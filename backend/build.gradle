@@ -165,16 +165,11 @@ dependencies {
     testImplementation('org.springframework.boot:spring-boot-starter-test')
 }
 
-// QueryDSL Q 클래스 생성 위치 설정
-def querydslDir = "$buildDir/generated/sources/annotationProcessor/java/main"
-
-sourceSets {
-    main {
-        java {
-            srcDirs += [querydslDir]
-        }
-    }
-}
+// QueryDSL Q 클래스는 annotationProcessor(querydsl-apt)가
+// build/generated/sources/annotationProcessor/java/main 에 생성하며,
+// Gradle 5+ 는 이 출력을 compileJava 에 자동 포함한다.
+// 별도로 srcDirs 에 추가하면 IDE(JDT)의 자체 APT 출력(bin/generated-sources)과
+// 중복되어 "type ... is already defined" 오류가 발생하므로 등록하지 않는다.
 
 tasks.withType(JavaCompile) {
     options.annotationProcessorPath = configurations.annotationProcessor
