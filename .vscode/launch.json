@@ -1,0 +1,41 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "name": "GroupCallApplication",
+      "request": "launch",
+      "mainClass": "com.liveclass.GroupCallApplication",
+      "projectName": "liveclass-web-project-backend"
+    },
+    {
+      "type": "java",
+      "name": "GroupCallApplication",
+      "request": "launch",
+      "mainClass": "com.liveclass.GroupCallApplication",
+      "projectName": "backend"
+    },
+    {
+      "type": "java",
+      "name": "Spring Boot (Backend)",
+      "request": "launch",
+      "mainClass": "com.liveclass.GroupCallApplication",
+      "projectName": "liveclass-web-project",
+      "cwd": "${workspaceFolder}/backend"
+    },
+    {
+      "type": "node-terminal",
+      "name": "Frontend (Vite dev)",
+      "request": "launch",
+      "command": "npm run dev",
+      "cwd": "${workspaceFolder}/frontend"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Full Stack (BE + FE)",
+      "configurations": ["Spring Boot (Backend)", "Frontend (Vite dev)"],
+      "stopAll": true
+    }
+  ]
+}
