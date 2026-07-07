@@ -1,0 +1,15 @@
+# Frontend build output (bundled into backend resources)
+dist/
+backend/src/main/resources/dist/
+
+# Application logs (rolled/compressed logs live here too)
+logs/
+
+# Node dependencies (root: concurrently)
+node_modules/
+
+# npm lockfiles (not tracked per team decision)
+package-lock.json
+
+# oh-my-claudecode operational state
+.omc/
