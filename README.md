@@ -22,7 +22,24 @@
 
 ## 3. 빠른 실행 흐름
 
-### 권장 실행 순서 (로컬 개발 환경)
+> 📘 실행 방법·필요 확장(VSCode)·트러블슈팅 상세는 **[RUN.md](./RUN.md)** 참고.
+
+### 루트에서 한 번에 실행 (권장)
+
+```bash
+# 최초 1회 의존성 설치
+npm run install:all
+
+# 개발 모드 (프론트 HMR + 백엔드 핫리로드 동시)
+npm run dev        # FE http://localhost:8083 , BE http://localhost:8080
+
+# 통합 구동 (프론트 빌드 후 백엔드 단일 포트)
+npm start          # http://localhost:8080
+```
+
+VSCode에서는 `Extension Pack for Java` 설치 후 `GroupCallApplication.java`의 ▶ Run/Debug 버튼으로도 백엔드를 실행할 수 있습니다. (자세한 내용은 [RUN.md](./RUN.md))
+
+### (참고) 구성요소별 개별 실행 순서 (로컬 개발 환경)
 
 1. **MySQL 설치 및 DB 생성**
    - MySQL 8.0.39 설치
