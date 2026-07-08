@@ -1,0 +1,10 @@
+---
+description: 팀 AI 하네스 규칙 — 정본 AGENTS.md 를 따른다
+alwaysApply: true
+---
+
+이 프로젝트의 규칙·공유 계약·완료 게이트 정본은 @AGENTS.md 이다. 항상 이를 따른다.
+작업 폴더에 따라 @backend/AGENTS.md 또는 @frontend/AGENTS.md 도 함께 참고한다.
+공유 계약(필드명 camelCase·상태코드)은 @docs/CONTRACT.md, 판단 정책은 @docs/harness/POLICY.md.
+
+이 파일은 얇은 포인터일 뿐이다. 규칙을 여기 복제하지 말고 위 문서를 갱신하라.
