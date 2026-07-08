@@ -1,0 +1,83 @@
+# AGENTS.md — 팀 공통 AI 하네스 (정본)
+
+> 📍 하네스 개요·온보딩: [docs/harness/README.md](docs/harness/README.md)
+>
+> **이 파일이 정본입니다.** 어떤 AI 코딩 도구(Claude Code / Codex / Cursor / Gemini 등)를 쓰든
+> 이 규칙을 따릅니다. 도구별 연결법은 위 README의 "도구별 링킹" 표를 참고하세요.
+
+실시간 그룹 화상 회의 서비스(Vue 3 + Spring Boot + Kurento WebRTC). 부트캠프 팀 프로젝트.
+
+---
+
+## 1. 프로젝트 한눈에
+
+| 구분 | 스택 | 위치 |
+|---|---|---|
+| Frontend | Vue 3.4 · Vite 5 · Element Plus · Vue Router · Vuex | `frontend/` ([frontend/AGENTS.md](frontend/AGENTS.md)) |
+| Backend | Spring Boot 2.7 · Spring Security · QueryDSL · JWT | `backend/` ([backend/AGENTS.md](backend/AGENTS.md)) |
+| Realtime | Kurento Media Server 6.18 (WebRTC) + STOMP/WebSocket 채팅 | — |
+| DB | MySQL 8.0 (`liveclass_web_db`) | — |
+
+- 실행법: [RUN.md](RUN.md) · 요구사항 상세: [README.md](README.md)
+- 기능 명세: [docs/SPEC.md](docs/SPEC.md) · 구현 로드맵: [docs/ROADMAP.md](docs/ROADMAP.md)
+- 마일스톤: **Sub Ⅰ**(인증/회원) → **Sub Ⅱ**(방 CRUD/미디어) → **Sub Ⅲ**(화상콜/채팅/배포)
+
+---
+
+## 2. 반드시 지킬 공유 계약 (요약)
+
+전체·정본은 [docs/CONTRACT.md](docs/CONTRACT.md). 아래는 어길 시 FE/BE가 깨지는 핵심만.
+
+- **API 필드명은 `camelCase`로 통일.** 명세(SPEC)는 snake/camel을 혼용하지만(예: `is_active`, `thumbnail_url`) 이는 **명세 자체의 계약 불일치**이므로 구현에서 camelCase로 정정한다. 근거: [docs/decisions/0001-field-name-camelcase.md](docs/decisions/0001-field-name-camelcase.md)
+- **API prefix**: `/api/v1`.
+- **HTTP 상태코드 규격을 지킨다** (예: 회원가입 **201**, 중복확인 **409**, 로그인 실패 **401**). CONTRACT의 상태코드 표 참조.
+- FE/BE가 공유하는 DTO/응답 형태를 바꿀 때는 **양쪽을 함께** 바꾸고 CONTRACT를 갱신한다.
+
+---
+
+## 3. 작업 판단 정책 (언제 테스트/린트를 채우나)
+
+정본은 [docs/harness/POLICY.md](docs/harness/POLICY.md). 요지:
+
+| 상황 | 필요한 것 |
+|---|---|
+| FE/BE 공유 DTO·응답 필드 계약 | **계약 테스트** (필드명·상태코드 검증) |
+| 정적으로 잡히는 규칙(camelCase 등) | **린트로 충분** |
+| 마일스톤 완료 게이트 핵심 경로(로그인, 방 생성) | **계약 테스트** |
+| 표준 CRUD·내부 헬퍼·UI 문구 | **불필요** (근거만 남김) |
+
+자물쇠(린트/훅/테스트)를 실제로 켜는 방법은 [docs/harness/ENFORCEMENT.md](docs/harness/ENFORCEMENT.md).
+
+---
+
+## 4. 완료 게이트 (기능 "완료" 선언 전 필수)
+
+아래를 만족하지 않으면 완료가 아니다. AI 에이전트는 완료 보고 시 이 항목을 명시한다.
+
+1. **계약 검증**: 계약이 걸린 기능이면 테스트 통과 증거를 첨부. 계약이 없다면 "왜 불필요한지" 한 줄 근거.
+2. **결정 기록**: 기술 결정·판단(라이브러리 선택, 🟡 항목 확정, 테스트 채택/생략 등)이 있었으면 [docs/decisions/](docs/decisions/)에 ADR을 남기고 **번호를 명시**.
+3. **가짜 완료 금지**: `TODO`/`test.skip`/`@Disabled`/빈 스텁을 "완료"로 보고하지 않는다. 미구현은 블로커로 보고한다.
+
+---
+
+## 5. 커밋·MR 규칙
+
+- **커밋 메시지**: 한글, `<타입>: <제목>` (타입: feat/fix/refactor/style/docs/chore/test). 상세는 [.gitcommit_template.txt](.gitcommit_template.txt).
+- **MR**: [MR 템플릿](.gitlab/merge_request_templates/merge_request_template.md)의 하네스 체크리스트를 채운다.
+- 공유 계약 파일(`AGENTS.md`, `docs/CONTRACT.md`)은 [CODEOWNERS](CODEOWNERS)에 따라 리드 승인이 필요하다.
+
+---
+
+## 6. 강제(자물쇠)는 도구 중립 레이어에 있다
+
+팀원마다 AI 도구가 다르므로, 규칙 강제는 특정 도구가 아니라 **git 훅·lint/test 스크립트·MR 체크리스트**에 둔다. AI 도구 설정(`.claude/`·`.cursor/`·`.gemini/`·`CLAUDE.md`·`GEMINI.md`)은 정본을 가리키는 **얇은 어댑터**이며, 없어도 안전망이 유지된다. 활성화·주의사항은 [docs/harness/ENFORCEMENT.md](docs/harness/ENFORCEMENT.md).
+
+## 7. 문서 최신화 규칙 (표류 방지)
+
+문서·계약이 코드나 서로에 대해 뒤처지지 않게 아래를 지킨다. 기계 검사는 [ENFORCEMENT §G](docs/harness/ENFORCEMENT.md#g-문서-최신화-자물쇠-표류-방지).
+
+- **단일 원본(SSOT)**: 규칙·계약·판단 기준은 정본 문서(`AGENTS.md`·`CONTRACT.md`·`POLICY.md`)에만 둔다. 도구 어댑터(`.claude/`·`.cursor/`·`GEMINI.md` 등)·README에 **복제 금지** — 가리키기만 한다.
+- **동반 수정**: API 요청/응답 필드·상태코드를 바꾸면 같은 변경에서 `CONTRACT.md`를 갱신하고 FE/BE **양쪽**을 함께 고친다.
+- **결정은 즉시 기록**: 🟡 항목·기술 선택을 확정하면 그 자리에서 [docs/decisions/](docs/decisions/)에 ADR을 남긴다(나중으로 미루지 않기).
+- **링크 무결성**: 문서를 옮기거나 지우면 참조를 함께 고친다(링크 검사가 커밋에서 잡는다).
+- **어댑터 갱신은 정본에서**: 판단 로직이 바뀌면 어댑터가 아니라 `POLICY.md`를 고친다. 어댑터는 그대로 둔다.

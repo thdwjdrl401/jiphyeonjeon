@@ -1,0 +1,13 @@
+// TEMPLATE — 복사해서 채우세요. (이 파일은 린트/빌드 대상이 아님)
+// 활성화 가이드: docs/harness/ENFORCEMENT.md §A
+// 판단 정책: docs/harness/POLICY.md
+//
+// 아래 "rules" 내용을 frontend/package.json 의 eslintConfig.rules 에 병합하세요.
+// camelCase 를 강제해 snake_case 필드가 코드에 새어드는 것을 막습니다.
+{
+  "rules": {
+    // 변수·속성 등 식별자를 camelCase 로 강제.
+    // properties: "always" → 객체 속성명도 검사 (API 응답 매핑에서 snake 차단)
+    "camelcase": ["error", { "properties": "always" }]
+  }
+}
