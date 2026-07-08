@@ -9,6 +9,21 @@
 
 ---
 
+## 0. AI 작업 순서
+
+AI 에이전트는 작업을 시작할 때 아래 순서로 문서를 확인한다.
+
+1. 루트 `AGENTS.md`를 최상위 운영 규칙으로 따른다.
+2. `backend/` 작업이면 `backend/AGENTS.md`, `frontend/` 작업이면 `frontend/AGENTS.md`를 함께 따른다.
+3. API 요청/응답 필드, 상태코드, 공유 DTO, URL prefix를 바꾸면 `docs/CONTRACT.md`를 확인하고 FE/BE 양쪽을 함께 반영한다.
+4. 테스트·린트가 필요한지 애매하면 `docs/harness/POLICY.md`로 판단한다.
+5. 필요한 자물쇠는 `docs/harness/ENFORCEMENT.md` 절차로 켠다.
+6. 완료 보고 전 이 문서의 "완료 게이트"를 확인한다.
+
+Codex는 별도 명령 어댑터 없이 위 문서 흐름을 기준으로 판단한다.
+
+---
+
 ## 1. 프로젝트 한눈에
 
 | 구분 | 스택 | 위치 |
@@ -41,9 +56,9 @@
 
 | 상황 | 필요한 것 |
 |---|---|
-| FE/BE 공유 DTO·응답 필드 계약 | **계약 테스트** (필드명·상태코드 검증) |
-| 정적으로 잡히는 규칙(camelCase 등) | **린트로 충분** |
+| 실제 API JSON 필드명·상태코드처럼 FE/BE 런타임 계약 | **계약 테스트** (필드명·상태코드 검증) |
 | 마일스톤 완료 게이트 핵심 경로(로그인, 방 생성) | **계약 테스트** |
+| 코드 식별자 같은 정적 규칙(camelCase, import 순서, 미사용 변수) | **린트로 충분** |
 | 표준 CRUD·내부 헬퍼·UI 문구 | **불필요** (근거만 남김) |
 
 자물쇠(린트/훅/테스트)를 실제로 켜는 방법은 [docs/harness/ENFORCEMENT.md](docs/harness/ENFORCEMENT.md).
