@@ -34,21 +34,12 @@ npm run install:all
 
 ### 방법 A. 터미널 (루트에서 한 번에)
 
-```bash
-# 개발 모드 — 프론트 HMR + 백엔드 핫리로드 동시 실행
-npm run dev
-#  FE: http://localhost:8083 (자동 오픈, 코드 수정 즉시 반영)
-#  BE: http://localhost:8080 (DevTools 자동 재시작)
+| 환경 | 개발 모드 | 통합 구동 | 전체 빌드 |
+| ---- | ---- | ---- | ---- |
+| Windows (기본) | `npm run dev` | `npm start` | `npm run build` |
+| WSL | `npm run dev:wsl` | `npm run start:wsl` | `npm run build:wsl` |
 
-# 통합 구동 모드 — 프론트 빌드 후 백엔드만 단일 포트로 서빙
-npm start
-#  http://localhost:8080 하나에서 SPA + API 모두 서빙
-```
-
-- `npm run dev`는 3개 프로세스(프론트 Vite, 백엔드 `bootRun`, 백엔드 continuous compile)를 동시에 띄웁니다. 한쪽이 종료되면 전체가 함께 종료됩니다(`-k`).
-- 백엔드 소스를 저장하면 → 자동 재컴파일(`gradlew -t classes`) → `spring-boot-devtools`가 감지해 자동 재시작됩니다.
-
-> **Windows 기준**입니다. macOS/Linux 팀원은 `package.json`의 `be:dev`/`be:watch`/`start`/`build`에서 `.\gradlew.bat` → `./gradlew` 로 바꿔 사용하세요.
+WSL에서 `Permission denied: ./gradlew`이 발생할 때만 `chmod +x backend/gradlew`을 실행합니다. MySQL이 꺼져 있으면 `sudo service mysql start`로 시작합니다.
 
 ### 방법 B. VSCode 실행 버튼
 
@@ -66,7 +57,7 @@ npm start
 | 서비스 | 포트 | 설명 |
 | ---- | ---- | ---- |
 | Spring Boot (HTTP) | 8080 | 백엔드 API + 정적 리소스(통합 구동 시 접속 포트) |
-| Vue 개발 서버 | 8083 | 프론트엔드 dev 서버(`npm run dev`, `/api/v1` 등을 8080으로 프록시) |
+| Vue 개발 서버 | 8083 | 프론트엔드 dev 서버(`npm run dev`/`npm run dev:wsl`, `/api/v1` 등을 8080으로 프록시) |
 | MySQL | 3306 | 로컬 DB |
 | Kurento Media Server | 8888 | WebRTC 미디어 서버(선택) |
 
@@ -85,5 +76,6 @@ npm start
 - **`JAVA_HOME`이 안 잡힘**: 환경변수를 설정한 뒤에는 **터미널/VSCode를 새로 열어야** 반영됩니다(기존 프로세스는 이전 값 유지).
 - **포트 충돌**: 8080 / 8083 / 3306 / 8888 사용 여부 확인.
 - **DB 연결 실패**: MySQL 실행 여부, `liveclass_web_db` 존재 여부, `application.properties`의 접속 정보 확인.
+- **WSL에서 Windows npm(`/mnt/c/...`)이 잡힘**: `which node`와 `which npm`을 확인하고 WSL 내부에 Node.js 20.18.0을 설치한 뒤 터미널을 다시 연다.
 - **로그 위치**: 백엔드 로그는 `backend/logs/`에 쌓입니다(git 무시 대상).
 - **`bootRun` + watch 파일락(Windows, 드묾)**: `npm run dev` 중 간헐적 락 발생 시, VSCode의 Java ▶ 실행(방법 B)을 쓰면 watch 없이 저장 시 컴파일로 핫리로드됩니다.
