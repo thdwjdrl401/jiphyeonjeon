@@ -5,7 +5,7 @@
 > **이 파일이 정본입니다.** 어떤 AI 코딩 도구(Claude Code / Codex / Cursor / Gemini 등)를 쓰든
 > 이 규칙을 따릅니다. 도구별 연결법은 위 README의 "도구별 링킹" 표를 참고하세요.
 
-실시간 그룹 화상 회의 서비스(Vue 3 + Spring Boot + Kurento WebRTC). 부트캠프 팀 프로젝트.
+실시간 그룹 화상 회의 서비스(React + TypeScript + Spring Boot + Kurento WebRTC). 부트캠프 팀 프로젝트.
 
 ---
 
@@ -28,7 +28,7 @@ Codex는 별도 명령 어댑터 없이 위 문서 흐름을 기준으로 판단
 
 | 구분 | 스택 | 위치 |
 |---|---|---|
-| Frontend | Vue 3.4 · Vite 5 · Element Plus · Vue Router · Vuex | `frontend/` ([frontend/AGENTS.md](frontend/AGENTS.md)) |
+| Frontend | React 18 · TypeScript · Vite 5 · React Router · Context API | `frontend/` ([frontend/AGENTS.md](frontend/AGENTS.md)) |
 | Backend | Spring Boot 2.7 · Spring Security · QueryDSL · JWT | `backend/` ([backend/AGENTS.md](backend/AGENTS.md)) |
 | Realtime | Kurento Media Server 6.18 (WebRTC) + STOMP/WebSocket 채팅 | — |
 | DB | MySQL 8.0 (`liveclass_web_db`) | — |

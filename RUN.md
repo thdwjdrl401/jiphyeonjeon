@@ -12,7 +12,7 @@
 | **MySQL** | 8.0.x | DB `liveclass_web_db` 필요 (아래 참고) |
 | **Kurento** | 6.18.0 (선택) | WebRTC 화상 기능 사용 시에만. 없어도 앱 기동은 정상 |
 | **VSCode 확장** | `Extension Pack for Java` | Java 파일 ▶ Run/Debug 버튼 제공 |
-| (선택) | `Vue - Official (Volar)` | 프론트엔드 개발 편의 |
+| (선택) | `ESLint` | React·TypeScript 정적 검사 |
 
 > VSCode로 열면 위 확장들이 **추천 팝업**으로 안내됩니다 (`.vscode/extensions.json`).
 
@@ -66,7 +66,7 @@ npm start
 | 서비스 | 포트 | 설명 |
 | ---- | ---- | ---- |
 | Spring Boot (HTTP) | 8080 | 백엔드 API + 정적 리소스(통합 구동 시 접속 포트) |
-| Vue 개발 서버 | 8083 | 프론트엔드 dev 서버(`npm run dev`, `/api/v1` 등을 8080으로 프록시) |
+| React 개발 서버 | 8083 | 프론트엔드 dev 서버(`npm run dev`, `/api/v1` 등을 8080으로 프록시) |
 | MySQL | 3306 | 로컬 DB |
 | Kurento Media Server | 8888 | WebRTC 미디어 서버(선택) |
 

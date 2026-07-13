@@ -8,7 +8,7 @@
     "fe:dev": "npm --prefix frontend run dev",
     "be:dev": "cd backend && .\\gradlew.bat bootRun",
     "be:watch": "cd backend && .\\gradlew.bat -t compileJava",
-    "start": "npm run build:fe && cd backend && .\\gradlew.bat bootRun",
+    "start": "cd backend && .\\gradlew.bat bootRun",
     "build:fe": "npm --prefix frontend run build",
     "build": "cd backend && .\\gradlew.bat clean build",
     "install:all": "npm install && npm --prefix frontend install"
