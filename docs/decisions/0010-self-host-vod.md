@@ -1,34 +1,33 @@
-# ADR-0010: VOD는 self-host 트랜스코딩 (HLS·FFmpeg·nginx·MinIO)
+# ADR-0010: VOD = LiveKit Egress 녹화 (업로드·FFmpeg 없음)
 
 > 📍 하네스 개요: [../harness/README.md](../harness/README.md) · 아키텍처: [../ARCHITECTURE.md](../ARCHITECTURE.md)
 
-- **상태**: 채택
+- **상태**: 채택 (2026-07-14 개정: 완전 라이브 지향 → 업로드/FFmpeg 폐기, Egress로 통일)
 - **일자**: 2026-07-14
-- **관련**: [0004](0004-media-livekit-selfhost.md), [0012](0012-hybrid-queue.md)
+- **관련**: [0003](0003-greenfield-redesign.md), [0004](0004-media-livekit-selfhost.md), [0012](0012-hybrid-queue.md)
 
 ## 맥락
-기획서는 P1 VOD에 **관리형 VOD(Mux/AWS 등)** 를 권장(트랜스코딩·CDN·signed playback 위임). 하지만 우리는 **self-host** 방침(비용·계정 제약).
+초기에는 강사가 미리 찍은 강의를 **업로드**하는 것을 가정하고 self-host FFmpeg 트랜스코딩(→HLS)을 고려했다. 그러나 제품이 **완전 라이브 지향(업로드 강의 미지원)** 으로 확정됐다. 모든 콘텐츠는 라이브로 진행되고, 다시보기(VOD)는 그 **라이브 녹화**에서만 나온다.
 
 ## 결정
-VOD를 **self-host**로 처리한다: 업로드=presigned direct→MinIO, 트랜스코딩=**FFmpeg 워커(RabbitMQ 잡)**→HLS→MinIO, 서빙=**nginx**(HLS 게이트). 재생 **인증은 defer(seam만)**.
+VOD/다시보기는 **LiveKit Egress**가 라이브 세션을 **녹화 → HLS → MinIO**로 만든다. **영상 업로드·FFmpeg 트랜스코드 워커는 없다.** 자료 **PPTX만 업로드**(RAG용, 영상 아님). 재생은 nginx가 HLS 서빙, **인증은 defer(seam 유지)**.
 
 ## 근거
-- 관리형 VOD는 유료·외부 의존 → 데모 제약. self-host로 통일(LiveKit도 self-host).
-- HLS는 되감기·시점이동·자막 동기·적응화질에 필요(제품 핵심). 원본 mp4 직서빙은 seek·확장 한계.
-- 영상 바이트는 Spring/Python 통과 금지(대역폭) → nginx가 직접 서빙.
-
-## 결정 세부
-- **트랜스코드**: 전용 FFmpeg 워커(CPU 격리). **단일 720p 시작**, `video_rendition` 구조는 분리해 ABR 확장 대비.
-- **HLS 서빙/인증**: 데모는 nginx 무인증 패스스루. **인증 seam 3개** 유지 — ① 재생 URL은 Spring 발급(`GET /lessons/{id}/playback`) ② nginx를 처음부터 경로에 ③ `PlaybackTokenService` no-op. 나중에 nginx secure_link/auth_request만 켜면 드롭인.
-- **메타**: `core.video_asset`(status·`hls_manifest_key`·duration) + `video_rendition`. 개별 세그먼트는 DB 아님(MinIO+m3u8).
+- 업로드가 없으니 별도 트랜스코드 파이프라인이 불필요 → **미디어 경로를 LiveKit(SFU)+Egress 하나로 통일**.
+- "업로드용 FFmpeg"와 "라이브 녹화용 Egress" 이중 작업이 원천 제거됨.
+- 다시보기 자막은 **라이브 때 만든 transcript 재사용**(재STT 불필요), 필요 시 녹화본에 2-pass 교정.
 
 ## 대안
 | 대안 | 장점 | 단점 |
 |---|---|---|
-| **self-host (선택)** | 비용·제어, 스택 통일 | 트랜스코딩·서빙 직접 운영 |
-| 관리형 VOD | 운영 위임·ABR·CDN | 유료·외부 의존 |
-| 원본 mp4 직서빙 | 최속 개발 | seek·적응화질·확장 한계 |
+| **Egress 녹화 (선택)** | 미디어 단일 경로, 이중작업 없음 | Egress 컨테이너+Redis 필요 |
+| FFmpeg 업로드 트랜스코드 | 업로드 강의 지원 | **업로드 미지원 제품이라 불필요** |
+| 관리형 VOD | 운영 위임 | 유료·외부 의존(self-host 방침) |
+
+## 결정 세부
+- **Egress**: LiveKit Egress(별도 컨테이너, Redis 연동)로 room composite 녹화 → HLS → MinIO. `core.video_asset`(status·`hls_manifest_key`·duration).
+- **재생 인증 seam(유지)**: ① 재생 URL은 Spring 발급(`GET /lessons/{id}/playback`) ② nginx를 처음부터 경로에 ③ `PlaybackTokenService` no-op → 나중 secure_link 드롭인.
 
 ## 영향·후속
-- FFmpeg 워커·nginx가 인프라에 추가. self-host Docker Compose 구성 필요.
-- HLS 서빙 인증(secure_link/auth_request)은 나중 활성.
+- **FFmpeg 업로드 워커 삭제**, 업로드 영상 API 제거. Egress는 **코어**(추후 아님).
+- 로드맵이 **라이브-first**로 뒤집힘([CP-ROADMAP](../CP-ROADMAP.md)) — VOD는 라이브의 산출물이라 라이브 없이 존재 불가.

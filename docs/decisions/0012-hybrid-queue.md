@@ -7,11 +7,11 @@
 - **관련**: [0008](0008-ai-bus-redis-streams-session-clock.md), [0011](0011-ai-three-services.md), [0013](0013-unified-streaming-stt.md)
 
 ## 맥락
-비동기 작업이 성격이 다르다: ① 업로드 후 **수분짜리 배치**(STT·파싱·embedding·후보·트랜스코드) — 유실=재업로드, retry/DLQ 필요. ② **실시간 스트림**(STT 조각·라이브 자막) — 저지연, partial 유실 허용.
+비동기 작업이 성격이 다르다: ① **수분짜리 배치**(PPTX 파싱·embedding·후보 생성) — 유실 시 재처리 비용 큼, retry/DLQ 필요. ② **실시간 스트림**(라이브 STT·자막) — 저지연, partial 유실 허용.
 
 ## 결정
 **하이브리드**로 분리한다:
-- **RabbitMQ** = durable 배치 잡(ingestion·트랜스코드). ack/재시도/**DLQ**/우선순위.
+- **RabbitMQ** = durable 배치 잡(PPTX·embedding·후보 등 ingestion). ack/재시도/**DLQ**/우선순위.
 - **Redis Streams** = STT 조각·라이브 자막 **fast path**. consumer group으로 소비.
 - **Redis(그 외)** = cache/session/rate-limit. **durable 잡 큐로는 쓰지 않음**.
 
@@ -28,5 +28,5 @@
 | 전부 RabbitMQ | 잡 시맨틱 일관 | 실시간 자막에 지연 오버헤드 |
 
 ## 영향·후속
-- Spring은 **outbox**로 잡 발행 신뢰성 확보, RabbitMQ 컨슈머(ai-worker/FFmpeg). idempotency key·DLQ 운영 지표.
+- Spring은 **outbox**로 잡 발행 신뢰성 확보, RabbitMQ 컨슈머(ai-worker). idempotency key·DLQ 운영 지표.
 - ADR-0008은 "Redis Streams = fast path 전용"으로 보완됨.

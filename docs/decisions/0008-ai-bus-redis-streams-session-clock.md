@@ -6,7 +6,7 @@
 - **일자**: 2026-07-14
 - **관련**: [0004](0004-media-livekit-selfhost.md), [0006](0006-backend-spring-plus-python-ai.md), [0012](0012-hybrid-queue.md), [0013](0013-unified-streaming-stt.md)
 
-> **보완**: Redis Streams는 **STT·라이브 자막 fast path 전용**이다. embedding·PPTX파싱·후보생성·트랜스코드 같은 **무거운 durable 배치는 RabbitMQ**로 분리 → [0012](0012-hybrid-queue.md). STT는 VOD·라이브 공유 스트리밍(VAD) → [0013](0013-unified-streaming-stt.md). 세션 상대 ms 좌표계는 유지.
+> **보완**: Redis Streams는 **STT·라이브 자막 fast path 전용**이다. PPTX파싱·embedding·후보생성 같은 **무거운 durable 배치는 RabbitMQ**로 분리 → [0012](0012-hybrid-queue.md). STT는 라이브 스트리밍(VAD; 다시보기는 저장본 재생) → [0013](0013-unified-streaming-stt.md). 세션 상대 ms 좌표계는 유지.
 
 ## 맥락
 Python AI가 자막·enrichment를 Spring에 **지속적으로** 전달해야 하고, 자막·채팅·영상·되감기의 **시간 정렬** 기준이 필요하다.
