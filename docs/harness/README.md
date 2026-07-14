@@ -26,7 +26,7 @@
 | 왜 이렇게 결정했나? | [decisions/](../decisions/) |
 | 린트/훅/테스트 켜는 법 | [ENFORCEMENT.md](ENFORCEMENT.md) |
 | 스택별 규칙(빌드/실행) | [backend/AGENTS.md](../../backend/AGENTS.md) · [frontend/AGENTS.md](../../frontend/AGENTS.md) |
-| 기능 명세 / 구현 로드맵 | [SPEC.md](../SPEC.md) · [ROADMAP.md](../ROADMAP.md) |
+| 기능 명세 / 구현 로드맵 | [SPEC.md](../legacy/SPEC.md) · [ROADMAP.md](../legacy/ROADMAP.md) |
 
 ## 작업 흐름 (프로세스)
 

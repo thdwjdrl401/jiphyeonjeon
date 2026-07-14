@@ -1,6 +1,6 @@
 # ADR-0003: 명세·스켈레톤 참고용, 제로베이스 재설계
 
-> 📍 하네스 개요: [../harness/README.md](../harness/README.md) · 아키텍처: [../architecture.md](../architecture.md)
+> 📍 하네스 개요: [../harness/README.md](../harness/README.md) · 아키텍처: [../ARCHITECTURE.md](../ARCHITECTURE.md)
 
 - **상태**: 채택
 - **일자**: 2026-07-14

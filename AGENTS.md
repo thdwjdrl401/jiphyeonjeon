@@ -5,9 +5,9 @@
 > **이 파일이 정본입니다.** 어떤 AI 코딩 도구(Claude Code / Codex / Cursor / Gemini 등)를 쓰든
 > 이 규칙을 따릅니다. 도구별 연결법은 위 README의 "도구별 링킹" 표를 참고하세요.
 
-실시간 온라인 강의 플랫폼 **LiveClass AI** (React + Spring Boot + Python AI + LiveKit). 부트캠프 팀 프로젝트.
+실시간 온라인 강의 플랫폼 **LiveClass AI** — VOD 학습(강좌·자막·RAG·퀴즈) 코어 + 실시간 WebRTC. React + Spring Boot(Java 21) + Python AI + LiveKit. 부트캠프 팀 프로젝트.
 
-> **기존 PJT 명세서·스켈레톤 코드는 참고용이다.** 본 기획에 맞춰 제로베이스로 재설계한다(구조 포함). 명세·스켈레톤 준수를 완료 기준으로 삼지 않는다. 근거: [docs/decisions/0003-greenfield-redesign.md](docs/decisions/0003-greenfield-redesign.md) · 확정 아키텍처: [docs/architecture.md](docs/architecture.md)
+> **기존 PJT 명세서·스켈레톤 코드는 참고용이다.** 본 기획에 맞춰 제로베이스로 재설계한다(구조 포함). 명세·스켈레톤 준수를 완료 기준으로 삼지 않는다. 근거: [docs/decisions/0003-greenfield-redesign.md](docs/decisions/0003-greenfield-redesign.md) · 확정 아키텍처: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 ---
 
@@ -30,16 +30,16 @@ Codex는 별도 명령 어댑터 없이 위 문서 흐름을 기준으로 판단
 
 | 구분 | 스택 | 위치 |
 |---|---|---|
-| Frontend | React 18 · TypeScript · Vite 5 (FE/BE 분리 배포) | `frontend/` ([frontend/AGENTS.md](frontend/AGENTS.md)) |
-| Backend (컨트롤) | Spring Boot 2.7 · Spring Security · JPA · JWT | `backend/` ([backend/AGENTS.md](backend/AGENTS.md)) |
-| AI | Python (LiveKit Agent · STT · RAG) | — |
-| 미디어 | LiveKit self-host (SFU) + Egress(HLS·녹화) | — |
-| DB | PostgreSQL + pgvector | — |
-| 캐시·버스·스토리지 | Redis (LiveKit 조정·WS팬아웃·Streams버스) · MinIO | — |
+| Frontend | React 19 · TypeScript · Vite (FE/BE 분리, TanStack Query, SSE/WS) | `frontend/` ([frontend/AGENTS.md](frontend/AGENTS.md)) |
+| Backend (컨트롤) | **Spring Boot 3.4/3.5 · Java 21**(virtual threads) · JPA · Security | `backend/` ([backend/AGENTS.md](backend/AGENTS.md)) |
+| AI | Python: **ai-api(FastAPI SSE)** · **ai-worker(RabbitMQ)** · **realtime-agent(LiveKit)** | — |
+| DB | PostgreSQL + pgvector (**core/ai 스키마 분리**) | — |
+| 큐·캐시 | **RabbitMQ**(durable 배치) · **Redis**(cache/session + STT·라이브 fast path) | — |
+| 미디어 | VOD: **MinIO + FFmpeg + nginx**(self-host HLS) / 라이브: **LiveKit self-host** | — |
 
-- **확정 아키텍처·다이어그램**: [docs/architecture.md](docs/architecture.md) · 실행법: [RUN.md](RUN.md)
-- 마일스톤(CP): **CP0**(인증·세션 CRUD) → **CP1~2**(VOD 자막·근거) → **CP3~6**(라이브·되감기·Q&A). 상세는 architecture.md.
-- 참고(구 화상회의 명세, 참고용): [docs/SPEC.md](docs/SPEC.md) · [docs/ROADMAP.md](docs/ROADMAP.md)
+- **확정 아키텍처·다이어그램**: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · 실행법: [RUN.md](RUN.md)
+- 마일스톤(CP): **CP0**(인증·세션 CRUD) → **CP1~2**(VOD 자막·근거) → **CP3~6**(라이브·되감기·Q&A). 상세는 ARCHITECTURE.md.
+- 참고(구 화상회의 명세, 참고용): [docs/legacy/SPEC.md](docs/legacy/SPEC.md) · [docs/legacy/ROADMAP.md](docs/legacy/ROADMAP.md)
 
 ---
 

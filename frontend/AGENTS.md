@@ -6,7 +6,8 @@
 
 ## 스택·환경
 
-- React **18** · TypeScript · Vite **5** · React Router 6 · Context API · Axios. Node.js 20.18 LTS.
+- React **19** · TypeScript · Vite · React Router · **TanStack Query**(서버 상태) · 최소 전역 UI 상태(Context/Zustand) · Axios. Node.js 20.18 LTS.
+- AI 응답은 **SSE**, 채팅/자막은 **WebSocket**(누락은 REST로 보완). API 타입은 OpenAPI 생성 권장(임의 DTO 복제 금지).
 - 개발 서버 8083. **FE/BE 분리 배포** — React를 독립 서비스(정적 호스팅/컨테이너)로 배포, Spring은 API+WS만([../docs/decisions/0002](../docs/decisions/0002-react-typescript-frontend.md)).
 - UI 프레임워크 없이 기존 CSS와 네이티브 HTML 요소를 사용.
 
@@ -27,7 +28,7 @@ test/               ← Vitest/React Testing Library
 
 - BE 응답을 소비할 때 **camelCase** 필드 계약을 따른다([CONTRACT §1](../docs/CONTRACT.md#1-필드명-규칙--camelcase-통일)). snake 필드가 오면 BE와 함께 정정하며 FE 변환 우회는 금지.
 - 공용 Axios는 `/api/v1`을 base URL로 사용하고 토큰 존재 시 `Authorization: Bearer <token>`을 보낸다.
-- 토큰은 `localStorage`의 `accessToken`에 저장한다. 401·403 및 `/users/me` 진입 검증은 [SPEC §6](../docs/SPEC.md)의 후속 구현 범위다.
+- 토큰은 `localStorage`의 `accessToken`에 저장한다. 401·403 및 `/users/me` 진입 검증은 [SPEC §6](../docs/legacy/SPEC.md)의 후속 구현 범위다.
 
 ## 빌드·실행·검증
 
@@ -41,4 +42,4 @@ npm run test
 npm run build       # 정적 산출물(독립 배포)
 ```
 
-- 개발 시 Vite dev 서버(8083)가 `/api/v1`·WS를 Spring(8080)으로 프록시. **통합 빌드 없음**(FE/BE 분리 — [../docs/architecture.md](../docs/architecture.md)).
+- 개발 시 Vite dev 서버(8083)가 `/api/v1`·WS를 Spring(8080)으로 프록시. **통합 빌드 없음**(FE/BE 분리 — [../docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md)).
