@@ -2,9 +2,11 @@
 
 > 📍 하네스 개요: [../harness/README.md](../harness/README.md) · 아키텍처: [../architecture.md](../architecture.md)
 
-- **상태**: 채택
+- **상태**: 채택 (보완 2026-07-14: **라이브 전용**으로 범위 축소)
 - **일자**: 2026-07-14
-- **관련**: [0003](0003-greenfield-redesign.md), [0006](0006-backend-spring-plus-python-ai.md), [0008](0008-ai-bus-redis-streams-session-clock.md)
+- **관련**: [0003](0003-greenfield-redesign.md), [0006](0006-backend-spring-plus-python-ai.md), [0008](0008-ai-bus-redis-streams-session-clock.md), [0010](0010-self-host-vod.md)
+
+> **보완**: LiveKit은 **실시간(라이브) 미디어 전용**이다. **VOD 영상은 self-host 트랜스코딩**(FFmpeg→HLS→MinIO, nginx 서빙)으로 처리 → [0010](0010-self-host-vod.md). 라이브 녹화→VOD(Egress)는 추후. 라이브는 기획서상 P2지만 본 프로젝트에선 **필수 목표**([0003](0003-greenfield-redesign.md)).
 
 ## 맥락
 그룹 화상 + **서버측 미디어 접근**(AI 자막을 위해 오디오 구독)이 필요하다. 공식 스켈레톤은 Kurento를 쓰지만 시그널링을 직접 구현해야 하고 Agents/Egress 통합이 약하다.
