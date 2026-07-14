@@ -6,7 +6,7 @@
 
 | 구분 | 기술 | 버전 및 비고 |
 | ---- | ---- | ---- |
-| Frontend | Vue 3.4.27, Vite 5.1.0, Element Plus 2.8.6, Vue Router 4.3.2, Vuex 4.1.0 | Node.js 20.18.0 LTS, npm |
+| Frontend | React 18.3, TypeScript, Vite 5, React Router 6, Context API, Axios | Node.js 20.18.0 LTS, npm |
 | Backend | Spring Boot 2.7.18, Spring Security, QueryDSL | Java 11 권장, Gradle 6.9.4 |
 | Realtime | Kurento Media Server 6.18.0 | 수동 설치 필요 |
 | Database | MySQL 8.0.39 | `liveclass_web_db` (수동 설치 필요) |
@@ -85,8 +85,8 @@ webmobile1-skeleton/
 ├── README.md                          # 전체 개요 및 실행 요약 (현재 문서)
 ├── backend/                           # Spring Boot 프로젝트
 │   └── src/main/...                   # API, 도메인, 정적 리소스 포함
-└── frontend/                          # Vue 3 프론트엔드
-    └── src/...                        # Vue 컴포넌트, 스토어, 라우터 등
+└── frontend/                          # React + TypeScript 프론트엔드
+    └── src/...                        # React 컴포넌트, Context, 라우터 등
 ```
 
 ## 5. 주요 포트 및 서비스
@@ -94,7 +94,7 @@ webmobile1-skeleton/
 | 서비스 | 포트 | 설명 |
 | ---- | ---- | ---- |
 | Spring Boot (HTTP) | 8080 | 백엔드 API 및 정적 리소스 (기본 접속 포트) |
-| Vue 개발 서버 | 8083 | 프론트엔드 개발 서버 (`npm run dev`) |
+| React 개발 서버 | 8083 | 프론트엔드 개발 서버 (`npm run dev`) |
 | MySQL | 3306 | 로컬 MySQL 서버 |
 | Kurento Media Server | 8888 | WebRTC 미디어 서버 (수동 설치 필요) |
 

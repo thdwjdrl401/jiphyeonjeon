@@ -1,5 +1,5 @@
 {
-  "name": "liveclass-vue",
+  "name": "liveclass-react",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -7,43 +7,33 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs --fix --ignore-path .gitignore"
+    "lint": "eslint . --ext .ts,.tsx,.js,.cjs,.mjs --max-warnings 0 --ignore-pattern ../backend/src/main/resources/dist",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
-    "@mdi/font": "^7.4.47",
     "axios": "^1.7.2",
     "core-js": "^3.37.1",
-    "element-plus": "^2.8.6",
-    "sass": "^1.77.2",
-    "stylus": "^0.54.8",
-    "vue": "^3.4.27",
-    "vue-axios": "^3.5.2",
-    "vue-router": "^4.3.2",
-    "vuex": "^4.1.0"
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "^5.0.0",
-    "@vue/eslint-config-prettier": "^9.0.0",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
+    "@testing-library/user-event": "^14.5.2",
+    "@types/node": "^22.10.1",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "@vitejs/plugin-react": "^4.3.4",
     "eslint": "^8.57.0",
-    "eslint-plugin-vue": "^9.20.0",
+    "eslint-plugin-react-hooks": "^4.6.2",
+    "jsdom": "^25.0.1",
+    "typescript": "^5.6.3",
     "vite": "^5.1.0",
-    "vite-plugin-eslint": "^1.8.1"
-  },
-  "eslintConfig": {
-    "root": true,
-    "env": {
-      "node": true,
-      "es2022": true
-    },
-    "extends": [
-      "plugin:vue/vue3-essential",
-      "eslint:recommended"
-    ],
-    "parserOptions": {
-      "ecmaVersion": 2022,
-      "sourceType": "module"
-    },
-    "rules": {}
+    "vitest": "^2.1.8"
   },
   "browserslist": [
     "> 1%",

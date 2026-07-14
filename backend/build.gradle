@@ -65,7 +65,7 @@ configurations {
     args = ['install']
 }*/
 
-task webpack(type: NpmTask, dependsOn: 'npmInstall') {
+task frontendBuild(type: NpmTask, dependsOn: 'npmInstall') {
     args = ['run','build']
 }
 
@@ -76,8 +76,8 @@ task copySample(type: Copy) {
     }
 }
 
-// processResources is a Java task. Run the webpack bundling before this task using the 'build' task in the package.json
-processResources.dependsOn 'webpack', 'copySample'
+// React production assets are packaged into the Spring Boot JAR from classpath:/dist.
+processResources.dependsOn 'frontendBuild', 'copySample'
 
 //set build time and inject value to application.properties
 def buildTime() {

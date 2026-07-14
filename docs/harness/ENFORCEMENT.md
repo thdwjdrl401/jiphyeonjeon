@@ -30,7 +30,7 @@ echo "npx lint-staged" > .husky/pre-commit
 루트 `package.json`에 lint-staged 설정 추가:
 ```jsonc
 "lint-staged": {
-  "frontend/**/*.{vue,js,jsx,cjs,mjs}": "npm --prefix frontend run lint"
+  "frontend/**/*.{ts,tsx,js,cjs,mjs}": "npm --prefix frontend run lint"
 }
 ```
 
