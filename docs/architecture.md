@@ -163,6 +163,72 @@ sequenceDiagram
 
 **재접속·늦은 입장**: 라이브 자동 재구독 + Spring에서 교정 스크립트·구조 요약 로드로 따라잡기.
 
+## 추가 시퀀스 (VOD · 재접속 · 장애)
+
+### VOD / 되감기
+
+```mermaid
+sequenceDiagram
+  actor S as 학생(FE)
+  participant SP as Spring
+  participant OBJ as MinIO(HLS)
+  participant PG as Postgres
+
+  Note over S: ended 세션(=VOD) 열람
+  S->>SP: 세션 상세 요청
+  SP->>PG: 세션·구조 요약 조회
+  SP-->>S: 메타 + 구조 요약
+  S->>OBJ: HLS 재생 (세션 t)
+  Note over S: 특정 지점 T로 되감기(seek)
+  S->>SP: 구간 [T] 자막·용어·근거 요청
+  SP->>PG: startMs ≤ T ≤ endMs 세그먼트 조회
+  PG-->>SP: 교정 자막 + term + evidence
+  SP-->>S: 그 구간 자막·호버
+  Note over S: 좌표계 단일(세션 ms) → HLS와 자막 자동 정렬
+```
+
+### 재접속 / 늦은 입장 catch-up
+
+```mermaid
+sequenceDiagram
+  actor S as 학생(FE)
+  participant SP as Spring
+  participant LK as LiveKit
+  participant PG as Postgres
+
+  Note over S: 새로고침 / 끊김 / 늦은 입장
+  S->>SP: 재입장(토큰 재요청)
+  SP-->>S: LiveKit 토큰 + WS 재연결
+  S->>LK: 라이브 자동 재구독(현재 지점)
+  S->>SP: catch-up 요청(마지막 본 t)
+  SP->>PG: 그간 교정 자막 + 구조 요약 조회
+  PG-->>SP: 스크립트 + 요약
+  SP-->>S: "지금까지 이런 내용" 브리핑
+  Note over S,SP: 라이브는 현재로 붙고, 놓친 구간은 요약으로 따라잡기
+```
+
+### 장애 / 격리 (AI 서비스 다운)
+
+```mermaid
+sequenceDiagram
+  actor T as 강사
+  actor S as 학생
+  participant LK as LiveKit
+  participant SP as Spring
+  participant PY as Python AI
+
+  Note over PY: AI 서비스 다운
+  T->>LK: 오디오/영상 (계속)
+  LK->>S: 영상 구독 (정상 유지)
+  S->>SP: 채팅 (정상 유지)
+  SP--xPY: 자막/enrichment 중단 감지
+  SP-->>S: 자막 "일시 중단" 표시 (영상·채팅 정상)
+  Note over PY: 복구 시
+  PY->>SP: Redis Streams 재개(버퍼 구간부터)
+  SP-->>S: 자막 재개 (놓친 구간 교정으로 채움)
+  Note over LK,SP: 격리 — 미디어·채팅은 AI 장애와 무관하게 생존
+```
+
 ## 데모 체크포인트 (증분, 각 지점 독립 데모 가능)
 
 - **CP0** 기반: 로그인·회원 + 세션 CRUD·입장.
