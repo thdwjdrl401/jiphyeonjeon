@@ -1,6 +1,6 @@
 # AGENTS.md — Backend / 컨트롤 플레인 (Spring Boot)
 
-> 📍 정본 규칙: [../AGENTS.md](../AGENTS.md) · 공유 계약: [../docs/CONTRACT.md](../docs/CONTRACT.md) · 아키텍처: [../docs/architecture.md](../docs/architecture.md) · 판단 정책: [../docs/harness/POLICY.md](../docs/harness/POLICY.md)
+> 📍 정본 규칙: [../AGENTS.md](../AGENTS.md) · 공유 계약: [../docs/CONTRACT.md](../docs/CONTRACT.md) · 아키텍처: [../docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md) · 판단 정책: [../docs/harness/POLICY.md](../docs/harness/POLICY.md)
 >
 > 이 파일은 backend 작업 시의 스택별 규칙만 다룹니다. 계약·완료 게이트·커밋 규칙은 정본을 따르세요.
 > 명세·스켈레톤은 참고용([../docs/decisions/0003](../docs/decisions/0003-greenfield-redesign.md)) — 도메인은 course→section→lesson 중심으로 재설계.

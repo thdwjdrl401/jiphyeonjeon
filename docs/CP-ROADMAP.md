@@ -1,8 +1,8 @@
 # CP 구현 로드맵 — LiveClass AI
 
-> 📍 하네스 개요: [harness/README.md](harness/README.md) · 확정 아키텍처: [architecture.md](architecture.md) · 계약: [CONTRACT.md](CONTRACT.md)
+> 📍 하네스 개요: [harness/README.md](harness/README.md) · 확정 아키텍처: [ARCHITECTURE.md](ARCHITECTURE.md) · 계약: [CONTRACT.md](CONTRACT.md)
 >
-> 확정 아키텍처를 착수 순서·의존성·역할로 변환. 팀 기획서 v3.0의 15-day vertical slice(§11.2)를 우리 결정(self-host·라이브 필수·Spring3.4/Java21)에 맞춰 조정. (구 [ROADMAP.md](ROADMAP.md)는 대체됨)
+> 확정 아키텍처를 착수 순서·의존성·역할로 변환. 팀 기획서 v3.0의 15-day vertical slice(§11.2)를 우리 결정(self-host·라이브 필수·Spring3.4/Java21)에 맞춰 조정. (구 [ROADMAP.md](legacy/ROADMAP.md)는 대체됨)
 
 ## 원칙
 - **증분 vertical slice**: 각 CP는 독립 데모 가능. 폭이 아니라 **깊이**(강좌→강의→학습→AI→퀴즈→라이브 한 줄기 관통).

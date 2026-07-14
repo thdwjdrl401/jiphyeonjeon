@@ -1,6 +1,6 @@
 # ADR-0010: VOD는 self-host 트랜스코딩 (HLS·FFmpeg·nginx·MinIO)
 
-> 📍 하네스 개요: [../harness/README.md](../harness/README.md) · 아키텍처: [../architecture.md](../architecture.md)
+> 📍 하네스 개요: [../harness/README.md](../harness/README.md) · 아키텍처: [../ARCHITECTURE.md](../ARCHITECTURE.md)
 
 - **상태**: 채택
 - **일자**: 2026-07-14

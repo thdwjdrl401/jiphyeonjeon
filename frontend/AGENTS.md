@@ -28,7 +28,7 @@ test/               ← Vitest/React Testing Library
 
 - BE 응답을 소비할 때 **camelCase** 필드 계약을 따른다([CONTRACT §1](../docs/CONTRACT.md#1-필드명-규칙--camelcase-통일)). snake 필드가 오면 BE와 함께 정정하며 FE 변환 우회는 금지.
 - 공용 Axios는 `/api/v1`을 base URL로 사용하고 토큰 존재 시 `Authorization: Bearer <token>`을 보낸다.
-- 토큰은 `localStorage`의 `accessToken`에 저장한다. 401·403 및 `/users/me` 진입 검증은 [SPEC §6](../docs/SPEC.md)의 후속 구현 범위다.
+- 토큰은 `localStorage`의 `accessToken`에 저장한다. 401·403 및 `/users/me` 진입 검증은 [SPEC §6](../docs/legacy/SPEC.md)의 후속 구현 범위다.
 
 ## 빌드·실행·검증
 
@@ -42,4 +42,4 @@ npm run test
 npm run build       # 정적 산출물(독립 배포)
 ```
 
-- 개발 시 Vite dev 서버(8083)가 `/api/v1`·WS를 Spring(8080)으로 프록시. **통합 빌드 없음**(FE/BE 분리 — [../docs/architecture.md](../docs/architecture.md)).
+- 개발 시 Vite dev 서버(8083)가 `/api/v1`·WS를 Spring(8080)으로 프록시. **통합 빌드 없음**(FE/BE 분리 — [../docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md)).

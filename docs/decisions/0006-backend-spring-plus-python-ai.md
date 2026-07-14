@@ -1,6 +1,6 @@
 # ADR-0006: 컨트롤 플레인 = Spring Boot(Java), AI 플레인 = Python 분리
 
-> 📍 하네스 개요: [../harness/README.md](../harness/README.md) · 아키텍처: [../architecture.md](../architecture.md)
+> 📍 하네스 개요: [../harness/README.md](../harness/README.md) · 아키텍처: [../ARCHITECTURE.md](../ARCHITECTURE.md)
 
 - **상태**: 채택
 - **일자**: 2026-07-14

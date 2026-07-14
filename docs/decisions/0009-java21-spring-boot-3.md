@@ -1,6 +1,6 @@
 # ADR-0009: 백엔드 = Java 21 + Spring Boot 3.4/3.5
 
-> 📍 하네스 개요: [../harness/README.md](../harness/README.md) · 아키텍처: [../architecture.md](../architecture.md)
+> 📍 하네스 개요: [../harness/README.md](../harness/README.md) · 아키텍처: [../ARCHITECTURE.md](../ARCHITECTURE.md)
 
 - **상태**: 채택
 - **일자**: 2026-07-14

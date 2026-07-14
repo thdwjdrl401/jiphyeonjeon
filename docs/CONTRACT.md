@@ -1,9 +1,9 @@
 # CONTRACT.md — 공유 계약 (정본)
 
-> 📍 하네스 개요: [docs/harness/README.md](harness/README.md) · 정본 규칙: [AGENTS.md](../AGENTS.md) · 아키텍처: [architecture.md](architecture.md)
+> 📍 하네스 개요: [docs/harness/README.md](harness/README.md) · 정본 규칙: [AGENTS.md](../AGENTS.md) · 아키텍처: [ARCHITECTURE.md](ARCHITECTURE.md)
 >
 > **FE↔Spring**, **Spring↔AI(RabbitMQ/HTTP)**, **AI→Spring(Redis Streams/callback)** 이 동시에 지켜야 어긋나지 않는 계약. 한쪽이 바꾸면 다른 쪽이 깨지는 항목만.
-> (구 화상회의 명세 [SPEC.md](SPEC.md)는 참고용 — [decisions/0003](decisions/0003-greenfield-redesign.md))
+> (구 화상회의 명세 [SPEC.md](legacy/SPEC.md)는 참고용 — [decisions/0003](decisions/0003-greenfield-redesign.md))
 
 ---
 
@@ -45,7 +45,7 @@
 - 시간은 전부 **세션 상대 ms**.
 
 ## 4. 스키마 소유권 (공동수정 금지)
-- `core` = Spring 단독 쓰기, `ai` = Python 단독 쓰기. AI 후보(ai)→강사 게시→core read model. 상세: [architecture.md](architecture.md) 도메인 모델.
+- `core` = Spring 단독 쓰기, `ai` = Python 단독 쓰기. AI 후보(ai)→강사 게시→core read model. 상세: [ARCHITECTURE.md](ARCHITECTURE.md) 도메인 모델.
 
 ## 5. 기능 ↔ 오너 맵 (CP 기준)
 | CP | 영역 | 오너 | 계약 |
