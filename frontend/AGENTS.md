@@ -6,7 +6,8 @@
 
 ## 스택·환경
 
-- React **18** · TypeScript · Vite **5** · React Router 6 · Context API · Axios. Node.js 20.18 LTS.
+- React **19** · TypeScript · Vite · React Router · **TanStack Query**(서버 상태) · 최소 전역 UI 상태(Context/Zustand) · Axios. Node.js 20.18 LTS.
+- AI 응답은 **SSE**, 채팅/자막은 **WebSocket**(누락은 REST로 보완). API 타입은 OpenAPI 생성 권장(임의 DTO 복제 금지).
 - 개발 서버 8083. **FE/BE 분리 배포** — React를 독립 서비스(정적 호스팅/컨테이너)로 배포, Spring은 API+WS만([../docs/decisions/0002](../docs/decisions/0002-react-typescript-frontend.md)).
 - UI 프레임워크 없이 기존 CSS와 네이티브 HTML 요소를 사용.
 
