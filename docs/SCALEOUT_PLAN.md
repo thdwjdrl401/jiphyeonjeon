@@ -1,5 +1,7 @@
 # 스케일아웃 계획 — Kurento / 시그널링 / 채팅
 
+> ⚠️ **대체됨 (SUPERSEDED)**: Kurento 기반 계획이다. 미디어는 **LiveKit self-host**로 변경됨 → **[architecture.md](architecture.md)** · [decisions/0004](decisions/0004-media-livekit-selfhost.md). 아래는 참고용(히스토리).
+
 > 목표: 부하를 **측정 → 기준점(최대 방 인원·동시 방 수) 설정 → (고도화 단계) 트리거 기반 자동 확장**.
 > 전제: 병목은 **미디어 처리(Kurento)**. 시그널링·채팅은 상대적으로 경량.
 > **우선순위**: ①단일 인스턴스 캐파 측정 → 최대 방 인원 기준 결정(근시일) → ②멀티 인스턴스 오케스트레이션(고도화, 후순위).
