@@ -7,7 +7,7 @@
 ## 스택·환경
 
 - React **18** · TypeScript · Vite **5** · React Router 6 · Context API · Axios. Node.js 20.18 LTS.
-- 개발 서버 8083, 빌드 산출물은 backend 정적 리소스 `backend/src/main/resources/dist/`로 번들.
+- 개발 서버 8083. **FE/BE 분리 배포** — React를 독립 서비스(정적 호스팅/컨테이너)로 배포, Spring은 API+WS만([../docs/decisions/0002](../docs/decisions/0002-react-typescript-frontend.md)).
 - UI 프레임워크 없이 기존 CSS와 네이티브 HTML 요소를 사용.
 
 ## 구조 (`frontend/src`)
@@ -38,8 +38,7 @@ npm run dev         # http://localhost:8083
 npm run lint
 npm run typecheck
 npm run test
-npm run build       # backend/src/main/resources/dist 생성
+npm run build       # 정적 산출물(독립 배포)
 ```
 
-- 루트에서 FE+BE 동시 개발: `npm run dev`.
-- 통합 구동은 루트 `npm start`; Gradle `processResources`가 프론트 빌드를 한 번 실행한 뒤 Spring Boot가 8080에서 SPA와 API를 함께 제공한다.
+- 개발 시 Vite dev 서버(8083)가 `/api/v1`·WS를 Spring(8080)으로 프록시. **통합 빌드 없음**(FE/BE 분리 — [../docs/architecture.md](../docs/architecture.md)).

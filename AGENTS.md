@@ -5,7 +5,9 @@
 > **이 파일이 정본입니다.** 어떤 AI 코딩 도구(Claude Code / Codex / Cursor / Gemini 등)를 쓰든
 > 이 규칙을 따릅니다. 도구별 연결법은 위 README의 "도구별 링킹" 표를 참고하세요.
 
-실시간 그룹 화상 회의 서비스(React + TypeScript + Spring Boot + Kurento WebRTC). 부트캠프 팀 프로젝트.
+실시간 온라인 강의 플랫폼 **LiveClass AI** (React + Spring Boot + Python AI + LiveKit). 부트캠프 팀 프로젝트.
+
+> **기존 PJT 명세서·스켈레톤 코드는 참고용이다.** 본 기획에 맞춰 제로베이스로 재설계한다(구조 포함). 명세·스켈레톤 준수를 완료 기준으로 삼지 않는다. 근거: [docs/decisions/0003-greenfield-redesign.md](docs/decisions/0003-greenfield-redesign.md) · 확정 아키텍처: [docs/architecture.md](docs/architecture.md)
 
 ---
 
@@ -28,14 +30,16 @@ Codex는 별도 명령 어댑터 없이 위 문서 흐름을 기준으로 판단
 
 | 구분 | 스택 | 위치 |
 |---|---|---|
-| Frontend | React 18 · TypeScript · Vite 5 · React Router · Context API | `frontend/` ([frontend/AGENTS.md](frontend/AGENTS.md)) |
-| Backend | Spring Boot 2.7 · Spring Security · QueryDSL · JWT | `backend/` ([backend/AGENTS.md](backend/AGENTS.md)) |
-| Realtime | Kurento Media Server 6.18 (WebRTC) + STOMP/WebSocket 채팅 | — |
-| DB | MySQL 8.0 (`liveclass_web_db`) | — |
+| Frontend | React 18 · TypeScript · Vite 5 (FE/BE 분리 배포) | `frontend/` ([frontend/AGENTS.md](frontend/AGENTS.md)) |
+| Backend (컨트롤) | Spring Boot 2.7 · Spring Security · JPA · JWT | `backend/` ([backend/AGENTS.md](backend/AGENTS.md)) |
+| AI | Python (LiveKit Agent · STT · RAG) | — |
+| 미디어 | LiveKit self-host (SFU) + Egress(HLS·녹화) | — |
+| DB | PostgreSQL + pgvector | — |
+| 캐시·버스·스토리지 | Redis (LiveKit 조정·WS팬아웃·Streams버스) · MinIO | — |
 
-- 실행법: [RUN.md](RUN.md) · 요구사항 상세: [README.md](README.md)
-- 기능 명세: [docs/SPEC.md](docs/SPEC.md) · 구현 로드맵: [docs/ROADMAP.md](docs/ROADMAP.md)
-- 마일스톤: **Sub Ⅰ**(인증/회원) → **Sub Ⅱ**(방 CRUD/미디어) → **Sub Ⅲ**(화상콜/채팅/배포)
+- **확정 아키텍처·다이어그램**: [docs/architecture.md](docs/architecture.md) · 실행법: [RUN.md](RUN.md)
+- 마일스톤(CP): **CP0**(인증·세션 CRUD) → **CP1~2**(VOD 자막·근거) → **CP3~6**(라이브·되감기·Q&A). 상세는 architecture.md.
+- 참고(구 화상회의 명세, 참고용): [docs/SPEC.md](docs/SPEC.md) · [docs/ROADMAP.md](docs/ROADMAP.md)
 
 ---
 
@@ -43,7 +47,7 @@ Codex는 별도 명령 어댑터 없이 위 문서 흐름을 기준으로 판단
 
 전체·정본은 [docs/CONTRACT.md](docs/CONTRACT.md). 아래는 어길 시 FE/BE가 깨지는 핵심만.
 
-- **API 필드명은 `camelCase`로 통일.** 명세(SPEC)는 snake/camel을 혼용하지만(예: `is_active`, `thumbnail_url`) 이는 **명세 자체의 계약 불일치**이므로 구현에서 camelCase로 정정한다. 근거: [docs/decisions/0001-field-name-camelcase.md](docs/decisions/0001-field-name-camelcase.md)
+- **API 필드명은 `camelCase`로 통일** (팀 자체 컨벤션). 근거: [docs/decisions/0001-field-name-camelcase.md](docs/decisions/0001-field-name-camelcase.md)
 - **API prefix**: `/api/v1`.
 - **HTTP 상태코드 규격을 지킨다** (예: 회원가입 **201**, 중복확인 **409**, 로그인 실패 **401**). CONTRACT의 상태코드 표 참조.
 - FE/BE가 공유하는 DTO/응답 형태를 바꿀 때는 **양쪽을 함께** 바꾸고 CONTRACT를 갱신한다.
@@ -57,7 +61,7 @@ Codex는 별도 명령 어댑터 없이 위 문서 흐름을 기준으로 판단
 | 상황 | 필요한 것 |
 |---|---|
 | 실제 API JSON 필드명·상태코드처럼 FE/BE 런타임 계약 | **계약 테스트** (필드명·상태코드 검증) |
-| 마일스톤 완료 게이트 핵심 경로(로그인, 방 생성) | **계약 테스트** |
+| 마일스톤(CP) 완료 게이트 핵심 경로(로그인, 세션 생성/입장) | **계약 테스트** |
 | 코드 식별자 같은 정적 규칙(camelCase, import 순서, 미사용 변수) | **린트로 충분** |
 | 표준 CRUD·내부 헬퍼·UI 문구 | **불필요** (근거만 남김) |
 

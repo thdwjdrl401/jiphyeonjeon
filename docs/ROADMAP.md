@@ -1,5 +1,7 @@
 # 구현 로드맵 — 명세대로 진행 가능(🟢) vs 더 고민 필요(🟡)
 
+> ⚠️ **대체됨 (SUPERSEDED)**: 이 문서는 구 그룹 화상회의 명세 기준이다. 프로젝트는 **LiveClass AI**로 재설계됨 → **[architecture.md](architecture.md)** · [decisions/0003](decisions/0003-greenfield-redesign.md). 아래는 참고용(히스토리).
+
 > 기준: [SPEC.md](./SPEC.md) (Sub Ⅰ/Ⅱ/Ⅲ 명세 추출본) + 현재 코드 상태.
 > 🟢 = 명세에 규격(경로·요청·응답·규칙)이 있어 표준 패턴으로 바로 구현 가능.
 > 🟡 = 설계 결정·인프라·정합성 이슈로 착수 전 합의/설계 필요.
