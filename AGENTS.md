@@ -35,10 +35,10 @@ Codex는 별도 명령 어댑터 없이 위 문서 흐름을 기준으로 판단
 | AI | Python: **ai-api(FastAPI SSE)** · **ai-worker(RabbitMQ)** · **realtime-agent(LiveKit)** | — |
 | DB | PostgreSQL + pgvector (**core/ai 스키마 분리**) | — |
 | 큐·캐시 | **RabbitMQ**(durable 배치) · **Redis**(cache/session + STT·라이브 fast path) | — |
-| 미디어 | VOD: **MinIO + FFmpeg + nginx**(self-host HLS) / 라이브: **LiveKit self-host** | — |
+| 미디어 | **LiveKit self-host(SFU) + Egress(녹화→HLS) + MinIO + nginx** (완전 라이브 — 영상 업로드 없음, VOD=녹화) | — |
 
 - **확정 아키텍처·다이어그램**: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · 실행법: [RUN.md](RUN.md)
-- 마일스톤(CP): **CP0**(인증·세션 CRUD) → **CP1~2**(VOD 자막·근거) → **CP3~6**(라이브·되감기·Q&A). 상세는 ARCHITECTURE.md.
+- 마일스톤(CP): **CP0**(인증·강좌) → **CP1**(라이브 미디어) → **CP2**(자막) → **CP3**(용어·RAG) → **CP4**(녹화·다시보기) → **CP5**(퀴즈). 상세는 [docs/CP-ROADMAP.md](docs/CP-ROADMAP.md).
 - 참고(구 화상회의 명세, 참고용): [docs/legacy/SPEC.md](docs/legacy/SPEC.md) · [docs/legacy/ROADMAP.md](docs/legacy/ROADMAP.md)
 
 ---
