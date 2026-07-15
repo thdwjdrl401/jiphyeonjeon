@@ -1,0 +1,39 @@
+# T0 개발 backbone — 최소 인프라 (CP0가 쓰는 것만).
+# RabbitMQ·MinIO·nginx·미디어(LiveKit/Egress)는 각 CP 착수 시점에 확장 (TEAM-KICKOFF §4).
+# 사용: cp .env.example .env  →  docker compose up -d
+services:
+  postgres:
+    image: pgvector/pgvector:pg16          # pgvector 사전 설치 (ADR-0005)
+    container_name: liveclass-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-liveclass}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-liveclass}
+      POSTGRES_DB: ${POSTGRES_DB:-liveclass}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro   # 최초 1회 실행
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-liveclass} -d ${POSTGRES_DB:-liveclass}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine                  # cache/session + STT/라이브 Streams (ADR-0008/0012)
+    container_name: liveclass-redis
+    command: ["redis-server", "--appendonly", "yes"]   # 세션 재시작 생존
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
+  redisdata:
