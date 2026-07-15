@@ -15,6 +15,7 @@
 |---|---|---|
 | Front-end | **React 19 + TypeScript** (FE/BE 분리, TanStack Query, SSE/WS) | [0002](decisions/0002-react-typescript-frontend.md) |
 | 컨트롤/데이터 | **Spring Boot 3.4/3.5 + Java 21**(virtual threads), JPA, Security | [0006](decisions/0006-backend-spring-plus-python-ai.md)·[0009](decisions/0009-java21-spring-boot-3.md) |
+| 인증 | **HttpOnly 쿠키 + Redis 세션**(엣지) · 내부 S2S=단명 JWT · 미디어=LiveKit JWT | [0014](decisions/0014-auth-redis-session-cookie.md) |
 | AI (3서비스) | **realtime-agent(LiveKit, 라이브 STT)** + **ai-api(FastAPI, RAG SSE)** + **ai-worker(RabbitMQ, chunk·embed·후보)** | [0011](decisions/0011-ai-three-services.md) |
 | DB | **PostgreSQL + pgvector** (core/ai 스키마 분리) | [0005](decisions/0005-db-postgres-pgvector.md) |
 | 캐시·fast path | **Redis** (cache/session/rate-limit + STT·라이브 자막 Streams) | [0008](decisions/0008-ai-bus-redis-streams-session-clock.md)·[0012](decisions/0012-hybrid-queue.md) |

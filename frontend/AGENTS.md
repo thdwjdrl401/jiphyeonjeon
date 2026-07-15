@@ -27,8 +27,8 @@ test/               ← Vitest/React Testing Library
 ## 계약 주의 (FE가 지킬 것)
 
 - BE 응답을 소비할 때 **camelCase** 필드 계약을 따른다([CONTRACT §1](../docs/CONTRACT.md#1-필드명-규칙--camelcase-통일)). snake 필드가 오면 BE와 함께 정정하며 FE 변환 우회는 금지.
-- 공용 Axios는 `/api/v1`을 base URL로 사용하고 토큰 존재 시 `Authorization: Bearer <token>`을 보낸다.
-- 토큰은 `localStorage`의 `accessToken`에 저장한다. 401·403 및 `/users/me` 진입 검증은 [SPEC §6](../docs/legacy/SPEC.md)의 후속 구현 범위다.
+- **인증 = HttpOnly 쿠키 세션**([../docs/decisions/0014](../docs/decisions/0014-auth-redis-session-cookie.md)). 공용 Axios는 `/api/v1`을 base URL로 쓰고 **`withCredentials: true`** 로 쿠키를 자동 전송한다. **`Authorization: Bearer`·localStorage 토큰은 쓰지 않는다**(쿠키는 JS가 읽지 않음). 상태변경 요청엔 **CSRF 토큰** 동봉.
+- `EventSource`(RAG SSE)·`WebSocket`(자막·채팅)도 same-origin 쿠키로 인증됨 → 별도 토큰 부착 불필요. 401·403 처리(로그아웃·리다이렉트)는 CP0 구현 범위.
 
 ## 빌드·실행·검증
 
