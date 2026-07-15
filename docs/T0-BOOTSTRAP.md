@@ -42,7 +42,7 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/liveclass
     username: liveclass
-    password: change-me-local
+    password: liveclass          # 로컬 dev 전용 (.env와 일치)
   jpa:
     properties:
       hibernate.default_schema: core

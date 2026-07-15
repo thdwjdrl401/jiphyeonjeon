@@ -19,3 +19,7 @@ package-lock.json
 
 # 로컬 인프라 시크릿 (.env.example만 커밋)
 .env
+
+# 에디터 스왑/임시 파일
+*.swp
+*~
