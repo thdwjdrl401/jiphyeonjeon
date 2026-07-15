@@ -1,0 +1,9 @@
+# Egress 녹화 워커 설정
+# ⚠️ 템플릿: secret은 서버에서 채우고 커밋 금지.
+log_level: debug
+api_key: <API_KEY>
+api_secret: <API_SECRET>           # livekit.yaml keys의 secret과 동일
+ws_url: ws://localhost:7880        # ★ recorder는 co-located라 로컬 직결 (nginx/wss 아님 — 트러블슈팅 #5)
+insecure: true                     # 로컬 ws 허용
+redis:
+  address: localhost:6379          # livekit.yaml과 동일 Redis
