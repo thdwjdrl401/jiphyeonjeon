@@ -15,7 +15,7 @@
 ## 2. REST API (`/api/v1`, Spring 소유)
 | 도메인 | 예시 | 비고 |
 |---|---|---|
-| 인증 | `POST /auth/login`·`/auth/signup`·`/auth/logout` | 상태코드: 생성 201·중복 409·인증실패 401·권한 403. **인증 방식(JWT vs 세션쿠키) 확정 필요**(로드맵 열린항목) |
+| 인증 | `POST /auth/login`·`/auth/signup`·`/auth/logout` | 상태코드: 생성 201·중복 409·인증실패 401·권한 403. **HttpOnly 쿠키 세션(Redis 저장)** — FE는 `withCredentials`, `Authorization: Bearer` 미사용. 변경요청 CSRF 토큰([decisions/0014](decisions/0014-auth-redis-session-cookie.md)) |
 | 카탈로그 | `GET /courses`·`GET /courses/{id}` | 검색·필터·페이지네이션 |
 | 강좌(강사) | `POST/PATCH /instructor/courses`·`.../sections`·`.../curriculum/order` | 소유권 검증 |
 | 강의 | `POST /instructor/sections/{id}/lessons`·`PATCH /instructor/lessons/{id}` | status: DRAFT/AI_NOT_READY/READY/PUBLISHED |

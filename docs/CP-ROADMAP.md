@@ -60,7 +60,7 @@ flowchart LR
 > **선행 스파이크(Week1 병렬)**: 한국어 STT bake-off + LiveKit/Egress self-host PoC — CP1·CP2 리스크 검증. **미디어·라이브는 3그룹 합동.**
 
 ## 열린 항목 (착수 직전 상세)
-- **인증 방식**: JWT vs 세션 쿠키(HttpOnly, 보안 권장) — 확정 후 ADR.
+- ✅ **인증 방식 확정**: HttpOnly 쿠키 + Redis 세션([decisions/0014](decisions/0014-auth-redis-session-cookie.md)).
 - Spring↔RabbitMQ 잡 envelope·Redis Streams STT 메시지·LiveKit 토큰 계약 → [CONTRACT.md](CONTRACT.md).
 - 세션시계 변환 기준, RAG 평가 게이트·reranker(고도화).
 - 보류: 분석(클러스터·히트맵)·관리자·멀티테넌트.
