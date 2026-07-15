@@ -18,7 +18,8 @@
 - **시그널링(WSS)**: `wss://<LIVEKIT_DOMAIN>` → nginx가 TLS 종료 → LiveKit `7880`(평문).
 - **미디어(WebRTC UDP)**: nginx 우회, 라우터/보안그룹이 `7882/udp`를 서버로 직접 전달.
 - **녹화(Egress)**: LiveKit↔Egress는 **Redis**로 통신. Egress가 헤드리스 Chrome으로 방을 합성 → MP4 → **MinIO**(PoC) / S3(EC2).
-- 파일: [`docker-compose.yml`](docker-compose.yml) · [`livekit.yaml`](livekit.yaml) · [`egress.yaml`](egress.yaml) · [`request.json`](request.json) · [`nginx-livekit.conf`](nginx-livekit.conf)
+- 파일: [`docker-compose.yml`](docker-compose.yml) · [`livekit.yaml`](livekit.yaml) · [`egress.yaml`](egress.yaml) · [`request.json`](request.json)(MP4 스모크) · [`request-hls.json`](request-hls.json)(HLS·near-live, 제품용) · [`nginx-livekit.conf`](nginx-livekit.conf)
+- **녹화 출력 2종**: `request.json`=단일 MP4(검증 쉬움) / `request-hls.json`=HLS 세그먼트(`segment_duration` 조절, `live_playlist_name`으로 near-live). 제품 다시보기는 **HLS**([ADR-0010](../../docs/decisions/0010-self-host-vod.md)). MP4로 파이프라인 검증 완료 → HLS는 같은 파이프라인, `.m3u8` 재생 검증은 CP4에서.
 
 ## 2. 채울 값 (딱 이것만)
 | placeholder | 뜻 | 맞춰야 할 곳 |
