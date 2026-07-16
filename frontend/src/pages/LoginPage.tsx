@@ -11,6 +11,8 @@ interface LoginLocationState {
   displayName?: string
 }
 
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
 function getSafeReturnTo(value: string | null) {
   if (!value || !value.startsWith('/') || value.startsWith('//')) return null
   try {
@@ -30,10 +32,10 @@ export default function LoginPage() {
   const [searchParams] = useSearchParams()
   const returnTo = getSafeReturnTo(searchParams.get('returnTo'))
   const locationState = location.state as LoginLocationState | null
-  const [loginId, setLoginId] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [errors, setErrors] = useState<{ loginId?: string; password?: string }>({})
+  const [errors, setErrors] = useState<{ email?: string; password?: string }>({})
   const [submitError, setSubmitError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -44,7 +46,9 @@ export default function LoginPage() {
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
     const nextErrors: typeof errors = {}
-    if (!loginId.trim()) nextErrors.loginId = '아이디를 입력해 주세요.'
+    const normalizedEmail = email.trim()
+    if (!normalizedEmail) nextErrors.email = '이메일을 입력해 주세요.'
+    else if (!emailPattern.test(normalizedEmail)) nextErrors.email = '올바른 이메일 형식으로 입력해 주세요.'
     if (!password) nextErrors.password = '비밀번호를 입력해 주세요.'
     setErrors(nextErrors)
     setSubmitError('')
@@ -52,13 +56,13 @@ export default function LoginPage() {
 
     setIsSubmitting(true)
     try {
-      await login({ loginId: loginId.trim(), password })
+      await login({ email: normalizedEmail, password })
       navigate(returnTo ?? '/', { replace: true })
     } catch (error) {
       if (error instanceof ApiError && error.status === 429) {
         setSubmitError('로그인 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.')
       } else {
-        setSubmitError('아이디 또는 비밀번호를 확인해 주세요.')
+        setSubmitError('이메일 또는 비밀번호를 확인해 주세요.')
       }
     } finally {
       setIsSubmitting(false)
@@ -87,30 +91,32 @@ export default function LoginPage() {
       {isMockApiEnabled && (
         <div className="demo-notice">
           <strong>개발용 미리보기</strong>
-          <span>아이디에 instructor를 포함하면 강사 화면으로 로그인됩니다.</span>
+          <span>instructor@liveclass.ai로 로그인하면 강사 화면을 확인할 수 있습니다.</span>
         </div>
       )}
 
       <form className="auth-form" aria-label="로그인" onSubmit={handleSubmit} noValidate>
-        <div className={`form-group${errors.loginId ? ' has-error' : ''}`}>
-          <label htmlFor="loginId">아이디</label>
+        <div className={`form-group${errors.email ? ' has-error' : ''}`}>
+          <label htmlFor="email">이메일</label>
           <div className="input-shell">
             <span className="input-icon" aria-hidden="true">@</span>
             <input
-              id="loginId"
-              name="loginId"
-              autoComplete="username"
-              value={loginId}
-              placeholder="아이디를 입력하세요"
-              aria-invalid={Boolean(errors.loginId)}
-              aria-describedby={errors.loginId ? 'loginId-error' : undefined}
+              id="email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              maxLength={320}
+              value={email}
+              placeholder="name@example.com"
+              aria-invalid={Boolean(errors.email)}
+              aria-describedby={errors.email ? 'email-error' : undefined}
               onChange={(event) => {
-                setLoginId(event.target.value)
-                if (errors.loginId) setErrors((current) => ({ ...current, loginId: undefined }))
+                setEmail(event.target.value)
+                if (errors.email) setErrors((current) => ({ ...current, email: undefined }))
               }}
             />
           </div>
-          {errors.loginId && <p className="field-error" id="loginId-error">{errors.loginId}</p>}
+          {errors.email && <p className="field-error" id="email-error">{errors.email}</p>}
         </div>
 
         <div className={`form-group${errors.password ? ' has-error' : ''}`}>

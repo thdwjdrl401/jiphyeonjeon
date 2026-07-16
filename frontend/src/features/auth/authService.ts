@@ -3,12 +3,12 @@ import { isMockApiEnabled } from '@/shared/config/runtime'
 import { mockAuthService } from './mockAuth'
 import type {
   AuthUser,
-  LoginIdAvailability,
+  EmailAvailability,
   LoginRequest,
   SignupRequest,
 } from './types'
 
-const httpAuthService = {
+export const httpAuthService = {
   async getCurrentUser() {
     try {
       const { data } = await apiClient.get<AuthUser>('/auth/me')
@@ -26,10 +26,10 @@ const httpAuthService = {
     const { data } = await apiClient.post<AuthUser>('/auth/signup', request)
     return data
   },
-  async checkLoginId(loginId: string) {
-    const { data } = await apiClient.get<LoginIdAvailability>(
-      '/auth/login-id-availability',
-      { params: { loginId } },
+  async checkEmail(email: string) {
+    const { data } = await apiClient.get<EmailAvailability>(
+      '/auth/email-availability',
+      { params: { email } },
     )
     return data
   },

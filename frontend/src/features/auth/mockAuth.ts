@@ -1,13 +1,18 @@
 import { ApiError } from '@/shared/api/client'
 import type {
   AuthUser,
-  LoginIdAvailability,
+  EmailAvailability,
   LoginRequest,
   SignupRequest,
 } from './types'
 
 let currentUser: AuthUser | null = null
-const reservedLoginIds = new Set(['liveclass', 'admin', 'teacher'])
+const initialReservedEmails = [
+  'liveclass@example.com',
+  'admin@liveclass.ai',
+  'teacher@liveclass.ai',
+]
+const reservedEmails = new Set(initialReservedEmails)
 
 async function wait() {
   if (import.meta.env.MODE === 'test') return
@@ -20,6 +25,8 @@ export function peekMockUser() {
 
 export function resetMockAuth() {
   currentUser = null
+  reservedEmails.clear()
+  initialReservedEmails.forEach((email) => reservedEmails.add(email))
 }
 
 export const mockAuthService = {
@@ -32,16 +39,16 @@ export const mockAuthService = {
     await wait()
     if (request.password.toLowerCase() === 'wrong') {
       throw new ApiError(
-        '아이디 또는 비밀번호를 확인해 주세요.',
+        '이메일 또는 비밀번호를 확인해 주세요.',
         401,
         'AUTH_INVALID_CREDENTIALS',
       )
     }
 
-    const isInstructor = /teacher|instructor|강사/i.test(request.loginId)
+    const isInstructor = /teacher|instructor/i.test(request.email)
     currentUser = {
       userId: isInstructor ? 'usr_mock_instructor' : 'usr_mock_student',
-      loginId: request.loginId,
+      email: request.email,
       displayName: isInstructor ? '이강사' : '김학생',
       role: isInstructor ? 'INSTRUCTOR' : 'STUDENT',
     }
@@ -50,28 +57,28 @@ export const mockAuthService = {
 
   async signup(request: SignupRequest) {
     await wait()
-    if (reservedLoginIds.has(request.loginId.toLowerCase())) {
+    if (reservedEmails.has(request.email.toLowerCase())) {
       throw new ApiError(
-        '이미 사용 중인 아이디입니다.',
+        '이미 사용 중인 이메일입니다.',
         409,
-        'AUTH_LOGIN_ID_DUPLICATED',
+        'AUTH_EMAIL_DUPLICATED',
       )
     }
-    reservedLoginIds.add(request.loginId.toLowerCase())
+    reservedEmails.add(request.email.toLowerCase())
     return {
       userId: `usr_mock_${Date.now()}`,
-      loginId: request.loginId,
+      email: request.email,
       displayName: request.displayName,
       role: request.role,
     } satisfies AuthUser
   },
 
-  async checkLoginId(loginId: string) {
+  async checkEmail(email: string) {
     await wait()
     return {
-      loginId,
-      available: !reservedLoginIds.has(loginId.toLowerCase()),
-    } satisfies LoginIdAvailability
+      email,
+      available: !reservedEmails.has(email.toLowerCase()),
+    } satisfies EmailAvailability
   },
 
   async logout() {

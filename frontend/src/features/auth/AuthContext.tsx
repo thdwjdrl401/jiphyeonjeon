@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { authService } from './authService'
 import type {
   AuthUser,
-  LoginIdAvailability,
+  EmailAvailability,
   LoginRequest,
   SignupRequest,
 } from './types'
@@ -15,7 +15,7 @@ interface AuthContextValue {
   status: AuthStatus
   login: (request: LoginRequest) => Promise<AuthUser>
   signup: (request: SignupRequest) => Promise<AuthUser>
-  checkLoginId: (loginId: string) => Promise<LoginIdAvailability>
+  checkEmail: (email: string) => Promise<EmailAvailability>
   logout: () => Promise<void>
 }
 
@@ -47,7 +47,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       return signedInUser
     },
     signup: authService.signup,
-    checkLoginId: authService.checkLoginId,
+    checkEmail: authService.checkEmail,
     async logout() {
       await authService.logout()
       queryClient.removeQueries({
