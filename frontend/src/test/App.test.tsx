@@ -1,114 +1,96 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { App } from '@/App'
-import { requestLogin } from '@/api/authApi'
-import { apiClient } from '@/api/client'
-
-vi.mock('@/api/authApi', () => ({
-  requestLogin: vi.fn(),
-}))
-
-const mockedRequestLogin = vi.mocked(requestLogin)
+import { beforeEach, describe, expect, it } from 'vitest'
+import App from '@/App'
+import { resetMockAuth } from '@/features/auth/mockAuth'
+import { apiClient } from '@/shared/api/client'
 
 function renderAt(path: string) {
   window.history.pushState({}, '', path)
   return render(<App />)
 }
 
-describe('React 애플리케이션', () => {
+describe('LiveClass AI 공개 페이지', () => {
   beforeEach(() => {
-    mockedRequestLogin.mockReset()
+    resetMockAuth()
+    window.history.replaceState({}, '', '/')
   })
 
-  it('홈 경로를 렌더링한다', () => {
+  it('웰컴 페이지에서 핵심 가치와 추천 커리큘럼을 보여준다', async () => {
     renderAt('/')
-    expect(screen.getByRole('button', { name: '1번 회의 상세 보기' })).toBeInTheDocument()
+
+    expect(
+      screen.getByRole('heading', { name: /라이브의 순간을 놓치지 않고/ }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('몰입하는 라이브 수업')).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: '라이브로 완성하는 Spring Boot' }),
+    ).toBeInTheDocument()
   })
 
-  it.each([
-    ['/history', '지난 회의 이력 페이지'],
-    ['/conferences/42', '42번 방 상세 보기 페이지'],
-  ])('%s 경로를 렌더링한다', (path, expectedText) => {
-    renderAt(path)
-    expect(screen.getByText(expectedText)).toBeInTheDocument()
-  })
-
-  it('경로에 맞춰 사이드바 메뉴를 활성화하고 이동한다', async () => {
+  it('커리큘럼 검색 조건을 URL에 보존하고 결과를 갱신한다', async () => {
     const user = userEvent.setup()
-    renderAt('/')
+    renderAt('/curriculums')
 
-    const historyButton = screen.getByRole('button', { name: '지난 회의 이력' })
-    await user.click(historyButton)
+    const search = screen.getByPlaceholderText('제목, 소개, 강사 이름으로 검색')
+    await user.type(search, 'WebRTC')
+    await user.click(screen.getByRole('button', { name: '검색' }))
 
-    expect(screen.getByText('지난 회의 이력 페이지')).toBeInTheDocument()
-    expect(historyButton).toHaveClass('active')
+    await waitFor(() => expect(window.location.search).toContain('q=WebRTC'))
+    expect(
+      await screen.findByRole('heading', { name: 'WebRTC와 실시간 미디어' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/총/)).toHaveTextContent('1개의 커리큘럼')
   })
 
-  it('로그인 필수값을 검증한다', async () => {
+  it('로그인 필수 입력을 검증한다', async () => {
     const user = userEvent.setup()
-    renderAt('/')
+    renderAt('/login')
 
-    await user.click(screen.getByRole('button', { name: '로그인' }))
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: '로그인' }))
+    const form = await screen.findByRole('form', { name: '로그인' })
+    await user.click(within(form).getByRole('button', { name: '로그인' }))
 
-    expect(screen.getByText('Please input ID')).toBeInTheDocument()
-    expect(screen.getByText('Please input password')).toBeInTheDocument()
-    expect(mockedRequestLogin).not.toHaveBeenCalled()
+    expect(screen.getByText('아이디를 입력해 주세요.')).toBeInTheDocument()
+    expect(screen.getByText('비밀번호를 입력해 주세요.')).toBeInTheDocument()
   })
 
-  it('로그인 payload와 토큰 저장을 검증한다', async () => {
-    mockedRequestLogin.mockResolvedValue({
-      statusCode: 200,
-      message: 'Success',
-      accessToken: 'test-token',
-    })
+  it('로그인 후 사용자 정보를 헤더에 반영하며 토큰을 저장하지 않는다', async () => {
     const user = userEvent.setup()
-    renderAt('/')
+    renderAt('/login')
+    const form = await screen.findByRole('form', { name: '로그인' })
 
-    await user.click(screen.getByRole('button', { name: '로그인' }))
-    await user.type(screen.getByLabelText('아이디'), 'liveclass')
-    await user.type(screen.getByLabelText('비밀번호'), 'password!1')
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: '로그인' }))
+    await user.type(within(form).getByLabelText('아이디'), 'student01')
+    await user.type(within(form).getByLabelText('비밀번호'), 'password1')
+    await user.click(within(form).getByRole('button', { name: '로그인' }))
 
-    await waitFor(() => expect(mockedRequestLogin).toHaveBeenCalledWith({ id: 'liveclass', password: 'password!1' }))
-    expect(localStorage.getItem('accessToken')).toBe('test-token')
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(await screen.findByText('김학생')).toBeInTheDocument()
+    expect(localStorage.getItem('accessToken')).toBeNull()
   })
 
-  it('저장된 토큰을 앱 시작 시 보존한다', () => {
-    localStorage.setItem('accessToken', 'saved-token')
-    renderAt('/')
-    expect(localStorage.getItem('accessToken')).toBe('saved-token')
+  it('회원가입에서 역할·중복 확인을 거쳐 로그인으로 이동한다', async () => {
+    const user = userEvent.setup()
+    renderAt('/signup')
+    const form = await screen.findByRole('form', { name: '회원가입' })
+
+    await user.click(within(form).getByRole('button', { name: /학생으로 배우기/ }))
+    await user.type(within(form).getByLabelText(/이름/), '김라이브')
+    await user.type(within(form).getByLabelText(/아이디/), 'newstudent01')
+    await user.click(within(form).getByRole('button', { name: '중복 확인' }))
+    expect(await screen.findByText('사용할 수 있는 아이디입니다.')).toBeInTheDocument()
+    await user.type(within(form).getByLabelText(/^비밀번호 \*/), 'password1')
+    await user.type(within(form).getByLabelText(/비밀번호 확인/), 'password1')
+    await user.click(within(form).getByRole('button', { name: /가입하고 시작하기/ }))
+
+    expect(
+      await screen.findByText(/김라이브님, 가입이 완료됐어요/),
+    ).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/login')
   })
+})
 
-  it('저장된 토큰을 공용 Axios Authorization 헤더에 설정한다', async () => {
-    localStorage.setItem('accessToken', 'saved-token')
-
-    const response = await apiClient.get('/test', {
-      adapter: async (config) => ({
-        config,
-        data: {},
-        headers: {},
-        status: 200,
-        statusText: 'OK',
-      }),
-    })
-
-    expect(response.config.headers.Authorization).toBe('Bearer saved-token')
-  })
-
-  it('스크롤 하단에서 회의 카드를 추가한다', () => {
-    renderAt('/')
-    const scrollContainer = screen.getByTestId('conference-scroll')
-
-    Object.defineProperties(scrollContainer, {
-      scrollTop: { configurable: true, value: 900 },
-      clientHeight: { configurable: true, value: 100 },
-      scrollHeight: { configurable: true, value: 1000 },
-    })
-    fireEvent.scroll(scrollContainer)
-
-    expect(screen.getByRole('button', { name: '16번 회의 상세 보기' })).toBeInTheDocument()
+describe('공유 API 계약', () => {
+  it('API prefix와 HttpOnly 쿠키 전송 옵션을 사용한다', () => {
+    expect(apiClient.defaults.baseURL).toBe('/api/v1')
+    expect(apiClient.defaults.withCredentials).toBe(true)
   })
 })

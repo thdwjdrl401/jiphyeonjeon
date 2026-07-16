@@ -11,28 +11,15 @@ export default defineConfig({
   },
   server: {
     port: 8083,
-    open: true,
     proxy: {
       '/api/v1': {
-        target: 'http://localhost:8080/',
-        changeOrigin: true,
-      },
-      '/webjars': {
-        target: 'http://localhost:8080/',
-        changeOrigin: true,
-      },
-      '/group-call': {
-        target: 'http://localhost:8080/',
-        changeOrigin: true,
-      },
-      '/upload': {
         target: 'http://localhost:8080/',
         changeOrigin: true,
       },
     },
   },
   build: {
-    outDir: '../backend/src/main/resources/dist',
+    outDir: 'dist',
     emptyOutDir: true,
     sourcemap: false,
     rollupOptions: {
@@ -53,5 +40,6 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: './src/test/setup.ts',
     css: true,
+    clearMocks: true,
   },
 })
