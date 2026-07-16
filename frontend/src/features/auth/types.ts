@@ -2,13 +2,13 @@ export type UserRole = 'STUDENT' | 'INSTRUCTOR'
 
 export interface AuthUser {
   userId: string
-  loginId: string
+  email: string
   displayName: string
   role: UserRole
 }
 
 export interface LoginRequest {
-  loginId: string
+  email: string
   password: string
 }
 
@@ -17,7 +17,7 @@ export interface SignupRequest extends LoginRequest {
   role: UserRole
 }
 
-export interface LoginIdAvailability {
-  loginId: string
+export interface EmailAvailability {
+  email: string
   available: boolean
 }

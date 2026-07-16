@@ -6,26 +6,26 @@ import type { UserRole } from '@/features/auth/types'
 import { ApiError } from '@/shared/api/client'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 
-type SignupField = 'role' | 'displayName' | 'loginId' | 'password' | 'passwordConfirm'
+type SignupField = 'role' | 'displayName' | 'email' | 'password' | 'passwordConfirm'
 type SignupErrors = Partial<Record<SignupField, string>>
 type Availability = 'idle' | 'checking' | 'available' | 'unavailable' | 'error'
 
-const loginIdPattern = /^[a-zA-Z0-9._-]{4,20}$/
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-function validateLoginId(loginId: string) {
-  if (!loginId) return '아이디를 입력해 주세요.'
-  if (!loginIdPattern.test(loginId)) return '영문, 숫자, 마침표, 밑줄로 4–20자 입력해 주세요.'
+function validateEmail(email: string) {
+  if (!email) return '이메일을 입력해 주세요.'
+  if (email.length > 320 || !emailPattern.test(email)) return '올바른 이메일 형식으로 입력해 주세요.'
   return undefined
 }
 
 export default function SignupPage() {
   usePageTitle('회원가입')
-  const { signup, checkLoginId } = useAuth()
+  const { signup, checkEmail } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [role, setRole] = useState<UserRole | null>(null)
   const [displayName, setDisplayName] = useState('')
-  const [loginId, setLoginId] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [passwordConfirm, setPasswordConfirm] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -44,26 +44,27 @@ export default function SignupPage() {
   }
 
   const handleAvailabilityCheck = async () => {
-    const normalized = loginId.trim()
-    const loginIdError = validateLoginId(normalized)
-    if (loginIdError) {
-      setErrors((current) => ({ ...current, loginId: loginIdError }))
+    const normalized = email.trim()
+    const emailError = validateEmail(normalized)
+    if (emailError) {
+      setErrors((current) => ({ ...current, email: emailError }))
       return
     }
 
     setAvailability('checking')
-    setErrors((current) => ({ ...current, loginId: undefined }))
+    setErrors((current) => ({ ...current, email: undefined }))
     try {
-      const result = await checkLoginId(normalized)
+      const result = await checkEmail(normalized)
       setAvailability(result.available ? 'available' : 'unavailable')
       if (!result.available) {
-        setErrors((current) => ({ ...current, loginId: '이미 사용 중인 아이디입니다.' }))
+        setErrors((current) => ({ ...current, email: '이미 사용 중인 이메일입니다.' }))
       }
     } catch (error) {
       setAvailability('error')
-      if (error instanceof ApiError && error.status === 429) {
-        setErrors((current) => ({ ...current, loginId: '잠시 후 다시 확인해 주세요.' }))
-      }
+      const message = error instanceof ApiError && error.status === 429
+        ? '잠시 후 다시 확인해 주세요.'
+        : '이메일 중복 확인에 실패했습니다. 다시 시도해 주세요.'
+      setErrors((current) => ({ ...current, email: message }))
     }
   }
 
@@ -71,10 +72,10 @@ export default function SignupPage() {
     const nextErrors: SignupErrors = {}
     if (!role) nextErrors.role = '학생 또는 강사를 선택해 주세요.'
     const name = displayName.trim()
-    if (!name) nextErrors.displayName = '이름을 입력해 주세요.'
-    else if (name.length < 2 || name.length > 20) nextErrors.displayName = '이름은 2–20자로 입력해 주세요.'
-    nextErrors.loginId = validateLoginId(loginId.trim())
-    if (!nextErrors.loginId && availability !== 'available') nextErrors.loginId = '아이디 중복 확인을 완료해 주세요.'
+    if (!name) nextErrors.displayName = '닉네임을 입력해 주세요.'
+    else if (name.length < 2 || name.length > 100) nextErrors.displayName = '닉네임은 2–100자로 입력해 주세요.'
+    nextErrors.email = validateEmail(email.trim())
+    if (!nextErrors.email && availability !== 'available') nextErrors.email = '이메일 중복 확인을 완료해 주세요.'
     if (password.length < 8 || !/[a-zA-Z]/.test(password) || !/\d/.test(password)) nextErrors.password = '영문과 숫자를 포함해 8자 이상 입력해 주세요.'
     if (!passwordConfirm) nextErrors.passwordConfirm = '비밀번호를 한 번 더 입력해 주세요.'
     else if (password !== passwordConfirm) nextErrors.passwordConfirm = '비밀번호가 일치하지 않습니다.'
@@ -90,15 +91,15 @@ export default function SignupPage() {
 
     setIsSubmitting(true)
     try {
-      await signup({ loginId: loginId.trim(), password, displayName: displayName.trim(), role })
+      await signup({ email: email.trim(), password, displayName: displayName.trim(), role })
       navigate(loginHref, {
         replace: true,
         state: { signupSuccess: true, displayName: displayName.trim() },
       })
     } catch (error) {
-      if (error instanceof ApiError && (error.status === 409 || error.code === 'AUTH_LOGIN_ID_DUPLICATED')) {
+      if (error instanceof ApiError && (error.status === 409 || error.code === 'AUTH_EMAIL_DUPLICATED')) {
         setAvailability('unavailable')
-        setErrors((current) => ({ ...current, loginId: '이미 사용 중인 아이디입니다.' }))
+        setErrors((current) => ({ ...current, email: '이미 사용 중인 이메일입니다.' }))
       } else if (error instanceof ApiError && error.status === 429) {
         setSubmitError('요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.')
       } else {
@@ -136,27 +137,27 @@ export default function SignupPage() {
         </fieldset>
 
         <div className={`form-group${errors.displayName ? ' has-error' : ''}`}>
-          <label htmlFor="displayName">이름 <span>*</span></label>
+          <label htmlFor="displayName">닉네임 <span>*</span></label>
           <div className="input-shell">
             <span className="input-icon" aria-hidden="true">○</span>
-            <input id="displayName" autoComplete="name" value={displayName} placeholder="서비스에서 사용할 이름" aria-invalid={Boolean(errors.displayName)} onChange={(event) => { setDisplayName(event.target.value); clearError('displayName') }} />
+            <input id="displayName" autoComplete="nickname" maxLength={100} value={displayName} placeholder="서비스에서 사용할 닉네임" aria-invalid={Boolean(errors.displayName)} onChange={(event) => { setDisplayName(event.target.value); clearError('displayName') }} />
           </div>
           {errors.displayName && <p className="field-error">{errors.displayName}</p>}
         </div>
 
-        <div className={`form-group${errors.loginId ? ' has-error' : availability === 'available' ? ' has-success' : ''}`}>
-          <label htmlFor="signup-loginId">아이디 <span>*</span></label>
+        <div className={`form-group${errors.email ? ' has-error' : availability === 'available' ? ' has-success' : ''}`}>
+          <label htmlFor="signup-email">이메일 <span>*</span></label>
           <div className="input-with-button">
             <div className="input-shell">
               <span className="input-icon" aria-hidden="true">@</span>
-              <input id="signup-loginId" autoComplete="username" value={loginId} placeholder="4–20자 영문, 숫자" aria-invalid={Boolean(errors.loginId)} onChange={(event) => { setLoginId(event.target.value); setAvailability('idle'); clearError('loginId') }} />
+              <input id="signup-email" name="email" type="email" autoComplete="email" maxLength={320} value={email} placeholder="name@example.com" aria-invalid={Boolean(errors.email)} onChange={(event) => { setEmail(event.target.value); setAvailability('idle'); clearError('email') }} />
             </div>
             <button className="button button--soft input-check-button" type="button" disabled={availability === 'checking'} onClick={handleAvailabilityCheck}>
               {availability === 'checking' ? '확인 중' : '중복 확인'}
             </button>
           </div>
-          {availability === 'available' && <p className="field-success">사용할 수 있는 아이디입니다.</p>}
-          {errors.loginId && <p className="field-error">{errors.loginId}</p>}
+          {availability === 'available' && <p className="field-success">사용할 수 있는 이메일입니다.</p>}
+          {errors.email && <p className="field-error">{errors.email}</p>}
         </div>
 
         <div className="form-row">

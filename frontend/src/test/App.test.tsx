@@ -1,7 +1,8 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '@/App'
+import { httpAuthService } from '@/features/auth/authService'
 import { resetMockAuth } from '@/features/auth/mockAuth'
 import { apiClient } from '@/shared/api/client'
 
@@ -50,7 +51,7 @@ describe('LiveClass AI 공개 페이지', () => {
     const form = await screen.findByRole('form', { name: '로그인' })
     await user.click(within(form).getByRole('button', { name: '로그인' }))
 
-    expect(screen.getByText('아이디를 입력해 주세요.')).toBeInTheDocument()
+    expect(screen.getByText('이메일을 입력해 주세요.')).toBeInTheDocument()
     expect(screen.getByText('비밀번호를 입력해 주세요.')).toBeInTheDocument()
   })
 
@@ -59,7 +60,7 @@ describe('LiveClass AI 공개 페이지', () => {
     renderAt('/login')
     const form = await screen.findByRole('form', { name: '로그인' })
 
-    await user.type(within(form).getByLabelText('아이디'), 'student01')
+    await user.type(within(form).getByLabelText('이메일'), 'student01@example.com')
     await user.type(within(form).getByLabelText('비밀번호'), 'password1')
     await user.click(within(form).getByRole('button', { name: '로그인' }))
 
@@ -73,10 +74,10 @@ describe('LiveClass AI 공개 페이지', () => {
     const form = await screen.findByRole('form', { name: '회원가입' })
 
     await user.click(within(form).getByRole('button', { name: /학생으로 배우기/ }))
-    await user.type(within(form).getByLabelText(/이름/), '김라이브')
-    await user.type(within(form).getByLabelText(/아이디/), 'newstudent01')
+    await user.type(within(form).getByLabelText(/닉네임/), '김라이브')
+    await user.type(within(form).getByLabelText(/이메일/), 'newstudent01@example.com')
     await user.click(within(form).getByRole('button', { name: '중복 확인' }))
-    expect(await screen.findByText('사용할 수 있는 아이디입니다.')).toBeInTheDocument()
+    expect(await screen.findByText('사용할 수 있는 이메일입니다.')).toBeInTheDocument()
     await user.type(within(form).getByLabelText(/^비밀번호 \*/), 'password1')
     await user.type(within(form).getByLabelText(/비밀번호 확인/), 'password1')
     await user.click(within(form).getByRole('button', { name: /가입하고 시작하기/ }))
@@ -89,8 +90,44 @@ describe('LiveClass AI 공개 페이지', () => {
 })
 
 describe('공유 API 계약', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('API prefix와 HttpOnly 쿠키 전송 옵션을 사용한다', () => {
     expect(apiClient.defaults.baseURL).toBe('/api/v1')
     expect(apiClient.defaults.withCredentials).toBe(true)
+  })
+
+  it('인증 API가 이메일 필드와 이메일 중복 확인 경로를 사용한다', async () => {
+    const authUser = {
+      userId: 'usr_contract',
+      email: 'student@example.com',
+      displayName: '김학생',
+      role: 'STUDENT' as const,
+    }
+    const loginRequest = {
+      email: authUser.email,
+      password: 'password1',
+    }
+    const signupRequest = {
+      ...loginRequest,
+      displayName: authUser.displayName,
+      role: authUser.role,
+    }
+    const postSpy = vi.spyOn(apiClient, 'post').mockResolvedValue({ data: authUser } as never)
+    const getSpy = vi.spyOn(apiClient, 'get').mockResolvedValue({
+      data: { email: authUser.email, available: true },
+    } as never)
+
+    await httpAuthService.login(loginRequest)
+    await httpAuthService.signup(signupRequest)
+    await httpAuthService.checkEmail(authUser.email)
+
+    expect(postSpy).toHaveBeenNthCalledWith(1, '/auth/login', loginRequest)
+    expect(postSpy).toHaveBeenNthCalledWith(2, '/auth/signup', signupRequest)
+    expect(getSpy).toHaveBeenCalledWith('/auth/email-availability', {
+      params: { email: authUser.email },
+    })
   })
 })
