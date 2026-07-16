@@ -15,8 +15,8 @@
 
 | 역할 | 요약 | 목록 |
 |---|---|---|
-| 강사 | `GET /api/v1/instructor/dashboard-summary` | `GET /api/v1/instructor/courses` |
-| 학생 | `GET /api/v1/me/learning-summary` | `GET /api/v1/me/enrollments` |
+| 강사 | `GET /api/instructor/dashboard-summary` | `GET /api/instructor/curriculums` |
+| 학생 | `GET /api/me/learning-summary` | `GET /api/me/enrollments` |
 
 프론트는 역할 확인 전 두 대시보드를 동시에 호출하지 않는다. 강사 계정의 타 커리큘럼 수강이 허용되면 `view` 전환 정책을 추가로 협의한다.
 
@@ -24,24 +24,24 @@
 
 | ID | Method | Path | 설명 | 상태 |
 |---|---|---|---|---|
-| `MY-COURSE-01` | `GET` | `/api/v1/instructor/dashboard-summary` | 강사 운영 요약·가장 가까운 세션 | **제안** |
-| `MY-COURSE-02` | `GET` | `/api/v1/instructor/courses` | 내가 운영하는 커리큘럼 목록 | prefix **확정**, 상세 **협의 필요** |
-| `MY-COURSE-03` | `GET` | `/api/v1/me/learning-summary` | 학생 학습 요약·이어보기 | **제안** |
-| `MY-COURSE-04` | `GET` | `/api/v1/me/enrollments` | 내 수강 커리큘럼 목록 | **제안** |
+| `MY-CURRICULUM-01` | `GET` | `/api/instructor/dashboard-summary` | 강사 운영 요약·가장 가까운 세션 | **제안** |
+| `MY-CURRICULUM-02` | `GET` | `/api/instructor/curriculums` | 내가 운영하는 커리큘럼 목록 | prefix **확정**, 상세 **협의 필요** |
+| `MY-CURRICULUM-03` | `GET` | `/api/me/learning-summary` | 학생 학습 요약·이어보기 | **제안** |
+| `MY-CURRICULUM-04` | `GET` | `/api/me/enrollments` | 내 수강 커리큘럼 목록 | **제안** |
 
 ## 4. 강사 대시보드
 
-### 4.1 `MY-COURSE-01` 운영 요약
+### 4.1 `MY-CURRICULUM-01` 운영 요약
 
 ```http
-GET /api/v1/instructor/dashboard-summary
+GET /api/instructor/dashboard-summary
 ```
 
 **응답 제안 — `200 OK`**
 
 ```json
 {
-  "courseCounts": {
+  "curriculumCounts": {
     "total": 4,
     "preparing": 1,
     "active": 2,
@@ -55,8 +55,8 @@ GET /api/v1/instructor/dashboard-summary
     "sessionId": "ses_01J...",
     "lessonId": "les_01J...",
     "lessonTitle": "Spring Security 시작하기",
-    "courseId": "crs_01J...",
-    "courseTitle": "실시간 Spring 입문",
+    "curriculumId": "cur_01J...",
+    "curriculumTitle": "실시간 Spring 입문",
     "scheduledAt": "2026-08-01T10:00:00+09:00",
     "liveSessionStatus": "SCHEDULED",
     "allowedActions": ["VIEW_SESSION", "EDIT_SESSION", "RUN_PREFLIGHT"]
@@ -64,12 +64,12 @@ GET /api/v1/instructor/dashboard-summary
 }
 ```
 
-`courseCounts`의 UI 분류는 API 상태 그 자체가 아니다. 서버가 lifecycle 상태를 확정하기 전에는 `preparing`, `active`, `ended` 집계의 포함 기준을 문서화해야 한다.
+`curriculumCounts`의 UI 분류는 API 상태 그 자체가 아니다. 서버가 lifecycle 상태를 확정하기 전에는 `preparing`, `active`, `ended` 집계의 포함 기준을 문서화해야 한다.
 
-### 4.2 `MY-COURSE-02` 운영 목록
+### 4.2 `MY-CURRICULUM-02` 운영 목록
 
 ```http
-GET /api/v1/instructor/courses?q=spring&status=ACTIVE&sort=NEXT_SESSION&page=0&size=20
+GET /api/instructor/curriculums?q=spring&status=ACTIVE&sort=NEXT_SESSION&page=0&size=20
 ```
 
 | Query | 형식 | 설명 |
@@ -85,7 +85,7 @@ GET /api/v1/instructor/courses?q=spring&status=ACTIVE&sort=NEXT_SESSION&page=0&s
 {
   "items": [
     {
-      "courseId": "crs_01J...",
+      "curriculumId": "cur_01J...",
       "title": "실시간 Spring 입문",
       "summary": "라이브로 배우는 Spring 기초",
       "thumbnailUrl": "https://cdn.example.com/...",
@@ -101,7 +101,7 @@ GET /api/v1/instructor/courses?q=spring&status=ACTIVE&sort=NEXT_SESSION&page=0&s
         "scheduledAt": "2026-08-01T10:00:00+09:00",
         "liveSessionStatus": "SCHEDULED"
       },
-      "allowedActions": ["VIEW_DETAIL", "MANAGE_COURSE", "VIEW_SESSION"]
+      "allowedActions": ["VIEW_DETAIL", "MANAGE_CURRICULUM", "VIEW_SESSION"]
     }
   ],
   "page": 0,
@@ -116,10 +116,10 @@ GET /api/v1/instructor/courses?q=spring&status=ACTIVE&sort=NEXT_SESSION&page=0&s
 
 ## 5. 학생 대시보드
 
-### 5.1 `MY-COURSE-03` 학습 요약
+### 5.1 `MY-CURRICULUM-03` 학습 요약
 
 ```http
-GET /api/v1/me/learning-summary
+GET /api/me/learning-summary
 ```
 
 **응답 제안 — `200 OK`**
@@ -132,8 +132,8 @@ GET /api/v1/me/learning-summary
     "completed": 3
   },
   "continueLearning": {
-    "courseId": "crs_01J...",
-    "courseTitle": "실시간 Spring 입문",
+    "curriculumId": "cur_01J...",
+    "curriculumTitle": "실시간 Spring 입문",
     "lessonId": "les_01J...",
     "lessonTitle": "Spring Security 시작하기",
     "destination": "VOD",
@@ -144,7 +144,7 @@ GET /api/v1/me/learning-summary
     "sessionId": "ses_01J...",
     "lessonId": "les_01K...",
     "lessonTitle": "JWT와 세션",
-    "courseId": "crs_01J...",
+    "curriculumId": "cur_01J...",
     "scheduledAt": "2026-08-01T10:00:00+09:00",
     "liveSessionStatus": "SCHEDULED",
     "allowedActions": ["VIEW_SESSION"]
@@ -154,10 +154,10 @@ GET /api/v1/me/learning-summary
 
 이어보기 목적지는 서버가 재생 가능 상태를 확인해 `LESSON_DETAIL`, `LIVE_SESSION`, `LIVE_CLASSROOM`, `VOD` 중 하나로 제공한다. URL 문자열은 반환하지 않는다.
 
-### 5.2 `MY-COURSE-04` 수강 목록
+### 5.2 `MY-CURRICULUM-04` 수강 목록
 
 ```http
-GET /api/v1/me/enrollments?q=spring&learningStatus=IN_PROGRESS&sort=RECENT_LEARNING&page=0&size=20
+GET /api/me/enrollments?q=spring&learningStatus=IN_PROGRESS&sort=RECENT_LEARNING&page=0&size=20
 ```
 
 | Query | 형식 | 설명 |
@@ -176,8 +176,8 @@ GET /api/v1/me/enrollments?q=spring&learningStatus=IN_PROGRESS&sort=RECENT_LEARN
       "enrollmentId": "enr_01J...",
       "enrollmentStatus": "ACTIVE",
       "enrolledAt": "2026-07-01T10:00:00+09:00",
-      "course": {
-        "courseId": "crs_01J...",
+      "curriculum": {
+        "curriculumId": "cur_01J...",
         "title": "실시간 Spring 입문",
         "thumbnailUrl": "https://cdn.example.com/...",
         "instructor": {

@@ -26,48 +26,48 @@
 
 | ID | Method | Path | 설명 | 상태 |
 |---|---|---|---|---|
-| `VOD-01` | `GET` | `/api/v1/lessons/{lessonId}/learning-context` | VOD 화면 초기 context | URL **확정** |
-| `VOD-02` | `GET` | `/api/v1/lessons/{lessonId}/playback` | 권한 적용 HLS URL 발급 | URL **확정** |
-| `PROGRESS-01` | `PUT` | `/api/v1/lessons/{lessonId}/progress` | 마지막 위치·유효 시청 구간 저장 | URL **확정** |
-| `BOOKMARK-01` | `GET/POST` | `/api/v1/lessons/{lessonId}/bookmarks` | 내 북마크 조회·생성 | URL 계열 **확정** |
-| `BOOKMARK-02` | `DELETE` | `/api/v1/lessons/{lessonId}/bookmarks/{bookmarkId}` | 내 북마크 삭제 | **제안** |
+| `VOD-01` | `GET` | `/api/lessons/{lessonId}/learning-context` | VOD 화면 초기 context | URL **확정** |
+| `VOD-02` | `GET` | `/api/lessons/{lessonId}/playback` | 권한 적용 HLS URL 발급 | URL **확정** |
+| `PROGRESS-01` | `PUT` | `/api/lessons/{lessonId}/progress` | 마지막 위치·유효 시청 구간 저장 | URL **확정** |
+| `BOOKMARK-01` | `GET/POST` | `/api/lessons/{lessonId}/bookmarks` | 내 북마크 조회·생성 | URL 계열 **확정** |
+| `BOOKMARK-02` | `DELETE` | `/api/lessons/{lessonId}/bookmarks/{bookmarkId}` | 내 북마크 삭제 | **제안** |
 
 ### 2.2 게시 콘텐츠·채팅·AI
 
 | ID | Method | Path | 설명 | 상태 |
 |---|---|---|---|---|
-| `TRANSCRIPT-01` | `GET` | `/api/v1/lessons/{lessonId}/transcript` | 게시 자막 조회·검색 | URL **확정** |
-| `GLOSSARY-01` | `GET` | `/api/v1/lessons/{lessonId}/glossary` | 게시 전문용어 조회 | URL **확정** |
-| `CHAPTER-01` | `GET` | `/api/v1/lessons/{lessonId}/chapters` | 게시 챕터·구조 요약 조회 | **제안** |
-| `CHAT-REPLAY-01` | `GET` | `/api/v1/lessons/{lessonId}/messages` | 저장 채팅 리플레이 | URL **확정** |
-| `AI-HISTORY-01` | `GET` | `/api/v1/lessons/{lessonId}/ai/questions` | 본인 AI Q&A 기록 | **제안** |
-| `AI-QUESTION-01` | `POST/SSE` | `/api/v1/lessons/{lessonId}/ai/questions:stream` | 현재 시점 개인 AI 질문 | URL **확정** |
+| `TRANSCRIPT-01` | `GET` | `/api/lessons/{lessonId}/transcript` | 게시 자막 조회·검색 | URL **확정** |
+| `GLOSSARY-01` | `GET` | `/api/lessons/{lessonId}/glossary` | 게시 전문용어 조회 | URL **확정** |
+| `CHAPTER-01` | `GET` | `/api/lessons/{lessonId}/chapters` | 게시 챕터·구조 요약 조회 | **제안** |
+| `CHAT-REPLAY-01` | `GET` | `/api/lessons/{lessonId}/messages` | 저장 채팅 리플레이 | URL **확정** |
+| `AI-HISTORY-01` | `GET` | `/api/lessons/{lessonId}/ai/questions` | 본인 AI Q&A 기록 | **제안** |
+| `AI-QUESTION-01` | `POST/SSE` | `/api/lessons/{lessonId}/ai/questions:stream` | 현재 시점 개인 AI 질문 | URL **확정** |
 
 ### 2.3 퀴즈
 
 | ID | Method | Path | 설명 | 상태 |
 |---|---|---|---|---|
-| `QUIZ-01` | `GET` | `/api/v1/lessons/{lessonId}/quizzes` | 현재 게시 퀴즈와 내 최신 결과 | URL **확정** |
-| `QUIZ-02` | `POST` | `/api/v1/quizzes/{quizId}/attempts` | 응시 제출·결정론 채점 | URL **확정** |
-| `QUIZ-03` | `GET` | `/api/v1/quizzes/{quizId}/attempts/me` | 내 응시 이력 | **제안** |
+| `QUIZ-01` | `GET` | `/api/lessons/{lessonId}/quizzes` | 현재 게시 퀴즈와 내 최신 결과 | URL **확정** |
+| `QUIZ-02` | `POST` | `/api/quizzes/{quizId}/attempts` | 응시 제출·결정론 채점 | URL **확정** |
+| `QUIZ-03` | `GET` | `/api/quizzes/{quizId}/attempts/me` | 내 응시 이력 | **제안** |
 
 ### 2.4 강사 replay·콘텐츠 검수·통계
 
 | ID | Method | Path | 설명 | 상태 |
 |---|---|---|---|---|
-| `REPLAY-01` | `POST` | `/api/v1/instructor/lessons/{lessonId}/replay/publish` | VOD 영상 수강생 공개 | **제안** |
-| `REPLAY-02` | `POST` | `/api/v1/instructor/lessons/{lessonId}/replay/withdraw` | 신규 VOD 재생 공개 중단 | **제안** |
-| `REVIEW-01` | `GET` | `/api/v1/instructor/lessons/{lessonId}/reviews` | 영역별 후보·초안·게시본·상태 | **제안** |
-| `REVIEW-02` | `PUT` | `/api/v1/instructor/lessons/{lessonId}/reviews/{contentType}/draft` | 검수 초안 저장 | **제안** |
-| `REVIEW-03` | `POST` | `/api/v1/instructor/lessons/{lessonId}/reviews/{contentType}/publish` | 새 게시본 version 생성·활성화 | **제안** |
-| `QUESTION-STATS-01` | `GET` | `/api/v1/instructor/lessons/{lessonId}/question-pins` | 라이브·VOD 익명 질문 집계 | **제안** |
-| `QUESTION-STATS-02` | `GET` | `/api/v1/instructor/lessons/{lessonId}/question-pins/{pinId}/questions` | 익명 질문 원문 | **제안** |
-| `LEARNING-STATS-01` | `GET` | `/api/v1/instructor/lessons/{lessonId}/learning-summary` | 재생·완료·퀴즈 집계 | **제안** |
+| `REPLAY-01` | `POST` | `/api/instructor/lessons/{lessonId}/replay/publish` | VOD 영상 수강생 공개 | **제안** |
+| `REPLAY-02` | `POST` | `/api/instructor/lessons/{lessonId}/replay/withdraw` | 신규 VOD 재생 공개 중단 | **제안** |
+| `REVIEW-01` | `GET` | `/api/instructor/lessons/{lessonId}/reviews` | 영역별 후보·초안·게시본·상태 | **제안** |
+| `REVIEW-02` | `PUT` | `/api/instructor/lessons/{lessonId}/reviews/{contentType}/draft` | 검수 초안 저장 | **제안** |
+| `REVIEW-03` | `POST` | `/api/instructor/lessons/{lessonId}/reviews/{contentType}/publish` | 새 게시본 version 생성·활성화 | **제안** |
+| `QUESTION-STATS-01` | `GET` | `/api/instructor/lessons/{lessonId}/question-pins` | 라이브·VOD 익명 질문 집계 | **제안** |
+| `QUESTION-STATS-02` | `GET` | `/api/instructor/lessons/{lessonId}/question-pins/{pinId}/questions` | 익명 질문 원문 | **제안** |
+| `LEARNING-STATS-01` | `GET` | `/api/instructor/lessons/{lessonId}/learning-summary` | 재생·완료·퀴즈 집계 | **제안** |
 
 ## 3. `VOD-01` 초기 학습 context
 
 ```http
-GET /api/v1/lessons/{lessonId}/learning-context
+GET /api/lessons/{lessonId}/learning-context
 ```
 
 재생 URL과 대용량 자막·채팅을 제외한 페이지 조합 정보를 반환한다.
@@ -78,8 +78,8 @@ GET /api/v1/lessons/{lessonId}/learning-context
     "lessonId": "les_01J...",
     "title": "Spring Security 시작하기",
     "description": "인증과 인가의 기본을 다룹니다.",
-    "courseId": "crs_01J...",
-    "courseTitle": "실시간 Spring 입문",
+    "curriculumId": "cur_01J...",
+    "curriculumTitle": "실시간 Spring 입문",
     "sectionId": "sec_01J...",
     "sectionTitle": "2. 인증과 인가",
     "previousLessonId": "les_01A...",
@@ -128,7 +128,7 @@ GET /api/v1/lessons/{lessonId}/learning-context
 ## 4. `VOD-02` HLS 재생 정보
 
 ```http
-GET /api/v1/lessons/{lessonId}/playback
+GET /api/lessons/{lessonId}/playback
 ```
 
 ```json
@@ -165,7 +165,7 @@ GET /api/v1/lessons/{lessonId}/playback
 ### 5.1 `PROGRESS-01`
 
 ```http
-PUT /api/v1/lessons/{lessonId}/progress
+PUT /api/lessons/{lessonId}/progress
 ```
 
 ```json
@@ -203,8 +203,8 @@ PUT /api/v1/lessons/{lessonId}/progress
 ### 6.1 자막 조회와 검색
 
 ```http
-GET /api/v1/lessons/{lessonId}/transcript?fromMs=0&toMs=600000
-GET /api/v1/lessons/{lessonId}/transcript?q=security&page=0&size=50
+GET /api/lessons/{lessonId}/transcript?fromMs=0&toMs=600000
+GET /api/lessons/{lessonId}/transcript?q=security&page=0&size=50
 ```
 
 ```json
@@ -226,7 +226,7 @@ GET /api/v1/lessons/{lessonId}/transcript?q=security&page=0&size=50
 ### 6.2 전문용어
 
 ```http
-GET /api/v1/lessons/{lessonId}/glossary
+GET /api/lessons/{lessonId}/glossary
 ```
 
 ```json
@@ -256,7 +256,7 @@ GET /api/v1/lessons/{lessonId}/glossary
 ### 6.3 챕터
 
 ```http
-GET /api/v1/lessons/{lessonId}/chapters
+GET /api/lessons/{lessonId}/chapters
 ```
 
 ```json
@@ -280,7 +280,7 @@ GET /api/v1/lessons/{lessonId}/chapters
 ## 7. 채팅 리플레이
 
 ```http
-GET /api/v1/lessons/{lessonId}/messages?sessionId={sessionId}&fromSessionMs=0&toSessionMs=300000&page=0&size=200
+GET /api/lessons/{lessonId}/messages?sessionId={sessionId}&fromSessionMs=0&toSessionMs=300000&page=0&size=200
 ```
 
 ```json
@@ -311,7 +311,7 @@ GET /api/v1/lessons/{lessonId}/messages?sessionId={sessionId}&fromSessionMs=0&to
 ### 8.1 기록 조회
 
 ```http
-GET /api/v1/lessons/{lessonId}/ai/questions?page=0&size=20
+GET /api/lessons/{lessonId}/ai/questions?page=0&size=20
 ```
 
 ```json
@@ -356,7 +356,7 @@ GET /api/v1/lessons/{lessonId}/ai/questions?page=0&size=20
 ### 10.1 `QUIZ-01` 현재 게시 퀴즈
 
 ```http
-GET /api/v1/lessons/{lessonId}/quizzes
+GET /api/lessons/{lessonId}/quizzes
 ```
 
 ```json
@@ -391,7 +391,7 @@ GET /api/v1/lessons/{lessonId}/quizzes
 ### 10.2 `QUIZ-02` 응시 제출
 
 ```http
-POST /api/v1/quizzes/{quizId}/attempts
+POST /api/quizzes/{quizId}/attempts
 ```
 
 ```json
@@ -438,7 +438,7 @@ POST /api/v1/quizzes/{quizId}/attempts
 ### 11.1 게시
 
 ```http
-POST /api/v1/instructor/lessons/{lessonId}/replay/publish
+POST /api/instructor/lessons/{lessonId}/replay/publish
 ```
 
 서버는 video asset `READY`, lesson 소유권, 게시 차단 상태를 검증한다. AI 콘텐츠가 미게시여도 영상 게시를 허용한다.
@@ -455,7 +455,7 @@ POST /api/v1/instructor/lessons/{lessonId}/replay/publish
 ### 11.2 회수
 
 ```http
-POST /api/v1/instructor/lessons/{lessonId}/replay/withdraw
+POST /api/instructor/lessons/{lessonId}/replay/withdraw
 ```
 
 ```json
@@ -477,7 +477,7 @@ POST /api/v1/instructor/lessons/{lessonId}/replay/withdraw
 ### 12.2 `REVIEW-01` 검수 조회
 
 ```http
-GET /api/v1/instructor/lessons/{lessonId}/reviews?contentType=TRANSCRIPT
+GET /api/instructor/lessons/{lessonId}/reviews?contentType=TRANSCRIPT
 ```
 
 ```json
@@ -509,7 +509,7 @@ GET /api/v1/instructor/lessons/{lessonId}/reviews?contentType=TRANSCRIPT
 ### 12.3 `REVIEW-02` 초안 저장
 
 ```http
-PUT /api/v1/instructor/lessons/{lessonId}/reviews/{contentType}/draft
+PUT /api/instructor/lessons/{lessonId}/reviews/{contentType}/draft
 ```
 
 ```json
@@ -528,7 +528,7 @@ PUT /api/v1/instructor/lessons/{lessonId}/reviews/{contentType}/draft
 ### 12.4 `REVIEW-03` 게시
 
 ```http
-POST /api/v1/instructor/lessons/{lessonId}/reviews/{contentType}/publish
+POST /api/instructor/lessons/{lessonId}/reviews/{contentType}/publish
 ```
 
 ```json
@@ -560,7 +560,7 @@ POST /api/v1/instructor/lessons/{lessonId}/reviews/{contentType}/publish
 ### 13.1 질문 핀
 
 ```http
-GET /api/v1/instructor/lessons/{lessonId}/question-pins?bucketMs=30000
+GET /api/instructor/lessons/{lessonId}/question-pins?bucketMs=30000
 ```
 
 집계 출처:
@@ -574,7 +574,7 @@ GET /api/v1/instructor/lessons/{lessonId}/question-pins?bucketMs=30000
 ### 13.2 학습 요약
 
 ```http
-GET /api/v1/instructor/lessons/{lessonId}/learning-summary
+GET /api/instructor/lessons/{lessonId}/learning-summary
 ```
 
 ```json

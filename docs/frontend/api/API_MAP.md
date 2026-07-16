@@ -41,13 +41,13 @@
 
 | 프론트 용어 | API·도메인 용어 | 식별자 |
 |---|---|---|
-| 커리큘럼 | `course` | `courseId` |
+| 커리큘럼 | `curriculum` | `curriculumId` |
 | 섹션 | `section` | `sectionId` |
 | 레슨 | `lesson` | `lessonId` |
 | 라이브 세션 | `liveSession` | `sessionId` |
 | 수강 | `enrollment` | `enrollmentId` |
 
-프론트 문구는 커리큘럼을 유지하되 API 경로·필드는 `courses`, `courseId`를 사용한다. 같은 개념에 `curriculumId`와 `courseId`를 혼용하지 않는다.
+프론트 문구·API 경로·필드 모두 커리큘럼으로 통일한다. 경로는 `curriculums`, 식별자는 `curriculumId`를 사용하며 `course`/`courseId` 명칭을 혼용하지 않는다.
 
 ## 2. 공통 호출 계약
 
@@ -55,7 +55,7 @@
 
 | 항목 | 계약 | 상태 |
 |---|---|---|
-| API prefix | `/api/v1` | **확정** |
+| API prefix | `/api` | **확정** |
 | JSON 필드명 | `camelCase` | **확정** |
 | 인증 방식 | Redis에 저장하는 HttpOnly 쿠키 세션 | **확정** |
 | 프론트 요청 옵션 | 모든 인증 관련 요청에 `credentials: 'include'` 적용 | **확정** |
@@ -154,15 +154,15 @@
 
 | ID | Method | Path | 사용처 | 상태 |
 |---|---|---|---|---|
-| `AUTH-01` | `GET` | `/api/v1/auth/csrf` | 변경 요청 전 CSRF 준비 | **제안·협의 필요** |
-| `AUTH-02` | `GET` | `/api/v1/auth/login-id-availability` | 회원가입 아이디 중복 확인 | **제안·협의 필요** |
-| `AUTH-03` | `POST` | `/api/v1/auth/signup` | 회원가입 | URL **확정**, 상세 계약 **협의 필요** |
-| `AUTH-04` | `POST` | `/api/v1/auth/login` | 로그인 | URL **확정**, 상세 계약 **협의 필요** |
-| `AUTH-05` | `GET` | `/api/v1/auth/me` | 앱 시작·새로고침 시 현재 사용자 복원 | **제안·협의 필요** |
-| `AUTH-06` | `POST` | `/api/v1/auth/logout` | 로그아웃 | URL **확정**, 상세 계약 **협의 필요** |
-| `PROFILE-01` | `GET` | `/api/v1/users/me/profile` | 내 프로필 조회 | **제안·협의 필요** |
-| `PROFILE-02` | `PATCH` | `/api/v1/users/me/profile` | 공통 프로필 수정 | **제안·협의 필요** |
-| `PROFILE-03` | `PATCH` | `/api/v1/instructor/me/public-profile` | 강사 공개 프로필 수정 | **제안·협의 필요** |
+| `AUTH-01` | `GET` | `/api/auth/csrf` | 변경 요청 전 CSRF 준비 | **제안·협의 필요** |
+| `AUTH-02` | `GET` | `/api/auth/login-id-availability` | 회원가입 아이디 중복 확인 | **제안·협의 필요** |
+| `AUTH-03` | `POST` | `/api/auth/signup` | 회원가입 | URL **확정**, 상세 계약 **협의 필요** |
+| `AUTH-04` | `POST` | `/api/auth/login` | 로그인 | URL **확정**, 상세 계약 **협의 필요** |
+| `AUTH-05` | `GET` | `/api/auth/me` | 앱 시작·새로고침 시 현재 사용자 복원 | **제안·협의 필요** |
+| `AUTH-06` | `POST` | `/api/auth/logout` | 로그아웃 | URL **확정**, 상세 계약 **협의 필요** |
+| `PROFILE-01` | `GET` | `/api/users/me/profile` | 내 프로필 조회 | **제안·협의 필요** |
+| `PROFILE-02` | `PATCH` | `/api/users/me/profile` | 공통 프로필 수정 | **제안·협의 필요** |
+| `PROFILE-03` | `PATCH` | `/api/instructor/me/public-profile` | 강사 공개 프로필 수정 | **제안·협의 필요** |
 
 `AUTH-05`는 전역 헤더와 라우트 가드가 사용하는 최소 인증 사용자 API다. `PROFILE-01`은 프로필 페이지가 사용하는 상세 API다. 두 응답의 공통 사용자 필드는 같은 명칭과 enum을 사용한다.
 
@@ -171,7 +171,7 @@
 ### 4.1 `AUTH-01` CSRF 토큰 준비
 
 ```http
-GET /api/v1/auth/csrf
+GET /api/auth/csrf
 ```
 
 로그인·회원가입을 포함한 변경 요청 전에 프론트가 CSRF 토큰을 얻기 위해 필요하다. 인증 전에도 호출할 수 있어야 한다.
@@ -199,7 +199,7 @@ GET /api/v1/auth/csrf
 ### 4.2 `AUTH-02` 로그인 아이디 사용 가능 여부
 
 ```http
-GET /api/v1/auth/login-id-availability?loginId=liveclass01
+GET /api/auth/login-id-availability?loginId=liveclass01
 ```
 
 회원가입 폼의 중복 확인 상태에 사용한다. 이 API의 결과는 안내용이며, 회원가입 시 서버가 중복을 다시 검증해야 한다.
@@ -228,7 +228,7 @@ GET /api/v1/auth/login-id-availability?loginId=liveclass01
 ### 4.3 `AUTH-03` 회원가입
 
 ```http
-POST /api/v1/auth/signup
+POST /api/auth/signup
 ```
 
 **제안 요청**
@@ -274,7 +274,7 @@ POST /api/v1/auth/signup
 ### 4.4 `AUTH-04` 로그인
 
 ```http
-POST /api/v1/auth/login
+POST /api/auth/login
 ```
 
 **제안 요청**
@@ -311,7 +311,7 @@ POST /api/v1/auth/login
 ### 4.5 `AUTH-05` 현재 인증 사용자
 
 ```http
-GET /api/v1/auth/me
+GET /api/auth/me
 ```
 
 앱 시작, 새로고침, 보호 라우트 진입 시 현재 쿠키 세션을 사용자 정보로 복원한다. 프로필·학습 요약처럼 전역 인증에 불필요한 데이터는 포함하지 않는다.
@@ -337,7 +337,7 @@ GET /api/v1/auth/me
 ### 4.6 `AUTH-06` 로그아웃
 
 ```http
-POST /api/v1/auth/logout
+POST /api/auth/logout
 ```
 
 요청 본문은 없다. 서버는 현재 세션을 Redis에서 무효화하고 세션 쿠키를 만료시킨다.
@@ -362,7 +362,7 @@ POST /api/v1/auth/logout
 ### 5.2 `PROFILE-01` 내 프로필 조회
 
 ```http
-GET /api/v1/users/me/profile
+GET /api/users/me/profile
 ```
 
 URL에 사용자 ID를 받지 않고 현재 세션의 본인만 조회한다.
@@ -408,7 +408,7 @@ URL에 사용자 ID를 받지 않고 현재 세션의 본인만 조회한다.
 ### 5.3 `PROFILE-02` 공통 프로필 수정
 
 ```http
-PATCH /api/v1/users/me/profile
+PATCH /api/users/me/profile
 ```
 
 **제안 요청**
@@ -441,7 +441,7 @@ PATCH /api/v1/users/me/profile
 ### 5.4 `PROFILE-03` 강사 공개 프로필 수정
 
 ```http
-PATCH /api/v1/instructor/me/public-profile
+PATCH /api/instructor/me/public-profile
 ```
 
 공통 프로필과 저장 상태를 분리하기 위해 별도 API를 제안한다. 현재 세션이 강사 계정이 아니면 서버가 거부한다.

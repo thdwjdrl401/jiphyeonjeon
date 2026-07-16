@@ -4,7 +4,7 @@
 
 ## 1. 범위
 
-웰컴 페이지의 추천 커리큘럼과 공개 커리큘럼 목록 페이지에 필요한 조회 계약을 정의한다. 프론트 용어 `커리큘럼`은 API와 도메인 모델의 `course`에 대응한다.
+웰컴 페이지의 추천 커리큘럼과 공개 커리큘럼 목록 페이지에 필요한 조회 계약을 정의한다. 프론트 용어 `커리큘럼`은 API와 도메인 모델의 `curriculum`에 대응한다.
 
 - 비로그인 사용자도 호출 가능
 - 로그인 쿠키가 있으면 카드에 현재 사용자 관계와 허용 행동을 함께 제공
@@ -15,8 +15,8 @@
 
 | 페이지 | 필수 호출 | 선택 호출 |
 |---|---|---|
-| 웰컴 | `GET /api/v1/courses?featured=true&size=...` | 학생·강사 빠른 행동의 실제 요약은 내 커리큘럼 API 사용 |
-| 커리큘럼 목록 | `GET /api/v1/courses` | 없음 |
+| 웰컴 | `GET /api/curriculums?featured=true&size=...` | 학생·강사 빠른 행동의 실제 요약은 내 커리큘럼 API 사용 |
+| 커리큘럼 목록 | `GET /api/curriculums` | 없음 |
 
 추천 조회가 실패해도 웰컴의 서비스 소개와 전체 탐색 CTA는 유지한다.
 
@@ -24,12 +24,12 @@
 
 | ID | Method | Path | 설명 | 상태 |
 |---|---|---|---|---|
-| `CATALOG-01` | `GET` | `/api/v1/courses` | 공개 커리큘럼 검색·필터·정렬·페이지 조회 | URL **확정**, 상세 계약 **협의 필요** |
+| `CATALOG-01` | `GET` | `/api/curriculums` | 공개 커리큘럼 검색·필터·정렬·페이지 조회 | URL **확정**, 상세 계약 **협의 필요** |
 
 ## 4. `CATALOG-01` 공개 목록 조회
 
 ```http
-GET /api/v1/courses?q=spring&featured=false&lifecycleStatus=PUBLISHED&sort=LATEST&page=0&size=20
+GET /api/curriculums?q=spring&featured=false&lifecycleStatus=PUBLISHED&sort=LATEST&page=0&size=20
 ```
 
 ### 4.1 Query parameter 제안
@@ -52,7 +52,7 @@ GET /api/v1/courses?q=spring&featured=false&lifecycleStatus=PUBLISHED&sort=LATES
 {
   "items": [
     {
-      "courseId": "crs_01J...",
+      "curriculumId": "cur_01J...",
       "title": "실시간 Spring 입문",
       "summary": "라이브로 배우는 Spring 기초",
       "thumbnailUrl": "https://cdn.example.com/...",
@@ -86,11 +86,11 @@ GET /api/v1/courses?q=spring&featured=false&lifecycleStatus=PUBLISHED&sort=LATES
 }
 ```
 
-### 4.3 `CourseCardSummary`
+### 4.3 `CurriculumCardSummary`
 
 | 필드 | 형식 | 필수 | 설명 |
 |---|---|---|---|
-| `courseId` | string | 예 | 커리큘럼 식별자 |
+| `curriculumId` | string | 예 | 커리큘럼 식별자 |
 | `title` | string | 예 | 제목 |
 | `summary` | string | 예 | 카드용 짧은 소개 |
 | `thumbnailUrl` | string/null | 예 | 표시용 이미지 URL. 프론트가 스토리지 경로를 조합하지 않음 |
@@ -106,7 +106,7 @@ GET /api/v1/courses?q=spring&featured=false&lifecycleStatus=PUBLISHED&sort=LATES
 | 필드 | 형식 | 설명 |
 |---|---|---|
 | `relationship` | enum | `GUEST`, `UNENROLLED_STUDENT`, `PENDING_ENROLLMENT`, `ENROLLED`, `OWNER_INSTRUCTOR`, `NON_OWNER_INSTRUCTOR` 제안 |
-| `allowedActions` | enum[] | `VIEW_DETAIL`, `ENROLL`, `CONTINUE_LEARNING`, `MANAGE_COURSE`, `JOIN_LIVE` 중 현재 가능한 행동 |
+| `allowedActions` | enum[] | `VIEW_DETAIL`, `ENROLL`, `CONTINUE_LEARNING`, `MANAGE_CURRICULUM`, `JOIN_LIVE` 중 현재 가능한 행동 |
 | `progress` | object | 수강생이고 카드에 표시할 데이터가 있을 때만 포함 |
 | `nextLesson` | object | 실제 카드에 다음 레슨을 표시하기로 확정할 때만 포함 |
 
@@ -114,10 +114,10 @@ GET /api/v1/courses?q=spring&featured=false&lifecycleStatus=PUBLISHED&sort=LATES
 
 ## 5. 추천 커리큘럼
 
-별도 `/featured-courses` API를 만들지 않고 다음처럼 같은 목록 계약을 사용한다.
+별도 `/featured-curriculums` API를 만들지 않고 다음처럼 같은 목록 계약을 사용한다.
 
 ```http
-GET /api/v1/courses?featured=true&sort=RECOMMENDED&page=0&size=6
+GET /api/curriculums?featured=true&sort=RECOMMENDED&page=0&size=6
 ```
 
 - 추천 기준은 서버 정책이 소유한다.

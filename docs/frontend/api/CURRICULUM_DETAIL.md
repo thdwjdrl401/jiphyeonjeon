@@ -15,29 +15,29 @@
 
 | 시점 | 호출 | 비고 |
 |---|---|---|
-| 최초 진입 | `GET /api/v1/courses/{courseId}` | 공통 정보·목차·관계·대표 행동을 한 번에 조회 |
-| 수강 신청 | `POST /api/v1/courses/{courseId}/enrollments` | 즉시 승인 또는 승인 대기 결과 반환 |
-| 대기 신청 취소 | `DELETE /api/v1/courses/{courseId}/enrollments/me` | 응답의 허용 행동이 있을 때만 노출 |
+| 최초 진입 | `GET /api/curriculums/{curriculumId}` | 공통 정보·목차·관계·대표 행동을 한 번에 조회 |
+| 수강 신청 | `POST /api/curriculums/{curriculumId}/enrollments` | 즉시 승인 또는 승인 대기 결과 반환 |
+| 대기 신청 취소 | `DELETE /api/curriculums/{curriculumId}/enrollments/me` | 응답의 허용 행동이 있을 때만 노출 |
 
 ## 3. API 목록
 
 | ID | Method | Path | 설명 | 상태 |
 |---|---|---|---|---|
-| `COURSE-DETAIL-01` | `GET` | `/api/v1/courses/{courseId}` | 공개 상세·목차·관계 조회 | URL **확정**, 상세 계약 **협의 필요** |
-| `ENROLLMENT-01` | `POST` | `/api/v1/courses/{courseId}/enrollments` | 현재 사용자 수강 신청 | **제안·협의 필요** |
-| `ENROLLMENT-02` | `DELETE` | `/api/v1/courses/{courseId}/enrollments/me` | 현재 사용자 신청 취소 | **제안·정책 확정 필요** |
+| `CURRICULUM-DETAIL-01` | `GET` | `/api/curriculums/{curriculumId}` | 공개 상세·목차·관계 조회 | URL **확정**, 상세 계약 **협의 필요** |
+| `ENROLLMENT-01` | `POST` | `/api/curriculums/{curriculumId}/enrollments` | 현재 사용자 수강 신청 | **제안·협의 필요** |
+| `ENROLLMENT-02` | `DELETE` | `/api/curriculums/{curriculumId}/enrollments/me` | 현재 사용자 신청 취소 | **제안·정책 확정 필요** |
 
-## 4. `COURSE-DETAIL-01` 상세 조회
+## 4. `CURRICULUM-DETAIL-01` 상세 조회
 
 ```http
-GET /api/v1/courses/{courseId}
+GET /api/curriculums/{curriculumId}
 ```
 
 ### 4.1 응답 제안 — `200 OK`
 
 ```json
 {
-  "courseId": "crs_01J...",
+  "curriculumId": "cur_01J...",
   "title": "실시간 Spring 입문",
   "summary": "라이브로 배우는 Spring 기초",
   "description": "커리큘럼 상세 설명",
@@ -112,7 +112,7 @@ GET /api/v1/courses/{courseId}
 
 | 영역 | 필드 | 설명 |
 |---|---|---|
-| 기본 | `courseId`, `title`, `summary`, `description`, `thumbnailUrl` | 공개 소개 |
+| 기본 | `curriculumId`, `title`, `summary`, `description`, `thumbnailUrl` | 공개 소개 |
 | 상태 | `lifecycleStatus`, `period`, `enrollmentPolicy` | 공개·운영·수강 상태 |
 | 강사 | `instructor` | 공개 가능한 강사 요약 |
 | 목차 | `outline[].sectionId`, `title`, `description`, `order` | 공개 섹션 |
@@ -130,7 +130,7 @@ GET /api/v1/courses/{courseId}
 | `UNENROLLED_STUDENT` | `ENROLL` 또는 없음 |
 | `PENDING_ENROLLMENT` | `CANCEL_ENROLLMENT` 또는 없음 |
 | `ENROLLED` | `VIEW_LESSON`, `CONTINUE_LEARNING`, 조건부 `JOIN_LIVE` |
-| `OWNER_INSTRUCTOR` | `MANAGE_COURSE`, `EDIT_LESSON`, 조건부 `OPEN_LIVE_SESSION` |
+| `OWNER_INSTRUCTOR` | `MANAGE_CURRICULUM`, `EDIT_LESSON`, 조건부 `OPEN_LIVE_SESSION` |
 | `NON_OWNER_INSTRUCTOR` | 정책에 따라 `ENROLL` 또는 없음 |
 
 행동이 불가능한 이유를 화면에 표시해야 할 때 다음 배열을 제안한다.
@@ -165,13 +165,13 @@ GET /api/v1/courses/{courseId}
 | 상태 | 오류 코드 예시 | 처리 |
 |---|---|---|
 | `200` | - | 관계별 화면 구성 |
-| `404` | `COURSE_NOT_FOUND` | 찾을 수 없음. 비공개·삭제·존재하지 않음을 구분하지 않을 수 있음 |
-| `5xx` | `COURSE_DETAIL_UNAVAILABLE` | 현재 페이지에서 재시도 |
+| `404` | `CURRICULUM_NOT_FOUND` | 찾을 수 없음. 비공개·삭제·존재하지 않음을 구분하지 않을 수 있음 |
+| `5xx` | `CURRICULUM_DETAIL_UNAVAILABLE` | 현재 페이지에서 재시도 |
 
 ## 5. `ENROLLMENT-01` 수강 신청
 
 ```http
-POST /api/v1/courses/{courseId}/enrollments
+POST /api/curriculums/{curriculumId}/enrollments
 ```
 
 요청 본문은 초기 범위에서 없다. 현재 세션 사용자로 신청하며 다른 사용자 ID를 받지 않는다.
@@ -181,7 +181,7 @@ POST /api/v1/courses/{courseId}/enrollments
 ```json
 {
   "enrollmentId": "enr_01J...",
-  "courseId": "crs_01J...",
+  "curriculumId": "cur_01J...",
   "status": "ACTIVE",
   "requestedAt": "2026-07-20T12:00:00+09:00",
   "approvedAt": "2026-07-20T12:00:00+09:00"
@@ -199,7 +199,7 @@ POST /api/v1/courses/{courseId}/enrollments
 | `201` | - | 신청 생성 |
 | `401` | `AUTH_SESSION_REQUIRED` | 로그인 필요 |
 | `403` | `ENROLLMENT_NOT_ALLOWED_FOR_ROLE` | 계정 유형 정책상 신청 불가 |
-| `404` | `COURSE_NOT_FOUND` | 공개·신청 가능한 커리큘럼 없음 |
+| `404` | `CURRICULUM_NOT_FOUND` | 공개·신청 가능한 커리큘럼 없음 |
 | `409` | `ENROLLMENT_ALREADY_EXISTS` | 이미 신청·수강 중 |
 | `409` | `ENROLLMENT_CLOSED` | 모집 종료·정원 등 현재 상태 충돌 |
 
@@ -208,7 +208,7 @@ POST /api/v1/courses/{courseId}/enrollments
 ## 6. `ENROLLMENT-02` 신청 취소
 
 ```http
-DELETE /api/v1/courses/{courseId}/enrollments/me
+DELETE /api/curriculums/{curriculumId}/enrollments/me
 ```
 
 초기에는 `PENDING` 신청 취소만 허용하는 방식을 제안한다. 활성 수강 취소·권한 회수는 학습 기록 처리 정책 확정 후 별도 행동으로 다룬다.
