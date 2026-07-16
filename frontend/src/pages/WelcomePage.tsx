@@ -50,9 +50,15 @@ export default function WelcomePage() {
             <h1>라이브의 순간을 놓치지 않고,<br /><em>나의 배움으로.</em></h1>
             <p>실시간 수업부터 자막, 근거 기반 AI 설명, 다시보기까지.<br />이해가 이어지는 하나의 학습 경험을 만나보세요.</p>
             <div className="hero-actions">
-              <Link className="button button--primary button--large" to="/curriculums">
-                커리큘럼 둘러보기 <span aria-hidden="true">→</span>
-              </Link>
+              {user ? (
+                <Link className="button button--primary button--large" to="/me/curriculums">
+                  내 커리큘럼 <span aria-hidden="true">→</span>
+                </Link>
+              ) : (
+                <Link className="button button--primary button--large" to="/curriculums">
+                  커리큘럼 둘러보기 <span aria-hidden="true">→</span>
+                </Link>
+              )}
               {!user && (
                 <Link className="button button--soft button--large" to="/signup">
                   무료로 시작하기

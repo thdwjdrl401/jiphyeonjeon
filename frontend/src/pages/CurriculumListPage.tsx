@@ -9,6 +9,14 @@ import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
 
 const validSorts = new Set<CourseSort>(['LATEST', 'STARTING_SOON', 'TITLE_ASC'])
+const MAX_VISIBLE_PAGES = 5
+
+function getPageWindow(current: number, total: number, maxVisible: number) {
+  if (total <= maxVisible) return Array.from({ length: total }, (_, index) => index)
+  const half = Math.floor(maxVisible / 2)
+  const start = Math.min(Math.max(current - half, 0), total - maxVisible)
+  return Array.from({ length: maxVisible }, (_, index) => start + index)
+}
 
 export default function CurriculumListPage() {
   usePageTitle('커리큘럼 탐색')
@@ -16,7 +24,6 @@ export default function CurriculumListPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const queryText = searchParams.get('q') ?? ''
   const [searchInput, setSearchInput] = useState(queryText)
-  const featured = searchParams.get('featured') === 'true'
   const sortParam = searchParams.get('sort') as CourseSort | null
   const sort = sortParam && validSorts.has(sortParam) ? sortParam : 'LATEST'
   const rawPage = Number(searchParams.get('page') ?? '0')
@@ -27,7 +34,6 @@ export default function CurriculumListPage() {
   const courseQuery = useCourses(
     {
       q: queryText || undefined,
-      featured: featured || undefined,
       lifecycleStatus: 'PUBLISHED',
       sort,
       page,
@@ -56,7 +62,7 @@ export default function CurriculumListPage() {
   }
 
   const data = courseQuery.data
-  const hasConditions = Boolean(queryText || featured || sort !== 'LATEST')
+  const hasConditions = Boolean(queryText || sort !== 'LATEST')
 
   return (
     <div className="catalog-page">
@@ -82,10 +88,6 @@ export default function CurriculumListPage() {
             {searchInput && <button type="button" aria-label="검색어 지우기" onClick={() => setSearchInput('')}>×</button>}
           </label>
           <button className="button button--primary catalog-search-button" type="submit">검색</button>
-          <label className="filter-check">
-            <input type="checkbox" checked={featured} onChange={(event) => updateParams({ featured: event.target.checked ? 'true' : null, page: null })} />
-            <span>추천 커리큘럼만</span>
-          </label>
           <label className="sort-field">
             <span className="visually-hidden">정렬 기준</span>
             <select value={sort} onChange={(event) => updateParams({ sort: event.target.value === 'LATEST' ? null : event.target.value, page: null })}>
@@ -98,7 +100,7 @@ export default function CurriculumListPage() {
 
         <div className="catalog-summary" aria-live="polite">
           <div>
-            <h2>{queryText ? `‘${queryText}’ 검색 결과` : featured ? '추천 커리큘럼' : '전체 커리큘럼'}</h2>
+            <h2>{queryText ? `‘${queryText}’ 검색 결과` : '전체 커리큘럼'}</h2>
             {data && <p>총 <strong>{data.totalElements}</strong>개의 커리큘럼을 찾았어요.</p>}
           </div>
           {hasConditions && <button className="reset-button" type="button" onClick={resetFilters}>조건 초기화</button>}
@@ -113,7 +115,7 @@ export default function CurriculumListPage() {
         ) : data.items.length === 0 ? (
           <PageState
             title={hasConditions ? '검색 조건에 맞는 커리큘럼이 없어요' : '공개된 커리큘럼을 준비하고 있어요'}
-            description={hasConditions ? '검색어를 줄이거나 추천 필터를 해제해 보세요.' : '곧 새로운 라이브 커리큘럼으로 찾아올게요.'}
+            description={hasConditions ? '검색어를 줄이거나 조건을 초기화해 보세요.' : '곧 새로운 라이브 커리큘럼으로 찾아올게요.'}
             action={hasConditions ? <button className="button button--soft" type="button" onClick={resetFilters}>전체 커리큘럼 보기</button> : <Link className="button button--soft" to="/">웰컴으로 돌아가기</Link>}
           />
         ) : (
@@ -122,15 +124,22 @@ export default function CurriculumListPage() {
               {data.items.map((course) => <CurriculumCard key={course.courseId} course={course} />)}
             </div>
             {courseQuery.isFetching && <span className="catalog-updating" role="status">결과를 업데이트하고 있어요.</span>}
-            {data.totalPages > 1 && (
-              <nav className="pagination" aria-label="커리큘럼 페이지">
-                <button type="button" disabled={page === 0} onClick={() => updateParams({ page: page - 1 === 0 ? null : String(page - 1) })} aria-label="이전 페이지">←</button>
-                {Array.from({ length: data.totalPages }, (_, index) => (
-                  <button className={index === page ? 'is-current' : undefined} type="button" key={index} aria-current={index === page ? 'page' : undefined} onClick={() => updateParams({ page: index === 0 ? null : String(index) })}>{index + 1}</button>
-                ))}
-                <button type="button" disabled={!data.hasNext} onClick={() => updateParams({ page: String(page + 1) })} aria-label="다음 페이지">→</button>
-              </nav>
-            )}
+            {data.totalPages > 1 && (() => {
+              const pageWindow = getPageWindow(page, data.totalPages, MAX_VISIBLE_PAGES)
+              const [firstVisible] = pageWindow
+              const lastVisible = pageWindow[pageWindow.length - 1]
+              return (
+                <nav className="pagination" aria-label="커리큘럼 페이지">
+                  <button type="button" disabled={page === 0} onClick={() => updateParams({ page: page - 1 === 0 ? null : String(page - 1) })} aria-label="이전 페이지">←</button>
+                  {firstVisible > 0 && <span className="pagination-ellipsis" aria-hidden="true">…</span>}
+                  {pageWindow.map((index) => (
+                    <button className={index === page ? 'is-current' : undefined} type="button" key={index} aria-current={index === page ? 'page' : undefined} onClick={() => updateParams({ page: index === 0 ? null : String(index) })}>{index + 1}</button>
+                  ))}
+                  {lastVisible < data.totalPages - 1 && <span className="pagination-ellipsis" aria-hidden="true">…</span>}
+                  <button type="button" disabled={!data.hasNext} onClick={() => updateParams({ page: String(page + 1) })} aria-label="다음 페이지">→</button>
+                </nav>
+              )
+            })()}
           </>
         )}
       </section>

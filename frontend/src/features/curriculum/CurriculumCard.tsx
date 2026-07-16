@@ -42,7 +42,6 @@ export default function CurriculumCard({ course, compact = false }: CurriculumCa
           <div className={`course-art course-art--${getCoverVariant(course.courseId)}`}>
             <span className="course-art__grid" />
             <span className="course-art__orb" />
-            <strong>{course.title.slice(0, 2)}</strong>
           </div>
         )}
         <span className="status-badge">공개 중</span>
