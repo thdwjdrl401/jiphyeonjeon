@@ -11,7 +11,7 @@ import java.util.Map;
  * T0 스모크: 앱이 뜨고 Redis 세션이 동작하는지 확인용. CP0에서 실제 도메인 컨트롤러로 대체.
  */
 @RestController
-@RequestMapping("/api/v1")
+@RequestMapping("/api")
 public class SessionSmokeController {
 
     @GetMapping("/ping")

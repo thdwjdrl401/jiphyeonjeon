@@ -90,7 +90,7 @@ describe('LiveClass AI 공개 페이지', () => {
 
 describe('공유 API 계약', () => {
   it('API prefix와 HttpOnly 쿠키 전송 옵션을 사용한다', () => {
-    expect(apiClient.defaults.baseURL).toBe('/api/v1')
+    expect(apiClient.defaults.baseURL).toBe('/api')
     expect(apiClient.defaults.withCredentials).toBe(true)
   })
 })

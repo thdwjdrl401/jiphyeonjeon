@@ -12,7 +12,7 @@
 - **API JSON·이벤트 필드명은 `camelCase`**. 예: `courseId`·`lessonId`·`sectionId`·`startMs`·`hlsManifestKey`·`isPublished`.
 - **DB 컬럼은 snake_case 허용**, DTO/응답/이벤트로 노출되는 순간 camelCase.
 
-## 2. REST API (`/api/v1`, Spring 소유)
+## 2. REST API (`/api`, Spring 소유)
 | 도메인 | 예시 | 비고 |
 |---|---|---|
 | 인증 | `POST /auth/login`·`/auth/signup`·`/auth/logout` | 상태코드: 생성 201·중복 409·인증실패 401·권한 403. **HttpOnly 쿠키 세션(Redis 저장)** — FE는 `withCredentials`, `Authorization: Bearer` 미사용. 변경요청 CSRF 토큰([decisions/0014](decisions/0014-auth-redis-session-cookie.md)) |

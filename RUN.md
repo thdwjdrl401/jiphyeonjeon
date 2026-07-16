@@ -2,7 +2,7 @@
 
 루트에서 프론트엔드(React) + 백엔드(Spring)를 실행하기 위한 가이드. 전체 개요는 [README.md](./README.md), 인프라·스캐폴드 상세는 [docs/T0-BOOTSTRAP.md](./docs/T0-BOOTSTRAP.md) 참고.
 
-> **FE/BE 분리** 아키텍처 — 프론트(Vite dev, 8083)와 백엔드(Spring API, 8080)는 **따로** 뜬다(단일 포트 통합 서빙 없음). 프론트는 `/api/v1`을 8080으로 프록시.
+> **FE/BE 분리** 아키텍처 — 프론트(Vite dev, 8083)와 백엔드(Spring API, 8080)는 **따로** 뜬다(단일 포트 통합 서빙 없음). 프론트는 `/api`을 8080으로 프록시.
 
 ## 1. 사전 요구
 | 구분 | 요구사항 | 비고 |
@@ -47,7 +47,7 @@ npm run install:all             # 루트(concurrently) + frontend
 | 서비스 | 포트 | 설명 |
 | ---- | ---- | ---- |
 | Spring Boot (API) | 8080 | 백엔드 REST/WS |
-| React (Vite dev) | 8083 | 프론트 dev, `/api/v1`→8080 프록시 |
+| React (Vite dev) | 8083 | 프론트 dev, `/api`→8080 프록시 |
 | PostgreSQL + pgvector | 5432 | DB (`liveclass`) |
 | Redis | 6379 | 세션·캐시 |
 
@@ -56,8 +56,8 @@ npm run install:all             # 루트(concurrently) + frontend
 ## 5. 스모크 확인 (백엔드)
 ```bash
 curl -s localhost:8080/actuator/health          # {"status":"UP"}
-curl -s localhost:8080/api/v1/ping               # {"status":"ok","app":"liveclass"}
-curl -s -i localhost:8080/api/v1/session/touch | grep -i set-cookie   # LIVECLASS_SESSION 발급
+curl -s localhost:8080/api/ping               # {"status":"ok","app":"liveclass"}
+curl -s -i localhost:8080/api/session/touch | grep -i set-cookie   # LIVECLASS_SESSION 발급
 docker exec liveclass-redis redis-cli --scan --pattern 'liveclass:session:*'   # Redis에 세션
 ```
 
