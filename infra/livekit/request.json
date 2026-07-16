@@ -1,5 +1,4 @@
 {
-  "_comment": "room-composite 녹화 요청. lk egress start --type room-composite \"$(cat request.json)\"",
   "room_name": "test",
   "layout": "grid",
   "audio_only": false,

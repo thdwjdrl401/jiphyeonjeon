@@ -38,5 +38,33 @@ services:
     ports: ["9000:9000", "9001:9001"]
     volumes: ["miniodata:/data"]
 
+  nginx-livekit:                              # 시그널링(WSS) TLS 종단 → livekit 7880. 미디어(UDP)는 우회.
+    image: nginx:alpine
+    restart: unless-stopped
+    network_mode: host                        # 7443 바인딩 + 127.0.0.1:7880 직결
+    depends_on: [livekit]
+    volumes:
+      - ./nginx-livekit-prod.conf:/etc/nginx/conf.d/default.conf:ro
+      - certbot-etc:/etc/letsencrypt:ro       # 앱 스택 certbot이 발급/갱신하는 공유 인증서
+    # 6h마다 reload → 갱신된 인증서 반영
+    command: /bin/sh -c "while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g 'daemon off;'"
+
+  av-bot:                                     # STT 테스트용 지속 퍼블리셔 — 영상+음성을 room stt-test에 상시 흘려보냄
+    build: ./stt-bot                          #   STT 서버는 이 방 av-bot 참가자의 audio 트랙만 구독
+    restart: unless-stopped
+    network_mode: host                        # livekit 127.0.0.1:7880 직결
+    depends_on: [livekit]
+    env_file: CREDENTIALS.txt                 # LIVEKIT_API_KEY / LIVEKIT_API_SECRET (서버 로컬, 커밋 안 됨)
+    environment:
+      LIVEKIT_URL: ws://localhost:7880
+      STT_ROOM: stt-test
+      STT_IDENTITY: av-bot
+      LOOP_SECONDS: "2665"                     # springBoot.mp4 길이(≈2668s)에 맞춤
+    volumes:
+      - ./stt-audio:/audio:ro                 # loop-video.h264 · loop-audio.ogg
+
 volumes:
   miniodata:
+  certbot-etc:                                # 앱 스택(docker-compose.prod.yml)이 생성한 볼륨을 공유
+    external: true
+    name: liveclass_certbot_etc

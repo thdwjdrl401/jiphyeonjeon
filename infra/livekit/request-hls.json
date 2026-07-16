@@ -1,5 +1,4 @@
 {
-  "_comment": "HLS(near-live) 녹화. lk egress start --type room-composite \"$(cat request-hls.json)\". 다시보기 + near-live 재생용 (ADR-0010). MP4 스모크는 request.json.",
   "room_name": "test",
   "layout": "grid",
   "audio_only": false,
