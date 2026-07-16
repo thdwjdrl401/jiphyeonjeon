@@ -1,5 +1,5 @@
 {
-  "name": "liveclass-react",
+  "name": "liveclass-ai-frontend",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -12,10 +12,11 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.83.0",
     "axios": "^1.7.2",
     "core-js": "^3.37.1",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
     "react-router-dom": "^6.28.0"
   },
   "devDependencies": {
@@ -23,8 +24,8 @@
     "@testing-library/react": "^16.1.0",
     "@testing-library/user-event": "^14.5.2",
     "@types/node": "^22.10.1",
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",
     "@vitejs/plugin-react": "^4.3.4",

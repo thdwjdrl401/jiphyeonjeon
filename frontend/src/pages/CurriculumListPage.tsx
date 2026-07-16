@@ -1,0 +1,148 @@
+import { useEffect, useState, type FormEvent } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { useAuth } from '@/features/auth/AuthContext'
+import CurriculumCard from '@/features/curriculum/CurriculumCard'
+import CurriculumCardSkeleton from '@/features/curriculum/CurriculumCardSkeleton'
+import type { CourseSort } from '@/features/curriculum/types'
+import { useCourses } from '@/features/curriculum/useCourses'
+import { usePageTitle } from '@/shared/lib/usePageTitle'
+import PageState from '@/shared/ui/PageState'
+
+const validSorts = new Set<CourseSort>(['LATEST', 'STARTING_SOON', 'TITLE_ASC'])
+const MAX_VISIBLE_PAGES = 5
+
+function getPageWindow(current: number, total: number, maxVisible: number) {
+  if (total <= maxVisible) return Array.from({ length: total }, (_, index) => index)
+  const half = Math.floor(maxVisible / 2)
+  const start = Math.min(Math.max(current - half, 0), total - maxVisible)
+  return Array.from({ length: maxVisible }, (_, index) => start + index)
+}
+
+export default function CurriculumListPage() {
+  usePageTitle('커리큘럼 탐색')
+  const { user } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const queryText = searchParams.get('q') ?? ''
+  const [searchInput, setSearchInput] = useState(queryText)
+  const sortParam = searchParams.get('sort') as CourseSort | null
+  const sort = sortParam && validSorts.has(sortParam) ? sortParam : 'LATEST'
+  const rawPage = Number(searchParams.get('page') ?? '0')
+  const page = Number.isInteger(rawPage) && rawPage >= 0 ? rawPage : 0
+
+  useEffect(() => setSearchInput(queryText), [queryText])
+
+  const courseQuery = useCourses(
+    {
+      q: queryText || undefined,
+      lifecycleStatus: 'PUBLISHED',
+      sort,
+      page,
+      size: 9,
+    },
+    user?.userId,
+  )
+
+  const updateParams = (changes: Record<string, string | null>) => {
+    const next = new URLSearchParams(searchParams)
+    Object.entries(changes).forEach(([key, value]) => {
+      if (!value) next.delete(key)
+      else next.set(key, value)
+    })
+    setSearchParams(next)
+  }
+
+  const handleSearch = (event: FormEvent) => {
+    event.preventDefault()
+    updateParams({ q: searchInput.trim() || null, page: null })
+  }
+
+  const resetFilters = () => {
+    setSearchInput('')
+    setSearchParams({})
+  }
+
+  const data = courseQuery.data
+  const hasConditions = Boolean(queryText || sort !== 'LATEST')
+
+  return (
+    <div className="catalog-page">
+      <section className="catalog-hero">
+        <div className="page-container catalog-hero__inner">
+          <div>
+            <span className="eyebrow">EXPLORE CURRICULUMS</span>
+            <h1>함께 배우면,<br /><em>더 멀리 갈 수 있어요.</em></h1>
+            <p>관심 있는 주제를 검색하고 라이브로 소통하는 커리큘럼을 만나보세요.</p>
+          </div>
+          <div className="catalog-hero__graphic" aria-hidden="true">
+            <span>LIVE</span><i /><i /><i />
+          </div>
+        </div>
+      </section>
+
+      <section className="catalog-content page-container">
+        <form className="catalog-controls" onSubmit={handleSearch} role="search">
+          <label className="search-field">
+            <span className="visually-hidden">커리큘럼 검색</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
+            <input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="제목, 소개, 강사 이름으로 검색" />
+            {searchInput && <button type="button" aria-label="검색어 지우기" onClick={() => setSearchInput('')}>×</button>}
+          </label>
+          <button className="button button--primary catalog-search-button" type="submit">검색</button>
+          <label className="sort-field">
+            <span className="visually-hidden">정렬 기준</span>
+            <select value={sort} onChange={(event) => updateParams({ sort: event.target.value === 'LATEST' ? null : event.target.value, page: null })}>
+              <option value="LATEST">최신순</option>
+              <option value="STARTING_SOON">시작 임박순</option>
+              <option value="TITLE_ASC">이름순</option>
+            </select>
+          </label>
+        </form>
+
+        <div className="catalog-summary" aria-live="polite">
+          <div>
+            <h2>{queryText ? `‘${queryText}’ 검색 결과` : '전체 커리큘럼'}</h2>
+            {data && <p>총 <strong>{data.totalElements}</strong>개의 커리큘럼을 찾았어요.</p>}
+          </div>
+          {hasConditions && <button className="reset-button" type="button" onClick={resetFilters}>조건 초기화</button>}
+        </div>
+
+        {courseQuery.isPending ? (
+          <CurriculumCardSkeleton count={6} />
+        ) : courseQuery.isError ? (
+          <PageState title="커리큘럼을 불러오지 못했어요" description="네트워크 연결을 확인한 뒤 다시 시도해 주세요." action={<button className="button button--primary" type="button" onClick={() => courseQuery.refetch()}>다시 시도</button>} />
+        ) : !data ? (
+          <CurriculumCardSkeleton count={6} />
+        ) : data.items.length === 0 ? (
+          <PageState
+            title={hasConditions ? '검색 조건에 맞는 커리큘럼이 없어요' : '공개된 커리큘럼을 준비하고 있어요'}
+            description={hasConditions ? '검색어를 줄이거나 조건을 초기화해 보세요.' : '곧 새로운 라이브 커리큘럼으로 찾아올게요.'}
+            action={hasConditions ? <button className="button button--soft" type="button" onClick={resetFilters}>전체 커리큘럼 보기</button> : <Link className="button button--soft" to="/">웰컴으로 돌아가기</Link>}
+          />
+        ) : (
+          <>
+            <div className={`curriculum-grid${courseQuery.isFetching ? ' is-updating' : ''}`}>
+              {data.items.map((course) => <CurriculumCard key={course.courseId} course={course} />)}
+            </div>
+            {courseQuery.isFetching && <span className="catalog-updating" role="status">결과를 업데이트하고 있어요.</span>}
+            {data.totalPages > 1 && (() => {
+              const pageWindow = getPageWindow(page, data.totalPages, MAX_VISIBLE_PAGES)
+              const [firstVisible] = pageWindow
+              const lastVisible = pageWindow[pageWindow.length - 1]
+              return (
+                <nav className="pagination" aria-label="커리큘럼 페이지">
+                  <button type="button" disabled={page === 0} onClick={() => updateParams({ page: page - 1 === 0 ? null : String(page - 1) })} aria-label="이전 페이지">←</button>
+                  {firstVisible > 0 && <span className="pagination-ellipsis" aria-hidden="true">…</span>}
+                  {pageWindow.map((index) => (
+                    <button className={index === page ? 'is-current' : undefined} type="button" key={index} aria-current={index === page ? 'page' : undefined} onClick={() => updateParams({ page: index === 0 ? null : String(index) })}>{index + 1}</button>
+                  ))}
+                  {lastVisible < data.totalPages - 1 && <span className="pagination-ellipsis" aria-hidden="true">…</span>}
+                  <button type="button" disabled={!data.hasNext} onClick={() => updateParams({ page: String(page + 1) })} aria-label="다음 페이지">→</button>
+                </nav>
+              )
+            })()}
+          </>
+        )}
+      </section>
+    </div>
+  )
+}
