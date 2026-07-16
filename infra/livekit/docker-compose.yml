@@ -1,0 +1,42 @@
+# 미디어 서버 (LiveKit SFU + Egress 녹화 + Redis + MinIO)
+# PoC 검증 완료 구성. 값은 아래 <...> 자리 채우기. 자세한 건 README.md.
+# 기동: docker compose up -d
+services:
+  livekit:
+    image: livekit/livekit-server:v1.13.3   # advertise_internal_ip 지원(≥v1.13.0) — 구버전이면 무시됨
+    command: --config /etc/livekit.yaml
+    restart: unless-stopped
+    network_mode: host                        # RTC 포트 직접 바인딩
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+    depends_on: [redis]
+
+  redis:                                      # LiveKit ↔ Egress 통신 전용 (앱 Redis와 별개)
+    image: redis:7-alpine
+    restart: unless-stopped
+    network_mode: host
+    command: ["redis-server", "--bind", "127.0.0.1", "--appendonly", "yes"]
+
+  egress:
+    image: livekit/egress:v1.13.0
+    restart: unless-stopped
+    network_mode: host
+    cap_add: [SYS_ADMIN]                      # Chromium 샌드박스 (필수)
+    security_opt: ["seccomp=unconfined"]      # ★ Chrome 런치 차단 회피 (아래 트러블슈팅 #3)
+    shm_size: "1g"                            # Chrome /dev/shm
+    environment: ["EGRESS_CONFIG_FILE=/out/egress.yaml"]
+    volumes:
+      - ./egress.yaml:/out/egress.yaml:ro
+    depends_on: [redis, livekit]
+
+  minio:                                      # PoC용 S3 호환 스토리지 (EC2는 실 AWS S3로 교체)
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z   # 커뮤니티 유지보수모드 → 태그 고정
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: <MINIO_USER>
+      MINIO_ROOT_PASSWORD: <MINIO_PASSWORD>
+    ports: ["9000:9000", "9001:9001"]
+    volumes: ["miniodata:/data"]
+
+volumes:
+  miniodata:

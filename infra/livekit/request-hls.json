@@ -1,0 +1,22 @@
+{
+  "_comment": "HLS(near-live) 녹화. lk egress start --type room-composite \"$(cat request-hls.json)\". 다시보기 + near-live 재생용 (ADR-0010). MP4 스모크는 request.json.",
+  "room_name": "test",
+  "layout": "grid",
+  "audio_only": false,
+  "segment_outputs": [
+    {
+      "filename_prefix": "test/seg",
+      "playlist_name": "index.m3u8",
+      "live_playlist_name": "live.m3u8",
+      "segment_duration": 2,
+      "s3": {
+        "access_key": "<MINIO_USER>",
+        "secret": "<MINIO_PASSWORD>",
+        "bucket": "recordings",
+        "endpoint": "http://localhost:9000",
+        "region": "us-east-1",
+        "force_path_style": true
+      }
+    }
+  ]
+}
