@@ -1,0 +1,8 @@
+# 빌드 컨텍스트 최소화 — 이미지 빌드는 컨테이너 안에서 gradlew로 새로 함
+build/
+.gradle/
+bin/
+*.log
+.idea/
+.vscode/
+*.iml

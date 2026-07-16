@@ -1,0 +1,97 @@
+# 프로덕션 배포 (EC2) — 전부 Docker + HTTPS.  dev용 docker-compose.yml과는 별개 파일.
+# 사용:
+#   cp .env.prod.example .env.prod   # 값 채우기 (POSTGRES_PASSWORD 등)
+#   bash scripts/init-letsencrypt.sh # 최초 1회 인증서 발급
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+#
+# 컨테이너: postgres · redis · backend · frontend(nginx) · certbot
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: liveclass-postgres-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-liveclass}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 필요}
+      POSTGRES_DB: ${POSTGRES_DB:-liveclass}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro   # 최초 1회 스키마
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-liveclass} -d ${POSTGRES_DB:-liveclass}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # 호스트 포트 미노출 — 내부 네트워크에서만 접근
+
+  redis:
+    image: redis:7-alpine
+    container_name: liveclass-redis-prod
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: liveclass-backend-prod
+    restart: unless-stopped
+    environment:
+      # application.yml이 localhost 하드코딩 → relaxed-binding env로 override
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-liveclass}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-liveclass}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 필요}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: "6379"
+      # HTTPS 뒤 → 세션 쿠키 Secure + 프록시 헤더 신뢰
+      SERVER_SERVLET_SESSION_COOKIE_SECURE: "true"
+      SERVER_FORWARD_HEADERS_STRATEGY: framework
+    depends_on:
+      postgres:
+        condition: service_healthy   # Flyway 마이그레이션 전 DB 준비 대기
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    # 호스트 포트 미노출 — nginx(frontend)만 접근
+
+  frontend:
+    build: ./frontend
+    container_name: liveclass-frontend-prod
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - certbot-etc:/etc/letsencrypt:ro     # 인증서 (certbot이 발급/갱신)
+      - certbot-www:/var/www/certbot        # ACME 챌린지 webroot
+    depends_on:
+      - backend
+    # 6h마다 nginx reload → 갱신된 인증서 반영
+    command: /bin/sh -c "while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g 'daemon off;'"
+
+  certbot:
+    image: certbot/certbot
+    container_name: liveclass-certbot-prod
+    restart: unless-stopped
+    volumes:
+      - certbot-etc:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+    # 12h마다 갱신 시도 (webroot). 최초 발급은 scripts/init-letsencrypt.sh.
+    entrypoint: /bin/sh -c "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot; sleep 12h & wait $${!}; done"
+
+volumes:
+  pgdata:
+  redisdata:
+  certbot-etc:
+    name: liveclass_certbot_etc   # 미디어 스택(infra/livekit)이 external로 공유
+  certbot-www:
