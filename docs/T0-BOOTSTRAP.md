@@ -23,7 +23,7 @@ docker compose config         # (참고) 구문 검증
 
 ---
 
-## 2. 백엔드 Spring Boot 3.4 / Java 21 scaffold 계획
+## 2. 백엔드 Spring Boot 4.1 / Java 21 scaffold
 
 **방식: 버전 bump 아니라 fresh scaffold.** 기존 `backend/`(Spring 2.7·Java11·Kurento·QueryDSL·MySQL)는 도메인 재사용이 없어 새로 초기화하는 게 빠르다. Gradle은 유지.
 
@@ -31,7 +31,7 @@ docker compose config         # (참고) 구문 검증
 - **Web · Security · Data JPA · PostgreSQL Driver · Validation · Actuator · Flyway**
 - **Spring Session Data Redis** (쿠키 세션 저장 — [ADR-0014 인증](decisions/)) · **Spring Data Redis**
 - 선택: Lombok · DevTools
-- Java **21** 툴체인, Spring Boot **3.4.x**.
+- Java **21** 툴체인, Spring Boot **4.1** (버전 근거 [ADR-0009](decisions/0009-java21-spring-boot-3.md)), Gradle **8.14+/9.x**.
 
 ### 2-2. 핵심 설정 (`application.yml`)
 ```yaml
@@ -76,8 +76,8 @@ server:
 
 ### 2-5. T0 완료 기준(스모크)
 1. `./gradlew bootRun` 기동 → `GET /actuator/health` = UP.
-2. Postgres 연결 + **Flyway가 첫 마이그레이션(core, 예: `user` 최소 테이블) 적용**.
-3. 로그인 스모크 → **응답에 HttpOnly 쿠키 발급, Redis에 세션 키 생성** 확인(`redis-cli keys 'spring:session:*'`).
+2. Postgres 연결(Hibernate/Hikari) + **Flyway 설정 완료**. 첫 마이그레이션(core DDL)은 **CP0 DDL 설계 후** 작성(스캐폴드엔 임의 DDL 미포함).
+3. 세션 스모크(`GET /api/v1/session/touch`) → **HttpOnly 쿠키 발급 + Redis 세션 키**(`liveclass:session:*`) 확인.
 > 전체 인증·강좌 도메인은 CP0에서. T0는 "붙고 뜬다"까지만.
 
 ---

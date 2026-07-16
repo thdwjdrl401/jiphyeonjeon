@@ -1,8 +1,8 @@
 {
-  "name": "webmobile1-skeleton",
+  "name": "liveclass",
   "version": "1.0.0",
   "private": true,
-  "description": "실시간 그룹 화상 회의 서비스 - 루트 통합 실행 스크립트 (frontend + backend)",
+  "description": "LiveClass AI — 실시간 라이브 강의 플랫폼 (루트 통합 실행: frontend + backend)",
   "scripts": {
     "dev": "concurrently -k -n FE,BE,WATCH -c green,blue,magenta \"npm run fe:dev\" \"npm run be:dev\" \"npm run be:watch\"",
     "be:dev": "cd backend && .\\gradlew.bat bootRun",

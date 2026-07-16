@@ -3,24 +3,10 @@
   "configurations": [
     {
       "type": "java",
-      "name": "GroupCallApplication",
-      "request": "launch",
-      "mainClass": "com.liveclass.GroupCallApplication",
-      "projectName": "liveclass-web-project-backend"
-    },
-    {
-      "type": "java",
-      "name": "GroupCallApplication",
-      "request": "launch",
-      "mainClass": "com.liveclass.GroupCallApplication",
-      "projectName": "backend"
-    },
-    {
-      "type": "java",
       "name": "Spring Boot (Backend)",
       "request": "launch",
-      "mainClass": "com.liveclass.GroupCallApplication",
-      "projectName": "liveclass-web-project",
+      "mainClass": "com.liveclass.LiveClassApplication",
+      "projectName": "liveclass",
       "cwd": "${workspaceFolder}/backend"
     },
     {

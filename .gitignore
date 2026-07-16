@@ -23,3 +23,11 @@ package-lock.json
 # 에디터 스왑/임시 파일
 *.swp
 *~
+
+# IDE
+.idea/
+.vscode/*.local
+
+# Gradle 빌드 산출물
+backend/build/
+backend/.gradle/

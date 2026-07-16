@@ -6,7 +6,7 @@
 > 명세·스켈레톤은 참고용([../docs/decisions/0003](../docs/decisions/0003-greenfield-redesign.md)) — 도메인은 course→section→lesson 중심으로 재설계.
 
 ## 스택·환경
-- **Spring Boot 3.4/3.5 · Java 21**(virtual threads로 blocking I/O 동시성 확대, reactive/JPA 혼합 회피), Gradle, Spring Security, JPA/Hibernate. ([../docs/decisions/0009](../docs/decisions/0009-java21-spring-boot-3.md))
+- **Spring Boot 4.1 · Java 21**(virtual threads로 blocking I/O 동시성 확대, reactive/JPA 혼합 회피), Gradle 8.14+/9.x, Spring Security, JPA/Hibernate 7. ([../docs/decisions/0009](../docs/decisions/0009-java21-spring-boot-3.md))
 - DB: **PostgreSQL + pgvector**, **core 스키마 단독 쓰기**(ai 스키마는 Python) ([../docs/decisions/0005](../docs/decisions/0005-db-postgres-pgvector.md)).
 - 큐: **RabbitMQ**(durable 배치 잡 발행) · **Redis**(cache/session + STT/라이브 자막 Streams 소비) ([../docs/decisions/0012](../docs/decisions/0012-hybrid-queue.md)).
 

@@ -31,7 +31,7 @@ Codex는 별도 명령 어댑터 없이 위 문서 흐름을 기준으로 판단
 | 구분 | 스택 | 위치 |
 |---|---|---|
 | Frontend | React 19 · TypeScript · Vite (FE/BE 분리, TanStack Query, SSE/WS) | `frontend/` ([frontend/AGENTS.md](frontend/AGENTS.md)) |
-| Backend (컨트롤) | **Spring Boot 3.4/3.5 · Java 21**(virtual threads) · JPA · Security | `backend/` ([backend/AGENTS.md](backend/AGENTS.md)) |
+| Backend (컨트롤) | **Spring Boot 4.1 · Java 21**(virtual threads) · JPA · Security | `backend/` ([backend/AGENTS.md](backend/AGENTS.md)) |
 | AI | Python: **ai-api(FastAPI SSE)** · **ai-worker(RabbitMQ)** · **realtime-agent(LiveKit)** | — |
 | DB | PostgreSQL + pgvector (**core/ai 스키마 분리**) | — |
 | 큐·캐시 | **RabbitMQ**(durable 배치) · **Redis**(cache/session + STT·라이브 fast path) | — |
