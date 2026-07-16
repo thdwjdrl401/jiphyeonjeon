@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint . --ext .ts,.tsx,.js,.cjs,.mjs --max-warnings 0 --ignore-pattern ../backend/src/main/resources/dist",
+    "lint": "eslint . --ext .ts,.tsx,.js,.cjs,.mjs --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
