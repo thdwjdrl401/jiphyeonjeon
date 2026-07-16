@@ -79,7 +79,19 @@ Codex는 별도 명령 어댑터 없이 위 문서 흐름을 기준으로 판단
 
 ---
 
-## 5. 커밋·MR 규칙
+## 5. 브랜치·커밋·MR 규칙
+
+### 브랜치 이름
+
+형식: `{type}/{scope}/{description}` (예: `feat/ai/streaming-caption`)
+
+- **type**: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`
+- **scope**: `fe`, `be`, `ai`, `common`
+  - 여러 영역을 함께 건드리는 변경은 `common`을 사용한다.
+- **description**: 영문 kebab-case로 작성한다.
+- 하나의 브랜치는 하나의 영역만 담당한다.
+
+### 커밋·MR
 
 - **커밋 메시지**: 한글, `<타입>: <제목>` (타입: feat/fix/refactor/style/docs/chore/test). 상세는 [.gitcommit_template.txt](.gitcommit_template.txt).
 - **MR**: [MR 템플릿](.gitlab/merge_request_templates/merge_request_template.md)의 하네스 체크리스트를 채운다.
