@@ -26,29 +26,29 @@
 
 | ID | Method | Path | 설명 | 상태 |
 |---|---|---|---|---|
-| `LESSON-01` | `POST` | `/api/v1/instructor/sections/{sectionId}/lessons` | `DRAFT` 생성 | URL **확정** |
-| `LESSON-02` | `GET` | `/api/v1/instructor/lessons/{lessonId}` | 생성·수정용 전체 상태 조회 | **제안** |
-| `LESSON-03` | `PATCH` | `/api/v1/instructor/lessons/{lessonId}` | 제목·설명 수정 | URL **확정** |
-| `LESSON-04` | `POST` | `/api/v1/instructor/lessons/{lessonId}/publish` | `READY → PUBLISHED` | **제안** |
-| `LESSON-05` | `GET` | `/api/v1/lessons/{lessonId}` | 역할별 레슨 상세 허브 조회 | **제안** |
+| `LESSON-01` | `POST` | `/api/instructor/sections/{sectionId}/lessons` | `DRAFT` 생성 | URL **확정** |
+| `LESSON-02` | `GET` | `/api/instructor/lessons/{lessonId}` | 생성·수정용 전체 상태 조회 | **제안** |
+| `LESSON-03` | `PATCH` | `/api/instructor/lessons/{lessonId}` | 제목·설명 수정 | URL **확정** |
+| `LESSON-04` | `POST` | `/api/instructor/lessons/{lessonId}/publish` | `READY → PUBLISHED` | **제안** |
+| `LESSON-05` | `GET` | `/api/lessons/{lessonId}` | 역할별 레슨 상세 허브 조회 | **제안** |
 
 ### 2.2 PPTX 자료
 
 | ID | Method | Path | 설명 | 상태 |
 |---|---|---|---|---|
-| `MATERIAL-01` | `POST` | `/api/v1/instructor/lessons/{lessonId}/materials` | PPTX 업로드 요청 생성 | URL **확정**, 상세 **협의 필요** |
-| `MATERIAL-02` | `POST` | `/api/v1/instructor/lessons/{lessonId}/materials/{materialId}/complete` | 직접 업로드 완료 통지·검증 시작 | **제안** |
-| `MATERIAL-03` | `POST` | `/api/v1/instructor/lessons/{lessonId}/ai-preparation` | 초기 자료 집합 AI 준비 시작 | **제안** |
-| `MATERIAL-04` | `DELETE` | `/api/v1/instructor/lessons/{lessonId}/materials/{materialId}` | 활성 자료 하나 삭제·영향 처리 | **제안** |
-| `MATERIAL-05` | `POST` | `/api/v1/instructor/lessons/{lessonId}/material-operations/{operationId}/retry` | 실패한 작업 재시도 | **제안** |
-| `MATERIAL-06` | `GET` | `/api/v1/lessons/{lessonId}/materials/{materialId}/download` | 권한 검증 후 PPTX 다운로드 URL 발급 | **제안** |
+| `MATERIAL-01` | `POST` | `/api/instructor/lessons/{lessonId}/materials` | PPTX 업로드 요청 생성 | URL **확정**, 상세 **협의 필요** |
+| `MATERIAL-02` | `POST` | `/api/instructor/lessons/{lessonId}/materials/{materialId}/complete` | 직접 업로드 완료 통지·검증 시작 | **제안** |
+| `MATERIAL-03` | `POST` | `/api/instructor/lessons/{lessonId}/ai-preparation` | 초기 자료 집합 AI 준비 시작 | **제안** |
+| `MATERIAL-04` | `DELETE` | `/api/instructor/lessons/{lessonId}/materials/{materialId}` | 활성 자료 하나 삭제·영향 처리 | **제안** |
+| `MATERIAL-05` | `POST` | `/api/instructor/lessons/{lessonId}/material-operations/{operationId}/retry` | 실패한 작업 재시도 | **제안** |
+| `MATERIAL-06` | `GET` | `/api/lessons/{lessonId}/materials/{materialId}/download` | 권한 검증 후 PPTX 다운로드 URL 발급 | **제안** |
 
 ## 3. 레슨 생성·수정 모델
 
 ### 3.1 `LESSON-01` 초안 생성
 
 ```http
-POST /api/v1/instructor/sections/{sectionId}/lessons
+POST /api/instructor/sections/{sectionId}/lessons
 ```
 
 ```json
@@ -76,7 +76,7 @@ POST /api/v1/instructor/sections/{sectionId}/lessons
 ### 3.2 `LESSON-02` 강사용 편집 조회
 
 ```http
-GET /api/v1/instructor/lessons/{lessonId}
+GET /api/instructor/lessons/{lessonId}
 ```
 
 ```json
@@ -86,8 +86,8 @@ GET /api/v1/instructor/lessons/{lessonId}
   "description": "인증과 인가의 기본을 다룹니다.",
   "lessonStatus": "AI_NOT_READY",
   "parent": {
-    "courseId": "crs_01J...",
-    "courseTitle": "실시간 Spring 입문",
+    "curriculumId": "cur_01J...",
+    "curriculumTitle": "실시간 Spring 입문",
     "sectionId": "sec_01J...",
     "sectionTitle": "2. 인증과 인가"
   },
@@ -126,7 +126,7 @@ GET /api/v1/instructor/lessons/{lessonId}
 ### 3.3 `LESSON-03` 기본 정보 수정
 
 ```http
-PATCH /api/v1/instructor/lessons/{lessonId}
+PATCH /api/instructor/lessons/{lessonId}
 ```
 
 ```json
@@ -144,7 +144,7 @@ PATCH /api/v1/instructor/lessons/{lessonId}
 ### 3.4 `LESSON-04` 게시
 
 ```http
-POST /api/v1/instructor/lessons/{lessonId}/publish
+POST /api/instructor/lessons/{lessonId}/publish
 ```
 
 요청 본문은 없다. 서버는 다음 조건을 원자적으로 다시 검증한다.
@@ -182,7 +182,7 @@ Spring 업로드 요청 생성 → MinIO presigned URL로 직접 PUT
 초기 준비에서는 여러 파일 metadata를 한 번에 요청하고, 이후 추가에서는 배열 길이를 1로 제한한다.
 
 ```http
-POST /api/v1/instructor/lessons/{lessonId}/materials
+POST /api/instructor/lessons/{lessonId}/materials
 ```
 
 ```json
@@ -234,7 +234,7 @@ POST /api/v1/instructor/lessons/{lessonId}/materials
 ### 4.3 `MATERIAL-02` 업로드 완료 통지
 
 ```http
-POST /api/v1/instructor/lessons/{lessonId}/materials/{materialId}/complete
+POST /api/instructor/lessons/{lessonId}/materials/{materialId}/complete
 ```
 
 ```json
@@ -260,7 +260,7 @@ POST /api/v1/instructor/lessons/{lessonId}/materials/{materialId}/complete
 ### 5.1 `MATERIAL-03`
 
 ```http
-POST /api/v1/instructor/lessons/{lessonId}/ai-preparation
+POST /api/instructor/lessons/{lessonId}/ai-preparation
 ```
 
 ```json
@@ -302,7 +302,7 @@ POST /api/v1/instructor/lessons/{lessonId}/ai-preparation
 ### 6.2 `MATERIAL-04` 삭제
 
 ```http
-DELETE /api/v1/instructor/lessons/{lessonId}/materials/{materialId}
+DELETE /api/instructor/lessons/{lessonId}/materials/{materialId}
 ```
 
 ```json
@@ -329,7 +329,7 @@ DELETE /api/v1/instructor/lessons/{lessonId}/materials/{materialId}
 ### 6.3 `MATERIAL-05` 재시도
 
 ```http
-POST /api/v1/instructor/lessons/{lessonId}/material-operations/{operationId}/retry
+POST /api/instructor/lessons/{lessonId}/material-operations/{operationId}/retry
 ```
 
 동일 작업의 실패 단계부터 재시도한다. 이미 완료·실행 중이면 최신 상태를 반환하거나 `409 MATERIAL_OPERATION_STATE_CONFLICT`를 사용한다.
@@ -359,7 +359,7 @@ POST /api/v1/instructor/lessons/{lessonId}/material-operations/{operationId}/ret
 ## 8. `LESSON-05` 역할별 레슨 상세
 
 ```http
-GET /api/v1/lessons/{lessonId}
+GET /api/lessons/{lessonId}
 ```
 
 ```json
@@ -369,8 +369,8 @@ GET /api/v1/lessons/{lessonId}
   "description": "인증과 인가의 기본을 다룹니다.",
   "lessonStatus": "PUBLISHED",
   "parent": {
-    "courseId": "crs_01J...",
-    "courseTitle": "실시간 Spring 입문",
+    "curriculumId": "cur_01J...",
+    "curriculumTitle": "실시간 Spring 입문",
     "sectionId": "sec_01J...",
     "sectionTitle": "2. 인증과 인가"
   },
@@ -417,7 +417,7 @@ GET /api/v1/lessons/{lessonId}
 ## 9. 자료 다운로드
 
 ```http
-GET /api/v1/lessons/{lessonId}/materials/{materialId}/download
+GET /api/lessons/{lessonId}/materials/{materialId}/download
 ```
 
 ```json

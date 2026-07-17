@@ -33,37 +33,37 @@ STARTING ─────────→ FAILED
 
 | ID | Method | Path | 설명 | 상태 |
 |---|---|---|---|---|
-| `LIVE-SESSION-01` | `POST` | `/api/v1/instructor/lessons/{lessonId}/live-sessions` | 세션 생성 | **제안** |
-| `LIVE-SESSION-02` | `PATCH` | `/api/v1/instructor/live-sessions/{sessionId}` | 일정 수정 | **제안** |
-| `LIVE-SESSION-03` | `GET` | `/api/v1/live-sessions/{sessionId}` | 역할별 세션 상세 | **제안** |
-| `LIVE-SESSION-04` | `POST` | `/api/v1/instructor/live-sessions/{sessionId}/cancel` | 시작 전 취소 | **제안** |
-| `LIVE-SESSION-05` | `POST` | `/api/v1/instructor/live-sessions/{sessionId}/preflight` | 서버·미디어 시작 조건 점검 | **제안** |
-| `LIVE-SESSION-06` | `POST` | `/api/v1/live-sessions/{sessionId}/start` | 멱등 라이브 시작 | URL **확정** |
-| `LIVE-SESSION-07` | `POST` | `/api/v1/live-sessions/{sessionId}/token` | 역할 제한 LiveKit token 발급 | URL **확정** |
-| `LIVE-SESSION-08` | `POST` | `/api/v1/live-sessions/{sessionId}/end` | 멱등 라이브 종료 | URL **확정** |
-| `LIVE-SESSION-09` | `GET` | `/api/v1/instructor/live-sessions/{sessionId}/processing` | 종료 후 녹화·AI 처리 조회 | **제안** |
-| `LIVE-PLAYBACK-01` | `GET` | `/api/v1/live-sessions/{sessionId}/playback` | 최근·전체 DVR HLS 재생 정보 | **제안** |
+| `LIVE-SESSION-01` | `POST` | `/api/instructor/lessons/{lessonId}/live-sessions` | 세션 생성 | **제안** |
+| `LIVE-SESSION-02` | `PATCH` | `/api/instructor/live-sessions/{sessionId}` | 일정 수정 | **제안** |
+| `LIVE-SESSION-03` | `GET` | `/api/live-sessions/{sessionId}` | 역할별 세션 상세 | **제안** |
+| `LIVE-SESSION-04` | `POST` | `/api/instructor/live-sessions/{sessionId}/cancel` | 시작 전 취소 | **제안** |
+| `LIVE-SESSION-05` | `POST` | `/api/instructor/live-sessions/{sessionId}/preflight` | 서버·미디어 시작 조건 점검 | **제안** |
+| `LIVE-SESSION-06` | `POST` | `/api/live-sessions/{sessionId}/start` | 멱등 라이브 시작 | URL **확정** |
+| `LIVE-SESSION-07` | `POST` | `/api/live-sessions/{sessionId}/token` | 역할 제한 LiveKit token 발급 | URL **확정** |
+| `LIVE-SESSION-08` | `POST` | `/api/live-sessions/{sessionId}/end` | 멱등 라이브 종료 | URL **확정** |
+| `LIVE-SESSION-09` | `GET` | `/api/instructor/live-sessions/{sessionId}/processing` | 종료 후 녹화·AI 처리 조회 | **제안** |
+| `LIVE-PLAYBACK-01` | `GET` | `/api/live-sessions/{sessionId}/playback` | 최근·전체 DVR HLS 재생 정보 | **제안** |
 
 ### 2.2 실시간·학습
 
 | ID | Transport | Path/Channel | 설명 | 상태 |
 |---|---|---|---|---|
-| `LIVE-WS-01` | WebSocket | `/api/v1/ws` | 인증 쿠키 기반 WS 연결 | **제안** |
-| `CHAT-01` | REST | `GET/POST /api/v1/lessons/{lessonId}/messages` | 채팅 복구 조회·전송 fallback | URL **확정** |
-| `CAPTION-01` | REST | `GET /api/v1/live-sessions/{sessionId}/captions` | 재연결 누락 자막 복구 | **제안** |
-| `AI-QUESTION-01` | SSE | `POST /api/v1/lessons/{lessonId}/ai/questions:stream` | 개인 AI Q&A | URL **확정** |
-| `AI-TERM-01` | REST | `POST /api/v1/lessons/{lessonId}/ai/terms:explain` | 전문용어 설명 | URL **확정** |
-| `LIVE-QUESTION-01` | REST | `GET /api/v1/instructor/live-sessions/{sessionId}/question-pins` | 강사용 질문 시점 집계 | **제안** |
-| `LIVE-QUESTION-02` | REST | `GET /api/v1/instructor/live-sessions/{sessionId}/question-pins/{pinId}/questions` | 핀의 익명 질문 원문 | **제안** |
-| `BOOKMARK-01` | REST | `GET/POST /api/v1/lessons/{lessonId}/bookmarks` | 내 북마크 조회·생성 | URL 계열 **확정** |
-| `BOOKMARK-02` | REST | `DELETE /api/v1/lessons/{lessonId}/bookmarks/{bookmarkId}` | 내 북마크 삭제 | **제안** |
+| `LIVE-WS-01` | WebSocket | `/api/ws` | 인증 쿠키 기반 WS 연결 | **제안** |
+| `CHAT-01` | REST | `GET/POST /api/lessons/{lessonId}/messages` | 채팅 복구 조회·전송 fallback | URL **확정** |
+| `CAPTION-01` | REST | `GET /api/live-sessions/{sessionId}/captions` | 재연결 누락 자막 복구 | **제안** |
+| `AI-QUESTION-01` | SSE | `POST /api/lessons/{lessonId}/ai/questions:stream` | 개인 AI Q&A | URL **확정** |
+| `AI-TERM-01` | REST | `POST /api/lessons/{lessonId}/ai/terms:explain` | 전문용어 설명 | URL **확정** |
+| `LIVE-QUESTION-01` | REST | `GET /api/instructor/live-sessions/{sessionId}/question-pins` | 강사용 질문 시점 집계 | **제안** |
+| `LIVE-QUESTION-02` | REST | `GET /api/instructor/live-sessions/{sessionId}/question-pins/{pinId}/questions` | 핀의 익명 질문 원문 | **제안** |
+| `BOOKMARK-01` | REST | `GET/POST /api/lessons/{lessonId}/bookmarks` | 내 북마크 조회·생성 | URL 계열 **확정** |
+| `BOOKMARK-02` | REST | `DELETE /api/lessons/{lessonId}/bookmarks/{bookmarkId}` | 내 북마크 삭제 | **제안** |
 
 ## 3. 세션 생성·수정·상세
 
 ### 3.1 `LIVE-SESSION-01` 생성
 
 ```http
-POST /api/v1/instructor/lessons/{lessonId}/live-sessions
+POST /api/instructor/lessons/{lessonId}/live-sessions
 ```
 
 ```json
@@ -94,7 +94,7 @@ POST /api/v1/instructor/lessons/{lessonId}/live-sessions
 ### 3.2 `LIVE-SESSION-02` 수정
 
 ```http
-PATCH /api/v1/instructor/live-sessions/{sessionId}
+PATCH /api/instructor/live-sessions/{sessionId}
 ```
 
 생성과 같은 일정 필드를 사용한다. `DRAFT`, `SCHEDULED`에서 허용하고 `OPEN` 이후 범위는 서버 `allowedActions`를 따른다. `STARTING` 이후에는 `409 LIVE_SESSION_STATE_CONFLICT`를 반환한다.
@@ -102,7 +102,7 @@ PATCH /api/v1/instructor/live-sessions/{sessionId}
 ### 3.3 `LIVE-SESSION-03` 역할별 상세
 
 ```http
-GET /api/v1/live-sessions/{sessionId}
+GET /api/live-sessions/{sessionId}
 ```
 
 ```json
@@ -113,8 +113,8 @@ GET /api/v1/live-sessions/{sessionId}
     "title": "Spring Security 시작하기",
     "lessonStatus": "PUBLISHED",
     "sectionId": "sec_01J...",
-    "courseId": "crs_01J...",
-    "courseTitle": "실시간 Spring 입문"
+    "curriculumId": "cur_01J...",
+    "curriculumTitle": "실시간 Spring 입문"
   },
   "liveSessionStatus": "OPEN",
   "scheduledAt": "2026-08-01T10:00:00+09:00",
@@ -146,7 +146,7 @@ GET /api/v1/live-sessions/{sessionId}
 ### 3.4 취소
 
 ```http
-POST /api/v1/instructor/live-sessions/{sessionId}/cancel
+POST /api/instructor/live-sessions/{sessionId}/cancel
 ```
 
 ```json
@@ -173,7 +173,7 @@ POST /api/v1/instructor/live-sessions/{sessionId}/cancel
 ### 4.2 `LIVE-SESSION-05` 강사 preflight
 
 ```http
-POST /api/v1/instructor/live-sessions/{sessionId}/preflight
+POST /api/instructor/live-sessions/{sessionId}/preflight
 ```
 
 ```json
@@ -201,7 +201,7 @@ AI 미준비, LiveKit, Egress, STT 시작 문제는 우회 없이 차단한다. 
 ### 5.1 `LIVE-SESSION-06` 시작
 
 ```http
-POST /api/v1/live-sessions/{sessionId}/start
+POST /api/live-sessions/{sessionId}/start
 Idempotency-Key: 01J...
 ```
 
@@ -230,7 +230,7 @@ Idempotency-Key: 01J...
 ### 5.2 `LIVE-SESSION-07` LiveKit token
 
 ```http
-POST /api/v1/live-sessions/{sessionId}/token
+POST /api/live-sessions/{sessionId}/token
 ```
 
 ```json
@@ -264,7 +264,7 @@ POST /api/v1/live-sessions/{sessionId}/token
 ### 5.3 `LIVE-SESSION-08` 종료
 
 ```http
-POST /api/v1/live-sessions/{sessionId}/end
+POST /api/live-sessions/{sessionId}/end
 Idempotency-Key: 01K...
 ```
 
@@ -299,7 +299,7 @@ classroom 진입 시 다음 순서로 호출한다.
 ### 7.1 `LIVE-PLAYBACK-01`
 
 ```http
-GET /api/v1/live-sessions/{sessionId}/playback
+GET /api/live-sessions/{sessionId}/playback
 ```
 
 ```json
@@ -337,7 +337,7 @@ GET /api/v1/live-sessions/{sessionId}/playback
 ### 8.1 연결과 envelope 제안
 
 ```text
-GET /api/v1/ws
+GET /api/ws
 Cookie: session=...
 ```
 
@@ -384,7 +384,7 @@ Cookie: session=...
 ### 8.3 `CAPTION-01` 복구
 
 ```http
-GET /api/v1/live-sessions/{sessionId}/captions?afterSessionMs=115000&limit=500
+GET /api/live-sessions/{sessionId}/captions?afterSessionMs=115000&limit=500
 ```
 
 WS 재연결 시 누락 구간을 복구한다. cursor 또는 `afterRevision` 방식이 더 안전한지는 백엔드 저장 모델과 협의한다.
@@ -396,7 +396,7 @@ WS 재연결 시 누락 구간을 복구한다. cursor 또는 `afterRevision` �
 WS 전송을 기본으로 하되 REST fallback도 같은 command DTO를 사용한다.
 
 ```http
-POST /api/v1/lessons/{lessonId}/messages
+POST /api/lessons/{lessonId}/messages
 ```
 
 ```json
@@ -429,7 +429,7 @@ POST /api/v1/lessons/{lessonId}/messages
 ### 9.2 복구 조회
 
 ```http
-GET /api/v1/lessons/{lessonId}/messages?sessionId={sessionId}&afterSessionMs=115000&limit=100
+GET /api/lessons/{lessonId}/messages?sessionId={sessionId}&afterSessionMs=115000&limit=100
 ```
 
 가명, 삭제·제재 상태, `isQuestion`을 포함한다. 사용자 실명과 내부 userId는 수강생 채팅 응답에 포함하지 않는다.
@@ -439,7 +439,7 @@ GET /api/v1/lessons/{lessonId}/messages?sessionId={sessionId}&afterSessionMs=115
 ### 10.1 AI 질문 SSE
 
 ```http
-POST /api/v1/lessons/{lessonId}/ai/questions:stream
+POST /api/lessons/{lessonId}/ai/questions:stream
 Accept: text/event-stream
 ```
 
@@ -481,7 +481,7 @@ React는 Spring만 호출하며 Python AI endpoint를 직접 호출하지 않는
 ### 10.2 용어 설명
 
 ```http
-POST /api/v1/lessons/{lessonId}/ai/terms:explain
+POST /api/lessons/{lessonId}/ai/terms:explain
 ```
 
 ```json
@@ -497,7 +497,7 @@ POST /api/v1/lessons/{lessonId}/ai/terms:explain
 ## 11. 북마크
 
 ```http
-POST /api/v1/lessons/{lessonId}/bookmarks
+POST /api/lessons/{lessonId}/bookmarks
 ```
 
 ```json
@@ -525,7 +525,7 @@ POST /api/v1/lessons/{lessonId}/bookmarks
 ### 12.1 집계
 
 ```http
-GET /api/v1/instructor/live-sessions/{sessionId}/question-pins?bucketMs=30000
+GET /api/instructor/live-sessions/{sessionId}/question-pins?bucketMs=30000
 ```
 
 ```json
@@ -550,7 +550,7 @@ GET /api/v1/instructor/live-sessions/{sessionId}/question-pins?bucketMs=30000
 ### 12.2 익명 질문 원문
 
 ```http
-GET /api/v1/instructor/live-sessions/{sessionId}/question-pins/{pinId}/questions?page=0&size=50
+GET /api/instructor/live-sessions/{sessionId}/question-pins/{pinId}/questions?page=0&size=50
 ```
 
 ```json
@@ -574,7 +574,7 @@ userId, 실명, 가명과 개인 AI 답변은 포함하지 않는다. 초기에�
 ## 13. 종료 후 처리 조회
 
 ```http
-GET /api/v1/instructor/live-sessions/{sessionId}/processing
+GET /api/instructor/live-sessions/{sessionId}/processing
 ```
 
 ```json

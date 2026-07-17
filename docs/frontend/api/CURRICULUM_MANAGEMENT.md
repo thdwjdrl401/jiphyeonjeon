@@ -17,34 +17,34 @@
 
 | ID | Method | Path | 설명 | 상태 |
 |---|---|---|---|---|
-| `COURSE-MGMT-01` | `POST` | `/api/v1/instructor/courses` | 커리큘럼 생성 | prefix **확정**, 상세 **협의 필요** |
-| `COURSE-MGMT-02` | `GET` | `/api/v1/instructor/courses/{courseId}` | 관리용 기본 정보·권한 조회 | **제안** |
-| `COURSE-MGMT-03` | `PATCH` | `/api/v1/instructor/courses/{courseId}` | 기본 정보 수정 | URL 계열 **확정**, 상세 **협의 필요** |
-| `COURSE-MGMT-04` | `POST` | `/api/v1/instructor/course-thumbnails/upload-requests` | 대표 이미지 직접 업로드 정보 발급 | **제안** |
+| `CURRICULUM-MGMT-01` | `POST` | `/api/instructor/curriculums` | 커리큘럼 생성 | prefix **확정**, 상세 **협의 필요** |
+| `CURRICULUM-MGMT-02` | `GET` | `/api/instructor/curriculums/{curriculumId}` | 관리용 기본 정보·권한 조회 | **제안** |
+| `CURRICULUM-MGMT-03` | `PATCH` | `/api/instructor/curriculums/{curriculumId}` | 기본 정보 수정 | URL 계열 **확정**, 상세 **협의 필요** |
+| `CURRICULUM-MGMT-04` | `POST` | `/api/instructor/curriculum-thumbnails/upload-requests` | 대표 이미지 직접 업로드 정보 발급 | **제안** |
 
 ### 2.2 섹션·순서
 
 | ID | Method | Path | 설명 | 상태 |
 |---|---|---|---|---|
-| `SECTION-01` | `POST` | `/api/v1/instructor/courses/{courseId}/sections` | 섹션 생성 | URL 계열 **확정** |
-| `SECTION-02` | `PATCH` | `/api/v1/instructor/sections/{sectionId}` | 섹션 정보 수정 | **제안** |
-| `SECTION-03` | `DELETE` | `/api/v1/instructor/sections/{sectionId}` | 빈 섹션 삭제 | **제안·정책 필요** |
-| `STRUCTURE-01` | `PUT` | `/api/v1/instructor/courses/{courseId}/curriculum/order` | 섹션·레슨 전체 순서 원자 저장 | URL **확정**, 상세 **협의 필요** |
+| `SECTION-01` | `POST` | `/api/instructor/curriculums/{curriculumId}/sections` | 섹션 생성 | URL 계열 **확정** |
+| `SECTION-02` | `PATCH` | `/api/instructor/sections/{sectionId}` | 섹션 정보 수정 | **제안** |
+| `SECTION-03` | `DELETE` | `/api/instructor/sections/{sectionId}` | 빈 섹션 삭제 | **제안·정책 필요** |
+| `STRUCTURE-01` | `PUT` | `/api/instructor/curriculums/{curriculumId}/curriculum/order` | 섹션·레슨 전체 순서 원자 저장 | URL **확정**, 상세 **협의 필요** |
 
 ### 2.3 수강생
 
 | ID | Method | Path | 설명 | 상태 |
 |---|---|---|---|---|
-| `ENROLLEE-01` | `GET` | `/api/v1/instructor/courses/{courseId}/enrollments` | 수강 신청·수강생 목록 | **제안** |
-| `ENROLLEE-02` | `PATCH` | `/api/v1/instructor/courses/{courseId}/enrollments/{enrollmentId}` | 신청 승인·거절·권한 회수 | **제안·정책 필요** |
+| `ENROLLEE-01` | `GET` | `/api/instructor/curriculums/{curriculumId}/enrollments` | 수강 신청·수강생 목록 | **제안** |
+| `ENROLLEE-02` | `PATCH` | `/api/instructor/curriculums/{curriculumId}/enrollments/{enrollmentId}` | 신청 승인·거절·권한 회수 | **제안·정책 필요** |
 
 ## 3. 관리용 조회 모델
 
-`COURSE-MGMT-02` 응답은 관리 페이지 헤더·기본 폼·편성 목록이 사용할 데이터를 제공한다.
+`CURRICULUM-MGMT-02` 응답은 관리 페이지 헤더·기본 폼·편성 목록이 사용할 데이터를 제공한다.
 
 ```json
 {
-  "courseId": "crs_01J...",
+  "curriculumId": "cur_01J...",
   "title": "실시간 Spring 입문",
   "summary": "라이브로 배우는 Spring 기초",
   "description": "커리큘럼 상세 설명",
@@ -86,7 +86,7 @@
       "allowedActions": ["EDIT_SECTION", "ADD_LESSON", "REORDER_SECTION"]
     }
   ],
-  "allowedActions": ["EDIT_COURSE", "ADD_SECTION", "REORDER_STRUCTURE"]
+  "allowedActions": ["EDIT_CURRICULUM", "ADD_SECTION", "REORDER_STRUCTURE"]
 }
 ```
 
@@ -94,10 +94,10 @@
 
 ## 4. 기본 정보 생성·수정
 
-### 4.1 `COURSE-MGMT-01` 생성
+### 4.1 `CURRICULUM-MGMT-01` 생성
 
 ```http
-POST /api/v1/instructor/courses
+POST /api/instructor/curriculums
 ```
 
 ```json
@@ -115,7 +115,7 @@ POST /api/v1/instructor/courses
 
 ```json
 {
-  "courseId": "crs_01J...",
+  "curriculumId": "cur_01J...",
   "lifecycleStatus": "DRAFT",
   "createdAt": "2026-07-20T12:00:00+09:00"
 }
@@ -123,10 +123,10 @@ POST /api/v1/instructor/courses
 
 초기에는 제목, 짧은 소개, 상세 설명, 진행 기간을 입력한다. 대표 이미지 필수 여부와 enrollment policy는 확정 후 요청 필드에 추가한다.
 
-### 4.2 `COURSE-MGMT-03` 수정
+### 4.2 `CURRICULUM-MGMT-03` 수정
 
 ```http
-PATCH /api/v1/instructor/courses/{courseId}
+PATCH /api/instructor/curriculums/{curriculumId}
 ```
 
 ```json
@@ -148,9 +148,9 @@ PATCH /api/v1/instructor/courses/{courseId}
 |---|---|---|
 | `400` | `VALIDATION_FAILED` | 길이·기간·이미지 참조 오류 |
 | `401` | `AUTH_SESSION_REQUIRED` | 로그인 필요 |
-| `403` | `COURSE_MANAGE_FORBIDDEN` | 강사 역할 또는 소유권 없음 |
-| `404` | `COURSE_NOT_FOUND` | 관리 대상 없음 |
-| `409` | `COURSE_STATE_CONFLICT` | 현재 lifecycle에서 수정 불가 |
+| `403` | `CURRICULUM_MANAGE_FORBIDDEN` | 강사 역할 또는 소유권 없음 |
+| `404` | `CURRICULUM_NOT_FOUND` | 관리 대상 없음 |
+| `409` | `CURRICULUM_STATE_CONFLICT` | 현재 lifecycle에서 수정 불가 |
 
 ## 5. 대표 이미지 업로드
 
@@ -159,12 +159,12 @@ Spring이 이미지 바이트를 중계하지 않고 presigned URL로 스토리�
 ### 5.1 업로드 요청
 
 ```http
-POST /api/v1/instructor/course-thumbnails/upload-requests
+POST /api/instructor/curriculum-thumbnails/upload-requests
 ```
 
 ```json
 {
-  "fileName": "spring-course.png",
+  "fileName": "spring-curriculum.png",
   "contentType": "image/png",
   "fileSize": 245123
 }
@@ -189,7 +189,7 @@ POST /api/v1/instructor/course-thumbnails/upload-requests
 ### 6.1 생성
 
 ```http
-POST /api/v1/instructor/courses/{courseId}/sections
+POST /api/instructor/curriculums/{curriculumId}/sections
 ```
 
 ```json
@@ -204,7 +204,7 @@ POST /api/v1/instructor/courses/{courseId}/sections
 ### 6.2 수정
 
 ```http
-PATCH /api/v1/instructor/sections/{sectionId}
+PATCH /api/instructor/sections/{sectionId}
 ```
 
 ```json
@@ -219,7 +219,7 @@ PATCH /api/v1/instructor/sections/{sectionId}
 ### 6.3 삭제
 
 ```http
-DELETE /api/v1/instructor/sections/{sectionId}
+DELETE /api/instructor/sections/{sectionId}
 ```
 
 초기에는 소속 레슨이 없는 섹션만 삭제하도록 제안한다.
@@ -233,7 +233,7 @@ DELETE /api/v1/instructor/sections/{sectionId}
 ## 7. 구조 순서 저장
 
 ```http
-PUT /api/v1/instructor/courses/{courseId}/curriculum/order
+PUT /api/instructor/curriculums/{curriculumId}/curriculum/order
 ```
 
 섹션 순서와 각 섹션의 레슨 순서를 한 요청에서 원자적으로 저장한다.
@@ -270,7 +270,7 @@ PUT /api/v1/instructor/courses/{courseId}/curriculum/order
 }
 ```
 
-- 모든 section·lesson이 해당 course에 속하는지 검증한다.
+- 모든 section·lesson이 해당 curriculum에 속하는지 검증한다.
 - 누락·중복 ID가 있으면 전체 요청을 실패시킨다.
 - `baseVersion` 불일치는 `409 STRUCTURE_VERSION_CONFLICT`와 최신 version을 반환한다.
 - 프론트는 충돌 시 최신 구조를 재조회하고 사용자 변경을 다시 적용하도록 안내한다.
@@ -280,7 +280,7 @@ PUT /api/v1/instructor/courses/{courseId}/curriculum/order
 ### 8.1 목록
 
 ```http
-GET /api/v1/instructor/courses/{courseId}/enrollments?q=김&status=PENDING&page=0&size=20
+GET /api/instructor/curriculums/{curriculumId}/enrollments?q=김&status=PENDING&page=0&size=20
 ```
 
 ```json
@@ -316,7 +316,7 @@ GET /api/v1/instructor/courses/{courseId}/enrollments?q=김&status=PENDING&page=
 ### 8.2 상태 변경
 
 ```http
-PATCH /api/v1/instructor/courses/{courseId}/enrollments/{enrollmentId}
+PATCH /api/instructor/curriculums/{curriculumId}/enrollments/{enrollmentId}
 ```
 
 ```json
