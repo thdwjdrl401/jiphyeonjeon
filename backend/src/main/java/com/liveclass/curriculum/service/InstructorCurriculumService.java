@@ -6,7 +6,7 @@ import com.liveclass.curriculum.domain.EnrollmentType;
 import com.liveclass.curriculum.domain.Section;
 import com.liveclass.curriculum.repository.CurriculumRepository;
 import com.liveclass.curriculum.repository.SectionRepository;
-import com.liveclass.lesson.repository.LessonRepository;
+import com.liveclass.lesson.api.LessonDirectory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,14 +22,14 @@ public class InstructorCurriculumService {
 
     private final CurriculumRepository curriculumRepository;
     private final SectionRepository sectionRepository;
-    private final LessonRepository lessonRepository;
+    private final LessonDirectory lessonDirectory;
 
     public InstructorCurriculumService(CurriculumRepository curriculumRepository,
                                        SectionRepository sectionRepository,
-                                       LessonRepository lessonRepository) {
+                                       LessonDirectory lessonDirectory) {
         this.curriculumRepository = curriculumRepository;
         this.sectionRepository = sectionRepository;
-        this.lessonRepository = lessonRepository;
+        this.lessonDirectory = lessonDirectory;
     }
 
     @Transactional
@@ -117,7 +117,7 @@ public class InstructorCurriculumService {
         Section section = requireOwnedSection(instructorId, sectionId);
 
         // 레슨이 남은 섹션 삭제는 캐스케이드로 레슨까지 지워버리므로 막는다 — 실수 방지.
-        if (lessonRepository.countBySectionId(sectionId) > 0) {
+        if (lessonDirectory.countInSection(sectionId) > 0) {
             throw new SectionNotEmptyException("레슨이 있는 섹션은 삭제할 수 없습니다.");
         }
 

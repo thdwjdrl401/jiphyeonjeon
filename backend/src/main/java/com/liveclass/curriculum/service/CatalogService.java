@@ -1,9 +1,7 @@
 package com.liveclass.curriculum.service;
 
-import com.liveclass.auth.domain.AppUser;
-import com.liveclass.auth.domain.InstructorProfile;
-import com.liveclass.auth.repository.AppUserRepository;
-import com.liveclass.auth.repository.InstructorProfileRepository;
+import com.liveclass.auth.api.InstructorDirectory;
+import com.liveclass.auth.api.InstructorSummaryView;
 import com.liveclass.curriculum.domain.Curriculum;
 import com.liveclass.curriculum.domain.CurriculumLifecycleStatus;
 import com.liveclass.curriculum.domain.Section;
@@ -15,9 +13,8 @@ import com.liveclass.curriculum.web.dto.CurriculumPeriod;
 import com.liveclass.curriculum.web.dto.InstructorSummary;
 import com.liveclass.curriculum.web.dto.OutlineLesson;
 import com.liveclass.curriculum.web.dto.OutlineSection;
-import com.liveclass.lesson.domain.Lesson;
-import com.liveclass.lesson.domain.LessonStatus;
-import com.liveclass.lesson.repository.LessonRepository;
+import com.liveclass.lesson.api.LessonDirectory;
+import com.liveclass.lesson.api.LessonOutlineView;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -32,6 +29,8 @@ import java.util.stream.Collectors;
 
 /**
  * 공개 커리큘럼 탐색(카탈로그). PUBLISHED만 노출한다.
+ * 강사·레슨 정보는 각 모듈의 포트(InstructorDirectory·LessonDirectory)로만 얻는다 — 타 모듈
+ * 엔티티에 직접 접근하지 않는다(모듈 경계, AGENTS.md).
  * viewerContext·수강정책·추천(featured)·썸네일 해석은 범위 밖(후속).
  */
 @Service
@@ -39,20 +38,17 @@ public class CatalogService {
 
     private final CurriculumRepository curriculumRepository;
     private final SectionRepository sectionRepository;
-    private final LessonRepository lessonRepository;
-    private final AppUserRepository appUserRepository;
-    private final InstructorProfileRepository instructorProfileRepository;
+    private final LessonDirectory lessonDirectory;
+    private final InstructorDirectory instructorDirectory;
 
     public CatalogService(CurriculumRepository curriculumRepository,
                           SectionRepository sectionRepository,
-                          LessonRepository lessonRepository,
-                          AppUserRepository appUserRepository,
-                          InstructorProfileRepository instructorProfileRepository) {
+                          LessonDirectory lessonDirectory,
+                          InstructorDirectory instructorDirectory) {
         this.curriculumRepository = curriculumRepository;
         this.sectionRepository = sectionRepository;
-        this.lessonRepository = lessonRepository;
-        this.appUserRepository = appUserRepository;
-        this.instructorProfileRepository = instructorProfileRepository;
+        this.lessonDirectory = lessonDirectory;
+        this.instructorDirectory = instructorDirectory;
     }
 
     @Transactional(readOnly = true)
@@ -103,10 +99,9 @@ public class CatalogService {
         }
         List<UUID> sectionIds = sections.stream().map(Section::getId).toList();
 
-        Map<UUID, List<Lesson>> lessonsBySection = lessonRepository
-                .findBySectionIdInAndStatusOrderByOrderIndexAsc(sectionIds, LessonStatus.PUBLISHED)
-                .stream()
-                .collect(Collectors.groupingBy(Lesson::getSectionId));
+        Map<UUID, List<LessonOutlineView>> lessonsBySection =
+                lessonDirectory.findPublishedBySections(sectionIds).stream()
+                        .collect(Collectors.groupingBy(LessonOutlineView::sectionId));
 
         return sections.stream().map(section -> new OutlineSection(
                 section.getId().toString(),
@@ -115,7 +110,7 @@ public class CatalogService {
                 section.getOrderIndex(),
                 lessonsBySection.getOrDefault(section.getId(), List.of()).stream()
                         .map(l -> new OutlineLesson(
-                                l.getId().toString(), l.getTitle(), l.getOrderIndex(), l.getStatus().name()))
+                                l.lessonId().toString(), l.title(), l.order(), l.status()))
                         .toList()
         )).toList();
     }
@@ -135,21 +130,15 @@ public class CatalogService {
     }
 
     private Map<UUID, InstructorSummary> loadInstructors(List<UUID> instructorIds) {
-        if (instructorIds.isEmpty()) {
-            return Map.of();
-        }
-        Map<UUID, String> displayNames = appUserRepository.findAllById(instructorIds).stream()
-                .collect(Collectors.toMap(AppUser::getId, AppUser::getDisplayName));
-        Map<UUID, InstructorProfile> profiles = instructorProfileRepository.findAllById(instructorIds).stream()
-                .collect(Collectors.toMap(InstructorProfile::getUserId, Function.identity()));
+        return instructorDirectory.findSummaries(instructorIds).stream()
+                .collect(Collectors.toMap(InstructorSummaryView::instructorId, this::toSummary));
+    }
 
-        return instructorIds.stream().collect(Collectors.toMap(Function.identity(), id -> {
-            InstructorProfile profile = profiles.get(id);
-            return new InstructorSummary(
-                    id.toString(),
-                    displayNames.get(id),
-                    profile != null ? profile.getBio() : null,
-                    profile != null ? profile.getExpertise() : List.of());
-        }));
+    private InstructorSummary toSummary(InstructorSummaryView view) {
+        return new InstructorSummary(
+                view.instructorId().toString(),
+                view.displayName(),
+                view.bio(),
+                view.expertise());
     }
 }
