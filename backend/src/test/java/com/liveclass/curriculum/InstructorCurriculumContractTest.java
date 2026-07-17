@@ -1,5 +1,6 @@
 package com.liveclass.curriculum;
 
+import jakarta.persistence.EntityManager;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,7 +40,20 @@ class InstructorCurriculumContractTest {
     @Autowired
     private MockMvc mockMvc;
 
+    @Autowired
+    private EntityManager entityManager;
+
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
+
+    /**
+     * 카운터는 DB 트리거가 유지한다. 트리거가 쓴 값을 검증하려면 flush(트리거 발화) 후
+     * clear(1차 캐시 비움)로 다음 조회가 DB를 다시 읽게 해야 한다 — 안 그러면 in-memory
+     * 캐시 값만 보고 통과해버린다(이 버그를 놓쳤던 원인).
+     */
+    private void syncWithDatabase() {
+        entityManager.flush();
+        entityManager.clear();
+    }
 
     // ---- 생성·조회 ----
 
@@ -138,6 +152,8 @@ class InstructorCurriculumContractTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.orderIndex").value(1));
 
+        // 트리거가 쓴 section_count를 실제 DB에서 확인한다(캐시 값이 아니라).
+        syncWithDatabase();
         mockMvc.perform(get("/api/instructor/curriculums/" + curriculumId).cookie(auth))
                 .andExpect(jsonPath("$.sectionCount").value(2))
                 .andExpect(jsonPath("$.structureVersion").value(2));
@@ -152,6 +168,8 @@ class InstructorCurriculumContractTest {
         write(delete("/api/instructor/sections/" + sectionId), auth, null)
                 .andExpect(status().isNoContent());
 
+        // 트리거가 −1 하므로 0이어야 한다. 앱이 이중 감소하면 −1로 드러난다(회귀 방지).
+        syncWithDatabase();
         mockMvc.perform(get("/api/instructor/curriculums/" + curriculumId).cookie(auth))
                 .andExpect(jsonPath("$.sectionCount").value(0));
     }

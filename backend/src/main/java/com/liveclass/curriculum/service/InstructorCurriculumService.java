@@ -94,8 +94,8 @@ public class InstructorCurriculumService {
         section.setOrderIndex(nextSectionOrder(curriculumId));
         Section saved = sectionRepository.save(section);
 
-        curriculum.setSectionCount(curriculum.getSectionCount() + 1);
-        // 목차가 바뀌면 구조 버전을 올린다 — 뷰어/캐시가 오래된 목차를 감지할 수 있게.
+        // section_count는 DB 트리거가 유지한다(앱이 건드리면 이중 반영). 여기선 목차 변경을
+        // 감지시키는 structure_version만 올린다 — 트리거는 이 컬럼을 건드리지 않는다.
         curriculum.setStructureVersion(curriculum.getStructureVersion() + 1);
         return saved;
     }
@@ -123,7 +123,7 @@ public class InstructorCurriculumService {
 
         Curriculum curriculum = requireOwned(instructorId, section.getCurriculumId());
         sectionRepository.delete(section);
-        curriculum.setSectionCount(Math.max(0, curriculum.getSectionCount() - 1));
+        // section_count는 트리거가 −1 한다(앱은 건드리지 않음). structure_version만 올린다.
         curriculum.setStructureVersion(curriculum.getStructureVersion() + 1);
     }
 
