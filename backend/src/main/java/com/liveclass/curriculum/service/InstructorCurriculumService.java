@@ -8,6 +8,8 @@ import com.liveclass.curriculum.repository.CurriculumRepository;
 import com.liveclass.curriculum.repository.SectionRepository;
 import com.liveclass.common.logging.Audit;
 import com.liveclass.lesson.api.LessonDirectory;
+import com.liveclass.lesson.api.LessonManagement;
+import com.liveclass.lesson.api.LessonView;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -29,13 +31,16 @@ public class InstructorCurriculumService {
     private final CurriculumRepository curriculumRepository;
     private final SectionRepository sectionRepository;
     private final LessonDirectory lessonDirectory;
+    private final LessonManagement lessonManagement;
 
     public InstructorCurriculumService(CurriculumRepository curriculumRepository,
                                        SectionRepository sectionRepository,
-                                       LessonDirectory lessonDirectory) {
+                                       LessonDirectory lessonDirectory,
+                                       LessonManagement lessonManagement) {
         this.curriculumRepository = curriculumRepository;
         this.sectionRepository = sectionRepository;
         this.lessonDirectory = lessonDirectory;
+        this.lessonManagement = lessonManagement;
     }
 
     @Transactional
@@ -164,6 +169,55 @@ public class InstructorCurriculumService {
         // section_count는 트리거가 −1 한다(앱은 건드리지 않음). structure_version만 올린다.
         curriculum.setStructureVersion(curriculum.getStructureVersion() + 1);
         log.info(Audit.MARKER, "섹션 삭제 curriculumId={} sectionId={}", section.getCurriculumId(), sectionId);
+    }
+
+    // ── 레슨 관리 ── 데이터 조작은 lesson 모듈 포트가, 소유권·구조버전은 여기(curriculum)가 책임진다.
+
+    @Transactional
+    public LessonView createLesson(UUID instructorId, UUID sectionId, String title, String description) {
+        Section section = requireOwnedSection(instructorId, sectionId);
+        LessonView lesson = lessonManagement.create(sectionId, title, description);
+        // lesson_count는 트리거가 유지. 목차 변경이므로 structure_version만 올린다.
+        Curriculum curriculum = requireOwned(instructorId, section.getCurriculumId());
+        curriculum.setStructureVersion(curriculum.getStructureVersion() + 1);
+        log.info(Audit.MARKER, "레슨 생성 sectionId={} lessonId={}", sectionId, lesson.lessonId());
+        return lesson;
+    }
+
+    @Transactional(readOnly = true)
+    public List<LessonView> listLessons(UUID instructorId, UUID sectionId) {
+        requireOwnedSection(instructorId, sectionId);
+        return lessonManagement.findBySection(sectionId);
+    }
+
+    @Transactional(readOnly = true)
+    public LessonView getLesson(UUID instructorId, UUID lessonId) {
+        return requireOwnedLesson(instructorId, lessonId);
+    }
+
+    @Transactional
+    public LessonView updateLesson(UUID instructorId, UUID lessonId, String title, String description) {
+        requireOwnedLesson(instructorId, lessonId);
+        return lessonManagement.update(lessonId, title, description);
+    }
+
+    @Transactional
+    public void deleteLesson(UUID instructorId, UUID lessonId) {
+        LessonView lesson = requireOwnedLesson(instructorId, lessonId);
+        lessonManagement.delete(lessonId);
+        // lesson_count는 트리거가 −1. 구조 변경이므로 structure_version만 올린다.
+        Section section = requireOwnedSection(instructorId, lesson.sectionId());
+        Curriculum curriculum = requireOwned(instructorId, section.getCurriculumId());
+        curriculum.setStructureVersion(curriculum.getStructureVersion() + 1);
+        log.info(Audit.MARKER, "레슨 삭제 sectionId={} lessonId={}", lesson.sectionId(), lessonId);
+    }
+
+    /** 레슨 → 섹션 → 커리큘럼 소유권 검증. 없으면 404, 소유자 아니면 403. */
+    private LessonView requireOwnedLesson(UUID instructorId, UUID lessonId) {
+        LessonView lesson = lessonManagement.findById(lessonId)
+                .orElseThrow(() -> new LessonNotFoundException("레슨을 찾을 수 없습니다."));
+        requireOwnedSection(instructorId, lesson.sectionId());
+        return lesson;
     }
 
     private int nextSectionOrder(UUID curriculumId) {
