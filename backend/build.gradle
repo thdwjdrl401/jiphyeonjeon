@@ -42,6 +42,12 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-micrometer-tracing-brave'
     implementation 'io.micrometer:micrometer-tracing-bridge-brave'
 
+    // 모듈러 모놀리스: 모듈 경계를 코드로 강제한다(ModularityTests의 verify가 산출물 기준 검증).
+    // Boot 4.1 대응은 Modulith 2.x(BOM으로 버전 관리).
+    // 관측성(spring-modulith-observability)은 모듈 스팬 생성을 확인하지 못해 보류 — 트레이싱
+    // 백엔드(Zipkin/OTel)와 함께 도입할 때 실제로 검증 가능하다.
+    implementation 'org.springframework.modulith:spring-modulith-starter-core'
+
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
 
@@ -49,6 +55,14 @@ dependencies {
     // Boot 4.x는 테스트 오토컨피그도 기술별로 쪼개짐 — MockMvc(@AutoConfigureMockMvc)는 starter-test에 없음
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
     testImplementation 'org.springframework.security:spring-security-test'
+    // 모듈 경계 검증(ApplicationModules.verify)
+    testImplementation 'org.springframework.modulith:spring-modulith-starter-test'
+}
+
+dependencyManagement {
+    imports {
+        mavenBom 'org.springframework.modulith:spring-modulith-bom:2.1.0'
+    }
 }
 
 tasks.named('test') {
