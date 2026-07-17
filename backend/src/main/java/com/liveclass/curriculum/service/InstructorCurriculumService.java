@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -64,6 +65,35 @@ public class InstructorCurriculumService {
     @Transactional(readOnly = true)
     public Curriculum getOwned(UUID instructorId, UUID curriculumId) {
         return requireOwned(instructorId, curriculumId);
+    }
+
+    /**
+     * 발행: DRAFT → PUBLISHED. 발행 순간 카탈로그에 노출된다(카탈로그는 PUBLISHED만 조회).
+     * FE 설계대로 일반 수정(PATCH)과 분리된 command다. 전제조건(예: 레슨 게시 여부)·모집 연동·
+     * 영향 요약은 정책 미확정이라 이번 범위 밖 — 상태 전이만 최소로 구현한다.
+     */
+    @Transactional
+    public Curriculum publish(UUID instructorId, UUID curriculumId) {
+        Curriculum curriculum = requireOwned(instructorId, curriculumId);
+        if (curriculum.getLifecycleStatus() != CurriculumLifecycleStatus.DRAFT) {
+            throw new CurriculumStateConflictException("DRAFT 상태에서만 발행할 수 있습니다.");
+        }
+        curriculum.setLifecycleStatus(CurriculumLifecycleStatus.PUBLISHED);
+        curriculum.setPublishedAt(OffsetDateTime.now());
+        log.info(Audit.MARKER, "커리큘럼 발행 curriculumId={} instructorId={}", curriculumId, instructorId);
+        return curriculum;
+    }
+
+    /** 보관: PUBLISHED → ARCHIVED. 카탈로그에서 내려간다. 되돌리기·삭제 정책은 범위 밖. */
+    @Transactional
+    public Curriculum archive(UUID instructorId, UUID curriculumId) {
+        Curriculum curriculum = requireOwned(instructorId, curriculumId);
+        if (curriculum.getLifecycleStatus() != CurriculumLifecycleStatus.PUBLISHED) {
+            throw new CurriculumStateConflictException("PUBLISHED 상태에서만 보관할 수 있습니다.");
+        }
+        curriculum.setLifecycleStatus(CurriculumLifecycleStatus.ARCHIVED);
+        log.info(Audit.MARKER, "커리큘럼 보관 curriculumId={} instructorId={}", curriculumId, instructorId);
+        return curriculum;
     }
 
     /** null 인자는 "변경 안 함"으로 다룬다 — PATCH 부분 수정. */

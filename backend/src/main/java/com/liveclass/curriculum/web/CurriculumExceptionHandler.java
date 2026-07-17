@@ -1,6 +1,7 @@
 package com.liveclass.curriculum.web;
 
 import com.liveclass.curriculum.service.CurriculumNotFoundException;
+import com.liveclass.curriculum.service.CurriculumStateConflictException;
 import com.liveclass.curriculum.service.NotCurriculumOwnerException;
 import com.liveclass.curriculum.service.SectionNotEmptyException;
 import com.liveclass.curriculum.service.SectionNotFoundException;
@@ -36,6 +37,13 @@ public class CurriculumExceptionHandler {
     public ResponseEntity<ErrorResponse> handleSectionNotEmpty(SectionNotEmptyException e) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ErrorResponse.of("SECTION_NOT_EMPTY", e.getMessage()));
+    }
+
+    /** 허용되지 않는 lifecycle 전이. FE가 지정한 계약 코드를 쓴다. */
+    @ExceptionHandler(CurriculumStateConflictException.class)
+    public ResponseEntity<ErrorResponse> handleStateConflict(CurriculumStateConflictException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ErrorResponse.of("CURRICULUM_STATE_CONFLICT", e.getMessage()));
     }
 
     /**

@@ -71,6 +71,18 @@ public class InstructorCurriculumController {
                 request.title(), request.summary(), request.description()));
     }
 
+    @Operation(summary = "커리큘럼 발행", description = "DRAFT → PUBLISHED. 발행 즉시 공개 카탈로그에 노출. DRAFT가 아니면 409.")
+    @PostMapping("/api/instructor/curriculums/{curriculumId}/publish")
+    public CurriculumResponse publish(@PathVariable UUID curriculumId, Authentication authentication) {
+        return CurriculumResponse.from(service.publish(currentUserId(authentication), curriculumId));
+    }
+
+    @Operation(summary = "커리큘럼 보관", description = "PUBLISHED → ARCHIVED. 카탈로그에서 내려감. PUBLISHED가 아니면 409.")
+    @PostMapping("/api/instructor/curriculums/{curriculumId}/archive")
+    public CurriculumResponse archive(@PathVariable UUID curriculumId, Authentication authentication) {
+        return CurriculumResponse.from(service.archive(currentUserId(authentication), curriculumId));
+    }
+
     @Operation(summary = "섹션 목록", description = "순서 오름차순.")
     @GetMapping("/api/instructor/curriculums/{curriculumId}/sections")
     public List<SectionResponse> listSections(@PathVariable UUID curriculumId, Authentication authentication) {
