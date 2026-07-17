@@ -42,6 +42,10 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-micrometer-tracing-brave'
     implementation 'io.micrometer:micrometer-tracing-bridge-brave'
 
+    // 메트릭: Prometheus 노출 형식 레지스트리. /actuator/prometheus 로 스크레이프 대상 제공.
+    // 버전은 micrometer-bom 관리. 실제 Prometheus/Grafana 컨테이너 연결은 후속(인프라).
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+
     // 모듈러 모놀리스: 모듈 경계를 코드로 강제한다(ModularityTests의 verify가 산출물 기준 검증).
     // Boot 4.1 대응은 Modulith 2.x(BOM으로 버전 관리).
     // 관측성(spring-modulith-observability)은 모듈 스팬 생성을 확인하지 못해 보류 — 트레이싱

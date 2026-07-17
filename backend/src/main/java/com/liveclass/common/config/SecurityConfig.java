@@ -30,6 +30,9 @@ public class SecurityConfig {
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                         // T0 스캐폴드 잔재: CP0에서 실제 /api/session/* 이 생기면 이 permitAll을 걷어내야 한다.
                         .requestMatchers("/actuator/health", "/api/ping", "/api/session/**").permitAll()
+                        // Prometheus 스크레이프 대상(세션 없이 접근). 메트릭(JVM·요청통계) 노출이라
+                        // 운영 배포 전엔 별도 관리 포트(management.server.port)나 네트워크 ACL로 제한할 것.
+                        .requestMatchers("/actuator/prometheus").permitAll()
                         // 로그인 전에 부를 수 있어야 하는 것들 — csrf가 막히면 로그인 자체가 불가능하다.
                         .requestMatchers(HttpMethod.GET, "/api/auth/csrf", "/api/auth/email-availability").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/signup", "/api/auth/login", "/api/auth/logout").permitAll()

@@ -45,7 +45,14 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus,metrics   # prometheus = 스크레이프 엔드포인트
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}      # 스크레이프된 메트릭에 앱 식별 태그
   tracing:
     sampling:
       probability: 1.0            # 요청마다 traceId 생성(로그·에러 상관관계용). 익스포터는 후속.
