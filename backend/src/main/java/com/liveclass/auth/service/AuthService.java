@@ -4,6 +4,9 @@ import com.liveclass.auth.domain.AccountStatus;
 import com.liveclass.auth.domain.AppUser;
 import com.liveclass.auth.domain.Role;
 import com.liveclass.auth.repository.AppUserRepository;
+import com.liveclass.common.logging.Audit;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -16,6 +19,7 @@ import java.util.UUID;
 @Service
 public class AuthService {
 
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
     private static final String CREDENTIALS_REJECTED = "이메일 또는 비밀번호를 확인해 주세요.";
 
     private final AppUserRepository appUserRepository;
@@ -51,7 +55,9 @@ public class AuthService {
         user.setStatus(AccountStatus.ACTIVE);
 
         try {
-            return appUserRepository.saveAndFlush(user);
+            AppUser saved = appUserRepository.saveAndFlush(user);
+            log.info(Audit.MARKER, "회원가입 userId={} role={}", saved.getId(), role);
+            return saved;
         } catch (DataIntegrityViolationException e) {
             // 동시 가입 경합에서는 위 존재 검사가 아니라 UNIQUE(email) 제약이 최종 판정자다.
             throw new EmailDuplicatedException("이미 사용 중인 이메일입니다.");
@@ -76,6 +82,7 @@ public class AuthService {
         }
 
         user.setLastLoginAt(OffsetDateTime.now());
+        log.info(Audit.MARKER, "로그인 성공 userId={}", user.getId());
         return user;
     }
 
