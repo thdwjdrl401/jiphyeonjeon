@@ -48,7 +48,7 @@ Codex는 별도 명령 어댑터 없이 위 문서 흐름을 기준으로 판단
 전체·정본은 [docs/CONTRACT.md](docs/CONTRACT.md). 아래는 어길 시 FE/BE가 깨지는 핵심만.
 
 - **API 필드명은 `camelCase`로 통일** (팀 자체 컨벤션). 근거: [docs/decisions/0001-field-name-camelcase.md](docs/decisions/0001-field-name-camelcase.md)
-- **API prefix**: `/api/v1`.
+- **API prefix**: `/api`.
 - **HTTP 상태코드 규격을 지킨다** (예: 회원가입 **201**, 중복확인 **409**, 로그인 실패 **401**). CONTRACT의 상태코드 표 참조.
 - FE/BE가 공유하는 DTO/응답 형태를 바꿀 때는 **양쪽을 함께** 바꾸고 CONTRACT를 갱신한다.
 

@@ -77,7 +77,7 @@ server:
 ### 2-5. T0 완료 기준(스모크)
 1. `./gradlew bootRun` 기동 → `GET /actuator/health` = UP.
 2. Postgres 연결(Hibernate/Hikari) + **Flyway 설정 완료**. 첫 마이그레이션(core DDL)은 **CP0 DDL 설계 후** 작성(스캐폴드엔 임의 DDL 미포함).
-3. 세션 스모크(`GET /api/v1/session/touch`) → **HttpOnly 쿠키 발급 + Redis 세션 키**(`liveclass:session:*`) 확인.
+3. 세션 스모크(`GET /api/session/touch`) → **HttpOnly 쿠키 발급 + Redis 세션 키**(`liveclass:session:*`) 확인.
 > 전체 인증·강좌 도메인은 CP0에서. T0는 "붙고 뜬다"까지만.
 
 ---

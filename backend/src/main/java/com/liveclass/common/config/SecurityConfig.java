@@ -19,7 +19,7 @@ public class SecurityConfig {
                 // SPA용 CSRF: JS가 XSRF-TOKEN 쿠키를 읽어 헤더로 에코 (ADR-0014)
                 .csrf(csrf -> csrf.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/actuator/health", "/api/v1/ping", "/api/v1/session/**").permitAll()
+                        .requestMatchers("/actuator/health", "/api/ping", "/api/session/**").permitAll()
                         .anyRequest().authenticated()
                 );
         return http.build();

@@ -19,7 +19,8 @@
 - **미디어(WebRTC UDP)**: nginx 우회, 라우터/보안그룹이 `7882/udp`를 서버로 직접 전달.
 - **녹화(Egress)**: LiveKit↔Egress는 **Redis**로 통신. Egress가 헤드리스 Chrome으로 방을 합성 → MP4 → **MinIO**(PoC) / S3(EC2).
 - 파일: [`docker-compose.yml`](docker-compose.yml) · [`livekit.yaml`](livekit.yaml) · [`egress.yaml`](egress.yaml) · [`request.json`](request.json)(MP4 스모크) · [`request-hls.json`](request-hls.json)(HLS·near-live, 제품용) · [`nginx-livekit.conf`](nginx-livekit.conf)
-- **녹화 출력 2종**: `request.json`=단일 MP4(검증 쉬움) / `request-hls.json`=HLS 세그먼트(`segment_duration` 조절, `live_playlist_name`으로 near-live). 제품 다시보기는 **HLS**([ADR-0010](../../docs/decisions/0010-self-host-vod.md)). MP4로 파이프라인 검증 완료 → HLS는 같은 파이프라인, `.m3u8` 재생 검증은 CP4에서.
+- **녹화 출력 2종**: `request.json`=단일 MP4(검증 쉬움) / `request-hls.json`=HLS 세그먼트(`segment_duration` 조절, `live_playlist_name`으로 near-live). 제품 다시보기는 **HLS**([ADR-0010](../../docs/decisions/0010-self-host-vod.md)). **EC2에서 HLS 파이프라인 검증 완료(2026-07-17)**: room-composite egress → 2초 `.ts` 세그먼트 + `index.m3u8`(VOD, EVENT)·`live.m3u8`(near-live) → MinIO `recordings/` 업로드 확인.
+  - ⚠️ **request*.json에 JSON 주석(`_comment` 등) 넣지 말 것** — `lk egress start`는 요청을 엄격 파싱(protojson)이라 알 수 없는 필드가 있으면 조용히 실패한다. 파일은 egress 요청 그대로만 유지.
 
 ## 2. 채울 값 (딱 이것만)
 | placeholder | 뜻 | 맞춰야 할 곳 |
@@ -91,6 +92,13 @@ docker run --rm --network host --entrypoint /bin/sh minio/mc:RELEASE.2025-08-13T
 | 헤어핀 | 문제됨(#2·#4) | 덜함(퍼블릭 IP 직접) — 그래도 co-located egress 위해 `advertise_internal_ip` 유지 권장 |
 | MinIO | 필요 | 제거(S3 사용) |
 | 시크릿 | 재발급 | Secrets Manager/SSM 등 |
+
+**EC2 실배포 확정 구성 (ADR-0015 연계)**: 앱(`jiphyeonjeon.thdwjdrl.com`)이 이미 443을 점유하고 단일 도메인·DNS 콘솔 권한이 없으므로, 미디어 시그널링은 **별도 TLS 포트**로 분리한다.
+- 이 compose에 **`nginx-livekit` 서비스**(`nginx-livekit-prod.conf`, `network_mode: host`) 추가 → `wss://jiphyeonjeon.thdwjdrl.com:7443` 종단 후 livekit 7880으로 프록시. (앱 nginx에 스니펫을 합치지 않고 미디어 스택이 독립 운영.)
+- **인증서 공유**: 앱 스택(`docker-compose.prod.yml`)의 certbot이 발급한 볼륨 `liveclass_certbot_etc`를 `external`로 읽기전용 마운트. → **앱 스택을 먼저 기동**해 cert가 있어야 미디어 nginx가 뜬다. 갱신은 앱 certbot이, 미디어 nginx는 6h마다 reload.
+- **보안그룹**: `7443/tcp`(시그널) + `7882/udp`(미디어) + `7881/tcp`(fallback). `7880`은 미노출(내부).
+- **클라이언트 접속 URL**: `wss://jiphyeonjeon.thdwjdrl.com:7443`.
+- **기동**: `docker compose -f infra/livekit/docker-compose.yml up -d` (앱 스택·인증서 준비 후).
 
 **사양**: Egress(Chrome) 때문에 **4 vCPU / 4GB 이상** 권장. 라이브만이면 더 작아도 됨.
 

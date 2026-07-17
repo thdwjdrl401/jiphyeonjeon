@@ -27,7 +27,7 @@ test/               ← Vitest/React Testing Library
 ## 계약 주의 (FE가 지킬 것)
 
 - BE 응답을 소비할 때 **camelCase** 필드 계약을 따른다([CONTRACT §1](../docs/CONTRACT.md#1-필드명-규칙--camelcase-통일)). snake 필드가 오면 BE와 함께 정정하며 FE 변환 우회는 금지.
-- **인증 = HttpOnly 쿠키 세션**([../docs/decisions/0014](../docs/decisions/0014-auth-redis-session-cookie.md)). 공용 Axios는 `/api/v1`을 base URL로 쓰고 **`withCredentials: true`** 로 쿠키를 자동 전송한다. **`Authorization: Bearer`·localStorage 토큰은 쓰지 않는다**(쿠키는 JS가 읽지 않음). 상태변경 요청엔 **CSRF 토큰** 동봉.
+- **인증 = HttpOnly 쿠키 세션**([../docs/decisions/0014](../docs/decisions/0014-auth-redis-session-cookie.md)). 공용 Axios는 `/api`을 base URL로 쓰고 **`withCredentials: true`** 로 쿠키를 자동 전송한다. **`Authorization: Bearer`·localStorage 토큰은 쓰지 않는다**(쿠키는 JS가 읽지 않음). 상태변경 요청엔 **CSRF 토큰** 동봉.
 - `EventSource`(RAG SSE)·`WebSocket`(자막·채팅)도 same-origin 쿠키로 인증됨 → 별도 토큰 부착 불필요. 401·403 처리(로그아웃·리다이렉트)는 CP0 구현 범위.
 
 ## 빌드·실행·검증
@@ -42,4 +42,4 @@ npm run test
 npm run build       # 정적 산출물(독립 배포)
 ```
 
-- 개발 시 Vite dev 서버(8083)가 `/api/v1`·WS를 Spring(8080)으로 프록시. **통합 빌드 없음**(FE/BE 분리 — [../docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md)).
+- 개발 시 Vite dev 서버(8083)가 `/api`·WS를 Spring(8080)으로 프록시. **통합 빌드 없음**(FE/BE 분리 — [../docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md)).

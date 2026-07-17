@@ -39,7 +39,7 @@ class ContractTestTemplate {
         String body = "{"
             + "\"department\":\"부트캠프\",\"position\":\"교육생\","
             + "\"name\":\"홍길동\",\"userId\":\"new-user\",\"password\":\"12345\"}";
-        mockMvc.perform(post("/api/v1/users")
+        mockMvc.perform(post("/api/users")
                 .contentType(MediaType.APPLICATION_JSON).content(body))
             .andExpect(status().isCreated());
     }
@@ -48,7 +48,7 @@ class ContractTestTemplate {
     //   - snake_case 필드(is_active, thumbnail_url, call_start_time)가 응답에 존재하면 실패시킨다.
     // @Test
     // void conference_response_uses_camelCase() throws Exception {
-    //     mockMvc.perform(get("/api/v1/conferences/1").header("Authorization", "Bearer " + token))
+    //     mockMvc.perform(get("/api/conferences/1").header("Authorization", "Bearer " + token))
     //         .andExpect(status().isOk())
     //         .andExpect(jsonPath("$.isActive").exists())
     //         .andExpect(jsonPath("$.thumbnailUrl").exists())
