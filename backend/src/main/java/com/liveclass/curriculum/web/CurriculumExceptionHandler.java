@@ -10,8 +10,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-/** 커리큘럼 관리 실패 → CONTRACT §2 상태코드(없음 404·권한 403·충돌 409)로 매핑. */
-@RestControllerAdvice(assignableTypes = InstructorCurriculumController.class)
+/** 커리큘럼 도메인 실패 → CONTRACT §2 상태코드(없음 404·권한 403·충돌 409)로 매핑. */
+@RestControllerAdvice(assignableTypes = {InstructorCurriculumController.class, CatalogController.class})
 public class CurriculumExceptionHandler {
 
     @ExceptionHandler({CurriculumNotFoundException.class, SectionNotFoundException.class})
