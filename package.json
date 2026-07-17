@@ -4,10 +4,15 @@
   "private": true,
   "description": "LiveClass AI — 실시간 라이브 강의 플랫폼 (루트 통합 실행: frontend + backend)",
   "scripts": {
+    "predev": "node scripts/guard-win.mjs",
     "dev": "concurrently -k -n FE,BE,WATCH -c green,blue,magenta \"npm run fe:dev\" \"npm run be:dev\" \"npm run be:watch\"",
+    "prebe:dev": "node scripts/guard-win.mjs",
     "be:dev": "cd backend && .\\gradlew.bat bootRun",
+    "prebe:watch": "node scripts/guard-win.mjs",
     "be:watch": "cd backend && .\\gradlew.bat -t compileJava",
+    "prestart": "node scripts/guard-win.mjs",
     "start": "npm run build:fe && cd backend && .\\gradlew.bat bootRun",
+    "prebuild": "node scripts/guard-win.mjs",
     "build": "cd backend && .\\gradlew.bat clean build",
 
     "dev:wsl": "concurrently -k -n FE,BE,WATCH -c green,blue,magenta \"npm run fe:dev\" \"npm run be:dev:wsl\" \"npm run be:watch:wsl\"",
