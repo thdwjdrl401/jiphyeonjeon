@@ -5,12 +5,16 @@ import com.liveclass.auth.service.InvalidCredentialsException;
 import com.liveclass.common.web.ErrorResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /** 인증 도메인의 실패 → CONTRACT §2 상태코드(중복 409·인증실패 401)로 매핑. */
+// 범용 Exception 핸들러보다 먼저 뽑히도록 우선순위를 명시한다.
+@Order(Ordered.LOWEST_PRECEDENCE - 100)
 @RestControllerAdvice(assignableTypes = AuthController.class)
 public class AuthExceptionHandler {
 

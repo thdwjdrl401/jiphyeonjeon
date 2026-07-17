@@ -2,6 +2,7 @@ package com.liveclass.common.web;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import io.swagger.v3.oas.annotations.media.Schema;
+import org.slf4j.MDC;
 
 import java.util.List;
 import java.util.UUID;
@@ -23,7 +24,7 @@ public record ErrorResponse(
         @Schema(description = "입력 필드별 검증 오류(있을 때만)")
         List<FieldErrorItem> fieldErrors,
 
-        @Schema(description = "로그 추적용 상관관계 ID")
+        @Schema(description = "로그 추적용 상관관계 ID(요청 traceId와 동일 — 로그 검색 키)", example = "a1b2c3d4e5f6...")
         String correlationId
 ) {
 
@@ -32,14 +33,20 @@ public record ErrorResponse(
     }
 
     public static ErrorResponse of(String code, String message) {
-        return new ErrorResponse(code, message, null, newCorrelationId());
+        return new ErrorResponse(code, message, null, currentCorrelationId());
     }
 
     public static ErrorResponse of(String code, String message, List<FieldErrorItem> fieldErrors) {
-        return new ErrorResponse(code, message, fieldErrors, newCorrelationId());
+        return new ErrorResponse(code, message, fieldErrors, currentCorrelationId());
     }
 
-    private static String newCorrelationId() {
-        return UUID.randomUUID().toString();
+    /**
+     * 응답의 correlationId를 요청 traceId로 채운다 — 사용자가 들고 온 이 값으로 로그를 검색할 수 있게.
+     * traceId는 Micrometer Tracing이 요청마다 MDC에 넣는다. 트레이스 컨텍스트가 없으면(배치·부팅 등)
+     * UUID로 폴백한다. FE 계약(client.ts)의 필드명 correlationId는 유지한다.
+     */
+    private static String currentCorrelationId() {
+        String traceId = MDC.get("traceId");
+        return traceId != null ? traceId : UUID.randomUUID().toString();
     }
 }

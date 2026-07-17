@@ -5,6 +5,8 @@ import com.liveclass.curriculum.service.NotCurriculumOwnerException;
 import com.liveclass.curriculum.service.SectionNotEmptyException;
 import com.liveclass.curriculum.service.SectionNotFoundException;
 import com.liveclass.common.web.ErrorResponse;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -12,6 +14,8 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /** 커리큘럼 도메인 실패 → CONTRACT §2 상태코드(없음 404·권한 403·충돌 409)로 매핑. */
+// 범용 Exception 핸들러보다 먼저 뽑히도록 우선순위를 명시한다.
+@Order(Ordered.LOWEST_PRECEDENCE - 100)
 @RestControllerAdvice(assignableTypes = {InstructorCurriculumController.class, CatalogController.class})
 public class CurriculumExceptionHandler {
 

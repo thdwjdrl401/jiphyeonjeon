@@ -17,7 +17,9 @@ import java.util.List;
 import java.util.Map;
 
 /** 입력 검증 실패 → 프론트가 입력란에 붙일 수 있는 형태(API_MAP §2.3)로 변환한다. */
-@Order(Ordered.LOWEST_PRECEDENCE)
+// 범용 Exception 핸들러(UnhandledExceptionHandler=LOWEST_PRECEDENCE)보다 먼저 뽑혀야
+// 검증 예외가 500이 아닌 400으로 처리된다.
+@Order(Ordered.LOWEST_PRECEDENCE - 100)
 @RestControllerAdvice
 public class ValidationExceptionHandler {
 

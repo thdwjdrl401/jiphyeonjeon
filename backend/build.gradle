@@ -36,6 +36,12 @@ dependencies {
     // API 문서 = springdoc-openapi (ADR-0009가 전제한 3.0.x). Boot 4.1은 BOM 미관리라 버전 명시.
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3'
 
+    // 관측성: Micrometer Tracing(Brave). 요청마다 traceId/spanId를 MDC에 넣어 로그·에러 응답을
+    // 하나의 요청으로 묶는다. Boot 4.x는 둘 다 필요하다 — Boot 모듈(자동설정)은 brave 브리지를
+    // 전이로 가져오지 않으므로 micrometer 브리지(실제 BraveTracer)를 함께 넣는다. 익스포터는 후속.
+    implementation 'org.springframework.boot:spring-boot-micrometer-tracing-brave'
+    implementation 'io.micrometer:micrometer-tracing-bridge-brave'
+
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
 

@@ -46,3 +46,6 @@ management:
     web:
       exposure:
         include: health,info
+  tracing:
+    sampling:
+      probability: 1.0            # 요청마다 traceId 생성(로그·에러 상관관계용). 익스포터는 후속.
