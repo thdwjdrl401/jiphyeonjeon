@@ -133,6 +133,19 @@ class InstructorCurriculumContractTest {
                 .andExpect(jsonPath("$.summary").value("소개만 변경"));
     }
 
+    @Test
+    void patch_updates_period() throws Exception {
+        Cookie[] auth = loginAs("INSTRUCTOR");
+        String curriculumId = createCurriculum(auth, "기간 수정");
+
+        write(patch("/api/instructor/curriculums/" + curriculumId), auth, """
+                {"startsAt":"2026-08-01T10:00:00+09:00","endsAt":"2026-10-15T22:00:00+09:00"}
+                """)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.startsAt").exists())
+                .andExpect(jsonPath("$.endsAt").exists());
+    }
+
     // ---- 섹션 ----
 
     @Test

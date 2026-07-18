@@ -68,7 +68,8 @@ public class InstructorCurriculumController {
                                      Authentication authentication) {
         return CurriculumResponse.from(service.updateBasicInfo(
                 currentUserId(authentication), curriculumId,
-                request.title(), request.summary(), request.description()));
+                request.title(), request.summary(), request.description(),
+                request.startsAt(), request.endsAt()));
     }
 
     @Operation(summary = "커리큘럼 발행", description = "DRAFT → PUBLISHED. 발행 즉시 공개 카탈로그에 노출. DRAFT가 아니면 409.")

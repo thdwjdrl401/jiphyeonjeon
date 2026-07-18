@@ -101,10 +101,11 @@ public class InstructorCurriculumService {
         return curriculum;
     }
 
-    /** null 인자는 "변경 안 함"으로 다룬다 — PATCH 부분 수정. */
+    /** null 인자는 "변경 안 함"으로 다룬다 — PATCH 부분 수정. 기간 검증 규칙은 미확정(골격). */
     @Transactional
     public Curriculum updateBasicInfo(UUID instructorId, UUID curriculumId,
-                                      String title, String summary, String description) {
+                                      String title, String summary, String description,
+                                      OffsetDateTime startsAt, OffsetDateTime endsAt) {
         Curriculum curriculum = requireOwned(instructorId, curriculumId);
         if (title != null) {
             curriculum.setTitle(title);
@@ -114,6 +115,12 @@ public class InstructorCurriculumService {
         }
         if (description != null) {
             curriculum.setDescription(description);
+        }
+        if (startsAt != null) {
+            curriculum.setStartsAt(startsAt);
+        }
+        if (endsAt != null) {
+            curriculum.setEndsAt(endsAt);
         }
         return curriculum;
     }
