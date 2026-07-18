@@ -5,19 +5,21 @@ import com.liveclass.live.service.LiveKitTokenService;
 import com.liveclass.live.service.LiveSessionNotFoundException;
 import com.liveclass.live.service.LiveSessionService;
 import com.liveclass.live.web.dto.LiveTokenResponse;
+import com.liveclass.live.web.dto.UpdateLiveSessionRequest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
 
 /**
- * 라이브 세션 조회·토큰·시작/종료(live 모듈). 생성은 소유권 때문에 curriculum이 오케스트레이션한다.
- * 시작/종료는 후속.
+ * 라이브 세션 조회·토큰·시작/종료·일정수정·취소(live 모듈). 생성은 소유권 때문에 curriculum이 오케스트레이션한다.
  */
 @Tag(name = "라이브 세션", description = "라이브 세션 생성(강사)·조회·토큰·시작/종료.")
 @RestController
@@ -42,6 +44,23 @@ public class LiveSessionController {
     @PostMapping("/api/live-sessions/{sessionId}/start")
     public LiveSessionView start(@PathVariable UUID sessionId, Authentication authentication) {
         return liveSessionService.start(sessionId, UUID.fromString(authentication.getName()));
+    }
+
+    @Operation(summary = "라이브 세션 일정 수정", description = "예정 시각·입장창·예상 시간을 수정한다(강사). 라이브가 시작되기 전에만 가능하다. 보낸 필드만 바뀐다.")
+    @PatchMapping("/api/instructor/live-sessions/{sessionId}")
+    public LiveSessionView updateSchedule(@PathVariable UUID sessionId,
+                                          @RequestBody(required = false) UpdateLiveSessionRequest request,
+                                          Authentication authentication) {
+        UpdateLiveSessionRequest r = request == null
+                ? new UpdateLiveSessionRequest(null, null, null) : request;
+        return liveSessionService.updateSchedule(sessionId, UUID.fromString(authentication.getName()),
+                r.scheduledAt(), r.entryWindowMinutes(), r.expectedDurationMinutes());
+    }
+
+    @Operation(summary = "라이브 세션 취소", description = "예정된 세션을 시작 전에 취소한다(강사). 이미 시작·종료된 세션은 취소할 수 없다.")
+    @PostMapping("/api/instructor/live-sessions/{sessionId}/cancel")
+    public LiveSessionView cancel(@PathVariable UUID sessionId, Authentication authentication) {
+        return liveSessionService.cancel(sessionId, UUID.fromString(authentication.getName()));
     }
 
     @Operation(summary = "라이브 종료", description = "진행 중인 라이브를 강사가 끝낸다. 이미 종료됐어도 문제없이 종료 상태를 유지한다(멱등).")

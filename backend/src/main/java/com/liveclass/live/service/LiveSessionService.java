@@ -90,6 +90,46 @@ public class LiveSessionService implements LiveSessionManagement {
         return toView(s);
     }
 
+    /** 일정 수정(강사). 시작 전(DRAFT/SCHEDULED/OPEN)에만 가능. null은 "변경 안 함". 상태 자동 전이는 없다. */
+    @Transactional
+    public LiveSessionView updateSchedule(UUID sessionId, UUID requesterId,
+                                          OffsetDateTime scheduledAt,
+                                          Integer entryWindowMinutes,
+                                          Integer expectedDurationMinutes) {
+        LiveSession s = requireOwned(sessionId, requesterId);
+        requireNotStarted(s, "시작된 세션은 일정을 수정할 수 없습니다.");
+        if (scheduledAt != null) {
+            s.setScheduledAt(scheduledAt);
+        }
+        if (entryWindowMinutes != null) {
+            s.setEntryWindowMinutes(entryWindowMinutes);
+        }
+        if (expectedDurationMinutes != null) {
+            s.setExpectedDurationMinutes(expectedDurationMinutes);
+        }
+        return toView(s);
+    }
+
+    /** 시작 전 취소(강사). DRAFT/SCHEDULED/OPEN → CANCELLED. 이미 CANCELLED면 그대로(멱등). 시작·종료된 건 취소 불가. */
+    @Transactional
+    public LiveSessionView cancel(UUID sessionId, UUID requesterId) {
+        LiveSession s = requireOwned(sessionId, requesterId);
+        switch (s.getStatus()) {
+            case CANCELLED -> { /* 멱등 */ }
+            case DRAFT, SCHEDULED, OPEN -> s.setStatus(LiveSessionStatus.CANCELLED);
+            default -> throw new LiveSessionStateConflictException("이미 시작·종료된 세션은 취소할 수 없습니다.");
+        }
+        return toView(s);
+    }
+
+    /** 아직 시작 전(DRAFT/SCHEDULED/OPEN)이 아니면 상태 충돌. */
+    private void requireNotStarted(LiveSession s, String message) {
+        switch (s.getStatus()) {
+            case DRAFT, SCHEDULED, OPEN -> { /* ok */ }
+            default -> throw new LiveSessionStateConflictException(message);
+        }
+    }
+
     /** 세션을 로드하고 요청자가 그 세션의 강사인지 확인한다. 없으면 404, 강사 아니면 403. */
     private LiveSession requireOwned(UUID sessionId, UUID requesterId) {
         LiveSession s = liveSessionRepository.findById(sessionId)
@@ -103,7 +143,8 @@ public class LiveSessionService implements LiveSessionManagement {
     private LiveSessionView toView(LiveSession s) {
         return new LiveSessionView(
                 s.getId(), s.getLessonId(), s.getInstructorId(), s.getStatus().name(),
-                s.getScheduledAt(), s.getRoomSid(), s.getStartedAt(), s.getEndedAt(),
+                s.getScheduledAt(), s.getEntryWindowMinutes(), s.getExpectedDurationMinutes(),
+                s.getRoomSid(), s.getStartedAt(), s.getEndedAt(),
                 s.isRecordingEnabled(), s.isCaptionEnabled(), s.isChatEnabled(), s.isAiQnaEnabled(),
                 s.getCreatedAt(), s.getUpdatedAt());
     }

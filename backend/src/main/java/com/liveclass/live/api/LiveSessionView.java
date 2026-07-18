@@ -11,6 +11,8 @@ public record LiveSessionView(
         UUID instructorId,
         String liveSessionStatus,
         OffsetDateTime scheduledAt,
+        Integer entryWindowMinutes,
+        Integer expectedDurationMinutes,
         String roomSid,
         OffsetDateTime startedAt,
         OffsetDateTime endedAt,
