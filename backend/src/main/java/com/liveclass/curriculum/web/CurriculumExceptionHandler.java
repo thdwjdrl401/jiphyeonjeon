@@ -19,7 +19,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 // 범용 Exception 핸들러보다 먼저 뽑히도록 우선순위를 명시한다.
 @Order(Ordered.LOWEST_PRECEDENCE - 100)
 @RestControllerAdvice(assignableTypes = {
-        InstructorCurriculumController.class, InstructorLessonController.class, CatalogController.class})
+        InstructorCurriculumController.class, InstructorLessonController.class,
+        InstructorLiveSessionController.class, CatalogController.class})
 public class CurriculumExceptionHandler {
 
     @ExceptionHandler({CurriculumNotFoundException.class, SectionNotFoundException.class, LessonNotFoundException.class})
