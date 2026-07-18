@@ -64,3 +64,9 @@ logging:
     com.liveclass.curriculum: INFO
     com.liveclass.lesson: INFO
     com.liveclass.common: INFO
+
+livekit:
+  url: ${LIVEKIT_URL:wss://jiphyeonjeon.thdwjdrl.com:7443}   # 클라이언트 접속 URL
+  api-key: ${LIVEKIT_API_KEY:devkey}                  # dev/test 더미. 운영은 환경변수 주입.
+  api-secret: ${LIVEKIT_API_SECRET:devsecretdevsecretdevsecretdevsecret}  # 커밋 금지 값은 env로
+  token-ttl-seconds: ${LIVEKIT_TOKEN_TTL:600}         # 10분
