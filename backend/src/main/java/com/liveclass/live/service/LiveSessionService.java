@@ -5,10 +5,13 @@ import com.liveclass.live.api.LiveSessionView;
 import com.liveclass.live.domain.LiveSession;
 import com.liveclass.live.domain.LiveSessionStatus;
 import com.liveclass.live.repository.LiveSessionRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -16,10 +19,19 @@ import java.util.UUID;
 @Service
 public class LiveSessionService implements LiveSessionManagement {
 
-    private final LiveSessionRepository liveSessionRepository;
+    private static final Logger log = LoggerFactory.getLogger(LiveSessionService.class);
 
-    public LiveSessionService(LiveSessionRepository liveSessionRepository) {
+    private final LiveSessionRepository liveSessionRepository;
+    private final LiveRoomControl roomControl;
+
+    public LiveSessionService(LiveSessionRepository liveSessionRepository, LiveRoomControl roomControl) {
         this.liveSessionRepository = liveSessionRepository;
+        this.roomControl = roomControl;
+    }
+
+    /** 세션 ID로 결정론적 방 이름(토큰과 동일 규칙). */
+    private static String roomName(UUID sessionId) {
+        return "session-" + sessionId;
     }
 
     @Override
@@ -84,10 +96,35 @@ public class LiveSessionService implements LiveSessionManagement {
             case LIVE -> {
                 s.setStatus(LiveSessionStatus.ENDED);
                 s.setEndedAt(OffsetDateTime.now());
+                // DB 종료가 진실의 원천. 실제 방 닫기는 정리 작업이라 실패해도 종료를 되돌리지 않는다(best-effort).
+                closeRoomBestEffort(sessionId);
             }
             default -> throw new LiveSessionStateConflictException("진행 중이 아니라 종료할 수 없습니다.");
         }
         return toView(s);
+    }
+
+    /** 방 참여자 목록(강사). 실제 LiveKit 서버 조회. */
+    @Transactional(readOnly = true)
+    public List<LiveRoomControl.RoomParticipant> listParticipants(UUID sessionId, UUID requesterId) {
+        requireOwned(sessionId, requesterId);
+        return roomControl.listParticipants(roomName(sessionId));
+    }
+
+    /** 참여자 강퇴(강사). 실제 LiveKit 서버에 removeParticipant 명령. */
+    @Transactional(readOnly = true)
+    public void removeParticipant(UUID sessionId, UUID requesterId, String identity) {
+        requireOwned(sessionId, requesterId);
+        roomControl.removeParticipant(roomName(sessionId), identity);
+        log.info("참여자 강퇴 sessionId={} identity={}", sessionId, identity);
+    }
+
+    private void closeRoomBestEffort(UUID sessionId) {
+        try {
+            roomControl.closeRoom(roomName(sessionId));
+        } catch (RuntimeException e) {
+            log.warn("종료 시 방 닫기 실패(무시) sessionId={} : {}", sessionId, e.getMessage());
+        }
     }
 
     /** 일정 수정(강사). 시작 전(DRAFT/SCHEDULED/OPEN)에만 가능. null은 "변경 안 함". 상태 자동 전이는 없다. */

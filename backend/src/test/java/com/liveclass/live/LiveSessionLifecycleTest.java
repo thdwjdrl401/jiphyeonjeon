@@ -1,11 +1,13 @@
 package com.liveclass.live;
 
+import com.liveclass.live.service.LiveRoomControl;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
@@ -32,6 +34,10 @@ class LiveSessionLifecycleTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    // 종료 시 실제 LiveKit 방 닫기(best-effort)를 목으로 대체 — 테스트가 실 서버에 붙지 않게.
+    @MockitoBean
+    private LiveRoomControl roomControl;
 
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
 

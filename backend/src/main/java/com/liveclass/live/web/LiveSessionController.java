@@ -5,17 +5,22 @@ import com.liveclass.live.service.LiveKitTokenService;
 import com.liveclass.live.service.LiveSessionNotFoundException;
 import com.liveclass.live.service.LiveSessionService;
 import com.liveclass.live.web.dto.LiveTokenResponse;
+import com.liveclass.live.web.dto.ParticipantView;
 import com.liveclass.live.web.dto.UpdateLiveSessionRequest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -61,6 +66,22 @@ public class LiveSessionController {
     @PostMapping("/api/instructor/live-sessions/{sessionId}/cancel")
     public LiveSessionView cancel(@PathVariable UUID sessionId, Authentication authentication) {
         return liveSessionService.cancel(sessionId, UUID.fromString(authentication.getName()));
+    }
+
+    @Operation(summary = "방 참여자 목록", description = "지금 라이브 방에 접속해 있는 참여자를 조회한다(강사). 실제 LiveKit 서버에서 가져온다.")
+    @GetMapping("/api/instructor/live-sessions/{sessionId}/participants")
+    public List<ParticipantView> participants(@PathVariable UUID sessionId, Authentication authentication) {
+        return liveSessionService.listParticipants(sessionId, UUID.fromString(authentication.getName())).stream()
+                .map(ParticipantView::from)
+                .toList();
+    }
+
+    @Operation(summary = "참여자 강퇴", description = "특정 참여자를 방에서 내보낸다(강사). 실제 LiveKit 서버에 명령한다.")
+    @DeleteMapping("/api/instructor/live-sessions/{sessionId}/participants/{identity}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void removeParticipant(@PathVariable UUID sessionId, @PathVariable String identity,
+                                  Authentication authentication) {
+        liveSessionService.removeParticipant(sessionId, UUID.fromString(authentication.getName()), identity);
     }
 
     @Operation(summary = "라이브 종료", description = "진행 중인 라이브를 강사가 끝낸다. 이미 종료됐어도 문제없이 종료 상태를 유지한다(멱등).")

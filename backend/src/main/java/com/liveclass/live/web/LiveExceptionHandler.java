@@ -1,6 +1,7 @@
 package com.liveclass.live.web;
 
 import com.liveclass.common.web.ErrorResponse;
+import com.liveclass.live.service.LiveRoomControlException;
 import com.liveclass.live.service.LiveSessionForbiddenException;
 import com.liveclass.live.service.LiveSessionNotFoundException;
 import com.liveclass.live.service.LiveSessionStateConflictException;
@@ -32,5 +33,12 @@ public class LiveExceptionHandler {
     public ResponseEntity<ErrorResponse> handleStateConflict(LiveSessionStateConflictException e) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ErrorResponse.of("LIVE_SESSION_STATE_CONFLICT", e.getMessage()));
+    }
+
+    /** LiveKit 서버 제어 실패 — 우리 잘못이 아닌 상위 서비스 오류 → 502. */
+    @ExceptionHandler(LiveRoomControlException.class)
+    public ResponseEntity<ErrorResponse> handleRoomControl(LiveRoomControlException e) {
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                .body(ErrorResponse.of("LIVE_ROOM_CONTROL_FAILED", "라이브 방 제어에 실패했습니다. 잠시 후 다시 시도해 주세요."));
     }
 }
