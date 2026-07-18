@@ -1,9 +1,9 @@
 package com.liveclass.live.web;
 
-import com.liveclass.live.api.LiveSessionManagement;
 import com.liveclass.live.api.LiveSessionView;
 import com.liveclass.live.service.LiveKitTokenService;
 import com.liveclass.live.service.LiveSessionNotFoundException;
+import com.liveclass.live.service.LiveSessionService;
 import com.liveclass.live.web.dto.LiveTokenResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -23,19 +23,31 @@ import java.util.UUID;
 @RestController
 public class LiveSessionController {
 
-    private final LiveSessionManagement liveSessionManagement;
+    private final LiveSessionService liveSessionService;
     private final LiveKitTokenService tokenService;
 
-    public LiveSessionController(LiveSessionManagement liveSessionManagement, LiveKitTokenService tokenService) {
-        this.liveSessionManagement = liveSessionManagement;
+    public LiveSessionController(LiveSessionService liveSessionService, LiveKitTokenService tokenService) {
+        this.liveSessionService = liveSessionService;
         this.tokenService = tokenService;
     }
 
     @Operation(summary = "라이브 세션 조회", description = "라이브 세션의 기본 정보를 조회한다.")
     @GetMapping("/api/live-sessions/{sessionId}")
     public LiveSessionView get(@PathVariable UUID sessionId) {
-        return liveSessionManagement.findById(sessionId)
+        return liveSessionService.findById(sessionId)
                 .orElseThrow(() -> new LiveSessionNotFoundException("라이브 세션을 찾을 수 없습니다."));
+    }
+
+    @Operation(summary = "라이브 시작", description = "세션을 강사가 라이브로 켠다. 같은 세션을 다시 눌러도 문제없이 진행 중 상태를 유지한다(멱등).")
+    @PostMapping("/api/live-sessions/{sessionId}/start")
+    public LiveSessionView start(@PathVariable UUID sessionId, Authentication authentication) {
+        return liveSessionService.start(sessionId, UUID.fromString(authentication.getName()));
+    }
+
+    @Operation(summary = "라이브 종료", description = "진행 중인 라이브를 강사가 끝낸다. 이미 종료됐어도 문제없이 종료 상태를 유지한다(멱등).")
+    @PostMapping("/api/live-sessions/{sessionId}/end")
+    public LiveSessionView end(@PathVariable UUID sessionId, Authentication authentication) {
+        return liveSessionService.end(sessionId, UUID.fromString(authentication.getName()));
     }
 
     /**
@@ -45,7 +57,7 @@ public class LiveSessionController {
     @Operation(summary = "LiveKit 토큰 발급", description = "라이브 방에 접속할 입장 토큰을 발급한다. 세션을 만든 강사는 화면·음성을 내보낼 수 있고(송출), 그 외 참여자는 시청만 할 수 있다.")
     @PostMapping("/api/live-sessions/{sessionId}/token")
     public LiveTokenResponse token(@PathVariable UUID sessionId, Authentication authentication) {
-        LiveSessionView session = liveSessionManagement.findById(sessionId)
+        LiveSessionView session = liveSessionService.findById(sessionId)
                 .orElseThrow(() -> new LiveSessionNotFoundException("라이브 세션을 찾을 수 없습니다."));
 
         String requesterId = authentication.getName();

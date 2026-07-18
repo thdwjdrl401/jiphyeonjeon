@@ -9,7 +9,7 @@ public record LiveSessionView(
         UUID sessionId,
         UUID lessonId,
         UUID instructorId,
-        String status,
+        String liveSessionStatus,
         OffsetDateTime scheduledAt,
         String roomSid,
         OffsetDateTime startedAt,

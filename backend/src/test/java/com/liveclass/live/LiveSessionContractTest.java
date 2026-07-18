@@ -46,7 +46,7 @@ class LiveSessionContractTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.sessionId").exists())
                 .andExpect(jsonPath("$.lessonId").value(lessonId))
-                .andExpect(jsonPath("$.status").value("SCHEDULED"))
+                .andExpect(jsonPath("$.liveSessionStatus").value("SCHEDULED"))
                 .andExpect(jsonPath("$.recordingEnabled").value(true));
     }
 
@@ -57,7 +57,7 @@ class LiveSessionContractTest {
 
         write(post("/api/instructor/lessons/" + lessonId + "/live-sessions"), auth, null)
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.status").value("DRAFT"));
+                .andExpect(jsonPath("$.liveSessionStatus").value("DRAFT"));
     }
 
     @Test

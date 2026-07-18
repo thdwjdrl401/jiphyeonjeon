@@ -1,7 +1,9 @@
 package com.liveclass.live.web;
 
 import com.liveclass.common.web.ErrorResponse;
+import com.liveclass.live.service.LiveSessionForbiddenException;
 import com.liveclass.live.service.LiveSessionNotFoundException;
+import com.liveclass.live.service.LiveSessionStateConflictException;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
@@ -18,5 +20,17 @@ public class LiveExceptionHandler {
     public ResponseEntity<ErrorResponse> handleNotFound(LiveSessionNotFoundException e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ErrorResponse.of("LIVE_SESSION_NOT_FOUND", e.getMessage()));
+    }
+
+    @ExceptionHandler(LiveSessionForbiddenException.class)
+    public ResponseEntity<ErrorResponse> handleForbidden(LiveSessionForbiddenException e) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ErrorResponse.of("LIVE_SESSION_FORBIDDEN", e.getMessage()));
+    }
+
+    @ExceptionHandler(LiveSessionStateConflictException.class)
+    public ResponseEntity<ErrorResponse> handleStateConflict(LiveSessionStateConflictException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ErrorResponse.of("LIVE_SESSION_STATE_CONFLICT", e.getMessage()));
     }
 }
