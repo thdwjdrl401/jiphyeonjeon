@@ -10,6 +10,7 @@ import com.liveclass.video.service.EgressControlException;
 import com.liveclass.video.service.RecordingEventListener;
 import com.liveclass.video.service.RecordingService;
 import jakarta.servlet.http.Cookie;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -21,7 +22,6 @@ import org.springframework.test.context.event.RecordApplicationEvents;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
-import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -41,10 +41,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * 라이브 녹화 생명주기 골격 검증(songjeongki/0020). Egress는 목이라 인프라 없이 상태기계·이벤트 배선을
  * 확인한다: 시작 이벤트 발행 → RECORDING 자산, 종료 → FINALIZING, Egress 실패 → FAILED, 비활성 → 자산 없음.
+ *
+ * <p>비-@Transactional(실커밋)이다 — RecordingService는 REQUIRES_NEW라 별도 tx에서 커밋된 세션만 보이므로
+ * 세션이 실제로 커밋돼야 한다. 생성한 video_asset은 @AfterEach로 정리한다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
-@Transactional
 @RecordApplicationEvents
 class RecordingLifecycleTest {
 
@@ -58,6 +60,15 @@ class RecordingLifecycleTest {
     @MockitoBean private LiveRoomControl roomControl;   // 종료 시 방 닫기가 실 LiveKit을 안 타게 목.
 
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
+    private final List<UUID> createdSessions = new ArrayList<>();
+
+    @AfterEach
+    void cleanupVideoAssets() {
+        for (UUID sessionId : createdSessions) {
+            videoAssetRepository.findByLiveSessionId(sessionId).ifPresent(videoAssetRepository::delete);
+        }
+        createdSessions.clear();
+    }
 
     @Test
     void starting_a_session_publishes_started_event_with_recording_enabled() throws Exception {
@@ -165,6 +176,7 @@ class RecordingLifecycleTest {
                 .andReturn()).get("lessonId").asString();
         String sessionId = json(write(post("/api/instructor/lessons/" + lessonId + "/live-sessions"), auth, null)
                 .andReturn()).get("sessionId").asString();
+        createdSessions.add(UUID.fromString(sessionId));   // @AfterEach 정리 대상
         return new String[]{lessonId, sessionId};
     }
 

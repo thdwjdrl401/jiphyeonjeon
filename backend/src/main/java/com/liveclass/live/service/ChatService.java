@@ -7,6 +7,7 @@ import com.liveclass.live.domain.LiveSession;
 import com.liveclass.live.repository.ChatMessageRepository;
 import com.liveclass.live.repository.LiveSessionRepository;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,10 +43,7 @@ public class ChatService {
     @Transactional
     public ChatMessage send(UUID lessonId, UUID senderId, String clientMessageId, String text, boolean isQuestion) {
         LiveSession session = sessionForLesson(lessonId);
-
-        return chatMessageRepository
-                .findByLiveSessionIdAndClientMessageId(session.getId(), clientMessageId)
-                .orElseGet(() -> store(session, lessonId, senderId, clientMessageId, text, isQuestion));
+        return sendIdempotent(session, lessonId, senderId, clientMessageId, text, isQuestion);
     }
 
     /**
@@ -56,10 +54,24 @@ public class ChatService {
     public ChatMessage sendToSession(UUID sessionId, UUID senderId, String clientMessageId, String text, boolean isQuestion) {
         LiveSession session = liveSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new LiveSessionNotFoundException("라이브 세션이 없습니다."));
+        return sendIdempotent(session, session.getLessonId(), senderId, clientMessageId, text, isQuestion);
+    }
 
-        return chatMessageRepository
-                .findByLiveSessionIdAndClientMessageId(session.getId(), clientMessageId)
-                .orElseGet(() -> store(session, session.getLessonId(), senderId, clientMessageId, text, isQuestion));
+    /**
+     * 멱등 전송: 이미 있으면 그 행, 없으면 저장. 같은 clientMessageId가 동시에 들어와 SELECT를 둘 다 통과하면
+     * 하나는 UNIQUE(live_session_id, client_message_id) 위반이 난다 → 500 대신 409(STATE_CONFLICT)로 매핑한다.
+     * 채팅은 clientMessageId로 재전송 안전하므로, 클라 재시도가 위 SELECT 경로로 기존 메시지를 받아 멱등이 유지된다.
+     */
+    private ChatMessage sendIdempotent(LiveSession session, UUID lessonId, UUID senderId,
+                                       String clientMessageId, String text, boolean isQuestion) {
+        return chatMessageRepository.findByLiveSessionIdAndClientMessageId(session.getId(), clientMessageId)
+                .orElseGet(() -> {
+                    try {
+                        return store(session, lessonId, senderId, clientMessageId, text, isQuestion);
+                    } catch (DataIntegrityViolationException race) {
+                        throw new LiveSessionStateConflictException("같은 메시지가 동시에 저장되었습니다. 다시 시도해 주세요.");
+                    }
+                });
     }
 
     /** 복구 조회: afterSessionMs 이후 삭제 안 된 메시지를 시각순으로. */

@@ -8,6 +8,7 @@ import com.liveclass.video.repository.VideoAssetRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
@@ -38,8 +39,12 @@ public class RecordingService {
         this.egressProperties = egressProperties;
     }
 
-    /** 세션 녹화 시작. 멱등(이미 자산 있으면 건너뜀). Egress 실패면 FAILED로 기록하고 넘어간다. */
-    @Transactional
+    /**
+     * 세션 녹화 시작. 멱등(이미 자산 있으면 건너뜀). Egress 실패면 FAILED로 기록하고 넘어간다.
+     * <p>REQUIRES_NEW 필수 — AFTER_COMMIT 리스너에서 호출되므로 REQUIRED면 이미 커밋된 원 트랜잭션에
+     * 참여만 하고 새 커밋이 없어 video_asset이 저장되지 않는다.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void startRecording(UUID sessionId, UUID lessonId, String roomName) {
         if (videoAssetRepository.existsByLiveSessionId(sessionId)) {
             log.debug("이미 녹화 자산 존재 — 건너뜀 session={}", sessionId);
@@ -67,8 +72,11 @@ public class RecordingService {
         }
     }
 
-    /** 세션 녹화 중지. 녹화 중인 자산만 FINALIZING으로. Egress 중지 실패는 무시(webhook이 최종 정리). */
-    @Transactional
+    /**
+     * 세션 녹화 중지. 녹화 중인 자산만 FINALIZING으로. Egress 중지 실패는 무시(webhook이 최종 정리).
+     * REQUIRES_NEW 필수 — startRecording과 같은 이유(AFTER_COMMIT 경로).
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void stopRecording(UUID sessionId) {
         VideoAsset asset = videoAssetRepository.findByLiveSessionId(sessionId).orElse(null);
         if (asset == null) {

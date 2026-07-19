@@ -2,6 +2,8 @@ package com.liveclass.video.service;
 
 import com.liveclass.live.api.LiveSessionEndedEvent;
 import com.liveclass.live.api.LiveSessionStartedEvent;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
@@ -14,6 +16,8 @@ import org.springframework.transaction.event.TransactionalEventListener;
 @Component
 public class RecordingEventListener {
 
+    private static final Logger log = LoggerFactory.getLogger(RecordingEventListener.class);
+
     private final RecordingService recordingService;
 
     public RecordingEventListener(RecordingService recordingService) {
@@ -25,11 +29,20 @@ public class RecordingEventListener {
         if (!event.recordingEnabled()) {
             return;   // 녹화 비활성 세션은 자산을 만들지 않는다.
         }
-        recordingService.startRecording(event.sessionId(), event.lessonId(), event.roomName());
+        // best-effort: 녹화 시작 중 어떤 예외도 세션(이미 커밋됨) 밖으로 새지 않게 여기서 삼킨다.
+        try {
+            recordingService.startRecording(event.sessionId(), event.lessonId(), event.roomName());
+        } catch (RuntimeException e) {
+            log.warn("녹화 시작 처리 실패(무시) session={}: {}", event.sessionId(), e.getMessage());
+        }
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onSessionEnded(LiveSessionEndedEvent event) {
-        recordingService.stopRecording(event.sessionId());
+        try {
+            recordingService.stopRecording(event.sessionId());
+        } catch (RuntimeException e) {
+            log.warn("녹화 중지 처리 실패(무시) session={}: {}", event.sessionId(), e.getMessage());
+        }
     }
 }

@@ -53,7 +53,7 @@ public class LiveSessionService implements LiveSessionManagement {
         session.setCaptionEnabled(true);
         session.setChatEnabled(true);
         session.setAiQnaEnabled(true);
-        session.setVersion(0L);
+        // version은 @Version이라 Hibernate가 관리한다(수동 초기화 불필요).
         return toView(liveSessionRepository.save(session));
     }
 
