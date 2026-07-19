@@ -19,7 +19,7 @@ docker compose config         # (참고) 구문 검증
 
 - Postgres: `pgvector/pgvector:pg16`, `localhost:5432`, DB `liveclass`. 최초 기동 시 [`infra/postgres/init/01-schema.sql`](../infra/postgres/init/01-schema.sql)가 `vector` 확장 + `core`/`ai` 스키마를 만든다.
 - Redis: `redis:7-alpine`, `localhost:6379`, `appendonly`(세션 재시작 생존).
-- 테이블은 **마이그레이션이 생성**: Flyway(core, Spring) / Alembic(ai, Python). 스키마 공동수정 금지([ADR-0006](decisions/0006-backend-spring-plus-python-ai.md)).
+- 테이블은 **마이그레이션이 생성**: Flyway(core, Spring) / Alembic(ai, Python). 스키마 공동수정 금지([ADR-0006](decisions/songjeongki/0006-backend-spring-plus-python-ai.md)).
 
 ---
 
@@ -31,7 +31,7 @@ docker compose config         # (참고) 구문 검증
 - **Web · Security · Data JPA · PostgreSQL Driver · Validation · Actuator · Flyway**
 - **Spring Session Data Redis** (쿠키 세션 저장 — [ADR-0014 인증](decisions/)) · **Spring Data Redis**
 - 선택: Lombok · DevTools
-- Java **21** 툴체인, Spring Boot **4.1** (버전 근거 [ADR-0009](decisions/0009-java21-spring-boot-3.md)), Gradle **8.14+/9.x**.
+- Java **21** 툴체인, Spring Boot **4.1** (버전 근거 [ADR-0009](decisions/songjeongki/0009-java21-spring-boot-3.md)), Gradle **8.14+/9.x**.
 
 ### 2-2. 핵심 설정 (`application.yml`)
 ```yaml
@@ -87,7 +87,7 @@ server:
 ### 3-1. 왜 원격 1대인가
 - **Egress는 Linux 전용**(헤드리스 Chromium) — Windows 네이티브 불가.
 - **WebRTC는 공인 IP 도달**이 필요 — 각자 로컬(WSL/NAT 뒤)은 서로 못 붙음.
-- → **미디어 플레인만 공유 원격 Linux 1대**(클라우드 VM/개인서버), 앱은 URL로 접속. ([ADR-0004](decisions/0004-media-livekit-selfhost.md)·[0010](decisions/0010-self-host-vod.md))
+- → **미디어 플레인만 공유 원격 Linux 1대**(클라우드 VM/개인서버), 앱은 URL로 접속. ([ADR-0004](decisions/songjeongki/0004-media-livekit-selfhost.md)·[0010](decisions/songjeongki/0010-self-host-vod.md))
 
 ### 3-2. ⭐ 정본은 공식 생성기 — 손으로 config 쓰지 말 것
 LiveKit 공식 배포 경로는 **설정 생성기**다. 실제 배포 config(compose·Caddy·livekit.yaml·egress.yaml)는 이걸로 만든다:

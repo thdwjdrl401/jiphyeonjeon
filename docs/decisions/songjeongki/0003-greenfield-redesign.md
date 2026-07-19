@@ -1,6 +1,6 @@
 # ADR-0003: 명세·스켈레톤 참고용, 제로베이스 재설계
 
-> 📍 하네스 개요: [../harness/README.md](../harness/README.md) · 아키텍처: [../ARCHITECTURE.md](../ARCHITECTURE.md)
+> 📍 하네스 개요: [../harness/README.md](../../harness/README.md) · 아키텍처: [../ARCHITECTURE.md](../../ARCHITECTURE.md)
 
 - **상태**: 채택
 - **일자**: 2026-07-14
@@ -25,5 +25,5 @@
 
 ## 영향·후속
 - 도메인을 `live_session` 중심으로 재정의([0007](0007-domain-live-session.md)), 공식 conference 계열 폐기.
-- [CONTRACT.md](../CONTRACT.md)에서 SPEC 파생 매핑 제거, camelCase는 **자체 컨벤션**으로 리프레이밍([0001](0001-field-name-camelcase.md)).
+- [CONTRACT.md](../../CONTRACT.md)에서 SPEC 파생 매핑 제거, camelCase는 **자체 컨벤션**으로 리프레이밍([0001](0001-field-name-camelcase.md)).
 - AGENTS.md에 "명세·스켈레톤 참고용" 규칙 추가.

@@ -1,6 +1,6 @@
 # ADR-0018: PK 전략 — uuid(v4) 도메인 / bigint identity 고빈도 하이브리드
 
-> 📍 하네스 개요: [../harness/README.md](../harness/README.md) · 아키텍처: [../ARCHITECTURE.md](../ARCHITECTURE.md)
+> 📍 하네스 개요: [../harness/README.md](../../harness/README.md) · 아키텍처: [../ARCHITECTURE.md](../../ARCHITECTURE.md)
 
 - **상태**: 채택
 - **일자**: 2026-07-17

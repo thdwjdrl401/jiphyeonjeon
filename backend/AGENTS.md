@@ -3,12 +3,12 @@
 > 📍 정본 규칙: [../AGENTS.md](../AGENTS.md) · 공유 계약: [../docs/CONTRACT.md](../docs/CONTRACT.md) · 아키텍처: [../docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md) · 판단 정책: [../docs/harness/POLICY.md](../docs/harness/POLICY.md)
 >
 > 이 파일은 backend 작업 시의 스택별 규칙만 다룹니다. 계약·완료 게이트·커밋 규칙은 정본을 따르세요.
-> 명세·스켈레톤은 참고용([../docs/decisions/0003](../docs/decisions/0003-greenfield-redesign.md)) — 도메인은 course→section→lesson 중심으로 재설계.
+> 명세·스켈레톤은 참고용([../docs/decisions/songjeongki/0003](../docs/decisions/songjeongki/0003-greenfield-redesign.md)) — 도메인은 course→section→lesson 중심으로 재설계.
 
 ## 스택·환경
-- **Spring Boot 4.1 · Java 21**(virtual threads로 blocking I/O 동시성 확대, reactive/JPA 혼합 회피), Gradle 8.14+/9.x, Spring Security, JPA/Hibernate 7. ([../docs/decisions/0009](../docs/decisions/0009-java21-spring-boot-3.md))
-- DB: **PostgreSQL + pgvector**, **core 스키마 단독 쓰기**(ai 스키마는 Python) ([../docs/decisions/0005](../docs/decisions/0005-db-postgres-pgvector.md)).
-- 큐: **RabbitMQ**(durable 배치 잡 발행) · **Redis**(cache/session + STT/라이브 자막 Streams 소비) ([../docs/decisions/0012](../docs/decisions/0012-hybrid-queue.md)).
+- **Spring Boot 4.1 · Java 21**(virtual threads로 blocking I/O 동시성 확대, reactive/JPA 혼합 회피), Gradle 8.14+/9.x, Spring Security, JPA/Hibernate 7. ([../docs/decisions/songjeongki/0009](../docs/decisions/songjeongki/0009-java21-spring-boot-3.md))
+- DB: **PostgreSQL + pgvector**, **core 스키마 단독 쓰기**(ai 스키마는 Python) ([../docs/decisions/songjeongki/0005](../docs/decisions/songjeongki/0005-db-postgres-pgvector.md)).
+- 큐: **RabbitMQ**(durable 배치 잡 발행) · **Redis**(cache/session + STT/라이브 자막 Streams 소비) ([../docs/decisions/songjeongki/0012](../docs/decisions/songjeongki/0012-hybrid-queue.md)).
 
 ## 컨트롤 플레인 책임 (LiveClass AI)
 - 인증·유저·**강좌·커리큘럼·강의(course→section→lesson) CRUD**·수강·진도·자료(material) 관리.
@@ -25,7 +25,7 @@
 - Python↔Spring 브릿지 메시지·시간(세션 상대 ms)은 [CONTRACT §3](../docs/CONTRACT.md#3-실시간서비스-간-계약-확정-인터페이스) 준수.
 
 ## 패키지 구조
-- **모듈러 모놀리스**: 도메인 모듈(auth·course·curriculum·lesson·enrollment·video·transcript·glossary·quiz·chat·aiintegration·live) 단일 배포. 모듈 간 ID/port로만 연결(다른 모듈 Entity 직접 참조 금지). 도메인은 **course→section→lesson 중심**(live_session은 lesson 연결, [../docs/decisions/0007](../docs/decisions/0007-domain-live-session.md)).
+- **모듈러 모놀리스**: 도메인 모듈(auth·course·curriculum·lesson·enrollment·video·transcript·glossary·quiz·chat·aiintegration·live) 단일 배포. 모듈 간 ID/port로만 연결(다른 모듈 Entity 직접 참조 금지). 도메인은 **course→section→lesson 중심**(live_session은 lesson 연결, [../docs/decisions/songjeongki/0007](../docs/decisions/songjeongki/0007-domain-live-session.md)).
 
 ## 빌드·실행·테스트
 ```bash

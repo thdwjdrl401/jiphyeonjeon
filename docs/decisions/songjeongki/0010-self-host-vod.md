@@ -1,6 +1,6 @@
 # ADR-0010: VOD = LiveKit Egress 녹화 (업로드·FFmpeg 없음)
 
-> 📍 하네스 개요: [../harness/README.md](../harness/README.md) · 아키텍처: [../ARCHITECTURE.md](../ARCHITECTURE.md)
+> 📍 하네스 개요: [../harness/README.md](../../harness/README.md) · 아키텍처: [../ARCHITECTURE.md](../../ARCHITECTURE.md)
 
 - **상태**: 채택 (2026-07-14 개정: 완전 라이브 지향 → 업로드/FFmpeg 폐기, Egress로 통일)
 - **일자**: 2026-07-14
@@ -30,4 +30,4 @@ VOD/다시보기는 **LiveKit Egress**가 라이브 세션을 **녹화 → HLS �
 
 ## 영향·후속
 - **FFmpeg 업로드 워커 삭제**, 업로드 영상 API 제거. Egress는 **코어**(추후 아님).
-- 로드맵이 **라이브-first**로 뒤집힘([CP-ROADMAP](../CP-ROADMAP.md)) — VOD는 라이브의 산출물이라 라이브 없이 존재 불가.
+- 로드맵이 **라이브-first**로 뒤집힘([CP-ROADMAP](../../CP-ROADMAP.md)) — VOD는 라이브의 산출물이라 라이브 없이 존재 불가.

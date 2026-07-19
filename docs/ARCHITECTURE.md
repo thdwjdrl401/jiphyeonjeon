@@ -7,20 +7,20 @@
 ## 제품 한 줄
 **실시간 라이브 강의 플랫폼** — 강사가 WebRTC로 라이브 강의, 실시간 **자막·용어·자료 근거 RAG** 제공. 지난 강의는 **녹화 다시보기**(지평선 넘어 교정된 자막·용어·RAG 전체 제공). **영상 업로드는 없음**(콘텐츠는 전부 라이브+녹화); 자료 PPTX만 업로드.
 
-> 기존 부트캠프 PJT 명세·스켈레톤은 **참고용**, 본 기획으로 제로베이스 재설계([decisions/0003](decisions/0003-greenfield-redesign.md)). **완전 라이브 지향** — 업로드 강의 미지원, VOD는 라이브 녹화(Egress)에서만 나온다([decisions/0010](decisions/0010-self-host-vod.md)). RAG류는 구조 우선·고도화는 별도.
+> 기존 부트캠프 PJT 명세·스켈레톤은 **참고용**, 본 기획으로 제로베이스 재설계([decisions/songjeongki/0003](decisions/songjeongki/0003-greenfield-redesign.md)). **완전 라이브 지향** — 업로드 강의 미지원, VOD는 라이브 녹화(Egress)에서만 나온다([decisions/songjeongki/0010](decisions/songjeongki/0010-self-host-vod.md)). RAG류는 구조 우선·고도화는 별도.
 
 ## 확정 스택
 
 | 컴포넌트 | 스택 | 근거 ADR |
 |---|---|---|
-| Front-end | **React 19 + TypeScript** (FE/BE 분리, TanStack Query, SSE/WS) | [0002](decisions/0002-react-typescript-frontend.md) |
-| 컨트롤/데이터 | **Spring Boot 4.1 + Java 21**(virtual threads), JPA, Security | [0006](decisions/0006-backend-spring-plus-python-ai.md)·[0009](decisions/0009-java21-spring-boot-3.md) |
-| 인증 | **HttpOnly 쿠키 + Redis 세션**(엣지) · 내부 S2S=단명 JWT · 미디어=LiveKit JWT | [0014](decisions/0014-auth-redis-session-cookie.md) |
-| AI (3서비스) | **realtime-agent(LiveKit, 라이브 STT)** + **ai-api(FastAPI, RAG SSE)** + **ai-worker(RabbitMQ, chunk·embed·후보)** | [0011](decisions/0011-ai-three-services.md) |
-| DB | **PostgreSQL + pgvector** (core/ai 스키마 분리) | [0005](decisions/0005-db-postgres-pgvector.md) |
-| 캐시·fast path | **Redis** (cache/session/rate-limit + STT·라이브 자막 Streams) | [0008](decisions/0008-ai-bus-redis-streams-session-clock.md)·[0012](decisions/0012-hybrid-queue.md) |
-| 잡 큐 | **RabbitMQ** (ingestion: PPTX 파싱·chunk·embed·후보·2-pass 교정) | [0012](decisions/0012-hybrid-queue.md) |
-| 미디어 | **LiveKit self-host(SFU) + Egress(녹화→HLS) + MinIO + nginx** | [0004](decisions/0004-media-livekit-selfhost.md)·[0010](decisions/0010-self-host-vod.md) |
+| Front-end | **React 19 + TypeScript** (FE/BE 분리, TanStack Query, SSE/WS) | [0002](decisions/songjeongki/0002-react-typescript-frontend.md) |
+| 컨트롤/데이터 | **Spring Boot 4.1 + Java 21**(virtual threads), JPA, Security | [0006](decisions/songjeongki/0006-backend-spring-plus-python-ai.md)·[0009](decisions/songjeongki/0009-java21-spring-boot-3.md) |
+| 인증 | **HttpOnly 쿠키 + Redis 세션**(엣지) · 내부 S2S=단명 JWT · 미디어=LiveKit JWT | [0014](decisions/songjeongki/0014-auth-redis-session-cookie.md) |
+| AI (3서비스) | **realtime-agent(LiveKit, 라이브 STT)** + **ai-api(FastAPI, RAG SSE)** + **ai-worker(RabbitMQ, chunk·embed·후보)** | [0011](decisions/songjeongki/0011-ai-three-services.md) |
+| DB | **PostgreSQL + pgvector** (core/ai 스키마 분리) | [0005](decisions/songjeongki/0005-db-postgres-pgvector.md) |
+| 캐시·fast path | **Redis** (cache/session/rate-limit + STT·라이브 자막 Streams) | [0008](decisions/songjeongki/0008-ai-bus-redis-streams-session-clock.md)·[0012](decisions/songjeongki/0012-hybrid-queue.md) |
+| 잡 큐 | **RabbitMQ** (ingestion: PPTX 파싱·chunk·embed·후보·2-pass 교정) | [0012](decisions/songjeongki/0012-hybrid-queue.md) |
+| 미디어 | **LiveKit self-host(SFU) + Egress(녹화→HLS) + MinIO + nginx** | [0004](decisions/songjeongki/0004-media-livekit-selfhost.md)·[0010](decisions/songjeongki/0010-self-host-vod.md) |
 | LLM | 외부 API → model gateway(추후 로컬) | — |
 
 - 배포: 모듈러 모놀리스(Spring 단일 배포) + 폴리글랏 모노레포. FE dev 8083 / Spring 8080.
@@ -143,7 +143,7 @@ flowchart LR
 - 다시보기는 **라이브 때 만든 산출물을 그대로 재생** — 지평선 뒤라 교정 완료본. 세션 상대 ms 좌표로 HLS·자막 자동 정렬.
 
 ## 도메인 모델 (core / ai 스키마)
-근거: [decisions/0007](decisions/0007-domain-live-session.md)·[0005](decisions/0005-db-postgres-pgvector.md)
+근거: [decisions/songjeongki/0007](decisions/songjeongki/0007-domain-live-session.md)·[0005](decisions/songjeongki/0005-db-postgres-pgvector.md)
 
 **`core` (Spring 쓰기, 공식)**: `user`(role enum) · `course`→`curriculum_section`→`lesson` · `live_session`(lesson의 라이브 인스턴스) · `video_asset`(Egress 녹화 HLS)·`material_asset`(PPTX) · `enrollment`·`learning_progress`·`bookmark` · `published_transcript`·`glossary_term` · `quiz`·`quiz_question`·`quiz_attempt` · `chat_message` · `outbox_events`
 
@@ -155,7 +155,7 @@ flowchart LR
 - **보류**: org/멀티테넌트·roles테이블·audit_logs·learning_events·question_clusters.
 
 ## 다시보기 재생 인증 (defer + seam)
-데모는 무인증 nginx 패스스루. 나중 드롭인용 seam 3개: ① 재생 URL은 Spring 발급(`GET /lessons/{id}/playback`) ② nginx를 처음부터 경로에 ③ `PlaybackTokenService` no-op. → 나중에 nginx secure_link/서명만 켜면 됨. [decisions/0010](decisions/0010-self-host-vod.md)
+데모는 무인증 nginx 패스스루. 나중 드롭인용 seam 3개: ① 재생 URL은 Spring 발급(`GET /lessons/{id}/playback`) ② nginx를 처음부터 경로에 ③ `PlaybackTokenService` no-op. → 나중에 nginx secure_link/서명만 켜면 됨. [decisions/songjeongki/0010](decisions/songjeongki/0010-self-host-vod.md)
 
 ## 신뢰성 / 장애
 - **outbox + idempotency + DLQ + correlation_id**(React→Spring→AI→Worker 추적).

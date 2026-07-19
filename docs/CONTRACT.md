@@ -3,19 +3,19 @@
 > 📍 하네스 개요: [docs/harness/README.md](harness/README.md) · 정본 규칙: [AGENTS.md](../AGENTS.md) · 아키텍처: [ARCHITECTURE.md](ARCHITECTURE.md)
 >
 > **FE↔Spring**, **Spring↔AI(RabbitMQ/HTTP)**, **AI→Spring(Redis Streams/callback)** 이 동시에 지켜야 어긋나지 않는 계약. 한쪽이 바꾸면 다른 쪽이 깨지는 항목만.
-> (구 화상회의 명세 [SPEC.md](legacy/SPEC.md)는 참고용 — [decisions/0003](decisions/0003-greenfield-redesign.md))
+> (구 화상회의 명세 [SPEC.md](legacy/SPEC.md)는 참고용 — [decisions/songjeongki/0003](decisions/songjeongki/0003-greenfield-redesign.md))
 
 ---
 
 ## 1. 필드명 규칙 — camelCase 통일
-> 근거: [decisions/0001](decisions/0001-field-name-camelcase.md) (팀 자체 컨벤션)
+> 근거: [decisions/songjeongki/0001](decisions/songjeongki/0001-field-name-camelcase.md) (팀 자체 컨벤션)
 - **API JSON·이벤트 필드명은 `camelCase`**. 예: `courseId`·`lessonId`·`sectionId`·`startMs`·`hlsManifestKey`·`isPublished`.
 - **DB 컬럼은 snake_case 허용**, DTO/응답/이벤트로 노출되는 순간 camelCase.
 
 ## 2. REST API (`/api`, Spring 소유)
 | 도메인 | 예시 | 비고 |
 |---|---|---|
-| 인증 | `POST /auth/login`·`/auth/signup`·`/auth/logout` | 상태코드: 생성 201·중복 409·인증실패 401·권한 403. **HttpOnly 쿠키 세션(Redis 저장)** — FE는 `withCredentials`, `Authorization: Bearer` 미사용. 변경요청 CSRF 토큰([decisions/0014](decisions/0014-auth-redis-session-cookie.md)) |
+| 인증 | `POST /auth/login`·`/auth/signup`·`/auth/logout` | 상태코드: 생성 201·중복 409·인증실패 401·권한 403. **HttpOnly 쿠키 세션(Redis 저장)** — FE는 `withCredentials`, `Authorization: Bearer` 미사용. 변경요청 CSRF 토큰([decisions/songjeongki/0014](decisions/songjeongki/0014-auth-redis-session-cookie.md)) |
 | 카탈로그 | `GET /courses`·`GET /courses/{id}` | 검색·필터·페이지네이션 |
 | 강좌(강사) | `POST/PATCH /instructor/courses`·`.../sections`·`.../curriculum/order` | 소유권 검증 |
 | 강의 | `POST /instructor/sections/{id}/lessons`·`PATCH /instructor/lessons/{id}` | status: DRAFT/AI_NOT_READY/READY/PUBLISHED |
@@ -31,13 +31,13 @@
 ## 3. 내부 계약 (확정 인터페이스)
 
 ### 3-1. Spring → AI 배치 잡 (RabbitMQ)
-잡 envelope: `{ jobId, idempotencyKey, tenantId, courseId, lessonId, taskType, inputRefs, policy, contractVersion, correlationId }`. taskType: `PPTX_PARSE|EMBED|CANDIDATE_GEN|STT_2PASS`. (라이브 STT는 배치 아님 — Redis Streams §3-3. 트랜스코드는 없음 — VOD=Egress 녹화, [decisions/0010](decisions/0010-self-host-vod.md)) **outbox**로 발행 신뢰성, 실패는 **DLQ**.
+잡 envelope: `{ jobId, idempotencyKey, tenantId, courseId, lessonId, taskType, inputRefs, policy, contractVersion, correlationId }`. taskType: `PPTX_PARSE|EMBED|CANDIDATE_GEN|STT_2PASS`. (라이브 STT는 배치 아님 — Redis Streams §3-3. 트랜스코드는 없음 — VOD=Egress 녹화, [decisions/songjeongki/0010](decisions/songjeongki/0010-self-host-vod.md)) **outbox**로 발행 신뢰성, 실패는 **DLQ**.
 
 ### 3-2. AI → Spring callback (HTTP, 서명)
 `{ eventId, eventType, jobId, lessonId, status, outputs }`. eventType 예: `LESSON_AI_READY`. Spring은 `eventId`로 중복 제거(멱등), 산출물을 ai schema에 두고 강사 게시 시 core로 반영.
 
 ### 3-3. AI → Spring 실시간 (Redis Streams, STT/자막)
-세션별 스트림. 메시지: `caption.partial|final|revised { sessionId|lessonId, segmentId, startMs, endMs, text, revision }` · `term` · `evidence` · `summary`. (라이브 STT 실시간 전달; 다시보기는 저장본 재생 — [decisions/0013](decisions/0013-unified-streaming-stt.md))
+세션별 스트림. 메시지: `caption.partial|final|revised { sessionId|lessonId, segmentId, startMs, endMs, text, revision }` · `term` · `evidence` · `summary`. (라이브 STT 실시간 전달; 다시보기는 저장본 재생 — [decisions/songjeongki/0013](decisions/songjeongki/0013-unified-streaming-stt.md))
 
 ### 3-4. FE ↔ Spring WebSocket
 - **자막 채널**(세션/강의별): caption 이벤트 push.
