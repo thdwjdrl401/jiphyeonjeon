@@ -1,6 +1,6 @@
 package com.liveclass.live.service;
 
-import com.liveclass.live.config.LiveKitProperties;
+import com.liveclass.common.config.LiveKitProperties;
 import io.livekit.server.RoomServiceClient;
 import livekit.LivekitModels;
 import org.springframework.stereotype.Service;

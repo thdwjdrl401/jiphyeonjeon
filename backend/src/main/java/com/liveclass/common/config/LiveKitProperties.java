@@ -1,4 +1,4 @@
-package com.liveclass.live.config;
+package com.liveclass.common.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 

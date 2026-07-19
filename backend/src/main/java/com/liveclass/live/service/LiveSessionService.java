@@ -1,12 +1,15 @@
 package com.liveclass.live.service;
 
+import com.liveclass.live.api.LiveSessionEndedEvent;
 import com.liveclass.live.api.LiveSessionManagement;
+import com.liveclass.live.api.LiveSessionStartedEvent;
 import com.liveclass.live.api.LiveSessionView;
 import com.liveclass.live.domain.LiveSession;
 import com.liveclass.live.domain.LiveSessionStatus;
 import com.liveclass.live.repository.LiveSessionRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,10 +26,13 @@ public class LiveSessionService implements LiveSessionManagement {
 
     private final LiveSessionRepository liveSessionRepository;
     private final LiveRoomControl roomControl;
+    private final ApplicationEventPublisher eventPublisher;
 
-    public LiveSessionService(LiveSessionRepository liveSessionRepository, LiveRoomControl roomControl) {
+    public LiveSessionService(LiveSessionRepository liveSessionRepository, LiveRoomControl roomControl,
+                              ApplicationEventPublisher eventPublisher) {
         this.liveSessionRepository = liveSessionRepository;
         this.roomControl = roomControl;
+        this.eventPublisher = eventPublisher;
     }
 
     /** 세션 ID로 결정론적 방 이름(토큰과 동일 규칙). */
@@ -81,6 +87,9 @@ public class LiveSessionService implements LiveSessionManagement {
                 s.setStartedAt(now);
                 s.setClockOriginAt(now);   // 자막·STT 상대시각의 기준점(세션 시계 t0)
                 s.setStartedBy(requesterId);
+                // 커밋 후 부가 처리(녹화 등)를 트리거. best-effort라 세션 시작을 막지 않는다.
+                eventPublisher.publishEvent(new LiveSessionStartedEvent(
+                        s.getId(), s.getLessonId(), roomName(s.getId()), s.isRecordingEnabled()));
             }
             default -> throw new LiveSessionStateConflictException("이미 종료되었거나 시작할 수 없는 상태입니다.");
         }
@@ -98,6 +107,8 @@ public class LiveSessionService implements LiveSessionManagement {
                 s.setEndedAt(OffsetDateTime.now());
                 // DB 종료가 진실의 원천. 실제 방 닫기는 정리 작업이라 실패해도 종료를 되돌리지 않는다(best-effort).
                 closeRoomBestEffort(sessionId);
+                // 커밋 후 녹화 중지 등 정리 처리를 트리거.
+                eventPublisher.publishEvent(new LiveSessionEndedEvent(sessionId));
             }
             default -> throw new LiveSessionStateConflictException("진행 중이 아니라 종료할 수 없습니다.");
         }
