@@ -6,6 +6,7 @@ import com.liveclass.live.domain.ChatMessage;
 import com.liveclass.live.domain.LiveSession;
 import com.liveclass.live.repository.ChatMessageRepository;
 import com.liveclass.live.repository.LiveSessionRepository;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,16 +26,19 @@ public class ChatService {
     private final ChatMessageRepository chatMessageRepository;
     private final LiveSessionRepository liveSessionRepository;
     private final UserDirectory userDirectory;
+    private final ApplicationEventPublisher eventPublisher;
 
     public ChatService(ChatMessageRepository chatMessageRepository,
                        LiveSessionRepository liveSessionRepository,
-                       UserDirectory userDirectory) {
+                       UserDirectory userDirectory,
+                       ApplicationEventPublisher eventPublisher) {
         this.chatMessageRepository = chatMessageRepository;
         this.liveSessionRepository = liveSessionRepository;
         this.userDirectory = userDirectory;
+        this.eventPublisher = eventPublisher;
     }
 
-    /** 채팅 전송(멱등). 같은 clientMessageId 재전송이면 기존 메시지를 그대로 돌려준다. */
+    /** 채팅 전송(멱등, lessonId 기준 = REST). 같은 clientMessageId 재전송이면 기존 메시지를 그대로 돌려준다. */
     @Transactional
     public ChatMessage send(UUID lessonId, UUID senderId, String clientMessageId, String text, boolean isQuestion) {
         LiveSession session = sessionForLesson(lessonId);
@@ -42,6 +46,20 @@ public class ChatService {
         return chatMessageRepository
                 .findByLiveSessionIdAndClientMessageId(session.getId(), clientMessageId)
                 .orElseGet(() -> store(session, lessonId, senderId, clientMessageId, text, isQuestion));
+    }
+
+    /**
+     * 채팅 전송(멱등, sessionId 기준 = WebSocket). WS 채널·구독 destination이 sessionId로 키잉되므로
+     * 실시간 인바운드는 이 경로로 들어온다. lesson:session = 1:1(MVP)이라 세션에서 lessonId를 얻는다.
+     */
+    @Transactional
+    public ChatMessage sendToSession(UUID sessionId, UUID senderId, String clientMessageId, String text, boolean isQuestion) {
+        LiveSession session = liveSessionRepository.findById(sessionId)
+                .orElseThrow(() -> new LiveSessionNotFoundException("라이브 세션이 없습니다."));
+
+        return chatMessageRepository
+                .findByLiveSessionIdAndClientMessageId(session.getId(), clientMessageId)
+                .orElseGet(() -> store(session, session.getLessonId(), senderId, clientMessageId, text, isQuestion));
     }
 
     /** 복구 조회: afterSessionMs 이후 삭제 안 된 메시지를 시각순으로. */
@@ -70,7 +88,15 @@ public class ChatService {
         m.setText(text);
         m.setQuestion(isQuestion);
         m.setClientMessageId(clientMessageId);
-        return chatMessageRepository.save(m);
+        // PK가 IDENTITY라 save()가 즉시 INSERT → id·createdAt(@CreationTimestamp)이 여기서 채워진다.
+        ChatMessage saved = chatMessageRepository.save(m);
+
+        // 저장이 실제로 일어난 경우에만 발행 → 커밋 후 리스너가 브로드캐스트한다(REST·WS 공용 실시간 경로).
+        eventPublisher.publishEvent(new ChatMessageStoredEvent(
+                saved.getLiveSessionId(), saved.getLessonId(), String.valueOf(saved.getId()),
+                saved.getClientMessageId(), saved.getSenderName(), saved.getSessionMs(),
+                saved.getText(), saved.isQuestion(), saved.getCreatedAt()));
+        return saved;
     }
 
     /** 라이브 시작(clock_origin_at) 기준 경과 ms. 아직 시작 전이면 0. */

@@ -70,3 +70,12 @@ livekit:
   api-key: ${LIVEKIT_API_KEY:devkey}                  # dev/test 더미. 운영은 환경변수 주입.
   api-secret: ${LIVEKIT_API_SECRET:devsecretdevsecretdevsecretdevsecret}  # 커밋 금지 값은 env로
   token-ttl-seconds: ${LIVEKIT_TOKEN_TTL:600}         # 10분
+
+liveclass:
+  ws:
+    # WebSocket 핸드셰이크 오리진 화이트리스트(CSWSH 방어, ADR-0019). 같은 오리진 배포(nginx)라
+    # 운영은 도메인 하나면 충분하고, dev는 Vite(localhost:*)만 허용한다. 콤마 없이 리스트로 override 가능.
+    allowed-origin-patterns:
+      - http://localhost:*
+      - https://jiphyeonjeon.thdwjdrl.com
+      - https://*.thdwjdrl.com
