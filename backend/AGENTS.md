@@ -31,7 +31,7 @@
 ```bash
 cd backend
 ./gradlew clean build     # 빌드 (Windows: .\gradlew.bat)
-./gradlew bootRun         # 실행 (HTTP 8080, Swagger)
+./gradlew bootRun         # 실행 (HTTP 8080). API 문서: /swagger-ui/index.html · /v3/api-docs (springdoc, ADR-0009)
 ./gradlew test            # 테스트
 ```
 

@@ -33,10 +33,15 @@ dependencies {
     implementation 'org.flywaydb:flyway-database-postgresql'
     runtimeOnly 'org.postgresql:postgresql'
 
+    // API 문서 = springdoc-openapi (ADR-0009가 전제한 3.0.x). Boot 4.1은 BOM 미관리라 버전 명시.
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3'
+
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
 
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    // Boot 4.x는 테스트 오토컨피그도 기술별로 쪼개짐 — MockMvc(@AutoConfigureMockMvc)는 starter-test에 없음
+    testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
     testImplementation 'org.springframework.security:spring-security-test'
 }
 

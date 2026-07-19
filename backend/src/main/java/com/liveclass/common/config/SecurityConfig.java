@@ -2,13 +2,17 @@ package com.liveclass.common.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 
 /**
  * 인증 = HttpOnly 쿠키 + Redis 세션 (ADR-0014).
- * T0 스캐폴드 단계: 스모크 엔드포인트만 permitAll. 실제 인증/인가는 CP0에서.
  */
 @Configuration
 public class SecurityConfig {
@@ -19,9 +23,26 @@ public class SecurityConfig {
                 // SPA용 CSRF: JS가 XSRF-TOKEN 쿠키를 읽어 헤더로 에코 (ADR-0014)
                 .csrf(csrf -> csrf.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()))
                 .authorizeHttpRequests(auth -> auth
+                        // 오류는 서블릿이 /error 로 포워딩한다. 이걸 막으면 404·500이 전부 401로 위장돼
+                        // 프론트가 "로그아웃됐다"고 오해한다(client.ts는 401에서 CSRF 캐시를 버린다).
+                        .requestMatchers("/error").permitAll()
+                        // API 문서(springdoc). 운영 노출 범위는 후속에서 프로파일로 조일 수 있다.
+                        .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
+                        // T0 스캐폴드 잔재: CP0에서 실제 /api/session/* 이 생기면 이 permitAll을 걷어내야 한다.
                         .requestMatchers("/actuator/health", "/api/ping", "/api/session/**").permitAll()
+                        // 로그인 전에 부를 수 있어야 하는 것들 — csrf가 막히면 로그인 자체가 불가능하다.
+                        .requestMatchers(HttpMethod.GET, "/api/auth/csrf", "/api/auth/email-availability").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/signup", "/api/auth/login", "/api/auth/logout").permitAll()
                         .anyRequest().authenticated()
-                );
+                )
+                // 기본 동작은 403이지만 CONTRACT §2는 인증 실패를 401로 못박았다.
+                .exceptionHandling(ex -> ex.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)));
         return http.build();
+    }
+
+    /** {bcrypt} 접두사를 붙여 저장 → 나중에 해시 알고리즘을 바꿔도 기존 행을 읽을 수 있다. */
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
     }
 }
