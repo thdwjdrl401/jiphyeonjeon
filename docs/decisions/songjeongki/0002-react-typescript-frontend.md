@@ -1,12 +1,12 @@
 # ADR-0002: 프론트엔드를 React + TypeScript로 전환
 
-> 📍 하네스 개요: [../harness/README.md](../harness/README.md) · 판단 정책: [../harness/POLICY.md](../harness/POLICY.md)
+> 📍 하네스 개요: [../harness/README.md](../../harness/README.md) · 판단 정책: [../harness/POLICY.md](../../harness/POLICY.md)
 
 - **상태**: 채택 (배포 방식 일부 개정 — 아래 개정 이력 참조)
 - **일자**: 2026-07-13
 - **관련**: 프론트엔드 스켈레톤 전환, ADR-0001, ADR-0014
 
-> **개정 이력 (2026-07-16)**: 본 ADR의 "Vite 산출물을 `backend/src/main/resources/dist`에 넣어 Spring Boot가 8080에서 SPA+API를 함께 서빙"하는 **단일 서버 통합 배포** 결정은 이후 폐기되었다. 현재 아키텍처는 **FE(Vite dev 8083)/BE(Spring 8080) 분리 오리진**이며, 프론트가 API 경로를 8080으로 프록시한다(통합 포트 서빙 없음). 배포 구조는 [ADR-0015](0015-docker-deploy-fe-be-nginx.md), API 경로 규약은 [ADR-0016](0016-drop-api-path-versioning.md)를 정본으로 한다 — [ADR-0014](0014-auth-redis-session-cookie.md), [RUN.md](../../RUN.md). 아래 §결정 18번째 항목과 §근거의 통합-배포 서술은 이 이력으로 대체된다. React+TypeScript+Context 전환이라는 본 ADR의 핵심 결정은 유효하다.
+> **개정 이력 (2026-07-16)**: 본 ADR의 "Vite 산출물을 `backend/src/main/resources/dist`에 넣어 Spring Boot가 8080에서 SPA+API를 함께 서빙"하는 **단일 서버 통합 배포** 결정은 이후 폐기되었다. 현재 아키텍처는 **FE(Vite dev 8083)/BE(Spring 8080) 분리 오리진**이며, 프론트가 API 경로를 8080으로 프록시한다(통합 포트 서빙 없음). 배포 구조는 [ADR-0015](0015-docker-deploy-fe-be-nginx.md), API 경로 규약은 [ADR-0016](0016-drop-api-path-versioning.md)를 정본으로 한다 — [ADR-0014](0014-auth-redis-session-cookie.md), [RUN.md](../../../RUN.md). 아래 §결정 18번째 항목과 §근거의 통합-배포 서술은 이 이력으로 대체된다. React+TypeScript+Context 전환이라는 본 ADR의 핵심 결정은 유효하다.
 
 ## 맥락
 

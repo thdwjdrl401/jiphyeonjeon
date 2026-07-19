@@ -2,7 +2,7 @@
 
 **실시간 라이브 강의 플랫폼** — 강사가 WebRTC로 라이브 강의하고, 실시간 **자막·용어·자료 근거 RAG**를 제공한다. 지난 강의는 **녹화 다시보기**(교정된 자막·용어·RAG 포함)로 재생한다. **영상 업로드는 없다**(콘텐츠는 라이브+녹화, 자료 PPTX만 업로드).
 
-> 기존 부트캠프 화상회의 스켈레톤을 참고용으로만 두고 본 기획으로 제로베이스 재설계했다([docs/decisions/0003](docs/decisions/0003-greenfield-redesign.md)). 현재 **설계 확정 → 착수 전환 단계**이며, 스캐폴딩 마이그레이션·인프라 구성은 [CP-ROADMAP](docs/CP-ROADMAP.md)의 T0부터 진행한다.
+> 기존 부트캠프 화상회의 스켈레톤을 참고용으로만 두고 본 기획으로 제로베이스 재설계했다([docs/decisions/songjeongki/0003](docs/decisions/songjeongki/0003-greenfield-redesign.md)). 현재 **설계 확정 → 착수 전환 단계**이며, 스캐폴딩 마이그레이션·인프라 구성은 [CP-ROADMAP](docs/CP-ROADMAP.md)의 T0부터 진행한다.
 
 ## 📚 정본 문서 (여기부터 읽기)
 
@@ -20,13 +20,13 @@
 
 | 구분 | 기술 | 근거 ADR |
 | ---- | ---- | ---- |
-| Frontend | **React 19 + TypeScript**, Vite, TanStack Query, SSE/WS, LiveKit client | [0002](docs/decisions/0002-react-typescript-frontend.md) |
-| Backend | **Spring Boot 3.4/3.5 + Java 21**(virtual threads), JPA, Security | [0006](docs/decisions/0006-backend-spring-plus-python-ai.md)·[0009](docs/decisions/0009-java21-spring-boot-3.md) |
-| AI | **Python 3서비스** — realtime-agent(라이브 STT) · ai-api(FastAPI, RAG SSE) · ai-worker(RabbitMQ, chunk·embed·후보) | [0011](docs/decisions/0011-ai-three-services.md) |
-| Database | **PostgreSQL + pgvector** (core/ai 스키마 분리) | [0005](docs/decisions/0005-db-postgres-pgvector.md) |
-| Cache·Queue | **Redis**(cache/session + STT/라이브 Streams) · **RabbitMQ**(durable 배치 잡) | [0008](docs/decisions/0008-ai-bus-redis-streams-session-clock.md)·[0012](docs/decisions/0012-hybrid-queue.md) |
-| Media | **LiveKit self-host(SFU) + Egress(녹화→HLS) + MinIO + nginx** | [0004](docs/decisions/0004-media-livekit-selfhost.md)·[0010](docs/decisions/0010-self-host-vod.md) |
-| Auth | **HttpOnly 쿠키 + Redis 세션**(엣지) · 내부 S2S=단명 JWT · 미디어=LiveKit JWT | [0014](docs/decisions/0014-auth-redis-session-cookie.md) |
+| Frontend | **React 19 + TypeScript**, Vite, TanStack Query, SSE/WS, LiveKit client | [0002](docs/decisions/songjeongki/0002-react-typescript-frontend.md) |
+| Backend | **Spring Boot 3.4/3.5 + Java 21**(virtual threads), JPA, Security | [0006](docs/decisions/songjeongki/0006-backend-spring-plus-python-ai.md)·[0009](docs/decisions/songjeongki/0009-java21-spring-boot-3.md) |
+| AI | **Python 3서비스** — realtime-agent(라이브 STT) · ai-api(FastAPI, RAG SSE) · ai-worker(RabbitMQ, chunk·embed·후보) | [0011](docs/decisions/songjeongki/0011-ai-three-services.md) |
+| Database | **PostgreSQL + pgvector** (core/ai 스키마 분리) | [0005](docs/decisions/songjeongki/0005-db-postgres-pgvector.md) |
+| Cache·Queue | **Redis**(cache/session + STT/라이브 Streams) · **RabbitMQ**(durable 배치 잡) | [0008](docs/decisions/songjeongki/0008-ai-bus-redis-streams-session-clock.md)·[0012](docs/decisions/songjeongki/0012-hybrid-queue.md) |
+| Media | **LiveKit self-host(SFU) + Egress(녹화→HLS) + MinIO + nginx** | [0004](docs/decisions/songjeongki/0004-media-livekit-selfhost.md)·[0010](docs/decisions/songjeongki/0010-self-host-vod.md) |
+| Auth | **HttpOnly 쿠키 + Redis 세션**(엣지) · 내부 S2S=단명 JWT · 미디어=LiveKit JWT | [0014](docs/decisions/songjeongki/0014-auth-redis-session-cookie.md) |
 
 - 배포: 모듈러 모놀리스(Spring 단일 배포) + 폴리글랏 모노레포.
 
@@ -58,7 +58,7 @@ npm start              # WSL: npm start:wsl
 
 - **빌드·테스트 상세**는 [backend/AGENTS.md](backend/AGENTS.md)·[frontend/AGENTS.md](frontend/AGENTS.md) 참고.
 - **인프라(Postgres·Redis·RabbitMQ·MinIO·nginx)** 는 T0에서 docker-compose로 구성한다([CP-ROADMAP](docs/CP-ROADMAP.md)).
-- **미디어 플레인(LiveKit·Egress·TURN)** 은 Egress가 Linux 전용·WebRTC가 공인 IP를 요구하므로 **공유 원격 호스트**에 올리고 앱은 URL로 접속한다([0004](docs/decisions/0004-media-livekit-selfhost.md)).
+- **미디어 플레인(LiveKit·Egress·TURN)** 은 Egress가 Linux 전용·WebRTC가 공인 IP를 요구하므로 **공유 원격 호스트**에 올리고 앱은 URL로 접속한다([0004](docs/decisions/songjeongki/0004-media-livekit-selfhost.md)).
 
 ## 4. 주요 포트
 

@@ -1,6 +1,6 @@
 # ADR-0008: AI 버스 = Redis Streams, 자막 싱크 = 세션 상대 ms
 
-> 📍 하네스 개요: [../harness/README.md](../harness/README.md) · 아키텍처: [../ARCHITECTURE.md](../ARCHITECTURE.md)
+> 📍 하네스 개요: [../harness/README.md](../../harness/README.md) · 아키텍처: [../ARCHITECTURE.md](../../ARCHITECTURE.md)
 
 - **상태**: 채택 (보완 2026-07-14: **하이브리드 큐**로 조정)
 - **일자**: 2026-07-14

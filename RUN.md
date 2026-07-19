@@ -7,7 +7,7 @@
 ## 1. 사전 요구
 | 구분 | 요구사항 | 비고 |
 | ---- | ---- | ---- |
-| **JDK** | Java **21** (LTS) | Spring Boot 4.1 ([ADR-0009](./docs/decisions/0009-java21-spring-boot-3.md)). Gradle 8.14+/9.x는 wrapper가 자동 |
+| **JDK** | Java **21** (LTS) | Spring Boot 4.1 ([ADR-0009](./docs/decisions/songjeongki/0009-java21-spring-boot-3.md)). Gradle 8.14+/9.x는 wrapper가 자동 |
 | **Node.js** | 20+ / npm | 프론트(Vite). **WSL에서 개발하면 WSL 안에 설치** (`brew install node` 등) |
 | **Docker** | Engine + compose | 인프라(Postgres+pgvector·Redis) |
 | **VSCode 확장** | `Extension Pack for Java` · `ESLint` | 추천 팝업(`.vscode/extensions.json`) |

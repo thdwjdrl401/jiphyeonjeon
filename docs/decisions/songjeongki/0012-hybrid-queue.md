@@ -1,6 +1,6 @@
 # ADR-0012: 하이브리드 큐 — RabbitMQ(배치) + Redis Streams(fast path)
 
-> 📍 하네스 개요: [../harness/README.md](../harness/README.md) · 아키텍처: [../ARCHITECTURE.md](../ARCHITECTURE.md)
+> 📍 하네스 개요: [../harness/README.md](../../harness/README.md) · 아키텍처: [../ARCHITECTURE.md](../../ARCHITECTURE.md)
 
 - **상태**: 채택
 - **일자**: 2026-07-14

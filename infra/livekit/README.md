@@ -1,6 +1,6 @@
 # 미디어 서버 — LiveKit + Egress (셋업 · 트러블슈팅 · EC2 이전)
 
-> 관련: [../../docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) · [ADR-0004 LiveKit self-host](../../docs/decisions/0004-media-livekit-selfhost.md) · [ADR-0010 VOD=Egress 녹화](../../docs/decisions/0010-self-host-vod.md)
+> 관련: [../../docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) · [ADR-0004 LiveKit self-host](../../docs/decisions/songjeongki/0004-media-livekit-selfhost.md) · [ADR-0010 VOD=Egress 녹화](../../docs/decisions/songjeongki/0010-self-host-vod.md)
 >
 > **상태**: PoC 검증 완료(2026-07-15) — 라이브 화상 + Egress 녹화(MP4→MinIO) 성공. 임시 개인서버에서 검증했고, 실배포는 EC2. 이 문서의 값은 **템플릿**(`<...>`)이며 호스트별로 채운다.
 
@@ -19,7 +19,7 @@
 - **미디어(WebRTC UDP)**: nginx 우회, 라우터/보안그룹이 `7882/udp`를 서버로 직접 전달.
 - **녹화(Egress)**: LiveKit↔Egress는 **Redis**로 통신. Egress가 헤드리스 Chrome으로 방을 합성 → MP4 → **MinIO**(PoC) / S3(EC2).
 - 파일: [`docker-compose.yml`](docker-compose.yml) · [`livekit.yaml`](livekit.yaml) · [`egress.yaml`](egress.yaml) · [`request.json`](request.json)(MP4 스모크) · [`request-hls.json`](request-hls.json)(HLS·near-live, 제품용) · [`nginx-livekit.conf`](nginx-livekit.conf)
-- **녹화 출력 2종**: `request.json`=단일 MP4(검증 쉬움) / `request-hls.json`=HLS 세그먼트(`segment_duration` 조절, `live_playlist_name`으로 near-live). 제품 다시보기는 **HLS**([ADR-0010](../../docs/decisions/0010-self-host-vod.md)). **EC2에서 HLS 파이프라인 검증 완료(2026-07-17)**: room-composite egress → 2초 `.ts` 세그먼트 + `index.m3u8`(VOD, EVENT)·`live.m3u8`(near-live) → MinIO `recordings/` 업로드 확인.
+- **녹화 출력 2종**: `request.json`=단일 MP4(검증 쉬움) / `request-hls.json`=HLS 세그먼트(`segment_duration` 조절, `live_playlist_name`으로 near-live). 제품 다시보기는 **HLS**([ADR-0010](../../docs/decisions/songjeongki/0010-self-host-vod.md)). **EC2에서 HLS 파이프라인 검증 완료(2026-07-17)**: room-composite egress → 2초 `.ts` 세그먼트 + `index.m3u8`(VOD, EVENT)·`live.m3u8`(near-live) → MinIO `recordings/` 업로드 확인.
   - ⚠️ **request*.json에 JSON 주석(`_comment` 등) 넣지 말 것** — `lk egress start`는 요청을 엄격 파싱(protojson)이라 알 수 없는 필드가 있으면 조용히 실패한다. 파일은 egress 요청 그대로만 유지.
 
 ## 2. 채울 값 (딱 이것만)
@@ -107,4 +107,4 @@ docker run --rm --network host --entrypoint /bin/sh minio/mc:RELEASE.2025-08-13T
 ## 7. 앱(Spring) 연동 지점 (CP1/CP4)
 - **LiveKit 토큰 발급**: Spring이 `<API_KEY>`/`<API_SECRET>`로 JWT 서명(방·권한 grant) → FE에 전달.
 - **Egress 제어**: Spring이 강의 시작 시 `StartRoomCompositeEgress`(request.json 형태), 종료 시 `StopEgress`. sink는 요청마다 지정.
-- **다시보기**: 녹화된 HLS/MP4를 nginx로 서빙([ADR-0010](../../docs/decisions/0010-self-host-vod.md) 재생 seam).
+- **다시보기**: 녹화된 HLS/MP4를 nginx로 서빙([ADR-0010](../../docs/decisions/songjeongki/0010-self-host-vod.md) 재생 seam).

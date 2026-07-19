@@ -1,6 +1,6 @@
 # ADR-0011: AI 플레인 = 3-서비스 (ai-api + ai-worker + realtime-agent)
 
-> 📍 하네스 개요: [../harness/README.md](../harness/README.md) · 아키텍처: [../ARCHITECTURE.md](../ARCHITECTURE.md)
+> 📍 하네스 개요: [../harness/README.md](../../harness/README.md) · 아키텍처: [../ARCHITECTURE.md](../../ARCHITECTURE.md)
 
 - **상태**: 채택
 - **일자**: 2026-07-14

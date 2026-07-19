@@ -55,7 +55,7 @@
 - 도구는 각자(Claude/Cursor/Codex/Gemini) — 규칙 정본은 [AGENTS.md](../AGENTS.md), 도구별 어댑터 연결됨.
 
 ## 6. 착수 전 확정할 열린 항목
-- ✅ **인증 방식 확정**: HttpOnly 쿠키 + Redis 세션([decisions/0014](decisions/0014-auth-redis-session-cookie.md)).
+- ✅ **인증 방식 확정**: HttpOnly 쿠키 + Redis 세션([decisions/songjeongki/0014](decisions/songjeongki/0014-auth-redis-session-cookie.md)).
 - **STT 공급자**: 한국어 강의 샘플 bake-off(전문용어 recall·지연·비용) — AI팀 검토.
 - **세션시계 변환 기준**: LiveKit 트랙 타임스탬프 → 세션 상대 ms.
 

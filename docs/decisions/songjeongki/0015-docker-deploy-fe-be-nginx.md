@@ -1,10 +1,10 @@
 # ADR-0015: EC2 배포 — 전부 Docker + nginx(SSL 종단·`/api` 프록시) + Let's Encrypt
 
-> 📍 하네스 개요: [../harness/README.md](../harness/README.md) · 판단 정책: [../harness/POLICY.md](../harness/POLICY.md)
+> 📍 하네스 개요: [../harness/README.md](../../harness/README.md) · 판단 정책: [../harness/POLICY.md](../../harness/POLICY.md)
 
 - **상태**: 채택
 - **일자**: 2026-07-17
-- **관련**: Sub Ⅱ 배포, [ADR-0002](0002-react-typescript-frontend.md)(FE/BE 분리로 개정됨), [ADR-0009](0009-java21-spring-boot-3.md), [ADR-0014](0014-auth-redis-session-cookie.md), [ADR-0004](0004-media-livekit-selfhost.md), [RUN.md](../../RUN.md)
+- **관련**: Sub Ⅱ 배포, [ADR-0002](0002-react-typescript-frontend.md)(FE/BE 분리로 개정됨), [ADR-0009](0009-java21-spring-boot-3.md), [ADR-0014](0014-auth-redis-session-cookie.md), [ADR-0004](0004-media-livekit-selfhost.md), [RUN.md](../../../RUN.md)
 
 ## 맥락 (Context)
 부트캠프 EC2(`jiphyeonjeon.thdwjdrl.com`, Ubuntu 24.04, 4vCPU/15GB)에 cp 앱(Spring Boot 4.1 + React/Vite + Postgres/Redis)을 배포해야 한다. 제약:
@@ -40,5 +40,5 @@
 ## 영향·후속 (Consequences)
 - **추가 파일**: `backend/Dockerfile`·`.dockerignore`, `frontend/Dockerfile`·`.dockerignore`·`nginx/default.conf`, `docker-compose.prod.yml`, `.env.prod.example`, `scripts/init-letsencrypt.sh`.
 - **비밀값**: `.env.prod`(gitignore). `POSTGRES_PASSWORD`는 운영에서 강한 값으로.
-- **하네스**: 인프라 파일이라 계약 테스트 대상 아님([POLICY](../harness/POLICY.md)). 프론트 테스트(`baseURL==='/api'`)는 `/api/` 프록시와 정합 → 영향 없음.
+- **하네스**: 인프라 파일이라 계약 테스트 대상 아님([POLICY](../../harness/POLICY.md)). 프론트 테스트(`baseURL==='/api'`)는 `/api/` 프록시와 정합 → 영향 없음.
 - **후속**: ① ~~API 경로 de-versioning~~ → [ADR-0016](0016-drop-api-path-versioning.md)으로 완료. ② Egress 저장소 MinIO→실 S3 교체. ③ GitLab CI/CD 자동 배포.

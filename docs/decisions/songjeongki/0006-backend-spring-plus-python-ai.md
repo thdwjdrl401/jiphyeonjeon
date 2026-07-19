@@ -1,6 +1,6 @@
 # ADR-0006: 컨트롤 플레인 = Spring Boot(Java), AI 플레인 = Python 분리
 
-> 📍 하네스 개요: [../harness/README.md](../harness/README.md) · 아키텍처: [../ARCHITECTURE.md](../ARCHITECTURE.md)
+> 📍 하네스 개요: [../harness/README.md](../../harness/README.md) · 아키텍처: [../ARCHITECTURE.md](../../ARCHITECTURE.md)
 
 - **상태**: 채택
 - **일자**: 2026-07-14
@@ -24,5 +24,5 @@ FE는 TypeScript(React), AI는 Python이 사실상 강제된다(LiveKit Agents�
 | NestJS + Python AI | FE/BE 언어 통일(TS) | 팀 Nest 경험 없음 |
 
 ## 영향·후속
-- **Python↔Spring 브릿지가 확정 인터페이스** → 대충 넘기지 말고 계약 설계([0008](0008-ai-bus-redis-streams-session-clock.md), [CONTRACT.md](../CONTRACT.md)).
+- **Python↔Spring 브릿지가 확정 인터페이스** → 대충 넘기지 말고 계약 설계([0008](0008-ai-bus-redis-streams-session-clock.md), [CONTRACT.md](../../CONTRACT.md)).
 - 3언어 시스템 → 통합 지점(브릿지)이 최대 리스크이므로 계약·테스트로 관리.

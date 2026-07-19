@@ -1,6 +1,6 @@
 # ADR-0014: 인증 = HttpOnly 쿠키 + Redis 세션 (엣지), 내부 S2S·미디어 = JWT
 
-> 📍 하네스 개요: [../harness/README.md](../harness/README.md) · 아키텍처: [../ARCHITECTURE.md](../ARCHITECTURE.md) · 계약: [../CONTRACT.md](../CONTRACT.md)
+> 📍 하네스 개요: [../harness/README.md](../../harness/README.md) · 아키텍처: [../ARCHITECTURE.md](../../ARCHITECTURE.md) · 계약: [../CONTRACT.md](../../CONTRACT.md)
 
 - **상태**: 채택
 - **일자**: 2026-07-15
@@ -9,7 +9,7 @@
 ## 맥락
 - React SPA ↔ Spring **분리 오리진**(dev 8083 / 8080). 인증 크리덴셜 전송 방식이 CORS·CSRF·XSS 노출을 좌우.
 - **SSE(RAG 스트림)·WebSocket(자막·채팅)** 이 코어인데, 브라우저 `EventSource`·`WebSocket`은 **Authorization 헤더를 못 붙인다**.
-- 원칙 #1([ARCHITECTURE](../ARCHITECTURE.md)): **React는 Spring으로만**, Python AI는 브라우저 비노출 → **유저-인증 경계는 Spring 1곳**뿐(ai-api·ai-worker·realtime-agent는 유저 토큰을 안 봄).
+- 원칙 #1([ARCHITECTURE](../../ARCHITECTURE.md)): **React는 Spring으로만**, Python AI는 브라우저 비노출 → **유저-인증 경계는 Spring 1곳**뿐(ai-api·ai-worker·realtime-agent는 유저 토큰을 안 봄).
 - 클래스 플랫폼 → **즉시 강퇴·강제 로그아웃**(세션 무효화) 니즈.
 - **Redis 이미 존재**([0008](0008-ai-bus-redis-streams-session-clock.md)·[0012](0012-hybrid-queue.md)): cache/session/STT 스트림.
 
@@ -38,7 +38,7 @@
 > **전환 안전판**: 전송을 쿠키로 고정했으므로, 나중 확장이 필요하면 **opaque → JWT-in-쿠키**로 바꿔도 **FE·계약 무변경, 서버 인증 필터만 교체**. 지금 과최적화하지 않는다.
 
 ## 영향·후속
-- **CONTRACT §2 인증**: 쿠키 세션 명시. **FE = axios `withCredentials: true`, `Authorization: Bearer`·localStorage 토큰 미사용**([frontend/AGENTS.md](../../frontend/AGENTS.md)).
+- **CONTRACT §2 인증**: 쿠키 세션 명시. **FE = axios `withCredentials: true`, `Authorization: Bearer`·localStorage 토큰 미사용**([frontend/AGENTS.md](../../../frontend/AGENTS.md)).
 - **CP0**에서 구현: 세션 TTL·슬라이딩 갱신, CSRF 토큰 방식(더블 서브밋 vs 헤더), 쿠키 속성(`Secure`·`SameSite`)·프록시 same-origin 셋업.
 - **즉시 강퇴**는 Redis 세션 삭제로 처리. 필요 시 세션 인덱스(userId→sessionIds).
-- 내부 S2S JWT 서명키·claim 스키마, LiveKit 토큰 grant 세부는 [CONTRACT §3](../CONTRACT.md) / CP1에서 확정.
+- 내부 S2S JWT 서명키·claim 스키마, LiveKit 토큰 grant 세부는 [CONTRACT §3](../../CONTRACT.md) / CP1에서 확정.

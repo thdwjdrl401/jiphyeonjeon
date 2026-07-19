@@ -1,10 +1,10 @@
 # ADR-0016: API 경로 버저닝 제거 (`/api/v1` → `/api`)
 
-> 📍 하네스 개요: [../harness/README.md](../harness/README.md) · 판단 정책: [../harness/POLICY.md](../harness/POLICY.md)
+> 📍 하네스 개요: [../harness/README.md](../../harness/README.md) · 판단 정책: [../harness/POLICY.md](../../harness/POLICY.md)
 
 - **상태**: 채택
 - **일자**: 2026-07-17
-- **관련**: [ADR-0002](0002-react-typescript-frontend.md)(프론트 API 계약), [ADR-0009](0009-java21-spring-boot-3.md)(Spring Boot 4.1), [ADR-0014](0014-auth-redis-session-cookie.md)(쿠키 세션), [ADR-0015](0015-docker-deploy-fe-be-nginx.md)(배포·nginx 프록시), [CONTRACT.md](../CONTRACT.md)
+- **관련**: [ADR-0002](0002-react-typescript-frontend.md)(프론트 API 계약), [ADR-0009](0009-java21-spring-boot-3.md)(Spring Boot 4.1), [ADR-0014](0014-auth-redis-session-cookie.md)(쿠키 세션), [ADR-0015](0015-docker-deploy-fe-be-nginx.md)(배포·nginx 프록시), [CONTRACT.md](../../CONTRACT.md)
 
 ## 맥락 (Context)
 초기 스캐폴드는 API 경로에 버전 세그먼트를 두어 `/api/v1/...`로 계약했다. 그러나 **Spring Boot 4.1(Spring Framework 7)은 API 버저닝을 프레임워크가 1급으로 지원**한다:
@@ -34,6 +34,6 @@ API 경로에서 버전 세그먼트를 제거한다: **`/api/v1/*` → `/api/*`
 - **코드 변경(완료)**:
   - 백엔드: `SessionSmokeController`(`@RequestMapping("/api")`), `SecurityConfig`(permitAll 매처 `/api/ping`, `/api/session/**`).
   - 프론트: `shared/api/client.ts`(`baseURL='/api'`), 계약 테스트 `App.test.tsx`(`toBe('/api')`), `vite.config.ts` dev 프록시 키 `/api`.
-- **문서 변경**: [CONTRACT.md](../CONTRACT.md), [RUN.md](../../RUN.md), `AGENTS.md`, `frontend/AGENTS.md`, `T0-BOOTSTRAP.md`, 하네스 템플릿 경로 표기 갱신. `docs/frontend/api/*`는 진행 중인 프론트 계약 리네이밍(course→curriculum)과 같은 줄에서 겹쳐 그 작업과 함께 반영.
+- **문서 변경**: [CONTRACT.md](../../CONTRACT.md), [RUN.md](../../../RUN.md), `AGENTS.md`, `frontend/AGENTS.md`, `T0-BOOTSTRAP.md`, 하네스 템플릿 경로 표기 갱신. `docs/frontend/api/*`는 진행 중인 프론트 계약 리네이밍(course→curriculum)과 같은 줄에서 겹쳐 그 작업과 함께 반영.
 - **검증(완료)**: 프론트 계약 테스트(`baseURL==='/api'`) 통과(Node 20), 백엔드 스모크 `/api/ping`·`/api/session/touch`(Secure 쿠키) 정상, 옛 `/api/v1/*`는 미매핑.
 - **후속**: 버전 도입이 필요해지면 `@RequestMapping(version=…)` + `ApiVersionStrategy`로 처리하는 ADR을 별도 작성.

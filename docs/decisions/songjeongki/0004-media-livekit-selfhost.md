@@ -1,6 +1,6 @@
 # ADR-0004: 미디어 서버 = LiveKit self-host (Kurento 대체)
 
-> 📍 하네스 개요: [../harness/README.md](../harness/README.md) · 아키텍처: [../ARCHITECTURE.md](../ARCHITECTURE.md)
+> 📍 하네스 개요: [../harness/README.md](../../harness/README.md) · 아키텍처: [../ARCHITECTURE.md](../../ARCHITECTURE.md)
 
 - **상태**: 채택 (2026-07-14 개정: 완전 라이브 → **LiveKit이 유일 미디어**, Egress 코어)
 - **일자**: 2026-07-14
