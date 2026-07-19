@@ -43,7 +43,7 @@ import java.util.UUID;
  * 인증 (CONTRACT §2, ADR-0014). 세션 본체는 Redis, 쿠키는 HttpOnly라 JS가 못 읽는다.
  * 경로에 버전 세그먼트를 두지 않는다 (ADR-0016).
  */
-@Tag(name = "인증", description = "회원가입·로그인·세션. 쿠키 세션(Redis) 기반이며 Bearer 토큰을 쓰지 않는다 (ADR-0014).")
+@Tag(name = "인증", description = "회원가입·로그인·로그아웃. 로그인하면 서버가 HttpOnly 쿠키에 세션을 담아주고, 이후 요청은 그 쿠키로 인증된다(토큰을 직접 들고 다니지 않음).")
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
@@ -58,13 +58,14 @@ public class AuthController {
     }
 
     @Operation(summary = "CSRF 토큰 발급",
-            description = "변경 요청 전에 호출한다. 응답의 token을 headerName(X-XSRF-TOKEN) 헤더로 에코해야 한다.")
+            description = "데이터를 바꾸는 요청(로그인·회원가입 등 POST/PATCH/DELETE)을 보내기 전에 먼저 호출한다. "
+                    + "응답으로 받은 token 값을, 함께 온 headerName 이름의 HTTP 헤더에 담아 그다음 요청에 붙여야 한다.")
     @GetMapping("/csrf")
     public CsrfResponse csrf(CsrfToken csrfToken) {
         return new CsrfResponse(csrfToken.getToken(), csrfToken.getHeaderName());
     }
 
-    @Operation(summary = "회원가입", description = "가입은 세션을 만들지 않는다. 로그인은 별도로 호출해야 한다.")
+    @Operation(summary = "회원가입", description = "새 계정을 만든다. 가입만으로는 로그인되지 않으니, 로그인을 따로 호출해야 한다.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "생성됨"),
             @ApiResponse(responseCode = "400", description = "입력 검증 실패 (VALIDATION_FAILED)"),
@@ -82,7 +83,7 @@ public class AuthController {
         return AuthUserResponse.from(user);
     }
 
-    @Operation(summary = "로그인", description = "성공 시 HttpOnly 세션 쿠키를 발급한다.")
+    @Operation(summary = "로그인", description = "이메일·비밀번호로 로그인한다. 성공하면 세션 쿠키가 발급돼 이후 요청이 자동으로 인증된다.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "로그인 성공, 세션 쿠키 발급"),
             @ApiResponse(responseCode = "401", description = "자격 증명 실패 (AUTH_INVALID_CREDENTIALS)")
@@ -98,7 +99,7 @@ public class AuthController {
         return AuthUserResponse.from(user);
     }
 
-    @Operation(summary = "로그아웃", description = "세션을 무효화한다. 세션이 이미 없어도 성공(멱등)한다.")
+    @Operation(summary = "로그아웃", description = "로그아웃한다. 이미 로그아웃 상태여도 정상 성공으로 처리된다.")
     @PostMapping("/logout")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void logout(HttpServletRequest request, HttpServletResponse response) {
@@ -106,7 +107,7 @@ public class AuthController {
         new SecurityContextLogoutHandler().logout(request, response, authentication);
     }
 
-    @Operation(summary = "현재 사용자 조회", description = "세션 쿠키로 인증된 사용자를 반환한다. 앱 시작·새로고침 시 복원용.")
+    @Operation(summary = "현재 사용자 조회", description = "지금 로그인된 사용자 정보를 반환한다. 앱을 처음 열거나 새로고침할 때 로그인 상태를 복원하는 데 쓴다.")
     @ApiResponse(responseCode = "401", description = "세션 없음")
     @GetMapping("/me")
     public AuthUserResponse me(Authentication authentication) {
@@ -114,7 +115,7 @@ public class AuthController {
         return AuthUserResponse.from(authService.getById(userId));
     }
 
-    @Operation(summary = "이메일 사용 가능 여부", description = "회원가입 전 이메일 중복 확인. 인증 불필요.")
+    @Operation(summary = "이메일 사용 가능 여부", description = "회원가입 화면에서 이 이메일이 이미 쓰이는지 확인한다. 로그인 없이 호출할 수 있다.")
     @GetMapping("/email-availability")
     public EmailAvailabilityResponse emailAvailability(@RequestParam @NotBlank String email) {
         return new EmailAvailabilityResponse(email, authService.isEmailAvailable(email));

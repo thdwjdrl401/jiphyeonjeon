@@ -25,7 +25,7 @@ import java.util.UUID;
  * 강사용 레슨 관리 (CONTRACT §2, 소유권 검증). 데이터는 lesson 모듈이 소유하고, 여기선 소유권
  * 검증 후 위임한다. 발행(READY→PUBLISHED)·자료(PPTX/AI)는 정책·파이프라인 미확정이라 범위 밖.
  */
-@Tag(name = "레슨 관리(강사)", description = "레슨 CRUD. 소유자만 접근 가능.")
+@Tag(name = "레슨 관리(강사)", description = "강사가 섹션 안의 레슨을 만들고 수정한다. 본인 커리큘럼의 레슨만 접근할 수 있다.")
 @RestController
 public class InstructorLessonController {
 
@@ -35,7 +35,7 @@ public class InstructorLessonController {
         this.service = service;
     }
 
-    @Operation(summary = "레슨 생성", description = "섹션 맨 뒤에 DRAFT로 추가.")
+    @Operation(summary = "레슨 생성", description = "섹션 맨 뒤에 새 레슨을 추가한다. 처음엔 초안 상태다.")
     @PostMapping("/api/instructor/sections/{sectionId}/lessons")
     @ResponseStatus(HttpStatus.CREATED)
     public LessonView create(@PathVariable UUID sectionId,
@@ -44,19 +44,19 @@ public class InstructorLessonController {
         return service.createLesson(currentUserId(authentication), sectionId, request.title(), request.description());
     }
 
-    @Operation(summary = "레슨 목록", description = "섹션 내 순서 오름차순.")
+    @Operation(summary = "레슨 목록", description = "섹션 안의 레슨을 배치 순서대로 반환한다.")
     @GetMapping("/api/instructor/sections/{sectionId}/lessons")
     public List<LessonView> list(@PathVariable UUID sectionId, Authentication authentication) {
         return service.listLessons(currentUserId(authentication), sectionId);
     }
 
-    @Operation(summary = "레슨 조회", description = "소유자만.")
+    @Operation(summary = "레슨 조회", description = "레슨 하나의 상세를 반환한다. 본인 것만.")
     @GetMapping("/api/instructor/lessons/{lessonId}")
     public LessonView get(@PathVariable UUID lessonId, Authentication authentication) {
         return service.getLesson(currentUserId(authentication), lessonId);
     }
 
-    @Operation(summary = "레슨 수정", description = "제목·설명 부분 수정.")
+    @Operation(summary = "레슨 수정", description = "레슨 제목·설명을 수정한다. 보낸 필드만 바뀐다.")
     @PatchMapping("/api/instructor/lessons/{lessonId}")
     public LessonView update(@PathVariable UUID lessonId,
                              @Valid @RequestBody UpdateLessonRequest request,
@@ -64,7 +64,7 @@ public class InstructorLessonController {
         return service.updateLesson(currentUserId(authentication), lessonId, request.title(), request.description());
     }
 
-    @Operation(summary = "레슨 삭제", description = "게시된 레슨 삭제 정책은 범위 밖(현재 전부 DRAFT).")
+    @Operation(summary = "레슨 삭제", description = "레슨을 삭제한다.")
     @DeleteMapping("/api/instructor/lessons/{lessonId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable UUID lessonId, Authentication authentication) {

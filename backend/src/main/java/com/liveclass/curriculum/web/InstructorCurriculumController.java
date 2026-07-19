@@ -28,7 +28,7 @@ import java.util.UUID;
  * 강사용 커리큘럼·섹션 관리 (CONTRACT §2, 소유권 검증). 인가는 SecurityConfig가 ROLE_INSTRUCTOR로 건다.
  * 섹션은 커리큘럼 하위(생성·목록)와 단건(수정·삭제) 경로가 나뉜다 — 명세 URL 계열 확정본을 따른다.
  */
-@Tag(name = "커리큘럼 관리(강사)", description = "커리큘럼·섹션 CRUD. 소유자만 접근 가능.")
+@Tag(name = "커리큘럼 관리(강사)", description = "강사가 자기 커리큘럼과 그 안의 섹션(목차)을 만들고 수정한다. 본인 것만 접근할 수 있다.")
 @RestController
 public class InstructorCurriculumController {
 
@@ -38,7 +38,7 @@ public class InstructorCurriculumController {
         this.service = service;
     }
 
-    @Operation(summary = "커리큘럼 생성", description = "DRAFT 상태로 생성한다.")
+    @Operation(summary = "커리큘럼 생성", description = "새 커리큘럼을 만든다. 처음엔 비공개(초안) 상태이고, 발행해야 공개 카탈로그에 노출된다.")
     @PostMapping("/api/instructor/curriculums")
     @ResponseStatus(HttpStatus.CREATED)
     public CurriculumResponse create(@Valid @RequestBody CreateCurriculumRequest request,
@@ -47,7 +47,7 @@ public class InstructorCurriculumController {
                 currentUserId(authentication), request.title(), request.summary(), request.description()));
     }
 
-    @Operation(summary = "내 커리큘럼 목록", description = "생성 최신순.")
+    @Operation(summary = "내 커리큘럼 목록", description = "내가 만든 커리큘럼 목록을 최근 만든 순으로 반환한다.")
     @GetMapping("/api/instructor/curriculums")
     public List<CurriculumResponse> listMine(Authentication authentication) {
         return service.listMine(currentUserId(authentication)).stream()
@@ -55,13 +55,13 @@ public class InstructorCurriculumController {
                 .toList();
     }
 
-    @Operation(summary = "커리큘럼 관리 조회", description = "소유자만. 운영 카운터 포함.")
+    @Operation(summary = "커리큘럼 관리 조회", description = "관리 화면용 상세. 섹션·레슨 개수 같은 운영 정보까지 포함한다. 본인 것만.")
     @GetMapping("/api/instructor/curriculums/{curriculumId}")
     public CurriculumResponse get(@PathVariable UUID curriculumId, Authentication authentication) {
         return CurriculumResponse.from(service.getOwned(currentUserId(authentication), curriculumId));
     }
 
-    @Operation(summary = "커리큘럼 기본 정보 수정", description = "넘어온 필드만 부분 수정.")
+    @Operation(summary = "커리큘럼 기본 정보 수정", description = "제목·소개·설명·진행 기간을 수정한다. 요청에 담아 보낸 필드만 바뀐다.")
     @PatchMapping("/api/instructor/curriculums/{curriculumId}")
     public CurriculumResponse update(@PathVariable UUID curriculumId,
                                      @Valid @RequestBody UpdateCurriculumRequest request,
@@ -72,19 +72,19 @@ public class InstructorCurriculumController {
                 request.startsAt(), request.endsAt()));
     }
 
-    @Operation(summary = "커리큘럼 발행", description = "DRAFT → PUBLISHED. 발행 즉시 공개 카탈로그에 노출. DRAFT가 아니면 409.")
+    @Operation(summary = "커리큘럼 발행", description = "커리큘럼을 공개한다. 공개되는 즉시 카탈로그에 노출된다. 초안(비공개) 상태일 때만 발행할 수 있다.")
     @PostMapping("/api/instructor/curriculums/{curriculumId}/publish")
     public CurriculumResponse publish(@PathVariable UUID curriculumId, Authentication authentication) {
         return CurriculumResponse.from(service.publish(currentUserId(authentication), curriculumId));
     }
 
-    @Operation(summary = "커리큘럼 보관", description = "PUBLISHED → ARCHIVED. 카탈로그에서 내려감. PUBLISHED가 아니면 409.")
+    @Operation(summary = "커리큘럼 보관", description = "공개된 커리큘럼을 내린다. 카탈로그에서 사라진다. 현재 공개 상태일 때만 보관할 수 있다.")
     @PostMapping("/api/instructor/curriculums/{curriculumId}/archive")
     public CurriculumResponse archive(@PathVariable UUID curriculumId, Authentication authentication) {
         return CurriculumResponse.from(service.archive(currentUserId(authentication), curriculumId));
     }
 
-    @Operation(summary = "섹션 목록", description = "순서 오름차순.")
+    @Operation(summary = "섹션 목록", description = "커리큘럼의 섹션(목차)을 배치 순서대로 반환한다.")
     @GetMapping("/api/instructor/curriculums/{curriculumId}/sections")
     public List<SectionResponse> listSections(@PathVariable UUID curriculumId, Authentication authentication) {
         return service.listSections(currentUserId(authentication), curriculumId).stream()
@@ -92,7 +92,7 @@ public class InstructorCurriculumController {
                 .toList();
     }
 
-    @Operation(summary = "섹션 생성", description = "맨 뒤에 추가한다.")
+    @Operation(summary = "섹션 생성", description = "새 섹션을 목차 맨 뒤에 추가한다.")
     @PostMapping("/api/instructor/curriculums/{curriculumId}/sections")
     @ResponseStatus(HttpStatus.CREATED)
     public SectionResponse createSection(@PathVariable UUID curriculumId,
@@ -102,7 +102,7 @@ public class InstructorCurriculumController {
                 currentUserId(authentication), curriculumId, request.title(), request.description()));
     }
 
-    @Operation(summary = "섹션 수정", description = "넘어온 필드만 부분 수정.")
+    @Operation(summary = "섹션 수정", description = "섹션 제목·설명을 수정한다. 보낸 필드만 바뀐다.")
     @PatchMapping("/api/instructor/sections/{sectionId}")
     public SectionResponse updateSection(@PathVariable UUID sectionId,
                                          @Valid @RequestBody UpdateSectionRequest request,
@@ -111,7 +111,7 @@ public class InstructorCurriculumController {
                 currentUserId(authentication), sectionId, request.title(), request.description()));
     }
 
-    @Operation(summary = "섹션 삭제", description = "레슨이 없는 섹션만 삭제할 수 있다.")
+    @Operation(summary = "섹션 삭제", description = "섹션을 삭제한다. 안에 레슨이 남아 있으면 삭제할 수 없다(먼저 레슨을 비워야 한다).")
     @DeleteMapping("/api/instructor/sections/{sectionId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteSection(@PathVariable UUID sectionId, Authentication authentication) {

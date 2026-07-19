@@ -10,6 +10,8 @@ import com.liveclass.common.logging.Audit;
 import com.liveclass.lesson.api.LessonDirectory;
 import com.liveclass.lesson.api.LessonManagement;
 import com.liveclass.lesson.api.LessonView;
+import com.liveclass.live.api.LiveSessionManagement;
+import com.liveclass.live.api.LiveSessionView;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -32,15 +34,18 @@ public class InstructorCurriculumService {
     private final SectionRepository sectionRepository;
     private final LessonDirectory lessonDirectory;
     private final LessonManagement lessonManagement;
+    private final LiveSessionManagement liveSessionManagement;
 
     public InstructorCurriculumService(CurriculumRepository curriculumRepository,
                                        SectionRepository sectionRepository,
                                        LessonDirectory lessonDirectory,
-                                       LessonManagement lessonManagement) {
+                                       LessonManagement lessonManagement,
+                                       LiveSessionManagement liveSessionManagement) {
         this.curriculumRepository = curriculumRepository;
         this.sectionRepository = sectionRepository;
         this.lessonDirectory = lessonDirectory;
         this.lessonManagement = lessonManagement;
+        this.liveSessionManagement = liveSessionManagement;
     }
 
     @Transactional
@@ -217,6 +222,20 @@ public class InstructorCurriculumService {
         Curriculum curriculum = requireOwned(instructorId, section.getCurriculumId());
         curriculum.setStructureVersion(curriculum.getStructureVersion() + 1);
         log.info(Audit.MARKER, "레슨 삭제 sectionId={} lessonId={}", lesson.sectionId(), lessonId);
+    }
+
+    // ── 라이브 세션 생성 ── 소유권(레슨→커리큘럼)은 여기서, 세션 데이터는 live 모듈 포트가.
+
+    @Transactional
+    public LiveSessionView createLiveSession(UUID instructorId, UUID lessonId, java.time.OffsetDateTime scheduledAt) {
+        requireOwnedLesson(instructorId, lessonId);
+        // 레슨당 세션 1개(DDL UNIQUE). 이미 있으면 상태 충돌로 막는다.
+        if (liveSessionManagement.existsForLesson(lessonId)) {
+            throw new CurriculumStateConflictException("이미 이 레슨의 라이브 세션이 있습니다.");
+        }
+        LiveSessionView session = liveSessionManagement.create(lessonId, instructorId, scheduledAt);
+        log.info(Audit.MARKER, "라이브 세션 생성 lessonId={} sessionId={}", lessonId, session.sessionId());
+        return session;
     }
 
     /** 레슨 → 섹션 → 커리큘럼 소유권 검증. 없으면 404, 소유자 아니면 403. */
