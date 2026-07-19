@@ -6,7 +6,10 @@ import com.liveclass.curriculum.domain.EnrollmentType;
 import com.liveclass.curriculum.domain.Section;
 import com.liveclass.curriculum.repository.CurriculumRepository;
 import com.liveclass.curriculum.repository.SectionRepository;
+import com.liveclass.common.logging.Audit;
 import com.liveclass.lesson.api.LessonDirectory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,6 +22,8 @@ import java.util.UUID;
  */
 @Service
 public class InstructorCurriculumService {
+
+    private static final Logger log = LoggerFactory.getLogger(InstructorCurriculumService.class);
 
     private final CurriculumRepository curriculumRepository;
     private final SectionRepository sectionRepository;
@@ -46,7 +51,9 @@ public class InstructorCurriculumService {
         curriculum.setSectionCount(0);
         curriculum.setLessonCount(0);
         curriculum.setPublishedLessonCount(0);
-        return curriculumRepository.save(curriculum);
+        Curriculum saved = curriculumRepository.save(curriculum);
+        log.info(Audit.MARKER, "커리큘럼 생성 curriculumId={} instructorId={}", saved.getId(), instructorId);
+        return saved;
     }
 
     @Transactional(readOnly = true)
@@ -97,6 +104,7 @@ public class InstructorCurriculumService {
         // section_count는 DB 트리거가 유지한다(앱이 건드리면 이중 반영). 여기선 목차 변경을
         // 감지시키는 structure_version만 올린다 — 트리거는 이 컬럼을 건드리지 않는다.
         curriculum.setStructureVersion(curriculum.getStructureVersion() + 1);
+        log.info(Audit.MARKER, "섹션 생성 curriculumId={} sectionId={}", curriculumId, saved.getId());
         return saved;
     }
 
@@ -125,6 +133,7 @@ public class InstructorCurriculumService {
         sectionRepository.delete(section);
         // section_count는 트리거가 −1 한다(앱은 건드리지 않음). structure_version만 올린다.
         curriculum.setStructureVersion(curriculum.getStructureVersion() + 1);
+        log.info(Audit.MARKER, "섹션 삭제 curriculumId={} sectionId={}", section.getCurriculumId(), sectionId);
     }
 
     private int nextSectionOrder(UUID curriculumId) {
