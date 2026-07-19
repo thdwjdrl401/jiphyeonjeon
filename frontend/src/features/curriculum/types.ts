@@ -1,3 +1,6 @@
+import type { CourseOutlineLesson } from '@/features/lesson/types'
+import type { CourseDetailViewerContext } from '@/features/enrollment/types'
+
 export type CourseRelationship =
   | 'GUEST'
   | 'UNENROLLED_STUDENT'
@@ -64,4 +67,47 @@ export interface CourseListQuery {
   sort?: CourseSort
   page?: number
   size?: number
+}
+
+export interface CourseDetailPeriod {
+  startsAt: string
+  endsAt: string
+}
+
+export type CourseEnrollmentPolicyType = 'IMMEDIATE' | 'APPROVAL_REQUIRED' | 'INVITATION_ONLY'
+
+export interface CourseEnrollmentPolicy {
+  type: CourseEnrollmentPolicyType
+  status: string
+  opensAt: string | null
+  closesAt: string | null
+}
+
+export interface CourseInstructorProfile {
+  instructorId: string
+  displayName: string
+  bio: string
+  expertise: string[]
+}
+
+export interface CourseSection {
+  sectionId: string
+  title: string
+  description: string | null
+  order: number
+  lessons: CourseOutlineLesson[]
+}
+
+export interface CourseDetailResponse {
+  courseId: string
+  title: string
+  summary: string
+  description: string
+  thumbnailUrl: string | null
+  lifecycleStatus: string
+  period: CourseDetailPeriod | null
+  enrollmentPolicy: CourseEnrollmentPolicy
+  instructor: CourseInstructorProfile
+  outline: CourseSection[]
+  viewerContext: CourseDetailViewerContext
 }
