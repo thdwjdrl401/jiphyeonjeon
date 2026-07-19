@@ -40,18 +40,21 @@ public class ChatController {
     public ChatMessageResponse send(@PathVariable UUID lessonId,
                                     @Valid @RequestBody SendChatMessageRequest request,
                                     Authentication authentication) {
-        var saved = chatService.send(lessonId, UUID.fromString(authentication.getName()),
+        UUID requesterId = UUID.fromString(authentication.getName());
+        var saved = chatService.send(lessonId, requesterId,
                 request.clientMessageId(), request.text(), Boolean.TRUE.equals(request.isQuestion()));
-        return ChatMessageResponse.from(saved, request.viewingSessionMs());
+        return ChatMessageResponse.from(saved, request.viewingSessionMs(), requesterId);
     }
 
     @Operation(summary = "채팅 복구 조회", description = "저장된 채팅을 시각순으로 불러온다. afterSessionMs 이후만. 접속·새로고침·되감기 때 과거 채팅 복구용.")
     @GetMapping("/api/lessons/{lessonId}/messages")
     public List<ChatMessageResponse> list(@PathVariable UUID lessonId,
                                           @RequestParam(defaultValue = "-1") long afterSessionMs,
-                                          @RequestParam(defaultValue = "100") int limit) {
+                                          @RequestParam(defaultValue = "100") int limit,
+                                          Authentication authentication) {
+        UUID requesterId = UUID.fromString(authentication.getName());
         return chatService.list(lessonId, afterSessionMs, limit).stream()
-                .map(m -> ChatMessageResponse.from(m, null))
+                .map(m -> ChatMessageResponse.from(m, null, requesterId))
                 .toList();
     }
 }

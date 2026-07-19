@@ -78,6 +78,30 @@ class ChatContractTest {
     }
 
     @Test
+    void list_marks_only_my_messages_as_mine_for_the_requester() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String lessonId = createStartedLessonSession(instructor);
+        Cookie[] me = loginAs("STUDENT");
+        Cookie[] other = loginAs("STUDENT");
+
+        write(post("/api/lessons/" + lessonId + "/messages"), me, "{\"clientMessageId\":\"m1\",\"text\":\"내가 보냄\"}").andReturn();
+        write(post("/api/lessons/" + lessonId + "/messages"), other, "{\"clientMessageId\":\"o1\",\"text\":\"남이 보냄\"}").andReturn();
+
+        // 새로고침/재접속처럼 clientMessageId 로컬 기억 없이 GET만으로도 서버가 세션 기준 mine을 판정한다.
+        mockMvc.perform(get("/api/lessons/" + lessonId + "/messages").cookie(me))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].text").value("내가 보냄"))
+                .andExpect(jsonPath("$[0].mine").value(true))
+                .andExpect(jsonPath("$[1].text").value("남이 보냄"))
+                .andExpect(jsonPath("$[1].mine").value(false));
+
+        // 같은 목록을 다른 사람이 조회하면 mine 판정이 뒤바뀐다(뷰어별 계산).
+        mockMvc.perform(get("/api/lessons/" + lessonId + "/messages").cookie(other))
+                .andExpect(jsonPath("$[0].mine").value(false))
+                .andExpect(jsonPath("$[1].mine").value(true));
+    }
+
+    @Test
     void resend_with_same_client_message_id_is_idempotent() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String lessonId = createStartedLessonSession(instructor);

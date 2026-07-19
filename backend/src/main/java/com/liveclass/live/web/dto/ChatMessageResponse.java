@@ -4,6 +4,7 @@ import com.liveclass.live.domain.ChatMessage;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.OffsetDateTime;
+import java.util.UUID;
 
 /**
  * 채팅 응답. 프라이버시: 실명·내부 userId를 절대 포함하지 않고 alias(가명)만 노출한다(FE 명세).
@@ -22,10 +23,14 @@ public record ChatMessageResponse(
         boolean isQuestion,
         @Schema(description = "가명(강사=표시 이름, 수강생=익명). 실명·userId는 포함하지 않는다.")
         String alias,
+        @Schema(description = "요청자 본인이 보낸 메시지 여부. FE 우측 정렬용. 서버가 세션 기준으로 판정하므로 "
+                + "새로고침·재접속·다른 기기에서도 정확하다. userId는 노출하지 않는다.")
+        boolean mine,
         OffsetDateTime createdAt
 ) {
 
-    public static ChatMessageResponse from(ChatMessage m, Long viewingSessionMs) {
+    /** @param requesterId 조회·전송 요청자 userId(세션에서 온 값). 노출하지 않고 mine 판정에만 쓴다. */
+    public static ChatMessageResponse from(ChatMessage m, Long viewingSessionMs, UUID requesterId) {
         return new ChatMessageResponse(
                 String.valueOf(m.getId()),
                 m.getClientMessageId(),
@@ -36,6 +41,7 @@ public record ChatMessageResponse(
                 m.getText(),
                 m.isQuestion(),
                 m.getSenderName(),   // sender_name은 저장 시점에 이미 가명으로 넣는다
+                m.getUserId().equals(requesterId),
                 m.getCreatedAt());
     }
 }
