@@ -1,13 +1,13 @@
 # ADR-0019: 실시간 채팅 = STOMP over WebSocket + 커밋 후 이벤트 브로드캐스트
 
-> 📍 하네스 개요: [../harness/README.md](../harness/README.md) · 아키텍처: [../ARCHITECTURE.md](../ARCHITECTURE.md) · 계약: [../CONTRACT.md](../CONTRACT.md)
+> 📍 하네스 개요: [../harness/README.md](../../harness/README.md) · 아키텍처: [../ARCHITECTURE.md](../../ARCHITECTURE.md) · 계약: [../CONTRACT.md](../../CONTRACT.md)
 
 - **상태**: 채택
 - **일자**: 2026-07-19
 - **관련**: [0007](0007-domain-live-session.md), [0008](0008-ai-bus-redis-streams-session-clock.md), [0014](0014-auth-redis-session-cookie.md)
 
 ## 맥락
-- CONTRACT §3-4·[frontend/api/LIVE.md](../frontend/api/LIVE.md) §8이 FE↔Spring WebSocket 채팅 채널을 규정: 엔드포인트 `/api/ws`(쿠키 인증), 채널 `/topic/live-sessions/{sessionId}/chat`, 이벤트 `chat.message.created`, 봉투 `{eventId, type, sessionId, occurredAt, payload}`.
+- CONTRACT §3-4·[frontend/api/LIVE.md](../../frontend/api/LIVE.md) §8이 FE↔Spring WebSocket 채팅 채널을 규정: 엔드포인트 `/api/ws`(쿠키 인증), 채널 `/topic/live-sessions/{sessionId}/chat`, 이벤트 `chat.message.created`, 봉투 `{eventId, type, sessionId, occurredAt, payload}`.
 - 채팅 **저장·복구(REST)** 골격은 이미 있음(CHAT-01, `mine`·가명·멱등). 남은 절반이 **실시간 전달(WS)**.
 - 인증은 쿠키 세션(ADR-0014). 브라우저 WS는 Authorization 헤더를 못 붙이지만 **쿠키는 핸드셰이크에 자동 전송**된다.
 
