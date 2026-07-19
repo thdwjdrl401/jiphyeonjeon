@@ -36,6 +36,22 @@ dependencies {
     // API 문서 = springdoc-openapi (ADR-0009가 전제한 3.0.x). Boot 4.1은 BOM 미관리라 버전 명시.
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3'
 
+    // 관측성: Micrometer Tracing(Brave). 요청마다 traceId/spanId를 MDC에 넣어 로그·에러 응답을
+    // 하나의 요청으로 묶는다. Boot 4.x는 둘 다 필요하다 — Boot 모듈(자동설정)은 brave 브리지를
+    // 전이로 가져오지 않으므로 micrometer 브리지(실제 BraveTracer)를 함께 넣는다. 익스포터는 후속.
+    implementation 'org.springframework.boot:spring-boot-micrometer-tracing-brave'
+    implementation 'io.micrometer:micrometer-tracing-bridge-brave'
+
+    // 메트릭: Prometheus 노출 형식 레지스트리. /actuator/prometheus 로 스크레이프 대상 제공.
+    // 버전은 micrometer-bom 관리. 실제 Prometheus/Grafana 컨테이너 연결은 후속(인프라).
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+
+    // 모듈러 모놀리스: 모듈 경계를 코드로 강제한다(ModularityTests의 verify가 산출물 기준 검증).
+    // Boot 4.1 대응은 Modulith 2.x(BOM으로 버전 관리).
+    // 관측성(spring-modulith-observability)은 모듈 스팬 생성을 확인하지 못해 보류 — 트레이싱
+    // 백엔드(Zipkin/OTel)와 함께 도입할 때 실제로 검증 가능하다.
+    implementation 'org.springframework.modulith:spring-modulith-starter-core'
+
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
 
@@ -43,6 +59,14 @@ dependencies {
     // Boot 4.x는 테스트 오토컨피그도 기술별로 쪼개짐 — MockMvc(@AutoConfigureMockMvc)는 starter-test에 없음
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
     testImplementation 'org.springframework.security:spring-security-test'
+    // 모듈 경계 검증(ApplicationModules.verify)
+    testImplementation 'org.springframework.modulith:spring-modulith-starter-test'
+}
+
+dependencyManagement {
+    imports {
+        mavenBom 'org.springframework.modulith:spring-modulith-bom:2.1.0'
+    }
 }
 
 tasks.named('test') {
