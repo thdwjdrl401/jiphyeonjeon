@@ -8,11 +8,16 @@ import com.liveclass.curriculum.repository.CurriculumRepository;
 import com.liveclass.curriculum.repository.SectionRepository;
 import com.liveclass.common.logging.Audit;
 import com.liveclass.lesson.api.LessonDirectory;
+import com.liveclass.lesson.api.LessonManagement;
+import com.liveclass.lesson.api.LessonView;
+import com.liveclass.live.api.LiveSessionManagement;
+import com.liveclass.live.api.LiveSessionView;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -28,13 +33,19 @@ public class InstructorCurriculumService {
     private final CurriculumRepository curriculumRepository;
     private final SectionRepository sectionRepository;
     private final LessonDirectory lessonDirectory;
+    private final LessonManagement lessonManagement;
+    private final LiveSessionManagement liveSessionManagement;
 
     public InstructorCurriculumService(CurriculumRepository curriculumRepository,
                                        SectionRepository sectionRepository,
-                                       LessonDirectory lessonDirectory) {
+                                       LessonDirectory lessonDirectory,
+                                       LessonManagement lessonManagement,
+                                       LiveSessionManagement liveSessionManagement) {
         this.curriculumRepository = curriculumRepository;
         this.sectionRepository = sectionRepository;
         this.lessonDirectory = lessonDirectory;
+        this.lessonManagement = lessonManagement;
+        this.liveSessionManagement = liveSessionManagement;
     }
 
     @Transactional
@@ -66,10 +77,40 @@ public class InstructorCurriculumService {
         return requireOwned(instructorId, curriculumId);
     }
 
-    /** null 인자는 "변경 안 함"으로 다룬다 — PATCH 부분 수정. */
+    /**
+     * 발행: DRAFT → PUBLISHED. 발행 순간 카탈로그에 노출된다(카탈로그는 PUBLISHED만 조회).
+     * FE 설계대로 일반 수정(PATCH)과 분리된 command다. 전제조건(예: 레슨 게시 여부)·모집 연동·
+     * 영향 요약은 정책 미확정이라 이번 범위 밖 — 상태 전이만 최소로 구현한다.
+     */
+    @Transactional
+    public Curriculum publish(UUID instructorId, UUID curriculumId) {
+        Curriculum curriculum = requireOwned(instructorId, curriculumId);
+        if (curriculum.getLifecycleStatus() != CurriculumLifecycleStatus.DRAFT) {
+            throw new CurriculumStateConflictException("DRAFT 상태에서만 발행할 수 있습니다.");
+        }
+        curriculum.setLifecycleStatus(CurriculumLifecycleStatus.PUBLISHED);
+        curriculum.setPublishedAt(OffsetDateTime.now());
+        log.info(Audit.MARKER, "커리큘럼 발행 curriculumId={} instructorId={}", curriculumId, instructorId);
+        return curriculum;
+    }
+
+    /** 보관: PUBLISHED → ARCHIVED. 카탈로그에서 내려간다. 되돌리기·삭제 정책은 범위 밖. */
+    @Transactional
+    public Curriculum archive(UUID instructorId, UUID curriculumId) {
+        Curriculum curriculum = requireOwned(instructorId, curriculumId);
+        if (curriculum.getLifecycleStatus() != CurriculumLifecycleStatus.PUBLISHED) {
+            throw new CurriculumStateConflictException("PUBLISHED 상태에서만 보관할 수 있습니다.");
+        }
+        curriculum.setLifecycleStatus(CurriculumLifecycleStatus.ARCHIVED);
+        log.info(Audit.MARKER, "커리큘럼 보관 curriculumId={} instructorId={}", curriculumId, instructorId);
+        return curriculum;
+    }
+
+    /** null 인자는 "변경 안 함"으로 다룬다 — PATCH 부분 수정. 기간 검증 규칙은 미확정(골격). */
     @Transactional
     public Curriculum updateBasicInfo(UUID instructorId, UUID curriculumId,
-                                      String title, String summary, String description) {
+                                      String title, String summary, String description,
+                                      OffsetDateTime startsAt, OffsetDateTime endsAt) {
         Curriculum curriculum = requireOwned(instructorId, curriculumId);
         if (title != null) {
             curriculum.setTitle(title);
@@ -79,6 +120,12 @@ public class InstructorCurriculumService {
         }
         if (description != null) {
             curriculum.setDescription(description);
+        }
+        if (startsAt != null) {
+            curriculum.setStartsAt(startsAt);
+        }
+        if (endsAt != null) {
+            curriculum.setEndsAt(endsAt);
         }
         return curriculum;
     }
@@ -134,6 +181,69 @@ public class InstructorCurriculumService {
         // section_count는 트리거가 −1 한다(앱은 건드리지 않음). structure_version만 올린다.
         curriculum.setStructureVersion(curriculum.getStructureVersion() + 1);
         log.info(Audit.MARKER, "섹션 삭제 curriculumId={} sectionId={}", section.getCurriculumId(), sectionId);
+    }
+
+    // ── 레슨 관리 ── 데이터 조작은 lesson 모듈 포트가, 소유권·구조버전은 여기(curriculum)가 책임진다.
+
+    @Transactional
+    public LessonView createLesson(UUID instructorId, UUID sectionId, String title, String description) {
+        Section section = requireOwnedSection(instructorId, sectionId);
+        LessonView lesson = lessonManagement.create(sectionId, title, description);
+        // lesson_count는 트리거가 유지. 목차 변경이므로 structure_version만 올린다.
+        Curriculum curriculum = requireOwned(instructorId, section.getCurriculumId());
+        curriculum.setStructureVersion(curriculum.getStructureVersion() + 1);
+        log.info(Audit.MARKER, "레슨 생성 sectionId={} lessonId={}", sectionId, lesson.lessonId());
+        return lesson;
+    }
+
+    @Transactional(readOnly = true)
+    public List<LessonView> listLessons(UUID instructorId, UUID sectionId) {
+        requireOwnedSection(instructorId, sectionId);
+        return lessonManagement.findBySection(sectionId);
+    }
+
+    @Transactional(readOnly = true)
+    public LessonView getLesson(UUID instructorId, UUID lessonId) {
+        return requireOwnedLesson(instructorId, lessonId);
+    }
+
+    @Transactional
+    public LessonView updateLesson(UUID instructorId, UUID lessonId, String title, String description) {
+        requireOwnedLesson(instructorId, lessonId);
+        return lessonManagement.update(lessonId, title, description);
+    }
+
+    @Transactional
+    public void deleteLesson(UUID instructorId, UUID lessonId) {
+        LessonView lesson = requireOwnedLesson(instructorId, lessonId);
+        lessonManagement.delete(lessonId);
+        // lesson_count는 트리거가 −1. 구조 변경이므로 structure_version만 올린다.
+        Section section = requireOwnedSection(instructorId, lesson.sectionId());
+        Curriculum curriculum = requireOwned(instructorId, section.getCurriculumId());
+        curriculum.setStructureVersion(curriculum.getStructureVersion() + 1);
+        log.info(Audit.MARKER, "레슨 삭제 sectionId={} lessonId={}", lesson.sectionId(), lessonId);
+    }
+
+    // ── 라이브 세션 생성 ── 소유권(레슨→커리큘럼)은 여기서, 세션 데이터는 live 모듈 포트가.
+
+    @Transactional
+    public LiveSessionView createLiveSession(UUID instructorId, UUID lessonId, java.time.OffsetDateTime scheduledAt) {
+        requireOwnedLesson(instructorId, lessonId);
+        // 레슨당 세션 1개(DDL UNIQUE). 이미 있으면 상태 충돌로 막는다.
+        if (liveSessionManagement.existsForLesson(lessonId)) {
+            throw new CurriculumStateConflictException("이미 이 레슨의 라이브 세션이 있습니다.");
+        }
+        LiveSessionView session = liveSessionManagement.create(lessonId, instructorId, scheduledAt);
+        log.info(Audit.MARKER, "라이브 세션 생성 lessonId={} sessionId={}", lessonId, session.sessionId());
+        return session;
+    }
+
+    /** 레슨 → 섹션 → 커리큘럼 소유권 검증. 없으면 404, 소유자 아니면 403. */
+    private LessonView requireOwnedLesson(UUID instructorId, UUID lessonId) {
+        LessonView lesson = lessonManagement.findById(lessonId)
+                .orElseThrow(() -> new LessonNotFoundException("레슨을 찾을 수 없습니다."));
+        requireOwnedSection(instructorId, lesson.sectionId());
+        return lesson;
     }
 
     private int nextSectionOrder(UUID curriculumId) {

@@ -21,6 +21,7 @@ public record CurriculumResponse(
         int lessonCount,
         int publishedLessonCount,
         int structureVersion,
+        OffsetDateTime publishedAt,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt
 ) {
@@ -39,6 +40,7 @@ public record CurriculumResponse(
                 c.getLessonCount(),
                 c.getPublishedLessonCount(),
                 c.getStructureVersion(),
+                c.getPublishedAt(),
                 c.getCreatedAt(),
                 c.getUpdatedAt()
         );

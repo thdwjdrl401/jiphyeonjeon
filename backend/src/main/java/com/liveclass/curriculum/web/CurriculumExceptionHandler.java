@@ -1,6 +1,8 @@
 package com.liveclass.curriculum.web;
 
 import com.liveclass.curriculum.service.CurriculumNotFoundException;
+import com.liveclass.curriculum.service.CurriculumStateConflictException;
+import com.liveclass.curriculum.service.LessonNotFoundException;
 import com.liveclass.curriculum.service.NotCurriculumOwnerException;
 import com.liveclass.curriculum.service.SectionNotEmptyException;
 import com.liveclass.curriculum.service.SectionNotFoundException;
@@ -16,10 +18,12 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 /** 커리큘럼 도메인 실패 → CONTRACT §2 상태코드(없음 404·권한 403·충돌 409)로 매핑. */
 // 범용 Exception 핸들러보다 먼저 뽑히도록 우선순위를 명시한다.
 @Order(Ordered.LOWEST_PRECEDENCE - 100)
-@RestControllerAdvice(assignableTypes = {InstructorCurriculumController.class, CatalogController.class})
+@RestControllerAdvice(assignableTypes = {
+        InstructorCurriculumController.class, InstructorLessonController.class,
+        InstructorLiveSessionController.class, CatalogController.class})
 public class CurriculumExceptionHandler {
 
-    @ExceptionHandler({CurriculumNotFoundException.class, SectionNotFoundException.class})
+    @ExceptionHandler({CurriculumNotFoundException.class, SectionNotFoundException.class, LessonNotFoundException.class})
     public ResponseEntity<ErrorResponse> handleNotFound(RuntimeException e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ErrorResponse.of("CURRICULUM_NOT_FOUND", e.getMessage()));
@@ -36,6 +40,13 @@ public class CurriculumExceptionHandler {
     public ResponseEntity<ErrorResponse> handleSectionNotEmpty(SectionNotEmptyException e) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ErrorResponse.of("SECTION_NOT_EMPTY", e.getMessage()));
+    }
+
+    /** 허용되지 않는 lifecycle 전이. FE가 지정한 계약 코드를 쓴다. */
+    @ExceptionHandler(CurriculumStateConflictException.class)
+    public ResponseEntity<ErrorResponse> handleStateConflict(CurriculumStateConflictException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ErrorResponse.of("CURRICULUM_STATE_CONFLICT", e.getMessage()));
     }
 
     /**

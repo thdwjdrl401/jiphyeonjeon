@@ -19,7 +19,7 @@ import java.util.function.Function;
  * 공개 커리큘럼 탐색 (CATALOG-01, CURRICULUM-DETAIL-01). 비로그인도 호출 가능.
  * 인증 쿠키가 있어도 지금은 viewerContext를 붙이지 않는다(후속).
  */
-@Tag(name = "카탈로그(공개)", description = "공개 커리큘럼 목록·상세. 비로그인 접근 가능.")
+@Tag(name = "카탈로그(공개)", description = "누구나(로그인 없이) 공개된 커리큘럼을 검색하고 열어볼 수 있는 조회 API.")
 @RestController
 public class CatalogController {
 
@@ -32,7 +32,7 @@ public class CatalogController {
         this.catalogService = catalogService;
     }
 
-    @Operation(summary = "공개 커리큘럼 목록", description = "PUBLISHED만. q 검색·정렬·페이지. 잘못된 정렬·페이지 값은 400.")
+    @Operation(summary = "공개 커리큘럼 목록", description = "공개된 커리큘럼을 검색·정렬·페이지로 조회한다. q로 제목·소개를 검색할 수 있다.")
     @GetMapping("/api/curriculums")
     public PageResponse<CurriculumCardSummary> list(
             @RequestParam(required = false) String q,
@@ -45,7 +45,7 @@ public class CatalogController {
                 Function.identity());
     }
 
-    @Operation(summary = "공개 커리큘럼 상세", description = "PUBLISHED만. 없거나 미공개면 404.")
+    @Operation(summary = "공개 커리큘럼 상세", description = "공개 커리큘럼 하나의 상세(강사·목차 포함). 없거나 비공개면 찾을 수 없음으로 응답한다.")
     @GetMapping("/api/curriculums/{curriculumId}")
     public CurriculumDetailResponse detail(@PathVariable UUID curriculumId) {
         return catalogService.detail(curriculumId);
