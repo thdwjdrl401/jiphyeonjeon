@@ -33,6 +33,10 @@ public class SecurityConfig {
                         // 로그인 전에 부를 수 있어야 하는 것들 — csrf가 막히면 로그인 자체가 불가능하다.
                         .requestMatchers(HttpMethod.GET, "/api/auth/csrf", "/api/auth/email-availability").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/signup", "/api/auth/login", "/api/auth/logout").permitAll()
+                        // 공개 카탈로그 조회는 비로그인도 가능(GET만).
+                        .requestMatchers(HttpMethod.GET, "/api/curriculums", "/api/curriculums/**").permitAll()
+                        // 강사 관리 API는 INSTRUCTOR 역할 필수. 소유권(내 커리큘럼인가)은 서비스가 별도로 검증한다.
+                        .requestMatchers("/api/instructor/**").hasRole("INSTRUCTOR")
                         .anyRequest().authenticated()
                 )
                 // 기본 동작은 403이지만 CONTRACT §2는 인증 실패를 401로 못박았다.

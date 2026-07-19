@@ -11,6 +11,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.util.List;
 import java.util.Map;
@@ -59,6 +60,13 @@ public class ValidationExceptionHandler {
     public ResponseEntity<ErrorResponse> handleMissingParam(MissingServletRequestParameterException e) {
         return badRequest(ErrorResponse.of(VALIDATION_FAILED, MESSAGE,
                 List.of(new ErrorResponse.FieldErrorItem(e.getParameterName(), "REQUIRED"))));
+    }
+
+    /** 파라미터 타입 변환 실패(예: 잘못된 enum·UUID·정수). 무시하지 않고 400으로 응답. */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
+        return badRequest(ErrorResponse.of(VALIDATION_FAILED, MESSAGE,
+                List.of(new ErrorResponse.FieldErrorItem(e.getName(), "INVALID"))));
     }
 
     private ResponseEntity<ErrorResponse> badRequest(ErrorResponse body) {

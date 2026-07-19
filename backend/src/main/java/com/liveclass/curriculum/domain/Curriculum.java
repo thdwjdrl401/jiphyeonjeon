@@ -11,13 +11,20 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.DynamicUpdate;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
+/**
+ * section_count·lesson_count·published_lesson_count는 DB 트리거가 소유한다(DDL 주석).
+ * 앱은 이 컬럼들을 쓰지 않으며, @DynamicUpdate로 변경된 컬럼만 UPDATE해 트리거가 쓴 값을
+ * stale in-memory 값으로 덮어쓰지 않도록 한다. structure_version만 앱이 유지한다.
+ */
 @Entity
 @Table(schema = "core", name = "curriculum")
+@DynamicUpdate
 @Getter
 @Setter
 @NoArgsConstructor
