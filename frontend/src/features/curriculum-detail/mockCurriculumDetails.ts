@@ -350,13 +350,18 @@ function applyViewerAccess(
           learning: null,
         }
       }
+      const isPast = flatIndex <= completedLessonCount
+      const isNextUp = flatIndex === completedLessonCount + 1
       const learning =
         relationship === 'ENROLLED'
           ? {
-              completed: flatIndex <= completedLessonCount,
-              progressPercent: flatIndex <= completedLessonCount ? 100 : 0,
+              completed: isPast,
+              progressPercent: isPast ? 100 : 0,
             }
           : null
+      // 지난 레슨은 다시보기(VOD)로, 바로 다음 예정 레슨은 라이브 안내 페이지로 보낸다.
+      // 그보다 먼 미래 레슨은 아직 일정이 확정되지 않아 상세 페이지가 없다(404 유지).
+      const destination: LessonAccessDestination = isPast ? 'VOD' : isNextUp ? 'LIVE_SESSION' : 'LESSON_DETAIL'
       return {
         ...lesson,
         access: { allowed: true, destination: resolveMockLessonDestination(lesson), reasonCode: null },

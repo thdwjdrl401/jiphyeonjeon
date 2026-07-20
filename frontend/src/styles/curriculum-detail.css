@@ -194,6 +194,10 @@ a.curriculum-lesson__title:hover {
   color: var(--red-600);
 }
 
+.curriculum-lesson a.curriculum-lesson__replay {
+  flex: none;
+}
+
 .curriculum-lesson__done {
   padding-inline: 6px;
 }
