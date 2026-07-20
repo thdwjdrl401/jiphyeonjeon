@@ -2,6 +2,7 @@ package com.liveclass.live.web;
 
 import com.liveclass.live.api.LiveSessionView;
 import com.liveclass.live.service.LiveKitTokenService;
+import com.liveclass.live.service.LiveAccessGuard;
 import com.liveclass.live.service.LiveSessionNotFoundException;
 import com.liveclass.live.service.LiveSessionService;
 import com.liveclass.live.web.dto.LiveTokenResponse;
@@ -32,10 +33,13 @@ public class LiveSessionController {
 
     private final LiveSessionService liveSessionService;
     private final LiveKitTokenService tokenService;
+    private final LiveAccessGuard accessGuard;
 
-    public LiveSessionController(LiveSessionService liveSessionService, LiveKitTokenService tokenService) {
+    public LiveSessionController(LiveSessionService liveSessionService, LiveKitTokenService tokenService,
+                                LiveAccessGuard accessGuard) {
         this.liveSessionService = liveSessionService;
         this.tokenService = tokenService;
+        this.accessGuard = accessGuard;
     }
 
     @Operation(summary = "라이브 세션 조회", description = "라이브 세션의 기본 정보를 조회한다.")
@@ -92,15 +96,17 @@ public class LiveSessionController {
 
     /**
      * 방 입장 토큰 발급. 요청자가 세션 강사면 publisher(송출+구독), 아니면 subscriber(구독 전용).
-     * 세밀한 입장 게이팅(수강생만 등)·세션 LIVE 상태 검사는 수강/시작 기능과 함께 후속.
+     * 세션 LIVE 상태 검사(입장창 등)는 후속. 접근 권한은 accessGuard가 수강 기반으로 검증한다.
      */
-    @Operation(summary = "LiveKit 토큰 발급", description = "라이브 방에 접속할 입장 토큰을 발급한다. 세션을 만든 강사는 화면·음성을 내보낼 수 있고(송출), 그 외 참여자는 시청만 할 수 있다.")
+    @Operation(summary = "LiveKit 토큰 발급", description = "라이브 방에 접속할 입장 토큰을 발급한다. 세션을 만든 강사는 화면·음성을 내보낼 수 있고(송출), 그 외 참여자는 시청만 할 수 있다. 소유 강사 또는 활성 수강생만 발급된다.")
     @PostMapping("/api/live-sessions/{sessionId}/token")
     public LiveTokenResponse token(@PathVariable UUID sessionId, Authentication authentication) {
         LiveSessionView session = liveSessionService.findById(sessionId)
                 .orElseThrow(() -> new LiveSessionNotFoundException("라이브 세션을 찾을 수 없습니다."));
 
         String requesterId = authentication.getName();
+        // 접근 게이트: 소유 강사이거나 소속 커리큘럼의 활성 수강생만. 아니면 403.
+        accessGuard.requireCanAccess(sessionId, UUID.fromString(requesterId));
         boolean publisher = requesterId.equals(session.instructorId().toString());
         // 방 이름은 세션 ID로 결정론적으로 만든다. LiveKit이 붙이는 room_sid는 실제 시작 시 채운다.
         String room = "session-" + sessionId;

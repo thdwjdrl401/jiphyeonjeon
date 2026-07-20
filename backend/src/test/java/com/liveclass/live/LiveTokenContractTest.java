@@ -41,7 +41,8 @@ class LiveTokenContractTest {
     @Test
     void instructor_gets_publisher_token() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
-        String sessionId = createSession(instructor);
+        String[] created = createSession(instructor);
+        String sessionId = created[0];
 
         MvcResult res = write(post("/api/live-sessions/" + sessionId + "/token"), instructor, null)
                 .andExpect(status().isOk())
@@ -63,9 +64,11 @@ class LiveTokenContractTest {
     @Test
     void non_instructor_gets_subscribe_only_token() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
-        String sessionId = createSession(instructor);
+        String[] created = createSession(instructor);
+        String sessionId = created[0];
 
         Cookie[] student = loginAs("STUDENT");
+        enrollActive(created[1], student, instructor);   // 활성 수강생이어야 토큰 발급됨
         MvcResult res = write(post("/api/live-sessions/" + sessionId + "/token"), student, null)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.grants.canPublish").value(false))
@@ -76,6 +79,17 @@ class LiveTokenContractTest {
         assertThat(video.get("room").asString()).isEqualTo("session-" + sessionId);
         assertThat(video.get("canPublish").asBoolean()).isFalse();
         assertThat(video.get("canSubscribe").asBoolean()).isTrue();
+    }
+
+    @Test
+    void non_enrolled_student_is_forbidden() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String[] created = createSession(instructor);
+
+        Cookie[] student = loginAs("STUDENT");   // 수강 신청 안 함
+        write(post("/api/live-sessions/" + created[0] + "/token"), student, null)
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("LIVE_SESSION_FORBIDDEN"));
     }
 
     @Test
@@ -90,7 +104,8 @@ class LiveTokenContractTest {
     void token_requires_authentication() throws Exception {
         // 세션은 강사가 만들고, 비로그인으로 토큰 요청 → 401.
         Cookie[] instructor = loginAs("INSTRUCTOR");
-        String sessionId = createSession(instructor);
+        String[] created = createSession(instructor);
+        String sessionId = created[0];
 
         Cookie xsrf = fetchXsrf();
         mockMvc.perform(post("/api/live-sessions/" + sessionId + "/token")
@@ -114,15 +129,26 @@ class LiveTokenContractTest {
         return jsonMapper.readTree(new String(decoded));
     }
 
-    private String createSession(Cookie[] auth) throws Exception {
+    /** 세션 생성 + 커리큘럼 발행. {sessionId, curriculumId} 반환(수강 등록에 curriculumId 필요). */
+    private String[] createSession(Cookie[] auth) throws Exception {
         String cid = json(write(post("/api/instructor/curriculums"), auth, "{\"title\":\"토큰 테스트\"}")
                 .andReturn()).get("curriculumId").asString();
+        write(post("/api/instructor/curriculums/" + cid + "/publish"), auth, null).andExpect(status().isOk());
         String sid = json(write(post("/api/instructor/curriculums/" + cid + "/sections"), auth, "{\"title\":\"섹션\"}")
                 .andReturn()).get("sectionId").asString();
         String lid = json(write(post("/api/instructor/sections/" + sid + "/lessons"), auth, "{\"title\":\"레슨\"}")
                 .andReturn()).get("lessonId").asString();
-        return json(write(post("/api/instructor/lessons/" + lid + "/live-sessions"), auth, null)
+        String sessionId = json(write(post("/api/instructor/lessons/" + lid + "/live-sessions"), auth, null)
                 .andReturn()).get("sessionId").asString();
+        return new String[]{sessionId, cid};
+    }
+
+    /** 학생을 이 커리큘럼의 ACTIVE 수강생으로: 신청(PENDING) → 강사 승인(ACTIVE). */
+    private void enrollActive(String cid, Cookie[] student, Cookie[] instructor) throws Exception {
+        String eid = json(write(post("/api/curriculums/" + cid + "/enrollments"), student, null)
+                .andReturn()).get("enrollmentId").asString();
+        write(post("/api/instructor/curriculums/" + cid + "/enrollments/" + eid + "/approve"), instructor, null)
+                .andExpect(status().isOk());
     }
 
     private org.springframework.test.web.servlet.ResultActions write(

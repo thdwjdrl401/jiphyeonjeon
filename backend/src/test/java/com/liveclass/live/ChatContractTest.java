@@ -44,9 +44,11 @@ class ChatContractTest {
     @Test
     void student_message_uses_anonymous_alias_and_hides_identity() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
-        String lessonId = createStartedLessonSession(instructor);
+        String[] created = createStartedLessonSession(instructor);
+        String lessonId = created[0];
 
         Cookie[] student = loginAs("STUDENT");
+        enrollActive(created[1], student, instructor);   // 활성 수강생이어야 채팅 가능
         MvcResult res = write(post("/api/lessons/" + lessonId + "/messages"), student, """
                 {"clientMessageId":"c-1","text":"질문 있어요","isQuestion":true}
                 """)
@@ -68,7 +70,8 @@ class ChatContractTest {
     @Test
     void instructor_message_shows_display_name_as_alias() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
-        String lessonId = createStartedLessonSession(instructor);
+        String[] created = createStartedLessonSession(instructor);
+        String lessonId = created[0];
 
         write(post("/api/lessons/" + lessonId + "/messages"), instructor, """
                 {"clientMessageId":"c-i","text":"안녕하세요"}
@@ -80,9 +83,12 @@ class ChatContractTest {
     @Test
     void list_marks_only_my_messages_as_mine_for_the_requester() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
-        String lessonId = createStartedLessonSession(instructor);
+        String[] created = createStartedLessonSession(instructor);
+        String lessonId = created[0];
         Cookie[] me = loginAs("STUDENT");
         Cookie[] other = loginAs("STUDENT");
+        enrollActive(created[1], me, instructor);
+        enrollActive(created[1], other, instructor);
 
         write(post("/api/lessons/" + lessonId + "/messages"), me, "{\"clientMessageId\":\"m1\",\"text\":\"내가 보냄\"}").andReturn();
         write(post("/api/lessons/" + lessonId + "/messages"), other, "{\"clientMessageId\":\"o1\",\"text\":\"남이 보냄\"}").andReturn();
@@ -104,8 +110,10 @@ class ChatContractTest {
     @Test
     void resend_with_same_client_message_id_is_idempotent() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
-        String lessonId = createStartedLessonSession(instructor);
+        String[] created = createStartedLessonSession(instructor);
+        String lessonId = created[0];
         Cookie[] student = loginAs("STUDENT");
+        enrollActive(created[1], student, instructor);
 
         String first = json(write(post("/api/lessons/" + lessonId + "/messages"), student, """
                 {"clientMessageId":"dup-1","text":"한번만"}
@@ -123,8 +131,10 @@ class ChatContractTest {
     @Test
     void list_recovers_messages_in_order() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
-        String lessonId = createStartedLessonSession(instructor);
+        String[] created = createStartedLessonSession(instructor);
+        String lessonId = created[0];
         Cookie[] student = loginAs("STUDENT");
+        enrollActive(created[1], student, instructor);
         write(post("/api/lessons/" + lessonId + "/messages"), student, "{\"clientMessageId\":\"a\",\"text\":\"첫째\"}").andReturn();
         write(post("/api/lessons/" + lessonId + "/messages"), student, "{\"clientMessageId\":\"b\",\"text\":\"둘째\"}").andReturn();
 
@@ -149,7 +159,8 @@ class ChatContractTest {
     @Test
     void chat_requires_authentication() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
-        String lessonId = createStartedLessonSession(instructor);
+        String[] created = createStartedLessonSession(instructor);
+        String lessonId = created[0];
 
         Cookie xsrf = fetchXsrf();
         mockMvc.perform(post("/api/lessons/" + lessonId + "/messages")
@@ -177,12 +188,27 @@ class ChatContractTest {
                 .andReturn()).get("lessonId").asString();
     }
 
-    private String createStartedLessonSession(Cookie[] auth) throws Exception {
-        String lessonId = createLessonWithoutSession(auth);
+    /** 세션 시작 + 커리큘럼 발행. {lessonId, curriculumId} 반환(채팅 게이트 통과용 수강 등록에 curriculumId 필요). */
+    private String[] createStartedLessonSession(Cookie[] auth) throws Exception {
+        String cid = json(write(post("/api/instructor/curriculums"), auth, "{\"title\":\"채팅\"}")
+                .andReturn()).get("curriculumId").asString();
+        write(post("/api/instructor/curriculums/" + cid + "/publish"), auth, null).andExpect(status().isOk());
+        String sid = json(write(post("/api/instructor/curriculums/" + cid + "/sections"), auth, "{\"title\":\"s\"}")
+                .andReturn()).get("sectionId").asString();
+        String lessonId = json(write(post("/api/instructor/sections/" + sid + "/lessons"), auth, "{\"title\":\"l\"}")
+                .andReturn()).get("lessonId").asString();
         String sessionId = json(write(post("/api/instructor/lessons/" + lessonId + "/live-sessions"), auth, null)
                 .andReturn()).get("sessionId").asString();
         write(post("/api/live-sessions/" + sessionId + "/start"), auth, null).andExpect(status().isOk());
-        return lessonId;
+        return new String[]{lessonId, cid};
+    }
+
+    /** 학생을 이 커리큘럼의 ACTIVE 수강생으로: 신청 → 강사 승인. (채팅/토큰 게이트 통과용) */
+    private void enrollActive(String cid, Cookie[] student, Cookie[] instructor) throws Exception {
+        String eid = json(write(post("/api/curriculums/" + cid + "/enrollments"), student, null)
+                .andReturn()).get("enrollmentId").asString();
+        write(post("/api/instructor/curriculums/" + cid + "/enrollments/" + eid + "/approve"), instructor, null)
+                .andExpect(status().isOk());
     }
 
     private org.springframework.test.web.servlet.ResultActions write(

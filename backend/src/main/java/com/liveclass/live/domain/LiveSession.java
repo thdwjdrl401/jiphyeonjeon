@@ -30,6 +30,8 @@ public class LiveSession {
 
     private UUID lessonId;
 
+    private UUID curriculumId;
+
     private UUID instructorId;
 
     @Enumerated(EnumType.STRING)

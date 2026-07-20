@@ -11,7 +11,7 @@ import java.util.UUID;
 public interface LiveSessionManagement {
 
     /** 레슨에 라이브 세션을 만든다(레슨당 1개). scheduledAt이 있으면 SCHEDULED, 없으면 DRAFT. */
-    LiveSessionView create(UUID lessonId, UUID instructorId, OffsetDateTime scheduledAt);
+    LiveSessionView create(UUID lessonId, UUID curriculumId, UUID instructorId, OffsetDateTime scheduledAt);
 
     Optional<LiveSessionView> findById(UUID sessionId);
 

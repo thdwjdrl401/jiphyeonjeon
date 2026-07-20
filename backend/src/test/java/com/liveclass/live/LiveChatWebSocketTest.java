@@ -64,6 +64,10 @@ class LiveChatWebSocketTest {
 
         Client student = new Client();
         student.signupAndLogin("STUDENT");
+        // 활성 수강생이어야 채팅 게이트를 통과한다: 신청 → 강사 승인.
+        String cid = ids[2];
+        String eid = student.field(student.post("/api/curriculums/" + cid + "/enrollments", null), "enrollmentId");
+        instructor.post("/api/instructor/curriculums/" + cid + "/enrollments/" + eid + "/approve", null);
 
         WebSocketStompClient stompClient = new WebSocketStompClient(new StandardWebSocketClient());
         stompClient.setMessageConverter(new JacksonJsonMessageConverter());
@@ -137,14 +141,15 @@ class LiveChatWebSocketTest {
                     """.formatted(email));
         }
 
-        /** 강사로 커리큘럼→섹션→레슨→라이브세션 생성 후 시작. {lessonId, sessionId} 반환. */
+        /** 강사로 커리큘럼→섹션→레슨→라이브세션 생성·발행·시작. {lessonId, sessionId, curriculumId} 반환. */
         String[] createStartedSession() throws Exception {
             String cid = field(post("/api/instructor/curriculums", "{\"title\":\"ws\"}"), "curriculumId");
+            post("/api/instructor/curriculums/" + cid + "/publish", null);
             String sid = field(post("/api/instructor/curriculums/" + cid + "/sections", "{\"title\":\"s\"}"), "sectionId");
             String lessonId = field(post("/api/instructor/sections/" + sid + "/lessons", "{\"title\":\"l\"}"), "lessonId");
             String sessionId = field(post("/api/instructor/lessons/" + lessonId + "/live-sessions", null), "sessionId");
             post("/api/live-sessions/" + sessionId + "/start", null);
-            return new String[]{lessonId, sessionId};
+            return new String[]{lessonId, sessionId, cid};
         }
 
         HttpResponse<String> get(String path) throws Exception {

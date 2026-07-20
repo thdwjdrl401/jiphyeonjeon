@@ -229,12 +229,14 @@ public class InstructorCurriculumService {
 
     @Transactional
     public LiveSessionView createLiveSession(UUID instructorId, UUID lessonId, java.time.OffsetDateTime scheduledAt) {
-        requireOwnedLesson(instructorId, lessonId);
+        LessonView lesson = requireOwnedLesson(instructorId, lessonId);
+        // 세션에 소속 커리큘럼을 실어 접근 게이팅에 쓴다(session→enrollment 사이클 회피).
+        UUID curriculumId = requireOwnedSection(instructorId, lesson.sectionId()).getCurriculumId();
         // 레슨당 세션 1개(DDL UNIQUE). 이미 있으면 상태 충돌로 막는다.
         if (liveSessionManagement.existsForLesson(lessonId)) {
             throw new CurriculumStateConflictException("이미 이 레슨의 라이브 세션이 있습니다.");
         }
-        LiveSessionView session = liveSessionManagement.create(lessonId, instructorId, scheduledAt);
+        LiveSessionView session = liveSessionManagement.create(lessonId, curriculumId, instructorId, scheduledAt);
         log.info(Audit.MARKER, "라이브 세션 생성 lessonId={} sessionId={}", lessonId, session.sessionId());
         return session;
     }

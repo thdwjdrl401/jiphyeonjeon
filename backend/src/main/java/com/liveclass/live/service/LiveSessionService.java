@@ -42,9 +42,10 @@ public class LiveSessionService implements LiveSessionManagement {
 
     @Override
     @Transactional
-    public LiveSessionView create(UUID lessonId, UUID instructorId, OffsetDateTime scheduledAt) {
+    public LiveSessionView create(UUID lessonId, UUID curriculumId, UUID instructorId, OffsetDateTime scheduledAt) {
         LiveSession session = new LiveSession();
         session.setLessonId(lessonId);
+        session.setCurriculumId(curriculumId);   // 접근 게이팅용 비정규화
         session.setInstructorId(instructorId);
         session.setScheduledAt(scheduledAt);
         session.setStatus(scheduledAt != null ? LiveSessionStatus.SCHEDULED : LiveSessionStatus.DRAFT);
