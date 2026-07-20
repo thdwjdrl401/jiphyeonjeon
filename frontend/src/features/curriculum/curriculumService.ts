@@ -1,5 +1,5 @@
 import { apiClient } from '@/shared/api/client'
-import { isMockApiEnabled } from '@/shared/config/runtime'
+import { requestByDataSource } from '@/shared/api/dataSource'
 import type { AuthUser } from '@/features/auth/types'
 import { getMockCurriculums } from './mockCurriculums'
 import type { CurriculumCardSummary, CurriculumListQuery, CurriculumListResponse } from './types'
@@ -22,19 +22,23 @@ function toApiQuery(query: CurriculumListQuery) {
 }
 
 export async function getCurriculums(query: CurriculumListQuery, viewer?: AuthUser) {
-  if (isMockApiEnabled) return getMockCurriculums(query)
-  const { data } = await apiClient.get<CurriculumApiListResponse>('/curriculums', {
-    params: toApiQuery(query),
+  return requestByDataSource({
+    mock: () => getMockCurriculums(query),
+    http: async () => {
+      const { data } = await apiClient.get<CurriculumApiListResponse>('/curriculums', {
+        params: toApiQuery(query),
+      })
+      const fallbackViewerContext = createFallbackViewerContext(viewer)
+      return {
+        ...data,
+        items: data.items.map((curriculum) => ({
+          ...curriculum,
+          viewerContext: curriculum.viewerContext ?? {
+            relationship: fallbackViewerContext.relationship,
+            allowedActions: ['VIEW_DETAIL'],
+          },
+        })),
+      }
+    },
   })
-  const fallbackViewerContext = createFallbackViewerContext(viewer)
-  return {
-    ...data,
-    items: data.items.map((curriculum) => ({
-      ...curriculum,
-      viewerContext: curriculum.viewerContext ?? {
-        relationship: fallbackViewerContext.relationship,
-        allowedActions: ['VIEW_DETAIL'],
-      },
-    })),
-  }
 }

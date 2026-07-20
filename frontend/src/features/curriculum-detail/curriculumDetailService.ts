@@ -1,5 +1,5 @@
 import { apiClient } from '@/shared/api/client'
-import { isMockApiEnabled } from '@/shared/config/runtime'
+import { requestByDataSource } from '@/shared/api/dataSource'
 import type { AuthUser } from '@/features/auth/types'
 import type {
   CurriculumDetailResponse,
@@ -61,31 +61,43 @@ function normalizeLesson(lesson: CurriculumApiOutlineLesson): CurriculumOutlineL
 }
 
 export async function getCurriculumDetail(curriculumId: string, viewer?: AuthUser) {
-  if (isMockApiEnabled) return getMockCurriculumDetail(curriculumId)
-  const { data } = await apiClient.get<CurriculumApiDetailResponse>(`/curriculums/${curriculumId}`)
-  return {
-    ...data,
-    enrollmentPolicy: data.enrollmentPolicy ?? {
-      type: 'INVITATION_ONLY',
-      status: 'UNAVAILABLE',
-      opensAt: null,
-      closesAt: null,
+  return requestByDataSource({
+    mock: () => getMockCurriculumDetail(curriculumId),
+    http: async () => {
+      const { data } = await apiClient.get<CurriculumApiDetailResponse>(`/curriculums/${curriculumId}`)
+      return {
+        ...data,
+        enrollmentPolicy: data.enrollmentPolicy ?? {
+          type: 'INVITATION_ONLY' as const,
+          status: 'UNAVAILABLE',
+          opensAt: null,
+          closesAt: null,
+        },
+        outline: data.outline.map((section) => ({
+          ...section,
+          lessons: section.lessons.map(normalizeLesson),
+        })),
+        viewerContext: data.viewerContext ?? createFallbackViewerContext(viewer),
+      }
     },
-    outline: data.outline.map((section) => ({
-      ...section,
-      lessons: section.lessons.map(normalizeLesson),
-    })),
-    viewerContext: data.viewerContext ?? createFallbackViewerContext(viewer),
-  }
+  })
 }
 
 export async function enrollInCurriculum(curriculumId: string) {
-  if (isMockApiEnabled) return enrollMockCurriculum(curriculumId)
-  const { data } = await apiClient.post<EnrollResult>(`/curriculums/${curriculumId}/enrollments`)
-  return data
+  return requestByDataSource({
+    mock: () => enrollMockCurriculum(curriculumId),
+    http: async () => {
+      const { data } = await apiClient.post<EnrollResult>(`/curriculums/${curriculumId}/enrollments`)
+      return data
+    },
+  })
 }
 
 export async function cancelEnrollment(curriculumId: string) {
-  if (isMockApiEnabled) return cancelMockEnrollment(curriculumId)
-  await apiClient.delete(`/curriculums/${curriculumId}/enrollments/me`)
+  return requestByDataSource({
+    mock: () => cancelMockEnrollment(curriculumId),
+    http: async () => {
+      await apiClient.delete(`/curriculums/${curriculumId}/enrollments/me`)
+    },
+  })
 }

@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
+import { instructorPaths, publicPaths } from '@/app/router/paths'
 import CurriculumImageField from '@/features/curriculum/CurriculumImageField'
-import { demoCurriculum, demoSections } from '@/features/demo/demoData'
+import { demoCurriculum } from '@/features/demo/demoData'
+import { buildMockCurriculumOutline, getMockCurriculum } from '@/features/demo/mockDatabase'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import { InlineNotice, MetricCard, PageHeader, Panel, StatusBadge } from '@/shared/ui/WorkspaceUi'
 
@@ -25,15 +27,26 @@ export default function CurriculumManagePage() {
   const { curriculumId = demoCurriculum.curriculumId } = useParams()
   const location = useLocation()
   const routeState = location.state as CurriculumDraftState | null
-  const isNewDraft = curriculumId === 'cur_new_draft'
+  const storedCurriculum = getMockCurriculum(curriculumId)
+  const isNewDraft = storedCurriculum?.lifecycleStatus === 'DRAFT'
   const [tab, setTab] = useState<'structure' | 'info' | 'enrollees'>('structure')
-  const [sections, setSections] = useState(() => demoSections.map((section) => ({ ...section, lessons: [...section.lessons] })))
+  const [sections, setSections] = useState(() => storedCurriculum
+    ? buildMockCurriculumOutline(storedCurriculum).map((section) => ({
+        ...section,
+        description: section.description ?? '',
+        lessons: section.lessons.map((lesson) => ({
+          lessonId: lesson.lessonId,
+          title: lesson.title,
+          status: lesson.lessonStatus,
+        })),
+      }))
+    : [])
   const [curriculumInfo, setCurriculumInfo] = useState({
-    title: routeState?.draft?.title ?? (isNewDraft ? '' : demoCurriculum.title),
-    summary: routeState?.draft?.summary ?? (isNewDraft ? '' : demoCurriculum.summary),
-    description: routeState?.draft?.description ?? (isNewDraft ? '' : demoCurriculum.description),
+    title: routeState?.draft?.title ?? storedCurriculum?.title ?? '',
+    summary: routeState?.draft?.summary ?? storedCurriculum?.summary ?? '',
+    description: routeState?.draft?.description ?? storedCurriculum?.description ?? '',
   })
-  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(routeState?.draft?.thumbnailUrl ?? (isNewDraft ? null : demoCurriculum.thumbnailUrl))
+  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(routeState?.draft?.thumbnailUrl ?? storedCurriculum?.thumbnailUrl ?? null)
   const [saved, setSaved] = useState(Boolean(routeState?.created))
   usePageTitle('커리큘럼 관리')
 
@@ -68,7 +81,13 @@ export default function CurriculumManagePage() {
   const addSection = () => {
     setSections((current) => [
       ...current,
-      { sectionId: `sec_${Date.now()}`, title: '새 섹션', description: '설명을 입력해 주세요.', lessons: [] },
+      {
+        sectionId: `sec-${Date.now()}`,
+        title: '새 섹션',
+        description: '설명을 입력해 주세요.',
+        order: current.length + 1,
+        lessons: [],
+      },
     ])
     markChanged()
   }
@@ -79,10 +98,10 @@ export default function CurriculumManagePage() {
         eyebrow="CURRICULUM STUDIO"
         title={curriculumInfo.title || '새 커리큘럼 초안'}
         description="기본 정보, 수강생, 섹션과 레슨 편성을 관리합니다."
-        action={<div className="header-action-group"><Link className="button button--soft" to={`/curriculums/${curriculumId}`}>공개 화면</Link><button className="button button--primary" type="button" onClick={() => setSaved(true)}>변경 저장</button></div>}
+        action={<div className="header-action-group"><Link className="button button--soft" to={publicPaths.curriculum(curriculumId)}>공개 화면</Link><button className="button button--primary" type="button" onClick={() => setSaved(true)}>변경 저장</button></div>}
       />
       {saved && <InlineNotice tone="success">변경 내용이 현재 작업 초안에 반영되었습니다.</InlineNotice>}
-      <div className="metric-grid"><MetricCard label="상태" value="DRAFT" helper="게시 전" /><MetricCard label="섹션" value={sections.length} /><MetricCard label="전체 레슨" value={sections.reduce((sum, section) => sum + section.lessons.length, 0)} /><MetricCard label="수강생" value={demoCurriculum.enrolleeCount} /></div>
+      <div className="metric-grid"><MetricCard label="상태" value={storedCurriculum?.lifecycleStatus ?? 'DRAFT'} helper={isNewDraft ? '게시 전' : '운영 중'} /><MetricCard label="섹션" value={sections.length} /><MetricCard label="전체 레슨" value={sections.reduce((sum, section) => sum + section.lessons.length, 0)} /><MetricCard label="수강생" value={storedCurriculum?.enrolleeCount ?? 0} /></div>
       <div className="workspace-tabs" role="tablist"><button className={tab === 'structure' ? 'is-active' : ''} onClick={() => setTab('structure')} type="button">구성</button><button className={tab === 'info' ? 'is-active' : ''} onClick={() => setTab('info')} type="button">기본 정보</button><button className={tab === 'enrollees' ? 'is-active' : ''} onClick={() => setTab('enrollees')} type="button">수강생</button></div>
 
       {tab === 'structure' && (
@@ -97,9 +116,9 @@ export default function CurriculumManagePage() {
                     <label><small>섹션 이름</small><input aria-label={`섹션 ${sectionIndex + 1} 이름`} maxLength={200} value={section.title} onChange={(event) => updateSection(section.sectionId, 'title', event.target.value)} /></label>
                     <label><small>섹션 설명</small><textarea aria-label={`섹션 ${sectionIndex + 1} 설명`} rows={2} value={section.description} onChange={(event) => updateSection(section.sectionId, 'description', event.target.value)} /></label>
                   </div>
-                  <div className="structure-actions"><button aria-label="섹션 위로" disabled={sectionIndex === 0} onClick={() => moveSection(sectionIndex, -1)} type="button">↑</button><button aria-label="섹션 아래로" disabled={sectionIndex === sections.length - 1} onClick={() => moveSection(sectionIndex, 1)} type="button">↓</button><Link className="button button--soft button--small" to={`/curriculums/${curriculumId}/sections/${section.sectionId}/lessons/new`}>레슨 추가</Link></div>
+                  <div className="structure-actions"><button aria-label="섹션 위로" disabled={sectionIndex === 0} onClick={() => moveSection(sectionIndex, -1)} type="button">↑</button><button aria-label="섹션 아래로" disabled={sectionIndex === sections.length - 1} onClick={() => moveSection(sectionIndex, 1)} type="button">↓</button><Link className="button button--soft button--small" to={instructorPaths.newLesson(curriculumId, section.sectionId)}>레슨 추가</Link></div>
                 </header>
-                <ul>{section.lessons.map((lesson, lessonIndex) => <li key={lesson.lessonId}><span className="lesson-order">{lessonIndex + 1}</span><div><strong>{lesson.title}</strong><small>{lesson.status}</small></div><StatusBadge tone={lesson.status === 'PUBLISHED' ? 'success' : lesson.status === 'READY' ? 'warning' : 'neutral'}>{lesson.status}</StatusBadge><div className="row-actions"><Link to={`/curriculums/${curriculumId}/sections/${section.sectionId}/lessons/${lesson.lessonId}`}>상세</Link><Link to={`/curriculums/${curriculumId}/sections/${section.sectionId}/lessons/${lesson.lessonId}/edit`}>수정</Link></div></li>)}</ul>
+                <ul>{section.lessons.map((lesson, lessonIndex) => <li key={lesson.lessonId}><span className="lesson-order">{lessonIndex + 1}</span><div><strong>{lesson.title}</strong><small>{lesson.status}</small></div><StatusBadge tone={lesson.status === 'PUBLISHED' ? 'success' : lesson.status === 'READY' ? 'warning' : 'neutral'}>{lesson.status}</StatusBadge><div className="row-actions"><Link to={instructorPaths.lesson(curriculumId, section.sectionId, lesson.lessonId)}>상세</Link><Link to={instructorPaths.editLesson(curriculumId, section.sectionId, lesson.lessonId)}>수정</Link></div></li>)}</ul>
               </article>
             ))}
           </div>

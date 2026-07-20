@@ -139,7 +139,7 @@ LiveLessonPage
 
 - 해당 커리큘럼 강사 또는 수강생만 접근
 - 비로그인·미수강 학생·다른 커리큘럼 강사는 라우트 진입 단계에서 차단
-- `/live-sessions/:sessionId/classroom`에서 `liveSessionStatus=LIVE`일 때 입장
+- 강사는 `/instructor/live-sessions/:sessionId/classroom`, 학생은 `/student/live-sessions/:sessionId/classroom`에서 `liveSessionStatus=LIVE`일 때 입장
 - 세션 종료를 감지하면 라이브 세션 상세 또는 녹화 처리 상태로 이동
 - 권한과 상태는 프론트 라우트 가드뿐 아니라 서버에서도 검증
 

@@ -1,5 +1,6 @@
 import type { CurriculumDetailResponse } from '@/features/curriculum/types'
 import { resolveLessonPath } from '@/features/lesson/lessonRouting'
+import { instructorPaths, publicPaths } from '@/app/router/paths'
 
 export type PrimaryAction =
   | { kind: 'link'; label: string; to: string }
@@ -23,6 +24,7 @@ function getLessonDetailPath(detail: CurriculumDetailResponse, lessonId: string)
     sectionId: location.sectionId,
     lessonId: location.lesson.lessonId,
     destination: 'LESSON_DETAIL',
+    role: 'STUDENT',
   })
 }
 
@@ -30,12 +32,12 @@ export function resolvePrimaryAction(detail: CurriculumDetailResponse, returnTo:
   const { relationship, allowedActions, progress, nextLiveSession } = detail.viewerContext
 
   if (relationship === 'OWNER_INSTRUCTOR') {
-    return { kind: 'link', label: '관리하기', to: `/curriculums/${detail.curriculumId}/manage` }
+    return { kind: 'link', label: '관리하기', to: instructorPaths.curriculumManage(detail.curriculumId) }
   }
 
   if (relationship === 'ENROLLED') {
     if (allowedActions.includes('JOIN_LIVE') && nextLiveSession) {
-      return { kind: 'link', label: '라이브 입장', to: `/curriculums/${detail.curriculumId}` }
+      return { kind: 'link', label: '라이브 입장', to: publicPaths.curriculum(detail.curriculumId) }
     }
     const lastLearningPath = progress?.lastLearning
       ? getLessonDetailPath(detail, progress.lastLearning.lessonId)
@@ -58,6 +60,7 @@ export function resolvePrimaryAction(detail: CurriculumDetailResponse, returnTo:
           sectionId: firstSection.sectionId,
           lessonId: firstLesson.lessonId,
           destination: 'LESSON_DETAIL',
+          role: 'STUDENT',
         }),
       }
     }

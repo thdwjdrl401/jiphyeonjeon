@@ -1,5 +1,5 @@
 import { ApiError, apiClient } from '@/shared/api/client'
-import { isMockApiEnabled } from '@/shared/config/runtime'
+import { selectDataSource } from '@/shared/api/dataSource'
 import { mockAuthService } from './mockAuth'
 import type {
   AuthUser,
@@ -38,4 +38,4 @@ export const httpAuthService = {
   },
 }
 
-export const authService = isMockApiEnabled ? mockAuthService : httpAuthService
+export const authService = selectDataSource(mockAuthService, httpAuthService)

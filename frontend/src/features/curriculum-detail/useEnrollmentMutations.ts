@@ -6,7 +6,7 @@ export function useEnrollMutation(curriculumId: string) {
   return useMutation({
     mutationFn: () => enrollInCurriculum(curriculumId),
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['curriculums', 'detail', curriculumId] })
+      queryClient.invalidateQueries({ queryKey: ['curriculums'] })
     },
   })
 }
@@ -16,7 +16,7 @@ export function useCancelEnrollmentMutation(curriculumId: string) {
   return useMutation({
     mutationFn: () => cancelEnrollment(curriculumId),
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['curriculums', 'detail', curriculumId] })
+      queryClient.invalidateQueries({ queryKey: ['curriculums'] })
     },
   })
 }

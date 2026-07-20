@@ -170,7 +170,7 @@ POST /api/instructor/live-sessions/{sessionId}/cancel
 
 카메라·마이크 권한은 수강생 prejoin에서 요청하지 않는다.
 
-수강생의 모든 강의실 진입 동선은 prejoin을 먼저 거친다. 프론트는 점검 완료 문맥 없이 `/live-sessions/{sessionId}/classroom`에 직접 접근하면 `/live-sessions/{sessionId}/prejoin`으로 이동시킨다. 실제 입장 권한과 `LIVE` 상태는 이후 LiveKit token 발급에서 서버가 다시 검증한다.
+수강생의 모든 강의실 진입 동선은 prejoin을 먼저 거친다. 프론트는 점검 완료 문맥 없이 `/student/live-sessions/{sessionId}/classroom`에 직접 접근하면 `/student/live-sessions/{sessionId}/prejoin`으로 이동시킨다. 실제 입장 권한과 `LIVE` 상태는 이후 LiveKit token 발급에서 서버가 다시 검증한다.
 
 ### 4.2 `LIVE-SESSION-05` 강사 preflight
 

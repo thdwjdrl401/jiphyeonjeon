@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { instructorPaths, publicPaths } from '@/app/router/paths'
 import type { CurriculumCardSummary } from './types'
 
 interface CurriculumCardProps {
@@ -18,12 +19,12 @@ function getCoverVariant(curriculumId: string) {
 function getPrimaryAction(curriculum: CurriculumCardSummary) {
   const actions = curriculum.viewerContext.allowedActions
   if (actions.includes('MANAGE_CURRICULUM')) {
-    return { label: '관리하기', to: `/curriculums/${curriculum.curriculumId}/manage` }
+    return { label: '관리하기', to: instructorPaths.curriculumManage(curriculum.curriculumId) }
   }
   if (actions.includes('CONTINUE_LEARNING')) {
-    return { label: '학습 계속하기', to: `/curriculums/${curriculum.curriculumId}` }
+    return { label: '학습 계속하기', to: publicPaths.curriculum(curriculum.curriculumId) }
   }
-  return { label: '상세 보기', to: `/curriculums/${curriculum.curriculumId}` }
+  return { label: '상세 보기', to: publicPaths.curriculum(curriculum.curriculumId) }
 }
 
 export default function CurriculumCard({ curriculum, compact = false }: CurriculumCardProps) {
@@ -35,7 +36,7 @@ export default function CurriculumCard({ curriculum, compact = false }: Curricul
 
   return (
     <article className={`curriculum-card${compact ? ' curriculum-card--compact' : ''}`}>
-      <Link className="curriculum-cover" to={`/curriculums/${curriculum.curriculumId}`} tabIndex={-1} aria-hidden="true">
+      <Link className="curriculum-cover" to={publicPaths.curriculum(curriculum.curriculumId)} tabIndex={-1} aria-hidden="true">
         {curriculum.thumbnailUrl ? (
           <img src={curriculum.thumbnailUrl} alt="" />
         ) : (
@@ -53,7 +54,7 @@ export default function CurriculumCard({ curriculum, compact = false }: Curricul
           <span>{period}</span>
         </div>
         <h3>
-          <Link to={`/curriculums/${curriculum.curriculumId}`}>{curriculum.title}</Link>
+          <Link to={publicPaths.curriculum(curriculum.curriculumId)}>{curriculum.title}</Link>
         </h3>
         <p>{curriculum.summary}</p>
 

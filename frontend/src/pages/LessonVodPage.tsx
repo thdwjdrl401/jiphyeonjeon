@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { publicPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
 import { useCurriculumDetail } from '@/features/curriculum-detail/useCurriculumDetail'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
@@ -34,7 +35,7 @@ export default function LessonVodPage() {
       <PageState
         title="다시보기를 찾을 수 없어요"
         description="레슨 정보를 확인할 수 없거나 아직 다시보기가 준비되지 않았어요."
-        action={<Link className="button button--soft" to={`/curriculums/${curriculumId}`}>커리큘럼으로 돌아가기</Link>}
+        action={<Link className="button button--soft" to={publicPaths.curriculum(curriculumId)}>커리큘럼으로 돌아가기</Link>}
       />
     )
   }
@@ -48,7 +49,7 @@ export default function LessonVodPage() {
           <small>{lesson.order}강 · 다시보기</small>
         </div>
         <div className="media-page__status">
-          <Link className="button button--soft button--small" to={`/curriculums/${curriculumId}`}>커리큘럼으로</Link>
+          <Link className="button button--soft button--small" to={publicPaths.curriculum(curriculumId)}>커리큘럼으로</Link>
         </div>
       </header>
       <div className="video-stage replay-video">

@@ -1,3 +1,5 @@
+import { instructorPaths, studentPaths } from '@/app/router/paths'
+import type { UserRole } from '@/features/auth/types'
 import type { LessonAccessDestination } from './types'
 
 interface LessonPathParams {
@@ -6,18 +8,27 @@ interface LessonPathParams {
   lessonId: string
   destination: LessonAccessDestination | null
   sessionId?: string | null
+  role: UserRole
 }
 
-export function resolveLessonPath({ curriculumId, sectionId, lessonId, destination, sessionId }: LessonPathParams) {
+export function resolveLessonPath({ curriculumId, sectionId, lessonId, destination, sessionId, role }: LessonPathParams) {
+  const lessonPath = role === 'INSTRUCTOR'
+    ? instructorPaths.lesson(curriculumId, sectionId, lessonId)
+    : studentPaths.lesson(curriculumId, sectionId, lessonId)
+
   switch (destination) {
     case 'LIVE_SESSION':
-      return sessionId ? `/live-sessions/${sessionId}` : `/curriculums/${curriculumId}/sections/${sectionId}/lessons/${lessonId}`
+      return sessionId
+        ? role === 'INSTRUCTOR' ? instructorPaths.liveSession(sessionId) : studentPaths.liveSession(sessionId)
+        : lessonPath
     case 'LIVE_CLASSROOM':
-      return sessionId ? `/live-sessions/${sessionId}/classroom` : `/curriculums/${curriculumId}/sections/${sectionId}/lessons/${lessonId}`
+      return sessionId
+        ? role === 'INSTRUCTOR' ? instructorPaths.classroom(sessionId) : studentPaths.classroom(sessionId)
+        : lessonPath
     case 'VOD':
-      return `/lessons/${lessonId}/replay`
+      return role === 'INSTRUCTOR' ? instructorPaths.replay(lessonId) : studentPaths.replay(lessonId)
     case 'LESSON_DETAIL':
     default:
-      return `/curriculums/${curriculumId}/sections/${sectionId}/lessons/${lessonId}`
+      return lessonPath
   }
 }

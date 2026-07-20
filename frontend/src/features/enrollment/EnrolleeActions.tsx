@@ -34,6 +34,7 @@ export default function EnrolleeActions({ detail }: EnrolleeActionsProps) {
             sectionId: target.sectionId,
             lessonId: target.lesson.lessonId,
             destination: 'LESSON_DETAIL',
+            role: 'STUDENT',
           })}
         >
           {target.label}

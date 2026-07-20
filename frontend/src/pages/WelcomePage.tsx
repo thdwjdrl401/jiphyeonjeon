@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { getRoleHomePath, instructorPaths, publicPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
 import CurriculumCard from '@/features/curriculum/CurriculumCard'
 import CurriculumCardSkeleton from '@/features/curriculum/CurriculumCardSkeleton'
@@ -51,16 +52,16 @@ export default function WelcomePage() {
             <p>실시간 수업부터 자막, 근거 기반 AI 설명, 다시보기까지.<br />이해가 이어지는 하나의 학습 경험을 만나보세요.</p>
             <div className="hero-actions">
               {user ? (
-                <Link className="button button--primary button--large" to="/me/curriculums">
+                <Link className="button button--primary button--large" to={getRoleHomePath(user.role)}>
                   내 커리큘럼 <span aria-hidden="true">→</span>
                 </Link>
               ) : (
-                <Link className="button button--primary button--large" to="/curriculums">
+                <Link className="button button--primary button--large" to={publicPaths.curriculums}>
                   커리큘럼 둘러보기 <span aria-hidden="true">→</span>
                 </Link>
               )}
               {!user && (
-                <Link className="button button--soft button--large" to="/signup">
+                <Link className="button button--soft button--large" to={publicPaths.signup}>
                   무료로 시작하기
                 </Link>
               )}
@@ -138,7 +139,7 @@ export default function WelcomePage() {
               <h2>지금, 함께 배우기 좋은 수업</h2>
               <p>라이브로 질문하고 AI와 함께 깊이 이해해 보세요.</p>
             </div>
-            <Link className="text-link text-link--large" to="/curriculums">전체 커리큘럼 보기 <span aria-hidden="true">→</span></Link>
+            <Link className="text-link text-link--large" to={publicPaths.curriculums}>전체 커리큘럼 보기 <span aria-hidden="true">→</span></Link>
           </div>
 
           {featuredQuery.isPending ? (
@@ -151,7 +152,7 @@ export default function WelcomePage() {
               action={<button className="button button--soft" type="button" onClick={() => featuredQuery.refetch()}>다시 시도</button>}
             />
           ) : featuredQuery.data.items.length === 0 ? (
-            <PageState compact title="추천 커리큘럼을 준비하고 있어요" description="전체 커리큘럼에서 먼저 마음에 드는 수업을 찾아보세요." action={<Link className="button button--soft" to="/curriculums">전체 둘러보기</Link>} />
+            <PageState compact title="추천 커리큘럼을 준비하고 있어요" description="전체 커리큘럼에서 먼저 마음에 드는 수업을 찾아보세요." action={<Link className="button button--soft" to={publicPaths.curriculums}>전체 둘러보기</Link>} />
           ) : (
             <div className="curriculum-grid curriculum-grid--featured">
               {featuredQuery.data.items.slice(0, 3).map((curriculum) => (
@@ -172,13 +173,13 @@ export default function WelcomePage() {
           <div className="quick-action-buttons">
             {user ? (
               <>
-                <Link className="button button--white button--large" to="/me/curriculums">내 커리큘럼</Link>
-                {user.role === 'INSTRUCTOR' && <Link className="button button--outline-light button--large" to="/curriculums/new">새 커리큘럼 만들기</Link>}
+                <Link className="button button--white button--large" to={getRoleHomePath(user.role)}>내 커리큘럼</Link>
+                {user.role === 'INSTRUCTOR' && <Link className="button button--outline-light button--large" to={instructorPaths.newCurriculum}>새 커리큘럼 만들기</Link>}
               </>
             ) : (
               <>
-                <Link className="button button--white button--large" to="/signup">무료로 시작하기</Link>
-                <Link className="button button--outline-light button--large" to="/login">이미 계정이 있어요</Link>
+                <Link className="button button--white button--large" to={publicPaths.signup}>무료로 시작하기</Link>
+                <Link className="button button--outline-light button--large" to={publicPaths.login}>이미 계정이 있어요</Link>
               </>
             )}
           </div>

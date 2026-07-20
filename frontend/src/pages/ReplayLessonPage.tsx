@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { instructorPaths, studentPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
-import { demoCaptions, demoLesson, demoMessages } from '@/features/demo/demoData'
+import { demoCaptions, demoLesson, demoMessages, getDemoLesson } from '@/features/demo/demoData'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import { InlineNotice, StatusBadge } from '@/shared/ui/WorkspaceUi'
 
@@ -22,8 +23,12 @@ const replayQuestions = [
 
 export default function ReplayLessonPage() {
   const { lessonId = demoLesson.lessonId } = useParams()
+  const lesson = getDemoLesson(lessonId)
   const { user } = useAuth()
   const isInstructor = user?.role === 'INSTRUCTOR'
+  const lessonPath = isInstructor
+    ? instructorPaths.lesson(lesson.curriculumId, lesson.sectionId, lesson.lessonId)
+    : studentPaths.lesson(lesson.curriculumId, lesson.sectionId, lesson.lessonId)
   const [panel, setPanel] = useState<ReplayPanel>(isInstructor ? 'review' : 'outline')
   const [position, setPosition] = useState(42)
   const [playing, setPlaying] = useState(false)
@@ -34,7 +39,7 @@ export default function ReplayLessonPage() {
   const [reviewDraft, setReviewDraft] = useState('SecurityContext는 인증이 완료된 현재 요청의 인증 주체를 보관합니다.')
   const [reviewSaved, setReviewSaved] = useState(false)
   const [published, setPublished] = useState(false)
-  usePageTitle(`다시보기 · ${demoLesson.title}`)
+  usePageTitle(`다시보기 · ${lesson.title}`)
 
   const askAi = (event: FormEvent) => {
     event.preventDefault()
@@ -66,10 +71,10 @@ export default function ReplayLessonPage() {
   return (
     <div className={`media-page replay-page${isInstructor ? ' media-page--instructor' : ''}`}>
       <header className="media-page__title">
-        <div><StatusBadge tone="success">REPLAY</StatusBadge><h1>{demoLesson.title}</h1><small>레슨 {lessonId} · 교정 자막 v2</small></div>
+        <div><StatusBadge tone="success">REPLAY</StatusBadge><h1>{lesson.title}</h1><small>레슨 {lesson.lessonId} · 교정 자막 v2</small></div>
         <div className="media-page__status">
           {isInstructor ? <><StatusBadge tone="warning">강사 검수 모드</StatusBadge><span>VIDEO READY · {published ? 'PUBLISHED' : 'READY_FOR_REVIEW'}</span></> : <span>학습 진행률 {position}%</span>}
-          <Link className="button button--soft button--small" to={`/curriculums/cur_spring_live/sections/sec_security/lessons/${lessonId}`}>레슨 상세</Link>
+          <Link className="button button--soft button--small" to={lessonPath}>레슨 상세</Link>
         </div>
       </header>
 

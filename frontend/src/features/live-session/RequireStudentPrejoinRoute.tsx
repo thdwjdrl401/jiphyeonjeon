@@ -1,4 +1,5 @@
 import { Navigate, Outlet, useLocation, useParams } from 'react-router-dom'
+import { studentPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
 
 interface ClassroomNavigationState {
@@ -14,7 +15,7 @@ export default function RequireStudentPrejoinRoute() {
 
   const navigationState = location.state as ClassroomNavigationState | null
   if (!sessionId || navigationState?.prejoinSessionId !== sessionId) {
-    return <Navigate to={`/live-sessions/${sessionId ?? ''}/prejoin`} replace />
+    return <Navigate to={studentPaths.prejoin(sessionId ?? '')} replace />
   }
 
   return <Outlet />

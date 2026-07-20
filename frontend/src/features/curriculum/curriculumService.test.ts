@@ -8,6 +8,8 @@ import {
   enrollInCurriculum,
   getCurriculumDetail,
 } from '@/features/curriculum-detail/curriculumDetailService'
+import { authService, httpAuthService } from '@/features/auth/authService'
+import { createCurriculum } from './curriculumManagementService'
 import { getCurriculums } from './curriculumService'
 
 describe('커리큘럼 API 계약', () => {
@@ -31,6 +33,25 @@ describe('커리큘럼 API 계약', () => {
 
     expect(getSpy).toHaveBeenCalledWith('/curriculums', {
       params: { q: 'React', sort: 'LATEST', page: 0, size: 6 },
+    })
+  })
+
+  it('mock 설정이 false면 인증과 생성 서비스도 HTTP 구현을 선택한다', async () => {
+    const postSpy = vi.spyOn(apiClient, 'post').mockResolvedValue({
+      data: { curriculumId: 'cur-created' },
+    } as never)
+
+    expect(authService).toBe(httpAuthService)
+    await expect(createCurriculum({
+      title: '새 커리큘럼',
+      summary: '요약',
+      description: '설명',
+      thumbnailUrl: 'data:image/png;base64,mock',
+    })).resolves.toEqual({ curriculumId: 'cur-created' })
+    expect(postSpy).toHaveBeenCalledWith('/instructor/curriculums', {
+      title: '새 커리큘럼',
+      summary: '요약',
+      description: '설명',
     })
   })
 

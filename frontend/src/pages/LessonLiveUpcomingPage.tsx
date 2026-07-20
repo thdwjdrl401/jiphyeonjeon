@@ -1,4 +1,5 @@
 import { Link, useParams } from 'react-router-dom'
+import { publicPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
 import { useCurriculumDetail } from '@/features/curriculum-detail/useCurriculumDetail'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
@@ -35,7 +36,7 @@ export default function LessonLiveUpcomingPage() {
     <PageState
       title={lesson ? `${lesson.title} · 라이브 준비 중이에요` : '라이브 준비 중이에요'}
       description={description}
-      action={<Link className="button button--soft" to={`/curriculums/${curriculumId}`}>커리큘럼으로 돌아가기</Link>}
+      action={<Link className="button button--soft" to={publicPaths.curriculum(curriculumId)}>커리큘럼으로 돌아가기</Link>}
     />
   )
 }

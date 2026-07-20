@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { instructorPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
-import { demoCaptions, demoLesson, demoMessages, demoSession } from '@/features/demo/demoData'
+import { demoCaptions, demoMessages, demoSession, getDemoLesson, getDemoLiveSession } from '@/features/demo/demoData'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import { InlineNotice, StatusBadge } from '@/shared/ui/WorkspaceUi'
 
@@ -21,6 +22,8 @@ const participants = [
 
 export default function LiveClassroomPage() {
   const { sessionId = demoSession.sessionId } = useParams()
+  const session = getDemoLiveSession(sessionId)
+  const lesson = getDemoLesson(session.lessonId)
   const { user } = useAuth()
   const isInstructor = user?.role === 'INSTRUCTOR'
   const [panel, setPanel] = useState<LivePanel>(isInstructor ? 'questions' : 'chat')
@@ -33,7 +36,7 @@ export default function LiveClassroomPage() {
   const [aiAnswer, setAiAnswer] = useState('')
   const [bookmarked, setBookmarked] = useState(false)
   const [endRequested, setEndRequested] = useState(false)
-  usePageTitle(`LIVE · ${demoLesson.title}`)
+  usePageTitle(`LIVE · ${lesson.title}`)
 
   const sendMessage = (event: FormEvent) => {
     event.preventDefault()
@@ -79,13 +82,13 @@ export default function LiveClassroomPage() {
         <div>
           <span className="live-dot" />
           <strong>LIVE</strong>
-          <h1>{demoLesson.title}</h1>
+          <h1>{lesson.title}</h1>
           <small>세션 {sessionId}</small>
         </div>
         <div className="media-page__status">
           {isInstructor && <StatusBadge tone="warning">강사 운영 모드</StatusBadge>}
           <StatusBadge tone="success">연결 안정적</StatusBadge>
-          <span>{demoSession.participants}명 참여 중</span>
+          <span>{session.participants}명 참여 중</span>
           {isInstructor && <button className="button button--soft button--small" type="button" onClick={() => setEndRequested(true)}>세션 종료</button>}
         </div>
       </header>
@@ -102,7 +105,7 @@ export default function LiveClassroomPage() {
       {isInstructor && endRequested && (
         <div className="instructor-end-confirm" role="alert">
           <div><strong>라이브 세션을 종료할까요?</strong><p>학생 연결을 종료하고 녹화·AI 후처리 단계로 이동합니다.</p></div>
-          <div><button className="button button--ghost button--small" type="button" onClick={() => setEndRequested(false)}>계속 진행</button><Link className="button button--primary button--small" to={`/instructor/live-sessions/${sessionId}/processing`}>종료하고 처리 현황 보기</Link></div>
+          <div><button className="button button--ghost button--small" type="button" onClick={() => setEndRequested(false)}>계속 진행</button><Link className="button button--primary button--small" to={instructorPaths.processing(sessionId)}>종료하고 처리 현황 보기</Link></div>
         </div>
       )}
 
@@ -142,7 +145,7 @@ export default function LiveClassroomPage() {
 
           {!isInstructor && panel === 'ai' && <div className="side-panel-content ai-panel"><div className="ai-empty"><span>AI</span><h3>현재 수업 맥락에 질문하세요</h3><p>강의 자료와 발화를 근거로 답변합니다.</p></div>{aiAnswer && <div className="ai-answer"><strong>답변</strong><p>{aiAnswer}</p><small>근거 · 12번 슬라이드, 12:08–12:41 발화</small></div>}<form onSubmit={askAi}><textarea rows={3} value={aiQuestion} placeholder="예: SecurityContext와 세션은 어떻게 다른가요?" onChange={(event) => setAiQuestion(event.target.value)} /><button className="button button--primary button--full" type="submit">근거와 함께 질문</button></form></div>}
 
-          {panel === 'materials' && <div className="side-panel-content"><ul className="material-list material-list--compact">{demoLesson.materials.map((material) => <li key={material.id}><span className="file-icon">PPTX</span><div><strong>{material.name}</strong><small>{material.size}</small></div><button className="text-button" type="button">열기</button></li>)}</ul><InlineNotice>{isInstructor ? '현재 송출과 AI 근거에 사용하는 활성 자료입니다.' : '수업 전에 공개된 활성 자료만 표시됩니다.'}</InlineNotice></div>}
+          {panel === 'materials' && <div className="side-panel-content"><ul className="material-list material-list--compact">{lesson.materials.map((material) => <li key={material.id}><span className="file-icon">PPTX</span><div><strong>{material.name}</strong><small>{material.size}</small></div><button className="text-button" type="button">열기</button></li>)}</ul><InlineNotice>{isInstructor ? '현재 송출과 AI 근거에 사용하는 활성 자료입니다.' : '수업 전에 공개된 활성 자료만 표시됩니다.'}</InlineNotice></div>}
         </aside>
       </div>
     </div>

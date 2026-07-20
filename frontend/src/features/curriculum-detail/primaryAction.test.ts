@@ -4,7 +4,7 @@ import { resolvePrimaryAction } from './primaryAction'
 
 function makeDetail(overrides: Partial<CurriculumDetailResponse['viewerContext']>): CurriculumDetailResponse {
   return {
-    curriculumId: 'cur_test',
+    curriculumId: 'cur-test',
     title: '테스트 커리큘럼',
     summary: '',
     description: '',
@@ -15,13 +15,13 @@ function makeDetail(overrides: Partial<CurriculumDetailResponse['viewerContext']
     instructor: { instructorId: 'usr_1', displayName: '강사', bio: '', expertise: [] },
     outline: [
       {
-        sectionId: 'sec_1',
+        sectionId: 'sec-1',
         title: '1. 섹션 1',
         description: null,
         order: 1,
         lessons: [
           {
-            lessonId: 'les_1',
+            lessonId: 'les-1',
             title: '1강',
             order: 1,
             lessonStatus: 'PUBLISHED',
@@ -51,8 +51,8 @@ describe('resolvePrimaryAction', () => {
     const withCancel = makeDetail({ relationship: 'PENDING_ENROLLMENT', allowedActions: ['CANCEL_ENROLLMENT'] })
     const withoutCancel = makeDetail({ relationship: 'PENDING_ENROLLMENT', allowedActions: [] })
 
-    expect(resolvePrimaryAction(withCancel, '/curriculums/cur_test')).toEqual({ kind: 'status', label: '승인 대기' })
-    expect(resolvePrimaryAction(withoutCancel, '/curriculums/cur_test')).toEqual({ kind: 'status', label: '승인 대기' })
+    expect(resolvePrimaryAction(withCancel, '/curriculums/cur-test')).toEqual({ kind: 'status', label: '승인 대기' })
+    expect(resolvePrimaryAction(withoutCancel, '/curriculums/cur-test')).toEqual({ kind: 'status', label: '승인 대기' })
   })
 
   it('수강생인데 학습 기록이 없으면 첫 레슨으로 가는 수강하기 액션을 반환한다', () => {
@@ -62,10 +62,10 @@ describe('resolvePrimaryAction', () => {
       progress: { completedLessonCount: 0, totalLessonCount: 1, progressPercent: 0, lastLearning: null },
     })
 
-    expect(resolvePrimaryAction(detail, '/curriculums/cur_test')).toEqual({
+    expect(resolvePrimaryAction(detail, '/curriculums/cur-test')).toEqual({
       kind: 'link',
       label: '수강하기',
-      to: '/curriculums/cur_test/sections/sec_1/lessons/les_1',
+      to: '/student/curriculums/cur-test/sections/sec-1/lessons/les-1',
     })
   })
 
@@ -77,14 +77,14 @@ describe('resolvePrimaryAction', () => {
         completedLessonCount: 3,
         totalLessonCount: 10,
         progressPercent: 30,
-        lastLearning: { lessonId: 'les_1', sessionMs: 1000 },
+        lastLearning: { lessonId: 'les-1', sessionMs: 1000 },
       },
     })
 
-    expect(resolvePrimaryAction(detail, '/curriculums/cur_test')).toEqual({
+    expect(resolvePrimaryAction(detail, '/curriculums/cur-test')).toEqual({
       kind: 'link',
       label: '이어보기',
-      to: '/curriculums/cur_test/sections/sec_1/lessons/les_1',
+      to: '/student/curriculums/cur-test/sections/sec-1/lessons/les-1',
     })
   })
 
@@ -96,14 +96,14 @@ describe('resolvePrimaryAction', () => {
         completedLessonCount: 1,
         totalLessonCount: 1,
         progressPercent: 100,
-        lastLearning: { lessonId: 'removed_lesson', sessionMs: 1000 },
+        lastLearning: { lessonId: 'removed-lesson', sessionMs: 1000 },
       },
     })
 
-    expect(resolvePrimaryAction(detail, '/curriculums/cur_test')).toEqual({
+    expect(resolvePrimaryAction(detail, '/curriculums/cur-test')).toEqual({
       kind: 'link',
       label: '수강하기',
-      to: '/curriculums/cur_test/sections/sec_1/lessons/les_1',
+      to: '/student/curriculums/cur-test/sections/sec-1/lessons/les-1',
     })
   })
 })

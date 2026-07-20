@@ -45,7 +45,7 @@ describe('LiveClass AI 공개 페이지', () => {
   })
 
   it('커리큘럼 상세 경로를 실제 앱 라우터에서 연다', async () => {
-    renderAt('/curriculums/cur_spring_live')
+    renderAt('/curriculums/cur-spring-live')
 
     expect(
       await screen.findByRole('heading', { name: '라이브로 완성하는 Spring Boot' }),
@@ -73,7 +73,8 @@ describe('LiveClass AI 공개 페이지', () => {
     await user.type(within(form).getByLabelText('비밀번호'), 'password1')
     await user.click(within(form).getByRole('button', { name: '로그인' }))
 
-    expect(await screen.findByText('김학생')).toBeInTheDocument()
+    expect((await screen.findAllByText('김학생')).length).toBeGreaterThan(0)
+    expect(window.location.pathname).toBe('/student/curriculums')
     expect(localStorage.getItem('accessToken')).toBeNull()
   })
 

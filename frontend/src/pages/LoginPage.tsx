@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { getRoleHomePath } from '@/app/router/paths'
 import AuthShell from '@/features/auth/AuthShell'
 import { useAuth } from '@/features/auth/AuthContext'
 import { ApiError } from '@/shared/api/client'
@@ -56,8 +57,8 @@ export default function LoginPage() {
 
     setIsSubmitting(true)
     try {
-      await login({ email: normalizedEmail, password })
-      navigate(returnTo ?? '/', { replace: true })
+      const signedInUser = await login({ email: normalizedEmail, password })
+      navigate(returnTo ?? getRoleHomePath(signedInUser.role), { replace: true })
     } catch (error) {
       if (error instanceof ApiError && error.status === 429) {
         setSubmitError('로그인 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.')

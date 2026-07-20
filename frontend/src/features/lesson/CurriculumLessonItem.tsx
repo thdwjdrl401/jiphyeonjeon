@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { studentPaths } from '@/app/router/paths'
 import type { CurriculumRelationship } from '@/features/curriculum/types'
 import { resolveLessonPath } from './lessonRouting'
 import type { CurriculumOutlineLesson, LessonStatus } from './types'
@@ -57,18 +58,20 @@ function resolveActivity(lesson: CurriculumOutlineLesson, relationship: Curricul
 
 export default function CurriculumLessonItem({ lesson, relationship, curriculumId, sectionId }: CurriculumLessonItemProps) {
   const canOpen = lesson.access.allowed
-  const detailPath = resolveLessonPath({ curriculumId, sectionId, lessonId: lesson.lessonId, destination: 'LESSON_DETAIL' })
+  const role = relationship === 'OWNER_INSTRUCTOR' ? 'INSTRUCTOR' : 'STUDENT'
+  const detailPath = resolveLessonPath({ curriculumId, sectionId, lessonId: lesson.lessonId, destination: 'LESSON_DETAIL', role })
   const activity = resolveActivity(lesson, relationship)
   const requiresStudentPrejoin = relationship === 'ENROLLED'
     && (lesson.liveSession?.status === 'OPEN' || lesson.liveSession?.status === 'LIVE')
   const actionPath = requiresStudentPrejoin && lesson.liveSession
-    ? `/live-sessions/${lesson.liveSession.sessionId}/prejoin`
+    ? studentPaths.prejoin(lesson.liveSession.sessionId)
     : resolveLessonPath({
         curriculumId,
         sectionId,
         lessonId: lesson.lessonId,
         destination: lesson.access.destination,
         sessionId: lesson.liveSession?.sessionId,
+        role,
       })
   const showCompleted = relationship === 'ENROLLED' && lesson.learning?.completed
 

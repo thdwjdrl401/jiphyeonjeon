@@ -170,10 +170,10 @@ GET /api/curriculums/{curriculumId}
 
 | `destination` | 필요한 식별자 | 프론트 라우트 |
 |---|---|---|
-| `LESSON_DETAIL` | `curriculumId`, `sectionId`, `lessonId` | `/curriculums/{curriculumId}/sections/{sectionId}/lessons/{lessonId}` |
-| `LIVE_SESSION` | `liveSession.sessionId` | `/live-sessions/{sessionId}` |
-| `LIVE_CLASSROOM` | `liveSession.sessionId` | 학생은 `/live-sessions/{sessionId}/prejoin`을 먼저 거친 뒤 `/live-sessions/{sessionId}/classroom`으로 이동 |
-| `VOD` | `lessonId` | `/lessons/{lessonId}/replay` |
+| `LESSON_DETAIL` | `curriculumId`, `sectionId`, `lessonId` | 학생은 `/student/curriculums/{curriculumId}/sections/{sectionId}/lessons/{lessonId}`, 강사는 같은 계층의 `/instructor/*` 경로 |
+| `LIVE_SESSION` | `liveSession.sessionId` | 학생은 `/student/live-sessions/{sessionId}`, 강사는 `/instructor/live-sessions/{sessionId}` |
+| `LIVE_CLASSROOM` | `liveSession.sessionId` | 학생은 `/student/live-sessions/{sessionId}/prejoin`을 먼저 거친 뒤 `/student/live-sessions/{sessionId}/classroom`으로 이동 |
+| `VOD` | `lessonId` | 학생은 `/student/lessons/{lessonId}/replay`, 강사는 `/instructor/lessons/{lessonId}/replay` |
 
 `LIVE_SESSION` 또는 `LIVE_CLASSROOM`인데 `liveSession.sessionId`가 누락되면 프론트는 존재하지 않는 URL을 만들지 않고 레슨 상세로 대체한다.
 

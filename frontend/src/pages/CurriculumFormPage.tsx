@@ -1,12 +1,11 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { instructorPaths } from '@/app/router/paths'
 import CurriculumImageField from '@/features/curriculum/CurriculumImageField'
-import { apiClient, ApiError } from '@/shared/api/client'
-import { isMockApiEnabled } from '@/shared/config/runtime'
+import { createCurriculum } from '@/features/curriculum/curriculumManagementService'
+import { ApiError } from '@/shared/api/client'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import { InlineNotice, PageHeader, Panel } from '@/shared/ui/WorkspaceUi'
-
-interface CreateCurriculumResponse { curriculumId: string }
 
 export default function CurriculumFormPage() {
   usePageTitle('커리큘럼 만들기')
@@ -25,16 +24,13 @@ export default function CurriculumFormPage() {
     if (form.startsAt && form.endsAt && form.startsAt >= form.endsAt) { setError('종료일은 시작일보다 뒤여야 합니다.'); return }
     setSubmitting(true)
     try {
-      let curriculumId = 'cur_new_draft'
-      if (!isMockApiEnabled) {
-        const { data } = await apiClient.post<CreateCurriculumResponse>('/instructor/curriculums', {
-          title: form.title.trim(),
-          summary: form.summary.trim(),
-          description: form.description.trim(),
-        })
-        curriculumId = data.curriculumId
-      }
-      navigate(`/curriculums/${curriculumId}/manage`, {
+      const { curriculumId } = await createCurriculum({
+        title: form.title.trim(),
+        summary: form.summary.trim(),
+        description: form.description.trim(),
+        thumbnailUrl,
+      })
+      navigate(instructorPaths.curriculumManage(curriculumId), {
         state: {
           created: true,
           draft: {
@@ -79,7 +75,7 @@ export default function CurriculumFormPage() {
         </Panel>
 
         {error && <InlineNotice tone="danger">{error}</InlineNotice>}
-        <div className="sticky-form-actions"><Link className="button button--ghost" to="/me/curriculums">취소</Link><button className="button button--primary button--large" type="submit" disabled={submitting}>{submitting ? '초안 만드는 중' : '초안 만들기'}</button></div>
+        <div className="sticky-form-actions"><Link className="button button--ghost" to={instructorPaths.curriculums}>취소</Link><button className="button button--primary button--large" type="submit" disabled={submitting}>{submitting ? '초안 만드는 중' : '초안 만들기'}</button></div>
       </form>
     </div>
   )
