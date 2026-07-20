@@ -134,6 +134,10 @@
   text-decoration: none;
 }
 
+.curriculum-lesson a.curriculum-lesson__replay {
+  flex: none;
+}
+
 .curriculum-lesson__done {
   color: var(--green-700);
   font-size: 0.8rem;

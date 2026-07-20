@@ -26,6 +26,14 @@ export default function CurriculumLessonItem({ lesson, curriculumId }: Curriculu
           <span>{lesson.order}. {lesson.title}</span>
           {lesson.learning?.completed && <span className="curriculum-lesson__done" aria-label="완료">완료</span>}
         </Link>
+        {lesson.learning?.completed && (
+          <Link
+            className="button button--soft button--small curriculum-lesson__replay"
+            to={resolveLessonPath(curriculumId, lesson.lessonId, 'VOD')}
+          >
+            다시보기
+          </Link>
+        )}
       </li>
     )
   }

@@ -10,6 +10,8 @@ import ForbiddenPage from '@/pages/ForbiddenPage'
 import InstructorPreflightPage from '@/pages/InstructorPreflightPage'
 import LessonDetailPage from '@/pages/LessonDetailPage'
 import LessonFormPage from '@/pages/LessonFormPage'
+import LessonLiveUpcomingPage from '@/pages/LessonLiveUpcomingPage'
+import LessonVodPage from '@/pages/LessonVodPage'
 import LiveClassroomPage from '@/pages/LiveClassroomPage'
 import LiveSessionDetailPage from '@/pages/LiveSessionDetailPage'
 import LiveSessionFormPage from '@/pages/LiveSessionFormPage'
@@ -43,6 +45,7 @@ export default function AppRouter() {
           <Route path="me/profile" element={<ProfilePage />} />
           <Route path="me/curriculums" element={<MyCurriculumsPage />} />
           <Route path="curriculums/:curriculumId/sections/:sectionId/lessons/:lessonId" element={<LessonDetailPage />} />
+          <Route path="curriculums/:curriculumId/live/:lessonId" element={<LessonLiveUpcomingPage />} />
           <Route path="live-sessions/:sessionId" element={<LiveSessionDetailPage />} />
           <Route path="live-sessions/:sessionId/prejoin" element={<StudentPrejoinPage />} />
           <Route element={<RequireInstructorRoute />}>
@@ -59,6 +62,7 @@ export default function AppRouter() {
         <Route element={<LessonLayout />}>
           <Route path="live-sessions/:sessionId/classroom" element={<LiveClassroomPage />} />
           <Route path="lessons/:lessonId/replay" element={<ReplayLessonPage />} />
+          <Route path="curriculums/:curriculumId/lessons/:lessonId/vod" element={<LessonVodPage />} />
         </Route>
       </Route>
       <Route path="forbidden" element={<ForbiddenPage />} />

@@ -77,6 +77,26 @@ describe('CurriculumDetailPage', () => {
     expect(screen.getAllByRole('link', { name: '이어보기' }).length).toBeGreaterThan(0)
   })
 
+  it('지난(완료된) 레슨에는 다시보기 버튼이 있고 VOD 경로로 연결된다', async () => {
+    await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
+    renderDetail('/curriculums/cur_spring_live')
+
+    await screen.findByText('학습 진행률')
+    const replayLinks = screen.getAllByRole('link', { name: '다시보기' })
+    expect(replayLinks.length).toBeGreaterThan(0)
+    for (const link of replayLinks) {
+      expect(link).toHaveAttribute('href', expect.stringMatching(/^\/curriculums\/cur_spring_live\/lessons\/.+\/vod$/))
+    }
+  })
+
+  it('완료 직후 바로 다음 예정 레슨은 라이브 준비 안내 페이지로 연결된다', async () => {
+    await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
+    renderDetail('/curriculums/cur_spring_live')
+
+    const nextUpLink = await screen.findByRole('link', { name: /^7\. 7강\. 학습 주제 7$/ })
+    expect(nextUpLink).toHaveAttribute('href', '/curriculums/cur_spring_live/live/cur_spring_live_lesson_7')
+  })
+
   it('수강 중이지만 아직 레슨을 하나도 듣지 않았다면 수강하기 CTA가 보인다', async () => {
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
     renderDetail('/curriculums/cur_react_system')
