@@ -57,7 +57,8 @@ public class InstructorCurriculumService {
         curriculum.setDescription(description);
         // 생성 시점 기본값은 DDL과 일치시킨다(초안·즉시수강). 발행은 별도 흐름에서.
         curriculum.setLifecycleStatus(CurriculumLifecycleStatus.DRAFT);
-        curriculum.setEnrollmentType(EnrollmentType.IMMEDIATE);
+        // 제품 정책: 승인제(학생 신청 → 강사 승인). enum은 즉시·초대도 지원하나 기본은 승인제.
+        curriculum.setEnrollmentType(EnrollmentType.APPROVAL_REQUIRED);
         curriculum.setStructureVersion(0);
         curriculum.setSectionCount(0);
         curriculum.setLessonCount(0);

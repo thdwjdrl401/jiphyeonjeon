@@ -38,6 +38,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/auth/signup", "/api/auth/login", "/api/auth/logout").permitAll()
                         // 공개 카탈로그 조회는 비로그인도 가능(GET만).
                         .requestMatchers(HttpMethod.GET, "/api/curriculums", "/api/curriculums/**").permitAll()
+                        // 수강 신청·취소는 학생만(강사 계정은 수강 불가 — 계정 분리 정책). 강사 승인 등은 /api/instructor/**.
+                        .requestMatchers(HttpMethod.POST, "/api/curriculums/*/enrollments").hasRole("STUDENT")
+                        .requestMatchers(HttpMethod.DELETE, "/api/curriculums/*/enrollments/me").hasRole("STUDENT")
                         // 강사 관리 API는 INSTRUCTOR 역할 필수. 소유권(내 커리큘럼인가)은 서비스가 별도로 검증한다.
                         .requestMatchers("/api/instructor/**").hasRole("INSTRUCTOR")
                         .anyRequest().authenticated()

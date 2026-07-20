@@ -7,6 +7,8 @@ import com.liveclass.curriculum.service.NotCurriculumOwnerException;
 import com.liveclass.curriculum.service.SectionNotEmptyException;
 import com.liveclass.curriculum.service.SectionNotFoundException;
 import com.liveclass.common.web.ErrorResponse;
+import com.liveclass.enrollment.api.EnrollmentNotFoundException;
+import com.liveclass.enrollment.api.EnrollmentStateConflictException;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -20,8 +22,23 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @Order(Ordered.LOWEST_PRECEDENCE - 100)
 @RestControllerAdvice(assignableTypes = {
         InstructorCurriculumController.class, InstructorLessonController.class,
-        InstructorLiveSessionController.class, CatalogController.class})
+        InstructorLiveSessionController.class, CatalogController.class,
+        StudentEnrollmentController.class, InstructorEnrollmentController.class})
 public class CurriculumExceptionHandler {
+
+    /** 수강 기록 없음(취소 대상 없음 등). */
+    @ExceptionHandler(EnrollmentNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleEnrollmentNotFound(EnrollmentNotFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ErrorResponse.of("ENROLLMENT_NOT_FOUND", e.getMessage()));
+    }
+
+    /** 허용되지 않는 수강 상태 전이(중복 신청·잘못된 승인 등). */
+    @ExceptionHandler(EnrollmentStateConflictException.class)
+    public ResponseEntity<ErrorResponse> handleEnrollmentConflict(EnrollmentStateConflictException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ErrorResponse.of("ENROLLMENT_STATE_CONFLICT", e.getMessage()));
+    }
 
     @ExceptionHandler({CurriculumNotFoundException.class, SectionNotFoundException.class, LessonNotFoundException.class})
     public ResponseEntity<ErrorResponse> handleNotFound(RuntimeException e) {
