@@ -1,15 +1,15 @@
 import type { LessonAccessDestination } from './types'
 
-export function resolveLessonPath(courseId: string, lessonId: string, destination: LessonAccessDestination | null) {
+export function resolveLessonPath(curriculumId: string, lessonId: string, destination: LessonAccessDestination | null) {
   switch (destination) {
     case 'LIVE_SESSION':
-      return `/curriculums/${courseId}/live/${lessonId}`
+      return `/curriculums/${curriculumId}/live/${lessonId}`
     case 'LIVE_CLASSROOM':
-      return `/curriculums/${courseId}/classroom/${lessonId}`
+      return `/curriculums/${curriculumId}/classroom/${lessonId}`
     case 'VOD':
-      return `/curriculums/${courseId}/lessons/${lessonId}/vod`
+      return `/curriculums/${curriculumId}/lessons/${lessonId}/vod`
     case 'LESSON_DETAIL':
     default:
-      return `/curriculums/${courseId}/lessons/${lessonId}`
+      return `/curriculums/${curriculumId}/lessons/${lessonId}`
   }
 }

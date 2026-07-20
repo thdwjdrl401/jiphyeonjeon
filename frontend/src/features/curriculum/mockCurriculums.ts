@@ -1,15 +1,15 @@
 import { peekMockUser } from '@/features/auth/mockAuth'
 import type {
-  CourseCardSummary,
-  CourseListQuery,
-  CourseListResponse,
+  CurriculumCardSummary,
+  CurriculumListQuery,
+  CurriculumListResponse,
 } from './types'
 
-type MockCourse = Omit<CourseCardSummary, 'viewerContext'> & { featured: boolean }
+type MockCurriculum = Omit<CurriculumCardSummary, 'viewerContext'> & { featured: boolean }
 
-const courses: MockCourse[] = [
+const curriculums: MockCurriculum[] = [
   {
-    courseId: 'crs_spring_live',
+    curriculumId: 'cur_spring_live',
     title: '라이브로 완성하는 Spring Boot',
     summary: '현업의 요청 흐름을 따라가며 견고한 백엔드를 함께 설계합니다.',
     thumbnailUrl: null,
@@ -21,7 +21,7 @@ const courses: MockCourse[] = [
     featured: true,
   },
   {
-    courseId: 'crs_data_story',
+    curriculumId: 'cur_data_story',
     title: '데이터로 설득하는 시각화',
     summary: '좋은 차트의 기준부터 비즈니스 스토리텔링까지 실습으로 익혀요.',
     thumbnailUrl: null,
@@ -33,7 +33,7 @@ const courses: MockCourse[] = [
     featured: true,
   },
   {
-    courseId: 'crs_react_system',
+    curriculumId: 'cur_react_system',
     title: 'React 디자인 시스템 실전',
     summary: '재사용 가능한 컴포넌트와 접근성 있는 인터랙션을 직접 구축합니다.',
     thumbnailUrl: null,
@@ -45,7 +45,7 @@ const courses: MockCourse[] = [
     featured: true,
   },
   {
-    courseId: 'crs_ai_product',
+    curriculumId: 'cur_ai_product',
     title: 'AI 제품 기획자를 위한 첫걸음',
     summary: '모델의 가능성과 한계를 이해하고 검증 가능한 AI 기능을 설계해요.',
     thumbnailUrl: null,
@@ -57,7 +57,7 @@ const courses: MockCourse[] = [
     featured: true,
   },
   {
-    courseId: 'crs_webrtc',
+    curriculumId: 'cur_webrtc',
     title: 'WebRTC와 실시간 미디어',
     summary: '브라우저 미디어부터 SFU 아키텍처까지 실시간 서비스의 핵심을 다룹니다.',
     thumbnailUrl: null,
@@ -69,7 +69,7 @@ const courses: MockCourse[] = [
     featured: true,
   },
   {
-    courseId: 'crs_sql',
+    curriculumId: 'cur_sql',
     title: '성능을 바꾸는 SQL 튜닝',
     summary: '실행 계획을 읽고 느린 쿼리의 원인을 단계적으로 찾아갑니다.',
     thumbnailUrl: null,
@@ -81,7 +81,7 @@ const courses: MockCourse[] = [
     featured: true,
   },
   {
-    courseId: 'crs_cloud',
+    curriculumId: 'cur_cloud',
     title: '처음 만나는 클라우드 아키텍처',
     summary: '확장성과 장애 대응을 중심으로 서비스 구조를 함께 그려봅니다.',
     thumbnailUrl: null,
@@ -93,7 +93,7 @@ const courses: MockCourse[] = [
     featured: false,
   },
   {
-    courseId: 'crs_typescript',
+    curriculumId: 'cur_typescript',
     title: 'TypeScript 타입 설계 워크숍',
     summary: '복잡한 도메인을 안전하고 읽기 좋은 타입으로 표현하는 연습을 합니다.',
     thumbnailUrl: null,
@@ -105,7 +105,7 @@ const courses: MockCourse[] = [
     featured: false,
   },
   {
-    courseId: 'crs_ux_research',
+    curriculumId: 'cur_ux_research',
     title: '사용자를 이해하는 UX 리서치',
     summary: '인터뷰 설계부터 인사이트 도출까지 작은 팀을 위한 방법을 익혀요.',
     thumbnailUrl: null,
@@ -117,7 +117,7 @@ const courses: MockCourse[] = [
     featured: false,
   },
   {
-    courseId: 'crs_python',
+    curriculumId: 'cur_python',
     title: 'Python 자동화 레시피',
     summary: '반복 업무를 줄이는 작은 스크립트부터 데이터 파이프라인까지 만들어요.',
     thumbnailUrl: null,
@@ -130,18 +130,18 @@ const courses: MockCourse[] = [
   },
 ]
 
-function withViewerContext(course: MockCourse, index: number): CourseCardSummary {
+function withViewerContext(curriculum: MockCurriculum, index: number): CurriculumCardSummary {
   const user = peekMockUser()
   const summary = {
-    courseId: course.courseId,
-    title: course.title,
-    summary: course.summary,
-    thumbnailUrl: course.thumbnailUrl,
-    instructor: course.instructor,
-    lifecycleStatus: course.lifecycleStatus,
-    period: course.period,
-    sectionCount: course.sectionCount,
-    lessonCount: course.lessonCount,
+    curriculumId: curriculum.curriculumId,
+    title: curriculum.title,
+    summary: curriculum.summary,
+    thumbnailUrl: curriculum.thumbnailUrl,
+    instructor: curriculum.instructor,
+    lifecycleStatus: curriculum.lifecycleStatus,
+    period: curriculum.period,
+    sectionCount: curriculum.sectionCount,
+    lessonCount: curriculum.lessonCount,
   }
 
   if (!user) {
@@ -157,7 +157,7 @@ function withViewerContext(course: MockCourse, index: number): CourseCardSummary
       ...summary,
       viewerContext: {
         relationship: isOwner ? 'OWNER_INSTRUCTOR' : 'NON_OWNER_INSTRUCTOR',
-        allowedActions: isOwner ? ['VIEW_DETAIL', 'MANAGE_COURSE'] : ['VIEW_DETAIL'],
+        allowedActions: isOwner ? ['VIEW_DETAIL', 'MANAGE_CURRICULUM'] : ['VIEW_DETAIL'],
       },
     }
   }
@@ -170,8 +170,8 @@ function withViewerContext(course: MockCourse, index: number): CourseCardSummary
           relationship: 'ENROLLED',
           allowedActions: ['VIEW_DETAIL', 'CONTINUE_LEARNING'],
           progress: {
-            completedLessonCount: Math.max(1, Math.floor(course.lessonCount * 0.36)),
-            totalLessonCount: course.lessonCount,
+            completedLessonCount: Math.max(1, Math.floor(curriculum.lessonCount * 0.36)),
+            totalLessonCount: curriculum.lessonCount,
             progressPercent: 36,
           },
         }
@@ -182,16 +182,16 @@ function withViewerContext(course: MockCourse, index: number): CourseCardSummary
   }
 }
 
-export async function getMockCourses(query: CourseListQuery): Promise<CourseListResponse> {
+export async function getMockCurriculums(query: CurriculumListQuery): Promise<CurriculumListResponse> {
   if (import.meta.env.MODE !== 'test') {
     await new Promise((resolve) => window.setTimeout(resolve, 420))
   }
 
   const search = query.q?.trim().toLocaleLowerCase('ko')
-  let filtered = courses.filter((course) => {
-    if (query.featured && !course.featured) return false
+  let filtered = curriculums.filter((curriculum) => {
+    if (query.featured && !curriculum.featured) return false
     if (!search) return true
-    return [course.title, course.summary, course.instructor.displayName]
+    return [curriculum.title, curriculum.summary, curriculum.instructor.displayName]
       .join(' ')
       .toLocaleLowerCase('ko')
       .includes(search)
@@ -210,7 +210,7 @@ export async function getMockCourses(query: CourseListQuery): Promise<CourseList
   const start = page * size
   const items = filtered
     .slice(start, start + size)
-    .map((course) => withViewerContext(course, courses.indexOf(course)))
+    .map((curriculum) => withViewerContext(curriculum, curriculums.indexOf(curriculum)))
   const totalPages = Math.ceil(filtered.length / size)
 
   return {

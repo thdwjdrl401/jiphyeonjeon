@@ -1,4 +1,4 @@
-import type { CourseDetailResponse } from '@/features/curriculum/types'
+import type { CurriculumDetailResponse } from '@/features/curriculum/types'
 
 const dateFormatter = new Intl.DateTimeFormat('ko-KR', {
   year: 'numeric',
@@ -7,7 +7,7 @@ const dateFormatter = new Intl.DateTimeFormat('ko-KR', {
 })
 
 interface EnrollmentPendingNoticeProps {
-  detail: CourseDetailResponse
+  detail: CurriculumDetailResponse
   onCancel: () => void
   isCancelling: boolean
   cancelError: string | null

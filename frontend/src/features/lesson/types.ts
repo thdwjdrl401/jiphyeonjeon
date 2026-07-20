@@ -19,7 +19,7 @@ export interface LessonLearning {
   progressPercent: number
 }
 
-export interface CourseOutlineLesson {
+export interface CurriculumOutlineLesson {
   lessonId: string
   title: string
   order: number

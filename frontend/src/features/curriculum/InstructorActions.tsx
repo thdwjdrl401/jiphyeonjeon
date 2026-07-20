@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom'
-import type { CourseDetailResponse } from './types'
+import type { CurriculumDetailResponse } from './types'
 
 interface InstructorActionsProps {
-  detail: CourseDetailResponse
+  detail: CurriculumDetailResponse
 }
 
 export default function InstructorActions({ detail }: InstructorActionsProps) {
@@ -11,7 +11,7 @@ export default function InstructorActions({ detail }: InstructorActionsProps) {
       <h2>담당 강사 관리</h2>
       <p>이 커리큘럼을 관리하고 레슨을 편성할 수 있어요.</p>
       <div className="instructor-actions__buttons">
-        <Link className="button button--primary" to={`/curriculums/${detail.courseId}/manage`}>
+        <Link className="button button--primary" to={`/curriculums/${detail.curriculumId}/manage`}>
           커리큘럼 관리
         </Link>
       </div>

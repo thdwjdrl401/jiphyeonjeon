@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '@/features/auth/AuthContext'
 import CurriculumCard from '@/features/curriculum/CurriculumCard'
 import CurriculumCardSkeleton from '@/features/curriculum/CurriculumCardSkeleton'
-import { useCourses } from '@/features/curriculum/useCourses'
+import { useCurriculums } from '@/features/curriculum/useCurriculums'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
 
@@ -36,9 +36,9 @@ const features = [
 export default function WelcomePage() {
   usePageTitle('라이브의 순간을 내 학습으로')
   const { user } = useAuth()
-  const featuredQuery = useCourses(
+  const featuredQuery = useCurriculums(
     { featured: true, lifecycleStatus: 'PUBLISHED', sort: 'RECOMMENDED', page: 0, size: 6 },
-    user?.userId,
+    user ?? undefined,
   )
 
   return (
@@ -154,8 +154,8 @@ export default function WelcomePage() {
             <PageState compact title="추천 커리큘럼을 준비하고 있어요" description="전체 커리큘럼에서 먼저 마음에 드는 수업을 찾아보세요." action={<Link className="button button--soft" to="/curriculums">전체 둘러보기</Link>} />
           ) : (
             <div className="curriculum-grid curriculum-grid--featured">
-              {featuredQuery.data.items.slice(0, 3).map((course) => (
-                <CurriculumCard key={course.courseId} course={course} compact />
+              {featuredQuery.data.items.slice(0, 3).map((curriculum) => (
+                <CurriculumCard key={curriculum.curriculumId} curriculum={curriculum} compact />
               ))}
             </div>
           )}

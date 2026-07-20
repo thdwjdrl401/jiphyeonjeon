@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import type { CourseDetailResponse } from '@/features/curriculum/types'
+import type { CurriculumDetailResponse } from '@/features/curriculum/types'
 import { resolvePrimaryAction } from './primaryAction'
 
-function makeDetail(overrides: Partial<CourseDetailResponse['viewerContext']>): CourseDetailResponse {
+function makeDetail(overrides: Partial<CurriculumDetailResponse['viewerContext']>): CurriculumDetailResponse {
   return {
-    courseId: 'crs_test',
+    curriculumId: 'cur_test',
     title: '테스트 커리큘럼',
     summary: '',
     description: '',
@@ -49,8 +49,8 @@ describe('resolvePrimaryAction', () => {
     const withCancel = makeDetail({ relationship: 'PENDING_ENROLLMENT', allowedActions: ['CANCEL_ENROLLMENT'] })
     const withoutCancel = makeDetail({ relationship: 'PENDING_ENROLLMENT', allowedActions: [] })
 
-    expect(resolvePrimaryAction(withCancel, '/curriculums/crs_test')).toEqual({ kind: 'status', label: '승인 대기' })
-    expect(resolvePrimaryAction(withoutCancel, '/curriculums/crs_test')).toEqual({ kind: 'status', label: '승인 대기' })
+    expect(resolvePrimaryAction(withCancel, '/curriculums/cur_test')).toEqual({ kind: 'status', label: '승인 대기' })
+    expect(resolvePrimaryAction(withoutCancel, '/curriculums/cur_test')).toEqual({ kind: 'status', label: '승인 대기' })
   })
 
   it('수강생인데 학습 기록이 없으면 첫 레슨으로 가는 수강하기 액션을 반환한다', () => {
@@ -60,10 +60,10 @@ describe('resolvePrimaryAction', () => {
       progress: { completedLessonCount: 0, totalLessonCount: 1, progressPercent: 0, lastLearning: null },
     })
 
-    expect(resolvePrimaryAction(detail, '/curriculums/crs_test')).toEqual({
+    expect(resolvePrimaryAction(detail, '/curriculums/cur_test')).toEqual({
       kind: 'link',
       label: '수강하기',
-      to: '/curriculums/crs_test/lessons/les_1',
+      to: '/curriculums/cur_test/lessons/les_1',
     })
   })
 
@@ -79,10 +79,10 @@ describe('resolvePrimaryAction', () => {
       },
     })
 
-    expect(resolvePrimaryAction(detail, '/curriculums/crs_test')).toEqual({
+    expect(resolvePrimaryAction(detail, '/curriculums/cur_test')).toEqual({
       kind: 'link',
       label: '이어보기',
-      to: '/curriculums/crs_test/lessons/les_3',
+      to: '/curriculums/cur_test/lessons/les_3',
     })
   })
 })

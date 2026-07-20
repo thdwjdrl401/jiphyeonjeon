@@ -1,13 +1,13 @@
 import GuestActions from '@/features/auth/GuestActions'
 import InstructorActions from '@/features/curriculum/InstructorActions'
-import type { CourseDetailResponse } from '@/features/curriculum/types'
+import type { CurriculumDetailResponse } from '@/features/curriculum/types'
 import EnrolleeActions from '@/features/enrollment/EnrolleeActions'
 import EnrollmentActions from '@/features/enrollment/EnrollmentActions'
 import EnrollmentPendingNotice from '@/features/enrollment/EnrollmentPendingNotice'
 import NonOwnerInstructorNotice from '@/features/enrollment/NonOwnerInstructorNotice'
 
 interface CurriculumRelationPanelProps {
-  detail: CourseDetailResponse
+  detail: CurriculumDetailResponse
   returnTo: string
   onEnroll: () => void
   isEnrolling: boolean

@@ -1,12 +1,12 @@
 import { Link } from 'react-router-dom'
-import type { CourseRelationship } from '@/features/curriculum/types'
+import type { CurriculumRelationship } from '@/features/curriculum/types'
 import { resolveLessonPath } from './lessonRouting'
-import type { CourseOutlineLesson } from './types'
+import type { CurriculumOutlineLesson } from './types'
 
 interface CurriculumLessonItemProps {
-  lesson: CourseOutlineLesson
-  relationship: CourseRelationship
-  courseId: string
+  lesson: CurriculumOutlineLesson
+  relationship: CurriculumRelationship
+  curriculumId: string
 }
 
 const reasonLabel: Record<string, string> = {
@@ -16,13 +16,13 @@ const reasonLabel: Record<string, string> = {
   REPLAY_NOT_PUBLISHED: '다시보기 준비 중',
 }
 
-export default function CurriculumLessonItem({ lesson, courseId }: CurriculumLessonItemProps) {
+export default function CurriculumLessonItem({ lesson, curriculumId }: CurriculumLessonItemProps) {
   const canOpen = lesson.access.allowed
 
   if (canOpen) {
     return (
       <li className="curriculum-lesson">
-        <Link to={resolveLessonPath(courseId, lesson.lessonId, lesson.access.destination)}>
+        <Link to={resolveLessonPath(curriculumId, lesson.lessonId, lesson.access.destination)}>
           <span>{lesson.order}. {lesson.title}</span>
           {lesson.learning?.completed && <span className="curriculum-lesson__done" aria-label="완료">완료</span>}
         </Link>

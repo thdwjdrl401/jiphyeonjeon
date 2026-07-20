@@ -1,7 +1,7 @@
-import type { CourseDetailResponse } from '@/features/curriculum/types'
+import type { CurriculumDetailResponse } from '@/features/curriculum/types'
 
 interface NonOwnerInstructorNoticeProps {
-  detail: CourseDetailResponse
+  detail: CurriculumDetailResponse
   onEnroll: () => void
   isEnrolling: boolean
 }

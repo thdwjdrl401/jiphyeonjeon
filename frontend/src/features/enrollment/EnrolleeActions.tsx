@@ -1,9 +1,9 @@
 import { Link } from 'react-router-dom'
-import type { CourseDetailResponse } from '@/features/curriculum/types'
+import type { CurriculumDetailResponse } from '@/features/curriculum/types'
 import { resolveLessonPath } from '@/features/lesson/lessonRouting'
 
 interface EnrolleeActionsProps {
-  detail: CourseDetailResponse
+  detail: CurriculumDetailResponse
 }
 
 export default function EnrolleeActions({ detail }: EnrolleeActionsProps) {
@@ -21,7 +21,7 @@ export default function EnrolleeActions({ detail }: EnrolleeActionsProps) {
       <h2>수강 중이에요</h2>
       <p>목차에서 원하는 레슨으로 바로 이동할 수 있어요.</p>
       {target && (
-        <Link className="button button--primary" to={resolveLessonPath(detail.courseId, target.lessonId, 'LESSON_DETAIL')}>
+        <Link className="button button--primary" to={resolveLessonPath(detail.curriculumId, target.lessonId, 'LESSON_DETAIL')}>
           {target.label}
         </Link>
       )}

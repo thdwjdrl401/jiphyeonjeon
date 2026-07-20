@@ -6,6 +6,8 @@ import './styles/layout.css'
 import './styles/pages.css'
 import './styles/auth.css'
 import './styles/curriculum-detail.css'
+import './styles/workspace.css'
+import './styles/learning.css'
 
 const rootElement = document.getElementById('root')
 

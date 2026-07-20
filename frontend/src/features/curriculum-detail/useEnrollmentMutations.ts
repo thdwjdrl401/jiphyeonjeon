@@ -1,22 +1,22 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { cancelEnrollment, enrollInCourse } from './courseDetailService'
+import { cancelEnrollment, enrollInCurriculum } from './curriculumDetailService'
 
-export function useEnrollMutation(courseId: string) {
+export function useEnrollMutation(curriculumId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: () => enrollInCourse(courseId),
+    mutationFn: () => enrollInCurriculum(curriculumId),
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['courses', 'detail', courseId] })
+      queryClient.invalidateQueries({ queryKey: ['curriculums', 'detail', curriculumId] })
     },
   })
 }
 
-export function useCancelEnrollmentMutation(courseId: string) {
+export function useCancelEnrollmentMutation(curriculumId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: () => cancelEnrollment(courseId),
+    mutationFn: () => cancelEnrollment(curriculumId),
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['courses', 'detail', courseId] })
+      queryClient.invalidateQueries({ queryKey: ['curriculums', 'detail', curriculumId] })
     },
   })
 }

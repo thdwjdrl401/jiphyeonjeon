@@ -1,11 +1,11 @@
-import type { CourseDetailResponse } from './types'
+import type { CurriculumDetailResponse } from './types'
 import type { PrimaryAction } from '@/features/curriculum-detail/primaryAction'
 import CurriculumIdentity from './CurriculumIdentity'
 import CurriculumMetadata from './CurriculumMetadata'
 import CurriculumPrimaryAction from './CurriculumPrimaryAction'
 
 interface CurriculumHeroProps {
-  detail: CourseDetailResponse
+  detail: CurriculumDetailResponse
   primaryAction: PrimaryAction
   onEnroll: () => void
   isEnrolling: boolean

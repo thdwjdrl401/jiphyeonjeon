@@ -1,45 +1,45 @@
-import type { CourseAllowedAction, CourseProgress, CourseRelationship } from '@/features/curriculum/types'
+import type { CurriculumAllowedAction, CurriculumProgress, CurriculumRelationship } from '@/features/curriculum/types'
 
-export type CourseDetailAllowedAction =
-  | CourseAllowedAction
+export type CurriculumDetailAllowedAction =
+  | CurriculumAllowedAction
   | 'LOGIN_TO_ENROLL'
   | 'CANCEL_ENROLLMENT'
   | 'VIEW_LESSON'
   | 'EDIT_LESSON'
   | 'OPEN_LIVE_SESSION'
 
-export interface CourseEnrollmentRecord {
+export interface CurriculumEnrollmentRecord {
   enrollmentId: string
   status: 'ACTIVE' | 'PENDING'
   requestedAt: string
 }
 
-export interface CourseLastLearning {
+export interface CurriculumLastLearning {
   lessonId: string
   sessionMs: number
 }
 
-export interface CourseDetailProgress extends CourseProgress {
-  lastLearning: CourseLastLearning | null
+export interface CurriculumDetailProgress extends CurriculumProgress {
+  lastLearning: CurriculumLastLearning | null
 }
 
-export interface CourseActionRestriction {
-  action: CourseDetailAllowedAction
+export interface CurriculumActionRestriction {
+  action: CurriculumDetailAllowedAction
   reasonCode: string
 }
 
-export interface CourseDetailViewerContext {
-  relationship: CourseRelationship
-  allowedActions: CourseDetailAllowedAction[]
-  enrollment: CourseEnrollmentRecord | null
-  progress: CourseDetailProgress | null
+export interface CurriculumDetailViewerContext {
+  relationship: CurriculumRelationship
+  allowedActions: CurriculumDetailAllowedAction[]
+  enrollment: CurriculumEnrollmentRecord | null
+  progress: CurriculumDetailProgress | null
   nextLiveSession: null
-  actionRestrictions?: CourseActionRestriction[]
+  actionRestrictions?: CurriculumActionRestriction[]
 }
 
 export interface EnrollResult {
   enrollmentId: string
-  courseId: string
+  curriculumId: string
   status: 'ACTIVE' | 'PENDING'
   requestedAt: string
   approvedAt: string | null

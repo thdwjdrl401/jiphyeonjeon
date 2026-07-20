@@ -1,7 +1,7 @@
-import type { CourseDetailResponse } from './types'
+import type { CurriculumDetailResponse } from './types'
 
 interface CurriculumNoticeProps {
-  detail: CourseDetailResponse
+  detail: CurriculumDetailResponse
 }
 
 export default function CurriculumNotice({ detail }: CurriculumNoticeProps) {

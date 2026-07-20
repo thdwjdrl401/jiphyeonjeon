@@ -33,7 +33,7 @@ describe('LiveClass AI 공개 페이지', () => {
     const user = userEvent.setup()
     renderAt('/curriculums')
 
-    const search = screen.getByPlaceholderText('제목, 소개, 강사 이름으로 검색')
+    const search = screen.getByPlaceholderText('제목과 소개로 검색')
     await user.type(search, 'WebRTC')
     await user.click(screen.getByRole('button', { name: '검색' }))
 
@@ -42,6 +42,15 @@ describe('LiveClass AI 공개 페이지', () => {
       await screen.findByRole('heading', { name: 'WebRTC와 실시간 미디어' }),
     ).toBeInTheDocument()
     expect(screen.getByText(/총/)).toHaveTextContent('1개의 커리큘럼')
+  })
+
+  it('커리큘럼 상세 경로를 실제 앱 라우터에서 연다', async () => {
+    renderAt('/curriculums/cur_spring_live')
+
+    expect(
+      await screen.findByRole('heading', { name: '라이브로 완성하는 Spring Boot' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '커리큘럼 목차' })).toBeInTheDocument()
   })
 
   it('로그인 필수 입력을 검증한다', async () => {

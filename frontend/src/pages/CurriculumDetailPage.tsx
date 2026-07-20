@@ -8,7 +8,7 @@ import InstructorSummary from '@/features/curriculum/InstructorSummary'
 import CurriculumDetailSkeleton from '@/features/curriculum-detail/CurriculumDetailSkeleton'
 import CurriculumRelationPanel from '@/features/curriculum-detail/CurriculumRelationPanel'
 import { resolvePrimaryAction } from '@/features/curriculum-detail/primaryAction'
-import { useCourseDetail } from '@/features/curriculum-detail/useCourseDetail'
+import { useCurriculumDetail } from '@/features/curriculum-detail/useCurriculumDetail'
 import { useCancelEnrollmentMutation, useEnrollMutation } from '@/features/curriculum-detail/useEnrollmentMutations'
 import CurriculumProgress from '@/features/enrollment/CurriculumProgress'
 import { ApiError } from '@/shared/api/client'
@@ -21,7 +21,7 @@ export default function CurriculumDetailPage() {
   const location = useLocation()
   const returnTo = `${location.pathname}${location.search}`
 
-  const detailQuery = useCourseDetail(curriculumId, user?.userId)
+  const detailQuery = useCurriculumDetail(curriculumId, user ?? undefined)
   const enrollMutation = useEnrollMutation(curriculumId)
   const cancelMutation = useCancelEnrollmentMutation(curriculumId)
 
@@ -76,7 +76,7 @@ export default function CurriculumDetailPage() {
       <CurriculumOutline
         outline={detail.outline}
         relationship={detail.viewerContext.relationship}
-        courseId={detail.courseId}
+        curriculumId={detail.curriculumId}
       />
 
       <CurriculumRelationPanel

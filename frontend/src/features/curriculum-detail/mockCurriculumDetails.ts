@@ -1,37 +1,37 @@
 import { ApiError } from '@/shared/api/client'
 import { peekMockUser } from '@/features/auth/mockAuth'
 import type {
-  CourseDetailPeriod,
-  CourseDetailResponse,
-  CourseEnrollmentPolicyType,
-  CourseInstructorProfile,
-  CourseSection,
+  CurriculumDetailPeriod,
+  CurriculumDetailResponse,
+  CurriculumEnrollmentPolicyType,
+  CurriculumInstructorProfile,
+  CurriculumOutlineSection,
 } from '@/features/curriculum/types'
 import type {
-  CourseDetailViewerContext,
-  CourseEnrollmentRecord,
+  CurriculumDetailViewerContext,
+  CurriculumEnrollmentRecord,
   EnrollResult,
 } from '@/features/enrollment/types'
-import type { CourseOutlineLesson } from '@/features/lesson/types'
+import type { CurriculumOutlineLesson } from '@/features/lesson/types'
 
-export const MOCK_ERROR_COURSE_ID = 'crs_force_error'
+export const MOCK_ERROR_CURRICULUM_ID = 'cur_force_error'
 
-interface MockCourseBase {
-  courseId: string
+interface MockCurriculumBase {
+  curriculumId: string
   title: string
   summary: string
   description: string
-  instructor: CourseInstructorProfile
+  instructor: CurriculumInstructorProfile
   lifecycleStatus: string
-  period: CourseDetailPeriod | null
+  period: CurriculumDetailPeriod | null
   sectionCount: number
   lessonCount: number
-  enrollmentPolicyType: CourseEnrollmentPolicyType
+  enrollmentPolicyType: CurriculumEnrollmentPolicyType
 }
 
-const courses: MockCourseBase[] = [
+const curriculums: MockCurriculumBase[] = [
   {
-    courseId: 'crs_spring_live',
+    curriculumId: 'cur_spring_live',
     title: '라이브로 완성하는 Spring Boot',
     summary: '현업의 요청 흐름을 따라가며 견고한 백엔드를 함께 설계합니다.',
     description:
@@ -49,7 +49,7 @@ const courses: MockCourseBase[] = [
     enrollmentPolicyType: 'IMMEDIATE',
   },
   {
-    courseId: 'crs_data_story',
+    curriculumId: 'cur_data_story',
     title: '데이터로 설득하는 시각화',
     summary: '좋은 차트의 기준부터 비즈니스 스토리텔링까지 실습으로 익혀요.',
     description:
@@ -67,7 +67,7 @@ const courses: MockCourseBase[] = [
     enrollmentPolicyType: 'IMMEDIATE',
   },
   {
-    courseId: 'crs_react_system',
+    curriculumId: 'cur_react_system',
     title: 'React 디자인 시스템 실전',
     summary: '재사용 가능한 컴포넌트와 접근성 있는 인터랙션을 직접 구축합니다.',
     description:
@@ -85,7 +85,7 @@ const courses: MockCourseBase[] = [
     enrollmentPolicyType: 'IMMEDIATE',
   },
   {
-    courseId: 'crs_ai_product',
+    curriculumId: 'cur_ai_product',
     title: 'AI 제품 기획자를 위한 첫걸음',
     summary: '모델의 가능성과 한계를 이해하고 검증 가능한 AI 기능을 설계해요.',
     description:
@@ -103,7 +103,7 @@ const courses: MockCourseBase[] = [
     enrollmentPolicyType: 'IMMEDIATE',
   },
   {
-    courseId: 'crs_webrtc',
+    curriculumId: 'cur_webrtc',
     title: 'WebRTC와 실시간 미디어',
     summary: '브라우저 미디어부터 SFU 아키텍처까지 실시간 서비스의 핵심을 다룹니다.',
     description:
@@ -121,7 +121,7 @@ const courses: MockCourseBase[] = [
     enrollmentPolicyType: 'IMMEDIATE',
   },
   {
-    courseId: 'crs_sql',
+    curriculumId: 'cur_sql',
     title: '성능을 바꾸는 SQL 튜닝',
     summary: '실행 계획을 읽고 느린 쿼리의 원인을 단계적으로 찾아갑니다.',
     description:
@@ -139,7 +139,7 @@ const courses: MockCourseBase[] = [
     enrollmentPolicyType: 'APPROVAL_REQUIRED',
   },
   {
-    courseId: 'crs_cloud',
+    curriculumId: 'cur_cloud',
     title: '처음 만나는 클라우드 아키텍처',
     summary: '확장성과 장애 대응을 중심으로 서비스 구조를 함께 그려봅니다.',
     description:
@@ -157,7 +157,7 @@ const courses: MockCourseBase[] = [
     enrollmentPolicyType: 'IMMEDIATE',
   },
   {
-    courseId: 'crs_typescript',
+    curriculumId: 'cur_typescript',
     title: 'TypeScript 타입 설계 워크숍',
     summary: '복잡한 도메인을 안전하고 읽기 좋은 타입으로 표현하는 연습을 합니다.',
     description:
@@ -175,7 +175,7 @@ const courses: MockCourseBase[] = [
     enrollmentPolicyType: 'IMMEDIATE',
   },
   {
-    courseId: 'crs_ux_research',
+    curriculumId: 'cur_ux_research',
     title: '사용자를 이해하는 UX 리서치',
     summary: '인터뷰 설계부터 인사이트 도출까지 작은 팀을 위한 방법을 익혀요.',
     description:
@@ -193,7 +193,7 @@ const courses: MockCourseBase[] = [
     enrollmentPolicyType: 'IMMEDIATE',
   },
   {
-    courseId: 'crs_python',
+    curriculumId: 'cur_python',
     title: 'Python 자동화 레시피',
     summary: '반복 업무를 줄이는 작은 스크립트부터 데이터 파이프라인까지 만들어요.',
     description:
@@ -212,29 +212,29 @@ const courses: MockCourseBase[] = [
   },
 ]
 
-function enrollmentKey(userId: string, courseId: string) {
-  return `${userId}:${courseId}`
+function enrollmentKey(userId: string, curriculumId: string) {
+  return `${userId}:${curriculumId}`
 }
 
 // 'usr_mock_student' is the fixed id mockAuth.ts assigns to every student login,
 // so seeding by that id is how demo accounts start out already enrolled/pending.
 const MOCK_STUDENT_ID = 'usr_mock_student'
 
-// 이미 학습을 시작한 것으로 보여줄 수강생 course. 목록에 없으면(=crs_react_system 등)
+// 이미 학습을 시작한 것으로 보여줄 수강생 curriculum. 목록에 없으면(=cur_react_system 등)
 // 수강 중이어도 학습 기록이 0이라 '수강하기' 버튼이 뜬다.
-const COURSES_WITH_PRIOR_LEARNING = new Set(['crs_spring_live', 'crs_ai_product', 'crs_cloud', 'crs_python'])
+const CURRICULUMS_WITH_PRIOR_LEARNING = new Set(['cur_spring_live', 'cur_ai_product', 'cur_cloud', 'cur_python'])
 
-function createSeedEnrollments(): Map<string, CourseEnrollmentRecord> {
-  const seed = new Map<string, CourseEnrollmentRecord>()
-  for (const courseId of [...COURSES_WITH_PRIOR_LEARNING, 'crs_react_system']) {
-    seed.set(enrollmentKey(MOCK_STUDENT_ID, courseId), {
-      enrollmentId: `enr_seed_${courseId}`,
+function createSeedEnrollments(): Map<string, CurriculumEnrollmentRecord> {
+  const seed = new Map<string, CurriculumEnrollmentRecord>()
+  for (const curriculumId of [...CURRICULUMS_WITH_PRIOR_LEARNING, 'cur_react_system']) {
+    seed.set(enrollmentKey(MOCK_STUDENT_ID, curriculumId), {
+      enrollmentId: `enr_seed_${curriculumId}`,
       status: 'ACTIVE',
       requestedAt: '2026-07-20T12:00:00+09:00',
     })
   }
-  seed.set(enrollmentKey(MOCK_STUDENT_ID, 'crs_sql'), {
-    enrollmentId: 'enr_seed_crs_sql',
+  seed.set(enrollmentKey(MOCK_STUDENT_ID, 'cur_sql'), {
+    enrollmentId: 'enr_seed_cur_sql',
     status: 'PENDING',
     requestedAt: '2026-07-18T09:00:00+09:00',
   })
@@ -243,7 +243,7 @@ function createSeedEnrollments(): Map<string, CourseEnrollmentRecord> {
 
 let mockEnrollments = createSeedEnrollments()
 
-export function resetMockCourseDetails() {
+export function resetMockCurriculumDetails() {
   mockEnrollments = createSeedEnrollments()
 }
 
@@ -252,29 +252,29 @@ async function wait() {
   await new Promise((resolve) => window.setTimeout(resolve, 380))
 }
 
-function buildOutline(course: MockCourseBase): CourseSection[] {
-  const lessonsPerSection = Math.ceil(course.lessonCount / course.sectionCount)
+function buildOutline(curriculum: MockCurriculumBase): CurriculumOutlineSection[] {
+  const lessonsPerSection = Math.ceil(curriculum.lessonCount / curriculum.sectionCount)
   let lessonOrder = 0
-  return Array.from({ length: course.sectionCount }, (_, sectionIndex) => {
+  return Array.from({ length: curriculum.sectionCount }, (_, sectionIndex) => {
     const sectionLessonCount = Math.min(
       lessonsPerSection,
-      course.lessonCount - sectionIndex * lessonsPerSection,
+      curriculum.lessonCount - sectionIndex * lessonsPerSection,
     )
-    const lessons: CourseOutlineLesson[] = Array.from({ length: Math.max(sectionLessonCount, 0) }, () => {
+    const lessons: CurriculumOutlineLesson[] = Array.from({ length: Math.max(sectionLessonCount, 0) }, () => {
       lessonOrder += 1
       return {
-        lessonId: `${course.courseId}_lesson_${lessonOrder}`,
+        lessonId: `${curriculum.curriculumId}_lesson_${lessonOrder}`,
         title: `${lessonOrder}강. 학습 주제 ${lessonOrder}`,
         order: lessonOrder,
         lessonStatus: 'PUBLISHED',
-        scheduledAt: course.period?.startsAt ?? null,
+        scheduledAt: curriculum.period?.startsAt ?? null,
         durationMs: 3_600_000,
         access: { allowed: false, destination: null, reasonCode: 'ENROLLMENT_REQUIRED' },
         learning: null,
       }
     })
     return {
-      sectionId: `${course.courseId}_section_${sectionIndex + 1}`,
+      sectionId: `${curriculum.curriculumId}_section_${sectionIndex + 1}`,
       title: `${sectionIndex + 1}. 섹션 ${sectionIndex + 1}`,
       description: null,
       order: sectionIndex + 1,
@@ -284,8 +284,8 @@ function buildOutline(course: MockCourseBase): CourseSection[] {
 }
 
 function applyViewerAccess(
-  outline: CourseSection[],
-  relationship: CourseDetailViewerContext['relationship'],
+  outline: CurriculumOutlineSection[],
+  relationship: CurriculumDetailViewerContext['relationship'],
   completedLessonCount: number,
 ) {
   const canOpen = relationship === 'OWNER_INSTRUCTOR' || relationship === 'ENROLLED'
@@ -317,7 +317,7 @@ function applyViewerAccess(
   }))
 }
 
-function resolveViewerContext(course: MockCourseBase, index: number): CourseDetailViewerContext {
+function resolveViewerContext(curriculum: MockCurriculumBase, index: number): CurriculumDetailViewerContext {
   const user = peekMockUser()
 
   if (!user) {
@@ -335,7 +335,7 @@ function resolveViewerContext(course: MockCourseBase, index: number): CourseDeta
     if (isOwner) {
       return {
         relationship: 'OWNER_INSTRUCTOR',
-        allowedActions: ['MANAGE_COURSE', 'EDIT_LESSON'],
+        allowedActions: ['MANAGE_CURRICULUM', 'EDIT_LESSON'],
         enrollment: null,
         progress: null,
         nextLiveSession: null,
@@ -351,21 +351,21 @@ function resolveViewerContext(course: MockCourseBase, index: number): CourseDeta
     }
   }
 
-  const overlay = mockEnrollments.get(enrollmentKey(user.userId, course.courseId))
+  const overlay = mockEnrollments.get(enrollmentKey(user.userId, curriculum.curriculumId))
 
   if (overlay?.status === 'ACTIVE') {
-    const hasPriorLearning = COURSES_WITH_PRIOR_LEARNING.has(course.courseId)
-    const completedLessonCount = hasPriorLearning ? Math.max(1, Math.floor(course.lessonCount * 0.36)) : 0
+    const hasPriorLearning = CURRICULUMS_WITH_PRIOR_LEARNING.has(curriculum.curriculumId)
+    const completedLessonCount = hasPriorLearning ? Math.max(1, Math.floor(curriculum.lessonCount * 0.36)) : 0
     return {
       relationship: 'ENROLLED',
       allowedActions: ['VIEW_LESSON', 'CONTINUE_LEARNING'],
       enrollment: overlay,
       progress: {
         completedLessonCount,
-        totalLessonCount: course.lessonCount,
-        progressPercent: Math.round((completedLessonCount / course.lessonCount) * 100),
+        totalLessonCount: curriculum.lessonCount,
+        progressPercent: Math.round((completedLessonCount / curriculum.lessonCount) * 100),
         lastLearning: hasPriorLearning
-          ? { lessonId: `${course.courseId}_lesson_${completedLessonCount}`, sessionMs: 125_000 }
+          ? { lessonId: `${curriculum.curriculumId}_lesson_${completedLessonCount}`, sessionMs: 125_000 }
           : null,
       },
       nextLiveSession: null,
@@ -384,54 +384,54 @@ function resolveViewerContext(course: MockCourseBase, index: number): CourseDeta
 
   return {
     relationship: 'UNENROLLED_STUDENT',
-    allowedActions: course.enrollmentPolicyType === 'INVITATION_ONLY' ? [] : ['ENROLL'],
+    allowedActions: curriculum.enrollmentPolicyType === 'INVITATION_ONLY' ? [] : ['ENROLL'],
     enrollment: null,
     progress: null,
     nextLiveSession: null,
   }
 }
 
-export async function getMockCourseDetail(courseId: string): Promise<CourseDetailResponse> {
+export async function getMockCurriculumDetail(curriculumId: string): Promise<CurriculumDetailResponse> {
   await wait()
 
-  if (courseId === MOCK_ERROR_COURSE_ID) {
-    throw new ApiError('일시적인 오류가 발생했어요.', 500, 'COURSE_DETAIL_UNAVAILABLE')
+  if (curriculumId === MOCK_ERROR_CURRICULUM_ID) {
+    throw new ApiError('일시적인 오류가 발생했어요.', 500, 'CURRICULUM_DETAIL_UNAVAILABLE')
   }
 
-  const index = courses.findIndex((course) => course.courseId === courseId)
+  const index = curriculums.findIndex((curriculum) => curriculum.curriculumId === curriculumId)
   if (index === -1) {
-    throw new ApiError('커리큘럼을 찾을 수 없어요.', 404, 'COURSE_NOT_FOUND')
+    throw new ApiError('커리큘럼을 찾을 수 없어요.', 404, 'CURRICULUM_NOT_FOUND')
   }
-  const course = courses[index]
+  const curriculum = curriculums[index]
 
-  const viewerContext = resolveViewerContext(course, index)
+  const viewerContext = resolveViewerContext(curriculum, index)
   const outline = applyViewerAccess(
-    buildOutline(course),
+    buildOutline(curriculum),
     viewerContext.relationship,
     viewerContext.progress?.completedLessonCount ?? 0,
   )
 
   return {
-    courseId: course.courseId,
-    title: course.title,
-    summary: course.summary,
-    description: course.description,
+    curriculumId: curriculum.curriculumId,
+    title: curriculum.title,
+    summary: curriculum.summary,
+    description: curriculum.description,
     thumbnailUrl: null,
-    lifecycleStatus: course.lifecycleStatus,
-    period: course.period,
+    lifecycleStatus: curriculum.lifecycleStatus,
+    period: curriculum.period,
     enrollmentPolicy: {
-      type: course.enrollmentPolicyType,
+      type: curriculum.enrollmentPolicyType,
       status: 'OPEN',
       opensAt: null,
       closesAt: null,
     },
-    instructor: course.instructor,
+    instructor: curriculum.instructor,
     outline,
     viewerContext,
   }
 }
 
-export async function enrollMockCourse(courseId: string): Promise<EnrollResult> {
+export async function enrollMockCurriculum(curriculumId: string): Promise<EnrollResult> {
   await wait()
 
   const user = peekMockUser()
@@ -442,23 +442,23 @@ export async function enrollMockCourse(courseId: string): Promise<EnrollResult> 
     throw new ApiError('강사 계정은 다른 커리큘럼을 수강할 수 없어요.', 403, 'ENROLLMENT_NOT_ALLOWED_FOR_ROLE')
   }
 
-  const course = courses.find((item) => item.courseId === courseId)
-  if (!course) {
-    throw new ApiError('커리큘럼을 찾을 수 없어요.', 404, 'COURSE_NOT_FOUND')
+  const curriculum = curriculums.find((item) => item.curriculumId === curriculumId)
+  if (!curriculum) {
+    throw new ApiError('커리큘럼을 찾을 수 없어요.', 404, 'CURRICULUM_NOT_FOUND')
   }
 
-  const key = enrollmentKey(user.userId, course.courseId)
+  const key = enrollmentKey(user.userId, curriculum.curriculumId)
   if (mockEnrollments.has(key)) {
     throw new ApiError('이미 신청했거나 수강 중이에요.', 409, 'ENROLLMENT_ALREADY_EXISTS')
   }
-  if (course.enrollmentPolicyType === 'INVITATION_ONLY') {
+  if (curriculum.enrollmentPolicyType === 'INVITATION_ONLY') {
     throw new ApiError('초대를 통해서만 신청할 수 있어요.', 409, 'ENROLLMENT_CLOSED')
   }
 
   // 정책: 새로 신청한 수강은 정책 유형과 무관하게 항상 승인 대기 상태로 시작한다.
   const now = new Date().toISOString()
   const status = 'PENDING'
-  const record: CourseEnrollmentRecord = {
+  const record: CurriculumEnrollmentRecord = {
     enrollmentId: `enr_mock_${Date.now()}`,
     status,
     requestedAt: now,
@@ -467,14 +467,14 @@ export async function enrollMockCourse(courseId: string): Promise<EnrollResult> 
 
   return {
     enrollmentId: record.enrollmentId,
-    courseId: course.courseId,
+    curriculumId: curriculum.curriculumId,
     status,
     requestedAt: now,
     approvedAt: null,
   }
 }
 
-export async function cancelMockEnrollment(courseId: string): Promise<void> {
+export async function cancelMockEnrollment(curriculumId: string): Promise<void> {
   await wait()
 
   const user = peekMockUser()
@@ -482,7 +482,7 @@ export async function cancelMockEnrollment(courseId: string): Promise<void> {
     throw new ApiError('로그인이 필요해요.', 401, 'AUTH_SESSION_REQUIRED')
   }
 
-  const key = enrollmentKey(user.userId, courseId)
+  const key = enrollmentKey(user.userId, curriculumId)
   const record = mockEnrollments.get(key)
   if (!record) {
     throw new ApiError('신청 내역을 찾을 수 없어요.', 404, 'ENROLLMENT_NOT_FOUND')

@@ -1,7 +1,7 @@
-import type { CourseInstructorProfile } from './types'
+import type { CurriculumInstructorProfile } from './types'
 
 interface InstructorSummaryProps {
-  instructor: CourseInstructorProfile
+  instructor: CurriculumInstructorProfile
 }
 
 export default function InstructorSummary({ instructor }: InstructorSummaryProps) {

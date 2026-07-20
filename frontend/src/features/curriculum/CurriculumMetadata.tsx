@@ -1,8 +1,8 @@
-import type { CourseDetailPeriod } from './types'
+import type { CurriculumDetailPeriod } from './types'
 
 interface CurriculumMetadataProps {
   instructorName: string
-  period: CourseDetailPeriod | null
+  period: CurriculumDetailPeriod | null
   sectionCount: number
   lessonCount: number
 }

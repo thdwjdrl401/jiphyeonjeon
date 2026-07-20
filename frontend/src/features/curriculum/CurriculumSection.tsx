@@ -1,14 +1,14 @@
 import { useState } from 'react'
 import CurriculumLessonItem from '@/features/lesson/CurriculumLessonItem'
-import type { CourseRelationship, CourseSection } from './types'
+import type { CurriculumOutlineSection, CurriculumRelationship } from './types'
 
 interface CurriculumSectionProps {
-  section: CourseSection
-  relationship: CourseRelationship
-  courseId: string
+  section: CurriculumOutlineSection
+  relationship: CurriculumRelationship
+  curriculumId: string
 }
 
-export default function CurriculumSection({ section, relationship, courseId }: CurriculumSectionProps) {
+export default function CurriculumSection({ section, relationship, curriculumId }: CurriculumSectionProps) {
   const [expanded, setExpanded] = useState(true)
 
   return (
@@ -31,7 +31,7 @@ export default function CurriculumSection({ section, relationship, courseId }: C
               key={lesson.lessonId}
               lesson={lesson}
               relationship={relationship}
-              courseId={courseId}
+              curriculumId={curriculumId}
             />
           ))}
         </ul>
