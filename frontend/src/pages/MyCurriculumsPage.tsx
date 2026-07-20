@@ -26,7 +26,7 @@ export default function MyCurriculumsPage() {
         <div className="dashboard-curriculum-list">
           {curriculums.map((item) => (
             <article className="dashboard-curriculum-card" key={item.curriculumId}>
-              <div className="dashboard-curriculum-card__cover"><span>{item.title.slice(0, 1)}</span></div>
+              <div className="dashboard-curriculum-card__cover"><img src={item.thumbnailUrl} alt={`${item.title} 대표 이미지`} /></div>
               <div className="dashboard-curriculum-card__content"><div><StatusBadge tone={item.lifecycleStatus === 'PUBLISHED' ? 'success' : 'warning'}>{item.lifecycleStatus === 'PUBLISHED' ? '공개 중' : '준비 중'}</StatusBadge><h3>{item.title}</h3><p>{item.summary}</p></div>{'progress' in item ? <div className="dashboard-progress"><span><strong>{item.progress}%</strong> · {item.completedLessonCount}/{item.lessonCount} 레슨</span><i><b style={{ width: `${item.progress}%` }} /></i></div> : <p className="dashboard-meta">게시 레슨 {item.publishedLessonCount}/{item.lessonCount} · 다음 일정 {item.nextSession}</p>}<div className="card-actions"><Link className="button button--soft" to={`/curriculums/${item.curriculumId}`}>상세</Link><Link className="button button--primary" to={isInstructor ? `/curriculums/${item.curriculumId}/manage` : `/lessons/${'lastLessonId' in item ? item.lastLessonId : 'les_security'}/replay`}>{isInstructor ? '관리하기' : '학습 계속하기'}</Link></div></div>
             </article>
           ))}

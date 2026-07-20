@@ -1,4 +1,7 @@
 import { peekMockUser } from '@/features/auth/mockAuth'
+import architectureCurriculumImage from '@/assets/images/curriculum-architecture.svg'
+import dataCurriculumImage from '@/assets/images/curriculum-data.svg'
+import springCurriculumImage from '@/assets/images/curriculum-spring.svg'
 import type {
   CurriculumCardSummary,
   CurriculumListQuery,
@@ -12,7 +15,7 @@ const curriculums: MockCurriculum[] = [
     curriculumId: 'cur_spring_live',
     title: '라이브로 완성하는 Spring Boot',
     summary: '현업의 요청 흐름을 따라가며 견고한 백엔드를 함께 설계합니다.',
-    thumbnailUrl: null,
+    thumbnailUrl: springCurriculumImage,
     instructor: { instructorId: 'usr_instructor_01', displayName: '이도현' },
     lifecycleStatus: 'PUBLISHED',
     period: { startsAt: '2026-08-03T19:00:00+09:00', endsAt: '2026-09-24T21:00:00+09:00' },
@@ -24,7 +27,7 @@ const curriculums: MockCurriculum[] = [
     curriculumId: 'cur_data_story',
     title: '데이터로 설득하는 시각화',
     summary: '좋은 차트의 기준부터 비즈니스 스토리텔링까지 실습으로 익혀요.',
-    thumbnailUrl: null,
+    thumbnailUrl: dataCurriculumImage,
     instructor: { instructorId: 'usr_instructor_02', displayName: '박세린' },
     lifecycleStatus: 'PUBLISHED',
     period: { startsAt: '2026-07-20T20:00:00+09:00', endsAt: '2026-08-28T22:00:00+09:00' },
@@ -36,7 +39,7 @@ const curriculums: MockCurriculum[] = [
     curriculumId: 'cur_react_system',
     title: 'React 디자인 시스템 실전',
     summary: '재사용 가능한 컴포넌트와 접근성 있는 인터랙션을 직접 구축합니다.',
-    thumbnailUrl: null,
+    thumbnailUrl: architectureCurriculumImage,
     instructor: { instructorId: 'usr_instructor_03', displayName: '최유진' },
     lifecycleStatus: 'PUBLISHED',
     period: { startsAt: '2026-08-10T19:30:00+09:00', endsAt: '2026-10-05T21:30:00+09:00' },

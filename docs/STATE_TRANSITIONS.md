@@ -74,15 +74,13 @@ DRAFT ──게시──→ PUBLISHED ──보관──→ ARCHIVED
 
 ## 5. 수강 상태
 
-목표 전이는 다음과 같다. enum은 백엔드에 존재하지만 신청·승인 API의 전체 연동은 아직 남아 있다.
+현재 프론트엔드 초안은 모든 커리큘럼을 **강사 승인 후 수강** 방식으로 운영한다. 따라서 일반 신청은 항상 `PENDING`으로 생성되고 강사의 승인 이후에만 `ACTIVE`가 된다. enum은 백엔드에 존재하지만 신청·승인 API의 전체 연동은 아직 남아 있다.
 
 ```text
                     ┌──승인──→ ACTIVE ──권한 회수──→ REVOKED
 신청 생성 ──→ PENDING
                     ├──거절──→ REJECTED
                     └──취소──→ CANCELLED
-
-즉시 수강 ─────────────────→ ACTIVE
 ```
 
 | 상태 | 의미 | 학생 행동 |
@@ -93,15 +91,15 @@ DRAFT ──게시──→ PUBLISHED ──보관──→ ARCHIVED
 | `REVOKED` | 기존 수강 권한 회수 | 신규 재생 URL·SSE·학습 요청 중단 |
 | `CANCELLED` | 승인 전 신청 취소 | 접근 불가, 재신청 정책 미정 |
 
-수강 방식은 상태가 아니라 생성 규칙이다.
+수강 방식은 상태가 아니라 신청 상태의 생성 규칙이다. 현재 커리큘럼 생성 UI에서는 `APPROVAL_REQUIRED`만 선택된 고정값으로 사용하며 다른 방식은 노출하지 않는다.
 
-| 수강 방식 | 생성 결과 |
-|---|---|
-| `IMMEDIATE` | 바로 `ACTIVE` |
-| `APPROVAL_REQUIRED` | `PENDING` 생성 후 강사 승인 필요 |
-| `INVITATION_ONLY` | 일반 신청 차단. 초대 흐름은 후속 범위 |
+| 수강 방식 | 현재 지원 | 생성 결과 |
+|---|---|---|
+| `APPROVAL_REQUIRED` | 지원 | `PENDING` 생성 후 강사 승인 필요 |
+| `IMMEDIATE` | 미지원 | 프론트 생성 UI에서 노출하지 않음 |
+| `INVITATION_ONLY` | 미지원 | 프론트 생성 UI에서 노출하지 않음 |
 
-초기 권장 범위는 `PENDING → ACTIVE`, `PENDING → REJECTED`, `PENDING → CANCELLED`다. `ACTIVE → REVOKED`는 학습 기록과 재생 권한 회수 정책을 먼저 확정해야 한다.
+현재 프론트엔드에서 다루는 기본 전이는 `PENDING → ACTIVE`, `PENDING → REJECTED`, `PENDING → CANCELLED`다. 신청을 승인 없이 바로 `ACTIVE`로 만드는 흐름은 제공하지 않는다. `ACTIVE → REVOKED`는 학습 기록과 재생 권한 회수 정책을 먼저 확정해야 한다.
 
 ## 6. 레슨 상태
 
@@ -327,22 +325,55 @@ quizStatus         = NOT_STARTED
 
 ## 13. 상태처럼 보이지만 별도로 다룰 값
 
-- `IMMEDIATE`, `APPROVAL_REQUIRED`, `INVITATION_ONLY`는 수강 상태가 아니라 수강 방식이다.
+- `APPROVAL_REQUIRED`는 수강 상태가 아니라 현재 고정된 수강 방식이다. 백엔드 enum에는 `IMMEDIATE`, `INVITATION_ONLY`도 남아 있지만 현재 프론트 생성 UI에서는 지원하지 않는다.
 - `GUEST`, `UNENROLLED_STUDENT`, `PENDING_ENROLLMENT`, `ENROLLED`, `OWNER_INSTRUCTOR`, `NON_OWNER_INSTRUCTOR`는 저장 lifecycle이 아니라 현재 사용자의 관계를 계산한 `viewerContext.relationship`이다.
 - `OPEN`, `NOT_OPEN` 같은 모집 가능 여부는 커리큘럼 lifecycle과 분리된 모집 상태다. 날짜 기반 계산 주체와 최종 enum은 미확정이다.
 - `loading`, `authenticated`, `guest`는 프론트 인증 조회를 위한 UI 로컬 상태이며 서버 도메인 상태가 아니다.
+- `강사 운영 모드`, `강사 검수 모드`는 classroom·replay에서 역할에 따라 렌더링하는 화면 모드이며 라이브나 replay 상태가 아니다. 실제 연동에서는 해당 커리큘럼 소유권과 서버 `allowedActions`로 결정한다.
+- 대표 이미지의 선택·미리보기·삭제는 현재 브라우저 폼 상태다. 업로드 API가 연결되기 전까지 서버 자산 lifecycle로 간주하지 않는다.
 - outbox·inbox 메시지 상태는 내부 연동 복구용이며 프론트 API에 노출하지 않는다.
 
 ## 14. 아직 확정해야 할 전이
 
 1. 게시된 레슨의 자료 변경 시 학생 공개를 즉시 중단할 정확한 시점
+
+   - **권장안:** 현재 학생에게 공개 중인 게시 revision은 유지하고, 자료 변경은 별도의 작업 revision을 `AI_NOT_READY`로 만든다. AI 처리가 끝난 뒤 강사가 재게시하면 활성 revision을 원자적으로 교체한다.
+   - 기존 게시본을 즉시 내리면 정상 학습과 예정된 라이브가 자료 편집 때문에 갑자기 중단될 수 있다. 라이브와 학생 화면은 재게시 전까지 기존 활성 revision만 사용하고, 강사 화면에는 “공개 중인 버전”과 “수정 중인 버전”을 구분해 표시한다.
+
 2. 자료 업로드의 서버 enum 범위와 브라우저 전용 `UPLOADING` 분리 방식
+
+   - **권장안:** 파일 선택·읽기·전송 진행률인 `SELECTED`, `READING`, `UPLOADING`은 브라우저 로컬 상태로만 관리한다. 서버는 업로드 세션을 만든 시점부터 `PENDING_UPLOAD`, `UPLOADED`, `VALIDATING`, `ACTIVE`, `DELETING`, `DELETED`, `FAILED`를 관리한다.
+   - 네트워크가 끊긴 브라우저의 진행 상태를 서버 enum과 섞지 않는다. 프론트는 업로드 완료 통지 후 서버 상태를 다시 조회하고, 페이지 재진입 시에는 서버 상태만으로 화면을 복원한다.
+
 3. `OPEN`을 저장할지 서버가 시각·정책으로 계산할지
+
+   - **권장안:** `OPEN`은 DB에 저장하지 않고 서버가 현재 시각, 예정 시각, 입장 가능 시간, 취소 여부를 기준으로 계산한다. 장기적으로는 라이브 lifecycle과 분리된 `entryStatus=NOT_OPEN|OPEN|CLOSED` 필드로 제공한다.
+   - 시간 경과만으로 바뀌는 값을 저장하면 별도 스케줄러와 상태 보정 작업이 필요하다. 프론트는 로컬 시각으로 입장을 열지 않고 서버 응답의 `entryStatus`와 `allowedActions`만 사용한다.
+
 4. 라이브 `FAILED` 재시도와 새 세션 생성 중 어떤 방식을 사용할지
+
+   - **권장안:** `STARTING` 중 일시적인 LiveKit·Egress·STT 기동 실패는 같은 `sessionId`에서 멱등 재시도한다. 서버가 `attempt`를 증가시키고 재시도 가능한 경우에만 `RETRY_START`를 `allowedActions`로 반환한다.
+   - 한 번이라도 `LIVE`가 되었거나 녹화 자산·시간축이 생성된 세션은 재사용하지 않는다. 종료 후 재수업이 필요하면 새 세션을 만들고 기존 실패·종료 세션은 이력으로 보존한다.
+
 5. `ACTIVE → REVOKED` 시 학습 기록과 기존 재생 URL 처리
+
+   - **권장안:** 진도, 퀴즈 응시, 북마크 같은 학습 기록은 감사와 복구를 위해 보존하고 접근 권한만 즉시 회수한다. 신규 HLS URL, LiveKit token, SSE·학습 요청 발급은 바로 차단한다.
+   - 이미 발급된 HLS URL은 짧은 TTL을 기본으로 하고 만료 이후 재발급을 거부한다. 즉시 차단이 반드시 필요한 경우에만 CDN·미디어 게이트의 별도 폐기 기능을 사용하며, 프론트는 `REVOKED` 확인 즉시 재생과 실시간 연결을 종료한다.
+
 6. replay `WITHDRAWN → PUBLISHED` 재게시 허용 여부
+
+   - **권장안:** 영상 자산이 여전히 `READY`이고 기존 게시본을 그대로 다시 공개하는 경우에는 `WITHDRAWN → PUBLISHED`를 허용한다. 확인 대화상자와 게시·철회 이력은 반드시 남긴다.
+   - 철회 중 영상이나 AI 콘텐츠가 변경됐다면 기존 상태를 바로 되돌리지 않고 새 검수 revision을 만든다. 검수가 끝난 뒤 새 버전을 게시하며 기존 학습·퀴즈 기록은 삭제하지 않는다.
+
 7. 영역별 AI 처리 `READY`와 검수 `READY_FOR_REVIEW`의 DTO 경계
+
+   - **권장안:** AI 작업의 기술 상태와 core 게시 상태를 별도 필드로 분리한다. 예를 들어 `processingStatus=NOT_STARTED|PROCESSING|READY|FAILED`, `publicationStatus=NOT_READY|READY_FOR_REVIEW|DRAFT_SAVED|PUBLISHED`를 사용한다.
+   - AI worker 결과가 준비돼 core 후보로 정상 반영되면 `processingStatus=READY`, `publicationStatus=READY_FOR_REVIEW` 조합이 된다. 프론트는 처리 진행 안내에는 전자를, 강사 검수·학생 노출 판단에는 후자와 `allowedActions`를 사용한다.
+
 8. 모집 상태 enum과 커리큘럼 lifecycle의 조합 규칙
+
+   - **권장안:** 모집 가능 여부는 커리큘럼 lifecycle과 분리된 `enrollmentStatus=NOT_OPEN|OPEN|CLOSED`로 서버가 계산한다. 현재 수강 방식은 `APPROVAL_REQUIRED`로 고정하고 `PUBLISHED + OPEN`일 때만 신청을 허용한다.
+   - `DRAFT`와 `ARCHIVED`는 모집 기간과 관계없이 항상 `NOT_OPEN` 또는 `CLOSED`로 응답한다. `PUBLISHED`에서는 모집 시작·종료 시각과 운영 정책으로 상태를 계산하고, 최종 신청 가능 여부는 `allowedActions`의 `ENROLL`로 제공한다.
 
 결정이 API 필드, enum, 상태코드 또는 URL을 바꾸면 [공유 계약](../CONTRACT.md), 관련 API 명세와 FE/BE 계약 테스트를 함께 갱신한다.
 

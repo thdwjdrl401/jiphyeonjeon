@@ -1,3 +1,7 @@
+import architectureCurriculumImage from '@/assets/images/curriculum-architecture.svg'
+import dataCurriculumImage from '@/assets/images/curriculum-data.svg'
+import springCurriculumImage from '@/assets/images/curriculum-spring.svg'
+
 export const demoCurriculum = {
   curriculumId: 'cur_spring_live',
   title: '라이브로 완성하는 Spring Boot',
@@ -8,6 +12,7 @@ export const demoCurriculum = {
   endsAt: '2026-09-24T21:00:00+09:00',
   instructor: '이도현',
   enrolleeCount: 48,
+  thumbnailUrl: springCurriculumImage,
 }
 
 export const demoSections = [
@@ -74,6 +79,7 @@ export const demoInstructorCurriculums = [
     title: '확장 가능한 서비스 아키텍처',
     summary: '작은 서비스가 성장할 때 필요한 경계와 운영 전략을 설계합니다.',
     lifecycleStatus: 'DRAFT',
+    thumbnailUrl: architectureCurriculumImage,
     publishedLessonCount: 0,
     lessonCount: 7,
     nextSession: '일정 미정',
@@ -87,6 +93,7 @@ export const demoStudentCurriculums = [
     curriculumId: 'cur_data_story',
     title: '데이터로 설득하는 시각화',
     instructor: '박세린',
+    thumbnailUrl: dataCurriculumImage,
     progress: 76,
     completedLessonCount: 9,
     lessonCount: 12,

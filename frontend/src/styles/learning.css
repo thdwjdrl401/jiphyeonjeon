@@ -11,6 +11,16 @@
 .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #ff3c55; box-shadow: 0 0 0 5px rgba(255,60,85,.13); }
 .media-page__title > div:first-child > strong { color: #ff6074; font-size: .65rem; letter-spacing: .12em; }
 .media-page__status { display: flex; align-items: center; gap: 10px; color: rgba(255,255,255,.58); font-size: .68rem; }
+.media-page--instructor { background: radial-gradient(circle at 86% 0,rgba(255,188,92,.05),transparent 26%); }
+.instructor-live-console { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 9px; margin-bottom: 13px; }
+.instructor-live-console > div { display: grid; gap: 3px; padding: 11px 13px; border: 1px solid rgba(255,188,92,.15); border-radius: 11px; background: rgba(255,188,92,.055); }
+.instructor-live-console span { color: rgba(255,255,255,.48); font-size: .57rem; }
+.instructor-live-console strong { color: #ffdfa8; font-size: .72rem; }
+.instructor-live-console small { color: rgba(255,255,255,.43); font-size: .56rem; }
+.instructor-end-confirm { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 13px; padding: 12px 14px; border: 1px solid rgba(255,96,116,.26); border-radius: 12px; background: rgba(255,60,85,.09); }
+.instructor-end-confirm strong { color: #fff; font-size: .74rem; }
+.instructor-end-confirm p { margin: 3px 0 0; color: rgba(255,255,255,.57); font-size: .62rem; }
+.instructor-end-confirm > div:last-child { display: flex; gap: 7px; }
 .media-layout { display: grid; grid-template-columns: minmax(0,1fr) 370px; gap: 13px; }
 .media-primary { min-width: 0; }
 .video-stage { position: relative; min-height: min(64vh, 690px); overflow: hidden; border: 1px solid rgba(255,255,255,.08); border-radius: 17px; background: #171f35; box-shadow: 0 22px 50px rgba(0,0,0,.24); }
@@ -83,9 +93,47 @@
 .media-side .material-list li { border-color: rgba(255,255,255,.08); background: rgba(255,255,255,.025); }
 .media-side .material-list strong { color: #fff; }
 .media-side .inline-notice { border-color: rgba(82,116,255,.2); background: rgba(82,116,255,.1); color: #bdc8ff; }
+.instructor-question-panel > header, .instructor-review-panel > header, .instructor-participant-panel > header, .instructor-analytics-panel > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 13px; }
+.instructor-question-panel > header > div, .instructor-review-panel > header > div { display: grid; gap: 3px; }
+.instructor-question-panel > header strong, .instructor-review-panel > header strong, .instructor-participant-panel > header strong, .instructor-analytics-panel > header strong { color: #fff; font-size: .74rem; }
+.instructor-question-panel > header small, .instructor-review-panel > header small, .instructor-participant-panel > header small, .instructor-analytics-panel > header small { color: rgba(255,255,255,.44); font-size: .57rem; line-height: 1.5; }
+.instructor-question-panel > button { display: grid; width: 100%; grid-template-columns: 42px minmax(0,1fr) auto; align-items: start; gap: 9px; margin-bottom: 7px; border: 1px solid rgba(255,255,255,.07); border-radius: 10px; padding: 10px; background: rgba(255,255,255,.035); color: #fff; text-align: left; }
+.instructor-question-panel > button:hover { border-color: rgba(255,188,92,.28); background: rgba(255,188,92,.07); }
+.instructor-question-panel time { color: #ffca79; font-size: .59rem; }
+.instructor-question-panel button div { display: grid; gap: 3px; }
+.instructor-question-panel button strong { font-size: .65rem; }
+.instructor-question-panel button p { margin: 0; color: rgba(255,255,255,.6); font-size: .61rem; line-height: 1.5; }
+.instructor-question-panel button > span { align-self: center; color: rgba(255,255,255,.38); font-size: .56rem; }
+.participant-summary { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px; margin-bottom: 10px; }
+.participant-summary span { padding: 8px; border-radius: 8px; background: rgba(255,255,255,.04); color: rgba(255,255,255,.62); font-size: .58rem; text-align: center; }
+.instructor-participant-panel ul { display: grid; gap: 6px; margin: 0 0 11px; padding: 0; list-style: none; }
+.instructor-participant-panel li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px; border-radius: 9px; background: rgba(255,255,255,.035); }
+.instructor-participant-panel li > div { display: grid; gap: 2px; }
+.instructor-participant-panel li strong { color: #fff; font-size: .64rem; }
+.instructor-participant-panel li small { color: rgba(255,255,255,.38); font-size: .55rem; }
 .review-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 15px; margin-bottom: 13px; padding: 10px 13px; border: 1px solid rgba(255,188,92,.2); border-radius: 11px; background: rgba(255,188,92,.07); }
 .review-toolbar > div { display: flex; align-items: center; gap: 9px; }
 .review-toolbar strong { color: #ffdfa8; font-size: .68rem; }
+.replay-page > .inline-notice { margin: -4px 0 13px; border-color: rgba(82,116,255,.2); background: rgba(82,116,255,.1); color: #bdc8ff; }
+.review-status-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; }
+.review-status-grid button { display: grid; gap: 3px; border: 1px solid rgba(255,255,255,.08); border-radius: 9px; padding: 9px; background: rgba(255,255,255,.035); color: #fff; text-align: left; }
+.review-status-grid button:hover { border-color: rgba(255,188,92,.24); }
+.review-status-grid span { color: rgba(255,255,255,.48); font-size: .56rem; }
+.review-status-grid strong { overflow: hidden; color: #ffcf87; font-size: .58rem; text-overflow: ellipsis; }
+.review-status-grid small { color: rgba(255,255,255,.38); font-size: .53rem; }
+.review-editor { display: grid; gap: 6px; margin-top: 12px; }
+.review-editor > span { color: rgba(255,255,255,.66); font-size: .61rem; font-weight: 700; }
+.review-editor textarea { width: 100%; resize: vertical; border: 1px solid rgba(255,255,255,.11); border-radius: 9px; padding: 10px; outline: 0; background: rgba(255,255,255,.05); color: #fff; font: inherit; font-size: .65rem; line-height: 1.6; }
+.review-editor textarea:focus { border-color: #7188f5; }
+.review-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin: 9px 0; }
+.analytics-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; }
+.analytics-grid > div { display: grid; gap: 3px; padding: 11px; border-radius: 9px; background: rgba(255,255,255,.04); }
+.analytics-grid span { color: rgba(255,255,255,.43); font-size: .56rem; }
+.analytics-grid strong { color: #fff; font-size: .84rem; }
+.analytics-progress { margin: 12px 0; }
+.analytics-progress > div { display: flex; justify-content: space-between; margin-bottom: 6px; color: rgba(255,255,255,.62); font-size: .6rem; }
+.analytics-progress i { display: block; height: 7px; overflow: hidden; border-radius: 99px; background: rgba(255,255,255,.08); }
+.analytics-progress b { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#5274ff,#8b70ef); }
 .replay-video { min-height: min(62vh,650px); }
 .play-button { position: absolute; z-index: 5; top: 50%; left: 50%; display: grid; width: 62px; height: 62px; place-items: center; border: 1px solid rgba(255,255,255,.25); border-radius: 50%; background: rgba(7,11,22,.72); color: #fff; font-size: 1.2rem; transform: translate(-50%,-50%); backdrop-filter: blur(8px); }
 .chapter-row { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); }
@@ -118,6 +166,7 @@
   .video-stage { min-height: 470px; }
   .media-page__title { align-items: flex-start; flex-direction: column; }
   .media-page__status { width: 100%; flex-wrap: wrap; }
+  .instructor-live-console { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
 @media (max-width: 600px) {
   .lesson-shell__header { grid-template-columns: 1fr auto; padding-inline: 14px; }
@@ -141,4 +190,7 @@
   .chapter-row button { min-width: 160px; }
   .review-toolbar { align-items: stretch; flex-direction: column; }
   .review-toolbar > div:last-child { display: grid; grid-template-columns: 1fr 1fr; }
+  .instructor-live-console { grid-template-columns: 1fr 1fr; }
+  .instructor-end-confirm { align-items: stretch; flex-direction: column; }
+  .instructor-end-confirm > div:last-child { display: grid; grid-template-columns: 1fr; }
 }

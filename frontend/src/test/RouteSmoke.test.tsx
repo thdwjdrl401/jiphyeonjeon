@@ -43,6 +43,42 @@ describe('전체 페이지 라우트', () => {
     expect(await screen.findByRole('heading', { name: '입장 전 점검' })).toBeInTheDocument()
   })
 
+  it('강사에게 라이브 운영 화면을 제공한다', async () => {
+    await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
+    renderAt('/live-sessions/ses_security_live/classroom')
+    expect(await screen.findByText('강사 운영 모드')).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '질문' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '세션 종료' })).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'AI 질문' })).not.toBeInTheDocument()
+  })
+
+  it('수강생에게 라이브 학습 화면을 제공한다', async () => {
+    await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
+    renderAt('/live-sessions/ses_security_live/classroom')
+    expect(await screen.findByRole('tab', { name: 'AI 질문' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '☆ 북마크' })).toBeInTheDocument()
+    expect(screen.queryByText('강사 운영 모드')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '세션 종료' })).not.toBeInTheDocument()
+  })
+
+  it('강사에게 다시보기 검수 화면을 제공한다', async () => {
+    await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
+    renderAt('/lessons/les_security/replay')
+    expect(await screen.findByText('강사 검수 모드')).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '콘텐츠 검수' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '학습 통계' })).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: '퀴즈' })).not.toBeInTheDocument()
+  })
+
+  it('수강생에게 다시보기 학습 화면을 제공한다', async () => {
+    await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
+    renderAt('/lessons/les_security/replay')
+    expect(await screen.findByText('학습 진행률 42%')).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '퀴즈' })).toBeInTheDocument()
+    expect(screen.queryByText('강사 검수 모드')).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: '콘텐츠 검수' })).not.toBeInTheDocument()
+  })
+
   it('학생의 강사 전용 라우트 접근을 차단한다', async () => {
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
     renderAt('/curriculums/new')
