@@ -5,6 +5,7 @@ import './styles/global.css'
 import './styles/layout.css'
 import './styles/pages.css'
 import './styles/auth.css'
+import './styles/curriculum-detail.css'
 
 const rootElement = document.getElementById('root')
 
