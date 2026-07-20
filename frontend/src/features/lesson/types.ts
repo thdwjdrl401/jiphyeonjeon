@@ -8,6 +8,30 @@ export type LessonAccessReasonCode =
   | 'LIVE_NOT_STARTED'
   | 'REPLAY_NOT_PUBLISHED'
 
+export type CurriculumLiveSessionStatus =
+  | 'DRAFT'
+  | 'SCHEDULED'
+  | 'OPEN'
+  | 'STARTING'
+  | 'LIVE'
+  | 'ENDING'
+  | 'ENDED'
+  | 'CANCELLED'
+  | 'FAILED'
+
+export type CurriculumReplayStatus =
+  | 'NOT_READY'
+  | 'DRAFT'
+  | 'READY_FOR_REVIEW'
+  | 'PUBLISHED'
+  | 'WITHDRAWN'
+
+export interface CurriculumLessonLiveSession {
+  sessionId: string
+  status: CurriculumLiveSessionStatus
+  scheduledAt: string | null
+}
+
 export interface LessonAccess {
   allowed: boolean
   destination: LessonAccessDestination | null
@@ -26,6 +50,8 @@ export interface CurriculumOutlineLesson {
   lessonStatus: LessonStatus
   scheduledAt: string | null
   durationMs: number | null
+  liveSession: CurriculumLessonLiveSession | null
+  replayStatus: CurriculumReplayStatus
   access: LessonAccess
   learning: LessonLearning | null
 }

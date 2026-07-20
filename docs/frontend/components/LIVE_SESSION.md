@@ -197,7 +197,7 @@ MVP 1:1 제약으로 기존 세션이 있으면 새 세션 생성을 차단하�
 | `SCHEDULED` | 일정·카운트다운 확인 |
 | `OPEN` | 입장 전 점검 |
 | `STARTING` | 강사 시작 대기 |
-| `LIVE` | 입장 전 점검 또는 라이브 입장 |
+| `LIVE` | 입장 전 점검 필수 |
 | `ENDING` | 종료 처리 안내 |
 | `ENDED` | 다시보기 준비 상태 |
 | `CANCELLED` | 취소 안내 |
@@ -215,6 +215,8 @@ MVP 1:1 제약으로 기존 세션이 있으면 새 세션 생성을 차단하�
 - token 요청 실패와 LiveKit 연결 실패 구분
 
 점검을 통과해도 session이 `LIVE`가 아니면 classroom 연결 대신 시작 대기 상태를 유지한다.
+
+수강생은 `OPEN`과 `LIVE` 모두 prejoin을 먼저 거친다. 프론트는 점검 완료 문맥 없이 `/live-sessions/:sessionId/classroom`으로 직접 접근한 수강생을 같은 세션의 prejoin으로 되돌린다. 이 클라이언트 가드는 보안 판정을 대신하지 않으며 LiveKit token 발급 시 서버가 수강 권한과 세션 상태를 다시 검증한다.
 
 ## 10. 강사 사전 점검과 시작 차단
 

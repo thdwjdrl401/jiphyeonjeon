@@ -74,7 +74,49 @@ describe('CurriculumDetailPage', () => {
     renderDetail('/curriculums/cur_spring_live')
 
     expect(await screen.findByText('학습 진행률')).toBeInTheDocument()
-    expect(screen.getAllByRole('link', { name: '이어보기' }).length).toBeGreaterThan(0)
+    const continueLinks = screen.getAllByRole('link', { name: '이어보기' })
+    expect(continueLinks.length).toBeGreaterThan(0)
+    for (const link of continueLinks) {
+      expect(link).toHaveAttribute(
+        'href',
+        '/curriculums/cur_spring_live/sections/cur_spring_live_section_2/lessons/cur_spring_live_lesson_6',
+      )
+    }
+  })
+
+  it('레슨별 게시·라이브·다시보기 상태와 실제 이동 버튼을 함께 보여준다', async () => {
+    await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
+    renderDetail('/curriculums/cur_spring_live')
+
+    const lessonTitle = await screen.findByRole('link', { name: '1. 1강. 학습 주제 1' })
+    expect(lessonTitle).toHaveAttribute(
+      'href',
+      '/curriculums/cur_spring_live/sections/cur_spring_live_section_1/lessons/cur_spring_live_lesson_1',
+    )
+    expect(screen.getAllByText('게시됨').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('다시보기 준비 중').length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('button', { name: '다시보기 준비 중' })[0]).toBeDisabled()
+
+    expect(screen.getAllByRole('link', { name: '다시보기' })[0]).toHaveAttribute(
+      'href',
+      '/lessons/cur_spring_live_lesson_1/replay',
+    )
+    expect(screen.getAllByRole('link', { name: '라이브 일정 보기' })[0]).toHaveAttribute(
+      'href',
+      '/live-sessions/ses_cur_spring_live_3',
+    )
+    const prejoinPaths = screen.getAllByRole('link', { name: '입장 준비' })
+      .map((link) => link.getAttribute('href'))
+    expect(prejoinPaths).toEqual(expect.arrayContaining([
+      '/live-sessions/ses_cur_spring_live_4/prejoin',
+      '/live-sessions/ses_cur_spring_live_5/prejoin',
+    ]))
+    expect(screen.queryByRole('link', { name: '라이브 입장' })).not.toBeInTheDocument()
+    expect(screen.getAllByText('라이브 일정 준비 중').length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('link', { name: '레슨 자료 보기' })[0]).toHaveAttribute(
+      'href',
+      '/curriculums/cur_spring_live/sections/cur_spring_live_section_2/lessons/cur_spring_live_lesson_6',
+    )
   })
 
   it('수강 중이지만 아직 레슨을 하나도 듣지 않았다면 수강하기 CTA가 보인다', async () => {

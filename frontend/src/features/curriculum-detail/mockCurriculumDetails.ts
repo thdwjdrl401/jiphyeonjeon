@@ -12,7 +12,7 @@ import type {
   CurriculumEnrollmentRecord,
   EnrollResult,
 } from '@/features/enrollment/types'
-import type { CurriculumOutlineLesson } from '@/features/lesson/types'
+import type { CurriculumOutlineLesson, LessonAccessDestination } from '@/features/lesson/types'
 
 export const MOCK_ERROR_CURRICULUM_ID = 'cur_force_error'
 
@@ -46,7 +46,7 @@ const curriculums: MockCurriculumBase[] = [
     period: { startsAt: '2026-08-03T19:00:00+09:00', endsAt: '2026-09-24T21:00:00+09:00' },
     sectionCount: 6,
     lessonCount: 18,
-    enrollmentPolicyType: 'IMMEDIATE',
+    enrollmentPolicyType: 'APPROVAL_REQUIRED',
   },
   {
     curriculumId: 'cur_data_story',
@@ -64,7 +64,7 @@ const curriculums: MockCurriculumBase[] = [
     period: { startsAt: '2026-07-20T20:00:00+09:00', endsAt: '2026-08-28T22:00:00+09:00' },
     sectionCount: 5,
     lessonCount: 12,
-    enrollmentPolicyType: 'IMMEDIATE',
+    enrollmentPolicyType: 'APPROVAL_REQUIRED',
   },
   {
     curriculumId: 'cur_react_system',
@@ -82,7 +82,7 @@ const curriculums: MockCurriculumBase[] = [
     period: { startsAt: '2026-08-10T19:30:00+09:00', endsAt: '2026-10-05T21:30:00+09:00' },
     sectionCount: 7,
     lessonCount: 16,
-    enrollmentPolicyType: 'IMMEDIATE',
+    enrollmentPolicyType: 'APPROVAL_REQUIRED',
   },
   {
     curriculumId: 'cur_ai_product',
@@ -100,7 +100,7 @@ const curriculums: MockCurriculumBase[] = [
     period: { startsAt: '2026-09-01T20:00:00+09:00', endsAt: '2026-10-13T22:00:00+09:00' },
     sectionCount: 4,
     lessonCount: 10,
-    enrollmentPolicyType: 'IMMEDIATE',
+    enrollmentPolicyType: 'APPROVAL_REQUIRED',
   },
   {
     curriculumId: 'cur_webrtc',
@@ -118,7 +118,7 @@ const curriculums: MockCurriculumBase[] = [
     period: { startsAt: '2026-07-13T19:00:00+09:00', endsAt: '2026-08-31T21:00:00+09:00' },
     sectionCount: 8,
     lessonCount: 20,
-    enrollmentPolicyType: 'IMMEDIATE',
+    enrollmentPolicyType: 'APPROVAL_REQUIRED',
   },
   {
     curriculumId: 'cur_sql',
@@ -154,7 +154,7 @@ const curriculums: MockCurriculumBase[] = [
     period: { startsAt: '2026-09-07T19:00:00+09:00', endsAt: '2026-10-19T21:00:00+09:00' },
     sectionCount: 6,
     lessonCount: 14,
-    enrollmentPolicyType: 'IMMEDIATE',
+    enrollmentPolicyType: 'APPROVAL_REQUIRED',
   },
   {
     curriculumId: 'cur_typescript',
@@ -172,7 +172,7 @@ const curriculums: MockCurriculumBase[] = [
     period: { startsAt: '2026-07-27T19:30:00+09:00', endsAt: '2026-09-07T21:30:00+09:00' },
     sectionCount: 5,
     lessonCount: 12,
-    enrollmentPolicyType: 'IMMEDIATE',
+    enrollmentPolicyType: 'APPROVAL_REQUIRED',
   },
   {
     curriculumId: 'cur_ux_research',
@@ -190,7 +190,7 @@ const curriculums: MockCurriculumBase[] = [
     period: { startsAt: '2026-08-15T10:00:00+09:00', endsAt: '2026-09-19T12:00:00+09:00' },
     sectionCount: 4,
     lessonCount: 9,
-    enrollmentPolicyType: 'IMMEDIATE',
+    enrollmentPolicyType: 'APPROVAL_REQUIRED',
   },
   {
     curriculumId: 'cur_python',
@@ -208,7 +208,7 @@ const curriculums: MockCurriculumBase[] = [
     period: { startsAt: '2026-09-05T13:00:00+09:00', endsAt: '2026-10-10T15:00:00+09:00' },
     sectionCount: 6,
     lessonCount: 15,
-    enrollmentPolicyType: 'IMMEDIATE',
+    enrollmentPolicyType: 'APPROVAL_REQUIRED',
   },
 ]
 
@@ -252,6 +252,53 @@ async function wait() {
   await new Promise((resolve) => window.setTimeout(resolve, 380))
 }
 
+function buildLessonAvailability(
+  curriculum: MockCurriculumBase,
+  lessonOrder: number,
+): Pick<CurriculumOutlineLesson, 'liveSession' | 'replayStatus'> {
+  const sessionId = `ses_${curriculum.curriculumId}_${lessonOrder}`
+  const scheduledAt = curriculum.period?.startsAt ?? null
+
+  switch ((lessonOrder - 1) % 6) {
+    case 0:
+      return {
+        liveSession: { sessionId, status: 'ENDED', scheduledAt },
+        replayStatus: 'PUBLISHED',
+      }
+    case 1:
+      return {
+        liveSession: { sessionId, status: 'ENDED', scheduledAt },
+        replayStatus: 'READY_FOR_REVIEW',
+      }
+    case 2:
+      return {
+        liveSession: { sessionId, status: 'SCHEDULED', scheduledAt },
+        replayStatus: 'NOT_READY',
+      }
+    case 3:
+      return {
+        liveSession: { sessionId, status: 'OPEN', scheduledAt },
+        replayStatus: 'NOT_READY',
+      }
+    case 4:
+      return {
+        liveSession: { sessionId, status: 'LIVE', scheduledAt },
+        replayStatus: 'NOT_READY',
+      }
+    default:
+      return { liveSession: null, replayStatus: 'NOT_READY' }
+  }
+}
+
+function resolveMockLessonDestination(lesson: CurriculumOutlineLesson): LessonAccessDestination {
+  if (lesson.liveSession?.status === 'LIVE') return 'LIVE_CLASSROOM'
+  if (lesson.liveSession && ['DRAFT', 'SCHEDULED', 'OPEN', 'STARTING'].includes(lesson.liveSession.status)) {
+    return 'LIVE_SESSION'
+  }
+  if (lesson.replayStatus === 'PUBLISHED') return 'VOD'
+  return 'LESSON_DETAIL'
+}
+
 function buildOutline(curriculum: MockCurriculumBase): CurriculumOutlineSection[] {
   const lessonsPerSection = Math.ceil(curriculum.lessonCount / curriculum.sectionCount)
   let lessonOrder = 0
@@ -262,13 +309,15 @@ function buildOutline(curriculum: MockCurriculumBase): CurriculumOutlineSection[
     )
     const lessons: CurriculumOutlineLesson[] = Array.from({ length: Math.max(sectionLessonCount, 0) }, () => {
       lessonOrder += 1
+      const availability = buildLessonAvailability(curriculum, lessonOrder)
       return {
         lessonId: `${curriculum.curriculumId}_lesson_${lessonOrder}`,
         title: `${lessonOrder}강. 학습 주제 ${lessonOrder}`,
         order: lessonOrder,
         lessonStatus: 'PUBLISHED',
-        scheduledAt: curriculum.period?.startsAt ?? null,
+        scheduledAt: availability.liveSession?.scheduledAt ?? null,
         durationMs: 3_600_000,
+        ...availability,
         access: { allowed: false, destination: null, reasonCode: 'ENROLLMENT_REQUIRED' },
         learning: null,
       }
@@ -310,7 +359,7 @@ function applyViewerAccess(
           : null
       return {
         ...lesson,
-        access: { allowed: true, destination: 'LESSON_DETAIL' as const, reasonCode: null },
+        access: { allowed: true, destination: resolveMockLessonDestination(lesson), reasonCode: null },
         learning,
       }
     }),

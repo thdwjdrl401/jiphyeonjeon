@@ -2,6 +2,7 @@ import { Route, Routes } from 'react-router-dom'
 import GuestOnlyRoute from '@/features/auth/GuestOnlyRoute'
 import RequireAuthRoute from '@/features/auth/RequireAuthRoute'
 import RequireInstructorRoute from '@/features/auth/RequireInstructorRoute'
+import RequireStudentPrejoinRoute from '@/features/live-session/RequireStudentPrejoinRoute'
 import CurriculumDetailPage from '@/pages/CurriculumDetailPage'
 import CurriculumFormPage from '@/pages/CurriculumFormPage'
 import CurriculumListPage from '@/pages/CurriculumListPage'
@@ -57,7 +58,9 @@ export default function AppRouter() {
           </Route>
         </Route>
         <Route element={<LessonLayout />}>
-          <Route path="live-sessions/:sessionId/classroom" element={<LiveClassroomPage />} />
+          <Route element={<RequireStudentPrejoinRoute />}>
+            <Route path="live-sessions/:sessionId/classroom" element={<LiveClassroomPage />} />
+          </Route>
           <Route path="lessons/:lessonId/replay" element={<ReplayLessonPage />} />
         </Route>
       </Route>

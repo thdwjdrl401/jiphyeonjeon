@@ -59,7 +59,7 @@ CurriculumDetailPage
 | `CurriculumLessonItem` | `features/lesson` | lesson 게시 상태와 연결 live session·다시보기 상태, 접근 가능 여부 표시 |
 | `CurriculumRelationPanel` | page 조합 | 관계에 맞는 행동·안내 컴포넌트 한 종류 선택 |
 | `InstructorActions` | `features/curriculum` | 관리 이동, 예정 live session 상세·입장 등 운영 행동 제공 |
-| `EnrolleeActions` | `features/enrollment` | 이어보기, 라이브 입장, 다음 레슨 이동 제공 |
+| `EnrolleeActions` | `features/enrollment` | 이어보기, 라이브 입장 준비, 다음 레슨 이동 제공 |
 | `EnrollmentActions` | `features/enrollment` | 수강 신청 행동 제공 |
 | `EnrollmentPendingNotice` | `features/enrollment` | 수강 승인 대기 상태 안내 |
 | `NonOwnerInstructorNotice` | `features/enrollment` | 비운영 강사의 수강 가능 여부 안내 |
@@ -218,7 +218,7 @@ CurriculumOutline
 | 관계·상태 | 대표 행동 예시 |
 |---|---|
 | 커리큘럼 강사 | 커리큘럼 관리 또는 live session 상세·강의실 입장 |
-| 수강생·진행 중 라이브 있음 | 라이브 입장 |
+| 수강생·진행 중 라이브 있음 | 입장 전 점검 |
 | 수강생·최근 학습 있음 | 이어보기 |
 | 학생·미수강 | 수강 신청 |
 | 승인 대기 | 승인 대기 확인 |

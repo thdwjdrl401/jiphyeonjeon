@@ -34,7 +34,7 @@ describe('커리큘럼 API 계약', () => {
     })
   })
 
-  it('현재 공개 상세 응답에 후속 필드가 없어도 안전한 읽기 전용 상태로 보정한다', async () => {
+  it('상세 응답의 누락 필드를 보정하고 라이브 상태를 내부 모델로 정규화한다', async () => {
     vi.spyOn(apiClient, 'get').mockResolvedValue({
       data: {
         curriculumId: 'cur_contract',
@@ -57,7 +57,18 @@ describe('커리큘럼 API 계약', () => {
             description: null,
             order: 1,
             lessons: [
-              { lessonId: 'les_1', title: '레슨', order: 1, lessonStatus: 'PUBLISHED' },
+              {
+                lessonId: 'les_1',
+                title: '레슨',
+                order: 1,
+                lessonStatus: 'PUBLISHED',
+                liveSession: {
+                  sessionId: 'ses_1',
+                  liveSessionStatus: 'SCHEDULED',
+                  scheduledAt: '2026-08-01T10:00:00+09:00',
+                },
+                replayStatus: 'NOT_READY',
+              },
             ],
           },
         ],
@@ -72,6 +83,12 @@ describe('커리큘럼 API 계약', () => {
       allowedActions: ['VIEW_DETAIL'],
     })
     expect(detail.outline[0].lessons[0].access.allowed).toBe(false)
+    expect(detail.outline[0].lessons[0].liveSession).toEqual({
+      sessionId: 'ses_1',
+      status: 'SCHEDULED',
+      scheduledAt: '2026-08-01T10:00:00+09:00',
+    })
+    expect(detail.outline[0].lessons[0].replayStatus).toBe('NOT_READY')
   })
 
   it('수강 신청과 취소도 curriculum 경로를 사용한다', async () => {

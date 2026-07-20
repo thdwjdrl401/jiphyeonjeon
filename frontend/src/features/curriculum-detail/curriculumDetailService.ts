@@ -7,13 +7,22 @@ import type {
 } from '@/features/curriculum/types'
 import { createFallbackViewerContext } from '@/features/curriculum/viewerContext'
 import type { EnrollResult } from '@/features/enrollment/types'
-import type { CurriculumOutlineLesson } from '@/features/lesson/types'
+import type { CurriculumLiveSessionStatus, CurriculumOutlineLesson } from '@/features/lesson/types'
 import { cancelMockEnrollment, enrollMockCurriculum, getMockCurriculumDetail } from './mockCurriculumDetails'
+
+interface CurriculumApiLiveSession {
+  sessionId: string
+  liveSessionStatus?: CurriculumLiveSessionStatus
+  status?: CurriculumLiveSessionStatus
+  scheduledAt?: string | null
+}
 
 type CurriculumApiOutlineLesson = Pick<
   CurriculumOutlineLesson,
   'lessonId' | 'title' | 'order' | 'lessonStatus'
-> & Partial<Omit<CurriculumOutlineLesson, 'lessonId' | 'title' | 'order' | 'lessonStatus'>>
+> & Partial<Omit<CurriculumOutlineLesson, 'lessonId' | 'title' | 'order' | 'lessonStatus' | 'liveSession'>> & {
+  liveSession?: CurriculumApiLiveSession | null
+}
 
 type CurriculumApiOutlineSection = Omit<CurriculumOutlineSection, 'lessons'> & {
   lessons: CurriculumApiOutlineLesson[]
@@ -29,10 +38,19 @@ type CurriculumApiDetailResponse = Omit<
 }
 
 function normalizeLesson(lesson: CurriculumApiOutlineLesson): CurriculumOutlineLesson {
+  const liveSessionStatus = lesson.liveSession?.liveSessionStatus ?? lesson.liveSession?.status
   return {
     ...lesson,
     scheduledAt: lesson.scheduledAt ?? null,
     durationMs: lesson.durationMs ?? null,
+    liveSession: lesson.liveSession && liveSessionStatus
+      ? {
+          sessionId: lesson.liveSession.sessionId,
+          status: liveSessionStatus,
+          scheduledAt: lesson.liveSession.scheduledAt ?? null,
+        }
+      : null,
+    replayStatus: lesson.replayStatus ?? 'NOT_READY',
     access: lesson.access ?? {
       allowed: false,
       destination: null,

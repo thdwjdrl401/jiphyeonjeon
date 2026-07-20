@@ -32,6 +32,7 @@ export default function CurriculumSection({ section, relationship, curriculumId 
               lesson={lesson}
               relationship={relationship}
               curriculumId={curriculumId}
+              sectionId={section.sectionId}
             />
           ))}
         </ul>

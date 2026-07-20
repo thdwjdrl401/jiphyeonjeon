@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
 import App from '@/App'
 import { mockAuthService, resetMockAuth } from '@/features/auth/mockAuth'
@@ -52,10 +53,27 @@ describe('전체 페이지 라우트', () => {
     expect(screen.queryByRole('tab', { name: 'AI 질문' })).not.toBeInTheDocument()
   })
 
-  it('수강생에게 라이브 학습 화면을 제공한다', async () => {
+  it('수강생이 강의실 주소로 직접 접근하면 입장 전 점검으로 이동한다', async () => {
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
     renderAt('/live-sessions/ses_security_live/classroom')
+
+    expect(await screen.findByRole('heading', { name: '입장 전 점검' })).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/live-sessions/ses_security_live/prejoin')
+  })
+
+  it('수강생은 입장 전 점검을 모두 마친 뒤 라이브 학습 화면으로 이동한다', async () => {
+    const user = userEvent.setup()
+    await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
+    renderAt('/live-sessions/ses_security_live/prejoin')
+
+    await user.click(await screen.findByRole('button', { name: /스피커 테스트/ }))
+    await user.click(screen.getByRole('button', { name: /자동 재생 확인/ }))
+    await user.click(screen.getByRole('button', { name: /네트워크 상태/ }))
+    await user.click(screen.getByRole('checkbox', { name: /녹화·자막·채팅·AI 사용 안내/ }))
+    await user.click(screen.getByRole('link', { name: '라이브 입장' }))
+
     expect(await screen.findByRole('tab', { name: 'AI 질문' })).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/live-sessions/ses_security_live/classroom')
     expect(screen.getByRole('button', { name: '☆ 북마크' })).toBeInTheDocument()
     expect(screen.queryByText('강사 운영 모드')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '세션 종료' })).not.toBeInTheDocument()

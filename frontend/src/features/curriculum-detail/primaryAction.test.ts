@@ -27,6 +27,8 @@ function makeDetail(overrides: Partial<CurriculumDetailResponse['viewerContext']
             lessonStatus: 'PUBLISHED',
             scheduledAt: null,
             durationMs: null,
+            liveSession: null,
+            replayStatus: 'NOT_READY',
             access: { allowed: true, destination: 'LESSON_DETAIL', reasonCode: null },
             learning: null,
           },
@@ -63,7 +65,7 @@ describe('resolvePrimaryAction', () => {
     expect(resolvePrimaryAction(detail, '/curriculums/cur_test')).toEqual({
       kind: 'link',
       label: '수강하기',
-      to: '/curriculums/cur_test/lessons/les_1',
+      to: '/curriculums/cur_test/sections/sec_1/lessons/les_1',
     })
   })
 
@@ -75,14 +77,33 @@ describe('resolvePrimaryAction', () => {
         completedLessonCount: 3,
         totalLessonCount: 10,
         progressPercent: 30,
-        lastLearning: { lessonId: 'les_3', sessionMs: 1000 },
+        lastLearning: { lessonId: 'les_1', sessionMs: 1000 },
       },
     })
 
     expect(resolvePrimaryAction(detail, '/curriculums/cur_test')).toEqual({
       kind: 'link',
       label: '이어보기',
-      to: '/curriculums/cur_test/lessons/les_3',
+      to: '/curriculums/cur_test/sections/sec_1/lessons/les_1',
+    })
+  })
+
+  it('학습 기록의 레슨이 목차에 없으면 첫 레슨 수강하기로 안전하게 대체한다', () => {
+    const detail = makeDetail({
+      relationship: 'ENROLLED',
+      allowedActions: ['VIEW_LESSON', 'CONTINUE_LEARNING'],
+      progress: {
+        completedLessonCount: 1,
+        totalLessonCount: 1,
+        progressPercent: 100,
+        lastLearning: { lessonId: 'removed_lesson', sessionMs: 1000 },
+      },
+    })
+
+    expect(resolvePrimaryAction(detail, '/curriculums/cur_test')).toEqual({
+      kind: 'link',
+      label: '수강하기',
+      to: '/curriculums/cur_test/sections/sec_1/lessons/les_1',
     })
   })
 })

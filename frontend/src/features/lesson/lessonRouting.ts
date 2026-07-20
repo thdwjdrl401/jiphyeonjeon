@@ -1,15 +1,23 @@
 import type { LessonAccessDestination } from './types'
 
-export function resolveLessonPath(curriculumId: string, lessonId: string, destination: LessonAccessDestination | null) {
+interface LessonPathParams {
+  curriculumId: string
+  sectionId: string
+  lessonId: string
+  destination: LessonAccessDestination | null
+  sessionId?: string | null
+}
+
+export function resolveLessonPath({ curriculumId, sectionId, lessonId, destination, sessionId }: LessonPathParams) {
   switch (destination) {
     case 'LIVE_SESSION':
-      return `/curriculums/${curriculumId}/live/${lessonId}`
+      return sessionId ? `/live-sessions/${sessionId}` : `/curriculums/${curriculumId}/sections/${sectionId}/lessons/${lessonId}`
     case 'LIVE_CLASSROOM':
-      return `/curriculums/${curriculumId}/classroom/${lessonId}`
+      return sessionId ? `/live-sessions/${sessionId}/classroom` : `/curriculums/${curriculumId}/sections/${sectionId}/lessons/${lessonId}`
     case 'VOD':
-      return `/curriculums/${curriculumId}/lessons/${lessonId}/vod`
+      return `/lessons/${lessonId}/replay`
     case 'LESSON_DETAIL':
     default:
-      return `/curriculums/${curriculumId}/lessons/${lessonId}`
+      return `/curriculums/${curriculumId}/sections/${sectionId}/lessons/${lessonId}`
   }
 }

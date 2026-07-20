@@ -8,12 +8,18 @@ interface EnrolleeActionsProps {
 
 export default function EnrolleeActions({ detail }: EnrolleeActionsProps) {
   const lastLearning = detail.viewerContext.progress?.lastLearning
-  const firstLesson = detail.outline[0]?.lessons[0]
+  const lessonLocations = detail.outline.flatMap((section) =>
+    section.lessons.map((lesson) => ({ sectionId: section.sectionId, lesson })),
+  )
+  const lastLearningLocation = lastLearning
+    ? lessonLocations.find(({ lesson }) => lesson.lessonId === lastLearning.lessonId)
+    : null
+  const firstLessonLocation = lessonLocations[0]
 
-  const target = lastLearning
-    ? { lessonId: lastLearning.lessonId, label: '이어보기' }
-    : firstLesson
-      ? { lessonId: firstLesson.lessonId, label: '수강하기' }
+  const target = lastLearningLocation
+    ? { ...lastLearningLocation, label: '이어보기' }
+    : firstLessonLocation
+      ? { ...firstLessonLocation, label: '수강하기' }
       : null
 
   return (
@@ -21,7 +27,15 @@ export default function EnrolleeActions({ detail }: EnrolleeActionsProps) {
       <h2>수강 중이에요</h2>
       <p>목차에서 원하는 레슨으로 바로 이동할 수 있어요.</p>
       {target && (
-        <Link className="button button--primary" to={resolveLessonPath(detail.curriculumId, target.lessonId, 'LESSON_DETAIL')}>
+        <Link
+          className="button button--primary"
+          to={resolveLessonPath({
+            curriculumId: detail.curriculumId,
+            sectionId: target.sectionId,
+            lessonId: target.lesson.lessonId,
+            destination: 'LESSON_DETAIL',
+          })}
+        >
           {target.label}
         </Link>
       )}
