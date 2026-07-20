@@ -42,16 +42,10 @@ public class ChatService {
         this.accessGuard = accessGuard;
     }
 
-    /** 채팅 전송(멱등, lessonId 기준 = REST). 같은 clientMessageId 재전송이면 기존 메시지를 그대로 돌려준다. */
-    @Transactional
-    public ChatMessage send(UUID lessonId, UUID senderId, String clientMessageId, String text, boolean isQuestion) {
-        LiveSession session = sessionForLesson(lessonId);
-        return sendIdempotent(session, lessonId, senderId, clientMessageId, text, isQuestion);
-    }
-
     /**
-     * 채팅 전송(멱등, sessionId 기준 = WebSocket). WS 채널·구독 destination이 sessionId로 키잉되므로
-     * 실시간 인바운드는 이 경로로 들어온다. lesson:session = 1:1(MVP)이라 세션에서 lessonId를 얻는다.
+     * 채팅 전송(멱등, sessionId 기준). REST·WebSocket 모두 이 경로로 들어온다 — 채팅은 라이브 세션 범위라
+     * sessionId로 키잉한다(WS 채널·구독 destination과 일치). lesson:session=1:1이 나중에 1:N이 돼도
+     * sessionId 키잉이라 이 코드가 안 깨진다. lessonId는 세션에서 얻어 메시지에 비정규화만 한다.
      */
     @Transactional
     public ChatMessage sendToSession(UUID sessionId, UUID senderId, String clientMessageId, String text, boolean isQuestion) {
@@ -79,13 +73,15 @@ public class ChatService {
                 });
     }
 
-    /** 복구 조회: afterSessionMs 이후 삭제 안 된 메시지를 시각순으로. */
+    /** 복구 조회(sessionId 기준): afterSessionMs 이후 삭제 안 된 메시지를 시각순으로. 세션 없으면 404. */
     @Transactional(readOnly = true)
-    public List<ChatMessage> list(UUID lessonId, long afterSessionMs, int limit) {
-        LiveSession session = sessionForLesson(lessonId);
+    public List<ChatMessage> listBySession(UUID sessionId, long afterSessionMs, int limit) {
+        if (!liveSessionRepository.existsById(sessionId)) {
+            throw new LiveSessionNotFoundException("라이브 세션이 없습니다.");
+        }
         int capped = Math.min(Math.max(limit, 1), 200);
         return chatMessageRepository.findByLiveSessionIdAndSessionMsGreaterThanAndDeletedAtIsNullOrderBySessionMsAsc(
-                session.getId(), afterSessionMs, Limit.of(capped));
+                sessionId, afterSessionMs, Limit.of(capped));
     }
 
     private ChatMessage store(LiveSession session, UUID lessonId, UUID senderId,
@@ -131,10 +127,5 @@ public class ChatService {
     private String studentAlias(UUID sessionId, UUID userId) {
         int code = Math.abs((sessionId.toString() + userId).hashCode()) % 10000;
         return "수강생-" + String.format("%04d", code);
-    }
-
-    private LiveSession sessionForLesson(UUID lessonId) {
-        return liveSessionRepository.findByLessonId(lessonId)
-                .orElseThrow(() -> new LiveSessionNotFoundException("이 레슨의 라이브 세션이 없습니다."));
     }
 }

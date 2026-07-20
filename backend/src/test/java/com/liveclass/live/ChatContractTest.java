@@ -44,12 +44,12 @@ class ChatContractTest {
     @Test
     void student_message_uses_anonymous_alias_and_hides_identity() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
-        String[] created = createStartedLessonSession(instructor);
-        String lessonId = created[0];
+        String[] created = createStartedSession(instructor);
+        String sessionId = created[0];
 
         Cookie[] student = loginAs("STUDENT");
         enrollActive(created[1], student, instructor);   // 활성 수강생이어야 채팅 가능
-        MvcResult res = write(post("/api/lessons/" + lessonId + "/messages"), student, """
+        MvcResult res = write(post("/api/live-sessions/" + sessionId + "/messages"), student, """
                 {"clientMessageId":"c-1","text":"질문 있어요","isQuestion":true}
                 """)
                 .andExpect(status().isCreated())
@@ -70,10 +70,10 @@ class ChatContractTest {
     @Test
     void instructor_message_shows_display_name_as_alias() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
-        String[] created = createStartedLessonSession(instructor);
-        String lessonId = created[0];
+        String[] created = createStartedSession(instructor);
+        String sessionId = created[0];
 
-        write(post("/api/lessons/" + lessonId + "/messages"), instructor, """
+        write(post("/api/live-sessions/" + sessionId + "/messages"), instructor, """
                 {"clientMessageId":"c-i","text":"안녕하세요"}
                 """)
                 .andExpect(status().isCreated())
@@ -83,18 +83,18 @@ class ChatContractTest {
     @Test
     void list_marks_only_my_messages_as_mine_for_the_requester() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
-        String[] created = createStartedLessonSession(instructor);
-        String lessonId = created[0];
+        String[] created = createStartedSession(instructor);
+        String sessionId = created[0];
         Cookie[] me = loginAs("STUDENT");
         Cookie[] other = loginAs("STUDENT");
         enrollActive(created[1], me, instructor);
         enrollActive(created[1], other, instructor);
 
-        write(post("/api/lessons/" + lessonId + "/messages"), me, "{\"clientMessageId\":\"m1\",\"text\":\"내가 보냄\"}").andReturn();
-        write(post("/api/lessons/" + lessonId + "/messages"), other, "{\"clientMessageId\":\"o1\",\"text\":\"남이 보냄\"}").andReturn();
+        write(post("/api/live-sessions/" + sessionId + "/messages"), me, "{\"clientMessageId\":\"m1\",\"text\":\"내가 보냄\"}").andReturn();
+        write(post("/api/live-sessions/" + sessionId + "/messages"), other, "{\"clientMessageId\":\"o1\",\"text\":\"남이 보냄\"}").andReturn();
 
         // 새로고침/재접속처럼 clientMessageId 로컬 기억 없이 GET만으로도 서버가 세션 기준 mine을 판정한다.
-        mockMvc.perform(get("/api/lessons/" + lessonId + "/messages").cookie(me))
+        mockMvc.perform(get("/api/live-sessions/" + sessionId + "/messages").cookie(me))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].text").value("내가 보냄"))
                 .andExpect(jsonPath("$[0].mine").value(true))
@@ -102,7 +102,7 @@ class ChatContractTest {
                 .andExpect(jsonPath("$[1].mine").value(false));
 
         // 같은 목록을 다른 사람이 조회하면 mine 판정이 뒤바뀐다(뷰어별 계산).
-        mockMvc.perform(get("/api/lessons/" + lessonId + "/messages").cookie(other))
+        mockMvc.perform(get("/api/live-sessions/" + sessionId + "/messages").cookie(other))
                 .andExpect(jsonPath("$[0].mine").value(false))
                 .andExpect(jsonPath("$[1].mine").value(true));
     }
@@ -110,35 +110,35 @@ class ChatContractTest {
     @Test
     void resend_with_same_client_message_id_is_idempotent() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
-        String[] created = createStartedLessonSession(instructor);
-        String lessonId = created[0];
+        String[] created = createStartedSession(instructor);
+        String sessionId = created[0];
         Cookie[] student = loginAs("STUDENT");
         enrollActive(created[1], student, instructor);
 
-        String first = json(write(post("/api/lessons/" + lessonId + "/messages"), student, """
+        String first = json(write(post("/api/live-sessions/" + sessionId + "/messages"), student, """
                 {"clientMessageId":"dup-1","text":"한번만"}
                 """).andReturn()).get("messageId").asString();
-        String second = json(write(post("/api/lessons/" + lessonId + "/messages"), student, """
+        String second = json(write(post("/api/live-sessions/" + sessionId + "/messages"), student, """
                 {"clientMessageId":"dup-1","text":"한번만"}
                 """).andReturn()).get("messageId").asString();
 
         org.assertj.core.api.Assertions.assertThat(second).isEqualTo(first);   // 같은 메시지, 중복 저장 안 됨
 
-        mockMvc.perform(get("/api/lessons/" + lessonId + "/messages").cookie(student))
+        mockMvc.perform(get("/api/live-sessions/" + sessionId + "/messages").cookie(student))
                 .andExpect(jsonPath("$.length()").value(1));
     }
 
     @Test
     void list_recovers_messages_in_order() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
-        String[] created = createStartedLessonSession(instructor);
-        String lessonId = created[0];
+        String[] created = createStartedSession(instructor);
+        String sessionId = created[0];
         Cookie[] student = loginAs("STUDENT");
         enrollActive(created[1], student, instructor);
-        write(post("/api/lessons/" + lessonId + "/messages"), student, "{\"clientMessageId\":\"a\",\"text\":\"첫째\"}").andReturn();
-        write(post("/api/lessons/" + lessonId + "/messages"), student, "{\"clientMessageId\":\"b\",\"text\":\"둘째\"}").andReturn();
+        write(post("/api/live-sessions/" + sessionId + "/messages"), student, "{\"clientMessageId\":\"a\",\"text\":\"첫째\"}").andReturn();
+        write(post("/api/live-sessions/" + sessionId + "/messages"), student, "{\"clientMessageId\":\"b\",\"text\":\"둘째\"}").andReturn();
 
-        mockMvc.perform(get("/api/lessons/" + lessonId + "/messages").cookie(student))
+        mockMvc.perform(get("/api/live-sessions/" + sessionId + "/messages").cookie(student))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2))
                 .andExpect(jsonPath("$[0].text").value("첫째"))
@@ -146,12 +146,11 @@ class ChatContractTest {
     }
 
     @Test
-    void chatting_a_lesson_without_live_session_returns_404() throws Exception {
-        Cookie[] instructor = loginAs("INSTRUCTOR");
-        String lessonId = createLessonWithoutSession(instructor);
+    void chatting_a_nonexistent_session_returns_404() throws Exception {
         Cookie[] student = loginAs("STUDENT");
+        String missingSession = UUID.randomUUID().toString();
 
-        write(post("/api/lessons/" + lessonId + "/messages"), student, "{\"clientMessageId\":\"x\",\"text\":\"hi\"}")
+        write(post("/api/live-sessions/" + missingSession + "/messages"), student, "{\"clientMessageId\":\"x\",\"text\":\"hi\"}")
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("LIVE_SESSION_NOT_FOUND"));
     }
@@ -159,11 +158,11 @@ class ChatContractTest {
     @Test
     void chat_requires_authentication() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
-        String[] created = createStartedLessonSession(instructor);
-        String lessonId = created[0];
+        String[] created = createStartedSession(instructor);
+        String sessionId = created[0];
 
         Cookie xsrf = fetchXsrf();
-        mockMvc.perform(post("/api/lessons/" + lessonId + "/messages")
+        mockMvc.perform(post("/api/live-sessions/" + sessionId + "/messages")
                         .cookie(xsrf).header("X-XSRF-TOKEN", xsrfToken)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"clientMessageId\":\"z\",\"text\":\"hi\"}"))
                 .andExpect(status().isUnauthorized());
@@ -179,17 +178,8 @@ class ChatContractTest {
         return csrf.getResponse().getCookie("XSRF-TOKEN");
     }
 
-    private String createLessonWithoutSession(Cookie[] auth) throws Exception {
-        String cid = json(write(post("/api/instructor/curriculums"), auth, "{\"title\":\"채팅\"}")
-                .andReturn()).get("curriculumId").asString();
-        String sid = json(write(post("/api/instructor/curriculums/" + cid + "/sections"), auth, "{\"title\":\"s\"}")
-                .andReturn()).get("sectionId").asString();
-        return json(write(post("/api/instructor/sections/" + sid + "/lessons"), auth, "{\"title\":\"l\"}")
-                .andReturn()).get("lessonId").asString();
-    }
-
-    /** 세션 시작 + 커리큘럼 발행. {lessonId, curriculumId} 반환(채팅 게이트 통과용 수강 등록에 curriculumId 필요). */
-    private String[] createStartedLessonSession(Cookie[] auth) throws Exception {
+    /** 세션 시작 + 커리큘럼 발행. {sessionId, curriculumId} 반환(수강 등록에 curriculumId 필요). */
+    private String[] createStartedSession(Cookie[] auth) throws Exception {
         String cid = json(write(post("/api/instructor/curriculums"), auth, "{\"title\":\"채팅\"}")
                 .andReturn()).get("curriculumId").asString();
         write(post("/api/instructor/curriculums/" + cid + "/publish"), auth, null).andExpect(status().isOk());
@@ -200,7 +190,7 @@ class ChatContractTest {
         String sessionId = json(write(post("/api/instructor/lessons/" + lessonId + "/live-sessions"), auth, null)
                 .andReturn()).get("sessionId").asString();
         write(post("/api/live-sessions/" + sessionId + "/start"), auth, null).andExpect(status().isOk());
-        return new String[]{lessonId, cid};
+        return new String[]{sessionId, cid};
     }
 
     /** 학생을 이 커리큘럼의 ACTIVE 수강생으로: 신청 → 강사 승인. (채팅/토큰 게이트 통과용) */
