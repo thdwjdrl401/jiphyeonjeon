@@ -59,7 +59,6 @@ class LiveChatWebSocketTest {
         Client instructor = new Client();
         instructor.signupAndLogin("INSTRUCTOR");
         String[] ids = instructor.createStartedSession();
-        String lessonId = ids[0];
         String sessionId = ids[1];
 
         Client student = new Client();
@@ -118,7 +117,7 @@ class LiveChatWebSocketTest {
         stompClient.stop();
 
         // WS로 보낸 메시지가 REST GET으로도 복구된다(같은 저장 경로).
-        HttpResponse<String> list = student.get("/api/lessons/" + lessonId + "/messages");
+        HttpResponse<String> list = student.get("/api/live-sessions/" + sessionId + "/messages");
         assertThat(list.statusCode()).isEqualTo(200);
         JsonNode arr = jsonMapper.readTree(list.body());
         assertThat(arr.size()).isEqualTo(1);
