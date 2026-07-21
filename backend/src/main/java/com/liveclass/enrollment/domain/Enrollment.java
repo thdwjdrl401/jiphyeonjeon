@@ -1,5 +1,6 @@
 package com.liveclass.enrollment.domain;
 
+import com.liveclass.enrollment.api.EnrollmentStatus;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;

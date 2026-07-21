@@ -1,4 +1,4 @@
-package com.liveclass.enrollment.domain;
+package com.liveclass.enrollment.api;
 
 public enum EnrollmentStatus {
     PENDING,

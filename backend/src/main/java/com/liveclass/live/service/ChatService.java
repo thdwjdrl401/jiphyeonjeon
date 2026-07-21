@@ -28,15 +28,18 @@ public class ChatService {
     private final LiveSessionRepository liveSessionRepository;
     private final UserDirectory userDirectory;
     private final ApplicationEventPublisher eventPublisher;
+    private final LiveAccessGuard accessGuard;
 
     public ChatService(ChatMessageRepository chatMessageRepository,
                        LiveSessionRepository liveSessionRepository,
                        UserDirectory userDirectory,
-                       ApplicationEventPublisher eventPublisher) {
+                       ApplicationEventPublisher eventPublisher,
+                       LiveAccessGuard accessGuard) {
         this.chatMessageRepository = chatMessageRepository;
         this.liveSessionRepository = liveSessionRepository;
         this.userDirectory = userDirectory;
         this.eventPublisher = eventPublisher;
+        this.accessGuard = accessGuard;
     }
 
     /** 채팅 전송(멱등, lessonId 기준 = REST). 같은 clientMessageId 재전송이면 기존 메시지를 그대로 돌려준다. */
@@ -64,6 +67,8 @@ public class ChatService {
      */
     private ChatMessage sendIdempotent(LiveSession session, UUID lessonId, UUID senderId,
                                        String clientMessageId, String text, boolean isQuestion) {
+        // 접근 게이트: 소유 강사이거나 소속 커리큘럼의 활성 수강생만 채팅 전송 가능(REST·WS 공용 경로).
+        accessGuard.requireCanAccess(session.getId(), senderId);
         return chatMessageRepository.findByLiveSessionIdAndClientMessageId(session.getId(), clientMessageId)
                 .orElseGet(() -> {
                     try {

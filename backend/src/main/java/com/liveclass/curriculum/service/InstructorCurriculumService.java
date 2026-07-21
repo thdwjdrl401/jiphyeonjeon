@@ -57,7 +57,8 @@ public class InstructorCurriculumService {
         curriculum.setDescription(description);
         // 생성 시점 기본값은 DDL과 일치시킨다(초안·즉시수강). 발행은 별도 흐름에서.
         curriculum.setLifecycleStatus(CurriculumLifecycleStatus.DRAFT);
-        curriculum.setEnrollmentType(EnrollmentType.IMMEDIATE);
+        // 제품 정책: 승인제(학생 신청 → 강사 승인). enum은 즉시·초대도 지원하나 기본은 승인제.
+        curriculum.setEnrollmentType(EnrollmentType.APPROVAL_REQUIRED);
         curriculum.setStructureVersion(0);
         curriculum.setSectionCount(0);
         curriculum.setLessonCount(0);
@@ -228,12 +229,14 @@ public class InstructorCurriculumService {
 
     @Transactional
     public LiveSessionView createLiveSession(UUID instructorId, UUID lessonId, java.time.OffsetDateTime scheduledAt) {
-        requireOwnedLesson(instructorId, lessonId);
+        LessonView lesson = requireOwnedLesson(instructorId, lessonId);
+        // 세션에 소속 커리큘럼을 실어 접근 게이팅에 쓴다(session→enrollment 사이클 회피).
+        UUID curriculumId = requireOwnedSection(instructorId, lesson.sectionId()).getCurriculumId();
         // 레슨당 세션 1개(DDL UNIQUE). 이미 있으면 상태 충돌로 막는다.
         if (liveSessionManagement.existsForLesson(lessonId)) {
             throw new CurriculumStateConflictException("이미 이 레슨의 라이브 세션이 있습니다.");
         }
-        LiveSessionView session = liveSessionManagement.create(lessonId, instructorId, scheduledAt);
+        LiveSessionView session = liveSessionManagement.create(lessonId, curriculumId, instructorId, scheduledAt);
         log.info(Audit.MARKER, "라이브 세션 생성 lessonId={} sessionId={}", lessonId, session.sessionId());
         return session;
     }
