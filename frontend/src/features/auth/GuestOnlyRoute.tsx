@@ -1,5 +1,5 @@
 import { Navigate, Outlet } from 'react-router-dom'
-import { getRoleHomePath } from '@/app/router/paths'
+import { publicPaths } from '@/app/router/paths'
 import { useAuth } from './AuthContext'
 
 export default function GuestOnlyRoute() {
@@ -14,6 +14,6 @@ export default function GuestOnlyRoute() {
     )
   }
 
-  if (status === 'authenticated' && user) return <Navigate to={getRoleHomePath(user.role)} replace />
+  if (status === 'authenticated' && user) return <Navigate to={publicPaths.curriculums} replace />
   return <Outlet />
 }

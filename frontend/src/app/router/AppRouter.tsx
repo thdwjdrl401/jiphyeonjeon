@@ -14,8 +14,6 @@ import LessonFormPage from '@/pages/LessonFormPage'
 import LessonLiveUpcomingPage from '@/pages/LessonLiveUpcomingPage'
 import LessonVodPage from '@/pages/LessonVodPage'
 import LiveClassroomPage from '@/pages/LiveClassroomPage'
-import LiveSessionDetailPage from '@/pages/LiveSessionDetailPage'
-import LiveSessionFormPage from '@/pages/LiveSessionFormPage'
 import LiveSessionProcessingPage from '@/pages/LiveSessionProcessingPage'
 import LoginPage from '@/pages/LoginPage'
 import MyCurriculumsPage from '@/pages/MyCurriculumsPage'
@@ -48,7 +46,6 @@ export default function AppRouter() {
           <Route path="curriculums" element={<MyCurriculumsPage />} />
           <Route path="curriculums/:curriculumId/sections/:sectionId/lessons/:lessonId" element={<LessonDetailPage />} />
           <Route path="curriculums/:curriculumId/lessons/:lessonId/live-upcoming" element={<LessonLiveUpcomingPage />} />
-          <Route path="live-sessions/:sessionId" element={<LiveSessionDetailPage />} />
           <Route path="live-sessions/:sessionId/prejoin" element={<StudentPrejoinPage />} />
         </Route>
         <Route element={<LessonLayout />}>
@@ -69,9 +66,6 @@ export default function AppRouter() {
           <Route path="curriculums/:curriculumId/sections/:sectionId/lessons/new" element={<LessonFormPage />} />
           <Route path="curriculums/:curriculumId/sections/:sectionId/lessons/:lessonId" element={<LessonDetailPage />} />
           <Route path="curriculums/:curriculumId/sections/:sectionId/lessons/:lessonId/edit" element={<LessonFormPage />} />
-          <Route path="lessons/:lessonId/live-sessions/new" element={<LiveSessionFormPage />} />
-          <Route path="live-sessions/:sessionId" element={<LiveSessionDetailPage />} />
-          <Route path="live-sessions/:sessionId/edit" element={<LiveSessionFormPage />} />
           <Route path="live-sessions/:sessionId/preflight" element={<InstructorPreflightPage />} />
           <Route path="live-sessions/:sessionId/processing" element={<LiveSessionProcessingPage />} />
         </Route>

@@ -6,6 +6,7 @@ import {
   getDemoInstructorCurriculums,
   getDemoPendingStudentCurriculums,
   getDemoStudentCurriculums,
+  getDemoTodayInstructorLiveSession,
 } from './demoData'
 
 describe('통합 mock 데이터베이스', () => {
@@ -50,5 +51,23 @@ describe('통합 mock 데이터베이스', () => {
     expect(dashboard.map((curriculum) => curriculum.curriculumId)).toEqual(['cur-spring-live', 'cur-architecture'])
     expect(catalog.items.find((item) => item.curriculumId === 'cur-spring-live')?.viewerContext.relationship).toBe('OWNER_INSTRUCTOR')
     expect(catalog.items.find((item) => item.curriculumId === 'cur-data-story')?.viewerContext.relationship).toBe('NON_OWNER_INSTRUCTOR')
+  })
+
+  it('강사 대시보드 라이브는 당일 일정만 반환한다', async () => {
+    const instructor = await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
+
+    const todayLive = getDemoTodayInstructorLiveSession(
+      instructor.userId,
+      new Date('2026-08-03T12:00:00+09:00'),
+    )
+    const anotherDayLive = getDemoTodayInstructorLiveSession(
+      instructor.userId,
+      new Date('2026-08-04T12:00:00+09:00'),
+    )
+
+    expect(todayLive?.curriculumId).toBe('cur-spring-live')
+    expect(todayLive?.sectionId).toBeTruthy()
+    expect(todayLive?.lessonId).toBeTruthy()
+    expect(anotherDayLive).toBeNull()
   })
 })

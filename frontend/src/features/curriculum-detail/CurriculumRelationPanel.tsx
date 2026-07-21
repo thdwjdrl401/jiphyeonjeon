@@ -12,9 +12,6 @@ interface CurriculumRelationPanelProps {
   onEnroll: () => void
   isEnrolling: boolean
   enrollError: string | null
-  onCancel: () => void
-  isCancelling: boolean
-  cancelError: string | null
 }
 
 export default function CurriculumRelationPanel({
@@ -23,9 +20,6 @@ export default function CurriculumRelationPanel({
   onEnroll,
   isEnrolling,
   enrollError,
-  onCancel,
-  isCancelling,
-  cancelError,
 }: CurriculumRelationPanelProps) {
   switch (detail.viewerContext.relationship) {
     case 'OWNER_INSTRUCTOR':
@@ -37,14 +31,7 @@ export default function CurriculumRelationPanel({
         <EnrollmentActions detail={detail} onEnroll={onEnroll} isEnrolling={isEnrolling} error={enrollError} />
       )
     case 'PENDING_ENROLLMENT':
-      return (
-        <EnrollmentPendingNotice
-          detail={detail}
-          onCancel={onCancel}
-          isCancelling={isCancelling}
-          cancelError={cancelError}
-        />
-      )
+      return <EnrollmentPendingNotice detail={detail} />
     case 'NON_OWNER_INSTRUCTOR':
       return <NonOwnerInstructorNotice detail={detail} onEnroll={onEnroll} isEnrolling={isEnrolling} />
     case 'GUEST':

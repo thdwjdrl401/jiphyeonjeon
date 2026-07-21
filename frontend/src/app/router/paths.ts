@@ -18,7 +18,6 @@ export const studentPaths = {
     `/student/curriculums/${curriculumId}/sections/${sectionId}/lessons/${lessonId}`,
   liveUpcoming: (curriculumId: string, lessonId: string) =>
     `/student/curriculums/${curriculumId}/lessons/${lessonId}/live-upcoming`,
-  liveSession: (sessionId: string) => `/student/live-sessions/${sessionId}`,
   prejoin: (sessionId: string) => `/student/live-sessions/${sessionId}/prejoin`,
   classroom: (sessionId: string) => `/student/live-sessions/${sessionId}/classroom`,
   replay: (lessonId: string) => `/student/lessons/${lessonId}/replay`,
@@ -38,9 +37,6 @@ export const instructorPaths = {
     `/instructor/curriculums/${curriculumId}/sections/${sectionId}/lessons/new`,
   editLesson: (curriculumId: string, sectionId: string, lessonId: string) =>
     `/instructor/curriculums/${curriculumId}/sections/${sectionId}/lessons/${lessonId}/edit`,
-  newLiveSession: (lessonId: string) => `/instructor/lessons/${lessonId}/live-sessions/new`,
-  liveSession: (sessionId: string) => `/instructor/live-sessions/${sessionId}`,
-  editLiveSession: (sessionId: string) => `/instructor/live-sessions/${sessionId}/edit`,
   preflight: (sessionId: string) => `/instructor/live-sessions/${sessionId}/preflight`,
   classroom: (sessionId: string) => `/instructor/live-sessions/${sessionId}/classroom`,
   processing: (sessionId: string) => `/instructor/live-sessions/${sessionId}/processing`,

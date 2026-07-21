@@ -18,9 +18,7 @@ export function resolveLessonPath({ curriculumId, sectionId, lessonId, destinati
 
   switch (destination) {
     case 'LIVE_SESSION':
-      return sessionId
-        ? role === 'INSTRUCTOR' ? instructorPaths.liveSession(sessionId) : studentPaths.liveSession(sessionId)
-        : lessonPath
+      return lessonPath
     case 'LIVE_CLASSROOM':
       return sessionId
         ? role === 'INSTRUCTOR' ? instructorPaths.classroom(sessionId) : studentPaths.classroom(sessionId)

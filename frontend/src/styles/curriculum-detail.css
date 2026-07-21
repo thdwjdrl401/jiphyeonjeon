@@ -48,6 +48,19 @@
   justify-self: start;
 }
 
+.curriculum-primary-action-group {
+  display: flex;
+  align-items: center;
+  justify-self: start;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.curriculum-primary-action-group .form-error {
+  flex-basis: 100%;
+  margin: 0;
+}
+
 .curriculum-overview,
 .instructor-summary,
 .curriculum-materials,

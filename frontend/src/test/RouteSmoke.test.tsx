@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
 import App from '@/App'
@@ -23,9 +23,6 @@ describe('전체 페이지 라우트', () => {
     ['/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/new', '새 레슨 만들기'],
     ['/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/les-security/edit', '레슨 수정'],
     ['/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/les-security', 'Spring Security 시작하기'],
-    ['/instructor/lessons/les-security/live-sessions/new', '라이브 일정 만들기'],
-    ['/instructor/live-sessions/ses-security-live/edit', '라이브 일정 수정'],
-    ['/instructor/live-sessions/ses-security-live', 'Spring Security 시작하기'],
     ['/instructor/live-sessions/ses-security-live/preflight', '라이브 시작 전 최종 점검'],
     ['/instructor/live-sessions/ses-security-live/processing', '녹화 처리 현황'],
     ['/instructor/live-sessions/ses-security-live/classroom', 'Spring Security 시작하기'],
@@ -38,10 +35,45 @@ describe('전체 페이지 라우트', () => {
     expect(await screen.findByRole('heading', { name: heading, level: 1 })).toBeInTheDocument()
   })
 
+  it.each([
+    '/instructor/curriculums/cur-spring-live/manage',
+    '/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/les-security',
+    '/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/les-security/edit',
+    '/instructor/live-sessions/ses-security-live/preflight',
+  ])('강사 작업 화면 %s에 현재 커리큘럼 레슨 목록을 표시한다', async (path) => {
+    await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
+    renderAt(path)
+    const navigation = await screen.findByRole('complementary', { name: '커리큘럼 레슨 목록' })
+    expect(within(navigation).getByRole('link', { name: '라이브로 완성하는 Spring Boot' })).toBeInTheDocument()
+    expect(within(navigation).queryByRole('link', { name: '내 프로필' })).not.toBeInTheDocument()
+  })
+
+  it.each([
+    '/instructor/lessons/les-security/live-sessions/new',
+    '/instructor/live-sessions/ses-security-live',
+    '/instructor/live-sessions/ses-security-live/edit',
+  ])('삭제된 라이브 일정·상세 경로 %s를 제공하지 않는다', async (path) => {
+    await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
+    renderAt(path)
+    expect(await screen.findByRole('heading', { name: '요청한 페이지를 찾을 수 없어요' })).toBeInTheDocument()
+  })
+
+  it('학생에게도 삭제된 라이브 상세 경로를 제공하지 않는다', async () => {
+    await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
+    renderAt('/student/live-sessions/ses-security-live')
+    expect(await screen.findByRole('heading', { name: '요청한 페이지를 찾을 수 없어요' })).toBeInTheDocument()
+  })
+
   it('학생 입장 전 점검 화면을 연다', async () => {
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
     renderAt('/student/live-sessions/ses-security-live/prejoin')
     expect(await screen.findByRole('heading', { name: '입장 전 점검' })).toBeInTheDocument()
+    const lessonNavigation = screen.getByRole('complementary', { name: '커리큘럼 레슨 목록' })
+    expect(within(lessonNavigation).getByRole('link', { name: /Spring Security 시작하기/ })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+    expect(within(lessonNavigation).queryByRole('link', { name: '내 프로필' })).not.toBeInTheDocument()
   })
 
   it('강사에게 라이브 운영 화면을 제공한다', async () => {
@@ -49,7 +81,7 @@ describe('전체 페이지 라우트', () => {
     renderAt('/instructor/live-sessions/ses-security-live/classroom')
     expect(await screen.findByText('강사 운영 모드')).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '질문' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '세션 종료' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '강의 종료' })).toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'AI 질문' })).not.toBeInTheDocument()
   })
 
@@ -76,7 +108,7 @@ describe('전체 페이지 라우트', () => {
     expect(window.location.pathname).toBe('/student/live-sessions/ses-security-live/classroom')
     expect(screen.getByRole('button', { name: '☆ 북마크' })).toBeInTheDocument()
     expect(screen.queryByText('강사 운영 모드')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '세션 종료' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '강의 종료' })).not.toBeInTheDocument()
   })
 
   it('강사에게 다시보기 검수 화면을 제공한다', async () => {
@@ -95,6 +127,60 @@ describe('전체 페이지 라우트', () => {
     expect(screen.getByRole('tab', { name: '퀴즈' })).toBeInTheDocument()
     expect(screen.queryByText('강사 검수 모드')).not.toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: '콘텐츠 검수' })).not.toBeInTheDocument()
+  })
+
+  it('학생 레슨 상세는 라이브 강의에서 바로 입장 전 점검으로 연결한다', async () => {
+    const user = userEvent.setup()
+    await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
+    renderAt('/student/curriculums/cur-spring-live/sections/sec-security/lessons/les-security')
+
+    expect(await screen.findByRole('heading', { name: '라이브 강의' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '준비 상태' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '입장' })).toHaveAttribute(
+      'href',
+      '/student/live-sessions/ses-security-live/prejoin',
+    )
+    const lessonNavigation = screen.getByRole('complementary', { name: '커리큘럼 레슨 목록' })
+    expect(within(lessonNavigation).getByRole('link', { name: '라이브로 완성하는 Spring Boot' })).toBeInTheDocument()
+    expect(within(lessonNavigation).getByRole('heading', { name: '인증과 인가' })).toBeInTheDocument()
+    expect(within(lessonNavigation).getByRole('link', { name: /Spring Security 시작하기/ })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+
+    await user.click(within(lessonNavigation).getByRole('link', { name: /Redis 세션과 CSRF/ }))
+    expect(await screen.findByRole('heading', { name: 'Redis 세션과 CSRF', level: 1 })).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/student/curriculums/cur-spring-live/sections/sec-security/lessons/les-session')
+  })
+
+  it('학생의 종료된 레슨 상세에는 라이브 대신 다시보기 진행도만 표시한다', async () => {
+    await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
+    renderAt('/student/curriculums/cur-spring-live/sections/sec-foundation/lessons/les-orientation')
+
+    expect(await screen.findByRole('heading', { name: '다시보기' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '라이브 강의' })).not.toBeInTheDocument()
+    expect(screen.getByText('진행도')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '다시보기' })).toHaveAttribute(
+      'href',
+      '/student/lessons/les-orientation/replay',
+    )
+  })
+
+  it('다시보기가 배포되지 않은 종료 레슨은 준비 중으로 표시한다', async () => {
+    await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
+    renderAt('/student/curriculums/cur-spring-live/sections/sec-foundation/lessons/les-request-flow')
+
+    expect(await screen.findByText('다시 보기 준비 중')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '다시보기' })).not.toBeInTheDocument()
+  })
+
+  it('입장 가능 시간 전에는 학생 레슨 상세에서 안내를 표시한다', async () => {
+    const user = userEvent.setup()
+    await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
+    renderAt('/student/curriculums/cur-spring-live/sections/sec-foundation/lessons/les-service-layer')
+
+    await user.click(await screen.findByRole('button', { name: '입장' }))
+    expect(screen.getByText('강의 시간이 아닙니다.')).toBeInTheDocument()
   })
 
   it('학생의 강사 전용 라우트 접근을 차단한다', async () => {

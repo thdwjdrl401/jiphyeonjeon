@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { instructorPaths, publicPaths } from '@/app/router/paths'
+import { publicPaths } from '@/app/router/paths'
 import type { CurriculumCardSummary } from './types'
 
 interface CurriculumCardProps {
@@ -19,7 +19,7 @@ function getCoverVariant(curriculumId: string) {
 function getPrimaryAction(curriculum: CurriculumCardSummary) {
   const actions = curriculum.viewerContext.allowedActions
   if (actions.includes('MANAGE_CURRICULUM')) {
-    return { label: '관리하기', to: instructorPaths.curriculumManage(curriculum.curriculumId) }
+    return { label: '커리큘럼 상세', to: publicPaths.curriculum(curriculum.curriculumId) }
   }
   if (actions.includes('CONTINUE_LEARNING')) {
     return { label: '학습 계속하기', to: publicPaths.curriculum(curriculum.curriculumId) }

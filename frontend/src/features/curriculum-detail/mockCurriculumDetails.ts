@@ -133,7 +133,7 @@ export async function cancelMockEnrollment(curriculumId: string): Promise<void> 
 
   const record = getMockEnrollment(user.userId, curriculumId)
   if (!record) throw new ApiError('신청 내역을 찾을 수 없어요.', 404, 'ENROLLMENT_NOT_FOUND')
-  if (record.status !== 'PENDING') {
+  if (record.status !== 'PENDING' && record.status !== 'ACTIVE') {
     throw new ApiError('이미 처리된 신청이라 취소할 수 없어요.', 409, 'ENROLLMENT_CANNOT_BE_CANCELLED')
   }
   deleteMockEnrollment(user.userId, curriculumId)

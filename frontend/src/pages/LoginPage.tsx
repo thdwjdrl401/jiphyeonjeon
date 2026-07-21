@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { getRoleHomePath } from '@/app/router/paths'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { publicPaths } from '@/app/router/paths'
 import AuthShell from '@/features/auth/AuthShell'
 import { useAuth } from '@/features/auth/AuthContext'
 import { ApiError } from '@/shared/api/client'
@@ -14,24 +14,11 @@ interface LoginLocationState {
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-function getSafeReturnTo(value: string | null) {
-  if (!value || !value.startsWith('/') || value.startsWith('//')) return null
-  try {
-    const target = new URL(value, window.location.origin)
-    if (target.origin !== window.location.origin) return null
-    return `${target.pathname}${target.search}${target.hash}`
-  } catch {
-    return null
-  }
-}
-
 export default function LoginPage() {
   usePageTitle('로그인')
   const { login } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const [searchParams] = useSearchParams()
-  const returnTo = getSafeReturnTo(searchParams.get('returnTo'))
   const locationState = location.state as LoginLocationState | null
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -39,10 +26,6 @@ export default function LoginPage() {
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({})
   const [submitError, setSubmitError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
-
-  const signupHref = returnTo
-    ? `/signup?returnTo=${encodeURIComponent(returnTo)}`
-    : '/signup'
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
@@ -57,8 +40,8 @@ export default function LoginPage() {
 
     setIsSubmitting(true)
     try {
-      const signedInUser = await login({ email: normalizedEmail, password })
-      navigate(returnTo ?? getRoleHomePath(signedInUser.role), { replace: true })
+      await login({ email: normalizedEmail, password })
+      navigate(publicPaths.curriculums, { replace: true })
     } catch (error) {
       if (error instanceof ApiError && error.status === 429) {
         setSubmitError('로그인 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.')
@@ -76,17 +59,12 @@ export default function LoginPage() {
       eyebrow="WELCOME BACK"
       title="다시 만나서 반가워요"
       description="로그인하고 멈췄던 배움을 이어가세요."
-      footer={<p>아직 계정이 없나요? <Link to={signupHref}>무료로 시작하기</Link></p>}
+      footer={<p>아직 계정이 없나요? <Link to={publicPaths.signup}>무료로 시작하기</Link></p>}
     >
       {locationState?.signupSuccess && (
         <div className="form-notice form-notice--success" role="status">
           <span aria-hidden="true">✓</span>
           {locationState.displayName ? `${locationState.displayName}님, ` : ''}가입이 완료됐어요. 이제 로그인해 주세요.
-        </div>
-      )}
-      {returnTo && (
-        <div className="form-notice" role="status">
-          로그인 후 요청한 페이지로 안전하게 돌아갑니다.
         </div>
       )}
       {isMockApiEnabled && (
