@@ -2,7 +2,11 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { mockAuthService, resetMockAuth } from '@/features/auth/mockAuth'
 import { getMockCurriculumDetail, cancelMockEnrollment, enrollMockCurriculum } from '@/features/curriculum-detail/mockCurriculumDetails'
 import { getMockCurriculums } from '@/features/curriculum/mockCurriculums'
-import { getDemoInstructorCurriculums, getDemoStudentCurriculums } from './demoData'
+import {
+  getDemoInstructorCurriculums,
+  getDemoPendingStudentCurriculums,
+  getDemoStudentCurriculums,
+} from './demoData'
 
 describe('통합 mock 데이터베이스', () => {
   beforeEach(() => {
@@ -12,10 +16,12 @@ describe('통합 mock 데이터베이스', () => {
   it('학생의 ACTIVE 수강 목록과 공개 목록·상세 관계가 같은 원본을 사용한다', async () => {
     const student = await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
     const dashboard = getDemoStudentCurriculums(student.userId)
+    const pendingDashboard = getDemoPendingStudentCurriculums(student.userId)
     const catalog = await getMockCurriculums({ page: 0, size: 20 })
     const activeIds = dashboard.map((curriculum) => curriculum.curriculumId)
 
     expect(activeIds).toEqual(['cur-spring-live', 'cur-data-story', 'cur-react-system'])
+    expect(pendingDashboard.map((curriculum) => curriculum.curriculumId)).toEqual(['cur-sql'])
     for (const curriculumId of activeIds) {
       expect(catalog.items.find((item) => item.curriculumId === curriculumId)?.viewerContext.relationship).toBe('ENROLLED')
       expect((await getMockCurriculumDetail(curriculumId)).viewerContext.relationship).toBe('ENROLLED')

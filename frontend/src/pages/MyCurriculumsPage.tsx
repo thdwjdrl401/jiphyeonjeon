@@ -1,7 +1,12 @@
 import { Link } from 'react-router-dom'
 import { instructorPaths, publicPaths, studentPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
-import { demoSession, getDemoInstructorCurriculums, getDemoStudentCurriculums } from '@/features/demo/demoData'
+import {
+  demoSession,
+  getDemoInstructorCurriculums,
+  getDemoPendingStudentCurriculums,
+  getDemoStudentCurriculums,
+} from '@/features/demo/demoData'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import { MetricCard, PageHeader, Panel, StatusBadge } from '@/shared/ui/WorkspaceUi'
 
@@ -11,6 +16,7 @@ export default function MyCurriculumsPage() {
   const isInstructor = user?.role === 'INSTRUCTOR'
   const instructorCurriculums = getDemoInstructorCurriculums(user?.userId ?? '')
   const studentCurriculums = getDemoStudentCurriculums(user?.userId ?? '')
+  const pendingStudentCurriculums = getDemoPendingStudentCurriculums(user?.userId ?? '')
   const curriculums = isInstructor ? instructorCurriculums : studentCurriculums
   const completedLessonCount = studentCurriculums.reduce((sum, curriculum) => sum + curriculum.completedLessonCount, 0)
   const averageProgress = studentCurriculums.length > 0
@@ -39,6 +45,38 @@ export default function MyCurriculumsPage() {
           ))}
         </div>
       </Panel>
+
+      {!isInstructor && (
+        <Panel
+          title="승인 대기 중인 커리큘럼"
+          description="강사가 수강 신청을 승인하면 나의 학습 목록에서 바로 시작할 수 있어요."
+        >
+          {pendingStudentCurriculums.length > 0 ? (
+            <div className="dashboard-curriculum-list">
+              {pendingStudentCurriculums.map((item) => (
+                <article className="dashboard-curriculum-card" key={item.curriculumId}>
+                  <div className="dashboard-curriculum-card__cover">
+                    {item.thumbnailUrl && <img src={item.thumbnailUrl} alt={`${item.title} 대표 이미지`} />}
+                  </div>
+                  <div className="dashboard-curriculum-card__content">
+                    <div>
+                      <StatusBadge tone="warning">승인 대기</StatusBadge>
+                      <h3>{item.title}</h3>
+                      <p>{item.summary}</p>
+                    </div>
+                    <p className="dashboard-meta">{item.instructor} 강사 · 승인 후 학습 가능</p>
+                    <div className="card-actions">
+                      <Link className="button button--soft" to={publicPaths.curriculum(item.curriculumId)}>상세</Link>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p>현재 승인 대기 중인 커리큘럼이 없습니다.</p>
+          )}
+        </Panel>
+      )}
     </div>
   )
 }
