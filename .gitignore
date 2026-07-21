@@ -17,9 +17,10 @@ package-lock.json
 # AI 하네스: 팀 공용 .claude/ 는 커밋, 개인 설정만 무시
 .claude/settings.local.json
 
-# 로컬 인프라 시크릿 (.env.example / .env.prod.example만 커밋)
+# 로컬 인프라 시크릿 (.env.example / .env.prod.example / .env.remote.example만 커밋)
 .env
 .env.prod
+.env.remote
 
 # 에디터 스왑/임시 파일
 *.swp

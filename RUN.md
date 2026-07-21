@@ -43,6 +43,25 @@ npm run install:all             # 루트(concurrently) + frontend
 3. 프론트+백엔드 동시는 **`Full Stack (BE + FE)`** 컴파운드 실행(`.vscode/launch.json`).
 > VSCode(Remote-WSL)가 `backend/`를 Gradle 프로젝트 `liveclass`로 자동 import. Java 런타임 **JDK 21**.
 
+### 방법 C. EC2 인프라에 붙어 실행 (remote 프로필) — [ADR-0022](./docs/decisions/songjeongki/0022-local-vs-ec2-infra-profile.md)
+AI(realtime-agent)가 만든 **라이브 STT**는 EC2 Redis 스트림에만 쌓인다. 로컬 백엔드에서 그 스트림을 실제로 소비/개발하려면 인프라를 **통째로 EC2**로 바꾼다(한 스위치: `SPRING_PROFILES_ACTIVE=remote`). datasource·Redis만 EC2로 가고 **LiveKit은 로컬/원격 무관 항상 EC2**다.
+
+**1) EC2에서 포트 공개** (한 번):
+```bash
+# EC2에서 — .env.prod에 EC2_REDIS_PASSWORD 채운 뒤
+docker compose -f docker-compose.prod.yml -f docker-compose.expose.yml --env-file .env.prod up -d
+```
+> ⚠️ 반드시 AWS SG 인바운드 5432/6379 → **팀 공인 IP만** + EC2 ufw 소스 제한. Redis는 `requirepass`로 보호(공개 인터넷 노출 금지).
+
+**2) 로컬에서 remote 프로필로 실행**:
+```bash
+cp .env.remote.example .env.remote      # POSTGRES_PASSWORD·EC2_REDIS_PASSWORD 채우기 (EC2 값과 일치)
+npm run dev:remote:wsl                   # FE + BE(remote) 동시
+# 또는 VSCode: "Spring Boot (Backend · EC2 infra)" / "Full Stack (BE · EC2 infra + FE)"
+```
+- 안전장치: remote는 **EC2 스키마를 마이그레이션하지 않는다**(`flyway.enabled=false`). 스키마가 뒤처져 `validate`가 실패하면 EC2 재배포 신호.
+- **범위 밖(현재)**: 에셋 스토리지(MinIO)는 remote 전환에 포함되지 않는다 — datasource·Redis(STT 핵심 경로)만 전환. STT consumer(CP2) 착수 시 **consumer group을 개발자별로 분리**할 것(같은 그룹이면 EC2 백엔드와 메시지를 뺏는다, ADR-0022 유보).
+
 ## 4. 포트
 | 서비스 | 포트 | 설명 |
 | ---- | ---- | ---- |
