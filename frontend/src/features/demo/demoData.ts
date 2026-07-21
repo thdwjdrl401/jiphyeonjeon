@@ -1,7 +1,9 @@
 import {
   buildMockCurriculumOutline,
+  findLastRecordedLesson,
   findMockLesson,
   findMockLiveSession,
+  findNextLiveLesson,
   getMockCurriculum,
   getMockEnrollments,
   getMockProgress,
@@ -139,7 +141,14 @@ export function getDemoStudentCurriculums(userId: string) {
     .map((enrollment) => {
       const curriculum = getMockCurriculum(enrollment.curriculumId)!
       const progress = getMockProgress(curriculum, enrollment)
-      const firstLessonId = buildMockCurriculumOutline(curriculum)[0]?.lessons[0]?.lessonId ?? ''
+      const firstSection = buildMockCurriculumOutline(curriculum)[0]
+      const firstLesson = firstSection?.lessons[0]
+      const lastRecordedLesson = findLastRecordedLesson(curriculum, enrollment)
+      const continueLearning = lastRecordedLesson
+        ? { kind: 'VOD' as const, sectionId: lastRecordedLesson.sectionId, lessonId: lastRecordedLesson.lessonId }
+        : firstSection && firstLesson
+          ? { kind: 'START' as const, sectionId: firstSection.sectionId, lessonId: firstLesson.lessonId }
+          : null
       return {
         curriculumId: curriculum.curriculumId,
         title: curriculum.title,
@@ -154,7 +163,15 @@ export function getDemoStudentCurriculums(userId: string) {
         progress: progress.progressPercent,
         completedLessonCount: progress.completedLessonCount,
         lessonCount: progress.totalLessonCount,
-        lastLessonId: enrollment.lastLessonId ?? firstLessonId,
+        continueLearning,
       }
     })
+}
+
+export function getDemoUpcomingLiveSession(userId: string) {
+  const curriculums = getMockEnrollments(userId)
+    .filter((enrollment) => enrollment.status === 'ACTIVE')
+    .map((enrollment) => ({ curriculum: getMockCurriculum(enrollment.curriculumId)! }))
+    .filter((entry) => entry.curriculum)
+  return findNextLiveLesson(curriculums)
 }

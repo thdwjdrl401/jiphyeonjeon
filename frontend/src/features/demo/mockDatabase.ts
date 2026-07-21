@@ -15,6 +15,7 @@ import type {
   CurriculumLiveSessionStatus,
   CurriculumOutlineLesson,
   CurriculumReplayStatus,
+  LessonAccessDestination,
   LessonStatus,
 } from '@/features/lesson/types'
 
@@ -372,6 +373,61 @@ export function buildMockCurriculumOutline(curriculum: MockCurriculumEntity): Cu
       lessons,
     }
   })
+}
+
+export function resolveMockLessonDestination(lesson: CurriculumOutlineLesson): LessonAccessDestination {
+  if (lesson.liveSession?.status === 'LIVE') return 'LIVE_CLASSROOM'
+  if (lesson.liveSession && ['DRAFT', 'SCHEDULED', 'OPEN', 'STARTING'].includes(lesson.liveSession.status)) {
+    return 'LIVE_SESSION'
+  }
+  if (lesson.replayStatus === 'PUBLISHED') return 'VOD'
+  return 'LESSON_DETAIL'
+}
+
+export function findLastRecordedLesson(curriculum: MockCurriculumEntity, enrollment: MockEnrollmentState) {
+  const flatLessons = buildMockCurriculumOutline(curriculum).flatMap((section) =>
+    section.lessons.map((lesson) => ({ ...lesson, sectionId: section.sectionId })),
+  )
+  const reachedOrder = enrollment.lastLessonId
+    ? flatLessons.find((lesson) => lesson.lessonId === enrollment.lastLessonId)?.order ?? 0
+    : 0
+  for (let index = flatLessons.length - 1; index >= 0; index -= 1) {
+    const lesson = flatLessons[index]
+    if (lesson.order > reachedOrder) continue
+    if (resolveMockLessonDestination(lesson) === 'VOD') {
+      return { sectionId: lesson.sectionId, lessonId: lesson.lessonId, title: lesson.title }
+    }
+  }
+  return null
+}
+
+export function findNextLiveLesson(curriculums: Array<{ curriculum: MockCurriculumEntity }>) {
+  const openLiveStatuses: CurriculumLiveSessionStatus[] = ['SCHEDULED', 'OPEN', 'LIVE']
+  const candidates = curriculums.flatMap(({ curriculum }) =>
+    buildMockCurriculumOutline(curriculum).flatMap((section) =>
+      section.lessons
+        .filter((lesson) => lesson.liveSession && openLiveStatuses.includes(lesson.liveSession.status))
+        .map((lesson) => ({ curriculum, sectionId: section.sectionId, lesson, liveSession: lesson.liveSession! })),
+    ),
+  )
+  if (candidates.length === 0) return null
+  candidates.sort((a, b) => {
+    const aTime = a.liveSession.scheduledAt ? new Date(a.liveSession.scheduledAt).getTime() : Number.POSITIVE_INFINITY
+    const bTime = b.liveSession.scheduledAt ? new Date(b.liveSession.scheduledAt).getTime() : Number.POSITIVE_INFINITY
+    return aTime - bTime
+  })
+  const next = candidates[0]
+  return {
+    curriculumId: next.curriculum.curriculumId,
+    curriculumTitle: next.curriculum.title,
+    sectionId: next.sectionId,
+    lessonId: next.lesson.lessonId,
+    lessonTitle: next.lesson.title,
+    liveSessionStatus: next.liveSession.status,
+    scheduledAt: next.liveSession.scheduledAt,
+    durationMs: next.lesson.durationMs,
+    sessionId: next.liveSession.sessionId,
+  }
 }
 
 export function findMockLesson(lessonId: string) {
