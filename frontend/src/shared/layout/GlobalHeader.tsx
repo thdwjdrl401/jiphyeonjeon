@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { getRoleHomePath, instructorPaths, publicPaths, studentPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
@@ -6,14 +6,41 @@ import BrandLink from './BrandLink'
 
 export default function GlobalHeader() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [isMyMenuOpen, setIsMyMenuOpen] = useState(false)
+  const [isProfileOpen, setIsProfileOpen] = useState(false)
   const [logoutError, setLogoutError] = useState('')
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const profileMenuRef = useRef<HTMLDivElement>(null)
   const { user, status, logout } = useAuth()
   const navigate = useNavigate()
   const workspaceHome = user ? getRoleHomePath(user.role) : publicPaths.home
   const profilePath = user?.role === 'INSTRUCTOR' ? instructorPaths.profile : studentPaths.profile
 
-  const closeMenu = () => setIsMenuOpen(false)
+  const closeMenu = () => {
+    setIsMenuOpen(false)
+    setIsMyMenuOpen(false)
+    setIsProfileOpen(false)
+  }
+
+  useEffect(() => {
+    if (!isProfileOpen) return
+
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (event.target instanceof Node && !profileMenuRef.current?.contains(event.target)) {
+        setIsProfileOpen(false)
+      }
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsProfileOpen(false)
+    }
+
+    document.addEventListener('mousedown', closeOnOutsideClick)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('mousedown', closeOnOutsideClick)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [isProfileOpen])
 
   const handleLogout = async () => {
     setIsLoggingOut(true)
@@ -60,9 +87,31 @@ export default function GlobalHeader() {
               커리큘럼 탐색
             </NavLink>
             {user && (
-              <Link to={workspaceHome} onClick={closeMenu}>
-                내 커리큘럼
-              </Link>
+              <div
+                className={`header-my-menu${isMyMenuOpen ? ' is-open' : ''}`}
+                onMouseEnter={() => setIsMyMenuOpen(true)}
+                onMouseLeave={() => setIsMyMenuOpen(false)}
+                onFocusCapture={() => setIsMyMenuOpen(true)}
+                onBlurCapture={(event) => {
+                  if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) {
+                    setIsMyMenuOpen(false)
+                  }
+                }}
+              >
+                <button
+                  className="header-my-menu__trigger"
+                  type="button"
+                  aria-expanded={isMyMenuOpen}
+                  aria-controls="my-page-menu"
+                  onClick={() => setIsMyMenuOpen((current) => !current)}
+                >
+                  마이페이지
+                </button>
+                <div className="header-my-menu__items" id="my-page-menu">
+                  <Link to={workspaceHome} onClick={closeMenu}>내 커리큘럼</Link>
+                  <Link to={profilePath} onClick={closeMenu}>내 프로필</Link>
+                </div>
+              </div>
             )}
             {user?.role === 'INSTRUCTOR' && (
               <Link to={instructorPaths.newCurriculum} onClick={closeMenu}>
@@ -76,15 +125,31 @@ export default function GlobalHeader() {
               <span className="header-auth-loading" aria-label="로그인 상태 확인 중" />
             ) : user ? (
               <>
-                <Link className="user-chip" to={profilePath} onClick={closeMenu}>
-                  <span className="user-avatar" aria-hidden="true">
-                    {user.displayName.slice(0, 1)}
-                  </span>
-                  <span>
-                    <strong>{user.displayName}</strong>
-                    <small>{user.role === 'INSTRUCTOR' ? '강사' : '학생'}</small>
-                  </span>
-                </Link>
+                <div className="profile-popover-anchor" ref={profileMenuRef}>
+                  <button
+                    className="user-chip"
+                    type="button"
+                    aria-expanded={isProfileOpen}
+                    aria-controls="profile-summary-popover"
+                    onClick={() => setIsProfileOpen((current) => !current)}
+                  >
+                    <span className="user-avatar" aria-hidden="true">
+                      {user.displayName.slice(0, 1)}
+                    </span>
+                    <span>
+                      <strong>{user.displayName}</strong>
+                      <small>{user.role === 'INSTRUCTOR' ? '강사' : '학생'}</small>
+                    </span>
+                  </button>
+                  {isProfileOpen && (
+                    <div className="profile-summary-popover" id="profile-summary-popover" role="dialog" aria-label="기본 정보">
+                      <span className="user-avatar" aria-hidden="true">{user.displayName.slice(0, 1)}</span>
+                      <strong>{user.displayName}</strong>
+                      <small>{user.role === 'INSTRUCTOR' ? '강사' : '학생'}</small>
+                      <p>{user.email}</p>
+                    </div>
+                  )}
+                </div>
                 <button
                   className="button button--ghost button--small"
                   type="button"

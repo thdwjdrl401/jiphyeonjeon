@@ -5,6 +5,7 @@ import {
   findMockLiveSession,
   findNextLiveLesson,
   getMockCurriculum,
+  getMockEnrollment,
   getMockEnrollments,
   getMockProgress,
   mockCurriculumEntities,
@@ -60,9 +61,17 @@ export const demoSession = {
   participants: 128,
 }
 
-export function getDemoLesson(lessonId: string) {
+export function getDemoLesson(lessonId: string, userId?: string) {
   const context = findMockLesson(lessonId) ?? primaryLessonContext
   const isPrimaryLesson = context.lesson.lessonId === demoLesson.lessonId
+  const enrollment = userId ? getMockEnrollment(userId, context.curriculum.curriculumId) : null
+  const isCompleted = Boolean(enrollment && context.lesson.order <= enrollment.completedLessonCount)
+  const isCurrentLesson = enrollment?.lastLessonId === context.lesson.lessonId
+  const progressPercent = isCompleted
+    ? 100
+    : isCurrentLesson && context.lesson.durationMs
+      ? Math.min(99, Math.round((enrollment.sessionMs / context.lesson.durationMs) * 100))
+      : 0
   return {
     lessonId: context.lesson.lessonId,
     title: context.lesson.title,
@@ -79,6 +88,7 @@ export function getDemoLesson(lessonId: string) {
       : [{ id: `mat-${context.lesson.lessonId}`, name: `${context.lesson.lessonId}.pptx`, size: '2.4 MB', status: 'READY' }],
     liveSession: context.lesson.liveSession,
     replayStatus: context.lesson.replayStatus,
+    learning: enrollment?.status === 'ACTIVE' ? { completed: isCompleted, progressPercent } : null,
   }
 }
 
@@ -90,6 +100,7 @@ export function getDemoLiveSession(sessionId: string) {
     lessonTitle: context.lesson.title,
     curriculumId: context.curriculum.curriculumId,
     curriculumTitle: context.curriculum.title,
+    sectionId: context.section.sectionId,
     status: context.liveSession.status,
     scheduledAt: context.liveSession.scheduledAt,
     entryOpensAt: context.liveSession.scheduledAt,
@@ -189,4 +200,29 @@ export function getDemoUpcomingLiveSession(userId: string) {
     .map((enrollment) => ({ curriculum: getMockCurriculum(enrollment.curriculumId)! }))
     .filter((entry) => entry.curriculum)
   return findNextLiveLesson(curriculums)
+}
+
+export function getDemoTodayLiveSession(userId: string, today = new Date()) {
+  const curriculums = getMockEnrollments(userId)
+    .filter((enrollment) => enrollment.status === 'ACTIVE')
+    .map((enrollment) => ({ curriculum: getMockCurriculum(enrollment.curriculumId)! }))
+    .filter((entry) => entry.curriculum)
+  return findNextLiveLesson(curriculums, today)
+}
+
+export function getDemoStudentLearningSummary(userId: string) {
+  const curriculums = getDemoStudentCurriculums(userId)
+  const completedCurriculumCount = curriculums.filter((curriculum) => curriculum.progress >= 100).length
+  const inProgressCurriculumCount = curriculums.length - completedCurriculumCount
+  const completedLessonCount = curriculums.reduce((sum, curriculum) => sum + curriculum.completedLessonCount, 0)
+  const averageProgress = curriculums.length > 0
+    ? Math.round(curriculums.reduce((sum, curriculum) => sum + curriculum.progress, 0) / curriculums.length)
+    : 0
+
+  return {
+    inProgressCurriculumCount,
+    completedCurriculumCount,
+    averageProgress,
+    completedLessonCount,
+  }
 }

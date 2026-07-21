@@ -83,13 +83,13 @@ export default function LiveClassroomPage() {
           <span className="live-dot" />
           <strong>LIVE</strong>
           <h1>{lesson.title}</h1>
-          <small>세션 {sessionId}</small>
+          <small>강의 {sessionId}</small>
         </div>
         <div className="media-page__status">
           {isInstructor && <StatusBadge tone="warning">강사 운영 모드</StatusBadge>}
           <StatusBadge tone="success">연결 안정적</StatusBadge>
           <span>{session.participants}명 참여 중</span>
-          {isInstructor && <button className="button button--soft button--small" type="button" onClick={() => setEndRequested(true)}>세션 종료</button>}
+          {isInstructor && <button className="button button--soft button--small" type="button" onClick={() => setEndRequested(true)}>강의 종료</button>}
         </div>
       </header>
 
@@ -104,7 +104,7 @@ export default function LiveClassroomPage() {
 
       {isInstructor && endRequested && (
         <div className="instructor-end-confirm" role="alert">
-          <div><strong>라이브 세션을 종료할까요?</strong><p>학생 연결을 종료하고 녹화·AI 후처리 단계로 이동합니다.</p></div>
+          <div><strong>라이브 강의를 종료할까요?</strong><p>학생 연결을 종료하고 녹화·AI 후처리 단계로 이동합니다.</p></div>
           <div><button className="button button--ghost button--small" type="button" onClick={() => setEndRequested(false)}>계속 진행</button><Link className="button button--primary button--small" to={instructorPaths.processing(sessionId)}>종료하고 처리 현황 보기</Link></div>
         </div>
       )}

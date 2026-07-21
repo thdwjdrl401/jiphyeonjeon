@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { getRoleHomePath, instructorPaths, publicPaths } from '@/app/router/paths'
+import { instructorPaths, publicPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
 import CurriculumCard from '@/features/curriculum/CurriculumCard'
 import CurriculumCardSkeleton from '@/features/curriculum/CurriculumCardSkeleton'
@@ -52,8 +52,8 @@ export default function WelcomePage() {
             <p>실시간 수업부터 자막, 근거 기반 AI 설명, 다시보기까지.<br />이해가 이어지는 하나의 학습 경험을 만나보세요.</p>
             <div className="hero-actions">
               {user ? (
-                <Link className="button button--primary button--large" to={getRoleHomePath(user.role)}>
-                  내 커리큘럼 <span aria-hidden="true">→</span>
+                <Link className="button button--primary button--large" to={publicPaths.curriculums}>
+                  커리큘럼 탐색 <span aria-hidden="true">→</span>
                 </Link>
               ) : (
                 <Link className="button button--primary button--large" to={publicPaths.curriculums}>
@@ -173,7 +173,7 @@ export default function WelcomePage() {
           <div className="quick-action-buttons">
             {user ? (
               <>
-                <Link className="button button--white button--large" to={getRoleHomePath(user.role)}>내 커리큘럼</Link>
+                <Link className="button button--white button--large" to={publicPaths.curriculums}>커리큘럼 탐색</Link>
                 {user.role === 'INSTRUCTOR' && <Link className="button button--outline-light button--large" to={instructorPaths.newCurriculum}>새 커리큘럼 만들기</Link>}
               </>
             ) : (

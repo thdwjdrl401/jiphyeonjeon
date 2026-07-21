@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { instructorPaths, studentPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
-import { demoSession, getDemoStudentCurriculums } from '@/features/demo/demoData'
+import { getDemoStudentLearningSummary } from '@/features/demo/demoData'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import { InlineNotice, MetricCard, PageHeader, Panel, StatusBadge } from '@/shared/ui/WorkspaceUi'
 
@@ -10,7 +10,7 @@ export default function ProfilePage() {
   usePageTitle('내 프로필')
   const { user } = useAuth()
   const curriculumsPath = user?.role === 'INSTRUCTOR' ? instructorPaths.curriculums : studentPaths.curriculums
-  const studentCurriculums = getDemoStudentCurriculums(user?.userId ?? '')
+  const studentSummary = getDemoStudentLearningSummary(user?.userId ?? '')
   const [displayName, setDisplayName] = useState(user?.displayName ?? '')
   const [bio, setBio] = useState('복잡한 백엔드 개념을 실제 요청 흐름으로 쉽게 설명합니다.')
   const [expertise, setExpertise] = useState('Spring, JPA, 분산 시스템')
@@ -52,8 +52,7 @@ export default function ProfilePage() {
         </Panel>
       ) : (
         <Panel title="나의 학습 요약" description="상세 진도는 내 커리큘럼에서 확인할 수 있어요.">
-          <div className="metric-grid"><MetricCard label="수강 중" value={studentCurriculums.length} /><MetricCard label="완료한 레슨" value={studentCurriculums.reduce((sum, curriculum) => sum + curriculum.completedLessonCount, 0)} /><MetricCard label="다음 라이브" value="8월 1일" helper={demoSession.status} /></div>
-          <div className="panel-footer"><Link className="text-link" to={curriculumsPath}>내 학습 이어가기 →</Link></div>
+          <div className="metric-grid"><MetricCard label="수강 중인 커리큘럼" value={studentSummary.inProgressCurriculumCount} /><MetricCard label="완료한 커리큘럼" value={studentSummary.completedCurriculumCount} /><MetricCard label="평균 진행률" value={`${studentSummary.averageProgress}%`} /><MetricCard label="완료한 레슨" value={studentSummary.completedLessonCount} /></div>
         </Panel>
       )}
 

@@ -78,7 +78,7 @@ export const mockCurriculumEntities: MockCurriculumEntity[] = [
   {
     curriculumId: 'cur-spring-live', title: '라이브로 완성하는 Spring Boot',
     summary: '현업의 요청 흐름을 따라가며 견고한 백엔드를 함께 설계합니다.',
-    description: '실제 서비스에서 마주치는 요청 흐름을 재현하며 Spring Boot로 안정적인 백엔드를 설계하는 방법을 다룹니다. 매 세션 라이브로 코드를 작성하고 질문에 답합니다.',
+    description: '실제 서비스에서 마주치는 요청 흐름을 재현하며 Spring Boot로 안정적인 백엔드를 설계하는 방법을 다룹니다. 매 라이브 강의에서 코드를 작성하고 질문에 답합니다.',
     thumbnailUrl: springCurriculumImage, instructor: instructorProfiles[0], lifecycleStatus: 'PUBLISHED',
     materials: [
       { materialId: 'mat-curr-spring-guide', fileName: 'Spring Boot 커리큘럼 가이드.pptx', fileSize: 2_516_582 },
@@ -344,7 +344,7 @@ export function getMockDetailViewerContext(user: AuthUser | null, curriculum: Mo
     const progress = getMockProgress(curriculum, enrollment)
     return {
       relationship,
-      allowedActions: ['VIEW_LESSON', 'CONTINUE_LEARNING'],
+      allowedActions: ['VIEW_LESSON', 'CONTINUE_LEARNING', 'CANCEL_ENROLLMENT'],
       enrollment,
       progress: {
         ...progress,
@@ -433,12 +433,19 @@ export function findLastRecordedLesson(curriculum: MockCurriculumEntity, enrollm
   return null
 }
 
-export function findNextLiveLesson(curriculums: Array<{ curriculum: MockCurriculumEntity }>) {
+export function findNextLiveLesson(curriculums: Array<{ curriculum: MockCurriculumEntity }>, scheduledDate?: Date) {
   const openLiveStatuses: CurriculumLiveSessionStatus[] = ['SCHEDULED', 'OPEN', 'LIVE']
   const candidates = curriculums.flatMap(({ curriculum }) =>
     buildMockCurriculumOutline(curriculum).flatMap((section) =>
       section.lessons
         .filter((lesson) => lesson.liveSession && openLiveStatuses.includes(lesson.liveSession.status))
+        .filter((lesson) => {
+          if (!scheduledDate || !lesson.liveSession?.scheduledAt) return !scheduledDate
+          const scheduledAt = new Date(lesson.liveSession.scheduledAt)
+          return scheduledAt.getFullYear() === scheduledDate.getFullYear()
+            && scheduledAt.getMonth() === scheduledDate.getMonth()
+            && scheduledAt.getDate() === scheduledDate.getDate()
+        })
         .map((lesson) => ({ curriculum, sectionId: section.sectionId, lesson, liveSession: lesson.liveSession! })),
     ),
   )

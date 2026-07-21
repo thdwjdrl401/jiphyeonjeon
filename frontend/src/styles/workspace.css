@@ -171,6 +171,11 @@ th { color: var(--ink-500); font-size: .67rem; }
 .readiness-list li small { color: var(--ink-500); font-size: .58rem; }
 .replay-summary > div:first-child { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .replay-summary h3, .replay-summary p { flex-basis: 100%; }
+.student-replay-summary { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.student-replay-summary > div { display: flex; flex-direction: column; gap: 3px; }
+.student-replay-summary span { color: var(--ink-500); font-size: .72rem; }
+.student-replay-summary strong { color: var(--ink-950); font-size: 1.35rem; }
+.replay-pending-label { padding: 9px 12px; border-radius: 9px; background: var(--ink-50); color: var(--ink-600) !important; font-weight: 700; }
 .breadcrumbs { display: flex; flex-wrap: wrap; gap: 7px; color: var(--ink-500); font-size: .7rem; }
 .breadcrumbs a { color: var(--blue-600); }
 .policy-list { display: grid; gap: 10px; margin: 0 0 17px; padding: 0; list-style: none; }

@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom'
-import { studentPaths } from '@/app/router/paths'
 import type { CurriculumRelationship } from '@/features/curriculum/types'
 import { resolveLessonPath } from './lessonRouting'
 import type { CurriculumOutlineLesson, LessonStatus } from './types'
@@ -58,13 +57,12 @@ function resolveActivity(lesson: CurriculumOutlineLesson, relationship: Curricul
 
 export default function CurriculumLessonItem({ lesson, relationship, curriculumId, sectionId }: CurriculumLessonItemProps) {
   const canOpen = lesson.access.allowed
+  const isStudentView = relationship !== 'OWNER_INSTRUCTOR'
   const role = relationship === 'OWNER_INSTRUCTOR' ? 'INSTRUCTOR' : 'STUDENT'
   const detailPath = resolveLessonPath({ curriculumId, sectionId, lessonId: lesson.lessonId, destination: 'LESSON_DETAIL', role })
   const activity = resolveActivity(lesson, relationship)
-  const requiresStudentPrejoin = relationship === 'ENROLLED'
-    && (lesson.liveSession?.status === 'OPEN' || lesson.liveSession?.status === 'LIVE')
-  const actionPath = requiresStudentPrejoin && lesson.liveSession
-    ? studentPaths.prejoin(lesson.liveSession.sessionId)
+  const actionPath = isStudentView
+    ? detailPath
     : resolveLessonPath({
         curriculumId,
         sectionId,
@@ -79,11 +77,11 @@ export default function CurriculumLessonItem({ lesson, relationship, curriculumI
     <li className={`curriculum-lesson${canOpen ? '' : ' curriculum-lesson--locked'}`}>
       <div className="curriculum-lesson__main">
         {canOpen ? <Link className="curriculum-lesson__title" to={detailPath}>{lesson.order}. {lesson.title}</Link> : <strong className="curriculum-lesson__title">{lesson.order}. {lesson.title}</strong>}
-        <div className="curriculum-lesson__states">
+        {!isStudentView && <div className="curriculum-lesson__states">
           <span className={`curriculum-lesson__state curriculum-lesson__state--${lesson.lessonStatus.toLowerCase()}`}>{lessonStatusLabel[lesson.lessonStatus]}</span>
           {canOpen && <span className={`curriculum-lesson__state curriculum-lesson__state--${activity.tone}`}>{activity.statusLabel}</span>}
           {showCompleted && <span className="curriculum-lesson__done" aria-label="완료">✓ 완료</span>}
-        </div>
+        </div>}
       </div>
 
       {!canOpen ? (
@@ -94,7 +92,7 @@ export default function CurriculumLessonItem({ lesson, relationship, curriculumI
       ) : activity.disabled ? (
         <button type="button" className="curriculum-lesson__action curriculum-lesson__action--disabled" disabled>{activity.actionLabel}</button>
       ) : (
-        <Link className={`curriculum-lesson__action curriculum-lesson__action--${activity.tone}`} to={actionPath}>{activity.actionLabel}<span aria-hidden="true"> →</span></Link>
+        <Link className={`curriculum-lesson__action${isStudentView ? '' : ` curriculum-lesson__action--${activity.tone}`}`} to={actionPath}>{isStudentView ? '강의 상세' : activity.actionLabel}<span aria-hidden="true"> →</span></Link>
       )}
     </li>
   )

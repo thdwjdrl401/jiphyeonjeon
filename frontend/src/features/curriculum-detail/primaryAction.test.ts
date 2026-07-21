@@ -48,15 +48,16 @@ function makeDetail(overrides: Partial<CurriculumDetailResponse['viewerContext']
 }
 
 describe('resolvePrimaryAction', () => {
-  it('승인 대기 상태에서는 취소 가능 여부와 무관하게 상태 안내만 반환한다(취소는 관계 패널이 전담)', () => {
+  it('승인 대기 상태에서는 상태 배지와 신청 취소 액션을 반환한다', () => {
     const withCancel = makeDetail({ relationship: 'PENDING_ENROLLMENT', allowedActions: ['CANCEL_ENROLLMENT'] })
     const withoutCancel = makeDetail({ relationship: 'PENDING_ENROLLMENT', allowedActions: [] })
 
-    expect(resolvePrimaryAction(withCancel, '/curriculums/cur-test')).toEqual({ kind: 'status', label: '승인 대기' })
-    expect(resolvePrimaryAction(withoutCancel, '/curriculums/cur-test')).toEqual({ kind: 'status', label: '승인 대기' })
+    const expected = { kind: 'enrollmentStatus', label: '승인 대기', cancelLabel: '수강 신청 취소' }
+    expect(resolvePrimaryAction(withCancel, '/curriculums/cur-test')).toEqual(expected)
+    expect(resolvePrimaryAction(withoutCancel, '/curriculums/cur-test')).toEqual(expected)
   })
 
-  it('수강생인데 학습 기록이 없으면 첫 레슨으로 가는 수강하기 액션을 반환한다', () => {
+  it('수강생에게 학습 기록과 무관하게 수강 상태와 취소 액션을 반환한다', () => {
     const detail = makeDetail({
       relationship: 'ENROLLED',
       allowedActions: ['VIEW_LESSON', 'CONTINUE_LEARNING'],
@@ -64,47 +65,9 @@ describe('resolvePrimaryAction', () => {
     })
 
     expect(resolvePrimaryAction(detail, '/curriculums/cur-test')).toEqual({
-      kind: 'link',
-      label: '수강하기',
-      to: '/student/curriculums/cur-test/sections/sec-1/lessons/les-1',
-    })
-  })
-
-  it('수강생인데 이전 학습 기록이 있으면 이어보기 액션을 반환한다', () => {
-    const detail = makeDetail({
-      relationship: 'ENROLLED',
-      allowedActions: ['VIEW_LESSON', 'CONTINUE_LEARNING'],
-      progress: {
-        completedLessonCount: 3,
-        totalLessonCount: 10,
-        progressPercent: 30,
-        lastLearning: { lessonId: 'les-1', sessionMs: 1000 },
-      },
-    })
-
-    expect(resolvePrimaryAction(detail, '/curriculums/cur-test')).toEqual({
-      kind: 'link',
-      label: '이어보기',
-      to: '/student/curriculums/cur-test/sections/sec-1/lessons/les-1',
-    })
-  })
-
-  it('학습 기록의 레슨이 목차에 없으면 첫 레슨 수강하기로 안전하게 대체한다', () => {
-    const detail = makeDetail({
-      relationship: 'ENROLLED',
-      allowedActions: ['VIEW_LESSON', 'CONTINUE_LEARNING'],
-      progress: {
-        completedLessonCount: 1,
-        totalLessonCount: 1,
-        progressPercent: 100,
-        lastLearning: { lessonId: 'removed-lesson', sessionMs: 1000 },
-      },
-    })
-
-    expect(resolvePrimaryAction(detail, '/curriculums/cur-test')).toEqual({
-      kind: 'link',
-      label: '수강하기',
-      to: '/student/curriculums/cur-test/sections/sec-1/lessons/les-1',
+      kind: 'enrollmentStatus',
+      label: '수강 중',
+      cancelLabel: '수강 취소',
     })
   })
 })
