@@ -1,6 +1,4 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
-import { instructorPaths, studentPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
 import { getDemoStudentLearningSummary } from '@/features/demo/demoData'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
@@ -9,7 +7,6 @@ import { InlineNotice, MetricCard, PageHeader, Panel, StatusBadge } from '@/shar
 export default function ProfilePage() {
   usePageTitle('내 프로필')
   const { user } = useAuth()
-  const curriculumsPath = user?.role === 'INSTRUCTOR' ? instructorPaths.curriculums : studentPaths.curriculums
   const studentSummary = getDemoStudentLearningSummary(user?.userId ?? '')
   const [displayName, setDisplayName] = useState(user?.displayName ?? '')
   const [bio, setBio] = useState('복잡한 백엔드 개념을 실제 요청 흐름으로 쉽게 설명합니다.')
@@ -47,7 +44,7 @@ export default function ProfilePage() {
             <label><span>전문 분야</span><input value={expertise} onChange={(event) => { setExpertise(event.target.value); setSavedArea(null) }} /><small>쉼표로 구분해 주세요.</small></label>
             <div className="profile-preview"><span className="user-avatar">{displayName.slice(0, 1)}</span><div><strong>{displayName}</strong><p>{bio}</p><small>{expertise}</small></div></div>
             {savedArea === 'instructor' && <InlineNotice tone="success">공개 프로필 초안이 저장되었습니다.</InlineNotice>}
-            <div className="form-actions"><Link className="button button--soft" to={curriculumsPath}>운영 커리큘럼</Link><button className="button button--primary" type="submit">공개 프로필 저장</button></div>
+            <div className="form-actions"><button className="button button--primary" type="submit">공개 프로필 저장</button></div>
           </form>
         </Panel>
       ) : (

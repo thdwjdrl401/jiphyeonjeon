@@ -3,11 +3,11 @@ import { Link } from 'react-router-dom'
 import { instructorPaths, publicPaths, studentPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
 import {
-  demoSession,
   getDemoInstructorCurriculums,
   getDemoPendingStudentCurriculums,
   getDemoStudentLearningSummary,
   getDemoStudentCurriculums,
+  getDemoTodayInstructorLiveSession,
   getDemoTodayLiveSession,
 } from '@/features/demo/demoData'
 import { useCancelEnrollmentMutation } from '@/features/curriculum-detail/useEnrollmentMutations'
@@ -66,7 +66,9 @@ export default function MyCurriculumsPage() {
   const curriculums = isInstructor ? instructorCurriculums : studentCurriculums
   const studentSummary = getDemoStudentLearningSummary(user?.userId ?? '')
 
-  const upcomingLive = isInstructor ? null : getDemoTodayLiveSession(user?.userId ?? '')
+  const upcomingLive = isInstructor
+    ? getDemoTodayInstructorLiveSession(user?.userId ?? '')
+    : getDemoTodayLiveSession(user?.userId ?? '')
   const upcomingLiveDate = upcomingLive?.scheduledAt ? new Date(upcomingLive.scheduledAt) : null
   const upcomingLiveDateLabel = upcomingLiveDate
     ? `${String(upcomingLiveDate.getMonth() + 1).padStart(2, '0')}.${String(upcomingLiveDate.getDate()).padStart(2, '0')}`
@@ -75,29 +77,21 @@ export default function MyCurriculumsPage() {
     ? `${String(upcomingLiveDate.getHours()).padStart(2, '0')}:${String(upcomingLiveDate.getMinutes()).padStart(2, '0')}`
     : '--:--'
   const upcomingLiveActionPath = upcomingLive
-    ? studentPaths.lesson(upcomingLive.curriculumId, upcomingLive.sectionId, upcomingLive.lessonId)
+    ? isInstructor
+      ? instructorPaths.lesson(upcomingLive.curriculumId, upcomingLive.sectionId, upcomingLive.lessonId)
+      : studentPaths.lesson(upcomingLive.curriculumId, upcomingLive.sectionId, upcomingLive.lessonId)
     : null
 
   return (
     <div className="workspace-page">
-      <PageHeader eyebrow={isInstructor ? 'INSTRUCTOR DASHBOARD' : 'LEARNING DASHBOARD'} title="내 커리큘럼" description={isInstructor ? '운영 상태와 다음 라이브 준비 작업을 한눈에 확인하세요.' : '최근 학습과 오늘의 라이브 강의를 확인하세요.'} action={isInstructor ? <Link className="button button--primary" to={instructorPaths.newCurriculum}>새 커리큘럼</Link> : undefined} />
+      <PageHeader eyebrow={isInstructor ? 'INSTRUCTOR DASHBOARD' : 'LEARNING DASHBOARD'} title="내 커리큘럼" description={isInstructor ? '운영 상태와 오늘의 라이브 강의를 한눈에 확인하세요.' : '최근 학습과 오늘의 라이브 강의를 확인하세요.'} />
 
       <div className="metric-grid">
         {isInstructor ? <><MetricCard label="운영 커리큘럼" value={instructorCurriculums.length} /><MetricCard label="공개 중" value={instructorCurriculums.filter((curriculum) => curriculum.lifecycleStatus === 'PUBLISHED').length} /><MetricCard label="예정 라이브" value={instructorCurriculums.filter((curriculum) => curriculum.nextSession !== '일정 미정').length} /><MetricCard label="전체 수강생" value={`${instructorCurriculums.reduce((sum, curriculum) => sum + curriculum.enrolleeCount, 0)}명`} /></> : <><MetricCard label="수강 중인 커리큘럼" value={studentSummary.inProgressCurriculumCount} /><MetricCard label="완료한 커리큘럼" value={studentSummary.completedCurriculumCount} /><MetricCard label="평균 진행률" value={`${studentSummary.averageProgress}%`} /><MetricCard label="완료한 레슨" value={`${studentSummary.completedLessonCount}개`} /></>}
       </div>
 
-      <Panel className="highlight-panel" title={isInstructor ? '가장 가까운 라이브' : '오늘의 라이브 강의'} description={isInstructor ? '시작 전 레슨과 장치 준비 상태를 확인해 주세요.' : '오늘 예정된 라이브 강의만 표시합니다.'}>
-        {isInstructor ? (
-          <div className="next-action-card">
-            <div className="next-action-card__date"><strong>08.01</strong><span>10:00</span></div>
-            <div>
-              <StatusBadge tone="live">{demoSession.status}</StatusBadge>
-              <h3>Spring Security 시작하기</h3>
-              <p>라이브로 완성하는 Spring Boot · 예상 90분</p>
-            </div>
-            <Link className="button button--primary" to={instructorPaths.preflight(demoSession.sessionId)}>사전 점검</Link>
-          </div>
-        ) : upcomingLive && upcomingLiveActionPath ? (
+      <Panel className="highlight-panel" title="오늘의 라이브 강의" description="오늘 예정된 라이브 강의만 표시합니다.">
+        {upcomingLive && upcomingLiveActionPath ? (
           <div className="next-action-card">
             <div className="next-action-card__date"><strong>{upcomingLiveDateLabel}</strong><span>{upcomingLiveTimeLabel}</span></div>
             <div>
@@ -112,13 +106,13 @@ export default function MyCurriculumsPage() {
         )}
       </Panel>
 
-      <Panel title={isInstructor ? '운영 중인 커리큘럼' : '나의 학습 목록'} action={<div className="compact-controls"><input aria-label="내 커리큘럼 검색" placeholder="제목 검색" /><select aria-label="상태 필터"><option>전체 상태</option><option>{isInstructor ? '공개 중' : '학습 중'}</option><option>{isInstructor ? '준비 중' : '완료'}</option></select></div>}>
+      <Panel title={isInstructor ? '운영 중인 커리큘럼' : '나의 학습 목록'} action={<div className="compact-controls">{isInstructor && <Link className="button button--primary" to={instructorPaths.newCurriculum}>새 커리큘럼</Link>}<input aria-label="내 커리큘럼 검색" placeholder="제목 검색" /><select aria-label="상태 필터"><option>전체 상태</option><option>{isInstructor ? '공개 중' : '학습 중'}</option><option>{isInstructor ? '준비 중' : '완료'}</option></select></div>}>
         <div className="dashboard-curriculum-list">
           {curriculums.map((item) => {
             return (
               <article className="dashboard-curriculum-card" key={item.curriculumId}>
                 <div className="dashboard-curriculum-card__cover"><img src={item.thumbnailUrl ?? undefined} alt={`${item.title} 대표 이미지`} /></div>
-                <div className="dashboard-curriculum-card__content"><div><StatusBadge tone={item.lifecycleStatus === 'PUBLISHED' ? 'success' : 'warning'}>{item.lifecycleStatus === 'PUBLISHED' ? '공개 중' : '준비 중'}</StatusBadge><h3>{item.title}</h3><p>{item.summary}</p></div>{'progress' in item ? <div className="dashboard-progress"><span><strong>{item.progress}%</strong> · {item.completedLessonCount}/{item.lessonCount} 레슨</span><i><b style={{ width: `${item.progress}%` }} /></i></div> : <p className="dashboard-meta">게시 레슨 {item.publishedLessonCount}/{item.lessonCount} · 다음 일정 {item.nextSession}</p>}<div className="card-actions">{isInstructor ? <Link className="button button--primary" to={instructorPaths.curriculumManage(item.curriculumId)}>관리하기</Link> : <Link className="button button--primary" to={publicPaths.curriculum(item.curriculumId)}>커리큘럼 상세</Link>}</div></div>
+                <div className="dashboard-curriculum-card__content"><div><StatusBadge tone={item.lifecycleStatus === 'PUBLISHED' ? 'success' : 'warning'}>{item.lifecycleStatus === 'PUBLISHED' ? '공개 중' : '준비 중'}</StatusBadge><h3>{item.title}</h3><p>{item.summary}</p></div>{'progress' in item ? <div className="dashboard-progress"><span><strong>{item.progress}%</strong> · {item.completedLessonCount}/{item.lessonCount} 레슨</span><i><b style={{ width: `${item.progress}%` }} /></i></div> : <p className="dashboard-meta">게시 레슨 {item.publishedLessonCount}/{item.lessonCount} · 다음 일정 {item.nextSession}</p>}<div className="card-actions"><Link className="button button--primary" to={publicPaths.curriculum(item.curriculumId)}>커리큘럼 상세</Link></div></div>
               </article>
             )
           })}

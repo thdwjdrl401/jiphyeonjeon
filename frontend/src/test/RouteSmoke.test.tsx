@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
 import App from '@/App'
@@ -42,6 +42,12 @@ describe('전체 페이지 라우트', () => {
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
     renderAt('/student/live-sessions/ses-security-live/prejoin')
     expect(await screen.findByRole('heading', { name: '입장 전 점검' })).toBeInTheDocument()
+    const lessonNavigation = screen.getByRole('complementary', { name: '커리큘럼 레슨 목록' })
+    expect(within(lessonNavigation).getByRole('link', { name: /Spring Security 시작하기/ })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+    expect(within(lessonNavigation).queryByRole('link', { name: '내 프로필' })).not.toBeInTheDocument()
   })
 
   it('강사에게 라이브 운영 화면을 제공한다', async () => {
@@ -98,6 +104,7 @@ describe('전체 페이지 라우트', () => {
   })
 
   it('학생 레슨 상세는 라이브 강의에서 바로 입장 전 점검으로 연결한다', async () => {
+    const user = userEvent.setup()
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
     renderAt('/student/curriculums/cur-spring-live/sections/sec-security/lessons/les-security')
 
@@ -107,6 +114,17 @@ describe('전체 페이지 라우트', () => {
       'href',
       '/student/live-sessions/ses-security-live/prejoin',
     )
+    const lessonNavigation = screen.getByRole('complementary', { name: '커리큘럼 레슨 목록' })
+    expect(within(lessonNavigation).getByRole('link', { name: '라이브로 완성하는 Spring Boot' })).toBeInTheDocument()
+    expect(within(lessonNavigation).getByRole('heading', { name: '인증과 인가' })).toBeInTheDocument()
+    expect(within(lessonNavigation).getByRole('link', { name: /Spring Security 시작하기/ })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+
+    await user.click(within(lessonNavigation).getByRole('link', { name: /Redis 세션과 CSRF/ }))
+    expect(await screen.findByRole('heading', { name: 'Redis 세션과 CSRF', level: 1 })).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/student/curriculums/cur-spring-live/sections/sec-security/lessons/les-session')
   })
 
   it('학생의 종료된 레슨 상세에는 라이브 대신 다시보기 진행도만 표시한다', async () => {

@@ -1,6 +1,6 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { instructorPaths } from '@/app/router/paths'
+import { instructorPaths, publicPaths } from '@/app/router/paths'
 import { demoCurriculum, demoLesson, getDemoLesson } from '@/features/demo/demoData'
 import { getMockCurriculum } from '@/features/demo/mockDatabase'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
@@ -30,7 +30,7 @@ export default function LessonFormPage() {
 
   return (
     <div className="workspace-page workspace-page--narrow">
-      <PageHeader eyebrow={isEdit ? 'EDIT LESSON' : 'NEW LESSON'} title={isEdit ? '레슨 수정' : '새 레슨 만들기'} description={`${curriculum?.title ?? demoCurriculum.title} · ${isEdit ? currentLesson.sectionTitle : '선택한 섹션'}`} action={<Link className="button button--soft" to={instructorPaths.curriculumManage(curriculumId)}>관리로 돌아가기</Link>} />
+      <PageHeader eyebrow={isEdit ? 'EDIT LESSON' : 'NEW LESSON'} title={isEdit ? '레슨 수정' : '새 레슨 만들기'} description={`${curriculum?.title ?? demoCurriculum.title} · ${isEdit ? currentLesson.sectionTitle : '선택한 섹션'}`} action={<Link className="button button--soft" to={publicPaths.curriculum(curriculumId)}>커리큘럼 상세로 돌아가기</Link>} />
       <form className="workspace-form" onSubmit={save}>
         <Panel title="레슨 기본 정보" description="기본 정보 저장과 자료 AI 준비는 서로 독립적으로 처리합니다."><div className="form-grid"><label className="form-field--wide"><span>레슨 제목 *</span><input value={title} maxLength={200} onChange={(event) => { setTitle(event.target.value); setSaved(false) }} /></label><label className="form-field--wide"><span>설명</span><textarea rows={5} value={description} onChange={(event) => { setDescription(event.target.value); setSaved(false) }} /></label></div>{saved && <InlineNotice tone="success">레슨 기본 정보가 작업 초안에 저장되었습니다.</InlineNotice>}<div className="form-actions"><button className="button button--primary" type="submit" disabled={!title.trim()}>기본 정보 저장</button></div></Panel>
         <Panel title="PPTX 강의 자료" description={isEdit ? '초기 준비 이후에는 자료를 하나씩 추가하고 영향 범위만 다시 처리합니다.' : '초기 자료는 여러 개를 선택한 뒤 한 번에 AI 준비를 시작합니다.'}>

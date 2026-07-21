@@ -39,6 +39,23 @@ export const demoSections = buildMockCurriculumOutline(primaryCurriculum).map((s
   })),
 }))
 
+export function getDemoCurriculumLessonNavigation(curriculumId: string) {
+  const curriculum = getMockCurriculum(curriculumId) ?? primaryCurriculum
+  return {
+    curriculumId: curriculum.curriculumId,
+    title: curriculum.title,
+    sections: buildMockCurriculumOutline(curriculum).map((section) => ({
+      sectionId: section.sectionId,
+      title: section.title,
+      lessons: section.lessons.map((lesson) => ({
+        lessonId: lesson.lessonId,
+        title: lesson.title,
+        order: lesson.order,
+      })),
+    })),
+  }
+}
+
 export const demoLesson = {
   lessonId: primaryLessonContext.lesson.lessonId,
   title: primaryLessonContext.lesson.title,
@@ -207,6 +224,13 @@ export function getDemoTodayLiveSession(userId: string, today = new Date()) {
     .filter((enrollment) => enrollment.status === 'ACTIVE')
     .map((enrollment) => ({ curriculum: getMockCurriculum(enrollment.curriculumId)! }))
     .filter((entry) => entry.curriculum)
+  return findNextLiveLesson(curriculums, today)
+}
+
+export function getDemoTodayInstructorLiveSession(userId: string, today = new Date()) {
+  const curriculums = mockCurriculumEntities
+    .filter((curriculum) => curriculum.instructor.instructorId === userId)
+    .map((curriculum) => ({ curriculum }))
   return findNextLiveLesson(curriculums, today)
 }
 

@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { instructorPaths } from '@/app/router/paths'
+import { instructorPaths, publicPaths } from '@/app/router/paths'
 import CurriculumImageField from '@/features/curriculum/CurriculumImageField'
 import CurriculumMaterialField from '@/features/curriculum/CurriculumMaterialField'
 import { createCurriculum } from '@/features/curriculum/curriculumManagementService'
@@ -34,20 +34,7 @@ export default function CurriculumFormPage() {
         thumbnailUrl,
         materials,
       })
-      navigate(instructorPaths.curriculumManage(curriculumId), {
-        state: {
-          created: true,
-          draft: {
-            ...form,
-            title: form.title.trim(),
-            summary: form.summary.trim(),
-            description: form.description.trim(),
-            enrollmentType: 'APPROVAL_REQUIRED',
-            thumbnailUrl,
-            materials,
-          },
-        },
-      })
+      navigate(publicPaths.curriculum(curriculumId))
     } catch (requestError) {
       setError(requestError instanceof ApiError ? requestError.message : '커리큘럼을 만들지 못했습니다.')
     } finally {
@@ -57,7 +44,7 @@ export default function CurriculumFormPage() {
 
   return (
     <div className="workspace-page workspace-page--narrow">
-      <PageHeader eyebrow="NEW CURRICULUM" title="새 커리큘럼 만들기" description="핵심 정보를 먼저 저장하고 섹션과 레슨은 관리 화면에서 편성합니다." />
+      <PageHeader eyebrow="NEW CURRICULUM" title="새 커리큘럼 만들기" description="핵심 정보를 먼저 저장한 뒤 커리큘럼 상세에서 관리 화면으로 이동할 수 있습니다." />
       <form className="workspace-form" onSubmit={submit}>
         <Panel title="기본 정보" description="제목만으로 초안을 만들 수 있으며 나머지는 나중에 보완할 수 있어요.">
           <div className="form-grid">

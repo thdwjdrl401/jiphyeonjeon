@@ -13,7 +13,7 @@ export default function LessonDetailPage() {
   const [entryNotice, setEntryNotice] = useState('')
   const isInstructor = user?.role === 'INSTRUCTOR'
   const lesson = getDemoLesson(lessonId, user?.userId)
-  const curriculumPath = isInstructor ? instructorPaths.curriculumManage(curriculumId) : publicPaths.curriculum(curriculumId)
+  const curriculumPath = publicPaths.curriculum(curriculumId)
   const liveSessionPath = lesson.liveSession ? instructorPaths.liveSession(lesson.liveSession.sessionId) : null
   const replayPath = isInstructor ? instructorPaths.replay(lessonId) : studentPaths.replay(lessonId)
   const showReplay = lesson.liveSession?.status === 'ENDING' || lesson.liveSession?.status === 'ENDED'
