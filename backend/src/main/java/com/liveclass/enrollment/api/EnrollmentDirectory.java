@@ -21,4 +21,7 @@ public interface EnrollmentDirectory {
 
     /** 내 수강 목록(최신순). */
     List<EnrollmentView> myEnrollments(UUID userId);
+
+    /** 강사용 ACTIVE 수강생 로스터(신청 순). */
+    List<EnrollmentView> activeFor(UUID curriculumId);
 }

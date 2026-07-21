@@ -132,6 +132,13 @@ public class EnrollmentService implements EnrollmentManagement, EnrollmentDirect
         return repository.findByUserIdOrderByCreatedAtDesc(userId).stream().map(EnrollmentService::toView).toList();
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<EnrollmentView> activeFor(UUID curriculumId) {
+        return repository.findByCurriculumIdAndStatusOrderByRequestedAtAsc(curriculumId, EnrollmentStatus.ACTIVE)
+                .stream().map(EnrollmentService::toView).toList();
+    }
+
     private Enrollment require(UUID enrollmentId) {
         return repository.findById(enrollmentId)
                 .orElseThrow(() -> new EnrollmentNotFoundException("수강 기록을 찾을 수 없습니다."));
