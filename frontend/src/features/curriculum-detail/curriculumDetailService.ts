@@ -30,9 +30,10 @@ type CurriculumApiOutlineSection = Omit<CurriculumOutlineSection, 'lessons'> & {
 
 type CurriculumApiDetailResponse = Omit<
   CurriculumDetailResponse,
-  'enrollmentPolicy' | 'outline' | 'viewerContext'
+  'enrollmentPolicy' | 'materials' | 'outline' | 'viewerContext'
 > & {
   enrollmentPolicy?: CurriculumDetailResponse['enrollmentPolicy']
+  materials?: CurriculumDetailResponse['materials']
   outline: CurriculumApiOutlineSection[]
   viewerContext?: CurriculumDetailResponse['viewerContext']
 }
@@ -73,6 +74,7 @@ export async function getCurriculumDetail(curriculumId: string, viewer?: AuthUse
           opensAt: null,
           closesAt: null,
         },
+        materials: data.materials ?? [],
         outline: data.outline.map((section) => ({
           ...section,
           lessons: section.lessons.map(normalizeLesson),

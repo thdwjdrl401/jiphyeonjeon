@@ -2,12 +2,14 @@ import { peekMockUser } from '@/features/auth/mockAuth'
 import { putMockCurriculum } from '@/features/demo/mockDatabase'
 import { ApiError, apiClient } from '@/shared/api/client'
 import { requestByDataSource } from '@/shared/api/dataSource'
+import type { CurriculumMaterial } from './types'
 
 export interface CreateCurriculumRequest {
   title: string
   summary: string
   description: string
   thumbnailUrl: string | null
+  materials?: CurriculumMaterial[]
 }
 
 interface CreateCurriculumResponse {

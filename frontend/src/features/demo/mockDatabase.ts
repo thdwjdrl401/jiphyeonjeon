@@ -6,6 +6,7 @@ import type {
   CurriculumDetailPeriod,
   CurriculumEnrollmentPolicyType,
   CurriculumInstructorProfile,
+  CurriculumMaterial,
   CurriculumOutlineSection,
   CurriculumProgress,
   CurriculumRelationship,
@@ -28,6 +29,7 @@ export interface MockCurriculumEntity {
   summary: string
   description: string
   thumbnailUrl: string | null
+  materials: CurriculumMaterial[]
   instructor: CurriculumInstructorProfile
   lifecycleStatus: string
   period: CurriculumDetailPeriod | null
@@ -78,6 +80,10 @@ export const mockCurriculumEntities: MockCurriculumEntity[] = [
     summary: '현업의 요청 흐름을 따라가며 견고한 백엔드를 함께 설계합니다.',
     description: '실제 서비스에서 마주치는 요청 흐름을 재현하며 Spring Boot로 안정적인 백엔드를 설계하는 방법을 다룹니다. 매 세션 라이브로 코드를 작성하고 질문에 답합니다.',
     thumbnailUrl: springCurriculumImage, instructor: instructorProfiles[0], lifecycleStatus: 'PUBLISHED',
+    materials: [
+      { materialId: 'mat-curr-spring-guide', fileName: 'Spring Boot 커리큘럼 가이드.pptx', fileSize: 2_516_582 },
+      { materialId: 'mat-curr-spring-setup', fileName: '공통 실습 환경 설정.pptx', fileSize: 1_887_437 },
+    ],
     period: { startsAt: '2026-08-03T19:00:00+09:00', endsAt: '2026-09-24T21:00:00+09:00' },
     sectionCount: 6, lessonCount: 18, featured: true, catalogVisible: true,
     enrollmentPolicyType: 'APPROVAL_REQUIRED', enrolleeCount: 48,
@@ -87,6 +93,7 @@ export const mockCurriculumEntities: MockCurriculumEntity[] = [
     summary: '좋은 차트의 기준부터 비즈니스 스토리텔링까지 실습으로 익혀요.',
     description: '데이터를 그래프로 옮기는 방법이 아니라, 데이터로 사람을 설득하는 방법을 다룹니다. 실무 데이터셋으로 매주 시각화 결과물을 완성합니다.',
     thumbnailUrl: dataCurriculumImage, instructor: instructorProfiles[1], lifecycleStatus: 'PUBLISHED',
+    materials: [{ materialId: 'mat-curr-data-guide', fileName: '시각화 실습 데이터 안내.pptx', fileSize: 1_363_149 }],
     period: { startsAt: '2026-07-20T20:00:00+09:00', endsAt: '2026-08-28T22:00:00+09:00' },
     sectionCount: 5, lessonCount: 12, featured: true, catalogVisible: true,
     enrollmentPolicyType: 'APPROVAL_REQUIRED', enrolleeCount: 31,
@@ -96,6 +103,7 @@ export const mockCurriculumEntities: MockCurriculumEntity[] = [
     summary: '재사용 가능한 컴포넌트와 접근성 있는 인터랙션을 직접 구축합니다.',
     description: '버튼 하나부터 복합 컴포넌트까지, 실제 서비스에 적용 가능한 디자인 시스템을 처음부터 함께 만듭니다. 접근성 검증까지 포함합니다.',
     thumbnailUrl: architectureCurriculumImage, instructor: instructorProfiles[2], lifecycleStatus: 'PUBLISHED',
+    materials: [],
     period: { startsAt: '2026-08-10T19:30:00+09:00', endsAt: '2026-10-05T21:30:00+09:00' },
     sectionCount: 7, lessonCount: 16, featured: true, catalogVisible: true,
     enrollmentPolicyType: 'APPROVAL_REQUIRED', enrolleeCount: 24,
@@ -105,6 +113,7 @@ export const mockCurriculumEntities: MockCurriculumEntity[] = [
     summary: '모델의 가능성과 한계를 이해하고 검증 가능한 AI 기능을 설계해요.',
     description: 'AI 모델을 다루는 프로덕트를 기획할 때 필요한 감각을 기릅니다. 가설을 세우고 작은 실험으로 검증하는 흐름을 실습합니다.',
     thumbnailUrl: null, instructor: instructorProfiles[3], lifecycleStatus: 'PUBLISHED',
+    materials: [],
     period: { startsAt: '2026-09-01T20:00:00+09:00', endsAt: '2026-10-13T22:00:00+09:00' },
     sectionCount: 4, lessonCount: 10, featured: true, catalogVisible: true,
     enrollmentPolicyType: 'APPROVAL_REQUIRED', enrolleeCount: 18,
@@ -114,6 +123,7 @@ export const mockCurriculumEntities: MockCurriculumEntity[] = [
     summary: '브라우저 미디어부터 SFU 아키텍처까지 실시간 서비스의 핵심을 다룹니다.',
     description: '브라우저의 미디어 API부터 SFU 기반 대규모 실시간 서비스 아키텍처까지, 실시간 미디어 서비스를 만드는 데 필요한 개념을 순서대로 다룹니다.',
     thumbnailUrl: null, instructor: instructorProfiles[4], lifecycleStatus: 'PUBLISHED',
+    materials: [],
     period: { startsAt: '2026-07-13T19:00:00+09:00', endsAt: '2026-08-31T21:00:00+09:00' },
     sectionCount: 8, lessonCount: 20, featured: true, catalogVisible: true,
     enrollmentPolicyType: 'APPROVAL_REQUIRED', enrolleeCount: 56,
@@ -123,6 +133,7 @@ export const mockCurriculumEntities: MockCurriculumEntity[] = [
     summary: '실행 계획을 읽고 느린 쿼리의 원인을 단계적으로 찾아갑니다.',
     description: '실행 계획을 읽는 법부터 인덱스 설계까지, 느린 쿼리를 원인 단위로 분해해 개선하는 과정을 다룹니다. 정원이 있어 신청 후 승인을 거칩니다.',
     thumbnailUrl: null, instructor: instructorProfiles[5], lifecycleStatus: 'PUBLISHED',
+    materials: [],
     period: { startsAt: '2026-08-22T10:00:00+09:00', endsAt: '2026-09-26T12:00:00+09:00' },
     sectionCount: 5, lessonCount: 10, featured: true, catalogVisible: true,
     enrollmentPolicyType: 'APPROVAL_REQUIRED', enrolleeCount: 20,
@@ -132,6 +143,7 @@ export const mockCurriculumEntities: MockCurriculumEntity[] = [
     summary: '확장성과 장애 대응을 중심으로 서비스 구조를 함께 그려봅니다.',
     description: '트래픽 증가와 장애 상황을 가정하고, 그에 대응하는 서비스 구조를 단계적으로 설계합니다.',
     thumbnailUrl: null, instructor: instructorProfiles[6], lifecycleStatus: 'PUBLISHED',
+    materials: [],
     period: { startsAt: '2026-09-07T19:00:00+09:00', endsAt: '2026-10-19T21:00:00+09:00' },
     sectionCount: 6, lessonCount: 14, featured: false, catalogVisible: true,
     enrollmentPolicyType: 'APPROVAL_REQUIRED', enrolleeCount: 17,
@@ -141,6 +153,7 @@ export const mockCurriculumEntities: MockCurriculumEntity[] = [
     summary: '복잡한 도메인을 안전하고 읽기 좋은 타입으로 표현하는 연습을 합니다.',
     description: '복잡한 도메인 로직을 타입으로 안전하게 표현하는 연습을 반복합니다. 실무 코드 리뷰에서 자주 나오는 패턴을 함께 다룹니다.',
     thumbnailUrl: null, instructor: instructorProfiles[7], lifecycleStatus: 'PUBLISHED',
+    materials: [],
     period: { startsAt: '2026-07-27T19:30:00+09:00', endsAt: '2026-09-07T21:30:00+09:00' },
     sectionCount: 5, lessonCount: 12, featured: false, catalogVisible: true,
     enrollmentPolicyType: 'APPROVAL_REQUIRED', enrolleeCount: 28,
@@ -150,6 +163,7 @@ export const mockCurriculumEntities: MockCurriculumEntity[] = [
     summary: '인터뷰 설계부터 인사이트 도출까지 작은 팀을 위한 방법을 익혀요.',
     description: '적은 인원과 짧은 시간으로도 신뢰할 수 있는 인사이트를 얻는 리서치 방법을 다룹니다.',
     thumbnailUrl: null, instructor: instructorProfiles[8], lifecycleStatus: 'PUBLISHED',
+    materials: [],
     period: { startsAt: '2026-08-15T10:00:00+09:00', endsAt: '2026-09-19T12:00:00+09:00' },
     sectionCount: 4, lessonCount: 9, featured: false, catalogVisible: true,
     enrollmentPolicyType: 'APPROVAL_REQUIRED', enrolleeCount: 12,
@@ -159,6 +173,7 @@ export const mockCurriculumEntities: MockCurriculumEntity[] = [
     summary: '반복 업무를 줄이는 작은 스크립트부터 데이터 파이프라인까지 만들어요.',
     description: '매일 반복하는 업무를 작은 스크립트로 줄이는 것부터 시작해, 정기적으로 도는 데이터 파이프라인까지 단계적으로 확장합니다.',
     thumbnailUrl: null, instructor: instructorProfiles[9], lifecycleStatus: 'PUBLISHED',
+    materials: [],
     period: { startsAt: '2026-09-05T13:00:00+09:00', endsAt: '2026-10-10T15:00:00+09:00' },
     sectionCount: 6, lessonCount: 15, featured: false, catalogVisible: true,
     enrollmentPolicyType: 'APPROVAL_REQUIRED', enrolleeCount: 22,
@@ -168,12 +183,16 @@ export const mockCurriculumEntities: MockCurriculumEntity[] = [
     summary: '작은 서비스가 성장할 때 필요한 경계와 운영 전략을 설계합니다.',
     description: '트래픽과 조직이 함께 성장할 때 서비스 경계를 나누고 운영 위험을 줄이는 방법을 실습합니다.',
     thumbnailUrl: architectureCurriculumImage, instructor: instructorProfiles[0], lifecycleStatus: 'DRAFT',
+    materials: [],
     period: null, sectionCount: 3, lessonCount: 7, featured: false, catalogVisible: false,
     enrollmentPolicyType: 'APPROVAL_REQUIRED', enrolleeCount: 0,
   },
 ]
 
 const initialCurriculumCount = mockCurriculumEntities.length
+const initialCurriculumMaterials = new Map(
+  mockCurriculumEntities.map((curriculum) => [curriculum.curriculumId, curriculum.materials.map((material) => ({ ...material }))]),
+)
 
 const springSectionSeeds: MockSectionSeed[] = [
   {
@@ -212,11 +231,16 @@ let mockEnrollments = createInitialEnrollments()
 export function resetMockDatabase() {
   mockEnrollments = createInitialEnrollments()
   mockCurriculumEntities.splice(initialCurriculumCount)
+  for (const curriculum of mockCurriculumEntities) {
+    curriculum.materials = initialCurriculumMaterials.get(curriculum.curriculumId)?.map((material) => ({ ...material })) ?? []
+  }
 }
 
 export function putMockCurriculum(
   owner: AuthUser,
-  input: Pick<MockCurriculumEntity, 'title' | 'summary' | 'description' | 'thumbnailUrl'>,
+  input: Pick<MockCurriculumEntity, 'title' | 'summary' | 'description' | 'thumbnailUrl'> & {
+    materials?: CurriculumMaterial[]
+  },
 ) {
   const curriculum: MockCurriculumEntity = {
     curriculumId: `cur-draft-${Date.now()}`,
@@ -224,6 +248,7 @@ export function putMockCurriculum(
     summary: input.summary,
     description: input.description,
     thumbnailUrl: input.thumbnailUrl,
+    materials: input.materials?.map((material) => ({ ...material })) ?? [],
     instructor: {
       instructorId: owner.userId,
       displayName: owner.displayName,
@@ -245,6 +270,13 @@ export function putMockCurriculum(
 
 export function getMockCurriculum(curriculumId: string) {
   return mockCurriculumEntities.find((curriculum) => curriculum.curriculumId === curriculumId) ?? null
+}
+
+export function updateMockCurriculumMaterials(curriculumId: string, materials: CurriculumMaterial[]) {
+  const curriculum = getMockCurriculum(curriculumId)
+  if (!curriculum) return null
+  curriculum.materials = materials.map((material) => ({ ...material }))
+  return curriculum
 }
 
 export function getMockEnrollment(userId: string, curriculumId: string) {

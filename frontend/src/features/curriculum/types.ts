@@ -90,6 +90,12 @@ export interface CurriculumInstructorProfile {
   expertise: string[]
 }
 
+export interface CurriculumMaterial {
+  materialId: string
+  fileName: string
+  fileSize: number
+}
+
 export interface CurriculumOutlineSection {
   sectionId: string
   title: string
@@ -106,6 +112,7 @@ export interface CurriculumDetailResponse {
   thumbnailUrl: string | null
   lifecycleStatus: string
   period: CurriculumDetailPeriod | null
+  materials: CurriculumMaterial[]
   enrollmentPolicy: CurriculumEnrollmentPolicy
   instructor: CurriculumInstructorProfile
   outline: CurriculumOutlineSection[]

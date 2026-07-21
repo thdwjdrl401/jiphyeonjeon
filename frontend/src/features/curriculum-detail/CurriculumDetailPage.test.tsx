@@ -47,6 +47,7 @@ describe('CurriculumDetailPage', () => {
     expect(screen.getByText('1. 오리엔테이션과 개발 환경')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '수강 신청' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '관리하기' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '커리큘럼 강의 자료' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: '로그인하기' })).toBeInTheDocument()
   })
 
@@ -75,6 +76,8 @@ describe('CurriculumDetailPage', () => {
     renderDetail('/curriculums/cur-spring-live')
 
     expect(await screen.findByText('학습 진행률')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '커리큘럼 강의 자료' })).toBeInTheDocument()
+    expect(screen.getByText('Spring Boot 커리큘럼 가이드.pptx')).toBeInTheDocument()
     const continueLinks = screen.getAllByRole('link', { name: '이어보기' })
     expect(continueLinks.length).toBeGreaterThan(0)
     for (const link of continueLinks) {
@@ -158,6 +161,8 @@ describe('CurriculumDetailPage', () => {
     const { unmount } = renderDetail('/curriculums/cur-spring-live')
 
     expect(await screen.findByRole('link', { name: '관리하기' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '커리큘럼 강의 자료' })).toBeInTheDocument()
+    expect(screen.getByText('공통 실습 환경 설정.pptx')).toBeInTheDocument()
     unmount()
   })
 
@@ -169,6 +174,7 @@ describe('CurriculumDetailPage', () => {
     expect(screen.queryByRole('link', { name: '관리하기' })).not.toBeInTheDocument()
     expect(screen.getByText('다른 강사가 운영하는 커리큘럼이에요')).toBeInTheDocument()
     expect(screen.getByText('이 커리큘럼은 강사 계정으로 수강할 수 없어요.')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '커리큘럼 강의 자료' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '수강 신청' })).not.toBeInTheDocument()
   })
 

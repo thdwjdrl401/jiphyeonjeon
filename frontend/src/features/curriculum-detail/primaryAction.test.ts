@@ -11,6 +11,7 @@ function makeDetail(overrides: Partial<CurriculumDetailResponse['viewerContext']
     thumbnailUrl: null,
     lifecycleStatus: 'PUBLISHED',
     period: null,
+    materials: [],
     enrollmentPolicy: { type: 'APPROVAL_REQUIRED', status: 'OPEN', opensAt: null, closesAt: null },
     instructor: { instructorId: 'usr_1', displayName: '강사', bio: '', expertise: [] },
     outline: [

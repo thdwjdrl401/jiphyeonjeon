@@ -1,6 +1,7 @@
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { useAuth } from '@/features/auth/AuthContext'
 import CurriculumHero from '@/features/curriculum/CurriculumHero'
+import CurriculumMaterials from '@/features/curriculum/CurriculumMaterials'
 import CurriculumNotice from '@/features/curriculum/CurriculumNotice'
 import CurriculumOutline from '@/features/curriculum/CurriculumOutline'
 import CurriculumOverview from '@/features/curriculum/CurriculumOverview'
@@ -53,6 +54,7 @@ export default function CurriculumDetailPage() {
 
   const detail = detailQuery.data
   const primaryAction = resolvePrimaryAction(detail, returnTo)
+  const canViewCurriculumMaterials = ['ENROLLED', 'OWNER_INSTRUCTOR'].includes(detail.viewerContext.relationship)
 
   const handleEnroll = () => enrollMutation.mutate()
   const handleCancel = () => cancelMutation.mutate()
@@ -68,6 +70,10 @@ export default function CurriculumDetailPage() {
 
       <CurriculumOverview description={detail.description} />
       <InstructorSummary instructor={detail.instructor} />
+
+      {canViewCurriculumMaterials && detail.materials.length > 0 && (
+        <CurriculumMaterials materials={detail.materials} />
+      )}
 
       {detail.viewerContext.relationship === 'ENROLLED' && detail.viewerContext.progress && (
         <CurriculumProgress progress={detail.viewerContext.progress} />
