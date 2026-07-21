@@ -54,7 +54,7 @@ public class ChatController {
                                           @RequestParam(defaultValue = "100") int limit,
                                           Authentication authentication) {
         UUID requesterId = UUID.fromString(authentication.getName());
-        return chatService.listBySession(sessionId, afterSessionMs, limit).stream()
+        return chatService.listBySession(sessionId, requesterId, afterSessionMs, limit).stream()
                 .map(m -> ChatMessageResponse.from(m, null, requesterId))
                 .toList();
     }
