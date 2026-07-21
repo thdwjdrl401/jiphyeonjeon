@@ -125,6 +125,128 @@ class LiveChatWebSocketTest {
         assertThat(arr.get(0).get("mine").asBoolean()).isTrue();   // 보낸 학생 본인 → mine
     }
 
+    @Test
+    void subscribing_to_chat_without_enrollment_is_blocked() throws Exception {
+        Client instructor = new Client();
+        instructor.signupAndLogin("INSTRUCTOR");
+        String[] ids = instructor.createStartedSession();
+        String sessionId = ids[1];
+        String cid = ids[2];
+
+        // 통제군: 활성 수강생 — 구독 허용·수신되어야 게이트가 "정상은 통과"시킴을 증명한다.
+        Client enrolled = new Client();
+        enrolled.signupAndLogin("STUDENT");
+        String eid = enrolled.field(enrolled.post("/api/curriculums/" + cid + "/enrollments", null), "enrollmentId");
+        instructor.post("/api/instructor/curriculums/" + cid + "/enrollments/" + eid + "/approve", null);
+
+        // 공격자: 수강 신청 안 함 — 구독이 인가 인터셉터에서 거부되어야 한다.
+        Client outsider = new Client();
+        outsider.signupAndLogin("STUDENT");
+
+        BlockingQueue<Map<String, Object>> enrolledInbox = new LinkedBlockingQueue<>();
+        BlockingQueue<Map<String, Object>> outsiderInbox = new LinkedBlockingQueue<>();
+
+        StompSession enrolledSession = connect(enrolled);
+        StompSession outsiderSession = connect(outsider);
+        subscribeChat(enrolledSession, sessionId, enrolledInbox);
+        subscribeChat(outsiderSession, sessionId, outsiderInbox);
+        Thread.sleep(400);   // 허용된 구독이 브로커에 반영될 시간
+
+        // 활성 수강생이 채팅을 보낸다(전송은 컨트롤러 게이트를 통과).
+        enrolledSession.send("/app/live-sessions/" + sessionId + "/chat",
+                Map.of("clientMessageId", "gate-1", "text", "수강생만 보여야", "isQuestion", false));
+
+        // 활성 수강생은 실시간으로 받는다.
+        assertThat(enrolledInbox.poll(10, TimeUnit.SECONDS))
+                .as("활성 수강생은 채팅을 수신한다").isNotNull();
+        // 미수강자는 구독이 거부돼 같은 브로드캐스트를 받지 못한다.
+        assertThat(outsiderInbox.poll(2, TimeUnit.SECONDS))
+                .as("미수강자는 구독이 거부돼 실시간 채팅을 수신하지 못한다").isNull();
+
+        // 미수강자 세션은 구독 거부(ERROR 프레임)로 이미 서버가 닫았을 수 있으니 방어적으로 정리한다.
+        if (enrolledSession.isConnected()) {
+            enrolledSession.disconnect();
+        }
+        if (outsiderSession.isConnected()) {
+            outsiderSession.disconnect();
+        }
+    }
+
+    @Test
+    void wildcard_subscription_to_chat_topics_is_rejected() throws Exception {
+        Client instructor = new Client();
+        instructor.signupAndLogin("INSTRUCTOR");
+        String[] ids = instructor.createStartedSession();
+        String sessionId = ids[1];
+        String cid = ids[2];
+
+        // 통제군: 구체적 채팅 토픽을 구독한 활성 수강생 — 수신되어야.
+        Client enrolled = new Client();
+        enrolled.signupAndLogin("STUDENT");
+        String eid = enrolled.field(enrolled.post("/api/curriculums/" + cid + "/enrollments", null), "enrollmentId");
+        instructor.post("/api/instructor/curriculums/" + cid + "/enrollments/" + eid + "/approve", null);
+
+        // 공격자: 활성 수강생이지만(!) 와일드카드로 구독을 시도한다. 브로커는 구독을 패턴 매칭하므로
+        // 이게 통하면 게이트 우회가 된다 → 구체 토픽이 아니라 거부되어 아무것도 못 받아야 한다.
+        Client wildcardAttempt = new Client();
+        wildcardAttempt.signupAndLogin("STUDENT");
+        String eid2 = wildcardAttempt.field(
+                wildcardAttempt.post("/api/curriculums/" + cid + "/enrollments", null), "enrollmentId");
+        instructor.post("/api/instructor/curriculums/" + cid + "/enrollments/" + eid2 + "/approve", null);
+
+        BlockingQueue<Map<String, Object>> enrolledInbox = new LinkedBlockingQueue<>();
+        BlockingQueue<Map<String, Object>> wildcardInbox = new LinkedBlockingQueue<>();
+
+        StompSession enrolledSession = connect(enrolled);
+        StompSession wildcardSession = connect(wildcardAttempt);
+        subscribeChat(enrolledSession, sessionId, enrolledInbox);
+        wildcardSession.subscribe("/topic/live-sessions/*/chat", frameHandler(wildcardInbox));   // 와일드카드
+        Thread.sleep(400);
+
+        enrolledSession.send("/app/live-sessions/" + sessionId + "/chat",
+                Map.of("clientMessageId", "wc-1", "text", "패턴 구독은 차단", "isQuestion", false));
+
+        assertThat(enrolledInbox.poll(10, TimeUnit.SECONDS))
+                .as("구체 토픽을 구독한 활성 수강생은 수신한다").isNotNull();
+        assertThat(wildcardInbox.poll(2, TimeUnit.SECONDS))
+                .as("와일드카드 구독은 수강 여부와 무관하게 거부되어 수신이 없다").isNull();
+
+        if (enrolledSession.isConnected()) {
+            enrolledSession.disconnect();
+        }
+        if (wildcardSession.isConnected()) {
+            wildcardSession.disconnect();
+        }
+    }
+
+    private StompSession connect(Client client) throws Exception {
+        WebSocketStompClient stompClient = new WebSocketStompClient(new StandardWebSocketClient());
+        stompClient.setMessageConverter(new JacksonJsonMessageConverter());
+        WebSocketHttpHeaders handshake = new WebSocketHttpHeaders();
+        handshake.add("Cookie", client.cookieHeader());
+        return stompClient.connectAsync("ws://localhost:" + port + "/api/ws", handshake, new StompHeaders(),
+                new StompSessionHandlerAdapter() {}).get(10, TimeUnit.SECONDS);
+    }
+
+    private void subscribeChat(StompSession session, String sessionId, BlockingQueue<Map<String, Object>> inbox) {
+        session.subscribe("/topic/live-sessions/" + sessionId + "/chat", frameHandler(inbox));
+    }
+
+    private StompFrameHandler frameHandler(BlockingQueue<Map<String, Object>> inbox) {
+        return new StompFrameHandler() {
+            @Override
+            public Type getPayloadType(StompHeaders headers) {
+                return Map.class;
+            }
+
+            @Override
+            @SuppressWarnings("unchecked")
+            public void handleFrame(StompHeaders headers, Object payload) {
+                inbox.add((Map<String, Object>) payload);
+            }
+        };
+    }
+
     /** 쿠키 세션을 유지하는 최소 HTTP 클라이언트(CSRF 핸드셰이크 포함). */
     private final class Client {
         private final CookieManager cookies = new CookieManager(null, CookiePolicy.ACCEPT_ALL);
