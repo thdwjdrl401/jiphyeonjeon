@@ -59,9 +59,12 @@ services:
       LIVEKIT_URL: ws://localhost:7880
       STT_ROOM: stt-test
       STT_IDENTITY: av-bot
-      LOOP_SECONDS: "2665"                     # springBoot.mp4 길이(≈2668s)에 맞춤
+      # 재생목록: "영상|음성|길이초" 클립을 공백으로 나열, 순서대로 번갈아 재생 후 반복.
+      # 현재: imf만(완전 대체). 번갈아 하려면 아래 주석처럼 springBoot 클립을 뒤에 붙인다.
+      STT_PLAYLIST: "/audio/imf-video.h264|/audio/imf-audio.ogg|68"
+      # STT_PLAYLIST: "/audio/imf-video.h264|/audio/imf-audio.ogg|68 /audio/loop-video.h264|/audio/loop-audio.ogg|2665"
     volumes:
-      - ./stt-audio:/audio:ro                 # loop-video.h264 · loop-audio.ogg
+      - ./stt-audio:/audio:ro                 # imf-video.h264·imf-audio.ogg / loop-video.h264·loop-audio.ogg (springBoot)
 
 volumes:
   miniodata:
