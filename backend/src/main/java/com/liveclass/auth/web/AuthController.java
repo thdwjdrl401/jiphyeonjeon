@@ -112,7 +112,8 @@ public class AuthController {
     @GetMapping("/me")
     public AuthUserResponse me(Authentication authentication) {
         UUID userId = UUID.fromString(authentication.getName());
-        return AuthUserResponse.from(authService.getById(userId));
+        AppUser user = authService.getById(userId);
+        return AuthUserResponse.from(user, authService.resolveProfileImageUrl(user));
     }
 
     @Operation(summary = "이메일 사용 가능 여부", description = "회원가입 화면에서 이 이메일이 이미 쓰이는지 확인한다. 로그인 없이 호출할 수 있다.")

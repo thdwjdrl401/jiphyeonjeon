@@ -17,15 +17,23 @@ public record AuthUserResponse(
         String displayName,
 
         @Schema(description = "전역 역할", example = "STUDENT")
-        Role role
+        Role role,
+
+        @Schema(description = "표시용 프로필 이미지 URL. 미설정/미해결 시 null.")
+        String profileImageUrl
 ) {
 
     public static AuthUserResponse from(AppUser user) {
+        return from(user, null);
+    }
+
+    public static AuthUserResponse from(AppUser user, String profileImageUrl) {
         return new AuthUserResponse(
                 user.getId().toString(),
                 user.getEmail(),
                 user.getDisplayName(),
-                user.getRole()
+                user.getRole(),
+                profileImageUrl
         );
     }
 }
