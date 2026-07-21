@@ -116,28 +116,36 @@
 
 ### 4.2 라우트 매핑
 
+공개 탐색 경로는 역할과 무관하게 유지한다. 로그인 이후 화면은 실제 계정 역할명과 맞춘 `/student/*`, `/instructor/*` 아래에 배치하며, 각 상위 라우트의 `RequireRoleRoute`가 인증과 역할을 한 번에 검사한다. 현재 역할 모델에 없는 `/admin/*` 경로는 만들지 않는다. URL 세그먼트와 프론트 fixture 식별자는 대시(`-`) 표기를 사용하되, 서버가 내려주는 식별자는 불투명 값으로 취급하여 임의 변환하지 않는다.
+
 | 페이지 | 제안 라우트 |
 |---|---|
 | 웰컴 | `/` |
 | 커리큘럼 목록 | `/curriculums` |
 | 로그인 | `/login` |
 | 회원가입 | `/signup` |
-| 내 프로필 | `/me/profile` |
-| 내 커리큘럼 | `/me/curriculums` |
-| 커리큘럼 생성 | `/curriculums/new` |
+| 학생 내 프로필 | `/student/profile` |
+| 강사 내 프로필 | `/instructor/profile` |
+| 학생 내 커리큘럼 | `/student/curriculums` |
+| 강사 내 커리큘럼 | `/instructor/curriculums` |
+| 커리큘럼 생성 | `/instructor/curriculums/new` |
 | 커리큘럼 상세 | `/curriculums/:curriculumId` |
-| 커리큘럼 관리 | `/curriculums/:curriculumId/manage` |
-| 레슨 생성 | `/curriculums/:curriculumId/sections/:sectionId/lessons/new` |
-| 레슨 수정 | `/curriculums/:curriculumId/sections/:sectionId/lessons/:lessonId/edit` |
-| 레슨 상세 | `/curriculums/:curriculumId/sections/:sectionId/lessons/:lessonId` |
+| 커리큘럼 관리 | `/instructor/curriculums/:curriculumId/manage` |
+| 레슨 생성 | `/instructor/curriculums/:curriculumId/sections/:sectionId/lessons/new` |
+| 강사 레슨 수정 | `/instructor/curriculums/:curriculumId/sections/:sectionId/lessons/:lessonId/edit` |
+| 학생 레슨 상세 | `/student/curriculums/:curriculumId/sections/:sectionId/lessons/:lessonId` |
+| 강사 레슨 상세 | `/instructor/curriculums/:curriculumId/sections/:sectionId/lessons/:lessonId` |
 | 라이브 세션 생성 | `/instructor/lessons/:lessonId/live-sessions/new` |
 | 라이브 세션 수정 | `/instructor/live-sessions/:sessionId/edit` |
-| 라이브 세션 상세 | `/live-sessions/:sessionId` |
-| 수강생 입장 전 점검 | `/live-sessions/:sessionId/prejoin` |
+| 학생 라이브 세션 상세 | `/student/live-sessions/:sessionId` |
+| 강사 라이브 세션 상세 | `/instructor/live-sessions/:sessionId` |
+| 수강생 입장 전 점검 | `/student/live-sessions/:sessionId/prejoin` |
 | 강사 사전 점검 | `/instructor/live-sessions/:sessionId/preflight` |
-| 라이브 레슨 | `/live-sessions/:sessionId/classroom` |
+| 학생 라이브 레슨 | `/student/live-sessions/:sessionId/classroom` |
+| 강사 라이브 레슨 | `/instructor/live-sessions/:sessionId/classroom` |
 | 녹화 처리 현황 | `/instructor/live-sessions/:sessionId/processing` |
-| VOD 레슨 | `/lessons/:lessonId/replay` |
+| 학생 VOD 레슨 | `/student/lessons/:lessonId/replay` |
+| 강사 VOD 검수 | `/instructor/lessons/:lessonId/replay` |
 | 접근 불가 | `/forbidden` |
 | 찾을 수 없음 | `*` |
 
@@ -372,6 +380,7 @@ AI 준비가 끝나 `READY`가 된 레슨을 강사가 게시하면 `PUBLISHED`�
 - `OPEN` 이후 입장 전 점검으로 이동
 - 스피커·autoplay·네트워크·표시명 확인. 카메라·마이크 점검은 제공하지 않음
 - `LIVE`가 확인된 뒤 강의실 입장
+- 점검 완료 문맥 없이 강의실 주소에 직접 접근하면 같은 세션의 입장 전 점검으로 복귀
 - `CANCELLED`·`FAILED`·`ENDED` 상태별 안내와 복구 동선 확인
 
 세부 구성은 [라이브 세션 준비·상세 컴포넌트 명세](components/LIVE_SESSION.md)를 따른다.

@@ -1,4 +1,7 @@
-export type CourseRelationship =
+import type { CurriculumOutlineLesson } from '@/features/lesson/types'
+import type { CurriculumDetailViewerContext } from '@/features/enrollment/types'
+
+export type CurriculumRelationship =
   | 'GUEST'
   | 'UNENROLLED_STUDENT'
   | 'PENDING_ENROLLMENT'
@@ -6,27 +9,27 @@ export type CourseRelationship =
   | 'OWNER_INSTRUCTOR'
   | 'NON_OWNER_INSTRUCTOR'
 
-export type CourseAllowedAction =
+export type CurriculumAllowedAction =
   | 'VIEW_DETAIL'
   | 'ENROLL'
   | 'CONTINUE_LEARNING'
-  | 'MANAGE_COURSE'
+  | 'MANAGE_CURRICULUM'
   | 'JOIN_LIVE'
 
-export type CourseSort =
+export type CurriculumSort =
   | 'LATEST'
   | 'STARTING_SOON'
   | 'TITLE_ASC'
   | 'RECOMMENDED'
 
-export interface CourseProgress {
+export interface CurriculumProgress {
   completedLessonCount: number
   totalLessonCount: number
   progressPercent: number
 }
 
-export interface CourseCardSummary {
-  courseId: string
+export interface CurriculumCardSummary {
+  curriculumId: string
   title: string
   summary: string
   thumbnailUrl: string | null
@@ -42,14 +45,14 @@ export interface CourseCardSummary {
   sectionCount: number
   lessonCount: number
   viewerContext: {
-    relationship: CourseRelationship
-    allowedActions: CourseAllowedAction[]
-    progress?: CourseProgress
+    relationship: CurriculumRelationship
+    allowedActions: CurriculumAllowedAction[]
+    progress?: CurriculumProgress
   }
 }
 
-export interface CourseListResponse {
-  items: CourseCardSummary[]
+export interface CurriculumListResponse {
+  items: CurriculumCardSummary[]
   page: number
   size: number
   totalElements: number
@@ -57,11 +60,54 @@ export interface CourseListResponse {
   hasNext: boolean
 }
 
-export interface CourseListQuery {
+export interface CurriculumListQuery {
   q?: string
   featured?: boolean
   lifecycleStatus?: string
-  sort?: CourseSort
+  sort?: CurriculumSort
   page?: number
   size?: number
+}
+
+export interface CurriculumDetailPeriod {
+  startsAt: string
+  endsAt: string
+}
+
+export type CurriculumEnrollmentPolicyType = 'IMMEDIATE' | 'APPROVAL_REQUIRED' | 'INVITATION_ONLY'
+
+export interface CurriculumEnrollmentPolicy {
+  type: CurriculumEnrollmentPolicyType
+  status: string
+  opensAt: string | null
+  closesAt: string | null
+}
+
+export interface CurriculumInstructorProfile {
+  instructorId: string
+  displayName: string
+  bio: string
+  expertise: string[]
+}
+
+export interface CurriculumOutlineSection {
+  sectionId: string
+  title: string
+  description: string | null
+  order: number
+  lessons: CurriculumOutlineLesson[]
+}
+
+export interface CurriculumDetailResponse {
+  curriculumId: string
+  title: string
+  summary: string
+  description: string
+  thumbnailUrl: string | null
+  lifecycleStatus: string
+  period: CurriculumDetailPeriod | null
+  enrollmentPolicy: CurriculumEnrollmentPolicy
+  instructor: CurriculumInstructorProfile
+  outline: CurriculumOutlineSection[]
+  viewerContext: CurriculumDetailViewerContext
 }

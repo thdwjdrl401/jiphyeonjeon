@@ -492,7 +492,7 @@
   object-fit: cover;
 }
 
-.course-art {
+.curriculum-art {
   position: relative;
   width: 100%;
   height: 100%;
@@ -500,7 +500,7 @@
   background: linear-gradient(145deg, #dce5ff, #9eb4ff);
 }
 
-.course-art::after {
+.curriculum-art::after {
   position: absolute;
   top: 28px;
   right: 30px;
@@ -512,7 +512,7 @@
   transform: rotate(18deg);
 }
 
-.course-art__grid {
+.curriculum-art__grid {
   position: absolute;
   inset: 0;
   opacity: 0.4;
@@ -520,7 +520,7 @@
   background-size: 24px 24px;
 }
 
-.course-art__orb {
+.curriculum-art__orb {
   position: absolute;
   right: -20px;
   bottom: -36px;
@@ -530,11 +530,11 @@
   background: rgba(255, 255, 255, 0.25);
 }
 
-.course-art--1 { background: linear-gradient(145deg, #e5dbff, #a58ee9); }
-.course-art--2 { background: linear-gradient(145deg, #d8f4ee, #79cfbd); }
-.course-art--3 { background: linear-gradient(145deg, #ffe4d6, #f5aa7f); }
-.course-art--4 { background: linear-gradient(145deg, #d9eafa, #76afd9); }
-.course-art--5 { background: linear-gradient(145deg, #f3e6cf, #d6b77e); }
+.curriculum-art--1 { background: linear-gradient(145deg, #e5dbff, #a58ee9); }
+.curriculum-art--2 { background: linear-gradient(145deg, #d8f4ee, #79cfbd); }
+.curriculum-art--3 { background: linear-gradient(145deg, #ffe4d6, #f5aa7f); }
+.curriculum-art--4 { background: linear-gradient(145deg, #d9eafa, #76afd9); }
+.curriculum-art--5 { background: linear-gradient(145deg, #f3e6cf, #d6b77e); }
 
 .status-badge {
   position: absolute;
@@ -587,11 +587,11 @@
   line-height: 1.65;
 }
 
-.course-progress {
+.curriculum-progress {
   margin: 15px 0;
 }
 
-.course-progress > div {
+.curriculum-progress > div {
   display: flex;
   justify-content: space-between;
   margin-bottom: 6px;
@@ -599,7 +599,7 @@
   font-size: 0.67rem;
 }
 
-.course-progress strong { color: var(--blue-600); }
+.curriculum-progress strong { color: var(--blue-600); }
 
 .progress-track {
   display: block;

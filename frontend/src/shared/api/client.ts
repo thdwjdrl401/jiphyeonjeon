@@ -1,4 +1,5 @@
 import axios, { AxiosHeaders, type AxiosError } from 'axios'
+import { isMockApiEnabled } from '@/shared/config/runtime'
 
 export interface FieldError {
   field: string
@@ -56,6 +57,13 @@ async function getCsrfToken() {
 }
 
 apiClient.interceptors.request.use(async (config) => {
+  if (isMockApiEnabled) {
+    throw new ApiError(
+      'Mock API 모드에서는 실제 네트워크 요청을 보낼 수 없습니다.',
+      undefined,
+      'MOCK_API_NETWORK_REQUEST_BLOCKED',
+    )
+  }
   const method = config.method?.toUpperCase() ?? 'GET'
   const needsCsrf = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)
 
@@ -71,6 +79,8 @@ apiClient.interceptors.request.use(async (config) => {
 apiClient.interceptors.response.use(
   (response) => response,
   (error: AxiosError<ErrorResponse>) => {
+    if (error instanceof ApiError) return Promise.reject(error)
+
     const response = error.response
     const payload = response?.data
 

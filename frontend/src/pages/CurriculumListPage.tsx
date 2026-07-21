@@ -3,12 +3,12 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/features/auth/AuthContext'
 import CurriculumCard from '@/features/curriculum/CurriculumCard'
 import CurriculumCardSkeleton from '@/features/curriculum/CurriculumCardSkeleton'
-import type { CourseSort } from '@/features/curriculum/types'
-import { useCourses } from '@/features/curriculum/useCourses'
+import type { CurriculumSort } from '@/features/curriculum/types'
+import { useCurriculums } from '@/features/curriculum/useCurriculums'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
 
-const validSorts = new Set<CourseSort>(['LATEST', 'STARTING_SOON', 'TITLE_ASC'])
+const validSorts = new Set<CurriculumSort>(['LATEST', 'STARTING_SOON', 'TITLE_ASC'])
 const MAX_VISIBLE_PAGES = 5
 
 function getPageWindow(current: number, total: number, maxVisible: number) {
@@ -24,14 +24,14 @@ export default function CurriculumListPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const queryText = searchParams.get('q') ?? ''
   const [searchInput, setSearchInput] = useState(queryText)
-  const sortParam = searchParams.get('sort') as CourseSort | null
+  const sortParam = searchParams.get('sort') as CurriculumSort | null
   const sort = sortParam && validSorts.has(sortParam) ? sortParam : 'LATEST'
   const rawPage = Number(searchParams.get('page') ?? '0')
   const page = Number.isInteger(rawPage) && rawPage >= 0 ? rawPage : 0
 
   useEffect(() => setSearchInput(queryText), [queryText])
 
-  const courseQuery = useCourses(
+  const curriculumQuery = useCurriculums(
     {
       q: queryText || undefined,
       lifecycleStatus: 'PUBLISHED',
@@ -39,7 +39,7 @@ export default function CurriculumListPage() {
       page,
       size: 9,
     },
-    user?.userId,
+    user ?? undefined,
   )
 
   const updateParams = (changes: Record<string, string | null>) => {
@@ -61,7 +61,7 @@ export default function CurriculumListPage() {
     setSearchParams({})
   }
 
-  const data = courseQuery.data
+  const data = curriculumQuery.data
   const hasConditions = Boolean(queryText || sort !== 'LATEST')
 
   return (
@@ -84,7 +84,7 @@ export default function CurriculumListPage() {
           <label className="search-field">
             <span className="visually-hidden">커리큘럼 검색</span>
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
-            <input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="제목, 소개, 강사 이름으로 검색" />
+            <input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="제목과 소개로 검색" />
             {searchInput && <button type="button" aria-label="검색어 지우기" onClick={() => setSearchInput('')}>×</button>}
           </label>
           <button className="button button--primary catalog-search-button" type="submit">검색</button>
@@ -106,10 +106,10 @@ export default function CurriculumListPage() {
           {hasConditions && <button className="reset-button" type="button" onClick={resetFilters}>조건 초기화</button>}
         </div>
 
-        {courseQuery.isPending ? (
+        {curriculumQuery.isPending ? (
           <CurriculumCardSkeleton count={6} />
-        ) : courseQuery.isError ? (
-          <PageState title="커리큘럼을 불러오지 못했어요" description="네트워크 연결을 확인한 뒤 다시 시도해 주세요." action={<button className="button button--primary" type="button" onClick={() => courseQuery.refetch()}>다시 시도</button>} />
+        ) : curriculumQuery.isError ? (
+          <PageState title="커리큘럼을 불러오지 못했어요" description="네트워크 연결을 확인한 뒤 다시 시도해 주세요." action={<button className="button button--primary" type="button" onClick={() => curriculumQuery.refetch()}>다시 시도</button>} />
         ) : !data ? (
           <CurriculumCardSkeleton count={6} />
         ) : data.items.length === 0 ? (
@@ -120,10 +120,10 @@ export default function CurriculumListPage() {
           />
         ) : (
           <>
-            <div className={`curriculum-grid${courseQuery.isFetching ? ' is-updating' : ''}`}>
-              {data.items.map((course) => <CurriculumCard key={course.courseId} course={course} />)}
+            <div className={`curriculum-grid${curriculumQuery.isFetching ? ' is-updating' : ''}`}>
+              {data.items.map((curriculum) => <CurriculumCard key={curriculum.curriculumId} curriculum={curriculum} />)}
             </div>
-            {courseQuery.isFetching && <span className="catalog-updating" role="status">결과를 업데이트하고 있어요.</span>}
+            {curriculumQuery.isFetching && <span className="catalog-updating" role="status">결과를 업데이트하고 있어요.</span>}
             {data.totalPages > 1 && (() => {
               const pageWindow = getPageWindow(page, data.totalPages, MAX_VISIBLE_PAGES)
               const [firstVisible] = pageWindow

@@ -55,10 +55,12 @@ STARTING ─────────→ FAILED
 |---|---|---|
 | 세션 생성 | `/instructor/lessons/:lessonId/live-sessions/new` | 해당 lesson 강사 |
 | 세션 수정 | `/instructor/live-sessions/:sessionId/edit` | 해당 세션 강사 |
-| 세션 상세 | `/live-sessions/:sessionId` | 해당 강사·수강생 |
-| 수강생 prejoin | `/live-sessions/:sessionId/prejoin` | 입장 권한 수강생 |
+| 강사 세션 상세 | `/instructor/live-sessions/:sessionId` | 해당 세션 강사 |
+| 학생 세션 상세 | `/student/live-sessions/:sessionId` | 해당 커리큘럼 수강생 |
+| 수강생 prejoin | `/student/live-sessions/:sessionId/prejoin` | 입장 권한 수강생 |
 | 강사 preflight | `/instructor/live-sessions/:sessionId/preflight` | 해당 세션 강사 |
-| 라이브 강의실 | `/live-sessions/:sessionId/classroom` | 유효 입장 권한 |
+| 강사 라이브 강의실 | `/instructor/live-sessions/:sessionId/classroom` | 해당 세션 강사 |
+| 학생 라이브 강의실 | `/student/live-sessions/:sessionId/classroom` | prejoin을 완료한 수강생 |
 | 녹화 처리 | `/instructor/live-sessions/:sessionId/processing` | 해당 세션 강사 |
 
 ## 5. 컴포넌트 트리
@@ -197,7 +199,7 @@ MVP 1:1 제약으로 기존 세션이 있으면 새 세션 생성을 차단하�
 | `SCHEDULED` | 일정·카운트다운 확인 |
 | `OPEN` | 입장 전 점검 |
 | `STARTING` | 강사 시작 대기 |
-| `LIVE` | 입장 전 점검 또는 라이브 입장 |
+| `LIVE` | 입장 전 점검 필수 |
 | `ENDING` | 종료 처리 안내 |
 | `ENDED` | 다시보기 준비 상태 |
 | `CANCELLED` | 취소 안내 |
@@ -215,6 +217,8 @@ MVP 1:1 제약으로 기존 세션이 있으면 새 세션 생성을 차단하�
 - token 요청 실패와 LiveKit 연결 실패 구분
 
 점검을 통과해도 session이 `LIVE`가 아니면 classroom 연결 대신 시작 대기 상태를 유지한다.
+
+수강생은 `OPEN`과 `LIVE` 모두 prejoin을 먼저 거친다. 프론트는 점검 완료 문맥 없이 `/student/live-sessions/:sessionId/classroom`으로 직접 접근한 수강생을 `/student/live-sessions/:sessionId/prejoin`으로 되돌린다. 이 클라이언트 가드는 보안 판정을 대신하지 않으며 LiveKit token 발급 시 서버가 수강 권한과 세션 상태를 다시 검증한다.
 
 ## 10. 강사 사전 점검과 시작 차단
 

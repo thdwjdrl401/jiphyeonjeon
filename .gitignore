@@ -1,3 +1,4 @@
+.sub1/
 # Frontend build output (FE/BE 분리 — frontend/dist 로컬 산출)
 frontend/dist/
 

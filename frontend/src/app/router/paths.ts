@@ -1,0 +1,52 @@
+import type { UserRole } from '@/features/auth/types'
+
+export const publicPaths = {
+  home: '/',
+  login: '/login',
+  signup: '/signup',
+  curriculums: '/curriculums',
+  curriculum: (curriculumId: string) => `/curriculums/${curriculumId}`,
+  forbidden: (reason?: 'student' | 'instructor' | 'enrollment' | 'ownership') =>
+    reason ? `/forbidden?reason=${reason}` : '/forbidden',
+}
+
+export const studentPaths = {
+  root: '/student',
+  profile: '/student/profile',
+  curriculums: '/student/curriculums',
+  lesson: (curriculumId: string, sectionId: string, lessonId: string) =>
+    `/student/curriculums/${curriculumId}/sections/${sectionId}/lessons/${lessonId}`,
+  liveUpcoming: (curriculumId: string, lessonId: string) =>
+    `/student/curriculums/${curriculumId}/lessons/${lessonId}/live-upcoming`,
+  liveSession: (sessionId: string) => `/student/live-sessions/${sessionId}`,
+  prejoin: (sessionId: string) => `/student/live-sessions/${sessionId}/prejoin`,
+  classroom: (sessionId: string) => `/student/live-sessions/${sessionId}/classroom`,
+  replay: (lessonId: string) => `/student/lessons/${lessonId}/replay`,
+  vod: (curriculumId: string, lessonId: string) =>
+    `/student/curriculums/${curriculumId}/lessons/${lessonId}/vod`,
+}
+
+export const instructorPaths = {
+  root: '/instructor',
+  profile: '/instructor/profile',
+  curriculums: '/instructor/curriculums',
+  newCurriculum: '/instructor/curriculums/new',
+  curriculumManage: (curriculumId: string) => `/instructor/curriculums/${curriculumId}/manage`,
+  lesson: (curriculumId: string, sectionId: string, lessonId: string) =>
+    `/instructor/curriculums/${curriculumId}/sections/${sectionId}/lessons/${lessonId}`,
+  newLesson: (curriculumId: string, sectionId: string) =>
+    `/instructor/curriculums/${curriculumId}/sections/${sectionId}/lessons/new`,
+  editLesson: (curriculumId: string, sectionId: string, lessonId: string) =>
+    `/instructor/curriculums/${curriculumId}/sections/${sectionId}/lessons/${lessonId}/edit`,
+  newLiveSession: (lessonId: string) => `/instructor/lessons/${lessonId}/live-sessions/new`,
+  liveSession: (sessionId: string) => `/instructor/live-sessions/${sessionId}`,
+  editLiveSession: (sessionId: string) => `/instructor/live-sessions/${sessionId}/edit`,
+  preflight: (sessionId: string) => `/instructor/live-sessions/${sessionId}/preflight`,
+  classroom: (sessionId: string) => `/instructor/live-sessions/${sessionId}/classroom`,
+  processing: (sessionId: string) => `/instructor/live-sessions/${sessionId}/processing`,
+  replay: (lessonId: string) => `/instructor/lessons/${lessonId}/replay`,
+}
+
+export function getRoleHomePath(role: UserRole) {
+  return role === 'INSTRUCTOR' ? instructorPaths.curriculums : studentPaths.curriculums
+}

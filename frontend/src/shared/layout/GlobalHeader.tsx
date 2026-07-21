@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
+import { getRoleHomePath, instructorPaths, publicPaths, studentPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
 import BrandLink from './BrandLink'
 
@@ -9,6 +10,8 @@ export default function GlobalHeader() {
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const { user, status, logout } = useAuth()
   const navigate = useNavigate()
+  const workspaceHome = user ? getRoleHomePath(user.role) : publicPaths.home
+  const profilePath = user?.role === 'INSTRUCTOR' ? instructorPaths.profile : studentPaths.profile
 
   const closeMenu = () => setIsMenuOpen(false)
 
@@ -18,7 +21,7 @@ export default function GlobalHeader() {
     try {
       await logout()
       closeMenu()
-      navigate('/')
+      navigate(publicPaths.home)
     } catch {
       setLogoutError('로그아웃하지 못했습니다. 잠시 후 다시 시도해 주세요.')
     } finally {
@@ -50,19 +53,19 @@ export default function GlobalHeader() {
         >
           <nav className="primary-navigation" aria-label="주요 메뉴">
             <NavLink
-              to="/curriculums"
+              to={publicPaths.curriculums}
               onClick={closeMenu}
               className={({ isActive }) => (isActive ? 'is-active' : undefined)}
             >
               커리큘럼 탐색
             </NavLink>
             {user && (
-              <Link to="/me/curriculums" onClick={closeMenu}>
+              <Link to={workspaceHome} onClick={closeMenu}>
                 내 커리큘럼
               </Link>
             )}
             {user?.role === 'INSTRUCTOR' && (
-              <Link to="/curriculums/new" onClick={closeMenu}>
+              <Link to={instructorPaths.newCurriculum} onClick={closeMenu}>
                 커리큘럼 만들기
               </Link>
             )}
@@ -73,7 +76,7 @@ export default function GlobalHeader() {
               <span className="header-auth-loading" aria-label="로그인 상태 확인 중" />
             ) : user ? (
               <>
-                <Link className="user-chip" to="/me/profile" onClick={closeMenu}>
+                <Link className="user-chip" to={profilePath} onClick={closeMenu}>
                   <span className="user-avatar" aria-hidden="true">
                     {user.displayName.slice(0, 1)}
                   </span>
@@ -93,10 +96,10 @@ export default function GlobalHeader() {
               </>
             ) : (
               <>
-                <Link className="button button--ghost button--small" to="/login" onClick={closeMenu}>
+                <Link className="button button--ghost button--small" to={publicPaths.login} onClick={closeMenu}>
                   로그인
                 </Link>
-                <Link className="button button--primary button--small" to="/signup" onClick={closeMenu}>
+                <Link className="button button--primary button--small" to={publicPaths.signup} onClick={closeMenu}>
                   무료로 시작하기
                 </Link>
               </>

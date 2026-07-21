@@ -1,4 +1,5 @@
 import { ApiError } from '@/shared/api/client'
+import { MOCK_INSTRUCTOR_ID, MOCK_STUDENT_ID, resetMockDatabase } from '@/features/demo/mockDatabase'
 import type {
   AuthUser,
   EmailAvailability,
@@ -25,6 +26,7 @@ export function peekMockUser() {
 
 export function resetMockAuth() {
   currentUser = null
+  resetMockDatabase()
   reservedEmails.clear()
   initialReservedEmails.forEach((email) => reservedEmails.add(email))
 }
@@ -47,9 +49,9 @@ export const mockAuthService = {
 
     const isInstructor = /teacher|instructor/i.test(request.email)
     currentUser = {
-      userId: isInstructor ? 'usr_mock_instructor' : 'usr_mock_student',
+      userId: isInstructor ? MOCK_INSTRUCTOR_ID : MOCK_STUDENT_ID,
       email: request.email,
-      displayName: isInstructor ? '이강사' : '김학생',
+      displayName: isInstructor ? '이도현' : '김학생',
       role: isInstructor ? 'INSTRUCTOR' : 'STUDENT',
     }
     return currentUser

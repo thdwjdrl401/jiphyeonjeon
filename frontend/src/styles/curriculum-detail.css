@@ -1,0 +1,346 @@
+/* 커리큘럼 상세 페이지 (/curriculums/:curriculumId) */
+
+.curriculum-detail-page {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+  padding-block: 40px 80px;
+}
+
+.curriculum-hero {
+  background: var(--ink-50);
+  border-radius: var(--radius-xl);
+  padding: 32px;
+}
+
+.curriculum-hero__grid {
+  display: grid;
+  gap: 20px;
+}
+
+.curriculum-identity h1 {
+  margin: 12px 0 8px;
+  font-size: clamp(1.6rem, 2.4vw, 2.2rem);
+}
+
+.curriculum-identity p {
+  color: var(--ink-700);
+}
+
+.curriculum-metadata {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 16px;
+}
+
+.curriculum-metadata dt {
+  font-size: 0.8rem;
+  color: var(--ink-500);
+}
+
+.curriculum-metadata dd {
+  margin: 4px 0 0;
+  font-weight: 600;
+  color: var(--ink-900);
+}
+
+.curriculum-primary-action {
+  justify-self: start;
+}
+
+.curriculum-overview,
+.instructor-summary,
+.curriculum-progress-panel,
+.curriculum-outline {
+  background: var(--white);
+  border: 1px solid var(--ink-100);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+}
+
+.instructor-summary__expertise {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+}
+
+.instructor-summary__expertise li {
+  background: var(--blue-50);
+  color: var(--blue-700);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 0.85rem;
+}
+
+.curriculum-outline__sections {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.curriculum-section {
+  border: 1px solid var(--ink-100);
+  border-radius: var(--radius-md);
+}
+
+.curriculum-section__toggle {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--ink-900);
+}
+
+.curriculum-section__count {
+  font-weight: 400;
+  color: var(--ink-500);
+  font-size: 0.85rem;
+}
+
+.curriculum-section__lessons {
+  list-style: none;
+  margin: 0;
+  padding: 0 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.curriculum-lesson {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+}
+
+.curriculum-lesson__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.curriculum-lesson__title {
+  width: fit-content;
+  max-width: 100%;
+  color: var(--ink-900);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+a.curriculum-lesson__title:hover {
+  color: var(--blue-700);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.curriculum-lesson__states {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.curriculum-lesson__state,
+.curriculum-lesson__done {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.curriculum-lesson__state--draft,
+.curriculum-lesson__state--ai_not_ready,
+.curriculum-lesson__state--default {
+  background: var(--ink-100);
+  color: var(--ink-700);
+}
+
+.curriculum-lesson__state--ready,
+.curriculum-lesson__state--scheduled {
+  background: var(--blue-50);
+  color: var(--blue-700);
+}
+
+.curriculum-lesson__state--published,
+.curriculum-lesson__state--replay,
+.curriculum-lesson__done {
+  background: var(--green-50);
+  color: var(--green-700);
+}
+
+.curriculum-lesson__state--live,
+.curriculum-lesson__state--warning {
+  background: var(--red-50);
+  color: var(--red-600);
+}
+
+.curriculum-lesson a.curriculum-lesson__replay {
+  flex: none;
+}
+
+.curriculum-lesson__done {
+  padding-inline: 6px;
+}
+
+.curriculum-lesson__action {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid var(--ink-200);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  color: var(--ink-800);
+  font-size: 0.84rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.curriculum-lesson__action:hover {
+  border-color: var(--blue-500);
+  color: var(--blue-700);
+}
+
+.curriculum-lesson__action--live {
+  border-color: var(--red-600);
+  color: var(--red-600);
+}
+
+.curriculum-lesson__action--replay {
+  border-color: var(--green-700);
+  color: var(--green-700);
+}
+
+.curriculum-lesson__action--disabled {
+  border-color: var(--ink-100);
+  background: var(--ink-50);
+  color: var(--ink-500);
+  cursor: not-allowed;
+}
+
+.curriculum-lesson__action--disabled:hover {
+  border-color: var(--ink-100);
+  color: var(--ink-500);
+}
+
+.curriculum-lesson--locked {
+  color: var(--ink-500);
+}
+
+.curriculum-lesson__locked-action {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.curriculum-lesson__lock {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: var(--ink-500);
+  stroke-width: 1.6;
+}
+
+.curriculum-lesson__reason {
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.relation-panel {
+  background: var(--blue-50);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.instructor-actions__buttons,
+.guest-actions__buttons {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.curriculum-notice {
+  background: var(--red-50);
+  color: var(--red-600);
+  border-radius: var(--radius-md);
+  padding: 16px 20px;
+}
+
+.curriculum-detail-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding-block: 40px;
+}
+
+.curriculum-detail-skeleton__hero {
+  height: 220px;
+  border-radius: var(--radius-xl);
+  background: var(--ink-100);
+}
+
+.curriculum-detail-skeleton__block {
+  height: 120px;
+  border-radius: var(--radius-lg);
+  background: var(--ink-100);
+}
+
+.curriculum-detail-skeleton__outline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.curriculum-detail-skeleton__row {
+  height: 48px;
+  border-radius: var(--radius-sm);
+  background: var(--ink-100);
+}
+
+@media (max-width: 640px) {
+  .curriculum-section__lessons {
+    padding-inline: 12px;
+  }
+
+  .curriculum-lesson {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .curriculum-lesson__action,
+  .curriculum-lesson__action--disabled,
+  .curriculum-lesson__locked-action {
+    align-self: flex-start;
+  }
+}

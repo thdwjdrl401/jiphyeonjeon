@@ -156,7 +156,7 @@ LessonDetailPage
 - `DRAFT`·`SCHEDULED`·`OPEN`·`STARTING`·`LIVE`·`ENDING`·`ENDED`·`CANCELLED`·`FAILED`
 - 역할별 허용 행동
 - 강사: 일정 수정, 상세, 사전 점검, 라이브 운영, 처리 현황
-- 수강생: 세션 상세, 입장 전 점검, 라이브 입장
+- 수강생: 세션 상세, 필수 입장 전 점검, 점검 완료 후 라이브 입장
 
 lesson 상세는 세션 시작·종료 요청을 직접 보내지 않는다.
 

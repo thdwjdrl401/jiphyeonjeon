@@ -16,7 +16,7 @@
 | 시점 | 호출 | 비고 |
 |---|---|---|
 | 최초 진입 | `GET /api/curriculums/{curriculumId}` | 공통 정보·목차·관계·대표 행동을 한 번에 조회 |
-| 수강 신청 | `POST /api/curriculums/{curriculumId}/enrollments` | 즉시 승인 또는 승인 대기 결과 반환 |
+| 수강 신청 | `POST /api/curriculums/{curriculumId}/enrollments` | 강사 승인 대기 결과 반환 |
 | 대기 신청 취소 | `DELETE /api/curriculums/{curriculumId}/enrollments/me` | 응답의 허용 행동이 있을 때만 노출 |
 
 ## 3. API 목록
@@ -48,7 +48,7 @@ GET /api/curriculums/{curriculumId}
     "endsAt": "2026-09-30T22:00:00+09:00"
   },
   "enrollmentPolicy": {
-    "type": "IMMEDIATE",
+    "type": "APPROVAL_REQUIRED",
     "status": "OPEN",
     "opensAt": null,
     "closesAt": null
@@ -73,9 +73,15 @@ GET /api/curriculums/{curriculumId}
           "lessonStatus": "PUBLISHED",
           "scheduledAt": "2026-08-01T10:00:00+09:00",
           "durationMs": 5400000,
+          "liveSession": {
+            "sessionId": "ses_01J...",
+            "liveSessionStatus": "SCHEDULED",
+            "scheduledAt": "2026-08-01T10:00:00+09:00"
+          },
+          "replayStatus": "NOT_READY",
           "access": {
             "allowed": true,
-            "destination": "LESSON_DETAIL",
+            "destination": "LIVE_SESSION",
             "reasonCode": null
           },
           "learning": {
@@ -116,7 +122,9 @@ GET /api/curriculums/{curriculumId}
 | 상태 | `lifecycleStatus`, `period`, `enrollmentPolicy` | 공개·운영·수강 상태 |
 | 강사 | `instructor` | 공개 가능한 강사 요약 |
 | 목차 | `outline[].sectionId`, `title`, `description`, `order` | 공개 섹션 |
-| 레슨 | `lessonId`, `title`, `order`, 공개 상태 요약 | 공개하기로 한 최소 목차 |
+| 레슨 | `lessonId`, `title`, `order`, `lessonStatus` | 레슨 게시 상태와 공개하기로 한 최소 목차 |
+| 라이브 | `liveSession.sessionId`, `liveSessionStatus`, `scheduledAt` | 연결된 라이브 세션이 없으면 `liveSession=null` |
+| 다시보기 | `replayStatus` | `NOT_READY`, `DRAFT`, `READY_FOR_REVIEW`, `PUBLISHED`, `WITHDRAWN` |
 
 비수강 사용자에게 `lessonStatus` 전체를 노출할지, `AVAILABLE|UPCOMING|LOCKED` 같은 공개용 상태로 변환할지는 **협의 필요**다. 내부 준비 상태 노출을 줄이기 위해 공개용 상태를 별도로 제공하는 방식을 제안한다.
 
@@ -158,7 +166,18 @@ GET /api/curriculums/{curriculumId}
 | `destination` | enum/null | `LESSON_DETAIL`, `LIVE_SESSION`, `LIVE_CLASSROOM`, `VOD` 제안 |
 | `reasonCode` | string/null | `ENROLLMENT_REQUIRED`, `LESSON_NOT_PUBLISHED`, `LIVE_NOT_STARTED`, `REPLAY_NOT_PUBLISHED` 등 |
 
-목적지 URL 자체는 서버가 반환하지 않는다. 프론트가 식별자와 허용된 destination을 내부 라우트에 매핑한다.
+목적지 URL 자체는 서버가 반환하지 않는다. 프론트는 다음과 같이 응답 식별자와 허용된 `destination`을 실제 내부 라우트에 매핑한다.
+
+| `destination` | 필요한 식별자 | 프론트 라우트 |
+|---|---|---|
+| `LESSON_DETAIL` | `curriculumId`, `sectionId`, `lessonId` | 학생은 `/student/curriculums/{curriculumId}/sections/{sectionId}/lessons/{lessonId}`, 강사는 같은 계층의 `/instructor/*` 경로 |
+| `LIVE_SESSION` | `liveSession.sessionId` | 학생은 `/student/live-sessions/{sessionId}`, 강사는 `/instructor/live-sessions/{sessionId}` |
+| `LIVE_CLASSROOM` | `liveSession.sessionId` | 학생은 `/student/live-sessions/{sessionId}/prejoin`을 먼저 거친 뒤 `/student/live-sessions/{sessionId}/classroom`으로 이동 |
+| `VOD` | `lessonId` | 학생은 `/student/lessons/{lessonId}/replay`, 강사는 `/instructor/lessons/{lessonId}/replay` |
+
+`LIVE_SESSION` 또는 `LIVE_CLASSROOM`인데 `liveSession.sessionId`가 누락되면 프론트는 존재하지 않는 URL을 만들지 않고 레슨 상세로 대체한다.
+
+학생용 레슨 행은 `lessonStatus`와 활동 상태를 함께 보여준다. `OPEN|LIVE`는 강의실 직접 입장 대신 `입장 준비`를 노출하고 반드시 prejoin으로 이동한다. `DRAFT|SCHEDULED|STARTING`은 라이브 상세 확인, `replayStatus=PUBLISHED`는 다시보기 이동을 제공한다. 라이브가 `ENDING|ENDED`이고 다시보기가 아직 게시되지 않았으면 `다시보기 준비 중`을 비활성 안내로 표시한다. 연결된 라이브 일정과 게시된 다시보기가 아직 없으면 `라이브 일정 준비 중` 상태와 `레슨 자료 보기` 행동을 제공한다.
 
 ### 4.5 상태코드
 
@@ -182,11 +201,13 @@ POST /api/curriculums/{curriculumId}/enrollments
 {
   "enrollmentId": "enr_01J...",
   "curriculumId": "cur_01J...",
-  "status": "ACTIVE",
+  "status": "PENDING",
   "requestedAt": "2026-07-20T12:00:00+09:00",
-  "approvedAt": "2026-07-20T12:00:00+09:00"
+  "approvedAt": null
 }
 ```
+
+현재 프론트 초기 범위는 `APPROVAL_REQUIRED`만 노출하며, 신청 결과는 항상 `PENDING`으로 시작한다. 아래의 다른 정책 값은 계약 호환과 후속 확장을 위한 값이다.
 
 | `enrollmentPolicy.type` | 생성 결과 |
 |---|---|
@@ -229,7 +250,7 @@ DELETE /api/curriculums/{curriculumId}/enrollments/me
 
 ## 8. 백엔드 협의 사항
 
-1. 수강 방식: 즉시 승인, 강사 승인, 초대 중 초기 지원 범위
+1. 강사 승인 수강의 승인·거절 알림과 재신청 제한 정책
 2. 강사 계정의 타 커리큘럼 수강 허용 여부
 3. 비수강 사용자에게 공개할 섹션·레슨 필드 범위
 4. 내부 `lessonStatus` 대신 공개용 레슨 상태를 둘지 여부

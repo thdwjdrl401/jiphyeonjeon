@@ -47,7 +47,7 @@
 | 라이브 세션 | `liveSession` | `sessionId` |
 | 수강 | `enrollment` | `enrollmentId` |
 
-프론트 문구·API 경로·필드 모두 커리큘럼으로 통일한다. 경로는 `curriculums`, 식별자는 `curriculumId`를 사용하며 `course`/`courseId` 명칭을 혼용하지 않는다.
+프론트 문구·API 경로·필드 모두 커리큘럼으로 통일한다. 경로는 `curriculums`, 식별자는 `curriculumId`를 사용하며 다른 도메인 명칭을 혼용하지 않는다.
 
 ## 2. 공통 호출 계약
 
