@@ -73,12 +73,11 @@ public class ChatService {
                 });
     }
 
-    /** 복구 조회(sessionId 기준): afterSessionMs 이후 삭제 안 된 메시지를 시각순으로. 세션 없으면 404. */
+    /** 복구 조회(sessionId 기준): afterSessionMs 이후 삭제 안 된 메시지를 시각순으로. 세션 없으면 404, 미접근 403. */
     @Transactional(readOnly = true)
-    public List<ChatMessage> listBySession(UUID sessionId, long afterSessionMs, int limit) {
-        if (!liveSessionRepository.existsById(sessionId)) {
-            throw new LiveSessionNotFoundException("라이브 세션이 없습니다.");
-        }
+    public List<ChatMessage> listBySession(UUID sessionId, UUID requesterId, long afterSessionMs, int limit) {
+        // 접근 게이트: 소유 강사이거나 활성 수강생만 채팅 이력 조회 가능(전송과 동일 게이트). 세션 없으면 404.
+        accessGuard.requireCanAccess(sessionId, requesterId);
         int capped = Math.min(Math.max(limit, 1), 200);
         return chatMessageRepository.findByLiveSessionIdAndSessionMsGreaterThanAndDeletedAtIsNullOrderBySessionMsAsc(
                 sessionId, afterSessionMs, Limit.of(capped));

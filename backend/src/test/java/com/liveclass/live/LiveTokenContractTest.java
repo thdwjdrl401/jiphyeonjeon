@@ -113,6 +113,32 @@ class LiveTokenContractTest {
                 .andExpect(status().isUnauthorized());
     }
 
+    @Test
+    void token_for_ended_session_is_conflict() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String[] created = createSession(instructor);
+        String sessionId = created[0];
+        write(post("/api/live-sessions/" + sessionId + "/start"), instructor, null).andExpect(status().isOk());
+        write(post("/api/live-sessions/" + sessionId + "/end"), instructor, null).andExpect(status().isOk());
+
+        // 소유 강사라 접근 게이트는 통과하지만, 종료된 세션엔 입장 토큰이 안 나간다 → 409.
+        write(post("/api/live-sessions/" + sessionId + "/token"), instructor, null)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("LIVE_SESSION_STATE_CONFLICT"));
+    }
+
+    @Test
+    void token_for_cancelled_session_is_conflict() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String[] created = createSession(instructor);
+        String sessionId = created[0];
+        write(post("/api/instructor/live-sessions/" + sessionId + "/cancel"), instructor, null).andExpect(status().isOk());
+
+        write(post("/api/live-sessions/" + sessionId + "/token"), instructor, null)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("LIVE_SESSION_STATE_CONFLICT"));
+    }
+
     // ---- 헬퍼 ----
 
     private String xsrfToken;

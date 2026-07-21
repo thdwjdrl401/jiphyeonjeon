@@ -8,6 +8,7 @@ import com.liveclass.lesson.repository.LessonRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -70,6 +71,26 @@ public class LessonManagementService implements LessonManagement {
     @Transactional
     public void delete(UUID lessonId) {
         lessonRepository.deleteById(lessonId);
+    }
+
+    @Override
+    @Transactional
+    public LessonView publish(UUID lessonId) {
+        Lesson lesson = lessonRepository.findById(lessonId)
+                .orElseThrow(() -> new IllegalStateException("레슨이 없습니다: " + lessonId));
+        lesson.setStatus(LessonStatus.PUBLISHED);
+        lesson.setPublishedAt(OffsetDateTime.now());
+        return toView(lesson);
+    }
+
+    @Override
+    @Transactional
+    public LessonView unpublish(UUID lessonId) {
+        Lesson lesson = lessonRepository.findById(lessonId)
+                .orElseThrow(() -> new IllegalStateException("레슨이 없습니다: " + lessonId));
+        lesson.setStatus(LessonStatus.DRAFT);
+        lesson.setPublishedAt(null);
+        return toView(lesson);
     }
 
     private int nextOrder(UUID sectionId) {

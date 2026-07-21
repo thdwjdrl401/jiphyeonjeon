@@ -34,7 +34,10 @@
 
 ## 영향·후속
 - **확장**: 다중 인스턴스가 되면 SimpleBroker 브로드캐스트가 인스턴스 경계를 못 넘는다 → 외부 브로커 릴레이(Redis/RabbitMQ STOMP)로 교체. 계약(destination·봉투)은 불변.
-- **구독 인가**: 현재는 "인증된 사용자면 아무 세션 채팅이나 구독 가능"이다. 수강/참가자 검증(enrollment)이 생기면 채널 구독 인가(ChannelInterceptor)를 추가할 것 — 참가자 추적 기능과 함께.
+- **구독 인가(구현됨, 2026-07-21)**: 핸드셰이크만 통과하면 아무나 `/topic/live-sessions/{id}/chat`을 구독해 실시간 채팅을 받을 수 있던 구멍을, `ChannelInterceptor`(`ChatTopicSubscriptionInterceptor`)로 SUBSCRIBE를 REST 조회와 동일 게이트(소유 강사·활성 수강생, `LiveAccessGuard.requireCanAccess`)로 검증해 닫았다.
+  - **핵심 결정 — 와일드카드 구독 차단**: SimpleBroker는 구독 destination을 AntPathMatcher **패턴으로 매칭**한다. 즉 `/topic/**`·`/topic/live-sessions/*/chat` 같은 와일드카드 구독이 특정 세션 브로드캐스트를 수신할 수 있어, 구체 토픽만 검사하면 우회된다. 그래서 `/topic`의 **구체적 채팅 토픽(`/topic/live-sessions/{uuid}/chat`)이 아닌 구독은 전부 거부**한다 — 이 앱의 유일한 브로커 토픽이 채팅이라 안전하고, 유효 UUID엔 패턴 메타문자가 없어 허용된 구독은 자기 세션만 매칭한다. (`/topic` 아닌 destination은 SimpleBroker의 prefix 검사가 애초에 등록을 막는다 — 2겹 방어.)
+  - **모듈 경계**: 인터셉터 등록은 `common→live` 역의존을 피해 live 모듈의 별도 `WebSocketMessageBrokerConfigurer`(`ChatWsSecurityConfig`)로 분리한다(브로커 설정은 common의 `WebSocketConfig` 유지, Spring이 모든 configurer를 수집·적용).
+  - 전송(SEND)은 이미 컨트롤러(`ChatWsController`)에서 게이팅되며, REST 조회·토큰 발급 게이트와 함께 라이브 접근제어를 완성한다. 후속: SUBSCRIBE 레이트리밋.
 - **세션 만료 전파**: 핸드셰이크 시점 인증만 강제한다. HTTP 세션이 만료돼도 열린 WS는 즉시 끊기지 않음 — 강제 로그아웃/강퇴 즉시성이 필요하면 Spring Session WS 연동(만료 시 disconnect)을 추가.
 - **자막·presence·state 채널**(LIVE.md §8)은 이 ADR 범위 밖(CP2 STT 등에서 같은 봉투·엔드포인트 재사용).
 - **미구현 계약 항목**: WS `mine` 대체안은 FE 회신 대기(open-questions §8).

@@ -1,10 +1,12 @@
 package com.liveclass.live.web;
 
 import com.liveclass.live.api.LiveSessionView;
+import com.liveclass.live.domain.LiveSessionStatus;
 import com.liveclass.live.service.LiveKitTokenService;
 import com.liveclass.live.service.LiveAccessGuard;
 import com.liveclass.live.service.LiveSessionNotFoundException;
 import com.liveclass.live.service.LiveSessionService;
+import com.liveclass.live.service.LiveSessionStateConflictException;
 import com.liveclass.live.web.dto.LiveTokenResponse;
 import com.liveclass.live.web.dto.ParticipantView;
 import com.liveclass.live.web.dto.UpdateLiveSessionRequest;
@@ -107,6 +109,14 @@ public class LiveSessionController {
         String requesterId = authentication.getName();
         // 접근 게이트: 소유 강사이거나 소속 커리큘럼의 활성 수강생만. 아니면 403.
         accessGuard.requireCanAccess(sessionId, UUID.fromString(requesterId));
+        // 상태 게이트: 종료·취소·실패한 세션엔 입장 토큰을 발급하지 않는다(끝난/취소된 방 재입장 차단).
+        // 게이트를 접근검증 뒤에 둬서 미수강자에겐 세션 상태를 흘리지 않는다. enum 비교라 오타로 fail-open 안 된다.
+        LiveSessionStatus liveStatus = LiveSessionStatus.valueOf(session.liveSessionStatus());
+        if (liveStatus == LiveSessionStatus.ENDED
+                || liveStatus == LiveSessionStatus.CANCELLED
+                || liveStatus == LiveSessionStatus.FAILED) {
+            throw new LiveSessionStateConflictException("종료되었거나 취소된 세션에는 입장할 수 없습니다.");
+        }
         boolean publisher = requesterId.equals(session.instructorId().toString());
         // 방 이름은 세션 ID로 결정론적으로 만든다. LiveKit이 붙이는 room_sid는 실제 시작 시 채운다.
         String room = "session-" + sessionId;

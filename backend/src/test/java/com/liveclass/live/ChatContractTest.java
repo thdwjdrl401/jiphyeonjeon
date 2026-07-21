@@ -168,6 +168,18 @@ class ChatContractTest {
                 .andExpect(status().isUnauthorized());
     }
 
+    @Test
+    void listing_messages_without_enrollment_is_forbidden() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String[] created = createStartedSession(instructor);
+        String sessionId = created[0];
+
+        Cookie[] student = loginAs("STUDENT");   // 수강 신청 안 함 — 조회도 막혀야 한다(전송과 동일 게이트).
+        mockMvc.perform(get("/api/live-sessions/" + sessionId + "/messages").cookie(student))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("LIVE_SESSION_FORBIDDEN"));
+    }
+
     // ---- 헬퍼 ----
 
     private String xsrfToken;
