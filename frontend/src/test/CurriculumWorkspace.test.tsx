@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
 import App from '@/App'
@@ -10,7 +10,13 @@ async function renderAsInstructor(path: string) {
   return render(<App />)
 }
 
-describe('강사 커리큘럼 작업 화면', () => {
+async function renderAsStudent(path: string) {
+  await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
+  window.history.pushState({}, '', path)
+  return render(<App />)
+}
+
+describe('커리큘럼 작업 화면', () => {
   beforeEach(() => {
     resetMockAuth()
     window.history.replaceState({}, '', '/')
@@ -58,5 +64,19 @@ describe('강사 커리큘럼 작업 화면', () => {
     await renderAsInstructor('/instructor/curriculums')
     expect(await screen.findByAltText('라이브로 완성하는 Spring Boot 대표 이미지')).toBeInTheDocument()
     expect(screen.getByAltText('확장 가능한 서비스 아키텍처 대표 이미지')).toBeInTheDocument()
+  })
+
+  it('학생 내 커리큘럼에서 승인 대기 목록을 학습 진행 정보 없이 표시한다', async () => {
+    await renderAsStudent('/student/curriculums')
+    const heading = await screen.findByRole('heading', { name: '승인 대기 중인 커리큘럼' })
+    const section = heading.closest('section')
+
+    expect(section).not.toBeNull()
+    const pendingSection = within(section!)
+    expect(pendingSection.getByRole('heading', { name: '성능을 바꾸는 SQL 튜닝' })).toBeInTheDocument()
+    expect(pendingSection.getByText('승인 대기')).toBeInTheDocument()
+    expect(pendingSection.queryByRole('link', { name: '학습 계속하기' })).not.toBeInTheDocument()
+    expect(pendingSection.queryByText(/레슨$/)).not.toBeInTheDocument()
+    expect(pendingSection.getByRole('link', { name: '상세' })).toBeInTheDocument()
   })
 })

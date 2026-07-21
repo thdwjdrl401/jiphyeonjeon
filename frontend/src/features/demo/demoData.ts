@@ -168,6 +168,21 @@ export function getDemoStudentCurriculums(userId: string) {
     })
 }
 
+export function getDemoPendingStudentCurriculums(userId: string) {
+  return getMockEnrollments(userId)
+    .filter((enrollment) => enrollment.status === 'PENDING')
+    .map((enrollment) => {
+      const curriculum = getMockCurriculum(enrollment.curriculumId)!
+      return {
+        curriculumId: curriculum.curriculumId,
+        title: curriculum.title,
+        summary: curriculum.summary,
+        thumbnailUrl: curriculum.thumbnailUrl,
+        instructor: curriculum.instructor.displayName,
+      }
+    })
+}
+
 export function getDemoUpcomingLiveSession(userId: string) {
   const curriculums = getMockEnrollments(userId)
     .filter((enrollment) => enrollment.status === 'ACTIVE')
