@@ -53,6 +53,12 @@ dependencies {
     // 브로드캐스트는 SimpleBroker(/topic)로 나간다. 클러스터 확장 시 외부 브로커로 교체.
     implementation 'org.springframework.boot:spring-boot-starter-websocket'
 
+    // 에셋 업로드 = presigned direct-to-storage (MinIO/S3 호환). 바이트는 Spring을 거치지 않고
+    // 클라이언트가 스토리지로 직접 PUT 한다 — 백엔드는 presigned URL 발급과 완료 확인만 한다.
+    // S3Presigner/S3Client 생성은 lazy라 MinIO 없이도 빈 생성·앱 부팅이 된다(테스트에서 모킹).
+    implementation platform('software.amazon.awssdk:bom:2.28.16')
+    implementation 'software.amazon.awssdk:s3'
+
     // 모듈러 모놀리스: 모듈 경계를 코드로 강제한다(ModularityTests의 verify가 산출물 기준 검증).
     // Boot 4.1 대응은 Modulith 2.x(BOM으로 버전 관리).
     // 관측성(spring-modulith-observability)은 모듈 스팬 생성을 확인하지 못해 보류 — 트레이싱
