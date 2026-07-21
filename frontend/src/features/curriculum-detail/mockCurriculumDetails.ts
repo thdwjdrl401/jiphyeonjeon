@@ -8,9 +8,9 @@ import {
   getMockEnrollment,
   putMockPendingEnrollment,
   resetMockDatabase,
+  resolveMockLessonDestination,
 } from '@/features/demo/mockDatabase'
 import type { EnrollResult } from '@/features/enrollment/types'
-import type { CurriculumOutlineLesson, LessonAccessDestination } from '@/features/lesson/types'
 import { ApiError } from '@/shared/api/client'
 
 export const MOCK_ERROR_CURRICULUM_ID = 'cur-force-error'
@@ -22,15 +22,6 @@ export function resetMockCurriculumDetails() {
 async function wait() {
   if (import.meta.env.MODE === 'test') return
   await new Promise((resolve) => window.setTimeout(resolve, 380))
-}
-
-function resolveMockLessonDestination(lesson: CurriculumOutlineLesson): LessonAccessDestination {
-  if (lesson.liveSession?.status === 'LIVE') return 'LIVE_CLASSROOM'
-  if (lesson.liveSession && ['DRAFT', 'SCHEDULED', 'OPEN', 'STARTING'].includes(lesson.liveSession.status)) {
-    return 'LIVE_SESSION'
-  }
-  if (lesson.replayStatus === 'PUBLISHED') return 'VOD'
-  return 'LESSON_DETAIL'
 }
 
 function applyViewerAccess(
