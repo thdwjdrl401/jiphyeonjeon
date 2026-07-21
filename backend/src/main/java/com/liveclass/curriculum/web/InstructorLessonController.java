@@ -23,7 +23,8 @@ import java.util.UUID;
 
 /**
  * 강사용 레슨 관리 (CONTRACT §2, 소유권 검증). 데이터는 lesson 모듈이 소유하고, 여기선 소유권
- * 검증 후 위임한다. 발행(READY→PUBLISHED)·자료(PPTX/AI)는 정책·파이프라인 미확정이라 범위 밖.
+ * 검증 후 위임한다. 발행/게시취소는 MVP 직행 DRAFT↔PUBLISHED command다(ADR-0021) — AI 준비도
+ * 게이팅(READY→PUBLISHED)은 CP2로 유보. 자료(PPTX/AI) 파이프라인은 여전히 범위 밖.
  */
 @Tag(name = "레슨 관리(강사)", description = "강사가 섹션 안의 레슨을 만들고 수정한다. 본인 커리큘럼의 레슨만 접근할 수 있다.")
 @RestController
@@ -69,6 +70,18 @@ public class InstructorLessonController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable UUID lessonId, Authentication authentication) {
         service.deleteLesson(currentUserId(authentication), lessonId);
+    }
+
+    @Operation(summary = "레슨 발행", description = "레슨을 PUBLISHED로 바꿔 공개 목차에 노출한다. MVP 직행(DRAFT→PUBLISHED).")
+    @PostMapping("/api/instructor/lessons/{lessonId}/publish")
+    public LessonView publish(@PathVariable UUID lessonId, Authentication authentication) {
+        return service.publishLesson(currentUserId(authentication), lessonId);
+    }
+
+    @Operation(summary = "레슨 게시취소", description = "레슨을 DRAFT로 되돌려 공개 목차에서 내린다(PUBLISHED→DRAFT).")
+    @PostMapping("/api/instructor/lessons/{lessonId}/unpublish")
+    public LessonView unpublish(@PathVariable UUID lessonId, Authentication authentication) {
+        return service.unpublishLesson(currentUserId(authentication), lessonId);
     }
 
     private UUID currentUserId(Authentication authentication) {
