@@ -1,6 +1,7 @@
 package com.liveclass.curriculum.web;
 
 import com.liveclass.curriculum.service.CurriculumEnrollmentService;
+import com.liveclass.curriculum.web.dto.EnrollmentApplicantResponse;
 import com.liveclass.curriculum.web.dto.EnrollmentResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -24,11 +25,18 @@ public class InstructorEnrollmentController {
         this.service = service;
     }
 
-    @Operation(summary = "승인 대기 목록", description = "이 커리큘럼의 승인 대기(PENDING) 수강 신청 목록.")
+    @Operation(summary = "승인 대기 목록", description = "이 커리큘럼의 승인 대기(PENDING) 수강 신청 목록(신청자 이름·이메일 포함).")
     @GetMapping("/api/instructor/curriculums/{curriculumId}/enrollments")
-    public List<EnrollmentResponse> pending(@PathVariable UUID curriculumId, Authentication authentication) {
+    public List<EnrollmentApplicantResponse> pending(@PathVariable UUID curriculumId, Authentication authentication) {
         UUID instructorId = UUID.fromString(authentication.getName());
-        return service.pending(curriculumId, instructorId).stream().map(EnrollmentResponse::from).toList();
+        return service.pending(curriculumId, instructorId).stream().map(EnrollmentApplicantResponse::from).toList();
+    }
+
+    @Operation(summary = "수강생 로스터", description = "ACTIVE 수강생 목록(이름·이메일 포함).")
+    @GetMapping("/api/instructor/curriculums/{curriculumId}/enrollments/active")
+    public List<EnrollmentApplicantResponse> roster(@PathVariable UUID curriculumId, Authentication authentication) {
+        UUID instructorId = UUID.fromString(authentication.getName());
+        return service.roster(curriculumId, instructorId).stream().map(EnrollmentApplicantResponse::from).toList();
     }
 
     @Operation(summary = "수강 승인", description = "PENDING → ACTIVE.")
