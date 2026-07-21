@@ -225,6 +225,40 @@ public class InstructorCurriculumService {
         log.info(Audit.MARKER, "레슨 삭제 sectionId={} lessonId={}", lesson.sectionId(), lessonId);
     }
 
+    /**
+     * 레슨 발행: DRAFT → PUBLISHED (MVP 직행, AI 준비도 게이팅 없음 — ADR-0021).
+     * 발행 순간 공개 목차(카탈로그)에 노출되므로 목차 변경으로 보고 structure_version을 올린다.
+     */
+    @Transactional
+    public LessonView publishLesson(UUID instructorId, UUID lessonId) {
+        LessonView lesson = requireOwnedLesson(instructorId, lessonId);
+        if ("PUBLISHED".equals(lesson.status())) {
+            throw new CurriculumStateConflictException("이미 게시된 레슨입니다.");
+        }
+        LessonView published = lessonManagement.publish(lessonId);
+        // 목차(학생 노출)가 바뀌므로 structure_version만 올린다(deleteLesson과 동일 패턴).
+        Section section = requireOwnedSection(instructorId, lesson.sectionId());
+        Curriculum curriculum = requireOwned(instructorId, section.getCurriculumId());
+        curriculum.setStructureVersion(curriculum.getStructureVersion() + 1);
+        log.info(Audit.MARKER, "레슨 발행 sectionId={} lessonId={}", lesson.sectionId(), lessonId);
+        return published;
+    }
+
+    /** 레슨 게시취소: PUBLISHED → DRAFT. 공개 목차에서 내려가므로 structure_version을 올린다. */
+    @Transactional
+    public LessonView unpublishLesson(UUID instructorId, UUID lessonId) {
+        LessonView lesson = requireOwnedLesson(instructorId, lessonId);
+        if (!"PUBLISHED".equals(lesson.status())) {
+            throw new CurriculumStateConflictException("게시되지 않은 레슨입니다.");
+        }
+        LessonView unpublished = lessonManagement.unpublish(lessonId);
+        Section section = requireOwnedSection(instructorId, lesson.sectionId());
+        Curriculum curriculum = requireOwned(instructorId, section.getCurriculumId());
+        curriculum.setStructureVersion(curriculum.getStructureVersion() + 1);
+        log.info(Audit.MARKER, "레슨 게시취소 sectionId={} lessonId={}", lesson.sectionId(), lessonId);
+        return unpublished;
+    }
+
     // ── 라이브 세션 생성 ── 소유권(레슨→커리큘럼)은 여기서, 세션 데이터는 live 모듈 포트가.
 
     @Transactional

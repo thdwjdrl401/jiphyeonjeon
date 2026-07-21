@@ -21,4 +21,10 @@ public interface LessonManagement {
     List<LessonView> findBySection(UUID sectionId);
 
     void delete(UUID lessonId);
+
+    /** 레슨을 PUBLISHED로. published_at 세팅. 전이 유효성(중복 발행 등)은 호출자 책임. */
+    LessonView publish(UUID lessonId);
+
+    /** 레슨을 DRAFT로 되돌리고 published_at 해제. */
+    LessonView unpublish(UUID lessonId);
 }
