@@ -38,6 +38,25 @@ describe('커리큘럼 작업 화면', () => {
     expect(await screen.findByAltText('대표 이미지 미리보기')).toBeInTheDocument()
   })
 
+  it('새 커리큘럼에서 선택 자료를 등록하고 관리 화면으로 전달한다', async () => {
+    const user = userEvent.setup()
+    await renderAsInstructor('/instructor/curriculums/new')
+    await user.type(
+      await screen.findByPlaceholderText('예: 라이브로 완성하는 Spring Boot'),
+      '자료가 있는 새 커리큘럼',
+    )
+    const material = new File(['presentation'], 'curriculum-guide.pptx', {
+      type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    })
+
+    await user.upload(screen.getByLabelText('커리큘럼 강의 자료 등록'), material)
+    expect(screen.getByText('curriculum-guide.pptx')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '초안 만들기' }))
+    await user.click(await screen.findByRole('button', { name: '기본 정보' }))
+
+    expect(await screen.findByText('curriculum-guide.pptx')).toBeInTheDocument()
+  })
+
   it('관리 화면에서 섹션 이름과 설명을 수정한다', async () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
@@ -58,6 +77,23 @@ describe('커리큘럼 작업 화면', () => {
     await user.click(screen.getByRole('button', { name: '기본 정보' }))
     expect(await screen.findByAltText('대표 이미지 미리보기')).toBeInTheDocument()
     expect(screen.getByLabelText('이미지 변경')).toBeInTheDocument()
+  })
+
+  it('관리 화면 최하단에서 커리큘럼 자료를 수정하고 상세에 반영한다', async () => {
+    const user = userEvent.setup()
+    await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
+    await user.click(await screen.findByRole('button', { name: '기본 정보' }))
+    const material = new File(['presentation'], 'instructor-common-guide.pptx', {
+      type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    })
+
+    await user.upload(screen.getByLabelText('커리큘럼 강의 자료 등록'), material)
+    expect(screen.getByText('instructor-common-guide.pptx')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '변경 저장' }))
+    await user.click(screen.getByRole('link', { name: '공개 화면' }))
+
+    expect(await screen.findByRole('heading', { name: '커리큘럼 강의 자료' })).toBeInTheDocument()
+    expect(screen.getByText('instructor-common-guide.pptx')).toBeInTheDocument()
   })
 
   it('내 커리큘럼 카드에서 제목 첫 글자 대신 대표 이미지를 표시한다', async () => {

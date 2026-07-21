@@ -2,8 +2,10 @@ import { useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { instructorPaths, publicPaths } from '@/app/router/paths'
 import CurriculumImageField from '@/features/curriculum/CurriculumImageField'
+import CurriculumMaterialField from '@/features/curriculum/CurriculumMaterialField'
+import type { CurriculumMaterial } from '@/features/curriculum/types'
 import { demoCurriculum } from '@/features/demo/demoData'
-import { buildMockCurriculumOutline, getMockCurriculum } from '@/features/demo/mockDatabase'
+import { buildMockCurriculumOutline, getMockCurriculum, updateMockCurriculumMaterials } from '@/features/demo/mockDatabase'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import { InlineNotice, MetricCard, PageHeader, Panel, StatusBadge } from '@/shared/ui/WorkspaceUi'
 
@@ -17,6 +19,7 @@ interface CurriculumDraftState {
     endsAt: string
     enrollmentType: 'APPROVAL_REQUIRED'
     thumbnailUrl: string | null
+    materials: CurriculumMaterial[]
   }
 }
 
@@ -47,6 +50,7 @@ export default function CurriculumManagePage() {
     description: routeState?.draft?.description ?? storedCurriculum?.description ?? '',
   })
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(routeState?.draft?.thumbnailUrl ?? storedCurriculum?.thumbnailUrl ?? null)
+  const [materials, setMaterials] = useState<CurriculumMaterial[]>(routeState?.draft?.materials ?? storedCurriculum?.materials ?? [])
   const [saved, setSaved] = useState(Boolean(routeState?.created))
   usePageTitle('커리큘럼 관리')
 
@@ -60,6 +64,16 @@ export default function CurriculumManagePage() {
   const updateThumbnail = (value: string | null) => {
     setThumbnailUrl(value)
     markChanged()
+  }
+
+  const updateMaterials = (value: CurriculumMaterial[]) => {
+    setMaterials(value)
+    markChanged()
+  }
+
+  const saveChanges = () => {
+    updateMockCurriculumMaterials(curriculumId, materials)
+    setSaved(true)
   }
 
   const updateSection = (sectionId: string, field: SectionInfoField, value: string) => {
@@ -98,7 +112,7 @@ export default function CurriculumManagePage() {
         eyebrow="CURRICULUM STUDIO"
         title={curriculumInfo.title || '새 커리큘럼 초안'}
         description="기본 정보, 수강생, 섹션과 레슨 편성을 관리합니다."
-        action={<div className="header-action-group"><Link className="button button--soft" to={publicPaths.curriculum(curriculumId)}>공개 화면</Link><button className="button button--primary" type="button" onClick={() => setSaved(true)}>변경 저장</button></div>}
+        action={<div className="header-action-group"><Link className="button button--soft" to={publicPaths.curriculum(curriculumId)}>공개 화면</Link><button className="button button--primary" type="button" onClick={saveChanges}>변경 저장</button></div>}
       />
       {saved && <InlineNotice tone="success">변경 내용이 현재 작업 초안에 반영되었습니다.</InlineNotice>}
       <div className="metric-grid"><MetricCard label="상태" value={storedCurriculum?.lifecycleStatus ?? 'DRAFT'} helper={isNewDraft ? '게시 전' : '운영 중'} /><MetricCard label="섹션" value={sections.length} /><MetricCard label="전체 레슨" value={sections.reduce((sum, section) => sum + section.lessons.length, 0)} /><MetricCard label="수강생" value={storedCurriculum?.enrolleeCount ?? 0} /></div>
@@ -129,7 +143,8 @@ export default function CurriculumManagePage() {
         <Panel title="기본 정보" description="일반 수정과 공개 상태 전환은 분리합니다.">
           <div className="form-grid"><label className="form-field--wide"><span>제목</span><input value={curriculumInfo.title} onChange={(event) => updateCurriculumInfo('title', event.target.value)} /></label><label className="form-field--wide"><span>짧은 소개</span><input value={curriculumInfo.summary} onChange={(event) => updateCurriculumInfo('summary', event.target.value)} /></label><label className="form-field--wide"><span>상세 설명</span><textarea rows={6} value={curriculumInfo.description} onChange={(event) => updateCurriculumInfo('description', event.target.value)} /></label></div>
           <div className="curriculum-manage-thumbnail"><h3>대표 이미지</h3><p>목록과 상세 카드에 표시할 이미지를 등록합니다.</p><CurriculumImageField id="manage-curriculum-thumbnail" value={thumbnailUrl} onChange={updateThumbnail} /></div>
-          <div className="lifecycle-actions"><div><StatusBadge tone="warning">DRAFT</StatusBadge><p>레슨 편성을 확인한 뒤 커리큘럼을 게시하세요.</p></div><button className="button button--primary" type="button" onClick={() => setSaved(true)}>커리큘럼 게시</button></div>
+          <div className="lifecycle-actions"><div><StatusBadge tone="warning">DRAFT</StatusBadge><p>레슨 편성을 확인한 뒤 커리큘럼을 게시하세요.</p></div><button className="button button--primary" type="button" onClick={saveChanges}>커리큘럼 게시</button></div>
+          <div className="curriculum-manage-materials"><h3>커리큘럼 강의 자료 <small>선택</small></h3><p>전체 레슨에서 공통으로 제공할 PPTX 자료를 추가하거나 제거합니다.</p><CurriculumMaterialField id="manage-curriculum-materials" value={materials} onChange={updateMaterials} /></div>
         </Panel>
       )}
 

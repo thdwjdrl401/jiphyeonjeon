@@ -85,6 +85,7 @@ export async function getMockCurriculumDetail(curriculumId: string): Promise<Cur
     thumbnailUrl: curriculum.thumbnailUrl,
     lifecycleStatus: curriculum.lifecycleStatus,
     period: curriculum.period,
+    materials: curriculum.materials.map((material) => ({ ...material })),
     enrollmentPolicy: {
       type: curriculum.enrollmentPolicyType,
       status: 'OPEN',

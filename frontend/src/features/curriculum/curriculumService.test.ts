@@ -103,6 +103,7 @@ describe('커리큘럼 API 계약', () => {
       relationship: 'GUEST',
       allowedActions: ['VIEW_DETAIL'],
     })
+    expect(detail.materials).toEqual([])
     expect(detail.outline[0].lessons[0].access.allowed).toBe(false)
     expect(detail.outline[0].lessons[0].liveSession).toEqual({
       sessionId: 'ses_1',
