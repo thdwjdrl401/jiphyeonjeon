@@ -4,6 +4,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
+import java.util.UUID;
+
 @Schema(description = "커리큘럼 생성 요청")
 public record CreateCurriculumRequest(
 
@@ -17,6 +19,9 @@ public record CreateCurriculumRequest(
         String summary,
 
         @Schema(description = "상세 설명")
-        String description
+        String description,
+
+        @Schema(description = "썸네일 에셋 id(선택). 미리 업로드 완료(UPLOADED)한 본인 THUMBNAIL 에셋이어야 한다.")
+        UUID thumbnailAssetId
 ) {
 }

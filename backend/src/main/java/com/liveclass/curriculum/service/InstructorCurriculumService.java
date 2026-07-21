@@ -1,5 +1,7 @@
 package com.liveclass.curriculum.service;
 
+import com.liveclass.asset.api.AssetDirectory;
+import com.liveclass.asset.api.AssetRef;
 import com.liveclass.curriculum.domain.Curriculum;
 import com.liveclass.curriculum.domain.CurriculumLifecycleStatus;
 import com.liveclass.curriculum.domain.EnrollmentType;
@@ -35,26 +37,31 @@ public class InstructorCurriculumService {
     private final LessonDirectory lessonDirectory;
     private final LessonManagement lessonManagement;
     private final LiveSessionManagement liveSessionManagement;
+    private final AssetDirectory assetDirectory;
 
     public InstructorCurriculumService(CurriculumRepository curriculumRepository,
                                        SectionRepository sectionRepository,
                                        LessonDirectory lessonDirectory,
                                        LessonManagement lessonManagement,
-                                       LiveSessionManagement liveSessionManagement) {
+                                       LiveSessionManagement liveSessionManagement,
+                                       AssetDirectory assetDirectory) {
         this.curriculumRepository = curriculumRepository;
         this.sectionRepository = sectionRepository;
         this.lessonDirectory = lessonDirectory;
         this.lessonManagement = lessonManagement;
         this.liveSessionManagement = liveSessionManagement;
+        this.assetDirectory = assetDirectory;
     }
 
     @Transactional
-    public Curriculum create(UUID instructorId, String title, String summary, String description) {
+    public Curriculum create(UUID instructorId, String title, String summary, String description,
+                             UUID thumbnailAssetId) {
         Curriculum curriculum = new Curriculum();
         curriculum.setInstructorId(instructorId);
         curriculum.setTitle(title);
         curriculum.setSummary(summary);
         curriculum.setDescription(description);
+        applyThumbnail(curriculum, instructorId, thumbnailAssetId);
         // 생성 시점 기본값은 DDL과 일치시킨다(초안·즉시수강). 발행은 별도 흐름에서.
         curriculum.setLifecycleStatus(CurriculumLifecycleStatus.DRAFT);
         // 제품 정책: 승인제(학생 신청 → 강사 승인). enum은 즉시·초대도 지원하나 기본은 승인제.
@@ -111,7 +118,8 @@ public class InstructorCurriculumService {
     @Transactional
     public Curriculum updateBasicInfo(UUID instructorId, UUID curriculumId,
                                       String title, String summary, String description,
-                                      OffsetDateTime startsAt, OffsetDateTime endsAt) {
+                                      OffsetDateTime startsAt, OffsetDateTime endsAt,
+                                      UUID thumbnailAssetId) {
         Curriculum curriculum = requireOwned(instructorId, curriculumId);
         if (title != null) {
             curriculum.setTitle(title);
@@ -128,7 +136,27 @@ public class InstructorCurriculumService {
         if (endsAt != null) {
             curriculum.setEndsAt(endsAt);
         }
+        applyThumbnail(curriculum, instructorId, thumbnailAssetId);
         return curriculum;
+    }
+
+    /**
+     * 썸네일 에셋 지정(선택). null이면 변경 안 함. 지정 시 asset.api로 검증한다 — 본인이 올린,
+     * 종류 THUMBNAIL, 완료(UPLOADED)여야 한다. 어긋나면 상태 충돌(409)로 막는다. asset 엔티티에는
+     * 직접 접근하지 않고 포트(AssetDirectory)만 쓴다(모듈 경계).
+     */
+    private void applyThumbnail(Curriculum curriculum, UUID instructorId, UUID thumbnailAssetId) {
+        if (thumbnailAssetId == null) {
+            return;
+        }
+        AssetRef ref = assetDirectory.find(thumbnailAssetId)
+                .orElseThrow(() -> new CurriculumStateConflictException("썸네일 에셋을 찾을 수 없습니다."));
+        if (!instructorId.equals(ref.uploadedBy())
+                || !"THUMBNAIL".equals(ref.kind())
+                || !"UPLOADED".equals(ref.status())) {
+            throw new CurriculumStateConflictException("유효하지 않은 썸네일 에셋입니다.");
+        }
+        curriculum.setThumbnailAssetId(thumbnailAssetId);
     }
 
     @Transactional(readOnly = true)

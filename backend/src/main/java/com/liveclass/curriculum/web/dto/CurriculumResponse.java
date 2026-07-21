@@ -13,6 +13,8 @@ public record CurriculumResponse(
         String title,
         String summary,
         String description,
+        @Schema(description = "표시용 썸네일 URL. 에셋 없음/미해결 시 null.")
+        String thumbnailUrl,
         String lifecycleStatus,
         String enrollmentType,
         OffsetDateTime startsAt,
@@ -27,11 +29,16 @@ public record CurriculumResponse(
 ) {
 
     public static CurriculumResponse from(Curriculum c) {
+        return from(c, null);
+    }
+
+    public static CurriculumResponse from(Curriculum c, String thumbnailUrl) {
         return new CurriculumResponse(
                 c.getId().toString(),
                 c.getTitle(),
                 c.getSummary(),
                 c.getDescription(),
+                thumbnailUrl,
                 c.getLifecycleStatus().name(),
                 c.getEnrollmentType().name(),
                 c.getStartsAt(),

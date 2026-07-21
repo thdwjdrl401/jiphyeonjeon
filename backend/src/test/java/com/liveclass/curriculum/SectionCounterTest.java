@@ -42,7 +42,7 @@ class SectionCounterTest {
     void section_count_is_trigger_owned_and_never_double_counted() {
         UUID instructor = seedInstructor();
 
-        Curriculum curriculum = service.create(instructor, "카운터 검증", null, null);
+        Curriculum curriculum = service.create(instructor, "카운터 검증", null, null, null);
         UUID id = curriculum.getId();
         assertThat(dbSectionCount(id)).isEqualTo(0);
 

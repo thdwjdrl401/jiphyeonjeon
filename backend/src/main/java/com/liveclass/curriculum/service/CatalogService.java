@@ -1,5 +1,6 @@
 package com.liveclass.curriculum.service;
 
+import com.liveclass.asset.api.AssetDirectory;
 import com.liveclass.auth.api.InstructorDirectory;
 import com.liveclass.auth.api.InstructorSummaryView;
 import com.liveclass.curriculum.domain.Curriculum;
@@ -23,8 +24,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -40,15 +41,18 @@ public class CatalogService {
     private final SectionRepository sectionRepository;
     private final LessonDirectory lessonDirectory;
     private final InstructorDirectory instructorDirectory;
+    private final AssetDirectory assetDirectory;
 
     public CatalogService(CurriculumRepository curriculumRepository,
                           SectionRepository sectionRepository,
                           LessonDirectory lessonDirectory,
-                          InstructorDirectory instructorDirectory) {
+                          InstructorDirectory instructorDirectory,
+                          AssetDirectory assetDirectory) {
         this.curriculumRepository = curriculumRepository;
         this.sectionRepository = sectionRepository;
         this.lessonDirectory = lessonDirectory;
         this.instructorDirectory = instructorDirectory;
+        this.assetDirectory = assetDirectory;
     }
 
     @Transactional(readOnly = true)
@@ -63,8 +67,11 @@ public class CatalogService {
         // 강사 정보를 카드마다 조회하면 N+1이라 한 번에 모아 맵으로 만든다.
         Map<UUID, InstructorSummary> instructors = loadInstructors(
                 found.getContent().stream().map(Curriculum::getInstructorId).distinct().toList());
+        // 썸네일 URL도 배치로 해석(N+1 회피).
+        Map<UUID, String> thumbnails = assetDirectory.resolveUrls(found.getContent().stream()
+                .map(Curriculum::getThumbnailAssetId).filter(Objects::nonNull).toList());
 
-        return found.map(c -> toCard(c, instructors.get(c.getInstructorId())));
+        return found.map(c -> toCard(c, instructors.get(c.getInstructorId()), thumbnails));
     }
 
     @Transactional(readOnly = true)
@@ -79,12 +86,16 @@ public class CatalogService {
         InstructorSummary instructor = loadInstructors(List.of(curriculum.getInstructorId()))
                 .get(curriculum.getInstructorId());
 
+        String thumbnailUrl = curriculum.getThumbnailAssetId() == null
+                ? null
+                : assetDirectory.resolveUrl(curriculum.getThumbnailAssetId()).orElse(null);
+
         return new CurriculumDetailResponse(
                 curriculum.getId().toString(),
                 curriculum.getTitle(),
                 curriculum.getSummary(),
                 curriculum.getDescription(),
-                null, // 썸네일 URL 해석은 후속(asset 스토리지 seam)
+                thumbnailUrl,
                 curriculum.getLifecycleStatus().name(),
                 CurriculumPeriod.of(curriculum.getStartsAt(), curriculum.getEndsAt()),
                 instructor,
@@ -115,12 +126,13 @@ public class CatalogService {
         )).toList();
     }
 
-    private CurriculumCardSummary toCard(Curriculum c, InstructorSummary instructor) {
+    private CurriculumCardSummary toCard(Curriculum c, InstructorSummary instructor, Map<UUID, String> thumbnails) {
+        String thumbnailUrl = c.getThumbnailAssetId() == null ? null : thumbnails.get(c.getThumbnailAssetId());
         return new CurriculumCardSummary(
                 c.getId().toString(),
                 c.getTitle(),
                 c.getSummary(),
-                null, // 썸네일 URL 해석은 후속
+                thumbnailUrl,
                 instructor,
                 c.getLifecycleStatus().name(),
                 CurriculumPeriod.of(c.getStartsAt(), c.getEndsAt()),
