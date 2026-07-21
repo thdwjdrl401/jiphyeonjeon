@@ -149,6 +149,33 @@ describe('CurriculumDetailPage', () => {
     expect(screen.queryByRole('link', { name: '이어보기' })).not.toBeInTheDocument()
   })
 
+  it('담당 강사 목차는 레슨 버튼과 공개·라이브 상태 태그를 단순화한다', async () => {
+    await mockAuthService.login({ email: 'instructor01@example.com', password: 'password1' })
+    renderDetail('/curriculums/cur-spring-live')
+
+    const detailLinks = await screen.findAllByRole('link', { name: '강의 상세' })
+    expect(detailLinks.length).toBeGreaterThan(0)
+    for (const link of detailLinks) {
+      expect(link).toHaveAttribute('href', expect.stringMatching(/^\/instructor\/curriculums\/.+\/sections\/.+\/lessons\/.+$/))
+    }
+    expect(screen.getAllByText('게시됨').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('라이브 일정 준비 중').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('라이브 예정').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('다시보기 준비 중').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('다시보기 가능').length).toBeGreaterThan(0)
+    expect(screen.queryByText('입장 가능')).not.toBeInTheDocument()
+    expect(screen.queryByText('라이브 진행 중')).not.toBeInTheDocument()
+  })
+
+  it('게시되지 않은 레슨의 학생 공개 상태는 준비 중으로 표시한다', async () => {
+    await mockAuthService.login({ email: 'instructor01@example.com', password: 'password1' })
+    renderDetail('/curriculums/cur-architecture')
+
+    expect((await screen.findAllByText('준비 중')).length).toBeGreaterThan(0)
+    expect(screen.queryByText('초안')).not.toBeInTheDocument()
+    expect(screen.queryByText('게시 준비')).not.toBeInTheDocument()
+  })
+
   it('담당 강사에게만 관리 버튼이 보인다', async () => {
     await mockAuthService.login({ email: 'instructor01@example.com', password: 'password1' })
     const { unmount } = renderDetail('/curriculums/cur-spring-live')

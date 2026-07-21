@@ -247,7 +247,7 @@ export default function CurriculumManagePage() {
                         <span className="lesson-order">{lessonIndex + 1}</span>
                         <div className="lesson-info"><strong>{lesson.title}</strong><small>{lesson.status}</small></div>
                         <StatusBadge tone={lesson.status === 'PUBLISHED' ? 'success' : lesson.status === 'READY' ? 'warning' : 'neutral'}>{lesson.status}</StatusBadge>
-                        <div className="row-actions"><Link to={instructorPaths.lesson(curriculumId, section.sectionId, lesson.lessonId)}>상세</Link><Link to={instructorPaths.editLesson(curriculumId, section.sectionId, lesson.lessonId)}>수정</Link></div>
+                        <div className="row-actions"><Link to={instructorPaths.lesson(curriculumId, section.sectionId, lesson.lessonId)}>상세</Link></div>
                       </li>
                     )
                   })}

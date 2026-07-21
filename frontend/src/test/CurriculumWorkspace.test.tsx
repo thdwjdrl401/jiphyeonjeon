@@ -75,6 +75,87 @@ describe('커리큘럼 작업 화면', () => {
     expect(description).toHaveValue('수정된 섹션 설명입니다.')
   })
 
+  it('커리큘럼 관리에서는 레슨 상세만 제공하고 수정 진입점을 숨긴다', async () => {
+    await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
+    expect(await screen.findAllByRole('link', { name: '상세' })).not.toHaveLength(0)
+    expect(screen.queryByRole('link', { name: '수정' })).not.toBeInTheDocument()
+  })
+
+  it('새 레슨 폼에서 라이브 강의 일정을 함께 입력한다', async () => {
+    const user = userEvent.setup()
+    await renderAsInstructor('/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/new')
+    const scheduleToggle = await screen.findByRole('checkbox', { name: /라이브 강의 일정 설정/ })
+
+    expect(scheduleToggle).not.toBeChecked()
+    expect(screen.queryByLabelText(/예정 시작 시각/)).not.toBeInTheDocument()
+    await user.click(scheduleToggle)
+
+    expect(screen.getByLabelText(/예정 시작 시각/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/예상 진행 시간/)).toHaveValue(90)
+    expect(screen.getByLabelText(/입장 가능 창/)).toHaveValue(10)
+  })
+
+  it('레슨 수정 폼에서 기존 라이브 일정을 불러와 수정한다', async () => {
+    const user = userEvent.setup()
+    await renderAsInstructor('/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/les-security/edit')
+    const scheduleToggle = await screen.findByRole('checkbox', { name: /라이브 강의 일정 설정/ })
+    const scheduledAt = screen.getByLabelText(/예정 시작 시각/)
+
+    expect(scheduleToggle).toBeChecked()
+    expect(scheduledAt).toHaveValue('2026-08-03T19:00')
+    await user.clear(scheduledAt)
+    await user.type(scheduledAt, '2026-08-04T20:30')
+    await user.click(screen.getByRole('button', { name: '레슨 수정 저장' }))
+    expect(await screen.findByText('레슨 정보와 라이브 일정 초안이 저장되었습니다.')).toBeInTheDocument()
+  })
+
+  it.each([
+    ['다시보기 가능', 'les-orientation'],
+    ['다시보기 준비 중', 'les-request-flow'],
+  ])('%s 레슨 수정 폼에서는 완료된 라이브 일정을 변경할 수 없다', async (_, lessonId) => {
+    await renderAsInstructor(`/instructor/curriculums/cur-spring-live/sections/sec-foundation/lessons/${lessonId}/edit`)
+
+    expect(await screen.findByRole('heading', { name: '레슨 수정' })).toBeInTheDocument()
+    expect(screen.getByLabelText(/레슨 제목/)).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '라이브 강의 일정' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: /라이브 강의 일정 설정/ })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/예정 시작 시각/)).not.toBeInTheDocument()
+  })
+
+  it('강사 레슨 상세에 라이브 일정과 준비 상태를 통합한다', async () => {
+    await renderAsInstructor('/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/les-security')
+    const editLink = await screen.findByRole('link', { name: '레슨 수정' })
+
+    expect(editLink).toHaveClass('button--primary')
+    expect(screen.getByRole('heading', { name: '레슨 준비 상태' })).toBeInTheDocument()
+    expect(screen.getByText('자료 작업')).toBeInTheDocument()
+    expect(screen.getByText('완료')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '라이브 일정' })).toBeInTheDocument()
+    expect(screen.getByText('오후 7:00')).toBeInTheDocument()
+    expect(screen.getByText('오후 6:50부터')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '사전 점검' })).toHaveAttribute(
+      'href',
+      '/instructor/live-sessions/ses-security-live/preflight',
+    )
+    expect(screen.queryByRole('link', { name: '강의 상세' })).not.toBeInTheDocument()
+  })
+
+  it('라이브 일정이 없는 강사 레슨 상세는 레슨 수정에서 일정을 추가하도록 안내한다', async () => {
+    await renderAsInstructor('/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/cur-spring-live-lesson-6')
+    expect(await screen.findByText('연결된 라이브 일정이 없습니다. 레슨 수정에서 라이브 강의 일정을 추가해 주세요.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '레슨 수정에서 일정 추가' })).toHaveAttribute(
+      'href',
+      '/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/cur-spring-live-lesson-6/edit',
+    )
+  })
+
+  it('강사 사전 점검에서는 별도 강의 상세 버튼을 표시하지 않는다', async () => {
+    await renderAsInstructor('/instructor/live-sessions/ses-security-live/preflight')
+    expect(await screen.findByRole('heading', { name: '라이브 시작 전 최종 점검' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '강의 상세' })).not.toBeInTheDocument()
+    expect(screen.getByRole('complementary', { name: '커리큘럼 레슨 목록' })).toBeInTheDocument()
+  })
+
   it('레슨을 드래그해 같은 섹션 안에서 순서를 변경한다', async () => {
     await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
     const lessonList = await screen.findByRole('list', { name: '서비스의 뼈대 세우기 레슨 목록' })

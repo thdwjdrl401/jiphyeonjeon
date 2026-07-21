@@ -23,9 +23,6 @@ describe('전체 페이지 라우트', () => {
     ['/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/new', '새 레슨 만들기'],
     ['/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/les-security/edit', '레슨 수정'],
     ['/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/les-security', 'Spring Security 시작하기'],
-    ['/instructor/lessons/les-security/live-sessions/new', '라이브 일정 만들기'],
-    ['/instructor/live-sessions/ses-security-live/edit', '라이브 일정 수정'],
-    ['/instructor/live-sessions/ses-security-live', 'Spring Security 시작하기'],
     ['/instructor/live-sessions/ses-security-live/preflight', '라이브 시작 전 최종 점검'],
     ['/instructor/live-sessions/ses-security-live/processing', '녹화 처리 현황'],
     ['/instructor/live-sessions/ses-security-live/classroom', 'Spring Security 시작하기'],
@@ -36,6 +33,35 @@ describe('전체 페이지 라우트', () => {
     await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
     renderAt(path)
     expect(await screen.findByRole('heading', { name: heading, level: 1 })).toBeInTheDocument()
+  })
+
+  it.each([
+    '/instructor/curriculums/cur-spring-live/manage',
+    '/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/les-security',
+    '/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/les-security/edit',
+    '/instructor/live-sessions/ses-security-live/preflight',
+  ])('강사 작업 화면 %s에 현재 커리큘럼 레슨 목록을 표시한다', async (path) => {
+    await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
+    renderAt(path)
+    const navigation = await screen.findByRole('complementary', { name: '커리큘럼 레슨 목록' })
+    expect(within(navigation).getByRole('link', { name: '라이브로 완성하는 Spring Boot' })).toBeInTheDocument()
+    expect(within(navigation).queryByRole('link', { name: '내 프로필' })).not.toBeInTheDocument()
+  })
+
+  it.each([
+    '/instructor/lessons/les-security/live-sessions/new',
+    '/instructor/live-sessions/ses-security-live',
+    '/instructor/live-sessions/ses-security-live/edit',
+  ])('삭제된 라이브 일정·상세 경로 %s를 제공하지 않는다', async (path) => {
+    await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
+    renderAt(path)
+    expect(await screen.findByRole('heading', { name: '요청한 페이지를 찾을 수 없어요' })).toBeInTheDocument()
+  })
+
+  it('학생에게도 삭제된 라이브 상세 경로를 제공하지 않는다', async () => {
+    await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
+    renderAt('/student/live-sessions/ses-security-live')
+    expect(await screen.findByRole('heading', { name: '요청한 페이지를 찾을 수 없어요' })).toBeInTheDocument()
   })
 
   it('학생 입장 전 점검 화면을 연다', async () => {

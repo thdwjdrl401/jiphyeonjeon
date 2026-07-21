@@ -15,9 +15,9 @@ describe('resolveLessonPath', () => {
     )
   })
 
-  it('학생 라이브 화면은 lessonId가 아닌 sessionId를 사용한다', () => {
+  it('통합된 라이브 상세 목적지는 레슨 상세를 사용하고 강의실만 sessionId를 사용한다', () => {
     expect(resolveLessonPath({ ...studentBase, destination: 'LIVE_SESSION', sessionId: 'ses-1' })).toBe(
-      '/student/live-sessions/ses-1',
+      '/student/curriculums/cur-1/sections/sec-1/lessons/les-1',
     )
     expect(resolveLessonPath({ ...studentBase, destination: 'LIVE_CLASSROOM', sessionId: 'ses-1' })).toBe(
       '/student/live-sessions/ses-1/classroom',
@@ -34,7 +34,7 @@ describe('resolveLessonPath', () => {
     )
     expect(
       resolveLessonPath({ ...studentBase, role: 'INSTRUCTOR', destination: 'LIVE_SESSION', sessionId: 'ses-1' }),
-    ).toBe('/instructor/live-sessions/ses-1')
+    ).toBe('/instructor/curriculums/cur-1/sections/sec-1/lessons/les-1')
     expect(resolveLessonPath({ ...studentBase, role: 'INSTRUCTOR', destination: 'VOD' })).toBe(
       '/instructor/lessons/les-1/replay',
     )

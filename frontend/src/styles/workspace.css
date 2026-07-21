@@ -208,6 +208,7 @@ th { color: var(--ink-500); font-size: .67rem; }
 .choice-row > span { display: flex; flex-direction: column; }
 .choice-row strong { font-size: .75rem; }
 .choice-row small { color: var(--ink-500); font-size: .66rem; }
+.live-schedule-fields { margin-top: 17px; }
 .input-with-unit { display: flex; align-items: center; }
 .input-with-unit input { border-radius: 10px 0 0 10px !important; }
 .input-with-unit span { align-self: stretch; display: grid; place-items: center; padding: 0 12px; border: 1px solid var(--ink-200); border-left: 0; border-radius: 0 10px 10px 0; color: var(--ink-500); font-size: .7rem; }
@@ -219,9 +220,16 @@ th { color: var(--ink-500); font-size: .67rem; }
 .big-schedule dl div { display: flex; justify-content: space-between; padding: 5px 0; font-size: .73rem; }
 .big-schedule dt { color: var(--ink-500); }
 .big-schedule dd { margin: 0; font-weight: 700; }
+.lesson-live-details { margin-bottom: 14px; }
+.lesson-live-card { padding: 18px; border: 1px solid var(--ink-100); border-radius: 14px; background: var(--ink-50); }
+.lesson-live-card > h3 { margin: 0 0 14px; color: var(--ink-950); font-size: .84rem; }
 .state-hero { min-height: 115px; display: flex; justify-content: center; flex-direction: column; }
-.state-hero h3 { margin: 8px 0 3px; }
+.state-hero h3, .state-hero h4 { margin: 8px 0 3px; font-size: .95rem; }
 .state-hero p { margin: 0; color: var(--ink-500); font-size: .72rem; }
+.lesson-live-policies { grid-template-columns: repeat(3,minmax(0,1fr)); margin-top: 14px; }
+.lesson-live-actions { display: flex; justify-content: flex-end; margin-top: 16px; }
+.empty-live-state { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.empty-live-state .inline-notice { flex: 1; }
 .check-grid, .notice-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
 .check-grid li, .notice-grid > div { padding: 14px; border-radius: 12px; background: var(--ink-50); }
 .check-grid li { display: flex; align-items: center; gap: 9px; }
