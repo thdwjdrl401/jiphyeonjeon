@@ -1,6 +1,6 @@
 package com.liveclass.video.service;
 
-import com.liveclass.common.config.LiveKitProperties;
+import com.liveclass.live.api.LiveKitServerAccess;
 import com.liveclass.video.config.EgressProperties;
 import io.livekit.server.AudioMixing;
 import io.livekit.server.EgressServiceClient;
@@ -14,7 +14,7 @@ import java.io.IOException;
 
 /**
  * LiveKit Egress 실제 제어. 방 컴포지트를 HLS(세그먼트)로 녹화해 S3/MinIO에 올린다(ADR-0010).
- * LiveKit 서버 API는 접속용 wss를 https로 바꿔 호출하고(방 제어와 동일), 출력 S3 설정은 {@link EgressProperties}.
+ * LiveKit 서버 API 접속 정보는 live 모듈 포트({@link LiveKitServerAccess})로 받고, 출력 S3 설정은 {@link EgressProperties}.
  *
  * <p><b>주의</b>: 이 경로는 아직 실제 Egress 인프라(egress 컨테이너·MinIO·발행 참가자)로 검증되지 않았다.
  * 토큰/강퇴처럼 실환경 e2e 확인은 후속(songjeongki/0020 참고). 상태기계·배선은 목으로 검증한다.
@@ -27,11 +27,8 @@ public class LiveKitEgressControl implements EgressControl {
     private final EgressServiceClient client;
     private final EgressProperties egress;
 
-    public LiveKitEgressControl(LiveKitProperties livekit, EgressProperties egress) {
-        String apiUrl = livekit.url()
-                .replaceFirst("^wss://", "https://")
-                .replaceFirst("^ws://", "http://");
-        this.client = EgressServiceClient.Companion.create(apiUrl, livekit.apiKey(), livekit.apiSecret());
+    public LiveKitEgressControl(LiveKitServerAccess livekit, EgressProperties egress) {
+        this.client = EgressServiceClient.Companion.create(livekit.apiUrl(), livekit.apiKey(), livekit.apiSecret());
         this.egress = egress;
     }
 

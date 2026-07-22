@@ -1,6 +1,6 @@
 package com.liveclass.live.service;
 
-import com.liveclass.common.config.LiveKitProperties;
+import com.liveclass.live.config.LiveKitProperties;
 import io.livekit.server.AccessToken;
 import io.livekit.server.CanPublish;
 import io.livekit.server.CanPublishData;

@@ -1,6 +1,6 @@
 package com.liveclass.live.service;
 
-import com.liveclass.common.config.LiveKitProperties;
+import com.liveclass.live.api.LiveKitServerAccess;
 import io.livekit.server.RoomServiceClient;
 import livekit.LivekitModels;
 import org.springframework.stereotype.Service;
@@ -10,18 +10,15 @@ import java.util.List;
 
 /**
  * LiveRoomControl 구현 — LiveKit 서버의 RoomService(HTTP/TwirP)를 호출한다.
- * client URL은 접속용 wss라서 서버 API용 https로 바꿔 쓴다. 서명 키는 환경변수로 주입.
+ * 서버 API URL·서명 키는 LiveKitServerAccess(설정에서 조립)로 주입받는다.
  */
 @Service
 public class LiveKitRoomControl implements LiveRoomControl {
 
     private final RoomServiceClient client;
 
-    public LiveKitRoomControl(LiveKitProperties properties) {
-        String apiUrl = properties.url()
-                .replaceFirst("^wss://", "https://")
-                .replaceFirst("^ws://", "http://");
-        this.client = RoomServiceClient.create(apiUrl, properties.apiKey(), properties.apiSecret(), false, null);
+    public LiveKitRoomControl(LiveKitServerAccess access) {
+        this.client = RoomServiceClient.create(access.apiUrl(), access.apiKey(), access.apiSecret(), false, null);
     }
 
     @Override
