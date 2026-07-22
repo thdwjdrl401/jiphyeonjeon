@@ -96,7 +96,9 @@ public class AssetService implements AssetDirectory {
     public void complete(UUID assetId, UUID requesterId) {
         Asset asset = assetRepository.findById(assetId)
                 .orElseThrow(() -> new AssetNotFoundException("에셋을 찾을 수 없습니다."));
-        if (!asset.getUploadedBy().equals(requesterId)) {
+        UUID uploadedBy = asset.getUploadedBy();
+        if (uploadedBy == null || !uploadedBy.equals(requesterId)) {
+            // uploaded_by는 nullable 컬럼이라 null이면 NPE 대신 403(업로더 없음 = 소유권 없음)으로 막는다.
             throw new AssetForbiddenException("이 에셋의 업로더가 아닙니다.");
         }
         if (asset.getStatus() == AssetStatus.UPLOADED) {
