@@ -1,5 +1,6 @@
 package com.liveclass.curriculum.web.dto;
 
+import com.liveclass.curriculum.service.CatalogDetail;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.List;
@@ -22,4 +23,17 @@ public record CurriculumDetailResponse(
         InstructorSummary instructor,
         List<OutlineSection> outline
 ) {
+
+    public static CurriculumDetailResponse from(CatalogDetail detail) {
+        return new CurriculumDetailResponse(
+                detail.curriculumId().toString(),
+                detail.title(),
+                detail.summary(),
+                detail.description(),
+                detail.thumbnailUrl(),
+                detail.lifecycleStatus(),
+                CurriculumPeriod.of(detail.startsAt(), detail.endsAt()),
+                InstructorSummary.from(detail.instructor()),
+                detail.outline().stream().map(OutlineSection::from).toList());
+    }
 }

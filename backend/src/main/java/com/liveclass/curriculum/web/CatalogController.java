@@ -13,7 +13,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
-import java.util.function.Function;
 
 /**
  * 공개 커리큘럼 탐색 (CATALOG-01, CURRICULUM-DETAIL-01). 비로그인도 호출 가능.
@@ -42,13 +41,13 @@ public class CatalogController {
     ) {
         return PageResponse.of(
                 catalogService.list(q, sort, Math.max(0, page), clampSize(size)),
-                Function.identity());
+                CurriculumCardSummary::from);
     }
 
     @Operation(summary = "공개 커리큘럼 상세", description = "공개 커리큘럼 하나의 상세(강사·목차 포함). 없거나 비공개면 찾을 수 없음으로 응답한다.")
     @GetMapping("/api/curriculums/{curriculumId}")
     public CurriculumDetailResponse detail(@PathVariable UUID curriculumId) {
-        return catalogService.detail(curriculumId);
+        return CurriculumDetailResponse.from(catalogService.detail(curriculumId));
     }
 
     /** 페이지 크기는 서버가 제한한다(CATALOG §4.1). 0 이하는 기본값, 상한 초과는 상한으로. */
