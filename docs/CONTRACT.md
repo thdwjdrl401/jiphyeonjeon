@@ -20,9 +20,9 @@
 | 커리큘럼(강사) | `POST/PATCH /instructor/curriculums`·`.../sections`·`.../curriculum/order` | 소유권 검증 |
 | 강의 | `POST /instructor/sections/{id}/lessons`·`PATCH /instructor/lessons/{id}` | status: DRAFT/AI_NOT_READY/READY/PUBLISHED |
 | 자료 | `POST /instructor/lessons/{id}/materials` (PPTX) | presigned→MinIO. **영상 업로드 없음**. 자료를 커리큘럼·레슨에 연결하는 API는 아직 없어 상세의 `materials`는 항상 빈 목록 |
-| 에셋 | `POST /assets/upload-requests` → presigned `PUT` → `POST /assets/{id}/complete` | 바이트는 앱 서버를 통과하지 않는다. 받은 `assetId`를 도메인 요청에 실어 보낸다(커리큘럼 `thumbnailAssetId`, 프로필 `assetId`). kind: PROFILE_IMAGE·THUMBNAIL·MATERIAL ([decisions/songjeongki/0023](decisions/songjeongki/0023-asset-presigned-upload.md)) |
-| 다시보기 | `GET /lessons/{id}/playback` | 녹화(Egress) HLS URL 발급(재생 인증 seam) |
-| 학습 | `GET /lessons/{id}/learning-context`·`PUT /lessons/{id}/progress`·`POST .../bookmarks` | 미구현. 그래서 카탈로그의 `progress`·레슨 `learning`·`durationMs`는 현재 항상 null |
+| 에셋 | `POST /assets/upload-requests` → presigned `PUT` → `POST /assets/{id}/complete` | 바이트는 앱 서버를 통과하지 않는다. 받은 `assetId`를 도메인 요청에 실어 보낸다(커리큘럼 `thumbnailAssetId`, 프로필 `assetId`). kind는 **PROFILE_IMAGE·THUMBNAIL만 발급**되고 **MATERIAL은 현재 400으로 거부**된다 ([decisions/songjeongki/0023](decisions/songjeongki/0023-asset-presigned-upload.md)) |
+| 다시보기 | `GET /lessons/{id}/playback` | 녹화(Egress) HLS URL 발급(재생 인증 seam). 재생 API는 미구현이나 **녹화본 자체는 생성된다** — 카탈로그의 `replayStatus`는 녹화 없음이면 NOT_READY, 있으면 저장된 상태(현재 DRAFT). 게시 검수 흐름이 없어 PUBLISHED에는 도달하지 않는다. `durationMs`는 녹화 완료 webhook 전까지 null |
+| 학습 | `GET /lessons/{id}/learning-context`·`PUT /lessons/{id}/progress`·`POST .../bookmarks` | 미구현(`learning` 패키지는 배선 없는 골격, ADR-0024). 그래서 카탈로그의 `progress`·레슨 `learning`은 항상 null |
 | 내 수강 | `GET /me/enrollments` | **항목마다 커리큘럼 카드 동봉(구현됨)** — 목록을 받고 커리큘럼을 건건이 다시 조회하지 않도록. 소유 모듈은 curriculum |
 | 자막/용어 | `GET /lessons/{id}/transcript`·`/glossary` | 게시본(core) |
 | AI | `POST /lessons/{id}/ai/questions:stream`(SSE)·`/ai/terms:explain` | Spring이 권한·정책 후 ai-api 중계 |

@@ -1,7 +1,12 @@
 import axios from 'axios'
 import { apiClient } from './client'
 
-export type AssetKind = 'PROFILE_IMAGE' | 'THUMBNAIL' | 'MATERIAL'
+/**
+ * 서버가 현재 업로드를 허용하는 종류.
+ * 강의 자료(MATERIAL)는 `AssetController`가 400으로 거부하므로 여기 넣지 않는다 —
+ * 자료 업로드가 열리면 그때 추가한다.
+ */
+export type AssetKind = 'PROFILE_IMAGE' | 'THUMBNAIL'
 
 interface UploadTicket {
   assetId: string
@@ -34,8 +39,9 @@ export async function uploadAsset(file: File, kind: AssetKind): Promise<Uploaded
     fileSize: file.size,
   })
 
-  // presigned URL은 서명이 걸린 스토리지 주소다. apiClient로 보내면 baseURL(/api)·쿠키·CSRF 헤더가
-  // 함께 붙어 서명이 깨지므로, 설정이 없는 axios 인스턴스로 티켓이 지시한 그대로만 보낸다.
+  // 스토리지로 직접 보내는 요청이라 apiClient를 쓰지 않는다. apiClient를 타면 요청 인터셉터가
+  // 우리 서버에서 CSRF 토큰을 받아 붙이고, withCredentials가 세션 쿠키를 스토리지 호스트로 보낸다.
+  // 티켓이 지시한 URL·method·헤더 그대로만 보내는 게 맞다.
   await axios.request({
     url: ticket.uploadUrl,
     method: ticket.method,

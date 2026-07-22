@@ -31,9 +31,15 @@ FE가 역할·수강상태를 스스로 조합해 CTA를 정하는 방법도 있
 1. **카탈로그 목록·상세 응답에 `viewerContext`를 싣는다.** 관계(GUEST·UNENROLLED_STUDENT·
    PENDING_ENROLLMENT·ENROLLED·OWNER_INSTRUCTOR·NON_OWNER_INSTRUCTOR)와 그 관계에서 허용되는
    행동(`allowedActions`)을 서버가 판정한다. 상세에는 `enrollmentPolicy`와 목차 레슨별
-   `liveSession`·`access`도 함께 싣는다.
+   `liveSession`·`access`·`replayStatus`도 함께 싣는다.
+   **`allowedActions`는 실제 API가 받아 줄 행동만 담는다** — 신청이 409로 떨어질 상황(초대 전용·
+   미발행·모집 창 밖)에서는 `ENROLL`을 주지 않는다. FE는 이 목록만 보고 버튼을 켜므로, 여기서
+   느슨하게 주면 버튼이 거짓말을 한다.
 2. 공개 경로(`GET /api/curriculums`, `/{id}`)는 permitAll을 유지하되 **`Authentication`을 선택적으로
    받는다.** 쿠키가 있으면 그 사용자 기준, 없으면 손님 기준으로 답한다.
+   `enrollmentPolicy.status`는 저장값이 아니라 **모집 창(`enrollmentOpensAt`·`enrollmentClosesAt`) +
+   현재 시각에서 파생**한다(`OPEN`·`NOT_OPEN`·`CLOSED`·`UNAVAILABLE`). DDL 주석이 정한 규칙과 같고,
+   판정 조건은 신청 API의 전제조건과 일치시킨다.
 3. **`/api/me/enrollments`의 소유 모듈을 `curriculum`으로 옮긴다.** 경로와 기존 필드는 그대로 두고
    `curriculum` 카드를 항목마다 덧붙인다. 이미 `enrollment`를 참조하고 있는 `curriculum`이 조립을 맡아
    순환을 만들지 않는다.
@@ -42,9 +48,11 @@ FE가 역할·수강상태를 스스로 조합해 CTA를 정하는 방법도 있
 
 - **판정 규칙은 한 곳에.** 누가 무엇을 할 수 있는가는 이미 서버가 인가로 판정한다. 표시용 판정을
   클라이언트에 복제하면 두 규칙이 갈라지고, 갈라진 쪽은 대개 보안이 아니라 UX가 깨지는 형태로 드러난다.
-- **"필드 없음"이 "기능 없음"으로 보이지 않게.** 아직 도메인이 없는 값(진도·재생 길이·다시보기 상태)도
-  필드는 계약에 포함하고 `null`·`NOT_READY`로 명시해 내보낸다. FE가 값을 추측하지 않고, 나중에 도메인이
-  생기면 서버만 채우면 된다.
+- **"필드 없음"이 "기능 없음"으로 보이지 않게.** 아직 배선되지 않은 값(진도)도 필드는 계약에 포함하고
+  `null`로 명시해 내보낸다. FE가 값을 추측하지 않고, 배선되면 서버만 채우면 된다.
+- **하드코딩 대신 실제 값을 읽는다.** 다시보기 상태·재생 길이는 `video` 모듈이 이미 들고 있으므로
+  포트로 읽어 온다. "아직 없을 것"이라고 단정해 상수를 내보내면, 데이터가 생긴 뒤에도 응답이 계속
+  거짓말한다.
 - **모듈 방향은 이미 정해져 있었다.** `curriculum → enrollment`는 수강 신청·승인에서 이미 쓰고 있다.
   반대 방향을 새로 만들지 않고 기존 방향에 얹는 쪽이 경계를 지키면서 가장 적게 움직인다.
 
@@ -66,5 +74,12 @@ FE가 역할·수강상태를 스스로 조합해 CTA를 정하는 방법도 있
 - `enrollment/web` 패키지 제거(컨트롤러·DTO가 `curriculum/web`으로 이동). `enrollment`는 도메인·포트만
   갖는 모듈이 된다.
 - `LiveSessionDirectory.findByLessons`(배치 조회) 추가 — 목차가 레슨마다 세션을 묻지 않도록.
-- **아직 비어 있는 필드**: `progress`·`learning`·`durationMs`(학습 기록 도메인, CP5),
-  `replayStatus`(다시보기, CP4), `materials`(자료 연결 API 부재). 각각 해당 CP에서 채운다.
+- **값이 비는 필드와 그 이유** (각각 사실 확인함):
+  - `progress`·`learning` — `learning` 패키지(`LearningProgress`·`Bookmark`)가 엔티티만 있고
+    배선되지 않았다([ADR-0024](0024-orphan-module-scaffolding.md)). 배선 시 채운다.
+  - `durationMs` — `video_asset`에 컬럼은 있으나 녹화 완료 webhook(FINALIZING→VERIFYING→READY)이
+    아직 없어 채워지지 않는다. 값이 생기면 그대로 흘러나간다.
+  - `replayStatus` — **비어 있지 않다.** 녹화가 없으면 `NOT_READY`, 라이브를 한 번 한 레슨은 `DRAFT`다.
+    게시 검수 흐름이 없어 `PUBLISHED`에는 아직 도달하지 않으므로 `destination=VOD`도 현재는 나오지 않는다.
+  - `materials` — 커리큘럼 단위 자료를 연결하는 API가 없다. 스키마의 `material_asset`은 **강의 단위**라
+    모델이 갈린다(별건으로 정리 필요). 에셋 업로드도 `MATERIAL` kind는 현재 400으로 거부된다.
