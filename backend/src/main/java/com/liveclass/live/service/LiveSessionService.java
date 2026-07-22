@@ -15,8 +15,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /** 라이브 세션 포트(읽기·쓰기) 구현. 데이터만 담당하고 소유권 검증은 하지 않는다(호출자 책임). */
@@ -24,6 +28,21 @@ import java.util.UUID;
 public class LiveSessionService implements LiveSessionManagement, LiveSessionDirectory {
 
     private static final Logger log = LoggerFactory.getLogger(LiveSessionService.class);
+
+    /**
+     * "다음 일정"에서 빼는 상태. 종료 계열(ENDED/CANCELLED/FAILED)에 더해 정리 중인 ENDING도 뺀다 —
+     * 방을 닫는 중인 세션을 "다음 일정"이라고 보여주면 강사가 아직 시작 전이라고 오해한다.
+     */
+    private static final Set<LiveSessionStatus> EXCLUDED_FROM_NEXT = Set.of(
+            LiveSessionStatus.ENDING, LiveSessionStatus.ENDED,
+            LiveSessionStatus.CANCELLED, LiveSessionStatus.FAILED);
+
+    /**
+     * 진행 계열 — scheduledAt이 이미 지났어도 "지금/다음 일정"으로 계속 보여준다.
+     * 10분 전에 시작해 방송 중인 세션이 목록에서 사라지면 안 되기 때문이다.
+     */
+    private static final Set<LiveSessionStatus> IN_PROGRESS_STATUSES =
+            Set.of(LiveSessionStatus.OPEN, LiveSessionStatus.STARTING, LiveSessionStatus.LIVE);
 
     private final LiveSessionRepository liveSessionRepository;
     private final LiveRoomControl roomControl;
@@ -69,6 +88,28 @@ public class LiveSessionService implements LiveSessionManagement, LiveSessionDir
     @Transactional(readOnly = true)
     public boolean existsForLesson(UUID lessonId) {
         return liveSessionRepository.existsByLessonId(lessonId);
+    }
+
+    /**
+     * 커리큘럼별 다음 예정 세션(배치). 쿼리는 페이지당 정확히 1번만 나간다 — 결과가 scheduledAt
+     * 오름차순이므로 커리큘럼별 첫 행(putIfAbsent)만 남기면 가장 이른 세션이 된다.
+     *
+     * <p>기준 시각은 여기서 한 번 찍어 쿼리에 넘긴다(DB의 now() 대신). 한 페이지 안의 모든 행이
+     * 같은 시각을 기준으로 판정되고, 테스트에서도 애플리케이션 시계만 보면 된다.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public Map<UUID, LiveSessionView> nextScheduledByCurriculum(Collection<UUID> curriculumIds) {
+        if (curriculumIds.isEmpty()) {
+            return Map.of();
+        }
+        OffsetDateTime now = OffsetDateTime.now();
+        Map<UUID, LiveSessionView> nextByCurriculum = new LinkedHashMap<>();
+        for (LiveSession session : liveSessionRepository.findUpcomingByCurriculumIds(
+                curriculumIds, EXCLUDED_FROM_NEXT, IN_PROGRESS_STATUSES, now)) {
+            nextByCurriculum.putIfAbsent(session.getCurriculumId(), toView(session));
+        }
+        return nextByCurriculum;
     }
 
     /**

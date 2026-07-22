@@ -2,6 +2,7 @@ package com.liveclass.lesson.api;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -15,4 +16,10 @@ public interface LessonDirectory {
 
     /** 여러 섹션의 PUBLISHED 레슨을 순서대로(한 번에) 반환한다 — 공개 목차용. */
     List<LessonOutlineView> findPublishedBySections(Collection<UUID> sectionIds);
+
+    /**
+     * 레슨 ID → 제목을 <b>한 번에</b> 조회한다(N+1 방지). 다른 모듈이 목록 응답에 레슨 제목만
+     * 곁들일 때 쓴다(예: 커리큘럼 목록의 다음 라이브 세션). 없는 ID는 맵에 담기지 않는다.
+     */
+    Map<UUID, String> findTitles(Collection<UUID> lessonIds);
 }
