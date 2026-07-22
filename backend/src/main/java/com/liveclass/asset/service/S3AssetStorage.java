@@ -3,6 +3,7 @@ package com.liveclass.asset.service;
 import com.liveclass.asset.config.AssetStorageProperties;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
@@ -83,5 +84,14 @@ public class S3AssetStorage implements AssetStorage {
             }
             throw e;
         }
+    }
+
+    @Override
+    public void delete(String objectKey) {
+        // S3/MinIO의 DELETE는 없는 키에도 204를 준다 → 별도 존재 확인 없이 멱등하게 호출한다.
+        s3Client.deleteObject(DeleteObjectRequest.builder()
+                .bucket(bucket)
+                .key(objectKey)
+                .build());
     }
 }
