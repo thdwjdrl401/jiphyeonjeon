@@ -18,13 +18,13 @@ public record OutlineLesson(
         String lessonStatus,
         @Schema(description = "라이브 예정 시각. 세션이 없으면 null.")
         OffsetDateTime scheduledAt,
-        @Schema(description = "재생 길이. 다시보기 도메인(CP4) 전까지 항상 null.")
+        @Schema(description = "재생 길이(ms). 녹화 완료 webhook이 채우는 값이라 그 경로 전까지는 null.")
         Long durationMs,
         OutlineLessonLiveSession liveSession,
-        @Schema(description = "NOT_READY·DRAFT·READY_FOR_REVIEW·PUBLISHED·WITHDRAWN. CP4 전까지 NOT_READY 고정.")
+        @Schema(description = "NOT_READY(녹화 없음)·DRAFT·READY_FOR_REVIEW·PUBLISHED·WITHDRAWN. 게시 검수 흐름 전까지 PUBLISHED에는 도달하지 않는다.")
         String replayStatus,
         LessonAccessResponse access,
-        @Schema(description = "내 학습 상태. 학습 기록 도메인(CP5) 전까지 항상 null.")
+        @Schema(description = "내 학습 상태. learning 패키지가 배선되지 않아 항상 null(ADR-0024).")
         LearningResponse learning
 ) {
     @Schema(description = "레슨 학습 상태")

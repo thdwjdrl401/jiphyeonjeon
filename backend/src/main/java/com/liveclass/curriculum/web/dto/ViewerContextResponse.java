@@ -19,7 +19,7 @@ public record ViewerContextResponse(
         String relationship,
         List<String> allowedActions,
         EnrollmentRecordResponse enrollment,
-        @Schema(description = "진도. 학습 기록 도메인(CP5) 전까지 항상 null.")
+        @Schema(description = "진도. learning 패키지가 배선되지 않아 항상 null(ADR-0024).")
         ProgressResponse progress,
         @Schema(description = "다음 라이브 세션. 목차의 레슨별 liveSession으로 대체되어 현재 항상 null.")
         Object nextLiveSession

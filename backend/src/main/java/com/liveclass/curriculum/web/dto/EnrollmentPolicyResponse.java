@@ -7,8 +7,9 @@ import java.time.OffsetDateTime;
 
 /**
  * 지금 이 커리큘럼을 신청할 수 있는가.
- * type: IMMEDIATE·APPROVAL_REQUIRED·INVITATION_ONLY / status: OPEN·UNAVAILABLE.
- * 신청 창구 개폐 일정은 도메인에 없어 opensAt·closesAt은 항상 null이다.
+ * type: IMMEDIATE·APPROVAL_REQUIRED·INVITATION_ONLY
+ * status: OPEN · NOT_OPEN(모집 시작 전) · CLOSED(마감) · UNAVAILABLE(초대 전용·미발행)
+ * status는 저장값이 아니라 모집 창(opensAt·closesAt) + 현재 시각에서 파생한다.
  */
 @Schema(description = "수강 신청 정책")
 public record EnrollmentPolicyResponse(

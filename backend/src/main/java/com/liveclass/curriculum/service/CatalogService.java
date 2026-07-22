@@ -16,12 +16,15 @@ import com.liveclass.lesson.api.LessonDirectory;
 import com.liveclass.lesson.api.LessonOutlineView;
 import com.liveclass.live.api.LiveSessionDirectory;
 import com.liveclass.live.api.LiveSessionView;
+import com.liveclass.video.api.ReplayDirectory;
+import com.liveclass.video.api.ReplayView;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -52,6 +55,7 @@ public class CatalogService {
     private final AssetDirectory assetDirectory;
     private final EnrollmentDirectory enrollmentDirectory;
     private final LiveSessionDirectory liveSessionDirectory;
+    private final ReplayDirectory replayDirectory;
 
     public CatalogService(CurriculumRepository curriculumRepository,
                           SectionRepository sectionRepository,
@@ -59,7 +63,8 @@ public class CatalogService {
                           InstructorDirectory instructorDirectory,
                           AssetDirectory assetDirectory,
                           EnrollmentDirectory enrollmentDirectory,
-                          LiveSessionDirectory liveSessionDirectory) {
+                          LiveSessionDirectory liveSessionDirectory,
+                          ReplayDirectory replayDirectory) {
         this.curriculumRepository = curriculumRepository;
         this.sectionRepository = sectionRepository;
         this.lessonDirectory = lessonDirectory;
@@ -67,6 +72,7 @@ public class CatalogService {
         this.assetDirectory = assetDirectory;
         this.enrollmentDirectory = enrollmentDirectory;
         this.liveSessionDirectory = liveSessionDirectory;
+        this.replayDirectory = replayDirectory;
     }
 
     @Transactional(readOnly = true)
@@ -184,6 +190,10 @@ public class CatalogService {
                 .flatMap(List::stream).map(LessonOutlineView::lessonId).toList();
         Map<UUID, LiveSessionView> liveSessions = liveSessionDirectory.findByLessons(lessonIds).stream()
                 .collect(Collectors.toMap(LiveSessionView::lessonId, view -> view, (first, second) -> first));
+        // 녹화본도 마찬가지. 세션이 레슨당 하나(DDL UNIQUE)라 녹화본도 레슨당 하나지만,
+        // 병합 함수를 둬서 혹시 모를 중복에 첫 건을 택한다.
+        Map<UUID, ReplayView> replays = replayDirectory.findByLessons(lessonIds).stream()
+                .collect(Collectors.toMap(ReplayView::lessonId, view -> view, (first, second) -> first));
 
         return sections.stream().map(section -> new CatalogOutlineSection(
                 section.getId(),
@@ -191,19 +201,23 @@ public class CatalogService {
                 section.getDescription(),
                 section.getOrderIndex(),
                 lessonsBySection.getOrDefault(section.getId(), List.of()).stream()
-                        .map(l -> toOutlineLesson(l, liveSessions.get(l.lessonId()), relationship))
+                        .map(l -> toOutlineLesson(l, liveSessions.get(l.lessonId()), replays.get(l.lessonId()), relationship))
                         .toList()
         )).toList();
     }
 
     private CatalogOutlineLesson toOutlineLesson(LessonOutlineView lesson,
                                                  LiveSessionView session,
+                                                 ReplayView replay,
                                                  String relationship) {
         CatalogLiveSession liveSession = session == null
                 ? null
                 : new CatalogLiveSession(session.sessionId(), session.liveSessionStatus(), session.scheduledAt());
-        // 다시보기 도메인(CP4)이 붙기 전까지 재생 가능한 녹화는 없다.
-        String replayStatus = "NOT_READY";
+        // 녹화 자체가 없는 레슨은 NOT_READY. 녹화가 있으면 그 상태를 그대로 옮긴다(라이브를 한 번 한
+        // 레슨은 DRAFT로 잡힌다). 게시 검수 흐름이 아직 없어 PUBLISHED에는 도달하지 않는다.
+        String replayStatus = replay == null ? "NOT_READY" : replay.replayStatus();
+        // 재생 길이는 녹화 완료 webhook이 채운다 — 그 경로 전까지는 녹화가 있어도 null이다.
+        Long durationMs = replay == null ? null : replay.durationMs();
 
         return new CatalogOutlineLesson(
                 lesson.lessonId(),
@@ -211,7 +225,7 @@ public class CatalogService {
                 lesson.order(),
                 lesson.status(),
                 liveSession == null ? null : liveSession.scheduledAt(),
-                null,
+                durationMs,
                 liveSession,
                 replayStatus,
                 lessonAccess(lesson, liveSession, replayStatus, relationship),
@@ -277,18 +291,38 @@ public class CatalogService {
                     List.of("CANCEL_ENROLLMENT"),
                     toEnrollmentRecord(enrollment));
         }
-        return CatalogViewerContext.of("UNENROLLED_STUDENT", List.of("ENROLL"));
+        // 신청이 실제로 통과할 때만 ENROLL을 준다. FE는 이 목록만 보고 버튼을 켜므로(EnrollmentActions),
+        // 여기서 무조건 주면 초대 전용·모집 마감 커리큘럼에서 버튼이 켜진 채 409로 떨어진다.
+        return CatalogViewerContext.of("UNENROLLED_STUDENT",
+                enrollmentPolicy(curriculum).isOpen() ? List.of("ENROLL") : List.of());
     }
 
     private CatalogEnrollmentRecord toEnrollmentRecord(EnrollmentView enrollment) {
         return new CatalogEnrollmentRecord(enrollment.id(), enrollment.status().name(), enrollment.requestedAt());
     }
 
-    /** 초대 전용은 카탈로그에서 신청 자체가 불가능하므로 창구를 닫힌 것으로 알린다. */
+    /**
+     * 지금 신청을 받는가. 판정 조건은 실제 신청 API({@code CurriculumEnrollmentService#apply})의
+     * 전제조건과 같아야 한다 — 여기서 OPEN이라고 답해 놓고 신청에서 409를 던지면 버튼이 거짓말을 한다.
+     */
     private CatalogEnrollmentPolicy enrollmentPolicy(Curriculum curriculum) {
         EnrollmentType type = curriculum.getEnrollmentType();
-        String status = type == EnrollmentType.INVITATION_ONLY ? "UNAVAILABLE" : "OPEN";
-        return new CatalogEnrollmentPolicy(type.name(), status, null, null);
+        OffsetDateTime opensAt = curriculum.getEnrollmentOpensAt();
+        OffsetDateTime closesAt = curriculum.getEnrollmentClosesAt();
+        OffsetDateTime now = OffsetDateTime.now();
+
+        String status;
+        if (type == EnrollmentType.INVITATION_ONLY
+                || curriculum.getLifecycleStatus() != CurriculumLifecycleStatus.PUBLISHED) {
+            status = "UNAVAILABLE";       // 초대 전용이거나 아직 공개되지 않음 — 창구 일정과 무관하게 불가
+        } else if (opensAt != null && now.isBefore(opensAt)) {
+            status = "NOT_OPEN";          // 모집 시작 전
+        } else if (closesAt != null && now.isAfter(closesAt)) {
+            status = "CLOSED";            // 모집 마감
+        } else {
+            status = "OPEN";
+        }
+        return new CatalogEnrollmentPolicy(type.name(), status, opensAt, closesAt);
     }
 
     private Map<UUID, EnrollmentView> loadMyEnrollments(CatalogViewer viewer) {
