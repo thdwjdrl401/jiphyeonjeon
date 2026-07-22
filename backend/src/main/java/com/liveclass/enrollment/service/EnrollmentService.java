@@ -8,6 +8,7 @@ import com.liveclass.enrollment.api.EnrollmentView;
 import com.liveclass.enrollment.domain.Enrollment;
 import com.liveclass.enrollment.api.EnrollmentStatus;
 import com.liveclass.enrollment.repository.EnrollmentRepository;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -49,7 +50,14 @@ public class EnrollmentService implements EnrollmentManagement, EnrollmentDirect
         e.setRequestedAt(now);
         e.setDecidedAt(null);
         e.setEnrolledAt(target == EnrollmentStatus.ACTIVE ? now : null);
-        return toView(repository.save(e));
+        try {
+            // 최초 동시 신청이 uq(curriculum_id, user_id)를 위반하면 여기서 DataIntegrityViolationException으로 올라온다.
+            // curriculum 모듈의 핸들러는 이를 구조충돌(CURRICULUM_STRUCTURE_CONFLICT)로 오인하므로, 수강 도메인의
+            // 상태충돌로 다시 던져 409 ENROLLMENT_STATE_CONFLICT로 내려간다.
+            return toView(repository.saveAndFlush(e));
+        } catch (DataIntegrityViolationException ex) {
+            throw new EnrollmentStateConflictException("이미 수강 신청한 커리큘럼입니다.");
+        }
     }
 
     @Override

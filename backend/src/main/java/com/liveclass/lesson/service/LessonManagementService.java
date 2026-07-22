@@ -1,6 +1,7 @@
 package com.liveclass.lesson.service;
 
 import com.liveclass.lesson.api.LessonManagement;
+import com.liveclass.lesson.api.LessonNotFoundException;
 import com.liveclass.lesson.api.LessonView;
 import com.liveclass.lesson.domain.Lesson;
 import com.liveclass.lesson.domain.LessonStatus;
@@ -43,7 +44,7 @@ public class LessonManagementService implements LessonManagement {
     @Transactional
     public LessonView update(UUID lessonId, String title, String description) {
         Lesson lesson = lessonRepository.findById(lessonId)
-                .orElseThrow(() -> new IllegalStateException("레슨이 없습니다: " + lessonId));
+                .orElseThrow(() -> new LessonNotFoundException("레슨이 없습니다: " + lessonId));
         if (title != null) {
             lesson.setTitle(title);
         }
@@ -77,7 +78,7 @@ public class LessonManagementService implements LessonManagement {
     @Transactional
     public LessonView publish(UUID lessonId) {
         Lesson lesson = lessonRepository.findById(lessonId)
-                .orElseThrow(() -> new IllegalStateException("레슨이 없습니다: " + lessonId));
+                .orElseThrow(() -> new LessonNotFoundException("레슨이 없습니다: " + lessonId));
         lesson.setStatus(LessonStatus.PUBLISHED);
         lesson.setPublishedAt(OffsetDateTime.now());
         return toView(lesson);
@@ -87,7 +88,7 @@ public class LessonManagementService implements LessonManagement {
     @Transactional
     public LessonView unpublish(UUID lessonId) {
         Lesson lesson = lessonRepository.findById(lessonId)
-                .orElseThrow(() -> new IllegalStateException("레슨이 없습니다: " + lessonId));
+                .orElseThrow(() -> new LessonNotFoundException("레슨이 없습니다: " + lessonId));
         lesson.setStatus(LessonStatus.DRAFT);
         lesson.setPublishedAt(null);
         return toView(lesson);

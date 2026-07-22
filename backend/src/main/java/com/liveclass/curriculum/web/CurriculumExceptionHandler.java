@@ -46,6 +46,16 @@ public class CurriculumExceptionHandler {
                 .body(ErrorResponse.of("CURRICULUM_NOT_FOUND", e.getMessage()));
     }
 
+    /**
+     * 레슨 포트(lesson.api) 조작 중 레슨을 못 찾는 경우(소유권 확인과 포트 호출 사이의 동시 삭제 등).
+     * 매핑이 없으면 500으로 새므로 404 LESSON_NOT_FOUND로 내린다.
+     */
+    @ExceptionHandler(com.liveclass.lesson.api.LessonNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleLessonNotFound(com.liveclass.lesson.api.LessonNotFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ErrorResponse.of("LESSON_NOT_FOUND", e.getMessage()));
+    }
+
     /** 소유자가 아님. 존재는 하지만(404 아님) 권한이 없다. */
     @ExceptionHandler(NotCurriculumOwnerException.class)
     public ResponseEntity<ErrorResponse> handleNotOwner(NotCurriculumOwnerException e) {
