@@ -69,15 +69,15 @@ GET /api/instructor/dashboard-summary
 ### 4.2 `MY-CURRICULUM-02` 운영 목록
 
 ```http
-GET /api/instructor/curriculums?q=spring&status=ACTIVE&sort=NEXT_SESSION&page=0&size=20
+GET /api/instructor/curriculums?q=spring&status=PUBLISHED&sort=TITLE_ASC&page=0&size=20
 ```
 
 | Query | 형식 | 설명 |
 |---|---|---|
-| `q` | string | 제목 검색 |
-| `status` | enum | 확정된 운영 상태 필터 |
-| `sort` | enum | `LATEST`, `NEXT_SESSION`, `TITLE_ASC` 제안 |
-| `page`, `size` | integer | 공통 페이지네이션 |
+| `q` | string | 제목 부분 검색(대소문자 무시). 생략 시 전체 |
+| `status` | enum | lifecycle 상태 필터: `DRAFT` \| `PUBLISHED` \| `ARCHIVED`. 생략 시 전체 |
+| `sort` | enum | `LATEST`(기본, 최근 생성 순) \| `TITLE_ASC`. `NEXT_SESSION`은 미지원 — 아래 "구현 현황" 참고 |
+| `page`, `size` | integer | 공통 페이지네이션 (`page` 기본 0, `size` 기본 20 · 상한 100) |
 
 **응답 항목 제안**
 
@@ -113,6 +113,15 @@ GET /api/instructor/curriculums?q=spring&status=ACTIVE&sort=NEXT_SESSION&page=0&
 ```
 
 목록에는 수강생 개인정보나 처리 중인 AI 내부 오류를 포함하지 않는다. 관리가 필요한 자료·세션 상태는 개수와 공개 가능한 reason code 수준으로 요약한다.
+
+#### 구현 현황 (백엔드)
+
+- **구현됨**: `q`(제목 대소문자 무시 부분검색) · `status`(lifecycle 필터, `DRAFT`/`PUBLISHED`/`ARCHIVED`) · `sort`(`LATEST` 기본, `TITLE_ASC` — 둘 다 id 2차 키로 순서를 확정해 페이지 간 중복·누락이 없다) · `page`/`size`(공통 페이지 봉투, size 상한 100) · 소유자 본인 커리큘럼만 · `nextLiveSession`.
+- **`nextLiveSession`의 의미**: "앞으로 있을 것 또는 지금 진행 중인 것" 중 가장 이른 하나. 일정 미정(`DRAFT`) · 정리 중(`ENDING`) · 종료 계열(`ENDED`/`CANCELLED`/`FAILED`)은 제외하고, `scheduledAt`이 아직 지나지 않았거나 이미 지났더라도 진행 계열(`OPEN`/`STARTING`/`LIVE`)인 세션만 대상이다. 즉 **시작하지 않은 채 방치된 과거 `SCHEDULED` 세션은 보여주지 않고**(진짜 다음 일정을 가리지 않도록), 10분 전에 시작해 방송 중인 세션은 계속 보여준다. 해당 세션이 없으면 필드 자체가 `null`.
+- **미구현 — 필드 자체가 응답에 없다**(가짜 기본값을 내려 FE가 구현된 것으로 오해하지 않도록):
+  - `materialAttentionCount` — `material_asset`이 아직 배선되지 않은 골격이라 계산할 값이 없다(CP2, ADR-0024).
+  - `allowedActions` — `viewerContext`/허용행동 모델이 레포 전체에 미구현.
+- **미구현 — 400으로 거절**: `sort=NEXT_SESSION`. 커리큘럼 × 라이브를 가로지르는 정렬이라 현재 포트로는 전역 순서를 표현할 수 없다. 페이지 내부만 재정렬하면 조용히 틀린 결과가 되므로 허용 enum에서 제외해 `VALIDATION_FAILED`(400)로 응답한다.
 
 ## 5. 학생 대시보드
 

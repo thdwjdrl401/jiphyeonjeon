@@ -9,13 +9,29 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 public interface CurriculumRepository extends JpaRepository<Curriculum, UUID> {
 
-    List<Curriculum> findByInstructorIdOrderByCreatedAtDesc(UUID instructorId);
+    /*
+     * 강사 운영 목록(MY-CURRICULUM-02). 소유자 한정 + 선택적 제목검색·상태필터의 4가지 조합을
+     * 파생 쿼리로 나눈다. "q/status가 null이면 무시"를 한 JPQL에 넣으면 Postgres가 바인딩 타입을
+     * 추론하지 못해 깨지므로(searchPublic 주석 참고) 조합별 메서드로 분리했다.
+     * TitleContainingIgnoreCase는 와일드카드를 바인딩 값에 붙여 CONCAT 타입추론 문제를 피한다.
+     */
+
+    Page<Curriculum> findByInstructorId(UUID instructorId, Pageable pageable);
+
+    Page<Curriculum> findByInstructorIdAndLifecycleStatus(UUID instructorId,
+                                                          CurriculumLifecycleStatus lifecycleStatus,
+                                                          Pageable pageable);
+
+    Page<Curriculum> findByInstructorIdAndTitleContainingIgnoreCase(UUID instructorId, String title,
+                                                                    Pageable pageable);
+
+    Page<Curriculum> findByInstructorIdAndLifecycleStatusAndTitleContainingIgnoreCase(
+            UUID instructorId, CurriculumLifecycleStatus lifecycleStatus, String title, Pageable pageable);
 
     Optional<Curriculum> findByIdAndLifecycleStatus(UUID id, CurriculumLifecycleStatus status);
 

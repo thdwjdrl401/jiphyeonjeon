@@ -10,7 +10,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /** LessonDirectory 구현 — lesson 내부 엔티티를 경계 DTO로 변환한다. */
 @Service
@@ -39,6 +41,17 @@ public class LessonDirectoryService implements LessonDirectory {
                 .stream()
                 .map(this::toView)
                 .toList();
+    }
+
+    /** 제목 배치 조회 — findAllById가 IN 쿼리 한 번으로 끝낸다(행마다 findById 금지). */
+    @Override
+    @Transactional(readOnly = true)
+    public Map<UUID, String> findTitles(Collection<UUID> lessonIds) {
+        if (lessonIds.isEmpty()) {
+            return Map.of();
+        }
+        return lessonRepository.findAllById(lessonIds).stream()
+                .collect(Collectors.toMap(Lesson::getId, Lesson::getTitle));
     }
 
     private LessonOutlineView toView(Lesson lesson) {

@@ -2,10 +2,14 @@ package com.liveclass.curriculum.web;
 
 import com.liveclass.asset.api.AssetDirectory;
 import com.liveclass.curriculum.domain.Curriculum;
+import com.liveclass.curriculum.domain.CurriculumLifecycleStatus;
 import com.liveclass.curriculum.service.InstructorCurriculumService;
+import com.liveclass.curriculum.service.InstructorCurriculumSort;
 import com.liveclass.curriculum.service.SectionOrderCommand;
 import com.liveclass.curriculum.web.dto.CreateCurriculumRequest;
 import com.liveclass.curriculum.web.dto.CurriculumResponse;
+import com.liveclass.curriculum.web.dto.InstructorCurriculumListItem;
+import com.liveclass.curriculum.web.dto.PageResponse;
 import com.liveclass.curriculum.web.dto.SectionRequest;
 import com.liveclass.curriculum.web.dto.SectionResponse;
 import com.liveclass.curriculum.web.dto.StructureOrderRequest;
@@ -24,12 +28,11 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -58,16 +61,29 @@ public class InstructorCurriculumController {
                 request.thumbnailAssetId()));
     }
 
-    @Operation(summary = "내 커리큘럼 목록", description = "내가 만든 커리큘럼 목록을 최근 만든 순으로 반환한다.")
+    /**
+     * MY-CURRICULUM-02. 계약 초안의 {@code materialAttentionCount}·{@code allowedActions}·
+     * {@code sort=NEXT_SESSION}은 이번 범위에서 <b>의도적으로 제외</b>했다 — 각각 material_asset
+     * 미배선(CP2, ADR-0024), viewerContext 모델 미구현, 그리고 커리큘럼×라이브를 가로지르는 정렬을
+     * 현재 포트로 표현할 수 없기 때문이다. 조용히 틀린 값을 주는 대신 필드를 빼고 400으로 거절한다.
+     */
+    @Operation(summary = "내 커리큘럼 목록",
+            description = "내가 만든 커리큘럼을 검색·필터·정렬·페이지로 조회한다. 카드마다 가장 가까운 예정 라이브 세션(nextLiveSession)을 함께 준다. "
+                    + "미구현 항목: materialAttentionCount·allowedActions는 응답에 없고, sort=NEXT_SESSION은 지원하지 않아 400으로 거절한다.")
     @GetMapping("/api/instructor/curriculums")
-    public List<CurriculumResponse> listMine(Authentication authentication) {
-        List<Curriculum> curriculums = service.listMine(currentUserId(authentication));
-        // 썸네일 URL은 목록 크기만큼 배치로 해석해 N+1을 피한다.
-        Map<UUID, String> urls = assetDirectory.resolveUrls(curriculums.stream()
-                .map(Curriculum::getThumbnailAssetId).filter(Objects::nonNull).toList());
-        return curriculums.stream()
-                .map(c -> CurriculumResponse.from(c, thumbnailUrl(c, urls)))
-                .toList();
+    public PageResponse<InstructorCurriculumListItem> listMine(
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) CurriculumLifecycleStatus status,
+            @RequestParam(defaultValue = "LATEST") InstructorCurriculumSort sort,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            Authentication authentication
+    ) {
+        int pageSize = PageParams.size(size);
+        return PageResponse.of(
+                service.listMine(currentUserId(authentication), q, status, sort,
+                        PageParams.page(page, pageSize), pageSize),
+                InstructorCurriculumListItem::from);
     }
 
     @Operation(summary = "커리큘럼 관리 조회", description = "관리 화면용 상세. 섹션·레슨 개수 같은 운영 정보까지 포함한다. 본인 것만.")
@@ -153,10 +169,6 @@ public class InstructorCurriculumController {
                 ? null
                 : assetDirectory.resolveUrl(c.getThumbnailAssetId()).orElse(null);
         return CurriculumResponse.from(c, url);
-    }
-
-    private String thumbnailUrl(Curriculum c, Map<UUID, String> urls) {
-        return c.getThumbnailAssetId() == null ? null : urls.get(c.getThumbnailAssetId());
     }
 
     /** 인증 주체엔 사용자 ID(UUID 문자열)만 담겨 있다 — AuthController.establishSession 참고. */
