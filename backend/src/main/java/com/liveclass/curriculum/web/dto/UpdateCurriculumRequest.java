@@ -4,6 +4,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Size;
 
 import java.time.OffsetDateTime;
+import java.util.UUID;
 
 /**
  * PATCH 부분 수정 — 넘어온 필드만 바꾼다. null은 "변경 안 함"으로 다룬다(전부 선택).
@@ -27,6 +28,9 @@ public record UpdateCurriculumRequest(
         OffsetDateTime startsAt,
 
         @Schema(description = "진행 종료 시각", example = "2026-10-15T22:00:00+09:00")
-        OffsetDateTime endsAt
+        OffsetDateTime endsAt,
+
+        @Schema(description = "썸네일 에셋 id(선택). 미리 업로드 완료(UPLOADED)한 본인 THUMBNAIL 에셋이어야 한다.")
+        UUID thumbnailAssetId
 ) {
 }

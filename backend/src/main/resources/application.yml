@@ -85,6 +85,19 @@ livekit:
     live-playlist-name: live.m3u8
     layout: grid
 
+asset:
+  storage:
+    # 에셋(썸네일·프로필 이미지) presigned 업로드용 S3 호환 스토리지. 로컬은 MinIO.
+    # 비밀키는 커밋하지 않는다 — dev 기본값만 두고 운영은 환경변수로 주입한다.
+    endpoint: ${ASSET_STORAGE_ENDPOINT:http://localhost:9000}    # MinIO. 운영 S3 배정 시 교체.
+    region: ${ASSET_STORAGE_REGION:us-east-1}
+    bucket: ${ASSET_STORAGE_BUCKET:liveclass-assets}
+    access-key: ${ASSET_STORAGE_ACCESS_KEY:minioadmin}          # 커밋 금지 값은 env로
+    secret-key: ${ASSET_STORAGE_SECRET_KEY:minioadmin}
+    path-style: ${ASSET_STORAGE_PATH_STYLE:true}                # MinIO는 path-style 필요
+    upload-ttl-seconds: ${ASSET_STORAGE_UPLOAD_TTL:600}         # presigned PUT 유효기간(10분)
+    download-ttl-seconds: ${ASSET_STORAGE_DOWNLOAD_TTL:3600}    # presigned GET 유효기간(1시간)
+
 liveclass:
   ws:
     # WebSocket 핸드셰이크 오리진 화이트리스트(CSWSH 방어, ADR-0019). 같은 오리진 배포(nginx)라

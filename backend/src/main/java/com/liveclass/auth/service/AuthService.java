@@ -1,5 +1,7 @@
 package com.liveclass.auth.service;
 
+import com.liveclass.asset.api.AssetDirectory;
+import com.liveclass.asset.api.AssetRef;
 import com.liveclass.auth.domain.AccountStatus;
 import com.liveclass.auth.domain.AppUser;
 import com.liveclass.auth.domain.Role;
@@ -24,6 +26,7 @@ public class AuthService {
 
     private final AppUserRepository appUserRepository;
     private final PasswordEncoder passwordEncoder;
+    private final AssetDirectory assetDirectory;
 
     /**
      * 계정이 없을 때도 해싱 비용을 치르기 위한 미끼 해시.
@@ -32,9 +35,11 @@ public class AuthService {
      */
     private final String decoyHash;
 
-    public AuthService(AppUserRepository appUserRepository, PasswordEncoder passwordEncoder) {
+    public AuthService(AppUserRepository appUserRepository, PasswordEncoder passwordEncoder,
+                       AssetDirectory assetDirectory) {
         this.appUserRepository = appUserRepository;
         this.passwordEncoder = passwordEncoder;
+        this.assetDirectory = assetDirectory;
         this.decoyHash = passwordEncoder.encode("decoy-password-that-never-matches");
     }
 
@@ -95,6 +100,33 @@ public class AuthService {
     public AppUser getById(UUID id) {
         return appUserRepository.findById(id)
                 .orElseThrow(() -> new InvalidCredentialsException(CREDENTIALS_REJECTED));
+    }
+
+    /**
+     * 프로필 이미지 지정. asset.api로 검증한다 — 본인이 올린, 종류 PROFILE_IMAGE, 완료(UPLOADED)
+     * 여야 한다. asset 엔티티엔 직접 접근하지 않고 포트만 쓴다(모듈 경계).
+     */
+    @Transactional
+    public AppUser updateProfileImage(UUID userId, UUID assetId) {
+        AppUser user = appUserRepository.findById(userId)
+                .orElseThrow(() -> new InvalidCredentialsException(CREDENTIALS_REJECTED));
+        AssetRef ref = assetDirectory.find(assetId)
+                .orElseThrow(() -> new ProfileImageInvalidException("프로필 이미지 에셋을 찾을 수 없습니다."));
+        if (!userId.equals(ref.uploadedBy())
+                || !"PROFILE_IMAGE".equals(ref.kind())
+                || !"UPLOADED".equals(ref.status())) {
+            throw new ProfileImageInvalidException("유효하지 않은 프로필 이미지 에셋입니다.");
+        }
+        user.setProfileImageAssetId(assetId);
+        log.info(Audit.MARKER, "프로필 이미지 변경 userId={} assetId={}", userId, assetId);
+        return user;
+    }
+
+    /** 사용자의 프로필 이미지 표시용 presigned URL(없거나 미완료면 null). */
+    @Transactional(readOnly = true)
+    public String resolveProfileImageUrl(AppUser user) {
+        UUID assetId = user.getProfileImageAssetId();
+        return assetId == null ? null : assetDirectory.resolveUrl(assetId).orElse(null);
     }
 
     private String normalize(String email) {
