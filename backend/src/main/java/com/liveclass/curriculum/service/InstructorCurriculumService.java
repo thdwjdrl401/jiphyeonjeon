@@ -12,6 +12,7 @@ import com.liveclass.common.logging.Audit;
 import com.liveclass.lesson.api.LessonDirectory;
 import com.liveclass.lesson.api.LessonManagement;
 import com.liveclass.lesson.api.LessonView;
+import com.liveclass.live.api.LiveSessionDirectory;
 import com.liveclass.live.api.LiveSessionManagement;
 import com.liveclass.live.api.LiveSessionView;
 import org.slf4j.Logger;
@@ -37,6 +38,7 @@ public class InstructorCurriculumService {
     private final LessonDirectory lessonDirectory;
     private final LessonManagement lessonManagement;
     private final LiveSessionManagement liveSessionManagement;
+    private final LiveSessionDirectory liveSessionDirectory;
     private final AssetDirectory assetDirectory;
 
     public InstructorCurriculumService(CurriculumRepository curriculumRepository,
@@ -44,12 +46,14 @@ public class InstructorCurriculumService {
                                        LessonDirectory lessonDirectory,
                                        LessonManagement lessonManagement,
                                        LiveSessionManagement liveSessionManagement,
+                                       LiveSessionDirectory liveSessionDirectory,
                                        AssetDirectory assetDirectory) {
         this.curriculumRepository = curriculumRepository;
         this.sectionRepository = sectionRepository;
         this.lessonDirectory = lessonDirectory;
         this.lessonManagement = lessonManagement;
         this.liveSessionManagement = liveSessionManagement;
+        this.liveSessionDirectory = liveSessionDirectory;
         this.assetDirectory = assetDirectory;
     }
 
@@ -295,7 +299,7 @@ public class InstructorCurriculumService {
         // 세션에 소속 커리큘럼을 실어 접근 게이팅에 쓴다(session→enrollment 사이클 회피).
         UUID curriculumId = requireOwnedSection(instructorId, lesson.sectionId()).getCurriculumId();
         // 레슨당 세션 1개(DDL UNIQUE). 이미 있으면 상태 충돌로 막는다.
-        if (liveSessionManagement.existsForLesson(lessonId)) {
+        if (liveSessionDirectory.existsForLesson(lessonId)) {
             throw new CurriculumStateConflictException("이미 이 레슨의 라이브 세션이 있습니다.");
         }
         LiveSessionView session = liveSessionManagement.create(lessonId, curriculumId, instructorId, scheduledAt);

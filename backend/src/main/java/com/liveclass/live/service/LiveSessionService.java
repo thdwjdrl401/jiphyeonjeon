@@ -1,5 +1,6 @@
 package com.liveclass.live.service;
 
+import com.liveclass.live.api.LiveSessionDirectory;
 import com.liveclass.live.api.LiveSessionEndedEvent;
 import com.liveclass.live.api.LiveSessionManagement;
 import com.liveclass.live.api.LiveSessionStartedEvent;
@@ -18,9 +19,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-/** LiveSessionManagement 구현. 데이터만 담당하고 소유권 검증은 하지 않는다(호출자 책임). */
+/** 라이브 세션 포트(읽기·쓰기) 구현. 데이터만 담당하고 소유권 검증은 하지 않는다(호출자 책임). */
 @Service
-public class LiveSessionService implements LiveSessionManagement {
+public class LiveSessionService implements LiveSessionManagement, LiveSessionDirectory {
 
     private static final Logger log = LoggerFactory.getLogger(LiveSessionService.class);
 
