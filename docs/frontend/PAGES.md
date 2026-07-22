@@ -75,7 +75,7 @@
 | 다시보기 공개 | `DRAFT`·`READY_FOR_REVIEW`·`PUBLISHED`·`WITHDRAWN` | 강사 검수 가능 여부와 수강생 공개 여부 구분 |
 
 - 레슨 `PUBLISHED`를 라이브 진행·종료 상태로 사용하지 않는다.
-- `isPublished` 같은 별도 boolean을 두지 않고 레슨의 공식 공개 여부는 `lessonStatus=PUBLISHED`로 판단한다.
+- `isPublished` 같은 별도 boolean을 두지 않고 레슨의 공식 공개 여부는 `status=PUBLISHED`로 판단한다.
 - 라이브 시작은 레슨 `PUBLISHED`, 필수 PPTX 존재, AI 준비 완료, 진행 중인 자료 작업 없음, 라이브 세션 `SCHEDULED` 또는 `OPEN`, 사전 점검 통과를 모두 요구한다.
 - `AI_NOT_READY`에서는 라이브 시작을 허용하지 않는다.
 - PPTX 자료는 레슨 전부터 수강생에게 공개한다.

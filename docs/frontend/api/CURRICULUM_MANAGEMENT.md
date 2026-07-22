@@ -73,7 +73,7 @@
           "lessonId": "les_01J...",
           "title": "오리엔테이션",
           "order": 1,
-          "lessonStatus": "AI_NOT_READY",
+          "status": "AI_NOT_READY",
           "materialSummary": {
             "activeCount": 2,
             "operationStatus": "PROCESSING",

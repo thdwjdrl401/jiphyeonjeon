@@ -20,7 +20,7 @@ live session은 lesson에 연결된 실제 일정·입장·진행·종료 인스
 - MVP에서는 `lesson : liveSession = 1:1`
 - 세션 화면·API·실시간 연결의 기준 식별자는 `sessionId`
 - lesson 게시·AI 준비 전에도 세션 예약은 가능
-- 실제 시작은 `lessonStatus=PUBLISHED`와 AI 준비 완료를 필수로 요구
+- 실제 시작은 `status=PUBLISHED`와 AI 준비 완료를 필수로 요구
 - 강사가 수동으로 시작하며 예정 시각만으로 자동 시작하지 않음
 - 시작 전 LiveKit·Egress·STT 문제는 시작 차단
 - 시작 성공 후 Egress·STT 장애는 WebRTC 라이브를 종료시키지 않고 저하 상태로 처리
@@ -165,7 +165,7 @@ MVP 1:1 제약으로 기존 세션이 있으면 새 세션 생성을 차단하�
 ### 8.1 접근 권한
 
 - 해당 lesson 강사는 lesson 게시 상태와 관계없이 자신의 session 상세·수정·점검에 접근
-- 수강생은 유효한 enrollment와 `lessonStatus=PUBLISHED`를 모두 만족할 때만 session 상세·prejoin에 접근
+- 수강생은 유효한 enrollment와 `status=PUBLISHED`를 모두 만족할 때만 session 상세·prejoin에 접근
 - 비로그인·미수강자·다른 강사는 진입 단계에서 차단
 - 실제 권한과 상태는 모든 session API와 LiveKit token 발급에서 서버가 다시 검증
 
@@ -276,7 +276,7 @@ AI 미준비와 Egress 문제는 경고만 표시하고 우회하는 선택지�
 
 - `sessionId`·`lessonId`
 - curriculum·section·lesson 요약
-- `lessonStatus`·자료·AI 준비 상태
+- `status`·자료·AI 준비 상태
 - live session 예정 시각·입장 창·상태
 - 현재 사용자의 관계와 허용 행동
 - prejoin·preflight 점검 결과와 차단·경고 구분

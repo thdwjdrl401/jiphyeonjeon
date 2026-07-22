@@ -175,7 +175,7 @@ QUEUED → VALIDATING → PARSING → CHUNKING → EMBEDDING
 ```
 
 - `stage` 또는 `processingStatus`는 사용자 안내용이다.
-- 행동 가능 여부는 최종 `lessonStatus`, `operationStatus`, `allowedActions`로 결정한다.
+- 행동 가능 여부는 최종 `status`, `operationStatus`, `allowedActions`로 결정한다.
 - 처리 중에는 2~5초 polling으로 시작하고 장기 작업은 backoff한다.
 - `COMPLETED`, `FAILED`에서 polling을 중단한다.
 - 작업 실패 시 기존 활성 자료와 기존 검색 범위를 가능한 한 유지한다.
@@ -253,7 +253,7 @@ DRAFT → READY_FOR_REVIEW → PUBLISHED → WITHDRAWN
 학생 VOD 접근은 최소한 다음 조건을 모두 만족해야 한다.
 
 ```text
-lessonStatus=PUBLISHED
+status=PUBLISHED
 + enrollmentStatus=ACTIVE
 + videoAssetStatus=READY
 + replayStatus=PUBLISHED
@@ -313,7 +313,7 @@ NOT_READY → PROCESSING → READY_FOR_REVIEW → DRAFT_SAVED → PUBLISHED
 예를 들어 라이브 종료 직후의 정상 조합은 아래처럼 여러 상태가 동시에 존재할 수 있다.
 
 ```text
-lessonStatus       = PUBLISHED
+status       = PUBLISHED
 liveSessionStatus  = ENDED
 videoAssetStatus   = FINALIZING
 replayStatus       = DRAFT

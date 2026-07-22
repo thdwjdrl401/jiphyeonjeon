@@ -8,7 +8,7 @@
 
 ### 1.1 확정 상태와 원칙
 
-- `lessonStatus`: `DRAFT → AI_NOT_READY → READY → PUBLISHED`
+- `status`: `DRAFT → AI_NOT_READY → READY → PUBLISHED`
 - 별도 `isPublished` boolean을 사용하지 않음
 - 제목만으로 `DRAFT` 생성 가능
 - 초기 PPTX는 복수 선택·업로드 후 명시적으로 AI 준비 시작
@@ -65,7 +65,7 @@ POST /api/instructor/sections/{sectionId}/lessons
   "lessonId": "les_01J...",
   "sectionId": "sec_01J...",
   "order": 3,
-  "lessonStatus": "DRAFT",
+  "status": "DRAFT",
   "createdAt": "2026-07-20T12:00:00+09:00",
   "allowedActions": ["EDIT_LESSON", "UPLOAD_INITIAL_MATERIALS"]
 }
@@ -84,7 +84,7 @@ GET /api/instructor/lessons/{lessonId}
   "lessonId": "les_01J...",
   "title": "Spring Security 시작하기",
   "description": "인증과 인가의 기본을 다룹니다.",
-  "lessonStatus": "AI_NOT_READY",
+  "status": "AI_NOT_READY",
   "parent": {
     "curriculumId": "cur_01J...",
     "curriculumTitle": "실시간 Spring 입문",
@@ -158,7 +158,7 @@ POST /api/instructor/lessons/{lessonId}/publish
 ```json
 {
   "lessonId": "les_01J...",
-  "lessonStatus": "PUBLISHED",
+  "status": "PUBLISHED",
   "publishedAt": "2026-07-20T12:30:00+09:00",
   "allowedActions": ["VIEW_LESSON", "CREATE_LIVE_SESSION"]
 }
@@ -275,7 +275,7 @@ POST /api/instructor/lessons/{lessonId}/ai-preparation
 {
   "operationId": "mop_01L...",
   "lessonId": "les_01J...",
-  "lessonStatus": "AI_NOT_READY",
+  "status": "AI_NOT_READY",
   "operationStatus": "QUEUED"
 }
 ```
@@ -310,7 +310,7 @@ DELETE /api/instructor/lessons/{lessonId}/materials/{materialId}
   "operationId": "mop_01M...",
   "lessonId": "les_01J...",
   "materialId": "mat_01J...",
-  "lessonStatus": "AI_NOT_READY",
+  "status": "AI_NOT_READY",
   "operationStatus": "QUEUED"
 }
 ```
@@ -346,7 +346,7 @@ POST /api/instructor/lessons/{lessonId}/material-operations/{operationId}/retry
 
 `QUEUED`, `VALIDATING`, `PARSING`, `CHUNKING`, `EMBEDDING`, `GENERATING_CANDIDATES`, `REMOVING_EMBEDDINGS`, `INVALIDATING_AI_RESULTS`, `COMPLETED`, `FAILED`
 
-`stage`는 진행 안내용이며 프론트가 상태 전이를 결정하는 근거로 사용하지 않는다. 최종 `lessonStatus`, `operationStatus`, `allowedActions`를 사용한다.
+`stage`는 진행 안내용이며 프론트가 상태 전이를 결정하는 근거로 사용하지 않는다. 최종 `status`, `operationStatus`, `allowedActions`를 사용한다.
 
 ### 7.3 상태 갱신
 
@@ -367,7 +367,7 @@ GET /api/lessons/{lessonId}
   "lessonId": "les_01J...",
   "title": "Spring Security 시작하기",
   "description": "인증과 인가의 기본을 다룹니다.",
-  "lessonStatus": "PUBLISHED",
+  "status": "PUBLISHED",
   "parent": {
     "curriculumId": "cur_01J...",
     "curriculumTitle": "실시간 Spring 입문",
@@ -449,7 +449,7 @@ GET /api/lessons/{lessonId}/materials/{materialId}/download
 - 동일 키와 동일 payload는 기존 결과로 수렴한다.
 - 동일 키와 다른 payload는 `409 IDEMPOTENCY_KEY_REUSED`.
 - 한 lesson에서 자료 추가·삭제 operation은 동시에 하나만 실행한다.
-- 상태 충돌 응답에는 최신 `lessonStatus`, `currentMaterialOperation`, `allowedActions`를 가능한 범위에서 포함한다.
+- 상태 충돌 응답에는 최신 `status`, `currentMaterialOperation`, `allowedActions`를 가능한 범위에서 포함한다.
 
 ## 12. 백엔드 협의 사항
 

@@ -70,7 +70,7 @@ GET /api/curriculums/{curriculumId}
           "lessonId": "les_01J...",
           "title": "오리엔테이션",
           "order": 1,
-          "lessonStatus": "PUBLISHED",
+          "status": "PUBLISHED",
           "scheduledAt": "2026-08-01T10:00:00+09:00",
           "durationMs": 5400000,
           "liveSession": {
@@ -122,11 +122,11 @@ GET /api/curriculums/{curriculumId}
 | 상태 | `lifecycleStatus`, `period`, `enrollmentPolicy` | 공개·운영·수강 상태 |
 | 강사 | `instructor` | 공개 가능한 강사 요약 |
 | 목차 | `outline[].sectionId`, `title`, `description`, `order` | 공개 섹션 |
-| 레슨 | `lessonId`, `title`, `order`, `lessonStatus` | 레슨 게시 상태와 공개하기로 한 최소 목차 |
+| 레슨 | `lessonId`, `title`, `order`, `status` | 레슨 게시 상태와 공개하기로 한 최소 목차 |
 | 라이브 | `liveSession.sessionId`, `liveSessionStatus`, `scheduledAt` | 연결된 라이브 세션이 없으면 `liveSession=null` |
 | 다시보기 | `replayStatus` | `NOT_READY`, `DRAFT`, `READY_FOR_REVIEW`, `PUBLISHED`, `WITHDRAWN` |
 
-비수강 사용자에게 `lessonStatus` 전체를 노출할지, `AVAILABLE|UPCOMING|LOCKED` 같은 공개용 상태로 변환할지는 **협의 필요**다. 내부 준비 상태 노출을 줄이기 위해 공개용 상태를 별도로 제공하는 방식을 제안한다.
+비수강 사용자에게 `status` 전체를 노출할지, `AVAILABLE|UPCOMING|LOCKED` 같은 공개용 상태로 변환할지는 **협의 필요**다. 내부 준비 상태 노출을 줄이기 위해 공개용 상태를 별도로 제공하는 방식을 제안한다.
 
 ### 4.3 관계·허용 행동
 
@@ -177,7 +177,7 @@ GET /api/curriculums/{curriculumId}
 
 `LIVE_SESSION` 또는 `LIVE_CLASSROOM`인데 `liveSession.sessionId`가 누락되면 프론트는 존재하지 않는 URL을 만들지 않고 레슨 상세로 대체한다.
 
-학생용 레슨 행은 `lessonStatus`와 활동 상태를 함께 보여준다. `OPEN|LIVE`는 강의실 직접 입장 대신 `입장 준비`를 노출하고 반드시 prejoin으로 이동한다. `DRAFT|SCHEDULED|STARTING`은 라이브 상세 확인, `replayStatus=PUBLISHED`는 다시보기 이동을 제공한다. 라이브가 `ENDING|ENDED`이고 다시보기가 아직 게시되지 않았으면 `다시보기 준비 중`을 비활성 안내로 표시한다. 연결된 라이브 일정과 게시된 다시보기가 아직 없으면 `라이브 일정 준비 중` 상태와 `레슨 자료 보기` 행동을 제공한다.
+학생용 레슨 행은 `status`와 활동 상태를 함께 보여준다. `OPEN|LIVE`는 강의실 직접 입장 대신 `입장 준비`를 노출하고 반드시 prejoin으로 이동한다. `DRAFT|SCHEDULED|STARTING`은 라이브 상세 확인, `replayStatus=PUBLISHED`는 다시보기 이동을 제공한다. 라이브가 `ENDING|ENDED`이고 다시보기가 아직 게시되지 않았으면 `다시보기 준비 중`을 비활성 안내로 표시한다. 연결된 라이브 일정과 게시된 다시보기가 아직 없으면 `라이브 일정 준비 중` 상태와 `레슨 자료 보기` 행동을 제공한다.
 
 ### 4.5 상태코드
 
@@ -253,7 +253,7 @@ DELETE /api/curriculums/{curriculumId}/enrollments/me
 1. 강사 승인 수강의 승인·거절 알림과 재신청 제한 정책
 2. 강사 계정의 타 커리큘럼 수강 허용 여부
 3. 비수강 사용자에게 공개할 섹션·레슨 필드 범위
-4. 내부 `lessonStatus` 대신 공개용 레슨 상태를 둘지 여부
+4. 내부 `status` 대신 공개용 레슨 상태를 둘지 여부
 5. 커리큘럼 lifecycle·모집 상태 enum과 날짜 기반 상태 판정 주체
 6. 수강 완료 기준과 상세 진행률 계산 방식
 7. `PENDING` 신청 취소 외 활성 수강 취소 제공 여부
