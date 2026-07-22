@@ -81,10 +81,6 @@ export async function getMockCurriculums(query: CurriculumListQuery): Promise<Cu
 
   if (query.sort === 'TITLE_ASC') {
     filtered = [...filtered].sort((a, b) => a.title.localeCompare(b.title, 'ko'))
-  } else if (query.sort === 'STARTING_SOON') {
-    filtered = [...filtered].sort((a, b) =>
-      (a.period?.startsAt ?? '').localeCompare(b.period?.startsAt ?? ''),
-    )
   }
 
   const page = query.page ?? 0

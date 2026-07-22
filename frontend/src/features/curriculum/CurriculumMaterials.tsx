@@ -13,7 +13,7 @@ export default function CurriculumMaterials({ materials }: CurriculumMaterialsPr
   return (
     <section className="curriculum-materials" aria-labelledby="curriculum-materials-heading">
       <header>
-        <div><h2 id="curriculum-materials-heading">커리큘럼 강의 자료</h2><p>전체 레슨에서 공통으로 사용하는 자료입니다.</p></div>
+        <div><h2 id="curriculum-materials-heading">커리큘럼 강의 자료</h2><p>전체 강의에서 공통으로 사용하는 자료입니다.</p></div>
         <span>{materials.length}개</span>
       </header>
       <ul>

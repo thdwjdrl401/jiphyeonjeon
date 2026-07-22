@@ -13,12 +13,12 @@ export default function CurriculumLessonNavigation({ curriculumId, activeLessonI
   const curriculum = getDemoCurriculumLessonNavigation(curriculumId)
 
   return (
-    <aside className="workspace-sidebar workspace-sidebar--lesson" aria-label="커리큘럼 레슨 목록">
+    <aside className="workspace-sidebar workspace-sidebar--lesson" aria-label="커리큘럼 강의 목록">
       <div className="lesson-navigation__header">
         <span>현재 커리큘럼</span>
         <Link to={publicPaths.curriculum(curriculum.curriculumId)}>{curriculum.title}</Link>
       </div>
-      <nav className="lesson-navigation__sections" aria-label={`${curriculum.title} 레슨 이동`}>
+      <nav className="lesson-navigation__sections" aria-label={`${curriculum.title} 강의 이동`}>
         {curriculum.sections.map((section) => (
           <section className="lesson-navigation__section" key={section.sectionId}>
             <h2>{section.title}</h2>

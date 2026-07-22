@@ -201,15 +201,15 @@ export default function CurriculumManagePage() {
       <PageHeader
         eyebrow="CURRICULUM STUDIO"
         title={curriculumInfo.title || '새 커리큘럼 초안'}
-        description="기본 정보, 수강생, 섹션과 레슨 편성을 관리합니다."
+        description="기본 정보, 수강생, 섹션과 강의 편성을 관리합니다."
         action={<div className="header-action-group"><Link className="button button--soft" to={publicPaths.curriculum(curriculumId)}>커리큘럼 상세</Link><button className="button button--primary" type="button" onClick={saveChanges}>변경 저장</button></div>}
       />
       {saved && <InlineNotice tone="success">변경 내용이 현재 작업 초안에 반영되었습니다.</InlineNotice>}
-      <div className="metric-grid"><MetricCard label="상태" value={storedCurriculum?.lifecycleStatus ?? 'DRAFT'} helper={isNewDraft ? '게시 전' : '운영 중'} /><MetricCard label="섹션" value={sections.length} /><MetricCard label="전체 레슨" value={sections.reduce((sum, section) => sum + section.lessons.length, 0)} /><MetricCard label="수강생" value={storedCurriculum?.enrolleeCount ?? 0} /></div>
+      <div className="metric-grid"><MetricCard label="상태" value={storedCurriculum?.lifecycleStatus ?? 'DRAFT'} helper={isNewDraft ? '게시 전' : '운영 중'} /><MetricCard label="섹션" value={sections.length} /><MetricCard label="전체 강의" value={sections.reduce((sum, section) => sum + section.lessons.length, 0)} /><MetricCard label="수강생" value={storedCurriculum?.enrolleeCount ?? 0} /></div>
       <div className="workspace-tabs" role="tablist"><button className={tab === 'structure' ? 'is-active' : ''} onClick={() => setTab('structure')} type="button">구성</button><button className={tab === 'info' ? 'is-active' : ''} onClick={() => setTab('info')} type="button">기본 정보</button><button className={tab === 'enrollees' ? 'is-active' : ''} onClick={() => setTab('enrollees')} type="button">수강생</button></div>
 
       {tab === 'structure' && (
-        <Panel title="섹션과 레슨" description="레슨을 드래그해 순서를 바꾸거나 다른 섹션으로 옮길 수 있습니다." action={<button className="button button--soft" type="button" onClick={addSection}>섹션 추가</button>}>
+        <Panel title="섹션과 강의" description="강의를 드래그해 순서를 바꾸거나 다른 섹션으로 옮길 수 있습니다." action={<button className="button button--soft" type="button" onClick={addSection}>섹션 추가</button>}>
           <div className="structure-list">
             {sections.map((section, sectionIndex) => (
               <article className={`structure-section${lessonDropTarget?.sectionId === section.sectionId ? ' is-lesson-drop-target' : ''}`} key={section.sectionId}>
@@ -220,11 +220,11 @@ export default function CurriculumManagePage() {
                     <label><small>섹션 이름</small><input aria-label={`섹션 ${sectionIndex + 1} 이름`} maxLength={200} value={section.title} onChange={(event) => updateSection(section.sectionId, 'title', event.target.value)} /></label>
                     <label><small>섹션 설명</small><textarea aria-label={`섹션 ${sectionIndex + 1} 설명`} rows={2} value={section.description} onChange={(event) => updateSection(section.sectionId, 'description', event.target.value)} /></label>
                   </div>
-                  <div className="structure-actions"><button aria-label="섹션 위로" disabled={sectionIndex === 0} onClick={() => moveSection(sectionIndex, -1)} type="button">↑</button><button aria-label="섹션 아래로" disabled={sectionIndex === sections.length - 1} onClick={() => moveSection(sectionIndex, 1)} type="button">↓</button><Link className="button button--soft button--small" to={instructorPaths.newLesson(curriculumId, section.sectionId)}>레슨 추가</Link></div>
+                  <div className="structure-actions"><button aria-label="섹션 위로" disabled={sectionIndex === 0} onClick={() => moveSection(sectionIndex, -1)} type="button">↑</button><button aria-label="섹션 아래로" disabled={sectionIndex === sections.length - 1} onClick={() => moveSection(sectionIndex, 1)} type="button">↓</button><Link className="button button--soft button--small" to={instructorPaths.newLesson(curriculumId, section.sectionId)}>강의 추가</Link></div>
                 </header>
                 <ul
                   className={lessonDropTarget?.sectionId === section.sectionId && lessonDropTarget.lessonIndex === section.lessons.length ? 'is-drop-at-end' : undefined}
-                  aria-label={`${section.title} 레슨 목록`}
+                  aria-label={`${section.title} 강의 목록`}
                   onDragOver={(event) => setLessonListDropTarget(event, section.sectionId, section.lessons.length)}
                   onDrop={(event) => dropLesson(event, section.sectionId, section.lessons.length)}
                 >
@@ -237,7 +237,7 @@ export default function CurriculumManagePage() {
                         className={`${isDragging ? 'is-dragging' : ''}${isDropBefore ? ' is-drop-before' : ''}`.trim() || undefined}
                         key={lesson.lessonId}
                         draggable
-                        aria-label={`${lesson.title} 레슨`}
+                        aria-label={`${lesson.title} 강의`}
                         onDragStart={(event) => startLessonDrag(event, section.sectionId, lesson.lessonId)}
                         onDragOver={(event) => setLessonRowDropTarget(event, section.sectionId, lessonIndex)}
                         onDrop={(event) => dropLesson(event, section.sectionId, lessonDropTarget?.lessonIndex ?? lessonIndex)}
@@ -251,7 +251,7 @@ export default function CurriculumManagePage() {
                       </li>
                     )
                   })}
-                  {section.lessons.length === 0 && <li className="lesson-drop-empty" aria-hidden="true">레슨을 이 섹션으로 드래그하세요.</li>}
+                  {section.lessons.length === 0 && <li className="lesson-drop-empty" aria-hidden="true">강의를 이 섹션으로 드래그하세요.</li>}
                 </ul>
               </article>
             ))}
@@ -263,8 +263,8 @@ export default function CurriculumManagePage() {
         <Panel title="기본 정보" description="일반 수정과 공개 상태 전환은 분리합니다.">
           <div className="form-grid"><label className="form-field--wide"><span>제목</span><input value={curriculumInfo.title} onChange={(event) => updateCurriculumInfo('title', event.target.value)} /></label><label className="form-field--wide"><span>짧은 소개</span><input value={curriculumInfo.summary} onChange={(event) => updateCurriculumInfo('summary', event.target.value)} /></label><label className="form-field--wide"><span>상세 설명</span><textarea rows={6} value={curriculumInfo.description} onChange={(event) => updateCurriculumInfo('description', event.target.value)} /></label></div>
           <div className="curriculum-manage-thumbnail"><h3>대표 이미지</h3><p>목록과 상세 카드에 표시할 이미지를 등록합니다.</p><CurriculumImageField id="manage-curriculum-thumbnail" value={thumbnailUrl} onChange={updateThumbnail} /></div>
-          <div className="lifecycle-actions"><div><StatusBadge tone="warning">DRAFT</StatusBadge><p>레슨 편성을 확인한 뒤 커리큘럼을 게시하세요.</p></div><button className="button button--primary" type="button" onClick={saveChanges}>커리큘럼 게시</button></div>
-          <div className="curriculum-manage-materials"><h3>커리큘럼 강의 자료 <small>선택</small></h3><p>전체 레슨에서 공통으로 제공할 PPTX 자료를 추가하거나 제거합니다.</p><CurriculumMaterialField id="manage-curriculum-materials" value={materials} onChange={updateMaterials} /></div>
+          <div className="lifecycle-actions"><div><StatusBadge tone="warning">DRAFT</StatusBadge><p>강의 편성을 확인한 뒤 커리큘럼을 게시하세요.</p></div><button className="button button--primary" type="button" onClick={saveChanges}>커리큘럼 게시</button></div>
+          <div className="curriculum-manage-materials"><h3>커리큘럼 강의 자료 <small>선택</small></h3><p>전체 강의에서 공통으로 제공할 PPTX 자료를 추가하거나 제거합니다.</p><CurriculumMaterialField id="manage-curriculum-materials" value={materials} onChange={updateMaterials} /></div>
         </Panel>
       )}
 
