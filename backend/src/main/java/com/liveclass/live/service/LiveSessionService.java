@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -69,6 +70,15 @@ public class LiveSessionService implements LiveSessionManagement, LiveSessionDir
     @Transactional(readOnly = true)
     public boolean existsForLesson(UUID lessonId) {
         return liveSessionRepository.existsByLessonId(lessonId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<LiveSessionView> findByLessons(Collection<UUID> lessonIds) {
+        if (lessonIds.isEmpty()) {
+            return List.of();   // 빈 IN 절로 쿼리를 쏘지 않는다.
+        }
+        return liveSessionRepository.findByLessonIdIn(lessonIds).stream().map(this::toView).toList();
     }
 
     /**

@@ -8,7 +8,6 @@ import java.util.UUID;
  * 컨트롤러는 이걸 응답 DTO로 옮기기만 한다(서비스가 web 계층을 알지 않도록).
  */
 public record CatalogCard(
-
         UUID curriculumId,
         String title,
         String summary,
@@ -18,6 +17,7 @@ public record CatalogCard(
         OffsetDateTime startsAt,
         OffsetDateTime endsAt,
         int sectionCount,
-        int lessonCount
+        int lessonCount,
+        CatalogViewerContext viewerContext
 ) {
 }
