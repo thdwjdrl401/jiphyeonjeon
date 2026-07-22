@@ -10,8 +10,9 @@ logs/
 # Node dependencies (root: concurrently)
 node_modules/
 
-# npm lockfiles (not tracked per team decision)
+# npm lockfiles: 루트(concurrently)는 미추적. 프론트는 Docker `npm ci` 재현빌드/CI 배포 전제라 추적.
 package-lock.json
+!frontend/package-lock.json
 
 # oh-my-claudecode operational state
 .omc/
