@@ -1,5 +1,5 @@
 import axios, { AxiosHeaders, type AxiosError } from 'axios'
-import { isMockApiEnabled } from '@/shared/config/runtime'
+import { isNetworkBlocked } from '@/shared/config/runtime'
 
 export interface FieldError {
   field: string
@@ -57,9 +57,9 @@ async function getCsrfToken() {
 }
 
 apiClient.interceptors.request.use(async (config) => {
-  if (isMockApiEnabled) {
+  if (isNetworkBlocked) {
     throw new ApiError(
-      'Mock API 모드에서는 실제 네트워크 요청을 보낼 수 없습니다.',
+      '테스트에서는 실제 네트워크 요청을 보낼 수 없습니다.',
       undefined,
       'MOCK_API_NETWORK_REQUEST_BLOCKED',
     )

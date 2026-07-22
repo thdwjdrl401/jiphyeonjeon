@@ -19,8 +19,9 @@ npm run dev
 ```
 
 - 개발 서버: `http://localhost:8083`
-- `VITE_USE_MOCK_API=true`: 구현된 모든 데이터 서비스가 통합 mock 저장소를 사용하며 실제 `/api` 요청은 차단
-- `VITE_USE_MOCK_API=false`: 구현된 모든 데이터 서비스가 `/api` 백엔드 요청을 사용
+- `VITE_USE_MOCK_API=true`: 데이터 서비스가 통합 mock 저장소를 사용
+- `VITE_USE_MOCK_API=false`: 데이터 서비스가 `/api` 백엔드 요청을 사용
+- 실 API로 옮긴 서비스만 HTTP를 타고, 아직 안 옮긴 화면은 값과 무관하게 mock 데이터를 그린다(전환 중 혼재는 의도된 중간 상태 — [ADR-0027](../decisions/songjeongki/0027-frontend-incremental-api-cutover.md))
 - 값을 바꾼 뒤에는 Vite 개발 서버를 다시 시작해야 함
 - 값을 생략하면 개발 모드는 mock, 프로덕션 빌드는 실제 API를 사용
 - 테스트 모드: 로컬 환경 변수와 무관하게 fixture를 사용해 독립 실행
@@ -102,7 +103,7 @@ fixture 로그인 계정은 이메일 문자열로 역할을 구분한다.
 - 공개 커리큘럼 목록과 상세
 - 커리큘럼 생성의 현재 백엔드 지원 필드
 
-위 요청은 각각 별도 환경 분기를 두지 않고 `src/shared/api/dataSource.ts`의 단일 선택 경계를 사용한다. mock 모드에서 선택 경계를 우회한 Axios 요청은 `MOCK_API_NETWORK_REQUEST_BLOCKED` 오류로 차단해 혼합 사용을 조기에 발견한다.
+위 요청은 각각 별도 환경 분기를 두지 않고 `src/shared/api/dataSource.ts`의 단일 선택 경계를 사용한다. **테스트 모드**에서 선택 경계를 우회한 Axios 요청은 `MOCK_API_NETWORK_REQUEST_BLOCKED` 오류로 차단해 테스트가 네트워크에 의존하지 않게 막는다. dev에서는 차단하지 않는다 — 막으면 이미 실 API로 옮긴 서비스까지 백엔드에 닿지 못해 점진 전환이 불가능해진다.
 
 ### fixture 우선
 

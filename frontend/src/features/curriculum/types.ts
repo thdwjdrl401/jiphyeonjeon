@@ -1,5 +1,5 @@
 import type { CurriculumOutlineLesson } from '@/features/lesson/types'
-import type { CurriculumDetailViewerContext } from '@/features/enrollment/types'
+import type { CurriculumDetailAllowedAction, CurriculumDetailViewerContext } from '@/features/enrollment/types'
 
 export type CurriculumRelationship =
   | 'GUEST'
@@ -45,7 +45,8 @@ export interface CurriculumCardSummary {
   lessonCount: number
   viewerContext: {
     relationship: CurriculumRelationship
-    allowedActions: CurriculumAllowedAction[]
+    // 목록 카드도 상세와 같은 viewerContext를 받는다 — 서버가 하나의 형태로 답한다.
+    allowedActions: CurriculumDetailAllowedAction[]
     progress?: CurriculumProgress
   }
 }

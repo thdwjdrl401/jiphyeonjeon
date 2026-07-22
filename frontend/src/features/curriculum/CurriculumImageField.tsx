@@ -1,14 +1,24 @@
 import { useState, type ChangeEvent } from 'react'
 
+/**
+ * 고른 이미지. 미리보기는 data URL로 즉시 보여 주고, 실제 업로드는 폼을 저장할 때 원본 파일로 한다 —
+ * 등록만 하고 저장하지 않은 이미지가 스토리지에 남지 않도록.
+ */
+export interface CurriculumImageSelection {
+  file: File
+  previewUrl: string
+}
+
 interface CurriculumImageFieldProps {
   id: string
-  value: string | null
-  onChange: (value: string | null) => void
+  /** 미리보기에 쓸 URL. 새로 고른 이미지의 data URL이거나, 이미 저장된 이미지의 서버 URL. */
+  previewUrl: string | null
+  onChange: (selection: CurriculumImageSelection | null) => void
 }
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024
 
-export default function CurriculumImageField({ id, value, onChange }: CurriculumImageFieldProps) {
+export default function CurriculumImageField({ id, previewUrl, onChange }: CurriculumImageFieldProps) {
   const [error, setError] = useState('')
 
   const selectImage = (event: ChangeEvent<HTMLInputElement>) => {
@@ -29,7 +39,11 @@ export default function CurriculumImageField({ id, value, onChange }: Curriculum
     const reader = new FileReader()
     reader.onload = () => {
       setError('')
-      onChange(typeof reader.result === 'string' ? reader.result : null)
+      if (typeof reader.result === 'string') {
+        onChange({ file, previewUrl: reader.result })
+      } else {
+        onChange(null)
+      }
     }
     reader.onerror = () => setError('이미지를 읽지 못했습니다. 다시 선택해 주세요.')
     reader.readAsDataURL(file)
@@ -38,12 +52,12 @@ export default function CurriculumImageField({ id, value, onChange }: Curriculum
   return (
     <div className="curriculum-image-field">
       <div className="curriculum-image-preview">
-        {value ? <img src={value} alt="대표 이미지 미리보기" /> : <div><span>IMAGE</span><strong>대표 이미지 미리보기</strong><small>16:9 비율을 권장합니다.</small></div>}
+        {previewUrl ? <img src={previewUrl} alt="대표 이미지 미리보기" /> : <div><span>IMAGE</span><strong>대표 이미지 미리보기</strong><small>16:9 비율을 권장합니다.</small></div>}
       </div>
       <div className="curriculum-image-field__actions">
-        <label className="button button--soft" htmlFor={id}>{value ? '이미지 변경' : '이미지 등록'}</label>
+        <label className="button button--soft" htmlFor={id}>{previewUrl ? '이미지 변경' : '이미지 등록'}</label>
         <input id={id} type="file" accept="image/jpeg,image/png,image/webp" onChange={selectImage} />
-        {value && <button className="button button--ghost" type="button" onClick={() => { setError(''); onChange(null) }}>삭제</button>}
+        {previewUrl && <button className="button button--ghost" type="button" onClick={() => { setError(''); onChange(null) }}>삭제</button>}
       </div>
       <p>JPG, PNG, WebP · 최대 5MB · 목록과 상세 카드에 사용됩니다.</p>
       {error && <small role="alert">{error}</small>}

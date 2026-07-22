@@ -2,6 +2,7 @@ package com.liveclass.video;
 
 import com.liveclass.live.api.LiveSessionStartedEvent;
 import com.liveclass.live.service.LiveRoomControl;
+import com.liveclass.video.domain.ReplayStatus;
 import com.liveclass.video.domain.VideoAsset;
 import com.liveclass.video.domain.VideoAssetStatus;
 import com.liveclass.video.repository.VideoAssetRepository;
@@ -97,6 +98,9 @@ class RecordingLifecycleTest {
 
         VideoAsset asset = videoAssetRepository.findByLiveSessionId(sessionId).orElseThrow();
         assertThat(asset.getStatus()).isEqualTo(VideoAssetStatus.RECORDING);
+        // 녹화가 잡히는 순간부터 다시보기는 DRAFT다 — 카탈로그가 이 값을 그대로 노출하므로
+        // "녹화 없음(NOT_READY)"과 구분된다.
+        assertThat(asset.getReplayStatus()).isEqualTo(ReplayStatus.DRAFT);
         assertThat(asset.getEgressId()).isEqualTo("eg_test123");
         assertThat(asset.getBucket()).isEqualTo("recordings");
         assertThat(asset.getRecordingStartedAt()).isNotNull();

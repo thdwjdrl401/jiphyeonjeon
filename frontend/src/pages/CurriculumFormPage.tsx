@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { instructorPaths, publicPaths } from '@/app/router/paths'
-import CurriculumImageField from '@/features/curriculum/CurriculumImageField'
+import CurriculumImageField, { type CurriculumImageSelection } from '@/features/curriculum/CurriculumImageField'
 import CurriculumMaterialField from '@/features/curriculum/CurriculumMaterialField'
-import { createCurriculum } from '@/features/curriculum/curriculumManagementService'
+import { createCurriculum, uploadCurriculumThumbnail } from '@/features/curriculum/curriculumManagementService'
 import type { CurriculumMaterial } from '@/features/curriculum/types'
 import { ApiError } from '@/shared/api/client'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
@@ -13,7 +13,7 @@ export default function CurriculumFormPage() {
   usePageTitle('커리큘럼 만들기')
   const navigate = useNavigate()
   const [form, setForm] = useState({ title: '', summary: '', description: '', startsAt: '', endsAt: '' })
-  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null)
+  const [thumbnail, setThumbnail] = useState<CurriculumImageSelection | null>(null)
   const [materials, setMaterials] = useState<CurriculumMaterial[]>([])
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -27,11 +27,14 @@ export default function CurriculumFormPage() {
     if (form.startsAt && form.endsAt && form.startsAt >= form.endsAt) { setError('종료일은 시작일보다 뒤여야 합니다.'); return }
     setSubmitting(true)
     try {
+      // 이미지는 저장 시점에 올린다 — 폼을 그만두면 아무것도 남지 않도록.
+      const thumbnailAssetId = thumbnail ? await uploadCurriculumThumbnail(thumbnail.file) : null
       const { curriculumId } = await createCurriculum({
         title: form.title.trim(),
         summary: form.summary.trim(),
         description: form.description.trim(),
-        thumbnailUrl,
+        thumbnailAssetId,
+        thumbnailPreviewUrl: thumbnail?.previewUrl ?? null,
         materials,
       })
       navigate(publicPaths.curriculum(curriculumId))
@@ -59,7 +62,7 @@ export default function CurriculumFormPage() {
             <section className="curriculum-asset-section">
               <h3>대표 이미지</h3>
               <p>목록과 상세 화면에서 커리큘럼을 구분하는 이미지입니다.</p>
-              <CurriculumImageField id="new-curriculum-thumbnail" value={thumbnailUrl} onChange={setThumbnailUrl} />
+              <CurriculumImageField id="new-curriculum-thumbnail" previewUrl={thumbnail?.previewUrl ?? null} onChange={setThumbnail} />
             </section>
             <section className="curriculum-asset-section">
               <h3>커리큘럼 강의 자료 <small>선택</small></h3>
