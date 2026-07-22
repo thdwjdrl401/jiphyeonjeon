@@ -8,7 +8,10 @@ import com.liveclass.auth.api.UserDirectory;
 import com.liveclass.curriculum.repository.CurriculumRepository;
 import com.liveclass.enrollment.api.EnrollmentDirectory;
 import com.liveclass.enrollment.api.EnrollmentManagement;
+import com.liveclass.enrollment.api.EnrollmentStatus;
 import com.liveclass.enrollment.api.EnrollmentView;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -71,28 +74,27 @@ public class CurriculumEnrollmentService {
         return enrollmentManagement.cancel(curriculumId, studentId);
     }
 
-    /** 강사 승인 대기 목록(신청자 이름·이메일 보강). 소유권 검증. */
+    /**
+     * 강사용 수강생 로스터 한 페이지 + 커리큘럼 전체의 상태별 건수(ENROLLEE-01). 소유권 검증.
+     * summary는 집계 쿼리로 세고(행 미적재), 항목의 이름·이메일은 현재 페이지만 배치 보강한다.
+     *
+     * @param status null이면 상태 필터 없이 전체
+     */
     @Transactional(readOnly = true)
-    public List<EnrollmentApplicant> pending(UUID curriculumId, UUID instructorId) {
+    public EnrollmentRoster roster(UUID curriculumId, UUID instructorId, EnrollmentStatus status,
+                                   int page, int size) {
         requireOwned(curriculumId, instructorId);
-        return enrich(enrollmentManagement.pendingFor(curriculumId));
+        Page<EnrollmentApplicant> items =
+                enrich(enrollmentDirectory.findPage(curriculumId, status, PageRequest.of(page, size)));
+        return new EnrollmentRoster(items, enrollmentDirectory.countsByStatus(curriculumId));
     }
 
-    /** 강사용 ACTIVE 수강생 로스터(이름·이메일 보강). 소유권 검증. */
-    @Transactional(readOnly = true)
-    public List<EnrollmentApplicant> roster(UUID curriculumId, UUID instructorId) {
-        requireOwned(curriculumId, instructorId);
-        return enrich(enrollmentDirectory.activeFor(curriculumId));
-    }
-
-    /** 수강 목록을 사용자 PII로 한 번에 보강한다(배치 조회 1회, N+1 없음). 리스트 순서 보존. */
-    private List<EnrollmentApplicant> enrich(List<EnrollmentView> views) {
-        List<UUID> userIds = views.stream().map(EnrollmentView::userId).distinct().toList();
+    /** 현재 페이지의 수강 기록만 사용자 PII로 보강한다(배치 조회 1회, N+1 없음). 페이지 순서 보존. */
+    private Page<EnrollmentApplicant> enrich(Page<EnrollmentView> views) {
+        List<UUID> userIds = views.getContent().stream().map(EnrollmentView::userId).distinct().toList();
         Map<UUID, UserContact> byId = userDirectory.findContacts(userIds).stream()
                 .collect(Collectors.toMap(UserContact::userId, Function.identity()));
-        return views.stream()
-                .map(v -> new EnrollmentApplicant(v, byId.get(v.userId())))
-                .toList();
+        return views.map(v -> new EnrollmentApplicant(v, byId.get(v.userId())));
     }
 
     /** 강사 승인. 소유권 + 그 커리큘럼 소속 검증. */

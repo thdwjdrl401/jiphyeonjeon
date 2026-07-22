@@ -8,12 +8,19 @@ import com.liveclass.enrollment.api.EnrollmentView;
 import com.liveclass.enrollment.domain.Enrollment;
 import com.liveclass.enrollment.api.EnrollmentStatus;
 import com.liveclass.enrollment.repository.EnrollmentRepository;
+import com.liveclass.enrollment.repository.EnrollmentStatusCount;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -24,6 +31,9 @@ import java.util.UUID;
  */
 @Service
 public class EnrollmentService implements EnrollmentManagement, EnrollmentDirectory {
+
+    /** 로스터 기본 정렬: 신청 순. requestedAt이 같아도 페이지 경계가 흔들리지 않게 id로 타이브레이크. */
+    private static final Sort ROSTER_SORT = Sort.by(Sort.Order.asc("requestedAt"), Sort.Order.asc("id"));
 
     private final EnrollmentRepository repository;
 
@@ -111,13 +121,6 @@ public class EnrollmentService implements EnrollmentManagement, EnrollmentDirect
 
     @Override
     @Transactional(readOnly = true)
-    public List<EnrollmentView> pendingFor(UUID curriculumId) {
-        return repository.findByCurriculumIdAndStatusOrderByRequestedAtAsc(curriculumId, EnrollmentStatus.PENDING)
-                .stream().map(EnrollmentService::toView).toList();
-    }
-
-    @Override
-    @Transactional(readOnly = true)
     public boolean isActive(UUID curriculumId, UUID userId) {
         return repository.existsByCurriculumIdAndUserIdAndStatus(curriculumId, userId, EnrollmentStatus.ACTIVE);
     }
@@ -142,9 +145,28 @@ public class EnrollmentService implements EnrollmentManagement, EnrollmentDirect
 
     @Override
     @Transactional(readOnly = true)
-    public List<EnrollmentView> activeFor(UUID curriculumId) {
-        return repository.findByCurriculumIdAndStatusOrderByRequestedAtAsc(curriculumId, EnrollmentStatus.ACTIVE)
-                .stream().map(EnrollmentService::toView).toList();
+    public Page<EnrollmentView> findPage(UUID curriculumId, EnrollmentStatus status, Pageable pageable) {
+        // 정렬 필드는 enrollment 엔티티의 것이라 모듈 밖으로 새지 않게 여기서 채운다.
+        Pageable sorted = pageable.getSort().isSorted()
+                ? pageable
+                : PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), ROSTER_SORT);
+        Page<Enrollment> found = (status == null)
+                ? repository.findByCurriculumId(curriculumId, sorted)
+                : repository.findByCurriculumIdAndStatus(curriculumId, status, sorted);
+        return found.map(EnrollmentService::toView);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<EnrollmentStatus, Long> countsByStatus(UUID curriculumId) {
+        Map<EnrollmentStatus, Long> counts = new EnumMap<>(EnrollmentStatus.class);
+        for (EnrollmentStatus s : EnrollmentStatus.values()) {
+            counts.put(s, 0L);
+        }
+        for (EnrollmentStatusCount row : repository.countByStatus(curriculumId)) {
+            counts.put(row.status(), row.count());
+        }
+        return counts;
     }
 
     private Enrollment require(UUID enrollmentId) {

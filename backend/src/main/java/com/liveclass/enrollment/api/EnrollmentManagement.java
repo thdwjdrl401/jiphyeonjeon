@@ -1,6 +1,5 @@
 package com.liveclass.enrollment.api;
 
-import java.util.List;
 import java.util.UUID;
 
 /**
@@ -29,7 +28,4 @@ public interface EnrollmentManagement {
 
     /** 강사 강퇴(수강 제적): ACTIVE → REVOKED. */
     EnrollmentView revoke(UUID enrollmentId);
-
-    /** 강사용 승인 대기 목록(PENDING). */
-    List<EnrollmentView> pendingFor(UUID curriculumId);
 }
