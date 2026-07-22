@@ -19,6 +19,9 @@ package-lock.json
 
 # AI 하네스: 팀 공용 .claude/ 는 커밋, 개인 설정만 무시
 .claude/settings.local.json
+# 에이전트용 git worktree는 리포 안에 생기지만 소스가 아니다 — 커밋되면 삭제한 파일이
+# 사본으로 되살아난다(git add -A 사고 방지).
+.claude/worktrees/
 
 # 로컬 인프라 시크릿 (.env.example / .env.prod.example / .env.remote.example만 커밋)
 .env
