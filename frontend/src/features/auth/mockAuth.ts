@@ -53,6 +53,7 @@ export const mockAuthService = {
       email: request.email,
       displayName: isInstructor ? '이도현' : '김학생',
       role: isInstructor ? 'INSTRUCTOR' : 'STUDENT',
+      profileImageUrl: null,
     }
     return currentUser
   },
@@ -72,6 +73,7 @@ export const mockAuthService = {
       email: request.email,
       displayName: request.displayName,
       role: request.role,
+      profileImageUrl: null,
     } satisfies AuthUser
   },
 
@@ -86,5 +88,23 @@ export const mockAuthService = {
   async logout() {
     await wait()
     currentUser = null
+  },
+
+  // core.app_user.display_name varchar(100) NOT NULL 과 동일한 제약을 목에서도 흉내낸다.
+  async updateDisplayName(displayName: string) {
+    await wait()
+    if (!currentUser) {
+      throw new ApiError('로그인이 필요합니다.', 401, 'AUTH_UNAUTHENTICATED')
+    }
+    const trimmed = displayName.trim()
+    if (!trimmed || trimmed.length > 100) {
+      throw new ApiError(
+        '닉네임은 1자 이상 100자 이하로 입력해 주세요.',
+        400,
+        'AUTH_DISPLAY_NAME_INVALID',
+      )
+    }
+    currentUser = { ...currentUser, displayName: trimmed }
+    return currentUser
   },
 }

@@ -1,4 +1,4 @@
-# ADR-0027: 강사 운영 목록(MY-CURRICULUM-02) — 페이지 봉투·파생 파인더·`nextLiveSession` 의미와 미구현 필드 처리
+# ADR-0028: 강사 운영 목록(MY-CURRICULUM-02) — 페이지 봉투·파생 파인더·`nextLiveSession` 의미와 미구현 필드 처리
 
 > 📍 하네스 개요: [../../harness/README.md](../../harness/README.md) · 아키텍처: [../../ARCHITECTURE.md](../../ARCHITECTURE.md) · 계약: [../../CONTRACT.md](../../CONTRACT.md)
 

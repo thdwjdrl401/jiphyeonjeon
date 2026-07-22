@@ -15,7 +15,8 @@ public record CurriculumCardSummary(
         String lifecycleStatus,
         CurriculumPeriod period,
         int sectionCount,
-        int lessonCount
+        int lessonCount,
+        ViewerContextResponse viewerContext
 ) {
 
     public static CurriculumCardSummary from(CatalogCard card) {
@@ -28,6 +29,7 @@ public record CurriculumCardSummary(
                 card.lifecycleStatus(),
                 CurriculumPeriod.of(card.startsAt(), card.endsAt()),
                 card.sectionCount(),
-                card.lessonCount());
+                card.lessonCount(),
+                ViewerContextResponse.from(card.viewerContext()));
     }
 }

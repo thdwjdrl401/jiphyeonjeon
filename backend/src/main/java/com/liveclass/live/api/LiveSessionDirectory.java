@@ -1,6 +1,7 @@
 package com.liveclass.live.api;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -27,4 +28,10 @@ public interface LiveSessionDirectory {
      * 해당하는 세션이 없는 커리큘럼은 맵에 키 자체가 없다.
      */
     Map<UUID, LiveSessionView> nextScheduledByCurriculum(Collection<UUID> curriculumIds);
+
+    /**
+     * 레슨들에 걸린 라이브 세션을 한 번에 가져온다(레슨당 최대 하나).
+     * 목차처럼 레슨이 여러 개인 화면에서 레슨마다 조회하면 N+1이라 배치 조회를 포트에 둔다.
+     */
+    List<LiveSessionView> findByLessons(Collection<UUID> lessonIds);
 }

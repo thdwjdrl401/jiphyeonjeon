@@ -47,4 +47,5 @@ public interface LiveSessionRepository extends JpaRepository<LiveSession, UUID> 
                                                   @Param("excludedStatuses") Collection<LiveSessionStatus> excludedStatuses,
                                                   @Param("inProgressStatuses") Collection<LiveSessionStatus> inProgressStatuses,
                                                   @Param("now") OffsetDateTime now);
+    List<LiveSession> findByLessonIdIn(Collection<UUID> lessonIds);
 }

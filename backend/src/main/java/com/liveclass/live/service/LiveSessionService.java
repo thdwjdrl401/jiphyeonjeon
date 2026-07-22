@@ -90,6 +90,15 @@ public class LiveSessionService implements LiveSessionManagement, LiveSessionDir
         return liveSessionRepository.existsByLessonId(lessonId);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<LiveSessionView> findByLessons(Collection<UUID> lessonIds) {
+        if (lessonIds.isEmpty()) {
+            return List.of();   // 빈 IN 절로 쿼리를 쏘지 않는다.
+        }
+        return liveSessionRepository.findByLessonIdIn(lessonIds).stream().map(this::toView).toList();
+    }
+
     /**
      * 커리큘럼별 다음 예정 세션(배치). 쿼리는 페이지당 정확히 1번만 나간다 — 결과가 scheduledAt
      * 오름차순이므로 커리큘럼별 첫 행(putIfAbsent)만 남기면 가장 이른 세션이 된다.

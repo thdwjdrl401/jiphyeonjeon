@@ -84,7 +84,7 @@ export default function MyCurriculumsPage() {
 
   return (
     <div className="workspace-page">
-      <PageHeader eyebrow={isInstructor ? 'INSTRUCTOR DASHBOARD' : 'LEARNING DASHBOARD'} title="내 커리큘럼" description={isInstructor ? '운영 상태와 오늘의 라이브 강의를 한눈에 확인하세요.' : '최근 학습과 오늘의 라이브 강의를 확인하세요.'} />
+      <PageHeader eyebrow={isInstructor ? 'INSTRUCTOR DASHBOARD' : 'LEARNING DASHBOARD'} title="내 커리큘럼" description={isInstructor ? '운영 상태와 오늘의 라이브 강의를 한눈에 확인하세요.' : undefined} />
 
       <div className="metric-grid">
         {isInstructor ? <><MetricCard label="운영 커리큘럼" value={instructorCurriculums.length} /><MetricCard label="공개 중" value={instructorCurriculums.filter((curriculum) => curriculum.lifecycleStatus === 'PUBLISHED').length} /><MetricCard label="예정 라이브" value={instructorCurriculums.filter((curriculum) => curriculum.nextSession !== '일정 미정').length} /><MetricCard label="전체 수강생" value={`${instructorCurriculums.reduce((sum, curriculum) => sum + curriculum.enrolleeCount, 0)}명`} /></> : <><MetricCard label="수강 중인 커리큘럼" value={studentSummary.inProgressCurriculumCount} /><MetricCard label="완료한 커리큘럼" value={studentSummary.completedCurriculumCount} /><MetricCard label="평균 진행률" value={`${studentSummary.averageProgress}%`} /><MetricCard label="완료한 강의" value={`${studentSummary.completedLessonCount}개`} /></>}
