@@ -49,7 +49,7 @@ STARTING ─────────→ FAILED
 | ID | Transport | Path/Channel | 설명 | 상태 |
 |---|---|---|---|---|
 | `LIVE-WS-01` | WebSocket | `/api/ws` | 인증 쿠키 기반 WS 연결 | **제안** |
-| `CHAT-01` | REST | `GET/POST /api/lessons/{lessonId}/messages` | 채팅 복구 조회·전송 fallback | URL **확정** |
+| `CHAT-01` | REST | `GET/POST /api/live-sessions/{sessionId}/messages` | 채팅 복구 조회·전송 fallback | **구현됨(세션 키잉)** |
 | `CAPTION-01` | REST | `GET /api/live-sessions/{sessionId}/captions` | 재연결 누락 자막 복구 | **제안** |
 | `AI-QUESTION-01` | SSE | `POST /api/lessons/{lessonId}/ai/questions:stream` | 개인 AI Q&A | URL **확정** |
 | `AI-TERM-01` | REST | `POST /api/lessons/{lessonId}/ai/terms:explain` | 전문용어 설명 | URL **확정** |
@@ -111,7 +111,7 @@ GET /api/live-sessions/{sessionId}
   "lesson": {
     "lessonId": "les_01J...",
     "title": "Spring Security 시작하기",
-    "lessonStatus": "PUBLISHED",
+    "status": "PUBLISHED",
     "sectionId": "sec_01J...",
     "curriculumId": "cur_01J...",
     "curriculumTitle": "실시간 Spring 입문"
@@ -398,12 +398,13 @@ WS 재연결 시 누락 구간을 복구한다. cursor 또는 `afterRevision` �
 WS 전송을 기본으로 하되 REST fallback도 같은 command DTO를 사용한다.
 
 ```http
-POST /api/lessons/{lessonId}/messages
+POST /api/live-sessions/{sessionId}/messages
 ```
+
+채팅은 **세션 키잉(구현됨)**이다. `sessionId`는 경로로 전달하므로 본문에 다시 넣지 않는다.
 
 ```json
 {
-  "sessionId": "ses_01J...",
   "clientMessageId": "local-01J...",
   "text": "이 부분을 다시 설명해 주세요.",
   "isQuestion": true,
@@ -431,7 +432,7 @@ POST /api/lessons/{lessonId}/messages
 ### 9.2 복구 조회
 
 ```http
-GET /api/lessons/{lessonId}/messages?sessionId={sessionId}&afterSessionMs=115000&limit=100
+GET /api/live-sessions/{sessionId}/messages?afterSessionMs=115000&limit=100
 ```
 
 가명, 삭제·제재 상태, `isQuestion`을 포함한다. 사용자 실명과 내부 userId는 수강생 채팅 응답에 포함하지 않는다.

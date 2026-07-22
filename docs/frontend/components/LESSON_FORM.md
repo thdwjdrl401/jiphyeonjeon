@@ -325,7 +325,7 @@ PPTX 한 개 선택
 
 ## 15. 게시와 공개 범위
 
-- 레슨 공개 여부는 별도 boolean이 아니라 `lessonStatus=PUBLISHED`로 관리
+- 레슨 공개 여부는 별도 boolean이 아니라 `status=PUBLISHED`로 관리
 - `DRAFT`·`AI_NOT_READY`·`READY`는 강사만 접근
 - `READY`에서 게시 조건과 활성 PPTX를 최종 확인한 뒤 명시적으로 게시
 - `PUBLISHED`에서 수강생에게 레슨 기본 정보와 활성 PPTX 자료 표시

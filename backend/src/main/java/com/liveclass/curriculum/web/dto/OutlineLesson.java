@@ -8,6 +8,6 @@ public record OutlineLesson(
         String lessonId,
         String title,
         int order,
-        String lessonStatus
+        String status
 ) {
 }

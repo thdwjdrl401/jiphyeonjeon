@@ -85,7 +85,7 @@
   "message": "요청을 처리할 수 없습니다.",
   "fieldErrors": [
     {
-      "field": "loginId",
+      "field": "email",
       "code": "REQUIRED"
     }
   ],
@@ -112,7 +112,7 @@
 | `401` | 세션을 인증되지 않은 상태로 정리하고 로그인으로 이동 | 안전한 내부 `returnTo` 보존 |
 | `403` | 세션은 유지하고 접근 불가 안내 표시 | 역할·소유권·수강 관계 위반 |
 | `404` | 찾을 수 없음 또는 현재 영역의 리소스 없음 표시 | 보호 리소스의 존재 은닉에도 사용 가능 |
-| `409` | 중복·현재 상태 충돌을 해당 행동 가까이에 표시 | 회원가입 아이디 중복 포함 |
+| `409` | 중복·현재 상태 충돌을 해당 행동 가까이에 표시 | 회원가입 이메일 중복 포함 |
 | `429` | 재시도 가능 시점 안내와 중복 요청 차단 | 로그인·중복 확인 등에 적용 가능 |
 | `5xx` | 네트워크/서버 오류로 처리하고 재시도 제공 | `403`·`404`로 오인하지 않음 |
 
@@ -154,17 +154,18 @@
 
 | ID | Method | Path | 사용처 | 상태 |
 |---|---|---|---|---|
-| `AUTH-01` | `GET` | `/api/auth/csrf` | 변경 요청 전 CSRF 준비 | **제안·협의 필요** |
-| `AUTH-02` | `GET` | `/api/auth/login-id-availability` | 회원가입 아이디 중복 확인 | **제안·협의 필요** |
-| `AUTH-03` | `POST` | `/api/auth/signup` | 회원가입 | URL **확정**, 상세 계약 **협의 필요** |
-| `AUTH-04` | `POST` | `/api/auth/login` | 로그인 | URL **확정**, 상세 계약 **협의 필요** |
-| `AUTH-05` | `GET` | `/api/auth/me` | 앱 시작·새로고침 시 현재 사용자 복원 | **제안·협의 필요** |
-| `AUTH-06` | `POST` | `/api/auth/logout` | 로그아웃 | URL **확정**, 상세 계약 **협의 필요** |
-| `PROFILE-01` | `GET` | `/api/users/me/profile` | 내 프로필 조회 | **제안·협의 필요** |
-| `PROFILE-02` | `PATCH` | `/api/users/me/profile` | 공통 프로필 수정 | **제안·협의 필요** |
-| `PROFILE-03` | `PATCH` | `/api/instructor/me/public-profile` | 강사 공개 프로필 수정 | **제안·협의 필요** |
+| `AUTH-01` | `GET` | `/api/auth/csrf` | 변경 요청 전 CSRF 준비 | **구현됨** |
+| `AUTH-02` | `GET` | `/api/auth/email-availability` | 회원가입 이메일 중복 확인 | **구현됨** (`?email=`) |
+| `AUTH-03` | `POST` | `/api/auth/signup` | 회원가입 | **구현됨** (식별자 `email`) |
+| `AUTH-04` | `POST` | `/api/auth/login` | 로그인 | **구현됨** (식별자 `email`) |
+| `AUTH-05` | `GET` | `/api/auth/me` | 앱 시작·새로고침 시 현재 사용자 복원 | **구현됨** |
+| `AUTH-06` | `POST` | `/api/auth/logout` | 로그아웃 | **구현됨** |
+| `PROFILE-IMG-01` | `PUT` | `/api/me/profile-image` | 프로필 이미지 지정(`{assetId}`) | **구현됨**. 결과는 `/auth/me`의 `profileImageUrl`로 반영 |
+| `PROFILE-01` | `GET` | `/api/users/me/profile` | 내 프로필 조회 | **미구현(제안)** — 현재 백엔드 없음 |
+| `PROFILE-02` | `PATCH` | `/api/users/me/profile` | 공통 프로필 수정(`displayName`) | **미구현(제안)** — 현재 백엔드 없음 |
+| `PROFILE-03` | `PATCH` | `/api/instructor/me/public-profile` | 강사 공개 프로필 수정(`bio`/`expertise`) | **미구현(제안)** — 현재 백엔드 없음 |
 
-`AUTH-05`는 전역 헤더와 라우트 가드가 사용하는 최소 인증 사용자 API다. `PROFILE-01`은 프로필 페이지가 사용하는 상세 API다. 두 응답의 공통 사용자 필드는 같은 명칭과 enum을 사용한다.
+인증 식별자는 **`email`**이다(`loginId` 아님). `AUTH-05`는 전역 헤더와 라우트 가드가 사용하는 최소 인증 사용자 API이며 `userId`·`email`·`displayName`·`role`·`profileImageUrl`을 반환한다. `PROFILE-01`은 프로필 페이지가 사용하는 상세 API 제안이지만 아직 백엔드가 없다. 두 응답의 공통 사용자 필드는 같은 명칭과 enum을 사용한다. 프로필 이미지 지정만 실제 구현되어 있고(`PROFILE-IMG-01`), `displayName`·`bio`·`expertise` 수정 API는 아직 없다.
 
 ## 4. 인증 API
 
@@ -196,34 +197,34 @@ GET /api/auth/csrf
 - 고정 header 이름을 계약으로 둘지 `headerName`을 응답할지
 - 세션 만료·로그인·로그아웃 뒤 토큰을 다시 발급해야 하는 시점
 
-### 4.2 `AUTH-02` 로그인 아이디 사용 가능 여부
+### 4.2 `AUTH-02` 이메일 사용 가능 여부 (구현됨)
 
 ```http
-GET /api/auth/login-id-availability?loginId=liveclass01
+GET /api/auth/email-availability?email=student@liveclass.test
 ```
 
-회원가입 폼의 중복 확인 상태에 사용한다. 이 API의 결과는 안내용이며, 회원가입 시 서버가 중복을 다시 검증해야 한다.
+인증 식별자는 `email`이다. 회원가입 폼의 중복 확인 상태에 사용한다. 이 API의 결과는 안내용이며, 회원가입 시 서버가 중복을 다시 검증한다.
 
-**제안 응답 — `200 OK`**
+**응답 — `200 OK`**
 
 ```json
 {
-  "loginId": "liveclass01",
+  "email": "student@liveclass.test",
   "available": true
 }
 ```
 
 | 필드 | 형식 | 설명 |
 |---|---|---|
-| `loginId` | string | 정규화 후 확인한 로그인 아이디 |
+| `email` | string | 정규화 후 확인한 로그인 이메일 |
 | `available` | boolean | 현재 가입에 사용할 수 있는지 여부 |
 
 | 상태 | 오류 코드 예시 | 조건 |
 |---|---|---|
-| `400` | `AUTH_LOGIN_ID_INVALID` | 형식·길이가 유효하지 않음 |
+| `400` | `AUTH_EMAIL_INVALID` | 형식·길이가 유효하지 않음 |
 | `429` | `AUTH_RATE_LIMITED` | 과도한 반복 조회 |
 
-아이디 존재 여부 노출 위험과 rate limit 기준은 **협의 필요**다. 중복 확인 API를 제공하지 않기로 하면 이 API를 제거하고 `AUTH-03`의 `409`만 사용한다.
+rate limit 기준은 **협의 필요**다.
 
 ### 4.3 `AUTH-03` 회원가입
 
@@ -235,7 +236,7 @@ POST /api/auth/signup
 
 ```json
 {
-  "loginId": "liveclass01",
+  "email": "student@liveclass.test",
   "password": "user-entered-password",
   "displayName": "김라이브",
   "role": "STUDENT"
@@ -244,7 +245,7 @@ POST /api/auth/signup
 
 | 필드 | 형식 | 필수 | 설명 |
 |---|---|---|---|
-| `loginId` | string | 예 | 변경할 수 없는 로그인용 계정 아이디 |
+| `email` | string | 예 | 로그인 식별자(이메일). 변경 불가 |
 | `password` | string | 예 | 비밀번호. 응답·로그·분석 이벤트에 포함하지 않음 |
 | `displayName` | string | 예 | 서비스에 표시할 사용자 이름 |
 | `role` | enum | 예 | `STUDENT` 또는 `INSTRUCTOR` |
@@ -256,7 +257,7 @@ POST /api/auth/signup
 ```json
 {
   "userId": "usr_01J...",
-  "loginId": "liveclass01",
+  "email": "student@liveclass.test",
   "displayName": "김라이브",
   "role": "STUDENT"
 }
@@ -266,7 +267,7 @@ POST /api/auth/signup
 |---|---|---|
 | `201` | - | 가입 완료 후 로그인으로 이동 |
 | `400` | `VALIDATION_FAILED` | 필드별 오류 표시 |
-| `409` | `AUTH_LOGIN_ID_DUPLICATED` | 로그인 아이디 필드에 중복 오류 표시 |
+| `409` | `AUTH_EMAIL_DUPLICATED` | 이메일 필드에 중복 오류 표시 |
 | `429` | `AUTH_RATE_LIMITED` | 잠시 후 재시도 안내 |
 
 초기 제안은 **회원가입 후 자동 로그인하지 않는 방식**이다. 가입 응답은 세션을 만들지 않고, 사용자가 로그인 화면을 거쳐 인증한다. 자동 로그인으로 결정하면 쿠키 발급 여부와 완료 후 역할별 이동 규칙을 함께 변경해야 한다.
@@ -281,7 +282,7 @@ POST /api/auth/login
 
 ```json
 {
-  "loginId": "liveclass01",
+  "email": "student@liveclass.test",
   "password": "user-entered-password"
 }
 ```
@@ -291,9 +292,10 @@ POST /api/auth/login
 ```json
 {
   "userId": "usr_01J...",
-  "loginId": "liveclass01",
+  "email": "student@liveclass.test",
   "displayName": "김라이브",
-  "role": "STUDENT"
+  "role": "STUDENT",
+  "profileImageUrl": null
 }
 ```
 
@@ -303,10 +305,10 @@ POST /api/auth/login
 |---|---|---|
 | `200` | - | 안전한 `returnTo` 또는 역할별 기본 페이지로 이동 |
 | `400` | `VALIDATION_FAILED` | 입력 형식 오류 표시 |
-| `401` | `AUTH_INVALID_CREDENTIALS` | 아이디 존재 여부를 구분하지 않는 로그인 실패 문구 표시 |
+| `401` | `AUTH_INVALID_CREDENTIALS` | 이메일 존재 여부를 구분하지 않는 로그인 실패 문구 표시 |
 | `429` | `AUTH_RATE_LIMITED` | 재시도 제한 안내 |
 
-계정 없음과 비밀번호 불일치를 서로 다른 오류 코드나 문구로 반환하지 않는 방식을 제안한다.
+계정 없음과 비밀번호 불일치를 서로 다른 오류 코드나 문구로 반환하지 않는 방식을 제안한다. 식별자는 이메일이다.
 
 ### 4.5 `AUTH-05` 현재 인증 사용자
 
@@ -314,16 +316,17 @@ POST /api/auth/login
 GET /api/auth/me
 ```
 
-앱 시작, 새로고침, 보호 라우트 진입 시 현재 쿠키 세션을 사용자 정보로 복원한다. 프로필·학습 요약처럼 전역 인증에 불필요한 데이터는 포함하지 않는다.
+앱 시작, 새로고침, 보호 라우트 진입 시 현재 쿠키 세션을 사용자 정보로 복원한다. 프로필·학습 요약처럼 전역 인증에 불필요한 데이터는 포함하지 않는다. 프로필 이미지 URL은 `profileImageUrl`로 함께 반환한다(구현됨).
 
-**제안 응답 — `200 OK`**
+**응답 — `200 OK`** (구현됨)
 
 ```json
 {
   "userId": "usr_01J...",
-  "loginId": "liveclass01",
+  "email": "instructor@liveclass.test",
   "displayName": "김라이브",
-  "role": "INSTRUCTOR"
+  "role": "INSTRUCTOR",
+  "profileImageUrl": null
 }
 ```
 
@@ -351,6 +354,26 @@ POST /api/auth/logout
 
 ## 5. 내 프로필 API
 
+> **구현 현황**: 프로필 관리에서 실제 백엔드가 있는 것은 **`PUT /api/me/profile-image {assetId}`**(프로필 이미지 지정)와 **`GET /api/auth/me`**뿐이다. 아래 `PROFILE-01/02/03`(`/api/users/me/profile`, `/api/instructor/me/public-profile`)은 **미구현(제안)**으로, `displayName`·`bio`·`expertise` 조회·수정 API는 아직 백엔드에 없다.
+
+### 5.0 `PROFILE-IMG-01` 프로필 이미지 지정 (구현됨)
+
+```http
+PUT /api/me/profile-image
+```
+
+미리 업로드 완료한 본인 `PROFILE_IMAGE` 에셋을 프로필 이미지로 지정한다.
+
+**요청**
+
+```json
+{
+  "assetId": "ast_01J..."
+}
+```
+
+**응답 — `200 OK`**: `AUTH-05`(`/auth/me`)와 동일한 사용자 DTO를 반환하며, 갱신된 이미지는 `profileImageUrl`로 노출된다.
+
 ### 5.1 조회 모델 분리 원칙
 
 - `AUTH-05`는 전역 인증에 필요한 최소 사용자 정보만 반환한다.
@@ -359,20 +382,20 @@ POST /api/auth/logout
 - 강사의 운영 커리큘럼 요약도 프로필 리소스에 섞지 않고 추후 내 커리큘럼 API를 재사용한다.
 - 보조 요약 조회 실패가 기본 프로필 조회·수정을 막지 않도록 별도 요청으로 구성한다.
 
-### 5.2 `PROFILE-01` 내 프로필 조회
+### 5.2 `PROFILE-01` 내 프로필 조회 (미구현·제안)
 
 ```http
 GET /api/users/me/profile
 ```
 
-URL에 사용자 ID를 받지 않고 현재 세션의 본인만 조회한다.
+URL에 사용자 ID를 받지 않고 현재 세션의 본인만 조회한다. **현재 백엔드에 없다** — 현 시점에는 `GET /api/auth/me`가 최소 사용자 정보를 제공한다.
 
 **학생 응답 제안 — `200 OK`**
 
 ```json
 {
   "userId": "usr_01J...",
-  "loginId": "liveclass01",
+  "email": "student@liveclass.test",
   "displayName": "김학생",
   "role": "STUDENT"
 }
@@ -383,7 +406,7 @@ URL에 사용자 ID를 받지 않고 현재 세션의 본인만 조회한다.
 ```json
 {
   "userId": "usr_01K...",
-  "loginId": "instructor01",
+  "email": "instructor@liveclass.test",
   "displayName": "이강사",
   "role": "INSTRUCTOR",
   "publicProfile": {
@@ -396,7 +419,7 @@ URL에 사용자 ID를 받지 않고 현재 세션의 본인만 조회한다.
 | 필드 | 형식 | 수정 | 설명 |
 |---|---|---|---|
 | `userId` | string | 불가 | 내부 사용자 식별자 |
-| `loginId` | string | 불가 | 로그인용 계정 아이디 |
+| `email` | string | 불가 | 로그인 식별자(이메일) |
 | `displayName` | string | 가능 | 서비스 표시 이름 |
 | `role` | enum | 불가 | `STUDENT` 또는 `INSTRUCTOR` |
 | `publicProfile` | object | 역할별 | 강사에게만 포함하는 공개 프로필 |
@@ -405,11 +428,13 @@ URL에 사용자 ID를 받지 않고 현재 세션의 본인만 조회한다.
 
 역할별로 의미 없는 필드는 `null`로 채우기보다 응답에서 생략하는 방식을 제안한다. `role`을 판별 필드로 사용하면 프론트가 안전하게 역할별 영역을 구성할 수 있다.
 
-### 5.3 `PROFILE-02` 공통 프로필 수정
+### 5.3 `PROFILE-02` 공통 프로필 수정 (미구현·제안)
 
 ```http
 PATCH /api/users/me/profile
 ```
+
+**현재 백엔드에 없다.** `displayName` 수정 API는 아직 준비되지 않았다.
 
 **제안 요청**
 
@@ -419,14 +444,14 @@ PATCH /api/users/me/profile
 }
 ```
 
-초기 수정 가능 필드는 `displayName` 하나만 제안한다. `loginId`, `role`, 이메일, 전화번호, 프로필 이미지는 포함하지 않는다.
+초기 수정 가능 필드는 `displayName` 하나만 제안한다. `email`, `role`, 전화번호는 포함하지 않는다. 프로필 이미지는 별도 API(`PROFILE-IMG-01`)로 관리한다.
 
 **제안 응답 — `200 OK`**
 
 ```json
 {
   "userId": "usr_01J...",
-  "loginId": "liveclass01",
+  "email": "student@liveclass.test",
   "displayName": "김새이름",
   "role": "STUDENT"
 }
@@ -438,13 +463,13 @@ PATCH /api/users/me/profile
 | `400` | `VALIDATION_FAILED` | 입력값을 유지하고 필드 오류 표시 |
 | `401` | `AUTH_SESSION_REQUIRED` | 로그인 후 프로필 복귀 |
 
-### 5.4 `PROFILE-03` 강사 공개 프로필 수정
+### 5.4 `PROFILE-03` 강사 공개 프로필 수정 (미구현·제안)
 
 ```http
 PATCH /api/instructor/me/public-profile
 ```
 
-공통 프로필과 저장 상태를 분리하기 위해 별도 API를 제안한다. 현재 세션이 강사 계정이 아니면 서버가 거부한다.
+**현재 백엔드에 없다.** `bio`·`expertise` 수정 API는 아직 준비되지 않았다. 공통 프로필과 저장 상태를 분리하기 위해 별도 API를 제안한다. 현재 세션이 강사 계정이 아니면 서버가 거부한다.
 
 **제안 요청**
 
@@ -492,9 +517,9 @@ PATCH /api/instructor/me/public-profile
 백엔드와 다음 항목을 합의한 뒤 해당 행을 **확정**으로 변경한다.
 
 1. CSRF 토큰 발급 방식, header 이름, 재발급 시점
-2. 로그인 아이디 필드명을 `loginId`로 사용할지 여부와 정규화 규칙
+2. ~~로그인 아이디 필드명~~ — **확정: 식별자는 `email`**(구현됨). 이메일 정규화 규칙만 협의
 3. `displayName`의 길이·허용 문자·공백 정규화 규칙
-4. 아이디 중복 확인 API 제공 여부와 rate limit
+4. ~~중복 확인 API 제공 여부~~ — **확정: `GET /api/auth/email-availability` 구현됨**. rate limit 기준만 협의
 5. 회원가입 후 로그인 화면 이동 또는 자동 로그인 중 선택
 6. 현재 사용자 API를 `/auth/me`로 둘지 `/users/me`로 둘지
 7. 성공 응답의 envelope 사용 여부와 공통 오류 DTO

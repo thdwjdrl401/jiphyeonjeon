@@ -9,15 +9,15 @@
 
 ## 1. 필드명 규칙 — camelCase 통일
 > 근거: [decisions/songjeongki/0001](decisions/songjeongki/0001-field-name-camelcase.md) (팀 자체 컨벤션)
-- **API JSON·이벤트 필드명은 `camelCase`**. 예: `courseId`·`lessonId`·`sectionId`·`startMs`·`hlsManifestKey`·`isPublished`.
+- **API JSON·이벤트 필드명은 `camelCase`**. 예: `curriculumId`·`lessonId`·`sectionId`·`startMs`·`hlsManifestKey`·`isPublished`.
 - **DB 컬럼은 snake_case 허용**, DTO/응답/이벤트로 노출되는 순간 camelCase.
 
 ## 2. REST API (`/api`, Spring 소유)
 | 도메인 | 예시 | 비고 |
 |---|---|---|
-| 인증 | `POST /auth/login`·`/auth/signup`·`/auth/logout` | 상태코드: 생성 201·중복 409·인증실패 401·권한 403. **HttpOnly 쿠키 세션(Redis 저장)** — FE는 `withCredentials`, `Authorization: Bearer` 미사용. 변경요청 CSRF 토큰([decisions/songjeongki/0014](decisions/songjeongki/0014-auth-redis-session-cookie.md)) |
-| 카탈로그 | `GET /courses`·`GET /courses/{id}` | 검색·필터·페이지네이션 |
-| 강좌(강사) | `POST/PATCH /instructor/courses`·`.../sections`·`.../curriculum/order` | 소유권 검증 |
+| 인증 | `POST /auth/login`·`/auth/signup`·`/auth/logout`·`GET /auth/email-availability` | 인증 식별자는 **`email`**(구현됨, `loginId` 아님). 상태코드: 생성 201·중복 409·인증실패 401·권한 403. **HttpOnly 쿠키 세션(Redis 저장)** — FE는 `withCredentials`, `Authorization: Bearer` 미사용. 변경요청 CSRF 토큰([decisions/songjeongki/0014](decisions/songjeongki/0014-auth-redis-session-cookie.md)) |
+| 카탈로그 | `GET /curriculums`·`GET /curriculums/{id}` | 검색·필터·페이지네이션 |
+| 커리큘럼(강사) | `POST/PATCH /instructor/curriculums`·`.../sections`·`.../curriculum/order` | 소유권 검증 |
 | 강의 | `POST /instructor/sections/{id}/lessons`·`PATCH /instructor/lessons/{id}` | status: DRAFT/AI_NOT_READY/READY/PUBLISHED |
 | 자료 | `POST /instructor/lessons/{id}/materials` (PPTX) | presigned→MinIO. **영상 업로드 없음** |
 | 다시보기 | `GET /lessons/{id}/playback` | 녹화(Egress) HLS URL 발급(재생 인증 seam) |
@@ -25,13 +25,13 @@
 | 자막/용어 | `GET /lessons/{id}/transcript`·`/glossary` | 게시본(core) |
 | AI | `POST /lessons/{id}/ai/questions:stream`(SSE)·`/ai/terms:explain` | Spring이 권한·정책 후 ai-api 중계 |
 | 퀴즈 | `GET /lessons/{id}/quizzes`·`POST /quizzes/{id}/attempts` | 결정론 채점 |
-| 채팅 | `GET/POST /lessons/{id}/messages` | 가명, WS 실시간 + REST 보완 |
+| 채팅 | `GET/POST /live-sessions/{sessionId}/messages` | **세션 키잉(구현됨)**, 본문도 세션 기준. 가명, WS 실시간 + REST 보완 |
 | 라이브 | `POST /live-sessions/{id}/start`·`/token`·`/end` | 시작(토큰+Egress 녹화 시작)·LiveKit 토큰(publish/subscribe)·종료 |
 
 ## 3. 내부 계약 (확정 인터페이스)
 
 ### 3-1. Spring → AI 배치 잡 (RabbitMQ)
-잡 envelope: `{ jobId, idempotencyKey, tenantId, courseId, lessonId, taskType, inputRefs, policy, contractVersion, correlationId }`. taskType: `PPTX_PARSE|EMBED|CANDIDATE_GEN|STT_2PASS`. (라이브 STT는 배치 아님 — Redis Streams §3-3. 트랜스코드는 없음 — VOD=Egress 녹화, [decisions/songjeongki/0010](decisions/songjeongki/0010-self-host-vod.md)) **outbox**로 발행 신뢰성, 실패는 **DLQ**.
+잡 envelope: `{ jobId, idempotencyKey, tenantId, curriculumId, lessonId, taskType, inputRefs, policy, contractVersion, correlationId }`. taskType: `PPTX_PARSE|EMBED|CANDIDATE_GEN|STT_2PASS`. (라이브 STT는 배치 아님 — Redis Streams §3-3. 트랜스코드는 없음 — VOD=Egress 녹화, [decisions/songjeongki/0010](decisions/songjeongki/0010-self-host-vod.md)) **outbox**로 발행 신뢰성, 실패는 **DLQ**.
 
 ### 3-2. AI → Spring callback (HTTP, 서명)
 `{ eventId, eventType, jobId, lessonId, status, outputs }`. eventType 예: `LESSON_AI_READY`. Spring은 `eventId`로 중복 제거(멱등), 산출물을 ai schema에 두고 강사 게시 시 core로 반영.

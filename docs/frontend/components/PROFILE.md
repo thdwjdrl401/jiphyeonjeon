@@ -11,6 +11,8 @@
 
 계정 유형 변경, 커리큘럼 운영·수강 목록, 상세 학습 분석은 이 페이지에서 처리하지 않는다.
 
+> **구현 현황(2026-07)**: `displayName`(공통 프로필)·`bio`/`expertise`(강사 공개 프로필) 편집 폼은 **백엔드가 아직 없다 — 준비 중**(`ProfileEditForm`, `InstructorPublicProfileForm`은 저장 API 대기). 반대로 **프로필 이미지 지정은 백엔드가 구현되어 있으나**(`PUT /api/me/profile-image {assetId}`, 결과는 `/auth/me`의 `profileImageUrl`) **아직 FE UI가 없다**. 현재 조회 가능한 사용자 정보는 `GET /api/auth/me`(`userId`·`email`·`displayName`·`role`·`profileImageUrl`)뿐이다. 인증 식별자는 `email`이다.
+
 ## 2. 컴포넌트 트리
 
 ```text
@@ -74,10 +76,10 @@ ProfilePage
 
 ### 5.2 수정 가능
 
-- 사용자 이름 또는 표시 이름
+- 사용자 이름 또는 표시 이름 (**수정 API 미구현 — 준비 중**)
 - 실제 회원가입 계약에 포함된 수정 가능한 공통 프로필 정보
 
-이메일·전화번호·프로필 이미지는 계정 계약이 확정되기 전까지 필수 필드로 추가하지 않는다.
+이메일·전화번호는 계정 계약이 확정되기 전까지 필수 필드로 추가하지 않는다. 프로필 이미지는 지정 API(`PUT /api/me/profile-image`)가 이미 구현되어 있으나 이 폼에 연결하는 FE UI는 아직 없다.
 
 ### 5.3 저장 원칙
 
@@ -228,7 +230,7 @@ ProfilePage
 
 ## 16. 이후 기능 후보
 
-- 프로필 이미지
+- 프로필 이미지 FE UI (백엔드 `PUT /api/me/profile-image`는 이미 구현됨 — FE UI만 없음)
 - 이메일·전화번호 인증과 변경
 - 학생 관심 분야·추천 설정
 - 공개 강사 프로필 페이지

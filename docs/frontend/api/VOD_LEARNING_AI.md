@@ -39,7 +39,7 @@
 | `TRANSCRIPT-01` | `GET` | `/api/lessons/{lessonId}/transcript` | 게시 자막 조회·검색 | URL **확정** |
 | `GLOSSARY-01` | `GET` | `/api/lessons/{lessonId}/glossary` | 게시 전문용어 조회 | URL **확정** |
 | `CHAPTER-01` | `GET` | `/api/lessons/{lessonId}/chapters` | 게시 챕터·구조 요약 조회 | **제안** |
-| `CHAT-REPLAY-01` | `GET` | `/api/lessons/{lessonId}/messages` | 저장 채팅 리플레이 | URL **확정** |
+| `CHAT-REPLAY-01` | `GET` | `/api/live-sessions/{sessionId}/messages` | 저장 채팅 리플레이 | **구현됨(세션 키잉)**. 리플레이 페이지는 `lessonId` 기준이므로 lesson→session 해석 필요(설계 후속) |
 | `AI-HISTORY-01` | `GET` | `/api/lessons/{lessonId}/ai/questions` | 본인 AI Q&A 기록 | **제안** |
 | `AI-QUESTION-01` | `POST/SSE` | `/api/lessons/{lessonId}/ai/questions:stream` | 현재 시점 개인 AI 질문 | URL **확정** |
 
@@ -279,8 +279,10 @@ GET /api/lessons/{lessonId}/chapters
 
 ## 7. 채팅 리플레이
 
+채팅 저장·조회는 **세션 키잉(구현됨)**이다: `GET /api/live-sessions/{sessionId}/messages`. 다시보기 페이지는 `lessonId`로 진입하므로, 리플레이 채팅을 읽으려면 먼저 lessonId→sessionId 해석이 필요하다(레슨:세션 1:N 대비, **설계 후속**).
+
 ```http
-GET /api/lessons/{lessonId}/messages?sessionId={sessionId}&fromSessionMs=0&toSessionMs=300000&page=0&size=200
+GET /api/live-sessions/{sessionId}/messages?afterSessionMs=0&limit=200
 ```
 
 ```json

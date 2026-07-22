@@ -15,7 +15,7 @@
 
 - lesson 상태는 `DRAFT → AI_NOT_READY → READY → PUBLISHED`
 - 별도 `isPublished` boolean을 사용하지 않음
-- 수강생은 `lessonStatus=PUBLISHED`인 레슨만 접근
+- 수강생은 `status=PUBLISHED`인 레슨만 접근
 - `AI_NOT_READY`에서는 live session 시작 불가
 - live session은 별도 `sessionId`·상태·라우트 사용
 - MVP에서는 lesson과 live session을 1:1로 제한
@@ -80,7 +80,7 @@ LessonDetailPage
 
 ### 5.2 수강생
 
-- `lessonStatus=PUBLISHED`인 레슨만 접근
+- `status=PUBLISHED`인 레슨만 접근
 - 활성 PPTX와 공개 가능한 lesson 정보 확인
 - 연결 live session 상세에서 일정·입장 상태 확인
 - `videoAssetStatus=READY`와 `replayStatus=PUBLISHED`를 모두 만족한 뒤 다시보기 이동
@@ -204,7 +204,7 @@ AI 콘텐츠가 일부 준비 중이거나 실패해도 게시된 HLS 재생을 
 정확한 필드와 API는 [API_MAP.md](../API_MAP.md)에서 확정한다.
 
 - curriculum·section·lesson 기본 정보
-- `lessonStatus`와 역할별 허용 행동
+- `status`와 역할별 허용 행동
 - 활성 PPTX와 강사용 처리 상태
 - 연결된 `liveSessionId`·일정·상태·입장 가능 여부
 - 대표 `videoAssetStatus`와 처리 실패 사유
