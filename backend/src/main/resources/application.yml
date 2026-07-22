@@ -97,6 +97,11 @@ asset:
     path-style: ${ASSET_STORAGE_PATH_STYLE:true}                # MinIO는 path-style 필요
     upload-ttl-seconds: ${ASSET_STORAGE_UPLOAD_TTL:600}         # presigned PUT 유효기간(10분)
     download-ttl-seconds: ${ASSET_STORAGE_DOWNLOAD_TTL:3600}    # presigned GET 유효기간(1시간)
+  reaper:
+    # 티켓만 받고 완료 통지가 없던 PENDING 에셋 정리(→ FAILED). 행은 지우지 않는다(감사 추적 유지).
+    pending-expiry-hours: ${ASSET_REAPER_PENDING_EXPIRY_HOURS:24}   # 이보다 오래된 PENDING을 회수(PUT TTL 10분보다 충분히 뒤)
+    fixed-delay: ${ASSET_REAPER_FIXED_DELAY:PT1H}                   # 회수 주기(ISO-8601 Duration)
+    initial-delay: ${ASSET_REAPER_INITIAL_DELAY:PT5M}               # 기동 직후 첫 실행까지 지연
 
 liveclass:
   ws:

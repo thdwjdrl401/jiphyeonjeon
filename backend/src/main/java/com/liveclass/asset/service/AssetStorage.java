@@ -22,6 +22,12 @@ public interface AssetStorage {
     /** 업로드된 객체의 실제 메타(크기·content-type). 없으면 empty — 업로드 완료·크기·형식 검증용. */
     Optional<StoredObject> head(String objectKey);
 
+    /**
+     * 이 객체를 지운다. 객체가 없어도 성공으로 취급한다(S3 DELETE 자체가 멱등).
+     * 미완료(PENDING) 에셋 회수 시 남은 바이트를 치우는 용도 — 호출측은 실패를 삼킨다.
+     */
+    void delete(String objectKey);
+
     /** presigned 업로드 발급 결과. */
     record PresignedUpload(String url, OffsetDateTime expiresAt) {
     }
