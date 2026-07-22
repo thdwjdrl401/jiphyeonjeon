@@ -100,6 +100,14 @@ class CatalogContractTest {
                 .andExpect(jsonPath("$.size").value(100));
     }
 
+    @Test
+    void list_out_of_range_page_is_capped_not_500() throws Exception {
+        // page*size 오프셋이 int를 넘으면 Spring Data가 예외를 던져 500이 됐다 — 쿼리 파라미터 하나로 500이 나면 안 된다.
+        mockMvc.perform(get("/api/curriculums").param("page", "2000000000").param("size", "100"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(0));
+    }
+
     // ---- 상세 ----
 
     @Test
