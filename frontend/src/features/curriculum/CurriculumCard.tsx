@@ -45,7 +45,6 @@ export default function CurriculumCard({ curriculum, compact = false }: Curricul
             <span className="curriculum-art__orb" />
           </div>
         )}
-        <span className="status-badge">공개 중</span>
       </Link>
 
       <div className="curriculum-card__body">
@@ -71,7 +70,7 @@ export default function CurriculumCard({ curriculum, compact = false }: Curricul
         )}
 
         <div className="curriculum-card__footer">
-          <span>{curriculum.sectionCount}개 섹션 · {curriculum.lessonCount}개 레슨</span>
+          <span>{curriculum.sectionCount}개 섹션 · {curriculum.lessonCount}개 강의</span>
           <Link className="text-link" to={action.to}>
             {action.label}<span aria-hidden="true"> →</span>
           </Link>

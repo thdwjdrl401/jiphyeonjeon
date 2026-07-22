@@ -95,7 +95,7 @@ describe('CurriculumDetailPage', () => {
     expect(screen.queryByText('학습 진행률')).not.toBeInTheDocument()
   })
 
-  it('학생 목차에서는 상태 태그를 숨기고 모든 레슨 버튼을 강의 상세로 통일한다', async () => {
+  it('학생 목차에서는 상태 태그를 숨기고 모든 강의 버튼을 강의 상세로 통일한다', async () => {
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
     renderDetail('/curriculums/cur-spring-live')
 
@@ -114,7 +114,7 @@ describe('CurriculumDetailPage', () => {
     )
   })
 
-  it('지난 레슨도 커리큘럼 목차에서는 강의 상세로 연결된다', async () => {
+  it('지난 강의도 커리큘럼 목차에서는 강의 상세로 연결된다', async () => {
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
     renderDetail('/curriculums/cur-spring-live')
 
@@ -126,7 +126,7 @@ describe('CurriculumDetailPage', () => {
     }
   })
 
-  it('완료 직후 바로 다음 예정 레슨은 라이브 준비 안내 페이지로 연결된다', async () => {
+  it('완료 직후 바로 다음 예정 강의는 라이브 준비 안내 페이지로 연결된다', async () => {
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
     renderDetail('/curriculums/cur-spring-live')
 
@@ -137,7 +137,7 @@ describe('CurriculumDetailPage', () => {
     )
   })
 
-  it('수강 중이지만 아직 레슨을 하나도 듣지 않아도 수강 상태 배지를 보여준다', async () => {
+  it('수강 중이지만 아직 강의를 하나도 듣지 않아도 수강 상태 배지를 보여준다', async () => {
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
     renderDetail('/curriculums/cur-react-system')
 
@@ -149,7 +149,7 @@ describe('CurriculumDetailPage', () => {
     expect(screen.queryByRole('link', { name: '이어보기' })).not.toBeInTheDocument()
   })
 
-  it('담당 강사 목차는 레슨 버튼과 공개·라이브 상태 태그를 단순화한다', async () => {
+  it('담당 강사 목차는 강의 버튼과 공개·라이브 상태 태그를 단순화한다', async () => {
     await mockAuthService.login({ email: 'instructor01@example.com', password: 'password1' })
     renderDetail('/curriculums/cur-spring-live')
 
@@ -167,7 +167,7 @@ describe('CurriculumDetailPage', () => {
     expect(screen.queryByText('라이브 진행 중')).not.toBeInTheDocument()
   })
 
-  it('게시되지 않은 레슨의 학생 공개 상태는 준비 중으로 표시한다', async () => {
+  it('게시되지 않은 강의의 학생 공개 상태는 준비 중으로 표시한다', async () => {
     await mockAuthService.login({ email: 'instructor01@example.com', password: 'password1' })
     renderDetail('/curriculums/cur-architecture')
 

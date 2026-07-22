@@ -25,7 +25,7 @@ export default function LessonLiveUpcomingPage() {
   usePageTitle(lesson ? `라이브 준비 중 · ${lesson.title}` : '라이브 준비 중')
 
   if (detailQuery.isPending) {
-    return <PageState compact title="불러오는 중이에요" description="레슨 정보를 확인하고 있어요." />
+    return <PageState compact title="불러오는 중이에요" description="강의 정보를 확인하고 있어요." />
   }
 
   const description = lesson?.scheduledAt

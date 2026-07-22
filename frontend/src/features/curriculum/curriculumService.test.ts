@@ -83,7 +83,7 @@ describe('커리큘럼 API 계약', () => {
             lessons: [
               {
                 lessonId: 'les_1',
-                title: '레슨',
+                title: '강의',
                 order: 1,
                 lessonStatus: 'PUBLISHED',
                 liveSession: {

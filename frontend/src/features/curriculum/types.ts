@@ -18,7 +18,6 @@ export type CurriculumAllowedAction =
 
 export type CurriculumSort =
   | 'LATEST'
-  | 'STARTING_SOON'
   | 'TITLE_ASC'
   | 'RECOMMENDED'
 

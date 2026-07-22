@@ -35,7 +35,7 @@ export default function CurriculumMetadata({
       </div>
       <div>
         <dt>구성</dt>
-        <dd>{sectionCount}개 섹션 · {lessonCount}개 레슨</dd>
+        <dd>{sectionCount}개 섹션 · {lessonCount}개 강의</dd>
       </div>
     </dl>
   )

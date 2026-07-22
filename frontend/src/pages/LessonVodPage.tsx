@@ -34,7 +34,7 @@ export default function LessonVodPage() {
     return (
       <PageState
         title="다시보기를 찾을 수 없어요"
-        description="레슨 정보를 확인할 수 없거나 아직 다시보기가 준비되지 않았어요."
+        description="강의 정보를 확인할 수 없거나 아직 다시보기가 준비되지 않았어요."
         action={<Link className="button button--soft" to={publicPaths.curriculum(curriculumId)}>커리큘럼으로 돌아가기</Link>}
       />
     )
