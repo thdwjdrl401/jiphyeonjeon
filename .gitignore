@@ -36,3 +36,6 @@ package-lock.json
 # Gradle 빌드 산출물
 backend/build/
 backend/.gradle/
+
+# LiveKit STT 테스트 미디어(대용량 바이너리) — 호스트 /srv/liveclass/stt-audio 에만 둔다
+infra/livekit/stt-audio/
