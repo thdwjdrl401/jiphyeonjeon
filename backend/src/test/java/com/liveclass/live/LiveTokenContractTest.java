@@ -139,6 +139,22 @@ class LiveTokenContractTest {
                 .andExpect(jsonPath("$.code").value("LIVE_SESSION_STATE_CONFLICT"));
     }
 
+    @Test
+    void token_participant_identity_is_opaque_not_raw_user_id() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String[] created = createSession(instructor);
+        String sessionId = created[0];
+        String userId = json(mockMvc.perform(get("/api/auth/me").cookie(instructor)).andReturn())
+                .get("userId").asString();
+
+        MvcResult res = write(post("/api/live-sessions/" + sessionId + "/token"), instructor, null)
+                .andExpect(status().isOk())
+                .andReturn();
+        // 참가자 identity가 원시 userId를 그대로 노출하면 안 된다(방 참가자끼리 서로의 identity를 봄).
+        String identity = json(res).get("participant").get("identity").asString();
+        assertThat(identity).isNotBlank().isNotEqualTo(userId);
+    }
+
     // ---- 헬퍼 ----
 
     private String xsrfToken;

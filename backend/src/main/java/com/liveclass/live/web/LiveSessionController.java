@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
 
@@ -44,9 +45,12 @@ public class LiveSessionController {
         this.accessGuard = accessGuard;
     }
 
-    @Operation(summary = "라이브 세션 조회", description = "라이브 세션의 기본 정보를 조회한다.")
+    @Operation(summary = "라이브 세션 조회", description = "라이브 세션의 기본 정보를 조회한다. 소유 강사 또는 활성 수강생만.")
     @GetMapping("/api/live-sessions/{sessionId}")
-    public LiveSessionView get(@PathVariable UUID sessionId) {
+    public LiveSessionView get(@PathVariable UUID sessionId, Authentication authentication) {
+        // 접근 게이트: 소유 강사이거나 활성 수강생만 세션 정보를 볼 수 있다(없으면 404, 미수강 403).
+        // 없으면 아무 로그인 사용자나 임의 세션의 강사·일정·roomSid를 조회할 수 있었다(IDOR).
+        accessGuard.requireCanAccess(sessionId, UUID.fromString(authentication.getName()));
         return liveSessionService.findById(sessionId)
                 .orElseThrow(() -> new LiveSessionNotFoundException("라이브 세션을 찾을 수 없습니다."));
     }
@@ -120,16 +124,20 @@ public class LiveSessionController {
         boolean publisher = requesterId.equals(session.instructorId().toString());
         // 방 이름은 세션 ID로 결정론적으로 만든다. LiveKit이 붙이는 room_sid는 실제 시작 시 채운다.
         String room = "session-" + sessionId;
+        // 참가자 identity는 원시 userId를 노출하지 않는 (session,user) 결정론적 불투명 값으로 만든다.
+        // 방 안에서 참가자끼리 서로의 identity를 보므로, 채팅 익명화와 동일하게 userId를 미디어 계층에 흘리지 않는다.
+        String identity = UUID.nameUUIDFromBytes(
+                (sessionId + ":" + requesterId).getBytes(StandardCharsets.UTF_8)).toString();
 
-        // displayName(참여자 표시명·수강생 익명화)은 화면 요구가 붙을 때 채운다 — 지금은 식별자만.
-        var issued = tokenService.issue(room, requesterId, null, publisher);
+        // displayName(참여자 표시명·수강생 익명화)은 화면 요구가 붙을 때 채운다 — 지금은 불투명 식별자만.
+        var issued = tokenService.issue(room, identity, null, publisher);
 
         return new LiveTokenResponse(
                 "LIVEKIT",
                 tokenService.url(),
                 issued.jwt(),
                 issued.expiresAt(),
-                new LiveTokenResponse.Participant(requesterId, null),
+                new LiveTokenResponse.Participant(identity, null),
                 new LiveTokenResponse.Grants(true, publisher, publisher));
     }
 }
