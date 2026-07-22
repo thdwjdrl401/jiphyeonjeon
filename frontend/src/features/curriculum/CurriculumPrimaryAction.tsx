@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom'
 import type { PrimaryAction } from '@/features/curriculum-detail/primaryAction'
-import { StatusBadge } from '@/shared/ui/WorkspaceUi'
 
 interface CurriculumPrimaryActionProps {
   action: PrimaryAction
@@ -38,7 +37,7 @@ export default function CurriculumPrimaryAction({ action, onEnroll, isEnrolling,
   if (action.kind === 'enrollmentStatus') {
     return (
       <div className="curriculum-primary-action-group">
-        <StatusBadge tone={action.label === '수강 중' ? 'success' : 'warning'}>{action.label}</StatusBadge>
+        <button className="button button--ghost" type="button" disabled aria-disabled="true">{action.label}</button>
         <button className="button button--ghost" type="button" onClick={onCancel} disabled={isCancelling}>
           {isCancelling ? '취소 중' : action.cancelLabel}
         </button>

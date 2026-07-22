@@ -17,6 +17,7 @@ interface AuthContextValue {
   signup: (request: SignupRequest) => Promise<AuthUser>
   checkEmail: (email: string) => Promise<EmailAvailability>
   logout: () => Promise<void>
+  updateDisplayName: (displayName: string) => Promise<AuthUser>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -54,6 +55,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
         predicate: ({ queryKey }) => queryKey[0] !== 'auth',
       })
       queryClient.setQueryData(authQueryKey, null)
+    },
+    async updateDisplayName(displayName) {
+      const updatedUser = await authService.updateDisplayName(displayName)
+      queryClient.setQueryData(authQueryKey, updatedUser)
+      return updatedUser
     },
   }
 
