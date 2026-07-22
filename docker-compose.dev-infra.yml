@@ -3,7 +3,7 @@
 #   AI STT(Redis Streams)·배치잡(RabbitMQ, ADR-0012)을 EC2 공유 dev 인프라에서.
 # 배포: CI 수동 잡 deploy-dev-infra, 또는
 #   docker compose -f docker-compose.dev-infra.yml --env-file /etc/liveclass/.env.dev up -d
-# ⚠️ 노출 포트(5433/6380/5673/15673)는 AWS SG + ufw로 팀 공인 IP만 허용 + 비밀번호 필수.
+# ⚠️ 노출 포트(5433/8988/8989/8990)는 AWS SG + ufw로 팀 공인 IP만 허용 + 비밀번호 필수.
 name: liveclass-dev
 services:
   postgres:
@@ -30,7 +30,7 @@ services:
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD 필요}"]
     ports:
-      - "6380:6379"
+      - "8988:6379"
     volumes:
       - redisdata:/data
     healthcheck:
@@ -46,8 +46,8 @@ services:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-liveclass}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD 필요}
     ports:
-      - "5673:5672"      # AMQP (dev)
-      - "15673:15672"    # 관리 UI (dev)
+      - "8989:5672"      # AMQP (dev)
+      - "8990:15672"    # 관리 UI (dev)
     volumes:
       - rabbitmqdata:/var/lib/rabbitmq
     healthcheck:
