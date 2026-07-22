@@ -14,6 +14,7 @@ public record SendChatMessageRequest(
 
         @Schema(description = "메시지 내용")
         @NotBlank
+        @Size(max = 2000)
         String text,
 
         @Schema(description = "질문 여부(생략 시 false)", example = "false")

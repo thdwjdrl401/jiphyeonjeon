@@ -180,6 +180,19 @@ class ChatContractTest {
                 .andExpect(jsonPath("$.code").value("LIVE_SESSION_FORBIDDEN"));
     }
 
+    @Test
+    void chat_text_over_limit_returns_400() throws Exception {
+        Cookie[] student = loginAs("STUDENT");
+        String anySession = UUID.randomUUID().toString();
+        String tooLong = "가".repeat(2001);   // @Size(max=2000) 초과 — 컨트롤러 진입 전 검증에서 걸린다
+
+        write(post("/api/live-sessions/" + anySession + "/messages"), student,
+                "{\"clientMessageId\":\"c-long\",\"text\":\"" + tooLong + "\"}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.fieldErrors[?(@.field=='text')].code").value("INVALID_LENGTH"));
+    }
+
     // ---- 헬퍼 ----
 
     private String xsrfToken;
