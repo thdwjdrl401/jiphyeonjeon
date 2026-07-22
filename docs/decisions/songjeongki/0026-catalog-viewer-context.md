@@ -1,0 +1,70 @@
+# ADR-0026: 카탈로그 응답에 viewerContext를 담고, 내 수강 목록 조립을 curriculum 모듈이 맡는다
+
+> 📍 하네스 개요: [../../harness/README.md](../../harness/README.md) · 판단 정책: [../../harness/POLICY.md](../../harness/POLICY.md)
+
+- **상태**: 채택
+- **일자**: 2026-07-22
+- **관련**: Sub Ⅱ / CP0 · [CONTRACT §2](../../CONTRACT.md) · [ADR-0023](0023-asset-presigned-upload.md)
+
+## 맥락 (Context)
+
+프론트가 mock에서 실 API로 넘어가려는 시점에 두 가지가 걸렸다.
+
+1. **커리큘럼 상세가 "누가 보는지"를 모른 채 답했다.** FE는 주 CTA(수강 신청 / 이어서 학습 / 관리하기 /
+   로그인 후 수강)와 레슨 진입 가능 여부를 `viewerContext`·`enrollmentPolicy`·레슨별 `access`로 정하도록
+   설계돼 있는데, 서버가 그 필드를 주지 않았다. FE는 없으면 안전한 쪽으로 폴백하도록 짜여 있어서
+   `enrollmentPolicy=INVITATION_ONLY/UNAVAILABLE`, `allowedActions=[VIEW_DETAIL]`,
+   `access.allowed=false`가 되고, **화면 전체가 잠긴 것처럼 보였다.** 값을 안 주는 것이 "기능 없음"이
+   아니라 "기능 꺼짐"으로 나타나는 구조였다.
+
+2. **내 수강 목록이 화면을 그릴 수 없었다.** `GET /api/me/enrollments`가 수강 기록 5필드만 주는데,
+   화면은 제목·썸네일·강사·진행률이 있는 카드를 그린다. FE가 수강 건마다 커리큘럼을 다시 조회하면 N+1이다.
+   그런데 수강 기록은 `enrollment` 모듈이, 커리큘럼 카드는 `curriculum` 모듈이 소유한다.
+   `enrollment`에서 커리큘럼을 읽으면 `curriculum → enrollment` 와 맞물려 모듈 순환이 생긴다
+   (Spring Modulith 검증에 걸린다).
+
+FE가 역할·수강상태를 스스로 조합해 CTA를 정하는 방법도 있지만, 같은 판정 규칙이 서버(인가)와
+클라이언트(표시) 두 곳에 생겨 어긋나기 시작한다.
+
+## 결정 (Decision)
+
+1. **카탈로그 목록·상세 응답에 `viewerContext`를 싣는다.** 관계(GUEST·UNENROLLED_STUDENT·
+   PENDING_ENROLLMENT·ENROLLED·OWNER_INSTRUCTOR·NON_OWNER_INSTRUCTOR)와 그 관계에서 허용되는
+   행동(`allowedActions`)을 서버가 판정한다. 상세에는 `enrollmentPolicy`와 목차 레슨별
+   `liveSession`·`access`도 함께 싣는다.
+2. 공개 경로(`GET /api/curriculums`, `/{id}`)는 permitAll을 유지하되 **`Authentication`을 선택적으로
+   받는다.** 쿠키가 있으면 그 사용자 기준, 없으면 손님 기준으로 답한다.
+3. **`/api/me/enrollments`의 소유 모듈을 `curriculum`으로 옮긴다.** 경로와 기존 필드는 그대로 두고
+   `curriculum` 카드를 항목마다 덧붙인다. 이미 `enrollment`를 참조하고 있는 `curriculum`이 조립을 맡아
+   순환을 만들지 않는다.
+
+## 근거 (Rationale)
+
+- **판정 규칙은 한 곳에.** 누가 무엇을 할 수 있는가는 이미 서버가 인가로 판정한다. 표시용 판정을
+  클라이언트에 복제하면 두 규칙이 갈라지고, 갈라진 쪽은 대개 보안이 아니라 UX가 깨지는 형태로 드러난다.
+- **"필드 없음"이 "기능 없음"으로 보이지 않게.** 아직 도메인이 없는 값(진도·재생 길이·다시보기 상태)도
+  필드는 계약에 포함하고 `null`·`NOT_READY`로 명시해 내보낸다. FE가 값을 추측하지 않고, 나중에 도메인이
+  생기면 서버만 채우면 된다.
+- **모듈 방향은 이미 정해져 있었다.** `curriculum → enrollment`는 수강 신청·승인에서 이미 쓰고 있다.
+  반대 방향을 새로 만들지 않고 기존 방향에 얹는 쪽이 경계를 지키면서 가장 적게 움직인다.
+
+## 대안 (Alternatives)
+
+| 대안 | 장점 | 단점 |
+|---|---|---|
+| (선택) 서버가 viewerContext까지 판정해 응답 | 규칙 한 곳, FE 폴백 불필요, 화면이 바로 살아남 | 공개 조회가 인증을 선택적으로 알아야 함, 수강 조회 1회 추가 |
+| FE가 역할·수강상태로 CTA를 조합 | 서버 변경 없음 | 판정 규칙 이원화, 카드마다 수강 여부를 따로 조회해야 함 |
+| viewerContext 전용 엔드포인트를 분리 | 공개 캐시가 쉬움 | 화면 한 장에 왕복 2회, 두 응답의 시점 불일치 |
+| `enrollment`가 커리큘럼을 읽어 목록을 조립 | 경로 소유가 직관적 | `curriculum ↔ enrollment` 순환 — Modulith 검증 실패 |
+
+## 영향·후속 (Consequences)
+
+- `GET /api/curriculums`·`/{id}`·`/api/me/enrollments` 응답에 필드가 **추가**된다(기존 필드 유지 →
+  기존 소비자 무해). [CONTRACT §2](../../CONTRACT.md) 갱신.
+- 계약 테스트 `CatalogViewerContextContractTest` 추가 — 관계별로 어떤 행동이 열리는지, 라이브가 잡힌
+  레슨이 라이브 쪽으로 향하는지를 실제 로그인 흐름으로 검증한다.
+- `enrollment/web` 패키지 제거(컨트롤러·DTO가 `curriculum/web`으로 이동). `enrollment`는 도메인·포트만
+  갖는 모듈이 된다.
+- `LiveSessionDirectory.findByLessons`(배치 조회) 추가 — 목차가 레슨마다 세션을 묻지 않도록.
+- **아직 비어 있는 필드**: `progress`·`learning`·`durationMs`(학습 기록 도메인, CP5),
+  `replayStatus`(다시보기, CP4), `materials`(자료 연결 API 부재). 각각 해당 CP에서 채운다.
