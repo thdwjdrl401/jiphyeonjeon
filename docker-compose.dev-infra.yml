@@ -1,0 +1,61 @@
+# EC2 dev 인프라 스택 — prod(liveclass)와 별개 프로젝트/포트/볼륨으로 동시 가동.
+# 목적: 로컬에서 backend를 돌리면서 datasource/redis/rabbitmq만 EC2 dev 인프라에 붙여 테스트(prod 무관).
+#   AI STT(Redis Streams)·배치잡(RabbitMQ, ADR-0012)을 EC2 공유 dev 인프라에서.
+# 배포: CI 수동 잡 deploy-dev-infra, 또는
+#   docker compose -f docker-compose.dev-infra.yml --env-file /etc/liveclass/.env.dev up -d
+# ⚠️ 노출 포트(5433/6380/5673/15673)는 AWS SG + ufw로 팀 공인 IP만 허용 + 비밀번호 필수.
+name: liveclass-dev
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: liveclass-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-liveclass}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 필요}
+      POSTGRES_DB: ${POSTGRES_DB:-liveclass}
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-liveclass} -d ${POSTGRES_DB:-liveclass}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  redis:
+    image: redis:7-alpine
+    container_name: liveclass-redis-dev
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD 필요}"]
+    ports:
+      - "6380:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: liveclass-rabbitmq-dev
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-liveclass}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD 필요}
+    ports:
+      - "5673:5672"      # AMQP (dev)
+      - "15673:15672"    # 관리 UI (dev)
+    volumes:
+      - rabbitmqdata:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+volumes:
+  pgdata:
+  redisdata:
+  rabbitmqdata:

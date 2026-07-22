@@ -23,6 +23,7 @@ package-lock.json
 # 로컬 인프라 시크릿 (.env.example / .env.prod.example / .env.remote.example만 커밋)
 .env
 .env.prod
+.env.dev
 .env.remote
 
 # 에디터 스왑/임시 파일
