@@ -18,6 +18,9 @@ import com.liveclass.live.api.LiveSessionManagement;
 import com.liveclass.live.api.LiveSessionView;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,6 +29,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -85,9 +89,74 @@ public class InstructorCurriculumService {
         return saved;
     }
 
+    /**
+     * 강사 운영 목록(MY-CURRICULUM-02). 소유자 본인 커리큘럼만, 제목검색·상태필터·정렬·페이지로 조회한다.
+     *
+     * <p>N+1을 만들지 않는 것이 이 메서드의 핵심 제약이다. 페이지를 먼저 자른 뒤 부가정보를
+     * <b>세 번의 배치 조회</b>로만 채운다 — 썸네일 URL(asset.api), 커리큘럼별 다음 세션(live.api),
+     * 그 세션들의 레슨 제목(lesson.api). 행 수와 무관하게 쿼리 수가 고정된다.
+     *
+     * <p>타 모듈 데이터는 전부 포트(api 패키지)로만 얻는다 — live_session이 curriculum_id를
+     * 비정규화해 들고 있어 모듈 간 조인 없이 live 안에서 해결된다.
+     */
     @Transactional(readOnly = true)
-    public List<Curriculum> listMine(UUID instructorId) {
-        return curriculumRepository.findByInstructorIdOrderByCreatedAtDesc(instructorId);
+    public Page<InstructorCurriculumCard> listMine(UUID instructorId, String q,
+                                                   CurriculumLifecycleStatus status,
+                                                   InstructorCurriculumSort sort, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size, sort.toSort());
+        String normalizedQuery = (q == null || q.isBlank()) ? null : q.trim();
+
+        Page<Curriculum> found = findMine(instructorId, normalizedQuery, status, pageable);
+        List<Curriculum> content = found.getContent();
+
+        // (1) 썸네일 URL 배치 해석.
+        Map<UUID, String> thumbnails = assetDirectory.resolveUrls(content.stream()
+                .map(Curriculum::getThumbnailAssetId).filter(Objects::nonNull).toList());
+        // (2) 페이지 전체의 다음 예정 세션을 한 쿼리로.
+        Map<UUID, LiveSessionView> nextSessions = liveSessionDirectory.nextScheduledByCurriculum(
+                content.stream().map(Curriculum::getId).toList());
+        // (3) 그 세션들이 걸린 레슨 제목도 한 쿼리로.
+        Map<UUID, String> lessonTitles = lessonDirectory.findTitles(nextSessions.values().stream()
+                .map(LiveSessionView::lessonId).distinct().toList());
+
+        return found.map(c -> toCard(c, thumbnails, nextSessions, lessonTitles));
+    }
+
+    private Page<Curriculum> findMine(UUID instructorId, String q, CurriculumLifecycleStatus status,
+                                      Pageable pageable) {
+        if (q == null && status == null) {
+            return curriculumRepository.findByInstructorId(instructorId, pageable);
+        }
+        if (q == null) {
+            return curriculumRepository.findByInstructorIdAndLifecycleStatus(instructorId, status, pageable);
+        }
+        if (status == null) {
+            return curriculumRepository.findByInstructorIdAndTitleContainingIgnoreCase(instructorId, q, pageable);
+        }
+        return curriculumRepository.findByInstructorIdAndLifecycleStatusAndTitleContainingIgnoreCase(
+                instructorId, status, q, pageable);
+    }
+
+    private InstructorCurriculumCard toCard(Curriculum c, Map<UUID, String> thumbnails,
+                                            Map<UUID, LiveSessionView> nextSessions,
+                                            Map<UUID, String> lessonTitles) {
+        LiveSessionView next = nextSessions.get(c.getId());
+        InstructorNextLiveSession nextLiveSession = next == null ? null : new InstructorNextLiveSession(
+                next.sessionId(),
+                next.lessonId(),
+                lessonTitles.get(next.lessonId()),
+                next.scheduledAt(),
+                next.liveSessionStatus());
+        return new InstructorCurriculumCard(
+                c.getId(),
+                c.getTitle(),
+                c.getSummary(),
+                c.getThumbnailAssetId() == null ? null : thumbnails.get(c.getThumbnailAssetId()),
+                c.getLifecycleStatus().name(),
+                c.getSectionCount(),
+                c.getLessonCount(),
+                c.getPublishedLessonCount(),
+                nextLiveSession);
     }
 
     @Transactional(readOnly = true)
