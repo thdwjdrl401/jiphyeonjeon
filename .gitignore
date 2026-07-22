@@ -1,4 +1,6 @@
-.sub1/
+# 팀원 개별 실습(Sub PJT1). 이미 원격에 올라간 것은 유지, 이후 새 변경만 무시.
+sub1/
+
 # Frontend build output (FE/BE 분리 — frontend/dist 로컬 산출)
 frontend/dist/
 
