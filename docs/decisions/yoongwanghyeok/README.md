@@ -2,8 +2,8 @@
 
 > 정본 규칙: [AGENTS.md](../../../AGENTS.md) · 아키텍처: [ARCHITECTURE.md](../../ARCHITECTURE.md) · 공유 계약: [CONTRACT.md](../../CONTRACT.md)
 
-- **기록 기준일**: 2026-07-21
-- **범위**: 이번 세션에서 진행한 페이지 분리, 컴포넌트 명세, 라이브·VOD 정책, 프론트 API 협의, 전체 페이지 구현 과정의 런타임·라우팅·fixture·공통 자료 결정
+- **기록 기준일**: 2026-07-22
+- **범위**: 이번 세션에서 진행한 페이지 분리, 컴포넌트 명세, 라이브·VOD 정책, 프론트 API 협의, 전체 페이지 구현 과정의 런타임·라우팅·fixture·공통 자료·사용자 이동 구조 결정
 - **목적**: 채택된 제품·프론트 결정을 다시 찾을 수 있게 하고, 현재 정본과 충돌하거나 아직 검증되지 않은 항목을 분리한다.
 
 ## 문서 우선순위
@@ -32,6 +32,7 @@
 | [0009](0009-role-prefixed-routing-and-entry-gates.md) | 채택 | 학생·강사 prefix 상위 가드와 라이브 prejoin 강제 |
 | [0010](0010-integrated-mock-domain-state.md) | 채택 | 목록·상세·대시보드가 공유하는 통합 fixture 단일 원본 |
 | [0011](0011-optional-curriculum-materials.md) | 프론트 채택 | 선택형 커리큘럼 공통 자료와 수강·소유 관계 기반 노출 |
+| [0012](0012-curriculum-centered-navigation-and-lesson-live-management.md) | 프론트 채택 | 커리큘럼 중심 탐색과 레슨 중심 라이브 일정·상세 통합 |
 
 ## 이슈와 트러블슈팅
 
