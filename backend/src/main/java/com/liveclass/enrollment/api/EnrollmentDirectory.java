@@ -1,12 +1,16 @@
 package com.liveclass.enrollment.api;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 /**
  * 수강 상태 조회 포트. 라이브 입장/채팅 게이팅(live), 내 수강 목록(enrollment web),
- * viewerContext(curriculum)가 소비한다.
+ * viewerContext·강사 로스터(curriculum)가 소비한다.
  */
 public interface EnrollmentDirectory {
 
@@ -22,6 +26,16 @@ public interface EnrollmentDirectory {
     /** 내 수강 목록(최신순). */
     List<EnrollmentView> myEnrollments(UUID userId);
 
-    /** 강사용 ACTIVE 수강생 로스터(신청 순). */
-    List<EnrollmentView> activeFor(UUID curriculumId);
+    /**
+     * 강사용 수강 로스터 한 페이지(신청 순: requestedAt ASC, 동시각은 id ASC로 안정 정렬).
+     *
+     * @param status null이면 상태 필터 없이 전체
+     */
+    Page<EnrollmentView> findPage(UUID curriculumId, EnrollmentStatus status, Pageable pageable);
+
+    /**
+     * 이 커리큘럼의 상태별 수강 건수. 행을 적재하지 않고 집계 쿼리 1회로 센다.
+     * 모든 {@link EnrollmentStatus} 키를 담아 돌려준다(해당 건이 없으면 0).
+     */
+    Map<EnrollmentStatus, Long> countsByStatus(UUID curriculumId);
 }

@@ -22,9 +22,6 @@ import java.util.UUID;
 @RestController
 public class CatalogController {
 
-    private static final int DEFAULT_SIZE = 20;
-    private static final int MAX_SIZE = 100;
-
     private final CatalogService catalogService;
 
     public CatalogController(CatalogService catalogService) {
@@ -39,8 +36,9 @@ public class CatalogController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
+        int pageSize = PageParams.size(size);
         return PageResponse.of(
-                catalogService.list(q, sort, Math.max(0, page), clampSize(size)),
+                catalogService.list(q, sort, PageParams.page(page, pageSize), pageSize),
                 CurriculumCardSummary::from);
     }
 
@@ -50,11 +48,4 @@ public class CatalogController {
         return CurriculumDetailResponse.from(catalogService.detail(curriculumId));
     }
 
-    /** 페이지 크기는 서버가 제한한다(CATALOG §4.1). 0 이하는 기본값, 상한 초과는 상한으로. */
-    private int clampSize(int size) {
-        if (size <= 0) {
-            return DEFAULT_SIZE;
-        }
-        return Math.min(size, MAX_SIZE);
-    }
 }

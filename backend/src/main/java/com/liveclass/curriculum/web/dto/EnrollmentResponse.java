@@ -7,7 +7,7 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 /** 수강 신청/승인 응답(학생 apply/cancel·강사 approve/reject/revoke 공용).
- *  강사 목록의 신청자 이름·이메일 보강은 {@link EnrollmentApplicantResponse} 참고(Tier 2). */
+ *  강사 로스터의 신청자 이름·이메일 보강은 {@link EnrollmentRosterItem} 참고(Tier 2). */
 public record EnrollmentResponse(
         UUID enrollmentId,
         UUID curriculumId,
