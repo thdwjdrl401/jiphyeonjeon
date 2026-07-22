@@ -104,6 +104,19 @@ class LiveSessionContractTest {
                 .andExpect(jsonPath("$.code").value("LIVE_SESSION_NOT_FOUND"));
     }
 
+    @Test
+    void get_session_without_access_returns_403() throws Exception {
+        Cookie[] owner = loginAs("INSTRUCTOR");
+        String lessonId = createLesson(owner);
+        String sessionId = json(write(post("/api/instructor/lessons/" + lessonId + "/live-sessions"), owner, null)
+                .andReturn()).get("sessionId").asString();
+
+        Cookie[] outsider = loginAs("STUDENT");   // 소유 강사도, 활성 수강생도 아님
+        mockMvc.perform(get("/api/live-sessions/" + sessionId).cookie(outsider))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("LIVE_SESSION_FORBIDDEN"));
+    }
+
     // ---- 헬퍼 ----
 
     private String createLesson(Cookie[] auth) throws Exception {

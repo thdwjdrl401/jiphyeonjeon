@@ -7,6 +7,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -48,6 +49,16 @@ public class UnhandledExceptionHandler {
     @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
     public ResponseEntity<ErrorResponse> handleMediaType(HttpMediaTypeNotSupportedException e) {
         return status(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "UNSUPPORTED_MEDIA_TYPE", "지원하지 않는 미디어 타입입니다.");
+    }
+
+    /**
+     * 낙관적 잠금(@Version) 충돌 = 동시 수정. 500이 아니라 409로 매핑한다 — 클라가 재시도하면 된다.
+     * (LiveSession의 동시 start/end, Enrollment의 동시 상태전이 등에서 발생. CONTRACT §2 "중복 409".)
+     */
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<ErrorResponse> handleOptimisticLock(ObjectOptimisticLockingFailureException e) {
+        return status(HttpStatus.CONFLICT, "CONCURRENT_MODIFICATION",
+                "다른 요청과 동시에 변경되었습니다. 다시 시도해 주세요.");
     }
 
     /** 그 밖의 예상 못 한 예외 — 여기 오면 우리 코드/인프라 문제다. 스택트레이스를 로그로 남긴다. */
