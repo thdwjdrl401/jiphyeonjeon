@@ -1,6 +1,7 @@
 # T0 개발 backbone — 최소 인프라 (CP0가 쓰는 것만).
 # RabbitMQ·MinIO·nginx·미디어(LiveKit/Egress)는 각 CP 착수 시점에 확장 (TEAM-KICKOFF §4).
 # 사용: cp .env.example .env  →  docker compose up -d
+name: liveclass          # compose 프로젝트명 고정 = 볼륨/이미지 접두사. 디렉토리명(cp/liveclass 등)과 무관하게 liveclass_* 로 통일.
 services:
   postgres:
     image: pgvector/pgvector:pg16          # pgvector 사전 설치 (ADR-0005)

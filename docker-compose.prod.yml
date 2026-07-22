@@ -5,6 +5,7 @@
 #   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
 #
 # 컨테이너: postgres · redis · backend · frontend(nginx) · certbot
+name: liveclass          # compose 프로젝트명 고정 = 볼륨/이미지/네트워크 접두사. 디렉토리명과 무관하게 liveclass_* 로 통일.
 services:
   postgres:
     image: pgvector/pgvector:pg16
