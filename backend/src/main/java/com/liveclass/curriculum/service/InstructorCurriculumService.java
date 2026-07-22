@@ -11,6 +11,7 @@ import com.liveclass.curriculum.repository.SectionRepository;
 import com.liveclass.common.logging.Audit;
 import com.liveclass.lesson.api.LessonDirectory;
 import com.liveclass.lesson.api.LessonManagement;
+import com.liveclass.lesson.api.LessonPlacement;
 import com.liveclass.lesson.api.LessonView;
 import com.liveclass.live.api.LiveSessionDirectory;
 import com.liveclass.live.api.LiveSessionManagement;
@@ -21,8 +22,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * 강사가 소유한 커리큘럼·섹션의 관리(CRUD). 소유권은 curriculum.instructorId로 판정한다.
@@ -171,7 +177,7 @@ public class InstructorCurriculumService {
 
     @Transactional
     public Section createSection(UUID instructorId, UUID curriculumId, String title, String description) {
-        Curriculum curriculum = requireOwned(instructorId, curriculumId);
+        requireOwned(instructorId, curriculumId);
 
         Section section = new Section();
         section.setCurriculumId(curriculumId);
@@ -183,7 +189,7 @@ public class InstructorCurriculumService {
 
         // section_count는 DB 트리거가 유지한다(앱이 건드리면 이중 반영). 여기선 목차 변경을
         // 감지시키는 structure_version만 올린다 — 트리거는 이 컬럼을 건드리지 않는다.
-        curriculum.setStructureVersion(curriculum.getStructureVersion() + 1);
+        curriculumRepository.bumpStructureVersion(curriculumId);
         log.info(Audit.MARKER, "섹션 생성 curriculumId={} sectionId={}", curriculumId, saved.getId());
         return saved;
     }
@@ -209,11 +215,11 @@ public class InstructorCurriculumService {
             throw new SectionNotEmptyException("레슨이 있는 섹션은 삭제할 수 없습니다.");
         }
 
-        Curriculum curriculum = requireOwned(instructorId, section.getCurriculumId());
+        UUID curriculumId = section.getCurriculumId();
         sectionRepository.delete(section);
         // section_count는 트리거가 −1 한다(앱은 건드리지 않음). structure_version만 올린다.
-        curriculum.setStructureVersion(curriculum.getStructureVersion() + 1);
-        log.info(Audit.MARKER, "섹션 삭제 curriculumId={} sectionId={}", section.getCurriculumId(), sectionId);
+        curriculumRepository.bumpStructureVersion(curriculumId);
+        log.info(Audit.MARKER, "섹션 삭제 curriculumId={} sectionId={}", curriculumId, sectionId);
     }
 
     // ── 레슨 관리 ── 데이터 조작은 lesson 모듈 포트가, 소유권·구조버전은 여기(curriculum)가 책임진다.
@@ -223,8 +229,8 @@ public class InstructorCurriculumService {
         Section section = requireOwnedSection(instructorId, sectionId);
         LessonView lesson = lessonManagement.create(sectionId, title, description);
         // lesson_count는 트리거가 유지. 목차 변경이므로 structure_version만 올린다.
-        Curriculum curriculum = requireOwned(instructorId, section.getCurriculumId());
-        curriculum.setStructureVersion(curriculum.getStructureVersion() + 1);
+        // (소유권은 requireOwnedSection이 이미 커리큘럼까지 확인했다.)
+        curriculumRepository.bumpStructureVersion(section.getCurriculumId());
         log.info(Audit.MARKER, "레슨 생성 sectionId={} lessonId={}", sectionId, lesson.lessonId());
         return lesson;
     }
@@ -252,8 +258,7 @@ public class InstructorCurriculumService {
         lessonManagement.delete(lessonId);
         // lesson_count는 트리거가 −1. 구조 변경이므로 structure_version만 올린다.
         Section section = requireOwnedSection(instructorId, lesson.sectionId());
-        Curriculum curriculum = requireOwned(instructorId, section.getCurriculumId());
-        curriculum.setStructureVersion(curriculum.getStructureVersion() + 1);
+        curriculumRepository.bumpStructureVersion(section.getCurriculumId());
         log.info(Audit.MARKER, "레슨 삭제 sectionId={} lessonId={}", lesson.sectionId(), lessonId);
     }
 
@@ -270,8 +275,7 @@ public class InstructorCurriculumService {
         LessonView published = lessonManagement.publish(lessonId);
         // 목차(학생 노출)가 바뀌므로 structure_version만 올린다(deleteLesson과 동일 패턴).
         Section section = requireOwnedSection(instructorId, lesson.sectionId());
-        Curriculum curriculum = requireOwned(instructorId, section.getCurriculumId());
-        curriculum.setStructureVersion(curriculum.getStructureVersion() + 1);
+        curriculumRepository.bumpStructureVersion(section.getCurriculumId());
         log.info(Audit.MARKER, "레슨 발행 sectionId={} lessonId={}", lesson.sectionId(), lessonId);
         return published;
     }
@@ -285,10 +289,96 @@ public class InstructorCurriculumService {
         }
         LessonView unpublished = lessonManagement.unpublish(lessonId);
         Section section = requireOwnedSection(instructorId, lesson.sectionId());
-        Curriculum curriculum = requireOwned(instructorId, section.getCurriculumId());
-        curriculum.setStructureVersion(curriculum.getStructureVersion() + 1);
+        curriculumRepository.bumpStructureVersion(section.getCurriculumId());
         log.info(Audit.MARKER, "레슨 게시취소 sectionId={} lessonId={}", lesson.sectionId(), lessonId);
         return unpublished;
+    }
+
+    // ── 구조 순서 원자 저장 (STRUCTURE-01) ──
+
+    /**
+     * 섹션 순서와 각 섹션의 레슨 순서를 한 트랜잭션에서 통째로 저장한다.
+     *
+     * <p>검증은 전부 쓰기 전에 끝낸다 — 요청의 섹션 목록은 이 커리큘럼의 현재 섹션 집합과 정확히
+     * 일치(순열)해야 하고, 모든 lessonIds의 합집합도 현재 레슨 집합과 정확히 일치해야 한다.
+     * 누락·중복·외부 ID 중 하나라도 있으면 전체 요청을 실패시킨다(부분 적용 없음).
+     * 레슨은 같은 커리큘럼 안이라면 다른 섹션으로 옮길 수 있고, 이때 section_id도 함께 갱신된다.
+     *
+     * <p>order_index는 0-based로 0..n-1을 그대로 재배정한다. uq_section_order·uq_lesson_order가
+     * DEFERRABLE INITIALLY DEFERRED라 트랜잭션 중간의 일시적 중복은 문제가 되지 않는다.
+     *
+     * <p>동시성은 structure_version compare-and-set으로 잡는다. 0행이면 그 사이 누군가 구조를
+     * 바꾼 것이므로 최신 버전을 실어 409로 알린다.
+     */
+    @Transactional
+    public StructureOrder reorderStructure(UUID instructorId, UUID curriculumId,
+                                           int baseVersion, List<SectionOrderCommand> commands) {
+        requireOwned(instructorId, curriculumId);
+
+        List<Section> currentSections = sectionRepository.findByCurriculumIdOrderByOrderIndexAsc(curriculumId);
+        Map<UUID, Section> sectionsById = currentSections.stream()
+                .collect(Collectors.toMap(Section::getId, section -> section));
+
+        requireExactPermutation("섹션", sectionsById.keySet(),
+                commands.stream().map(SectionOrderCommand::sectionId).toList());
+
+        Set<UUID> currentLessonIds = lessonManagement.findBySections(sectionsById.keySet()).stream()
+                .map(LessonView::lessonId)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        requireExactPermutation("레슨", currentLessonIds,
+                commands.stream().flatMap(command -> command.lessonIds().stream()).toList());
+
+        // 적용: 섹션은 0..n-1, 각 섹션 안의 레슨도 0..m-1. 이동한 레슨은 section_id까지 바뀐다.
+        List<LessonPlacement> placements = new ArrayList<>();
+        List<StructureOrder.SectionOrder> applied = new ArrayList<>();
+        for (int sectionOrder = 0; sectionOrder < commands.size(); sectionOrder++) {
+            SectionOrderCommand command = commands.get(sectionOrder);
+            sectionsById.get(command.sectionId()).setOrderIndex(sectionOrder);
+
+            List<UUID> lessonIds = command.lessonIds();
+            List<StructureOrder.LessonOrder> lessons = new ArrayList<>();
+            for (int lessonOrder = 0; lessonOrder < lessonIds.size(); lessonOrder++) {
+                placements.add(new LessonPlacement(lessonIds.get(lessonOrder), command.sectionId(), lessonOrder));
+                lessons.add(new StructureOrder.LessonOrder(lessonIds.get(lessonOrder), lessonOrder));
+            }
+            applied.add(new StructureOrder.SectionOrder(command.sectionId(), sectionOrder, lessons));
+        }
+        lessonManagement.applyPlacements(placements);
+
+        // compare-and-set. 여기서 flush가 일어나 위의 순서 변경이 먼저 DB로 나간다.
+        if (curriculumRepository.bumpStructureVersionIfMatches(curriculumId, baseVersion) == 0) {
+            int latest = curriculumRepository.findById(curriculumId)
+                    .map(Curriculum::getStructureVersion)
+                    .orElseThrow(() -> new CurriculumNotFoundException("커리큘럼을 찾을 수 없습니다."));
+            throw new StructureVersionConflictException(
+                    "구조가 이미 변경되었습니다(최신 structureVersion=" + latest + "). 다시 조회해 주세요.", latest);
+        }
+
+        log.info(Audit.MARKER, "구조 순서 저장 curriculumId={} structureVersion={}",
+                curriculumId, baseVersion + 1);
+        return new StructureOrder(baseVersion + 1, applied);
+    }
+
+    /**
+     * 요청 ID 목록이 현재 집합의 정확한 순열인지 검사한다. 중복·외부 ID·누락을 각각 구분해서 알린다.
+     * 어떤 것도 쓰기 전에 호출해야 부분 적용이 생기지 않는다.
+     */
+    private void requireExactPermutation(String label, Set<UUID> current, List<UUID> requested) {
+        Set<UUID> seen = new LinkedHashSet<>();
+        for (UUID id : requested) {
+            if (!seen.add(id)) {
+                throw new StructureInvalidException(label + " ID가 중복되었습니다: " + id);
+            }
+            if (!current.contains(id)) {
+                throw new StructureInvalidException("이 커리큘럼의 " + label + "이 아닙니다: " + id);
+            }
+        }
+        if (seen.size() != current.size()) {
+            Set<UUID> missing = new LinkedHashSet<>(current);
+            missing.removeAll(seen);
+            throw new StructureInvalidException(label + " ID가 누락되었습니다: " + missing);
+        }
     }
 
     // ── 라이브 세션 생성 ── 소유권(레슨→커리큘럼)은 여기서, 세션 데이터는 live 모듈 포트가.

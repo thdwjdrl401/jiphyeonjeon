@@ -2,6 +2,7 @@ package com.liveclass.lesson.service;
 
 import com.liveclass.lesson.api.LessonManagement;
 import com.liveclass.lesson.api.LessonNotFoundException;
+import com.liveclass.lesson.api.LessonPlacement;
 import com.liveclass.lesson.api.LessonView;
 import com.liveclass.lesson.domain.Lesson;
 import com.liveclass.lesson.domain.LessonStatus;
@@ -10,9 +11,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * LessonManagement 구현. 데이터 조작만 담당하고 소유권 검증은 하지 않는다(호출자 책임).
@@ -69,9 +73,45 @@ public class LessonManagementService implements LessonManagement {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<LessonView> findBySections(Collection<UUID> sectionIds) {
+        if (sectionIds.isEmpty()) {
+            return List.of();
+        }
+        return lessonRepository.findBySectionIdInOrderByOrderIndexAsc(sectionIds).stream()
+                .map(this::toView)
+                .toList();
+    }
+
+    @Override
     @Transactional
     public void delete(UUID lessonId) {
         lessonRepository.deleteById(lessonId);
+    }
+
+    /**
+     * 소속 섹션·순서를 통째로 다시 쓴다. 한 트랜잭션 안에서만 의미가 있으므로 호출자의 트랜잭션에
+     * 참여한다(REQUIRED). DEFERRABLE UNIQUE 덕분에 중간 상태 충돌을 신경 쓰지 않아도 된다.
+     */
+    @Override
+    @Transactional
+    public void applyPlacements(List<LessonPlacement> placements) {
+        if (placements.isEmpty()) {
+            return;
+        }
+        Map<UUID, Lesson> byId = lessonRepository
+                .findAllById(placements.stream().map(LessonPlacement::lessonId).toList())
+                .stream()
+                .collect(Collectors.toMap(Lesson::getId, lesson -> lesson));
+
+        for (LessonPlacement placement : placements) {
+            Lesson lesson = byId.get(placement.lessonId());
+            if (lesson == null) {
+                throw new LessonNotFoundException("레슨이 없습니다: " + placement.lessonId());
+            }
+            lesson.setSectionId(placement.sectionId());
+            lesson.setOrderIndex(placement.orderIndex());
+        }
     }
 
     @Override

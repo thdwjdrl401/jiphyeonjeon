@@ -3,10 +3,13 @@ package com.liveclass.curriculum.web;
 import com.liveclass.asset.api.AssetDirectory;
 import com.liveclass.curriculum.domain.Curriculum;
 import com.liveclass.curriculum.service.InstructorCurriculumService;
+import com.liveclass.curriculum.service.SectionOrderCommand;
 import com.liveclass.curriculum.web.dto.CreateCurriculumRequest;
 import com.liveclass.curriculum.web.dto.CurriculumResponse;
 import com.liveclass.curriculum.web.dto.SectionRequest;
 import com.liveclass.curriculum.web.dto.SectionResponse;
+import com.liveclass.curriculum.web.dto.StructureOrderRequest;
+import com.liveclass.curriculum.web.dto.StructureOrderResponse;
 import com.liveclass.curriculum.web.dto.UpdateCurriculumRequest;
 import com.liveclass.curriculum.web.dto.UpdateSectionRequest;
 import io.swagger.v3.oas.annotations.Operation;
@@ -19,6 +22,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -111,6 +115,20 @@ public class InstructorCurriculumController {
                                          Authentication authentication) {
         return SectionResponse.from(service.createSection(
                 currentUserId(authentication), curriculumId, request.title(), request.description()));
+    }
+
+    @Operation(summary = "구조 순서 저장",
+            description = "섹션 순서와 각 섹션의 레슨 순서를 한 번에 저장한다. 커리큘럼의 모든 섹션·레슨을 빠짐없이 한 번씩 보내야 하며, "
+                    + "레슨은 같은 커리큘럼 안의 다른 섹션으로 옮길 수 있다. 그 사이 구조가 바뀌었으면(baseVersion 불일치) 409로 거절한다.")
+    @PutMapping("/api/instructor/curriculums/{curriculumId}/curriculum/order")
+    public StructureOrderResponse reorderStructure(@PathVariable UUID curriculumId,
+                                                   @Valid @RequestBody StructureOrderRequest request,
+                                                   Authentication authentication) {
+        List<SectionOrderCommand> commands = request.sections().stream()
+                .map(item -> new SectionOrderCommand(item.sectionId(), item.lessonIds()))
+                .toList();
+        return StructureOrderResponse.from(service.reorderStructure(
+                currentUserId(authentication), curriculumId, request.baseVersion(), commands));
     }
 
     @Operation(summary = "섹션 수정", description = "섹션 제목·설명을 수정한다. 보낸 필드만 바뀐다.")

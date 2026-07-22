@@ -17,6 +17,9 @@ public interface LessonRepository extends JpaRepository<Lesson, UUID> {
 
     long countBySectionId(UUID sectionId);
 
+    /** 구조 순서 저장용 — 여러 섹션의 레슨을 상태 무관하게 한 번에 조회(N+1 방지). */
+    List<Lesson> findBySectionIdInOrderByOrderIndexAsc(Collection<UUID> sectionIds);
+
     /** 공개 목차용 — 여러 섹션의 특정 상태 레슨을 한 번에 조회(N+1 방지). */
     List<Lesson> findBySectionIdInAndStatusOrderByOrderIndexAsc(Collection<UUID> sectionIds, LessonStatus status);
 }
