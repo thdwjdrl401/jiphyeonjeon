@@ -1,6 +1,7 @@
 # 미디어 서버 (LiveKit SFU + Egress 녹화 + Redis + MinIO)
 # PoC 검증 완료 구성. 값은 아래 <...> 자리 채우기. 자세한 건 README.md.
-# 기동: docker compose up -d
+# 기동(수동): docker compose up -d   # 시크릿/미디어는 호스트(/etc/liveclass/livekit, /srv/liveclass/stt-audio)에서 마운트
+name: livekit          # 프로젝트명 고정 = 볼륨(livekit_*)·컨테이너 접두사. 디렉토리명과 무관.
 services:
   livekit:
     image: livekit/livekit-server:v1.13.3   # advertise_internal_ip 지원(≥v1.13.0) — 구버전이면 무시됨
@@ -8,7 +9,7 @@ services:
     restart: unless-stopped
     network_mode: host                        # RTC 포트 직접 바인딩
     volumes:
-      - ./livekit.yaml:/etc/livekit.yaml:ro
+      - /etc/liveclass/livekit/livekit.yaml:/etc/livekit.yaml:ro   # 실 시크릿(호스트). git엔 템플릿만.
     depends_on: [redis]
 
   redis:                                      # LiveKit ↔ Egress 통신 전용 (앱 Redis와 별개)
@@ -26,7 +27,7 @@ services:
     shm_size: "1g"                            # Chrome /dev/shm
     environment: ["EGRESS_CONFIG_FILE=/out/egress.yaml"]
     volumes:
-      - ./egress.yaml:/out/egress.yaml:ro
+      - /etc/liveclass/livekit/egress.yaml:/out/egress.yaml:ro     # 실 시크릿(호스트)
     depends_on: [redis, livekit]
 
   minio:                                      # PoC용 S3 호환 스토리지 (EC2는 실 AWS S3로 교체)
@@ -54,7 +55,7 @@ services:
     restart: unless-stopped
     network_mode: host                        # livekit 127.0.0.1:7880 직결
     depends_on: [livekit]
-    env_file: CREDENTIALS.txt                 # LIVEKIT_API_KEY / LIVEKIT_API_SECRET (서버 로컬, 커밋 안 됨)
+    env_file: /etc/liveclass/livekit/CREDENTIALS.txt   # 서버 로컬 시크릿(커밋 안 됨)
     environment:
       LIVEKIT_URL: ws://localhost:7880
       STT_ROOM: stt-test
@@ -64,7 +65,7 @@ services:
       STT_PLAYLIST: "/audio/imf-video.h264|/audio/imf-audio.ogg|68"
       # STT_PLAYLIST: "/audio/imf-video.h264|/audio/imf-audio.ogg|68 /audio/loop-video.h264|/audio/loop-audio.ogg|2665"
     volumes:
-      - ./stt-audio:/audio:ro                 # imf-video.h264·imf-audio.ogg / loop-video.h264·loop-audio.ogg (springBoot)
+      - /srv/liveclass/stt-audio:/audio:ro    # 테스트 미디어(호스트, 195MB — git 밖)
 
 volumes:
   miniodata:
