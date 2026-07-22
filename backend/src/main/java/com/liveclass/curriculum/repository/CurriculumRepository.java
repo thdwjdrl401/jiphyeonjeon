@@ -5,6 +5,7 @@ import com.liveclass.curriculum.domain.CurriculumLifecycleStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -34,4 +35,26 @@ public interface CurriculumRepository extends JpaRepository<Curriculum, UUID> {
     Page<Curriculum> searchPublic(@Param("status") CurriculumLifecycleStatus status,
                                   @Param("q") String q,
                                   Pageable pageable);
+
+    /**
+     * 구조 변경 시 structure_version 원자 증가. 엔티티를 읽어 +1 해서 쓰면(read-modify-write)
+     * 동시 요청에서 증분이 유실되므로 DB에서 컬럼 기준으로 올린다.
+     *
+     * <p>flushAutomatically: 벌크 UPDATE 전에 대기 중인 INSERT/UPDATE/DELETE를 먼저 내보내
+     * 트리거(section_count 등)와 순서가 어긋나지 않게 한다.
+     * clearAutomatically: 벌크 UPDATE는 1차 캐시를 우회하므로, 이후 조회가 낡은 structure_version을
+     * 들고 있는 엔티티를 다시 쓰지 않도록 영속성 컨텍스트를 비운다.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update Curriculum c set c.structureVersion = c.structureVersion + 1 where c.id = :id")
+    int bumpStructureVersion(@Param("id") UUID id);
+
+    /**
+     * 구조 순서 저장(STRUCTURE-01)용 compare-and-set. 호출자가 본 baseVersion과 DB 값이 같을 때만
+     * +1 하고 1을 돌려준다. 0이면 그 사이 다른 요청이 구조를 바꾼 것 → 409로 충돌을 알린다.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("update Curriculum c set c.structureVersion = c.structureVersion + 1 "
+            + "where c.id = :id and c.structureVersion = :expected")
+    int bumpStructureVersionIfMatches(@Param("id") UUID id, @Param("expected") int expected);
 }

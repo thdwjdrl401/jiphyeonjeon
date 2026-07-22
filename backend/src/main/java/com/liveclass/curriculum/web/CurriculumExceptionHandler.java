@@ -6,6 +6,9 @@ import com.liveclass.curriculum.service.LessonNotFoundException;
 import com.liveclass.curriculum.service.NotCurriculumOwnerException;
 import com.liveclass.curriculum.service.SectionNotEmptyException;
 import com.liveclass.curriculum.service.SectionNotFoundException;
+import com.liveclass.curriculum.service.StructureInvalidException;
+import com.liveclass.curriculum.service.StructureVersionConflictException;
+import com.liveclass.curriculum.web.dto.StructureConflictResponse;
 import com.liveclass.common.web.ErrorResponse;
 import com.liveclass.enrollment.api.EnrollmentNotFoundException;
 import com.liveclass.enrollment.api.EnrollmentStateConflictException;
@@ -74,6 +77,28 @@ public class CurriculumExceptionHandler {
     public ResponseEntity<ErrorResponse> handleStateConflict(CurriculumStateConflictException e) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ErrorResponse.of("CURRICULUM_STATE_CONFLICT", e.getMessage()));
+    }
+
+    /**
+     * 구조 순서 저장 요청이 현재 구조와 어긋남(누락·중복·이 커리큘럼 소속이 아닌 ID) → 400.
+     * 전체 요청이 실패하며 부분 적용은 없다. message가 무엇이 잘못됐는지 알려준다.
+     */
+    @ExceptionHandler(StructureInvalidException.class)
+    public ResponseEntity<ErrorResponse> handleStructureInvalid(StructureInvalidException e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponse.of("STRUCTURE_INVALID", e.getMessage()));
+    }
+
+    /**
+     * baseVersion 불일치 → 409. 공용 봉투 대신 최신 structureVersion을 한 칸 더한 상위집합 본문을 내려
+     * FE가 재조회 없이 최신 버전을 알 수 있게 한다(StructureConflictResponse 참고).
+     */
+    @ExceptionHandler(StructureVersionConflictException.class)
+    public ResponseEntity<StructureConflictResponse> handleStructureVersionConflict(
+            StructureVersionConflictException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(StructureConflictResponse.of(
+                        "STRUCTURE_VERSION_CONFLICT", e.getMessage(), e.getLatestVersion()));
     }
 
     /**
