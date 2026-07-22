@@ -22,15 +22,15 @@ export default function ProfilePage() {
 
   return (
     <div className="workspace-page">
-      <PageHeader eyebrow="MY PROFILE" title="내 프로필" description="계정 정보와 서비스에 표시되는 프로필을 관리하세요." />
+      <PageHeader eyebrow="MY PROFILE" title="내 프로필" />
 
       <div className="profile-grid">
         <Panel title="계정 정보" description="이메일과 가입 유형은 현재 변경할 수 없습니다.">
           <dl className="identity-list"><div><dt>이메일</dt><dd>{user?.email}</dd></div><div><dt>가입 유형</dt><dd><StatusBadge tone={user?.role === 'INSTRUCTOR' ? 'warning' : 'success'}>{user?.role === 'INSTRUCTOR' ? '강사' : '학생'}</StatusBadge></dd></div></dl>
         </Panel>
-        <Panel title="기본 프로필" description="서비스 전반에서 사용할 표시 이름입니다.">
+        <Panel title="기본 프로필" description="서비스 전반에서 사용할 닉네임입니다.">
           <form className="workspace-form" onSubmit={(event) => save(event, 'account')}>
-            <label><span>표시 이름</span><input value={displayName} maxLength={100} onChange={(event) => { setDisplayName(event.target.value); setSavedArea(null) }} /></label>
+            <label><span>닉네임</span><input value={displayName} maxLength={100} onChange={(event) => { setDisplayName(event.target.value); setSavedArea(null) }} /></label>
             {savedArea === 'account' && <InlineNotice tone="success">기본 프로필 초안이 저장되었습니다.</InlineNotice>}
             <div className="form-actions"><button className="button button--primary" disabled={!displayName.trim()} type="submit">변경 저장</button></div>
           </form>

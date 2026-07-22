@@ -36,6 +36,12 @@ export const httpAuthService = {
   async logout() {
     await apiClient.post('/auth/logout')
   },
+  // 아직 백엔드에 없는 엔드포인트. /api/me/profile-image(AccountController)와 같은 축으로
+  // core.app_user.display_name(varchar(100) NOT NULL)을 갱신한다고 가정한 목업 계약.
+  async updateDisplayName(displayName: string) {
+    const { data } = await apiClient.put<AuthUser>('/me/display-name', { displayName })
+    return data
+  },
 }
 
 export const authService = selectDataSource(mockAuthService, httpAuthService)

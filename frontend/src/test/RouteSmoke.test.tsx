@@ -98,11 +98,10 @@ describe('전체 페이지 라우트', () => {
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
     renderAt('/student/live-sessions/ses-security-live/prejoin')
 
-    await user.click(await screen.findByRole('button', { name: /스피커 테스트/ }))
-    await user.click(screen.getByRole('button', { name: /자동 재생 확인/ }))
-    await user.click(screen.getByRole('button', { name: /네트워크 상태/ }))
+    await screen.findByRole('button', { name: /스피커 테스트/ })
     await user.click(screen.getByRole('checkbox', { name: /녹화·자막·채팅·AI 사용 안내/ }))
-    await user.click(screen.getByRole('link', { name: '라이브 입장' }))
+    // 재생 환경 점검은 클릭 없이 마법사가 자동으로 통과시킨다.
+    await user.click(await screen.findByRole('link', { name: '라이브 입장' }, { timeout: 3000 }))
 
     expect(await screen.findByRole('tab', { name: 'AI 질문' })).toBeInTheDocument()
     expect(window.location.pathname).toBe('/student/live-sessions/ses-security-live/classroom')
@@ -136,7 +135,7 @@ describe('전체 페이지 라우트', () => {
 
     expect(await screen.findByRole('heading', { name: '라이브 강의' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '준비 상태' })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '입장' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: '입장 점검' })).toHaveAttribute(
       'href',
       '/student/live-sessions/ses-security-live/prejoin',
     )
@@ -179,7 +178,7 @@ describe('전체 페이지 라우트', () => {
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
     renderAt('/student/curriculums/cur-spring-live/sections/sec-foundation/lessons/les-service-layer')
 
-    await user.click(await screen.findByRole('button', { name: '입장' }))
+    await user.click(await screen.findByRole('button', { name: '입장 점검' }))
     expect(screen.getByText('강의 시간이 아닙니다.')).toBeInTheDocument()
   })
 
