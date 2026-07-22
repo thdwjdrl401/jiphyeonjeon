@@ -3,6 +3,8 @@ package com.liveclass.curriculum.service;
 import com.liveclass.curriculum.domain.Curriculum;
 import com.liveclass.curriculum.domain.CurriculumLifecycleStatus;
 import com.liveclass.curriculum.domain.EnrollmentType;
+import com.liveclass.auth.api.UserContact;
+import com.liveclass.auth.api.UserDirectory;
 import com.liveclass.curriculum.repository.CurriculumRepository;
 import com.liveclass.enrollment.api.EnrollmentDirectory;
 import com.liveclass.enrollment.api.EnrollmentManagement;
@@ -12,7 +14,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * 수강 오케스트레이션. enrollment은 상태기계만 담당하므로, 커리큘럼 정책(발행·모집창·정책타입)과
@@ -24,13 +29,16 @@ public class CurriculumEnrollmentService {
     private final CurriculumRepository curriculumRepository;
     private final EnrollmentManagement enrollmentManagement;
     private final EnrollmentDirectory enrollmentDirectory;
+    private final UserDirectory userDirectory;
 
     public CurriculumEnrollmentService(CurriculumRepository curriculumRepository,
                                        EnrollmentManagement enrollmentManagement,
-                                       EnrollmentDirectory enrollmentDirectory) {
+                                       EnrollmentDirectory enrollmentDirectory,
+                                       UserDirectory userDirectory) {
         this.curriculumRepository = curriculumRepository;
         this.enrollmentManagement = enrollmentManagement;
         this.enrollmentDirectory = enrollmentDirectory;
+        this.userDirectory = userDirectory;
     }
 
     /** 학생 수강 신청. 발행·모집창·정책 검증 후 정책에 맞는 초기 상태로 생성. */
@@ -63,11 +71,28 @@ public class CurriculumEnrollmentService {
         return enrollmentManagement.cancel(curriculumId, studentId);
     }
 
-    /** 강사 승인 대기 목록. 소유권 검증. */
+    /** 강사 승인 대기 목록(신청자 이름·이메일 보강). 소유권 검증. */
     @Transactional(readOnly = true)
-    public List<EnrollmentView> pending(UUID curriculumId, UUID instructorId) {
+    public List<EnrollmentApplicant> pending(UUID curriculumId, UUID instructorId) {
         requireOwned(curriculumId, instructorId);
-        return enrollmentManagement.pendingFor(curriculumId);
+        return enrich(enrollmentManagement.pendingFor(curriculumId));
+    }
+
+    /** 강사용 ACTIVE 수강생 로스터(이름·이메일 보강). 소유권 검증. */
+    @Transactional(readOnly = true)
+    public List<EnrollmentApplicant> roster(UUID curriculumId, UUID instructorId) {
+        requireOwned(curriculumId, instructorId);
+        return enrich(enrollmentDirectory.activeFor(curriculumId));
+    }
+
+    /** 수강 목록을 사용자 PII로 한 번에 보강한다(배치 조회 1회, N+1 없음). 리스트 순서 보존. */
+    private List<EnrollmentApplicant> enrich(List<EnrollmentView> views) {
+        List<UUID> userIds = views.stream().map(EnrollmentView::userId).distinct().toList();
+        Map<UUID, UserContact> byId = userDirectory.findContacts(userIds).stream()
+                .collect(Collectors.toMap(UserContact::userId, Function.identity()));
+        return views.stream()
+                .map(v -> new EnrollmentApplicant(v, byId.get(v.userId())))
+                .toList();
     }
 
     /** 강사 승인. 소유권 + 그 커리큘럼 소속 검증. */

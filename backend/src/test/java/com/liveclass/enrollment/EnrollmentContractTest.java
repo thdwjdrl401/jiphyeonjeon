@@ -40,29 +40,58 @@ class EnrollmentContractTest {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
 
-        Cookie[] student = loginAs("STUDENT");
+        Account studentAcc = register("STUDENT");
+        Cookie[] student = studentAcc.cookies();
         // 신청 → 승인제라 PENDING
         String eid = json(write(post("/api/curriculums/" + cid + "/enrollments"), student, null)
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.status").value("PENDING"))
                 .andReturn()).get("enrollmentId").asString();
 
-        // 강사 대기 목록에 뜬다
+        // 강사 대기 목록에 신청자 이름·이메일이 보강되어 뜬다
         write(get("/api/instructor/curriculums/" + cid + "/enrollments"), instructor, null)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].status").value("PENDING"));
+                .andExpect(jsonPath("$[0].status").value("PENDING"))
+                .andExpect(jsonPath("$[0].userId").exists())
+                .andExpect(jsonPath("$[0].studentName").value(studentAcc.displayName()))
+                .andExpect(jsonPath("$[0].studentEmail").value(studentAcc.email()));
+
+        // 승인 전 로스터(ACTIVE)는 비어 있다 — PENDING은 로스터에 없다
+        write(get("/api/instructor/curriculums/" + cid + "/enrollments/active"), instructor, null)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
 
         // 강사 승인 → ACTIVE
         write(post("/api/instructor/curriculums/" + cid + "/enrollments/" + eid + "/approve"), instructor, null)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("ACTIVE"));
 
+        // 로스터에 이름·이메일과 함께 ACTIVE로 나타난다
+        write(get("/api/instructor/curriculums/" + cid + "/enrollments/active"), instructor, null)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].status").value("ACTIVE"))
+                .andExpect(jsonPath("$[0].userId").exists())
+                .andExpect(jsonPath("$[0].studentName").value(studentAcc.displayName()))
+                .andExpect(jsonPath("$[0].studentEmail").value(studentAcc.email()));
+
         // 학생 내 수강 목록에 ACTIVE로
         write(get("/api/me/enrollments"), student, null)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].status").value("ACTIVE"));
+    }
+
+    @Test
+    void non_owner_instructor_cannot_see_roster() throws Exception {
+        Cookie[] owner = loginAs("INSTRUCTOR");
+        String cid = createPublishedCurriculum(owner);
+        Cookie[] other = loginAs("INSTRUCTOR");
+
+        write(get("/api/instructor/curriculums/" + cid + "/enrollments/active"), other, null)
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CURRICULUM_FORBIDDEN"));
     }
 
     @Test
@@ -137,14 +166,23 @@ class EnrollmentContractTest {
     }
 
     private Cookie[] loginAs(String role) throws Exception {
+        return register(role).cookies();
+    }
+
+    /** 가입+로그인 계정. 보강된 이름·이메일을 검증하려면 이메일/표시명을 캡처해야 한다. */
+    private record Account(Cookie[] cookies, String email, String displayName) {
+    }
+
+    private Account register(String role) throws Exception {
         String email = "enr-" + UUID.randomUUID() + "@liveclass.test";
+        String displayName = "테스터-" + UUID.randomUUID().toString().substring(0, 8);
         write(post("/api/auth/signup"), null, """
-                {"email":"%s","password":"password123","displayName":"테스터","role":"%s"}
-                """.formatted(email, role)).andExpect(status().isCreated());
+                {"email":"%s","password":"password123","displayName":"%s","role":"%s"}
+                """.formatted(email, displayName, role)).andExpect(status().isCreated());
         MvcResult login = write(post("/api/auth/login"), null, """
                 {"email":"%s","password":"password123"}
                 """.formatted(email)).andExpect(status().isOk()).andReturn();
-        return login.getResponse().getCookies();
+        return new Account(login.getResponse().getCookies(), email, displayName);
     }
 
     private JsonNode json(MvcResult result) throws Exception {
