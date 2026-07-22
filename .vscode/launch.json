@@ -3,11 +3,29 @@
   "configurations": [
     {
       "type": "java",
+      "name": "LiveClassApplication",
+      "request": "launch",
+      "mainClass": "com.liveclass.LiveClassApplication",
+      "projectName": "backend"
+    },
+    {
+      "type": "java",
       "name": "Spring Boot (Backend)",
       "request": "launch",
       "mainClass": "com.liveclass.LiveClassApplication",
       "projectName": "liveclass",
       "cwd": "${workspaceFolder}/backend"
+    },
+    {
+      "type": "java",
+      "name": "Spring Boot (Backend · EC2 infra)",
+      "request": "launch",
+      "mainClass": "com.liveclass.LiveClassApplication",
+      "projectName": "liveclass",
+      "cwd": "${workspaceFolder}/backend",
+      "//": "remote 프로필 = 전부 EC2 인프라(Redis STT 스트림/PG). 시크릿은 .env.remote (ADR-0022).",
+      "env": { "SPRING_PROFILES_ACTIVE": "remote" },
+      "envFile": "${workspaceFolder}/.env.remote"
     },
     {
       "type": "node-terminal",
@@ -21,6 +39,11 @@
     {
       "name": "Full Stack (BE + FE)",
       "configurations": ["Spring Boot (Backend)", "Frontend (Vite dev)"],
+      "stopAll": true
+    },
+    {
+      "name": "Full Stack (BE · EC2 infra + FE)",
+      "configurations": ["Spring Boot (Backend · EC2 infra)", "Frontend (Vite dev)"],
       "stopAll": true
     }
   ]

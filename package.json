@@ -18,6 +18,9 @@
     "dev:wsl": "concurrently -k -n FE,BE,WATCH -c green,blue,magenta \"npm run fe:dev\" \"npm run be:dev:wsl\" \"npm run be:watch:wsl\"",
     "be:dev:wsl": "cd backend && ./gradlew bootRun",
     "be:watch:wsl": "cd backend && ./gradlew -t compileJava",
+
+    "dev:remote:wsl": "concurrently -k -n FE,BE,WATCH -c green,blue,magenta \"npm run fe:dev\" \"npm run be:dev:remote:wsl\" \"npm run be:watch:wsl\"",
+    "be:dev:remote:wsl": "cd backend && set -a && . ../.env.remote && set +a && SPRING_PROFILES_ACTIVE=remote ./gradlew bootRun",
     "start:wsl": "npm run build:fe && cd backend && ./gradlew bootRun",
     "build:wsl": "cd backend && ./gradlew clean build",
 

@@ -4,6 +4,9 @@ spring:
   threads:
     virtual:
       enabled: true                 # Java 21 virtual threads (ADR-0009)
+  # 인프라 접속(datasource·redis)의 기본값 = 전부 로컬(docker-compose.yml). 프로필 없이 뜨면 이 값.
+  # 전부 EC2 인프라에 붙으려면 SPRING_PROFILES_ACTIVE=remote → application-remote.yml이 override (ADR-0022).
+  # prod(docker-compose.prod.yml)는 프로필 대신 SPRING_DATASOURCE_URL 등 env로 override(우선순위 상위).
   datasource:
     url: jdbc:postgresql://localhost:5432/liveclass
     username: liveclass
