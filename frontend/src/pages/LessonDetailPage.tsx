@@ -41,14 +41,14 @@ export default function LessonDetailPage() {
         eyebrow="LESSON HUB"
         title={lesson.title}
         description={lesson.description}
-        action={<div className="header-action-group">{isInstructor && <Link className="button button--primary" to={editLessonPath}>레슨 수정</Link>}<StatusBadge tone="success">{lesson.lessonStatus}</StatusBadge></div>}
+        action={<div className="header-action-group">{isInstructor && <Link className="button button--primary" to={editLessonPath}>강의 수정</Link>}<StatusBadge tone="success">{lesson.lessonStatus}</StatusBadge></div>}
       />
       <div className={isInstructor ? 'lesson-hub-grid' : undefined}>
-        {isInstructor && <Panel title="레슨 준비 상태" description="레슨, 자료와 AI 준비 상태를 확인합니다."><ul className="readiness-list"><li><span>레슨 게시</span><StatusBadge tone="success">PUBLISHED</StatusBadge></li><li><span>필수 PPTX</span><StatusBadge tone="success">{lesson.materials.length}개 준비</StatusBadge></li><li><span>AI 준비</span><StatusBadge tone="success">READY</StatusBadge></li><li><span>자료 작업</span><StatusBadge tone={materialWorkInProgress ? 'warning' : 'success'}>{materialWorkInProgress ? '진행 중' : '완료'}</StatusBadge></li></ul></Panel>}
+        {isInstructor && <Panel title="강의 준비 상태" description="강의, 자료와 AI 준비 상태를 확인합니다."><ul className="readiness-list"><li><span>강의 게시</span><StatusBadge tone="success">PUBLISHED</StatusBadge></li><li><span>필수 PPTX</span><StatusBadge tone="success">{lesson.materials.length}개 준비</StatusBadge></li><li><span>AI 준비</span><StatusBadge tone="success">READY</StatusBadge></li><li><span>자료 작업</span><StatusBadge tone={materialWorkInProgress ? 'warning' : 'success'}>{materialWorkInProgress ? '진행 중' : '완료'}</StatusBadge></li></ul></Panel>}
         <Panel title="활성 강의 자료" description="수강생에게 공개되는 PPTX 원본입니다."><ul className="material-list material-list--compact">{lesson.materials.map((material) => <li key={material.id}><span className="file-icon">PPTX</span><div><strong>{material.name}</strong><small>{material.size}</small></div><button className="text-button" type="button">다운로드</button></li>)}</ul></Panel>
       </div>
       {!showReplay ? (
-        <Panel title="라이브 강의" description="라이브 일정과 실제 진행 상태를 레슨에서 함께 확인합니다.">
+        <Panel title="라이브 강의" description="라이브 일정과 실제 진행 상태를 강의에서 함께 확인합니다.">
           {liveSession && scheduledDate && entryDate ? <>
             <div className="session-detail-grid lesson-live-details">
               <section className="lesson-live-card" aria-labelledby="lesson-live-schedule-heading">
@@ -62,7 +62,7 @@ export default function LessonDetailPage() {
             </div>
             <div className="notice-grid lesson-live-policies"><div><strong>녹화</strong><p>Egress로 녹화되며 검수 후 다시보기로 공개됩니다.</p></div><div><strong>자막</strong><p>실시간 자막과 교정 자막을 제공합니다.</p></div><div><strong>채팅·AI</strong><p>질문과 근거 기반 답변이 강의 맥락에 연결됩니다.</p></div></div>
             <div className="lesson-live-actions">{isInstructor ? <Link className="button button--primary" to={instructorPaths.preflight(liveSession.sessionId)}>사전 점검</Link> : canEnterLive ? <Link className="button button--primary" to={studentPaths.prejoin(liveSession.sessionId)}>입장</Link> : <button className="button button--primary" type="button" onClick={() => setEntryNotice('강의 시간이 아닙니다.')}>입장</button>}</div>
-          </> : isInstructor ? <div className="empty-live-state"><InlineNotice tone="warning">연결된 라이브 일정이 없습니다. 레슨 수정에서 라이브 강의 일정을 추가해 주세요.</InlineNotice><Link className="button button--primary" to={editLessonPath}>레슨 수정에서 일정 추가</Link></div> : <InlineNotice>연결된 라이브 일정이 아직 없습니다.</InlineNotice>}
+          </> : isInstructor ? <div className="empty-live-state"><InlineNotice tone="warning">연결된 라이브 일정이 없습니다. 강의 수정에서 라이브 강의 일정을 추가해 주세요.</InlineNotice><Link className="button button--primary" to={editLessonPath}>강의 수정에서 일정 추가</Link></div> : <InlineNotice>연결된 라이브 일정이 아직 없습니다.</InlineNotice>}
           {entryNotice && <InlineNotice tone="warning">{entryNotice}</InlineNotice>}
         </Panel>
       ) : (

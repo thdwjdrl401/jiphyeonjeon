@@ -49,7 +49,7 @@ export default function ProfilePage() {
         </Panel>
       ) : (
         <Panel title="나의 학습 요약" description="상세 진도는 내 커리큘럼에서 확인할 수 있어요.">
-          <div className="metric-grid"><MetricCard label="수강 중인 커리큘럼" value={studentSummary.inProgressCurriculumCount} /><MetricCard label="완료한 커리큘럼" value={studentSummary.completedCurriculumCount} /><MetricCard label="평균 진행률" value={`${studentSummary.averageProgress}%`} /><MetricCard label="완료한 레슨" value={studentSummary.completedLessonCount} /></div>
+          <div className="metric-grid"><MetricCard label="수강 중인 커리큘럼" value={studentSummary.inProgressCurriculumCount} /><MetricCard label="완료한 커리큘럼" value={studentSummary.completedCurriculumCount} /><MetricCard label="평균 진행률" value={`${studentSummary.averageProgress}%`} /><MetricCard label="완료한 강의" value={studentSummary.completedLessonCount} /></div>
         </Panel>
       )}
 

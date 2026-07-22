@@ -71,10 +71,10 @@ export default function ReplayLessonPage() {
   return (
     <div className={`media-page replay-page${isInstructor ? ' media-page--instructor' : ''}`}>
       <header className="media-page__title">
-        <div><StatusBadge tone="success">REPLAY</StatusBadge><h1>{lesson.title}</h1><small>레슨 {lesson.lessonId} · 교정 자막 v2</small></div>
+        <div><StatusBadge tone="success">REPLAY</StatusBadge><h1>{lesson.title}</h1><small>강의 {lesson.lessonId} · 교정 자막 v2</small></div>
         <div className="media-page__status">
           {isInstructor ? <><StatusBadge tone="warning">강사 검수 모드</StatusBadge><span>VIDEO READY · {published ? 'PUBLISHED' : 'READY_FOR_REVIEW'}</span></> : <span>학습 진행률 {position}%</span>}
-          <Link className="button button--soft button--small" to={lessonPath}>레슨 상세</Link>
+          <Link className="button button--soft button--small" to={lessonPath}>강의 상세</Link>
         </div>
       </header>
 
@@ -106,13 +106,13 @@ export default function ReplayLessonPage() {
 
           {isInstructor && panel === 'analytics' && <div className="side-panel-content instructor-analytics-panel"><header><strong>학습 요약</strong><small>개인 식별 정보 없이 집계만 제공합니다.</small></header><div className="analytics-grid"><div><span>수강생</span><strong>48명</strong></div><div><span>재생 시작</span><strong>42명</strong></div><div><span>90% 완료</span><strong>31명</strong></div><div><span>퀴즈 평균</span><strong>82.5점</strong></div></div><div className="analytics-progress"><div><span>완료율</span><strong>64.6%</strong></div><i><b style={{ width: '64.6%' }} /></i></div><InlineNotice>질문 원문은 익명으로 제공하며 개인 AI 답변은 강사에게 노출하지 않습니다.</InlineNotice></div>}
 
-          {!isInstructor && panel === 'outline' && <div className="side-panel-content"><div className="replay-outline"><button className="is-current" type="button"><span>12:08</span><div><strong>SecurityContext의 역할</strong><small>현재 재생 중</small></div></button><button type="button"><span>31:20</span><div><strong>Redis 세션 저장</strong><small>핵심 개념 3개</small></div></button><button type="button"><span>58:42</span><div><strong>CSRF 방어 흐름</strong><small>실습</small></div></button></div><div className="evidence-card"><span>구조 요약</span><strong>이번 레슨의 핵심</strong><p>인증 주체, 요청 컨텍스트, 공유 세션 저장소의 책임을 구분합니다.</p></div></div>}
+          {!isInstructor && panel === 'outline' && <div className="side-panel-content"><div className="replay-outline"><button className="is-current" type="button"><span>12:08</span><div><strong>SecurityContext의 역할</strong><small>현재 재생 중</small></div></button><button type="button"><span>31:20</span><div><strong>Redis 세션 저장</strong><small>핵심 개념 3개</small></div></button><button type="button"><span>58:42</span><div><strong>CSRF 방어 흐름</strong><small>실습</small></div></button></div><div className="evidence-card"><span>구조 요약</span><strong>이번 강의의 핵심</strong><p>인증 주체, 요청 컨텍스트, 공유 세션 저장소의 책임을 구분합니다.</p></div></div>}
 
           {panel === 'caption' && <div className="side-panel-content"><label className="panel-search"><span className="visually-hidden">자막 검색</span><input placeholder="자막에서 검색" /></label><div className="caption-list">{demoCaptions.map((caption) => <button type="button" key={caption.at}><time>{caption.at}</time><p>{caption.text}</p></button>)}</div></div>}
 
           {panel === 'chat' && <div className="side-panel-content chat-list">{demoMessages.map((item) => <article key={item.id}><header><strong>{item.alias}</strong><time>{item.time}</time></header><p>{item.text}</p></article>)}</div>}
 
-          {!isInstructor && panel === 'ai' && <div className="side-panel-content ai-panel"><InlineNotice>현재 재생 시각과 레슨 전체 자료를 함께 근거로 사용합니다.</InlineNotice>{aiAnswer && <div className="ai-answer"><strong>답변</strong><p>{aiAnswer}</p><small>근거 · session-and-csrf.pptx 8쪽</small></div>}<form onSubmit={askAi}><textarea rows={4} value={aiQuestion} placeholder="이 구간에서 궁금한 점을 질문하세요." onChange={(event) => setAiQuestion(event.target.value)} /><button className="button button--primary button--full" type="submit">질문하기</button></form></div>}
+          {!isInstructor && panel === 'ai' && <div className="side-panel-content ai-panel"><InlineNotice>현재 재생 시각과 강의 전체 자료를 함께 근거로 사용합니다.</InlineNotice>{aiAnswer && <div className="ai-answer"><strong>답변</strong><p>{aiAnswer}</p><small>근거 · session-and-csrf.pptx 8쪽</small></div>}<form onSubmit={askAi}><textarea rows={4} value={aiQuestion} placeholder="이 구간에서 궁금한 점을 질문하세요." onChange={(event) => setAiQuestion(event.target.value)} /><button className="button button--primary button--full" type="submit">질문하기</button></form></div>}
 
           {!isInstructor && panel === 'quiz' && <div className="side-panel-content quiz-panel"><header><StatusBadge tone="success">QUIZ v1</StatusBadge><strong>핵심 개념 확인</strong><small>1 / 3 문제</small></header><p>현재 요청의 인증 주체를 참조하는 객체는 무엇인가요?</p>{['HttpSession', 'SecurityContext', 'RedisConnection'].map((answer) => <label className={quizAnswer === answer ? 'is-selected' : ''} key={answer}><input name="quiz" type="radio" value={answer} checked={quizAnswer === answer} onChange={(event) => { setQuizAnswer(event.target.value); setQuizSubmitted(false) }} /><span>{answer}</span></label>)}<button className="button button--primary button--full" disabled={!quizAnswer} type="button" onClick={() => setQuizSubmitted(true)}>정답 확인</button>{quizSubmitted && <InlineNotice tone={quizAnswer === 'SecurityContext' ? 'success' : 'danger'}>{quizAnswer === 'SecurityContext' ? '정답입니다. 현재 요청의 인증 주체를 보관합니다.' : '다시 생각해 보세요. 세션 저장소와 요청 컨텍스트는 책임이 다릅니다.'}</InlineNotice>}</div>}
         </aside>

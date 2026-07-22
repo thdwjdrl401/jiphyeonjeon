@@ -21,7 +21,7 @@ export default function CurriculumSection({ section, relationship, curriculumId 
           onClick={() => setExpanded((current) => !current)}
         >
           <span>{section.order}. {section.title}</span>
-          <span className="curriculum-section__count">{section.lessons.length}개 레슨</span>
+          <span className="curriculum-section__count">{section.lessons.length}개 강의</span>
         </button>
       </div>
       {expanded && (

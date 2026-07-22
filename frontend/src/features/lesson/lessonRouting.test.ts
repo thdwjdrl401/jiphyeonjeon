@@ -9,13 +9,13 @@ const studentBase = {
 }
 
 describe('resolveLessonPath', () => {
-  it('학생 레슨 상세 경로에 역할과 전체 계층을 포함한다', () => {
+  it('학생 강의 상세 경로에 역할과 전체 계층을 포함한다', () => {
     expect(resolveLessonPath({ ...studentBase, destination: 'LESSON_DETAIL' })).toBe(
       '/student/curriculums/cur-1/sections/sec-1/lessons/les-1',
     )
   })
 
-  it('통합된 라이브 상세 목적지는 레슨 상세를 사용하고 강의실만 sessionId를 사용한다', () => {
+  it('통합된 라이브 상세 목적지는 강의 상세를 사용하고 강의실만 sessionId를 사용한다', () => {
     expect(resolveLessonPath({ ...studentBase, destination: 'LIVE_SESSION', sessionId: 'ses-1' })).toBe(
       '/student/curriculums/cur-1/sections/sec-1/lessons/les-1',
     )
@@ -40,7 +40,7 @@ describe('resolveLessonPath', () => {
     )
   })
 
-  it('라이브 목적지에 sessionId가 없으면 역할별 레슨 상세 경로로 대체한다', () => {
+  it('라이브 목적지에 sessionId가 없으면 역할별 강의 상세 경로로 대체한다', () => {
     expect(resolveLessonPath({ ...studentBase, destination: 'LIVE_SESSION' })).toBe(
       '/student/curriculums/cur-1/sections/sec-1/lessons/les-1',
     )

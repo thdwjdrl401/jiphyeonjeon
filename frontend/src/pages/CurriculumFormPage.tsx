@@ -63,7 +63,7 @@ export default function CurriculumFormPage() {
             </section>
             <section className="curriculum-asset-section">
               <h3>커리큘럼 강의 자료 <small>선택</small></h3>
-              <p>수강 중인 학생에게 모든 레슨에서 공통으로 제공할 PPTX 자료입니다.</p>
+              <p>수강 중인 학생에게 모든 강의에서 공통으로 제공할 PPTX 자료입니다.</p>
               <CurriculumMaterialField id="new-curriculum-materials" value={materials} onChange={setMaterials} />
             </section>
           </div>

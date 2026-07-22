@@ -6,7 +6,7 @@ import { usePageTitle } from '@/shared/lib/usePageTitle'
 import { InlineNotice, PageHeader, Panel, StatusBadge } from '@/shared/ui/WorkspaceUi'
 
 const serverChecks = [
-  ['LESSON_PUBLISHED', '레슨 게시', 'PUBLISHED'],
+  ['LESSON_PUBLISHED', '강의 게시', 'PUBLISHED'],
   ['MATERIAL_READY', 'PPTX 자료', '2개 준비'],
   ['AI_READY', 'AI 준비', 'READY'],
   ['LIVEKIT_READY', 'LiveKit', '연결 가능'],

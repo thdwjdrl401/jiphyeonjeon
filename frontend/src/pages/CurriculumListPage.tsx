@@ -8,7 +8,8 @@ import { useCurriculums } from '@/features/curriculum/useCurriculums'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
 
-const validSorts = new Set<CurriculumSort>(['LATEST', 'STARTING_SOON', 'TITLE_ASC'])
+const validSorts = new Set<CurriculumSort>(['LATEST', 'TITLE_ASC'])
+const SEARCH_DEBOUNCE_MS = 300
 const MAX_VISIBLE_PAGES = 5
 
 function getPageWindow(current: number, total: number, maxVisible: number) {
@@ -51,6 +52,18 @@ export default function CurriculumListPage() {
     setSearchParams(next)
   }
 
+  useEffect(() => {
+    const trimmed = searchInput.trim()
+    if (trimmed === queryText) return
+    // 검색어를 지우면(trimmed === '') 디바운스 없이 즉시 전체 목록으로 되돌린다.
+    const delay = trimmed === '' ? 0 : SEARCH_DEBOUNCE_MS
+    const timer = window.setTimeout(() => {
+      updateParams({ q: trimmed || null, page: null })
+    }, delay)
+    return () => window.clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchInput, queryText])
+
   const handleSearch = (event: FormEvent) => {
     event.preventDefault()
     updateParams({ q: searchInput.trim() || null, page: null })
@@ -92,7 +105,6 @@ export default function CurriculumListPage() {
             <span className="visually-hidden">정렬 기준</span>
             <select value={sort} onChange={(event) => updateParams({ sort: event.target.value === 'LATEST' ? null : event.target.value, page: null })}>
               <option value="LATEST">최신순</option>
-              <option value="STARTING_SOON">시작 임박순</option>
               <option value="TITLE_ASC">이름순</option>
             </select>
           </label>
