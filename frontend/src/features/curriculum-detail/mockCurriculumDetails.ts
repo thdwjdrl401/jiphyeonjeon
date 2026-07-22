@@ -120,9 +120,11 @@ export async function enrollMockCurriculum(curriculumId: string): Promise<Enroll
   return {
     enrollmentId: record.enrollmentId,
     curriculumId,
+    userId: user.userId,
     status: record.status,
     requestedAt,
-    approvedAt: null,
+    decidedAt: null,
+    enrolledAt: null,
   }
 }
 

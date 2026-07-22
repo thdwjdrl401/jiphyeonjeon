@@ -46,12 +46,15 @@ describe('커리큘럼 API 계약', () => {
       title: '새 커리큘럼',
       summary: '요약',
       description: '설명',
-      thumbnailUrl: 'data:image/png;base64,mock',
+      thumbnailAssetId: 'ast_1',
+      thumbnailPreviewUrl: 'data:image/png;base64,mock',
     })).resolves.toEqual({ curriculumId: 'cur-created' })
+    // 미리보기용 data URL이 아니라 업로드로 받은 에셋 id가 나간다.
     expect(postSpy).toHaveBeenCalledWith('/instructor/curriculums', {
       title: '새 커리큘럼',
       summary: '요약',
       description: '설명',
+      thumbnailAssetId: 'ast_1',
     })
   })
 
@@ -118,9 +121,11 @@ describe('커리큘럼 API 계약', () => {
       data: {
         enrollmentId: 'enr_1',
         curriculumId: 'cur_contract',
+        userId: 'usr_1',
         status: 'PENDING',
         requestedAt: '2026-07-20T00:00:00Z',
-        approvedAt: null,
+        decidedAt: null,
+        enrolledAt: null,
       },
     } as never)
     const deleteSpy = vi.spyOn(apiClient, 'delete').mockResolvedValue({} as never)

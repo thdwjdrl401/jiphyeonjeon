@@ -255,9 +255,11 @@ describe('CurriculumDetailPage', () => {
     resolveEnroll({
       enrollmentId: 'enr_test_loading',
       curriculumId: 'cur-ux-research',
+      userId: 'usr_test_loading',
       status: 'ACTIVE',
       requestedAt: '2026-07-20T12:00:00+09:00',
-      approvedAt: '2026-07-20T12:00:00+09:00',
+      decidedAt: '2026-07-20T12:00:00+09:00',
+      enrolledAt: '2026-07-20T12:00:00+09:00',
     })
 
     await waitFor(() => expect(screen.queryByRole('button', { name: /신청 중/ })).not.toBeInTheDocument())

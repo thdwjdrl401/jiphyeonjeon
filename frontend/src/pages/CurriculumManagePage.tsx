@@ -1,7 +1,7 @@
 import { useState, type DragEvent as ReactDragEvent } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { instructorPaths, publicPaths } from '@/app/router/paths'
-import CurriculumImageField from '@/features/curriculum/CurriculumImageField'
+import CurriculumImageField, { type CurriculumImageSelection } from '@/features/curriculum/CurriculumImageField'
 import CurriculumMaterialField from '@/features/curriculum/CurriculumMaterialField'
 import type { CurriculumMaterial } from '@/features/curriculum/types'
 import { demoCurriculum } from '@/features/demo/demoData'
@@ -262,7 +262,7 @@ export default function CurriculumManagePage() {
       {tab === 'info' && (
         <Panel title="기본 정보" description="일반 수정과 공개 상태 전환은 분리합니다.">
           <div className="form-grid"><label className="form-field--wide"><span>제목</span><input value={curriculumInfo.title} onChange={(event) => updateCurriculumInfo('title', event.target.value)} /></label><label className="form-field--wide"><span>짧은 소개</span><input value={curriculumInfo.summary} onChange={(event) => updateCurriculumInfo('summary', event.target.value)} /></label><label className="form-field--wide"><span>상세 설명</span><textarea rows={6} value={curriculumInfo.description} onChange={(event) => updateCurriculumInfo('description', event.target.value)} /></label></div>
-          <div className="curriculum-manage-thumbnail"><h3>대표 이미지</h3><p>목록과 상세 카드에 표시할 이미지를 등록합니다.</p><CurriculumImageField id="manage-curriculum-thumbnail" value={thumbnailUrl} onChange={updateThumbnail} /></div>
+          <div className="curriculum-manage-thumbnail"><h3>대표 이미지</h3><p>목록과 상세 카드에 표시할 이미지를 등록합니다.</p><CurriculumImageField id="manage-curriculum-thumbnail" previewUrl={thumbnailUrl} onChange={(selection: CurriculumImageSelection | null) => updateThumbnail(selection?.previewUrl ?? null)} /></div>
           <div className="lifecycle-actions"><div><StatusBadge tone="warning">DRAFT</StatusBadge><p>레슨 편성을 확인한 뒤 커리큘럼을 게시하세요.</p></div><button className="button button--primary" type="button" onClick={saveChanges}>커리큘럼 게시</button></div>
           <div className="curriculum-manage-materials"><h3>커리큘럼 강의 자료 <small>선택</small></h3><p>전체 레슨에서 공통으로 제공할 PPTX 자료를 추가하거나 제거합니다.</p><CurriculumMaterialField id="manage-curriculum-materials" value={materials} onChange={updateMaterials} /></div>
         </Panel>

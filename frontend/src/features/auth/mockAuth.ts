@@ -53,6 +53,7 @@ export const mockAuthService = {
       email: request.email,
       displayName: isInstructor ? '이도현' : '김학생',
       role: isInstructor ? 'INSTRUCTOR' : 'STUDENT',
+      profileImageUrl: null,
     }
     return currentUser
   },
@@ -72,6 +73,7 @@ export const mockAuthService = {
       email: request.email,
       displayName: request.displayName,
       role: request.role,
+      profileImageUrl: null,
     } satisfies AuthUser
   },
 
