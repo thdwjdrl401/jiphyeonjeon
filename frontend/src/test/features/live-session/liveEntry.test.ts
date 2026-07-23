@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isLiveEntryOpen } from './liveEntry'
+import { isLiveEntryOpen } from '@/features/live-session/liveEntry'
 
 describe('isLiveEntryOpen', () => {
   const scheduledAt = '2026-08-01T10:00:00+09:00'

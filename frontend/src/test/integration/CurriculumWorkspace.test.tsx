@@ -1,8 +1,8 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
 import App from '@/App'
-import { mockAuthService, resetMockAuth } from '@/features/auth/mockAuth'
+import { mockAuthService, resetMockAuth } from '@/features/auth/mockAuthService'
 
 async function renderAsInstructor(path: string) {
   await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
@@ -79,6 +79,25 @@ describe('커리큘럼 작업 화면', () => {
     await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
     expect(await screen.findAllByRole('link', { name: '상세' })).not.toHaveLength(0)
     expect(screen.queryByRole('link', { name: '수정' })).not.toBeInTheDocument()
+  })
+
+  it('관리 화면에서 실제 수강 신청 목록을 조회하고 승인 상태를 변경한다', async () => {
+    const user = userEvent.setup()
+    await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
+    await user.click(await screen.findByRole('button', { name: '수강생' }))
+
+    const pendingEmail = await screen.findByText('student02@example.com')
+    const pendingRow = pendingEmail.closest('tr')
+    expect(pendingRow).not.toBeNull()
+    expect(within(pendingRow!).getByText('승인 대기')).toBeInTheDocument()
+    await user.click(within(pendingRow!).getByRole('button', { name: '승인' }))
+
+    await waitFor(() => {
+      const activeRow = screen.getByText('student02@example.com').closest('tr')
+      expect(activeRow).not.toBeNull()
+      expect(within(activeRow!).getByText('수강 중')).toBeInTheDocument()
+      expect(within(activeRow!).getByRole('button', { name: '제적' })).toBeInTheDocument()
+    })
   })
 
   it('새 강의 폼에서 라이브 강의 일정을 함께 입력한다', async () => {
@@ -244,30 +263,52 @@ describe('커리큘럼 작업 화면', () => {
     expect(within(operatingPanel!).queryByRole('link', { name: '관리하기' })).not.toBeInTheDocument()
   })
 
-  it('강사 프로필에서 운영 커리큘럼 버튼을 표시하지 않는다', async () => {
+  it('강사 프로필을 수정하면서 운영 커리큘럼 버튼은 표시하지 않는다', async () => {
+    const user = userEvent.setup()
     await renderAsInstructor('/instructor/profile')
     expect(await screen.findByRole('heading', { name: '강사 공개 프로필' })).toBeInTheDocument()
-    expect(screen.getByText('강사 소개와 전문 분야 편집은 서버 API가 준비된 뒤 제공됩니다.')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '공개 프로필 저장' })).not.toBeInTheDocument()
+    const saveButton = await screen.findByRole('button', { name: '공개 프로필 저장' })
+    const bio = screen.getByLabelText('강사 소개')
+    await user.clear(bio)
+    await user.type(bio, '테스트로 검증한 강의를 제공합니다.')
+    await user.click(saveButton)
+
+    expect(await screen.findByText('강사 공개 프로필이 저장되었습니다.')).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '운영 커리큘럼' })).not.toBeInTheDocument()
   })
 
-  it('프로필 수정 모달에서 이미지를 변경하고 닉네임은 준비 중으로 안내한다', async () => {
+  it('프로필 수정 모달에서 이미지와 닉네임을 함께 변경한다', async () => {
     const user = userEvent.setup()
     await renderAsStudent('/student/profile')
     await user.click(await screen.findByRole('button', { name: '프로필 수정' }))
 
     const dialog = screen.getByRole('dialog', { name: '프로필 수정' })
-    expect(within(dialog).getByDisplayValue('김학생')).toHaveAttribute('readonly')
-    expect(within(dialog).getByText('닉네임 변경 기능은 준비 중입니다.')).toBeInTheDocument()
+    const displayName = within(dialog).getByDisplayValue('김학생')
+    await user.clear(displayName)
+    await user.type(displayName, '김라이브')
 
     const image = new File(['profile-image'], 'profile.png', { type: 'image/png' })
     await user.upload(within(dialog).getByLabelText('프로필 이미지 선택'), image)
     await user.click(within(dialog).getByRole('button', { name: '변경사항 저장' }))
 
-    expect(await screen.findByText('프로필 이미지가 변경되었습니다.')).toBeInTheDocument()
+    expect(await screen.findByText('기본 프로필이 변경되었습니다.')).toBeInTheDocument()
     expect(screen.queryByRole('dialog', { name: '프로필 수정' })).not.toBeInTheDocument()
-    expect(screen.getByRole('img', { name: '김학생 프로필 이미지' }).querySelector('img')).not.toBeNull()
+    expect(screen.getByRole('img', { name: '김라이브 프로필 이미지' }).querySelector('img')).not.toBeNull()
+  })
+
+  it('목 프로필 서비스로 비밀번호를 변경하고 회원 탈퇴한다', async () => {
+    const user = userEvent.setup()
+    await renderAsStudent('/student/profile')
+
+    await user.type(await screen.findByLabelText('현재 비밀번호'), 'current-password')
+    await user.type(screen.getByLabelText('새 비밀번호'), 'new-password-123')
+    await user.click(screen.getByRole('button', { name: '비밀번호 변경' }))
+    expect(await screen.findByText('비밀번호가 변경되었습니다.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('checkbox', { name: '계정 탈퇴에 동의합니다.' }))
+    await user.click(screen.getByRole('button', { name: '회원 탈퇴' }))
+    await waitFor(() => expect(window.location.pathname).toBe('/login'))
+    expect(await screen.findByRole('link', { name: '로그인' })).toBeInTheDocument()
   })
 
   it('학생 내 커리큘럼에서 승인 대기 목록을 학습 진행 정보 없이 표시한다', async () => {

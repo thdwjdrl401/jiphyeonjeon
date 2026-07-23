@@ -13,6 +13,7 @@ import {
   type InstructorCurriculumResponse,
 } from '@/features/curriculum/curriculumManagementService'
 import type { CurriculumMaterial } from '@/features/curriculum/types'
+import InstructorEnrollmentRoster from '@/features/enrollment/InstructorEnrollmentRoster'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
 import { InlineNotice, MetricCard, PageHeader, Panel, StatusBadge } from '@/shared/ui/WorkspaceUi'
@@ -325,7 +326,11 @@ function CurriculumManageEditor({
         </Panel>
       )}
 
-      {tab === 'enrollees' && <Panel title="수강 신청과 수강생" description="모든 커리큘럼은 강사 승인 후 수강 방식으로 운영합니다."><div className="table-wrap"><table><thead><tr><th>수강생</th><th>신청일</th><th>상태</th><th>진행률</th><th>행동</th></tr></thead><tbody><tr><td>김학생</td><td>2026.07.20</td><td><StatusBadge tone="success">ACTIVE</StatusBadge></td><td>42%</td><td><button className="text-button" type="button">상세</button></td></tr><tr><td>수강생-21B3</td><td>2026.07.21</td><td><StatusBadge tone="warning">PENDING</StatusBadge></td><td>-</td><td><button className="text-button" type="button">승인</button></td></tr></tbody></table></div></Panel>}
+      {tab === 'enrollees' && (
+        <Panel title="수강 신청과 수강생" description="승인 대기, 수강 중, 종료된 수강 상태를 관리합니다.">
+          <InstructorEnrollmentRoster curriculumId={curriculumId} />
+        </Panel>
+      )}
     </div>
   )
 }

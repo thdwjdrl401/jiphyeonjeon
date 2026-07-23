@@ -1,0 +1,24 @@
+import { getDemoCurriculumLessonNavigation, getDemoLesson } from '@/features/demo/demoData'
+import type { LessonService } from './lessonService.interface'
+
+export const mockLessonService = {
+  async getLesson(request) {
+    return getDemoLesson(request.lessonId, request.userId)
+  },
+  async getCurriculumLessonNavigation(curriculumId) {
+    return getDemoCurriculumLessonNavigation(curriculumId)
+  },
+  async saveLesson(request) {
+    return {
+      lessonId: request.lessonId ?? `lesson-mock-${Date.now()}`,
+      sectionId: request.sectionId,
+      title: request.title,
+      description: request.description,
+      status: 'DRAFT' as const,
+    }
+  },
+  async prepareLessonAi() {
+    if (import.meta.env.MODE === 'test') return
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 700))
+  },
+} satisfies LessonService

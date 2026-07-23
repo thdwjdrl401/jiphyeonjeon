@@ -1,68 +1,15 @@
-import { demoCaptions, demoMessages } from '@/features/demo/demoData'
-import { apiClient } from '@/shared/api/client'
-import { requestByDataSource } from '@/shared/api/dataSource'
-import type { CaptionView, ChatMessageView } from '@/features/live-session/liveSessionService'
+import { selectDataSource } from '@/shared/api/dataSource'
+import { httpReplayService } from './httpReplayService'
+import { mockReplayService } from './mockReplayService'
+import type { ReplayService } from './replayService.interface'
 
-export function getReplayCaptions(lessonId: string) {
-  return requestByDataSource<CaptionView[]>({
-    mock: () => demoCaptions,
-    http: async () => {
-      const { data } = await apiClient.get<CaptionView[]>(`/lessons/${lessonId}/captions`)
-      return data
-    },
-    apiImplemented: false,
-  })
-}
+const replayService = selectDataSource<ReplayService>(mockReplayService, httpReplayService)
 
-export function getReplayMessages(lessonId: string) {
-  return requestByDataSource<ChatMessageView[]>({
-    mock: () => demoMessages,
-    http: async () => {
-      const { data } = await apiClient.get<ChatMessageView[]>(`/lessons/${lessonId}/messages`)
-      return data
-    },
-    apiImplemented: false,
-  })
-}
+export const getReplayCaptions = (lessonId: string) => replayService.getReplayCaptions(lessonId)
+export const getReplayMessages = (lessonId: string) => replayService.getReplayMessages(lessonId)
+export const askReplayAi = (lessonId: string, question: string, sessionMs: number) => replayService.askReplayAi(lessonId, question, sessionMs)
+export const saveReplayReview = (lessonId: string, transcript: string) => replayService.saveReplayReview(lessonId, transcript)
+export const publishReplayReview = (lessonId: string, transcript: string) => replayService.publishReplayReview(lessonId, transcript)
+export const submitReplayQuiz = (lessonId: string, answer: string) => replayService.submitReplayQuiz(lessonId, answer)
 
-export function askReplayAi(lessonId: string, question: string, sessionMs: number) {
-  return requestByDataSource<{ answer: string }>({
-    mock: () => ({ answer: '세션은 인증 상태를 여러 요청에 걸쳐 유지하고, SecurityContext는 현재 요청에서 인증 주체를 참조하는 역할을 합니다.' }),
-    http: async () => {
-      const { data } = await apiClient.post<{ answer: string }>(`/lessons/${lessonId}/ai/questions:stream`, { question, sessionMs })
-      return data
-    },
-    apiImplemented: false,
-  })
-}
-
-export function saveReplayReview(lessonId: string, transcript: string) {
-  return requestByDataSource({
-    mock: () => undefined,
-    http: async () => {
-      await apiClient.put(`/instructor/lessons/${lessonId}/replay-review`, { transcript })
-    },
-    apiImplemented: false,
-  })
-}
-
-export function publishReplayReview(lessonId: string, transcript: string) {
-  return requestByDataSource({
-    mock: () => undefined,
-    http: async () => {
-      await apiClient.post(`/instructor/lessons/${lessonId}/replay-review/publish`, { transcript })
-    },
-    apiImplemented: false,
-  })
-}
-
-export function submitReplayQuiz(lessonId: string, answer: string) {
-  return requestByDataSource<{ correct: boolean }>({
-    mock: () => ({ correct: answer === 'SecurityContext' }),
-    http: async () => {
-      const { data } = await apiClient.post<{ correct: boolean }>(`/lessons/${lessonId}/quizzes/answers`, { answer })
-      return data
-    },
-    apiImplemented: false,
-  })
-}
+export type { ReplayService } from './replayService.interface'

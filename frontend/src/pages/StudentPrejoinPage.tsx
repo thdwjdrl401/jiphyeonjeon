@@ -38,7 +38,7 @@ export default function StudentPrejoinPage() {
 
   useEffect(() => setNickname(user?.displayName ?? ''), [user?.displayName])
 
-  // 닉네임을 수정하면 디바운스 후 즉시 반영(현재는 목 계정 서비스; 실제 API는 없음).
+  // 닉네임을 수정하면 디바운스 후 선택된 인증 서비스 구현체에 즉시 반영한다.
   useEffect(() => {
     const trimmed = nickname.trim()
     if (!trimmed || trimmed === user?.displayName) return

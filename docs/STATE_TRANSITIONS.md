@@ -74,32 +74,37 @@ DRAFT ──게시──→ PUBLISHED ──보관──→ ARCHIVED
 
 ## 5. 수강 상태
 
-현재 프론트엔드 초안은 모든 커리큘럼을 **강사 승인 후 수강** 방식으로 운영한다. 따라서 일반 신청은 항상 `PENDING`으로 생성되고 강사의 승인 이후에만 `ACTIVE`가 된다. enum은 백엔드에 존재하지만 신청·승인 API의 전체 연동은 아직 남아 있다.
+수강 신청의 초기 상태는 커리큘럼의 수강 방식에 따라 결정한다. `APPROVAL_REQUIRED`는 `PENDING`, `IMMEDIATE`는 바로 `ACTIVE`가 된다. `INVITATION_ONLY`는 공개 학생 신청 API에서 차단한다.
 
 ```text
-                    ┌──승인──→ ACTIVE ──권한 회수──→ REVOKED
-신청 생성 ──→ PENDING
-                    ├──거절──→ REJECTED
-                    └──취소──→ CANCELLED
+APPROVAL_REQUIRED 신청 ──→ PENDING ──승인──→ ACTIVE ──권한 회수──→ REVOKED
+                              ├──거절──→ REJECTED       └──학생 취소──→ CANCELLED
+                              └──학생 취소──→ CANCELLED
+
+IMMEDIATE 신청 ───────────→ ACTIVE
+
+REJECTED · REVOKED · CANCELLED ──재신청──→ 정책에 따라 PENDING 또는 ACTIVE
 ```
 
 | 상태 | 의미 | 학생 행동 |
 |---|---|---|
 | `PENDING` | 수강 승인 대기 | 신청 취소 가능, 보호 레슨 접근 불가 |
 | `ACTIVE` | 유효한 수강 권한 | 게시 레슨·라이브·VOD에 조건부 접근 가능 |
-| `REJECTED` | 강사가 신청을 거절 | 접근 불가, 재신청 정책 미정 |
-| `REVOKED` | 기존 수강 권한 회수 | 신규 재생 URL·SSE·학습 요청 중단 |
-| `CANCELLED` | 승인 전 신청 취소 | 접근 불가, 재신청 정책 미정 |
+| `REJECTED` | 강사가 신청을 거절 | 접근 불가, 재신청 가능 |
+| `REVOKED` | 기존 수강 권한 회수 | 접근 중단, 재신청 가능 |
+| `CANCELLED` | 학생이 승인 대기 또는 수강을 취소 | 접근 불가, 재신청 가능 |
 
-수강 방식은 상태가 아니라 신청 상태의 생성 규칙이다. 현재 커리큘럼 생성 UI에서는 `APPROVAL_REQUIRED`만 선택된 고정값으로 사용하며 다른 방식은 노출하지 않는다.
+종료 상태에서 재신청할 때는 새 행을 만들지 않고 `(curriculumId, userId)`가 같은 기존 수강 레코드를 재사용한다. 기존 `enrollmentId`를 유지하면서 `requestedAt`과 현재 상태 필드를 새 신청 기준으로 갱신한다.
+
+수강 방식은 상태가 아니라 신청 상태의 생성 규칙이다. 프론트의 조회·신청 흐름은 `APPROVAL_REQUIRED`와 `IMMEDIATE`를 모두 처리한다. 다만 현재 커리큘럼 생성·수정 API가 `enrollmentType`을 입력받지 않으므로 강사 관리 UI에서는 `APPROVAL_REQUIRED` 고정값을 사용한다.
 
 | 수강 방식 | 현재 지원 | 생성 결과 |
 |---|---|---|
 | `APPROVAL_REQUIRED` | 지원 | `PENDING` 생성 후 강사 승인 필요 |
-| `IMMEDIATE` | 미지원 | 프론트 생성 UI에서 노출하지 않음 |
-| `INVITATION_ONLY` | 미지원 | 프론트 생성 UI에서 노출하지 않음 |
+| `IMMEDIATE` | 학생 조회·신청 지원 | 즉시 `ACTIVE`; 강사 생성·수정 UI에서는 아직 선택 불가 |
+| `INVITATION_ONLY` | 공개 신청 미지원 | 공개 신청 차단; 초대 API는 미구현 |
 
-현재 프론트엔드에서 다루는 기본 전이는 `PENDING → ACTIVE`, `PENDING → REJECTED`, `PENDING → CANCELLED`다. 신청을 승인 없이 바로 `ACTIVE`로 만드는 흐름은 제공하지 않는다. `ACTIVE → REVOKED`는 학습 기록과 재생 권한 회수 정책을 먼저 확정해야 한다.
+프론트 mock도 실제 API와 동일하게 승인제는 `PENDING`, 즉시 수강은 `ACTIVE`로 생성한다. 취소 시 레코드를 삭제하지 않고 `CANCELLED`로 변경하며, 종료 상태에서 재신청하면 같은 `enrollmentId`를 재사용한다.
 
 ## 6. 레슨 상태
 
@@ -325,7 +330,7 @@ quizStatus         = NOT_STARTED
 
 ## 13. 상태처럼 보이지만 별도로 다룰 값
 
-- `APPROVAL_REQUIRED`는 수강 상태가 아니라 현재 고정된 수강 방식이다. 백엔드 enum에는 `IMMEDIATE`, `INVITATION_ONLY`도 남아 있지만 현재 프론트 생성 UI에서는 지원하지 않는다.
+- `APPROVAL_REQUIRED`, `IMMEDIATE`, `INVITATION_ONLY`는 수강 상태가 아니라 신청 초기 상태와 신청 가능 경로를 정하는 수강 방식이다. 프론트 조회·신청은 `IMMEDIATE`를 처리하지만 강사 생성·수정 UI는 백엔드 입력 계약이 생길 때까지 `APPROVAL_REQUIRED`로 고정한다.
 - `GUEST`, `UNENROLLED_STUDENT`, `PENDING_ENROLLMENT`, `ENROLLED`, `OWNER_INSTRUCTOR`, `NON_OWNER_INSTRUCTOR`는 저장 lifecycle이 아니라 현재 사용자의 관계를 계산한 `viewerContext.relationship`이다.
 - `OPEN`, `NOT_OPEN` 같은 모집 가능 여부는 커리큘럼 lifecycle과 분리된 모집 상태다. 날짜 기반 계산 주체와 최종 enum은 미확정이다.
 - `loading`, `authenticated`, `guest`는 프론트 인증 조회를 위한 UI 로컬 상태이며 서버 도메인 상태가 아니다.
@@ -372,17 +377,17 @@ quizStatus         = NOT_STARTED
 
 8. 모집 상태 enum과 커리큘럼 lifecycle의 조합 규칙
 
-   - **권장안:** 모집 가능 여부는 커리큘럼 lifecycle과 분리된 `enrollmentStatus=NOT_OPEN|OPEN|CLOSED`로 서버가 계산한다. 현재 수강 방식은 `APPROVAL_REQUIRED`로 고정하고 `PUBLISHED + OPEN`일 때만 신청을 허용한다.
+   - **권장안:** 모집 가능 여부는 커리큘럼 lifecycle과 분리된 `enrollmentStatus=NOT_OPEN|OPEN|CLOSED`로 서버가 계산한다. `PUBLISHED + OPEN`일 때만 신청을 허용하고 초기 수강 상태는 `APPROVAL_REQUIRED`면 `PENDING`, `IMMEDIATE`면 `ACTIVE`로 결정한다. `INVITATION_ONLY`는 공개 신청을 허용하지 않는다.
    - `DRAFT`와 `ARCHIVED`는 모집 기간과 관계없이 항상 `NOT_OPEN` 또는 `CLOSED`로 응답한다. `PUBLISHED`에서는 모집 시작·종료 시각과 운영 정책으로 상태를 계산하고, 최종 신청 가능 여부는 `allowedActions`의 `ENROLL`로 제공한다.
 
-결정이 API 필드, enum, 상태코드 또는 URL을 바꾸면 [공유 계약](../CONTRACT.md), 관련 API 명세와 FE/BE 계약 테스트를 함께 갱신한다.
+결정이 API 필드, enum, 상태코드 또는 URL을 바꾸면 [공유 계약](CONTRACT.md), 관련 API 명세와 FE/BE 계약 테스트를 함께 갱신한다.
 
 ## 15. 관련 문서
 
-- [전체 페이지 명세](PAGES.md)
-- [레슨·자료 API](api/LESSON_MANAGEMENT.md)
-- [라이브 API](api/LIVE.md)
-- [VOD·AI API](api/VOD_LEARNING_AI.md)
-- [커리큘럼 상세·수강 API](api/CURRICULUM_DETAIL.md)
-- [커리큘럼 관리 API](api/CURRICULUM_MANAGEMENT.md)
-- [결정 필요 항목](DECISIONS_PENDING.md)
+- [전체 페이지 명세](frontend/PAGES.md)
+- [레슨·자료 API](frontend/api/LESSON_MANAGEMENT.md)
+- [라이브 API](frontend/api/LIVE.md)
+- [VOD·AI API](frontend/api/VOD_LEARNING_AI.md)
+- [커리큘럼 상세·수강 API](frontend/api/CURRICULUM_DETAIL.md)
+- [커리큘럼 관리 API](frontend/api/CURRICULUM_MANAGEMENT.md)
+- [결정 필요 항목](frontend/DECISIONS_PENDING.md)

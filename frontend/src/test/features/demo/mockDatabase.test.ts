@@ -1,13 +1,15 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { mockAuthService, resetMockAuth } from '@/features/auth/mockAuth'
-import { getMockCurriculumDetail, cancelMockEnrollment, enrollMockCurriculum } from '@/features/curriculum-detail/mockCurriculumDetails'
+import { mockAuthService, resetMockAuth } from '@/features/auth/mockAuthService'
+import { getMockCurriculumDetail } from '@/features/curriculum-detail/mockCurriculumDetails'
 import { getMockCurriculums } from '@/features/curriculum/mockCurriculums'
+import { mockEnrollmentService } from '@/features/enrollment/mockEnrollmentService'
+import { getMockEnrollment, updateMockEnrollmentStatus } from '@/features/enrollment/mockEnrollmentStore'
 import {
   getDemoInstructorCurriculums,
   getDemoPendingStudentCurriculums,
   getDemoStudentCurriculums,
   getDemoTodayInstructorLiveSession,
-} from './demoData'
+} from '@/features/demo/demoData'
 
 describe('통합 mock 데이터베이스', () => {
   beforeEach(() => {
@@ -30,17 +32,38 @@ describe('통합 mock 데이터베이스', () => {
   })
 
   it('수강 신청·취소 변경을 목록과 상세이 함께 반영한다', async () => {
-    await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
+    const student = await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
 
-    await enrollMockCurriculum('cur-ux-research')
+    const firstEnrollment = await mockEnrollmentService.apply('cur-ux-research')
     expect((await getMockCurriculumDetail('cur-ux-research')).viewerContext.relationship).toBe('PENDING_ENROLLMENT')
     expect(
       (await getMockCurriculums({ page: 0, size: 20 })).items
         .find((item) => item.curriculumId === 'cur-ux-research')?.viewerContext.relationship,
     ).toBe('PENDING_ENROLLMENT')
 
-    await cancelMockEnrollment('cur-ux-research')
+    await mockEnrollmentService.cancel('cur-ux-research')
+    expect(getMockEnrollment(student.userId, 'cur-ux-research')?.status).toBe('CANCELLED')
     expect((await getMockCurriculumDetail('cur-ux-research')).viewerContext.relationship).toBe('UNENROLLED_STUDENT')
+
+    const reappliedEnrollment = await mockEnrollmentService.apply('cur-ux-research')
+    expect(reappliedEnrollment.enrollmentId).toBe(firstEnrollment.enrollmentId)
+    expect(reappliedEnrollment.status).toBe('PENDING')
+  })
+
+  it('IMMEDIATE는 즉시 ACTIVE가 되고 REVOKED 이후 같은 레코드로 재신청한다', async () => {
+    const student = await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
+
+    const firstEnrollment = await mockEnrollmentService.apply('cur-typescript')
+    expect(firstEnrollment.status).toBe('ACTIVE')
+    expect(firstEnrollment.enrolledAt).toBe(firstEnrollment.requestedAt)
+    expect((await getMockCurriculumDetail('cur-typescript')).viewerContext.relationship).toBe('ENROLLED')
+
+    updateMockEnrollmentStatus(student.userId, 'cur-typescript', 'REVOKED')
+    expect((await getMockCurriculumDetail('cur-typescript')).viewerContext.relationship).toBe('UNENROLLED_STUDENT')
+
+    const reappliedEnrollment = await mockEnrollmentService.apply('cur-typescript')
+    expect(reappliedEnrollment.enrollmentId).toBe(firstEnrollment.enrollmentId)
+    expect(reappliedEnrollment.status).toBe('ACTIVE')
   })
 
   it('강사 소유권은 배열 위치가 아니라 instructorId로 결정한다', async () => {

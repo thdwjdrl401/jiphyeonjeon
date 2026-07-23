@@ -1,0 +1,63 @@
+import type { CurriculumLiveSessionStatus } from '@/features/lesson/types'
+
+export interface LiveSessionView {
+  sessionId: string
+  lessonId: string
+  lessonTitle: string
+  curriculumId: string
+  curriculumTitle: string
+  sectionId: string
+  status: CurriculumLiveSessionStatus
+  scheduledAt: string | null
+  entryOpensAt: string | null
+  entryWindowMinutes: number
+  expectedDurationMinutes: number
+  participants: number
+}
+
+export interface ChatMessageView {
+  id: string
+  alias: string
+  text: string
+  time: string
+  question?: boolean
+}
+
+export interface CaptionView {
+  at: string
+  text: string
+}
+
+export interface PreflightCheck {
+  code: string
+  label: string
+  value: string
+  ready: boolean
+}
+
+export interface ProcessingStatus {
+  steps: Array<{ label: string; status: 'COMPLETE' | 'PROCESSING' | 'PENDING' }>
+  ready: boolean
+}
+
+export interface QuestionHighlight {
+  at: string
+  count: number
+  text: string
+}
+
+export interface LiveSessionService {
+  getLiveSession: (sessionId: string) => Promise<LiveSessionView>
+  getPreflightChecks: (sessionId: string) => Promise<PreflightCheck[]>
+  startLiveSession: (sessionId: string) => Promise<void>
+  endLiveSession: (sessionId: string) => Promise<void>
+  getLiveToken: (sessionId: string) => Promise<{ token: string; wsUrl?: string }>
+  getParticipants: (sessionId: string) => Promise<Array<{ alias: string; state: string; joinedAt: string }>>
+  getChatMessages: (sessionId: string) => Promise<ChatMessageView[]>
+  sendChatMessage: (sessionId: string, text: string, question: boolean) => Promise<ChatMessageView>
+  getCaptions: (sessionId: string) => Promise<CaptionView[]>
+  askLiveAi: (lessonId: string, question: string) => Promise<{ answer: string }>
+  saveBookmark: (lessonId: string, sessionMs: number) => Promise<void>
+  getProcessingStatus: (sessionId: string) => Promise<ProcessingStatus>
+  getQuestionHighlights: (sessionId: string) => Promise<QuestionHighlight[]>
+}

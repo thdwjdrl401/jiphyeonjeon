@@ -11,7 +11,12 @@ import type {
   CurriculumProgress,
   CurriculumRelationship,
 } from '@/features/curriculum/types'
-import type { CurriculumDetailViewerContext, CurriculumEnrollmentRecord } from '@/features/enrollment/types'
+import {
+  getMockEnrollment,
+  resetMockEnrollmentStore,
+  type MockEnrollmentState,
+} from '@/features/enrollment/mockEnrollmentStore'
+import type { CurriculumDetailViewerContext } from '@/features/enrollment/types'
 import type {
   CurriculumLiveSessionStatus,
   CurriculumOutlineLesson,
@@ -51,14 +56,6 @@ interface MockSectionSeed {
   title: string
   description: string | null
   lessons: MockLessonSeed[]
-}
-
-export interface MockEnrollmentState extends CurriculumEnrollmentRecord {
-  userId: string
-  curriculumId: string
-  completedLessonCount: number
-  lastLessonId: string | null
-  sessionMs: number
 }
 
 const instructorProfiles: CurriculumInstructorProfile[] = [
@@ -156,7 +153,7 @@ export const mockCurriculumEntities: MockCurriculumEntity[] = [
     materials: [],
     period: { startsAt: '2026-07-27T19:30:00+09:00', endsAt: '2026-09-07T21:30:00+09:00' },
     sectionCount: 5, lessonCount: 12, featured: false, catalogVisible: true,
-    enrollmentPolicyType: 'APPROVAL_REQUIRED', enrolleeCount: 28,
+    enrollmentPolicyType: 'IMMEDIATE', enrolleeCount: 28,
   },
   {
     curriculumId: 'cur-ux-research', title: '사용자를 이해하는 UX 리서치',
@@ -212,24 +209,8 @@ const springSectionSeeds: MockSectionSeed[] = [
   },
 ]
 
-function enrollmentKey(userId: string, curriculumId: string) {
-  return `${userId}:${curriculumId}`
-}
-
-function createInitialEnrollments() {
-  const states: MockEnrollmentState[] = [
-    { enrollmentId: 'enr-spring-active', userId: MOCK_STUDENT_ID, curriculumId: 'cur-spring-live', status: 'ACTIVE', requestedAt: '2026-07-01T10:00:00+09:00', completedLessonCount: 7, lastLessonId: 'cur-spring-live-lesson-7', sessionMs: 125_000 },
-    { enrollmentId: 'enr-data-active', userId: MOCK_STUDENT_ID, curriculumId: 'cur-data-story', status: 'ACTIVE', requestedAt: '2026-07-03T10:00:00+09:00', completedLessonCount: 9, lastLessonId: 'cur-data-story-lesson-9', sessionMs: 225_000 },
-    { enrollmentId: 'enr-react-active', userId: MOCK_STUDENT_ID, curriculumId: 'cur-react-system', status: 'ACTIVE', requestedAt: '2026-07-05T10:00:00+09:00', completedLessonCount: 0, lastLessonId: null, sessionMs: 0 },
-    { enrollmentId: 'enr-sql-pending', userId: MOCK_STUDENT_ID, curriculumId: 'cur-sql', status: 'PENDING', requestedAt: '2026-07-18T09:00:00+09:00', completedLessonCount: 0, lastLessonId: null, sessionMs: 0 },
-  ]
-  return new Map(states.map((state) => [enrollmentKey(state.userId, state.curriculumId), state]))
-}
-
-let mockEnrollments = createInitialEnrollments()
-
 export function resetMockDatabase() {
-  mockEnrollments = createInitialEnrollments()
+  resetMockEnrollmentStore()
   mockCurriculumEntities.splice(initialCurriculumCount)
   for (const curriculum of mockCurriculumEntities) {
     curriculum.materials = initialCurriculumMaterials.get(curriculum.curriculumId)?.map((material) => ({ ...material })) ?? []
@@ -277,33 +258,6 @@ export function updateMockCurriculumMaterials(curriculumId: string, materials: C
   if (!curriculum) return null
   curriculum.materials = materials.map((material) => ({ ...material }))
   return curriculum
-}
-
-export function getMockEnrollment(userId: string, curriculumId: string) {
-  return mockEnrollments.get(enrollmentKey(userId, curriculumId)) ?? null
-}
-
-export function getMockEnrollments(userId: string) {
-  return [...mockEnrollments.values()].filter((enrollment) => enrollment.userId === userId)
-}
-
-export function putMockPendingEnrollment(userId: string, curriculumId: string, requestedAt: string) {
-  const state: MockEnrollmentState = {
-    enrollmentId: `enr-mock-${Date.now()}`,
-    userId,
-    curriculumId,
-    status: 'PENDING',
-    requestedAt,
-    completedLessonCount: 0,
-    lastLessonId: null,
-    sessionMs: 0,
-  }
-  mockEnrollments.set(enrollmentKey(userId, curriculumId), state)
-  return state
-}
-
-export function deleteMockEnrollment(userId: string, curriculumId: string) {
-  return mockEnrollments.delete(enrollmentKey(userId, curriculumId))
 }
 
 export function resolveMockRelationship(user: AuthUser | null, curriculum: MockCurriculumEntity): CurriculumRelationship {

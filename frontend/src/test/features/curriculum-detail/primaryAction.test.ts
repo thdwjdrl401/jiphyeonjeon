@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CurriculumDetailResponse } from '@/features/curriculum/types'
-import { resolvePrimaryAction } from './primaryAction'
+import { resolvePrimaryAction } from '@/features/curriculum-detail/primaryAction'
 
 function makeDetail(overrides: Partial<CurriculumDetailResponse['viewerContext']>): CurriculumDetailResponse {
   return {

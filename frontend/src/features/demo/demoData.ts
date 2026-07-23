@@ -1,3 +1,4 @@
+import { getMockEnrollment, getMockEnrollments } from '@/features/enrollment/mockEnrollmentStore'
 import {
   buildMockCurriculumOutline,
   findLastRecordedLesson,
@@ -5,8 +6,6 @@ import {
   findMockLiveSession,
   findNextLiveLesson,
   getMockCurriculum,
-  getMockEnrollment,
-  getMockEnrollments,
   getMockProgress,
   mockCurriculumEntities,
 } from './mockDatabase'

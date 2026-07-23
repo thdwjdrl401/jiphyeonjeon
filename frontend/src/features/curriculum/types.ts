@@ -1,6 +1,8 @@
 import type { CurriculumOutlineLesson } from '@/features/lesson/types'
 import type { CurriculumDetailAllowedAction, CurriculumDetailViewerContext } from '@/features/enrollment/types'
 
+export type CurriculumLifecycleStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED'
+
 export type CurriculumRelationship =
   | 'GUEST'
   | 'UNENROLLED_STUDENT'

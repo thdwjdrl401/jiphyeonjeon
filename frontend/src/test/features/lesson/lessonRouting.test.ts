@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveLessonPath } from './lessonRouting'
+import { resolveLessonPath } from '@/features/lesson/lessonRouting'
 
 const studentBase = {
   role: 'STUDENT' as const,

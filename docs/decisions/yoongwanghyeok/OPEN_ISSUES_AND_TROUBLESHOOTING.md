@@ -179,7 +179,7 @@
 
 ### 커리큘럼·수강
 
-- `APPROVAL_REQUIRED` 외 수강 방식 지원 범위
+- `IMMEDIATE` 강사 선택·저장 API와 `INVITATION_ONLY` 지원 범위 (`IMMEDIATE` 학생 신청·조회는 지원)
 - 강사 계정의 타 커리큘럼 수강 허용
 - lifecycle·학습 완료 상태 enum
 - 목록의 page/cursor 방식과 `viewerContext` 포함 여부
