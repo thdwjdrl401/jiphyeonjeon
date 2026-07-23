@@ -16,7 +16,8 @@ ROLE = {
     "ext":   ("#F1F4F6", "#8C9AA6"),
 }
 BG, INK, SUB, LBL, EDGE = "#FFFFFF", "#0F1B2A", "#4A5A6B", "#41525F", "#5A6C7B"
-ZONE_FILL, ZONE_LINE, ZONE_TXT = "#F5F8FA", "#C6D2DB", "#7C8B99"
+ZONE_FILL, ZONE_LINE, ZONE_TXT = "#F5F8FA", "#C6D2DB", "#3F5162"
+ZONE_BAR = "#8FA3B4"
 LSIZE = 11.5
 
 
@@ -29,8 +30,8 @@ class Free:
        zones: (label, x, y, w, h)
        edges: (points, label, label_xy, kind)  — points 는 직교 꺾은선 [(x,y), ...]"""
 
-    def __init__(self, title, size, zones, nodes, edges, note=None):
-        self.title, self.note = title, note
+    def __init__(self, title, size, zones, nodes, edges, note=None, legend=None):
+        self.title, self.note, self.legend = title, note, legend
         self.width, self.height = size
         self.zones, self.edges_in = zones, edges
         self.pos = {i: dict(t=t, sub=s, role=r, x=x, y=y, w=w, h=h,
@@ -62,8 +63,9 @@ class Free:
         for lab, x, y, w, h in self.zones:                       # ① 구역
             o.append(f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="4" fill="{ZONE_FILL}" '
                      f'stroke="{ZONE_LINE}" stroke-width="1" stroke-dasharray="4 4"/>')
-            o.append(f'<text x="{x+14}" y="{y+21}" font-size="11" fill="{ZONE_TXT}" '
-                     f'letter-spacing="1.4">{escape(lab)}</text>')
+            o.append(f'<rect x="{x+14}" y="{y+10}" width="4" height="15" rx="1" fill="{ZONE_BAR}"/>')
+            o.append(f'<text x="{x+26}" y="{y+23}" font-size="13" font-weight="700" '
+                     f'fill="{ZONE_TXT}" letter-spacing="1.6">{escape(lab)}</text>')
 
         for pts, lab, lxy, kind in self.edges_in:                # ② 선
             col = "#D9342B" if kind == "hot" else EDGE
@@ -97,6 +99,28 @@ class Free:
             else:
                 o.append(f'<text x="{p["cx"]}" y="{p["cy"]+5}" text-anchor="middle" font-size="14.5" '
                          f'font-weight="650" fill="{INK}">{escape(p["t"])}</text>')
+
+        if self.legend:
+            lx, ly, lw, lh, ltitle, sw, lines = self.legend
+            o.append(f'<rect x="{lx}" y="{ly}" width="{lw}" height="{lh}" rx="4" fill="#FFFFFF" '
+                     f'stroke="#C6D2DB" stroke-width="1.2"/>')
+            o.append(f'<rect x="{lx+18}" y="{ly+18}" width="4" height="15" rx="1" fill="{ZONE_BAR}"/>')
+            o.append(f'<text x="{lx+30}" y="{ly+31}" font-size="13" font-weight="700" '
+                     f'fill="{ZONE_TXT}" letter-spacing="1.6">{escape(ltitle)}</text>')
+            for i, (label, role) in enumerate(sw):
+                col, row = i % 3, i // 3
+                sx, sy = lx + 30 + col * 218, ly + 60 + row * 32
+                fill, stroke = ROLE[role]
+                o.append(f'<rect x="{sx}" y="{sy-11}" width="17" height="15" rx="2" '
+                         f'fill="{fill}" stroke="{stroke}" stroke-width="1.6"/>')
+                o.append(f'<text x="{sx+26}" y="{sy}" font-size="12" fill="{INK}">{escape(label)}</text>')
+            base = ly + 60 + ((len(sw) + 2) // 3) * 32 + 8
+            for i, (color, label) in enumerate(lines):
+                yy = base + i * 26
+                o.append(f'<path d="M{lx+30},{yy-4} H{lx+76}" stroke="{color}" '
+                         f'stroke-width="{2 if color != EDGE else 1.6}" fill="none"/>')
+                o.append(f'<path d="M{lx+76},{yy-4} l-9,-5 l0,10 z" fill="{color}"/>')
+                o.append(f'<text x="{lx+90}" y="{yy}" font-size="12" fill="{SUB}">{escape(label)}</text>')
 
         if self.note:
             y0 = self.height - 22 - 20 * (len(self.note) - 1)

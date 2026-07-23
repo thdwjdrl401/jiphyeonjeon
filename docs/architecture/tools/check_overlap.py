@@ -15,6 +15,9 @@ def seg_rect_hit(seg, r, pad=2):
 def check(d):
     issues = []
     boxes = [(p["x"], p["y"], p["w"], p["h"], nid) for nid, p in d.pos.items()]
+    lg = getattr(d, "legend", None)
+    if lg:
+        boxes.append((lg[0], lg[1], lg[2], lg[3], "범례"))
     for seg in d.segs:
         for x, y, w, h, nid in boxes:
             if seg_rect_hit(seg, (x, y, w, h)):

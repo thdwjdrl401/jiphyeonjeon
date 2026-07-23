@@ -3,11 +3,14 @@
 <style>text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif}</style>
 <rect width="100%" height="100%" fill="#FFFFFF"/>
 <rect x="40" y="150" width="600" height="290" rx="4" fill="#F5F8FA" stroke="#C6D2DB" stroke-width="1" stroke-dasharray="4 4"/>
-<text x="54" y="171" font-size="11" fill="#7C8B99" letter-spacing="1.4">앱 플레인 · SPRING BOOT</text>
+<rect x="54" y="160" width="4" height="15" rx="1" fill="#8FA3B4"/>
+<text x="66" y="173" font-size="13" font-weight="700" fill="#3F5162" letter-spacing="1.6">앱 플레인 · SPRING BOOT</text>
 <rect x="680" y="150" width="500" height="290" rx="4" fill="#F5F8FA" stroke="#C6D2DB" stroke-width="1" stroke-dasharray="4 4"/>
-<text x="694" y="171" font-size="11" fill="#7C8B99" letter-spacing="1.4">미디어 플레인 · LIVEKIT SELF-HOST</text>
+<rect x="694" y="160" width="4" height="15" rx="1" fill="#8FA3B4"/>
+<text x="706" y="173" font-size="13" font-weight="700" fill="#3F5162" letter-spacing="1.6">미디어 플레인 · LIVEKIT SELF-HOST</text>
 <rect x="40" y="500" width="1140" height="180" rx="4" fill="#F5F8FA" stroke="#C6D2DB" stroke-width="1" stroke-dasharray="4 4"/>
-<text x="54" y="521" font-size="11" fill="#7C8B99" letter-spacing="1.4">AI 플레인 · PYTHON</text>
+<rect x="54" y="510" width="4" height="15" rx="1" fill="#8FA3B4"/>
+<text x="66" y="523" font-size="13" font-weight="700" fill="#3F5162" letter-spacing="1.6">AI 플레인 · PYTHON</text>
 <path d="M560,92 V168 H185 V190" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
 <path d="M185,190 l-5,-9 l10,0 z" fill="#5A6C7B"/>
 <path d="M660,92 V168 H825 V190" fill="none" stroke="#D9342B" stroke-width="2"/>
