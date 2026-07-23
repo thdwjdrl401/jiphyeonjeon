@@ -1,5 +1,6 @@
 import type { AuthUser } from '@/features/auth/types'
 import { ApiError, apiClient } from '@/shared/api/client'
+import { notImplemented } from '@/shared/api/notImplemented'
 import type { ProfileService } from './profileService.interface'
 import { getProfileImageValidationError } from './profileValidation'
 
@@ -9,14 +10,6 @@ interface AssetUploadTicket {
   method: string
   headers: Record<string, string>
   expiresAt: string
-}
-
-function unavailable(): never {
-  throw new ApiError(
-    '이 기능의 실제 API가 아직 연결되지 않았습니다.',
-    501,
-    'PROFILE_HTTP_ADAPTER_UNAVAILABLE',
-  )
 }
 
 export const httpProfileService = {
@@ -49,16 +42,18 @@ export const httpProfileService = {
     const { data } = await apiClient.put<AuthUser>('/me/profile-image', { assetId: ticket.assetId })
     return data
   },
+  // 강사 공개 프로필·비밀번호 변경·탈퇴는 서버에 경로가 없다. 코드는 공용 미구현 표시로 통일한다 —
+  // 화면이 feature마다 다른 코드를 알 필요가 없다.
   async getInstructorProfile() {
-    return unavailable()
+    return notImplemented('GET /me/instructor-profile')
   },
   async updateInstructorProfile() {
-    return unavailable()
+    return notImplemented('PUT /me/instructor-profile')
   },
   async changePassword() {
-    return unavailable()
+    return notImplemented('PUT /me/password')
   },
   async withdrawAccount() {
-    return unavailable()
+    return notImplemented('DELETE /me')
   },
 } satisfies ProfileService
