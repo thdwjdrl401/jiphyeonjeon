@@ -1,36 +1,35 @@
 <title>LiveClass AI — 기획 발표용 아키텍처</title>
 <style>
-  :root{--bg:#F2F4F6;--card:#FFFFFF;--ink:#0F1B2A;--soft:#4A5A6B;--faint:#7C8B99;--rule:#DCE3E8;--accent:#1D4E6F}
-  @media (prefers-color-scheme:dark){:root{--bg:#0C1218;--card:#FFFFFF;--ink:#E4EBF1;--soft:#9DAEBC;--faint:#71828F;--rule:#1F2B36;--accent:#6FB2D8}}
-  :root[data-theme="dark"]{--bg:#0C1218;--card:#FFFFFF;--ink:#E4EBF1;--soft:#9DAEBC;--faint:#71828F;--rule:#1F2B36;--accent:#6FB2D8}
-  :root[data-theme="light"]{--bg:#F2F4F6;--card:#FFFFFF;--ink:#0F1B2A;--soft:#4A5A6B;--faint:#7C8B99;--rule:#DCE3E8;--accent:#1D4E6F}
+  :root{--bg:#F2F4F6;--ink:#0F1B2A;--soft:#4A5A6B;--faint:#7C8B99;--rule:#DCE3E8}
+  @media (prefers-color-scheme:dark){:root{--bg:#0C1218;--ink:#E4EBF1;--soft:#9DAEBC;--faint:#71828F;--rule:#1F2B36}}
+  :root[data-theme="dark"]{--bg:#0C1218;--ink:#E4EBF1;--soft:#9DAEBC;--faint:#71828F;--rule:#1F2B36}
+  :root[data-theme="light"]{--bg:#F2F4F6;--ink:#0F1B2A;--soft:#4A5A6B;--faint:#7C8B99;--rule:#DCE3E8}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);line-height:1.6;
        font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif}
-  .wrap{max-width:74rem;margin:0 auto;padding:0 1.5rem 5rem}
+  .wrap{max-width:76rem;margin:0 auto;padding:0 1.5rem 5rem}
   header{padding:3.5rem 0 1.75rem;border-bottom:2px solid var(--ink);display:flex;flex-direction:column;gap:.85rem}
   .eb{font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:var(--faint)}
   h1{margin:0;font-size:clamp(1.9rem,4.6vw,2.9rem);letter-spacing:-.03em;line-height:1.05;font-weight:700;text-wrap:balance}
-  header p{margin:0;max-width:58ch;color:var(--soft)}
+  header p{margin:0;max-width:60ch;color:var(--soft)}
   .legend{display:flex;flex-wrap:wrap;gap:.5rem 1.4rem;margin-top:.4rem;font-size:.8rem;color:var(--soft)}
   .legend span{display:inline-flex;align-items:center;gap:.45rem}
   .sw{width:.85rem;height:.85rem;border-radius:2px;border:1.6px solid}
-  .plate{margin:2.25rem 0 0;background:var(--card);border:1px solid var(--rule);border-radius:2px;overflow:hidden;
-         box-shadow:0 1px 2px rgba(15,27,42,.05)}
+  .grp{margin:3rem 0 .25rem;font-size:.76rem;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);font-weight:600}
+  .plate{margin:1.1rem 0 0;background:#FFFFFF;border:1px solid var(--rule);border-radius:2px;overflow:hidden;box-shadow:0 1px 2px rgba(15,27,42,.05)}
   .ph{padding:1.2rem 1.4rem .95rem;border-bottom:1px solid #EDF1F4;display:grid;grid-template-columns:auto 1fr;gap:.15rem .9rem;align-items:baseline}
-  .pn{grid-row:1/3;font-size:1.5rem;font-weight:700;color:var(--accent);letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+  .pn{grid-row:1/3;font-size:1.5rem;font-weight:700;color:#1D4E6F;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
   .ph h2{margin:0;font-size:1.22rem;letter-spacing:-.02em;font-weight:650;color:#0F1B2A}
   .ph p{margin:0;font-size:.86rem;color:#5A6C7B}
   .pc{padding:1.1rem;overflow-x:auto;background:#FFFFFF}
   .dg{display:block;width:100%;height:auto;min-width:640px}
-  footer{margin-top:3rem;padding-top:1.2rem;border-top:2px solid var(--ink);font-size:.75rem;color:var(--faint);
-         display:flex;flex-wrap:wrap;gap:.4rem 1.5rem;justify-content:space-between}
+  footer{margin-top:3rem;padding-top:1.2rem;border-top:2px solid var(--ink);font-size:.75rem;color:var(--faint);display:flex;flex-wrap:wrap;gap:.4rem 1.5rem;justify-content:space-between}
 </style>
 <div class="wrap">
   <header>
     <div class="eb">LiveClass AI · 기획 발표 · 2026-07-23</div>
     <h1>실시간 라이브 강의 플랫폼</h1>
-    <p>제품을 이야기 순서대로 열 장으로 나눴다. 필요한 장만 골라 슬라이드에 넣으면 된다.
+    <p>앞의 여덟 장이 제품 이야기 순서 그대로다. 뒤의 네 장은 기술 질문이 나올 때 꺼낸다.
        색은 진행 상태가 아니라 역할을 뜻한다.</p>
     <div class="legend">
       <span><i class="sw" style="background:#FFFFFF;border-color:#5A6C7B"></i>사용자</span>
@@ -41,6 +40,7 @@
       <span><i class="sw" style="background:#F1F4F6;border-color:#8C9AA6"></i>외부</span>
     </div>
   </header>
+  <h3 class="grp">제품 이야기 — 발표 본문</h3>
   <figure class="plate" id="00-overview">
     <div class="ph"><span class="pn">00</span><h2>전체 구조</h2><p>제품 전체를 한 장으로 — 첫 슬라이드</p></div>
     <div class="pc"><svg class="dg" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1102 390"  role="img">
@@ -424,6 +424,7 @@
 <text x="34" y="228.0" font-size="12" fill="#4A5A6B">이미 교정이 끝난 뒤라, 다시보기는 처음부터 자막·용어·질의응답이 모두 갖춰진 상태다.</text>
 </svg></div>
   </figure>
+  <h3 class="grp">기술 — 질문이 나오면 꺼내는 장</h3>
   <figure class="plate" id="08-data">
     <div class="ph"><span class="pn">08</span><h2>데이터가 놓이는 곳</h2><p>데이터를 어떻게 나눠 두었는가</p></div>
     <div class="pc"><svg class="dg" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1502 292"  role="img">
@@ -515,5 +516,104 @@
 <text x="34" y="252.0" font-size="12" fill="#4A5A6B">데이터베이스는 바깥으로 열려 있지 않다. 서버 안에서만 닿는다.</text>
 </svg></div>
   </figure>
-  <footer><span>LiveClass AI — 기획 발표용 아키텍처</span><span>정본: docs/ARCHITECTURE.md</span></footer>
+  <figure class="plate" id="10-backend-modules">
+    <div class="ph"><span class="pn">10</span><h2>백엔드 모듈 구조</h2><p>백엔드 안이 어떻게 나뉘어 있는가 — 유지보수 질문의 답</p></div>
+    <div class="pc"><svg class="dg" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1450 494"  role="img">
+<title>백엔드 모듈 구조</title>
+<style>text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif}</style>
+<rect width="100%" height="100%" fill="#FFFFFF"/>
+<path d="M216.0,299.0 H325.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M334.0,299.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M516.0,299.0 H625.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M634.0,299.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M816.0,287.7 H835.7 V233.0 H925.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M934.0,233.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M816.0,310.3 H894.7 V336.7 H925.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M934.0,336.7 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M1116.0,250.0 H1135.7 V238.7 H1225.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M1234.0,238.7 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M1116.0,348.0 H1214.3 V365.0 H1225.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M1234.0,365.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M60.0,265.0 V42.0 H855.3 V250.0 H925.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M934.0,250.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M86.0,265.0 V66.0 H914.3 V359.3 H925.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M934.0,359.3 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M112.0,265.0 V90.0 H1155.3 V261.3 H1225.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M1234.0,261.3 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M138.0,265.0 V114.0 H1175.0 V331.0 H1225.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M1234.0,331.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M464.0,265.0 V138.0 H875.0 V267.0 H925.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M934.0,267.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M790.0,265.0 V162.0 H1194.7 V354.0 H1225.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M1234.0,354.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<rect x="34.0" y="265.0" width="182.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="125.0" y="296.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">강의 탐색 · 관리</text>
+<text x="125.0" y="315.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">curriculum</text>
+<rect x="334.0" y="265.0" width="182.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="425.0" y="296.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">녹화</text>
+<text x="425.0" y="315.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">video</text>
+<rect x="634.0" y="265.0" width="182.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="725.0" y="296.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">라이브 세션 · 채팅</text>
+<text x="725.0" y="315.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">live</text>
+<rect x="934.0" y="216.0" width="182.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="1025.0" y="247.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">레슨 · 자료</text>
+<text x="1025.0" y="266.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">lesson</text>
+<rect x="934.0" y="314.0" width="182.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="1025.0" y="345.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">수강</text>
+<text x="1025.0" y="364.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">enrollment</text>
+<rect x="1234.0" y="216.0" width="182.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="1325.0" y="247.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">파일</text>
+<text x="1325.0" y="266.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">asset</text>
+<rect x="1234.0" y="314.0" width="182.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="1325.0" y="345.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">계정 · 세션</text>
+<text x="1325.0" y="364.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">auth</text>
+<line x1="34" y1="395.0" x2="1416.0" y2="395.0" stroke="#E3E9ED"/>
+<text x="34" y="414.0" font-size="12" fill="#4A5A6B">백엔드는 하나로 배포하지만 안에서는 모듈로 나뉜다. 화살표는 의존 방향이고, 왼쪽이 오른쪽을 쓴다.</text>
+<text x="34" y="434.0" font-size="12" fill="#4A5A6B">모듈끼리는 정해진 창구로만 대화한다 — 남의 내부 데이터를 직접 건드릴 수 없다.</text>
+<text x="34" y="454.0" font-size="12" fill="#4A5A6B">되돌아가는 의존(순환)은 금지다. 어기면 사람이 아니라 빌드가 먼저 막는다.</text>
+<text x="34" y="474.0" font-size="12" fill="#4A5A6B">덕분에 나중에 특정 모듈만 떼어 별도 서버로 옮길 수 있다.</text>
+</svg></div>
+  </figure>
+  <figure class="plate" id="11-request-path">
+    <div class="ph"><span class="pn">11</span><h2>한 요청이 지나는 길</h2><p>요청 하나가 어떤 검사를 거치는가</p></div>
+    <div class="pc"><svg class="dg" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1578 194"  role="img">
+<title>한 요청이 지나는 길</title>
+<style>text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif}</style>
+<rect width="100%" height="100%" fill="#FFFFFF"/>
+<path d="M224.0,68.0 H355.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M364.0,68.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M554.0,68.0 H685.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M694.0,68.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M884.0,68.0 H1015.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M1024.0,68.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M1214.0,68.0 H1345.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M1354.0,68.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<rect x="267.1" y="45.4" width="53.8" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="294.0" y="56.0" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">① 도착</text>
+<rect x="570.9" y="45.4" width="106.2" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="624.0" y="56.0" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">② 누구인지 확정</text>
+<rect x="912.4" y="45.4" width="83.2" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="954.0" y="56.0" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">③ 형식 통과</text>
+<rect x="1242.4" y="45.4" width="83.2" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="1284.0" y="56.0" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">④ 규칙 통과</text>
+<rect x="34.0" y="34.0" width="190.0" height="68.0" rx="3" fill="#FFFFFF" stroke="#5A6C7B" stroke-width="1.8"/>
+<text x="129.0" y="73.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">브라우저 요청</text>
+<rect x="364.0" y="34.0" width="190.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="459.0" y="65.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">로그인 확인</text>
+<text x="459.0" y="84.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">쿠키 · 세션</text>
+<rect x="694.0" y="34.0" width="190.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="789.0" y="65.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">입력 검증</text>
+<text x="789.0" y="84.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">형식 · 필수값</text>
+<rect x="1024.0" y="34.0" width="190.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="1119.0" y="65.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">업무 규칙</text>
+<text x="1119.0" y="84.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">권한 · 상태 · 정합성</text>
+<rect x="1354.0" y="34.0" width="190.0" height="68.0" rx="3" fill="#F8EFDD" stroke="#A96F16" stroke-width="1.8"/>
+<text x="1449.0" y="73.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">저장소</text>
+<line x1="34" y1="115.0" x2="1544.0" y2="115.0" stroke="#E3E9ED"/>
+<text x="34" y="134.0" font-size="12" fill="#4A5A6B">권한 판정은 항상 업무 규칙 층에서 한다 — 화면이나 입력 단계에서 막는 것에 기대지 않는다.</text>
+<text x="34" y="154.0" font-size="12" fill="#4A5A6B">동시에 같은 것을 고치면 뒤늦은 요청을 덮어쓰지 않고 되돌린 뒤 알려 준다.</text>
+<text x="34" y="174.0" font-size="12" fill="#4A5A6B">실패는 화면이 이해할 수 있는 형태로 통일해 내려간다.</text>
+</svg></div>
+  </figure>
+  <footer><span>LiveClass AI — 기획 발표용 아키텍처</span><span>정본: docs/ARCHITECTURE.md · 생성: tools/build_deck.py</span></footer>
 </div>

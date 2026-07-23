@@ -1,0 +1,940 @@
+<title>LiveClass AI — 아키텍처 다이어그램 세트</title>
+
+<style>
+  :root {
+    --ground:      #F4F6F8;
+    --surface:     #FFFFFF;
+    --surface-2:   #EAEEF2;
+    --ink:         #0F1B2A;
+    --ink-soft:    #4A5A6B;
+    --ink-faint:   #7C8B99;
+    --rule:        #D5DDE4;
+    --rule-soft:   #E4EAEF;
+    --accent:      #1D4E6F;
+    --tally:       #D9342B;
+
+    --n-built:     #2C7A5B;
+    --n-built-bg:  #E4F2EB;
+    --n-plan:      #94A3AF;
+    --n-plan-bg:   #EDF1F4;
+    --n-key:       #1D4E6F;
+    --n-key-bg:    #E1EDF4;
+    --n-data:      #A96F16;
+    --n-data-bg:   #F8EFDD;
+
+    --zone:        #EDF1F4;
+    --zone-line:   #C3CFD9;
+    --edge:        #5A6C7B;
+    --edge-soft:   #9DAAB6;
+
+    --font-display: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans KR", sans-serif;
+    --font-body: ui-serif, Georgia, "Times New Roman", "Noto Serif KR", serif;
+    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #0D141C; --surface: #131D27; --surface-2: #1A2632;
+      --ink: #E1E9F0; --ink-soft: #9DAEBC; --ink-faint: #6B7C8B;
+      --rule: #24323F; --rule-soft: #1B2733; --accent: #6FB2D8; --tally: #F2564C;
+      --n-built: #4FAE83; --n-built-bg: #153024;
+      --n-plan: #6B7C8B; --n-plan-bg: #1A242D;
+      --n-key: #6FB2D8; --n-key-bg: #15303F;
+      --n-data: #D9A44F; --n-data-bg: #2C2214;
+      --zone: #172129; --zone-line: #2B3A47;
+      --edge: #8899A6; --edge-soft: #56656F;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #0D141C; --surface: #131D27; --surface-2: #1A2632;
+    --ink: #E1E9F0; --ink-soft: #9DAEBC; --ink-faint: #6B7C8B;
+    --rule: #24323F; --rule-soft: #1B2733; --accent: #6FB2D8; --tally: #F2564C;
+    --n-built: #4FAE83; --n-built-bg: #153024;
+    --n-plan: #6B7C8B; --n-plan-bg: #1A242D;
+    --n-key: #6FB2D8; --n-key-bg: #15303F;
+    --n-data: #D9A44F; --n-data-bg: #2C2214;
+    --zone: #172129; --zone-line: #2B3A47;
+    --edge: #8899A6; --edge-soft: #56656F;
+  }
+
+  :root[data-theme="light"] {
+    --ground: #F4F6F8; --surface: #FFFFFF; --surface-2: #EAEEF2;
+    --ink: #0F1B2A; --ink-soft: #4A5A6B; --ink-faint: #7C8B99;
+    --rule: #D5DDE4; --rule-soft: #E4EAEF; --accent: #1D4E6F; --tally: #D9342B;
+    --n-built: #2C7A5B; --n-built-bg: #E4F2EB;
+    --n-plan: #94A3AF; --n-plan-bg: #EDF1F4;
+    --n-key: #1D4E6F; --n-key-bg: #E1EDF4;
+    --n-data: #A96F16; --n-data-bg: #F8EFDD;
+    --zone: #EDF1F4; --zone-line: #C3CFD9;
+    --edge: #5A6C7B; --edge-soft: #9DAAB6;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--font-body);
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .sheet { max-width: 68rem; margin: 0 auto; padding: 0 1.5rem 6rem; }
+
+  /* ---------- head ---------- */
+
+  .head {
+    padding: 3.5rem 0 2rem;
+    border-bottom: 2px solid var(--ink);
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  h1 {
+    font-family: var(--font-display);
+    font-size: clamp(2rem, 5vw, 3rem);
+    line-height: 1.02;
+    letter-spacing: -0.032em;
+    font-weight: 700;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .head p { margin: 0; max-width: 60ch; color: var(--ink-soft); font-size: 1.02rem; }
+
+  /* ---------- picker ---------- */
+
+  .picker {
+    margin-top: 2.5rem;
+    border: 1px solid var(--rule);
+    background: var(--surface);
+  }
+
+  .picker-head {
+    padding: 0.9rem 1.1rem;
+    border-bottom: 1px solid var(--rule);
+    font-family: var(--font-display);
+    font-weight: 650;
+    font-size: 0.92rem;
+    letter-spacing: 0.01em;
+  }
+
+  .scroll { overflow-x: auto; }
+
+  table { width: 100%; border-collapse: collapse; font-family: var(--font-display); font-size: 0.85rem; }
+  thead th {
+    text-align: left;
+    font-size: 0.68rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-weight: 600;
+    padding: 0.7rem 1.1rem;
+    border-bottom: 1px solid var(--rule);
+    white-space: nowrap;
+  }
+  tbody td { padding: 0.7rem 1.1rem; border-bottom: 1px solid var(--rule-soft); color: var(--ink-soft); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody td:first-child { white-space: nowrap; }
+  tbody a { color: var(--ink); font-weight: 650; text-decoration: none; border-bottom: 1.5px solid var(--accent); }
+  tbody a:hover { color: var(--accent); }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+  .tag {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.06em;
+    padding: 0.12em 0.45em;
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    color: var(--ink-faint);
+    background: var(--surface-2);
+  }
+
+  /* ---------- plates ---------- */
+
+  .plate {
+    margin: 3.5rem 0 0;
+    border: 1px solid var(--rule);
+    background: var(--surface);
+    scroll-margin-top: 1rem;
+  }
+
+  .plate-head {
+    padding: 1.3rem 1.4rem 1.1rem;
+    border-bottom: 1px solid var(--rule);
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+  }
+
+  .plate-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  .plate-meta .n { color: var(--accent); font-weight: 600; }
+
+  .plate h2 {
+    font-family: var(--font-display);
+    font-size: clamp(1.25rem, 2.6vw, 1.6rem);
+    letter-spacing: -0.022em;
+    font-weight: 650;
+    line-height: 1.2;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .plate-use {
+    font-size: 0.9rem;
+    color: var(--ink-soft);
+    max-width: 70ch;
+    margin: 0;
+  }
+  .plate-use b { color: var(--ink); font-family: var(--font-display); font-weight: 650; font-size: 0.85rem; }
+
+  .canvas { padding: 1.6rem 1.2rem; overflow-x: auto; }
+  .canvas svg { display: block; width: 100%; min-width: 680px; height: auto; }
+
+  .plate-foot {
+    padding: 0.9rem 1.4rem 1.1rem;
+    border-top: 1px solid var(--rule-soft);
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--ink-faint);
+    line-height: 1.7;
+  }
+
+  /* ---------- svg language ---------- */
+
+  svg text { font-family: var(--font-display); }
+
+  .box     { fill: var(--surface); stroke: var(--zone-line); stroke-width: 1.5; }
+  .box.on  { fill: var(--n-built-bg); stroke: var(--n-built); }
+  .box.off { fill: var(--n-plan-bg);  stroke: var(--n-plan); stroke-dasharray: 5 4; }
+  .box.key { fill: var(--n-key-bg);   stroke: var(--n-key); stroke-width: 2; }
+  .box.dat { fill: var(--n-data-bg);  stroke: var(--n-data); }
+
+  .zone    { fill: var(--zone); stroke: var(--zone-line); stroke-width: 1; stroke-dasharray: 4 4; }
+  .zone.solid { stroke-dasharray: none; }
+
+  .t   { font-size: 14px; font-weight: 650; fill: var(--ink); }
+  .t.sm{ font-size: 12.5px; }
+  .ts  { font-size: 11px; fill: var(--ink-soft); font-family: var(--font-mono); }
+  .zl  { font-size: 11px; fill: var(--ink-faint); font-family: var(--font-mono); letter-spacing: 0.1em; }
+  .el  { font-size: 10.5px; fill: var(--ink-faint); font-family: var(--font-mono); }
+  .el.hot { fill: var(--tally); }
+  .num { font-size: 11px; font-weight: 700; fill: var(--surface); font-family: var(--font-mono); }
+
+  .edge      { stroke: var(--edge); stroke-width: 1.6; fill: none; }
+  .edge.off  { stroke: var(--edge-soft); stroke-dasharray: 5 4; }
+  .edge.hot  { stroke: var(--tally); stroke-width: 2; }
+  .head-a     { fill: var(--edge); }
+  .head-a.off { fill: var(--edge-soft); }
+  .head-a.hot { fill: var(--tally); }
+
+  .mid { text-anchor: middle; }
+  .end { text-anchor: end; }
+
+  footer {
+    margin-top: 4rem;
+    padding-top: 1.4rem;
+    border-top: 2px solid var(--ink);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--ink-faint);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.5rem;
+    justify-content: space-between;
+  }
+</style>
+
+<div class="sheet">
+
+  <header class="head">
+    <div class="eyebrow">LiveClass AI · 아키텍처 다이어그램 세트 · 2026-07-23</div>
+    <h1>같은 시스템, 일곱 개의 시선</h1>
+    <p>
+      하나의 그림으로 아키텍처를 다 설명할 수는 없다. <strong>스케일</strong>(얼마나 멀리서 보는가)과
+      <strong>관점</strong>(무엇을 설명하려는가)에 따라 필요한 그림이 다르다.
+      발표 흐름에 맞는 장을 골라 쓰면 된다.
+    </p>
+  </header>
+
+  <div class="picker">
+    <div class="picker-head">어떤 장을 쓸지 고르기</div>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>축</th><th>장</th><th>답하는 질문</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="tag">스케일 L0</span></td>
+            <td><a href="#p1">1. 시스템 컨텍스트</a></td>
+            <td>이 서비스는 누구를 위한 것이고, 밖으로 무엇에 기대는가</td>
+          </tr>
+          <tr>
+            <td><span class="tag">스케일 L1</span></td>
+            <td><a href="#p2">2. 컨테이너 구성</a></td>
+            <td>돌아가는 프로세스가 무엇무엇이고, 무엇이 이미 서 있는가</td>
+          </tr>
+          <tr>
+            <td><span class="tag">스케일 L2</span></td>
+            <td><a href="#p3">3. 백엔드 모듈</a></td>
+            <td>단일 배포 안에서 경계를 어떻게 그었는가</td>
+          </tr>
+          <tr>
+            <td><span class="tag">관점 · 배포</span></td>
+            <td><a href="#p4">4. 물리 배치</a></td>
+            <td>서버 한 대에 어떻게 얹었고 무엇을 열어 뒀는가</td>
+          </tr>
+          <tr>
+            <td><span class="tag">관점 · 런타임</span></td>
+            <td><a href="#p5">5. 라이브 자막 경로</a></td>
+            <td>말이 자막이 되어 학생 화면에 뜨기까지 무슨 일이 벌어지는가</td>
+          </tr>
+          <tr>
+            <td><span class="tag">관점 · 데이터</span></td>
+            <td><a href="#p6">6. 스키마 소유권</a></td>
+            <td>어느 서비스가 어느 테이블을 쓰는가, 왜 그렇게 나눴는가</td>
+          </tr>
+          <tr>
+            <td><span class="tag">관점 · 보안</span></td>
+            <td><a href="#p7">7. 신뢰 경계</a></td>
+            <td>브라우저가 자원에 닿기까지 무엇을 통과해야 하는가</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ================= 1. L0 컨텍스트 ================= -->
+  <figure class="plate" id="p1">
+    <div class="plate-head">
+      <div class="plate-meta"><span class="n">01</span><span>스케일 L0 · 시스템 컨텍스트</span></div>
+      <h2>바깥에서 본 LiveClass AI</h2>
+      <p class="plate-use"><b>이럴 때</b> 발표 첫 장. 제품이 무엇이고 경계가 어디까지인지 한 번에 보여줄 때. 내부 구조는 일부러 감춘다.</p>
+    </div>
+    <div class="canvas">
+      <svg viewBox="0 0 960 320" role="img" aria-label="시스템 컨텍스트 다이어그램">
+        <!-- actors -->
+        <rect class="box" x="30" y="70" width="160" height="60" rx="3"/>
+        <text class="t mid" x="110" y="95">강사</text>
+        <text class="ts mid" x="110" y="114">강의 개설 · 라이브 송출</text>
+
+        <rect class="box" x="30" y="190" width="160" height="60" rx="3"/>
+        <text class="t mid" x="110" y="215">학생</text>
+        <text class="ts mid" x="110" y="234">수강 · 시청 · 질문</text>
+
+        <!-- system -->
+        <rect class="box key" x="330" y="60" width="300" height="200" rx="4"/>
+        <text class="t mid" x="480" y="105" style="font-size:17px">LiveClass AI</text>
+        <text class="ts mid" x="480" y="132">실시간 라이브 강의 플랫폼</text>
+        <line x1="360" y1="152" x2="600" y2="152" stroke="var(--zone-line)" stroke-width="1"/>
+        <text class="ts mid" x="480" y="176" style="fill:var(--ink)">라이브 화상 · 채팅</text>
+        <text class="ts mid" x="480" y="200" style="fill:var(--ink)">실시간 자막 · 용어 · 근거 RAG</text>
+        <text class="ts mid" x="480" y="224" style="fill:var(--ink)">녹화 다시보기</text>
+
+        <!-- external -->
+        <rect class="box off" x="770" y="70" width="160" height="60" rx="3"/>
+        <text class="t mid sm" x="850" y="95">외부 AI API</text>
+        <text class="ts mid" x="850" y="114">STT · 임베딩 · LLM</text>
+
+        <rect class="box" x="770" y="190" width="160" height="60" rx="3"/>
+        <text class="t mid sm" x="850" y="215">부트캠프 EC2</text>
+        <text class="ts mid" x="850" y="234">단일 노드 · 자체 호스팅</text>
+
+        <!-- edges -->
+        <path class="edge" d="M190,100 H322"/>
+        <path class="head-a" d="M330,100 l-8,-4.5 l0,9 z"/>
+        <text class="el mid" x="256" y="92">강의·라이브</text>
+
+        <path class="edge" d="M190,220 H322"/>
+        <path class="head-a" d="M330,220 l-8,-4.5 l0,9 z"/>
+        <text class="el mid" x="256" y="212">수강·질문</text>
+
+        <path class="edge off" d="M630,100 H762"/>
+        <path class="head-a off" d="M770,100 l-8,-4.5 l0,9 z"/>
+        <text class="el mid" x="696" y="92">CP2~CP3</text>
+
+        <path class="edge" d="M630,220 H762"/>
+        <path class="head-a" d="M770,220 l-8,-4.5 l0,9 z"/>
+        <text class="el mid" x="696" y="212">전부 자체 호스팅</text>
+      </svg>
+    </div>
+    <figcaption class="plate-foot">
+      바깥으로 나가는 의존은 둘뿐이다 — 모델 API(CP2부터)와 서버 한 대.
+      미디어 서버도 SaaS가 아니라 직접 띄운다.
+    </figcaption>
+  </figure>
+
+  <!-- ================= 2. L1 컨테이너 ================= -->
+  <figure class="plate" id="p2">
+    <div class="plate-head">
+      <div class="plate-meta"><span class="n">02</span><span>스케일 L1 · 컨테이너 구성</span></div>
+      <h2>세 개의 플레인으로 나눈 실행 단위</h2>
+      <p class="plate-use"><b>이럴 때</b> 기술 스택과 진척을 함께 보여줄 때. 초록이 이미 도는 것, 회색 점선이 CP2~CP3에 붙을 것이다. 브라우저에서 미디어·스토리지로 바로 가는 선이 이 그림의 핵심이다.</p>
+    </div>
+    <div class="canvas">
+      <svg viewBox="0 0 960 660" role="img" aria-label="컨테이너 구성 다이어그램">
+        <!-- FE -->
+        <rect class="box on" x="355" y="40" width="250" height="48" rx="3"/>
+        <text class="t mid" x="480" y="60">React 19 · TypeScript</text>
+        <text class="ts mid" x="480" y="78">브라우저</text>
+
+        <!-- zone: app -->
+        <rect class="zone" x="30" y="130" width="430" height="230" rx="4"/>
+        <text class="zl" x="42" y="148">앱 플레인 — SPRING BOOT 4.1</text>
+        <rect class="box on" x="55" y="165" width="380" height="70" rx="3"/>
+        <text class="t mid" x="245" y="192">core-api</text>
+        <text class="ts mid" x="245" y="212">인증 · 커리큘럼 · 수강 · 라이브 · 채팅 · 자산</text>
+        <rect class="box dat" x="55" y="255" width="180" height="44" rx="3"/>
+        <text class="t mid sm" x="145" y="273">PostgreSQL 16</text>
+        <text class="ts mid" x="145" y="290">+ pgvector</text>
+        <rect class="box dat" x="255" y="255" width="180" height="44" rx="3"/>
+        <text class="t mid sm" x="345" y="273">Redis 7</text>
+        <text class="ts mid" x="345" y="290">session · cache</text>
+        <rect class="box off" x="55" y="315" width="380" height="36" rx="3"/>
+        <text class="t mid sm" x="245" y="338">RabbitMQ — 인프라만 기동, 배선은 CP3</text>
+
+        <!-- zone: media -->
+        <rect class="zone" x="500" y="130" width="430" height="230" rx="4"/>
+        <text class="zl" x="512" y="148">미디어 플레인 — LIVEKIT SELF-HOST</text>
+        <rect class="box on" x="525" y="165" width="180" height="60" rx="3"/>
+        <text class="t mid sm" x="615" y="190">LiveKit SFU</text>
+        <text class="ts mid" x="615" y="209">WebRTC 라이브</text>
+        <rect class="box on" x="525" y="255" width="180" height="44" rx="3"/>
+        <text class="t mid sm" x="615" y="273">Egress</text>
+        <text class="ts mid" x="615" y="290">녹화 → HLS</text>
+        <rect class="box dat" x="735" y="240" width="170" height="60" rx="3"/>
+        <text class="t mid sm" x="820" y="265">MinIO / S3</text>
+        <text class="ts mid" x="820" y="284">오브젝트 스토리지</text>
+
+        <!-- zone: ai -->
+        <rect class="zone" x="30" y="420" width="900" height="180" rx="4"/>
+        <text class="zl" x="42" y="438">AI 플레인 — PYTHON · CP2~CP3</text>
+        <rect class="box off" x="60" y="460" width="190" height="50" rx="3"/>
+        <text class="t mid sm" x="155" y="481">realtime-agent</text>
+        <text class="ts mid" x="155" y="498">라이브 STT</text>
+        <rect class="box off" x="280" y="460" width="190" height="50" rx="3"/>
+        <text class="t mid sm" x="375" y="481">ai-api</text>
+        <text class="ts mid" x="375" y="498">RAG · SSE</text>
+        <rect class="box off" x="500" y="460" width="190" height="50" rx="3"/>
+        <text class="t mid sm" x="595" y="481">ai-worker</text>
+        <text class="ts mid" x="595" y="498">chunk · embed</text>
+        <rect class="box off" x="720" y="460" width="190" height="50" rx="3"/>
+        <text class="t mid sm" x="815" y="481">model gateway</text>
+        <text class="ts mid" x="815" y="498">외부 모델 API</text>
+
+        <!-- FE edges -->
+        <path class="edge" d="M420,88 V145 H245 V157"/>
+        <path class="head-a" d="M245,165 l-4.5,-8 l9,0 z"/>
+        <text class="el" x="252" y="120">REST · WS(STOMP)</text>
+
+        <path class="edge" d="M540,88 V145 H615 V157"/>
+        <path class="head-a" d="M615,165 l-4.5,-8 l9,0 z"/>
+        <text class="el" x="624" y="120">WebRTC</text>
+
+        <path class="edge" d="M605,64 H940 V270 H913"/>
+        <path class="head-a" d="M905,270 l8,-4.5 l0,9 z"/>
+        <text class="el end" x="934" y="180">presigned PUT</text>
+        <text class="el end" x="934" y="194">(자료 업로드)</text>
+
+        <!-- app internal -->
+        <path class="edge" d="M145,235 V247"/>
+        <path class="head-a" d="M145,255 l-4.5,-8 l9,0 z"/>
+        <path class="edge" d="M345,235 V247"/>
+        <path class="head-a" d="M345,255 l-4.5,-8 l9,0 z"/>
+        <path class="edge off" d="M245,235 V307"/>
+        <path class="head-a off" d="M245,315 l-4.5,-8 l9,0 z"/>
+
+        <!-- app -> media -->
+        <path class="edge" d="M435,190 H517"/>
+        <path class="head-a" d="M525,190 l-8,-4.5 l0,9 z"/>
+        <text class="el mid" x="476" y="182">토큰</text>
+        <text class="el mid" x="476" y="168">Egress 제어</text>
+
+        <!-- media internal -->
+        <path class="edge" d="M615,225 V247"/>
+        <path class="head-a" d="M615,255 l-4.5,-8 l9,0 z"/>
+        <path class="edge" d="M705,277 H727"/>
+        <path class="head-a" d="M735,277 l-8,-4.5 l0,9 z"/>
+
+        <!-- ai edges -->
+        <path class="edge off" d="M705,195 H720 V405 H110 V452"/>
+        <path class="head-a off" d="M110,460 l-4.5,-8 l9,0 z"/>
+        <text class="el" x="726" y="380">강사 오디오</text>
+
+        <path class="edge off" d="M200,460 V390 H345 V307"/>
+        <path class="head-a off" d="M345,299 l-4.5,8 l9,0 z"/>
+        <text class="el" x="352" y="384">caption 스트림</text>
+
+        <path class="edge off" d="M375,460 V372 H145 V307"/>
+        <path class="head-a off" d="M145,299 l-4.5,8 l9,0 z"/>
+        <text class="el" x="152" y="366">RAG 검색</text>
+
+        <path class="edge off" d="M55,190 H40 V485 H272"/>
+        <path class="head-a off" d="M280,485 l-8,-4.5 l0,9 z"/>
+        <text class="el" x="46" y="330">internal</text>
+
+        <path class="edge off" d="M435,333 H545 V452"/>
+        <path class="head-a off" d="M545,460 l-4.5,-8 l9,0 z"/>
+        <path class="edge off" d="M640,460 V398 H420 V359"/>
+        <path class="head-a off" d="M420,351 l-4.5,8 l9,0 z"/>
+        <text class="el" x="648" y="424">완료 이벤트</text>
+
+        <path class="edge off" d="M690,485 H712"/>
+        <path class="head-a off" d="M720,485 l-8,-4.5 l0,9 z"/>
+        <path class="edge off" d="M375,510 V535 H800 V518"/>
+        <path class="head-a off" d="M800,510 l-4.5,8 l9,0 z"/>
+      </svg>
+    </div>
+    <figcaption class="plate-foot">
+      초록 = 구현 완료 · 회색 점선 = CP2~CP3 예정 · 주황 = 상태 저장소<br>
+      브라우저에서 SFU와 스토리지로 직접 가는 선이 "미디어 바이트는 Spring을 통과하지 않는다"는 원칙 4다.
+    </figcaption>
+  </figure>
+
+  <!-- ================= 3. L2 모듈 ================= -->
+  <figure class="plate" id="p3">
+    <div class="plate-head">
+      <div class="plate-meta"><span class="n">03</span><span>스케일 L2 · 백엔드 모듈</span></div>
+      <h2>단일 배포 안에 그어 둔 열 개의 경계</h2>
+      <p class="plate-use"><b>이럴 때</b> "모놀리스인데 왜 관리가 되느냐"는 질문에 답할 때. 화살표는 의존 방향이고, 역방향과 순환은 <span class="tag">ModularityTests</span>가 빌드에서 막는다.</p>
+    </div>
+    <div class="canvas">
+      <svg viewBox="0 0 960 560" role="img" aria-label="백엔드 모듈 의존 그래프">
+        <text class="zl" x="30" y="30">의존 방향 ↓ · 위가 소비자, 아래가 공급자</text>
+
+        <rect class="box key" x="380" y="45" width="200" height="54" rx="3"/>
+        <text class="t mid" x="480" y="68">curriculum</text>
+        <text class="ts mid" x="480" y="86">카탈로그 · 구조 · 발행</text>
+
+        <rect class="box on" x="300" y="155" width="180" height="54" rx="3"/>
+        <text class="t mid sm" x="390" y="178">video</text>
+        <text class="ts mid" x="390" y="196">Egress · 녹화물</text>
+        <rect class="box on" x="540" y="155" width="180" height="54" rx="3"/>
+        <text class="t mid sm" x="630" y="178">live</text>
+        <text class="ts mid" x="630" y="196">세션 · 토큰 · 채팅</text>
+
+        <rect class="box on" x="300" y="265" width="180" height="54" rx="3"/>
+        <text class="t mid sm" x="390" y="288">lesson</text>
+        <text class="ts mid" x="390" y="306">레슨 · 자료</text>
+        <rect class="box on" x="540" y="265" width="180" height="54" rx="3"/>
+        <text class="t mid sm" x="630" y="288">enrollment</text>
+        <text class="ts mid" x="630" y="306">수강 · 로스터</text>
+
+        <rect class="box on" x="300" y="375" width="180" height="54" rx="3"/>
+        <text class="t mid sm" x="390" y="398">asset</text>
+        <text class="ts mid" x="390" y="416">presigned 업로드</text>
+        <rect class="box on" x="540" y="375" width="180" height="54" rx="3"/>
+        <text class="t mid sm" x="630" y="398">auth</text>
+        <text class="ts mid" x="630" y="416">계정 · 세션</text>
+
+        <!-- side -->
+        <rect class="box off" x="785" y="155" width="145" height="50" rx="3"/>
+        <text class="t mid sm" x="857" y="176">learning</text>
+        <text class="ts mid" x="857" y="193">배선 없음</text>
+        <rect class="box off" x="785" y="240" width="145" height="50" rx="3"/>
+        <text class="t mid sm" x="857" y="261">aiintegration</text>
+        <text class="ts mid" x="857" y="278">배선 없음</text>
+        <rect class="box" x="785" y="375" width="145" height="50" rx="3"/>
+        <text class="t mid sm" x="857" y="396">common</text>
+        <text class="ts mid" x="857" y="413">공용 · 무의존</text>
+
+        <!-- curriculum edges -->
+        <path class="edge" d="M440,99 V127 H390 V147"/>
+        <path class="head-a" d="M390,155 l-4.5,-8 l9,0 z"/>
+        <path class="edge" d="M480,99 V122 H250 V292 H292"/>
+        <path class="head-a" d="M300,292 l-8,-4.5 l0,9 z"/>
+        <path class="edge" d="M520,99 V122 H762 V292 H728"/>
+        <path class="head-a" d="M720,292 l8,-4.5 l0,9 z"/>
+        <path class="edge" d="M462,99 V110 H232 V402 H292"/>
+        <path class="head-a" d="M300,402 l-8,-4.5 l0,9 z"/>
+        <path class="edge" d="M540,99 V110 H748 V402 H728"/>
+        <path class="head-a" d="M720,402 l8,-4.5 l0,9 z"/>
+
+        <!-- video / live -->
+        <path class="edge" d="M480,182 H532"/>
+        <path class="head-a" d="M540,182 l-8,-4.5 l0,9 z"/>
+        <path class="edge" d="M360,209 V257"/>
+        <path class="head-a" d="M360,265 l-4.5,-8 l9,0 z"/>
+        <path class="edge" d="M580,209 V237 H420 V257"/>
+        <path class="head-a" d="M420,265 l-4.5,-8 l9,0 z"/>
+        <path class="edge" d="M660,209 V257"/>
+        <path class="head-a" d="M660,265 l-4.5,-8 l9,0 z"/>
+        <path class="edge" d="M720,180 H736 V352 H660 V367"/>
+        <path class="head-a" d="M660,375 l-4.5,-8 l9,0 z"/>
+
+        <!-- lesson / enrollment -->
+        <path class="edge" d="M360,319 V367"/>
+        <path class="head-a" d="M360,375 l-4.5,-8 l9,0 z"/>
+        <path class="edge" d="M630,319 V367"/>
+        <path class="head-a" d="M630,375 l-4.5,-8 l9,0 z"/>
+
+        <!-- rule note -->
+        <text class="zl" x="30" y="480">규칙</text>
+        <text class="ts" x="30" y="503">· 접근은 &lt;module&gt;.api 공개면으로만 — 남의 domain·repository 직접 호출 금지</text>
+        <text class="ts" x="30" y="523">· 순환 금지. 열 개 중 .api 를 가진 건 여섯 개, curriculum 은 유입이 없어 포트가 없다</text>
+        <text class="ts" x="30" y="543">· live → curriculum 순환이 막혀 live_session.curriculum_id 를 비정규화했다 — 조인 없는 수강 검사</text>
+      </svg>
+    </div>
+    <figcaption class="plate-foot">
+      파랑 = 최상위 소비자 · 초록 = 배선된 모듈 · 회색 점선 = 스키마만 있고 배선 없는 스캐폴딩
+    </figcaption>
+  </figure>
+
+  <!-- ================= 4. 배포 뷰 ================= -->
+  <figure class="plate" id="p4">
+    <div class="plate-head">
+      <div class="plate-meta"><span class="n">04</span><span>관점 · 배포</span></div>
+      <h2>서버 한 대, 서로 간섭하지 않는 두 스택</h2>
+      <p class="plate-use"><b>이럴 때</b> 인프라·운영을 설명할 때. 도메인이 하나뿐이고 DNS 권한이 없다는 제약이 왜 포트 분리로 이어졌는지 보여준다.</p>
+    </div>
+    <div class="canvas">
+      <svg viewBox="0 0 960 540" role="img" aria-label="배포 토폴로지">
+        <!-- internet -->
+        <rect class="box" x="30" y="40" width="150" height="44" rx="22"/>
+        <text class="t mid sm" x="105" y="68">인터넷</text>
+
+        <!-- EC2 -->
+        <rect class="zone solid" x="250" y="30" width="680" height="470" rx="5"/>
+        <text class="zl" x="264" y="52">부트캠프 EC2 · UBUNTU 24.04 · 4 vCPU / 15 GB</text>
+
+        <!-- app stack -->
+        <rect class="zone" x="272" y="70" width="400" height="410" rx="4"/>
+        <text class="zl" x="286" y="90">앱 스택 — DOCKER-COMPOSE.PROD.YML</text>
+
+        <rect class="box on" x="296" y="106" width="352" height="60" rx="3"/>
+        <text class="t mid" x="472" y="130">nginx</text>
+        <text class="ts mid" x="472" y="149">TLS 종단 · SPA 서빙 · /api 프록시</text>
+
+        <rect class="box on" x="296" y="196" width="352" height="52" rx="3"/>
+        <text class="t mid sm" x="472" y="218">backend :8080</text>
+        <text class="ts mid" x="472" y="236">호스트 미노출</text>
+
+        <rect class="box dat" x="296" y="278" width="168" height="52" rx="3"/>
+        <text class="t mid sm" x="380" y="300">postgres</text>
+        <text class="ts mid" x="380" y="318">내부 전용</text>
+        <rect class="box dat" x="480" y="278" width="168" height="52" rx="3"/>
+        <text class="t mid sm" x="564" y="300">redis</text>
+        <text class="ts mid" x="564" y="318">내부 전용</text>
+
+        <rect class="box" x="296" y="360" width="352" height="46" rx="3"/>
+        <text class="t mid sm" x="472" y="380">certbot</text>
+        <text class="ts mid" x="472" y="397">인증서 발급 · 12시간 갱신 루프</text>
+
+        <!-- media stack -->
+        <rect class="zone" x="700" y="70" width="208" height="410" rx="4"/>
+        <text class="zl" x="712" y="90">미디어 스택</text>
+        <text class="zl" x="712" y="104">NETWORK_MODE: HOST</text>
+
+        <rect class="box on" x="718" y="120" width="172" height="52" rx="3"/>
+        <text class="t mid sm" x="804" y="142">nginx-livekit</text>
+        <text class="ts mid" x="804" y="160">시그널링 TLS</text>
+
+        <rect class="box on" x="718" y="196" width="172" height="52" rx="3"/>
+        <text class="t mid sm" x="804" y="218">livekit</text>
+        <text class="ts mid" x="804" y="236">SFU :7880</text>
+
+        <rect class="box on" x="718" y="272" width="172" height="52" rx="3"/>
+        <text class="t mid sm" x="804" y="294">egress</text>
+        <text class="ts mid" x="804" y="312">녹화 → HLS</text>
+
+        <rect class="box dat" x="718" y="348" width="172" height="52" rx="3"/>
+        <text class="t mid sm" x="804" y="370">minio</text>
+        <text class="ts mid" x="804" y="388">오브젝트</text>
+
+        <!-- ingress arrows -->
+        <path class="edge" d="M180,62 H262 V136 H288"/>
+        <path class="head-a" d="M296,136 l-8,-4.5 l0,9 z"/>
+        <text class="el" x="188" y="54">:443 · :80</text>
+
+        <path class="edge" d="M180,62 V440 H700 V152 H710"/>
+        <path class="head-a" d="M718,152 l-8,-4.5 l0,9 z"/>
+        <text class="el" x="188" y="434">:7443 시그널링</text>
+
+        <path class="edge hot" d="M180,62 V470 H690 V228 H710"/>
+        <path class="head-a hot" d="M718,228 l-8,-4.5 l0,9 z"/>
+        <text class="el hot" x="188" y="464">:7882/udp 미디어 · :7881/tcp fallback</text>
+
+        <!-- internal -->
+        <path class="edge" d="M472,166 V188"/>
+        <path class="head-a" d="M472,196 l-4.5,-8 l9,0 z"/>
+        <path class="edge" d="M380,248 V270"/>
+        <path class="head-a" d="M380,278 l-4.5,-8 l9,0 z"/>
+        <path class="edge" d="M564,248 V270"/>
+        <path class="head-a" d="M564,278 l-4.5,-8 l9,0 z"/>
+        <path class="edge" d="M804,172 V188"/>
+        <path class="head-a" d="M804,196 l-4.5,-8 l9,0 z"/>
+        <path class="edge" d="M804,324 V340"/>
+        <path class="head-a" d="M804,348 l-4.5,-8 l9,0 z"/>
+
+        <!-- cert share -->
+        <path class="edge off" d="M648,383 H676 V146 H710"/>
+        <path class="head-a off" d="M718,146 l-8,-4.5 l0,9 z"/>
+        <text class="el" x="560" y="428">인증서 볼륨 공유 (읽기 전용)</text>
+
+        <text class="ts" x="30" y="140">도메인이 하나뿐이고</text>
+        <text class="ts" x="30" y="160">DNS 콘솔 권한이 없어</text>
+        <text class="ts" x="30" y="180">서브도메인 대신</text>
+        <text class="ts" x="30" y="200">포트로 분리했다.</text>
+        <text class="ts" x="30" y="240">DB·Redis는 호스트</text>
+        <text class="ts" x="30" y="260">포트를 열지 않는다 —</text>
+        <text class="ts" x="30" y="280">도커 내부망 +</text>
+        <text class="ts" x="30" y="300">Security Group의</text>
+        <text class="ts" x="30" y="320">2중 차단.</text>
+      </svg>
+    </div>
+    <figcaption class="plate-foot">
+      두 스택은 라이프사이클이 분리돼 있다 — 앱을 재배포해도 라이브 세션이 끊기지 않는다.<br>
+      결합은 인증서 파일 하나뿐이고, 발급·갱신 소유권은 앱 스택에 있다.
+    </figcaption>
+  </figure>
+
+  <!-- ================= 5. 런타임 뷰 ================= -->
+  <figure class="plate" id="p5">
+    <div class="plate-head">
+      <div class="plate-meta"><span class="n">05</span><span>관점 · 런타임</span></div>
+      <h2>말이 자막이 되어 학생 화면에 뜨기까지</h2>
+      <p class="plate-use"><b>이럴 때</b> 제품의 핵심 기능을 기술적으로 설명할 때. 오른쪽 끝의 지평선이 "왜 라이브와 다시보기의 품질이 다른가"를 한 그림으로 답한다.</p>
+    </div>
+    <div class="canvas">
+      <svg viewBox="0 0 960 440" role="img" aria-label="라이브 자막 파이프라인">
+        <!-- pipeline -->
+        <rect class="box on" x="30" y="60" width="150" height="64" rx="3"/>
+        <text class="t mid sm" x="105" y="86">강사 오디오</text>
+        <text class="ts mid" x="105" y="105">WebRTC</text>
+
+        <rect class="box on" x="220" y="60" width="150" height="64" rx="3"/>
+        <text class="t mid sm" x="295" y="86">LiveKit SFU</text>
+        <text class="ts mid" x="295" y="105">방당 1회 분기</text>
+
+        <rect class="box off" x="410" y="60" width="150" height="64" rx="3"/>
+        <text class="t mid sm" x="485" y="86">realtime-agent</text>
+        <text class="ts mid" x="485" y="105">VAD · 스트리밍 STT</text>
+
+        <rect class="box off" x="600" y="60" width="150" height="64" rx="3"/>
+        <text class="t mid sm" x="675" y="86">Redis Stream</text>
+        <text class="ts mid" x="675" y="105">fast-path</text>
+
+        <rect class="box on" x="790" y="60" width="140" height="64" rx="3"/>
+        <text class="t mid sm" x="860" y="86">core-api</text>
+        <text class="ts mid" x="860" y="105">영속 + WS</text>
+
+        <path class="edge" d="M180,92 H212"/><path class="head-a" d="M220,92 l-8,-4.5 l0,9 z"/>
+        <path class="edge off" d="M370,92 H402"/><path class="head-a off" d="M410,92 l-8,-4.5 l0,9 z"/>
+        <path class="edge off" d="M560,92 H592"/><path class="head-a off" d="M600,92 l-8,-4.5 l0,9 z"/>
+        <path class="edge off" d="M750,92 H782"/><path class="head-a off" d="M790,92 l-8,-4.5 l0,9 z"/>
+
+        <!-- numbers -->
+        <circle cx="200" cy="92" r="9" fill="var(--edge)"/><text class="num mid" x="200" y="96">1</text>
+        <circle cx="390" cy="92" r="9" fill="var(--edge-soft)"/><text class="num mid" x="390" y="96">2</text>
+        <circle cx="580" cy="92" r="9" fill="var(--edge-soft)"/><text class="num mid" x="580" y="96">3</text>
+        <circle cx="770" cy="92" r="9" fill="var(--edge-soft)"/><text class="num mid" x="770" y="96">4</text>
+
+        <!-- horizon axis -->
+        <text class="zl" x="30" y="190">학생이 보는 화면 — 세션 시간축</text>
+
+        <rect x="30" y="210" width="900" height="88" rx="3" fill="var(--n-key-bg)" stroke="var(--zone-line)" stroke-width="1"/>
+        <rect x="600" y="211" width="270" height="86" fill="var(--n-data-bg)" opacity="0.75"/>
+        <line x1="600" y1="210" x2="600" y2="298" stroke="var(--n-data)" stroke-width="1.5" stroke-dasharray="5 4"/>
+        <line x1="885" y1="205" x2="885" y2="303" stroke="var(--tally)" stroke-width="2.5"/>
+        <circle cx="885" cy="205" r="5" fill="var(--tally)"/>
+
+        <text class="t sm" x="52" y="242" style="fill:var(--n-key)">확정 구간</text>
+        <text class="ts" x="52" y="262">교정된 자막 + 용어 카드 + 자료 근거</text>
+        <text class="ts" x="52" y="280">다시보기는 항상 이 영역이다</text>
+
+        <text class="t sm" x="618" y="242" style="fill:var(--n-data)">지평선</text>
+        <text class="ts" x="618" y="262">2-pass 교정 진행 중</text>
+
+        <text class="el hot end" x="875" y="242">지금</text>
+        <text class="el hot end" x="875" y="258">partial 자막</text>
+
+        <line x1="30" y1="318" x2="930" y2="318" stroke="var(--zone-line)" stroke-width="1"/>
+        <text class="el" x="30" y="336">세션 시작 · 0 ms</text>
+        <text class="el end" x="930" y="336">세션 상대 시간 →</text>
+
+        <text class="zl" x="30" y="382">아직 정해지지 않은 것</text>
+        <text class="ts" x="30" y="404">지평선의 길이(N초)와 확정 선언 주체. 이게 없으면 프론트는 렌더 정책을, 백엔드는 영속 시점을 정할 수 없다 — CP2 착수를 막는 결정.</text>
+      </svg>
+    </div>
+    <figcaption class="plate-foot">
+      AI 경로 전체가 점선이다 — 이 파이프라인이 죽어도 1·2번의 영상과 채팅은 그대로 산다(원칙 6).
+    </figcaption>
+  </figure>
+
+  <!-- ================= 6. 데이터 소유권 ================= -->
+  <figure class="plate" id="p6">
+    <div class="plate-head">
+      <div class="plate-meta"><span class="n">06</span><span>관점 · 데이터</span></div>
+      <h2>한 클러스터, 두 스키마, 겹치지 않는 쓰기 권한</h2>
+      <p class="plate-use"><b>이럴 때</b> 두 언어가 한 DB를 쓰는 게 위험하지 않냐는 질문에 답할 때. 기준은 단 하나 — <span class="tag">그 행을 실제로 쓰는 서비스가 소유한다</span>.</p>
+    </div>
+    <div class="canvas">
+      <svg viewBox="0 0 960 460" role="img" aria-label="스키마 소유권">
+        <!-- owners -->
+        <rect class="box on" x="60" y="40" width="290" height="50" rx="3"/>
+        <text class="t mid" x="205" y="63">Spring · core-api</text>
+        <text class="ts mid" x="205" y="80">Flyway 로 마이그레이션</text>
+
+        <rect class="box off" x="610" y="40" width="290" height="50" rx="3"/>
+        <text class="t mid" x="755" y="63">Python · ai-worker / ai-api</text>
+        <text class="ts mid" x="755" y="80">Alembic 으로 마이그레이션 · CP2~</text>
+
+        <!-- schemas -->
+        <rect class="zone solid" x="60" y="130" width="290" height="250" rx="4"/>
+        <text class="zl" x="74" y="152">스키마 CORE — 쓰기 독점</text>
+        <text class="ts" x="74" y="180" style="fill:var(--ink)">app_user · instructor_profile</text>
+        <text class="ts" x="74" y="202" style="fill:var(--ink)">curriculum → section → lesson</text>
+        <text class="ts" x="74" y="224" style="fill:var(--ink)">live_session · chat_message</text>
+        <text class="ts" x="74" y="246" style="fill:var(--ink)">enrollment · learning_progress</text>
+        <text class="ts" x="74" y="268" style="fill:var(--ink)">asset · material_asset · video_asset</text>
+        <text class="ts" x="74" y="290" style="fill:var(--ink)">outbox_events · external_event_inbox</text>
+        <line x1="74" y1="308" x2="336" y2="308" stroke="var(--zone-line)"/>
+        <text class="ts" x="74" y="328">자막 원본 · 게시본 · 용어 · 퀴즈</text>
+        <text class="el" x="74" y="346">CP2~ · 학생에게 보이는 것은 전부 여기</text>
+
+        <rect class="zone" x="610" y="130" width="290" height="250" rx="4"/>
+        <text class="zl" x="624" y="152">스키마 AI — 쓰기 독점 · 미생성</text>
+        <text class="ts" x="624" y="180" style="fill:var(--ink)">document_chunk</text>
+        <text class="ts" x="624" y="202" style="fill:var(--ink)">chunk_embedding</text>
+        <text class="ts" x="624" y="224" style="fill:var(--ink)">job_run</text>
+        <text class="ts" x="624" y="246" style="fill:var(--ink)">model_run</text>
+        <line x1="624" y1="266" x2="886" y2="266" stroke="var(--zone-line)"/>
+        <text class="ts" x="624" y="288">네 개뿐이다.</text>
+        <text class="el" x="624" y="306">Python이 생산자이자 주 소비자인 것만</text>
+        <text class="el" x="624" y="324">— 벡터를 이벤트로 실어 나르지 않기 위해</text>
+
+        <!-- write arrows -->
+        <path class="edge" d="M205,90 V122"/>
+        <path class="head-a" d="M205,130 l-4.5,-8 l9,0 z"/>
+        <text class="el" x="214" y="112">write</text>
+        <path class="edge off" d="M755,90 V122"/>
+        <path class="head-a off" d="M755,130 l-4.5,-8 l9,0 z"/>
+        <text class="el" x="764" y="112">write</text>
+
+        <!-- read across -->
+        <path class="edge off" d="M350,196 H600"/>
+        <path class="head-a off" d="M608,196 l-8,-4.5 l0,9 z"/>
+        <text class="el mid" x="479" y="188">읽기 — chunking 원본</text>
+
+        <!-- event bridge -->
+        <rect class="box off" x="382" y="250" width="196" height="56" rx="3"/>
+        <text class="t mid sm" x="480" y="273">이벤트 버스</text>
+        <text class="ts mid" x="480" y="291">outbox → 큐 → inbox</text>
+
+        <path class="edge off" d="M610,278 H586"/>
+        <path class="head-a off" d="M578,278 l8,-4.5 l0,9 z"/>
+        <path class="edge off" d="M382,278 H358"/>
+        <path class="head-a off" d="M350,278 l8,-4.5 l0,9 z"/>
+        <text class="el mid" x="480" y="326">AI 산출물은 이 경로로만 core 에 들어간다</text>
+
+        <text class="zl" x="60" y="412">교차 규칙</text>
+        <text class="ts" x="60" y="434">읽기는 grant 로 서로 허용 · 쓰기는 절대 교차 없음 · 스키마를 넘는 FK 없이 논리 참조 + 앱 검증</text>
+      </svg>
+    </div>
+    <figcaption class="plate-foot">
+      벡터 인덱스를 ai 가 갖는 이유 — Python이 임베딩(쓰기)과 검색(읽기) 양쪽이라, core로 빼면 수천 청크의 벡터를 이벤트로 실어 나르고 검색이 크로스플레인이 된다.
+    </figcaption>
+  </figure>
+
+  <!-- ================= 7. 신뢰 경계 ================= -->
+  <figure class="plate" id="p7">
+    <div class="plate-head">
+      <div class="plate-meta"><span class="n">07</span><span>관점 · 보안</span></div>
+      <h2>브라우저는 Spring이 발급한 증명 없이 어디에도 닿지 못한다</h2>
+      <p class="plate-use"><b>이럴 때</b> "미디어와 파일이 백엔드를 우회하는데 안전하냐"는 질문에 답할 때. 우회하는 건 <strong>바이트</strong>이지 <strong>권한</strong>이 아니다.</p>
+    </div>
+    <div class="canvas">
+      <svg viewBox="0 0 960 460" role="img" aria-label="신뢰 경계">
+        <line x1="330" y1="30" x2="330" y2="400" stroke="var(--tally)" stroke-width="1.5" stroke-dasharray="6 5"/>
+        <text class="el hot" x="338" y="46">신뢰 경계 — 여기서 모든 권한이 판정된다</text>
+
+        <!-- lane 1 -->
+        <rect class="box" x="30" y="70" width="150" height="52" rx="3"/>
+        <text class="t mid sm" x="105" y="92">브라우저</text>
+        <text class="ts mid" x="105" y="110">쿠키 세션</text>
+        <rect class="box key" x="390" y="70" width="200" height="52" rx="3"/>
+        <text class="t mid sm" x="490" y="92">core-api</text>
+        <text class="ts mid" x="490" y="110">세션 · 역할 · 수강 확인</text>
+        <rect class="box dat" x="700" y="70" width="180" height="52" rx="3"/>
+        <text class="t mid sm" x="790" y="92">PostgreSQL</text>
+        <text class="ts mid" x="790" y="110">내부망 전용</text>
+        <path class="edge" d="M180,96 H382"/><path class="head-a" d="M390,96 l-8,-4.5 l0,9 z"/>
+        <text class="el mid" x="281" y="88">HttpOnly 쿠키 + CSRF</text>
+        <path class="edge" d="M590,96 H692"/><path class="head-a" d="M700,96 l-8,-4.5 l0,9 z"/>
+
+        <!-- lane 2 -->
+        <rect class="box" x="30" y="190" width="150" height="52" rx="3"/>
+        <text class="t mid sm" x="105" y="212">브라우저</text>
+        <text class="ts mid" x="105" y="230">LiveKit JWT 소지</text>
+        <rect class="box key" x="390" y="190" width="200" height="52" rx="3"/>
+        <text class="t mid sm" x="490" y="212">core-api</text>
+        <text class="ts mid" x="490" y="230">수강 확인 후 토큰 서명</text>
+        <rect class="box on" x="700" y="190" width="180" height="52" rx="3"/>
+        <text class="t mid sm" x="790" y="212">LiveKit SFU</text>
+        <text class="ts mid" x="790" y="230">JWT 검증 후 입장</text>
+        <path class="edge" d="M180,206 H382"/><path class="head-a" d="M390,206 l-8,-4.5 l0,9 z"/>
+        <text class="el mid" x="281" y="198">① 토큰 요청</text>
+        <path class="edge" d="M390,228 H188"/><path class="head-a" d="M180,228 l8,-4.5 l0,9 z"/>
+        <text class="el mid" x="281" y="248">② 단명 JWT + 익명 identity</text>
+        <path class="edge hot" d="M180,216 V276 H790 V250"/>
+        <path class="head-a hot" d="M790,242 l-4.5,8 l9,0 z"/>
+        <text class="el hot mid" x="480" y="292">③ WebRTC 직결 — 미디어 바이트는 Spring을 통과하지 않는다</text>
+
+        <!-- lane 3 -->
+        <rect class="box" x="30" y="320" width="150" height="52" rx="3"/>
+        <text class="t mid sm" x="105" y="342">브라우저</text>
+        <text class="ts mid" x="105" y="360">presigned URL 소지</text>
+        <rect class="box key" x="390" y="320" width="200" height="52" rx="3"/>
+        <text class="t mid sm" x="490" y="342">core-api</text>
+        <text class="ts mid" x="490" y="360">소유 · 용량 · 타입 검증</text>
+        <rect class="box dat" x="700" y="320" width="180" height="52" rx="3"/>
+        <text class="t mid sm" x="790" y="342">MinIO / S3</text>
+        <text class="ts mid" x="790" y="360">서명 검증 후 수락</text>
+        <path class="edge" d="M180,336 H382"/><path class="head-a" d="M390,336 l-8,-4.5 l0,9 z"/>
+        <text class="el mid" x="281" y="328">① 업로드 티켓 요청</text>
+        <path class="edge" d="M390,358 H188"/><path class="head-a" d="M180,358 l8,-4.5 l0,9 z"/>
+        <text class="el mid" x="281" y="378">② 만료 있는 presigned URL</text>
+        <path class="edge hot" d="M180,346 V404 H790 V380"/>
+        <path class="head-a hot" d="M790,372 l-4.5,8 l9,0 z"/>
+        <text class="el hot mid" x="480" y="420">③ 직접 PUT — 완료 후 Spring이 실제 크기·타입을 재검증한다</text>
+
+        <text class="el end" x="930" y="150">세 경로 모두</text>
+        <text class="el end" x="930" y="166">발급자는 Spring</text>
+      </svg>
+    </div>
+    <figcaption class="plate-foot">
+      빨간 선이 백엔드를 우회하는 데이터 경로다. 우회하더라도 그 앞에 반드시 Spring의 발급 단계가 있다.<br>
+      라이브 입장 identity 는 원본 사용자 ID가 아니라 (세션, 사용자) 해시라, 참가자 목록으로 내부 ID가 새지 않는다.
+    </figcaption>
+  </figure>
+
+  <footer>
+    <span>LiveClass AI — 아키텍처 다이어그램 세트</span>
+    <span>정본: docs/ARCHITECTURE.md</span>
+  </footer>
+
+</div>

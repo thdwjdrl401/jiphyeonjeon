@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1450 494" width="1450" height="494" role="img">
+<title>백엔드 모듈 구조</title>
+<style>text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif}</style>
+<rect width="100%" height="100%" fill="#FFFFFF"/>
+<path d="M216.0,299.0 H325.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M334.0,299.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M516.0,299.0 H625.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M634.0,299.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M816.0,287.7 H835.7 V233.0 H925.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M934.0,233.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M816.0,310.3 H894.7 V336.7 H925.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M934.0,336.7 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M1116.0,250.0 H1135.7 V238.7 H1225.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M1234.0,238.7 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M1116.0,348.0 H1214.3 V365.0 H1225.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M1234.0,365.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M60.0,265.0 V42.0 H855.3 V250.0 H925.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M934.0,250.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M86.0,265.0 V66.0 H914.3 V359.3 H925.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M934.0,359.3 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M112.0,265.0 V90.0 H1155.3 V261.3 H1225.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M1234.0,261.3 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M138.0,265.0 V114.0 H1175.0 V331.0 H1225.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M1234.0,331.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M464.0,265.0 V138.0 H875.0 V267.0 H925.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M934.0,267.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M790.0,265.0 V162.0 H1194.7 V354.0 H1225.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M1234.0,354.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<rect x="34.0" y="265.0" width="182.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="125.0" y="296.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">강의 탐색 · 관리</text>
+<text x="125.0" y="315.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">curriculum</text>
+<rect x="334.0" y="265.0" width="182.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="425.0" y="296.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">녹화</text>
+<text x="425.0" y="315.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">video</text>
+<rect x="634.0" y="265.0" width="182.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="725.0" y="296.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">라이브 세션 · 채팅</text>
+<text x="725.0" y="315.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">live</text>
+<rect x="934.0" y="216.0" width="182.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="1025.0" y="247.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">레슨 · 자료</text>
+<text x="1025.0" y="266.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">lesson</text>
+<rect x="934.0" y="314.0" width="182.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="1025.0" y="345.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">수강</text>
+<text x="1025.0" y="364.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">enrollment</text>
+<rect x="1234.0" y="216.0" width="182.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="1325.0" y="247.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">파일</text>
+<text x="1325.0" y="266.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">asset</text>
+<rect x="1234.0" y="314.0" width="182.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="1325.0" y="345.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">계정 · 세션</text>
+<text x="1325.0" y="364.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">auth</text>
+<line x1="34" y1="395.0" x2="1416.0" y2="395.0" stroke="#E3E9ED"/>
+<text x="34" y="414.0" font-size="12" fill="#4A5A6B">백엔드는 하나로 배포하지만 안에서는 모듈로 나뉜다. 화살표는 의존 방향이고, 왼쪽이 오른쪽을 쓴다.</text>
+<text x="34" y="434.0" font-size="12" fill="#4A5A6B">모듈끼리는 정해진 창구로만 대화한다 — 남의 내부 데이터를 직접 건드릴 수 없다.</text>
+<text x="34" y="454.0" font-size="12" fill="#4A5A6B">되돌아가는 의존(순환)은 금지다. 어기면 사람이 아니라 빌드가 먼저 막는다.</text>
+<text x="34" y="474.0" font-size="12" fill="#4A5A6B">덕분에 나중에 특정 모듈만 떼어 별도 서버로 옮길 수 있다.</text>
+</svg>

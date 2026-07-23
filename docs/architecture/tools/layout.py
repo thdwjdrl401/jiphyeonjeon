@@ -12,6 +12,7 @@
 from xml.sax.saxutils import escape
 
 PAD_X, PAD_TOP = 34, 34
+OVER_GAP, OVER_STEP = 42, 24
 NODE_W, NODE_H, VGAP = 196, 68, 30
 GUTTER = 132
 RING_GAP, RING_STEP = 48, 28
@@ -64,12 +65,20 @@ class Diagram:
     # ---------- 라우팅 ----------
     def _route(self):
         self.segs, self.paths, self.labels = [], [], []
-        norm = [e for e in self.edges if not (len(e) > 3 and e[3] == "ring")]
         rings = [e for e in self.edges if len(e) > 3 and e[3] == "ring"]
+        rest = [e for e in self.edges if e not in rings]
+        over = [e for e in rest if self.pos[e[1]]["col"] > self.pos[e[0]]["col"] + 1]
+        norm = [e for e in rest if e not in over]
+        self.over_h = (OVER_GAP + OVER_STEP * max(0, len(over) - 1) + 20) if over else 0
+        if self.over_h:                       # 상단 레인 확보를 위해 본문을 내린다
+            for p_ in self.pos.values():
+                p_["y"] += self.over_h
+                p_["cy"] += self.over_h
 
         outs, ins = {}, {}
         for e in norm:
             outs.setdefault(e[0], []).append(e)
+        for e in norm + over:
             ins.setdefault(e[1], []).append(e)
         exit_y, entry_y = {}, {}
         for nid, es in outs.items():
@@ -83,9 +92,22 @@ class Diagram:
             for i, e in enumerate(es):
                 entry_y[(e[0], e[1])] = p["y"] + p["h"] * (i + 1) / (len(es) + 1)
 
+        # 출발 구간과 도착 구간이 같은 거터에서 같은 높이가 되면 두 선이 겹친다 — 살짝 밀어낸다
+        for e1 in norm:
+            for e2 in norm + over:
+                if e1 is e2:
+                    continue
+                if (self.pos[e1[0]]["col"] == self.pos[e2[1]]["col"] - 1
+                        and abs(exit_y[(e1[0], e1[1])] - entry_y[(e2[0], e2[1])]) < 2.5):
+                    t_ = self.pos[e2[1]]
+                    entry_y[(e2[0], e2[1])] = min(t_["y"] + t_["h"] - 8,
+                                                  entry_y[(e2[0], e2[1])] + 6)
+
         gut = {}
         for e in norm:
             gut.setdefault(self.pos[e[0]]["col"], []).append(e)
+        for e in over:                         # 목표 열 바로 왼쪽 거터에서 내려온다
+            gut.setdefault(self.pos[e[1]]["col"] - 1, []).append(e)
         lane = {}
         for ci, es in gut.items():
             es.sort(key=lambda e: entry_y[(e[0], e[1])])
@@ -94,7 +116,7 @@ class Diagram:
                 lane[(e[0], e[1])] = base + step * (i + 1)
 
         self.ring_h = (RING_GAP + RING_STEP * max(0, len(rings) - 1) + 26) if rings else 0
-        ring_y0 = PAD_TOP + self.body_h + RING_GAP
+        ring_y0 = PAD_TOP + self.over_h + self.body_h + RING_GAP
 
         for e in norm:
             k = (e[0], e[1])
@@ -115,6 +137,21 @@ class Diagram:
             if e[2]:
                 self.labels.append([lab_x, y2 - 12, e[2], y2])
 
+        for i, e in enumerate(over):
+            k = (e[0], e[1])
+            s_, t_ = self.pos[e[0]], self.pos[e[1]]
+            ly = PAD_TOP + OVER_GAP + OVER_STEP * i - OVER_GAP + 8 + OVER_STEP * 0
+            ly = PAD_TOP + 8 + OVER_STEP * i
+            sx = s_["x"] + s_["w"] * (i + 1) / (len(over) + 1)
+            dx = lane[k]
+            ey = entry_y[k]
+            self.paths.append(f'M{sx:.1f},{s_["y"]:.1f} V{ly:.1f} H{dx:.1f} V{ey:.1f} H{t_["x"]-9:.1f}')
+            self.segs += [("v", sx, ly, s_["y"]), ("h", ly, sx, dx),
+                          ("v", dx, ly, ey), ("h", ey, dx, t_["x"])]
+            self.paths.append(("head", t_["x"], ey))
+            if e[2]:
+                self.labels.append([(dx + t_["x"]) / 2, ey - 12, e[2], ey])
+
         for i, e in enumerate(rings):
             s, t = self.pos[e[0]], self.pos[e[1]]
             y = ring_y0 + RING_STEP * i
@@ -130,7 +167,7 @@ class Diagram:
                 self.labels.append([(dx + ux) / 2, y - 9, e[2], y])
 
         self._resolve_labels()
-        self.height = (PAD_TOP + self.body_h + self.ring_h
+        self.height = (PAD_TOP + self.over_h + self.body_h + self.ring_h
                        + (32 + 20 * len(self.note) if self.note else 26))
 
     def _halo(self, l):
@@ -216,7 +253,7 @@ class Diagram:
                          f'font-size="14.5" font-weight="650" fill="{tc}">{escape(p["t"])}</text>')
 
         if self.note:
-            ny = PAD_TOP + self.body_h + self.ring_h + 32
+            ny = PAD_TOP + self.over_h + self.body_h + self.ring_h + 32
             o.append(f'<line x1="{PAD_X}" y1="{ny-19:.1f}" x2="{self.width-PAD_X:.1f}" '
                      f'y2="{ny-19:.1f}" stroke="#E3E9ED"/>')
             for i, line in enumerate(self.note):
