@@ -61,7 +61,7 @@
 |---|---|---|---|
 | 인증 식별자 | `email`, `GET /api/auth/email-availability` | 이미 `email` 사용 | 코드·계약 정렬, CP0 질문 문서 미종료 |
 | 커리큘럼 명칭 | `curriculum`, `curriculumId` | 동일 명칭 사용 | 과거 `course/courseId` 드리프트 해소 |
-| 레슨 상태 필드 | `status` | `lessonStatus` 사용 | 활성 계약 불일치 |
+| 레슨 상태 필드 | `status` | `status` 사용 | **해소** — 아래 §7.1-1 참고(2026-07-23) |
 | 채팅 범위 키 | REST·WS 경로와 envelope는 `sessionId` | API·WS 연동 없음 | FE 미연동, WS payload 문서 편차 있음 |
 | 프로필 | `GET /api/auth/me`, `PUT /api/me/profile-image`만 구현 | 텍스트 편집은 로컬 상태, 이미지 UI 없음 | 구현 범위와 UI 불일치 |
 
@@ -684,6 +684,17 @@ VITE_USE_MOCK_API=true + API 미구현 → mock
 ### 7.1 높은 우선순위
 
 #### 1. 레슨 상태 필드명 `status`와 `lessonStatus` 불일치
+
+> **해소됨 (2026-07-23) — 다만 방향이 아래 서술과 반대로 뒤집혔었다.**
+>
+> 프론트는 이 감사 이후 `status`로 이관을 마쳤다. 그런데 백엔드 쪽에서 `OutlineLesson`이 카탈로그
+> viewerContext를 추가하는 커밋에 휩쓸려 `lessonStatus`로 **되돌아가 있었다**(계약 결정 e331a1c의 회귀).
+> 즉 최근까지의 실제 상태는 "FE `status` · BE `lessonStatus`"로, 아래 서술과 정반대였다.
+>
+> 조치: 백엔드를 `status`로 되돌리고, 값이 아니라 **필드명 자체**를 계약 테스트로 고정했다
+> (`CatalogViewerContextContractTest.outline_lesson_status_uses_contract_field_name`).
+> 근거와 재발 방지 이유는 [ADR-0029](decisions/songjeongki/0029-lesson-detail-and-display-name.md).
+> 아래 원문은 감사 시점 기록으로 남겨 둔다.
 
 백엔드 DTO와 계약 문서의 정본 필드는 `status`지만 프론트 타입, HTTP adapter, mock, 컴포넌트, 페이지와 테스트는 `lessonStatus`를 사용한다.
 

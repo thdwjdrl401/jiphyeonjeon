@@ -15,10 +15,10 @@
 ## 2. REST API (`/api`, Spring 소유)
 | 도메인 | 예시 | 비고 |
 |---|---|---|
-| 인증 | `POST /auth/login`·`/auth/signup`·`/auth/logout`·`GET /auth/email-availability` | 인증 식별자는 **`email`**(구현됨, `loginId` 아님). 상태코드: 생성 201·중복 409·인증실패 401·권한 403. **HttpOnly 쿠키 세션(Redis 저장)** — FE는 `withCredentials`, `Authorization: Bearer` 미사용. 변경요청 CSRF 토큰([decisions/songjeongki/0014](decisions/songjeongki/0014-auth-redis-session-cookie.md)) |
+| 인증 | `POST /auth/login`·`/auth/signup`·`/auth/logout`·`GET /auth/email-availability` | 인증 식별자는 **`email`**(구현됨, `loginId` 아님). 상태코드: 생성 201·중복 409·인증실패 401·권한 403. **HttpOnly 쿠키 세션(Redis 저장)** — FE는 `withCredentials`, `Authorization: Bearer` 미사용. 변경요청 CSRF 토큰([decisions/songjeongki/0014](decisions/songjeongki/0014-auth-redis-session-cookie.md)). 내 계정: `PUT /me/profile-image`·`PUT /me/display-name`(표시 이름만 바뀌고 `email`·역할은 불변) |
 | 카탈로그 | `GET /curriculums`·`GET /curriculums/{id}` | 검색·필터·페이지네이션. **응답에 `viewerContext`(관계·allowedActions) 포함(구현됨)** — 비로그인도 호출 가능하고, 쿠키가 있으면 그 사용자 기준으로 채운다. 상세는 `enrollmentPolicy`와 목차 레슨별 `liveSession`·`access`까지. ([decisions/songjeongki/0026](decisions/songjeongki/0026-catalog-viewer-context.md)) |
 | 커리큘럼(강사) | `POST/PATCH /instructor/curriculums`·`.../sections`·`.../curriculum/order` | 소유권 검증 |
-| 강의 | `POST /instructor/sections/{id}/lessons`·`PATCH /instructor/lessons/{id}` | status: DRAFT/AI_NOT_READY/READY/PUBLISHED |
+| 강의 | `POST /instructor/sections/{id}/lessons`·`PATCH /instructor/lessons/{id}`·`GET /lessons/{id}` | 상태 필드는 **어디서나 `status`**(목차·관리 응답 동일, `lessonStatus` 아님). 값: DRAFT/AI_NOT_READY/READY/PUBLISHED. 수강생용 `GET /lessons/{id}`는 소유권이 아니라 **수강 관계**로 연다 — 미수강 403 `ENROLLMENT_REQUIRED`, 수강 중이라도 미게시 레슨은 404([decisions/songjeongki/0029](decisions/songjeongki/0029-lesson-detail-and-display-name.md)) |
 | 자료 | `POST /instructor/lessons/{id}/materials` (PPTX) | presigned→MinIO. **영상 업로드 없음**. 자료를 커리큘럼·레슨에 연결하는 API는 아직 없어 상세의 `materials`는 항상 빈 목록 |
 | 에셋 | `POST /assets/upload-requests` → presigned `PUT` → `POST /assets/{id}/complete` | 바이트는 앱 서버를 통과하지 않는다. 받은 `assetId`를 도메인 요청에 실어 보낸다(커리큘럼 `thumbnailAssetId`, 프로필 `assetId`). kind는 **PROFILE_IMAGE·THUMBNAIL만 발급**되고 **MATERIAL은 현재 400으로 거부**된다 ([decisions/songjeongki/0023](decisions/songjeongki/0023-asset-presigned-upload.md)) |
 | 다시보기 | `GET /lessons/{id}/playback` | 녹화(Egress) HLS URL 발급(재생 인증 seam). 재생 API는 미구현이나 **녹화본 자체는 생성된다** — 카탈로그의 `replayStatus`는 녹화 없음이면 NOT_READY, 있으면 저장된 상태(현재 DRAFT). 게시 검수 흐름이 없어 PUBLISHED에는 도달하지 않는다. `durationMs`는 녹화 완료 webhook 전까지 null |
