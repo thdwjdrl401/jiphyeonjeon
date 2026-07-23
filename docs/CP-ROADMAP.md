@@ -69,7 +69,7 @@ flowchart LR
 | **CP1** ★ | 라이브 미디어 | LiveKit 토큰, **WebRTC 화상 입장**(강사 publish/학생 subscribe), Spring **채팅**(WS) | — |
 | **CP2** | 라이브 자막 | **realtime-agent 스트리밍 STT(VAD)** → Redis Streams → Spring 영속+WS, 자막 렌더·검수 | realtime-agent · **`ai` 스키마+Alembic** · 외부 STT API |
 | **CP3** ★ | 용어·근거(RAG) | PPTX 업로드·파싱, chunk·embedding(pgvector), 용어 후보·카드, **RAG SSE**(FTS+vector+RRF+scope+citation+insufficient) | ai-api · ai-worker · **RabbitMQ** · model gateway |
-| **CP4** | 녹화·다시보기 | Egress 녹화→HLS→MinIO, **재생 API**(권한 검증 + manifest presigned 재작성), HLS 플레이어 + 교정 자막·용어·RAG 재생 | HLS.js |
+| **CP4** | 녹화·다시보기 | Egress 녹화→HLS→MinIO, **egress 웹훅 수신기**(상태 전이 + 시간축 앵커 저장), **재생 API**(권한 검증 + manifest presigned 재작성), HLS 플레이어 + 교정 자막·용어·RAG 재생 | HLS.js |
 | **CP5** | 퀴즈·따라잡기 | 퀴즈 후보→검수→응시(**결정론 채점**), 재접속 catch-up | — |
 
 > **RabbitMQ는 dev 인프라에 이미 서 있지만 배선은 CP3이다.** 브로커와 관리 UI는 떠 있어도 backend에 `spring-amqp` 의존성·설정이 없다. CP2의 자막 경로는 Redis Streams로 충분하고 실제 배치 잡(PPTX 파싱·embed)은 CP3에서 처음 생기므로, **prod 투입과 Spring 배선을 함께 CP3에서** 한다([ARCHITECTURE §9-4](ARCHITECTURE.md)).
@@ -100,7 +100,7 @@ flowchart LR
 | 🔴 **자료→레슨 연결** | CP3 | RAG ingestion의 입력. BE 선행 작업 |
 | 🟠 **자막 유실 정책** | CP2 | Redis fast-path 유실 허용 + 녹화 2-pass 복구로 확정할지 |
 | 🟠 **단일 노드 운용 전제** | CP2 | STT·임베딩·LLM 전부 외부 API, Egress는 데모 세션에만, 동시 세션 1~2개 |
-| 🟠 **다시보기 시간축 변환** | CP4 | 재생 위치를 세션 ms로 바꾸는 규칙. 오프셋 하나로 갈지, 세그먼트마다 절대 시각을 박을지 |
+| 🟠 **다시보기 시간축 변환** | CP4 | 규칙 확정 — 서버가 `index.m3u8` 첫 PDT를 앵커로 오프셋 하나를 내려준다. 선행: egress 웹훅 수신기 ([ARCHITECTURE §9-9](ARCHITECTURE.md)) |
 
 ## 열린 항목 (착수 직전 상세)
 - ✅ **인증 방식 확정**: HttpOnly 쿠키 + Redis 세션([decisions/songjeongki/0014](decisions/songjeongki/0014-auth-redis-session-cookie.md)).

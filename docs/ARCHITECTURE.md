@@ -385,14 +385,28 @@ STOMP 브로커가 인메모리 SimpleBroker라 **브로드캐스트가 인스�
 이전 판은 "seam 3개(재생 URL 발급 · nginx · PlaybackTokenService)"라고 적었지만, 실제로는 **셋 다 존재하지 않고**, 현재 nginx는 SPA·API 프록시 전용이라 HLS 서빙 경로 자체가 없다.
 → **제안**: nginx secure_link 대신, 이미 쓰고 있는 **presigned 방식으로 통일**한다. `GET /api/lessons/{id}/playback`이 권한을 검증하고 **manifest만 Spring이 프록시하며 세그먼트 URL을 presigned로 재작성**한다. manifest는 수 KB라 원칙 4(바이트는 Spring을 통과하지 않음)를 유지하면서 세그먼트는 스토리지 직결이 된다. S3로 옮겨도 그대로 동작한다.
 
-### 9-9. 🟠 다시보기의 시간축 변환 기준이 없다
-자막 싱크는 전송 경로가 아니라 **공통 좌표계** 문제다. 영상 세그먼트는 스토리지에서 직접 받고 자막은 Spring이 내려주지만, 둘을 맞추려면 *재생 위치 → 세션 상대 ms* 변환이 필요하다. `video_asset.session_offset_ms`·`recording_started_at` 컬럼이 그 자리로 이미 잡혀 있는데, **변환 규칙이 계약에 없다.**
+### 9-9. 🟠 다시보기 시간축 변환 — 규칙은 확정, 선행 작업이 남음
+자막 싱크는 전송 경로가 아니라 **공통 좌표계** 문제다. 세그먼트는 스토리지에서 직접 받고 자막은 Spring이 내려주므로, 둘을 맞추려면 *재생 위치 → 세션 상대 ms* 변환이 필요하다.
 
-문제는 오프셋 하나로 부족할 수 있다는 점이다. 녹화가 중간에 끊기거나 Egress가 재시작하면 미디어 시간과 실제 경과 시간이 어긋나 뒤쪽 자막이 통째로 밀린다.
-→ **제안**: manifest에 `EXT-X-PROGRAM-DATE-TIME`을 실어 세그먼트마다 절대 시각을 박고, 플레이어가 *절대 시각 → 세션 ms*로 변환한다. 불연속(`EXT-X-DISCONTINUITY`)이 생겨도 어긋나지 않는다. **선행 확인: LiveKit Egress가 이 태그를 내보내는지.** 내보내지 않으면 오프셋 방식 + 녹화 무중단을 전제로 못 박아야 한다.
+**조사 결과**(Egress v1.13.0 소스 확인)
+- Egress는 **모든 세그먼트에 `EXT-X-PROGRAM-DATE-TIME`을 넣는다.** 옵션으로 끌 수 없고 API에도 관련 필드가 없다.
+- 다만 **PDT 델타는 `EXTINF` 누적합과 수학적으로 같다.** 즉 PDT가 추가로 주는 정보는 **첫 세그먼트의 절대 시각(앵커) 하나뿐**이다. 프론트가 PDT를 직접 읽어도 얻는 게 없고, hls.js 종속만 생긴다(Safari 네이티브 재생 경로에는 PDT 접근 API가 없다).
+- **`EXT-X-DISCONTINUITY`는 생성하지 않는다.**
 
-> 이 오류는 재생해 보기 전까지 아무도 모른다 — 빌드도 테스트도 잡지 않는다. CP4 착수 전에 계약으로 확정해야 한다.
-> 로드맵의 "세션시계 변환 기준"은 지금 *LiveKit 트랙 → 세션 ms* 방향만 적혀 있고, 이 반대 방향이 빠져 있다.
+**결정 — 단일 오프셋, 앵커는 첫 PDT에서 뽑는다**
+```
+session_offset_ms = index.m3u8 의 첫 PROGRAM-DATE-TIME − live_session.started_at
+자막 위치(ms)      = player.currentTime * 1000 + session_offset_ms
+```
+서버가 앵커를 한 번 읽어 **숫자 하나로 환산해 내려주고**, 프론트는 그 숫자만 쓴다. 플레이어 선택이 묶이지 않는다.
+
+> ⚠️ **`video_asset.recording_started_at`을 앵커로 쓰면 안 된다.** 지금 값은 `StartEgress` 호출 시각(`RecordingService`)이라, Chrome 기동·페이지 로드·방 접속 지연이 통째로 오차가 된다 — `infra/livekit/README.md` 트러블슈팅에 20초까지 걸린 사례가 있다. 앵커 전용 컬럼을 따로 둔다.
+
+**선행 작업** — **egress 웹훅 수신기가 아직 없다.** 코드 곳곳(`RecordingService`·`ReplayView`·`CatalogService`)이 "완료 webhook이 채운다"를 전제로 `null`을 반환하고 있다. 그 수신기를 붙이면서 `index.m3u8`의 첫 PDT를 파싱해 앵커를 저장한다. 재생목록은 **첫 세그먼트가 닫히는 즉시**(세그먼트 2초 설정) 업로드되므로 녹화 종료를 기다릴 필요가 없다.
+
+**남은 위험 — 파이프라인 stall(미검증).** 미디어 타임라인이 벽시계 대비 멈추면 그만큼 자막이 누적해서 어긋나는데, `DISCONTINUITY` 태그가 없어 **사후 탐지 수단이 없다.** 반면 egress 재시작은 위험하지 않다 — 파일 접두사에 `{retry}` 치환자가 없어 재시도 자체가 거부되므로, 같은 재생목록에 두 번째 타임라인이 몰래 이어붙지 않는다(뒤가 잘릴 뿐 오프셋은 유효).
+
+**실측 과제**: EC2에서 한 세션 돌려 `첫 PDT − recording_started_at` 차이를 재 둔다. 그 값이 곧 "앵커를 바꿔야 하는 이유"의 정량 근거다.
 
 ### 9-10. 🟡 `ai` 스키마와 Alembic이 아직 없다
 T0에 만들기로 했으나 미이행. `core`만 존재한다. 리스크는 낮지만 CP2 착수 시 **DB 롤(`core_app`/`ai_app`) 분리와 함께** 세워야 원칙 2가 실제로 강제된다.
