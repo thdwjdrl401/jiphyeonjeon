@@ -40,5 +40,6 @@ export async function getCurriculums(query: CurriculumListQuery, viewer?: AuthUs
         })),
       }
     },
+    apiImplemented: true,
   })
 }

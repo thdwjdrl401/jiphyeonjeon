@@ -35,7 +35,7 @@ export const demoSections = buildMockCurriculumOutline(primaryCurriculum).map((s
   lessons: section.lessons.map((lesson) => ({
     lessonId: lesson.lessonId,
     title: lesson.title,
-    status: lesson.lessonStatus,
+    status: lesson.status,
   })),
 }))
 
@@ -60,7 +60,7 @@ export const demoLesson = {
   lessonId: primaryLessonContext.lesson.lessonId,
   title: primaryLessonContext.lesson.title,
   description: '인증 필터와 세션의 흐름을 실제 요청을 따라가며 이해합니다.',
-  lessonStatus: primaryLessonContext.lesson.lessonStatus,
+  status: primaryLessonContext.lesson.status,
   sectionTitle: primaryLessonContext.section.title,
   materials: [
     { id: 'mat-security', name: 'spring-security-basics.pptx', size: '3.4 MB', status: 'READY' },
@@ -95,7 +95,7 @@ export function getDemoLesson(lessonId: string, userId?: string) {
     description: isPrimaryLesson
       ? demoLesson.description
       : `${context.lesson.title}의 핵심 개념과 실습 내용을 학습합니다.`,
-    lessonStatus: context.lesson.lessonStatus,
+    status: context.lesson.status,
     sectionId: context.section.sectionId,
     sectionTitle: context.section.title,
     curriculumId: context.curriculum.curriculumId,
@@ -156,7 +156,7 @@ export function getDemoInstructorCurriculums(userId: string) {
         instructor: curriculum.instructor.displayName,
         enrolleeCount: curriculum.enrolleeCount,
         thumbnailUrl: curriculum.thumbnailUrl,
-        publishedLessonCount: lessons.filter((lesson) => lesson.lessonStatus === 'PUBLISHED').length,
+        publishedLessonCount: lessons.filter((lesson) => lesson.status === 'PUBLISHED').length,
         lessonCount: curriculum.lessonCount,
         nextSession: nextSession?.liveSession?.scheduledAt ?? '일정 미정',
       }

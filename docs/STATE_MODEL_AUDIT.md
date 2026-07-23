@@ -388,7 +388,7 @@ DRAFT/SCHEDULED/OPEN → CANCELLED
 - WebSocket 송신 경로, 구독 topic, 공통 envelope도 `sessionId` 기준이다.
 - 백엔드 WebSocket `ChatMessagePayload`에는 `lessonId`와 `sessionId`가 모두 있으며 실명과 `userId`는 없다.
 - 반면 `CONTRACT.md`의 WebSocket 요약은 아직 `chat_message { lessonId, userId, sessionMs, text, alias }`로 적혀 있어 실제 payload와 충돌한다.
-- 프론트에는 REST 또는 WebSocket 채팅 호출이 없고 라이브 화면은 통합 mock 메시지와 로컬 입력 상태를 사용한다.
+- 프론트 라이브 화면은 REST `GET/POST /api/live-sessions/{sessionId}/messages`를 호출한다. WebSocket 연동은 후속 범위다.
 - 다시보기 화면은 `lessonId`로 진입하지만 채팅 복구 API는 `sessionId`를 요구한다. 현재의 lesson-session 연결을 조회하는 계약이 없으므로 리플레이 채팅 연동 전에 해석 경로를 설계해야 한다.
 
 근거:
@@ -659,34 +659,18 @@ NOT_READY | PROCESSING | READY_FOR_REVIEW | DRAFT_SAVED | PUBLISHED | FAILED
 
 ## 6. 프론트 데이터 출처별 상태 신뢰도
 
-프론트는 개발·테스트에서 기본적으로 mock API를 사용한다.
+프론트는 함수별 API 구현 상태를 명시하고 공통 경계에서 데이터 출처를 선택한다.
 
 ```text
 test mode → mock
-VITE_USE_MOCK_API=true → mock
-development이고 명시적으로 false가 아님 → mock
-그 외 → HTTP
+VITE_USE_MOCK_API=false → 모든 함수 HTTP
+VITE_USE_MOCK_API=true + API 구현됨 → HTTP
+VITE_USE_MOCK_API=true + API 미구현 → mock
 ```
 
-카탈로그 목록, 커리큘럼 상세, 수강 신청·취소, 인증 일부는 mock/HTTP 전환 계층을 사용한다.
+카탈로그, 내 커리큘럼, 프로필 요약, 커리큘럼 관리, 레슨, prejoin/preflight, 라이브, 녹화 처리, replay와 좌측 레슨 탐색은 모두 `requestByDataSource`를 통과한다. 페이지·레이아웃은 demo/mock 모듈을 직접 읽지 않는다.
 
-다음 화면은 데이터 소스 설정과 무관하게 통합 mock을 직접 읽는다.
-
-- 내 커리큘럼
-- 프로필 학습 요약
-- 커리큘럼 관리
-- 레슨 상세
-- 레슨 생성·수정
-- 학생 입장 전 점검
-- 강사 시작 전 최종 점검
-- 라이브 강의실
-- 녹화 처리 현황
-- 강사 replay 검수 화면
-- 좌측 커리큘럼 레슨 탐색
-
-프로필 편집의 `savedArea`와 라이브 채팅 입력도 서버 저장 성공 상태가 아니라 컴포넌트 로컬 상태다. 또한 인증 응답은 백엔드에서 `profileImageUrl`을 제공하지만 현재 프론트 인증 타입이 이 필드를 받지 않는다.
-
-따라서 이 화면에서 보이는 `READY`, `VERIFYING`, `PROCESSING`, preflight 통과, replay 게시 등의 상태는 현재 서버 상태의 증거로 사용할 수 없다.
+백엔드 미구현으로 표시된 대시보드 요약, 자료 업로드, AI 준비·질문, 자막, preflight, 녹화 처리, replay 검수·퀴즈는 mock=true에서만 fixture를 사용한다. mock=false에서는 예상 HTTP endpoint를 호출해 미구현 오류를 드러낸다.
 
 근거:
 

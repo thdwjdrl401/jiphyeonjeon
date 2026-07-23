@@ -1,56 +1,71 @@
 import { useState, type FormEvent } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { instructorPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
-import { demoCaptions, demoMessages, demoSession, getDemoLesson, getDemoLiveSession } from '@/features/demo/demoData'
+import { getLesson } from '@/features/lesson/lessonService'
+import {
+  askLiveAi,
+  endLiveSession,
+  getCaptions,
+  getChatMessages,
+  getLiveSession,
+  getParticipants,
+  getQuestionHighlights,
+  saveBookmark,
+  sendChatMessage,
+  type ChatMessageView,
+} from '@/features/live-session/liveSessionService'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
+import PageState from '@/shared/ui/PageState'
 import { InlineNotice, StatusBadge } from '@/shared/ui/WorkspaceUi'
 
 type LivePanel = 'questions' | 'participants' | 'chat' | 'caption' | 'ai' | 'materials'
 
-const instructorQuestions = [
-  { at: '12:18', count: 3, text: '세션과 JWT를 함께 사용하는 기준이 궁금해요.' },
-  { at: '27:40', count: 5, text: '필터 순서가 실제 인증에 어떤 영향을 주나요?' },
-  { at: '41:05', count: 2, text: 'Redis 장애 시 세션 복구 방식이 궁금해요.' },
-]
-
-const participants = [
-  { alias: '수강생-14A2', state: '시청 중', joinedAt: '09:52' },
-  { alias: '수강생-09C1', state: 'DVR · 2분 전', joinedAt: '09:55' },
-  { alias: '수강생-21B3', state: '시청 중', joinedAt: '10:03' },
-]
-
 export default function LiveClassroomPage() {
-  const { sessionId = demoSession.sessionId } = useParams()
-  const session = getDemoLiveSession(sessionId)
-  const lesson = getDemoLesson(session.lessonId)
+  const { sessionId = '' } = useParams()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { user } = useAuth()
   const isInstructor = user?.role === 'INSTRUCTOR'
+  const sessionQuery = useQuery({ queryKey: ['live-session', sessionId], queryFn: () => getLiveSession(sessionId), enabled: Boolean(sessionId) })
+  const lessonQuery = useQuery({
+    queryKey: ['live-classroom-lesson', sessionQuery.data?.lessonId, user?.role],
+    queryFn: () => getLesson({ lessonId: sessionQuery.data!.lessonId, role: user?.role, userId: user?.userId }),
+    enabled: Boolean(sessionQuery.data?.lessonId),
+  })
+  const chatQuery = useQuery({ queryKey: ['live-chat', sessionId], queryFn: () => getChatMessages(sessionId), enabled: Boolean(sessionId) })
+  const captionsQuery = useQuery({ queryKey: ['live-captions', sessionId], queryFn: () => getCaptions(sessionId), enabled: Boolean(sessionId) })
+  const participantsQuery = useQuery({ queryKey: ['live-participants', sessionId], queryFn: () => getParticipants(sessionId), enabled: isInstructor && Boolean(sessionId) })
+  const questionsQuery = useQuery({ queryKey: ['live-question-highlights', sessionId], queryFn: () => getQuestionHighlights(sessionId), enabled: isInstructor && Boolean(sessionId) })
+  const session = sessionQuery.data
+  const lesson = lessonQuery.data
+  const messages = chatQuery.data ?? []
+  const captions = captionsQuery.data ?? []
+  const participants = participantsQuery.data ?? []
+  const instructorQuestions = questionsQuery.data ?? []
   const [panel, setPanel] = useState<LivePanel>(isInstructor ? 'questions' : 'chat')
   const [isLive, setIsLive] = useState(true)
   const [position, setPosition] = useState(88)
-  const [messages, setMessages] = useState(demoMessages)
   const [message, setMessage] = useState('')
   const [isQuestion, setIsQuestion] = useState(false)
   const [aiQuestion, setAiQuestion] = useState('')
   const [aiAnswer, setAiAnswer] = useState('')
   const [bookmarked, setBookmarked] = useState(false)
   const [endRequested, setEndRequested] = useState(false)
-  usePageTitle(`LIVE · ${lesson.title}`)
+  const sendMutation = useMutation({
+    mutationFn: ({ text, question }: { text: string; question: boolean }) => sendChatMessage(sessionId, text, question),
+    onSuccess: (sent) => queryClient.setQueryData<ChatMessageView[]>(['live-chat', sessionId], (current = []) => [...current, sent]),
+  })
+  const aiMutation = useMutation({ mutationFn: (question: string) => askLiveAi(lesson!.lessonId, question), onSuccess: (data) => setAiAnswer(data.answer) })
+  const bookmarkMutation = useMutation({ mutationFn: () => saveBookmark(lesson!.lessonId, position * 1000), onSuccess: () => setBookmarked(true) })
+  const endMutation = useMutation({ mutationFn: () => endLiveSession(sessionId), onSuccess: () => navigate(instructorPaths.processing(sessionId)) })
+  usePageTitle(`LIVE · ${lesson?.title ?? ''}`)
 
   const sendMessage = (event: FormEvent) => {
     event.preventDefault()
     if (!message.trim()) return
-    setMessages((current) => [
-      ...current,
-      {
-        id: `msg_${Date.now()}`,
-        alias: user?.displayName ?? '나',
-        text: message.trim(),
-        time: '현재',
-        question: isInstructor ? false : isQuestion,
-      },
-    ])
+    sendMutation.mutate({ text: message.trim(), question: isInstructor ? false : isQuestion })
     setMessage('')
     setIsQuestion(false)
   }
@@ -58,8 +73,12 @@ export default function LiveClassroomPage() {
   const askAi = (event: FormEvent) => {
     event.preventDefault()
     if (!aiQuestion.trim()) return
-    setAiAnswer('SecurityContext는 인증이 끝난 현재 요청의 사용자 정보를 보관합니다. 세션 저장소와는 책임이 다르며, 요청이 끝나면 컨텍스트가 정리됩니다.')
+    aiMutation.mutate(aiQuestion.trim())
   }
+
+  if (!sessionId) return <PageState title="잘못된 라이브 세션 경로입니다" />
+  if (sessionQuery.isPending || lessonQuery.isPending || chatQuery.isPending || captionsQuery.isPending) return <PageState title="라이브 강의를 불러오는 중입니다" />
+  if (sessionQuery.isError || lessonQuery.isError || chatQuery.isError || captionsQuery.isError || !session || !lesson) return <PageState title="라이브 강의를 불러오지 못했습니다" />
 
   const tabs: Array<{ id: LivePanel; label: string }> = isInstructor
     ? [
@@ -105,7 +124,7 @@ export default function LiveClassroomPage() {
       {isInstructor && endRequested && (
         <div className="instructor-end-confirm" role="alert">
           <div><strong>라이브 강의를 종료할까요?</strong><p>학생 연결을 종료하고 녹화·AI 후처리 단계로 이동합니다.</p></div>
-          <div><button className="button button--ghost button--small" type="button" onClick={() => setEndRequested(false)}>계속 진행</button><Link className="button button--primary button--small" to={instructorPaths.processing(sessionId)}>종료하고 처리 현황 보기</Link></div>
+          <div><button className="button button--ghost button--small" type="button" onClick={() => setEndRequested(false)}>계속 진행</button><button className="button button--primary button--small" type="button" disabled={endMutation.isPending} onClick={() => endMutation.mutate()}>종료하고 처리 현황 보기</button></div>
         </div>
       )}
 
@@ -115,13 +134,13 @@ export default function LiveClassroomPage() {
             <div className="video-stage__glow" />
             <div className="presenter-card"><span>이</span><div><strong>이도현 강사</strong><small>화면 공유 중</small></div></div>
             <div className="slide-preview"><span>SPRING SECURITY</span><h2>요청은 어떻게<br />인증되는가?</h2><div className="slide-code">SecurityFilterChain → Authentication → SecurityContext</div></div>
-            <div className="caption-overlay"><small>실시간 자막 · FINAL</small><p>{demoCaptions[1].text}</p></div>
+            <div className="caption-overlay"><small>실시간 자막 · FINAL</small><p>{captions[1]?.text ?? captions[0]?.text ?? ''}</p></div>
           </div>
 
           <div className="live-controls">
             <div className="timeline-row"><span>00:00</span><input aria-label="라이브 타임라인" min="0" max="100" type="range" value={position} onChange={(event) => { const value = Number(event.target.value); setPosition(value); setIsLive(value > 96) }} /><span>현재</span></div>
             <div className="control-row">
-              <div>{isInstructor ? <><button type="button">마이크 켜짐</button><button type="button">카메라 켜짐</button><button type="button">화면 공유 중</button></> : <button className={bookmarked ? 'is-active' : ''} type="button" onClick={() => setBookmarked((current) => !current)}>{bookmarked ? '★ 북마크됨' : '☆ 북마크'}</button>}</div>
+              <div>{isInstructor ? <><button type="button">마이크 켜짐</button><button type="button">카메라 켜짐</button><button type="button">화면 공유 중</button></> : <button className={bookmarked ? 'is-active' : ''} type="button" onClick={() => bookmarkMutation.mutate()}>{bookmarked ? '★ 북마크됨' : '☆ 북마크'}</button>}</div>
               <button className={`go-live${isLive ? ' is-live' : ''}`} type="button" onClick={() => { setPosition(100); setIsLive(true) }}><i /> LIVE{!isLive && '로 이동'}</button>
             </div>
           </div>
@@ -141,7 +160,7 @@ export default function LiveClassroomPage() {
 
           {panel === 'chat' && <div className="side-panel-content chat-panel"><div className="chat-list">{messages.map((item) => <article className={item.question ? 'is-question' : ''} key={item.id}><header><strong>{item.alias}</strong><time>{item.time}</time></header><p>{item.text}</p>{item.question && <small>질문으로 등록됨</small>}</article>)}</div><form className="chat-composer" onSubmit={sendMessage}><textarea aria-label="채팅 메시지" rows={2} value={message} placeholder="메시지를 입력하세요" onChange={(event) => setMessage(event.target.value)} /><div>{!isInstructor ? <label><input type="checkbox" checked={isQuestion} onChange={(event) => setIsQuestion(event.target.checked)} /> 질문으로 등록</label> : <span>강사 메시지로 전송됩니다.</span>}<button className="button button--primary button--small" type="submit">전송</button></div></form></div>}
 
-          {panel === 'caption' && <div className="side-panel-content"><div className="caption-list">{demoCaptions.map((caption, index) => <button className={index === 1 ? 'is-current' : ''} type="button" key={caption.at}><time>{caption.at}</time><p>{caption.text}</p></button>)}</div><div className="evidence-card"><span>PPTX · 12번 슬라이드</span><strong>SecurityContext의 생명주기</strong><p>현재 자막과 연결된 강의 자료 근거입니다.</p></div></div>}
+          {panel === 'caption' && <div className="side-panel-content"><div className="caption-list">{captions.map((caption, index) => <button className={index === 1 ? 'is-current' : ''} type="button" key={caption.at}><time>{caption.at}</time><p>{caption.text}</p></button>)}</div><div className="evidence-card"><span>PPTX · 12번 슬라이드</span><strong>SecurityContext의 생명주기</strong><p>현재 자막과 연결된 강의 자료 근거입니다.</p></div></div>}
 
           {!isInstructor && panel === 'ai' && <div className="side-panel-content ai-panel"><div className="ai-empty"><span>AI</span><h3>현재 수업 맥락에 질문하세요</h3><p>강의 자료와 발화를 근거로 답변합니다.</p></div>{aiAnswer && <div className="ai-answer"><strong>답변</strong><p>{aiAnswer}</p><small>근거 · 12번 슬라이드, 12:08–12:41 발화</small></div>}<form onSubmit={askAi}><textarea rows={3} value={aiQuestion} placeholder="예: SecurityContext와 세션은 어떻게 다른가요?" onChange={(event) => setAiQuestion(event.target.value)} /><button className="button button--primary button--full" type="submit">근거와 함께 질문</button></form></div>}
 

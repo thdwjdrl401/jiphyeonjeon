@@ -127,6 +127,7 @@ describe('공유 API 계약', () => {
       email: 'student@example.com',
       displayName: '김학생',
       role: 'STUDENT' as const,
+      profileImageUrl: null,
     }
     const loginRequest = {
       email: authUser.email,

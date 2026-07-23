@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { instructorPaths, publicPaths, studentPaths } from '@/app/router/paths'
 import type { UserRole } from '@/features/auth/types'
-import { getDemoCurriculumLessonNavigation } from '@/features/demo/demoData'
+import { getCurriculumLessonNavigation } from './lessonService'
 
 interface CurriculumLessonNavigationProps {
   curriculumId: string
@@ -10,7 +11,18 @@ interface CurriculumLessonNavigationProps {
 }
 
 export default function CurriculumLessonNavigation({ curriculumId, activeLessonId, role }: CurriculumLessonNavigationProps) {
-  const curriculum = getDemoCurriculumLessonNavigation(curriculumId)
+  const curriculumQuery = useQuery({
+    queryKey: ['curriculum-lesson-navigation', curriculumId],
+    queryFn: () => getCurriculumLessonNavigation(curriculumId),
+  })
+
+  if (curriculumQuery.isPending) {
+    return <aside className="workspace-sidebar workspace-sidebar--lesson" aria-label="커리큘럼 강의 목록">불러오는 중...</aside>
+  }
+  if (curriculumQuery.isError || !curriculumQuery.data) {
+    return <aside className="workspace-sidebar workspace-sidebar--lesson" aria-label="커리큘럼 강의 목록">강의 목록을 불러오지 못했습니다.</aside>
+  }
+  const curriculum = curriculumQuery.data
 
   return (
     <aside className="workspace-sidebar workspace-sidebar--lesson" aria-label="커리큘럼 강의 목록">

@@ -1,5 +1,10 @@
 import { peekMockUser } from '@/features/auth/mockAuth'
-import { putMockCurriculum } from '@/features/demo/mockDatabase'
+import {
+  buildMockCurriculumOutline,
+  getMockCurriculum,
+  putMockCurriculum,
+  updateMockCurriculumMaterials,
+} from '@/features/demo/mockDatabase'
 import { ApiError, apiClient } from '@/shared/api/client'
 import { requestByDataSource } from '@/shared/api/dataSource'
 import { uploadAsset } from '@/shared/api/uploadAsset'
@@ -20,6 +25,56 @@ interface CreateCurriculumResponse {
   curriculumId: string
 }
 
+export interface InstructorCurriculumResponse {
+  curriculumId: string
+  title: string
+  summary: string
+  description: string
+  thumbnailUrl: string | null
+  lifecycleStatus: string
+  sectionCount: number
+  lessonCount: number
+  publishedLessonCount: number
+  structureVersion: number
+  materials: CurriculumMaterial[]
+  enrolleeCount: number | null
+}
+
+export interface CurriculumManagementLesson {
+  lessonId: string
+  title: string
+  status: string
+}
+
+export interface CurriculumManagementSection {
+  sectionId: string
+  title: string
+  description: string
+  order: number
+  lessons: CurriculumManagementLesson[]
+}
+
+interface ApiSectionResponse {
+  sectionId: string
+  title: string
+  description: string | null
+  orderIndex: number
+}
+
+interface ApiLessonResponse {
+  lessonId: string
+  title: string
+  status: string
+}
+
+export interface SaveCurriculumManagementRequest {
+  curriculumId: string
+  info: { title: string; summary: string; description: string }
+  sections: CurriculumManagementSection[]
+  materials: CurriculumMaterial[]
+  structureVersion: number
+}
+
 /**
  * 대표 이미지를 올리고 커리큘럼에 붙일 에셋 id를 받는다.
  * mock 모드에는 올릴 곳이 없으므로 id 없이 미리보기만 유지한다.
@@ -31,6 +86,7 @@ export function uploadCurriculumThumbnail(file: File) {
       const asset = await uploadAsset(file, 'THUMBNAIL')
       return asset.assetId
     },
+    apiImplemented: true,
   })
 }
 
@@ -62,5 +118,133 @@ export function createCurriculum(request: CreateCurriculumRequest) {
       })
       return data
     },
+    apiImplemented: true,
+  })
+}
+
+export function getInstructorCurriculum(curriculumId: string) {
+  return requestByDataSource<InstructorCurriculumResponse>({
+    mock: () => {
+      const curriculum = getMockCurriculum(curriculumId)
+      if (!curriculum) throw new ApiError('커리큘럼을 찾을 수 없습니다.', 404, 'CURRICULUM_NOT_FOUND')
+      return {
+        curriculumId: curriculum.curriculumId,
+        title: curriculum.title,
+        summary: curriculum.summary,
+        description: curriculum.description,
+        thumbnailUrl: curriculum.thumbnailUrl,
+        lifecycleStatus: curriculum.lifecycleStatus,
+        sectionCount: curriculum.sectionCount,
+        lessonCount: curriculum.lessonCount,
+        publishedLessonCount: buildMockCurriculumOutline(curriculum)
+          .flatMap((section) => section.lessons)
+          .filter((lesson) => lesson.status === 'PUBLISHED').length,
+        structureVersion: 0,
+        materials: curriculum.materials,
+        enrolleeCount: curriculum.enrolleeCount,
+      }
+    },
+    http: async () => {
+      const { data } = await apiClient.get<InstructorCurriculumResponse>(`/instructor/curriculums/${curriculumId}`)
+      return { ...data, materials: data.materials ?? [], enrolleeCount: data.enrolleeCount ?? null }
+    },
+    apiImplemented: true,
+  })
+}
+
+export function getCurriculumManagementStructure(curriculumId: string) {
+  return requestByDataSource<CurriculumManagementSection[]>({
+    mock: () => {
+      const curriculum = getMockCurriculum(curriculumId)
+      if (!curriculum) throw new ApiError('커리큘럼을 찾을 수 없습니다.', 404, 'CURRICULUM_NOT_FOUND')
+      return buildMockCurriculumOutline(curriculum).map((section) => ({
+        sectionId: section.sectionId,
+        title: section.title,
+        description: section.description ?? '',
+        order: section.order,
+        lessons: section.lessons.map((lesson) => ({
+          lessonId: lesson.lessonId,
+          title: lesson.title,
+          status: lesson.status,
+        })),
+      }))
+    },
+    http: async () => {
+      const { data: sections } = await apiClient.get<ApiSectionResponse[]>(`/instructor/curriculums/${curriculumId}/sections`)
+      return Promise.all(sections.map(async (section) => {
+        const { data: lessons } = await apiClient.get<ApiLessonResponse[]>(`/instructor/sections/${section.sectionId}/lessons`)
+        return {
+          sectionId: section.sectionId,
+          title: section.title,
+          description: section.description ?? '',
+          order: section.orderIndex + 1,
+          lessons,
+        }
+      }))
+    },
+    apiImplemented: true,
+  })
+}
+
+export async function saveCurriculumManagement(request: SaveCurriculumManagementRequest) {
+  const saveImplementedData = requestByDataSource({
+    mock: () => undefined,
+    http: async () => {
+      await apiClient.patch(`/instructor/curriculums/${request.curriculumId}`, request.info)
+      await Promise.all(request.sections
+        .filter((section) => !section.sectionId.startsWith('sec-new-'))
+        .map((section) => apiClient.patch(`/instructor/sections/${section.sectionId}`, {
+          title: section.title,
+          description: section.description,
+        })))
+      const persistedSections = request.sections.filter((section) => !section.sectionId.startsWith('sec-new-'))
+      if (persistedSections.length === request.sections.length) {
+        await apiClient.put(`/instructor/curriculums/${request.curriculumId}/curriculum/order`, {
+          baseVersion: request.structureVersion,
+          sections: persistedSections.map((section) => ({
+            sectionId: section.sectionId,
+            lessonIds: section.lessons.map((lesson) => lesson.lessonId),
+          })),
+        })
+      }
+    },
+    apiImplemented: true,
+  })
+
+  const createNewSections = Promise.all(request.sections
+    .filter((section) => section.sectionId.startsWith('sec-new-'))
+    .map((section) => requestByDataSource({
+      mock: () => undefined,
+      http: async () => {
+        await apiClient.post(`/instructor/curriculums/${request.curriculumId}/sections`, {
+          title: section.title,
+          description: section.description,
+        })
+      },
+      apiImplemented: true,
+    })))
+
+  const saveMaterials = requestByDataSource({
+    mock: () => {
+      updateMockCurriculumMaterials(request.curriculumId, request.materials)
+    },
+    http: async () => {
+      await apiClient.put(`/instructor/curriculums/${request.curriculumId}/materials`, {
+        materials: request.materials,
+      })
+    },
+    apiImplemented: false,
+  })
+
+  await Promise.all([saveImplementedData, createNewSections, saveMaterials])
+}
+
+export function publishCurriculum(curriculumId: string) {
+  return requestByDataSource({
+    mock: () => undefined,
+    http: async () => {
+      await apiClient.post(`/instructor/curriculums/${curriculumId}/publish`)
+    },
+    apiImplemented: true,
   })
 }

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { getRoleHomePath, instructorPaths, publicPaths, studentPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
+import ProfileAvatar from '@/features/profile/ProfileAvatar'
 import BrandLink from './BrandLink'
 
 export default function GlobalHeader() {
@@ -133,9 +134,7 @@ export default function GlobalHeader() {
                     aria-controls="profile-summary-popover"
                     onClick={() => setIsProfileOpen((current) => !current)}
                   >
-                    <span className="user-avatar" aria-hidden="true">
-                      {user.displayName.slice(0, 1)}
-                    </span>
+                    <ProfileAvatar displayName={user.displayName} imageUrl={user.profileImageUrl} decorative />
                     <span>
                       <strong>{user.displayName}</strong>
                       <small>{user.role === 'INSTRUCTOR' ? '강사' : '학생'}</small>
@@ -143,7 +142,7 @@ export default function GlobalHeader() {
                   </button>
                   {isProfileOpen && (
                     <div className="profile-summary-popover" id="profile-summary-popover" role="dialog" aria-label="기본 정보">
-                      <span className="user-avatar" aria-hidden="true">{user.displayName.slice(0, 1)}</span>
+                      <ProfileAvatar displayName={user.displayName} imageUrl={user.profileImageUrl} decorative />
                       <strong>{user.displayName}</strong>
                       <small>{user.role === 'INSTRUCTOR' ? '강사' : '학생'}</small>
                       <p>{user.email}</p>

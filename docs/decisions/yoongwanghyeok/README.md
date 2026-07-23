@@ -33,13 +33,15 @@
 | [0010](0010-integrated-mock-domain-state.md) | 채택 | 목록·상세·대시보드가 공유하는 통합 fixture 단일 원본 |
 | [0011](0011-optional-curriculum-materials.md) | 프론트 채택 | 선택형 커리큘럼 공통 자료와 수강·소유 관계 기반 노출 |
 | [0012](0012-curriculum-centered-navigation-and-lesson-live-management.md) | 프론트 채택 | 커리큘럼 중심 탐색과 레슨 중심 라이브 일정·상세 통합 |
+| [0013](0013-profile-image-edit-modal.md) | 프론트 채택 | 프로필 이미지 편집 모달과 구현된 계약만 저장하는 원칙 |
+| [0014](0014-operation-level-hybrid-api-routing.md) | 채택 | 함수별 API 구현 메타데이터와 `VITE_USE_MOCK_API` 하이브리드 분기 |
 
 ## 이슈와 트러블슈팅
 
 [OPEN_ISSUES_AND_TROUBLESHOOTING.md](OPEN_ISSUES_AND_TROUBLESHOOTING.md)에 다음을 구분해 기록한다.
 
 - 해결됨: 문서 비대화, 브랜치 오작업, 용어·파일 형식 변경 이력, LiveKit 되감기 오해, API prefix 변경, 화면별 mock 상태 불일치, 병합 충돌
-- 조율 필요: `course`와 `curriculum` 공유 계약, 레슨 발행 MVP 편차, 커리큘럼 공통 자료의 백엔드 계약·AI 영향 범위
+- 조율 필요: 레슨 발행 MVP 편차, 커리큘럼 공통 자료의 백엔드 계약·AI 영향 범위
 - 구현 전 검증: 녹화 중 누적 DVR HLS, session clock 보정, 검수 동시성, 진행률 계산
 
 ## 관련 산출물

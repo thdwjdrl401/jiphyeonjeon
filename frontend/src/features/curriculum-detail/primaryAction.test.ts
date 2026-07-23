@@ -25,7 +25,7 @@ function makeDetail(overrides: Partial<CurriculumDetailResponse['viewerContext']
             lessonId: 'les-1',
             title: '1강',
             order: 1,
-            lessonStatus: 'PUBLISHED',
+            status: 'PUBLISHED',
             scheduledAt: null,
             durationMs: null,
             liveSession: null,

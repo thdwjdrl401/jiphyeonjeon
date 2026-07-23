@@ -1,9 +1,19 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { instructorPaths, studentPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
-import { demoCaptions, demoLesson, demoMessages, getDemoLesson } from '@/features/demo/demoData'
+import { getLesson } from '@/features/lesson/lessonService'
+import {
+  askReplayAi,
+  getReplayCaptions,
+  getReplayMessages,
+  publishReplayReview,
+  saveReplayReview,
+  submitReplayQuiz,
+} from '@/features/replay/replayService'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
+import PageState from '@/shared/ui/PageState'
 import { InlineNotice, StatusBadge } from '@/shared/ui/WorkspaceUi'
 
 type ReplayPanel = 'review' | 'questions' | 'analytics' | 'outline' | 'caption' | 'chat' | 'ai' | 'quiz'
@@ -22,13 +32,24 @@ const replayQuestions = [
 ]
 
 export default function ReplayLessonPage() {
-  const { lessonId = demoLesson.lessonId } = useParams()
-  const lesson = getDemoLesson(lessonId)
+  const { lessonId = '' } = useParams()
   const { user } = useAuth()
   const isInstructor = user?.role === 'INSTRUCTOR'
-  const lessonPath = isInstructor
-    ? instructorPaths.lesson(lesson.curriculumId, lesson.sectionId, lesson.lessonId)
-    : studentPaths.lesson(lesson.curriculumId, lesson.sectionId, lesson.lessonId)
+  const lessonQuery = useQuery({
+    queryKey: ['replay-lesson', lessonId, user?.role],
+    queryFn: () => getLesson({ lessonId, role: user?.role, userId: user?.userId }),
+    enabled: Boolean(lessonId),
+  })
+  const captionsQuery = useQuery({ queryKey: ['replay-captions', lessonId], queryFn: () => getReplayCaptions(lessonId), enabled: Boolean(lessonId) })
+  const messagesQuery = useQuery({ queryKey: ['replay-messages', lessonId], queryFn: () => getReplayMessages(lessonId), enabled: Boolean(lessonId) })
+  const lesson = lessonQuery.data
+  const captions = captionsQuery.data ?? []
+  const messages = messagesQuery.data ?? []
+  const lessonPath = lesson
+    ? isInstructor
+      ? instructorPaths.lesson(lesson.curriculumId, lesson.sectionId, lesson.lessonId)
+      : studentPaths.lesson(lesson.curriculumId, lesson.sectionId, lesson.lessonId)
+    : '#'
   const [panel, setPanel] = useState<ReplayPanel>(isInstructor ? 'review' : 'outline')
   const [position, setPosition] = useState(42)
   const [playing, setPlaying] = useState(false)
@@ -39,11 +60,15 @@ export default function ReplayLessonPage() {
   const [reviewDraft, setReviewDraft] = useState('SecurityContext는 인증이 완료된 현재 요청의 인증 주체를 보관합니다.')
   const [reviewSaved, setReviewSaved] = useState(false)
   const [published, setPublished] = useState(false)
-  usePageTitle(`다시보기 · ${lesson.title}`)
+  const aiMutation = useMutation({ mutationFn: (question: string) => askReplayAi(lessonId, question, position * 1000), onSuccess: (data) => setAiAnswer(data.answer) })
+  const saveReviewMutation = useMutation({ mutationFn: () => saveReplayReview(lessonId, reviewDraft), onSuccess: () => setReviewSaved(true) })
+  const publishMutation = useMutation({ mutationFn: () => publishReplayReview(lessonId, reviewDraft), onSuccess: () => { setReviewSaved(true); setPublished(true) } })
+  const quizMutation = useMutation({ mutationFn: (answer: string) => submitReplayQuiz(lessonId, answer), onSuccess: () => setQuizSubmitted(true) })
+  usePageTitle(`다시보기 · ${lesson?.title ?? ''}`)
 
   const askAi = (event: FormEvent) => {
     event.preventDefault()
-    if (aiQuestion.trim()) setAiAnswer('세션은 인증 상태를 여러 요청에 걸쳐 유지하고, SecurityContext는 현재 요청에서 인증 주체를 참조하는 역할을 합니다.')
+    if (aiQuestion.trim()) aiMutation.mutate(aiQuestion.trim())
   }
 
   const tabs: Array<{ id: ReplayPanel; label: string }> = isInstructor
@@ -62,11 +87,12 @@ export default function ReplayLessonPage() {
         { id: 'quiz', label: '퀴즈' },
       ]
 
-  const saveReview = () => setReviewSaved(true)
-  const publishReview = () => {
-    setReviewSaved(true)
-    setPublished(true)
-  }
+  const saveReview = () => saveReviewMutation.mutate()
+  const publishReview = () => publishMutation.mutate()
+
+  if (!lessonId) return <PageState title="잘못된 다시보기 경로입니다" />
+  if (lessonQuery.isPending || captionsQuery.isPending || messagesQuery.isPending) return <PageState title="다시보기를 불러오는 중입니다" />
+  if (lessonQuery.isError || captionsQuery.isError || messagesQuery.isError || !lesson) return <PageState title="다시보기를 불러오지 못했습니다" />
 
   return (
     <div className={`media-page replay-page${isInstructor ? ' media-page--instructor' : ''}`}>
@@ -108,13 +134,13 @@ export default function ReplayLessonPage() {
 
           {!isInstructor && panel === 'outline' && <div className="side-panel-content"><div className="replay-outline"><button className="is-current" type="button"><span>12:08</span><div><strong>SecurityContext의 역할</strong><small>현재 재생 중</small></div></button><button type="button"><span>31:20</span><div><strong>Redis 세션 저장</strong><small>핵심 개념 3개</small></div></button><button type="button"><span>58:42</span><div><strong>CSRF 방어 흐름</strong><small>실습</small></div></button></div><div className="evidence-card"><span>구조 요약</span><strong>이번 강의의 핵심</strong><p>인증 주체, 요청 컨텍스트, 공유 세션 저장소의 책임을 구분합니다.</p></div></div>}
 
-          {panel === 'caption' && <div className="side-panel-content"><label className="panel-search"><span className="visually-hidden">자막 검색</span><input placeholder="자막에서 검색" /></label><div className="caption-list">{demoCaptions.map((caption) => <button type="button" key={caption.at}><time>{caption.at}</time><p>{caption.text}</p></button>)}</div></div>}
+          {panel === 'caption' && <div className="side-panel-content"><label className="panel-search"><span className="visually-hidden">자막 검색</span><input placeholder="자막에서 검색" /></label><div className="caption-list">{captions.map((caption) => <button type="button" key={caption.at}><time>{caption.at}</time><p>{caption.text}</p></button>)}</div></div>}
 
-          {panel === 'chat' && <div className="side-panel-content chat-list">{demoMessages.map((item) => <article key={item.id}><header><strong>{item.alias}</strong><time>{item.time}</time></header><p>{item.text}</p></article>)}</div>}
+          {panel === 'chat' && <div className="side-panel-content chat-list">{messages.map((item) => <article key={item.id}><header><strong>{item.alias}</strong><time>{item.time}</time></header><p>{item.text}</p></article>)}</div>}
 
           {!isInstructor && panel === 'ai' && <div className="side-panel-content ai-panel"><InlineNotice>현재 재생 시각과 강의 전체 자료를 함께 근거로 사용합니다.</InlineNotice>{aiAnswer && <div className="ai-answer"><strong>답변</strong><p>{aiAnswer}</p><small>근거 · session-and-csrf.pptx 8쪽</small></div>}<form onSubmit={askAi}><textarea rows={4} value={aiQuestion} placeholder="이 구간에서 궁금한 점을 질문하세요." onChange={(event) => setAiQuestion(event.target.value)} /><button className="button button--primary button--full" type="submit">질문하기</button></form></div>}
 
-          {!isInstructor && panel === 'quiz' && <div className="side-panel-content quiz-panel"><header><StatusBadge tone="success">QUIZ v1</StatusBadge><strong>핵심 개념 확인</strong><small>1 / 3 문제</small></header><p>현재 요청의 인증 주체를 참조하는 객체는 무엇인가요?</p>{['HttpSession', 'SecurityContext', 'RedisConnection'].map((answer) => <label className={quizAnswer === answer ? 'is-selected' : ''} key={answer}><input name="quiz" type="radio" value={answer} checked={quizAnswer === answer} onChange={(event) => { setQuizAnswer(event.target.value); setQuizSubmitted(false) }} /><span>{answer}</span></label>)}<button className="button button--primary button--full" disabled={!quizAnswer} type="button" onClick={() => setQuizSubmitted(true)}>정답 확인</button>{quizSubmitted && <InlineNotice tone={quizAnswer === 'SecurityContext' ? 'success' : 'danger'}>{quizAnswer === 'SecurityContext' ? '정답입니다. 현재 요청의 인증 주체를 보관합니다.' : '다시 생각해 보세요. 세션 저장소와 요청 컨텍스트는 책임이 다릅니다.'}</InlineNotice>}</div>}
+          {!isInstructor && panel === 'quiz' && <div className="side-panel-content quiz-panel"><header><StatusBadge tone="success">QUIZ v1</StatusBadge><strong>핵심 개념 확인</strong><small>1 / 3 문제</small></header><p>현재 요청의 인증 주체를 참조하는 객체는 무엇인가요?</p>{['HttpSession', 'SecurityContext', 'RedisConnection'].map((answer) => <label className={quizAnswer === answer ? 'is-selected' : ''} key={answer}><input name="quiz" type="radio" value={answer} checked={quizAnswer === answer} onChange={(event) => { setQuizAnswer(event.target.value); setQuizSubmitted(false) }} /><span>{answer}</span></label>)}<button className="button button--primary button--full" disabled={!quizAnswer || quizMutation.isPending} type="button" onClick={() => quizMutation.mutate(quizAnswer)}>정답 확인</button>{quizSubmitted && <InlineNotice tone={quizMutation.data?.correct ? 'success' : 'danger'}>{quizMutation.data?.correct ? '정답입니다. 현재 요청의 인증 주체를 보관합니다.' : '다시 생각해 보세요. 세션 저장소와 요청 컨텍스트는 책임이 다릅니다.'}</InlineNotice>}</div>}
         </aside>
       </div>
     </div>

@@ -47,7 +47,7 @@ export interface CurriculumOutlineLesson {
   lessonId: string
   title: string
   order: number
-  lessonStatus: LessonStatus
+  status: LessonStatus
   scheduledAt: string | null
   durationMs: number | null
   liveSession: CurriculumLessonLiveSession | null

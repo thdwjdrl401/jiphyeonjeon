@@ -2,7 +2,7 @@
 
 > 구현 가이드: [IMPLEMENTATION_GUIDE.md](../../frontend/IMPLEMENTATION_GUIDE.md) · 데이터 소스: [dataSource.ts](../../../frontend/src/shared/api/dataSource.ts) · 런타임 설정: [runtime.ts](../../../frontend/src/shared/config/runtime.ts)
 
-- **상태**: 채택
+- **상태**: 일부 대체 — 함수별 선택 규칙은 [ADR-0014](0014-operation-level-hybrid-api-routing.md) 적용
 - **일자**: 2026-07-21
 - **적용 범위**: 프론트 개발·빌드 방식, fixture와 실제 API의 선택 경계
 

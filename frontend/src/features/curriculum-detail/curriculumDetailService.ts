@@ -19,8 +19,8 @@ interface CurriculumApiLiveSession {
 
 type CurriculumApiOutlineLesson = Pick<
   CurriculumOutlineLesson,
-  'lessonId' | 'title' | 'order' | 'lessonStatus'
-> & Partial<Omit<CurriculumOutlineLesson, 'lessonId' | 'title' | 'order' | 'lessonStatus' | 'liveSession'>> & {
+  'lessonId' | 'title' | 'order' | 'status'
+> & Partial<Omit<CurriculumOutlineLesson, 'lessonId' | 'title' | 'order' | 'status' | 'liveSession'>> & {
   liveSession?: CurriculumApiLiveSession | null
 }
 
@@ -82,6 +82,7 @@ export async function getCurriculumDetail(curriculumId: string, viewer?: AuthUse
         viewerContext: data.viewerContext ?? createFallbackViewerContext(viewer),
       }
     },
+    apiImplemented: true,
   })
 }
 
@@ -92,6 +93,7 @@ export async function enrollInCurriculum(curriculumId: string) {
       const { data } = await apiClient.post<EnrollResult>(`/curriculums/${curriculumId}/enrollments`)
       return data
     },
+    apiImplemented: true,
   })
 }
 
@@ -101,5 +103,6 @@ export async function cancelEnrollment(curriculumId: string) {
     http: async () => {
       await apiClient.delete(`/curriculums/${curriculumId}/enrollments/me`)
     },
+    apiImplemented: true,
   })
 }

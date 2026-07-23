@@ -1,12 +1,15 @@
-import { useState, type ChangeEvent, type FormEvent } from 'react'
+import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { instructorPaths, publicPaths } from '@/app/router/paths'
-import { demoCurriculum, demoLesson, getDemoLesson } from '@/features/demo/demoData'
-import { getMockCurriculum } from '@/features/demo/mockDatabase'
+import { useAuth } from '@/features/auth/AuthContext'
+import { getInstructorCurriculum } from '@/features/curriculum/curriculumManagementService'
+import { getLesson, prepareLessonAi, saveLesson } from '@/features/lesson/lessonService'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
+import PageState from '@/shared/ui/PageState'
 import { InlineNotice, PageHeader, Panel, StatusBadge } from '@/shared/ui/WorkspaceUi'
 
-interface SelectedMaterial { id: string; name: string; size: string }
+interface SelectedMaterial { id: string; name: string; size: string; file?: File }
 
 function toDateTimeLocal(value?: string | null) {
   if (!value) return ''
@@ -16,20 +19,31 @@ function toDateTimeLocal(value?: string | null) {
 }
 
 export default function LessonFormPage() {
-  const { curriculumId = demoCurriculum.curriculumId, sectionId = 'sec-security', lessonId } = useParams()
+  const { curriculumId = '', sectionId = '', lessonId } = useParams()
+  const { user } = useAuth()
   const isEdit = Boolean(lessonId)
-  const currentLesson = getDemoLesson(lessonId ?? demoLesson.lessonId)
-  const curriculum = getMockCurriculum(curriculumId)
-  const existingLiveSession = isEdit ? currentLesson.liveSession : null
+  const curriculumQuery = useQuery({
+    queryKey: ['instructor-curriculum', curriculumId],
+    queryFn: () => getInstructorCurriculum(curriculumId),
+    enabled: Boolean(curriculumId),
+  })
+  const lessonQuery = useQuery({
+    queryKey: ['instructor-lesson-form', lessonId],
+    queryFn: () => getLesson({ lessonId: lessonId!, role: user?.role, userId: user?.userId, curriculumId, sectionId }),
+    enabled: isEdit,
+  })
+  const currentLesson = lessonQuery.data
+  const curriculum = curriculumQuery.data
+  const existingLiveSession = isEdit ? currentLesson?.liveSession : null
   const liveHasEnded = existingLiveSession?.status === 'ENDING' || existingLiveSession?.status === 'ENDED'
-  const replayIsPreparingOrAvailable = currentLesson.replayStatus === 'DRAFT'
-    || currentLesson.replayStatus === 'READY_FOR_REVIEW'
-    || currentLesson.replayStatus === 'PUBLISHED'
+  const replayIsPreparingOrAvailable = currentLesson?.replayStatus === 'DRAFT'
+    || currentLesson?.replayStatus === 'READY_FOR_REVIEW'
+    || currentLesson?.replayStatus === 'PUBLISHED'
   const canEditLiveSchedule = !isEdit || !(liveHasEnded || replayIsPreparingOrAvailable)
-  const lessonDetailPath = instructorPaths.lesson(curriculumId, sectionId, lessonId ?? demoLesson.lessonId)
-  const [title, setTitle] = useState(isEdit ? currentLesson.title : '')
-  const [description, setDescription] = useState(isEdit ? currentLesson.description : '')
-  const [materials, setMaterials] = useState<SelectedMaterial[]>(isEdit ? currentLesson.materials.map((item) => ({ id: item.id, name: item.name, size: item.size })) : [])
+  const lessonDetailPath = instructorPaths.lesson(curriculumId, sectionId, lessonId ?? '')
+  const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
+  const [materials, setMaterials] = useState<SelectedMaterial[]>([])
   const [processing, setProcessing] = useState(false)
   const [hasLiveSchedule, setHasLiveSchedule] = useState(Boolean(existingLiveSession))
   const [scheduledAt, setScheduledAt] = useState(toDateTimeLocal(existingLiveSession?.scheduledAt))
@@ -37,35 +51,71 @@ export default function LessonFormPage() {
   const [entryWindow, setEntryWindow] = useState('10')
   const [saveAsDraft, setSaveAsDraft] = useState(existingLiveSession?.status === 'DRAFT')
   const [saved, setSaved] = useState(false)
+  const [saveError, setSaveError] = useState('')
   usePageTitle(isEdit ? '강의 수정' : '강의 만들기')
+
+  useEffect(() => {
+    if (!currentLesson) return
+    setTitle(currentLesson.title)
+    setDescription(currentLesson.description)
+    setMaterials(currentLesson.materials.map((item) => ({ id: item.id, name: item.name, size: item.size })))
+    setHasLiveSchedule(Boolean(currentLesson.liveSession))
+    setScheduledAt(toDateTimeLocal(currentLesson.liveSession?.scheduledAt))
+    setSaveAsDraft(currentLesson.liveSession?.status === 'DRAFT')
+  }, [currentLesson])
 
   const markChanged = () => setSaved(false)
   const selectFiles = (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? [])
-    setMaterials((current) => [...current, ...files.map((file) => ({ id: `${file.name}-${file.lastModified}`, name: file.name, size: `${(file.size / 1024 / 1024).toFixed(1)} MB` }))])
+    setMaterials((current) => [...current, ...files.map((file) => ({ id: `${file.name}-${file.lastModified}`, name: file.name, size: `${(file.size / 1024 / 1024).toFixed(1)} MB`, file }))])
     markChanged()
   }
-  const save = (event: FormEvent) => {
+  const save = async (event: FormEvent) => {
     event.preventDefault()
     if (!title.trim() || (canEditLiveSchedule && hasLiveSchedule && !scheduledAt)) return
-    setSaved(true)
+    setSaveError('')
+    try {
+      await saveLesson({
+        sectionId,
+        lessonId,
+        title: title.trim(),
+        description,
+        liveSessionId: existingLiveSession?.sessionId,
+        scheduledAt: canEditLiveSchedule && hasLiveSchedule ? new Date(scheduledAt).toISOString() : undefined,
+        entryWindowMinutes: Number(entryWindow),
+        expectedDurationMinutes: Number(duration),
+        materials: materials.flatMap((material) => material.file ? [material.file] : []),
+      })
+      setSaved(true)
+    } catch {
+      setSaveError('강의 저장에 실패했습니다. 입력값과 서버 상태를 확인해 주세요.')
+    }
   }
-  const prepare = () => {
+  const prepare = async () => {
     setProcessing(true)
     markChanged()
-    window.setTimeout(() => setProcessing(false), 700)
+    try {
+      await prepareLessonAi(lessonId ?? 'new')
+    } finally {
+      setProcessing(false)
+    }
   }
+
+  if (!curriculumId || !sectionId) return <PageState title="잘못된 강의 경로입니다" />
+  if (curriculumQuery.isPending || (isEdit && lessonQuery.isPending)) return <PageState title="강의 정보를 불러오는 중입니다" />
+  if (curriculumQuery.isError || (isEdit && (lessonQuery.isError || !currentLesson))) return <PageState title="강의 정보를 불러오지 못했습니다" />
 
   return (
     <div className="workspace-page workspace-page--narrow">
       <PageHeader
         eyebrow={isEdit ? 'EDIT LESSON' : 'NEW LESSON'}
         title={isEdit ? '강의 수정' : '새 강의 만들기'}
-        description={`${curriculum?.title ?? demoCurriculum.title} · ${isEdit ? currentLesson.sectionTitle : '선택한 섹션'}`}
+        description={`${curriculum?.title ?? ''} · ${isEdit ? currentLesson?.sectionTitle ?? '' : '선택한 섹션'}`}
         action={<Link className="button button--soft" to={publicPaths.curriculum(curriculumId)}>커리큘럼 상세로 돌아가기</Link>}
       />
       <form className="workspace-form" onSubmit={save}>
         {saved && <InlineNotice tone="success">{canEditLiveSchedule ? '강의 정보와 라이브 일정 초안이 저장되었습니다.' : '강의 정보가 저장되었습니다.'}</InlineNotice>}
+        {saveError && <InlineNotice tone="danger">{saveError}</InlineNotice>}
 
         <Panel title="강의 기본 정보" description="강의 제목과 수강생에게 표시할 설명을 입력합니다.">
           <div className="form-grid">

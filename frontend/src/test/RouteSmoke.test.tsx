@@ -44,7 +44,7 @@ describe('전체 페이지 라우트', () => {
     await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
     renderAt(path)
     const navigation = await screen.findByRole('complementary', { name: '커리큘럼 강의 목록' })
-    expect(within(navigation).getByRole('link', { name: '라이브로 완성하는 Spring Boot' })).toBeInTheDocument()
+    expect(await within(navigation).findByRole('link', { name: '라이브로 완성하는 Spring Boot' })).toBeInTheDocument()
     expect(within(navigation).queryByRole('link', { name: '내 프로필' })).not.toBeInTheDocument()
   })
 
@@ -69,7 +69,7 @@ describe('전체 페이지 라우트', () => {
     renderAt('/student/live-sessions/ses-security-live/prejoin')
     expect(await screen.findByRole('heading', { name: '입장 전 점검' })).toBeInTheDocument()
     const lessonNavigation = screen.getByRole('complementary', { name: '커리큘럼 강의 목록' })
-    expect(within(lessonNavigation).getByRole('link', { name: /Spring Security 시작하기/ })).toHaveAttribute(
+    expect(await within(lessonNavigation).findByRole('link', { name: /Spring Security 시작하기/ })).toHaveAttribute(
       'aria-current',
       'page',
     )
@@ -140,7 +140,7 @@ describe('전체 페이지 라우트', () => {
       '/student/live-sessions/ses-security-live/prejoin',
     )
     const lessonNavigation = screen.getByRole('complementary', { name: '커리큘럼 강의 목록' })
-    expect(within(lessonNavigation).getByRole('link', { name: '라이브로 완성하는 Spring Boot' })).toBeInTheDocument()
+    expect(await within(lessonNavigation).findByRole('link', { name: '라이브로 완성하는 Spring Boot' })).toBeInTheDocument()
     expect(within(lessonNavigation).getByRole('heading', { name: '인증과 인가' })).toBeInTheDocument()
     expect(within(lessonNavigation).getByRole('link', { name: /Spring Security 시작하기/ })).toHaveAttribute(
       'aria-current',

@@ -44,7 +44,7 @@ export interface MockCurriculumEntity {
 interface MockLessonSeed {
   lessonId: string
   title: string
-  lessonStatus: LessonStatus
+  status: LessonStatus
 }
 
 interface MockSectionSeed {
@@ -198,16 +198,16 @@ const springSectionSeeds: MockSectionSeed[] = [
   {
     title: '서비스의 뼈대 세우기', description: '요청 흐름과 계층의 책임을 정리합니다.',
     lessons: [
-      { lessonId: 'les-orientation', title: '오리엔테이션과 개발 환경', lessonStatus: 'PUBLISHED' },
-      { lessonId: 'les-request-flow', title: 'HTTP 요청 흐름 해부하기', lessonStatus: 'PUBLISHED' },
-      { lessonId: 'les-service-layer', title: '서비스 계층과 트랜잭션', lessonStatus: 'PUBLISHED' },
+      { lessonId: 'les-orientation', title: '오리엔테이션과 개발 환경', status: 'PUBLISHED' },
+      { lessonId: 'les-request-flow', title: 'HTTP 요청 흐름 해부하기', status: 'PUBLISHED' },
+      { lessonId: 'les-service-layer', title: '서비스 계층과 트랜잭션', status: 'PUBLISHED' },
     ],
   },
   {
     title: '인증과 인가', description: '세션 기반 인증과 안전한 권한 경계를 구현합니다.',
     lessons: [
-      { lessonId: 'les-security', title: 'Spring Security 시작하기', lessonStatus: 'PUBLISHED' },
-      { lessonId: 'les-session', title: 'Redis 세션과 CSRF', lessonStatus: 'PUBLISHED' },
+      { lessonId: 'les-security', title: 'Spring Security 시작하기', status: 'PUBLISHED' },
+      { lessonId: 'les-session', title: 'Redis 세션과 CSRF', status: 'PUBLISHED' },
     ],
   },
 ]
@@ -389,7 +389,7 @@ export function buildMockCurriculumOutline(curriculum: MockCurriculumEntity): Cu
         lessonId,
         title: lessonSeed?.title ?? `${lessonOrder}강. 학습 주제 ${lessonOrder}`,
         order: lessonOrder,
-        lessonStatus: lessonSeed?.lessonStatus ?? (curriculum.lifecycleStatus === 'DRAFT' ? 'DRAFT' : 'PUBLISHED'),
+        status: lessonSeed?.status ?? (curriculum.lifecycleStatus === 'DRAFT' ? 'DRAFT' : 'PUBLISHED'),
         scheduledAt: availability.liveSession?.scheduledAt ?? null,
         durationMs: 3_600_000,
         ...availability,

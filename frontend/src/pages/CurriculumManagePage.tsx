@@ -1,12 +1,20 @@
 import { useState, type DragEvent as ReactDragEvent } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { instructorPaths, publicPaths } from '@/app/router/paths'
 import CurriculumImageField, { type CurriculumImageSelection } from '@/features/curriculum/CurriculumImageField'
 import CurriculumMaterialField from '@/features/curriculum/CurriculumMaterialField'
+import {
+  getCurriculumManagementStructure,
+  getInstructorCurriculum,
+  publishCurriculum,
+  saveCurriculumManagement,
+  type CurriculumManagementSection,
+  type InstructorCurriculumResponse,
+} from '@/features/curriculum/curriculumManagementService'
 import type { CurriculumMaterial } from '@/features/curriculum/types'
-import { demoCurriculum } from '@/features/demo/demoData'
-import { buildMockCurriculumOutline, getMockCurriculum, updateMockCurriculumMaterials } from '@/features/demo/mockDatabase'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
+import PageState from '@/shared/ui/PageState'
 import { InlineNotice, MetricCard, PageHeader, Panel, StatusBadge } from '@/shared/ui/WorkspaceUi'
 
 interface CurriculumDraftState {
@@ -35,34 +43,60 @@ interface LessonDropTarget {
 }
 
 export default function CurriculumManagePage() {
-  const { curriculumId = demoCurriculum.curriculumId } = useParams()
+  const { curriculumId } = useParams()
   const location = useLocation()
   const routeState = location.state as CurriculumDraftState | null
-  const storedCurriculum = getMockCurriculum(curriculumId)
+  const managementQuery = useQuery({
+    queryKey: ['curriculum-management', curriculumId],
+    queryFn: async () => {
+      const [curriculum, sections] = await Promise.all([
+        getInstructorCurriculum(curriculumId!),
+        getCurriculumManagementStructure(curriculumId!),
+      ])
+      return { curriculum, sections }
+    },
+    enabled: Boolean(curriculumId),
+  })
+  usePageTitle('커리큘럼 관리')
+
+  if (!curriculumId) return <PageState title="커리큘럼을 찾을 수 없습니다" />
+  if (managementQuery.isPending) return <PageState title="커리큘럼을 불러오는 중입니다" />
+  if (managementQuery.isError) return <PageState title="커리큘럼을 불러오지 못했습니다" description="잠시 후 다시 시도해 주세요." />
+
+  return <CurriculumManageEditor
+    key={curriculumId}
+    curriculumId={curriculumId}
+    routeState={routeState}
+    storedCurriculum={managementQuery.data.curriculum}
+    initialSections={managementQuery.data.sections}
+  />
+}
+
+function CurriculumManageEditor({
+  curriculumId,
+  routeState,
+  storedCurriculum,
+  initialSections,
+}: {
+  curriculumId: string
+  routeState: CurriculumDraftState | null
+  storedCurriculum: InstructorCurriculumResponse
+  initialSections: CurriculumManagementSection[]
+}) {
   const isNewDraft = storedCurriculum?.lifecycleStatus === 'DRAFT'
   const [tab, setTab] = useState<'structure' | 'info' | 'enrollees'>('structure')
-  const [sections, setSections] = useState(() => storedCurriculum
-    ? buildMockCurriculumOutline(storedCurriculum).map((section) => ({
-        ...section,
-        description: section.description ?? '',
-        lessons: section.lessons.map((lesson) => ({
-          lessonId: lesson.lessonId,
-          title: lesson.title,
-          status: lesson.lessonStatus,
-        })),
-      }))
-    : [])
+  const [sections, setSections] = useState(initialSections)
   const [curriculumInfo, setCurriculumInfo] = useState({
     title: routeState?.draft?.title ?? storedCurriculum?.title ?? '',
     summary: routeState?.draft?.summary ?? storedCurriculum?.summary ?? '',
     description: routeState?.draft?.description ?? storedCurriculum?.description ?? '',
   })
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(routeState?.draft?.thumbnailUrl ?? storedCurriculum?.thumbnailUrl ?? null)
-  const [materials, setMaterials] = useState<CurriculumMaterial[]>(routeState?.draft?.materials ?? storedCurriculum?.materials ?? [])
+  const [materials, setMaterials] = useState<CurriculumMaterial[]>(routeState?.draft?.materials ?? storedCurriculum.materials)
   const [saved, setSaved] = useState(Boolean(routeState?.created))
+  const [saveError, setSaveError] = useState('')
   const [draggedLesson, setDraggedLesson] = useState<DraggedLesson | null>(null)
   const [lessonDropTarget, setLessonDropTarget] = useState<LessonDropTarget | null>(null)
-  usePageTitle('커리큘럼 관리')
 
   const markChanged = () => setSaved(false)
 
@@ -81,9 +115,31 @@ export default function CurriculumManagePage() {
     markChanged()
   }
 
-  const saveChanges = () => {
-    updateMockCurriculumMaterials(curriculumId, materials)
-    setSaved(true)
+  const saveChanges = async () => {
+    setSaveError('')
+    setSaved(false)
+    try {
+      await saveCurriculumManagement({
+        curriculumId,
+        info: curriculumInfo,
+        sections,
+        materials,
+        structureVersion: storedCurriculum.structureVersion,
+      })
+      setSaved(true)
+    } catch {
+      setSaveError('변경 내용을 저장하지 못했습니다.')
+    }
+  }
+
+  const publish = async () => {
+    setSaveError('')
+    try {
+      await publishCurriculum(curriculumId)
+      setSaved(true)
+    } catch {
+      setSaveError('커리큘럼을 게시하지 못했습니다.')
+    }
   }
 
   const updateSection = (sectionId: string, field: SectionInfoField, value: string) => {
@@ -106,7 +162,7 @@ export default function CurriculumManagePage() {
     setSections((current) => [
       ...current,
       {
-        sectionId: `sec-${Date.now()}`,
+        sectionId: `sec-new-${Date.now()}`,
         title: '새 섹션',
         description: '설명을 입력해 주세요.',
         order: current.length + 1,
@@ -205,7 +261,8 @@ export default function CurriculumManagePage() {
         action={<div className="header-action-group"><Link className="button button--soft" to={publicPaths.curriculum(curriculumId)}>커리큘럼 상세</Link><button className="button button--primary" type="button" onClick={saveChanges}>변경 저장</button></div>}
       />
       {saved && <InlineNotice tone="success">변경 내용이 현재 작업 초안에 반영되었습니다.</InlineNotice>}
-      <div className="metric-grid"><MetricCard label="상태" value={storedCurriculum?.lifecycleStatus ?? 'DRAFT'} helper={isNewDraft ? '게시 전' : '운영 중'} /><MetricCard label="섹션" value={sections.length} /><MetricCard label="전체 강의" value={sections.reduce((sum, section) => sum + section.lessons.length, 0)} /><MetricCard label="수강생" value={storedCurriculum?.enrolleeCount ?? 0} /></div>
+      {saveError && <InlineNotice tone="danger">{saveError}</InlineNotice>}
+      <div className="metric-grid"><MetricCard label="상태" value={storedCurriculum.lifecycleStatus} helper={isNewDraft ? '게시 전' : '운영 중'} /><MetricCard label="섹션" value={sections.length} /><MetricCard label="전체 강의" value={sections.reduce((sum, section) => sum + section.lessons.length, 0)} /><MetricCard label="수강생" value={storedCurriculum.enrolleeCount ?? '--'} /></div>
       <div className="workspace-tabs" role="tablist"><button className={tab === 'structure' ? 'is-active' : ''} onClick={() => setTab('structure')} type="button">구성</button><button className={tab === 'info' ? 'is-active' : ''} onClick={() => setTab('info')} type="button">기본 정보</button><button className={tab === 'enrollees' ? 'is-active' : ''} onClick={() => setTab('enrollees')} type="button">수강생</button></div>
 
       {tab === 'structure' && (
@@ -263,7 +320,7 @@ export default function CurriculumManagePage() {
         <Panel title="기본 정보" description="일반 수정과 공개 상태 전환은 분리합니다.">
           <div className="form-grid"><label className="form-field--wide"><span>제목</span><input value={curriculumInfo.title} onChange={(event) => updateCurriculumInfo('title', event.target.value)} /></label><label className="form-field--wide"><span>짧은 소개</span><input value={curriculumInfo.summary} onChange={(event) => updateCurriculumInfo('summary', event.target.value)} /></label><label className="form-field--wide"><span>상세 설명</span><textarea rows={6} value={curriculumInfo.description} onChange={(event) => updateCurriculumInfo('description', event.target.value)} /></label></div>
           <div className="curriculum-manage-thumbnail"><h3>대표 이미지</h3><p>목록과 상세 카드에 표시할 이미지를 등록합니다.</p><CurriculumImageField id="manage-curriculum-thumbnail" previewUrl={thumbnailUrl} onChange={(selection: CurriculumImageSelection | null) => updateThumbnail(selection?.previewUrl ?? null)} /></div>
-          <div className="lifecycle-actions"><div><StatusBadge tone="warning">DRAFT</StatusBadge><p>강의 편성을 확인한 뒤 커리큘럼을 게시하세요.</p></div><button className="button button--primary" type="button" onClick={saveChanges}>커리큘럼 게시</button></div>
+          <div className="lifecycle-actions"><div><StatusBadge tone="warning">DRAFT</StatusBadge><p>강의 편성을 확인한 뒤 커리큘럼을 게시하세요.</p></div><button className="button button--primary" type="button" onClick={() => void publish()}>커리큘럼 게시</button></div>
           <div className="curriculum-manage-materials"><h3>커리큘럼 강의 자료 <small>선택</small></h3><p>전체 강의에서 공통으로 제공할 PPTX 자료를 추가하거나 제거합니다.</p><CurriculumMaterialField id="manage-curriculum-materials" value={materials} onChange={updateMaterials} /></div>
         </Panel>
       )}
