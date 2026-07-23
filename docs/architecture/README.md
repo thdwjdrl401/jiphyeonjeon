@@ -109,6 +109,20 @@ cd docs/architecture/tools && python3 build_slices.py   # → liveclass-architec
 > 최초 생성 이후로는 `liveclass-architecture.drawio`가 원본이고, 스크립트는 참고용이다.
 > 슬라이스를 통째로 다시 뽑고 싶을 때만 쓴다.
 
+## 화살표 규칙
+
+그림 종류마다 화살표의 뜻이 다르다. 한 그림 안에서는 반드시 하나로 통일한다 —
+섞이면 같은 "가져온다"가 어떤 곳은 요청 방향, 어떤 곳은 데이터 방향으로 그려진다.
+
+| 그림 | 화살표의 뜻 |
+|---|---|
+| **구성도** (`full-architecture` · `12-architecture` · `09-servers`) | **호출·의존 방향** — 누가 누구를 부르는가. 그래서 `ai-worker → rabbitmq`(잡을 가져간다), `realtime-agent → livekit`(방을 구독한다)이다 |
+| **흐름도** (`17-runtime` · 제품 이야기 8장 · 서비스 내부 3장) | **데이터가 이동하는 방향** — 무엇이 어디로 가는가. 그래서 `minio → ai-worker`(원본이 온다)이다 |
+
+`17-runtime` 에는 세 번째 종류가 하나 더 있다 — **화살촉 없는 옅은 선**은
+"붙어 있다"는 연결이다. `backend ↔ postgres` 처럼 읽고 쓰기가 양방향이라
+한 방향을 고를 수 없는 것에 쓴다. 억지로 방향을 주면 그게 곧 혼선이 된다.
+
 ## 표기 규칙
 
 그림 전체가 같은 언어를 쓴다.

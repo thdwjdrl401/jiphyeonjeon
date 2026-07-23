@@ -29,14 +29,14 @@
 <path d="M710,204 l-9,-5 l0,10 z" fill="#5A6C7B"/>
 <path d="M230,362 V482 H465 V570" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
 <path d="M465,570 l-5,-9 l10,0 z" fill="#5A6C7B"/>
-<path d="M710,232 H668 V506 H140 V570" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
-<path d="M140,570 l-5,-9 l10,0 z" fill="#5A6C7B"/>
-<path d="M825,246 V290" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
-<path d="M825,290 l-5,-9 l10,0 z" fill="#5A6C7B"/>
+<path d="M140,570 V506 H668 V232 H710" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M710,232 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M825,290 V246" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M825,246 l-5,9 l10,0 z" fill="#5A6C7B"/>
 <path d="M940,310 H975" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
 <path d="M975,310 l-9,-5 l0,10 z" fill="#5A6C7B"/>
-<path d="M490,410 V466 H745 V570" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
-<path d="M745,570 l-5,-9 l10,0 z" fill="#5A6C7B"/>
+<path d="M745,570 V466 H490 V410" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M490,410 l-5,9 l10,0 z" fill="#5A6C7B"/>
 <path d="M465,626 V672 H1030 V626" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
 <path d="M1030,626 l-5,9 l10,0 z" fill="#5A6C7B"/>
 <path d="M860,598 H910" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
@@ -54,7 +54,7 @@
 <rect x="361.6" y="463.4" width="76.8" height="17.8" fill="#FFFFFF" rx="2"/>
 <text x="400" y="474" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">검증된 요청</text>
 <rect x="521.6" y="487.4" width="76.8" height="17.8" fill="#FFFFFF" rx="2"/>
-<text x="560" y="498" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">강사 오디오</text>
+<text x="560" y="498" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">오디오 구독</text>
 <rect x="285.3" y="385.4" width="65.3" height="17.8" fill="#FFFFFF" rx="2"/>
 <text x="318" y="396" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">근거 검색</text>
 <rect x="275.3" y="459.4" width="65.3" height="17.8" fill="#FFFFFF" rx="2"/>
