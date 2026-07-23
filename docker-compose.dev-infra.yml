@@ -47,7 +47,6 @@ services:
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD 필요}
     ports:
       - "4001:5672"      # AMQP (dev)
-      - "8990:15672"    # 관리 UI (dev)
     volumes:
       - rabbitmqdata:/var/lib/rabbitmq
     healthcheck:
@@ -55,7 +54,25 @@ services:
       interval: 15s
       timeout: 10s
       retries: 5
+
+  # RabbitMQ 관리 UI TLS 종단 — https://…:8990 → rabbitmq:15672. HSTS-preload(*.liveclass.io) 하에서도 접속되게.
+  rabbitmq-ui-tls:
+    image: nginx:alpine
+    container_name: liveclass-rabbitmq-ui-tls-dev
+    restart: unless-stopped
+    ports:
+      - "8990:8990"      # https (SG 개방 포트)
+    volumes:
+      - ./infra/nginx/rabbitmq-ui-dev.conf:/etc/nginx/conf.d/default.conf:ro
+      - certbot-etc:/etc/letsencrypt:ro
+    depends_on: [rabbitmq]
+    # 6h마다 reload → 갱신 인증서 반영 (livekit nginx와 동일)
+    command: /bin/sh -c "while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g 'daemon off;'"
+
 volumes:
   pgdata:
   redisdata:
   rabbitmqdata:
+  certbot-etc:                # 앱 스택 certbot 발급 공유 인증서
+    external: true
+    name: liveclass_certbot_etc
