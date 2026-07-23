@@ -13,6 +13,8 @@ VOD 레슨은 종료된 라이브 레슨의 Egress HLS 녹화를 재생하고, �
 
 ## 2. 확정 원칙
 
+> **UI 목업 기준(2026-07-23)**: 학생·강사 다시보기의 기본 학습 사이드바는 라이브와 같은 `채팅·질문 / 실시간 노트 / AI 질문 / 핵심 용어` 네 탭을 사용한다. 라이브에서 생성된 구간 요약 블록과 검수 용어를 읽기 형태로 재사용하며, 역할별 검수·통계·퀴즈의 최종 위치는 후속 논의한다. 상세 결정은 [ADR-0019](../../decisions/yoongwanghyeok/0019-unified-learning-sidebar-and-caption-dock-preview.md)를 따른다.
+
 - VOD는 라이브 Egress가 생성한 HLS만 사용하며 영상 업로드는 제공하지 않음
 - `videoAssetStatus=READY`는 강사 미리보기 가능 상태이며 수강생 자동 공개를 의미하지 않음
 - 수강생 영상 재생은 `replayStatus=PUBLISHED`일 때만 허용
@@ -64,24 +66,16 @@ VodLessonPage
    ├─ VodLessonPrimaryContent
    │  ├─ VodPlayerStage
    │  │  ├─ HlsVodPlayer
-   │  │  ├─ VodPlayerControls
+   │  │  ├─ MediaControlsOverlay
    │  │  └─ PlaybackStateOverlay
-   │  ├─ VodTimeline
-   │  │  ├─ ChapterMarkerLayer
-   │  │  ├─ BookmarkMarkerLayer            수강생
-   │  │  └─ QuestionPinLayer               강사만
-   │  └─ VodCaptionRegion
-   │     ├─ PublishedCaption
-   │     ├─ GlossaryPopover
-   │     └─ EvidenceViewer
+   │  └─ VodCaptionDock
+   │     ├─ CaptionSentenceList
+   │     └─ CaptionTermLink
    ├─ VodLessonSidePanel
-   │  ├─ TranscriptSearchPanel
-   │  ├─ ChapterNavigationPanel
-   │  ├─ ChatReplayPanel
+   │  ├─ DiscussionPanel                   읽기 전용 채팅 + 질문 필터
+   │  ├─ LiveSummaryPanel                  라이브 누적 블록
    │  ├─ PersonalAiQuestionPanel
-   │  ├─ LessonMaterialPanel
-   │  ├─ BookmarkPanel                     수강생
-   │  └─ QuizPanel
+   │  └─ GlossaryPanel
    ├─ StudentLearningStatus                수강생
    ├─ InstructorVodPanel                   강사만
    │  ├─ InstructorReviewPanel
