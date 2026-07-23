@@ -68,12 +68,16 @@ class Free:
                      f'fill="{ZONE_TXT}" letter-spacing="1.6">{escape(lab)}</text>')
 
         for pts, lab, lxy, kind in self.edges_in:                # ② 선
-            col = "#D9342B" if kind == "hot" else EDGE
-            wdt = 2 if kind == "hot" else 1.6
+            # kind="link" 는 "붙어 있다"는 연결선 — 방향이 없으므로 화살촉을 달지 않는다.
+            # 화살촉이 달린 선은 전부 "데이터가 이 방향으로 이동한다"는 뜻이다.
+            col = "#D9342B" if kind == "hot" else ("#9DAAB6" if kind == "link" else EDGE)
+            wdt = 2 if kind == "hot" else (1.2 if kind == "link" else 1.6)
             d = f'M{pts[0][0]},{pts[0][1]}' + "".join(
                 (f' H{b[0]}' if abs(a[1] - b[1]) < 0.5 else f' V{b[1]}')
                 for a, b in zip(pts, pts[1:]))
             o.append(f'<path d="{d}" fill="none" stroke="{col}" stroke-width="{wdt}"/>')
+            if kind == "link":
+                continue
             a, b = pts[-2], pts[-1]
             if abs(a[1] - b[1]) < 0.5:
                 tip = f'M{b[0]},{b[1]} l-9,-5 l0,10 z' if b[0] > a[0] else f'M{b[0]},{b[1]} l9,-5 l0,10 z'
