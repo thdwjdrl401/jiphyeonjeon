@@ -3,11 +3,7 @@
 <style>text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif}</style>
 <rect width="100%" height="100%" fill="#FFFFFF"/>
 <rect x="40" y="120" width="1060" height="190" rx="4" fill="#F5F8FA" stroke="#C6D2DB" stroke-width="1" stroke-dasharray="4 4"/>
-<rect x="54" y="130" width="4" height="15" rx="1" fill="#8FA3B4"/>
-<text x="66" y="143" font-size="13" font-weight="700" fill="#3F5162" letter-spacing="1.6">실시간 경로</text>
 <rect x="40" y="340" width="1060" height="190" rx="4" fill="#F5F8FA" stroke="#C6D2DB" stroke-width="1" stroke-dasharray="4 4"/>
-<rect x="54" y="350" width="4" height="15" rx="1" fill="#8FA3B4"/>
-<text x="66" y="363" font-size="13" font-weight="700" fill="#3F5162" letter-spacing="1.6">녹화 경로</text>
 <path d="M145,96 V160" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
 <path d="M145,160 l-5,-9 l10,0 z" fill="#5A6C7B"/>
 <path d="M270,193 H340" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>

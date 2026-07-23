@@ -3,23 +3,11 @@
 <style>text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif}</style>
 <rect width="100%" height="100%" fill="#FFFFFF"/>
 <rect x="40" y="40" width="280" height="200" rx="4" fill="#F5F8FA" stroke="#C6D2DB" stroke-width="1" stroke-dasharray="4 4"/>
-<rect x="54" y="50" width="4" height="15" rx="1" fill="#8FA3B4"/>
-<text x="66" y="63" font-size="13" font-weight="700" fill="#3F5162" letter-spacing="1.6">사용자</text>
 <rect x="360" y="40" width="1260" height="200" rx="4" fill="#F5F8FA" stroke="#C6D2DB" stroke-width="1" stroke-dasharray="4 4"/>
-<rect x="374" y="50" width="4" height="15" rx="1" fill="#8FA3B4"/>
-<text x="386" y="63" font-size="13" font-weight="700" fill="#3F5162" letter-spacing="1.6">브라우저 · REACT</text>
 <rect x="40" y="270" width="1580" height="110" rx="4" fill="#F5F8FA" stroke="#C6D2DB" stroke-width="1" stroke-dasharray="4 4"/>
-<rect x="54" y="280" width="4" height="15" rx="1" fill="#8FA3B4"/>
-<text x="66" y="293" font-size="13" font-weight="700" fill="#3F5162" letter-spacing="1.6">엣지 · NGINX</text>
 <rect x="40" y="420" width="760" height="370" rx="4" fill="#F5F8FA" stroke="#C6D2DB" stroke-width="1" stroke-dasharray="4 4"/>
-<rect x="54" y="430" width="4" height="15" rx="1" fill="#8FA3B4"/>
-<text x="66" y="443" font-size="13" font-weight="700" fill="#3F5162" letter-spacing="1.6">앱 서비스 · SPRING BOOT — 단일 배포</text>
 <rect x="840" y="420" width="780" height="200" rx="4" fill="#F5F8FA" stroke="#C6D2DB" stroke-width="1" stroke-dasharray="4 4"/>
-<rect x="854" y="430" width="4" height="15" rx="1" fill="#8FA3B4"/>
-<text x="866" y="443" font-size="13" font-weight="700" fill="#3F5162" letter-spacing="1.6">미디어 서비스 · LIVEKIT SELF-HOST</text>
 <rect x="840" y="670" width="780" height="320" rx="4" fill="#F5F8FA" stroke="#C6D2DB" stroke-width="1" stroke-dasharray="4 4"/>
-<rect x="854" y="680" width="4" height="15" rx="1" fill="#8FA3B4"/>
-<text x="866" y="693" font-size="13" font-weight="700" fill="#3F5162" letter-spacing="1.6">AI 서비스 · PYTHON</text>
 <path d="M290,100 H390" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
 <path d="M390,100 l-9,-5 l0,10 z" fill="#5A6C7B"/>
 <path d="M290,180 H340 V115 H390" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>

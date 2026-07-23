@@ -60,12 +60,9 @@ class Free:
              '"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif}</style>',
              f'<rect width="100%" height="100%" fill="{BG}"/>']
 
-        for lab, x, y, w, h in self.zones:                       # ① 구역
+        for lab, x, y, w, h in self.zones:                       # ① 구역 배경
             o.append(f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="4" fill="{ZONE_FILL}" '
                      f'stroke="{ZONE_LINE}" stroke-width="1" stroke-dasharray="4 4"/>')
-            o.append(f'<rect x="{x+14}" y="{y+10}" width="4" height="15" rx="1" fill="{ZONE_BAR}"/>')
-            o.append(f'<text x="{x+26}" y="{y+23}" font-size="13" font-weight="700" '
-                     f'fill="{ZONE_TXT}" letter-spacing="1.6">{escape(lab)}</text>')
 
         for pts, lab, lxy, kind in self.edges_in:                # ② 선
             # kind="link" 는 "붙어 있다"는 연결선 — 방향이 없으므로 화살촉을 달지 않는다.
