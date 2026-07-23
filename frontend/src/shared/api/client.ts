@@ -34,6 +34,7 @@ export class ApiError extends Error {
 export const apiClient = axios.create({
   baseURL: '/api',
   withCredentials: true,
+  withXSRFToken: false,
   timeout: 15_000,
 })
 

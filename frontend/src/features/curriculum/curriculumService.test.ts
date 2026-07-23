@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { apiClient } from '@/shared/api/client'
 
-vi.mock('@/shared/config/runtime', () => ({ isMockApiEnabled: false }))
+vi.mock('@/shared/config/runtime', () => ({ isMockApiEnabled: false, isTestMode: false }))
 
 import {
   cancelEnrollment,
   enrollInCurriculum,
   getCurriculumDetail,
 } from '@/features/curriculum-detail/curriculumDetailService'
-import { authService, httpAuthService } from '@/features/auth/authService'
+import { authService } from '@/features/auth/authService'
 import { createCurriculum } from './curriculumManagementService'
 import { getCurriculums } from './curriculumService'
 
@@ -40,8 +40,12 @@ describe('커리큘럼 API 계약', () => {
     const postSpy = vi.spyOn(apiClient, 'post').mockResolvedValue({
       data: { curriculumId: 'cur-created' },
     } as never)
+    const getSpy = vi.spyOn(apiClient, 'get').mockResolvedValue({
+      data: { userId: 'usr-1', email: 'instructor@example.com', displayName: '강사', role: 'INSTRUCTOR' },
+    } as never)
 
-    expect(authService).toBe(httpAuthService)
+    await expect(authService.getCurrentUser()).resolves.toMatchObject({ email: 'instructor@example.com' })
+    expect(getSpy).toHaveBeenCalledWith('/auth/me')
     await expect(createCurriculum({
       title: '새 커리큘럼',
       summary: '요약',
@@ -85,7 +89,7 @@ describe('커리큘럼 API 계약', () => {
                 lessonId: 'les_1',
                 title: '강의',
                 order: 1,
-                lessonStatus: 'PUBLISHED',
+                status: 'PUBLISHED',
                 liveSession: {
                   sessionId: 'ses_1',
                   liveSessionStatus: 'SCHEDULED',
@@ -108,6 +112,7 @@ describe('커리큘럼 API 계약', () => {
     })
     expect(detail.materials).toEqual([])
     expect(detail.outline[0].lessons[0].access.allowed).toBe(false)
+    expect(detail.outline[0].lessons[0].status).toBe('PUBLISHED')
     expect(detail.outline[0].lessons[0].liveSession).toEqual({
       sessionId: 'ses_1',
       status: 'SCHEDULED',

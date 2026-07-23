@@ -2,7 +2,7 @@
 
 > 📍 하네스 개요: [../../harness/README.md](../../harness/README.md) · 판단 정책: [../../harness/POLICY.md](../../harness/POLICY.md)
 
-- **상태**: 채택
+- **상태**: 일부 대체 — 직접 demo 호출 허용과 선택 규칙은 [ADR-0014](../yoongwanghyeok/0014-operation-level-hybrid-api-routing.md) 적용
 - **일자**: 2026-07-22
 - **관련**: Sub Ⅱ / CP0 · [ADR-0026](0026-catalog-viewer-context.md)
 

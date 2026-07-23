@@ -6,12 +6,12 @@
 
 내 프로필은 로그인 사용자가 자신의 계정 정보와 가입 유형을 확인하고, 수정 가능한 프로필 정보를 관리하는 개인 설정 페이지다.
 
-- 강사: 수강생에게 공개할 소개와 전문 분야 관리
+- 강사: 계정 정보 확인과 공개 프로필 편집 준비 상태 확인
 - 학생: 기본 계정 정보와 학습 요약 확인
 
 계정 유형 변경, 커리큘럼 운영·수강 목록, 상세 학습 분석은 이 페이지에서 처리하지 않는다.
 
-> **구현 현황(2026-07)**: `displayName`(공통 프로필)·`bio`/`expertise`(강사 공개 프로필) 편집 폼은 **백엔드가 아직 없다 — 준비 중**(`ProfileEditForm`, `InstructorPublicProfileForm`은 저장 API 대기). 반대로 **프로필 이미지 지정은 백엔드가 구현되어 있으나**(`PUT /api/me/profile-image {assetId}`, 결과는 `/auth/me`의 `profileImageUrl`) **아직 FE UI가 없다**. 현재 조회 가능한 사용자 정보는 `GET /api/auth/me`(`userId`·`email`·`displayName`·`role`·`profileImageUrl`)뿐이다. 인증 식별자는 `email`이다.
+> **구현 현황(2026-07)**: 기본 프로필은 읽기 전용 요약과 `프로필 수정` 모달로 제공한다. 모달에서 프로필 이미지를 presigned 업로드한 뒤 `PUT /api/me/profile-image {assetId}`로 지정하고, `/auth/me`와 같은 사용자 DTO의 `profileImageUrl`을 전역 인증 캐시에 즉시 반영한다. `displayName`·`bio`·`expertise` 수정 API는 아직 없어 입력·가짜 저장을 제공하지 않고 **준비 중**으로 안내한다. 인증 식별자는 `email`이다.
 
 ## 2. 컴포넌트 트리
 
@@ -22,10 +22,11 @@ ProfilePage
    ├─ AccountIdentitySection
    │  ├─ AccountIdentitySummary
    │  └─ AccountTypeBadge
-   ├─ ProfileEditSection
-   │  └─ ProfileEditForm
+   ├─ ProfileSummarySection
+   │  ├─ ProfileAvatar
+   │  └─ ProfileEditModal
    ├─ InstructorPublicProfileSection    강사만
-   │  └─ InstructorPublicProfileForm
+   │  └─ PendingFeatureNotice
    ├─ StudentProfileSummary             학생만
    ├─ AccountSecuritySection
    │  └─ PasswordChangeEntry
@@ -45,9 +46,10 @@ ProfilePage
 | `AccountIdentitySection` | `features/profile` | 계정 식별 정보와 가입 유형 조합 |
 | `AccountIdentitySummary` | `features/profile` | 아이디·이름 등 계정 기본 정보 표시 |
 | `AccountTypeBadge` | `features/auth` | 강사·학생 가입 유형을 읽기 전용으로 표시 |
-| `ProfileEditForm` | `features/profile` | 공통 수정 가능 정보의 입력·검증·저장 |
-| `InstructorPublicProfileSection` | `features/profile` | 강사 공개 프로필 설명과 미리보기 조합 |
-| `InstructorPublicProfileForm` | `features/profile` | 공개 소개·전문 분야 입력·저장 |
+| `ProfileSummarySection` | `pages` | 프로필 이미지·닉네임 요약과 수정 모달 진입 제공 |
+| `ProfileAvatar` | `features/profile` | `profileImageUrl` 표시와 닉네임 첫 글자 fallback 제공 |
+| `ProfileEditModal` | `features/profile` | 이미지 선택·검증·미리보기·업로드 저장, 닉네임 준비 중 안내 |
+| `InstructorPublicProfileSection` | `pages` | 강사 공개 프로필 API 준비 상태 안내 |
 | `StudentProfileSummary` | `features/learning` | 수강·완료·다음 학습의 간단한 요약과 이동 |
 | `AccountSecuritySection` | `features/auth` | 비밀번호 변경 등 보안 설정 진입 |
 | `SessionActions` | `features/auth` | 로그아웃 행동 제공 |
@@ -76,27 +78,24 @@ ProfilePage
 
 ### 5.2 수정 가능
 
-- 사용자 이름 또는 표시 이름 (**수정 API 미구현 — 준비 중**)
-- 실제 회원가입 계약에 포함된 수정 가능한 공통 프로필 정보
+- 프로필 이미지 (**구현됨**)
+- 사용자 이름 또는 표시 이름 (**수정 API 미구현 — 읽기 전용·준비 중**)
 
-이메일·전화번호는 계정 계약이 확정되기 전까지 필수 필드로 추가하지 않는다. 프로필 이미지는 지정 API(`PUT /api/me/profile-image`)가 이미 구현되어 있으나 이 폼에 연결하는 FE UI는 아직 없다.
+이메일·전화번호는 계정 계약이 확정되기 전까지 필수 필드로 추가하지 않는다. 프로필 이미지는 `POST /api/assets/upload-requests` → presigned 스토리지 PUT → `POST /api/assets/{assetId}/complete` → `PUT /api/me/profile-image` 순서로 저장한다.
 
 ### 5.3 저장 원칙
 
-- 공통 프로필과 강사 공개 프로필은 저장 상태를 분리
+- 프로필 이미지와 향후 강사 공개 프로필은 저장 상태를 분리
 - 변경이 없으면 저장 행동 비활성화
 - 저장 중 중복 제출 방지
 - 저장 실패 시 입력값 유지와 필드·폼 오류 표시
-- 페이지 이탈 시 저장되지 않은 변경 안내
+- 저장 완료 응답을 전역 인증 캐시에 반영해 헤더·사이드바도 즉시 갱신
 
 ## 6. 강사 공개 프로필
 
-강사 계정에만 다음 영역을 제공한다.
+강사 계정에만 다음 영역을 제공한다. 현재는 수정 API가 없으므로 준비 중 안내만 표시하고 입력 폼과 저장 성공 상태를 만들지 않는다.
 
-- 공개 소개
-- 전문 분야
-- 수강생에게 표시될 내용의 간단한 미리보기
-- 운영 중인 커리큘럼으로 이동
+- 공개 소개·전문 분야 편집 준비 상태
 
 운영 커리큘럼 전체 목록과 통계는 [MY_CURRICULUMS.md](MY_CURRICULUMS.md)에서 제공하고 이 페이지에 중복 구현하지 않는다.
 
@@ -159,13 +158,13 @@ ProfilePage
 ### 11.2 정상
 
 - 공통 계정 정보와 역할별 영역 표시
-- 각 저장 영역의 변경·저장 상태를 독립적으로 관리
+- 프로필 이미지는 수정 모달에서 관리하고 미구현 필드는 읽기 전용으로 표시
 
 ### 11.3 저장 중·성공
 
-- 실행한 폼만 저장 중 표시
+- 실행한 프로필 이미지 변경만 저장 중 표시
 - 저장 완료 후 서버 결과로 화면 갱신
-- 성공 메시지는 해당 영역 가까이에 제공
+- 모달을 닫고 기본 프로필 영역 가까이에 성공 메시지 제공
 
 ### 11.4 저장 실패
 
@@ -183,16 +182,14 @@ ProfilePage
 ### 12.1 공통
 
 - 계정 정보와 가입 유형 확인
-- 수정 가능한 공통 프로필 저장
+- 프로필 수정 모달에서 이미지 변경
 - 비밀번호 변경 진입
 - 로그아웃
 - 회원 탈퇴 정책 확인·진입
 
 ### 12.2 강사
 
-- 공개 소개·전문 분야 저장
-- 공개 프로필 미리보기
-- 운영 커리큘럼으로 이동
+- 공개 소개·전문 분야 편집 준비 상태 확인
 
 ### 12.3 학생
 
@@ -201,7 +198,7 @@ ProfilePage
 
 ## 13. 필요한 데이터
 
-정확한 필드와 API는 [API_MAP.md](../API_MAP.md)에서 확정한다.
+정확한 필드와 API는 [API_MAP.md](../api/API_MAP.md)에서 확정한다.
 
 - 현재 인증 사용자
 - 계정 아이디와 가입 유형
@@ -217,6 +214,7 @@ ProfilePage
 - 읽기 전용 값과 입력 필드를 시각적으로 구분
 - 저장 성공·실패 메시지를 해당 폼과 연결
 - 오류 발생 시 첫 오류 필드로 이동하거나 오류 요약에서 연결
+- 프로필 수정 모달은 `dialog`·`aria-modal`을 제공하고 Escape·배경 선택으로 닫기
 - 회원 탈퇴 확인 대화상자의 포커스 이동·가두기·복귀 처리
 - 계정 유형을 색상만으로 구분하지 않음
 
@@ -230,7 +228,7 @@ ProfilePage
 
 ## 16. 이후 기능 후보
 
-- 프로필 이미지 FE UI (백엔드 `PUT /api/me/profile-image`는 이미 구현됨 — FE UI만 없음)
+- 프로필 이미지 제거·기본 이미지 복원
 - 이메일·전화번호 인증과 변경
 - 학생 관심 분야·추천 설정
 - 공개 강사 프로필 페이지

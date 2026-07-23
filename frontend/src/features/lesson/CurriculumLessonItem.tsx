@@ -43,8 +43,8 @@ export default function CurriculumLessonItem({ lesson, relationship, curriculumI
   const detailPath = resolveLessonPath({ curriculumId, sectionId, lessonId: lesson.lessonId, destination: 'LESSON_DETAIL', role })
   const activity = resolveActivity(lesson)
   const isStudentView = relationship !== 'OWNER_INSTRUCTOR'
-  const publicationLabel = lesson.lessonStatus === 'PUBLISHED' ? '게시됨' : '준비 중'
-  const publicationTone = lesson.lessonStatus === 'PUBLISHED' ? 'published' : 'default'
+  const publicationLabel = lesson.status === 'PUBLISHED' ? '게시됨' : '준비 중'
+  const publicationTone = lesson.status === 'PUBLISHED' ? 'published' : 'default'
 
   return (
     <li className={`curriculum-lesson${canOpen ? '' : ' curriculum-lesson--locked'}`}>

@@ -19,9 +19,9 @@ npm run dev
 ```
 
 - 개발 서버: `http://localhost:8083`
-- `VITE_USE_MOCK_API=true`: 데이터 서비스가 통합 mock 저장소를 사용
-- `VITE_USE_MOCK_API=false`: 데이터 서비스가 `/api` 백엔드 요청을 사용
-- 실 API로 옮긴 서비스만 HTTP를 타고, 아직 안 옮긴 화면은 값과 무관하게 mock 데이터를 그린다(전환 중 혼재는 의도된 중간 상태 — [ADR-0027](../decisions/songjeongki/0027-frontend-incremental-api-cutover.md))
+- `VITE_USE_MOCK_API=true`: 구현된 함수는 `/api`, 미구현 함수는 통합 mock을 사용
+- `VITE_USE_MOCK_API=false`: 구현 여부와 무관하게 모든 데이터 함수가 `/api`를 호출하며 오류를 숨기지 않음
+- 모든 화면은 공통 데이터 소스 경계를 사용하고, 함수별 `apiImplemented` 값으로 구현 여부를 명시한다([ADR-0014](../decisions/yoongwanghyeok/0014-operation-level-hybrid-api-routing.md)).
 - 값을 바꾼 뒤에는 Vite 개발 서버를 다시 시작해야 함
 - 값을 생략하면 개발 모드는 mock, 프로덕션 빌드는 실제 API를 사용
 - 테스트 모드: 로컬 환경 변수와 무관하게 fixture를 사용해 독립 실행

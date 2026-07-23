@@ -1,10 +1,13 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { instructorPaths, publicPaths, studentPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
-import { demoCurriculum, demoLesson, getDemoLesson, getDemoLiveSession } from '@/features/demo/demoData'
+import { getLesson } from '@/features/lesson/lessonService'
 import { isLiveEntryOpen } from '@/features/live-session/liveEntry'
+import { getLiveSession } from '@/features/live-session/liveSessionService'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
+import PageState from '@/shared/ui/PageState'
 import { InlineNotice, PageHeader, Panel, StatusBadge } from '@/shared/ui/WorkspaceUi'
 
 function formatScheduleTime(date: Date) {
@@ -15,12 +18,33 @@ function formatScheduleTime(date: Date) {
 }
 
 export default function LessonDetailPage() {
-  const { curriculumId = demoCurriculum.curriculumId, sectionId = 'sec-security', lessonId = demoLesson.lessonId } = useParams()
+  const { curriculumId = '', sectionId = '', lessonId = '' } = useParams()
   const { user } = useAuth()
   const [entryNotice, setEntryNotice] = useState('')
   const isInstructor = user?.role === 'INSTRUCTOR'
-  const lesson = getDemoLesson(lessonId, user?.userId)
-  const liveSession = lesson.liveSession ? getDemoLiveSession(lesson.liveSession.sessionId) : null
+  const lessonQuery = useQuery({
+    queryKey: ['lesson', lessonId, user?.role, user?.userId, curriculumId, sectionId],
+    queryFn: () => getLesson({ lessonId, role: user?.role, userId: user?.userId, curriculumId, sectionId }),
+    enabled: Boolean(lessonId),
+  })
+  const liveSessionQuery = useQuery({
+    queryKey: ['live-session', lessonQuery.data?.liveSession?.sessionId],
+    queryFn: () => getLiveSession(lessonQuery.data!.liveSession!.sessionId),
+    enabled: Boolean(lessonQuery.data?.liveSession?.sessionId),
+  })
+  const lesson = lessonQuery.data
+  const liveSession = liveSessionQuery.data ?? null
+  usePageTitle(lesson?.title ?? '강의 상세')
+
+  if (!lessonId || !curriculumId || !sectionId) {
+    return <PageState title="잘못된 강의 경로입니다" description="강의 식별자를 확인해 주세요." />
+  }
+  if (lessonQuery.isPending || (lesson?.liveSession && liveSessionQuery.isPending)) {
+    return <PageState title="강의를 불러오는 중입니다" description="잠시만 기다려 주세요." />
+  }
+  if (lessonQuery.isError || liveSessionQuery.isError || !lesson) {
+    return <PageState title="강의를 불러오지 못했습니다" description="잠시 후 다시 시도해 주세요." />
+  }
   const curriculumPath = publicPaths.curriculum(curriculumId)
   const editLessonPath = instructorPaths.editLesson(curriculumId, sectionId, lessonId)
   const replayPath = isInstructor ? instructorPaths.replay(lessonId) : studentPaths.replay(lessonId)
@@ -32,7 +56,6 @@ export default function LessonDetailPage() {
   const scheduledDate = liveSession?.scheduledAt ? new Date(liveSession.scheduledAt) : null
   const entryDate = scheduledDate ? new Date(scheduledDate.getTime() - 10 * 60_000) : null
   const liveStatusLabel = liveSession && ['OPEN', 'STARTING', 'LIVE'].includes(liveSession.status) ? '입장 가능' : '예정'
-  usePageTitle(lesson.title)
 
   return (
     <div className="workspace-page">
@@ -40,7 +63,7 @@ export default function LessonDetailPage() {
       <PageHeader
         title={lesson.title}
         description={lesson.description}
-        action={isInstructor ? <Link className="button button--primary" to={editLessonPath}>강의 수정</Link> : undefined}
+        action={<div className="header-action-group">{isInstructor && <Link className="button button--primary" to={editLessonPath}>강의 수정</Link>}<StatusBadge tone="success">{lesson.status}</StatusBadge></div>}
       />
       {isInstructor && <Panel title="강의 준비 상태" description="강의, 자료와 AI 준비 상태를 확인합니다."><ul className="readiness-list"><li><span>필수 PPTX</span><StatusBadge tone="success">{lesson.materials.length}개 준비</StatusBadge></li><li><span>AI 준비</span><StatusBadge tone="success">READY</StatusBadge></li><li><span>자료 작업</span><StatusBadge tone={materialWorkInProgress ? 'warning' : 'success'}>{materialWorkInProgress ? '진행 중' : '완료'}</StatusBadge></li></ul></Panel>}
       {!showReplay ? (

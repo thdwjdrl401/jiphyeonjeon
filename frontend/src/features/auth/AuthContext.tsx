@@ -1,6 +1,7 @@
 import { createContext, useContext, type PropsWithChildren } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { authService } from './authService'
+import { profileService } from '@/features/profile/profileService'
 import type {
   AuthUser,
   EmailAvailability,
@@ -16,6 +17,7 @@ interface AuthContextValue {
   login: (request: LoginRequest) => Promise<AuthUser>
   signup: (request: SignupRequest) => Promise<AuthUser>
   checkEmail: (email: string) => Promise<EmailAvailability>
+  updateProfileImage: (file: File) => Promise<AuthUser>
   logout: () => Promise<void>
   updateDisplayName: (displayName: string) => Promise<AuthUser>
 }
@@ -49,6 +51,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
     },
     signup: authService.signup,
     checkEmail: authService.checkEmail,
+    async updateProfileImage(file) {
+      const updatedUser = await profileService.updateProfileImage(file)
+      queryClient.setQueryData(authQueryKey, updatedUser)
+      return updatedUser
+    },
     async logout() {
       await authService.logout()
       queryClient.removeQueries({

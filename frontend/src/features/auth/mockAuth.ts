@@ -107,4 +107,11 @@ export const mockAuthService = {
     currentUser = { ...currentUser, displayName: trimmed }
     return currentUser
   },
+
+  async updateProfileImage(profileImageUrl: string) {
+    await wait()
+    if (!currentUser) throw new ApiError('로그인이 필요합니다.', 401, 'AUTH_SESSION_REQUIRED')
+    currentUser = { ...currentUser, profileImageUrl }
+    return currentUser
+  },
 }

@@ -219,11 +219,18 @@
   display: grid;
   width: 34px;
   height: 34px;
+  overflow: hidden;
   place-items: center;
   border-radius: 10px;
   background: var(--blue-100);
   color: var(--blue-700);
   font-weight: 700;
+}
+
+.user-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .user-chip > span:last-child {

@@ -1,13 +1,16 @@
 import { matchPath, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { instructorPaths, studentPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
-import { getDemoLiveSession } from '@/features/demo/demoData'
 import CurriculumLessonNavigation from '@/features/lesson/CurriculumLessonNavigation'
+import { getLiveSession } from '@/features/live-session/liveSessionService'
+import ProfileAvatar from '@/features/profile/ProfileAvatar'
 import GlobalHeader from './GlobalHeader'
 
 interface LessonNavigationContext {
-  curriculumId: string
+  curriculumId?: string
   lessonId?: string
+  sessionId?: string
 }
 
 function getStudentLessonContext(pathname: string): LessonNavigationContext | null {
@@ -21,11 +24,7 @@ function getStudentLessonContext(pathname: string): LessonNavigationContext | nu
 
   const prejoinMatch = matchPath('/student/live-sessions/:sessionId/prejoin', pathname)
   if (prejoinMatch?.params.sessionId) {
-    const session = getDemoLiveSession(prejoinMatch.params.sessionId)
-    return {
-      curriculumId: session.curriculumId,
-      lessonId: session.lessonId,
-    }
+    return { sessionId: prejoinMatch.params.sessionId }
   }
 
   return null
@@ -49,11 +48,7 @@ function getInstructorLessonContext(pathname: string): LessonNavigationContext |
 
   const preflightMatch = matchPath('/instructor/live-sessions/:sessionId/preflight', pathname)
   if (preflightMatch?.params.sessionId) {
-    const session = getDemoLiveSession(preflightMatch.params.sessionId)
-    return {
-      curriculumId: session.curriculumId,
-      lessonId: session.lessonId,
-    }
+    return { sessionId: preflightMatch.params.sessionId }
   }
 
   return null
@@ -70,19 +65,32 @@ export default function WorkspaceLayout() {
     : user?.role === 'INSTRUCTOR'
       ? getInstructorLessonContext(pathname)
       : null
+  const navigationSessionQuery = useQuery({
+    queryKey: ['live-session-navigation', lessonContext?.sessionId],
+    queryFn: () => getLiveSession(lessonContext!.sessionId!),
+    enabled: Boolean(lessonContext?.sessionId),
+  })
+  const resolvedLessonContext = lessonContext?.curriculumId
+    ? lessonContext
+    : navigationSessionQuery.data
+      ? {
+          curriculumId: navigationSessionQuery.data.curriculumId,
+          lessonId: navigationSessionQuery.data.lessonId,
+        }
+      : null
   return (
     <div className="workspace-shell">
       <a className="skip-link" href="#workspace-content">본문으로 바로가기</a>
       <GlobalHeader />
       <div className="workspace-frame page-container">
-        {lessonContext && user ? (
+        {resolvedLessonContext?.curriculumId && user ? (
           <CurriculumLessonNavigation
-            curriculumId={lessonContext.curriculumId}
-            activeLessonId={lessonContext.lessonId}
+            curriculumId={resolvedLessonContext.curriculumId}
+            activeLessonId={resolvedLessonContext.lessonId}
             role={user.role}
           />
         ) : <aside className="workspace-sidebar" aria-label="작업 메뉴">
-          <div className="workspace-user"><span>{user?.displayName.slice(0, 1)}</span><div><strong>{user?.displayName}</strong><small>{user?.role === 'INSTRUCTOR' ? '강사 워크스페이스' : '학생 워크스페이스'}</small></div></div>
+          <div className="workspace-user">{user && <ProfileAvatar displayName={user.displayName} imageUrl={user.profileImageUrl} decorative />}<div><strong>{user?.displayName}</strong><small>{user?.role === 'INSTRUCTOR' ? '강사 워크스페이스' : '학생 워크스페이스'}</small></div></div>
           <nav>
             <NavLink to={curriculumPath}>내 커리큘럼</NavLink>
             <NavLink to={profilePath}>내 프로필</NavLink>

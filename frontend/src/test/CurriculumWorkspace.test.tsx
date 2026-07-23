@@ -238,7 +238,7 @@ describe('커리큘럼 작업 화면', () => {
       'href',
       '/instructor/curriculums/new',
     )
-    for (const detailLink of within(operatingPanel!).getAllByRole('link', { name: '커리큘럼 상세' })) {
+    for (const detailLink of await within(operatingPanel!).findAllByRole('link', { name: '커리큘럼 상세' })) {
       expect(detailLink).toHaveAttribute('href', expect.stringMatching(/^\/curriculums\/.+/))
     }
     expect(within(operatingPanel!).queryByRole('link', { name: '관리하기' })).not.toBeInTheDocument()
@@ -247,7 +247,27 @@ describe('커리큘럼 작업 화면', () => {
   it('강사 프로필에서 운영 커리큘럼 버튼을 표시하지 않는다', async () => {
     await renderAsInstructor('/instructor/profile')
     expect(await screen.findByRole('heading', { name: '강사 공개 프로필' })).toBeInTheDocument()
+    expect(screen.getByText('강사 소개와 전문 분야 편집은 서버 API가 준비된 뒤 제공됩니다.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '공개 프로필 저장' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '운영 커리큘럼' })).not.toBeInTheDocument()
+  })
+
+  it('프로필 수정 모달에서 이미지를 변경하고 닉네임은 준비 중으로 안내한다', async () => {
+    const user = userEvent.setup()
+    await renderAsStudent('/student/profile')
+    await user.click(await screen.findByRole('button', { name: '프로필 수정' }))
+
+    const dialog = screen.getByRole('dialog', { name: '프로필 수정' })
+    expect(within(dialog).getByDisplayValue('김학생')).toHaveAttribute('readonly')
+    expect(within(dialog).getByText('닉네임 변경 기능은 준비 중입니다.')).toBeInTheDocument()
+
+    const image = new File(['profile-image'], 'profile.png', { type: 'image/png' })
+    await user.upload(within(dialog).getByLabelText('프로필 이미지 선택'), image)
+    await user.click(within(dialog).getByRole('button', { name: '변경사항 저장' }))
+
+    expect(await screen.findByText('프로필 이미지가 변경되었습니다.')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: '프로필 수정' })).not.toBeInTheDocument()
+    expect(screen.getByRole('img', { name: '김학생 프로필 이미지' }).querySelector('img')).not.toBeNull()
   })
 
   it('학생 내 커리큘럼에서 승인 대기 목록을 학습 진행 정보 없이 표시한다', async () => {
@@ -257,7 +277,7 @@ describe('커리큘럼 작업 화면', () => {
 
     expect(section).not.toBeNull()
     const pendingSection = within(section!)
-    expect(pendingSection.getByRole('heading', { name: '성능을 바꾸는 SQL 튜닝' })).toBeInTheDocument()
+    expect(await pendingSection.findByRole('heading', { name: '성능을 바꾸는 SQL 튜닝' })).toBeInTheDocument()
     expect(pendingSection.getByText('승인 대기')).toBeInTheDocument()
     expect(pendingSection.queryByRole('link', { name: '학습 계속하기' })).not.toBeInTheDocument()
     expect(pendingSection.queryByText(/강의$/)).not.toBeInTheDocument()

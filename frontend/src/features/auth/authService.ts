@@ -1,5 +1,5 @@
 import { ApiError, apiClient } from '@/shared/api/client'
-import { selectDataSource } from '@/shared/api/dataSource'
+import { requestByDataSource } from '@/shared/api/dataSource'
 import { mockAuthService } from './mockAuth'
 import type {
   AuthUser,
@@ -44,4 +44,35 @@ export const httpAuthService = {
   },
 }
 
-export const authService = selectDataSource(mockAuthService, httpAuthService)
+export const authService = {
+  getCurrentUser: () => requestByDataSource({
+    mock: mockAuthService.getCurrentUser,
+    http: httpAuthService.getCurrentUser,
+    apiImplemented: true,
+  }),
+  login: (request: LoginRequest) => requestByDataSource({
+    mock: () => mockAuthService.login(request),
+    http: () => httpAuthService.login(request),
+    apiImplemented: true,
+  }),
+  signup: (request: SignupRequest) => requestByDataSource({
+    mock: () => mockAuthService.signup(request),
+    http: () => httpAuthService.signup(request),
+    apiImplemented: true,
+  }),
+  checkEmail: (email: string) => requestByDataSource({
+    mock: () => mockAuthService.checkEmail(email),
+    http: () => httpAuthService.checkEmail(email),
+    apiImplemented: true,
+  }),
+  logout: () => requestByDataSource({
+    mock: mockAuthService.logout,
+    http: httpAuthService.logout,
+    apiImplemented: true,
+  }),
+  updateDisplayName: (displayName: string) => requestByDataSource({
+    mock: () => mockAuthService.updateDisplayName(displayName),
+    http: () => httpAuthService.updateDisplayName(displayName),
+    apiImplemented: false,
+  }),
+}
