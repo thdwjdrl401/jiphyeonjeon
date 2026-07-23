@@ -54,6 +54,7 @@ def check(d):
         for zx, zy, zw, zh, zname in zone_title_boxes(d):
             if rects_overlap(h, (zx, zy, zw, zh)):
                 issues.append(f"라벨 '{txt}' 이 {zname} 을 덮음")
+    # 구역 제목도 헤일로를 깔고 선 위에 그리므로, 선이 지나가도 글자는 가려지지 않는다
     for x, y, w, hh, nid in boxes:
         for zx, zy, zw, zh, zname in zone_title_boxes(d):
             if rects_overlap((x, y, w, hh), (zx, zy, zw, zh)):
