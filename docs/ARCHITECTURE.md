@@ -385,10 +385,19 @@ STOMP 브로커가 인메모리 SimpleBroker라 **브로드캐스트가 인스�
 이전 판은 "seam 3개(재생 URL 발급 · nginx · PlaybackTokenService)"라고 적었지만, 실제로는 **셋 다 존재하지 않고**, 현재 nginx는 SPA·API 프록시 전용이라 HLS 서빙 경로 자체가 없다.
 → **제안**: nginx secure_link 대신, 이미 쓰고 있는 **presigned 방식으로 통일**한다. `GET /api/lessons/{id}/playback`이 권한을 검증하고 **manifest만 Spring이 프록시하며 세그먼트 URL을 presigned로 재작성**한다. manifest는 수 KB라 원칙 4(바이트는 Spring을 통과하지 않음)를 유지하면서 세그먼트는 스토리지 직결이 된다. S3로 옮겨도 그대로 동작한다.
 
-### 9-9. 🟡 `ai` 스키마와 Alembic이 아직 없다
+### 9-9. 🟠 다시보기의 시간축 변환 기준이 없다
+자막 싱크는 전송 경로가 아니라 **공통 좌표계** 문제다. 영상 세그먼트는 스토리지에서 직접 받고 자막은 Spring이 내려주지만, 둘을 맞추려면 *재생 위치 → 세션 상대 ms* 변환이 필요하다. `video_asset.session_offset_ms`·`recording_started_at` 컬럼이 그 자리로 이미 잡혀 있는데, **변환 규칙이 계약에 없다.**
+
+문제는 오프셋 하나로 부족할 수 있다는 점이다. 녹화가 중간에 끊기거나 Egress가 재시작하면 미디어 시간과 실제 경과 시간이 어긋나 뒤쪽 자막이 통째로 밀린다.
+→ **제안**: manifest에 `EXT-X-PROGRAM-DATE-TIME`을 실어 세그먼트마다 절대 시각을 박고, 플레이어가 *절대 시각 → 세션 ms*로 변환한다. 불연속(`EXT-X-DISCONTINUITY`)이 생겨도 어긋나지 않는다. **선행 확인: LiveKit Egress가 이 태그를 내보내는지.** 내보내지 않으면 오프셋 방식 + 녹화 무중단을 전제로 못 박아야 한다.
+
+> 이 오류는 재생해 보기 전까지 아무도 모른다 — 빌드도 테스트도 잡지 않는다. CP4 착수 전에 계약으로 확정해야 한다.
+> 로드맵의 "세션시계 변환 기준"은 지금 *LiveKit 트랙 → 세션 ms* 방향만 적혀 있고, 이 반대 방향이 빠져 있다.
+
+### 9-10. 🟡 `ai` 스키마와 Alembic이 아직 없다
 T0에 만들기로 했으나 미이행. `core`만 존재한다. 리스크는 낮지만 CP2 착수 시 **DB 롤(`core_app`/`ai_app`) 분리와 함께** 세워야 원칙 2가 실제로 강제된다.
 
-### 9-10. 🟠 프론트가 아직 없는 백엔드 API를 이미 호출 형태로 굳혀 뒀다
+### 9-11. 🟠 프론트가 아직 없는 백엔드 API를 이미 호출 형태로 굳혀 뒀다
 FE는 **오퍼레이션 단위 하이브리드 라우팅**을 쓴다 — 각 호출에 `apiImplemented` 플래그가 붙어 구현된 API는 실 HTTP로, 미구현은 목으로 간다([ADR-0027](decisions/songjeongki/0027-frontend-incremental-api-cutover.md)). 현재 인증·커리큘럼·레슨·라이브 세션에서 **28개 오퍼레이션이 실 연동**됐다(세션 시작/종료·토큰·참가자·채팅 포함).
 
 문제는 **미구현 쪽**이다. `/live-sessions/{id}/captions`, `/lessons/{id}/ai/questions:stream`, `/instructor/live-sessions/{id}/processing`, `/instructor/lessons/{id}/ai-preparation` 같은 CP2·CP3 경로가 이미 FE 코드에 문자열로 박혀 있는데 **CONTRACT.md에는 정의가 없다.** 이대로 CP2에 들어가면 계약 드리프트가 반복된다.

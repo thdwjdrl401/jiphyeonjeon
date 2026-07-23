@@ -100,9 +100,10 @@ flowchart LR
 | 🔴 **자료→레슨 연결** | CP3 | RAG ingestion의 입력. BE 선행 작업 |
 | 🟠 **자막 유실 정책** | CP2 | Redis fast-path 유실 허용 + 녹화 2-pass 복구로 확정할지 |
 | 🟠 **단일 노드 운용 전제** | CP2 | STT·임베딩·LLM 전부 외부 API, Egress는 데모 세션에만, 동시 세션 1~2개 |
+| 🟠 **다시보기 시간축 변환** | CP4 | 재생 위치를 세션 ms로 바꾸는 규칙. 오프셋 하나로 갈지, 세그먼트마다 절대 시각을 박을지 |
 
 ## 열린 항목 (착수 직전 상세)
 - ✅ **인증 방식 확정**: HttpOnly 쿠키 + Redis 세션([decisions/songjeongki/0014](decisions/songjeongki/0014-auth-redis-session-cookie.md)).
 - 잡 envelope·결과 메시지·Redis Streams caption 스키마·LiveKit 토큰 계약 → [CONTRACT.md](CONTRACT.md).
-- 세션시계 변환 기준(LiveKit 트랙 타임스탬프 → 세션 상대 ms), RAG 평가 게이트·reranker(고도화).
+- 세션시계 변환 기준 **양방향**: 라이브(LiveKit 트랙 타임스탬프 → 세션 상대 ms)와 다시보기(재생 위치 → 세션 상대 ms). 후자가 없으면 다시보기 자막이 어긋난다([ARCHITECTURE §9-9](ARCHITECTURE.md)). RAG 평가 게이트·reranker(고도화).
 - 보류: 분석(클러스터·히트맵)·관리자·멀티테넌트.
