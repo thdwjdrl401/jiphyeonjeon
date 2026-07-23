@@ -47,7 +47,7 @@ export default function StudentPrejoinPage() {
   })
   const session = sessionQuery.data
   const { user, updateDisplayName } = useAuth()
-  const [checks, setChecks] = useState({ speaker: false, autoplay: false, network: false, consent: false })
+  const [checks, setChecks] = useState({ speaker: false, autoplay: false, network: false })
   const [speakerStage, setSpeakerStage] = useState<SpeakerStage>('idle')
   const [nickname, setNickname] = useState(user?.displayName ?? '')
   const ready = Object.values(checks).every(Boolean)
@@ -74,8 +74,6 @@ export default function StudentPrejoinPage() {
     return () => window.clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nickname])
-
-  const toggleConsent = () => setChecks((current) => ({ ...current, consent: !current.consent }))
 
   // 스피커 테스트: 사용자가 버튼을 눌러 테스트 음을 재생한 뒤 직접 결과를 확인한다.
   const runSpeakerTest = () => {
@@ -116,7 +114,7 @@ export default function StudentPrejoinPage() {
         )}
       </div>
     </Panel>
-    <Panel title="닉네임과 녹화 고지"><dl className="identity-list"><div><dt>닉네임</dt><dd><input className="identity-nickname-input" value={nickname} maxLength={100} onChange={(event) => setNickname(event.target.value)} /></dd></div><div><dt>미디어 권한</dt><dd>수신 전용</dd></div></dl><label className="choice-row"><input type="checkbox" checked={checks.consent} onChange={toggleConsent} /><span><strong>녹화·자막·채팅·AI 사용 안내를 확인했습니다.</strong><small>개인 AI 질문 기록은 본인에게만 표시되고 익명 통계에 반영될 수 있습니다.</small></span></label></Panel>
+    <Panel title="닉네임과 미디어 권한"><dl className="identity-list"><div><dt>닉네임</dt><dd><input className="identity-nickname-input" value={nickname} maxLength={100} onChange={(event) => setNickname(event.target.value)} /></dd></div><div><dt>미디어 권한</dt><dd>수신 전용</dd></div></dl></Panel>
     {!ready && <InlineNotice tone="warning">모든 필수 점검과 고지를 확인해야 입장할 수 있습니다.</InlineNotice>}
     {tokenMutation.isError && <InlineNotice tone="danger">라이브 입장 토큰 발급에 실패했습니다.</InlineNotice>}
     <div className="sticky-form-actions"><Link className="button button--ghost" to={studentPaths.lesson(session.curriculumId, session.sectionId, session.lessonId)}>강의 상세</Link>{ready ? <Link className="button button--primary button--large" to={studentPaths.classroom(sessionId)} onClick={(event) => { event.preventDefault(); tokenMutation.mutate() }}>라이브 입장</Link> : <button className="button button--primary button--large is-disabled" type="button" disabled>라이브 입장</button>}</div>

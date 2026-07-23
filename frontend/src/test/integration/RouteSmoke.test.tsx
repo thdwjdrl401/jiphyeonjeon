@@ -102,7 +102,6 @@ describe('전체 페이지 라우트', () => {
     // 스피커 테스트는 사용자가 직접 재생하고 결과를 확인해야 한다.
     await user.click(await screen.findByRole('button', { name: /테스트 시작/ }))
     await user.click(await screen.findByRole('button', { name: '네, 잘 들려요' }, { timeout: 3000 }))
-    await user.click(screen.getByRole('checkbox', { name: /녹화·자막·채팅·AI 사용 안내/ }))
     await user.click(await screen.findByRole('link', { name: '라이브 입장' }, { timeout: 3000 }))
 
     expect(await screen.findByRole('tab', { name: 'AI 질문' })).toBeInTheDocument()
