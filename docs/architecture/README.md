@@ -9,7 +9,7 @@
 
 | 경로 | 내용 | 성격 |
 |---|---|---|
-| `pitch/` | **아키텍처 18장** — 전체 1 + 제품 8 + 서비스 구성 4 + 세부 5 | 생성물 (스크립트가 원본) |
+| `pitch/` | **아키텍처 19장** — 전체 1 + 제품 8 + 서비스 구성 5 + 세부 5 | 생성물 (스크립트가 원본) |
 | `liveclass-architecture.drawio` | 기능 슬라이스 15탭 | 편집 가능한 원본 |
 | `tools/` | 생성 스크립트 | 원본 |
 | `overview.html` | `ARCHITECTURE.md` 를 발표용으로 렌더한 한 페이지 | 스냅샷 |
@@ -38,6 +38,7 @@
 | `14-service-app` | 앱 서비스 안: 요청이 지나는 순서와 모듈 구성 |
 | `15-service-media` | 미디어 서비스 안: 실시간 경로와 녹화 경로 |
 | `16-service-ai` | AI 서비스 안: 실시간 자막 경로와 배치 처리 경로 |
+| `17-runtime` | 실제 도커 서비스 단위 구성과 두 데이터 흐름 |
 | `13-trust` | 백엔드를 우회하는 경로가 안전한 이유 |
 
 앞 여덟 장이 제품 이야기, 가운데 네 장(`12`·`14`~`16`)이 서비스 구성 — 전체를 세 플레인으로
@@ -52,6 +53,7 @@ cd docs/architecture/tools
 python3 build_deck.py     # 열 기반 파이프라인 13장
 python3 build_arch.py     # 플레인으로 묶은 2D 4장
 python3 build_full.py     # 서비스 전체를 담은 단일 아키텍처 1장
+python3 build_runtime.py  # 도커 서비스 단위 구성 1장
 python3 build_gallery.py  # 위 결과를 index.html 로 묶는다
 ```
 
@@ -63,7 +65,7 @@ python3 build_gallery.py  # 위 결과를 index.html 로 묶는다
 거터의 전용 레인으로만 흐르며, 라벨은 선·노드를 피해 자동으로 자리를 잡는다.
 열을 건너뛰는 의존(예: `curriculum → auth`)은 본문 위쪽 전용 레인으로 우회한 뒤
 목표 열 바로 왼쪽 거터에서 내려온다 — 중간 모듈을 관통하지 않는다.
-`check_overlap.py`가 매 실행마다 이를 검증하고 위반을 출력한다. **현재 18장 모두 겹침 0건.**
+`check_overlap.py`가 매 실행마다 이를 검증하고 위반을 출력한다. **현재 19장 모두 겹침 0건.**
 
 ## 1. `liveclass-architecture.drawio` — 편집 원본
 

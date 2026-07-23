@@ -8,10 +8,12 @@ sys.path.insert(0, ".")
 import build_deck as BD
 import build_arch as BA
 import build_full as BF
+import build_runtime as BR
 
 TITLES = {n: d.title for d, n in zip(BD.DECK, BD.NAMES)}
 TITLES.update({n: d.title for n, d in BA.PLATES})
 TITLES["full-architecture"] = BF.FULL.title
+TITLES["17-runtime"] = BR.RUNTIME.title
 
 USE = {
     "full-architecture": "서비스 전체를 한 장에 — 클라이언트부터 외부 모델까지",
@@ -32,10 +34,11 @@ USE = {
     "14-service-app":    "앱 서비스 안에서 요청이 지나는 순서와 모듈 구성",
     "15-service-media":  "미디어 서비스의 실시간 경로와 녹화 경로",
     "16-service-ai":     "AI 서비스의 실시간 자막 경로와 배치 처리 경로",
+    "17-runtime":        "실제 도커 서비스 단위 구성과 두 데이터 흐름",
 }
 ORDER = ["full-architecture", "00-overview", "01-authoring", "02-enrollment", "03-live", "04-captions",
          "05-materials", "06-qa", "07-replay",
-         "12-architecture", "14-service-app", "15-service-media", "16-service-ai",
+         "12-architecture", "17-runtime", "14-service-app", "15-service-media", "16-service-ai",
          "10-backend-modules", "11-request-path", "08-data", "09-servers", "13-trust"]
 GROUP = {
     "full-architecture": "전체 — 한 장으로 보는 서비스",
