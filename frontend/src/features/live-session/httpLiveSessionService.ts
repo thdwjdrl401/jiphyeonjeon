@@ -1,7 +1,7 @@
 import type { CurriculumLiveSessionStatus } from '@/features/lesson/types'
 import { apiClient } from '@/shared/api/client'
+import { normalizeCaption, type ApiCaptionView } from './captionAdapter'
 import type {
-  CaptionView,
   ChatMessageView,
   LiveSessionService,
   LiveSessionView,
@@ -108,8 +108,8 @@ export const httpLiveSessionService = {
     return { ...message, time: data.createdAt ? message.time : '현재' }
   },
   async getCaptions(sessionId) {
-    const { data } = await apiClient.get<CaptionView[]>(`/live-sessions/${sessionId}/captions`)
-    return data
+    const { data } = await apiClient.get<ApiCaptionView[]>(`/live-sessions/${sessionId}/captions`)
+    return data.map(normalizeCaption)
   },
   async askLiveAi(lessonId, question) {
     const { data } = await apiClient.post<{ answer: string }>(`/lessons/${lessonId}/ai/questions:stream`, { question })

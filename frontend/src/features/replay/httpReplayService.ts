@@ -1,11 +1,12 @@
-import type { CaptionView, ChatMessageView } from '@/features/live-session/liveSessionService.interface'
+import { normalizeCaption, type ApiCaptionView } from '@/features/live-session/captionAdapter'
+import type { ChatMessageView } from '@/features/live-session/liveSessionService.interface'
 import { apiClient } from '@/shared/api/client'
 import type { ReplayService } from './replayService.interface'
 
 export const httpReplayService = {
   async getReplayCaptions(lessonId) {
-    const { data } = await apiClient.get<CaptionView[]>(`/lessons/${lessonId}/captions`)
-    return data
+    const { data } = await apiClient.get<ApiCaptionView[]>(`/lessons/${lessonId}/captions`)
+    return data.map(normalizeCaption)
   },
   async getReplayMessages(lessonId) {
     const { data } = await apiClient.get<ChatMessageView[]>(`/lessons/${lessonId}/messages`)

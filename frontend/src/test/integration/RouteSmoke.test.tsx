@@ -77,12 +77,26 @@ describe('전체 페이지 라우트', () => {
   })
 
   it('강사에게 라이브 운영 화면을 제공한다', async () => {
+    const user = userEvent.setup()
     await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
     renderAt('/instructor/live-sessions/ses-security-live/classroom')
-    expect(await screen.findByText('강사 운영 모드')).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: '질문' })).toBeInTheDocument()
+    const liveInformation = await screen.findByRole('banner', { name: '라이브 강의 정보' })
+    expect(within(liveInformation).getByText('강사 운영 모드')).toBeInTheDocument()
+    expect(within(liveInformation).getByText('연결 안정적')).toBeInTheDocument()
+    expect(within(liveInformation).getByText(/명 참여 중/)).toBeInTheDocument()
+    expect(document.querySelector('.presenter-card')).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '채팅·질문' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '실시간 노트' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'AI 질문' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '핵심 용어' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '강의 종료' })).toBeInTheDocument()
-    expect(screen.queryByRole('tab', { name: 'AI 질문' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'SecurityContext' }))
+    expect(screen.getByRole('tab', { name: '핵심 용어' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByText(/현재 실행 중인 요청에서 인증된 사용자/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '12:08' }))
+    expect(screen.getByLabelText('라이브 타임라인')).toHaveValue('728000')
   })
 
   it('수강생이 강의실 주소로 직접 접근하면 입장 전 점검으로 이동한다', async () => {
@@ -104,6 +118,9 @@ describe('전체 페이지 라우트', () => {
     await user.click(await screen.findByRole('link', { name: '라이브 입장' }, { timeout: 3000 }))
 
     expect(await screen.findByRole('tab', { name: 'AI 질문' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '채팅·질문' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '실시간 노트' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '핵심 용어' })).toBeInTheDocument()
     expect(window.location.pathname).toBe('/student/live-sessions/ses-security-live/classroom')
     expect(screen.getByRole('button', { name: '☆ 북마크' })).toBeInTheDocument()
     expect(screen.queryByText('강사 운영 모드')).not.toBeInTheDocument()
@@ -114,18 +131,21 @@ describe('전체 페이지 라우트', () => {
     await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
     renderAt('/instructor/lessons/les-security/replay')
     expect(await screen.findByText('강사 검수 모드')).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: '콘텐츠 검수' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: '학습 통계' })).toBeInTheDocument()
-    expect(screen.queryByRole('tab', { name: '퀴즈' })).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '채팅·질문' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '실시간 노트' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'AI 질문' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '핵심 용어' })).toBeInTheDocument()
   })
 
   it('수강생에게 다시보기 학습 화면을 제공한다', async () => {
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
     renderAt('/student/lessons/les-security/replay')
     expect(await screen.findByText('학습 진행률 42%')).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: '퀴즈' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '채팅·질문' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '실시간 노트' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'AI 질문' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '핵심 용어' })).toBeInTheDocument()
     expect(screen.queryByText('강사 검수 모드')).not.toBeInTheDocument()
-    expect(screen.queryByRole('tab', { name: '콘텐츠 검수' })).not.toBeInTheDocument()
   })
 
   it('학생 강의 상세는 라이브 강의에서 바로 입장 전 점검으로 연결한다', async () => {

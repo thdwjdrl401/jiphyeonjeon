@@ -1,11 +1,11 @@
-import { demoCaptions, demoMessages } from '@/features/demo/demoData'
+import { demoMessages, demoReplayCaptions } from '@/features/demo/demoData'
 import type { ReplayService } from './replayService.interface'
 
 const replayReviews = new Map<string, { transcript: string; published: boolean }>()
 
 export const mockReplayService = {
   async getReplayCaptions() {
-    return demoCaptions
+    return demoReplayCaptions
   },
   async getReplayMessages() {
     return demoMessages

@@ -131,10 +131,51 @@ export const demoMessages = [
   { id: 'msg-3', alias: '이도현 강사', text: '좋은 질문이에요. 다음 예제에서 바로 비교해 볼게요.', time: '10:17', question: false },
 ]
 
-export const demoCaptions = [
-  { at: '12:08', text: '인증이 끝난 뒤에는 SecurityContext가 현재 요청의 사용자 정보를 보관합니다.' },
-  { at: '12:24', text: '이 경계를 서비스 계층의 권한 검사와 함께 보겠습니다.' },
-  { at: '12:41', text: '세션 저장소를 Redis로 분리하면 여러 서버가 같은 인증 상태를 공유할 수 있습니다.' },
+export const demoLiveCaptions = [
+  {
+    segmentId: 'caption-live-1',
+    startMs: 728_000,
+    endMs: 743_000,
+    at: '12:08',
+    text: '인증이 끝난 뒤에는 SecurityContext가 현재 요청의 사용자 정보를 보관합니다.',
+    termReferences: [{ termId: 'term-security-context', startIndex: 11, endIndex: 26 }],
+  },
+  {
+    segmentId: 'caption-live-2',
+    startMs: 744_000,
+    endMs: 760_000,
+    at: '12:24',
+    text: '이 경계를 SecurityFilterChain의 권한 검사와 함께 보겠습니다.',
+    termReferences: [{ termId: 'term-security-filter-chain', startIndex: 6, endIndex: 25 }],
+  },
+  {
+    segmentId: 'caption-live-3',
+    startMs: 761_000,
+    endMs: 779_000,
+    at: '12:41',
+    text: '세션 저장소를 Redis로 분리하면 여러 서버가 같은 인증 상태를 공유할 수 있습니다.',
+    termReferences: [{ termId: 'term-redis', startIndex: 8, endIndex: 13 }],
+  },
+]
+
+export const demoReplayCaptions = [
+  ...demoLiveCaptions,
+  {
+    segmentId: 'caption-replay-4',
+    startMs: 1_880_000,
+    endMs: 1_899_000,
+    at: '31:20',
+    text: 'Redis 세션은 여러 애플리케이션 인스턴스가 인증 상태를 공유하게 해줍니다.',
+    termReferences: [{ termId: 'term-redis', startIndex: 0, endIndex: 5 }],
+  },
+  {
+    segmentId: 'caption-replay-5',
+    startMs: 3_522_000,
+    endMs: 3_540_000,
+    at: '58:42',
+    text: 'CSRF 토큰은 사용자의 의도하지 않은 상태 변경 요청을 차단합니다.',
+    termReferences: [{ termId: 'term-csrf', startIndex: 0, endIndex: 4 }],
+  },
 ]
 
 export function getDemoInstructorCurriculums(userId: string) {
