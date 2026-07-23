@@ -2,7 +2,7 @@
 
 > 이전 결정: [ADR-0008](0008-frontend-runtime-and-data-source-boundary.md) · 점진 전환 배경: [ADR-0027](../songjeongki/0027-frontend-incremental-api-cutover.md)
 
-- **상태**: 채택
+- **상태**: 대체됨(→ [ADR-0015](0015-feature-service-adapter-routing.md))
 - **일자**: 2026-07-22
 - **적용 범위**: 프론트 데이터 조회·변경 함수의 mock/HTTP 선택
 

@@ -1,4 +1,9 @@
-import type { CurriculumAllowedAction, CurriculumProgress, CurriculumRelationship } from '@/features/curriculum/types'
+import type {
+  CurriculumAllowedAction,
+  CurriculumLifecycleStatus,
+  CurriculumProgress,
+  CurriculumRelationship,
+} from '@/features/curriculum/types'
 
 export type CurriculumDetailAllowedAction =
   | CurriculumAllowedAction
@@ -42,7 +47,8 @@ export interface CurriculumDetailViewerContext {
 
 /**
  * 수강 신청·취소 응답(서버 `EnrollmentResponse`와 동일 형태).
- * 판정 시각은 `decidedAt`(승인·거절·철회 공통), 수강 확정 시각은 `enrolledAt`으로 나뉜다.
+ * 판정 시각은 `decidedAt`(승인·거절), 수강 확정 시각은 `enrolledAt`으로 나뉜다.
+ * 현재 서버는 취소·제적 때 기존 시각을 그대로 유지한다.
  */
 export interface EnrollResult {
   enrollmentId: string
@@ -53,3 +59,59 @@ export interface EnrollResult {
   decidedAt: string | null
   enrolledAt: string | null
 }
+
+export interface StudentCurriculumItem {
+  enrollmentId: string
+  enrollmentStatus: EnrollmentStatus
+  curriculumId: string
+  title: string
+  summary: string
+  thumbnailUrl: string | null
+  lifecycleStatus: CurriculumLifecycleStatus
+  instructor: string
+  progress: number
+  completedLessonCount: number
+  lessonCount: number
+}
+
+export interface EnrollmentRosterStudent {
+  userId: string
+  displayName: string | null
+  email: string | null
+}
+
+export interface EnrollmentRosterItem {
+  enrollmentId: string
+  student: EnrollmentRosterStudent
+  status: EnrollmentStatus
+  requestedAt: string
+  decidedAt: string | null
+  enrolledAt: string | null
+  allowedTransitions: EnrollmentStatus[]
+}
+
+export interface EnrollmentStatusSummary {
+  pending: number
+  active: number
+  rejected: number
+  revoked: number
+  cancelled: number
+}
+
+export interface EnrollmentRosterQuery {
+  status?: EnrollmentStatus
+  page?: number
+  size?: number
+}
+
+export interface EnrollmentRosterResponse {
+  summary: EnrollmentStatusSummary
+  items: EnrollmentRosterItem[]
+  page: number
+  size: number
+  totalElements: number
+  totalPages: number
+  hasNext: boolean
+}
+
+export type InstructorEnrollmentAction = 'approve' | 'reject' | 'revoke'

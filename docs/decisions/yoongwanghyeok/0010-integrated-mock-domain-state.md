@@ -1,8 +1,8 @@
 # ADR-0010: 프론트 fixture = 통합 도메인 상태를 단일 원본으로 사용
 
-> 통합 저장소: [mockDatabase.ts](../../../frontend/src/features/demo/mockDatabase.ts) · 화면 어댑터: [demoData.ts](../../../frontend/src/features/demo/demoData.ts) · 데이터 소스 결정: [ADR-0008](0008-frontend-runtime-and-data-source-boundary.md)
+> 통합 저장소: [mockDatabase.ts](../../../frontend/src/features/demo/mockDatabase.ts) · 수강 저장소: [mockEnrollmentStore.ts](../../../frontend/src/features/enrollment/mockEnrollmentStore.ts) · 화면 어댑터: [demoData.ts](../../../frontend/src/features/demo/demoData.ts) · 데이터 소스 결정: [ADR-0008](0008-frontend-runtime-and-data-source-boundary.md) · 수강 소유권 분리: [ADR-0017](0017-independent-enrollment-feature-boundary.md)
 
-- **상태**: 채택
+- **상태**: 부분 대체됨 — 수강 레코드의 코드 소유권은 ADR-0017로 분리
 - **일자**: 2026-07-21
 - **적용 범위**: 프론트 fixture, 목록·상세·학생/강사 대시보드 테스트 시나리오
 
@@ -14,8 +14,8 @@
 
 ## 결정
 
-1. `mockDatabase.ts`를 커리큘럼·수강 관계·소유권·레슨·라이브 세션·진행 상태 fixture의 단일 원본으로 사용한다.
-2. `demoData.ts`와 feature별 mock 함수는 단일 원본을 화면 모델로 변환하는 어댑터로만 사용한다.
+1. `mockDatabase.ts`를 커리큘럼·소유권·레슨·라이브 세션·진행 상태 fixture의 통합 원본으로 사용한다. 수강 레코드는 `features/enrollment/mockEnrollmentStore.ts`가 소유하고, 통합 viewer context와 진행 상태는 해당 저장소를 조회해 파생한다.
+2. `demoData.ts`와 feature별 mock 함수는 각 소유 저장소를 화면 모델로 변환하는 어댑터로만 사용한다.
 3. 수강 상태는 제목이나 배열 index가 아니라 `userId + curriculumId + enrollment.status`로 판정한다.
 4. `ACTIVE` 수강은 나의 학습 목록, `PENDING` 수강 신청은 승인 대기 목록으로 분리한다.
 5. 승인 대기 카드에는 진행률과 학습 계속하기 행동을 제공하지 않는다.

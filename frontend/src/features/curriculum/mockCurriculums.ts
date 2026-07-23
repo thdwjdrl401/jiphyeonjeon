@@ -1,6 +1,6 @@
-import { peekMockUser } from '@/features/auth/mockAuth'
+import { peekMockUser } from '@/features/auth/mockAuthService'
+import { getMockEnrollment } from '@/features/enrollment/mockEnrollmentStore'
 import {
-  getMockEnrollment,
   getMockProgress,
   mockCurriculumEntities,
   resolveMockRelationship,

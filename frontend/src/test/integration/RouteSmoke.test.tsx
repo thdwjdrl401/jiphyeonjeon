@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
 import App from '@/App'
-import { mockAuthService, resetMockAuth } from '@/features/auth/mockAuth'
+import { mockAuthService, resetMockAuth } from '@/features/auth/mockAuthService'
 
 function renderAt(path: string) {
   window.history.pushState({}, '', path)

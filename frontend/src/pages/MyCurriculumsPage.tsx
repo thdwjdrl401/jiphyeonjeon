@@ -3,14 +3,14 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { instructorPaths, publicPaths, studentPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
-import { useCancelEnrollmentMutation } from '@/features/curriculum-detail/useEnrollmentMutations'
 import {
   getInstructorCurriculums,
   getInstructorDashboardSummary,
-  getStudentCurriculums,
   getStudentDashboardSummary,
-  type StudentCurriculumItem,
 } from '@/features/curriculum/myCurriculumsService'
+import type { StudentCurriculumItem } from '@/features/enrollment/types'
+import { useCancelEnrollmentMutation } from '@/features/enrollment/useEnrollmentMutations'
+import { useMyEnrollmentsQuery } from '@/features/enrollment/useEnrollmentQueries'
 import { ApiError } from '@/shared/api/client'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import { InlineNotice, MetricCard, PageHeader, Panel, StatusBadge } from '@/shared/ui/WorkspaceUi'
@@ -20,7 +20,7 @@ function formatLessonMinutes(durationMs?: number | null) {
   return `${Math.round(durationMs / 60_000)}`
 }
 
-function PendingCurriculumCard({ item, onCancelled }: { item: StudentCurriculumItem; onCancelled: () => void }) {
+function PendingCurriculumCard({ item }: { item: StudentCurriculumItem }) {
   const cancelMutation = useCancelEnrollmentMutation(item.curriculumId)
   const cancelError = cancelMutation.error instanceof ApiError ? cancelMutation.error.message : null
 
@@ -43,7 +43,7 @@ function PendingCurriculumCard({ item, onCancelled }: { item: StudentCurriculumI
             className="button button--ghost"
             type="button"
             disabled={cancelMutation.isPending}
-            onClick={() => cancelMutation.mutate(undefined, { onSuccess: onCancelled })}
+            onClick={() => cancelMutation.mutate()}
           >
             {cancelMutation.isPending ? '취소 중' : '수강 신청 취소'}
           </button>
@@ -73,11 +73,7 @@ export default function MyCurriculumsPage() {
     enabled: Boolean(userId && isInstructor),
     placeholderData: keepPreviousData,
   })
-  const studentListQuery = useQuery({
-    queryKey: ['my-curriculums', 'student', userId],
-    queryFn: () => getStudentCurriculums(userId),
-    enabled: Boolean(userId && !isInstructor),
-  })
+  const studentListQuery = useMyEnrollmentsQuery(userId, Boolean(userId && !isInstructor))
   const instructorSummaryQuery = useQuery({
     queryKey: ['dashboard-summary', 'instructor', userId],
     queryFn: () => getInstructorDashboardSummary(userId),
@@ -158,7 +154,7 @@ export default function MyCurriculumsPage() {
 
       {!isInstructor && (
         <Panel title="승인 대기 중인 커리큘럼" description="강사가 수강 신청을 승인하면 나의 학습 목록에서 바로 시작할 수 있어요.">
-          {pendingStudentCurriculums.length > 0 ? <div className="dashboard-curriculum-list">{pendingStudentCurriculums.map((item) => <PendingCurriculumCard key={item.curriculumId} item={item} onCancelled={() => void studentListQuery.refetch()} />)}</div> : <p>현재 승인 대기 중인 커리큘럼이 없습니다.</p>}
+          {pendingStudentCurriculums.length > 0 ? <div className="dashboard-curriculum-list">{pendingStudentCurriculums.map((item) => <PendingCurriculumCard key={item.curriculumId} item={item} />)}</div> : <p>현재 승인 대기 중인 커리큘럼이 없습니다.</p>}
         </Panel>
       )}
     </div>

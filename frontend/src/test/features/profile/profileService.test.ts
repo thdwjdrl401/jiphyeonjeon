@@ -3,7 +3,7 @@ import { apiClient } from '@/shared/api/client'
 
 vi.mock('@/shared/config/runtime', () => ({ isMockApiEnabled: false, isTestMode: false }))
 
-import { httpProfileService } from './profileService'
+import { httpProfileService } from '@/features/profile/profileService'
 
 describe('프로필 이미지 API 계약', () => {
   afterEach(() => {

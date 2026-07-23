@@ -1,0 +1,79 @@
+import { demoCaptions, demoMessages, getDemoLiveSession } from '@/features/demo/demoData'
+import type { CurriculumLiveSessionStatus } from '@/features/lesson/types'
+import type { LiveSessionService } from './liveSessionService.interface'
+
+const liveStatusOverrides = new Map<string, CurriculumLiveSessionStatus>()
+const bookmarksByLesson = new Map<string, number[]>()
+
+export const mockLiveSessionService = {
+  async getLiveSession(sessionId) {
+    const session = getDemoLiveSession(sessionId)
+    const status = liveStatusOverrides.get(sessionId) ?? session.status
+    return {
+      ...session,
+      status,
+      participants: status === 'LIVE' ? Math.max(session.participants, 1) : 0,
+      entryWindowMinutes: 10,
+    }
+  },
+  async getPreflightChecks() {
+    return [
+      { code: 'LESSON_PUBLISHED', label: '강의 게시', value: 'PUBLISHED', ready: true },
+      { code: 'MATERIAL_READY', label: 'PPTX 자료', value: '2개 준비', ready: true },
+      { code: 'AI_READY', label: 'AI 준비', value: 'READY', ready: true },
+      { code: 'LIVEKIT_READY', label: 'LiveKit', value: '연결 가능', ready: true },
+      { code: 'EGRESS_READY', label: 'Egress 녹화', value: '저장 경로 준비', ready: true },
+      { code: 'STT_READY', label: '실시간 자막', value: '처리 가능', ready: true },
+    ]
+  },
+  async startLiveSession(sessionId) {
+    liveStatusOverrides.set(sessionId, 'LIVE')
+  },
+  async endLiveSession(sessionId) {
+    liveStatusOverrides.set(sessionId, 'ENDED')
+  },
+  async getLiveToken(sessionId) {
+    return { token: `mock-token-${sessionId}` }
+  },
+  async getParticipants() {
+    return [
+      { alias: '수강생-14A2', state: '시청 중', joinedAt: '09:52' },
+      { alias: '수강생-09C1', state: 'DVR · 2분 전', joinedAt: '09:55' },
+      { alias: '수강생-21B3', state: '시청 중', joinedAt: '10:03' },
+    ]
+  },
+  async getChatMessages() {
+    return demoMessages
+  },
+  async sendChatMessage(_sessionId, text, question) {
+    return { id: `msg_${Date.now()}`, alias: '나', text, time: '현재', question }
+  },
+  async getCaptions() {
+    return demoCaptions
+  },
+  async askLiveAi() {
+    return { answer: 'SecurityContext는 인증이 끝난 현재 요청의 사용자 정보를 보관합니다. 세션 저장소와는 책임이 다르며, 요청이 끝나면 컨텍스트가 정리됩니다.' }
+  },
+  async saveBookmark(lessonId, sessionMs) {
+    const bookmarks = bookmarksByLesson.get(lessonId) ?? []
+    bookmarksByLesson.set(lessonId, [...bookmarks, sessionMs])
+  },
+  async getProcessingStatus() {
+    return {
+      steps: [
+        { label: '녹화 종료 요청', status: 'COMPLETE' as const },
+        { label: 'HLS 세그먼트 정리', status: 'COMPLETE' as const },
+        { label: '재생 가능성 검증', status: 'COMPLETE' as const },
+        { label: '다시보기 검수 준비', status: 'PROCESSING' as const },
+      ],
+      ready: false,
+    }
+  },
+  async getQuestionHighlights() {
+    return [
+      { at: '12:18', count: 3, text: '세션과 JWT를 함께 사용하는 기준이 궁금해요.' },
+      { at: '27:40', count: 5, text: '필터 순서가 실제 인증에 어떤 영향을 주나요?' },
+      { at: '41:05', count: 2, text: 'Redis 장애 시 세션 복구 방식이 궁금해요.' },
+    ]
+  },
+} satisfies LiveSessionService

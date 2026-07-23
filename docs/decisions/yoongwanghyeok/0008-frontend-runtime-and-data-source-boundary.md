@@ -2,7 +2,7 @@
 
 > 구현 가이드: [IMPLEMENTATION_GUIDE.md](../../frontend/IMPLEMENTATION_GUIDE.md) · 데이터 소스: [dataSource.ts](../../../frontend/src/shared/api/dataSource.ts) · 런타임 설정: [runtime.ts](../../../frontend/src/shared/config/runtime.ts)
 
-- **상태**: 일부 대체 — 함수별 선택 규칙은 [ADR-0014](0014-operation-level-hybrid-api-routing.md) 적용
+- **상태**: 채택 — 구현체 선택 구조는 [ADR-0015](0015-feature-service-adapter-routing.md)로 구체화
 - **일자**: 2026-07-21
 - **적용 범위**: 프론트 개발·빌드 방식, fixture와 실제 API의 선택 경계
 
@@ -21,7 +21,7 @@
    - `false`: 구현된 HTTP 서비스를 통해 실제 `/api`를 호출한다.
    - 미설정: 개발 모드는 mock, 프로덕션 빌드는 HTTP를 사용한다.
    - 테스트 모드: 외부 환경값과 관계없이 mock을 사용한다.
-4. 각 feature가 환경 변수를 직접 읽지 않고 `requestByDataSource` 또는 `selectDataSource`를 통해 선택한다.
+4. 각 feature가 환경 변수를 직접 읽지 않고 서비스 facade에서 `selectDataSource`로 구현체를 선택한다.
 5. 실제 모드에서 미구현 API가 있다고 해서 해당 기능만 fixture로 조용히 fallback하지 않는다. 미구현 상태를 명시적으로 드러내 혼합 데이터를 방지한다.
 6. 실제 API에 아직 없는 선택 필드는 응답에서 안전한 기본값으로 정규화할 수 있지만, 합의되지 않은 요청 필드를 임의로 전송하지 않는다.
 

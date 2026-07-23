@@ -3,14 +3,10 @@ import { apiClient } from '@/shared/api/client'
 
 vi.mock('@/shared/config/runtime', () => ({ isMockApiEnabled: false, isTestMode: false }))
 
-import {
-  cancelEnrollment,
-  enrollInCurriculum,
-  getCurriculumDetail,
-} from '@/features/curriculum-detail/curriculumDetailService'
+import { getCurriculumDetail } from '@/features/curriculum-detail/curriculumDetailService'
 import { authService } from '@/features/auth/authService'
-import { createCurriculum } from './curriculumManagementService'
-import { getCurriculums } from './curriculumService'
+import { createCurriculum } from '@/features/curriculum/curriculumManagementService'
+import { getCurriculums } from '@/features/curriculum/curriculumService'
 
 describe('커리큘럼 API 계약', () => {
   afterEach(() => {
@@ -121,24 +117,4 @@ describe('커리큘럼 API 계약', () => {
     expect(detail.outline[0].lessons[0].replayStatus).toBe('NOT_READY')
   })
 
-  it('수강 신청과 취소도 curriculum 경로를 사용한다', async () => {
-    const postSpy = vi.spyOn(apiClient, 'post').mockResolvedValue({
-      data: {
-        enrollmentId: 'enr_1',
-        curriculumId: 'cur_contract',
-        userId: 'usr_1',
-        status: 'PENDING',
-        requestedAt: '2026-07-20T00:00:00Z',
-        decidedAt: null,
-        enrolledAt: null,
-      },
-    } as never)
-    const deleteSpy = vi.spyOn(apiClient, 'delete').mockResolvedValue({} as never)
-
-    await enrollInCurriculum('cur_contract')
-    await cancelEnrollment('cur_contract')
-
-    expect(postSpy).toHaveBeenCalledWith('/curriculums/cur_contract/enrollments')
-    expect(deleteSpy).toHaveBeenCalledWith('/curriculums/cur_contract/enrollments/me')
-  })
 })

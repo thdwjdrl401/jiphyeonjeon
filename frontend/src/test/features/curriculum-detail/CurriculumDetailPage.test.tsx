@@ -4,12 +4,15 @@ import userEvent from '@testing-library/user-event'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthProvider } from '@/features/auth/AuthContext'
-import { mockAuthService, resetMockAuth } from '@/features/auth/mockAuth'
+import { mockAuthService, resetMockAuth } from '@/features/auth/mockAuthService'
 import { ApiError } from '@/shared/api/client'
 import CurriculumDetailPage from '@/pages/CurriculumDetailPage'
 import LoginPage from '@/pages/LoginPage'
-import * as curriculumDetailService from './curriculumDetailService'
-import { MOCK_ERROR_CURRICULUM_ID, resetMockCurriculumDetails } from './mockCurriculumDetails'
+import * as enrollmentService from '@/features/enrollment/enrollmentService'
+import {
+  MOCK_ERROR_CURRICULUM_ID,
+  resetMockCurriculumDetails,
+} from '@/features/curriculum-detail/mockCurriculumDetails'
 
 function renderDetail(path: string) {
   window.history.pushState({}, '', path)
@@ -198,7 +201,7 @@ describe('CurriculumDetailPage', () => {
     expect(screen.queryByRole('button', { name: '수강 신청' })).not.toBeInTheDocument()
   })
 
-  it('수강 신청 성공 후에는 정책과 무관하게 승인 대기 상태로 갱신된다', async () => {
+  it('승인제 수강 신청 성공 후에는 승인 대기 상태로 갱신된다', async () => {
     const user = userEvent.setup()
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
     renderDetail('/curriculums/cur-ux-research')
@@ -209,6 +212,19 @@ describe('CurriculumDetailPage', () => {
     expect(await screen.findByText('승인 대기 중이에요')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '수강 신청 취소' })).toBeInTheDocument()
     expect(screen.getByText('승인 대기')).toBeInTheDocument()
+  })
+
+  it('즉시 수강 커리큘럼은 신청 직후 수강 중 상태로 갱신된다', async () => {
+    const user = userEvent.setup()
+    await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
+    renderDetail('/curriculums/cur-typescript')
+
+    expect(await screen.findByText('신청 즉시 수강을 시작할 수 있어요.')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '수강 신청' }))
+
+    expect(await screen.findByText('수강 중')).toBeInTheDocument()
+    expect(screen.queryByText('승인 대기 중이에요')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '수강 취소' })).toBeInTheDocument()
   })
 
   it('승인 대기 → 취소 → 재신청까지 버튼이 이어진다', async () => {
@@ -237,11 +253,11 @@ describe('CurriculumDetailPage', () => {
     const user = userEvent.setup()
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
 
-    let resolveEnroll: (value: Awaited<ReturnType<typeof curriculumDetailService.enrollInCurriculum>>) => void = () => {}
-    const pending = new Promise<Awaited<ReturnType<typeof curriculumDetailService.enrollInCurriculum>>>((resolve) => {
+    let resolveEnroll: (value: Awaited<ReturnType<typeof enrollmentService.enrollInCurriculum>>) => void = () => {}
+    const pending = new Promise<Awaited<ReturnType<typeof enrollmentService.enrollInCurriculum>>>((resolve) => {
       resolveEnroll = resolve
     })
-    const spy = vi.spyOn(curriculumDetailService, 'enrollInCurriculum').mockReturnValue(pending)
+    const spy = vi.spyOn(enrollmentService, 'enrollInCurriculum').mockReturnValue(pending)
 
     renderDetail('/curriculums/cur-ux-research')
     const enrollButton = await screen.findByRole('button', { name: '수강 신청' })
@@ -271,7 +287,7 @@ describe('CurriculumDetailPage', () => {
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
 
     const spy = vi
-      .spyOn(curriculumDetailService, 'enrollInCurriculum')
+      .spyOn(enrollmentService, 'enrollInCurriculum')
       .mockRejectedValue(new ApiError('이미 신청했거나 수강 중이에요.', 409, 'ENROLLMENT_ALREADY_EXISTS'))
 
     renderDetail('/curriculums/cur-ux-research')

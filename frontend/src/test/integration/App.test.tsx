@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '@/App'
 import { httpAuthService } from '@/features/auth/authService'
-import { resetMockAuth } from '@/features/auth/mockAuth'
+import { resetMockAuth } from '@/features/auth/mockAuthService'
 import { apiClient } from '@/shared/api/client'
 
 function renderAt(path: string) {

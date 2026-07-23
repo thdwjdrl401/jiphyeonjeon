@@ -8,7 +8,7 @@ interface EnrollmentActionsProps {
 }
 
 const policyLabel: Record<string, string> = {
-  IMMEDIATE: '신청 후 승인을 거치면 수강할 수 있어요.',
+  IMMEDIATE: '신청 즉시 수강을 시작할 수 있어요.',
   APPROVAL_REQUIRED: '신청 후 승인을 거치면 수강할 수 있어요.',
   INVITATION_ONLY: '초대받은 사용자만 신청할 수 있어요.',
 }

@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { describe, expect, it, vi } from 'vitest'
-import { apiClient } from './client'
-import { uploadAsset } from './uploadAsset'
+import { apiClient } from '@/shared/api/client'
+import { uploadAsset } from '@/shared/api/uploadAsset'
 
 describe('에셋 업로드', () => {
   it('티켓 발급 → presigned 업로드 → 완료 통보 순서로 진행하고 assetId를 돌려준다', async () => {

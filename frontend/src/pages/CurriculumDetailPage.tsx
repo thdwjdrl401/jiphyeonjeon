@@ -10,19 +10,19 @@ import CurriculumDetailSkeleton from '@/features/curriculum-detail/CurriculumDet
 import CurriculumRelationPanel from '@/features/curriculum-detail/CurriculumRelationPanel'
 import { resolvePrimaryAction } from '@/features/curriculum-detail/primaryAction'
 import { useCurriculumDetail } from '@/features/curriculum-detail/useCurriculumDetail'
-import { useCancelEnrollmentMutation, useEnrollMutation } from '@/features/curriculum-detail/useEnrollmentMutations'
 import CurriculumProgress from '@/features/enrollment/CurriculumProgress'
+import { useCancelEnrollmentMutation, useEnrollMutation } from '@/features/enrollment/useEnrollmentMutations'
 import { ApiError } from '@/shared/api/client'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
 
 export default function CurriculumDetailPage() {
   const { curriculumId = '' } = useParams()
-  const { user } = useAuth()
+  const { user, status } = useAuth()
   const location = useLocation()
   const returnTo = `${location.pathname}${location.search}`
 
-  const detailQuery = useCurriculumDetail(curriculumId, user ?? undefined)
+  const detailQuery = useCurriculumDetail(curriculumId, user ?? undefined, status !== 'loading')
   const enrollMutation = useEnrollMutation(curriculumId)
   const cancelMutation = useCancelEnrollmentMutation(curriculumId)
 
