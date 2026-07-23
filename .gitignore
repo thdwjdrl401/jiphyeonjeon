@@ -43,3 +43,10 @@ backend/.gradle/
 
 # LiveKit STT 테스트 미디어(대용량 바이너리) — 호스트 /srv/liveclass/stt-audio 에만 둔다
 infra/livekit/stt-audio/
+
+# 아키텍처 다이어그램 생성 스크립트의 출력물 (원본은 liveclass-architecture.drawio)
+docs/architecture/**/*.generated.drawio
+
+# 파이썬 캐시
+__pycache__/
+*.pyc

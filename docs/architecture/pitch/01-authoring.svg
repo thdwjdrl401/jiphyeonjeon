@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1502 226" width="1502" height="226" role="img">
+<title>1부 · 강의 준비</title>
+<style>text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif}</style>
+<rect width="100%" height="100%" fill="#FFFFFF"/>
+<path d="M220.0,117.0 H337.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M346.0,117.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M532.0,105.7 H574.0 V68.0 H649.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M658.0,68.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M532.0,128.3 H616.0 V166.0 H649.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M658.0,166.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M844.0,68.0 H886.0 V105.7 H961.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M970.0,105.7 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M844.0,166.0 H928.0 V128.3 H961.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M970.0,128.3 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M1156.0,117.0 H1273.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M1282.0,117.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<rect x="256.1" y="94.4" width="53.8" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="283.0" y="105.0" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">① 개설</text>
+<rect x="574.4" y="10.4" width="83.2" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="616.0" y="21.0" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">② 목차 구성</text>
+<rect x="907.4" y="56.8" width="83.2" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="949.0" y="67.3" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">③ 준비 완료</text>
+<rect x="1192.1" y="94.4" width="53.8" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="1219.0" y="105.0" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">④ 공개</text>
+<rect x="34.0" y="83.0" width="186.0" height="68.0" rx="3" fill="#FFFFFF" stroke="#5A6C7B" stroke-width="1.8"/>
+<text x="127.0" y="122.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">강사</text>
+<rect x="346.0" y="83.0" width="186.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="439.0" y="114.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">커리큘럼</text>
+<text x="439.0" y="133.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">제목 · 소개 · 수강 방식</text>
+<rect x="658.0" y="34.0" width="186.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="751.0" y="65.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">섹션</text>
+<text x="751.0" y="84.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">주차 · 챕터</text>
+<rect x="658.0" y="132.0" width="186.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="751.0" y="163.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">레슨</text>
+<text x="751.0" y="182.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">한 회차 수업</text>
+<rect x="970.0" y="83.0" width="186.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="1063.0" y="114.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">발행</text>
+<text x="1063.0" y="133.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">공개로 전환</text>
+<rect x="1282.0" y="83.0" width="186.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="1375.0" y="122.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">공개 카탈로그</text>
+</svg>

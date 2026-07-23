@@ -1,0 +1,952 @@
+<title>LiveClass AI — 아키텍처</title>
+
+<style>
+  :root {
+    --ground:      #F4F6F8;
+    --surface:     #FFFFFF;
+    --surface-2:   #EAEEF2;
+    --ink:         #0F1B2A;
+    --ink-soft:    #4A5A6B;
+    --ink-faint:   #7C8B99;
+    --rule:        #D5DDE4;
+    --rule-soft:   #E4EAEF;
+    --accent:      #1D4E6F;
+    --accent-soft: #E3EDF3;
+    --tally:       #D9342B;
+
+    --st-done:     #2C7A5B;
+    --st-done-bg:  #E1F0E9;
+    --st-part:     #A96F16;
+    --st-part-bg:  #F7EDDB;
+    --st-todo:     #7A8794;
+    --st-todo-bg:  #EBEFF2;
+    --st-gap:      #BE3A2B;
+    --st-gap-bg:   #FAE5E2;
+
+    --font-display: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans KR", sans-serif;
+    --font-body: ui-serif, Georgia, "Times New Roman", "Noto Serif KR", serif;
+    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+    --measure: 68ch;
+    --rail: 4.5rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground:      #0D141C;
+      --surface:     #131D27;
+      --surface-2:   #1A2632;
+      --ink:         #E1E9F0;
+      --ink-soft:    #9DAEBC;
+      --ink-faint:   #6B7C8B;
+      --rule:        #24323F;
+      --rule-soft:   #1B2733;
+      --accent:      #6FB2D8;
+      --accent-soft: #16303F;
+      --tally:       #F2564C;
+
+      --st-done:     #5CBF93;
+      --st-done-bg:  #12291F;
+      --st-part:     #D9A44F;
+      --st-part-bg:  #2B2113;
+      --st-todo:     #8494A2;
+      --st-todo-bg:  #1B242D;
+      --st-gap:      #F0736A;
+      --st-gap-bg:   #2E1613;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:      #0D141C;
+    --surface:     #131D27;
+    --surface-2:   #1A2632;
+    --ink:         #E1E9F0;
+    --ink-soft:    #9DAEBC;
+    --ink-faint:   #6B7C8B;
+    --rule:        #24323F;
+    --rule-soft:   #1B2733;
+    --accent:      #6FB2D8;
+    --accent-soft: #16303F;
+    --tally:       #F2564C;
+    --st-done:     #5CBF93;
+    --st-done-bg:  #12291F;
+    --st-part:     #D9A44F;
+    --st-part-bg:  #2B2113;
+    --st-todo:     #8494A2;
+    --st-todo-bg:  #1B242D;
+    --st-gap:      #F0736A;
+    --st-gap-bg:   #2E1613;
+  }
+
+  :root[data-theme="light"] {
+    --ground:      #F4F6F8;
+    --surface:     #FFFFFF;
+    --surface-2:   #EAEEF2;
+    --ink:         #0F1B2A;
+    --ink-soft:    #4A5A6B;
+    --ink-faint:   #7C8B99;
+    --rule:        #D5DDE4;
+    --rule-soft:   #E4EAEF;
+    --accent:      #1D4E6F;
+    --accent-soft: #E3EDF3;
+    --tally:       #D9342B;
+    --st-done:     #2C7A5B;
+    --st-done-bg:  #E1F0E9;
+    --st-part:     #A96F16;
+    --st-part-bg:  #F7EDDB;
+    --st-todo:     #7A8794;
+    --st-todo-bg:  #EBEFF2;
+    --st-gap:      #BE3A2B;
+    --st-gap-bg:   #FAE5E2;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 1rem;
+    line-height: 1.68;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 62rem;
+    margin: 0 auto;
+    padding: 0 1.5rem 6rem;
+  }
+
+  /* ---------- masthead ---------- */
+
+  .masthead {
+    padding: 4.5rem 0 2.5rem;
+    border-bottom: 2px solid var(--ink);
+    display: flex;
+    flex-direction: column;
+    gap: 1.75rem;
+  }
+
+  .tally {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  .tally::before {
+    content: "";
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 50%;
+    background: var(--tally);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--tally) 18%, transparent);
+  }
+
+  h1 {
+    font-family: var(--font-display);
+    font-size: clamp(2.6rem, 7vw, 4.4rem);
+    line-height: 0.98;
+    letter-spacing: -0.035em;
+    font-weight: 700;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  h1 .sub {
+    display: block;
+    font-size: clamp(1rem, 2.4vw, 1.35rem);
+    letter-spacing: -0.01em;
+    font-weight: 400;
+    color: var(--ink-soft);
+    margin-top: 1rem;
+    line-height: 1.4;
+    max-width: 44ch;
+  }
+
+  .masthead-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 2rem;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--ink-faint);
+    letter-spacing: 0.02em;
+  }
+
+  .masthead-meta b { color: var(--ink-soft); font-weight: 500; }
+
+  /* ---------- session-clock rail ---------- */
+
+  .track {
+    display: grid;
+    grid-template-columns: var(--rail) minmax(0, 1fr);
+    gap: 0 2rem;
+    padding: 3.5rem 0 0;
+    position: relative;
+  }
+
+  .track::before {
+    content: "";
+    position: absolute;
+    left: calc(var(--rail) - 1px);
+    top: 0;
+    bottom: -3.5rem;
+    width: 1px;
+    background: var(--rule);
+  }
+
+  .track:last-of-type::before { bottom: 2rem; }
+
+  .track-mark {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    color: var(--ink-faint);
+    text-align: right;
+    padding-top: 0.55rem;
+    position: relative;
+  }
+
+  .track-mark::after {
+    content: "";
+    position: absolute;
+    right: -2.4rem;
+    top: 0.95rem;
+    width: 0.85rem;
+    height: 1px;
+    background: var(--accent);
+  }
+
+  .track-body { min-width: 0; display: flex; flex-direction: column; gap: 1.25rem; }
+
+  h2 {
+    font-family: var(--font-display);
+    font-size: clamp(1.5rem, 3.2vw, 2rem);
+    letter-spacing: -0.025em;
+    font-weight: 650;
+    line-height: 1.15;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  h3 {
+    font-family: var(--font-display);
+    font-size: 1.02rem;
+    letter-spacing: -0.008em;
+    font-weight: 650;
+    margin: 0;
+    line-height: 1.35;
+  }
+
+  p { margin: 0; max-width: var(--measure); }
+  p + p { margin-top: -0.35rem; }
+
+  .lede { font-size: 1.1rem; color: var(--ink-soft); max-width: 58ch; }
+
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  code, .mono { font-family: var(--font-mono); font-size: 0.86em; }
+  p code, li code, td code, th code {
+    background: var(--surface-2);
+    padding: 0.1em 0.36em;
+    border-radius: 3px;
+  }
+
+  strong { font-weight: 700; }
+
+  /* ---------- status chips ---------- */
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4em;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 0.18em 0.55em;
+    border-radius: 3px;
+    white-space: nowrap;
+    border: 1px solid transparent;
+  }
+  .chip::before { content: ""; width: 0.4em; height: 0.4em; border-radius: 50%; background: currentColor; }
+  .c-done { color: var(--st-done); background: var(--st-done-bg); border-color: color-mix(in srgb, var(--st-done) 25%, transparent); }
+  .c-part { color: var(--st-part); background: var(--st-part-bg); border-color: color-mix(in srgb, var(--st-part) 25%, transparent); }
+  .c-todo { color: var(--st-todo); background: var(--st-todo-bg); border-color: color-mix(in srgb, var(--st-todo) 25%, transparent); }
+  .c-gap  { color: var(--st-gap);  background: var(--st-gap-bg);  border-color: color-mix(in srgb, var(--st-gap) 25%, transparent); }
+
+  /* ---------- tables ---------- */
+
+  .scroll { overflow-x: auto; margin-inline: -0.25rem; padding-inline: 0.25rem; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-display);
+    font-size: 0.86rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.45;
+  }
+
+  th {
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.7rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    padding: 0 0.9rem 0.6rem 0;
+    border-bottom: 1px solid var(--ink);
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 0.7rem 0.9rem 0.7rem 0;
+    border-bottom: 1px solid var(--rule-soft);
+    vertical-align: top;
+    color: var(--ink-soft);
+  }
+
+  td:first-child { color: var(--ink); font-weight: 600; white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+
+  /* ---------- cards ---------- */
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+  }
+
+  .card {
+    background: var(--surface);
+    padding: 1.15rem 1.2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .card p { font-size: 0.9rem; color: var(--ink-soft); }
+
+  .card-n {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+  }
+
+  /* ---------- principles ---------- */
+
+  ol.principles { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.9rem; counter-reset: p; }
+  ol.principles > li {
+    counter-increment: p;
+    display: grid;
+    grid-template-columns: 1.9rem minmax(0, 1fr);
+    gap: 0.75rem;
+    font-size: 0.96rem;
+    max-width: var(--measure);
+  }
+  ol.principles > li::before {
+    content: counter(p, decimal-leading-zero);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--ink-faint);
+    padding-top: 0.32em;
+  }
+  .exception {
+    margin-top: 0.4rem;
+    padding-left: 0.85rem;
+    border-left: 2px solid var(--st-part);
+    font-size: 0.88rem;
+    color: var(--ink-soft);
+  }
+
+  /* ---------- horizon diagram ---------- */
+
+  .horizon {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    padding: 1.75rem 1.5rem 1.4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+  }
+
+  .horizon-bar {
+    position: relative;
+    height: 5.5rem;
+    border-radius: 2px;
+    background: linear-gradient(90deg, var(--accent-soft) 0%, var(--accent-soft) 62%, var(--surface-2) 62%, var(--surface-2) 100%);
+    border: 1px solid var(--rule);
+    overflow: hidden;
+  }
+
+  .horizon-band {
+    position: absolute;
+    top: 0; bottom: 0;
+    left: 62%; right: 8%;
+    background: repeating-linear-gradient(
+      -45deg,
+      color-mix(in srgb, var(--st-part) 13%, transparent) 0 5px,
+      transparent 5px 10px
+    );
+    border-left: 1px dashed var(--st-part);
+  }
+
+  .playhead { position: absolute; top: 0; bottom: 0; left: 92%; width: 2px; background: var(--tally); }
+  .playhead::after {
+    content: "";
+    position: absolute;
+    top: -1px; left: -3px;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--tally);
+  }
+
+  .horizon-label {
+    position: absolute;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.04em;
+    line-height: 1.35;
+  }
+  .hl-past   { left: 1rem;  top: 0.9rem; color: var(--accent); max-width: 18ch; }
+  .hl-band   { left: 63.5%; top: 0.9rem; color: var(--st-part); max-width: 14ch; }
+  .hl-now    { right: 0.6rem; bottom: 0.7rem; color: var(--tally); text-align: right; }
+
+  .horizon-axis {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    color: var(--ink-faint);
+    letter-spacing: 0.06em;
+  }
+
+  .horizon-legend {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+    gap: 0.9rem;
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+    border-top: 1px solid var(--rule-soft);
+    padding-top: 1rem;
+  }
+  .horizon-legend b { display: block; color: var(--ink); font-family: var(--font-display); font-size: 0.82rem; letter-spacing: 0.01em; }
+
+  /* ---------- callout ---------- */
+
+  .callout {
+    border-left: 3px solid var(--accent);
+    background: var(--surface);
+    padding: 1rem 1.2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    font-size: 0.93rem;
+    color: var(--ink-soft);
+  }
+  .callout-title {
+    font-family: var(--font-display);
+    font-weight: 650;
+    font-size: 0.9rem;
+    color: var(--ink);
+    letter-spacing: 0.01em;
+  }
+  .callout.gap { border-left-color: var(--st-gap); }
+
+  /* ---------- proof list ---------- */
+
+  ul.proof { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.7rem; }
+  ul.proof li {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.7rem;
+    align-items: baseline;
+    font-size: 0.92rem;
+    color: var(--ink-soft);
+    max-width: var(--measure);
+  }
+  ul.proof .mono { color: var(--ink); font-weight: 500; }
+
+  /* ---------- mermaid ---------- */
+
+  .figure {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    padding: 1.5rem 1rem 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+  }
+  .figure .mermaid { overflow-x: auto; text-align: center; }
+  .figure figcaption {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--ink-faint);
+    letter-spacing: 0.04em;
+    border-top: 1px solid var(--rule-soft);
+    padding-top: 0.8rem;
+    line-height: 1.6;
+  }
+
+  /* ---------- decisions ---------- */
+
+  .decisions { display: flex; flex-direction: column; gap: 1px; background: var(--rule); border: 1px solid var(--rule); }
+  .decision {
+    background: var(--surface);
+    padding: 1.1rem 1.2rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.35rem 1rem;
+    align-items: start;
+  }
+  .decision h3 { grid-column: 1; }
+  .decision .chip { grid-column: 2; grid-row: 1; }
+  .decision p { grid-column: 1 / -1; font-size: 0.9rem; color: var(--ink-soft); }
+  .decision .fix {
+    grid-column: 1 / -1;
+    font-size: 0.88rem;
+    color: var(--ink);
+    border-top: 1px dashed var(--rule);
+    padding-top: 0.6rem;
+    margin-top: 0.25rem;
+  }
+  .decision .fix b { font-family: var(--font-display); font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+
+  /* ---------- footer ---------- */
+
+  footer {
+    margin-top: 5rem;
+    padding-top: 1.5rem;
+    border-top: 2px solid var(--ink);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--ink-faint);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.5rem;
+    justify-content: space-between;
+  }
+
+  @media (max-width: 46rem) {
+    :root { --rail: 0rem; }
+    .track { grid-template-columns: minmax(0, 1fr); gap: 0; padding-top: 2.75rem; }
+    .track::before { display: none; }
+    .track-mark { text-align: left; padding: 0 0 0.6rem; }
+    .track-mark::after { display: none; }
+    .decision { grid-template-columns: minmax(0, 1fr); }
+    .decision .chip { grid-column: 1; grid-row: auto; justify-self: start; }
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .playhead::after { animation: pulse 2.4s ease-in-out infinite; }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--tally) 55%, transparent); }
+      50%      { box-shadow: 0 0 0 6px color-mix(in srgb, var(--tally) 0%, transparent); }
+    }
+  }
+</style>
+
+<div class="page">
+
+  <header class="masthead">
+    <div class="tally">LiveClass AI · 아키텍처 기준선 · 2026-07-23</div>
+    <h1>
+      라이브가 토대다
+      <span class="sub">강사가 라이브로 강의하면 자막·용어·근거가 실시간으로 붙고, 그 산출물이 그대로 다시보기가 된다. 영상 업로드는 없다.</span>
+    </h1>
+    <div class="masthead-meta">
+      <span><b>스택</b> React 19 · Spring Boot 4.1 / Java 21 · PostgreSQL+pgvector · LiveKit</span>
+      <span><b>현재</b> CP0·CP1 백엔드 완료</span>
+    </div>
+  </header>
+
+  <!-- ============ 제품 ============ -->
+  <section class="track">
+    <div class="track-mark">00:00<br>제품</div>
+    <div class="track-body">
+      <h2>업로드 강의가 아니라, 라이브의 부산물로 만들어지는 강의</h2>
+      <p class="lede">
+        콘텐츠는 전부 라이브와 그 녹화에서 나온다. 강사가 따로 올리는 건 강의자료(PPTX)뿐이다.
+        이 한 줄이 아키텍처 전체를 결정한다 — 라이브 없이는 다시보기도 없고, 그래서 <strong>라이브 미디어가 가장 먼저 서야 하는 토대</strong>다.
+      </p>
+
+      <div class="cards">
+        <div class="card">
+          <span class="card-n">LIVE</span>
+          <h3>실시간 자막과 용어</h3>
+          <p>강사 오디오가 STT를 거쳐 자막이 되고, 확정된 구간에는 용어 설명과 자료 근거가 따라붙는다.</p>
+        </div>
+        <div class="card">
+          <span class="card-n">ASK</span>
+          <h3>자료 근거 RAG</h3>
+          <p>강의자료와 자막을 근거로만 답한다. 근거가 없으면 지어내지 않고 <code>INSUFFICIENT_EVIDENCE</code>를 반환한다.</p>
+        </div>
+        <div class="card">
+          <span class="card-n">REPLAY</span>
+          <h3>다시보기 = 완성본</h3>
+          <p>라이브 때 만든 산출물을 그대로 재생한다. 이미 교정이 끝난 뒤라 처음부터 전체 기능이 나온다.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 원칙 ============ -->
+  <section class="track">
+    <div class="track-mark">01<br>원칙</div>
+    <div class="track-body">
+      <h2>여섯 개의 분리 원칙</h2>
+      <p>구현이 흔들릴 때 되돌아오는 기준선이다. 모든 설계 논쟁은 이 여섯 줄로 판정한다.</p>
+
+      <ol class="principles">
+        <li><span>React는 <strong>Spring으로만</strong> 요청한다. Python AI는 외부에 노출되지 않는다 — 권한·정책·비용을 Spring이 검증한다.</span></li>
+        <li><span><code>core</code>(Spring) / <code>ai</code>(Python) <strong>스키마 공동수정 금지.</strong> 한 클러스터, 소유 기준은 그 행을 실제로 쓰는 서비스(write-owner)다.</span></li>
+        <li><span><strong>긴 작업은 큐 잡으로.</strong> HTTP 요청 안에서 처리하지 않는다. Redis는 durable 큐로 쓰지 않는다.</span></li>
+        <li><span><strong>미디어 바이트는 Spring을 통과하지 않는다.</strong> 라이브는 WebRTC 직결, 자료 업로드는 presigned로 클라이언트가 스토리지에 직접 PUT 한다.</span></li>
+        <li>
+          <span>
+            <strong>AI 결과는 후보다.</strong> 원본은 보존하고 강사 게시본을 학생에게 노출한다.
+            <span class="exception"><strong>예외 — 라이브 자막.</strong> 실시간 자막은 검수 없이 즉시 나간다. 그게 실시간의 본질이다. 검수는 사후 교정이고 승인 게이트는 두지 않는다.</span>
+          </span>
+        </li>
+        <li><span><strong>AI 장애가 코어를 막지 않는다.</strong> 라이브 영상·채팅·수강·다시보기는 AI와 무관하게 살아 있다.</span></li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ============ 시스템 ============ -->
+  <section class="track">
+    <div class="track-mark">02<br>시스템</div>
+    <div class="track-body">
+      <h2>지금 도는 것 일곱, 앞으로 붙는 것 다섯</h2>
+      <p>실선은 구현됐고 점선은 설계다. 원칙 4가 화살표에 그대로 드러난다 — 브라우저에서 LiveKit·스토리지로 가는 선들은 전부 Spring을 우회한다.</p>
+
+      <figure class="figure">
+        <pre class="mermaid">
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"ui-monospace, SFMono-Regular, Menlo, monospace","fontSize":"13px","lineColor":"#7C8B99","primaryTextColor":"#0F1B2A","clusterBkg":"transparent","clusterBorder":"#C7D2DB"}}}%%
+flowchart LR
+  classDef built fill:#E1F0E9,stroke:#2C7A5B,color:#123F2D
+  classDef planned fill:#EBEFF2,stroke:#9AA7B3,color:#43505C,stroke-dasharray:4 3
+
+  FE["React 19 + TS<br/>LiveKit client · WS"]
+
+  subgraph CTRL["컨트롤 · 데이터 — Spring Boot 4.1"]
+    SP["core-api<br/>인증 · 커리큘럼 · 수강 · 라이브<br/>채팅 · 자산 · AI 게이트웨이"]
+    PG[("PostgreSQL + pgvector")]
+    RD[("Redis")]
+    MQ[["RabbitMQ"]]
+  end
+
+  subgraph AI["Intelligence — Python"]
+    AG["realtime-agent<br/>라이브 STT"]
+    API["ai-api<br/>RAG SSE"]
+    WK["ai-worker<br/>chunk · embed"]
+    GW["model gateway"]
+  end
+
+  subgraph MEDIA["미디어 — LiveKit self-host"]
+    LK["LiveKit SFU"]
+    EG["Egress 녹화 → HLS"]
+    OBJ[("MinIO / S3")]
+  end
+
+  FE -->|"REST · WS"| SP
+  FE -->|"WebRTC"| LK
+  FE -->|"presigned PUT"| OBJ
+  SP -->|"토큰 · Egress 제어"| LK
+  SP --- PG
+  SP --- RD
+  SP -.->|"outbox"| MQ
+  SP -.->|"internal"| API
+  MQ -.-> WK
+  WK -.->|"완료 이벤트"| MQ
+  MQ -.->|"inbox"| SP
+  LK -.->|"강사 오디오"| AG
+  AG -.->|"caption"| RD
+  RD -.->|"consume"| SP
+  LK -->|"녹화"| EG
+  EG --> OBJ
+  API -.-> PG
+  API -.-> GW
+  WK -.-> GW
+
+  class FE,SP,PG,RD,LK,EG,OBJ built
+  class MQ,AG,API,WK,GW planned
+        </pre>
+        <figcaption>초록 = 구현 완료 · 회색 점선 = CP2~CP4 설계</figcaption>
+      </figure>
+
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr><th>영역</th><th>선택</th><th>상태</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>프론트</td><td>React 19 + TypeScript, TanStack Query, Vite</td><td><span class="chip c-done">구현</span></td></tr>
+            <tr><td>컨트롤·데이터</td><td>Spring Boot 4.1 · Java 21 · Spring Modulith 2.1</td><td><span class="chip c-done">구현</span></td></tr>
+            <tr><td>인증</td><td>HttpOnly 쿠키 + Redis 세션 · 미디어는 LiveKit JWT</td><td><span class="chip c-done">구현</span></td></tr>
+            <tr><td>DB</td><td>PostgreSQL 16 + pgvector · <code>core</code>/<code>ai</code> 스키마 분리</td><td><span class="chip c-part"><code>core</code>만</span></td></tr>
+            <tr><td>실시간</td><td>STOMP over WebSocket</td><td><span class="chip c-done">구현</span></td></tr>
+            <tr><td>스토리지</td><td>MinIO(S3 호환) + presigned direct upload</td><td><span class="chip c-done">구현</span></td></tr>
+            <tr><td>미디어</td><td>LiveKit self-host SFU + Egress 녹화</td><td><span class="chip c-part">재생 미착수</span></td></tr>
+            <tr><td>AI</td><td>realtime-agent · ai-api · ai-worker (Python)</td><td><span class="chip c-todo">CP2~CP3</span></td></tr>
+            <tr><td>STT·임베딩·LLM</td><td>전부 외부 API — 로컬 모델 미탑재</td><td><span class="chip c-todo">CP2~CP3</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 모듈 ============ -->
+  <section class="track">
+    <div class="track-mark">03<br>모듈</div>
+    <div class="track-body">
+      <h2>경계를 규율이 아니라 빌드 실패로 지킨다</h2>
+      <p>
+        Spring Modulith로 모듈 경계를 코드에 새겼다. 다른 모듈의 <code>domain</code>·<code>repository</code>를 직접 부를 수 없고,
+        접근은 <code>&lt;module&gt;.api</code> 공개면으로만 가능하다. 순환은 금지고, 위반은 리뷰어가 아니라 <strong>CI가 잡는다</strong>.
+      </p>
+      <p>
+        포트는 필요한 모듈만 만든다. 10개 모듈 중 <code>.api</code>를 가진 건 6개이고,
+        <code>curriculum</code>은 유입 참조가 없어 포트가 아예 없다. 기계적으로 다 파면 비용만 남는다.
+      </p>
+
+      <div class="callout">
+        <span class="callout-title">이 게이트가 실제로 잡은 것</span>
+        <ul class="proof">
+          <li><span class="mono">video → live.config</span><span>아무도 의도하지 않은 결합이 드러났다. <code>LiveKitServerAccess</code> seam으로 정리.</span></li>
+          <li><span class="mono">CatalogService</span><span>서비스가 web DTO를 알던 계층 역전. 서비스 레벨 record + web 팩토리로 분리.</span></li>
+          <li><span class="mono">live → curriculum</span><span>순환이 막히자 <code>live_session.curriculum_id</code>를 비정규화했다. 결과적으로 조인 없이 수강을 검사하는 <strong>더 빠른</strong> 구조가 됐다.</span></li>
+        </ul>
+      </div>
+
+      <p>
+        세 번 다 확장성 이야기가 아니다. 전부 지금 당장의 코드 품질이다.
+        나중에 특정 모듈을 별도 서비스로 떼어낼 수 있다는 건 공짜로 딸려오는 선택지이지, 이 구조를 고른 이유가 아니다.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============ 지평선 ============ -->
+  <section class="track">
+    <div class="track-mark">04<br>시간축</div>
+    <div class="track-body">
+      <h2>지평선 — 라이브와 확정본 사이의 거리</h2>
+      <p>
+        이 제품의 모든 데이터는 <strong>세션 상대 밀리초</strong>라는 하나의 좌표 위에 놓인다. 자막도, HLS 세그먼트도, 다시보기 싱크도 같은 축을 쓴다.
+        그 축 위에서 <em>지금</em>과 <em>확정된 지점</em> 사이의 간격이 지평선이다.
+      </p>
+
+      <div class="horizon">
+        <div class="horizon-bar">
+          <div class="horizon-band"></div>
+          <div class="playhead"></div>
+          <span class="horizon-label hl-past">확정 구간<br>교정 자막 · 용어 · 근거</span>
+          <span class="horizon-label hl-band">지평선<br>교정 진행 중</span>
+          <span class="horizon-label hl-now">지금<br>partial 자막</span>
+        </div>
+        <div class="horizon-axis">
+          <span>세션 시작 · 0 ms</span>
+          <span>세션 상대 시간 →</span>
+        </div>
+        <div class="horizon-legend">
+          <div><b>라이브 시청자</b>가 보는 건 오른쪽 끝이다. 말이 끝나기 전 partial 자막이 먼저 뜨고, 확정되면 교체된다.</div>
+          <div><b>지평선 뒤</b>로 넘어간 구간은 교정이 끝나 용어와 근거가 함께 붙는다.</div>
+          <div><b>다시보기</b>는 정의상 항상 지평선 밖이다. 그래서 처음부터 전체 기능이 나온다.</div>
+        </div>
+      </div>
+
+      <div class="callout gap">
+        <span class="callout-title">아직 정해지지 않았다</span>
+        <p>
+          지평선이 <strong>몇 초인지, 누가 확정을 선언하는지</strong>가 비어 있다.
+          이게 없으면 프론트는 자막 렌더링 정책을, 백엔드는 영속 시점을 정할 수 없다. CP2 착수를 막는 첫 번째 결정이다.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 로드맵 ============ -->
+  <section class="track">
+    <div class="track-mark">05<br>로드맵</div>
+    <div class="track-body">
+      <h2>지금 여기 — CP1 데모까지 프론트 미디어 연동만 남았다</h2>
+      <p>각 체크포인트는 독립적으로 데모 가능한 수직 슬라이스다. 폭이 아니라 깊이로 쌓는다.</p>
+
+      <figure class="figure">
+        <pre class="mermaid">
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"ui-monospace, SFMono-Regular, Menlo, monospace","fontSize":"13px","lineColor":"#7C8B99","primaryTextColor":"#0F1B2A"}}}%%
+flowchart LR
+  classDef done fill:#E1F0E9,stroke:#2C7A5B,color:#123F2D
+  classDef partial fill:#F7EDDB,stroke:#A96F16,color:#5C3D0B
+  classDef todo fill:#EBEFF2,stroke:#9AA7B3,color:#43505C,stroke-dasharray:4 3
+  classDef gap fill:#FAE5E2,stroke:#BE3A2B,color:#7A2119
+
+  T0["T0 인프라<br/>compose · CI · EC2<br/>LiveKit · Egress"]
+  SPK["STT 스파이크"]
+  MAT["자료→레슨 연결<br/>BE 선행 · 미착수"]
+  T0 --> CP0["CP0 인증 +<br/>커리큘럼 골격"]
+  CP0 --> CP1["CP1 라이브 미디어<br/>★ 첫 데모"]
+  CP1 --> CP2["CP2 라이브 자막"]
+  CP2 --> CP3["CP3 용어·근거 RAG<br/>★ 제품 핵심"]
+  CP1 --> CP4["CP4 녹화·다시보기"]
+  CP0 --> CP5["CP5 퀴즈"]
+  MAT --> CP3
+  SPK -.-> CP2
+  CP2 -.-> CP4
+  CP3 -.-> CP4
+
+  class T0,CP0 done
+  class CP1,CP4 partial
+  class CP2,CP3,CP5,SPK todo
+  class MAT gap
+        </pre>
+        <figcaption>초록 = 완료 · 노랑 = 부분 · 회색 = 미착수 · 빨강 = 새로 드러난 선행조건</figcaption>
+      </figure>
+
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr><th>CP</th><th>백엔드</th><th>프론트</th><th>AI</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>T0 인프라</td>
+              <td><span class="chip c-done">완료</span> compose · CI · EC2 배포 · LiveKit 상시가동</td>
+              <td><span class="chip c-done">완료</span> Vite · 라우팅</td>
+              <td><span class="chip c-todo">Alembic</span></td>
+            </tr>
+            <tr>
+              <td>CP0 강좌 골격</td>
+              <td><span class="chip c-done">완료</span> 인증 · 커리큘럼 · 수강 · 카탈로그</td>
+              <td><span class="chip c-done">완료</span> 화면 + 실 API 연동</td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <td>CP1 라이브 ★</td>
+              <td><span class="chip c-done">완료</span> LiveKit 토큰 · 채팅 WS · 세션 수명주기</td>
+              <td><span class="chip c-part">세션·채팅 연동 완료</span> 미디어 클라이언트 미착수</td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <td>CP2 자막</td>
+              <td><span class="chip c-todo">대기</span></td>
+              <td><span class="chip c-todo">대기</span></td>
+              <td><span class="chip c-todo">realtime-agent</span></td>
+            </tr>
+            <tr>
+              <td>CP3 RAG ★</td>
+              <td><span class="chip c-gap">선행 필요</span></td>
+              <td><span class="chip c-todo">대기</span></td>
+              <td><span class="chip c-todo">ai-api · worker</span></td>
+            </tr>
+            <tr>
+              <td>CP4 다시보기</td>
+              <td><span class="chip c-part">Egress 제어 완료</span> 재생 API 미착수</td>
+              <td><span class="chip c-todo">대기</span></td>
+              <td>—</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout">
+        <span class="callout-title">인프라는 쓰는 시점에 배선한다</span>
+        <p>
+          RabbitMQ는 dev 인프라에 이미 서 있지만 <strong>Spring 배선과 prod 투입은 CP3에서</strong> 한다.
+          CP2의 자막 경로는 Redis Streams로 충분하고, 실제 배치 잡은 CP3에서 처음 생긴다.
+          단일 노드에 컨테이너를 하나라도 늦게 얹는 게 낫다.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 결정 ============ -->
+  <section class="track">
+    <div class="track-mark">06<br>결정</div>
+    <div class="track-body">
+      <h2>착수를 막는 결정 네 가지</h2>
+      <p>미구현 영역을 점검하며 나온 것들이다. 답이 나와야 CP2·CP3에 손을 댈 수 있다.</p>
+
+      <div class="decisions">
+        <article class="decision">
+          <h3>지평선을 몇 초로 둘 것인가</h3>
+          <span class="chip c-gap">CP2 차단</span>
+          <p>제품 설명의 핵심 단어인데 정의가 없다. 프론트의 자막 렌더링 정책과 백엔드의 영속 시점이 여기에 달려 있다.</p>
+          <p class="fix"><b>제안</b> partial은 즉시 회색으로, final은 확정 렌더, 교정·용어·근거는 <code>t − N초</code> 뒤 재전송. <code>N</code>은 STT bake-off 결과로 정하고 설정값으로 뺀다.</p>
+        </article>
+
+        <article class="decision">
+          <h3>자료를 레슨에 붙이는 API가 없다</h3>
+          <span class="chip c-gap">CP3 차단</span>
+          <p>presigned 업로드는 되지만 업로드한 자료를 레슨에 연결하는 경로가 없다. RAG ingestion의 입력이 비어 있는 상태다. 로드맵 의존성 그래프에도 빠져 있던 선행조건이다.</p>
+          <p class="fix"><b>제안</b> CP3 착수 전 백엔드 작업으로 명시하고 의존성 그래프에 반영한다.</p>
+        </article>
+
+        <article class="decision">
+          <h3>자막이 유실되면 정본은 어디에 있나</h3>
+          <span class="chip c-part">CP2 차단</span>
+          <p>원칙 3은 Redis를 durable 큐로 쓰지 않는다고 했는데, 자막이 Redis Streams를 지난다. Redis가 재시작하면 그 구간의 정본이 없다.</p>
+          <p class="fix"><b>제안</b> 자막 fast-path는 <strong>의도적으로 유실을 허용</strong>하고, 빈 구간은 CP4 녹화본 2-pass 재처리로 복구한다. 그러면 Redis는 여전히 fast-path이고 정본 복구 경로는 녹화가 된다.</p>
+        </article>
+
+        <article class="decision">
+          <h3>EC2 한 대로 CP3까지 갈 수 있나</h3>
+          <span class="chip c-part">CP2 차단</span>
+          <p>노드 전체가 4vCPU/15GB인데 Egress 단독 권장 사양만 4vCPU/4GB다. 여기에 realtime-agent·ai-api·ai-worker가 더 붙는다.</p>
+          <p class="fix"><b>전제를 명시한다</b> STT·임베딩·LLM은 전부 외부 API · Egress는 데모 세션에만 기동 · 동시 라이브 세션 1~2개. 이 전제가 깨지면 노드를 분리한다.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 배포 ============ -->
+  <section class="track">
+    <div class="track-mark">07<br>배포</div>
+    <div class="track-body">
+      <h2>한 대의 EC2, 두 개의 독립 스택</h2>
+      <p>
+        앱 스택은 nginx가 TLS를 종단하고 SPA와 <code>/api</code>를 같은 오리진에서 서빙한다 — 쿠키 세션이 CORS 없이 동작한다.
+        미디어 스택은 SFU가 UDP 포트를 직접 잡아야 해서 <code>network_mode: host</code>로 도커 NAT를 우회한다.
+      </p>
+      <p>
+        도메인이 하나뿐이고 DNS 콘솔 권한이 없어, 미디어 시그널링은 서브도메인 대신 <strong>같은 도메인의 별도 TLS 포트</strong>로 분리했다.
+        인증서는 앱 스택이 단독으로 발급·갱신하고 미디어 nginx는 볼륨으로 읽기만 한다.
+      </p>
+
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr><th>노출</th><th>담당</th><th>비고</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>443 / 80</td><td>앱 nginx</td><td>SPA + <code>/api</code> 프록시, 80은 301 및 인증서 갱신</td></tr>
+            <tr><td>7443</td><td>미디어 nginx</td><td>LiveKit 시그널링 WSS 종단</td></tr>
+            <tr><td>7882 UDP</td><td>LiveKit SFU</td><td>미디어 직결. 7881 TCP는 UDP 차단 환경 fallback</td></tr>
+            <tr><td>비노출</td><td>PostgreSQL · Redis · backend</td><td>도커 내부 네트워크 전용 + Security Group 차단, 2중 방어</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>LiveClass AI — 아키텍처 기준선</span>
+    <span>docs/ARCHITECTURE.md · docs/CP-ROADMAP.md · docs/decisions/</span>
+  </footer>
+
+</div>

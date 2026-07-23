@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1578 128" width="1578" height="128" role="img">
+<title>한 요청이 지나는 길</title>
+<style>text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif}</style>
+<rect width="100%" height="100%" fill="#FFFFFF"/>
+<path d="M224.0,68.0 H355.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M364.0,68.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M554.0,68.0 H685.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M694.0,68.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M884.0,68.0 H1015.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M1024.0,68.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M1214.0,68.0 H1345.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M1354.0,68.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<rect x="267.1" y="45.4" width="53.8" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="294.0" y="56.0" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">① 도착</text>
+<rect x="570.9" y="45.4" width="106.2" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="624.0" y="56.0" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">② 누구인지 확정</text>
+<rect x="912.4" y="45.4" width="83.2" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="954.0" y="56.0" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">③ 형식 통과</text>
+<rect x="1242.4" y="45.4" width="83.2" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="1284.0" y="56.0" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">④ 규칙 통과</text>
+<rect x="34.0" y="34.0" width="190.0" height="68.0" rx="3" fill="#FFFFFF" stroke="#5A6C7B" stroke-width="1.8"/>
+<text x="129.0" y="73.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">브라우저 요청</text>
+<rect x="364.0" y="34.0" width="190.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="459.0" y="65.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">로그인 확인</text>
+<text x="459.0" y="84.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">쿠키 · 세션</text>
+<rect x="694.0" y="34.0" width="190.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="789.0" y="65.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">입력 검증</text>
+<text x="789.0" y="84.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">형식 · 필수값</text>
+<rect x="1024.0" y="34.0" width="190.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="1119.0" y="65.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">업무 규칙</text>
+<text x="1119.0" y="84.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">권한 · 상태 · 정합성</text>
+<rect x="1354.0" y="34.0" width="190.0" height="68.0" rx="3" fill="#F8EFDD" stroke="#A96F16" stroke-width="1.8"/>
+<text x="1449.0" y="73.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">저장소</text>
+</svg>
