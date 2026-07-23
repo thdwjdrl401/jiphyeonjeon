@@ -102,6 +102,7 @@ describe('LiveClass AI 공개 페이지', () => {
     expect(await screen.findByText('사용할 수 있는 이메일입니다.')).toBeInTheDocument()
     await user.type(within(form).getByLabelText(/^비밀번호 \*/), 'password1')
     await user.type(within(form).getByLabelText(/비밀번호 확인/), 'password1')
+    await user.click(within(form).getByLabelText('LiveClass 이용 안내를 확인했습니다.'))
     await user.click(within(form).getByRole('button', { name: /가입하고 시작하기/ }))
 
     expect(

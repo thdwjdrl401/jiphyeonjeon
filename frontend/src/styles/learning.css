@@ -21,6 +21,13 @@
 .instructor-end-confirm strong { color: #fff; font-size: .74rem; }
 .instructor-end-confirm p { margin: 3px 0 0; color: rgba(255,255,255,.57); font-size: .62rem; }
 .instructor-end-confirm > div:last-child { display: flex; gap: 7px; }
+.recording-banner { display: flex; align-items: center; gap: 11px; margin-bottom: 13px; padding: 11px 15px; border: 1px solid rgba(255,96,116,.32); border-radius: 12px; background: rgba(255,60,85,.11); }
+.recording-banner__dot { width: 9px; height: 9px; flex: 0 0 auto; border-radius: 50%; background: #ff3c55; box-shadow: 0 0 0 5px rgba(255,60,85,.14); animation: recording-pulse 1.8s ease-in-out infinite; }
+.recording-banner strong { display: block; color: #fff; font-size: .74rem; }
+.recording-banner p { margin: 3px 0 0; color: rgba(255,255,255,.6); font-size: .62rem; }
+.control-row button.is-recording { color: #ff8494; border-color: rgba(255,96,116,.4); }
+@keyframes recording-pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .recording-banner__dot { animation: none; } }
 .media-layout { display: grid; grid-template-columns: minmax(0,1fr) 370px; gap: 13px; }
 .media-primary { min-width: 0; }
 .video-stage { position: relative; min-height: min(64vh, 690px); overflow: hidden; border: 1px solid rgba(255,255,255,.08); border-radius: 17px; background: #171f35; box-shadow: 0 22px 50px rgba(0,0,0,.24); }

@@ -53,6 +53,9 @@ export default function LiveClassroomPage() {
   const [aiAnswer, setAiAnswer] = useState('')
   const [bookmarked, setBookmarked] = useState(false)
   const [endRequested, setEndRequested] = useState(false)
+  // 녹화는 세션 진행 중 기본 활성 상태다. 실제 배포에서는 세션 상태(getLiveSession)로 동기화되어
+  // 모든 참가자 클라이언트가 같은 값을 받아 Google Meet처럼 녹화 알림 배너를 표시한다.
+  const [isRecording, setIsRecording] = useState(true)
   const sendMutation = useMutation({
     mutationFn: ({ text, question }: { text: string; question: boolean }) => sendChatMessage(sessionId, text, question),
     onSuccess: (sent) => queryClient.setQueryData<ChatMessageView[]>(['live-chat', sessionId], (current = []) => [...current, sent]),
@@ -112,10 +115,20 @@ export default function LiveClassroomPage() {
         </div>
       </header>
 
+      {isRecording && (
+        <div className="recording-banner" role="status" aria-live="polite">
+          <span className="recording-banner__dot" aria-hidden="true" />
+          <div>
+            <strong>이 강의는 녹화되고 있습니다</strong>
+            <p>AI 기능 제공을 위해 채팅과 자막이 함께 처리됩니다.</p>
+          </div>
+        </div>
+      )}
+
       {isInstructor && (
         <section className="instructor-live-console" aria-label="강사 라이브 운영 상태">
           <div><span>송출</span><strong>LIVE</strong><small>카메라·화면 공유 정상</small></div>
-          <div><span>녹화</span><strong>RECORDING</strong><small>Egress HLS 저장 중</small></div>
+          <div><span>녹화</span><strong>{isRecording ? 'RECORDING' : '중지됨'}</strong><small>{isRecording ? 'Egress HLS 저장 중' : '녹화가 일시 중지되었습니다'}</small></div>
           <div><span>실시간 자막</span><strong>ACTIVE</strong><small>지연 1.2초</small></div>
           <div><span>질문</span><strong>10개</strong><small>집중 구간 3곳</small></div>
         </section>
@@ -140,7 +153,7 @@ export default function LiveClassroomPage() {
           <div className="live-controls">
             <div className="timeline-row"><span>00:00</span><input aria-label="라이브 타임라인" min="0" max="100" type="range" value={position} onChange={(event) => { const value = Number(event.target.value); setPosition(value); setIsLive(value > 96) }} /><span>현재</span></div>
             <div className="control-row">
-              <div>{isInstructor ? <><button type="button">마이크 켜짐</button><button type="button">카메라 켜짐</button><button type="button">화면 공유 중</button></> : <button className={bookmarked ? 'is-active' : ''} type="button" onClick={() => bookmarkMutation.mutate()}>{bookmarked ? '★ 북마크됨' : '☆ 북마크'}</button>}</div>
+              <div>{isInstructor ? <><button type="button">마이크 켜짐</button><button type="button">카메라 켜짐</button><button type="button">화면 공유 중</button><button className={isRecording ? 'is-recording' : ''} type="button" aria-pressed={isRecording} onClick={() => setIsRecording((current) => !current)}>{isRecording ? '● 녹화 중지' : '○ 녹화 시작'}</button></> : <button className={bookmarked ? 'is-active' : ''} type="button" onClick={() => bookmarkMutation.mutate()}>{bookmarked ? '★ 북마크됨' : '☆ 북마크'}</button>}</div>
               <button className={`go-live${isLive ? ' is-live' : ''}`} type="button" onClick={() => { setPosition(100); setIsLive(true) }}><i /> LIVE{!isLive && '로 이동'}</button>
             </div>
           </div>
