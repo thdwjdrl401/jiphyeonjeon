@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 460" width="960" height="460" role="img">
+  <title>한 클러스터, 두 스키마, 겹치지 않는 쓰기 권한</title>
+  <style>
+  svg {
+    --surface:#131D27; --ink:#E1E9F0; --ink-soft:#9DAEBC; --ink-faint:#8496A4;
+    --accent:#6FB2D8; --tally:#F2564C;
+    --n-built:#4FAE83; --n-built-bg:#153024;
+    --n-plan:#6B7C8B;  --n-plan-bg:#1A242D;
+    --n-key:#6FB2D8;   --n-key-bg:#15303F;
+    --n-data:#D9A44F;  --n-data-bg:#2C2214;
+    --zone:#172129; --zone-line:#2B3A47;
+    --edge:#8899A6; --edge-soft:#6A7A86;
+    --page:#0D141C;
+  }
+
+  svg { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+        "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; }
+  .box     { fill: var(--surface); stroke: var(--zone-line); stroke-width: 1.5; }
+  .box.on  { fill: var(--n-built-bg); stroke: var(--n-built); }
+  .box.off { fill: var(--n-plan-bg);  stroke: var(--n-plan); stroke-dasharray: 5 4; }
+  .box.key { fill: var(--n-key-bg);   stroke: var(--n-key); stroke-width: 2; }
+  .box.dat { fill: var(--n-data-bg);  stroke: var(--n-data); }
+  .zone    { fill: var(--zone); stroke: var(--zone-line); stroke-width: 1; stroke-dasharray: 4 4; }
+  .zone.solid { stroke-dasharray: none; }
+  .t   { font-size: 14px; font-weight: 650; fill: var(--ink); }
+  .t.sm{ font-size: 12.5px; }
+  .ts  { font-size: 11px; fill: var(--ink-soft); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .zl  { font-size: 11px; fill: var(--ink-faint); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: 0.1em; }
+  .el  { font-size: 10.5px; fill: var(--ink-faint); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .el.hot { fill: var(--tally); }
+  .num { font-size: 11px; font-weight: 700; fill: var(--surface); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .edge      { stroke: var(--edge); stroke-width: 1.6; fill: none; }
+  .edge.off  { stroke: var(--edge-soft); stroke-dasharray: 5 4; }
+  .edge.hot  { stroke: var(--tally); stroke-width: 2; }
+  .head-a     { fill: var(--edge); }
+  .head-a.off { fill: var(--edge-soft); }
+  .head-a.hot { fill: var(--tally); }
+  .mid { text-anchor: middle; }
+  .end { text-anchor: end; }
+  </style>
+  <rect x="0" y="0" width="960" height="460" fill="var(--page)"/>
+
+        <!-- owners -->
+        <rect class="box on" x="60" y="40" width="290" height="50" rx="3"/>
+        <text class="t mid" x="205" y="63">Spring · core-api</text>
+        <text class="ts mid" x="205" y="80">Flyway 로 마이그레이션</text>
+
+        <rect class="box off" x="610" y="40" width="290" height="50" rx="3"/>
+        <text class="t mid" x="755" y="63">Python · ai-worker / ai-api</text>
+        <text class="ts mid" x="755" y="80">Alembic 으로 마이그레이션 · CP2~</text>
+
+        <!-- schemas -->
+        <rect class="zone solid" x="60" y="130" width="290" height="250" rx="4"/>
+        <text class="zl" x="74" y="152">스키마 CORE — 쓰기 독점</text>
+        <text class="ts" x="74" y="180" style="fill:var(--ink)">app_user · instructor_profile</text>
+        <text class="ts" x="74" y="202" style="fill:var(--ink)">curriculum → section → lesson</text>
+        <text class="ts" x="74" y="224" style="fill:var(--ink)">live_session · chat_message</text>
+        <text class="ts" x="74" y="246" style="fill:var(--ink)">enrollment · learning_progress</text>
+        <text class="ts" x="74" y="268" style="fill:var(--ink)">asset · material_asset · video_asset</text>
+        <text class="ts" x="74" y="290" style="fill:var(--ink)">outbox_events · external_event_inbox</text>
+        <line x1="74" y1="308" x2="336" y2="308" stroke="var(--zone-line)"/>
+        <text class="ts" x="74" y="328">자막 원본 · 게시본 · 용어 · 퀴즈</text>
+        <text class="el" x="74" y="346">CP2~ · 학생에게 보이는 것은 전부 여기</text>
+
+        <rect class="zone" x="610" y="130" width="290" height="250" rx="4"/>
+        <text class="zl" x="624" y="152">스키마 AI — 쓰기 독점 · 미생성</text>
+        <text class="ts" x="624" y="180" style="fill:var(--ink)">document_chunk</text>
+        <text class="ts" x="624" y="202" style="fill:var(--ink)">chunk_embedding</text>
+        <text class="ts" x="624" y="224" style="fill:var(--ink)">job_run</text>
+        <text class="ts" x="624" y="246" style="fill:var(--ink)">model_run</text>
+        <line x1="624" y1="266" x2="886" y2="266" stroke="var(--zone-line)"/>
+        <text class="ts" x="624" y="288">네 개뿐이다.</text>
+        <text class="el" x="624" y="306">Python이 생산자이자 주 소비자인 것만</text>
+        <text class="el" x="624" y="324">— 벡터를 이벤트로 실어 나르지 않기 위해</text>
+
+        <!-- write arrows -->
+        <path class="edge" d="M205,90 V122"/>
+        <path class="head-a" d="M205,130 l-4.5,-8 l9,0 z"/>
+        <text class="el" x="214" y="112">write</text>
+        <path class="edge off" d="M755,90 V122"/>
+        <path class="head-a off" d="M755,130 l-4.5,-8 l9,0 z"/>
+        <text class="el" x="764" y="112">write</text>
+
+        <!-- read across -->
+        <path class="edge off" d="M350,196 H600"/>
+        <path class="head-a off" d="M608,196 l-8,-4.5 l0,9 z"/>
+        <text class="el mid" x="479" y="188">읽기 — chunking 원본</text>
+
+        <!-- event bridge -->
+        <rect class="box off" x="382" y="250" width="196" height="56" rx="3"/>
+        <text class="t mid sm" x="480" y="273">이벤트 버스</text>
+        <text class="ts mid" x="480" y="291">outbox → 큐 → inbox</text>
+
+        <path class="edge off" d="M610,278 H586"/>
+        <path class="head-a off" d="M578,278 l8,-4.5 l0,9 z"/>
+        <path class="edge off" d="M382,278 H358"/>
+        <path class="head-a off" d="M350,278 l8,-4.5 l0,9 z"/>
+        <text class="el mid" x="480" y="326">AI 산출물은 이 경로로만 core 에 들어간다</text>
+
+        <text class="zl" x="60" y="412">교차 규칙</text>
+        <text class="ts" x="60" y="434">읽기는 grant 로 서로 허용 · 쓰기는 절대 교차 없음 · 스키마를 넘는 FK 없이 논리 참조 + 앱 검증</text>
+      
+</svg>

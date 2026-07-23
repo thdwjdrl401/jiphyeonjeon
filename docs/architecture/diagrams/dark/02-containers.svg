@@ -1,0 +1,154 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 660" width="960" height="660" role="img">
+  <title>세 개의 플레인으로 나눈 실행 단위</title>
+  <style>
+  svg {
+    --surface:#131D27; --ink:#E1E9F0; --ink-soft:#9DAEBC; --ink-faint:#8496A4;
+    --accent:#6FB2D8; --tally:#F2564C;
+    --n-built:#4FAE83; --n-built-bg:#153024;
+    --n-plan:#6B7C8B;  --n-plan-bg:#1A242D;
+    --n-key:#6FB2D8;   --n-key-bg:#15303F;
+    --n-data:#D9A44F;  --n-data-bg:#2C2214;
+    --zone:#172129; --zone-line:#2B3A47;
+    --edge:#8899A6; --edge-soft:#6A7A86;
+    --page:#0D141C;
+  }
+
+  svg { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+        "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; }
+  .box     { fill: var(--surface); stroke: var(--zone-line); stroke-width: 1.5; }
+  .box.on  { fill: var(--n-built-bg); stroke: var(--n-built); }
+  .box.off { fill: var(--n-plan-bg);  stroke: var(--n-plan); stroke-dasharray: 5 4; }
+  .box.key { fill: var(--n-key-bg);   stroke: var(--n-key); stroke-width: 2; }
+  .box.dat { fill: var(--n-data-bg);  stroke: var(--n-data); }
+  .zone    { fill: var(--zone); stroke: var(--zone-line); stroke-width: 1; stroke-dasharray: 4 4; }
+  .zone.solid { stroke-dasharray: none; }
+  .t   { font-size: 14px; font-weight: 650; fill: var(--ink); }
+  .t.sm{ font-size: 12.5px; }
+  .ts  { font-size: 11px; fill: var(--ink-soft); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .zl  { font-size: 11px; fill: var(--ink-faint); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: 0.1em; }
+  .el  { font-size: 10.5px; fill: var(--ink-faint); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .el.hot { fill: var(--tally); }
+  .num { font-size: 11px; font-weight: 700; fill: var(--surface); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .edge      { stroke: var(--edge); stroke-width: 1.6; fill: none; }
+  .edge.off  { stroke: var(--edge-soft); stroke-dasharray: 5 4; }
+  .edge.hot  { stroke: var(--tally); stroke-width: 2; }
+  .head-a     { fill: var(--edge); }
+  .head-a.off { fill: var(--edge-soft); }
+  .head-a.hot { fill: var(--tally); }
+  .mid { text-anchor: middle; }
+  .end { text-anchor: end; }
+  </style>
+  <rect x="0" y="0" width="960" height="660" fill="var(--page)"/>
+
+        <!-- FE -->
+        <rect class="box on" x="355" y="40" width="250" height="48" rx="3"/>
+        <text class="t mid" x="480" y="60">React 19 · TypeScript</text>
+        <text class="ts mid" x="480" y="78">브라우저</text>
+
+        <!-- zone: app -->
+        <rect class="zone" x="30" y="130" width="430" height="230" rx="4"/>
+        <text class="zl" x="42" y="148">앱 플레인 — SPRING BOOT 4.1</text>
+        <rect class="box on" x="55" y="165" width="380" height="70" rx="3"/>
+        <text class="t mid" x="245" y="192">core-api</text>
+        <text class="ts mid" x="245" y="212">인증 · 커리큘럼 · 수강 · 라이브 · 채팅 · 자산</text>
+        <rect class="box dat" x="55" y="255" width="180" height="44" rx="3"/>
+        <text class="t mid sm" x="145" y="273">PostgreSQL 16</text>
+        <text class="ts mid" x="145" y="290">+ pgvector</text>
+        <rect class="box dat" x="255" y="255" width="180" height="44" rx="3"/>
+        <text class="t mid sm" x="345" y="273">Redis 7</text>
+        <text class="ts mid" x="345" y="290">session · cache</text>
+        <rect class="box off" x="55" y="315" width="380" height="36" rx="3"/>
+        <text class="t mid sm" x="245" y="338">RabbitMQ — 인프라만 기동, 배선은 CP3</text>
+
+        <!-- zone: media -->
+        <rect class="zone" x="500" y="130" width="430" height="230" rx="4"/>
+        <text class="zl" x="512" y="148">미디어 플레인 — LIVEKIT SELF-HOST</text>
+        <rect class="box on" x="525" y="165" width="180" height="60" rx="3"/>
+        <text class="t mid sm" x="615" y="190">LiveKit SFU</text>
+        <text class="ts mid" x="615" y="209">WebRTC 라이브</text>
+        <rect class="box on" x="525" y="255" width="180" height="44" rx="3"/>
+        <text class="t mid sm" x="615" y="273">Egress</text>
+        <text class="ts mid" x="615" y="290">녹화 → HLS</text>
+        <rect class="box dat" x="735" y="240" width="170" height="60" rx="3"/>
+        <text class="t mid sm" x="820" y="265">MinIO / S3</text>
+        <text class="ts mid" x="820" y="284">오브젝트 스토리지</text>
+
+        <!-- zone: ai -->
+        <rect class="zone" x="30" y="420" width="900" height="180" rx="4"/>
+        <text class="zl" x="42" y="438">AI 플레인 — PYTHON · CP2~CP3</text>
+        <rect class="box off" x="60" y="460" width="190" height="50" rx="3"/>
+        <text class="t mid sm" x="155" y="481">realtime-agent</text>
+        <text class="ts mid" x="155" y="498">라이브 STT</text>
+        <rect class="box off" x="280" y="460" width="190" height="50" rx="3"/>
+        <text class="t mid sm" x="375" y="481">ai-api</text>
+        <text class="ts mid" x="375" y="498">RAG · SSE</text>
+        <rect class="box off" x="500" y="460" width="190" height="50" rx="3"/>
+        <text class="t mid sm" x="595" y="481">ai-worker</text>
+        <text class="ts mid" x="595" y="498">chunk · embed</text>
+        <rect class="box off" x="720" y="460" width="190" height="50" rx="3"/>
+        <text class="t mid sm" x="815" y="481">model gateway</text>
+        <text class="ts mid" x="815" y="498">외부 모델 API</text>
+
+        <!-- FE edges -->
+        <path class="edge" d="M420,88 V145 H245 V157"/>
+        <path class="head-a" d="M245,165 l-4.5,-8 l9,0 z"/>
+        <text class="el" x="252" y="120">REST · WS(STOMP)</text>
+
+        <path class="edge" d="M540,88 V145 H615 V157"/>
+        <path class="head-a" d="M615,165 l-4.5,-8 l9,0 z"/>
+        <text class="el" x="624" y="120">WebRTC</text>
+
+        <path class="edge" d="M605,64 H940 V270 H913"/>
+        <path class="head-a" d="M905,270 l8,-4.5 l0,9 z"/>
+        <text class="el end" x="934" y="180">presigned PUT</text>
+        <text class="el end" x="934" y="194">(자료 업로드)</text>
+
+        <!-- app internal -->
+        <path class="edge" d="M145,235 V247"/>
+        <path class="head-a" d="M145,255 l-4.5,-8 l9,0 z"/>
+        <path class="edge" d="M345,235 V247"/>
+        <path class="head-a" d="M345,255 l-4.5,-8 l9,0 z"/>
+        <path class="edge off" d="M245,235 V307"/>
+        <path class="head-a off" d="M245,315 l-4.5,-8 l9,0 z"/>
+
+        <!-- app -> media -->
+        <path class="edge" d="M435,190 H517"/>
+        <path class="head-a" d="M525,190 l-8,-4.5 l0,9 z"/>
+        <text class="el mid" x="476" y="182">토큰</text>
+        <text class="el mid" x="476" y="168">Egress 제어</text>
+
+        <!-- media internal -->
+        <path class="edge" d="M615,225 V247"/>
+        <path class="head-a" d="M615,255 l-4.5,-8 l9,0 z"/>
+        <path class="edge" d="M705,277 H727"/>
+        <path class="head-a" d="M735,277 l-8,-4.5 l0,9 z"/>
+
+        <!-- ai edges -->
+        <path class="edge off" d="M705,195 H720 V405 H110 V452"/>
+        <path class="head-a off" d="M110,460 l-4.5,-8 l9,0 z"/>
+        <text class="el" x="726" y="380">강사 오디오</text>
+
+        <path class="edge off" d="M200,460 V390 H345 V307"/>
+        <path class="head-a off" d="M345,299 l-4.5,8 l9,0 z"/>
+        <text class="el" x="352" y="384">caption 스트림</text>
+
+        <path class="edge off" d="M375,460 V372 H145 V307"/>
+        <path class="head-a off" d="M145,299 l-4.5,8 l9,0 z"/>
+        <text class="el" x="152" y="366">RAG 검색</text>
+
+        <path class="edge off" d="M55,190 H40 V485 H272"/>
+        <path class="head-a off" d="M280,485 l-8,-4.5 l0,9 z"/>
+        <text class="el" x="46" y="330">internal</text>
+
+        <path class="edge off" d="M435,333 H545 V452"/>
+        <path class="head-a off" d="M545,460 l-4.5,-8 l9,0 z"/>
+        <path class="edge off" d="M640,460 V398 H420 V359"/>
+        <path class="head-a off" d="M420,351 l-4.5,8 l9,0 z"/>
+        <text class="el" x="648" y="424">완료 이벤트</text>
+
+        <path class="edge off" d="M690,485 H712"/>
+        <path class="head-a off" d="M720,485 l-8,-4.5 l0,9 z"/>
+        <path class="edge off" d="M375,510 V535 H800 V518"/>
+        <path class="head-a off" d="M800,510 l-4.5,8 l9,0 z"/>
+      
+</svg>

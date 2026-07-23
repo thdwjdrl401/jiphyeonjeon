@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 440" width="960" height="440" role="img">
+  <title>말이 자막이 되어 학생 화면에 뜨기까지</title>
+  <style>
+  svg {
+    --surface:#131D27; --ink:#E1E9F0; --ink-soft:#9DAEBC; --ink-faint:#8496A4;
+    --accent:#6FB2D8; --tally:#F2564C;
+    --n-built:#4FAE83; --n-built-bg:#153024;
+    --n-plan:#6B7C8B;  --n-plan-bg:#1A242D;
+    --n-key:#6FB2D8;   --n-key-bg:#15303F;
+    --n-data:#D9A44F;  --n-data-bg:#2C2214;
+    --zone:#172129; --zone-line:#2B3A47;
+    --edge:#8899A6; --edge-soft:#6A7A86;
+    --page:#0D141C;
+  }
+
+  svg { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+        "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; }
+  .box     { fill: var(--surface); stroke: var(--zone-line); stroke-width: 1.5; }
+  .box.on  { fill: var(--n-built-bg); stroke: var(--n-built); }
+  .box.off { fill: var(--n-plan-bg);  stroke: var(--n-plan); stroke-dasharray: 5 4; }
+  .box.key { fill: var(--n-key-bg);   stroke: var(--n-key); stroke-width: 2; }
+  .box.dat { fill: var(--n-data-bg);  stroke: var(--n-data); }
+  .zone    { fill: var(--zone); stroke: var(--zone-line); stroke-width: 1; stroke-dasharray: 4 4; }
+  .zone.solid { stroke-dasharray: none; }
+  .t   { font-size: 14px; font-weight: 650; fill: var(--ink); }
+  .t.sm{ font-size: 12.5px; }
+  .ts  { font-size: 11px; fill: var(--ink-soft); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .zl  { font-size: 11px; fill: var(--ink-faint); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: 0.1em; }
+  .el  { font-size: 10.5px; fill: var(--ink-faint); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .el.hot { fill: var(--tally); }
+  .num { font-size: 11px; font-weight: 700; fill: var(--surface); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .edge      { stroke: var(--edge); stroke-width: 1.6; fill: none; }
+  .edge.off  { stroke: var(--edge-soft); stroke-dasharray: 5 4; }
+  .edge.hot  { stroke: var(--tally); stroke-width: 2; }
+  .head-a     { fill: var(--edge); }
+  .head-a.off { fill: var(--edge-soft); }
+  .head-a.hot { fill: var(--tally); }
+  .mid { text-anchor: middle; }
+  .end { text-anchor: end; }
+  </style>
+  <rect x="0" y="0" width="960" height="440" fill="var(--page)"/>
+
+        <!-- pipeline -->
+        <rect class="box on" x="30" y="60" width="150" height="64" rx="3"/>
+        <text class="t mid sm" x="105" y="86">강사 오디오</text>
+        <text class="ts mid" x="105" y="105">WebRTC</text>
+
+        <rect class="box on" x="220" y="60" width="150" height="64" rx="3"/>
+        <text class="t mid sm" x="295" y="86">LiveKit SFU</text>
+        <text class="ts mid" x="295" y="105">방당 1회 분기</text>
+
+        <rect class="box off" x="410" y="60" width="150" height="64" rx="3"/>
+        <text class="t mid sm" x="485" y="86">realtime-agent</text>
+        <text class="ts mid" x="485" y="105">VAD · 스트리밍 STT</text>
+
+        <rect class="box off" x="600" y="60" width="150" height="64" rx="3"/>
+        <text class="t mid sm" x="675" y="86">Redis Stream</text>
+        <text class="ts mid" x="675" y="105">fast-path</text>
+
+        <rect class="box on" x="790" y="60" width="140" height="64" rx="3"/>
+        <text class="t mid sm" x="860" y="86">core-api</text>
+        <text class="ts mid" x="860" y="105">영속 + WS</text>
+
+        <path class="edge" d="M180,92 H212"/><path class="head-a" d="M220,92 l-8,-4.5 l0,9 z"/>
+        <path class="edge off" d="M370,92 H402"/><path class="head-a off" d="M410,92 l-8,-4.5 l0,9 z"/>
+        <path class="edge off" d="M560,92 H592"/><path class="head-a off" d="M600,92 l-8,-4.5 l0,9 z"/>
+        <path class="edge off" d="M750,92 H782"/><path class="head-a off" d="M790,92 l-8,-4.5 l0,9 z"/>
+
+        <!-- numbers -->
+        <circle cx="200" cy="92" r="9" fill="var(--edge)"/><text class="num mid" x="200" y="96">1</text>
+        <circle cx="390" cy="92" r="9" fill="var(--edge-soft)"/><text class="num mid" x="390" y="96">2</text>
+        <circle cx="580" cy="92" r="9" fill="var(--edge-soft)"/><text class="num mid" x="580" y="96">3</text>
+        <circle cx="770" cy="92" r="9" fill="var(--edge-soft)"/><text class="num mid" x="770" y="96">4</text>
+
+        <!-- horizon axis -->
+        <text class="zl" x="30" y="190">학생이 보는 화면 — 세션 시간축</text>
+
+        <rect x="30" y="210" width="900" height="88" rx="3" fill="var(--n-key-bg)" stroke="var(--zone-line)" stroke-width="1"/>
+        <rect x="600" y="211" width="270" height="86" fill="var(--n-data-bg)" opacity="0.75"/>
+        <line x1="600" y1="210" x2="600" y2="298" stroke="var(--n-data)" stroke-width="1.5" stroke-dasharray="5 4"/>
+        <line x1="885" y1="205" x2="885" y2="303" stroke="var(--tally)" stroke-width="2.5"/>
+        <circle cx="885" cy="205" r="5" fill="var(--tally)"/>
+
+        <text class="t sm" x="52" y="242" style="fill:var(--n-key)">확정 구간</text>
+        <text class="ts" x="52" y="262">교정된 자막 + 용어 카드 + 자료 근거</text>
+        <text class="ts" x="52" y="280">다시보기는 항상 이 영역이다</text>
+
+        <text class="t sm" x="618" y="242" style="fill:var(--n-data)">지평선</text>
+        <text class="ts" x="618" y="262">2-pass 교정 진행 중</text>
+
+        <text class="el hot end" x="875" y="242">지금</text>
+        <text class="el hot end" x="875" y="258">partial 자막</text>
+
+        <line x1="30" y1="318" x2="930" y2="318" stroke="var(--zone-line)" stroke-width="1"/>
+        <text class="el" x="30" y="336">세션 시작 · 0 ms</text>
+        <text class="el end" x="930" y="336">세션 상대 시간 →</text>
+
+        <text class="zl" x="30" y="382">아직 정해지지 않은 것</text>
+        <text class="ts" x="30" y="404">지평선의 길이(N초)와 확정 선언 주체. 이게 없으면 프론트는 렌더 정책을, 백엔드는 영속 시점을 정할 수 없다 — CP2 착수를 막는 결정.</text>
+      
+</svg>
