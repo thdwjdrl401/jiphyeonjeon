@@ -291,7 +291,11 @@
 .field-error { color: var(--red-600); }
 .field-success { color: var(--green-700); }
 
-.signup-consent-note { margin: 0; color: var(--ink-600); font-size: 0.74rem; line-height: 1.55; }
+.consent-card { display: block; margin-top: 4px; padding: 14px 16px; border-radius: 12px; background: var(--ink-50); cursor: pointer; }
+.consent-card__note { display: block; color: var(--ink-600); font-size: 0.74rem; line-height: 1.55; }
+.consent-card__confirm { display: flex; align-items: center; gap: 10px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--ink-100); }
+.consent-card__confirm input { width: auto; flex: 0 0 auto; margin: 0; accent-color: var(--blue-600); }
+.consent-card__confirm strong { font-size: 0.78rem; color: var(--ink-800); }
 
 .form-error,
 .form-notice,
