@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1140 590" width="1140" height="590" role="img">
+<title>미디어 서비스 내부</title>
+<style>text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif}</style>
+<rect width="100%" height="100%" fill="#FFFFFF"/>
+<rect x="40" y="120" width="1060" height="190" rx="4" fill="#F5F8FA" stroke="#C6D2DB" stroke-width="1" stroke-dasharray="4 4"/>
+<text x="54" y="141" font-size="11" fill="#7C8B99" letter-spacing="1.4">실시간 경로</text>
+<rect x="40" y="340" width="1060" height="190" rx="4" fill="#F5F8FA" stroke="#C6D2DB" stroke-width="1" stroke-dasharray="4 4"/>
+<text x="54" y="361" font-size="11" fill="#7C8B99" letter-spacing="1.4">녹화 경로</text>
+<path d="M145,96 V160" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M145,160 l-5,-9 l10,0 z" fill="#5A6C7B"/>
+<path d="M270,193 H340" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M340,193 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M560,193 H630" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M630,193 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M890,193 H830" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M830,193 l9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M975,96 V160" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M975,160 l-5,-9 l10,0 z" fill="#5A6C7B"/>
+<path d="M170,226 V380" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M170,380 l-5,-9 l10,0 z" fill="#5A6C7B"/>
+<path d="M270,413 H340" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M340,413 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M560,413 H630" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M630,413 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M830,413 H890" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M890,413 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M450,226 V340" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M450,340 l-5,-9 l10,0 z" fill="#5A6C7B"/>
+<rect x="842.0" y="174.4" width="36.0" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="860" y="185" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">허가</text>
+<rect x="385.4" y="289.4" width="129.2" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="450" y="300" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">같은 방에서 갈라진다</text>
+<rect x="60" y="40" width="170" height="56" rx="3" fill="#FFFFFF" stroke="#5A6C7B" stroke-width="1.8"/>
+<text x="145.0" y="73.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">강사</text>
+<rect x="890" y="40" width="170" height="56" rx="3" fill="#FFFFFF" stroke="#5A6C7B" stroke-width="1.8"/>
+<text x="975.0" y="73.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">학생</text>
+<rect x="70" y="160" width="200" height="66" rx="3" fill="#EAE5F5" stroke="#5B4B8A" stroke-width="1.8"/>
+<text x="170.0" y="190.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">시그널링</text>
+<text x="170.0" y="209.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">WSS · 전용 포트</text>
+<rect x="340" y="160" width="220" height="66" rx="3" fill="#EAE5F5" stroke="#5B4B8A" stroke-width="1.8"/>
+<text x="450.0" y="190.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">SFU</text>
+<text x="450.0" y="209.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">구독자별 화질 조절</text>
+<rect x="630" y="160" width="200" height="66" rx="3" fill="#EAE5F5" stroke="#5B4B8A" stroke-width="1.8"/>
+<text x="730.0" y="190.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">중계</text>
+<text x="730.0" y="209.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">TURN · 방화벽 우회</text>
+<rect x="890" y="160" width="190" height="66" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="985.0" y="190.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">서비스</text>
+<text x="985.0" y="209.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">입장 허가 발급</text>
+<rect x="70" y="380" width="200" height="66" rx="3" fill="#EAE5F5" stroke="#5B4B8A" stroke-width="1.8"/>
+<text x="170.0" y="410.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">Egress</text>
+<text x="170.0" y="429.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">화면 합성 · 인코딩</text>
+<rect x="340" y="380" width="220" height="66" rx="3" fill="#EAE5F5" stroke="#5B4B8A" stroke-width="1.8"/>
+<text x="450.0" y="410.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">HLS 분할</text>
+<text x="450.0" y="429.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">세그먼트 + 목록</text>
+<rect x="630" y="380" width="200" height="66" rx="3" fill="#F8EFDD" stroke="#A96F16" stroke-width="1.8"/>
+<text x="730.0" y="410.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">오브젝트 저장소</text>
+<text x="730.0" y="429.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">MinIO / S3</text>
+<rect x="890" y="380" width="190" height="66" rx="3" fill="#FFFFFF" stroke="#5A6C7B" stroke-width="1.8"/>
+<text x="985.0" y="410.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">재생</text>
+<text x="985.0" y="429.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">허가 후 직접 수신</text>
+<line x1="34" y1="482" x2="1106" y2="482" stroke="#E3E9ED"/>
+<text x="34" y="508" font-size="12" fill="#4A5A6B">SFU 는 참가자마다 화질을 달리 보낸다 — 회선이 느린 학생 때문에 전체가 끊기지 않는다.</text>
+<text x="34" y="528" font-size="12" fill="#4A5A6B">방화벽이 막힌 환경에서는 중계 서버를 거쳐 우회한다.</text>
+<text x="34" y="548" font-size="12" fill="#4A5A6B">녹화는 같은 방을 한 명 더 들어와 보는 방식으로 만든다. 라이브 품질에 영향을 주지 않는다.</text>
+<text x="34" y="568" font-size="12" fill="#4A5A6B">녹화물은 잘게 나뉜 조각과 목록으로 저장돼, 원하는 지점부터 바로 재생된다.</text>
+</svg>

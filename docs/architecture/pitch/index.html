@@ -1,4 +1,4 @@
-<title>LiveClass AI — 기획 발표용 아키텍처</title>
+<title>LiveClass AI — 아키텍처</title>
 <style>
   :root{--bg:#F2F4F6;--ink:#0F1B2A;--soft:#4A5A6B;--faint:#7C8B99;--rule:#DCE3E8}
   @media (prefers-color-scheme:dark){:root{--bg:#0C1218;--ink:#E4EBF1;--soft:#9DAEBC;--faint:#71828F;--rule:#1F2B36}}
@@ -7,11 +7,11 @@
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);line-height:1.6;
        font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif}
-  .wrap{max-width:76rem;margin:0 auto;padding:0 1.5rem 5rem}
+  .wrap{max-width:78rem;margin:0 auto;padding:0 1.5rem 5rem}
   header{padding:3.5rem 0 1.75rem;border-bottom:2px solid var(--ink);display:flex;flex-direction:column;gap:.85rem}
   .eb{font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:var(--faint)}
   h1{margin:0;font-size:clamp(1.9rem,4.6vw,2.9rem);letter-spacing:-.03em;line-height:1.05;font-weight:700;text-wrap:balance}
-  header p{margin:0;max-width:60ch;color:var(--soft)}
+  header p{margin:0;max-width:62ch;color:var(--soft)}
   .legend{display:flex;flex-wrap:wrap;gap:.5rem 1.4rem;margin-top:.4rem;font-size:.8rem;color:var(--soft)}
   .legend span{display:inline-flex;align-items:center;gap:.45rem}
   .sw{width:.85rem;height:.85rem;border-radius:2px;border:1.6px solid}
@@ -22,14 +22,15 @@
   .ph h2{margin:0;font-size:1.22rem;letter-spacing:-.02em;font-weight:650;color:#0F1B2A}
   .ph p{margin:0;font-size:.86rem;color:#5A6C7B}
   .pc{padding:1.1rem;overflow-x:auto;background:#FFFFFF}
-  .dg{display:block;width:100%;height:auto;min-width:640px}
+  .dg{display:block;width:100%;height:auto;min-width:660px}
   footer{margin-top:3rem;padding-top:1.2rem;border-top:2px solid var(--ink);font-size:.75rem;color:var(--faint);display:flex;flex-wrap:wrap;gap:.4rem 1.5rem;justify-content:space-between}
 </style>
 <div class="wrap">
   <header>
-    <div class="eb">LiveClass AI · 기획 발표 · 2026-07-23</div>
+    <div class="eb">LiveClass AI · 아키텍처 · 2026-07-23</div>
     <h1>실시간 라이브 강의 플랫폼</h1>
-    <p>앞의 여덟 장이 제품 이야기 순서 그대로다. 뒤의 여섯 장은 기술 질문이 나올 때 꺼낸다.
+    <p>앞의 여덟 장이 제품 이야기 순서 그대로다. 가운데 네 장은 서비스 구성 —
+       전체를 세 플레인으로 보고, 이어서 서비스 안을 하나씩 연다. 나머지는 질문이 나올 때 꺼낸다.
        색은 진행 상태가 아니라 역할을 뜻한다.</p>
     <div class="legend">
       <span><i class="sw" style="background:#FFFFFF;border-color:#5A6C7B"></i>사용자</span>
@@ -424,100 +425,323 @@
 <text x="34" y="228.0" font-size="12" fill="#4A5A6B">이미 교정이 끝난 뒤라, 다시보기는 처음부터 자막·용어·질의응답이 모두 갖춰진 상태다.</text>
 </svg></div>
   </figure>
-  <h3 class="grp">기술 — 질문이 나오면 꺼내는 장</h3>
-  <figure class="plate" id="08-data">
-    <div class="ph"><span class="pn">08</span><h2>데이터가 놓이는 곳</h2><p>데이터를 어떻게 나눠 두었는가</p></div>
-    <div class="pc"><svg class="dg" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1502 292"  role="img">
-<title>데이터가 놓이는 곳</title>
+  <h3 class="grp">서비스 구성 — 기술 발표 본문</h3>
+  <figure class="plate" id="12-architecture">
+    <div class="ph"><span class="pn">12</span><h2>전체 아키텍처</h2><p>구성 요소 전부를 세 플레인으로 — 기술 발표의 중심 슬라이드</p></div>
+    <div class="pc"><svg class="dg" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1220 790"  role="img">
+<title>전체 아키텍처</title>
 <style>text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif}</style>
 <rect width="100%" height="100%" fill="#FFFFFF"/>
-<path d="M220.0,117.0 H337.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
-<path d="M346.0,117.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
-<path d="M532.0,117.0 H595.0 V68.0 H649.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
-<path d="M658.0,68.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
-<path d="M844.0,68.0 H886.0 V105.7 H961.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
-<path d="M970.0,105.7 l-9,-5 l0,10 z" fill="#5A6C7B"/>
-<path d="M844.0,166.0 H928.0 V128.3 H961.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
-<path d="M970.0,128.3 l-9,-5 l0,10 z" fill="#5A6C7B"/>
-<path d="M1156.0,117.0 H1273.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
-<path d="M1282.0,117.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
-<rect x="265.0" y="94.4" width="36.0" height="17.8" fill="#FFFFFF" rx="2"/>
-<text x="283.0" y="105.0" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">쓰기</text>
-<rect x="931.0" y="56.8" width="36.0" height="17.8" fill="#FFFFFF" rx="2"/>
-<text x="949.0" y="67.3" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">쓰기</text>
-<rect x="34.0" y="83.0" width="186.0" height="68.0" rx="3" fill="#E4F2EB" stroke="#2C7A5B" stroke-width="1.8"/>
-<text x="127.0" y="114.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">AI 서비스</text>
-<text x="127.0" y="133.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">Python</text>
-<rect x="346.0" y="83.0" width="186.0" height="68.0" rx="3" fill="#F8EFDD" stroke="#A96F16" stroke-width="1.8"/>
-<text x="439.0" y="114.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">지식 데이터</text>
-<text x="439.0" y="133.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">문서 조각 · 의미 색인</text>
-<rect x="658.0" y="34.0" width="186.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
-<text x="751.0" y="65.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">전달 경로</text>
-<text x="751.0" y="84.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">AI 결과는 여기를 지난다</text>
-<rect x="658.0" y="132.0" width="186.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
-<text x="751.0" y="163.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">LiveClass 서비스</text>
-<text x="751.0" y="182.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">Spring</text>
-<rect x="970.0" y="83.0" width="186.0" height="68.0" rx="3" fill="#F8EFDD" stroke="#A96F16" stroke-width="1.8"/>
-<text x="1063.0" y="114.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">서비스 데이터</text>
-<text x="1063.0" y="133.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">계정 · 강의 · 수강 · 자막</text>
-<rect x="1282.0" y="83.0" width="186.0" height="68.0" rx="3" fill="#FFFFFF" stroke="#5A6C7B" stroke-width="1.8"/>
-<text x="1375.0" y="122.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">학생에게 보이는 것</text>
-<line x1="34" y1="213.0" x2="1468.0" y2="213.0" stroke="#E3E9ED"/>
-<text x="34" y="232.0" font-size="12" fill="#4A5A6B">같은 데이터베이스 안에서 쓰는 영역을 나눈다 — 두 서비스가 같은 표를 동시에 고치지 않는다.</text>
-<text x="34" y="252.0" font-size="12" fill="#4A5A6B">AI가 만든 것은 곧바로 학생에게 가지 않는다. 서비스 쪽으로 넘어와 강사가 다듬은 뒤 공개된다.</text>
-<text x="34" y="272.0" font-size="12" fill="#4A5A6B">라이브 자막만 예외다 — 실시간이라 검수를 기다리지 않고, 교정은 사후에 이뤄진다.</text>
+<rect x="40" y="150" width="600" height="290" rx="4" fill="#F5F8FA" stroke="#C6D2DB" stroke-width="1" stroke-dasharray="4 4"/>
+<text x="54" y="171" font-size="11" fill="#7C8B99" letter-spacing="1.4">앱 플레인 · SPRING BOOT</text>
+<rect x="680" y="150" width="500" height="290" rx="4" fill="#F5F8FA" stroke="#C6D2DB" stroke-width="1" stroke-dasharray="4 4"/>
+<text x="694" y="171" font-size="11" fill="#7C8B99" letter-spacing="1.4">미디어 플레인 · LIVEKIT SELF-HOST</text>
+<rect x="40" y="500" width="1140" height="180" rx="4" fill="#F5F8FA" stroke="#C6D2DB" stroke-width="1" stroke-dasharray="4 4"/>
+<text x="54" y="521" font-size="11" fill="#7C8B99" letter-spacing="1.4">AI 플레인 · PYTHON</text>
+<path d="M560,92 V168 H185 V190" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M185,190 l-5,-9 l10,0 z" fill="#5A6C7B"/>
+<path d="M660,92 V168 H825 V190" fill="none" stroke="#D9342B" stroke-width="2"/>
+<path d="M825,190 l-5,-9 l10,0 z" fill="#D9342B"/>
+<path d="M720,64 H1195 V280 H1155" fill="none" stroke="#D9342B" stroke-width="2"/>
+<path d="M1155,280 l9,-5 l0,10 z" fill="#D9342B"/>
+<path d="M185,246 V290" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M185,290 l-5,-9 l10,0 z" fill="#5A6C7B"/>
+<path d="M300,306 H330 V218 H380" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M380,218 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M300,326 H345 V300 H380" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M380,300 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M300,346 H360 V382 H380" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M380,382 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M150,362 V458 H660 V204 H710" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M710,204 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M230,362 V476 H465 V540" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M465,540 l-5,-9 l10,0 z" fill="#5A6C7B"/>
+<path d="M710,232 H668 V494 H140 V540" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M140,540 l-5,-9 l10,0 z" fill="#5A6C7B"/>
+<path d="M825,246 V290" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M825,290 l-5,-9 l10,0 z" fill="#5A6C7B"/>
+<path d="M940,310 H975" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M975,310 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M490,410 V466 H745 V540" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M745,540 l-5,-9 l10,0 z" fill="#5A6C7B"/>
+<path d="M465,596 V640 H1030 V596" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M1030,596 l-5,9 l10,0 z" fill="#5A6C7B"/>
+<path d="M860,568 H910" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M910,568 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M350,556 H318 V312 H380" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M380,312 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M300,554 H308 V232 H380" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M380,232 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<rect x="709.3" y="149.4" width="65.3" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="742" y="160" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">화상 직결</text>
+<rect x="896.4" y="45.4" width="107.3" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="950" y="56" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">자료 · 영상 직결</text>
+<rect x="331.7" y="439.4" width="136.6" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="400" y="450" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">입장 허가 · 녹화 제어</text>
+<rect x="527.6" y="457.4" width="76.8" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="566" y="468" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">검증된 요청</text>
+<rect x="391.6" y="475.4" width="76.8" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="430" y="486" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">강사 오디오</text>
+<rect x="285.3" y="399.4" width="65.3" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="318" y="410" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">근거 검색</text>
+<rect x="275.3" y="459.4" width="65.3" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="308" y="470" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">자막 전달</text>
+<rect x="500" y="36" width="220" height="56" rx="3" fill="#FFFFFF" stroke="#5A6C7B" stroke-width="1.8"/>
+<text x="610.0" y="61.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">브라우저</text>
+<text x="610.0" y="80.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">React · TypeScript</text>
+<rect x="70" y="190" width="230" height="56" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="185.0" y="215.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">웹 관문</text>
+<text x="185.0" y="234.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">nginx</text>
+<rect x="70" y="290" width="230" height="72" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="185.0" y="323.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">서비스</text>
+<text x="185.0" y="342.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">core-api</text>
+<rect x="380" y="190" width="230" height="56" rx="3" fill="#F8EFDD" stroke="#A96F16" stroke-width="1.8"/>
+<text x="495.0" y="215.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">세션 · 캐시</text>
+<text x="495.0" y="234.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">Redis</text>
+<rect x="380" y="272" width="230" height="56" rx="3" fill="#F8EFDD" stroke="#A96F16" stroke-width="1.8"/>
+<text x="495.0" y="297.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">데이터베이스</text>
+<text x="495.0" y="316.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">PostgreSQL + pgvector</text>
+<rect x="380" y="354" width="230" height="56" rx="3" fill="#F8EFDD" stroke="#A96F16" stroke-width="1.8"/>
+<text x="495.0" y="379.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">작업 큐</text>
+<text x="495.0" y="398.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">RabbitMQ</text>
+<rect x="710" y="190" width="230" height="56" rx="3" fill="#EAE5F5" stroke="#5B4B8A" stroke-width="1.8"/>
+<text x="825.0" y="215.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">미디어 서버</text>
+<text x="825.0" y="234.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">LiveKit SFU</text>
+<rect x="710" y="290" width="230" height="56" rx="3" fill="#EAE5F5" stroke="#5B4B8A" stroke-width="1.8"/>
+<text x="825.0" y="315.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">녹화</text>
+<text x="825.0" y="334.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">Egress</text>
+<rect x="975" y="240" width="180" height="80" rx="3" fill="#F8EFDD" stroke="#A96F16" stroke-width="1.8"/>
+<text x="1065.0" y="277.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">오브젝트 저장소</text>
+<text x="1065.0" y="296.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">MinIO / S3</text>
+<rect x="70" y="540" width="230" height="56" rx="3" fill="#E4F2EB" stroke="#2C7A5B" stroke-width="1.8"/>
+<text x="185.0" y="565.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">음성 인식</text>
+<text x="185.0" y="584.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">realtime-agent</text>
+<rect x="350" y="540" width="230" height="56" rx="3" fill="#E4F2EB" stroke="#2C7A5B" stroke-width="1.8"/>
+<text x="465.0" y="565.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">지식 API</text>
+<text x="465.0" y="584.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">ai-api</text>
+<rect x="630" y="540" width="230" height="56" rx="3" fill="#E4F2EB" stroke="#2C7A5B" stroke-width="1.8"/>
+<text x="745.0" y="565.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">배치 작업자</text>
+<text x="745.0" y="584.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">ai-worker</text>
+<rect x="910" y="540" width="240" height="56" rx="3" fill="#F1F4F6" stroke="#8C9AA6" stroke-width="1.8"/>
+<text x="1030.0" y="565.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">모델 게이트웨이</text>
+<text x="1030.0" y="584.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">외부 STT · 임베딩 · LLM</text>
+<line x1="34" y1="682" x2="1186" y2="682" stroke="#E3E9ED"/>
+<text x="34" y="708" font-size="12" fill="#4A5A6B">브라우저의 업무 요청은 모두 앱 플레인을 지난다 — 권한과 정책을 한 곳에서 판정한다.</text>
+<text x="34" y="728" font-size="12" fill="#4A5A6B">빨간 선은 서비스를 거치지 않는 경로다. 화상과 파일은 미디어 서버·저장소와 직접 주고받는다.</text>
+<text x="34" y="748" font-size="12" fill="#4A5A6B">AI 플레인은 바깥에 노출되지 않는다. 서비스가 검증한 요청만 받고, 결과는 캐시와 DB로 돌아온다.</text>
+<text x="34" y="768" font-size="12" fill="#4A5A6B">AI 플레인이 통째로 멈춰도 위쪽 두 플레인(화상 · 채팅 · 수강 · 다시보기)은 그대로 돌아간다.</text>
 </svg></div>
   </figure>
-  <figure class="plate" id="09-servers">
-    <div class="ph"><span class="pn">09</span><h2>서버 구성</h2><p>실제로 어떤 서버에 어떻게 얹었는가</p></div>
-    <div class="pc"><svg class="dg" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1318 272"  role="img">
-<title>서버 구성</title>
+  <figure class="plate" id="14-service-app">
+    <div class="ph"><span class="pn">14</span><h2>앱 서비스 내부</h2><p>앱 서비스 안에서 요청이 지나는 순서와 모듈 구성</p></div>
+    <div class="pc"><svg class="dg" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1140 640"  role="img">
+<title>앱 서비스 내부</title>
 <style>text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif}</style>
 <rect width="100%" height="100%" fill="#FFFFFF"/>
-<path d="M234.0,105.7 H284.0 V68.0 H375.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
-<path d="M384.0,68.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
-<path d="M234.0,128.3 H334.0 V166.0 H375.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
-<path d="M384.0,166.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
-<path d="M584.0,68.0 H725.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
-<path d="M734.0,68.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
-<path d="M584.0,166.0 H725.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
-<path d="M734.0,166.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
-<path d="M934.0,68.0 H1075.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
-<path d="M1084.0,68.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
-<path d="M934.0,166.0 H1075.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
-<path d="M1084.0,166.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
-<rect x="301.3" y="45.4" width="65.3" height="17.8" fill="#FFFFFF" rx="2"/>
-<text x="334.0" y="56.0" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">일반 접속</text>
-<rect x="326.3" y="108.4" width="65.3" height="17.8" fill="#FFFFFF" rx="2"/>
-<text x="359.0" y="119.0" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">화상 접속</text>
-<rect x="976.3" y="143.4" width="65.3" height="17.8" fill="#FFFFFF" rx="2"/>
-<text x="1009.0" y="154.0" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">녹화 저장</text>
-<rect x="34.0" y="83.0" width="200.0" height="68.0" rx="3" fill="#FFFFFF" stroke="#5A6C7B" stroke-width="1.8"/>
-<text x="134.0" y="122.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">인터넷</text>
-<rect x="384.0" y="34.0" width="200.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
-<text x="484.0" y="65.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">웹 관문</text>
-<text x="484.0" y="84.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">주소 하나로 화면과 API</text>
-<rect x="384.0" y="132.0" width="200.0" height="68.0" rx="3" fill="#EAE5F5" stroke="#5B4B8A" stroke-width="1.8"/>
-<text x="484.0" y="163.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">미디어 관문</text>
-<text x="484.0" y="182.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">화상 접속 전용 통로</text>
-<rect x="734.0" y="34.0" width="200.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
-<text x="834.0" y="65.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">서비스</text>
-<text x="834.0" y="84.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">Spring</text>
-<rect x="734.0" y="132.0" width="200.0" height="68.0" rx="3" fill="#EAE5F5" stroke="#5B4B8A" stroke-width="1.8"/>
-<text x="834.0" y="163.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">미디어 서버</text>
-<text x="834.0" y="182.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">화상 · 녹화</text>
-<rect x="1084.0" y="34.0" width="200.0" height="68.0" rx="3" fill="#F8EFDD" stroke="#A96F16" stroke-width="1.8"/>
-<text x="1184.0" y="65.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">데이터베이스</text>
-<text x="1184.0" y="84.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">외부 접속 차단</text>
-<rect x="1084.0" y="132.0" width="200.0" height="68.0" rx="3" fill="#F8EFDD" stroke="#A96F16" stroke-width="1.8"/>
-<text x="1184.0" y="171.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">오브젝트 저장소</text>
-<line x1="34" y1="213.0" x2="1284.0" y2="213.0" stroke="#E3E9ED"/>
-<text x="34" y="232.0" font-size="12" fill="#4A5A6B">서비스와 미디어를 분리해 운영한다 — 서비스를 다시 배포해도 진행 중인 수업이 끊기지 않는다.</text>
-<text x="34" y="252.0" font-size="12" fill="#4A5A6B">데이터베이스는 바깥으로 열려 있지 않다. 서버 안에서만 닿는다.</text>
+<rect x="40" y="120" width="1060" height="250" rx="4" fill="#F5F8FA" stroke="#C6D2DB" stroke-width="1" stroke-dasharray="4 4"/>
+<text x="54" y="141" font-size="11" fill="#7C8B99" letter-spacing="1.4">요청이 지나는 순서</text>
+<rect x="40" y="400" width="1060" height="190" rx="4" fill="#F5F8FA" stroke="#C6D2DB" stroke-width="1" stroke-dasharray="4 4"/>
+<text x="54" y="421" font-size="11" fill="#7C8B99" letter-spacing="1.4">모듈 — 정해진 창구로만 대화한다</text>
+<path d="M150,96 V160" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M150,160 l-5,-9 l10,0 z" fill="#5A6C7B"/>
+<path d="M320,193 H380" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M380,193 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M600,193 H660" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M660,193 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M760,226 V270" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M760,270 l-5,-9 l10,0 z" fill="#5A6C7B"/>
+<path d="M660,303 H600" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M600,303 l9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M380,303 H320" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M320,303 l9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M880,193 H900" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M900,193 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M260,468 H285" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M285,468 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M475,468 H500" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M500,468 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M690,468 H715" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M715,468 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M880,468 H905" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M905,468 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<rect x="60" y="40" width="180" height="56" rx="3" fill="#FFFFFF" stroke="#5A6C7B" stroke-width="1.8"/>
+<text x="150.0" y="73.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">브라우저</text>
+<rect x="70" y="160" width="250" height="66" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="195.0" y="190.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">nginx</text>
+<text x="195.0" y="209.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">TLS · 정적 화면 · /api 프록시</text>
+<rect x="380" y="160" width="220" height="66" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="490.0" y="190.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">보안 필터</text>
+<text x="490.0" y="209.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">쿠키 세션 · CSRF</text>
+<rect x="660" y="160" width="200" height="66" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="760.0" y="190.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">컨트롤러</text>
+<text x="760.0" y="209.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">입력 검증</text>
+<rect x="660" y="270" width="200" height="66" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="760.0" y="300.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">서비스 계층</text>
+<text x="760.0" y="319.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">권한 · 상태 · 정합성</text>
+<rect x="380" y="270" width="220" height="66" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="490.0" y="300.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">리포지토리</text>
+<text x="490.0" y="319.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">JPA</text>
+<rect x="70" y="270" width="250" height="66" rx="3" fill="#F8EFDD" stroke="#A96F16" stroke-width="1.8"/>
+<text x="195.0" y="308.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">PostgreSQL</text>
+<rect x="900" y="160" width="180" height="66" rx="3" fill="#F8EFDD" stroke="#A96F16" stroke-width="1.8"/>
+<text x="990.0" y="190.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">Redis</text>
+<text x="990.0" y="209.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">세션 · 캐시</text>
+<rect x="70" y="440" width="190" height="56" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="165.0" y="465.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">강의 탐색 · 관리</text>
+<text x="165.0" y="484.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">curriculum</text>
+<rect x="285" y="440" width="190" height="56" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="380.0" y="465.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">라이브 · 채팅</text>
+<text x="380.0" y="484.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">live</text>
+<rect x="500" y="440" width="190" height="56" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="595.0" y="465.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">레슨 · 자료</text>
+<text x="595.0" y="484.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">lesson</text>
+<rect x="715" y="440" width="165" height="56" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="797.5" y="465.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">수강</text>
+<text x="797.5" y="484.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">enrollment</text>
+<rect x="905" y="440" width="175" height="56" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="992.5" y="465.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">계정 · 파일</text>
+<text x="992.5" y="484.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">auth · asset</text>
+<line x1="34" y1="532" x2="1106" y2="532" stroke="#E3E9ED"/>
+<text x="34" y="558" font-size="12" fill="#4A5A6B">요청은 nginx → 보안 필터 → 컨트롤러 → 서비스 계층 → 저장소 순으로 좁혀진다.</text>
+<text x="34" y="578" font-size="12" fill="#4A5A6B">권한 판정은 항상 서비스 계층에서 한다 — 화면이나 입력 단계에서 막는 것에 기대지 않는다.</text>
+<text x="34" y="598" font-size="12" fill="#4A5A6B">아래쪽은 같은 배포 안에서 나뉜 모듈이다. 왼쪽이 오른쪽을 쓰고, 순환은 빌드가 막는다.</text>
+<text x="34" y="618" font-size="12" fill="#4A5A6B">모듈 경계 덕분에 나중에 특정 기능만 떼어 별도 서버로 옮길 수 있다.</text>
 </svg></div>
   </figure>
+  <figure class="plate" id="15-service-media">
+    <div class="ph"><span class="pn">15</span><h2>미디어 서비스 내부</h2><p>미디어 서비스의 실시간 경로와 녹화 경로</p></div>
+    <div class="pc"><svg class="dg" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1140 590"  role="img">
+<title>미디어 서비스 내부</title>
+<style>text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif}</style>
+<rect width="100%" height="100%" fill="#FFFFFF"/>
+<rect x="40" y="120" width="1060" height="190" rx="4" fill="#F5F8FA" stroke="#C6D2DB" stroke-width="1" stroke-dasharray="4 4"/>
+<text x="54" y="141" font-size="11" fill="#7C8B99" letter-spacing="1.4">실시간 경로</text>
+<rect x="40" y="340" width="1060" height="190" rx="4" fill="#F5F8FA" stroke="#C6D2DB" stroke-width="1" stroke-dasharray="4 4"/>
+<text x="54" y="361" font-size="11" fill="#7C8B99" letter-spacing="1.4">녹화 경로</text>
+<path d="M145,96 V160" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M145,160 l-5,-9 l10,0 z" fill="#5A6C7B"/>
+<path d="M270,193 H340" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M340,193 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M560,193 H630" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M630,193 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M890,193 H830" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M830,193 l9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M975,96 V160" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M975,160 l-5,-9 l10,0 z" fill="#5A6C7B"/>
+<path d="M170,226 V380" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M170,380 l-5,-9 l10,0 z" fill="#5A6C7B"/>
+<path d="M270,413 H340" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M340,413 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M560,413 H630" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M630,413 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M830,413 H890" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M890,413 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M450,226 V340" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M450,340 l-5,-9 l10,0 z" fill="#5A6C7B"/>
+<rect x="842.0" y="174.4" width="36.0" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="860" y="185" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">허가</text>
+<rect x="385.4" y="289.4" width="129.2" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="450" y="300" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">같은 방에서 갈라진다</text>
+<rect x="60" y="40" width="170" height="56" rx="3" fill="#FFFFFF" stroke="#5A6C7B" stroke-width="1.8"/>
+<text x="145.0" y="73.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">강사</text>
+<rect x="890" y="40" width="170" height="56" rx="3" fill="#FFFFFF" stroke="#5A6C7B" stroke-width="1.8"/>
+<text x="975.0" y="73.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">학생</text>
+<rect x="70" y="160" width="200" height="66" rx="3" fill="#EAE5F5" stroke="#5B4B8A" stroke-width="1.8"/>
+<text x="170.0" y="190.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">시그널링</text>
+<text x="170.0" y="209.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">WSS · 전용 포트</text>
+<rect x="340" y="160" width="220" height="66" rx="3" fill="#EAE5F5" stroke="#5B4B8A" stroke-width="1.8"/>
+<text x="450.0" y="190.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">SFU</text>
+<text x="450.0" y="209.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">구독자별 화질 조절</text>
+<rect x="630" y="160" width="200" height="66" rx="3" fill="#EAE5F5" stroke="#5B4B8A" stroke-width="1.8"/>
+<text x="730.0" y="190.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">중계</text>
+<text x="730.0" y="209.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">TURN · 방화벽 우회</text>
+<rect x="890" y="160" width="190" height="66" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="985.0" y="190.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">서비스</text>
+<text x="985.0" y="209.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">입장 허가 발급</text>
+<rect x="70" y="380" width="200" height="66" rx="3" fill="#EAE5F5" stroke="#5B4B8A" stroke-width="1.8"/>
+<text x="170.0" y="410.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">Egress</text>
+<text x="170.0" y="429.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">화면 합성 · 인코딩</text>
+<rect x="340" y="380" width="220" height="66" rx="3" fill="#EAE5F5" stroke="#5B4B8A" stroke-width="1.8"/>
+<text x="450.0" y="410.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">HLS 분할</text>
+<text x="450.0" y="429.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">세그먼트 + 목록</text>
+<rect x="630" y="380" width="200" height="66" rx="3" fill="#F8EFDD" stroke="#A96F16" stroke-width="1.8"/>
+<text x="730.0" y="410.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">오브젝트 저장소</text>
+<text x="730.0" y="429.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">MinIO / S3</text>
+<rect x="890" y="380" width="190" height="66" rx="3" fill="#FFFFFF" stroke="#5A6C7B" stroke-width="1.8"/>
+<text x="985.0" y="410.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">재생</text>
+<text x="985.0" y="429.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">허가 후 직접 수신</text>
+<line x1="34" y1="482" x2="1106" y2="482" stroke="#E3E9ED"/>
+<text x="34" y="508" font-size="12" fill="#4A5A6B">SFU 는 참가자마다 화질을 달리 보낸다 — 회선이 느린 학생 때문에 전체가 끊기지 않는다.</text>
+<text x="34" y="528" font-size="12" fill="#4A5A6B">방화벽이 막힌 환경에서는 중계 서버를 거쳐 우회한다.</text>
+<text x="34" y="548" font-size="12" fill="#4A5A6B">녹화는 같은 방을 한 명 더 들어와 보는 방식으로 만든다. 라이브 품질에 영향을 주지 않는다.</text>
+<text x="34" y="568" font-size="12" fill="#4A5A6B">녹화물은 잘게 나뉜 조각과 목록으로 저장돼, 원하는 지점부터 바로 재생된다.</text>
+</svg></div>
+  </figure>
+  <figure class="plate" id="16-service-ai">
+    <div class="ph"><span class="pn">16</span><h2>AI 서비스 내부</h2><p>AI 서비스의 실시간 자막 경로와 배치 처리 경로</p></div>
+    <div class="pc"><svg class="dg" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1140 620"  role="img">
+<title>AI 서비스 내부</title>
+<style>text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif}</style>
+<rect width="100%" height="100%" fill="#FFFFFF"/>
+<rect x="40" y="120" width="1060" height="190" rx="4" fill="#F5F8FA" stroke="#C6D2DB" stroke-width="1" stroke-dasharray="4 4"/>
+<text x="54" y="141" font-size="11" fill="#7C8B99" letter-spacing="1.4">실시간 — 말이 자막이 되는 길</text>
+<rect x="40" y="340" width="1060" height="220" rx="4" fill="#F5F8FA" stroke="#C6D2DB" stroke-width="1" stroke-dasharray="4 4"/>
+<text x="54" y="361" font-size="11" fill="#7C8B99" letter-spacing="1.4">배치 — 자료가 지식이 되는 길</text>
+<path d="M250,193 H320" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M320,193 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M510,193 H580" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M580,193 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M770,193 H840" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M840,193 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M250,413 H320" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M320,413 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M510,413 H580" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M580,413 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M770,413 H840" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M840,413 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M950,446 V500 H770" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M770,500 l9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M950,226 V290 H285 V500 H320" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M320,500 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<rect x="535.0" y="271.4" width="170.0" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="620" y="282" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">확정된 자막도 같은 인덱스로</text>
+<rect x="60" y="160" width="190" height="66" rx="3" fill="#EAE5F5" stroke="#5B4B8A" stroke-width="1.8"/>
+<text x="155.0" y="190.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">미디어 서버</text>
+<text x="155.0" y="209.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">강사 오디오</text>
+<rect x="320" y="160" width="190" height="66" rx="3" fill="#E4F2EB" stroke="#2C7A5B" stroke-width="1.8"/>
+<text x="415.0" y="190.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">말끝 감지</text>
+<text x="415.0" y="209.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">문장 단위로 자름</text>
+<rect x="580" y="160" width="190" height="66" rx="3" fill="#E4F2EB" stroke="#2C7A5B" stroke-width="1.8"/>
+<text x="675.0" y="190.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">음성 인식</text>
+<text x="675.0" y="209.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">외부 STT API</text>
+<rect x="840" y="160" width="220" height="66" rx="3" fill="#F8EFDD" stroke="#A96F16" stroke-width="1.8"/>
+<text x="950.0" y="190.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">전달 통로</text>
+<text x="950.0" y="209.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">Redis Stream</text>
+<rect x="60" y="380" width="190" height="66" rx="3" fill="#F8EFDD" stroke="#A96F16" stroke-width="1.8"/>
+<text x="155.0" y="410.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">올린 자료</text>
+<text x="155.0" y="429.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">PPTX</text>
+<rect x="320" y="380" width="190" height="66" rx="3" fill="#E4F2EB" stroke="#2C7A5B" stroke-width="1.8"/>
+<text x="415.0" y="410.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">문서 해석</text>
+<text x="415.0" y="429.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">장표 → 텍스트</text>
+<rect x="580" y="380" width="190" height="66" rx="3" fill="#E4F2EB" stroke="#2C7A5B" stroke-width="1.8"/>
+<text x="675.0" y="410.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">조각 나누기</text>
+<text x="675.0" y="429.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">의미 단위</text>
+<rect x="840" y="380" width="220" height="66" rx="3" fill="#E4F2EB" stroke="#2C7A5B" stroke-width="1.8"/>
+<text x="950.0" y="410.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">의미 색인</text>
+<text x="950.0" y="429.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">임베딩</text>
+<rect x="320" y="470" width="450" height="60" rx="3" fill="#F8EFDD" stroke="#A96F16" stroke-width="1.8"/>
+<text x="545.0" y="497.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">지식 인덱스</text>
+<text x="545.0" y="516.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">pgvector — 자료 + 자막</text>
+<line x1="34" y1="512" x2="1106" y2="512" stroke="#E3E9ED"/>
+<text x="34" y="538" font-size="12" fill="#4A5A6B">말끝을 감지해 문장 단위로 잘라 보낸다 — 낱말 단위보다 인식 정확도가 높다.</text>
+<text x="34" y="558" font-size="12" fill="#4A5A6B">인식 결과는 전달 통로를 거쳐 서비스로 넘어가고, 서비스가 저장과 화면 전달을 맡는다.</text>
+<text x="34" y="578" font-size="12" fill="#4A5A6B">올린 자료와 확정된 자막이 같은 인덱스로 들어가, 질문 하나에 둘 다 근거로 쓰인다.</text>
+<text x="34" y="598" font-size="12" fill="#4A5A6B">모델은 전부 외부 API다 — 서버에 모델을 얹지 않는다.</text>
+</svg></div>
+  </figure>
+  <h3 class="grp">세부 — 질문이 나오면 꺼내는 장</h3>
   <figure class="plate" id="10-backend-modules">
-    <div class="ph"><span class="pn">10</span><h2>백엔드 모듈 구조</h2><p>백엔드 안이 어떻게 나뉘어 있는가 — 유지보수 질문의 답</p></div>
+    <div class="ph"><span class="pn">10</span><h2>백엔드 모듈 구조</h2><p>백엔드 안이 어떻게 나뉘어 있는가</p></div>
     <div class="pc"><svg class="dg" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1450 494"  role="img">
 <title>백엔드 모듈 구조</title>
 <style>text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif}</style>
@@ -615,104 +839,95 @@
 <text x="34" y="174.0" font-size="12" fill="#4A5A6B">실패는 화면이 이해할 수 있는 형태로 통일해 내려간다.</text>
 </svg></div>
   </figure>
-  <figure class="plate" id="12-architecture">
-    <div class="ph"><span class="pn">12</span><h2>전체 아키텍처</h2><p>구성 요소 전부를 한 장에 — 기술 발표의 중심 슬라이드</p></div>
-    <div class="pc"><svg class="dg" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1690 720"  role="img">
-<title>전체 아키텍처</title>
+  <figure class="plate" id="08-data">
+    <div class="ph"><span class="pn">08</span><h2>데이터가 놓이는 곳</h2><p>데이터를 어떻게 나눠 두었는가</p></div>
+    <div class="pc"><svg class="dg" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1502 292"  role="img">
+<title>데이터가 놓이는 곳</title>
 <style>text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif}</style>
 <rect width="100%" height="100%" fill="#FFFFFF"/>
-<path d="M206.0,325.0 H315.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
-<path d="M324.0,325.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
-<path d="M496.0,325.0 H605.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
-<path d="M614.0,325.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
-<path d="M786.0,304.6 H805.7 V178.0 H895.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
-<path d="M904.0,178.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
-<path d="M786.0,318.2 H825.3 V276.0 H895.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
-<path d="M904.0,276.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
-<path d="M786.0,331.8 H845.0 V374.0 H895.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
-<path d="M904.0,374.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
-<path d="M786.0,345.4 H864.7 V460.7 H895.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
-<path d="M904.0,460.7 l-9,-5 l0,10 z" fill="#5A6C7B"/>
-<path d="M1076.0,460.7 H1099.6 V178.0 H1185.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
-<path d="M1194.0,178.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
-<path d="M1076.0,483.3 H1170.4 V472.0 H1185.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
-<path d="M1194.0,472.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
-<path d="M1076.0,374.0 H1185.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
-<path d="M1194.0,374.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
-<path d="M1366.0,472.0 H1460.4 V385.3 H1475.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
-<path d="M1484.0,385.3 l-9,-5 l0,10 z" fill="#5A6C7B"/>
-<path d="M1366.0,276.0 H1389.6 V264.7 H1475.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
-<path d="M1484.0,264.7 l-9,-5 l0,10 z" fill="#5A6C7B"/>
-<path d="M1366.0,374.0 H1413.2 V287.3 H1475.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
-<path d="M1484.0,287.3 l-9,-5 l0,10 z" fill="#5A6C7B"/>
-<path d="M657.0,291.0 V42.0 H1123.2 V276.0 H1185.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
-<path d="M1194.0,276.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
-<path d="M120.0,291.0 V66.0 H884.3 V483.3 H895.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
-<path d="M904.0,483.3 l-9,-5 l0,10 z" fill="#5A6C7B"/>
-<path d="M163.0,291.0 V90.0 H1436.8 V362.7 H1475.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
-<path d="M1484.0,362.7 l-9,-5 l0,10 z" fill="#5A6C7B"/>
-<path d="M1366.0,197.0 H1394.3 V554.0 H823.8 V194.3 H895.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
-<path d="M904.0,194.3 l-9,-5 l0,10 z" fill="#5A6C7B"/>
-<path d="M1366.0,295.0 H1417.9 V582.0 H847.4 V292.3 H895.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
-<path d="M904.0,292.3 l-9,-5 l0,10 z" fill="#5A6C7B"/>
-<rect x="816.0" y="486.1" width="136.6" height="17.8" fill="#FFFFFF" rx="2"/>
-<text x="884.3" y="496.7" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">입장 허가 · 녹화 제어</text>
-<rect x="1108.4" y="155.4" width="76.8" height="17.8" fill="#FFFFFF" rx="2"/>
-<text x="1146.8" y="166.0" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">강사 오디오</text>
-<rect x="1120.2" y="218.4" width="76.8" height="17.8" fill="#FFFFFF" rx="2"/>
-<text x="1158.6" y="229.0" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">검증된 요청</text>
-<rect x="861.5" y="508.8" width="65.3" height="17.8" fill="#FFFFFF" rx="2"/>
-<text x="894.2" y="519.3" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">화상 직결</text>
-<rect x="1406.8" y="388.1" width="107.3" height="17.8" fill="#FFFFFF" rx="2"/>
-<text x="1460.4" y="398.7" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">자료 · 영상 직결</text>
-<rect x="1076.4" y="522.4" width="65.3" height="17.8" fill="#FFFFFF" rx="2"/>
-<text x="1109.0" y="533.0" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">자막 전달</text>
-<rect x="1100.0" y="584.4" width="65.3" height="17.8" fill="#FFFFFF" rx="2"/>
-<text x="1132.6" y="595.0" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">근거 검색</text>
-<rect x="34.0" y="291.0" width="172.0" height="68.0" rx="3" fill="#FFFFFF" stroke="#5A6C7B" stroke-width="1.8"/>
-<text x="120.0" y="322.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">브라우저</text>
-<text x="120.0" y="341.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">React</text>
-<rect x="324.0" y="291.0" width="172.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
-<text x="410.0" y="322.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">웹 관문</text>
-<text x="410.0" y="341.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">nginx</text>
-<rect x="614.0" y="291.0" width="172.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
-<text x="700.0" y="322.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">서비스</text>
-<text x="700.0" y="341.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">Spring Boot</text>
-<rect x="904.0" y="144.0" width="172.0" height="68.0" rx="3" fill="#F8EFDD" stroke="#A96F16" stroke-width="1.8"/>
-<text x="990.0" y="175.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">세션 · 캐시</text>
-<text x="990.0" y="194.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">Redis</text>
-<rect x="904.0" y="242.0" width="172.0" height="68.0" rx="3" fill="#F8EFDD" stroke="#A96F16" stroke-width="1.8"/>
-<text x="990.0" y="273.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">데이터베이스</text>
-<text x="990.0" y="292.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">PostgreSQL</text>
-<rect x="904.0" y="340.0" width="172.0" height="68.0" rx="3" fill="#F8EFDD" stroke="#A96F16" stroke-width="1.8"/>
-<text x="990.0" y="371.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">작업 큐</text>
-<text x="990.0" y="390.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">RabbitMQ</text>
-<rect x="904.0" y="438.0" width="172.0" height="68.0" rx="3" fill="#EAE5F5" stroke="#5B4B8A" stroke-width="1.8"/>
-<text x="990.0" y="469.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">미디어 서버</text>
-<text x="990.0" y="488.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">LiveKit SFU</text>
-<rect x="1194.0" y="144.0" width="172.0" height="68.0" rx="3" fill="#E4F2EB" stroke="#2C7A5B" stroke-width="1.8"/>
-<text x="1280.0" y="175.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">음성 인식</text>
-<text x="1280.0" y="194.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">realtime-agent</text>
-<rect x="1194.0" y="242.0" width="172.0" height="68.0" rx="3" fill="#E4F2EB" stroke="#2C7A5B" stroke-width="1.8"/>
-<text x="1280.0" y="273.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">지식 API</text>
-<text x="1280.0" y="292.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">ai-api</text>
-<rect x="1194.0" y="340.0" width="172.0" height="68.0" rx="3" fill="#E4F2EB" stroke="#2C7A5B" stroke-width="1.8"/>
-<text x="1280.0" y="371.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">배치 작업자</text>
-<text x="1280.0" y="390.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">ai-worker</text>
-<rect x="1194.0" y="438.0" width="172.0" height="68.0" rx="3" fill="#EAE5F5" stroke="#5B4B8A" stroke-width="1.8"/>
-<text x="1280.0" y="469.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">녹화</text>
-<text x="1280.0" y="488.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">Egress</text>
-<rect x="1484.0" y="242.0" width="172.0" height="68.0" rx="3" fill="#F1F4F6" stroke="#8C9AA6" stroke-width="1.8"/>
-<text x="1570.0" y="273.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#2E3A45">모델 게이트웨이</text>
-<text x="1570.0" y="292.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">외부 STT · 임베딩 · LLM</text>
-<rect x="1484.0" y="340.0" width="172.0" height="68.0" rx="3" fill="#F8EFDD" stroke="#A96F16" stroke-width="1.8"/>
-<text x="1570.0" y="371.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">오브젝트 저장소</text>
-<text x="1570.0" y="390.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">MinIO / S3</text>
-<line x1="34" y1="621.0" x2="1656.0" y2="621.0" stroke="#E3E9ED"/>
-<text x="34" y="640.0" font-size="12" fill="#4A5A6B">브라우저의 모든 업무 요청은 서비스를 지난다 — 권한과 정책을 한 곳에서 판정한다.</text>
-<text x="34" y="660.0" font-size="12" fill="#4A5A6B">화상과 파일은 서비스를 거치지 않고 미디어 서버·저장소와 직접 주고받는다.</text>
-<text x="34" y="680.0" font-size="12" fill="#4A5A6B">AI는 바깥에 노출되지 않는다. 서비스가 검증한 요청만 받는다.</text>
-<text x="34" y="700.0" font-size="12" fill="#4A5A6B">AI가 멈춰도 왼쪽 절반(화상 · 채팅 · 수강 · 다시보기)은 그대로 돌아간다.</text>
+<path d="M220.0,117.0 H337.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M346.0,117.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M532.0,117.0 H595.0 V68.0 H649.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M658.0,68.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M844.0,68.0 H886.0 V105.7 H961.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M970.0,105.7 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M844.0,166.0 H928.0 V128.3 H961.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M970.0,128.3 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M1156.0,117.0 H1273.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M1282.0,117.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<rect x="265.0" y="94.4" width="36.0" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="283.0" y="105.0" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">쓰기</text>
+<rect x="931.0" y="56.8" width="36.0" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="949.0" y="67.3" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">쓰기</text>
+<rect x="34.0" y="83.0" width="186.0" height="68.0" rx="3" fill="#E4F2EB" stroke="#2C7A5B" stroke-width="1.8"/>
+<text x="127.0" y="114.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">AI 서비스</text>
+<text x="127.0" y="133.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">Python</text>
+<rect x="346.0" y="83.0" width="186.0" height="68.0" rx="3" fill="#F8EFDD" stroke="#A96F16" stroke-width="1.8"/>
+<text x="439.0" y="114.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">지식 데이터</text>
+<text x="439.0" y="133.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">문서 조각 · 의미 색인</text>
+<rect x="658.0" y="34.0" width="186.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="751.0" y="65.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">전달 경로</text>
+<text x="751.0" y="84.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">AI 결과는 여기를 지난다</text>
+<rect x="658.0" y="132.0" width="186.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="751.0" y="163.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">LiveClass 서비스</text>
+<text x="751.0" y="182.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">Spring</text>
+<rect x="970.0" y="83.0" width="186.0" height="68.0" rx="3" fill="#F8EFDD" stroke="#A96F16" stroke-width="1.8"/>
+<text x="1063.0" y="114.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">서비스 데이터</text>
+<text x="1063.0" y="133.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">계정 · 강의 · 수강 · 자막</text>
+<rect x="1282.0" y="83.0" width="186.0" height="68.0" rx="3" fill="#FFFFFF" stroke="#5A6C7B" stroke-width="1.8"/>
+<text x="1375.0" y="122.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">학생에게 보이는 것</text>
+<line x1="34" y1="213.0" x2="1468.0" y2="213.0" stroke="#E3E9ED"/>
+<text x="34" y="232.0" font-size="12" fill="#4A5A6B">같은 데이터베이스 안에서 쓰는 영역을 나눈다 — 두 서비스가 같은 표를 동시에 고치지 않는다.</text>
+<text x="34" y="252.0" font-size="12" fill="#4A5A6B">AI가 만든 것은 곧바로 학생에게 가지 않는다. 서비스 쪽으로 넘어와 강사가 다듬은 뒤 공개된다.</text>
+<text x="34" y="272.0" font-size="12" fill="#4A5A6B">라이브 자막만 예외다 — 실시간이라 검수를 기다리지 않고, 교정은 사후에 이뤄진다.</text>
+</svg></div>
+  </figure>
+  <figure class="plate" id="09-servers">
+    <div class="ph"><span class="pn">09</span><h2>서버 구성</h2><p>실제로 어떤 서버에 어떻게 얹었는가</p></div>
+    <div class="pc"><svg class="dg" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1318 272"  role="img">
+<title>서버 구성</title>
+<style>text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif}</style>
+<rect width="100%" height="100%" fill="#FFFFFF"/>
+<path d="M234.0,105.7 H284.0 V68.0 H375.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M384.0,68.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M234.0,128.3 H334.0 V166.0 H375.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M384.0,166.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M584.0,68.0 H725.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M734.0,68.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M584.0,166.0 H725.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M734.0,166.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M934.0,68.0 H1075.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M1084.0,68.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M934.0,166.0 H1075.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M1084.0,166.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<rect x="301.3" y="45.4" width="65.3" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="334.0" y="56.0" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">일반 접속</text>
+<rect x="326.3" y="108.4" width="65.3" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="359.0" y="119.0" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">화상 접속</text>
+<rect x="976.3" y="143.4" width="65.3" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="1009.0" y="154.0" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">녹화 저장</text>
+<rect x="34.0" y="83.0" width="200.0" height="68.0" rx="3" fill="#FFFFFF" stroke="#5A6C7B" stroke-width="1.8"/>
+<text x="134.0" y="122.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">인터넷</text>
+<rect x="384.0" y="34.0" width="200.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="484.0" y="65.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">웹 관문</text>
+<text x="484.0" y="84.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">주소 하나로 화면과 API</text>
+<rect x="384.0" y="132.0" width="200.0" height="68.0" rx="3" fill="#EAE5F5" stroke="#5B4B8A" stroke-width="1.8"/>
+<text x="484.0" y="163.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">미디어 관문</text>
+<text x="484.0" y="182.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">화상 접속 전용 통로</text>
+<rect x="734.0" y="34.0" width="200.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="834.0" y="65.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">서비스</text>
+<text x="834.0" y="84.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">Spring</text>
+<rect x="734.0" y="132.0" width="200.0" height="68.0" rx="3" fill="#EAE5F5" stroke="#5B4B8A" stroke-width="1.8"/>
+<text x="834.0" y="163.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">미디어 서버</text>
+<text x="834.0" y="182.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">화상 · 녹화</text>
+<rect x="1084.0" y="34.0" width="200.0" height="68.0" rx="3" fill="#F8EFDD" stroke="#A96F16" stroke-width="1.8"/>
+<text x="1184.0" y="65.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">데이터베이스</text>
+<text x="1184.0" y="84.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">외부 접속 차단</text>
+<rect x="1084.0" y="132.0" width="200.0" height="68.0" rx="3" fill="#F8EFDD" stroke="#A96F16" stroke-width="1.8"/>
+<text x="1184.0" y="171.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">오브젝트 저장소</text>
+<line x1="34" y1="213.0" x2="1284.0" y2="213.0" stroke="#E3E9ED"/>
+<text x="34" y="232.0" font-size="12" fill="#4A5A6B">서비스와 미디어를 분리해 운영한다 — 서비스를 다시 배포해도 진행 중인 수업이 끊기지 않는다.</text>
+<text x="34" y="252.0" font-size="12" fill="#4A5A6B">데이터베이스는 바깥으로 열려 있지 않다. 서버 안에서만 닿는다.</text>
 </svg></div>
   </figure>
   <figure class="plate" id="13-trust">
@@ -759,5 +974,5 @@
 <text x="34" y="550.0" font-size="12" fill="#4A5A6B">우회하는 것은 데이터의 용량이지 권한이 아니다.</text>
 </svg></div>
   </figure>
-  <footer><span>LiveClass AI — 기획 발표용 아키텍처</span><span>정본: docs/ARCHITECTURE.md · 생성: tools/build_deck.py</span></footer>
+  <footer><span>LiveClass AI — 아키텍처</span><span>정본: docs/ARCHITECTURE.md · 생성: tools/build_deck.py · build_arch.py</span></footer>
 </div>

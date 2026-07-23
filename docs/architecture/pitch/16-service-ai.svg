@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1140 620" width="1140" height="620" role="img">
+<title>AI 서비스 내부</title>
+<style>text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif}</style>
+<rect width="100%" height="100%" fill="#FFFFFF"/>
+<rect x="40" y="120" width="1060" height="190" rx="4" fill="#F5F8FA" stroke="#C6D2DB" stroke-width="1" stroke-dasharray="4 4"/>
+<text x="54" y="141" font-size="11" fill="#7C8B99" letter-spacing="1.4">실시간 — 말이 자막이 되는 길</text>
+<rect x="40" y="340" width="1060" height="220" rx="4" fill="#F5F8FA" stroke="#C6D2DB" stroke-width="1" stroke-dasharray="4 4"/>
+<text x="54" y="361" font-size="11" fill="#7C8B99" letter-spacing="1.4">배치 — 자료가 지식이 되는 길</text>
+<path d="M250,193 H320" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M320,193 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M510,193 H580" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M580,193 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M770,193 H840" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M840,193 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M250,413 H320" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M320,413 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M510,413 H580" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M580,413 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M770,413 H840" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M840,413 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M950,446 V500 H770" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M770,500 l9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M950,226 V290 H285 V500 H320" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M320,500 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<rect x="535.0" y="271.4" width="170.0" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="620" y="282" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">확정된 자막도 같은 인덱스로</text>
+<rect x="60" y="160" width="190" height="66" rx="3" fill="#EAE5F5" stroke="#5B4B8A" stroke-width="1.8"/>
+<text x="155.0" y="190.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">미디어 서버</text>
+<text x="155.0" y="209.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">강사 오디오</text>
+<rect x="320" y="160" width="190" height="66" rx="3" fill="#E4F2EB" stroke="#2C7A5B" stroke-width="1.8"/>
+<text x="415.0" y="190.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">말끝 감지</text>
+<text x="415.0" y="209.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">문장 단위로 자름</text>
+<rect x="580" y="160" width="190" height="66" rx="3" fill="#E4F2EB" stroke="#2C7A5B" stroke-width="1.8"/>
+<text x="675.0" y="190.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">음성 인식</text>
+<text x="675.0" y="209.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">외부 STT API</text>
+<rect x="840" y="160" width="220" height="66" rx="3" fill="#F8EFDD" stroke="#A96F16" stroke-width="1.8"/>
+<text x="950.0" y="190.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">전달 통로</text>
+<text x="950.0" y="209.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">Redis Stream</text>
+<rect x="60" y="380" width="190" height="66" rx="3" fill="#F8EFDD" stroke="#A96F16" stroke-width="1.8"/>
+<text x="155.0" y="410.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">올린 자료</text>
+<text x="155.0" y="429.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">PPTX</text>
+<rect x="320" y="380" width="190" height="66" rx="3" fill="#E4F2EB" stroke="#2C7A5B" stroke-width="1.8"/>
+<text x="415.0" y="410.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">문서 해석</text>
+<text x="415.0" y="429.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">장표 → 텍스트</text>
+<rect x="580" y="380" width="190" height="66" rx="3" fill="#E4F2EB" stroke="#2C7A5B" stroke-width="1.8"/>
+<text x="675.0" y="410.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">조각 나누기</text>
+<text x="675.0" y="429.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">의미 단위</text>
+<rect x="840" y="380" width="220" height="66" rx="3" fill="#E4F2EB" stroke="#2C7A5B" stroke-width="1.8"/>
+<text x="950.0" y="410.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">의미 색인</text>
+<text x="950.0" y="429.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">임베딩</text>
+<rect x="320" y="470" width="450" height="60" rx="3" fill="#F8EFDD" stroke="#A96F16" stroke-width="1.8"/>
+<text x="545.0" y="497.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">지식 인덱스</text>
+<text x="545.0" y="516.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">pgvector — 자료 + 자막</text>
+<line x1="34" y1="512" x2="1106" y2="512" stroke="#E3E9ED"/>
+<text x="34" y="538" font-size="12" fill="#4A5A6B">말끝을 감지해 문장 단위로 잘라 보낸다 — 낱말 단위보다 인식 정확도가 높다.</text>
+<text x="34" y="558" font-size="12" fill="#4A5A6B">인식 결과는 전달 통로를 거쳐 서비스로 넘어가고, 서비스가 저장과 화면 전달을 맡는다.</text>
+<text x="34" y="578" font-size="12" fill="#4A5A6B">올린 자료와 확정된 자막이 같은 인덱스로 들어가, 질문 하나에 둘 다 근거로 쓰인다.</text>
+<text x="34" y="598" font-size="12" fill="#4A5A6B">모델은 전부 외부 API다 — 서버에 모델을 얹지 않는다.</text>
+</svg>
