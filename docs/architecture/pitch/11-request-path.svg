@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1578 194" width="1578" height="194" role="img">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1578 128" width="1578" height="128" role="img">
 <title>한 요청이 지나는 길</title>
 <style>text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif}</style>
 <rect width="100%" height="100%" fill="#FFFFFF"/>
@@ -31,8 +31,4 @@
 <text x="1119.0" y="84.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">권한 · 상태 · 정합성</text>
 <rect x="1354.0" y="34.0" width="190.0" height="68.0" rx="3" fill="#F8EFDD" stroke="#A96F16" stroke-width="1.8"/>
 <text x="1449.0" y="73.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">저장소</text>
-<line x1="34" y1="115.0" x2="1544.0" y2="115.0" stroke="#E3E9ED"/>
-<text x="34" y="134.0" font-size="12" fill="#4A5A6B">권한 판정은 항상 업무 규칙 층에서 한다 — 화면이나 입력 단계에서 막는 것에 기대지 않는다.</text>
-<text x="34" y="154.0" font-size="12" fill="#4A5A6B">동시에 같은 것을 고치면 뒤늦은 요청을 덮어쓰지 않고 되돌린 뒤 알려 준다.</text>
-<text x="34" y="174.0" font-size="12" fill="#4A5A6B">실패는 화면이 이해할 수 있는 형태로 통일해 내려간다.</text>
 </svg>

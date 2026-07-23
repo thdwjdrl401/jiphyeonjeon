@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1450 494" width="1450" height="494" role="img">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1450 408" width="1450" height="408" role="img">
 <title>백엔드 모듈 구조</title>
 <style>text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif}</style>
 <rect width="100%" height="100%" fill="#FFFFFF"/>
@@ -47,9 +47,4 @@
 <rect x="1234.0" y="314.0" width="182.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
 <text x="1325.0" y="345.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">계정 · 세션</text>
 <text x="1325.0" y="364.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">auth</text>
-<line x1="34" y1="395.0" x2="1416.0" y2="395.0" stroke="#E3E9ED"/>
-<text x="34" y="414.0" font-size="12" fill="#4A5A6B">백엔드는 하나로 배포하지만 안에서는 모듈로 나뉜다. 화살표는 의존 방향이고, 왼쪽이 오른쪽을 쓴다.</text>
-<text x="34" y="434.0" font-size="12" fill="#4A5A6B">모듈끼리는 정해진 창구로만 대화한다 — 남의 내부 데이터를 직접 건드릴 수 없다.</text>
-<text x="34" y="454.0" font-size="12" fill="#4A5A6B">되돌아가는 의존(순환)은 금지다. 어기면 사람이 아니라 빌드가 먼저 막는다.</text>
-<text x="34" y="474.0" font-size="12" fill="#4A5A6B">덕분에 나중에 특정 모듈만 떼어 별도 서버로 옮길 수 있다.</text>
 </svg>

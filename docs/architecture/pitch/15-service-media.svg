@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1140 590" width="1140" height="590" role="img">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1140 554" width="1140" height="554" role="img">
 <title>미디어 서비스 내부</title>
 <style>text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif}</style>
 <rect width="100%" height="100%" fill="#FFFFFF"/>
@@ -43,8 +43,8 @@
 <text x="450.0" y="190.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">SFU</text>
 <text x="450.0" y="209.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">구독자별 화질 조절</text>
 <rect x="630" y="160" width="200" height="66" rx="3" fill="#EAE5F5" stroke="#5B4B8A" stroke-width="1.8"/>
-<text x="730.0" y="190.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">중계</text>
-<text x="730.0" y="209.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">TURN · 방화벽 우회</text>
+<text x="730.0" y="190.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">TCP 대체 경로</text>
+<text x="730.0" y="209.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">UDP 가 막힌 클라이언트</text>
 <rect x="890" y="160" width="190" height="66" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
 <text x="985.0" y="190.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">서비스</text>
 <text x="985.0" y="209.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">입장 허가 발급</text>
@@ -60,10 +60,4 @@
 <rect x="890" y="380" width="190" height="66" rx="3" fill="#FFFFFF" stroke="#5A6C7B" stroke-width="1.8"/>
 <text x="985.0" y="410.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">재생</text>
 <text x="985.0" y="429.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">세그먼트만 직접 수신</text>
-<line x1="34" y1="462" x2="1106" y2="462" stroke="#E3E9ED"/>
-<text x="34" y="488" font-size="12" fill="#4A5A6B">SFU 는 참가자마다 화질을 달리 보낸다 — 회선이 느린 학생 때문에 전체가 끊기지 않는다.</text>
-<text x="34" y="508" font-size="12" fill="#4A5A6B">방화벽이 막힌 환경에서는 중계 서버를 거쳐 우회한다.</text>
-<text x="34" y="528" font-size="12" fill="#4A5A6B">녹화는 같은 방을 한 명 더 들어와 보는 방식으로 만든다. 라이브 품질에 영향을 주지 않는다.</text>
-<text x="34" y="548" font-size="12" fill="#4A5A6B">재생할 때 영상 조각만 저장소에서 직접 받는다. 목록과 자막, 그리고 둘을 맞출 시간 기준은</text>
-<text x="34" y="568" font-size="12" fill="#4A5A6B">앱 서비스가 내려준다 — 같은 연결이 아니라 같은 좌표계로 싱크를 맞춘다.</text>
 </svg>

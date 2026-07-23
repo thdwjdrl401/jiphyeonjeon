@@ -36,6 +36,8 @@
 <path d="M1125,455 l-5,-9 l10,0 z" fill="#D9342B"/>
 <path d="M350,360 V455" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
 <path d="M350,455 l-5,-9 l10,0 z" fill="#5A6C7B"/>
+<path d="M920,360 V455" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M920,455 l-5,-9 l10,0 z" fill="#5A6C7B"/>
 <path d="M370,484 H400" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
 <path d="M400,484 l-9,-5 l0,10 z" fill="#5A6C7B"/>
 <path d="M430,513 V521 H170 V545" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
@@ -86,6 +88,8 @@
 <text x="1400" y="152" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">세그먼트만 직결</text>
 <rect x="967.3" y="191.4" width="65.3" height="17.8" fill="#FFFFFF" rx="2"/>
 <text x="1000" y="202" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">화상 직결</text>
+<rect x="878.4" y="389.4" width="83.2" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="920" y="400" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">종단 후 전달</text>
 <rect x="772.3" y="466.4" width="65.3" height="17.8" fill="#FFFFFF" rx="2"/>
 <text x="805" y="477" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">입장 허가</text>
 <rect x="783.3" y="556.4" width="65.3" height="17.8" fill="#FFFFFF" rx="2"/>
@@ -99,7 +103,7 @@
 <rect x="622.3" y="741.4" width="65.3" height="17.8" fill="#FFFFFF" rx="2"/>
 <text x="655" y="752" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">자막 전달</text>
 <rect x="587.3" y="991.4" width="65.3" height="17.8" fill="#FFFFFF" rx="2"/>
-<text x="620" y="1002" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">근거 검색</text>
+<text x="620" y="1002" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">자막 읽기</text>
 <rect x="70" y="70" width="220" height="60" rx="3" fill="#FFFFFF" stroke="#5A6C7B" stroke-width="1.8"/>
 <text x="180.0" y="105.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">강사</text>
 <rect x="70" y="150" width="220" height="60" rx="3" fill="#FFFFFF" stroke="#5A6C7B" stroke-width="1.8"/>
@@ -178,7 +182,7 @@
 <text x="1035.0" y="814.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">realtime-agent · VAD</text>
 <rect x="1260" y="772" width="330" height="52" rx="3" fill="#F8EFDD" stroke="#A96F16" stroke-width="1.8"/>
 <text x="1425.0" y="795.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">지식 인덱스</text>
-<text x="1425.0" y="814.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">문서 조각 · 의미 색인</text>
+<text x="1425.0" y="814.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">같은 PostgreSQL 의 ai 스키마</text>
 <rect x="870" y="844" width="330" height="52" rx="3" fill="#E4F2EB" stroke="#2C7A5B" stroke-width="1.8"/>
 <text x="1035.0" y="867.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">배치 작업자</text>
 <text x="1035.0" y="886.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">ai-worker · 파싱 · 임베딩</text>

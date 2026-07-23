@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1502 272" width="1502" height="272" role="img">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1502 226" width="1502" height="226" role="img">
 <title>1부 · 강의 준비</title>
 <style>text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif}</style>
 <rect width="100%" height="100%" fill="#FFFFFF"/>
@@ -39,7 +39,4 @@
 <rect x="1282.0" y="83.0" width="186.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
 <text x="1375.0" y="114.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">공개 카탈로그</text>
 <text x="1375.0" y="133.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">누구나 검색 · 열람</text>
-<line x1="34" y1="213.0" x2="1468.0" y2="213.0" stroke="#E3E9ED"/>
-<text x="34" y="232.0" font-size="12" fill="#4A5A6B">커리큘럼과 레슨은 초안으로 시작해, 강사가 발행할 때 비로소 학생에게 보인다.</text>
-<text x="34" y="252.0" font-size="12" fill="#4A5A6B">목차 순서는 통째로 저장한다 — 편집 중 다른 창에서 순서가 바뀌면 덮어쓰지 않고 알려 준다.</text>
 </svg>
