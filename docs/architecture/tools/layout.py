@@ -156,15 +156,29 @@ class Diagram:
             s, t = self.pos[e[0]], self.pos[e[1]]
             y = ring_y0 + RING_STEP * i
             sy = s["y"] + s["h"] * 0.78
-            dx = self.col_right[s["col"]] + self.GUT * 0.34
-            ux = t["cx"]
-            self.paths.append(f'M{s["x"]+s["w"]:.1f},{sy:.1f} H{dx:.1f} V{y:.1f} '
-                              f'H{ux:.1f} V{t["y"]+t["h"]+9:.1f}')
-            self.segs += [("h", sy, s["x"] + s["w"], dx), ("v", dx, sy, y),
-                          ("h", y, min(ux, dx), max(ux, dx)), ("v", ux, t["y"] + t["h"] + 9, y)]
-            self.paths.append(("head_up", ux, t["y"] + t["h"]))
+            frac = 0.24 + 0.2 * i          # 되돌아가는 화살표마다 오르내리는 x 를 달리한다
+            dx = self.col_right[s["col"]] + self.GUT * min(frac, 0.8)
+            if t["col"] > 0:
+                # 목표 열 왼쪽 거터에서 올라와 왼쪽으로 진입 — 같은 열 아래 노드를 관통하지 않는다
+                ux = self.col_right[t["col"] - 1] + self.GUT * min(0.32 + 0.2 * i, 0.86)
+                ey = t["y"] + t["h"] * 0.74
+                self.paths.append(f'M{s["x"]+s["w"]:.1f},{sy:.1f} H{dx:.1f} V{y:.1f} '
+                                  f'H{ux:.1f} V{ey:.1f} H{t["x"]-9:.1f}')
+                self.segs += [("h", sy, s["x"] + s["w"], dx), ("v", dx, sy, y),
+                              ("h", y, min(ux, dx), max(ux, dx)), ("v", ux, ey, y),
+                              ("h", ey, ux, t["x"])]
+                self.paths.append(("head", t["x"], ey))
+                lab_x, lab_y = (dx + ux) / 2, y - 9
+            else:
+                ux = t["cx"]
+                self.paths.append(f'M{s["x"]+s["w"]:.1f},{sy:.1f} H{dx:.1f} V{y:.1f} '
+                                  f'H{ux:.1f} V{t["y"]+t["h"]+9:.1f}')
+                self.segs += [("h", sy, s["x"] + s["w"], dx), ("v", dx, sy, y),
+                              ("h", y, min(ux, dx), max(ux, dx)), ("v", ux, t["y"] + t["h"] + 9, y)]
+                self.paths.append(("head_up", ux, t["y"] + t["h"]))
+                lab_x, lab_y = (dx + ux) / 2, y - 9
             if e[2]:
-                self.labels.append([(dx + ux) / 2, y - 9, e[2], y])
+                self.labels.append([lab_x, lab_y, e[2], lab_y])
 
         self._resolve_labels()
         self.height = (PAD_TOP + self.over_h + self.body_h + self.ring_h

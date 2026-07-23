@@ -9,12 +9,10 @@
 
 | 경로 | 내용 | 성격 |
 |---|---|---|
-| `pitch/` | **기획 발표용 12장** — 제품 8 + 기술 4 | 생성물 (스크립트가 원본) |
+| `pitch/` | **아키텍처 14장** — 제품 8 + 기술 6 | 생성물 (스크립트가 원본) |
 | `liveclass-architecture.drawio` | 기능 슬라이스 15탭 | 편집 가능한 원본 |
-| `diagrams/light/*.svg` · `diagrams/dark/*.svg` | 전체 구조 7종 | 정적 렌더 |
 | `tools/` | 생성 스크립트 | 원본 |
 | `overview.html` | `ARCHITECTURE.md` 를 발표용으로 렌더한 한 페이지 | 스냅샷 |
-| `diagrams/index.html` | 전체 구조 7종 갤러리 | 스냅샷 |
 
 ## 0. `pitch/` — 기획 발표용
 
@@ -35,9 +33,11 @@
 | `09-servers` | 실제로 어떤 서버에 어떻게 얹었는가 |
 | `10-backend-modules` | 백엔드 안이 어떻게 나뉘어 있는가 — 유지보수 질문의 답 |
 | `11-request-path` | 요청 하나가 어떤 검사를 거치는가 |
+| `12-architecture` | 구성 요소 전부를 한 장에 — 기술 발표의 중심 슬라이드 |
+| `13-trust` | 백엔드를 우회하는 경로가 안전한 이유 |
 
-앞 여덟 장이 발표 본문, 뒤 네 장(`08`~`11`)은 질문이 나올 때 꺼내는 장이다.
-`index.html`을 브라우저로 열면 열두 장을 한 번에 훑어볼 수 있다.
+앞 여덟 장이 발표 본문, 뒤 여섯 장(`08`~`13`)은 질문이 나올 때 꺼내는 장이다.
+`index.html`을 브라우저로 열면 열네 장을 한 번에 훑어볼 수 있다.
 
 **이 장들은 손으로 그린 게 아니라 `tools/build_deck.py`가 생성한다.** 고칠 일이 있으면
 SVG를 직접 만지지 말고 스크립트의 노드·연결선 정의를 고친 뒤 다시 돌린다.
@@ -50,7 +50,7 @@ cd docs/architecture/tools && python3 build_deck.py   # → ../pitch/*.svg + 겹
 거터의 전용 레인으로만 흐르며, 라벨은 선·노드를 피해 자동으로 자리를 잡는다.
 열을 건너뛰는 의존(예: `curriculum → auth`)은 본문 위쪽 전용 레인으로 우회한 뒤
 목표 열 바로 왼쪽 거터에서 내려온다 — 중간 모듈을 관통하지 않는다.
-`check_overlap.py`가 매 실행마다 이를 검증하고 위반을 출력한다. **현재 12장 모두 겹침 0건.**
+`check_overlap.py`가 매 실행마다 이를 검증하고 위반을 출력한다. **현재 14장 모두 겹침 0건.**
 
 ## 1. `liveclass-architecture.drawio` — 편집 원본
 
@@ -81,23 +81,7 @@ cd docs/architecture/tools && python3 build_deck.py   # → ../pitch/*.svg + 겹
 
 **내보내기** — `File → Export as → SVG / PNG / PDF`. 슬라이드에는 SVG가 가장 깔끔하다.
 
-## 2. `diagrams/` — 정적 렌더
-
-전체 구조를 스케일·관점별로 본 7종. 편집 없이 바로 쓸 수 있게 SVG로 떠 뒀다.
-
-| 파일 | 보는 각도 |
-|---|---|
-| `01-system-context` | 바깥에서 본 경계 — 발표 첫 장 |
-| `02-containers` | 돌아가는 프로세스 전부 · 구현/미구현 |
-| `03-backend-modules` | 모듈 의존 그래프 |
-| `04-deployment` | 서버 한 대에 얹은 두 스택 |
-| `05-live-caption-pipeline` | 말 → 자막, 그리고 지평선 |
-| `06-schema-ownership` | `core` / `ai` 쓰기 권한 |
-| `07-trust-boundaries` | 브라우저가 자원에 닿기까지 |
-
-`light/`는 밝은 배경, `dark/`는 어두운 배경용이다. 벡터라 확대해도 깨지지 않는다.
-
-## 3. `tools/` — 생성 스크립트
+## 2. `tools/` — 생성 스크립트
 
 `.drawio`를 **처음 만들 때** 쓴 스크립트다. 노드·연결선을 파이썬 데이터로 정의하고 mxGraphModel XML로 내보낸다.
 
