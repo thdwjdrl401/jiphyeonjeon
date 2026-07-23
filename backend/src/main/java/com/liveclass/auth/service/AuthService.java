@@ -122,6 +122,19 @@ public class AuthService {
         return user;
     }
 
+    /**
+     * 표시 이름 변경. 화면에 보이는 이름만 바꾼다 — 로그인 식별자(email)와 역할은 건드리지 않는다.
+     * 중복을 막지 않는 이름이므로 유일성 검사도 없다.
+     */
+    @Transactional
+    public AppUser updateDisplayName(UUID userId, String displayName) {
+        AppUser user = appUserRepository.findById(userId)
+                .orElseThrow(() -> new InvalidCredentialsException(CREDENTIALS_REJECTED));
+        user.setDisplayName(displayName);
+        log.info(Audit.MARKER, "표시 이름 변경 userId={}", userId);
+        return user;
+    }
+
     /** 사용자의 프로필 이미지 표시용 presigned URL(없거나 미완료면 null). */
     @Transactional(readOnly = true)
     public String resolveProfileImageUrl(AppUser user) {

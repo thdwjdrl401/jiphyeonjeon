@@ -1,5 +1,6 @@
 package com.liveclass.lesson.service;
 
+import com.liveclass.lesson.api.LessonDetailView;
 import com.liveclass.lesson.api.LessonDirectory;
 import com.liveclass.lesson.api.LessonOutlineView;
 import com.liveclass.lesson.domain.Lesson;
@@ -11,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -52,6 +54,22 @@ public class LessonDirectoryService implements LessonDirectory {
         }
         return lessonRepository.findAllById(lessonIds).stream()
                 .collect(Collectors.toMap(Lesson::getId, Lesson::getTitle));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<LessonDetailView> findDetail(UUID lessonId) {
+        return lessonRepository.findById(lessonId).map(this::toDetailView);
+    }
+
+    private LessonDetailView toDetailView(Lesson lesson) {
+        return new LessonDetailView(
+                lesson.getId(),
+                lesson.getSectionId(),
+                lesson.getTitle(),
+                lesson.getDescription(),
+                lesson.getOrderIndex(),
+                lesson.getStatus().name());
     }
 
     private LessonOutlineView toView(Lesson lesson) {

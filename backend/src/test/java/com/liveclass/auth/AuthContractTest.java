@@ -18,6 +18,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -195,6 +196,58 @@ class AuthContractTest {
                 .andExpect(jsonPath("$.fieldErrors").isArray())
                 .andExpect(jsonPath("$.fieldErrors[*].field").exists())
                 .andExpect(jsonPath("$.fieldErrors[*].code").exists());
+    }
+
+    /**
+     * 표시 이름 변경. FE는 프로필 저장과 라이브 입장 전 별명 설정 두 곳에서 이 경로를 부른다.
+     * 이름만 바뀌고 로그인 식별자(email)·역할은 그대로여야 한다.
+     */
+    @Test
+    void display_name_change_is_reflected_in_me() throws Exception {
+        signup("rename@liveclass.test", "password123").andExpect(status().isCreated());
+        Cookie[] session = cookiesOf(login("rename@liveclass.test", "password123").andReturn());
+
+        Csrf csrf = fetchCsrf();
+        mockMvc.perform(withCsrf(put("/api/me/display-name"), csrf).cookie(session)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"displayName":"바꾼이름"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.displayName").value("바꾼이름"));
+
+        mockMvc.perform(get("/api/auth/me").cookie(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.displayName").value("바꾼이름"))
+                .andExpect(jsonPath("$.email").value("rename@liveclass.test"))
+                .andExpect(jsonPath("$.role").value("STUDENT"));
+    }
+
+    @Test
+    void blank_display_name_is_rejected_with_field_errors() throws Exception {
+        signup("blankname@liveclass.test", "password123").andExpect(status().isCreated());
+        Cookie[] session = cookiesOf(login("blankname@liveclass.test", "password123").andReturn());
+
+        Csrf csrf = fetchCsrf();
+        mockMvc.perform(withCsrf(put("/api/me/display-name"), csrf).cookie(session)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"displayName":"  "}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.fieldErrors[*].field").exists());
+    }
+
+    @Test
+    void display_name_change_without_session_returns_401() throws Exception {
+        Csrf csrf = fetchCsrf();
+        mockMvc.perform(withCsrf(put("/api/me/display-name"), csrf)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"displayName":"익명"}
+                                """))
+                .andExpect(status().isUnauthorized());
     }
 
     // ---- 프론트 왕복 재현 헬퍼 ----

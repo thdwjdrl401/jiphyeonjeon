@@ -3,6 +3,7 @@ package com.liveclass.auth.web;
 import com.liveclass.auth.domain.AppUser;
 import com.liveclass.auth.service.AuthService;
 import com.liveclass.auth.web.dto.AuthUserResponse;
+import com.liveclass.auth.web.dto.DisplayNameRequest;
 import com.liveclass.auth.web.dto.ProfileImageRequest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -35,6 +36,16 @@ public class AccountController {
                                                Authentication authentication) {
         UUID userId = UUID.fromString(authentication.getName());
         AppUser user = authService.updateProfileImage(userId, request.assetId());
+        return AuthUserResponse.from(user, authService.resolveProfileImageUrl(user));
+    }
+
+    @Operation(summary = "표시 이름 변경",
+            description = "화면에 보이는 이름을 바꾼다. 로그인 식별자(email)는 바뀌지 않는다.")
+    @PutMapping("/api/me/display-name")
+    public AuthUserResponse updateDisplayName(@Valid @RequestBody DisplayNameRequest request,
+                                              Authentication authentication) {
+        UUID userId = UUID.fromString(authentication.getName());
+        AppUser user = authService.updateDisplayName(userId, request.displayName());
         return AuthUserResponse.from(user, authService.resolveProfileImageUrl(user));
     }
 }
