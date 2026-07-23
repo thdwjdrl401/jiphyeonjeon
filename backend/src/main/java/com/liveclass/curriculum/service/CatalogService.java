@@ -12,6 +12,7 @@ import com.liveclass.curriculum.repository.SectionRepository;
 import com.liveclass.enrollment.api.EnrollmentDirectory;
 import com.liveclass.enrollment.api.EnrollmentStatus;
 import com.liveclass.enrollment.api.EnrollmentView;
+import com.liveclass.lesson.api.LessonDetailView;
 import com.liveclass.lesson.api.LessonDirectory;
 import com.liveclass.lesson.api.LessonOutlineView;
 import com.liveclass.live.api.LiveSessionDirectory;
@@ -132,6 +133,53 @@ public class CatalogService {
                 enrollmentPolicy(curriculum),
                 viewerContext
         );
+    }
+
+    /**
+     * 레슨 상세 한 건. 목차의 레슨을 눌러 들어온 화면이 쓴다.
+     *
+     * <p>공개 목차(detail)는 커리큘럼 단위로 열리지만 이건 레슨 단위라 게이트를 따로 판정한다.
+     * 규칙은 목차의 access 판정({@link #lessonAccess})과 같은 것을 쓴다 — 목차에서 열린다고
+     * 표시해 놓고 실제로 열면 막히는 어긋남이 생기지 않도록.
+     *
+     * <ul>
+     *   <li>레슨·섹션·커리큘럼이 없으면 404.</li>
+     *   <li>소유 강사도 활성 수강생도 아니면 403(존재는 공개 목차로 이미 드러나 있다).</li>
+     *   <li>수강생이 미게시 레슨을 찍으면 404 — 그 사람의 목차엔 없는 레슨이므로 존재를 알리지 않는다.</li>
+     * </ul>
+     */
+    @Transactional(readOnly = true)
+    public CatalogLessonDetail lessonDetail(UUID lessonId, CatalogViewer viewer) {
+        LessonDetailView lesson = lessonDirectory.findDetail(lessonId)
+                .orElseThrow(() -> new LessonNotFoundException("레슨을 찾을 수 없습니다."));
+        Section section = sectionRepository.findById(lesson.sectionId())
+                .orElseThrow(() -> new LessonNotFoundException("레슨을 찾을 수 없습니다."));
+        // 보관(ARCHIVED)된 커리큘럼도 막지 않는다 — 듣던 강의는 계속 열려야 한다(myEnrollments와 같은 판단).
+        Curriculum curriculum = curriculumRepository.findById(section.getCurriculumId())
+                .orElseThrow(() -> new LessonNotFoundException("레슨을 찾을 수 없습니다."));
+
+        EnrollmentView enrollment = viewer.isGuest()
+                ? null
+                : enrollmentDirectory.find(curriculum.getId(), viewer.userId()).orElse(null);
+        String relationship = viewerContext(curriculum, viewer, enrollment).relationship();
+
+        if (!"OWNER_INSTRUCTOR".equals(relationship) && !"ENROLLED".equals(relationship)) {
+            throw new LessonAccessDeniedException("이 강의를 수강해야 열 수 있습니다.");
+        }
+        if ("ENROLLED".equals(relationship) && !"PUBLISHED".equals(lesson.status())) {
+            throw new LessonNotFoundException("레슨을 찾을 수 없습니다.");
+        }
+
+        return new CatalogLessonDetail(
+                lesson.lessonId(),
+                lesson.sectionId(),
+                curriculum.getId(),
+                section.getTitle(),
+                curriculum.getTitle(),
+                lesson.title(),
+                lesson.description(),
+                lesson.order(),
+                lesson.status());
     }
 
     /**

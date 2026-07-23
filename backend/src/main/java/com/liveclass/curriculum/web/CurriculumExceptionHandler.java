@@ -2,6 +2,7 @@ package com.liveclass.curriculum.web;
 
 import com.liveclass.curriculum.service.CurriculumNotFoundException;
 import com.liveclass.curriculum.service.CurriculumStateConflictException;
+import com.liveclass.curriculum.service.LessonAccessDeniedException;
 import com.liveclass.curriculum.service.LessonNotFoundException;
 import com.liveclass.curriculum.service.NotCurriculumOwnerException;
 import com.liveclass.curriculum.service.SectionNotEmptyException;
@@ -26,7 +27,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice(assignableTypes = {
         InstructorCurriculumController.class, InstructorLessonController.class,
         InstructorLiveSessionController.class, CatalogController.class,
-        StudentEnrollmentController.class, InstructorEnrollmentController.class})
+        StudentEnrollmentController.class, InstructorEnrollmentController.class,
+        StudentLessonController.class})
 public class CurriculumExceptionHandler {
 
     /** 수강 기록 없음(취소 대상 없음 등). */
@@ -57,6 +59,16 @@ public class CurriculumExceptionHandler {
     public ResponseEntity<ErrorResponse> handleLessonNotFound(com.liveclass.lesson.api.LessonNotFoundException e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ErrorResponse.of("LESSON_NOT_FOUND", e.getMessage()));
+    }
+
+    /**
+     * 레슨은 공개 목차에 보이지만 수강하지 않아 열 수 없다.
+     * 코드는 목차 access의 reasonCode와 같은 값을 써서 FE가 같은 분기로 다룰 수 있게 한다.
+     */
+    @ExceptionHandler(LessonAccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleLessonAccessDenied(LessonAccessDeniedException e) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ErrorResponse.of("ENROLLMENT_REQUIRED", e.getMessage()));
     }
 
     /** 소유자가 아님. 존재는 하지만(404 아님) 권한이 없다. */
