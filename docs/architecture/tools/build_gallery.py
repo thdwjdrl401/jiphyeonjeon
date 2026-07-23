@@ -7,11 +7,14 @@ import sys
 sys.path.insert(0, ".")
 import build_deck as BD
 import build_arch as BA
+import build_full as BF
 
 TITLES = {n: d.title for d, n in zip(BD.DECK, BD.NAMES)}
 TITLES.update({n: d.title for n, d in BA.PLATES})
+TITLES["full-architecture"] = BF.FULL.title
 
 USE = {
+    "full-architecture": "서비스 전체를 한 장에 — 클라이언트부터 외부 모델까지",
     "00-overview":       "제품 전체를 한 장으로 — 첫 슬라이드",
     "01-authoring":      "강사가 강의를 만들어 공개하기까지",
     "02-enrollment":     "학생이 강의를 찾아 듣기 시작하기까지",
@@ -30,11 +33,12 @@ USE = {
     "15-service-media":  "미디어 서비스의 실시간 경로와 녹화 경로",
     "16-service-ai":     "AI 서비스의 실시간 자막 경로와 배치 처리 경로",
 }
-ORDER = ["00-overview", "01-authoring", "02-enrollment", "03-live", "04-captions",
+ORDER = ["full-architecture", "00-overview", "01-authoring", "02-enrollment", "03-live", "04-captions",
          "05-materials", "06-qa", "07-replay",
          "12-architecture", "14-service-app", "15-service-media", "16-service-ai",
          "10-backend-modules", "11-request-path", "08-data", "09-servers", "13-trust"]
 GROUP = {
+    "full-architecture": "전체 — 한 장으로 보는 서비스",
     "00-overview": "제품 이야기 — 발표 본문",
     "12-architecture": "서비스 구성 — 기술 발표 본문",
     "10-backend-modules": "세부 — 질문이 나오면 꺼내는 장",
