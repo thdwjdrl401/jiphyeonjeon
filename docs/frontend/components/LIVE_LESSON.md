@@ -13,6 +13,8 @@
 
 ## 2. 현재 범위와 후속 범위
 
+> **UI 목업 기준(2026-07-23)**: 학생·강사와 다시보기의 학습 사이드바는 `채팅·질문 / 실시간 노트 / AI 질문 / 핵심 용어` 네 탭으로 통일한다. 자막은 영상 하단 도크로 이동하고 영상 제어는 hover·focus 오버레이로 제공한다. 실제 API·WS·DVR 연결 전의 결정과 후속 범위는 [ADR-0019](../../decisions/yoongwanghyeok/0019-unified-learning-sidebar-and-caption-dock-preview.md)를 따른다.
+
 ### 2.1 현재 범위
 
 - 강사는 카메라·마이크·화면 공유를 LiveKit으로 발행
@@ -42,35 +44,21 @@
 ```text
 LiveLessonPage
 └─ LessonLayout
-   ├─ LiveLessonHeader
-   │  ├─ LessonIdentity
-   │  ├─ LiveStatusBadge
-   │  ├─ ConnectionStatus
-   │  └─ InstructorSessionActions          강사만
    ├─ LiveLessonPrimaryContent
    │  ├─ LiveMediaStage
    │  │  ├─ LiveRtcPlayer                  현재 LIVE
    │  │  ├─ LiveHlsPlayer                  최근·전체 되감기
+   │  │  ├─ VideoStatusOverlay             제목·세션·연결·참여·강사 액션
    │  │  ├─ MediaStateOverlay
-   │  │  └─ InstructorMediaControls        강사만
-   │  ├─ LiveTimeline
-   │  │  ├─ PlaybackPosition
-   │  │  ├─ BookmarkMarkerLayer            수강생
-   │  │  ├─ QuestionPinLayer               강사만
-   │  │  └─ GoLiveButton
-   │  └─ LiveCaptionRegion
-   │     ├─ CurrentCaption
-   │     ├─ GlossaryPopover
-   │     └─ EvidenceViewer
+   │  │  └─ MediaControlsOverlay           진행 바·LIVE 복귀·역할별 제어
+   │  └─ LiveCaptionDock
+   │     ├─ CaptionSentenceList            sessionMs 문장 목록
+   │     └─ CaptionTermLink                termId 선택
    ├─ LiveLessonSidePanel
-   │  ├─ LiveChatPanel
-   │  │  ├─ LiveChatList
-   │  │  └─ LiveChatComposer
-   │  │     └─ QuestionFlagCheckbox
+   │  ├─ DiscussionPanel                   전체·질문 필터 + 채팅
+   │  ├─ LiveSummaryPanel                  구간별 누적 요약 블록
    │  ├─ PersonalAiQuestionPanel
-   │  ├─ LessonMaterialPanel
-   │  ├─ ParticipantSummary
-   │  └─ InstructorQuestionPanel           강사만
+   │  └─ GlossaryPanel                     검색 목록 + 선택 상세
    ├─ LessonStatusRegion
    │  ├─ RecordingStatusNotice             강사만
    │  ├─ AiServiceStatusNotice

@@ -13,6 +13,8 @@
 - 수강생: 실시간 시청 전용(발행 권한 없음), 채팅, 자막·근거 확인, 개인 AI Q&A, 북마크, 라이브 되감기
 
 ## 화면 구성
+
+> 현재 UI 목업의 학습 사이드바와 자막 배치는 [ADR-0019](../../decisions/yoongwanghyeok/0019-unified-learning-sidebar-and-caption-dock-preview.md)에 따라 아래 기존 역할별 구성을 `채팅·질문 / 실시간 노트 / AI 질문 / 핵심 용어` 공통 4탭과 하단 자막 도크로 대체한다.
 ```text
 LiveLessonHeader
 ├─ LessonIdentity

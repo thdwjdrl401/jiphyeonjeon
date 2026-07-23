@@ -1,4 +1,4 @@
-import { demoCaptions, demoMessages, getDemoLiveSession } from '@/features/demo/demoData'
+import { demoLiveCaptions, demoMessages, getDemoLiveSession } from '@/features/demo/demoData'
 import type { CurriculumLiveSessionStatus } from '@/features/lesson/types'
 import type { LiveSessionService } from './liveSessionService.interface'
 
@@ -49,7 +49,7 @@ export const mockLiveSessionService = {
     return { id: `msg_${Date.now()}`, alias: '나', text, time: '현재', question }
   },
   async getCaptions() {
-    return demoCaptions
+    return demoLiveCaptions
   },
   async askLiveAi() {
     return { answer: 'SecurityContext는 인증이 끝난 현재 요청의 사용자 정보를 보관합니다. 세션 저장소와는 책임이 다르며, 요청이 끝나면 컨텍스트가 정리됩니다.' }
