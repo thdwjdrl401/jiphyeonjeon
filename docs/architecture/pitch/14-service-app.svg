@@ -7,7 +7,7 @@
 <text x="66" y="143" font-size="13" font-weight="700" fill="#3F5162" letter-spacing="1.6">요청이 지나는 순서</text>
 <rect x="40" y="400" width="1060" height="190" rx="4" fill="#F5F8FA" stroke="#C6D2DB" stroke-width="1" stroke-dasharray="4 4"/>
 <rect x="54" y="410" width="4" height="15" rx="1" fill="#8FA3B4"/>
-<text x="66" y="423" font-size="13" font-weight="700" fill="#3F5162" letter-spacing="1.6">모듈 — 정해진 창구로만 대화한다</text>
+<text x="66" y="423" font-size="13" font-weight="700" fill="#3F5162" letter-spacing="1.6">모듈</text>
 <path d="M150,96 V160" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
 <path d="M150,160 l-5,-9 l10,0 z" fill="#5A6C7B"/>
 <path d="M320,193 H380" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>

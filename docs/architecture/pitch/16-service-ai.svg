@@ -4,10 +4,10 @@
 <rect width="100%" height="100%" fill="#FFFFFF"/>
 <rect x="40" y="120" width="1060" height="190" rx="4" fill="#F5F8FA" stroke="#C6D2DB" stroke-width="1" stroke-dasharray="4 4"/>
 <rect x="54" y="130" width="4" height="15" rx="1" fill="#8FA3B4"/>
-<text x="66" y="143" font-size="13" font-weight="700" fill="#3F5162" letter-spacing="1.6">실시간 — 말이 자막이 되는 길</text>
+<text x="66" y="143" font-size="13" font-weight="700" fill="#3F5162" letter-spacing="1.6">실시간 경로</text>
 <rect x="40" y="340" width="1060" height="220" rx="4" fill="#F5F8FA" stroke="#C6D2DB" stroke-width="1" stroke-dasharray="4 4"/>
 <rect x="54" y="350" width="4" height="15" rx="1" fill="#8FA3B4"/>
-<text x="66" y="363" font-size="13" font-weight="700" fill="#3F5162" letter-spacing="1.6">배치 — 자료가 지식이 되는 길</text>
+<text x="66" y="363" font-size="13" font-weight="700" fill="#3F5162" letter-spacing="1.6">배치 경로</text>
 <path d="M250,193 H320" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
 <path d="M320,193 l-9,-5 l0,10 z" fill="#5A6C7B"/>
 <path d="M510,193 H580" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
@@ -24,14 +24,14 @@
 <path d="M770,500 l9,-5 l0,10 z" fill="#5A6C7B"/>
 <path d="M950,226 V290 H285 V500 H320" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
 <path d="M320,500 l-9,-5 l0,10 z" fill="#5A6C7B"/>
-<rect x="535.0" y="271.4" width="170.0" height="17.8" fill="#FFFFFF" rx="2"/>
-<text x="620" y="282" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">확정된 자막도 같은 인덱스로</text>
+<rect x="561.2" y="271.4" width="117.7" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="620" y="282" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">자막도 같은 인덱스</text>
 <rect x="60" y="160" width="190" height="66" rx="3" fill="#EAE5F5" stroke="#5B4B8A" stroke-width="1.8"/>
 <text x="155.0" y="190.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">미디어 서버</text>
 <text x="155.0" y="209.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">강사 오디오</text>
 <rect x="320" y="160" width="190" height="66" rx="3" fill="#E4F2EB" stroke="#2C7A5B" stroke-width="1.8"/>
 <text x="415.0" y="190.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">말끝 감지</text>
-<text x="415.0" y="209.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">문장 단위로 자름</text>
+<text x="415.0" y="209.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">VAD</text>
 <rect x="580" y="160" width="190" height="66" rx="3" fill="#E4F2EB" stroke="#2C7A5B" stroke-width="1.8"/>
 <text x="675.0" y="190.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">음성 인식</text>
 <text x="675.0" y="209.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">외부 STT API</text>
