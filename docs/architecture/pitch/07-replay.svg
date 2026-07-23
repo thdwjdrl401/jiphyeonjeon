@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1578 248" width="1578" height="248" role="img">
+<title>7부 · 녹화와 다시보기</title>
+<style>text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif}</style>
+<rect width="100%" height="100%" fill="#FFFFFF"/>
+<path d="M224.0,68.0 H355.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M364.0,68.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M554.0,68.0 H685.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M694.0,68.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M884.0,68.0 H1015.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M1024.0,68.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M1214.0,68.0 H1345.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M1354.0,68.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M1544.0,87.0 H1591.6 V150.0 H789.0 V111.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M789.0,102.0 l-5,9 l10,0 z" fill="#5A6C7B"/>
+<rect x="231.4" y="45.4" width="125.1" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="294.0" y="56.0" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">① 자동 시작 · 정지</text>
+<rect x="611.8" y="45.4" width="24.5" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="624.0" y="56.0" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">②</text>
+<rect x="941.8" y="45.4" width="24.5" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="954.0" y="56.0" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">③</text>
+<rect x="1257.1" y="45.4" width="53.8" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="1284.0" y="56.0" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">④ 허가</text>
+<rect x="1120.0" y="127.4" width="140.7" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="1190.3" y="138.0" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">영상은 저장소에서 직접</text>
+<rect x="34.0" y="34.0" width="190.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="129.0" y="73.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">수업 종료</text>
+<rect x="364.0" y="34.0" width="190.0" height="68.0" rx="3" fill="#EAE5F5" stroke="#5B4B8A" stroke-width="1.8"/>
+<text x="459.0" y="65.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">녹화 합성</text>
+<text x="459.0" y="84.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">화면 + 음성</text>
+<rect x="694.0" y="34.0" width="190.0" height="68.0" rx="3" fill="#F8EFDD" stroke="#A96F16" stroke-width="1.8"/>
+<text x="789.0" y="65.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">영상 보관</text>
+<text x="789.0" y="84.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">오브젝트 저장소</text>
+<rect x="1024.0" y="34.0" width="190.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="1119.0" y="65.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">재생 허가</text>
+<text x="1119.0" y="84.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">수강 여부 확인</text>
+<rect x="1354.0" y="34.0" width="190.0" height="68.0" rx="3" fill="#FFFFFF" stroke="#5A6C7B" stroke-width="1.8"/>
+<text x="1449.0" y="65.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">학생</text>
+<text x="1449.0" y="84.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">다시보기</text>
+<line x1="34" y1="189.0" x2="1544.0" y2="189.0" stroke="#E3E9ED"/>
+<text x="34" y="208.0" font-size="12" fill="#4A5A6B">다시보기는 따로 만들지 않는다 — 라이브 때 생긴 녹화와 자막이 그대로 재생된다.</text>
+<text x="34" y="228.0" font-size="12" fill="#4A5A6B">이미 교정이 끝난 뒤라, 다시보기는 처음부터 자막·용어·질의응답이 모두 갖춰진 상태다.</text>
+</svg>
