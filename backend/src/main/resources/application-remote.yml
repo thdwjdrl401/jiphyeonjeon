@@ -18,3 +18,12 @@ spring:
 
 # ⚠️ Redis Streams 소비자(향후 CP2): dev 인프라를 여러 개발자가 공유하면 consumer group을
 #    개발자별로 분리할 것(같은 그룹이면 서로 메시지를 뺏음). group 이름에 인스턴스 식별자.
+
+# 에셋 스토리지(썸네일·프로필 presigned) → EC2 dev MinIO. IP+http로 브라우저 HSTS 우회.
+# secret은 .env.remote로 주입(EC2 /etc/liveclass/.env.dev 의 MINIO_ROOT_PASSWORD 와 일치).
+asset:
+  storage:
+    endpoint: ${ASSET_STORAGE_ENDPOINT:http://43.201.249.3:9090}
+    access-key: ${ASSET_STORAGE_ACCESS_KEY:liveclass}
+    secret-key: ${ASSET_STORAGE_SECRET_KEY:?remote 프로필은 EC2 dev MinIO secret(ASSET_STORAGE_SECRET_KEY) 필요}
+    # bucket(liveclass-assets)·path-style(true)·region 등은 application.yml 기본값 유지
