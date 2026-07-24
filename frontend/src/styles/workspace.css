@@ -271,6 +271,20 @@ th { color: var(--ink-500); font-size: .67rem; }
 .precheck-list b { color: var(--blue-600); font-size: .68rem; }
 .precheck-list button.is-pass { border-color: #cceee4; background: var(--green-50); }
 .precheck-list button.is-pass > span { background: var(--green-700); color: #fff; }
+.precheck-list button.is-pass b { color: var(--green-700); }
+.speaker-check { display: grid; gap: 11px; border: 1px solid var(--ink-100); border-radius: 12px; padding: 14px; background: #fff; }
+.speaker-check.is-pass { border-color: #cceee4; background: var(--green-50); }
+.speaker-check__row { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 12px; }
+.speaker-check__row > span { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 10px; background: var(--ink-100); color: var(--ink-600); font-size: .82rem; font-weight: 700; }
+.speaker-check.is-pass .speaker-check__row > span { background: var(--green-700); color: #fff; }
+.speaker-check__row div { display: flex; flex-direction: column; }
+.speaker-check__row strong { font-size: .76rem; }
+.speaker-check__row small { color: var(--ink-500); font-size: .65rem; }
+.speaker-check__row b { color: var(--blue-600); font-size: .68rem; }
+.speaker-check.is-pass .speaker-check__row b { color: var(--green-700); }
+.speaker-confirm { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: 10px; background: var(--ink-50); }
+.speaker-confirm p { margin: 0; font-size: .72rem; font-weight: 600; }
+.speaker-confirm > div { display: flex; gap: 7px; }
 .button.is-disabled { pointer-events: none; opacity: .45; }
 .camera-preview { display: grid; min-height: 250px; place-items: center; border-radius: 15px; background: radial-gradient(circle at 50% 35%, #3b4968, #151e34); color: #fff; }
 .camera-avatar { display: grid; width: 82px; height: 82px; place-items: center; border-radius: 50%; background: var(--blue-600); font-size: 1.7rem; font-weight: 700; }
