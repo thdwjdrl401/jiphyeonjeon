@@ -139,4 +139,12 @@ export const httpLessonService = {
   async prepareLessonAi(lessonId) {
     return notImplemented(`POST /instructor/lessons/${lessonId}/ai-preparation`)
   },
+  async publishLesson(lessonId) {
+    const { data } = await apiClient.post<ApiLessonView>(`/instructor/lessons/${lessonId}/publish`)
+    return { lessonId: data.lessonId, status: data.status }
+  },
+  async unpublishLesson(lessonId) {
+    const { data } = await apiClient.post<ApiLessonView>(`/instructor/lessons/${lessonId}/unpublish`)
+    return { lessonId: data.lessonId, status: data.status }
+  },
 } satisfies LessonService

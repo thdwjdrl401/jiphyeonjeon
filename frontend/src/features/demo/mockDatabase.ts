@@ -1,6 +1,7 @@
 import architectureCurriculumImage from '@/assets/images/curriculum-architecture.svg'
 import dataCurriculumImage from '@/assets/images/curriculum-data.svg'
 import springCurriculumImage from '@/assets/images/curriculum-spring.svg'
+import { ApiError } from '@/shared/api/client'
 import type { AuthUser } from '@/features/auth/types'
 import type {
   CurriculumDetailPeriod,
@@ -27,6 +28,10 @@ import type {
 
 export const MOCK_STUDENT_ID = 'usr-student-01'
 export const MOCK_INSTRUCTOR_ID = 'usr-instructor-01'
+
+// 게시/게시취소로 바뀐 레슨 상태를 세션 동안 기억한다. seed는 매 조회마다 다시
+// 만들어지므로(buildMockCurriculumOutline) seed를 직접 고치지 않고 이 덮어쓰기 맵을 우선한다.
+const lessonStatusOverrides = new Map<string, LessonStatus>()
 
 export interface MockCurriculumEntity {
   curriculumId: string
@@ -211,6 +216,7 @@ const springSectionSeeds: MockSectionSeed[] = [
 
 export function resetMockDatabase() {
   resetMockEnrollmentStore()
+  lessonStatusOverrides.clear()
   mockCurriculumEntities.splice(initialCurriculumCount)
   for (const curriculum of mockCurriculumEntities) {
     curriculum.materials = initialCurriculumMaterials.get(curriculum.curriculumId)?.map((material) => ({ ...material })) ?? []
@@ -343,7 +349,9 @@ export function buildMockCurriculumOutline(curriculum: MockCurriculumEntity): Cu
         lessonId,
         title: lessonSeed?.title ?? `${lessonOrder}강. 학습 주제 ${lessonOrder}`,
         order: lessonOrder,
-        status: lessonSeed?.status ?? (curriculum.lifecycleStatus === 'DRAFT' ? 'DRAFT' : 'PUBLISHED'),
+        status: lessonStatusOverrides.get(lessonId)
+          ?? lessonSeed?.status
+          ?? (curriculum.lifecycleStatus === 'DRAFT' ? 'DRAFT' : 'PUBLISHED'),
         scheduledAt: availability.liveSession?.scheduledAt ?? null,
         durationMs: 3_600_000,
         ...availability,
@@ -431,6 +439,16 @@ export function findMockLesson(lessonId: string) {
     }
   }
   return null
+}
+
+// 강사의 레슨 게시/게시취소를 mock 상태에 반영한다. 존재하지 않는 레슨은 실제 서버와
+// 같은 404 계약으로 거절한다.
+export function setMockLessonStatus(lessonId: string, status: LessonStatus) {
+  if (!findMockLesson(lessonId)) {
+    throw new ApiError('강의를 찾을 수 없습니다.', 404, 'LESSON_NOT_FOUND')
+  }
+  lessonStatusOverrides.set(lessonId, status)
+  return { lessonId, status }
 }
 
 export function findMockLiveSession(sessionId: string) {

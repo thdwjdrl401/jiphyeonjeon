@@ -9,6 +9,8 @@ export const getLesson = (request: GetLessonRequest) => lessonService.getLesson(
 export const getCurriculumLessonNavigation = (curriculumId: string) => lessonService.getCurriculumLessonNavigation(curriculumId)
 export const saveLesson = (request: SaveLessonRequest) => lessonService.saveLesson(request)
 export const prepareLessonAi = (lessonId: string) => lessonService.prepareLessonAi(lessonId)
+export const publishLesson = (lessonId: string) => lessonService.publishLesson(lessonId)
+export const unpublishLesson = (lessonId: string) => lessonService.unpublishLesson(lessonId)
 
 export type {
   GetLessonRequest,

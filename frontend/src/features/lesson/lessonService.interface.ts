@@ -57,9 +57,16 @@ export interface SaveLessonRequest {
   materials: File[]
 }
 
+export interface LessonStatusResult {
+  lessonId: string
+  status: LessonStatus
+}
+
 export interface LessonService {
   getLesson: (request: GetLessonRequest) => Promise<LessonDetailView>
   getCurriculumLessonNavigation: (curriculumId: string) => Promise<LessonNavigationView>
   saveLesson: (request: SaveLessonRequest) => Promise<{ lessonId: string; sectionId: string; title: string; description: string; status: LessonStatus }>
   prepareLessonAi: (lessonId: string) => Promise<void>
+  publishLesson: (lessonId: string) => Promise<LessonStatusResult>
+  unpublishLesson: (lessonId: string) => Promise<LessonStatusResult>
 }
