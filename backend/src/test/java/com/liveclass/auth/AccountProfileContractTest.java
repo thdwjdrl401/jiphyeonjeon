@@ -92,8 +92,8 @@ class AccountProfileContractTest {
     void too_many_expertise_tags_are_rejected_400() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
 
-        // 11개 → 상한(10) 초과.
-        String tags = "\"" + String.join("\",\"", java.util.Collections.nCopies(11, "태그")) + "\"";
+        // 9개 → 상한(8) 초과. 화면·mock과 같은 8개로 통일(ADR-0031).
+        String tags = "\"" + String.join("\",\"", java.util.Collections.nCopies(9, "태그")) + "\"";
         write(put("/api/me/instructor-profile"), instructor, "{\"bio\":\"\",\"expertise\":[" + tags + "]}")
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
