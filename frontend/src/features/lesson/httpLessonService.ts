@@ -1,4 +1,5 @@
 import { apiClient } from '@/shared/api/client'
+import { notImplemented } from '@/shared/api/notImplemented'
 import type { CurriculumLiveSessionStatus, CurriculumReplayStatus, LessonStatus } from './types'
 import type { LessonDetailView, LessonService } from './lessonService.interface'
 
@@ -93,6 +94,14 @@ export const httpLessonService = {
     }
   },
   async saveLesson(request) {
+    // 자료 업로드는 ADR-0023의 presigned 경로로 가야 하는데(지금 코드는 multipart), 서버는
+    // kind=MATERIAL을 세 곳에서 막는다 — kind 게이트·5MiB 상한·이미지 MIME 화이트리스트.
+    // 뒤의 둘은 kind를 보지 않아서 게이트 하나만 열어도 통과하지 못한다(CP3).
+    // 레슨을 먼저 만들고 마지막에 실패하면 절반만 저장되므로 첫 쓰기 전에 막는다.
+    if (request.materials.length > 0) {
+      notImplemented('POST /instructor/lessons/{lessonId}/materials')
+    }
+
     let lesson: ApiLessonView
     if (request.lessonId) {
       const { data } = await apiClient.patch<ApiLessonView>(`/instructor/lessons/${request.lessonId}`, {
@@ -124,14 +133,10 @@ export const httpLessonService = {
       }
     }
 
-    if (request.materials.length > 0) {
-      const body = new FormData()
-      request.materials.forEach((file) => body.append('files', file))
-      await apiClient.post(`/instructor/lessons/${lesson.lessonId}/materials`, body)
-    }
     return lesson
   },
+  // 자료 임베딩을 트리거하는 경로. 자료 업로드 자체가 없어 준비할 대상이 없다(CP3).
   async prepareLessonAi(lessonId) {
-    await apiClient.post(`/instructor/lessons/${lessonId}/ai-preparation`)
+    return notImplemented(`POST /instructor/lessons/${lessonId}/ai-preparation`)
   },
 } satisfies LessonService

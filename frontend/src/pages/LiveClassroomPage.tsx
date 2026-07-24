@@ -95,9 +95,15 @@ export default function LiveClassroomPage() {
     setPanel('glossary')
   }
 
+  // 진입 게이트에는 이 화면의 정체성인 세션·레슨만 둔다.
+  // 자막·질문 하이라이트는 아직 서버 경로가 없어(CP2) 늘 실패하는데, 여기에 섞으면
+  // 나머지가 멀쩡해도 라이브 화면 전체가 뜨지 않는다. 패널 안에서 각자 안내한다.
+  //
+  // 실패 검사를 로딩보다 먼저 한다. 레슨 조회는 세션 결과에 의존해(enabled) 세션이 실패하면
+  // 비활성인 채 영원히 isPending으로 남는다 — 로딩을 먼저 보면 오류 화면에 닿지 못한다.
   if (!sessionId) return <PageState title="잘못된 라이브 세션 경로입니다" />
-  if (sessionQuery.isPending || lessonQuery.isPending || chatQuery.isPending || captionsQuery.isPending) return <PageState title="라이브 강의를 불러오는 중입니다" />
-  if (sessionQuery.isError || lessonQuery.isError || chatQuery.isError || captionsQuery.isError || !session || !lesson) return <PageState title="라이브 강의를 불러오지 못했습니다" />
+  if (sessionQuery.isError || lessonQuery.isError) return <PageState title="라이브 강의를 불러오지 못했습니다" />
+  if (!session || !lesson) return <PageState title="라이브 강의를 불러오는 중입니다" />
 
   const discussionComposer = (
     <form className="chat-composer" onSubmit={sendMessage}>

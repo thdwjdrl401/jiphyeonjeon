@@ -1,13 +1,10 @@
 import type { CurriculumLiveSessionStatus } from '@/features/lesson/types'
 import { apiClient } from '@/shared/api/client'
-import { normalizeCaption, type ApiCaptionView } from './captionAdapter'
+import { notImplemented } from '@/shared/api/notImplemented'
 import type {
   ChatMessageView,
   LiveSessionService,
   LiveSessionView,
-  PreflightCheck,
-  ProcessingStatus,
-  QuestionHighlight,
 } from './liveSessionService.interface'
 
 interface ApiLiveSessionView {
@@ -71,9 +68,10 @@ export const httpLiveSessionService = {
       participants: 0,
     } satisfies LiveSessionView
   },
+  // 점검 대상이 LiveKit 연결·장치 상태라 서버 판정이 있어야 한다(CP1). 프론트가 흉내 내면
+  // "점검 통과"가 거짓이 되므로 값을 지어내지 않는다.
   async getPreflightChecks(sessionId) {
-    const { data } = await apiClient.post<PreflightCheck[]>(`/instructor/live-sessions/${sessionId}/preflight`)
-    return data
+    return notImplemented(`POST /instructor/live-sessions/${sessionId}/preflight`)
   },
   async startLiveSession(sessionId) {
     await apiClient.post(`/live-sessions/${sessionId}/start`)
@@ -107,23 +105,21 @@ export const httpLiveSessionService = {
     const message = normalizeMessage(data)
     return { ...message, time: data.createdAt ? message.time : '현재' }
   },
+  // 실시간 자막은 WS 채널(CONTRACT §3-4)로 오게 되어 있고 REST 스냅샷 경로는 아직 없다(CP2).
+  // 응답 정규화(captionAdapter)는 그대로 두었다 — 경로가 생기면 여기만 바꾸면 된다.
   async getCaptions(sessionId) {
-    const { data } = await apiClient.get<ApiCaptionView[]>(`/live-sessions/${sessionId}/captions`)
-    return data.map(normalizeCaption)
+    return notImplemented(`GET /live-sessions/${sessionId}/captions`)
   },
-  async askLiveAi(lessonId, question) {
-    const { data } = await apiClient.post<{ answer: string }>(`/lessons/${lessonId}/ai/questions:stream`, { question })
-    return data
+  async askLiveAi(lessonId) {
+    return notImplemented(`POST /lessons/${lessonId}/ai/questions:stream`)
   },
-  async saveBookmark(lessonId, sessionMs) {
-    await apiClient.post(`/lessons/${lessonId}/bookmarks`, { sessionMs })
+  async saveBookmark(lessonId) {
+    return notImplemented(`POST /lessons/${lessonId}/bookmarks`)
   },
   async getProcessingStatus(sessionId) {
-    const { data } = await apiClient.get<ProcessingStatus>(`/instructor/live-sessions/${sessionId}/processing`)
-    return data
+    return notImplemented(`GET /instructor/live-sessions/${sessionId}/processing`)
   },
   async getQuestionHighlights(sessionId) {
-    const { data } = await apiClient.get<QuestionHighlight[]>(`/instructor/live-sessions/${sessionId}/question-highlights`)
-    return data
+    return notImplemented(`GET /instructor/live-sessions/${sessionId}/question-highlights`)
   },
 } satisfies LiveSessionService

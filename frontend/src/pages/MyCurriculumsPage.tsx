@@ -12,6 +12,7 @@ import type { StudentCurriculumItem } from '@/features/enrollment/types'
 import { useCancelEnrollmentMutation } from '@/features/enrollment/useEnrollmentMutations'
 import { useMyEnrollmentsQuery } from '@/features/enrollment/useEnrollmentQueries'
 import { ApiError } from '@/shared/api/client'
+import { isNotImplemented } from '@/shared/api/notImplemented'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import { InlineNotice, MetricCard, PageHeader, Panel, StatusBadge } from '@/shared/ui/WorkspaceUi'
 
@@ -110,15 +111,24 @@ export default function MyCurriculumsPage() {
       ? instructorPaths.preflight(upcomingLive.sessionId)
       : studentPaths.prejoin(upcomingLive.sessionId)
     : null
-  const queryError = isInstructor
-    ? instructorListQuery.error ?? instructorSummaryQuery.error
-    : studentListQuery.error ?? studentSummaryQuery.error
+  // 목록과 요약을 갈라서 본다. 요약(/me/learning-summary·/instructor/dashboard-summary)은
+  // learning 배선 전까지 서버에 없어서 늘 실패하는데, 묶어 두면 목록이 멀쩡한데도
+  // 페이지 전체에 오류 배너가 뜬다. 요약은 위쪽 지표 자리에서만 안내한다.
+  const listError = isInstructor ? instructorListQuery.error : studentListQuery.error
+  const summaryError = isInstructor ? instructorSummaryQuery.error : studentSummaryQuery.error
 
   return (
     <div className="workspace-page">
       <PageHeader eyebrow={isInstructor ? 'INSTRUCTOR DASHBOARD' : 'LEARNING DASHBOARD'} title="내 커리큘럼" description={isInstructor ? '운영 상태와 오늘의 라이브 강의를 한눈에 확인하세요.' : undefined} />
 
-      {queryError && <InlineNotice tone="danger">대시보드 데이터를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.</InlineNotice>}
+      {listError && <InlineNotice tone="danger">커리큘럼 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.</InlineNotice>}
+      {!listError && summaryError && (
+        <InlineNotice tone={isNotImplemented(summaryError) ? 'warning' : 'danger'}>
+          {isNotImplemented(summaryError)
+            ? '학습 요약은 아직 준비 중입니다. 아래 목록은 정상입니다.'
+            : '학습 요약을 불러오지 못했습니다. 아래 목록은 정상입니다.'}
+        </InlineNotice>
+      )}
 
       <div className="metric-grid">
         {isInstructor ? <><MetricCard label="운영 커리큘럼" value={instructorSummaryQuery.data?.totalCurriculumCount ?? '--'} /><MetricCard label="공개 중" value={instructorSummaryQuery.data?.publishedCurriculumCount ?? '--'} /><MetricCard label="예정 라이브" value={instructorSummaryQuery.data?.upcomingLiveCount ?? '--'} /><MetricCard label="전체 수강생" value={instructorSummaryQuery.data?.totalEnrolleeCount == null ? '--' : `${instructorSummaryQuery.data.totalEnrolleeCount}명`} /></> : <><MetricCard label="수강 중인 커리큘럼" value={studentSummaryQuery.data?.inProgressCurriculumCount ?? '--'} /><MetricCard label="완료한 커리큘럼" value={studentSummaryQuery.data?.completedCurriculumCount ?? '--'} /><MetricCard label="평균 진행률" value={studentSummaryQuery.data ? `${studentSummaryQuery.data.averageProgress}%` : '--'} /><MetricCard label="완료한 강의" value={studentSummaryQuery.data ? `${studentSummaryQuery.data.completedLessonCount}개` : '--'} /></>}

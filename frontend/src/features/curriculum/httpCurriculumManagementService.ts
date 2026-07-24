@@ -1,4 +1,5 @@
 import { apiClient } from '@/shared/api/client'
+import { notImplemented } from '@/shared/api/notImplemented'
 import { uploadAsset } from '@/shared/api/uploadAsset'
 import type {
   CurriculumManagementSection,
@@ -51,6 +52,13 @@ export const httpCurriculumManagementService = {
     }))
   },
   async saveCurriculumManagement(request) {
+    // 자료 연결 API가 아직 없다(ADR-0023 MATERIAL은 CP3). 아래 네 번의 쓰기를 먼저 보내고
+    // 마지막에 404를 맞으면 화면엔 "저장 실패"가 뜨는데 서버 데이터는 절반만 바뀐다.
+    // 롤백할 방법이 없으므로 첫 쓰기 전에 막는다. 자료를 건드리지 않은 저장은 그대로 통과한다.
+    if (request.materials.length > 0) {
+      notImplemented(`PUT /instructor/curriculums/${request.curriculumId}/materials`)
+    }
+
     await apiClient.patch(`/instructor/curriculums/${request.curriculumId}`, request.info)
     await Promise.all(request.sections
       .filter((section) => !section.sectionId.startsWith('sec-new-'))
@@ -76,10 +84,6 @@ export const httpCurriculumManagementService = {
         title: section.title,
         description: section.description,
       })))
-
-    await apiClient.put(`/instructor/curriculums/${request.curriculumId}/materials`, {
-      materials: request.materials,
-    })
   },
   async publishCurriculum(curriculumId) {
     await apiClient.post(`/instructor/curriculums/${curriculumId}/publish`)

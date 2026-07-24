@@ -1,32 +1,31 @@
-import { normalizeCaption, type ApiCaptionView } from '@/features/live-session/captionAdapter'
-import type { ChatMessageView } from '@/features/live-session/liveSessionService.interface'
-import { apiClient } from '@/shared/api/client'
+import { notImplemented } from '@/shared/api/notImplemented'
 import type { ReplayService } from './replayService.interface'
 
+/**
+ * 다시보기 HTTP 어댑터.
+ *
+ * 이 화면이 쓰는 경로는 아직 서버에 하나도 없다 — 게시본 자막·채팅(CONTRACT §2 자막/용어),
+ * AI 질의(§2 AI), 퀴즈(§2 퀴즈), 강사 검수는 모두 CP3~CP5 범위다. 경로만 적어 두고 호출하면
+ * 404가 나는데 화면에서는 그게 서버 장애와 구분되지 않으므로 미구현임을 명시한다.
+ * 서버가 생기는 순서대로 한 줄씩 실제 호출로 바꾼다.
+ */
 export const httpReplayService = {
   async getReplayCaptions(lessonId) {
-    const { data } = await apiClient.get<ApiCaptionView[]>(`/lessons/${lessonId}/captions`)
-    return data.map(normalizeCaption)
+    return notImplemented(`GET /lessons/${lessonId}/captions`)
   },
   async getReplayMessages(lessonId) {
-    const { data } = await apiClient.get<ChatMessageView[]>(`/lessons/${lessonId}/messages`)
-    return data
+    return notImplemented(`GET /lessons/${lessonId}/messages`)
   },
-  async askReplayAi(lessonId, question, sessionMs) {
-    const { data } = await apiClient.post<{ answer: string }>(`/lessons/${lessonId}/ai/questions:stream`, {
-      question,
-      sessionMs,
-    })
-    return data
+  async askReplayAi(lessonId) {
+    return notImplemented(`POST /lessons/${lessonId}/ai/questions:stream`)
   },
-  async saveReplayReview(lessonId, transcript) {
-    await apiClient.put(`/instructor/lessons/${lessonId}/replay-review`, { transcript })
+  async saveReplayReview(lessonId) {
+    return notImplemented(`PUT /instructor/lessons/${lessonId}/replay-review`)
   },
-  async publishReplayReview(lessonId, transcript) {
-    await apiClient.post(`/instructor/lessons/${lessonId}/replay-review/publish`, { transcript })
+  async publishReplayReview(lessonId) {
+    return notImplemented(`POST /instructor/lessons/${lessonId}/replay-review/publish`)
   },
-  async submitReplayQuiz(lessonId, answer) {
-    const { data } = await apiClient.post<{ correct: boolean }>(`/lessons/${lessonId}/quizzes/answers`, { answer })
-    return data
+  async submitReplayQuiz(lessonId) {
+    return notImplemented(`POST /lessons/${lessonId}/quizzes/answers`)
   },
 } satisfies ReplayService

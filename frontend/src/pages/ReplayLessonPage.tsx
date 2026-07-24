@@ -76,9 +76,11 @@ export default function ReplayLessonPage() {
     setPanel('glossary')
   }
 
+  // 게시본 자막·채팅은 아직 서버 경로가 없다(CP3~CP5). 진입 게이트에 넣으면 레슨을
+  // 정상으로 불러왔는데도 화면이 통째로 막힌다 — 필수는 레슨 하나뿐이다.
   if (!lessonId) return <PageState title="잘못된 다시보기 경로입니다" />
-  if (lessonQuery.isPending || captionsQuery.isPending || messagesQuery.isPending) return <PageState title="다시보기를 불러오는 중입니다" />
-  if (lessonQuery.isError || captionsQuery.isError || messagesQuery.isError || !lesson) return <PageState title="다시보기를 불러오지 못했습니다" />
+  if (lessonQuery.isError) return <PageState title="다시보기를 불러오지 못했습니다" />
+  if (!lesson) return <PageState title="다시보기를 불러오는 중입니다" />
 
   const aiContent = (
     <>
