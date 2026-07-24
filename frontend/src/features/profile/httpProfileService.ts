@@ -1,7 +1,6 @@
 import type { AuthUser } from '@/features/auth/types'
 import { ApiError, apiClient } from '@/shared/api/client'
-import { notImplemented } from '@/shared/api/notImplemented'
-import type { ProfileService } from './profileService.interface'
+import type { InstructorPublicProfile, ProfileService } from './profileService.interface'
 import { getProfileImageValidationError } from './profileValidation'
 
 interface AssetUploadTicket {
@@ -42,18 +41,20 @@ export const httpProfileService = {
     const { data } = await apiClient.put<AuthUser>('/me/profile-image', { assetId: ticket.assetId })
     return data
   },
-  // 강사 공개 프로필·비밀번호 변경·탈퇴는 서버에 경로가 없다. 코드는 공용 미구현 표시로 통일한다 —
-  // 화면이 feature마다 다른 코드를 알 필요가 없다.
-  async getInstructorProfile() {
-    return notImplemented('GET /me/instructor-profile')
+  // 강사 공개 프로필·비밀번호 변경·탈퇴 (ADR-0031). 서버가 bio를 저장 전엔 null로 주는데
+  // 인터페이스·화면은 string을 기대하므로 여기서 빈 문자열로 흡수한다(경계에서 한 번).
+  async getInstructorProfile(): Promise<InstructorPublicProfile> {
+    const { data } = await apiClient.get<InstructorPublicProfile>('/me/instructor-profile')
+    return { ...data, bio: data.bio ?? '' }
   },
-  async updateInstructorProfile() {
-    return notImplemented('PUT /me/instructor-profile')
+  async updateInstructorProfile(profile) {
+    const { data } = await apiClient.put<InstructorPublicProfile>('/me/instructor-profile', profile)
+    return { ...data, bio: data.bio ?? '' }
   },
-  async changePassword() {
-    return notImplemented('PUT /me/password')
+  async changePassword(request) {
+    await apiClient.put('/me/password', request)
   },
   async withdrawAccount() {
-    return notImplemented('DELETE /me')
+    await apiClient.delete('/me')
   },
 } satisfies ProfileService
