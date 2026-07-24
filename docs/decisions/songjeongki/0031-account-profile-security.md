@@ -58,7 +58,7 @@ live.service  : class LiveWithdrawalGuard implements ...    (진행 상태는 li
 
 - `instructor-profile`은 비강사가 부르면 **403**(`AUTH_INSTRUCTOR_ONLY`). FE도 `role === INSTRUCTOR`일 때만 부른다.
 - `PUT`은 **upsert** — 가입 시 프로필 행을 만들지 않으므로 첫 저장이 곧 생성이다.
-- 카탈로그에 그대로 노출되므로 상한을 둔다: bio ≤ 1000자, expertise ≤ 10개·각 ≤ 30자. 없으면 태그 수·길이가 무제한이라 화면이 깨진다.
+- 카탈로그에 그대로 노출되므로 상한을 둔다: bio ≤ 1000자, expertise ≤ **8개**·각 ≤ 30자. 없으면 태그 수·길이가 무제한이라 화면이 깨진다. (8개는 기존 화면·mock이 이미 쓰던 상한에 맞췄다 — 셋이 어긋나면 mock 모드에서 조용히 잘리고 실 API에선 통과해 데모와 운영이 달라진다.)
 - 비밀번호: 현재 비번 불일치 → **401**(`AUTH_PASSWORD_MISMATCH`, 로그인 실패와 같은 계열). 새 비번 형식은 가입과 같은 규칙(`@Size(min=8)` + bcrypt 72바이트).
 
 ## 근거

@@ -18,8 +18,8 @@ public record UpdateInstructorProfileRequest(
         @Size(max = 1000)
         String bio,
 
-        @Schema(description = "전문분야 태그(최대 10개, 각 30자)")
-        @Size(max = 10, message = "전문분야 태그는 최대 10개까지 등록할 수 있습니다.")
+        @Schema(description = "전문분야 태그(최대 8개, 각 30자)")
+        @Size(max = 8, message = "전문분야 태그는 최대 8개까지 등록할 수 있습니다.")
         List<@Size(max = 30, message = "전문분야 태그는 각 30자 이하여야 합니다.") String> expertise
 ) {
 }
