@@ -59,3 +59,48 @@ describe('프로필 이미지 API 계약', () => {
     expect(postSpy).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * 강사 공개 프로필·비밀번호·탈퇴가 실제 서버 경로를 호출하는지 (ADR-0031).
+ *
+ * 이 4개는 한때 notImplemented(요청 없이 501)로 막혀 있었고, 서버가 생긴 뒤에도 그대로 남아
+ * 화면에 "불러오지 못했습니다"만 떴다. 그때 이 테스트가 있었다면 회귀가 CI에서 잡혔다.
+ * 그래서 "실제로 이 경로로 요청이 나가는가"를 못박는다.
+ */
+describe('계정 API 계약', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('강사 공개 프로필을 GET하고, 서버가 준 null bio를 빈 문자열로 흡수한다', async () => {
+    const getSpy = vi.spyOn(apiClient, 'get')
+      .mockResolvedValue({ data: { bio: null, expertise: ['Spring'] } } as never)
+
+    await expect(httpProfileService.getInstructorProfile())
+      .resolves.toEqual({ bio: '', expertise: ['Spring'] })
+    expect(getSpy).toHaveBeenCalledWith('/me/instructor-profile')
+  })
+
+  it('강사 공개 프로필을 PUT으로 저장한다', async () => {
+    const putSpy = vi.spyOn(apiClient, 'put')
+      .mockResolvedValue({ data: { bio: '소개', expertise: ['JPA'] } } as never)
+
+    await expect(httpProfileService.updateInstructorProfile({ bio: '소개', expertise: ['JPA'] }))
+      .resolves.toEqual({ bio: '소개', expertise: ['JPA'] })
+    expect(putSpy).toHaveBeenCalledWith('/me/instructor-profile', { bio: '소개', expertise: ['JPA'] })
+  })
+
+  it('비밀번호 변경은 PUT /me/password로 나간다', async () => {
+    const putSpy = vi.spyOn(apiClient, 'put').mockResolvedValue({ data: undefined } as never)
+
+    await httpProfileService.changePassword({ currentPassword: 'old12345', newPassword: 'new12345' })
+    expect(putSpy).toHaveBeenCalledWith('/me/password', { currentPassword: 'old12345', newPassword: 'new12345' })
+  })
+
+  it('회원 탈퇴는 DELETE /me로 나간다', async () => {
+    const deleteSpy = vi.spyOn(apiClient, 'delete').mockResolvedValue({ data: undefined } as never)
+
+    await httpProfileService.withdrawAccount()
+    expect(deleteSpy).toHaveBeenCalledWith('/me')
+  })
+})
