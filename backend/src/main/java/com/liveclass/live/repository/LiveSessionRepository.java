@@ -48,4 +48,7 @@ public interface LiveSessionRepository extends JpaRepository<LiveSession, UUID> 
                                                   @Param("inProgressStatuses") Collection<LiveSessionStatus> inProgressStatuses,
                                                   @Param("now") OffsetDateTime now);
     List<LiveSession> findByLessonIdIn(Collection<UUID> lessonIds);
+
+    /** 이 강사가 소유한 세션 중 주어진 상태의 것이 하나라도 있는가(탈퇴 가드용). */
+    boolean existsByInstructorIdAndStatusIn(UUID instructorId, Collection<LiveSessionStatus> statuses);
 }
