@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1618 300" width="1618" height="300" role="img">
+<title>6부 · 근거 기반 질의응답</title>
+<style>text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif}</style>
+<rect width="100%" height="100%" fill="#FFFFFF"/>
+<path d="M224.0,117.0 H365.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M374.0,117.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M564.0,117.0 H705.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M714.0,117.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M904.0,105.7 H954.0 V68.0 H1045.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M1054.0,68.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M904.0,128.3 H1004.0 V166.0 H1045.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M1054.0,166.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M1244.0,166.0 H1319.0 V117.0 H1385.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M1394.0,117.0 l-9,-5 l0,10 z" fill="#5A6C7B"/>
+<path d="M1584.0,136.0 H1620.0 V248.0 H129.0 V160.0" fill="none" stroke="#5A6C7B" stroke-width="1.6"/>
+<path d="M129.0,151.0 l-5,9 l10,0 z" fill="#5A6C7B"/>
+<rect x="272.1" y="94.4" width="53.8" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="299.0" y="105.0" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">① 질문</text>
+<rect x="585.9" y="94.4" width="106.2" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="639.0" y="105.0" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">② 허용된 범위만</text>
+<rect x="977.1" y="45.4" width="53.8" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="1004.0" y="56.0" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">③ 검색</text>
+<rect x="981.7" y="108.4" width="94.7" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="1029.0" y="119.0" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">④ 근거와 함께</text>
+<rect x="1329.6" y="94.4" width="53.8" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="1356.5" y="105.0" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">⑤ 생성</text>
+<rect x="821.4" y="216.4" width="106.2" height="17.8" fill="#FFFFFF" rx="2"/>
+<text x="874.5" y="227.0" text-anchor="middle" font-size="11.5" fill="#41525F" font-weight="500">출처와 함께 표시</text>
+<rect x="34.0" y="83.0" width="190.0" height="68.0" rx="3" fill="#FFFFFF" stroke="#5A6C7B" stroke-width="1.8"/>
+<text x="129.0" y="114.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">학생</text>
+<text x="129.0" y="133.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">수업 중 질문</text>
+<rect x="374.0" y="83.0" width="190.0" height="68.0" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
+<text x="469.0" y="114.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">요청 심사</text>
+<text x="469.0" y="133.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">수강 · 범위 · 비용</text>
+<rect x="714.0" y="83.0" width="190.0" height="68.0" rx="3" fill="#E4F2EB" stroke="#2C7A5B" stroke-width="1.8"/>
+<text x="809.0" y="114.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">근거 검색</text>
+<text x="809.0" y="133.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">자료와 자막에서</text>
+<rect x="1054.0" y="34.0" width="190.0" height="68.0" rx="3" fill="#F8EFDD" stroke="#A96F16" stroke-width="1.8"/>
+<text x="1149.0" y="73.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">지식 인덱스</text>
+<rect x="1054.0" y="132.0" width="190.0" height="68.0" rx="3" fill="#F1F4F6" stroke="#8C9AA6" stroke-width="1.8"/>
+<text x="1149.0" y="163.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#2E3A45">언어 모델</text>
+<text x="1149.0" y="182.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">답변 생성</text>
+<rect x="1394.0" y="83.0" width="190.0" height="68.0" rx="3" fill="#FFFFFF" stroke="#5A6C7B" stroke-width="1.8"/>
+<text x="1489.0" y="114.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">답변</text>
+<text x="1489.0" y="133.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">출처 표시 포함</text>
+</svg>

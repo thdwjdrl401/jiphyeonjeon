@@ -3,6 +3,7 @@ package com.liveclass.lesson.api;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -22,4 +23,10 @@ public interface LessonDirectory {
      * 곁들일 때 쓴다(예: 커리큘럼 목록의 다음 라이브 세션). 없는 ID는 맵에 담기지 않는다.
      */
     Map<UUID, String> findTitles(Collection<UUID> lessonIds);
+
+    /**
+     * 레슨 한 건을 상태와 무관하게 조회한다. 게시 여부·수강 관계 판정은 호출하는 쪽 몫이다 —
+     * 여기서 미게시를 걸러 버리면 소유 강사에게 자기 초안을 보여줄 수 없다.
+     */
+    Optional<LessonDetailView> findDetail(UUID lessonId);
 }

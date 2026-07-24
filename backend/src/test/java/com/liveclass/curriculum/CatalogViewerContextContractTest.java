@@ -69,6 +69,25 @@ class CatalogViewerContextContractTest {
                 .andExpect(jsonPath("$.outline[0].lessons[0].replayStatus").value("NOT_READY"));
     }
 
+    /**
+     * 목차 레슨의 상태 필드명은 {@code status}다 — 관리 응답(LessonView)과 같은 이름.
+     *
+     * <p>계약으로 한 번 정한 뒤 다른 작업에서 {@code lessonStatus}로 되돌아간 적이 있다. FE 타입·어댑터·
+     * 화면이 모두 {@code status}만 읽으므로 이름이 어긋나면 값이 undefined가 되어 상태 배지와 진입
+     * 버튼이 조용히 죽는다. 컴파일로도 기존 테스트로도 안 잡히는 종류라 이름 자체를 여기서 못박는다.
+     */
+    @Test
+    void outline_lesson_status_uses_contract_field_name() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String cid = createPublishedCurriculum(instructor);
+        publishLesson(instructor, cid, "1강");
+
+        mockMvc.perform(get("/api/curriculums/" + cid))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.outline[0].lessons[0].status").value("PUBLISHED"))
+                .andExpect(jsonPath("$.outline[0].lessons[0].lessonStatus").doesNotExist());
+    }
+
     @Test
     void other_instructor_gets_no_actions() throws Exception {
         Cookie[] owner = loginAs("INSTRUCTOR");

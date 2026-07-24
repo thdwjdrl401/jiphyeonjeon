@@ -15,6 +15,8 @@
 - 영상 자체는 AI 콘텐츠 게시 여부와 무관하게 먼저 공개될 수 있다(자막/용어/챕터/퀴즈는 각각 독립적으로 준비·게시).
 
 ## 화면 구성
+
+> 현재 UI 목업의 학습 사이드바와 자막 배치는 [ADR-0019](../../decisions/yoongwanghyeok/0019-unified-learning-sidebar-and-caption-dock-preview.md)에 따라 라이브와 같은 `채팅·질문 / 실시간 노트 / AI 질문 / 핵심 용어` 공통 4탭과 하단 자막 도크를 사용한다. 검수·통계·퀴즈 최종 위치는 후속 범위다.
 ```text
 VodLessonHeader
 ├─ LessonIdentity

@@ -23,9 +23,19 @@ export interface ChatMessageView {
   question?: boolean
 }
 
+export interface CaptionTermReference {
+  termId: string
+  startIndex: number
+  endIndex: number
+}
+
 export interface CaptionView {
+  segmentId: string
+  startMs: number
+  endMs: number
   at: string
   text: string
+  termReferences: CaptionTermReference[]
 }
 
 export interface PreflightCheck {
