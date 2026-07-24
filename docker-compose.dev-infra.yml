@@ -69,6 +69,34 @@ services:
     # 6h마다 reload → 갱신 인증서 반영 (livekit nginx와 동일)
     command: /bin/sh -c "while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g 'daemon off;'"
 
+  minio:                                   # 에셋 스토리지 (dev). 브라우저 presigned 대비 SG 개방 포트로 노출.
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: liveclass-minio-dev
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER 필요}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD 필요}
+    ports:
+      - "9090:9000"      # S3 API (SG 개방 포트). 콘솔(9001)은 내부 전용.
+    volumes:
+      - miniodata:/data
+
+  minio-init:                              # liveclass-assets 버킷 생성
+    image: minio/mc
+    depends_on: [minio]
+    restart: "no"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER 필요}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD 필요}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        until mc alias set lc http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"; do echo 'waiting for minio'; sleep 1; done
+        mc mb -p lc/liveclass-assets
+        exit 0
+
 volumes:
   pgdata:
   redisdata:
@@ -76,3 +104,4 @@ volumes:
   certbot-etc:                # 앱 스택 certbot 발급 공유 인증서
     external: true
     name: liveclass_certbot_etc
+  miniodata:

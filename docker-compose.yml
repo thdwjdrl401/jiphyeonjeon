@@ -35,6 +35,35 @@ services:
       timeout: 5s
       retries: 5
 
+  minio:                                   # 에셋(썸네일·프로필) presigned 업로드용 S3 호환 스토리지 (ADR-0023)
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z   # LiveKit 스택과 동일 태그 고정
+    container_name: liveclass-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}       # application.yml asset.storage 기본값과 일치
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "9000:9000"      # S3 API (앱·브라우저 presigned)
+      - "9001:9001"      # 콘솔 UI
+    volumes:
+      - miniodata:/data
+
+  minio-init:                              # liveclass-assets 버킷 최초 생성 (멱등)
+    image: minio/mc
+    depends_on: [minio]
+    restart: "no"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        until mc alias set lc http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"; do echo 'waiting for minio'; sleep 1; done
+        mc mb -p lc/liveclass-assets
+        exit 0
+
 volumes:
   pgdata:
   redisdata:
+  miniodata:
