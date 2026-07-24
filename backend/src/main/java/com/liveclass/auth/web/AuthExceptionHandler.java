@@ -1,7 +1,10 @@
 package com.liveclass.auth.web;
 
+import com.liveclass.auth.api.WithdrawalBlockedException;
 import com.liveclass.auth.service.EmailDuplicatedException;
+import com.liveclass.auth.service.InstructorOnlyException;
 import com.liveclass.auth.service.InvalidCredentialsException;
+import com.liveclass.auth.service.PasswordMismatchException;
 import com.liveclass.auth.service.ProfileImageInvalidException;
 import com.liveclass.common.web.ErrorResponse;
 import org.slf4j.Logger;
@@ -35,6 +38,24 @@ public class AuthExceptionHandler {
     @ExceptionHandler(InvalidCredentialsException.class)
     public ResponseEntity<ErrorResponse> handleInvalidCredentials(InvalidCredentialsException e) {
         return respond(HttpStatus.UNAUTHORIZED, ErrorResponse.of("AUTH_INVALID_CREDENTIALS", e.getMessage()));
+    }
+
+    /** 비밀번호 변경 시 현재 비밀번호 불일치 → 401(로그인 실패와 같은 계열). */
+    @ExceptionHandler(PasswordMismatchException.class)
+    public ResponseEntity<ErrorResponse> handlePasswordMismatch(PasswordMismatchException e) {
+        return respond(HttpStatus.UNAUTHORIZED, ErrorResponse.of("AUTH_PASSWORD_MISMATCH", e.getMessage()));
+    }
+
+    /** 강사 전용 리소스에 비강사 접근 → 403. */
+    @ExceptionHandler(InstructorOnlyException.class)
+    public ResponseEntity<ErrorResponse> handleInstructorOnly(InstructorOnlyException e) {
+        return respond(HttpStatus.FORBIDDEN, ErrorResponse.of("AUTH_INSTRUCTOR_ONLY", e.getMessage()));
+    }
+
+    /** 진행 중인 라이브 등으로 지금은 탈퇴할 수 없음 → 409. */
+    @ExceptionHandler(WithdrawalBlockedException.class)
+    public ResponseEntity<ErrorResponse> handleWithdrawalBlocked(WithdrawalBlockedException e) {
+        return respond(HttpStatus.CONFLICT, ErrorResponse.of("AUTH_WITHDRAWAL_BLOCKED", e.getMessage()));
     }
 
     /**
