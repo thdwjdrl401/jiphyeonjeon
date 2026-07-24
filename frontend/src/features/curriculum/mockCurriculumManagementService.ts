@@ -1,6 +1,8 @@
 import { peekMockUser } from '@/features/auth/mockAuthService'
 import {
   buildMockCurriculumOutline,
+  deleteMockLesson,
+  deleteMockSection,
   getMockCurriculum,
   putMockCurriculum,
   updateMockCurriculumMaterials,
@@ -96,5 +98,20 @@ export const mockCurriculumManagementService = {
     if (!curriculum) throw new ApiError('커리큘럼을 찾을 수 없습니다.', 404, 'CURRICULUM_NOT_FOUND')
     curriculum.lifecycleStatus = 'PUBLISHED'
     curriculum.catalogVisible = true
+  },
+  async deleteLesson(lessonId) {
+    deleteMockLesson(lessonId)
+    for (const [key, structure] of savedStructures) {
+      savedStructures.set(key, structure.map((section) => ({
+        ...section,
+        lessons: section.lessons.filter((lesson) => lesson.lessonId !== lessonId),
+      })))
+    }
+  },
+  async deleteSection(sectionId) {
+    deleteMockSection(sectionId)
+    for (const [key, structure] of savedStructures) {
+      savedStructures.set(key, structure.filter((section) => section.sectionId !== sectionId))
+    }
   },
 } satisfies CurriculumManagementService

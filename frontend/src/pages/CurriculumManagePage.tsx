@@ -5,6 +5,8 @@ import { instructorPaths, publicPaths } from '@/app/router/paths'
 import CurriculumImageField, { type CurriculumImageSelection } from '@/features/curriculum/CurriculumImageField'
 import CurriculumMaterialField from '@/features/curriculum/CurriculumMaterialField'
 import {
+  deleteLesson,
+  deleteSection,
   getCurriculumManagementStructure,
   getInstructorCurriculum,
   publishCurriculum,
@@ -96,6 +98,7 @@ function CurriculumManageEditor({
   const [materials, setMaterials] = useState<CurriculumMaterial[]>(routeState?.draft?.materials ?? storedCurriculum.materials)
   const [saved, setSaved] = useState(Boolean(routeState?.created))
   const [saveError, setSaveError] = useState('')
+  const [structureError, setStructureError] = useState('')
   const [draggedLesson, setDraggedLesson] = useState<DraggedLesson | null>(null)
   const [lessonDropTarget, setLessonDropTarget] = useState<LessonDropTarget | null>(null)
 
@@ -171,6 +174,35 @@ function CurriculumManageEditor({
       },
     ])
     markChanged()
+  }
+
+  const removeLesson = async (sectionId: string, lessonId: string) => {
+    if (!window.confirm('이 강의를 삭제할까요? 되돌릴 수 없습니다.')) return
+    setStructureError('')
+    try {
+      await deleteLesson(lessonId)
+      setSections((current) => current.map((section) => section.sectionId === sectionId
+        ? { ...section, lessons: section.lessons.filter((lesson) => lesson.lessonId !== lessonId) }
+        : section))
+    } catch {
+      setStructureError('강의를 삭제하지 못했습니다.')
+    }
+  }
+
+  const removeSection = async (sectionId: string) => {
+    if (!window.confirm('이 섹션과 포함된 강의를 모두 삭제할까요? 되돌릴 수 없습니다.')) return
+    setStructureError('')
+    // 아직 저장하지 않은 새 섹션은 서버에 없으므로 로컬에서만 제거한다.
+    if (sectionId.startsWith('sec-new-')) {
+      setSections((current) => current.filter((section) => section.sectionId !== sectionId))
+      return
+    }
+    try {
+      await deleteSection(sectionId)
+      setSections((current) => current.filter((section) => section.sectionId !== sectionId))
+    } catch {
+      setStructureError('섹션을 삭제하지 못했습니다.')
+    }
   }
 
   const moveLesson = (
@@ -263,6 +295,7 @@ function CurriculumManageEditor({
       />
       {saved && <InlineNotice tone="success">변경 내용이 현재 작업 초안에 반영되었습니다.</InlineNotice>}
       {saveError && <InlineNotice tone="danger">{saveError}</InlineNotice>}
+      {structureError && <InlineNotice tone="danger">{structureError}</InlineNotice>}
       <div className="metric-grid"><MetricCard label="상태" value={storedCurriculum.lifecycleStatus} helper={isNewDraft ? '게시 전' : '운영 중'} /><MetricCard label="섹션" value={sections.length} /><MetricCard label="전체 강의" value={sections.reduce((sum, section) => sum + section.lessons.length, 0)} /><MetricCard label="수강생" value={storedCurriculum.enrolleeCount ?? '--'} /></div>
       <div className="workspace-tabs" role="tablist"><button className={tab === 'structure' ? 'is-active' : ''} onClick={() => setTab('structure')} type="button">구성</button><button className={tab === 'info' ? 'is-active' : ''} onClick={() => setTab('info')} type="button">기본 정보</button><button className={tab === 'enrollees' ? 'is-active' : ''} onClick={() => setTab('enrollees')} type="button">수강생</button></div>
 
@@ -278,7 +311,7 @@ function CurriculumManageEditor({
                     <label><small>섹션 이름</small><input aria-label={`섹션 ${sectionIndex + 1} 이름`} maxLength={200} value={section.title} onChange={(event) => updateSection(section.sectionId, 'title', event.target.value)} /></label>
                     <label><small>섹션 설명</small><textarea aria-label={`섹션 ${sectionIndex + 1} 설명`} rows={2} value={section.description} onChange={(event) => updateSection(section.sectionId, 'description', event.target.value)} /></label>
                   </div>
-                  <div className="structure-actions"><button aria-label="섹션 위로" disabled={sectionIndex === 0} onClick={() => moveSection(sectionIndex, -1)} type="button">↑</button><button aria-label="섹션 아래로" disabled={sectionIndex === sections.length - 1} onClick={() => moveSection(sectionIndex, 1)} type="button">↓</button><Link className="button button--soft button--small" to={instructorPaths.newLesson(curriculumId, section.sectionId)}>강의 추가</Link></div>
+                  <div className="structure-actions"><button aria-label="섹션 위로" disabled={sectionIndex === 0} onClick={() => moveSection(sectionIndex, -1)} type="button">↑</button><button aria-label="섹션 아래로" disabled={sectionIndex === sections.length - 1} onClick={() => moveSection(sectionIndex, 1)} type="button">↓</button><Link className="button button--soft button--small" to={instructorPaths.newLesson(curriculumId, section.sectionId)}>강의 추가</Link><button className="button button--soft button--small" type="button" onClick={() => void removeSection(section.sectionId)}>섹션 삭제</button></div>
                 </header>
                 <ul
                   className={lessonDropTarget?.sectionId === section.sectionId && lessonDropTarget.lessonIndex === section.lessons.length ? 'is-drop-at-end' : undefined}
@@ -305,7 +338,7 @@ function CurriculumManageEditor({
                         <span className="lesson-order">{lessonIndex + 1}</span>
                         <div className="lesson-info"><strong>{lesson.title}</strong><small>{lesson.status}</small></div>
                         <StatusBadge tone={lesson.status === 'PUBLISHED' ? 'success' : lesson.status === 'READY' ? 'warning' : 'neutral'}>{lesson.status}</StatusBadge>
-                        <div className="row-actions"><Link to={instructorPaths.lesson(curriculumId, section.sectionId, lesson.lessonId)}>상세</Link></div>
+                        <div className="row-actions"><Link to={instructorPaths.lesson(curriculumId, section.sectionId, lesson.lessonId)}>상세</Link><button className="text-button" type="button" onClick={() => void removeLesson(section.sectionId, lesson.lessonId)}>삭제</button></div>
                       </li>
                     )
                   })}
