@@ -97,4 +97,48 @@ public class RecordingService {
             }
         }
     }
+
+    /**
+     * Egress 완료/실패 webhook을 반영해 자산을 확정한다(ADR-0034). 재생과는 무관한 뒷정리 —
+     * 목록·썸네일 표시(duration/size)와 실패 감지를 위한 것이다.
+     *
+     * <p>멱등: 같은 완료 신호가 여러 번 와도 안전하다. 이미 READY/FAILED면 무시한다. 모르는 egressId도
+     * 조용히 무시한다(우리 자산이 아님 — 잘못된 실패 표시를 만들지 않는다).
+     *
+     * @param success        EGRESS_COMPLETE면 true, 실패/중단이면 false
+     * @param durationMs     녹화 길이(ms). 없으면 유지
+     * @param sizeBytes      총 크기(bytes). 없으면 유지
+     * @param segmentCount   세그먼트 수. 없으면 유지
+     * @param failureCode    실패 코드(실패일 때)
+     */
+    @Transactional
+    public void completeFromWebhook(String egressId, boolean success,
+                                    Long durationMs, Long sizeBytes, Integer segmentCount, String failureCode) {
+        VideoAsset asset = videoAssetRepository.findByEgressId(egressId).orElse(null);
+        if (asset == null) {
+            log.debug("모르는 egress webhook 무시 egressId={}", egressId);
+            return;
+        }
+        if (asset.getStatus() == VideoAssetStatus.READY || asset.getStatus() == VideoAssetStatus.FAILED) {
+            return;   // 이미 확정 — 멱등
+        }
+        if (success) {
+            asset.setStatus(VideoAssetStatus.READY);
+            asset.setReadyAt(OffsetDateTime.now());
+            if (durationMs != null) {
+                asset.setDurationMs(durationMs);
+            }
+            if (sizeBytes != null) {
+                asset.setSizeBytes(sizeBytes);
+            }
+            if (segmentCount != null) {
+                asset.setSegmentCount(segmentCount);
+            }
+            log.info("녹화 완료 확정 egressId={} durationMs={} size={}", egressId, durationMs, sizeBytes);
+        } else {
+            asset.setStatus(VideoAssetStatus.FAILED);
+            asset.setFailureCode(failureCode != null ? failureCode : "EGRESS_FAILED");
+            log.warn("녹화 실패 감지 egressId={} code={}", egressId, asset.getFailureCode());
+        }
+    }
 }
