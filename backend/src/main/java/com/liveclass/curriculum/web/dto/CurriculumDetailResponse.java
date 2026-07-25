@@ -9,7 +9,7 @@ import java.util.List;
  * 공개 커리큘럼 상세 (CURRICULUM-DETAIL-01). 기본 정보 + 강사 요약 + 섹션→레슨 목차에
  * 요청자 기준 컨텍스트(viewerContext)와 수강 정책까지.
  *
- * <p>materials(커리큘럼 자료)는 목차 레슨들에 연결된 활성 자료를 모은 것이다(ADR-0034).
+ * <p>materials(커리큘럼 자료)는 목차 레슨들에 연결된 활성 자료를 모은 것이다(ADR-0035).
  */
 @Schema(description = "공개 커리큘럼 상세")
 public record CurriculumDetailResponse(

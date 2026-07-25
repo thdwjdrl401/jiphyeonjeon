@@ -33,7 +33,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 자료→레슨 연결 계약 검증 (ADR-0034). 스토리지는 모킹해 실제 MinIO 없이 PPTX 업로드 완료를 흉내낸다.
+ * 자료→레슨 연결 계약 검증 (ADR-0035). 스토리지는 모킹해 실제 MinIO 없이 PPTX 업로드 완료를 흉내낸다.
  * 소유권(비소유 강사 403)·에셋 유효성(kind·완료 상태)·중복(409)·응답 필드명·레슨 상세 materials 채움을 본다.
  */
 @SpringBootTest
@@ -185,7 +185,7 @@ class LessonMaterialContractTest {
                 """.formatted(assetId))
                 .andExpect(status().isCreated());
 
-        // 게스트(비로그인) — 자료가 있어도 목록은 비어야 한다(ADR-0034 가시성 게이트).
+        // 게스트(비로그인) — 자료가 있어도 목록은 비어야 한다(ADR-0035 가시성 게이트).
         mockMvc.perform(get("/api/curriculums/" + curriculumId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.materials.length()").value(0));

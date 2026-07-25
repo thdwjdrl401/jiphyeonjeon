@@ -138,7 +138,7 @@ public class CatalogService {
                 ? null
                 : assetDirectory.resolveUrl(curriculum.getThumbnailAssetId()).orElse(null);
 
-        // 목차 레슨들의 활성 자료를 모아 커리큘럼 단위 materials로 평탄화한다(N+1 회피, ADR-0034).
+        // 목차 레슨들의 활성 자료를 모아 커리큘럼 단위 materials로 평탄화한다(N+1 회피, ADR-0035).
         // 게스트·미수강자에게는 노출하지 않는다 — progress와 같은 게이트(ENROLLED만)에 OWNER_INSTRUCTOR를
         // 더한 것(강사 자신은 항상 자기 자료를 볼 수 있어야 함). outline은 이미 PUBLISHED 레슨만 담고 있어
         // (buildOutline) 자료도 자연히 공개된 레슨 것만이다.

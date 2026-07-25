@@ -88,7 +88,7 @@ public class InstructorLessonController {
 
     @Operation(summary = "레슨 자료 연결",
             description = "미리 업로드한 자료 에셋(kind=MATERIAL)을 레슨에 연결한다. 본문의 assetId는 "
-                    + "본인이 올린 업로드 완료 에셋이어야 한다(ADR-0034). 파일 바이트는 presigned로 이미 올라가 있다.")
+                    + "본인이 올린 업로드 완료 에셋이어야 한다(ADR-0035). 파일 바이트는 presigned로 이미 올라가 있다.")
     @PostMapping("/api/instructor/lessons/{lessonId}/materials")
     @ResponseStatus(HttpStatus.CREATED)
     public LessonMaterialResponse attachMaterial(@PathVariable UUID lessonId,

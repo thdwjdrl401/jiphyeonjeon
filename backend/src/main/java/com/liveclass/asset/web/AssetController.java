@@ -50,7 +50,7 @@ public class AssetController {
         return assetService.find(assetId).orElseThrow();
     }
 
-    /** kind 게이트: THUMBNAIL·MATERIAL은 강사만, PROFILE_IMAGE는 인증만으로 통과(ADR-0034). */
+    /** kind 게이트: THUMBNAIL·MATERIAL은 강사만, PROFILE_IMAGE는 인증만으로 통과(ADR-0035). */
     private void requireKindAllowed(AssetKind kind, Authentication authentication) {
         if (kind == AssetKind.THUMBNAIL && !hasRole(authentication, "ROLE_INSTRUCTOR")) {
             throw new AssetForbiddenException("썸네일 업로드는 강사만 가능합니다.");

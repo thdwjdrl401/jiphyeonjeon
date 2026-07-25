@@ -38,11 +38,11 @@ public class AssetService implements AssetDirectory {
     /** 이미지 업로드 최대 크기 5 MiB(THUMBNAIL·PROFILE_IMAGE). */
     private static final long MAX_IMAGE_SIZE_BYTES = 5L * 1024 * 1024;
 
-    /** 자료(MATERIAL) 허용 content-type — PPTX만(ADR-0034). */
+    /** 자료(MATERIAL) 허용 content-type — PPTX만(ADR-0035). */
     private static final String MATERIAL_CONTENT_TYPE =
             "application/vnd.openxmlformats-officedocument.presentationml.presentation";
 
-    /** 자료 업로드 최대 크기 50 MiB(ADR-0034). */
+    /** 자료 업로드 최대 크기 50 MiB(ADR-0035). */
     private static final long MAX_MATERIAL_SIZE_BYTES = 50L * 1024 * 1024;
 
     private final AssetRepository assetRepository;
@@ -200,7 +200,7 @@ public class AssetService implements AssetDirectory {
 
     /**
      * kind별 형식·크기 검증. 이미지(THUMBNAIL·PROFILE_IMAGE)는 이미지 MIME·5MiB, 자료(MATERIAL)는
-     * PPTX·50MiB로 분기한다(ADR-0034). 크기 상한이 kind마다 다르므로 여기서 kind를 봐야 한다.
+     * PPTX·50MiB로 분기한다(ADR-0035). 크기 상한이 kind마다 다르므로 여기서 kind를 봐야 한다.
      */
     private void validateUploadRequest(AssetKind kind, String contentType, long fileSize) {
         long maxSize;

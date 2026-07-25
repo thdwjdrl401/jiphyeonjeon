@@ -7,7 +7,7 @@ import java.util.List;
 
 /**
  * 레슨 상세 응답. 상태 필드명은 목차·관리 응답과 같은 {@code status}다(계약 §1).
- * materials는 이 레슨에 연결된 활성 자료(PPTX)다(ADR-0034).
+ * materials는 이 레슨에 연결된 활성 자료(PPTX)다(ADR-0035).
  */
 @Schema(description = "레슨 상세")
 public record LessonDetailResponse(

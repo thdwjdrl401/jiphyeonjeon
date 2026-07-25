@@ -20,7 +20,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 /**
- * LessonMaterialService의 동시 중복 attach 방어(ADR-0034)를 단위 테스트한다.
+ * LessonMaterialService의 동시 중복 attach 방어(ADR-0035)를 단위 테스트한다.
  *
  * <p>사전 조회(exists)만으로는 두 요청이 동시에 통과한 뒤 둘 다 저장을 시도하는 레이스를 못 잡는다 —
  * 그 경우를 HTTP 계약 테스트로 결정론적으로 재현하기는 어려워(진짜 스레드 경합·타이밍 의존) 리포지토리를
