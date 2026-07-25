@@ -289,12 +289,12 @@ Idempotency-Key: 01K...
 classroom 진입 시 다음 순서로 호출한다.
 
 1. `LIVE-SESSION-03`으로 권한·`LIVE` 상태 확인
-2. `LIVE-SESSION-07`로 LiveKit token 발급
-3. `LIVE-PLAYBACK-01`로 되감기 가능 범위 조회
+2. **강사만** `LIVE-SESSION-07`로 LiveKit 발행 token 발급 — 학생은 LiveKit에 붙지 않는다(HLS 단일, [ADR-0032](../../decisions/songjeongki/0032-media-playback-hls-only.md))
+3. `LIVE-PLAYBACK-01`로 HLS 재생 정보 조회 — **학생의 라이브 시청 원천**(라이브 엣지)이자 되감기 범위
 4. `CHAT-01`, `CAPTION-01`, `BOOKMARK-01`로 저장 데이터 복원
 5. WebSocket 연결 후 실시간 이벤트 구독
 
-세션 상세가 `LIVE`가 아니면 LiveKit token을 선발급하지 않는다.
+세션 상세가 `LIVE`가 아니면 강사 LiveKit token을 선발급하지 않는다.
 
 ## 7. 라이브 되감기 HLS
 
@@ -326,13 +326,13 @@ GET /api/live-sessions/{sessionId}/playback
 }
 ```
 
-- WebRTC 현재 시점은 LiveKit, 과거 시점은 HLS를 사용
-- `recent` 범위를 벗어나면 같은 `sessionMs`를 유지해 `dvr`로 전환
+- 재생은 **HLS 단일**이다([ADR-0032](../../decisions/songjeongki/0032-media-playback-hls-only.md)) — 라이브 시점도 HLS를 **라이브 엣지**에서 재생(`live.m3u8`, `#EXT-X-ENDLIST` 없음)하고, 과거 시점은 **같은 HLS를 seek**한다. WebRTC 직접 구독·렌더 경로는 없다.
+- `recent` 범위를 벗어나면 같은 `sessionMs`를 유지해 `dvr`로 전환(둘 다 HLS)
 - URL 만료 시 endpoint를 재호출
-- Egress 실패 시 `sources` 일부 또는 전체가 `null`이고 공개 가능한 상태 코드를 제공
-- HLS 실패가 WebRTC 라이브를 종료시키지 않음
+- Egress 실패 시 `sources` 일부 또는 전체가 `null`이고 공개 가능한 상태 코드를 제공. **Egress가 라이브 HLS의 유일 원천이므로 실패하면 라이브 시청 자체가 끊긴다**(WebRTC 복귀 경로 없음) — 채팅·자막은 유지.
+- HLS 실패는 재시도·상태 코드로 처리한다(WebRTC fallback 없음)
 
-최근 유지 범위, DVR 누적 playlist 제공 방식, Egress 지연 보정은 구현 전 인프라 검증이 필요하다.
+최근 유지 범위, DVR 누적 playlist 제공 방식, Egress 지연 보정(LL-HLS 2~6초 목표)은 구현 전 인프라 검증이 필요하다([ADR-0032](../../decisions/songjeongki/0032-media-playback-hls-only.md) 후속 실측).
 
 ## 8. WebSocket 계약
 
@@ -610,9 +610,9 @@ GET /api/instructor/live-sessions/{sessionId}/processing
 |---|---|
 | AI Q&A 실패 | 미디어·채팅 유지, SSE 오류만 표시 |
 | STT 실패 | 미디어·채팅 유지, degraded 이벤트와 자막 중단 표시 |
-| Egress 실패 | WebRTC 유지, 되감기·VOD 위험 표시 |
-| 최근 HLS 실패 | DVR HLS fallback |
-| 전체 HLS 실패 | WebRTC LIVE 복귀 |
+| Egress 실패 | 라이브 HLS 원천 상실 → 라이브 시청 중단·상태 표시, 채팅·자막 유지, 되감기·VOD 위험 표시 |
+| 최근 HLS 실패 | DVR HLS fallback(같은 HLS 단일) |
+| 전체 HLS 실패 | 라이브 시청 불가 표시(WebRTC 복귀 경로 없음, ADR-0032), 종료 후 VOD 안내 |
 | 채팅 WS 실패 | REST 누락 복구·전송 fallback |
 | LiveKit 실패 | token 재발급·재연결, 다른 영역 상태는 별도 유지 |
 
