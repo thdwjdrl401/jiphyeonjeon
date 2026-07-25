@@ -55,7 +55,6 @@ describe('미구현 API 표시', () => {
   const unimplemented: Array<[string, () => Promise<unknown>]> = [
     ['라이브 자막', () => live.getCaptions('ses-1')],
     ['라이브 AI 질문', () => live.askLiveAi('les-1', '질문')],
-    ['라이브 북마크', () => live.saveBookmark('les-1', 1000)],
     ['입장 전 점검', () => live.getPreflightChecks('ses-1')],
     ['녹화 처리 현황', () => live.getProcessingStatus('ses-1')],
     ['질문 하이라이트', () => live.getQuestionHighlights('ses-1')],
