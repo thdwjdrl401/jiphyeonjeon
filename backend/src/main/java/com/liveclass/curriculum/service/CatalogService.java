@@ -12,6 +12,8 @@ import com.liveclass.curriculum.repository.SectionRepository;
 import com.liveclass.enrollment.api.EnrollmentDirectory;
 import com.liveclass.enrollment.api.EnrollmentStatus;
 import com.liveclass.enrollment.api.EnrollmentView;
+import com.liveclass.learning.api.LearningDirectory;
+import com.liveclass.learning.api.LearningProgressView;
 import com.liveclass.lesson.api.LessonDetailView;
 import com.liveclass.lesson.api.LessonDirectory;
 import com.liveclass.lesson.api.LessonOutlineView;
@@ -26,6 +28,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -57,6 +62,7 @@ public class CatalogService {
     private final EnrollmentDirectory enrollmentDirectory;
     private final LiveSessionDirectory liveSessionDirectory;
     private final ReplayDirectory replayDirectory;
+    private final LearningDirectory learningDirectory;
 
     public CatalogService(CurriculumRepository curriculumRepository,
                           SectionRepository sectionRepository,
@@ -65,7 +71,8 @@ public class CatalogService {
                           AssetDirectory assetDirectory,
                           EnrollmentDirectory enrollmentDirectory,
                           LiveSessionDirectory liveSessionDirectory,
-                          ReplayDirectory replayDirectory) {
+                          ReplayDirectory replayDirectory,
+                          LearningDirectory learningDirectory) {
         this.curriculumRepository = curriculumRepository;
         this.sectionRepository = sectionRepository;
         this.lessonDirectory = lessonDirectory;
@@ -74,6 +81,7 @@ public class CatalogService {
         this.enrollmentDirectory = enrollmentDirectory;
         this.liveSessionDirectory = liveSessionDirectory;
         this.replayDirectory = replayDirectory;
+        this.learningDirectory = learningDirectory;
     }
 
     @Transactional(readOnly = true)
@@ -112,6 +120,12 @@ public class CatalogService {
 
         List<Section> sections = sectionRepository.findByCurriculumIdOrderByOrderIndexAsc(curriculumId);
         List<CatalogOutlineSection> outline = buildOutline(sections, viewerContext.relationship());
+        // 수강자면 목차 레슨들의 내 진도를 집계해 progress를 채운다(비수강자는 null 그대로).
+        if ("ENROLLED".equals(viewerContext.relationship())) {
+            List<UUID> lessonIds = outline.stream().flatMap(s -> s.lessons().stream())
+                    .map(CatalogOutlineLesson::lessonId).toList();
+            viewerContext = viewerContext.withProgress(computeProgress(viewer.userId(), lessonIds));
+        }
         CatalogInstructor instructor = loadInstructors(List.of(curriculum.getInstructorId()))
                 .get(curriculum.getInstructorId());
 
@@ -207,6 +221,8 @@ public class CatalogService {
                 .map(Curriculum::getInstructorId).distinct().toList());
         Map<UUID, String> thumbnails = assetDirectory.resolveUrls(curriculums.values().stream()
                 .map(Curriculum::getThumbnailAssetId).filter(Objects::nonNull).toList());
+        // 내 수강 목록의 진도를 한 번에 집계한다(커리큘럼마다 조회하지 않도록).
+        Map<UUID, CatalogProgress> progressByCurriculum = computeEnrolledProgress(viewer.userId(), curriculums.keySet());
 
         return enrollments.stream()
                 .map(enrollment -> {
@@ -214,8 +230,11 @@ public class CatalogService {
                     if (curriculum == null) {
                         return null;
                     }
-                    CatalogCard card = toCard(curriculum, instructors.get(curriculum.getInstructorId()), thumbnails,
-                            viewerContext(curriculum, viewer, enrollment));
+                    CatalogViewerContext vc = viewerContext(curriculum, viewer, enrollment);
+                    if ("ENROLLED".equals(vc.relationship())) {
+                        vc = vc.withProgress(progressByCurriculum.get(curriculum.getId()));
+                    }
+                    CatalogCard card = toCard(curriculum, instructors.get(curriculum.getInstructorId()), thumbnails, vc);
                     return new MyEnrollmentEntry(enrollment, card);
                 })
                 .filter(Objects::nonNull)
@@ -343,6 +362,69 @@ public class CatalogService {
         // 여기서 무조건 주면 초대 전용·모집 마감 커리큘럼에서 버튼이 켜진 채 409로 떨어진다.
         return CatalogViewerContext.of("UNENROLLED_STUDENT",
                 enrollmentPolicy(curriculum).isOpen() ? List.of("ENROLL") : List.of());
+    }
+
+    /**
+     * 한 커리큘럼의 내 진도(단건 조회). 완료 레슨 수 기준 — completedLessonCount / totalLessonCount.
+     * lastLearning은 가장 최근에 갱신한 진도의 레슨·위치.
+     */
+    private CatalogProgress computeProgress(UUID userId, List<UUID> lessonIds) {
+        if (lessonIds.isEmpty()) {
+            return new CatalogProgress(0, 0, 0, null);
+        }
+        Map<UUID, LearningProgressView> byLesson = learningDirectory.findProgress(userId, lessonIds).stream()
+                .collect(Collectors.toMap(LearningProgressView::lessonId, p -> p));
+        return progressFrom(lessonIds, byLesson);
+    }
+
+    /**
+     * 내 수강 목록 전체의 진도를 커리큘럼별로 <b>한 번에</b> 집계한다(N+1 방지):
+     * 섹션·게시레슨·진도를 각각 IN 쿼리 한 번씩만 친다.
+     */
+    private Map<UUID, CatalogProgress> computeEnrolledProgress(UUID userId, java.util.Collection<UUID> curriculumIds) {
+        List<Section> sections = sectionRepository.findByCurriculumIdIn(curriculumIds);
+        if (sections.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, UUID> sectionToCurriculum = sections.stream()
+                .collect(Collectors.toMap(Section::getId, Section::getCurriculumId));
+        List<UUID> sectionIds = sections.stream().map(Section::getId).toList();
+
+        Map<UUID, List<UUID>> lessonsByCurriculum = new HashMap<>();
+        for (LessonOutlineView lesson : lessonDirectory.findPublishedBySections(sectionIds)) {
+            UUID curriculumId = sectionToCurriculum.get(lesson.sectionId());
+            if (curriculumId != null) {
+                lessonsByCurriculum.computeIfAbsent(curriculumId, k -> new ArrayList<>()).add(lesson.lessonId());
+            }
+        }
+        List<UUID> allLessonIds = lessonsByCurriculum.values().stream().flatMap(List::stream).toList();
+        Map<UUID, LearningProgressView> byLesson = allLessonIds.isEmpty() ? Map.of()
+                : learningDirectory.findProgress(userId, allLessonIds).stream()
+                        .collect(Collectors.toMap(LearningProgressView::lessonId, p -> p));
+
+        Map<UUID, CatalogProgress> result = new HashMap<>();
+        lessonsByCurriculum.forEach((curriculumId, lessonIds) ->
+                result.put(curriculumId, progressFrom(lessonIds, byLesson)));
+        return result;
+    }
+
+    /** 레슨 목록과 진도 맵에서 완료율·마지막 학습 지점을 계산한다. */
+    private CatalogProgress progressFrom(List<UUID> lessonIds, Map<UUID, LearningProgressView> byLesson) {
+        int total = lessonIds.size();
+        if (total == 0) {
+            return new CatalogProgress(0, 0, 0, null);
+        }
+        List<LearningProgressView> mine = lessonIds.stream().map(byLesson::get).filter(Objects::nonNull).toList();
+        int completed = (int) mine.stream().filter(LearningProgressView::completed).count();
+        int percent = (int) Math.round(completed * 100.0 / total);
+        LearningProgressView last = mine.stream()
+                .filter(p -> p.updatedAt() != null)
+                .max(Comparator.comparing(LearningProgressView::updatedAt))
+                .orElse(null);
+        CatalogProgress.CatalogLastLearning lastLearning = last == null ? null
+                : new CatalogProgress.CatalogLastLearning(
+                        last.lessonId(), last.lastPositionMs() == null ? 0L : last.lastPositionMs());
+        return new CatalogProgress(completed, total, percent, lastLearning);
     }
 
     private CatalogEnrollmentRecord toEnrollmentRecord(EnrollmentView enrollment) {
