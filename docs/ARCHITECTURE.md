@@ -358,10 +358,9 @@ flowchart TB
 제품 설명의 핵심 단어인데 정의가 없다. 라이브 시청자가 보는 시점과 확정본 사이의 지연을 뜻하는데, **몇 초인지·누가 확정하는지**가 없으면 FE는 자막 렌더링 정책을, BE는 영속 시점을 정할 수 없다.
 → **제안**: partial은 즉시 렌더(회색), final은 확정 렌더, 교정·용어·근거는 `t - N초` 뒤 재전송. `N`은 CP2 STT bake-off 결과로 확정하고 설정값으로 뺀다. 다시보기는 정의상 항상 지평선 밖이라 전체 기능이 나간다.
 
-### 9-2. 🔴 CP3의 숨은 선행조건 — 자료→레슨 연결이 없다
-`asset` 모듈이 presigned 업로드(`kind=MATERIAL`)까지 구현했지만, **`material_asset` 테이블과 엔티티는 어디서도 참조되지 않는다.** 레슨에 자료를 붙이는 API가 없어서 RAG ingestion의 입력이 비어 있다.
-→ **로드맵 의존성 그래프에 이 선행이 빠져 있다.** CP3 착수 전 BE 작업으로 명시해야 한다.
-FE는 이미 `POST /instructor/lessons/{lessonId}/materials` 형태로 목을 잡아 뒀으므로 경로는 그대로 쓰되, **본문은 multipart가 아니라 presigned 티켓 방식이어야 한다**(§9-10 경고 참조).
+### 9-2. ✅ 해소됨 — 자료→레슨 연결
+`POST /instructor/lessons/{lessonId}/materials`로 미리 올린 PPTX 에셋(`kind=MATERIAL`)을 레슨에 연결한다. 본문은 presigned 티켓 방식(`{"assetId":"..."}`, multipart 아님), `material_asset`에 status=ACTIVE로 저장되고 레슨/커리큘럼 상세의 `materials`가 이 레코드로 채워진다. 상세는 [ADR-0035](decisions/songjeongki/0035-lesson-material-attach.md).
+커리큘럼-레벨 자료·삭제 API·AI(RAG ingestion) 잡 발행은 CP3으로 유보한다 — 이 연결이 그 입력이 된다.
 
 ### 9-3. 🟠 Redis Streams가 원칙 3과 긴장 관계다
 원칙 3은 "Redis를 durable 큐로 쓰지 않는다"인데, STT 자막이 Redis Streams를 지난다. Redis가 재시작하면 그 구간 자막의 정본이 없다.

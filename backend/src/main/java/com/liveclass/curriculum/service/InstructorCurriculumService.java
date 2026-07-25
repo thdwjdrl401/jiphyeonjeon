@@ -11,8 +11,10 @@ import com.liveclass.curriculum.repository.SectionRepository;
 import com.liveclass.common.logging.Audit;
 import com.liveclass.lesson.api.LessonDirectory;
 import com.liveclass.lesson.api.LessonManagement;
+import com.liveclass.lesson.api.LessonMaterialManagement;
 import com.liveclass.lesson.api.LessonPlacement;
 import com.liveclass.lesson.api.LessonView;
+import com.liveclass.lesson.api.MaterialView;
 import com.liveclass.live.api.LiveSessionDirectory;
 import com.liveclass.live.api.LiveSessionManagement;
 import com.liveclass.live.api.LiveSessionView;
@@ -47,6 +49,7 @@ public class InstructorCurriculumService {
     private final SectionRepository sectionRepository;
     private final LessonDirectory lessonDirectory;
     private final LessonManagement lessonManagement;
+    private final LessonMaterialManagement lessonMaterialManagement;
     private final LiveSessionManagement liveSessionManagement;
     private final LiveSessionDirectory liveSessionDirectory;
     private final AssetDirectory assetDirectory;
@@ -55,6 +58,7 @@ public class InstructorCurriculumService {
                                        SectionRepository sectionRepository,
                                        LessonDirectory lessonDirectory,
                                        LessonManagement lessonManagement,
+                                       LessonMaterialManagement lessonMaterialManagement,
                                        LiveSessionManagement liveSessionManagement,
                                        LiveSessionDirectory liveSessionDirectory,
                                        AssetDirectory assetDirectory) {
@@ -62,6 +66,7 @@ public class InstructorCurriculumService {
         this.sectionRepository = sectionRepository;
         this.lessonDirectory = lessonDirectory;
         this.lessonManagement = lessonManagement;
+        this.lessonMaterialManagement = lessonMaterialManagement;
         this.liveSessionManagement = liveSessionManagement;
         this.liveSessionDirectory = liveSessionDirectory;
         this.assetDirectory = assetDirectory;
@@ -361,6 +366,20 @@ public class InstructorCurriculumService {
         curriculumRepository.bumpStructureVersion(section.getCurriculumId());
         log.info(Audit.MARKER, "레슨 게시취소 sectionId={} lessonId={}", lesson.sectionId(), lessonId);
         return unpublished;
+    }
+
+    /**
+     * 레슨에 자료(PPTX) 에셋을 연결한다(ADR-0035). 소유권(레슨→섹션→커리큘럼)은 여기서 확인하고,
+     * 에셋 유효성 검증과 연결 저장은 lesson 모듈 포트가 한다. 에셋 업로더 검증에 쓰라고 instructorId를
+     * 넘긴다(레슨 소유권과 별개로 자기 에셋만 붙일 수 있게). AI 잡 발행은 이번 범위 밖(CP3).
+     */
+    @Transactional
+    public MaterialView attachMaterial(UUID instructorId, UUID lessonId, UUID assetId) {
+        requireOwnedLesson(instructorId, lessonId);
+        MaterialView material = lessonMaterialManagement.attach(lessonId, assetId, instructorId);
+        log.info(Audit.MARKER, "레슨 자료 연결 lessonId={} assetId={} materialId={}",
+                lessonId, assetId, material.materialId());
+        return material;
     }
 
     // ── 구조 순서 원자 저장 (STRUCTURE-01) ──

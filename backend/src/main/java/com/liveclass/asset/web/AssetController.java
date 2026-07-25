@@ -5,7 +5,6 @@ import com.liveclass.asset.domain.AssetKind;
 import com.liveclass.asset.service.AssetForbiddenException;
 import com.liveclass.asset.service.AssetService;
 import com.liveclass.asset.service.AssetUploadTicket;
-import com.liveclass.asset.service.AssetValidationException;
 import com.liveclass.asset.web.dto.UploadRequest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -51,13 +50,13 @@ public class AssetController {
         return assetService.find(assetId).orElseThrow();
     }
 
-    /** kind 게이트: THUMBNAIL은 강사만, MATERIAL은 범위 밖(400), PROFILE_IMAGE는 인증만으로 통과. */
+    /** kind 게이트: THUMBNAIL·MATERIAL은 강사만, PROFILE_IMAGE는 인증만으로 통과(ADR-0035). */
     private void requireKindAllowed(AssetKind kind, Authentication authentication) {
-        if (kind == AssetKind.MATERIAL) {
-            throw new AssetValidationException("자료(MATERIAL) 업로드는 지원하지 않습니다.");
-        }
         if (kind == AssetKind.THUMBNAIL && !hasRole(authentication, "ROLE_INSTRUCTOR")) {
             throw new AssetForbiddenException("썸네일 업로드는 강사만 가능합니다.");
+        }
+        if (kind == AssetKind.MATERIAL && !hasRole(authentication, "ROLE_INSTRUCTOR")) {
+            throw new AssetForbiddenException("자료 업로드는 강사만 가능합니다.");
         }
     }
 

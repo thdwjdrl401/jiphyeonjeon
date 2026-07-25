@@ -35,8 +35,15 @@ public class AssetService implements AssetDirectory {
     /** 이미지 에셋 허용 content-type(THUMBNAIL·PROFILE_IMAGE 공통). */
     private static final Set<String> ALLOWED_IMAGE_TYPES = Set.of("image/jpeg", "image/png", "image/webp");
 
-    /** 업로드 최대 크기 5 MiB. */
-    private static final long MAX_SIZE_BYTES = 5L * 1024 * 1024;
+    /** 이미지 업로드 최대 크기 5 MiB(THUMBNAIL·PROFILE_IMAGE). */
+    private static final long MAX_IMAGE_SIZE_BYTES = 5L * 1024 * 1024;
+
+    /** 자료(MATERIAL) 허용 content-type — PPTX만(ADR-0035). */
+    private static final String MATERIAL_CONTENT_TYPE =
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+
+    /** 자료 업로드 최대 크기 50 MiB(ADR-0035). */
+    private static final long MAX_MATERIAL_SIZE_BYTES = 50L * 1024 * 1024;
 
     private final AssetRepository assetRepository;
     private final AssetStorage storage;
@@ -55,7 +62,7 @@ public class AssetService implements AssetDirectory {
     @Transactional
     public AssetUploadTicket createUploadRequest(AssetKind kind, String fileName, String contentType,
                                                  long fileSize, UUID uploaderId) {
-        validateImageRequest(kind, contentType, fileSize);
+        validateUploadRequest(kind, contentType, fileSize);
 
         Asset asset = new Asset();
         asset.setKind(kind);
@@ -108,10 +115,19 @@ public class AssetService implements AssetDirectory {
         // (클라가 티켓엔 "png 1MB"로 신고하고 실제로는 거대/비이미지 바이트를 올리는 남용을 차단.)
         AssetStorage.StoredObject head = storage.head(asset.getObjectKey())
                 .orElseThrow(() -> new AssetStateConflictException("업로드가 확인되지 않았습니다."));
-        if (head.contentLength() > MAX_SIZE_BYTES) {
-            throw new AssetValidationException("업로드 파일이 최대 크기(5MiB)를 초과했습니다.");
+        boolean isMaterial = asset.getKind() == AssetKind.MATERIAL;
+        long maxSize = isMaterial ? MAX_MATERIAL_SIZE_BYTES : MAX_IMAGE_SIZE_BYTES;
+        if (head.contentLength() > maxSize) {
+            throw new AssetValidationException("업로드 파일이 최대 크기를 초과했습니다.");
         }
-        if (head.contentType() != null && !ALLOWED_IMAGE_TYPES.contains(head.contentType())) {
+        // MATERIAL은 신뢰 경계가 스토리지가 보고하는 content-type뿐이라(magic bytes 검증은 CP3
+        // ingestion 파서에서) null을 통과시키지 않는다(fail closed) — 이미지는 헤더 부재가 흔해
+        // 기존처럼 null 통과를 유지한다.
+        if (isMaterial) {
+            if (head.contentType() == null || !MATERIAL_CONTENT_TYPE.equals(head.contentType())) {
+                throw new AssetValidationException("허용되지 않는 파일 형식입니다: " + head.contentType());
+            }
+        } else if (head.contentType() != null && !ALLOWED_IMAGE_TYPES.contains(head.contentType())) {
             throw new AssetValidationException("허용되지 않는 파일 형식입니다: " + head.contentType());
         }
         // 신고값이 아니라 실제 검증된 값으로 확정 저장.
@@ -129,6 +145,20 @@ public class AssetService implements AssetDirectory {
     @Transactional(readOnly = true)
     public Optional<AssetRef> find(UUID assetId) {
         return assetRepository.findById(assetId).map(this::toRef);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<UUID, AssetRef> findRefs(Collection<UUID> assetIds) {
+        if (assetIds == null || assetIds.isEmpty()) {
+            return Map.of();
+        }
+        List<UUID> distinct = assetIds.stream().filter(java.util.Objects::nonNull).distinct().toList();
+        Map<UUID, AssetRef> refs = new HashMap<>();
+        for (Asset asset : assetRepository.findAllById(distinct)) {
+            refs.put(asset.getId(), toRef(asset));
+        }
+        return refs;
     }
 
     @Override
@@ -163,21 +193,33 @@ public class AssetService implements AssetDirectory {
     }
 
     private AssetRef toRef(Asset asset) {
-        return new AssetRef(asset.getId(), asset.getKind().name(), asset.getStatus().name(), asset.getUploadedBy());
+        return new AssetRef(asset.getId(), asset.getKind().name(), asset.getStatus().name(),
+                asset.getUploadedBy(), asset.getOriginalFilename(),
+                asset.getSizeBytes() == null ? 0L : asset.getSizeBytes());
     }
 
-    private void validateImageRequest(AssetKind kind, String contentType, long fileSize) {
-        // 현재 발급 대상은 이미지(THUMBNAIL·PROFILE_IMAGE)뿐. MATERIAL은 범위 밖(컨트롤러에서 차단).
-        if (kind == AssetKind.THUMBNAIL || kind == AssetKind.PROFILE_IMAGE) {
+    /**
+     * kind별 형식·크기 검증. 이미지(THUMBNAIL·PROFILE_IMAGE)는 이미지 MIME·5MiB, 자료(MATERIAL)는
+     * PPTX·50MiB로 분기한다(ADR-0035). 크기 상한이 kind마다 다르므로 여기서 kind를 봐야 한다.
+     */
+    private void validateUploadRequest(AssetKind kind, String contentType, long fileSize) {
+        long maxSize;
+        if (kind == AssetKind.MATERIAL) {
+            if (contentType == null || !MATERIAL_CONTENT_TYPE.equals(contentType)) {
+                throw new AssetValidationException("허용되지 않는 자료 형식입니다(PPTX만).");
+            }
+            maxSize = MAX_MATERIAL_SIZE_BYTES;
+        } else {
             if (contentType == null || !ALLOWED_IMAGE_TYPES.contains(contentType)) {
                 throw new AssetValidationException("허용되지 않는 이미지 형식입니다(jpeg·png·webp).");
             }
+            maxSize = MAX_IMAGE_SIZE_BYTES;
         }
         if (fileSize <= 0) {
             throw new AssetValidationException("파일 크기가 올바르지 않습니다.");
         }
-        if (fileSize > MAX_SIZE_BYTES) {
-            throw new AssetValidationException("파일 크기가 5MiB를 초과합니다.");
+        if (fileSize > maxSize) {
+            throw new AssetValidationException("파일 크기가 허용 한도를 초과합니다.");
         }
     }
 }
