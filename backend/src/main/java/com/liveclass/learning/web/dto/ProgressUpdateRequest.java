@@ -9,7 +9,7 @@ import jakarta.validation.constraints.PositiveOrZero;
 import java.time.OffsetDateTime;
 
 /**
- * 진도 갱신 요청. 진도율은 클라이언트가 계산해 보낸다(ADR-0032).
+ * 진도 갱신 요청. 진도율은 클라이언트가 계산해 보낸다(ADR-0033).
  * clientUpdatedAt 은 순서역전 방어용 — 없으면 서버가 방어 없이 반영한다.
  */
 @Schema(description = "학습 진도 갱신 요청")

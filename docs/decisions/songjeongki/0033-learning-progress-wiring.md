@@ -1,4 +1,4 @@
-# ADR-0032: 학습 상태 배선 — 진도·북마크, 클라이언트 계산 진도율, SPI 인가, 카탈로그 progress 연결
+# ADR-0033: 학습 상태 배선 — 진도·북마크, 클라이언트 계산 진도율, SPI 인가, 카탈로그 progress 연결
 
 > 📍 하네스 개요: [../../harness/README.md](../../harness/README.md) · 아키텍처: [../../ARCHITECTURE.md](../../ARCHITECTURE.md) · 계약: [../../CONTRACT.md](../../CONTRACT.md)
 
