@@ -48,6 +48,6 @@ LiveKit은 로그인 세션이 없다. 대신 `Authorization` 헤더에 **JWT**�
 ## 영향·후속
 
 - **검증**: `LiveKitWebhookContractTest` 8건 — 완료→READY+메타, 실패→FAILED, 서명 위조·누락·본문 변조→401, 멱등, 모르는 egress·비종료 이벤트 무시. `ModularityTests` 통과(video→live.api 방향 유지). 전체 스위트 통과.
-- **인프라 후속 (블로커 — 실제 동작 전제)**: `infra/livekit/livekit.yaml`에 **webhook 설정이 없다**. LiveKit이 우리로 webhook을 보내게 하려면 `webhook: { api_key: <key>, urls: [https://<host>/api/webhooks/livekit] }`를 추가해야 한다. 이게 없으면 코드는 있어도 신호가 오지 않는다. EC2 배포 시 함께 설정.
+- **인프라 설정 (완료)**: `infra/livekit/livekit.yaml`에 `webhook: { api_key: <API_KEY>, urls: [https://jiphyeonjeon.thdwjdrl.com/api/webhooks/livekit] }`를 추가했다. `api_key`는 `keys`의 key와 같아야 하고(그 secret으로 JWT 서명), Spring이 같은 secret으로 검증한다. url은 app nginx가 `/api`를 backend로 프록시하는 경로다. secret은 템플릿대로 서버에서 채운다(커밋 금지). **배포 후 실동작 검증**: 라이브 종료 → egress 완료 → 자산 READY + duration 확인.
 - **매니페스트 키(`hlsManifestKey`)**: 100(재생 API, 조인후) 담당이다 — 녹화 시작 시 세팅. 이 webhook은 그 값을 건드리지 않고 상태·메타만 확정한다. 두 작업의 경계.
 - **VERIFYING 생략**: 상태 enum에 `VERIFYING`이 있지만 webhook이 완료 정보를 신뢰하므로 `FINALIZING → READY` 직행이다. 스토리지 존재를 별도 HEAD로 재확인하는 VERIFYING 단계는 후속(필요 시).
