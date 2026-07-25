@@ -20,4 +20,9 @@ public record CatalogViewerContext(
                                           CatalogEnrollmentRecord enrollment) {
         return new CatalogViewerContext(relationship, allowedActions, enrollment, null);
     }
+
+    /** 진도를 얹은 새 컨텍스트. record라 불변이므로 새 인스턴스로 돌려준다(수강자에게만 채운다). */
+    public CatalogViewerContext withProgress(CatalogProgress progress) {
+        return new CatalogViewerContext(relationship, allowedActions, enrollment, progress);
+    }
 }
