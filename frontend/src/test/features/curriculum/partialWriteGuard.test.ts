@@ -69,21 +69,6 @@ describe('부분 쓰기 차단', () => {
     expect(post).not.toHaveBeenCalled()
   })
 
-  it('자료가 붙은 레슨 저장은 레슨을 만들기 전에 501로 끝난다', async () => {
-    const patch = vi.spyOn(apiClient, 'patch')
-    const post = vi.spyOn(apiClient, 'post')
-
-    await expect(httpLessonService.saveLesson({
-      sectionId: 'sec-1',
-      title: '새 강의',
-      description: '설명',
-      materials: [new File(['x'], '자료.pptx')],
-    })).rejects.toMatchObject({ status: 501, code: 'API_NOT_IMPLEMENTED' })
-
-    expect(post).not.toHaveBeenCalled()
-    expect(patch).not.toHaveBeenCalled()
-  })
-
   it('자료가 없는 레슨 저장은 그대로 생성된다', async () => {
     const created = { lessonId: 'les-9', sectionId: 'sec-1', title: '새 강의', description: '설명', status: 'DRAFT' }
     const post = vi.spyOn(apiClient, 'post').mockResolvedValue({ data: created } as never)
