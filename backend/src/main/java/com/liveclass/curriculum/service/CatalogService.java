@@ -16,7 +16,9 @@ import com.liveclass.learning.api.LearningDirectory;
 import com.liveclass.learning.api.LearningProgressView;
 import com.liveclass.lesson.api.LessonDetailView;
 import com.liveclass.lesson.api.LessonDirectory;
+import com.liveclass.lesson.api.LessonMaterialManagement;
 import com.liveclass.lesson.api.LessonOutlineView;
+import com.liveclass.lesson.api.MaterialView;
 import com.liveclass.live.api.LiveSessionDirectory;
 import com.liveclass.live.api.LiveSessionView;
 import com.liveclass.video.api.ReplayDirectory;
@@ -57,6 +59,7 @@ public class CatalogService {
     private final CurriculumRepository curriculumRepository;
     private final SectionRepository sectionRepository;
     private final LessonDirectory lessonDirectory;
+    private final LessonMaterialManagement lessonMaterialManagement;
     private final InstructorDirectory instructorDirectory;
     private final AssetDirectory assetDirectory;
     private final EnrollmentDirectory enrollmentDirectory;
@@ -67,6 +70,7 @@ public class CatalogService {
     public CatalogService(CurriculumRepository curriculumRepository,
                           SectionRepository sectionRepository,
                           LessonDirectory lessonDirectory,
+                          LessonMaterialManagement lessonMaterialManagement,
                           InstructorDirectory instructorDirectory,
                           AssetDirectory assetDirectory,
                           EnrollmentDirectory enrollmentDirectory,
@@ -76,6 +80,7 @@ public class CatalogService {
         this.curriculumRepository = curriculumRepository;
         this.sectionRepository = sectionRepository;
         this.lessonDirectory = lessonDirectory;
+        this.lessonMaterialManagement = lessonMaterialManagement;
         this.instructorDirectory = instructorDirectory;
         this.assetDirectory = assetDirectory;
         this.enrollmentDirectory = enrollmentDirectory;
@@ -133,6 +138,19 @@ public class CatalogService {
                 ? null
                 : assetDirectory.resolveUrl(curriculum.getThumbnailAssetId()).orElse(null);
 
+        // 목차 레슨들의 활성 자료를 모아 커리큘럼 단위 materials로 평탄화한다(N+1 회피, ADR-0034).
+        // 게스트·미수강자에게는 노출하지 않는다 — progress와 같은 게이트(ENROLLED만)에 OWNER_INSTRUCTOR를
+        // 더한 것(강사 자신은 항상 자기 자료를 볼 수 있어야 함). outline은 이미 PUBLISHED 레슨만 담고 있어
+        // (buildOutline) 자료도 자연히 공개된 레슨 것만이다.
+        List<MaterialView> materials = List.of();
+        String relationship = viewerContext.relationship();
+        if ("ENROLLED".equals(relationship) || "OWNER_INSTRUCTOR".equals(relationship)) {
+            List<UUID> outlineLessonIds = outline.stream().flatMap(s -> s.lessons().stream())
+                    .map(CatalogOutlineLesson::lessonId).toList();
+            materials = lessonMaterialManagement.findActiveByLessons(outlineLessonIds)
+                    .values().stream().flatMap(List::stream).toList();
+        }
+
         return new CatalogDetail(
                 curriculum.getId(),
                 curriculum.getTitle(),
@@ -144,6 +162,7 @@ public class CatalogService {
                 curriculum.getEndsAt(),
                 instructor,
                 outline,
+                materials,
                 enrollmentPolicy(curriculum),
                 viewerContext
         );
@@ -193,7 +212,8 @@ public class CatalogService {
                 lesson.title(),
                 lesson.description(),
                 lesson.order(),
-                lesson.status());
+                lesson.status(),
+                lessonMaterialManagement.findActiveByLesson(lesson.lessonId()));
     }
 
     /**

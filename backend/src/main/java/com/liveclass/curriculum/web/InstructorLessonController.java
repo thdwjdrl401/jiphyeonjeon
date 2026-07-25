@@ -1,7 +1,9 @@
 package com.liveclass.curriculum.web;
 
 import com.liveclass.curriculum.service.InstructorCurriculumService;
+import com.liveclass.curriculum.web.dto.AttachMaterialRequest;
 import com.liveclass.curriculum.web.dto.CreateLessonRequest;
+import com.liveclass.curriculum.web.dto.LessonMaterialResponse;
 import com.liveclass.curriculum.web.dto.UpdateLessonRequest;
 import com.liveclass.lesson.api.LessonView;
 import io.swagger.v3.oas.annotations.Operation;
@@ -82,6 +84,18 @@ public class InstructorLessonController {
     @PostMapping("/api/instructor/lessons/{lessonId}/unpublish")
     public LessonView unpublish(@PathVariable UUID lessonId, Authentication authentication) {
         return service.unpublishLesson(currentUserId(authentication), lessonId);
+    }
+
+    @Operation(summary = "레슨 자료 연결",
+            description = "미리 업로드한 자료 에셋(kind=MATERIAL)을 레슨에 연결한다. 본문의 assetId는 "
+                    + "본인이 올린 업로드 완료 에셋이어야 한다(ADR-0034). 파일 바이트는 presigned로 이미 올라가 있다.")
+    @PostMapping("/api/instructor/lessons/{lessonId}/materials")
+    @ResponseStatus(HttpStatus.CREATED)
+    public LessonMaterialResponse attachMaterial(@PathVariable UUID lessonId,
+                                                 @Valid @RequestBody AttachMaterialRequest request,
+                                                 Authentication authentication) {
+        return LessonMaterialResponse.from(
+                service.attachMaterial(currentUserId(authentication), lessonId, request.assetId()));
     }
 
     private UUID currentUserId(Authentication authentication) {

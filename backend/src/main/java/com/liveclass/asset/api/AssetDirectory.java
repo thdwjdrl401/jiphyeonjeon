@@ -16,6 +16,12 @@ public interface AssetDirectory {
     Optional<AssetRef> find(UUID assetId);
 
     /**
+     * assetId → 에셋 참조 배치 조회(N+1 회피). 레슨 자료 목록처럼 여러 에셋의 파일명·크기를
+     * 한 번에 채워야 할 때 쓴다. 없는 id는 결과에서 빠진다.
+     */
+    Map<UUID, AssetRef> findRefs(Collection<UUID> assetIds);
+
+    /**
      * assetId → presigned GET URL 배치 해석. UPLOADED가 아니거나 없는 id는 결과에서 빠진다
      * (목록 응답의 N+1 회피용).
      */

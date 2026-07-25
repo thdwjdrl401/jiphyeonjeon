@@ -9,8 +9,7 @@ import java.util.List;
  * 공개 커리큘럼 상세 (CURRICULUM-DETAIL-01). 기본 정보 + 강사 요약 + 섹션→레슨 목차에
  * 요청자 기준 컨텍스트(viewerContext)와 수강 정책까지.
  *
- * <p>materials(커리큘럼 자료)는 자료를 커리큘럼에 연결하는 API가 아직 없어 항상 빈 목록이다 —
- * FE가 값 없음을 추측하지 않도록 필드는 계약에 포함해 둔다.
+ * <p>materials(커리큘럼 자료)는 목차 레슨들에 연결된 활성 자료를 모은 것이다(ADR-0034).
  */
 @Schema(description = "공개 커리큘럼 상세")
 public record CurriculumDetailResponse(
@@ -25,7 +24,7 @@ public record CurriculumDetailResponse(
         CurriculumPeriod period,
         InstructorSummary instructor,
         List<OutlineSection> outline,
-        @Schema(description = "커리큘럼 자료(PPTX). 자료 연결 API 전까지 항상 빈 목록.")
+        @Schema(description = "커리큘럼 자료(PPTX). 목차 레슨들에 연결된 활성 자료.")
         List<CurriculumMaterialResponse> materials,
         EnrollmentPolicyResponse enrollmentPolicy,
         ViewerContextResponse viewerContext
@@ -42,7 +41,7 @@ public record CurriculumDetailResponse(
                 CurriculumPeriod.of(detail.startsAt(), detail.endsAt()),
                 InstructorSummary.from(detail.instructor()),
                 detail.outline().stream().map(OutlineSection::from).toList(),
-                List.of(),
+                detail.materials().stream().map(CurriculumMaterialResponse::from).toList(),
                 EnrollmentPolicyResponse.from(detail.enrollmentPolicy()),
                 ViewerContextResponse.from(detail.viewerContext()));
     }
