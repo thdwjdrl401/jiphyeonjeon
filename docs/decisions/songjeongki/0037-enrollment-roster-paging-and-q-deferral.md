@@ -1,4 +1,4 @@
-# ADR-0026: 강사 수강생 로스터(ENROLLEE-01) — 단일 페이지 엔드포인트·summary 집계·`q` 검색 보류
+# ADR-0037: 강사 수강생 로스터(ENROLLEE-01) — 단일 페이지 엔드포인트·summary 집계·`q` 검색 보류
 
 > 📍 하네스 개요: [../../harness/README.md](../../harness/README.md) · 아키텍처: [../../ARCHITECTURE.md](../../ARCHITECTURE.md) · 계약: [../../CONTRACT.md](../../CONTRACT.md)
 
