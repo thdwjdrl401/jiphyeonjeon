@@ -1,5 +1,6 @@
 package com.liveclass.curriculum.service;
 
+import com.liveclass.aiintegration.api.OutboxPublisher;
 import com.liveclass.asset.api.AssetDirectory;
 import com.liveclass.asset.api.AssetRef;
 import com.liveclass.curriculum.domain.Curriculum;
@@ -20,11 +21,13 @@ import com.liveclass.live.api.LiveSessionManagement;
 import com.liveclass.live.api.LiveSessionView;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -53,6 +56,9 @@ public class InstructorCurriculumService {
     private final LiveSessionManagement liveSessionManagement;
     private final LiveSessionDirectory liveSessionDirectory;
     private final AssetDirectory assetDirectory;
+    private final OutboxPublisher outboxPublisher;
+    private final boolean embeddingEnabled;
+    private final JsonMapper jsonMapper = JsonMapper.builder().build();
 
     public InstructorCurriculumService(CurriculumRepository curriculumRepository,
                                        SectionRepository sectionRepository,
@@ -61,7 +67,9 @@ public class InstructorCurriculumService {
                                        LessonMaterialManagement lessonMaterialManagement,
                                        LiveSessionManagement liveSessionManagement,
                                        LiveSessionDirectory liveSessionDirectory,
-                                       AssetDirectory assetDirectory) {
+                                       AssetDirectory assetDirectory,
+                                       OutboxPublisher outboxPublisher,
+                                       @Value("${material.embedding.enabled:false}") boolean embeddingEnabled) {
         this.curriculumRepository = curriculumRepository;
         this.sectionRepository = sectionRepository;
         this.lessonDirectory = lessonDirectory;
@@ -70,6 +78,8 @@ public class InstructorCurriculumService {
         this.liveSessionManagement = liveSessionManagement;
         this.liveSessionDirectory = liveSessionDirectory;
         this.assetDirectory = assetDirectory;
+        this.outboxPublisher = outboxPublisher;
+        this.embeddingEnabled = embeddingEnabled;
     }
 
     @Transactional
@@ -382,10 +392,17 @@ public class InstructorCurriculumService {
      */
     @Transactional
     public MaterialView attachMaterial(UUID instructorId, UUID lessonId, UUID assetId) {
-        requireOwnedLesson(instructorId, lessonId);
+        LessonView lesson = requireOwnedLesson(instructorId, lessonId);
         MaterialView material = lessonMaterialManagement.attach(lessonId, assetId, instructorId);
         log.info(Audit.MARKER, "레슨 자료 연결 lessonId={} assetId={} materialId={}",
                 lessonId, assetId, material.materialId());
+        // 임베딩 파이프라인이 켜져 있으면 PENDING으로 두고 잡을 outbox에 싣는다(같은 트랜잭션 = 신뢰성, ADR-0036).
+        // 꺼져 있으면(기본) 연결만 하고 상태는 READY 유지 — 파이프라인 미배선 단계의 무회귀.
+        if (embeddingEnabled) {
+            UUID curriculumId = requireOwnedSection(instructorId, lesson.sectionId()).getCurriculumId();
+            lessonMaterialManagement.updateEmbeddingStatus(material.materialId(), "PENDING");
+            enqueueEmbedJob(curriculumId, lessonId, material);
+        }
         return material;
     }
 
@@ -394,6 +411,31 @@ public class InstructorCurriculumService {
     public void detachMaterial(UUID instructorId, UUID lessonId, UUID materialId) {
         requireOwnedLesson(instructorId, lessonId);
         lessonMaterialManagement.detach(lessonId, materialId);
+        // 임베딩 파이프라인이 켜져 있으면 pgvector에서 이 자료 chunk를 지우도록 삭제 잡을 싣는다(ADR-0036).
+        if (embeddingEnabled) {
+            String payload = jsonMapper.writeValueAsString(Map.of(
+                    "taskType", "EMBED_DELETE",
+                    "materialId", materialId.toString(),
+                    "lessonId", lessonId.toString(),
+                    "contractVersion", 1));
+            outboxPublisher.enqueue("material_asset", materialId.toString(), "MATERIAL_EMBED_DELETE",
+                    payload, "material:" + materialId + ":embed-delete", null);
+        }
+    }
+
+    /** 자료 임베딩 잡을 outbox에 싣는다(CONTRACT §3-1 envelope, taskType=PPTX_EMBED, 모델 bge-m3). */
+    private void enqueueEmbedJob(UUID curriculumId, UUID lessonId, MaterialView material) {
+        String payload = jsonMapper.writeValueAsString(Map.of(
+                "taskType", "PPTX_EMBED",
+                "materialId", material.materialId().toString(),
+                "assetId", material.assetId().toString(),
+                "lessonId", lessonId.toString(),
+                "curriculumId", curriculumId.toString(),
+                "fileName", material.fileName() == null ? "" : material.fileName(),
+                "policy", Map.of("embedModel", "bge-m3"),
+                "contractVersion", 1));
+        outboxPublisher.enqueue("material_asset", material.materialId().toString(), "MATERIAL_EMBED_REQUESTED",
+                payload, "material:" + material.materialId() + ":embed", null);
     }
 
     /**
