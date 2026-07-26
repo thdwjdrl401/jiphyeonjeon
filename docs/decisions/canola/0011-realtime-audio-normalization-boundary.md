@@ -17,7 +17,7 @@ frame처럼 변환 비율에 맞는 경계에서는 드러나지 않지만, 비�
 
 ## 결정
 
-이번 단계는 원본 정규화 동작만 다음과 같이 선별 이식한다.
+이 기록은 `realtime-stt-providers` MR 내부의 정규화 계층만 다음과 같이 한정한다.
 
 1. target sample rate의 PCM16 mono는 그대로 유지한다.
 2. PCM16 stereo는 좌우 채널을 같은 비율로 mono downmix한다.
@@ -26,14 +26,16 @@ frame처럼 변환 비율에 맞는 경계에서는 드러나지 않지만, 비�
 4. 불완전한 PCM16 frame, 지원하지 않는 channel 수와 stream 도중 source sample rate 변경은
    즉시 거부한다.
 
-VAD, 20 ms framing, 발화 segmentation, STT provider·registry, room job wiring, queue backlog 정책은
-포함하지 않는다. backend, 공용 계약, `pyproject.toml`과 lockfile도 바꾸지 않는다.
+정규화 primitive 자체에는 VAD, 20 ms framing, 발화 segmentation, STT provider·registry,
+room job wiring, queue backlog 정책을 섞지 않는다. 이 중 VAD·provider·backlog 정책은 같은
+`realtime-stt-providers` MR의 별도 계층에서 다루고, backend와 공용 계약은 바꾸지 않는다.
 
 ## 영향
 
-- 이번 MR은 정규화 primitive만 제공하며 실제 room audio 경로의 출력 형식을 바꾸지 않는다.
+- 이 primitive만으로는 실제 room audio 경로의 출력 형식이 바뀌지 않는다.
 - 테스트는 mono 유지, stereo downmix, 48 kHz → 16 kHz 변환, PCM frame·channel 거부뿐 아니라
   비정렬 연속 chunk 변환이 합친 PCM의 일괄 변환과 같은지도 검증한다.
 - Python 3.12에서는 표준 라이브러리 `audioop`을 사용한다. 이 모듈은 Python 3.13에서 제거되므로
   런타임 업그레이드 전에 LiveKit SDK resampler 등 대체 구현을 별도 결정해야 한다.
-- VAD의 frame 크기와 발화 경계는 다음 AI MR에서 독립적으로 결정하고 테스트한다.
+- VAD의 frame 크기와 발화 경계는 같은 provider MR의
+  [ADR-0012](0012-realtime-stt-provider-and-overload-boundary.md)에서 독립적으로 결정하고 테스트한다.

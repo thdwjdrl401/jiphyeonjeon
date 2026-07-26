@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any
@@ -16,13 +17,20 @@ from app.livekit.subscription import (
 from app.stt.engine import AudioChunk
 
 _CLOSED = object()
-_OUTPUT_QUEUE_CAPACITY = 64
+_FRAME_SIZE_MS = 20
+_OUTPUT_QUEUE_CAPACITY_FRAMES = 250
 _SAMPLE_RATE = 48_000
 _NANOSECONDS_PER_SECOND = 1_000_000_000
+
+logger = logging.getLogger(__name__)
 
 
 class AudioSourceError(RuntimeError):
     """Raised when the selected instructor microphone cannot be consumed."""
+
+
+class AudioBacklogError(RuntimeError):
+    """Raised instead of silently dropping instructor audio under backpressure."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,7 +50,7 @@ class LiveKitInstructorAudioSource:
         self._context = context
         self._room = context.room
         self._queue: asyncio.Queue[AudioChunk | _AudioStreamFailure | object] = asyncio.Queue(
-            maxsize=_OUTPUT_QUEUE_CAPACITY
+            maxsize=_OUTPUT_QUEUE_CAPACITY_FRAMES
         )
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._retired_tasks: set[asyncio.Task[None]] = set()
@@ -108,9 +116,7 @@ class LiveKitInstructorAudioSource:
         descriptor = TrackDescriptor(
             kind="audio" if publication.kind == rtc.TrackKind.KIND_AUDIO else "other",
             source=(
-                "microphone"
-                if publication.source == rtc.TrackSource.SOURCE_MICROPHONE
-                else "other"
+                "microphone" if publication.source == rtc.TrackSource.SOURCE_MICROPHONE else "other"
             ),
         )
         if not is_microphone(descriptor):
@@ -157,14 +163,10 @@ class LiveKitInstructorAudioSource:
             lambda completed, sid=publication.sid: self._on_consumer_done(sid, completed)
         )
 
-    def _on_track_unsubscribed(
-        self, _track: Any, publication: Any, _participant: Any
-    ) -> None:
+    def _on_track_unsubscribed(self, _track: Any, publication: Any, _participant: Any) -> None:
         self._cancel_consumer(publication.sid)
 
-    def _on_track_subscription_failed(
-        self, participant: Any, track_sid: str, error: str
-    ) -> None:
+    def _on_track_subscription_failed(self, participant: Any, track_sid: str, error: str) -> None:
         if (
             not self._accepting_tracks
             or participant.identity != self._publisher_identity
@@ -207,13 +209,13 @@ class LiveKitInstructorAudioSource:
             track,
             sample_rate=_SAMPLE_RATE,
             num_channels=1,
+            frame_size_ms=_FRAME_SIZE_MS,
         )
         try:
             async for event in stream:
                 frame = event.frame
                 duration_ns = (
-                    frame.samples_per_channel * _NANOSECONDS_PER_SECOND
-                    + frame.sample_rate // 2
+                    frame.samples_per_channel * _NANOSECONDS_PER_SECOND + frame.sample_rate // 2
                 ) // frame.sample_rate
                 self._captured_nanoseconds += duration_ns
                 chunk = AudioChunk(
@@ -222,7 +224,23 @@ class LiveKitInstructorAudioSource:
                     num_channels=frame.num_channels,
                     stream_elapsed_ms=self._captured_nanoseconds // 1_000_000,
                 )
-                await self._queue.put(chunk)
+                try:
+                    self._queue.put_nowait(chunk)
+                except asyncio.QueueFull as exc:
+                    queued_frames = self._queue.qsize()
+                    logger.error(
+                        "LiveKit audio backlog overflow: "
+                        "track=%s queued=%d capacity=%d backlog_ms=%d",
+                        track_sid,
+                        queued_frames,
+                        self._queue.maxsize,
+                        queued_frames * _FRAME_SIZE_MS,
+                    )
+                    raise AudioBacklogError(
+                        "audio backlog exceeded "
+                        f"{_OUTPUT_QUEUE_CAPACITY_FRAMES} frames "
+                        f"({_OUTPUT_QUEUE_CAPACITY_FRAMES * _FRAME_SIZE_MS} ms)"
+                    ) from exc
         finally:
             await stream.aclose()
             current_task = asyncio.current_task()
@@ -234,9 +252,7 @@ class LiveKitInstructorAudioSource:
         self._room.off("track_unpublished", self._on_track_unpublished)
         self._room.off("track_subscribed", self._on_track_subscribed)
         self._room.off("track_unsubscribed", self._on_track_unsubscribed)
-        self._room.off(
-            "track_subscription_failed", self._on_track_subscription_failed
-        )
+        self._room.off("track_subscription_failed", self._on_track_subscription_failed)
         self._room.off("disconnected", self._on_disconnected)
 
     def _fail(self, track_sid: str, error: BaseException) -> None:
