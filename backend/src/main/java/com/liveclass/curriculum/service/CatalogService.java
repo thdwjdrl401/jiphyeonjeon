@@ -385,6 +385,68 @@ public class CatalogService {
     }
 
     /**
+     * 학생 학습 요약(대시보드). 활성 수강들의 진도를 {@link #computeEnrolledProgress}로 한 번에 집계하고
+     * 커리큘럼 수·평균·완료 레슨 수로 접는다. 다음 라이브는 {@link #nearestLiveSession}로 붙인다.
+     * 비로그인·수강 없음이면 빈 요약.
+     */
+    @Transactional(readOnly = true)
+    public StudentLearningSummary studentLearningSummary(CatalogViewer viewer) {
+        if (viewer.isGuest()) {
+            return StudentLearningSummary.empty();
+        }
+        List<UUID> curriculumIds = enrollmentDirectory.myEnrollments(viewer.userId()).stream()
+                .filter(e -> e.status() == EnrollmentStatus.ACTIVE)
+                .map(EnrollmentView::curriculumId)
+                .distinct()
+                .toList();
+        if (curriculumIds.isEmpty()) {
+            return StudentLearningSummary.empty();
+        }
+
+        Map<UUID, CatalogProgress> progressByCurriculum = computeEnrolledProgress(viewer.userId(), curriculumIds);
+        int completedCurriculums = 0;
+        int completedLessons = 0;
+        int percentSum = 0;
+        for (UUID curriculumId : curriculumIds) {
+            CatalogProgress p = progressByCurriculum.get(curriculumId);
+            if (p == null) {
+                continue;   // 게시 레슨이 없는 커리큘럼 — 진도 0으로 취급(평균 분모에는 포함)
+            }
+            completedLessons += p.completedLessonCount();
+            percentSum += p.progressPercent();
+            if (p.totalLessonCount() > 0 && p.progressPercent() >= 100) {
+                completedCurriculums++;
+            }
+        }
+        int enrolled = curriculumIds.size();
+        int averageProgress = Math.round((float) percentSum / enrolled);
+        return new StudentLearningSummary(
+                enrolled - completedCurriculums, completedCurriculums, averageProgress, completedLessons,
+                nearestLiveSession(curriculumIds));
+    }
+
+    /** 수강 커리큘럼들 중 가장 이른 예정/진행 라이브 하나를 대시보드용으로 조립한다(없으면 null). */
+    private StudentLearningSummary.TodayLiveSession nearestLiveSession(List<UUID> curriculumIds) {
+        Map.Entry<UUID, LiveSessionView> nearest = liveSessionDirectory.nextScheduledByCurriculum(curriculumIds)
+                .entrySet().stream()
+                .filter(e -> e.getValue() != null && e.getValue().scheduledAt() != null)
+                .min(Comparator.comparing(e -> e.getValue().scheduledAt()))
+                .orElse(null);
+        if (nearest == null) {
+            return null;
+        }
+        UUID curriculumId = nearest.getKey();
+        LiveSessionView session = nearest.getValue();
+        String curriculumTitle = curriculumRepository.findById(curriculumId)
+                .map(Curriculum::getTitle).orElse(null);
+        String lessonTitle = lessonDirectory.findTitles(List.of(session.lessonId())).get(session.lessonId());
+        return new StudentLearningSummary.TodayLiveSession(
+                session.sessionId(), session.lessonId(), lessonTitle,
+                curriculumId, curriculumTitle, null,
+                session.scheduledAt(), session.liveSessionStatus(), null);
+    }
+
+    /**
      * 한 커리큘럼의 내 진도(단건 조회). 완료 레슨 수 기준 — completedLessonCount / totalLessonCount.
      * lastLearning은 가장 최근에 갱신한 진도의 레슨·위치.
      */
