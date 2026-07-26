@@ -28,6 +28,9 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
     implementation 'org.springframework.boot:spring-boot-starter-session-data-redis'
 
+    // AI 배치 잡 발행 = RabbitMQ (ADR-0012/0036). outbox 릴레이가 잡을 큐에 싣는다. 발행 전용(리스너 없음).
+    implementation 'org.springframework.boot:spring-boot-starter-amqp'
+
     // 마이그레이션 = Flyway (core 스키마), DB = PostgreSQL (ADR-0005). Boot 4.x는 flyway-core만으론 오토컨피그 안 붙음 → 스타터 필요
     implementation 'org.springframework.boot:spring-boot-starter-flyway'
     implementation 'org.flywaydb:flyway-database-postgresql'
@@ -87,4 +90,7 @@ dependencyManagement {
 
 tasks.named('test') {
     useJUnitPlatform()
+    // 테스트는 @SpringBootTest 컨텍스트가 여러 개 캐시되고 각자 Hikari 풀을 잡는다. 로컬 Postgres
+    // max_connections(=100)를 넘지 않도록 컨텍스트당 풀을 작게 제한한다(설정파일 불변, 시스템 프로퍼티로).
+    systemProperty 'spring.datasource.hikari.maximum-pool-size', '3'
 }

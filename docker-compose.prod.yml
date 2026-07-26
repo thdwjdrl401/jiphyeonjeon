@@ -66,6 +66,22 @@ services:
         mc mb -p lc/${ASSET_STORAGE_BUCKET:-liveclass-assets} || true
         echo 'bucket ready'; sleep infinity
 
+  rabbitmq:                                # AI 배치 잡 큐(ADR-0036/0012). prod 전용 — dev-infra와 분리(B안).
+    image: rabbitmq:3.13-management-alpine
+    container_name: liveclass-rabbitmq-prod
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-liveclass}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD 필요}
+    volumes:
+      - rabbitmqdata:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+    # 호스트 포트 미노출 — 백엔드(같은 네트워크)만 발행. AI 워커 접속은 그 스택 배포 시 네트워크로 결정(후속).
+
   backend:
     build: ./backend
     container_name: liveclass-backend-prod
@@ -89,10 +105,17 @@ services:
       ASSET_STORAGE_PATH_STYLE: "true"
       ASSET_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       ASSET_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD 필요}
+      # AI 배치 잡 발행(ADR-0036). outbox 릴레이가 rabbitmq로 publish. 스위치 material.embedding.enabled로 켠다.
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: "5672"
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER:-liveclass}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD 필요}
     depends_on:
       postgres:
         condition: service_healthy   # Flyway 마이그레이션 전 DB 준비 대기
       redis:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
@@ -138,6 +161,7 @@ volumes:
   pgdata:
   redisdata:
   miniodata:
+  rabbitmqdata:
   certbot-etc:
     name: liveclass_certbot_etc   # 미디어 스택(infra/livekit)이 external로 공유
   certbot-www:
