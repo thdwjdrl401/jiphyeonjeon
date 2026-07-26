@@ -423,7 +423,11 @@ public class InstructorCurriculumService {
         }
     }
 
-    /** 자료 임베딩 잡을 outbox에 싣는다(CONTRACT §3-1 envelope, taskType=PPTX_EMBED, 모델 bge-m3). */
+    /**
+     * 자료 임베딩 잡을 outbox에 싣는다(CONTRACT §3-1 envelope, taskType=PPTX_EMBED, 모델 bge-m3).
+     * 파일 위치·URL은 싣지 않는다 — 워커가 처리 직전에 {@code POST /api/internal/ai/materials/download-url}로
+     * 갓 서명된 presigned GET URL을 받아 읽는다(ADR-0036 B안, 주문형 발급 → TTL 무관).
+     */
     private void enqueueEmbedJob(UUID curriculumId, UUID lessonId, MaterialView material) {
         String payload = jsonMapper.writeValueAsString(Map.of(
                 "taskType", "PPTX_EMBED",

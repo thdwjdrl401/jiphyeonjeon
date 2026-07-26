@@ -37,22 +37,30 @@
 
 ### 3. 잡 envelope (Spring→AI, RabbitMQ) — CONTRACT §3-1 특화
 
+실제 구현·배포된 envelope(`InstructorCurriculumService.enqueueEmbedJob`). 파일 위치·URL은 싣지 않는다:
+
 ```json
 {
-  "jobId": "uuid",
-  "idempotencyKey": "material:{materialId}:embed",
   "taskType": "PPTX_EMBED",
+  "materialId": "uuid",
+  "assetId": "uuid",
   "lessonId": "uuid",
   "curriculumId": "uuid",
-  "materialId": "uuid",
-  "inputRefs": { "bucket": "liveclass-assets", "objectKey": "materials/...", "fileName": "deck.pptx" },
-  "policy": { "chunkSize": 800, "overlap": 100, "embedModel": "..." },
-  "contractVersion": 1,
-  "correlationId": "..."
+  "fileName": "deck.pptx",
+  "policy": { "embedModel": "bge-m3" },
+  "contractVersion": 1
 }
 ```
-- 큐: `ingestion.embed`(taskType 라우팅). taskType은 §3-1의 `PPTX_PARSE|EMBED`를 자료용 단일 파이프라인 `PPTX_EMBED`로 합친다(파싱+임베딩을 워커가 이어서).
-- `inputRefs`로 **바이트 위치만** 넘긴다 — 워커가 스토리지에서 직접 읽는다(앱 서버 미통과).
+- 큐: `ingestion.embed`(default exchange, routing key=큐명). taskType `PPTX_EMBED`는 파싱+임베딩을 워커가 이어서 하는 단일 파이프라인. 삭제는 `EMBED_DELETE`.
+- outbox 기록의 `idempotency_key=material:{materialId}:embed`가 중복 발행을 막는다(envelope 밖, DB 레벨).
+
+**파일 접근 결정 — B(주문형 presigned URL):** 워커가 잡을 처리하기 **직전에** `POST /api/internal/ai/materials/download-url`(본문 `{assetId}`, 콜백과 같은 HMAC 서명)로 갓 서명된 presigned GET URL을 받아 파일을 읽는다. `AiMaterialUrlController`가 kind=MATERIAL·UPLOADED만 발급하고 아니면 404. 이렇게 하면:
+- **TTL 무관**: URL을 큐에 싣지 않고 사용 직전 발급하므로 만료 클럭이 시작조차 안 한다 — 큐에 며칠 묵은 잡·재시도·DLQ 리플레이도 안전.
+- **최소권한**: 워커는 스토리지 자격증명을 갖지 않는다. BE가 1객체·단명 URL(1회용 능력증표)만 내준다. URL이 유출돼도 1개 PPTX·TTL 동안뿐(상시 자격증명 유출은 전 자료 무기한).
+- **디커플링**: 워커는 스토리지 종류·객체키 규칙·endpoint를 모른다. 스토리지를 S3로 이관해도 워커 무영향(BE가 URL만 다르게 발급). Python 워커를 우리 Java/인프라 결정에서 떼어놓는다.
+
+AI팀 통합 가이드: [ai-embedding-integration.md](../../ai-embedding-integration.md).
+- 반려한 대안(A′: 워커가 `bucket`/`objectKey`로 직접 접근): TTL은 없지만 워커에 **상시 MinIO 자격증명**이 필요하고(최소권한 위배), 스토리지 규칙·SDK에 결합돼 크로스팀 운영 부담이 크다. B의 유일 약점이던 TTL은 "주문형 발급"으로 원천 제거되므로 B가 우세.
 
 ### 4. 콜백 (AI→Spring, 서명 HTTP, inbox 멱등) — CONTRACT §3-2 특화
 

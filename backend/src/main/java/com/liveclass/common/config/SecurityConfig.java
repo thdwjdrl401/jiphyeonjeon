@@ -39,8 +39,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/auth/signup", "/api/auth/login", "/api/auth/logout").permitAll()
                         // LiveKit egress webhook — 로그인 세션이 아니라 JWT 서명으로 인증한다(컨트롤러가 검증).
                         .requestMatchers(HttpMethod.POST, "/api/webhooks/livekit").permitAll()
-                        // AI 워커 콜백 — 로그인 세션 아니라 HMAC 서명으로 인증한다(AiCallbackVerifier). ADR-0036.
+                        // AI 워커 콜백·자료 URL 발급 — 로그인 세션 아니라 HMAC 서명으로 인증한다(AiCallbackVerifier). ADR-0036.
                         .requestMatchers(HttpMethod.POST, "/api/internal/ai/callbacks").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/internal/ai/materials/download-url").permitAll()
                         // 공개 카탈로그 조회는 비로그인도 가능(GET만).
                         .requestMatchers(HttpMethod.GET, "/api/curriculums", "/api/curriculums/**").permitAll()
                         // 수강 신청·취소는 학생만(강사 계정은 수강 불가 — 계정 분리 정책). 강사 승인 등은 /api/instructor/**.
