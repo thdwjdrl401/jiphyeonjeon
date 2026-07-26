@@ -12,6 +12,7 @@ public record MaterialView(
         UUID assetId,
         String fileName,
         long fileSize,
-        String status
+        String status,
+        String embeddingStatus
 ) {
 }

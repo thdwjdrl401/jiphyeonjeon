@@ -239,7 +239,8 @@ class LessonMaterialContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.materials.length()").value(1))
                 .andExpect(jsonPath("$.materials[0].fileName").value("deck.pptx"))
-                .andExpect(jsonPath("$.materials[0].materialId").exists());
+                .andExpect(jsonPath("$.materials[0].materialId").exists())
+                .andExpect(jsonPath("$.materials[0].embeddingStatus").value("READY"));   // ADR-0036 상태 필드
     }
 
     @Test

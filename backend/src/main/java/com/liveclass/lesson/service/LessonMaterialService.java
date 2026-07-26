@@ -8,6 +8,7 @@ import com.liveclass.lesson.api.MaterialAlreadyAttachedException;
 import com.liveclass.lesson.api.MaterialAssetInvalidException;
 import com.liveclass.lesson.api.MaterialView;
 import com.liveclass.lesson.domain.MaterialAsset;
+import com.liveclass.lesson.domain.MaterialEmbeddingStatus;
 import com.liveclass.lesson.domain.MaterialStatus;
 import com.liveclass.lesson.repository.MaterialAssetRepository;
 import org.slf4j.Logger;
@@ -56,6 +57,8 @@ public class LessonMaterialService implements LessonMaterialManagement {
         material.setLessonId(lessonId);
         material.setAssetId(assetId);
         material.setStatus(MaterialStatus.ACTIVE);
+        // 임베딩 파이프라인 미배선 단계 — 일단 READY. 파이프라인(outbox+콜백) 얹을 때 PENDING+발행으로 전환(ADR-0036).
+        material.setEmbeddingStatus(MaterialEmbeddingStatus.READY);
         MaterialAsset saved;
         try {
             // saveAndFlush로 여기서 즉시 제약을 때려 잡는다 — save()만 쓰면 flush가 트랜잭션 끝까지
@@ -139,6 +142,7 @@ public class LessonMaterialService implements LessonMaterialManagement {
                 material.getAssetId(),
                 fileName,
                 fileSize,
-                material.getStatus().name());
+                material.getStatus().name(),
+                material.getEmbeddingStatus() == null ? null : material.getEmbeddingStatus().name());
     }
 }

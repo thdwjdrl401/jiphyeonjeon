@@ -34,6 +34,10 @@ public class MaterialAsset {
     @Enumerated(EnumType.STRING)
     private MaterialStatus status;
 
+    // 임베딩 파이프라인 상태(ADR-0036). 연결 상태와 직교. 신규 연결은 서비스가 세팅, 기존 행은 READY 승계.
+    @Enumerated(EnumType.STRING)
+    private MaterialEmbeddingStatus embeddingStatus;
+
     @CreationTimestamp
     private OffsetDateTime createdAt;
 
