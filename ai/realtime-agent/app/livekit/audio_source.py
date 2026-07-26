@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from livekit import rtc
 from livekit.agents import AutoSubscribe, JobContext
@@ -23,6 +24,14 @@ _SAMPLE_RATE = 48_000
 _NANOSECONDS_PER_SECOND = 1_000_000_000
 
 logger = logging.getLogger(__name__)
+
+AudioCompletionReason = Literal["ROOM_DELETED", "SOURCE_EOF"]
+
+
+@dataclass(frozen=True, slots=True)
+class AudioCompletionRequest:
+    reason: AudioCompletionReason
+    requested_at_monotonic: float
 
 
 class AudioSourceError(RuntimeError):
@@ -60,6 +69,9 @@ class LiveKitInstructorAudioSource:
         self._connected = False
         self._closed = False
         self._accepting_tracks = True
+        self._input_completed = False
+        self._completion_requested = asyncio.Event()
+        self._completion_request: AudioCompletionRequest | None = None
         self._chunks_taken = False
 
         self._room.on("track_published", self._on_track_published)
@@ -85,6 +97,8 @@ class LiveKitInstructorAudioSource:
             raise RuntimeError("audio chunks can only be consumed once")
         self._chunks_taken = True
         while True:
+            if self._input_completed and self._queue.empty():
+                return
             item = await self._queue.get()
             if item is _CLOSED:
                 return
@@ -94,6 +108,17 @@ class LiveKitInstructorAudioSource:
                 ) from item.error
             assert isinstance(item, AudioChunk)
             yield item
+
+    @property
+    def completion_request(self) -> AudioCompletionRequest | None:
+        return self._completion_request
+
+    async def wait_completion_requested(self) -> AudioCompletionRequest:
+        await self._completion_requested.wait()
+        request = self._completion_request
+        if request is None:
+            raise RuntimeError("audio completion event was set without a request")
+        return request
 
     async def close(self) -> None:
         if self._closed:
@@ -108,7 +133,7 @@ class LiveKitInstructorAudioSource:
             await asyncio.gather(*tasks, return_exceptions=True)
         self._tasks.clear()
         self._retired_tasks.clear()
-        self._signal(_CLOSED)
+        self._complete_input()
 
     def _consider_publication(self, publication: Any, participant: Any) -> bool:
         if not self._accepting_tracks:
@@ -175,10 +200,23 @@ class LiveKitInstructorAudioSource:
             return
         self._fail(track_sid, ConnectionError(error))
 
-    def _on_disconnected(self, *_args: Any) -> None:
+    def _on_disconnected(
+        self,
+        reason: int = rtc.DisconnectReason.UNKNOWN_REASON,
+    ) -> None:
         if not self._accepting_tracks:
             return
-        self._fail("room", ConnectionError("LiveKit room disconnected"))
+        if reason == rtc.DisconnectReason.ROOM_DELETED:
+            self._request_completion("ROOM_DELETED")
+            self._accepting_tracks = False
+            for active_track_sid in list(self._tasks):
+                self._cancel_consumer(active_track_sid)
+            self._complete_input()
+            return
+        self._fail(
+            "room",
+            ConnectionError(f"LiveKit room disconnected: reason={_disconnect_reason_name(reason)}"),
+        )
 
     def _on_consumer_done(self, track_sid: str, task: asyncio.Task[None]) -> None:
         if self._tasks.get(track_sid) is task:
@@ -266,6 +304,26 @@ class LiveKitInstructorAudioSource:
                 break
         self._signal(_AudioStreamFailure(track_sid, error))
 
+    def _request_completion(self, reason: AudioCompletionReason) -> None:
+        if self._completion_request is not None:
+            return
+        self._completion_request = AudioCompletionRequest(
+            reason=reason,
+            requested_at_monotonic=time.monotonic(),
+        )
+        self._completion_requested.set()
+
+    def _complete_input(self) -> None:
+        """Wake the sole consumer without discarding already captured audio."""
+        if self._input_completed:
+            return
+        self._input_completed = True
+        try:
+            self._queue.put_nowait(_CLOSED)
+        except asyncio.QueueFull:
+            # chunks() observes _input_completed after draining the full queue.
+            pass
+
     def _signal(self, item: _AudioStreamFailure | object) -> None:
         if self._queue.full():
             try:
@@ -276,3 +334,10 @@ class LiveKitInstructorAudioSource:
             self._queue.put_nowait(item)
         except asyncio.QueueFull:
             return
+
+
+def _disconnect_reason_name(reason: int) -> str:
+    try:
+        return rtc.DisconnectReason.Name(reason)
+    except ValueError:
+        return f"UNKNOWN({reason})"

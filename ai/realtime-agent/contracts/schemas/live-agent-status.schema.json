@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://liveclass.local/ai-candidates/live-agent-status.schema.json",
+  "title": "LiveAgentStatusCandidateV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion", "eventId", "eventType", "sessionId", "lessonId",
+    "jobId", "state", "occurredAt"
+  ],
+  "properties": {
+    "contractVersion": {"const": "1"},
+    "eventId": {"$ref": "#/$defs/safeIdentifier"},
+    "eventType": {"const": "LIVE_AGENT_STATUS"},
+    "sessionId": {"$ref": "#/$defs/canonicalUuid"},
+    "lessonId": {"$ref": "#/$defs/canonicalUuid"},
+    "jobId": {"$ref": "#/$defs/safeIdentifier"},
+    "state": {
+      "enum": [
+        "ROOM_CONNECTED", "STT_STARTED", "AUDIO_STARTED", "STOPPING",
+        "SUCCEEDED", "FAILED"
+      ]
+    },
+    "occurredAt": {"type": "string", "format": "date-time"},
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message", "retryable"],
+      "properties": {
+        "code": {"$ref": "#/$defs/safeIdentifier"},
+        "message": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "retryable": {"type": "boolean"}
+      }
+    }
+  },
+  "$defs": {
+    "canonicalUuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "safeIdentifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {"state": {"const": "FAILED"}},
+      "required": ["error"]
+    },
+    {
+      "properties": {
+        "state": {
+          "enum": [
+            "ROOM_CONNECTED", "STT_STARTED", "AUDIO_STARTED", "STOPPING", "SUCCEEDED"
+          ]
+        }
+      },
+      "not": {"required": ["error"]}
+    }
+  ]
+}
