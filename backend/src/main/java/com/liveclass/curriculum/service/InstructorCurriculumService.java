@@ -320,6 +320,13 @@ public class InstructorCurriculumService {
         return requireOwnedLesson(instructorId, lessonId);
     }
 
+    /** 강사 레슨 단건 + 연결된 활성 자료(ADR-0035) — 수정 폼이 저장된 자료를 다시 보여주도록. */
+    @Transactional(readOnly = true)
+    public InstructorLessonDetail getLessonDetail(UUID instructorId, UUID lessonId) {
+        LessonView lesson = requireOwnedLesson(instructorId, lessonId);
+        return new InstructorLessonDetail(lesson, lessonMaterialManagement.findActiveByLesson(lessonId));
+    }
+
     @Transactional
     public LessonView updateLesson(UUID instructorId, UUID lessonId, String title, String description) {
         requireOwnedLesson(instructorId, lessonId);

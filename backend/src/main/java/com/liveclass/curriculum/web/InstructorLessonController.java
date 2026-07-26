@@ -3,6 +3,7 @@ package com.liveclass.curriculum.web;
 import com.liveclass.curriculum.service.InstructorCurriculumService;
 import com.liveclass.curriculum.web.dto.AttachMaterialRequest;
 import com.liveclass.curriculum.web.dto.CreateLessonRequest;
+import com.liveclass.curriculum.web.dto.InstructorLessonResponse;
 import com.liveclass.curriculum.web.dto.LessonMaterialResponse;
 import com.liveclass.curriculum.web.dto.UpdateLessonRequest;
 import com.liveclass.lesson.api.LessonView;
@@ -53,10 +54,10 @@ public class InstructorLessonController {
         return service.listLessons(currentUserId(authentication), sectionId);
     }
 
-    @Operation(summary = "레슨 조회", description = "레슨 하나의 상세를 반환한다. 본인 것만.")
+    @Operation(summary = "레슨 조회", description = "레슨 하나의 상세를 반환한다. 본인 것만. 연결된 활성 자료(materials)를 함께 준다(ADR-0035).")
     @GetMapping("/api/instructor/lessons/{lessonId}")
-    public LessonView get(@PathVariable UUID lessonId, Authentication authentication) {
-        return service.getLesson(currentUserId(authentication), lessonId);
+    public InstructorLessonResponse get(@PathVariable UUID lessonId, Authentication authentication) {
+        return InstructorLessonResponse.from(service.getLessonDetail(currentUserId(authentication), lessonId));
     }
 
     @Operation(summary = "레슨 수정", description = "레슨 제목·설명을 수정한다. 보낸 필드만 바뀐다.")

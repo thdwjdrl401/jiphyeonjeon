@@ -221,6 +221,25 @@ class LessonMaterialContractTest {
                 .andExpect(jsonPath("$.materials[0].materialId").exists());
     }
 
+    @Test
+    void instructor_lesson_get_includes_attached_materials() throws Exception {
+        Cookie[] auth = loginAs("INSTRUCTOR");
+        String lessonId = createLesson(auth);
+        String assetId = uploadedMaterialAsset(auth);
+
+        write(post("/api/instructor/lessons/" + lessonId + "/materials"), auth, """
+                {"assetId":"%s"}
+                """.formatted(assetId))
+                .andExpect(status().isCreated());
+
+        // 강사 수정 폼의 데이터 소스(관리 GET)도 저장된 자료를 줘야 새로고침 후에도 유지된다.
+        mockMvc.perform(get("/api/instructor/lessons/" + lessonId).cookie(auth))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.materials.length()").value(1))
+                .andExpect(jsonPath("$.materials[0].fileName").value("deck.pptx"))
+                .andExpect(jsonPath("$.materials[0].materialId").exists());
+    }
+
     // ---- 헬퍼 ----
 
     /** 소유 강사의 커리큘럼→섹션→레슨을 만들고 레슨 id 반환. */
