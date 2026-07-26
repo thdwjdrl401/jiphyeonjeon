@@ -10,13 +10,15 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public record CurriculumMaterialResponse(
         String materialId,
         String fileName,
-        long fileSize
+        long fileSize,
+        String embeddingStatus
 ) {
 
     public static CurriculumMaterialResponse from(MaterialView view) {
         return new CurriculumMaterialResponse(
                 view.materialId().toString(),
                 view.fileName(),
-                view.fileSize());
+                view.fileSize(),
+                view.embeddingStatus());
     }
 }

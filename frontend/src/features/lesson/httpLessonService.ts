@@ -8,6 +8,7 @@ interface ApiLessonMaterial {
   materialId: string
   fileName: string
   fileSize: number
+  embeddingStatus?: string   // PENDING/PROCESSING/READY/FAILED (ADR-0036). 없으면 READY로 간주.
 }
 
 interface ApiLessonView {
@@ -31,7 +32,7 @@ function toMaterialView(material: ApiLessonMaterial): LessonMaterialView {
     id: material.materialId,
     name: material.fileName,
     size: formatFileSize(material.fileSize),
-    status: 'READY',
+    status: material.embeddingStatus ?? 'READY',   // 임베딩 상태를 그대로 노출(ADR-0036)
   }
 }
 
