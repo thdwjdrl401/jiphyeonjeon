@@ -47,7 +47,7 @@ LiveKit은 로그인 세션이 없다. 대신 `Authorization` 헤더에 **JWT**�
 
 ## 영향·후속
 
-- **검증**: `LiveKitWebhookContractTest` 8건 — 완료→READY+메타, 실패→FAILED, 서명 위조·누락·본문 변조→401, 멱등, 모르는 egress·비종료 이벤트 무시. `ModularityTests` 통과(video→live.api 방향 유지). 전체 스위트 통과.
+- **검증**: `LiveKitWebhookContractTest` 10건 — 완료→(VERIFYING)→READY+메타, 매니페스트 부재→FAILED, 확인 불가→fail-open READY, 실패→FAILED, 서명 위조·누락·본문 변조→401, 멱등, 모르는 egress·비종료 이벤트 무시. `ModularityTests` 통과(video→live.api 방향 유지). 전체 스위트 통과.
 - **인프라 설정 (완료)**: `infra/livekit/livekit.yaml`에 `webhook: { api_key: <API_KEY>, urls: [https://jiphyeonjeon.thdwjdrl.com/api/webhooks/livekit] }`를 추가했다. `api_key`는 `keys`의 key와 같아야 하고(그 secret으로 JWT 서명), Spring이 같은 secret으로 검증한다. url은 app nginx가 `/api`를 backend로 프록시하는 경로다. secret은 템플릿대로 서버에서 채운다(커밋 금지). **배포 후 실동작 검증**: 라이브 종료 → egress 완료 → 자산 READY + duration 확인.
 - **매니페스트 키(`hlsManifestKey`)**: 100(재생 API, 조인후) 담당이다 — 녹화 시작 시 세팅. 이 webhook은 그 값을 건드리지 않고 상태·메타만 확정한다. 두 작업의 경계.
-- **VERIFYING 생략**: 상태 enum에 `VERIFYING`이 있지만 webhook이 완료 정보를 신뢰하므로 `FINALIZING → READY` 직행이다. 스토리지 존재를 별도 HEAD로 재확인하는 VERIFYING 단계는 후속(필요 시).
+- **VERIFYING 구현 (2026-07-26)**: 완료 신호를 곧바로 믿지 않고 `FINALIZING → VERIFYING → READY/FAILED`로 간다. VOD 매니페스트(`sessions/{sessionId}/index.m3u8`)를 스토리지에서 HEAD로 재확인해 "COMPLETE인데 파일이 없는" 케이스를 잡는다. **부재 확정(404) → FAILED(`MANIFEST_MISSING`)**, **존재 → READY**, **확인 불가(네트워크·설정 예외) → READY(fail-open)** — 검증기 자체가 새로운 실패원인이 되지 않도록 webhook의 COMPLETE를 신뢰한다. HEAD는 video 모듈 자체 `RecordingStorage`/`S3RecordingStorage`(egress 버킷·`livekit.egress.*` 자격)로 친다 — asset 모듈 `S3Client` 빈과 충돌하지 않게 빈이 아닌 필드로 클라이언트를 생성(lazy). 매니페스트 키 규약은 `RecordingService`가 녹화 시작 prefix(`sessions/{id}`)와 공유해 드리프트를 막는다.
