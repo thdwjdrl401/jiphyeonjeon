@@ -7,6 +7,7 @@ import com.liveclass.live.service.LiveRoomControl;
 import com.liveclass.video.domain.VideoAssetStatus;
 import com.liveclass.video.repository.VideoAssetRepository;
 import com.liveclass.video.service.EgressControl;
+import com.liveclass.video.service.RecordingStorage;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -26,6 +27,7 @@ import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -53,6 +55,7 @@ class LiveKitWebhookContractTest {
 
     @MockitoBean private EgressControl egressControl;      // 실 LiveKit 안 타게 목.
     @MockitoBean private LiveRoomControl roomControl;
+    @MockitoBean private RecordingStorage recordingStorage;   // 실 MinIO 안 타게 목(VERIFYING HEAD).
 
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
     private final List<UUID> createdSessions = new ArrayList<>();
@@ -69,6 +72,7 @@ class LiveKitWebhookContractTest {
     void egress_complete_webhook_sets_asset_ready_with_metadata() throws Exception {
         String egressId = "EG_" + UUID.randomUUID();
         String sessionId = startRecording(egressId);
+        when(recordingStorage.head(any(), any())).thenReturn(Optional.of(10_485_760L));   // 매니페스트 존재.
 
         // 600초·10MiB·300세그먼트 완료 (duration은 나노초).
         String body = """
@@ -147,6 +151,7 @@ class LiveKitWebhookContractTest {
     void duplicate_complete_is_idempotent() throws Exception {
         String egressId = "EG_" + UUID.randomUUID();
         String sessionId = startRecording(egressId);
+        when(recordingStorage.head(any(), any())).thenReturn(Optional.of(10_485_760L));
         String body = """
                 {"event":"egress_ended","egressInfo":{"egressId":"%s","status":"EGRESS_COMPLETE",
                 "segmentResults":[{"playlistName":"index.m3u8","duration":"600000000000","size":"10485760","segmentCount":300}]}}
@@ -180,6 +185,42 @@ class LiveKitWebhookContractTest {
 
         var asset = videoAssetRepository.findByLiveSessionId(UUID.fromString(sessionId)).orElseThrow();
         assertThat(asset.getStatus()).isEqualTo(VideoAssetStatus.FINALIZING);
+    }
+
+    @Test
+    void complete_but_manifest_missing_sets_failed() throws Exception {
+        String egressId = "EG_" + UUID.randomUUID();
+        String sessionId = startRecording(egressId);
+        // COMPLETE라고 오지만 스토리지엔 매니페스트가 없다(부재 확정) → FAILED(MANIFEST_MISSING).
+        when(recordingStorage.head(any(), any())).thenReturn(Optional.empty());
+
+        String body = """
+                {"event":"egress_ended","egressInfo":{"egressId":"%s","status":"EGRESS_COMPLETE",
+                "segmentResults":[{"playlistName":"index.m3u8","duration":"600000000000","size":"10485760","segmentCount":300}]}}
+                """.formatted(egressId);
+        postWebhook(body, sign(body)).andExpect(status().isNoContent());
+
+        var asset = videoAssetRepository.findByLiveSessionId(UUID.fromString(sessionId)).orElseThrow();
+        assertThat(asset.getStatus()).isEqualTo(VideoAssetStatus.FAILED);
+        assertThat(asset.getFailureCode()).isEqualTo("MANIFEST_MISSING");
+    }
+
+    @Test
+    void complete_with_verify_error_fails_open_to_ready() throws Exception {
+        String egressId = "EG_" + UUID.randomUUID();
+        String sessionId = startRecording(egressId);
+        // 확인 자체가 실패(네트워크·설정 등) → 검증기가 실패원인이 되지 않게 COMPLETE 신뢰(fail-open) → READY.
+        when(recordingStorage.head(any(), any())).thenThrow(new RuntimeException("connection refused"));
+
+        String body = """
+                {"event":"egress_ended","egressInfo":{"egressId":"%s","status":"EGRESS_COMPLETE",
+                "segmentResults":[{"playlistName":"index.m3u8","duration":"600000000000","size":"10485760","segmentCount":300}]}}
+                """.formatted(egressId);
+        postWebhook(body, sign(body)).andExpect(status().isNoContent());
+
+        var asset = videoAssetRepository.findByLiveSessionId(UUID.fromString(sessionId)).orElseThrow();
+        assertThat(asset.getStatus()).isEqualTo(VideoAssetStatus.READY);
+        assertThat(asset.getDurationMs()).isEqualTo(600_000L);
     }
 
     // ---- 헬퍼 ----
