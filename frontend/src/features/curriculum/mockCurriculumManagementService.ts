@@ -80,16 +80,27 @@ export const mockCurriculumManagementService = {
     curriculum.title = request.info.title
     curriculum.summary = request.info.summary
     curriculum.description = request.info.description
-    curriculum.sectionCount = request.sections.length
-    curriculum.lessonCount = request.sections.reduce((count, section) => count + section.lessons.length, 0)
+
+    // 새 섹션에 실제 id를 부여(HTTP 구현과 동일 계약) — 저장 후 로컬 상태가 실제 id를 갖도록.
+    const sectionIdMap: Record<string, string> = {}
+    const persistedSections = request.sections.map((section) => {
+      if (!section.sectionId.startsWith('sec-new-')) return section
+      const realId = `sec-mock-${section.sectionId.slice('sec-new-'.length)}`
+      sectionIdMap[section.sectionId] = realId
+      return { ...section, sectionId: realId }
+    })
+
+    curriculum.sectionCount = persistedSections.length
+    curriculum.lessonCount = persistedSections.reduce((count, section) => count + section.lessons.length, 0)
     updateMockCurriculumMaterials(request.curriculumId, request.materials)
     savedStructures.set(
       request.curriculumId,
-      request.sections.map((section) => ({
+      persistedSections.map((section) => ({
         ...section,
         lessons: section.lessons.map((lesson) => ({ ...lesson })),
       })),
     )
+    return { structureVersion: request.structureVersion + 1, sectionIdMap }
   },
   async publishCurriculum(curriculumId) {
     const curriculum = getMockCurriculum(curriculumId)

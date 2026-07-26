@@ -64,7 +64,7 @@ describe('미구현 API 표시', () => {
     ['검수 저장', () => replay.saveReplayReview('les-1', '자막')],
     ['검수 게시', () => replay.publishReplayReview('les-1', '자막')],
     ['퀴즈 제출', () => replay.submitReplayQuiz('les-1', '답')],
-    ['학생 학습 요약', () => httpMyCurriculumsService.getStudentDashboardSummary()],
+    // 학생 학습 요약(getStudentDashboardSummary)은 GET /me/learning-summary로 구현됨 — 여기서 제외.
     ['강사 대시보드 요약', () => httpMyCurriculumsService.getInstructorDashboardSummary()],
     ['레슨 AI 준비', () => lesson.prepareLessonAi('les-1')],
   ]
