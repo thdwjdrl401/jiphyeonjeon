@@ -5,20 +5,28 @@
 
 BE·인프라(발행측 + RabbitMQ + 콜백 수신)는 실서버에 이미 배포돼 있다. 스위치(`MATERIAL_EMBEDDING_ENABLED`)만 꺼져 있어서 아직 잡이 안 실릴 뿐, AI 워커가 준비되면 켜면 바로 흐른다.
 
+```mermaid
+flowchart TD
+    A["강사가 자료 연결"] -->|"스위치 on"| B["BE: outbox 적재<br/>(같은 트랜잭션)"]
+    B --> C["OutboxRelay<br/>@Scheduled 5s"]
+    C --> Q(["RabbitMQ 큐<br/>ingestion.embed"])
+    Q --> W1
+
+    subgraph W["AI 워커 (당신이 구현)"]
+        direction TB
+        W1["① 큐 소비"] --> W2["② assetId로 URL 발급요청 → PPTX GET"]
+        W2 --> W3["③ bge-m3 임베딩 → pgvector 저장"]
+        W3 --> W4["④ 콜백 POST (HMAC 서명)"]
+    end
+
+    W4 --> D["BE: POST /api/internal/ai/callbacks<br/>→ embeddingStatus 확정"]
+
+    classDef done fill:#e6f4ea,stroke:#34a853,color:#111;
+    classDef todo fill:#fef7e0,stroke:#f9ab00,color:#111;
+    class B,C,Q,D done;
+    class W1,W2,W3,W4 todo;
 ```
-강사가 자료 연결          BE: outbox 적재(같은 트랜잭션)
-   └─(스위치 on)──────────────┘
-                             OutboxRelay(@Scheduled 5s) → RabbitMQ 큐  ← 여기까지 배포 완료
-                                                            │
-                          ┌─────────────── AI 워커(당신) ───┼──────────────┐
-                          │ 1) 큐 소비                      ▼               │
-                          │ 2) assetId로 URL 발급요청 → PPTX GET            │
-                          │ 3) bge-m3 임베딩 → pgvector 저장               │
-                          │ 4) 콜백 POST(HMAC 서명)                        │
-                          └───────────────────────────────┬───────────────┘
-                                                           ▼
-                          BE: POST /api/internal/ai/callbacks → embeddingStatus 확정  ← 배포 완료
-```
+> 🟢 초록 = BE·인프라(실서버 배포 완료) · 🟡 노랑 = AI 워커가 구현할 부분
 
 ---
 
@@ -161,15 +169,21 @@ requests.post(
 
 ## 4. 상태 모델 요약
 
-`embeddingStatus`는 자료 존재 여부(`MaterialStatus` ACTIVE/DELETED)와 **직교**한다. 4값:
+자료 임베딩 상태(`embeddingStatus`) 전이 — 4값(PENDING/PROCESSING/READY/FAILED):
 
+```mermaid
+stateDiagram-v2
+    [*] --> PENDING: 자료 연결 (스위치 on)
+    [*] --> READY: 자료 연결 (스위치 off · 무회귀)
+    PENDING --> PROCESSING: MATERIAL_EMBEDDING 콜백 (선택)
+    PENDING --> READY: MATERIAL_EMBEDDED 콜백
+    PROCESSING --> READY: MATERIAL_EMBEDDED 콜백
+    PENDING --> FAILED: MATERIAL_EMBED_FAILED 콜백
+    PROCESSING --> FAILED: MATERIAL_EMBED_FAILED 콜백
+    note right of READY: FE 로딩 배지 해제
+    note right of FAILED: FE 에러 · 재시도 표시
 ```
-연결 시     PENDING ──(릴레이가 큐에 실음)──▶ [워커]
-  MATERIAL_EMBEDDING 콜백 ─▶ PROCESSING (선택)
-  MATERIAL_EMBEDDED  콜백 ─▶ READY      ← 완료, FE 로딩 배지 해제
-  MATERIAL_EMBED_FAILED 콜백 ─▶ FAILED  ← FE 에러/재시도 표시
-```
-스위치가 꺼져 있으면 연결 시 바로 `READY`(파이프라인 미가동, 무회귀). FE(윤광혁)가 이 값으로 로딩 UI를 그린다.
+`embeddingStatus`는 자료 존재 여부(`MaterialStatus` ACTIVE/DELETED)와 **직교**한다. 스위치가 꺼져 있으면 연결 시 바로 `READY`(파이프라인 미가동, 무회귀). FE(윤광혁)가 이 값으로 로딩 UI를 그린다.
 
 ---
 
