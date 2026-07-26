@@ -51,10 +51,10 @@ services:
     # 호스트 포트 미노출 — 브라우저·backend는 앱 nginx의 /liveclass-assets 로만 접근(presigned가 공개 도메인으로 서명).
     # 헬스체크는 두지 않는다 — minio 서버 이미지에 mc/curl 유무가 불확실. minio-init이 재시도 루프로 준비를 기다린다.
 
-  minio-init:                              # liveclass-assets 버킷 최초 생성 (멱등)
-    image: minio/mc
+  minio-init:                              # liveclass-assets 버킷 생성 (멱등). 계속 살려둔다 —
+    image: minio/mc                         # 일회성으로 exit하면 `up --wait`가 그 종료를 실패로 보고 배포가 깨진다.
     depends_on: [minio]
-    restart: "no"
+    restart: unless-stopped
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD 필요}
@@ -63,8 +63,8 @@ services:
       - -c
       - |
         until mc alias set lc http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"; do echo 'waiting for minio'; sleep 1; done
-        mc mb -p lc/${ASSET_STORAGE_BUCKET:-liveclass-assets}
-        exit 0
+        mc mb -p lc/${ASSET_STORAGE_BUCKET:-liveclass-assets} || true
+        echo 'bucket ready'; sleep infinity
 
   backend:
     build: ./backend
