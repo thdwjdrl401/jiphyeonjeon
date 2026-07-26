@@ -28,6 +28,12 @@ public interface LessonMaterialManagement {
     void detach(UUID lessonId, UUID materialId);
 
     /**
+     * 자료 임베딩 상태를 갱신한다(ADR-0036) — AI 콜백/파이프라인이 PENDING↔PROCESSING↔READY/FAILED로 옮긴다.
+     * {@code embeddingStatus}는 {@code MaterialEmbeddingStatus} 이름. 없는 materialId면 무시(멱등).
+     */
+    void updateEmbeddingStatus(UUID materialId, String embeddingStatus);
+
+    /**
      * 여러 레슨의 활성 자료를 한 번에 조회한다(N+1 방지). 커리큘럼 상세처럼 목차 전체의 자료를
      * 채울 때 쓴다. 자료가 없는 레슨은 맵에 담기지 않는다.
      */

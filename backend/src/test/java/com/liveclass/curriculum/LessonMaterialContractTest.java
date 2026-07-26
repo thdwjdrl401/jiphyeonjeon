@@ -16,9 +16,13 @@ import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -284,6 +288,68 @@ class LessonMaterialContractTest {
         String lessonId = createLesson(auth);
         mockMvc.perform(get("/api/instructor/lessons/" + lessonId + "/materials/" + UUID.randomUUID() + "/download").cookie(auth))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void ai_callback_updates_embedding_status_and_is_idempotent() throws Exception {
+        Cookie[] auth = loginAs("INSTRUCTOR");
+        String lessonId = createLesson(auth);
+        String assetId = uploadedMaterialAsset(auth);
+        String materialId = json(write(post("/api/instructor/lessons/" + lessonId + "/materials"), auth, """
+                {"assetId":"%s"}
+                """.formatted(assetId)).andExpect(status().isCreated()).andReturn()).get("materialId").asString();
+
+        // 콜백: 임베딩 실패 → FAILED (연결 직후 READY에서 관측 가능하게 바뀐다).
+        String eventId = UUID.randomUUID().toString();
+        String body = """
+                {"eventId":"%s","eventType":"MATERIAL_EMBED_FAILED","materialId":"%s","status":"FAILED"}
+                """.formatted(eventId, materialId);
+        mockMvc.perform(post("/api/internal/ai/callbacks")
+                        .contentType(MediaType.APPLICATION_JSON).content(body).header("X-Signature", signCallback(body)))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get("/api/instructor/lessons/" + lessonId).cookie(auth))
+                .andExpect(jsonPath("$.materials[0].embeddingStatus").value("FAILED"));
+
+        // 같은 eventId 재수신(이번엔 EMBEDDED) → 멱등 무시, 상태는 그대로 FAILED.
+        String dup = """
+                {"eventId":"%s","eventType":"MATERIAL_EMBEDDED","materialId":"%s","status":"READY"}
+                """.formatted(eventId, materialId);
+        mockMvc.perform(post("/api/internal/ai/callbacks")
+                        .contentType(MediaType.APPLICATION_JSON).content(dup).header("X-Signature", signCallback(dup)))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get("/api/instructor/lessons/" + lessonId).cookie(auth))
+                .andExpect(jsonPath("$.materials[0].embeddingStatus").value("FAILED"));
+    }
+
+    @Test
+    void ai_callback_bad_signature_is_401() throws Exception {
+        String body = """
+                {"eventId":"e1","eventType":"MATERIAL_EMBEDDED","materialId":"%s"}
+                """.formatted(UUID.randomUUID());
+        mockMvc.perform(post("/api/internal/ai/callbacks")
+                        .contentType(MediaType.APPLICATION_JSON).content(body).header("X-Signature", "wrong-signature"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void ai_callback_missing_signature_is_401() throws Exception {
+        String body = """
+                {"eventId":"e2","eventType":"MATERIAL_EMBEDDED","materialId":"%s"}
+                """.formatted(UUID.randomUUID());
+        mockMvc.perform(post("/api/internal/ai/callbacks")
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isUnauthorized());
+    }
+
+    /** AI 워커가 하는 것과 같은 방식으로 서명: ai.callback-secret HMAC-SHA256 → base64. */
+    private String signCallback(String body) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec("dev-ai-callback-secret".getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            return Base64.getEncoder().encodeToString(mac.doFinal(body.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     // ---- 헬퍼 ----

@@ -111,3 +111,13 @@ liveclass:
       - http://localhost:*
       - https://jiphyeonjeon.thdwjdrl.com
       - https://*.thdwjdrl.com
+
+# AI 워커 콜백(ADR-0036) — HMAC 서명 검증 시크릿. 워커와 같은 값을 공유한다. 운영은 env로 주입(커밋 금지).
+ai:
+  callback-secret: ${AI_CALLBACK_SECRET:dev-ai-callback-secret}
+
+# 자료 임베딩 파이프라인 스위치(ADR-0036). true면 자료 연결/해제 시 outbox 발행 + PENDING 전환.
+# 릴레이(RabbitMQ)와 AI 워커가 준비되기 전까지는 false — 연결만 하고 상태 READY(무회귀).
+material:
+  embedding:
+    enabled: ${MATERIAL_EMBEDDING_ENABLED:false}

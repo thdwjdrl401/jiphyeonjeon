@@ -97,6 +97,17 @@ public class LessonMaterialService implements LessonMaterialManagement {
     }
 
     @Override
+    @Transactional
+    public void updateEmbeddingStatus(UUID materialId, String embeddingStatus) {
+        MaterialEmbeddingStatus target = MaterialEmbeddingStatus.valueOf(embeddingStatus);
+        materialAssetRepository.findById(materialId)
+                .ifPresent(m -> {
+                    m.setEmbeddingStatus(target);
+                    log.info(Audit.MARKER, "자료 임베딩 상태 갱신 materialId={} status={}", materialId, target);
+                });
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public Map<UUID, List<MaterialView>> findActiveByLessons(Collection<UUID> lessonIds) {
         if (lessonIds == null || lessonIds.isEmpty()) {
