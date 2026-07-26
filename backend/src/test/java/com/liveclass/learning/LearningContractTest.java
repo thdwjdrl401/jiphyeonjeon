@@ -197,6 +197,47 @@ class LearningContractTest {
                 .andExpect(jsonPath("$[0].curriculum.viewerContext.progress.progressPercent").value(50));
     }
 
+    @Test
+    void learning_summary_aggregates_enrolled_progress() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String cid = createPublishedCurriculum(instructor);
+        String l1 = publishLesson(instructor, cid, "1강");
+        publishLesson(instructor, cid, "2강");
+        Cookie[] student = loginAs("STUDENT");
+        approveEnrollment(instructor, student, cid);
+
+        // 수강 직후: 진행 중 1, 완료 0, 완료 레슨 0, 평균 0.
+        write(get("/api/me/learning-summary"), student, null)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.inProgressCurriculumCount").value(1))
+                .andExpect(jsonPath("$.completedCurriculumCount").value(0))
+                .andExpect(jsonPath("$.completedLessonCount").value(0))
+                .andExpect(jsonPath("$.averageProgress").value(0));
+
+        // 2강 중 1강 완료 → 완료 레슨 1, 평균 50, 아직 커리큘럼 완료 아님.
+        write(put("/api/lessons/" + l1 + "/progress"), student,
+                "{\"progressPercent\":100,\"lastPositionMs\":600000}")
+                .andExpect(status().isNoContent());
+
+        write(get("/api/me/learning-summary"), student, null)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.completedLessonCount").value(1))
+                .andExpect(jsonPath("$.averageProgress").value(50))
+                .andExpect(jsonPath("$.inProgressCurriculumCount").value(1))
+                .andExpect(jsonPath("$.completedCurriculumCount").value(0));
+    }
+
+    @Test
+    void learning_summary_is_empty_without_enrollments() throws Exception {
+        Cookie[] student = loginAs("STUDENT");
+        write(get("/api/me/learning-summary"), student, null)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.inProgressCurriculumCount").value(0))
+                .andExpect(jsonPath("$.completedCurriculumCount").value(0))
+                .andExpect(jsonPath("$.completedLessonCount").value(0))
+                .andExpect(jsonPath("$.averageProgress").value(0));
+    }
+
     // ---- 헬퍼 ----
 
     private String createPublishedCurriculum(Cookie[] instructor) throws Exception {
