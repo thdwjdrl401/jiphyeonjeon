@@ -22,6 +22,12 @@ public interface LessonMaterialManagement {
     List<MaterialView> findActiveByLesson(UUID lessonId);
 
     /**
+     * 레슨 자료 연결을 해제한다(소프트 삭제 → status DELETED, findActive에서 제외). 멱등:
+     * 그 레슨의 활성 연결이 아니면(없음·이미 삭제·다른 레슨) 아무것도 하지 않는다. 소유권은 호출자가 확인.
+     */
+    void detach(UUID lessonId, UUID materialId);
+
+    /**
      * 여러 레슨의 활성 자료를 한 번에 조회한다(N+1 방지). 커리큘럼 상세처럼 목차 전체의 자료를
      * 채울 때 쓴다. 자료가 없는 레슨은 맵에 담기지 않는다.
      */

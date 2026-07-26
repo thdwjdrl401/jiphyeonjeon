@@ -11,6 +11,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.net.URI;
 import java.util.List;
 import java.util.UUID;
 
@@ -97,6 +99,23 @@ public class InstructorLessonController {
                                                  Authentication authentication) {
         return LessonMaterialResponse.from(
                 service.attachMaterial(currentUserId(authentication), lessonId, request.assetId()));
+    }
+
+    @Operation(summary = "레슨 자료 삭제", description = "연결된 자료를 소프트 삭제한다(멱등). 소유 강사만.")
+    @DeleteMapping("/api/instructor/lessons/{lessonId}/materials/{materialId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteMaterial(@PathVariable UUID lessonId, @PathVariable UUID materialId,
+                               Authentication authentication) {
+        service.detachMaterial(currentUserId(authentication), lessonId, materialId);
+    }
+
+    @Operation(summary = "레슨 자료 다운로드",
+            description = "presigned GET URL로 302 리다이렉트한다 — 바이트는 스토리지 직결(앱 서버를 통과하지 않음). 소유 강사만.")
+    @GetMapping("/api/instructor/lessons/{lessonId}/materials/{materialId}/download")
+    public ResponseEntity<Void> downloadMaterial(@PathVariable UUID lessonId, @PathVariable UUID materialId,
+                                                 Authentication authentication) {
+        String url = service.materialDownloadUrl(currentUserId(authentication), lessonId, materialId);
+        return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(url)).build();
     }
 
     private UUID currentUserId(Authentication authentication) {

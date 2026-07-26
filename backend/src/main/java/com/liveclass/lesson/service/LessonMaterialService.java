@@ -82,6 +82,18 @@ public class LessonMaterialService implements LessonMaterialManagement {
     }
 
     @Override
+    @Transactional
+    public void detach(UUID lessonId, UUID materialId) {
+        // 멱등 소프트 삭제 — 그 레슨의 활성 연결일 때만 DELETED로. 없음·이미 삭제·다른 레슨이면 무시.
+        materialAssetRepository.findById(materialId)
+                .filter(m -> m.getLessonId().equals(lessonId) && m.getStatus() == MaterialStatus.ACTIVE)
+                .ifPresent(m -> {
+                    m.setStatus(MaterialStatus.DELETED);
+                    log.info(Audit.MARKER, "자료 연결 해제 lessonId={} materialId={}", lessonId, materialId);
+                });
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public Map<UUID, List<MaterialView>> findActiveByLessons(Collection<UUID> lessonIds) {
         if (lessonIds == null || lessonIds.isEmpty()) {

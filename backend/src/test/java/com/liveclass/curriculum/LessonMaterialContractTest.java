@@ -27,8 +27,10 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -238,6 +240,49 @@ class LessonMaterialContractTest {
                 .andExpect(jsonPath("$.materials.length()").value(1))
                 .andExpect(jsonPath("$.materials[0].fileName").value("deck.pptx"))
                 .andExpect(jsonPath("$.materials[0].materialId").exists());
+    }
+
+    @Test
+    void detach_material_removes_it_and_is_idempotent() throws Exception {
+        Cookie[] auth = loginAs("INSTRUCTOR");
+        String lessonId = createLesson(auth);
+        String assetId = uploadedMaterialAsset(auth);
+        String materialId = json(write(post("/api/instructor/lessons/" + lessonId + "/materials"), auth, """
+                {"assetId":"%s"}
+                """.formatted(assetId)).andExpect(status().isCreated()).andReturn()).get("materialId").asString();
+
+        // 삭제 → 204, 관리 GET에서 사라짐.
+        write(delete("/api/instructor/lessons/" + lessonId + "/materials/" + materialId), auth, null)
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get("/api/instructor/lessons/" + lessonId).cookie(auth))
+                .andExpect(jsonPath("$.materials.length()").value(0));
+
+        // 멱등 — 이미 삭제된 걸 또 삭제해도 204.
+        write(delete("/api/instructor/lessons/" + lessonId + "/materials/" + materialId), auth, null)
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void download_material_redirects_to_presigned_url() throws Exception {
+        Cookie[] auth = loginAs("INSTRUCTOR");
+        String lessonId = createLesson(auth);
+        String assetId = uploadedMaterialAsset(auth);
+        String materialId = json(write(post("/api/instructor/lessons/" + lessonId + "/materials"), auth, """
+                {"assetId":"%s"}
+                """.formatted(assetId)).andExpect(status().isCreated()).andReturn()).get("materialId").asString();
+
+        // 302 + Location(presigned GET) — 바이트는 스토리지 직결.
+        mockMvc.perform(get("/api/instructor/lessons/" + lessonId + "/materials/" + materialId + "/download").cookie(auth))
+                .andExpect(status().isFound())
+                .andExpect(header().exists("Location"));
+    }
+
+    @Test
+    void download_unknown_material_returns_404() throws Exception {
+        Cookie[] auth = loginAs("INSTRUCTOR");
+        String lessonId = createLesson(auth);
+        mockMvc.perform(get("/api/instructor/lessons/" + lessonId + "/materials/" + UUID.randomUUID() + "/download").cookie(auth))
+                .andExpect(status().isNotFound());
     }
 
     // ---- 헬퍼 ----

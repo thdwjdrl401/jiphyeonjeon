@@ -163,6 +163,9 @@ export const httpLessonService = {
 
     return lesson
   },
+  async deleteLessonMaterial(lessonId, materialId) {
+    await apiClient.delete(`/instructor/lessons/${lessonId}/materials/${materialId}`)
+  },
   // 자료 임베딩을 트리거하는 경로. 자료 업로드 자체가 없어 준비할 대상이 없다(CP3).
   async prepareLessonAi(lessonId) {
     return notImplemented(`POST /instructor/lessons/${lessonId}/ai-preparation`)

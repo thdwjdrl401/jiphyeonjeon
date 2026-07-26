@@ -389,6 +389,28 @@ public class InstructorCurriculumService {
         return material;
     }
 
+    /** 레슨 자료 연결 해제(소프트 삭제). 소유권 확인 후 위임. 멱등(없는 자료여도 성공). */
+    @Transactional
+    public void detachMaterial(UUID instructorId, UUID lessonId, UUID materialId) {
+        requireOwnedLesson(instructorId, lessonId);
+        lessonMaterialManagement.detach(lessonId, materialId);
+    }
+
+    /**
+     * 레슨 자료 다운로드용 presigned GET URL. 소유권 확인 후, 그 레슨의 활성 자료 중 materialId를 찾아
+     * 에셋의 presigned URL을 발급한다. 바이트는 스토리지 직결이라 이 URL로 302 리다이렉트만 하면 된다.
+     */
+    @Transactional(readOnly = true)
+    public String materialDownloadUrl(UUID instructorId, UUID lessonId, UUID materialId) {
+        requireOwnedLesson(instructorId, lessonId);
+        MaterialView material = lessonMaterialManagement.findActiveByLesson(lessonId).stream()
+                .filter(m -> m.materialId().equals(materialId))
+                .findFirst()
+                .orElseThrow(() -> new LessonNotFoundException("자료를 찾을 수 없습니다."));
+        return assetDirectory.resolveUrl(material.assetId())
+                .orElseThrow(() -> new LessonNotFoundException("자료 URL을 발급할 수 없습니다."));
+    }
+
     // ── 구조 순서 원자 저장 (STRUCTURE-01) ──
 
     /**

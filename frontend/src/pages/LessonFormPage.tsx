@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { instructorPaths, publicPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
 import { getInstructorCurriculum } from '@/features/curriculum/curriculumManagementService'
-import { getLesson, prepareLessonAi, saveLesson } from '@/features/lesson/lessonService'
+import { deleteLessonMaterial, getLesson, prepareLessonAi, saveLesson } from '@/features/lesson/lessonService'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
 import { InlineNotice, PageHeader, Panel, StatusBadge } from '@/shared/ui/WorkspaceUi'
@@ -70,6 +70,20 @@ export default function LessonFormPage() {
     setMaterials((current) => [...current, ...files.map((file) => ({ id: `${file.name}-${file.lastModified}`, name: file.name, size: `${(file.size / 1024 / 1024).toFixed(1)} MB`, file }))])
     markChanged()
   }
+  // 저장된 자료(파일 없음 = 서버에 있는 것)는 삭제 API로 즉시 반영, 새로 고른 파일은 로컬에서만 제거.
+  const removeMaterial = async (material: SelectedMaterial) => {
+    if (!material.file && lessonId) {
+      try {
+        await deleteLessonMaterial(lessonId, material.id)
+      } catch {
+        setSaveError('자료 삭제에 실패했습니다.')
+        return
+      }
+    }
+    setMaterials((current) => current.filter((item) => item.id !== material.id))
+    markChanged()
+  }
+
   const save = async (event: FormEvent) => {
     event.preventDefault()
     if (!title.trim() || (canEditLiveSchedule && hasLiveSchedule && !scheduledAt)) return
@@ -126,7 +140,7 @@ export default function LessonFormPage() {
 
         <Panel title="PPTX 강의 자료" description={isEdit ? '초기 준비 이후에는 자료를 하나씩 추가하고 영향 범위만 다시 처리합니다.' : '초기 자료는 여러 개를 선택한 뒤 한 번에 AI 준비를 시작합니다.'}>
           <label className="material-dropzone"><input type="file" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation" multiple={!isEdit} onChange={selectFiles} /><span className="material-dropzone__icon">P</span><strong>PPTX 파일 선택</strong><small>{isEdit ? '한 번에 한 파일 · 기존 자료는 유지됩니다.' : '여러 파일을 함께 선택할 수 있습니다.'}</small></label>
-          {materials.length > 0 && <ul className="material-list">{materials.map((material) => <li key={material.id}><span className="file-icon">PPTX</span><div><strong>{material.name}</strong><small>{material.size}</small></div><StatusBadge tone={processing ? 'warning' : 'success'}>{processing ? 'EMBEDDING' : 'READY'}</StatusBadge><button type="button" aria-label={`${material.name} 제거`} onClick={() => { setMaterials((current) => current.filter((item) => item.id !== material.id)); markChanged() }}>×</button></li>)}</ul>}
+          {materials.length > 0 && <ul className="material-list">{materials.map((material) => <li key={material.id}><span className="file-icon">PPTX</span><div><strong>{material.name}</strong><small>{material.size}</small></div>{isEdit && !material.file && <a className="button button--soft button--small" href={`/api/instructor/lessons/${lessonId}/materials/${material.id}/download`}>다운로드</a>}<StatusBadge tone={processing ? 'warning' : 'success'}>{processing ? 'EMBEDDING' : 'READY'}</StatusBadge><button type="button" aria-label={`${material.name} 제거`} onClick={() => void removeMaterial(material)}>×</button></li>)}</ul>}
           <InlineNotice tone={materials.length ? 'info' : 'warning'}>{materials.length ? `${materials.length}개 자료가 준비 목록에 있습니다. AI 준비 중에는 추가·삭제가 제한됩니다.` : '자료 없이도 DRAFT 저장은 가능하지만 게시와 라이브 시작은 할 수 없습니다.'}</InlineNotice>
           <div className="form-actions"><button className="button button--soft" type="button" disabled={!materials.length || processing} onClick={prepare}>{processing ? 'AI 준비 중…' : 'AI 준비 시작'}</button></div>
         </Panel>

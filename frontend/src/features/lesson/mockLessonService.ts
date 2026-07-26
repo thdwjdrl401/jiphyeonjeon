@@ -17,6 +17,9 @@ export const mockLessonService = {
       status: 'DRAFT' as const,
     }
   },
+  async deleteLessonMaterial() {
+    // mock: 서버 없음 — 호출자가 로컬 목록에서 제거한다.
+  },
   async prepareLessonAi() {
     if (import.meta.env.MODE === 'test') return
     await new Promise<void>((resolve) => window.setTimeout(resolve, 700))
