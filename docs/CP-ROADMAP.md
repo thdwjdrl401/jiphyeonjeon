@@ -23,7 +23,7 @@ flowchart LR
 
   T0["T0 인프라·스캐폴딩<br/>모노레포·compose·CI·EC2 배포<br/>+ LiveKit self-host·Egress·TURN"]
   SPK["STT 한국어 스파이크"]
-  MAT["자료→레슨 연결<br/>BE 선행 · 미착수"]
+  MAT["자료→레슨 연결<br/>BE 선행 · 해소(ADR-0035)"]
   T0 --> CP0["CP0 인증 + 커리큘럼/live_session 골격"]
   CP0 --> CP1["CP1 라이브 미디어<br/>(WebRTC 화상 + 채팅) ★첫 데모"]
   CP1 --> CP2["CP2 라이브 자막(STT)"]
@@ -35,16 +35,15 @@ flowchart LR
   CP2 -.녹화 자막.-> CP4
   CP3 -.녹화 RAG.-> CP4
 
-  class T0,CP0 done
-  class CP1,CP4 partial
-  class CP2,CP3,CP5,SPK todo
-  class MAT gap
+  class T0,CP0,MAT done
+  class CP1,CP3,CP4 partial
+  class CP2,CP5,SPK todo
 ```
 
 - **핵심 트랙**: CP1(라이브 미디어) → CP2(자막) → CP3(용어·RAG)
 - **다시보기**: CP4 (라이브 산출물 녹화·재생 — CP1 이후, CP2·CP3 결과 재사용)
 - **안전 데모 지점**: **CP1(미니멀 라이브)**, **CP3(제품 핵심)**
-- 🔴 **`자료→레슨 연결`은 새로 드러난 선행조건이다.** presigned 업로드는 되지만 자료를 레슨에 붙이는 API가 없어 RAG ingestion의 입력이 비어 있다([ARCHITECTURE §9-2](ARCHITECTURE.md)). CP3 착수 전 BE 작업.
+- ✅ **`자료→레슨 연결`은 해소됐다.** `POST /instructor/lessons/{id}/materials`로 presigned 업로드한 PPTX 에셋을 레슨에 연결하고 삭제·다운로드까지 배선됐다([ADR-0035](decisions/songjeongki/0035-lesson-material-attach.md), [ARCHITECTURE §9-2](ARCHITECTURE.md)). RAG ingestion의 입력이 채워져 CP3 착수를 막던 선행조건이 사라졌다.
 
 ## 현재 위치
 
@@ -56,8 +55,8 @@ flowchart LR
 | **CP0** | ✅ 인증·커리큘럼·섹션·레슨·수강·카탈로그·구조 재정렬 | ✅ 화면 + 실 API 연동 | — |
 | **CP1** ★ | ✅ LiveKit 토큰·채팅 WS·세션 수명주기·참가자 관리 | 🟡 세션·채팅 API 연동 ✅ / `livekit-client` ⬜ | — |
 | **CP2** | ⬜ | ⬜ | ⬜ realtime-agent |
-| **CP3** ★ | ⬜ (선행: 자료→레슨 연결) | ⬜ | ⬜ ai-api·ai-worker |
-| **CP4** | 🟡 Egress 제어·`VideoAsset` 완료 / 재생 API 미착수 | ⬜ | — |
+| **CP3** ★ | 🟡 BE 슬라이스 착수(자료 연결·삭제·다운로드, 임베딩 outbox→RabbitMQ→콜백 inbox, 스위치 off) | ⬜ | ⬜ ai-api·ai-worker |
+| **CP4** | 🟡 Egress 제어·`VideoAsset` 완료·egress 완료 웹훅 ✅(ADR-0034) / 재생 API 미착수 | ⬜ | — |
 | **CP5** | ⬜ | ⬜ | ⬜ |
 
 ## 단계별 상세
@@ -72,7 +71,7 @@ flowchart LR
 | **CP4** | 녹화·다시보기 | Egress 녹화→HLS→MinIO, **egress 웹훅 수신기**(상태 전이 + 시간축 앵커 저장), **재생 API**(권한 검증 + manifest presigned 재작성), HLS 플레이어 + 교정 자막·용어·RAG 재생 | HLS.js |
 | **CP5** | 퀴즈·따라잡기 | 퀴즈 후보→검수→응시(**결정론 채점**), 재접속 catch-up | — |
 
-> **RabbitMQ는 dev 인프라에 이미 서 있지만 배선은 CP3이다.** 브로커와 관리 UI는 떠 있어도 backend에 `spring-amqp` 의존성·설정이 없다. CP2의 자막 경로는 Redis Streams로 충분하고 실제 배치 잡(PPTX 파싱·embed)은 CP3에서 처음 생기므로, **prod 투입과 Spring 배선을 함께 CP3에서** 한다([ARCHITECTURE §9-4](ARCHITECTURE.md)).
+> **RabbitMQ 배선은 CP3에서 이뤄졌다.** backend에 `spring-amqp` 의존성·설정이 들어가 outbox 릴레이가 `ingestion.embed`로 발행하고, prod compose에도 RabbitMQ가 추가됐다([ADR-0036](decisions/songjeongki/0036-material-embedding-pipeline.md), [ARCHITECTURE §9-4](ARCHITECTURE.md)). CP2 자막 경로는 여전히 Redis Streams만으로 충분하다. 자료 임베딩 파이프라인은 스위치(`material.embedding.enabled`) 뒤에서 기본 off다.
 >
 > **CP3에서 채팅 브로커도 함께 교체한다.** 현재 STOMP 브로커가 인메모리라 백엔드를 2대로 늘리면 채팅이 인스턴스별로 갈린다. RabbitMQ를 들일 때 STOMP relay로 전환하면 수평 확장의 유일한 선행조건이 해소된다([ARCHITECTURE §9-6](ARCHITECTURE.md)).
 
@@ -97,7 +96,6 @@ flowchart LR
 | 결정 | 막는 CP | 내용 |
 |---|---|---|
 | 🔴 **지평선(horizon) 정의** | CP2 | 확정본 지연을 몇 초로 둘지. 없으면 FE 자막 렌더 정책·BE 영속 시점을 못 정한다 |
-| 🔴 **자료→레슨 연결** | CP3 | RAG ingestion의 입력. BE 선행 작업 |
 | 🟠 **자막 유실 정책** | CP2 | Redis fast-path 유실 허용 + 녹화 2-pass 복구로 확정할지 |
 | 🟠 **단일 노드 운용 전제** | CP2 | STT·임베딩·LLM 전부 외부 API, Egress는 데모 세션에만, 동시 세션 1~2개 |
 | 🟠 **다시보기 시간축 변환** | CP4 | 규칙 확정 — 서버가 `index.m3u8` 첫 PDT를 앵커로 오프셋 하나를 내려준다. 선행: egress 웹훅 수신기 ([ARCHITECTURE §9-9](ARCHITECTURE.md)) |

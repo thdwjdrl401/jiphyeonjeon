@@ -33,10 +33,10 @@
 ## 3. 내부 계약 (확정 인터페이스)
 
 ### 3-1. Spring → AI 배치 잡 (RabbitMQ)
-잡 envelope: `{ jobId, idempotencyKey, tenantId, curriculumId, lessonId, taskType, inputRefs, policy, contractVersion, correlationId }`. taskType: `PPTX_PARSE|EMBED|CANDIDATE_GEN|STT_2PASS`. (라이브 STT는 배치 아님 — Redis Streams §3-3. 트랜스코드는 없음 — VOD=Egress 녹화, [decisions/songjeongki/0010](decisions/songjeongki/0010-self-host-vod.md)) **outbox**로 발행 신뢰성, 실패는 **DLQ**.
+자료 임베딩 잡 envelope(정본은 코드 `InstructorCurriculumService.enqueueEmbedJob`): `{ taskType, materialId, assetId, lessonId, curriculumId, fileName, policy{embedModel}, contractVersion }`. taskType: `PPTX_EMBED`(자료 임베딩)·`EMBED_DELETE`(자료 삭제 시 chunk 제거) 등. (라이브 STT는 배치 아님 — Redis Streams §3-3. 트랜스코드는 없음 — VOD=Egress 녹화, [decisions/songjeongki/0010](decisions/songjeongki/0010-self-host-vod.md)) **outbox**로 발행 신뢰성, 실패는 **DLQ**. **워커 파일 접근(B안, 주문형 발급)**: envelope에 파일 위치·URL을 싣지 않는다. 워커가 잡 처리 **직전에** `POST /api/internal/ai/materials/download-url`(본문 `{assetId}`, §3-2와 동일 HMAC 서명)로 갓 서명된 presigned GET URL을 받아 스토리지에서 직접 읽는다 — 자격증명을 워커에 두지 않고, 사용 직전 발급이라 TTL 만료와 무관. chunk 정책(chunkSize·overlap)은 워커 설정 소유(envelope의 `policy`는 `embedModel`만). 상세: [decisions/songjeongki/0036](decisions/songjeongki/0036-material-embedding-pipeline.md).
 
-### 3-2. AI → Spring callback (HTTP, 서명)
-`{ eventId, eventType, jobId, lessonId, status, outputs }`. eventType 예: `LESSON_AI_READY`. Spring은 `eventId`로 중복 제거(멱등), 산출물을 ai schema에 두고 강사 게시 시 core로 반영.
+### 3-2. AI → Spring callback (HTTP, 서명) — 구현됨
+`POST /api/internal/ai/callbacks` — permitAll이되 **HMAC-SHA256 서명이 실질 인증**이다(egress webhook 0034와 동일 패턴). 워커가 공유 시크릿(`ai.callback-secret`)으로 **원시 바이트 body**를 서명해 `X-Signature`(base64) 헤더에 실어 보내고, 검증 실패는 401. body: `{ eventId, eventType, jobId, materialId, lessonId, status }`(미지의 필드는 무시). Spring은 `external_event_inbox`에 `(source=ai-worker, eventId)` 복합키로 삽입해 **멱등** 처리(중복이면 무시). eventType → 자료 임베딩 상태 매핑: `MATERIAL_EMBEDDED`→READY, `MATERIAL_EMBED_FAILED`→FAILED, `MATERIAL_EMBEDDING`→PROCESSING, 그 외는 inbox에만 남기고 상태 불변. 코드: `aiintegration/service/AiCallbackService.java`·`web/AiCallbackVerifier.java`. 상세: [decisions/songjeongki/0036](decisions/songjeongki/0036-material-embedding-pipeline.md).
 
 ### 3-3. AI → Spring 실시간 (Redis Streams, STT/자막)
 세션별 스트림. 메시지: `caption.partial|final|revised { sessionId|lessonId, segmentId, startMs, endMs, text, revision }` · `term` · `evidence` · `summary`. (라이브 STT 실시간 전달; 다시보기는 저장본 재생 — [decisions/songjeongki/0013](decisions/songjeongki/0013-unified-streaming-stt.md))

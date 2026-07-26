@@ -366,9 +366,9 @@ flowchart TB
 원칙 3은 "Redis를 durable 큐로 쓰지 않는다"인데, STT 자막이 Redis Streams를 지난다. Redis가 재시작하면 그 구간 자막의 정본이 없다.
 → **제안**: 자막 fast-path는 **의도적으로 유실 허용**(consumer group + PEL로 at-least-once까지만)하고, 유실 구간은 **CP4 녹화본 2-pass 재처리로 복구**한다. 이러면 원칙 3과 모순되지 않는다 — Redis는 여전히 fast-path이고 정본 복구 경로는 녹화다. 이 문장을 계약에 명시해야 한다.
 
-### 9-4. 🟠 RabbitMQ는 서 있지만 배선은 CP3이다
-`dev-infra` compose에 브로커가 떠 있고 관리 UI까지 TLS로 종단돼 있다. 다만 **prod compose에는 없고, backend에 `spring-amqp` 의존성도 설정도 없다** — 즉 인프라만 준비된 상태다.
-→ **배선 시점은 CP3으로 잡는다.** CP2 자막 경로는 Redis Streams만으로 충분하고, 실제 배치 잡(PPTX 파싱·embed)은 CP3에서 처음 생긴다. prod에 컨테이너를 얹는 것도 그때다(§9-5).
+### 9-4. ✅ 해소됨 — RabbitMQ 배선(자료 임베딩 잡)
+backend에 `spring-amqp` 의존성·설정이 들어가고, `outbox_events`를 읽어 `ingestion.embed`로 발행하는 **outbox 릴레이**가 붙었다. prod compose에도 RabbitMQ 컨테이너가 추가됐다([ADR-0036](decisions/songjeongki/0036-material-embedding-pipeline.md)). 자료 임베딩 파이프라인은 스위치(`material.embedding.enabled`) 뒤에서 기본 off다.
+> **채팅 브로커(STOMP relay) 전환은 여전히 미착수다(§9-6).** 여기서 붙은 건 배치 잡용 AMQP 경로이지, 인메모리 STOMP SimpleBroker를 RabbitMQ relay로 바꾸는 작업은 아니다 — 그건 수평 확장 시점에 별도로 한다.
 
 ### 9-5. 🔴 EC2 단일 노드 용량이 CP2부터 빠듯하다
 두 스택 합쳐 이미 컨테이너 10여 개가 돌고, Egress는 내부적으로 Chrome을 띄워 **단독 권장 사양이 4vCPU/4GB**다. 여기에 CP2~CP3에서 realtime-agent·ai-api·ai-worker·RabbitMQ가 더 붙는다.
@@ -378,9 +378,9 @@ flowchart TB
 STOMP 브로커가 인메모리 SimpleBroker라 **브로드캐스트가 인스턴스 로컬**이다. backend를 2대로 늘리는 순간 채팅이 인스턴스별로 갈린다.
 → 세션이 Redis에 있어 나머지는 이미 stateless이므로, **수평 확장의 유일한 선행조건이 브로커 교체**다. CP3에서 RabbitMQ를 들일 때 STOMP relay로 함께 전환하는 게 자연스럽다.
 
-### 9-7. 🟡 Python → Spring 역방향 경로가 미확정이다
-`external_event_inbox`(멱등 수신)가 스키마에 있는데 **어떤 채널로 오는지**가 정해지지 않았다. ADR-0017은 "이벤트(큐)"라고 했으므로 HTTP 콜백이 아니라 **결과 큐**로 확정하는 게 일관적이다.
-→ 구성도에는 `WK → MQ → SP` 역방향 화살표로 반영해 뒀다. 계약(잡 envelope·결과 메시지 스키마)은 CONTRACT.md에 정의 필요.
+### 9-7. 🟡 Python → Spring 역방향 경로 — 자료 임베딩은 콜백 inbox로 구현됨
+`external_event_inbox`(멱등 수신)를 쓰는 **AI 콜백 수신기가 배선됐다** — 워커가 `POST /api/internal/ai/callbacks`(HMAC 서명, permitAll이되 서명이 실질 인증)로 보내면 `(source=ai-worker, eventId)` 복합키로 멱등 처리해 자료 embeddingStatus를 확정한다([ADR-0036](decisions/songjeongki/0036-material-embedding-pipeline.md), CONTRACT §3-2).
+→ 다만 **STT/자막 실시간 역방향(Redis Streams 소비→core 영속)은 여전히 미결**이다. ADR-0017이 상정한 "결과 큐" 경로 중 배치 잡 콜백만 섰고, 실시간 경로는 CP2에서 붙는다.
 
 ### 9-8. 🟠 다시보기 재생 인증 — 기존 seam 설계가 현실과 안 맞는다
 이전 판은 "seam 3개(재생 URL 발급 · nginx · PlaybackTokenService)"라고 적었지만, 실제로는 **셋 다 존재하지 않고**, 현재 nginx는 SPA·API 프록시 전용이라 HLS 서빙 경로 자체가 없다.
@@ -403,7 +403,7 @@ session_offset_ms = index.m3u8 의 첫 PROGRAM-DATE-TIME − live_session.starte
 
 > ⚠️ **`video_asset.recording_started_at`을 앵커로 쓰면 안 된다.** 지금 값은 `StartEgress` 호출 시각(`RecordingService`)이라, Chrome 기동·페이지 로드·방 접속 지연이 통째로 오차가 된다 — `infra/livekit/README.md` 트러블슈팅에 20초까지 걸린 사례가 있다. 앵커 전용 컬럼을 따로 둔다.
 
-**선행 작업** — **egress 웹훅 수신기가 아직 없다.** 코드 곳곳(`RecordingService`·`ReplayView`·`CatalogService`)이 "완료 webhook이 채운다"를 전제로 `null`을 반환하고 있다. 그 수신기를 붙이면서 `index.m3u8`의 첫 PDT를 파싱해 앵커를 저장한다. 재생목록은 **첫 세그먼트가 닫히는 즉시**(세그먼트 2초 설정) 업로드되므로 녹화 종료를 기다릴 필요가 없다.
+**선행 작업** — **egress 완료 웹훅 수신기는 구현됐다**([ADR-0034](decisions/songjeongki/0034-egress-completion-webhook.md)). LiveKit `egress_ended`를 JWT 서명 검증 후 받아 자산을 READY/FAILED로 확정하고 `durationMs`·`sizeBytes`·`segmentCount`를 채운다. 다만 **시간축 변환 자체(앵커 저장·오프셋 산출)는 여전히 미착수다** — 이 수신기가 `index.m3u8`의 첫 PDT를 파싱해 앵커 전용 컬럼에 저장하는 부분이 남았다. 재생목록은 **첫 세그먼트가 닫히는 즉시**(세그먼트 2초 설정) 업로드되므로 녹화 종료를 기다릴 필요가 없다.
 
 **남은 위험 — 파이프라인 stall(미검증).** 미디어 타임라인이 벽시계 대비 멈추면 그만큼 자막이 누적해서 어긋나는데, `DISCONTINUITY` 태그가 없어 **사후 탐지 수단이 없다.** 반면 egress 재시작은 위험하지 않다 — 파일 접두사에 `{retry}` 치환자가 없어 재시도 자체가 거부되므로, 같은 재생목록에 두 번째 타임라인이 몰래 이어붙지 않는다(뒤가 잘릴 뿐 오프셋은 유효).
 
@@ -418,7 +418,7 @@ FE는 **오퍼레이션 단위 하이브리드 라우팅**을 쓴다 — 각 호
 문제는 **미구현 쪽**이다. `/live-sessions/{id}/captions`, `/lessons/{id}/ai/questions:stream`, `/instructor/live-sessions/{id}/processing`, `/instructor/lessons/{id}/ai-preparation` 같은 CP2·CP3 경로가 이미 FE 코드에 문자열로 박혀 있는데 **CONTRACT.md에는 정의가 없다.** 이대로 CP2에 들어가면 계약 드리프트가 반복된다.
 → **CP2 착수 전에 이 경로들을 계약으로 승격**시키거나, FE가 임시 경로임을 코드에 명시해야 한다.
 
-> ⚠️ 하나는 지금 바로 충돌한다. FE의 자료 업로드 목이 `POST /instructor/lessons/{id}/materials`에 **multipart `FormData`로 파일을 직접 보낸다.** 이는 원칙 4(바이트는 Spring을 통과하지 않음)와 [ADR-0023](decisions/songjeongki/0023-asset-presigned-upload.md) presigned 방식에 어긋난다. 실제 API는 presigned 티켓 발급 + 완료 통보 2단계여야 한다(§9-2와 함께 정리).
+> ✅ 이전에 충돌하던 자료 업로드 경로는 해소됐다. FE가 `POST /instructor/lessons/{id}/materials`를 **presigned 티켓 흐름**(에셋 업로드 후 `{"assetId":"..."}` 연결, multipart 아님)으로 배선해 원칙 4·[ADR-0023](decisions/songjeongki/0023-asset-presigned-upload.md)·[ADR-0035](decisions/songjeongki/0035-lesson-material-attach.md)와 일치한다.
 
 `livekit-client`·`hls.js` 의존성은 아직 없다 — **CP1 데모의 실제 잔여 작업은 FE 미디어 연동 하나**다.
 
