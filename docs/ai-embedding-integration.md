@@ -12,7 +12,7 @@ flowchart TD
     C --> Q(["RabbitMQ 큐<br/>ingestion.embed"])
     Q --> W1
 
-    subgraph W["AI 워커 (당신이 구현)"]
+    subgraph W["AI 워커 (AI팀 구현)"]
         direction TB
         W1["① 큐 소비"] --> W2["② assetId로 URL 발급요청 → PPTX GET"]
         W2 --> W3["③ bge-m3 임베딩 → pgvector 저장"]
@@ -56,7 +56,7 @@ flowchart TD
   "contractVersion": 1
 }
 ```
-> 파일 위치·URL은 envelope에 **없다**(§2 B안). 워커는 처리 직전에 `assetId`로 다운로드 URL을 주문형 발급받는다 — 그래서 TTL 만료 걱정이 없다.
+> 파일 위치·URL은 envelope에 **없다**(§2). 워커는 처리 직전에 `assetId`로 다운로드 URL을 발급받는다 — 그래서 TTL 만료 걱정이 없다.
 
 ### 1-2. 삭제 잡 envelope (`taskType=EMBED_DELETE`)
 
@@ -74,7 +74,7 @@ flowchart TD
 
 ---
 
-## 2. PPTX 바이트를 어떻게 읽나 (확정: B — 주문형 presigned URL)
+## 2. PPTX 바이트를 어떻게 읽나
 
 **워커가 잡을 처리하기 직전에 BE에 URL을 요청하고, 갓 서명된 presigned GET URL로 파일을 읽는다.**
 URL을 큐에 싣지 않으므로(발급 즉시 사용) **TTL 만료 문제가 아예 없고**, 워커는 **스토리지 자격증명을 갖지 않는다**(최소권한).
@@ -101,7 +101,6 @@ pptx_bytes = requests.get(url).content     # 갓 발급된 URL로 즉시 다운�
 ```
 
 > 서명 규칙은 콜백(§3-2)과 똑같다 — 서명한 바이트를 `data=`로 그대로 보낸다(`json=` 금지).
-> 반려한 대안(A′: 워커가 MinIO 직접 접근)은 워커에 상시 자격증명이 필요해 최소권한에 어긋난다. 상세 비교는 ADR-0036.
 
 ---
 
@@ -189,7 +188,7 @@ stateDiagram-v2
 
 ## 5. 남은 배선(스위치 켜기 전 체크리스트)
 
-- [x] **§2 파일 접근 방식** — B 확정, BE가 주문형 발급 엔드포인트(`POST /api/internal/ai/materials/download-url`) 배선 완료. 워커는 MinIO 자격증명 불필요
+- [x] **§2 파일 접근** — 주문형 발급 엔드포인트(`POST /api/internal/ai/materials/download-url`) 배선 완료. 워커는 MinIO 자격증명 불필요
 - [ ] **워커의 RabbitMQ 접근 경로**: 큐는 prod 내부 네트워크 전용. 워커를 (a) 같은 compose 네트워크 컨테이너로 붙이거나 (b) 호스트 포트/방화벽 열어 접속. 같은 호스트 컨테이너 권장(`rabbitmq:5672` 내부 직결). ※ 콜백·URL 발급 HTTP 엔드포인트는 public HTTPS라 별도 개방 불필요
 - [ ] **공유 시크릿 전달**: `AI_CALLBACK_SECRET` 하나(콜백 + URL 발급 공용) — 안전한 채널로 공유, 커밋 금지
 - [ ] 워커: 큐 소비 → PPTX 파싱 → bge-m3 임베딩 → pgvector upsert → 콜백. 삭제 잡은 pgvector delete
