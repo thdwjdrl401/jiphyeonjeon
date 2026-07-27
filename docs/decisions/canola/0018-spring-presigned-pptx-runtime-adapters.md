@@ -1,4 +1,4 @@
-# ADR-0001: Spring 주문형 URL과 분리된 BGE runtime adapter를 사용한다
+# ADR-0018: Spring 주문형 URL과 분리된 BGE runtime adapter를 사용한다
 
 - 상태: Accepted (AI worker local)
 - 일자: 2026-07-27

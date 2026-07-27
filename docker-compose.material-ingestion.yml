@@ -1,0 +1,112 @@
+# PPTX material ingestion을 로컬에서 opt-in으로 검증하는 격리 스택.
+# 다른 개발자의 기본 liveclass 컨테이너·볼륨·포트를 건드리지 않는다.
+#
+#   docker compose -f docker-compose.material-ingestion.yml up -d
+#   docker compose -f docker-compose.material-ingestion.yml --profile gpu up -d
+name: liveclass-material-e2e
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-liveclass}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-liveclass}
+      POSTGRES_DB: ${POSTGRES_DB:-liveclass}
+    ports:
+      - "15432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-liveclass} -d ${POSTGRES_DB:-liveclass}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "16379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "19000:9000"
+      - "19001:9001"
+    volumes:
+      - miniodata:/data
+
+  minio-init:
+    image: minio/mc
+    depends_on: [minio]
+    restart: "no"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        until mc alias set lc http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"; do sleep 1; done
+        mc mb -p lc/liveclass-assets || true
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-liveclass}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-liveclass}
+    ports:
+      - "15673:5672"
+      - "25673:15672"
+    volumes:
+      - rabbitmqdata:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # GPU runtime만 컨테이너로 띄우고 Spring·ai-worker는 host에서 실행한다.
+  # 그러면 Spring이 발급한 localhost MinIO presigned URL을 worker도 그대로 읽을 수 있다.
+  bge-runtime:
+    profiles: ["gpu"]
+    build:
+      context: ./ai/bge-runtime
+    restart: unless-stopped
+    gpus: all
+    environment:
+      BGE_RUNTIME_HOST: 0.0.0.0
+      BGE_RUNTIME_PORT: "8020"
+      BGE_RUNTIME_INTERNAL_TOKEN: ${BGE_RUNTIME_INTERNAL_TOKEN:-local-bge-token-change-me-00000001}
+      BGE_RUNTIME_DEVICE: ${BGE_RUNTIME_DEVICE:-cuda}
+      HF_HOME: /home/liveclass/.cache/huggingface
+    ports:
+      - "18020:8020"
+    volumes:
+      - bge-model-cache:/home/liveclass/.cache/huggingface
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8020/readyz', timeout=2)"]
+      interval: 15s
+      timeout: 5s
+      retries: 30
+      start_period: 120s
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:
+  rabbitmqdata:
+  bge-model-cache:

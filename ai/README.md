@@ -10,11 +10,12 @@ lockfile을 독립적으로 관리한다.
 | [`realtime-agent`](realtime-agent/README.md) | LiveKit 강사 오디오→STT→Redis caption agent | LiveKit AgentServer |
 | [`bge-runtime`](bge-runtime/README.md) | 인증된 BGE-M3 내부 GPU embedding runtime | `127.0.0.1:8020` |
 
-현재 범위는 ai-api의 RAG 요청→근거 조회 port→답변 port→SSE terminal 골격, ai-worker의 PPTX
-ingestion/index 저장, realtime-agent의 runnable AgentServer·오디오·VAD·STT provider·AI-side lifecycle
-계약, 독립 BGE-M3 runtime까지다. Java가 아직 채택하지 않은 Python 경계는 각 서비스의 후보 계약으로
-관리하며 공유 `docs/CONTRACT.md`를 확정 변경하지 않는다. ai-api의 Redis/pgvector/BGE/GMS adapter와
-production 인증·배선, Java의 live caption dispatch/consumer는 후속 MR에서 추가한다.
+현재 범위는 ai-api의 RAG 요청→근거 조회 port→답변 port→SSE terminal 골격, ai-worker의 RabbitMQ PPTX
+ingestion→BGE→pgvector→Spring callback 실행 경로, realtime-agent의 runnable AgentServer·오디오·VAD·STT
+provider·AI-side lifecycle 계약, 독립 BGE-M3 runtime까지다. Java가 아직 채택하지 않은 Python 경계는 각
+서비스의 후보 계약으로 관리하며 공유 `docs/CONTRACT.md`를 확정 변경하지 않는다. ai-api의
+Redis/pgvector/BGE/GMS adapter와 production 인증·배선, Java의 live caption dispatch/consumer는 후속 MR에서
+추가한다.
 
 실행과 검증 명령은 각 서비스 README를 따른다.
 

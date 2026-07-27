@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from app.domain import (
     BGE_M3_DIMENSIONS,
     ChunkRecord,
+    ExistingIndexVersion,
     StagedMaterial,
     StaleMaterialVersionError,
 )
@@ -30,6 +31,86 @@ class PgvectorIndexRepository:
             raise ValueError("runtime_role must be a safe PostgreSQL role identifier")
         self._engine = engine
         self._set_runtime_role = text(f"SET LOCAL ROLE {runtime_role}")
+
+    async def find_existing(self, material: StagedMaterial) -> ExistingIndexVersion | None:
+        """Resume a staged version or return a completed result without re-embedding."""
+
+        values = asdict(material)
+        async with self._engine.begin() as connection:
+            await connection.execute(self._set_runtime_role)
+            rows = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT
+                              jr.job_id, jr.idempotency_key, jr.task_type, jr.tenant_id,
+                              jr.curriculum_id, jr.lesson_id, jr.material_id,
+                              jr.material_version, jr.status, jr.correlation_id,
+                              mv.id AS version_id, mv.state, mv.source_bucket,
+                              mv.source_object_key, mv.chunk_strategy,
+                              model.model_name, model.model_revision
+                            FROM ai.job_run jr
+                            LEFT JOIN ai.material_version mv ON mv.job_run_id = jr.id
+                            LEFT JOIN LATERAL (
+                              SELECT ce.model_name, ce.model_revision
+                              FROM ai.document_chunk dc
+                              JOIN ai.chunk_embedding ce ON ce.chunk_id = dc.id
+                              WHERE dc.material_version_id = mv.id
+                              ORDER BY dc.chunk_index
+                              LIMIT 1
+                            ) model ON true
+                            WHERE jr.job_id = :job_id
+                               OR jr.idempotency_key = :idempotency_key
+                            ORDER BY jr.id
+                            """
+                        ),
+                        values,
+                    )
+                )
+                .mappings()
+                .all()
+            )
+
+        if not rows:
+            return None
+        if len(rows) != 1:
+            raise ValueError("job identity keys refer to different material operations")
+
+        existing = rows[0]
+        _assert_job_identity(
+            existing,
+            {
+                "job_id": material.job_id,
+                "idempotency_key": material.idempotency_key,
+                "task_type": "MATERIAL_INDEX",
+                "tenant_id": material.tenant_id,
+                "curriculum_id": material.curriculum_id,
+                "lesson_id": material.lesson_id,
+                "material_id": material.material_id,
+                "material_version": material.material_version,
+                "correlation_id": material.correlation_id,
+            },
+        )
+        if existing["version_id"] is None:
+            raise ValueError("material index job exists without a staged version")
+        _assert_job_identity(
+            existing,
+            {
+                "source_bucket": material.source_bucket,
+                "source_object_key": material.source_object_key,
+                "chunk_strategy": material.chunk_strategy,
+                "model_name": material.model_name,
+                "model_revision": material.model_revision,
+            },
+        )
+
+        version_id = int(existing["version_id"])
+        if existing["status"] == "SUCCEEDED" and existing["state"] in {"ACTIVE", "RETIRED"}:
+            return ExistingIndexVersion(version_id, activation_required=False)
+        if existing["status"] == "RUNNING" and existing["state"] == "BUILDING":
+            return ExistingIndexVersion(version_id, activation_required=True)
+        raise ValueError("stored material index job has an inconsistent terminal state")
 
     async def stage(self, material: StagedMaterial, chunks: Sequence[ChunkRecord]) -> int:
         if not chunks:

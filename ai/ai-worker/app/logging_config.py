@@ -14,6 +14,8 @@ _CONTEXT_FIELDS = (
     "error_code",
 )
 
+_SENSITIVE_HTTP_LOGGERS = ("httpx", "httpcore")
+
 
 class JsonFormatter(logging.Formatter):
     def __init__(self, service: str) -> None:
@@ -43,3 +45,6 @@ def configure_logging(service: str, level: str) -> None:
     root.handlers.clear()
     root.addHandler(handler)
     root.setLevel(level)
+    for logger_name in _SENSITIVE_HTTP_LOGGERS:
+        # httpx INFO access logs include the complete presigned URL, including its query signature.
+        logging.getLogger(logger_name).setLevel(logging.WARNING)

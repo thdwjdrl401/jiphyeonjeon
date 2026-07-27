@@ -8,6 +8,7 @@ from app.domain import (
     ChunkRecord,
     EmbeddingContractError,
     EmptyPptxContentError,
+    ExistingIndexVersion,
     MaterialIngestionError,
     StagedMaterial,
 )
@@ -43,6 +44,12 @@ class IndexPptxMaterial:
 
     async def execute(self, material: StagedMaterial) -> int:
         self._validate_contract(material)
+        existing = await self._index_storage.find_existing(material)
+        if existing is not None:
+            if existing.activation_required:
+                await self._index_storage.activate(material, existing.version_id)
+            return existing.version_id
+
         source = await self._asset_store.read_pptx(
             material.source_bucket,
             material.source_object_key,
@@ -68,6 +75,12 @@ class IndexPptxMaterial:
         version_id = await self._index_storage.stage(material, records)
         await self._index_storage.activate(material, version_id)
         return version_id
+
+    async def find_existing(self, material: StagedMaterial) -> ExistingIndexVersion | None:
+        """Return a resumable/completed DB result before source or GPU work."""
+
+        self._validate_contract(material)
+        return await self._index_storage.find_existing(material)
 
     def _validate_contract(self, material: StagedMaterial) -> None:
         if material.chunk_strategy != self._chunk_strategy:
