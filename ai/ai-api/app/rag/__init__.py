@@ -13,6 +13,7 @@ from app.rag.models import (
     RetrievalResult,
 )
 from app.rag.ports import AnswerModel, EvidenceRetriever
+from app.rag.retrieval import CaptionContextPort, CombinedEvidenceRetriever, MaterialRetrievalPort
 from app.rag.service import RagAnswerService
 from app.rag.sse import encode_sse_event, encode_sse_stream
 
@@ -25,7 +26,10 @@ __all__ = [
     "AnswerModel",
     "AnswerSource",
     "CaptionSource",
+    "CaptionContextPort",
+    "CombinedEvidenceRetriever",
     "EvidenceRetriever",
+    "MaterialRetrievalPort",
     "PptxSource",
     "RagAnswerRequest",
     "RagAnswerService",
