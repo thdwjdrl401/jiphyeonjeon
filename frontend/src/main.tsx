@@ -8,6 +8,7 @@ import './styles/auth.css'
 import './styles/curriculum-detail.css'
 import './styles/workspace.css'
 import './styles/learning.css'
+import './styles/toast.css'
 
 const rootElement = document.getElementById('root')
 

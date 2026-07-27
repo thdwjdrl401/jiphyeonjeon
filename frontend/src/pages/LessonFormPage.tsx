@@ -7,6 +7,7 @@ import { getInstructorCurriculum } from '@/features/curriculum/curriculumManagem
 import { deleteLessonMaterial, getLesson, prepareLessonAi, saveLesson } from '@/features/lesson/lessonService'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
+import { useToast } from '@/shared/ui/Toast'
 import { InlineNotice, PageHeader, Panel, StatusBadge } from '@/shared/ui/WorkspaceUi'
 
 interface SelectedMaterial { id: string; name: string; size: string; file?: File }
@@ -23,6 +24,7 @@ export default function LessonFormPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const toast = useToast()
   const isEdit = Boolean(lessonId)
   const curriculumQuery = useQuery({
     queryKey: ['instructor-curriculum', curriculumId],
@@ -52,7 +54,6 @@ export default function LessonFormPage() {
   const [duration, setDuration] = useState('90')
   const [entryWindow, setEntryWindow] = useState('10')
   const [saveAsDraft, setSaveAsDraft] = useState(existingLiveSession?.status === 'DRAFT')
-  const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   usePageTitle(isEdit ? '강의 수정' : '강의 만들기')
@@ -67,11 +68,9 @@ export default function LessonFormPage() {
     setSaveAsDraft(currentLesson.liveSession?.status === 'DRAFT')
   }, [currentLesson])
 
-  const markChanged = () => setSaved(false)
   const selectFiles = (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? [])
     setMaterials((current) => [...current, ...files.map((file) => ({ id: `${file.name}-${file.lastModified}`, name: file.name, size: `${(file.size / 1024 / 1024).toFixed(1)} MB`, file }))])
-    markChanged()
   }
   // 저장된 자료(파일 없음 = 서버에 있는 것)는 삭제 API로 즉시 반영, 새로 고른 파일은 로컬에서만 제거.
   const removeMaterial = async (material: SelectedMaterial) => {
@@ -84,7 +83,6 @@ export default function LessonFormPage() {
       }
     }
     setMaterials((current) => current.filter((item) => item.id !== material.id))
-    markChanged()
   }
 
   const save = async (event: FormEvent) => {
@@ -105,7 +103,7 @@ export default function LessonFormPage() {
         expectedDurationMinutes: Number(duration),
         materials: materials.flatMap((material) => material.file ? [material.file] : []),
       })
-      setSaved(true)
+      toast.success(canEditLiveSchedule ? '강의 정보와 라이브 일정 초안이 저장되었습니다.' : '강의 정보가 저장되었습니다.')
       // 생성 성공 시엔 편집 모드(고유 URL)로 이동한다. 그래야 다시 저장해도 같은 레슨을 수정하고,
       // "새 강의" 폼에 머물며 연타로 매번 새 레슨이 생기던 것을 원천 차단한다.
       if (!isEdit) {
@@ -121,7 +119,6 @@ export default function LessonFormPage() {
   }
   const prepare = async () => {
     setProcessing(true)
-    markChanged()
     try {
       await prepareLessonAi(lessonId ?? 'new')
     } finally {
@@ -142,13 +139,12 @@ export default function LessonFormPage() {
         action={<Link className="button button--soft" to={publicPaths.curriculum(curriculumId)}>커리큘럼 상세로 돌아가기</Link>}
       />
       <form className="workspace-form" onSubmit={save}>
-        {saved && <InlineNotice tone="success">{canEditLiveSchedule ? '강의 정보와 라이브 일정 초안이 저장되었습니다.' : '강의 정보가 저장되었습니다.'}</InlineNotice>}
         {saveError && <InlineNotice tone="danger">{saveError}</InlineNotice>}
 
         <Panel title="강의 기본 정보" description="강의 제목과 수강생에게 표시할 설명을 입력합니다.">
           <div className="form-grid">
-            <label className="form-field--wide"><span>강의 제목 *</span><input value={title} maxLength={200} onChange={(event) => { setTitle(event.target.value); markChanged() }} /></label>
-            <label className="form-field--wide"><span>설명</span><textarea rows={5} value={description} onChange={(event) => { setDescription(event.target.value); markChanged() }} /></label>
+            <label className="form-field--wide"><span>강의 제목 *</span><input value={title} maxLength={200} onChange={(event) => setTitle(event.target.value)} /></label>
+            <label className="form-field--wide"><span>설명</span><textarea rows={5} value={description} onChange={(event) => setDescription(event.target.value)} /></label>
           </div>
         </Panel>
 
@@ -161,16 +157,16 @@ export default function LessonFormPage() {
 
         {canEditLiveSchedule && <Panel title="라이브 강의 일정" description="라이브 강의를 진행할 강의에만 일정을 설정합니다.">
           <label className="choice-row">
-            <input type="checkbox" checked={hasLiveSchedule} onChange={(event) => { setHasLiveSchedule(event.target.checked); markChanged() }} />
+            <input type="checkbox" checked={hasLiveSchedule} onChange={(event) => { setHasLiveSchedule(event.target.checked) }} />
             <span><strong>라이브 강의 일정 설정</strong><small>일정이 없는 강의는 강의 상세에서 강의 수정을 통해 추가할 수 있습니다.</small></span>
           </label>
           {hasLiveSchedule && <>
             <div className="form-grid live-schedule-fields">
-              <label className="form-field--wide"><span>예정 시작 시각 *</span><input required type="datetime-local" value={scheduledAt} onChange={(event) => { setScheduledAt(event.target.value); markChanged() }} /></label>
-              <label><span>예상 진행 시간</span><div className="input-with-unit"><input min="10" max="480" type="number" value={duration} onChange={(event) => { setDuration(event.target.value); markChanged() }} /><span>분</span></div></label>
-              <label><span>입장 가능 창</span><div className="input-with-unit"><input min="0" max="60" type="number" value={entryWindow} onChange={(event) => { setEntryWindow(event.target.value); markChanged() }} /><span>분 전</span></div></label>
+              <label className="form-field--wide"><span>예정 시작 시각 *</span><input required type="datetime-local" value={scheduledAt} onChange={(event) => { setScheduledAt(event.target.value) }} /></label>
+              <label><span>예상 진행 시간</span><div className="input-with-unit"><input min="10" max="480" type="number" value={duration} onChange={(event) => { setDuration(event.target.value) }} /><span>분</span></div></label>
+              <label><span>입장 가능 창</span><div className="input-with-unit"><input min="0" max="60" type="number" value={entryWindow} onChange={(event) => { setEntryWindow(event.target.value) }} /><span>분 전</span></div></label>
             </div>
-            <label className="choice-row"><input type="checkbox" checked={saveAsDraft} onChange={(event) => { setSaveAsDraft(event.target.checked); markChanged() }} /><span><strong>일정 초안으로 저장</strong><small>확정 전에는 수강생에게 노출하지 않습니다.</small></span></label>
+            <label className="choice-row"><input type="checkbox" checked={saveAsDraft} onChange={(event) => { setSaveAsDraft(event.target.checked) }} /><span><strong>일정 초안으로 저장</strong><small>확정 전에는 수강생에게 노출하지 않습니다.</small></span></label>
           </>}
         </Panel>}
 
