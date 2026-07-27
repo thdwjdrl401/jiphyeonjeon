@@ -8,10 +8,18 @@ from app.captions.models import CaptionDelta, CaptionStreamCompleted
 from app.contracts.serialization import utc_rfc3339
 
 CAPTION_STREAM_KEY = "ai:captions:live"
+CAPTION_STREAM_MAXLEN = 10_000
 
 
 class RedisStreamClient(Protocol):
-    async def xadd(self, name: str, fields: dict[str, str]) -> object: ...
+    async def xadd(
+        self,
+        name: str,
+        fields: dict[str, str],
+        *,
+        maxlen: int,
+        approximate: bool,
+    ) -> object: ...
 
 
 def to_stream_fields(event: CaptionDelta | CaptionStreamCompleted) -> dict[str, str]:
@@ -47,10 +55,15 @@ class RedisCaptionPublisher:
         client: RedisStreamClient,
         stream_key: str = CAPTION_STREAM_KEY,
         *,
+        stream_maxlen: int = CAPTION_STREAM_MAXLEN,
         publish_timeout_seconds: float = 1.25,
     ) -> None:
         if not stream_key:
             raise ValueError("stream_key must not be empty")
+        if isinstance(stream_maxlen, bool) or not isinstance(stream_maxlen, int):
+            raise TypeError("stream_maxlen must be an integer")
+        if stream_maxlen <= 0:
+            raise ValueError("stream_maxlen must be positive")
         if (
             isinstance(publish_timeout_seconds, bool)
             or not isinstance(publish_timeout_seconds, int | float)
@@ -61,6 +74,7 @@ class RedisCaptionPublisher:
             raise ValueError("publish_timeout_seconds must be positive")
         self._client = client
         self._stream_key = stream_key
+        self._stream_maxlen = stream_maxlen
         self._publish_timeout_seconds = float(publish_timeout_seconds)
 
     async def publish_delta(self, event: CaptionDelta) -> None:
@@ -71,4 +85,9 @@ class RedisCaptionPublisher:
 
     async def _publish(self, event: CaptionDelta | CaptionStreamCompleted) -> None:
         async with asyncio.timeout(self._publish_timeout_seconds):
-            await self._client.xadd(self._stream_key, to_stream_fields(event))
+            await self._client.xadd(
+                self._stream_key,
+                to_stream_fields(event),
+                maxlen=self._stream_maxlen,
+                approximate=True,
+            )
