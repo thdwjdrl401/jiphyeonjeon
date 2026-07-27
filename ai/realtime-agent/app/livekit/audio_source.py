@@ -1,0 +1,262 @@
+from __future__ import annotations
+
+import asyncio
+from collections.abc import AsyncIterator
+from dataclasses import dataclass
+from typing import Any
+
+from livekit import rtc
+from livekit.agents import AutoSubscribe, JobContext
+
+from app.livekit.subscription import (
+    TrackDescriptor,
+    apply_selective_subscription,
+    is_microphone,
+)
+from app.stt.engine import AudioChunk
+
+_CLOSED = object()
+_OUTPUT_QUEUE_CAPACITY = 64
+_SAMPLE_RATE = 48_000
+_NANOSECONDS_PER_SECOND = 1_000_000_000
+
+
+class AudioSourceError(RuntimeError):
+    """Raised when the selected instructor microphone cannot be consumed."""
+
+
+@dataclass(frozen=True, slots=True)
+class _AudioStreamFailure:
+    track_sid: str
+    error: BaseException
+
+
+class LiveKitInstructorAudioSource:
+    """Expose the only remote microphone publisher as PCM chunks.
+
+    Spring grants publish permission only to the instructor. A second microphone publisher therefore
+    violates the room authorization invariant and fails closed instead of mixing audio.
+    """
+
+    def __init__(self, context: JobContext) -> None:
+        self._context = context
+        self._room = context.room
+        self._queue: asyncio.Queue[AudioChunk | _AudioStreamFailure | object] = asyncio.Queue(
+            maxsize=_OUTPUT_QUEUE_CAPACITY
+        )
+        self._tasks: dict[str, asyncio.Task[None]] = {}
+        self._retired_tasks: set[asyncio.Task[None]] = set()
+        self._publisher_identity: str | None = None
+        self._selected_track_sid: str | None = None
+        self._captured_nanoseconds = 0
+        self._connected = False
+        self._closed = False
+        self._accepting_tracks = True
+        self._chunks_taken = False
+
+        self._room.on("track_published", self._on_track_published)
+        self._room.on("track_unpublished", self._on_track_unpublished)
+        self._room.on("track_subscribed", self._on_track_subscribed)
+        self._room.on("track_unsubscribed", self._on_track_unsubscribed)
+        self._room.on("track_subscription_failed", self._on_track_subscription_failed)
+        self._room.on("disconnected", self._on_disconnected)
+
+    async def connect(self) -> None:
+        if self._closed:
+            raise RuntimeError("audio source is closed")
+        if self._connected:
+            raise RuntimeError("audio source is already connected")
+        self._connected = True
+        await self._context.connect(auto_subscribe=AutoSubscribe.SUBSCRIBE_NONE)
+        for participant in self._room.remote_participants.values():
+            for publication in participant.track_publications.values():
+                self._consider_publication(publication, participant)
+
+    async def chunks(self) -> AsyncIterator[AudioChunk]:
+        if self._chunks_taken:
+            raise RuntimeError("audio chunks can only be consumed once")
+        self._chunks_taken = True
+        while True:
+            item = await self._queue.get()
+            if item is _CLOSED:
+                return
+            if isinstance(item, _AudioStreamFailure):
+                raise AudioSourceError(
+                    f"LiveKit audio stream failed: track_sid={item.track_sid}"
+                ) from item.error
+            assert isinstance(item, AudioChunk)
+            yield item
+
+    async def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        self._accepting_tracks = False
+        self._remove_listeners()
+        tasks = [*self._tasks.values(), *self._retired_tasks]
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        self._tasks.clear()
+        self._retired_tasks.clear()
+        self._signal(_CLOSED)
+
+    def _consider_publication(self, publication: Any, participant: Any) -> bool:
+        if not self._accepting_tracks:
+            return False
+        descriptor = TrackDescriptor(
+            kind="audio" if publication.kind == rtc.TrackKind.KIND_AUDIO else "other",
+            source=(
+                "microphone"
+                if publication.source == rtc.TrackSource.SOURCE_MICROPHONE
+                else "other"
+            ),
+        )
+        if not is_microphone(descriptor):
+            return False
+        if self._publisher_identity is None:
+            self._publisher_identity = participant.identity
+        elif participant.identity != self._publisher_identity:
+            self._fail(
+                publication.sid,
+                RuntimeError("multiple remote microphone publishers"),
+            )
+            return False
+        if self._selected_track_sid not in (None, publication.sid):
+            return False
+        self._selected_track_sid = publication.sid
+        return apply_selective_subscription(publication, descriptor)
+
+    def _on_track_published(self, publication: Any, participant: Any) -> None:
+        if self._accepting_tracks:
+            self._consider_publication(publication, participant)
+
+    def _on_track_unpublished(self, publication: Any, participant: Any) -> None:
+        if publication.sid != self._selected_track_sid:
+            return
+        self._cancel_consumer(publication.sid)
+        self._selected_track_sid = None
+        if self._accepting_tracks:
+            for candidate in participant.track_publications.values():
+                if self._consider_publication(candidate, participant):
+                    break
+
+    def _on_track_subscribed(self, track: Any, publication: Any, participant: Any) -> None:
+        if not self._accepting_tracks:
+            return
+        if publication.sid != self._selected_track_sid:
+            return
+        if not self._is_selected_track(track, publication, participant):
+            return
+        if publication.sid in self._tasks:
+            return
+        task = asyncio.create_task(self._consume_track(track, publication.sid))
+        self._tasks[publication.sid] = task
+        task.add_done_callback(
+            lambda completed, sid=publication.sid: self._on_consumer_done(sid, completed)
+        )
+
+    def _on_track_unsubscribed(
+        self, _track: Any, publication: Any, _participant: Any
+    ) -> None:
+        self._cancel_consumer(publication.sid)
+
+    def _on_track_subscription_failed(
+        self, participant: Any, track_sid: str, error: str
+    ) -> None:
+        if (
+            not self._accepting_tracks
+            or participant.identity != self._publisher_identity
+            or track_sid != self._selected_track_sid
+        ):
+            return
+        self._fail(track_sid, ConnectionError(error))
+
+    def _on_disconnected(self, *_args: Any) -> None:
+        if not self._accepting_tracks:
+            return
+        self._fail("room", ConnectionError("LiveKit room disconnected"))
+
+    def _on_consumer_done(self, track_sid: str, task: asyncio.Task[None]) -> None:
+        if self._tasks.get(track_sid) is task:
+            self._tasks.pop(track_sid, None)
+        self._retired_tasks.discard(task)
+        if task.cancelled():
+            return
+        error = task.exception()
+        if error is not None and not self._closed:
+            self._fail(track_sid, error)
+
+    def _cancel_consumer(self, track_sid: str) -> None:
+        task = self._tasks.pop(track_sid, None)
+        if task is None:
+            return
+        self._retired_tasks.add(task)
+        task.cancel()
+
+    def _is_selected_track(self, track: Any, publication: Any, participant: Any) -> bool:
+        return (
+            participant.identity == self._publisher_identity
+            and track.kind == rtc.TrackKind.KIND_AUDIO
+            and publication.source == rtc.TrackSource.SOURCE_MICROPHONE
+        )
+
+    async def _consume_track(self, track: Any, track_sid: str) -> None:
+        stream = rtc.AudioStream(
+            track,
+            sample_rate=_SAMPLE_RATE,
+            num_channels=1,
+        )
+        try:
+            async for event in stream:
+                frame = event.frame
+                duration_ns = (
+                    frame.samples_per_channel * _NANOSECONDS_PER_SECOND
+                    + frame.sample_rate // 2
+                ) // frame.sample_rate
+                self._captured_nanoseconds += duration_ns
+                chunk = AudioChunk(
+                    pcm=bytes(frame.data),
+                    sample_rate=frame.sample_rate,
+                    num_channels=frame.num_channels,
+                    stream_elapsed_ms=self._captured_nanoseconds // 1_000_000,
+                )
+                await self._queue.put(chunk)
+        finally:
+            await stream.aclose()
+            current_task = asyncio.current_task()
+            if self._tasks.get(track_sid) is current_task:
+                self._tasks.pop(track_sid, None)
+
+    def _remove_listeners(self) -> None:
+        self._room.off("track_published", self._on_track_published)
+        self._room.off("track_unpublished", self._on_track_unpublished)
+        self._room.off("track_subscribed", self._on_track_subscribed)
+        self._room.off("track_unsubscribed", self._on_track_unsubscribed)
+        self._room.off(
+            "track_subscription_failed", self._on_track_subscription_failed
+        )
+        self._room.off("disconnected", self._on_disconnected)
+
+    def _fail(self, track_sid: str, error: BaseException) -> None:
+        self._accepting_tracks = False
+        for active_track_sid in list(self._tasks):
+            self._cancel_consumer(active_track_sid)
+        while True:
+            try:
+                self._queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+        self._signal(_AudioStreamFailure(track_sid, error))
+
+    def _signal(self, item: _AudioStreamFailure | object) -> None:
+        if self._queue.full():
+            try:
+                self._queue.get_nowait()
+            except asyncio.QueueEmpty:
+                return
+        try:
+            self._queue.put_nowait(item)
+        except asyncio.QueueFull:
+            return
