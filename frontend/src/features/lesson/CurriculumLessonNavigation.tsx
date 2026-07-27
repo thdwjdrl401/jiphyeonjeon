@@ -12,8 +12,8 @@ interface CurriculumLessonNavigationProps {
 
 export default function CurriculumLessonNavigation({ curriculumId, activeLessonId, role }: CurriculumLessonNavigationProps) {
   const curriculumQuery = useQuery({
-    queryKey: ['curriculum-lesson-navigation', curriculumId],
-    queryFn: () => getCurriculumLessonNavigation(curriculumId),
+    queryKey: ['curriculum-lesson-navigation', curriculumId, role],
+    queryFn: () => getCurriculumLessonNavigation(curriculumId, role),
   })
 
   if (curriculumQuery.isPending) {
