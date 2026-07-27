@@ -6,13 +6,14 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from app.adapters import (
     CaptionConsumerState,
+    GmsOpenAIAnswerModel,
     PgvectorActiveMaterialRepository,
     RedisCaptionConsumer,
     RemoteBgeM3QueryEmbedding,
 )
 from app.captions import CaptionContextStore, parse_caption_entry
 from app.config import Settings
-from app.rag import CombinedEvidenceRetriever
+from app.rag import CombinedEvidenceRetriever, InMemoryRequestRegistry, RagAnswerService
 from app.retrieval import ActiveMaterialRetrievalService
 
 
@@ -30,6 +31,20 @@ class RagContextServices:
             await self.embedding.aclose()
         finally:
             await self.engine.dispose()
+
+
+@dataclass(slots=True)
+class RagServices:
+    service: RagAnswerService
+    context: RagContextServices
+    answer_model: GmsOpenAIAnswerModel
+    registry: InMemoryRequestRegistry
+
+    async def close(self) -> None:
+        try:
+            await self.answer_model.aclose()
+        finally:
+            await self.context.close()
 
 
 def build_rag_context_services(settings: Settings) -> RagContextServices:
@@ -91,4 +106,44 @@ def build_rag_context_services(settings: Settings) -> RagContextServices:
         engine=engine,
         embedding=embedding,
         retriever=retriever,
+    )
+
+
+def build_answer_model(settings: Settings) -> GmsOpenAIAnswerModel:
+    if settings.gms_api_key is None:
+        raise ValueError("AI_API_GMS_API_KEY is required to build the GMS answer model")
+    return GmsOpenAIAnswerModel(
+        api_key=settings.gms_api_key.get_secret_value(),
+        model=settings.gms_model,
+        max_output_tokens=settings.gms_max_output_tokens,
+        max_prompt_chars=settings.gms_max_prompt_chars,
+        timeout_seconds=settings.gms_timeout_seconds,
+    )
+
+
+def build_rag_services(settings: Settings) -> RagServices:
+    if settings.database_url is None:
+        raise ValueError("AI_API_DATABASE_URL is required to build RAG services")
+    if settings.bge_base_url is None or settings.bge_token is None:
+        raise ValueError("AI_API_BGE_BASE_URL and AI_API_BGE_TOKEN are required")
+    if settings.gms_api_key is None:
+        raise ValueError("AI_API_GMS_API_KEY is required to build RAG services")
+    context = build_rag_context_services(settings)
+    answer_model = build_answer_model(settings)
+    registry = InMemoryRequestRegistry(
+        max_active=settings.rag_request_max_active,
+        max_completed=settings.rag_request_max_completed,
+    )
+    service = RagAnswerService(
+        context.retriever,
+        answer_model,
+        registry,
+        retrieval_timeout_seconds=settings.rag_retrieval_timeout_seconds,
+        model_timeout_seconds=settings.rag_model_timeout_seconds,
+    )
+    return RagServices(
+        service=service,
+        context=context,
+        answer_model=answer_model,
+        registry=registry,
     )
