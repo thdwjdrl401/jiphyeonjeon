@@ -12,6 +12,8 @@ def test_uses_loopback_defaults() -> None:
     assert settings.redis_url == "redis://127.0.0.1:6379/0"
     assert settings.database_url is None
     assert settings.bge_base_url is None
+    assert settings.gms_api_key is None
+    assert settings.rag_request_max_active == 256
 
 
 def test_rejects_invalid_port() -> None:
@@ -41,6 +43,11 @@ def test_load_settings_reads_prefixed_environment(monkeypatch) -> None:
         {"bge_token": "x" * 32},
         {"bge_base_url": "http://user:secret@127.0.0.1:8020", "bge_token": "x" * 32},
         {"bge_base_url": "http://127.0.0.1:8020/path", "bge_token": "x" * 32},
+        {"gms_api_key": " padded-key "},
+        {"gms_model": " gpt-4.1"},
+        {"rag_retrieval_timeout_seconds": 8.0},
+        {"rag_model_timeout_seconds": 55.0},
+        {"caption_shutdown_timeout_seconds": 1.0},
     ],
 )
 def test_rejects_invalid_context_runtime_settings(values: dict[str, object]) -> None:
@@ -58,3 +65,21 @@ def test_accepts_complete_context_runtime_settings() -> None:
     assert settings.database_role == "ai_app"
     assert settings.bge_token is not None
     assert settings.bge_token.get_secret_value().startswith("bge-runtime")
+
+
+@pytest.mark.parametrize("blank", ["", " ", "\t"])
+def test_blank_gms_key_is_unconfigured(blank: str) -> None:
+    assert Settings(gms_api_key=blank).gms_api_key is None
+
+
+def test_gms_secret_is_loaded_without_repr_leak(monkeypatch) -> None:
+    secret = "private-gms-api-key"
+    monkeypatch.setenv("AI_API_GMS_API_KEY", secret)
+    load_settings.cache_clear()
+    try:
+        settings = load_settings()
+        assert settings.gms_api_key is not None
+        assert settings.gms_api_key.get_secret_value() == secret
+        assert secret not in repr(settings)
+    finally:
+        load_settings.cache_clear()

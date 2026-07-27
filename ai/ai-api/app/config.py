@@ -48,11 +48,41 @@ class Settings(BaseSettings):
     )
     bge_timeout_seconds: float = Field(default=8.0, gt=0, le=120)
 
+    gms_api_key: SecretStr | None = Field(default=None, min_length=1)
+    gms_model: str = Field(default="gpt-4.1", min_length=1, max_length=128)
+    gms_max_output_tokens: int = Field(default=1_024, ge=1, le=8_192)
+    gms_max_prompt_chars: int = Field(default=100_000, ge=1_000, le=1_000_000)
+    gms_timeout_seconds: float = Field(default=55.0, gt=0, le=120)
+
+    rag_retrieval_timeout_seconds: float = Field(default=10.0, gt=0, le=120)
+    rag_model_timeout_seconds: float = Field(default=60.0, gt=0, le=180)
+    rag_request_max_active: int = Field(default=256, ge=1, le=10_000)
+    rag_request_max_completed: int = Field(default=10_000, ge=1, le=1_000_000)
+    caption_shutdown_timeout_seconds: float = Field(default=3.0, gt=0, le=30)
+    caption_cancel_grace_seconds: float = Field(default=1.0, gt=0, le=10)
+
     material_top_k: int = Field(default=8, ge=1, le=50)
     material_vector_threshold: float = Field(default=0.25, ge=0, le=1)
     material_lexical_threshold: float = Field(default=0.0, ge=0, le=1)
     caption_evidence_max_items: int = Field(default=32, ge=1, le=1_000)
     caption_evidence_max_chars: int = Field(default=20_000, ge=1, le=50_000)
+
+    @field_validator("gms_api_key", mode="before")
+    @classmethod
+    def validate_gms_api_key(cls, value: object) -> object:
+        if isinstance(value, str):
+            if not value.strip():
+                return None
+            if value != value.strip():
+                raise ValueError("gms_api_key must not contain surrounding whitespace")
+        return value
+
+    @field_validator("gms_model")
+    @classmethod
+    def validate_gms_model(cls, value: str) -> str:
+        if value != value.strip():
+            raise ValueError("gms_model must not contain surrounding whitespace")
+        return value
 
     @field_validator("database_role")
     @classmethod
@@ -80,6 +110,8 @@ class Settings(BaseSettings):
             raise ValueError("redis reconnect maximum must be at least the minimum")
         if self.redis_socket_timeout_seconds <= self.caption_poll_block_ms / 1_000:
             raise ValueError("redis socket timeout must exceed caption poll block")
+        if self.caption_shutdown_timeout_seconds <= self.caption_poll_block_ms / 1_000:
+            raise ValueError("caption shutdown timeout must exceed caption poll block")
 
         redis_url = urlparse(self.redis_url)
         try:
@@ -105,6 +137,10 @@ class Settings(BaseSettings):
                 or bge_url.fragment
             ):
                 raise ValueError("bge_base_url must be a credential-free HTTP(S) origin")
+        if self.rag_retrieval_timeout_seconds <= self.bge_timeout_seconds:
+            raise ValueError("RAG retrieval timeout must exceed the BGE client timeout")
+        if self.rag_model_timeout_seconds <= self.gms_timeout_seconds:
+            raise ValueError("RAG model timeout must exceed the GMS client timeout")
         return self
 
 
