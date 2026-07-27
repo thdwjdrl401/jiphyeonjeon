@@ -10,6 +10,7 @@ from app.domain.index_models import (
     BGE_M3_DIMENSIONS,
     BGE_M3_MODEL,
     ChunkRecord,
+    ExistingIndexVersion,
     StagedMaterial,
 )
 
@@ -19,6 +20,7 @@ __all__ = [
     "ChunkRecord",
     "EmbeddingContractError",
     "EmptyPptxContentError",
+    "ExistingIndexVersion",
     "InvalidPptxError",
     "MaterialIngestionError",
     "PptxLimitExceededError",

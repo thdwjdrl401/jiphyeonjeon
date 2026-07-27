@@ -6,7 +6,14 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 Identifier = Annotated[str, Field(min_length=1, max_length=128)]
-SessionId = Annotated[str, Field(pattern=r"^[A-Za-z0-9._:-]{1,128}$")]
+SafeIdentifier = Annotated[
+    str,
+    Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"),
+]
+SessionId = Annotated[
+    str,
+    Field(pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"),
+]
 Question = Annotated[str, Field(min_length=1, max_length=4_000)]
 Message = Annotated[str, Field(min_length=1, max_length=1_000)]
 ErrorCode = Annotated[str, Field(pattern=r"^[A-Z][A-Z0-9_]{0,127}$")]
@@ -33,6 +40,7 @@ class PptxSource(_ContractModel):
 class CaptionSource(_ContractModel):
     type: Literal["CAPTION"] = "CAPTION"
     sessionId: SessionId
+    sttSessionId: SafeIdentifier
     startMs: int = Field(ge=0)
     endMs: int = Field(ge=0)
 
@@ -96,17 +104,9 @@ class RetrievedEvidence(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=False)
 
-    lesson_id: UUID | None = None
+    lesson_id: UUID
     content: str = Field(min_length=1, max_length=50_000)
     source: AnswerSource
-
-    @model_validator(mode="after")
-    def validate_source_scope(self) -> RetrievedEvidence:
-        if isinstance(self.source, PptxSource) and self.lesson_id is None:
-            raise ValueError("PPTX evidence must carry its stored lesson scope")
-        if isinstance(self.source, CaptionSource) and self.lesson_id is not None:
-            raise ValueError("caption evidence is scoped by sessionId, not lessonId")
-        return self
 
 
 class RetrievalResult(BaseModel):

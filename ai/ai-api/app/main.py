@@ -12,7 +12,8 @@ from app.api import RAG_STREAM_PATH, InternalRequestAuthenticator, create_rag_ro
 from app.config import Settings, load_settings
 from app.logging_config import configure_logging
 from app.rag import RagAnswerService
-from app.runtime import RuntimeState
+from app.runtime import CaptionRuntime, RuntimeState
+from app.wiring import RagServices, build_rag_services
 
 logger = logging.getLogger(__name__)
 
@@ -23,22 +24,44 @@ def create_app(
     *,
     rag_service: RagAnswerService | None = None,
     internal_authenticator: InternalRequestAuthenticator | None = None,
+    rag_services: RagServices | None = None,
 ) -> FastAPI:
     resolved_settings = settings or load_settings()
     resolved_runtime = runtime or RuntimeState()
+    if rag_service is not None and rag_services is not None:
+        raise ValueError("provide rag_service or rag_services, not both")
+    resolved_rag_service = rag_services.service if rag_services is not None else rag_service
+    caption_runtime = (
+        CaptionRuntime(
+            rag_services.context.consumer,
+            rag_services.context.consumer_state,
+            shutdown_timeout_seconds=resolved_settings.caption_shutdown_timeout_seconds,
+            cancel_grace_seconds=resolved_settings.caption_cancel_grace_seconds,
+        )
+        if rag_services is not None
+        else None
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        if caption_runtime is not None:
+            caption_runtime.start()
         resolved_runtime.ready = True
         logger.info("ai-api ready", extra={"event": "service.ready"})
         try:
             yield
         finally:
             resolved_runtime.ready = False
-            logger.info("ai-api stopped", extra={"event": "service.stopped"})
+            try:
+                if caption_runtime is not None:
+                    await caption_runtime.stop()
+            finally:
+                if rag_services is not None:
+                    await rag_services.close()
+                logger.info("ai-api stopped", extra={"event": "service.stopped"})
 
     app = FastAPI(title="LiveClass AI API", lifespan=lifespan)
-    app.include_router(create_rag_router(rag_service, internal_authenticator))
+    app.include_router(create_rag_router(resolved_rag_service, internal_authenticator))
 
     @app.exception_handler(RequestValidationError)
     async def validation_error_handler(
@@ -65,16 +88,19 @@ def create_app(
 
     app.state.settings = resolved_settings
     app.state.runtime = resolved_runtime
-    app.state.rag_service = rag_service
+    app.state.rag_service = resolved_rag_service
     app.state.internal_authenticator = internal_authenticator
+    app.state.rag_services = rag_services
+    app.state.caption_runtime = caption_runtime
     return app
 
 
 def run() -> None:
     settings = load_settings()
     configure_logging("ai-api", settings.log_level)
+    rag_services = build_rag_services(settings)
     uvicorn.run(
-        create_app(settings),
+        create_app(settings, rag_services=rag_services),
         host=settings.host,
         port=settings.port,
         log_config=None,

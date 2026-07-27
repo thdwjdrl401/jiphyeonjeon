@@ -16,6 +16,7 @@ from app.domain import (
     ChunkRecord,
     EmbeddingContractError,
     EmptyPptxContentError,
+    ExistingIndexVersion,
     StagedMaterial,
 )
 
@@ -71,12 +72,19 @@ class FakeIndexStorage:
         self,
         *,
         version_id: int = 41,
+        existing: ExistingIndexVersion | None = None,
         stage_error: BaseException | None = None,
     ) -> None:
         self.version_id = version_id
+        self.existing = existing
         self.stage_error = stage_error
+        self.lookups: list[StagedMaterial] = []
         self.staged: list[tuple[StagedMaterial, tuple[ChunkRecord, ...]]] = []
         self.activated: list[tuple[StagedMaterial, int]] = []
+
+    async def find_existing(self, material: StagedMaterial) -> ExistingIndexVersion | None:
+        self.lookups.append(material)
+        return self.existing
 
     async def stage(
         self,
@@ -144,6 +152,7 @@ async def test_indexes_ordered_chunks_and_activates_the_same_material_identity()
     ).execute(staged_material)
 
     assert version_id == 73
+    assert index_storage.lookups == [staged_material]
     assert asset_store.reads == [(staged_material.source_bucket, staged_material.source_object_key)]
     assert embedding_model.calls == [("first block\nsecond block", "third block")]
     staged_identity, records = index_storage.staged[0]
@@ -155,6 +164,30 @@ async def test_indexes_ordered_chunks_and_activates_the_same_material_identity()
     activated_identity, activated_version_id = index_storage.activated[0]
     assert activated_identity is staged_material
     assert activated_version_id == 73
+
+
+@pytest.mark.parametrize("activation_required", [False, True])
+async def test_existing_result_skips_source_and_embedding(
+    activation_required: bool,
+) -> None:
+    staged_material = material()
+    asset_store = FakeAssetStore(b"must not be read")
+    embedding_model = FakeEmbeddingModel()
+    index_storage = FakeIndexStorage(
+        existing=ExistingIndexVersion(73, activation_required=activation_required)
+    )
+
+    version_id = await IndexPptxMaterial(
+        asset_store,
+        embedding_model,
+        index_storage,
+    ).execute(staged_material)
+
+    assert version_id == 73
+    assert asset_store.reads == []
+    assert embedding_model.calls == []
+    assert index_storage.staged == []
+    assert index_storage.activated == ([(staged_material, 73)] if activation_required else [])
 
 
 @pytest.mark.parametrize(

@@ -8,6 +8,7 @@ from app.database_urls import parse_migration_database_url
 DATABASE_URL = "postgresql+asyncpg://ai:secret@localhost/liveclass"
 CALLBACK_SECRET = "dev-ai-callback-secret"
 BGE_TOKEN = "x" * 32
+RABBITMQ_URL = "amqp://liveclass:secret@localhost:5672/"
 
 
 def test_requires_worker_instance_id() -> None:
@@ -51,12 +52,16 @@ def test_database_password_is_redacted_from_settings_repr() -> None:
         database_url=DATABASE_URL,
         spring_hmac_secret=CALLBACK_SECRET,
         bge_internal_token=BGE_TOKEN,
+        rabbitmq_url=RABBITMQ_URL,
     )
 
     assert DATABASE_URL not in repr(settings)
     assert CALLBACK_SECRET not in repr(settings)
     assert BGE_TOKEN not in repr(settings)
+    assert RABBITMQ_URL not in repr(settings)
     assert settings.database_url.get_secret_value() == DATABASE_URL
+    assert settings.rabbitmq_url is not None
+    assert settings.rabbitmq_url.get_secret_value() == RABBITMQ_URL
 
 
 def test_pptx_runtime_defaults_match_spring_and_bge_contracts() -> None:
@@ -70,6 +75,10 @@ def test_pptx_runtime_defaults_match_spring_and_bge_contracts() -> None:
     assert settings.embedding_max_batch_size == 4
     assert settings.source_max_bytes == 50 * 1024 * 1024
     assert settings.chunk_max_chars == 1_200
+    assert settings.material_ingestion_enabled is False
+    assert settings.rabbitmq_retry_limit == 3
+    assert settings.rabbitmq_retry_base_delay_seconds == 5
+    assert settings.rabbitmq_shutdown_grace_seconds == 30
 
 
 def test_accepts_shared_spring_secret_from_documented_environment(monkeypatch) -> None:
@@ -93,6 +102,10 @@ def test_accepts_shared_spring_secret_from_documented_environment(monkeypatch) -
         ("embedding_max_batch_size", 8),
         ("spring_hmac_secret", " padded"),
         ("bge_internal_token", "short"),
+        ("rabbitmq_url", "http://rabbitmq:5672"),
+        ("rabbitmq_retry_limit", 11),
+        ("rabbitmq_retry_base_delay_seconds", -1),
+        ("rabbitmq_shutdown_grace_seconds", 0),
     ],
 )
 def test_rejects_invalid_pptx_runtime_configuration(field: str, value: object) -> None:

@@ -104,4 +104,10 @@ export const httpCurriculumManagementService = {
   async publishCurriculum(curriculumId) {
     await apiClient.post(`/instructor/curriculums/${curriculumId}/publish`)
   },
+  async deleteLesson(lessonId) {
+    await apiClient.delete(`/instructor/lessons/${lessonId}`)
+  },
+  async deleteSection(sectionId) {
+    await apiClient.delete(`/instructor/sections/${sectionId}`)
+  },
 } satisfies CurriculumManagementService

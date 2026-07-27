@@ -1,19 +1,19 @@
 # ai-api RAG answer AI-side contract
 
 이 문서는 Python `ai-api`가 구현하고 테스트하는 **AI-side 후보 계약**이다. Java/Spring이 채택한 공유
-`docs/CONTRACT.md`의 확정 세부 계약이 아니며 Spring proxy 구현 완료를 뜻하지 않는다. Java 채택 시 이
-문서와 공유 계약, 양측 계약 테스트를 같은 common MR에서 맞춘다.
+`docs/CONTRACT.md`의 확정 내부 계약은 아니며, Spring proxy 구현과 양쪽 계약 테스트가 준비되면 common MR에서
+공유 계약으로 승격한다.
 
 ## 1. 내부 HTTP 후보 경계
 
 - 요청: `POST /internal/v1/rag/answers:stream`
-- 호출자: 사용자 인증·수강 권한·비용 정책을 먼저 확인한 Spring만
-- 요청 header: `Authorization`은 주입된 내부 인증기가 검증한다. 토큰 claim/서명 방식은 아직 확정하지 않는다.
+- 호출자: 사용자 인증·강의 권한·비용 정책을 먼저 확인한 Spring만 허용한다.
+- 요청 header: `Authorization`. 토큰 claim과 서명 방식은 아직 확정하지 않았다.
 - 응답 협상: `Accept`에 `text/event-stream`이 포함되어야 한다.
-- 브라우저 직접 호출은 지원하지 않는다.
+- 브라우저의 직접 호출은 지원하지 않는다.
 
-현재 production entrypoint에는 인증기와 RAG adapter가 배선되지 않아 `503`으로 닫힌다. 테스트 전용 fake
-port가 이 경계를 통과한다고 해서 Spring 인증 연동이 완료된 것은 아니다.
+현재 production entrypoint는 Redis/pgvector/BGE/GMS와 application lifespan을 조립하지만 내부 인증기는
+배선하지 않아 `503`으로 닫혀 있다. fake 인증기로 통과한 테스트는 Spring 인증 완료를 뜻하지 않는다.
 
 ## 2. 요청 body
 
@@ -21,18 +21,20 @@ port가 이 경계를 통과한다고 해서 Spring 인증 연동이 완료된 �
 {
   "requestId": "request-1",
   "lessonId": "11111111-1111-4111-8111-111111111111",
-  "sessionId": "session-1",
+  "sessionId": "33333333-3333-4333-8333-333333333333",
   "question": "방금 설명한 개념은 무엇인가요?",
   "contextTimeMs": 615000
 }
 ```
 
-- JSON field는 camelCase이며 정의되지 않은 field를 거부한다.
-- `requestId`: 1~128자, 현재 tracing key다. 중복 방지는 후속 request registry가 맡는다.
-- `lessonId`: UUID. 모든 PPTX evidence의 저장 scope와 같아야 한다.
-- `sessionId`: `[A-Za-z0-9._:-]{1,128}`. 모든 caption evidence의 scope와 같아야 한다.
-- `question`: 1~4,000자. whitespace를 임의 trim하지 않는다.
-- `contextTimeMs`: 0 이상의 session-relative millisecond 후보값이다. Java session clock 합의가 필요하다.
+- JSON field는 camelCase이며 정의하지 않은 field를 거부한다.
+- `requestId`: 1~128자. 한 process의 active/recent registry에서 SSE 시작 전에 확보한다. terminal·오류·client
+  취소 뒤에도 bounded recent 목록에 남으며 같은 ID는 `409`다. replay 가능한 멱등 응답 key는 아니다.
+- `lessonId`: 소문자 canonical UUID. 모든 PPTX와 자막 evidence가 이 lesson scope임을 내부에서 검증한다.
+- `sessionId`: 소문자 canonical UUID. 모든 자막 evidence가 이 session scope여야 한다.
+- `question`: 1~4,000자. whitespace를 임의로 trim하지 않는다.
+- `contextTimeMs`: 0 이상의 **최신 STT attempt-local `streamElapsedMs` 좌표**다. Spring은 자신의
+  session/HLS clock을 이 좌표로 변환한 뒤 보내야 하며, 변환 기준점은 공유 계약 승격 전에 확정해야 한다.
 
 ## 3. SSE event
 
@@ -44,27 +46,25 @@ data: {"requestId":"request-1","text":"RAG는 "}
 
 ```
 
-event 종류:
-
 | event | data | 의미 |
 |---|---|---|
-| `answer.delta` | `{requestId,text}` | 0회 이상 답변 조각 |
-| `answer.done` | `{requestId,sources}` | 근거 있는 정상 종료 |
-| `answer.insufficient` | `{requestId,message}` | 답변할 근거가 없어 모델을 호출하지 않음 |
+| `answer.delta` | `{requestId,text}` | 0개 이상의 답변 조각 |
+| `answer.done` | `{requestId,sources}` | 근거가 있는 정상 종료 |
+| `answer.insufficient` | `{requestId,message}` | 답할 근거가 없어 모델을 호출하지 않음 |
 | `answer.error` | `{requestId,code,message,retryable}` | timeout 또는 정제된 내부 실패 |
 
-`answer.done.sources`는 1개 이상이며 최초 evidence 순서를 보존해 중복 제거한다.
+`answer.done.sources`는 1개 이상이며 최초 evidence 순서를 보존하고 중복 제거한다.
 
 ```json
 {"type":"PPTX","materialId":"22222222-2222-4222-8222-222222222222","page":4}
 ```
 
 ```json
-{"type":"CAPTION","sessionId":"session-1","startMs":55000,"endMs":59000}
+{"type":"CAPTION","sessionId":"33333333-3333-4333-8333-333333333333","sttSessionId":"stt-attempt-2","startMs":55000,"endMs":59000}
 ```
 
-한 stream은 `answer.delta` 0회 이상 뒤 `answer.done|answer.insufficient|answer.error` 중 정확히 하나로 끝난다.
-단, client disconnect/cancellation은 terminal event 생성을 강제하지 않고 내부 iterator에 취소를 전파한다.
+한 stream은 `answer.delta` 0개 이상 뒤 `answer.done|answer.insufficient|answer.error` 중 정확히 하나로 끝난다.
+client disconnect/cancellation 때는 terminal event 생성을 강제하지 않고 내부 iterator까지 취소를 전파한다.
 
 ## 4. HTTP 상태코드
 
@@ -73,15 +73,55 @@ event 종류:
 | `200` | 인증·Accept·body 검증 후 SSE 시작 |
 | `400` | 요청 body가 후보 계약을 위반 |
 | `401` | 구성된 내부 인증기가 호출자를 거부 |
+| `409` | active/recent `requestId` 재사용 |
 | `406` | `Accept: text/event-stream` 미포함 |
-| `503` | 인증기 또는 RAG service 미배선 |
+| `503` | 인증기/RAG service 미배선 또는 process-local active request 한도 초과 |
 
-SSE header가 시작된 뒤 retrieval/model 실패는 HTTP 상태를 바꾸지 않고 `answer.error`로 전달한다.
+SSE header가 시작된 뒤의 retrieval/model 실패는 HTTP 상태를 바꾸지 않고 `answer.error`로 전달한다.
 
-## 5. 아직 확정하지 않은 것
+## 5. realtime-agent 자막 입력 계약
+
+ai-api는 realtime-agent의 `caption-stream-entry.schema.json`과 fixture를 직접 테스트 기준으로 사용한다.
+
+- transport: application Redis stream, 기본 key `ai:captions:live`
+- delta: `caption.delta` + `eventId/lessonId/sessionId/sttSessionId/sequence/streamElapsedMs/text/occurredAt`
+- terminal: `caption.stream.completed` + 같은 scope + `lastSequence/reason=ROOM_DELETED/occurredAt`
+- `sequence`와 `streamElapsedMs`는 session 전체가 아니라 `(sessionId, sttSessionId)` attempt 안에서 증가한다.
+- 새 `sttSessionId`는 새 attempt이므로 이전 자막 문맥을 교체하고 `sequence=1`을 허용한다.
+- ai-api consumer group은 `ai-rag-live-v1`로 Spring consumer group과 분리한다. handler 반영 뒤에만 ACK한다.
+- Redis endpoint는 `AI_API_REDIS_URL`로 주입하며 기본 개발값은 `redis://127.0.0.1:6379/0`이다.
+  LiveKit 내부 Redis 포트 `6380`으로 고정하지 않는다.
+
+이 경계는 AI 내부 후보 계약이다. Spring이 자막 stream을 직접 소비하거나 시간축을 변환할 때는
+`docs/CONTRACT.md`와 양쪽 계약 테스트를 common MR에서 함께 갱신한다.
+
+## 6. 자료 검색과 BGE 경계
+
+- pgvector 검색은 요청 `lessonId`와 `ai.material_version.state='ACTIVE'`를 SQL에서 강제한다.
+- runtime DB role은 안전한 identifier만 허용하며 production에서는 read-only 권한으로 제공해야 한다.
+- query embedding은 인증된 `POST /internal/v1/embeddings`를 호출한다.
+- 요청은 고정 `model=BAAI/bge-m3`, full revision, 단일 text를 전달한다.
+- 응답은 같은 model/revision, `dimensions=1024`, `normalized=true`, 유한한 단위 벡터 하나여야 한다.
+- material evidence는 현재 vector similarity `0.25` 이상 또는 lexical score `0` 초과일 때 채택한다.
+  이 값은 MVP 기본값이며 실제 평가 corpus로 조정할 설정값이다.
+- 자막 evidence는 최신 attempt에서 `contextTimeMs` 이전의 제한된 event와 문자 수만 사용한다.
+
+## 7. GMS 답변과 process lifecycle
+
+- 답변은 고정 GMS OpenAI-compatible gateway로 보내며 API key만 `AI_API_GMS_API_KEY`로 주입한다.
+- SDK 자동 retry는 0이다. GMS client timeout은 전체 model timeout보다 짧게 검증한다.
+- prompt에는 `question`, 선택된 evidence 내용과 PPTX page 또는 caption time 좌표만 포함한다.
+  `requestId/sessionId/materialId/sttSessionId`는 provider에 보내지 않는다.
+- system prompt는 question/evidence 안의 지시를 신뢰하지 않고 제공된 강의 근거만 사용하도록 고정한다.
+- prompt 문자 수와 output token 수를 설정 상한으로 제한하고 provider delta는 최대 10,000자로 나눈다.
+- GMS timeout·rate limit·연결·인증·설정 실패는 secret과 provider body를 제외한 `MODEL_*` code로 변환한다.
+- FastAPI lifespan은 caption consumer 하나를 시작·drain하고 GMS/BGE client와 DB engine을 닫는다.
+- `/readyz`는 외부 dependency health가 아니라 application lifespan 준비 상태만 나타낸다.
+
+## 8. 공유 계약 승격 전 미확정 사항
 
 - Spring→AI 단명 토큰의 algorithm, issuer, audience, scope, clock skew
-- Spring 외부 endpoint와 이 내부 endpoint 사이의 request/event 변환
-- Redis caption time origin과 Java session clock 변환
-- request 중복/재연결 정책과 multi-replica registry
-- retrieval ranking, 충분성 기준, prompt와 model/provider
+- Java session/HLS clock과 realtime-agent `streamElapsedMs`의 변환 기준점
+- request 재연결/replay 정책과 multi-replica 공유 registry·recent TTL
+- multi-replica 자막 context 공유, abandoned Redis PEL claim, stream retention
+- retrieval threshold와 GMS model 품질 평가

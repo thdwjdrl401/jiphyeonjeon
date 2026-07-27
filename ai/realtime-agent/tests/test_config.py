@@ -19,6 +19,7 @@ def test_uses_application_redis_without_assuming_livekit_redis_port() -> None:
 
     assert settings.redis_url == "redis://localhost:6379/0"
     assert ":6380" not in settings.redis_url
+    assert settings.caption_stream_maxlen == 10_000
     assert settings.stt_shutdown_timeout_seconds == 12
     assert settings.stt_drain_timeout_seconds == 7
     assert settings.stt_cleanup_timeout_seconds == 1
@@ -30,6 +31,26 @@ def test_rejects_missing_livekit_credentials() -> None:
     settings = Settings.from_env({"LIVEKIT_URL": "wss://livekit.example"})
 
     with pytest.raises(RuntimeError, match="LIVEKIT_API_KEY, LIVEKIT_API_SECRET"):
+        settings.validate_agent_server()
+
+
+@pytest.mark.parametrize("value", ["0", "-1"])
+def test_rejects_nonpositive_caption_stream_maxlen(value: str) -> None:
+    settings = Settings.from_env({**BASE_ENV, "CAPTION_STREAM_MAXLEN": value})
+
+    with pytest.raises(RuntimeError, match="positive integer"):
+        settings.validate_agent_server()
+
+
+def test_rejects_noninteger_caption_stream_maxlen() -> None:
+    with pytest.raises(ValueError, match="CAPTION_STREAM_MAXLEN must be an integer"):
+        Settings.from_env({**BASE_ENV, "CAPTION_STREAM_MAXLEN": "ten-thousand"})
+
+
+def test_rejects_boolean_caption_stream_maxlen_in_programmatic_settings() -> None:
+    settings = replace(Settings.from_env(BASE_ENV), caption_stream_maxlen=True)
+
+    with pytest.raises(TypeError, match="positive integer"):
         settings.validate_agent_server()
 
 

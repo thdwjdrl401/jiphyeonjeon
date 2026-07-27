@@ -2,7 +2,7 @@ import json
 import logging
 from uuid import UUID
 
-from app.logging_config import JsonFormatter
+from app.logging_config import JsonFormatter, configure_logging
 
 
 def test_json_log_uses_same_allowlisted_context_fields() -> None:
@@ -20,3 +20,22 @@ def test_json_log_uses_same_allowlisted_context_fields() -> None:
     assert payload["job_id"] == "12345678-1234-5678-1234-567812345678"
     assert payload["error_code"] == "TEST_FAILURE"
     assert "must-not-appear" not in rendered
+
+
+def test_http_client_info_logs_cannot_expose_presigned_query() -> None:
+    root = logging.getLogger()
+    previous_handlers = root.handlers[:]
+    previous_root_level = root.level
+    previous_http_levels = {name: logging.getLogger(name).level for name in ("httpx", "httpcore")}
+    try:
+        configure_logging("ai-worker", "INFO")
+
+        assert logging.getLogger("httpx").isEnabledFor(logging.INFO) is False
+        assert logging.getLogger("httpcore").isEnabledFor(logging.INFO) is False
+        assert logging.getLogger("httpx").isEnabledFor(logging.WARNING) is True
+    finally:
+        root.handlers.clear()
+        root.handlers.extend(previous_handlers)
+        root.setLevel(previous_root_level)
+        for name, level in previous_http_levels.items():
+            logging.getLogger(name).setLevel(level)

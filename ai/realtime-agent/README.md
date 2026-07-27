@@ -34,8 +34,8 @@ lifecycle과 제어면을 중복시키지 않고 `ROOM_DELETED`를 정상 stop �
 - LiveKit frame은 20 ms로 받고 자체 queue에 최대 250개, 약 5초를 보관한다. 가득 차면 audio를
   버리지 않고 `AudioBacklogError`로 실패한다. 이 수치는 capture backlog 한계이지 전체 pipeline
   latency 상한은 아니다.
-- Redis caption `XADD`는 bounded timeout으로 직접 await하며 producer가 `MAXLEN`으로 임의 삭제하지
-  않는다.
+- Redis caption `XADD`는 bounded timeout으로 직접 await하고 `MAXLEN ~ 10000`을 기본 적용해
+  오래된 엔트리를 근사 trimming한다. `CAPTION_STREAM_MAXLEN`은 양의 엔트리 수로만 조정할 수 있다.
 - Redis/HTTP timeout은 remote commit 뒤 응답만 유실된 상태일 수 있다. Redis consumer는 `eventId`,
   callback consumer는 `Idempotency-Key`로 중복을 제거해야 하며 cancellation을 no-write 증거로 보지
   않는다.
@@ -66,6 +66,7 @@ completion도 동일한 `sttSessionId`를 포함한다.
 - `STT_AGENT_NAME`
 - `STT_ENGINE_PROVIDER=stub|openai-realtime|nemotron`
 - `REDIS_URL`: LiveKit 내부 Redis가 아닌 application Redis
+- `CAPTION_STREAM_MAXLEN`: `XADD MAXLEN ~` 보존 엔트리 수, 기본 `10000`(0으로 비활성화 불가)
 
 `stub`은 local wiring 확인 전용이다. OpenAI provider는 `OPENAI_API_KEY`가 필요하고, Nemotron은
 optional CUDA 의존성과 `STT_MAX_ACTIVE_JOBS=1`이 필요하다. callback을 켤 때만
@@ -106,7 +107,7 @@ LiveKit, Spring 왕복과 OpenAI credential은 별도 opt-in smoke 증거가 필
 
 - `captionEnabled` session에 explicit named AgentDispatch 생성
 - 같은 metadata fixture를 사용하는 Java serializer/contract test
-- Redis consumer group, retention, event enum과 session clock 변환 확정
+- Redis consumer group, 세션 종료 후 정리, event enum과 session clock 변환 확정
 - callback URL·HMAC·event ID 멱등·terminal first-wins 처리
 - 실제 계약 채택과 함께 `docs/CONTRACT.md` 갱신
 
