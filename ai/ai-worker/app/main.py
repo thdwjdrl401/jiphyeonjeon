@@ -21,9 +21,7 @@ def make_stop_handler(stop_event: asyncio.Event, server: uvicorn.Server):
     return request_stop
 
 
-def register_signal_handlers(
-    loop: asyncio.AbstractEventLoop, request_stop
-) -> None:
+def register_signal_handlers(loop: asyncio.AbstractEventLoop, request_stop) -> None:
     for signal_name in (signal.SIGINT, signal.SIGTERM):
         try:
             loop.add_signal_handler(signal_name, request_stop)
