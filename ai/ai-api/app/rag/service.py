@@ -17,11 +17,11 @@ from app.rag.models import (
     AnswerInsufficientData,
     AnswerSource,
     CaptionSource,
-    PptxSource,
     RagAnswerRequest,
     RetrievedEvidence,
 )
 from app.rag.ports import AnswerModel, EvidenceRetriever
+from app.rag.registry import InMemoryRequestRegistry, RequestLease, RequestRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +49,7 @@ class RagAnswerService:
         self,
         retriever: EvidenceRetriever,
         model: AnswerModel,
+        registry: RequestRegistry | None = None,
         *,
         retrieval_timeout_seconds: float = 5.0,
         model_timeout_seconds: float = 60.0,
@@ -57,10 +58,17 @@ class RagAnswerService:
             raise ValueError("RAG timeouts must be positive")
         self._retriever = retriever
         self._model = model
+        self._registry = registry or InMemoryRequestRegistry()
         self._retrieval_timeout_seconds = retrieval_timeout_seconds
         self._model_timeout_seconds = model_timeout_seconds
 
-    async def stream(self, request: RagAnswerRequest) -> AsyncIterator[AnswerEvent]:
+    async def open(self, request: RagAnswerRequest) -> AnswerEventStream:
+        """Reserve requestId before the HTTP adapter commits SSE headers."""
+
+        lease = await self._registry.acquire(request.requestId)
+        return AnswerEventStream(self._produce(request), lease)
+
+    async def _produce(self, request: RagAnswerRequest) -> AsyncIterator[AnswerEvent]:
         try:
             try:
                 async with asyncio.timeout(self._retrieval_timeout_seconds):
@@ -134,12 +142,50 @@ class RagAnswerService:
             )
 
 
+class AnswerEventStream(AsyncIterator[AnswerEvent]):
+    """Release requestId on terminal, failure, explicit close, or disconnect."""
+
+    def __init__(self, events: AsyncIterator[AnswerEvent], lease: RequestLease) -> None:
+        self._events = events
+        self._lease = lease
+        self._closed = False
+        self._close_lock = asyncio.Lock()
+
+    def __aiter__(self) -> AnswerEventStream:
+        return self
+
+    async def __anext__(self) -> AnswerEvent:
+        if self._closed:
+            raise StopAsyncIteration
+        try:
+            event = await self._events.__anext__()
+        except StopAsyncIteration:
+            await self.aclose()
+            raise
+        except BaseException:
+            await self.aclose()
+            raise
+        if not isinstance(event, AnswerDelta):
+            await self.aclose()
+        return event
+
+    async def aclose(self) -> None:
+        async with self._close_lock:
+            if self._closed:
+                return
+            self._closed = True
+            try:
+                await _close_iterator(self._events)
+            finally:
+                await self._lease.complete()
+
+
 def _validate_evidence_scope(
     request: RagAnswerRequest,
     evidence: Sequence[RetrievedEvidence],
 ) -> None:
     for item in evidence:
-        if isinstance(item.source, PptxSource) and item.lesson_id != request.lessonId:
+        if item.lesson_id != request.lessonId:
             raise _EvidenceScopeViolation
         if isinstance(item.source, CaptionSource) and item.source.sessionId != request.sessionId:
             raise _EvidenceScopeViolation

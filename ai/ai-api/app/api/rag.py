@@ -6,7 +6,13 @@ from fastapi import APIRouter, Depends, Header, HTTPException, status
 from fastapi.responses import StreamingResponse
 
 from app.api.internal_auth import InternalAuthenticationError, InternalRequestAuthenticator
-from app.rag import RagAnswerRequest, RagAnswerService, encode_sse_stream
+from app.rag import (
+    DuplicateRequestError,
+    RagAnswerRequest,
+    RagAnswerService,
+    RequestRegistryFullError,
+    encode_sse_stream,
+)
 
 RAG_ROUTE_PREFIX = "/internal/v1/rag"
 RAG_STREAM_PATH = f"{RAG_ROUTE_PREFIX}/answers:stream"
@@ -54,8 +60,20 @@ def create_rag_router(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="RAG service is not configured",
             )
+        try:
+            events = await service.open(request)
+        except DuplicateRequestError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="requestId was already used",
+            ) from exc
+        except RequestRegistryFullError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="too many active RAG requests",
+            ) from exc
         return StreamingResponse(
-            encode_sse_stream(service.stream(request)),
+            encode_sse_stream(events),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache, no-transform",

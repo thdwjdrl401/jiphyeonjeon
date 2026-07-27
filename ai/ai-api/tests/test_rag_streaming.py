@@ -10,10 +10,13 @@ from pydantic import ValidationError
 from app.rag import (
     AnswerError,
     CaptionSource,
+    DuplicateRequestError,
+    InMemoryRequestRegistry,
     PptxSource,
     RagAnswerRequest,
     RagAnswerService,
     RagStreamFailure,
+    RequestRegistryFullError,
     RetrievedEvidence,
     RetrievalResult,
     encode_sse_event,
@@ -23,6 +26,7 @@ from app.rag import (
 LESSON_ID = UUID("11111111-1111-4111-8111-111111111111")
 OTHER_LESSON_ID = UUID("22222222-2222-4222-8222-222222222222")
 MATERIAL_ID = UUID("33333333-3333-4333-8333-333333333333")
+SESSION_ID = "44444444-4444-4444-8444-444444444444"
 
 
 def async_test(test):
@@ -37,7 +41,7 @@ def request(request_id: str = "request-1") -> RagAnswerRequest:
     return RagAnswerRequest(
         requestId=request_id,
         lessonId=LESSON_ID,
-        sessionId="session-1",
+        sessionId=SESSION_ID,
         question="방금 설명한 개념은 무엇인가요?",
         contextTimeMs=615_000,
     )
@@ -51,10 +55,20 @@ def pptx_evidence(*, lesson_id: UUID = LESSON_ID) -> RetrievedEvidence:
     )
 
 
-def caption_evidence(*, session_id: str = "session-1") -> RetrievedEvidence:
+def caption_evidence(
+    *,
+    lesson_id: UUID = LESSON_ID,
+    session_id: str = SESSION_ID,
+) -> RetrievedEvidence:
     return RetrievedEvidence(
+        lesson_id=lesson_id,
         content="방금 말한 자막 근거",
-        source=CaptionSource(sessionId=session_id, startMs=550_000, endMs=590_000),
+        source=CaptionSource(
+            sessionId=session_id,
+            sttSessionId="provider-session-1",
+            startMs=550_000,
+            endMs=590_000,
+        ),
     )
 
 
@@ -95,7 +109,8 @@ class Model:
 
 
 async def collect(service: RagAnswerService, current_request: RagAnswerRequest):
-    return [event async for event in service.stream(current_request)]
+    stream = await service.open(current_request)
+    return [event async for event in stream]
 
 
 def test_contract_rejects_unknown_request_field_and_reversed_caption_range() -> None:
@@ -107,7 +122,12 @@ def test_contract_rejects_unknown_request_field_and_reversed_caption_range() -> 
             }
         )
     with pytest.raises(ValidationError):
-        CaptionSource(sessionId="session-1", startMs=2, endMs=1)
+        CaptionSource(
+            sessionId=SESSION_ID,
+            sttSessionId="provider-session-1",
+            startMs=2,
+            endMs=1,
+        )
 
 
 @pytest.mark.parametrize(
@@ -240,7 +260,11 @@ async def test_model_timeout_closes_generation_with_terminal_error() -> None:
 
 @pytest.mark.parametrize(
     "leaked_evidence",
-    [pptx_evidence(lesson_id=OTHER_LESSON_ID), caption_evidence(session_id="session-2")],
+    [
+        pptx_evidence(lesson_id=OTHER_LESSON_ID),
+        caption_evidence(lesson_id=OTHER_LESSON_ID),
+        caption_evidence(session_id="55555555-5555-4555-8555-555555555555"),
+    ],
 )
 @async_test
 async def test_cross_scope_evidence_never_reaches_model(
@@ -257,6 +281,27 @@ async def test_cross_scope_evidence_never_reaches_model(
     assert [event.event for event in events] == ["answer.error"]
     assert events[0].data.code == "EVIDENCE_SCOPE_VIOLATION"
     assert model.calls == []
+
+
+@async_test
+async def test_registry_rejects_active_recent_and_capacity_before_streaming() -> None:
+    registry = InMemoryRequestRegistry(max_active=1, max_completed=2)
+    service = RagAnswerService(Retriever(), Model(), registry)
+
+    first = await service.open(request("request-1"))
+    with pytest.raises(DuplicateRequestError):
+        await service.open(request("request-1"))
+    with pytest.raises(RequestRegistryFullError):
+        await service.open(request("request-2"))
+
+    assert [event.event async for event in first] == ["answer.insufficient"]
+    assert await registry.snapshot() == {"active": 0, "completed": 1}
+    with pytest.raises(DuplicateRequestError):
+        await service.open(request("request-1"))
+
+    second = await service.open(request("request-2"))
+    await second.aclose()
+    assert await registry.snapshot() == {"active": 0, "completed": 2}
 
 
 @async_test
@@ -281,7 +326,7 @@ async def test_consumer_cancellation_reaches_model_and_closes_stream() -> None:
         Retriever(RetrievalResult(sufficient=True, evidence=(pptx_evidence(),))),
         BlockingModel(),
     )
-    encoded_stream = encode_sse_stream(service.stream(request()))
+    encoded_stream = encode_sse_stream(await service.open(request()))
     next_event = asyncio.create_task(encoded_stream.__anext__())
     await started.wait()
 
@@ -290,6 +335,8 @@ async def test_consumer_cancellation_reaches_model_and_closes_stream() -> None:
         await next_event
 
     assert cancelled.is_set()
+    with pytest.raises(DuplicateRequestError):
+        await service.open(request())
 
 
 @async_test
@@ -306,7 +353,8 @@ async def test_consumer_cancellation_reaches_retriever() -> None:
                 cancelled.set()
                 raise
 
-    stream = RagAnswerService(BlockingRetriever(), Model()).stream(request())
+    service = RagAnswerService(BlockingRetriever(), Model())
+    stream = await service.open(request())
     next_event = asyncio.create_task(stream.__anext__())
     await started.wait()
 
@@ -315,6 +363,8 @@ async def test_consumer_cancellation_reaches_retriever() -> None:
         await next_event
 
     assert cancelled.is_set()
+    with pytest.raises(DuplicateRequestError):
+        await service.open(request())
 
 
 @async_test
