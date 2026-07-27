@@ -17,6 +17,7 @@ public record EgressProperties(
         int segmentDurationSeconds,
         String playlistName,
         String livePlaylistName,
-        String layout
+        String layout,
+        int playbackUrlTtlSeconds
 ) {
 }
