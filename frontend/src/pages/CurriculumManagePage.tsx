@@ -334,7 +334,8 @@ function CurriculumManageEditor({
       <div className="workspace-tabs" role="tablist"><button className={tab === 'structure' ? 'is-active' : ''} onClick={() => setTab('structure')} type="button">구성</button><button className={tab === 'info' ? 'is-active' : ''} onClick={() => setTab('info')} type="button">기본 정보</button><button className={tab === 'enrollees' ? 'is-active' : ''} onClick={() => setTab('enrollees')} type="button">수강생</button></div>
 
       {tab === 'structure' && (
-        <Panel title="섹션과 강의" description="강의를 드래그해 순서를 바꾸거나 다른 섹션으로 옮길 수 있습니다." action={<button className="button button--soft" type="button" onClick={addSection}>섹션 추가</button>}>
+        <Panel title="섹션과 강의" description="강의를 드래그해 순서를 바꾸거나 다른 섹션으로 옮길 수 있습니다.">
+          <InlineNotice tone="info"><strong>섹션</strong>은 대단원(챕터), <strong>강의</strong>는 그 안의 개별 수업이에요. 먼저 섹션을 추가하면 자동 저장된 뒤, 그 섹션의 “강의 추가”로 강의를 넣을 수 있어요.</InlineNotice>
           <div className="structure-list">
             {sections.map((section, sectionIndex) => (
               <article className={`structure-section${lessonDropTarget?.sectionId === section.sectionId ? ' is-lesson-drop-target' : ''}`} key={section.sectionId}>
@@ -383,6 +384,7 @@ function CurriculumManageEditor({
               </article>
             ))}
           </div>
+          <button className="structure-add-section" type="button" onClick={addSection}>+ 섹션 추가</button>
         </Panel>
       )}
 
