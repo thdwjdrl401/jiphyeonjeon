@@ -18,6 +18,26 @@ interface ApiLessonView {
   description: string
   status: LessonStatus
   materials?: ApiLessonMaterial[]
+  // 강사 레슨 조회(/instructor/lessons/{id})만 함께 준다. 공개 카탈로그는 PUBLISHED만 보여
+  // DRAFT에서 방금 만든 세션이 안 보였다 — 강사 저작 읽기를 강사 권한 축으로(BE ADR).
+  liveSession?: {
+    sessionId: string
+    status: CurriculumLiveSessionStatus
+    scheduledAt?: string | null
+    entryWindowMinutes?: number | null
+    expectedDurationMinutes?: number | null
+  } | null
+}
+
+interface ApiInstructorCurriculum {
+  curriculumId: string
+  title: string
+}
+
+interface ApiInstructorSection {
+  sectionId: string
+  title: string
+  orderIndex: number
 }
 
 function formatFileSize(fileSize: number) {
@@ -58,12 +78,60 @@ interface ApiCurriculumDetail {
   }>
 }
 
+/**
+ * 강사 레슨 상세 — 전부 강사 엔드포인트로 읽는다(DRAFT여도 보이도록).
+ * liveSession은 레슨 응답이 직접 준다. 커리큘럼·섹션 제목은 강사 커리큘럼/섹션 조회로 채운다.
+ * replayStatus·learning은 저작 화면에서 쓰지 않으므로 안전한 기본값(NOT_READY·null).
+ */
+async function getInstructorLesson(request: {
+  lessonId: string
+  curriculumId?: string
+  sectionId?: string
+}): Promise<LessonDetailView> {
+  const { data: lesson } = await apiClient.get<ApiLessonView>(`/instructor/lessons/${request.lessonId}`)
+
+  let curriculumTitle = ''
+  let sectionTitle = ''
+  if (request.curriculumId) {
+    const [{ data: curriculum }, { data: sections }] = await Promise.all([
+      apiClient.get<ApiInstructorCurriculum>(`/instructor/curriculums/${request.curriculumId}`),
+      apiClient.get<ApiInstructorSection[]>(`/instructor/curriculums/${request.curriculumId}/sections`),
+    ])
+    curriculumTitle = curriculum.title
+    sectionTitle = sections.find((item) => item.sectionId === (request.sectionId ?? lesson.sectionId))?.title ?? ''
+  }
+
+  return {
+    lessonId: lesson.lessonId,
+    title: lesson.title,
+    description: lesson.description,
+    status: lesson.status,
+    sectionId: lesson.sectionId,
+    sectionTitle,
+    curriculumId: request.curriculumId ?? '',
+    curriculumTitle,
+    materials: (lesson.materials ?? []).map(toMaterialView),
+    liveSession: lesson.liveSession
+      ? {
+          sessionId: lesson.liveSession.sessionId,
+          status: lesson.liveSession.status,
+          scheduledAt: lesson.liveSession.scheduledAt ?? null,
+        }
+      : null,
+    replayStatus: 'NOT_READY',
+    learning: null,
+  }
+}
+
 export const httpLessonService = {
   async getLesson(request) {
-    const endpoint = request.role === 'INSTRUCTOR'
-      ? `/instructor/lessons/${request.lessonId}`
-      : `/lessons/${request.lessonId}`
-    const { data: lesson } = await apiClient.get<ApiLessonView>(endpoint)
+    // 강사 저작(수정 폼·상세)은 공개 카탈로그로 읽지 않는다 — 그 경로는 PUBLISHED만 보여
+    // DRAFT 커리큘럼·레슨에서 404가 나거나 방금 만든 세션이 빠진다. 강사 엔드포인트로 읽는다.
+    if (request.role === 'INSTRUCTOR') {
+      return getInstructorLesson(request)
+    }
+
+    const { data: lesson } = await apiClient.get<ApiLessonView>(`/lessons/${request.lessonId}`)
 
     let curriculumTitle = ''
     let sectionTitle = ''
@@ -102,7 +170,26 @@ export const httpLessonService = {
       learning,
     }
   },
-  async getCurriculumLessonNavigation(curriculumId) {
+  async getCurriculumLessonNavigation(curriculumId, role) {
+    // 강사 사이드바는 DRAFT 커리큘럼에서도 떠야 한다. 공개 카탈로그는 PUBLISHED-only라 404가 나므로
+    // 강사는 강사 엔드포인트(제목 + 섹션 + 섹션별 레슨)로 읽는다.
+    if (role === 'INSTRUCTOR') {
+      const [{ data: curriculum }, { data: sections }] = await Promise.all([
+        apiClient.get<ApiInstructorCurriculum>(`/instructor/curriculums/${curriculumId}`),
+        apiClient.get<ApiInstructorSection[]>(`/instructor/curriculums/${curriculumId}/sections`),
+      ])
+      const ordered = [...sections].sort((a, b) => a.orderIndex - b.orderIndex)
+      const sectionsWithLessons = await Promise.all(ordered.map(async (section) => {
+        const { data: lessons } = await apiClient.get<ApiLessonView[]>(`/instructor/sections/${section.sectionId}/lessons`)
+        return {
+          sectionId: section.sectionId,
+          title: section.title,
+          lessons: lessons.map((lesson, index) => ({ lessonId: lesson.lessonId, title: lesson.title, order: index + 1 })),
+        }
+      }))
+      return { curriculumId: curriculum.curriculumId, title: curriculum.title, sections: sectionsWithLessons }
+    }
+
     const { data } = await apiClient.get<ApiCurriculumDetail>(`/curriculums/${curriculumId}`)
     return {
       curriculumId: data.curriculumId,

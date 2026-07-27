@@ -38,7 +38,9 @@ describe('커리큘럼 작업 화면', () => {
     expect(await screen.findByAltText('대표 이미지 미리보기')).toBeInTheDocument()
   })
 
-  it('새 커리큘럼을 만들면 상세로 이동하고 상세에서 관리 화면에 진입한다', async () => {
+  // 초안은 DRAFT라 공개 상세(GET /curriculums/{id}, PUBLISHED-only)로 보내면 404로 튕긴다.
+  // 생성 후엔 강사 엔드포인트로 읽는 관리 화면으로 바로 이동해야 한다(ADR-0041).
+  it('새 커리큘럼을 만들면 관리 화면으로 이동한다', async () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/new')
     await user.type(
@@ -53,12 +55,10 @@ describe('커리큘럼 작업 화면', () => {
     expect(screen.getByText('curriculum-guide.pptx')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '초안 만들기' }))
 
+    // 공개 상세를 거치지 않고 관리 화면으로 직행한다.
     expect(await screen.findByRole('heading', { name: '자료가 있는 새 커리큘럼', level: 1 })).toBeInTheDocument()
-    expect(window.location.pathname).toMatch(/^\/curriculums\/cur-draft-/)
-    expect(screen.getByText('curriculum-guide.pptx')).toBeInTheDocument()
-    await user.click(screen.getByRole('link', { name: '관리하기' }))
+    expect(window.location.pathname).toMatch(/^\/instructor\/curriculums\/cur-draft-.*\/manage$/)
     await user.click(await screen.findByRole('button', { name: '기본 정보' }))
-
     expect(await screen.findByText('curriculum-guide.pptx')).toBeInTheDocument()
   })
 
@@ -73,6 +73,38 @@ describe('커리큘럼 작업 화면', () => {
     await user.type(description, '수정된 섹션 설명입니다.')
     expect(title).toHaveValue('새로운 기초 섹션')
     expect(description).toHaveValue('수정된 섹션 설명입니다.')
+  })
+
+  it('섹션을 추가하면 자동 저장 전까지 "강의 추가"를 막고, 저장되면 링크로 연다', async () => {
+    const user = userEvent.setup()
+    await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
+    await screen.findByLabelText('섹션 1 이름')
+    await user.click(screen.getByRole('button', { name: '섹션 추가' }))
+
+    // 방금 추가한(아직 임시 id) 섹션의 "강의 추가"는 비활성 버튼이어야 한다 — 존재하지 않는 섹션
+    // URL로 못 들어가게(#3). 클릭 가능한 링크가 아니라 disabled 버튼으로 렌더된다.
+    const addLessonButtons = screen.getAllByRole('button', { name: '강의 추가' })
+    expect(addLessonButtons.some((button) => button.hasAttribute('disabled'))).toBe(true)
+
+    // 디바운스 자동 저장이 새 섹션에 실제 id를 부여하면 "강의 추가"가 링크로 바뀐다.
+    await waitFor(() => {
+      expect(screen.getByText('자동 저장됨')).toBeInTheDocument()
+    }, { timeout: 3000 })
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: '강의 추가' })).not.toBeInTheDocument()
+    }, { timeout: 3000 })
+  })
+
+  it('새 강의를 저장하면 편집 모드로 이동해 재클릭으로 중복 생성되지 않는다', async () => {
+    const user = userEvent.setup()
+    await renderAsInstructor('/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/new')
+    await user.type(await screen.findByLabelText(/강의 제목/), '중복 방지 강의')
+    await user.click(screen.getByRole('button', { name: '강의 생성 저장' }))
+
+    // 생성 성공 후엔 고유 URL(편집 모드)로 이동한다 — "새 강의" 폼에 머물며 연타로 매번
+    // 새 레슨이 생기던 것을 막는다(#4). 편집 모드 제목으로 전환된 것으로 확인한다.
+    expect(await screen.findByRole('heading', { name: '강의 수정', level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '강의 수정 저장' })).toBeInTheDocument()
   })
 
   it('커리큘럼 관리에서는 강의 상세만 제공하고 수정 진입점을 숨긴다', async () => {
@@ -222,7 +254,9 @@ describe('커리큘럼 작업 화면', () => {
     expect(screen.getByLabelText('이미지 변경')).toBeInTheDocument()
   })
 
-  it('관리 화면 최하단에서 커리큘럼 자료를 수정하고 상세에 반영한다', async () => {
+  // 커리큘럼-레벨 자료 편집은 로컬 스테이징이다 — 연결 API가 없어 서버에 반영하지 않는다(ADR-0030).
+  // 구조/정보는 자동 저장되지만 자료만 바꾼 것으로는 저장이 돌지 않으므로, 여기선 로컬 표시만 확인한다.
+  it('관리 화면에서 커리큘럼 자료를 추가하면 목록에 표시된다', async () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
     await user.click(await screen.findByRole('button', { name: '기본 정보' }))
@@ -231,11 +265,6 @@ describe('커리큘럼 작업 화면', () => {
     })
 
     await user.upload(screen.getByLabelText('커리큘럼 강의 자료 등록'), material)
-    expect(screen.getByText('instructor-common-guide.pptx')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: '변경 저장' }))
-    await user.click(screen.getByRole('link', { name: '커리큘럼 상세' }))
-
-    expect(await screen.findByRole('heading', { name: '커리큘럼 강의 자료' })).toBeInTheDocument()
     expect(screen.getByText('instructor-common-guide.pptx')).toBeInTheDocument()
   })
 

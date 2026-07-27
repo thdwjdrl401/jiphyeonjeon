@@ -169,6 +169,19 @@ public class EnrollmentService implements EnrollmentManagement, EnrollmentDirect
         return counts;
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public Map<UUID, Long> countActiveByCurriculums(java.util.Collection<UUID> curriculumIds) {
+        if (curriculumIds.isEmpty()) {
+            return Map.of();   // 빈 IN 절로 쿼리를 쏘지 않는다.
+        }
+        Map<UUID, Long> counts = new java.util.HashMap<>();
+        for (var row : repository.countActiveByCurriculumIds(curriculumIds, EnrollmentStatus.ACTIVE)) {
+            counts.put(row.curriculumId(), row.count());
+        }
+        return counts;
+    }
+
     private Enrollment require(UUID enrollmentId) {
         return repository.findById(enrollmentId)
                 .orElseThrow(() -> new EnrollmentNotFoundException("수강 기록을 찾을 수 없습니다."));

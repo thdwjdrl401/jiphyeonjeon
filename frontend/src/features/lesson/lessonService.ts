@@ -1,3 +1,4 @@
+import type { UserRole } from '@/features/auth/types'
 import { selectDataSource } from '@/shared/api/dataSource'
 import { httpLessonService } from './httpLessonService'
 import type { GetLessonRequest, LessonService, SaveLessonRequest } from './lessonService.interface'
@@ -6,7 +7,7 @@ import { mockLessonService } from './mockLessonService'
 const lessonService = selectDataSource<LessonService>(mockLessonService, httpLessonService)
 
 export const getLesson = (request: GetLessonRequest) => lessonService.getLesson(request)
-export const getCurriculumLessonNavigation = (curriculumId: string) => lessonService.getCurriculumLessonNavigation(curriculumId)
+export const getCurriculumLessonNavigation = (curriculumId: string, role?: UserRole) => lessonService.getCurriculumLessonNavigation(curriculumId, role)
 export const saveLesson = (request: SaveLessonRequest) => lessonService.saveLesson(request)
 export const deleteLessonMaterial = (lessonId: string, materialId: string) => lessonService.deleteLessonMaterial(lessonId, materialId)
 export const prepareLessonAi = (lessonId: string) => lessonService.prepareLessonAi(lessonId)

@@ -1,6 +1,6 @@
 import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { instructorPaths, publicPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
 import { getInstructorCurriculum } from '@/features/curriculum/curriculumManagementService'
@@ -21,6 +21,8 @@ function toDateTimeLocal(value?: string | null) {
 export default function LessonFormPage() {
   const { curriculumId = '', sectionId = '', lessonId } = useParams()
   const { user } = useAuth()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const isEdit = Boolean(lessonId)
   const curriculumQuery = useQuery({
     queryKey: ['instructor-curriculum', curriculumId],
@@ -52,6 +54,7 @@ export default function LessonFormPage() {
   const [saveAsDraft, setSaveAsDraft] = useState(existingLiveSession?.status === 'DRAFT')
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
   usePageTitle(isEdit ? '강의 수정' : '강의 만들기')
 
   useEffect(() => {
@@ -86,10 +89,12 @@ export default function LessonFormPage() {
 
   const save = async (event: FormEvent) => {
     event.preventDefault()
+    if (submitting) return   // 연타 방지 — 진행 중이면 무시(중복 생성 차단)
     if (!title.trim() || (canEditLiveSchedule && hasLiveSchedule && !scheduledAt)) return
     setSaveError('')
+    setSubmitting(true)
     try {
-      await saveLesson({
+      const lesson = await saveLesson({
         sectionId,
         lessonId,
         title: title.trim(),
@@ -101,8 +106,17 @@ export default function LessonFormPage() {
         materials: materials.flatMap((material) => material.file ? [material.file] : []),
       })
       setSaved(true)
+      // 생성 성공 시엔 편집 모드(고유 URL)로 이동한다. 그래야 다시 저장해도 같은 레슨을 수정하고,
+      // "새 강의" 폼에 머물며 연타로 매번 새 레슨이 생기던 것을 원천 차단한다.
+      if (!isEdit) {
+        queryClient.invalidateQueries({ queryKey: ['curriculum-management', curriculumId] })
+        queryClient.invalidateQueries({ queryKey: ['curriculum-lesson-navigation', curriculumId] })
+        navigate(instructorPaths.editLesson(curriculumId, sectionId, lesson.lessonId), { replace: true })
+      }
     } catch {
       setSaveError('강의 저장에 실패했습니다. 입력값과 서버 상태를 확인해 주세요.')
+    } finally {
+      setSubmitting(false)
     }
   }
   const prepare = async () => {
@@ -167,7 +181,7 @@ export default function LessonFormPage() {
 
         <div className="sticky-form-actions">
           <Link className="button button--ghost" to={isEdit ? lessonDetailPath : publicPaths.curriculum(curriculumId)}>취소</Link>
-          <button className="button button--primary button--large" type="submit" disabled={!title.trim() || (canEditLiveSchedule && hasLiveSchedule && !scheduledAt)}>{isEdit ? '강의 수정 저장' : '강의 생성 저장'}</button>
+          <button className="button button--primary button--large" type="submit" disabled={submitting || !title.trim() || (canEditLiveSchedule && hasLiveSchedule && !scheduledAt)}>{submitting ? '저장 중…' : isEdit ? '강의 수정 저장' : '강의 생성 저장'}</button>
         </div>
       </form>
     </div>
