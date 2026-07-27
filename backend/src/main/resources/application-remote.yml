@@ -2,7 +2,7 @@
 #   목적: EC2 공유 dev 인프라(PG·Redis·RabbitMQ)에 로컬 개발 중 붙어 테스트.
 #         AI STT(Redis Streams)·배치잡(RabbitMQ)을 EC2 dev에서 소비/개발.
 #   활성화: SPRING_PROFILES_ACTIVE=remote  (+ 아래 시크릿 env, .env.remote 참고)
-#   전제: EC2 dev 스택이 5433(PG)/4000(Redis)에서 가동, SG/ufw 팀 IP 허용, Redis requirepass.
+#   전제: EC2 dev 스택이 5433(PG)/4000(Redis)/4001(RabbitMQ)에서 가동, SG/ufw 팀 IP 허용, Redis requirepass.
 #   LiveKit은 양쪽 모두 EC2(application.yml 기본값).
 spring:
   datasource:
@@ -14,6 +14,12 @@ spring:
       host: ${EC2_INFRA_HOST:jiphyeonjeon.thdwjdrl.com}
       port: ${EC2_REDIS_PORT:4000}
       password: ${EC2_REDIS_PASSWORD:?remote 프로필은 EC2 dev Redis 비밀번호(EC2_REDIS_PASSWORD) 필요}
+  rabbitmq:
+    # AI 배치잡(임베딩 파이프라인 ADR-0036) 큐도 EC2 dev RabbitMQ로. dev-infra가 4001:5672로 노출.
+    host: ${EC2_INFRA_HOST:jiphyeonjeon.thdwjdrl.com}
+    port: ${EC2_RABBITMQ_PORT:4001}
+    username: ${RABBITMQ_USER:liveclass}
+    password: ${RABBITMQ_PASSWORD:?remote 프로필은 EC2 dev RabbitMQ 비밀번호(RABBITMQ_PASSWORD) 필요}
   # dev 전용 인프라라 flyway 켜서 스키마 생성(prod과 달리 안전) = application.yml 기본값 유지.
 
 # ⚠️ Redis Streams 소비자(향후 CP2): dev 인프라를 여러 개발자가 공유하면 consumer group을
