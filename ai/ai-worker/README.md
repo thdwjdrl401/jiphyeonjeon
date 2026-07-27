@@ -1,8 +1,8 @@
 # ai-worker
 
 EC2에서 실행하는 배치 AI 작업 프로세스다. lifecycle·관리 probe, Python 소유 RAG 인덱스 저장 경계,
-transport-neutral PPTX ingestion 코어와 Spring/BGE 외부 runtime adapter를 제공한다. RabbitMQ consumer 실행
-루프는 아직 연결하지 않았다.
+transport-neutral PPTX ingestion 코어, Spring/BGE 외부 adapter와 RabbitMQ consumer를 제공한다. consumer는
+기본적으로 꺼져 있으며 명시적으로 활성화할 때만 `ingestion.embed` 작업을 받는다.
 
 ```bash
 cd ai/ai-worker
@@ -12,8 +12,8 @@ AI_WORKER_DATABASE_URL=postgresql+asyncpg://ai_runtime:secret@localhost:5432/liv
 uv run --frozen python -m app.main
 ```
 
-현재 `/readyz`는 DB 연결 상태를 의미하지 않는다. 실제 consumer wiring에서 DB 연결과 consumer 준비 상태를
-readiness에 포함한다.
+consumer가 꺼진 scaffold 모드에서는 `/readyz`가 event loop 준비 상태를 뜻한다. consumer를 켜면 RabbitMQ
+연결과 PostgreSQL 연결이 모두 정상일 때만 ready다.
 
 ## RAG index migration
 
@@ -77,8 +77,8 @@ uv run --frozen alembic upgrade head
 - 동기식 OOXML 파싱과 chunking은 event loop를 막지 않도록 `asyncio.to_thread`로 offload한다.
 
 이 경계 자체는 RabbitMQ 메시지나 HTTP API가 아니다. 내부 `StagedMaterial`과 Python port는 wire DTO로
-재사용하지 않고 별도 adapter mapper가 Spring camelCase envelope를 변환한다. 현재 `app.main`은 ingestion
-job을 consume하지 않는다. 상세 규약은 [CONTRACT.md](CONTRACT.md)에 있다.
+재사용하지 않고 별도 adapter mapper가 Spring camelCase envelope를 변환한다. 상세 규약은
+[CONTRACT.md](CONTRACT.md)에 있다.
 
 ## PPTX runtime adapters
 
@@ -96,11 +96,36 @@ Spring 자료 파이프라인 계약은 `feat/be/ai-material-download-url`의
 - `build_pptx_ingestion_runtime()`은 Spring HTTP client, BGE HTTP client, pgvector engine과 use case를 연결하고
   `aclose()`에서 세 resource를 정리한다. builder 호출만으로 queue를 consume하지 않는다.
 
+## RabbitMQ consumer
+
+`AI_WORKER_MATERIAL_INGESTION_ENABLED=true`일 때만 `app.main`이 consumer를 연결한다. Python 구조로 보면
+consumer는 **메시지를 받는 입구**, handler는 **어떤 처리를 할지 정하는 곳**, 기존 ingestion use case는
+**PPTX를 실제로 읽고 임베딩·저장하는 곳**이다.
+
+```text
+RabbitMQ consumer -> material job handler -> PPTX ingestion use case
+                                   |-----> Spring READY/FAILED callback
+```
+
+- Spring이 이미 만든 `ingestion.embed` 큐를 passive lookup하므로 큐 속성을 바꾸거나 Java 선언과 충돌하지 않는다.
+- 한 번에 한 작업만 받고 성공 callback까지 끝난 뒤 ACK한다.
+- 일시 실패는 최대 3회 지수 backoff 후 같은 main queue에 persistent message로 다시 넣는다.
+- 영구 실패와 재시도 소진 메시지는 확인 후 ACK하기 전에 `ingestion.embed.dlq`에 먼저 보존한다.
+- DB에 BUILDING 결과가 있으면 activate부터 재개하고, SUCCEEDED 결과가 있으면 다운로드·BGE 호출 없이 READY
+  callback만 다시 보낸다.
+- 종료 시 새 delivery를 멈추고 진행 중인 한 작업을 기본 30초간 기다린다. 제한을 넘기면 원본은 ACK하지 않아
+  broker 재전달 대상으로 남는다.
+
 runtime builder를 활성화하려면 아래 설정이 추가로 필요하다. `AI_CALLBACK_SECRET`은 Spring의
 `ai.callback-secret`과 같아야 하고 BGE Bearer token과 공유하지 않는다.
 
 | 환경변수 | 기본값/필수 |
 |---|---|
+| `AI_WORKER_MATERIAL_INGESTION_ENABLED` | `false` |
+| `AI_WORKER_RABBITMQ_URL` | consumer 활성화 시 필수 |
+| `AI_WORKER_RABBITMQ_RETRY_LIMIT` | `3` |
+| `AI_WORKER_RABBITMQ_RETRY_BASE_DELAY_SECONDS` | `5` |
+| `AI_WORKER_RABBITMQ_SHUTDOWN_GRACE_SECONDS` | `30` |
 | `AI_CALLBACK_SECRET` | 필수, download-url·callback 공용 HMAC secret |
 | `AI_WORKER_SPRING_INTERNAL_BASE_URL` | `http://127.0.0.1:8080` |
 | `AI_WORKER_BGE_INTERNAL_TOKEN` | 필수, 32자 이상 |
@@ -109,34 +134,30 @@ runtime builder를 활성화하려면 아래 설정이 추가로 필요하다. `
 | `AI_WORKER_SOURCE_MAX_BYTES` | `52428800` |
 | `AI_WORKER_CHUNK_MAX_CHARS` | `1200` |
 
-결정 근거는 [ADR-0001](docs/decisions/0001-spring-presigned-pptx-runtime-adapters.md)에 기록했다.
+외부 adapter 결정은 [ADR-0001](docs/decisions/0001-spring-presigned-pptx-runtime-adapters.md), consumer
+수명주기 결정은 [ADR-0002](docs/decisions/0002-material-rabbitmq-consumer-lifecycle.md)에 기록했다.
 
 ### 현재 리뷰·후속 항목
 
-다음 runtime·연동 MR에서는 아래 항목을 닫기 전 완료로 선언하지 않는다.
+남은 항목은 아래와 같다.
 
 - 공유 계약: embed envelope와 주문형 source 발급은 채택했다. 다만 `EMBED_DELETE`에는 curriculum/version이
   없어 현재 저장소의 scope·tombstone 검증으로 바로 변환할 수 없다. resolver 또는 공유 계약 보강이 필요하다.
 - source 저장: 기존 DB column을 파괴적으로 바꾸지 않기 위해 `source_bucket="spring-asset"`,
   `source_object_key=<assetId>` compatibility locator를 사용한다. 실제 MinIO bucket/key가 아니며 column rename은
   data migration 전략과 함께 별도 저장소 MR에서 처리한다.
-- 메시지 처리: RabbitMQ ACK 시점, retry/backoff, DLQ, callback/outbox와 성공 결과 재조회 흐름을 결정한다.
-- broker topology: BE의 현재 `ingestion.embed` 선언은 durable queue만 포함하고 문서가 언급한 retry/DLQ queue는
-  아직 보이지 않는다. consumer가 기존 queue와 다른 argument로 재선언하면 안 된다.
-- 실행 격리: `asyncio.to_thread` task를 취소해도 이미 실행 중인 worker thread는 멈추지 않는다. bounded executor
-  또는 process isolation, 동시 job 제한과 shutdown drain을 runtime에서 설계한다.
-- 재시도 일관성: 저장 fingerprint에는 embedding 값도 포함된다. GPU 비결정성 때문에 같은 입력의 재시도 결과가
-  달라질 수 있으므로 completed-job short circuit 또는 durable result/outbox 없이 무조건 재임베딩하지 않는다.
+- 실행 격리: prefetch 1로 동시에 시작하는 parsing thread를 하나로 제한했지만 `asyncio.to_thread` 자체는 강제
+  중단할 수 없다. 30초 drain 뒤 취소되어도 Python process 종료 과정은 실행 중인 기본 executor thread를 기다린다.
 - 추출 범위: 이미지 OCR, SmartArt, chart와 grouped shape 내부 텍스트는 지원하지 않는다. 필요 시 fixture와
   resource limit을 포함한 별도 기능으로 확장한다.
 - 통합 검증: unit/contract test는 실제 wire body와 실패 분류를 검증하지만, 배포된 Spring URL 발급·presigned
   GET·실제 BGE GPU·RabbitMQ를 한 번에 연결한 E2E는 아직 실행하지 않았다.
-- 활성화 gate: consumer, completed-job short circuit, delete resolver와 broker retry/DLQ가 준비되기 전에는
-  Spring의 `MATERIAL_EMBEDDING_ENABLED`를 켜지 않는다.
+- 활성화 gate: delete resolver와 실제 Spring·RabbitMQ·BGE·PostgreSQL E2E가 끝나기 전에는 Python consumer와
+  Spring의 `MATERIAL_EMBEDDING_ENABLED`를 모두 켜지 않는다.
 
 ## Verification
 
-현재 runtime adapter branch 기준 전체 결과는 `219 passed, 0 skipped`다. 경고 1건은 FastAPI TestClient가
+현재 consumer branch 기준 전체 결과는 `247 passed, 0 skipped`다. 경고 1건은 FastAPI TestClient가
 Starlette의 기존 httpx 호환 경로를 불러올 때 발생하는 deprecation warning이며 이번 변경에서 추가한 실패나
 skip은 아니다.
 
