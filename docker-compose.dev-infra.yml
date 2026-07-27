@@ -82,7 +82,7 @@ services:
     volumes:
       - miniodata:/data
 
-  minio-init:                              # liveclass-assets 버킷 생성
+  minio-init:                              # liveclass-assets·recordings 버킷 생성
     image: minio/mc
     depends_on: [minio]
     restart: "no"
@@ -95,6 +95,7 @@ services:
       - |
         until mc alias set lc http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"; do echo 'waiting for minio'; sleep 1; done
         mc mb -p lc/liveclass-assets
+        mc mb -p lc/recordings
         exit 0
 
 volumes:
