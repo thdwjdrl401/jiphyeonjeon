@@ -8,6 +8,7 @@ import ProfileAvatar from '@/features/profile/ProfileAvatar'
 import ProfileEditModal from '@/features/profile/ProfileEditModal'
 import { profileService } from '@/features/profile/profileService'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
+import { useToast } from '@/shared/ui/Toast'
 import { InlineNotice, MetricCard, PageHeader, Panel, StatusBadge } from '@/shared/ui/WorkspaceUi'
 
 export default function ProfilePage() {
@@ -25,8 +26,8 @@ export default function ProfilePage() {
     enabled: user?.role === 'INSTRUCTOR',
   })
   const editButtonRef = useRef<HTMLButtonElement>(null)
+  const toast = useToast()
   const [isEditOpen, setIsEditOpen] = useState(false)
-  const [saveNotice, setSaveNotice] = useState('')
   const [bio, setBio] = useState('')
   const [expertise, setExpertise] = useState('')
   const [currentPassword, setCurrentPassword] = useState('')
@@ -47,7 +48,7 @@ export default function ProfilePage() {
     onSuccess: (profile) => {
       setBio(profile.bio)
       setExpertise(profile.expertise.join(', '))
-      setSaveNotice('강사 공개 프로필이 저장되었습니다.')
+      toast.success('강사 공개 프로필이 저장되었습니다.')
     },
   })
   const passwordMutation = useMutation({
@@ -55,7 +56,7 @@ export default function ProfilePage() {
     onSuccess: () => {
       setCurrentPassword('')
       setNewPassword('')
-      setSaveNotice('비밀번호가 변경되었습니다.')
+      toast.success('비밀번호가 변경되었습니다.')
     },
   })
   const withdrawMutation = useMutation({
@@ -74,8 +75,8 @@ export default function ProfilePage() {
   const saveBasicProfile = useCallback(async (displayName: string, file: File | null) => {
     if (displayName !== user?.displayName) await updateDisplayName(displayName)
     if (file) await updateProfileImage(file)
-    setSaveNotice('기본 프로필이 변경되었습니다.')
-  }, [updateDisplayName, updateProfileImage, user?.displayName])
+    toast.success('기본 프로필이 변경되었습니다.')
+  }, [updateDisplayName, updateProfileImage, user?.displayName, toast])
 
   const saveInstructorProfile = (event: FormEvent) => {
     event.preventDefault()
@@ -92,8 +93,6 @@ export default function ProfilePage() {
     <div className="workspace-page">
       <PageHeader eyebrow="MY PROFILE" title="내 프로필" description="계정 정보와 서비스에 표시되는 프로필을 확인하세요." />
 
-      {saveNotice && <InlineNotice tone="success">{saveNotice}</InlineNotice>}
-
       <div className="profile-grid">
         <Panel title="계정 정보" description="이메일과 가입 유형은 가입 계정의 기본 정보입니다.">
           <dl className="identity-list"><div><dt>이메일</dt><dd>{user.email}</dd></div><div><dt>가입 유형</dt><dd><StatusBadge tone={user.role === 'INSTRUCTOR' ? 'warning' : 'success'}>{user.role === 'INSTRUCTOR' ? '강사' : '학생'}</StatusBadge></dd></div></dl>
@@ -101,7 +100,7 @@ export default function ProfilePage() {
         <Panel
           title="기본 프로필"
           description="서비스 전반에서 표시되는 프로필입니다."
-          action={<button ref={editButtonRef} className="button button--primary button--small" type="button" onClick={() => { setSaveNotice(''); setIsEditOpen(true) }}>프로필 수정</button>}
+          action={<button ref={editButtonRef} className="button button--primary button--small" type="button" onClick={() => setIsEditOpen(true)}>프로필 수정</button>}
         >
           <div className="profile-summary-card">
             <ProfileAvatar displayName={user.displayName} imageUrl={user.profileImageUrl} className="user-avatar--large" />
