@@ -32,4 +32,14 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, UUID> {
             group by e.status
             """)
     List<EnrollmentStatusCount> countByStatus(@Param("curriculumId") UUID curriculumId);
+
+    /** 여러 커리큘럼의 ACTIVE 수강생 수를 한 쿼리로(대시보드 집계 N+1 방지). 수강 0인 커리큘럼은 행 없음. */
+    @Query("""
+            select e.curriculumId as curriculumId, count(e) as count
+            from Enrollment e
+            where e.curriculumId in :curriculumIds and e.status = :status
+            group by e.curriculumId
+            """)
+    List<CurriculumEnrollmentCount> countActiveByCurriculumIds(@Param("curriculumIds") java.util.Collection<UUID> curriculumIds,
+                                                               @Param("status") EnrollmentStatus status);
 }

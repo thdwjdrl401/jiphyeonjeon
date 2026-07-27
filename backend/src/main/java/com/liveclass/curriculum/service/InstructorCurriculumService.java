@@ -330,11 +330,16 @@ public class InstructorCurriculumService {
         return requireOwnedLesson(instructorId, lessonId);
     }
 
-    /** 강사 레슨 단건 + 연결된 활성 자료(ADR-0035) — 수정 폼이 저장된 자료를 다시 보여주도록. */
+    /**
+     * 강사 레슨 단건 + 연결된 활성 자료(ADR-0035) + 이 레슨의 라이브 세션 — 수정 폼이 저장된 자료와
+     * 라이브 일정을 다시 보여주도록. 세션은 레슨당 최대 하나라 배치 조회 결과의 첫 건을 취한다.
+     */
     @Transactional(readOnly = true)
     public InstructorLessonDetail getLessonDetail(UUID instructorId, UUID lessonId) {
         LessonView lesson = requireOwnedLesson(instructorId, lessonId);
-        return new InstructorLessonDetail(lesson, lessonMaterialManagement.findActiveByLesson(lessonId));
+        LiveSessionView liveSession = liveSessionDirectory.findByLessons(List.of(lessonId)).stream()
+                .findFirst().orElse(null);
+        return new InstructorLessonDetail(lesson, lessonMaterialManagement.findActiveByLesson(lessonId), liveSession);
     }
 
     @Transactional
