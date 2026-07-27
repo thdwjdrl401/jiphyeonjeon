@@ -2,7 +2,7 @@
 #   목적: EC2 공유 dev 인프라(PG·Redis·RabbitMQ)에 로컬 개발 중 붙어 테스트.
 #         AI STT(Redis Streams)·배치잡(RabbitMQ)을 EC2 dev에서 소비/개발.
 #   활성화: SPRING_PROFILES_ACTIVE=remote  (+ 아래 시크릿 env, .env.remote 참고)
-#   전제: EC2 dev 스택이 5433(PG)/6380(Redis)에서 가동, SG/ufw 팀 IP 허용, Redis requirepass.
+#   전제: EC2 dev 스택이 5433(PG)/4000(Redis)에서 가동, SG/ufw 팀 IP 허용, Redis requirepass.
 #   LiveKit은 양쪽 모두 EC2(application.yml 기본값).
 spring:
   datasource:

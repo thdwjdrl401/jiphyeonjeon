@@ -36,7 +36,7 @@
 | 캐시·세션 | Redis 7 | ✅ | [0014](decisions/songjeongki/0014-auth-redis-session-cookie.md) |
 | 실시간 채널 | STOMP over WebSocket | ✅ | [0019](decisions/songjeongki/0019-ws-realtime-chat-stomp.md) |
 | 오브젝트 스토리지 | MinIO(S3 호환) + presigned direct upload | ✅ | [0023](decisions/songjeongki/0023-asset-presigned-upload.md) |
-| 미디어 | LiveKit self-host(SFU) + Egress(녹화→HLS) | 🟡 서버 상시가동·토큰·Egress 제어 ✅ / 재생 ⬜ | [0004](decisions/songjeongki/0004-media-livekit-selfhost.md)·[0020](decisions/songjeongki/0020-egress-recording-lifecycle.md) |
+| 미디어 | LiveKit self-host(SFU) + Egress(녹화→HLS) | 🟡 서버 상시가동·토큰·Egress 제어·VOD 재생 API ✅ / 라이브 엣지 재생 ⬜ | [0004](decisions/songjeongki/0004-media-livekit-selfhost.md)·[0020](decisions/songjeongki/0020-egress-recording-lifecycle.md)·[0039](decisions/songjeongki/0039-replay-playback-api.md) |
 | 라이브 STT | realtime-agent (Python, LiveKit Agents) | ⬜ CP2 | [0011](decisions/songjeongki/0011-ai-three-services.md)·[0013](decisions/songjeongki/0013-unified-streaming-stt.md) |
 | RAG API | ai-api (FastAPI, SSE) | ⬜ CP3 | [0011](decisions/songjeongki/0011-ai-three-services.md) |
 | 배치 파이프라인 | ai-worker + RabbitMQ | ⬜ CP3 | [0011](decisions/songjeongki/0011-ai-three-services.md)·[0012](decisions/songjeongki/0012-hybrid-queue.md) |
@@ -245,20 +245,20 @@ flowchart LR
 잡은 **idempotency key + outbox**로 유실·중복을 막고, 실패는 **DLQ**로 보낸다.
 Python은 `core`에 직접 쓰지 않는다 — 결과는 큐 이벤트로 돌아오고 Spring이 기록한다([ADR-0017](decisions/songjeongki/0017-schema-ownership-core-ai.md)).
 
-### 6-4. 녹화 → 다시보기 🟡 (녹화 ✅ / 재생 ⬜ CP4)
+### 6-4. 녹화 → 다시보기 🟡 (녹화·재생 API ✅ / 플레이어·자막 연동 ⬜ CP4)
 
 ```mermaid
 flowchart LR
   L["라이브 세션"] -->|"✅ Egress 제어"| EG["녹화 → HLS → MinIO"]
   L -->|"⬜ CP2·CP3"| DB["자막·용어·근거 영속"]
   EG -->|"✅ VideoAsset 상태 추적"| VA["REQUESTED→…→READY"]
-  VA -->|"⬜ 재생 API"| RP["다시보기 플레이어"]
+  VA -->|"✅ 재생 API"| RP["다시보기 플레이어"]
   DB --> RP
   RP --> DONE["교정 자막 · 용어 호버 · 저장 컨텍스트 Q&A"]
 ```
 
-**지금 되는 것**: 세션 종료 이벤트로 Egress를 제어하고, `VideoAsset`이 녹화 수명주기를 추적하며, 카탈로그가 "다시보기 있음"을 표시한다.
-**남은 것**: 재생 API와 플레이어(§9-8 참조).
+**지금 되는 것**: 세션 종료 이벤트로 Egress를 제어하고, `VideoAsset`이 녹화 수명주기를 추적하며, 카탈로그가 "다시보기 있음"을 표시한다. **재생 API**(`GET /lessons/{id}/playback`, [ADR-0039](decisions/songjeongki/0039-replay-playback-api.md))가 권한 검증 + presigned manifest 재작성 + 시간축 오프셋을 반환하고, **게시 전환**(`POST .../replay-review/publish`)으로 강사가 검수 후 공개한다.
+**남은 것**: FE HLS.js 플레이어 연동, 자막·용어·RAG 재생(CP2·CP3 산출물 의존), 검수 데이터 저장([0039](decisions/songjeongki/0039-replay-playback-api.md) §5 범위 제외 근거).
 
 다시보기는 라이브 때 만든 산출물을 **그대로 재생**한다. 지평선 뒤라 이미 교정이 끝난 상태이고, 세션 상대 ms 좌표로 HLS와 자막을 자동 정렬한다.
 
@@ -382,11 +382,11 @@ STOMP 브로커가 인메모리 SimpleBroker라 **브로드캐스트가 인스�
 `external_event_inbox`(멱등 수신)를 쓰는 **AI 콜백 수신기가 배선됐다** — 워커가 `POST /api/internal/ai/callbacks`(HMAC 서명, permitAll이되 서명이 실질 인증)로 보내면 `(source=ai-worker, eventId)` 복합키로 멱등 처리해 자료 embeddingStatus를 확정한다([ADR-0036](decisions/songjeongki/0036-material-embedding-pipeline.md), CONTRACT §3-2).
 → 다만 **STT/자막 실시간 역방향(Redis Streams 소비→core 영속)은 여전히 미결**이다. ADR-0017이 상정한 "결과 큐" 경로 중 배치 잡 콜백만 섰고, 실시간 경로는 CP2에서 붙는다.
 
-### 9-8. 🟠 다시보기 재생 인증 — 기존 seam 설계가 현실과 안 맞는다
-이전 판은 "seam 3개(재생 URL 발급 · nginx · PlaybackTokenService)"라고 적었지만, 실제로는 **셋 다 존재하지 않고**, 현재 nginx는 SPA·API 프록시 전용이라 HLS 서빙 경로 자체가 없다.
-→ **제안**: nginx secure_link 대신, 이미 쓰고 있는 **presigned 방식으로 통일**한다. `GET /api/lessons/{id}/playback`이 권한을 검증하고 **manifest만 Spring이 프록시하며 세그먼트 URL을 presigned로 재작성**한다. manifest는 수 KB라 원칙 4(바이트는 Spring을 통과하지 않음)를 유지하면서 세그먼트는 스토리지 직결이 된다. S3로 옮겨도 그대로 동작한다.
+### 9-8. ✅ 다시보기 재생 인증 — presigned 방식으로 구현됨
+이전 판은 "seam 3개(재생 URL 발급 · nginx · PlaybackTokenService)"라고 적었지만, 실제로는 **셋 다 존재하지 않고**, 현재 nginx는 SPA·API 프록시 전용이라 HLS 서빙 경로 자체가 없었다.
+→ **구현 완료(2026-07-26, [ADR-0039](decisions/songjeongki/0039-replay-playback-api.md))**: nginx secure_link 대신 이미 쓰던 **presigned 방식으로 통일**했다. `GET /api/lessons/{id}/playback`이 권한을 검증하고(`video.api.LessonPlaybackAccess` SPI, curriculum 구현 — 소유 강사는 항상, 학생은 활성 수강 + PUBLISHED만) **manifest를 Spring이 읽어 세그먼트 URL을 presigned로 재작성**해 응답에 인라인으로 싣는다. manifest는 수 KB라 원칙 4(바이트는 Spring을 통과하지 않음)를 유지하면서 세그먼트는 스토리지 직결이다. S3로 옮겨도 그대로 동작한다.
 
-### 9-9. 🟠 다시보기 시간축 변환 — 규칙은 확정, 선행 작업이 남음
+### 9-9. ✅ 다시보기 시간축 변환 — 온디맨드 계산으로 구현됨
 자막 싱크는 전송 경로가 아니라 **공통 좌표계** 문제다. 세그먼트는 스토리지에서 직접 받고 자막은 Spring이 내려주므로, 둘을 맞추려면 *재생 위치 → 세션 상대 ms* 변환이 필요하다.
 
 **조사 결과**(Egress v1.13.0 소스 확인)
@@ -401,9 +401,9 @@ session_offset_ms = index.m3u8 의 첫 PROGRAM-DATE-TIME − live_session.starte
 ```
 서버가 앵커를 한 번 읽어 **숫자 하나로 환산해 내려주고**, 프론트는 그 숫자만 쓴다. 플레이어 선택이 묶이지 않는다.
 
-> ⚠️ **`video_asset.recording_started_at`을 앵커로 쓰면 안 된다.** 지금 값은 `StartEgress` 호출 시각(`RecordingService`)이라, Chrome 기동·페이지 로드·방 접속 지연이 통째로 오차가 된다 — `infra/livekit/README.md` 트러블슈팅에 20초까지 걸린 사례가 있다. 앵커 전용 컬럼을 따로 둔다.
+> ⚠️ **`video_asset.recording_started_at`을 앵커로 쓰면 안 된다.** 지금 값은 `StartEgress` 호출 시각(`RecordingService`)이라, Chrome 기동·페이지 로드·방 접속 지연이 통째로 오차가 된다 — `infra/livekit/README.md` 트러블슈팅에 20초까지 걸린 사례가 있다.
 
-**선행 작업** — **egress 완료 웹훅 수신기는 구현됐다**([ADR-0034](decisions/songjeongki/0034-egress-completion-webhook.md)). LiveKit `egress_ended`를 JWT 서명 검증 후 받아 자산을 READY/FAILED로 확정하고 `durationMs`·`sizeBytes`·`segmentCount`를 채운다. 다만 **시간축 변환 자체(앵커 저장·오프셋 산출)는 여전히 미착수다** — 이 수신기가 `index.m3u8`의 첫 PDT를 파싱해 앵커 전용 컬럼에 저장하는 부분이 남았다. 재생목록은 **첫 세그먼트가 닫히는 즉시**(세그먼트 2초 설정) 업로드되므로 녹화 종료를 기다릴 필요가 없다.
+**구현 완료(2026-07-26, [ADR-0039](decisions/songjeongki/0039-replay-playback-api.md))** — 앵커를 별도 컬럼에 저장하는 대신, 재생 요청마다 **온디맨드로 계산**한다. `GET /lessons/{id}/playback`이 세그먼트 재작성을 위해 어차피 매니페스트 텍스트를 읽으므로, 같은 텍스트에서 첫 PDT를 파싱해 `live_session.started_at`(`recording_started_at`이 아니다)과의 차이를 `sessionOffsetMs`로 응답에 싣는다. `video_asset.session_offset_ms` 컬럼은 유지하되 쓰지 않는다 — webhook·재생 두 곳에 저장 로직을 나누면 드리프트 위험만 생기고, 매번 계산해도 비용은 정규식 스캔 한 번이다. PDT가 없거나 세션 시작시각을 못 구하면 `null`로 degrade(에러 아님). 재생목록은 **첫 세그먼트가 닫히는 즉시**(세그먼트 2초 설정) 업로드되므로 녹화 종료를 기다릴 필요가 없다.
 
 **남은 위험 — 파이프라인 stall(미검증).** 미디어 타임라인이 벽시계 대비 멈추면 그만큼 자막이 누적해서 어긋나는데, `DISCONTINUITY` 태그가 없어 **사후 탐지 수단이 없다.** 반면 egress 재시작은 위험하지 않다 — 파일 접두사에 `{retry}` 치환자가 없어 재시도 자체가 거부되므로, 같은 재생목록에 두 번째 타임라인이 몰래 이어붙지 않는다(뒤가 잘릴 뿐 오프셋은 유효).
 
@@ -433,7 +433,7 @@ FE는 **오퍼레이션 단위 하이브리드 라우팅**을 쓴다 — 각 호
 | **CP1** ★ | 라이브 미디어 | ✅ LiveKit 토큰·채팅 WS·세션 수명주기 | 🟡 세션·채팅 API 연동 ✅ / 미디어 클라이언트 ⬜ | — |
 | **CP2** | 라이브 자막 | ⬜ | ⬜ | ⬜ realtime-agent |
 | **CP3** ★ | 용어·근거 RAG | ⬜ (선행: §9-2) | ⬜ | ⬜ ai-api·ai-worker |
-| **CP4** | 녹화·다시보기 | 🟡 Egress 제어·`VideoAsset` ✅ / 재생 API ⬜ | ⬜ | — |
+| **CP4** | 녹화·다시보기 | 🟡 Egress 제어·`VideoAsset`·재생 API·게시 전환 ✅ / 검수 데이터 저장 ⬜(선행: CP2·CP3) | ⬜ | — |
 | **CP5** | 퀴즈 | ⬜ | ⬜ | ⬜ |
 
 **지금 위치**: CP0 백엔드 완료, CP1 백엔드 완료, **CP1 데모까지 남은 건 FE 미디어 연동**.
