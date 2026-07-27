@@ -29,6 +29,7 @@ export default function SignupPage() {
   const [password, setPassword] = useState('')
   const [passwordConfirm, setPasswordConfirm] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [consentChecked, setConsentChecked] = useState(false)
   const [availability, setAvailability] = useState<Availability>('idle')
   const [errors, setErrors] = useState<SignupErrors>({})
   const [submitError, setSubmitError] = useState('')
@@ -182,7 +183,15 @@ export default function SignupPage() {
 
         {submitError && <div className="form-error" role="alert"><span aria-hidden="true">!</span>{submitError}</div>}
 
-        <button className="button button--primary button--full button--large" type="submit" disabled={isSubmitting}>
+        <label className="consent-card">
+          <span className="consent-card__note">라이브 강의는 녹화될 수 있으며 AI 기능 제공을 위해 채팅, 자막이 처리될 수 있습니다.</span>
+          <span className="consent-card__confirm">
+            <input type="checkbox" checked={consentChecked} onChange={(event) => setConsentChecked(event.target.checked)} />
+            <strong>LiveClass 이용 안내를 확인했습니다.</strong>
+          </span>
+        </label>
+
+        <button className="button button--primary button--full button--large" type="submit" disabled={isSubmitting || !consentChecked}>
           {isSubmitting ? <><span className="spinner spinner--light" aria-hidden="true" /> 가입하는 중</> : <>가입하고 시작하기 <span aria-hidden="true">→</span></>}
         </button>
       </form>

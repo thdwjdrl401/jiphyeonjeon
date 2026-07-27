@@ -1,7 +1,15 @@
 import { apiClient } from '@/shared/api/client'
 import { notImplemented } from '@/shared/api/notImplemented'
+import { uploadAsset } from '@/shared/api/uploadAsset'
 import type { CurriculumLiveSessionStatus, CurriculumReplayStatus, LessonStatus } from './types'
-import type { LessonDetailView, LessonService } from './lessonService.interface'
+import type { LessonDetailView, LessonMaterialView, LessonService } from './lessonService.interface'
+
+interface ApiLessonMaterial {
+  materialId: string
+  fileName: string
+  fileSize: number
+  embeddingStatus?: string   // PENDING/PROCESSING/READY/FAILED (ADR-0036). 없으면 READY로 간주.
+}
 
 interface ApiLessonView {
   lessonId: string
@@ -9,6 +17,23 @@ interface ApiLessonView {
   title: string
   description: string
   status: LessonStatus
+  materials?: ApiLessonMaterial[]
+}
+
+function formatFileSize(fileSize: number) {
+  if (fileSize < 1024 * 1024) return `${Math.max(1, Math.round(fileSize / 1024))} KB`
+  return `${(fileSize / 1024 / 1024).toFixed(1)} MB`
+}
+
+// 서버 자료 응답은 {materialId, fileName, fileSize}뿐이라 status가 없다. 화면(LessonDetailPage)은
+// material.status로 준비 여부를 표시하므로, 이미 연결된 자료는 READY로 채운다.
+function toMaterialView(material: ApiLessonMaterial): LessonMaterialView {
+  return {
+    id: material.materialId,
+    name: material.fileName,
+    size: formatFileSize(material.fileSize),
+    status: material.embeddingStatus ?? 'READY',   // 임베딩 상태를 그대로 노출(ADR-0036)
+  }
 }
 
 interface ApiCurriculumDetail {
@@ -71,7 +96,7 @@ export const httpLessonService = {
       sectionTitle,
       curriculumId: request.curriculumId ?? '',
       curriculumTitle,
-      materials: [],
+      materials: (lesson.materials ?? []).map(toMaterialView),
       liveSession,
       replayStatus,
       learning,
@@ -94,14 +119,6 @@ export const httpLessonService = {
     }
   },
   async saveLesson(request) {
-    // 자료 업로드는 ADR-0023의 presigned 경로로 가야 하는데(지금 코드는 multipart), 서버는
-    // kind=MATERIAL을 세 곳에서 막는다 — kind 게이트·5MiB 상한·이미지 MIME 화이트리스트.
-    // 뒤의 둘은 kind를 보지 않아서 게이트 하나만 열어도 통과하지 못한다(CP3).
-    // 레슨을 먼저 만들고 마지막에 실패하면 절반만 저장되므로 첫 쓰기 전에 막는다.
-    if (request.materials.length > 0) {
-      notImplemented('POST /instructor/lessons/{lessonId}/materials')
-    }
-
     let lesson: ApiLessonView
     if (request.lessonId) {
       const { data } = await apiClient.patch<ApiLessonView>(`/instructor/lessons/${request.lessonId}`, {
@@ -133,7 +150,22 @@ export const httpLessonService = {
       }
     }
 
+    // 각 자료를 presigned로 올리고(발급→PUT→complete) 레슨에 연결한다. 레슨은 이미 저장됐으므로
+    // 어느 파일에서 멈췄는지 알려, 레슨은 저장됐고 자료만 부분 실패했음을 호출자가 알 수 있게 한다.
+    for (const file of request.materials) {
+      try {
+        const asset = await uploadAsset(file, 'MATERIAL')
+        await apiClient.post(`/instructor/lessons/${lesson.lessonId}/materials`, { assetId: asset.assetId })
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error)
+        throw new Error(`레슨은 저장됐지만 자료 "${file.name}" 업로드·연결에 실패했습니다. 이 자료만 다시 추가해 주세요. (${reason})`)
+      }
+    }
+
     return lesson
+  },
+  async deleteLessonMaterial(lessonId, materialId) {
+    await apiClient.delete(`/instructor/lessons/${lessonId}/materials/${materialId}`)
   },
   // 자료 임베딩을 트리거하는 경로. 자료 업로드 자체가 없어 준비할 대상이 없다(CP3).
   async prepareLessonAi(lessonId) {

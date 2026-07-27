@@ -8,6 +8,7 @@ const lessonService = selectDataSource<LessonService>(mockLessonService, httpLes
 export const getLesson = (request: GetLessonRequest) => lessonService.getLesson(request)
 export const getCurriculumLessonNavigation = (curriculumId: string) => lessonService.getCurriculumLessonNavigation(curriculumId)
 export const saveLesson = (request: SaveLessonRequest) => lessonService.saveLesson(request)
+export const deleteLessonMaterial = (lessonId: string, materialId: string) => lessonService.deleteLessonMaterial(lessonId, materialId)
 export const prepareLessonAi = (lessonId: string) => lessonService.prepareLessonAi(lessonId)
 
 export type {

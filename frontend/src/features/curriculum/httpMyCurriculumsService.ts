@@ -4,6 +4,7 @@ import type {
   InstructorCurriculumItem,
   MyCurriculumsService,
   PageResponse,
+  StudentDashboardSummary,
 } from './myCurriculumsService.interface'
 
 export const httpMyCurriculumsService = {
@@ -13,10 +14,11 @@ export const httpMyCurriculumsService = {
     })
     return data
   },
-  // 요약은 진도(learning) 집계가 있어야 나오는 값이라 learning 패키지 배선 전까지 서버에
-  // 만들 수 없다(ADR-0024). 목록 자체는 위 조회와 /me/enrollments 로 이미 뜬다.
+  // 학생 요약은 learning 배선(ADR-0033) 이후 서버 집계로 채운다(inProgress/completed 커리큘럼 수·
+  // 평균 진도·완료 레슨 수·다음 라이브). 강사 요약(/instructor/dashboard-summary)은 아직 미구현.
   async getStudentDashboardSummary() {
-    return notImplemented('GET /me/learning-summary')
+    const { data } = await apiClient.get<StudentDashboardSummary>('/me/learning-summary')
+    return data
   },
   async getInstructorDashboardSummary() {
     return notImplemented('GET /instructor/dashboard-summary')

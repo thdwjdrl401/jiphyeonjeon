@@ -135,7 +135,29 @@ class AssetUploadContractTest {
     }
 
     @Test
-    void material_kind_returns_400() throws Exception {
+    void material_upload_request_as_instructor_returns_200() throws Exception {
+        Cookie[] auth = loginAs("INSTRUCTOR");
+
+        write(post("/api/assets/upload-requests"), auth, """
+                {"kind":"MATERIAL","fileName":"deck.pptx","contentType":"application/vnd.openxmlformats-officedocument.presentationml.presentation","fileSize":1048576}
+                """)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.assetId").exists());
+    }
+
+    @Test
+    void material_upload_request_as_student_returns_403() throws Exception {
+        Cookie[] auth = loginAs("STUDENT");
+
+        write(post("/api/assets/upload-requests"), auth, """
+                {"kind":"MATERIAL","fileName":"deck.pptx","contentType":"application/vnd.openxmlformats-officedocument.presentationml.presentation","fileSize":1048576}
+                """)
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ASSET_FORBIDDEN"));
+    }
+
+    @Test
+    void material_non_pptx_content_type_returns_400() throws Exception {
         Cookie[] auth = loginAs("INSTRUCTOR");
 
         write(post("/api/assets/upload-requests"), auth, """

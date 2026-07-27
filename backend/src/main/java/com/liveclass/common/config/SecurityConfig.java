@@ -21,7 +21,9 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
                 // SPA용 CSRF: JS가 XSRF-TOKEN 쿠키를 읽어 헤더로 에코 (ADR-0014)
-                .csrf(csrf -> csrf.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()))
+                // LiveKit webhook은 외부 서버 호출이라 CSRF 토큰이 없다 — JWT 서명으로 인증하므로 면제한다.
+                .csrf(csrf -> csrf.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+                        .ignoringRequestMatchers("/api/webhooks/**", "/api/internal/**"))
                 .authorizeHttpRequests(auth -> auth
                         // 오류는 서블릿이 /error 로 포워딩한다. 이걸 막으면 404·500이 전부 401로 위장돼
                         // 프론트가 "로그아웃됐다"고 오해한다(client.ts는 401에서 CSRF 캐시를 버린다).
@@ -35,6 +37,10 @@ public class SecurityConfig {
                         // 로그인 전에 부를 수 있어야 하는 것들 — csrf가 막히면 로그인 자체가 불가능하다.
                         .requestMatchers(HttpMethod.GET, "/api/auth/csrf", "/api/auth/email-availability").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/signup", "/api/auth/login", "/api/auth/logout").permitAll()
+                        // LiveKit egress webhook — 로그인 세션이 아니라 JWT 서명으로 인증한다(컨트롤러가 검증).
+                        .requestMatchers(HttpMethod.POST, "/api/webhooks/livekit").permitAll()
+                        // AI 워커 콜백 — 로그인 세션 아니라 HMAC 서명으로 인증한다(AiCallbackVerifier). ADR-0036.
+                        .requestMatchers(HttpMethod.POST, "/api/internal/ai/callbacks").permitAll()
                         // 공개 카탈로그 조회는 비로그인도 가능(GET만).
                         .requestMatchers(HttpMethod.GET, "/api/curriculums", "/api/curriculums/**").permitAll()
                         // 수강 신청·취소는 학생만(강사 계정은 수강 불가 — 계정 분리 정책). 강사 승인 등은 /api/instructor/**.

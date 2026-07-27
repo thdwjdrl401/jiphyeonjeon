@@ -19,7 +19,7 @@
 # 인프라 (PG+pgvector, Redis) — 최초 기동 시 core/ai 스키마 자동 생성
 cp .env.example .env
 docker compose up -d
-docker compose ps               # postgres·redis healthy 확인
+docker compose ps               # postgres·redis·minio healthy 확인
 
 # 의존성
 npm run install:all             # 루트(concurrently) + frontend

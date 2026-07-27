@@ -53,7 +53,7 @@
 1. **React는 Spring으로만** 업무·AI 요청을 보낸다. Python AI는 외부에 노출되지 않는다 — 권한·정책·비용을 Spring이 검증한다.
 2. **`core`(Spring) / `ai`(Python) 스키마 공동수정 금지.** 한 클러스터, 스키마·계정·마이그레이션 도구 분리. 소유 기준은 **write-owner**([ADR-0017](decisions/songjeongki/0017-schema-ownership-core-ai.md)).
 3. **긴 작업은 큐 잡으로**, HTTP 요청 안에서 처리하지 않는다. Redis는 durable 큐로 쓰지 않는다(cache/session/fast-path 전용).
-4. **미디어 바이트는 Spring/Python을 통과하지 않는다.** 라이브는 WebRTC로 LiveKit 직결, 다시보기는 스토리지 직결, 자료 업로드는 presigned로 클라이언트→스토리지 직접 PUT.
+4. **미디어 바이트는 Spring/Python을 통과하지 않는다.** 강사 발행은 WebRTC로 LiveKit 직결, 학생 시청(라이브·다시보기)은 HLS로 스토리지 직결([ADR-0032](decisions/songjeongki/0032-media-playback-hls-only.md)), 자료 업로드는 presigned로 클라이언트→스토리지 직접 PUT.
 5. **AI 결과는 후보다.** 원본은 보존하고, 강사 수정·게시본을 학생에게 노출한다.
    - **예외 — 라이브 자막.** 실시간 자막은 검수 없이 즉시 나간다(그게 실시간의 본질). 검수는 사후에 게시본을 교정하는 형태이고, 승인 게이트는 두지 않는다([ADR-0017](decisions/songjeongki/0017-schema-ownership-core-ai.md)).
 6. **AI 장애가 코어를 막지 않는다.** 라이브 영상·채팅·수강·다시보기는 AI와 무관하게 살아 있어야 한다(degraded). LiveKit/Egress 미디어 경로는 AI와 격리한다.
@@ -68,7 +68,7 @@ flowchart LR
   classDef partial fill:#fef9c3,stroke:#ca8a04,color:#713f12
   classDef planned fill:#f8fafc,stroke:#94a3b8,color:#475569,stroke-dasharray:4 3
 
-  FE["React 19 + TS<br/>LiveKit client · HLS.js · WS"]
+  FE["React 19 + TS<br/>LiveKit client(강사 발행) · HLS.js(재생) · WS"]
 
   subgraph CTRL["컨트롤·데이터 — Spring Boot 4.1 (모듈러 모놀리스)"]
     SP["core-api<br/>인증·커리큘럼·수강·라이브·채팅·자산<br/>LiveKit 토큰 · Egress 제어 · AI 게이트웨이"]
@@ -91,7 +91,7 @@ flowchart LR
   end
 
   FE -->|"REST · WS(STOMP)"| SP
-  FE -->|"WebRTC"| LK
+  FE -->|"WebRTC 발행(강사)"| LK
   FE -->|"presigned PUT (자료)"| OBJ
   FE -.->|"HLS 재생"| OBJ
   SP -->|"토큰 · Egress 제어"| LK
@@ -177,7 +177,7 @@ flowchart TB
 
 ## 6. 데이터플로우
 
-### 6-1. 라이브 강의 ✅ (자막 부분 ⬜ CP2)
+### 6-1. 라이브 강의 🟡 (강사 발행·Egress·토큰 ✅ / 학생 HLS 시청 ⬜ 재생 API · 자막 ⬜ CP2)
 
 ```mermaid
 sequenceDiagram
@@ -185,16 +185,18 @@ sequenceDiagram
   actor S as 학생
   participant SP as Spring
   participant LK as LiveKit(+Egress)
+  participant OBJ as MinIO/S3(HLS)
   participant AG as realtime-agent
   participant RD as Redis Stream
   T->>SP: 세션 시작
   SP->>SP: 권한 확인 → 세션 상태 전이(OPEN→LIVE)
   SP->>LK: 방 토큰 발급 + Egress 녹화 시작
-  T->>LK: 오디오·영상 (WebRTC)
-  S->>SP: 입장 토큰 요청
-  SP->>SP: 수강 확인 → 익명 identity 발급
-  S->>LK: 구독 (WebRTC)
-  Note over T,S: 여기까지 CP1 — 구현 완료
+  T->>LK: 오디오·영상 (WebRTC 발행)
+  LK->>OBJ: Egress가 HLS 세그먼트·live.m3u8 지속 기록
+  S->>SP: 라이브 재생 요청 (수강 확인)
+  SP-->>S: live.m3u8 URL (라이브 엣지)
+  S->>OBJ: HLS 재생 (라이브 엣지 — WebRTC 구독 아님, ADR-0032)
+  Note over T,S: CP1 — 강사 발행·Egress·토큰 ✅ / 학생 HLS 재생은 재생 API(⬜)
   LK-->>AG: 강사 오디오 (방당 1회)
   AG-->>AG: 스트리밍 STT (VAD, partial/final)
   AG-->>RD: caption 스트림
@@ -203,7 +205,7 @@ sequenceDiagram
   Note over LK,SP: AI가 죽어도 영상·채팅은 유지 (원칙 6)
 ```
 
-> **입장 identity는 원본 userId가 아니라 `(sessionId, userId)` 해시**다. LiveKit 참가자 목록으로 다른 수강생의 내부 ID가 새지 않는다.
+> **학생은 LiveKit 방에 참가하지 않는다**(HLS 단일 시청, [0032](decisions/songjeongki/0032-media-playback-hls-only.md)) — 참가자 목록 유출 자체가 없다. 예전엔 이를 막으려 `(sessionId, userId)` 해시 identity를 썼고, 가명화는 이제 채팅 계층에서 이어진다.
 
 ### 6-2. RAG 질문 ⬜ CP3
 
@@ -356,10 +358,9 @@ flowchart TB
 제품 설명의 핵심 단어인데 정의가 없다. 라이브 시청자가 보는 시점과 확정본 사이의 지연을 뜻하는데, **몇 초인지·누가 확정하는지**가 없으면 FE는 자막 렌더링 정책을, BE는 영속 시점을 정할 수 없다.
 → **제안**: partial은 즉시 렌더(회색), final은 확정 렌더, 교정·용어·근거는 `t - N초` 뒤 재전송. `N`은 CP2 STT bake-off 결과로 확정하고 설정값으로 뺀다. 다시보기는 정의상 항상 지평선 밖이라 전체 기능이 나간다.
 
-### 9-2. 🔴 CP3의 숨은 선행조건 — 자료→레슨 연결이 없다
-`asset` 모듈이 presigned 업로드(`kind=MATERIAL`)까지 구현했지만, **`material_asset` 테이블과 엔티티는 어디서도 참조되지 않는다.** 레슨에 자료를 붙이는 API가 없어서 RAG ingestion의 입력이 비어 있다.
-→ **로드맵 의존성 그래프에 이 선행이 빠져 있다.** CP3 착수 전 BE 작업으로 명시해야 한다.
-FE는 이미 `POST /instructor/lessons/{lessonId}/materials` 형태로 목을 잡아 뒀으므로 경로는 그대로 쓰되, **본문은 multipart가 아니라 presigned 티켓 방식이어야 한다**(§9-10 경고 참조).
+### 9-2. ✅ 해소됨 — 자료→레슨 연결
+`POST /instructor/lessons/{lessonId}/materials`로 미리 올린 PPTX 에셋(`kind=MATERIAL`)을 레슨에 연결한다. 본문은 presigned 티켓 방식(`{"assetId":"..."}`, multipart 아님), `material_asset`에 status=ACTIVE로 저장되고 레슨/커리큘럼 상세의 `materials`가 이 레코드로 채워진다. 상세는 [ADR-0035](decisions/songjeongki/0035-lesson-material-attach.md).
+커리큘럼-레벨 자료·삭제 API·AI(RAG ingestion) 잡 발행은 CP3으로 유보한다 — 이 연결이 그 입력이 된다.
 
 ### 9-3. 🟠 Redis Streams가 원칙 3과 긴장 관계다
 원칙 3은 "Redis를 durable 큐로 쓰지 않는다"인데, STT 자막이 Redis Streams를 지난다. Redis가 재시작하면 그 구간 자막의 정본이 없다.

@@ -38,6 +38,50 @@ services:
       timeout: 5s
       retries: 5
 
+  minio:                                   # 에셋(썸네일·프로필·강의자료) presigned 업로드용 S3 호환 스토리지 (ADR-0023)
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z   # LiveKit 스택과 동일 태그 고정
+    container_name: liveclass-minio-prod
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD 필요}
+    volumes:
+      - miniodata:/data
+    # 호스트 포트 미노출 — 브라우저·backend는 앱 nginx의 /liveclass-assets 로만 접근(presigned가 공개 도메인으로 서명).
+    # 헬스체크는 두지 않는다 — minio 서버 이미지에 mc/curl 유무가 불확실. minio-init이 재시도 루프로 준비를 기다린다.
+
+  minio-init:                              # liveclass-assets 버킷 생성 (멱등). 계속 살려둔다 —
+    image: minio/mc                         # 일회성으로 exit하면 `up --wait`가 그 종료를 실패로 보고 배포가 깨진다.
+    depends_on: [minio]
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD 필요}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        until mc alias set lc http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"; do echo 'waiting for minio'; sleep 1; done
+        mc mb -p lc/${ASSET_STORAGE_BUCKET:-liveclass-assets} || true
+        echo 'bucket ready'; sleep infinity
+
+  rabbitmq:                                # AI 배치 잡 큐(ADR-0036/0012). prod 전용 — dev-infra와 분리(B안).
+    image: rabbitmq:3.13-management-alpine
+    container_name: liveclass-rabbitmq-prod
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-liveclass}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD 필요}
+    volumes:
+      - rabbitmqdata:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+    # 호스트 포트 미노출 — 백엔드(같은 네트워크)만 발행. AI 워커 접속은 그 스택 배포 시 네트워크로 결정(후속).
+
   backend:
     build: ./backend
     container_name: liveclass-backend-prod
@@ -52,10 +96,26 @@ services:
       # HTTPS 뒤 → 세션 쿠키 Secure + 프록시 헤더 신뢰
       SERVER_SERVLET_SESSION_COOKIE_SECURE: "true"
       SERVER_FORWARD_HEADERS_STRATEGY: framework
+      # 에셋 스토리지(MinIO, 같은 스택). presigned URL을 공개 도메인으로 서명 → 브라우저가 앱 nginx의
+      # /liveclass-assets 로 직접 PUT. backend 자신(complete HEAD)도 이 도메인으로 접근하는데,
+      # frontend 서비스의 network alias(jiphyeonjeon.thdwjdrl.com)로 내부에서 nginx로 해석돼 hairpin을 피한다.
+      ASSET_STORAGE_ENDPOINT: https://jiphyeonjeon.thdwjdrl.com
+      ASSET_STORAGE_BUCKET: ${ASSET_STORAGE_BUCKET:-liveclass-assets}
+      ASSET_STORAGE_REGION: ${ASSET_STORAGE_REGION:-us-east-1}
+      ASSET_STORAGE_PATH_STYLE: "true"
+      ASSET_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      ASSET_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD 필요}
+      # AI 배치 잡 발행(ADR-0036). outbox 릴레이가 rabbitmq로 publish. 스위치 material.embedding.enabled로 켠다.
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: "5672"
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER:-liveclass}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD 필요}
     depends_on:
       postgres:
         condition: service_healthy   # Flyway 마이그레이션 전 DB 준비 대기
       redis:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
@@ -77,6 +137,13 @@ services:
       - certbot-www:/var/www/certbot        # ACME 챌린지 webroot
     depends_on:
       - backend
+      - minio
+    networks:
+      default:
+        # backend가 ASSET_STORAGE_ENDPOINT(공개 도메인)로 MinIO에 붙을 때 내부에서 이 nginx로 해석되게 한다
+        # (EC2 hairpin NAT 회피). 외부 클라이언트는 여전히 공개 DNS→퍼블릭 IP로 이 nginx에 닿는다.
+        aliases:
+          - jiphyeonjeon.thdwjdrl.com
     # 6h마다 nginx reload → 갱신된 인증서 반영
     command: /bin/sh -c "while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g 'daemon off;'"
 
@@ -93,6 +160,8 @@ services:
 volumes:
   pgdata:
   redisdata:
+  miniodata:
+  rabbitmqdata:
   certbot-etc:
     name: liveclass_certbot_etc   # 미디어 스택(infra/livekit)이 external로 공유
   certbot-www:

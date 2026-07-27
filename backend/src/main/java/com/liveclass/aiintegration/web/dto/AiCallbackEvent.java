@@ -1,0 +1,15 @@
+package com.liveclass.aiintegration.web.dto;
+
+/**
+ * AI 워커 → Spring 콜백(ADR-0036, CONTRACT §3-2). eventId로 멱등(inbox 복합키), eventType으로 분기.
+ * 자료 임베딩: {@code MATERIAL_EMBEDDED}(성공) / {@code MATERIAL_EMBED_FAILED}(실패). outputs 등 미지의 필드는 무시.
+ */
+public record AiCallbackEvent(
+        String eventId,
+        String eventType,
+        String jobId,
+        String materialId,
+        String lessonId,
+        String status
+) {
+}

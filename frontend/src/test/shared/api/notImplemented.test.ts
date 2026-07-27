@@ -55,7 +55,6 @@ describe('미구현 API 표시', () => {
   const unimplemented: Array<[string, () => Promise<unknown>]> = [
     ['라이브 자막', () => live.getCaptions('ses-1')],
     ['라이브 AI 질문', () => live.askLiveAi('les-1', '질문')],
-    ['라이브 북마크', () => live.saveBookmark('les-1', 1000)],
     ['입장 전 점검', () => live.getPreflightChecks('ses-1')],
     ['녹화 처리 현황', () => live.getProcessingStatus('ses-1')],
     ['질문 하이라이트', () => live.getQuestionHighlights('ses-1')],
@@ -65,7 +64,7 @@ describe('미구현 API 표시', () => {
     ['검수 저장', () => replay.saveReplayReview('les-1', '자막')],
     ['검수 게시', () => replay.publishReplayReview('les-1', '자막')],
     ['퀴즈 제출', () => replay.submitReplayQuiz('les-1', '답')],
-    ['학생 학습 요약', () => httpMyCurriculumsService.getStudentDashboardSummary()],
+    // 학생 학습 요약(getStudentDashboardSummary)은 GET /me/learning-summary로 구현됨 — 여기서 제외.
     ['강사 대시보드 요약', () => httpMyCurriculumsService.getInstructorDashboardSummary()],
     ['레슨 AI 준비', () => lesson.prepareLessonAi('les-1')],
   ]
