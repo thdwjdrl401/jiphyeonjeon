@@ -8,6 +8,7 @@ import { isLiveEntryOpen } from '@/features/live-session/liveEntry'
 import { getLiveSession } from '@/features/live-session/liveSessionService'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
+import { useToast } from '@/shared/ui/Toast'
 import { InlineNotice, PageHeader, Panel, StatusBadge } from '@/shared/ui/WorkspaceUi'
 
 function formatScheduleTime(date: Date) {
@@ -33,13 +34,16 @@ export default function LessonDetailPage() {
     enabled: Boolean(lessonQuery.data?.liveSession?.sessionId),
   })
   const queryClient = useQueryClient()
+  const toast = useToast()
   const publishMutation = useMutation({
     mutationFn: (next: 'PUBLISHED' | 'DRAFT') =>
       next === 'PUBLISHED' ? publishLesson(lessonId) : unpublishLesson(lessonId),
-    onSuccess: () => {
+    onSuccess: (_result, next) => {
       void queryClient.invalidateQueries({ queryKey: ['lesson'] })
       void queryClient.invalidateQueries({ queryKey: ['curriculum'] })
+      toast.success(next === 'PUBLISHED' ? '레슨을 게시했습니다.' : '게시를 취소했습니다.')
     },
+    onError: () => toast.error('게시 상태를 변경하지 못했습니다. 잠시 후 다시 시도해 주세요.'),
   })
   const lesson = lessonQuery.data
   const liveSession = liveSessionQuery.data ?? null
@@ -81,7 +85,6 @@ export default function LessonDetailPage() {
           >{lesson.status === 'PUBLISHED' ? '게시취소' : '게시'}</button>
         )}{isInstructor && <Link className="button button--primary" to={editLessonPath}>강의 수정</Link>}<StatusBadge tone={lesson.status === 'PUBLISHED' ? 'success' : 'warning'}>{lesson.status}</StatusBadge></div>}
       />
-      {isInstructor && publishMutation.isError && <InlineNotice tone="warning">게시 상태를 변경하지 못했습니다. 잠시 후 다시 시도해 주세요.</InlineNotice>}
       {isInstructor && <Panel title="강의 준비 상태" description="강의, 자료와 AI 준비 상태를 확인합니다."><ul className="readiness-list"><li><span>필수 PPTX</span><StatusBadge tone="success">{lesson.materials.length}개 준비</StatusBadge></li><li><span>AI 준비</span><StatusBadge tone="success">READY</StatusBadge></li><li><span>자료 작업</span><StatusBadge tone={materialWorkInProgress ? 'warning' : 'success'}>{materialWorkInProgress ? '진행 중' : '완료'}</StatusBadge></li></ul></Panel>}
       {!showReplay ? (
         <Panel title="라이브 강의" description="라이브 일정과 실제 진행 상태를 강의에서 함께 확인합니다.">
