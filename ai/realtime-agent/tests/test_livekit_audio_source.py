@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from types import SimpleNamespace
@@ -9,7 +10,11 @@ import pytest
 from livekit import rtc
 from livekit.agents import AutoSubscribe
 
-from app.livekit.audio_source import AudioSourceError, LiveKitInstructorAudioSource
+from app.livekit.audio_source import (
+    AudioBacklogError,
+    AudioSourceError,
+    LiveKitInstructorAudioSource,
+)
 from app.stt.engine import AudioChunk
 
 INSTRUCTOR_IDENTITY = "861bdefa-69eb-4f2f-9b5a-3dd46e8a9646"
@@ -210,6 +215,7 @@ async def test_pcm_frames_are_mono_and_use_cumulative_sample_time(
     assert captured == {
         "sample_rate": 48_000,
         "num_channels": 1,
+        "frame_size_ms": 20,
     }
     await source.close()
 
@@ -250,6 +256,63 @@ async def test_audio_stream_failure_reaches_chunk_consumer(
 
     assert isinstance(exc_info.value.__cause__, RuntimeError)
     assert stream_closed.is_set()
+    await source.close()
+
+
+async def test_full_output_backlog_fails_closed_instead_of_dropping_audio(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    room = FakeRoom()
+    publication = microphone()
+    participant = FakeParticipant(INSTRUCTOR_IDENTITY, {publication.sid: publication})
+    room.remote_participants[participant.identity] = participant
+    source = LiveKitInstructorAudioSource(FakeContext(room))  # type: ignore[arg-type]
+    await source.connect()
+    while not source._queue.full():
+        source._queue.put_nowait(AudioChunk(b"queued", 48_000, 1, 20))
+
+    class OneFrameAudioStream:
+        def __init__(self, _track: object, **_kwargs: object) -> None:
+            self._sent = False
+
+        def __aiter__(self) -> OneFrameAudioStream:
+            return self
+
+        async def __anext__(self) -> object:
+            if self._sent:
+                raise StopAsyncIteration
+            self._sent = True
+            return SimpleNamespace(
+                frame=SimpleNamespace(
+                    data=b"overflow",
+                    samples_per_channel=480,
+                    sample_rate=48_000,
+                    num_channels=1,
+                )
+            )
+
+        async def aclose(self) -> None:
+            return None
+
+    monkeypatch.setattr(rtc, "AudioStream", OneFrameAudioStream)
+    caplog.set_level(logging.ERROR, logger="app.livekit.audio_source")
+    room.handlers["track_subscribed"](
+        SimpleNamespace(kind=rtc.TrackKind.KIND_AUDIO),
+        publication,
+        participant,
+    )
+    consumer = source._tasks[publication.sid]
+    await asyncio.gather(consumer, return_exceptions=True)
+    await asyncio.sleep(0)
+
+    with pytest.raises(AudioSourceError) as exc_info:
+        await anext(source.chunks())
+    assert isinstance(exc_info.value.__cause__, AudioBacklogError)
+    assert "250 frames (5000 ms)" in str(exc_info.value.__cause__)
+    assert (
+        "LiveKit audio backlog overflow: track=track-1 queued=250 capacity=250 backlog_ms=5000"
+    ) in caplog.messages
     await source.close()
 
 
