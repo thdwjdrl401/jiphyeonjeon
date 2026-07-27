@@ -43,6 +43,19 @@ uv run --frozen alembic upgrade head
 - `GET /healthz`: 프로세스 생존
 - `GET /readyz`: worker event loop 준비 상태
 
+## 폴더별 상세 문서
+
+| 폴더 | 설명 |
+|---|---|
+| [`app/`](app/README.md) | worker 실행 골격과 ingestion core |
+| [`app/domain/`](app/domain/README.md) | index 도메인 모델·오류 |
+| [`app/application/`](app/application/README.md) | transport-neutral PPTX indexing use case |
+| [`app/ports/`](app/ports/README.md) | asset·embedding·storage port |
+| [`app/ingestion/`](app/ingestion/README.md) | 안전한 PPTX parsing·chunking |
+| [`app/adapters/`](app/adapters/README.md) | PostgreSQL/pgvector 저장 adapter |
+| [`migrations/`](migrations/README.md) | Python 소유 `ai` schema |
+| [`tests/`](tests/README.md) | 단위·계약·PostgreSQL 통합 검증 |
+
 컨테이너 probe 때문에 `AI_WORKER_MANAGEMENT_HOST=0.0.0.0`을 사용하더라도 외부 ingress에는 포트를
 노출하지 않는다.
 

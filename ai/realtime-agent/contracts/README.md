@@ -37,3 +37,8 @@ v1=hex(HMAC-SHA256(secret, timestamp + "." + rawBody))
 재사용한다. 이 client는 terminal 상태를 준비한 뒤 반대 terminal event를 새로 만들지 않는다.
 `fixtures/live-agent-status-signing.valid.json`은 Java 구현과 byte-level 결과를 대조할 수 있는
 고정 signing vector다.
+
+## 폴더별 문서
+
+- [`schemas/`](schemas/README.md): 통신별 JSON Schema와 필드 형식
+- [`fixtures/`](fixtures/README.md): 정상 payload와 HMAC 서명 검증용 고정 예시

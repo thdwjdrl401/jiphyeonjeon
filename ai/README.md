@@ -16,3 +16,8 @@ provider·AI-side lifecycle 계약, 독립 BGE-M3 runtime까지다. realtime-age
 RAG API, RabbitMQ consumer와 Java의 live caption dispatch/consumer는 후속 MR에서 추가한다.
 
 실행과 검증 명령은 각 서비스 README를 따른다.
+
+## 폴더별 문서
+
+각 서비스 README에서 실행 코드와 테스트 폴더의 상세 README로 이어진다. `.venv*`, `.uv-cache*`,
+`.pytest*`, `__pycache__`, `models/`는 로컬 생성 자산이므로 대상에서 제외한다.
