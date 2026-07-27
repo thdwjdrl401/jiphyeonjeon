@@ -1,0 +1,95 @@
+import { useEffect, useRef } from 'react'
+import type { LocalVideoTrack } from 'livekit-client'
+import { StatusBadge } from '@/shared/ui/WorkspaceUi'
+import { useInstructorLiveKit, type InstructorLiveKitConnectionState } from './useInstructorLiveKit'
+
+interface InstructorLiveKitStageProps {
+  sessionId: string
+  lessonTitle: string
+  participantCount: number
+  enabled: boolean
+  onRequestEnd: () => void
+}
+
+function LocalTrackVideo({ track, label, fit = 'cover' }: { track: LocalVideoTrack; label: string; fit?: 'cover' | 'contain' }) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+
+  useEffect(() => {
+    const element = videoRef.current
+    if (!element) return
+    track.attach(element)
+    return () => { track.detach(element) }
+  }, [track])
+
+  return <video aria-label={label} autoPlay className={`instructor-local-video instructor-local-video--${fit}`} muted playsInline ref={videoRef} />
+}
+
+function connectionBadge(state: InstructorLiveKitConnectionState) {
+  if (state === 'connected') return <StatusBadge tone="success">송출 연결됨</StatusBadge>
+  if (state === 'mock') return <StatusBadge tone="warning">Mock 송출 모드</StatusBadge>
+  if (state === 'connecting') return <StatusBadge>연결 중</StatusBadge>
+  if (state === 'reconnecting') return <StatusBadge tone="warning">재연결 중</StatusBadge>
+  if (state === 'error') return <StatusBadge tone="danger">연결 실패</StatusBadge>
+  if (state === 'disconnected') return <StatusBadge tone="danger">연결 끊김</StatusBadge>
+  return <StatusBadge>송출 대기</StatusBadge>
+}
+
+function emptyPreviewMessage(state: InstructorLiveKitConnectionState, cameraEnabled: boolean) {
+  if (state === 'idle') return '녹화 안내를 확인하면 LiveKit 송출을 시작합니다.'
+  if (state === 'connecting') return 'LiveKit 송출 서버에 연결하고 있습니다.'
+  if (state === 'mock') return 'Mock API 모드에서는 실제 장치와 LiveKit 네트워크를 사용하지 않습니다.'
+  if (state === 'error' || state === 'disconnected') return '송출 연결을 복구한 뒤 미리보기가 표시됩니다.'
+  if (cameraEnabled) return '카메라 미리보기를 준비하고 있습니다.'
+  return '카메라가 꺼져 있습니다. 카메라를 켜거나 화면을 공유해 주세요.'
+}
+
+export default function InstructorLiveKitStage({ sessionId, lessonTitle, participantCount, enabled, onRequestEnd }: InstructorLiveKitStageProps) {
+  const publisher = useInstructorLiveKit(sessionId, enabled)
+  const screenShareTrack = publisher.screenShareEnabled ? publisher.screenShareTrack : undefined
+  const cameraTrack = publisher.cameraEnabled ? publisher.cameraTrack : undefined
+  const mainTrack = screenShareTrack ?? cameraTrack
+  const showCameraPictureInPicture = Boolean(screenShareTrack && cameraTrack)
+  const canRetry = publisher.connectionState === 'error' || publisher.connectionState === 'disconnected'
+
+  return (
+    <div className="video-stage video-stage--instructor" tabIndex={0}>
+      <div className="video-stage__glow" />
+      <div className="instructor-media-preview">
+        {mainTrack
+          ? <LocalTrackVideo fit={screenShareTrack ? 'contain' : 'cover'} label={screenShareTrack ? '공유 화면 미리보기' : '카메라 미리보기'} track={mainTrack} />
+          : <div className="instructor-media-empty"><span aria-hidden="true">◉</span><strong>{emptyPreviewMessage(publisher.connectionState, publisher.cameraEnabled)}</strong></div>}
+        {showCameraPictureInPicture && cameraTrack && (
+          <div className="instructor-camera-pip"><LocalTrackVideo label="카메라 미리보기" track={cameraTrack} /></div>
+        )}
+      </div>
+
+      <header className="video-status-overlay" aria-label="라이브 강의 정보">
+        <div className="video-status-overlay__identity"><span className="live-dot" /><strong>LIVE</strong><h1>{lessonTitle}</h1><small>강의 {sessionId}</small></div>
+        <div className="video-status-overlay__status">
+          <StatusBadge tone="warning">강사 운영 모드</StatusBadge>
+          {connectionBadge(publisher.connectionState)}
+          <span>{participantCount}명 참여 중</span>
+          <button className="button button--soft button--small" type="button" onClick={onRequestEnd}>강의 종료</button>
+        </div>
+      </header>
+
+      {publisher.errorMessage && (
+        <div className="instructor-media-error" role="alert">
+          <span>{publisher.errorMessage}</span>
+          {canRetry && <button className="button button--soft button--small" type="button" onClick={publisher.retry}>다시 연결</button>}
+        </div>
+      )}
+
+      <div className="video-controls-overlay" aria-label="강사 송출 컨트롤">
+        <div className="control-row">
+          <div>
+            <button aria-pressed={publisher.microphoneEnabled} className={publisher.microphoneEnabled ? 'is-active' : ''} disabled={!publisher.canControl || Boolean(publisher.pendingControl)} type="button" onClick={publisher.toggleMicrophone}>마이크 {publisher.microphoneEnabled ? '켜짐' : '꺼짐'}</button>
+            <button aria-pressed={publisher.cameraEnabled} className={publisher.cameraEnabled ? 'is-active' : ''} disabled={!publisher.canControl || Boolean(publisher.pendingControl)} type="button" onClick={publisher.toggleCamera}>카메라 {publisher.cameraEnabled ? '켜짐' : '꺼짐'}</button>
+            <button aria-pressed={publisher.screenShareEnabled} className={publisher.screenShareEnabled ? 'is-active' : ''} disabled={!publisher.canControl || Boolean(publisher.pendingControl)} type="button" onClick={publisher.toggleScreenShare}>{publisher.screenShareEnabled ? '화면 공유 중' : '화면 공유'}</button>
+          </div>
+          {publisher.pendingControl && <span>장치 상태 변경 중...</span>}
+        </div>
+      </div>
+    </div>
+  )
+}

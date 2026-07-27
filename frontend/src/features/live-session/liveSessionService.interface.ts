@@ -23,6 +23,8 @@ export interface ChatMessageView {
   question?: boolean
 }
 
+export type ChatConnectionState = 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'error'
+
 export interface CaptionTermReference {
   termId: string
   startIndex: number
@@ -56,8 +58,17 @@ export interface QuestionHighlight {
   text: string
 }
 
+export interface LivePlaybackView {
+  sessionId: string
+  playbackUrl: string
+  mimeType: 'application/vnd.apple.mpegurl'
+  streamType: 'LIVE_DVR'
+  sessionOffsetMs: number | null
+}
+
 export interface LiveSessionService {
   getLiveSession: (sessionId: string) => Promise<LiveSessionView>
+  getLivePlayback: (sessionId: string) => Promise<LivePlaybackView>
   getPreflightChecks: (sessionId: string) => Promise<PreflightCheck[]>
   startLiveSession: (sessionId: string) => Promise<void>
   endLiveSession: (sessionId: string) => Promise<void>
@@ -65,6 +76,11 @@ export interface LiveSessionService {
   getParticipants: (sessionId: string) => Promise<Array<{ alias: string; state: string; joinedAt: string }>>
   getChatMessages: (sessionId: string) => Promise<ChatMessageView[]>
   sendChatMessage: (sessionId: string, text: string, question: boolean) => Promise<ChatMessageView>
+  subscribeChatMessages: (
+    sessionId: string,
+    onMessage: (message: ChatMessageView) => void,
+    onConnectionChange: (state: ChatConnectionState) => void,
+  ) => () => void
   getCaptions: (sessionId: string) => Promise<CaptionView[]>
   askLiveAi: (lessonId: string, question: string) => Promise<{ answer: string }>
   saveBookmark: (lessonId: string, sessionMs: number) => Promise<void>

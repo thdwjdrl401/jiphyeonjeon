@@ -3,16 +3,27 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import FastAPI, Response, status
+from fastapi import FastAPI, Request, Response, status
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
+from app.api import RAG_STREAM_PATH, InternalRequestAuthenticator, create_rag_router
 from app.config import Settings, load_settings
 from app.logging_config import configure_logging
+from app.rag import RagAnswerService
 from app.runtime import RuntimeState
 
 logger = logging.getLogger(__name__)
 
 
-def create_app(settings: Settings | None = None, runtime: RuntimeState | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    runtime: RuntimeState | None = None,
+    *,
+    rag_service: RagAnswerService | None = None,
+    internal_authenticator: InternalRequestAuthenticator | None = None,
+) -> FastAPI:
     resolved_settings = settings or load_settings()
     resolved_runtime = runtime or RuntimeState()
 
@@ -27,6 +38,19 @@ def create_app(settings: Settings | None = None, runtime: RuntimeState | None = 
             logger.info("ai-api stopped", extra={"event": "service.stopped"})
 
     app = FastAPI(title="LiveClass AI API", lifespan=lifespan)
+    app.include_router(create_rag_router(rag_service, internal_authenticator))
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error_handler(
+        request: Request,
+        exc: RequestValidationError,
+    ) -> Response:
+        if request.url.path == RAG_STREAM_PATH:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={"detail": "invalid RAG request"},
+            )
+        return await request_validation_exception_handler(request, exc)
 
     @app.get("/healthz")
     async def health() -> dict[str, str]:
@@ -41,6 +65,8 @@ def create_app(settings: Settings | None = None, runtime: RuntimeState | None = 
 
     app.state.settings = resolved_settings
     app.state.runtime = resolved_runtime
+    app.state.rag_service = rag_service
+    app.state.internal_authenticator = internal_authenticator
     return app
 
 

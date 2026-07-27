@@ -1,8 +1,10 @@
+import { Client, type IMessage } from '@stomp/stompjs'
 import type { CurriculumLiveSessionStatus } from '@/features/lesson/types'
-import { apiClient } from '@/shared/api/client'
+import { ApiError, apiClient } from '@/shared/api/client'
 import { notImplemented } from '@/shared/api/notImplemented'
 import type {
   ChatMessageView,
+  LivePlaybackView,
   LiveSessionService,
   LiveSessionView,
 } from './liveSessionService.interface'
@@ -24,6 +26,12 @@ interface ApiChatMessage {
   isQuestion: boolean
 }
 
+interface ApiChatEnvelope {
+  type: string
+  sessionId: string
+  payload: ApiChatMessage
+}
+
 interface ApiLiveToken {
   livekitUrl: string
   accessToken: string
@@ -36,6 +44,40 @@ interface ApiParticipant {
   joinedAtEpochSeconds: number
 }
 
+interface ApiLivePlayback {
+  sessionId: string
+  playbackUrl: string
+  mimeType: string
+  streamType: string
+  sessionOffsetMs: number | null
+}
+
+function normalizeLivePlayback(data: ApiLivePlayback, sessionId: string): LivePlaybackView {
+  const playbackUrl = data.playbackUrl?.trim()
+  const hasValidOffset = data.sessionOffsetMs === null || Number.isFinite(data.sessionOffsetMs)
+  if (
+    data.sessionId !== sessionId
+    || !playbackUrl
+    || data.mimeType !== 'application/vnd.apple.mpegurl'
+    || data.streamType !== 'LIVE_DVR'
+    || !hasValidOffset
+  ) {
+    throw new ApiError(
+      '라이브 재생 API 응답이 계약과 일치하지 않습니다.',
+      undefined,
+      'LIVE_PLAYBACK_CONTRACT_INVALID',
+    )
+  }
+
+  return {
+    sessionId: data.sessionId,
+    playbackUrl,
+    mimeType: data.mimeType,
+    streamType: data.streamType,
+    sessionOffsetMs: data.sessionOffsetMs,
+  }
+}
+
 function normalizeMessage(message: ApiChatMessage): ChatMessageView {
   return {
     id: message.messageId,
@@ -44,6 +86,17 @@ function normalizeMessage(message: ApiChatMessage): ChatMessageView {
     time: message.createdAt ? new Date(message.createdAt).toLocaleTimeString('ko-KR') : '-',
     question: message.isQuestion,
   }
+}
+
+function getChatBrokerUrl() {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${protocol}//${window.location.host}/api/ws`
+}
+
+function readChatEnvelope(frame: IMessage, sessionId: string) {
+  const envelope = JSON.parse(frame.body) as ApiChatEnvelope
+  if (envelope.type !== 'chat.message.created' || envelope.sessionId !== sessionId) return null
+  return normalizeMessage(envelope.payload)
 }
 
 export const httpLiveSessionService = {
@@ -67,6 +120,10 @@ export const httpLiveSessionService = {
       expectedDurationMinutes: data.expectedDurationMinutes ?? 0,
       participants: 0,
     } satisfies LiveSessionView
+  },
+  async getLivePlayback(sessionId) {
+    const { data } = await apiClient.get<ApiLivePlayback>(`/live-sessions/${sessionId}/playback`)
+    return normalizeLivePlayback(data, sessionId)
   },
   // 점검 대상이 LiveKit 연결·장치 상태라 서버 판정이 있어야 한다(CP1). 프론트가 흉내 내면
   // "점검 통과"가 거짓이 되므로 값을 지어내지 않는다.
@@ -104,6 +161,47 @@ export const httpLiveSessionService = {
     })
     const message = normalizeMessage(data)
     return { ...message, time: data.createdAt ? message.time : '현재' }
+  },
+  subscribeChatMessages(sessionId, onMessage, onConnectionChange) {
+    let active = true
+    onConnectionChange('connecting')
+
+    const client = new Client({
+      brokerURL: getChatBrokerUrl(),
+      connectionTimeout: 10_000,
+      heartbeatIncoming: 10_000,
+      heartbeatOutgoing: 10_000,
+      reconnectDelay: 3_000,
+    })
+
+    client.onConnect = () => {
+      if (!active) return
+      onConnectionChange('connected')
+      client.subscribe(`/topic/live-sessions/${sessionId}/chat`, (frame) => {
+        try {
+          const message = readChatEnvelope(frame, sessionId)
+          if (message) onMessage(message)
+        } catch {
+          onConnectionChange('error')
+        }
+      })
+    }
+    client.onStompError = () => {
+      if (active) onConnectionChange('error')
+    }
+    client.onWebSocketError = () => {
+      if (active) onConnectionChange('reconnecting')
+    }
+    client.onWebSocketClose = () => {
+      if (active) onConnectionChange('reconnecting')
+    }
+    client.activate()
+
+    return () => {
+      active = false
+      onConnectionChange('disconnected')
+      void client.deactivate()
+    }
   },
   // 실시간 자막은 WS 채널(CONTRACT §3-4)로 오게 되어 있고 REST 스냅샷 경로는 아직 없다(CP2).
   // 응답 정규화(captionAdapter)는 그대로 두었다 — 경로가 생기면 여기만 바꾸면 된다.
