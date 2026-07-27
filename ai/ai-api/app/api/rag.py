@@ -1,0 +1,73 @@
+from __future__ import annotations
+
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi.responses import StreamingResponse
+
+from app.api.internal_auth import InternalAuthenticationError, InternalRequestAuthenticator
+from app.rag import RagAnswerRequest, RagAnswerService, encode_sse_stream
+
+RAG_ROUTE_PREFIX = "/internal/v1/rag"
+RAG_STREAM_PATH = f"{RAG_ROUTE_PREFIX}/answers:stream"
+
+
+def create_rag_router(
+    service: RagAnswerService | None,
+    authenticator: InternalRequestAuthenticator | None,
+) -> APIRouter:
+    async def require_internal_auth(
+        authorization: Annotated[str | None, Header()] = None,
+    ) -> None:
+        if authenticator is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="internal authentication is not configured",
+            )
+        try:
+            await authenticator.authenticate(authorization)
+        except InternalAuthenticationError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="invalid internal credentials",
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from exc
+
+    router = APIRouter(
+        prefix=RAG_ROUTE_PREFIX,
+        tags=["internal-rag"],
+        dependencies=[Depends(require_internal_auth)],
+    )
+
+    @router.post("/answers:stream", response_class=StreamingResponse)
+    async def stream_answer(
+        request: RagAnswerRequest,
+        accept: Annotated[str | None, Header()] = None,
+    ) -> StreamingResponse:
+        if not _accepts_event_stream(accept):
+            raise HTTPException(
+                status_code=status.HTTP_406_NOT_ACCEPTABLE,
+                detail="Accept must include text/event-stream",
+            )
+        if service is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="RAG service is not configured",
+            )
+        return StreamingResponse(
+            encode_sse_stream(service.stream(request)),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache, no-transform",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    return router
+
+
+def _accepts_event_stream(accept: str | None) -> bool:
+    if accept is None:
+        return False
+    media_types = {part.split(";", 1)[0].strip().lower() for part in accept.split(",")}
+    return "text/event-stream" in media_types
