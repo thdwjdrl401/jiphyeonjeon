@@ -13,6 +13,8 @@
 - realtime-agent fixture를 직접 소비해 Redis wire drift와 attempt 재시작을 검증한다.
 - 실제 Redis ACK/consumer group과 격리 PostgreSQL pgvector scope 검색을 항상 실행한다.
 - remote BGE HTTP 계약과 material/caption evidence 결합을 검증한다.
+- GMS prompt 최소화, text delta, 실패 매핑, 취소·provider stream close를 검증한다.
+- requestId 중복·용량과 caption consumer lifespan·자원 종료를 검증한다.
 
 ## 구조와 흐름
 
@@ -34,7 +36,9 @@ BGE는 `MockTransport`로 HTTP 계약을 확인한다. 실제 GPU BGE, GMS와 Sp
 | `test_material_retrieval_postgres.py` | 자동 생성·삭제되는 실제 pgvector DB 검색 |
 | `test_remote_bge_m3_embedding.py` | BGE runtime HTTP request/response·실패 매핑 |
 | `test_combined_retrieval.py` | material/caption threshold·citation 결합 |
-| `test_wiring.py` | context component factory와 자원 close |
+| `test_gms_openai_answer.py` | GMS prompt·stream·실패·취소·client close |
+| `test_caption_runtime.py` | Redis consumer task의 정상 drain·강제 취소·조기 종료 |
+| `test_wiring.py` | context/GMS/RAG component factory와 자원 close |
 
 ## 경계와 불변식
 

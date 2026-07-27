@@ -18,7 +18,8 @@ RagAnswerRequest
 |---|---|
 | `models.py` | camelCase 요청/SSE event와 내부 evidence 모델 |
 | `ports.py` | 근거 검색·답변 모델 port |
-| `service.py` | timeout, scope 재검증, citation, terminal/error 조율 |
+| `service.py` | request lease, timeout, scope 재검증, citation, terminal/error 조율 |
+| `registry.py` | active/recent requestId의 bounded process-local registry |
 | `retrieval.py` | material hit와 최신 caption attempt를 evidence로 결합 |
 | `sse.py` | named event와 JSON data framing, iterator cleanup |
 | `errors.py` | adapter가 공개 가능한 실패 code만 전달하는 타입 |
@@ -32,4 +33,6 @@ RagAnswerRequest
 - timeout과 adapter 오류는 secret·내부 URL을 노출하지 않는 `answer.error`로 끝난다.
 - 소비자 취소는 삼키지 않고 retrieval/model iterator까지 전파한다.
 - Redis caption과 pgvector/BGE retrieval adapter는 구현됐지만 main lifecycle에는 아직 연결하지 않았다.
-- GMS streaming, request 중복 방지와 production wiring은 후속 범위다.
+- client 취소·오류·terminal 모두 request lease를 recent 상태로 옮겨 같은 ID의 재사용을 막는다.
+- GMS streaming과 context consumer lifecycle은 연결했지만 Spring 인증이 채택되기 전 production API는 닫혀 있다.
+- multi-replica registry와 재연결 replay 정책은 후속 범위다.

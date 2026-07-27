@@ -7,3 +7,4 @@
 |---|---|
 | [0001](0001-rag-answer-core-boundary.md) | port 기반 RAG SSE 수직 코어와 fail-closed 인증 seam |
 | [0002](0002-rag-context-runtime-boundary.md) | attempt-aware caption과 query-only pgvector/BGE context adapter |
+| [0003](0003-rag-gms-runtime-lifecycle.md) | grounded GMS stream, request registry와 process lifecycle |

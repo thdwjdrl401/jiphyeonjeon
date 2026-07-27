@@ -12,8 +12,8 @@
 - 응답 협상: `Accept`에 `text/event-stream`이 포함되어야 한다.
 - 브라우저의 직접 호출은 지원하지 않는다.
 
-현재 production entrypoint에는 인증기와 RAG service가 배선되지 않아 `503`으로 닫혀 있다. 이 문서의 adapter와
-테스트가 통과해도 Spring 인증·GMS 답변 생성·application lifespan 연결이 완료된 것은 아니다.
+현재 production entrypoint는 Redis/pgvector/BGE/GMS와 application lifespan을 조립하지만 내부 인증기는
+배선하지 않아 `503`으로 닫혀 있다. fake 인증기로 통과한 테스트는 Spring 인증 완료를 뜻하지 않는다.
 
 ## 2. 요청 body
 
@@ -28,7 +28,8 @@
 ```
 
 - JSON field는 camelCase이며 정의하지 않은 field를 거부한다.
-- `requestId`: 1~128자. 현재 tracing key이며 중복 방지는 후속 request registry가 맡는다.
+- `requestId`: 1~128자. 한 process의 active/recent registry에서 SSE 시작 전에 확보한다. terminal·오류·client
+  취소 뒤에도 bounded recent 목록에 남으며 같은 ID는 `409`다. replay 가능한 멱등 응답 key는 아니다.
 - `lessonId`: 소문자 canonical UUID. 모든 PPTX와 자막 evidence가 이 lesson scope임을 내부에서 검증한다.
 - `sessionId`: 소문자 canonical UUID. 모든 자막 evidence가 이 session scope여야 한다.
 - `question`: 1~4,000자. whitespace를 임의로 trim하지 않는다.
@@ -72,8 +73,9 @@ client disconnect/cancellation 때는 terminal event 생성을 강제하지 않�
 | `200` | 인증·Accept·body 검증 후 SSE 시작 |
 | `400` | 요청 body가 후보 계약을 위반 |
 | `401` | 구성된 내부 인증기가 호출자를 거부 |
+| `409` | active/recent `requestId` 재사용 |
 | `406` | `Accept: text/event-stream` 미포함 |
-| `503` | 인증기 또는 RAG service 미배선 |
+| `503` | 인증기/RAG service 미배선 또는 process-local active request 한도 초과 |
 
 SSE header가 시작된 뒤의 retrieval/model 실패는 HTTP 상태를 바꾸지 않고 `answer.error`로 전달한다.
 
@@ -104,10 +106,22 @@ ai-api는 realtime-agent의 `caption-stream-entry.schema.json`과 fixture를 직
   이 값은 MVP 기본값이며 실제 평가 corpus로 조정할 설정값이다.
 - 자막 evidence는 최신 attempt에서 `contextTimeMs` 이전의 제한된 event와 문자 수만 사용한다.
 
-## 7. 공유 계약 승격 전 미확정 사항
+## 7. GMS 답변과 process lifecycle
+
+- 답변은 고정 GMS OpenAI-compatible gateway로 보내며 API key만 `AI_API_GMS_API_KEY`로 주입한다.
+- SDK 자동 retry는 0이다. GMS client timeout은 전체 model timeout보다 짧게 검증한다.
+- prompt에는 `question`, 선택된 evidence 내용과 PPTX page 또는 caption time 좌표만 포함한다.
+  `requestId/sessionId/materialId/sttSessionId`는 provider에 보내지 않는다.
+- system prompt는 question/evidence 안의 지시를 신뢰하지 않고 제공된 강의 근거만 사용하도록 고정한다.
+- prompt 문자 수와 output token 수를 설정 상한으로 제한하고 provider delta는 최대 10,000자로 나눈다.
+- GMS timeout·rate limit·연결·인증·설정 실패는 secret과 provider body를 제외한 `MODEL_*` code로 변환한다.
+- FastAPI lifespan은 caption consumer 하나를 시작·drain하고 GMS/BGE client와 DB engine을 닫는다.
+- `/readyz`는 외부 dependency health가 아니라 application lifespan 준비 상태만 나타낸다.
+
+## 8. 공유 계약 승격 전 미확정 사항
 
 - Spring→AI 단명 토큰의 algorithm, issuer, audience, scope, clock skew
 - Java session/HLS clock과 realtime-agent `streamElapsedMs`의 변환 기준점
-- request 중복·재연결 정책과 multi-replica request registry
+- request 재연결/replay 정책과 multi-replica 공유 registry·recent TTL
 - multi-replica 자막 context 공유, abandoned Redis PEL claim, stream retention
-- retrieval threshold 평가와 GMS prompt/model/provider
+- retrieval threshold와 GMS model 품질 평가

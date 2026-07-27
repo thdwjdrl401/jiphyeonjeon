@@ -5,7 +5,7 @@ lockfile을 독립적으로 관리한다.
 
 | 서비스 | 역할 | 기본 관리 주소 |
 |---|---|---|
-| [`ai-api`](ai-api/README.md) | RAG SSE 코어와 Redis caption·pgvector/BGE context adapter | `127.0.0.1:8010` |
+| [`ai-api`](ai-api/README.md) | Redis/pgvector/BGE 근거와 GMS 답변을 조율하는 RAG SSE 서비스 | `127.0.0.1:8010` |
 | [`ai-worker`](ai-worker/README.md) | 비동기 AI 작업 프로세스 골격 | `127.0.0.1:8011` |
 | [`realtime-agent`](realtime-agent/README.md) | LiveKit 강사 오디오→STT→Redis caption agent | LiveKit AgentServer |
 | [`bge-runtime`](bge-runtime/README.md) | 인증된 BGE-M3 내부 GPU embedding runtime | `127.0.0.1:8020` |
@@ -13,8 +13,9 @@ lockfile을 독립적으로 관리한다.
 현재 범위는 ai-api의 RAG 요청→Redis/pgvector/BGE 근거 조회→답변 port→SSE terminal 골격, ai-worker의 PPTX
 ingestion/index 저장, realtime-agent의 runnable AgentServer·오디오·VAD·STT provider·AI-side lifecycle
 계약, 독립 BGE-M3 runtime까지다. Java가 아직 채택하지 않은 Python 경계는 각 서비스의 후보 계약으로
-관리하며 공유 `docs/CONTRACT.md`를 확정 변경하지 않는다. ai-api의 GMS 답변 model·request registry와
-production lifecycle/auth 배선, Java의 live caption dispatch/consumer는 후속 MR에서 추가한다.
+관리하며 공유 `docs/CONTRACT.md`를 확정 변경하지 않는다. ai-api의 GMS 답변 model, 단일 process request
+registry와 context consumer lifecycle은 연결했으며 Spring 단명 JWT 인증과 multi-replica registry,
+Java의 live caption dispatch/consumer는 후속 협업 gate다.
 
 실행과 검증 명령은 각 서비스 README를 따른다.
 
