@@ -20,6 +20,7 @@ import { ApiError } from '@/shared/api/client'
 import { isNotImplemented } from '@/shared/api/notImplemented'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
+import { useToast } from '@/shared/ui/Toast'
 import { InlineNotice, MetricCard, PageHeader, Panel, StatusBadge } from '@/shared/ui/WorkspaceUi'
 
 interface CurriculumDraftState {
@@ -103,7 +104,7 @@ function CurriculumManageEditor({
   const [materials, setMaterials] = useState<CurriculumMaterial[]>(routeState?.draft?.materials ?? storedCurriculum.materials)
   const [autosave, setAutosave] = useState<'idle' | 'saving' | 'saved' | 'error'>(routeState?.created ? 'saved' : 'idle')
   const [saveError, setSaveError] = useState('')
-  const [structureError, setStructureError] = useState('')
+  const toast = useToast()
   const [draggedLesson, setDraggedLesson] = useState<DraggedLesson | null>(null)
   const [lessonDropTarget, setLessonDropTarget] = useState<LessonDropTarget | null>(null)
 
@@ -247,30 +248,31 @@ function CurriculumManageEditor({
 
   const removeLesson = async (sectionId: string, lessonId: string) => {
     if (!window.confirm('이 강의를 삭제할까요? 되돌릴 수 없습니다.')) return
-    setStructureError('')
     try {
       await deleteLesson(lessonId)
       setSections((current) => current.map((section) => section.sectionId === sectionId
         ? { ...section, lessons: section.lessons.filter((lesson) => lesson.lessonId !== lessonId) }
         : section))
+      toast.success('강의를 삭제했습니다.')
     } catch {
-      setStructureError('강의를 삭제하지 못했습니다.')
+      toast.error('강의를 삭제하지 못했습니다.')
     }
   }
 
   const removeSection = async (sectionId: string) => {
     if (!window.confirm('이 섹션과 포함된 강의를 모두 삭제할까요? 되돌릴 수 없습니다.')) return
-    setStructureError('')
     // 아직 저장하지 않은 새 섹션은 서버에 없으므로 로컬에서만 제거한다.
     if (sectionId.startsWith('sec-new-')) {
       setSections((current) => current.filter((section) => section.sectionId !== sectionId))
+      toast.success('섹션을 삭제했습니다.')
       return
     }
     try {
       await deleteSection(sectionId)
       setSections((current) => current.filter((section) => section.sectionId !== sectionId))
+      toast.success('섹션을 삭제했습니다.')
     } catch {
-      setStructureError('섹션을 삭제하지 못했습니다.')
+      toast.error('섹션을 삭제하지 못했습니다.')
     }
   }
 
@@ -362,7 +364,6 @@ function CurriculumManageEditor({
         action={<div className="header-action-group"><Link className="button button--soft" to={publicPaths.curriculum(curriculumId)}>커리큘럼 상세</Link><span className="autosave-status" role="status" aria-live="polite">{autosave === 'saving' ? '자동 저장 중…' : autosave === 'saved' ? '자동 저장됨' : autosave === 'error' ? '저장 실패' : '변경 사항이 자동 저장됩니다'}</span></div>}
       />
       {saveError && <InlineNotice tone="danger">{saveError}</InlineNotice>}
-      {structureError && <InlineNotice tone="danger">{structureError}</InlineNotice>}
       <div className="metric-grid"><MetricCard label="상태" value={storedCurriculum.lifecycleStatus} helper={isNewDraft ? '게시 전' : '운영 중'} /><MetricCard label="섹션" value={sections.length} /><MetricCard label="전체 강의" value={sections.reduce((sum, section) => sum + section.lessons.length, 0)} /><MetricCard label="수강생" value={storedCurriculum.enrolleeCount ?? '--'} /></div>
       <div className="workspace-tabs" role="tablist"><button className={tab === 'structure' ? 'is-active' : ''} onClick={() => setTab('structure')} type="button">구성</button><button className={tab === 'info' ? 'is-active' : ''} onClick={() => setTab('info')} type="button">기본 정보</button><button className={tab === 'enrollees' ? 'is-active' : ''} onClick={() => setTab('enrollees')} type="button">수강생</button></div>
 
