@@ -7,6 +7,13 @@ from app.config import Settings
 from app.runtime import WorkerRuntime
 
 
+DATABASE_URL = "postgresql+asyncpg://ai:secret@localhost/liveclass"
+
+
+def settings() -> Settings:
+    return Settings(instance_id="worker-1", database_url=DATABASE_URL)
+
+
 class FakeServer:
     instances = []
 
@@ -68,7 +75,7 @@ async def test_runtime_failure_stops_management_server(monkeypatch) -> None:
     monkeypatch.setattr(main.uvicorn, "Server", FakeServer)
 
     with pytest.raises(RuntimeError, match="runtime failed"):
-        await main.run_worker(Settings(instance_id="worker-1"))
+        await main.run_worker(settings())
 
     assert FakeServer.instances[-1].should_exit is True
     assert FakeServer.instances[-1].stopped.is_set()
@@ -94,7 +101,7 @@ async def test_management_server_failure_stops_runtime(monkeypatch) -> None:
     monkeypatch.setattr(main.uvicorn, "Server", FailingServer)
 
     with pytest.raises(RuntimeError, match="management server failed"):
-        await main.run_worker(Settings(instance_id="worker-1"))
+        await main.run_worker(settings())
 
     assert states[-1].ready is False
     assert FailingServer.instances[-1].stopped.is_set()
@@ -111,7 +118,7 @@ async def test_cancellation_cleans_up_runtime_and_management_server(monkeypatch)
     monkeypatch.setattr(main, "WorkerRuntime", create_runtime)
     monkeypatch.setattr(main.uvicorn, "Server", FakeServer)
 
-    task = asyncio.create_task(main.run_worker(Settings(instance_id="worker-1")))
+    task = asyncio.create_task(main.run_worker(settings()))
     while not FakeServer.instances or not FakeServer.instances[-1].started.is_set():
         await asyncio.sleep(0)
     await asyncio.sleep(0)
