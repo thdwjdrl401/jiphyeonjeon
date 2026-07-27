@@ -25,6 +25,9 @@ Docker/Compose 배치는 포함하지 않는다.
 
 ## HTTP API
 
+폴더별 구현 설명은 [`app/`](app/README.md), CUDA smoke는 [`scripts/`](scripts/README.md), 자동 검증은
+[`tests/`](tests/README.md)에 있다.
+
 관리 endpoint는 인증 없이 process 상태만 제공한다.
 
 - `GET /healthz`

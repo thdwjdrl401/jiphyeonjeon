@@ -109,3 +109,16 @@ LiveKit, Spring 왕복과 OpenAI credential은 별도 opt-in smoke 증거가 필
 - Redis consumer group, retention, event enum과 session clock 변환 확정
 - callback URL·HMAC·event ID 멱등·terminal first-wins 처리
 - 실제 계약 채택과 함께 `docs/CONTRACT.md` 갱신
+
+## 폴더별 문서
+
+- [`app/`](app/README.md): 프로세스 조립과 실행 경계
+- [`app/jobs/`](app/jobs/README.md): dispatch 검증과 room job 생명주기
+- [`app/livekit/`](app/livekit/README.md): LiveKit 오디오 구독 경계
+- [`app/audio/`](app/audio/README.md): 오디오 정규화와 분할
+- [`app/stt/`](app/stt/README.md): provider-neutral STT 계약과 구현 선택
+- [`app/captions/`](app/captions/README.md): STT 이벤트를 자막 이벤트로 변환하는 파이프라인
+- [`app/adapters/`](app/adapters/README.md): Redis와 Spring 외부 통신 형식
+- [`app/contracts/`](app/contracts/README.md): 상태 콜백 모델과 직렬화
+- [`contracts/`](contracts/README.md): AI-side v1 후보 JSON Schema와 fixture
+- [`tests/`](tests/README.md): 단위·계약·생명주기 검증 범위
