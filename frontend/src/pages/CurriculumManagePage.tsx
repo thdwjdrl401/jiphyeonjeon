@@ -69,8 +69,12 @@ export default function CurriculumManagePage() {
   if (managementQuery.isPending) return <PageState title="커리큘럼을 불러오는 중입니다" />
   if (managementQuery.isError) return <PageState title="커리큘럼을 불러오지 못했습니다" description="잠시 후 다시 시도해 주세요." />
 
+  // 서버 구조(섹션·강의 수)가 바뀌면 에디터를 새 데이터로 다시 seeding한다 — 강의 추가 후
+  // 관리로 돌아왔을 때 옛 로컬 state에 멈춰 섹션·강의가 안 보이던 문제 해결. 편집 중에는
+  // 서버 데이터가 그대로라 key도 안 바뀌어 자동저장 흐름을 방해하지 않는다.
+  const structureKey = managementQuery.data.sections.map((section) => `${section.sectionId}:${section.lessons.length}`).join(',')
   return <CurriculumManageEditor
-    key={curriculumId}
+    key={`${curriculumId}:${structureKey}`}
     curriculumId={curriculumId}
     routeState={routeState}
     storedCurriculum={managementQuery.data.curriculum}
@@ -250,9 +254,10 @@ function CurriculumManageEditor({
     if (!window.confirm('이 강의를 삭제할까요? 되돌릴 수 없습니다.')) return
     try {
       await deleteLesson(lessonId)
-      setSections((current) => current.map((section) => section.sectionId === sectionId
-        ? { ...section, lessons: section.lessons.filter((lesson) => lesson.lessonId !== lessonId) }
-        : section))
+      // 로컬 state를 직접 고치면 자동저장이 옛 structureVersion으로 돌아 409(구조 변경)가 난다.
+      // 서버 구조를 다시 읽어(structureKey 변경) 최신 버전으로 다시 그리고 사이드바도 갱신한다.
+      queryClient.invalidateQueries({ queryKey: ['curriculum-management', curriculumId] })
+      queryClient.invalidateQueries({ queryKey: ['curriculum-lesson-navigation', curriculumId] })
       toast.success('강의를 삭제했습니다.')
     } catch {
       toast.error('강의를 삭제하지 못했습니다.')
@@ -269,7 +274,8 @@ function CurriculumManageEditor({
     }
     try {
       await deleteSection(sectionId)
-      setSections((current) => current.filter((section) => section.sectionId !== sectionId))
+      queryClient.invalidateQueries({ queryKey: ['curriculum-management', curriculumId] })
+      queryClient.invalidateQueries({ queryKey: ['curriculum-lesson-navigation', curriculumId] })
       toast.success('섹션을 삭제했습니다.')
     } catch {
       toast.error('섹션을 삭제하지 못했습니다.')
