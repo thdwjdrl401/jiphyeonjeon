@@ -80,6 +80,15 @@ dependencies {
     testImplementation 'org.springframework.security:spring-security-test'
     // 모듈 경계 검증(ApplicationModules.verify)
     testImplementation 'org.springframework.modulith:spring-modulith-starter-test'
+
+    // CI/콜드 체크아웃 격리 = Testcontainers (ADR-0038). @SpringBootTest 컨텍스트가 로컬 compose 인프라
+    // 대신 랜덤 포트 컨테이너(Postgres+pgvector·Redis)에 붙는다. @ServiceConnection·ContainerConnectionSource
+    // 제공은 spring-boot-testcontainers. Redis 커넥션 팩토리는 starter-data-redis 안에 이미 있음(추가 의존성 불필요).
+    // Testcontainers 2.0은 모듈명이 org.testcontainers:testcontainers-* 로 바뀜(구 postgresql/junit-jupiter →
+    // testcontainers-postgresql/-junit-jupiter). 버전은 모두 Boot 4.1 BOM 관리.
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
+    testImplementation 'org.testcontainers:testcontainers-postgresql'
 }
 
 dependencyManagement {

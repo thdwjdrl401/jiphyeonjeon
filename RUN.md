@@ -80,10 +80,26 @@ curl -s -i localhost:8080/api/session/touch | grep -i set-cookie   # LIVECLASS_S
 docker exec liveclass-redis redis-cli --scan --pattern 'liveclass:session:*'   # Redis에 세션
 ```
 
-## 6. 트러블슈팅
+## 6. 테스트 (백엔드)
+```bash
+cd backend
+./gradlew test
+```
+- **로컬 compose 인프라(`docker compose up`)가 떠 있지 않아도 전체 통과한다.** `@SpringBootTest` 컨텍스트는 `TestcontainersConfiguration`(`backend/src/test/java/com/liveclass/support/`)이 스위트 전체가 공유하는 랜덤 포트 Postgres(`pgvector/pgvector:pg16`)+Redis(`redis:7-alpine`) 컨테이너에 자동으로 붙는다(ADR-0038). 테스트 파일을 개별 수정하지 않고 `META-INF/spring.factories`로 전 테스트에 일괄 적용된다.
+- 로컬 compose 인프라를 **띄운 채로 실행해도 무방** — 테스트는 5432/6379가 아니라 Testcontainers가 잡은 임의 포트를 쓰므로 충돌하지 않는다.
+- **Colima(macOS)를 쓰는 경우**: 기본 `/var/run/docker.sock`이 Colima 소켓으로의 심볼릭 링크라 Testcontainers의 리소스 정리 컨테이너(Ryuk)가 소켓을 바인드 마운트할 때 `operation not supported`로 실패할 수 있다. 아래 3줄을 셸에 설정하고 실행:
+  ```bash
+  export DOCKER_HOST="unix://${HOME}/.colima/default/docker.sock"
+  export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE="/var/run/docker.sock"
+  export TESTCONTAINERS_RYUK_DISABLED=true   # Ryuk 우회 — 컨테이너 정리는 수동(docker rm -f)
+  ```
+  (Docker Desktop·표준 Linux dockerd에서는 필요 없다.)
+
+## 7. 트러블슈팅
 - **`java: command not found`(WSL)**: JDK가 Windows쪽에만 있음. WSL에 설치 + `JAVA_HOME`/PATH 등록(brew openjdk는 keg-only).
 - **DB 인증 실패 `password authentication failed`**: PG 볼륨이 옛 비번으로 init됨. `.env`의 `POSTGRES_PASSWORD`와 실제 볼륨 비번 불일치 → `docker compose down -v && up`(재초기화) 또는 `ALTER USER liveclass PASSWORD 'liveclass'`.
 - **Flyway/세션이 안 켜짐(Boot 4.x)**: `flyway-core`·`spring-session-data-redis` 단독으론 부족 → `spring-boot-starter-flyway`·`spring-boot-starter-session-data-redis` 필요(이미 반영).
 - **WSL에서 Windows npm(`/mnt/c/...`)이 잡힘**: `which node`/`which npm` 확인 후 WSL 내부에 Node 설치, 터미널 재시작.
 - **포트 충돌**: 8080·8083·5432·6379.
 - **백엔드 로그**: `backend/logs/`(git 무시).
+- **테스트 중 Testcontainers가 Ryuk을 못 띄움(Colima)**: 위 6절의 `DOCKER_HOST`/`TESTCONTAINERS_*` 환경변수 설정.

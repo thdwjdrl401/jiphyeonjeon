@@ -23,6 +23,12 @@
 .instructor-end-confirm strong { color: #fff; font-size: .74rem; }
 .instructor-end-confirm p { margin: 3px 0 0; color: rgba(255,255,255,.57); font-size: .62rem; }
 .instructor-end-confirm > div:last-child { display: flex; gap: 7px; }
+.recording-consent-overlay { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(6,10,20,.72); backdrop-filter: blur(4px); }
+.recording-consent-modal { width: min(380px,100%); padding: 22px 22px 20px; border: 1px solid rgba(255,96,116,.28); border-radius: 16px; background: #141d33; box-shadow: 0 24px 60px rgba(0,0,0,.45); }
+.recording-consent-modal__badge { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 13px; color: #ff8494; font-size: .62rem; font-weight: 700; letter-spacing: .04em; }
+.recording-consent-modal__badge i { width: 9px; height: 9px; flex: 0 0 auto; border-radius: 50%; background: #ff3c55; box-shadow: 0 0 0 5px rgba(255,60,85,.14); }
+.recording-consent-modal h2 { margin: 0 0 8px; color: #fff; font-size: .98rem; letter-spacing: -.02em; }
+.recording-consent-modal p { margin: 0 0 18px; color: rgba(255,255,255,.62); font-size: .72rem; line-height: 1.6; }
 .media-layout { display: grid; grid-template-columns: minmax(0,1fr) 370px; gap: 13px; }
 .media-primary { min-width: 0; }
 .media-page--live .media-layout { min-height: 0; flex: 1; overflow: hidden; }
