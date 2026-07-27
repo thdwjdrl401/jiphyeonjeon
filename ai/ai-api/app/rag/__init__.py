@@ -13,6 +13,12 @@ from app.rag.models import (
     RetrievalResult,
 )
 from app.rag.ports import AnswerModel, EvidenceRetriever
+from app.rag.registry import (
+    DuplicateRequestError,
+    InMemoryRequestRegistry,
+    RequestRegistry,
+    RequestRegistryFullError,
+)
 from app.rag.retrieval import CaptionContextPort, CombinedEvidenceRetriever, MaterialRetrievalPort
 from app.rag.service import RagAnswerService
 from app.rag.sse import encode_sse_event, encode_sse_stream
@@ -25,15 +31,19 @@ __all__ = [
     "AnswerInsufficient",
     "AnswerModel",
     "AnswerSource",
-    "CaptionSource",
     "CaptionContextPort",
+    "CaptionSource",
     "CombinedEvidenceRetriever",
+    "DuplicateRequestError",
     "EvidenceRetriever",
+    "InMemoryRequestRegistry",
     "MaterialRetrievalPort",
     "PptxSource",
     "RagAnswerRequest",
     "RagAnswerService",
     "RagStreamFailure",
+    "RequestRegistry",
+    "RequestRegistryFullError",
     "RetrievedEvidence",
     "RetrievalResult",
     "encode_sse_event",

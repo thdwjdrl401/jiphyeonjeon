@@ -10,9 +10,11 @@ from app.config import Settings
 from app.main import create_app
 from app.rag import (
     CaptionSource,
+    InMemoryRequestRegistry,
     PptxSource,
     RagAnswerRequest,
     RagAnswerService,
+    RequestRegistryFullError,
     RetrievedEvidence,
     RetrievalResult,
 )
@@ -106,12 +108,16 @@ def _events(body: str) -> list[tuple[str, dict[str, object]]]:
     return parsed
 
 
-def _app(retriever: Retriever | None = None, model: Model | None = None):
+def _app(
+    retriever: Retriever | None = None,
+    model: Model | None = None,
+    registry=None,
+):
     resolved_retriever = retriever or Retriever()
     resolved_model = model or Model()
     return create_app(
         Settings(),
-        rag_service=RagAnswerService(resolved_retriever, resolved_model),
+        rag_service=RagAnswerService(resolved_retriever, resolved_model, registry),
         internal_authenticator=Authenticator(),
     )
 
@@ -149,6 +155,36 @@ def test_internal_endpoint_streams_contract_events_and_citations() -> None:
     ]
     assert retriever.calls == 1
     assert model.calls == 1
+
+
+def test_internal_endpoint_rejects_recent_duplicate_before_new_stream() -> None:
+    registry = InMemoryRequestRegistry()
+    app = _app(registry=registry)
+
+    with TestClient(app) as client:
+        first = client.post(PATH, json=_payload(), headers=_headers())
+        duplicate = client.post(PATH, json=_payload(), headers=_headers())
+
+    assert first.status_code == 200
+    assert duplicate.status_code == 409
+    assert duplicate.json() == {"detail": "requestId was already used"}
+
+
+def test_internal_endpoint_maps_registry_capacity_before_retrieval() -> None:
+    class FullRegistry:
+        async def acquire(self, request_id: str):
+            raise RequestRegistryFullError("full")
+
+    retriever = Retriever()
+    model = Model()
+
+    with TestClient(_app(retriever, model, FullRegistry())) as client:
+        response = client.post(PATH, json=_payload(), headers=_headers())
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "too many active RAG requests"}
+    assert retriever.calls == 0
+    assert model.calls == 0
 
 
 @pytest.mark.parametrize("authorization", [None, "Basic abc", "Bearer wrong"])

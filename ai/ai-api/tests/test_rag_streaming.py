@@ -10,10 +10,13 @@ from pydantic import ValidationError
 from app.rag import (
     AnswerError,
     CaptionSource,
+    DuplicateRequestError,
+    InMemoryRequestRegistry,
     PptxSource,
     RagAnswerRequest,
     RagAnswerService,
     RagStreamFailure,
+    RequestRegistryFullError,
     RetrievedEvidence,
     RetrievalResult,
     encode_sse_event,
@@ -106,7 +109,8 @@ class Model:
 
 
 async def collect(service: RagAnswerService, current_request: RagAnswerRequest):
-    return [event async for event in service.stream(current_request)]
+    stream = await service.open(current_request)
+    return [event async for event in stream]
 
 
 def test_contract_rejects_unknown_request_field_and_reversed_caption_range() -> None:
@@ -280,6 +284,27 @@ async def test_cross_scope_evidence_never_reaches_model(
 
 
 @async_test
+async def test_registry_rejects_active_recent_and_capacity_before_streaming() -> None:
+    registry = InMemoryRequestRegistry(max_active=1, max_completed=2)
+    service = RagAnswerService(Retriever(), Model(), registry)
+
+    first = await service.open(request("request-1"))
+    with pytest.raises(DuplicateRequestError):
+        await service.open(request("request-1"))
+    with pytest.raises(RequestRegistryFullError):
+        await service.open(request("request-2"))
+
+    assert [event.event async for event in first] == ["answer.insufficient"]
+    assert await registry.snapshot() == {"active": 0, "completed": 1}
+    with pytest.raises(DuplicateRequestError):
+        await service.open(request("request-1"))
+
+    second = await service.open(request("request-2"))
+    await second.aclose()
+    assert await registry.snapshot() == {"active": 0, "completed": 2}
+
+
+@async_test
 async def test_consumer_cancellation_reaches_model_and_closes_stream() -> None:
     started = asyncio.Event()
     cancelled = asyncio.Event()
@@ -301,7 +326,7 @@ async def test_consumer_cancellation_reaches_model_and_closes_stream() -> None:
         Retriever(RetrievalResult(sufficient=True, evidence=(pptx_evidence(),))),
         BlockingModel(),
     )
-    encoded_stream = encode_sse_stream(service.stream(request()))
+    encoded_stream = encode_sse_stream(await service.open(request()))
     next_event = asyncio.create_task(encoded_stream.__anext__())
     await started.wait()
 
@@ -310,6 +335,8 @@ async def test_consumer_cancellation_reaches_model_and_closes_stream() -> None:
         await next_event
 
     assert cancelled.is_set()
+    with pytest.raises(DuplicateRequestError):
+        await service.open(request())
 
 
 @async_test
@@ -326,7 +353,8 @@ async def test_consumer_cancellation_reaches_retriever() -> None:
                 cancelled.set()
                 raise
 
-    stream = RagAnswerService(BlockingRetriever(), Model()).stream(request())
+    service = RagAnswerService(BlockingRetriever(), Model())
+    stream = await service.open(request())
     next_event = asyncio.create_task(stream.__anext__())
     await started.wait()
 
@@ -335,6 +363,8 @@ async def test_consumer_cancellation_reaches_retriever() -> None:
         await next_event
 
     assert cancelled.is_set()
+    with pytest.raises(DuplicateRequestError):
+        await service.open(request())
 
 
 @async_test
