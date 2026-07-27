@@ -9,6 +9,9 @@ def test_uses_loopback_defaults() -> None:
 
     assert settings.host == "127.0.0.1"
     assert settings.port == 8010
+    assert settings.redis_url == "redis://127.0.0.1:6379/0"
+    assert settings.database_url is None
+    assert settings.bge_base_url is None
 
 
 def test_rejects_invalid_port() -> None:
@@ -23,3 +26,35 @@ def test_load_settings_reads_prefixed_environment(monkeypatch) -> None:
         assert load_settings().port == 8110
     finally:
         load_settings.cache_clear()
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        {"redis_url": "http://localhost:6379"},
+        {"redis_url": "redis://localhost:99999"},
+        {"caption_poll_block_ms": 1_000, "redis_socket_timeout_seconds": 1.0},
+        {"redis_reconnect_min_seconds": 2.0, "redis_reconnect_max_seconds": 1.0},
+        {"database_url": "postgresql+psycopg://localhost/liveclass"},
+        {"database_role": "AI-APP"},
+        {"bge_base_url": "http://127.0.0.1:8020"},
+        {"bge_token": "x" * 32},
+        {"bge_base_url": "http://user:secret@127.0.0.1:8020", "bge_token": "x" * 32},
+        {"bge_base_url": "http://127.0.0.1:8020/path", "bge_token": "x" * 32},
+    ],
+)
+def test_rejects_invalid_context_runtime_settings(values: dict[str, object]) -> None:
+    with pytest.raises(ValidationError):
+        Settings(**values)
+
+
+def test_accepts_complete_context_runtime_settings() -> None:
+    settings = Settings(
+        database_url="postgresql+asyncpg://ai_runtime:secret@127.0.0.1:5432/liveclass",
+        bge_base_url="http://127.0.0.1:8020",
+        bge_token="bge-runtime-token-that-is-at-least-32-characters",
+    )
+
+    assert settings.database_role == "ai_app"
+    assert settings.bge_token is not None
+    assert settings.bge_token.get_secret_value().startswith("bge-runtime")
