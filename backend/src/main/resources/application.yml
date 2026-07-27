@@ -33,6 +33,12 @@ spring:
     data:
       redis:
         namespace: liveclass:session  # 세션 본체 → Redis (앱 무상태). Boot 4.0: spring.session.redis.* → spring.session.data.redis.*
+  rabbitmq:
+    # AI 배치 잡 발행(ADR-0036). 로컬/dev는 미기동(스위치 off라 발행 안 함), prod는 env로 override.
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME:liveclass}
+    password: ${SPRING_RABBITMQ_PASSWORD:liveclass}
 
 server:
   port: 8080
@@ -111,3 +117,19 @@ liveclass:
       - http://localhost:*
       - https://jiphyeonjeon.thdwjdrl.com
       - https://*.thdwjdrl.com
+
+# AI 워커 콜백(ADR-0036) — HMAC 서명 검증 시크릿. 워커와 같은 값을 공유한다. 운영은 env로 주입(커밋 금지).
+ai:
+  callback-secret: ${AI_CALLBACK_SECRET:dev-ai-callback-secret}
+
+# 자료 임베딩 파이프라인 스위치(ADR-0036). true면 자료 연결/해제 시 outbox 발행 + PENDING 전환.
+# 릴레이(RabbitMQ)와 AI 워커가 준비되기 전까지는 false — 연결만 하고 상태 READY(무회귀).
+material:
+  embedding:
+    enabled: ${MATERIAL_EMBEDDING_ENABLED:false}
+
+# outbox → RabbitMQ 릴레이 폴링 주기(ADR-0036). 발행 전용, 빈 결과면 무해.
+outbox:
+  relay:
+    fixed-delay-ms: ${OUTBOX_RELAY_FIXED_DELAY_MS:5000}
+    initial-delay-ms: ${OUTBOX_RELAY_INITIAL_DELAY_MS:15000}

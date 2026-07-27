@@ -113,8 +113,8 @@ export const httpLiveSessionService = {
   async askLiveAi(lessonId) {
     return notImplemented(`POST /lessons/${lessonId}/ai/questions:stream`)
   },
-  async saveBookmark(lessonId) {
-    return notImplemented(`POST /lessons/${lessonId}/bookmarks`)
+  async saveBookmark(lessonId, sessionMs) {
+    await apiClient.post(`/lessons/${lessonId}/bookmarks`, { sessionMs })
   },
   async getProcessingStatus(sessionId) {
     return notImplemented(`GET /instructor/live-sessions/${sessionId}/processing`)

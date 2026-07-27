@@ -1,5 +1,6 @@
 package com.liveclass.curriculum.service;
 
+import com.liveclass.aiintegration.api.OutboxPublisher;
 import com.liveclass.asset.api.AssetDirectory;
 import com.liveclass.asset.api.AssetRef;
 import com.liveclass.curriculum.domain.Curriculum;
@@ -11,18 +12,22 @@ import com.liveclass.curriculum.repository.SectionRepository;
 import com.liveclass.common.logging.Audit;
 import com.liveclass.lesson.api.LessonDirectory;
 import com.liveclass.lesson.api.LessonManagement;
+import com.liveclass.lesson.api.LessonMaterialManagement;
 import com.liveclass.lesson.api.LessonPlacement;
 import com.liveclass.lesson.api.LessonView;
+import com.liveclass.lesson.api.MaterialView;
 import com.liveclass.live.api.LiveSessionDirectory;
 import com.liveclass.live.api.LiveSessionManagement;
 import com.liveclass.live.api.LiveSessionView;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -47,24 +52,34 @@ public class InstructorCurriculumService {
     private final SectionRepository sectionRepository;
     private final LessonDirectory lessonDirectory;
     private final LessonManagement lessonManagement;
+    private final LessonMaterialManagement lessonMaterialManagement;
     private final LiveSessionManagement liveSessionManagement;
     private final LiveSessionDirectory liveSessionDirectory;
     private final AssetDirectory assetDirectory;
+    private final OutboxPublisher outboxPublisher;
+    private final boolean embeddingEnabled;
+    private final JsonMapper jsonMapper = JsonMapper.builder().build();
 
     public InstructorCurriculumService(CurriculumRepository curriculumRepository,
                                        SectionRepository sectionRepository,
                                        LessonDirectory lessonDirectory,
                                        LessonManagement lessonManagement,
+                                       LessonMaterialManagement lessonMaterialManagement,
                                        LiveSessionManagement liveSessionManagement,
                                        LiveSessionDirectory liveSessionDirectory,
-                                       AssetDirectory assetDirectory) {
+                                       AssetDirectory assetDirectory,
+                                       OutboxPublisher outboxPublisher,
+                                       @Value("${material.embedding.enabled:false}") boolean embeddingEnabled) {
         this.curriculumRepository = curriculumRepository;
         this.sectionRepository = sectionRepository;
         this.lessonDirectory = lessonDirectory;
         this.lessonManagement = lessonManagement;
+        this.lessonMaterialManagement = lessonMaterialManagement;
         this.liveSessionManagement = liveSessionManagement;
         this.liveSessionDirectory = liveSessionDirectory;
         this.assetDirectory = assetDirectory;
+        this.outboxPublisher = outboxPublisher;
+        this.embeddingEnabled = embeddingEnabled;
     }
 
     @Transactional
@@ -315,6 +330,13 @@ public class InstructorCurriculumService {
         return requireOwnedLesson(instructorId, lessonId);
     }
 
+    /** 강사 레슨 단건 + 연결된 활성 자료(ADR-0035) — 수정 폼이 저장된 자료를 다시 보여주도록. */
+    @Transactional(readOnly = true)
+    public InstructorLessonDetail getLessonDetail(UUID instructorId, UUID lessonId) {
+        LessonView lesson = requireOwnedLesson(instructorId, lessonId);
+        return new InstructorLessonDetail(lesson, lessonMaterialManagement.findActiveByLesson(lessonId));
+    }
+
     @Transactional
     public LessonView updateLesson(UUID instructorId, UUID lessonId, String title, String description) {
         requireOwnedLesson(instructorId, lessonId);
@@ -361,6 +383,74 @@ public class InstructorCurriculumService {
         curriculumRepository.bumpStructureVersion(section.getCurriculumId());
         log.info(Audit.MARKER, "레슨 게시취소 sectionId={} lessonId={}", lesson.sectionId(), lessonId);
         return unpublished;
+    }
+
+    /**
+     * 레슨에 자료(PPTX) 에셋을 연결한다(ADR-0035). 소유권(레슨→섹션→커리큘럼)은 여기서 확인하고,
+     * 에셋 유효성 검증과 연결 저장은 lesson 모듈 포트가 한다. 에셋 업로더 검증에 쓰라고 instructorId를
+     * 넘긴다(레슨 소유권과 별개로 자기 에셋만 붙일 수 있게). AI 잡 발행은 이번 범위 밖(CP3).
+     */
+    @Transactional
+    public MaterialView attachMaterial(UUID instructorId, UUID lessonId, UUID assetId) {
+        LessonView lesson = requireOwnedLesson(instructorId, lessonId);
+        MaterialView material = lessonMaterialManagement.attach(lessonId, assetId, instructorId);
+        log.info(Audit.MARKER, "레슨 자료 연결 lessonId={} assetId={} materialId={}",
+                lessonId, assetId, material.materialId());
+        // 임베딩 파이프라인이 켜져 있으면 PENDING으로 두고 잡을 outbox에 싣는다(같은 트랜잭션 = 신뢰성, ADR-0036).
+        // 꺼져 있으면(기본) 연결만 하고 상태는 READY 유지 — 파이프라인 미배선 단계의 무회귀.
+        if (embeddingEnabled) {
+            UUID curriculumId = requireOwnedSection(instructorId, lesson.sectionId()).getCurriculumId();
+            lessonMaterialManagement.updateEmbeddingStatus(material.materialId(), "PENDING");
+            enqueueEmbedJob(curriculumId, lessonId, material);
+        }
+        return material;
+    }
+
+    /** 레슨 자료 연결 해제(소프트 삭제). 소유권 확인 후 위임. 멱등(없는 자료여도 성공). */
+    @Transactional
+    public void detachMaterial(UUID instructorId, UUID lessonId, UUID materialId) {
+        requireOwnedLesson(instructorId, lessonId);
+        lessonMaterialManagement.detach(lessonId, materialId);
+        // 임베딩 파이프라인이 켜져 있으면 pgvector에서 이 자료 chunk를 지우도록 삭제 잡을 싣는다(ADR-0036).
+        if (embeddingEnabled) {
+            String payload = jsonMapper.writeValueAsString(Map.of(
+                    "taskType", "EMBED_DELETE",
+                    "materialId", materialId.toString(),
+                    "lessonId", lessonId.toString(),
+                    "contractVersion", 1));
+            outboxPublisher.enqueue("material_asset", materialId.toString(), "MATERIAL_EMBED_DELETE",
+                    payload, "material:" + materialId + ":embed-delete", null);
+        }
+    }
+
+    /** 자료 임베딩 잡을 outbox에 싣는다(CONTRACT §3-1 envelope, taskType=PPTX_EMBED, 모델 bge-m3). */
+    private void enqueueEmbedJob(UUID curriculumId, UUID lessonId, MaterialView material) {
+        String payload = jsonMapper.writeValueAsString(Map.of(
+                "taskType", "PPTX_EMBED",
+                "materialId", material.materialId().toString(),
+                "assetId", material.assetId().toString(),
+                "lessonId", lessonId.toString(),
+                "curriculumId", curriculumId.toString(),
+                "fileName", material.fileName() == null ? "" : material.fileName(),
+                "policy", Map.of("embedModel", "bge-m3"),
+                "contractVersion", 1));
+        outboxPublisher.enqueue("material_asset", material.materialId().toString(), "MATERIAL_EMBED_REQUESTED",
+                payload, "material:" + material.materialId() + ":embed", null);
+    }
+
+    /**
+     * 레슨 자료 다운로드용 presigned GET URL. 소유권 확인 후, 그 레슨의 활성 자료 중 materialId를 찾아
+     * 에셋의 presigned URL을 발급한다. 바이트는 스토리지 직결이라 이 URL로 302 리다이렉트만 하면 된다.
+     */
+    @Transactional(readOnly = true)
+    public String materialDownloadUrl(UUID instructorId, UUID lessonId, UUID materialId) {
+        requireOwnedLesson(instructorId, lessonId);
+        MaterialView material = lessonMaterialManagement.findActiveByLesson(lessonId).stream()
+                .filter(m -> m.materialId().equals(materialId))
+                .findFirst()
+                .orElseThrow(() -> new LessonNotFoundException("자료를 찾을 수 없습니다."));
+        return assetDirectory.resolveUrl(material.assetId())
+                .orElseThrow(() -> new LessonNotFoundException("자료 URL을 발급할 수 없습니다."));
     }
 
     // ── 구조 순서 원자 저장 (STRUCTURE-01) ──

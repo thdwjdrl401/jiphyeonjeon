@@ -50,11 +50,18 @@ export interface SaveCurriculumManagementRequest {
   structureVersion: number
 }
 
+export interface SaveCurriculumManagementResult {
+  /** 저장 후 서버의 structureVersion. 다음 저장의 baseVersion으로 쓴다(연속 저장 시 409 방지). */
+  structureVersion: number
+  /** 새로 만든 섹션의 임시 id(sec-new-*) → 실제 sectionId. 로컬 상태를 실제 id로 바꿔 중복 생성을 막는다. */
+  sectionIdMap: Record<string, string>
+}
+
 export interface CurriculumManagementService {
   uploadCurriculumThumbnail: (file: File) => Promise<string | null>
   createCurriculum: (request: CreateCurriculumRequest) => Promise<CreateCurriculumResponse>
   getInstructorCurriculum: (curriculumId: string) => Promise<InstructorCurriculumResponse>
   getCurriculumManagementStructure: (curriculumId: string) => Promise<CurriculumManagementSection[]>
-  saveCurriculumManagement: (request: SaveCurriculumManagementRequest) => Promise<void>
+  saveCurriculumManagement: (request: SaveCurriculumManagementRequest) => Promise<SaveCurriculumManagementResult>
   publishCurriculum: (curriculumId: string) => Promise<void>
 }

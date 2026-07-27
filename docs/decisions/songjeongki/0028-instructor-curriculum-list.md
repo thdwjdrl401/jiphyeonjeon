@@ -4,7 +4,7 @@
 
 - **상태**: 채택
 - **일자**: 2026-07-22
-- **관련**: [0017](0017-schema-ownership-core-ai.md), [0024](0024-orphan-module-scaffolding.md), [0026](0026-enrollment-roster-paging-and-q-deferral.md), FE 계약 [docs/frontend/api/MY_CURRICULUMS.md](../../frontend/api/MY_CURRICULUMS.md) §4.2
+- **관련**: [0017](0017-schema-ownership-core-ai.md), [0024](0024-orphan-module-scaffolding.md), [0037](0037-enrollment-roster-paging-and-q-deferral.md), FE 계약 [docs/frontend/api/MY_CURRICULUMS.md](../../frontend/api/MY_CURRICULUMS.md) §4.2
 
 ## 맥락
 

@@ -66,6 +66,9 @@ export default function LiveClassroomPage() {
   const [aiAnswer, setAiAnswer] = useState('')
   const [bookmarked, setBookmarked] = useState(false)
   const [endRequested, setEndRequested] = useState(false)
+  // 라이브는 녹화되고 채팅·자막이 AI 처리된다는 안내를 입장 시 한 번 확인받는다.
+  // 상시 배너 대신 진입 모달로 알려 시야를 가리지 않게 한다.
+  const [recordingNoticeAck, setRecordingNoticeAck] = useState(false)
   const isLive = liveEdgeMs - positionMs < 3_000
   const sendMutation = useMutation({
     mutationFn: ({ text, question }: { text: string; question: boolean }) => sendChatMessage(sessionId, text, question),
@@ -127,6 +130,17 @@ export default function LiveClassroomPage() {
 
   return (
     <div className={`media-page media-page--live${isInstructor ? ' media-page--instructor' : ''}`}>
+      {!recordingNoticeAck && (
+        <div className="recording-consent-overlay" role="dialog" aria-modal="true" aria-labelledby="recording-consent-title">
+          <div className="recording-consent-modal">
+            <span className="recording-consent-modal__badge"><i aria-hidden="true" /> 녹화 안내</span>
+            <h2 id="recording-consent-title">이 강의는 녹화됩니다</h2>
+            <p>AI 기능 제공을 위해 채팅과 자막이 함께 처리됩니다. 참여하면 안내를 확인한 것으로 간주됩니다.</p>
+            <button className="button button--primary button--full" type="button" onClick={() => setRecordingNoticeAck(true)}>확인하고 참여하기</button>
+          </div>
+        </div>
+      )}
+
       {isInstructor && (
         <section className="instructor-live-console" aria-label="강사 라이브 운영 상태">
           <div><span>송출</span><strong>LIVE</strong><small>카메라·화면 공유 정상</small></div>

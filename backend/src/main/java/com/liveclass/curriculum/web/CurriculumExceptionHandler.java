@@ -13,6 +13,8 @@ import com.liveclass.curriculum.web.dto.StructureConflictResponse;
 import com.liveclass.common.web.ErrorResponse;
 import com.liveclass.enrollment.api.EnrollmentNotFoundException;
 import com.liveclass.enrollment.api.EnrollmentStateConflictException;
+import com.liveclass.lesson.api.MaterialAlreadyAttachedException;
+import com.liveclass.lesson.api.MaterialAssetInvalidException;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -59,6 +61,23 @@ public class CurriculumExceptionHandler {
     public ResponseEntity<ErrorResponse> handleLessonNotFound(com.liveclass.lesson.api.LessonNotFoundException e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ErrorResponse.of("LESSON_NOT_FOUND", e.getMessage()));
+    }
+
+    /**
+     * 자료 연결 대상 에셋이 유효하지 않음(없음·kind 불일치·미완료·업로더 불일치) → 400.
+     * lesson.api 경계 예외라 여기서 매핑한다(구현 모듈 예외를 curriculum이 참조하면 순환).
+     */
+    @ExceptionHandler(MaterialAssetInvalidException.class)
+    public ResponseEntity<ErrorResponse> handleMaterialInvalid(MaterialAssetInvalidException e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponse.of("MATERIAL_INVALID", e.getMessage()));
+    }
+
+    /** 같은 (레슨, 에셋) 자료가 이미 연결돼 있음 → 409. */
+    @ExceptionHandler(MaterialAlreadyAttachedException.class)
+    public ResponseEntity<ErrorResponse> handleMaterialConflict(MaterialAlreadyAttachedException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ErrorResponse.of("MATERIAL_ALREADY_ATTACHED", e.getMessage()));
     }
 
     /**

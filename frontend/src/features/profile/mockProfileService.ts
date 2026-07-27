@@ -50,7 +50,8 @@ export const mockProfileService = {
   async changePassword(request) {
     requireUser()
     if (request.currentPassword.toLowerCase() === 'wrong') {
-      throw new ApiError('현재 비밀번호가 일치하지 않습니다.', 400, 'CURRENT_PASSWORD_MISMATCH')
+      // 현재 비밀번호 불일치는 로그인 실패와 같은 계열(401) — 서버 계약과 코드까지 맞춘다(ADR-0031).
+      throw new ApiError('현재 비밀번호가 일치하지 않습니다.', 401, 'AUTH_PASSWORD_MISMATCH')
     }
     if (request.newPassword.length < 8) {
       throw new ApiError('새 비밀번호는 8자 이상이어야 합니다.', 400, 'NEW_PASSWORD_INVALID')

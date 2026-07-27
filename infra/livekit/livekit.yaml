@@ -3,6 +3,12 @@
 port: 7880
 keys:
   <API_KEY>: <API_SECRET>          # egress.yaml api_secret과 동일해야 함
+webhook:
+  # egress 완료(egress_ended) 등 이벤트를 Spring으로 POST한다 → 녹화 자산을 READY/FAILED로 확정(ADR-0034).
+  # 이 key의 secret으로 JWT를 서명하고, Spring이 같은 secret으로 검증한다(keys와 동일해야 함).
+  api_key: <API_KEY>
+  urls:
+    - https://jiphyeonjeon.thdwjdrl.com/api/webhooks/livekit   # app nginx가 /api를 backend로 프록시
 rtc:
   udp_port: 7882                   # 단일 UDP mux (라우터/보안그룹 포워딩 1개)
   tcp_port: 7881                   # UDP 막힌 클라 fallback

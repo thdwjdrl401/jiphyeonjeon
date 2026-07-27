@@ -14,6 +14,8 @@ import {
 } from '@/features/curriculum/curriculumManagementService'
 import type { CurriculumMaterial } from '@/features/curriculum/types'
 import InstructorEnrollmentRoster from '@/features/enrollment/InstructorEnrollmentRoster'
+import { ApiError } from '@/shared/api/client'
+import { isNotImplemented } from '@/shared/api/notImplemented'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
 import { InlineNotice, MetricCard, PageHeader, Panel, StatusBadge } from '@/shared/ui/WorkspaceUi'
@@ -87,6 +89,9 @@ function CurriculumManageEditor({
   const isNewDraft = storedCurriculum?.lifecycleStatus === 'DRAFT'
   const [tab, setTab] = useState<'structure' | 'info' | 'enrollees'>('structure')
   const [sections, setSections] = useState(initialSections)
+  // structureVersion을 로컬로 들고 저장 때마다 갱신한다 — 안 그러면 새로고침 없이 연속 저장 시
+  // 낡은 baseVersion을 보내 409로 실패한다(order PUT의 낙관적 동시성).
+  const [structureVersion, setStructureVersion] = useState(storedCurriculum.structureVersion)
   const [curriculumInfo, setCurriculumInfo] = useState({
     title: routeState?.draft?.title ?? storedCurriculum?.title ?? '',
     summary: routeState?.draft?.summary ?? storedCurriculum?.summary ?? '',
@@ -120,16 +125,30 @@ function CurriculumManageEditor({
     setSaveError('')
     setSaved(false)
     try {
-      await saveCurriculumManagement({
+      const result = await saveCurriculumManagement({
         curriculumId,
         info: curriculumInfo,
         sections,
         materials,
-        structureVersion: storedCurriculum.structureVersion,
+        structureVersion,
       })
+      // 새로 만든 섹션의 임시 id를 실제 id로 교체 — 안 하면 다음 저장에서 같은 섹션을 또 만든다.
+      if (Object.keys(result.sectionIdMap).length > 0) {
+        setSections((current) => current.map((section) =>
+          result.sectionIdMap[section.sectionId]
+            ? { ...section, sectionId: result.sectionIdMap[section.sectionId] }
+            : section))
+      }
+      setStructureVersion(result.structureVersion)   // 다음 저장 baseVersion 최신화
       setSaved(true)
-    } catch {
-      setSaveError('변경 내용을 저장하지 못했습니다.')
+    } catch (error) {
+      if (isNotImplemented(error)) {
+        setSaveError('아직 준비 중인 항목이 포함돼 저장하지 못했습니다.')
+      } else if (error instanceof ApiError && error.code === 'STRUCTURE_VERSION_CONFLICT') {
+        setSaveError('구조가 다른 곳에서 변경되었습니다. 새로고침한 뒤 다시 저장해 주세요.')
+      } else {
+        setSaveError('변경 내용을 저장하지 못했습니다.')
+      }
     }
   }
 

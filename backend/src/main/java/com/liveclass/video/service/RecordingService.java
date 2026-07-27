@@ -18,8 +18,8 @@ import java.util.UUID;
  * 라이브 녹화 생명주기 골격(songjeongki/0020). 세션 시작/종료 이벤트를 받아 Egress를 켜고 끄며
  * {@code video_asset} 상태기계를 전이한다. Egress 실패는 세션을 되돌리지 않는다(best-effort).
  *
- * <p>상태: REQUESTED → (egress 시작) RECORDING → (세션 종료) FINALIZING. FINALIZING→VERIFYING→READY는
- * Egress 완료 webhook으로 전이(후속). 시작 실패는 FAILED.
+ * <p>상태: REQUESTED → (egress 시작) RECORDING → (세션 종료) FINALIZING → (egress 완료 webhook)
+ * VERIFYING → (스토리지에 매니페스트 확인) READY / FAILED. 시작 실패는 FAILED.
  *
  * <p>live 모듈에 의존하지 않는다 — 이벤트 필드를 원시값으로 받는다(경계는 {@link RecordingEventListener}가 담당).
  */
@@ -28,15 +28,20 @@ public class RecordingService {
 
     private static final Logger log = LoggerFactory.getLogger(RecordingService.class);
 
+    /** Egress HLS 출력 객체 prefix 규약. 세그먼트는 {@code sessions/{id}/seg*}, VOD 매니페스트는 {@code sessions/{id}/index.m3u8}. */
+    private static final String SESSION_PREFIX = "sessions/";
+
     private final VideoAssetRepository videoAssetRepository;
     private final EgressControl egressControl;
     private final EgressProperties egressProperties;
+    private final RecordingStorage recordingStorage;
 
     public RecordingService(VideoAssetRepository videoAssetRepository, EgressControl egressControl,
-                            EgressProperties egressProperties) {
+                            EgressProperties egressProperties, RecordingStorage recordingStorage) {
         this.videoAssetRepository = videoAssetRepository;
         this.egressControl = egressControl;
         this.egressProperties = egressProperties;
+        this.recordingStorage = recordingStorage;
     }
 
     /**
@@ -59,7 +64,7 @@ public class RecordingService {
         videoAssetRepository.save(asset);
 
         try {
-            String egressId = egressControl.startHlsRecording(roomName, "sessions/" + sessionId);
+            String egressId = egressControl.startHlsRecording(roomName, objectPrefix(sessionId));
             asset.setEgressId(egressId);
             asset.setStatus(VideoAssetStatus.RECORDING);
             asset.setRecordingStartedAt(OffsetDateTime.now());
@@ -96,5 +101,98 @@ public class RecordingService {
                 log.warn("녹화 중지 실패(무시) session={} egressId={}: {}", sessionId, asset.getEgressId(), e.getMessage());
             }
         }
+    }
+
+    /**
+     * Egress 완료/실패 webhook을 반영해 자산을 확정한다(ADR-0034). 재생과는 무관한 뒷정리 —
+     * 목록·썸네일 표시(duration/size)와 실패 감지를 위한 것이다.
+     *
+     * <p>멱등: 같은 완료 신호가 여러 번 와도 안전하다. 이미 READY/FAILED면 무시한다. 모르는 egressId도
+     * 조용히 무시한다(우리 자산이 아님 — 잘못된 실패 표시를 만들지 않는다).
+     *
+     * <p>완료 신호는 곧바로 READY가 아니라 <b>VERIFYING</b>을 거친다 — 스토리지에 VOD 매니페스트가
+     * 실제로 있는지 HEAD로 재확인한다. "COMPLETE인데 파일이 없는" 케이스를 잡기 위함이다.
+     *
+     * @param success        EGRESS_COMPLETE면 true, 실패/중단이면 false
+     * @param durationMs     녹화 길이(ms). 없으면 유지
+     * @param sizeBytes      총 크기(bytes). 없으면 유지
+     * @param segmentCount   세그먼트 수. 없으면 유지
+     * @param failureCode    실패 코드(실패일 때)
+     */
+    @Transactional
+    public void completeFromWebhook(String egressId, boolean success,
+                                    Long durationMs, Long sizeBytes, Integer segmentCount, String failureCode) {
+        VideoAsset asset = videoAssetRepository.findByEgressId(egressId).orElse(null);
+        if (asset == null) {
+            log.debug("모르는 egress webhook 무시 egressId={}", egressId);
+            return;
+        }
+        if (asset.getStatus() == VideoAssetStatus.READY || asset.getStatus() == VideoAssetStatus.FAILED) {
+            return;   // 이미 확정 — 멱등
+        }
+        if (success) {
+            verifyAndFinalize(asset, egressId, durationMs, sizeBytes, segmentCount);
+        } else {
+            asset.setStatus(VideoAssetStatus.FAILED);
+            asset.setFailureCode(failureCode != null ? failureCode : "EGRESS_FAILED");
+            log.warn("녹화 실패 감지 egressId={} code={}", egressId, asset.getFailureCode());
+        }
+    }
+
+    /**
+     * VERIFYING: 스토리지에 VOD 매니페스트가 실제로 있는지 확인한 뒤 READY로 확정한다(ADR-0034).
+     * <ul>
+     *   <li><b>존재</b> → READY + 메타데이터.
+     *   <li><b>부재 확정(404)</b> → FAILED({@code MANIFEST_MISSING}). webhook은 COMPLETE라는데 파일이 없다.
+     *   <li><b>확인 불가</b>(네트워크·설정 등 예외) → READY로 진행(fail-open). 검증기가 새로운 실패원인이
+     *       되지 않도록, webhook의 COMPLETE를 신뢰한다.
+     * </ul>
+     */
+    private void verifyAndFinalize(VideoAsset asset, String egressId,
+                                   Long durationMs, Long sizeBytes, Integer segmentCount) {
+        asset.setStatus(VideoAssetStatus.VERIFYING);
+        String manifestKey = manifestKey(asset.getLiveSessionId());
+        boolean present;
+        try {
+            present = recordingStorage.head(asset.getBucket(), manifestKey).isPresent();
+        } catch (RuntimeException e) {
+            log.warn("매니페스트 검증 불가 — COMPLETE 신뢰해 READY 유지(fail-open) egressId={} key={}: {}",
+                    egressId, manifestKey, e.getMessage());
+            markReady(asset, egressId, durationMs, sizeBytes, segmentCount);
+            return;
+        }
+        if (!present) {
+            asset.setStatus(VideoAssetStatus.FAILED);
+            asset.setFailureCode("MANIFEST_MISSING");
+            log.warn("egress COMPLETE인데 매니페스트 부재 → FAILED egressId={} key={}", egressId, manifestKey);
+            return;
+        }
+        markReady(asset, egressId, durationMs, sizeBytes, segmentCount);
+    }
+
+    private void markReady(VideoAsset asset, String egressId,
+                           Long durationMs, Long sizeBytes, Integer segmentCount) {
+        asset.setStatus(VideoAssetStatus.READY);
+        asset.setReadyAt(OffsetDateTime.now());
+        if (durationMs != null) {
+            asset.setDurationMs(durationMs);
+        }
+        if (sizeBytes != null) {
+            asset.setSizeBytes(sizeBytes);
+        }
+        if (segmentCount != null) {
+            asset.setSegmentCount(segmentCount);
+        }
+        log.info("녹화 완료 확정 egressId={} durationMs={} size={}", egressId, durationMs, sizeBytes);
+    }
+
+    /** Egress HLS 출력 객체 prefix — {@link #startRecording}와 {@link #manifestKey}가 공유하는 규약. */
+    private String objectPrefix(UUID sessionId) {
+        return SESSION_PREFIX + sessionId;
+    }
+
+    /** VOD 매니페스트 키 = {@code sessions/{sessionId}/index.m3u8}. Egress가 세그먼트 디렉토리에 playlist를 쓴다. */
+    private String manifestKey(UUID sessionId) {
+        return objectPrefix(sessionId) + "/" + egressProperties.playlistName();
     }
 }
