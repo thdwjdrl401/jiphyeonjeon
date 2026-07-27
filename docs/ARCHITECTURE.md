@@ -36,7 +36,7 @@
 | 캐시·세션 | Redis 7 | ✅ | [0014](decisions/songjeongki/0014-auth-redis-session-cookie.md) |
 | 실시간 채널 | STOMP over WebSocket | ✅ | [0019](decisions/songjeongki/0019-ws-realtime-chat-stomp.md) |
 | 오브젝트 스토리지 | MinIO(S3 호환) + presigned direct upload | ✅ | [0023](decisions/songjeongki/0023-asset-presigned-upload.md) |
-| 미디어 | LiveKit self-host(SFU) + Egress(녹화→HLS) | 🟡 서버 상시가동·토큰·Egress 제어·VOD 재생 API ✅ / 라이브 엣지 재생 ⬜ | [0004](decisions/songjeongki/0004-media-livekit-selfhost.md)·[0020](decisions/songjeongki/0020-egress-recording-lifecycle.md)·[0039](decisions/songjeongki/0039-replay-playback-api.md) |
+| 미디어 | LiveKit self-host(SFU) + Egress(녹화→HLS) | 🟡 서버 상시가동·토큰·Egress 제어·라이브 엣지/되감기·VOD 재생 API ✅ / FE HLS 플레이어 ⬜ | [0004](decisions/songjeongki/0004-media-livekit-selfhost.md)·[0020](decisions/songjeongki/0020-egress-recording-lifecycle.md)·[0039](decisions/songjeongki/0039-replay-playback-api.md)·[choinhoo/0001](decisions/choinhoo/0001-live-replay-playback-api.md) |
 | 라이브 STT | realtime-agent (Python, LiveKit Agents) | ⬜ CP2 | [0011](decisions/songjeongki/0011-ai-three-services.md)·[0013](decisions/songjeongki/0013-unified-streaming-stt.md) |
 | RAG API | ai-api (FastAPI, SSE) | ⬜ CP3 | [0011](decisions/songjeongki/0011-ai-three-services.md) |
 | 배치 파이프라인 | ai-worker + RabbitMQ | ⬜ CP3 | [0011](decisions/songjeongki/0011-ai-three-services.md)·[0012](decisions/songjeongki/0012-hybrid-queue.md) |
@@ -257,8 +257,8 @@ flowchart LR
   RP --> DONE["교정 자막 · 용어 호버 · 저장 컨텍스트 Q&A"]
 ```
 
-**지금 되는 것**: 세션 종료 이벤트로 Egress를 제어하고, `VideoAsset`이 녹화 수명주기를 추적하며, 카탈로그가 "다시보기 있음"을 표시한다. **재생 API**(`GET /lessons/{id}/playback`, [ADR-0039](decisions/songjeongki/0039-replay-playback-api.md))가 권한 검증 + presigned manifest 재작성 + 시간축 오프셋을 반환하고, **게시 전환**(`POST .../replay-review/publish`)으로 강사가 검수 후 공개한다.
-**남은 것**: FE HLS.js 플레이어 연동, 자막·용어·RAG 재생(CP2·CP3 산출물 의존), 검수 데이터 저장([0039](decisions/songjeongki/0039-replay-playback-api.md) §5 범위 제외 근거).
+**지금 되는 것**: 세션 시작·종료 이벤트로 Egress를 제어하고, `VideoAsset`이 녹화 수명주기를 추적하며, 카탈로그가 "다시보기 있음"을 표시한다. **재생 metadata API**(`GET /lessons/{id}/playback`)가 라이브 recent/dvr와 종료 후 VOD source·시간축을 반환하고, **manifest API**(`GET .../playback/manifest?source=...`)가 권한을 재검증한 뒤 세그먼트 URI를 presigned로 재작성한다([ADR-0039](decisions/songjeongki/0039-replay-playback-api.md), [ADR-0001](decisions/choinhoo/0001-live-replay-playback-api.md)). **게시·철회**(`POST .../replay-review/publish`, `POST .../replay-review/withdraw`)로 강사가 종료 VOD 공개 상태를 관리한다.
+**남은 것**: FE HLS.js 플레이어 연동, recent→dvr 전환 UX, 실제 Egress 지연 실측, 자막·용어·RAG 재생(CP2·CP3 산출물 의존), 검수 데이터 저장([0039](decisions/songjeongki/0039-replay-playback-api.md) §5 범위 제외 근거).
 
 다시보기는 라이브 때 만든 산출물을 **그대로 재생**한다. 지평선 뒤라 이미 교정이 끝난 상태이고, 세션 상대 ms 좌표로 HLS와 자막을 자동 정렬한다.
 
@@ -384,7 +384,7 @@ STOMP 브로커가 인메모리 SimpleBroker라 **브로드캐스트가 인스�
 
 ### 9-8. ✅ 다시보기 재생 인증 — presigned 방식으로 구현됨
 이전 판은 "seam 3개(재생 URL 발급 · nginx · PlaybackTokenService)"라고 적었지만, 실제로는 **셋 다 존재하지 않고**, 현재 nginx는 SPA·API 프록시 전용이라 HLS 서빙 경로 자체가 없었다.
-→ **구현 완료(2026-07-26, [ADR-0039](decisions/songjeongki/0039-replay-playback-api.md))**: nginx secure_link 대신 이미 쓰던 **presigned 방식으로 통일**했다. `GET /api/lessons/{id}/playback`이 권한을 검증하고(`video.api.LessonPlaybackAccess` SPI, curriculum 구현 — 소유 강사는 항상, 학생은 활성 수강 + PUBLISHED만) **manifest를 Spring이 읽어 세그먼트 URL을 presigned로 재작성**해 응답에 인라인으로 싣는다. manifest는 수 KB라 원칙 4(바이트는 Spring을 통과하지 않음)를 유지하면서 세그먼트는 스토리지 직결이다. S3로 옮겨도 그대로 동작한다.
+→ **구현 완료(2026-07-27, [ADR-0039](decisions/songjeongki/0039-replay-playback-api.md), [ADR-0001](decisions/choinhoo/0001-live-replay-playback-api.md))**: nginx secure_link 대신 **presigned 방식으로 통일**했다. `GET /api/lessons/{id}/playback`은 권한을 검증하고 recent/dvr metadata만 반환한다. 각 source가 가리키는 `GET .../playback/manifest?source=...`가 권한을 다시 검증해 manifest의 일반 URI와 MAP/KEY URI를 presigned URL로 재작성한다. 소유 강사는 항상, 학생은 활성 수강·게시 레슨이 필수다. 학생은 라이브 중 replay 게시 상태와 무관하게 시청하고 종료 후에는 PUBLISHED만 본다. manifest 수 KB만 Spring을 통과하고 세그먼트는 스토리지 직결이므로 원칙 4를 유지하며 S3로 옮겨도 그대로 동작한다.
 
 ### 9-9. ✅ 다시보기 시간축 변환 — 온디맨드 계산으로 구현됨
 자막 싱크는 전송 경로가 아니라 **공통 좌표계** 문제다. 세그먼트는 스토리지에서 직접 받고 자막은 Spring이 내려주므로, 둘을 맞추려면 *재생 위치 → 세션 상대 ms* 변환이 필요하다.
@@ -403,7 +403,7 @@ session_offset_ms = index.m3u8 의 첫 PROGRAM-DATE-TIME − live_session.starte
 
 > ⚠️ **`video_asset.recording_started_at`을 앵커로 쓰면 안 된다.** 지금 값은 `StartEgress` 호출 시각(`RecordingService`)이라, Chrome 기동·페이지 로드·방 접속 지연이 통째로 오차가 된다 — `infra/livekit/README.md` 트러블슈팅에 20초까지 걸린 사례가 있다.
 
-**구현 완료(2026-07-26, [ADR-0039](decisions/songjeongki/0039-replay-playback-api.md))** — 앵커를 별도 컬럼에 저장하는 대신, 재생 요청마다 **온디맨드로 계산**한다. `GET /lessons/{id}/playback`이 세그먼트 재작성을 위해 어차피 매니페스트 텍스트를 읽으므로, 같은 텍스트에서 첫 PDT를 파싱해 `live_session.started_at`(`recording_started_at`이 아니다)과의 차이를 `sessionOffsetMs`로 응답에 싣는다. `video_asset.session_offset_ms` 컬럼은 유지하되 쓰지 않는다 — webhook·재생 두 곳에 저장 로직을 나누면 드리프트 위험만 생기고, 매번 계산해도 비용은 정규식 스캔 한 번이다. PDT가 없거나 세션 시작시각을 못 구하면 `null`로 degrade(에러 아님). 재생목록은 **첫 세그먼트가 닫히는 즉시**(세그먼트 2초 설정) 업로드되므로 녹화 종료를 기다릴 필요가 없다.
+**구현 완료(2026-07-27, [ADR-0039](decisions/songjeongki/0039-replay-playback-api.md), [ADR-0001](decisions/choinhoo/0001-live-replay-playback-api.md))** — 앵커를 별도 컬럼에 저장하는 대신, metadata 요청마다 **온디맨드로 계산**한다. `GET /lessons/{id}/playback`이 recent/dvr 범위를 계산하려고 읽은 매니페스트에서 첫 PDT를 파싱해 `live_session.started_at`(`recording_started_at`이 아니다)과의 차이를 `sessionOffsetMs`로 응답에 싣는다. `video_asset.session_offset_ms` 컬럼은 유지하되 쓰지 않는다. PDT가 없으면 `null`로 degrade하고 EXTINF 합계로 재생 가능 범위를 계산한다. 재생목록은 **첫 세그먼트가 닫히는 즉시**(세그먼트 2초 설정) 업로드되므로 녹화 종료를 기다릴 필요가 없다.
 
 **남은 위험 — 파이프라인 stall(미검증).** 미디어 타임라인이 벽시계 대비 멈추면 그만큼 자막이 누적해서 어긋나는데, `DISCONTINUITY` 태그가 없어 **사후 탐지 수단이 없다.** 반면 egress 재시작은 위험하지 않다 — 파일 접두사에 `{retry}` 치환자가 없어 재시도 자체가 거부되므로, 같은 재생목록에 두 번째 타임라인이 몰래 이어붙지 않는다(뒤가 잘릴 뿐 오프셋은 유효).
 

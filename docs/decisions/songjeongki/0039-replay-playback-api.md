@@ -6,6 +6,11 @@
 - **일자**: 2026-07-26
 - **관련**: [0032](0032-media-playback-hls-only.md)(HLS 단일 재생), [0034](0034-egress-completion-webhook.md)(egress webhook·VERIFYING), [0020](0020-egress-recording-lifecycle.md)(녹화 생명주기), [0033](0033-learning-progress-wiring.md)(학습 접근 SPI 패턴) · ARCHITECTURE §9-8·§9-9, Jira liveclass-100
 
+> **2026-07-27 부분 대체**: 라이브 `recent`/`dvr` 재생과 별도 manifest 엔드포인트,
+> 라이브 접근·VOD 게시 상태 분리는 [choinhoo/0001](../choinhoo/0001-live-replay-playback-api.md)이
+> 이 ADR의 `READY` 전면 게이트와 인라인 manifest 응답을 대체한다. 권한 SPI, presigned 세그먼트,
+> PDT 온디맨드 계산, 검수 후 게시 결정은 계속 유효하다.
+
 ## 맥락
 
 [ARCHITECTURE §9-8](../../ARCHITECTURE.md)은 재생 인증을 presigned 방식으로 통일할 것을 제안만 해 뒀고(`GET /api/lessons/{id}/playback`이 권한 검증 + manifest presigned 재작성), §9-9는 시간축 변환 규칙(첫 PDT를 앵커로 오프셋 하나)을 확정만 해 뒀다. 실제 엔드포인트·서비스는 존재하지 않았다 — `ReplayView`가 `durationMs`만 내려주고, `video_asset.hls_manifest_key`·`session_offset_ms` 컬럼은 있지만 아무도 채우지 않았다.
