@@ -15,6 +15,7 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:8080/',
         changeOrigin: true,
+        ws: true,
       },
     },
   },
@@ -27,6 +28,29 @@ export default defineConfig({
         manualChunks(id) {
           if (!id.includes('node_modules')) {
             return undefined
+          }
+          const normalizedId = id.replace(/\\/g, '/')
+          if (
+            normalizedId.includes('/node_modules/livekit-client/')
+            || normalizedId.includes('/node_modules/@livekit/')
+            || normalizedId.includes('/node_modules/@bufbuild/protobuf/')
+            || normalizedId.includes('/node_modules/webrtc-adapter/')
+            || normalizedId.includes('/node_modules/sdp-transform/')
+            || normalizedId.includes('/node_modules/sdp/')
+            || normalizedId.includes('/node_modules/jose/')
+            || normalizedId.includes('/node_modules/loglevel/')
+            || normalizedId.includes('/node_modules/events/')
+            || normalizedId.includes('/node_modules/typed-emitter/')
+          ) {
+            return 'livekit-vendor'
+          }
+          if (
+            normalizedId.includes('/node_modules/@vidstack/')
+            || normalizedId.includes('/node_modules/hls.js/')
+            || normalizedId.includes('/node_modules/media-captions/')
+            || normalizedId.includes('/node_modules/@floating-ui/')
+          ) {
+            return 'vidstack-vendor'
           }
           if (id.includes('react') || id.includes('react-router')) {
             return 'react-vendor'

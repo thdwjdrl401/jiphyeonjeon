@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from typing import Protocol
 
-from app.domain import ChunkRecord, StagedMaterial
+from app.domain import ChunkRecord, ExistingIndexVersion, StagedMaterial
 
 
 class MaterialAssetStore(Protocol):
@@ -22,6 +22,8 @@ class TextEmbeddingModel(Protocol):
 
 
 class IndexStorage(Protocol):
+    async def find_existing(self, material: StagedMaterial) -> ExistingIndexVersion | None: ...
+
     async def stage(self, material: StagedMaterial, chunks: Sequence[ChunkRecord]) -> int: ...
 
     async def activate(self, material: StagedMaterial, version_id: int) -> None: ...

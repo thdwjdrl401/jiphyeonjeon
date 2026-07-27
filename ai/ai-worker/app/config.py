@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     management_port: int = Field(default=8011, ge=1, le=65535)
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     database_url: SecretStr
+    material_ingestion_enabled: bool = False
+    rabbitmq_url: SecretStr | None = Field(default=None, min_length=1)
+    rabbitmq_retry_limit: int = Field(default=3, ge=0, le=10)
+    rabbitmq_retry_base_delay_seconds: float = Field(default=5.0, ge=0, le=60)
+    rabbitmq_shutdown_grace_seconds: float = Field(default=30.0, gt=0, le=600)
     tenant_id: str = Field(default="liveclass", min_length=1, max_length=128)
     spring_internal_base_url: str = "http://127.0.0.1:8080"
     spring_hmac_secret: SecretStr | None = Field(
@@ -52,6 +57,26 @@ class Settings(BaseSettings):
     @classmethod
     def validate_database_url(cls, value: SecretStr) -> SecretStr:
         parse_async_database_url(value.get_secret_value())
+        return value
+
+    @field_validator("rabbitmq_url")
+    @classmethod
+    def validate_rabbitmq_url(cls, value: SecretStr | None) -> SecretStr | None:
+        if value is None:
+            return None
+        revealed = value.get_secret_value()
+        parsed = urlsplit(revealed)
+        if (
+            revealed != revealed.strip()
+            or parsed.scheme not in {"amqp", "amqps"}
+            or not parsed.hostname
+            or parsed.fragment
+        ):
+            raise ValueError("rabbitmq_url must be an unpadded AMQP URL")
+        try:
+            parsed.port
+        except ValueError as exc:
+            raise ValueError("rabbitmq_url contains an invalid port") from exc
         return value
 
     @field_validator("tenant_id")

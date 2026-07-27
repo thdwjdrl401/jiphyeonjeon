@@ -29,9 +29,10 @@ import type {
 export const MOCK_STUDENT_ID = 'usr-student-01'
 export const MOCK_INSTRUCTOR_ID = 'usr-instructor-01'
 
-// 게시/게시취소로 바뀐 레슨 상태를 세션 동안 기억한다. seed는 매 조회마다 다시
-// 만들어지므로(buildMockCurriculumOutline) seed를 직접 고치지 않고 이 덮어쓰기 맵을 우선한다.
-const lessonStatusOverrides = new Map<string, LessonStatus>()
+// 강사가 삭제한 강의/섹션 ID를 세션 동안 기억한다. 목차는 매 조회마다 seed에서 다시
+// 만들어지므로(buildMockCurriculumOutline) 이 집합으로 삭제분을 걸러낸다.
+const deletedLessonIds = new Set<string>()
+const deletedSectionIds = new Set<string>()
 
 export interface MockCurriculumEntity {
   curriculumId: string
@@ -216,7 +217,8 @@ const springSectionSeeds: MockSectionSeed[] = [
 
 export function resetMockDatabase() {
   resetMockEnrollmentStore()
-  lessonStatusOverrides.clear()
+  deletedLessonIds.clear()
+  deletedSectionIds.clear()
   mockCurriculumEntities.splice(initialCurriculumCount)
   for (const curriculum of mockCurriculumEntities) {
     curriculum.materials = initialCurriculumMaterials.get(curriculum.curriculumId)?.map((material) => ({ ...material })) ?? []
@@ -337,7 +339,7 @@ function buildLessonAvailability(
 export function buildMockCurriculumOutline(curriculum: MockCurriculumEntity): CurriculumOutlineSection[] {
   const lessonsPerSection = Math.ceil(curriculum.lessonCount / curriculum.sectionCount)
   let lessonOrder = 0
-  return Array.from({ length: curriculum.sectionCount }, (_, sectionIndex) => {
+  const sections = Array.from({ length: curriculum.sectionCount }, (_, sectionIndex) => {
     const seed = curriculum.curriculumId === 'cur-spring-live' ? springSectionSeeds[sectionIndex] : undefined
     const sectionLessonCount = Math.min(lessonsPerSection, curriculum.lessonCount - sectionIndex * lessonsPerSection)
     const lessons = Array.from({ length: Math.max(sectionLessonCount, 0) }, (_, lessonIndex): CurriculumOutlineLesson => {
@@ -358,7 +360,7 @@ export function buildMockCurriculumOutline(curriculum: MockCurriculumEntity): Cu
         access: { allowed: false, destination: null, reasonCode: 'ENROLLMENT_REQUIRED' },
         learning: null,
       }
-    })
+    }).filter((lesson) => !deletedLessonIds.has(lesson.lessonId))
     return {
       sectionId: seed ? `sec-${sectionIndex === 0 ? 'foundation' : 'security'}` : `${curriculum.curriculumId}-section-${sectionIndex + 1}`,
       title: seed?.title ?? `${sectionIndex + 1}. 섹션 ${sectionIndex + 1}`,
@@ -367,6 +369,7 @@ export function buildMockCurriculumOutline(curriculum: MockCurriculumEntity): Cu
       lessons,
     }
   })
+  return sections.filter((section) => !deletedSectionIds.has(section.sectionId))
 }
 
 export function resolveMockLessonDestination(lesson: CurriculumOutlineLesson): LessonAccessDestination {
@@ -441,14 +444,22 @@ export function findMockLesson(lessonId: string) {
   return null
 }
 
-// 강사의 레슨 게시/게시취소를 mock 상태에 반영한다. 존재하지 않는 레슨은 실제 서버와
-// 같은 404 계약으로 거절한다.
-export function setMockLessonStatus(lessonId: string, status: LessonStatus) {
+// 강사의 강의/섹션 삭제를 mock 상태에 반영한다. 존재하지 않으면 실제 서버와 같은 404로 거절한다.
+export function deleteMockLesson(lessonId: string) {
   if (!findMockLesson(lessonId)) {
     throw new ApiError('강의를 찾을 수 없습니다.', 404, 'LESSON_NOT_FOUND')
   }
-  lessonStatusOverrides.set(lessonId, status)
-  return { lessonId, status }
+  deletedLessonIds.add(lessonId)
+}
+
+export function deleteMockSection(sectionId: string) {
+  const exists = mockCurriculumEntities.some((curriculum) =>
+    buildMockCurriculumOutline(curriculum).some((section) => section.sectionId === sectionId),
+  )
+  if (!exists) {
+    throw new ApiError('섹션을 찾을 수 없습니다.', 404, 'SECTION_NOT_FOUND')
+  }
+  deletedSectionIds.add(sectionId)
 }
 
 export function findMockLiveSession(sessionId: string) {

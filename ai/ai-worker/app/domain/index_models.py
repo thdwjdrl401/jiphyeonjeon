@@ -45,6 +45,16 @@ class ChunkRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class ExistingIndexVersion:
+    version_id: int
+    activation_required: bool
+
+    def __post_init__(self) -> None:
+        if self.version_id < 1:
+            raise ValueError("version_id must be positive")
+
+
+@dataclass(frozen=True, slots=True)
 class StagedMaterial:
     job_id: str
     idempotency_key: str

@@ -4,18 +4,22 @@ from dataclasses import dataclass
 
 from httpx import AsyncClient
 from pydantic import SecretStr
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from app.adapters.pgvector_index import PgvectorIndexRepository
+from app.adapters.rabbitmq_material_consumer import RabbitMaterialConsumer
 from app.adapters.remote_bge_embedding import RemoteBgeM3EmbeddingModel
 from app.adapters.spring_hmac import SpringHmacSigner
 from app.adapters.spring_material_asset_store import SpringPresignedPptxAssetStore
 from app.adapters.spring_material_callback import SpringMaterialCallbackClient
 from app.application import IndexPptxMaterial, map_pptx_embed_job
 from app.config import Settings
+from app.consumers import MaterialJobHandler
 from app.contracts import PptxEmbedJob
 from app.domain import StagedMaterial
 from app.ingestion import PptxValidationLimits
+from app.runtime import WorkerRuntime, WorkerState
 
 
 class PptxRuntimeConfigurationError(RuntimeError):
@@ -41,6 +45,10 @@ class PptxIngestionRuntime:
             model_revision=self.model_revision,
             chunk_max_chars=self.chunk_max_chars,
         )
+
+    async def database_ready(self) -> bool:
+        async with self._database_engine.connect() as connection:
+            return (await connection.scalar(text("SELECT 1"))) == 1
 
     async def aclose(self) -> None:
         if self._closed:
@@ -111,6 +119,29 @@ def build_pptx_ingestion_runtime(settings: Settings) -> PptxIngestionRuntime:
         _spring_client=spring_client,
         _embedding_client=embedding_client,
         _database_engine=database_engine,
+    )
+
+
+def build_worker_runtime(settings: Settings, state: WorkerState) -> WorkerRuntime:
+    if not settings.material_ingestion_enabled:
+        return WorkerRuntime(state)
+
+    rabbitmq_url = _required_secret(settings.rabbitmq_url, "AI_WORKER_RABBITMQ_URL")
+    ingestion_runtime = build_pptx_ingestion_runtime(settings)
+    handler = MaterialJobHandler(ingestion_runtime)
+    consumer = RabbitMaterialConsumer(
+        rabbitmq_url,
+        handler,
+        retry_limit=settings.rabbitmq_retry_limit,
+        retry_base_delay_seconds=settings.rabbitmq_retry_base_delay_seconds,
+        shutdown_grace_seconds=settings.rabbitmq_shutdown_grace_seconds,
+        readiness_check=ingestion_runtime.database_ready,
+        on_ready=lambda ready: setattr(state, "ready", ready),
+    )
+    return WorkerRuntime(
+        state,
+        runner=consumer,
+        close=ingestion_runtime.aclose,
     )
 
 

@@ -7,7 +7,8 @@ import uvicorn
 from app.config import Settings, load_settings
 from app.logging_config import configure_logging
 from app.management import create_management_app
-from app.runtime import WorkerRuntime, WorkerState
+from app.runtime import WorkerState
+from app.wiring import build_worker_runtime
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ async def run_worker(settings: Settings) -> None:
     stop_event = asyncio.Event()
     loop = asyncio.get_running_loop()
     state = WorkerState()
-    runtime = WorkerRuntime(state)
+    runtime = build_worker_runtime(settings, state)
     management_app = create_management_app(state)
     server = uvicorn.Server(
         uvicorn.Config(

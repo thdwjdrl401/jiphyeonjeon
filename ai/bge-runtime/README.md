@@ -2,8 +2,8 @@
 
 `bge-runtime`은 BGE-M3 dense embedding만 제공하는 AI 내부 GPU HTTP 서비스다. PostgreSQL,
 Redis, RabbitMQ, MinIO와 Java/Spring credential을 갖지 않으며 입력 text나 embedding 값을 로그에
-남기지 않는다. 이번 단계는 독립 runtime과 그 내부 HTTP 경계까지만 제공하고 caller wiring과
-Docker/Compose 배치는 포함하지 않는다.
+남기지 않는다. ai-worker가 이 내부 HTTP 경계를 호출하며 서비스 단독 Docker image와 opt-in local
+Compose profile을 제공한다.
 
 ## 현재 경계
 
@@ -58,7 +58,7 @@ Content-Type: application/json
 - 빈 text, text 길이 초과, schema 오류: `422`
 - active+queued 요청 상한 초과: `429` + `Retry-After: 1`
 
-이 API는 향후 `ai-api`/`ai-worker`가 사용할 Python 서비스 간 내부 경계다. 아직 caller가 없으며
+이 API는 `ai-worker`와 향후 `ai-api`가 사용할 Python 서비스 간 내부 경계다. Java/FE가 직접 호출하지 않으며
 Java/FE 공유 계약인 `docs/CONTRACT.md` 대상이 아니다.
 
 ## 설정
@@ -98,6 +98,14 @@ uv run --frozen --extra cuda python scripts/smoke_cuda.py --offline
 실제 모델 smoke에서는 full revision, 1024차원·유한값·unit norm·입력 순서와 cold/warm latency,
 CUDA peak allocated/reserved를 기록한다. 스크립트는 입력 원문과 vector를 출력하지 않는다.
 `--offline`은 pinned revision이 로컬 Hugging Face cache에 없으면 다운로드하지 않고 실패한다.
+
+Docker image는 `Dockerfile`로 빌드한다. GPU container 실행에는 NVIDIA Container Toolkit과 Compose의
+GPU 지원이 필요하며, 로컬 격리 스택은 `--profile gpu`일 때만 이 무거운 runtime을 올린다. 전체 실행 순서는
+[material ingestion E2E runbook](../../docs/decisions/canola/0021-material-ingestion-e2e-runbook.md)에 둔다.
+
+```bash
+docker compose -f docker-compose.material-ingestion.yml --profile gpu up -d bge-runtime
+```
 BGE와 Nemotron을 6 GB GPU에 동시에 상주시킬 수 있다는 보장은 별도 동시 실행 검증 전에는 하지
 않는다.
 

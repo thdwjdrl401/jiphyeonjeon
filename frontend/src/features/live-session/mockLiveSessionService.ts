@@ -4,6 +4,7 @@ import type { LiveSessionService } from './liveSessionService.interface'
 
 const liveStatusOverrides = new Map<string, CurriculumLiveSessionStatus>()
 const bookmarksByLesson = new Map<string, number[]>()
+const mockLivePlaybackUrl = 'https://files.vidstack.io/sprite-fight/hls/stream.m3u8'
 
 export const mockLiveSessionService = {
   async getLiveSession(sessionId) {
@@ -14,6 +15,15 @@ export const mockLiveSessionService = {
       status,
       participants: status === 'LIVE' ? Math.max(session.participants, 1) : 0,
       entryWindowMinutes: 10,
+    }
+  },
+  async getLivePlayback(sessionId) {
+    return {
+      sessionId,
+      playbackUrl: mockLivePlaybackUrl,
+      mimeType: 'application/vnd.apple.mpegurl' as const,
+      streamType: 'LIVE_DVR' as const,
+      sessionOffsetMs: 0,
     }
   },
   async getPreflightChecks() {
@@ -47,6 +57,10 @@ export const mockLiveSessionService = {
   },
   async sendChatMessage(_sessionId, text, question) {
     return { id: `msg_${Date.now()}`, alias: '나', text, time: '현재', question }
+  },
+  subscribeChatMessages(_sessionId, _onMessage, onConnectionChange) {
+    onConnectionChange('connected')
+    return () => onConnectionChange('disconnected')
   },
   async getCaptions() {
     return demoLiveCaptions

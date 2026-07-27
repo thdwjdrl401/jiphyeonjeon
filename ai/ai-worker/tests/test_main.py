@@ -71,7 +71,11 @@ async def test_runtime_failure_stops_management_server(monkeypatch) -> None:
                 self.state.ready = False
 
     FakeServer.instances.clear()
-    monkeypatch.setattr(main, "WorkerRuntime", FailingRuntime)
+    monkeypatch.setattr(
+        main,
+        "build_worker_runtime",
+        lambda _settings, state: FailingRuntime(state),
+    )
     monkeypatch.setattr(main.uvicorn, "Server", FakeServer)
 
     with pytest.raises(RuntimeError, match="runtime failed"):
@@ -92,12 +96,12 @@ async def test_management_server_failure_stops_runtime(monkeypatch) -> None:
             finally:
                 self.stopped.set()
 
-    def create_runtime(state):
+    def create_runtime(_settings, state):
         states.append(state)
         return WorkerRuntime(state)
 
     FailingServer.instances.clear()
-    monkeypatch.setattr(main, "WorkerRuntime", create_runtime)
+    monkeypatch.setattr(main, "build_worker_runtime", create_runtime)
     monkeypatch.setattr(main.uvicorn, "Server", FailingServer)
 
     with pytest.raises(RuntimeError, match="management server failed"):
@@ -110,12 +114,12 @@ async def test_management_server_failure_stops_runtime(monkeypatch) -> None:
 async def test_cancellation_cleans_up_runtime_and_management_server(monkeypatch) -> None:
     states = []
 
-    def create_runtime(state):
+    def create_runtime(_settings, state):
         states.append(state)
         return WorkerRuntime(state)
 
     FakeServer.instances.clear()
-    monkeypatch.setattr(main, "WorkerRuntime", create_runtime)
+    monkeypatch.setattr(main, "build_worker_runtime", create_runtime)
     monkeypatch.setattr(main.uvicorn, "Server", FakeServer)
 
     task = asyncio.create_task(main.run_worker(settings()))

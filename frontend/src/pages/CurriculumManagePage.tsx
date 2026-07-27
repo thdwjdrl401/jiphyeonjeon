@@ -5,6 +5,8 @@ import { instructorPaths, publicPaths } from '@/app/router/paths'
 import CurriculumImageField, { type CurriculumImageSelection } from '@/features/curriculum/CurriculumImageField'
 import CurriculumMaterialField from '@/features/curriculum/CurriculumMaterialField'
 import {
+  deleteLesson,
+  deleteSection,
   getCurriculumManagementStructure,
   getInstructorCurriculum,
   publishCurriculum,
@@ -18,6 +20,7 @@ import { ApiError } from '@/shared/api/client'
 import { isNotImplemented } from '@/shared/api/notImplemented'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
+import { useToast } from '@/shared/ui/Toast'
 import { InlineNotice, MetricCard, PageHeader, Panel, StatusBadge } from '@/shared/ui/WorkspaceUi'
 
 interface CurriculumDraftState {
@@ -101,6 +104,7 @@ function CurriculumManageEditor({
   const [materials, setMaterials] = useState<CurriculumMaterial[]>(routeState?.draft?.materials ?? storedCurriculum.materials)
   const [autosave, setAutosave] = useState<'idle' | 'saving' | 'saved' | 'error'>(routeState?.created ? 'saved' : 'idle')
   const [saveError, setSaveError] = useState('')
+  const toast = useToast()
   const [draggedLesson, setDraggedLesson] = useState<DraggedLesson | null>(null)
   const [lessonDropTarget, setLessonDropTarget] = useState<LessonDropTarget | null>(null)
 
@@ -242,6 +246,36 @@ function CurriculumManageEditor({
     ])
   }
 
+  const removeLesson = async (sectionId: string, lessonId: string) => {
+    if (!window.confirm('이 강의를 삭제할까요? 되돌릴 수 없습니다.')) return
+    try {
+      await deleteLesson(lessonId)
+      setSections((current) => current.map((section) => section.sectionId === sectionId
+        ? { ...section, lessons: section.lessons.filter((lesson) => lesson.lessonId !== lessonId) }
+        : section))
+      toast.success('강의를 삭제했습니다.')
+    } catch {
+      toast.error('강의를 삭제하지 못했습니다.')
+    }
+  }
+
+  const removeSection = async (sectionId: string) => {
+    if (!window.confirm('이 섹션과 포함된 강의를 모두 삭제할까요? 되돌릴 수 없습니다.')) return
+    // 아직 저장하지 않은 새 섹션은 서버에 없으므로 로컬에서만 제거한다.
+    if (sectionId.startsWith('sec-new-')) {
+      setSections((current) => current.filter((section) => section.sectionId !== sectionId))
+      toast.success('섹션을 삭제했습니다.')
+      return
+    }
+    try {
+      await deleteSection(sectionId)
+      setSections((current) => current.filter((section) => section.sectionId !== sectionId))
+      toast.success('섹션을 삭제했습니다.')
+    } catch {
+      toast.error('섹션을 삭제하지 못했습니다.')
+    }
+  }
+
   const moveLesson = (
     source: DraggedLesson,
     targetSectionId: string,
@@ -347,7 +381,7 @@ function CurriculumManageEditor({
                   </div>
                   <div className="structure-actions"><button aria-label="섹션 위로" disabled={sectionIndex === 0} onClick={() => moveSection(sectionIndex, -1)} type="button">↑</button><button aria-label="섹션 아래로" disabled={sectionIndex === sections.length - 1} onClick={() => moveSection(sectionIndex, 1)} type="button">↓</button>{section.sectionId.startsWith('sec-new-')
                     ? <button className="button button--soft button--small" type="button" disabled title="새 섹션이 자동 저장된 뒤에 강의를 추가할 수 있어요.">강의 추가</button>
-                    : <Link className="button button--soft button--small" to={instructorPaths.newLesson(curriculumId, section.sectionId)}>강의 추가</Link>}</div>
+                    : <Link className="button button--soft button--small" to={instructorPaths.newLesson(curriculumId, section.sectionId)}>강의 추가</Link>}<button className="button button--soft button--small" type="button" onClick={() => void removeSection(section.sectionId)}>섹션 삭제</button></div>
                 </header>
                 <ul
                   className={lessonDropTarget?.sectionId === section.sectionId && lessonDropTarget.lessonIndex === section.lessons.length ? 'is-drop-at-end' : undefined}
@@ -374,7 +408,7 @@ function CurriculumManageEditor({
                         <span className="lesson-order">{lessonIndex + 1}</span>
                         <div className="lesson-info"><strong>{lesson.title}</strong><small>{lesson.status}</small></div>
                         <StatusBadge tone={lesson.status === 'PUBLISHED' ? 'success' : lesson.status === 'READY' ? 'warning' : 'neutral'}>{lesson.status}</StatusBadge>
-                        <div className="row-actions"><Link to={instructorPaths.lesson(curriculumId, section.sectionId, lesson.lessonId)}>상세</Link></div>
+                        <div className="row-actions"><Link to={instructorPaths.lesson(curriculumId, section.sectionId, lesson.lessonId)}>상세</Link><button className="text-button" type="button" onClick={() => void removeLesson(section.sectionId, lesson.lessonId)}>삭제</button></div>
                       </li>
                     )
                   })}

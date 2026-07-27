@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import json
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
 from app import wiring
 from app.config import Settings
 from app.contracts import PptxEmbedJob, parse_material_job
+from app.runtime import WorkerState
 from app.wiring import PptxRuntimeConfigurationError
 
 
@@ -15,6 +17,7 @@ DATABASE_URL = "postgresql+asyncpg://ai:secret@localhost/liveclass"
 REVISION = "5617a9f61b028005a4858fdac845db406aefb181"
 CALLBACK_SECRET = "dev-ai-callback-secret"
 BGE_TOKEN = "x" * 32
+RABBITMQ_URL = "amqp://liveclass:secret@localhost:5672/"
 
 
 def _settings(**overrides: object) -> Settings:
@@ -189,3 +192,67 @@ async def test_runtime_closes_both_http_clients_and_database_engine_once(monkeyp
 
     assert [client.closed for client in clients] == [1, 1]
     assert engine.disposed == 1
+
+
+def test_disabled_worker_keeps_management_only_runtime(monkeypatch) -> None:
+    monkeypatch.setattr(
+        wiring,
+        "build_pptx_ingestion_runtime",
+        lambda _settings: pytest.fail("disabled worker must not build external adapters"),
+    )
+
+    runtime = wiring.build_worker_runtime(_settings(), WorkerState())
+
+    assert runtime._runner is None
+
+
+def test_enabled_worker_requires_rabbitmq_url_before_building_resources(monkeypatch) -> None:
+    monkeypatch.setattr(
+        wiring,
+        "build_pptx_ingestion_runtime",
+        lambda _settings: pytest.fail("missing RabbitMQ URL must fail first"),
+    )
+
+    with pytest.raises(PptxRuntimeConfigurationError, match="AI_WORKER_RABBITMQ_URL"):
+        wiring.build_worker_runtime(
+            _settings(material_ingestion_enabled=True),
+            WorkerState(),
+        )
+
+
+def test_enabled_worker_wires_consumer_handler_readiness_and_cleanup(monkeypatch) -> None:
+    captured = {}
+    ingestion_runtime = SimpleNamespace(
+        database_ready=AsyncMock(return_value=True),
+        aclose=AsyncMock(),
+    )
+    job_handler = object()
+    consumer = object()
+    monkeypatch.setattr(
+        wiring,
+        "build_pptx_ingestion_runtime",
+        lambda _settings: ingestion_runtime,
+    )
+    monkeypatch.setattr(wiring, "MaterialJobHandler", lambda runtime: job_handler)
+
+    def fake_consumer(url, handler, **options):
+        captured.update(url=url, handler=handler, options=options)
+        return consumer
+
+    monkeypatch.setattr(wiring, "RabbitMaterialConsumer", fake_consumer)
+    state = WorkerState()
+
+    runtime = wiring.build_worker_runtime(
+        _settings(
+            material_ingestion_enabled=True,
+            rabbitmq_url=RABBITMQ_URL,
+        ),
+        state,
+    )
+
+    assert captured["url"] == RABBITMQ_URL
+    assert captured["handler"] is job_handler
+    assert captured["options"]["readiness_check"] is ingestion_runtime.database_ready
+    captured["options"]["on_ready"](True)
+    assert state.ready is True
+    assert runtime._runner is consumer
