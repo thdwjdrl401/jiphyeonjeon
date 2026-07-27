@@ -23,6 +23,7 @@ from app.rag import (
 LESSON_ID = UUID("11111111-1111-4111-8111-111111111111")
 OTHER_LESSON_ID = UUID("22222222-2222-4222-8222-222222222222")
 MATERIAL_ID = UUID("33333333-3333-4333-8333-333333333333")
+SESSION_ID = "44444444-4444-4444-8444-444444444444"
 
 
 def async_test(test):
@@ -37,7 +38,7 @@ def request(request_id: str = "request-1") -> RagAnswerRequest:
     return RagAnswerRequest(
         requestId=request_id,
         lessonId=LESSON_ID,
-        sessionId="session-1",
+        sessionId=SESSION_ID,
         question="방금 설명한 개념은 무엇인가요?",
         contextTimeMs=615_000,
     )
@@ -51,10 +52,20 @@ def pptx_evidence(*, lesson_id: UUID = LESSON_ID) -> RetrievedEvidence:
     )
 
 
-def caption_evidence(*, session_id: str = "session-1") -> RetrievedEvidence:
+def caption_evidence(
+    *,
+    lesson_id: UUID = LESSON_ID,
+    session_id: str = SESSION_ID,
+) -> RetrievedEvidence:
     return RetrievedEvidence(
+        lesson_id=lesson_id,
         content="방금 말한 자막 근거",
-        source=CaptionSource(sessionId=session_id, startMs=550_000, endMs=590_000),
+        source=CaptionSource(
+            sessionId=session_id,
+            sttSessionId="provider-session-1",
+            startMs=550_000,
+            endMs=590_000,
+        ),
     )
 
 
@@ -107,7 +118,12 @@ def test_contract_rejects_unknown_request_field_and_reversed_caption_range() -> 
             }
         )
     with pytest.raises(ValidationError):
-        CaptionSource(sessionId="session-1", startMs=2, endMs=1)
+        CaptionSource(
+            sessionId=SESSION_ID,
+            sttSessionId="provider-session-1",
+            startMs=2,
+            endMs=1,
+        )
 
 
 @pytest.mark.parametrize(
@@ -240,7 +256,11 @@ async def test_model_timeout_closes_generation_with_terminal_error() -> None:
 
 @pytest.mark.parametrize(
     "leaked_evidence",
-    [pptx_evidence(lesson_id=OTHER_LESSON_ID), caption_evidence(session_id="session-2")],
+    [
+        pptx_evidence(lesson_id=OTHER_LESSON_ID),
+        caption_evidence(lesson_id=OTHER_LESSON_ID),
+        caption_evidence(session_id="55555555-5555-4555-8555-555555555555"),
+    ],
 )
 @async_test
 async def test_cross_scope_evidence_never_reaches_model(

@@ -20,6 +20,7 @@ from app.rag import (
 TOKEN = "signed-token-placeholder"
 LESSON_ID = UUID("11111111-1111-4111-8111-111111111111")
 MATERIAL_ID = UUID("22222222-2222-4222-8222-222222222222")
+SESSION_ID = "33333333-3333-4333-8333-333333333333"
 PATH = "/internal/v1/rag/answers:stream"
 
 
@@ -44,9 +45,11 @@ class Retriever:
                     source=PptxSource(materialId=MATERIAL_ID, page=4),
                 ),
                 RetrievedEvidence(
+                    lesson_id=request.lessonId,
                     content="자막 근거",
                     source=CaptionSource(
                         sessionId=request.sessionId,
+                        sttSessionId="provider-session-1",
                         startMs=55_000,
                         endMs=59_000,
                     ),
@@ -77,7 +80,7 @@ def _payload(**overrides: object) -> dict[str, object]:
     payload: dict[str, object] = {
         "requestId": "request-1",
         "lessonId": str(LESSON_ID),
-        "sessionId": "session-1",
+        "sessionId": SESSION_ID,
         "question": "방금 설명한 개념은 무엇인가요?",
         "contextTimeMs": 61_500,
     }
@@ -135,7 +138,8 @@ def test_internal_endpoint_streams_contract_events_and_citations() -> None:
                     {"type": "PPTX", "materialId": str(MATERIAL_ID), "page": 4},
                     {
                         "type": "CAPTION",
-                        "sessionId": "session-1",
+                        "sessionId": SESSION_ID,
+                        "sttSessionId": "provider-session-1",
                         "startMs": 55_000,
                         "endMs": 59_000,
                     },

@@ -17,7 +17,6 @@ from app.rag.models import (
     AnswerInsufficientData,
     AnswerSource,
     CaptionSource,
-    PptxSource,
     RagAnswerRequest,
     RetrievedEvidence,
 )
@@ -139,7 +138,7 @@ def _validate_evidence_scope(
     evidence: Sequence[RetrievedEvidence],
 ) -> None:
     for item in evidence:
-        if isinstance(item.source, PptxSource) and item.lesson_id != request.lessonId:
+        if item.lesson_id != request.lessonId:
             raise _EvidenceScopeViolation
         if isinstance(item.source, CaptionSource) and item.source.sessionId != request.sessionId:
             raise _EvidenceScopeViolation
