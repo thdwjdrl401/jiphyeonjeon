@@ -23,6 +23,9 @@ public interface CurriculumRepository extends JpaRepository<Curriculum, UUID> {
 
     Page<Curriculum> findByInstructorId(UUID instructorId, Pageable pageable);
 
+    /** 강사의 모든 커리큘럼(비페이지). 대시보드 합계 집계용 — 상태 무관 전체를 센다. */
+    java.util.List<Curriculum> findByInstructorId(UUID instructorId);
+
     Page<Curriculum> findByInstructorIdAndLifecycleStatus(UUID instructorId,
                                                           CurriculumLifecycleStatus lifecycleStatus,
                                                           Pageable pageable);

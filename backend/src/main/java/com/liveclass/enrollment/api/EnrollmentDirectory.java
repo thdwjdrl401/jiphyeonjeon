@@ -38,4 +38,10 @@ public interface EnrollmentDirectory {
      * 모든 {@link EnrollmentStatus} 키를 담아 돌려준다(해당 건이 없으면 0).
      */
     Map<EnrollmentStatus, Long> countsByStatus(UUID curriculumId);
+
+    /**
+     * 여러 커리큘럼의 ACTIVE 수강생 수를 한 번에(대시보드 합계 집계). 커리큘럼당 조회하면 N+1이라
+     * 배치로 둔다. 수강 0인 커리큘럼은 맵에 키가 없다(호출자가 0으로 본다).
+     */
+    Map<UUID, Long> countActiveByCurriculums(java.util.Collection<UUID> curriculumIds);
 }
