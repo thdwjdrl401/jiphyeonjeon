@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { instructorPaths, publicPaths } from '@/app/router/paths'
+import { instructorPaths } from '@/app/router/paths'
 import CurriculumImageField, { type CurriculumImageSelection } from '@/features/curriculum/CurriculumImageField'
 import CurriculumMaterialField from '@/features/curriculum/CurriculumMaterialField'
 import { createCurriculum, uploadCurriculumThumbnail } from '@/features/curriculum/curriculumManagementService'
@@ -37,7 +37,9 @@ export default function CurriculumFormPage() {
         thumbnailPreviewUrl: thumbnail?.previewUrl ?? null,
         materials,
       })
-      navigate(publicPaths.curriculum(curriculumId))
+      // 방금 만든 건 DRAFT라 공개 상세(GET /curriculums/{id}, PUBLISHED-only)로 보내면 404로 튕긴다.
+      // 강사 엔드포인트로 읽는 관리 화면으로 보낸다(ADR-0041). created 플래그로 "저장됨" 상태로 시작.
+      navigate(instructorPaths.curriculumManage(curriculumId), { state: { created: true } })
     } catch (requestError) {
       setError(requestError instanceof ApiError ? requestError.message : '커리큘럼을 만들지 못했습니다.')
     } finally {
