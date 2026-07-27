@@ -17,8 +17,9 @@
 
 - `MATERIAL_EMBEDDING_ENABLED=false`가 기본값이다. 이때 자료 연결은 기존 동작을 보존해 즉시 `READY`가 되고
   outbox job을 만들지 않는다.
-- `true`이면 Spring이 기동 중 `ingestion.embed`를 먼저 선언한다. RabbitMQ가 준비되지 않으면 활성화된 서버가
-  작업을 받을 수 없도록 기동을 실패시킨다. worker는 이 Spring 소유 큐를 passive lookup한다.
+- Spring의 `Queue` 빈은 RabbitAdmin이 broker에 처음 연결할 때 `ingestion.embed`를 선언하며,
+  발행 전용인 Spring은 기동 중 broker 연결을 강제하지 않는다. worker는 이 큐를 passive lookup하므로
+  새 broker에서 worker를 첫 발행보다 먼저 시작하려면 배포 인프라가 큐를 미리 생성해야 한다.
 - outbox relay는 default exchange에 routing key `ingestion.embed`로 발행한 뒤에만 event를 `PUBLISHED`로
   바꾼다. 실패는 DB에 기록하고 지수 backoff한다.
 - worker는 메시지의 `assetId`로 `POST /api/internal/ai/materials/download-url`을 호출한다. Spring과 worker는

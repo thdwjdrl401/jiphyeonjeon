@@ -35,7 +35,9 @@ NVIDIA Container Toolkit이 준비된 환경은 격리 스택의 `gpu` profile�
 
 ## 3. Spring과 worker
 
-Spring은 명시적으로 임베딩 스위치를 켠다.
+Spring은 명시적으로 임베딩 스위치를 켠다. master의 Spring은 기동 중 RabbitMQ 연결을
+강제하지 않으므로, 새 RabbitMQ volume에서 worker를 먼저 시작하려면 `ingestion.embed` durable queue를
+배포 인프라로 미리 생성해야 한다. 이 runbook은 큐가 이미 존재하는 환경을 전제로 한다.
 
 ```powershell
 cd backend
@@ -98,6 +100,8 @@ uv run --frozen python scripts/e2e_material_ingestion.py `
 ## 2026-07-27 실행 증거
 
 - 같은 격리 스택에서 실제 강사 업로드를 두 번 실행해 모두 `READY` callback을 받았다.
+- 이 실행 당시에는 Spring 기동 중 큐를 선언하는 후보 코드가 있었다. Java 변경을 master로
+  되돌린 후에는 큐 사전 생성이 배포 전제이며, clean broker bootstrap E2E는 다시 확인해야 한다.
 - 최종 material `dd78649c-8b8c-4603-ab9c-0f5f1b1152a8`은 AI DB에서 `ACTIVE`, chunk 1개,
   embedding 1개, 1024차원으로 확인했다.
 - worker 로그에서 presigned URL query가 노출되는 문제를 첫 실행에서 발견해 `httpx`·`httpcore` INFO 로그를
