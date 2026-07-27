@@ -1,8 +1,27 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '@/App'
 import { mockAuthService, resetMockAuth } from '@/features/auth/mockAuthService'
+
+vi.mock('@/features/live-session/StudentLivePlayer', () => ({
+  default: ({
+    bookmarked,
+    playback,
+    onBookmark,
+  }: {
+    bookmarked: boolean
+    playback: { sessionId: string } | null
+    onBookmark: () => void
+  }) => (
+    <div aria-label="학생 라이브 영상" role="region">
+      {playback && <span>Mock HLS 재생 준비 · {playback.sessionId}</span>}
+      <button type="button" onClick={onBookmark}>
+        {bookmarked ? '★ 북마크됨' : '☆ 북마크'}
+      </button>
+    </div>
+  ),
+}))
 
 function renderAt(path: string) {
   window.history.pushState({}, '', path)
@@ -134,13 +153,14 @@ describe('전체 페이지 라우트', () => {
     await user.click(await screen.findByRole('link', { name: '라이브 입장' }, { timeout: 3000 }))
 
     expect(await screen.findByRole('tab', { name: 'AI 질문' })).toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: '학생 라이브 영상' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '채팅·질문' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '실시간 노트' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '핵심 용어' })).toBeInTheDocument()
     expect(window.location.pathname).toBe('/student/live-sessions/ses-security-live/classroom')
     expect(screen.getByRole('button', { name: '☆ 북마크' })).toBeInTheDocument()
-    expect(screen.getByLabelText('라이브 타임라인')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'LIVE' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '확인하고 참여하기' }))
+    expect(await screen.findByText('Mock HLS 재생 준비 · ses-security-live')).toBeInTheDocument()
     expect(screen.queryByText('강사 운영 모드')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '강의 종료' })).not.toBeInTheDocument()
   })

@@ -1,9 +1,10 @@
 import { Client, type IMessage } from '@stomp/stompjs'
 import type { CurriculumLiveSessionStatus } from '@/features/lesson/types'
-import { apiClient } from '@/shared/api/client'
+import { ApiError, apiClient } from '@/shared/api/client'
 import { notImplemented } from '@/shared/api/notImplemented'
 import type {
   ChatMessageView,
+  LivePlaybackView,
   LiveSessionService,
   LiveSessionView,
 } from './liveSessionService.interface'
@@ -41,6 +42,40 @@ interface ApiParticipant {
   name: string
   state: string
   joinedAtEpochSeconds: number
+}
+
+interface ApiLivePlayback {
+  sessionId: string
+  playbackUrl: string
+  mimeType: string
+  streamType: string
+  sessionOffsetMs: number | null
+}
+
+function normalizeLivePlayback(data: ApiLivePlayback, sessionId: string): LivePlaybackView {
+  const playbackUrl = data.playbackUrl?.trim()
+  const hasValidOffset = data.sessionOffsetMs === null || Number.isFinite(data.sessionOffsetMs)
+  if (
+    data.sessionId !== sessionId
+    || !playbackUrl
+    || data.mimeType !== 'application/vnd.apple.mpegurl'
+    || data.streamType !== 'LIVE_DVR'
+    || !hasValidOffset
+  ) {
+    throw new ApiError(
+      '라이브 재생 API 응답이 계약과 일치하지 않습니다.',
+      undefined,
+      'LIVE_PLAYBACK_CONTRACT_INVALID',
+    )
+  }
+
+  return {
+    sessionId: data.sessionId,
+    playbackUrl,
+    mimeType: data.mimeType,
+    streamType: data.streamType,
+    sessionOffsetMs: data.sessionOffsetMs,
+  }
 }
 
 function normalizeMessage(message: ApiChatMessage): ChatMessageView {
@@ -85,6 +120,10 @@ export const httpLiveSessionService = {
       expectedDurationMinutes: data.expectedDurationMinutes ?? 0,
       participants: 0,
     } satisfies LiveSessionView
+  },
+  async getLivePlayback(sessionId) {
+    const { data } = await apiClient.get<ApiLivePlayback>(`/live-sessions/${sessionId}/playback`)
+    return normalizeLivePlayback(data, sessionId)
   },
   // 점검 대상이 LiveKit 연결·장치 상태라 서버 판정이 있어야 한다(CP1). 프론트가 흉내 내면
   // "점검 통과"가 거짓이 되므로 값을 지어내지 않는다.

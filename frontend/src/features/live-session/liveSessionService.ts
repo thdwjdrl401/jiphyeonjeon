@@ -6,6 +6,7 @@ import type { LiveSessionService } from './liveSessionService.interface'
 const liveSessionService = selectDataSource<LiveSessionService>(mockLiveSessionService, httpLiveSessionService)
 
 export const getLiveSession = (sessionId: string) => liveSessionService.getLiveSession(sessionId)
+export const getLivePlayback = (sessionId: string) => liveSessionService.getLivePlayback(sessionId)
 export const getPreflightChecks = (sessionId: string) => liveSessionService.getPreflightChecks(sessionId)
 export const startLiveSession = (sessionId: string) => liveSessionService.startLiveSession(sessionId)
 export const endLiveSession = (sessionId: string) => liveSessionService.endLiveSession(sessionId)
@@ -28,6 +29,7 @@ export type {
   CaptionView,
   ChatConnectionState,
   ChatMessageView,
+  LivePlaybackView,
   LiveSessionService,
   LiveSessionView,
   PreflightCheck,

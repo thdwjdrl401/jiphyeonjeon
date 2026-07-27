@@ -14,6 +14,7 @@ import {
   endLiveSession,
   getCaptions,
   getChatMessages,
+  getLivePlayback,
   getLiveSession,
   saveBookmark,
   sendChatMessage,
@@ -21,25 +22,30 @@ import {
   type ChatConnectionState,
   type ChatMessageView,
 } from '@/features/live-session/liveSessionService'
+import type { StudentLiveSeekRequest } from '@/features/live-session/StudentLivePlayer'
 import { useDetachedSidebarWindow } from '@/features/live-session/useDetachedSidebarWindow'
+import { ApiError } from '@/shared/api/client'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
-import { InlineNotice, StatusBadge } from '@/shared/ui/WorkspaceUi'
 
-const liveEdgeMs = 779_000
 const { summaryBlocks, glossaryTerms } = getLiveLearningPreview()
 const InstructorLiveKitStage = lazy(() => import('@/features/live-session/InstructorLiveKitStage'))
-
-function formatSessionTime(sessionMs: number) {
-  const seconds = Math.floor(sessionMs / 1000)
-  const minutes = Math.floor(seconds / 60)
-  return `${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
-}
+const StudentLivePlayer = lazy(() => import('@/features/live-session/StudentLivePlayer'))
 
 function mergeChatMessage(messages: ChatMessageView[], incoming: ChatMessageView) {
   const existingIndex = messages.findIndex((message) => message.id === incoming.id)
   if (existingIndex < 0) return [...messages, incoming]
   return messages.map((message, index) => index === existingIndex ? incoming : message)
+}
+
+function getLivePlaybackErrorMessage(error: unknown) {
+  if (!(error instanceof ApiError)) return '라이브 재생 서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.'
+  if (error.code === 'ENROLLMENT_REQUIRED') return '현재 라이브 강의를 시청할 수강 권한이 없습니다.'
+  if (error.code === 'LIVE_NOT_STARTED') return '아직 라이브 강의가 시작되지 않았습니다.'
+  if (error.code === 'LIVE_PLAYBACK_NOT_READY') return '강의는 시작됐지만 HLS 영상이 아직 준비되지 않았습니다.'
+  if (error.code === 'LIVE_ENDED') return '라이브 강의가 종료되었습니다. 다시보기가 준비되면 강의 상세에서 시청할 수 있습니다.'
+  if (error.code === 'LIVE_PLAYBACK_CONTRACT_INVALID') return '라이브 재생 주소가 올바르게 전달되지 않았습니다.'
+  return error.message || '라이브 재생 주소를 가져오지 못했습니다.'
 }
 
 export default function LiveClassroomPage() {
@@ -62,19 +68,25 @@ export default function LiveClassroomPage() {
   const captions = captionsQuery.data ?? []
   const [panel, setPanel] = useState<LearningPanel>('discussion')
   const [selectedTermId, setSelectedTermId] = useState<string | null>(null)
-  const [positionMs, setPositionMs] = useState(liveEdgeMs)
+  const [positionMs, setPositionMs] = useState(0)
   const [message, setMessage] = useState('')
   const [isQuestion, setIsQuestion] = useState(false)
   const [aiQuestion, setAiQuestion] = useState('')
   const [aiAnswer, setAiAnswer] = useState('')
   const [bookmarked, setBookmarked] = useState(false)
+  const [studentSeekRequest, setStudentSeekRequest] = useState<StudentLiveSeekRequest | null>(null)
   const [endRequested, setEndRequested] = useState(false)
   const [chatConnectionState, setChatConnectionState] = useState<ChatConnectionState>('connecting')
   const sidebarWindow = useDetachedSidebarWindow(sessionId)
   // 라이브는 녹화되고 채팅·자막이 AI 처리된다는 안내를 입장 시 한 번 확인받는다.
   // 상시 배너 대신 진입 모달로 알려 시야를 가리지 않게 한다.
   const [recordingNoticeAck, setRecordingNoticeAck] = useState(false)
-  const isLive = liveEdgeMs - positionMs < 3_000
+  const playbackQuery = useQuery({
+    queryKey: ['live-playback', sessionId],
+    queryFn: () => getLivePlayback(sessionId),
+    enabled: Boolean(sessionId && !isInstructor && recordingNoticeAck),
+    retry: false,
+  })
   const sendMutation = useMutation({
     mutationFn: ({ text, question }: { text: string; question: boolean }) => sendChatMessage(sessionId, text, question),
     onSuccess: (sent) => queryClient.setQueryData<ChatMessageView[]>(
@@ -133,6 +145,16 @@ export default function LiveClassroomPage() {
     setPanel('glossary')
   }
 
+  const seekSession = (sessionMs: number) => {
+    setPositionMs(sessionMs)
+    if (!isInstructor) {
+      setStudentSeekRequest((current) => ({
+        sessionMs,
+        sequence: (current?.sequence ?? 0) + 1,
+      }))
+    }
+  }
+
   // 진입 게이트에는 이 화면의 정체성인 세션·레슨만 둔다.
   // 자막은 아직 서버 경로가 없어(CP2) 늘 실패하는데, 여기에 섞으면
   // 나머지가 멀쩡해도 라이브 화면 전체가 뜨지 않는다. 패널 안에서 안내한다.
@@ -142,6 +164,9 @@ export default function LiveClassroomPage() {
   if (!sessionId) return <PageState title="잘못된 라이브 세션 경로입니다" />
   if (sessionQuery.isError || lessonQuery.isError) return <PageState title="라이브 강의를 불러오지 못했습니다" />
   if (!session || !lesson) return <PageState title="라이브 강의를 불러오는 중입니다" />
+  const playbackErrorMessage = playbackQuery.isError
+    ? getLivePlaybackErrorMessage(playbackQuery.error)
+    : null
 
   const discussionComposer = (
     <form className="chat-composer" onSubmit={sendMessage}>
@@ -185,7 +210,7 @@ export default function LiveClassroomPage() {
       panel={panel}
       onPanelChange={setPanel}
       currentSessionMs={positionMs}
-      onSeek={setPositionMs}
+      onSeek={seekSession}
       selectedTermId={selectedTermId}
       onSelectedTermChange={setSelectedTermId}
       summaryBlocks={summaryBlocks}
@@ -251,28 +276,25 @@ export default function LiveClassroomPage() {
                 />
               </Suspense>
             )
-            : <div className="video-stage" tabIndex={0}>
-              <div className="video-stage__glow" />
-              <header className="video-status-overlay" aria-label="라이브 강의 정보">
-                <div className="video-status-overlay__identity"><span className="live-dot" /><strong>LIVE</strong><h1>{lesson.title}</h1><small>강의 {sessionId}</small></div>
-                <div className="video-status-overlay__status">
-                  <StatusBadge tone="success">연결 안정적</StatusBadge>
-                  <span>{session.participants}명 참여 중</span>
-                </div>
-              </header>
-              <div className="slide-preview"><span>SPRING SECURITY</span><h2>요청은 어떻게<br />인증되는가?</h2><div className="slide-code">SecurityFilterChain → Authentication → SecurityContext</div></div>
-              <div className="video-controls-overlay" aria-label="라이브 재생 컨트롤">
-                <div className="timeline-row"><span>00:00</span><input aria-label="라이브 타임라인" min="0" max={liveEdgeMs} type="range" value={positionMs} onChange={(event) => setPositionMs(Number(event.target.value))} /><span>{formatSessionTime(positionMs)}</span></div>
-                <div className="control-row">
-                  <div><button className={bookmarked ? 'is-active' : ''} type="button" onClick={() => bookmarkMutation.mutate()}>{bookmarked ? '★ 북마크됨' : '☆ 북마크'}</button></div>
-                  <button className={`go-live${isLive ? ' is-live' : ''}`} type="button" onClick={() => setPositionMs(liveEdgeMs)}><i /> LIVE{!isLive && '로 이동'}</button>
-                </div>
-              </div>
-            </div>}
+            : (
+              <Suspense fallback={<div className="video-stage instructor-livekit-loading" role="status">Vidstack 플레이어를 불러오는 중입니다.</div>}>
+                <StudentLivePlayer
+                  bookmarked={bookmarked}
+                  errorMessage={playbackErrorMessage}
+                  lessonTitle={lesson.title}
+                  loading={recordingNoticeAck && playbackQuery.isPending}
+                  participantCount={session.participants}
+                  playback={recordingNoticeAck ? playbackQuery.data ?? null : null}
+                  playbackKey={playbackQuery.dataUpdatedAt}
+                  seekRequest={studentSeekRequest}
+                  onBookmark={() => bookmarkMutation.mutate()}
+                  onRetry={() => void playbackQuery.refetch()}
+                  onSessionTimeChange={setPositionMs}
+                />
+              </Suspense>
+            )}
 
-          <CaptionDock captions={captions} currentSessionMs={positionMs} label="실시간 자막" onSeek={setPositionMs} onSelectTerm={openGlossaryTerm} />
-
-          {!isInstructor && !isLive && <InlineNotice>현재 라이브보다 {formatSessionTime(liveEdgeMs - positionMs)} 이전을 재생하고 있습니다. 영상과 자막이 같은 시각으로 이동했습니다.</InlineNotice>}
+          <CaptionDock captions={captions} currentSessionMs={positionMs} label="실시간 자막" onSeek={seekSession} onSelectTerm={openGlossaryTerm} />
         </section>
 
         {(!isInstructor || !sidebarWindow.isDetached) && sidebar}

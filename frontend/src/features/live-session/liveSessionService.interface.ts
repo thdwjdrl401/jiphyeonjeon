@@ -58,8 +58,17 @@ export interface QuestionHighlight {
   text: string
 }
 
+export interface LivePlaybackView {
+  sessionId: string
+  playbackUrl: string
+  mimeType: 'application/vnd.apple.mpegurl'
+  streamType: 'LIVE_DVR'
+  sessionOffsetMs: number | null
+}
+
 export interface LiveSessionService {
   getLiveSession: (sessionId: string) => Promise<LiveSessionView>
+  getLivePlayback: (sessionId: string) => Promise<LivePlaybackView>
   getPreflightChecks: (sessionId: string) => Promise<PreflightCheck[]>
   startLiveSession: (sessionId: string) => Promise<void>
   endLiveSession: (sessionId: string) => Promise<void>
