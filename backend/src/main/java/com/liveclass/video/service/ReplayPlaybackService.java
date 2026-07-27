@@ -59,10 +59,10 @@ public class ReplayPlaybackService {
         VideoAsset asset = context.asset();
         LiveSessionView session = context.session();
 
-        Optional<ManifestData> recent = context.phase() == PlaybackPhase.LIVE
-                ? findManifestData(asset, session, PlaybackSource.RECENT)
+        Optional<HlsManifestProcessor.ManifestSnapshot> recent = context.phase() == PlaybackPhase.LIVE
+                ? findSnapshot(asset, session, PlaybackSource.RECENT)
                 : Optional.empty();
-        Optional<ManifestData> dvr = findManifestData(asset, session, PlaybackSource.DVR);
+        Optional<HlsManifestProcessor.ManifestSnapshot> dvr = findSnapshot(asset, session, PlaybackSource.DVR);
 
         if (context.phase() == PlaybackPhase.REPLAY && dvr.isEmpty()) {
             log.warn("종료된 READY 자산의 DVR manifest 부재 lesson={} key={}", lessonId, dvrKey(asset));
@@ -70,15 +70,15 @@ public class ReplayPlaybackService {
         }
 
         PlaybackResponse.Source recentSource = recent
-                .map(data -> toSource(lessonId, PlaybackSource.RECENT, data.snapshot()))
+                .map(snapshot -> toSource(lessonId, PlaybackSource.RECENT, snapshot))
                 .orElse(null);
         PlaybackResponse.Source dvrSource = dvr
-                .map(data -> toSource(lessonId, PlaybackSource.DVR, data.snapshot()))
+                .map(snapshot -> toSource(lessonId, PlaybackSource.DVR, snapshot))
                 .orElse(null);
         Long currentSessionMs = recentSource != null
                 ? recentSource.availableToMs()
                 : dvrSource != null ? dvrSource.availableToMs() : null;
-        Long sessionOffsetMs = dvr.map(data -> data.snapshot().sessionOffsetMs()).orElse(null);
+        Long sessionOffsetMs = dvr.map(HlsManifestProcessor.ManifestSnapshot::sessionOffsetMs).orElse(null);
 
         return new PlaybackResponse(
                 asset.getLessonId(),
@@ -145,12 +145,12 @@ public class ReplayPlaybackService {
         return new PlaybackContext(asset, session, phase);
     }
 
-    private Optional<ManifestData> findManifestData(VideoAsset asset,
-                                                    LiveSessionView session,
-                                                    PlaybackSource source) {
+    private Optional<HlsManifestProcessor.ManifestSnapshot> findSnapshot(VideoAsset asset,
+                                                                        LiveSessionView session,
+                                                                        PlaybackSource source) {
         String key = manifestKey(asset, source);
         return findManifest(asset.getBucket(), key)
-                .map(raw -> new ManifestData(raw, manifestProcessor.analyze(raw, session.startedAt())));
+                .map(raw -> manifestProcessor.analyze(raw, session.startedAt()));
     }
 
     private Optional<String> findManifest(String bucket, String key) {
@@ -211,12 +211,6 @@ public class ReplayPlaybackService {
             VideoAsset asset,
             LiveSessionView session,
             PlaybackPhase phase
-    ) {
-    }
-
-    private record ManifestData(
-            String raw,
-            HlsManifestProcessor.ManifestSnapshot snapshot
     ) {
     }
 }
