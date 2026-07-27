@@ -15,11 +15,8 @@ from app.adapters.pgvector_index import PgvectorIndexRepository
 from app.config import load_settings
 from app.database_urls import parse_async_database_url, parse_migration_database_url
 from app.domain import BGE_M3_DIMENSIONS, ChunkRecord, StagedMaterial, StaleMaterialVersionError
+from conftest import IntegrationDatabase
 
-
-DATABASE_URL = os.getenv("AI_WORKER_TEST_DATABASE_URL")
-MIGRATION_DATABASE_URL = os.getenv("AI_WORKER_TEST_MIGRATION_DATABASE_URL")
-pytestmark = pytest.mark.skipif(not DATABASE_URL, reason="integration database is not configured")
 
 CURRICULUM_ID = UUID("11111111-1111-4111-8111-111111111111")
 OTHER_CURRICULUM_ID = UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
@@ -57,27 +54,29 @@ def _chunk(value: float, *, chunk_index: int = 0, content_hash: str | None = Non
 
 
 @pytest.fixture(scope="module", autouse=True)
-def migrate_database() -> None:
-    if DATABASE_URL is None:
-        pytest.fail("AI_WORKER_TEST_DATABASE_URL must be set before integration setup")
-    if MIGRATION_DATABASE_URL is None:
-        pytest.fail("AI_WORKER_TEST_MIGRATION_DATABASE_URL must be set for integration setup")
-    database_name = parse_async_database_url(DATABASE_URL).database
+def migrate_database(integration_database: IntegrationDatabase) -> None:
+    database_url = integration_database.database_url
+    migration_database_url = integration_database.migration_database_url
+    database_name = parse_async_database_url(database_url).database
     if not database_name or not database_name.endswith("_test"):
         pytest.fail("integration DB name must end in _test")
-    if os.getenv("AI_WORKER_ALLOW_DESTRUCTIVE_TEST_DB") != "1":
+    if (
+        not integration_database.automatically_created
+        and os.getenv("AI_WORKER_ALLOW_DESTRUCTIVE_TEST_DB") != "1"
+    ):
         pytest.fail("set AI_WORKER_ALLOW_DESTRUCTIVE_TEST_DB=1 for a disposable empty database")
-    migration_database_name = parse_migration_database_url(MIGRATION_DATABASE_URL).database
+    migration_database_name = parse_migration_database_url(migration_database_url).database
     if migration_database_name != database_name:
         pytest.fail("runtime and migration test URLs must target the same _test database")
 
     setting_keys = (
         "AI_WORKER_DATABASE_URL",
         "AI_WORKER_MIGRATION_DATABASE_URL",
+        "AI_WORKER_DATABASE_ROLE",
         "AI_WORKER_INSTANCE_ID",
     )
     original_environment = {key: os.environ.get(key) for key in setting_keys}
-    sync_engine = create_engine(MIGRATION_DATABASE_URL)
+    sync_engine = create_engine(migration_database_url)
     config = Config("alembic.ini")
     migration_started = False
     cleanup_authorized = False
@@ -105,10 +104,13 @@ def migrate_database() -> None:
                     "integration database must not contain core/ai schema or an active revision"
                 )
             role_exists = connection.scalar(
-                text("SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ai_app')")
+                text("SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :runtime_role)"),
+                {"runtime_role": integration_database.runtime_role},
             )
             if not role_exists:
-                connection.execute(text("CREATE ROLE ai_app NOLOGIN NOINHERIT"))
+                connection.execute(
+                    text(f"CREATE ROLE {integration_database.runtime_role} NOLOGIN NOINHERIT")
+                )
                 role_created = True
             connection.execute(text("CREATE SCHEMA core"))
             core_created = True
@@ -116,8 +118,9 @@ def migrate_database() -> None:
             connection.execute(text("INSERT INTO core.boundary_fixture VALUES (1)"))
         cleanup_authorized = True
 
-        os.environ["AI_WORKER_DATABASE_URL"] = DATABASE_URL
-        os.environ["AI_WORKER_MIGRATION_DATABASE_URL"] = MIGRATION_DATABASE_URL
+        os.environ["AI_WORKER_DATABASE_URL"] = database_url
+        os.environ["AI_WORKER_MIGRATION_DATABASE_URL"] = migration_database_url
+        os.environ["AI_WORKER_DATABASE_ROLE"] = integration_database.runtime_role
         os.environ["AI_WORKER_INSTANCE_ID"] = "integration-test"
         load_settings.cache_clear()
 
@@ -161,7 +164,9 @@ def migrate_database() -> None:
                         if core_created:
                             connection.execute(text("DROP SCHEMA IF EXISTS core CASCADE"))
                         if role_created:
-                            connection.execute(text("DROP ROLE IF EXISTS ai_app"))
+                            connection.execute(
+                                text(f"DROP ROLE IF EXISTS {integration_database.runtime_role}")
+                            )
             finally:
                 sync_engine.dispose()
                 for key, value in original_environment.items():
@@ -173,10 +178,10 @@ def migrate_database() -> None:
 
 
 @pytest.fixture
-async def database_engine() -> AsyncIterator[AsyncEngine]:
-    if DATABASE_URL is None:
-        pytest.fail("AI_WORKER_TEST_DATABASE_URL must be set before integration setup")
-    engine = create_async_engine(DATABASE_URL)
+async def database_engine(
+    integration_database: IntegrationDatabase,
+) -> AsyncIterator[AsyncEngine]:
+    engine = create_async_engine(integration_database.database_url)
     try:
         async with engine.begin() as connection:
             await connection.execute(
@@ -194,12 +199,19 @@ async def database_engine() -> AsyncIterator[AsyncEngine]:
 
 
 @pytest.fixture
-def repository(database_engine: AsyncEngine) -> PgvectorIndexRepository:
-    return PgvectorIndexRepository(database_engine)
+def repository(
+    database_engine: AsyncEngine,
+    integration_database: IntegrationDatabase,
+) -> PgvectorIndexRepository:
+    return PgvectorIndexRepository(
+        database_engine,
+        runtime_role=integration_database.runtime_role,
+    )
 
 
 async def test_migration_schema_has_uuid_vector_and_cosine_hnsw(
     database_engine: AsyncEngine,
+    integration_database: IntegrationDatabase,
 ) -> None:
     async with database_engine.connect() as connection:
         column_types = dict(
@@ -249,9 +261,10 @@ async def test_migration_schema_has_uuid_vector_and_cosine_hnsw(
                     SELECT rolcanlogin, rolsuper, rolinherit, rolcreaterole, rolcreatedb,
                            rolreplication, rolbypassrls
                     FROM pg_roles
-                    WHERE rolname = 'ai_app'
+                    WHERE rolname = :runtime_role
                     """
-                )
+                ),
+                {"runtime_role": integration_database.runtime_role},
             )
         ).one()
 
@@ -311,10 +324,11 @@ async def test_shadow_version_activation_and_material_delete(
 
 async def test_ai_runtime_role_cannot_write_core_or_create_ai_table(
     database_engine: AsyncEngine,
+    integration_database: IntegrationDatabase,
 ) -> None:
     async with database_engine.connect() as connection:
         transaction = await connection.begin()
-        await connection.execute(text("SET LOCAL ROLE ai_app"))
+        await connection.execute(text(f"SET LOCAL ROLE {integration_database.runtime_role}"))
         await connection.execute(
             text(
                 """
@@ -337,7 +351,7 @@ async def test_ai_runtime_role_cannot_write_core_or_create_ai_table(
 
     async with database_engine.connect() as connection:
         transaction = await connection.begin()
-        await connection.execute(text("SET LOCAL ROLE ai_app"))
+        await connection.execute(text(f"SET LOCAL ROLE {integration_database.runtime_role}"))
         with pytest.raises(DBAPIError):
             await connection.execute(text("CREATE TABLE ai.runtime_ddl_violation (id bigint)"))
         await transaction.rollback()

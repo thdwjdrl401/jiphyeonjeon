@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+import re
 import struct
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict
@@ -18,11 +19,17 @@ from app.domain import (
 )
 
 
+_DATABASE_ROLE = re.compile(r"^[a-z_][a-z0-9_]{0,62}$")
+
+
 class PgvectorIndexRepository:
     """Persist a complete inactive version, then switch the active pointer separately."""
 
-    def __init__(self, engine: AsyncEngine) -> None:
+    def __init__(self, engine: AsyncEngine, *, runtime_role: str = "ai_app") -> None:
+        if not _DATABASE_ROLE.fullmatch(runtime_role):
+            raise ValueError("runtime_role must be a safe PostgreSQL role identifier")
         self._engine = engine
+        self._set_runtime_role = text(f"SET LOCAL ROLE {runtime_role}")
 
     async def stage(self, material: StagedMaterial, chunks: Sequence[ChunkRecord]) -> int:
         if not chunks:
@@ -32,7 +39,7 @@ class PgvectorIndexRepository:
 
         values = {**asdict(material), "input_fingerprint": _chunk_fingerprint(chunks)}
         async with self._engine.begin() as connection:
-            await connection.execute(text("SET LOCAL ROLE ai_app"))
+            await connection.execute(self._set_runtime_role)
             await _lock_material(connection, material.tenant_id, material.material_id)
             await _assert_material_scope(connection, material)
             delete_version = await connection.scalar(
@@ -192,7 +199,7 @@ class PgvectorIndexRepository:
 
     async def activate(self, material: StagedMaterial, version_id: int) -> None:
         async with self._engine.begin() as connection:
-            await connection.execute(text("SET LOCAL ROLE ai_app"))
+            await connection.execute(self._set_runtime_role)
             target = await _load_version_identity(connection, version_id)
             _assert_version_identity(target, material)
             await _lock_material(connection, target["tenant_id"], target["material_id"])
@@ -259,7 +266,7 @@ class PgvectorIndexRepository:
 
         values = asdict(material)
         async with self._engine.begin() as connection:
-            await connection.execute(text("SET LOCAL ROLE ai_app"))
+            await connection.execute(self._set_runtime_role)
             await _lock_material(connection, material.tenant_id, material.material_id)
             await _assert_material_scope(connection, material)
             job_run_id = await _start_job_run(connection, material, "MATERIAL_DELETE")

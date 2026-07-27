@@ -17,6 +17,14 @@ class NeverBeginEngine:
         raise AssertionError("validation must happen before opening a DB transaction")
 
 
+def test_repository_rejects_unsafe_runtime_role() -> None:
+    with pytest.raises(ValueError, match="safe PostgreSQL role"):
+        PgvectorIndexRepository(
+            NeverBeginEngine(),  # type: ignore[arg-type]
+            runtime_role="ai_app; RESET ROLE",
+        )
+
+
 def material() -> StagedMaterial:
     return StagedMaterial(
         job_id="job-1",
