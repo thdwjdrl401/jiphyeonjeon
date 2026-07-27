@@ -1,0 +1,174 @@
+from __future__ import annotations
+
+from dataclasses import replace
+
+import pytest
+
+from app.config import Settings
+
+BASE_ENV = {
+    "LIVEKIT_URL": "wss://livekit.example",
+    "LIVEKIT_API_KEY": "key",
+    "LIVEKIT_API_SECRET": "secret",
+    "STT_ENGINE_PROVIDER": "stub",
+}
+
+
+def test_uses_application_redis_without_assuming_livekit_redis_port() -> None:
+    settings = Settings.from_env(BASE_ENV)
+
+    assert settings.redis_url == "redis://localhost:6379/0"
+    assert ":6380" not in settings.redis_url
+    assert settings.stt_shutdown_timeout_seconds == 12
+    assert settings.stt_drain_timeout_seconds == 7
+    assert settings.stt_cleanup_timeout_seconds == 1
+    assert settings.caption_publish_timeout_seconds == 1.25
+    assert settings.redis_operation_timeout_seconds == 1
+
+
+def test_rejects_missing_livekit_credentials() -> None:
+    settings = Settings.from_env({"LIVEKIT_URL": "wss://livekit.example"})
+
+    with pytest.raises(RuntimeError, match="LIVEKIT_API_KEY, LIVEKIT_API_SECRET"):
+        settings.validate_agent_server()
+
+
+@pytest.mark.parametrize("value", ["treu", "enabled", "2"])
+def test_rejects_invalid_callback_flag(value: str) -> None:
+    with pytest.raises(ValueError, match="must be true or false"):
+        Settings.from_env({**BASE_ENV, "SPRING_STATUS_CALLBACK_ENABLED": value})
+
+
+def test_callback_credentials_are_required_only_when_enabled() -> None:
+    Settings.from_env(BASE_ENV).validate_agent_server()
+    enabled = Settings.from_env({**BASE_ENV, "SPRING_STATUS_CALLBACK_ENABLED": "true"})
+
+    with pytest.raises(RuntimeError, match="SPRING_STATUS_CALLBACK_URL, AI_CALLBACK_SECRET"):
+        enabled.validate_agent_server()
+
+
+def test_rejects_short_callback_secret() -> None:
+    settings = Settings.from_env(
+        {
+            **BASE_ENV,
+            "SPRING_STATUS_CALLBACK_ENABLED": "true",
+            "SPRING_STATUS_CALLBACK_URL": "https://spring.example/internal/live-agent",
+            "AI_CALLBACK_SECRET": "too-short",
+        }
+    )
+
+    with pytest.raises(RuntimeError, match="at least 32 bytes"):
+        settings.validate_agent_server()
+
+
+def test_openai_provider_requires_api_key() -> None:
+    settings = Settings.from_env({**BASE_ENV, "STT_ENGINE_PROVIDER": "openai-realtime"})
+
+    with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
+        settings.validate_agent_server()
+
+
+def test_provider_must_be_explicit_and_supported() -> None:
+    with pytest.raises(RuntimeError, match="STT_ENGINE_PROVIDER"):
+        Settings.from_env(
+            {
+                "LIVEKIT_URL": "wss://livekit.example",
+                "LIVEKIT_API_KEY": "key",
+                "LIVEKIT_API_SECRET": "secret",
+            }
+        ).validate_agent_server()
+
+    with pytest.raises(RuntimeError, match="must be one of"):
+        Settings.from_env({**BASE_ENV, "STT_ENGINE_PROVIDER": "unknown"}).validate_agent_server()
+
+
+def test_nemotron_is_limited_to_one_active_job() -> None:
+    settings = Settings.from_env(
+        {**BASE_ENV, "STT_ENGINE_PROVIDER": "nemotron", "STT_MAX_ACTIVE_JOBS": "2"}
+    )
+
+    with pytest.raises(RuntimeError, match="must be 1 for nemotron"):
+        settings.validate_agent_server()
+
+
+def test_accepts_complete_callback_configuration() -> None:
+    settings = Settings.from_env(
+        {
+            **BASE_ENV,
+            "SPRING_STATUS_CALLBACK_ENABLED": "true",
+            "SPRING_STATUS_CALLBACK_URL": "https://spring.example/internal/live-agent",
+            "AI_CALLBACK_SECRET": "x" * 32,
+            "SPRING_STATUS_CALLBACK_ATTEMPTS": "2",
+        }
+    )
+
+    settings.validate_agent_server()
+
+
+@pytest.mark.parametrize("value", ["nan", "inf", "-inf", "0", "-1"])
+def test_rejects_non_finite_or_non_positive_callback_timeout(value: str) -> None:
+    settings = Settings.from_env(
+        {
+            **BASE_ENV,
+            "SPRING_STATUS_CALLBACK_TIMEOUT_SECONDS": value,
+        }
+    )
+
+    with pytest.raises(RuntimeError, match="finite positive number"):
+        settings.validate_agent_server()
+
+
+def test_rejects_boolean_timeout_in_programmatic_settings() -> None:
+    settings = replace(
+        Settings.from_env(BASE_ENV),
+        spring_status_callback_timeout_seconds=True,
+    )
+
+    with pytest.raises(TypeError, match="finite positive number"):
+        settings.validate_agent_server()
+
+
+def test_rejects_shutdown_budget_without_livekit_cancellation_headroom() -> None:
+    settings = Settings.from_env({**BASE_ENV, "STT_SHUTDOWN_TIMEOUT_SECONDS": "14"})
+
+    with pytest.raises(RuntimeError, match="at most 13 seconds"):
+        settings.validate_agent_server()
+
+
+def test_rejects_stage_ceilings_that_exceed_shared_shutdown_budget() -> None:
+    settings = Settings.from_env(
+        {
+            **BASE_ENV,
+            "SPRING_STATUS_CALLBACK_ENABLED": "true",
+            "SPRING_STATUS_CALLBACK_URL": "https://spring.example/internal/live-agent",
+            "AI_CALLBACK_SECRET": "x" * 32,
+            "STT_SHUTDOWN_TIMEOUT_SECONDS": "10",
+            "STT_DRAIN_TIMEOUT_SECONDS": "7",
+            "STT_CLEANUP_TIMEOUT_SECONDS": "1",
+            "SPRING_STATUS_CALLBACK_TIMEOUT_SECONDS": "0.75",
+            "SPRING_STATUS_CALLBACK_ATTEMPTS": "2",
+        }
+    )
+
+    with pytest.raises(RuntimeError, match="ceilings exceed"):
+        settings.validate_agent_server()
+
+
+def test_settings_repr_redacts_credentials_and_redis_password() -> None:
+    configured = Settings.from_env(
+        {
+            **BASE_ENV,
+            "LIVEKIT_API_KEY": "private-livekit-key",
+            "LIVEKIT_API_SECRET": "private-livekit-secret",
+            "REDIS_URL": "redis://:private-redis-password@redis:6379/0",
+            "OPENAI_API_KEY": "private-openai-key",
+            "AI_CALLBACK_SECRET": "private-callback-secret",
+        }
+    )
+
+    rendered = repr(configured)
+    assert "private-livekit-key" not in rendered
+    assert "private-livekit-secret" not in rendered
+    assert "private-redis-password" not in rendered
+    assert "private-openai-key" not in rendered
+    assert "private-callback-secret" not in rendered

@@ -1,0 +1,6 @@
+{
+  "timestamp": "1785155700",
+  "secret": "fixture-secret-that-is-at-least-32-bytes",
+  "rawBody": "{\"contractVersion\":\"1\",\"eventId\":\"status-event-1\",\"eventType\":\"LIVE_AGENT_STATUS\",\"sessionId\":\"11111111-1111-4111-8111-111111111111\",\"lessonId\":\"22222222-2222-4222-8222-222222222222\",\"jobId\":\"livekit-job-1\",\"state\":\"SUCCEEDED\",\"occurredAt\":\"2026-07-27T12:35:00.000Z\"}",
+  "expectedSignature": "v1=d889e8de39c2b492691c3b5b1ac43e7d24fef858a2e18ac1dc8235dcc23d4954"
+}

@@ -16,6 +16,13 @@ uv run --frozen python -m app.main
 업무 API와 Spring↔AI 인증 경계는 후속 계약 MR에서 함께 추가한다. 이 서비스를 브라우저에 직접
 노출하지 않는다.
 
+## 폴더별 상세 문서
+
+| 폴더 | 설명 |
+|---|---|
+| [`app/`](app/README.md) | FastAPI 생명주기·설정·관리 endpoint |
+| [`tests/`](tests/README.md) | 설정·로그·health/readiness 검증 |
+
 ```bash
 uv run --frozen pytest -q -p no:cacheprovider
 uv run --frozen ruff check app tests

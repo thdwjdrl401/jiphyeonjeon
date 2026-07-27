@@ -1,0 +1,4 @@
+# 모든 @SpringBootTest 컨텍스트에 Testcontainers 인프라(Postgres+Redis)를 일괄 주입한다(ADR-0038).
+# 개별 테스트 파일을 고치지 않고 공용 설정을 적용하기 위한 스프링 테스트 훅.
+org.springframework.test.context.ContextCustomizerFactory=\
+com.liveclass.support.TestcontainersContextCustomizerFactory

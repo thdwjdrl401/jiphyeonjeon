@@ -7,7 +7,7 @@ import com.liveclass.live.service.LiveRoomControl;
 import com.liveclass.video.domain.VideoAssetStatus;
 import com.liveclass.video.repository.VideoAssetRepository;
 import com.liveclass.video.service.EgressControl;
-import com.liveclass.video.service.RecordingStorage;
+import com.liveclass.video.service.S3RecordingStorage;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -55,7 +55,9 @@ class LiveKitWebhookContractTest {
 
     @MockitoBean private EgressControl egressControl;      // 실 LiveKit 안 타게 목.
     @MockitoBean private LiveRoomControl roomControl;
-    @MockitoBean private RecordingStorage recordingStorage;   // 실 MinIO 안 타게 목(VERIFYING HEAD).
+    // S3RecordingStorage가 RecordingStorage(VERIFYING HEAD)·ReplayStorage(재생) 둘 다 구현 —
+    // 콘크리트 타입으로 모킹해야 같은 컨텍스트의 ReplayPlaybackService 주입점도 이 목으로 채워진다.
+    @MockitoBean private S3RecordingStorage recordingStorage;
 
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
     private final List<UUID> createdSessions = new ArrayList<>();
