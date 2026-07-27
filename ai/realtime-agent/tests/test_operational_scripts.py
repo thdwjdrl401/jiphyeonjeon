@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+import subprocess
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -8,6 +11,8 @@ from livekit import rtc
 from scripts.monitor_caption_stream import format_entry
 from scripts.monitor_caption_stream import parse_args as parse_monitor_args
 from scripts.probe_livekit_room import ProbeSettings, format_room_snapshot
+
+TUNNEL_SCRIPT = Path(__file__).parents[1] / "scripts" / "start_ec2_tunnels.sh"
 
 
 def test_probe_settings_reject_missing_credentials_without_exposing_values() -> None:
@@ -68,3 +73,29 @@ def test_caption_formatter_preserves_utf8_and_completion() -> None:
 def test_caption_monitor_requires_session_filter() -> None:
     with pytest.raises(SystemExit):
         parse_monitor_args([])
+
+
+def test_tunnel_script_requires_explicit_connection_target() -> None:
+    environ = {
+        key: value for key, value in os.environ.items() if key not in {"SSH_KEY", "SSH_TARGET"}
+    }
+    result = subprocess.run(
+        ["sh", "-n", str(TUNNEL_SCRIPT)],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=environ,
+    )
+    assert result.returncode == 0
+
+    result = subprocess.run(
+        ["sh", str(TUNNEL_SCRIPT)],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=environ,
+    )
+    assert result.returncode != 0
+    assert "SSH_KEY" in result.stderr
+    assert "liveclass.pem" not in result.stderr
+    assert "43.201." not in result.stderr
