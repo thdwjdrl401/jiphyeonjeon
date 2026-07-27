@@ -48,6 +48,10 @@ export const mockLiveSessionService = {
   async sendChatMessage(_sessionId, text, question) {
     return { id: `msg_${Date.now()}`, alias: '나', text, time: '현재', question }
   },
+  subscribeChatMessages(_sessionId, _onMessage, onConnectionChange) {
+    onConnectionChange('connected')
+    return () => onConnectionChange('disconnected')
+  },
   async getCaptions() {
     return demoLiveCaptions
   },

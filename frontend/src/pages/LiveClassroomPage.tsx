@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from 'react'
+import { lazy, Suspense, useEffect, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { instructorPaths } from '@/app/router/paths'
@@ -14,17 +15,20 @@ import {
   getCaptions,
   getChatMessages,
   getLiveSession,
-  getQuestionHighlights,
   saveBookmark,
   sendChatMessage,
+  subscribeChatMessages,
+  type ChatConnectionState,
   type ChatMessageView,
 } from '@/features/live-session/liveSessionService'
+import { useDetachedSidebarWindow } from '@/features/live-session/useDetachedSidebarWindow'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
 import { InlineNotice, StatusBadge } from '@/shared/ui/WorkspaceUi'
 
 const liveEdgeMs = 779_000
 const { summaryBlocks, glossaryTerms } = getLiveLearningPreview()
+const InstructorLiveKitStage = lazy(() => import('@/features/live-session/InstructorLiveKitStage'))
 
 function formatSessionTime(sessionMs: number) {
   const seconds = Math.floor(sessionMs / 1000)
@@ -32,9 +36,10 @@ function formatSessionTime(sessionMs: number) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
 }
 
-function timeLabelToMs(label: string) {
-  const [minutes, seconds] = label.split(':').map(Number)
-  return (minutes * 60 + seconds) * 1000
+function mergeChatMessage(messages: ChatMessageView[], incoming: ChatMessageView) {
+  const existingIndex = messages.findIndex((message) => message.id === incoming.id)
+  if (existingIndex < 0) return [...messages, incoming]
+  return messages.map((message, index) => index === existingIndex ? incoming : message)
 }
 
 export default function LiveClassroomPage() {
@@ -51,12 +56,10 @@ export default function LiveClassroomPage() {
   })
   const chatQuery = useQuery({ queryKey: ['live-chat', sessionId], queryFn: () => getChatMessages(sessionId), enabled: Boolean(sessionId) })
   const captionsQuery = useQuery({ queryKey: ['live-captions', sessionId], queryFn: () => getCaptions(sessionId), enabled: Boolean(sessionId) })
-  const questionsQuery = useQuery({ queryKey: ['live-question-highlights', sessionId], queryFn: () => getQuestionHighlights(sessionId), enabled: isInstructor && Boolean(sessionId) })
   const session = sessionQuery.data
   const lesson = lessonQuery.data
   const messages = chatQuery.data ?? []
   const captions = captionsQuery.data ?? []
-  const instructorQuestions = questionsQuery.data ?? []
   const [panel, setPanel] = useState<LearningPanel>('discussion')
   const [selectedTermId, setSelectedTermId] = useState<string | null>(null)
   const [positionMs, setPositionMs] = useState(liveEdgeMs)
@@ -66,17 +69,33 @@ export default function LiveClassroomPage() {
   const [aiAnswer, setAiAnswer] = useState('')
   const [bookmarked, setBookmarked] = useState(false)
   const [endRequested, setEndRequested] = useState(false)
+  const [chatConnectionState, setChatConnectionState] = useState<ChatConnectionState>('connecting')
+  const sidebarWindow = useDetachedSidebarWindow(sessionId)
   // 라이브는 녹화되고 채팅·자막이 AI 처리된다는 안내를 입장 시 한 번 확인받는다.
   // 상시 배너 대신 진입 모달로 알려 시야를 가리지 않게 한다.
   const [recordingNoticeAck, setRecordingNoticeAck] = useState(false)
   const isLive = liveEdgeMs - positionMs < 3_000
   const sendMutation = useMutation({
     mutationFn: ({ text, question }: { text: string; question: boolean }) => sendChatMessage(sessionId, text, question),
-    onSuccess: (sent) => queryClient.setQueryData<ChatMessageView[]>(['live-chat', sessionId], (current = []) => [...current, sent]),
+    onSuccess: (sent) => queryClient.setQueryData<ChatMessageView[]>(
+      ['live-chat', sessionId],
+      (current = []) => mergeChatMessage(current, sent),
+    ),
   })
   const aiMutation = useMutation({ mutationFn: (question: string) => askLiveAi(lesson!.lessonId, question), onSuccess: (data) => setAiAnswer(data.answer) })
   const bookmarkMutation = useMutation({ mutationFn: () => saveBookmark(lesson!.lessonId, positionMs), onSuccess: () => setBookmarked(true) })
   const endMutation = useMutation({ mutationFn: () => endLiveSession(sessionId), onSuccess: () => navigate(instructorPaths.processing(sessionId)) })
+  useEffect(() => {
+    if (!sessionId) return undefined
+    return subscribeChatMessages(
+      sessionId,
+      (incoming) => queryClient.setQueryData<ChatMessageView[]>(
+        ['live-chat', sessionId],
+        (current = []) => mergeChatMessage(current, incoming),
+      ),
+      setChatConnectionState,
+    )
+  }, [queryClient, sessionId])
   usePageTitle(`LIVE · ${lesson?.title ?? ''}`)
 
   const sendMessage = (event: FormEvent) => {
@@ -85,6 +104,22 @@ export default function LiveClassroomPage() {
     sendMutation.mutate({ text: message.trim(), question: isInstructor ? false : isQuestion })
     setMessage('')
     setIsQuestion(false)
+  }
+
+  const handleMessageKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== 'Enter' || event.nativeEvent.isComposing) return
+    if (event.ctrlKey) {
+      event.preventDefault()
+      const textarea = event.currentTarget
+      const selectionStart = textarea.selectionStart
+      const selectionEnd = textarea.selectionEnd
+      const nextCursor = selectionStart + 1
+      setMessage(`${message.slice(0, selectionStart)}\n${message.slice(selectionEnd)}`)
+      Promise.resolve().then(() => textarea.setSelectionRange(nextCursor, nextCursor))
+      return
+    }
+    event.preventDefault()
+    event.currentTarget.form?.requestSubmit()
   }
 
   const askAi = (event: FormEvent) => {
@@ -99,8 +134,8 @@ export default function LiveClassroomPage() {
   }
 
   // 진입 게이트에는 이 화면의 정체성인 세션·레슨만 둔다.
-  // 자막·질문 하이라이트는 아직 서버 경로가 없어(CP2) 늘 실패하는데, 여기에 섞으면
-  // 나머지가 멀쩡해도 라이브 화면 전체가 뜨지 않는다. 패널 안에서 각자 안내한다.
+  // 자막은 아직 서버 경로가 없어(CP2) 늘 실패하는데, 여기에 섞으면
+  // 나머지가 멀쩡해도 라이브 화면 전체가 뜨지 않는다. 패널 안에서 안내한다.
   //
   // 실패 검사를 로딩보다 먼저 한다. 레슨 조회는 세션 결과에 의존해(enabled) 세션이 실패하면
   // 비활성인 채 영원히 isPending으로 남는다 — 로딩을 먼저 보면 오류 화면에 닿지 못한다.
@@ -110,7 +145,14 @@ export default function LiveClassroomPage() {
 
   const discussionComposer = (
     <form className="chat-composer" onSubmit={sendMessage}>
-      <textarea aria-label="채팅 메시지" rows={2} value={message} placeholder="메시지를 입력하세요" onChange={(event) => setMessage(event.target.value)} />
+      <textarea
+        aria-label="채팅 메시지"
+        rows={2}
+        value={message}
+        placeholder="메시지를 입력하세요 (Enter 전송 · Ctrl+Enter 줄바꿈)"
+        onChange={(event) => setMessage(event.target.value)}
+        onKeyDown={handleMessageKeyDown}
+      />
       <div>
         {!isInstructor
           ? <label><input type="checkbox" checked={isQuestion} onChange={(event) => setIsQuestion(event.target.checked)} /> 질문으로 등록</label>
@@ -128,6 +170,53 @@ export default function LiveClassroomPage() {
     </>
   )
 
+  const chatConnectionNotice = chatConnectionState === 'connected'
+    ? undefined
+    : chatConnectionState === 'connecting'
+      ? '실시간 채팅을 연결하고 있습니다.'
+      : chatConnectionState === 'reconnecting'
+        ? '실시간 채팅 연결이 끊겨 다시 연결하고 있습니다.'
+        : chatConnectionState === 'error'
+          ? '실시간 채팅 연결에 문제가 생겼습니다. 자동 재연결을 시도합니다.'
+          : '실시간 채팅 연결이 종료되었습니다.'
+
+  const sidebar = (
+    <LearningSidebar
+      panel={panel}
+      onPanelChange={setPanel}
+      currentSessionMs={positionMs}
+      onSeek={setPositionMs}
+      selectedTermId={selectedTermId}
+      onSelectedTermChange={setSelectedTermId}
+      summaryBlocks={summaryBlocks}
+      glossaryTerms={glossaryTerms}
+      messages={messages}
+      discussionComposer={discussionComposer}
+      discussionNotice={chatConnectionNotice}
+      aiContent={aiContent}
+      noteContext="LIVE"
+      windowAction={isInstructor
+        ? (
+          <>
+            <span className="learning-sidebar-windowbar__status">
+              {sidebarWindow.isDetached
+                ? sidebarWindow.mode === 'picture-in-picture' ? '항상 위 패널' : '별도 팝업'
+                : '화면 공유 중에도 채팅 확인'}
+            </span>
+            {sidebarWindow.error && <span className="learning-sidebar-windowbar__error" role="alert">{sidebarWindow.error}</span>}
+            <button
+              className="learning-sidebar-windowbar__button"
+              type="button"
+              onClick={sidebarWindow.isDetached ? sidebarWindow.close : sidebarWindow.open}
+            >
+              {sidebarWindow.isDetached ? '패널 합치기' : '운영 패널 분리'}
+            </button>
+          </>
+        )
+        : undefined}
+    />
+  )
+
   return (
     <div className={`media-page media-page--live${isInstructor ? ' media-page--instructor' : ''}`}>
       {!recordingNoticeAck && (
@@ -141,15 +230,6 @@ export default function LiveClassroomPage() {
         </div>
       )}
 
-      {isInstructor && (
-        <section className="instructor-live-console" aria-label="강사 라이브 운영 상태">
-          <div><span>송출</span><strong>LIVE</strong><small>카메라·화면 공유 정상</small></div>
-          <div><span>녹화</span><strong>RECORDING</strong><small>Egress HLS 저장 중</small></div>
-          <div><span>실시간 자막</span><strong>ACTIVE</strong><small>지연 1.2초</small></div>
-          <div><span>질문</span><strong>{instructorQuestions.reduce((sum, item) => sum + item.count, 0)}개</strong><small>집중 구간 {instructorQuestions.length}곳</small></div>
-        </section>
-      )}
-
       {isInstructor && endRequested && (
         <div className="instructor-end-confirm" role="alert">
           <div><strong>라이브 강의를 종료할까요?</strong><p>학생 연결을 종료하고 녹화·AI 후처리 단계로 이동합니다.</p></div>
@@ -157,49 +237,46 @@ export default function LiveClassroomPage() {
         </div>
       )}
 
-      <div className="media-layout">
+      <div className={`media-layout${isInstructor && sidebarWindow.isDetached ? ' is-sidebar-detached' : ''}`}>
         <section className="media-primary">
-          <div className="video-stage" tabIndex={0}>
-            <div className="video-stage__glow" />
-            <header className="video-status-overlay" aria-label="라이브 강의 정보">
-              <div className="video-status-overlay__identity"><span className="live-dot" /><strong>LIVE</strong><h1>{lesson.title}</h1><small>강의 {sessionId}</small></div>
-              <div className="video-status-overlay__status">
-                {isInstructor && <StatusBadge tone="warning">강사 운영 모드</StatusBadge>}
-                <StatusBadge tone="success">연결 안정적</StatusBadge>
-                <span>{session.participants}명 참여 중</span>
-                {isInstructor && <button className="button button--soft button--small" type="button" onClick={() => setEndRequested(true)}>강의 종료</button>}
+          {isInstructor
+            ? (
+              <Suspense fallback={<div className="video-stage instructor-livekit-loading" role="status">LiveKit 송출 도구를 불러오는 중입니다.</div>}>
+                <InstructorLiveKitStage
+                  enabled={recordingNoticeAck}
+                  lessonTitle={lesson.title}
+                  participantCount={session.participants}
+                  sessionId={sessionId}
+                  onRequestEnd={() => setEndRequested(true)}
+                />
+              </Suspense>
+            )
+            : <div className="video-stage" tabIndex={0}>
+              <div className="video-stage__glow" />
+              <header className="video-status-overlay" aria-label="라이브 강의 정보">
+                <div className="video-status-overlay__identity"><span className="live-dot" /><strong>LIVE</strong><h1>{lesson.title}</h1><small>강의 {sessionId}</small></div>
+                <div className="video-status-overlay__status">
+                  <StatusBadge tone="success">연결 안정적</StatusBadge>
+                  <span>{session.participants}명 참여 중</span>
+                </div>
+              </header>
+              <div className="slide-preview"><span>SPRING SECURITY</span><h2>요청은 어떻게<br />인증되는가?</h2><div className="slide-code">SecurityFilterChain → Authentication → SecurityContext</div></div>
+              <div className="video-controls-overlay" aria-label="라이브 재생 컨트롤">
+                <div className="timeline-row"><span>00:00</span><input aria-label="라이브 타임라인" min="0" max={liveEdgeMs} type="range" value={positionMs} onChange={(event) => setPositionMs(Number(event.target.value))} /><span>{formatSessionTime(positionMs)}</span></div>
+                <div className="control-row">
+                  <div><button className={bookmarked ? 'is-active' : ''} type="button" onClick={() => bookmarkMutation.mutate()}>{bookmarked ? '★ 북마크됨' : '☆ 북마크'}</button></div>
+                  <button className={`go-live${isLive ? ' is-live' : ''}`} type="button" onClick={() => setPositionMs(liveEdgeMs)}><i /> LIVE{!isLive && '로 이동'}</button>
+                </div>
               </div>
-            </header>
-            <div className="slide-preview"><span>SPRING SECURITY</span><h2>요청은 어떻게<br />인증되는가?</h2><div className="slide-code">SecurityFilterChain → Authentication → SecurityContext</div></div>
-            <div className="video-controls-overlay" aria-label="라이브 재생 컨트롤">
-              <div className="timeline-row"><span>00:00</span><input aria-label="라이브 타임라인" min="0" max={liveEdgeMs} type="range" value={positionMs} onChange={(event) => setPositionMs(Number(event.target.value))} /><span>{formatSessionTime(positionMs)}</span></div>
-              <div className="control-row">
-                <div>{isInstructor ? <><button type="button">마이크 켜짐</button><button type="button">카메라 켜짐</button><button type="button">화면 공유 중</button></> : <button className={bookmarked ? 'is-active' : ''} type="button" onClick={() => bookmarkMutation.mutate()}>{bookmarked ? '★ 북마크됨' : '☆ 북마크'}</button>}</div>
-                <button className={`go-live${isLive ? ' is-live' : ''}`} type="button" onClick={() => setPositionMs(liveEdgeMs)}><i /> LIVE{!isLive && '로 이동'}</button>
-              </div>
-            </div>
-          </div>
+            </div>}
 
           <CaptionDock captions={captions} currentSessionMs={positionMs} label="실시간 자막" onSeek={setPositionMs} onSelectTerm={openGlossaryTerm} />
 
-          {!isLive && <InlineNotice>현재 라이브보다 {formatSessionTime(liveEdgeMs - positionMs)} 이전을 재생하고 있습니다. 영상과 자막이 같은 시각으로 이동했습니다.</InlineNotice>}
-          {isInstructor && <div className="question-strip"><strong>질문 집중 구간</strong>{instructorQuestions.map((question) => <button type="button" key={question.at} onClick={() => { setPositionMs(timeLabelToMs(question.at)); setPanel('discussion') }}><span>{question.at}</span> {question.count}개 질문</button>)}</div>}
+          {!isInstructor && !isLive && <InlineNotice>현재 라이브보다 {formatSessionTime(liveEdgeMs - positionMs)} 이전을 재생하고 있습니다. 영상과 자막이 같은 시각으로 이동했습니다.</InlineNotice>}
         </section>
 
-        <LearningSidebar
-          panel={panel}
-          onPanelChange={setPanel}
-          currentSessionMs={positionMs}
-          onSeek={setPositionMs}
-          selectedTermId={selectedTermId}
-          onSelectedTermChange={setSelectedTermId}
-          summaryBlocks={summaryBlocks}
-          glossaryTerms={glossaryTerms}
-          messages={messages}
-          discussionComposer={discussionComposer}
-          aiContent={aiContent}
-          noteContext="LIVE"
-        />
+        {(!isInstructor || !sidebarWindow.isDetached) && sidebar}
+        {isInstructor && sidebarWindow.portalContainer && createPortal(sidebar, sidebarWindow.portalContainer)}
       </div>
     </div>
   )
