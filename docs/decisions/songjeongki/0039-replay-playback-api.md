@@ -10,6 +10,12 @@
 > 라이브 접근·VOD 게시 상태 분리는 [choinhoo/0001](../choinhoo/0001-live-replay-playback-api.md)이
 > 이 ADR의 `READY` 전면 게이트와 인라인 manifest 응답을 대체한다. 권한 SPI, presigned 세그먼트,
 > PDT 온디맨드 계산, 검수 후 게시 결정은 계속 유효하다.
+>
+> 아래 본문에서 이름이 바뀌거나 사라진 것: 세그먼트 TTL 설정은
+> `livekit.egress.playback-url-ttl-seconds` → **`video.playback.segment-url-ttl`**(기본 `1h`)로 옮겼고,
+> `ReplayStorage.readManifest`와 `ReplayManifestMissingException`은 **삭제**됐다(부재는
+> `findManifest`의 빈 `Optional`로 표현하고 호출자가 상황에 맞는 409를 고른다).
+> §3-2의 만료 복구 계약도 대상이 `GET .../playback`이 아니라 **manifest 엔드포인트 재로드**다.
 
 ## 맥락
 
