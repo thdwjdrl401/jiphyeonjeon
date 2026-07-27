@@ -76,6 +76,9 @@ BUILDING -> ACTIVE -> RETIRED
 - migration login은 `vector` extension과 `ai` schema/table을 만들 수 있어야 하며 별도
   `AI_WORKER_MIGRATION_DATABASE_URL`(`postgresql+psycopg`)을 사용한다.
 - runtime login은 운영 단계에서 `ai_app` role membership을 받아야 한다.
+- production runtime/migration role 이름의 기본값은 `ai_app`이다. repository와 migration은 안전한 PostgreSQL
+  identifier만 받는 내부 role override를 지원하며, 자동 통합 테스트는 기존 cluster role과 충돌하지 않도록
+  실행마다 고유한 `ai_app_*_test` role을 주입한다.
 - `ai_app`은 이 revision의 5개 table DML과 4개 identity sequence 사용 권한만 가진다.
 - `ai_app`은 `ai` schema에서 DDL할 수 없다. AI migration은 상대 소유인 `core` schema ACL을 수정하지 않으며,
   runtime login에 core 권한을 주지 않는 것은 DB provisioning 전제다.

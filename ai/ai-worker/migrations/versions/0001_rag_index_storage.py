@@ -1,5 +1,8 @@
 """Create the Python-owned RAG index storage."""
 
+import os
+import re
+
 from alembic import op
 
 
@@ -8,17 +11,27 @@ down_revision = None
 branch_labels = None
 depends_on = None
 
+_DATABASE_ROLE = re.compile(r"^[a-z_][a-z0-9_]{0,62}$")
+
+
+def _runtime_role() -> str:
+    role = os.getenv("AI_WORKER_DATABASE_ROLE", "ai_app")
+    if not _DATABASE_ROLE.fullmatch(role):
+        raise ValueError("AI_WORKER_DATABASE_ROLE must be a safe PostgreSQL role identifier")
+    return role
+
 
 def upgrade() -> None:
+    runtime_role = _runtime_role()
     op.execute("CREATE EXTENSION IF NOT EXISTS vector")
     op.execute("CREATE SCHEMA IF NOT EXISTS ai")
     op.execute(
-        """
+        f"""
         DO $$
         DECLARE
           runtime_role record;
         BEGIN
-          SELECT * INTO runtime_role FROM pg_roles WHERE rolname = 'ai_app';
+          SELECT * INTO runtime_role FROM pg_roles WHERE rolname = '{runtime_role}';
           IF NOT FOUND THEN
             RAISE EXCEPTION 'ai_app must be provisioned before the AI migration';
           END IF;
@@ -35,7 +48,7 @@ def upgrade() -> None:
             SELECT 1
             FROM pg_auth_members membership
             JOIN pg_roles member_role ON member_role.oid = membership.member
-            WHERE member_role.rolname = 'ai_app'
+            WHERE member_role.rolname = '{runtime_role}'
           ) THEN
             RAISE EXCEPTION 'ai_app must not inherit or SET ROLE to another role';
           END IF;
@@ -43,24 +56,24 @@ def upgrade() -> None:
             SELECT 1
             FROM pg_namespace namespace
             JOIN pg_roles owner_role ON owner_role.oid = namespace.nspowner
-            WHERE namespace.nspname = 'ai' AND owner_role.rolname = 'ai_app'
+            WHERE namespace.nspname = 'ai' AND owner_role.rolname = '{runtime_role}'
           ) THEN
             RAISE EXCEPTION 'ai_app must not own the ai schema';
           END IF;
         END $$
         """
     )
-    op.execute("REVOKE CREATE ON SCHEMA ai FROM ai_app")
+    op.execute(f"REVOKE CREATE ON SCHEMA ai FROM {runtime_role}")
     op.execute(
-        """
+        f"""
         DO $$ BEGIN
-          IF has_schema_privilege('ai_app', 'ai', 'CREATE') THEN
+          IF has_schema_privilege('{runtime_role}', 'ai', 'CREATE') THEN
             RAISE EXCEPTION 'ai_app must not have direct or inherited CREATE on ai schema';
           END IF;
         END $$
         """
     )
-    op.execute("GRANT USAGE ON SCHEMA ai TO ai_app")
+    op.execute(f"GRANT USAGE ON SCHEMA ai TO {runtime_role}")
     op.execute(
         """
         CREATE TABLE ai.job_run (
@@ -192,18 +205,18 @@ def upgrade() -> None:
         "ON ai.job_run (tenant_id, material_id, task_type, status, material_version DESC)"
     )
     op.execute(
-        """
+        f"""
         GRANT SELECT, INSERT, UPDATE, DELETE
         ON ai.job_run, ai.model_run, ai.material_version, ai.document_chunk, ai.chunk_embedding
-        TO ai_app
+        TO {runtime_role}
         """
     )
     op.execute(
-        """
+        f"""
         GRANT USAGE, SELECT
         ON SEQUENCE ai.job_run_id_seq, ai.model_run_id_seq,
                     ai.material_version_id_seq, ai.document_chunk_id_seq
-        TO ai_app
+        TO {runtime_role}
         """
     )
 

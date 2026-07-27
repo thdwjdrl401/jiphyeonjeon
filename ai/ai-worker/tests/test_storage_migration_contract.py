@@ -1,8 +1,11 @@
 import importlib
 
+import pytest
+
 
 def test_upgrade_uses_curriculum_uuid_pgvector_and_least_privilege(monkeypatch) -> None:
     migration = importlib.import_module("migrations.versions.0001_rag_index_storage")
+    monkeypatch.delenv("AI_WORKER_DATABASE_ROLE", raising=False)
     statements = []
     monkeypatch.setattr(migration.op, "execute", statements.append)
 
@@ -34,6 +37,7 @@ def test_upgrade_uses_curriculum_uuid_pgvector_and_least_privilege(monkeypatch) 
 
 def test_downgrade_removes_only_owned_tables(monkeypatch) -> None:
     migration = importlib.import_module("migrations.versions.0001_rag_index_storage")
+    monkeypatch.delenv("AI_WORKER_DATABASE_ROLE", raising=False)
     statements = []
     monkeypatch.setattr(migration.op, "execute", statements.append)
 
@@ -47,3 +51,15 @@ def test_downgrade_removes_only_owned_tables(monkeypatch) -> None:
     assert "DROP SCHEMA" not in ddl
     assert "DROP EXTENSION" not in ddl
     assert "DROP ROLE" not in ddl
+
+
+def test_upgrade_rejects_unsafe_runtime_role_before_executing_sql(monkeypatch) -> None:
+    migration = importlib.import_module("migrations.versions.0001_rag_index_storage")
+    statements = []
+    monkeypatch.setattr(migration.op, "execute", statements.append)
+    monkeypatch.setenv("AI_WORKER_DATABASE_ROLE", "ai_app; RESET ROLE")
+
+    with pytest.raises(ValueError, match="safe PostgreSQL role"):
+        migration.upgrade()
+
+    assert statements == []

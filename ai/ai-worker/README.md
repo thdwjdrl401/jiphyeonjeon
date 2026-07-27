@@ -93,7 +93,10 @@ Java가 채택한 계약으로 해석하지 않는다. 현재 `app.main`도 inge
 
 ## Verification
 
-기본 테스트의 PostgreSQL 항목은 DB URL이 없으면 skip된다. skip 결과를 통합 테스트 통과로 세지 않는다.
+기본 테스트는 실행 중인 개발용 PostgreSQL 서버 안에 고유한 `liveclass_ai_*_test` DB와
+`ai_app_*_test NOLOGIN NOINHERIT` role을 만들고 제거하므로 pgvector 통합 테스트 16개를 항상 포함한다.
+Java가 사용하는 `liveclass` DB와 기존 cluster role은 수정하지 않는다.
+PostgreSQL이 꺼져 있거나 test DB를 만들 권한이 없으면 skip하지 않고 테스트를 실패시킨다.
 
 ```bash
 uv lock --check
@@ -102,12 +105,20 @@ uv run --frozen ruff check app tests migrations
 uv run --frozen ruff format --check app tests migrations
 ```
 
-실제 pgvector 통합 테스트는 이름이 `_test`로 끝나며 `core`·`ai` schema와 활성 Alembic revision이 없는
-폐기 가능한 전용 DB에서만 실행한다. 이 테스트는 downgrade와 fixture schema 삭제를 수행한다.
+기본 `docker-compose.yml`의 PostgreSQL 계정에서는 별도 환경변수가 필요 없다.
 
 ```bash
-AI_WORKER_TEST_DATABASE_URL=postgresql+asyncpg://admin:secret@localhost/liveclass_ai_test \
-AI_WORKER_TEST_MIGRATION_DATABASE_URL=postgresql+psycopg://admin:secret@localhost/liveclass_ai_test \
-AI_WORKER_ALLOW_DESTRUCTIVE_TEST_DB=1 \
+docker compose up -d postgres
+cd ai/ai-worker
 uv run --frozen pytest -q -p no:cacheprovider tests/test_pgvector_repository.py
 ```
+
+Compose의 PostgreSQL 계정이나 포트를 바꾼 환경은 관리자 DB URL 하나만 설정한다.
+
+```bash
+AI_WORKER_TEST_ADMIN_URL=postgresql+psycopg://admin:secret@localhost:5432/postgres \
+uv run --frozen pytest -q -p no:cacheprovider
+```
+
+외부에서 미리 만든 test DB를 사용하는 CI는 기존 `AI_WORKER_TEST_DATABASE_URL`,
+`AI_WORKER_TEST_MIGRATION_DATABASE_URL`, `AI_WORKER_ALLOW_DESTRUCTIVE_TEST_DB=1` 조합을 계속 사용할 수 있다.
