@@ -44,6 +44,14 @@ export default defineConfig({
           ) {
             return 'livekit-vendor'
           }
+          if (
+            normalizedId.includes('/node_modules/@vidstack/')
+            || normalizedId.includes('/node_modules/hls.js/')
+            || normalizedId.includes('/node_modules/media-captions/')
+            || normalizedId.includes('/node_modules/@floating-ui/')
+          ) {
+            return 'vidstack-vendor'
+          }
           if (id.includes('react') || id.includes('react-router')) {
             return 'react-vendor'
           }
