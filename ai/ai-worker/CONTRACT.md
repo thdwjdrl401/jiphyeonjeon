@@ -180,10 +180,8 @@ SUCCEEDED version이면 저장된 version id를 반환해 동일 job을 재임�
 
 ## 9. Spring 자료 임베딩 연동 adapter 규약
 
-이 절은 `feat/be/ai-material-download-url`의 `docs/ai-embedding-integration.md`, 루트
-`docs/CONTRACT.md` §3-1/§3-2와 ADR-0036을 AI 소비자 관점에서 채택한다. 검토 기준 revision은
-`6f472076e149567a9ecbfbb8ea55d070ec61b91f`이다. 해당 BE 변경이 master에 병합된 뒤에는 master의 공유 문서와
-코드를 정본으로 삼는다.
+이 절은 backend의 `aiintegration/README.md`, 루트 `docs/CONTRACT.md` §3-1/§3-2와 ADR-0036을 AI 소비자
+관점에서 채택한다. 공유 필드와 상태코드는 루트 계약 문서를 정본으로 삼는다.
 
 ### 9.1 RabbitMQ wire envelope
 

@@ -1,9 +1,9 @@
-# ADR-0002: Spring 큐를 변경하지 않는 단일 PPTX consumer를 사용한다
+# ADR-0019: Spring 큐를 변경하지 않는 단일 PPTX consumer를 사용한다
 
 - 상태: Accepted (AI worker local)
 - 일자: 2026-07-27
 - 범위: `ai/ai-worker`
-- 선행 결정: ADR-0001, 루트 ADR-0036
+- 선행 결정: ADR-0018, 루트 ADR-0036
 
 ## 배경
 

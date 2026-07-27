@@ -10,10 +10,11 @@ lockfile을 독립적으로 관리한다.
 | [`realtime-agent`](realtime-agent/README.md) | LiveKit 강사 오디오→STT→Redis caption agent | LiveKit AgentServer |
 | [`bge-runtime`](bge-runtime/README.md) | 인증된 BGE-M3 내부 GPU embedding runtime | `127.0.0.1:8020` |
 
-현재 범위는 ai-api/ai-worker의 실행 골격, realtime-agent의 runnable AgentServer·오디오·VAD·STT
-provider·AI-side lifecycle 계약, 독립 BGE-M3 runtime까지다. realtime-agent 메시지는 Java 채택 전
+현재 범위는 ai-api 실행 골격, RabbitMQ 자료 인제스트를 실행하는 ai-worker,
+realtime-agent의 runnable AgentServer·오디오·VAD·STT provider·AI-side lifecycle 계약,
+독립 BGE-M3 runtime까지다. realtime-agent 메시지는 Java 채택 전
 후보 계약이며 공유 `docs/CONTRACT.md`를 변경하지 않는다.
-RAG API, RabbitMQ consumer와 Java의 live caption dispatch/consumer는 후속 MR에서 추가한다.
+RAG API와 Java의 live caption dispatch/consumer는 후속 MR에서 추가한다.
 
 실행과 검증 명령은 각 서비스 README를 따른다.
 

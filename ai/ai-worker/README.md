@@ -55,6 +55,7 @@ uv run --frozen alembic upgrade head
 | [`app/adapters/`](app/adapters/README.md) | PostgreSQL/pgvector 저장 adapter |
 | [`migrations/`](migrations/README.md) | Python 소유 `ai` schema |
 | [`tests/`](tests/README.md) | 단위·계약·PostgreSQL 통합 검증 |
+| [`scripts/`](scripts/README.md) | 실제 Spring→RabbitMQ→BGE→pgvector E2E probe |
 
 컨테이너 probe 때문에 `AI_WORKER_MANAGEMENT_HOST=0.0.0.0`을 사용하더라도 외부 ingress에는 포트를
 노출하지 않는다.
@@ -82,14 +83,15 @@ uv run --frozen alembic upgrade head
 
 ## PPTX runtime adapters
 
-Spring 자료 파이프라인 계약은 `feat/be/ai-material-download-url`의
-`docs/ai-embedding-integration.md` revision `6f47207`을 기준으로 반영했다.
+Spring 자료 파이프라인 계약은 [backend aiintegration README](../../backend/src/main/java/com/liveclass/aiintegration/README.md)와
+루트 `docs/CONTRACT.md` §3을 기준으로 반영했다.
 
 - `PPTX_EMBED`·`EMBED_DELETE` version 1 wire DTO를 camelCase·extra-forbid로 검증한다.
 - `PPTX_EMBED`는 고정 tenant, material version 1, Spring asset compatibility locator와 배포 설정의 BGE
   revision/chunk 전략을 사용해 내부 `StagedMaterial`로 결정적으로 변환한다.
 - source adapter는 MinIO 자격증명을 사용하지 않는다. `assetId` 원시 JSON bytes를 Spring 공유 secret으로
   HMAC-SHA256 서명해 주문형 URL을 발급받고, URL을 저장하지 않은 채 50 MiB 상한으로 즉시 streaming GET한다.
+- presigned URL의 query signature가 access log에 남지 않도록 `httpx`·`httpcore` INFO 로그를 억제한다.
 - remote BGE adapter는 별도 Bearer token을 사용하고 최대 4개씩 순차 호출해 입력 순서를 보존한다.
 - callback adapter는 source 발급과 같은 Spring HMAC signer를 재사용하며, 동일 사건의 재시도에 같은
   `eventId`와 raw body를 사용할 수 있다.
@@ -134,8 +136,10 @@ runtime builder를 활성화하려면 아래 설정이 추가로 필요하다. `
 | `AI_WORKER_SOURCE_MAX_BYTES` | `52428800` |
 | `AI_WORKER_CHUNK_MAX_CHARS` | `1200` |
 
-외부 adapter 결정은 [ADR-0001](docs/decisions/0001-spring-presigned-pptx-runtime-adapters.md), consumer
-수명주기 결정은 [ADR-0002](docs/decisions/0002-material-rabbitmq-consumer-lifecycle.md)에 기록했다.
+외부 adapter 결정은 [ADR-0018](../../docs/decisions/canola/0018-spring-presigned-pptx-runtime-adapters.md), consumer
+수명주기 결정은 [ADR-0019](../../docs/decisions/canola/0019-material-rabbitmq-consumer-lifecycle.md)에 기록했다.
+격리 E2E 경계와 실행 절차는 [ADR-0020](../../docs/decisions/canola/0020-local-material-ingestion-e2e-boundary.md),
+[E2E runbook](../../docs/decisions/canola/0021-material-ingestion-e2e-runbook.md)에서 관리한다.
 
 ### 현재 리뷰·후속 항목
 
@@ -150,16 +154,20 @@ runtime builder를 활성화하려면 아래 설정이 추가로 필요하다. `
   중단할 수 없다. 30초 drain 뒤 취소되어도 Python process 종료 과정은 실행 중인 기본 executor thread를 기다린다.
 - 추출 범위: 이미지 OCR, SmartArt, chart와 grouped shape 내부 텍스트는 지원하지 않는다. 필요 시 fixture와
   resource limit을 포함한 별도 기능으로 확장한다.
-- 통합 검증: unit/contract test는 실제 wire body와 실패 분류를 검증하지만, 배포된 Spring URL 발급·presigned
-  GET·실제 BGE GPU·RabbitMQ를 한 번에 연결한 E2E는 아직 실행하지 않았다.
-- 활성화 gate: delete resolver와 실제 Spring·RabbitMQ·BGE·PostgreSQL E2E가 끝나기 전에는 Python consumer와
-  Spring의 `MATERIAL_EMBEDDING_ENABLED`를 모두 켜지 않는다.
+- 통합 검증: 격리된 Docker 인프라와 host Spring/worker, 실제 CUDA BGE를 연결한 강사 PPTX E2E를 두 번
+  통과했다. 두 실행 모두 Spring `READY`, AI `ACTIVE`, chunk/embedding 1개, 1024차원을 확인했다.
+- 활성화 gate: 검증된 `PPTX_EMBED` 경로는 필요한 서비스와 secret이 준비된 환경에서 opt-in으로 켤 수 있다.
+  기본값은 계속 false이며, 운영 Compose network와 `EMBED_DELETE` resolver를 보강하기 전 전역 활성화하지 않는다.
 
 ## Verification
 
-현재 consumer branch 기준 전체 결과는 `247 passed, 0 skipped`다. 경고 1건은 FastAPI TestClient가
+현재 consumer 기준 전체 결과는 `248 passed, 0 skipped`다. 경고 1건은 FastAPI TestClient가
 Starlette의 기존 httpx 호환 경로를 불러올 때 발생하는 deprecation warning이며 이번 변경에서 추가한 실패나
 skip은 아니다.
+
+2026-07-27 실제 E2E의 최종 확인 결과는 material `dd78649c-8b8c-4603-ab9c-0f5f1b1152a8`,
+`state=ACTIVE`, `chunkCount=1`, `embeddingCount=1`, `dimensions=1024`다. Spring AI 연동·자료 계약 테스트는
+`BUILD SUCCESSFUL`, BGE는 `64 passed`, worker image는 non-root `liveclass` 사용자로 `healthy/ready`를 확인했다.
 
 기본 테스트는 실행 중인 개발용 PostgreSQL 서버 안에 고유한 `liveclass_ai_*_test` DB와
 `ai_app_*_test NOLOGIN NOINHERIT` role을 만들고 제거하므로 pgvector 통합 테스트 16개를 항상 포함한다.
@@ -169,8 +177,8 @@ PostgreSQL이 꺼져 있거나 test DB를 만들 권한이 없으면 skip하지 
 ```bash
 uv lock --check
 uv run --frozen pytest -q -p no:cacheprovider
-uv run --frozen ruff check app tests migrations
-uv run --frozen ruff format --check app tests migrations
+uv run --frozen ruff check app tests migrations scripts
+uv run --frozen ruff format --check app tests migrations scripts
 ```
 
 기본 `docker-compose.yml`의 PostgreSQL 계정에서는 별도 환경변수가 필요 없다.
