@@ -35,12 +35,11 @@ def test_selective_subscription_only_subscribes_wanted_track() -> None:
     microphone = RecordingPublication()
     screen_audio = RecordingPublication()
 
-    assert apply_selective_subscription(
-        microphone, TrackDescriptor("audio", "microphone")
-    ) is True
-    assert apply_selective_subscription(
-        screen_audio, TrackDescriptor("audio", "screen_share_audio")
-    ) is False
+    assert apply_selective_subscription(microphone, TrackDescriptor("audio", "microphone")) is True
+    assert (
+        apply_selective_subscription(screen_audio, TrackDescriptor("audio", "screen_share_audio"))
+        is False
+    )
 
     assert microphone.subscribed is True
     assert screen_audio.subscribed is False

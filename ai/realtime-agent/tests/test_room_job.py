@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from types import SimpleNamespace
 
 import pytest
 
-from app.jobs.room_job import run_room_job
+from app.jobs.room_job import UnexpectedAudioEofError, run_room_job
+from app.livekit.audio_source import AudioCompletionReason, AudioCompletionRequest
 from app.stt.engine import (
     AudioChunk,
     EngineCompleted,
@@ -46,6 +48,8 @@ class FakeAudioSource:
         self.connect_calls = 0
         self.chunks_calls = 0
         self.close_calls = 0
+        self._completion_requested = asyncio.Event()
+        self._completion_request: AudioCompletionRequest | None = None
 
     async def connect(self) -> None:
         self.connect_calls += 1
@@ -55,6 +59,31 @@ class FakeAudioSource:
         self.chunks_calls += 1
         for chunk in self._chunks:
             yield chunk
+        self.request_completion()
+
+    @property
+    def completion_request(self) -> AudioCompletionRequest | None:
+        return self._completion_request
+
+    def request_completion(
+        self,
+        reason: AudioCompletionReason = "SOURCE_EOF",
+        *,
+        requested_at_monotonic: float | None = None,
+    ) -> None:
+        self._completion_request = AudioCompletionRequest(
+            reason=reason,
+            requested_at_monotonic=(
+                time.monotonic() if requested_at_monotonic is None else requested_at_monotonic
+            ),
+        )
+        self._completion_requested.set()
+
+    async def wait_completion_requested(self) -> AudioCompletionRequest:
+        await self._completion_requested.wait()
+        request = self._completion_request
+        assert request is not None
+        return request
 
     async def close(self) -> None:
         self.close_calls += 1
@@ -99,7 +128,7 @@ async def test_room_job_pumps_each_chunk_once_and_drains_engine_events() -> None
     async def record_event(event: EngineEvent) -> None:
         events.append(event)
 
-    await run_room_job(
+    result = await run_room_job(
         context,
         engine,
         record_event,
@@ -114,12 +143,41 @@ async def test_room_job_pumps_each_chunk_once_and_drains_engine_events() -> None
     assert engine.close_calls == 1
     assert [type(event) for event in events] == [TextDelta, TextDelta]
     assert [event.stream_elapsed_ms for event in events] == [20, 40]
+    assert result.completion_reason == "SOURCE_EOF"
+    assert result.shutdown_deadline > time.monotonic()
     assert context.log_context_fields == {
         "room_name": "room-1",
         "job_id": "job-1",
         "worker_id": "worker-1",
     }
     assert not hasattr(context.job, "metadata")
+
+
+async def test_iterator_eof_without_explicit_completion_fails_closed() -> None:
+    context = FakeContext()
+
+    class ReasonlessEofSource(FakeAudioSource):
+        async def chunks(self) -> AsyncIterator[AudioChunk]:
+            self.chunks_calls += 1
+            if False:
+                yield audio_chunk(0)
+
+    source = ReasonlessEofSource(context, [])
+    engine = RecordingEngine()
+
+    with pytest.raises(
+        UnexpectedAudioEofError,
+        match="without an explicit completion request",
+    ):
+        await run_room_job(
+            context,
+            engine,
+            _record_nothing,
+            audio_source_factory=lambda _context: source,
+        )
+
+    assert source.close_calls == 1
+    assert engine.close_calls == 1
 
 
 async def test_room_job_checks_room_after_connect_and_closes_on_mismatch() -> None:

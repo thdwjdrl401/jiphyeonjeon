@@ -1,0 +1,245 @@
+from __future__ import annotations
+
+import math
+import os
+import re
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from urllib.parse import urlparse
+
+_SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+_SAFE_REDIS_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$")
+_STT_PROVIDERS = frozenset({"stub", "openai-realtime", "nemotron"})
+_MAX_SHUTDOWN_TIMEOUT_SECONDS = 13.0
+_CALLBACK_RETRY_BASE_DELAY_SECONDS = 0.1
+
+
+def _parse_bool(environ: Mapping[str, str], name: str, default: bool) -> bool:
+    raw = environ.get(name)
+    if raw is None:
+        return default
+    value = raw.strip().lower()
+    if value in {"1", "true", "yes"}:
+        return True
+    if value in {"0", "false", "no"}:
+        return False
+    raise ValueError(f"{name} must be true or false")
+
+
+def _parse_int(environ: Mapping[str, str], name: str, default: int) -> int:
+    raw = environ.get(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an integer") from exc
+
+
+def _parse_float(environ: Mapping[str, str], name: str, default: float) -> float:
+    raw = environ.get(name)
+    if raw is None:
+        return default
+    try:
+        return float(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be a number") from exc
+
+
+@dataclass(frozen=True, slots=True)
+class Settings:
+    livekit_url: str
+    livekit_api_key: str = field(repr=False)
+    livekit_api_secret: str = field(repr=False)
+    agent_name: str = "liveclass-realtime-stt"
+    stt_provider: str = ""
+    max_active_jobs: int = 1
+    redis_url: str = field(default="redis://localhost:6379/0", repr=False)
+    redis_stream_key: str = "ai:captions:live"
+    session_lease_ttl_seconds: int = 30
+    stt_shutdown_timeout_seconds: float = 12.0
+    stt_drain_timeout_seconds: float = 7.0
+    stt_cleanup_timeout_seconds: float = 1.0
+    caption_publish_timeout_seconds: float = 1.25
+    redis_operation_timeout_seconds: float = 1.0
+    spring_status_callback_enabled: bool = False
+    spring_status_callback_url: str = ""
+    spring_status_callback_secret: str = field(default="", repr=False)
+    spring_status_callback_timeout_seconds: float = 0.75
+    spring_status_callback_attempts: int = 2
+    openai_api_key: str = field(default="", repr=False)
+    openai_realtime_model: str = "gpt-realtime-whisper"
+    openai_realtime_delay: str = "low"
+    nemotron_model_id: str = "nvidia/nemotron-3.5-asr-streaming-0.6b"
+    asr_language: str = "ko-KR"
+
+    @classmethod
+    def from_env(cls, environ: Mapping[str, str] | None = None) -> Settings:
+        values = os.environ if environ is None else environ
+        return cls(
+            livekit_url=values.get("LIVEKIT_URL", ""),
+            livekit_api_key=values.get("LIVEKIT_API_KEY", ""),
+            livekit_api_secret=values.get("LIVEKIT_API_SECRET", ""),
+            agent_name=values.get("STT_AGENT_NAME", "liveclass-realtime-stt"),
+            stt_provider=values.get("STT_ENGINE_PROVIDER", ""),
+            max_active_jobs=_parse_int(values, "STT_MAX_ACTIVE_JOBS", 1),
+            redis_url=values.get("REDIS_URL", "redis://localhost:6379/0"),
+            redis_stream_key=values.get("CAPTION_STREAM_KEY", "ai:captions:live"),
+            session_lease_ttl_seconds=_parse_int(values, "SESSION_LEASE_TTL_SECONDS", 30),
+            stt_shutdown_timeout_seconds=_parse_float(values, "STT_SHUTDOWN_TIMEOUT_SECONDS", 12.0),
+            stt_drain_timeout_seconds=_parse_float(values, "STT_DRAIN_TIMEOUT_SECONDS", 7.0),
+            stt_cleanup_timeout_seconds=_parse_float(values, "STT_CLEANUP_TIMEOUT_SECONDS", 1.0),
+            caption_publish_timeout_seconds=_parse_float(
+                values, "CAPTION_PUBLISH_TIMEOUT_SECONDS", 1.25
+            ),
+            redis_operation_timeout_seconds=_parse_float(
+                values, "REDIS_OPERATION_TIMEOUT_SECONDS", 1.0
+            ),
+            spring_status_callback_enabled=_parse_bool(
+                values, "SPRING_STATUS_CALLBACK_ENABLED", False
+            ),
+            spring_status_callback_url=values.get("SPRING_STATUS_CALLBACK_URL", ""),
+            spring_status_callback_secret=values.get("AI_CALLBACK_SECRET", ""),
+            spring_status_callback_timeout_seconds=_parse_float(
+                values, "SPRING_STATUS_CALLBACK_TIMEOUT_SECONDS", 0.75
+            ),
+            spring_status_callback_attempts=_parse_int(
+                values, "SPRING_STATUS_CALLBACK_ATTEMPTS", 2
+            ),
+            openai_api_key=values.get("OPENAI_API_KEY", ""),
+            openai_realtime_model=values.get(
+                "OPENAI_REALTIME_TRANSCRIPTION_MODEL", "gpt-realtime-whisper"
+            ),
+            openai_realtime_delay=values.get("OPENAI_REALTIME_TRANSCRIPTION_DELAY", "low"),
+            nemotron_model_id=values.get("ASR_MODEL_ID", "nvidia/nemotron-3.5-asr-streaming-0.6b"),
+            asr_language=values.get("ASR_LANGUAGE", "ko-KR"),
+        )
+
+    def validate_agent_server(self) -> None:
+        missing = [
+            name
+            for name, value in (
+                ("LIVEKIT_URL", self.livekit_url),
+                ("LIVEKIT_API_KEY", self.livekit_api_key),
+                ("LIVEKIT_API_SECRET", self.livekit_api_secret),
+                ("STT_AGENT_NAME", self.agent_name),
+                ("STT_ENGINE_PROVIDER", self.stt_provider),
+                ("REDIS_URL", self.redis_url),
+                ("CAPTION_STREAM_KEY", self.redis_stream_key),
+            )
+            if not value.strip()
+        ]
+        if missing:
+            raise RuntimeError(f"missing required agent server settings: {', '.join(missing)}")
+
+        livekit_url = urlparse(self.livekit_url)
+        if livekit_url.scheme not in {"ws", "wss"} or not livekit_url.netloc:
+            raise RuntimeError("LIVEKIT_URL must use ws or wss")
+        redis_url = urlparse(self.redis_url)
+        if redis_url.scheme not in {"redis", "rediss"} or not redis_url.netloc:
+            raise RuntimeError("REDIS_URL must use redis or rediss")
+        if not _SAFE_NAME.fullmatch(self.agent_name):
+            raise RuntimeError("STT_AGENT_NAME must be a 1-128 character safe identifier")
+        if not _SAFE_REDIS_KEY.fullmatch(self.redis_stream_key):
+            raise RuntimeError("CAPTION_STREAM_KEY must be a 1-256 character safe Redis key")
+        if not 1 <= self.max_active_jobs <= 100:
+            raise RuntimeError("STT_MAX_ACTIVE_JOBS must be between 1 and 100")
+        if self.session_lease_ttl_seconds < 3:
+            raise RuntimeError("SESSION_LEASE_TTL_SECONDS must be at least 3")
+        timeout_settings = (
+            ("STT_SHUTDOWN_TIMEOUT_SECONDS", self.stt_shutdown_timeout_seconds),
+            ("STT_DRAIN_TIMEOUT_SECONDS", self.stt_drain_timeout_seconds),
+            ("STT_CLEANUP_TIMEOUT_SECONDS", self.stt_cleanup_timeout_seconds),
+            ("CAPTION_PUBLISH_TIMEOUT_SECONDS", self.caption_publish_timeout_seconds),
+            ("REDIS_OPERATION_TIMEOUT_SECONDS", self.redis_operation_timeout_seconds),
+            (
+                "SPRING_STATUS_CALLBACK_TIMEOUT_SECONDS",
+                self.spring_status_callback_timeout_seconds,
+            ),
+        )
+        for name, value in timeout_settings:
+            if isinstance(value, bool) or not isinstance(value, int | float):
+                raise TypeError(f"{name} must be a finite positive number")
+            if not math.isfinite(value) or value <= 0:
+                raise RuntimeError(f"{name} must be a finite positive number")
+        if self.stt_shutdown_timeout_seconds > _MAX_SHUTDOWN_TIMEOUT_SECONDS:
+            raise RuntimeError(
+                "STT_SHUTDOWN_TIMEOUT_SECONDS must be at most 13 seconds "
+                "to leave headroom before LiveKit's 15-second cancellation"
+            )
+        if self.stt_drain_timeout_seconds > self.stt_shutdown_timeout_seconds:
+            raise RuntimeError(
+                "STT_DRAIN_TIMEOUT_SECONDS must not exceed STT_SHUTDOWN_TIMEOUT_SECONDS"
+            )
+        if self.stt_cleanup_timeout_seconds > self.stt_shutdown_timeout_seconds:
+            raise RuntimeError(
+                "STT_CLEANUP_TIMEOUT_SECONDS must not exceed STT_SHUTDOWN_TIMEOUT_SECONDS"
+            )
+        if self.caption_publish_timeout_seconds > self.stt_drain_timeout_seconds:
+            raise RuntimeError(
+                "CAPTION_PUBLISH_TIMEOUT_SECONDS must not exceed STT_DRAIN_TIMEOUT_SECONDS"
+            )
+        if self.redis_operation_timeout_seconds > self.stt_cleanup_timeout_seconds:
+            raise RuntimeError(
+                "REDIS_OPERATION_TIMEOUT_SECONDS must not exceed STT_CLEANUP_TIMEOUT_SECONDS"
+            )
+        if not 1 <= self.spring_status_callback_attempts <= 5:
+            raise RuntimeError("SPRING_STATUS_CALLBACK_ATTEMPTS must be between 1 and 5")
+
+        callback_budget = 0.0
+        if self.spring_status_callback_enabled:
+            callback_budget = (
+                self.spring_status_callback_timeout_seconds * self.spring_status_callback_attempts
+                + _CALLBACK_RETRY_BASE_DELAY_SECONDS
+                * (2 ** (self.spring_status_callback_attempts - 1) - 1)
+            )
+        # room_job cleanup and outer lease/reporter cleanup are separate phases. Their
+        # configured ceilings plus drain/callback must fit inside the one absolute budget.
+        configured_shutdown_path = (
+            self.stt_drain_timeout_seconds
+            + 2 * self.stt_cleanup_timeout_seconds
+            + self.caption_publish_timeout_seconds
+            + callback_budget
+        )
+        if configured_shutdown_path > self.stt_shutdown_timeout_seconds:
+            raise RuntimeError(
+                "configured drain, cleanup, caption, and callback ceilings exceed "
+                "STT_SHUTDOWN_TIMEOUT_SECONDS"
+            )
+
+        provider = self.stt_provider.strip().lower()
+        if provider not in _STT_PROVIDERS:
+            supported = ", ".join(sorted(_STT_PROVIDERS))
+            raise RuntimeError(f"STT_ENGINE_PROVIDER must be one of: {supported}")
+        if not self.asr_language.strip() or len(self.asr_language) > 32:
+            raise RuntimeError("ASR_LANGUAGE must contain 1-32 characters")
+        if provider == "openai-realtime" and not self.openai_api_key.strip():
+            raise RuntimeError("OPENAI_API_KEY is required for openai-realtime")
+        if provider == "openai-realtime" and not self.openai_realtime_model.strip():
+            raise RuntimeError("OPENAI_REALTIME_TRANSCRIPTION_MODEL must not be blank")
+        if self.openai_realtime_delay not in {"minimal", "low", "medium", "high", "xhigh"}:
+            raise RuntimeError("OPENAI_REALTIME_TRANSCRIPTION_DELAY is invalid")
+        if provider == "nemotron" and self.max_active_jobs != 1:
+            raise RuntimeError(
+                "STT_MAX_ACTIVE_JOBS must be 1 for nemotron until model sharing is implemented"
+            )
+        if provider == "nemotron" and not self.nemotron_model_id.strip():
+            raise RuntimeError("ASR_MODEL_ID must not be blank for nemotron")
+
+        if not self.spring_status_callback_enabled:
+            return
+        callback_missing = [
+            name
+            for name, value in (
+                ("SPRING_STATUS_CALLBACK_URL", self.spring_status_callback_url),
+                ("AI_CALLBACK_SECRET", self.spring_status_callback_secret),
+            )
+            if not value.strip()
+        ]
+        if callback_missing:
+            raise RuntimeError("missing required callback settings: " + ", ".join(callback_missing))
+        callback_url = urlparse(self.spring_status_callback_url)
+        if callback_url.scheme not in {"http", "https"} or not callback_url.netloc:
+            raise RuntimeError("SPRING_STATUS_CALLBACK_URL must use http or https")
+        if len(self.spring_status_callback_secret.encode("utf-8")) < 32:
+            raise RuntimeError("AI_CALLBACK_SECRET must be at least 32 bytes")
