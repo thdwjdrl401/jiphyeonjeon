@@ -1,8 +1,9 @@
-# ai-worker RAG index storage and PPTX ingestion core contract
+# ai-worker RAG index storage, PPTX ingestion and Spring adapter contract
 
-이 문서는 Python `ai-worker` 내부의 repository↔PostgreSQL 저장 규약과 transport-neutral PPTX ingestion
-코어 규약이다. Spring/Java의 RabbitMQ payload, callback API 또는 공유 DTO 규약이 아니며 Java 연동 완료를
-뜻하지 않는다. 외부 메시지 규약은 Java 담당자가 함께 채택하는 별도 common MR 전까지 확정하지 않는다.
+이 문서는 Python `ai-worker` 내부의 repository↔PostgreSQL 저장 규약, transport-neutral PPTX ingestion
+코어와 Spring 연동 adapter가 지켜야 할 소비자 규약이다. Spring 공유 계약의 정본은 루트
+`docs/CONTRACT.md`와 ADR-0036이며, 이 문서는 그 계약을 Python port·adapter와 테스트에 적용하는 방법만
+구체화한다. 공유 wire field를 변경할 때는 이 문서만 단독으로 바꾸지 않는다.
 
 ## 1. 식별자와 명명
 
@@ -165,15 +166,144 @@ chunk 최대 길이, 정규화, ordering 또는 hash 입력을 바꾸면 strateg
 
 ### 8.5 transport와 소유권 경계
 
-`StagedMaterial`, source/embedding/storage port와 snake_case field는 Python 내부 계약이다. `curriculum_id`에
-대응하는 wire 후보 `curriculumId`를 포함해 어떤 필드도 Spring/Java가 채택한 JSON/message 계약으로 선언하지
-않는다. source version, idempotency, delete scope, source acquisition도 공유 계약에서 아직 확정되지 않았다.
+`StagedMaterial`, source/embedding/storage port와 snake_case field는 Python 내부 계약이다. Spring wire의
+camelCase DTO를 그대로 domain 또는 DB model로 재사용하지 않고 adapter mapper에서 변환한다. Spring이 채택한
+자료 source는 MinIO bucket/object key가 아니라 `assetId`이며, worker는 MinIO 자격증명을 소유하지 않는다.
 
-따라서 이 코어는 RabbitMQ consume/ACK/retry/DLQ, MinIO stat·MIME·download guard, callback/outbox, index 또는
-원본 객체 삭제를 구현하지 않는다. Java 측 채택이 필요한 기능은 AI 브랜치에서 단독 확정하지 않고 담당자와
-공유 계약·양측 계약 테스트를 포함하는 별도 common MR에서 채택한다. 실제 MinIO, RabbitMQ와 remote BGE
-E2E도 각 adapter 도입 MR의 검증 책임이다.
+이 코어 자체는 RabbitMQ consume/ACK/retry/DLQ, Spring callback, index 또는 원본 객체 삭제를 구현하지 않는다.
+외부 통신은 9절 adapter가 담당하고 실제 메시지 수명주기는 후속 consumer가 담당한다. 원본 객체는 Spring asset
+도메인 소유이므로 AI worker가 삭제하지 않는다.
 
 저장 fingerprint에는 embedding 값이 포함되므로 GPU 비결정적 출력으로 재시도 fingerprint가 달라질 수 있다.
 runtime은 completed-job short circuit 또는 durable result/outbox를 설계하기 전 동일 job을 무조건 재임베딩하지
 않는다.
+
+## 9. Spring 자료 임베딩 연동 adapter 규약
+
+이 절은 `feat/be/ai-material-download-url`의 `docs/ai-embedding-integration.md`, 루트
+`docs/CONTRACT.md` §3-1/§3-2와 ADR-0036을 AI 소비자 관점에서 채택한다. 검토 기준 revision은
+`6f472076e149567a9ecbfbb8ea55d070ec61b91f`이다. 해당 BE 변경이 master에 병합된 뒤에는 master의 공유 문서와
+코드를 정본으로 삼는다.
+
+### 9.1 RabbitMQ wire envelope
+
+queue는 durable `ingestion.embed`, exchange는 RabbitMQ default exchange, routing key는 queue 이름이다.
+body는 UTF-8 JSON이며 모든 field는 camelCase다. adapter DTO는 알 수 없는 field와 지원하지 않는
+`contractVersion`을 fail-closed로 거부한다.
+
+`PPTX_EMBED` version 1:
+
+```json
+{
+  "taskType": "PPTX_EMBED",
+  "materialId": "uuid",
+  "assetId": "uuid",
+  "lessonId": "uuid",
+  "curriculumId": "uuid",
+  "fileName": "강의자료.pptx",
+  "policy": { "embedModel": "bge-m3" },
+  "contractVersion": 1
+}
+```
+
+`EMBED_DELETE` version 1:
+
+```json
+{
+  "taskType": "EMBED_DELETE",
+  "materialId": "uuid",
+  "lessonId": "uuid",
+  "contractVersion": 1
+}
+```
+
+- `fileName`은 빈 문자열일 수 있는 표시·관측용 값이며 source 권한이나 파일 형식 판정에 사용하지 않는다.
+- wire model alias `bge-m3`는 Python 내부의 고정 model `BAAI/bge-m3`로만 매핑한다.
+- embed envelope에는 source URL, bucket, object key, model revision, chunk 전략을 넣지 않는다. model revision,
+  최대 batch와 chunk 전략은 AI 배포 설정이 소유한다.
+- Spring outbox의 embed idempotency key는 body 밖의 `material:{materialId}:embed`다. consumer mapper는 현재
+  version 1에서 동일한 값을 결정적으로 복원한다.
+- 현재 envelope에는 재색인 version이 없다. material UUID가 attachment 실행마다 새 identity이고 한 번만
+  index된다는 전제로 내부 `material_version=1`을 사용한다. 같은 material 재색인이 필요해지면 공유 계약에
+  version을 추가한 뒤 이 규칙을 바꾼다.
+- 현재 delete envelope는 curriculum, asset, version을 포함하지 않아 저장소의 scope·tombstone 계약으로 바로
+  변환할 수 없다. 삭제 consumer는 별도 resolver 또는 공유 계약 보강 전까지 완료로 선언하지 않는다.
+
+### 9.2 HMAC 원시 body 규약
+
+Spring download-url 요청과 callback은 하나의 공유 secret을 사용한다. signature는 아래와 같다.
+
+```text
+X-Signature: base64(HMAC-SHA256(UTF-8 secret, rawBody))
+```
+
+서명한 `rawBody` bytes를 `Content-Type: application/json`으로 그대로 전송한다. HTTP client의 `json=` 옵션으로
+재직렬화하지 않는다. secret과 presigned URL은 로그·예외·DB에 남기지 않는다.
+
+### 9.3 주문형 PPTX source 획득
+
+worker는 job 처리 직전에 아래 요청을 보낸다.
+
+```http
+POST /api/internal/ai/materials/download-url
+X-Signature: <9.2 signature>
+Content-Type: application/json
+
+{"assetId":"<job assetId>"}
+```
+
+- 성공은 `200 {"url":"https://..."}`이며 worker는 받은 URL을 저장하거나 재사용하지 않고 즉시 GET한다.
+- `401`은 secret 불일치 또는 배포 설정 오류인 non-retryable 실패다.
+- `404`는 asset 없음·비-MATERIAL·미업로드 상태를 의도적으로 구분하지 않는다. consumer는 제한된 재시도 후
+  영구 실패로 전환한다.
+- URL 응답은 HTTP(S), userinfo 없음 조건을 만족해야 한다. GET은 redirect를 자동 추적하지 않는다.
+- GET 전에 `Content-Length`가 있으면 50 MiB 상한을 검사하고, 없거나 실제 응답이 달라져도 streaming 누적
+  bytes로 같은 상한을 강제한다.
+- 허용 media type은 PPTX 정식 MIME과 `application/octet-stream`이다. response는 성공·실패·취소 모두 닫는다.
+- presigned GET `401`·`403`은 URL 만료 가능성이 있으므로 상위 consumer가 새 URL부터 다시 발급하도록
+  retryable로 분류한다. adapter 내부에서 같은 URL을 재사용해 재시도하지 않는다.
+
+Python 내부의 기존 저장 column을 이번 adapter 단계에서 파괴적으로 바꾸지 않는다. compatibility locator로
+`source_bucket="spring-asset"`, `source_object_key=<assetId UUID>`를 사용한다. 이 값은 실제 bucket/key가 아니라
+source provider와 opaque source identity이며 MinIO 접근에 사용하지 않는다. column rename은 기존 data migration
+전략과 함께 별도 저장소 MR에서 처리한다.
+
+### 9.4 remote BGE runtime
+
+- endpoint는 `POST /internal/v1/embeddings`, 인증은 BGE runtime 전용 Bearer token이다. Spring HMAC secret과
+  공유하지 않는다.
+- 요청 model은 `BAAI/bge-m3`, revision은 배포 설정의 40자리 고정 commit이며 최대 batch는 4다.
+- adapter는 chunk 순서를 보존해 batch를 순차 호출하고 응답 model·revision·1024차원·정규화 flag·개수·finite
+  non-zero vector를 검증한다.
+- `400`·`409`·`413`·`422`는 계약 위반, network·`429`·`5xx`는 retryable runtime 실패다. adapter 자체는
+  재시도하지 않고 consumer에 분류를 전달한다.
+
+### 9.5 Spring 결과 callback
+
+callback은 `POST /api/internal/ai/callbacks`에 9.2의 HMAC으로 보낸다.
+
+```json
+{
+  "eventId": "uuid",
+  "eventType": "MATERIAL_EMBEDDED",
+  "jobId": "worker-side-job-id",
+  "materialId": "uuid",
+  "lessonId": "uuid",
+  "status": "READY"
+}
+```
+
+- 성공은 `204`다. `MATERIAL_EMBEDDED`는 READY, `MATERIAL_EMBED_FAILED`는 FAILED,
+  `MATERIAL_EMBEDDING`은 PROCESSING으로 전이한다.
+- 같은 사건의 HTTP 재시도는 동일 `eventId`와 동일 raw body를 사용한다. 새로운 결과 사건만 새 event ID를
+  만든다.
+- index activate가 commit된 뒤에만 success callback을 보낸다. callback 실패로 message가 재전달되면 완료된
+  DB job을 먼저 조회하고 재임베딩하지 않은 채 같은 callback을 재시도해야 한다.
+- Spring은 body 형식 미달도 204로 무시하므로 Python contract test가 필수 field를 발신 전에 강제한다.
+
+### 9.6 이번 runtime adapter와 후속 consumer 경계
+
+이번 runtime adapter 범위는 wire DTO, HMAC signer, 주문형 source client, remote BGE client, Spring callback
+client와 pgvector/use-case wiring이다. RabbitMQ 연결, prefetch/concurrency, ACK 시점, retry publish, DLQ와
+completed-job short circuit은 다음 consumer MR에서 구현한다. consumer와 delete resolver가 준비되기 전에는
+Spring의 `MATERIAL_EMBEDDING_ENABLED`를 켜지 않는다.
