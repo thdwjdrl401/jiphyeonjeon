@@ -11,7 +11,8 @@ application Redis와 Spring HTTP callback처럼 프로세스 밖 시스템에 �
 
 ## 파일 구성
 
-- `redis_caption_publisher.py`: `ai:captions:live` Stream에 delta·completed 이벤트를 `XADD`
+- `redis_caption_publisher.py`: `ai:captions:live` Stream에 delta·completed 이벤트를
+  `XADD MAXLEN ~`로 제한 발행
 - `redis_session_lease.py`: `SET NX EX` 및 owner 비교 Lua로 중복 job 방지
 - `spring_status_callback.py`: 상태 payload 직렬화, 서명, 제한된 재시도
 

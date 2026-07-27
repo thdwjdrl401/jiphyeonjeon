@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { ChatMessageView } from './liveSessionService.interface'
 import type { GlossaryTermView, LearningPanel, LiveSummaryBlock } from './liveLearningPreview'
 
@@ -16,6 +16,7 @@ interface LearningSidebarProps {
   discussionNotice?: string
   aiContent: ReactNode
   noteContext: 'LIVE' | 'REPLAY'
+  windowAction?: ReactNode
 }
 
 const tabs: Array<{ id: LearningPanel; label: string }> = [
@@ -37,15 +38,43 @@ function formatTime(sessionMs: number) {
 
 function DiscussionPanel({ messages, composer, notice }: { messages: ChatMessageView[]; composer?: ReactNode; notice?: string }) {
   const [filter, setFilter] = useState<'all' | 'questions'>('all')
-  const visibleMessages = filter === 'questions' ? messages.filter((message) => message.question) : messages
+  const [isFollowingLatest, setIsFollowingLatest] = useState(true)
+  const chatListRef = useRef<HTMLDivElement>(null)
+  const visibleMessages = useMemo(
+    () => filter === 'questions' ? messages.filter((message) => message.question) : messages,
+    [filter, messages],
+  )
+
+  const scrollToLatest = useCallback(() => {
+    const chatList = chatListRef.current
+    if (!chatList) return
+    chatList.scrollTop = chatList.scrollHeight
+    setIsFollowingLatest(true)
+  }, [])
+
+  const changeFilter = (nextFilter: 'all' | 'questions') => {
+    setFilter(nextFilter)
+    setIsFollowingLatest(true)
+  }
+
+  const handleChatScroll = () => {
+    const chatList = chatListRef.current
+    if (!chatList) return
+    const distanceFromBottom = chatList.scrollHeight - chatList.scrollTop - chatList.clientHeight
+    setIsFollowingLatest(distanceFromBottom <= 48)
+  }
+
+  useLayoutEffect(() => {
+    if (isFollowingLatest) scrollToLatest()
+  }, [isFollowingLatest, scrollToLatest, visibleMessages.length])
 
   return (
     <div className="side-panel-content discussion-panel" role="tabpanel">
       <div className="discussion-filter" aria-label="채팅 필터">
-        <button className={filter === 'all' ? 'is-active' : ''} type="button" onClick={() => setFilter('all')}>전체 {messages.length}</button>
-        <button className={filter === 'questions' ? 'is-active' : ''} type="button" onClick={() => setFilter('questions')}>질문 {messages.filter((message) => message.question).length}</button>
+        <button className={filter === 'all' ? 'is-active' : ''} type="button" onClick={() => changeFilter('all')}>전체 {messages.length}</button>
+        <button className={filter === 'questions' ? 'is-active' : ''} type="button" onClick={() => changeFilter('questions')}>질문 {messages.filter((message) => message.question).length}</button>
       </div>
-      <div className="chat-list">
+      <div className="chat-list" ref={chatListRef} onScroll={handleChatScroll}>
         {visibleMessages.length > 0
           ? visibleMessages.map((item) => (
               <article className={item.question ? 'is-question' : ''} key={item.id}>
@@ -56,6 +85,11 @@ function DiscussionPanel({ messages, composer, notice }: { messages: ChatMessage
             ))
           : <p className="panel-empty">등록된 질문이 없습니다.</p>}
       </div>
+      {!isFollowingLatest && (
+        <div className="chat-latest-jump">
+          <button type="button" onClick={scrollToLatest}>↓ 최근 채팅으로 이동</button>
+        </div>
+      )}
       {notice && <p className="discussion-notice">{notice}</p>}
       {composer}
     </div>
@@ -123,6 +157,7 @@ function GlossaryPanel({ terms, selectedTermId, onSelectedTermChange }: { terms:
 export default function LearningSidebar(props: LearningSidebarProps) {
   return (
     <aside className="media-side learning-sidebar">
+      {props.windowAction && <div className="learning-sidebar-windowbar">{props.windowAction}</div>}
       <div className="media-tabs learning-tabs" role="tablist">
         {tabs.map((tab) => <button aria-selected={props.panel === tab.id} className={props.panel === tab.id ? 'is-active' : ''} key={tab.id} role="tab" type="button" onClick={() => props.onPanelChange(tab.id)}>{tab.label}</button>)}
       </div>

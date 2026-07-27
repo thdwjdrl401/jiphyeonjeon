@@ -37,6 +37,81 @@ function createMemoryStorage(): Storage {
   } as Storage
 }
 
+if (!window.matchMedia) {
+  Object.defineProperty(window, 'matchMedia', {
+    configurable: true,
+    writable: true,
+    value: (query: string): MediaQueryList => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      dispatchEvent: () => false,
+    }),
+  })
+}
+
+class TestIntersectionObserver implements IntersectionObserver {
+  readonly root = null
+  readonly rootMargin = '0px'
+  readonly thresholds = [0]
+
+  constructor(private readonly callback: IntersectionObserverCallback) {}
+
+  observe(target: Element) {
+    const bounds = target.getBoundingClientRect()
+    this.callback(
+      [
+        {
+          boundingClientRect: bounds,
+          intersectionRatio: 1,
+          intersectionRect: bounds,
+          isIntersecting: true,
+          rootBounds: null,
+          target,
+          time: performance.now(),
+        },
+      ],
+      this,
+    )
+  }
+
+  unobserve() {}
+
+  disconnect() {}
+
+  takeRecords() {
+    return []
+  }
+}
+
+if (!globalThis.IntersectionObserver) {
+  Object.defineProperty(globalThis, 'IntersectionObserver', {
+    configurable: true,
+    writable: true,
+    value: TestIntersectionObserver,
+  })
+}
+
+class TestResizeObserver implements ResizeObserver {
+  observe() {}
+
+  unobserve() {}
+
+  disconnect() {}
+}
+
+if (!globalThis.ResizeObserver) {
+  Object.defineProperty(globalThis, 'ResizeObserver', {
+    configurable: true,
+    writable: true,
+    value: TestResizeObserver,
+  })
+}
+
 afterEach(() => {
   cleanup()
   localStorage.clear()

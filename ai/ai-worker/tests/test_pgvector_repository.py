@@ -322,6 +322,37 @@ async def test_shadow_version_activation_and_material_delete(
     assert delete_status == "SUCCEEDED"
 
 
+async def test_existing_index_lookup_resumes_building_and_short_circuits_completed(
+    repository: PgvectorIndexRepository,
+) -> None:
+    material = _material(1)
+
+    assert await repository.find_existing(material) is None
+    version_id = await repository.stage(material, [_chunk(0.1)])
+
+    building = await repository.find_existing(material)
+    assert building is not None
+    assert building.version_id == version_id
+    assert building.activation_required is True
+
+    await repository.activate(material, version_id)
+    completed = await repository.find_existing(material)
+    assert completed is not None
+    assert completed.version_id == version_id
+    assert completed.activation_required is False
+
+
+async def test_existing_index_lookup_rejects_reused_job_identity(
+    repository: PgvectorIndexRepository,
+) -> None:
+    material = _material(1)
+    version_id = await repository.stage(material, [_chunk(0.1)])
+    await repository.activate(material, version_id)
+
+    with pytest.raises(ValueError, match="reused"):
+        await repository.find_existing(replace(material, lesson_id=OTHER_LESSON_ID))
+
+
 async def test_ai_runtime_role_cannot_write_core_or_create_ai_table(
     database_engine: AsyncEngine,
     integration_database: IntegrationDatabase,

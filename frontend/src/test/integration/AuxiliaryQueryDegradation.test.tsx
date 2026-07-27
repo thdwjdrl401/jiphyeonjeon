@@ -10,7 +10,7 @@ import * as replayService from '@/features/replay/replayService'
 /**
  * 부가 데이터가 실패해도 화면은 열려야 한다.
  *
- * 학습 요약·자막·질문 하이라이트처럼 아직 서버 경로가 없는 조회가 진입 게이트에 섞여 있었다.
+ * 학습 요약·자막처럼 아직 서버 경로가 없는 조회가 진입 게이트에 섞여 있었다.
  * 그래서 목록이나 세션을 정상으로 불러왔는데도 페이지 전체가 오류 화면으로 막혔다.
  * 여기서 지키는 것은 "필수가 성공하면 화면은 뜬다"는 성질이다.
  */
@@ -58,9 +58,8 @@ describe('부가 조회 실패 시 화면 유지', () => {
     expect(await screen.findByText(/커리큘럼 목록을 불러오지 못했습니다/, undefined, AFTER_RETRY)).toBeInTheDocument()
   })
 
-  it('자막과 질문 하이라이트가 실패해도 라이브 강의실은 열린다', async () => {
+  it('자막이 실패해도 라이브 강의실은 열린다', async () => {
     const captions = vi.spyOn(liveSessionService, 'getCaptions').mockImplementation(notReady)
-    vi.spyOn(liveSessionService, 'getQuestionHighlights').mockImplementation(notReady)
     await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
 
     renderAt('/instructor/live-sessions/ses-security-live/classroom')

@@ -64,4 +64,6 @@ export interface CurriculumManagementService {
   getCurriculumManagementStructure: (curriculumId: string) => Promise<CurriculumManagementSection[]>
   saveCurriculumManagement: (request: SaveCurriculumManagementRequest) => Promise<SaveCurriculumManagementResult>
   publishCurriculum: (curriculumId: string) => Promise<void>
+  deleteLesson: (lessonId: string) => Promise<void>
+  deleteSection: (sectionId: string) => Promise<void>
 }

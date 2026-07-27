@@ -59,7 +59,8 @@
 - **최소권한**: 워커는 스토리지 자격증명을 갖지 않는다. BE가 1객체·단명 URL(1회용 능력증표)만 내준다. URL이 유출돼도 1개 PPTX·TTL 동안뿐(상시 자격증명 유출은 전 자료 무기한).
 - **디커플링**: 워커는 스토리지 종류·객체키 규칙·endpoint를 모른다. 스토리지를 S3로 이관해도 워커 무영향(BE가 URL만 다르게 발급). Python 워커를 우리 Java/인프라 결정에서 떼어놓는다.
 
-AI팀 통합 가이드: [ai-embedding-integration.md](../../ai-embedding-integration.md).
+구현별 연결 흐름: [backend aiintegration README](../../../backend/src/main/java/com/liveclass/aiintegration/README.md),
+[ai-worker README](../../../ai/ai-worker/README.md).
 - 반려한 대안(A′: 워커가 `bucket`/`objectKey`로 직접 접근): TTL은 없지만 워커에 **상시 MinIO 자격증명**이 필요하고(최소권한 위배), 스토리지 규칙·SDK에 결합돼 크로스팀 운영 부담이 크다. B의 유일 약점이던 TTL은 "주문형 발급"으로 원천 제거되므로 B가 우세.
 
 ### 4. 콜백 (AI→Spring, 서명 HTTP, inbox 멱등) — CONTRACT §3-2 특화

@@ -171,19 +171,17 @@ camelCase DTO를 그대로 domain 또는 DB model로 재사용하지 않고 adap
 자료 source는 MinIO bucket/object key가 아니라 `assetId`이며, worker는 MinIO 자격증명을 소유하지 않는다.
 
 이 코어 자체는 RabbitMQ consume/ACK/retry/DLQ, Spring callback, index 또는 원본 객체 삭제를 구현하지 않는다.
-외부 통신은 9절 adapter가 담당하고 실제 메시지 수명주기는 후속 consumer가 담당한다. 원본 객체는 Spring asset
-도메인 소유이므로 AI worker가 삭제하지 않는다.
+외부 통신과 메시지 수명주기는 9절 adapter와 consumer가 담당한다. 원본 객체는 Spring asset 도메인 소유이므로
+AI worker가 삭제하지 않는다.
 
 저장 fingerprint에는 embedding 값이 포함되므로 GPU 비결정적 출력으로 재시도 fingerprint가 달라질 수 있다.
-runtime은 completed-job short circuit 또는 durable result/outbox를 설계하기 전 동일 job을 무조건 재임베딩하지
-않는다.
+runtime은 source/GPU 작업 전에 기존 job을 조회한다. BUILDING version이면 저장된 결과를 activate하고,
+SUCCEEDED version이면 저장된 version id를 반환해 동일 job을 재임베딩하지 않는다.
 
 ## 9. Spring 자료 임베딩 연동 adapter 규약
 
-이 절은 `feat/be/ai-material-download-url`의 `docs/ai-embedding-integration.md`, 루트
-`docs/CONTRACT.md` §3-1/§3-2와 ADR-0036을 AI 소비자 관점에서 채택한다. 검토 기준 revision은
-`6f472076e149567a9ecbfbb8ea55d070ec61b91f`이다. 해당 BE 변경이 master에 병합된 뒤에는 master의 공유 문서와
-코드를 정본으로 삼는다.
+이 절은 backend의 `aiintegration/README.md`, 루트 `docs/CONTRACT.md` §3-1/§3-2와 ADR-0036을 AI 소비자
+관점에서 채택한다. 공유 필드와 상태코드는 루트 계약 문서를 정본으로 삼는다.
 
 ### 9.1 RabbitMQ wire envelope
 
@@ -299,11 +297,27 @@ callback은 `POST /api/internal/ai/callbacks`에 9.2의 HMAC으로 보낸다.
   만든다.
 - index activate가 commit된 뒤에만 success callback을 보낸다. callback 실패로 message가 재전달되면 완료된
   DB job을 먼저 조회하고 재임베딩하지 않은 채 같은 callback을 재시도해야 한다.
+- consumer는 terminal `MATERIAL_EMBEDDED`·`MATERIAL_EMBED_FAILED`만 발신한다. 응답 유실 뒤 별도 PROCESSING
+  event가 READY/FAILED 상태를 되돌리는 것을 피하기 위해 `MATERIAL_EMBEDDING`은 현재 발신하지 않는다.
 - Spring은 body 형식 미달도 204로 무시하므로 Python contract test가 필수 field를 발신 전에 강제한다.
 
-### 9.6 이번 runtime adapter와 후속 consumer 경계
+### 9.6 RabbitMQ consumer 수명주기
 
-이번 runtime adapter 범위는 wire DTO, HMAC signer, 주문형 source client, remote BGE client, Spring callback
-client와 pgvector/use-case wiring이다. RabbitMQ 연결, prefetch/concurrency, ACK 시점, retry publish, DLQ와
-completed-job short circuit은 다음 consumer MR에서 구현한다. consumer와 delete resolver가 준비되기 전에는
-Spring의 `MATERIAL_EMBEDDING_ENABLED`를 켜지 않는다.
+- consumer는 `AI_WORKER_MATERIAL_INGESTION_ENABLED=true`일 때만 시작한다. 기본값은 false다.
+- Spring이 소유한 durable `ingestion.embed`는 passive lookup한다. consumer는 main queue를 다른 argument로
+  재선언하지 않는다.
+- prefetch는 1이다. message 하나의 handler와 terminal callback이 성공한 뒤에만 원본을 ACK한다.
+- 일시 실패는 `x-ai-retry-count`를 1씩 올려 persistent message를 default exchange의 `ingestion.embed`로 먼저
+  publish-confirm한 뒤 원본을 ACK한다. 기본 retry는 3회, 지연은 5초에서 시작하는 지수 backoff이며 최대 300초다.
+  지연 중에는 원본 message를 unacked로 유지하므로 worker가 종료되면 broker가 원본을 다시 전달한다.
+- 잘못된 envelope, non-retryable 실패, 아직 scope를 복원할 수 없는 `EMBED_DELETE`와 retry 소진 message는
+  AI가 선언한 durable `ingestion.embed.dlq`에 먼저 publish-confirm한 뒤 원본을 ACK한다. DLQ publish가 실패하면
+  원본을 `nack(requeue=true)`해 유실을 막는다.
+- retry 소진 시 DB가 이미 SUCCEEDED면 FAILED callback을 보내지 않는다. 이는 READY callback만 실패한 성공 작업의
+  상태를 FAILED로 덮지 않기 위한 규칙이다.
+- consumer 등록과 RabbitMQ·PostgreSQL 연결이 모두 정상일 때만 management readiness를 true로 둔다.
+- 종료 요청은 새 delivery를 취소하고 진행 중인 작업 하나를 기본 30초 drain한다. 제한을 넘기면 task를 취소하고
+  ACK하지 않은 원본은 broker 재전달 대상으로 남긴다.
+
+현재 `EMBED_DELETE`는 DLQ에 보존할 뿐 완료하지 않는다. delete resolver와 실제 Spring·RabbitMQ·BGE·PostgreSQL
+E2E가 준비되기 전에는 Python consumer와 Spring의 `MATERIAL_EMBEDDING_ENABLED`를 모두 켜지 않는다.

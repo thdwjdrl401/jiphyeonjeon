@@ -1,5 +1,5 @@
-# T0 개발 backbone — 최소 인프라 (CP0가 쓰는 것만).
-# RabbitMQ·MinIO·nginx·미디어(LiveKit/Egress)는 각 CP 착수 시점에 확장 (TEAM-KICKOFF §4).
+# 로컬 개발 backbone — postgres·redis·minio(에셋)·rabbitmq(임베딩 잡 큐)까지 포함.
+# nginx·미디어(LiveKit/Egress)는 별도 스택으로 운영 (TEAM-KICKOFF §4).
 # 사용: cp .env.example .env  →  docker compose up -d
 name: liveclass          # compose 프로젝트명 고정 = 볼륨/이미지 접두사. 디렉토리명(cp/liveclass 등)과 무관하게 liveclass_* 로 통일.
 services:
@@ -63,7 +63,25 @@ services:
         mc mb -p lc/liveclass-assets
         exit 0
 
+  rabbitmq:                                # AI 배치 잡 큐 (ADR-0012/0036). 임베딩 파이프라인이 outbox→여기로 발행.
+    image: rabbitmq:3-management           # 관리 UI 포함 (http://localhost:15672)
+    container_name: liveclass-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-liveclass}       # application.yml spring.rabbitmq 기본값과 일치
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-liveclass}
+    ports:
+      - "5672:5672"      # AMQP (앱 접속)
+      - "15672:15672"    # 관리 UI
+    volumes:
+      - rabbitmqdata:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   pgdata:
   redisdata:
   miniodata:
+  rabbitmqdata:

@@ -95,6 +95,7 @@ async def _run_agent_job(context: JobContext, *, settings: Settings) -> None:
         publisher = RedisCaptionPublisher(
             redis,
             settings.redis_stream_key,
+            stream_maxlen=settings.caption_stream_maxlen,
             publish_timeout_seconds=settings.caption_publish_timeout_seconds,
         )
         await run_dispatched_room_job(

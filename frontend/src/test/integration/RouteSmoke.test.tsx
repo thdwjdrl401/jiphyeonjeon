@@ -1,8 +1,27 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '@/App'
 import { mockAuthService, resetMockAuth } from '@/features/auth/mockAuthService'
+
+vi.mock('@/features/live-session/StudentLivePlayer', () => ({
+  default: ({
+    bookmarked,
+    playback,
+    onBookmark,
+  }: {
+    bookmarked: boolean
+    playback: { sessionId: string } | null
+    onBookmark: () => void
+  }) => (
+    <div aria-label="학생 라이브 영상" role="region">
+      {playback && <span>Mock HLS 재생 준비 · {playback.sessionId}</span>}
+      <button type="button" onClick={onBookmark}>
+        {bookmarked ? '★ 북마크됨' : '☆ 북마크'}
+      </button>
+    </div>
+  ),
+}))
 
 function renderAt(path: string) {
   window.history.pushState({}, '', path)
@@ -82,7 +101,7 @@ describe('전체 페이지 라우트', () => {
     renderAt('/instructor/live-sessions/ses-security-live/classroom')
     const liveInformation = await screen.findByRole('banner', { name: '라이브 강의 정보' })
     expect(within(liveInformation).getByText('강사 운영 모드')).toBeInTheDocument()
-    expect(within(liveInformation).getByText('연결 안정적')).toBeInTheDocument()
+    expect(within(liveInformation).getByText('송출 대기')).toBeInTheDocument()
     expect(within(liveInformation).getByText(/명 참여 중/)).toBeInTheDocument()
     expect(document.querySelector('.presenter-card')).not.toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '채팅·질문' })).toBeInTheDocument()
@@ -90,13 +109,28 @@ describe('전체 페이지 라우트', () => {
     expect(screen.getByRole('tab', { name: 'AI 질문' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '핵심 용어' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '강의 종료' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('라이브 타임라인')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'LIVE' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '확인하고 참여하기' }))
+    expect(await within(liveInformation).findByText('Mock 송출 모드')).toBeInTheDocument()
+    const cameraToggle = screen.getByRole('button', { name: '카메라 켜짐' })
+    expect(cameraToggle).toHaveAttribute('aria-pressed', 'true')
+    await user.click(cameraToggle)
+    expect(screen.getByRole('button', { name: '카메라 꺼짐' })).toHaveAttribute('aria-pressed', 'false')
+
+    const chatInput = screen.getByLabelText('채팅 메시지')
+    await user.type(chatInput, '첫째 줄')
+    await user.keyboard('{Control>}{Enter}{/Control}')
+    await user.type(chatInput, '둘째 줄')
+    expect(chatInput).toHaveValue('첫째 줄\n둘째 줄')
+    await user.keyboard('{Enter}')
+    expect(chatInput).toHaveValue('')
+    expect(await screen.findByText((text) => text.includes('첫째 줄') && text.includes('둘째 줄'))).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'SecurityContext' }))
     expect(screen.getByRole('tab', { name: '핵심 용어' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByText(/현재 실행 중인 요청에서 인증된 사용자/)).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: '12:08' }))
-    expect(screen.getByLabelText('라이브 타임라인')).toHaveValue('728000')
   })
 
   it('수강생이 강의실 주소로 직접 접근하면 입장 전 점검으로 이동한다', async () => {
@@ -119,11 +153,14 @@ describe('전체 페이지 라우트', () => {
     await user.click(await screen.findByRole('link', { name: '라이브 입장' }, { timeout: 3000 }))
 
     expect(await screen.findByRole('tab', { name: 'AI 질문' })).toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: '학생 라이브 영상' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '채팅·질문' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '실시간 노트' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '핵심 용어' })).toBeInTheDocument()
     expect(window.location.pathname).toBe('/student/live-sessions/ses-security-live/classroom')
     expect(screen.getByRole('button', { name: '☆ 북마크' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '확인하고 참여하기' }))
+    expect(await screen.findByText('Mock HLS 재생 준비 · ses-security-live')).toBeInTheDocument()
     expect(screen.queryByText('강사 운영 모드')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '강의 종료' })).not.toBeInTheDocument()
   })
