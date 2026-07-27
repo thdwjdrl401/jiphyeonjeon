@@ -4,9 +4,6 @@
 - 일자: 2026-07-27
 - 범위: `ai/ai-worker`
 
-> 위치 메모: 이번 MR은 사용자가 `ai/**` 밖 수정을 금지했기 때문에 AI-local 경로에 기록한다. 팀 정본 ADR
-> 경로인 `docs/decisions/canola/`로의 승격은 해당 경로 수정 승인을 받은 별도 문서 변경에서 수행한다.
-
 ## 배경
 
 원본 AI 실험 브랜치에는 PPTX 파싱, RabbitMQ payload, MinIO, remote embedding, callback과 삭제 흐름이 한 번에

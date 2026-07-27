@@ -88,8 +88,6 @@ Java가 채택한 계약으로 해석하지 않는다. 현재 `app.main`도 inge
   resource limit을 포함한 별도 기능으로 확장한다.
 - 통합 검증: 실제 MinIO, RabbitMQ, remote BGE를 연결한 E2E는 이번 MR에서 실행하지 않았다. 각 adapter를
   도입하는 MR에서 실패·재전달 경로까지 검증한다.
-- ADR 위치: 사용자 요청으로 이번 변경은 `ai/**`에 한정되어 AI-local ADR을 사용한다. 팀 정본
-  `docs/decisions/` 승격은 해당 경로 수정이 허용된 별도 문서 MR로 미룬다.
 
 ## Verification
 

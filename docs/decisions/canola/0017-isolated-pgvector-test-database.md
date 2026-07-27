@@ -4,9 +4,6 @@
 - 일자: 2026-07-27
 - 범위: `ai/ai-worker` 테스트 하네스
 
-> 위치 메모: 사용자 요청으로 변경 범위를 `ai/**`에 한정했기 때문에 AI-local ADR에 기록한다. 팀 정본
-> `docs/decisions/` 승격은 해당 경로 수정이 허용된 별도 문서 MR에서 수행한다.
-
 ## 배경
 
 RAG 저장소 통합 테스트는 Alembic upgrade/downgrade, fixture schema 삭제와 role 검증을 수행한다. 따라서 Java와
