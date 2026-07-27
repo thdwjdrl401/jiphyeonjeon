@@ -341,6 +341,48 @@ class LessonMaterialContractTest {
                 .andExpect(status().isUnauthorized());
     }
 
+    // ---- 자료 URL 주문형 발급(ADR-0036 B안): 워커가 처리 직전 호출 ----
+
+    @Test
+    void material_download_url_issued_for_signed_request() throws Exception {
+        Cookie[] auth = loginAs("INSTRUCTOR");
+        String assetId = uploadedMaterialAsset(auth);
+
+        String body = """
+                {"assetId":"%s"}
+                """.formatted(assetId);
+        mockMvc.perform(post("/api/internal/ai/materials/download-url")
+                        .contentType(MediaType.APPLICATION_JSON).content(body).header("X-Signature", signCallback(body)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.url").value("http://fake-minio/download"));
+    }
+
+    @Test
+    void material_download_url_missing_signature_is_401() throws Exception {
+        String body = """
+                {"assetId":"%s"}
+                """.formatted(UUID.randomUUID());
+        mockMvc.perform(post("/api/internal/ai/materials/download-url")
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void material_download_url_for_non_material_asset_is_404() throws Exception {
+        Cookie[] auth = loginAs("INSTRUCTOR");
+        // 썸네일 완료 검증이 이미지 타입을 통과하도록 head를 이미지로 되돌린다(공유 스텁은 PPTX).
+        when(storage.head(anyString()))
+                .thenReturn(Optional.of(new AssetStorage.StoredObject(2048L, "image/png")));
+        String thumbnailId = uploadedThumbnailAsset(auth);   // MATERIAL 아님 → 404(워커는 자료만 읽는다)
+
+        String body = """
+                {"assetId":"%s"}
+                """.formatted(thumbnailId);
+        mockMvc.perform(post("/api/internal/ai/materials/download-url")
+                        .contentType(MediaType.APPLICATION_JSON).content(body).header("X-Signature", signCallback(body)))
+                .andExpect(status().isNotFound());
+    }
+
     /** AI 워커가 하는 것과 같은 방식으로 서명: ai.callback-secret HMAC-SHA256 → base64. */
     private String signCallback(String body) {
         try {
