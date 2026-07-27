@@ -92,19 +92,19 @@ public class S3RecordingStorage implements RecordingStorage, ReplayStorage {
     }
 
     @Override
-    public String readManifest(String bucket, String key) {
+    public Optional<String> findManifest(String bucket, String key) {
         try {
             ResponseBytes<GetObjectResponse> bytes = s3Client.getObjectAsBytes(GetObjectRequest.builder()
                     .bucket(bucket)
                     .key(key)
                     .build());
-            return bytes.asString(StandardCharsets.UTF_8);
+            return Optional.of(bytes.asString(StandardCharsets.UTF_8));
         } catch (NoSuchKeyException e) {
-            throw new ReplayManifestMissingException("매니페스트를 찾을 수 없습니다: " + key);
+            return Optional.empty();
         } catch (S3Exception e) {
             // MinIO/S3의 getObject도 404를 NoSuchKeyException 대신 S3Exception(404)로 던지기도 한다(head()와 동일 이유).
             if (e.statusCode() == 404) {
-                throw new ReplayManifestMissingException("매니페스트를 찾을 수 없습니다: " + key);
+                return Optional.empty();
             }
             throw e;   // 그 외(권한·타임아웃·5xx 등)는 스토리지 장애 — 그대로 전파.
         }

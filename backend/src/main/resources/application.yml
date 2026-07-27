@@ -90,7 +90,10 @@ livekit:
     playlist-name: index.m3u8
     live-playlist-name: live.m3u8
     layout: grid
-    playback-url-ttl-seconds: ${EGRESS_PLAYBACK_URL_TTL:3600}   # 재생 매니페스트의 세그먼트 presigned GET 유효기간(1시간)
+
+video:
+  playback:
+    segment-url-ttl: ${VIDEO_PLAYBACK_SEGMENT_URL_TTL:1h}      # manifest 내부 세그먼트 presigned GET 유효기간
 
 asset:
   storage:

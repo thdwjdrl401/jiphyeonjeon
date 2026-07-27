@@ -1,6 +1,7 @@
 package com.liveclass.video.service;
 
 import java.time.Duration;
+import java.util.Optional;
 
 /**
  * 다시보기 매니페스트 서빙 포트(ADR-0039, ARCHITECTURE §9-8). webhook 검증용 {@link RecordingStorage}와
@@ -11,12 +12,14 @@ import java.time.Duration;
  */
 public interface ReplayStorage {
 
-    /**
-     * 매니페스트 본문(UTF-8). 객체가 없으면 {@link ReplayManifestMissingException}을 던진다 —
-     * 호출자가 자산 READY로 존재를 먼저 보장하지만, {@code retention_until} 만료 등으로 스토리지에서
-     * 파일만 먼저 사라지는 엣지케이스가 실제로 있어 이 경로에서도 404를 확정 신호로 다룬다.
-     */
-    String readManifest(String bucket, String key);
+    /** 매니페스트 본문(UTF-8). 객체 부재가 확정된 404는 empty, 그 밖의 스토리지 오류는 예외다. */
+    Optional<String> findManifest(String bucket, String key);
+
+    /** 부재를 예외로 다루는 기존 호출자를 위한 편의 메서드. */
+    default String readManifest(String bucket, String key) {
+        return findManifest(bucket, key)
+                .orElseThrow(() -> new ReplayManifestMissingException("매니페스트를 찾을 수 없습니다: " + key));
+    }
 
     /** 세그먼트(또는 임의 객체) presigned GET URL을 발급한다 — presign은 로컬 서명이라 네트워크 접속이 없다. */
     String presignSegment(String bucket, String key, Duration ttl);

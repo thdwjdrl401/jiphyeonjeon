@@ -4,6 +4,6 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-@EnableConfigurationProperties(EgressProperties.class)
+@EnableConfigurationProperties({EgressProperties.class, PlaybackProperties.class})
 public class EgressConfig {
 }

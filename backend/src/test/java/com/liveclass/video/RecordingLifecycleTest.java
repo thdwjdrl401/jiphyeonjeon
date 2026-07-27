@@ -103,6 +103,7 @@ class RecordingLifecycleTest {
         assertThat(asset.getReplayStatus()).isEqualTo(ReplayStatus.DRAFT);
         assertThat(asset.getEgressId()).isEqualTo("eg_test123");
         assertThat(asset.getBucket()).isEqualTo("recordings");
+        assertThat(asset.getHlsManifestKey()).isEqualTo("sessions/" + sessionId + "/index.m3u8");
         assertThat(asset.getRecordingStartedAt()).isNotNull();
         verify(egressControl).startHlsRecording("session-" + sessionId, "sessions/" + sessionId);
     }
