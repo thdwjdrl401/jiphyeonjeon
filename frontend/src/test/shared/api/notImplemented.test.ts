@@ -5,7 +5,6 @@ import { isNotImplemented, notImplemented } from '@/shared/api/notImplemented'
 vi.mock('@/shared/config/runtime', () => ({ isMockApiEnabled: false, isTestMode: false }))
 
 import { httpLiveSessionService } from '@/features/live-session/httpLiveSessionService'
-import { httpMyCurriculumsService } from '@/features/curriculum/httpMyCurriculumsService'
 import { httpReplayService } from '@/features/replay/httpReplayService'
 import { httpLessonService } from '@/features/lesson/httpLessonService'
 import type { LiveSessionService } from '@/features/live-session/liveSessionService.interface'
@@ -64,8 +63,8 @@ describe('미구현 API 표시', () => {
     ['검수 저장', () => replay.saveReplayReview('les-1', '자막')],
     ['검수 게시', () => replay.publishReplayReview('les-1', '자막')],
     ['퀴즈 제출', () => replay.submitReplayQuiz('les-1', '답')],
-    // 학생 학습 요약(getStudentDashboardSummary)은 GET /me/learning-summary로 구현됨 — 여기서 제외.
-    ['강사 대시보드 요약', () => httpMyCurriculumsService.getInstructorDashboardSummary()],
+    // 학생 학습 요약(GET /me/learning-summary)·강사 대시보드 요약(GET /instructor/dashboard-summary)은
+    // 모두 서버에 구현됨 — 여기서 제외.
     ['레슨 AI 준비', () => lesson.prepareLessonAi('les-1')],
   ]
 
