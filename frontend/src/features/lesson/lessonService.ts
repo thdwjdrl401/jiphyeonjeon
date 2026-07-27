@@ -11,6 +11,8 @@ export const getCurriculumLessonNavigation = (curriculumId: string, role?: UserR
 export const saveLesson = (request: SaveLessonRequest) => lessonService.saveLesson(request)
 export const deleteLessonMaterial = (lessonId: string, materialId: string) => lessonService.deleteLessonMaterial(lessonId, materialId)
 export const prepareLessonAi = (lessonId: string) => lessonService.prepareLessonAi(lessonId)
+export const publishLesson = (lessonId: string) => lessonService.publishLesson(lessonId)
+export const unpublishLesson = (lessonId: string) => lessonService.unpublishLesson(lessonId)
 
 export type {
   GetLessonRequest,
