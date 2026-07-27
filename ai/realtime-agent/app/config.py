@@ -56,6 +56,7 @@ class Settings:
     max_active_jobs: int = 1
     redis_url: str = field(default="redis://localhost:6379/0", repr=False)
     redis_stream_key: str = "ai:captions:live"
+    caption_stream_maxlen: int = 10_000
     session_lease_ttl_seconds: int = 30
     stt_shutdown_timeout_seconds: float = 12.0
     stt_drain_timeout_seconds: float = 7.0
@@ -85,6 +86,7 @@ class Settings:
             max_active_jobs=_parse_int(values, "STT_MAX_ACTIVE_JOBS", 1),
             redis_url=values.get("REDIS_URL", "redis://localhost:6379/0"),
             redis_stream_key=values.get("CAPTION_STREAM_KEY", "ai:captions:live"),
+            caption_stream_maxlen=_parse_int(values, "CAPTION_STREAM_MAXLEN", 10_000),
             session_lease_ttl_seconds=_parse_int(values, "SESSION_LEASE_TTL_SECONDS", 30),
             stt_shutdown_timeout_seconds=_parse_float(values, "STT_SHUTDOWN_TIMEOUT_SECONDS", 12.0),
             stt_drain_timeout_seconds=_parse_float(values, "STT_DRAIN_TIMEOUT_SECONDS", 7.0),
@@ -142,6 +144,12 @@ class Settings:
             raise RuntimeError("STT_AGENT_NAME must be a 1-128 character safe identifier")
         if not _SAFE_REDIS_KEY.fullmatch(self.redis_stream_key):
             raise RuntimeError("CAPTION_STREAM_KEY must be a 1-256 character safe Redis key")
+        if isinstance(self.caption_stream_maxlen, bool) or not isinstance(
+            self.caption_stream_maxlen, int
+        ):
+            raise TypeError("CAPTION_STREAM_MAXLEN must be a positive integer")
+        if self.caption_stream_maxlen <= 0:
+            raise RuntimeError("CAPTION_STREAM_MAXLEN must be a positive integer")
         if not 1 <= self.max_active_jobs <= 100:
             raise RuntimeError("STT_MAX_ACTIVE_JOBS must be between 1 and 100")
         if self.session_lease_ttl_seconds < 3:

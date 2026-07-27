@@ -25,7 +25,8 @@ caption `sequence`는 `(sessionId, sttSessionId)`로 식별되는 한 job attemp
 `caption.stream.completed`도 동일한 `sttSessionId`로 종료할 attempt를 명시한다.
 
 Redis endpoint는 런타임 URL로 주입한다. 기본 stream key는 `ai:captions:live`이며 XADD는
-`MAXLEN` 없이 직접 await한다. 쓰기 오류와 timeout은 호출자에게 전파된다.
+기본 `MAXLEN ~ 10000`으로 근사 trimming하면서 직접 await한다. 쓰기 오류와 timeout은 호출자에게
+전파된다.
 
 상태 callback 서명 문자열은 다음과 같다.
 

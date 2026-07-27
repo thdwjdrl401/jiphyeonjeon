@@ -37,7 +37,9 @@ metadata와 assigned room 검증은 Redis lease, LiveKit connect, audio source, 
 - Redis URL: `REDIS_URL`로 주입한다. LiveKit 내부 Redis나 host `6380`을 전제로 하지 않는다.
 - stream key: `CAPTION_STREAM_KEY`, 기본값 `ai:captions:live`
 - write: 각 `XADD`를 직접 await하고 제한 시간 안에 응답하지 않거나 실패하면 job을 실패시킨다.
-- retention: consumer 합의 전에는 producer가 `MAXLEN`으로 임의 삭제하지 않는다.
+- retention: 모든 `XADD`에 `MAXLEN ~ CAPTION_STREAM_MAXLEN`을 적용하며 기본값은 10,000 엔트리다.
+  값은 양의 정수만 허용해 무제한 누적 설정을 막는다. 근사 trimming이므로 실제 길이는 일시적으로
+  기준보다 조금 클 수 있고, 이는 바이트 상한이나 Redis 전체 `maxmemory` 설정이 아니다.
 - 모든 정수 필드: 부호 없는 최대 18자리 십진 문자열
 
 `caption.delta` fields:
@@ -162,7 +164,7 @@ audio/event drain, engine/source cleanup, completion write, terminal callback, l
 
 1. Spring이 `captionEnabled` session에 같은 agent name으로 explicit dispatch를 만든다.
 2. 이 metadata schema/fixture를 Java serializer와 양측 contract test로 검증한다.
-3. Redis key, consumer group, event enum, retention, timeout 결과의 멱등/fencing과 session clock 변환을
-   확정한다.
+3. Redis key, consumer group, 세션 종료 후 정리, event enum, timeout 결과의 멱등/fencing과 session
+   clock 변환을 확정한다.
 4. callback URL, HMAC 방식, event ID 멱등성과 terminal first-wins 처리를 확정한다.
 5. `docs/CONTRACT.md`를 실제 구현과 함께 갱신하고 LiveKit·Redis·Spring E2E를 별도 실행한다.

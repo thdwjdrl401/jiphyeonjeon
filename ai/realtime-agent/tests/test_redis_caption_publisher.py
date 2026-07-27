@@ -30,11 +30,18 @@ class FakeRedis:
     ) -> None:
         self.failure = failure
         self.block = block
-        self.calls: list[tuple[str, dict[str, str]]] = []
+        self.calls: list[tuple[str, dict[str, str], int, bool]] = []
         self.cancelled = False
 
-    async def xadd(self, name: str, fields: dict[str, str]) -> str:
-        self.calls.append((name, fields))
+    async def xadd(
+        self,
+        name: str,
+        fields: dict[str, str],
+        *,
+        maxlen: int,
+        approximate: bool,
+    ) -> str:
+        self.calls.append((name, fields, maxlen, approximate))
         if self.failure is not None:
             raise self.failure
         if self.block:
@@ -46,14 +53,24 @@ class FakeRedis:
         return "1-0"
 
 
-async def test_directly_awaits_xadd_without_maxlen_arguments() -> None:
+async def test_directly_awaits_xadd_with_approximate_maxlen() -> None:
     redis = FakeRedis()
     publisher = RedisCaptionPublisher(redis, "captions:test")
     event = caption()
 
     await publisher.publish_delta(event)
 
-    assert redis.calls == [("captions:test", to_stream_fields(event))]
+    assert redis.calls == [("captions:test", to_stream_fields(event), 10_000, True)]
+
+
+async def test_uses_configured_stream_maxlen() -> None:
+    redis = FakeRedis()
+    publisher = RedisCaptionPublisher(redis, stream_maxlen=2_500)
+    event = caption()
+
+    await publisher.publish_delta(event)
+
+    assert redis.calls == [("ai:captions:live", to_stream_fields(event), 2_500, True)]
 
 
 async def test_propagates_xadd_failure() -> None:
@@ -77,6 +94,18 @@ async def test_bounds_xadd_and_propagates_timeout() -> None:
 def test_rejects_nonpositive_publish_timeout() -> None:
     with pytest.raises(ValueError, match="must be positive"):
         RedisCaptionPublisher(FakeRedis(), publish_timeout_seconds=0)
+
+
+@pytest.mark.parametrize("maxlen", [0, -1])
+def test_rejects_nonpositive_stream_maxlen(maxlen: int) -> None:
+    with pytest.raises(ValueError, match="must be positive"):
+        RedisCaptionPublisher(FakeRedis(), stream_maxlen=maxlen)
+
+
+@pytest.mark.parametrize("maxlen", [True, 1.5, "10000"])
+def test_rejects_noninteger_stream_maxlen(maxlen: object) -> None:
+    with pytest.raises(TypeError, match="must be an integer"):
+        RedisCaptionPublisher(FakeRedis(), stream_maxlen=maxlen)  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize("timeout", [True, float("nan"), float("inf")])

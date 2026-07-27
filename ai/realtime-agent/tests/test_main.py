@@ -230,10 +230,12 @@ class FakePublisher:
         client: FakeRedisClient,
         stream_key: str,
         *,
+        stream_maxlen: int,
         publish_timeout_seconds: float,
     ) -> None:
         self.client = client
         self.stream_key = stream_key
+        self.stream_maxlen = stream_maxlen
         self.publish_timeout_seconds = publish_timeout_seconds
 
 
@@ -285,6 +287,7 @@ async def test_entrypoint_shares_one_redis_client_and_delegates_job(
     configured = settings(
         redis_url="redis://app-redis:6379/3",
         redis_stream_key="candidate:captions",
+        caption_stream_maxlen=2_500,
         session_lease_ttl_seconds=45,
         caption_publish_timeout_seconds=1.25,
         redis_operation_timeout_seconds=0.5,
@@ -307,6 +310,7 @@ async def test_entrypoint_shares_one_redis_client_and_delegates_job(
     assert isinstance(lease, FakeLease)
     assert publisher.client is redis_client
     assert publisher.stream_key == "candidate:captions"
+    assert publisher.stream_maxlen == 2_500
     assert publisher.publish_timeout_seconds == 1.25
     assert lease.client is redis_client
     assert lease.ttl_seconds == 45
