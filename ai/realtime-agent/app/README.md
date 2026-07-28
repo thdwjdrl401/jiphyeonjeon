@@ -6,8 +6,9 @@ LiveKit job을 받아 실시간 오디오를 STT로 변환하고 자막과 상�
 
 ## 구조와 흐름
 
-`main.py`가 설정을 읽어 `AgentServer`와 job handler를 등록한다. handler는 `jobs/`의 생명주기를 중심으로
-`livekit/` 오디오 입력, `stt/` 엔진, `captions/` 파이프라인, `adapters/` 외부 통신을 연결한다.
+`main.py`가 설정을 읽어 선택한 STT provider의 실행 profile로 `AgentServer`와 job handler를 등록한다.
+provider의 선택적 process resource는 LiveKit child setup에서 준비하고, handler는 `jobs/`의 생명주기를
+중심으로 `livekit/` 오디오 입력, `stt/` 엔진, `captions/` 파이프라인, `adapters/` 외부 통신을 연결한다.
 
 ## 파일 구성
 

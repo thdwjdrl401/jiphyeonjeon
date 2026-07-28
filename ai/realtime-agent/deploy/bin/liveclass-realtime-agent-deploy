@@ -1,0 +1,126 @@
+#!/bin/sh
+set -eu
+
+SOURCE_INPUT="${1:?usage: liveclass-realtime-agent-deploy SOURCE_DIR RELEASE_ID}"
+RELEASE_ID="${2:?usage: liveclass-realtime-agent-deploy SOURCE_DIR RELEASE_ID}"
+
+case "$RELEASE_ID" in
+    ''|*[!0-9a-f]*)
+        echo "release ID must be a lowercase hexadecimal commit SHA" >&2
+        exit 2
+        ;;
+esac
+if [ "${#RELEASE_ID}" -lt 7 ] || [ "${#RELEASE_ID}" -gt 64 ]; then
+    echo "release ID must contain 7 to 64 hexadecimal characters" >&2
+    exit 2
+fi
+
+SOURCE_DIR="$(readlink -f "$SOURCE_INPUT")"
+if [ ! -d "$SOURCE_DIR" ]; then
+    echo "source directory does not exist: $SOURCE_INPUT" >&2
+    exit 2
+fi
+for required in pyproject.toml uv.lock app; do
+    if [ ! -e "$SOURCE_DIR/$required" ]; then
+        echo "source directory is missing $required" >&2
+        exit 2
+    fi
+done
+
+DEPLOY_ROOT="${LIVECLASS_DEPLOY_ROOT:-$HOME/.local/share/liveclass/realtime-agent}"
+RELEASES_DIR="$DEPLOY_ROOT/releases"
+CURRENT_LINK="$DEPLOY_ROOT/current"
+UV_BIN="${UV_BIN:-$(command -v uv || true)}"
+UV_CACHE_DIR="${UV_CACHE_DIR:-$DEPLOY_ROOT/cache/uv}"
+HEALTH_URL="${LIVECLASS_HEALTH_URL:-http://127.0.0.1:8081/}"
+
+for command_name in curl flock nvidia-smi readlink rsync tmux; do
+    if ! command -v "$command_name" >/dev/null 2>&1; then
+        echo "required command is missing: $command_name" >&2
+        exit 1
+    fi
+done
+if [ ! -x "$UV_BIN" ]; then
+    echo "uv is not installed at $UV_BIN" >&2
+    exit 1
+fi
+install -d -m 0700 "$DEPLOY_ROOT" "$RELEASES_DIR" "$UV_CACHE_DIR"
+exec 9>"$DEPLOY_ROOT/deploy.lock"
+if ! flock -n 9; then
+    echo "another realtime-agent deployment is already running" >&2
+    exit 1
+fi
+
+RELEASE_DIR="$RELEASES_DIR/$RELEASE_ID"
+STAGING_DIR=
+cleanup() {
+    if [ -n "$STAGING_DIR" ] && [ -d "$STAGING_DIR" ]; then
+        rm -rf -- "$STAGING_DIR"
+    fi
+}
+trap cleanup EXIT HUP INT TERM
+
+if [ ! -d "$RELEASE_DIR" ]; then
+    STAGING_DIR="$(mktemp -d "$RELEASES_DIR/.${RELEASE_ID}.XXXXXX")"
+    rsync -a \
+        --exclude .venv \
+        --exclude .pytest_cache \
+        --exclude .ruff_cache \
+        --exclude __pycache__ \
+        --exclude .ipynb_checkpoints \
+        "$SOURCE_DIR/" "$STAGING_DIR/"
+    env UV_CACHE_DIR="$UV_CACHE_DIR" \
+        "$UV_BIN" sync --project "$STAGING_DIR" --frozen --no-dev --extra nemotron
+    "$STAGING_DIR/.venv/bin/python" -c \
+        "import torch; import livekit.agents; import redis; assert torch.cuda.is_available()"
+
+    printf '%s\n' "$RELEASE_ID" >"$STAGING_DIR/.release-id"
+    mv "$STAGING_DIR" "$RELEASE_DIR"
+    STAGING_DIR=
+elif [ "$(cat "$RELEASE_DIR/.release-id" 2>/dev/null || true)" != "$RELEASE_ID" ]; then
+    echo "existing release is incomplete or does not match: $RELEASE_DIR" >&2
+    exit 1
+fi
+
+PREVIOUS_RELEASE="$(readlink -f "$CURRENT_LINK" 2>/dev/null || true)"
+NEXT_LINK="$DEPLOY_ROOT/.current-${RELEASE_ID}-$$"
+ln -s "$RELEASE_DIR" "$NEXT_LINK"
+mv -Tf "$NEXT_LINK" "$CURRENT_LINK"
+# tmux server and supervised processes must not inherit the deployment lock.
+flock -u 9
+
+rollback() {
+    echo "agent health check failed; restoring previous release" >&2
+    if [ -n "$PREVIOUS_RELEASE" ] && [ -d "$PREVIOUS_RELEASE" ]; then
+        ROLLBACK_LINK="$DEPLOY_ROOT/.rollback-$$"
+        ln -s "$PREVIOUS_RELEASE" "$ROLLBACK_LINK"
+        mv -Tf "$ROLLBACK_LINK" "$CURRENT_LINK"
+        "$CURRENT_LINK/deploy/bin/liveclass-realtime-agent-supervisor" restart-agent || true
+    else
+        unlink "$CURRENT_LINK" 2>/dev/null || true
+        "$RELEASE_DIR/deploy/bin/liveclass-realtime-agent-supervisor" stop-agent || true
+    fi
+}
+
+SUPERVISOR="$CURRENT_LINK/deploy/bin/liveclass-realtime-agent-supervisor"
+if ! "$SUPERVISOR" start-tunnel; then
+    rollback
+    exit 1
+fi
+if ! "$SUPERVISOR" restart-agent; then
+    rollback
+    exit 1
+fi
+sleep 2
+if ! "$SUPERVISOR" status-agent; then
+    rollback
+    exit 1
+fi
+if ! curl --fail --silent --show-error \
+    --retry 30 --retry-delay 2 --retry-all-errors --max-time 5 \
+    "$HEALTH_URL" >/dev/null; then
+    rollback
+    exit 1
+fi
+
+echo "realtime-agent release $RELEASE_ID is healthy"

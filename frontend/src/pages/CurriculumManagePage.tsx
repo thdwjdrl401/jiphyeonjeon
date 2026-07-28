@@ -39,6 +39,20 @@ interface CurriculumDraftState {
 }
 
 type ManageTab = 'structure' | 'info' | 'enrollees'
+
+/**
+ * 발행 버튼은 DRAFT에서만 의미가 있다 — 서버가 DRAFT 외의 전이를 409로 막는다
+ * (InstructorCurriculumService.publish). 상태를 화면의 단일 출처로 삼는다.
+ *
+ * <p>label은 축 이름(DRAFT)이 아니라 강사가 알고 싶은 결과를 쓴다. ARCHIVED가 따로 있어야 하는
+ * 이유는 "PUBLISHED가 아니면 비공개"로 뭉개면 보관 상태를 초안과 구별할 수 없기 때문이다.
+ */
+const LIFECYCLE_VIEW: Record<string, { tone: 'warning' | 'success' | 'neutral'; label: string; description: string }> = {
+  DRAFT: { tone: 'warning', label: '비공개', description: '게시해야 수강생에게 보입니다.' },
+  PUBLISHED: { tone: 'success', label: '공개 중', description: '카탈로그에서 검색·수강신청할 수 있습니다.' },
+  ARCHIVED: { tone: 'neutral', label: '보관됨', description: '카탈로그에 노출되지 않습니다.' },
+}
+
 type CurriculumInfoField = 'title' | 'summary' | 'description'
 type SectionInfoField = 'title' | 'description'
 interface DraggedLesson {
@@ -109,6 +123,8 @@ function CurriculumManageEditor({
   onTabChange: (tab: ManageTab) => void
 }) {
   const isNewDraft = storedCurriculum?.lifecycleStatus === 'DRAFT'
+  const lifecycleView = LIFECYCLE_VIEW[storedCurriculum.lifecycleStatus]
+    ?? { tone: 'neutral' as const, label: storedCurriculum.lifecycleStatus, description: '알 수 없는 상태입니다.' }
   const [sections, setSections] = useState(initialSections)
   // structureVersion을 로컬로 들고 저장 때마다 갱신한다 — 안 그러면 새로고침 없이 연속 저장 시
   // 낡은 baseVersion을 보내 409로 실패한다(order PUT의 낙관적 동시성).
@@ -285,8 +301,12 @@ function CurriculumManageEditor({
         await publishCurriculum(curriculumId)
         curriculumPublished = true
         setAutosave('saved')
-      } catch {
-        setSaveError('커리큘럼을 게시하지 못했습니다.')
+      } catch (error) {
+        // 상태 충돌(이미 발행됨 등)은 서버 메시지가 원인을 정확히 말해준다 — 뭉개면 사용자가
+        // 같은 버튼을 계속 누르게 된다. 재조회로 화면 상태도 정합시킨다.
+        setSaveError(error instanceof ApiError && error.code === 'CURRICULUM_STATE_CONFLICT'
+          ? error.message
+          : '커리큘럼을 게시하지 못했습니다.')
       }
     }
 
@@ -587,12 +607,11 @@ function CurriculumManageEditor({
             )}
             <div className="lifecycle-actions lifecycle-actions--standalone">
               <div>
-                <StatusBadge tone={isPubliclyVisible ? 'success' : 'warning'}>
-                  {isPubliclyVisible ? '공개 중' : '비공개'}
+                {/* 공개는 두 축의 AND다(ADR-0002) — PUBLISHED라도 게시된 강의가 0이면 보이는 게 없다. */}
+                <StatusBadge tone={isPubliclyVisible ? 'success' : lifecycleView.tone}>
+                  {lifecycleView.label}
                 </StatusBadge>
-                <p>{isNewDraft
-                  ? `커리큘럼 비공개 · 게시된 강의 ${publishedLessonCount}/${totalLessonCount}개 — 게시해야 수강생에게 보입니다.`
-                  : `커리큘럼 공개 중 · 수강생에게 보이는 강의 ${publishedLessonCount}/${totalLessonCount}개.`}</p>
+                <p>{`커리큘럼 ${lifecycleView.label} · 게시된 강의 ${publishedLessonCount}/${totalLessonCount}개 — ${lifecycleView.description}`}</p>
               </div>
               <div className="lifecycle-actions__buttons">
                 {/*

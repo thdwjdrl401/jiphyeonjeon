@@ -36,7 +36,7 @@ class _RecognizerLoadAborted(RuntimeError):
 
 
 class NemotronStreamingEngine(SegmentedStreamingEngine):
-    """Bridge one bounded segment at a time to a lazy local Nemotron recognizer."""
+    """Bridge one bounded segment at a time to an owned Nemotron recognizer."""
 
     def __init__(
         self,
@@ -44,18 +44,21 @@ class NemotronStreamingEngine(SegmentedStreamingEngine):
         language: str,
         *,
         recognizer_factory: Callable[[str, str], NemotronRecognizer] | None = None,
+        prewarmed_recognizer: NemotronRecognizer | None = None,
         segmenter: SpeechSegmenter | None = None,
     ) -> None:
         if not model_id.strip():
             raise ValueError("Nemotron model_id must not be blank")
         if not language.strip():
             raise ValueError("Nemotron language must not be blank")
+        if recognizer_factory is not None and prewarmed_recognizer is not None:
+            raise ValueError("recognizer_factory and prewarmed_recognizer are mutually exclusive")
 
         super().__init__("nemotron", segmenter=segmenter)
         self._model_id = model_id
         self._language = language
         self._recognizer_factory = recognizer_factory or self._default_factory
-        self._recognizer: NemotronRecognizer | None = None
+        self._recognizer = prewarmed_recognizer
         self._recognizer_load_task: asyncio.Task[NemotronRecognizer] | None = None
         self._provider_closed = Event()
         self._inference_lock = asyncio.Lock()

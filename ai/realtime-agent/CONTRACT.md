@@ -84,9 +84,12 @@ load = activeJobs / STT_MAX_ACTIVE_JOBS
 load >= 1.0 이면 FULL
 ```
 
-현재 Nemotron은 model sharing이 없어서 `STT_MAX_ACTIVE_JOBS=1`만 허용한다. 즉 한 job이 실행 중이면
-기존 job은 유지하되 새 job은 받지 않는다. SDK reserved slot도 load에 포함하므로 동시 요청이 와도
-한도를 초과해 수락하지 않는다.
+현재 Nemotron은 model sharing 대신 job child마다 독립 model을 소유하며 한 H200 worker의
+`STT_MAX_ACTIVE_JOBS`를 최대 12까지 허용한다. `STT_NUM_IDLE_PROCESSES`는 active cap과 별개인 warm
+process target이고 provider 기본값은 12다. Nemotron의 active 설정이 없으면 provider 기본값 12를
+사용한다. LiveKit Agents 1.6.6은 active job이 아직 0인 동시 availability 요청의 예약 크기를 idle
+수로 계산하므로 12-request burst를 받으려면 idle도 12여야 한다. SDK reserved slot도 load에 포함해
+12개 한도를 초과해 수락하지 않는다. 13번째 이후 요청은 기존 job을 중단하지 않고 pending으로 둔다.
 
 같은 `STT_AGENT_NAME`의 Worker가 여러 개면 LiveKit이 가용 Worker에 분배한다. 모든 Worker가 FULL
 이거나 없으면 job은 pending 상태로 남는다. LiveKit은 GPU EC2를 자동 확장하지 않으며 pending 순서와

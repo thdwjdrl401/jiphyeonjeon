@@ -11,7 +11,6 @@ from app.connections import LiveKitConnectionSettings, RedisConnectionSettings
 
 _SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _SAFE_REDIS_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$")
-_STT_PROVIDERS = frozenset({"stub", "openai-realtime", "nemotron"})
 _MAX_SHUTDOWN_TIMEOUT_SECONDS = 13.0
 _CALLBACK_RETRY_BASE_DELAY_SECONDS = 0.1
 
@@ -32,6 +31,16 @@ def _parse_int(environ: Mapping[str, str], name: str, default: int) -> int:
     raw = environ.get(name)
     if raw is None:
         return default
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an integer") from exc
+
+
+def _parse_optional_int(environ: Mapping[str, str], name: str) -> int | None:
+    raw = environ.get(name)
+    if raw is None or not raw.strip():
+        return None
     try:
         return int(raw)
     except ValueError as exc:
@@ -80,7 +89,8 @@ class Settings:
     livekit_turn_secret: str = field(default="", repr=False)
     agent_name: str = "liveclass-realtime-stt"
     stt_provider: str = ""
-    max_active_jobs: int = 1
+    max_active_jobs: int | None = None
+    num_idle_processes: int | None = None
     redis_url: str = field(default="redis://localhost:6379/0", repr=False)
     redis_username: str = field(default="", repr=False)
     redis_password: str = field(default="", repr=False)
@@ -128,7 +138,8 @@ class Settings:
             livekit_turn_secret=values.get("LIVEKIT_TURN_SECRET", ""),
             agent_name=values.get("STT_AGENT_NAME", "liveclass-realtime-stt"),
             stt_provider=values.get("STT_ENGINE_PROVIDER", ""),
-            max_active_jobs=_parse_int(values, "STT_MAX_ACTIVE_JOBS", 1),
+            max_active_jobs=_parse_optional_int(values, "STT_MAX_ACTIVE_JOBS"),
+            num_idle_processes=_parse_optional_int(values, "STT_NUM_IDLE_PROCESSES"),
             redis_url=values.get("REDIS_URL", "redis://localhost:6379/0"),
             redis_username=values.get("REDIS_USERNAME", ""),
             redis_password=values.get("REDIS_PASSWORD", ""),
@@ -194,8 +205,20 @@ class Settings:
             raise TypeError("CAPTION_STREAM_MAXLEN must be a positive integer")
         if self.caption_stream_maxlen <= 0:
             raise RuntimeError("CAPTION_STREAM_MAXLEN must be a positive integer")
-        if not 1 <= self.max_active_jobs <= 100:
-            raise RuntimeError("STT_MAX_ACTIVE_JOBS must be between 1 and 100")
+        if self.max_active_jobs is not None:
+            if isinstance(self.max_active_jobs, bool) or not isinstance(self.max_active_jobs, int):
+                raise TypeError("STT_MAX_ACTIVE_JOBS must be an integer")
+            if not 1 <= self.max_active_jobs <= 100:
+                raise RuntimeError("STT_MAX_ACTIVE_JOBS must be between 1 and 100")
+        if self.num_idle_processes is not None:
+            if isinstance(self.num_idle_processes, bool) or not isinstance(
+                self.num_idle_processes, int
+            ):
+                raise TypeError("STT_NUM_IDLE_PROCESSES must be an integer")
+            if self.num_idle_processes < 1:
+                raise RuntimeError("STT_NUM_IDLE_PROCESSES must be at least 1")
+            if self.max_active_jobs is not None and self.num_idle_processes > self.max_active_jobs:
+                raise RuntimeError("STT_NUM_IDLE_PROCESSES must not exceed STT_MAX_ACTIVE_JOBS")
         if self.session_lease_ttl_seconds < 3:
             raise RuntimeError("SESSION_LEASE_TTL_SECONDS must be at least 3")
         timeout_settings = (
@@ -259,24 +282,8 @@ class Settings:
                 "STT_SHUTDOWN_TIMEOUT_SECONDS"
             )
 
-        provider = self.stt_provider.strip().lower()
-        if provider not in _STT_PROVIDERS:
-            supported = ", ".join(sorted(_STT_PROVIDERS))
-            raise RuntimeError(f"STT_ENGINE_PROVIDER must be one of: {supported}")
         if not self.asr_language.strip() or len(self.asr_language) > 32:
             raise RuntimeError("ASR_LANGUAGE must contain 1-32 characters")
-        if provider == "openai-realtime" and not self.openai_api_key.strip():
-            raise RuntimeError("OPENAI_API_KEY is required for openai-realtime")
-        if provider == "openai-realtime" and not self.openai_realtime_model.strip():
-            raise RuntimeError("OPENAI_REALTIME_TRANSCRIPTION_MODEL must not be blank")
-        if self.openai_realtime_delay not in {"minimal", "low", "medium", "high", "xhigh"}:
-            raise RuntimeError("OPENAI_REALTIME_TRANSCRIPTION_DELAY is invalid")
-        if provider == "nemotron" and self.max_active_jobs != 1:
-            raise RuntimeError(
-                "STT_MAX_ACTIVE_JOBS must be 1 for nemotron until model sharing is implemented"
-            )
-        if provider == "nemotron" and not self.nemotron_model_id.strip():
-            raise RuntimeError("ASR_MODEL_ID must not be blank for nemotron")
 
         if not self.spring_status_callback_enabled:
             return

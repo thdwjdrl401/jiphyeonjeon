@@ -45,6 +45,25 @@ type PlaybackState = 'loading' | 'ready' | 'playing' | 'buffering' | 'error'
 const LIVE_SYNC_SEGMENTS = 2
 
 /**
+ * vidstack에 duration을 주지 않으면 라이브 되감기가 영구히 잠긴다.
+ *
+ * vidstack의 seek 허용 조건은 `duration >= liveDVRWindow`인데, 두 값이 이렇게 정해진다:
+ *
+ *   liveDVRWindow = max(inferredLiveDVRWindow, 60)   inferred는 재생목록 전체 길이 T
+ *   seekableEnd   = liveSyncPosition                 = T − (liveSyncDurationCount × 세그먼트)
+ *   seekableStart = max(0, seekableEnd − liveDVRWindow) = 0
+ *   duration      = seekableEnd − seekableStart      = T − 2
+ *
+ * 즉 `T − 2 >= T`를 요구한다 — **항상 거짓**이다. 벌어진 폭은 라이브 엣지 오프셋이라
+ * 정의상 절대 좁혀지지 않는다. `streamType="live:dvr"`을 줘도 seek이 잠기는 진짜 이유다.
+ *
+ * duration을 명시하면 `seekableEnd = providedDuration = T`가 되어
+ * seekableStart = 0, duration = T = liveDVRWindow → 조건이 성립하고 막대가 강의 전체를 덮는다.
+ * (검증: @vidstack/react 1.12 dev 청크의 seekableStart/seekableEnd/canSeek 파생식)
+ */
+const NO_PROVIDED_DURATION = -1
+
+/**
  * 미디어 시각 ↔ 세션 시각 변환.
  *
  * 기준은 재생 중인 source의 `availableFromMs` — 미디어 시각 0이 가리키는 세션 시각이다.
@@ -80,11 +99,15 @@ export default function PlaybackPlayer({
   onSessionTimeChange,
 }: PlaybackPlayerProps) {
   const [playbackState, setPlaybackState] = useState<PlaybackState>('loading')
+  // 라이브 재생목록이 자라는 대로 갱신되는 전체 길이(초). 위 NO_PROVIDED_DURATION 주석 참고.
+  const [liveDuration, setLiveDuration] = useState(NO_PROVIDED_DURATION)
   const playerRef = useRef<MediaPlayerInstance>(null)
   const source = playback?.source ?? null
   const isLive = playback ? isLiveStatus(playback.liveSessionStatus) : true
 
   useEffect(() => setPlaybackState('loading'), [source?.url, reloadToken])
+  // 재생 대상이 바뀌면 이전 스트림의 길이를 물려주지 않는다.
+  useEffect(() => setLiveDuration(NO_PROVIDED_DURATION), [source?.url, reloadToken])
 
   useEffect(() => {
     if (!source || !seekRequest || !playerRef.current) return
@@ -103,6 +126,14 @@ export default function PlaybackPlayer({
       // 5% 빠르게 재생해 조용히 엣지로 복귀시킨다(체감되지 않는 수준).
       maxLiveSyncPlaybackRate: 1.05,
     }
+    // 다시보기(ENDLIST 있음)는 vidstack이 스스로 길이를 알아 손댈 필요가 없다.
+    if (!isLive) return
+    provider.onInstance((instance) => {
+      instance.on(HLS.Events.LEVEL_UPDATED, (_event, data) => {
+        const total = data.details.totalduration
+        if (total > 0) setLiveDuration(total)
+      })
+    })
   }
 
   const retryPlayback = () => {
@@ -125,6 +156,7 @@ export default function PlaybackPlayer({
             ref={playerRef}
             autoPlay
             className="student-live-player"
+            duration={liveDuration}
             playsInline
             src={{ src: source.url, type: 'application/vnd.apple.mpegurl' }}
             streamType={isLive ? 'live:dvr' : 'on-demand'}

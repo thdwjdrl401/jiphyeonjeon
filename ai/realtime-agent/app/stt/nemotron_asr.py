@@ -34,6 +34,11 @@ class NemotronStreamingASR:
         self._active_lock = Lock()
         self._active_generations: dict[Thread, Event] = {}
 
+    def load(self) -> None:
+        """Synchronously load the processor and model in the owning job process."""
+
+        self._ensure_loaded()
+
     def _ensure_loaded(self) -> tuple[Any, Any]:
         with self._state_lock:
             if self._closed.is_set():

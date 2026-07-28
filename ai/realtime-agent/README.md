@@ -46,7 +46,9 @@ lifecycle과 제어면을 중복시키지 않고 `ROOM_DELETED`를 정상 stop �
   성공 뒤 callback 구간에서 cancellation/lease loss가 생기면 `SUCCEEDED`가 누락될 수는 있어도 이미
   닫힌 stream을 반대 terminal로 뒤집지 않는다.
 - callback은 Java endpoint가 채택되기 전까지 기본 비활성화다.
-- Nemotron은 process-wide model sharing이 아직 없어 active job을 1개로 제한한다.
+- Nemotron은 job child마다 model을 하나씩 소유하고 worker당 active job을 최대 12개로 제한한다.
+  `STT_NUM_IDLE_PROCESSES` 기본값도 12다. LiveKit Agents 1.6.6이 idle 수를 초기 동시 dispatch의
+  reservation 기준으로 사용하기 때문에 12-room burst를 받으려면 active cap과 같아야 한다.
 - `ROOM_DELETED`부터 기본 12초 absolute deadline을 drain·cleanup·completion·callback·lease release가
   공유한다. 설정은 최대 13초라 LiveKit Agents 1.6.6의 약 15초 강제 취소 전에 headroom을 남긴다.
 
@@ -76,8 +78,10 @@ uv run --env-file /path/to/realtime-agent.env --frozen python -m app.main dev
 - `REDIS_URL`: LiveKit 내부 Redis가 아닌 application Redis
 - `CAPTION_STREAM_MAXLEN`: `XADD MAXLEN ~` 보존 엔트리 수, 기본 `10000`(0으로 비활성화 불가)
 
-`stub`은 local wiring 확인 전용이다. OpenAI provider는 `OPENAI_API_KEY`가 필요하고, Nemotron은
-optional CUDA 의존성과 `STT_MAX_ACTIVE_JOBS=1`이 필요하다. callback을 켤 때만
+`stub`은 local wiring 확인 전용이다. OpenAI provider는 `OPENAI_API_KEY`가 필요하다. Nemotron은
+optional CUDA 의존성을 설치하고 `STT_MAX_ACTIVE_JOBS`를 1~12로 설정한다. 생략 시 active 기본값은
+Nemotron 12, OpenAI/stub 1이다. `STT_NUM_IDLE_PROCESSES`를 생략하면 Nemotron은 12,
+OpenAI/stub은 1을 사용하며 이 값은 active job 수 이하여야 한다. callback을 켤 때만
 `SPRING_STATUS_CALLBACK_URL`과 32 byte 이상의 `AI_CALLBACK_SECRET`이 필수다.
 
 GPU 서버와 외부 LiveKit/Redis의 운영·검증 절차는

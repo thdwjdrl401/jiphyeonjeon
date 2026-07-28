@@ -13,6 +13,13 @@ from scripts.monitor_caption_stream import parse_args as parse_monitor_args
 from scripts.probe_livekit_room import ProbeSettings, format_room_snapshot
 
 TUNNEL_SCRIPT = Path(__file__).parents[1] / "scripts" / "start_ec2_tunnels.sh"
+DEPLOY_DIR = Path(__file__).parents[1] / "deploy"
+DEPLOY_SCRIPT = DEPLOY_DIR / "bin" / "liveclass-realtime-agent-deploy"
+SUPERVISOR_SCRIPT = DEPLOY_DIR / "bin" / "liveclass-realtime-agent-supervisor"
+RUNNER_CONTROL_SCRIPT = DEPLOY_DIR / "bin" / "liveclass-gitlab-runner-user"
+INSTALL_SCRIPT = DEPLOY_DIR / "install.sh"
+RUNNER_INSTALL_SCRIPT = DEPLOY_DIR / "install-gitlab-runner-user.sh"
+DNS_REDIRECT_SOURCE = DEPLOY_DIR / "livekit-tunnel-dns.c"
 
 
 def test_probe_settings_redact_credentials_from_repr() -> None:
@@ -137,3 +144,108 @@ def test_tunnel_script_rejects_listener_not_owned_by_managed_ssh(
 
     assert result.returncode != 0
     assert "outside the managed SSH tunnel" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "script",
+    [
+        TUNNEL_SCRIPT,
+        DEPLOY_SCRIPT,
+        SUPERVISOR_SCRIPT,
+        RUNNER_CONTROL_SCRIPT,
+        INSTALL_SCRIPT,
+        RUNNER_INSTALL_SCRIPT,
+    ],
+)
+def test_operational_shell_scripts_have_valid_syntax(script: Path) -> None:
+    result = subprocess.run(
+        ["sh", "-n", str(script)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_deploy_helper_rejects_unsafe_release_id_before_privileged_work() -> None:
+    result = subprocess.run(
+        [str(DEPLOY_SCRIPT), "/tmp/not-used", "../master"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    assert "release ID" in result.stderr
+
+
+def test_tunnel_includes_loopback_reverse_health_forward() -> None:
+    script = TUNNEL_SCRIPT.read_text(encoding="utf-8")
+
+    assert 'HEALTH_BIND_HOST="${HEALTH_BIND_HOST:-127.0.0.1}"' in script
+    assert '-R "$HEALTH_BIND_HOST:$HEALTH_REMOTE_PORT:127.0.0.1:$HEALTH_LOCAL_PORT"' in script
+    assert "ExitOnForwardFailure=yes" in script
+
+
+def test_rootless_supervisor_keeps_tunnel_and_agent_under_tmux() -> None:
+    supervisor = SUPERVISOR_SCRIPT.read_text(encoding="utf-8")
+    installer = INSTALL_SCRIPT.read_text(encoding="utf-8")
+
+    assert "tmux new-session -d" in supervisor
+    assert "tmux has-session" in supervisor
+    assert '"$AGENT_SESSION:0.0"' in supervisor
+    assert "status-agent)" in supervisor
+    assert "LIVEKIT_TUNNEL_HOST" in supervisor
+    assert "LD_PRELOAD" in supervisor
+    assert "systemctl" not in supervisor
+    assert "sudo" not in supervisor
+    assert "systemctl" not in installer
+    assert "sudo" not in installer
+
+
+def test_dns_redirect_source_compiles(tmp_path: Path) -> None:
+    result = subprocess.run(
+        [
+            "cc",
+            "-shared",
+            "-fPIC",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            str(DNS_REDIRECT_SOURCE),
+            "-ldl",
+            "-o",
+            str(tmp_path / "livekit-tunnel-dns.so"),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_deploy_helper_builds_before_switch_and_keeps_rollback_path() -> None:
+    script = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+
+    sync_position = script.index('"$UV_BIN" sync')
+    cuda_smoke_position = script.index("assert torch.cuda.is_available()")
+    switch_position = script.index('mv -Tf "$NEXT_LINK" "$CURRENT_LINK"')
+    unlock_position = script.index("flock -u 9")
+    health_position = script.index("--retry 30")
+    process_gate_position = script.index('"$SUPERVISOR" status-agent')
+
+    assert (
+        sync_position
+        < cuda_smoke_position
+        < switch_position
+        < unlock_position
+        < process_gate_position
+        < health_position
+    )
+    assert 'PREVIOUS_RELEASE="$(readlink -f "$CURRENT_LINK"' in script
+    assert 'mv -Tf "$ROLLBACK_LINK" "$CURRENT_LINK"' in script
+    assert "systemctl" not in script
+    assert "runuser" not in script
+    assert "sudo" not in script
