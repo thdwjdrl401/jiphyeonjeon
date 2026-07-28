@@ -125,7 +125,9 @@ uv run --frozen ruff format --check app tests scripts
 - RoomService read-only probe로 기존 room과 unmuted microphone publication을 확인했다.
 - relay-only custom ICE로 기존 room에 연결해 TURN/TCP peer connection을 확인했다.
 - worker가 named agent로 등록되고 정상 drain/shutdown됐다.
-- 현재 존재하는 room은 `stt-test`뿐이어서 strict `session-{UUID}` binding을 만족하지 않는다. 따라서
-  dispatch, caption delta/completion, lease release Gate D는 계약에 맞는 기존 test room이 준비될 때까지
-  blocker다. 도구가 room을 임의 생성하거나 계약 검증을 완화하지 않는다.
+- 기존 비민감 microphone을 임시 strict `session-{UUID}` room으로 relay해 Gate D를 수행했다. manual
+  dispatch의 room·participant·microphone 검증 후 Nemotron이 `caption.delta` 54개를 sequence 1–54로
+  발행했고 UTF-8 decode 오류가 없었다.
+- room 삭제 후 `caption.stream.completed`가 정확히 1개 발행됐고 `reason=ROOM_DELETED`,
+  `lastSequence=54`였으며 session lease key가 제거됐다. 임시 room·bridge·worker도 종료했다.
 - Spring named dispatch/consumer Gate E와 30분 안정성 Gate F도 미완료다.
