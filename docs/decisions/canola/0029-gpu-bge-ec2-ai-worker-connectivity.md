@@ -66,4 +66,7 @@ Spring은 embedding vector를 직접 받지 않는다. RabbitMQ는 durable mater
 - script argument와 fail-closed 동작을 기본 테스트에서 검증한다.
 - ai-worker readiness에 PostgreSQL뿐 아니라 tunnel을 통한 BGE `/readyz`를 포함한다.
 - 실제 완료는 GPU BGE warmup, reverse tunnel, EC2 ai-worker를 함께 띄워 한 PPTX가 1024차원 vector로 저장되고 Spring `READY` callback까지 도달한 E2E로 증명한다.
-- 이 결정은 Python 내부 transport와 배포 topology만 바꾸므로 Java/FE wire payload와 `docs/CONTRACT.md`는 변경하지 않는다.
+- 이 결정은 Java/FE wire payload를 바꾸지 않는다. 다만 EC2 ai-worker와 GPU bge-runtime을 서로 다른
+  배포 주체가 운영할 때 함께 지켜야 할 HTTP 경계이므로 공유 정본
+  [`docs/CONTRACT.md` §3-7](../../CONTRACT.md#3-7-ec2-ai-worker--gpu-bge-runtime-http--ai-구현됨)에
+  요청·응답·인증·실패 분류를 기록한다.

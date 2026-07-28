@@ -268,6 +268,9 @@ source provider와 opaque source identity이며 MinIO 접근에 사용하지 않
 
 ### 9.4 remote BGE runtime
 
+- EC2↔GPU 공유 정본과 운영 endpoint는
+  [`docs/CONTRACT.md` §3-7](../../docs/CONTRACT.md#3-7-ec2-ai-worker--gpu-bge-runtime-http--ai-구현됨)을
+  따른다. 아래는 ai-worker adapter가 추가로 강제하는 검증 규칙이다.
 - endpoint는 `POST /internal/v1/embeddings`, 인증은 BGE runtime 전용 Bearer token이다. Spring HMAC secret과
   공유하지 않는다.
 - 요청 model은 `BAAI/bge-m3`, revision은 배포 설정의 40자리 고정 commit이며 최대 batch는 4다.
