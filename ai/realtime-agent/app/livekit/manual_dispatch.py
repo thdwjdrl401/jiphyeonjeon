@@ -76,6 +76,17 @@ async def create_verified_dispatch(
     )
     if instructor is None:
         raise DispatchSafetyError(f"instructor is not in room: {request.instructor_identity!r}")
+    microphone_publishers = {
+        participant.identity
+        for participant in participants.participants
+        if any(track.source == api.TrackSource.MICROPHONE for track in participant.tracks)
+    }
+    unexpected_publishers = microphone_publishers - {request.instructor_identity}
+    if unexpected_publishers:
+        raise DispatchSafetyError(
+            "room has microphone publications from unexpected participants: "
+            + ", ".join(sorted(unexpected_publishers))
+        )
     if not any(
         track.source == api.TrackSource.MICROPHONE and not track.muted
         for track in instructor.tracks

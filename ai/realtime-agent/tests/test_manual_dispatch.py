@@ -18,16 +18,31 @@ LESSON_ID = "22222222-2222-4222-8222-222222222222"
 
 
 class FakeRoomService:
-    def __init__(self, *, room: bool = True, microphone: bool = True) -> None:
+    def __init__(
+        self,
+        *,
+        room: bool = True,
+        microphone: bool = True,
+        unexpected_microphone: bool = False,
+    ) -> None:
         self.room = room
         self.microphone = microphone
+        self.unexpected_microphone = unexpected_microphone
 
     async def list_rooms(self, request):
         return SimpleNamespace(rooms=[SimpleNamespace(name=request.names[0])] if self.room else [])
 
     async def list_participants(self, _request):
         track = SimpleNamespace(source=api.TrackSource.MICROPHONE, muted=not self.microphone)
-        return SimpleNamespace(participants=[SimpleNamespace(identity="av-bot", tracks=[track])])
+        participants = [SimpleNamespace(identity="av-bot", tracks=[track])]
+        if self.unexpected_microphone:
+            participants.append(
+                SimpleNamespace(
+                    identity="unexpected-publisher",
+                    tracks=[SimpleNamespace(source=api.TrackSource.MICROPHONE, muted=True)],
+                )
+            )
+        return SimpleNamespace(participants=participants)
 
 
 class FakeDispatchService:
@@ -80,6 +95,11 @@ async def test_creates_strict_contract_dispatch_after_microphone_verification() 
     [
         (FakeRoomService(room=False), request(), "room must already exist"),
         (FakeRoomService(microphone=False), request(), "no unmuted microphone"),
+        (
+            FakeRoomService(unexpected_microphone=True),
+            request(),
+            "unexpected participants",
+        ),
         (FakeRoomService(), request(room_name="wrong-room"), "room must match"),
     ],
 )
