@@ -2,15 +2,16 @@ from __future__ import annotations
 
 import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from httpx import ConnectError, Request
 
 from app import wiring
 from app.config import Settings
 from app.contracts import PptxEmbedJob, parse_material_job
 from app.runtime import WorkerState
-from app.wiring import PptxRuntimeConfigurationError
+from app.wiring import PptxIngestionRuntime, PptxRuntimeConfigurationError
 
 
 DATABASE_URL = "postgresql+asyncpg://ai:secret@localhost/liveclass"
@@ -101,7 +102,7 @@ def test_builds_spring_bge_pgvector_and_use_case_with_shared_dependencies(monkey
     monkeypatch.setattr(wiring, "SpringMaterialCallbackClient", fake_callback)
     monkeypatch.setattr(wiring, "IndexPptxMaterial", fake_indexer)
 
-    runtime = wiring.build_pptx_ingestion_runtime(_settings())
+    runtime = wiring.build_pptx_ingestion_runtime(_settings(bge_readiness_timeout_seconds=7.5))
 
     assert [client.kwargs for client in clients] == [
         {"base_url": "http://127.0.0.1:8080"},
@@ -135,6 +136,7 @@ def test_builds_spring_bge_pgvector_and_use_case_with_shared_dependencies(monkey
     assert indexer_options["chunk_max_chars"] == 1_200
     assert runtime.index_pptx_material.name == "indexer"
     assert runtime.callback_client.name == "callback"
+    assert runtime._bge_readiness_timeout_seconds == 7.5
 
 
 def test_runtime_maps_wire_job_with_its_validated_configuration(monkeypatch) -> None:
@@ -194,6 +196,60 @@ async def test_runtime_closes_both_http_clients_and_database_engine_once(monkeyp
     assert engine.disposed == 1
 
 
+async def test_runtime_readiness_requires_database_and_bge() -> None:
+    engine = MagicMock()
+    connection = AsyncMock()
+    engine.connect.return_value.__aenter__.return_value = connection
+    embedding_client = SimpleNamespace(get=AsyncMock())
+    runtime = PptxIngestionRuntime(
+        index_pptx_material=object(),  # type: ignore[arg-type]
+        callback_client=object(),  # type: ignore[arg-type]
+        tenant_id="liveclass",
+        model_revision=REVISION,
+        chunk_max_chars=1_200,
+        _spring_client=object(),  # type: ignore[arg-type]
+        _embedding_client=embedding_client,  # type: ignore[arg-type]
+        _database_engine=engine,
+        _bge_readiness_timeout_seconds=2.0,
+    )
+
+    connection.scalar.return_value = 0
+    assert await runtime.dependencies_ready() is False
+    embedding_client.get.assert_not_awaited()
+
+    connection.scalar.return_value = 1
+    embedding_client.get.return_value = SimpleNamespace(
+        status_code=200,
+        json=lambda: {
+            "status": "ready",
+            "service": "bge-runtime",
+            "metadata": {"model": "BAAI/bge-m3"},
+        },
+    )
+    assert await runtime.dependencies_ready() is True
+    embedding_client.get.assert_awaited_once_with("/readyz", timeout=2.0)
+    embedding_client.get.return_value = SimpleNamespace(
+        status_code=200,
+        json=lambda: {"status": "not_ready", "service": "bge-runtime"},
+    )
+    assert await runtime.dependencies_ready() is False
+
+    embedding_client.get.return_value = SimpleNamespace(status_code=503)
+    assert await runtime.dependencies_ready() is False
+
+    embedding_client.get.return_value = SimpleNamespace(
+        status_code=200,
+        json=MagicMock(side_effect=ValueError("invalid json")),
+    )
+    assert await runtime.dependencies_ready() is False
+
+    embedding_client.get.side_effect = ConnectError(
+        "offline",
+        request=Request("GET", "http://127.0.0.1:18020/readyz"),
+    )
+    assert await runtime.dependencies_ready() is False
+
+
 def test_disabled_worker_keeps_management_only_runtime(monkeypatch) -> None:
     monkeypatch.setattr(
         wiring,
@@ -223,7 +279,7 @@ def test_enabled_worker_requires_rabbitmq_url_before_building_resources(monkeypa
 def test_enabled_worker_wires_consumer_handler_readiness_and_cleanup(monkeypatch) -> None:
     captured = {}
     ingestion_runtime = SimpleNamespace(
-        database_ready=AsyncMock(return_value=True),
+        dependencies_ready=AsyncMock(return_value=True),
         aclose=AsyncMock(),
     )
     job_handler = object()
@@ -252,7 +308,7 @@ def test_enabled_worker_wires_consumer_handler_readiness_and_cleanup(monkeypatch
 
     assert captured["url"] == RABBITMQ_URL
     assert captured["handler"] is job_handler
-    assert captured["options"]["readiness_check"] is ingestion_runtime.database_ready
+    assert captured["options"]["readiness_check"] is ingestion_runtime.dependencies_ready
     captured["options"]["on_ready"](True)
     assert state.ready is True
     assert runtime._runner is consumer

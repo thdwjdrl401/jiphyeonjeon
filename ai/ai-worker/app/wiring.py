@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import logging
+
 from dataclasses import dataclass
 
-from httpx import AsyncClient
+from httpx import AsyncClient, HTTPError
 from pydantic import SecretStr
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
@@ -22,6 +24,9 @@ from app.ingestion import PptxValidationLimits
 from app.runtime import WorkerRuntime, WorkerState
 
 
+logger = logging.getLogger(__name__)
+
+
 class PptxRuntimeConfigurationError(RuntimeError):
     """Credentials required to activate the runtime adapters are absent."""
 
@@ -36,6 +41,8 @@ class PptxIngestionRuntime:
     _spring_client: AsyncClient
     _embedding_client: AsyncClient
     _database_engine: AsyncEngine
+    _bge_readiness_timeout_seconds: float
+    _bge_readiness_failure: str | None = None
     _closed: bool = False
 
     def material_for(self, job: PptxEmbedJob) -> StagedMaterial:
@@ -46,9 +53,58 @@ class PptxIngestionRuntime:
             chunk_max_chars=self.chunk_max_chars,
         )
 
-    async def database_ready(self) -> bool:
+    async def dependencies_ready(self) -> bool:
         async with self._database_engine.connect() as connection:
-            return (await connection.scalar(text("SELECT 1"))) == 1
+            if (await connection.scalar(text("SELECT 1"))) != 1:
+                return False
+
+        try:
+            response = await self._embedding_client.get(
+                "/readyz",
+                timeout=self._bge_readiness_timeout_seconds,
+            )
+        except HTTPError:
+            self._record_bge_readiness_failure("unreachable")
+            return False
+        if response.status_code != 200:
+            self._record_bge_readiness_failure("http_status")
+            return False
+        try:
+            payload = response.json()
+        except ValueError:
+            self._record_bge_readiness_failure("invalid_json")
+            return False
+
+        ready = (
+            isinstance(payload, dict)
+            and payload.get("status") == "ready"
+            and payload.get("service") == "bge-runtime"
+        )
+        self._record_bge_readiness_failure(None if ready else "invalid_payload")
+        return ready
+
+    def _record_bge_readiness_failure(self, failure: str | None) -> None:
+        if self._bge_readiness_failure == failure:
+            return
+        recovered = self._bge_readiness_failure is not None and failure is None
+        self._bge_readiness_failure = failure
+        if recovered:
+            logger.info(
+                "bge-runtime readiness recovered",
+                extra={
+                    "event": "service.dependency_recovered",
+                    "dependency": "bge-runtime",
+                },
+            )
+        elif failure is not None:
+            logger.warning(
+                "bge-runtime readiness check failed",
+                extra={
+                    "event": "service.dependency_not_ready",
+                    "dependency": "bge-runtime",
+                    "reason": failure,
+                },
+            )
 
     async def aclose(self) -> None:
         if self._closed:
@@ -119,6 +175,7 @@ def build_pptx_ingestion_runtime(settings: Settings) -> PptxIngestionRuntime:
         _spring_client=spring_client,
         _embedding_client=embedding_client,
         _database_engine=database_engine,
+        _bge_readiness_timeout_seconds=settings.bge_readiness_timeout_seconds,
     )
 
 
@@ -135,7 +192,7 @@ def build_worker_runtime(settings: Settings, state: WorkerState) -> WorkerRuntim
         retry_limit=settings.rabbitmq_retry_limit,
         retry_base_delay_seconds=settings.rabbitmq_retry_base_delay_seconds,
         shutdown_grace_seconds=settings.rabbitmq_shutdown_grace_seconds,
-        readiness_check=ingestion_runtime.database_ready,
+        readiness_check=ingestion_runtime.dependencies_ready,
         on_ready=lambda ready: setattr(state, "ready", ready),
     )
     return WorkerRuntime(
