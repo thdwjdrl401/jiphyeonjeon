@@ -6,16 +6,16 @@ import argparse
 import asyncio
 import os
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from livekit import api
+
+from app.connections import LiveKitConnectionSettings, create_livekit_api_client
 
 
 @dataclass(frozen=True, slots=True)
 class ProbeSettings:
-    url: str
-    api_key: str = field(repr=False)
-    api_secret: str = field(repr=False)
+    connection: LiveKitConnectionSettings
     room_name: str
 
     @classmethod
@@ -26,24 +26,15 @@ class ProbeSettings:
         api_secret: str,
         room_name: str,
     ) -> ProbeSettings:
-        settings = cls(
+        connection = LiveKitConnectionSettings(
             url=url.strip(),
             api_key=api_key.strip(),
             api_secret=api_secret.strip(),
-            room_name=room_name.strip(),
         )
-        missing = [
-            name
-            for name, value in (
-                ("LIVEKIT_URL", settings.url),
-                ("LIVEKIT_API_KEY", settings.api_key),
-                ("LIVEKIT_API_SECRET", settings.api_secret),
-                ("room name", settings.room_name),
-            )
-            if not value
-        ]
-        if missing:
-            raise RuntimeError(f"missing required probe settings: {', '.join(missing)}")
+        connection.validate()
+        settings = cls(connection=connection, room_name=room_name.strip())
+        if not settings.room_name:
+            raise RuntimeError("missing required probe setting: room name")
         return settings
 
 
@@ -86,11 +77,7 @@ def format_room_snapshot(room_name: str, participants: Iterable[object]) -> str:
 
 
 async def probe_room(settings: ProbeSettings, client: api.LiveKitAPI | None = None) -> str:
-    livekit = client or api.LiveKitAPI(
-        url=settings.url,
-        api_key=settings.api_key,
-        api_secret=settings.api_secret,
-    )
+    livekit = client or create_livekit_api_client(settings.connection)
     try:
         rooms = await livekit.room.list_rooms(api.ListRoomsRequest(names=[settings.room_name]))
         exact = [room for room in rooms.rooms if room.name == settings.room_name]

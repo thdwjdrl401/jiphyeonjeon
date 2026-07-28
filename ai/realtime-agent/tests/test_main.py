@@ -289,7 +289,16 @@ async def test_entrypoint_shares_one_redis_client_and_delegates_job(
         captured["cleanup_timeout_seconds"] = kwargs["cleanup_timeout_seconds"]
 
     monkeypatch.setattr(agent_main, "AgentServer", FakeAgentServer)
-    monkeypatch.setattr(agent_main, "Redis", FakeRedis)
+    monkeypatch.setattr(
+        agent_main,
+        "create_redis_client",
+        lambda connection: FakeRedis.from_url(
+            connection.url,
+            username=connection.username or None,
+            password=connection.password or None,
+            decode_responses=True,
+        ),
+    )
     monkeypatch.setattr(agent_main, "RedisCaptionPublisher", FakePublisher)
     monkeypatch.setattr(agent_main, "RedisSessionLease", FakeLease)
     monkeypatch.setattr(agent_main, "run_dispatched_room_job", run_job)
@@ -352,7 +361,16 @@ async def test_entrypoint_closes_redis_when_job_fails(
         raise RuntimeError("job failed")
 
     monkeypatch.setattr(agent_main, "AgentServer", FakeAgentServer)
-    monkeypatch.setattr(agent_main, "Redis", FakeRedis)
+    monkeypatch.setattr(
+        agent_main,
+        "create_redis_client",
+        lambda connection: FakeRedis.from_url(
+            connection.url,
+            username=connection.username or None,
+            password=connection.password or None,
+            decode_responses=True,
+        ),
+    )
     monkeypatch.setattr(agent_main, "run_dispatched_room_job", fail_job)
     server = agent_main.build_agent_server(settings())
 

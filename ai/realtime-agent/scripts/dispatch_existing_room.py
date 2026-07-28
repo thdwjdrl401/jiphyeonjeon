@@ -4,8 +4,7 @@ import argparse
 import asyncio
 import os
 
-from livekit import api
-
+from app.connections import LiveKitConnectionSettings, create_livekit_api_client
 from app.livekit.manual_dispatch import ManualDispatchRequest, create_verified_dispatch
 
 
@@ -24,19 +23,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def required_env(name: str) -> str:
-    value = os.getenv(name, "").strip()
-    if not value:
-        raise RuntimeError(f"missing required setting: {name}")
-    return value
-
-
 async def run(args: argparse.Namespace) -> None:
-    client = api.LiveKitAPI(
-        url=required_env("LIVEKIT_URL"),
-        api_key=required_env("LIVEKIT_API_KEY"),
-        api_secret=required_env("LIVEKIT_API_SECRET"),
-    )
+    client = create_livekit_api_client(LiveKitConnectionSettings.from_env())
     try:
         dispatch, created = await create_verified_dispatch(
             client.room,

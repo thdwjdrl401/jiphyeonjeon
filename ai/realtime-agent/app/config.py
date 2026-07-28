@@ -7,6 +7,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from urllib.parse import urlparse, urlsplit
 
+from app.connections import LiveKitConnectionSettings, RedisConnectionSettings
+
 _SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _SAFE_REDIS_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$")
 _STT_PROVIDERS = frozenset({"stub", "openai-realtime", "nemotron"})
@@ -101,6 +103,20 @@ class Settings:
     nemotron_model_id: str = "nvidia/nemotron-3.5-asr-streaming-0.6b"
     asr_language: str = "ko-KR"
 
+    def livekit_connection(self) -> LiveKitConnectionSettings:
+        return LiveKitConnectionSettings(
+            url=self.livekit_url,
+            api_key=self.livekit_api_key,
+            api_secret=self.livekit_api_secret,
+        )
+
+    def redis_connection(self) -> RedisConnectionSettings:
+        return RedisConnectionSettings(
+            url=self.redis_url,
+            username=self.redis_username,
+            password=self.redis_password,
+        )
+
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> Settings:
         values = os.environ if environ is None else environ
@@ -149,12 +165,10 @@ class Settings:
         )
 
     def validate_agent_server(self) -> None:
+        self.livekit_connection().validate()
         missing = [
             name
             for name, value in (
-                ("LIVEKIT_URL", self.livekit_url),
-                ("LIVEKIT_API_KEY", self.livekit_api_key),
-                ("LIVEKIT_API_SECRET", self.livekit_api_secret),
                 ("STT_AGENT_NAME", self.agent_name),
                 ("STT_ENGINE_PROVIDER", self.stt_provider),
                 ("REDIS_URL", self.redis_url),
@@ -165,16 +179,11 @@ class Settings:
         if missing:
             raise RuntimeError(f"missing required agent server settings: {', '.join(missing)}")
 
-        livekit_url = urlparse(self.livekit_url)
-        if livekit_url.scheme not in {"ws", "wss"} or not livekit_url.netloc:
-            raise RuntimeError("LIVEKIT_URL must use ws or wss")
         if self.livekit_turn_url:
             _validate_turn_url(self.livekit_turn_url)
             if not self.livekit_turn_secret.strip():
                 raise RuntimeError("LIVEKIT_TURN_SECRET is required when LIVEKIT_TURN_URL is set")
-        redis_url = urlparse(self.redis_url)
-        if redis_url.scheme not in {"redis", "rediss"} or not redis_url.netloc:
-            raise RuntimeError("REDIS_URL must use redis or rediss")
+        self.redis_connection().validate()
         if not _SAFE_NAME.fullmatch(self.agent_name):
             raise RuntimeError("STT_AGENT_NAME must be a 1-128 character safe identifier")
         if not _SAFE_REDIS_KEY.fullmatch(self.redis_stream_key):

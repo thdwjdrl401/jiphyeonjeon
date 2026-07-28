@@ -7,6 +7,8 @@ import os
 
 from redis.asyncio import Redis
 
+from app.connections import RedisConnectionSettings, create_redis_client
+
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -63,16 +65,15 @@ async def monitor(
 
 async def main() -> None:
     args = parse_args()
-    if not args.redis_url.strip():
-        raise RuntimeError("missing required setting: REDIS_URL or --redis-url")
     if not args.stream_key.strip():
         raise RuntimeError("stream key must not be blank")
-    redis = Redis.from_url(
-        args.redis_url,
-        username=args.redis_username or None,
-        password=args.redis_password or None,
-        decode_responses=True,
-        encoding_errors="strict",
+    redis = create_redis_client(
+        RedisConnectionSettings.from_env(
+            url=args.redis_url,
+            username=args.redis_username,
+            password=args.redis_password,
+        ),
+        strict_utf8=True,
     )
     try:
         await monitor(

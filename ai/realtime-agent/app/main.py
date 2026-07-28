@@ -4,12 +4,12 @@ from collections.abc import Callable
 from functools import partial
 
 from livekit.agents import AgentServer, JobContext, cli
-from redis.asyncio import Redis
 
 from app.adapters.redis_caption_publisher import RedisCaptionPublisher
 from app.adapters.redis_session_lease import RedisSessionLease
 from app.adapters.spring_status_callback import SpringStatusCallback
 from app.config import Settings
+from app.connections import create_redis_client
 from app.jobs.dispatched_room_job import run_dispatched_room_job
 from app.jobs.lifecycle import DisabledLifecycleReporter, LifecycleReporter
 from app.jobs.metadata import JobMetadata
@@ -96,12 +96,7 @@ async def _run_agent_job(context: JobContext, *, settings: Settings) -> None:
         settings.livekit_turn_url,
         settings.livekit_turn_secret,
     )
-    redis = Redis.from_url(
-        settings.redis_url,
-        username=settings.redis_username or None,
-        password=settings.redis_password or None,
-        decode_responses=True,
-    )
+    redis = create_redis_client(settings.redis_connection())
     try:
         publisher = RedisCaptionPublisher(
             redis,
