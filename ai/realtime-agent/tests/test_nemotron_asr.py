@@ -103,6 +103,45 @@ class FakeModel:
         streamer.on_finalized_text("강의 시작", stream_end=True)
 
 
+def test_public_load_eagerly_initializes_model_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    processor = FakeProcessor()
+    model = FakeModel()
+    processor_loads = 0
+    model_loads = 0
+
+    class AutoProcessor:
+        @staticmethod
+        def from_pretrained(model_id: str) -> FakeProcessor:
+            nonlocal processor_loads
+            assert model_id == "model"
+            processor_loads += 1
+            return processor
+
+    class AutoModel:
+        @staticmethod
+        def from_pretrained(model_id: str, *, device_map: str) -> FakeModel:
+            nonlocal model_loads
+            assert model_id == "model"
+            assert device_map == "auto"
+            model_loads += 1
+            return model
+
+    monkeypatch.setitem(
+        sys.modules,
+        "transformers",
+        SimpleNamespace(AutoModelForRNNT=AutoModel, AutoProcessor=AutoProcessor),
+    )
+    adapter = NemotronStreamingASR("model", "ko-KR")
+
+    adapter.load()
+    adapter.load()
+
+    assert processor_loads == 1
+    assert model_loads == 1
+    assert processor.lookahead_tokens == 6
+    adapter.close()
+
+
 def test_transformers_adapter_overrides_batch_input_features_once(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

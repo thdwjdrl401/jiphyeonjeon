@@ -25,6 +25,8 @@ def test_uses_application_redis_without_assuming_livekit_redis_port() -> None:
     assert settings.stt_cleanup_timeout_seconds == 1
     assert settings.caption_publish_timeout_seconds == 1.25
     assert settings.redis_operation_timeout_seconds == 1
+    assert settings.max_active_jobs is None
+    assert settings.num_idle_processes is None
 
 
 def test_default_redis_user_accepts_password_without_username() -> None:
@@ -157,14 +159,7 @@ def test_rejects_short_callback_secret() -> None:
         settings.validate_agent_server()
 
 
-def test_openai_provider_requires_api_key() -> None:
-    settings = Settings.from_env({**BASE_ENV, "STT_ENGINE_PROVIDER": "openai-realtime"})
-
-    with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
-        settings.validate_agent_server()
-
-
-def test_provider_must_be_explicit_and_supported() -> None:
+def test_provider_must_be_explicit() -> None:
     with pytest.raises(RuntimeError, match="STT_ENGINE_PROVIDER"):
         Settings.from_env(
             {
@@ -174,17 +169,46 @@ def test_provider_must_be_explicit_and_supported() -> None:
             }
         ).validate_agent_server()
 
-    with pytest.raises(RuntimeError, match="must be one of"):
-        Settings.from_env({**BASE_ENV, "STT_ENGINE_PROVIDER": "unknown"}).validate_agent_server()
+
+def test_common_config_does_not_branch_on_provider_name() -> None:
+    Settings.from_env(
+        {**BASE_ENV, "STT_ENGINE_PROVIDER": "future-provider"}
+    ).validate_agent_server()
 
 
-def test_nemotron_is_limited_to_one_active_job() -> None:
+def test_accepts_twelve_active_jobs_and_explicit_warm_pool() -> None:
     settings = Settings.from_env(
-        {**BASE_ENV, "STT_ENGINE_PROVIDER": "nemotron", "STT_MAX_ACTIVE_JOBS": "2"}
+        {
+            **BASE_ENV,
+            "STT_ENGINE_PROVIDER": "nemotron",
+            "STT_MAX_ACTIVE_JOBS": "12",
+            "STT_NUM_IDLE_PROCESSES": "2",
+        }
     )
 
-    with pytest.raises(RuntimeError, match="must be 1 for nemotron"):
+    settings.validate_agent_server()
+
+    assert settings.max_active_jobs == 12
+    assert settings.num_idle_processes == 2
+
+
+@pytest.mark.parametrize("value", ["0", "13"])
+def test_rejects_idle_processes_outside_active_jobs(value: str) -> None:
+    settings = Settings.from_env(
+        {
+            **BASE_ENV,
+            "STT_MAX_ACTIVE_JOBS": "12",
+            "STT_NUM_IDLE_PROCESSES": value,
+        }
+    )
+
+    with pytest.raises(RuntimeError, match="STT_NUM_IDLE_PROCESSES"):
         settings.validate_agent_server()
+
+
+def test_rejects_noninteger_idle_processes() -> None:
+    with pytest.raises(ValueError, match="STT_NUM_IDLE_PROCESSES must be an integer"):
+        Settings.from_env({**BASE_ENV, "STT_NUM_IDLE_PROCESSES": "two"})
 
 
 def test_accepts_complete_callback_configuration() -> None:
