@@ -4,6 +4,7 @@ import type { CurriculumLiveSessionStatus } from '@/features/lesson/types'
 import type { LiveSessionService } from './liveSessionService.interface'
 
 const liveStatusOverrides = new Map<string, CurriculumLiveSessionStatus>()
+const liveStartOperations = new Map<string, string>()
 const bookmarksByLesson = new Map<string, number[]>()
 const mockLivePlaybackUrl = 'https://files.vidstack.io/sprite-fight/hls/stream.m3u8'
 
@@ -30,18 +31,43 @@ export const mockLiveSessionService = {
       source: { url: mockLivePlaybackUrl, availableFromMs: 0, availableToMs: null },
     }
   },
-  async getPreflightChecks() {
-    return [
-      { code: 'LESSON_PUBLISHED', label: '강의 게시', value: 'PUBLISHED', ready: true },
-      { code: 'MATERIAL_READY', label: 'PPTX 자료', value: '2개 준비', ready: true },
-      { code: 'AI_READY', label: 'AI 준비', value: 'READY', ready: true },
-      { code: 'LIVEKIT_READY', label: 'LiveKit', value: '연결 가능', ready: true },
-      { code: 'EGRESS_READY', label: 'Egress 녹화', value: '저장 경로 준비', ready: true },
-      { code: 'STT_READY', label: '실시간 자막', value: '처리 가능', ready: true },
-    ]
+  async preparePreflightRoom(sessionId) {
+    return { sessionId, roomName: `session-${sessionId}`, roomSid: `RM_${sessionId}` }
+  },
+  async getPreflightReadiness() {
+    return {
+      ready: true,
+      instructorPresent: true,
+      microphonePublished: true,
+      microphoneMuted: false,
+      instructorMicrophoneTrackCount: 1,
+      unexpectedMicrophonePublishers: 0,
+    }
   },
   async startLiveSession(sessionId) {
+    const operationId = liveStartOperations.get(sessionId) ?? `op-${sessionId}`
+    liveStartOperations.set(sessionId, operationId)
+    liveStatusOverrides.set(sessionId, 'STARTING')
+    return { operationId, sessionId, status: 'STARTING' as const }
+  },
+  async getLiveStartStatus(sessionId) {
+    const operationId = liveStartOperations.get(sessionId) ?? null
     liveStatusOverrides.set(sessionId, 'LIVE')
+    const demo = getDemoLiveSession(sessionId)
+    const session = {
+      ...demo,
+      status: 'LIVE' as const,
+      participants: Math.max(demo.participants, 1),
+      entryWindowMinutes: 10,
+    }
+    return {
+      operationId,
+      attemptStatus: 'SUCCEEDED' as const,
+      step: 'LIVE' as const,
+      failureCode: null,
+      failureMessage: null,
+      session,
+    }
   },
   async endLiveSession(sessionId) {
     liveStatusOverrides.set(sessionId, 'ENDED')

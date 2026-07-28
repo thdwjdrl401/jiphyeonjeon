@@ -40,11 +40,34 @@ export interface CaptionView {
   termReferences: CaptionTermReference[]
 }
 
-export interface PreflightCheck {
-  code: string
-  label: string
-  value: string
+export interface PreflightRoom {
+  sessionId: string
+  roomName: string
+  roomSid: string
+}
+
+export interface PreflightReadiness {
   ready: boolean
+  instructorPresent: boolean
+  microphonePublished: boolean
+  microphoneMuted: boolean
+  instructorMicrophoneTrackCount: number
+  unexpectedMicrophonePublishers: number
+}
+
+export interface LiveStartOperation {
+  operationId: string | null
+  sessionId: string
+  status: 'STARTING' | 'LIVE'
+}
+
+export interface LiveStartStatus {
+  operationId: string | null
+  attemptStatus: 'IN_PROGRESS' | 'SUCCEEDED' | 'FAILED' | null
+  step: 'ACCEPTED' | 'STT_DISPATCHED' | 'EGRESS_STARTING' | 'EGRESS_READY' | 'PUBLISHER_RECHECK' | 'LIVE' | 'FAILED' | null
+  failureCode: string | null
+  failureMessage: string | null
+  session: LiveSessionView
 }
 
 export interface ProcessingStatus {
@@ -94,8 +117,10 @@ export interface LiveSessionService {
   getLiveSession: (sessionId: string) => Promise<LiveSessionView>
   /** 레슨 기준이다 — 권한이 레슨→커리큘럼→수강 관계로만 판정되기 때문(CONTRACT §2). */
   getPlayback: (lessonId: string) => Promise<PlaybackView>
-  getPreflightChecks: (sessionId: string) => Promise<PreflightCheck[]>
-  startLiveSession: (sessionId: string) => Promise<void>
+  preparePreflightRoom: (sessionId: string) => Promise<PreflightRoom>
+  getPreflightReadiness: (sessionId: string) => Promise<PreflightReadiness>
+  startLiveSession: (sessionId: string) => Promise<LiveStartOperation>
+  getLiveStartStatus: (sessionId: string, operationId?: string) => Promise<LiveStartStatus>
   endLiveSession: (sessionId: string) => Promise<void>
   getLiveToken: (sessionId: string) => Promise<{ token: string; wsUrl?: string }>
   getParticipants: (sessionId: string) => Promise<Array<{ alias: string; state: string; joinedAt: string }>>

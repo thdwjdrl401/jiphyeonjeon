@@ -4,8 +4,12 @@ import { ApiError, apiClient } from '@/shared/api/client'
 import { notImplemented } from '@/shared/api/notImplemented'
 import type {
   ChatMessageView,
+  LiveStartOperation,
+  LiveStartStatus,
   LiveSessionService,
   LiveSessionView,
+  PreflightReadiness,
+  PreflightRoom,
   PlaybackView,
 } from './liveSessionService.interface'
 
@@ -59,6 +63,36 @@ interface ApiPlayback {
   source: ApiPlaybackSource | null
 }
 
+interface ApiPreflightRoom {
+  sessionId: string
+  roomName: string
+  roomSid: string
+}
+
+interface ApiPreflightReadiness {
+  ready: boolean
+  instructorPresent: boolean
+  microphonePublished: boolean
+  microphoneMuted: boolean
+  instructorMicrophoneTrackCount: number
+  unexpectedMicrophonePublishers: number
+}
+
+interface ApiLiveStartOperation {
+  operationId: string | null
+  sessionId: string
+  status: 'STARTING' | 'LIVE'
+}
+
+interface ApiLiveStartStatus {
+  operationId: string | null
+  attemptStatus: 'IN_PROGRESS' | 'SUCCEEDED' | 'FAILED' | null
+  step: LiveStartStatus['step']
+  failureCode: string | null
+  failureMessage: string | null
+  session: ApiLiveSessionView
+}
+
 function nullableNumber(value: number | null | undefined) {
   return value === null || value === undefined || !Number.isFinite(value) ? null : value
 }
@@ -91,6 +125,27 @@ function normalizePlayback(data: ApiPlayback, lessonId: string): PlaybackView {
   }
 }
 
+function normalizeLiveSession(data: ApiLiveSessionView): LiveSessionView {
+  const entryWindowMinutes = data.entryWindowMinutes ?? 10
+  const scheduledAt = data.scheduledAt ? new Date(data.scheduledAt) : null
+  return {
+    sessionId: data.sessionId,
+    lessonId: data.lessonId,
+    lessonTitle: '',
+    curriculumId: '',
+    curriculumTitle: '',
+    sectionId: '',
+    status: data.liveSessionStatus as CurriculumLiveSessionStatus,
+    scheduledAt: data.scheduledAt,
+    entryOpensAt: scheduledAt
+      ? new Date(scheduledAt.getTime() - entryWindowMinutes * 60_000).toISOString()
+      : null,
+    entryWindowMinutes,
+    expectedDurationMinutes: data.expectedDurationMinutes ?? 0,
+    participants: 0,
+  }
+}
+
 function normalizeMessage(message: ApiChatMessage): ChatMessageView {
   return {
     id: message.messageId,
@@ -115,36 +170,37 @@ function readChatEnvelope(frame: IMessage, sessionId: string) {
 export const httpLiveSessionService = {
   async getLiveSession(sessionId) {
     const { data } = await apiClient.get<ApiLiveSessionView>(`/live-sessions/${sessionId}`)
-    const entryWindowMinutes = data.entryWindowMinutes ?? 10
-    const scheduledAt = data.scheduledAt ? new Date(data.scheduledAt) : null
-    return {
-      sessionId: data.sessionId,
-      lessonId: data.lessonId,
-      lessonTitle: '',
-      curriculumId: '',
-      curriculumTitle: '',
-      sectionId: '',
-      status: data.liveSessionStatus as CurriculumLiveSessionStatus,
-      scheduledAt: data.scheduledAt,
-      entryOpensAt: scheduledAt
-        ? new Date(scheduledAt.getTime() - entryWindowMinutes * 60_000).toISOString()
-        : null,
-      entryWindowMinutes,
-      expectedDurationMinutes: data.expectedDurationMinutes ?? 0,
-      participants: 0,
-    } satisfies LiveSessionView
+    return normalizeLiveSession(data)
   },
   async getPlayback(lessonId) {
     const { data } = await apiClient.get<ApiPlayback>(`/lessons/${lessonId}/playback`)
     return normalizePlayback(data, lessonId)
   },
-  // 점검 대상이 LiveKit 연결·장치 상태라 서버 판정이 있어야 한다(CP1). 프론트가 흉내 내면
-  // "점검 통과"가 거짓이 되므로 값을 지어내지 않는다.
-  async getPreflightChecks(sessionId) {
-    return notImplemented(`POST /instructor/live-sessions/${sessionId}/preflight`)
+  async preparePreflightRoom(sessionId) {
+    const { data } = await apiClient.post<ApiPreflightRoom>(
+      `/instructor/live-sessions/${sessionId}/preflight`,
+    )
+    return data satisfies PreflightRoom
+  },
+  async getPreflightReadiness(sessionId) {
+    const { data } = await apiClient.get<ApiPreflightReadiness>(
+      `/instructor/live-sessions/${sessionId}/preflight/readiness`,
+    )
+    return data satisfies PreflightReadiness
   },
   async startLiveSession(sessionId) {
-    await apiClient.post(`/live-sessions/${sessionId}/start`)
+    const { data } = await apiClient.post<ApiLiveStartOperation>(`/live-sessions/${sessionId}/start`)
+    return data satisfies LiveStartOperation
+  },
+  async getLiveStartStatus(sessionId, operationId) {
+    const { data } = await apiClient.get<ApiLiveStartStatus>(
+      `/live-sessions/${sessionId}/start-status`,
+      operationId ? { params: { operationId } } : undefined,
+    )
+    return {
+      ...data,
+      session: normalizeLiveSession(data.session),
+    } satisfies LiveStartStatus
   },
   async endLiveSession(sessionId) {
     await apiClient.post(`/live-sessions/${sessionId}/end`)
