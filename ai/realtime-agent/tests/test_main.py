@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pickle
 from dataclasses import replace
+from functools import partial
 from types import SimpleNamespace
 from typing import ClassVar
 from uuid import UUID
@@ -274,6 +275,7 @@ async def test_entrypoint_shares_one_redis_client_and_delegates_job(
         captured["publisher"] = publisher
         captured["lease"] = kwargs["session_lease_factory"](SESSION_ID, "job-1")
         captured["reporter"] = kwargs["lifecycle_reporter_factory"](metadata(), "job-1")
+        captured["audio_source_factory"] = kwargs["audio_source_factory"]
         captured["language"] = kwargs["language"]
         captured["shutdown_timeout_seconds"] = kwargs["shutdown_timeout_seconds"]
         captured["drain_timeout_seconds"] = kwargs["drain_timeout_seconds"]
@@ -295,6 +297,8 @@ async def test_entrypoint_shares_one_redis_client_and_delegates_job(
         stt_drain_timeout_seconds=6.0,
         stt_cleanup_timeout_seconds=0.75,
         asr_language="en-US",
+        livekit_turn_url="turn:127.0.0.1:3478?transport=tcp",
+        livekit_turn_secret="turn-secret",
     )
     context = object()
     server = agent_main.build_agent_server(configured)
@@ -322,6 +326,10 @@ async def test_entrypoint_shares_one_redis_client_and_delegates_job(
     assert captured["shutdown_timeout_seconds"] == 11.0
     assert captured["drain_timeout_seconds"] == 6.0
     assert captured["cleanup_timeout_seconds"] == 0.75
+    audio_source_factory = captured["audio_source_factory"]
+    assert isinstance(audio_source_factory, partial)
+    rtc_config = audio_source_factory.keywords["rtc_config"]
+    assert rtc_config.ice_servers[0].urls == ["turn:127.0.0.1:3478?transport=tcp"]
     assert redis_client.close_calls == 1
 
 

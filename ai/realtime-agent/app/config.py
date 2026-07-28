@@ -51,6 +51,8 @@ class Settings:
     livekit_url: str
     livekit_api_key: str = field(repr=False)
     livekit_api_secret: str = field(repr=False)
+    livekit_turn_url: str = ""
+    livekit_turn_secret: str = field(default="", repr=False)
     agent_name: str = "liveclass-realtime-stt"
     stt_provider: str = ""
     max_active_jobs: int = 1
@@ -81,6 +83,8 @@ class Settings:
             livekit_url=values.get("LIVEKIT_URL", ""),
             livekit_api_key=values.get("LIVEKIT_API_KEY", ""),
             livekit_api_secret=values.get("LIVEKIT_API_SECRET", ""),
+            livekit_turn_url=values.get("LIVEKIT_TURN_URL", "").strip(),
+            livekit_turn_secret=values.get("LIVEKIT_TURN_SECRET", ""),
             agent_name=values.get("STT_AGENT_NAME", "liveclass-realtime-stt"),
             stt_provider=values.get("STT_ENGINE_PROVIDER", ""),
             max_active_jobs=_parse_int(values, "STT_MAX_ACTIVE_JOBS", 1),
@@ -137,6 +141,13 @@ class Settings:
         livekit_url = urlparse(self.livekit_url)
         if livekit_url.scheme not in {"ws", "wss"} or not livekit_url.netloc:
             raise RuntimeError("LIVEKIT_URL must use ws or wss")
+        if self.livekit_turn_url:
+            if not self.livekit_turn_url.startswith(("turn:", "turns:")):
+                raise RuntimeError("LIVEKIT_TURN_URL must use turn or turns")
+            if any(character.isspace() for character in self.livekit_turn_url):
+                raise RuntimeError("LIVEKIT_TURN_URL must not contain whitespace")
+            if not self.livekit_turn_secret:
+                raise RuntimeError("LIVEKIT_TURN_SECRET is required when LIVEKIT_TURN_URL is set")
         redis_url = urlparse(self.redis_url)
         if redis_url.scheme not in {"redis", "rediss"} or not redis_url.netloc:
             raise RuntimeError("REDIS_URL must use redis or rediss")

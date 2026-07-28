@@ -55,9 +55,15 @@ class LiveKitInstructorAudioSource:
     violates the room authorization invariant and fails closed instead of mixing audio.
     """
 
-    def __init__(self, context: JobContext) -> None:
+    def __init__(
+        self,
+        context: JobContext,
+        *,
+        rtc_config: rtc.RtcConfiguration | None = None,
+    ) -> None:
         self._context = context
         self._room = context.room
+        self._rtc_config = rtc_config
         self._queue: asyncio.Queue[AudioChunk | _AudioStreamFailure | object] = asyncio.Queue(
             maxsize=_OUTPUT_QUEUE_CAPACITY_FRAMES
         )
@@ -87,7 +93,10 @@ class LiveKitInstructorAudioSource:
         if self._connected:
             raise RuntimeError("audio source is already connected")
         self._connected = True
-        await self._context.connect(auto_subscribe=AutoSubscribe.SUBSCRIBE_NONE)
+        connect_options: dict[str, Any] = {"auto_subscribe": AutoSubscribe.SUBSCRIBE_NONE}
+        if self._rtc_config is not None:
+            connect_options["rtc_config"] = self._rtc_config
+        await self._context.connect(**connect_options)
         for participant in self._room.remote_participants.values():
             for publication in participant.track_publications.values():
                 self._consider_publication(publication, participant)

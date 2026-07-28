@@ -34,6 +34,27 @@ def test_rejects_missing_livekit_credentials() -> None:
         settings.validate_agent_server()
 
 
+def test_turn_configuration_requires_dedicated_secret() -> None:
+    settings = Settings.from_env(
+        {**BASE_ENV, "LIVEKIT_TURN_URL": "turn:127.0.0.1:3478?transport=tcp"}
+    )
+
+    with pytest.raises(RuntimeError, match="LIVEKIT_TURN_SECRET"):
+        settings.validate_agent_server()
+
+
+def test_accepts_turn_tcp_tunnel_configuration() -> None:
+    settings = Settings.from_env(
+        {
+            **BASE_ENV,
+            "LIVEKIT_TURN_URL": "turn:127.0.0.1:3478?transport=tcp",
+            "LIVEKIT_TURN_SECRET": "turn-secret",
+        }
+    )
+
+    settings.validate_agent_server()
+
+
 @pytest.mark.parametrize("value", ["0", "-1"])
 def test_rejects_nonpositive_caption_stream_maxlen(value: str) -> None:
     settings = Settings.from_env({**BASE_ENV, "CAPTION_STREAM_MAXLEN": value})
