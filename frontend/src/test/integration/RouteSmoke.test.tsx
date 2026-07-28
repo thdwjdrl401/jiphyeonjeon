@@ -14,7 +14,7 @@ vi.mock('@/features/live-session/PlaybackPlayer', () => ({
     playback: { sessionId: string } | null
     onBookmark: () => void
   }) => (
-    <div aria-label="학생 라이브 영상" role="region">
+    <div aria-label="강의 영상" role="region">
       {playback && <span>Mock HLS 재생 준비 · {playback.sessionId}</span>}
       <button type="button" onClick={onBookmark}>
         {bookmarked ? '★ 북마크됨' : '☆ 북마크'}
@@ -153,7 +153,7 @@ describe('전체 페이지 라우트', () => {
     await user.click(await screen.findByRole('link', { name: '라이브 입장' }, { timeout: 3000 }))
 
     expect(await screen.findByRole('tab', { name: 'AI 질문' })).toBeInTheDocument()
-    expect(await screen.findByRole('region', { name: '학생 라이브 영상' })).toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: '강의 영상' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '채팅·질문' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '실시간 노트' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '핵심 용어' })).toBeInTheDocument()
@@ -191,7 +191,7 @@ describe('전체 페이지 라우트', () => {
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
     renderAt('/student/lessons/les-security/replay')
 
-    expect(await screen.findByRole('region', { name: '학생 라이브 영상' })).toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: '강의 영상' })).toBeInTheDocument()
     expect(screen.queryByLabelText('다시보기 타임라인')).not.toBeInTheDocument()
   })
 

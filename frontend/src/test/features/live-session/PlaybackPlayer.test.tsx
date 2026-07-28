@@ -19,7 +19,7 @@ function playbackFixture(overrides: Partial<PlaybackView> = {}): PlaybackView {
   }
 }
 
-describe('학생 라이브 DVR 플레이어', () => {
+describe('재생 플레이어', () => {
   it('미디어 시각과 세션 시각을 source 시작점 기준으로 양방향 변환한다', () => {
     // 기준은 source.availableFromMs — 미디어 시각 0이 가리키는 세션 시각이다.
     expect(toSessionMs(12.5, 1_250)).toBe(13_750)
@@ -99,7 +99,7 @@ describe('학생 라이브 DVR 플레이어', () => {
       />,
     )
 
-    const header = screen.getByLabelText('학생 라이브 재생 정보')
+    const header = screen.getByLabelText('재생 정보')
     expect(header).toHaveTextContent('다시보기')
     expect(header).not.toHaveTextContent('LIVE')
   })

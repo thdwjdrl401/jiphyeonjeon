@@ -94,8 +94,11 @@ export default function PlaybackPlayer({
 
   const statusState: PlaybackState = errorMessage ? 'error' : loading ? 'loading' : playbackState
 
+  // 랜드마크 이름은 라이브/다시보기에 걸쳐 고정한다 — 세션이 끝나 라이브가 다시보기로 바뀌는
+  // 중에 이름까지 변하면 보조기술 사용자가 같은 영역을 다시 찾아야 한다. 상태는 헤더의
+  // 'LIVE'/'다시보기' 텍스트가 전달한다.
   return (
-    <div aria-label="학생 라이브 영상" className="video-stage student-live-stage" role="region">
+    <div aria-label="강의 영상" className="video-stage student-live-stage" role="region">
       {source
         ? (
           // key는 실제 재생 대상이 바뀔 때만 변한다. 폴링 갱신마다 리마운트하면 재생이 끊긴다.
@@ -152,7 +155,7 @@ export default function PlaybackPlayer({
         </div>
       )}
 
-      <header className="student-live-status" aria-label="학생 라이브 재생 정보">
+      <header className="student-live-status" aria-label="재생 정보">
         <div>
           {/* 세션이 끝나면 LIVE 표시를 내린다. 플레이어 안의 LIVE 버튼(엣지 복귀)은 vidstack이 담당한다. */}
           {isLive && <span className="live-dot" aria-hidden="true" />}
