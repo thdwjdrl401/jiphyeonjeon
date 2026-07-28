@@ -94,7 +94,7 @@ export default function ProfilePage() {
 
   return (
     <div className="workspace-page">
-      <PageHeader eyebrow="MY PROFILE" title="내 프로필" description="계정 정보와 서비스에 표시되는 프로필을 확인하세요." />
+      <PageHeader title="내 프로필" description="계정 정보와 서비스에 표시되는 프로필을 확인하세요." />
 
       <div className="profile-grid">
         <Panel title="계정 정보" description="이메일과 가입 유형은 가입 계정의 기본 정보입니다.">

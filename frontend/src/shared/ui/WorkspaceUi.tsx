@@ -1,9 +1,9 @@
 import type { PropsWithChildren, ReactNode } from 'react'
 
-export function PageHeader({ eyebrow, title, description, action }: { eyebrow?: string; title: string; description?: ReactNode; action?: ReactNode }) {
+export function PageHeader({ title, description, action }: { title: string; description?: ReactNode; action?: ReactNode }) {
   return (
     <header className="workspace-page-header">
-      <div>{eyebrow && <span className="eyebrow">{eyebrow}</span>}<h1>{title}</h1>{description && <p>{description}</p>}</div>
+      <div><h1>{title}</h1>{description && <p>{description}</p>}</div>
       {action && <div className="workspace-page-header__action">{action}</div>}
     </header>
   )

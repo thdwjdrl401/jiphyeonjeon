@@ -1,4 +1,5 @@
 import type { PropsWithChildren, ReactNode } from 'react'
+import authRoyalLibraryEvening from '@/assets/images/auth-royal-library-evening.png'
 import BrandLink from '@/shared/layout/BrandLink'
 
 interface AuthShellProps extends PropsWithChildren {
@@ -21,6 +22,13 @@ export default function AuthShell({
     <div className="auth-page">
       <div className="auth-shell">
         <aside className={`auth-visual auth-visual--${variant}`}>
+          <img
+            className="auth-visual__art"
+            src={authRoyalLibraryEvening}
+            alt=""
+            aria-hidden="true"
+            decoding="async"
+          />
           <BrandLink inverse />
           <div className="auth-visual__copy">
             <span className="live-pill"><i /> Live learning, better remembered</span>

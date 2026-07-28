@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import catalogHeroRoyalLibrary from '@/assets/images/catalog-hero-royal-library.png'
 import { useAuth } from '@/features/auth/AuthContext'
 import CurriculumCard from '@/features/curriculum/CurriculumCard'
 import CurriculumCardSkeleton from '@/features/curriculum/CurriculumCardSkeleton'
@@ -80,14 +81,12 @@ export default function CurriculumListPage() {
   return (
     <div className="catalog-page">
       <section className="catalog-hero">
+        <img className="catalog-hero__art" src={catalogHeroRoyalLibrary} alt="" aria-hidden="true" decoding="async" fetchPriority="high" />
         <div className="page-container catalog-hero__inner">
-          <div>
-            <span className="eyebrow">EXPLORE CURRICULUMS</span>
-            <h1>함께 배우면,<br /><em>더 멀리 갈 수 있어요.</em></h1>
+          <div className="catalog-hero__copy">
+            <span className="catalog-hero__kicker">CURRICULUM COLLECTION</span>
+            <h1><span>배움이 머무는 곳,</span><em>함께 더 멀리.</em></h1>
             <p>관심 있는 주제를 검색하고 라이브로 소통하는 커리큘럼을 만나보세요.</p>
-          </div>
-          <div className="catalog-hero__graphic" aria-hidden="true">
-            <span>LIVE</span><i /><i /><i />
           </div>
         </div>
       </section>

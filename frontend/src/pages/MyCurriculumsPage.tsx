@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { instructorPaths, publicPaths, studentPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
 import { deleteCurriculum } from '@/features/curriculum/curriculumManagementService'
+import CurriculumCoverFallback from '@/features/curriculum/CurriculumCoverFallback'
 import {
   getInstructorCurriculums,
   getInstructorDashboardSummary,
@@ -42,7 +43,9 @@ function PendingCurriculumCard({ item }: { item: StudentCurriculumItem }) {
   return (
     <article className="dashboard-curriculum-card">
       <div className="dashboard-curriculum-card__cover">
-        {item.thumbnailUrl && <img src={item.thumbnailUrl} alt={`${item.title} 대표 이미지`} />}
+        {item.thumbnailUrl
+          ? <img src={item.thumbnailUrl} alt={`${item.title} 대표 이미지`} />
+          : <CurriculumCoverFallback />}
       </div>
       <div className="dashboard-curriculum-card__content">
         <div>
@@ -154,7 +157,7 @@ export default function MyCurriculumsPage() {
 
   return (
     <div className="workspace-page">
-      <PageHeader eyebrow={isInstructor ? 'INSTRUCTOR DASHBOARD' : 'LEARNING DASHBOARD'} title="내 커리큘럼" description={isInstructor ? '운영 상태와 오늘의 라이브 강의를 한눈에 확인하세요.' : undefined} />
+      <PageHeader title="내 커리큘럼" description={isInstructor ? '운영 상태와 오늘의 라이브 강의를 한눈에 확인하세요.' : undefined} />
 
       {listError && <InlineNotice tone="danger">커리큘럼 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.</InlineNotice>}
       {!listError && summaryError && (
@@ -189,7 +192,7 @@ export default function MyCurriculumsPage() {
         <div className="dashboard-curriculum-list">
           {(isInstructor ? instructorCurriculums : filteredStudentCurriculums).map((item) => (
             <article className="dashboard-curriculum-card" key={item.curriculumId}>
-              <div className="dashboard-curriculum-card__cover">{item.thumbnailUrl && <img src={item.thumbnailUrl} alt={`${item.title} 대표 이미지`} />}</div>
+              <div className="dashboard-curriculum-card__cover">{item.thumbnailUrl ? <img src={item.thumbnailUrl} alt={`${item.title} 대표 이미지`} /> : <CurriculumCoverFallback />}</div>
               <div className="dashboard-curriculum-card__content"><div><StatusBadge tone={item.lifecycleStatus === 'PUBLISHED' ? 'success' : item.lifecycleStatus === 'ARCHIVED' ? 'neutral' : 'warning'}>{item.lifecycleStatus === 'PUBLISHED' ? '공개 중' : item.lifecycleStatus === 'ARCHIVED' ? '보관됨' : '준비 중'}</StatusBadge><h3>{item.title}</h3><p>{item.summary}</p></div>{'progress' in item ? <div className="dashboard-progress"><span><strong>{item.progress}%</strong> · {item.completedLessonCount}/{item.lessonCount} 강의</span><i><b style={{ width: `${item.progress}%` }} /></i></div> : <p className="dashboard-meta">섹션 {item.sectionCount} · {instructorVisibilityLabel(item)} · 다음 일정 {item.nextLiveSession?.scheduledAt ? new Date(item.nextLiveSession.scheduledAt).toLocaleString('ko-KR') : '미정'}</p>}<div className="card-actions"><Link className="button button--primary" to={publicPaths.curriculum(item.curriculumId)}>커리큘럼 상세</Link>{isInstructor && <Link className="button button--soft" to={instructorPaths.curriculumManage(item.curriculumId)}>관리</Link>}{isInstructor && item.lifecycleStatus === 'DRAFT' && <button className="button button--ghost button--danger" type="button" disabled={deleteDraftMutation.isPending} onClick={() => removeDraft(item.curriculumId, item.title)}>삭제</button>}</div></div>
             </article>
           ))}
