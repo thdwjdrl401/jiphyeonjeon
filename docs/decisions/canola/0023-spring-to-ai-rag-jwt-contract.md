@@ -1,6 +1,6 @@
 # ADR-0023: Spring→AI RAG 호출에 요청 범위를 묶은 단명 JWT를 사용한다
 
-- **상태**: Proposed (Spring 담당 합의 필요)
+- **상태**: Proposed — Spring 담당 검토 결과 **MVP는 HMAC 공유 시크릿으로 간소화 역제안**(아래 §9), AI 합의 필요. RS256 JWT(§1~§8)는 phase-2 목표로 보존.
 - **일자**: 2026-07-27
 - **범위**: Spring → `ai-api`의 `POST /internal/v1/rag/answers:stream`
 - **구현 제한**: 이 ADR은 팀 검토용 후보 결정이며 Java 구현 완료나 공유 계약 확정을 의미하지 않는다.
@@ -259,6 +259,49 @@ Spring이 후보 profile을 채택하기 전에는 Python이 값을 임의 확�
 | 승인한 resource 범위를 어떻게 보존하는가? | 세 ID를 claim과 body에서 일치 검증 | ☐ |
 | 첫 MR에서 token을 1회 소비하는가? | 아니오 — `jti`만 포함하고 request registry와 함께 후속 결정 | ☐ |
 | 양측 호환성을 무엇으로 증명하는가? | 고정 test key·clock·claims 기반 golden JWT | ☐ |
+
+## 9. Spring 합의 (2026-07-27) — MVP는 HMAC 공유 시크릿으로 간소화
+
+Spring 담당(송정기) 검토 결론: **§1~§8의 RS256 JWT는 이 단계에 과하다.** Spring↔`ai-api`는 같은 호스트·같은
+Docker 내부망의 S2S이고 RAG 엔드포인트는 외부 비노출이라, RS256의 핵심 이점인 "AI가 Spring 토큰 위조 불가"는
+**한계 이득**이다(AI가 털렸으면 이미 pgvector·MinIO까지 내부다). 반면 RSA 키 생성·PEM 2종 mount·`kid`·회전·JWKS는
+**실제 운영 비용**이다. 게다가 임베딩 콜백·download-url이 **이미 HMAC**(`AiCallbackVerifier`)이라, RAG만 JWT로 가면
+S2S 인증을 두 모델로 유지해야 한다.
+
+**결정(MVP)**: 기존 HMAC 패턴을 재사용한다. 시크릿은 `.env`로 주입(dev 기본값, prod 주입) — RSA 키·PEM 불필요.
+
+### 9.1 간소화 wire 계약
+
+```text
+POST /internal/v1/rag/answers:stream
+Header: X-Internal-Signature: base64(HMAC-SHA256(AI_INTERNAL_SECRET, rawBody))
+Body(JSON): { lessonId, sessionId, requestId, issuedAtMs, question, ... }
+```
+
+- **서명**: 요청 **원시 body 전체**를 HMAC-SHA256으로 서명(콜백/ download-url과 동일 방식). body가 곧 서명 대상이라
+  claim↔body 대조·JWT claim(`iss`/`aud`/`scope`/`typ`/`kid`/`jti`)·alg allowlist가 **전부 불필요**하다(위·변조 시 서명 깨짐).
+- **신선도**: body의 `issuedAtMs`로 `now - issuedAtMs > 60초`면 거부(늦은 캡처 재사용 차단). 단명 효과를 클레임 없이 확보.
+- **범위 바인딩**: `lessonId`·`sessionId`·`requestId`는 body에 있고 서명이 덮으므로 자동 보존. Spring은 **발급 전** 사용자
+  권한을 검증하고(`LiveAccessGuard`·`LessonPlaybackAccess`), `ai-api`는 서명만 확인하고 body를 신뢰한다.
+- **시크릿**: `AI_INTERNAL_SECRET`(Spring·ai-api 공유, `.env`). 콜백용 `AI_CALLBACK_SECRET`과 별도 값 권장(재사용도 무방).
+
+### 9.2 유지 (메커니즘 무관 알맹이 — §3~§4에서 그대로 채택)
+
+- `lessonId`/`sessionId` 범위 바인딩(위처럼 body 서명으로), 짧은 신선도 창(60초), **fail-closed 503**(시크릿 미설정),
+  실패 원인 비노출 **일반 401**, 엔드포인트 **내부 전용**, Authorization/원문·질문·개인정보 **로그 금지**.
+
+### 9.3 폐기 (MVP에서 안 함)
+
+RS256 keypair·PEM mount·`kid`·JWKS·alg confusion 처리·`jti`·`exp-iat` 정확검증·`iss`/`aud`/`scope`/`typ` 클레임.
+단일 공유 시크릿 + body 서명으로 충분하다.
+
+### 9.4 phase-2 승격 조건 (그때 §1~§8 채택)
+
+AI 서비스가 **다른 호스트/외부망**으로 이동하거나, 내부 소비자가 **여럿**이 되어 발급/검증 권한 분리가 실제로
+필요하거나, 감사·규제로 issuer/verifier 분리가 요구될 때. 그전까지 §1~§8은 로드맵으로 보존한다.
+
+> AI 담당(유채은) 확인 필요: 위 간소화(HMAC 공유 시크릿) 채택 여부. 합의되면 `docs/CONTRACT.md`에 이 wire 계약을
+> 올리고 Spring 발급기·ai-api 검증기·양측 계약 테스트를 같은 변경에서 구현한다.
 
 ## 참고
 
