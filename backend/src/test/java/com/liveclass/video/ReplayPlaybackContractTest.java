@@ -75,6 +75,36 @@ class ReplayPlaybackContractTest {
             #EXT-X-ENDLIST
             """;
 
+    /** 라이브 중 재생목록 — ENDLIST가 없어 계속 자란다(EVENT). */
+    private static final String LIVE_MANIFEST = """
+            #EXTM3U
+            #EXT-X-VERSION:3
+            #EXT-X-TARGETDURATION:2
+            #EXT-X-MEDIA-SEQUENCE:0
+            #EXT-X-PLAYLIST-TYPE:EVENT
+            #EXT-X-PROGRAM-DATE-TIME:2026-07-26T10:00:00.000Z
+            #EXTINF:2.0,
+            seg_00000.ts
+            #EXTINF:2.0,
+            seg_00001.ts
+            """;
+
+    /** 델타 경계(60초)를 넘기려면 세그먼트가 충분히 많아야 한다. 2초 × n. */
+    private static String longLiveManifest(int segments) {
+        StringBuilder sb = new StringBuilder("""
+                #EXTM3U
+                #EXT-X-VERSION:3
+                #EXT-X-TARGETDURATION:2
+                #EXT-X-MEDIA-SEQUENCE:0
+                #EXT-X-PLAYLIST-TYPE:EVENT
+                #EXT-X-PROGRAM-DATE-TIME:2026-07-26T10:00:00.000Z
+                """);
+        for (int i = 0; i < segments; i++) {
+            sb.append("#EXTINF:2.0,\n").append(String.format("seg_%05d.ts%n", i));
+        }
+        return sb.toString();
+    }
+
     private static final String FMP4_MANIFEST = """
             #EXTM3U
             #EXT-X-VERSION:7
@@ -111,18 +141,17 @@ class ReplayPlaybackContractTest {
                 .andExpect(jsonPath("$.currentSessionMs").isNumber())
                 .andExpect(jsonPath("$.sessionOffsetMs").isNumber())
                 .andExpect(jsonPath("$.durationMs").value(600_000))
-                .andExpect(jsonPath("$.sources.recent").doesNotExist())
-                .andExpect(jsonPath("$.sources.dvr.url")
-                        .value("/api/lessons/" + ids[0] + "/playback/manifest?source=dvr"))
-                .andExpect(jsonPath("$.sources.dvr.availableFromMs").isNumber())
-                .andExpect(jsonPath("$.sources.dvr.availableToMs").isNumber());
+                .andExpect(jsonPath("$.source.url")
+                        .value("/api/lessons/" + ids[0] + "/playback/manifest"))
+                .andExpect(jsonPath("$.source.availableFromMs").isNumber())
+                .andExpect(jsonPath("$.source.availableToMs").isNumber());
     }
 
     @Test
-    void active_enrolled_student_can_play_draft_live_recent_and_dvr() throws Exception {
+    void active_enrolled_student_can_play_draft_live_recording() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         Cookie[] student = loginAs("STUDENT");
-        String[] ids = createActiveRecording(instructor, MANIFEST);
+        String[] ids = createActiveRecording(instructor, LIVE_MANIFEST);
         publishLesson(instructor, ids[0]);
         approveEnrollment(instructor, student, ids[2]);
 
@@ -130,24 +159,20 @@ class ReplayPlaybackContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.liveSessionStatus").value("LIVE"))
                 .andExpect(jsonPath("$.durationMs").doesNotExist())
-                .andExpect(jsonPath("$.sources.recent.url")
-                        .value("/api/lessons/" + ids[0] + "/playback/manifest?source=recent"))
-                .andExpect(jsonPath("$.sources.dvr.url")
-                        .value("/api/lessons/" + ids[0] + "/playback/manifest?source=dvr"));
+                .andExpect(jsonPath("$.source.url")
+                        .value("/api/lessons/" + ids[0] + "/playback/manifest"));
     }
 
     @Test
-    void active_manifest_delay_is_null_metadata_and_409_for_direct_manifest() throws Exception {
+    void active_manifest_delay_is_null_source_and_409_for_direct_manifest() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String[] ids = createActiveRecording(instructor, null);
 
         mockMvc.perform(get("/api/lessons/" + ids[0] + "/playback").cookie(instructor))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.sources.recent").doesNotExist())
-                .andExpect(jsonPath("$.sources.dvr").doesNotExist());
+                .andExpect(jsonPath("$.source").doesNotExist());
 
-        mockMvc.perform(get("/api/lessons/" + ids[0] + "/playback/manifest")
-                        .param("source", "recent").cookie(instructor))
+        mockMvc.perform(get("/api/lessons/" + ids[0] + "/playback/manifest").cookie(instructor))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("RECORDING_STARTING"));
     }
@@ -158,7 +183,7 @@ class ReplayPlaybackContractTest {
         String[] ids = createReadyRecording(instructor, FMP4_MANIFEST);
 
         MvcResult result = mockMvc.perform(get("/api/lessons/" + ids[0] + "/playback/manifest")
-                        .param("source", "dvr").cookie(instructor))
+                        .cookie(instructor))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType("application/vnd.apple.mpegurl"))
                 .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
@@ -176,24 +201,63 @@ class ReplayPlaybackContractTest {
     }
 
     @Test
+    void ended_manifest_is_not_delta_capable() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String[] ids = createReadyRecording(instructor, MANIFEST);
+
+        String body = mockMvc.perform(get("/api/lessons/" + ids[0] + "/playback/manifest")
+                        .cookie(instructor))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        // ENDLIST가 있으면 플레이어가 다시 받지 않는다 — 델타를 광고할 이유가 없다.
+        assertThat(body)
+                .contains("#EXT-X-ENDLIST")
+                .doesNotContain("CAN-SKIP-UNTIL")
+                .doesNotContain("#EXT-X-SKIP");
+    }
+
+    @Test
+    void live_manifest_advertises_delta_and_skips_when_requested() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String[] ids = createActiveRecording(instructor, longLiveManifest(100));
+
+        String full = mockMvc.perform(get("/api/lessons/" + ids[0] + "/playback/manifest")
+                        .cookie(instructor))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        // 최초 로드: 전체를 주되 델타를 줄 수 있다고 광고한다.
+        assertThat(full)
+                .contains("#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=60")
+                .contains("#EXT-X-VERSION:9")
+                .doesNotContain("#EXT-X-SKIP")
+                .contains("seg_00000.ts?")
+                .contains("seg_00099.ts?");
+
+        // 갱신: 플레이어가 _HLS_skip=YES로 물으면 경계 밖을 생략한다.
+        String delta = mockMvc.perform(get("/api/lessons/" + ids[0] + "/playback/manifest")
+                        .param("_HLS_skip", "YES").cookie(instructor))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        assertThat(delta)
+                .contains("#EXT-X-SKIP:SKIPPED-SEGMENTS=70")
+                .contains("#EXT-X-MEDIA-SEQUENCE:0")   // 생략은 삭제가 아니다
+                .doesNotContain("seg_00069.ts")
+                .contains("seg_00099.ts?");
+        assertThat(delta.length()).isLessThan(full.length() / 2);
+    }
+
+    @Test
     void unsafe_parent_path_in_manifest_is_rejected() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String unsafe = "#EXTM3U\n#EXTINF:2.0,\n../other-session/secret.ts\n#EXT-X-ENDLIST\n";
         String[] ids = createReadyRecording(instructor, unsafe);
 
-        mockMvc.perform(get("/api/lessons/" + ids[0] + "/playback/manifest")
-                        .param("source", "dvr").cookie(instructor))
+        mockMvc.perform(get("/api/lessons/" + ids[0] + "/playback/manifest").cookie(instructor))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("REPLAY_NOT_READY"));
-    }
-
-    @Test
-    void invalid_source_is_400() throws Exception {
-        Cookie[] user = loginAs("INSTRUCTOR");
-        mockMvc.perform(get("/api/lessons/" + UUID.randomUUID() + "/playback/manifest")
-                        .param("source", "unknown").cookie(user))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("PLAYBACK_SOURCE_INVALID"));
     }
 
     @Test
@@ -208,7 +272,7 @@ class ReplayPlaybackContractTest {
 
         mockMvc.perform(get("/api/lessons/" + ids[0] + "/playback").cookie(student))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.sources.dvr").exists());
+                .andExpect(jsonPath("$.source").exists());
     }
 
     @Test

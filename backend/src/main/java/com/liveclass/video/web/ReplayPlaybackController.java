@@ -1,5 +1,6 @@
 package com.liveclass.video.web;
 
+import com.liveclass.video.PlaybackPaths;
 import com.liveclass.video.service.ReplayPlaybackService;
 import com.liveclass.video.service.ReplayPublicationService;
 import com.liveclass.video.web.dto.PlaybackResponse;
@@ -58,20 +59,30 @@ public class ReplayPlaybackController {
     }
 
     @Operation(summary = "HLS 재생목록",
-            description = "segment URI가 presigned GET으로 재작성된 recent 또는 dvr manifest를 반환한다.")
-    @GetMapping("/api/lessons/{lessonId}/playback/manifest")
+            description = """
+                    세그먼트 URI가 presigned GET으로 재작성된 manifest를 반환한다.
+                    라이브 중에는 #EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL을 실어 델타 재생목록을 광고하고,
+                    플레이어가 _HLS_skip=YES로 다시 물으면 경계보다 오래된 세그먼트를 #EXT-X-SKIP으로 생략한다.
+                    종료 후 재생목록은 #EXT-X-ENDLIST가 있어 플레이어가 다시 받지 않으므로 전체를 그대로 준다.""")
+    @GetMapping(PlaybackPaths.MANIFEST_TEMPLATE)
     public ResponseEntity<String> manifest(
-                                           @Parameter(description = "레슨 UUID", example = SWAGGER_FIXTURE_LESSON_ID)
-                                           @PathVariable UUID lessonId,
-                                           @Parameter(description = "recent 또는 dvr", example = "dvr")
-                                           @RequestParam String source,
-                                           Authentication authentication) {
+            @Parameter(description = "레슨 UUID", example = SWAGGER_FIXTURE_LESSON_ID)
+            @PathVariable UUID lessonId,
+            // hls.js가 붙이는 델타 요청 지시자(RFC 8216bis §6.2.5.1). 이름이 규격이라 그대로 받는다.
+            @Parameter(description = "델타 재생목록 요청. 플레이어가 자동으로 붙인다.", example = "YES")
+            @RequestParam(name = "_HLS_skip", required = false) String hlsSkip,
+            Authentication authentication) {
         String body = playbackService.manifest(
-                UUID.fromString(authentication.getName()), lessonId, source);
+                UUID.fromString(authentication.getName()), lessonId, isDeltaRequest(hlsSkip));
         return ResponseEntity.ok()
                 .contentType(HLS_MEDIA_TYPE)
                 .cacheControl(org.springframework.http.CacheControl.noStore())
                 .body(body);
+    }
+
+    /** {@code YES}와 {@code v2}(DATERANGE까지 생략) 모두 델타 요청이다. 우리는 둘을 같게 처리한다. */
+    private boolean isDeltaRequest(String hlsSkip) {
+        return hlsSkip != null && (hlsSkip.equalsIgnoreCase("YES") || hlsSkip.equalsIgnoreCase("v2"));
     }
 
     @Operation(summary = "다시보기 게시",

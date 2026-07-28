@@ -2,6 +2,7 @@ package com.liveclass.video.service;
 
 import com.liveclass.live.api.LiveSessionDirectory;
 import com.liveclass.live.api.LiveSessionView;
+import com.liveclass.video.PlaybackPaths;
 import com.liveclass.video.api.LessonPlaybackAccess;
 import com.liveclass.video.api.PlaybackAccessGrant;
 import com.liveclass.video.config.EgressProperties;
@@ -53,32 +54,19 @@ public class ReplayPlaybackService {
         this.manifestProcessor = manifestProcessor;
     }
 
-    /** 재생 가능한 source와 세션 상대 시간 범위를 반환한다. 라이브 manifest 생성 지연은 null source다. */
+    /** 재생 source와 세션 상대 시간 범위를 반환한다. 라이브 manifest 생성 지연은 null source다. */
     public PlaybackResponse playback(UUID userId, UUID lessonId) {
         PlaybackContext context = requirePlaybackContext(userId, lessonId);
         VideoAsset asset = context.asset();
         LiveSessionView session = context.session();
 
-        Optional<HlsManifestProcessor.ManifestSnapshot> recent = context.phase() == PlaybackPhase.LIVE
-                ? findSnapshot(asset, session, PlaybackSource.RECENT)
-                : Optional.empty();
-        Optional<HlsManifestProcessor.ManifestSnapshot> dvr = findSnapshot(asset, session, PlaybackSource.DVR);
-
-        if (context.phase() == PlaybackPhase.REPLAY && dvr.isEmpty()) {
-            log.warn("종료된 READY 자산의 DVR manifest 부재 lesson={} key={}", lessonId, dvrKey(asset));
+        Optional<HlsManifestProcessor.ManifestSnapshot> snapshot = findSnapshot(asset, session);
+        if (context.phase() == PlaybackPhase.REPLAY && snapshot.isEmpty()) {
+            log.warn("종료된 READY 자산의 재생목록 부재 lesson={} key={}", lessonId, manifestKey(asset));
             throw new ReplayNotReadyException("다시보기를 재생할 수 없습니다. 잠시 후 다시 시도해 주세요.");
         }
 
-        PlaybackResponse.Source recentSource = recent
-                .map(snapshot -> toSource(lessonId, PlaybackSource.RECENT, snapshot))
-                .orElse(null);
-        PlaybackResponse.Source dvrSource = dvr
-                .map(snapshot -> toSource(lessonId, PlaybackSource.DVR, snapshot))
-                .orElse(null);
-        Long currentSessionMs = recentSource != null
-                ? recentSource.availableToMs()
-                : dvrSource != null ? dvrSource.availableToMs() : null;
-        Long sessionOffsetMs = dvr.map(HlsManifestProcessor.ManifestSnapshot::sessionOffsetMs).orElse(null);
+        PlaybackResponse.Source source = snapshot.map(s -> toSource(lessonId, s)).orElse(null);
 
         return new PlaybackResponse(
                 asset.getLessonId(),
@@ -86,33 +74,42 @@ public class ReplayPlaybackService {
                 session.sessionId(),
                 session.startedAt(),
                 session.liveSessionStatus(),
-                currentSessionMs,
-                sessionOffsetMs,
+                source != null ? source.availableToMs() : null,
+                snapshot.map(HlsManifestProcessor.ManifestSnapshot::sessionOffsetMs).orElse(null),
                 asset.getDurationMs(),
-                new PlaybackResponse.Sources(recentSource, dvrSource));
+                source);
     }
 
-    /** 요청한 source의 URI를 presigned GET으로 재작성한 HLS manifest 본문을 반환한다. */
-    public String manifest(UUID userId, UUID lessonId, String sourceValue) {
-        PlaybackSource source = PlaybackSource.from(sourceValue);
+    /**
+     * 세그먼트 URI를 presigned GET으로 재작성한 HLS manifest 본문을 반환한다.
+     *
+     * <p>라이브 중에는 {@code CAN-SKIP-UNTIL}을 광고해 플레이어가 델타를 요청하게 하고,
+     * {@code _HLS_skip=YES}로 온 요청에는 경계보다 오래된 세그먼트를 생략한 본문을 준다. 생략을 먼저
+     * 하고 재작성하므로 남은 세그먼트만 서명한다 — 델타의 요점이다.
+     *
+     * <p>종료 후 재생목록은 {@code #EXT-X-ENDLIST}가 있어 플레이어가 다시 받지 않으므로 손대지 않는다.
+     */
+    public String manifest(UUID userId, UUID lessonId, boolean deltaRequested) {
         PlaybackContext context = requirePlaybackContext(userId, lessonId);
-        if (source == PlaybackSource.RECENT && context.phase() != PlaybackPhase.LIVE) {
-            throw new ReplayNotReadyException("종료된 세션에는 recent 재생 source가 없습니다.");
-        }
-
         VideoAsset asset = context.asset();
-        String key = manifestKey(asset, source);
-        Optional<String> raw = findManifest(asset.getBucket(), key);
-        if (raw.isEmpty()) {
+        String key = manifestKey(asset);
+        String raw = findManifest(asset.getBucket(), key).orElseThrow(() -> {
             if (context.phase() == PlaybackPhase.LIVE) {
-                throw new RecordingStartingException("녹화 재생목록이 생성 중입니다. 잠시 후 다시 시도해 주세요.");
+                return new RecordingStartingException("녹화 재생목록이 생성 중입니다. 잠시 후 다시 시도해 주세요.");
             }
-            throw new ReplayNotReadyException("다시보기 재생목록을 찾을 수 없습니다.");
-        }
+            return new ReplayNotReadyException("다시보기 재생목록을 찾을 수 없습니다.");
+        });
 
         try {
+            String body = raw;
+            if (manifestProcessor.isLive(body)) {
+                if (deltaRequested) {
+                    body = manifestProcessor.skip(body, playbackProperties.canSkipUntil());
+                }
+                body = manifestProcessor.withServerControl(body, playbackProperties.canSkipUntil());
+            }
             return manifestProcessor.rewrite(
-                    raw.get(), asset.getBucket(), key, playbackProperties.segmentUrlTtl());
+                    body, asset.getBucket(), key, playbackProperties.segmentUrlTtl());
         } catch (ReplayManifestInvalidException e) {
             throw e;
         } catch (RuntimeException e) {
@@ -146,10 +143,8 @@ public class ReplayPlaybackService {
     }
 
     private Optional<HlsManifestProcessor.ManifestSnapshot> findSnapshot(VideoAsset asset,
-                                                                        LiveSessionView session,
-                                                                        PlaybackSource source) {
-        String key = manifestKey(asset, source);
-        return findManifest(asset.getBucket(), key)
+                                                                        LiveSessionView session) {
+        return findManifest(asset.getBucket(), manifestKey(asset))
                 .map(raw -> manifestProcessor.analyze(raw, session.startedAt()));
     }
 
@@ -166,24 +161,18 @@ public class ReplayPlaybackService {
     }
 
     private PlaybackResponse.Source toSource(UUID lessonId,
-                                             PlaybackSource source,
                                              HlsManifestProcessor.ManifestSnapshot snapshot) {
         return new PlaybackResponse.Source(
-                "/api/lessons/" + lessonId + "/playback/manifest?source=" + source.value(),
+                PlaybackPaths.manifest(lessonId),
                 snapshot.availableFromMs(),
                 snapshot.availableToMs());
     }
 
-    private String manifestKey(VideoAsset asset, PlaybackSource source) {
-        return source == PlaybackSource.RECENT ? recentKey(asset) : dvrKey(asset);
-    }
-
-    private String recentKey(VideoAsset asset) {
-        return RecordingObjectKeys.manifestKey(
-                asset.getLiveSessionId(), egressProperties.livePlaylistName());
-    }
-
-    private String dvrKey(VideoAsset asset) {
+    /**
+     * 재생목록 키 = {@code sessions/{sessionId}/index.m3u8}. 라이브 중에는 ENDLIST 없이 자라는
+     * EVENT 재생목록이고, 종료 후 같은 객체에 ENDLIST가 붙어 VOD가 된다 — 그래서 하나로 충분하다.
+     */
+    private String manifestKey(VideoAsset asset) {
         if (asset.getHlsManifestKey() != null && !asset.getHlsManifestKey().isBlank()) {
             return asset.getHlsManifestKey();
         }

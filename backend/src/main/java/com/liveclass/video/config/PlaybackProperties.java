@@ -18,9 +18,16 @@ import java.time.Duration;
 @ConfigurationProperties("video.playback")
 public record PlaybackProperties(
         Duration segmentUrlTtl,
-        String publicEndpoint
+        String publicEndpoint,
+        Duration canSkipUntil
 ) {
-    private static final Duration DEFAULT_SEGMENT_URL_TTL = Duration.ofHours(1);
+    /**
+     * 델타는 옛 세그먼트의 presigned URL을 다시 주지 않는다 — 클라이언트가 최초 로드 때 받은 것이
+     * 전부다. 그래서 TTL이 강의 길이보다 짧으면 오래 시청한 학생이 앞으로 되감을 때 403을 맞는다.
+     * 기본값은 장시간 세션까지 덮도록 넉넉히 잡는다.
+     */
+    private static final Duration DEFAULT_SEGMENT_URL_TTL = Duration.ofHours(6);
+    private static final Duration DEFAULT_CAN_SKIP_UNTIL = Duration.ofSeconds(60);
 
     public PlaybackProperties {
         if (segmentUrlTtl == null) {
@@ -31,6 +38,12 @@ public record PlaybackProperties(
         }
         if (publicEndpoint != null && publicEndpoint.isBlank()) {
             publicEndpoint = null;
+        }
+        if (canSkipUntil == null) {
+            canSkipUntil = DEFAULT_CAN_SKIP_UNTIL;
+        }
+        if (canSkipUntil.isZero() || canSkipUntil.isNegative()) {
+            throw new IllegalArgumentException("video.playback.can-skip-until은 양수여야 합니다.");
         }
     }
 }

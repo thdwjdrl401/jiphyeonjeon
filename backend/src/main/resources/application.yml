@@ -94,7 +94,12 @@ livekit:
 
 video:
   playback:
-    segment-url-ttl: ${VIDEO_PLAYBACK_SEGMENT_URL_TTL:1h}      # manifest 내부 세그먼트 presigned GET 유효기간
+    # manifest 내부 세그먼트 presigned GET 유효기간. 델타 재생목록은 옛 세그먼트 URL을 다시 주지 않으므로
+    # 이 값이 강의 길이보다 짧으면 오래 시청한 학생이 앞으로 되감을 때 403을 맞는다.
+    segment-url-ttl: ${VIDEO_PLAYBACK_SEGMENT_URL_TTL:6h}
+    # 델타 재생목록 경계(#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL). 타깃 듀레이션의 6배 이상이어야 한다
+    # (세그먼트 2초 → 최소 12초). 이보다 오래된 세그먼트는 #EXT-X-SKIP으로 생략된다.
+    can-skip-until: ${VIDEO_PLAYBACK_CAN_SKIP_UNTIL:60s}
     # 세그먼트 presigned URL을 서명할 공개 주소. 브라우저가 여는 주소라 egress s3-endpoint(내부)와 다르다.
     # SigV4가 Host를 서명에 포함하므로 브라우저가 실제로 보낼 Host로 서명해야 한다.
     # 비우면 내부 주소로 서명 — 로컬에서 vite(:8083) 프록시를 쓰면 http://localhost:8083을 넣는다.

@@ -2,7 +2,6 @@ package com.liveclass.video.web;
 
 import com.liveclass.common.web.ErrorResponse;
 import com.liveclass.video.api.PlaybackAccessException;
-import com.liveclass.video.service.InvalidPlaybackSourceException;
 import com.liveclass.video.service.PlaybackStorageUnavailableException;
 import com.liveclass.video.service.RecordingStartingException;
 import com.liveclass.video.service.ReplayForbiddenException;
@@ -59,12 +58,6 @@ public class ReplayExceptionHandler {
     public ResponseEntity<ErrorResponse> handleForbidden(ReplayForbiddenException e) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(ErrorResponse.of("REPLAY_FORBIDDEN", e.getMessage()));
-    }
-
-    @ExceptionHandler(InvalidPlaybackSourceException.class)
-    public ResponseEntity<ErrorResponse> handleInvalidSource(InvalidPlaybackSourceException e) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ErrorResponse.of("PLAYBACK_SOURCE_INVALID", e.getMessage()));
     }
 
     @ExceptionHandler(RecordingStartingException.class)
