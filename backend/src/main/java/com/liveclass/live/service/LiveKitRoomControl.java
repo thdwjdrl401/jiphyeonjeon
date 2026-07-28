@@ -21,6 +21,21 @@ public class LiveKitRoomControl implements LiveRoomControl {
         this.client = RoomServiceClient.create(access.apiUrl(), access.apiKey(), access.apiSecret(), false, null);
     }
 
+    /**
+     * LiveKit {@code CreateRoom}은 같은 이름의 방이 이미 있으면 오류 대신 <b>기존 방</b>을 돌려준다.
+     * 그래서 별도 존재 확인 없이 호출 한 번으로 멱등하게 준비된다.
+     */
+    @Override
+    public String ensureRoom(String room) {
+        Response<LivekitModels.Room> response =
+                execute("createRoom", client.createRoom(room, null, null, null, null, null, null, null, null));
+        LivekitModels.Room body = response.body();
+        if (body == null) {
+            throw new LiveRoomControlException("LiveKit createRoom 응답이 비어 있습니다: " + room, null);
+        }
+        return body.getSid();
+    }
+
     @Override
     public void removeParticipant(String room, String identity) {
         call("removeParticipant", client.removeParticipant(room, identity));
@@ -33,14 +48,23 @@ public class LiveKitRoomControl implements LiveRoomControl {
 
     @Override
     public List<RoomParticipant> listParticipants(String room) {
-        Response<List<LivekitModels.ParticipantInfo>> response = execute("listParticipants", client.listParticipants(room));
-        List<LivekitModels.ParticipantInfo> body = response.body();
-        if (body == null) {
-            return List.of();
-        }
-        return body.stream()
+        return participants(room).stream()
                 .map(p -> new RoomParticipant(p.getIdentity(), p.getName(), p.getState().name(), p.getJoinedAt()))
                 .toList();
+    }
+
+    @Override
+    public List<ParticipantMediaState> listParticipantMediaStates(String room) {
+        return participants(room).stream()
+                .map(LiveKitParticipantMedia::of)
+                .toList();
+    }
+
+    private List<LivekitModels.ParticipantInfo> participants(String room) {
+        Response<List<LivekitModels.ParticipantInfo>> response =
+                execute("listParticipants", client.listParticipants(room));
+        List<LivekitModels.ParticipantInfo> body = response.body();
+        return body == null ? List.of() : body;
     }
 
     private void call(String op, retrofit2.Call<?> retrofitCall) {
@@ -58,6 +82,26 @@ public class LiveKitRoomControl implements LiveRoomControl {
             return response;
         } catch (java.io.IOException e) {
             throw new LiveRoomControlException("LiveKit " + op + " 호출 오류", e);
+        }
+    }
+
+    /** participant 프로토버프의 {@code tracks}에서 마이크 트랙만 뽑아 경계 DTO로 접는다. */
+    private static final class LiveKitParticipantMedia {
+
+        private LiveKitParticipantMedia() {
+        }
+
+        static ParticipantMediaState of(LivekitModels.ParticipantInfo p) {
+            List<LivekitModels.TrackInfo> microphones = p.getTracksList().stream()
+                    .filter(t -> t.getSource() == LivekitModels.TrackSource.MICROPHONE)
+                    .toList();
+            LivekitModels.TrackInfo microphone = microphones.size() == 1 ? microphones.get(0) : null;
+            return new ParticipantMediaState(
+                    p.getIdentity(),
+                    p.getState().name(),
+                    !microphones.isEmpty(),
+                    microphone != null && microphone.getMuted(),
+                    microphones.size());
         }
     }
 }
