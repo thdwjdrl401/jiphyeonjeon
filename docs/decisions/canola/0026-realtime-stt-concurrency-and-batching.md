@@ -5,6 +5,7 @@
 - **관련**: [ADR-0010](0010-realtime-agent-room-job-boundary.md),
   [ADR-0012](0012-realtime-stt-provider-and-overload-boundary.md),
   [ADR-0024](0024-realtime-agent-gpu-turn-runtime.md),
+  [ADR-0027](0027-realtime-stt-shared-gpu-runtime.md),
   [realtime-agent CONTRACT](../../../ai/realtime-agent/CONTRACT.md)
 
 ## 맥락
