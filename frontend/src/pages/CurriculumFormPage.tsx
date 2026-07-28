@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { instructorPaths } from '@/app/router/paths'
-import CurriculumImageField, { type CurriculumImageSelection } from '@/features/curriculum/CurriculumImageField'
-import CurriculumMaterialField from '@/features/curriculum/CurriculumMaterialField'
+import CurriculumAssetsFields from '@/features/curriculum/CurriculumAssetsFields'
+import { type CurriculumImageSelection } from '@/features/curriculum/CurriculumImageField'
 import { createCurriculum, uploadCurriculumThumbnail } from '@/features/curriculum/curriculumManagementService'
 import type { CurriculumMaterial } from '@/features/curriculum/types'
 import { ApiError } from '@/shared/api/client'
@@ -60,18 +60,13 @@ export default function CurriculumFormPage() {
         </Panel>
 
         <Panel title="대표 이미지와 강의 자료" description="대표 이미지와 커리큘럼 전체에서 공통으로 사용할 선택 자료를 등록합니다.">
-          <div className="curriculum-assets-grid">
-            <section className="curriculum-asset-section">
-              <h3>대표 이미지</h3>
-              <p>목록과 상세 화면에서 커리큘럼을 구분하는 이미지입니다.</p>
-              <CurriculumImageField id="new-curriculum-thumbnail" previewUrl={thumbnail?.previewUrl ?? null} onChange={setThumbnail} />
-            </section>
-            <section className="curriculum-asset-section">
-              <h3>커리큘럼 강의 자료 <small>선택</small></h3>
-              <p>수강 중인 학생에게 모든 강의에서 공통으로 제공할 PPTX 자료입니다.</p>
-              <CurriculumMaterialField id="new-curriculum-materials" value={materials} onChange={setMaterials} />
-            </section>
-          </div>
+          <CurriculumAssetsFields
+            idPrefix="new-curriculum"
+            thumbnailPreviewUrl={thumbnail?.previewUrl ?? null}
+            onThumbnailChange={setThumbnail}
+            materials={materials}
+            onMaterialsChange={setMaterials}
+          />
         </Panel>
 
         <Panel title="운영 정보" description="기간은 서버 상세 계약 확정 후 저장되며 수강은 강사 승인 방식으로 운영합니다.">
