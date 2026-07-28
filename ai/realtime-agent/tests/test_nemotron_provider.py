@@ -69,6 +69,34 @@ async def test_nemotron_preserves_model_chunks_and_loads_recognizer_once() -> No
     assert recognizer.close_calls == 1
 
 
+async def test_prewarmed_recognizer_is_used_without_factory_and_owned_by_engine() -> None:
+    recognizer = FakeRecognizer()
+    engine = NemotronStreamingEngine(
+        "model",
+        "ko-KR",
+        prewarmed_recognizer=recognizer,
+        segmenter=NoopSegmenter(),
+    )
+    segment = SpeechSegment(b"\x00\x00" * 320, 16_000, 0, 20)
+
+    result = [text async for text in engine._transcribe(segment, SttStreamContext("stream-1"))]
+
+    assert result == ["강의", " 시작합니다"]
+    assert recognizer.calls == 1
+    await engine.close()
+    assert recognizer.close_calls == 1
+
+
+def test_rejects_factory_and_prewarmed_recognizer_together() -> None:
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        NemotronStreamingEngine(
+            "model",
+            "ko-KR",
+            recognizer_factory=lambda _model, _language: FakeRecognizer(),
+            prewarmed_recognizer=FakeRecognizer(),
+        )
+
+
 async def test_recognizer_failure_reaches_async_consumer_without_hanging() -> None:
     class FailingRecognizer(FakeRecognizer):
         def transcribe_stream(

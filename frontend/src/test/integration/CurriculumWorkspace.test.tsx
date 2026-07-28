@@ -42,7 +42,7 @@ describe('커리큘럼 작업 화면', () => {
     await user.click(screen.getByRole('button', { name: '강의 7개와 함께 게시' }))
 
     // 한 번의 클릭으로 두 축이 모두 PUBLISHED가 된다 — 남은 단계가 없어야 한다.
-    expect(await screen.findByText('커리큘럼 공개 중 · 수강생에게 보이는 강의 7/7개.')).toBeInTheDocument()
+    expect(await screen.findByText('커리큘럼 공개 중 · 게시된 강의 7/7개 — 카탈로그에서 검색·수강신청할 수 있습니다.')).toBeInTheDocument()
     expect(screen.getByText('공개 중')).toBeInTheDocument()
     expect(screen.queryByText(/게시하면 초안 강의/)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '게시 완료' })).toBeDisabled()

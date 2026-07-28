@@ -91,7 +91,7 @@ async def test_uses_current_transcription_session_and_correlates_item_deltas() -
     assert deltas == ["안녕", " 하세요", "!"]
     assert calls == [
         (
-            "wss://api.openai.com/v1/realtime?model=gpt-realtime-whisper",
+            "wss://api.openai.com/v1/realtime?intent=transcription",
             {"additional_headers": {"Authorization": "Bearer secret"}},
         )
     ]
@@ -152,7 +152,7 @@ async def test_completed_transcript_is_emitted_when_no_delta_was_received() -> N
     await engine.close()
 
 
-async def test_divergent_final_transcript_fails_closed() -> None:
+async def test_divergent_final_transcript_preserves_emitted_realtime_text(caplog) -> None:
     socket = FakeWebSocket(
         [
             {"type": "input_audio_buffer.committed", "item_id": "item-1"},
@@ -177,14 +177,17 @@ async def test_divergent_final_transcript_fails_closed() -> None:
         connect=connect,
         segmenter=NoopSegmenter(),
     )
-    events = engine._transcribe(
-        SpeechSegment(b"\0\0" * 320, 16_000, 0, 20),
-        SttStreamContext("stream-1"),
-    )
+    result = [
+        text
+        async for text in engine._transcribe(
+            SpeechSegment(b"\0\0" * 320, 16_000, 0, 20),
+            SttStreamContext("stream-1"),
+        )
+    ]
 
-    assert await anext(events) == "초안"
-    with pytest.raises(RuntimeError, match="diverged"):
-        await anext(events)
+    assert result == ["초안"]
+    assert "preserving emitted text" in caplog.text
+    assert "수정본" not in caplog.text
     await engine.close()
 
 

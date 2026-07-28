@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from functools import partial
 
-from livekit.agents import AgentServer, JobContext, cli
+from livekit.agents import AgentServer, JobContext, JobProcess, cli
 
 from app.adapters.redis_caption_publisher import RedisCaptionPublisher
 from app.adapters.redis_session_lease import RedisSessionLease
@@ -15,33 +15,14 @@ from app.jobs.lifecycle import DisabledLifecycleReporter, LifecycleReporter
 from app.jobs.metadata import JobMetadata
 from app.livekit.audio_source import LiveKitInstructorAudioSource
 from app.livekit.rtc_config import build_turn_rtc_config
-from app.stt.providers.nemotron import NemotronStreamingEngine
-from app.stt.providers.openai_realtime import OpenAiRealtimeStreamingEngine
-from app.stt.providers.stub import StubStreamingEngine
+from app.stt.catalog import build_stt_provider_registry
 from app.stt.registry import SttEngineRegistry
 
 _LOAD_THRESHOLD = 1.0
 
 
 def build_engine_registry(settings: Settings) -> SttEngineRegistry:
-    registry = SttEngineRegistry()
-    registry.register("stub", StubStreamingEngine)
-    registry.register(
-        "openai-realtime",
-        lambda: OpenAiRealtimeStreamingEngine(
-            settings.openai_api_key,
-            settings.openai_realtime_model,
-            delay=settings.openai_realtime_delay,
-        ),
-    )
-    registry.register(
-        "nemotron",
-        lambda: NemotronStreamingEngine(
-            settings.nemotron_model_id,
-            settings.asr_language,
-        ),
-    )
-    return registry
+    return build_stt_provider_registry(settings)
 
 
 def build_lifecycle_reporter(
@@ -74,24 +55,36 @@ def _build_active_job_load(max_active_jobs: int) -> Callable[[AgentServer], floa
 
 
 def build_agent_server(settings: Settings) -> AgentServer:
+    registry = build_engine_registry(settings)
+    worker_pool = registry.resolve_worker_pool(
+        settings.stt_provider,
+        max_active_jobs=settings.max_active_jobs,
+        num_idle_processes=settings.num_idle_processes,
+    )
     server = AgentServer(
         ws_url=settings.livekit_url,
         api_key=settings.livekit_api_key,
         api_secret=settings.livekit_api_secret,
-        load_fnc=_build_active_job_load(settings.max_active_jobs),
+        load_fnc=_build_active_job_load(worker_pool.max_active_jobs),
         load_threshold=_LOAD_THRESHOLD,
-        # One warm executor keeps startup reservation conservative without prewarming
-        # STT_MAX_ACTIVE_JOBS process/thread runners. Once a job is active, the SDK derives
-        # each reserved slot from active/max_active_jobs exactly.
-        num_idle_processes=1,
+        num_idle_processes=worker_pool.num_idle_processes,
+        initialize_process_timeout=worker_pool.initialize_process_timeout_seconds,
+        job_memory_warn_mb=worker_pool.job_memory_warn_mb,
+        setup_fnc=partial(_setup_stt_process, settings=settings),
     )
     entrypoint = partial(_run_agent_job, settings=settings)
     server.rtc_session(entrypoint, agent_name=settings.agent_name)
     return server
 
 
+def _setup_stt_process(process: JobProcess, *, settings: Settings) -> None:
+    registry = build_engine_registry(settings)
+    registry.prewarm(settings.stt_provider, process.userdata)
+
+
 async def _run_agent_job(context: JobContext, *, settings: Settings) -> None:
     registry = build_engine_registry(settings)
+    process_userdata = context.proc.userdata
     rtc_config = build_turn_rtc_config(
         settings.livekit_turn_url,
         settings.livekit_turn_secret,
@@ -106,7 +99,10 @@ async def _run_agent_job(context: JobContext, *, settings: Settings) -> None:
         )
         await run_dispatched_room_job(
             context,
-            lambda: registry.create(settings.stt_provider),
+            lambda: registry.create(
+                settings.stt_provider,
+                process_userdata=process_userdata,
+            ),
             publisher,
             session_lease_factory=lambda session_id, owner_id: RedisSessionLease(
                 redis,

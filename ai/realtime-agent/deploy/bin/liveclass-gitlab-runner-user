@@ -1,0 +1,61 @@
+#!/bin/sh
+set -eu
+
+COMMAND="${1:-status}"
+RUNNER_BIN="${GITLAB_RUNNER_BIN:-$HOME/.local/bin/gitlab-runner}"
+RUNNER_CONFIG="${GITLAB_RUNNER_CONFIG:-$HOME/.gitlab-runner/config.toml}"
+RUNNER_WORK_DIR="${GITLAB_RUNNER_WORK_DIR:-$HOME/.local/share/gitlab-runner}"
+RUNNER_SESSION="${GITLAB_RUNNER_SESSION:-liveclass-gitlab-runner}"
+PATH="$HOME/.local/bin:$PATH"
+export PATH
+
+session_exists() {
+    tmux has-session -t "=$RUNNER_SESSION" 2>/dev/null
+}
+
+case "$COMMAND" in
+    start)
+        if [ ! -x "$RUNNER_BIN" ]; then
+            echo "gitlab-runner is not executable: $RUNNER_BIN" >&2
+            exit 1
+        fi
+        if [ ! -r "$RUNNER_CONFIG" ]; then
+            echo "runner is not registered: $RUNNER_CONFIG" >&2
+            exit 1
+        fi
+        mkdir -p "$RUNNER_WORK_DIR"
+        if session_exists; then
+            echo "GitLab Runner is already running"
+            exit 0
+        fi
+        tmux new-session -d -s "$RUNNER_SESSION" \
+            "$RUNNER_BIN run --config $RUNNER_CONFIG --working-directory $RUNNER_WORK_DIR"
+        echo "GitLab Runner started"
+        ;;
+    stop)
+        if session_exists; then
+            tmux kill-session -t "=$RUNNER_SESSION"
+        fi
+        ;;
+    restart)
+        if session_exists; then
+            tmux kill-session -t "=$RUNNER_SESSION"
+        fi
+        "$0" start
+        ;;
+    status)
+        if session_exists; then
+            echo "GitLab Runner: running"
+        else
+            echo "GitLab Runner: stopped"
+            exit 1
+        fi
+        ;;
+    logs)
+        tmux capture-pane -p -t "$RUNNER_SESSION:0.0" -S -200
+        ;;
+    *)
+        echo "usage: liveclass-gitlab-runner-user {start|stop|restart|status|logs}" >&2
+        exit 2
+        ;;
+esac
