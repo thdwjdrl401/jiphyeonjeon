@@ -27,21 +27,14 @@ for required in pyproject.toml uv.lock app; do
     fi
 done
 
-if [ "$(id -u)" -ne 0 ]; then
-    echo "deployment helper must run as root" >&2
-    exit 1
-fi
-
-DEPLOY_ROOT=/srv/liveclass/realtime-agent
+DEPLOY_ROOT="${LIVECLASS_DEPLOY_ROOT:-$HOME/.local/share/liveclass/realtime-agent}"
 RELEASES_DIR="$DEPLOY_ROOT/releases"
 CURRENT_LINK="$DEPLOY_ROOT/current"
-SERVICE_USER=liveclass-ai
-UV_BIN=/usr/local/bin/uv
-AGENT_SERVICE=liveclass-realtime-agent.service
-TUNNEL_SERVICE=liveclass-realtime-agent-tunnels.service
-HEALTH_URL=http://127.0.0.1:8081/
+UV_BIN="${UV_BIN:-$(command -v uv || true)}"
+UV_CACHE_DIR="${UV_CACHE_DIR:-$DEPLOY_ROOT/cache/uv}"
+HEALTH_URL="${LIVECLASS_HEALTH_URL:-http://127.0.0.1:8081/}"
 
-for command_name in curl nvidia-smi readlink rsync runuser systemctl; do
+for command_name in curl flock nvidia-smi readlink rsync tmux; do
     if ! command -v "$command_name" >/dev/null 2>&1; then
         echo "required command is missing: $command_name" >&2
         exit 1
@@ -51,13 +44,12 @@ if [ ! -x "$UV_BIN" ]; then
     echo "uv is not installed at $UV_BIN" >&2
     exit 1
 fi
-if ! id "$SERVICE_USER" >/dev/null 2>&1; then
-    echo "service user does not exist: $SERVICE_USER" >&2
+install -d -m 0700 "$DEPLOY_ROOT" "$RELEASES_DIR" "$UV_CACHE_DIR"
+exec 9>"$DEPLOY_ROOT/deploy.lock"
+if ! flock -n 9; then
+    echo "another realtime-agent deployment is already running" >&2
     exit 1
 fi
-
-install -d -o root -g root -m 0755 "$DEPLOY_ROOT" "$RELEASES_DIR"
-install -d -o "$SERVICE_USER" -g "$SERVICE_USER" "$DEPLOY_ROOT/cache/uv"
 
 RELEASE_DIR="$RELEASES_DIR/$RELEASE_ID"
 STAGING_DIR=
@@ -77,15 +69,12 @@ if [ ! -d "$RELEASE_DIR" ]; then
         --exclude __pycache__ \
         --exclude .ipynb_checkpoints \
         "$SOURCE_DIR/" "$STAGING_DIR/"
-    chown -R "$SERVICE_USER:$SERVICE_USER" "$STAGING_DIR"
-
-    runuser -u "$SERVICE_USER" -- env UV_CACHE_DIR="$DEPLOY_ROOT/cache/uv" \
+    env UV_CACHE_DIR="$UV_CACHE_DIR" \
         "$UV_BIN" sync --project "$STAGING_DIR" --frozen --no-dev --extra nemotron
-    runuser -u "$SERVICE_USER" -- "$STAGING_DIR/.venv/bin/python" -c \
+    "$STAGING_DIR/.venv/bin/python" -c \
         "import torch; import livekit.agents; import redis; assert torch.cuda.is_available()"
 
     printf '%s\n' "$RELEASE_ID" >"$STAGING_DIR/.release-id"
-    chown -R root:root "$STAGING_DIR"
     mv "$STAGING_DIR" "$RELEASE_DIR"
     STAGING_DIR=
 elif [ "$(cat "$RELEASE_DIR/.release-id" 2>/dev/null || true)" != "$RELEASE_ID" ]; then
@@ -97,6 +86,8 @@ PREVIOUS_RELEASE="$(readlink -f "$CURRENT_LINK" 2>/dev/null || true)"
 NEXT_LINK="$DEPLOY_ROOT/.current-${RELEASE_ID}-$$"
 ln -s "$RELEASE_DIR" "$NEXT_LINK"
 mv -Tf "$NEXT_LINK" "$CURRENT_LINK"
+# tmux server and supervised processes must not inherit the deployment lock.
+flock -u 9
 
 rollback() {
     echo "agent health check failed; restoring previous release" >&2
@@ -104,18 +95,24 @@ rollback() {
         ROLLBACK_LINK="$DEPLOY_ROOT/.rollback-$$"
         ln -s "$PREVIOUS_RELEASE" "$ROLLBACK_LINK"
         mv -Tf "$ROLLBACK_LINK" "$CURRENT_LINK"
-        systemctl restart "$AGENT_SERVICE" || true
+        "$CURRENT_LINK/deploy/bin/liveclass-realtime-agent-supervisor" restart-agent || true
     else
         unlink "$CURRENT_LINK" 2>/dev/null || true
-        systemctl stop "$AGENT_SERVICE" || true
+        "$RELEASE_DIR/deploy/bin/liveclass-realtime-agent-supervisor" stop-agent || true
     fi
 }
 
-if ! systemctl start "$TUNNEL_SERVICE"; then
+SUPERVISOR="$CURRENT_LINK/deploy/bin/liveclass-realtime-agent-supervisor"
+if ! "$SUPERVISOR" start-tunnel; then
     rollback
     exit 1
 fi
-if ! systemctl restart "$AGENT_SERVICE"; then
+if ! "$SUPERVISOR" restart-agent; then
+    rollback
+    exit 1
+fi
+sleep 2
+if ! "$SUPERVISOR" status-agent; then
     rollback
     exit 1
 fi

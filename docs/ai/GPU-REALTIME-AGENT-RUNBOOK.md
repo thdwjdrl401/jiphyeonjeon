@@ -15,6 +15,9 @@ ID는 문서나 Git에 기록하지 않는다.
 | application Redis | `4000` | `4000` |
 | TURN/TCP | `3478` | `3478` |
 
+GPU agent health `127.0.0.1:8081`은 같은 SSH master의 reverse forward로 EC2
+`127.0.0.1:18081`에 연결한다. GPU inbound port는 열지 않는다.
+
 LiveKit 내부 Redis와 application Redis를 혼동하지 않는다. application Redis가 내장 `default` 사용자를
 쓰면 URL의 username은 비우고 password만 주입한다.
 
@@ -29,6 +32,9 @@ uv run --frozen python -c "import torch; print(torch.__version__, torch.version.
 
 모델은 Git 저장소 밖에 둔다. `ASR_MODEL_ID`에는 원격 model ID 또는 기존 로컬 모델의 절대경로를
 주입하며 모델 파일을 clone 안으로 복사하지 않는다.
+
+운영 host는 sudo 없는 rootless 배포를 사용한다. 사용자 Runner·tmux supervisor bootstrap과 장애
+확인은 [GPU 배포 가이드](../../ai/realtime-agent/deploy/README.md)를 따른다.
 
 ## SSH tunnel
 
@@ -113,8 +119,10 @@ STT_NUM_IDLE_PROCESSES=12
 ASR_MODEL_ID=/path/outside/git/nemotron-3.5-asr-streaming-0.6b
 ```
 
-`LIVEKIT_URL`은 인증서 hostname을 유지해야 한다. hostname을 loopback tunnel로 연결하는 방법은 배포
-환경의 DNS/hosts/proxy 정책으로 제공하며 `/tmp`의 사전 빌드 바이너리를 영구 전제로 삼지 않는다.
+`LIVEKIT_URL`은 인증서 hostname을 유지해야 한다. sudo 없는 운영 host는 배포에 포함된 C source를
+`~/.local/lib/liveclass/livekit-tunnel-dns.so`로 빌드하고, `LIVEKIT_TUNNEL_HOST`와
+`LD_PRELOAD`로 해당 hostname만 loopback tunnel에 연결한다. `/tmp`의 사전 빌드 바이너리는
+사용하지 않는다.
 `CUDA_VISIBLE_DEVICES=0`은 worker와 모든 job child에 물리 GPU 한 장만 노출한다. 그 안에서 CUDA는
 노출된 장치를 논리 `cuda:0`으로 본다. LiveKit Agents 1.6.6의 reserved-slot 계산상 시작 직후
 12-request burst를 모두 받으려면 active cap과 warm idle을 모두 12로 둬야 한다. full load에서는

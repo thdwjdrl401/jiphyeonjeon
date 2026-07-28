@@ -1,1 +1,0 @@
-gitlab-runner ALL=(root) NOPASSWD: /usr/local/sbin/liveclass-realtime-agent-deploy *
