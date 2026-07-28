@@ -48,7 +48,12 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD 필요}
     volumes:
       - miniodata:/data
-    # 호스트 포트 미노출 — 브라우저·backend는 앱 nginx의 /liveclass-assets 로만 접근(presigned가 공개 도메인으로 서명).
+    ports:
+      # 루프백에만 게시한다. 미디어 스택(Egress)이 host 네트워크로 돌아 도커 서비스명을 해석하지
+      # 못하는데, 녹화 업로드를 공개 도메인→nginx로 우회시키면 세그먼트 바이트가 TLS 엣지를
+      # 왕복한다. 127.0.0.1 바인드라 외부 노출은 없고 같은 호스트의 Egress만 닿는다.
+      - "127.0.0.1:9000:9000"
+    # 브라우저는 여전히 앱 nginx의 /liveclass-assets·/recordings 로만 접근(presigned가 공개 도메인으로 서명).
     # 헬스체크는 두지 않는다 — minio 서버 이미지에 mc/curl 유무가 불확실. minio-init이 재시도 루프로 준비를 기다린다.
 
   minio-init:                              # 버킷 생성 (멱등). 계속 살려둔다 —
@@ -87,6 +92,16 @@ services:
     build: ./backend
     container_name: liveclass-backend-prod
     restart: unless-stopped
+    # LiveKit API 자격. 미디어 스택과 같은 파일을 읽어 단일 출처를 지킨다 — .env.prod에 복사하면
+    # 두 곳이 갈라져 드리프트가 생긴다. 이 파일이 없으면 부팅을 실패시킨다(조용히 dev 더미 키로
+    # 도는 것보다 낫다 — 실제로 그 상태로 녹화가 안 되고 있었다).
+    env_file:
+      - /etc/liveclass/livekit/CREDENTIALS.txt
+    # 공개 도메인을 호스트로 직결시킨다. frontend의 network alias는 이 도메인을 앱 nginx 컨테이너로
+    # 묶어버려서 :443은 되지만 다른 포트(:7443 LiveKit API)에는 닿지 못한다. /etc/hosts가 도커 DNS보다
+    # 우선하므로 이 컨테이너만 호스트 게시 포트로 나가고, :443·:7443이 모두 열리면서 hairpin도 그대로 피한다.
+    extra_hosts:
+      - "jiphyeonjeon.thdwjdrl.com:host-gateway"
     environment:
       # application.yml이 localhost 하드코딩 → relaxed-binding env로 override
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-liveclass}
@@ -106,21 +121,28 @@ services:
       ASSET_STORAGE_PATH_STYLE: "true"
       ASSET_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       ASSET_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD 필요}
-      # 녹화 스토리지(같은 MinIO, 다른 버킷). 같은 버킷을 세 주체가 서로 다른 위치에서 접근하므로
-      # 주소가 셋이다 — SigV4가 Host를 서명에 포함해서 하나로 합칠 수 없다:
-      #   EGRESS_S3_ENDPOINT             = 내부.  backend가 매니페스트를 GET (도커 네트워크)
-      #   EGRESS_UPLOAD_ENDPOINT         = 공개.  Egress가 세그먼트를 PUT — Egress는 host 네트워크라
-      #                                           도커 서비스명(minio)을 해석하지 못한다
-      #   VIDEO_PLAYBACK_PUBLIC_ENDPOINT = 공개.  브라우저가 presigned 세그먼트를 GET
-      # 공개 쪽 둘은 nginx /recordings/ 로 들어와 Host 보존 프록시를 탄다.
+      # 녹화 스토리지(같은 MinIO, 다른 버킷). 같은 버킷을 세 주체가 서로 다른 네트워크 위치에서
+      # 접근하고 SigV4가 Host를 서명에 포함하므로 주소를 합칠 수 없다:
+      #   EGRESS_S3_ENDPOINT             backend가 매니페스트 GET  — 도커 브리지, 서비스명
+      #   EGRESS_UPLOAD_ENDPOINT         Egress가 세그먼트 PUT     — host 네트워크, 루프백 게시 포트
+      #   VIDEO_PLAYBACK_PUBLIC_ENDPOINT 브라우저가 세그먼트 GET   — 외부, nginx /recordings/
+      # 앞의 둘은 호스트 안에서 끝난다. 공개 엣지를 타는 건 브라우저 경로 하나뿐이다.
       EGRESS_BUCKET: ${EGRESS_BUCKET:-recordings}
       EGRESS_S3_ENDPOINT: http://minio:9000
-      EGRESS_UPLOAD_ENDPOINT: https://jiphyeonjeon.thdwjdrl.com
+      EGRESS_UPLOAD_ENDPOINT: http://127.0.0.1:9000
       EGRESS_S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       EGRESS_S3_SECRET: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD 필요}
       EGRESS_S3_REGION: ${EGRESS_S3_REGION:-us-east-1}
       EGRESS_FORCE_PATH_STYLE: "true"
       VIDEO_PLAYBACK_PUBLIC_ENDPOINT: https://jiphyeonjeon.thdwjdrl.com
+      # LiveKit — 브라우저 접속 주소와 백엔드 API 주소를 나눈다(같은 서버, 다른 네트워크 위치).
+      #   LIVEKIT_URL      브라우저가 WebRTC로 붙는 공개 wss (토큰 응답에 실림)
+      #   LIVEKIT_API_URL  백엔드가 방 제어·Egress 시작에 쓰는 주소
+      # API는 미디어 스택의 nginx(:7443, host 네트워크)를 탄다 — LiveKit 평문 7880은 ufw가
+      # 막고 있고, 컨트롤 호출은 소량이라 기존 TLS 엣지를 재사용하는 편이 방화벽 구멍보다 낫다.
+      # extra_hosts로 도메인을 호스트에 직결시켜야 7443에 닿는다(아래 참조).
+      LIVEKIT_URL: wss://jiphyeonjeon.thdwjdrl.com:7443
+      LIVEKIT_API_URL: https://jiphyeonjeon.thdwjdrl.com:7443
       # AI 배치 잡 발행(ADR-0036). outbox 릴레이가 rabbitmq로 publish. 스위치 material.embedding.enabled로 켠다.
       SPRING_RABBITMQ_HOST: rabbitmq
       SPRING_RABBITMQ_PORT: "5672"

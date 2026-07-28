@@ -75,7 +75,10 @@ logging:
     com.liveclass.common: INFO
 
 livekit:
-  url: ${LIVEKIT_URL:wss://jiphyeonjeon.thdwjdrl.com:7443}   # 클라이언트 접속 URL
+  url: ${LIVEKIT_URL:wss://jiphyeonjeon.thdwjdrl.com:7443}   # 브라우저 WebRTC 접속 URL (토큰 응답에 실림)
+  # 백엔드가 방 제어·Egress 시작에 쓰는 서버 API URL. 브라우저와 네트워크 위치가 달라 따로 둔다.
+  # 비우면 위 url에서 파생(wss→https) — 단일 호스트 개발 환경은 둘이 같다.
+  api-url: ${LIVEKIT_API_URL:}
   api-key: ${LIVEKIT_API_KEY:devkey}                  # dev/test 더미. 운영은 환경변수 주입.
   api-secret: ${LIVEKIT_API_SECRET:devsecretdevsecretdevsecretdevsecret}  # 커밋 금지 값은 env로
   token-ttl-seconds: ${LIVEKIT_TOKEN_TTL:600}         # 10분
