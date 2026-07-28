@@ -27,12 +27,26 @@ public record EgressProperties(
         int segmentDurationSeconds,
         String playlistName,
         String livePlaylistName,
-        String layout
+        String layout,
+
+        /**
+         * 합성 출력 인코딩 프리셋({@code LivekitEgress.EncodingOptionsPreset} 이름).
+         *
+         * <p>안 주면 Egress 기본값이 720p라, 강사가 1080p 화면공유를 올려도 다운스케일돼
+         * 코드·슬라이드 글자가 뭉갠다(EC2 실측). 반대로 카메라만 켠 세션은 소스가 720p라
+         * 1080p로 올려도 업스케일일 뿐이니, 콘텐츠 성격이 바뀌면 이 값을 조정한다.
+         */
+        String encodingPreset
 ) {
+    private static final String DEFAULT_ENCODING_PRESET = "H264_1080P_30";
+
     public EgressProperties {
         // 비우면 내부 주소를 그대로 쓴다 — 단일 호스트 개발 환경은 둘이 같다.
         if (uploadEndpoint == null || uploadEndpoint.isBlank()) {
             uploadEndpoint = s3Endpoint;
+        }
+        if (encodingPreset == null || encodingPreset.isBlank()) {
+            encodingPreset = DEFAULT_ENCODING_PRESET;
         }
     }
 }
