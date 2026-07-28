@@ -91,7 +91,7 @@ async def test_uses_current_transcription_session_and_correlates_item_deltas() -
     assert deltas == ["안녕", " 하세요", "!"]
     assert calls == [
         (
-            "wss://api.openai.com/v1/realtime?model=gpt-realtime-whisper",
+            "wss://api.openai.com/v1/realtime?intent=transcription",
             {"additional_headers": {"Authorization": "Bearer secret"}},
         )
     ]

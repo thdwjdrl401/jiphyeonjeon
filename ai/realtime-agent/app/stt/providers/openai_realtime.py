@@ -6,14 +6,13 @@ import base64
 import json
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
-from urllib.parse import quote
 
 from app.audio.segmentation import SpeechSegment
 from app.stt.engine import SttStreamContext
 from app.stt.providers.segmented import SegmentedStreamingEngine, SpeechSegmenter
 
 _REALTIME_SAMPLE_RATE = 24_000
-_REALTIME_URL = "wss://api.openai.com/v1/realtime"
+_REALTIME_TRANSCRIPTION_URL = "wss://api.openai.com/v1/realtime?intent=transcription"
 _TRANSCRIPTION_DELTA = "conversation.item.input_audio_transcription.delta"
 _TRANSCRIPTION_COMPLETED = "conversation.item.input_audio_transcription.completed"
 _TRANSCRIPTION_FAILED = "conversation.item.input_audio_transcription.failed"
@@ -54,7 +53,7 @@ class OpenAiRealtimeStreamingEngine(SegmentedStreamingEngine):
         self._api_key = api_key
         self._model = model
         self._delay = delay
-        self._url = url or f"{_REALTIME_URL}?model={quote(model, safe='')}"
+        self._url = url or _REALTIME_TRANSCRIPTION_URL
         self._segment_timeout_s = segment_timeout_s
         self._connect = connect
         self._ws: Any | None = None
