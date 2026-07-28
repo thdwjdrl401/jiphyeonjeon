@@ -1,7 +1,12 @@
 import { useState } from 'react'
 import { ApiError } from '@/shared/api/client'
 import { InlineNotice, StatusBadge } from '@/shared/ui/WorkspaceUi'
-import type { EnrollmentRosterItem, EnrollmentStatus, InstructorEnrollmentAction } from './types'
+import type {
+  EnrollmentRosterItem,
+  EnrollmentStatus,
+  EnrollmentStatusSummary,
+  InstructorEnrollmentAction,
+} from './types'
 import { useInstructorEnrollmentTransition } from './useEnrollmentMutations'
 import { useInstructorEnrollmentRosterQuery } from './useEnrollmentQueries'
 
@@ -14,6 +19,22 @@ const statusLabel: Record<EnrollmentStatus, string> = {
   REVOKED: '제적됨',
   CANCELLED: '취소됨',
 }
+
+/**
+ * 상태 요약 셀 정의. 마크업을 상태 수만큼 반복해 쓰지 않도록 배열로 관리하고 map으로 렌더한다.
+ * summaryKey는 서버 집계(EnrollmentStatusSummary)의 필드, status는 목록 필터 값이라 짝지어 둔다.
+ */
+const summaryCells: ReadonlyArray<{
+  status: EnrollmentStatus
+  summaryKey: keyof EnrollmentStatusSummary
+  label: string
+}> = [
+  { status: 'PENDING', summaryKey: 'pending', label: '대기' },
+  { status: 'ACTIVE', summaryKey: 'active', label: '수강 중' },
+  { status: 'REJECTED', summaryKey: 'rejected', label: '거절' },
+  { status: 'REVOKED', summaryKey: 'revoked', label: '제적' },
+  { status: 'CANCELLED', summaryKey: 'cancelled', label: '취소' },
+]
 
 function statusTone(status: EnrollmentStatus) {
   if (status === 'ACTIVE') return 'success' as const
@@ -62,16 +83,19 @@ export default function InstructorEnrollmentRoster({ curriculumId }: { curriculu
 
   const { items, summary } = query.data
 
+  // 셀 클릭도 select와 같은 필터를 건드린다 — 집계·필터 로직은 그대로 두고 진입점만 늘렸다.
+  const selectStatus = (next: EnrollmentStatus | '') => {
+    setStatus(next)
+    setPage(0)
+  }
+
   return (
     <div>
-      <div className="compact-controls">
+      <div className="enrollment-roster-controls">
         <select
           aria-label="수강 상태 필터"
           value={status}
-          onChange={(event) => {
-            setStatus(event.target.value as EnrollmentStatus | '')
-            setPage(0)
-          }}
+          onChange={(event) => selectStatus(event.target.value as EnrollmentStatus | '')}
         >
           <option value="">전체 상태</option>
           <option value="PENDING">승인 대기</option>
@@ -80,9 +104,24 @@ export default function InstructorEnrollmentRoster({ curriculumId }: { curriculu
           <option value="REVOKED">제적됨</option>
           <option value="CANCELLED">취소됨</option>
         </select>
-        <span className="dashboard-meta">
-          대기 {summary.pending} · 수강 {summary.active} · 거절 {summary.rejected} · 제적 {summary.revoked} · 취소 {summary.cancelled}
-        </span>
+        <div className="enrollment-status-summary">
+          {summaryCells.map((cell) => {
+            const selected = status === cell.status
+            return (
+              <button
+                className={`enrollment-status-cell${selected ? ' is-selected' : ''}`}
+                key={cell.status}
+                type="button"
+                aria-pressed={selected}
+                // 이미 고른 상태를 다시 누르면 전체로 되돌린다.
+                onClick={() => selectStatus(selected ? '' : cell.status)}
+              >
+                <span>{cell.label}</span>
+                <strong>{summary[cell.summaryKey]}</strong>
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {transitionError && <InlineNotice tone="danger">{transitionError}</InlineNotice>}

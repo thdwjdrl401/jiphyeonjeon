@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { instructorPaths, publicPaths, studentPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
+import { deleteCurriculum } from '@/features/curriculum/curriculumManagementService'
 import {
   getInstructorCurriculums,
   getInstructorDashboardSummary,
@@ -14,11 +15,24 @@ import { useMyEnrollmentsQuery } from '@/features/enrollment/useEnrollmentQuerie
 import { ApiError } from '@/shared/api/client'
 import { isNotImplemented } from '@/shared/api/notImplemented'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
+import { useToast } from '@/shared/ui/Toast'
 import { InlineNotice, MetricCard, PageHeader, Panel, StatusBadge } from '@/shared/ui/WorkspaceUi'
 
 function formatLessonMinutes(durationMs?: number | null) {
   if (!durationMs) return '--'
   return `${Math.round(durationMs / 60_000)}`
+}
+
+/**
+ * 강사 카드의 공개 상태 한 줄. 커리큘럼이 비공개면 강의를 다 게시했어도 수강생에게는 0개다
+ * (ADR-0002: 공개 = 커리큘럼 PUBLISHED AND 강의 PUBLISHED). "게시 강의 5/5"만 보여 주면
+ * 공개된 것으로 오해하므로, 비공개일 때는 그 사실을 먼저 말한다.
+ */
+function instructorVisibilityLabel(item: { lifecycleStatus: string; publishedLessonCount: number; lessonCount: number }) {
+  const lessons = `강의 ${item.publishedLessonCount}/${item.lessonCount} 게시`
+  if (item.lifecycleStatus === 'PUBLISHED') return `공개 중 · ${lessons}`
+  if (item.lifecycleStatus === 'ARCHIVED') return `보관됨 · 비공개 · ${lessons}`
+  return `비공개 · 게시해야 공개 · ${lessons}`
 }
 
 function PendingCurriculumCard({ item }: { item: StudentCurriculumItem }) {
@@ -62,6 +76,28 @@ export default function MyCurriculumsPage() {
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
   const [page, setPage] = useState(0)
+  const toast = useToast()
+  const queryClient = useQueryClient()
+
+  // 초안 삭제. 공개된 커리큘럼은 수강 이력이 붙을 수 있어 서버가 409로 막는다 — 보관으로 안내한다.
+  const deleteDraftMutation = useMutation({
+    mutationFn: (curriculumId: string) => deleteCurriculum(curriculumId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-curriculums'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] })
+      toast.success('커리큘럼을 삭제했습니다.')
+    },
+    onError: (error) => {
+      toast.error(error instanceof ApiError && error.code === 'CURRICULUM_STATE_CONFLICT'
+        ? '이미 공개된 커리큘럼은 삭제할 수 없어요. 먼저 보관 처리해 주세요.'
+        : '커리큘럼을 삭제하지 못했습니다.')
+    },
+  })
+
+  const removeDraft = (curriculumId: string, title: string) => {
+    if (!window.confirm(`초안 "${title}"을(를) 삭제할까요? 섹션과 강의도 함께 사라지며 되돌릴 수 없습니다.`)) return
+    deleteDraftMutation.mutate(curriculumId)
+  }
 
   const instructorListQuery = useQuery({
     queryKey: ['my-curriculums', 'instructor', userId, search, status, page],
@@ -155,7 +191,7 @@ export default function MyCurriculumsPage() {
           {(isInstructor ? instructorCurriculums : filteredStudentCurriculums).map((item) => (
             <article className="dashboard-curriculum-card" key={item.curriculumId}>
               <div className="dashboard-curriculum-card__cover">{item.thumbnailUrl && <img src={item.thumbnailUrl} alt={`${item.title} 대표 이미지`} />}</div>
-              <div className="dashboard-curriculum-card__content"><div><StatusBadge tone={item.lifecycleStatus === 'PUBLISHED' ? 'success' : item.lifecycleStatus === 'ARCHIVED' ? 'neutral' : 'warning'}>{item.lifecycleStatus === 'PUBLISHED' ? '공개 중' : item.lifecycleStatus === 'ARCHIVED' ? '보관됨' : '준비 중'}</StatusBadge><h3>{item.title}</h3><p>{item.summary}</p></div>{'progress' in item ? <div className="dashboard-progress"><span><strong>{item.progress}%</strong> · {item.completedLessonCount}/{item.lessonCount} 강의</span><i><b style={{ width: `${item.progress}%` }} /></i></div> : <p className="dashboard-meta">섹션 {item.sectionCount} · 게시 강의 {item.publishedLessonCount}/{item.lessonCount} · 다음 일정 {item.nextLiveSession?.scheduledAt ? new Date(item.nextLiveSession.scheduledAt).toLocaleString('ko-KR') : '일정 미정'}</p>}<div className="card-actions"><Link className="button button--primary" to={publicPaths.curriculum(item.curriculumId)}>커리큘럼 상세</Link>{isInstructor && <Link className="button button--soft" to={instructorPaths.curriculumManage(item.curriculumId)}>관리</Link>}</div></div>
+              <div className="dashboard-curriculum-card__content"><div><StatusBadge tone={item.lifecycleStatus === 'PUBLISHED' ? 'success' : item.lifecycleStatus === 'ARCHIVED' ? 'neutral' : 'warning'}>{item.lifecycleStatus === 'PUBLISHED' ? '공개 중' : item.lifecycleStatus === 'ARCHIVED' ? '보관됨' : '준비 중'}</StatusBadge><h3>{item.title}</h3><p>{item.summary}</p></div>{'progress' in item ? <div className="dashboard-progress"><span><strong>{item.progress}%</strong> · {item.completedLessonCount}/{item.lessonCount} 강의</span><i><b style={{ width: `${item.progress}%` }} /></i></div> : <p className="dashboard-meta">섹션 {item.sectionCount} · {instructorVisibilityLabel(item)} · 다음 일정 {item.nextLiveSession?.scheduledAt ? new Date(item.nextLiveSession.scheduledAt).toLocaleString('ko-KR') : '미정'}</p>}<div className="card-actions"><Link className="button button--primary" to={publicPaths.curriculum(item.curriculumId)}>커리큘럼 상세</Link>{isInstructor && <Link className="button button--soft" to={instructorPaths.curriculumManage(item.curriculumId)}>관리</Link>}{isInstructor && item.lifecycleStatus === 'DRAFT' && <button className="button button--ghost button--danger" type="button" disabled={deleteDraftMutation.isPending} onClick={() => removeDraft(item.curriculumId, item.title)}>삭제</button>}</div></div>
             </article>
           ))}
         </div>

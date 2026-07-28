@@ -18,6 +18,7 @@ export const getInstructorCurriculum = (curriculumId: string) => curriculumManag
 export const getCurriculumManagementStructure = (curriculumId: string) => curriculumManagementService.getCurriculumManagementStructure(curriculumId)
 export const saveCurriculumManagement = (request: SaveCurriculumManagementRequest) => curriculumManagementService.saveCurriculumManagement(request)
 export const publishCurriculum = (curriculumId: string) => curriculumManagementService.publishCurriculum(curriculumId)
+export const deleteCurriculum = (curriculumId: string) => curriculumManagementService.deleteCurriculum(curriculumId)
 export const deleteLesson = (lessonId: string) => curriculumManagementService.deleteLesson(lessonId)
 export const deleteSection = (sectionId: string) => curriculumManagementService.deleteSection(sectionId)
 

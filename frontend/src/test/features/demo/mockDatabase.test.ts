@@ -10,6 +10,7 @@ import {
   getDemoStudentCurriculums,
   getDemoTodayInstructorLiveSession,
 } from '@/features/demo/demoData'
+import { deleteMockCurriculum, getMockCurriculum } from '@/features/demo/mockDatabase'
 
 describe('통합 mock 데이터베이스', () => {
   beforeEach(() => {
@@ -74,6 +75,34 @@ describe('통합 mock 데이터베이스', () => {
     expect(dashboard.map((curriculum) => curriculum.curriculumId)).toEqual(['cur-spring-live', 'cur-architecture'])
     expect(catalog.items.find((item) => item.curriculumId === 'cur-spring-live')?.viewerContext.relationship).toBe('OWNER_INSTRUCTOR')
     expect(catalog.items.find((item) => item.curriculumId === 'cur-data-story')?.viewerContext.relationship).toBe('NON_OWNER_INSTRUCTOR')
+  })
+
+  it('초안 커리큘럼만 삭제되고, 공개된 것은 409로 막힌다', async () => {
+    const instructor = await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
+
+    // cur-architecture는 DRAFT, cur-spring-live는 PUBLISHED 시드다.
+    expect(() => deleteMockCurriculum('cur-spring-live')).toThrowError(
+      expect.objectContaining({ status: 409, code: 'CURRICULUM_STATE_CONFLICT' }),
+    )
+    expect(() => deleteMockCurriculum('cur-does-not-exist')).toThrowError(
+      expect.objectContaining({ status: 404, code: 'CURRICULUM_NOT_FOUND' }),
+    )
+
+    deleteMockCurriculum('cur-architecture')
+
+    expect(getMockCurriculum('cur-architecture')).toBeNull()
+    expect(getDemoInstructorCurriculums(instructor.userId).map((curriculum) => curriculum.curriculumId))
+      .toEqual(['cur-spring-live'])
+  })
+
+  it('삭제한 시드 커리큘럼도 reset하면 되살아난다', async () => {
+    await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
+    deleteMockCurriculum('cur-architecture')
+    expect(getMockCurriculum('cur-architecture')).toBeNull()
+
+    resetMockAuth()   // resetMockDatabase까지 함께 돈다
+
+    expect(getMockCurriculum('cur-architecture')?.lifecycleStatus).toBe('DRAFT')
   })
 
   it('강사 대시보드 라이브는 당일 일정만 반환한다', async () => {

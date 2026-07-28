@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState, type DragEvent as ReactDragEv
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { instructorPaths, publicPaths } from '@/app/router/paths'
-import CurriculumImageField, { type CurriculumImageSelection } from '@/features/curriculum/CurriculumImageField'
-import CurriculumMaterialField from '@/features/curriculum/CurriculumMaterialField'
+import CurriculumAssetsFields from '@/features/curriculum/CurriculumAssetsFields'
+import { type CurriculumImageSelection } from '@/features/curriculum/CurriculumImageField'
 import {
   deleteLesson,
   deleteSection,
@@ -15,6 +15,7 @@ import {
   type InstructorCurriculumResponse,
 } from '@/features/curriculum/curriculumManagementService'
 import type { CurriculumMaterial } from '@/features/curriculum/types'
+import { publishLesson } from '@/features/lesson/lessonService'
 import InstructorEnrollmentRoster from '@/features/enrollment/InstructorEnrollmentRoster'
 import { ApiError } from '@/shared/api/client'
 import { isNotImplemented } from '@/shared/api/notImplemented'
@@ -37,15 +38,19 @@ interface CurriculumDraftState {
   }
 }
 
+type ManageTab = 'structure' | 'info' | 'enrollees'
+
 /**
  * 발행 버튼은 DRAFT에서만 의미가 있다 — 서버가 DRAFT 외의 전이를 409로 막는다
- * (InstructorCurriculumService.publish). 하드코딩된 DRAFT 배지를 두면 발행 성공 후에도
- * 버튼이 남아 두 번째 클릭이 무조건 409가 됐다. 상태를 화면의 단일 출처로 삼는다.
+ * (InstructorCurriculumService.publish). 상태를 화면의 단일 출처로 삼는다.
+ *
+ * <p>label은 축 이름(DRAFT)이 아니라 강사가 알고 싶은 결과를 쓴다. ARCHIVED가 따로 있어야 하는
+ * 이유는 "PUBLISHED가 아니면 비공개"로 뭉개면 보관 상태를 초안과 구별할 수 없기 때문이다.
  */
-const LIFECYCLE_VIEW: Record<string, { tone: 'warning' | 'success' | 'neutral'; description: string }> = {
-  DRAFT: { tone: 'warning', description: '강의 편성을 확인한 뒤 커리큘럼을 게시하세요.' },
-  PUBLISHED: { tone: 'success', description: '수강생에게 공개 중입니다. 카탈로그에서 검색·수강신청할 수 있습니다.' },
-  ARCHIVED: { tone: 'neutral', description: '보관된 커리큘럼입니다. 카탈로그에 노출되지 않습니다.' },
+const LIFECYCLE_VIEW: Record<string, { tone: 'warning' | 'success' | 'neutral'; label: string; description: string }> = {
+  DRAFT: { tone: 'warning', label: '비공개', description: '게시해야 수강생에게 보입니다.' },
+  PUBLISHED: { tone: 'success', label: '공개 중', description: '카탈로그에서 검색·수강신청할 수 있습니다.' },
+  ARCHIVED: { tone: 'neutral', label: '보관됨', description: '카탈로그에 노출되지 않습니다.' },
 }
 
 type CurriculumInfoField = 'title' | 'summary' | 'description'
@@ -63,6 +68,9 @@ export default function CurriculumManagePage() {
   const { curriculumId } = useParams()
   const location = useLocation()
   const routeState = location.state as CurriculumDraftState | null
+  // 탭은 재seed(key 교체)로 리셋되면 안 되므로 키 바깥에 둔다 — 일괄 게시나 강의 삭제 뒤에
+  // 보고 있던 탭에서 계속 작업할 수 있어야 한다.
+  const [tab, setTab] = useState<ManageTab>('structure')
   const managementQuery = useQuery({
     queryKey: ['curriculum-management', curriculumId],
     queryFn: async () => {
@@ -83,13 +91,19 @@ export default function CurriculumManagePage() {
   // 서버 구조(섹션·강의 수)가 바뀌면 에디터를 새 데이터로 다시 seeding한다 — 강의 추가 후
   // 관리로 돌아왔을 때 옛 로컬 state에 멈춰 섹션·강의가 안 보이던 문제 해결. 편집 중에는
   // 서버 데이터가 그대로라 key도 안 바뀌어 자동저장 흐름을 방해하지 않는다.
-  const structureKey = managementQuery.data.sections.map((section) => `${section.sectionId}:${section.lessons.length}`).join(',')
+  // 강의 상태까지 키에 넣는다 — 일괄 게시 후 서버는 PUBLISHED인데 에디터 로컬 state가 DRAFT로
+  // 남아 배지가 안 바뀌던 문제. 상태는 편집 중에 변하지 않으므로 자동저장 흐름은 그대로다.
+  const structureKey = managementQuery.data.sections
+    .map((section) => `${section.sectionId}:${section.lessons.map((lesson) => lesson.status).join('|')}`)
+    .join(',')
   return <CurriculumManageEditor
     key={`${curriculumId}:${structureKey}`}
     curriculumId={curriculumId}
     routeState={routeState}
     storedCurriculum={managementQuery.data.curriculum}
     initialSections={managementQuery.data.sections}
+    tab={tab}
+    onTabChange={setTab}
   />
 }
 
@@ -98,16 +112,19 @@ function CurriculumManageEditor({
   routeState,
   storedCurriculum,
   initialSections,
+  tab,
+  onTabChange,
 }: {
   curriculumId: string
   routeState: CurriculumDraftState | null
   storedCurriculum: InstructorCurriculumResponse
   initialSections: CurriculumManagementSection[]
+  tab: ManageTab
+  onTabChange: (tab: ManageTab) => void
 }) {
   const isNewDraft = storedCurriculum?.lifecycleStatus === 'DRAFT'
   const lifecycleView = LIFECYCLE_VIEW[storedCurriculum.lifecycleStatus]
-    ?? { tone: 'neutral' as const, description: '알 수 없는 상태입니다.' }
-  const [tab, setTab] = useState<'structure' | 'info' | 'enrollees'>('structure')
+    ?? { tone: 'neutral' as const, label: storedCurriculum.lifecycleStatus, description: '알 수 없는 상태입니다.' }
   const [sections, setSections] = useState(initialSections)
   // structureVersion을 로컬로 들고 저장 때마다 갱신한다 — 안 그러면 새로고침 없이 연속 저장 시
   // 낡은 baseVersion을 보내 409로 실패한다(order PUT의 낙관적 동시성).
@@ -148,13 +165,14 @@ function CurriculumManageEditor({
   // 구조·기본정보 자동저장. 자료(materials)는 시그니처에 넣지 않아 자료 편집만으로는 저장이 돌지 않는다
   // — 커리큘럼-레벨 자료 연결 API가 없기 때문(ADR-0030). 구조/정보 저장 시 현재 자료를 함께 실어
   // mock이 기존 자료를 잃지 않게만 한다.
-  const flushSave = useCallback(async () => {
+  /** 저장에 성공했으면(또는 저장할 게 없으면) true. 게시는 이 값이 false면 중단한다. */
+  const flushSave = useCallback(async (): Promise<boolean> => {
     if (savingRef.current) {
       dirtyAfterSaveRef.current = true   // 저장 중 변경 — 끝나고 한 번 더
-      return
+      return true
     }
     const signature = currentSignature()
-    if (signature === savedSignatureRef.current) return   // 바뀐 게 없음
+    if (signature === savedSignatureRef.current) return true   // 바뀐 게 없음
 
     savingRef.current = true
     setAutosave('saving')
@@ -182,6 +200,7 @@ function CurriculumManageEditor({
       setAutosave('saved')
       // 사이드바 등 다른 화면이 최신 구조를 읽도록.
       queryClient.invalidateQueries({ queryKey: ['curriculum-lesson-navigation', curriculumId] })
+      return true
     } catch (error) {
       setAutosave('error')
       if (error instanceof ApiError && error.code === 'STRUCTURE_VERSION_CONFLICT') {
@@ -191,6 +210,7 @@ function CurriculumManageEditor({
       } else {
         setSaveError('변경 내용을 자동 저장하지 못했습니다.')
       }
+      return false
     } finally {
       savingRef.current = false
       if (dirtyAfterSaveRef.current) {
@@ -224,23 +244,87 @@ function CurriculumManageEditor({
   }
 
 
-  const publish = async () => {
+  // 게시가 바꾸는 범위는 이 화면 밖까지다 — 내 커리큘럼 카드의 상태·삭제 버튼, 대시보드 집계,
+  // 공개 카탈로그 목록·상세, 사이드바 목차. staleTime(30초) 때문에 빠뜨리면 되돌아갔을 때
+  // 한동안 옛 캐시가 그대로 보인다(삭제 버튼이 늦게 사라지던 원인).
+  const invalidateAfterPublish = () => {
+    queryClient.invalidateQueries({ queryKey: ['curriculum-management', curriculumId] })
+    queryClient.invalidateQueries({ queryKey: ['curriculum-lesson-navigation', curriculumId] })
+    queryClient.invalidateQueries({ queryKey: ['my-curriculums'] })
+    queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] })
+    queryClient.invalidateQueries({ queryKey: ['curriculums'] })
+  }
+
+  /**
+   * 게시 카드의 주 동작. 수강생에게 보이려면 커리큘럼과 강의가 모두 PUBLISHED여야 하므로
+   * (ADR-0002), 초안 강의를 올리고 커리큘럼 공개까지 한 번에 끝낸다. 서버 축은 여전히 분리돼
+   * 있지만(ADR-0021) 강사가 두 번 눌러야 하는 일은 없어야 한다 — 한 번 눌러 "공개" 상태에 도달한다.
+   *
+   * @param includeLessons false면 초안 강의는 그대로 두고 커리큘럼만 공개한다(일부만 먼저 공개하는 경우).
+   */
+  const runPublish = async (includeLessons: boolean) => {
+    const draftLessons = includeLessons
+      ? sections.flatMap((section) => section.lessons.filter((lesson) => lesson.status === 'DRAFT'))
+      : []
+    const willPublishCurriculum = isNewDraft
+    if (draftLessons.length === 0 && !willPublishCurriculum) return
+
+    const plan = [
+      draftLessons.length > 0 ? `초안 강의 ${draftLessons.length}개` : null,
+      willPublishCurriculum ? '커리큘럼' : null,
+    ].filter(Boolean).join('와 ')
+    if (!window.confirm(`${plan}을(를) 게시할까요? 게시하면 수강생에게 바로 공개됩니다.`)) return
+
     setSaveError('')
-    try {
-      await flushSave()   // 게시 전 대기 중인 편집을 먼저 반영
-      await publishCurriculum(curriculumId)
-      queryClient.invalidateQueries({ queryKey: ['curriculum-management', curriculumId] })
-      setAutosave('saved')
-    } catch (error) {
-      // 상태 충돌(이미 발행됨 등)은 서버 메시지가 원인을 정확히 말해준다 — 뭉개면 사용자가
-      // 같은 버튼을 계속 누르게 된다. 최신 상태를 다시 불러와 화면도 정합시킨다.
-      if (error instanceof ApiError && error.code === 'CURRICULUM_STATE_CONFLICT') {
-        setSaveError(error.message)
-        queryClient.invalidateQueries({ queryKey: ['curriculum-management', curriculumId] })
-        return
-      }
-      setSaveError('커리큘럼을 게시하지 못했습니다.')
+    // 저장이 실패한 채로 게시하면 화면에 보이는 내용과 공개되는 내용이 갈린다 — 게시를 멈춘다.
+    if (!await flushSave()) {
+      toast.error('변경 내용을 저장하지 못해 게시를 중단했습니다. 저장 오류를 먼저 해결해 주세요.')
+      return
     }
+
+    // 일부만 실패해도 나머지는 게시된 채로 둔다 — 전부 되돌릴 방법이 없으므로 결과를 그대로 알린다.
+    const results = await Promise.allSettled(draftLessons.map((lesson) => publishLesson(lesson.lessonId)))
+    const lessonFailed = results.filter((result) => result.status === 'rejected').length
+    const lessonPublished = results.length - lessonFailed
+    const visibleLessonCount = publishedLessonCount + lessonPublished
+
+    // 목차가 빈 커리큘럼을 공개하지 않는다 — 강의가 하나도 안 올라갔으면 공개를 보류한다.
+    if (willPublishCurriculum && totalLessonCount > 0 && visibleLessonCount === 0) {
+      invalidateAfterPublish()
+      toast.error('강의를 게시하지 못해 커리큘럼 공개를 중단했습니다. 잠시 후 다시 시도해 주세요.')
+      return
+    }
+
+    let curriculumPublished = false
+    if (willPublishCurriculum) {
+      try {
+        await publishCurriculum(curriculumId)
+        curriculumPublished = true
+        setAutosave('saved')
+      } catch (error) {
+        // 상태 충돌(이미 발행됨 등)은 서버 메시지가 원인을 정확히 말해준다 — 뭉개면 사용자가
+        // 같은 버튼을 계속 누르게 된다. 재조회로 화면 상태도 정합시킨다.
+        setSaveError(error instanceof ApiError && error.code === 'CURRICULUM_STATE_CONFLICT'
+          ? error.message
+          : '커리큘럼을 게시하지 못했습니다.')
+      }
+    }
+
+    invalidateAfterPublish()
+
+    if (lessonFailed > 0) {
+      toast.error(lessonPublished > 0
+        ? `강의 ${lessonPublished}개를 게시했고 ${lessonFailed}개는 실패했습니다.`
+        : '강의를 게시하지 못했습니다.')
+      return
+    }
+    if (willPublishCurriculum && !curriculumPublished) {
+      toast.error('커리큘럼을 게시하지 못했습니다.')
+      return
+    }
+    toast.success(curriculumPublished
+      ? `커리큘럼을 게시했습니다. 강의 ${visibleLessonCount}개가 수강생에게 공개됩니다.`
+      : `강의 ${lessonPublished}개를 게시했습니다.`)
   }
 
   const updateSection = (sectionId: string, field: SectionInfoField, value: string) => {
@@ -284,8 +368,14 @@ function CurriculumManageEditor({
     }
   }
 
-  const removeSection = async (sectionId: string) => {
-    if (!window.confirm('이 섹션과 포함된 강의를 모두 삭제할까요? 되돌릴 수 없습니다.')) return
+  const removeSection = async (sectionId: string, lessonCount: number) => {
+    // 강의가 남은 섹션은 서버가 409(SECTION_NOT_EMPTY)로 막는다 — 실수로 강의까지 지우지 않도록.
+    // 눌러 보고 알기 전에 먼저 안내한다(버튼도 비활성).
+    if (lessonCount > 0) {
+      toast.error('강의가 있는 섹션은 삭제할 수 없어요. 강의를 먼저 삭제하거나 다른 섹션으로 옮겨 주세요.')
+      return
+    }
+    if (!window.confirm('이 섹션을 삭제할까요? 되돌릴 수 없습니다.')) return
     // 아직 저장하지 않은 새 섹션은 서버에 없으므로 로컬에서만 제거한다.
     if (sectionId.startsWith('sec-new-')) {
       setSections((current) => current.filter((section) => section.sectionId !== sectionId))
@@ -297,8 +387,11 @@ function CurriculumManageEditor({
       queryClient.invalidateQueries({ queryKey: ['curriculum-management', curriculumId] })
       queryClient.invalidateQueries({ queryKey: ['curriculum-lesson-navigation', curriculumId] })
       toast.success('섹션을 삭제했습니다.')
-    } catch {
-      toast.error('섹션을 삭제하지 못했습니다.')
+    } catch (error) {
+      // 로컬 목록이 낡아 강의가 없어 보였을 수 있다(다른 탭에서 강의 추가 등) — 서버 판정을 그대로 안내한다.
+      toast.error(error instanceof ApiError && error.code === 'SECTION_NOT_EMPTY'
+        ? '강의가 있는 섹션은 삭제할 수 없어요. 강의를 먼저 삭제하거나 다른 섹션으로 옮겨 주세요.'
+        : '섹션을 삭제하지 못했습니다.')
     }
   }
 
@@ -381,6 +474,15 @@ function CurriculumManageEditor({
     setLessonDropTarget(null)
   }
 
+  // 게시 카드에서 "무엇이 실제로 공개되는지"를 보여 준다 — 공개 목차는 PUBLISHED 강의만 담는다.
+  const allLessons = sections.flatMap((section) => section.lessons)
+  const totalLessonCount = allLessons.length
+  const draftLessonCount = allLessons.filter((lesson) => lesson.status === 'DRAFT').length
+  const publishedLessonCount = allLessons.filter((lesson) => lesson.status === 'PUBLISHED').length
+  // 수강생에게 실제로 보이려면 두 축이 모두 PUBLISHED여야 한다(ADR-0002) — 카탈로그는 PUBLISHED
+  // 커리큘럼만 열고, 그 안에서 PUBLISHED 강의만 목차에 담는다.
+  const isPubliclyVisible = storedCurriculum.lifecycleStatus === 'PUBLISHED' && publishedLessonCount > 0
+
   return (
     <div className="workspace-page">
       <PageHeader
@@ -391,24 +493,37 @@ function CurriculumManageEditor({
       />
       {saveError && <InlineNotice tone="danger">{saveError}</InlineNotice>}
       <div className="metric-grid"><MetricCard label="상태" value={storedCurriculum.lifecycleStatus} helper={isNewDraft ? '게시 전' : '운영 중'} /><MetricCard label="섹션" value={sections.length} /><MetricCard label="전체 강의" value={sections.reduce((sum, section) => sum + section.lessons.length, 0)} /><MetricCard label="수강생" value={storedCurriculum.enrolleeCount ?? '--'} /></div>
-      <div className="workspace-tabs" role="tablist"><button className={tab === 'structure' ? 'is-active' : ''} onClick={() => setTab('structure')} type="button">구성</button><button className={tab === 'info' ? 'is-active' : ''} onClick={() => setTab('info')} type="button">기본 정보</button><button className={tab === 'enrollees' ? 'is-active' : ''} onClick={() => setTab('enrollees')} type="button">수강생</button></div>
+      <div className="workspace-tabs" role="tablist"><button className={tab === 'structure' ? 'is-active' : ''} onClick={() => onTabChange('structure')} type="button">구성</button><button className={tab === 'info' ? 'is-active' : ''} onClick={() => onTabChange('info')} type="button">기본 정보</button><button className={tab === 'enrollees' ? 'is-active' : ''} onClick={() => onTabChange('enrollees')} type="button">수강생</button></div>
 
       {tab === 'structure' && (
         <Panel title="섹션과 강의" description="강의를 드래그해 순서를 바꾸거나 다른 섹션으로 옮길 수 있습니다.">
-          <InlineNotice tone="info"><strong>섹션</strong>은 대단원(챕터), <strong>강의</strong>는 그 안의 개별 수업이에요. 먼저 섹션을 추가하면 자동 저장된 뒤, 그 섹션의 “강의 추가”로 강의를 넣을 수 있어요.</InlineNotice>
+          {/* 섹션마다 반복하지 않고 여기 한 번만 안내한다(삭제 제약 포함). */}
+          <InlineNotice tone="info"><strong>섹션</strong>은 대단원(챕터), <strong>강의</strong>는 그 안의 개별 수업이에요. 먼저 섹션을 추가하면 자동 저장된 뒤, 그 섹션의 “강의 추가”로 강의를 넣을 수 있어요. 강의가 포함된 섹션은 삭제할 수 없습니다. 먼저 강의를 삭제하거나 다른 섹션으로 이동한 뒤 섹션을 삭제해주세요.</InlineNotice>
           <div className="structure-list">
             {sections.map((section, sectionIndex) => (
               <article className={`structure-section${lessonDropTarget?.sectionId === section.sectionId ? ' is-lesson-drop-target' : ''}`} key={section.sectionId}>
+                {/* 라벨·액션이 첫 줄, 입력창은 그 아래 전폭 — 버튼이 입력 폭을 깎지 않도록. */}
                 <header>
                   <div className="drag-handle" aria-hidden="true">⋮⋮</div>
+                  <span className="structure-section__eyebrow">SECTION {sectionIndex + 1}</span>
                   <div className="structure-section__fields">
-                    <span>SECTION {sectionIndex + 1}</span>
                     <label><small>섹션 이름</small><input aria-label={`섹션 ${sectionIndex + 1} 이름`} maxLength={200} value={section.title} onChange={(event) => updateSection(section.sectionId, 'title', event.target.value)} /></label>
                     <label><small>섹션 설명</small><textarea aria-label={`섹션 ${sectionIndex + 1} 설명`} rows={2} value={section.description} onChange={(event) => updateSection(section.sectionId, 'description', event.target.value)} /></label>
                   </div>
-                  <div className="structure-actions"><button aria-label="섹션 위로" disabled={sectionIndex === 0} onClick={() => moveSection(sectionIndex, -1)} type="button">↑</button><button aria-label="섹션 아래로" disabled={sectionIndex === sections.length - 1} onClick={() => moveSection(sectionIndex, 1)} type="button">↓</button>{section.sectionId.startsWith('sec-new-')
-                    ? <button className="button button--soft button--small" type="button" disabled title="새 섹션이 자동 저장된 뒤에 강의를 추가할 수 있어요.">강의 추가</button>
-                    : <Link className="button button--soft button--small" to={instructorPaths.newLesson(curriculumId, section.sectionId)}>강의 추가</Link>}<button className="button button--soft button--small" type="button" onClick={() => void removeSection(section.sectionId)}>섹션 삭제</button></div>
+                  <div className="structure-actions">
+                    <button aria-label="섹션 위로" disabled={sectionIndex === 0} onClick={() => moveSection(sectionIndex, -1)} type="button">↑</button>
+                    <button aria-label="섹션 아래로" disabled={sectionIndex === sections.length - 1} onClick={() => moveSection(sectionIndex, 1)} type="button">↓</button>
+                    {section.sectionId.startsWith('sec-new-')
+                      ? <button className="button button--soft button--small" type="button" disabled title="새 섹션이 자동 저장된 뒤에 강의를 추가할 수 있어요.">강의 추가</button>
+                      : <Link className="button button--soft button--small" to={instructorPaths.newLesson(curriculumId, section.sectionId)}>강의 추가</Link>}
+                    <button
+                      className="button button--soft button--small"
+                      type="button"
+                      disabled={section.lessons.length > 0}
+                      title={section.lessons.length > 0 ? '강의가 있는 섹션은 삭제할 수 없어요. 강의를 먼저 비워 주세요.' : undefined}
+                      onClick={() => void removeSection(section.sectionId, section.lessons.length)}
+                    >섹션 삭제</button>
+                  </div>
                 </header>
                 <ul
                   className={lessonDropTarget?.sectionId === section.sectionId && lessonDropTarget.lessonIndex === section.lessons.length ? 'is-drop-at-end' : undefined}
@@ -434,8 +549,14 @@ function CurriculumManageEditor({
                         <span className="lesson-drag-handle" aria-hidden="true">⋮⋮</span>
                         <span className="lesson-order">{lessonIndex + 1}</span>
                         <div className="lesson-info"><strong>{lesson.title}</strong><small>{lesson.status}</small></div>
-                        <StatusBadge tone={lesson.status === 'PUBLISHED' ? 'success' : lesson.status === 'READY' ? 'warning' : 'neutral'}>{lesson.status}</StatusBadge>
-                        <div className="row-actions"><Link to={instructorPaths.lesson(curriculumId, section.sectionId, lesson.lessonId)}>상세</Link><button className="text-button" type="button" onClick={() => void removeLesson(section.sectionId, lesson.lessonId)}>삭제</button></div>
+                        {/* 배지와 링크·버튼을 한 flex 컨테이너에 모아 같은 수평선에 정렬한다(각각 별도 그리드 칼럼이던 시절엔 어긋났다). */}
+                        <div className="lesson-actions">
+                          <StatusBadge tone={lesson.status === 'PUBLISHED' ? 'success' : lesson.status === 'READY' ? 'warning' : 'neutral'}>{lesson.status}</StatusBadge>
+                          <div className="row-actions">
+                            <Link to={instructorPaths.lesson(curriculumId, section.sectionId, lesson.lessonId)}>상세</Link>
+                            <button className="text-button" type="button" onClick={() => void removeLesson(section.sectionId, lesson.lessonId)}>삭제</button>
+                          </div>
+                        </div>
                       </li>
                     )
                   })}
@@ -448,13 +569,74 @@ function CurriculumManageEditor({
         </Panel>
       )}
 
+      {/* 기본 정보 → 자산 → 게시 순으로 읽어 내려가며 확인하고 마지막에 게시한다. */}
       {tab === 'info' && (
-        <Panel title="기본 정보" description="일반 수정과 공개 상태 전환은 분리합니다.">
-          <div className="form-grid"><label className="form-field--wide"><span>제목</span><input value={curriculumInfo.title} onChange={(event) => updateCurriculumInfo('title', event.target.value)} /></label><label className="form-field--wide"><span>짧은 소개</span><input value={curriculumInfo.summary} onChange={(event) => updateCurriculumInfo('summary', event.target.value)} /></label><label className="form-field--wide"><span>상세 설명</span><textarea rows={6} value={curriculumInfo.description} onChange={(event) => updateCurriculumInfo('description', event.target.value)} /></label></div>
-          <div className="curriculum-manage-thumbnail"><h3>대표 이미지</h3><p>목록과 상세 카드에 표시할 이미지를 등록합니다.</p><CurriculumImageField id="manage-curriculum-thumbnail" previewUrl={thumbnailUrl} onChange={(selection: CurriculumImageSelection | null) => updateThumbnail(selection?.previewUrl ?? null)} /></div>
-          <div className="lifecycle-actions"><div><StatusBadge tone={lifecycleView.tone}>{storedCurriculum.lifecycleStatus}</StatusBadge><p>{lifecycleView.description}</p></div>{isNewDraft && <button className="button button--primary" type="button" onClick={() => void publish()}>커리큘럼 게시</button>}</div>
-          <div className="curriculum-manage-materials"><h3>커리큘럼 강의 자료 <small>선택</small></h3><p>전체 강의에서 공통으로 제공할 PPTX 자료를 추가하거나 제거합니다.</p><CurriculumMaterialField id="manage-curriculum-materials" value={materials} onChange={updateMaterials} /></div>
-        </Panel>
+        <>
+          <Panel title="기본 정보" description="일반 수정과 공개 상태 전환은 분리합니다.">
+            <div className="form-grid"><label className="form-field--wide"><span>제목</span><input value={curriculumInfo.title} onChange={(event) => updateCurriculumInfo('title', event.target.value)} /></label><label className="form-field--wide"><span>짧은 소개</span><input value={curriculumInfo.summary} onChange={(event) => updateCurriculumInfo('summary', event.target.value)} /></label><label className="form-field--wide"><span>상세 설명</span><textarea rows={6} value={curriculumInfo.description} onChange={(event) => updateCurriculumInfo('description', event.target.value)} /></label></div>
+          </Panel>
+
+          {/* 새 커리큘럼 만들기와 같은 카드를 재사용한다(CurriculumAssetsFields). */}
+          <Panel title="대표 이미지와 강의 자료" description="대표 이미지와 커리큘럼 전체에서 공통으로 사용할 선택 자료를 등록합니다.">
+            <CurriculumAssetsFields
+              idPrefix="manage-curriculum"
+              thumbnailPreviewUrl={thumbnailUrl}
+              onThumbnailChange={(selection: CurriculumImageSelection | null) => updateThumbnail(selection?.previewUrl ?? null)}
+              materials={materials}
+              onMaterialsChange={updateMaterials}
+            />
+          </Panel>
+
+          <Panel title="커리큘럼 게시" description="기본 정보와 자료를 모두 확인한 뒤 마지막으로 공개합니다.">
+            {/*
+              공개 = 커리큘럼 PUBLISHED AND 강의 PUBLISHED(ADR-0002). 무엇이 공개될지 먼저 알리고,
+              주 버튼 하나로 그 상태에 도달하게 한다 — 두 번 눌러야 공개되는 흐름은 만들지 않는다.
+            */}
+            {isNewDraft && draftLessonCount > 0 && (
+              <InlineNotice tone="info">
+                게시하면 초안 강의 <strong>{draftLessonCount}개</strong>도 함께 공개됩니다
+                {publishedLessonCount > 0 && `(이미 게시된 ${publishedLessonCount}개 포함 총 ${totalLessonCount}개)`}.
+                일부만 공개하려면 먼저 구성 탭에서 해당 강의를 정리해 주세요.
+              </InlineNotice>
+            )}
+            {!isNewDraft && draftLessonCount > 0 && (
+              <InlineNotice tone="warning">
+                초안 강의 <strong>{draftLessonCount}개</strong>는 아직 공개 목차에 보이지 않습니다.
+                수강생에게 보이려면 함께 게시해 주세요.
+              </InlineNotice>
+            )}
+            <div className="lifecycle-actions lifecycle-actions--standalone">
+              <div>
+                {/* 공개는 두 축의 AND다(ADR-0002) — PUBLISHED라도 게시된 강의가 0이면 보이는 게 없다. */}
+                <StatusBadge tone={isPubliclyVisible ? 'success' : lifecycleView.tone}>
+                  {lifecycleView.label}
+                </StatusBadge>
+                <p>{`커리큘럼 ${lifecycleView.label} · 게시된 강의 ${publishedLessonCount}/${totalLessonCount}개 — ${lifecycleView.description}`}</p>
+              </div>
+              <div className="lifecycle-actions__buttons">
+                {/*
+                  일부 강의를 초안으로 남겨 두고 먼저 공개하는 우회로. 주 동선은 오른쪽 버튼 하나다.
+                  게시된 강의가 하나도 없으면 목차가 빈 커리큘럼이 공개되므로 이 우회로를 열지 않는다.
+                */}
+                {isNewDraft && draftLessonCount > 0 && publishedLessonCount > 0 && (
+                  <button className="button button--ghost" type="button" onClick={() => void runPublish(false)}>
+                    커리큘럼만 게시
+                  </button>
+                )}
+                <button
+                  className="button button--primary"
+                  type="button"
+                  disabled={!isNewDraft && draftLessonCount === 0}
+                  onClick={() => void runPublish(true)}
+                >
+                  {isNewDraft
+                    ? draftLessonCount > 0 ? `강의 ${draftLessonCount}개와 함께 게시` : '커리큘럼 게시'
+                    : draftLessonCount > 0 ? `초안 강의 ${draftLessonCount}개 게시` : '게시 완료'}
+                </button>
+              </div>
+            </div>
+          </Panel>
+        </>
       )}
 
       {tab === 'enrollees' && (

@@ -195,7 +195,9 @@ export const mockCurriculumEntities: MockCurriculumEntity[] = [
   },
 ]
 
-const initialCurriculumCount = mockCurriculumEntities.length
+// 시드 커리큘럼 중에도 DRAFT가 있어(cur-architecture) 삭제 대상이 된다. 개수만 기억해 뒤쪽을 잘라내면
+// 삭제된 시드를 되살릴 수 없으므로, 초기 목록 자체를 복사해 두고 reset에서 통째로 되돌린다.
+const initialCurriculumEntities = mockCurriculumEntities.map((curriculum) => ({ ...curriculum }))
 const initialCurriculumMaterials = new Map(
   mockCurriculumEntities.map((curriculum) => [curriculum.curriculumId, curriculum.materials.map((material) => ({ ...material }))]),
 )
@@ -223,7 +225,7 @@ export function resetMockDatabase() {
   deletedLessonIds.clear()
   deletedSectionIds.clear()
   lessonStatusOverrides.clear()
-  mockCurriculumEntities.splice(initialCurriculumCount)
+  mockCurriculumEntities.splice(0, mockCurriculumEntities.length, ...initialCurriculumEntities.map((curriculum) => ({ ...curriculum })))
   for (const curriculum of mockCurriculumEntities) {
     curriculum.materials = initialCurriculumMaterials.get(curriculum.curriculumId)?.map((material) => ({ ...material })) ?? []
   }
@@ -263,6 +265,46 @@ export function putMockCurriculum(
 
 export function getMockCurriculum(curriculumId: string) {
   return mockCurriculumEntities.find((curriculum) => curriculum.curriculumId === curriculumId) ?? null
+}
+
+/**
+ * 초안 커리큘럼 삭제. 서버(DELETE /api/instructor/curriculums/{id})와 같은 판정을 흉내 낸다 —
+ * 없으면 404, DRAFT가 아니면 409. 섹션·레슨은 이 커리큘럼에서 파생되므로 함께 사라진다.
+ */
+export function deleteMockCurriculum(curriculumId: string) {
+  const index = mockCurriculumEntities.findIndex((curriculum) => curriculum.curriculumId === curriculumId)
+  if (index < 0) {
+    throw new ApiError('커리큘럼을 찾을 수 없습니다.', 404, 'CURRICULUM_NOT_FOUND')
+  }
+  if (mockCurriculumEntities[index].lifecycleStatus !== 'DRAFT') {
+    throw new ApiError('초안(DRAFT) 커리큘럼만 삭제할 수 있습니다.', 409, 'CURRICULUM_STATE_CONFLICT')
+  }
+  mockCurriculumEntities.splice(index, 1)
+}
+
+/**
+ * 커리큘럼 게시. 실 서버와 같이 <b>강의 상태는 건드리지 않는다</b>(ADR-0002: 두 축은 독립).
+ *
+ * <p>시드가 없는 강의는 기본 상태를 커리큘럼 lifecycle에서 끌어오므로(buildMockCurriculumOutline),
+ * 그대로 두면 커리큘럼을 게시하는 순간 강의까지 PUBLISHED로 딸려 올라가 실 서버와 어긋난다.
+ * 그래서 lifecycle을 바꾸기 <b>전에</b> 현재 강의 상태를 override로 고정한다.
+ */
+export function publishMockCurriculum(curriculumId: string) {
+  const curriculum = getMockCurriculum(curriculumId)
+  if (!curriculum) throw new ApiError('커리큘럼을 찾을 수 없습니다.', 404, 'CURRICULUM_NOT_FOUND')
+  if (curriculum.lifecycleStatus !== 'DRAFT') {
+    throw new ApiError('DRAFT 상태에서만 발행할 수 있습니다.', 409, 'CURRICULUM_STATE_CONFLICT')
+  }
+  for (const section of buildMockCurriculumOutline(curriculum)) {
+    for (const lesson of section.lessons) {
+      if (!lessonStatusOverrides.has(lesson.lessonId)) {
+        lessonStatusOverrides.set(lesson.lessonId, lesson.status)
+      }
+    }
+  }
+  curriculum.lifecycleStatus = 'PUBLISHED'
+  curriculum.catalogVisible = true
+  return curriculum
 }
 
 export function updateMockCurriculumMaterials(curriculumId: string, materials: CurriculumMaterial[]) {

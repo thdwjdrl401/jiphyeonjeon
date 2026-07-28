@@ -220,6 +220,17 @@ p {
   color: var(--ink-950);
 }
 
+/* 되돌릴 수 없는 동작(초안 삭제 등). ghost와 겹쳐 쓰면 색만 경고색으로 바뀐다. */
+.button--danger {
+  color: var(--red-600);
+}
+
+.button--danger:hover:not(:disabled) {
+  border-color: var(--red-600);
+  background: var(--red-50);
+  color: var(--red-600);
+}
+
 .button--white {
   background: var(--white);
   color: var(--blue-700);
