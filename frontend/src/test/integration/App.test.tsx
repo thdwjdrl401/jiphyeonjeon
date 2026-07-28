@@ -105,10 +105,14 @@ describe('LiveClass AI 공개 페이지', () => {
     await user.click(within(form).getByLabelText(/LiveClass 이용 안내를 확인했습니다/))
     await user.click(within(form).getByRole('button', { name: /가입하고 시작하기/ }))
 
+    // 가입 완료 알림은 로그인 폼 위 배너가 아니라 토스트로 뜬다.
+    const toastRegion = await screen.findByRole('region', { name: '알림' })
     expect(
-      await screen.findByText(/김라이브님, 가입이 완료됐어요/),
+      await within(toastRegion).findByText(/김라이브님, 가입이 완료됐어요/),
     ).toBeInTheDocument()
     expect(window.location.pathname).toBe('/login')
+    // 알림을 띄운 뒤 history state를 지워 새로고침·뒤로가기로 되살아나지 않게 한다.
+    expect(window.history.state?.usr ?? null).toBeNull()
   })
 })
 

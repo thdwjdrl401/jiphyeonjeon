@@ -1,11 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthProvider } from '@/features/auth/AuthContext'
 import { mockAuthService, resetMockAuth } from '@/features/auth/mockAuthService'
 import { ApiError } from '@/shared/api/client'
+import { ToastProvider } from '@/shared/ui/Toast'
 import CurriculumDetailPage from '@/pages/CurriculumDetailPage'
 import LoginPage from '@/pages/LoginPage'
 import * as enrollmentService from '@/features/enrollment/enrollmentService'
@@ -23,11 +24,13 @@ function renderDetail(path: string) {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider>
-          <Routes>
-            <Route path="/curriculums/:curriculumId" element={<CurriculumDetailPage />} />
-            <Route path="/curriculums" element={<div>커리큘럼 목록 페이지</div>} />
-            <Route path="/login" element={<LoginPage />} />
-          </Routes>
+          <ToastProvider>
+            <Routes>
+              <Route path="/curriculums/:curriculumId" element={<CurriculumDetailPage />} />
+              <Route path="/curriculums" element={<div>커리큘럼 목록 페이지</div>} />
+              <Route path="/login" element={<LoginPage />} />
+            </Routes>
+          </ToastProvider>
         </AuthProvider>
       </BrowserRouter>
     </QueryClientProvider>,
@@ -282,7 +285,8 @@ describe('CurriculumDetailPage', () => {
     spy.mockRestore()
   })
 
-  it('수강 신청이 실패하면 오류 메시지를 보여주고 다시 시도할 수 있다', async () => {
+  // 실패 알림은 토스트로 낸다(폼 옆 인라인 오류가 아니라) — 서버가 준 이유를 그대로 보여 준다.
+  it('수강 신청이 실패하면 토스트로 알리고 다시 시도할 수 있다', async () => {
     const user = userEvent.setup()
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
 
@@ -294,7 +298,8 @@ describe('CurriculumDetailPage', () => {
     const enrollButton = await screen.findByRole('button', { name: '수강 신청' })
     await user.click(enrollButton)
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('이미 신청했거나 수강 중이에요.')
+    const toastRegion = await screen.findByRole('region', { name: '알림' })
+    expect(await within(toastRegion).findByText('이미 신청했거나 수강 중이에요.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '수강 신청' })).not.toBeDisabled()
     spy.mockRestore()
   })

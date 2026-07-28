@@ -50,6 +50,7 @@ export default function ProfilePage() {
       setExpertise(profile.expertise.join(', '))
       toast.success('강사 공개 프로필이 저장되었습니다.')
     },
+    onError: (error) => toast.error(error.message || '공개 프로필을 저장하지 못했습니다.'),
   })
   const passwordMutation = useMutation({
     mutationFn: () => profileService.changePassword({ currentPassword, newPassword }),
@@ -58,6 +59,7 @@ export default function ProfilePage() {
       setNewPassword('')
       toast.success('비밀번호가 변경되었습니다.')
     },
+    onError: (error) => toast.error(error.message || '비밀번호를 변경하지 못했습니다.'),
   })
   const withdrawMutation = useMutation({
     mutationFn: profileService.withdrawAccount,
@@ -65,6 +67,7 @@ export default function ProfilePage() {
       await logout()
       navigate(publicPaths.home, { replace: true })
     },
+    onError: (error) => toast.error(error.message || '회원 탈퇴를 처리하지 못했습니다.'),
   })
 
   const closeEdit = useCallback(() => {
@@ -119,7 +122,6 @@ export default function ProfilePage() {
             <form className="workspace-form" onSubmit={saveInstructorProfile}>
               <label><span>강사 소개</span><textarea rows={4} value={bio} onChange={(event) => setBio(event.target.value)} /></label>
               <label><span>전문 분야</span><input value={expertise} placeholder="Spring, JPA, 분산 시스템" onChange={(event) => setExpertise(event.target.value)} /><small>쉼표로 구분해 최대 8개까지 저장합니다.</small></label>
-              {instructorProfileMutation.isError && <InlineNotice tone="danger">{instructorProfileMutation.error.message}</InlineNotice>}
               <div className="form-actions"><button className="button button--primary" type="submit" disabled={!bio.trim() || instructorProfileMutation.isPending}>{instructorProfileMutation.isPending ? '저장 중' : '공개 프로필 저장'}</button></div>
             </form>
           )}
@@ -137,13 +139,11 @@ export default function ProfilePage() {
             <label><span>현재 비밀번호</span><input type="password" value={currentPassword} autoComplete="current-password" onChange={(event) => setCurrentPassword(event.target.value)} /></label>
             <label><span>새 비밀번호</span><input type="password" value={newPassword} minLength={8} autoComplete="new-password" onChange={(event) => setNewPassword(event.target.value)} /></label>
           </div>
-          {passwordMutation.isError && <InlineNotice tone="danger">{passwordMutation.error.message}</InlineNotice>}
           <div className="form-actions"><button className="button button--soft" type="submit" disabled={!currentPassword || newPassword.length < 8 || passwordMutation.isPending}>{passwordMutation.isPending ? '변경 중' : '비밀번호 변경'}</button></div>
         </form>
         <div className="settings-list settings-list__danger">
           <div><div><strong>회원 탈퇴</strong><p>탈퇴하면 현재 세션이 종료되고 로그인 화면으로 돌아갑니다.</p></div><label className="choice-row"><input type="checkbox" checked={withdrawConfirmed} onChange={(event) => setWithdrawConfirmed(event.target.checked)} /><span>계정 탈퇴에 동의합니다.</span></label><button className="button button--ghost" type="button" disabled={!withdrawConfirmed || withdrawMutation.isPending} onClick={() => withdrawMutation.mutate()}>{withdrawMutation.isPending ? '처리 중' : '회원 탈퇴'}</button></div>
         </div>
-        {withdrawMutation.isError && <InlineNotice tone="danger">{withdrawMutation.error.message}</InlineNotice>}
       </Panel>
 
       {isEditOpen && (

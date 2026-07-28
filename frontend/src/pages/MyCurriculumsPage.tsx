@@ -36,8 +36,8 @@ function instructorVisibilityLabel(item: { lifecycleStatus: string; publishedLes
 }
 
 function PendingCurriculumCard({ item }: { item: StudentCurriculumItem }) {
+  // 취소 성공·실패 알림은 useCancelEnrollmentMutation이 토스트로 낸다.
   const cancelMutation = useCancelEnrollmentMutation(item.curriculumId)
-  const cancelError = cancelMutation.error instanceof ApiError ? cancelMutation.error.message : null
 
   return (
     <article className="dashboard-curriculum-card">
@@ -49,7 +49,6 @@ function PendingCurriculumCard({ item }: { item: StudentCurriculumItem }) {
           <StatusBadge tone="warning">승인 대기</StatusBadge>
           <h3>{item.title}</h3>
           <p>{item.summary}</p>
-          {cancelError && <p className="form-error" role="alert">{cancelError}</p>}
         </div>
         <p className="dashboard-meta">{item.instructor} 강사 · 승인 후 학습 가능</p>
         <div className="card-actions">

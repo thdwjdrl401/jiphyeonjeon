@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { ApiError } from '@/shared/api/client'
 import { InlineNotice, StatusBadge } from '@/shared/ui/WorkspaceUi'
 import type {
   EnrollmentRosterItem,
@@ -69,8 +68,8 @@ export default function InstructorEnrollmentRoster({ curriculumId }: { curriculu
     page,
     size: 20,
   })
+  // 승인·거절·제적의 결과 알림은 useInstructorEnrollmentTransition이 토스트로 낸다.
   const transition = useInstructorEnrollmentTransition(curriculumId)
-  const transitionError = transition.error instanceof ApiError ? transition.error.message : null
 
   const run = (enrollmentId: string, action: InstructorEnrollmentAction) => {
     transition.mutate({ enrollmentId, action })
@@ -123,8 +122,6 @@ export default function InstructorEnrollmentRoster({ curriculumId }: { curriculu
           })}
         </div>
       </div>
-
-      {transitionError && <InlineNotice tone="danger">{transitionError}</InlineNotice>}
 
       <div className="table-wrap">
         <table>

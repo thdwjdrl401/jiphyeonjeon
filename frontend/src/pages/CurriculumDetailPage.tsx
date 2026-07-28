@@ -68,7 +68,6 @@ export default function CurriculumDetailPage() {
         isEnrolling={enrollMutation.isPending}
         onCancel={handleCancel}
         isCancelling={cancelMutation.isPending}
-        cancelError={cancelMutation.error instanceof ApiError ? cancelMutation.error.message : null}
       />
 
       <CurriculumOverview description={detail.description} />
@@ -93,7 +92,6 @@ export default function CurriculumDetailPage() {
         returnTo={returnTo}
         onEnroll={handleEnroll}
         isEnrolling={enrollMutation.isPending}
-        enrollError={enrollMutation.error instanceof ApiError ? enrollMutation.error.message : null}
       />
 
       <CurriculumNotice detail={detail} />

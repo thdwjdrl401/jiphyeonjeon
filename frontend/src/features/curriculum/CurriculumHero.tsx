@@ -11,10 +11,9 @@ interface CurriculumHeroProps {
   isEnrolling: boolean
   onCancel: () => void
   isCancelling: boolean
-  cancelError: string | null
 }
 
-export default function CurriculumHero({ detail, primaryAction, onEnroll, isEnrolling, onCancel, isCancelling, cancelError }: CurriculumHeroProps) {
+export default function CurriculumHero({ detail, primaryAction, onEnroll, isEnrolling, onCancel, isCancelling }: CurriculumHeroProps) {
   return (
     <section className="curriculum-hero">
       <div className="curriculum-hero__grid">
@@ -25,7 +24,7 @@ export default function CurriculumHero({ detail, primaryAction, onEnroll, isEnro
           sectionCount={detail.outline.length}
           lessonCount={detail.outline.reduce((sum, section) => sum + section.lessons.length, 0)}
         />
-        <CurriculumPrimaryAction action={primaryAction} onEnroll={onEnroll} isEnrolling={isEnrolling} onCancel={onCancel} isCancelling={isCancelling} cancelError={cancelError} />
+        <CurriculumPrimaryAction action={primaryAction} onEnroll={onEnroll} isEnrolling={isEnrolling} onCancel={onCancel} isCancelling={isCancelling} />
       </div>
     </section>
   )

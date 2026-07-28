@@ -17,6 +17,7 @@ import {
   saveReplayReview,
 } from '@/features/replay/replayService'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
+import { useToast } from '@/shared/ui/Toast'
 import PageState from '@/shared/ui/PageState'
 import { InlineNotice, StatusBadge } from '@/shared/ui/WorkspaceUi'
 
@@ -50,13 +51,23 @@ export default function ReplayLessonPage() {
   const [bookmarked, setBookmarked] = useState(false)
   const [aiQuestion, setAiQuestion] = useState('')
   const [aiAnswer, setAiAnswer] = useState('')
-  const [reviewSaved, setReviewSaved] = useState(false)
   const [published, setPublished] = useState(false)
+  const toast = useToast()
   // 라이브 강의실과 같은 재생 계약을 쓴다 — BE가 라이브·종료 후 VOD를 한 엔드포인트로 준다.
   const playback = usePlayback(lessonId)
   const aiMutation = useMutation({ mutationFn: (question: string) => askReplayAi(lessonId, question, positionMs), onSuccess: (data) => setAiAnswer(data.answer) })
-  const saveReviewMutation = useMutation({ mutationFn: () => saveReplayReview(lessonId, reviewDraft), onSuccess: () => setReviewSaved(true) })
-  const publishMutation = useMutation({ mutationFn: () => publishReplayReview(lessonId, reviewDraft), onSuccess: () => { setReviewSaved(true); setPublished(true) } })
+  // 검수 저장·게시는 방금 누른 행동의 결과다 — 화면에 남기지 않고 토스트로 알린다.
+  // (게시 여부 자체는 위 툴바 배지가 계속 보여 준다.)
+  const saveReviewMutation = useMutation({
+    mutationFn: () => saveReplayReview(lessonId, reviewDraft),
+    onSuccess: () => toast.success('검수 초안을 저장했습니다. 기존 게시본은 변경되지 않습니다.'),
+    onError: () => toast.error('검수 초안을 저장하지 못했습니다.'),
+  })
+  const publishMutation = useMutation({
+    mutationFn: () => publishReplayReview(lessonId, reviewDraft),
+    onSuccess: () => { setPublished(true); toast.success('교정 자막 게시본을 공개했습니다.') },
+    onError: () => toast.error('게시본을 공개하지 못했습니다.'),
+  })
   usePageTitle(`다시보기 · ${lesson?.title ?? ''}`)
 
   const askAi = (event: FormEvent) => {
@@ -101,7 +112,6 @@ export default function ReplayLessonPage() {
       </header>
 
       {isInstructor && <div className="review-toolbar"><div><StatusBadge tone={published ? 'success' : 'warning'}>{published ? '게시 완료' : '강사 미리보기'}</StatusBadge><strong>{published ? '새 게시본이 수강생 화면에 반영되었습니다.' : '현재는 라이브 학습 화면과 같은 탭 구성을 미리 봅니다.'}</strong></div><div><button className="button button--soft button--small" type="button" onClick={() => saveReviewMutation.mutate()}>검수 초안 저장</button><button className="button button--primary button--small" type="button" onClick={() => publishMutation.mutate()}>게시본 공개</button></div></div>}
-      {isInstructor && reviewSaved && <InlineNotice tone={published ? 'success' : 'info'}>{published ? '교정 자막 게시본 v3이 활성화되었습니다.' : '검수 초안을 저장했습니다. 기존 게시본은 변경되지 않습니다.'}</InlineNotice>}
 
       <div className="media-layout">
         <section className="media-primary">

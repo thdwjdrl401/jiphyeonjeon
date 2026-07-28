@@ -6,6 +6,7 @@ import { useAuth } from '@/features/auth/AuthContext'
 import { isLiveEntryOpen } from '@/features/live-session/liveEntry'
 import { getLiveSession, getLiveToken } from '@/features/live-session/liveSessionService'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
+import { useToast } from '@/shared/ui/Toast'
 import PageState from '@/shared/ui/PageState'
 import { InlineNotice, PageHeader, Panel, StatusBadge } from '@/shared/ui/WorkspaceUi'
 
@@ -40,10 +41,13 @@ function playTestTone() {
 export default function StudentPrejoinPage() {
   const { sessionId = '' } = useParams()
   const navigate = useNavigate()
+  const toast = useToast()
   const sessionQuery = useQuery({ queryKey: ['live-session', sessionId], queryFn: () => getLiveSession(sessionId), enabled: Boolean(sessionId) })
   const tokenMutation = useMutation({
     mutationFn: () => getLiveToken(sessionId),
     onSuccess: (connection) => navigate(studentPaths.classroom(sessionId), { state: { prejoinSessionId: sessionId, connection } }),
+    // 입장 실패는 일회성 알림 — 점검 항목 안내(위 InlineNotice)는 그대로 남겨 둔다.
+    onError: () => toast.error('라이브 입장에 실패했습니다. 잠시 후 다시 시도해 주세요.'),
   })
   const session = sessionQuery.data
   const { user, updateDisplayName } = useAuth()
@@ -116,7 +120,6 @@ export default function StudentPrejoinPage() {
     </Panel>
     <Panel title="닉네임과 미디어 권한"><dl className="identity-list"><div><dt>닉네임</dt><dd><input className="identity-nickname-input" value={nickname} maxLength={100} onChange={(event) => setNickname(event.target.value)} /></dd></div><div><dt>미디어 권한</dt><dd>수신 전용</dd></div></dl></Panel>
     {!ready && <InlineNotice tone="warning">모든 필수 점검과 고지를 확인해야 입장할 수 있습니다.</InlineNotice>}
-    {tokenMutation.isError && <InlineNotice tone="danger">라이브 입장 토큰 발급에 실패했습니다.</InlineNotice>}
     <div className="sticky-form-actions"><Link className="button button--ghost" to={studentPaths.lesson(session.curriculumId, session.sectionId, session.lessonId)}>강의 상세</Link>{ready ? <Link className="button button--primary button--large" to={studentPaths.classroom(sessionId)} onClick={(event) => { event.preventDefault(); tokenMutation.mutate() }}>라이브 입장</Link> : <button className="button button--primary button--large is-disabled" type="button" disabled>라이브 입장</button>}</div>
   </div>
 }
