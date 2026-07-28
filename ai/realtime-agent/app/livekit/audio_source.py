@@ -5,7 +5,7 @@ import logging
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Literal
 
 from livekit import rtc
 from livekit.agents import AutoSubscribe, JobContext
@@ -93,10 +93,13 @@ class LiveKitInstructorAudioSource:
         if self._connected:
             raise RuntimeError("audio source is already connected")
         self._connected = True
-        connect_options: dict[str, Any] = {"auto_subscribe": AutoSubscribe.SUBSCRIBE_NONE}
-        if self._rtc_config is not None:
-            connect_options["rtc_config"] = self._rtc_config
-        await self._context.connect(**connect_options)
+        if self._rtc_config is None:
+            await self._context.connect(auto_subscribe=AutoSubscribe.SUBSCRIBE_NONE)
+        else:
+            await self._context.connect(
+                auto_subscribe=AutoSubscribe.SUBSCRIBE_NONE,
+                rtc_config=self._rtc_config,
+            )
         for participant in self._room.remote_participants.values():
             for publication in participant.track_publications.values():
                 self._consider_publication(publication, participant)
@@ -144,7 +147,11 @@ class LiveKitInstructorAudioSource:
         self._retired_tasks.clear()
         self._complete_input()
 
-    def _consider_publication(self, publication: Any, participant: Any) -> bool:
+    def _consider_publication(
+        self,
+        publication: rtc.RemoteTrackPublication,
+        participant: rtc.RemoteParticipant,
+    ) -> bool:
         if not self._accepting_tracks:
             return False
         descriptor = TrackDescriptor(
@@ -168,11 +175,19 @@ class LiveKitInstructorAudioSource:
         self._selected_track_sid = publication.sid
         return apply_selective_subscription(publication, descriptor)
 
-    def _on_track_published(self, publication: Any, participant: Any) -> None:
+    def _on_track_published(
+        self,
+        publication: rtc.RemoteTrackPublication,
+        participant: rtc.RemoteParticipant,
+    ) -> None:
         if self._accepting_tracks:
             self._consider_publication(publication, participant)
 
-    def _on_track_unpublished(self, publication: Any, participant: Any) -> None:
+    def _on_track_unpublished(
+        self,
+        publication: rtc.RemoteTrackPublication,
+        participant: rtc.RemoteParticipant,
+    ) -> None:
         if publication.sid != self._selected_track_sid:
             return
         self._cancel_consumer(publication.sid)
@@ -182,7 +197,12 @@ class LiveKitInstructorAudioSource:
                 if self._consider_publication(candidate, participant):
                     break
 
-    def _on_track_subscribed(self, track: Any, publication: Any, participant: Any) -> None:
+    def _on_track_subscribed(
+        self,
+        track: rtc.Track,
+        publication: rtc.RemoteTrackPublication,
+        participant: rtc.RemoteParticipant,
+    ) -> None:
         if not self._accepting_tracks:
             return
         if publication.sid != self._selected_track_sid:
@@ -197,10 +217,20 @@ class LiveKitInstructorAudioSource:
             lambda completed, sid=publication.sid: self._on_consumer_done(sid, completed)
         )
 
-    def _on_track_unsubscribed(self, _track: Any, publication: Any, _participant: Any) -> None:
+    def _on_track_unsubscribed(
+        self,
+        _track: rtc.Track | None,
+        publication: rtc.RemoteTrackPublication,
+        _participant: rtc.RemoteParticipant,
+    ) -> None:
         self._cancel_consumer(publication.sid)
 
-    def _on_track_subscription_failed(self, participant: Any, track_sid: str, error: str) -> None:
+    def _on_track_subscription_failed(
+        self,
+        participant: rtc.RemoteParticipant,
+        track_sid: str,
+        error: str,
+    ) -> None:
         if (
             not self._accepting_tracks
             or participant.identity != self._publisher_identity
@@ -244,14 +274,19 @@ class LiveKitInstructorAudioSource:
         self._retired_tasks.add(task)
         task.cancel()
 
-    def _is_selected_track(self, track: Any, publication: Any, participant: Any) -> bool:
+    def _is_selected_track(
+        self,
+        track: rtc.Track,
+        publication: rtc.RemoteTrackPublication,
+        participant: rtc.RemoteParticipant,
+    ) -> bool:
         return (
             participant.identity == self._publisher_identity
             and track.kind == rtc.TrackKind.KIND_AUDIO
             and publication.source == rtc.TrackSource.SOURCE_MICROPHONE
         )
 
-    async def _consume_track(self, track: Any, track_sid: str) -> None:
+    async def _consume_track(self, track: rtc.Track, track_sid: str) -> None:
         stream = rtc.AudioStream(
             track,
             sample_rate=_SAMPLE_RATE,
