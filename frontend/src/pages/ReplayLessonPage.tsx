@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { lazy, Suspense, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { instructorPaths, studentPaths } from '@/app/router/paths'
@@ -7,6 +7,8 @@ import { getLesson } from '@/features/lesson/lessonService'
 import CaptionDock from '@/features/live-session/CaptionDock'
 import LearningSidebar from '@/features/live-session/LearningSidebar'
 import { getLiveLearningPreview, type LearningPanel } from '@/features/live-session/liveLearningPreview'
+import type { PlaybackSeekRequest } from '@/features/live-session/PlaybackPlayer'
+import { usePlayback } from '@/features/live-session/usePlayback'
 import {
   askReplayAi,
   getReplayCaptions,
@@ -18,20 +20,9 @@ import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
 import { InlineNotice, StatusBadge } from '@/shared/ui/WorkspaceUi'
 
-const replayDurationMs = 5_538_000
-const initialReplayPositionMs = 1_880_000
 const { summaryBlocks, glossaryTerms } = getLiveLearningPreview()
 const reviewDraft = 'SecurityContext는 인증이 완료된 현재 요청의 인증 주체를 보관합니다.'
-
-function formatSessionTime(sessionMs: number) {
-  const seconds = Math.floor(sessionMs / 1000)
-  const hours = Math.floor(seconds / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
-  const remainingSeconds = seconds % 60
-  return hours > 0
-    ? `${hours}:${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`
-    : `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`
-}
+const PlaybackPlayer = lazy(() => import('@/features/live-session/PlaybackPlayer'))
 
 export default function ReplayLessonPage() {
   const { lessonId = '' } = useParams()
@@ -54,13 +45,15 @@ export default function ReplayLessonPage() {
     : '#'
   const [panel, setPanel] = useState<LearningPanel>('discussion')
   const [selectedTermId, setSelectedTermId] = useState<string | null>(null)
-  const [positionMs, setPositionMs] = useState(initialReplayPositionMs)
-  const [playing, setPlaying] = useState(false)
+  const [positionMs, setPositionMs] = useState(0)
+  const [seekRequest, setSeekRequest] = useState<PlaybackSeekRequest | null>(null)
+  const [bookmarked, setBookmarked] = useState(false)
   const [aiQuestion, setAiQuestion] = useState('')
   const [aiAnswer, setAiAnswer] = useState('')
   const [reviewSaved, setReviewSaved] = useState(false)
   const [published, setPublished] = useState(false)
-  const progressPercent = Math.round((positionMs / replayDurationMs) * 100)
+  // 라이브 강의실과 같은 재생 계약을 쓴다 — BE가 라이브·종료 후 VOD를 한 엔드포인트로 준다.
+  const playback = usePlayback(lessonId)
   const aiMutation = useMutation({ mutationFn: (question: string) => askReplayAi(lessonId, question, positionMs), onSuccess: (data) => setAiAnswer(data.answer) })
   const saveReviewMutation = useMutation({ mutationFn: () => saveReplayReview(lessonId, reviewDraft), onSuccess: () => setReviewSaved(true) })
   const publishMutation = useMutation({ mutationFn: () => publishReplayReview(lessonId, reviewDraft), onSuccess: () => { setReviewSaved(true); setPublished(true) } })
@@ -74,6 +67,13 @@ export default function ReplayLessonPage() {
   const openGlossaryTerm = (termId: string) => {
     setSelectedTermId(termId)
     setPanel('glossary')
+  }
+
+  // 자막·목차에서 특정 시각을 누르면 플레이어를 그 지점으로 옮긴다. sequence는 같은 시각을
+  // 다시 눌러도 effect가 재실행되게 하는 용도다.
+  const seekSession = (sessionMs: number) => {
+    setPositionMs(sessionMs)
+    setSeekRequest((current) => ({ sessionMs, sequence: (current?.sequence ?? 0) + 1 }))
   }
 
   // 게시본 자막·채팅은 아직 서버 경로가 없다(CP3~CP5). 진입 게이트에 넣으면 레슨을
@@ -105,18 +105,25 @@ export default function ReplayLessonPage() {
 
       <div className="media-layout">
         <section className="media-primary">
-          <div className="video-stage replay-video" tabIndex={0}>
-            <button className="play-button" type="button" aria-label={playing ? '일시정지' : '재생'} onClick={() => setPlaying((current) => !current)}>{playing ? 'Ⅱ' : '▶'}</button>
-            <div className="slide-preview"><span>SPRING SECURITY</span><h2>SecurityContext와<br />세션의 경계</h2><div className="slide-code">Request → FilterChain → Context → Service</div></div>
-            <div className="video-controls-overlay" aria-label="다시보기 재생 컨트롤">
-              <div className="timeline-row"><span>00:00</span><input aria-label="다시보기 타임라인" min="0" max={replayDurationMs} type="range" value={positionMs} onChange={(event) => setPositionMs(Number(event.target.value))} /><span>{formatSessionTime(positionMs)} / 1:32:18</span></div>
-              <div className="control-row"><div><button type="button" onClick={() => setPlaying((current) => !current)}>{playing ? '일시정지' : '재생'}</button><button type="button">1.0×</button><button type="button">CC 켜짐</button><button type="button">☆ 북마크</button></div><span>{progressPercent}% 지점</span></div>
-            </div>
-          </div>
+          <Suspense fallback={<div className="video-stage replay-video" role="status">플레이어를 불러오는 중입니다.</div>}>
+            <PlaybackPlayer
+              bookmarked={bookmarked}
+              errorMessage={playback.errorMessage}
+              lessonTitle={lesson.title}
+              loading={playback.loading}
+              participantCount={0}
+              playback={playback.playback}
+              reloadToken={playback.reloadToken}
+              seekRequest={seekRequest}
+              onBookmark={() => setBookmarked((current) => !current)}
+              onRetry={playback.reload}
+              onSessionTimeChange={setPositionMs}
+            />
+          </Suspense>
 
-          <CaptionDock captions={captions} currentSessionMs={positionMs} label="교정 자막" onSeek={setPositionMs} onSelectTerm={openGlossaryTerm} />
+          <CaptionDock captions={captions} currentSessionMs={positionMs} label="교정 자막" onSeek={seekSession} onSelectTerm={openGlossaryTerm} />
 
-          <div className="chapter-row"><button type="button" onClick={() => setPositionMs(0)}><span>00:00</span>인증 흐름</button><button type="button" onClick={() => setPositionMs(1_880_000)}><span>31:20</span>세션 저장소</button><button type="button" onClick={() => setPositionMs(3_700_000)}><span>1:01:40</span>CSRF 실습</button></div>
+          <div className="chapter-row"><button type="button" onClick={() => seekSession(0)}><span>00:00</span>인증 흐름</button><button type="button" onClick={() => seekSession(1_880_000)}><span>31:20</span>세션 저장소</button><button type="button" onClick={() => seekSession(3_700_000)}><span>1:01:40</span>CSRF 실습</button></div>
         </section>
 
         <LearningSidebar

@@ -12,7 +12,6 @@ import InstructorPreflightPage from '@/pages/InstructorPreflightPage'
 import LessonDetailPage from '@/pages/LessonDetailPage'
 import LessonFormPage from '@/pages/LessonFormPage'
 import LessonLiveUpcomingPage from '@/pages/LessonLiveUpcomingPage'
-import LessonVodPage from '@/pages/LessonVodPage'
 import LiveClassroomPage from '@/pages/LiveClassroomPage'
 import LiveSessionProcessingPage from '@/pages/LiveSessionProcessingPage'
 import LoginPage from '@/pages/LoginPage'
@@ -53,7 +52,6 @@ export default function AppRouter() {
             <Route path="live-sessions/:sessionId/classroom" element={<LiveClassroomPage />} />
           </Route>
           <Route path="lessons/:lessonId/replay" element={<ReplayLessonPage />} />
-          <Route path="curriculums/:curriculumId/lessons/:lessonId/vod" element={<LessonVodPage />} />
         </Route>
       </Route>
       <Route path="instructor" element={<RequireRoleRoute role="INSTRUCTOR" />}>

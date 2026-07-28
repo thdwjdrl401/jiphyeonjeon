@@ -1,10 +1,10 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import StudentLivePlayer, {
+import PlaybackPlayer, {
   toMediaTimeSeconds,
   toSessionMs,
-} from '@/features/live-session/StudentLivePlayer'
+} from '@/features/live-session/PlaybackPlayer'
 import { isLiveStatus, type PlaybackView } from '@/features/live-session/liveSessionService'
 
 function playbackFixture(overrides: Partial<PlaybackView> = {}): PlaybackView {
@@ -19,7 +19,7 @@ function playbackFixture(overrides: Partial<PlaybackView> = {}): PlaybackView {
   }
 }
 
-describe('학생 라이브 DVR 플레이어', () => {
+describe('재생 플레이어', () => {
   it('미디어 시각과 세션 시각을 source 시작점 기준으로 양방향 변환한다', () => {
     // 기준은 source.availableFromMs — 미디어 시각 0이 가리키는 세션 시각이다.
     expect(toSessionMs(12.5, 1_250)).toBe(13_750)
@@ -39,7 +39,7 @@ describe('학생 라이브 DVR 플레이어', () => {
     const onRetry = vi.fn()
 
     render(
-      <StudentLivePlayer
+      <PlaybackPlayer
         bookmarked={false}
         errorMessage="영상이 아직 준비되지 않았습니다."
         lessonTitle="세션별 라이브"
@@ -62,7 +62,7 @@ describe('학생 라이브 DVR 플레이어', () => {
   it('source가 없으면 오류가 아니라 준비 중으로 안내한다', () => {
     // Egress 지연은 정상 상태다. 오류로 표시하면 사용자가 기다리지 않고 이탈한다.
     render(
-      <StudentLivePlayer
+      <PlaybackPlayer
         bookmarked={false}
         errorMessage={null}
         lessonTitle="세션별 라이브"
@@ -84,7 +84,7 @@ describe('학생 라이브 DVR 플레이어', () => {
 
   it('세션이 끝나면 LIVE 표시를 내린다', () => {
     render(
-      <StudentLivePlayer
+      <PlaybackPlayer
         bookmarked={false}
         errorMessage={null}
         lessonTitle="종료된 강의"
@@ -99,7 +99,7 @@ describe('학생 라이브 DVR 플레이어', () => {
       />,
     )
 
-    const header = screen.getByLabelText('학생 라이브 재생 정보')
+    const header = screen.getByLabelText('재생 정보')
     expect(header).toHaveTextContent('다시보기')
     expect(header).not.toHaveTextContent('LIVE')
   })
