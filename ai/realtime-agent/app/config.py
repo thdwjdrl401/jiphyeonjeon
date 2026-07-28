@@ -5,7 +5,7 @@ import os
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit
 
 _SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _SAFE_REDIS_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$")
@@ -44,6 +44,29 @@ def _parse_float(environ: Mapping[str, str], name: str, default: float) -> float
         return float(raw)
     except ValueError as exc:
         raise ValueError(f"{name} must be a number") from exc
+
+
+def _validate_turn_url(value: str) -> None:
+    if any(character.isspace() for character in value):
+        raise RuntimeError("LIVEKIT_TURN_URL must not contain whitespace")
+    scheme, separator, remainder = value.partition(":")
+    if separator != ":" or scheme not in {"turn", "turns"}:
+        raise RuntimeError("LIVEKIT_TURN_URL must use turn or turns")
+    authority = remainder.partition("?")[0]
+    parsed = urlsplit(f"//{authority}")
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise RuntimeError("LIVEKIT_TURN_URL must include a valid host and port") from exc
+    if (
+        not parsed.hostname
+        or port is None
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.path
+        or parsed.fragment
+    ):
+        raise RuntimeError("LIVEKIT_TURN_URL must include a valid host and port")
 
 
 @dataclass(frozen=True, slots=True)
@@ -146,11 +169,8 @@ class Settings:
         if livekit_url.scheme not in {"ws", "wss"} or not livekit_url.netloc:
             raise RuntimeError("LIVEKIT_URL must use ws or wss")
         if self.livekit_turn_url:
-            if not self.livekit_turn_url.startswith(("turn:", "turns:")):
-                raise RuntimeError("LIVEKIT_TURN_URL must use turn or turns")
-            if any(character.isspace() for character in self.livekit_turn_url):
-                raise RuntimeError("LIVEKIT_TURN_URL must not contain whitespace")
-            if not self.livekit_turn_secret:
+            _validate_turn_url(self.livekit_turn_url)
+            if not self.livekit_turn_secret.strip():
                 raise RuntimeError("LIVEKIT_TURN_SECRET is required when LIVEKIT_TURN_URL is set")
         redis_url = urlparse(self.redis_url)
         if redis_url.scheme not in {"redis", "rediss"} or not redis_url.netloc:

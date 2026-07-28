@@ -36,3 +36,8 @@ def test_builds_relay_only_coturn_rest_credentials() -> None:
 def test_turn_url_never_falls_back_to_livekit_api_secret() -> None:
     with pytest.raises(RuntimeError, match="LIVEKIT_TURN_SECRET"):
         build_turn_rtc_config("turn:127.0.0.1:3478?transport=tcp", "")
+
+
+def test_turn_credentials_reject_whitespace_only_secret() -> None:
+    with pytest.raises(RuntimeError, match="LIVEKIT_TURN_SECRET"):
+        build_turn_rtc_config("turn:127.0.0.1:3478", "   ")
