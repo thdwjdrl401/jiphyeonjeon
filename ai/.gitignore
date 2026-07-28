@@ -1,5 +1,6 @@
-# Python 가상환경
+# Python 가상환경 (이름 변형 포함: .venv_test, .venv-local 등 임시 검증용도 커버)
 .venv/
+.venv*/
 
 # 바이트코드 캐시
 __pycache__/
