@@ -81,7 +81,10 @@ livekit:
   token-ttl-seconds: ${LIVEKIT_TOKEN_TTL:600}         # 10분
   egress:                                             # HLS 녹화 출력(S3/MinIO). infra/livekit/request-hls.json 대응.
     bucket: ${EGRESS_BUCKET:recordings}
-    s3-endpoint: ${EGRESS_S3_ENDPOINT:http://localhost:9000}   # 내부 주소 — Egress 업로드·백엔드 매니페스트 읽기용
+    s3-endpoint: ${EGRESS_S3_ENDPOINT:http://localhost:9000}   # 내부 주소 — 백엔드가 매니페스트를 읽는 곳
+    # Egress가 세그먼트를 올릴 주소. Egress는 호스트 네트워크라 도커 서비스명을 해석하지 못하므로
+    # 운영에서는 공개 도메인을 쓴다. 비우면 위 내부 주소를 그대로 쓴다(단일 호스트 개발 환경).
+    upload-endpoint: ${EGRESS_UPLOAD_ENDPOINT:}
 
     s3-access-key: ${EGRESS_S3_ACCESS_KEY:minioadmin}          # 커밋 금지 값은 env로
     s3-secret: ${EGRESS_S3_SECRET:minioadmin}
