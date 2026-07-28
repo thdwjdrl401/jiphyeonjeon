@@ -94,9 +94,12 @@ livekit:
     s3-region: ${EGRESS_S3_REGION:us-east-1}
     force-path-style: ${EGRESS_FORCE_PATH_STYLE:true}          # MinIO는 path-style 필요
     # 세그먼트 길이는 라이브 지연을 직접 좌우한다. 플레이어가 라이브 엣지에서 N개 뒤부터 재생하므로
-    # (hls.js liveSyncDurationCount) 서버·클라이언트 양쪽 지연이 이 값에 비례한다. 2초일 때 실측 총
-    # 지연이 ~10초였고 1초로 낮춰 절반 이하가 됐다. 대신 재생목록 엔트리가 2배 — 델타 재생목록이 잡는다.
-    segment-duration-seconds: ${EGRESS_SEGMENT_DURATION:1}
+    # (hls.js liveSyncDurationCount) 서버·클라이언트 양쪽 지연이 이 값에 비례한다.
+    #
+    # 1초까지 낮춰 총 지연을 ~10초에서 절반 이하로 줄였으나 실사용에서 버퍼링이 잦아 2초로 되돌린다.
+    # 세그먼트가 짧으면 버퍼가 그만큼 얇아져(엣지 뒤 2개 = 2초) 네트워크가 조금만 흔들려도 바닥난다.
+    # 화면공유는 비트레이트가 크게 튀는 구간이 있어 특히 취약했다. 지연보다 끊김 없는 재생이 우선이다.
+    segment-duration-seconds: ${EGRESS_SEGMENT_DURATION:2}
     # 합성 해상도. 안 주면 Egress 기본 720p라 1080p 화면공유가 다운스케일된다.
     encoding-preset: ${EGRESS_ENCODING_PRESET:H264_1080P_30}
     playlist-name: index.m3u8

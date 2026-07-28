@@ -4,7 +4,9 @@ import {
   MediaDeviceFailure,
   Room,
   RoomEvent,
+  ScreenSharePresets,
   Track,
+  VideoPresets,
 } from 'livekit-client'
 import { isMockApiEnabled } from '@/shared/config/runtime'
 import { getLiveToken } from './liveSessionService'
@@ -94,7 +96,22 @@ export function useInstructorLiveKit(sessionId: string, enabled: boolean) {
 
     let cancelled = false
     let connectionFailed = false
-    const room = new Room({ dynacast: true })
+    const room = new Room({
+      dynacast: true,
+      // 화질 손실은 Egress가 아니라 여기서 난다. 기본값은 카메라 720p·1.7Mbps, 화면공유 1080p15·2.5Mbps인데
+      // Egress는 이걸 받아 1080p·4.5Mbps로 재인코딩한다 — 출력 비트레이트가 입력의 2배가 넘으니
+      // 손실은 전부 송출 단계에서 이미 발생한 뒤다. 실측으로 확인했다(HIGH 레이어 1,700,000 = h720 기본값).
+      videoCaptureDefaults: { resolution: VideoPresets.h1080.resolution },
+      publishDefaults: {
+        // 카메라 단독 강의에서 Egress 캔버스(1080p)에 업스케일 없이 채우려면 소스가 1080p여야 한다.
+        // 웹캠이 1080p를 못 내면 ideal 제약이라 720p로 협상되고, 대역폭이 부족하면 simulcast가
+        // 알아서 낮은 레이어로 떨어진다(degradationPreference는 카메라 maintain-framerate 기본값).
+        videoEncoding: VideoPresets.h1080.encoding,
+        // 화면공유는 코드·슬라이드 텍스트라 비트레이트가 판독성을 좌우한다. 기본 h1080fps15(2.5Mbps)는
+        // 스크롤 구간에서 글자가 뭉갠다. 30fps 프리셋은 같은 1080p에 5Mbps다.
+        screenShareEncoding: ScreenSharePresets.h1080fps30.encoding,
+      },
+    })
     roomRef.current = room
 
     const onReconnecting = () => {
