@@ -13,7 +13,7 @@ uv run --frozen python -m app.main
 ```
 
 consumer가 꺼진 scaffold 모드에서는 `/readyz`가 event loop 준비 상태를 뜻한다. consumer를 켜면 RabbitMQ
-연결과 PostgreSQL 연결이 모두 정상일 때만 ready다.
+연결, PostgreSQL 연결, tunnel을 통한 BGE `/readyz`가 모두 정상일 때만 ready다.
 
 ## RAG index migration
 
@@ -41,7 +41,7 @@ uv run --frozen alembic upgrade head
 관리 HTTP는 업무 API가 아니며 기본 `127.0.0.1:8011`에만 열린다.
 
 - `GET /healthz`: 프로세스 생존
-- `GET /readyz`: worker event loop 준비 상태
+- `GET /readyz`: consumer 비활성 시 event loop, 활성 시 RabbitMQ·PostgreSQL·BGE 준비 상태
 
 ## 폴더별 상세 문서
 
@@ -132,9 +132,24 @@ runtime builder를 활성화하려면 아래 설정이 추가로 필요하다. `
 | `AI_WORKER_SPRING_INTERNAL_BASE_URL` | `http://127.0.0.1:8080` |
 | `AI_WORKER_BGE_INTERNAL_TOKEN` | 필수, 32자 이상 |
 | `AI_WORKER_BGE_RUNTIME_URL` | `http://127.0.0.1:8020` |
+| `AI_WORKER_BGE_READINESS_TIMEOUT_SECONDS` | `2` |
 | `AI_WORKER_TENANT_ID` | `liveclass` |
 | `AI_WORKER_SOURCE_MAX_BYTES` | `52428800` |
 | `AI_WORKER_CHUNK_MAX_CHARS` | `1200` |
+
+## EC2 ai-worker ↔ GPU BGE 연결
+
+EC2 host process에서는 아래 두 값으로 reverse tunnel의 loopback endpoint를 사용한다.
+
+```bash
+AI_WORKER_BGE_RUNTIME_URL=http://127.0.0.1:18020
+AI_WORKER_BGE_INTERNAL_TOKEN=<GPU의-BGE_RUNTIME_INTERNAL_TOKEN과-같은-값>
+```
+
+GPU tunnel 실행·EC2 sshd 제한은
+[bge-runtime scripts README](../bge-runtime/scripts/README.md), 책임과 대안은
+[ADR-0029](../../docs/decisions/canola/0029-gpu-bge-ec2-ai-worker-connectivity.md)를 따른다. 이 설정은 EC2
+**host process** 기준이며 container에서는 host network나 tunnel sidecar 결정 없이 localhost를 재사용하지 않는다.
 
 외부 adapter 결정은 [ADR-0018](../../docs/decisions/canola/0018-spring-presigned-pptx-runtime-adapters.md), consumer
 수명주기 결정은 [ADR-0019](../../docs/decisions/canola/0019-material-rabbitmq-consumer-lifecycle.md)에 기록했다.

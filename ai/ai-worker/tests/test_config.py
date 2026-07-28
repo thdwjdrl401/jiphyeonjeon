@@ -70,6 +70,7 @@ def test_pptx_runtime_defaults_match_spring_and_bge_contracts() -> None:
     assert settings.tenant_id == "liveclass"
     assert settings.spring_internal_base_url == "http://127.0.0.1:8080"
     assert settings.bge_runtime_url == "http://127.0.0.1:8020"
+    assert settings.bge_readiness_timeout_seconds == 2.0
     assert settings.embedding_model == "BAAI/bge-m3"
     assert settings.embedding_revision == "5617a9f61b028005a4858fdac845db406aefb181"
     assert settings.embedding_max_batch_size == 4
@@ -98,6 +99,7 @@ def test_accepts_shared_spring_secret_from_documented_environment(monkeypatch) -
         ("spring_internal_base_url", "http://user:pass@spring.internal"),
         ("spring_internal_base_url", "http://spring.internal/api"),
         ("bge_runtime_url", "http://bge-runtime:invalid"),
+        ("bge_readiness_timeout_seconds", 0),
         ("embedding_revision", "main"),
         ("embedding_max_batch_size", 8),
         ("spring_hmac_secret", " padded"),

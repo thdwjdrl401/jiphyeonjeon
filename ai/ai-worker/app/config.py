@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     bge_runtime_url: str = "http://127.0.0.1:8020"
     bge_internal_token: SecretStr | None = Field(default=None, min_length=32)
     bge_request_timeout_seconds: float = Field(default=10.0, gt=0, le=120)
+    bge_readiness_timeout_seconds: float = Field(default=2.0, gt=0, le=30)
     embedding_model: Literal["BAAI/bge-m3"] = "BAAI/bge-m3"
     embedding_revision: str = Field(
         default="5617a9f61b028005a4858fdac845db406aefb181",

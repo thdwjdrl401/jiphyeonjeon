@@ -315,7 +315,7 @@ callback은 `POST /api/internal/ai/callbacks`에 9.2의 HMAC으로 보낸다.
   원본을 `nack(requeue=true)`해 유실을 막는다.
 - retry 소진 시 DB가 이미 SUCCEEDED면 FAILED callback을 보내지 않는다. 이는 READY callback만 실패한 성공 작업의
   상태를 FAILED로 덮지 않기 위한 규칙이다.
-- consumer 등록과 RabbitMQ·PostgreSQL 연결이 모두 정상일 때만 management readiness를 true로 둔다.
+- consumer 등록과 RabbitMQ·PostgreSQL 연결, BGE `/readyz`가 모두 정상일 때만 management readiness를 true로 둔다.
 - 종료 요청은 새 delivery를 취소하고 진행 중인 작업 하나를 기본 30초 drain한다. 제한을 넘기면 task를 취소하고
   ACK하지 않은 원본은 broker 재전달 대상으로 남긴다.
 
