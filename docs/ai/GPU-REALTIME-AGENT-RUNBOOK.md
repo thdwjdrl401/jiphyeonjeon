@@ -114,3 +114,18 @@ uv run --frozen ruff format --check app tests scripts
 - Redis auth 오류: LiveKit Redis가 아닌 application Redis인지, `default` 사용자 URL 형식인지 확인한다.
 - 약 157초 후 disconnect: LiveKit disconnect reason, ICE/TURN 연결, tunnel keepalive와 queue backlog를 함께
   기록하고 30분 gate를 재실행한다.
+
+## 2026-07-28 migration 검증 기록
+
+- H200 NVL 2장 환경에서 `torch 2.11.0+cu128`, CUDA runtime 12.8, CUDA available을 확인했다.
+- 저장소 밖 로컬 Nemotron 모델을 offline으로 `cuda:0`에 로드했다.
+- frozen 환경의 realtime-agent 테스트 253개와 Ruff check/format이 통과했다.
+- SSH tunnel의 LiveKit 7443, application Redis 4000, TURN/TCP 3478 listener를 확인했다.
+- application Redis의 내장 `default` 사용자 password 인증 PING이 성공했다.
+- RoomService read-only probe로 기존 room과 unmuted microphone publication을 확인했다.
+- relay-only custom ICE로 기존 room에 연결해 TURN/TCP peer connection을 확인했다.
+- worker가 named agent로 등록되고 정상 drain/shutdown됐다.
+- 현재 존재하는 room은 `stt-test`뿐이어서 strict `session-{UUID}` binding을 만족하지 않는다. 따라서
+  dispatch, caption delta/completion, lease release Gate D는 계약에 맞는 기존 test room이 준비될 때까지
+  blocker다. 도구가 room을 임의 생성하거나 계약 검증을 완화하지 않는다.
+- Spring named dispatch/consumer Gate E와 30분 안정성 Gate F도 미완료다.
