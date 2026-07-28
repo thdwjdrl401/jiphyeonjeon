@@ -208,6 +208,23 @@ public class InstructorCurriculumService {
         return curriculum;
     }
 
+    /**
+     * 삭제: DRAFT만. 한 번이라도 공개된 커리큘럼(PUBLISHED·ARCHIVED)은 수강 이력이 붙을 수 있어
+     * 되돌릴 수 없는 삭제를 막고 보관(archive)으로 유도한다 — 409로 거절한다.
+     *
+     * <p>섹션·레슨·자료·라이브 세션은 DDL의 ON DELETE CASCADE가 함께 지운다(V1__init_core.sql).
+     * 카운터 트리거는 이미 사라진 부모 행을 UPDATE하려다 0건으로 무시되므로 별도 처리가 필요 없다.
+     */
+    @Transactional
+    public void delete(UUID instructorId, UUID curriculumId) {
+        Curriculum curriculum = requireOwned(instructorId, curriculumId);
+        if (curriculum.getLifecycleStatus() != CurriculumLifecycleStatus.DRAFT) {
+            throw new CurriculumStateConflictException("초안(DRAFT) 커리큘럼만 삭제할 수 있습니다.");
+        }
+        curriculumRepository.delete(curriculum);
+        log.info(Audit.MARKER, "커리큘럼 삭제 curriculumId={} instructorId={}", curriculumId, instructorId);
+    }
+
     /** null 인자는 "변경 안 함"으로 다룬다 — PATCH 부분 수정. 기간 검증 규칙은 미확정(골격). */
     @Transactional
     public Curriculum updateBasicInfo(UUID instructorId, UUID curriculumId,

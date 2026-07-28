@@ -109,6 +109,15 @@ public class InstructorCurriculumController {
         return toResponse(service.publish(currentUserId(authentication), curriculumId));
     }
 
+    @Operation(summary = "커리큘럼 삭제",
+            description = "초안(DRAFT) 커리큘럼을 삭제한다. 섹션·레슨도 함께 사라진다. "
+                    + "한 번이라도 공개된 커리큘럼(PUBLISHED·ARCHIVED)은 삭제할 수 없고 보관으로 내려야 한다(409).")
+    @DeleteMapping("/api/instructor/curriculums/{curriculumId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable UUID curriculumId, Authentication authentication) {
+        service.delete(currentUserId(authentication), curriculumId);
+    }
+
     @Operation(summary = "커리큘럼 보관", description = "공개된 커리큘럼을 내린다. 카탈로그에서 사라진다. 현재 공개 상태일 때만 보관할 수 있다.")
     @PostMapping("/api/instructor/curriculums/{curriculumId}/archive")
     public CurriculumResponse archive(@PathVariable UUID curriculumId, Authentication authentication) {
