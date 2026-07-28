@@ -1,9 +1,11 @@
 import { peekMockUser } from '@/features/auth/mockAuthService'
 import {
   buildMockCurriculumOutline,
+  deleteMockCurriculum,
   deleteMockLesson,
   deleteMockSection,
   getMockCurriculum,
+  publishMockCurriculum,
   putMockCurriculum,
   updateMockCurriculumMaterials,
 } from '@/features/demo/mockDatabase'
@@ -105,10 +107,12 @@ export const mockCurriculumManagementService = {
     return { structureVersion: request.structureVersion + 1, sectionIdMap }
   },
   async publishCurriculum(curriculumId) {
-    const curriculum = getMockCurriculum(curriculumId)
-    if (!curriculum) throw new ApiError('커리큘럼을 찾을 수 없습니다.', 404, 'CURRICULUM_NOT_FOUND')
-    curriculum.lifecycleStatus = 'PUBLISHED'
-    curriculum.catalogVisible = true
+    // 강의 상태는 그대로 둔다 — 실 서버와 같이 두 축은 독립이다(ADR-0002).
+    publishMockCurriculum(curriculumId)
+  },
+  async deleteCurriculum(curriculumId) {
+    deleteMockCurriculum(curriculumId)
+    savedStructures.delete(curriculumId)
   },
   async deleteLesson(lessonId) {
     deleteMockLesson(lessonId)

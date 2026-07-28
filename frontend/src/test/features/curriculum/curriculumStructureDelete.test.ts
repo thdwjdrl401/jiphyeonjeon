@@ -3,11 +3,19 @@ import { apiClient } from '@/shared/api/client'
 
 vi.mock('@/shared/config/runtime', () => ({ isMockApiEnabled: false, isTestMode: false }))
 
-import { deleteLesson, deleteSection } from '@/features/curriculum/curriculumManagementService'
+import { deleteCurriculum, deleteLesson, deleteSection } from '@/features/curriculum/curriculumManagementService'
 
 describe('커리큘럼 구조 삭제 HTTP 서비스 계약', () => {
   afterEach(() => {
     vi.restoreAllMocks()
+  })
+
+  it('커리큘럼 삭제는 강사 커리큘럼 DELETE API를 호출한다', async () => {
+    const deleteSpy = vi.spyOn(apiClient, 'delete').mockResolvedValue({ data: undefined } as never)
+
+    await deleteCurriculum('cur-1')
+
+    expect(deleteSpy).toHaveBeenCalledWith('/instructor/curriculums/cur-1')
   })
 
   it('강의 삭제는 lesson DELETE API를 호출한다', async () => {

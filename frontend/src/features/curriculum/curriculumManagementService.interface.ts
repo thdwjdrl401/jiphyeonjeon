@@ -64,6 +64,8 @@ export interface CurriculumManagementService {
   getCurriculumManagementStructure: (curriculumId: string) => Promise<CurriculumManagementSection[]>
   saveCurriculumManagement: (request: SaveCurriculumManagementRequest) => Promise<SaveCurriculumManagementResult>
   publishCurriculum: (curriculumId: string) => Promise<void>
+  /** 초안(DRAFT)만 삭제할 수 있다. 공개·보관 상태면 서버가 409 CURRICULUM_STATE_CONFLICT로 거절한다. */
+  deleteCurriculum: (curriculumId: string) => Promise<void>
   deleteLesson: (lessonId: string) => Promise<void>
   deleteSection: (sectionId: string) => Promise<void>
 }

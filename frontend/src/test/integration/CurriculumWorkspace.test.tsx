@@ -1,8 +1,9 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '@/App'
 import { mockAuthService, resetMockAuth } from '@/features/auth/mockAuthService'
+import { buildMockCurriculumOutline, getMockCurriculum, publishMockCurriculum } from '@/features/demo/mockDatabase'
 
 async function renderAsInstructor(path: string) {
   await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
@@ -20,6 +21,66 @@ describe('커리큘럼 작업 화면', () => {
   beforeEach(() => {
     resetMockAuth()
     window.history.replaceState({}, '', '/')
+  })
+
+  // window.confirm 스텁이 다음 테스트로 새지 않게 한다(clearMocks는 호출기록만 지운다).
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  // 공개 = 커리큘럼 PUBLISHED AND 강의 PUBLISHED(ADR-0002). 주 버튼 한 번으로 그 상태에 도달해야 한다.
+  it('초안 강의가 있으면 주 버튼 한 번으로 강의와 커리큘럼을 함께 게시한다', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    // cur-architecture는 DRAFT 커리큘럼이라 시드 강의 7개가 모두 DRAFT다.
+    await renderAsInstructor('/instructor/curriculums/cur-architecture/manage')
+    await user.click(await screen.findByRole('button', { name: '기본 정보' }))
+
+    expect(await screen.findByText(/게시하면 초안 강의/)).toBeInTheDocument()
+    expect(screen.getByText('커리큘럼 비공개 · 게시된 강의 0/7개 — 게시해야 수강생에게 보입니다.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '강의 7개와 함께 게시' }))
+
+    // 한 번의 클릭으로 두 축이 모두 PUBLISHED가 된다 — 남은 단계가 없어야 한다.
+    expect(await screen.findByText('커리큘럼 공개 중 · 수강생에게 보이는 강의 7/7개.')).toBeInTheDocument()
+    expect(screen.getByText('공개 중')).toBeInTheDocument()
+    expect(screen.queryByText(/게시하면 초안 강의/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '게시 완료' })).toBeDisabled()
+  })
+
+  // 게시된 강의가 하나도 없으면 커리큘럼만 공개해 봐야 목차가 빈 커리큘럼이 노출된다 — 우회로를 막는다.
+  it('게시된 강의가 없으면 커리큘럼만 게시하는 우회로를 열지 않는다', async () => {
+    const user = userEvent.setup()
+    await renderAsInstructor('/instructor/curriculums/cur-architecture/manage')
+    await user.click(await screen.findByRole('button', { name: '기본 정보' }))
+
+    expect(await screen.findByRole('button', { name: '강의 7개와 함께 게시' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '커리큘럼만 게시' })).not.toBeInTheDocument()
+  })
+
+  // mock이 실 서버와 같은 두 축 모델을 지켜야 한다 — 커리큘럼 게시가 강의를 딸려 올리면 안 된다.
+  it('커리큘럼 게시는 강의 상태를 바꾸지 않는다', async () => {
+    await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
+    const before = buildMockCurriculumOutline(getMockCurriculum('cur-architecture')!)
+    expect(before.flatMap((section) => section.lessons).every((lesson) => lesson.status === 'DRAFT')).toBe(true)
+
+    publishMockCurriculum('cur-architecture')
+
+    const after = buildMockCurriculumOutline(getMockCurriculum('cur-architecture')!)
+    expect(getMockCurriculum('cur-architecture')?.lifecycleStatus).toBe('PUBLISHED')
+    expect(after.flatMap((section) => section.lessons).every((lesson) => lesson.status === 'DRAFT')).toBe(true)
+  })
+
+  it('이미 전부 공개된 커리큘럼은 게시 동작을 비활성한다', async () => {
+    const user = userEvent.setup()
+    // cur-spring-live는 PUBLISHED 커리큘럼이고 시드 강의도 모두 PUBLISHED다.
+    await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
+    await user.click(await screen.findByRole('button', { name: '기본 정보' }))
+
+    expect(await screen.findByRole('button', { name: '게시 완료' })).toBeDisabled()
+    expect(screen.getByText('공개 중')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '커리큘럼만 게시' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/아직 공개 목차에 보이지 않습니다/)).not.toBeInTheDocument()
   })
 
   it('새 커리큘럼의 수강 방식을 강사 승인 방식으로 고정한다', async () => {
