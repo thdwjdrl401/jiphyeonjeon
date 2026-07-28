@@ -4,7 +4,6 @@ interface EnrollmentActionsProps {
   detail: CurriculumDetailResponse
   onEnroll: () => void
   isEnrolling: boolean
-  error: string | null
 }
 
 const policyLabel: Record<string, string> = {
@@ -13,7 +12,7 @@ const policyLabel: Record<string, string> = {
   INVITATION_ONLY: '초대받은 사용자만 신청할 수 있어요.',
 }
 
-export default function EnrollmentActions({ detail, onEnroll, isEnrolling, error }: EnrollmentActionsProps) {
+export default function EnrollmentActions({ detail, onEnroll, isEnrolling }: EnrollmentActionsProps) {
   const canEnroll = detail.viewerContext.allowedActions.includes('ENROLL')
 
   return (
@@ -27,7 +26,7 @@ export default function EnrollmentActions({ detail, onEnroll, isEnrolling, error
       ) : (
         <p>지금은 수강 신청을 받고 있지 않아요.</p>
       )}
-      {error && <p className="form-error" role="alert">{error}</p>}
+      {/* 신청 실패 알림은 useEnrollMutation이 토스트로 낸다 — 여기서 중복 표시하지 않는다. */}
     </div>
   )
 }

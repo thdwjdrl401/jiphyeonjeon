@@ -7,6 +7,7 @@ import { createCurriculum, uploadCurriculumThumbnail } from '@/features/curricul
 import type { CurriculumMaterial } from '@/features/curriculum/types'
 import { ApiError } from '@/shared/api/client'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
+import { useToast } from '@/shared/ui/Toast'
 import { InlineNotice, PageHeader, Panel } from '@/shared/ui/WorkspaceUi'
 
 export default function CurriculumFormPage() {
@@ -15,7 +16,10 @@ export default function CurriculumFormPage() {
   const [form, setForm] = useState({ title: '', summary: '', description: '', startsAt: '', endsAt: '' })
   const [thumbnail, setThumbnail] = useState<CurriculumImageSelection | null>(null)
   const [materials, setMaterials] = useState<CurriculumMaterial[]>([])
+  // error는 폼 검증 전용이다(입력을 고치는 동안 남아 있어야 한다).
+  // 요청 실패처럼 한 번 읽고 지나가는 알림은 토스트로 낸다.
   const [error, setError] = useState('')
+  const toast = useToast()
   const [submitting, setSubmitting] = useState(false)
 
   const update = (field: keyof typeof form, value: string) => setForm((current) => ({ ...current, [field]: value }))
@@ -41,7 +45,7 @@ export default function CurriculumFormPage() {
       // 강사 엔드포인트로 읽는 관리 화면으로 보낸다(ADR-0041). created 플래그로 "저장됨" 상태로 시작.
       navigate(instructorPaths.curriculumManage(curriculumId), { state: { created: true } })
     } catch (requestError) {
-      setError(requestError instanceof ApiError ? requestError.message : '커리큘럼을 만들지 못했습니다.')
+      toast.error(requestError instanceof ApiError ? requestError.message : '커리큘럼을 만들지 못했습니다.')
     } finally {
       setSubmitting(false)
     }

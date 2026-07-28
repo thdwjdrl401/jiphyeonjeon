@@ -54,7 +54,6 @@ export default function LessonFormPage() {
   const [duration, setDuration] = useState('90')
   const [entryWindow, setEntryWindow] = useState('10')
   const [saveAsDraft, setSaveAsDraft] = useState(existingLiveSession?.status === 'DRAFT')
-  const [saveError, setSaveError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   usePageTitle(isEdit ? '강의 수정' : '강의 만들기')
 
@@ -78,7 +77,7 @@ export default function LessonFormPage() {
       try {
         await deleteLessonMaterial(lessonId, material.id)
       } catch {
-        setSaveError('자료 삭제에 실패했습니다.')
+        toast.error('자료 삭제에 실패했습니다.')
         return
       }
     }
@@ -89,7 +88,6 @@ export default function LessonFormPage() {
     event.preventDefault()
     if (submitting) return   // 연타 방지 — 진행 중이면 무시(중복 생성 차단)
     if (!title.trim() || (canEditLiveSchedule && hasLiveSchedule && !scheduledAt)) return
-    setSaveError('')
     setSubmitting(true)
     try {
       await saveLesson({
@@ -112,7 +110,7 @@ export default function LessonFormPage() {
         navigate(instructorPaths.curriculumManage(curriculumId), { replace: true })
       }
     } catch {
-      setSaveError('강의 저장에 실패했습니다. 입력값과 서버 상태를 확인해 주세요.')
+      toast.error('강의 저장에 실패했습니다. 입력값과 서버 상태를 확인해 주세요.')
     } finally {
       setSubmitting(false)
     }
@@ -139,7 +137,6 @@ export default function LessonFormPage() {
         action={<Link className="button button--soft" to={publicPaths.curriculum(curriculumId)}>커리큘럼 상세로 돌아가기</Link>}
       />
       <form className="workspace-form" onSubmit={save}>
-        {saveError && <InlineNotice tone="danger">{saveError}</InlineNotice>}
 
         <Panel title="강의 기본 정보" description="강의 제목과 수강생에게 표시할 설명을 입력합니다.">
           <div className="form-grid">

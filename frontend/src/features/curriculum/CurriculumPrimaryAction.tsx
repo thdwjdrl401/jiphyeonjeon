@@ -7,10 +7,9 @@ interface CurriculumPrimaryActionProps {
   isEnrolling: boolean
   onCancel: () => void
   isCancelling: boolean
-  cancelError: string | null
 }
 
-export default function CurriculumPrimaryAction({ action, onEnroll, isEnrolling, onCancel, isCancelling, cancelError }: CurriculumPrimaryActionProps) {
+export default function CurriculumPrimaryAction({ action, onEnroll, isEnrolling, onCancel, isCancelling }: CurriculumPrimaryActionProps) {
   if (!action) return null
 
   if (action.kind === 'link') {
@@ -41,7 +40,7 @@ export default function CurriculumPrimaryAction({ action, onEnroll, isEnrolling,
         <button className="button button--ghost" type="button" onClick={onCancel} disabled={isCancelling}>
           {isCancelling ? '취소 중' : action.cancelLabel}
         </button>
-        {cancelError && <p className="form-error" role="alert">{cancelError}</p>}
+        {/* 취소 실패 알림은 useCancelEnrollmentMutation이 토스트로 낸다. */}
       </div>
     )
   }

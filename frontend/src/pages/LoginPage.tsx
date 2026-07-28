@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { publicPaths } from '@/app/router/paths'
 import AuthShell from '@/features/auth/AuthShell'
@@ -6,6 +6,7 @@ import { useAuth } from '@/features/auth/AuthContext'
 import { ApiError } from '@/shared/api/client'
 import { isMockApiEnabled } from '@/shared/config/runtime'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
+import { useToast } from '@/shared/ui/Toast'
 
 interface LoginLocationState {
   signupSuccess?: boolean
@@ -26,6 +27,18 @@ export default function LoginPage() {
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({})
   const [submitError, setSubmitError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const toast = useToast()
+
+  // 가입 완료 알림은 폼 위 배너가 아니라 토스트로 띄운다 — 한 번 읽고 사라지면 되는 알림이라
+  // 로그인 폼 옆에 계속 남아 있을 이유가 없다. 띄운 뒤 history state를 지워
+  // 새로고침·뒤로가기로 같은 알림이 되살아나지 않게 한다.
+  const signupNoticeShown = useRef(false)
+  useEffect(() => {
+    if (!locationState?.signupSuccess || signupNoticeShown.current) return
+    signupNoticeShown.current = true
+    toast.success(`${locationState.displayName ? `${locationState.displayName}님, ` : ''}가입이 완료됐어요. 이제 로그인해 주세요.`)
+    navigate(location.pathname, { replace: true, state: null })
+  }, [locationState, toast, navigate, location.pathname])
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
@@ -61,12 +74,6 @@ export default function LoginPage() {
       description="로그인하고 멈췄던 배움을 이어가세요."
       footer={<p>아직 계정이 없나요? <Link to={publicPaths.signup}>무료로 시작하기</Link></p>}
     >
-      {locationState?.signupSuccess && (
-        <div className="form-notice form-notice--success" role="status">
-          <span aria-hidden="true">✓</span>
-          {locationState.displayName ? `${locationState.displayName}님, ` : ''}가입이 완료됐어요. 이제 로그인해 주세요.
-        </div>
-      )}
       {isMockApiEnabled && (
         <div className="demo-notice">
           <strong>개발용 미리보기</strong>

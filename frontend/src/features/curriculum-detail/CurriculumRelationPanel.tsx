@@ -11,7 +11,6 @@ interface CurriculumRelationPanelProps {
   returnTo: string
   onEnroll: () => void
   isEnrolling: boolean
-  enrollError: string | null
 }
 
 export default function CurriculumRelationPanel({
@@ -19,7 +18,6 @@ export default function CurriculumRelationPanel({
   returnTo,
   onEnroll,
   isEnrolling,
-  enrollError,
 }: CurriculumRelationPanelProps) {
   switch (detail.viewerContext.relationship) {
     case 'OWNER_INSTRUCTOR':
@@ -28,7 +26,7 @@ export default function CurriculumRelationPanel({
       return <EnrolleeActions detail={detail} />
     case 'UNENROLLED_STUDENT':
       return (
-        <EnrollmentActions detail={detail} onEnroll={onEnroll} isEnrolling={isEnrolling} error={enrollError} />
+        <EnrollmentActions detail={detail} onEnroll={onEnroll} isEnrolling={isEnrolling} />
       )
     case 'PENDING_ENROLLMENT':
       return <EnrollmentPendingNotice detail={detail} />
