@@ -8,9 +8,21 @@
 }
 
 .curriculum-hero {
+  position: relative;
+  overflow: hidden;
   background: var(--ink-50);
   border-radius: var(--radius-xl);
   padding: 32px;
+}
+
+.curriculum-hero::before {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 4px;
+  background: var(--dancheong-band);
+  content: '';
 }
 
 .curriculum-hero__grid {
@@ -143,8 +155,8 @@
   flex: 0 0 auto;
   place-items: center;
   border-radius: 10px;
-  background: #fff0e8;
-  color: #c44f17;
+  background: #f7e6c8;
+  color: var(--orange-500);
   font-size: .58rem;
   font-weight: 800;
 }

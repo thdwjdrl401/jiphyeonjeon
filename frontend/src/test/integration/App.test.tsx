@@ -21,7 +21,7 @@ describe('LiveClass AI 공개 페이지', () => {
     renderAt('/')
 
     expect(
-      screen.getByRole('heading', { name: /라이브의 순간을 놓치지 않고/ }),
+      screen.getByRole('heading', { name: /수업은 지나가도, 배움은 남도록/ }),
     ).toBeInTheDocument()
     expect(screen.getByText('몰입하는 라이브 수업')).toBeInTheDocument()
     expect(

@@ -48,8 +48,8 @@ export default function WelcomePage() {
         <div className="page-container welcome-hero__grid">
           <div className="hero-copy">
             <span className="hero-kicker"><i /> Live learning, reimagined with AI</span>
-            <h1>라이브의 순간을 놓치지 않고,<br /><em>나의 배움으로.</em></h1>
-            <p>실시간 수업부터 자막, 근거 기반 AI 설명, 다시보기까지.<br />이해가 이어지는 하나의 학습 경험을 만나보세요.</p>
+            <h1>수업은 지나가도,<br /><em>배움은 남도록.</em></h1>
+            <p>라이브 수업의 자막과 질문, AI 설명, 다시보기를<br />하나의 학습 기록으로 이어갑니다.</p>
             <div className="hero-actions">
               {user ? (
                 <Link className="button button--primary button--large" to={publicPaths.curriculums}>
@@ -78,34 +78,49 @@ export default function WelcomePage() {
             <div className="classroom-preview">
               <div className="classroom-preview__topbar">
                 <span className="window-dots"><i /><i /><i /></span>
-                <span className="preview-live"><i /> LIVE · 32:18</span>
-                <span className="preview-viewers">128명</span>
+                <span className="preview-live"><i /> LIVE</span>
+                <span className="preview-viewers">Spring Security 시작하기</span>
               </div>
-              <div className="classroom-preview__screen">
-                <div className="instructor-tile">
-                  <span className="instructor-avatar">이</span>
-                  <span>이도현 강사</span>
+              <div className="classroom-preview__body">
+                <div className="classroom-preview__screen">
+                  <div className="welcome-slide">
+                    <span className="welcome-slide__eyebrow">오늘의 주제</span>
+                    <h2>Spring Security<br />요청 흐름</h2>
+                    <div className="welcome-slide__flow" aria-label="클라이언트에서 서비스까지의 요청 흐름">
+                      <span>Client</span><i>→</i><span>Filter</span><i>→</i><span>Service</span>
+                    </div>
+                    <p>요청은 보안 필터를 지나 서비스 계층으로 전달됩니다.</p>
+                  </div>
+                  <div className="instructor-tile">
+                    <span className="instructor-avatar">이</span>
+                    <span>이도현 강사</span>
+                  </div>
+                  <div className="live-caption">
+                    <small><i /> 실시간 자막</small>
+                    <p>이 요청은 서비스 계층에서 하나의 트랜잭션으로 처리됩니다.</p>
+                  </div>
                 </div>
-                <div className="code-panel" aria-hidden="true">
-                  <span className="code-line code-line--a" />
-                  <span className="code-line code-line--b" />
-                  <span className="code-line code-line--c" />
-                  <span className="code-line code-line--d" />
-                </div>
-                <div className="live-caption">
-                  <small>실시간 자막</small>
-                  <p>이 요청은 서비스 계층에서 하나의 트랜잭션으로 처리됩니다.</p>
-                </div>
+                <aside className="classroom-preview__side" aria-label="라이브 채팅과 AI 질문 예시">
+                  <header><strong>채팅·질문</strong><span>LIVE</span></header>
+                  <article className="preview-message preview-message--question">
+                    <small>수강생-14A2</small>
+                    <p>세션과 JWT를 함께 쓰는 경우도 있나요?</p>
+                    <em>질문</em>
+                  </article>
+                  <article className="preview-message">
+                    <small>이도현 강사</small>
+                    <p>좋은 질문이에요. 다음 예제에서 바로 비교해 볼게요.</p>
+                  </article>
+                  <div className="preview-ai-prompt">
+                    <span>AI</span>
+                    <div><strong>이 구간이 궁금한가요?</strong><p>강의 자료와 현재 자막을 함께 확인해요.</p></div>
+                  </div>
+                </aside>
               </div>
               <div className="classroom-preview__toolbar">
-                <span>◉</span><span>⌁</span><span>CC</span><span>•••</span>
+                <span>마이크</span><span>카메라</span><span className="is-active">CC 자막</span><span className="is-ai">AI 질문</span>
               </div>
             </div>
-            <div className="ai-note-card">
-              <span className="ai-note-icon">AI</span>
-              <div><small>근거를 찾았어요</small><strong>트랜잭션 경계 · 12번 슬라이드</strong></div>
-            </div>
-            <div className="caption-chip"><i /> 자막 정확도 98.7%</div>
           </div>
         </div>
       </section>

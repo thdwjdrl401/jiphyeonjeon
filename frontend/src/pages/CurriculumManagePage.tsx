@@ -486,7 +486,6 @@ function CurriculumManageEditor({
   return (
     <div className="workspace-page">
       <PageHeader
-        eyebrow="CURRICULUM STUDIO"
         title={curriculumInfo.title || '새 커리큘럼 초안'}
         description="기본 정보, 수강생, 섹션과 강의 편성을 관리합니다."
         action={<div className="header-action-group"><Link className="button button--soft" to={publicPaths.curriculum(curriculumId)}>커리큘럼 상세</Link><span className="autosave-status" role="status" aria-live="polite">{autosave === 'saving' ? '자동 저장 중…' : autosave === 'saved' ? '자동 저장됨' : autosave === 'error' ? '저장 실패' : '변경 사항이 자동 저장됩니다'}</span></div>}

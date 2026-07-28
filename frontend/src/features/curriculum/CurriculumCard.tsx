@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { publicPaths } from '@/app/router/paths'
+import CurriculumCoverFallback from './CurriculumCoverFallback'
 import type { CurriculumCardSummary } from './types'
 
 interface CurriculumCardProps {
@@ -11,10 +12,6 @@ const dateFormatter = new Intl.DateTimeFormat('ko-KR', {
   month: 'short',
   day: 'numeric',
 })
-
-function getCoverVariant(curriculumId: string) {
-  return [...curriculumId].reduce((sum, character) => sum + character.charCodeAt(0), 0) % 6
-}
 
 function getPrimaryAction(curriculum: CurriculumCardSummary) {
   const actions = curriculum.viewerContext.allowedActions
@@ -40,10 +37,7 @@ export default function CurriculumCard({ curriculum, compact = false }: Curricul
         {curriculum.thumbnailUrl ? (
           <img src={curriculum.thumbnailUrl} alt="" />
         ) : (
-          <div className={`curriculum-art curriculum-art--${getCoverVariant(curriculum.curriculumId)}`}>
-            <span className="curriculum-art__grid" />
-            <span className="curriculum-art__orb" />
-          </div>
+          <CurriculumCoverFallback />
         )}
       </Link>
 

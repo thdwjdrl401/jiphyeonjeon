@@ -131,7 +131,6 @@ export default function LessonFormPage() {
   return (
     <div className="workspace-page workspace-page--narrow">
       <PageHeader
-        eyebrow={isEdit ? 'EDIT LESSON' : 'NEW LESSON'}
         title={isEdit ? '강의 수정' : '새 강의 만들기'}
         description={`${curriculum?.title ?? ''} · ${isEdit ? currentLesson?.sectionTitle ?? '' : '선택한 섹션'}`}
         action={<Link className="button button--soft" to={publicPaths.curriculum(curriculumId)}>커리큘럼 상세로 돌아가기</Link>}
