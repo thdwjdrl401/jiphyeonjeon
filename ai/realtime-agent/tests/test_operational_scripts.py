@@ -92,5 +92,6 @@ def test_tunnel_script_requires_explicit_connection_target() -> None:
     )
     assert result.returncode != 0
     assert "SSH_KEY" in result.stderr
-    assert "liveclass.pem" not in result.stderr
-    assert "43.201." not in result.stderr
+    source = TUNNEL_SCRIPT.read_text(encoding="utf-8")
+    assert 'SSH_KEY="${SSH_KEY:-' not in source
+    assert 'SSH_TARGET="${SSH_TARGET:-' not in source
