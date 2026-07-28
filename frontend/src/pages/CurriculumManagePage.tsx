@@ -69,8 +69,12 @@ export default function CurriculumManagePage() {
   if (managementQuery.isPending) return <PageState title="커리큘럼을 불러오는 중입니다" />
   if (managementQuery.isError) return <PageState title="커리큘럼을 불러오지 못했습니다" description="잠시 후 다시 시도해 주세요." />
 
+  // 서버 구조(섹션·강의 수)가 바뀌면 에디터를 새 데이터로 다시 seeding한다 — 강의 추가 후
+  // 관리로 돌아왔을 때 옛 로컬 state에 멈춰 섹션·강의가 안 보이던 문제 해결. 편집 중에는
+  // 서버 데이터가 그대로라 key도 안 바뀌어 자동저장 흐름을 방해하지 않는다.
+  const structureKey = managementQuery.data.sections.map((section) => `${section.sectionId}:${section.lessons.length}`).join(',')
   return <CurriculumManageEditor
-    key={curriculumId}
+    key={`${curriculumId}:${structureKey}`}
     curriculumId={curriculumId}
     routeState={routeState}
     storedCurriculum={managementQuery.data.curriculum}
@@ -250,9 +254,10 @@ function CurriculumManageEditor({
     if (!window.confirm('이 강의를 삭제할까요? 되돌릴 수 없습니다.')) return
     try {
       await deleteLesson(lessonId)
-      setSections((current) => current.map((section) => section.sectionId === sectionId
-        ? { ...section, lessons: section.lessons.filter((lesson) => lesson.lessonId !== lessonId) }
-        : section))
+      // 로컬 state를 직접 고치면 자동저장이 옛 structureVersion으로 돌아 409(구조 변경)가 난다.
+      // 서버 구조를 다시 읽어(structureKey 변경) 최신 버전으로 다시 그리고 사이드바도 갱신한다.
+      queryClient.invalidateQueries({ queryKey: ['curriculum-management', curriculumId] })
+      queryClient.invalidateQueries({ queryKey: ['curriculum-lesson-navigation', curriculumId] })
       toast.success('강의를 삭제했습니다.')
     } catch {
       toast.error('강의를 삭제하지 못했습니다.')
@@ -269,7 +274,8 @@ function CurriculumManageEditor({
     }
     try {
       await deleteSection(sectionId)
-      setSections((current) => current.filter((section) => section.sectionId !== sectionId))
+      queryClient.invalidateQueries({ queryKey: ['curriculum-management', curriculumId] })
+      queryClient.invalidateQueries({ queryKey: ['curriculum-lesson-navigation', curriculumId] })
       toast.success('섹션을 삭제했습니다.')
     } catch {
       toast.error('섹션을 삭제하지 못했습니다.')
@@ -368,7 +374,8 @@ function CurriculumManageEditor({
       <div className="workspace-tabs" role="tablist"><button className={tab === 'structure' ? 'is-active' : ''} onClick={() => setTab('structure')} type="button">구성</button><button className={tab === 'info' ? 'is-active' : ''} onClick={() => setTab('info')} type="button">기본 정보</button><button className={tab === 'enrollees' ? 'is-active' : ''} onClick={() => setTab('enrollees')} type="button">수강생</button></div>
 
       {tab === 'structure' && (
-        <Panel title="섹션과 강의" description="강의를 드래그해 순서를 바꾸거나 다른 섹션으로 옮길 수 있습니다." action={<button className="button button--soft" type="button" onClick={addSection}>섹션 추가</button>}>
+        <Panel title="섹션과 강의" description="강의를 드래그해 순서를 바꾸거나 다른 섹션으로 옮길 수 있습니다.">
+          <InlineNotice tone="info"><strong>섹션</strong>은 대단원(챕터), <strong>강의</strong>는 그 안의 개별 수업이에요. 먼저 섹션을 추가하면 자동 저장된 뒤, 그 섹션의 “강의 추가”로 강의를 넣을 수 있어요.</InlineNotice>
           <div className="structure-list">
             {sections.map((section, sectionIndex) => (
               <article className={`structure-section${lessonDropTarget?.sectionId === section.sectionId ? ' is-lesson-drop-target' : ''}`} key={section.sectionId}>
@@ -417,6 +424,7 @@ function CurriculumManageEditor({
               </article>
             ))}
           </div>
+          <button className="structure-add-section" type="button" onClick={addSection}>+ 섹션 추가</button>
         </Panel>
       )}
 
