@@ -37,6 +37,17 @@ interface CurriculumDraftState {
   }
 }
 
+/**
+ * 발행 버튼은 DRAFT에서만 의미가 있다 — 서버가 DRAFT 외의 전이를 409로 막는다
+ * (InstructorCurriculumService.publish). 하드코딩된 DRAFT 배지를 두면 발행 성공 후에도
+ * 버튼이 남아 두 번째 클릭이 무조건 409가 됐다. 상태를 화면의 단일 출처로 삼는다.
+ */
+const LIFECYCLE_VIEW: Record<string, { tone: 'warning' | 'success' | 'neutral'; description: string }> = {
+  DRAFT: { tone: 'warning', description: '강의 편성을 확인한 뒤 커리큘럼을 게시하세요.' },
+  PUBLISHED: { tone: 'success', description: '수강생에게 공개 중입니다. 카탈로그에서 검색·수강신청할 수 있습니다.' },
+  ARCHIVED: { tone: 'neutral', description: '보관된 커리큘럼입니다. 카탈로그에 노출되지 않습니다.' },
+}
+
 type CurriculumInfoField = 'title' | 'summary' | 'description'
 type SectionInfoField = 'title' | 'description'
 interface DraggedLesson {
@@ -94,6 +105,8 @@ function CurriculumManageEditor({
   initialSections: CurriculumManagementSection[]
 }) {
   const isNewDraft = storedCurriculum?.lifecycleStatus === 'DRAFT'
+  const lifecycleView = LIFECYCLE_VIEW[storedCurriculum.lifecycleStatus]
+    ?? { tone: 'neutral' as const, description: '알 수 없는 상태입니다.' }
   const [tab, setTab] = useState<'structure' | 'info' | 'enrollees'>('structure')
   const [sections, setSections] = useState(initialSections)
   // structureVersion을 로컬로 들고 저장 때마다 갱신한다 — 안 그러면 새로고침 없이 연속 저장 시
@@ -218,7 +231,14 @@ function CurriculumManageEditor({
       await publishCurriculum(curriculumId)
       queryClient.invalidateQueries({ queryKey: ['curriculum-management', curriculumId] })
       setAutosave('saved')
-    } catch {
+    } catch (error) {
+      // 상태 충돌(이미 발행됨 등)은 서버 메시지가 원인을 정확히 말해준다 — 뭉개면 사용자가
+      // 같은 버튼을 계속 누르게 된다. 최신 상태를 다시 불러와 화면도 정합시킨다.
+      if (error instanceof ApiError && error.code === 'CURRICULUM_STATE_CONFLICT') {
+        setSaveError(error.message)
+        queryClient.invalidateQueries({ queryKey: ['curriculum-management', curriculumId] })
+        return
+      }
       setSaveError('커리큘럼을 게시하지 못했습니다.')
     }
   }
@@ -432,7 +452,7 @@ function CurriculumManageEditor({
         <Panel title="기본 정보" description="일반 수정과 공개 상태 전환은 분리합니다.">
           <div className="form-grid"><label className="form-field--wide"><span>제목</span><input value={curriculumInfo.title} onChange={(event) => updateCurriculumInfo('title', event.target.value)} /></label><label className="form-field--wide"><span>짧은 소개</span><input value={curriculumInfo.summary} onChange={(event) => updateCurriculumInfo('summary', event.target.value)} /></label><label className="form-field--wide"><span>상세 설명</span><textarea rows={6} value={curriculumInfo.description} onChange={(event) => updateCurriculumInfo('description', event.target.value)} /></label></div>
           <div className="curriculum-manage-thumbnail"><h3>대표 이미지</h3><p>목록과 상세 카드에 표시할 이미지를 등록합니다.</p><CurriculumImageField id="manage-curriculum-thumbnail" previewUrl={thumbnailUrl} onChange={(selection: CurriculumImageSelection | null) => updateThumbnail(selection?.previewUrl ?? null)} /></div>
-          <div className="lifecycle-actions"><div><StatusBadge tone="warning">DRAFT</StatusBadge><p>강의 편성을 확인한 뒤 커리큘럼을 게시하세요.</p></div><button className="button button--primary" type="button" onClick={() => void publish()}>커리큘럼 게시</button></div>
+          <div className="lifecycle-actions"><div><StatusBadge tone={lifecycleView.tone}>{storedCurriculum.lifecycleStatus}</StatusBadge><p>{lifecycleView.description}</p></div>{isNewDraft && <button className="button button--primary" type="button" onClick={() => void publish()}>커리큘럼 게시</button>}</div>
           <div className="curriculum-manage-materials"><h3>커리큘럼 강의 자료 <small>선택</small></h3><p>전체 강의에서 공통으로 제공할 PPTX 자료를 추가하거나 제거합니다.</p><CurriculumMaterialField id="manage-curriculum-materials" value={materials} onChange={updateMaterials} /></div>
         </Panel>
       )}
