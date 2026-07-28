@@ -11,7 +11,7 @@ registry가 provider를 선택한다. streaming provider는 PCM을 지속 전송
 
 ## 파일 구성
 
-- `openai_realtime.py`: OpenAI Realtime STT 연결
+- `openai_realtime.py`: `intent=transcription` session을 사용하는 OpenAI Realtime STT 연결
 - `nemotron.py`: 로컬 Nemotron backend adapter
 - `segmented.py`: segment 기반 provider 생명주기
 - `stub.py`: 외부 의존성 없는 개발·테스트 구현

@@ -42,6 +42,60 @@ SSH_TARGET=user@host \
 `LIVEKIT_REMOTE_PORT`, `REDIS_LOCAL_PORT`, `REDIS_REMOTE_PORT`, `TURN_LOCAL_PORT`,
 `TURN_REMOTE_PORT`를 명시한다. listener는 `nc` 또는 `ss`로 확인한다.
 
+## PEM 보유 로컬 개발자의 API provider 검증
+
+로컬 개발자는 EC2 security group에 LiveKit·Redis·TURN 포트를 새로 공개하지 않고 위 SSH local
+forwarding만 사용한다. PEM은 `chmod 600`으로 제한하고, host key를 별도 채널로 확인해
+`known_hosts`에 등록한다. PEM만으로는 LiveKit API·Redis·TURN 인증이 되지 않으므로 각 secret은
+팀 secret manager에서 별도로 주입한다.
+
+기본 포트가 로컬에서 사용 중이면 loopback 전용 대체 포트를 선택한다.
+
+```sh
+cd ai/realtime-agent
+chmod 600 /path/to/developer.pem
+SSH_KEY=/path/to/developer.pem \
+SSH_TARGET=user@ec2-host \
+LIVEKIT_LOCAL_PORT=17443 \
+REDIS_LOCAL_PORT=14000 \
+TURN_LOCAL_PORT=13478 \
+./scripts/start_ec2_tunnels.sh
+```
+
+개발자별 gitignore된 env file도 `chmod 600`으로 제한한다. OpenAI key는 SSH나 EC2를 거치지 않고
+로컬 agent process에서 OpenAI로 직접 나가며, `uv --env-file`로만 주입한다. 비용과 production
+worker 간섭을 막기 위해 고유 agent name과 active/idle 1을 사용한다.
+
+```dotenv
+LIVEKIT_URL=wss://<certificate-host>:17443
+LIVEKIT_API_KEY=<livekit-api-key>
+LIVEKIT_API_SECRET=<livekit-api-secret>
+LIVEKIT_TURN_URL=turn:127.0.0.1:13478?transport=tcp
+LIVEKIT_TURN_SECRET=<coturn-rest-auth-secret>
+REDIS_URL=redis://:<password>@127.0.0.1:14000/0
+STT_AGENT_NAME=liveclass-realtime-stt-<developer>
+STT_ENGINE_PROVIDER=openai-realtime
+STT_MAX_ACTIVE_JOBS=1
+STT_NUM_IDLE_PROCESSES=1
+OPENAI_API_KEY=<secret>
+OPENAI_REALTIME_TRANSCRIPTION_MODEL=gpt-realtime-whisper
+OPENAI_REALTIME_TRANSCRIPTION_DELAY=low
+```
+
+```sh
+chmod 600 /path/to/realtime-agent.local.env
+uv run --env-file /path/to/realtime-agent.local.env --frozen python -m app.main dev
+```
+
+`LIVEKIT_URL`의 인증서 hostname은 loopback으로 resolve하되 URL을 `localhost`로 바꾸지 않는다.
+고유 `session-{UUID}` room과 해당 개발자 agent name으로만 manual dispatch하고 production Spring
+dispatch와 섞지 않는다. 검증이 끝나면 agent를 종료한 뒤 같은 control path로 tunnel을 닫는다.
+
+```sh
+SSH_CONTROL_PATH="${TMPDIR:-/tmp}/liveclass-realtime-agent-%C.sock"
+ssh -S "$SSH_CONTROL_PATH" -O exit user@ec2-host
+```
+
 ## 환경 주입과 실행
 
 production은 process environment나 secret manager로 값을 주입한다. `.env`를 자동 로드하지 않는다.

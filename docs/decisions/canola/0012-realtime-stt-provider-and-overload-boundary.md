@@ -34,9 +34,11 @@ Transformers 5.13에 추가됐고 streaming API가 experimental이라고 명시�
    capacity와 backlog ms를 ERROR 로그로 남긴다. 5초는 LiveKit capture queue의 한계이며, 최대 8초
    segment 8개를 보관하는 provider queue까지 합친 전체 pipeline latency 상한을 뜻하지 않는다.
 4. OpenAI adapter는 [공식 Realtime transcription 가이드](https://developers.openai.com/api/docs/guides/realtime-transcription)에
-   맞춰 WebSocket model query, `session.type=transcription`, 24 kHz PCM, `turn_detection=null`, 수동
-   append/commit과 `itemId`별 delta/completed/failed 처리를 사용한다. 이미 발행한 delta와 final
-   transcript가 갈라지면 수정 기능이 없는 현재 내부 event 계약에서 조용히 무시하지 않고 실패한다.
+   맞춰 WebSocket `intent=transcription`, `session.type=transcription`, 24 kHz PCM,
+   `turn_detection=null`, 수동 append/commit과 `itemId`별 delta/completed/failed 처리를 사용한다.
+   transcription model은 URL의 top-level realtime model query가 아니라 session payload에 둔다. 이미
+   발행한 delta와 final transcript가 갈라지면 수정 기능이 없는 현재 내부 event 계약에서 조용히
+   무시하지 않고 실패한다.
 5. Nemotron adapter는
    [Transformers 5.13의 공식 streaming 예제](https://huggingface.co/docs/transformers/v5.13.1/en/model_doc/nemotron3_5_asr#streaming-transcription)를
    기준으로 lazy load하고 segment 추론을 직렬화한다. thread producer는 async queue에서 blocking
@@ -52,7 +54,10 @@ Transformers 5.13에 추가됐고 streaming API가 experimental이라고 명시�
 
 - fake WebSocket·fake recognizer 및 CPU VAD로 session payload, delta 순서, 오류·timeout·취소,
   segment 경계와 queue overflow를 단위 테스트한다.
-- 현재 환경에는 `OPENAI_API_KEY`가 없으므로 실제 OpenAI 연결은 검증하지 않는다.
+- 2026-07-28 실제 OpenAI key를 `uv --env-file`로 process에만 주입해 Models API 200과 transcription
+  session update를 확인했다. 기존 top-level model query는 `invalid_model`이었고
+  `intent=transcription`으로 교정한 뒤 개인정보 없는 500 ms 합성 톤 1회가 completion을 받았다.
+  이는 API 연결 smoke이며 실제 발화 품질이나 LiveKit room E2E를 대체하지 않는다.
 - 기본 테스트에서는 Nemotron CUDA extra와 모델 가중치를 설치하지 않는다. 실제 RTX/CUDA에서의
   VRAM, latency, 품질과 Transformers experimental API 호환성은 별도 GPU smoke가 필요하다.
 - model instance는 engine 안에서 lazy load된다. runnable process에서 job마다 모델을 중복 생성하면
