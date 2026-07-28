@@ -52,13 +52,20 @@ LIVEKIT_URL=wss://livekit.example:7443
 LIVEKIT_TURN_URL=turn:127.0.0.1:3478?transport=tcp
 LIVEKIT_TURN_SECRET=<coturn-rest-auth-secret>
 REDIS_URL=redis://:<password>@127.0.0.1:4000/0
+CUDA_VISIBLE_DEVICES=0
 STT_ENGINE_PROVIDER=nemotron
-STT_MAX_ACTIVE_JOBS=1
+STT_MAX_ACTIVE_JOBS=12
+STT_NUM_IDLE_PROCESSES=12
 ASR_MODEL_ID=/path/outside/git/nemotron-3.5-asr-streaming-0.6b
 ```
 
 `LIVEKIT_URL`은 인증서 hostname을 유지해야 한다. hostname을 loopback tunnel로 연결하는 방법은 배포
 환경의 DNS/hosts/proxy 정책으로 제공하며 `/tmp`의 사전 빌드 바이너리를 영구 전제로 삼지 않는다.
+`CUDA_VISIBLE_DEVICES=0`은 worker와 모든 job child에 물리 GPU 한 장만 노출한다. 그 안에서 CUDA는
+노출된 장치를 논리 `cuda:0`으로 본다. LiveKit Agents 1.6.6의 reserved-slot 계산상 시작 직후
+12-request burst를 모두 받으려면 active cap과 warm idle을 모두 12로 둬야 한다. full load에서는
+active 12벌과 replacement idle 12벌, 최대 24 model이 상주한다. H200 NVL 실측 peak는 81,468 MiB로
+143,771 MiB 안에 들어갔지만 더 작은 GPU에서는 idle과 active 값을 함께 낮추고 재검증해야 한다.
 
 ```sh
 uv run --env-file /path/to/realtime-agent.env --frozen python -m app.main start
@@ -119,12 +126,21 @@ uv run --frozen ruff format --check app tests scripts
 
 - H200 NVL 2장 환경에서 `torch 2.11.0+cu128`, CUDA runtime 12.8, CUDA available을 확인했다.
 - 저장소 밖 로컬 Nemotron 모델을 offline으로 `cuda:0`에 로드했다.
-- frozen 환경의 realtime-agent 테스트 253개와 Ruff check/format이 통과했다.
+- frozen 환경의 realtime-agent 테스트 296개와 Ruff check/format이 통과했다.
 - SSH tunnel의 LiveKit 7443, application Redis 4000, TURN/TCP 3478 listener를 확인했다.
 - application Redis의 내장 `default` 사용자 password 인증 PING이 성공했다.
 - RoomService read-only probe로 기존 room과 unmuted microphone publication을 확인했다.
 - relay-only custom ICE로 기존 room에 연결해 TURN/TCP peer connection을 확인했다.
 - worker가 named agent로 등록되고 정상 drain/shutdown됐다.
+- `CUDA_VISIBLE_DEVICES=0`, `STT_MAX_ACTIVE_JOBS` 미지정, idle 12의 capacity startup에서 provider
+  기본 active 12가 선택되고 Nemotron child 12개가 모두 초기화된 뒤 worker가 등록됐다. GPU 0은
+  process당 2952 MiB, 합계 35,503 MiB를 사용했고 GPU 1은 0 MiB였다.
+- strict `session-{UUID}` room과 explicit dispatch를 각각 12개 동시에 생성해 agent participant 12/12
+  입장과 worker load 1.0 FULL을 확인했다. 언어가 일치하는 8초 `en-US` speech를 동시에 전송했을 때
+  모든 session이 caption delta 17–23개와 completion 1개를 발행했다.
+- 12개 동시 추론 중 GPU 0은 SM 99–100%, peak 81,468 MiB였고 GPU 1은 사용하지 않았다. room과
+  worker를 정리한 뒤 두 GPU 모두 0 MiB로 복귀했다. 운영 기본 `ko-KR`의 자연스러운 한국어 발화
+  CER/지연과 30분 연속 실행은 별도 gate다.
 - 기존 비민감 microphone을 임시 strict `session-{UUID}` room으로 relay해 Gate D를 수행했다. manual
   dispatch의 room·participant·microphone 검증 후 Nemotron이 `caption.delta` 54개를 sequence 1–54로
   발행했고 UTF-8 decode 오류가 없었다.
