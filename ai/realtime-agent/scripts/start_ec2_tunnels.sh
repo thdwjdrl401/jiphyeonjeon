@@ -26,29 +26,29 @@ command -v nc >/dev/null 2>&1 || {
 }
 
 validate_port() {
-    port="$1"
-    name="$2"
-    case "$port" in
+    validate_port_value="$1"
+    validate_port_name="$2"
+    case "$validate_port_value" in
         ''|*[!0-9]*)
-            echo "$name must be an integer port" >&2
+            echo "$validate_port_name must be an integer port" >&2
             exit 1
             ;;
     esac
-    if [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
-        echo "$name must be between 1 and 65535" >&2
+    if [ "$validate_port_value" -lt 1 ] || [ "$validate_port_value" -gt 65535 ]; then
+        echo "$validate_port_name must be between 1 and 65535" >&2
         exit 1
     fi
 }
 
 ensure_tunnel() {
-    local_port="$1"
-    remote_port="$2"
-    name="$3"
-    validate_port "$local_port" "${name}_LOCAL_PORT"
-    validate_port "$remote_port" "${name}_REMOTE_PORT"
+    tunnel_local_port="$1"
+    tunnel_remote_port="$2"
+    tunnel_name="$3"
+    validate_port "$tunnel_local_port" "${tunnel_name}_LOCAL_PORT"
+    validate_port "$tunnel_remote_port" "${tunnel_name}_REMOTE_PORT"
 
-    if nc -z -w 2 127.0.0.1 "$local_port"; then
-        echo "$name tunnel is already listening on localhost:$local_port"
+    if nc -z -w 2 127.0.0.1 "$tunnel_local_port"; then
+        echo "$tunnel_name tunnel is already listening on localhost:$tunnel_local_port"
         return
     fi
 
@@ -59,10 +59,10 @@ ensure_tunnel() {
         -o ServerAliveInterval=30 \
         -o ServerAliveCountMax=3 \
         -f -N \
-        -L "$local_port:localhost:$remote_port" \
+        -L "$tunnel_local_port:localhost:$tunnel_remote_port" \
         "$SSH_TARGET"
-    nc -z -w 5 127.0.0.1 "$local_port"
-    echo "$name tunnel started on localhost:$local_port"
+    nc -z -w 5 127.0.0.1 "$tunnel_local_port"
+    echo "$tunnel_name tunnel started on localhost:$tunnel_local_port"
 }
 
 ensure_tunnel "$LIVEKIT_LOCAL_PORT" "$LIVEKIT_REMOTE_PORT" LIVEKIT
