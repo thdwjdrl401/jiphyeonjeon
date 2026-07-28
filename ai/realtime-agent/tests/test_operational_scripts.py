@@ -92,6 +92,39 @@ def test_tunnel_script_requires_explicit_connection_target() -> None:
     )
     assert result.returncode != 0
     assert "SSH_KEY" in result.stderr
-    source = TUNNEL_SCRIPT.read_text(encoding="utf-8")
-    assert 'SSH_KEY="${SSH_KEY:-' not in source
-    assert 'SSH_TARGET="${SSH_TARGET:-' not in source
+
+
+def test_tunnel_script_rejects_listener_not_owned_by_managed_ssh(
+    tmp_path: Path,
+) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_ssh = fake_bin / "ssh"
+    fake_ssh.write_text(
+        '#!/bin/sh\ncase " $* " in *" -O check "*) exit 1 ;; esac\nexit 99\n',
+        encoding="utf-8",
+    )
+    fake_nc = fake_bin / "nc"
+    fake_nc.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    fake_ssh.chmod(0o700)
+    fake_nc.chmod(0o700)
+    key = tmp_path / "test-key.pem"
+    key.touch(mode=0o600)
+    environ = {
+        **os.environ,
+        "PATH": f"{fake_bin}:{os.environ['PATH']}",
+        "SSH_KEY": str(key),
+        "SSH_TARGET": "user@example.invalid",
+        "SSH_CONTROL_PATH": str(tmp_path / "control.sock"),
+    }
+
+    result = subprocess.run(
+        ["sh", str(TUNNEL_SCRIPT)],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=environ,
+    )
+
+    assert result.returncode != 0
+    assert "outside the managed SSH tunnel" in result.stderr

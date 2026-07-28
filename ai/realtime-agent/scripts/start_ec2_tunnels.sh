@@ -10,6 +10,7 @@ REDIS_LOCAL_PORT="${REDIS_LOCAL_PORT:-4000}"
 REDIS_REMOTE_PORT="${REDIS_REMOTE_PORT:-4000}"
 TURN_LOCAL_PORT="${TURN_LOCAL_PORT:-3478}"
 TURN_REMOTE_PORT="${TURN_REMOTE_PORT:-3478}"
+SSH_CONTROL_PATH="${SSH_CONTROL_PATH:-${TMPDIR:-/tmp}/liveclass-realtime-agent-%C.sock}"
 
 if [ ! -r "$SSH_KEY" ]; then
     echo "SSH key is not readable" >&2
@@ -40,31 +41,57 @@ validate_port() {
     fi
 }
 
-ensure_tunnel() {
-    tunnel_local_port="$1"
-    tunnel_remote_port="$2"
-    tunnel_name="$3"
-    validate_port "$tunnel_local_port" "${tunnel_name}_LOCAL_PORT"
-    validate_port "$tunnel_remote_port" "${tunnel_name}_REMOTE_PORT"
-
-    if nc -z -w 2 127.0.0.1 "$tunnel_local_port"; then
-        echo "$tunnel_name tunnel is already listening on localhost:$tunnel_local_port"
-        return
+validate_listener_available() {
+    listener_port="$1"
+    listener_name="$2"
+    if nc -z -w 2 127.0.0.1 "$listener_port"; then
+        echo "$listener_name port is occupied by a process outside the managed SSH tunnel" >&2
+        exit 1
     fi
-
-    ssh \
-        -i "$SSH_KEY" \
-        -o BatchMode=yes \
-        -o ExitOnForwardFailure=yes \
-        -o ServerAliveInterval=30 \
-        -o ServerAliveCountMax=3 \
-        -f -N \
-        -L "$tunnel_local_port:localhost:$tunnel_remote_port" \
-        "$SSH_TARGET"
-    nc -z -w 5 127.0.0.1 "$tunnel_local_port"
-    echo "$tunnel_name tunnel started on localhost:$tunnel_local_port"
 }
 
-ensure_tunnel "$LIVEKIT_LOCAL_PORT" "$LIVEKIT_REMOTE_PORT" LIVEKIT
-ensure_tunnel "$REDIS_LOCAL_PORT" "$REDIS_REMOTE_PORT" REDIS
-ensure_tunnel "$TURN_LOCAL_PORT" "$TURN_REMOTE_PORT" TURN_TCP
+validate_managed_listener() {
+    listener_port="$1"
+    listener_name="$2"
+    if ! nc -z -w 2 127.0.0.1 "$listener_port"; then
+        echo "$listener_name listener is missing from the managed SSH tunnel" >&2
+        exit 1
+    fi
+    echo "$listener_name tunnel is listening on localhost:$listener_port"
+}
+
+validate_port "$LIVEKIT_LOCAL_PORT" LIVEKIT_LOCAL_PORT
+validate_port "$LIVEKIT_REMOTE_PORT" LIVEKIT_REMOTE_PORT
+validate_port "$REDIS_LOCAL_PORT" REDIS_LOCAL_PORT
+validate_port "$REDIS_REMOTE_PORT" REDIS_REMOTE_PORT
+validate_port "$TURN_LOCAL_PORT" TURN_LOCAL_PORT
+validate_port "$TURN_REMOTE_PORT" TURN_REMOTE_PORT
+
+if ssh -S "$SSH_CONTROL_PATH" -O check "$SSH_TARGET" >/dev/null 2>&1; then
+    validate_managed_listener "$LIVEKIT_LOCAL_PORT" LIVEKIT
+    validate_managed_listener "$REDIS_LOCAL_PORT" REDIS
+    validate_managed_listener "$TURN_LOCAL_PORT" TURN_TCP
+    exit 0
+fi
+
+validate_listener_available "$LIVEKIT_LOCAL_PORT" LIVEKIT
+validate_listener_available "$REDIS_LOCAL_PORT" REDIS
+validate_listener_available "$TURN_LOCAL_PORT" TURN_TCP
+
+ssh \
+    -M \
+    -S "$SSH_CONTROL_PATH" \
+    -i "$SSH_KEY" \
+    -o BatchMode=yes \
+    -o ExitOnForwardFailure=yes \
+    -o ServerAliveInterval=30 \
+    -o ServerAliveCountMax=3 \
+    -f -N \
+    -L "$LIVEKIT_LOCAL_PORT:localhost:$LIVEKIT_REMOTE_PORT" \
+    -L "$REDIS_LOCAL_PORT:localhost:$REDIS_REMOTE_PORT" \
+    -L "$TURN_LOCAL_PORT:localhost:$TURN_REMOTE_PORT" \
+    "$SSH_TARGET"
+
+validate_managed_listener "$LIVEKIT_LOCAL_PORT" LIVEKIT
+validate_managed_listener "$REDIS_LOCAL_PORT" REDIS
+validate_managed_listener "$TURN_LOCAL_PORT" TURN_TCP
