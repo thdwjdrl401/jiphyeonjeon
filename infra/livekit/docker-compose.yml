@@ -1,6 +1,10 @@
-# 미디어 서버 (LiveKit SFU + Egress 녹화 + Redis + MinIO)
-# PoC 검증 완료 구성. 값은 아래 <...> 자리 채우기. 자세한 건 README.md.
+# 미디어 서버 (LiveKit SFU + Egress 녹화 + Redis)
+# 값은 아래 <...> 자리 채우기. 자세한 건 README.md.
 # 기동(수동): docker compose up -d   # 시크릿/미디어는 호스트(/etc/liveclass/livekit, /srv/liveclass/stt-audio)에서 마운트
+#
+# 스토리지는 여기 없다. 녹화 업로드 대상은 앱 스택의 MinIO(docker-compose.prod.yml)이고,
+# 백엔드가 StartEgress 요청에 실어 보낸다(LiveKitEgressControl). 이 스택에 MinIO를 두면
+# Egress가 어느 쪽에 쓰는지 모호해지고 호스트 9000 포트만 잡아먹는다.
 name: livekit          # 프로젝트명 고정 = 볼륨(livekit_*)·컨테이너 접두사. 디렉토리명과 무관.
 services:
   livekit:
@@ -30,15 +34,6 @@ services:
       - /etc/liveclass/livekit/egress.yaml:/out/egress.yaml:ro     # 실 시크릿(호스트)
     depends_on: [redis, livekit]
 
-  minio:                                      # PoC용 S3 호환 스토리지 (EC2는 실 AWS S3로 교체)
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z   # 커뮤니티 유지보수모드 → 태그 고정
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: <MINIO_USER>
-      MINIO_ROOT_PASSWORD: <MINIO_PASSWORD>
-    ports: ["9000:9000", "9001:9001"]
-    volumes: ["miniodata:/data"]
-
   nginx-livekit:                              # 시그널링(WSS) TLS 종단 → livekit 7880. 미디어(UDP)는 우회.
     image: nginx:alpine
     restart: unless-stopped
@@ -52,6 +47,10 @@ services:
 
   av-bot:                                     # STT 테스트용 지속 퍼블리셔 — 영상+음성을 room stt-test에 상시 흘려보냄
     build: ./stt-bot                          #   STT 서버는 이 방 av-bot 참가자의 audio 트랙만 구독
+    # 상시 기동하지 않는다 — 테스트 도구가 계속 돌면 방·CPU·대역폭을 계속 먹고,
+    # 운영 스택에 뭐가 필수인지 흐려진다. 필요할 때만:
+    #   docker compose --profile stt-test up -d av-bot
+    profiles: [stt-test]
     restart: unless-stopped
     network_mode: host                        # livekit 127.0.0.1:7880 직결
     depends_on: [livekit]
@@ -68,7 +67,6 @@ services:
       - /srv/liveclass/stt-audio:/audio:ro    # 테스트 미디어(호스트, 195MB — git 밖)
 
 volumes:
-  miniodata:
   certbot-etc:                                # 앱 스택(docker-compose.prod.yml)이 생성한 볼륨을 공유
     external: true
     name: liveclass_certbot_etc

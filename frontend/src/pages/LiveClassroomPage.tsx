@@ -14,7 +14,6 @@ import {
   endLiveSession,
   getCaptions,
   getChatMessages,
-  getLivePlayback,
   getLiveSession,
   saveBookmark,
   sendChatMessage,
@@ -22,30 +21,20 @@ import {
   type ChatConnectionState,
   type ChatMessageView,
 } from '@/features/live-session/liveSessionService'
-import type { StudentLiveSeekRequest } from '@/features/live-session/StudentLivePlayer'
+import type { PlaybackSeekRequest } from '@/features/live-session/PlaybackPlayer'
 import { useDetachedSidebarWindow } from '@/features/live-session/useDetachedSidebarWindow'
-import { ApiError } from '@/shared/api/client'
+import { usePlayback } from '@/features/live-session/usePlayback'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
 
 const { summaryBlocks, glossaryTerms } = getLiveLearningPreview()
 const InstructorLiveKitStage = lazy(() => import('@/features/live-session/InstructorLiveKitStage'))
-const StudentLivePlayer = lazy(() => import('@/features/live-session/StudentLivePlayer'))
+const PlaybackPlayer = lazy(() => import('@/features/live-session/PlaybackPlayer'))
 
 function mergeChatMessage(messages: ChatMessageView[], incoming: ChatMessageView) {
   const existingIndex = messages.findIndex((message) => message.id === incoming.id)
   if (existingIndex < 0) return [...messages, incoming]
   return messages.map((message, index) => index === existingIndex ? incoming : message)
-}
-
-function getLivePlaybackErrorMessage(error: unknown) {
-  if (!(error instanceof ApiError)) return '라이브 재생 서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.'
-  if (error.code === 'ENROLLMENT_REQUIRED') return '현재 라이브 강의를 시청할 수강 권한이 없습니다.'
-  if (error.code === 'LIVE_NOT_STARTED') return '아직 라이브 강의가 시작되지 않았습니다.'
-  if (error.code === 'LIVE_PLAYBACK_NOT_READY') return '강의는 시작됐지만 HLS 영상이 아직 준비되지 않았습니다.'
-  if (error.code === 'LIVE_ENDED') return '라이브 강의가 종료되었습니다. 다시보기가 준비되면 강의 상세에서 시청할 수 있습니다.'
-  if (error.code === 'LIVE_PLAYBACK_CONTRACT_INVALID') return '라이브 재생 주소가 올바르게 전달되지 않았습니다.'
-  return error.message || '라이브 재생 주소를 가져오지 못했습니다.'
 }
 
 export default function LiveClassroomPage() {
@@ -74,19 +63,15 @@ export default function LiveClassroomPage() {
   const [aiQuestion, setAiQuestion] = useState('')
   const [aiAnswer, setAiAnswer] = useState('')
   const [bookmarked, setBookmarked] = useState(false)
-  const [studentSeekRequest, setStudentSeekRequest] = useState<StudentLiveSeekRequest | null>(null)
+  const [studentSeekRequest, setStudentSeekRequest] = useState<PlaybackSeekRequest | null>(null)
   const [endRequested, setEndRequested] = useState(false)
   const [chatConnectionState, setChatConnectionState] = useState<ChatConnectionState>('connecting')
   const sidebarWindow = useDetachedSidebarWindow(sessionId)
   // 라이브는 녹화되고 채팅·자막이 AI 처리된다는 안내를 입장 시 한 번 확인받는다.
   // 상시 배너 대신 진입 모달로 알려 시야를 가리지 않게 한다.
   const [recordingNoticeAck, setRecordingNoticeAck] = useState(false)
-  const playbackQuery = useQuery({
-    queryKey: ['live-playback', sessionId],
-    queryFn: () => getLivePlayback(sessionId),
-    enabled: Boolean(sessionId && !isInstructor && recordingNoticeAck),
-    retry: false,
-  })
+  // 강사는 LiveKit로 직접 송출하므로 재생 경로를 타지 않는다. 학생도 녹화 안내를 확인한 뒤에 붙는다.
+  const playback = usePlayback(sessionQuery.data?.lessonId, !isInstructor && recordingNoticeAck)
   const sendMutation = useMutation({
     mutationFn: ({ text, question }: { text: string; question: boolean }) => sendChatMessage(sessionId, text, question),
     onSuccess: (sent) => queryClient.setQueryData<ChatMessageView[]>(
@@ -164,9 +149,6 @@ export default function LiveClassroomPage() {
   if (!sessionId) return <PageState title="잘못된 라이브 세션 경로입니다" />
   if (sessionQuery.isError || lessonQuery.isError) return <PageState title="라이브 강의를 불러오지 못했습니다" />
   if (!session || !lesson) return <PageState title="라이브 강의를 불러오는 중입니다" />
-  const playbackErrorMessage = playbackQuery.isError
-    ? getLivePlaybackErrorMessage(playbackQuery.error)
-    : null
 
   const discussionComposer = (
     <form className="chat-composer" onSubmit={sendMessage}>
@@ -278,17 +260,17 @@ export default function LiveClassroomPage() {
             )
             : (
               <Suspense fallback={<div className="video-stage instructor-livekit-loading" role="status">Vidstack 플레이어를 불러오는 중입니다.</div>}>
-                <StudentLivePlayer
+                <PlaybackPlayer
                   bookmarked={bookmarked}
-                  errorMessage={playbackErrorMessage}
+                  errorMessage={playback.errorMessage}
                   lessonTitle={lesson.title}
-                  loading={recordingNoticeAck && playbackQuery.isPending}
+                  loading={playback.loading}
                   participantCount={session.participants}
-                  playback={recordingNoticeAck ? playbackQuery.data ?? null : null}
-                  playbackKey={playbackQuery.dataUpdatedAt}
+                  playback={playback.playback}
+                  reloadToken={playback.reloadToken}
                   seekRequest={studentSeekRequest}
                   onBookmark={() => bookmarkMutation.mutate()}
-                  onRetry={() => void playbackQuery.refetch()}
+                  onRetry={playback.reload}
                   onSessionTimeChange={setPositionMs}
                 />
               </Suspense>

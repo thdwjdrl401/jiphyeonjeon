@@ -4,9 +4,9 @@ import { ApiError, apiClient } from '@/shared/api/client'
 import { notImplemented } from '@/shared/api/notImplemented'
 import type {
   ChatMessageView,
-  LivePlaybackView,
   LiveSessionService,
   LiveSessionView,
+  PlaybackView,
 } from './liveSessionService.interface'
 
 interface ApiLiveSessionView {
@@ -44,37 +44,50 @@ interface ApiParticipant {
   joinedAtEpochSeconds: number
 }
 
-interface ApiLivePlayback {
-  sessionId: string
-  playbackUrl: string
-  mimeType: string
-  streamType: string
-  sessionOffsetMs: number | null
+interface ApiPlaybackSource {
+  url: string
+  availableFromMs: number | null
+  availableToMs: number | null
 }
 
-function normalizeLivePlayback(data: ApiLivePlayback, sessionId: string): LivePlaybackView {
-  const playbackUrl = data.playbackUrl?.trim()
-  const hasValidOffset = data.sessionOffsetMs === null || Number.isFinite(data.sessionOffsetMs)
-  if (
-    data.sessionId !== sessionId
-    || !playbackUrl
-    || data.mimeType !== 'application/vnd.apple.mpegurl'
-    || data.streamType !== 'LIVE_DVR'
-    || !hasValidOffset
-  ) {
+interface ApiPlayback {
+  lessonId: string
+  sessionId: string
+  liveSessionStatus: string
+  currentSessionMs: number | null
+  durationMs: number | null
+  source: ApiPlaybackSource | null
+}
+
+function nullableNumber(value: number | null | undefined) {
+  return value === null || value === undefined || !Number.isFinite(value) ? null : value
+}
+
+function normalizePlayback(data: ApiPlayback, lessonId: string): PlaybackView {
+  // source가 null인 건 정상 상태다 — Egress가 아직 첫 세그먼트를 안 올렸다는 뜻이라
+  // 계약 위반으로 다루면 대기 화면 대신 오류 화면이 뜬다.
+  const url = data.source?.url?.trim()
+  if (data.lessonId !== lessonId || (data.source && !url) || !data.liveSessionStatus) {
     throw new ApiError(
-      '라이브 재생 API 응답이 계약과 일치하지 않습니다.',
+      '재생 API 응답이 계약과 일치하지 않습니다.',
       undefined,
-      'LIVE_PLAYBACK_CONTRACT_INVALID',
+      'PLAYBACK_CONTRACT_INVALID',
     )
   }
 
   return {
+    lessonId: data.lessonId,
     sessionId: data.sessionId,
-    playbackUrl,
-    mimeType: data.mimeType,
-    streamType: data.streamType,
-    sessionOffsetMs: data.sessionOffsetMs,
+    liveSessionStatus: data.liveSessionStatus,
+    currentSessionMs: nullableNumber(data.currentSessionMs),
+    durationMs: nullableNumber(data.durationMs),
+    source: url
+      ? {
+          url,
+          availableFromMs: nullableNumber(data.source?.availableFromMs),
+          availableToMs: nullableNumber(data.source?.availableToMs),
+        }
+      : null,
   }
 }
 
@@ -121,9 +134,9 @@ export const httpLiveSessionService = {
       participants: 0,
     } satisfies LiveSessionView
   },
-  async getLivePlayback(sessionId) {
-    const { data } = await apiClient.get<ApiLivePlayback>(`/live-sessions/${sessionId}/playback`)
-    return normalizeLivePlayback(data, sessionId)
+  async getPlayback(lessonId) {
+    const { data } = await apiClient.get<ApiPlayback>(`/lessons/${lessonId}/playback`)
+    return normalizePlayback(data, lessonId)
   },
   // 점검 대상이 LiveKit 연결·장치 상태라 서버 판정이 있어야 한다(CP1). 프론트가 흉내 내면
   // "점검 통과"가 거짓이 되므로 값을 지어내지 않는다.

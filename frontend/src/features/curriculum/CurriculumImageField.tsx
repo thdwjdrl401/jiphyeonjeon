@@ -51,13 +51,12 @@ export default function CurriculumImageField({ id, previewUrl, onChange }: Curri
 
   return (
     <div className="curriculum-image-field">
-      <div className="curriculum-image-preview">
-        {previewUrl ? <img src={previewUrl} alt="대표 이미지 미리보기" /> : <div><span>IMAGE</span><strong>대표 이미지 미리보기</strong><small>16:9 비율을 권장합니다.</small></div>}
-      </div>
+      <label className="curriculum-image-preview" htmlFor={id}>
+        {previewUrl ? <img src={previewUrl} alt="대표 이미지 미리보기" /> : <div><span>IMAGE</span><strong>대표 이미지 등록</strong><small>클릭해 이미지 선택 · 16:9 권장</small></div>}
+      </label>
       <div className="curriculum-image-field__actions">
-        <label className="button button--soft" htmlFor={id}>{previewUrl ? '이미지 변경' : '이미지 등록'}</label>
-        <input id={id} type="file" accept="image/jpeg,image/png,image/webp" onChange={selectImage} />
-        {previewUrl && <button className="button button--ghost" type="button" onClick={() => { setError(''); onChange(null) }}>삭제</button>}
+        <input id={id} aria-label="대표 이미지 등록" type="file" accept="image/jpeg,image/png,image/webp" onChange={selectImage} />
+        {previewUrl && <button className="button button--ghost" type="button" onClick={() => { setError(''); onChange(null) }}>이미지 삭제</button>}
       </div>
       <p>JPG, PNG, WebP · 최대 5MB · 목록과 상세 카드에 사용됩니다.</p>
       {error && <small role="alert">{error}</small>}

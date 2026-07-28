@@ -34,7 +34,7 @@ describe('커리큘럼 작업 화면', () => {
     await renderAsInstructor('/instructor/curriculums/new')
     await screen.findByRole('heading', { name: '새 커리큘럼 만들기', level: 1 })
     const file = new File(['image'], 'curriculum.png', { type: 'image/png' })
-    await user.upload(screen.getByLabelText('이미지 등록'), file)
+    await user.upload(screen.getByLabelText('대표 이미지 등록'), file)
     expect(await screen.findByAltText('대표 이미지 미리보기')).toBeInTheDocument()
   })
 
@@ -79,7 +79,7 @@ describe('커리큘럼 작업 화면', () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
     await screen.findByLabelText('섹션 1 이름')
-    await user.click(screen.getByRole('button', { name: '섹션 추가' }))
+    await user.click(screen.getByRole('button', { name: /섹션 추가/ }))
 
     // 방금 추가한(아직 임시 id) 섹션의 "강의 추가"는 비활성 버튼이어야 한다 — 존재하지 않는 섹션
     // URL로 못 들어가게(#3). 클릭 가능한 링크가 아니라 disabled 버튼으로 렌더된다.
@@ -95,16 +95,18 @@ describe('커리큘럼 작업 화면', () => {
     }, { timeout: 3000 })
   })
 
-  it('새 강의를 저장하면 편집 모드로 이동해 재클릭으로 중복 생성되지 않는다', async () => {
+  it('새 강의를 저장하면 구성 화면으로 돌아가 중복 생성을 막는다', async () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/new')
     await user.type(await screen.findByLabelText(/강의 제목/), '중복 방지 강의')
     await user.click(screen.getByRole('button', { name: '강의 생성 저장' }))
 
-    // 생성 성공 후엔 고유 URL(편집 모드)로 이동한다 — "새 강의" 폼에 머물며 연타로 매번
-    // 새 레슨이 생기던 것을 막는다(#4). 편집 모드 제목으로 전환된 것으로 확인한다.
-    expect(await screen.findByRole('heading', { name: '강의 수정', level: 1 })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '강의 수정 저장' })).toBeInTheDocument()
+    // 생성 성공 후엔 구성(섹션·강의 목록) 화면으로 돌아간다 — 폼을 떠나므로 연타로 매번 새
+    // 레슨이 생기던 것도 막힌다.
+    await waitFor(() => {
+      expect(window.location.pathname).toMatch(/\/instructor\/curriculums\/cur-spring-live\/manage$/)
+    })
+    expect(screen.queryByRole('button', { name: '강의 생성 저장' })).not.toBeInTheDocument()
   })
 
   it('커리큘럼 관리에서는 강의 상세만 제공하고 수정 진입점을 숨긴다', async () => {
@@ -251,7 +253,7 @@ describe('커리큘럼 작업 화면', () => {
     await screen.findByRole('heading', { name: '라이브로 완성하는 Spring Boot', level: 1 })
     await user.click(screen.getByRole('button', { name: '기본 정보' }))
     expect(await screen.findByAltText('대표 이미지 미리보기')).toBeInTheDocument()
-    expect(screen.getByLabelText('이미지 변경')).toBeInTheDocument()
+    expect(screen.getByLabelText('대표 이미지 등록')).toBeInTheDocument()
   })
 
   // 커리큘럼-레벨 자료 편집은 로컬 스테이징이다 — 연결 API가 없어 서버에 반영하지 않는다(ADR-0030).

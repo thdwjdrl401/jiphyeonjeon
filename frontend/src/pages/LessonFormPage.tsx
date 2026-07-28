@@ -92,7 +92,7 @@ export default function LessonFormPage() {
     setSaveError('')
     setSubmitting(true)
     try {
-      const lesson = await saveLesson({
+      await saveLesson({
         sectionId,
         lessonId,
         title: title.trim(),
@@ -104,12 +104,12 @@ export default function LessonFormPage() {
         materials: materials.flatMap((material) => material.file ? [material.file] : []),
       })
       toast.success(canEditLiveSchedule ? '강의 정보와 라이브 일정 초안이 저장되었습니다.' : '강의 정보가 저장되었습니다.')
-      // 생성 성공 시엔 편집 모드(고유 URL)로 이동한다. 그래야 다시 저장해도 같은 레슨을 수정하고,
-      // "새 강의" 폼에 머물며 연타로 매번 새 레슨이 생기던 것을 원천 차단한다.
+      // 생성 성공 시엔 구성(섹션·강의 목록) 화면으로 돌아간다. 폼을 떠나므로 연타로 매번 새
+      // 레슨이 생기던 것도 막힌다. 저장 토스트는 앱 최상단이라 이동 후에도 그대로 보인다.
       if (!isEdit) {
         queryClient.invalidateQueries({ queryKey: ['curriculum-management', curriculumId] })
         queryClient.invalidateQueries({ queryKey: ['curriculum-lesson-navigation', curriculumId] })
-        navigate(instructorPaths.editLesson(curriculumId, sectionId, lesson.lessonId), { replace: true })
+        navigate(instructorPaths.curriculumManage(curriculumId), { replace: true })
       }
     } catch {
       setSaveError('강의 저장에 실패했습니다. 입력값과 서버 상태를 확인해 주세요.')

@@ -51,6 +51,10 @@ public class LessonPlaybackAccessImpl implements LessonPlaybackAccess {
         if (userId.equals(curriculum.getInstructorId())) {
             return new PlaybackAccessGrant(true);   // 소유 강사 — 검수 목적으로 게시 전에도 본다.
         }
+        if (!"PUBLISHED".equals(lesson.status())) {
+            // 학생에게 미게시 레슨의 존재를 드러내지 않는다. 소유 강사는 위에서 이미 통과했다.
+            throw notFound();
+        }
         if (enrollmentDirectory.isActive(curriculum.getId(), userId)) {
             return new PlaybackAccessGrant(false);  // 활성 수강생 — 게시본만(게이트는 video).
         }

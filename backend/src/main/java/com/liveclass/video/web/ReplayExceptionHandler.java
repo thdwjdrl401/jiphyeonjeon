@@ -2,10 +2,14 @@ package com.liveclass.video.web;
 
 import com.liveclass.common.web.ErrorResponse;
 import com.liveclass.video.api.PlaybackAccessException;
+import com.liveclass.video.service.PlaybackStorageUnavailableException;
+import com.liveclass.video.service.RecordingStartingException;
 import com.liveclass.video.service.ReplayForbiddenException;
+import com.liveclass.video.service.ReplayManifestInvalidException;
 import com.liveclass.video.service.ReplayNotFoundException;
 import com.liveclass.video.service.ReplayNotReadyException;
 import com.liveclass.video.service.ReplayPublishConflictException;
+import com.liveclass.video.service.ReplayWithdrawWhileLiveException;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
@@ -54,5 +58,29 @@ public class ReplayExceptionHandler {
     public ResponseEntity<ErrorResponse> handleForbidden(ReplayForbiddenException e) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(ErrorResponse.of("REPLAY_FORBIDDEN", e.getMessage()));
+    }
+
+    @ExceptionHandler(RecordingStartingException.class)
+    public ResponseEntity<ErrorResponse> handleRecordingStarting(RecordingStartingException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ErrorResponse.of("RECORDING_STARTING", e.getMessage()));
+    }
+
+    @ExceptionHandler(ReplayWithdrawWhileLiveException.class)
+    public ResponseEntity<ErrorResponse> handleWithdrawWhileLive(ReplayWithdrawWhileLiveException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ErrorResponse.of("REPLAY_WITHDRAW_WHILE_LIVE", e.getMessage()));
+    }
+
+    @ExceptionHandler(ReplayManifestInvalidException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidManifest(ReplayManifestInvalidException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ErrorResponse.of("REPLAY_NOT_READY", e.getMessage()));
+    }
+
+    @ExceptionHandler(PlaybackStorageUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleStorageUnavailable(PlaybackStorageUnavailableException e) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ErrorResponse.of("PLAYBACK_STORAGE_UNAVAILABLE", e.getMessage()));
     }
 }
