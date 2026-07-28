@@ -33,6 +33,12 @@ sudo ai/realtime-agent/deploy/install.sh /opt/tljh/user/bin/uv
 - `/etc/liveclass/realtime-agent.env`
 - `/etc/liveclass/realtime-agent-tunnels.env`
 
+한 GPU만 쓰는 현재 profile은 agent env에 `CUDA_VISIBLE_DEVICES=0`,
+`STT_MAX_ACTIVE_JOBS=12`, `STT_NUM_IDLE_PROCESSES=12`를 둔다. LiveKit Agents 1.6.6의 동시
+availability reservation은 idle 수를 초기 burst admission slot으로 사용하므로 두 값을 같게 둬야
+12개 동시 dispatch를 모두 받는다. `CUDA_VISIBLE_DEVICES`는 service와
+LiveKit job child에 상속되므로 모든 Nemotron model이 같은 물리 GPU 안에 올라간다.
+
 SSH private key는 Git 저장소 밖에 두고 `liveclass-ai`만 읽을 수 있게 한다. EC2 host key fingerprint를
 별도 채널로 확인한 뒤 `/srv/liveclass/realtime-agent/.ssh/known_hosts`에 등록한다. `StrictHostKeyChecking`
 을 끄지 않는다.

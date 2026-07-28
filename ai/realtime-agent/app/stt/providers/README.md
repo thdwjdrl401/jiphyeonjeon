@@ -19,7 +19,9 @@ registry가 provider를 선택한다. streaming provider는 PCM을 지속 전송
 ## 경계와 불변식
 
 provider 자격 증명과 선택은 환경 변수로 주입한다. `stub` 결과를 실제 STT 품질 검증으로 간주하지 않으며,
-Nemotron은 process-wide model 공유가 없어 현재 active job을 1개로 제한한다.
+Nemotron은 process-wide model을 공유하지 않고 job child마다 독립 model을 소유한다. provider profile은
+H200 한 장에서 worker당 active job 상한 12, 기본 warm idle process 12를 사용한다. LiveKit Agents
+1.6.6의 초기 burst reservation도 idle 수를 사용하므로 12-request burst에는 두 값을 같게 둔다.
 
 ## 검증
 
