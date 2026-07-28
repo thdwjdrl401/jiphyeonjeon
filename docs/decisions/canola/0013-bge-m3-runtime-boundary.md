@@ -26,7 +26,9 @@ sequence length가 8192인 모델이다. 기본 revision은 Hugging Face의 veri
 3. device는 canonical `cuda`/`cuda:N`만 허용한다. CUDA가 없거나 index가 유효하지 않으면 CPU로
    fallback하지 않고 시작을 실패시킨다.
 4. 기본 CI dependency와 실제 CUDA dependency를 분리한다. FastAPI/config/test는 base에서,
-   SentenceTransformers와 exact `torch==2.13.0+cu130`은 `cuda` extra에서 관리한다.
+   SentenceTransformers와 exact `torch==2.11.0+cu128`은 `cuda` extra에서 관리한다.
+   운영 H200 서버 드라이버는 CUDA 12.8이고 realtime-agent도 같은 cu128 계열을 사용한다. cu130 wheel은
+   이 서버에서 driver too old로 CUDA 초기화에 실패하므로 사용하지 않는다.
 5. model load와 encode는 OS thread 안의 lock으로 직렬화한다. coroutine이 취소되어도 실제 CUDA
    thread가 끝날 때까지 취소 전파와 admission 반환을 미루므로 다음 추론과 겹치거나 취소를 통해
    bounded queue를 우회하지 못한다.
@@ -47,6 +49,9 @@ sequence length가 8192인 모델이다. 기본 revision은 Hugging Face의 veri
   아니다. 실제 자료 분포와 최대 허용 batch의 VRAM/latency를 별도 측정해야 한다.
 - 실제 BGE model/CUDA smoke는 base 테스트와 구분해 full revision, cold/warm latency, peak
   allocated/reserved를 기록한다.
+- 2026-07-28 H200 NVL 물리 GPU0에서 `torch==2.11.0+cu128` offline smoke를 실행해 2×1024,
+  finite/unit norm, 반복 출력 최대 차이 0을 확인했다. cold 8934.4ms, warm 12.7ms, peak allocated
+  2200.2MiB / reserved 2222.0MiB였고 물리 GPU1 메모리는 0MiB를 유지했다.
 - 2026-07-27 RTX 4050 Laptop 6 GB에서 짧은 입력 2개 offline smoke 결과는 2×1024,
   finite/unit norm, cold 39.3초, warm 116.8ms, peak allocated 2175.4 MiB / reserved
   2188.0 MiB였다. 이는 최대 batch나 다른 모델과의 동시 상주 근거가 아니다.
