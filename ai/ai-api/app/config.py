@@ -12,7 +12,7 @@ _DATABASE_ROLE = re.compile(r"^[a-z_][a-z0-9_]{0,62}$")
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="AI_API_", extra="ignore")
+    model_config = SettingsConfigDict(env_prefix="AI_API_", extra="ignore", populate_by_name=True)
 
     environment: Literal["local", "test", "staging", "production"] = "local"
     host: str = "127.0.0.1"
@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     redis_reconnect_max_seconds: float = Field(default=5.0, gt=0, le=300)
     redis_connect_timeout_seconds: float = Field(default=2.0, gt=0, le=30)
     redis_socket_timeout_seconds: float = Field(default=15.0, gt=0, le=120)
+
+    ai_internal_secret: SecretStr | None = Field(
+        default=None, min_length=1, validation_alias="AI_INTERNAL_SECRET"
+    )
 
     database_url: str | None = None
     database_role: str = "ai_app"
@@ -66,6 +70,16 @@ class Settings(BaseSettings):
     material_lexical_threshold: float = Field(default=0.0, ge=0, le=1)
     caption_evidence_max_items: int = Field(default=32, ge=1, le=1_000)
     caption_evidence_max_chars: int = Field(default=20_000, ge=1, le=50_000)
+
+    @field_validator("ai_internal_secret", mode="before")
+    @classmethod
+    def validate_ai_internal_secret(cls, value: object) -> object:
+        if isinstance(value, str):
+            if not value.strip():
+                return None
+            if value != value.strip():
+                raise ValueError("ai_internal_secret must not contain surrounding whitespace")
+        return value
 
     @field_validator("gms_api_key", mode="before")
     @classmethod

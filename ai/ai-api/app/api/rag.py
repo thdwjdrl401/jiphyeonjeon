@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 
 from app.api.internal_auth import InternalAuthenticationError, InternalRequestAuthenticator
@@ -23,20 +23,21 @@ def create_rag_router(
     authenticator: InternalRequestAuthenticator | None,
 ) -> APIRouter:
     async def require_internal_auth(
-        authorization: Annotated[str | None, Header()] = None,
+        request: Request,
+        x_internal_signature: Annotated[str | None, Header()] = None,
     ) -> None:
         if authenticator is None:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="internal authentication is not configured",
             )
+        raw_body = await request.body()
         try:
-            await authenticator.authenticate(authorization)
+            await authenticator.authenticate(raw_body, x_internal_signature)
         except InternalAuthenticationError as exc:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="invalid internal credentials",
-                headers={"WWW-Authenticate": "Bearer"},
             ) from exc
 
     router = APIRouter(

@@ -8,6 +8,7 @@ from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from app.adapters import HmacInternalRequestAuthenticator
 from app.api import RAG_STREAM_PATH, InternalRequestAuthenticator, create_rag_router
 from app.config import Settings, load_settings
 from app.logging_config import configure_logging
@@ -99,8 +100,13 @@ def run() -> None:
     settings = load_settings()
     configure_logging("ai-api", settings.log_level)
     rag_services = build_rag_services(settings)
+    internal_authenticator = (
+        HmacInternalRequestAuthenticator(settings.ai_internal_secret.get_secret_value().encode("utf-8"))
+        if settings.ai_internal_secret is not None
+        else None
+    )
     uvicorn.run(
-        create_app(settings, rag_services=rag_services),
+        create_app(settings, rag_services=rag_services, internal_authenticator=internal_authenticator),
         host=settings.host,
         port=settings.port,
         log_config=None,

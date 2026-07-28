@@ -8,12 +8,14 @@
 
 - 요청: `POST /internal/v1/rag/answers:stream`
 - 호출자: 사용자 인증·강의 권한·비용 정책을 먼저 확인한 Spring만 허용한다.
-- 요청 header: `Authorization`. 토큰 claim과 서명 방식은 아직 확정하지 않았다.
+- 요청 header: `X-Internal-Signature: base64(HMAC-SHA256(AI_INTERNAL_SECRET, rawBody))` (ADR-0023 §9,
+  Spring↔ai-api 공유 시크릿). 서명 대상은 요청 원시 body 전체다.
 - 응답 협상: `Accept`에 `text/event-stream`이 포함되어야 한다.
 - 브라우저의 직접 호출은 지원하지 않는다.
 
-현재 production entrypoint는 Redis/pgvector/BGE/GMS와 application lifespan을 조립하지만 내부 인증기는
-배선하지 않아 `503`으로 닫혀 있다. fake 인증기로 통과한 테스트는 Spring 인증 완료를 뜻하지 않는다.
+`AI_INTERNAL_SECRET`이 설정되면 production entrypoint는 이 HMAC 인증기를 실제로 배선한다. 미설정 시에는
+지금까지와 동일하게 `503`으로 닫힌다(fail-closed). 이 계약은 아직 Spring 쪽 발급기·공유 `docs/CONTRACT.md`
+승격 전이라 §9가 서면 승인되기 전까지는 후보 상태다.
 
 ## 2. 요청 body
 
@@ -23,7 +25,8 @@
   "lessonId": "11111111-1111-4111-8111-111111111111",
   "sessionId": "33333333-3333-4333-8333-333333333333",
   "question": "방금 설명한 개념은 무엇인가요?",
-  "contextTimeMs": 615000
+  "contextTimeMs": 615000,
+  "issuedAtMs": 1785120000000
 }
 ```
 
@@ -35,6 +38,9 @@
 - `question`: 1~4,000자. whitespace를 임의로 trim하지 않는다.
 - `contextTimeMs`: 0 이상의 **최신 STT attempt-local `streamElapsedMs` 좌표**다. Spring은 자신의
   session/HLS clock을 이 좌표로 변환한 뒤 보내야 하며, 변환 기준점은 공유 계약 승격 전에 확정해야 한다.
+- `issuedAtMs`: 0 이상의 UTC epoch ms. `X-Internal-Signature` 검증 시 신선도 체크에 쓰인다 — 서버 수신
+  시각과 60초 이상 차이 나거나 5초를 초과해 미래면 `401`. body가 곧 서명 대상이라 별도 claim 없이 이 값
+  자체가 위·변조되면 서명 검증에서 걸린다.
 
 ## 3. SSE event
 

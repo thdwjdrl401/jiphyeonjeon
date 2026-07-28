@@ -29,6 +29,7 @@ class RagAnswerRequest(_ContractModel):
     sessionId: SessionId
     question: Question
     contextTimeMs: int = Field(ge=0)
+    issuedAtMs: int = Field(ge=0)
 
 
 class PptxSource(_ContractModel):
