@@ -102,3 +102,13 @@ def test_ai_internal_secret_is_loaded_from_unprefixed_env_var(monkeypatch) -> No
         assert secret not in repr(settings)
     finally:
         load_settings.cache_clear()
+
+
+def test_ai_internal_secret_env_var_rejects_surrounding_whitespace(monkeypatch) -> None:
+    monkeypatch.setenv("AI_INTERNAL_SECRET", " padded-secret ")
+    load_settings.cache_clear()
+    try:
+        with pytest.raises(ValidationError):
+            load_settings()
+    finally:
+        load_settings.cache_clear()

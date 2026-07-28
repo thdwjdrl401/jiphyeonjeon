@@ -167,3 +167,22 @@ async def test_rejects_non_utf8_body_as_auth_failure_not_crash() -> None:
 
     with pytest.raises(InternalAuthenticationError):
         await authenticator.authenticate(body, _sign(SECRET, body))
+
+
+@async_test
+async def test_rejects_empty_body() -> None:
+    authenticator = HmacInternalRequestAuthenticator(SECRET)
+    body = b""
+
+    with pytest.raises(InternalAuthenticationError):
+        await authenticator.authenticate(body, _sign(SECRET, body))
+
+
+@pytest.mark.parametrize("issued_at_ms", ["1700000000000", 1_700_000_000_000.5, True])
+@async_test
+async def test_rejects_issued_at_of_wrong_type(issued_at_ms: object) -> None:
+    authenticator = HmacInternalRequestAuthenticator(SECRET)
+    body = _body(0, issuedAtMs=issued_at_ms)
+
+    with pytest.raises(InternalAuthenticationError):
+        await authenticator.authenticate(body, _sign(SECRET, body))
