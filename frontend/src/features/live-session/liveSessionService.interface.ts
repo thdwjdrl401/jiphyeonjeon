@@ -58,17 +58,42 @@ export interface QuestionHighlight {
   text: string
 }
 
-export interface LivePlaybackView {
+/**
+ * 재생 metadata(CONTRACT §2 다시보기). 라이브 되감기와 종료 후 다시보기가 같은 응답을 쓴다.
+ *
+ * source가 하나인 이유: 라이브 중 재생목록은 `#EXT-X-ENDLIST` 없이 자라는 EVENT 목록이라
+ * 라이브 엣지와 세션 처음까지의 seek을 한 목록이 동시에 준다. 갱신 크기는 서버가 델타
+ * 재생목록으로 잡으므로 프론트가 source를 갈아끼울 일이 없다.
+ */
+export interface PlaybackView {
+  lessonId: string
   sessionId: string
-  playbackUrl: string
-  mimeType: 'application/vnd.apple.mpegurl'
-  streamType: 'LIVE_DVR'
-  sessionOffsetMs: number | null
+  /** STARTING/LIVE/ENDING이면 라이브, ENDED면 종료. 플레이어 UI와 폴링 주기를 가른다. */
+  liveSessionStatus: string
+  /** 재생 가능한 최신 지점(세션 상대 ms) = 라이브 엣지. */
+  currentSessionMs: number | null
+  /** 종료된 녹화의 총 길이(ms). 라이브 중에는 null. */
+  durationMs: number | null
+  /** manifest가 아직 없으면(Egress 지연) null — 오류가 아니라 대기 상태다. */
+  source: PlaybackSourceView | null
+}
+
+export interface PlaybackSourceView {
+  /** 인증된 manifest 엔드포인트. same-origin이라 세션 쿠키가 그대로 실린다. */
+  url: string
+  /**
+   * 이 source가 담는 구간의 시작(세션 상대 ms). **미디어 시각 0이 가리키는 세션 시각**이라
+   * 자막 싱크의 기준이다. 최상위 필드가 아니라 이 값을 써야 한다.
+   */
+  availableFromMs: number | null
+  /** 이 source가 담는 구간의 끝(세션 상대 ms). */
+  availableToMs: number | null
 }
 
 export interface LiveSessionService {
   getLiveSession: (sessionId: string) => Promise<LiveSessionView>
-  getLivePlayback: (sessionId: string) => Promise<LivePlaybackView>
+  /** 레슨 기준이다 — 권한이 레슨→커리큘럼→수강 관계로만 판정되기 때문(CONTRACT §2). */
+  getPlayback: (lessonId: string) => Promise<PlaybackView>
   getPreflightChecks: (sessionId: string) => Promise<PreflightCheck[]>
   startLiveSession: (sessionId: string) => Promise<void>
   endLiveSession: (sessionId: string) => Promise<void>
