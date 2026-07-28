@@ -106,12 +106,16 @@ services:
       ASSET_STORAGE_PATH_STYLE: "true"
       ASSET_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       ASSET_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD 필요}
-      # 녹화 스토리지(같은 MinIO, 다른 버킷). 에셋과 달리 주소가 둘로 갈린다:
-      #   EGRESS_S3_ENDPOINT          = 내부. Egress가 업로드하고 backend가 매니페스트를 GET
-      #   VIDEO_PLAYBACK_PUBLIC_ENDPOINT = 공개. 매니페스트 안 세그먼트 presigned URL을 브라우저가 연다
-      # SigV4가 Host를 서명에 포함하므로 하나로 합칠 수 없다. 공개 쪽은 nginx /recordings/ 로 들어온다.
+      # 녹화 스토리지(같은 MinIO, 다른 버킷). 같은 버킷을 세 주체가 서로 다른 위치에서 접근하므로
+      # 주소가 셋이다 — SigV4가 Host를 서명에 포함해서 하나로 합칠 수 없다:
+      #   EGRESS_S3_ENDPOINT             = 내부.  backend가 매니페스트를 GET (도커 네트워크)
+      #   EGRESS_UPLOAD_ENDPOINT         = 공개.  Egress가 세그먼트를 PUT — Egress는 host 네트워크라
+      #                                           도커 서비스명(minio)을 해석하지 못한다
+      #   VIDEO_PLAYBACK_PUBLIC_ENDPOINT = 공개.  브라우저가 presigned 세그먼트를 GET
+      # 공개 쪽 둘은 nginx /recordings/ 로 들어와 Host 보존 프록시를 탄다.
       EGRESS_BUCKET: ${EGRESS_BUCKET:-recordings}
       EGRESS_S3_ENDPOINT: http://minio:9000
+      EGRESS_UPLOAD_ENDPOINT: https://jiphyeonjeon.thdwjdrl.com
       EGRESS_S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       EGRESS_S3_SECRET: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD 필요}
       EGRESS_S3_REGION: ${EGRESS_S3_REGION:-us-east-1}

@@ -38,7 +38,9 @@ public class LiveKitEgressControl implements EgressControl {
                 .setAccessKey(egress.s3AccessKey())
                 .setSecret(egress.s3Secret())
                 .setBucket(egress.bucket())
-                .setEndpoint(egress.s3Endpoint())
+                // Egress는 호스트 네트워크로 돌아 도커 서비스명(minio)을 해석하지 못한다.
+                // 백엔드의 읽기 주소가 아니라 업로드 전용 주소를 넘긴다(EgressProperties javadoc).
+                .setEndpoint(egress.uploadEndpoint())
                 .setRegion(egress.s3Region())
                 .setForcePathStyle(egress.forcePathStyle())
                 .build();
