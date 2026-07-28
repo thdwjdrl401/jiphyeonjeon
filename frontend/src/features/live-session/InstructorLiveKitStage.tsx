@@ -7,7 +7,6 @@ interface InstructorLiveKitStageProps {
   sessionId: string
   lessonTitle: string
   participantCount: number
-  enabled: boolean
   onRequestEnd: () => void
 }
 
@@ -43,8 +42,8 @@ function emptyPreviewMessage(state: InstructorLiveKitConnectionState, cameraEnab
   return '카메라가 꺼져 있습니다. 카메라를 켜거나 화면을 공유해 주세요.'
 }
 
-export default function InstructorLiveKitStage({ sessionId, lessonTitle, participantCount, enabled, onRequestEnd }: InstructorLiveKitStageProps) {
-  const publisher = useInstructorLiveKit(sessionId, enabled)
+export default function InstructorLiveKitStage({ sessionId, lessonTitle, participantCount, onRequestEnd }: InstructorLiveKitStageProps) {
+  const publisher = useInstructorLiveKit()
   const screenShareTrack = publisher.screenShareEnabled ? publisher.screenShareTrack : undefined
   const cameraTrack = publisher.cameraEnabled ? publisher.cameraTrack : undefined
   const mainTrack = screenShareTrack ?? cameraTrack

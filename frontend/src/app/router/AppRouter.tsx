@@ -3,6 +3,7 @@ import { instructorPaths, studentPaths } from './paths'
 import GuestOnlyRoute from '@/features/auth/GuestOnlyRoute'
 import RequireRoleRoute from '@/features/auth/RequireRoleRoute'
 import RequireStudentPrejoinRoute from '@/features/live-session/RequireStudentPrejoinRoute'
+import InstructorLiveMediaProvider from '@/features/live-session/InstructorLiveMediaProvider'
 import CurriculumDetailPage from '@/pages/CurriculumDetailPage'
 import CurriculumFormPage from '@/pages/CurriculumFormPage'
 import CurriculumListPage from '@/pages/CurriculumListPage'
@@ -64,11 +65,18 @@ export default function AppRouter() {
           <Route path="curriculums/:curriculumId/sections/:sectionId/lessons/new" element={<LessonFormPage />} />
           <Route path="curriculums/:curriculumId/sections/:sectionId/lessons/:lessonId" element={<LessonDetailPage />} />
           <Route path="curriculums/:curriculumId/sections/:sectionId/lessons/:lessonId/edit" element={<LessonFormPage />} />
-          <Route path="live-sessions/:sessionId/preflight" element={<InstructorPreflightPage />} />
           <Route path="live-sessions/:sessionId/processing" element={<LiveSessionProcessingPage />} />
         </Route>
+        <Route path="live-sessions/:sessionId" element={<InstructorLiveMediaProvider />}>
+          <Route index element={<Navigate to="preflight" replace />} />
+          <Route element={<WorkspaceLayout />}>
+            <Route path="preflight" element={<InstructorPreflightPage />} />
+          </Route>
+          <Route element={<LessonLayout />}>
+            <Route path="classroom" element={<LiveClassroomPage />} />
+          </Route>
+        </Route>
         <Route element={<LessonLayout />}>
-          <Route path="live-sessions/:sessionId/classroom" element={<LiveClassroomPage />} />
           <Route path="lessons/:lessonId/replay" element={<ReplayLessonPage />} />
         </Route>
       </Route>
