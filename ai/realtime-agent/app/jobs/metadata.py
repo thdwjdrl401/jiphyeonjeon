@@ -48,6 +48,39 @@ class JobMetadata:
     correlation_id: str
 
     @classmethod
+    def from_values(
+        cls,
+        *,
+        session_id: str,
+        lesson_id: str,
+        correlation_id: str,
+    ) -> JobMetadata:
+        return cls.parse(
+            json.dumps(
+                {
+                    "contractVersion": "1",
+                    "sessionId": session_id,
+                    "lessonId": lesson_id,
+                    "correlationId": correlation_id,
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+        )
+
+    def to_json(self) -> str:
+        return json.dumps(
+            {
+                "contractVersion": self.contract_version,
+                "sessionId": str(self.session_id),
+                "lessonId": str(self.lesson_id),
+                "correlationId": self.correlation_id,
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+
+    @classmethod
     def parse(cls, raw: str) -> JobMetadata:
         if not isinstance(raw, str):
             raise InvalidJobMetadataError("job metadata must be a JSON string")

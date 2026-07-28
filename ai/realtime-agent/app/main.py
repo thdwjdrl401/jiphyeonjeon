@@ -4,15 +4,17 @@ from collections.abc import Callable
 from functools import partial
 
 from livekit.agents import AgentServer, JobContext, cli
-from redis.asyncio import Redis
 
 from app.adapters.redis_caption_publisher import RedisCaptionPublisher
 from app.adapters.redis_session_lease import RedisSessionLease
 from app.adapters.spring_status_callback import SpringStatusCallback
 from app.config import Settings
+from app.connections import create_redis_client
 from app.jobs.dispatched_room_job import run_dispatched_room_job
 from app.jobs.lifecycle import DisabledLifecycleReporter, LifecycleReporter
 from app.jobs.metadata import JobMetadata
+from app.livekit.audio_source import LiveKitInstructorAudioSource
+from app.livekit.rtc_config import build_turn_rtc_config
 from app.stt.providers.nemotron import NemotronStreamingEngine
 from app.stt.providers.openai_realtime import OpenAiRealtimeStreamingEngine
 from app.stt.providers.stub import StubStreamingEngine
@@ -90,7 +92,11 @@ def build_agent_server(settings: Settings) -> AgentServer:
 
 async def _run_agent_job(context: JobContext, *, settings: Settings) -> None:
     registry = build_engine_registry(settings)
-    redis = Redis.from_url(settings.redis_url, decode_responses=True)
+    rtc_config = build_turn_rtc_config(
+        settings.livekit_turn_url,
+        settings.livekit_turn_secret,
+    )
+    redis = create_redis_client(settings.redis_connection())
     try:
         publisher = RedisCaptionPublisher(
             redis,
@@ -111,6 +117,10 @@ async def _run_agent_job(context: JobContext, *, settings: Settings) -> None:
             ),
             lifecycle_reporter_factory=lambda metadata, job_id: build_lifecycle_reporter(
                 settings, metadata, job_id
+            ),
+            audio_source_factory=partial(
+                LiveKitInstructorAudioSource,
+                rtc_config=rtc_config,
             ),
             language=settings.asr_language,
             shutdown_timeout_seconds=settings.stt_shutdown_timeout_seconds,

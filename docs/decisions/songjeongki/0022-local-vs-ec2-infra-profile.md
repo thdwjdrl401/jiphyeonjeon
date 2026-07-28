@@ -4,10 +4,10 @@
 
 - **상태**: 채택
 - **일자**: 2026-07-21
-- **관련**: [0008](0008-ai-bus-redis-streams-session-clock.md)(AI 버스=Redis Streams), [0011](0011-ai-three-services.md)(realtime-agent), [0013](0013-unified-streaming-stt.md)(스트리밍 STT), [0004](0004-media-livekit-selfhost.md)(LiveKit), [0015](0015-docker-deploy-fe-be-nginx.md)(배포), 계약 [../../CONTRACT.md](../../CONTRACT.md) §3-3
+- **관련**: [0008](0008-ai-bus-redis-streams-session-clock.md)(AI 버스=Redis Streams), [0011](0011-ai-three-services.md)(realtime-agent), [0013](0013-unified-streaming-stt.md)(스트리밍 STT), [0004](0004-media-livekit-selfhost.md)(LiveKit), [0015](0015-docker-deploy-fe-be-nginx.md)(배포), 계약 [../../CONTRACT.md](../../CONTRACT.md) §3-4
 
 ## 맥락
-- 라이브 STT 파이프라인: `realtime-agent`(Python, LiveKit Agent)가 강사 오디오를 구독→스트리밍 STT→**Redis Streams**에 `caption.*` 푸시. Spring이 **consumer group**으로 소비→PG 영속+WS 전달 ([0008]/[0011]/[0013], [CONTRACT §3-3](../../CONTRACT.md)).
+- 라이브 STT 파이프라인: `realtime-agent`(Python, LiveKit Agent)가 강사 오디오를 구독→스트리밍 STT→**Redis Streams**에 `caption.*` 푸시. Spring이 **consumer group**으로 소비→PG 영속+WS 전달 ([0008]/[0011]/[0013], [CONTRACT §3-4](../../CONTRACT.md)).
 - 그런데 `realtime-agent`·LiveKit 미디어 스택은 **EC2에만** 있다(로컬 미디어는 제한적). 즉 STT는 **EC2의 Redis 스트림**에만 쌓인다.
 - 반면 로컬 개발 백엔드는 `application.yml`의 `localhost` 하드코딩으로 **로컬 도커 Redis**를 본다 → 스트림이 비어 있어 STT consumer/WS/영속 로직을 개발할 수 없다.
 - prod(`docker-compose.prod.yml`)는 Redis/PG 호스트 포트를 **미노출**(내부 네트워크 전용) + ufw/SG 2계층 방화벽으로 잠가 둔다.

@@ -16,17 +16,17 @@ dependencies = [
 nemotron = [
     "accelerate>=1.10,<2",
     "librosa>=0.11,<1",
-    "torch==2.13.0+cu130",
-    "transformers>=5.13,<6",
+    "torch==2.11.0+cu128",
+    "transformers>=5.3,<6",
 ]
 
 [[tool.uv.index]]
-name = "pytorch-cu130"
-url = "https://download.pytorch.org/whl/cu130"
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
 explicit = true
 
 [tool.uv.sources]
-torch = { index = "pytorch-cu130" }
+torch = { index = "pytorch-cu128" }
 
 [dependency-groups]
 dev = [

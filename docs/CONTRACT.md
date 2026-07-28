@@ -2,7 +2,7 @@
 
 > 📍 하네스 개요: [docs/harness/README.md](harness/README.md) · 정본 규칙: [AGENTS.md](../AGENTS.md) · 아키텍처: [ARCHITECTURE.md](ARCHITECTURE.md)
 >
-> **FE↔Spring**, **Spring↔AI(RabbitMQ/HTTP)**, **AI→Spring(Redis Streams/callback)** 이 동시에 지켜야 어긋나지 않는 계약. 한쪽이 바꾸면 다른 쪽이 깨지는 항목만.
+> **FE↔Spring**, **Spring↔AI(RabbitMQ/HTTP/LiveKit AgentDispatch/Redis Streams)** 이 동시에 지켜야 어긋나지 않는 계약. 한쪽이 바꾸면 다른 쪽이 깨지는 항목만.
 > (구 화상회의 명세 [SPEC.md](legacy/SPEC.md)는 참고용 — [decisions/songjeongki/0003](decisions/songjeongki/0003-greenfield-redesign.md))
 
 ---
@@ -33,18 +33,52 @@
 ## 3. 내부 계약 (확정 인터페이스)
 
 ### 3-1. Spring → AI 배치 잡 (RabbitMQ)
-자료 임베딩 잡 envelope(정본은 코드 `InstructorCurriculumService.enqueueEmbedJob`): `{ taskType, materialId, assetId, lessonId, curriculumId, fileName, policy{embedModel}, contractVersion }`. taskType: `PPTX_EMBED`(자료 임베딩)·`EMBED_DELETE`(자료 삭제 시 chunk 제거) 등. (라이브 STT는 배치 아님 — Redis Streams §3-3. 트랜스코드는 없음 — VOD=Egress 녹화, [decisions/songjeongki/0010](decisions/songjeongki/0010-self-host-vod.md)) **outbox**로 발행 신뢰성, 실패는 **DLQ**. **워커 파일 접근(B안, 주문형 발급)**: envelope에 파일 위치·URL을 싣지 않는다. 워커가 잡 처리 **직전에** `POST /api/internal/ai/materials/download-url`(본문 `{assetId}`, §3-2와 동일 HMAC 서명)로 갓 서명된 presigned GET URL을 받아 스토리지에서 직접 읽는다 — 자격증명을 워커에 두지 않고, 사용 직전 발급이라 TTL 만료와 무관. chunk 정책(chunkSize·overlap)은 워커 설정 소유(envelope의 `policy`는 `embedModel`만). 상세: [decisions/songjeongki/0036](decisions/songjeongki/0036-material-embedding-pipeline.md).
+자료 임베딩 잡 envelope(정본은 코드 `InstructorCurriculumService.enqueueEmbedJob`): `{ taskType, materialId, assetId, lessonId, curriculumId, fileName, policy{embedModel}, contractVersion }`. taskType: `PPTX_EMBED`(자료 임베딩)·`EMBED_DELETE`(자료 삭제 시 chunk 제거) 등. (라이브 STT는 배치 아님 — Redis Streams §3-4. 트랜스코드는 없음 — VOD=Egress 녹화, [decisions/songjeongki/0010](decisions/songjeongki/0010-self-host-vod.md)) **outbox**로 발행 신뢰성, 실패는 **DLQ**. **워커 파일 접근(B안, 주문형 발급)**: envelope에 파일 위치·URL을 싣지 않는다. 워커가 잡 처리 **직전에** `POST /api/internal/ai/materials/download-url`(본문 `{assetId}`, §3-2와 동일 HMAC 서명)로 갓 서명된 presigned GET URL을 받아 스토리지에서 직접 읽는다 — 자격증명을 워커에 두지 않고, 사용 직전 발급이라 TTL 만료와 무관. chunk 정책(chunkSize·overlap)은 워커 설정 소유(envelope의 `policy`는 `embedModel`만). 상세: [decisions/songjeongki/0036](decisions/songjeongki/0036-material-embedding-pipeline.md).
 
 ### 3-2. AI → Spring callback (HTTP, 서명) — 구현됨
 `POST /api/internal/ai/callbacks` — permitAll이되 **HMAC-SHA256 서명이 실질 인증**이다(egress webhook 0034와 동일 패턴). 워커가 공유 시크릿(`ai.callback-secret`)으로 **원시 바이트 body**를 서명해 `X-Signature`(base64) 헤더에 실어 보내고, 검증 실패는 401. body: `{ eventId, eventType, jobId, materialId, lessonId, status }`(미지의 필드는 무시). Spring은 `external_event_inbox`에 `(source=ai-worker, eventId)` 복합키로 삽입해 **멱등** 처리(중복이면 무시). eventType → 자료 임베딩 상태 매핑: `MATERIAL_EMBEDDED`→READY, `MATERIAL_EMBED_FAILED`→FAILED, `MATERIAL_EMBEDDING`→PROCESSING, 그 외는 inbox에만 남기고 상태 불변. 코드: `aiintegration/service/AiCallbackService.java`·`web/AiCallbackVerifier.java`. 상세: [decisions/songjeongki/0036](decisions/songjeongki/0036-material-embedding-pipeline.md).
 
-### 3-3. AI → Spring 실시간 (Redis Streams, STT/자막)
-세션별 스트림. 메시지: `caption.partial|final|revised { sessionId|lessonId, segmentId, startMs, endMs, text, revision }` · `term` · `evidence` · `summary`. (라이브 STT 실시간 전달; 다시보기는 저장본 재생 — [decisions/songjeongki/0013](decisions/songjeongki/0013-unified-streaming-stt.md))
+### 3-3. Spring → realtime-agent (LiveKit explicit AgentDispatch) — AI 구현됨, Spring 미구현
+Spring은 LiveKit room·권한·생명주기를 소유하고, realtime-agent는 Worker 등록과 배정된 STT job을 소유한다. Java의 `agentName`과 Python의 `STT_AGENT_NAME`은 정확히 같아야 하며 assigned/connected room은 모두 `session-{sessionId}`여야 한다. 근거: [ADR-0025](decisions/canola/0025-realtime-agent-spring-handoff-contract.md).
 
-### 3-4. FE ↔ Spring WebSocket
+dispatch metadata는 최대 4,096 UTF-8 byte의 JSON object다. 아래 네 필드만 허용하며 알 수 없는/중복/누락 필드는 agent가 외부 자원을 열기 전에 거부한다.
+
+| 필드 | 계약 |
+|---|---|
+| `contractVersion` | 문자열 `"1"` |
+| `sessionId`, `lessonId` | 소문자 canonical UUID 문자열 |
+| `correlationId` | `[A-Za-z0-9][A-Za-z0-9._:-]{0,127}` |
+
+`instructorIdentity`는 넣지 않는다. Spring은 remote microphone publisher가 강사 한 명뿐이도록 room 권한을 보장하고, agent는 두 번째 publisher를 발견하면 fail-closed 처리한다. Spring은 dispatch/job ID를 저장하고 동일 start retry에서 기존 dispatch를 재사용하며, assignment/running 확인·assignment timeout·capacity failure·취소·정리를 멱등 처리한다. 가용 Worker가 없거나 모두 FULL이면 job은 pending이다.
+
+정상 종료 제어면은 별도 Python HTTP/Redis stop 명령이 아니라 **Spring의 LiveKit room 삭제**다. agent는 `ROOM_DELETED`만 정상 EOF로 보고 drain 후 §3-4 completion을 발행한다. 상세: [`dispatch schema`](../ai/realtime-agent/contracts/schemas/dispatch-metadata.schema.json)·[`fixture`](../ai/realtime-agent/contracts/fixtures/dispatch-metadata.valid.json).
+
+### 3-4. realtime-agent → application Redis 자막 Stream — AI 구현됨, Spring consumer 미구현
+Redis는 LiveKit 내부 Redis가 아닌 application Redis다. key는 `CAPTION_STREAM_KEY`로 주입하며 기본값은 전역 `ai:captions:live`. 모든 `XADD`에 `MAXLEN ~ CAPTION_STREAM_MAXLEN`(기본 10,000)을 적용한다. entry value는 모두 문자열이고 정수 필드는 부호 없는 최대 18자리 십진 문자열이다.
+
+| `type` | 필수 필드 |
+|---|---|
+| `caption.delta` | `contractVersion="1"`, `eventId`, `sessionId`, `lessonId`, `sttSessionId`, `sequence`, `streamElapsedMs`, `text`, `occurredAt` |
+| `caption.stream.completed` | `contractVersion="1"`, `eventId`, `sessionId`, `lessonId`, `sttSessionId`, `lastSequence`, `streamElapsedMs`, `reason="ROOM_DELETED"`, `occurredAt` |
+
+`sequence`·`lastSequence`는 `(sessionId, sttSessionId)` 한 job attempt 안에서만 증가한다. retry는 새 `sttSessionId`에서 `sequence=1`로 시작할 수 있으므로 Spring은 attempt 단위로 접고 at-least-once write는 `eventId`로 중복 제거한다. `streamElapsedMs`는 **agent가 첫 audio frame을 받은 시점을 0으로 한 attempt-local 시간**이지 Spring session clock이 아니다.
+
+현재 agent는 `caption.segment.final`·`caption.partial|final|revised`를 발행하지 않는다. consumer group, 전역 key 정리, owner fencing, session/HLS time-origin 변환은 후속 공유 계약이며 변환 전 raw `streamElapsedMs`를 세션 상대 ms로 영속·중계하지 않는다. 상세: [`caption schema`](../ai/realtime-agent/contracts/schemas/caption-stream-entry.schema.json)·[`delta fixture`](../ai/realtime-agent/contracts/fixtures/caption-delta.valid.json)·[`completion fixture`](../ai/realtime-agent/contracts/fixtures/caption-completed.valid.json).
+
+### 3-5. realtime-agent → Spring lifecycle callback (HTTP, 서명) — AI 구현됨/기본 off, Spring 미구현
+Spring 수신 endpoint를 구현하고 `SPRING_STATUS_CALLBACK_URL`로 주입하기 전까지 `SPRING_STATUS_CALLBACK_ENABLED=false`로 둔다. 기존 material callback(§3-2)과 body·header·서명이 호환되지 않으므로 `POST /api/internal/ai/callbacks`로 보내지 않으며 실제 URL은 Java 구현에서 확정한다.
+
+- body: `{ contractVersion:"1", eventId, eventType:"LIVE_AGENT_STATUS", sessionId, lessonId, jobId, state, occurredAt, error? }`.
+- `state`: `ROOM_CONNECTED|STT_STARTED|AUDIO_STARTED|STOPPING|SUCCEEDED|FAILED`. `FAILED`만 `error { code, message, retryable }` 필수.
+- headers: `Idempotency-Key:{eventId}`, `X-Correlation-Id:{dispatch correlationId}`, `X-LiveClass-Timestamp:{Unix seconds}`, `X-LiveClass-Signature:v1={lowercase hex HMAC-SHA256}`.
+- 서명 입력: `ASCII(timestamp) + "." + rawBody`; secret은 최소 32 UTF-8 byte.
+
+한 event의 bounded retry는 event ID·timestamp·raw body·signature를 그대로 재사용한다. Spring은 `Idempotency-Key`를 멱등 처리하고 terminal을 first-wins로 접는다. nonterminal callback은 best-effort이며 소실될 수 있다. 상세: [`status schema`](../ai/realtime-agent/contracts/schemas/live-agent-status.schema.json)·[`signing vector`](../ai/realtime-agent/contracts/fixtures/live-agent-status-signing.valid.json).
+
+### 3-6. FE ↔ Spring WebSocket
 - **자막 채널**(세션/강의별): caption 이벤트 push.
 - **채팅 채널**: `chat_message { lessonId, userId, sessionMs, text, alias }`.
-- 시간은 전부 **세션 상대 ms**.
+- FE로 보내는 시간은 **세션 상대 ms**. §3-4의 `streamElapsedMs`를 그대로 노출하지 않는다.
 
 ## 4. 스키마 소유권 (공동수정 금지)
 - `core` = Spring 단독 쓰기, `ai` = Python 단독 쓰기. AI 후보(ai)→강사 게시→core read model. 상세: [ARCHITECTURE.md](ARCHITECTURE.md) 도메인 모델.
@@ -53,8 +87,8 @@
 | CP | 영역 | 오너 | 계약 |
 |---|---|---|---|
 | CP0 | 인증·강좌·live_session | _미정_ | §2 |
-| CP1 | 라이브 미디어(LiveKit·채팅) | _미정_ | §2 라이브, §3-4 |
-| CP2 | 라이브 자막(STT) | _미정_ | §3-3 |
+| CP1 | 라이브 미디어(LiveKit·채팅) | _미정_ | §2 라이브, §3-6 |
+| CP2 | 라이브 자막(STT) | _미정_ | §3-3~§3-6 |
 | CP3 | 용어·RAG | _미정_ | §2 AI, §3-1, §3-2 |
 | CP4 | 녹화·다시보기(Egress) | _미정_ | §2 다시보기, §3-1 |
 | CP5 | 퀴즈·따라잡기 | _미정_ | §2 |

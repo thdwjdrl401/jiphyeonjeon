@@ -22,7 +22,8 @@
 ## 계약 준수 (BE가 지킬 것)
 - **Response/Request 모델 필드명은 camelCase**([CONTRACT §1](../docs/CONTRACT.md#1-필드명-규칙--camelcase-통일)). DB 컬럼은 snake여도 DTO는 camel.
 - **상태코드 규격**: 생성 201, 중복 409, 인증 실패 401, 권한 403([CONTRACT §2](../docs/CONTRACT.md#2-rest-api-apiv1)).
-- Python↔Spring 브릿지 메시지·시간(세션 상대 ms)은 [CONTRACT §3](../docs/CONTRACT.md#3-실시간서비스-간-계약-확정-인터페이스) 준수.
+- Python↔Spring 브릿지 메시지는 [CONTRACT §3](../docs/CONTRACT.md#3-내부-계약-확정-인터페이스) 준수.
+  realtime-agent의 raw `streamElapsedMs`는 attempt-local 시간이며, 후속 계약으로 변환하기 전에는 세션 상대 ms로 간주하지 않는다.
 
 ## 패키지 구조
 - **모듈러 모놀리스**: 도메인 모듈(auth·course·curriculum·lesson·enrollment·video·transcript·glossary·quiz·chat·aiintegration·live) 단일 배포. 모듈 간 ID/port로만 연결(다른 모듈 Entity 직접 참조 금지). 도메인은 **course→section→lesson 중심**(live_session은 lesson 연결, [../docs/decisions/songjeongki/0007](../docs/decisions/songjeongki/0007-domain-live-session.md)).

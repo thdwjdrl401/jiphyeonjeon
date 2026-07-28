@@ -1,13 +1,13 @@
-# Realtime agent contract candidates
+# Realtime agent v1 contract artifacts
 
-이 디렉터리는 realtime-agent가 제안하는 **AI 내부 v1 후보 계약**의 JSON Schema와
-대표 fixture를 보관한다. 아직 `docs/CONTRACT.md`의 Spring/Python 공유 계약이 아니며,
-Java producer/consumer가 이 계약을 채택하고 양쪽 계약 테스트가 추가되기 전에는 Java와
-통합 완료로 간주하지 않는다.
+이 디렉터리는 realtime-agent v1 계약의 JSON Schema와 대표 fixture를 보관한다.
+Spring이 생산·소비하는 경계는 [`docs/CONTRACT.md` §3-3~§3-5](../../../docs/CONTRACT.md#3-내부-계약-확정-인터페이스)에 채택됐다.
+Java producer/consumer와 양쪽 계약 테스트가 아직 없으므로 Java 통합 완료로
+간주하지 않는다.
 
 ## 경계
 
-| Schema | 후보 producer | Transport | 후보 consumer |
+| Schema | Producer | Transport | Consumer |
 |---|---|---|---|
 | `dispatch-metadata.schema.json` | Spring dispatch adapter | LiveKit job metadata | realtime-agent |
 | `caption-stream-entry.schema.json` | realtime-agent | Redis Stream | 향후 Spring/ai-api consumer |

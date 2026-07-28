@@ -41,6 +41,7 @@ def test_parses_exact_dispatch_metadata_fixture() -> None:
         lesson_id=UUID(LESSON_ID),
         correlation_id="trace.live-1",
     )
+    assert JobMetadata.parse(metadata.to_json()) == metadata
 
 
 @pytest.mark.parametrize(

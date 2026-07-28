@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pickle
 from dataclasses import replace
+from functools import partial
 from types import SimpleNamespace
 from typing import ClassVar
 from uuid import UUID
@@ -213,12 +214,19 @@ class FakeRedisClient:
 
 
 class FakeRedis:
-    calls: ClassVar[list[tuple[str, bool]]] = []
+    calls: ClassVar[list[tuple[str, str | None, str | None, bool]]] = []
     clients: ClassVar[list[FakeRedisClient]] = []
 
     @classmethod
-    def from_url(cls, url: str, *, decode_responses: bool) -> FakeRedisClient:
-        cls.calls.append((url, decode_responses))
+    def from_url(
+        cls,
+        url: str,
+        *,
+        username: str | None,
+        password: str | None,
+        decode_responses: bool,
+    ) -> FakeRedisClient:
+        cls.calls.append((url, username, password, decode_responses))
         client = FakeRedisClient()
         cls.clients.append(client)
         return client
@@ -274,18 +282,30 @@ async def test_entrypoint_shares_one_redis_client_and_delegates_job(
         captured["publisher"] = publisher
         captured["lease"] = kwargs["session_lease_factory"](SESSION_ID, "job-1")
         captured["reporter"] = kwargs["lifecycle_reporter_factory"](metadata(), "job-1")
+        captured["audio_source_factory"] = kwargs["audio_source_factory"]
         captured["language"] = kwargs["language"]
         captured["shutdown_timeout_seconds"] = kwargs["shutdown_timeout_seconds"]
         captured["drain_timeout_seconds"] = kwargs["drain_timeout_seconds"]
         captured["cleanup_timeout_seconds"] = kwargs["cleanup_timeout_seconds"]
 
     monkeypatch.setattr(agent_main, "AgentServer", FakeAgentServer)
-    monkeypatch.setattr(agent_main, "Redis", FakeRedis)
+    monkeypatch.setattr(
+        agent_main,
+        "create_redis_client",
+        lambda connection: FakeRedis.from_url(
+            connection.url,
+            username=connection.username or None,
+            password=connection.password or None,
+            decode_responses=True,
+        ),
+    )
     monkeypatch.setattr(agent_main, "RedisCaptionPublisher", FakePublisher)
     monkeypatch.setattr(agent_main, "RedisSessionLease", FakeLease)
     monkeypatch.setattr(agent_main, "run_dispatched_room_job", run_job)
     configured = settings(
         redis_url="redis://app-redis:6379/3",
+        redis_username="",
+        redis_password="redis-secret",
         redis_stream_key="candidate:captions",
         caption_stream_maxlen=2_500,
         session_lease_ttl_seconds=45,
@@ -295,13 +315,15 @@ async def test_entrypoint_shares_one_redis_client_and_delegates_job(
         stt_drain_timeout_seconds=6.0,
         stt_cleanup_timeout_seconds=0.75,
         asr_language="en-US",
+        livekit_turn_url="turn:127.0.0.1:3478?transport=tcp",
+        livekit_turn_secret="turn-secret",
     )
     context = object()
     server = agent_main.build_agent_server(configured)
 
     await server.entrypoint(context)
 
-    assert FakeRedis.calls == [("redis://app-redis:6379/3", True)]
+    assert FakeRedis.calls == [("redis://app-redis:6379/3", None, "redis-secret", True)]
     assert len(FakeRedis.clients) == 1
     redis_client = FakeRedis.clients[0]
     publisher = captured["publisher"]
@@ -322,6 +344,10 @@ async def test_entrypoint_shares_one_redis_client_and_delegates_job(
     assert captured["shutdown_timeout_seconds"] == 11.0
     assert captured["drain_timeout_seconds"] == 6.0
     assert captured["cleanup_timeout_seconds"] == 0.75
+    audio_source_factory = captured["audio_source_factory"]
+    assert isinstance(audio_source_factory, partial)
+    rtc_config = audio_source_factory.keywords["rtc_config"]
+    assert rtc_config.ice_servers[0].urls == ["turn:127.0.0.1:3478?transport=tcp"]
     assert redis_client.close_calls == 1
 
 
@@ -335,7 +361,16 @@ async def test_entrypoint_closes_redis_when_job_fails(
         raise RuntimeError("job failed")
 
     monkeypatch.setattr(agent_main, "AgentServer", FakeAgentServer)
-    monkeypatch.setattr(agent_main, "Redis", FakeRedis)
+    monkeypatch.setattr(
+        agent_main,
+        "create_redis_client",
+        lambda connection: FakeRedis.from_url(
+            connection.url,
+            username=connection.username or None,
+            password=connection.password or None,
+            decode_responses=True,
+        ),
+    )
     monkeypatch.setattr(agent_main, "run_dispatched_room_job", fail_job)
     server = agent_main.build_agent_server(settings())
 

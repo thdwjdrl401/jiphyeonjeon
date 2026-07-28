@@ -38,9 +38,16 @@ class FakeContext:
     def __init__(self, room: FakeRoom) -> None:
         self.room = room
         self.auto_subscribe: AutoSubscribe | None = None
+        self.rtc_config: rtc.RtcConfiguration | None = None
 
-    async def connect(self, *, auto_subscribe: AutoSubscribe) -> None:
+    async def connect(
+        self,
+        *,
+        auto_subscribe: AutoSubscribe,
+        rtc_config: rtc.RtcConfiguration | None = None,
+    ) -> None:
         self.auto_subscribe = auto_subscribe
+        self.rtc_config = rtc_config
 
 
 class FakePublication:
@@ -93,6 +100,18 @@ async def test_connect_disables_auto_subscribe_and_selects_one_microphone() -> N
     assert screen_audio.subscribed is False
     await source.close()
     assert room.handlers == {}
+
+
+async def test_connect_passes_explicit_rtc_configuration() -> None:
+    room = FakeRoom()
+    context = FakeContext(room)
+    rtc_config = rtc.RtcConfiguration()
+    source = LiveKitInstructorAudioSource(context, rtc_config=rtc_config)  # type: ignore[arg-type]
+
+    await source.connect()
+
+    assert context.rtc_config is rtc_config
+    await source.close()
 
 
 async def test_late_microphone_publication_uses_the_same_selection_policy() -> None:

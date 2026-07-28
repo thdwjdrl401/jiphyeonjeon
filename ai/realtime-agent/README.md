@@ -6,9 +6,9 @@ LiveKit `AgentServer` 실행, session lease, caption stream, 선택적인 Spring
 연결한다.
 
 외부 메시지 형식은 [CONTRACT.md](CONTRACT.md)와 [`contracts/`](contracts/README.md)에 고정했다.
-이 계약은 아직 Java와 `docs/CONTRACT.md`가 채택한 공유 계약이 아니라 **AI-side v1 proposal**이다.
-현재 Java에는 named AgentDispatch, caption consumer, live-agent callback handler가 없으므로 이
-서비스만으로 Java 연동 또는 CP2 E2E가 완료됐다고 보지 않는다.
+Spring 공유 경계는 [`docs/CONTRACT.md` §3-3~§3-5](../../docs/CONTRACT.md#3-내부-계약-확정-인터페이스)에 채택됐다.
+다만 현재 Java에는 named AgentDispatch, caption consumer, live-agent callback handler가 없으므로
+이 서비스만으로 Java 연동 또는 CP2 E2E가 완료됐다고 보지 않는다.
 
 ## 처리 흐름
 
@@ -60,9 +60,17 @@ completion도 동일한 `sttSessionId`를 포함한다.
 기본 환경 변수 목록은 [`.env.example`](.env.example)에 있다. 코드는 root `.env`를 자동으로 읽지
 않으므로 배포 환경에서 명시적으로 주입한다.
 
+로컬 개발에서만 env file이 필요하면 `uv`에 경로를 명시한다. production entrypoint는 env file을
+자동 탐색하지 않는다.
+
+```sh
+uv run --env-file /path/to/realtime-agent.env --frozen python -m app.main dev
+```
+
 필수값:
 
 - `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`
+- SSH TCP tunnel의 coturn을 강제할 때 `LIVEKIT_TURN_URL`, `LIVEKIT_TURN_SECRET`
 - `STT_AGENT_NAME`
 - `STT_ENGINE_PROVIDER=stub|openai-realtime|nemotron`
 - `REDIS_URL`: LiveKit 내부 Redis가 아닌 application Redis
@@ -71,6 +79,9 @@ completion도 동일한 `sttSessionId`를 포함한다.
 `stub`은 local wiring 확인 전용이다. OpenAI provider는 `OPENAI_API_KEY`가 필요하고, Nemotron은
 optional CUDA 의존성과 `STT_MAX_ACTIVE_JOBS=1`이 필요하다. callback을 켤 때만
 `SPRING_STATUS_CALLBACK_URL`과 32 byte 이상의 `AI_CALLBACK_SECRET`이 필수다.
+
+GPU 서버와 외부 LiveKit/Redis의 운영·검증 절차는
+[`docs/ai/GPU-REALTIME-AGENT-RUNBOOK.md`](../../docs/ai/GPU-REALTIME-AGENT-RUNBOOK.md)를 따른다.
 
 ```powershell
 uv sync --frozen
@@ -109,7 +120,7 @@ LiveKit, Spring 왕복과 OpenAI credential은 별도 opt-in smoke 증거가 필
 - 같은 metadata fixture를 사용하는 Java serializer/contract test
 - Redis consumer group, 세션 종료 후 정리, event enum과 session clock 변환 확정
 - callback URL·HMAC·event ID 멱등·terminal first-wins 처리
-- 실제 계약 채택과 함께 `docs/CONTRACT.md` 갱신
+- LiveKit·Redis·Spring 정상·실패 E2E와 Java 쪽 계약 테스트
 
 ## 폴더별 문서
 

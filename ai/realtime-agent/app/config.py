@@ -5,7 +5,9 @@ import os
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit
+
+from app.connections import LiveKitConnectionSettings, RedisConnectionSettings
 
 _SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _SAFE_REDIS_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$")
@@ -46,15 +48,42 @@ def _parse_float(environ: Mapping[str, str], name: str, default: float) -> float
         raise ValueError(f"{name} must be a number") from exc
 
 
+def _validate_turn_url(value: str) -> None:
+    if any(character.isspace() for character in value):
+        raise RuntimeError("LIVEKIT_TURN_URL must not contain whitespace")
+    scheme, separator, remainder = value.partition(":")
+    if separator != ":" or scheme not in {"turn", "turns"}:
+        raise RuntimeError("LIVEKIT_TURN_URL must use turn or turns")
+    authority = remainder.partition("?")[0]
+    parsed = urlsplit(f"//{authority}")
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise RuntimeError("LIVEKIT_TURN_URL must include a valid host and port") from exc
+    if (
+        not parsed.hostname
+        or port is None
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.path
+        or parsed.fragment
+    ):
+        raise RuntimeError("LIVEKIT_TURN_URL must include a valid host and port")
+
+
 @dataclass(frozen=True, slots=True)
 class Settings:
     livekit_url: str
     livekit_api_key: str = field(repr=False)
     livekit_api_secret: str = field(repr=False)
+    livekit_turn_url: str = ""
+    livekit_turn_secret: str = field(default="", repr=False)
     agent_name: str = "liveclass-realtime-stt"
     stt_provider: str = ""
     max_active_jobs: int = 1
     redis_url: str = field(default="redis://localhost:6379/0", repr=False)
+    redis_username: str = field(default="", repr=False)
+    redis_password: str = field(default="", repr=False)
     redis_stream_key: str = "ai:captions:live"
     caption_stream_maxlen: int = 10_000
     session_lease_ttl_seconds: int = 30
@@ -74,6 +103,20 @@ class Settings:
     nemotron_model_id: str = "nvidia/nemotron-3.5-asr-streaming-0.6b"
     asr_language: str = "ko-KR"
 
+    def livekit_connection(self) -> LiveKitConnectionSettings:
+        return LiveKitConnectionSettings(
+            url=self.livekit_url,
+            api_key=self.livekit_api_key,
+            api_secret=self.livekit_api_secret,
+        )
+
+    def redis_connection(self) -> RedisConnectionSettings:
+        return RedisConnectionSettings(
+            url=self.redis_url,
+            username=self.redis_username,
+            password=self.redis_password,
+        )
+
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> Settings:
         values = os.environ if environ is None else environ
@@ -81,10 +124,14 @@ class Settings:
             livekit_url=values.get("LIVEKIT_URL", ""),
             livekit_api_key=values.get("LIVEKIT_API_KEY", ""),
             livekit_api_secret=values.get("LIVEKIT_API_SECRET", ""),
+            livekit_turn_url=values.get("LIVEKIT_TURN_URL", "").strip(),
+            livekit_turn_secret=values.get("LIVEKIT_TURN_SECRET", ""),
             agent_name=values.get("STT_AGENT_NAME", "liveclass-realtime-stt"),
             stt_provider=values.get("STT_ENGINE_PROVIDER", ""),
             max_active_jobs=_parse_int(values, "STT_MAX_ACTIVE_JOBS", 1),
             redis_url=values.get("REDIS_URL", "redis://localhost:6379/0"),
+            redis_username=values.get("REDIS_USERNAME", ""),
+            redis_password=values.get("REDIS_PASSWORD", ""),
             redis_stream_key=values.get("CAPTION_STREAM_KEY", "ai:captions:live"),
             caption_stream_maxlen=_parse_int(values, "CAPTION_STREAM_MAXLEN", 10_000),
             session_lease_ttl_seconds=_parse_int(values, "SESSION_LEASE_TTL_SECONDS", 30),
@@ -118,12 +165,10 @@ class Settings:
         )
 
     def validate_agent_server(self) -> None:
+        self.livekit_connection().validate()
         missing = [
             name
             for name, value in (
-                ("LIVEKIT_URL", self.livekit_url),
-                ("LIVEKIT_API_KEY", self.livekit_api_key),
-                ("LIVEKIT_API_SECRET", self.livekit_api_secret),
                 ("STT_AGENT_NAME", self.agent_name),
                 ("STT_ENGINE_PROVIDER", self.stt_provider),
                 ("REDIS_URL", self.redis_url),
@@ -134,12 +179,11 @@ class Settings:
         if missing:
             raise RuntimeError(f"missing required agent server settings: {', '.join(missing)}")
 
-        livekit_url = urlparse(self.livekit_url)
-        if livekit_url.scheme not in {"ws", "wss"} or not livekit_url.netloc:
-            raise RuntimeError("LIVEKIT_URL must use ws or wss")
-        redis_url = urlparse(self.redis_url)
-        if redis_url.scheme not in {"redis", "rediss"} or not redis_url.netloc:
-            raise RuntimeError("REDIS_URL must use redis or rediss")
+        if self.livekit_turn_url:
+            _validate_turn_url(self.livekit_turn_url)
+            if not self.livekit_turn_secret.strip():
+                raise RuntimeError("LIVEKIT_TURN_SECRET is required when LIVEKIT_TURN_URL is set")
+        self.redis_connection().validate()
         if not _SAFE_NAME.fullmatch(self.agent_name):
             raise RuntimeError("STT_AGENT_NAME must be a 1-128 character safe identifier")
         if not _SAFE_REDIS_KEY.fullmatch(self.redis_stream_key):

@@ -27,10 +27,85 @@ def test_uses_application_redis_without_assuming_livekit_redis_port() -> None:
     assert settings.redis_operation_timeout_seconds == 1
 
 
+def test_default_redis_user_accepts_password_without_username() -> None:
+    settings = Settings.from_env({**BASE_ENV, "REDIS_USERNAME": "", "REDIS_PASSWORD": "secret"})
+
+    assert settings.redis_username == ""
+    assert settings.redis_password == "secret"
+    assert "secret" not in repr(settings)
+
+
 def test_rejects_missing_livekit_credentials() -> None:
     settings = Settings.from_env({"LIVEKIT_URL": "wss://livekit.example"})
 
     with pytest.raises(RuntimeError, match="LIVEKIT_API_KEY, LIVEKIT_API_SECRET"):
+        settings.validate_agent_server()
+
+
+def test_turn_configuration_requires_dedicated_secret() -> None:
+    settings = Settings.from_env(
+        {**BASE_ENV, "LIVEKIT_TURN_URL": "turn:127.0.0.1:3478?transport=tcp"}
+    )
+
+    with pytest.raises(RuntimeError, match="LIVEKIT_TURN_SECRET"):
+        settings.validate_agent_server()
+
+
+@pytest.mark.parametrize(
+    "turn_url",
+    [
+        "turn:127.0.0.1:3478",
+        "turn:127.0.0.1:3478?transport=tcp",
+        "turns:turn.example.test:5349?transport=tcp",
+    ],
+)
+def test_accepts_turn_tunnel_configuration_without_requiring_transport_query(
+    turn_url: str,
+) -> None:
+    settings = Settings.from_env(
+        {
+            **BASE_ENV,
+            "LIVEKIT_TURN_URL": turn_url,
+            "LIVEKIT_TURN_SECRET": "turn-secret",
+        }
+    )
+
+    settings.validate_agent_server()
+
+
+@pytest.mark.parametrize(
+    "turn_url",
+    [
+        "turn:",
+        "turn:127.0.0.1",
+        "turn:127.0.0.1:not-a-port",
+        "turn:127.0.0.1:70000",
+        "turn:user@127.0.0.1:3478",
+    ],
+)
+def test_rejects_turn_url_without_valid_host_and_port(turn_url: str) -> None:
+    settings = Settings.from_env(
+        {
+            **BASE_ENV,
+            "LIVEKIT_TURN_URL": turn_url,
+            "LIVEKIT_TURN_SECRET": "turn-secret",
+        }
+    )
+
+    with pytest.raises(RuntimeError, match="valid host and port"):
+        settings.validate_agent_server()
+
+
+def test_rejects_whitespace_only_turn_secret() -> None:
+    settings = Settings.from_env(
+        {
+            **BASE_ENV,
+            "LIVEKIT_TURN_URL": "turn:127.0.0.1:3478",
+            "LIVEKIT_TURN_SECRET": "   ",
+        }
+    )
+
+    with pytest.raises(RuntimeError, match="LIVEKIT_TURN_SECRET"):
         settings.validate_agent_server()
 
 
