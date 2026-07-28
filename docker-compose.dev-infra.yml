@@ -82,10 +82,10 @@ services:
     volumes:
       - miniodata:/data
 
-  minio-init:                              # liveclass-assets·recordings 버킷 생성
-    image: minio/mc
+  minio-init:                              # liveclass-assets·recordings 버킷 생성 (멱등). 계속 살려둔다 —
+    image: minio/mc                         # 일회성으로 exit하면 `up --wait`가 그 종료를 실패로 보고 배포 잡이 깨진다.
     depends_on: [minio]
-    restart: "no"
+    restart: unless-stopped
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER 필요}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD 필요}
@@ -94,9 +94,9 @@ services:
       - -c
       - |
         until mc alias set lc http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"; do echo 'waiting for minio'; sleep 1; done
-        mc mb -p lc/liveclass-assets
-        mc mb -p lc/recordings
-        exit 0
+        mc mb -p lc/liveclass-assets || true
+        mc mb -p lc/recordings || true
+        echo 'bucket ready'; sleep infinity
 
 volumes:
   pgdata:
