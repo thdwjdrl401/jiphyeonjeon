@@ -9,8 +9,19 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "livekit")
 public record LiveKitProperties(
 
-        /** 클라이언트가 접속할 LiveKit wss URL. */
+        /** <b>브라우저</b>가 WebRTC로 접속할 공개 wss URL. 토큰 응답에 그대로 실린다. */
         String url,
+
+        /**
+         * <b>백엔드</b>가 방 제어·Egress 시작에 쓰는 서버 API URL.
+         *
+         * <p>브라우저 접속 주소와 나눈 이유: 같은 LiveKit 서버라도 둘의 네트워크 위치가 다르다.
+         * 브라우저는 공개 도메인으로 오지만 백엔드는 같은 호스트 안에서 부른다. 하나로 쓰면
+         * 브라우저 접속 경로를 바꿀 때 서버 호출까지 끌려간다.
+         *
+         * <p>비우면 {@link #url}에서 파생한다(wss→https) — 단일 호스트 개발 환경은 둘이 같다.
+         */
+        String apiUrl,
 
         /** API 키(공개 식별자). */
         String apiKey,
