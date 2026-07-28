@@ -1,8 +1,15 @@
 import asyncio
+import base64
+import hashlib
+import hmac
+import json
+import time
 
 import pytest
 
+from app.adapters import HmacInternalRequestAuthenticator
 from app.config import Settings
+from app.main import build_internal_authenticator
 from app.wiring import build_answer_model, build_rag_context_services, build_rag_services
 
 DATABASE_URL = "postgresql+asyncpg://ai_runtime:secret@127.0.0.1:5432/liveclass"
@@ -61,3 +68,28 @@ def test_full_rag_wiring_builds_registry_and_closes_all_clients() -> None:
 
     assert answer_client.is_closed
     assert embedding_client.is_closed
+
+
+def test_internal_authenticator_is_none_without_secret() -> None:
+    assert build_internal_authenticator(Settings()) is None
+
+
+def test_internal_authenticator_is_built_when_secret_configured() -> None:
+    authenticator = build_internal_authenticator(
+        Settings(ai_internal_secret="shared-spring-ai-api-secret")
+    )
+
+    assert isinstance(authenticator, HmacInternalRequestAuthenticator)
+
+
+def test_internal_authenticator_secret_is_usable_as_hmac_key() -> None:
+    authenticator = build_internal_authenticator(
+        Settings(ai_internal_secret="shared-spring-ai-api-secret")
+    )
+
+    body = json.dumps({"issuedAtMs": int(time.time() * 1000)}).encode("utf-8")
+    expected = base64.b64encode(
+        hmac.new(b"shared-spring-ai-api-secret", body, hashlib.sha256).digest()
+    ).decode("ascii")
+
+    asyncio.run(authenticator.authenticate(body, expected))

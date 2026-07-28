@@ -96,15 +96,17 @@ def create_app(
     return app
 
 
+def build_internal_authenticator(settings: Settings) -> InternalRequestAuthenticator | None:
+    if settings.ai_internal_secret is None:
+        return None
+    return HmacInternalRequestAuthenticator(settings.ai_internal_secret.get_secret_value().encode("utf-8"))
+
+
 def run() -> None:
     settings = load_settings()
     configure_logging("ai-api", settings.log_level)
     rag_services = build_rag_services(settings)
-    internal_authenticator = (
-        HmacInternalRequestAuthenticator(settings.ai_internal_secret.get_secret_value().encode("utf-8"))
-        if settings.ai_internal_secret is not None
-        else None
-    )
+    internal_authenticator = build_internal_authenticator(settings)
     uvicorn.run(
         create_app(settings, rag_services=rag_services, internal_authenticator=internal_authenticator),
         host=settings.host,
