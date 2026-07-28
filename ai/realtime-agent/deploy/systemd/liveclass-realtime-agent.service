@@ -1,0 +1,22 @@
+[Unit]
+Description=LiveClass LiveKit realtime-agent
+Requires=liveclass-realtime-agent-tunnels.service
+After=network-online.target liveclass-realtime-agent-tunnels.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=liveclass-ai
+Group=liveclass-ai
+WorkingDirectory=/srv/liveclass/realtime-agent/current
+EnvironmentFile=/etc/liveclass/realtime-agent.env
+ExecStart=/srv/liveclass/realtime-agent/current/.venv/bin/python -m app.main start
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=300
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

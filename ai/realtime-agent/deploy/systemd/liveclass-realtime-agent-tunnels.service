@@ -1,0 +1,17 @@
+[Unit]
+Description=LiveClass realtime-agent EC2 tunnels
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=liveclass-ai
+Group=liveclass-ai
+EnvironmentFile=/etc/liveclass/realtime-agent-tunnels.env
+ExecStart=/usr/local/libexec/liveclass-realtime-agent-tunnels
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
