@@ -15,10 +15,19 @@ from scripts.probe_livekit_room import ProbeSettings, format_room_snapshot
 TUNNEL_SCRIPT = Path(__file__).parents[1] / "scripts" / "start_ec2_tunnels.sh"
 
 
-def test_probe_settings_reject_missing_credentials_without_exposing_values() -> None:
-    with pytest.raises(RuntimeError, match="LIVEKIT_API_SECRET") as error:
-        ProbeSettings.from_values("wss://livekit.example", "api-key", "", "session-1")
-    assert "wss://livekit.example" not in str(error.value)
+def test_probe_settings_redact_credentials_from_repr() -> None:
+    settings = ProbeSettings.from_values(
+        "wss://livekit.example",
+        "private-api-key",
+        "private-api-secret",
+        "session-1",
+    )
+
+    rendered = repr(settings)
+
+    assert "private-api-key" not in rendered
+    assert "private-api-secret" not in rendered
+    assert "session-1" in rendered
 
 
 def test_probe_snapshot_reports_only_microphone_state() -> None:

@@ -6,7 +6,7 @@ import argparse
 import asyncio
 import os
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from livekit import api
 
@@ -14,8 +14,8 @@ from livekit import api
 @dataclass(frozen=True, slots=True)
 class ProbeSettings:
     url: str
-    api_key: str
-    api_secret: str
+    api_key: str = field(repr=False)
+    api_secret: str = field(repr=False)
     room_name: str
 
     @classmethod
@@ -50,8 +50,6 @@ class ProbeSettings:
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--url", default=os.getenv("LIVEKIT_URL", ""))
-    parser.add_argument("--api-key", default=os.getenv("LIVEKIT_API_KEY", ""))
-    parser.add_argument("--api-secret", default=os.getenv("LIVEKIT_API_SECRET", ""))
     parser.add_argument("--room", default=os.getenv("STT_ROOM", ""))
     return parser.parse_args(argv)
 
@@ -109,7 +107,12 @@ async def probe_room(settings: ProbeSettings, client: api.LiveKitAPI | None = No
 
 async def main() -> None:
     args = parse_args()
-    settings = ProbeSettings.from_values(args.url, args.api_key, args.api_secret, args.room)
+    settings = ProbeSettings.from_values(
+        args.url,
+        os.getenv("LIVEKIT_API_KEY", ""),
+        os.getenv("LIVEKIT_API_SECRET", ""),
+        args.room,
+    )
     print(await probe_room(settings))
 
 
