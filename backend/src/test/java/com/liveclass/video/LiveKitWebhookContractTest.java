@@ -3,7 +3,10 @@ package com.liveclass.video;
 import com.auth0.jwt.JWT;
 import com.auth0.jwt.algorithms.Algorithm;
 import com.liveclass.live.api.LiveKitServerAccess;
+import com.liveclass.live.repository.LiveSessionRepository;
+import com.liveclass.live.service.AgentDispatchControl;
 import com.liveclass.live.service.LiveRoomControl;
+import com.liveclass.support.LiveStartTestSupport;
 import com.liveclass.video.domain.VideoAssetStatus;
 import com.liveclass.video.repository.VideoAssetRepository;
 import com.liveclass.video.service.EgressControl;
@@ -52,9 +55,11 @@ class LiveKitWebhookContractTest {
     @Autowired private MockMvc mockMvc;
     @Autowired private VideoAssetRepository videoAssetRepository;
     @Autowired private LiveKitServerAccess livekit;
+    @Autowired private LiveSessionRepository liveSessionRepository;
 
     @MockitoBean private EgressControl egressControl;      // 실 LiveKit 안 타게 목.
     @MockitoBean private LiveRoomControl roomControl;
+    @MockitoBean private AgentDispatchControl agentDispatchControl;
     // S3RecordingStorage가 RecordingStorage(VERIFYING HEAD)·ReplayStorage(재생) 둘 다 구현 —
     // 콘크리트 타입으로 모킹해야 같은 컨텍스트의 ReplayPlaybackService 주입점도 이 목으로 채워진다.
     @MockitoBean private S3RecordingStorage recordingStorage;
@@ -230,13 +235,33 @@ class LiveKitWebhookContractTest {
     /** 세션을 만들고 라이브 시작→종료해 자산을 egressId·FINALIZING 상태로 커밋한다. */
     private String startRecording(String egressId) throws Exception {
         when(egressControl.startHlsRecording(any(), any())).thenReturn(egressId);
+        // 시작 게이트(ADR-0002 §4)가 통과하도록 Egress ACTIVE + 라이브 매니페스트·첫 세그먼트를 흉내낸다.
+        when(egressControl.findState(any())).thenReturn(Optional.of(EgressControl.EgressState.EGRESS_ACTIVE));
+        when(recordingStorage.findManifest(any(), any())).thenReturn(Optional.of(LIVE_MANIFEST));
+        when(recordingStorage.head(any(), any())).thenReturn(Optional.of(1_024L));
         Cookie[] instructor = loginAs();
         String[] ids = createSession(instructor);
         String sessionId = ids[1];
-        write(post("/api/live-sessions/" + sessionId + "/start"), instructor, null).andExpect(status().isOk());
+        String instructorId = json(mockMvc.perform(get("/api/auth/me").cookie(instructor)).andReturn())
+                .get("userId").asString();
+        LiveStartTestSupport.stubInstructorPublishing(roomControl, sessionId, instructorId);
+        LiveStartTestSupport.stubAgentDispatched(agentDispatchControl);
+        write(post("/api/live-sessions/" + sessionId + "/start"), instructor, null).andExpect(status().isAccepted());
+        // 실커밋 테스트라 AFTER_COMMIT @Async 게이트가 실제로 돈다 — 끝날 때까지 기다린다.
+        LiveStartTestSupport.awaitLive(liveSessionRepository, sessionId);
         write(post("/api/live-sessions/" + sessionId + "/end"), instructor, null).andExpect(status().isOk());
         return sessionId;
     }
+
+    /** Gate C가 볼 라이브 재생목록(ENDLIST 없음 + 세그먼트 존재). */
+    private static final String LIVE_MANIFEST = """
+            #EXTM3U
+            #EXT-X-VERSION:3
+            #EXT-X-TARGETDURATION:2
+            #EXT-X-MEDIA-SEQUENCE:0
+            #EXTINF:2.0,
+            seg_00000.ts
+            """;
 
     private org.springframework.test.web.servlet.ResultActions postWebhook(String body, String jwt) throws Exception {
         return mockMvc.perform(post("/api/webhooks/livekit")

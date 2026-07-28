@@ -3,8 +3,15 @@ package com.liveclass.video;
 import com.auth0.jwt.JWT;
 import com.auth0.jwt.algorithms.Algorithm;
 import com.liveclass.live.api.LiveKitServerAccess;
+import com.liveclass.live.domain.LiveSessionStatus;
+import com.liveclass.live.repository.LiveSessionRepository;
+import com.liveclass.live.service.AgentDispatchControl;
 import com.liveclass.live.service.LiveRoomControl;
+import com.liveclass.support.LiveStartTestSupport;
 import com.liveclass.video.repository.VideoAssetRepository;
+import com.liveclass.video.domain.ReplayStatus;
+import com.liveclass.video.domain.VideoAsset;
+import com.liveclass.video.domain.VideoAssetStatus;
 import com.liveclass.video.service.EgressControl;
 import com.liveclass.video.service.S3RecordingStorage;
 import jakarta.servlet.http.Cookie;
@@ -54,9 +61,11 @@ class ReplayPlaybackContractTest {
     @Autowired private MockMvc mockMvc;
     @Autowired private VideoAssetRepository videoAssetRepository;
     @Autowired private LiveKitServerAccess livekit;
+    @Autowired private LiveSessionRepository liveSessionRepository;
 
     @MockitoBean private EgressControl egressControl;
     @MockitoBean private LiveRoomControl roomControl;
+    @MockitoBean private AgentDispatchControl agentDispatchControl;
     @MockitoBean private S3RecordingStorage recordingStorage;
 
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
@@ -172,6 +181,35 @@ class ReplayPlaybackContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.source").doesNotExist());
 
+        mockMvc.perform(get("/api/lessons/" + ids[0] + "/playback/manifest").cookie(instructor))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("RECORDING_STARTING"));
+    }
+
+    @Test
+    void starting_exposes_metadata_but_never_hls_source_even_when_manifest_exists() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String[] ids = createSession(instructor);
+        UUID sessionId = UUID.fromString(ids[1]);
+        var session = liveSessionRepository.findById(sessionId).orElseThrow();
+        session.setStatus(LiveSessionStatus.STARTING);
+        liveSessionRepository.saveAndFlush(session);
+
+        VideoAsset asset = new VideoAsset();
+        asset.setLiveSessionId(sessionId);
+        asset.setLessonId(UUID.fromString(ids[0]));
+        asset.setEgressId("eg_starting_hidden");
+        asset.setStatus(VideoAssetStatus.RECORDING);
+        asset.setReplayStatus(ReplayStatus.DRAFT);
+        asset.setBucket("recordings");
+        asset.setHlsManifestKey("sessions/" + sessionId + "/index.m3u8");
+        videoAssetRepository.saveAndFlush(asset);
+        stubManifest(LIVE_MANIFEST);
+
+        mockMvc.perform(get("/api/lessons/" + ids[0] + "/playback").cookie(instructor))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.liveSessionStatus").value("STARTING"))
+                .andExpect(jsonPath("$.source").doesNotExist());
         mockMvc.perform(get("/api/lessons/" + ids[0] + "/playback/manifest").cookie(instructor))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("RECORDING_STARTING"));
@@ -392,10 +430,22 @@ class ReplayPlaybackContractTest {
     private String[] createActiveRecording(Cookie[] instructor, String manifest) throws Exception {
         String egressId = "EG_" + UUID.randomUUID();
         when(egressControl.startHlsRecording(any(), any())).thenReturn(egressId);
-        stubManifest(manifest);
+        // 시작 게이트(ADR-0002 §4~§7): Egress ACTIVE + 라이브 매니페스트·첫 세그먼트 + 강사 마이크 publish.
+        when(egressControl.findState(any())).thenReturn(Optional.of(EgressControl.EgressState.EGRESS_ACTIVE));
+        when(recordingStorage.head(any(), any())).thenReturn(Optional.of(1_024L));
+        // 시작 게이트는 "아직 자라는" 라이브 재생목록을 봐야 통과한다(ENDLIST가 있으면 Gate C 실패).
+        // 검증 대상 매니페스트는 LIVE 전환 뒤에 다시 심는다.
+        stubManifest(LIVE_MANIFEST);
         String[] base = createSession(instructor);
+        String instructorId = json(mockMvc.perform(get("/api/auth/me").cookie(instructor)).andReturn())
+                .get("userId").asString();
+        LiveStartTestSupport.stubInstructorPublishing(roomControl, base[1], instructorId);
+        LiveStartTestSupport.stubAgentDispatched(agentDispatchControl);
         write(post("/api/live-sessions/" + base[1] + "/start"), instructor, null)
-                .andExpect(status().isOk());
+                .andExpect(status().isAccepted());
+        // 실커밋 테스트라 AFTER_COMMIT @Async 게이트가 실제로 돈다 — 끝날 때까지 기다린다.
+        LiveStartTestSupport.awaitLive(liveSessionRepository, base[1]);
+        stubManifest(manifest);
         return new String[]{base[0], base[1], base[2], egressId};
     }
 
