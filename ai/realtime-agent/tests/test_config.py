@@ -27,6 +27,14 @@ def test_uses_application_redis_without_assuming_livekit_redis_port() -> None:
     assert settings.redis_operation_timeout_seconds == 1
 
 
+def test_default_redis_user_accepts_password_without_username() -> None:
+    settings = Settings.from_env({**BASE_ENV, "REDIS_USERNAME": "", "REDIS_PASSWORD": "secret"})
+
+    assert settings.redis_username == ""
+    assert settings.redis_password == "secret"
+    assert "secret" not in repr(settings)
+
+
 def test_rejects_missing_livekit_credentials() -> None:
     settings = Settings.from_env({"LIVEKIT_URL": "wss://livekit.example"})
 

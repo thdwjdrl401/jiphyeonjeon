@@ -57,6 +57,8 @@ class Settings:
     stt_provider: str = ""
     max_active_jobs: int = 1
     redis_url: str = field(default="redis://localhost:6379/0", repr=False)
+    redis_username: str = field(default="", repr=False)
+    redis_password: str = field(default="", repr=False)
     redis_stream_key: str = "ai:captions:live"
     caption_stream_maxlen: int = 10_000
     session_lease_ttl_seconds: int = 30
@@ -89,6 +91,8 @@ class Settings:
             stt_provider=values.get("STT_ENGINE_PROVIDER", ""),
             max_active_jobs=_parse_int(values, "STT_MAX_ACTIVE_JOBS", 1),
             redis_url=values.get("REDIS_URL", "redis://localhost:6379/0"),
+            redis_username=values.get("REDIS_USERNAME", ""),
+            redis_password=values.get("REDIS_PASSWORD", ""),
             redis_stream_key=values.get("CAPTION_STREAM_KEY", "ai:captions:live"),
             caption_stream_maxlen=_parse_int(values, "CAPTION_STREAM_MAXLEN", 10_000),
             session_lease_ttl_seconds=_parse_int(values, "SESSION_LEASE_TTL_SECONDS", 30),

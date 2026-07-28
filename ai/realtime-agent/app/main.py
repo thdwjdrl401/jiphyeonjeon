@@ -96,7 +96,12 @@ async def _run_agent_job(context: JobContext, *, settings: Settings) -> None:
         settings.livekit_turn_url,
         settings.livekit_turn_secret,
     )
-    redis = Redis.from_url(settings.redis_url, decode_responses=True)
+    redis = Redis.from_url(
+        settings.redis_url,
+        username=settings.redis_username or None,
+        password=settings.redis_password or None,
+        decode_responses=True,
+    )
     try:
         publisher = RedisCaptionPublisher(
             redis,

@@ -214,12 +214,19 @@ class FakeRedisClient:
 
 
 class FakeRedis:
-    calls: ClassVar[list[tuple[str, bool]]] = []
+    calls: ClassVar[list[tuple[str, str | None, str | None, bool]]] = []
     clients: ClassVar[list[FakeRedisClient]] = []
 
     @classmethod
-    def from_url(cls, url: str, *, decode_responses: bool) -> FakeRedisClient:
-        cls.calls.append((url, decode_responses))
+    def from_url(
+        cls,
+        url: str,
+        *,
+        username: str | None,
+        password: str | None,
+        decode_responses: bool,
+    ) -> FakeRedisClient:
+        cls.calls.append((url, username, password, decode_responses))
         client = FakeRedisClient()
         cls.clients.append(client)
         return client
@@ -288,6 +295,8 @@ async def test_entrypoint_shares_one_redis_client_and_delegates_job(
     monkeypatch.setattr(agent_main, "run_dispatched_room_job", run_job)
     configured = settings(
         redis_url="redis://app-redis:6379/3",
+        redis_username="",
+        redis_password="redis-secret",
         redis_stream_key="candidate:captions",
         caption_stream_maxlen=2_500,
         session_lease_ttl_seconds=45,
@@ -305,7 +314,7 @@ async def test_entrypoint_shares_one_redis_client_and_delegates_job(
 
     await server.entrypoint(context)
 
-    assert FakeRedis.calls == [("redis://app-redis:6379/3", True)]
+    assert FakeRedis.calls == [("redis://app-redis:6379/3", None, "redis-secret", True)]
     assert len(FakeRedis.clients) == 1
     redis_client = FakeRedis.clients[0]
     publisher = captured["publisher"]

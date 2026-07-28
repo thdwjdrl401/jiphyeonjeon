@@ -16,6 +16,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--from-id", default="0-0", help="Redis entry ID; default replays all.")
     parser.add_argument("--raw", action="store_true", help="Print one JSON object per entry.")
     parser.add_argument("--redis-url", default=os.getenv("REDIS_URL", ""))
+    parser.add_argument("--redis-username", default=os.getenv("REDIS_USERNAME", ""))
+    parser.add_argument("--redis-password", default=os.getenv("REDIS_PASSWORD", ""))
     parser.add_argument("--stream-key", default=os.getenv("CAPTION_STREAM_KEY", "ai:captions:live"))
     return parser.parse_args(argv)
 
@@ -65,7 +67,13 @@ async def main() -> None:
         raise RuntimeError("missing required setting: REDIS_URL or --redis-url")
     if not args.stream_key.strip():
         raise RuntimeError("stream key must not be blank")
-    redis = Redis.from_url(args.redis_url, decode_responses=True, encoding_errors="strict")
+    redis = Redis.from_url(
+        args.redis_url,
+        username=args.redis_username or None,
+        password=args.redis_password or None,
+        decode_responses=True,
+        encoding_errors="strict",
+    )
     try:
         await monitor(
             redis,
