@@ -30,6 +30,12 @@ public record LiveKitProperties(
         String apiSecret,
 
         /** 토큰 유효시간(초). */
-        long tokenTtlSeconds
+        long tokenTtlSeconds,
+
+        /**
+         * explicit AgentDispatch로 지목할 STT agent 이름(CONTRACT §3-3). realtime-agent의
+         * {@code STT_AGENT_NAME} 환경변수와 <b>반드시 같은 값</b>이어야 job이 배정된다 — 같은 배포 변수로 관리한다.
+         */
+        String agentName
 ) {
 }

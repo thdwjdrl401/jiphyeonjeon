@@ -4,9 +4,16 @@ import com.liveclass.live.api.LiveSessionView;
 import com.liveclass.live.domain.LiveSessionStatus;
 import com.liveclass.live.service.LiveKitTokenService;
 import com.liveclass.live.service.LiveAccessGuard;
+import com.liveclass.live.service.LiveParticipantIdentity;
+import com.liveclass.live.service.LivePreflightService;
 import com.liveclass.live.service.LiveSessionNotFoundException;
 import com.liveclass.live.service.LiveSessionService;
 import com.liveclass.live.service.LiveSessionStateConflictException;
+import com.liveclass.live.service.LiveStartOrchestrator;
+import com.liveclass.live.web.dto.LivePreflightReadinessResponse;
+import com.liveclass.live.web.dto.LivePreflightRoomResponse;
+import com.liveclass.live.web.dto.LiveStartResponse;
+import com.liveclass.live.web.dto.LiveStartStatusResponse;
 import com.liveclass.live.web.dto.LiveTokenResponse;
 import com.liveclass.live.web.dto.ParticipantView;
 import com.liveclass.live.web.dto.UpdateLiveSessionRequest;
@@ -20,10 +27,10 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
 
@@ -35,12 +42,17 @@ import java.util.UUID;
 public class LiveSessionController {
 
     private final LiveSessionService liveSessionService;
+    private final LiveStartOrchestrator startOrchestrator;
+    private final LivePreflightService preflightService;
     private final LiveKitTokenService tokenService;
     private final LiveAccessGuard accessGuard;
 
-    public LiveSessionController(LiveSessionService liveSessionService, LiveKitTokenService tokenService,
+    public LiveSessionController(LiveSessionService liveSessionService, LiveStartOrchestrator startOrchestrator,
+                                LivePreflightService preflightService, LiveKitTokenService tokenService,
                                 LiveAccessGuard accessGuard) {
         this.liveSessionService = liveSessionService;
+        this.startOrchestrator = startOrchestrator;
+        this.preflightService = preflightService;
         this.tokenService = tokenService;
         this.accessGuard = accessGuard;
     }
@@ -55,10 +67,51 @@ public class LiveSessionController {
                 .orElseThrow(() -> new LiveSessionNotFoundException("라이브 세션을 찾을 수 없습니다."));
     }
 
-    @Operation(summary = "라이브 시작", description = "세션을 강사가 라이브로 켠다. 같은 세션을 다시 눌러도 문제없이 진행 중 상태를 유지한다(멱등).")
+    @Operation(summary = "라이브 시작 요청",
+            description = "세션을 STARTING으로 두고 시작 준비(STT dispatch·Egress·강사 마이크 확인)를 백그라운드로 진행한다. "
+                    + "즉시 202와 operationId를 돌려주며, 실제 LIVE 전환은 start-status 또는 세션 조회로 관찰한다. "
+                    + "같은 세션을 다시 눌러도 진행 중인 같은 시도를 돌려준다(멱등).")
     @PostMapping("/api/live-sessions/{sessionId}/start")
-    public LiveSessionView start(@PathVariable UUID sessionId, Authentication authentication) {
-        return liveSessionService.start(sessionId, UUID.fromString(authentication.getName()));
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public LiveStartResponse start(@PathVariable UUID sessionId, Authentication authentication) {
+        LiveStartOrchestrator.StartOperation operation =
+                startOrchestrator.start(sessionId, UUID.fromString(authentication.getName()));
+        return new LiveStartResponse(operation.operationId(), operation.sessionId(), operation.status());
+    }
+
+    @Operation(summary = "라이브 시작 상태 조회",
+            description = "STARTING 동안 FE가 폴링한다. 시작 시도의 진행 상태(IN_PROGRESS/SUCCEEDED/FAILED)와 실패 code, "
+                    + "그리고 최신 세션 정보를 함께 돌려준다. operationId를 생략하면 가장 최근 시도를 본다.")
+    @GetMapping("/api/live-sessions/{sessionId}/start-status")
+    public LiveStartStatusResponse startStatus(@PathVariable UUID sessionId,
+                                               @RequestParam(required = false) UUID operationId,
+                                               Authentication authentication) {
+        LiveStartOrchestrator.StartStatus status =
+                startOrchestrator.status(sessionId, UUID.fromString(authentication.getName()), operationId);
+        return new LiveStartStatusResponse(status.operationId(), status.attemptStatus(), status.step(),
+                status.failureCode(), status.failureMessage(), status.session());
+    }
+
+    @Operation(summary = "preflight 방 준비",
+            description = "강사가 preflight 화면에 들어올 때 1회 호출한다. LiveKit 방을 만들거나 기존 방을 재사용하고 roomSid를 저장한다(멱등).")
+    @PostMapping("/api/instructor/live-sessions/{sessionId}/preflight")
+    public LivePreflightRoomResponse preflight(@PathVariable UUID sessionId, Authentication authentication) {
+        LivePreflightService.PreparedRoom room =
+                preflightService.prepareRoom(sessionId, UUID.fromString(authentication.getName()));
+        return new LivePreflightRoomResponse(room.sessionId(), room.roomName(), room.roomSid());
+    }
+
+    @Operation(summary = "preflight readiness 검사",
+            description = "FE가 실제로 마이크를 publish한 뒤 호출한다. LiveKit 서버에서 participant·track을 다시 조회해 "
+                    + "강사 존재·마이크 publish/unmute·예상 밖 마이크 publisher 없음을 판정한다. ready가 true일 때만 시작 버튼을 켠다.")
+    @GetMapping("/api/instructor/live-sessions/{sessionId}/preflight/readiness")
+    public LivePreflightReadinessResponse preflightReadiness(@PathVariable UUID sessionId,
+                                                             Authentication authentication) {
+        LivePreflightService.PreflightCheck check =
+                preflightService.checkOwned(sessionId, UUID.fromString(authentication.getName()));
+        return new LivePreflightReadinessResponse(check.ready(), check.instructorPresent(),
+                check.microphonePublished(), check.microphoneMuted(), check.instructorMicrophoneTrackCount(),
+                check.unexpectedMicrophonePublishers());
     }
 
     @Operation(summary = "라이브 세션 일정 수정", description = "예정 시각·입장창·예상 시간을 수정한다(강사). 라이브가 시작되기 전에만 가능하다. 보낸 필드만 바뀐다.")
@@ -116,7 +169,8 @@ public class LiveSessionController {
         // 상태 게이트: 종료·취소·실패한 세션엔 입장 토큰을 발급하지 않는다(끝난/취소된 방 재입장 차단).
         // 게이트를 접근검증 뒤에 둬서 미수강자에겐 세션 상태를 흘리지 않는다. enum 비교라 오타로 fail-open 안 된다.
         LiveSessionStatus liveStatus = LiveSessionStatus.valueOf(session.liveSessionStatus());
-        if (liveStatus == LiveSessionStatus.ENDED
+        if (liveStatus == LiveSessionStatus.ENDING
+                || liveStatus == LiveSessionStatus.ENDED
                 || liveStatus == LiveSessionStatus.CANCELLED
                 || liveStatus == LiveSessionStatus.FAILED) {
             throw new LiveSessionStateConflictException("종료되었거나 취소된 세션에는 입장할 수 없습니다.");
@@ -126,8 +180,8 @@ public class LiveSessionController {
         String room = "session-" + sessionId;
         // 참가자 identity는 원시 userId를 노출하지 않는 (session,user) 결정론적 불투명 값으로 만든다.
         // 방 안에서 참가자끼리 서로의 identity를 보므로, 채팅 익명화와 동일하게 userId를 미디어 계층에 흘리지 않는다.
-        String identity = UUID.nameUUIDFromBytes(
-                (sessionId + ":" + requesterId).getBytes(StandardCharsets.UTF_8)).toString();
+        // preflight·Gate S3①의 서버측 조회가 같은 규칙으로 강사 participant를 찾으므로 규약을 한곳에 둔다.
+        String identity = LiveParticipantIdentity.of(sessionId, UUID.fromString(requesterId));
 
         // displayName(참여자 표시명·수강생 익명화)은 화면 요구가 붙을 때 채운다 — 지금은 불투명 식별자만.
         var issued = tokenService.issue(room, identity, null, publisher);
