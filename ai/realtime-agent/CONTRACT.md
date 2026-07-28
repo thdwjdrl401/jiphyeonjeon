@@ -1,13 +1,10 @@
-# realtime-agent AI-side v1 proposal
+# realtime-agent v1 상세 계약
 
-이 문서는 realtime-agent가 생성·소비할 메시지를 Python 테스트로 고정하기 위한 **AI-side 제안
-계약**이다. 현재 Java `master`와 `docs/CONTRACT.md`가 채택한 공유 계약이 아니며, Java 연동 완료를
-의미하지 않는다.
+이 문서는 realtime-agent의 wire 형식과 AI 런타임 불변식을 Python 테스트로 고정한 상세 계약이다.
+Spring이 생산·소비하는 공유 경계의 정본은 [`docs/CONTRACT.md` §3-3~§3-5](../../docs/CONTRACT.md#3-내부-계약-확정-인터페이스)다.
 
-현재 Java에는 named LiveKit AgentDispatch 생성, 아래 Redis stream consumer, live-agent callback
-handler가 없다. 특히 공유 문서의 `caption.partial|final|revised`와 이 문서의 append-only
-`caption.delta|caption.stream.completed`는 이벤트 이름과 시간축이 다르다. Java가 채택할 때 양측
-코드·fixture와 `docs/CONTRACT.md`를 같은 common MR에서 갱신해야 한다.
+현재 Java에는 named LiveKit AgentDispatch 생성, Redis Stream consumer, live-agent callback handler가
+없으므로 계약 채택만으로 Java 연동 또는 CP2 E2E가 완료된 것은 아니다.
 
 ## 1. Spring → LiveKit → realtime-agent dispatch metadata
 
@@ -198,8 +195,8 @@ callback이 누락될 수는 있어도 이미 닫힌 caption stream을 반대 te
 
 ## 4. realtime-agent → Spring lifecycle callback
 
-기본값은 `SPRING_STATUS_CALLBACK_ENABLED=false`다. Java가 이 제안 계약을 채택하기 전에는 켜지
-않는다. 활성화하려면 HTTP(S) callback URL과 최소 32 byte secret을 모두 주입해야 한다. 운영
+기본값은 `SPRING_STATUS_CALLBACK_ENABLED=false`다. Spring 수신 endpoint를 구현하기 전에는 켜지
+않는다. 활성화하려면 HTTP(S) callback URL과 최소 32 byte secret을 모두 주입해야 하며 운영
 네트워크에서는 HTTPS를 사용한다.
 
 요청 body는 compact UTF-8 JSON이며 다음 필드를 사용한다.
@@ -257,7 +254,7 @@ audio/event drain, engine/source cleanup, completion write, terminal callback, l
 수행하는 LiveKit room 삭제이며, Python은 `ROOM_DELETED`만 정상 EOF로 분류한다. 다른 disconnect는
 실패다.
 
-## 6. Java 채택 전 필수 gate
+## 6. Java 연동 완료 전 필수 gate
 
 1. 2.5절의 named dispatch, idempotency, assignment timeout, Room 권한·삭제와 capacity handling을
    구현한다.
@@ -265,5 +262,5 @@ audio/event drain, engine/source cleanup, completion write, terminal callback, l
 3. Redis key, consumer group, 세션 종료 후 정리, event enum, timeout 결과의 멱등/fencing과 session
    clock 변환을 확정한다.
 4. callback URL, HMAC 방식, event ID 멱등성과 terminal first-wins 처리를 확정한다.
-5. `docs/CONTRACT.md`를 실제 구현과 함께 갱신하고 available/full/unregistered Worker 및
-   LiveKit·Redis·Spring 정상·실패 E2E를 별도 실행한다.
+5. available/full/unregistered Worker와 LiveKit·Redis·Spring 정상·실패 E2E를 별도 실행하고
+   실제 Java 연동 결과를 계약 테스트로 고정한다.

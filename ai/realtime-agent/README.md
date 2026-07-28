@@ -6,9 +6,9 @@ LiveKit `AgentServer` 실행, session lease, caption stream, 선택적인 Spring
 연결한다.
 
 외부 메시지 형식은 [CONTRACT.md](CONTRACT.md)와 [`contracts/`](contracts/README.md)에 고정했다.
-이 계약은 아직 Java와 `docs/CONTRACT.md`가 채택한 공유 계약이 아니라 **AI-side v1 proposal**이다.
-현재 Java에는 named AgentDispatch, caption consumer, live-agent callback handler가 없으므로 이
-서비스만으로 Java 연동 또는 CP2 E2E가 완료됐다고 보지 않는다.
+Spring 공유 경계는 [`docs/CONTRACT.md` §3-3~§3-5](../../docs/CONTRACT.md#3-내부-계약-확정-인터페이스)에 채택됐다.
+다만 현재 Java에는 named AgentDispatch, caption consumer, live-agent callback handler가 없으므로
+이 서비스만으로 Java 연동 또는 CP2 E2E가 완료됐다고 보지 않는다.
 
 ## 처리 흐름
 
@@ -120,7 +120,7 @@ LiveKit, Spring 왕복과 OpenAI credential은 별도 opt-in smoke 증거가 필
 - 같은 metadata fixture를 사용하는 Java serializer/contract test
 - Redis consumer group, 세션 종료 후 정리, event enum과 session clock 변환 확정
 - callback URL·HMAC·event ID 멱등·terminal first-wins 처리
-- 실제 계약 채택과 함께 `docs/CONTRACT.md` 갱신
+- LiveKit·Redis·Spring 정상·실패 E2E와 Java 쪽 계약 테스트
 
 ## 폴더별 문서
 
