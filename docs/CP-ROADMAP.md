@@ -68,7 +68,7 @@ flowchart LR
 | **CP1** ★ | 라이브 미디어 | LiveKit 토큰, **WebRTC 화상 입장**(강사 publish/학생 subscribe), Spring **채팅**(WS) | — |
 | **CP2** | 라이브 자막 | **realtime-agent 스트리밍 STT(VAD)** → Redis Streams → Spring 영속+WS, 자막 렌더·검수 | realtime-agent · **`ai` 스키마+Alembic** · 외부 STT API |
 | **CP3** ★ | 용어·근거(RAG) | PPTX 업로드·파싱, chunk·embedding(pgvector), 용어 후보·카드, **RAG SSE**(FTS+vector+RRF+scope+citation+insufficient) | ai-api · ai-worker · **RabbitMQ** · model gateway |
-| **CP4** | 녹화·다시보기 | Egress 녹화→HLS→MinIO, **egress 웹훅 수신기**(상태 전이, [0034](decisions/songjeongki/0034-egress-completion-webhook.md)) ✅, **라이브 recent/dvr·종료 VOD 재생 API**(metadata + 인증 manifest, presigned URI + 시간축 계산, [0039](decisions/songjeongki/0039-replay-playback-api.md), [choinhoo/0001](decisions/choinhoo/0001-live-replay-playback-api.md)) ✅, **게시·철회** ✅, HLS 플레이어 + 교정 자막·용어·RAG 재생(FE, 검수 데이터 저장은 CP2·CP3 산출물 선행) | HLS.js |
+| **CP4** | 녹화·다시보기 | Egress 녹화→HLS→MinIO, **egress 웹훅 수신기**(상태 전이, [0034](decisions/songjeongki/0034-egress-completion-webhook.md)) ✅, **라이브 되감기·종료 VOD 재생 API**(metadata + 인증 manifest, presigned URI + 시간축 계산 + 델타 재생목록, [0039](decisions/songjeongki/0039-replay-playback-api.md), [choinhoo/0001](decisions/choinhoo/0001-live-replay-playback-api.md)) ✅, **게시·철회** ✅, HLS 플레이어 + 교정 자막·용어·RAG 재생(FE, 검수 데이터 저장은 CP2·CP3 산출물 선행) | HLS.js |
 | **CP5** | 퀴즈·따라잡기 | 퀴즈 후보→검수→응시(**결정론 채점**), 재접속 catch-up | — |
 
 > **RabbitMQ 배선은 CP3에서 이뤄졌다.** backend에 `spring-amqp` 의존성·설정이 들어가 outbox 릴레이가 `ingestion.embed`로 발행하고, prod compose에도 RabbitMQ가 추가됐다([ADR-0036](decisions/songjeongki/0036-material-embedding-pipeline.md), [ARCHITECTURE §9-4](ARCHITECTURE.md)). CP2 자막 경로는 여전히 Redis Streams만으로 충분하다. 자료 임베딩 파이프라인은 스위치(`material.embedding.enabled`) 뒤에서 기본 off다.
@@ -85,7 +85,7 @@ flowchart LR
 | CP1 | LiveKit 토큰·채팅 WS | LiveKit 클라·화상·채팅 UI | — |
 | CP2 | 자막 영속·WS 전달 | 자막 렌더·싱크 | **realtime-agent STT** |
 | CP3 | 자료→레슨 연결·AI 게이트웨이·정책·SSE 중계 | 챗봇·용어카드 UI | **chunk·embed·RAG·citation** |
-| CP4 | Egress 제어·라이브/다시보기 재생 API·게시/철회 ✅ | HLS 플레이어·recent→dvr 전환·다시보기 UI | *(2-pass 교정 옵션)* |
+| CP4 | Egress 제어·라이브/다시보기 재생 API·게시/철회 ✅ | HLS 플레이어·LIVE 배지/되감기 UI·다시보기 UI | *(2-pass 교정 옵션)* |
 | CP5 | 퀴즈 채점·API | 퀴즈 UI | *(퀴즈 후보)* |
 
 > **선행 스파이크(Week1 병렬)**: 한국어 STT bake-off + LiveKit/Egress self-host PoC — CP1·CP2 리스크 검증. **미디어·라이브는 3그룹 합동.**
@@ -98,7 +98,8 @@ flowchart LR
 | 🔴 **지평선(horizon) 정의** | CP2 | 확정본 지연을 몇 초로 둘지. 없으면 FE 자막 렌더 정책·BE 영속 시점을 못 정한다 |
 | 🟠 **자막 유실 정책** | CP2 | Redis fast-path 유실 허용 + 녹화 2-pass 복구로 확정할지 |
 | 🟠 **단일 노드 운용 전제** | CP2 | STT·임베딩·LLM 전부 외부 API, Egress는 데모 세션에만, 동시 세션 1~2개 |
-| ✅ **라이브·다시보기 시간축 변환** | CP4 | 구현 완료 — metadata API가 recent/dvr 첫 PDT를 앵커로 오프셋·재생 범위를 요청마다 계산해 내려준다(저장하지 않음, [ADR-0039](decisions/songjeongki/0039-replay-playback-api.md), [choinhoo/0001](decisions/choinhoo/0001-live-replay-playback-api.md), [ARCHITECTURE §9-9](ARCHITECTURE.md)) |
+| ✅ **라이브·다시보기 시간축 변환** | CP4 | 구현 완료 — metadata API가 첫 PDT를 앵커로 오프셋·재생 범위를 요청마다 계산해 내려준다(저장하지 않음, [ADR-0039](decisions/songjeongki/0039-replay-playback-api.md), [choinhoo/0001](decisions/choinhoo/0001-live-replay-playback-api.md), [ARCHITECTURE §9-9](ARCHITECTURE.md)) |
+| ✅ **라이브 재생목록 무한 성장** | CP4 | 구현 완료 — 델타 재생목록(`EXT-X-SKIP`)으로 갱신 크기를 잡되 진행 바는 강의 전체를 유지한다([ARCHITECTURE §9-10](ARCHITECTURE.md)) |
 
 ## 열린 항목 (착수 직전 상세)
 - ✅ **인증 방식 확정**: HttpOnly 쿠키 + Redis 세션([decisions/songjeongki/0014](decisions/songjeongki/0014-auth-redis-session-cookie.md)).

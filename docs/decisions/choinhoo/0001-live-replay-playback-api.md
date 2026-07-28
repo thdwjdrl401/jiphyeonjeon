@@ -4,8 +4,38 @@
 > [ADR-0034 Egress 완료 webhook](../songjeongki/0034-egress-completion-webhook.md) ·
 > [ADR-0039 다시보기 재생 API](../songjeongki/0039-replay-playback-api.md)
 
-- **상태**: 채택
+- **상태**: 채택 (2026-07-28 §2 개정 — 아래 참조)
 - **일자**: 2026-07-27
+
+> ### 2026-07-28 개정 — `recent`/`dvr` 두 source → 단일 source + 델타 재생목록
+>
+> §2의 `sources.recent`/`sources.dvr` 분리를 **`source` 하나로 대체**한다. 응답 필드는
+> `sources:{recent,dvr}` → `source`, manifest 엔드포인트의 `?source=` 파라미터는 제거,
+> 오류코드 `PLAYBACK_SOURCE_INVALID`도 함께 사라진다.
+>
+> **왜**: `recent`(LiveKit `live.m3u8`)로는 되감기 요구를 만족할 수 없다. 슬라이딩 윈도우라
+> 세션 처음으로 돌아갈 수 없고, 윈도우 길이는 LiveKit egress API에 설정 필드 자체가 없어
+> (`SegmentedFileOutput`은 `playlist_name`·`live_playlist_name`·`segment_duration`만 받는다)
+> 우리가 정할 수도 없다. 반면 `index.m3u8`은 라이브 중 ENDLIST 없이 자라는 EVENT 목록이라
+> **라이브 엣지 추종과 세션 처음까지의 seek을 한 목록이 동시에** 준다.
+>
+> **그럼 크기는**: §2가 두 source를 둔 실질적 이유는 라이브 중 재생목록이 계속 자라는 문제였다.
+> 이건 자르는 게 아니라 **HLS 델타 재생목록**(RFC 8216bis §6.2.5.1)으로 푼다. 잘라 보내면
+> 플레이어는 "나머지는 사라졌다"로 읽어 진행 바가 쪼그라들지만, `#EXT-X-SKIP`은 "생략했으니
+> 갖고 있는 것과 병합하라"는 신호라 진행 바가 강의 전체로 유지된다. 그래서
+> `EXT-X-MEDIA-SEQUENCE`도 건드리지 않는다.
+>
+> 서버는 라이브 재생목록에 `#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=<n>`을 실어 능력을 광고하고,
+> 플레이어가 `_HLS_skip=YES`를 붙여 오면 경계 밖 세그먼트를 생략한 본문을 준다. 클라이언트별
+> 상태를 서버가 들지 않는다. `hls.js` 1.6.16이 기본 설정으로 이 협상을 수행하는 것을 확인했다
+> (`getSkipValue` → `_HLS_skip`, `SKIPPED-SEGMENTS` 병합, `deltaUpdateFailed` 시 전체 재요청 폴백).
+>
+> **딸린 변경**: 델타는 옛 세그먼트의 presigned URL을 다시 주지 않으므로
+> `video.playback.segment-url-ttl` 기본값을 1h → **6h**로 올린다. 그러지 않으면 오래 시청한
+> 학생이 앞으로 되감을 때 403을 맞는다.
+>
+> **미검증**: 실제 Egress 출력으로 e2e 확인하지 않았다. LiveKit이 라이브 중 내는 `index.m3u8`의
+> 실제 태그 구성(`EXT-X-VERSION` 값, PDT 주기)은 배포 후 확인이 필요하다.
 
 ## 맥락
 
@@ -35,6 +65,9 @@ ADR-0032가 확정한 학생 HLS 단일 재생은 라이브 중 `live.m3u8` 엣�
   `POST .../replay-review/withdraw`를 추가한다. 라이브 진행 중 철회는 409로 거부한다.
 
 ### 2. 재생 API를 metadata와 manifest 두 단계로 나눈다
+
+> ⚠️ **아래 §2의 두 source(`recent`/`dvr`) 부분은 2026-07-28 개정으로 대체됐다**(문서 상단 참조).
+> 두 단계로 나누는 결정 자체는 유효하다. 지금 구현은 `source` 하나 + 델타 재생목록이다.
 
 - `GET /api/lessons/{lessonId}/playback`
   - 세션·시간축·`sources.recent`/`sources.dvr` metadata를 JSON으로 반환한다.
@@ -72,7 +105,7 @@ manifest URL은 백엔드의 안정적인 URL이므로 응답에 만료시각을
 
 | HTTP | code | 조건 |
 |---|---|---|
-| 400 | `PLAYBACK_SOURCE_INVALID` | `recent`/`dvr` 외 source |
+| ~~400~~ | ~~`PLAYBACK_SOURCE_INVALID`~~ | **2026-07-28 폐기** — source 파라미터가 없어졌다 |
 | 403 | `ENROLLMENT_REQUIRED` | 소유 강사도 활성 수강생도 아님 |
 | 403 | `REPLAY_FORBIDDEN` | 비소유 강사의 게시·철회 |
 | 404 | `LESSON_NOT_FOUND` | 레슨 부재 또는 학생에게 미게시 레슨 은닉 |
