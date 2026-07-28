@@ -10,7 +10,11 @@ REDIS_LOCAL_PORT="${REDIS_LOCAL_PORT:-4000}"
 REDIS_REMOTE_PORT="${REDIS_REMOTE_PORT:-4000}"
 TURN_LOCAL_PORT="${TURN_LOCAL_PORT:-3478}"
 TURN_REMOTE_PORT="${TURN_REMOTE_PORT:-3478}"
+HEALTH_LOCAL_PORT="${HEALTH_LOCAL_PORT:-8081}"
+HEALTH_REMOTE_PORT="${HEALTH_REMOTE_PORT:-18081}"
+HEALTH_BIND_HOST="${HEALTH_BIND_HOST:-127.0.0.1}"
 SSH_CONTROL_PATH="${SSH_CONTROL_PATH:-${TMPDIR:-/tmp}/liveclass-realtime-agent-%C.sock}"
+HEALTH_REVERSE_MARKER="$SSH_CONTROL_PATH.health-$HEALTH_REMOTE_PORT"
 
 if [ ! -r "$SSH_KEY" ]; then
     echo "SSH key is not readable" >&2
@@ -66,14 +70,23 @@ validate_port "$REDIS_LOCAL_PORT" REDIS_LOCAL_PORT
 validate_port "$REDIS_REMOTE_PORT" REDIS_REMOTE_PORT
 validate_port "$TURN_LOCAL_PORT" TURN_LOCAL_PORT
 validate_port "$TURN_REMOTE_PORT" TURN_REMOTE_PORT
+validate_port "$HEALTH_LOCAL_PORT" HEALTH_LOCAL_PORT
+validate_port "$HEALTH_REMOTE_PORT" HEALTH_REMOTE_PORT
 
 if ssh -S "$SSH_CONTROL_PATH" -O check "$SSH_TARGET" >/dev/null 2>&1; then
+    if [ ! -e "$HEALTH_REVERSE_MARKER" ]; then
+        ssh -S "$SSH_CONTROL_PATH" -O forward \
+            -R "$HEALTH_BIND_HOST:$HEALTH_REMOTE_PORT:127.0.0.1:$HEALTH_LOCAL_PORT" \
+            "$SSH_TARGET"
+        : >"$HEALTH_REVERSE_MARKER"
+    fi
     validate_managed_listener "$LIVEKIT_LOCAL_PORT" LIVEKIT
     validate_managed_listener "$REDIS_LOCAL_PORT" REDIS
     validate_managed_listener "$TURN_LOCAL_PORT" TURN_TCP
     exit 0
 fi
 
+rm -f -- "$HEALTH_REVERSE_MARKER"
 validate_listener_available "$LIVEKIT_LOCAL_PORT" LIVEKIT
 validate_listener_available "$REDIS_LOCAL_PORT" REDIS
 validate_listener_available "$TURN_LOCAL_PORT" TURN_TCP
@@ -90,7 +103,9 @@ ssh \
     -L "$LIVEKIT_LOCAL_PORT:localhost:$LIVEKIT_REMOTE_PORT" \
     -L "$REDIS_LOCAL_PORT:localhost:$REDIS_REMOTE_PORT" \
     -L "$TURN_LOCAL_PORT:localhost:$TURN_REMOTE_PORT" \
+    -R "$HEALTH_BIND_HOST:$HEALTH_REMOTE_PORT:127.0.0.1:$HEALTH_LOCAL_PORT" \
     "$SSH_TARGET"
+: >"$HEALTH_REVERSE_MARKER"
 
 validate_managed_listener "$LIVEKIT_LOCAL_PORT" LIVEKIT
 validate_managed_listener "$REDIS_LOCAL_PORT" REDIS

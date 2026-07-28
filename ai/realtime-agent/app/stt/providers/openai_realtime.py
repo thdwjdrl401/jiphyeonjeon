@@ -4,21 +4,23 @@ import asyncio
 import audioop
 import base64
 import json
+import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
-from urllib.parse import quote
 
 from app.audio.segmentation import SpeechSegment
 from app.stt.engine import SttStreamContext
 from app.stt.providers.segmented import SegmentedStreamingEngine, SpeechSegmenter
 
 _REALTIME_SAMPLE_RATE = 24_000
-_REALTIME_URL = "wss://api.openai.com/v1/realtime"
+_REALTIME_TRANSCRIPTION_URL = "wss://api.openai.com/v1/realtime?intent=transcription"
 _TRANSCRIPTION_DELTA = "conversation.item.input_audio_transcription.delta"
 _TRANSCRIPTION_COMPLETED = "conversation.item.input_audio_transcription.completed"
 _TRANSCRIPTION_FAILED = "conversation.item.input_audio_transcription.failed"
 
 WebSocketConnect = Callable[..., Awaitable[Any]]
+
+logger = logging.getLogger(__name__)
 
 
 async def _default_connect(url: str, **kwargs: object) -> Any:
@@ -54,7 +56,7 @@ class OpenAiRealtimeStreamingEngine(SegmentedStreamingEngine):
         self._api_key = api_key
         self._model = model
         self._delay = delay
-        self._url = url or f"{_REALTIME_URL}?model={quote(model, safe='')}"
+        self._url = url or _REALTIME_TRANSCRIPTION_URL
         self._segment_timeout_s = segment_timeout_s
         self._connect = connect
         self._ws: Any | None = None
@@ -136,8 +138,15 @@ class OpenAiRealtimeStreamingEngine(SegmentedStreamingEngine):
                 remainder = transcript[len(emitted) :]
                 if remainder:
                     yield remainder
-            elif transcript != emitted:
-                raise RuntimeError("OpenAI final transcript diverged from emitted deltas")
+            elif transcript.strip() != emitted.strip():
+                logger.warning(
+                    "OpenAI final transcript revised already emitted realtime deltas; "
+                    "preserving emitted text",
+                    extra={
+                        "emitted_length": len(emitted),
+                        "final_length": len(transcript),
+                    },
+                )
             return
 
     async def _ensure_connected(self, language: str) -> Any:

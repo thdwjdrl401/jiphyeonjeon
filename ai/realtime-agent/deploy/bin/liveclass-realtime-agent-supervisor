@@ -1,0 +1,168 @@
+#!/bin/sh
+set -eu
+
+COMMAND="${1:-status}"
+DEPLOY_ROOT="${LIVECLASS_DEPLOY_ROOT:-$HOME/.local/share/liveclass/realtime-agent}"
+CURRENT_LINK="$DEPLOY_ROOT/current"
+CONFIG_DIR="${LIVECLASS_CONFIG_DIR:-$HOME/.config/liveclass}"
+AGENT_ENV="${LIVECLASS_AGENT_ENV:-$CONFIG_DIR/realtime-agent.env}"
+TUNNEL_ENV="${LIVECLASS_TUNNEL_ENV:-$CONFIG_DIR/realtime-agent-tunnels.env}"
+AGENT_SESSION="${LIVECLASS_AGENT_SESSION:-liveclass-realtime-agent}"
+TUNNEL_SESSION="${LIVECLASS_TUNNEL_SESSION:-liveclass-realtime-agent-tunnels}"
+RESTART_DELAY_SECONDS="${LIVECLASS_RESTART_DELAY_SECONDS:-5}"
+
+require_command() {
+    command -v "$1" >/dev/null 2>&1 || {
+        echo "required command is missing: $1" >&2
+        exit 1
+    }
+}
+
+require_file() {
+    if [ ! -r "$1" ]; then
+        echo "required file is not readable: $1" >&2
+        exit 1
+    fi
+}
+
+load_env() {
+    require_file "$1"
+    set -a
+    # The environment files are user-owned secrets and intentionally use shell KEY=value syntax.
+    # shellcheck disable=SC1090
+    . "$1"
+    set +a
+}
+
+session_exists() {
+    tmux has-session -t "=$1" 2>/dev/null
+}
+
+start_tunnel() {
+    if session_exists "$TUNNEL_SESSION"; then
+        echo "tunnel supervisor is already running"
+        return
+    fi
+    require_file "$TUNNEL_ENV"
+    require_file "$CURRENT_LINK/scripts/start_ec2_tunnels.sh"
+    tmux new-session -d -s "$TUNNEL_SESSION" "$CURRENT_LINK/deploy/bin/liveclass-realtime-agent-supervisor _run-tunnel"
+    echo "tunnel supervisor started"
+}
+
+start_agent() {
+    if session_exists "$AGENT_SESSION"; then
+        echo "agent supervisor is already running"
+        return
+    fi
+    require_file "$AGENT_ENV"
+    require_file "$CURRENT_LINK/.venv/bin/python"
+    tmux new-session -d -s "$AGENT_SESSION" "$CURRENT_LINK/deploy/bin/liveclass-realtime-agent-supervisor _run-agent"
+    echo "agent supervisor started"
+}
+
+stop_session() {
+    if session_exists "$1"; then
+        tmux kill-session -t "=$1"
+    fi
+}
+
+show_status() {
+    status=0
+    if session_exists "$TUNNEL_SESSION"; then
+        echo "tunnel: running"
+    else
+        echo "tunnel: stopped"
+        status=1
+    fi
+    if session_exists "$AGENT_SESSION"; then
+        echo "agent: running"
+    else
+        echo "agent: stopped"
+        status=1
+    fi
+    return "$status"
+}
+
+show_agent_status() {
+    if session_exists "$AGENT_SESSION"; then
+        echo "agent: running"
+        return 0
+    fi
+    echo "agent: stopped"
+    return 1
+}
+
+require_command tmux
+
+case "$COMMAND" in
+    _run-tunnel)
+        load_env "$TUNNEL_ENV"
+        while :; do
+            if ! "$CURRENT_LINK/scripts/start_ec2_tunnels.sh"; then
+                echo "tunnel check failed; retrying in ${RESTART_DELAY_SECONDS}s" >&2
+            fi
+            sleep "$RESTART_DELAY_SECONDS"
+        done
+        ;;
+    _run-agent)
+        load_env "$AGENT_ENV"
+        if [ -n "${LIVEKIT_TUNNEL_HOST:-}" ]; then
+            DNS_REDIRECT_LIB="${LIVEKIT_DNS_REDIRECT_LIB:-$HOME/.local/lib/liveclass/livekit-tunnel-dns.so}"
+            require_file "$DNS_REDIRECT_LIB"
+            LD_PRELOAD="$DNS_REDIRECT_LIB${LD_PRELOAD:+:$LD_PRELOAD}"
+            export LD_PRELOAD
+        fi
+        cd "$CURRENT_LINK"
+        while :; do
+            set +e
+            "$CURRENT_LINK/.venv/bin/python" -m app.main start
+            agent_status=$?
+            set -e
+            if [ "$agent_status" -eq 0 ]; then
+                exit 0
+            fi
+            echo "agent exited with status $agent_status; retrying in ${RESTART_DELAY_SECONDS}s" >&2
+            sleep "$RESTART_DELAY_SECONDS"
+        done
+        ;;
+    start)
+        start_tunnel
+        start_agent
+        ;;
+    start-tunnel)
+        start_tunnel
+        ;;
+    restart)
+        stop_session "$AGENT_SESSION"
+        stop_session "$TUNNEL_SESSION"
+        start_tunnel
+        start_agent
+        ;;
+    restart-agent)
+        stop_session "$AGENT_SESSION"
+        start_agent
+        ;;
+    stop)
+        stop_session "$AGENT_SESSION"
+        stop_session "$TUNNEL_SESSION"
+        ;;
+    stop-agent)
+        stop_session "$AGENT_SESSION"
+        ;;
+    status)
+        show_status
+        ;;
+    status-agent)
+        show_agent_status
+        ;;
+    logs-agent)
+        tmux capture-pane -p -t "$AGENT_SESSION:0.0" -S -200
+        ;;
+    logs-tunnel)
+        tmux capture-pane -p -t "$TUNNEL_SESSION:0.0" -S -200
+        ;;
+    *)
+        echo "usage: liveclass-realtime-agent-supervisor {start|start-tunnel|restart|restart-agent|stop|stop-agent|status|status-agent|logs-agent|logs-tunnel}" >&2
+        exit 2
+        ;;
+esac

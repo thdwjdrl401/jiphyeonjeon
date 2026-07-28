@@ -1,0 +1,113 @@
+# GPU realtime-agent rootless 배포
+
+GPU 호스트는 sudo 권한이 없고 Jupyter service에 NoNewPrivileges=yes가 적용돼 있다. 따라서
+GitLab Runner, SSH tunnel, realtime-agent를 모두 liveclass 계정으로 실행한다. LiveKit Worker
+등록은 agent process의 authenticated WebSocket 연결 상태이므로 agent가 시작되면 같은
+STT_AGENT_NAME으로 자동 등록된다.
+
+이 방식은 브라우저나 terminal 연결이 끊겨도 tmux session으로 계속 실행된다. 단, GPU host 또는
+Jupyter service가 재시작되면 사용자 process도 종료되므로 아래의 Runner 시작 명령을 한 번 다시
+실행해야 한다. 현재 권한에서는 boot-time 자동 시작을 설정할 수 없다.
+
+## 1. 사용자 영역 bootstrap
+
+Python 환경은 Conda가 아니라 프로젝트 표준인 Python 3.12와 uv를 사용한다.
+
+~~~sh
+cd /home/liveclass/liveclass
+ai/realtime-agent/deploy/install.sh /opt/tljh/user/bin/uv
+ai/realtime-agent/deploy/install-gitlab-runner-user.sh latest
+~~~
+
+첫 명령은 아래 항목만 사용자 홈에 설치한다.
+
+- 실행 파일: ~/.local/bin
+- agent release/cache: ~/.local/share/liveclass/realtime-agent
+- 환경파일: ~/.config/liveclass/realtime-agent*.env
+- TLS hostname loopback resolver: ~/.local/lib/liveclass/livekit-tunnel-dns.so
+
+설치 스크립트는 기존 환경파일을 덮어쓰지 않는다. 두 환경파일을 실제 값으로 수정하고 권한을
+0600으로 유지한다.
+
+~~~sh
+chmod 600 ~/.config/liveclass/realtime-agent*.env
+~~~
+
+realtime-agent.env의 LIVEKIT_URL에는 인증서 hostname을 유지하고 LIVEKIT_TUNNEL_HOST에는 그
+hostname만 넣는다. root 권한으로 /etc/hosts를 바꿀 수 없으므로 source-controlled resolver가 해당
+hostname만 127.0.0.1로 해석한다.
+
+한 GPU만 쓰는 profile은 CUDA_VISIBLE_DEVICES=0, STT_MAX_ACTIVE_JOBS=12,
+STT_NUM_IDLE_PROCESSES=12를 사용한다. 모델은 Git 밖의 기존 절대경로를 ASR_MODEL_ID로 지정한다.
+
+## 2. GPU project Runner 등록
+
+GitLab 프로젝트에서 새 project Runner를 만든다.
+
+- tag: gpu-realtime
+- project에 lock
+- protected branch만 허용
+- untagged job 실행 금지
+- 동시 실행 수 1
+
+GitLab 화면에 한 번 표시되는 Runner authentication token은 파일·로그·문서에 남기지 않는다.
+사용자 모드로 등록한다.
+
+~~~sh
+~/.local/bin/gitlab-runner register \
+  --config ~/.gitlab-runner/config.toml \
+  --url <gitlab-url> \
+  --token <runner-authentication-token> \
+  --executor shell
+~~~
+
+등록 후 Runner를 tmux에서 시작한다.
+
+~~~sh
+~/.local/bin/liveclass-gitlab-runner-user start
+~/.local/bin/liveclass-gitlab-runner-user status
+~~~
+
+Runner와 최초 GPU 배포가 정상임을 확인한 뒤 protected CI 변수 GPU_DEPLOY_ENABLED=1을 설정한다.
+GPU Runner는 GitLab와 EC2로 outbound 연결만 사용하며 GPU inbound port를 열지 않는다.
+
+## 3. 최초 배포와 pipeline
+
+Runner를 활성화하기 전 현재 checkout으로 최초 배포를 검증할 수 있다.
+
+~~~sh
+~/.local/bin/liveclass-realtime-agent-deploy \
+  "$PWD/ai/realtime-agent" "$(git rev-parse HEAD)"
+~/.local/bin/liveclass-realtime-agent-supervisor status
+curl --fail http://127.0.0.1:8081/
+~~~
+
+배포 helper는 commit SHA별 staging 복사, frozen Nemotron sync, CUDA smoke, current symlink 교체,
+tunnel·agent 재시작, health 확인 순서로 동작한다. 실패하면 이전 release로 rollback한다.
+GitLab job도 같은 helper를 현재 사용자로 직접 호출하며 sudo, systemctl, Docker executor는 사용하지
+않는다. 시크릿, SSH key, model checkpoint는 release에 복사하지 않는다.
+
+## 4. 연결과 상태 확인
+
+| 방향 | GPU 측 | EC2 측 | 용도 |
+|---|---|---|---|
+| local | 127.0.0.1:7443 | 127.0.0.1:7443 | LiveKit |
+| local | 127.0.0.1:4000 | 127.0.0.1:4000 | application Redis |
+| local | 127.0.0.1:3478 | 127.0.0.1:3478 | TURN/TCP |
+| reverse | GPU 127.0.0.1:8081 | EC2 127.0.0.1:18081 | Java health check |
+
+EC2 Java는 http://127.0.0.1:18081/로 GPU agent 상태를 확인한다. EC2 loopback에만 bind되므로 외부에
+공개되지 않는다.
+
+~~~sh
+~/.local/bin/liveclass-realtime-agent-supervisor status
+~/.local/bin/liveclass-realtime-agent-supervisor logs-agent
+~/.local/bin/liveclass-realtime-agent-supervisor logs-tunnel
+~/.local/bin/liveclass-gitlab-runner-user logs
+curl --fail http://127.0.0.1:8081/
+~~~
+
+- Runner가 offline이면 GPU job은 pending 상태이며 EC2 Runner가 대신 실행하지 않는다.
+- tunnel 또는 agent가 비정상 종료하면 tmux supervisor loop가 다시 시작한다.
+- active 강의 중 배포는 기존 process의 drain을 기다리지 않고 tmux session을 교체한다.
+- GPU/Jupyter 재시작 후에는 ~/.local/bin/liveclass-gitlab-runner-user start를 다시 실행한다.

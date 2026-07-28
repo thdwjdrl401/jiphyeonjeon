@@ -146,16 +146,19 @@ batch여야 한다.
 3. Nemotron의 `STT_MAX_ACTIVE_JOBS`는 worker당 12로 연다. load는
    `activeJobs / 12`, threshold는 1.0으로 두고 reserved slot까지 포함해 12를 넘겨 수락하지 않는다.
 4. LiveKit `setup_fnc`에서 각 idle job process에 Nemotron을 prewarm하고 `proc.userdata`로 job에 넘긴다.
-   `num_idle_processes=12`를 시작점으로 삼는다. process 하나는 동시에 job 하나만 실행하므로
-   Transformers 내부 가변 상태를 공유하지 않는다.
+   [ADR-0028](0028-stt-provider-execution-profile-and-warm-pool.md)에 따라 active cap과 기본 idle
+   process를 모두 12로 둔다. idle 2 실측에서 초기 dispatch가 10/12만 배정됐기 때문이다. process
+   하나는 동시에 job 하나만 실행하므로 Transformers 내부 가변 상태를 공유하지 않는다.
 5. room은 admission 단계에서 항상 weight 1을 예약한다. silence 비율로 cap을 늘리지 않는다. silence나
    segment deadline은 inference queue의 스케줄링 힌트로만 쓰고 admission 용량으로 환산하지 않는다.
 6. 24개를 넘는 dispatch는 LiveKit pending으로 두고 Spring assignment timeout으로 정리한다.
    pending 순서나 무제한 대기를 정상 동작으로 간주하지 않는다.
 
-이 단계는 가중치를 room마다 복제해 VRAM을 더 쓰는 대신 구현 위험을 낮춘다. 12 process의 model
-allocated 합은 GPU당 약 28.52 GiB, 2초 burst peak 합은 약 29.47 GiB여서 H200 memory에는 여유가
-있다. 이 구조의 병목은 memory가 아니라 compute와 scheduling이다.
+이 단계는 가중치를 room마다 복제해 VRAM을 더 쓰는 대신 구현 위험을 낮춘다. 기존 표의 29.47 GiB는
+PyTorch allocator 기준 12 active process의 2초 burst peak 합이다. 구현 후 `nvidia-smi`로 측정한
+12개 warm process의 CUDA context 포함 resident memory는 35,503 MiB였다. active 12 상태에서 SDK가
+replacement idle 12개를 채운 최대 24 model과 동시 추론 peak는 81,468 MiB였다. H200 memory에는
+여유가 있으며 이 구조의 주 병목은 memory보다 compute와 scheduling이다.
 
 ### 2. 목표 구조: GPU별 shared ASR runtime과 stateful micro-batch
 

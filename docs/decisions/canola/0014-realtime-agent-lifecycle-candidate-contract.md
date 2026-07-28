@@ -4,7 +4,8 @@
 - **일자**: 2026-07-27
 - **관련**: [ADR-0009](0009-realtime-agent-core-boundary.md),
   [ADR-0010](0010-realtime-agent-room-job-boundary.md),
-  [ADR-0012](0012-realtime-stt-provider-and-overload-boundary.md)
+  [ADR-0012](0012-realtime-stt-provider-and-overload-boundary.md),
+  [ADR-0028](0028-stt-provider-execution-profile-and-warm-pool.md)
 
 ## 맥락
 
@@ -47,8 +48,9 @@ audio/STT core를 오래된 구현으로 덮어쓰게 된다.
 8. 별도 Python stop HTTP API는 만들지 않는다. Spring이 소유한 LiveKit room lifecycle과 Redis
    command 제어면을 중복시키면 delete/command 순서 경쟁, ack, 멱등성, 인증 계약이 새로 필요하기
    때문이다.
-9. runnable AgentServer는 active job 수를 제한한다. 특히 Nemotron은 process-wide model sharing이
-   구현될 때까지 active job을 1개로 강제한다.
+9. runnable AgentServer는 active job 수를 제한한다. 당시 Nemotron active job은 1개로 강제했다.
+   이 수치와 실행 방식은 후속 측정 및 [ADR-0028](0028-stt-provider-execution-profile-and-warm-pool.md)의
+   child별 독립 model profile(active 최대 12)로 대체됐다.
 10. session lease를 얻지 못한 중복 job은 lifecycle callback을 발행하지 않는다. ownership을 얻지
     못한 attempt의 `FAILED`가 같은 session의 active owner 상태를 덮지 않게 하기 위한 fail-closed
     정책이다.

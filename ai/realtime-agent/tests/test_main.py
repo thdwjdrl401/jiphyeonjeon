@@ -14,6 +14,7 @@ from app import main as agent_main
 from app.config import Settings
 from app.jobs.lifecycle import DisabledLifecycleReporter
 from app.jobs.metadata import JobMetadata
+from app.stt import catalog as stt_catalog
 from app.stt.providers.stub import StubStreamingEngine
 
 SESSION_ID = UUID("11111111-1111-4111-8111-111111111111")
@@ -59,9 +60,9 @@ def test_builds_lazy_provider_registry_from_settings(
         calls.append(("nemotron", model_id, language))
         return nemotron_engine
 
-    monkeypatch.setattr(agent_main, "StubStreamingEngine", build_stub)
-    monkeypatch.setattr(agent_main, "OpenAiRealtimeStreamingEngine", build_openai)
-    monkeypatch.setattr(agent_main, "NemotronStreamingEngine", build_nemotron)
+    monkeypatch.setattr(stt_catalog, "StubStreamingEngine", build_stub)
+    monkeypatch.setattr(stt_catalog, "OpenAiRealtimeStreamingEngine", build_openai)
+    monkeypatch.setattr(stt_catalog, "NemotronStreamingEngine", build_nemotron)
     configured = settings(
         openai_api_key="openai-key",
         openai_realtime_model="transcribe-model",
@@ -160,10 +161,15 @@ def test_agent_server_uses_credentials_named_registration_and_bounded_load(
     assert server.options["api_secret"] == "livekit-secret"
     assert server.options["load_threshold"] == 1.0
     assert server.options["num_idle_processes"] == 1
+    assert server.options["initialize_process_timeout"] == 10.0
+    assert server.options["job_memory_warn_mb"] == 1000.0
+    assert callable(server.options["setup_fnc"])
     assert server.registered_agent_name == "liveclass-stt"
     assert callable(server.entrypoint)
     restored_entrypoint = pickle.loads(pickle.dumps(server.entrypoint))
     assert restored_entrypoint.keywords["settings"] == configured
+    restored_setup = pickle.loads(pickle.dumps(server.options["setup_fnc"]))
+    assert restored_setup.keywords["settings"] == configured
 
     load_fnc = server.options["load_fnc"]
     assert callable(load_fnc)
@@ -174,6 +180,34 @@ def test_agent_server_uses_credentials_named_registration_and_bounded_load(
     assert load_fnc(server) == 1.0
     server.active_jobs = [object(), object(), object()]
     assert load_fnc(server) == 1.0
+
+
+def test_nemotron_server_uses_twelve_job_profile_without_loading_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(agent_main, "AgentServer", FakeAgentServer)
+    configured = settings(stt_provider="nemotron")
+
+    server = agent_main.build_agent_server(configured)
+
+    assert isinstance(server, FakeAgentServer)
+    assert server.options["num_idle_processes"] == 12
+    assert server.options["initialize_process_timeout"] == 120
+    assert server.options["job_memory_warn_mb"] == 2304
+    load_fnc = server.options["load_fnc"]
+    server.active_jobs = [object()] * 11
+    assert load_fnc(server) == pytest.approx(11 / 12)
+    server.active_jobs.append(object())
+    assert load_fnc(server) == 1.0
+
+
+def test_unknown_provider_fails_before_agent_server_construction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(agent_main, "AgentServer", FakeAgentServer)
+
+    with pytest.raises(ValueError, match="supported: nemotron, openai-realtime, stub"):
+        agent_main.build_agent_server(settings(stt_provider="unknown"))
 
 
 def test_livekit_1_6_reserved_slots_fail_closed_during_assignment_burst() -> None:
@@ -201,6 +235,29 @@ def test_livekit_1_6_reserved_slots_fail_closed_during_assignment_burst() -> Non
     server._proc_pool = SimpleNamespace(processes=[SimpleNamespace(running_job=object())])
     server._worker_load = load_fnc(server)
     server._reserved_slots = 1
+    assert server._get_effective_load() == 1.0
+    assert server._is_available() is False
+
+
+def test_livekit_1_6_twelve_idle_slots_admit_twelve_job_burst() -> None:
+    """Pin the warm-pool size required for a 12-request cold assignment burst."""
+    load_fnc = agent_main._build_active_job_load(12)
+    server = LiveKitAgentServer(
+        load_fnc=load_fnc,
+        load_threshold=1.0,
+        num_idle_processes=12,
+    )
+    server._devmode = False
+    server._simulation = False
+    server._draining = False
+    server._proc_pool = SimpleNamespace(processes=[])
+    server._worker_load = load_fnc(server)
+
+    server._reserved_slots = 11
+    assert server._get_effective_load() == pytest.approx(11 / 12)
+    assert server._is_available() is True
+
+    server._reserved_slots = 12
     assert server._get_effective_load() == 1.0
     assert server._is_available() is False
 
@@ -318,7 +375,7 @@ async def test_entrypoint_shares_one_redis_client_and_delegates_job(
         livekit_turn_url="turn:127.0.0.1:3478?transport=tcp",
         livekit_turn_secret="turn-secret",
     )
-    context = object()
+    context = SimpleNamespace(proc=SimpleNamespace(userdata={}))
     server = agent_main.build_agent_server(configured)
 
     await server.entrypoint(context)
@@ -375,7 +432,7 @@ async def test_entrypoint_closes_redis_when_job_fails(
     server = agent_main.build_agent_server(settings())
 
     with pytest.raises(RuntimeError, match="job failed"):
-        await server.entrypoint(object())
+        await server.entrypoint(SimpleNamespace(proc=SimpleNamespace(userdata={})))
 
     assert len(FakeRedis.clients) == 1
     assert FakeRedis.clients[0].close_calls == 1
