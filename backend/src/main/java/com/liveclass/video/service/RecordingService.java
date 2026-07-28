@@ -28,9 +28,6 @@ public class RecordingService {
 
     private static final Logger log = LoggerFactory.getLogger(RecordingService.class);
 
-    /** Egress HLS 출력 객체 prefix 규약. 세그먼트는 {@code sessions/{id}/seg*}, VOD 매니페스트는 {@code sessions/{id}/index.m3u8}. */
-    private static final String SESSION_PREFIX = "sessions/";
-
     private final VideoAssetRepository videoAssetRepository;
     private final EgressControl egressControl;
     private final EgressProperties egressProperties;
@@ -61,6 +58,7 @@ public class RecordingService {
         asset.setStatus(VideoAssetStatus.REQUESTED);
         asset.setReplayStatus(ReplayStatus.DRAFT);
         asset.setBucket(egressProperties.bucket());
+        asset.setHlsManifestKey(manifestKey(sessionId));
         videoAssetRepository.save(asset);
 
         try {
@@ -186,13 +184,13 @@ public class RecordingService {
         log.info("녹화 완료 확정 egressId={} durationMs={} size={}", egressId, durationMs, sizeBytes);
     }
 
-    /** Egress HLS 출력 객체 prefix — {@link #startRecording}와 {@link #manifestKey}가 공유하는 규약. */
+    /** Egress HLS 출력 객체 prefix — 재생 API도 같은 규약을 사용한다. */
     private String objectPrefix(UUID sessionId) {
-        return SESSION_PREFIX + sessionId;
+        return RecordingObjectKeys.objectPrefix(sessionId);
     }
 
     /** VOD 매니페스트 키 = {@code sessions/{sessionId}/index.m3u8}. Egress가 세그먼트 디렉토리에 playlist를 쓴다. */
     private String manifestKey(UUID sessionId) {
-        return objectPrefix(sessionId) + "/" + egressProperties.playlistName();
+        return RecordingObjectKeys.manifestKey(sessionId, egressProperties.playlistName());
     }
 }

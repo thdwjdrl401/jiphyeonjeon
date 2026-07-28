@@ -36,7 +36,7 @@
 | 캐시·세션 | Redis 7 | ✅ | [0014](decisions/songjeongki/0014-auth-redis-session-cookie.md) |
 | 실시간 채널 | STOMP over WebSocket | ✅ | [0019](decisions/songjeongki/0019-ws-realtime-chat-stomp.md) |
 | 오브젝트 스토리지 | MinIO(S3 호환) + presigned direct upload | ✅ | [0023](decisions/songjeongki/0023-asset-presigned-upload.md) |
-| 미디어 | LiveKit self-host(SFU) + Egress(녹화→HLS) | 🟡 서버 상시가동·토큰·Egress 제어·VOD 재생 API ✅ / 라이브 엣지 재생 ⬜ | [0004](decisions/songjeongki/0004-media-livekit-selfhost.md)·[0020](decisions/songjeongki/0020-egress-recording-lifecycle.md)·[0039](decisions/songjeongki/0039-replay-playback-api.md) |
+| 미디어 | LiveKit self-host(SFU) + Egress(녹화→HLS) | 🟡 서버 상시가동·토큰·Egress 제어·라이브 엣지/되감기·VOD 재생 API ✅ / FE HLS 플레이어 ⬜ | [0004](decisions/songjeongki/0004-media-livekit-selfhost.md)·[0020](decisions/songjeongki/0020-egress-recording-lifecycle.md)·[0039](decisions/songjeongki/0039-replay-playback-api.md)·[choinhoo/0001](decisions/choinhoo/0001-live-replay-playback-api.md) |
 | 라이브 STT | realtime-agent (Python, LiveKit Agents) | ⬜ CP2 | [0011](decisions/songjeongki/0011-ai-three-services.md)·[0013](decisions/songjeongki/0013-unified-streaming-stt.md) |
 | RAG API | ai-api (FastAPI, SSE) | ⬜ CP3 | [0011](decisions/songjeongki/0011-ai-three-services.md) |
 | 배치 파이프라인 | ai-worker + RabbitMQ | ⬜ CP3 | [0011](decisions/songjeongki/0011-ai-three-services.md)·[0012](decisions/songjeongki/0012-hybrid-queue.md) |
@@ -257,8 +257,8 @@ flowchart LR
   RP --> DONE["교정 자막 · 용어 호버 · 저장 컨텍스트 Q&A"]
 ```
 
-**지금 되는 것**: 세션 종료 이벤트로 Egress를 제어하고, `VideoAsset`이 녹화 수명주기를 추적하며, 카탈로그가 "다시보기 있음"을 표시한다. **재생 API**(`GET /lessons/{id}/playback`, [ADR-0039](decisions/songjeongki/0039-replay-playback-api.md))가 권한 검증 + presigned manifest 재작성 + 시간축 오프셋을 반환하고, **게시 전환**(`POST .../replay-review/publish`)으로 강사가 검수 후 공개한다.
-**남은 것**: FE HLS.js 플레이어 연동, 자막·용어·RAG 재생(CP2·CP3 산출물 의존), 검수 데이터 저장([0039](decisions/songjeongki/0039-replay-playback-api.md) §5 범위 제외 근거).
+**지금 되는 것**: 세션 시작·종료 이벤트로 Egress를 제어하고, `VideoAsset`이 녹화 수명주기를 추적하며, 카탈로그가 "다시보기 있음"을 표시한다. **재생 metadata API**(`GET /lessons/{id}/playback`)가 source와 시간축을 반환하고, **manifest API**(`GET .../playback/manifest`)가 권한을 재검증한 뒤 세그먼트 URI를 presigned로 재작성한다([ADR-0039](decisions/songjeongki/0039-replay-playback-api.md), [ADR-0001](decisions/choinhoo/0001-live-replay-playback-api.md)). 라이브 중에는 **델타 재생목록**(`CAN-SKIP-UNTIL` 광고 → `_HLS_skip=YES` → `EXT-X-SKIP`)으로 갱신 크기를 잡는다 — 진행 바는 강의 전체를 유지하면서 폴링 비용만 줄인다. **게시·철회**(`POST .../replay-review/publish`, `POST .../replay-review/withdraw`)로 강사가 종료 VOD 공개 상태를 관리한다.
+**남은 것**: FE HLS.js 플레이어 연동, 실제 Egress 출력으로 델타 병합 e2e 검증, Egress 지연 실측, 자막·용어·RAG 재생(CP2·CP3 산출물 의존), 검수 데이터 저장([0039](decisions/songjeongki/0039-replay-playback-api.md) §5 범위 제외 근거).
 
 다시보기는 라이브 때 만든 산출물을 **그대로 재생**한다. 지평선 뒤라 이미 교정이 끝난 상태이고, 세션 상대 ms 좌표로 HLS와 자막을 자동 정렬한다.
 
@@ -384,7 +384,11 @@ STOMP 브로커가 인메모리 SimpleBroker라 **브로드캐스트가 인스�
 
 ### 9-8. ✅ 다시보기 재생 인증 — presigned 방식으로 구현됨
 이전 판은 "seam 3개(재생 URL 발급 · nginx · PlaybackTokenService)"라고 적었지만, 실제로는 **셋 다 존재하지 않고**, 현재 nginx는 SPA·API 프록시 전용이라 HLS 서빙 경로 자체가 없었다.
-→ **구현 완료(2026-07-26, [ADR-0039](decisions/songjeongki/0039-replay-playback-api.md))**: nginx secure_link 대신 이미 쓰던 **presigned 방식으로 통일**했다. `GET /api/lessons/{id}/playback`이 권한을 검증하고(`video.api.LessonPlaybackAccess` SPI, curriculum 구현 — 소유 강사는 항상, 학생은 활성 수강 + PUBLISHED만) **manifest를 Spring이 읽어 세그먼트 URL을 presigned로 재작성**해 응답에 인라인으로 싣는다. manifest는 수 KB라 원칙 4(바이트는 Spring을 통과하지 않음)를 유지하면서 세그먼트는 스토리지 직결이다. S3로 옮겨도 그대로 동작한다.
+→ **구현 완료(2026-07-28, [ADR-0039](decisions/songjeongki/0039-replay-playback-api.md), [ADR-0001](decisions/choinhoo/0001-live-replay-playback-api.md))**: nginx secure_link 대신 **presigned 방식으로 통일**했다. `GET /api/lessons/{id}/playback`은 권한을 검증하고 metadata만 반환하며, `GET .../playback/manifest`가 권한을 다시 검증해 manifest의 일반 URI와 MAP/KEY URI를 presigned URL로 재작성한다. 소유 강사는 항상, 학생은 활성 수강·게시 레슨이 필수다. 학생은 라이브 중 replay 게시 상태와 무관하게 시청하고 종료 후에는 PUBLISHED만 본다.
+
+**세그먼트 서빙 경로**: nginx `location /recordings/`가 MinIO로 프록시하되 **Host를 보존**한다 — presigned URL이 공개 도메인으로 서명돼 있고 SigV4가 Host를 서명에 포함하기 때문이다(`/liveclass-assets/`와 같은 규칙). 그래서 주소가 둘로 갈린다: backend가 매니페스트를 읽는 내부 주소(`livekit.egress.s3-endpoint`)와 브라우저용 서명 주소(`video.playback.public-endpoint`). SPA와 same-origin이라 CORS는 발생하지 않는다.
+
+**manifest 크기**: 라이브 재생목록은 세션이 길어질수록 자라고 플레이어가 targetDuration마다 다시 받으므로, 그대로 두면 2시간 시점에 갱신 하나가 MB 단위가 된다. 델타 재생목록(§9-10)으로 잡는다. 세그먼트는 스토리지 직결이라 원칙 4를 유지하며 S3로 옮겨도 그대로 동작한다.
 
 ### 9-9. ✅ 다시보기 시간축 변환 — 온디맨드 계산으로 구현됨
 자막 싱크는 전송 경로가 아니라 **공통 좌표계** 문제다. 세그먼트는 스토리지에서 직접 받고 자막은 Spring이 내려주므로, 둘을 맞추려면 *재생 위치 → 세션 상대 ms* 변환이 필요하다.
@@ -403,16 +407,39 @@ session_offset_ms = index.m3u8 의 첫 PROGRAM-DATE-TIME − live_session.starte
 
 > ⚠️ **`video_asset.recording_started_at`을 앵커로 쓰면 안 된다.** 지금 값은 `StartEgress` 호출 시각(`RecordingService`)이라, Chrome 기동·페이지 로드·방 접속 지연이 통째로 오차가 된다 — `infra/livekit/README.md` 트러블슈팅에 20초까지 걸린 사례가 있다.
 
-**구현 완료(2026-07-26, [ADR-0039](decisions/songjeongki/0039-replay-playback-api.md))** — 앵커를 별도 컬럼에 저장하는 대신, 재생 요청마다 **온디맨드로 계산**한다. `GET /lessons/{id}/playback`이 세그먼트 재작성을 위해 어차피 매니페스트 텍스트를 읽으므로, 같은 텍스트에서 첫 PDT를 파싱해 `live_session.started_at`(`recording_started_at`이 아니다)과의 차이를 `sessionOffsetMs`로 응답에 싣는다. `video_asset.session_offset_ms` 컬럼은 유지하되 쓰지 않는다 — webhook·재생 두 곳에 저장 로직을 나누면 드리프트 위험만 생기고, 매번 계산해도 비용은 정규식 스캔 한 번이다. PDT가 없거나 세션 시작시각을 못 구하면 `null`로 degrade(에러 아님). 재생목록은 **첫 세그먼트가 닫히는 즉시**(세그먼트 2초 설정) 업로드되므로 녹화 종료를 기다릴 필요가 없다.
+**구현 완료(2026-07-28, [ADR-0039](decisions/songjeongki/0039-replay-playback-api.md), [ADR-0001](decisions/choinhoo/0001-live-replay-playback-api.md))** — 앵커를 별도 컬럼에 저장하는 대신, metadata 요청마다 **온디맨드로 계산**한다. `GET /lessons/{id}/playback`이 재생 범위를 계산하려고 읽은 매니페스트에서 첫 PDT를 파싱해 `live_session.started_at`(`recording_started_at`이 아니다)과의 차이를 `sessionOffsetMs`로 응답에 싣는다. `video_asset.session_offset_ms` 컬럼은 유지하되 쓰지 않는다. PDT가 없으면 `null`로 degrade하고 EXTINF 합계로 재생 가능 범위를 계산한다. 재생목록은 **첫 세그먼트가 닫히는 즉시**(세그먼트 2초 설정) 업로드되므로 녹화 종료를 기다릴 필요가 없다.
 
 **남은 위험 — 파이프라인 stall(미검증).** 미디어 타임라인이 벽시계 대비 멈추면 그만큼 자막이 누적해서 어긋나는데, `DISCONTINUITY` 태그가 없어 **사후 탐지 수단이 없다.** 반면 egress 재시작은 위험하지 않다 — 파일 접두사에 `{retry}` 치환자가 없어 재시도 자체가 거부되므로, 같은 재생목록에 두 번째 타임라인이 몰래 이어붙지 않는다(뒤가 잘릴 뿐 오프셋은 유효).
 
 **실측 과제**: EC2에서 한 세션 돌려 `첫 PDT − recording_started_at` 차이를 재 둔다. 그 값이 곧 "앵커를 바꿔야 하는 이유"의 정량 근거다.
 
-### 9-10. 🟡 `ai` 스키마와 Alembic이 아직 없다
+### 9-10. ✅ 라이브 재생목록 무한 성장 — 델타 재생목록으로 해결
+
+HLS 재생목록은 **"지금 존재하는 세그먼트 전체 목록"** 이고, 라이브 중에는 플레이어가 이를 targetDuration 주기로 다시 받는다. 세그먼트 2초 설정에서 2시간 강의면 3600엔트리이고, presigned 재작성 후 엔트리당 300바이트를 넘어 **갱신 하나가 1MB를 넘는다. 그걸 2초마다 시청자 수만큼** 내보내게 된다.
+
+**잘라 보내는 것은 답이 아니다.** 짧은 재생목록은 플레이어에게 "나머지는 사라졌다"는 뜻이라 진행 바가 윈도우 크기로 쪼그라든다. 라이브 중 강의 처음으로 되감기가 불가능해진다.
+
+→ **델타 재생목록**(RFC 8216bis §6.2.5.1). `#EXT-X-SKIP:SKIPPED-SEGMENTS=N`은 "생략했을 뿐이니 갖고 있는 것과 병합하라"는 신호다. 그래서 `EXT-X-MEDIA-SEQUENCE`도 건드리지 않는다 — 재생목록의 논리적 시작점은 그대로고 **진행 바는 강의 전체를 유지한다.**
+
+```
+최초    GET .../playback/manifest
+        ← 전체 + #EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=60   (능력 광고)
+갱신    GET .../playback/manifest?_HLS_skip=YES            (플레이어가 자동으로 붙임)
+        ← 최근 60초분 + #EXT-X-SKIP:SKIPPED-SEGMENTS=3570
+```
+
+협상은 클라이언트가 주도하므로 **서버는 클라이언트별 상태를 들지 않는다.** `hls.js` 1.6.16이 기본 설정으로 이 협상을 수행한다(`getSkipValue` → `_HLS_skip`, `SKIPPED-SEGMENTS` 병합, 델타 병합 실패 시 전체 재요청 폴백). 생략을 먼저 하고 presign을 하므로 **남은 세그먼트만 서명한다** — 서버 CPU도 같이 잡힌다.
+
+종료 후 재생목록은 `#EXT-X-ENDLIST`가 붙어 플레이어가 다시 받지 않으므로 델타를 쓰지 않는다. 전체를 한 번 내보내고 끝이다.
+
+> ⚠️ **`segment-url-ttl`이 강의 길이보다 길어야 한다(기본 6h).** 델타는 옛 세그먼트의 presigned URL을 다시 주지 않는다 — 클라이언트가 최초 로드 때 받은 것이 전부다. TTL이 짧으면 오래 시청한 학생이 앞으로 되감을 때 403을 맞는다.
+
+**미검증**: 실제 Egress 출력으로 델타 병합을 확인하지 않았다. LiveKit이 라이브 중 내는 `index.m3u8`의 태그 구성(`EXT-X-VERSION` 값, PDT 주기)에 따라 조정이 필요할 수 있다.
+
+### 9-11. 🟡 `ai` 스키마와 Alembic이 아직 없다
 T0에 만들기로 했으나 미이행. `core`만 존재한다. 리스크는 낮지만 CP2 착수 시 **DB 롤(`core_app`/`ai_app`) 분리와 함께** 세워야 원칙 2가 실제로 강제된다.
 
-### 9-11. 🟠 프론트가 아직 없는 백엔드 API를 이미 호출 형태로 굳혀 뒀다
+### 9-12. 🟠 프론트가 아직 없는 백엔드 API를 이미 호출 형태로 굳혀 뒀다
 FE는 **오퍼레이션 단위 하이브리드 라우팅**을 쓴다 — 각 호출에 `apiImplemented` 플래그가 붙어 구현된 API는 실 HTTP로, 미구현은 목으로 간다([ADR-0027](decisions/songjeongki/0027-frontend-incremental-api-cutover.md)). 현재 인증·커리큘럼·레슨·라이브 세션에서 **28개 오퍼레이션이 실 연동**됐다(세션 시작/종료·토큰·참가자·채팅 포함).
 
 문제는 **미구현 쪽**이다. `/live-sessions/{id}/captions`, `/lessons/{id}/ai/questions:stream`, `/instructor/live-sessions/{id}/processing`, `/instructor/lessons/{id}/ai-preparation` 같은 CP2·CP3 경로가 이미 FE 코드에 문자열로 박혀 있는데 **CONTRACT.md에는 정의가 없다.** 이대로 CP2에 들어가면 계약 드리프트가 반복된다.

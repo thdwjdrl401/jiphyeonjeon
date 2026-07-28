@@ -51,7 +51,7 @@ services:
     # 호스트 포트 미노출 — 브라우저·backend는 앱 nginx의 /liveclass-assets 로만 접근(presigned가 공개 도메인으로 서명).
     # 헬스체크는 두지 않는다 — minio 서버 이미지에 mc/curl 유무가 불확실. minio-init이 재시도 루프로 준비를 기다린다.
 
-  minio-init:                              # liveclass-assets 버킷 생성 (멱등). 계속 살려둔다 —
+  minio-init:                              # 버킷 생성 (멱등). 계속 살려둔다 —
     image: minio/mc                         # 일회성으로 exit하면 `up --wait`가 그 종료를 실패로 보고 배포가 깨진다.
     depends_on: [minio]
     restart: unless-stopped
@@ -64,6 +64,7 @@ services:
       - |
         until mc alias set lc http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"; do echo 'waiting for minio'; sleep 1; done
         mc mb -p lc/${ASSET_STORAGE_BUCKET:-liveclass-assets} || true
+        mc mb -p lc/${EGRESS_BUCKET:-recordings} || true
         echo 'bucket ready'; sleep infinity
 
   rabbitmq:                                # AI 배치 잡 큐(ADR-0036/0012). prod 전용 — dev-infra와 분리(B안).
@@ -105,6 +106,17 @@ services:
       ASSET_STORAGE_PATH_STYLE: "true"
       ASSET_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       ASSET_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD 필요}
+      # 녹화 스토리지(같은 MinIO, 다른 버킷). 에셋과 달리 주소가 둘로 갈린다:
+      #   EGRESS_S3_ENDPOINT          = 내부. Egress가 업로드하고 backend가 매니페스트를 GET
+      #   VIDEO_PLAYBACK_PUBLIC_ENDPOINT = 공개. 매니페스트 안 세그먼트 presigned URL을 브라우저가 연다
+      # SigV4가 Host를 서명에 포함하므로 하나로 합칠 수 없다. 공개 쪽은 nginx /recordings/ 로 들어온다.
+      EGRESS_BUCKET: ${EGRESS_BUCKET:-recordings}
+      EGRESS_S3_ENDPOINT: http://minio:9000
+      EGRESS_S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      EGRESS_S3_SECRET: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD 필요}
+      EGRESS_S3_REGION: ${EGRESS_S3_REGION:-us-east-1}
+      EGRESS_FORCE_PATH_STYLE: "true"
+      VIDEO_PLAYBACK_PUBLIC_ENDPOINT: https://jiphyeonjeon.thdwjdrl.com
       # AI 배치 잡 발행(ADR-0036). outbox 릴레이가 rabbitmq로 publish. 스위치 material.embedding.enabled로 켠다.
       SPRING_RABBITMQ_HOST: rabbitmq
       SPRING_RABBITMQ_PORT: "5672"

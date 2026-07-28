@@ -1,6 +1,7 @@
 package com.liveclass.video.service;
 
 import com.liveclass.video.config.EgressProperties;
+import com.liveclass.video.config.PlaybackProperties;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
@@ -30,6 +31,10 @@ import java.util.Optional;
  *
  * <p>{@link RecordingStorage}(webhook VERIFYING의 HEAD)와 {@link ReplayStorage}(재생 매니페스트 읽기·
  * 세그먼트 presign)를 한 어댑터가 구현한다 — 같은 egress 버킷·자격을 공유하기 때문이다.
+ *
+ * <p><b>주소가 둘인 이유</b>: {@link S3Client}(HEAD·GET)는 백엔드가 직접 부르므로 <b>내부</b> 주소를,
+ * {@link S3Presigner}는 결과 URL을 브라우저가 여므로 <b>공개</b> 주소를 쓴다
+ * ({@link PlaybackProperties#publicEndpoint}). SigV4가 Host를 서명에 포함하기 때문에 하나로 합칠 수 없다.
  */
 @Component
 public class S3RecordingStorage implements RecordingStorage, ReplayStorage {
@@ -37,24 +42,28 @@ public class S3RecordingStorage implements RecordingStorage, ReplayStorage {
     private final S3Client s3Client;
     private final S3Presigner presigner;
 
-    public S3RecordingStorage(EgressProperties egress) {
+    public S3RecordingStorage(EgressProperties egress, PlaybackProperties playback) {
         this.s3Client = S3Client.builder()
-                .endpointOverride(endpoint(egress))
+                .endpointOverride(endpoint(egress.s3Endpoint()))
                 .region(region(egress))
                 .credentialsProvider(credentials(egress))
                 .serviceConfiguration(serviceConfiguration(egress))
                 .build();
         this.presigner = S3Presigner.builder()
-                .endpointOverride(endpoint(egress))
+                .endpointOverride(endpoint(publicEndpoint(egress, playback)))
                 .region(region(egress))
                 .credentialsProvider(credentials(egress))
                 .serviceConfiguration(serviceConfiguration(egress))
                 .build();
     }
 
-    /** {@link S3Client}·{@link S3Presigner}가 공유하는 접속 설정 — 둘 다 같은 egress 버킷·자격을 쓴다. */
-    private static URI endpoint(EgressProperties egress) {
-        return URI.create(egress.s3Endpoint());
+    /** presign 대상 주소 — 설정이 없으면 내부 주소로 서명한다(단일 호스트 개발 환경). */
+    private static String publicEndpoint(EgressProperties egress, PlaybackProperties playback) {
+        return playback.publicEndpoint() != null ? playback.publicEndpoint() : egress.s3Endpoint();
+    }
+
+    private static URI endpoint(String value) {
+        return URI.create(value);
     }
 
     private static Region region(EgressProperties egress) {
@@ -92,19 +101,19 @@ public class S3RecordingStorage implements RecordingStorage, ReplayStorage {
     }
 
     @Override
-    public String readManifest(String bucket, String key) {
+    public Optional<String> findManifest(String bucket, String key) {
         try {
             ResponseBytes<GetObjectResponse> bytes = s3Client.getObjectAsBytes(GetObjectRequest.builder()
                     .bucket(bucket)
                     .key(key)
                     .build());
-            return bytes.asString(StandardCharsets.UTF_8);
+            return Optional.of(bytes.asString(StandardCharsets.UTF_8));
         } catch (NoSuchKeyException e) {
-            throw new ReplayManifestMissingException("매니페스트를 찾을 수 없습니다: " + key);
+            return Optional.empty();
         } catch (S3Exception e) {
             // MinIO/S3의 getObject도 404를 NoSuchKeyException 대신 S3Exception(404)로 던지기도 한다(head()와 동일 이유).
             if (e.statusCode() == 404) {
-                throw new ReplayManifestMissingException("매니페스트를 찾을 수 없습니다: " + key);
+                return Optional.empty();
             }
             throw e;   // 그 외(권한·타임아웃·5xx 등)는 스토리지 장애 — 그대로 전파.
         }
