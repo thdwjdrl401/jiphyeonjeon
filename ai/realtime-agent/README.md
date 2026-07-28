@@ -60,9 +60,17 @@ completion도 동일한 `sttSessionId`를 포함한다.
 기본 환경 변수 목록은 [`.env.example`](.env.example)에 있다. 코드는 root `.env`를 자동으로 읽지
 않으므로 배포 환경에서 명시적으로 주입한다.
 
+로컬 개발에서만 env file이 필요하면 `uv`에 경로를 명시한다. production entrypoint는 env file을
+자동 탐색하지 않는다.
+
+```sh
+uv run --env-file /path/to/realtime-agent.env --frozen python -m app.main dev
+```
+
 필수값:
 
 - `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`
+- SSH TCP tunnel의 coturn을 강제할 때 `LIVEKIT_TURN_URL`, `LIVEKIT_TURN_SECRET`
 - `STT_AGENT_NAME`
 - `STT_ENGINE_PROVIDER=stub|openai-realtime|nemotron`
 - `REDIS_URL`: LiveKit 내부 Redis가 아닌 application Redis
@@ -71,6 +79,9 @@ completion도 동일한 `sttSessionId`를 포함한다.
 `stub`은 local wiring 확인 전용이다. OpenAI provider는 `OPENAI_API_KEY`가 필요하고, Nemotron은
 optional CUDA 의존성과 `STT_MAX_ACTIVE_JOBS=1`이 필요하다. callback을 켤 때만
 `SPRING_STATUS_CALLBACK_URL`과 32 byte 이상의 `AI_CALLBACK_SECRET`이 필수다.
+
+GPU 서버와 외부 LiveKit/Redis의 운영·검증 절차는
+[`docs/ai/GPU-REALTIME-AGENT-RUNBOOK.md`](../../docs/ai/GPU-REALTIME-AGENT-RUNBOOK.md)를 따른다.
 
 ```powershell
 uv sync --frozen
