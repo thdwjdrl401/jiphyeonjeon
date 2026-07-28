@@ -2,7 +2,8 @@
 
 > 📍 하네스 개요: [docs/harness/README.md](harness/README.md) · 정본 규칙: [AGENTS.md](../AGENTS.md) · 아키텍처: [ARCHITECTURE.md](ARCHITECTURE.md)
 >
-> **FE↔Spring**, **Spring↔AI(RabbitMQ/HTTP/LiveKit AgentDispatch/Redis Streams)** 이 동시에 지켜야 어긋나지 않는 계약. 한쪽이 바꾸면 다른 쪽이 깨지는 항목만.
+> **FE↔Spring**, **Spring↔AI(RabbitMQ/HTTP/LiveKit AgentDispatch/Redis Streams)**,
+> **EC2 AI↔GPU AI(HTTP)** 가 동시에 지켜야 어긋나지 않는 계약. 한쪽이 바꾸면 다른 쪽이 깨지는 항목만.
 > (구 화상회의 명세 [SPEC.md](legacy/SPEC.md)는 참고용 — [decisions/songjeongki/0003](decisions/songjeongki/0003-greenfield-redesign.md))
 
 ---
@@ -80,6 +81,57 @@ Spring 수신 endpoint를 구현하고 `SPRING_STATUS_CALLBACK_URL`로 주입하
 - **채팅 채널**: `chat_message { lessonId, userId, sessionMs, text, alias }`.
 - FE로 보내는 시간은 **세션 상대 ms**. §3-4의 `streamElapsedMs`를 그대로 노출하지 않는다.
 
+### 3-7. EC2 ai-worker → GPU bge-runtime (HTTP) — AI 구현됨
+
+이 호출은 **Spring이 보내는 API가 아니다**. Spring은 §3-1의 자료 잡을 RabbitMQ에 발행하고 §3-2의 최종
+callback만 받는다. EC2 `ai-worker`가 PPTX를 내려받아 chunking한 뒤 GPU에 embedding만 요청하고, 반환된
+vector를 `ai` schema의 pgvector에 저장한다. GPU `bge-runtime`에는 RabbitMQ·PostgreSQL·Spring credential을
+주입하지 않는다.
+
+운영에서 ai-worker의 호출 origin은
+`AI_WORKER_BGE_RUNTIME_URL=http://127.0.0.1:18020`이다. 이 EC2 loopback listener는 GPU 서버가 유지하는
+reverse SSH tunnel `127.0.0.1:18020 -> GPU 127.0.0.1:8020`으로만 연결한다. 두 포트를 public ingress로
+열지 않는다. EC2에서 `GET http://127.0.0.1:18020/readyz`가 200이어야 호출 가능하다.
+
+```http
+POST http://127.0.0.1:18020/internal/v1/embeddings
+Authorization: Bearer <AI_WORKER_BGE_INTERNAL_TOKEN>
+Content-Type: application/json
+
+{
+  "model": "BAAI/bge-m3",
+  "revision": "5617a9f61b028005a4858fdac845db406aefb181",
+  "texts": ["첫 번째 chunk", "두 번째 chunk"]
+}
+```
+
+```text
+200 OK
+{
+  "model": "BAAI/bge-m3",
+  "revision": "5617a9f61b028005a4858fdac845db406aefb181",
+  "dimensions": 1024,
+  "normalized": true,
+  "embeddings": [[finite float × 1024], [finite float × 1024]]
+}
+```
+
+- EC2의 `AI_WORKER_BGE_INTERNAL_TOKEN`과 GPU의 `BGE_RUNTIME_INTERNAL_TOKEN`은 같은 32자 이상 secret이다.
+  Spring callback HMAC secret과 공유하지 않으며 token 값을 요청 body·로그·예외에 노출하지 않는다.
+- `texts`는 요청당 1~4개이고 각 문자열은 공백이 아니며 최대 4,000자다. ai-worker는 전체 chunk를 최대
+  4개씩 나눠 순차 호출하며 요청 순서를 보존한다.
+- 성공은 200이고 body는
+  `{ model, revision, dimensions:1024, normalized:true, embeddings }`다. `embeddings`는 `texts`와
+  같은 개수·순서다. 각 vector는 모든 원소가 finite인 실수 1,024개이고 전체가 영벡터가 아니어야 한다.
+  model·revision이 요청과 다르면 성공으로 처리하지 않는다.
+- network 오류·429·5xx만 retryable이다(429 응답은 `Retry-After: 1`). 400·409·413·422는 요청/계약
+  위반이고, 401은 인증·설정 오류다. 그 밖의 4xx도 현재는 재시도하지 않는다. HTTP adapter는 자체 재시도하지
+  않고 자료 consumer의 제한된 재시도(기본 3회)와 DLQ에 맡긴다.
+
+상세 topology와 운영 근거는
+[ADR-0029](decisions/canola/0029-gpu-bge-ec2-ai-worker-connectivity.md), ai-worker 쪽 검증 규칙은
+[`ai/ai-worker/CONTRACT.md` §9.4](../ai/ai-worker/CONTRACT.md#94-remote-bge-runtime)를 따른다.
+
 ## 4. 스키마 소유권 (공동수정 금지)
 - `core` = Spring 단독 쓰기, `ai` = Python 단독 쓰기. AI 후보(ai)→강사 게시→core read model. 상세: [ARCHITECTURE.md](ARCHITECTURE.md) 도메인 모델.
 
@@ -89,7 +141,7 @@ Spring 수신 endpoint를 구현하고 `SPRING_STATUS_CALLBACK_URL`로 주입하
 | CP0 | 인증·강좌·live_session | _미정_ | §2 |
 | CP1 | 라이브 미디어(LiveKit·채팅) | _미정_ | §2 라이브, §3-6 |
 | CP2 | 라이브 자막(STT) | _미정_ | §3-3~§3-6 |
-| CP3 | 용어·RAG | _미정_ | §2 AI, §3-1, §3-2 |
+| CP3 | 용어·RAG | _미정_ | §2 AI, §3-1, §3-2, §3-7 |
 | CP4 | 녹화·다시보기(Egress) | _미정_ | §2 다시보기, §3-1 |
 | CP5 | 퀴즈·따라잡기 | _미정_ | §2 |
 

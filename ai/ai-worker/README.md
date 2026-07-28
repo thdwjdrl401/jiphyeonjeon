@@ -131,8 +131,8 @@ runtime builder를 활성화하려면 아래 설정이 추가로 필요하다. `
 | `AI_CALLBACK_SECRET` | 필수, download-url·callback 공용 HMAC secret |
 | `AI_WORKER_SPRING_INTERNAL_BASE_URL` | `http://127.0.0.1:8080` |
 | `AI_WORKER_BGE_INTERNAL_TOKEN` | 필수, 32자 이상 |
-| `AI_WORKER_BGE_RUNTIME_URL` | `http://127.0.0.1:8020` |
 | `AI_WORKER_BGE_READINESS_TIMEOUT_SECONDS` | `2` |
+| `AI_WORKER_BGE_RUNTIME_URL` | 로컬 기본 `http://127.0.0.1:8020`; EC2 reverse tunnel 운영은 `http://127.0.0.1:18020` |
 | `AI_WORKER_TENANT_ID` | `liveclass` |
 | `AI_WORKER_SOURCE_MAX_BYTES` | `52428800` |
 | `AI_WORKER_CHUNK_MAX_CHARS` | `1200` |
