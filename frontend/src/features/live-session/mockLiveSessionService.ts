@@ -1,4 +1,5 @@
 import { demoLiveCaptions, demoMessages, getDemoLiveSession } from '@/features/demo/demoData'
+import { findMockLesson } from '@/features/demo/mockDatabase'
 import type { CurriculumLiveSessionStatus } from '@/features/lesson/types'
 import type { LiveSessionService } from './liveSessionService.interface'
 
@@ -17,13 +18,16 @@ export const mockLiveSessionService = {
       entryWindowMinutes: 10,
     }
   },
-  async getLivePlayback(sessionId) {
+  async getPlayback(lessonId) {
+    // 실 API가 레슨의 라이브 세션을 찾아 응답에 싣듯, 목도 데모 데이터에서 세션을 찾는다.
+    const liveSession = findMockLesson(lessonId)?.lesson.liveSession
     return {
-      sessionId,
-      playbackUrl: mockLivePlaybackUrl,
-      mimeType: 'application/vnd.apple.mpegurl' as const,
-      streamType: 'LIVE_DVR' as const,
-      sessionOffsetMs: 0,
+      lessonId,
+      sessionId: liveSession?.sessionId ?? `ses-mock-${lessonId}`,
+      liveSessionStatus: liveSession?.status ?? 'LIVE',
+      currentSessionMs: null,
+      durationMs: null,
+      source: { url: mockLivePlaybackUrl, availableFromMs: 0, availableToMs: null },
     }
   },
   async getPreflightChecks() {
