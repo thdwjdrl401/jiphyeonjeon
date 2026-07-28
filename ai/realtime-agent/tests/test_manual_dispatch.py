@@ -107,6 +107,49 @@ async def test_reuses_identical_dispatch() -> None:
     assert service.created == []
 
 
+async def test_reuses_semantically_identical_dispatch_metadata() -> None:
+    service = FakeDispatchService()
+    existing = SimpleNamespace(
+        id="dispatch-existing",
+        room=request().room_name,
+        agent_name=request().agent_name,
+        metadata=json.dumps(
+            {
+                "correlationId": "manual-1",
+                "lessonId": LESSON_ID,
+                "sessionId": SESSION_ID,
+                "contractVersion": "1",
+            },
+            indent=2,
+        ),
+    )
+    service.existing = [existing]
+
+    dispatch, created = await create_verified_dispatch(FakeRoomService(), service, request())
+
+    assert created is False
+    assert dispatch is existing
+    assert service.created == []
+
+
+async def test_rejects_conflicting_dispatch_for_same_room_and_agent() -> None:
+    service = FakeDispatchService()
+    conflicting = request(correlation_id="different-correlation")
+    service.existing = [
+        SimpleNamespace(
+            id="dispatch-existing",
+            room=request().room_name,
+            agent_name=request().agent_name,
+            metadata=conflicting.metadata_json(),
+        )
+    ]
+
+    with pytest.raises(DispatchSafetyError, match="different metadata"):
+        await create_verified_dispatch(FakeRoomService(), service, request())
+
+    assert service.created == []
+
+
 def test_dispatch_cli_keeps_uuid_identifiers_as_strings() -> None:
     args = parse_args(
         [
