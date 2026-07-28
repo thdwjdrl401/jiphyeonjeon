@@ -164,10 +164,13 @@ describe('커리큘럼 작업 화면', () => {
 
     // 생성 성공 후엔 구성(섹션·강의 목록) 화면으로 돌아간다 — 폼을 떠나므로 연타로 매번 새
     // 레슨이 생기던 것도 막힌다.
+    //
+    // URL 변경과 폼 언마운트를 한 waitFor 안에서 함께 기다린다. URL만 기다리고 밖에서 단언하면
+    // 라우트 리렌더가 끝나기 전에 검사하게 돼 느린 환경에서 실패한다(CI에서 재현, 로컬은 통과).
     await waitFor(() => {
       expect(window.location.pathname).toMatch(/\/instructor\/curriculums\/cur-spring-live\/manage$/)
+      expect(screen.queryByRole('button', { name: '강의 생성 저장' })).not.toBeInTheDocument()
     })
-    expect(screen.queryByRole('button', { name: '강의 생성 저장' })).not.toBeInTheDocument()
   })
 
   it('커리큘럼 관리에서는 강의 상세만 제공하고 수정 진입점을 숨긴다', async () => {

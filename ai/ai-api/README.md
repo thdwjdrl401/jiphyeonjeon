@@ -18,8 +18,10 @@ uv run --frozen python -m app.main
 
 실행 entrypoint는 Redis caption consumer, pgvector/BGE context와 GMS client를 application lifespan에
 연결한다. 실행에는 `AI_API_DATABASE_URL`, `AI_API_BGE_BASE_URL`, `AI_API_BGE_TOKEN`,
-`AI_API_GMS_API_KEY`가 필요하다. Spring 단명 JWT 검증기는 아직 합의되지 않았으므로 endpoint는 계속
-fail-closed `503`이다. 이 서비스를 브라우저에 직접 노출하지 않으며 Java 채택 전 후보 계약은
+`AI_API_GMS_API_KEY`가 필요하다. Spring→ai-api 내부 인증은 HMAC 공유 시크릿(ADR-0023 §9)으로 채택
+확정됐고, `AI_INTERNAL_SECRET`이 설정되면 `HmacInternalRequestAuthenticator`가 실제로 배선된다.
+미설정 시에는 계속 fail-closed `503`이며, Spring 쪽 서명 발급기가 아직 없어 실제 상호 인증까지는
+안 된 상태다. 이 서비스를 브라우저에 직접 노출하지 않으며 Java 채택 전 후보 계약은
 [`CONTRACT.md`](CONTRACT.md)를 따른다.
 
 로컬 검증은 기본 compose의 PostgreSQL·Redis를 사용한다. PostgreSQL 테스트는 실행마다 별도 `*_test` DB와

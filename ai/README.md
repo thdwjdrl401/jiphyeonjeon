@@ -17,9 +17,12 @@ runtime까지다. Spring의 `ingestion.embed` 큐 선기동도 연결됐다.
 
 Java가 아직 채택하지 않은 Python 경계는 각 서비스의 후보 계약으로 관리하며 공유
 `docs/CONTRACT.md`를 확정 변경하지 않는다. ai-api의 context consumer·GMS client·단일 process
-request registry는 조립했지만 Spring 단명 JWT verifier가 없어 production RAG endpoint는 `503`으로
-fail-closed한다. Spring SSE proxy·양쪽 계약 테스트, Java live caption dispatch/consumer,
-multi-replica registry와 실제 GMS·Spring E2E는 후속 협업 gate다.
+request registry는 조립했고, Spring→ai-api 내부 인증은 HMAC 공유 시크릿 방식(ADR-0023 §9)으로
+채택 확정돼 ai-api 쪽 검증기(`HmacInternalRequestAuthenticator`)까지 구현·테스트 완료했다.
+`AI_INTERNAL_SECRET` 미설정 시 production RAG endpoint는 여전히 `503`으로 fail-closed하며,
+Spring 쪽 서명 발급기가 아직 없어 실제 상호 인증까지는 안 된다. Spring 발급기·SSE proxy·양쪽
+계약 테스트, Java live caption dispatch/consumer, multi-replica registry와 실제 GMS·Spring E2E는
+후속 협업 gate다.
 
 실행과 검증 명령은 각 서비스 README를 따른다.
 

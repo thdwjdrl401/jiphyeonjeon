@@ -44,6 +44,7 @@ def test_load_settings_reads_prefixed_environment(monkeypatch) -> None:
         {"bge_base_url": "http://user:secret@127.0.0.1:8020", "bge_token": "x" * 32},
         {"bge_base_url": "http://127.0.0.1:8020/path", "bge_token": "x" * 32},
         {"gms_api_key": " padded-key "},
+        {"ai_internal_secret": " padded-secret "},
         {"gms_model": " gpt-4.1"},
         {"rag_retrieval_timeout_seconds": 8.0},
         {"rag_model_timeout_seconds": 55.0},
@@ -80,6 +81,24 @@ def test_gms_secret_is_loaded_without_repr_leak(monkeypatch) -> None:
         settings = load_settings()
         assert settings.gms_api_key is not None
         assert settings.gms_api_key.get_secret_value() == secret
+        assert secret not in repr(settings)
+    finally:
+        load_settings.cache_clear()
+
+
+@pytest.mark.parametrize("blank", ["", " ", "\t"])
+def test_blank_ai_internal_secret_is_unconfigured(blank: str) -> None:
+    assert Settings(ai_internal_secret=blank).ai_internal_secret is None
+
+
+def test_ai_internal_secret_is_loaded_from_unprefixed_env_var(monkeypatch) -> None:
+    secret = "shared-spring-ai-api-secret"
+    monkeypatch.setenv("AI_INTERNAL_SECRET", secret)
+    load_settings.cache_clear()
+    try:
+        settings = load_settings()
+        assert settings.ai_internal_secret is not None
+        assert settings.ai_internal_secret.get_secret_value() == secret
         assert secret not in repr(settings)
     finally:
         load_settings.cache_clear()

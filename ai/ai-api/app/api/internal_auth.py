@@ -6,6 +6,6 @@ class InternalAuthenticationError(Exception):
 
 
 class InternalRequestAuthenticator(Protocol):
-    """Authentication seam for the future Spring-to-AI short-lived token."""
+    """Authentication seam for the Spring-to-ai-api internal RAG call (ADR-0023 §9, HMAC)."""
 
-    async def authenticate(self, authorization: str | None) -> None: ...
+    async def authenticate(self, raw_body: bytes, signature: str | None) -> None: ...

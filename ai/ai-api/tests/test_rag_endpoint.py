@@ -1,10 +1,15 @@
+import base64
+import hashlib
+import hmac
 import json
+import time
 from collections.abc import AsyncIterator, Sequence
 from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
 
+from app.adapters import HmacInternalRequestAuthenticator
 from app.api import InternalAuthenticationError
 from app.config import Settings
 from app.main import create_app
@@ -27,8 +32,8 @@ PATH = "/internal/v1/rag/answers:stream"
 
 
 class Authenticator:
-    async def authenticate(self, authorization: str | None) -> None:
-        if authorization != f"Bearer {TOKEN}":
+    async def authenticate(self, raw_body: bytes, signature: str | None) -> None:
+        if signature != TOKEN:
             raise InternalAuthenticationError
 
 
@@ -85,6 +90,7 @@ def _payload(**overrides: object) -> dict[str, object]:
         "sessionId": SESSION_ID,
         "question": "방금 설명한 개념은 무엇인가요?",
         "contextTimeMs": 61_500,
+        "issuedAtMs": 1_700_000_000_000,
     }
     payload.update(overrides)
     return payload
@@ -92,7 +98,7 @@ def _payload(**overrides: object) -> dict[str, object]:
 
 def _headers(**overrides: str) -> dict[str, str]:
     headers = {
-        "Authorization": f"Bearer {TOKEN}",
+        "X-Internal-Signature": TOKEN,
         "Accept": "text/event-stream",
     }
     headers.update(overrides)
@@ -187,21 +193,20 @@ def test_internal_endpoint_maps_registry_capacity_before_retrieval() -> None:
     assert model.calls == 0
 
 
-@pytest.mark.parametrize("authorization", [None, "Basic abc", "Bearer wrong"])
+@pytest.mark.parametrize("signature", [None, "", "wrong-signature"])
 def test_internal_endpoint_rejects_invalid_auth_before_model_call(
-    authorization: str | None,
+    signature: str | None,
 ) -> None:
     retriever = Retriever()
     model = Model()
     headers = {"Accept": "text/event-stream"}
-    if authorization is not None:
-        headers["Authorization"] = authorization
+    if signature is not None:
+        headers["X-Internal-Signature"] = signature
 
     with TestClient(_app(retriever, model)) as client:
         response = client.post(PATH, json=_payload(), headers=headers)
 
     assert response.status_code == 401
-    assert response.headers["www-authenticate"] == "Bearer"
     assert retriever.calls == 0
     assert model.calls == 0
 
@@ -211,7 +216,7 @@ def test_internal_endpoint_requires_explicit_sse_accept_header() -> None:
         response = client.post(
             PATH,
             json=_payload(),
-            headers={"Authorization": f"Bearer {TOKEN}"},
+            headers={"X-Internal-Signature": TOKEN},
         )
 
     assert response.status_code == 406
@@ -223,7 +228,7 @@ def test_internal_auth_is_rejected_before_malformed_body_validation() -> None:
             PATH,
             json={"lessonId": "not-a-uuid"},
             headers={
-                "Authorization": "Bearer wrong",
+                "X-Internal-Signature": "wrong-signature",
                 "Accept": "text/event-stream",
             },
         )
@@ -262,3 +267,31 @@ def test_internal_endpoint_fails_closed_without_auth_wiring() -> None:
         response = client.post(PATH, json=_payload(), headers=_headers())
 
     assert response.status_code == 503
+
+
+def test_internal_endpoint_accepts_real_hmac_signed_request() -> None:
+    """Regression guard: a genuinely-signed request must clear both the real
+    HMAC authenticator and the RagAnswerRequest contract, end to end."""
+    secret = b"integration-test-shared-secret"
+    body = json.dumps(_payload(issuedAtMs=int(time.time() * 1000))).encode("utf-8")
+    signature = base64.b64encode(hmac.new(secret, body, hashlib.sha256).digest()).decode(
+        "ascii"
+    )
+    app = create_app(
+        Settings(),
+        rag_service=RagAnswerService(Retriever(), Model()),
+        internal_authenticator=HmacInternalRequestAuthenticator(secret),
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            PATH,
+            content=body,
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "text/event-stream",
+                "X-Internal-Signature": signature,
+            },
+        )
+
+    assert response.status_code == 200

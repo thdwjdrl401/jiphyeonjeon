@@ -31,3 +31,13 @@ Spring→AI 단명 JWT 방향과 맞지 않아 그대로 이식할 수 없다.
 - 기본 registry는 한 process 안에서만 유효하다. multi-replica 배포 전 공유 registry·TTL·재연결 replay
   정책을 확정해야 한다.
 - 실제 GMS credential smoke, Spring JWT verifier와 Spring proxy E2E는 이 MR의 완료 주장에 포함하지 않는다.
+
+## 후속 (2026-07-28) — 인증 방식은 HMAC으로 확정, JWT 아님
+
+이 ADR 작성 시점엔 Spring→AI 인증이 단명 JWT로 갈 것을 가정했지만(§6 "실제 Spring 단명 토큰 verifier는
+구현하지 않는다"), 이후 ADR-0023 §9에서 Spring 담당(송정기)이 기존 `AiCallbackVerifier`와 같은 HMAC
+공유 시크릿 방식을 역제안했고 **채택이 확정됐다**([jinwoo/0001](../../../../docs/decisions/jinwoo/0001-spring-ai-rag-s2s-auth-approval.md)).
+`app/adapters/hmac_internal_authenticator.py`가 실제 검증기이며, `AI_INTERNAL_SECRET` 설정 시
+`main.py`가 배선한다. 위 §6의 "고정 secret 검증을 넣지 않는다"는 방침은 이 결정으로 대체됐다 — 지금은
+고정 공유 시크릿(HMAC)이 채택된 방식이다. Spring 쪽 서명 발급기는 여전히 미구현이라 fail-closed `503`
+경로 자체는 유지된다.

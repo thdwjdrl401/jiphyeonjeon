@@ -18,6 +18,7 @@ def _request() -> RagAnswerRequest:
         sessionId=SESSION_ID,
         question="방금 설명한 개념은 무엇인가요?",
         contextTimeMs=61_500,
+        issuedAtMs=1_700_000_000_000,
     )
 
 
