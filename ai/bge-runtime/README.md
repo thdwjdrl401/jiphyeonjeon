@@ -61,6 +61,12 @@ Content-Type: application/json
 이 API는 `ai-worker`와 향후 `ai-api`가 사용할 Python 서비스 간 내부 경계다. Java/FE가 직접 호출하지 않으며
 Java/FE 공유 계약인 `docs/CONTRACT.md` 대상이 아니다.
 
+## EC2 ai-worker 연결
+
+교차 호스트 운영은 [`start_ec2_reverse_tunnel.sh`](scripts/start_ec2_reverse_tunnel.sh)를 사용한다. 실행·검증은
+[scripts README](scripts/README.md), 책임과 대안은
+[ADR-0029](../../docs/decisions/canola/0029-gpu-bge-ec2-ai-worker-connectivity.md)를 정본으로 삼는다.
+
 ## 설정
 
 모든 설정은 `BGE_RUNTIME_` prefix를 사용한다. `BGE_RUNTIME_INTERNAL_TOKEN`은 32자 이상이며
