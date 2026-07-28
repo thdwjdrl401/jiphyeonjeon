@@ -66,13 +66,14 @@ uv run --env-file /path/to/realtime-agent.env --frozen python -m app.main start
 
 ## read-only probe와 수동 E2E
 
-participant token은 shell history에 남지 않도록 환경으로 주입한다.
+probe는 participant token으로 room에 join하지 않고 LiveKit RoomService로 기존 상태만 조회한다. API
+credential은 process environment로 주입하고 command line에 직접 쓰지 않는다.
 
 ```sh
-LIVEKIT_TOKEN='<short-lived-token>' uv run --frozen python scripts/probe_livekit_room.py
+uv run --frozen python scripts/probe_livekit_room.py --room session-<session-uuid>
 ```
 
-probe는 auto-subscribe를 끄고 기존 room과 microphone publication만 읽는다. room을 만들지 않는다.
+probe는 기존 room과 microphone publication만 읽고 room을 만들거나 media를 subscribe하지 않는다.
 수동 dispatch는 strict UUID metadata, `session-{sessionId}` room, 강사 participant와 unmuted microphone을
 모두 확인하고 동일 metadata dispatch가 있으면 재사용한다.
 
