@@ -37,6 +37,14 @@ interface PlaybackPlayerProps {
 type PlaybackState = 'loading' | 'ready' | 'playing' | 'buffering' | 'error'
 
 /**
+ * 라이브 엣지에서 몇 세그먼트 뒤에서 재생할지(hls.js 기본 3).
+ *
+ * 낮출수록 지연이 줄지만 네트워크가 흔들릴 때 버퍼링이 잦아진다. 2가 타협점 —
+ * 1은 화면공유처럼 비트레이트가 튀는 구간에서 끊길 여지가 커진다.
+ */
+const LIVE_SYNC_SEGMENTS = 2
+
+/**
  * 미디어 시각 ↔ 세션 시각 변환.
  *
  * 기준은 재생 중인 source의 `availableFromMs` — 미디어 시각 0이 가리키는 세션 시각이다.
@@ -84,7 +92,17 @@ export default function PlaybackPlayer({
   }, [source, seekRequest])
 
   const handleProviderChange = (provider: MediaProviderAdapter | null) => {
-    if (isHLSProvider(provider)) provider.library = HLS
+    if (!isHLSProvider(provider)) return
+    provider.library = HLS
+    provider.config = {
+      // hls.js 기본값은 라이브 엣지에서 3세그먼트 뒤부터 재생한다(안전 버퍼). 세그먼트 단위라
+      // 세그먼트가 2초면 그것만으로 6초가 붙는다. 강의는 단방향 방송이라 버퍼를 조금 줄여도
+      // 체감 손해가 적다 — 실측 총 지연 ~10초 중 이 값이 가장 큰 몫이었다.
+      liveSyncDurationCount: LIVE_SYNC_SEGMENTS,
+      // 기본값 1은 "따라잡기 금지"라, 한 번 버퍼링으로 밀리면 그 지연이 영구히 남는다.
+      // 5% 빠르게 재생해 조용히 엣지로 복귀시킨다(체감되지 않는 수준).
+      maxLiveSyncPlaybackRate: 1.05,
+    }
   }
 
   const retryPlayback = () => {
@@ -102,8 +120,6 @@ export default function PlaybackPlayer({
       {source
         ? (
           // key는 실제 재생 대상이 바뀔 때만 변한다. 폴링 갱신마다 리마운트하면 재생이 끊긴다.
-          // streamType은 넘기지 않는다 — #EXT-X-ENDLIST 유무로 vidstack이 판정하므로
-          // 라이브(live:dvr)/종료 후(on-demand)가 자동으로 갈린다.
           <MediaPlayer
             key={`${playback?.sessionId}-${source.url}-${reloadToken}`}
             ref={playerRef}
@@ -111,6 +127,7 @@ export default function PlaybackPlayer({
             className="student-live-player"
             playsInline
             src={{ src: source.url, type: 'application/vnd.apple.mpegurl' }}
+            streamType={isLive ? 'live:dvr' : 'on-demand'}
             title={lessonTitle}
             onCanPlay={() => setPlaybackState('ready')}
             onError={() => setPlaybackState('error')}

@@ -52,9 +52,11 @@ public class LiveKitEgressControl implements EgressControl {
                 .setS3(s3)
                 .build();
         try {
-            // preset·options는 null 허용(기본 인코딩), audioMixing은 non-null 필수(실 검증에서 확인).
+            // preset을 안 주면 Egress 기본값 720p로 합성한다. 강사가 1080p 화면공유를 올려도 720p로
+            // 다운스케일돼 코드·슬라이드 글자가 뭉갠다(EC2 실측). options는 null 허용, audioMixing은 non-null 필수.
             Response<LivekitEgress.EgressInfo> res = client.startRoomCompositeEgress(
-                    roomName, output, egress.layout(), null, null, false, false, "", AudioMixing.DEFAULT_MIXING).execute();
+                    roomName, output, egress.layout(), encodingPreset(), null, false, false, "",
+                    AudioMixing.DEFAULT_MIXING).execute();
             if (!res.isSuccessful() || res.body() == null) {
                 throw new EgressControlException("Egress 시작 실패: HTTP " + res.code());
             }
@@ -63,6 +65,19 @@ public class LiveKitEgressControl implements EgressControl {
             return egressId;
         } catch (IOException e) {
             throw new EgressControlException("Egress 시작 통신 실패: " + roomName, e);
+        }
+    }
+
+    /**
+     * 합성 출력 인코딩 프리셋. 설정값이 열거형에 없으면 기본값으로 떨어뜨린다 —
+     * 오타 하나로 녹화 자체가 죽는 것보다 낫다(녹화는 best-effort 경로다).
+     */
+    private LivekitEgress.EncodingOptionsPreset encodingPreset() {
+        try {
+            return LivekitEgress.EncodingOptionsPreset.valueOf(egress.encodingPreset());
+        } catch (IllegalArgumentException | NullPointerException e) {
+            log.warn("알 수 없는 Egress 프리셋 '{}' — 기본값 사용", egress.encodingPreset());
+            return LivekitEgress.EncodingOptionsPreset.H264_1080P_30;
         }
     }
 
