@@ -1,7 +1,11 @@
 package com.liveclass.live;
 
+import com.liveclass.live.api.LiveRecordingControl;
+import com.liveclass.live.service.AgentDispatchControl;
 import com.liveclass.live.service.LiveRoomControl;
 import com.liveclass.live.service.LiveRoomControlException;
+import com.liveclass.live.service.LiveStartOrchestrator;
+import com.liveclass.support.LiveStartTestSupport;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,6 +48,15 @@ class LiveRoomControlTest {
 
     @MockitoBean
     private LiveRoomControl roomControl;
+
+    @MockitoBean
+    private LiveRecordingControl recordingControl;
+
+    @MockitoBean
+    private AgentDispatchControl agentDispatchControl;
+
+    @Autowired
+    private LiveStartOrchestrator startOrchestrator;
 
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
 
@@ -99,7 +112,14 @@ class LiveRoomControlTest {
     void ending_a_live_session_closes_the_room() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String sessionId = createSession(instructor);
-        write(post("/api/live-sessions/" + sessionId + "/start"), instructor, null).andExpect(status().isOk());
+        // /start는 202만 돌려주므로 게이트를 동기로 돌려 LIVE까지 올린다(운영에서는 커밋 후 비동기).
+        String instructorId = json(mockMvc.perform(get("/api/auth/me").cookie(instructor)).andReturn())
+                .get("userId").asString();
+        LiveStartTestSupport.stubInstructorPublishing(roomControl, sessionId, instructorId);
+        LiveStartTestSupport.stubRecordingReady(recordingControl);
+        LiveStartTestSupport.stubAgentDispatched(agentDispatchControl);
+        write(post("/api/live-sessions/" + sessionId + "/start"), instructor, null).andExpect(status().isAccepted());
+        startOrchestrator.runStartGates(UUID.fromString(sessionId));
 
         write(post("/api/live-sessions/" + sessionId + "/end"), instructor, null).andExpect(status().isOk());
 

@@ -1,5 +1,10 @@
 package com.liveclass.curriculum;
 
+import com.liveclass.live.api.LiveRecordingControl;
+import com.liveclass.live.service.AgentDispatchControl;
+import com.liveclass.live.service.LiveRoomControl;
+import com.liveclass.live.service.LiveStartOrchestrator;
+import com.liveclass.support.LiveStartTestSupport;
 import jakarta.persistence.EntityManager;
 import jakarta.servlet.http.Cookie;
 import org.hibernate.SessionFactory;
@@ -9,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
@@ -47,6 +53,19 @@ class InstructorCurriculumListContractTest {
 
     @Autowired
     private EntityManager entityManager;
+
+    @Autowired
+    private LiveStartOrchestrator startOrchestrator;
+
+    // 라이브 시작·종료가 실제 LiveKit/Egress를 안 타게 목으로 둔다.
+    @MockitoBean
+    private LiveRoomControl roomControl;
+
+    @MockitoBean
+    private LiveRecordingControl recordingControl;
+
+    @MockitoBean
+    private AgentDispatchControl agentDispatchControl;
 
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
 
@@ -304,7 +323,7 @@ class InstructorCurriculumListContractTest {
         String curriculumId = createCurriculum(auth, "끝난 일정");
         String sectionId = createSection(auth, curriculumId, "1주차");
         String sessionId = createLiveSession(auth, createLesson(auth, sectionId, "레슨"), daysLater(1));
-        write(post("/api/live-sessions/" + sessionId + "/start"), auth, null).andExpect(status().isOk());
+        goLive(auth, sessionId);
         write(post("/api/live-sessions/" + sessionId + "/end"), auth, null).andExpect(status().isOk());
         syncWithDatabase();
 
@@ -388,7 +407,7 @@ class InstructorCurriculumListContractTest {
         String sectionId = createSection(auth, curriculumId, "1주차");
         String sessionId = createLiveSession(auth, createLesson(auth, sectionId, "진행 중 레슨"),
                 OffsetDateTime.now().minusMinutes(10));
-        write(post("/api/live-sessions/" + sessionId + "/start"), auth, null).andExpect(status().isOk());
+        goLive(auth, sessionId);
         syncWithDatabase();
 
         list(auth)
@@ -518,6 +537,17 @@ class InstructorCurriculumListContractTest {
      * scheduledAt이 있으면 SCHEDULED로 만들기 때문에, "지나갔는데 시작도 취소도 안 된 세션"이
      * JdbcTemplate으로 컬럼을 덮어쓰지 않고도 API만으로 정확히 재현된다.
      */
+    /** /start는 202만 돌려주므로 시작 게이트를 동기로 돌려 LIVE까지 올린다(운영에서는 커밋 후 비동기). */
+    private void goLive(Cookie[] auth, String sessionId) throws Exception {
+        String instructorId = json(mockMvc.perform(get("/api/auth/me").cookie(auth)).andReturn())
+                .get("userId").asString();
+        LiveStartTestSupport.stubInstructorPublishing(roomControl, sessionId, instructorId);
+        LiveStartTestSupport.stubRecordingReady(recordingControl);
+        LiveStartTestSupport.stubAgentDispatched(agentDispatchControl);
+        write(post("/api/live-sessions/" + sessionId + "/start"), auth, null).andExpect(status().isAccepted());
+        startOrchestrator.runStartGates(UUID.fromString(sessionId));
+    }
+
     private String createLiveSession(Cookie[] auth, String lessonId, OffsetDateTime scheduledAt) throws Exception {
         String body = scheduledAt == null ? null : "{\"scheduledAt\":\"" + scheduledAt + "\"}";
         MvcResult result = write(post("/api/instructor/lessons/" + lessonId + "/live-sessions"), auth, body)

@@ -1,6 +1,10 @@
 package com.liveclass.live;
 
+import com.liveclass.live.api.LiveRecordingControl;
+import com.liveclass.live.repository.LiveSessionRepository;
+import com.liveclass.live.service.AgentDispatchControl;
 import com.liveclass.live.service.LiveRoomControl;
+import com.liveclass.support.LiveStartTestSupport;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -48,9 +52,17 @@ class LiveChatWebSocketTest {
     @LocalServerPort
     private int port;
 
-    // start()는 방 제어를 부르지 않지만 안전하게 목으로 둔다(다른 라이브 테스트와 동일).
+    @Autowired
+    private LiveSessionRepository liveSessionRepository;
+
     @MockitoBean
     private LiveRoomControl roomControl;
+
+    @MockitoBean
+    private LiveRecordingControl recordingControl;
+
+    @MockitoBean
+    private AgentDispatchControl agentDispatchControl;
 
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
 
@@ -269,7 +281,12 @@ class LiveChatWebSocketTest {
             String sid = field(post("/api/instructor/curriculums/" + cid + "/sections", "{\"title\":\"s\"}"), "sectionId");
             String lessonId = field(post("/api/instructor/sections/" + sid + "/lessons", "{\"title\":\"l\"}"), "lessonId");
             String sessionId = field(post("/api/instructor/lessons/" + lessonId + "/live-sessions", null), "sessionId");
+            String instructorId = field(get("/api/auth/me"), "userId");
+            LiveStartTestSupport.stubInstructorPublishing(roomControl, sessionId, instructorId);
+            LiveStartTestSupport.stubRecordingReady(recordingControl);
+            LiveStartTestSupport.stubAgentDispatched(agentDispatchControl);
             post("/api/live-sessions/" + sessionId + "/start", null);
+            LiveStartTestSupport.awaitLive(liveSessionRepository, sessionId);
             return new String[]{lessonId, sessionId, cid};
         }
 

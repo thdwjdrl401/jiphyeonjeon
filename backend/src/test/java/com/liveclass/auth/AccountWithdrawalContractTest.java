@@ -1,6 +1,10 @@
 package com.liveclass.auth;
 
+import com.liveclass.live.api.LiveRecordingControl;
+import com.liveclass.live.service.AgentDispatchControl;
 import com.liveclass.live.service.LiveRoomControl;
+import com.liveclass.live.service.LiveStartOrchestrator;
+import com.liveclass.support.LiveStartTestSupport;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,9 +44,18 @@ class AccountWithdrawalContractTest {
     @Autowired
     private MockMvc mockMvc;
 
-    // 라이브 종료 시 실제 LiveKit 방 닫기를 목으로 — 테스트가 실 서버에 붙지 않게.
+    // 라이브 시작·종료가 실제 LiveKit을 안 타게 목으로 — 테스트가 실 서버에 붙지 않게.
     @MockitoBean
     private LiveRoomControl roomControl;
+
+    @MockitoBean
+    private LiveRecordingControl recordingControl;
+
+    @MockitoBean
+    private AgentDispatchControl agentDispatchControl;
+
+    @Autowired
+    private LiveStartOrchestrator startOrchestrator;
 
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
 
@@ -99,7 +112,7 @@ class AccountWithdrawalContractTest {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String sessionId = createSession(instructor);
         // 라이브 시작 → LIVE 상태.
-        write(post("/api/live-sessions/" + sessionId + "/start"), instructor, null).andExpect(status().isOk());
+        goLive(instructor, sessionId);
 
         write(delete("/api/me"), instructor, null)
                 .andExpect(status().isConflict())
@@ -113,7 +126,7 @@ class AccountWithdrawalContractTest {
     void instructor_can_withdraw_after_ending_live() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String sessionId = createSession(instructor);
-        write(post("/api/live-sessions/" + sessionId + "/start"), instructor, null).andExpect(status().isOk());
+        goLive(instructor, sessionId);
         write(post("/api/live-sessions/" + sessionId + "/end"), instructor, null).andExpect(status().isOk());
 
         // 종료(ENDED)했으면 탈퇴 가능.
@@ -121,6 +134,17 @@ class AccountWithdrawalContractTest {
     }
 
     // ---- 헬퍼 ----
+
+    /** /start는 202만 돌려주므로 시작 게이트를 동기로 돌려 LIVE까지 올린다(운영에서는 커밋 후 비동기). */
+    private void goLive(Cookie[] instructor, String sessionId) throws Exception {
+        String instructorId = json(mockMvc.perform(get("/api/auth/me").cookie(instructor)).andReturn())
+                .get("userId").asString();
+        LiveStartTestSupport.stubInstructorPublishing(roomControl, sessionId, instructorId);
+        LiveStartTestSupport.stubRecordingReady(recordingControl);
+        LiveStartTestSupport.stubAgentDispatched(agentDispatchControl);
+        write(post("/api/live-sessions/" + sessionId + "/start"), instructor, null).andExpect(status().isAccepted());
+        startOrchestrator.runStartGates(UUID.fromString(sessionId));
+    }
 
     private String createSession(Cookie[] auth) throws Exception {
         String cid = json(write(post("/api/instructor/curriculums"), auth, "{\"title\":\"탈퇴테스트\"}")
