@@ -32,7 +32,104 @@ LiveKit job metadata는 UTF-8 JSON object이며 최대 4,096 byte다. 필드는 
 metadata와 assigned room 검증은 Redis lease, LiveKit connect, audio source, STT engine보다 먼저
 실행한다.
 
-## 2. realtime-agent → application Redis caption stream
+## 2. Agent Worker 흐름
+
+Spring은 dispatch를 만들고, Python은 Worker로 등록해 실제 STT job을 처리한다. 두 서비스는 서로
+직접 호출하지 않고 LiveKit을 사이에 둔다.
+
+### 2.1 한눈에 보기
+
+```mermaid
+sequenceDiagram
+    participant S as Spring
+    participant L as LiveKit
+    participant W as Python Worker
+    participant J as Job process
+    participant R as Application Redis
+
+    W->>L: STT_AGENT_NAME으로 등록 + 용량 보고
+    S->>L: Room 준비 + explicit dispatch(metadata)
+    L->>W: job availability 요청
+
+    alt Worker AVAILABLE
+        W-->>L: job 수락
+        W->>J: job process 실행
+        J->>L: Room 참가 + microphone 구독
+        J->>R: caption.delta 기록
+        S->>L: session 종료 시 Room 삭제
+        L-->>J: ROOM_DELETED
+        J->>R: caption.stream.completed 기록
+        J-->>S: terminal callback (활성화 시)
+        J-->>W: job 종료 + 용량 반환
+    else Worker FULL 또는 미등록
+        Note over S,L: job은 할당 전 pending
+        S->>L: assignment timeout 후 정리
+    end
+```
+
+핵심 책임은 다음 네 가지다.
+
+- **Spring:** Room·권한 준비, explicit dispatch, assignment timeout, Room 삭제
+- **LiveKit:** 같은 `agentName`의 가용 Worker 선택과 job 단일 배정
+- **Python Worker:** 등록·재연결, 용량 보고, job process 실행, Room 참가와 STT
+- **공통 계약:** Java의 `agentName`과 Python의 `STT_AGENT_NAME`은 정확히 같아야 한다.
+
+### 2.2 Worker 등록과 용량
+
+Python `start` command는 설정을 검증한 뒤 `AgentServer`를 LiveKit에 등록하고 persistent WebSocket을
+유지한다. 등록은 영구 데이터가 아니며 프로세스가 종료되면 Worker pool에서 사라진다. 재시작은
+systemd, container restart policy 또는 orchestrator가 담당한다.
+
+Worker load는 다음 식으로 계산한다.
+
+```text
+load = activeJobs / STT_MAX_ACTIVE_JOBS
+load >= 1.0 이면 FULL
+```
+
+현재 Nemotron은 model sharing이 없어서 `STT_MAX_ACTIVE_JOBS=1`만 허용한다. 즉 한 job이 실행 중이면
+기존 job은 유지하되 새 job은 받지 않는다. SDK reserved slot도 load에 포함하므로 동시 요청이 와도
+한도를 초과해 수락하지 않는다.
+
+같은 `STT_AGENT_NAME`의 Worker가 여러 개면 LiveKit이 가용 Worker에 분배한다. 모든 Worker가 FULL
+이거나 없으면 job은 pending 상태로 남는다. LiveKit은 GPU EC2를 자동 확장하지 않으며 pending 순서와
+대기 SLA도 보장하지 않으므로 Java가 assignment timeout을 정해야 한다.
+
+### 2.3 session별 job 상세 흐름
+
+1. Spring이 `session-{sessionId}` Room과 instructor 한 명의 microphone publish 권한을 준비한다.
+2. 같은 `agentName`과 1절 metadata로 explicit dispatch를 생성하고 dispatch ID를 저장한다.
+3. LiveKit이 가용 Worker에 job을 배정하면 SDK가 격리된 job process를 실행한다.
+4. Python은 metadata·Room 이름을 검증하고 Redis session lease를 얻는다. 실패하면 Room과 STT를
+   시작하지 않는다.
+5. job은 `JobContext.connect()`로 해당 Room에 한 번 참가하고 유일한 remote microphone만 구독한다.
+6. audio → STT → caption 결과를 Redis에 기록하고, callback이 활성화됐다면 상태를 Spring에 보낸다.
+7. Spring이 Room을 삭제하면 job은 `ROOM_DELETED`를 정상 EOF로 처리하고 drain·completion·cleanup을
+   마친다. Worker는 종료하지 않고 다음 job을 기다린다.
+
+### 2.4 예외 흐름
+
+| 상황 | 결과 | Java 처리 |
+| --- | --- | --- |
+| 다른 Worker가 가용 | LiveKit이 그 Worker에 배정 | Worker 주소를 직접 선택하지 않는다. |
+| 모든 Worker가 FULL/미등록 | job이 pending | timeout 후 capacity failure 처리 및 Room/dispatch 정리 |
+| 같은 session의 dispatch 중복 | 서로 다른 job 생성 가능, Python lease는 한 개만 허용 | dispatch ID 저장·재사용으로 중복 생성을 막는다. |
+| Worker/job 종료 | job 실패 또는 재배정 가능 | job 상태와 `sttSessionId`별 결과를 조정한다. |
+| Room 정상 삭제 | completion 후 Worker 용량 반환 | 이를 정상 stop 신호로 사용한다. |
+
+### 2.5 Java 구현 체크리스트
+
+1. Java 설정의 `agentName`을 Python의 `STT_AGENT_NAME`과 맞춘다. Java는 Worker를 등록하지 않는다.
+2. Room 이름, instructor publish 권한, metadata를 검증한 뒤 explicit dispatch를 생성한다.
+3. dispatch ID와 LiveKit job ID를 저장하고 동일 start retry에서는 기존 dispatch를 재사용한다.
+4. dispatch 생성만으로 성공 처리하지 않고 job assignment/running을 bounded polling 또는 상태 이벤트로
+   확인한다.
+5. assignment timeout, capacity failure, 사용자 취소와 Room/dispatch 정리를 멱등하게 구현한다.
+6. Redis와 callback을 `(sessionId, sttSessionId)` attempt 단위로 처리하고 event ID 중복을 제거한다.
+7. Worker 수·load, active/pending job, assignment 시간, 실패율, GPU 메모리를 모니터링한다.
+8. AVAILABLE, FULL, Worker 미등록, 중복 dispatch, Worker crash, Room 삭제를 E2E로 검증한다.
+
+## 3. realtime-agent → application Redis caption stream
 
 - Redis URL: `REDIS_URL`로 주입한다. LiveKit 내부 Redis나 host `6380`을 전제로 하지 않는다.
 - stream key: `CAPTION_STREAM_KEY`, 기본값 `ai:captions:live`
@@ -99,7 +196,7 @@ completion `XADD`를 시작한 시점부터 remote 결과는 성공 또는 unkno
 point-of-no-return이며, 그 뒤 `SUCCEEDED` callback 구간에서 cancellation이나 lease loss가 발생하면
 callback이 누락될 수는 있어도 이미 닫힌 caption stream을 반대 terminal로 뒤집지 않는다.
 
-## 3. realtime-agent → Spring lifecycle callback
+## 4. realtime-agent → Spring lifecycle callback
 
 기본값은 `SPRING_STATUS_CALLBACK_ENABLED=false`다. Java가 이 제안 계약을 채택하기 전에는 켜지
 않는다. 활성화하려면 HTTP(S) callback URL과 최소 32 byte secret을 모두 주입해야 한다. 운영
@@ -141,7 +238,7 @@ HTTP timeout도 server가 처리한 뒤 응답만 유실된 상태일 수 있으
 현재 Java의 material callback URL·DTO·base64 `X-Signature`와 호환되지 않는다. 운영 URL은 코드에
 고정하지 않고 `SPRING_STATUS_CALLBACK_URL`로만 받는다.
 
-## 4. session lease와 종료
+## 5. session lease와 종료
 
 내부 lease key는 `agent:session:{sessionId}`이며 value는 LiveKit job ID다. `SET NX EX`로 획득하고
 Lua compare-and-expire/delete로 owner만 갱신·해제한다. lease를 얻지 못하면 audio source와 STT
@@ -160,11 +257,13 @@ audio/event drain, engine/source cleanup, completion write, terminal callback, l
 수행하는 LiveKit room 삭제이며, Python은 `ROOM_DELETED`만 정상 EOF로 분류한다. 다른 disconnect는
 실패다.
 
-## 5. Java 채택 전 필수 gate
+## 6. Java 채택 전 필수 gate
 
-1. Spring이 `captionEnabled` session에 같은 agent name으로 explicit dispatch를 만든다.
+1. 2.5절의 named dispatch, idempotency, assignment timeout, Room 권한·삭제와 capacity handling을
+   구현한다.
 2. 이 metadata schema/fixture를 Java serializer와 양측 contract test로 검증한다.
 3. Redis key, consumer group, 세션 종료 후 정리, event enum, timeout 결과의 멱등/fencing과 session
    clock 변환을 확정한다.
 4. callback URL, HMAC 방식, event ID 멱등성과 terminal first-wins 처리를 확정한다.
-5. `docs/CONTRACT.md`를 실제 구현과 함께 갱신하고 LiveKit·Redis·Spring E2E를 별도 실행한다.
+5. `docs/CONTRACT.md`를 실제 구현과 함께 갱신하고 available/full/unregistered Worker 및
+   LiveKit·Redis·Spring 정상·실패 E2E를 별도 실행한다.
