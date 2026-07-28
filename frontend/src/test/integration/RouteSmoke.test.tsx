@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '@/App'
 import { mockAuthService, resetMockAuth } from '@/features/auth/mockAuthService'
 
-vi.mock('@/features/live-session/StudentLivePlayer', () => ({
+vi.mock('@/features/live-session/PlaybackPlayer', () => ({
   default: ({
     bookmarked,
     playback,
@@ -184,6 +184,15 @@ describe('전체 페이지 라우트', () => {
     expect(screen.getByRole('tab', { name: 'AI 질문' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '핵심 용어' })).toBeInTheDocument()
     expect(screen.queryByText('강사 검수 모드')).not.toBeInTheDocument()
+  })
+
+  it('다시보기도 라이브와 같은 재생 계약으로 실제 플레이어를 띄운다', async () => {
+    // 목업 재생 컨트롤(▶ 버튼·range 슬라이더)이 아니라 라이브와 같은 플레이어를 쓴다.
+    await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
+    renderAt('/student/lessons/les-security/replay')
+
+    expect(await screen.findByRole('region', { name: '학생 라이브 영상' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('다시보기 타임라인')).not.toBeInTheDocument()
   })
 
   it('학생 강의 상세는 라이브 강의에서 바로 입장 전 점검으로 연결한다', async () => {

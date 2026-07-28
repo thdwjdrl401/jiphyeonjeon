@@ -14,18 +14,18 @@ import { StatusBadge } from '@/shared/ui/WorkspaceUi'
 import { isLiveStatus } from './liveSessionService'
 import type { PlaybackView } from './liveSessionService.interface'
 
-export interface StudentLiveSeekRequest {
+export interface PlaybackSeekRequest {
   sessionMs: number
   sequence: number
 }
 
-interface StudentLivePlayerProps {
+interface PlaybackPlayerProps {
   playback: PlaybackView | null
   /** 명시적 재시도에만 증가한다. 폴링 갱신으로 바뀌면 플레이어가 리마운트되어 재생이 끊긴다. */
   reloadToken: number
   loading: boolean
   errorMessage: string | null
-  seekRequest: StudentLiveSeekRequest | null
+  seekRequest: PlaybackSeekRequest | null
   lessonTitle: string
   participantCount: number
   bookmarked: boolean
@@ -58,7 +58,7 @@ function playbackLabel(state: PlaybackState) {
   return '스트림 연결 중'
 }
 
-export default function StudentLivePlayer({
+export default function PlaybackPlayer({
   playback,
   reloadToken,
   loading,
@@ -70,7 +70,7 @@ export default function StudentLivePlayer({
   onBookmark,
   onRetry,
   onSessionTimeChange,
-}: StudentLivePlayerProps) {
+}: PlaybackPlayerProps) {
   const [playbackState, setPlaybackState] = useState<PlaybackState>('loading')
   const playerRef = useRef<MediaPlayerInstance>(null)
   const source = playback?.source ?? null

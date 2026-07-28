@@ -15,54 +15,26 @@ import {
   getCaptions,
   getChatMessages,
   getLiveSession,
-  getPlayback,
-  isLiveStatus,
   saveBookmark,
   sendChatMessage,
   subscribeChatMessages,
   type ChatConnectionState,
   type ChatMessageView,
-  type PlaybackView,
 } from '@/features/live-session/liveSessionService'
-import type { StudentLiveSeekRequest } from '@/features/live-session/StudentLivePlayer'
+import type { PlaybackSeekRequest } from '@/features/live-session/PlaybackPlayer'
 import { useDetachedSidebarWindow } from '@/features/live-session/useDetachedSidebarWindow'
-import { ApiError } from '@/shared/api/client'
+import { usePlayback } from '@/features/live-session/usePlayback'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
 
 const { summaryBlocks, glossaryTerms } = getLiveLearningPreview()
 const InstructorLiveKitStage = lazy(() => import('@/features/live-session/InstructorLiveKitStage'))
-const StudentLivePlayer = lazy(() => import('@/features/live-session/StudentLivePlayer'))
+const PlaybackPlayer = lazy(() => import('@/features/live-session/PlaybackPlayer'))
 
 function mergeChatMessage(messages: ChatMessageView[], incoming: ChatMessageView) {
   const existingIndex = messages.findIndex((message) => message.id === incoming.id)
   if (existingIndex < 0) return [...messages, incoming]
   return messages.map((message, index) => index === existingIndex ? incoming : message)
-}
-
-/** 오류코드는 CONTRACT §2 다시보기 · ADR-choinhoo/0001 오류표가 정본이다. */
-function getPlaybackErrorMessage(error: unknown) {
-  if (!(error instanceof ApiError)) return '재생 서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.'
-  if (error.code === 'ENROLLMENT_REQUIRED') return '이 강의를 수강해야 시청할 수 있습니다.'
-  if (error.code === 'LESSON_NOT_FOUND') return '강의를 찾을 수 없습니다.'
-  if (error.code === 'REPLAY_NOT_FOUND') return '시청할 수 있는 영상이 없습니다.'
-  if (error.code === 'RECORDING_STARTING') return '녹화가 시작되는 중입니다. 곧 재생됩니다.'
-  if (error.code === 'REPLAY_NOT_READY') return '영상이 아직 준비되지 않았습니다. 잠시 후 다시 시도해 주세요.'
-  if (error.code === 'PLAYBACK_STORAGE_UNAVAILABLE') return '영상 저장소에 일시적인 문제가 있습니다. 잠시 후 다시 시도해 주세요.'
-  if (error.code === 'PLAYBACK_CONTRACT_INVALID') return '재생 정보가 올바르게 전달되지 않았습니다.'
-  return error.message || '재생 정보를 가져오지 못했습니다.'
-}
-
-/**
- * 재생 metadata 폴링 주기.
- *
- * source가 없으면(Egress 지연) 짧게 되물어 재생 시작을 놓치지 않고, 재생 중이면 세션 종료만
- * 감지하면 되므로 길게 잡는다. 종료 후에는 더 바뀔 게 없어 멈춘다.
- */
-function playbackPollInterval(data: PlaybackView | undefined) {
-  if (!data) return 3_000
-  if (!isLiveStatus(data.liveSessionStatus)) return false
-  return data.source ? 30_000 : 3_000
 }
 
 export default function LiveClassroomPage() {
@@ -91,23 +63,15 @@ export default function LiveClassroomPage() {
   const [aiQuestion, setAiQuestion] = useState('')
   const [aiAnswer, setAiAnswer] = useState('')
   const [bookmarked, setBookmarked] = useState(false)
-  const [studentSeekRequest, setStudentSeekRequest] = useState<StudentLiveSeekRequest | null>(null)
+  const [studentSeekRequest, setStudentSeekRequest] = useState<PlaybackSeekRequest | null>(null)
   const [endRequested, setEndRequested] = useState(false)
   const [chatConnectionState, setChatConnectionState] = useState<ChatConnectionState>('connecting')
   const sidebarWindow = useDetachedSidebarWindow(sessionId)
   // 라이브는 녹화되고 채팅·자막이 AI 처리된다는 안내를 입장 시 한 번 확인받는다.
   // 상시 배너 대신 진입 모달로 알려 시야를 가리지 않게 한다.
   const [recordingNoticeAck, setRecordingNoticeAck] = useState(false)
-  // 명시적 재시도에만 증가한다. 폴링 갱신으로 플레이어를 리마운트하면 재생이 계속 끊긴다.
-  const [playerReloadToken, setPlayerReloadToken] = useState(0)
-  const playbackLessonId = sessionQuery.data?.lessonId
-  const playbackQuery = useQuery({
-    queryKey: ['playback', playbackLessonId],
-    queryFn: () => getPlayback(playbackLessonId!),
-    enabled: Boolean(playbackLessonId && !isInstructor && recordingNoticeAck),
-    retry: false,
-    refetchInterval: (query) => playbackPollInterval(query.state.data),
-  })
+  // 강사는 LiveKit로 직접 송출하므로 재생 경로를 타지 않는다. 학생도 녹화 안내를 확인한 뒤에 붙는다.
+  const playback = usePlayback(sessionQuery.data?.lessonId, !isInstructor && recordingNoticeAck)
   const sendMutation = useMutation({
     mutationFn: ({ text, question }: { text: string; question: boolean }) => sendChatMessage(sessionId, text, question),
     onSuccess: (sent) => queryClient.setQueryData<ChatMessageView[]>(
@@ -185,9 +149,6 @@ export default function LiveClassroomPage() {
   if (!sessionId) return <PageState title="잘못된 라이브 세션 경로입니다" />
   if (sessionQuery.isError || lessonQuery.isError) return <PageState title="라이브 강의를 불러오지 못했습니다" />
   if (!session || !lesson) return <PageState title="라이브 강의를 불러오는 중입니다" />
-  const playbackErrorMessage = playbackQuery.isError
-    ? getPlaybackErrorMessage(playbackQuery.error)
-    : null
 
   const discussionComposer = (
     <form className="chat-composer" onSubmit={sendMessage}>
@@ -299,22 +260,17 @@ export default function LiveClassroomPage() {
             )
             : (
               <Suspense fallback={<div className="video-stage instructor-livekit-loading" role="status">Vidstack 플레이어를 불러오는 중입니다.</div>}>
-                <StudentLivePlayer
+                <PlaybackPlayer
                   bookmarked={bookmarked}
-                  errorMessage={playbackErrorMessage}
+                  errorMessage={playback.errorMessage}
                   lessonTitle={lesson.title}
-                  loading={recordingNoticeAck && playbackQuery.isPending}
+                  loading={playback.loading}
                   participantCount={session.participants}
-                  playback={recordingNoticeAck ? playbackQuery.data ?? null : null}
-                  reloadToken={playerReloadToken}
+                  playback={playback.playback}
+                  reloadToken={playback.reloadToken}
                   seekRequest={studentSeekRequest}
                   onBookmark={() => bookmarkMutation.mutate()}
-                  onRetry={() => {
-                    // 세그먼트 403(TTL 만료)·재생 오류 복구 경로 — 새 presigned URL을 받아
-                    // 플레이어를 다시 물린다. 이때만 리마운트한다.
-                    setPlayerReloadToken((token) => token + 1)
-                    void playbackQuery.refetch()
-                  }}
+                  onRetry={playback.reload}
                   onSessionTimeChange={setPositionMs}
                 />
               </Suspense>

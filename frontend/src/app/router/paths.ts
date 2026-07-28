@@ -21,8 +21,6 @@ export const studentPaths = {
   prejoin: (sessionId: string) => `/student/live-sessions/${sessionId}/prejoin`,
   classroom: (sessionId: string) => `/student/live-sessions/${sessionId}/classroom`,
   replay: (lessonId: string) => `/student/lessons/${lessonId}/replay`,
-  vod: (curriculumId: string, lessonId: string) =>
-    `/student/curriculums/${curriculumId}/lessons/${lessonId}/vod`,
 }
 
 export const instructorPaths = {
