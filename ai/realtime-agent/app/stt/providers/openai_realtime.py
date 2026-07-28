@@ -4,6 +4,7 @@ import asyncio
 import audioop
 import base64
 import json
+import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
@@ -18,6 +19,8 @@ _TRANSCRIPTION_COMPLETED = "conversation.item.input_audio_transcription.complete
 _TRANSCRIPTION_FAILED = "conversation.item.input_audio_transcription.failed"
 
 WebSocketConnect = Callable[..., Awaitable[Any]]
+
+logger = logging.getLogger(__name__)
 
 
 async def _default_connect(url: str, **kwargs: object) -> Any:
@@ -135,8 +138,15 @@ class OpenAiRealtimeStreamingEngine(SegmentedStreamingEngine):
                 remainder = transcript[len(emitted) :]
                 if remainder:
                     yield remainder
-            elif transcript != emitted:
-                raise RuntimeError("OpenAI final transcript diverged from emitted deltas")
+            elif transcript.strip() != emitted.strip():
+                logger.warning(
+                    "OpenAI final transcript revised already emitted realtime deltas; "
+                    "preserving emitted text",
+                    extra={
+                        "emitted_length": len(emitted),
+                        "final_length": len(transcript),
+                    },
+                )
             return
 
     async def _ensure_connected(self, language: str) -> Any:
