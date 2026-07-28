@@ -1,7 +1,6 @@
 package com.liveclass.video.service;
 
 import com.liveclass.video.config.EgressProperties;
-import com.liveclass.video.domain.ReplayStatus;
 import com.liveclass.video.domain.VideoAsset;
 import com.liveclass.video.domain.VideoAssetStatus;
 import com.liveclass.video.repository.VideoAssetRepository;
@@ -12,14 +11,16 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
- * 라이브 녹화 생명주기 골격(songjeongki/0020). 세션 시작/종료 이벤트를 받아 Egress를 켜고 끄며
- * {@code video_asset} 상태기계를 전이한다. Egress 실패는 세션을 되돌리지 않는다(best-effort).
+ * 라이브 녹화 생명주기(songjeongki/0020, choinhoo/0002). 시작 오케스트레이터와 종료 이벤트를 받아
+ * Egress를 켜고 끄며 {@code video_asset} 상태기계를 전이한다. HLS-only 정책에서 시작 전 Egress 실패는
+ * LIVE를 막고, 종료 정리는 기존 이벤트 기반 흐름을 유지한다.
  *
- * <p>상태: REQUESTED → (egress 시작) RECORDING → (세션 종료) FINALIZING → (egress 완료 webhook)
- * VERIFYING → (스토리지에 매니페스트 확인) READY / FAILED. 시작 실패는 FAILED.
+ * <p>상태: REQUESTED/FAILED → STARTING → (egress ID 저장) RECORDING → (세션 종료) FINALIZING
+ * → (egress 완료 webhook) VERIFYING → (스토리지에 매니페스트 확인) READY / FAILED.
  *
  * <p>live 모듈에 의존하지 않는다 — 이벤트 필드를 원시값으로 받는다(경계는 {@link RecordingEventListener}가 담당).
  */
@@ -32,47 +33,99 @@ public class RecordingService {
     private final EgressControl egressControl;
     private final EgressProperties egressProperties;
     private final RecordingStorage recordingStorage;
+    private final RecordingStartStore startStore;
 
     public RecordingService(VideoAssetRepository videoAssetRepository, EgressControl egressControl,
-                            EgressProperties egressProperties, RecordingStorage recordingStorage) {
+                            EgressProperties egressProperties, RecordingStorage recordingStorage,
+                            RecordingStartStore startStore) {
         this.videoAssetRepository = videoAssetRepository;
         this.egressControl = egressControl;
         this.egressProperties = egressProperties;
         this.recordingStorage = recordingStorage;
+        this.startStore = startStore;
     }
 
     /**
-     * 세션 녹화 시작. 멱등(이미 자산 있으면 건너뜀). Egress 실패면 FAILED로 기록하고 넘어간다.
-     * <p>REQUIRES_NEW 필수 — AFTER_COMMIT 리스너에서 호출되므로 REQUIRED면 이미 커밋된 원 트랜잭션에
-     * 참여만 하고 새 커밋이 없어 video_asset이 저장되지 않는다.
+     * 세션 녹화 시작(Gate A — API 수락, ADR-0002 §4). 멱등: 이미 진행 중인 자산이면 그대로 성공으로 본다.
+     * 이전 시도가 {@code FAILED}로 남아 있으면 같은 행을 재사용해 다시 시도한다 — 강사가 재시작을 누를 수
+     * 있어야 하므로 실패한 자산이 영구히 재시도를 막으면 안 된다.
+     *
+     * <p>외부 Egress 호출 전후 DB 변경은 {@link RecordingStartStore}의 짧은 REQUIRES_NEW
+     * 트랜잭션으로 분리한다. 네트워크를 기다리는 동안 DB 트랜잭션을 열어 두지 않는다.
+     *
+     * @return Egress 시작이 수락되면 true, 명시적으로 실패하면 false
      */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void startRecording(UUID sessionId, UUID lessonId, String roomName) {
-        if (videoAssetRepository.existsByLiveSessionId(sessionId)) {
-            log.debug("이미 녹화 자산 존재 — 건너뜀 session={}", sessionId);
-            return;
+    public boolean startRecording(UUID sessionId, UUID lessonId, String roomName) {
+        RecordingStartStore.StartPreparation preparation =
+                startStore.prepare(sessionId, lessonId, egressProperties.bucket(), manifestKey(sessionId));
+        if (preparation.mode() == RecordingStartStore.StartMode.ALREADY_ACCEPTED) {
+            log.debug("이미 Egress ID가 저장됨 — 재사용 session={} egressId={}",
+                    sessionId, preparation.egressId());
+            return true;
         }
-        VideoAsset asset = new VideoAsset();
-        asset.setLiveSessionId(sessionId);
-        asset.setLessonId(lessonId);
-        asset.setStatus(VideoAssetStatus.REQUESTED);
-        asset.setReplayStatus(ReplayStatus.DRAFT);
-        asset.setBucket(egressProperties.bucket());
-        asset.setHlsManifestKey(manifestKey(sessionId));
-        videoAssetRepository.save(asset);
+        if (preparation.mode() == RecordingStartStore.StartMode.RECONCILE_UNKNOWN) {
+            // 이전 호출의 응답이 유실됐을 수 있다. pollReadiness가 room list로 ID를 복구한다.
+            log.info("Egress 시작 결과 재조정 대기 session={}", sessionId);
+            return true;
+        }
 
         try {
+            // 외부 I/O: 위 prepare 트랜잭션은 이미 끝났고, 아래 attach는 새 짧은 트랜잭션이다.
             String egressId = egressControl.startHlsRecording(roomName, objectPrefix(sessionId));
-            asset.setEgressId(egressId);
-            asset.setStatus(VideoAssetStatus.RECORDING);
-            asset.setRecordingStartedAt(OffsetDateTime.now());
+            startStore.attachEgress(sessionId, egressId);
             log.info("녹화 시작 session={} egressId={}", sessionId, egressId);
+            return true;
+        } catch (EgressStartOutcomeUnknownException e) {
+            // 원격 성공 가능성이 있으므로 FAILED로 바꾸지 않는다. Gate B polling이 room list로 복구한다.
+            log.warn("Egress 시작 응답 유실 — 재조정 대기 session={}: {}", sessionId, e.getMessage());
+            return true;
         } catch (RuntimeException e) {
-            // best-effort: 녹화가 안 켜져도 세션은 그대로 진행된다. 실패 사실만 남긴다.
-            asset.setStatus(VideoAssetStatus.FAILED);
-            asset.setFailureCode("EGRESS_START_FAILED");
-            log.warn("녹화 시작 실패(best-effort) session={}: {}", sessionId, e.getMessage());
+            startStore.markStartFailed(sessionId, "EGRESS_START_FAILED");
+            log.warn("녹화 시작 실패 session={}: {}", sessionId, e.getMessage());
+            return false;
         }
+    }
+
+    /**
+     * 시작 실패 정리(ADR-0002 §6). 원격 Egress가 있으면 멱등 중지하고 자산을 실패로 남긴다.
+     * 예외를 던지지 않는다 — 정리 실패가 강사의 재시도를 막으면 안 된다.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void abortRecording(UUID sessionId, String failureCode) {
+        VideoAsset asset = videoAssetRepository.findByLiveSessionId(sessionId).orElse(null);
+        if (asset == null || asset.getStatus() == VideoAssetStatus.READY) {
+            return;
+        }
+        if (asset.getEgressId() != null) {
+            try {
+                egressControl.stopRecording(asset.getEgressId());
+            } catch (RuntimeException e) {
+                log.warn("시작 실패 정리 중 Egress 중지 실패(무시) session={}: {}", sessionId, e.getMessage());
+            }
+        } else if (asset.getStatus() == VideoAssetStatus.STARTING) {
+            // StartEgress 응답 유실 뒤 늦게 생성된 원격 작업도 찾아 중지해 다음 attempt와 겹치지 않게 한다.
+            try {
+                egressControl.findActiveForRoom(LiveSessionRoomNames.of(sessionId))
+                        .ifPresent(snapshot -> egressControl.stopRecording(snapshot.egressId()));
+            } catch (RuntimeException e) {
+                log.warn("시작 결과 미확정 Egress 정리 실패(무시) session={}: {}", sessionId, e.getMessage());
+            }
+        }
+        asset.setStatus(VideoAssetStatus.FAILED);
+        asset.setFailureCode(failureCode);
+        asset.setRecordingEndedAt(OffsetDateTime.now());
+        log.info("시작 실패로 녹화 자산 정리 session={} code={}", sessionId, failureCode);
+    }
+
+    /** Gate B~C 조회에 필요한 현재 자산 스냅샷(egressId·bucket·manifest 키). 없으면 empty. */
+    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
+    public Optional<RecordingTarget> findRecordingTarget(UUID sessionId) {
+        return videoAssetRepository.findByLiveSessionId(sessionId)
+                .map(a -> new RecordingTarget(a.getEgressId(), a.getBucket(), a.getHlsManifestKey(), a.getStatus()));
+    }
+
+    /** Egress 준비 확인에 필요한 최소 정보. */
+    public record RecordingTarget(String egressId, String bucket, String manifestKey, VideoAssetStatus status) {
     }
 
     /**
