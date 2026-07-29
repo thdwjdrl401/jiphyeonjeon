@@ -2,7 +2,8 @@
 
 > 관련 결정: [ADR-0032 학생 HLS 단일 재생](../songjeongki/0032-media-playback-hls-only.md) ·
 > [ADR-0034 Egress 완료 webhook](../songjeongki/0034-egress-completion-webhook.md) ·
-> [ADR-0039 다시보기 재생 API](../songjeongki/0039-replay-playback-api.md)
+> [ADR-0039 다시보기 재생 API](../songjeongki/0039-replay-playback-api.md) ·
+> [ADR-0002 라이브 시작 publisher·STT 서비스·Egress 게이트](0002-live-start-egress-stt-orchestration.md)
 
 - **상태**: 채택 (2026-07-28 §2 개정 — 아래 참조)
 - **일자**: 2026-07-27
@@ -57,8 +58,9 @@ ADR-0032가 확정한 학생 HLS 단일 재생은 라이브 중 `live.m3u8` 엣�
 - `ReplayStatus` 기본값은 `DRAFT`를 유지한다.
 - 소유 강사는 라이브 중과 종료 후 모두 자기 녹화를 볼 수 있다.
 - 학생은 활성 수강 및 `lesson.status=PUBLISHED` 조건을 항상 만족해야 한다.
-- `STARTING`·`LIVE`·`ENDING` 세션에서는 학생도 `ReplayStatus`와 무관하게 현재 HLS와
-  누적 DVR을 볼 수 있다.
+- `STARTING`·`LIVE`·`ENDING` 세션에서는 학생도 `ReplayStatus`와 무관하게 metadata를 조회할 수 있다.
+  단, [ADR-0002](0002-live-start-egress-stt-orchestration.md)가 이 결정을 좁혀 `STARTING`에는
+  `source=null`과 준비 상태만 제공하고 실제 HLS·누적 DVR은 원자적 `LIVE` 전환 뒤부터 공개한다.
 - `ENDED` 세션에서는 학생에게 `VideoAssetStatus.READY`이면서
   `ReplayStatus.PUBLISHED`인 자산만 공개한다.
 - 게시 전환은 기존 `POST .../replay-review/publish`를 유지하고, 같은 경로 계열에

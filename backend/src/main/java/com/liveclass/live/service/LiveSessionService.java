@@ -3,7 +3,6 @@ package com.liveclass.live.service;
 import com.liveclass.live.api.LiveSessionDirectory;
 import com.liveclass.live.api.LiveSessionEndedEvent;
 import com.liveclass.live.api.LiveSessionManagement;
-import com.liveclass.live.api.LiveSessionStartedEvent;
 import com.liveclass.live.api.LiveSessionView;
 import com.liveclass.live.domain.LiveSession;
 import com.liveclass.live.domain.LiveSessionStatus;
@@ -55,8 +54,8 @@ public class LiveSessionService implements LiveSessionManagement, LiveSessionDir
         this.eventPublisher = eventPublisher;
     }
 
-    /** 세션 ID로 결정론적 방 이름(토큰과 동일 규칙). */
-    private static String roomName(UUID sessionId) {
+    /** 세션 ID로 결정론적 방 이름(토큰과 동일 규칙). 시작 오케스트레이터·preflight도 같은 규칙을 쓴다. */
+    static String roomName(UUID sessionId) {
         return "session-" + sessionId;
     }
 
@@ -81,7 +80,7 @@ public class LiveSessionService implements LiveSessionManagement, LiveSessionDir
     @Override
     @Transactional(readOnly = true)
     public Optional<LiveSessionView> findById(UUID sessionId) {
-        return liveSessionRepository.findById(sessionId).map(this::toView);
+        return liveSessionRepository.findById(sessionId).map(LiveSessionService::toView);
     }
 
     @Override
@@ -96,7 +95,7 @@ public class LiveSessionService implements LiveSessionManagement, LiveSessionDir
         if (lessonIds.isEmpty()) {
             return List.of();   // 빈 IN 절로 쿼리를 쏘지 않는다.
         }
-        return liveSessionRepository.findByLessonIdIn(lessonIds).stream().map(this::toView).toList();
+        return liveSessionRepository.findByLessonIdIn(lessonIds).stream().map(LiveSessionService::toView).toList();
     }
 
     /**
@@ -122,43 +121,23 @@ public class LiveSessionService implements LiveSessionManagement, LiveSessionDir
     }
 
     /**
-     * 라이브 시작(멱등). 세션 강사만. DRAFT/SCHEDULED/OPEN → LIVE, 시계 원점 기록.
-     * 이미 LIVE면 그대로(no-op). 종료·취소·실패 상태에서는 다시 시작할 수 없다.
+     * 라이브 종료(멱등). 세션 강사만. 현재는 한 요청 안에서 {@code LIVE → ENDING → ENDED}를
+     * 처리하고 이미 ENDED면 그대로 돌려준다.
      *
-     * 실제 설계는 비동기(STARTING→LIVE, LiveKit room·Egress·STT 조정)지만 그 외부 연동은 후속 —
-     * 여기선 상태 전이·시계만 동기로 세운다. room_sid는 실제 방 생성 시 채운다.
+     * <p>ADR-0002 §10의 완전한 종료 상태기계는 아직 아니다. 방 삭제 실패를 기록·재시도하는 지속
+     * reconciler가 없어 현재 호출은 best-effort이고 응답도 최종 {@code ENDED}다. Phase 7에서는
+     * 실패 시 ENDING을 유지하고 room·agent·Egress 정리가 끝난 뒤에만 ENDED를 확정해야 한다.
      */
-    @Transactional
-    public LiveSessionView start(UUID sessionId, UUID requesterId) {
-        LiveSession s = requireOwned(sessionId, requesterId);
-        switch (s.getStatus()) {
-            case LIVE -> { /* 멱등: 이미 진행 중 */ }
-            case DRAFT, SCHEDULED, OPEN -> {
-                OffsetDateTime now = OffsetDateTime.now();
-                s.setStatus(LiveSessionStatus.LIVE);
-                s.setStartedAt(now);
-                s.setClockOriginAt(now);   // 자막·STT 상대시각의 기준점(세션 시계 t0)
-                s.setStartedBy(requesterId);
-                // 커밋 후 부가 처리(녹화 등)를 트리거. best-effort라 세션 시작을 막지 않는다.
-                eventPublisher.publishEvent(new LiveSessionStartedEvent(
-                        s.getId(), s.getLessonId(), roomName(s.getId()), s.isRecordingEnabled()));
-            }
-            default -> throw new LiveSessionStateConflictException("이미 종료되었거나 시작할 수 없는 상태입니다.");
-        }
-        return toView(s);
-    }
-
-    /** 라이브 종료(멱등). 세션 강사만. LIVE → ENDED. 이미 ENDED면 그대로. 시작 전이면 종료 불가. */
     @Transactional
     public LiveSessionView end(UUID sessionId, UUID requesterId) {
         LiveSession s = requireOwned(sessionId, requesterId);
         switch (s.getStatus()) {
             case ENDED -> { /* 멱등: 이미 종료됨 */ }
-            case LIVE -> {
+            case LIVE, ENDING -> {
+                s.setStatus(LiveSessionStatus.ENDING);   // 신규 토큰·시작 요청을 먼저 막는다.
+                closeRoomBestEffort(sessionId);
                 s.setStatus(LiveSessionStatus.ENDED);
                 s.setEndedAt(OffsetDateTime.now());
-                // DB 종료가 진실의 원천. 실제 방 닫기는 정리 작업이라 실패해도 종료를 되돌리지 않는다(best-effort).
-                closeRoomBestEffort(sessionId);
                 // 커밋 후 녹화 중지 등 정리 처리를 트리거.
                 eventPublisher.publishEvent(new LiveSessionEndedEvent(sessionId));
             }
@@ -231,7 +210,7 @@ public class LiveSessionService implements LiveSessionManagement, LiveSessionDir
     }
 
     /** 세션을 로드하고 요청자가 그 세션의 강사인지 확인한다. 없으면 404, 강사 아니면 403. */
-    private LiveSession requireOwned(UUID sessionId, UUID requesterId) {
+    LiveSession requireOwned(UUID sessionId, UUID requesterId) {
         LiveSession s = liveSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new LiveSessionNotFoundException("라이브 세션을 찾을 수 없습니다."));
         if (!s.getInstructorId().equals(requesterId)) {
@@ -240,7 +219,7 @@ public class LiveSessionService implements LiveSessionManagement, LiveSessionDir
         return s;
     }
 
-    private LiveSessionView toView(LiveSession s) {
+    static LiveSessionView toView(LiveSession s) {
         return new LiveSessionView(
                 s.getId(), s.getLessonId(), s.getInstructorId(), s.getStatus().name(),
                 s.getScheduledAt(), s.getEntryWindowMinutes(), s.getExpectedDurationMinutes(),

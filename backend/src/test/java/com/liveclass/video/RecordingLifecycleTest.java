@@ -1,15 +1,21 @@
 package com.liveclass.video;
 
-import com.liveclass.live.api.LiveSessionStartedEvent;
+import com.liveclass.live.api.LiveSessionStartingEvent;
+import com.liveclass.live.service.AgentDispatchControl;
 import com.liveclass.live.service.LiveRoomControl;
+import com.liveclass.live.service.LiveStartOrchestrator;
 import com.liveclass.video.domain.ReplayStatus;
 import com.liveclass.video.domain.VideoAsset;
 import com.liveclass.video.domain.VideoAssetStatus;
+import com.liveclass.live.repository.LiveSessionRepository;
+import com.liveclass.support.LiveStartTestSupport;
 import com.liveclass.video.repository.VideoAssetRepository;
 import com.liveclass.video.service.EgressControl;
 import com.liveclass.video.service.EgressControlException;
-import com.liveclass.video.service.RecordingEventListener;
+import com.liveclass.video.service.EgressStartOutcomeUnknownException;
+import com.liveclass.video.service.RecordingOrchestrationService;
 import com.liveclass.video.service.RecordingService;
+import com.liveclass.video.service.S3RecordingStorage;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -28,10 +34,13 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -53,12 +62,16 @@ class RecordingLifecycleTest {
 
     @Autowired private MockMvc mockMvc;
     @Autowired private RecordingService recordingService;
-    @Autowired private RecordingEventListener recordingEventListener;
+    @Autowired private RecordingOrchestrationService recordingOrchestrationService;
+    @Autowired private LiveStartOrchestrator startOrchestrator;
     @Autowired private VideoAssetRepository videoAssetRepository;
+    @Autowired private LiveSessionRepository liveSessionRepository;
     @Autowired private ApplicationEvents events;
 
     @MockitoBean private EgressControl egressControl;
-    @MockitoBean private LiveRoomControl roomControl;   // 종료 시 방 닫기가 실 LiveKit을 안 타게 목.
+    @MockitoBean private LiveRoomControl roomControl;   // 방 준비·참가자 조회·방 닫기가 실 LiveKit을 안 타게 목.
+    @MockitoBean private AgentDispatchControl agentDispatchControl;
+    @MockitoBean private S3RecordingStorage recordingStorage;   // Gate C의 manifest·세그먼트 확인을 목으로.
 
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
     private final List<UUID> createdSessions = new ArrayList<>();
@@ -71,19 +84,37 @@ class RecordingLifecycleTest {
         createdSessions.clear();
     }
 
+    /**
+     * 시작 요청은 이제 LIVE가 아니라 STARTING 이벤트를 낸다(ADR-0002 §2) — 게이트가 이 이벤트를 받아
+     * 커밋 후 별도 스레드에서 Egress·강사 확인을 진행한다. LIVE 시점의 {@code LiveSessionStartedEvent}는
+     * 그 비동기 스레드에서 나가므로 여기서 세지 않는다.
+     */
     @Test
-    void starting_a_session_publishes_started_event_with_recording_enabled() throws Exception {
+    void starting_a_session_publishes_starting_event_with_flags() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String[] ids = createSession(instructor);
         String sessionId = ids[1];
 
-        write(post("/api/live-sessions/" + sessionId + "/start"), instructor, null).andExpect(status().isOk());
+        when(egressControl.startHlsRecording(any(), any())).thenReturn("eg_starting");
+        when(egressControl.findState(any())).thenReturn(Optional.of(EgressControl.EgressState.EGRESS_ACTIVE));
+        when(recordingStorage.findManifest(any(), any())).thenReturn(Optional.of(LIVE_MANIFEST));
+        when(recordingStorage.head(any(), any())).thenReturn(Optional.of(1_024L));
+        String instructorId = json(mockMvc.perform(get("/api/auth/me").cookie(instructor)).andReturn())
+                .get("userId").asString();
+        LiveStartTestSupport.stubInstructorPublishing(roomControl, sessionId, instructorId);
+        LiveStartTestSupport.stubAgentDispatched(agentDispatchControl);
 
-        List<LiveSessionStartedEvent> published = events.stream(LiveSessionStartedEvent.class).toList();
+        write(post("/api/live-sessions/" + sessionId + "/start"), instructor, null).andExpect(status().isAccepted());
+        // 비동기 게이트가 끝나야 @AfterEach 정리와 경합하지 않는다.
+        LiveStartTestSupport.awaitLive(liveSessionRepository, sessionId);
+
+        List<LiveSessionStartingEvent> published = events.stream(LiveSessionStartingEvent.class).toList();
         assertThat(published).hasSize(1);
         assertThat(published.get(0).sessionId()).isEqualTo(UUID.fromString(sessionId));
         assertThat(published.get(0).recordingEnabled()).isTrue();
+        assertThat(published.get(0).captionEnabled()).isTrue();
         assertThat(published.get(0).roomName()).isEqualTo("session-" + sessionId);
+        assertThat(published.get(0).correlationId()).matches("[A-Za-z0-9][A-Za-z0-9._:-]{0,127}");
     }
 
     @Test
@@ -109,18 +140,52 @@ class RecordingLifecycleTest {
     }
 
     @Test
-    void egress_failure_marks_asset_failed_but_does_not_throw() throws Exception {
+    void egress_failure_marks_asset_failed_and_reports_failure() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String[] ids = createSession(instructor);
         UUID lessonId = UUID.fromString(ids[0]);
         UUID sessionId = UUID.fromString(ids[1]);
         when(egressControl.startHlsRecording(any(), any())).thenThrow(new EgressControlException("boom"));
 
-        recordingService.startRecording(sessionId, lessonId, "session-" + sessionId);   // 예외 전파 안 함
+        // 예외를 전파하지 않고 false로 보고한다 — 오케스트레이터가 Gate A 실패로 접는다.
+        assertThat(recordingService.startRecording(sessionId, lessonId, "session-" + sessionId)).isFalse();
 
         VideoAsset asset = videoAssetRepository.findByLiveSessionId(sessionId).orElseThrow();
         assertThat(asset.getStatus()).isEqualTo(VideoAssetStatus.FAILED);
         assertThat(asset.getFailureCode()).isEqualTo("EGRESS_START_FAILED");
+    }
+
+    @Test
+    void unknown_start_outcome_is_reconciled_without_creating_a_second_egress() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String[] ids = createSession(instructor);
+        UUID lessonId = UUID.fromString(ids[0]);
+        UUID sessionId = UUID.fromString(ids[1]);
+        when(egressControl.startHlsRecording(any(), any()))
+                .thenThrow(new EgressStartOutcomeUnknownException("response lost", new java.io.IOException()));
+
+        assertThat(recordingService.startRecording(
+                sessionId, lessonId, "session-" + sessionId)).isTrue();
+        assertThat(recordingService.startRecording(
+                sessionId, lessonId, "session-" + sessionId)).isTrue();
+
+        VideoAsset uncertain = videoAssetRepository.findByLiveSessionId(sessionId).orElseThrow();
+        assertThat(uncertain.getStatus()).isEqualTo(VideoAssetStatus.STARTING);
+        assertThat(uncertain.getEgressId()).isNull();
+        verify(egressControl, times(1)).startHlsRecording(any(), any());
+
+        when(egressControl.findActiveForRoom("session-" + sessionId))
+                .thenReturn(Optional.of(new EgressControl.EgressSnapshot(
+                        "eg_recovered", EgressControl.EgressState.EGRESS_ACTIVE)));
+        when(egressControl.findState("eg_recovered"))
+                .thenReturn(Optional.of(EgressControl.EgressState.EGRESS_ACTIVE));
+        when(recordingStorage.findManifest(anyString(), anyString())).thenReturn(Optional.of(LIVE_MANIFEST));
+        when(recordingStorage.head(anyString(), anyString())).thenReturn(Optional.of(1_024L));
+
+        assertThat(recordingOrchestrationService.pollReadiness(sessionId).ready()).isTrue();
+        VideoAsset recovered = videoAssetRepository.findByLiveSessionId(sessionId).orElseThrow();
+        assertThat(recovered.getEgressId()).isEqualTo("eg_recovered");
+        assertThat(recovered.getStatus()).isEqualTo(VideoAssetStatus.RECORDING);
     }
 
     @Test
@@ -156,20 +221,33 @@ class RecordingLifecycleTest {
     }
 
     @Test
-    void recording_disabled_session_creates_no_asset() throws Exception {
+    void recording_disabled_session_is_rejected_before_an_attempt_or_egress() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String[] ids = createSession(instructor);
-        UUID lessonId = UUID.fromString(ids[0]);
         UUID sessionId = UUID.fromString(ids[1]);
 
-        // 리스너를 직접 호출: recordingEnabled=false면 서비스로 위임하지 않는다.
-        recordingEventListener.onSessionStarted(
-                new LiveSessionStartedEvent(sessionId, lessonId, "session-" + sessionId, false));
+        var session = liveSessionRepository.findById(sessionId).orElseThrow();
+        session.setRecordingEnabled(false);
+        liveSessionRepository.saveAndFlush(session);
+
+        write(post("/api/live-sessions/" + sessionId + "/start"), instructor, null)
+                .andExpect(status().isConflict());
 
         assertThat(videoAssetRepository.findByLiveSessionId(sessionId)).isEmpty();
+        verify(egressControl, never()).startHlsRecording(any(), any());
     }
 
     // ---- 헬퍼 (ChatContractTest 패턴) ----
+
+    /** Gate C가 볼 라이브 재생목록(ENDLIST 없음 + 세그먼트 존재). */
+    private static final String LIVE_MANIFEST = """
+            #EXTM3U
+            #EXT-X-VERSION:3
+            #EXT-X-TARGETDURATION:2
+            #EXT-X-MEDIA-SEQUENCE:0
+            #EXTINF:2.0,
+            seg_00000.ts
+            """;
 
     /** 강사로 커리큘럼→섹션→레슨→라이브세션 생성. {lessonId, sessionId} 반환(시작은 안 함). */
     private String[] createSession(Cookie[] auth) throws Exception {

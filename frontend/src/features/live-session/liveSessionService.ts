@@ -19,8 +19,11 @@ const LIVE_SESSION_STATUSES = ['STARTING', 'LIVE', 'ENDING']
 
 export const isLiveStatus = (liveSessionStatus: string) =>
   LIVE_SESSION_STATUSES.includes(liveSessionStatus)
-export const getPreflightChecks = (sessionId: string) => liveSessionService.getPreflightChecks(sessionId)
+export const preparePreflightRoom = (sessionId: string) => liveSessionService.preparePreflightRoom(sessionId)
+export const getPreflightReadiness = (sessionId: string) => liveSessionService.getPreflightReadiness(sessionId)
 export const startLiveSession = (sessionId: string) => liveSessionService.startLiveSession(sessionId)
+export const getLiveStartStatus = (sessionId: string, operationId?: string) =>
+  liveSessionService.getLiveStartStatus(sessionId, operationId)
 export const endLiveSession = (sessionId: string) => liveSessionService.endLiveSession(sessionId)
 export const getLiveToken = (sessionId: string) => liveSessionService.getLiveToken(sessionId)
 export const getParticipants = (sessionId: string) => liveSessionService.getParticipants(sessionId)
@@ -45,7 +48,10 @@ export type {
   LiveSessionView,
   PlaybackSourceView,
   PlaybackView,
-  PreflightCheck,
+  LiveStartOperation,
+  LiveStartStatus,
+  PreflightReadiness,
+  PreflightRoom,
   ProcessingStatus,
   QuestionHighlight,
 } from './liveSessionService.interface'

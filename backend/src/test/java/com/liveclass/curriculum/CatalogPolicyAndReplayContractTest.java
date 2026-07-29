@@ -3,6 +3,11 @@ package com.liveclass.curriculum;
 import com.liveclass.curriculum.domain.Curriculum;
 import com.liveclass.curriculum.domain.EnrollmentType;
 import com.liveclass.curriculum.repository.CurriculumRepository;
+import com.liveclass.live.api.LiveRecordingControl;
+import com.liveclass.live.service.AgentDispatchControl;
+import com.liveclass.live.service.LiveRoomControl;
+import com.liveclass.live.service.LiveStartOrchestrator;
+import com.liveclass.support.LiveStartTestSupport;
 import com.liveclass.video.domain.ReplayStatus;
 import com.liveclass.video.domain.VideoAsset;
 import com.liveclass.video.domain.VideoAssetStatus;
@@ -13,6 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
@@ -54,6 +60,19 @@ class CatalogPolicyAndReplayContractTest {
 
     @Autowired
     private VideoAssetRepository videoAssetRepository;
+
+    @Autowired
+    private LiveStartOrchestrator startOrchestrator;
+
+    // 라이브 시작·종료가 실제 LiveKit/Egress를 안 타게 목으로 둔다.
+    @MockitoBean
+    private LiveRoomControl roomControl;
+
+    @MockitoBean
+    private LiveRecordingControl recordingControl;
+
+    @MockitoBean
+    private AgentDispatchControl agentDispatchControl;
 
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
 
@@ -181,7 +200,14 @@ class CatalogPolicyAndReplayContractTest {
         String sessionId = json(write(post("/api/instructor/lessons/" + lessonId + "/live-sessions"), instructor,
                 "{\"scheduledAt\":\"2026-08-01T10:00:00+09:00\"}")
                 .andExpect(status().isCreated()).andReturn()).get("sessionId").asString();
-        write(post("/api/live-sessions/" + sessionId + "/start"), instructor, null).andExpect(status().isOk());
+        // /start는 202만 돌려주므로 게이트를 동기로 돌려 LIVE까지 올린 뒤 종료한다(운영에서는 커밋 후 비동기).
+        String instructorId = json(mockMvc.perform(get("/api/auth/me").cookie(instructor)).andReturn())
+                .get("userId").asString();
+        LiveStartTestSupport.stubInstructorPublishing(roomControl, sessionId, instructorId);
+        LiveStartTestSupport.stubRecordingReady(recordingControl);
+        LiveStartTestSupport.stubAgentDispatched(agentDispatchControl);
+        write(post("/api/live-sessions/" + sessionId + "/start"), instructor, null).andExpect(status().isAccepted());
+        startOrchestrator.runStartGates(UUID.fromString(sessionId));
         write(post("/api/live-sessions/" + sessionId + "/end"), instructor, null).andExpect(status().isOk());
 
         VideoAsset asset = new VideoAsset();

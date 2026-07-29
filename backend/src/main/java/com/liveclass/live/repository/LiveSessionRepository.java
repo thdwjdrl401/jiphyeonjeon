@@ -2,6 +2,8 @@ package com.liveclass.live.repository;
 
 import com.liveclass.live.domain.LiveSession;
 import com.liveclass.live.domain.LiveSessionStatus;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -17,6 +19,11 @@ public interface LiveSessionRepository extends JpaRepository<LiveSession, UUID> 
     boolean existsByLessonId(UUID lessonId);
 
     Optional<LiveSession> findByLessonId(UUID lessonId);
+
+    /** 동시 /start가 둘 다 active attempt를 만들지 않게 세션 행을 잠근다. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select s from LiveSession s where s.id = :sessionId")
+    Optional<LiveSession> findByIdForUpdate(@Param("sessionId") UUID sessionId);
 
     /**
      * 여러 커리큘럼의 "앞으로 있을(또는 지금 진행 중인) 세션"을 <b>한 번의 쿼리로</b> 가져온다(목록 N+1 방지).

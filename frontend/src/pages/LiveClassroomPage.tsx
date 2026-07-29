@@ -250,7 +250,6 @@ export default function LiveClassroomPage() {
             ? (
               <Suspense fallback={<div className="video-stage instructor-livekit-loading" role="status">LiveKit 송출 도구를 불러오는 중입니다.</div>}>
                 <InstructorLiveKitStage
-                  enabled={recordingNoticeAck}
                   lessonTitle={lesson.title}
                   participantCount={session.participants}
                   sessionId={sessionId}

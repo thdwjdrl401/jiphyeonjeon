@@ -6,7 +6,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-@EnableConfigurationProperties(LiveKitProperties.class)
+@EnableConfigurationProperties({LiveKitProperties.class, LiveStartProperties.class})
 public class LiveKitConfig {
 
     /**

@@ -1,11 +1,14 @@
 package com.liveclass.live;
 
+import com.liveclass.live.service.LiveRoomControl;
+import com.liveclass.support.LiveStartTestSupport;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
@@ -34,6 +37,11 @@ class LiveSessionScheduleTest {
     @Autowired
     private MockMvc mockMvc;
 
+    // 시작 요청이 실제 LiveKit에 방을 만들지 않게 목으로 대체. 이 테스트는 STARTING만 있으면 충분하다
+    // (일정 수정·취소는 시작 전에만 가능하므로 LIVE까지 갈 필요가 없다).
+    @MockitoBean
+    private LiveRoomControl roomControl;
+
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
 
     @Test
@@ -53,7 +61,8 @@ class LiveSessionScheduleTest {
     void updating_schedule_after_start_returns_409() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String sessionId = createSession(instructor);
-        write(post("/api/live-sessions/" + sessionId + "/start"), instructor, null).andExpect(status().isOk());
+        stubPreflight(instructor, sessionId);
+        write(post("/api/live-sessions/" + sessionId + "/start"), instructor, null).andExpect(status().isAccepted());
 
         write(patch("/api/instructor/live-sessions/" + sessionId), instructor, """
                 {"entryWindowMinutes":5}
@@ -87,7 +96,8 @@ class LiveSessionScheduleTest {
     void cancelling_a_live_session_returns_409() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String sessionId = createSession(instructor);
-        write(post("/api/live-sessions/" + sessionId + "/start"), instructor, null).andExpect(status().isOk());
+        stubPreflight(instructor, sessionId);
+        write(post("/api/live-sessions/" + sessionId + "/start"), instructor, null).andExpect(status().isAccepted());
 
         write(post("/api/instructor/live-sessions/" + sessionId + "/cancel"), instructor, null)
                 .andExpect(status().isConflict())
@@ -105,6 +115,12 @@ class LiveSessionScheduleTest {
     }
 
     // ---- 헬퍼 ----
+
+    private void stubPreflight(Cookie[] instructor, String sessionId) throws Exception {
+        String instructorId = json(mockMvc.perform(get("/api/auth/me").cookie(instructor)).andReturn())
+                .get("userId").asString();
+        LiveStartTestSupport.stubInstructorPublishing(roomControl, sessionId, instructorId);
+    }
 
     private String createSession(Cookie[] auth) throws Exception {
         String cid = json(write(post("/api/instructor/curriculums"), auth, "{\"title\":\"일정\"}")

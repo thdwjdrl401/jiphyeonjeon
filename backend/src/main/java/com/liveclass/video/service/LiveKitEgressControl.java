@@ -11,6 +11,8 @@ import org.springframework.stereotype.Component;
 import retrofit2.Response;
 
 import java.io.IOException;
+import java.util.List;
+import java.util.Optional;
 
 /**
  * LiveKit Egress 실제 제어. 방 컴포지트를 HLS(세그먼트)로 녹화해 S3/MinIO에 올린다(ADR-0010).
@@ -64,7 +66,59 @@ public class LiveKitEgressControl implements EgressControl {
             log.info("Egress 녹화 시작 room={} egressId={}", roomName, egressId);
             return egressId;
         } catch (IOException e) {
-            throw new EgressControlException("Egress 시작 통신 실패: " + roomName, e);
+            throw new EgressStartOutcomeUnknownException("Egress 시작 응답 확인 실패: " + roomName, e);
+        }
+    }
+
+    /**
+     * {@code EgressServiceClient.listEgress(roomName, egressId, active)}로 단건 조회한다 — SDK에는 단건
+     * {@code getEgress}가 없고 list의 {@code egressId} 필터가 그 역할을 한다.
+     */
+    @Override
+    public Optional<EgressState> findState(String egressId) {
+        try {
+            Response<List<LivekitEgress.EgressInfo>> res = client.listEgress(null, egressId, null).execute();
+            if (!res.isSuccessful() || res.body() == null) {
+                throw new EgressControlException("Egress 상태 조회 실패: HTTP " + res.code());
+            }
+            return res.body().stream()
+                    .filter(info -> egressId.equals(info.getEgressId()))
+                    .findFirst()
+                    .map(info -> toState(info.getStatus()));
+        } catch (IOException e) {
+            throw new EgressControlException("Egress 상태 조회 통신 실패: " + egressId, e);
+        }
+    }
+
+    @Override
+    public Optional<EgressSnapshot> findActiveForRoom(String roomName) {
+        try {
+            Response<List<LivekitEgress.EgressInfo>> res = client.listEgress(roomName, null, true).execute();
+            if (!res.isSuccessful() || res.body() == null) {
+                throw new EgressControlException("방 Egress 조회 실패: HTTP " + res.code());
+            }
+            List<LivekitEgress.EgressInfo> active = res.body().stream()
+                    .filter(info -> info.getStatus() == LivekitEgress.EgressStatus.EGRESS_STARTING
+                            || info.getStatus() == LivekitEgress.EgressStatus.EGRESS_ACTIVE)
+                    .toList();
+            if (active.size() > 1) {
+                throw new EgressControlException(
+                        "같은 방에 진행 중 Egress가 둘 이상입니다: room=" + roomName + ", count=" + active.size());
+            }
+            return active.stream().findFirst()
+                    .map(info -> new EgressSnapshot(info.getEgressId(), toState(info.getStatus())));
+        } catch (IOException e) {
+            throw new EgressControlException("방 Egress 상태 조회 통신 실패: " + roomName, e);
+        }
+    }
+
+    /** 프로토버프 enum → 경계 enum. 우리가 모르는 값(UNRECOGNIZED 등)은 UNKNOWN으로 접어 계속 기다린다. */
+    private EgressState toState(LivekitEgress.EgressStatus status) {
+        try {
+            return EgressState.valueOf(status.name());
+        } catch (IllegalArgumentException e) {
+            log.warn("모르는 Egress 상태: {}", status);
+            return EgressState.UNKNOWN;
         }
     }
 

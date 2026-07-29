@@ -1,11 +1,17 @@
 package com.liveclass.live;
 
+import com.liveclass.live.api.LiveRecordingControl;
+import com.liveclass.live.service.AgentDispatchControl;
+import com.liveclass.live.service.LiveRoomControl;
+import com.liveclass.live.service.LiveStartOrchestrator;
+import com.liveclass.support.LiveStartTestSupport;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
@@ -35,6 +41,18 @@ class LiveTokenContractTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private LiveStartOrchestrator startOrchestrator;
+
+    @MockitoBean
+    private LiveRoomControl roomControl;
+
+    @MockitoBean
+    private LiveRecordingControl recordingControl;
+
+    @MockitoBean
+    private AgentDispatchControl agentDispatchControl;
 
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
 
@@ -118,7 +136,7 @@ class LiveTokenContractTest {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String[] created = createSession(instructor);
         String sessionId = created[0];
-        write(post("/api/live-sessions/" + sessionId + "/start"), instructor, null).andExpect(status().isOk());
+        goLive(instructor, sessionId);
         write(post("/api/live-sessions/" + sessionId + "/end"), instructor, null).andExpect(status().isOk());
 
         // 소유 강사라 접근 게이트는 통과하지만, 종료된 세션엔 입장 토큰이 안 나간다 → 409.
@@ -156,6 +174,22 @@ class LiveTokenContractTest {
     }
 
     // ---- 헬퍼 ----
+
+    /**
+     * 세션을 실제 LIVE까지 올린다. {@code /start}는 202만 돌려주므로 게이트(Egress·강사 마이크 확인)를
+     * 동기로 돌려야 LIVE가 된다 — 운영에서는 커밋 후 비동기다(ADR-0002 §2).
+     */
+    private void goLive(Cookie[] instructor, String sessionId) throws Exception {
+        LiveStartTestSupport.stubInstructorPublishing(roomControl, sessionId, userId(instructor));
+        LiveStartTestSupport.stubRecordingReady(recordingControl);
+        LiveStartTestSupport.stubAgentDispatched(agentDispatchControl);
+        write(post("/api/live-sessions/" + sessionId + "/start"), instructor, null).andExpect(status().isAccepted());
+        startOrchestrator.runStartGates(UUID.fromString(sessionId));
+    }
+
+    private String userId(Cookie[] auth) throws Exception {
+        return json(mockMvc.perform(get("/api/auth/me").cookie(auth)).andReturn()).get("userId").asString();
+    }
 
     private String xsrfToken;
 

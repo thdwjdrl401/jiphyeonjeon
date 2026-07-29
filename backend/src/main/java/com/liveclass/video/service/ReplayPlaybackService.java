@@ -28,7 +28,7 @@ import java.util.UUID;
 public class ReplayPlaybackService {
 
     private static final Logger log = LoggerFactory.getLogger(ReplayPlaybackService.class);
-    private static final Set<String> LIVE_PLAYBACK_STATUSES = Set.of("STARTING", "LIVE", "ENDING");
+    private static final Set<String> LIVE_PLAYBACK_STATUSES = Set.of("LIVE", "ENDING");
 
     private final VideoAssetRepository videoAssetRepository;
     private final LessonPlaybackAccess playbackAccess;
@@ -60,7 +60,9 @@ public class ReplayPlaybackService {
         VideoAsset asset = context.asset();
         LiveSessionView session = context.session();
 
-        Optional<HlsManifestProcessor.ManifestSnapshot> snapshot = findSnapshot(asset, session);
+        // STARTING 중 Gate C가 이미 manifest를 만들었더라도 학생 source는 LIVE 원자 전환 뒤에만 공개한다.
+        Optional<HlsManifestProcessor.ManifestSnapshot> snapshot =
+                context.phase() == PlaybackPhase.STARTING ? Optional.empty() : findSnapshot(asset, session);
         if (context.phase() == PlaybackPhase.REPLAY && snapshot.isEmpty()) {
             log.warn("종료된 READY 자산의 재생목록 부재 lesson={} key={}", lessonId, manifestKey(asset));
             throw new ReplayNotReadyException("다시보기를 재생할 수 없습니다. 잠시 후 다시 시도해 주세요.");
@@ -91,6 +93,9 @@ public class ReplayPlaybackService {
      */
     public String manifest(UUID userId, UUID lessonId, boolean deltaRequested) {
         PlaybackContext context = requirePlaybackContext(userId, lessonId);
+        if (context.phase() == PlaybackPhase.STARTING) {
+            throw new RecordingStartingException("라이브 송출을 준비하고 있습니다. 잠시 후 다시 시도해 주세요.");
+        }
         VideoAsset asset = context.asset();
         String key = manifestKey(asset);
         String raw = findManifest(asset.getBucket(), key).orElseThrow(() -> {
@@ -125,7 +130,7 @@ public class ReplayPlaybackService {
                 .orElseThrow(() -> new ReplayNotFoundException("라이브 세션을 찾을 수 없습니다."));
         PlaybackPhase phase = playbackPhase(session.liveSessionStatus());
 
-        if (phase != PlaybackPhase.LIVE
+        if (phase != PlaybackPhase.LIVE && phase != PlaybackPhase.STARTING
                 && !grant.owner()
                 && asset.getReplayStatus() != ReplayStatus.PUBLISHED) {
             throw new ReplayNotFoundException("게시된 다시보기가 없습니다.");
@@ -181,6 +186,9 @@ public class ReplayPlaybackService {
     }
 
     private PlaybackPhase playbackPhase(String status) {
+        if ("STARTING".equals(status)) {
+            return PlaybackPhase.STARTING;
+        }
         if (LIVE_PLAYBACK_STATUSES.contains(status)) {
             return PlaybackPhase.LIVE;
         }
@@ -191,6 +199,7 @@ public class ReplayPlaybackService {
     }
 
     private enum PlaybackPhase {
+        STARTING,
         LIVE,
         REPLAY,
         UNAVAILABLE

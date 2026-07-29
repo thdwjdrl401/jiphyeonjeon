@@ -82,6 +82,9 @@ livekit:
   api-key: ${LIVEKIT_API_KEY:devkey}                  # dev/test 더미. 운영은 환경변수 주입.
   api-secret: ${LIVEKIT_API_SECRET:devsecretdevsecretdevsecretdevsecret}  # 커밋 금지 값은 env로
   token-ttl-seconds: ${LIVEKIT_TOKEN_TTL:600}         # 10분
+  # explicit AgentDispatch로 지목할 STT agent 이름(CONTRACT §3-3).
+  # realtime-agent의 STT_AGENT_NAME(ai/realtime-agent/.env.example)과 반드시 같은 값이어야 job이 배정된다.
+  agent-name: ${LIVEKIT_AGENT_NAME:liveclass-realtime-stt}
   egress:                                             # HLS 녹화 출력(S3/MinIO). infra/livekit/request-hls.json 대응.
     bucket: ${EGRESS_BUCKET:recordings}
     s3-endpoint: ${EGRESS_S3_ENDPOINT:http://localhost:9000}   # 내부 주소 — 백엔드가 매니페스트를 읽는 곳
@@ -105,6 +108,24 @@ livekit:
     playlist-name: index.m3u8
     live-playlist-name: live.m3u8
     layout: grid
+
+# 라이브 시작 오케스트레이션(ADR-0002 choinhoo/0002).
+live:
+  stt:
+    # true면 captionEnabled 세션에서도 AgentDispatch만 만들고 Gate S1(job 배정)·S2(STT_READY)·S3②를 건너뛴다.
+    # 임시 우회 플래그다 — 그동안 자막 없이 LIVE가 될 수 있다(ADR §5-1). AI 담당자의 readiness API·callback
+    # 배포 뒤 false로 전환한다. 강사 publisher 재검증(Gate S3①)은 이 값과 무관하게 항상 수행한다.
+    assume-ready: ${LIVE_STT_ASSUME_READY:true}
+  start:
+    # Egress Gate B~C(EGRESS_ACTIVE + manifest·첫 세그먼트) bounded polling. 과거 Chrome page load가
+    # 20초까지 걸린 인프라 기록을 고려한 시작값이며 운영 지표로 조정한다(ADR §4).
+    egress-readiness-timeout: ${LIVE_START_EGRESS_TIMEOUT:45s}
+    egress-poll-interval: ${LIVE_START_EGRESS_POLL_INTERVAL:1s}
+    # 즉시 trigger가 죽으면 reconciler가 lease 만료 뒤 같은 attempt를 다시 집는다. 정상 45초 polling
+    # 도중에는 다른 인스턴스가 중복 실행하지 않도록 timeout보다 길게 둔다.
+    execution-lease: ${LIVE_START_EXECUTION_LEASE:90s}
+    reconcile-fixed-delay: ${LIVE_START_RECONCILE_DELAY:10s}
+    reconcile-initial-delay: ${LIVE_START_RECONCILE_INITIAL_DELAY:20s}
 
 video:
   playback:

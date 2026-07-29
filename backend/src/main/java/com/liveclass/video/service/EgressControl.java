@@ -1,8 +1,10 @@
 package com.liveclass.video.service;
 
+import java.util.Optional;
+
 /**
- * LiveKit Egress 제어 포트. 라이브 방을 HLS로 녹화 시작/중지한다(ADR-0010, songjeongki/0020).
- * 실패는 {@link EgressControlException}으로 감싸 던진다 — 호출자(RecordingService)가 best-effort로 처리한다.
+ * LiveKit Egress 제어 포트. 라이브 방을 HLS로 녹화 시작/중지하고 상태를 조회한다(ADR-0010, songjeongki/0020,
+ * choinhoo/0002 §4). 실패는 {@link EgressControlException}으로 감싸 던진다 — 호출자가 처리 정책을 정한다.
  */
 public interface EgressControl {
 
@@ -17,4 +19,36 @@ public interface EgressControl {
 
     /** 녹화 중지. 대상이 이미 없으면(중복 중지 등) 성공으로 간주(멱등). */
     void stopRecording(String egressId);
+
+    /**
+     * Gate B(ADR-0002 §4) — Egress 작업의 현재 상태. LiveKit이 그 작업을 모르면 {@link Optional#empty()}.
+     * 조회 자체가 실패하면 {@link EgressControlException}을 던진다 — 호출자가 "모름"과 "실패"를 구분한다.
+     */
+    Optional<EgressState> findState(String egressId);
+
+    /**
+     * StartEgress 응답 유실을 재조정하기 위해 방의 현재 STARTING/ACTIVE Egress를 찾는다.
+     * 하나보다 많으면 구현체가 오류를 던져 중복 상태를 숨기지 않는다.
+     */
+    Optional<EgressSnapshot> findActiveForRoom(String roomName);
+
+    record EgressSnapshot(String egressId, EgressState state) {
+    }
+
+    /** LiveKit {@code EgressStatus}를 그대로 옮긴 경계 enum. */
+    enum EgressState {
+        EGRESS_STARTING,
+        EGRESS_ACTIVE,
+        EGRESS_ENDING,
+        EGRESS_COMPLETE,
+        EGRESS_FAILED,
+        EGRESS_ABORTED,
+        EGRESS_LIMIT_REACHED,
+        UNKNOWN;
+
+        /** 더 기다려도 ACTIVE가 되지 않는 상태 — 즉시 실패로 접는다. */
+        public boolean terminalFailure() {
+            return this == EGRESS_FAILED || this == EGRESS_ABORTED || this == EGRESS_LIMIT_REACHED;
+        }
+    }
 }

@@ -1,6 +1,10 @@
 package com.liveclass.live;
 
+import com.liveclass.live.api.LiveRecordingControl;
+import com.liveclass.live.service.AgentDispatchControl;
 import com.liveclass.live.service.LiveRoomControl;
+import com.liveclass.live.service.LiveStartOrchestrator;
+import com.liveclass.support.LiveStartTestSupport;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,9 +39,18 @@ class ChatContractTest {
     @Autowired
     private MockMvc mockMvc;
 
-    // 세션 시작이 방 제어를 안 부르지만, 안전하게 목으로 둔다.
+    // 시작 요청이 실제 LiveKit에 방을 만들거나 참가자를 조회하지 않게 목으로 둔다.
     @MockitoBean
     private LiveRoomControl roomControl;
+
+    @MockitoBean
+    private LiveRecordingControl recordingControl;
+
+    @MockitoBean
+    private AgentDispatchControl agentDispatchControl;
+
+    @Autowired
+    private LiveStartOrchestrator startOrchestrator;
 
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
 
@@ -214,7 +227,14 @@ class ChatContractTest {
                 .andReturn()).get("lessonId").asString();
         String sessionId = json(write(post("/api/instructor/lessons/" + lessonId + "/live-sessions"), auth, null)
                 .andReturn()).get("sessionId").asString();
-        write(post("/api/live-sessions/" + sessionId + "/start"), auth, null).andExpect(status().isOk());
+        // /start는 202만 돌려주므로 게이트를 동기로 돌려 LIVE까지 올린다(운영에서는 커밋 후 비동기).
+        String instructorId = json(mockMvc.perform(get("/api/auth/me").cookie(auth)).andReturn())
+                .get("userId").asString();
+        LiveStartTestSupport.stubInstructorPublishing(roomControl, sessionId, instructorId);
+        LiveStartTestSupport.stubRecordingReady(recordingControl);
+        LiveStartTestSupport.stubAgentDispatched(agentDispatchControl);
+        write(post("/api/live-sessions/" + sessionId + "/start"), auth, null).andExpect(status().isAccepted());
+        startOrchestrator.runStartGates(UUID.fromString(sessionId));
         return new String[]{sessionId, cid};
     }
 

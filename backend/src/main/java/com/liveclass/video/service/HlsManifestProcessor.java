@@ -13,6 +13,7 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -79,6 +80,27 @@ public class HlsManifestProcessor {
     /** 라이브 중인 재생목록인가 — {@code #EXT-X-ENDLIST}가 없으면 아직 자라는 중이다. */
     public boolean isLive(String manifest) {
         return manifest.lines().noneMatch(line -> line.strip().startsWith(ENDLIST_TAG));
+    }
+
+    /**
+     * Egress Gate C(ADR-0002 §4)용 — 재생목록이 참조하는 <b>첫 media segment</b>의 객체 키.
+     * 같은 파서와 키 정규화 규약을 쓴다(느슨한 별도 parser를 만들지 않는다). media URI가 없으면 empty.
+     */
+    public Optional<String> firstSegmentKey(String manifest, String manifestKey) {
+        if (!manifest.stripLeading().startsWith("#EXTM3U")) {
+            return Optional.empty();   // HLS 재생목록이 아니다 — 아직 쓰이는 중이거나 깨진 객체.
+        }
+        List<Segment> segments = Playlist.parse(manifest).segments();
+        if (segments.isEmpty()) {
+            return Optional.empty();
+        }
+        String uri = segments.get(0).lines().get(segments.get(0).lines().size() - 1).strip();
+        try {
+            return Optional.of(resolveObjectKey(keyPrefix(manifestKey), parseUri(uri).getPath()));
+        } catch (RuntimeException e) {
+            log.warn("HLS 첫 세그먼트 키 해석 실패 manifestKey={} uri={}", manifestKey, uri);
+            return Optional.empty();
+        }
     }
 
     /**

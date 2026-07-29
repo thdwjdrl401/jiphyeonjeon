@@ -1,8 +1,10 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '@/App'
 import { mockAuthService, resetMockAuth } from '@/features/auth/mockAuthService'
+import type { LiveSessionService } from '@/features/live-session/liveSessionService.interface'
+import { mockLiveSessionService } from '@/features/live-session/mockLiveSessionService'
 
 vi.mock('@/features/live-session/PlaybackPlayer', () => ({
   default: ({
@@ -32,6 +34,10 @@ describe('전체 페이지 라우트', () => {
   beforeEach(() => {
     resetMockAuth()
     window.history.replaceState({}, '', '/')
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
   const instructorRoutes = [
@@ -69,12 +75,18 @@ describe('전체 페이지 라우트', () => {
 
   it.each([
     '/instructor/lessons/les-security/live-sessions/new',
-    '/instructor/live-sessions/ses-security-live',
     '/instructor/live-sessions/ses-security-live/edit',
   ])('삭제된 라이브 일정·상세 경로 %s를 제공하지 않는다', async (path) => {
     await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
     renderAt(path)
     expect(await screen.findByRole('heading', { name: '요청한 페이지를 찾을 수 없어요' })).toBeInTheDocument()
+  })
+
+  it('강사 세션 루트는 연결을 소유하는 preflight로 이동한다', async () => {
+    await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
+    renderAt('/instructor/live-sessions/ses-security-live')
+    expect(await screen.findByRole('heading', { name: '라이브 시작 전 최종 점검' })).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/instructor/live-sessions/ses-security-live/preflight')
   })
 
   it('학생에게도 삭제된 라이브 상세 경로를 제공하지 않는다', async () => {
@@ -101,7 +113,7 @@ describe('전체 페이지 라우트', () => {
     renderAt('/instructor/live-sessions/ses-security-live/classroom')
     const liveInformation = await screen.findByRole('banner', { name: '라이브 강의 정보' })
     expect(within(liveInformation).getByText('강사 운영 모드')).toBeInTheDocument()
-    expect(within(liveInformation).getByText('송출 대기')).toBeInTheDocument()
+    expect(await within(liveInformation).findByText('Mock 송출 모드')).toBeInTheDocument()
     expect(within(liveInformation).getByText(/명 참여 중/)).toBeInTheDocument()
     expect(document.querySelector('.presenter-card')).not.toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '채팅·질문' })).toBeInTheDocument()
@@ -113,7 +125,7 @@ describe('전체 페이지 라우트', () => {
     expect(screen.queryByRole('button', { name: 'LIVE' })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '확인하고 참여하기' }))
-    expect(await within(liveInformation).findByText('Mock 송출 모드')).toBeInTheDocument()
+    expect(within(liveInformation).getByText('Mock 송출 모드')).toBeInTheDocument()
     const cameraToggle = screen.getByRole('button', { name: '카메라 켜짐' })
     expect(cameraToggle).toHaveAttribute('aria-pressed', 'true')
     await user.click(cameraToggle)
@@ -131,6 +143,49 @@ describe('전체 페이지 라우트', () => {
     await user.click(screen.getByRole('button', { name: 'SecurityContext' }))
     expect(screen.getByRole('tab', { name: '핵심 용어' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByText(/현재 실행 중인 요청에서 인증된 사용자/)).toBeInTheDocument()
+  })
+
+  it('강사는 STARTING 동안 preflight에 머물고 LIVE가 된 뒤 같은 세션 classroom으로 이동한다', async () => {
+    const user = userEvent.setup()
+    const sessionId = 'ses-security-live'
+    const session = await mockLiveSessionService.getLiveSession(sessionId)
+    const startStatus = vi.spyOn(
+      mockLiveSessionService as LiveSessionService,
+      'getLiveStartStatus',
+    )
+      .mockResolvedValueOnce({
+        operationId: `op-${sessionId}`,
+        attemptStatus: 'IN_PROGRESS',
+        step: 'EGRESS_STARTING',
+        failureCode: null,
+        failureMessage: null,
+        session: { ...session, status: 'STARTING' },
+      })
+      .mockResolvedValueOnce({
+        operationId: `op-${sessionId}`,
+        attemptStatus: 'SUCCEEDED',
+        step: 'LIVE',
+        failureCode: null,
+        failureMessage: null,
+        session: { ...session, status: 'LIVE', participants: Math.max(session.participants, 1) },
+      })
+
+    await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
+    renderAt(`/instructor/live-sessions/${sessionId}/preflight`)
+
+    const startButton = await screen.findByRole('button', { name: '라이브 시작' })
+    await waitFor(() => expect(startButton).toBeEnabled())
+    await user.click(startButton)
+
+    expect(await screen.findByText(/STARTING · EGRESS_STARTING/)).toBeInTheDocument()
+    expect(window.location.pathname).toBe(`/instructor/live-sessions/${sessionId}/preflight`)
+    expect(startStatus).toHaveBeenNthCalledWith(1, sessionId, `op-${sessionId}`)
+
+    expect(
+      await screen.findByRole('banner', { name: '라이브 강의 정보' }, { timeout: 3_000 }),
+    ).toBeInTheDocument()
+    expect(window.location.pathname).toBe(`/instructor/live-sessions/${sessionId}/classroom`)
+    expect(startStatus).toHaveBeenCalledTimes(2)
   })
 
   it('수강생이 강의실 주소로 직접 접근하면 입장 전 점검으로 이동한다', async () => {
