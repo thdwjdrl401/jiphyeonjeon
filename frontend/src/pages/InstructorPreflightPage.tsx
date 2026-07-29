@@ -4,6 +4,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { instructorPaths } from '@/app/router/paths'
 import { useInstructorLiveKit } from '@/features/live-session/useInstructorLiveKit'
 import {
+  CAMERA_QUALITIES,
+  SCREEN_QUALITIES,
+  megabits,
+} from '@/features/live-session/publishQuality'
+import {
   getLiveSession,
   getLiveStartStatus,
   getPreflightReadiness,
@@ -96,6 +101,63 @@ export default function InstructorPreflightPage() {
         description={`${session.lessonTitle} · 실제 마이크 송출과 서버 확인을 통과해야 시작할 수 있습니다.`}
         action={<StatusBadge tone={ready ? 'success' : starting ? 'warning' : 'warning'}>{ready ? '시작 가능' : starting ? '시작 준비 중' : '점검 필요'}</StatusBadge>}
       />
+
+      <Panel
+        title="송출 품질"
+        description="여기서 올린 화질이 수강생이 보는 화질의 상한입니다. 서버에서는 더 좋게 만들 수 없습니다."
+      >
+        <fieldset className="quality-group" disabled={!publisher.canControl || publisher.applyingQuality}>
+          <legend>카메라</legend>
+          <div className="quality-options">
+            {CAMERA_QUALITIES.map((option) => (
+              <label
+                key={option.id}
+                className={`quality-option${publisher.quality.camera === option.id ? ' is-selected' : ''}`}
+              >
+                <input
+                  type="radio"
+                  name="camera-quality"
+                  value={option.id}
+                  checked={publisher.quality.camera === option.id}
+                  onChange={() => publisher.changeQuality({ camera: option.id })}
+                />
+                <span className="quality-option__label">{option.label}</span>
+                <span className="quality-option__rate">업로드 {megabits(option.preset)} Mbps</span>
+                <span className="quality-option__hint">{option.hint}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        <fieldset className="quality-group" disabled={!publisher.canControl || publisher.applyingQuality}>
+          <legend>화면 공유</legend>
+          <div className="quality-options">
+            {SCREEN_QUALITIES.map((option) => (
+              <label
+                key={option.id}
+                className={`quality-option${publisher.quality.screenShare === option.id ? ' is-selected' : ''}`}
+              >
+                <input
+                  type="radio"
+                  name="screen-quality"
+                  value={option.id}
+                  checked={publisher.quality.screenShare === option.id}
+                  onChange={() => publisher.changeQuality({ screenShare: option.id })}
+                />
+                <span className="quality-option__label">{option.label}</span>
+                <span className="quality-option__rate">업로드 {megabits(option.preset)} Mbps</span>
+                <span className="quality-option__hint">{option.hint}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        <InlineNotice tone="info">
+          {publisher.applyingQuality
+            ? '새 화질로 다시 송출하는 중입니다.'
+            : '선택은 이 브라우저에 저장되어 다음 강의에도 그대로 적용됩니다. 화면이 끊기면 한 단계 낮춰 보세요.'}
+        </InlineNotice>
+      </Panel>
 
       <div className="preflight-grid">
         <Panel title="실제 송출 장치" description="이 연결과 트랙은 LIVE 전환 뒤 강의실에서도 그대로 사용합니다.">

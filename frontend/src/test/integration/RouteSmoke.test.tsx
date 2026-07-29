@@ -82,6 +82,28 @@ describe('전체 페이지 라우트', () => {
     expect(await screen.findByRole('heading', { name: '요청한 페이지를 찾을 수 없어요' })).toBeInTheDocument()
   })
 
+  // 강사가 올린 화질이 수강생이 보는 화질의 상한이라, 이 선택은 사전 점검에서 눈에 보여야 한다.
+  // 기본은 최고 화질이고 강사는 낮추는 방향으로만 조정한다.
+  it('사전 점검에서 송출 품질을 고르고 선택이 유지된다', async () => {
+    const user = userEvent.setup()
+    window.localStorage.clear()
+    await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
+    renderAt('/instructor/live-sessions/ses-security-live/preflight')
+
+    await screen.findByRole('heading', { name: '라이브 시작 전 최종 점검' })
+    const camera = await screen.findByRole('group', { name: '카메라' })
+    const fullHd = within(camera).getByRole('radio', { name: /1080p/ })
+    expect(fullHd).toBeChecked()
+
+    await user.click(within(camera).getByRole('radio', { name: /720p/ }))
+    expect(within(camera).getByRole('radio', { name: /720p/ })).toBeChecked()
+    expect(fullHd).not.toBeChecked()
+
+    // 같은 장비로 반복해 강의하므로 다음 세션에도 그대로 적용돼야 한다.
+    expect(JSON.parse(window.localStorage.getItem('liveclass.publishQuality') ?? '{}'))
+      .toMatchObject({ camera: 'hd' })
+  })
+
   it('강사 세션 루트는 연결을 소유하는 preflight로 이동한다', async () => {
     await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
     renderAt('/instructor/live-sessions/ses-security-live')

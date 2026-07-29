@@ -14,12 +14,17 @@ import {
   MediaDeviceFailure,
   Room,
   RoomEvent,
-  ScreenSharePresets,
   Track,
-  VideoPresets,
 } from 'livekit-client'
 import { isMockApiEnabled } from '@/shared/config/runtime'
 import { getLiveToken, preparePreflightRoom } from './liveSessionService'
+import {
+  cameraPreset,
+  loadPublishQuality,
+  savePublishQuality,
+  screenPreset,
+  type PublishQuality,
+} from './publishQuality'
 
 export type InstructorLiveKitConnectionState =
   | 'idle'
@@ -48,6 +53,11 @@ export interface InstructorLiveMedia extends InstructorLiveKitState {
   sessionId: string
   pendingControl: MediaControl | 'initial' | null
   canControl: boolean
+  /** 강사가 고른 송출 품질. 켜져 있는 트랙에는 즉시 반영된다. */
+  quality: PublishQuality
+  changeQuality: (next: Partial<PublishQuality>) => void
+  /** 품질 변경으로 트랙을 다시 올리는 중. 이때는 선택을 잠근다. */
+  applyingQuality: boolean
   retry: () => void
   toggleCamera: () => void
   toggleMicrophone: () => void
@@ -84,6 +94,26 @@ function describeConnectionError(error: unknown) {
 }
 
 /**
+ * 트랙을 올릴 때마다 품질을 명시한다. Room 생성 시의 publishDefaults만 믿으면, 강사가 도중에
+ * 품질을 바꾼 뒤 카메라를 껐다 켰을 때 옛 기본값으로 되돌아간다.
+ */
+function cameraPublishArgs(quality: PublishQuality) {
+  const preset = cameraPreset(quality)
+  return {
+    capture: { resolution: preset.resolution },
+    publish: { videoEncoding: preset.encoding, simulcast: false },
+  } as const
+}
+
+function screenPublishArgs(quality: PublishQuality) {
+  const preset = screenPreset(quality)
+  return {
+    capture: { resolution: preset.resolution },
+    publish: { videoEncoding: preset.encoding, simulcast: false },
+  } as const
+}
+
+/**
  * preflight와 classroom이 공유하는 session-scoped LiveKit Room 소유자(ADR-0002 §1).
  *
  * <p>이 Provider는 두 페이지의 공통 route 부모에 mount된다. 따라서 preflight → classroom 전환은
@@ -96,6 +126,12 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
   const [retryCount, setRetryCount] = useState(0)
   const [pendingControl, setPendingControl] = useState<MediaControl | 'initial' | null>(null)
   const [state, setState] = useState<InstructorLiveKitState>(initialState)
+  const [quality, setQuality] = useState<PublishQuality>(loadPublishQuality)
+  const [applyingQuality, setApplyingQuality] = useState(false)
+  // Room 생성 effect가 품질 변경마다 재실행되면 연결이 끊긴다. 최신 값은 ref로만 읽고,
+  // 이미 올라간 트랙은 재게시로 반영한다.
+  const qualityRef = useRef(quality)
+  qualityRef.current = quality
 
   const syncLocalState = useCallback((room: Room) => {
     setState((current) => ({
@@ -148,7 +184,8 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
       // dynacast는 아무도 구독하지 않는 트랙의 송출을 멈춘다. 레이어가 하나뿐이어도
       // 구독자 없는 구간에서 업링크를 아끼므로 그대로 둔다.
       dynacast: true,
-      videoCaptureDefaults: { resolution: VideoPresets.h1080.resolution },
+      // 강사가 사전 점검에서 고른 값(publishQuality). 기본값은 최고 화질이다.
+      videoCaptureDefaults: { resolution: cameraPreset(qualityRef.current).resolution },
       publishDefaults: {
         // 사이멀캐스트를 끈다. 학생은 WebRTC로 직접 구독하지 않고 HLS로만 보므로(ADR-0032)
         // 강사 트랙의 구독자는 Egress 하나뿐이고, Egress는 언제나 최상위 레이어만 쓴다.
@@ -169,10 +206,10 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
         simulcast: false,
         // 카메라 단독 강의에서 Egress 캔버스(1080p)를 업스케일 없이 채우려면 소스가 1080p여야 한다.
         // 웹캠이 1080p를 못 내면 ideal 제약이라 720p로 협상된다.
-        videoEncoding: VideoPresets.h1080.encoding,
+        videoEncoding: cameraPreset(qualityRef.current).encoding,
         // 화면공유는 코드·슬라이드 텍스트라 비트레이트가 판독성을 좌우한다. 기본 h1080fps15(2.5Mbps)는
         // 스크롤 구간에서 글자가 뭉갠다. 30fps 프리셋은 같은 1080p에 5Mbps다.
-        screenShareEncoding: ScreenSharePresets.h1080fps30.encoding,
+        screenShareEncoding: screenPreset(qualityRef.current).encoding,
       },
     })
     roomRef.current = room
@@ -304,9 +341,15 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
     setPendingControl(control)
     setState((current) => ({ ...current, errorMessage: undefined }))
     try {
-      if (control === 'camera') await room.localParticipant.setCameraEnabled(!room.localParticipant.isCameraEnabled)
+      if (control === 'camera') {
+        const { capture, publish } = cameraPublishArgs(qualityRef.current)
+        await room.localParticipant.setCameraEnabled(!room.localParticipant.isCameraEnabled, capture, publish)
+      }
       if (control === 'microphone') await room.localParticipant.setMicrophoneEnabled(!room.localParticipant.isMicrophoneEnabled)
-      if (control === 'screenShare') await room.localParticipant.setScreenShareEnabled(!room.localParticipant.isScreenShareEnabled)
+      if (control === 'screenShare') {
+        const { capture, publish } = screenPublishArgs(qualityRef.current)
+        await room.localParticipant.setScreenShareEnabled(!room.localParticipant.isScreenShareEnabled, capture, publish)
+      }
       syncLocalState(room)
     } catch (error) {
       setState((current) => ({ ...current, errorMessage: describeMediaError(error) }))
@@ -315,16 +358,59 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
     }
   }, [pendingControl, state.connectionState, syncLocalState])
 
+  /**
+   * 품질 변경을 즉시 반영한다. Room을 다시 만들면 연결이 끊기므로, 이미 올라간 트랙만
+   * 껐다 다시 올린다. 미리보기에서 바로 확인하고 조정할 수 있어야 의미가 있는 설정이다.
+   */
+  const changeQuality = useCallback((next: Partial<PublishQuality>) => {
+    const merged = { ...qualityRef.current, ...next }
+    qualityRef.current = merged
+    setQuality(merged)
+    savePublishQuality(merged)
+
+    const room = roomRef.current
+    if (!room || state.connectionState !== 'connected') return
+
+    const republish = async () => {
+      setApplyingQuality(true)
+      setState((current) => ({ ...current, errorMessage: undefined }))
+      try {
+        if (next.camera && room.localParticipant.isCameraEnabled) {
+          const { capture, publish } = cameraPublishArgs(merged)
+          await room.localParticipant.setCameraEnabled(false)
+          await room.localParticipant.setCameraEnabled(true, capture, publish)
+        }
+        if (next.screenShare && room.localParticipant.isScreenShareEnabled) {
+          // 화면공유는 다시 올리면 브라우저가 공유 대상을 새로 묻는다. 강사가 강의 도중
+          // 예기치 않게 선택 창을 만나지 않도록, 켜져 있으면 다음 공유부터 적용한다.
+          setState((current) => ({
+            ...current,
+            errorMessage: '화면공유 화질은 공유를 다시 시작할 때 적용됩니다.',
+          }))
+        }
+        syncLocalState(room)
+      } catch (error) {
+        setState((current) => ({ ...current, errorMessage: describeMediaError(error) }))
+      } finally {
+        setApplyingQuality(false)
+      }
+    }
+    void republish()
+  }, [state.connectionState, syncLocalState])
+
   const value = useMemo<InstructorLiveMedia>(() => ({
     ...state,
     sessionId,
     pendingControl,
     canControl: state.connectionState === 'connected' || state.connectionState === 'mock',
+    quality,
+    changeQuality,
+    applyingQuality,
     retry: () => setRetryCount((current) => current + 1),
     toggleCamera: () => { void toggleControl('camera') },
     toggleMicrophone: () => { void toggleControl('microphone') },
     toggleScreenShare: () => { void toggleControl('screenShare') },
-  }), [pendingControl, sessionId, state, toggleControl])
+  }), [applyingQuality, changeQuality, pendingControl, quality, sessionId, state, toggleControl])
 
   return (
     <InstructorLiveMediaContext.Provider value={value}>
