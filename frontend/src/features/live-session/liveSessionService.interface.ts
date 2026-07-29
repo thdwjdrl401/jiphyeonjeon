@@ -38,7 +38,36 @@ export interface CaptionView {
   at: string
   text: string
   termReferences: CaptionTermReference[]
+  /**
+   * 스트림이 아직 끝나지 않아 더 자랄 수 있는 진행 중 라이브 라인이면 true.
+   * `caption.stream.completed`를 받은(확정된) 라인이나 세그먼트형 다시보기 자막에는 없다.
+   */
+  pending?: boolean
 }
+
+/**
+ * 실시간 자막 델타(append-only 증분). 계약: CONTRACT §3-4 / ADR-0040·0043.
+ * `streamElapsedMs`는 agent의 첫 오디오 프레임을 0으로 한 attempt-local ms이며
+ * 세션 상대 ms가 아니다(계약상 변환 금지). `sequence`는 `(sessionId, sttSessionId)`
+ * attempt 범위에서만 증가하고 retry(새 `sttSessionId`)마다 1부터 다시 시작할 수 있다.
+ */
+export interface CaptionDeltaPayload {
+  sttSessionId: string
+  sequence: number
+  streamElapsedMs: number
+  text: string
+}
+
+/** 스트림 종료 마커. 해당 `sttSessionId`에는 더 이상 델타가 오지 않는다. */
+export interface CaptionStreamCompletedPayload {
+  sttSessionId: string
+  lastSequence: number
+  reason: string
+}
+
+export type CaptionStreamEvent =
+  | { type: 'caption.delta'; occurredAt: string; payload: CaptionDeltaPayload }
+  | { type: 'caption.stream.completed'; occurredAt: string; payload: CaptionStreamCompletedPayload }
 
 export interface PreflightRoom {
   sessionId: string
@@ -133,6 +162,16 @@ export interface LiveSessionService {
     onConnectionChange: (state: ChatConnectionState) => void,
   ) => () => void
   getCaptions: (sessionId: string) => Promise<CaptionView[]>
+  /**
+   * 라이브 자막 델타 스트림 구독(STOMP `/topic/live-sessions/{id}/captions`).
+   * 채팅 구독과 대칭이며, `caption.delta`·`caption.stream.completed`만 onEvent로 넘긴다.
+   * 누적·CaptionView 매핑은 captionAdapter의 reduceCaptionStream/selectCaptionViews가 맡는다.
+   */
+  subscribeCaptions: (
+    sessionId: string,
+    onEvent: (event: CaptionStreamEvent) => void,
+    onConnectionChange: (state: ChatConnectionState) => void,
+  ) => () => void
   askLiveAi: (lessonId: string, question: string) => Promise<{ answer: string }>
   saveBookmark: (lessonId: string, sessionMs: number) => Promise<void>
   getProcessingStatus: (sessionId: string) => Promise<ProcessingStatus>

@@ -339,53 +339,59 @@ GET /api/ws
 Cookie: session=...
 ```
 
+봉투(`WsEnvelope`)는 채팅과 동형에 `occurredAt`이 더 있다:
+
 ```json
 {
-  "eventId": "evt_01J...",
-  "type": "caption.final",
+  "type": "caption.delta",
   "sessionId": "ses_01J...",
   "occurredAt": "2026-08-01T10:02:00+09:00",
-  "payload": {}
+  "payload": { "sttSessionId": "stt_01J...", "sequence": 12, "streamElapsedMs": 42000, "text": "SecurityContext가 " }
 }
 ```
 
-제안 채널:
+채널(구현됨 — STOMP `/api/ws`):
 
-| 채널 | 수신 이벤트 |
-|---|---|
-| `/topic/live-sessions/{sessionId}/state` | `session.starting`, `session.live`, `session.ending`, `session.ended`, degraded 상태 |
-| `/topic/live-sessions/{sessionId}/captions` | `caption.partial`, `caption.final`, `caption.revised` |
-| `/topic/live-sessions/{sessionId}/chat` | `chat.message.created`, 삭제·제재 이벤트 |
-| `/topic/live-sessions/{sessionId}/presence` | 참가자 수·접속 요약 |
+| 채널 | 수신 이벤트 | 상태 |
+|---|---|---|
+| `/topic/live-sessions/{sessionId}/captions` | `caption.delta`, `caption.stream.completed` | **구현됨(ADR-0043)** |
+| `/topic/live-sessions/{sessionId}/chat` | `chat.message.created` | **구현됨** |
+| `/topic/live-sessions/{sessionId}/state` | `session.starting`, `session.live`, `session.ending`, `session.ended`, degraded 상태 | 제안 |
+| `/topic/live-sessions/{sessionId}/presence` | 참가자 수·접속 요약 | 제안 |
 
-정확한 STOMP 사용 여부와 destination 이름은 **협의 필요**다. transport가 바뀌어도 payload의 `eventId`, `type`, `sessionId`, `sessionMs` 의미는 유지한다.
+구독 인가(참가자만)는 서버 STOMP 인터셉터가 정확 매칭으로 처리한다(와일드카드 구독 차단, ADR-0043) — FE는 토픽만 구독한다.
 
-### 8.2 자막 payload
+### 8.2 자막 payload — 델타 스트림(CONTRACT §3-4 / ADR-0040·0043)
+
+> **옛 `caption.partial|final|revised` 세그먼트 모델은 폐기됐다.** 실시간 STT 원출력은 확정 문장이 아니라
+> append-only 증분이라, 계약은 델타 전송 모델로 개정됐다(ADR-0040). 지금 서버가 발행하는 라이브 이벤트는
+> **`caption.delta`·`caption.stream.completed` 2종뿐**이다(`segment.final`도 아직 없음).
+
+`caption.delta` payload — **append-only 증분**:
 
 ```json
-{
-  "segmentId": "cap_01J...",
-  "lessonId": "les_01J...",
-  "sessionId": "ses_01J...",
-  "startMs": 118000,
-  "endMs": 121000,
-  "text": "Spring Security를 시작합니다.",
-  "revision": 2
-}
+{ "sttSessionId": "stt_01J...", "sequence": 12, "streamElapsedMs": 42000, "text": "이어지는 조각" }
 ```
 
-- `partial`: 같은 `segmentId`의 임시 텍스트 교체
-- `final`: 확정 구간 생성
-- `revised`: 더 높은 `revision`으로 기존 확정 구간 교체
-- 프론트는 낮거나 같은 revision의 중복 이벤트를 무시
+- `sttSessionId`: 한 STT job attempt. **이것이 곧 한 자막 라인의 정체성**이다(같은 attempt의 델타가 한 라인으로 모인다).
+- `sequence`: `(sessionId, sttSessionId)` attempt 범위에서만 증가. retry(새 `sttSessionId`)마다 1부터 다시 시작할 수 있다.
+- `streamElapsedMs`: **agent 첫 오디오 프레임=0 기준 stream-local(attempt) 경과 ms**. 세션 상대 ms가 **아니다** — 세션 ms로 변환하지 말고 그대로 표시한다(계약 강제).
+- `text`: 이전까지 텍스트에 이어 붙일 증분. FE는 `sttSessionId`별로 `sequence` 순서로 이어 붙여 "자라는" 라인을 만든다.
 
-### 8.3 `CAPTION-01` 복구
+`caption.stream.completed` payload — 스트림 종료 마커(해당 `sttSessionId`에 더 이상 델타 없음):
 
-```http
-GET /api/live-sessions/{sessionId}/captions?afterSessionMs=115000&limit=500
+```json
+{ "sttSessionId": "stt_01J...", "lastSequence": 12, "reason": "ROOM_DELETED" }
 ```
 
-WS 재연결 시 누락 구간을 복구한다. cursor 또는 `afterRevision` 방식이 더 안전한지는 백엔드 저장 모델과 협의한다.
+FE 소비 구현: 봉투 파싱은 `httpLiveSessionService.subscribeCaptions`, 누적·CaptionView 매핑은 `captionAdapter`
+(`reduceCaptionStream`/`selectCaptionViews`), 렌더는 `CaptionDock`(확정 전 라인은 `pending`). 상세 근거는 ADR-0044.
+
+### 8.3 재연결 누락 복구(미구현)
+
+`CAPTION-01`(`GET /api/live-sessions/{sessionId}/captions`) REST 복구 경로는 아직 서버에 없다(제안). 라이브 렌더는
+WS 델타가 구동하며 이 스냅샷에 의존하지 않는다. 델타는 fast-path라 at-least-once 유실을 허용하고, 정본 복구는
+녹화 2-pass(CP4)·`GET /lessons/{id}/transcript`의 몫이다. cursor 방식(예: `afterSequence`)은 저장 모델과 협의한다.
 
 ## 9. 채팅
 

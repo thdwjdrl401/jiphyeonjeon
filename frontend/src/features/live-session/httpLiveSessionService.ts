@@ -3,6 +3,7 @@ import type { CurriculumLiveSessionStatus } from '@/features/lesson/types'
 import { ApiError, apiClient } from '@/shared/api/client'
 import { notImplemented } from '@/shared/api/notImplemented'
 import type {
+  CaptionStreamEvent,
   ChatMessageView,
   LiveStartOperation,
   LiveStartStatus,
@@ -34,6 +35,26 @@ interface ApiChatEnvelope {
   type: string
   sessionId: string
   payload: ApiChatMessage
+}
+
+interface ApiCaptionDeltaPayload {
+  sttSessionId: string
+  sequence: number
+  streamElapsedMs: number
+  text: string
+}
+
+interface ApiCaptionCompletedPayload {
+  sttSessionId: string
+  lastSequence: number
+  reason: string
+}
+
+interface ApiCaptionEnvelope {
+  type: string
+  sessionId: string
+  occurredAt: string
+  payload: unknown
 }
 
 interface ApiLiveToken {
@@ -156,7 +177,7 @@ function normalizeMessage(message: ApiChatMessage): ChatMessageView {
   }
 }
 
-function getChatBrokerUrl() {
+function getBrokerUrl() {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   return `${protocol}//${window.location.host}/api/ws`
 }
@@ -165,6 +186,39 @@ function readChatEnvelope(frame: IMessage, sessionId: string) {
   const envelope = JSON.parse(frame.body) as ApiChatEnvelope
   if (envelope.type !== 'chat.message.created' || envelope.sessionId !== sessionId) return null
   return normalizeMessage(envelope.payload)
+}
+
+// 자막 봉투는 채팅과 동형(WsEnvelope)에 occurredAt이 더 있다. delta·completed 2종만 통과시키고
+// 그 외 type/타 세션은 무시한다(§3-4 / ADR-0043). streamElapsedMs 등 raw 값은 그대로 넘긴다.
+function readCaptionEnvelope(frame: IMessage, sessionId: string): CaptionStreamEvent | null {
+  const envelope = JSON.parse(frame.body) as ApiCaptionEnvelope
+  if (envelope.sessionId !== sessionId) return null
+  if (envelope.type === 'caption.delta') {
+    const payload = envelope.payload as ApiCaptionDeltaPayload
+    return {
+      type: 'caption.delta',
+      occurredAt: envelope.occurredAt,
+      payload: {
+        sttSessionId: payload.sttSessionId,
+        sequence: payload.sequence,
+        streamElapsedMs: payload.streamElapsedMs,
+        text: payload.text,
+      },
+    }
+  }
+  if (envelope.type === 'caption.stream.completed') {
+    const payload = envelope.payload as ApiCaptionCompletedPayload
+    return {
+      type: 'caption.stream.completed',
+      occurredAt: envelope.occurredAt,
+      payload: {
+        sttSessionId: payload.sttSessionId,
+        lastSequence: payload.lastSequence,
+        reason: payload.reason,
+      },
+    }
+  }
+  return null
 }
 
 export const httpLiveSessionService = {
@@ -236,7 +290,7 @@ export const httpLiveSessionService = {
     onConnectionChange('connecting')
 
     const client = new Client({
-      brokerURL: getChatBrokerUrl(),
+      brokerURL: getBrokerUrl(),
       connectionTimeout: 10_000,
       heartbeatIncoming: 10_000,
       heartbeatOutgoing: 10_000,
@@ -272,8 +326,51 @@ export const httpLiveSessionService = {
       void client.deactivate()
     }
   },
-  // 실시간 자막은 WS 채널(CONTRACT §3-4)로 오게 되어 있고 REST 스냅샷 경로는 아직 없다(CP2).
-  // 응답 정규화(captionAdapter)는 그대로 두었다 — 경로가 생기면 여기만 바꾸면 된다.
+  // 라이브 자막 델타 스트림. 채팅 구독과 대칭이며 같은 /api/ws에 붙어 captions 토픽만 구독한다.
+  // 구독 인가(참가자만)는 서버 STOMP 인터셉터가 처리한다(ADR-0043) — FE는 토픽 구독만 한다.
+  subscribeCaptions(sessionId, onEvent, onConnectionChange) {
+    let active = true
+    onConnectionChange('connecting')
+
+    const client = new Client({
+      brokerURL: getBrokerUrl(),
+      connectionTimeout: 10_000,
+      heartbeatIncoming: 10_000,
+      heartbeatOutgoing: 10_000,
+      reconnectDelay: 3_000,
+    })
+
+    client.onConnect = () => {
+      if (!active) return
+      onConnectionChange('connected')
+      client.subscribe(`/topic/live-sessions/${sessionId}/captions`, (frame) => {
+        try {
+          const event = readCaptionEnvelope(frame, sessionId)
+          if (event) onEvent(event)
+        } catch {
+          onConnectionChange('error')
+        }
+      })
+    }
+    client.onStompError = () => {
+      if (active) onConnectionChange('error')
+    }
+    client.onWebSocketError = () => {
+      if (active) onConnectionChange('reconnecting')
+    }
+    client.onWebSocketClose = () => {
+      if (active) onConnectionChange('reconnecting')
+    }
+    client.activate()
+
+    return () => {
+      active = false
+      onConnectionChange('disconnected')
+      void client.deactivate()
+    }
+  },
+  // WS 재연결 시 누락 자막을 메우는 REST 복구 경로(CAPTION-01)는 아직 서버에 없다.
+  // 라이브 렌더는 위 subscribeCaptions(WS 델타)가 구동한다 — 이 스텁에 의존하지 않는다.
   async getCaptions(sessionId) {
     return notImplemented(`GET /live-sessions/${sessionId}/captions`)
   },

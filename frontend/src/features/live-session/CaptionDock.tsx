@@ -7,6 +7,8 @@ interface CaptionDockProps {
   label: string
   onSeek: (sessionMs: number) => void
   onSelectTerm: (termId: string) => void
+  /** 헤더 힌트를 대체하는 안내(예: 라이브 자막 연결 상태). 없으면 기본 힌트를 보인다. */
+  note?: string
 }
 
 function renderCaptionText(caption: CaptionView, onSelectTerm: (termId: string) => void) {
@@ -35,18 +37,21 @@ function renderCaptionText(caption: CaptionView, onSelectTerm: (termId: string) 
   )
 }
 
-export default function CaptionDock({ captions, currentSessionMs, label, onSeek, onSelectTerm }: CaptionDockProps) {
+export default function CaptionDock({ captions, currentSessionMs, label, onSeek, onSelectTerm, note }: CaptionDockProps) {
   return (
     <section className="caption-dock" aria-label={label}>
       <header>
         <strong><i />{label}</strong>
-        <span>시간을 누르면 영상과 자막이 함께 이동합니다.</span>
+        <span>{note ?? '시간을 누르면 영상과 자막이 함께 이동합니다.'}</span>
       </header>
-      <div className="caption-dock__sentences">
+      <div className="caption-dock__sentences" aria-live="polite">
         {captions.map((caption) => {
           const isCurrent = currentSessionMs >= caption.startMs && currentSessionMs <= caption.endMs
+          const className = [isCurrent ? 'is-current' : '', caption.pending ? 'is-pending' : '']
+            .filter(Boolean)
+            .join(' ')
           return (
-            <article className={isCurrent ? 'is-current' : ''} key={caption.segmentId}>
+            <article className={className} key={caption.segmentId} aria-busy={caption.pending || undefined}>
               <button type="button" onClick={() => onSeek(caption.startMs)}>{caption.at}</button>
               <p>{renderCaptionText(caption, onSelectTerm)}</p>
             </article>

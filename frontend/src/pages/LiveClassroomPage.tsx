@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -7,17 +7,23 @@ import yeongsilImage from '@/assets/yeongsil.png'
 import { useAuth } from '@/features/auth/AuthContext'
 import { getLesson } from '@/features/lesson/lessonService'
 import CaptionDock from '@/features/live-session/CaptionDock'
+import {
+  emptyCaptionStreamState,
+  reduceCaptionStream,
+  selectCaptionViews,
+} from '@/features/live-session/captionAdapter'
 import LearningSidebar from '@/features/live-session/LearningSidebar'
 import { getLiveLearningPreview, type LearningPanel } from '@/features/live-session/liveLearningPreview'
 import {
   askLiveAi,
   endLiveSession,
-  getCaptions,
   getChatMessages,
   getLiveSession,
   saveBookmark,
   sendChatMessage,
+  subscribeCaptions,
   subscribeChatMessages,
+  type CaptionView,
   type ChatConnectionState,
   type ChatMessageView,
 } from '@/features/live-session/liveSessionService'
@@ -50,11 +56,14 @@ export default function LiveClassroomPage() {
     enabled: Boolean(sessionQuery.data?.lessonId),
   })
   const chatQuery = useQuery({ queryKey: ['live-chat', sessionId], queryFn: () => getChatMessages(sessionId), enabled: Boolean(sessionId) })
-  const captionsQuery = useQuery({ queryKey: ['live-captions', sessionId], queryFn: () => getCaptions(sessionId), enabled: Boolean(sessionId) })
   const session = sessionQuery.data
   const lesson = lessonQuery.data
   const messages = chatQuery.data ?? []
-  const captions = captionsQuery.data ?? []
+  // 라이브 자막은 REST 스냅샷이 아니라 WS 델타 스트림으로 구동한다(§3-4 / ADR-0043).
+  // 누적기는 ref에 두고, 파생 CaptionView[]만 state로 올려 CaptionDock에 넘긴다.
+  const captionAccumulator = useRef(emptyCaptionStreamState())
+  const [captions, setCaptions] = useState<CaptionView[]>([])
+  const [captionConnectionState, setCaptionConnectionState] = useState<ChatConnectionState>('connecting')
   const [panel, setPanel] = useState<LearningPanel>('discussion')
   const [selectedTermId, setSelectedTermId] = useState<string | null>(null)
   const [positionMs, setPositionMs] = useState(0)
@@ -93,6 +102,19 @@ export default function LiveClassroomPage() {
       setChatConnectionState,
     )
   }, [queryClient, sessionId])
+  useEffect(() => {
+    if (!sessionId) return undefined
+    captionAccumulator.current = emptyCaptionStreamState()
+    setCaptions([])
+    return subscribeCaptions(
+      sessionId,
+      (event) => {
+        captionAccumulator.current = reduceCaptionStream(captionAccumulator.current, event)
+        setCaptions(selectCaptionViews(captionAccumulator.current))
+      },
+      setCaptionConnectionState,
+    )
+  }, [sessionId])
   usePageTitle(`LIVE · ${lesson?.title ?? ''}`)
 
   const sendMessage = (event: FormEvent) => {
@@ -141,8 +163,8 @@ export default function LiveClassroomPage() {
   }
 
   // 진입 게이트에는 이 화면의 정체성인 세션·레슨만 둔다.
-  // 자막은 아직 서버 경로가 없어(CP2) 늘 실패하는데, 여기에 섞으면
-  // 나머지가 멀쩡해도 라이브 화면 전체가 뜨지 않는다. 패널 안에서 안내한다.
+  // 자막은 WS 델타 스트림으로 구동하며(§3-4), 연결 실패해도 게이트를 막지 않는다 —
+  // 자막 없이도 미디어·채팅은 살아 있어야 한다. 연결 상태는 자막 독 헤더에서 안내한다.
   //
   // 실패 검사를 로딩보다 먼저 한다. 레슨 조회는 세션 결과에 의존해(enabled) 세션이 실패하면
   // 비활성인 채 영원히 isPending으로 남는다 — 로딩을 먼저 보면 오류 화면에 닿지 못한다.
@@ -176,6 +198,18 @@ export default function LiveClassroomPage() {
       <form onSubmit={askAi}><textarea rows={3} value={aiQuestion} placeholder="예: SecurityContext와 세션은 어떻게 다른가요?" onChange={(event) => setAiQuestion(event.target.value)} /><button className="button button--primary button--full" type="submit">질문하기</button></form>
     </>
   )
+
+  // 자막이 이미 흐르면(누적 라인 존재) 연결 문구로 시야를 어지럽히지 않는다.
+  // 아직 한 줄도 없을 때만 연결 상태를 안내한다.
+  const captionNote = captions.length > 0 || captionConnectionState === 'connected'
+    ? undefined
+    : captionConnectionState === 'connecting'
+      ? '실시간 자막을 연결하고 있습니다.'
+      : captionConnectionState === 'reconnecting'
+        ? '실시간 자막 연결이 끊겨 다시 연결하고 있습니다.'
+        : captionConnectionState === 'error'
+          ? '실시간 자막 연결에 문제가 생겼습니다. 자동 재연결을 시도합니다.'
+          : '실시간 자막 연결이 종료되었습니다.'
 
   const chatConnectionNotice = chatConnectionState === 'connected'
     ? undefined
@@ -275,7 +309,7 @@ export default function LiveClassroomPage() {
               </Suspense>
             )}
 
-          <CaptionDock captions={captions} currentSessionMs={positionMs} label="실시간 자막" onSeek={seekSession} onSelectTerm={openGlossaryTerm} />
+          <CaptionDock captions={captions} currentSessionMs={positionMs} label="실시간 자막" note={captionNote} onSeek={seekSession} onSelectTerm={openGlossaryTerm} />
         </section>
 
         {(!isInstructor || !sidebarWindow.isDetached) && sidebar}

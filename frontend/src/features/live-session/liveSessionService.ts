@@ -36,6 +36,11 @@ export const subscribeChatMessages = (
   onConnectionChange: Parameters<LiveSessionService['subscribeChatMessages']>[2],
 ) => liveSessionService.subscribeChatMessages(sessionId, onMessage, onConnectionChange)
 export const getCaptions = (sessionId: string) => liveSessionService.getCaptions(sessionId)
+export const subscribeCaptions = (
+  sessionId: string,
+  onEvent: Parameters<LiveSessionService['subscribeCaptions']>[1],
+  onConnectionChange: Parameters<LiveSessionService['subscribeCaptions']>[2],
+) => liveSessionService.subscribeCaptions(sessionId, onEvent, onConnectionChange)
 export const askLiveAi = (lessonId: string, question: string) => liveSessionService.askLiveAi(lessonId, question)
 export const saveBookmark = (lessonId: string, sessionMs: number) => liveSessionService.saveBookmark(lessonId, sessionMs)
 export const getProcessingStatus = (sessionId: string) => liveSessionService.getProcessingStatus(sessionId)
@@ -43,6 +48,9 @@ export const getQuestionHighlights = (sessionId: string) => liveSessionService.g
 
 export type {
   CaptionView,
+  CaptionDeltaPayload,
+  CaptionStreamCompletedPayload,
+  CaptionStreamEvent,
   ChatConnectionState,
   ChatMessageView,
   LiveSessionService,

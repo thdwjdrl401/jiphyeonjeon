@@ -172,7 +172,11 @@ describe('전체 페이지 라우트', () => {
     expect(chatInput).toHaveValue('')
     expect(await screen.findByText((text) => text.includes('첫째 줄') && text.includes('둘째 줄'))).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'SecurityContext' }))
+    // 라이브 자막은 WS 델타 스트림으로 자란다(§3-4). mock이 흘린 델타가 자막 라인으로 렌더된다.
+    expect(await screen.findByText(/SecurityContext가 현재 요청의 사용자 정보를 보관합니다/)).toBeInTheDocument()
+
+    // 델타 계약에는 용어 참조가 없어 자막에서 바로 용어를 열 수는 없다 — 핵심 용어 탭으로 정의를 확인한다.
+    await user.click(screen.getByRole('tab', { name: '핵심 용어' }))
     expect(screen.getByRole('tab', { name: '핵심 용어' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByText(/현재 실행 중인 요청에서 인증된 사용자/)).toBeInTheDocument()
   })
