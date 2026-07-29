@@ -35,9 +35,9 @@ services:
     environment:
       # migration 계정 = 앱 admin(POSTGRES_USER, DDL 권한). 런타임과 분리 + sync(+psycopg).
       AI_WORKER_MIGRATION_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-liveclass}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 필요}@postgres:5432/${POSTGRES_DB:-liveclass}
+    # Dockerfile ENTRYPOINT(python -m app.main) 무시하고 alembic만 실행
+    entrypoint: ["sh", "-c"]
     command:
-      - sh
-      - -c
       - |
         cd /app
         for i in 1 2 3 4 5 6; do
