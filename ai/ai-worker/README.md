@@ -132,7 +132,7 @@ runtime builder를 활성화하려면 아래 설정이 추가로 필요하다. `
 | `AI_WORKER_SPRING_INTERNAL_BASE_URL` | `http://127.0.0.1:8080` |
 | `AI_WORKER_BGE_INTERNAL_TOKEN` | 필수, 32자 이상 |
 | `AI_WORKER_BGE_READINESS_TIMEOUT_SECONDS` | `2` |
-| `AI_WORKER_BGE_RUNTIME_URL` | 로컬 기본 `http://127.0.0.1:8020`; EC2 reverse tunnel 운영은 `http://127.0.0.1:18020` |
+| `AI_WORKER_BGE_RUNTIME_URL` | 로컬 기본 `http://127.0.0.1:8020`; EC2 host process는 `http://127.0.0.1:18020`; container는 `http://host.docker.internal:18080/internal/bge` (경로 접두사 허용, `..` 트래버설만 차단) |
 | `AI_WORKER_TENANT_ID` | `liveclass` |
 | `AI_WORKER_SOURCE_MAX_BYTES` | `52428800` |
 | `AI_WORKER_CHUNK_MAX_CHARS` | `1200` |
@@ -150,6 +150,22 @@ GPU tunnel 실행·EC2 sshd 제한은
 [bge-runtime scripts README](../bge-runtime/scripts/README.md), 책임과 대안은
 [ADR-0029](../../docs/decisions/canola/0029-gpu-bge-ec2-ai-worker-connectivity.md)를 따른다. 이 설정은 EC2
 **host process** 기준이며 container에서는 host network나 tunnel sidecar 결정 없이 localhost를 재사용하지 않는다.
+
+### 후속 — container 배포는 기존 gpu-proxy를 경유
+
+`docker-compose.gpu-proxy.yml`(host-net nginx, `infra/nginx/gpu-proxy.conf`, 커밋 e012eaa)이
+`127.0.0.1:18020`을 `18080/internal/bge/`로 내보내고 `172.18.0.0/16`(liveclass_default)·localhost만
+허용한다. `docker-compose.ai-prod.yml`로 ai-worker를 컨테이너로 띄울 때는 별도 sidecar 없이 이 프록시를
+그대로 쓴다.
+
+```bash
+AI_WORKER_BGE_RUNTIME_URL=http://host.docker.internal:18080/internal/bge
+```
+
+`AI_WORKER_BGE_RUNTIME_URL` 검증은 이제 경로가 있는 URL(디렉터리 순회 `..` 제외)을 허용한다 — httpx가
+`base_url`의 경로를 유지한 채 요청 경로(`/internal/v1/embeddings`)를 붙이므로 위 값 그대로
+`http://host.docker.internal:18080/internal/bge/internal/v1/embeddings`가 나간다.
+`extra_hosts: ["host.docker.internal:host-gateway"]`가 있어야 컨테이너에서 EC2 host로 나갈 수 있다.
 
 외부 adapter 결정은 [ADR-0018](../../docs/decisions/canola/0018-spring-presigned-pptx-runtime-adapters.md), consumer
 수명주기 결정은 [ADR-0019](../../docs/decisions/canola/0019-material-rabbitmq-consumer-lifecycle.md)에 기록했다.

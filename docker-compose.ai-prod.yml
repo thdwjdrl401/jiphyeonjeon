@@ -1,0 +1,75 @@
+# AI 서비스(ai-worker, ai-api) 배포 — EC2.  docker-compose.prod.yml과는 별도 파일이며 그 파일을
+# 수정하지 않는다. docker-compose.prod.yml이 만든 네트워크(liveclass_default)에 그대로 붙어서
+# postgres·redis·rabbitmq·backend를 서비스명으로 바로 호출한다 — 포트를 새로 게시할 필요 없음.
+#
+# GPU(bge-runtime)만 예외다. 물리적으로 다른 컴퓓터라 도커 네트워크 밖에 있고, SSH reverse tunnel로
+# 이 EC2 host의 127.0.0.1:18020에 연결되어 있다(ADR-0029). 컨테이너에서 host 루프백에 직접은 못
+# 닿지만, 이미 송정기가 만든 전용 프록시 스택(docker-compose.gpu-proxy.yml, infra/nginx/gpu-proxy.conf,
+# 커밋 e012eaa)이 host 네트워크 nginx로 127.0.0.1:18020을 18080/internal/bge/에 내보내고
+# 172.18.0.0/16(liveclass_default)·localhost만 허용해준다. 그래서 여기서는 별도 sidecar 없이
+# host.docker.internal:18080을 통해 그 프록시를 바로 호출한다. docker-compose.gpu-proxy.yml은
+# 여기서 안 건드리고 그대로 재사용한다.
+#
+# 첫 배포 전 1회만: postgres에 ai_app role/스키마 마이그레이션, ai_app에 GRANT할 로그인 계정 생성.
+# 그리고 docker-compose.gpu-proxy.yml 스택이 이 EC2에 이미 떠 있는지 확인한다
+# (docker compose -f docker-compose.gpu-proxy.yml ps, 없으면 CI의 deploy-gpu-proxy 수동 실행 필요).
+#
+# 사용:
+#   cp .env.ai-prod.example .env.ai-prod   # 값 채우기 (.env.ai-prod는 커밋 금지)
+#   docker compose -f docker-compose.ai-prod.yml \
+#     --env-file .env.prod --env-file .env.ai-prod \
+#     up -d --build ai-worker ai-api
+name: liveclass-ai
+networks:
+  default:
+    name: liveclass_default
+    external: true
+services:
+  ai-worker:
+    build: ./ai/ai-worker
+    container_name: liveclass-ai-worker-prod
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      AI_WORKER_INSTANCE_ID: ai-worker-1
+      AI_WORKER_ENVIRONMENT: production
+      AI_WORKER_MANAGEMENT_HOST: 127.0.0.1
+      AI_WORKER_MANAGEMENT_PORT: "8011"
+      AI_WORKER_DATABASE_URL: postgresql+asyncpg://${AI_RUNTIME_DB_USER:?AI_RUNTIME_DB_USER 필요}:${AI_RUNTIME_DB_PASSWORD:?AI_RUNTIME_DB_PASSWORD 필요}@postgres:5432/${POSTGRES_DB:-liveclass}
+      AI_WORKER_MATERIAL_INGESTION_ENABLED: "true"
+      AI_WORKER_RABBITMQ_URL: amqp://${RABBITMQ_USER:?RABBITMQ_USER 필요}:${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD 필요}@rabbitmq:5672/
+      AI_WORKER_SPRING_INTERNAL_BASE_URL: http://backend:8080
+      AI_WORKER_SPRING_HMAC_SECRET: ${AI_CALLBACK_SECRET:?AI_CALLBACK_SECRET 필요 — Spring이 이미 쓰는 기존 값}
+      AI_WORKER_BGE_RUNTIME_URL: http://host.docker.internal:18080/internal/bge
+      AI_WORKER_BGE_INTERNAL_TOKEN: ${BGE_RUNTIME_INTERNAL_TOKEN:?BGE_RUNTIME_INTERNAL_TOKEN 필요 — GPU 쪽과 동일 값}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8011/readyz', timeout=2)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  ai-api:
+    build: ./ai/ai-api
+    container_name: liveclass-ai-api-prod
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      AI_API_ENVIRONMENT: production
+      AI_API_INSTANCE_ID: ai-api-1
+      AI_API_HOST: 0.0.0.0   # backend 컨테이너가 이 네트워크로 ai-api:8010 호출하므로 loopback만으론 안 됨
+      AI_API_PORT: "8010"
+      AI_API_DATABASE_URL: postgresql+asyncpg://${AI_RUNTIME_DB_USER:?AI_RUNTIME_DB_USER 필요}:${AI_RUNTIME_DB_PASSWORD:?AI_RUNTIME_DB_PASSWORD 필요}@postgres:5432/${POSTGRES_DB:-liveclass}
+      AI_API_REDIS_URL: redis://redis:6379/0
+      AI_API_BGE_BASE_URL: http://host.docker.internal:18080/internal/bge
+      AI_API_BGE_TOKEN: ${BGE_RUNTIME_INTERNAL_TOKEN:?BGE_RUNTIME_INTERNAL_TOKEN 필요 — GPU 쪽과 동일 값}
+      AI_API_GMS_API_KEY: ${GMS_API_KEY:?GMS_API_KEY 필요}
+      AI_INTERNAL_SECRET: ${AI_INTERNAL_SECRET:?AI_INTERNAL_SECRET 필요 — Spring과 공유하는 HMAC 시크릿}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/healthz', timeout=2)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s

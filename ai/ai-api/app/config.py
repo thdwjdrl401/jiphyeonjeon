@@ -141,12 +141,15 @@ class Settings(BaseSettings):
             raise ValueError("bge_base_url and bge_token must be configured together")
         if self.bge_base_url is not None:
             bge_url = urlparse(self.bge_base_url)
+            # bge-runtime may sit behind a reverse-proxy path prefix (e.g. GPU tunnel
+            # exposed as /internal/bge/ on a shared nginx port) instead of its own
+            # origin, so a path is allowed as long as it is not a traversal attempt.
             if (
                 bge_url.scheme not in {"http", "https"}
                 or not bge_url.hostname
                 or bge_url.username is not None
                 or bge_url.password is not None
-                or bge_url.path not in {"", "/"}
+                or ".." in bge_url.path.split("/")
                 or bge_url.query
                 or bge_url.fragment
             ):
