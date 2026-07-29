@@ -22,6 +22,7 @@ import { ApiError } from '@/shared/api/client'
 import { isNotImplemented } from '@/shared/api/notImplemented'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
+import Tabs, { tabPanelProps, type TabItem } from '@/shared/ui/Tabs'
 import { useToast } from '@/shared/ui/Toast'
 import { InlineNotice, MetricCard, PageHeader, Panel, StatusBadge } from '@/shared/ui/WorkspaceUi'
 
@@ -45,13 +46,14 @@ type ManageTab = 'structure' | 'info' | 'enrollees'
  * 탭의 표시 순서. 작성 흐름(기본 정보 → 구성 → 게시)대로 읽히게 둔다.
  * 진입 기본 탭은 이 순서와 무관하게 DEFAULT_MANAGE_TAB이다 — 초안 생성 직후 바로 구성을 이어 가야 한다.
  */
-const MANAGE_TABS: ReadonlyArray<{ id: ManageTab; label: string }> = [
+const MANAGE_TABS: ReadonlyArray<TabItem<ManageTab>> = [
   { id: 'info', label: '기본 정보' },
   { id: 'structure', label: '구성' },
   { id: 'enrollees', label: '수강생' },
 ]
 
 const DEFAULT_MANAGE_TAB: ManageTab = 'structure'
+const MANAGE_TAB_PREFIX = 'curriculum-manage'
 
 /**
  * 발행 버튼은 DRAFT에서만 의미가 있다 — 서버가 DRAFT 외의 전이를 409로 막는다
@@ -505,17 +507,18 @@ function CurriculumManageEditor({
       />
       {saveError && <InlineNotice tone="danger">{saveError}</InlineNotice>}
       <div className="metric-grid"><MetricCard label="상태" value={storedCurriculum.lifecycleStatus} helper={isNewDraft ? '게시 전' : '운영 중'} /><MetricCard label="섹션" value={sections.length} /><MetricCard label="전체 강의" value={sections.reduce((sum, section) => sum + section.lessons.length, 0)} /><MetricCard label="수강생" value={storedCurriculum.enrolleeCount ?? '--'} /></div>
-      <div className="workspace-tabs" role="tablist">
-        {MANAGE_TABS.map(({ id, label }) => (
-          <button key={id} className={tab === id ? 'is-active' : ''} type="button" onClick={() => onTabChange(id)}>
-            {label}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        className="workspace-tabs"
+        idPrefix={MANAGE_TAB_PREFIX}
+        label="커리큘럼 관리"
+        items={MANAGE_TABS}
+        value={tab}
+        onChange={onTabChange}
+      />
 
       {/* 구성 → 게시 순으로 읽어 내려가며 편성을 마치고 그 자리에서 공개한다. */}
       {tab === 'structure' && (
-        <>
+        <div className="workspace-tabpanel" {...tabPanelProps(MANAGE_TAB_PREFIX, 'structure')}>
           <Panel title="섹션과 강의" description="강의를 드래그해 순서를 바꾸거나 다른 섹션으로 옮길 수 있습니다.">
             {/* 섹션마다 반복하지 않고 여기 한 번만 안내한다(삭제 제약 포함). */}
             <InlineNotice tone="info"><strong>섹션</strong>은 대단원(챕터), <strong>강의</strong>는 그 안의 개별 수업이에요. 먼저 섹션을 추가하면 자동 저장된 뒤, 그 섹션의 “강의 추가”로 강의를 넣을 수 있어요. 강의가 포함된 섹션은 삭제할 수 없습니다. 먼저 강의를 삭제하거나 다른 섹션으로 이동한 뒤 섹션을 삭제해주세요.</InlineNotice>
@@ -597,12 +600,12 @@ function CurriculumManageEditor({
             isPubliclyVisible={isPubliclyVisible}
             onPublish={(includeLessons) => void runPublish(includeLessons)}
           />
-        </>
+        </div>
       )}
 
       {/* 기본 정보 → 자산 순으로 확인한다. 게시는 구성 탭 맨 아래에서 한다. */}
       {tab === 'info' && (
-        <>
+        <div className="workspace-tabpanel" {...tabPanelProps(MANAGE_TAB_PREFIX, 'info')}>
           <Panel title="기본 정보" description="일반 수정과 공개 상태 전환은 분리합니다.">
             <div className="form-grid"><label className="form-field--wide"><span>제목</span><input value={curriculumInfo.title} onChange={(event) => updateCurriculumInfo('title', event.target.value)} /></label><label className="form-field--wide"><span>짧은 소개</span><input value={curriculumInfo.summary} onChange={(event) => updateCurriculumInfo('summary', event.target.value)} /></label><label className="form-field--wide"><span>상세 설명</span><textarea rows={6} value={curriculumInfo.description} onChange={(event) => updateCurriculumInfo('description', event.target.value)} /></label></div>
           </Panel>
@@ -617,13 +620,15 @@ function CurriculumManageEditor({
               onMaterialsChange={updateMaterials}
             />
           </Panel>
-        </>
+        </div>
       )}
 
       {tab === 'enrollees' && (
-        <Panel title="수강 신청과 수강생" description="승인 대기, 수강 중, 종료된 수강 상태를 관리합니다.">
-          <InstructorEnrollmentRoster curriculumId={curriculumId} />
-        </Panel>
+        <div className="workspace-tabpanel" {...tabPanelProps(MANAGE_TAB_PREFIX, 'enrollees')}>
+          <Panel title="수강 신청과 수강생" description="승인 대기, 수강 중, 종료된 수강 상태를 관리합니다.">
+            <InstructorEnrollmentRoster curriculumId={curriculumId} />
+          </Panel>
+        </div>
       )}
     </div>
   )

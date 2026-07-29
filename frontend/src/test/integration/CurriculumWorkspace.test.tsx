@@ -33,9 +33,9 @@ describe('커리큘럼 작업 화면', () => {
     await renderAsInstructor('/instructor/curriculums/cur-architecture/manage')
 
     const tablist = await screen.findByRole('tablist')
-    const labels = within(tablist).getAllByRole('button').map((button) => button.textContent)
+    const labels = within(tablist).getAllByRole('tab').map((button) => button.textContent)
     expect(labels).toEqual(['기본 정보', '구성', '수강생'])
-    expect(within(tablist).getByRole('button', { name: '구성' })).toHaveClass('is-active')
+    expect(within(tablist).getByRole('tab', { name: '구성' })).toHaveClass('is-active')
 
     // 진입 탭이 구성이므로 섹션 편집과 게시 카드가 함께 보인다.
     expect(screen.getByRole('heading', { name: '섹션과 강의' })).toBeInTheDocument()
@@ -47,7 +47,7 @@ describe('커리큘럼 작업 화면', () => {
     await renderAsInstructor('/instructor/curriculums/cur-architecture/manage')
     await screen.findByRole('heading', { name: '커리큘럼 게시' })
 
-    await user.click(screen.getByRole('button', { name: '기본 정보' }))
+    await user.click(screen.getByRole('tab', { name: '기본 정보' }))
 
     expect(await screen.findByRole('heading', { name: '대표 이미지와 강의 자료' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '커리큘럼 게시' })).not.toBeInTheDocument()
@@ -144,7 +144,7 @@ describe('커리큘럼 작업 화면', () => {
     // 공개 상세를 거치지 않고 관리 화면으로 직행한다.
     expect(await screen.findByRole('heading', { name: '자료가 있는 새 커리큘럼', level: 1 })).toBeInTheDocument()
     expect(window.location.pathname).toMatch(/^\/instructor\/curriculums\/cur-draft-.*\/manage$/)
-    await user.click(await screen.findByRole('button', { name: '기본 정보' }))
+    await user.click(await screen.findByRole('tab', { name: '기본 정보' }))
     expect(await screen.findByText('curriculum-guide.pptx')).toBeInTheDocument()
   })
 
@@ -228,7 +228,7 @@ describe('커리큘럼 작업 화면', () => {
   it('관리 화면에서 실제 수강 신청 목록을 조회하고 승인 상태를 변경한다', async () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
-    await user.click(await screen.findByRole('button', { name: '수강생' }))
+    await user.click(await screen.findByRole('tab', { name: '수강생' }))
 
     const pendingEmail = await screen.findByText('student02@example.com')
     const pendingRow = pendingEmail.closest('tr')
@@ -361,7 +361,7 @@ describe('커리큘럼 작업 화면', () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
     await screen.findByRole('heading', { name: '라이브로 완성하는 Spring Boot', level: 1 })
-    await user.click(screen.getByRole('button', { name: '기본 정보' }))
+    await user.click(screen.getByRole('tab', { name: '기본 정보' }))
     expect(await screen.findByAltText('대표 이미지 미리보기')).toBeInTheDocument()
     expect(screen.getByLabelText('대표 이미지 등록')).toBeInTheDocument()
   })
@@ -371,7 +371,7 @@ describe('커리큘럼 작업 화면', () => {
   it('관리 화면에서 커리큘럼 자료를 추가하면 목록에 표시된다', async () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
-    await user.click(await screen.findByRole('button', { name: '기본 정보' }))
+    await user.click(await screen.findByRole('tab', { name: '기본 정보' }))
     const material = new File(['presentation'], 'instructor-common-guide.pptx', {
       type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
     })

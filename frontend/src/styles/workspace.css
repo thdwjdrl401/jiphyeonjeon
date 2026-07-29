@@ -27,6 +27,9 @@
 .lesson-navigation__lessons a.is-current > span { background: var(--blue-600); color: #fff; }
 .workspace-content { min-width: 0; }
 .workspace-page { display: flex; flex-direction: column; gap: 22px; }
+/* tabpanel 래퍼가 페이지의 세로 리듬을 그대로 이어받는다(카드 사이 간격이 죽지 않도록). */
+.workspace-tabpanel { display: flex; flex-direction: column; gap: 22px; }
+.workspace-tabpanel:focus-visible { outline: 2px solid var(--blue-500); outline-offset: 4px; border-radius: 12px; }
 .workspace-page--narrow { width: min(100%, 840px); margin-inline: auto; }
 .workspace-page-header { display: flex; min-height: 105px; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 8px 2px 4px; }
 .workspace-page-header h1 { margin: 7px 0 5px; color: var(--ink-950); font-size: clamp(1.8rem, 3vw, 2.45rem); letter-spacing: -.055em; line-height: 1.15; }
