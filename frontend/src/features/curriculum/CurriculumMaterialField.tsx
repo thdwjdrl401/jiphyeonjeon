@@ -5,6 +5,8 @@ interface CurriculumMaterialFieldProps {
   id: string
   value: CurriculumMaterial[]
   onChange: (value: CurriculumMaterial[]) => void
+  /** 이미 저장된(persisted) 자료의 다운로드 링크. 주면 파일이 없는 자료에 다운로드 버튼을 붙인다(관리 화면). */
+  downloadHref?: (material: CurriculumMaterial) => string
 }
 
 const PPTX_MIME = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
@@ -14,7 +16,7 @@ function formatFileSize(fileSize: number) {
   return `${(fileSize / 1024 / 1024).toFixed(1)} MB`
 }
 
-export default function CurriculumMaterialField({ id, value, onChange }: CurriculumMaterialFieldProps) {
+export default function CurriculumMaterialField({ id, value, onChange, downloadHref }: CurriculumMaterialFieldProps) {
   const [error, setError] = useState('')
 
   const selectFiles = (event: ChangeEvent<HTMLInputElement>) => {
@@ -26,10 +28,12 @@ export default function CurriculumMaterialField({ id, value, onChange }: Curricu
       return
     }
 
-    const selected = files.map((file, index) => ({
+    // 원본 File을 함께 들고 있어야 저장 시 presigned 업로드→attach로 실제 반영된다(ADR-0042).
+    const selected: CurriculumMaterial[] = files.map((file, index) => ({
       materialId: `curriculum-material-${file.lastModified}-${file.size}-${index}`,
       fileName: file.name,
       fileSize: file.size,
+      file,
     }))
     const next = [...value]
     for (const material of selected) {
@@ -62,6 +66,9 @@ export default function CurriculumMaterialField({ id, value, onChange }: Curricu
             <li key={material.materialId}>
               <span className="file-icon">PPTX</span>
               <div><strong>{material.fileName}</strong><small>{formatFileSize(material.fileSize)}</small></div>
+              {downloadHref && !material.file && (
+                <a className="button button--soft button--small" href={downloadHref(material)}>다운로드</a>
+              )}
               <button
                 type="button"
                 aria-label={`${material.fileName} 제거`}

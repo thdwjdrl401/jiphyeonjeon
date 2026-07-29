@@ -14,6 +14,7 @@ import com.liveclass.enrollment.api.EnrollmentStatus;
 import com.liveclass.enrollment.api.EnrollmentView;
 import com.liveclass.learning.api.LearningDirectory;
 import com.liveclass.learning.api.LearningProgressView;
+import com.liveclass.lesson.api.CurriculumMaterialManagement;
 import com.liveclass.lesson.api.LessonDetailView;
 import com.liveclass.lesson.api.LessonDirectory;
 import com.liveclass.lesson.api.LessonMaterialManagement;
@@ -60,6 +61,7 @@ public class CatalogService {
     private final SectionRepository sectionRepository;
     private final LessonDirectory lessonDirectory;
     private final LessonMaterialManagement lessonMaterialManagement;
+    private final CurriculumMaterialManagement curriculumMaterialManagement;
     private final InstructorDirectory instructorDirectory;
     private final AssetDirectory assetDirectory;
     private final EnrollmentDirectory enrollmentDirectory;
@@ -71,6 +73,7 @@ public class CatalogService {
                           SectionRepository sectionRepository,
                           LessonDirectory lessonDirectory,
                           LessonMaterialManagement lessonMaterialManagement,
+                          CurriculumMaterialManagement curriculumMaterialManagement,
                           InstructorDirectory instructorDirectory,
                           AssetDirectory assetDirectory,
                           EnrollmentDirectory enrollmentDirectory,
@@ -81,6 +84,7 @@ public class CatalogService {
         this.sectionRepository = sectionRepository;
         this.lessonDirectory = lessonDirectory;
         this.lessonMaterialManagement = lessonMaterialManagement;
+        this.curriculumMaterialManagement = curriculumMaterialManagement;
         this.instructorDirectory = instructorDirectory;
         this.assetDirectory = assetDirectory;
         this.enrollmentDirectory = enrollmentDirectory;
@@ -142,13 +146,18 @@ public class CatalogService {
         // 게스트·미수강자에게는 노출하지 않는다 — progress와 같은 게이트(ENROLLED만)에 OWNER_INSTRUCTOR를
         // 더한 것(강사 자신은 항상 자기 자료를 볼 수 있어야 함). outline은 이미 PUBLISHED 레슨만 담고 있어
         // (buildOutline) 자료도 자연히 공개된 레슨 것만이다.
+        // 커리큘럼-레벨 자료(ADR-0042)를 먼저, 그 뒤에 목차 레슨들의 자료를 잇는다 — "커리큘럼 공통"이
+        // 위에 오도록. 게이트는 동일(ENROLLED 또는 OWNER_INSTRUCTOR).
         List<MaterialView> materials = List.of();
         String relationship = viewerContext.relationship();
         if ("ENROLLED".equals(relationship) || "OWNER_INSTRUCTOR".equals(relationship)) {
             List<UUID> outlineLessonIds = outline.stream().flatMap(s -> s.lessons().stream())
                     .map(CatalogOutlineLesson::lessonId).toList();
-            materials = lessonMaterialManagement.findActiveByLessons(outlineLessonIds)
+            List<MaterialView> lessonMaterials = lessonMaterialManagement.findActiveByLessons(outlineLessonIds)
                     .values().stream().flatMap(List::stream).toList();
+            materials = java.util.stream.Stream.concat(
+                    curriculumMaterialManagement.findActiveByCurriculum(curriculumId).stream(),
+                    lessonMaterials.stream()).toList();
         }
 
         return new CatalogDetail(

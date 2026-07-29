@@ -10,6 +10,7 @@ import com.liveclass.curriculum.domain.Section;
 import com.liveclass.curriculum.repository.CurriculumRepository;
 import com.liveclass.curriculum.repository.SectionRepository;
 import com.liveclass.common.logging.Audit;
+import com.liveclass.lesson.api.CurriculumMaterialManagement;
 import com.liveclass.lesson.api.LessonDirectory;
 import com.liveclass.lesson.api.LessonManagement;
 import com.liveclass.lesson.api.LessonMaterialManagement;
@@ -53,6 +54,7 @@ public class InstructorCurriculumService {
     private final LessonDirectory lessonDirectory;
     private final LessonManagement lessonManagement;
     private final LessonMaterialManagement lessonMaterialManagement;
+    private final CurriculumMaterialManagement curriculumMaterialManagement;
     private final LiveSessionManagement liveSessionManagement;
     private final LiveSessionDirectory liveSessionDirectory;
     private final AssetDirectory assetDirectory;
@@ -65,6 +67,7 @@ public class InstructorCurriculumService {
                                        LessonDirectory lessonDirectory,
                                        LessonManagement lessonManagement,
                                        LessonMaterialManagement lessonMaterialManagement,
+                                       CurriculumMaterialManagement curriculumMaterialManagement,
                                        LiveSessionManagement liveSessionManagement,
                                        LiveSessionDirectory liveSessionDirectory,
                                        AssetDirectory assetDirectory,
@@ -75,6 +78,7 @@ public class InstructorCurriculumService {
         this.lessonDirectory = lessonDirectory;
         this.lessonManagement = lessonManagement;
         this.lessonMaterialManagement = lessonMaterialManagement;
+        this.curriculumMaterialManagement = curriculumMaterialManagement;
         this.liveSessionManagement = liveSessionManagement;
         this.liveSessionDirectory = liveSessionDirectory;
         this.assetDirectory = assetDirectory;
@@ -477,6 +481,84 @@ public class InstructorCurriculumService {
                 .orElseThrow(() -> new LessonNotFoundException("자료를 찾을 수 없습니다."));
         return assetDirectory.resolveUrl(material.assetId())
                 .orElseThrow(() -> new LessonNotFoundException("자료 URL을 발급할 수 없습니다."));
+    }
+
+    // ── 커리큘럼-레벨 자료(ADR-0042) ── 레슨 자료와 대칭. 소유권은 여기(curriculum), 저장·검증은 lesson 포트가.
+
+    /** 관리 GET(강사 커리큘럼 상세)의 materials 채우기용 — 소유권 확인 후 활성 커리큘럼 자료를 준다. */
+    @Transactional(readOnly = true)
+    public List<MaterialView> listCurriculumMaterials(UUID instructorId, UUID curriculumId) {
+        requireOwned(instructorId, curriculumId);
+        return curriculumMaterialManagement.findActiveByCurriculum(curriculumId);
+    }
+
+    /**
+     * 커리큘럼에 자료(PPTX) 에셋을 연결한다(ADR-0042). 소유권은 여기서 확인하고, 에셋 유효성 검증과
+     * 연결 저장은 lesson 포트가 한다. 임베딩 파이프라인이 켜져 있으면(기본 꺼짐) 레슨과 동일하게 PENDING으로
+     * 두고 잡을 outbox에 싣는다 — 다만 scope=CURRICULUM이라 lessonId 없이 curriculumId만 싣는다.
+     */
+    @Transactional
+    public MaterialView attachCurriculumMaterial(UUID instructorId, UUID curriculumId, UUID assetId) {
+        requireOwned(instructorId, curriculumId);
+        MaterialView material = curriculumMaterialManagement.attach(curriculumId, assetId, instructorId);
+        log.info(Audit.MARKER, "커리큘럼 자료 연결 curriculumId={} assetId={} materialId={}",
+                curriculumId, assetId, material.materialId());
+        if (embeddingEnabled) {
+            curriculumMaterialManagement.updateEmbeddingStatus(material.materialId(), "PENDING");
+            enqueueCurriculumEmbedJob(curriculumId, material);
+        }
+        return material;
+    }
+
+    /** 커리큘럼 자료 연결 해제(소프트 삭제, 멱등). 파이프라인이 켜져 있으면 pgvector 정리 잡을 싣는다. */
+    @Transactional
+    public void detachCurriculumMaterial(UUID instructorId, UUID curriculumId, UUID materialId) {
+        requireOwned(instructorId, curriculumId);
+        curriculumMaterialManagement.detach(curriculumId, materialId);
+        if (embeddingEnabled) {
+            String payload = jsonMapper.writeValueAsString(Map.of(
+                    "taskType", "EMBED_DELETE",
+                    "scope", "CURRICULUM",
+                    "materialId", materialId.toString(),
+                    "curriculumId", curriculumId.toString(),
+                    "contractVersion", 1));
+            outboxPublisher.enqueue("material_asset", materialId.toString(), "MATERIAL_EMBED_DELETE",
+                    payload, "material:" + materialId + ":embed-delete", null);
+        }
+    }
+
+    /**
+     * 커리큘럼 자료 임베딩 잡을 outbox에 싣는다(ADR-0042). 레슨 잡({@link #enqueueEmbedJob})과 같은 taskType·
+     * 모델·주문형 URL(assetId) 방식이지만, 레슨이 없으므로 {@code lessonId} 대신 {@code scope=CURRICULUM}을
+     * 싣는다. 워커는 scope로 RAG 적재 범위(커리큘럼 전체)를 판별한다(CONTRACT §3-1 evolution, 후속 AI 배선).
+     */
+    private void enqueueCurriculumEmbedJob(UUID curriculumId, MaterialView material) {
+        String payload = jsonMapper.writeValueAsString(Map.of(
+                "taskType", "PPTX_EMBED",
+                "scope", "CURRICULUM",
+                "materialId", material.materialId().toString(),
+                "assetId", material.assetId().toString(),
+                "curriculumId", curriculumId.toString(),
+                "fileName", material.fileName() == null ? "" : material.fileName(),
+                "policy", Map.of("embedModel", "bge-m3"),
+                "contractVersion", 1));
+        outboxPublisher.enqueue("material_asset", material.materialId().toString(), "MATERIAL_EMBED_REQUESTED",
+                payload, "material:" + material.materialId() + ":embed", null);
+    }
+
+    /**
+     * 커리큘럼 자료 다운로드용 presigned GET URL. 소유권 확인 후, 그 커리큘럼의 활성 자료 중 materialId를
+     * 찾아 에셋의 presigned URL을 발급한다(레슨 다운로드와 대칭 — 302 리다이렉트 대상).
+     */
+    @Transactional(readOnly = true)
+    public String curriculumMaterialDownloadUrl(UUID instructorId, UUID curriculumId, UUID materialId) {
+        requireOwned(instructorId, curriculumId);
+        MaterialView material = curriculumMaterialManagement.findActiveByCurriculum(curriculumId).stream()
+                .filter(m -> m.materialId().equals(materialId))
+                .findFirst()
+                .orElseThrow(() -> new CurriculumNotFoundException("자료를 찾을 수 없습니다."));
+        return assetDirectory.resolveUrl(material.assetId())
+                .orElseThrow(() -> new CurriculumNotFoundException("자료 URL을 발급할 수 없습니다."));
     }
 
     // ── 구조 순서 원자 저장 (STRUCTURE-01) ──

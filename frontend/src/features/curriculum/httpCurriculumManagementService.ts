@@ -1,11 +1,11 @@
 import { apiClient } from '@/shared/api/client'
-import { notImplemented } from '@/shared/api/notImplemented'
 import { uploadAsset } from '@/shared/api/uploadAsset'
 import type {
   CurriculumManagementSection,
   CurriculumManagementService,
   InstructorCurriculumResponse,
 } from './curriculumManagementService.interface'
+import type { CurriculumMaterial } from './types'
 
 interface ApiSectionResponse {
   sectionId: string
@@ -18,6 +18,41 @@ interface ApiLessonResponse {
   lessonId: string
   title: string
   status: string
+}
+
+interface ApiCurriculumMaterial {
+  materialId: string
+  fileName: string
+  fileSize: number
+  embeddingStatus?: string
+}
+
+/** API 자료 응답을 화면 모델로. embeddingStatus·file은 목록/표시에 쓰지 않으므로 옮기지 않는다. */
+function toCurriculumMaterial(material: ApiCurriculumMaterial): CurriculumMaterial {
+  return { materialId: material.materialId, fileName: material.fileName, fileSize: material.fileSize }
+}
+
+/** 서버에 저장된 커리큘럼 자료 목록(persisted, File 없음). 저장 후 로컬 상태 교체·삭제 diff의 기준. */
+async function fetchCurriculumMaterials(curriculumId: string): Promise<CurriculumMaterial[]> {
+  const { data } = await apiClient.get<InstructorCurriculumResponse>(`/instructor/curriculums/${curriculumId}`)
+  return (data.materials ?? []).map((material) => toCurriculumMaterial(material as ApiCurriculumMaterial))
+}
+
+/**
+ * 새로 선택한 자료(File 보유)를 presigned 업로드→attach로 커리큘럼에 연결한다(ADR-0042, 레슨과 동일 흐름).
+ * 이미 저장된(File 없는) 자료는 건너뛴다. 어느 파일에서 멈췄는지 알려 부분 실패를 호출자가 알 수 있게 한다.
+ */
+async function attachNewCurriculumMaterials(curriculumId: string, materials: CurriculumMaterial[]): Promise<void> {
+  for (const material of materials) {
+    if (!material.file) continue
+    try {
+      const asset = await uploadAsset(material.file, 'MATERIAL')
+      await apiClient.post(`/instructor/curriculums/${curriculumId}/materials`, { assetId: asset.assetId })
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      throw new Error(`자료 "${material.fileName}" 업로드·연결에 실패했습니다. 이 자료만 다시 추가해 주세요. (${reason})`)
+    }
+  }
 }
 
 export const httpCurriculumManagementService = {
@@ -36,18 +71,27 @@ export const httpCurriculumManagementService = {
     // 생성 API(POST /instructor/curriculums)는 기간을 받지 않는다. 기본 정보 수정 PATCH는 받으므로
     // 입력이 있을 때만 이어서 보낸다. 여기서 실패해도 초안은 이미 만들어졌으니 예외를 올리지 않는다
     // — 올리면 화면이 "생성 실패"로 보여 같은 커리큘럼을 또 만들게 된다.
-    if (request.startsAt === null && request.endsAt === null) {
-      return { curriculumId: data.curriculumId, periodSaved: true }
+    let periodSaved = true
+    if (request.startsAt !== null || request.endsAt !== null) {
+      try {
+        await apiClient.patch(`/instructor/curriculums/${data.curriculumId}`, {
+          startsAt: request.startsAt,
+          endsAt: request.endsAt,
+        })
+      } catch {
+        periodSaved = false
+      }
     }
+
+    // 선택한 강의 자료를 presigned 업로드→attach로 연결한다(ADR-0042). 초안은 이미 만들어졌으므로
+    // 자료 실패도 예외로 올리지 않는다 — 커리큘럼 재생성을 유발하지 않게 하고, 자료는 관리 화면에서 다시 추가한다.
     try {
-      await apiClient.patch(`/instructor/curriculums/${data.curriculumId}`, {
-        startsAt: request.startsAt,
-        endsAt: request.endsAt,
-      })
-      return { curriculumId: data.curriculumId, periodSaved: true }
+      await attachNewCurriculumMaterials(data.curriculumId, request.materials ?? [])
     } catch {
-      return { curriculumId: data.curriculumId, periodSaved: false }
+      // 자료 부분 실패는 관리 화면에서 복구한다. 생성 자체는 성공으로 본다.
     }
+
+    return { curriculumId: data.curriculumId, periodSaved }
   },
   async getInstructorCurriculum(curriculumId) {
     const { data } = await apiClient.get<InstructorCurriculumResponse>(`/instructor/curriculums/${curriculumId}`)
@@ -67,12 +111,6 @@ export const httpCurriculumManagementService = {
     }))
   },
   async saveCurriculumManagement(request) {
-    // 자료 연결 API가 아직 없다(ADR-0023 MATERIAL은 CP3). 아래 쓰기를 먼저 보내고 뒤에서 404를 맞으면
-    // 화면엔 "저장 실패"가 뜨는데 서버 데이터는 절반만 바뀐다. 롤백할 방법이 없으므로 첫 쓰기 전에 막는다.
-    if (request.materials.length > 0) {
-      notImplemented(`PUT /instructor/curriculums/${request.curriculumId}/materials`)
-    }
-
     await apiClient.patch(`/instructor/curriculums/${request.curriculumId}`, request.info)
 
     // 기존 섹션은 제목·설명만 갱신(순서는 아래 order PUT이 담당).
@@ -114,7 +152,22 @@ export const httpCurriculumManagementService = {
       },
     )
 
-    return { structureVersion: order.structureVersion, sectionIdMap }
+    // 커리큘럼-레벨 자료 동기화(ADR-0042). 구조가 저장된 뒤에 반영한다 — 자료는 개별 attach/detach라
+    // 부분 실패해도 구조는 이미 일관되게 저장돼 있다(레슨 자료 흐름과 같은 정책). 서버의 현재 자료를
+    // 기준으로, 사라진 persisted 자료는 삭제하고 새로 선택한(File 보유) 자료는 업로드·연결한다.
+    const serverMaterials = await fetchCurriculumMaterials(request.curriculumId)
+    const keptIds = new Set(request.materials.filter((m) => !m.file).map((m) => m.materialId))
+    for (const stale of serverMaterials.filter((m) => !keptIds.has(m.materialId))) {
+      await apiClient.delete(`/instructor/curriculums/${request.curriculumId}/materials/${stale.materialId}`)
+    }
+    await attachNewCurriculumMaterials(request.curriculumId, request.materials)
+
+    return {
+      structureVersion: order.structureVersion,
+      sectionIdMap,
+      // 저장 후 서버 진실을 다시 읽어 돌려준다 — 화면이 임시 id·File을 실제 persisted 자료로 교체한다.
+      materials: await fetchCurriculumMaterials(request.curriculumId),
+    }
   },
   async publishCurriculum(curriculumId) {
     await apiClient.post(`/instructor/curriculums/${curriculumId}/publish`)

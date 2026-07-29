@@ -6,9 +6,11 @@ import com.liveclass.curriculum.domain.CurriculumLifecycleStatus;
 import com.liveclass.curriculum.service.InstructorCurriculumService;
 import com.liveclass.curriculum.service.InstructorCurriculumSort;
 import com.liveclass.curriculum.service.SectionOrderCommand;
+import com.liveclass.curriculum.web.dto.AttachMaterialRequest;
 import com.liveclass.curriculum.web.dto.CreateCurriculumRequest;
 import com.liveclass.curriculum.web.dto.CurriculumResponse;
 import com.liveclass.curriculum.web.dto.InstructorCurriculumListItem;
+import com.liveclass.curriculum.web.dto.LessonMaterialResponse;
 import com.liveclass.curriculum.web.dto.PageResponse;
 import com.liveclass.curriculum.web.dto.SectionRequest;
 import com.liveclass.curriculum.web.dto.SectionResponse;
@@ -20,6 +22,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -32,6 +35,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.net.URI;
 import java.util.List;
 import java.util.UUID;
 
@@ -86,10 +90,17 @@ public class InstructorCurriculumController {
                 InstructorCurriculumListItem::from);
     }
 
-    @Operation(summary = "커리큘럼 관리 조회", description = "관리 화면용 상세. 섹션·레슨 개수 같은 운영 정보까지 포함한다. 본인 것만.")
+    @Operation(summary = "커리큘럼 관리 조회",
+            description = "관리 화면용 상세. 섹션·레슨 개수 같은 운영 정보와 커리큘럼-레벨 강의 자료(materials, ADR-0042)까지 포함한다. 본인 것만.")
     @GetMapping("/api/instructor/curriculums/{curriculumId}")
     public CurriculumResponse get(@PathVariable UUID curriculumId, Authentication authentication) {
-        return toResponse(service.getOwned(currentUserId(authentication), curriculumId));
+        UUID instructorId = currentUserId(authentication);
+        Curriculum curriculum = service.getOwned(instructorId, curriculumId);
+        String thumbnailUrl = curriculum.getThumbnailAssetId() == null
+                ? null
+                : assetDirectory.resolveUrl(curriculum.getThumbnailAssetId()).orElse(null);
+        return CurriculumResponse.from(curriculum, thumbnailUrl,
+                service.listCurriculumMaterials(instructorId, curriculumId));
     }
 
     @Operation(summary = "커리큘럼 기본 정보 수정", description = "제목·소개·설명·진행 기간·썸네일을 수정한다. 요청에 담아 보낸 필드만 바뀐다.")
@@ -170,6 +181,37 @@ public class InstructorCurriculumController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteSection(@PathVariable UUID sectionId, Authentication authentication) {
         service.deleteSection(currentUserId(authentication), sectionId);
+    }
+
+    // ── 커리큘럼-레벨 강의 자료(ADR-0042) ── 레슨 자료(InstructorLessonController)와 대칭.
+
+    @Operation(summary = "커리큘럼 자료 연결",
+            description = "미리 업로드한 자료 에셋(kind=MATERIAL)을 커리큘럼에 연결한다. 커리큘럼 전체(모든 강의 공통) 자료다(ADR-0042). "
+                    + "본문의 assetId는 본인이 올린 업로드 완료 에셋이어야 한다.")
+    @PostMapping("/api/instructor/curriculums/{curriculumId}/materials")
+    @ResponseStatus(HttpStatus.CREATED)
+    public LessonMaterialResponse attachMaterial(@PathVariable UUID curriculumId,
+                                                 @Valid @RequestBody AttachMaterialRequest request,
+                                                 Authentication authentication) {
+        return LessonMaterialResponse.from(
+                service.attachCurriculumMaterial(currentUserId(authentication), curriculumId, request.assetId()));
+    }
+
+    @Operation(summary = "커리큘럼 자료 삭제", description = "연결된 커리큘럼 자료를 소프트 삭제한다(멱등). 소유 강사만.")
+    @DeleteMapping("/api/instructor/curriculums/{curriculumId}/materials/{materialId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteMaterial(@PathVariable UUID curriculumId, @PathVariable UUID materialId,
+                               Authentication authentication) {
+        service.detachCurriculumMaterial(currentUserId(authentication), curriculumId, materialId);
+    }
+
+    @Operation(summary = "커리큘럼 자료 다운로드",
+            description = "presigned GET URL로 302 리다이렉트한다 — 바이트는 스토리지 직결. 소유 강사만.")
+    @GetMapping("/api/instructor/curriculums/{curriculumId}/materials/{materialId}/download")
+    public ResponseEntity<Void> downloadMaterial(@PathVariable UUID curriculumId, @PathVariable UUID materialId,
+                                                 Authentication authentication) {
+        String url = service.curriculumMaterialDownloadUrl(currentUserId(authentication), curriculumId, materialId);
+        return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(url)).build();
     }
 
     /** 단건 응답: 썸네일 에셋이 있으면 presigned URL로 해석해 채운다(없으면 null). */

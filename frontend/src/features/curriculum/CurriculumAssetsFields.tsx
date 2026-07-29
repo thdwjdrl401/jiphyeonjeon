@@ -9,6 +9,8 @@ interface CurriculumAssetsFieldsProps {
   onThumbnailChange: (selection: CurriculumImageSelection | null) => void
   materials: CurriculumMaterial[]
   onMaterialsChange: (materials: CurriculumMaterial[]) => void
+  /** 저장된 자료의 다운로드 링크(관리 화면). 새 커리큘럼 만들기에서는 아직 저장 전이라 주지 않는다. */
+  materialDownloadHref?: (material: CurriculumMaterial) => string
 }
 
 /**
@@ -22,6 +24,7 @@ export default function CurriculumAssetsFields({
   onThumbnailChange,
   materials,
   onMaterialsChange,
+  materialDownloadHref,
 }: CurriculumAssetsFieldsProps) {
   return (
     <div className="curriculum-assets-grid">
@@ -41,6 +44,7 @@ export default function CurriculumAssetsFields({
           id={`${idPrefix}-materials`}
           value={materials}
           onChange={onMaterialsChange}
+          downloadHref={materialDownloadHref}
         />
       </section>
     </div>
