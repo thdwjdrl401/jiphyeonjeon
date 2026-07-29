@@ -10,6 +10,36 @@ room job은 공통 engine 인터페이스만 사용한다. catalog가 `stub`, `o
 factory와 실행 profile을 등록하고, registry가 선택한 구현과 선택적인 prewarmed process resource를
 조립한다. 필요하면 audio segmentation을 provider adapter 앞에 둔다.
 
+```text
+Room job
+  └─ StreamingSttEngine: 16 kHz mono AudioChunk → EngineEvent
+       └─ catalog/registry
+            ├─ stub             (process 내부, 외부 통신 없음)
+            ├─ openai-realtime  (outbound WebSocket)
+            └─ nemotron         (job child가 소유한 local GPU model)
+```
+
+provider 선택은 `STT_ENGINE_PROVIDER` 한 곳에서 끝난다. room job, caption pipeline, Redis publisher는
+provider 이름이나 model별 protocol을 알지 못한다.
+
+## 실행 profile과 자원 수명주기
+
+| provider | 기본 active/idle | process prewarm | 추론 통신 |
+|---|---:|---|---|
+| `stub` | 1 / 1 | 없음 | process 내부 fake delta |
+| `openai-realtime` | 1 / 1 | 없음 | OpenAI Realtime outbound WSS; 실제 동시 수는 API quota에 맞춰 운영자가 제한 |
+| `nemotron` | 12 / 12 | child마다 model 1개, 최대 120초 | 로컬 CUDA; 외부 model API 없음 |
+
+1. parent가 catalog를 만들고 profile만 읽어 `AgentServer` pool을 설정한다.
+2. LiveKit child `setup_fnc`가 provider의 process resource를 `process.userdata`에 저장한다.
+3. job 시작 시 registry가 resource를 `pop`해 engine에 단 한 번 소유권을 이전한다.
+4. engine 종료가 resource와 GPU allocation을 정리한다. prewarm resource가 없으면 Nemotron은
+   cold-load로 우회하지 않고 실패한다.
+
+이 12-process 방식은 현재 H200 단일 GPU용 단기 구조다. GPU당 model 하나를 공유하는 dynamic batching
+runtime은 [ADR-0027](../../../../docs/decisions/canola/0027-realtime-stt-shared-gpu-runtime.md)의 장기
+구조이며 아직 이 registry의 구현이 아니다.
+
 ## 파일 구성
 
 - `engine.py`: audio write·event iteration·finish·close 계약

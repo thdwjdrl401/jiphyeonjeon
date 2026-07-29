@@ -89,6 +89,29 @@ GitLab job도 같은 helper를 현재 사용자로 직접 호출하며 sudo, sys
 
 ## 4. 연결과 상태 확인
 
+GPU 호스트는 외부에서 inbound port를 열지 않는다. 사용자 영역 SSH client가 EC2에 연결해 세 개의
+local forward와 하나의 reverse forward를 한 control connection으로 유지한다.
+
+```mermaid
+flowchart LR
+    subgraph GPU[GPU host]
+        A[realtime-agent]
+        H[health 127.0.0.1:8081]
+        R[GitLab Runner]
+    end
+    subgraph EC2[EC2]
+        L[LiveKit :7443]
+        D[Application Redis :4000]
+        T[TURN/TCP :3478]
+        J[Java health client :18081]
+    end
+    A -->|SSH local forward :7443| L
+    A -->|SSH local forward :4000| D
+    A -->|SSH local forward :3478| T
+    J -->|SSH reverse forward :18081 → :8081| H
+    R -->|outbound HTTPS| G[GitLab]
+```
+
 | 방향 | GPU 측 | EC2 측 | 용도 |
 |---|---|---|---|
 | local | 127.0.0.1:7443 | 127.0.0.1:7443 | LiveKit |
@@ -98,6 +121,12 @@ GitLab job도 같은 helper를 현재 사용자로 직접 호출하며 sudo, sys
 
 EC2 Java는 http://127.0.0.1:18081/로 GPU agent 상태를 확인한다. EC2 loopback에만 bind되므로 외부에
 공개되지 않는다.
+
+`LIVEKIT_URL`은 TLS 인증서 hostname을 유지하되 배포 resolver가 그 hostname만 GPU loopback으로
+해석한다. 따라서 TLS SNI/hostname 검증을 버리지 않고 `127.0.0.1:7443` SSH tunnel을 사용한다.
+`REDIS_URL`과 TURN도 GPU loopback listener를 가리킨다. OpenAI provider로 전환하는 경우 OpenAI WSS는
+이 SSH tunnel을 거치지 않는 별도 outbound TLS 연결이며 `OPENAI_API_KEY`를 agent 환경파일로 주입해야
+한다.
 
 ~~~sh
 ~/.local/bin/liveclass-realtime-agent-supervisor status
@@ -111,3 +140,6 @@ curl --fail http://127.0.0.1:8081/
 - tunnel 또는 agent가 비정상 종료하면 tmux supervisor loop가 다시 시작한다.
 - active 강의 중 배포는 기존 process의 drain을 기다리지 않고 tmux session을 교체한다.
 - GPU/Jupyter 재시작 후에는 ~/.local/bin/liveclass-gitlab-runner-user start를 다시 실행한다.
+
+수동 tunnel helper의 입력·port 변경과 검증 방법은 [`../scripts/README.md`](../scripts/README.md)를
+참고한다.

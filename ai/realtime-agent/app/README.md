@@ -10,6 +10,36 @@ LiveKit job을 받아 실시간 오디오를 STT로 변환하고 자막과 상�
 provider의 선택적 process resource는 LiveKit child setup에서 준비하고, handler는 `jobs/`의 생명주기를
 중심으로 `livekit/` 오디오 입력, `stt/` 엔진, `captions/` 파이프라인, `adapters/` 외부 통신을 연결한다.
 
+```mermaid
+flowchart TD
+    C[config.py 환경 변수 검증] --> M[main.py]
+    M --> G[STT catalog/registry]
+    G --> P[provider execution profile]
+    P --> A[AgentServer parent]
+    A -->|setup_fnc| W[prewarmed JobProcess]
+    W -->|process.userdata 소유권 이전| J[한 Room의 job handler]
+    J --> L[livekit/: audio source]
+    L --> T[stt/: StreamingSttEngine]
+    T --> Q[captions/: sequence mapping]
+    Q --> D[adapters/: Redis publisher]
+    J -.-> H[adapters/: Spring callback]
+```
+
+`AgentServer` parent는 provider catalog와 worker load만 소유하고 CUDA model을 만들지 않는다. Nemotron
+resource는 각 child의 `setup_fnc`에서 미리 만들고 `process.userdata`를 통해 정확히 한 engine으로
+이전한다. OpenAI와 stub은 process resource 없이 같은 job 조립 경로를 사용한다.
+
+## 외부 통신 경계
+
+- `AgentServer` ↔ LiveKit: Worker 등록, load 보고, job 배정용 persistent WebSocket
+- `LiveKitInstructorAudioSource` ↔ LiveKit Room: WebRTC 참가, microphone 구독, Room lifecycle
+- `RedisSessionLease`·`RedisCaptionPublisher` → application Redis: lease Lua 연산과 bounded `XADD`
+- `SpringStatusCallback` → Spring: 선택적인 HTTP(S) HMAC callback
+- `OpenAiRealtimeStreamingEngine` → OpenAI: provider가 선택된 경우에만 outbound WebSocket
+
+`main.py`는 위 통신을 조립하지만 payload를 새로 정의하지 않는다. 세부 wire format은 각 하위 README와
+[`../CONTRACT.md`](../CONTRACT.md)가 소유한다.
+
 ## 파일 구성
 
 - `main.py`: `dev`·`start` 실행 진입점과 LiveKit worker 등록
