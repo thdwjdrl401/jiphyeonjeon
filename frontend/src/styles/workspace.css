@@ -530,9 +530,18 @@ th { color: var(--ink-500); font-size: .67rem; }
   backdrop-filter: blur(12px);
 }
 
+.workspace-panel,
+.metric-card,
+.dashboard-curriculum-card,
+.structure-section,
+.workspace-tabs {
+  border-color: var(--border-medium);
+  background: rgba(255, 252, 243, .97);
+}
+
 .workspace-panel {
   border-radius: 18px;
-  box-shadow: 0 12px 36px rgba(59, 40, 16, .07), var(--shadow-inset);
+  box-shadow: 0 14px 38px rgba(59, 40, 16, .09), var(--shadow-inset);
 }
 
 .workspace-panel__header {
@@ -605,7 +614,7 @@ th { color: var(--ink-500); font-size: .67rem; }
 .check-grid li,
 .notice-grid > div,
 .speaker-confirm {
-  border-color: var(--border-soft);
+  border: 1px solid var(--border-soft);
   background: var(--surface-muted);
 }
 
