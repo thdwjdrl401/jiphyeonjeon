@@ -25,6 +25,36 @@ Spring 공유 경계는 [`docs/CONTRACT.md` §3-3~§3-5](../../docs/CONTRACT.md#
 별도 Python stop HTTP API나 Redis stop command는 두지 않는다. Spring이 이미 소유한 LiveKit room
 lifecycle과 제어면을 중복시키지 않고 `ROOM_DELETED`를 정상 stop 신호로 사용한다.
 
+## 통신 구조
+
+```mermaid
+flowchart LR
+    B[강사 브라우저] -->|WebRTC microphone| L[LiveKit SFU]
+    S[Spring] -->|Server API: room + explicit dispatch| L
+    W[AgentServer parent] <-->|Worker WebSocket: 등록·load·job 배정| L
+    W -->|SDK: job child 생성| J[Room job child]
+    J <-->|WebRTC: room 참가·audio 구독·ROOM_DELETED| L
+    J -->|16 kHz mono PCM| E{STT provider}
+    E -->|local process/thread| N[Nemotron on GPU]
+    E -->|WSS: 24 kHz PCM + transcript events| O[OpenAI Realtime]
+    J -->|SET NX EX + Lua renew/release| R[(Application Redis)]
+    J -->|XADD caption.delta/completed| R
+    J -.->|HTTP(S) HMAC callback, opt-in| S
+```
+
+| 경계 | 방향·protocol | 전달 내용 | 실패·소유권 기준 |
+|---|---|---|---|
+| dispatch/control | Spring → LiveKit → Worker | agent name, strict metadata, job 배정, worker load | Spring이 dispatch와 timeout을 소유하고 LiveKit이 가용 Worker 하나를 고른다. |
+| room media | 브라우저 → LiveKit → job | remote microphone PCM, room lifecycle | job은 assigned Room에만 참가하며 `ROOM_DELETED`만 정상 EOF다. |
+| STT | job → provider | provider-neutral `AudioChunk`; transcript delta | Nemotron은 job child의 로컬 GPU 자원이고 OpenAI는 outbound WSS session이다. |
+| caption/lease | job → application Redis | session lease, `caption.delta`, `caption.stream.completed` | write timeout은 commit 여부가 unknown일 수 있어 consumer가 `eventId`로 멱등 처리한다. |
+| lifecycle | job → Spring, 선택적 | HMAC 서명 상태 callback | Java receiver 채택 전까지 기본 비활성화하며 terminal first-wins를 지킨다. |
+
+LiveKit 내부 Redis와 application Redis는 서로 다른 경계다. 이 agent가 직접 사용하는 `REDIS_URL`은
+lease와 caption을 위한 application Redis를 가리켜야 한다. 상세 wire format과 sequence diagram은
+[CONTRACT.md](CONTRACT.md), provider별 통신은 [`app/stt/providers/`](app/stt/providers/README.md),
+GPU 호스트의 SSH port forwarding은 [`deploy/`](deploy/README.md)를 따른다.
+
 ## 안전 경계
 
 - 같은 publisher가 microphone을 여러 개 발행해도 한 track만 선택한다.
@@ -137,4 +167,6 @@ LiveKit, Spring 왕복과 OpenAI credential은 별도 opt-in smoke 증거가 필
 - [`app/adapters/`](app/adapters/README.md): Redis와 Spring 외부 통신 형식
 - [`app/contracts/`](app/contracts/README.md): 상태 콜백 모델과 직렬화
 - [`contracts/`](contracts/README.md): AI-side v1 후보 JSON Schema와 fixture
+- [`deploy/`](deploy/README.md): GPU 사용자 영역 배포와 SSH 통신 구조
+- [`scripts/`](scripts/README.md): 로컬·GPU 검증용 SSH tunnel helper
 - [`tests/`](tests/README.md): 단위·계약·생명주기 검증 범위

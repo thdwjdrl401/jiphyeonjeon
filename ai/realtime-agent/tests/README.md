@@ -15,11 +15,19 @@
 - `test_redis_*.py`, `test_spring_status_callback.py`: 외부 adapter wire shape와 실패 처리
 - `test_room_job*.py`, `test_lifecycle.py`, `test_shutdown_deadline.py`: job 생명주기와 race
 - `test_audio_*.py`, `test_*provider*.py`: 오디오와 STT provider 계약
+- `test_stt_catalog.py`, `test_stt_registry.py`: provider profile, active/idle 상한과 prewarm resource 소유권
+- `test_main.py`, `test_config.py`: AgentServer load 계산과 환경 변수 조립
+- `test_operational_scripts.py`: SSH tunnel·배포 helper의 port와 secret 취급
 
 ## 경계와 불변식
 
 단위 테스트 통과는 실제 LiveKit·Redis·Spring·provider 연동 증거를 대신하지 않는다. 외부 자격 증명이 필요한
 smoke/E2E 검증은 별도 opt-in으로 수행해야 한다.
+
+통신 테스트도 기본 suite에서는 network를 열지 않는다. LiveKit Worker/Room, Redis, Spring HTTP,
+OpenAI WebSocket은 fake boundary로 대체해 payload, timeout, cancellation과 멱등성 전제만 검증한다.
+실제 Room→provider→Redis 결과와 GPU 동시성 증거는
+[`docs/ai/GPU-REALTIME-AGENT-RUNBOOK.md`](../../../docs/ai/GPU-REALTIME-AGENT-RUNBOOK.md)에 별도로 남긴다.
 
 ## 검증
 

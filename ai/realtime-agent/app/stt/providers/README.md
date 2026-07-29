@@ -9,6 +9,28 @@
 registry가 provider를 선택한다. streaming provider는 PCM을 지속 전송하고, segmented provider는 발화 단위로
 나눈 뒤 backend를 호출한다. `stub`은 로컬 wiring과 테스트 전용이다.
 
+공통 `SegmentedStreamingEngine`은 16 kHz mono PCM을 client-side VAD segment로 만들고 bounded queue에서
+한 segment씩 직렬 처리한다. provider 결과만 `TextDelta`로 되돌리므로 caption·Redis 계층은 provider의
+wire protocol을 알지 못한다.
+
+## provider별 통신
+
+| provider | 입력·전송 | 응답 | 외부 자격 증명 |
+|---|---|---|---|
+| `openai-realtime` | 16 kHz PCM을 24 kHz로 resample하고 base64 `input_audio_buffer.append` 후 segment마다 `commit` | 같은 `item_id`의 transcription delta/completed/failed event | `OPENAI_API_KEY` Bearer token |
+| `nemotron` | 16 kHz PCM을 NumPy/Transformers adapter로 전달 | local `TextIteratorStreamer` delta | 없음; `ASR_MODEL_ID`의 로컬 checkpoint 사용 가능 |
+| `stub` | process 내부 입력 | deterministic fake event | 없음 |
+
+OpenAI 연결 URL은 `wss://api.openai.com/v1/realtime?intent=transcription`이다. model은 URL query가 아니라
+첫 `session.update`의 `session.audio.input.transcription.model`에 넣는다. 한 job은 WebSocket session
+하나를 재사용하고 client VAD가 만든 segment를 순서대로 전송한다. 이미 발행한 realtime delta와 final
+transcript가 실질적으로 다르면 append-only Redis 계약 때문에 기존 delta를 교정하거나 취소하지 않고
+길이만 warning으로 기록한다.
+
+Nemotron 경로에는 외부 network hop이 없다. prewarmed recognizer와 CUDA model은 job child 하나가
+독점하고, segment inference는 engine의 lock으로 직렬화한다. model generate thread의 결과는 event loop
+queue로 전달하며 close 시 stop event를 보내 GPU 자원을 해제한다.
+
 ## 파일 구성
 
 - `openai_realtime.py`: `intent=transcription` session을 사용하는 OpenAI Realtime STT 연결

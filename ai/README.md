@@ -7,7 +7,7 @@ lockfile을 독립적으로 관리한다.
 |---|---|---|
 | [`ai-api`](ai-api/README.md) | Redis/pgvector/BGE 근거와 GMS 답변을 조율하는 RAG SSE 서비스 | `127.0.0.1:8010` |
 | [`ai-worker`](ai-worker/README.md) | 비동기 AI 작업 프로세스 골격 | `127.0.0.1:8011` |
-| [`realtime-agent`](realtime-agent/README.md) | LiveKit 강사 오디오→STT→Redis caption agent | LiveKit AgentServer |
+| [`realtime-agent`](realtime-agent/README.md) | LiveKit 강사 오디오→provider-neutral STT→Redis caption agent | LiveKit AgentServer |
 | [`bge-runtime`](bge-runtime/README.md) | 인증된 BGE-M3 내부 GPU embedding runtime | `127.0.0.1:8020` |
 
 현재 범위는 ai-api의 RAG 요청→Redis/pgvector/BGE 근거 조회→GMS 답변→SSE terminal
@@ -25,6 +25,24 @@ Spring 쪽 서명 발급기가 아직 없어 실제 상호 인증까지는 안 �
 후속 협업 gate다.
 
 실행과 검증 명령은 각 서비스 README를 따른다.
+
+## realtime-agent 통신 요약
+
+realtime-agent는 Spring이 직접 호출하는 HTTP 서비스가 아니다. Spring이 LiveKit에 explicit dispatch를
+만들면, LiveKit에 등록된 Python Worker가 job을 받아 Room 오디오를 처리한다. 자막은 application
+Redis Stream으로 보내고, lifecycle callback은 Java 수신 구현이 준비된 경우에만 선택적으로 사용한다.
+
+```text
+Spring ──dispatch──> LiveKit ──job/WebRTC audio──> realtime-agent
+                                                   ├─ local GPU: Nemotron
+                                                   ├─ outbound WSS: OpenAI Realtime
+                                                   ├─ Redis: lease + caption stream
+                                                   └─ HTTP(S): Spring callback (기본 비활성)
+```
+
+세부 protocol, 소유권과 장애 처리는
+[`realtime-agent/README.md`](realtime-agent/README.md#통신-구조)와
+[`realtime-agent/CONTRACT.md`](realtime-agent/CONTRACT.md)를 따른다.
 
 ## 폴더별 문서
 
