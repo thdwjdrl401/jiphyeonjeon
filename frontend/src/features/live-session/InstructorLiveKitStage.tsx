@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import type { LocalVideoTrack } from 'livekit-client'
 import { StatusBadge } from '@/shared/ui/WorkspaceUi'
+import CameraOverlayControl from './CameraOverlayControl'
 import { useInstructorLiveKit, type InstructorLiveKitConnectionState } from './useInstructorLiveKit'
 
 interface InstructorLiveKitStageProps {
@@ -57,8 +58,18 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
         {mainTrack
           ? <LocalTrackVideo fit={screenShareTrack ? 'contain' : 'cover'} label={screenShareTrack ? '공유 화면 미리보기' : '카메라 미리보기'} track={mainTrack} />
           : <div className="instructor-media-empty"><span aria-hidden="true">◉</span><strong>{emptyPreviewMessage(publisher.connectionState, publisher.cameraEnabled)}</strong></div>}
+        {/*
+          화면공유 위의 카메라는 단순 미리보기가 아니라 합성 화면의 편집기다. 여기서 옮긴 자리가
+          그대로 수강생 녹화가 된다 — 미리보기와 Egress 템플릿이 같은 값(0~1 비율)을 읽는다.
+        */}
         {showCameraPictureInPicture && cameraTrack && (
-          <div className="instructor-camera-pip"><LocalTrackVideo label="카메라 미리보기" track={cameraTrack} /></div>
+          <CameraOverlayControl
+            overlay={publisher.cameraOverlay}
+            onChange={publisher.moveCameraOverlay}
+            disabled={!publisher.canControl}
+          >
+            <LocalTrackVideo label="카메라 미리보기" track={cameraTrack} />
+          </CameraOverlayControl>
         )}
       </div>
 
@@ -85,6 +96,21 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
             <button aria-pressed={publisher.microphoneEnabled} className={publisher.microphoneEnabled ? 'is-active' : ''} disabled={!publisher.canControl || Boolean(publisher.pendingControl)} type="button" onClick={publisher.toggleMicrophone}>마이크 {publisher.microphoneEnabled ? '켜짐' : '꺼짐'}</button>
             <button aria-pressed={publisher.cameraEnabled} className={publisher.cameraEnabled ? 'is-active' : ''} disabled={!publisher.canControl || Boolean(publisher.pendingControl)} type="button" onClick={publisher.toggleCamera}>카메라 {publisher.cameraEnabled ? '켜짐' : '꺼짐'}</button>
             <button aria-pressed={publisher.screenShareEnabled} className={publisher.screenShareEnabled ? 'is-active' : ''} disabled={!publisher.canControl || Boolean(publisher.pendingControl)} type="button" onClick={publisher.toggleScreenShare}>{publisher.screenShareEnabled ? '화면 공유 중' : '화면 공유'}</button>
+            {/*
+              카메라 자체를 끄지 않고 합성 화면에서만 내린다. 강사는 계속 자기 카메라를 보면서
+              수강생 화면에는 자료만 띄울 수 있다 — 자료에 집중시키고 싶은 구간에서 쓴다.
+            */}
+            {showCameraPictureInPicture && (
+              <button
+                aria-pressed={publisher.cameraOverlay.visible}
+                className={publisher.cameraOverlay.visible ? 'is-active' : ''}
+                disabled={!publisher.canControl}
+                type="button"
+                onClick={() => publisher.moveCameraOverlay({ visible: !publisher.cameraOverlay.visible })}
+              >
+                수강생 화면에 카메라 {publisher.cameraOverlay.visible ? '표시' : '숨김'}
+              </button>
+            )}
           </div>
           {publisher.pendingControl && <span>장치 상태 변경 중...</span>}
         </div>

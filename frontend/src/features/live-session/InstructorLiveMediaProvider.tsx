@@ -25,6 +25,13 @@ import {
   screenPreset,
   type PublishQuality,
 } from './publishQuality'
+import {
+  DEFAULT_CAMERA_OVERLAY,
+  clampOverlay,
+  parseCameraOverlay,
+  withCameraOverlay,
+  type CameraOverlay,
+} from './cameraOverlay'
 
 export type InstructorLiveKitConnectionState =
   | 'idle'
@@ -56,6 +63,9 @@ export interface InstructorLiveMedia extends InstructorLiveKitState {
   /** 강사가 고른 송출 품질. 켜져 있는 트랙에는 즉시 반영된다. */
   quality: PublishQuality
   changeQuality: (next: Partial<PublishQuality>) => void
+  /** 합성 화면에서 카메라가 놓일 자리. 강사가 옮긴 그대로 수강생 녹화에 반영된다. */
+  cameraOverlay: CameraOverlay
+  moveCameraOverlay: (next: Partial<CameraOverlay>) => void
   /** 품질 변경으로 트랙을 다시 올리는 중. 이때는 선택을 잠근다. */
   applyingQuality: boolean
   retry: () => void
@@ -132,6 +142,9 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
   // 이미 올라간 트랙은 재게시로 반영한다.
   const qualityRef = useRef(quality)
   qualityRef.current = quality
+  const [cameraOverlay, setCameraOverlay] = useState<CameraOverlay>(DEFAULT_CAMERA_OVERLAY)
+  const overlayRef = useRef(cameraOverlay)
+  overlayRef.current = cameraOverlay
 
   const syncLocalState = useCallback((room: Room) => {
     setState((current) => ({
@@ -398,6 +411,42 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
     void republish()
   }, [state.connectionState, syncLocalState])
 
+  /**
+   * 카메라 배치를 강사 participant metadata에 쓴다. Egress 템플릿이 이 값을 읽어 합성하므로
+   * 강사가 미리보기에서 옮긴 자리가 그대로 수강생 녹화가 된다.
+   *
+   * <p>화면은 즉시 갱신하고 metadata 전송은 뒤따르게 한다 — 드래그 중에 서버 왕복을 기다리면
+   * 화면이 손가락을 따라오지 못한다. 전송이 실패해도 미리보기는 그대로 두고, 다음 조작 때
+   * 최신 값이 다시 나간다(마지막 값이 이긴다).
+   */
+  const moveCameraOverlay = useCallback((next: Partial<CameraOverlay>) => {
+    const merged = clampOverlay({ ...overlayRef.current, ...next })
+    overlayRef.current = merged
+    setCameraOverlay(merged)
+
+    const room = roomRef.current
+    if (!room || state.connectionState !== 'connected') return
+    const participant = room.localParticipant
+    void participant
+      .setMetadata(withCameraOverlay(participant.metadata, merged))
+      .catch((error) => {
+        console.warn('카메라 배치를 합성 화면에 전달하지 못했습니다', error)
+      })
+  }, [state.connectionState])
+
+  // 재연결하면 participant가 새로 만들어져 metadata가 비고, 합성 화면이 기본 배치로 돌아간다.
+  // 강사가 옮겨 둔 자리를 다시 실어 준다.
+  useEffect(() => {
+    const room = roomRef.current
+    if (!room || state.connectionState !== 'connected') return
+    const participant = room.localParticipant
+    const current = parseCameraOverlay(participant.metadata)
+    if (JSON.stringify(current) === JSON.stringify(overlayRef.current)) return
+    void participant
+      .setMetadata(withCameraOverlay(participant.metadata, overlayRef.current))
+      .catch(() => undefined)
+  }, [state.connectionState])
+
   const value = useMemo<InstructorLiveMedia>(() => ({
     ...state,
     sessionId,
@@ -405,12 +454,14 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
     canControl: state.connectionState === 'connected' || state.connectionState === 'mock',
     quality,
     changeQuality,
+    cameraOverlay,
+    moveCameraOverlay,
     applyingQuality,
     retry: () => setRetryCount((current) => current + 1),
     toggleCamera: () => { void toggleControl('camera') },
     toggleMicrophone: () => { void toggleControl('microphone') },
     toggleScreenShare: () => { void toggleControl('screenShare') },
-  }), [applyingQuality, changeQuality, pendingControl, quality, sessionId, state, toggleControl])
+  }), [applyingQuality, cameraOverlay, changeQuality, moveCameraOverlay, pendingControl, quality, sessionId, state, toggleControl])
 
   return (
     <InstructorLiveMediaContext.Provider value={value}>

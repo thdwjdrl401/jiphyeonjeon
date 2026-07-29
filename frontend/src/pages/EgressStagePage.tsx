@@ -71,12 +71,24 @@ export default function EgressStagePage() {
       if (publication.source === Track.Source.Camera) setHasCamera(false)
     }
 
-    const syncOverlay = () => setOverlay(parseCameraOverlay(room.metadata))
+    // 배치는 강사 participant의 metadata에 실린다. 강사 브라우저가 직접 쓸 수 있어(CanUpdateOwnMetadata)
+    // 백엔드 왕복 없이 드래그가 곧바로 합성에 반영된다. 카메라를 올린 참가자를 강사로 본다.
+    const syncOverlay = () => {
+      for (const participant of room.remoteParticipants.values()) {
+        if (participant.getTrackPublication(Track.Source.Camera)
+          || participant.getTrackPublication(Track.Source.ScreenShare)) {
+          setOverlay(parseCameraOverlay(participant.metadata))
+          return
+        }
+      }
+    }
 
     room
       .on(RoomEvent.TrackSubscribed, attach)
       .on(RoomEvent.TrackUnsubscribed, detach)
-      .on(RoomEvent.RoomMetadataChanged, syncOverlay)
+      .on(RoomEvent.ParticipantMetadataChanged, syncOverlay)
+      .on(RoomEvent.TrackPublished, syncOverlay)
+      .on(RoomEvent.ParticipantConnected, syncOverlay)
       .on(RoomEvent.Disconnected, signalEnd)
 
     room
@@ -97,7 +109,9 @@ export default function EgressStagePage() {
       room
         .off(RoomEvent.TrackSubscribed, attach)
         .off(RoomEvent.TrackUnsubscribed, detach)
-        .off(RoomEvent.RoomMetadataChanged, syncOverlay)
+        .off(RoomEvent.ParticipantMetadataChanged, syncOverlay)
+        .off(RoomEvent.TrackPublished, syncOverlay)
+        .off(RoomEvent.ParticipantConnected, syncOverlay)
         .off(RoomEvent.Disconnected, signalEnd)
       void room.disconnect(true)
     }
