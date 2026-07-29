@@ -205,8 +205,8 @@ export const httpLiveSessionService = {
   async endLiveSession(sessionId) {
     await apiClient.post(`/live-sessions/${sessionId}/end`)
   },
-  async getLiveToken(sessionId) {
-    const { data } = await apiClient.post<ApiLiveToken>(`/live-sessions/${sessionId}/token`)
+  async getInstructorLiveToken(sessionId) {
+    const { data } = await apiClient.post<ApiLiveToken>(`/instructor/live-sessions/${sessionId}/token`)
     return { token: data.accessToken, wsUrl: data.livekitUrl }
   },
   async getParticipants(sessionId) {

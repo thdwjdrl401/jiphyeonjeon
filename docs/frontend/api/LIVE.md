@@ -1,6 +1,6 @@
 # 라이브 세션 준비·입장·라이브 레슨 API
 
-> 공통 규칙: [API_MAP.md](../API_MAP.md) · 세션 화면: [LIVE_SESSION.md](../components/LIVE_SESSION.md) · 강의실 화면: [LIVE_LESSON.md](../components/LIVE_LESSON.md) · 공유 계약: [CONTRACT.md](../../CONTRACT.md)
+> 공통 규칙: [API_MAP.md](API_MAP.md) · 세션 화면: [LIVE_SESSION.md](../components/LIVE_SESSION.md) · 강의실 화면: [LIVE_LESSON.md](../components/LIVE_LESSON.md) · 공유 계약: [CONTRACT.md](../../CONTRACT.md)
 
 ## 1. 범위
 
@@ -23,7 +23,7 @@ STARTING ─────────→ FAILED
 ### 1.2 미디어 권한
 
 - 강사 LiveKit token: publish·subscribe 허용
-- 수강생 LiveKit token: subscribe-only, `canPublish=false`
+- 수강생은 LiveKit token을 발급받지 않고 HLS로만 시청
 - 수강생 카메라·마이크·화면 공유는 현재 범위에서 제공하지 않음
 - 후속 발언 요청·승인 기능이 생길 때만 단명 publish 권한을 별도 발급
 
@@ -39,7 +39,7 @@ STARTING ─────────→ FAILED
 | `LIVE-SESSION-04` | `POST` | `/api/instructor/live-sessions/{sessionId}/cancel` | 시작 전 취소 | **제안** |
 | `LIVE-SESSION-05` | `POST` | `/api/instructor/live-sessions/{sessionId}/preflight` | 서버·미디어 시작 조건 점검 | **제안** |
 | `LIVE-SESSION-06` | `POST` | `/api/live-sessions/{sessionId}/start` | 멱등 라이브 시작 | URL **확정** |
-| `LIVE-SESSION-07` | `POST` | `/api/live-sessions/{sessionId}/token` | 역할 제한 LiveKit token 발급 | URL **확정** |
+| `LIVE-SESSION-07` | `POST` | `/api/instructor/live-sessions/{sessionId}/token` | 소유 강사 LiveKit 송출 token 발급 | URL **확정** |
 | `LIVE-SESSION-08` | `POST` | `/api/live-sessions/{sessionId}/end` | 멱등 라이브 종료 | URL **확정** |
 | `LIVE-SESSION-09` | `GET` | `/api/instructor/live-sessions/{sessionId}/processing` | 종료 후 녹화·AI 처리 조회 | **제안** |
 | `LIVE-PLAYBACK-01` | `GET` | `/api/live-sessions/{sessionId}/playback` | 최근·전체 DVR HLS 재생 정보 | **제안** |
@@ -229,10 +229,10 @@ Idempotency-Key: 01J...
 - 프론트는 `STARTING` timeout을 임의로 실패 처리하지 않고 상세를 재조회
 - 성공 후 `LIVE` 상태를 확인한 다음 classroom으로 이동
 
-### 5.2 `LIVE-SESSION-07` LiveKit token
+### 5.2 `LIVE-SESSION-07` 강사 LiveKit token
 
 ```http
-POST /api/live-sessions/{sessionId}/token
+POST /api/instructor/live-sessions/{sessionId}/token
 ```
 
 ```json
@@ -243,23 +243,19 @@ POST /api/live-sessions/{sessionId}/token
   "expiresAt": "2026-08-01T10:10:00+09:00",
   "participant": {
     "identity": "opaque-participant-id",
-    "displayName": "익명 수강생 12"
+    "displayName": null
   },
   "grants": {
     "canSubscribe": true,
-    "canPublish": false,
-    "canPublishData": false
-  },
-  "sessionClock": {
-    "startedAt": "2026-08-01T10:00:00+09:00",
-    "serverNow": "2026-08-01T10:02:00+09:00",
-    "currentSessionMs": 120000
+    "canPublish": true,
+    "canPublishData": true
   }
 }
 ```
 
-- 페이지 역할과 실제 LiveKit grants가 일치해야 한다.
-- 수강생에게 publish 권한이 들어오면 프론트에서 사용하지 않는 수준이 아니라 서버 계약 위반으로 본다.
+- 소유 강사만 요청할 수 있으며 학생은 역할 게이트 403, 비소유 강사는 `403 LIVE_SESSION_FORBIDDEN`이다.
+- 수강생은 이 endpoint를 호출하지 않고 HLS playback metadata를 조회한다.
+- 구 공용 경로 `/api/live-sessions/{sessionId}/token`은 제공하지 않는다.
 - token은 로그·분석 이벤트·영속 저장에 남기지 않는다.
 - 만료·재연결 시 같은 endpoint로 새 token을 요청한다.
 
@@ -631,4 +627,3 @@ GET /api/instructor/live-sessions/{sessionId}/processing
 9. 질문 핀 bucket 크기와 intensity 계산 기준
 10. 북마크 중복 기준
 11. `FAILED` 세션 재시도 또는 새 세션 생성 정책
-

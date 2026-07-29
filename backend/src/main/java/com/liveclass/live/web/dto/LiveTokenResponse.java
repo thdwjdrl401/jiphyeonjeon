@@ -4,8 +4,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.Instant;
 
-/** LiveKit 토큰 응답 (LIVE-SESSION-07, FE 명세 형태). */
-@Schema(description = "LiveKit 입장 토큰")
+/** 소유 강사의 LiveKit WebRTC 송출 토큰 응답. 수강생 재생은 HLS 전용이다. */
+@Schema(description = "강사 LiveKit 송출 토큰")
 public record LiveTokenResponse(
 
         @Schema(description = "연결 종류", example = "LIVEKIT")

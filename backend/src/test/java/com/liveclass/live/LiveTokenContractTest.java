@@ -31,8 +31,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * LiveKit 토큰 발급 계약 검증. LiveKit 서버 없이 — 발급된 JWT의 payload를 디코드해
- * 방(room)·권한(video grant)이 역할대로 들어갔는지 확인한다.
+ * 강사 LiveKit 송출 토큰 계약 검증. LiveKit 서버 없이 발급된 JWT의 payload를 디코드해
+ * 방(room)·publisher 권한을 확인하고 수강생·구 공용 경로가 닫혔는지 검증한다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -62,7 +62,7 @@ class LiveTokenContractTest {
         String[] created = createSession(instructor);
         String sessionId = created[0];
 
-        MvcResult res = write(post("/api/live-sessions/" + sessionId + "/token"), instructor, null)
+        MvcResult res = write(post("/api/instructor/live-sessions/" + sessionId + "/token"), instructor, null)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.connectionType").value("LIVEKIT"))
                 .andExpect(jsonPath("$.livekitUrl").exists())
@@ -80,32 +80,24 @@ class LiveTokenContractTest {
     }
 
     @Test
-    void non_instructor_gets_subscribe_only_token() throws Exception {
+    void active_student_cannot_get_livekit_token() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String[] created = createSession(instructor);
         String sessionId = created[0];
 
         Cookie[] student = loginAs("STUDENT");
-        enrollActive(created[1], student, instructor);   // 활성 수강생이어야 토큰 발급됨
-        MvcResult res = write(post("/api/live-sessions/" + sessionId + "/token"), student, null)
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.grants.canPublish").value(false))
-                .andExpect(jsonPath("$.grants.canSubscribe").value(true))
-                .andReturn();
-
-        JsonNode video = decodeJwtPayload(json(res).get("accessToken").asString()).get("video");
-        assertThat(video.get("room").asString()).isEqualTo("session-" + sessionId);
-        assertThat(video.get("canPublish").asBoolean()).isFalse();
-        assertThat(video.get("canSubscribe").asBoolean()).isTrue();
+        enrollActive(created[1], student, instructor);
+        write(post("/api/instructor/live-sessions/" + sessionId + "/token"), student, null)
+                .andExpect(status().isForbidden());
     }
 
     @Test
-    void non_enrolled_student_is_forbidden() throws Exception {
+    void other_instructor_is_forbidden() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String[] created = createSession(instructor);
 
-        Cookie[] student = loginAs("STUDENT");   // 수강 신청 안 함
-        write(post("/api/live-sessions/" + created[0] + "/token"), student, null)
+        Cookie[] otherInstructor = loginAs("INSTRUCTOR");
+        write(post("/api/instructor/live-sessions/" + created[0] + "/token"), otherInstructor, null)
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("LIVE_SESSION_FORBIDDEN"));
     }
@@ -113,9 +105,18 @@ class LiveTokenContractTest {
     @Test
     void token_for_unknown_session_returns_404() throws Exception {
         Cookie[] auth = loginAs("INSTRUCTOR");
-        write(post("/api/live-sessions/" + UUID.randomUUID() + "/token"), auth, null)
+        write(post("/api/instructor/live-sessions/" + UUID.randomUUID() + "/token"), auth, null)
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("LIVE_SESSION_NOT_FOUND"));
+    }
+
+    @Test
+    void legacy_shared_token_route_is_not_exposed() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String sessionId = createSession(instructor)[0];
+
+        write(post("/api/live-sessions/" + sessionId + "/token"), instructor, null)
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -126,7 +127,7 @@ class LiveTokenContractTest {
         String sessionId = created[0];
 
         Cookie xsrf = fetchXsrf();
-        mockMvc.perform(post("/api/live-sessions/" + sessionId + "/token")
+        mockMvc.perform(post("/api/instructor/live-sessions/" + sessionId + "/token")
                         .cookie(xsrf).header("X-XSRF-TOKEN", xsrfToken))
                 .andExpect(status().isUnauthorized());
     }
@@ -140,7 +141,7 @@ class LiveTokenContractTest {
         write(post("/api/live-sessions/" + sessionId + "/end"), instructor, null).andExpect(status().isOk());
 
         // 소유 강사라 접근 게이트는 통과하지만, 종료된 세션엔 입장 토큰이 안 나간다 → 409.
-        write(post("/api/live-sessions/" + sessionId + "/token"), instructor, null)
+        write(post("/api/instructor/live-sessions/" + sessionId + "/token"), instructor, null)
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("LIVE_SESSION_STATE_CONFLICT"));
     }
@@ -152,7 +153,7 @@ class LiveTokenContractTest {
         String sessionId = created[0];
         write(post("/api/instructor/live-sessions/" + sessionId + "/cancel"), instructor, null).andExpect(status().isOk());
 
-        write(post("/api/live-sessions/" + sessionId + "/token"), instructor, null)
+        write(post("/api/instructor/live-sessions/" + sessionId + "/token"), instructor, null)
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("LIVE_SESSION_STATE_CONFLICT"));
     }
@@ -165,7 +166,7 @@ class LiveTokenContractTest {
         String userId = json(mockMvc.perform(get("/api/auth/me").cookie(instructor)).andReturn())
                 .get("userId").asString();
 
-        MvcResult res = write(post("/api/live-sessions/" + sessionId + "/token"), instructor, null)
+        MvcResult res = write(post("/api/instructor/live-sessions/" + sessionId + "/token"), instructor, null)
                 .andExpect(status().isOk())
                 .andReturn();
         // 참가자 identity가 원시 userId를 그대로 노출하면 안 된다(방 참가자끼리 서로의 identity를 봄).

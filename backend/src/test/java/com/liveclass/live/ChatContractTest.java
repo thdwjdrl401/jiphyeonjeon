@@ -238,7 +238,7 @@ class ChatContractTest {
         return new String[]{sessionId, cid};
     }
 
-    /** 학생을 이 커리큘럼의 ACTIVE 수강생으로: 신청 → 강사 승인. (채팅/토큰 게이트 통과용) */
+    /** 학생을 이 커리큘럼의 ACTIVE 수강생으로: 신청 → 강사 승인(채팅 게이트 통과용). */
     private void enrollActive(String cid, Cookie[] student, Cookie[] instructor) throws Exception {
         String eid = json(write(post("/api/curriculums/" + cid + "/enrollments"), student, null)
                 .andReturn()).get("enrollmentId").asString();

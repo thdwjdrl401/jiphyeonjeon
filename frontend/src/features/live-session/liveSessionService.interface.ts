@@ -122,7 +122,8 @@ export interface LiveSessionService {
   startLiveSession: (sessionId: string) => Promise<LiveStartOperation>
   getLiveStartStatus: (sessionId: string, operationId?: string) => Promise<LiveStartStatus>
   endLiveSession: (sessionId: string) => Promise<void>
-  getLiveToken: (sessionId: string) => Promise<{ token: string; wsUrl?: string }>
+  /** 강사 WebRTC 송출 전용 토큰. 수강생 재생은 LiveKit이 아니라 HLS를 사용한다. */
+  getInstructorLiveToken: (sessionId: string) => Promise<{ token: string; wsUrl?: string }>
   getParticipants: (sessionId: string) => Promise<Array<{ alias: string; state: string; joinedAt: string }>>
   getChatMessages: (sessionId: string) => Promise<ChatMessageView[]>
   sendChatMessage: (sessionId: string, text: string, question: boolean) => Promise<ChatMessageView>

@@ -24,7 +24,7 @@ live session은 lesson에 연결된 실제 일정·입장·진행·종료 인스
 - 강사가 수동으로 시작하며 예정 시각만으로 자동 시작하지 않음
 - 시작 전 LiveKit·Egress·STT 문제는 시작 차단
 - 시작 성공 후 Egress·STT 장애는 WebRTC 라이브를 종료시키지 않고 저하 상태로 처리
-- 학생 토큰은 미디어 subscribe-only
+- LiveKit 토큰은 소유 강사 송출 전용이며 학생은 HLS로만 시청
 - 라이브 종료와 Egress 완료를 별도 상태로 관리
 
 ## 3. 상태 모델
@@ -272,7 +272,7 @@ AI 미준비와 Egress 문제는 경고만 표시하고 우회하는 선택지�
 
 ## 13. 필요한 데이터와 연결
 
-정확한 필드와 API는 [API_MAP.md](../API_MAP.md)에서 확정한다.
+정확한 필드와 API는 [API_MAP.md](../api/API_MAP.md)에서 확정한다.
 
 - `sessionId`·`lessonId`
 - curriculum·section·lesson 요약

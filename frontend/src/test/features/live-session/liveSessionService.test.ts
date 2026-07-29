@@ -84,7 +84,7 @@ describe('라이브 세션 HTTP 서비스 계약', () => {
     )
   })
 
-  it('LiveKit 토큰 응답의 camelCase 필드를 SDK 연결 값으로 매핑한다', async () => {
+  it('강사 LiveKit 토큰 응답의 camelCase 필드를 SDK 연결 값으로 매핑한다', async () => {
     const post = vi.spyOn(apiClient, 'post').mockResolvedValue({
       data: {
         livekitUrl: 'wss://live.example.test',
@@ -92,11 +92,11 @@ describe('라이브 세션 HTTP 서비스 계약', () => {
       },
     } as never)
 
-    await expect(httpLiveSessionService.getLiveToken('ses-live-1')).resolves.toEqual({
+    await expect(httpLiveSessionService.getInstructorLiveToken('ses-live-1')).resolves.toEqual({
       wsUrl: 'wss://live.example.test',
       token: 'publisher-token',
     })
-    expect(post).toHaveBeenCalledWith('/live-sessions/ses-live-1/token')
+    expect(post).toHaveBeenCalledWith('/instructor/live-sessions/ses-live-1/token')
   })
 
   it('레슨 기준으로 재생 metadata를 조회하고 시간축 정보를 매핑한다', async () => {

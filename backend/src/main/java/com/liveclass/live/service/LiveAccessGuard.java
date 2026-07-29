@@ -10,7 +10,7 @@ import java.util.UUID;
 
 /**
  * 라이브 세션 접근 게이트. 세션에 비정규화된 curriculumId로 수강 여부를 확인한다 —
- * session → enrollment.isActive를 사이클(live→curriculum) 없이. 토큰 발급·채팅이 이걸 통과해야 한다.
+ * session → enrollment.isActive를 사이클(live→curriculum) 없이. 세션 조회·채팅이 이걸 통과해야 한다.
  */
 @Component
 public class LiveAccessGuard {
