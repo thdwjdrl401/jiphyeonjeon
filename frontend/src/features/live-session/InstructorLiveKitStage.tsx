@@ -42,33 +42,46 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
       <div className="video-stage__glow" />
       <div className="instructor-media-preview">
         {/*
-          항상 contain으로 그린다. cover는 미리보기 영역 비율에 맞춰 영상을 잘라내는데, 합성 캔버스는
-          자르지 않으므로 강사에게만 안 보이는 영역이 수강생에게는 보이게 된다. 잘리지 않는 대신
-          레터박스가 생기지만, 실제로 나가는 화면과 같은 것을 보는 편이 낫다.
+          미리보기 영역이 아니라 <b>합성 캔버스(16:9)</b>를 그린다. 미리보기 영역은 창 크기와 사이드바에
+          따라 아무 비율이나 되는데, 수강생에게 나가는 프레임은 언제나 16:9다. 영역 전체를 무대로 쓰면
+          같은 0~1 좌표가 서로 다른 자리를 가리켜 카메라 배치가 어긋나고, 강사는 실제로 나가지 않는
+          여백까지 화면으로 착각한다. 캔버스를 따로 잡아 그 안에만 그리면 강사가 보는 사각형이 곧
+          수강생이 받는 프레임이 된다.
         */}
-        {mainTrack
-          ? (
-            <InstructorLocalTrackVideo
-              fit="contain"
-              mirrored={!screenShareTrack}
-              label={screenShareTrack ? '공유 화면 미리보기' : '카메라 미리보기'}
-              track={mainTrack}
-            />
-          )
-          : <div className="instructor-media-empty"><span aria-hidden="true">◉</span><strong>{emptyPreviewMessage(publisher.connectionState, publisher.cameraEnabled)}</strong></div>}
-        {/*
-          화면공유 위의 카메라는 단순 미리보기가 아니라 합성 화면의 편집기다. 여기서 옮긴 자리가
-          그대로 수강생 녹화가 된다 — 미리보기와 Egress 템플릿이 같은 값(0~1 비율)을 읽는다.
-        */}
-        {showCameraPictureInPicture && cameraTrack && (
-          <CameraOverlayControl
-            overlay={publisher.cameraOverlay}
-            onChange={publisher.moveCameraOverlay}
-            disabled={!publisher.canControl}
-          >
-            <InstructorLocalTrackVideo label="카메라 미리보기" track={cameraTrack} />
-          </CameraOverlayControl>
-        )}
+        <div className="instructor-media-canvas">
+          {/*
+            항상 contain으로 그린다. cover는 캔버스 비율에 맞춰 영상을 잘라내는데, Egress 템플릿은
+            자르지 않으므로 강사에게만 안 보이는 영역이 수강생에게는 보이게 된다. 잘리지 않는 대신
+            레터박스가 생기지만, 실제로 나가는 화면과 같은 것을 보는 편이 낫다.
+          */}
+          {mainTrack
+            ? (
+              <InstructorLocalTrackVideo
+                fit="contain"
+                mirrored={!screenShareTrack}
+                label={screenShareTrack ? '공유 화면 미리보기' : '카메라 미리보기'}
+                track={mainTrack}
+              />
+            )
+            : <div className="instructor-media-empty"><span aria-hidden="true">◉</span><strong>{emptyPreviewMessage(publisher.connectionState, publisher.cameraEnabled)}</strong></div>}
+          {/*
+            화면공유 위의 카메라는 단순 미리보기가 아니라 합성 화면의 편집기다. 여기서 옮긴 자리가
+            그대로 수강생 녹화가 된다 — 미리보기와 Egress 템플릿이 같은 값(0~1 비율)을 읽는다.
+
+            카메라는 거울처럼 뒤집어 그린다. 강사가 자기 얼굴을 거울로 보는 것이 이 서비스의 기준이고,
+            Egress 템플릿도 카메라 트랙만 같은 방향으로 뒤집는다(egress-stage.css). 화면공유는 글자가
+            읽혀야 하므로 절대 뒤집지 않는다 — 그래서 뒤집기는 프레임 전체가 아니라 카메라에만 건다.
+          */}
+          {showCameraPictureInPicture && cameraTrack && (
+            <CameraOverlayControl
+              overlay={publisher.cameraOverlay}
+              onChange={publisher.moveCameraOverlay}
+              disabled={!publisher.canControl}
+            >
+              <InstructorLocalTrackVideo mirrored label="카메라 미리보기" track={cameraTrack} />
+            </CameraOverlayControl>
+          )}
+        </div>
       </div>
 
       <header className="video-status-overlay" aria-label="라이브 강의 정보">

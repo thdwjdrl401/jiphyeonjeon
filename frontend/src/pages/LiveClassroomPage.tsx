@@ -60,7 +60,9 @@ export default function LiveClassroomPage() {
   const chatQuery = useQuery({ queryKey: ['live-chat', sessionId], queryFn: () => getChatMessages(sessionId), enabled: Boolean(sessionId) })
   // 저장된 자막 리로드(CAPTION-01, ADR-0045). 마운트 시 세션-ms 순 자막을 받아 WS 누적기에 시드해
   // 새로고침·재연결 뒤 이전 자막을 복원한다. 실패해도 진입 게이트를 막지 않는다(자막 없이도 미디어·채팅은 산다).
-  const captionReloadQuery = useQuery({ queryKey: ['live-captions', sessionId], queryFn: () => getCaptions(sessionId), enabled: Boolean(sessionId) })
+  // 강사는 자막 독을 그리지 않는다(아래 렌더 참고). 자막을 쓰는 곳이 없으므로 리로드도 하지 않는다 —
+  // 송출 중인 브라우저에서 쓰지도 않을 자막을 받아 두는 것은 그대로 낭비다.
+  const captionReloadQuery = useQuery({ queryKey: ['live-captions', sessionId], queryFn: () => getCaptions(sessionId), enabled: Boolean(sessionId) && !isInstructor })
   const session = sessionQuery.data
   const lesson = lessonQuery.data
   const messages = chatQuery.data ?? []
@@ -107,8 +109,10 @@ export default function LiveClassroomPage() {
       setChatConnectionState,
     )
   }, [queryClient, sessionId])
+  // 자막 WS는 자막을 그리는 화면만 연다. 강사 화면에는 자막 독이 없고 다른 자막 소비처도 없어,
+  // 구독을 열면 송출 중인 브라우저에 쓰지 않을 스트림 하나가 계속 붙어 있게 된다.
   useEffect(() => {
-    if (!sessionId) return undefined
+    if (!sessionId || isInstructor) return undefined
     captionAccumulator.current = emptyCaptionStreamState()
     setCaptions([])
     return subscribeCaptions(
@@ -119,7 +123,7 @@ export default function LiveClassroomPage() {
       },
       setCaptionConnectionState,
     )
-  }, [sessionId])
+  }, [isInstructor, sessionId])
   // 리로드된 저장 자막을 누적기에 시드한다. WS 델타와 같은 이벤트라 reduceCaptionStream이 멱등하게 흡수하므로
   // WS가 먼저 붙어 일부가 이미 쌓였어도(순서 무관) 안전하다 — 중복 sequence는 무시, 누락분만 채운다.
   useEffect(() => {
@@ -187,8 +191,8 @@ export default function LiveClassroomPage() {
   if (sessionQuery.isError || lessonQuery.isError) return <PageState title="라이브 강의를 불러오지 못했습니다" />
   if (!session || !lesson) return <PageState title="라이브 강의를 불러오는 중입니다" />
 
-  // 뷰어 분기(ADR-0045): 강사는 라이브 실시간 append 그대로, 학생은 HLS 위치(positionMs)까지 도달한
-  // 위치 동기화 자막만 노출한다. 앞선 자막은 누적기(버퍼)에 두고 위치가 닿으면 드러난다.
+  // 자막은 수강생 화면에만 있다. HLS 위치(positionMs)까지 도달한 위치 동기화 자막만 노출하고,
+  // 앞선 자막은 누적기(버퍼)에 두었다가 위치가 닿으면 드러낸다(ADR-0045).
   const visibleCaptions = selectVisibleCaptions(captions, { isInstructor, positionMs })
 
   const discussionComposer = (
@@ -328,7 +332,13 @@ export default function LiveClassroomPage() {
               </Suspense>
             )}
 
-          <CaptionDock captions={visibleCaptions} currentSessionMs={positionMs} label="실시간 자막" note={captionNote} onSeek={seekSession} onSelectTerm={openGlossaryTerm} />
+          {/*
+            자막은 수강생 화면에만 둔다. 강사는 자기가 말한 것을 다시 읽을 이유가 없고, 자막 독이
+            차지하는 높이만큼 송출 미리보기가 눌려 실제로 나가는 프레임을 작게 보게 된다.
+          */}
+          {!isInstructor && (
+            <CaptionDock captions={visibleCaptions} currentSessionMs={positionMs} label="실시간 자막" note={captionNote} onSeek={seekSession} onSelectTerm={openGlossaryTerm} />
+          )}
         </section>
 
         {(!isInstructor || !sidebarWindow.isDetached) && sidebar}

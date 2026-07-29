@@ -7,6 +7,12 @@ import * as myCurriculumsService from '@/features/curriculum/myCurriculumsServic
 import * as liveSessionService from '@/features/live-session/liveSessionService'
 import * as replayService from '@/features/replay/replayService'
 
+// vidstack/hls.js는 jsdom에서 재생 경로를 세울 수 없다. 이 파일이 확인하는 것은 재생 자체가 아니라
+// "부가 조회가 실패해도 화면이 열리는가"이므로 플레이어는 영역만 남기고 대체한다.
+vi.mock('@/features/live-session/PlaybackPlayer', () => ({
+  default: () => <div aria-label="강의 영상" role="region" />,
+}))
+
 /**
  * 부가 데이터가 실패해도 화면은 열려야 한다.
  *
@@ -16,6 +22,17 @@ import * as replayService from '@/features/replay/replayService'
  */
 function renderAt(path: string) {
   window.history.pushState({}, '', path)
+  return render(<App />)
+}
+
+/**
+ * 수강생 강의실은 입장 전 점검을 통과했다는 navigation state가 있어야 열린다
+ * (RequireStudentPrejoinRoute). BrowserRouter는 그 값을 history state의 `usr`에서 읽으므로,
+ * 점검 화면을 전부 클릭해 통과하는 대신 같은 자리에 심어 강의실부터 연다.
+ */
+function renderAfterPrejoin(sessionId: string) {
+  const path = `/student/live-sessions/${sessionId}/classroom`
+  window.history.pushState({ usr: { prejoinSessionId: sessionId } }, '', path)
   return render(<App />)
 }
 
@@ -58,7 +75,7 @@ describe('부가 조회 실패 시 화면 유지', () => {
     expect(await screen.findByText(/커리큘럼 목록을 불러오지 못했습니다/, undefined, AFTER_RETRY)).toBeInTheDocument()
   })
 
-  it('자막 WS 구독이 실패해도 라이브 강의실은 열린다', async () => {
+  it('자막 WS 구독이 실패해도 수강생 라이브 강의실은 열린다', async () => {
     // 자막은 REST가 아니라 WS 델타 스트림으로 구동한다(§3-4 / ADR-0043). 구독이 곧바로
     // 에러로 끝나도(연결 실패 흉내) 미디어·채팅이 살아 있는 강의실은 열려야 한다.
     const captions = vi.spyOn(liveSessionService, 'subscribeCaptions')
@@ -66,14 +83,30 @@ describe('부가 조회 실패 시 화면 유지', () => {
         onConnectionChange('error')
         return () => {}
       })
+    await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
+
+    renderAfterPrejoin('ses-security-live')
+
+    expect(await screen.findByRole('region', { name: '강의 영상' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: '실시간 자막' })).toBeInTheDocument()
+    expect(screen.queryByText('라이브 강의를 불러오지 못했습니다')).not.toBeInTheDocument()
+    // 자막 구독을 실제로 탔는지 확인한다 — 안 그러면 이 테스트는 헛통과한다.
+    expect(captions).toHaveBeenCalled()
+  })
+
+  // 강사 화면에는 자막 독이 없다. 소비처가 없는데 WS를 열어 두면 송출 중인 브라우저에 쓰지 않을
+  // 스트림 하나와 자막 리로드 요청이 계속 붙는다.
+  it('강사 라이브 강의실은 자막을 구독하지도 리로드하지도 않는다', async () => {
+    const captions = vi.spyOn(liveSessionService, 'subscribeCaptions')
+    const reload = vi.spyOn(liveSessionService, 'getCaptions')
     await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
 
     renderAt('/instructor/live-sessions/ses-security-live/classroom')
 
     expect(await screen.findByRole('heading', { name: 'Spring Security 시작하기', level: 1 })).toBeInTheDocument()
-    expect(screen.queryByText('라이브 강의를 불러오지 못했습니다')).not.toBeInTheDocument()
-    // 자막 구독을 실제로 탔는지 확인한다 — 안 그러면 이 테스트는 헛통과한다.
-    expect(captions).toHaveBeenCalled()
+    expect(screen.queryByRole('region', { name: '실시간 자막' })).not.toBeInTheDocument()
+    expect(captions).not.toHaveBeenCalled()
+    expect(reload).not.toHaveBeenCalled()
   })
 
   it('세션 조회가 실패하면 라이브 강의실은 오류 화면을 낸다', async () => {
