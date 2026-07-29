@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import catalogHeroRoyalLibrary from '@/assets/images/catalog-hero-royal-library.png'
+import catalogHeroRoyalLibrary from '@/assets/images/catalog-hero-royal-library.webp'
 import { useAuth } from '@/features/auth/AuthContext'
 import CurriculumCard from '@/features/curriculum/CurriculumCard'
 import CurriculumCardSkeleton from '@/features/curriculum/CurriculumCardSkeleton'
