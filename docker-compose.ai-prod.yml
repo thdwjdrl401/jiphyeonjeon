@@ -25,10 +25,34 @@ networks:
     name: liveclass_default
     external: true
 services:
+  # DB 마이그레이션 자동 실행 (Flyway 스타일) — 매 배포마다 alembic upgrade head 후 종료.
+  # ai-worker/ai-api는 이게 성공(exit 0)한 뒤에 기동한다. 런타임(ai_runtime)엔 DDL 권한이 없으니 DDL은 여기서만.
+  # 최초 1회 DBA 부트스트랩 필요: ai_app NOLOGIN role + GRANT ai_app TO ai_runtime (마이그레이션이 fail-closed로 검사).
+  ai-migrate:
+    build: ./ai/ai-worker
+    container_name: liveclass-ai-migrate
+    restart: "no"
+    environment:
+      # migration 계정 = 앱 admin(POSTGRES_USER, DDL 권한). 런타임과 분리 + sync(+psycopg).
+      AI_WORKER_MIGRATION_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-liveclass}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 필요}@postgres:5432/${POSTGRES_DB:-liveclass}
+    command:
+      - sh
+      - -c
+      - |
+        cd /app
+        for i in 1 2 3 4 5 6; do
+          alembic upgrade head && exit 0
+          echo "migrate retry $$i (postgres 대기?)"; sleep 5
+        done
+        echo "migration failed"; exit 1
+
   ai-worker:
     build: ./ai/ai-worker
     container_name: liveclass-ai-worker-prod
     restart: unless-stopped
+    depends_on:
+      ai-migrate:
+        condition: service_completed_successfully
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
@@ -54,6 +78,9 @@ services:
     build: ./ai/ai-api
     container_name: liveclass-ai-api-prod
     restart: unless-stopped
+    depends_on:
+      ai-migrate:
+        condition: service_completed_successfully
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
