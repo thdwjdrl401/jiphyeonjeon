@@ -159,6 +159,12 @@ services:
       SPRING_RABBITMQ_PORT: "5672"
       SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER:-liveclass}
       SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD 필요}
+      # AI 질의응답 SSE 프록시(ADR-0047). ai-api는 별도 compose(docker-compose.ai-prod.yml)지만 같은
+      # liveclass_default 네트워크라 서비스명으로 닿는다. 시크릿은 ai-api의 AI_INTERNAL_SECRET과
+      # **같은 값**이어야 한다 — 다르면 서명 검증에서 401이라 답변이 아예 시작되지 않는다.
+      # 콜백용 AI_CALLBACK_SECRET과는 별개 값이다(docs/ai/CONTRACT.md §3.2).
+      AI_API_BASE_URL: http://ai-api:8010
+      AI_INTERNAL_SECRET: ${AI_INTERNAL_SECRET:?AI_INTERNAL_SECRET 필요 — ai-api와 공유하는 RAG HMAC 시크릿}
     depends_on:
       postgres:
         condition: service_healthy   # Flyway 마이그레이션 전 DB 준비 대기

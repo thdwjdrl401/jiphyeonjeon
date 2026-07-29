@@ -1,13 +1,11 @@
 package com.liveclass.aiintegration.web;
 
+import com.liveclass.aiintegration.service.HmacSha256;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.util.Base64;
 
 /**
  * AI 콜백의 진위를 검증한다(ADR-0036). AI 워커가 공유 시크릿({@code ai.callback-secret})으로 본문을
@@ -28,20 +26,10 @@ public class AiCallbackVerifier {
         if (signature == null || signature.isBlank()) {
             throw new AiCallbackUnverifiedException("콜백 서명이 없습니다.");
         }
-        String expected = Base64.getEncoder().encodeToString(hmacSha256(body == null ? new byte[0] : body));
+        String expected = HmacSha256.base64(secret, body);
         if (!MessageDigest.isEqual(
                 expected.getBytes(StandardCharsets.UTF_8), signature.getBytes(StandardCharsets.UTF_8))) {
             throw new AiCallbackUnverifiedException("콜백 서명이 유효하지 않습니다.");
-        }
-    }
-
-    private byte[] hmacSha256(byte[] body) {
-        try {
-            Mac mac = Mac.getInstance("HmacSHA256");
-            mac.init(new SecretKeySpec(secret, "HmacSHA256"));
-            return mac.doFinal(body);
-        } catch (Exception e) {
-            throw new IllegalStateException("HMAC-SHA256 계산 실패", e);
         }
     }
 }

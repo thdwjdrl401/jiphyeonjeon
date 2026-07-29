@@ -73,14 +73,15 @@ realtime-agent는 FastAPI가 아니다. Python `ThreadingHTTPServer`가 loopback
 
 | 배포 env | 실제 소비자 | 용도 | GPU 사용 |
 |---|---|---|---|
-| `AI_INTERNAL_SECRET` | ai-api; 향후 Spring signer | Spring→ai-api RAG HMAC | 사용하지 않음 |
+| `AI_INTERNAL_SECRET` | ai-api; **Spring signer(구현됨)** | Spring→ai-api RAG HMAC | 사용하지 않음 |
 | `AI_CALLBACK_SECRET` | Spring; ai-worker mapping | 자료 download-url·callback HMAC | realtime callback 활성 시에만 선택 사용 |
 | `BGE_RUNTIME_INTERNAL_TOKEN` | GPU bge-runtime; EC2 compose mapping | EC2 AI→GPU BGE Bearer | 사용 |
 
 운영 compose는 `BGE_RUNTIME_INTERNAL_TOKEN`을 ai-api의 `AI_API_BGE_TOKEN`과 ai-worker의
 `AI_WORKER_BGE_INTERNAL_TOKEN`으로, `AI_CALLBACK_SECRET`을 worker의
-`AI_WORKER_SPRING_HMAC_SECRET`으로 매핑한다. `AI_INTERNAL_SECRET`은 이름이 바뀌지 않았지만 현재
-Spring signer가 아직 없어 ai-api만 소비한다.
+`AI_WORKER_SPRING_HMAC_SECRET`으로 매핑한다. `AI_INTERNAL_SECRET`은 이름 그대로
+`docker-compose.ai-prod.yml`의 ai-api와 `docker-compose.prod.yml`의 backend **양쪽에 같은 값**으로
+주입한다 — 다르면 ai-api가 401을 내고 Spring이 502 `AI_ANSWER_UPSTREAM_REJECTED`로 매핑한다.
 
 ## 4. Java↔AI 통신
 
@@ -96,9 +97,13 @@ Content-Type: application/json
 요청은 `requestId`, `lessonId`, `sessionId`, `question`, `contextTimeMs`, `issuedAtMs`를 포함한다.
 응답은 `answer.delta` 0개 이상과 `answer.done|answer.insufficient|answer.error` terminal 하나로 끝난다.
 
-현재 ai-api route와 HMAC verifier는 구현됐지만 Spring signer와 browser-facing SSE proxy는 구현되지
-않았다. `AI_INTERNAL_SECRET`이 없으면 503으로 fail-closed한다. 상세 계약은
-[`ai-api/CONTRACT.md`](../../ai/ai-api/CONTRACT.md)를 따른다.
+ai-api route·HMAC verifier와 **Spring signer·browser-facing SSE proxy가 모두 구현됐다**
+([ADR-0047](../decisions/songjeongki/0047-live-ai-answer-sse-proxy.md), 공유 계약 [§3-9](../CONTRACT.md#3-9-spring--ai-api-rag-sse-http-hmac-서명--양쪽-구현됨)).
+Spring은 `POST /api/live-sessions/{sessionId}/ai/answers/stream`으로 브라우저 SSE를 열고, 세션 참가자
+인가를 끝낸 뒤 body를 **한 번만 직렬화한 바이트**로 서명해 전송하며 ai-api 이벤트를 변환 없이 릴레이한다.
+`contextTimeMs`는 `core.live_caption`의 해당 세션 **최신 행 raw `stream_elapsed_ms`**(없으면 0)로 채워
+§3-4가 금지한 세션-ms 변환 없이 규격을 만족한다. `AI_INTERNAL_SECRET`이 없으면 ai-api는 503으로
+fail-closed한다. 상세 계약은 [`ai-api/CONTRACT.md`](../../ai/ai-api/CONTRACT.md)를 따른다.
 
 ### 4.2 Spring→ai-worker 자료 작업
 
@@ -327,7 +332,7 @@ Spring realtime-agent health proxy client는 아직 없다. 따라서 `/internal
 
 | 경계 | 상태 |
 |---|---|
-| Spring→ai-api RAG SSE | AI route/auth 구현, Spring signer/proxy 미구현 |
+| Spring→ai-api RAG SSE | **양쪽 구현**. AI route/HMAC verifier 배선 완료(서명 없는 호출은 503이 아니라 401), Spring signer + 브라우저 SSE 프록시 `POST /api/live-sessions/{sessionId}/ai/answers/stream` 구현(ADR-0047, 공유 계약 §3-9). 운영은 backend·ai-api가 같은 `AI_INTERNAL_SECRET`을 받아야 동작 |
 | Spring→RabbitMQ→ai-worker | 양쪽 구현, Spring producer·worker 앱 기본 비활성, AI 운영 compose는 worker만 활성 |
 | ai-worker→Spring download URL/callback | 양쪽 구현 |
 | ai-worker/ai-api→BGE | runtime/client/reverse tunnel/운영 container proxy 배선 구현 |

@@ -51,7 +51,7 @@ STARTING ─────────→ FAILED
 | `LIVE-WS-01` | WebSocket | `/api/ws` | 인증 쿠키 기반 WS 연결 | **제안** |
 | `CHAT-01` | REST | `GET/POST /api/live-sessions/{sessionId}/messages` | 채팅 복구 조회·전송 fallback | **구현됨(세션 키잉)** |
 | `CAPTION-01` | REST | `GET /api/live-sessions/{sessionId}/captions` | 저장 자막 리로드(새로고침·재연결 복구) | **구현됨(ADR-0045)** |
-| `AI-QUESTION-01` | SSE | `POST /api/lessons/{lessonId}/ai/questions:stream` | 개인 AI Q&A | URL **확정** |
+| `AI-QUESTION-01` | SSE | `POST /api/live-sessions/{sessionId}/ai/answers/stream` | 개인 AI Q&A | **구현됨([ADR-0047](../../decisions/songjeongki/0047-live-ai-answer-sse-proxy.md))** |
 | `AI-TERM-01` | REST | `POST /api/lessons/{lessonId}/ai/terms:explain` | 전문용어 설명 | URL **확정** |
 | `LIVE-QUESTION-01` | REST | `GET /api/instructor/live-sessions/{sessionId}/question-pins` | 강사용 질문 시점 집계 | **제안** |
 | `LIVE-QUESTION-02` | REST | `GET /api/instructor/live-sessions/{sessionId}/question-pins/{pinId}/questions` | 핀의 익명 질문 원문 | **제안** |
@@ -455,47 +455,92 @@ GET /api/live-sessions/{sessionId}/messages?afterSessionMs=115000&limit=100
 
 ## 10. 개인 AI Q&A와 용어
 
-### 10.1 AI 질문 SSE
+### 10.1 AI 질문 SSE — **구현됨** ([ADR-0047](../../decisions/songjeongki/0047-live-ai-answer-sse-proxy.md))
+
+> ⚠️ 이 절은 실제 구현에 맞춰 갱신됐다. 이전 초안의 `POST /api/lessons/{lessonId}/ai/questions:stream`과
+> `meta`/`delta`/`citation`/`done`/`error` 이벤트는 **더 이상 유효하지 않다**.
 
 ```http
-POST /api/lessons/{lessonId}/ai/questions:stream
+POST /api/live-sessions/{sessionId}/ai/answers/stream
 Accept: text/event-stream
+Content-Type: application/json
+X-XSRF-TOKEN: <쿠키 XSRF-TOKEN 값>       # 다른 변경요청과 동일(ADR-0014). 쿠키 세션이라 credentials 포함.
 ```
+
+**경로가 `/stream`으로 끝나는 것은 계약이다.** 운영 nginx(`frontend/nginx/default.conf`)의
+`location ~ ^/api/.+/stream$`만 `proxy_buffering off`를 적용한다 — `:stream` 같은 다른 접미사면
+nginx가 토큰을 뭉쳐 스트리밍이 깨진다.
+
+요청 body는 **`question` 하나뿐**이다. `lessonId`·`contextTimeMs`·`requestId`는 **서버가 채운다**
+(클라 값을 신뢰하면 다른 강의 근거를 열람할 수 있다).
 
 ```json
-{
-  "sessionId": "ses_01J...",
-  "sessionMs": 118000,
-  "question": "SecurityFilterChain이 무엇인가요?",
-  "difficulty": "BEGINNER"
-}
+{ "question": "방금 설명한 SecurityFilterChain이 무엇인가요?" }
 ```
 
-제안 SSE event:
+- `question`: 1~4,000자. 서버가 trim하지 않고 그대로 AI에 전달한다. 비었거나 4,000자 초과면 **400**
+  `VALIDATION_FAILED`(`fieldErrors[].field="question"`).
+- 답변의 시간 문맥은 서버가 **해당 세션 최신 자막의 위치**로 잡는다(자막이 없으면 강의 처음).
+  FE가 `sessionMs`를 보내지 않는다.
+
+#### SSE 이벤트 (ai-api 스키마를 그대로 릴레이한다)
+
+한 스트림 = `answer.delta` 0개 이상 + terminal(`answer.done`\|`answer.insufficient`\|`answer.error`) **정확히 하나**.
 
 | event | data |
 |---|---|
-| `meta` | `questionId`, 기준 `sessionMs`, 사용한 content version |
-| `delta` | 답변 텍스트 조각 |
-| `citation` | 자료·자막 근거와 연결 시각 |
-| `done` | 완료 상태 `ANSWERED` 또는 `INSUFFICIENT_EVIDENCE` |
-| `error` | 안정적인 오류 코드와 `correlationId` |
+| `answer.delta` | `{ "requestId": "...", "text": "답변 조각" }` |
+| `answer.done` | `{ "requestId": "...", "sources": [...] }` — 근거가 있는 정상 종료 |
+| `answer.insufficient` | `{ "requestId": "...", "message": "..." }` — 답할 근거가 없어 모델을 호출하지 않음 |
+| `answer.error` | `{ "requestId": "...", "code": "...", "message": "...", "retryable": true }` |
 
-근거 제안:
+`sources` 항목은 두 종류다(최초 등장 순서 보존, 중복 제거).
 
 ```json
-{
-  "evidenceId": "evd_01J...",
-  "type": "MATERIAL",
-  "materialId": "mat_01J...",
-  "fileName": "security-basics.pptx",
-  "slideNumber": 12,
-  "excerpt": "SecurityFilterChain ...",
-  "sessionMs": 116000
-}
+{ "type": "PPTX", "materialId": "22222222-2222-4222-8222-222222222222", "page": 4 }
 ```
 
-React는 Spring만 호출하며 Python AI endpoint를 직접 호출하지 않는다. 사용자의 개인 답변 기록은 강사에게 제공하지 않고 질문 원문·시점만 익명 집계에 반영한다.
+```json
+{ "type": "CAPTION", "sessionId": "3333...", "sttSessionId": "stt-attempt-2", "startMs": 55000, "endMs": 59000 }
+```
+
+> `CAPTION` 근거의 `startMs`/`endMs`는 STT attempt-local `streamElapsedMs` 좌표다 — WS 자막 델타의
+> `streamElapsedMs`와 같은 축이며, 영상 위치(`sessionMs`)와는 **다른 축**이다(ADR-0043·0045).
+> 근거를 눌러 영상으로 점프하는 기능은 시간 앵커 공유 계약 이후다.
+
+#### 오류
+
+스트림이 **시작되기 전** 실패는 평범한 JSON 오류 봉투(`{code, message, correlationId}`)로 온다.
+
+| 상태 | code | 의미·FE 처리 |
+|---:|---|---|
+| 400 | `VALIDATION_FAILED` | 질문 길이 위반 — 입력란에 표시 |
+| 401 | — | 미로그인. 평소대로 로그인 유도 |
+| 403 | `LIVE_SESSION_FORBIDDEN` | 세션 참가자가 아님(수강 신청·승인 필요) |
+| 404 | `LIVE_SESSION_NOT_FOUND` | 없는 세션 |
+| 409 | `AI_ANSWER_REQUEST_CONFLICT` | 요청 ID 충돌 — **그대로 재시도**하면 된다 |
+| 502 | `AI_ANSWER_UPSTREAM_REJECTED` | AI 서비스가 요청을 거부(서버 설정 문제). 재시도해도 같을 수 있음 — 오류 안내 |
+| 503 | `AI_ANSWER_UNAVAILABLE` | AI 응답 준비 안 됨(서비스 미배선·한도 초과·연결 실패). "잠시 후 다시" 안내 |
+
+스트림이 **시작된 뒤**의 실패는 상태코드를 바꾸지 않고 `answer.error` 이벤트로 온다. 프록시 자신의 실패도
+같은 모양이라 분기가 하나다 — `code`가 `PROXY_UPSTREAM_FAILED`(중계 실패) 또는
+`PROXY_STREAM_INCOMPLETE`(terminal 없이 끊김)이면 재시도 가능하다.
+
+#### 소비 방법
+
+`EventSource`는 GET만 지원하므로 `fetch` + `ReadableStream`으로 읽는다(쿠키 세션이므로
+`credentials: "include"`, CSRF 헤더 필요). 요청을 중단하려면 `AbortController`로 끊으면 되고,
+그러면 서버가 ai-api 연결까지 함께 정리한다.
+
+React는 Spring만 호출하며 Python AI endpoint를 직접 호출하지 않는다. 사용자의 개인 답변 기록은 강사에게
+제공하지 않고 질문 원문·시점만 익명 집계에 반영한다.
+
+#### 아직 없는 것
+
+- **다시보기(replay) AI 질문**: `askReplayAi(...)`는 여전히 501 스텁이다. ai-api가 `sessionId`를 필수로
+  받고 시간 좌표가 attempt-local이라, 다시보기의 세션-ms를 역변환할 **시간 앵커 계약이 서기 전에는**
+  열 수 없다(ADR-0047 §9).
+- `AI-HISTORY-01`(질문 기록), `AI-TERM-01`(용어 설명), 강사용 question-pins는 미구현.
 
 ### 10.2 용어 설명
 
