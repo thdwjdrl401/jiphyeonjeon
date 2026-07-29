@@ -6,7 +6,7 @@ import java.net.URI;
 import java.time.Duration;
 
 /**
- * Spring→ai-api RAG SSE 설정(ADR-0046). 시크릿은 콜백용 {@code ai.callback-secret}과 <b>다른 값</b>이다
+ * Spring→ai-api RAG SSE 설정(ADR-0047). 시크릿은 콜백용 {@code ai.callback-secret}과 <b>다른 값</b>이다
  * — RAG는 {@code AI_INTERNAL_SECRET}, 콜백·download-url은 {@code AI_CALLBACK_SECRET}이다
  * (docs/ai/CONTRACT.md §3.2 secret 소유권).
  *

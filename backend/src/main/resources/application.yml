@@ -183,7 +183,7 @@ liveclass:
   # 라이브 자막 Redis Stream consumer(ADR-0043, CONTRACT §3-4). 소비 대상은 spring.data.redis가
   # 가리키는 프로필 구동 Redis다(로컬=localhost, remote=EC2 :4000 application Redis). ai-api가
   # ai-rag-live-v1로 이미 소비하므로 Spring은 반드시 별도 그룹을 쓴다.
-  # Spring→ai-api RAG SSE 프록시(ADR-0046, CONTRACT §3-9). 브라우저는 Spring만 호출한다.
+  # Spring→ai-api RAG SSE 프록시(ADR-0047, CONTRACT §3-9). 브라우저는 Spring만 호출한다.
   ai:
     # compose 내부망 서비스명. 로컬에 ai-api가 없으면 연결 실패 → 503 AI_ANSWER_UNAVAILABLE(무해).
     api-base-url: ${AI_API_BASE_URL:http://ai-api:8010}

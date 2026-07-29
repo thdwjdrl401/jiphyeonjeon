@@ -24,7 +24,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * 브라우저 ↔ ai-api RAG SSE 중계(ADR-0046). 인가는 호출자(컨트롤러)가 {@link LiveAccessGuard}로 먼저
+ * 브라우저 ↔ ai-api RAG SSE 중계(ADR-0047). 인가는 호출자(컨트롤러)가 {@link LiveAccessGuard}로 먼저
  * 끝내고, 여기서는 <b>서버가 신뢰할 수 있는 값만으로</b> 요청을 만들어 이벤트를 그대로 흘린다.
  *
  * <p>이벤트를 변환하지 않는다 — ai-api의 {@code answer.*} 이름·data를 그대로 브라우저로 보낸다.

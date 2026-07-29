@@ -1,4 +1,4 @@
-# ADR-0046: 라이브 AI 질의응답 — 브라우저 SSE 프록시와 ai-api HMAC signer
+# ADR-0047: 라이브 AI 질의응답 — 브라우저 SSE 프록시와 ai-api HMAC signer
 
 > 📍 하네스 개요: [../../harness/README.md](../../harness/README.md) · 아키텍처: [../../ARCHITECTURE.md](../../ARCHITECTURE.md) · 계약: [../../CONTRACT.md](../../CONTRACT.md)
 

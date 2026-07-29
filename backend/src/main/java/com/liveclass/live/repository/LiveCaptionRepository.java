@@ -27,7 +27,7 @@ public interface LiveCaptionRepository extends JpaRepository<LiveCaption, Long> 
     /**
      * 세션의 <b>가장 최근</b> 자막 행(정렬은 리로드와 같은 축의 역순). RAG 질의의 {@code contextTimeMs}는
      * "최신 STT attempt-local {@code streamElapsedMs} 좌표"라서 이 행의 raw 값이 곧 규격 값이다 —
-     * 세션-ms로 변환하지 않으므로 앵커 문제가 없다(ADR-0046).
+     * 세션-ms로 변환하지 않으므로 앵커 문제가 없다(ADR-0047).
      */
     Optional<LiveCaption> findFirstBySessionIdOrderByOccurredAtDescIdDesc(UUID sessionId);
 }

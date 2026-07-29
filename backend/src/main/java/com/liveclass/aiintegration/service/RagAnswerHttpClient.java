@@ -21,7 +21,7 @@ import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 
 /**
- * ai-api RAG SSE 어댑터(ADR-0046). 리액티브 스택을 끌어들이지 않고 JDK {@link HttpClient} +
+ * ai-api RAG SSE 어댑터(ADR-0047). 리액티브 스택을 끌어들이지 않고 JDK {@link HttpClient} +
  * virtual thread로 스트리밍한다 — backend는 JPA/blocking 모놀리스라 reactive 혼합을 피한다(ADR-0009).
  *
  * <p><b>서명 불일치를 막는 핵심 규칙</b>: body를 <b>한 번만</b> 직렬화해 그 바이트로 서명하고

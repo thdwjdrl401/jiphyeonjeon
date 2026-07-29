@@ -41,7 +41,7 @@
 | `CHAPTER-01` | `GET` | `/api/lessons/{lessonId}/chapters` | 게시 챕터·구조 요약 조회 | **제안** |
 | `CHAT-REPLAY-01` | `GET` | `/api/live-sessions/{sessionId}/messages` | 저장 채팅 리플레이 | **구현됨(세션 키잉)**. 리플레이 페이지는 `lessonId` 기준이므로 lesson→session 해석 필요(설계 후속) |
 | `AI-HISTORY-01` | `GET` | `/api/lessons/{lessonId}/ai/questions` | 본인 AI Q&A 기록 | **제안** |
-| `AI-QUESTION-01` | `POST/SSE` | `/api/live-sessions/{sessionId}/ai/answers/stream` | 현재 시점 개인 AI 질문 | **라이브만 구현됨**([ADR-0046](../../decisions/songjeongki/0046-live-ai-answer-sse-proxy.md)) — VOD/다시보기는 미구현 |
+| `AI-QUESTION-01` | `POST/SSE` | `/api/live-sessions/{sessionId}/ai/answers/stream` | 현재 시점 개인 AI 질문 | **라이브만 구현됨**([ADR-0047](../../decisions/songjeongki/0047-live-ai-answer-sse-proxy.md)) — VOD/다시보기는 미구현 |
 
 ### 2.3 퀴즈
 
@@ -343,7 +343,7 @@ GET /api/lessons/{lessonId}/ai/questions?page=0&size=20
 > `POST /api/live-sessions/{sessionId}/ai/answers/stream`으로 구현됐지만([LIVE.md §10.1](LIVE.md)),
 > 다시보기는 열지 못했다 — ai-api가 `sessionId`를 필수로 받고 시간 좌표가 STT attempt-local이라,
 > 다시보기의 세션-ms를 그 축으로 되돌릴 **시간 앵커 공유 계약이 아직 없다**
-> ([ADR-0046 §9](../../decisions/songjeongki/0046-live-ai-answer-sse-proxy.md)). FE의 `askReplayAi(...)`는
+> ([ADR-0047 §9](../../decisions/songjeongki/0047-live-ai-answer-sse-proxy.md)). FE의 `askReplayAi(...)`는
 > 501 스텁을 유지한다.
 
 앵커 계약이 서면 라이브와 같은 SSE 이벤트 계약(`answer.delta`/`answer.done`/`answer.insufficient`/`answer.error`,

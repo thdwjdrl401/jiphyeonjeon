@@ -49,7 +49,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 라이브 AI 질의응답 SSE 프록시 계약(ADR-0046, AI-QUESTION-01).
+ * 라이브 AI 질의응답 SSE 프록시 계약(ADR-0047, AI-QUESTION-01).
  *
  * <p>ai-api를 목 HTTP 서버로 세워 <b>실제 ai-api 없이</b> 다음을 고정한다.
  * <ul>

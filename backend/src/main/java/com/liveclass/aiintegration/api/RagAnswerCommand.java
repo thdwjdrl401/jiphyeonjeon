@@ -3,7 +3,7 @@ package com.liveclass.aiintegration.api;
 import java.util.UUID;
 
 /**
- * ai-api RAG 스트림 1건의 입력(ADR-0046, ai/ai-api/CONTRACT.md §2). 호출자(live 모듈)가 인가·정책을
+ * ai-api RAG 스트림 1건의 입력(ADR-0047, ai/ai-api/CONTRACT.md §2). 호출자(live 모듈)가 인가·정책을
  * 끝낸 뒤 만든다 — ai-api는 서명만 확인하고 이 body를 신뢰한다(ADR-0023 §9.1).
  *
  * <p>{@code issuedAtMs}는 여기 없다. 신선도(수신 시각과 60초 이상 차이나면 401)를 지키려면 <b>전송

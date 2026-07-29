@@ -51,7 +51,7 @@ STARTING ─────────→ FAILED
 | `LIVE-WS-01` | WebSocket | `/api/ws` | 인증 쿠키 기반 WS 연결 | **제안** |
 | `CHAT-01` | REST | `GET/POST /api/live-sessions/{sessionId}/messages` | 채팅 복구 조회·전송 fallback | **구현됨(세션 키잉)** |
 | `CAPTION-01` | REST | `GET /api/live-sessions/{sessionId}/captions` | 저장 자막 리로드(새로고침·재연결 복구) | **구현됨(ADR-0045)** |
-| `AI-QUESTION-01` | SSE | `POST /api/live-sessions/{sessionId}/ai/answers/stream` | 개인 AI Q&A | **구현됨([ADR-0046](../../decisions/songjeongki/0046-live-ai-answer-sse-proxy.md))** |
+| `AI-QUESTION-01` | SSE | `POST /api/live-sessions/{sessionId}/ai/answers/stream` | 개인 AI Q&A | **구현됨([ADR-0047](../../decisions/songjeongki/0047-live-ai-answer-sse-proxy.md))** |
 | `AI-TERM-01` | REST | `POST /api/lessons/{lessonId}/ai/terms:explain` | 전문용어 설명 | URL **확정** |
 | `LIVE-QUESTION-01` | REST | `GET /api/instructor/live-sessions/{sessionId}/question-pins` | 강사용 질문 시점 집계 | **제안** |
 | `LIVE-QUESTION-02` | REST | `GET /api/instructor/live-sessions/{sessionId}/question-pins/{pinId}/questions` | 핀의 익명 질문 원문 | **제안** |
@@ -455,7 +455,7 @@ GET /api/live-sessions/{sessionId}/messages?afterSessionMs=115000&limit=100
 
 ## 10. 개인 AI Q&A와 용어
 
-### 10.1 AI 질문 SSE — **구현됨** ([ADR-0046](../../decisions/songjeongki/0046-live-ai-answer-sse-proxy.md))
+### 10.1 AI 질문 SSE — **구현됨** ([ADR-0047](../../decisions/songjeongki/0047-live-ai-answer-sse-proxy.md))
 
 > ⚠️ 이 절은 실제 구현에 맞춰 갱신됐다. 이전 초안의 `POST /api/lessons/{lessonId}/ai/questions:stream`과
 > `meta`/`delta`/`citation`/`done`/`error` 이벤트는 **더 이상 유효하지 않다**.
@@ -539,7 +539,7 @@ React는 Spring만 호출하며 Python AI endpoint를 직접 호출하지 않는
 
 - **다시보기(replay) AI 질문**: `askReplayAi(...)`는 여전히 501 스텁이다. ai-api가 `sessionId`를 필수로
   받고 시간 좌표가 attempt-local이라, 다시보기의 세션-ms를 역변환할 **시간 앵커 계약이 서기 전에는**
-  열 수 없다(ADR-0046 §9).
+  열 수 없다(ADR-0047 §9).
 - `AI-HISTORY-01`(질문 기록), `AI-TERM-01`(용어 설명), 강사용 question-pins는 미구현.
 
 ### 10.2 용어 설명

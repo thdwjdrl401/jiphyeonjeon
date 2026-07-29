@@ -19,7 +19,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.util.UUID;
 
 /**
- * 라이브 AI 질의응답 SSE 프록시(AI-QUESTION-01, ADR-0046). 브라우저는 Spring만 호출하고, Spring이
+ * 라이브 AI 질의응답 SSE 프록시(AI-QUESTION-01, ADR-0047). 브라우저는 Spring만 호출하고, Spring이
  * 인가·정책을 끝낸 뒤 ai-api의 RAG 스트림을 <b>변환 없이</b> 중계한다.
  *
  * <p><b>경로가 {@code /stream}으로 끝나는 것은 계약이다.</b> {@code frontend/nginx/default.conf}의
