@@ -6,6 +6,7 @@ import com.liveclass.live.service.LiveKitTokenService;
 import com.liveclass.live.service.LiveAccessGuard;
 import com.liveclass.live.service.LiveParticipantIdentity;
 import com.liveclass.live.service.LivePreflightService;
+import com.liveclass.live.service.LiveSessionForbiddenException;
 import com.liveclass.live.service.LiveSessionNotFoundException;
 import com.liveclass.live.service.LiveSessionService;
 import com.liveclass.live.service.LiveSessionStateConflictException;
@@ -153,21 +154,20 @@ public class LiveSessionController {
         return liveSessionService.end(sessionId, UUID.fromString(authentication.getName()));
     }
 
-    /**
-     * 방 입장 토큰 발급. 요청자가 세션 강사면 publisher(송출+구독), 아니면 subscriber(구독 전용).
-     * 세션 LIVE 상태 검사(입장창 등)는 후속. 접근 권한은 accessGuard가 수강 기반으로 검증한다.
-     */
-    @Operation(summary = "LiveKit 토큰 발급", description = "라이브 방에 접속할 입장 토큰을 발급한다. 세션을 만든 강사는 화면·음성을 내보낼 수 있고(송출), 그 외 참여자는 시청만 할 수 있다. 소유 강사 또는 활성 수강생만 발급된다.")
-    @PostMapping("/api/live-sessions/{sessionId}/token")
+    /** 강사 WebRTC 송출 토큰 발급. 수강생은 LiveKit 방에 참여하지 않고 HLS로만 재생한다(ADR-0032). */
+    @Operation(summary = "강사 LiveKit 토큰 발급",
+            description = "세션 소유 강사에게만 화면·음성 송출용 LiveKit 토큰을 발급한다. 수강생 재생은 HLS 전용이다.")
+    @PostMapping("/api/instructor/live-sessions/{sessionId}/token")
     public LiveTokenResponse token(@PathVariable UUID sessionId, Authentication authentication) {
         LiveSessionView session = liveSessionService.findById(sessionId)
                 .orElseThrow(() -> new LiveSessionNotFoundException("라이브 세션을 찾을 수 없습니다."));
 
-        String requesterId = authentication.getName();
-        // 접근 게이트: 소유 강사이거나 소속 커리큘럼의 활성 수강생만. 아니면 403.
-        accessGuard.requireCanAccess(sessionId, UUID.fromString(requesterId));
+        UUID requesterId = UUID.fromString(authentication.getName());
+        if (!session.instructorId().equals(requesterId)) {
+            throw new LiveSessionForbiddenException("이 세션의 강사만 LiveKit 토큰을 발급할 수 있습니다.");
+        }
         // 상태 게이트: 종료·취소·실패한 세션엔 입장 토큰을 발급하지 않는다(끝난/취소된 방 재입장 차단).
-        // 게이트를 접근검증 뒤에 둬서 미수강자에겐 세션 상태를 흘리지 않는다. enum 비교라 오타로 fail-open 안 된다.
+        // 소유권 검사 뒤에 두며 enum 비교라 오타로 fail-open 하지 않는다.
         LiveSessionStatus liveStatus = LiveSessionStatus.valueOf(session.liveSessionStatus());
         if (liveStatus == LiveSessionStatus.ENDING
                 || liveStatus == LiveSessionStatus.ENDED
@@ -175,16 +175,12 @@ public class LiveSessionController {
                 || liveStatus == LiveSessionStatus.FAILED) {
             throw new LiveSessionStateConflictException("종료되었거나 취소된 세션에는 입장할 수 없습니다.");
         }
-        boolean publisher = requesterId.equals(session.instructorId().toString());
         // 방 이름은 세션 ID로 결정론적으로 만든다. LiveKit이 붙이는 room_sid는 실제 시작 시 채운다.
         String room = "session-" + sessionId;
-        // 참가자 identity는 원시 userId를 노출하지 않는 (session,user) 결정론적 불투명 값으로 만든다.
-        // 방 안에서 참가자끼리 서로의 identity를 보므로, 채팅 익명화와 동일하게 userId를 미디어 계층에 흘리지 않는다.
-        // preflight·Gate S3①의 서버측 조회가 같은 규칙으로 강사 participant를 찾으므로 규약을 한곳에 둔다.
-        String identity = LiveParticipantIdentity.of(sessionId, UUID.fromString(requesterId));
+        // preflight·Gate S3①의 서버측 조회가 같은 규칙으로 강사 participant를 찾는다.
+        String identity = LiveParticipantIdentity.of(sessionId, requesterId);
 
-        // displayName(참여자 표시명·수강생 익명화)은 화면 요구가 붙을 때 채운다 — 지금은 불투명 식별자만.
-        var issued = tokenService.issue(room, identity, null, publisher);
+        var issued = tokenService.issueInstructor(room, identity, null);
 
         return new LiveTokenResponse(
                 "LIVEKIT",
@@ -192,6 +188,6 @@ public class LiveSessionController {
                 issued.jwt(),
                 issued.expiresAt(),
                 new LiveTokenResponse.Participant(identity, null),
-                new LiveTokenResponse.Grants(true, publisher, publisher));
+                new LiveTokenResponse.Grants(true, true, true));
     }
 }

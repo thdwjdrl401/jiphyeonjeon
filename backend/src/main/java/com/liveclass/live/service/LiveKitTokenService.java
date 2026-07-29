@@ -26,8 +26,8 @@ public class LiveKitTokenService {
         this.properties = properties;
     }
 
-    /** 방 입장 토큰을 발급한다. publisher=true면 송출·구독 모두, false면 구독 전용. */
-    public IssuedToken issue(String roomName, String identity, String displayName, boolean publisher) {
+    /** 소유 강사의 WebRTC 송출·구독 토큰을 발급한다. 수강생 재생은 HLS라 토큰을 발급하지 않는다. */
+    public IssuedToken issueInstructor(String roomName, String identity, String displayName) {
         Instant expiresAt = Instant.now().plusSeconds(properties.tokenTtlSeconds());
 
         AccessToken token = new AccessToken(properties.apiKey(), properties.apiSecret());
@@ -40,14 +40,14 @@ public class LiveKitTokenService {
                 new RoomJoin(true),
                 new RoomName(roomName),
                 new CanSubscribe(true),
-                new CanPublish(publisher),
-                new CanPublishData(publisher),
+                new CanPublish(true),
+                new CanPublishData(true),
                 // 강사가 합성 화면의 카메라 배치를 자기 participant metadata에 쓴다. Egress 템플릿이
                 // 그 값을 읽어 같은 자리에 그리므로, 강사가 보는 화면과 수강생이 보는 녹화가 일치한다.
-                // 남의 metadata는 못 건드리고(Own) 수강생 토큰에는 주지 않는다.
-                new CanUpdateOwnMetadata(publisher));
+                // 남의 metadata는 못 건드리며 이 토큰은 소유 강사에게만 발급한다.
+                new CanUpdateOwnMetadata(true));
 
-        return new IssuedToken(token.toJwt(), expiresAt, publisher);
+        return new IssuedToken(token.toJwt(), expiresAt);
     }
 
     public String url() {
@@ -55,6 +55,6 @@ public class LiveKitTokenService {
     }
 
     /** 발급 결과. jwt는 서명된 토큰, expiresAt는 만료 시각. */
-    public record IssuedToken(String jwt, Instant expiresAt, boolean publisher) {
+    public record IssuedToken(String jwt, Instant expiresAt) {
     }
 }

@@ -104,6 +104,16 @@ describe('전체 페이지 라우트', () => {
       .toMatchObject({ camera: 'hd' })
   })
 
+  it('사전 점검의 서버 점검 결과를 버튼이 아닌 자동 상태 안내로 표시한다', async () => {
+    await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
+    renderAt('/instructor/live-sessions/ses-security-live/preflight')
+
+    expect(
+      await screen.findByText('서버 점검 완료 · 강사 연결과 마이크 송출 상태가 정상입니다.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /서버 점검|최신 상태 점검/ })).not.toBeInTheDocument()
+  })
+
   it('강사 세션 루트는 연결을 소유하는 preflight로 이동한다', async () => {
     await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
     renderAt('/instructor/live-sessions/ses-security-live')

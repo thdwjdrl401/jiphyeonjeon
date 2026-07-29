@@ -1,7 +1,6 @@
-import { useEffect, useRef } from 'react'
-import type { LocalVideoTrack } from 'livekit-client'
 import { StatusBadge } from '@/shared/ui/WorkspaceUi'
 import CameraOverlayControl from './CameraOverlayControl'
+import InstructorLocalTrackVideo from './InstructorLocalTrackVideo'
 import { useInstructorLiveKit, type InstructorLiveKitConnectionState } from './useInstructorLiveKit'
 
 interface InstructorLiveKitStageProps {
@@ -9,34 +8,6 @@ interface InstructorLiveKitStageProps {
   lessonTitle: string
   participantCount: number
   onRequestEnd: () => void
-}
-
-function LocalTrackVideo({ track, label, fit = 'cover', mirrored = false }: {
-  track: LocalVideoTrack
-  label: string
-  fit?: 'cover' | 'contain'
-  /** 자기 얼굴은 거울처럼 보여야 자연스럽다. 화면공유와 합성 미리보기는 뒤집지 않는다. */
-  mirrored?: boolean
-}) {
-  const videoRef = useRef<HTMLVideoElement>(null)
-
-  useEffect(() => {
-    const element = videoRef.current
-    if (!element) return
-    track.attach(element)
-    return () => { track.detach(element) }
-  }, [track])
-
-  return (
-    <video
-      aria-label={label}
-      autoPlay
-      className={`instructor-local-video instructor-local-video--${fit}${mirrored ? ' is-mirrored' : ''}`}
-      muted
-      playsInline
-      ref={videoRef}
-    />
-  )
 }
 
 function connectionBadge(state: InstructorLiveKitConnectionState) {
@@ -77,7 +48,7 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
         */}
         {mainTrack
           ? (
-            <LocalTrackVideo
+            <InstructorLocalTrackVideo
               fit="contain"
               mirrored={!screenShareTrack}
               label={screenShareTrack ? '공유 화면 미리보기' : '카메라 미리보기'}
@@ -95,7 +66,7 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
             onChange={publisher.moveCameraOverlay}
             disabled={!publisher.canControl}
           >
-            <LocalTrackVideo label="카메라 미리보기" track={cameraTrack} />
+            <InstructorLocalTrackVideo label="카메라 미리보기" track={cameraTrack} />
           </CameraOverlayControl>
         )}
       </div>

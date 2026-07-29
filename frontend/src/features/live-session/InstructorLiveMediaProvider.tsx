@@ -17,7 +17,7 @@ import {
   Track,
 } from 'livekit-client'
 import { isMockApiEnabled } from '@/shared/config/runtime'
-import { getLiveToken, preparePreflightRoom } from './liveSessionService'
+import { getInstructorLiveToken, preparePreflightRoom } from './liveSessionService'
 import {
   cameraPreset,
   loadPublishQuality,
@@ -282,7 +282,7 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
         await preparePreflightRoom(sessionId)
         if (cancelled) return
         setState((current) => ({ ...current, connectionState: 'connecting' }))
-        const { token, wsUrl } = await getLiveToken(sessionId)
+        const { token, wsUrl } = await getInstructorLiveToken(sessionId)
         if (!wsUrl) throw new Error('LiveKit 접속 주소가 토큰 응답에 없습니다.')
         if (cancelled) return
 

@@ -25,7 +25,8 @@ export const startLiveSession = (sessionId: string) => liveSessionService.startL
 export const getLiveStartStatus = (sessionId: string, operationId?: string) =>
   liveSessionService.getLiveStartStatus(sessionId, operationId)
 export const endLiveSession = (sessionId: string) => liveSessionService.endLiveSession(sessionId)
-export const getLiveToken = (sessionId: string) => liveSessionService.getLiveToken(sessionId)
+export const getInstructorLiveToken = (sessionId: string) =>
+  liveSessionService.getInstructorLiveToken(sessionId)
 export const getParticipants = (sessionId: string) => liveSessionService.getParticipants(sessionId)
 export const getChatMessages = (sessionId: string) => liveSessionService.getChatMessages(sessionId)
 export const sendChatMessage = (sessionId: string, text: string, question: boolean) => liveSessionService.sendChatMessage(sessionId, text, question)

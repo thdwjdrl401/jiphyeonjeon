@@ -72,7 +72,7 @@ export const mockLiveSessionService = {
   async endLiveSession(sessionId) {
     liveStatusOverrides.set(sessionId, 'ENDED')
   },
-  async getLiveToken(sessionId) {
+  async getInstructorLiveToken(sessionId) {
     return { token: `mock-token-${sessionId}` }
   },
   async getParticipants() {

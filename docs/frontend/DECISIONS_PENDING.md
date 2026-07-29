@@ -67,13 +67,12 @@
 
 ### 7. 라이브 강의실 미디어 동작
 
-- [ ] 수강생 token의 subscribe-only 보장
 - [ ] 강사의 카메라·마이크·화면 공유 기본 상태
-- [ ] WebRTC와 HLS 되감기 전환 시 `sessionMs` 보정 방식
+- [ ] HLS 재생 시 `sessionMs` 보정 방식
 - [ ] Egress 최근/전체 playlist 제공 방식과 재생 가능 범위
 - [ ] 세션 종료 감지 후 이동 대상
 
-권장안: 수강생은 미디어 수신 전용으로 시작한다. 과거 시점 선택 시 HLS로 전환하고 `LIVE` 버튼으로 WebRTC에 복귀한다.
+확정 사항: 수강생은 LiveKit token 없이 HLS로만 시청하고 `LIVE` 버튼은 HLS 라이브 엣지로 복귀한다([ADR-0032](../decisions/songjeongki/0032-media-playback-hls-only.md)).
 
 ### 8. 채팅·자막·AI 장애 정책
 
@@ -130,4 +129,3 @@
 2. API 필드·상태·경로에 영향을 주면 관련 `docs/frontend/api/` 문서와 `docs/CONTRACT.md`를 함께 갱신한다.
 3. 기술 선택이나 되돌리기 어려운 정책이면 팀 ADR을 추가한다.
 4. 실제 API 연결과 같은 변경에서 FE 계약 테스트를 추가한다.
-

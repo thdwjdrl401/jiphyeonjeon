@@ -18,15 +18,15 @@
 ### 2.1 현재 범위
 
 - 강사는 카메라·마이크·화면 공유를 LiveKit으로 발행
-- 수강생은 LiveKit 미디어 수신 전용
+- 수강생은 LiveKit에 참가하지 않고 HLS로만 시청
 - 라이브 영상·음성, 실시간 채팅, 자막, 전문용어, PPTX·발화 근거
 - 개인 AI Q&A
 - 질문으로 등록한 채팅과 AI Q&A를 이용한 강사용 익명 질문 핀
 - 북마크
-- WebRTC 현재 라이브와 Egress HLS를 결합한 라이브 되감기
+- Egress HLS 하나로 라이브 엣지 재생과 되감기 제공
 - 라이브 세션 종료와 Egress 녹화 상태 확인
 
-수강생 토큰은 미디어 기준으로 `canSubscribe=true`, `canPublish=false`를 전제로 한다. 실제 권한은 프론트에서 버튼을 숨기는 것만으로 처리하지 않고 서버가 발급하는 LiveKit 토큰에서도 제한한다.
+LiveKit 토큰은 소유 강사의 WebRTC 송출에만 발급한다. 수강생은 인증된 HLS playback API를 사용하며 LiveKit token을 요청하지 않는다.
 
 ### 2.2 후속 구현
 
@@ -46,8 +46,7 @@ LiveLessonPage
 └─ LessonLayout
    ├─ LiveLessonPrimaryContent
    │  ├─ LiveMediaStage
-   │  │  ├─ LiveRtcPlayer                  현재 LIVE
-   │  │  ├─ LiveHlsPlayer                  최근·전체 되감기
+   │  │  ├─ PlaybackPlayer                 HLS 라이브 엣지·되감기
    │  │  ├─ VideoStatusOverlay             제목·세션·연결·참여·강사 액션
    │  │  ├─ MediaStateOverlay
    │  │  └─ MediaControlsOverlay           진행 바·LIVE 복귀·역할별 제어
@@ -66,7 +65,7 @@ LiveLessonPage
    └─ SpeakerPermissionPanel                후속·강사만
 ```
 
-`LiveRtcPlayer`와 `LiveHlsPlayer`를 동시에 사용자에게 노출하지 않는다. `LiveMediaStage`가 현재 재생 모드에 따라 하나를 선택하고, 전환 중에는 이전 화면 또는 로딩 오버레이를 유지한다.
+수강생 미디어는 `PlaybackPlayer` 하나가 HLS 라이브 엣지와 되감기를 모두 담당한다. 강사의 LiveKit 발행은 별도 provider가 소유한다.
 
 ## 4. 컴포넌트 책임
 
@@ -84,12 +83,12 @@ LiveLessonPage
 
 | 컴포넌트 | 소유 영역 | 책임 |
 |---|---|---|
-| `LiveMediaStage` | `features/live` | WebRTC와 HLS 재생 모드 전환, 공통 미디어 상태 표시 |
-| `LiveRtcPlayer` | `features/live` | 현재 라이브의 LiveKit 트랙 구독·발행·재연결 |
-| `LiveHlsPlayer` | `features/live` | Egress가 생성한 최근 또는 전체 DVR HLS 재생 |
+| `LiveMediaStage` | `features/live` | HLS 재생과 공통 미디어 상태 표시 |
+| `PlaybackPlayer` | `features/live` | Egress HLS 라이브 엣지·되감기·재연결 |
+| `InstructorLiveMediaProvider` | `features/live` | 강사 LiveKit 트랙 발행·재연결 |
 | `InstructorMediaControls` | `features/live` | 강사의 카메라·마이크·화면 공유 제어 |
 | `LiveTimeline` | `features/live` | 라이브 시작부터 현재까지의 탐색 범위와 시각화 레이어 조합 |
-| `GoLiveButton` | `features/live` | 빨간 점이 있는 `LIVE` 버튼과 현재 WebRTC 시점 복귀 |
+| `GoLiveButton` | `features/live` | 빨간 점이 있는 `LIVE` 버튼과 HLS 라이브 엣지 복귀 |
 | `BookmarkMarkerLayer` | `features/learning` | 수강생 북마크 위치 표시·선택 |
 | `QuestionPinLayer` | `features/live-question` | 강사용 질문 발생 시점과 집중 정도 표시 |
 
@@ -343,7 +342,7 @@ AI 장애가 라이브 미디어와 채팅을 막지 않는 것을 기본 원칙
 
 ## 13. 필요한 데이터와 연결
 
-정확한 필드와 API는 [API_MAP.md](../API_MAP.md)에서 확정한다.
+정확한 필드와 API는 [API_MAP.md](../api/API_MAP.md)에서 확정한다.
 
 ### 13.1 초기 데이터
 
