@@ -17,6 +17,7 @@ Python 환경은 Conda가 아니라 프로젝트 표준인 Python 3.12와 uv를 
 cd /home/liveclass/liveclass
 ai/realtime-agent/deploy/install.sh /opt/tljh/user/bin/uv
 ai/realtime-agent/deploy/install-gitlab-runner-user.sh latest
+ai/bge-runtime/deploy/install.sh /opt/tljh/user/bin/uv
 ~~~
 
 첫 명령은 아래 항목만 사용자 홈에 설치한다.
@@ -32,6 +33,20 @@ ai/realtime-agent/deploy/install-gitlab-runner-user.sh latest
 ~~~sh
 chmod 600 ~/.config/liveclass/realtime-agent*.env
 ~~~
+
+운영 GPU↔EC2 터널은 개발자 로컬 tunnel과 구분해 공용 bootstrap으로 설정한다. 전달받은 PEM은
+저장소에 두고 계속 참조하지 않고 `~/.config/liveclass/ssh/`로 복사하며, realtime-agent와 BGE가 같은
+EC2 target을 사용하도록 두 tunnel env를 함께 생성한다.
+
+~~~sh
+ai/realtime-agent/deploy/configure-gpu-ec2-tunnels.sh \
+  /absolute/path/to/gpu-to-ec2.pem \
+  <ec2-user>@<ec2-host> \
+  --start
+~~~
+
+EC2 host key는 실행 전에 별도 채널로 확인해 `~/.ssh/known_hosts`에 등록한다. PEM과 생성된 env는
+모두 Git 밖에 있고 권한은 `0600`이다.
 
 realtime-agent.env의 LIVEKIT_URL에는 인증서 hostname을 유지하고 LIVEKIT_TUNNEL_HOST에는 그
 hostname만 넣는다. root 권한으로 /etc/hosts를 바꿀 수 없으므로 source-controlled resolver가 해당
@@ -89,14 +104,19 @@ GitLab job도 같은 helper를 현재 사용자로 직접 호출하며 sudo, sys
 
 ## 4. 연결과 상태 확인
 
-GPU 호스트는 외부에서 inbound port를 열지 않는다. 사용자 영역 SSH client가 EC2에 연결해 세 개의
-local forward와 하나의 reverse forward를 한 control connection으로 유지한다.
+GPU 호스트는 외부에서 inbound port를 열지 않는다. 사용자 영역 SSH client가 EC2 22번에 두 개의
+realtime-agent 연결을 만든다. control connection은 LiveKit·Redis local forward와 health reverse를,
+TURN connection은 미디어 local forward만 담당한다. 별도 BGE supervisor도 같은 PEM/target으로 세 번째
+SSH connection을 열어 EC2 `127.0.0.1:18020` reverse forward를 유지한다. 세 연결은 목적지가 같아도
+서로 다른 ControlPath와 TCP connection을 사용한다.
 
 ```mermaid
 flowchart LR
     subgraph GPU[GPU host]
         A[realtime-agent]
         H[health 127.0.0.1:8081]
+        C[SSH control connection]
+        M[SSH TURN connection]
         R[GitLab Runner]
     end
     subgraph EC2[EC2]
@@ -105,19 +125,21 @@ flowchart LR
         T[TURN/TCP :3478]
         J[Java health client :18081]
     end
-    A -->|SSH local forward :7443| L
-    A -->|SSH local forward :4000| D
-    A -->|SSH local forward :3478| T
-    J -->|SSH reverse forward :18081 → :8081| H
+    A --> C
+    A --> M
+    C -->|local forward :7443| L
+    C -->|local forward :4000| D
+    M -->|local forward :3478| T
+    J -->|control reverse :18081 → :8081| H
     R -->|outbound HTTPS| G[GitLab]
 ```
 
-| 방향 | GPU 측 | EC2 측 | 용도 |
-|---|---|---|---|
-| local | 127.0.0.1:7443 | 127.0.0.1:7443 | LiveKit |
-| local | 127.0.0.1:4000 | 127.0.0.1:4000 | application Redis |
-| local | 127.0.0.1:3478 | 127.0.0.1:3478 | TURN/TCP |
-| reverse | GPU 127.0.0.1:8081 | EC2 127.0.0.1:18081 | Java health check |
+| 연결 | 방향 | GPU 측 | EC2 측 | 용도 |
+|---|---|---|---|---|
+| control | local | 127.0.0.1:7443 | 127.0.0.1:7443 | LiveKit |
+| control | local | 127.0.0.1:4000 | 127.0.0.1:4000 | application Redis |
+| TURN | local | 127.0.0.1:3478 | 127.0.0.1:3478 | TURN/TCP |
+| control | reverse | GPU 127.0.0.1:8081 | EC2 127.0.0.1:18081 | Java health check |
 
 EC2 Java는 http://127.0.0.1:18081/로 GPU agent 상태를 확인한다. EC2 loopback에만 bind되므로 외부에
 공개되지 않는다.
@@ -138,6 +160,7 @@ curl --fail http://127.0.0.1:8081/
 
 - Runner가 offline이면 GPU job은 pending 상태이며 EC2 Runner가 대신 실행하지 않는다.
 - tunnel 또는 agent가 비정상 종료하면 tmux supervisor loop가 다시 시작한다.
+- control SSH 장애는 TURN SSH를 종료하지 않고, TURN SSH 장애도 LiveKit·Redis·health를 종료하지 않는다.
 - active 강의 중 배포는 기존 process의 drain을 기다리지 않고 tmux session을 교체한다.
 - GPU/Jupyter 재시작 후에는 ~/.local/bin/liveclass-gitlab-runner-user start를 다시 실행한다.
 

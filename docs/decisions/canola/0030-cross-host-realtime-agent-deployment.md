@@ -32,9 +32,17 @@ release, cache, 시크릿 설정, helper는 각각 ~/.local/share, ~/.config, ~/
 통과시킨 뒤 current symlink를 교체한다. health 실패 시 이전 release로 rollback한다.
 
 tmux supervisor는 tunnel watcher와 agent를 별도 session으로 관리한다. tunnel watcher는 기존 SSH
-control master를 재사용하고, 끊어지면 다시 연결한다. SSH 연결은 LiveKit·Redis·TURN local forward와
-GPU health의 EC2 loopback reverse forward를 함께 제공한다. LIVEKIT_URL의 TLS hostname은
+control master를 재사용하고, 끊어지면 다시 연결한다. LiveKit·Redis·health control connection과
+TURN/TCP connection은 서로 다른 OpenSSH master로 유지한다. LIVEKIT_URL의 TLS hostname은
 source-controlled LD_PRELOAD resolver로 해당 hostname만 loopback에 매핑한다.
+
+운영 bootstrap은 전달받은 PEM을 Git 밖의 `~/.config/liveclass/ssh/`에 `0600`으로 복사하고,
+realtime-agent와 BGE tunnel env에 같은 key·EC2 target을 기록한다. 두 서비스는 장애 격리를 위해 별도
+SSH connection과 supervisor를 유지한다. realtime-agent 내부에서도 LiveKit·application Redis·health
+control connection과 TURN/TCP connection을 분리하고, BGE tunnel은 local runtime readiness 이후
+embedding reverse forward를 담당한다. 세 연결의 분리 근거는
+[ADR-0033](0033-realtime-agent-ssh-channel-isolation.md)에 기록한다.
+모든 reverse listener는 EC2 loopback에만 bind하며 private key 파일은 `*.pem` ignore로 보호한다.
 
 ## 제약
 
@@ -58,6 +66,8 @@ tunnel과 agent를 복구한다. 실행 계정이 release도 소유하므로 roo
 - MR에서 realtime-agent unit test, Ruff와 wheel build를 CPU container로 검증한다.
 - helper의 shell syntax, 입력 검증, release/rollback 순서, sudo/systemd 부재를 테스트한다.
 - DNS redirect C source는 -Wall -Wextra -Werror로 빌드한다.
+- 운영 bootstrap이 PEM을 Git 밖에 0600으로 설치하고 두 서비스 설정에 동일 경로·target을 쓰는지
+  회귀 테스트한다.
 - 실제 GPU gate는 frozen Nemotron sync, CUDA availability와 LiveKit agent health다.
 - API, Redis entry, callback payload와 상태코드를 바꾸지 않아 공유 계약 테스트는 불필요하다.
 - Runner authentication token은 저장소로 자동화하지 않는 일회성 외부 설정이다.
