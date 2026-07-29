@@ -315,3 +315,51 @@ Spring realtime-agent health proxy client는 아직 없다. 따라서 `/internal
   tunnel script, deploy 문서와 proxy 설정을 함께 갱신한다.
 - 서비스 README에는 전체 계약을 복제하지 않고 통신 요약과 이 문서 링크만 둔다.
 - 구현 상태가 바뀌면 구현 MR에서 7절을 함께 갱신한다.
+
+## 9. 제안 변경 — 자료 2단계 스코프(커리큘럼·강의) [AI 오너 구현 대기]
+
+> 상태: **제안(미비준)**. 아래는 Spring 측 요구이며 실제 계약이 되려면 §8 규칙대로 루트
+> [`docs/CONTRACT.md`](../CONTRACT.md)·Java/Python 구현·양측 계약 테스트를 같은 변경에서 갱신해야 한다.
+
+자료(PPTX)는 두 수준에 종속된다.
+
+- **커리큘럼 종속 자료**: 커리큘럼 전체에서 **항상** 참조(RAG 검색에 상시 포함).
+- **강의(레슨) 종속 자료**: 해당 강의 문맥에서 **추가로** 참조.
+
+즉 강의 문맥의 RAG 질의 결과 = `커리큘럼 종속(항상) + 그 강의 종속(추가)`.
+
+### 9.1 인제스천 잡 (Spring→ai-worker, `ingestion.embed`)
+
+현재 `PptxEmbedJob`은 `lessonId`·`curriculumId`를 **둘 다 필수 UUID**로 요구한다
+(`ai/ai-worker/app/contracts/material_jobs.py`). 커리큘럼 종속 자료는 `lessonId`가 없어 표현 불가.
+
+요청 변경:
+
+- `scope: "CURRICULUM" | "LESSON"` 필드 추가(discriminator).
+- `curriculumId`: **항상 필수**(두 스코프 공통).
+- `lessonId`: `LESSON`일 때만 필수, `CURRICULUM`일 때 **생략(optional)**.
+  - CURRICULUM: `{ taskType:"PPTX_EMBED", scope:"CURRICULUM", curriculumId, materialId, assetId, fileName, policy, contractVersion }`
+  - LESSON: `{ taskType:"PPTX_EMBED", scope:"LESSON", curriculumId, lessonId, materialId, assetId, fileName, policy, contractVersion }`
+- `EmbedDeleteJob`도 동일하게 `lessonId` optional + `scope`.
+- 인덱스 스키마 `ai.material_version`: **`curriculum_id`(NOT NULL) 추가, `lesson_id` NULLABLE로**. 커리큘럼 종속 행은 `lesson_id IS NULL`.
+
+### 9.2 검색 (Spring→ai-api RAG + pgvector 스코프 SQL)
+
+현재 `RagAnswerRequest`는 `lessonId`만 받고, 검색 SQL은 `WHERE mv.lesson_id = :lesson_id`로 **레슨 전용**
+이다(`ai/ai-api/app/adapters/pgvector_material_retrieval.py`). 커리큘럼 종속 자료는 검색에 들어오지 않는다.
+
+요청 변경:
+
+- `RagAnswerRequest`에 **`curriculumId`(UUID) 추가**. (라이브 강의 문맥에선 `lessonId`와 함께 오지만,
+  커리큘럼 전용 질의 지원 시 `lessonId`는 optional로 둔다.)
+- 스코프 규칙(`state = 'ACTIVE'` 공통):
+  - **강의 문맥 질의**: `curriculum_id = :curriculumId AND (lesson_id IS NULL OR lesson_id = :lessonId)`
+    → 커리큘럼 종속(항상) + 해당 강의 종속(추가).
+  - **커리큘럼 전용 질의**(lesson 없음): `curriculum_id = :curriculumId AND lesson_id IS NULL`.
+
+### 9.3 Spring 측 정합 상태
+
+- Spring `feat/common/curriculum-material-embedding` 브랜치: 커리큘럼 attach는 `scope:"CURRICULUM"` +
+  `curriculumId`만, 레슨 attach는 `curriculumId + lessonId`를 발행하도록 구현됨. 현 워커가 `lessonId`
+  필수라 **커리큘럼 잡 소비는 9.1 반영 후** 가능(그전까지 스위치 off로 무회귀).
+- 9.1/9.2 구현 시 루트 `docs/CONTRACT.md`(§3-1 잡 wire, RAG 요청)와 §7 상태표를 함께 갱신한다.
