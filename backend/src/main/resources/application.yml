@@ -130,10 +130,6 @@ live:
     # 임시 우회 플래그다 — 그동안 자막 없이 LIVE가 될 수 있다(ADR §5-1). AI 담당자의 readiness API·callback
     # 배포 뒤 false로 전환한다. 강사 publisher 재검증(Gate S3①)은 이 값과 무관하게 항상 수행한다.
     assume-ready: ${LIVE_STT_ASSUME_READY:true}
-    health:
-      # GPU reverse tunnel의 service-level health. 특정 dispatch job의 STT_READY gate와는 별개다.
-      base-url: ${LIVE_STT_HEALTH_BASE_URL:http://127.0.0.1:18081/}
-      timeout: ${LIVE_STT_HEALTH_TIMEOUT:2s}
   start:
     # Egress Gate B~C(EGRESS_ACTIVE + manifest·첫 세그먼트) bounded polling. 과거 Chrome page load가
     # 20초까지 걸린 인프라 기록을 고려한 시작값이며 운영 지표로 조정한다(ADR §4).

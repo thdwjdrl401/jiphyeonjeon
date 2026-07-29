@@ -169,12 +169,11 @@ Content-Type: application/json
 [ADR-0029](decisions/canola/0029-gpu-bge-ec2-ai-worker-connectivity.md), ai-worker 쪽 검증 규칙은
 [`ai/ai-worker/CONTRACT.md` §9.4](../ai/ai-worker/CONTRACT.md#94-remote-bge-runtime)를 따른다.
 
-### 3-8. Spring → GPU realtime-agent service health (HTTP) — 양쪽 구현됨
+### 3-8. GPU realtime-agent service health (HTTP) — AI 구현됨, Spring consumer 미구현
 
-GPU agent는 `127.0.0.1:8081`, EC2 reverse tunnel은 `127.0.0.1:18081`에만 bind한다. host에서
-실행하는 Spring의 `LIVE_STT_HEALTH_BASE_URL` 기본값은 `http://127.0.0.1:18081/`이다. 운영 Docker
-backend는 host loopback에 직접 닿지 않으므로 host-network LiveKit nginx의 private-network 전용
-`https://jiphyeonjeon.thdwjdrl.com:7443/internal/realtime-agent/` proxy를 사용한다. 18081은 public bind하지 않는다.
+GPU agent는 `127.0.0.1:8081`, EC2 reverse tunnel은 `127.0.0.1:18081`에만 bind한다. EC2 host에서는
+reverse tunnel 주소로 상태를 확인할 수 있지만 Spring consumer와 backend container의 접근 경로는
+아직 구현하지 않았다. 18081은 public bind하지 않는다.
 
 - `GET /health/live`: **200**
   `{"contractVersion":"1","status":"alive","service":"realtime-agent"}`.
@@ -183,9 +182,9 @@ backend는 host loopback에 직접 닿지 않으므로 host-network LiveKit ngin
   공통 body는 `{contractVersion,status,service,sttProvider,workerStarted,liveKitConnected,modelsReady,readyProcessCount,expectedProcessCount}`다.
 
 Nemotron의 process marker는 `prewarm()`의 model load가 성공한 뒤에만 생긴다. 종료된/reuse된 PID의
-marker는 준비 수에 포함하지 않는다. 이 service-level readiness는 배포 및 Java 사전 진단용이다.
+marker는 준비 수에 포함하지 않는다. 이 service-level readiness는 배포 및 향후 consumer 사전 진단용이다.
 실제 dispatch를 예약하지 않고 특정 job의 session lease·Redis·room audio·engine queue를 검사하지
-않으므로 §3-3의 job-level `STT_READY` gate를 대체하지 않는다. 정본 schema와 양쪽 fixture는
+않으므로 §3-3의 job-level `STT_READY` gate를 대체하지 않는다. 정본 schema와 AI fixture는
 [`realtime-agent-health.schema.json`](../ai/realtime-agent/contracts/schemas/realtime-agent-health.schema.json)에 둔다.
 
 ## 4. 스키마 소유권 (공동수정 금지)

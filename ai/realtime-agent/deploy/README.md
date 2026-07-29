@@ -125,14 +125,14 @@ flowchart LR
         L[LiveKit :7443]
         D[Application Redis :4000]
         T[TURN/TCP :3478]
-        J[Java health client :18081]
+        E[EC2 host health smoke :18081]
     end
     A --> C
     A --> M
     C -->|local forward :7443| L
     C -->|local forward :4000| D
     M -->|local forward :3478| T
-    J -->|control reverse :18081 → :8081| H
+    E -->|control reverse :18081 → :8081| H
     R -->|outbound HTTPS| G[GitLab]
 ```
 
@@ -141,13 +141,12 @@ flowchart LR
 | control | local | 127.0.0.1:7443 | 127.0.0.1:7443 | LiveKit |
 | control | local | 127.0.0.1:4000 | 127.0.0.1:4000 | application Redis |
 | TURN | local | 127.0.0.1:3478 | 127.0.0.1:3478 | TURN/TCP |
-| control | reverse | GPU 127.0.0.1:8081 | EC2 127.0.0.1:18081 | Java health check |
+| control | reverse | GPU 127.0.0.1:8081 | EC2 127.0.0.1:18081 | EC2 host health check |
 
 EC2 host smoke는 `http://127.0.0.1:18081/health/live`로 process 생존을,
-`http://127.0.0.1:18081/health/ready`로 STT warm pool과 LiveKit 연결 완료를 확인한다. Docker backend는
-host loopback에 직접 닿을 수 없으므로 `LIVE_STT_HEALTH_BASE_URL`에 설정된 LiveKit nginx의
-`/internal/realtime-agent/` 경로를 사용한다. 이 경로는 Docker private subnet과 host만 허용하며
-18081 자체는 계속 EC2 loopback에만 bind된다. readiness는 준비 전 503, 준비 뒤 200이다.
+`http://127.0.0.1:18081/health/ready`로 STT warm pool과 LiveKit 연결 완료를 확인한다. 18081은 계속
+EC2 loopback에만 bind되고 readiness는 준비 전 503, 준비 뒤 200이다. backend consumer와 컨테이너
+네트워크 경로는 이 AI 배포 변경에 포함하지 않는다.
 
 `LIVEKIT_URL`은 TLS 인증서 hostname을 유지하되 배포 resolver가 그 hostname만 GPU loopback으로
 해석한다. 따라서 TLS SNI/hostname 검증을 버리지 않고 `127.0.0.1:7443` SSH tunnel을 사용한다.

@@ -95,7 +95,7 @@ health server는 GPU `127.0.0.1:8081`에만 bind하며 기존 reverse SSH tunnel
 - `GET /health/live`: Python health server가 응답 가능한 동안 200 `status=alive`
 - `GET /health/ready`: 설정된 STT child 전부의 provider prewarm, AgentServer 시작, 현재 LiveKit
   worker 연결이 모두 확인되면 200 `status=ready`; 하나라도 아니면 같은 JSON을 503
-- `GET /`: 기존 운영 smoke 호환용 plain text `OK`; 신규 배포/Java 판단에는 사용하지 않는다.
+- `GET /`: 기존 운영 smoke 호환용 plain text `OK`; 신규 배포/readiness 판단에는 사용하지 않는다.
 
 서비스 readiness는 warm pool이 배정 가능한 사전 상태를 뜻한다. 특정 dispatch job의 session lease,
 Redis, room audio와 engine queue 준비를 확인하지 않으므로 `STT_READY` job gate를 대체하지 않는다.
