@@ -4,7 +4,6 @@ import { instructorPaths } from '@/app/router/paths'
 import CurriculumAssetsFields from '@/features/curriculum/CurriculumAssetsFields'
 import { type CurriculumImageSelection } from '@/features/curriculum/CurriculumImageField'
 import CurriculumPeriodFields from '@/features/curriculum/CurriculumPeriodFields'
-import EnrollmentPolicyField from '@/features/curriculum/EnrollmentPolicyField'
 import { createCurriculum, uploadCurriculumThumbnail } from '@/features/curriculum/curriculumManagementService'
 import type { CurriculumMaterial } from '@/features/curriculum/types'
 import { ApiError } from '@/shared/api/client'
@@ -88,14 +87,17 @@ export default function CurriculumFormPage() {
           />
         </Panel>
 
-        <Panel title="운영 기간과 수강 방식" description="이 커리큘럼이 언제부터 언제까지 진행되고, 학생이 어떻게 등록하는지 정합니다.">
+        <Panel title="커리큘럼 운영 기간" description="이 커리큘럼이 언제부터 언제까지 진행되는지 정합니다.">
           <div className="operation-fields">
             <CurriculumPeriodFields
               idPrefix="new-curriculum"
               value={{ startsAt: form.startsAt, endsAt: form.endsAt }}
               onChange={update}
             />
-            <EnrollmentPolicyField value="APPROVAL_REQUIRED" />
+            <InlineNotice tone="info">
+              수강은 <strong>강사 승인 후 수강</strong> 방식으로 운영돼요. 학생이 신청하면 승인 대기 상태가 되고,
+              강사가 승인해야 수강이 시작됩니다.
+            </InlineNotice>
           </div>
         </Panel>
 

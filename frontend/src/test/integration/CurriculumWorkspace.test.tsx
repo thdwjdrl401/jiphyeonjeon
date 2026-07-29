@@ -83,9 +83,12 @@ describe('커리큘럼 작업 화면', () => {
     expect(screen.queryByText(/아직 공개 목차에 보이지 않습니다/)).not.toBeInTheDocument()
   })
 
-  it('새 커리큘럼의 수강 방식을 강사 승인 방식으로 고정한다', async () => {
+  // 수강 방식은 강사 승인 하나뿐이라 고르게 하지 않고 안내만 한다.
+  it('새 커리큘럼은 수강 방식을 고르지 않고 강사 승인 방식임을 안내한다', async () => {
     await renderAsInstructor('/instructor/curriculums/new')
-    expect(await screen.findByText('강사 승인 후 수강')).toBeInTheDocument()
+    const notice = await screen.findByText(/강사가 승인해야 수강이 시작됩니다/)
+    expect(notice).toHaveTextContent('강사 승인 후 수강')
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument()
     expect(screen.queryByText('신청 후 바로 수강')).not.toBeInTheDocument()
     expect(screen.queryByText('초대 전용')).not.toBeInTheDocument()
   })
