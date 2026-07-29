@@ -389,9 +389,11 @@ FE 소비 구현: 봉투 파싱은 `httpLiveSessionService.subscribeCaptions`, �
 (`reduceCaptionStream`/`selectCaptionViews`), 렌더는 `CaptionDock`(확정 전 라인은 `pending`). 상세 근거는 ADR-0044·0045.
 
 **뷰어별 위치 동기화(ADR-0045)**: 자막 시각을 `sessionMs`(있으면) 축에 두고, `LiveClassroomPage`가 뷰어에 따라 노출을 가른다.
-- **학생(HLS/replay, 플레이어 위치 존재)**: `selectVisibleCaptions`가 `positionMs`(+lead ~500ms)까지의 위치 동기화(`synced`) 자막만 노출한다. 앞선 자막은 누적기(버퍼)에 두고 위치가 도달하면 드러나 — HLS 지연으로 자막이 영상보다 앞서던 문제를 없앤다. 현재 cue는 위치에 도달한 마지막 라인으로 강조한다.
+- **학생(HLS/replay, 플레이어 위치 존재)**: `selectVisibleCaptions`가 `positionMs`(+STT 지연 보정)까지의 위치 동기화(`synced`) 자막만 노출한다. 앞선 자막은 누적기(버퍼)에 두고 위치가 도달하면 드러나 — HLS 지연으로 자막이 영상보다 앞서던 문제를 없앤다. 현재 cue는 위치에 도달한 마지막 라인으로 강조한다.
 - **강사(라이브, 위치 미구동)**: 기존 실시간 append 그대로.
 - `sessionMs`가 없어 fallback(`synced=false`)인 자막은 위치 축이 아니라 판단 불가라 그대로 보인다.
+
+**STT 방출 지연 보정(`CAPTION_STT_LAG_MS`=1,500)**: `sessionMs`는 조각을 **내보낸** 시각이라 실제 발화보다 늦다(`startMs ≈ 발화시각 + lag`). 같은 상수로 두 곳을 보정한다 — 노출은 `positionMs + lag`까지(말이 들리는 순간에 뜨도록), 시각 라벨 클릭 seek은 `startMs − lag`으로(문장 **시작**에 닿도록, 라벨 텍스트는 자막 시각 그대로). 두 값이 같아 자막을 눌러 이동한 직후에도 그 줄이 경계에 걸려 사라지지 않는다. 세그먼트형(다시보기) 자막은 정확한 구간이라 보정하지 않는다(`captionSeekMs`). 또 한 델타의 시작 시각으로는 **직전 델타의 시각**을 쓴다 — 델타 시각은 방출 시점이라, 그 조각의 말이 시작된 때는 직전 델타 무렵이기 때문이다.
 
 **Bounded 누적(롤링 캡)**: 누적기는 최근 `CAPTION_MAX_LINES`(=300) 라인만 보관하고 초과 시 가장 오래된 라인을 drop한다 — 긴 세션에서 메모리·DOM(<article> 수)이 무한정 커지지 않게. 학생 위치 버퍼는 HLS 지연분(~수십초)뿐이라 넉넉하다. 풀 가상 스크롤은 쓰지 않는다.
 

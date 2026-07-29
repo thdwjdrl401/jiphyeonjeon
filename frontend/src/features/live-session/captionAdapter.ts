@@ -61,10 +61,20 @@ export function normalizeCaption(caption: ApiCaptionView, index: number): Captio
 export const CAPTION_MAX_LINES = 300
 
 /**
- * 학생 위치 동기화에서 자막을 영상보다 살짝 먼저 노출하는 여유(ms). HLS 지연으로 자막은 항상 미리 와
- * 버퍼에 쌓이므로, positionMs 도달 직전 이 여유만큼 앞서 보여 준다.
+ * STT 방출 지연 보정(ms) — 근사 세션-ms 축의 **체계적 편향**을 상쇄하는 단일 상수다.
+ *
+ * 근사 sessionMs는 `occurredAt`(agent가 그 조각을 **내보낸** 시각) 기반이라, 실제 발화 시각보다 STT 처리
+ * 시간만큼 **늦다**: `startMs ≈ 발화시각 + lag`. 이 편향은 두 곳에 같은 크기로 나타나므로 같은 상수로 푼다.
+ *
+ * - **노출 시점**: `positionMs >= startMs − lag`일 때 보여야 말이 들리는 순간에 자막이 뜬다(그냥 startMs로
+ *   가리면 자막이 소리보다 lag만큼 늦게 뜬다).
+ * - **seek 목표**: `startMs − lag`으로 이동해야 문장 **시작**에 닿는다(그냥 startMs로 가면 문장 앞부분을
+ *   지나친 곳에 떨어진다).
+ *
+ * 두 곳이 같은 값이라 자막을 클릭해 seek한 직후에도 그 줄이 경계에 정확히 걸려 사라지지 않는다.
+ * 앵커(ADR-0045 후속)가 오면 이 보정은 필요 없어진다.
  */
-export const CAPTION_LEAD_MS = 500
+export const CAPTION_STT_LAG_MS = 1_500
 
 interface CaptionLineState {
   sttSessionId: string
@@ -175,12 +185,19 @@ export function selectCaptionViews(state: CaptionStreamState): CaptionView[] {
       if (sequences.length === 0) return []
       // 델타를 sequence 순서로 이어붙이며 (문자 offset → 시각) 색인을 만든다. 시각은 근사 sessionMs를
       // 우선 쓰고(세션 축 = HLS 위치와 정합) 없으면 stream-local streamElapsedMs로 fallback한다(ADR-0045).
+      // 한 델타의 시각은 그 조각을 **내보낸** 시점이라, 그 조각의 말이 **시작된** 시점은 직전 델타의
+      // 시각에 가깝다(그 사이 구간의 음성이 이 조각으로 나온 것이다). 그래서 각 델타의 시작 시각으로
+      // 직전 델타의 시각을 쓴다 — 그러지 않으면 문장 시작이 한 조각만큼 늦게 잡혀 seek이 뒤로 밀린다.
+      // 첫 델타는 직전이 없어 자기 시각을 쓰고, 남은 편향은 CAPTION_STT_LAG_MS가 상쇄한다.
       let full = ''
       const marks: { offset: number; ms: number; synced: boolean }[] = []
+      let previousMs: number | null = null
       for (const sequence of sequences) {
         const delta = line.deltas.get(sequence)!
         const synced = delta.sessionMs != null
-        marks.push({ offset: full.length, ms: synced ? delta.sessionMs! : delta.streamElapsedMs, synced })
+        const emittedMs = synced ? delta.sessionMs! : delta.streamElapsedMs
+        marks.push({ offset: full.length, ms: previousMs ?? emittedMs, synced })
+        previousMs = emittedMs
         full += delta.text
       }
       if (!full.trim()) return []
@@ -225,6 +242,19 @@ export function selectVisibleCaptions(
   options: { isInstructor: boolean; positionMs: number },
 ): CaptionView[] {
   if (options.isInstructor) return captions
-  const ceiling = options.positionMs + CAPTION_LEAD_MS
+  // startMs는 발화보다 STT 방출 지연만큼 늦으므로, 그 지연을 더한 지점까지 노출해야 말이 들리는 순간에 뜬다.
+  const ceiling = options.positionMs + CAPTION_STT_LAG_MS
   return captions.filter((caption) => !caption.synced || caption.startMs <= ceiling)
+}
+
+/**
+ * 자막의 시각 라벨을 눌렀을 때 실제로 이동할 세션-ms.
+ *
+ * 근사 축(`synced`)의 startMs는 발화보다 STT 방출 지연만큼 늦다 — 그대로 seek하면 문장 앞부분을 지나친
+ * 곳에 떨어져 "정확히 찾아가지 못한다". 지연분을 당겨 문장 시작 직전에 닿게 한다(늦게 도착하는 것보다
+ * 조금 이른 편이 회복 가능하다). 세그먼트형(다시보기) 자막은 정확한 구간 시각이라 보정하지 않는다.
+ */
+export function captionSeekMs(caption: CaptionView): number {
+  if (!caption.synced) return caption.startMs
+  return Math.max(0, caption.startMs - CAPTION_STT_LAG_MS)
 }

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   CAPTION_MAX_LINES,
+  CAPTION_STT_LAG_MS,
+  captionSeekMs,
   emptyCaptionStreamState,
   reduceCaptionStream,
   selectCaptionViews,
@@ -134,13 +136,26 @@ describe('근사 세션-ms 축 (ADR-0045)', () => {
     expect(views[0].startMs).toBe(65_000)
     expect(views[0].synced).toBe(false)
   })
+
+  it('뒤 델타에서 시작한 문장은 그 델타의 방출 시각이 아니라 직전 델타 시각을 시작으로 잡는다', () => {
+    // 델타 시각은 그 조각을 "내보낸" 시점이라, 그 조각의 말이 시작된 시점은 직전 델타 시각에 가깝다.
+    // 두 번째 문장은 델타2에서 시작하므로 시작 시각은 델타2(20_000)가 아니라 델타1(10_000)이어야 한다.
+    const views = selectCaptionViews(fold([
+      syncedDelta('stt-1', 1, 10_000, '첫 문장이다. '),
+      syncedDelta('stt-1', 2, 20_000, '둘째 문장이다.'),
+    ]))
+
+    expect(views).toHaveLength(2)
+    expect(views[0].startMs).toBe(10_000)   // 첫 델타는 직전이 없어 자기 시각
+    expect(views[1].startMs).toBe(10_000)   // 델타2의 말은 10_000부터 시작된 것
+  })
 })
 
 describe('뷰어별 자막 노출 선택 (selectVisibleCaptions)', () => {
   const captions: CaptionView[] = [
     captionView({ startMs: 1_000, synced: true }),
     captionView({ startMs: 5_000, synced: true }),
-    captionView({ startMs: 9_000, synced: true }),
+    captionView({ startMs: 20_000, synced: true }),
   ]
 
   it('강사는 위치와 무관하게 전부 노출한다(실시간 append)', () => {
@@ -148,20 +163,43 @@ describe('뷰어별 자막 노출 선택 (selectVisibleCaptions)', () => {
     expect(visible).toHaveLength(3)
   })
 
-  it('학생은 재생 위치(+lead)까지의 자막만 노출하고 앞선 자막은 감춘다', () => {
-    // positionMs=5_000, lead=500 → 5_500 이하만. 9_000은 아직 앞서 있어 감춘다.
+  it('학생은 재생 위치까지의 자막만 노출하고 앞선 자막은 감춘다', () => {
+    // positionMs=5_000, STT 지연 보정 1_500 → 6_500 이하만. 20_000은 아직 앞서 있어 감춘다.
     const visible = selectVisibleCaptions(captions, { isInstructor: false, positionMs: 5_000 })
     expect(visible.map((caption) => caption.startMs)).toEqual([1_000, 5_000])
   })
 
   it('학생 화면에서 위치 축이 아닌 fallback 자막(synced=false)은 위치를 앞서도 그대로 노출한다', () => {
-    // 위치=0. synced 자막(1_000)은 위치를 앞서 감춰지지만, 위치 축이 아닌 fallback(9_000)은 판단 불가라 노출된다.
+    // 위치=0. synced 자막(20_000)은 위치를 앞서 감춰지지만, 위치 축이 아닌 fallback은 판단 불가라 노출된다.
     const mixed: CaptionView[] = [
-      captionView({ startMs: 1_000, synced: true }),
-      captionView({ startMs: 9_000, synced: false }),
+      captionView({ startMs: 20_000, synced: true }),
+      captionView({ startMs: 20_000, synced: false }),
     ]
     const visible = selectVisibleCaptions(mixed, { isInstructor: false, positionMs: 0 })
-    expect(visible.map((caption) => caption.startMs)).toEqual([9_000])
+    expect(visible.map((caption) => caption.synced)).toEqual([false])
+  })
+})
+
+describe('자막 시각 클릭 seek 보정 (captionSeekMs)', () => {
+  it('근사 축 자막은 STT 방출 지연만큼 앞으로 당겨 문장 시작에 닿게 한다', () => {
+    const caption = captionView({ startMs: 42_000, synced: true })
+    expect(captionSeekMs(caption)).toBe(42_000 - CAPTION_STT_LAG_MS)
+  })
+
+  it('세그먼트형(다시보기) 자막은 정확한 구간이라 보정하지 않는다', () => {
+    const caption = captionView({ startMs: 42_000 })
+    expect(captionSeekMs(caption)).toBe(42_000)
+  })
+
+  it('보정이 세션 시작을 넘어가면 0으로 clamp한다', () => {
+    expect(captionSeekMs(captionView({ startMs: 500, synced: true }))).toBe(0)
+  })
+
+  it('보정 뒤 위치에서도 방금 누른 자막은 계속 보인다(노출 경계와 같은 상수)', () => {
+    // seek 목표로 이동한 직후 그 줄이 사라지면 안 된다 — 두 곳이 같은 보정값이라 경계에 정확히 걸린다.
+    const clicked = captionView({ startMs: 42_000, synced: true })
+    const positionMs = captionSeekMs(clicked)
+    expect(selectVisibleCaptions([clicked], { isInstructor: false, positionMs })).toEqual([clicked])
   })
 })
 
