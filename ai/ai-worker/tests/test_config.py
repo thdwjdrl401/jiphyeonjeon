@@ -64,6 +64,16 @@ def test_database_password_is_redacted_from_settings_repr() -> None:
     assert settings.rabbitmq_url.get_secret_value() == RABBITMQ_URL
 
 
+def test_bge_runtime_url_accepts_reverse_proxy_path_prefix() -> None:
+    settings = Settings(
+        instance_id="worker-1",
+        database_url=DATABASE_URL,
+        bge_runtime_url="https://jiphyeonjeon.thdwjdrl.com:7443/internal/bge",
+    )
+
+    assert settings.bge_runtime_url == "https://jiphyeonjeon.thdwjdrl.com:7443/internal/bge"
+
+
 def test_pptx_runtime_defaults_match_spring_and_bge_contracts() -> None:
     settings = Settings(instance_id="worker-1", database_url=DATABASE_URL)
 
@@ -99,6 +109,7 @@ def test_accepts_shared_spring_secret_from_documented_environment(monkeypatch) -
         ("spring_internal_base_url", "http://user:pass@spring.internal"),
         ("spring_internal_base_url", "http://spring.internal/api"),
         ("bge_runtime_url", "http://bge-runtime:invalid"),
+        ("bge_runtime_url", "http://bge-runtime:8020/../secret"),
         ("bge_readiness_timeout_seconds", 0),
         ("embedding_revision", "main"),
         ("embedding_max_batch_size", 8),

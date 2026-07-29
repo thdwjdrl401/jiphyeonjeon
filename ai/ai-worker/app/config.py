@@ -8,6 +8,30 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from app.database_urls import parse_async_database_url
 
 
+def _validate_internal_http_url(value: str, *, allow_path: bool) -> str:
+    parsed = urlsplit(value)
+    path_ok = parsed.path in {"", "/"} if not allow_path else ".." not in parsed.path.split("/")
+    if (
+        value != value.strip()
+        or parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or not path_ok
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValueError(
+            "internal service URL must be a credential-free HTTP origin"
+            + ("" if allow_path else " without a path")
+        )
+    try:
+        parsed.port
+    except ValueError as exc:
+        raise ValueError("internal service URL contains an invalid port") from exc
+    return value.rstrip("/") if parsed.path in {"", "/"} else value
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="AI_WORKER_",
@@ -87,28 +111,19 @@ class Settings(BaseSettings):
             raise ValueError("tenant_id must not be blank or padded")
         return value
 
-    @field_validator("spring_internal_base_url", "bge_runtime_url")
+    @field_validator("spring_internal_base_url")
     @classmethod
-    def validate_internal_http_origin(cls, value: str) -> str:
-        parsed = urlsplit(value)
-        if (
-            value != value.strip()
-            or parsed.scheme not in {"http", "https"}
-            or not parsed.hostname
-            or parsed.username is not None
-            or parsed.password is not None
-            or parsed.path not in {"", "/"}
-            or parsed.query
-            or parsed.fragment
-        ):
-            raise ValueError(
-                "internal service URL must be an HTTP origin without credentials or path"
-            )
-        try:
-            parsed.port
-        except ValueError as exc:
-            raise ValueError("internal service URL contains an invalid port") from exc
-        return value.rstrip("/")
+    def validate_spring_internal_base_url(cls, value: str) -> str:
+        return _validate_internal_http_url(value, allow_path=False)
+
+    @field_validator("bge_runtime_url")
+    @classmethod
+    def validate_bge_runtime_url(cls, value: str) -> str:
+        # bge-runtime may sit behind a reverse-proxy path prefix (e.g. GPU tunnel
+        # exposed as /internal/bge/ on a shared nginx port) instead of its own origin.
+        # httpx merges a leading-slash request path onto this base regardless of
+        # trailing slash, so any well-formed path is safe to allow here.
+        return _validate_internal_http_url(value, allow_path=True)
 
     @field_validator("spring_hmac_secret", "bge_internal_token")
     @classmethod

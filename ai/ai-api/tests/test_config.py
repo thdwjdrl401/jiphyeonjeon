@@ -42,7 +42,7 @@ def test_load_settings_reads_prefixed_environment(monkeypatch) -> None:
         {"bge_base_url": "http://127.0.0.1:8020"},
         {"bge_token": "x" * 32},
         {"bge_base_url": "http://user:secret@127.0.0.1:8020", "bge_token": "x" * 32},
-        {"bge_base_url": "http://127.0.0.1:8020/path", "bge_token": "x" * 32},
+        {"bge_base_url": "http://127.0.0.1:8020/../secret", "bge_token": "x" * 32},
         {"gms_api_key": " padded-key "},
         {"ai_internal_secret": " padded-secret "},
         {"gms_model": " gpt-4.1"},
@@ -66,6 +66,15 @@ def test_accepts_complete_context_runtime_settings() -> None:
     assert settings.database_role == "ai_app"
     assert settings.bge_token is not None
     assert settings.bge_token.get_secret_value().startswith("bge-runtime")
+
+
+def test_accepts_bge_base_url_with_reverse_proxy_path_prefix() -> None:
+    settings = Settings(
+        bge_base_url="https://jiphyeonjeon.thdwjdrl.com:7443/internal/bge",
+        bge_token="bge-runtime-token-that-is-at-least-32-characters",
+    )
+
+    assert settings.bge_base_url == "https://jiphyeonjeon.thdwjdrl.com:7443/internal/bge"
 
 
 @pytest.mark.parametrize("blank", ["", " ", "\t"])
