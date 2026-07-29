@@ -1,0 +1,104 @@
+# AI 서비스(ai-worker, ai-api) dev 스택 — docker-compose.ai-prod.yml의 대칭 dev 판.
+# prod(liveclass-ai)와 별개 프로젝트·컨테이너·env로 EC2에서 동시 가동한다.
+#
+# 네트워크: prod가 liveclass_default(앱 스택)에 붙는 것처럼, dev는 dev-infra 스택
+# (docker-compose.dev-infra.yml, project name: liveclass-dev)이 만든 liveclass-dev_default에
+# external로 붙어 postgres·redis·rabbitmq를 서비스명으로 바로 호출한다 — 포트 새로 게시할 필요 없음.
+#   ⚠️ dev redis는 --requirepass(REDIS_PASSWORD)라 prod와 달리 URL에 비밀번호가 들어간다.
+#
+# GPU(bge-runtime)는 prod와 동일하다 — 물리적으로 다른 컴퓨터라 도커 네트워크 밖이고,
+# host network nginx 프록시(docker-compose.gpu-proxy.yml, host.docker.internal:18080/internal/bge)를
+# dev/prod 공용으로 재사용한다. 여기서 gpu-proxy 스택은 건드리지 않는다.
+#
+# 첫 배포 전 1회만: dev postgres에 ai_app role/스키마 마이그레이션, ai_app에 GRANT할 로그인 계정(ai_runtime) 생성
+# (prod와 동일한 부트스트랩을 dev DSN으로). gpu-proxy 스택이 이 EC2에 이미 떠 있는지 확인한다.
+#
+# 사용:
+#   cp .env.ai-dev.example .env.ai-dev   # 값 채우기 (.env.ai-dev는 커밋 금지)
+#   docker compose -f docker-compose.ai-dev.yml \
+#     --env-file .env.dev --env-file .env.ai-dev \
+#     up -d --build ai-worker ai-api
+name: liveclass-ai-dev
+networks:
+  default:
+    name: liveclass-dev_default   # dev-infra 스택(project liveclass-dev)의 기본 네트워크
+    external: true
+services:
+  # DB 마이그레이션 자동 실행 — 매 배포마다 alembic upgrade head 후 종료. dev postgres 대상.
+  # ai-worker/ai-api는 이게 성공(exit 0)한 뒤에 기동한다. 런타임(ai_runtime)엔 DDL 권한이 없으니 DDL은 여기서만.
+  # 최초 1회 DBA 부트스트랩 필요: ai_app NOLOGIN role + GRANT ai_app TO ai_runtime (마이그레이션이 fail-closed로 검사).
+  ai-migrate:
+    build: ./ai/ai-worker
+    container_name: liveclass-ai-migrate-dev
+    restart: "no"
+    environment:
+      # migration 계정 = 앱 admin(POSTGRES_USER, DDL 권한). 런타임과 분리 + sync(+psycopg). dev postgres:5432.
+      AI_WORKER_MIGRATION_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-liveclass}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 필요}@postgres:5432/${POSTGRES_DB:-liveclass}
+    # Dockerfile ENTRYPOINT(python -m app.main) 무시하고 alembic만 실행
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        cd /app
+        for i in 1 2 3 4 5 6; do
+          alembic upgrade head && exit 0
+          echo "migrate retry $$i (postgres 대기?)"; sleep 5
+        done
+        echo "migration failed"; exit 1
+
+  ai-worker:
+    build: ./ai/ai-worker
+    container_name: liveclass-ai-worker-dev
+    restart: unless-stopped
+    depends_on:
+      ai-migrate:
+        condition: service_completed_successfully
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      AI_WORKER_INSTANCE_ID: ai-worker-dev-1
+      AI_WORKER_ENVIRONMENT: development
+      AI_WORKER_MANAGEMENT_HOST: 127.0.0.1
+      AI_WORKER_MANAGEMENT_PORT: "8011"
+      AI_WORKER_DATABASE_URL: postgresql+asyncpg://${AI_RUNTIME_DB_USER:?AI_RUNTIME_DB_USER 필요}:${AI_RUNTIME_DB_PASSWORD:?AI_RUNTIME_DB_PASSWORD 필요}@postgres:5432/${POSTGRES_DB:-liveclass}
+      AI_WORKER_MATERIAL_INGESTION_ENABLED: "true"
+      AI_WORKER_RABBITMQ_URL: amqp://${RABBITMQ_USER:?RABBITMQ_USER 필요}:${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD 필요}@rabbitmq:5672/
+      # dev에는 이 네트워크에 backend 서비스가 없다(로컬에서 돌리는 전제, dev-infra는 인프라만). 자료 콜백을
+      # 실제로 받으려면 backend를 liveclass-dev_default에 올리거나 이 값을 도달 가능한 dev Spring 주소로 바꾼다.
+      AI_WORKER_SPRING_INTERNAL_BASE_URL: http://backend:8080
+      AI_WORKER_SPRING_HMAC_SECRET: ${AI_CALLBACK_SECRET:?AI_CALLBACK_SECRET 필요 — Spring이 이미 쓰는 기존 값}
+      AI_WORKER_BGE_RUNTIME_URL: http://host.docker.internal:18080/internal/bge
+      AI_WORKER_BGE_INTERNAL_TOKEN: ${BGE_RUNTIME_INTERNAL_TOKEN:?BGE_RUNTIME_INTERNAL_TOKEN 필요 — GPU 쪽과 동일 값}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8011/readyz', timeout=2)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  ai-api:
+    build: ./ai/ai-api
+    container_name: liveclass-ai-api-dev
+    restart: unless-stopped
+    depends_on:
+      ai-migrate:
+        condition: service_completed_successfully
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      AI_API_ENVIRONMENT: development
+      AI_API_INSTANCE_ID: ai-api-dev-1
+      AI_API_HOST: 0.0.0.0   # backend 컨테이너가 이 네트워크로 ai-api:8010 호출하므로 loopback만으론 안 됨
+      AI_API_PORT: "8010"
+      AI_API_DATABASE_URL: postgresql+asyncpg://${AI_RUNTIME_DB_USER:?AI_RUNTIME_DB_USER 필요}:${AI_RUNTIME_DB_PASSWORD:?AI_RUNTIME_DB_PASSWORD 필요}@postgres:5432/${POSTGRES_DB:-liveclass}
+      # dev redis는 --requirepass라 prod(redis://redis:6379/0)와 달리 비밀번호가 필요하다.
+      AI_API_REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD 필요 — dev redis requirepass}@redis:6379/0
+      AI_API_BGE_BASE_URL: http://host.docker.internal:18080/internal/bge
+      AI_API_BGE_TOKEN: ${BGE_RUNTIME_INTERNAL_TOKEN:?BGE_RUNTIME_INTERNAL_TOKEN 필요 — GPU 쪽과 동일 값}
+      AI_API_GMS_API_KEY: ${GMS_API_KEY:?GMS_API_KEY 필요}
+      AI_INTERNAL_SECRET: ${AI_INTERNAL_SECRET:?AI_INTERNAL_SECRET 필요 — Spring과 공유하는 HMAC 시크릿}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/healthz', timeout=2)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
