@@ -200,13 +200,40 @@ GPU host는 application inbound port를 public ingress로 열지 않는다. GPU�
 | 방향 | GPU 주소 | EC2 주소 | protocol/용도 |
 |---|---|---|---|
 | local `-L` | `127.0.0.1:7443` | `localhost:7443` | LiveKit Worker WSS/API |
-| local `-L` | `127.0.0.1:4000` | `localhost:4000` | application Redis lease/caption |
+| local `-L` | `127.0.0.1:4000` | `localhost:4000` | **dev** application Redis lease/caption (dev-infra redis, requirepass) |
+| local `-L` | `127.0.0.1:6390` | `127.0.0.1:6390` | **prod** application Redis lease/caption (prod redis, 무인증) |
 | local `-L` | `127.0.0.1:3478` | `localhost:3478` | TURN/TCP Room media |
 | reverse `-R` | realtime-agent `127.0.0.1:8081` | `127.0.0.1:18081` | service liveness/readiness |
 | reverse `-R` | bge-runtime `127.0.0.1:8020` | `127.0.0.1:18020` | BGE readiness/embedding |
 
 실제 SSH TCP connection은 realtime control(LiveKit·Redis·health), TURN media, BGE supervisor 세 개로
 분리한다. 같은 EC2 SSH endpoint와 key를 사용해도 ControlPath와 장애 범위를 공유하지 않는다.
+
+application Redis는 dev/prod 두 벌이다. dev는 dev-infra(`docker-compose.dev-infra.yml`)의 redis가
+host `:4000`(→ 컨테이너 6379, `--requirepass REDIS_PASSWORD`)으로 발행되고, prod는
+`docker-compose.prod.yml`의 redis가 loopback `127.0.0.1:6390`(→ 6379, 무인증, loopback+SSH키 게이팅)으로
+발행된다. GPU realtime-agent는 어느 스택에 붙느냐에 따라 서로 **다른 터널·다른 redis·다른
+`STT_AGENT_NAME`**을 쓴다(§5.5).
+
+### 5.5 dev/prod realtime-agent 요구사항 (handoff)
+
+EC2 AI 스택이 dev(`docker-compose.ai-dev.yml`, project `liveclass-ai-dev`)·prod
+(`docker-compose.ai-prod.yml`, project `liveclass-ai`) 두 벌로 운영되므로, GPU realtime-agent도 대상
+스택에 맞춰 별개 프로세스로 띄운다. 둘은 caption 스트림이 섞이지 않도록 **서로 다른 `STT_AGENT_NAME`과
+서로 다른 redis**를 사용한다.
+
+| 항목 | dev realtime-agent | prod realtime-agent |
+|---|---|---|
+| Redis 터널 | local `-L 127.0.0.1:4000` (기존) | local `-L 127.0.0.1:6390` (신규) |
+| `REDIS_URL` | `redis://:<REDIS_PASSWORD>@127.0.0.1:4000/0` (requirepass) | `redis://127.0.0.1:6390/0` (무인증) |
+| STT provider | nemotron | nemotron |
+| LiveKit | dev LiveKit | prod LiveKit |
+| `STT_AGENT_NAME` | dev 전용 이름 | prod 전용 이름 (dev와 달라야 함) |
+| caption 소비자 | dev ai-api (`liveclass-ai-dev`) | prod ai-api (`liveclass-ai`) |
+
+prod realtime-agent를 새로 붙일 때 프로세스 요구사항: `REDIS_URL=redis://127.0.0.1:6390/0`(무인증,
+prod redis가 loopback `:6390`으로 발행), nemotron STT, prod LiveKit 접속, dev와 겹치지 않는
+`STT_AGENT_NAME`. dev realtime-agent는 기존 `:4000` 터널·이름을 그대로 유지한다.
 
 세부 실행은 [`realtime-agent tunnel 문서`](../../ai/realtime-agent/scripts/README.md)와
 [`BGE tunnel 문서`](../../ai/bge-runtime/scripts/README.md)를 따른다.
@@ -310,6 +337,7 @@ Spring realtime-agent health proxy client는 아직 없다. 따라서 `/internal
 | realtime-agent service health `:18081` | endpoint·schema·tunnel 구현, Spring client 미구현 |
 | nginx `:18080/internal/bge/*` | ai-api·ai-worker 운영 container caller 배선 구현 |
 | nginx `:18080/internal/realtime-agent/*` | proxy 구현, Spring health client 미구현 |
+| EC2 AI 스택 dev/prod 2벌 | prod `docker-compose.ai-prod.yml`(project `liveclass-ai`, network `liveclass_default`) + dev `docker-compose.ai-dev.yml`(project `liveclass-ai-dev`, network `liveclass-dev_default`). 각각 자기 pg/redis/rabbitmq에 접속, GPU BGE 프록시는 공용. prod redis loopback `:6390`, dev redis `:4000`(§5.1·§5.5) |
 
 ## 8. 변경 규칙
 

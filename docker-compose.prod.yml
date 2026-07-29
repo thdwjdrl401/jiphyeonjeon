@@ -30,6 +30,10 @@ services:
     container_name: liveclass-redis-prod
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      # GPU SSH -L 터널 → prod realtime-agent가 prod redis에 캡션 XADD(lease/caption). loopback 전용(외부 노출 아님).
+      # requirepass 없음 — loopback + SSH키로 게이팅. 내부 네트워크 소비자(Spring·ai-api)는 redis:6379 그대로.
+      - "127.0.0.1:6390:6379"
     volumes:
       - redisdata:/data
     healthcheck:
