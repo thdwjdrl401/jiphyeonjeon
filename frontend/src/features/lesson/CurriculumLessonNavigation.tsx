@@ -10,6 +10,15 @@ interface CurriculumLessonNavigationProps {
   role: UserRole
 }
 
+function LessonNavigationMasthead() {
+  return (
+    <div className="workspace-sidebar__masthead workspace-sidebar__masthead--lesson" aria-hidden="true">
+      <span>LESSON</span>
+      <strong>INDEX</strong>
+    </div>
+  )
+}
+
 export default function CurriculumLessonNavigation({ curriculumId, activeLessonId, role }: CurriculumLessonNavigationProps) {
   const curriculumQuery = useQuery({
     queryKey: ['curriculum-lesson-navigation', curriculumId, role],
@@ -17,17 +26,18 @@ export default function CurriculumLessonNavigation({ curriculumId, activeLessonI
   })
 
   if (curriculumQuery.isPending) {
-    return <aside className="workspace-sidebar workspace-sidebar--lesson" aria-label="커리큘럼 강의 목록">불러오는 중...</aside>
+    return <aside className="workspace-sidebar workspace-sidebar--lesson" aria-label="커리큘럼 강의 목록"><LessonNavigationMasthead /><p className="workspace-sidebar__state">불러오는 중...</p></aside>
   }
   if (curriculumQuery.isError || !curriculumQuery.data) {
-    return <aside className="workspace-sidebar workspace-sidebar--lesson" aria-label="커리큘럼 강의 목록">강의 목록을 불러오지 못했습니다.</aside>
+    return <aside className="workspace-sidebar workspace-sidebar--lesson" aria-label="커리큘럼 강의 목록"><LessonNavigationMasthead /><p className="workspace-sidebar__state">강의 목록을 불러오지 못했습니다.</p></aside>
   }
   const curriculum = curriculumQuery.data
 
   return (
     <aside className="workspace-sidebar workspace-sidebar--lesson" aria-label="커리큘럼 강의 목록">
+      <LessonNavigationMasthead />
       <div className="lesson-navigation__header">
-        <span>현재 커리큘럼</span>
+        <span>CURRICULUM</span>
         <Link to={publicPaths.curriculum(curriculum.curriculumId)}>{curriculum.title}</Link>
       </div>
       <nav className="lesson-navigation__sections" aria-label={`${curriculum.title} 강의 이동`}>

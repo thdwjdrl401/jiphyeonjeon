@@ -1,5 +1,5 @@
 import type { PropsWithChildren, ReactNode } from 'react'
-import authRoyalLibraryEvening from '@/assets/images/auth-royal-library-evening.webp'
+import inkStudyVertical from '@/assets/images/ink-study-vertical-v1.jpg'
 import BrandLink from '@/shared/layout/BrandLink'
 
 interface AuthShellProps extends PropsWithChildren {
@@ -24,15 +24,15 @@ export default function AuthShell({
         <aside className={`auth-visual auth-visual--${variant}`}>
           <img
             className="auth-visual__art"
-            src={authRoyalLibraryEvening}
+            src={inkStudyVertical}
             alt=""
             aria-hidden="true"
             decoding="async"
           />
           <BrandLink inverse />
           <div className="auth-visual__copy">
-            <span className="live-pill"><i /> Live learning, better remembered</span>
-            <h2>수업의 모든 순간이<br />나만의 학습 자산이 되도록</h2>
+            <span className="live-pill"><i /> KNOWLEDGE IN MOTION</span>
+            <h2>배움의 순간이<br />천천히 스며들도록</h2>
             <p>실시간 자막과 근거 기반 AI가 이해하지 못한 순간을 다시 연결해 드려요.</p>
           </div>
           <div className="auth-caption-card" aria-hidden="true">
