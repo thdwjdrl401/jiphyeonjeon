@@ -58,8 +58,8 @@ public class LiveKitEgressControl implements EgressControl {
             // 프리셋 대신 값으로 넘긴다 — 프리셋에는 30fps 고정본만 있어 프레임률을 낮출 수 없다.
             // preset과 advanced는 배타적이라 preset 자리에 null을 준다. audioMixing은 non-null 필수.
             Response<LivekitEgress.EgressInfo> res = client.startRoomCompositeEgress(
-                    roomName, output, egress.layout(), null, encodingOptions(), false, false, "",
-                    AudioMixing.DEFAULT_MIXING).execute();
+                    roomName, output, egress.layout(), null, encodingOptions(), false, false,
+                    templateBaseUrl(), AudioMixing.DEFAULT_MIXING).execute();
             if (!res.isSuccessful() || res.body() == null) {
                 throw new EgressControlException("Egress 시작 실패: HTTP " + res.code());
             }
@@ -136,6 +136,15 @@ public class LiveKitEgressControl implements EgressControl {
      * <p>키프레임 간격은 세그먼트 길이에 맞춘다. HLS 세그먼트는 키프레임에서 시작해야 하므로,
      * GOP가 세그먼트보다 길면 Egress가 경계마다 키프레임을 강제로 끼워 넣어 비트를 낭비한다.
      */
+    /**
+     * 합성 화면을 그릴 페이지. 빈 문자열이면 Egress가 LiveKit 기본 템플릿을 쓴다 —
+     * 설정이 빠졌을 때 녹화가 죽는 대신 예전 레이아웃으로 돌아가게 둔다(녹화 > 레이아웃).
+     */
+    private String templateBaseUrl() {
+        String configured = egress.templateBaseUrl();
+        return configured == null ? "" : configured.strip();
+    }
+
     private LivekitEgress.EncodingOptions encodingOptions() {
         return LivekitEgress.EncodingOptions.newBuilder()
                 .setWidth(egress.encodingWidth())

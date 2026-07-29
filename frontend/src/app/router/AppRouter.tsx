@@ -8,6 +8,7 @@ import CurriculumDetailPage from '@/pages/CurriculumDetailPage'
 import CurriculumFormPage from '@/pages/CurriculumFormPage'
 import CurriculumListPage from '@/pages/CurriculumListPage'
 import CurriculumManagePage from '@/pages/CurriculumManagePage'
+import EgressStagePage from '@/pages/EgressStagePage'
 import ForbiddenPage from '@/pages/ForbiddenPage'
 import InstructorPreflightPage from '@/pages/InstructorPreflightPage'
 import LessonDetailPage from '@/pages/LessonDetailPage'
@@ -80,6 +81,13 @@ export default function AppRouter() {
           <Route path="lessons/:lessonId/replay" element={<ReplayLessonPage />} />
         </Route>
       </Route>
+      {/*
+        Egress 합성 캔버스. 로그인 가드 밖에 둔다 — 이 페이지를 여는 것은 사람이 아니라
+        Egress의 헤드리스 Chrome이고, 브라우저 세션이 없다. 대신 아무 권한도 갖지 않는다:
+        방 접속에 필요한 LiveKit 토큰을 Egress가 쿼리로 넘겨줘야만 화면이 그려진다.
+        레이아웃(PublicLayout 등)을 씌우지 않는다 — 헤더나 여백이 그대로 녹화된다.
+      */}
+      <Route path="egress/stage" element={<EgressStagePage />} />
       <Route path="forbidden" element={<ForbiddenPage />} />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>

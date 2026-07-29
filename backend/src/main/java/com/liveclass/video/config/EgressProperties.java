@@ -52,7 +52,20 @@ public record EgressProperties(
 
         /** 합성 오디오 비트레이트(kbps)와 샘플레이트(Hz). 프리셋 기본값과 동일하게 맞춘다. */
         int audioBitrateKbps,
-        int audioFrequency
+        int audioFrequency,
+
+        /**
+         * 합성 화면을 그릴 페이지 주소. Egress의 헤드리스 Chrome이 여기에
+         * {@code ?url=&token=&layout=}을 붙여 연다.
+         *
+         * <p>비우면 LiveKit 기본 템플릿을 쓴다. 기본 템플릿은 화면공유와 카메라를 나란히 놓아
+         * 1920 폭 화면공유가 1587로 축소되고 좌하단에 쓰지 않는 검은 영역이 남는다(운영 프레임 실측).
+         * 우리 템플릿({@code /egress/stage})은 화면공유가 캔버스를 채우고 카메라를 그 위에 얹는다.
+         *
+         * <p><b>Egress 컨테이너에서 열리는 주소여야 한다.</b> 브라우저가 보는 주소가 아니라
+         * Egress가 접근하는 주소다 — 운영은 공개 도메인, 개발은 Egress가 닿는 호스트 주소를 넣는다.
+         */
+        String templateBaseUrl
 ) {
     private static final int DEFAULT_WIDTH = 1920;
     private static final int DEFAULT_HEIGHT = 1080;

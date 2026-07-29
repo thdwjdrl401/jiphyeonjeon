@@ -1,0 +1,47 @@
+/*
+ * Egress 합성 캔버스 전용 스타일. 사람이 보는 화면이 아니라 헤드리스 Chrome이 렌더링해
+ * 그대로 인코딩되는 표면이다.
+ *
+ * 렌더링 비용이 곧 Egress CPU다(강의 하나가 이미 2코어를 쓴다). 그림자·블러·트랜지션·애니메이션을
+ * 쓰지 않는다. 둥근 모서리와 테두리는 합성 결과에서 카메라 경계를 구분하는 최소 장치로만 둔다.
+ */
+.egress-stage {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #000;
+}
+
+/* 화면공유가 캔버스를 채운다. contain이라 원본 비율을 유지하고 잘리지 않는다 —
+   코드나 슬라이드는 가장자리가 잘리면 내용이 사라진다. */
+.egress-stage__screen {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+/* 카메라 오버레이. 위치·크기는 room metadata에서 온 인라인 스타일이 정한다. */
+.egress-stage__camera {
+  position: absolute;
+  border: 2px solid rgba(255, 255, 255, .82);
+  border-radius: 10px;
+  object-fit: cover;
+  background: #000;
+}
+
+/* 화면공유가 없을 때는 카메라가 무대 전체를 쓴다. 이때는 잘라내지 않고 비율을 지킨다. */
+.egress-stage__camera.is-stage {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  object-fit: contain;
+}
+
+.egress-stage .is-hidden {
+  display: none;
+}
