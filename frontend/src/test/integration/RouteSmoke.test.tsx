@@ -172,10 +172,12 @@ describe('전체 페이지 라우트', () => {
     expect(chatInput).toHaveValue('')
     expect(await screen.findByText((text) => text.includes('첫째 줄') && text.includes('둘째 줄'))).toBeInTheDocument()
 
-    // 라이브 자막은 WS 델타 스트림으로 자란다(§3-4). mock이 흘린 델타가 자막 라인으로 렌더된다.
-    expect(await screen.findByText(/SecurityContext가 현재 요청의 사용자 정보를 보관합니다/)).toBeInTheDocument()
+    // 강사 화면에는 자막 독이 없다. 자기가 말한 것을 다시 읽을 이유가 없고, 자막이 차지하는 높이만큼
+    // 실제로 나가는 프레임을 작게 보게 된다. 자막은 수강생 화면에만 둔다.
+    expect(screen.queryByRole('region', { name: '실시간 자막' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/SecurityContext가 현재 요청의 사용자 정보를 보관합니다/)).not.toBeInTheDocument()
 
-    // 델타 계약에는 용어 참조가 없어 자막에서 바로 용어를 열 수는 없다 — 핵심 용어 탭으로 정의를 확인한다.
+    // 용어는 자막이 아니라 핵심 용어 탭으로 확인한다.
     await user.click(screen.getByRole('tab', { name: '핵심 용어' }))
     expect(screen.getByRole('tab', { name: '핵심 용어' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByText(/현재 실행 중인 요청에서 인증된 사용자/)).toBeInTheDocument()
@@ -254,6 +256,10 @@ describe('전체 페이지 라우트', () => {
     expect(await screen.findByText('Mock HLS 재생 준비 · ses-security-live')).toBeInTheDocument()
     expect(screen.queryByText('강사 운영 모드')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '강의 종료' })).not.toBeInTheDocument()
+
+    // 자막 독은 수강생 화면에만 있다(강사 화면 테스트의 반대편). 라인 자체는 재생 위치가 자막 시각에
+    // 닿아야 드러나므로(ADR-0045) 여기서는 독의 존재만 확인한다.
+    expect(screen.getByRole('region', { name: '실시간 자막' })).toBeInTheDocument()
   })
 
   it('강사에게 다시보기 검수 화면을 제공한다', async () => {

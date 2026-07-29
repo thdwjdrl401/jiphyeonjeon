@@ -28,6 +28,10 @@ import '@/styles/egress-stage.css'
  * Chrome 콘솔 출력을 감시한다(egress v1.13.0 {@code source/web.go} 로그에서 확인).
  *
  * <p><b>가볍게 유지할 것.</b> 렌더링 비용이 그대로 Egress CPU다. 그림자·블러·트랜지션을 넣지 않는다.
+ *
+ * <p><b>카메라는 좌우를 뒤집어 합성한다</b>(egress-stage.css). 강사는 자기 카메라를 거울로 보고 그
+ * 화면을 기준으로 움직이므로, 원본 그대로 합성하면 수강생만 좌우가 반대로 보인다. 화면공유는 글자가
+ * 읽혀야 하므로 뒤집지 않는다 — 뒤집기는 카메라 element에만 걸린다.
  */
 export default function EgressStagePage() {
   const [params] = useSearchParams()
