@@ -41,12 +41,19 @@ export const subscribeCaptions = (
   onEvent: Parameters<LiveSessionService['subscribeCaptions']>[1],
   onConnectionChange: Parameters<LiveSessionService['subscribeCaptions']>[2],
 ) => liveSessionService.subscribeCaptions(sessionId, onEvent, onConnectionChange)
-export const askLiveAi = (lessonId: string, question: string) => liveSessionService.askLiveAi(lessonId, question)
+export const askLiveAi = (
+  sessionId: string,
+  question: string,
+  options: Parameters<LiveSessionService['askLiveAi']>[2],
+) => liveSessionService.askLiveAi(sessionId, question, options)
 export const saveBookmark = (lessonId: string, sessionMs: number) => liveSessionService.saveBookmark(lessonId, sessionMs)
 export const getProcessingStatus = (sessionId: string) => liveSessionService.getProcessingStatus(sessionId)
 export const getQuestionHighlights = (sessionId: string) => liveSessionService.getQuestionHighlights(sessionId)
 
 export type {
+  AiAnswerSource,
+  AiAnswerStreamEvent,
+  AiAnswerStreamOptions,
   CaptionView,
   CaptionDeltaPayload,
   CaptionStreamCompletedPayload,

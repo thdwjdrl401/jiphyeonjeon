@@ -535,11 +535,19 @@ nginx가 토큰을 뭉쳐 스트리밍이 깨진다.
 React는 Spring만 호출하며 Python AI endpoint를 직접 호출하지 않는다. 사용자의 개인 답변 기록은 강사에게
 제공하지 않고 질문 원문·시점만 익명 집계에 반영한다.
 
+FE 소비 구현(**배선 완료**): 프레임 파싱은 `shared/api/sse.ts`(`createSseDecoder` — 청크가 프레임/CRLF 경계와
+어긋나도 프레임 수가 보존된다), 요청·이벤트 매핑은 `httpLiveSessionService.askLiveAi`
+(`askLiveAi(sessionId, question, { onEvent, signal })`), 델타 누적·상태 전이는 `features/ai/aiAnswer.ts`의
+`reduceAiAnswer`, 렌더는 `features/ai/PersonalAiQuestionPanel`(근거 카드는 `AiEvidenceList`)이다.
+CSRF 토큰은 공용 axios와 같은 캐시를 쓴다(`resolveCsrfHeader`). 스트림이 terminal 없이 끝나면 FE가
+재시도 가능한 오류로 접는다 — 연결 자체가 죽으면 `answer.error`조차 오지 못하기 때문이다.
+
 #### 아직 없는 것
 
 - **다시보기(replay) AI 질문**: `askReplayAi(...)`는 여전히 501 스텁이다. ai-api가 `sessionId`를 필수로
   받고 시간 좌표가 attempt-local이라, 다시보기의 세션-ms를 역변환할 **시간 앵커 계약이 서기 전에는**
-  열 수 없다(ADR-0047 §9).
+  열 수 없다(ADR-0047 §9). 다시보기 화면은 이 스텁을 호출하지 않고 `PersonalAiQuestionPanel`이
+  미지원 안내를 먼저 띄우고 입력을 잠근다 — 501이 조용히 삼켜져 눌러도 무반응이던 상태를 없앴다.
 - `AI-HISTORY-01`(질문 기록), `AI-TERM-01`(용어 설명), 강사용 question-pins는 미구현.
 
 ### 10.2 용어 설명

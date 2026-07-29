@@ -84,6 +84,44 @@ export type CaptionStreamEvent =
   | { type: 'caption.delta'; occurredAt: string; payload: CaptionDeltaPayload }
   | { type: 'caption.stream.completed'; occurredAt: string; payload: CaptionStreamCompletedPayload }
 
+/**
+ * 라이브 AI 답변의 근거 한 건(ADR-0047 §2 / LIVE.md §10.1).
+ *
+ * 프록시가 ai-api 스키마를 **변환 없이** 릴레이하므로 FE도 원본 좌표를 그대로 받는다.
+ * 최초 등장 순서가 보존되고 중복은 서버가 제거한다.
+ */
+export type AiAnswerSource =
+  | { type: 'PPTX'; materialId: string; page: number }
+  /**
+   * ⚠️ `startMs`/`endMs`는 STT **attempt-local `streamElapsedMs`** 축이다(자막 델타와 같은 축).
+   * 영상 위치(`sessionMs`)와 **다른 축**이라 이 값으로 seek을 걸면 엉뚱한 지점으로 간다 —
+   * 시간 앵커 공유 계약이 서기 전까지는 표시만 한다(ADR-0043·0045·0047 §9).
+   */
+  | { type: 'CAPTION'; sessionId: string; sttSessionId: string; startMs: number; endMs: number }
+
+/**
+ * AI 답변 SSE 이벤트. 한 스트림 = `answer.delta` 0개 이상 + terminal(`done`|`insufficient`|`error`) 정확히 하나.
+ *
+ * `answer.error`는 스트림이 **시작된 뒤**의 실패다(HTTP 상태는 200 그대로). 프록시 자신의 실패도
+ * 같은 모양으로 오므로(`PROXY_UPSTREAM_FAILED`·`PROXY_STREAM_INCOMPLETE`) 화면 분기는 하나면 된다.
+ * 스트림이 **시작되기 전**의 실패는 이벤트가 아니라 `ApiError`(400/401/403/404/409/502/503)로 던진다.
+ */
+export type AiAnswerStreamEvent =
+  | { type: 'answer.delta'; payload: { requestId: string; text: string } }
+  | { type: 'answer.done'; payload: { requestId: string; sources: AiAnswerSource[] } }
+  | { type: 'answer.insufficient'; payload: { requestId: string; message: string } }
+  | { type: 'answer.error'; payload: { requestId: string; code: string; message: string; retryable: boolean } }
+
+export interface AiAnswerStreamOptions {
+  /** 도착한 순서 그대로 넘긴다. 델타 누적·상태 전이는 `features/ai`의 reduceAiAnswer가 맡는다. */
+  onEvent: (event: AiAnswerStreamEvent) => void
+  /**
+   * 중단 신호. 끊으면 서버가 ai-api 연결까지 정리한다(ADR-0047 §6). 중단된 호출은 오류가 아니라
+   * **조용히 resolve**한다 — 취소는 사용자가 방금 한 행동이지 실패가 아니다.
+   */
+  signal?: AbortSignal
+}
+
 export interface PreflightRoom {
   sessionId: string
   roomName: string
@@ -192,7 +230,21 @@ export interface LiveSessionService {
     onEvent: (event: CaptionStreamEvent) => void,
     onConnectionChange: (state: ChatConnectionState) => void,
   ) => () => void
-  askLiveAi: (lessonId: string, question: string) => Promise<{ answer: string }>
+  /**
+   * 라이브 AI 질의응답(AI-QUESTION-01, `POST /live-sessions/{id}/ai/answers/stream`).
+   *
+   * **세션 스코프**다 — 레슨이 아니다. ai-api가 자막 근거를 세션 범위로 검증하고, 세션을 경로에 두면
+   * `lessonId`를 서버가 세션에서 조회해 채우므로 클라가 다른 강의의 근거를 열람할 여지가 없다(ADR-0047 §1b).
+   *
+   * 구독형이지만 자막·채팅의 `subscribe*`처럼 unsubscribe를 돌려주지 않고 `AbortSignal`을 받는다 —
+   * 이건 상시 연결이 아니라 **한 번의 요청이 여러 이벤트로 답하는** 단발 스트림이고, 전송 수단이
+   * `fetch`라 취소 수단도 그쪽 계약(`AbortController`)이 정본이기 때문이다(LIVE.md §10.1 "소비 방법").
+   * Promise는 terminal 이벤트를 넘긴 뒤(또는 취소된 뒤) resolve한다.
+   *
+   * @param question 1~4,000자. 서버가 trim하지 않으므로 **호출자가 trim해서 넘긴다**.
+   *                 `contextTimeMs`·`requestId`·`lessonId`는 서버가 채운다(클라가 보내지 않는다).
+   */
+  askLiveAi: (sessionId: string, question: string, options: AiAnswerStreamOptions) => Promise<void>
   saveBookmark: (lessonId: string, sessionMs: number) => Promise<void>
   getProcessingStatus: (sessionId: string) => Promise<ProcessingStatus>
   getQuestionHighlights: (sessionId: string) => Promise<QuestionHighlight[]>

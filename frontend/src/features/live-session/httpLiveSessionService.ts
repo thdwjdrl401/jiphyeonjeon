@@ -1,8 +1,12 @@
 import { Client, type IMessage } from '@stomp/stompjs'
 import type { CurriculumLiveSessionStatus } from '@/features/lesson/types'
-import { ApiError, apiClient } from '@/shared/api/client'
+import { ApiError, apiClient, invalidateCsrfToken, resolveCsrfHeader } from '@/shared/api/client'
 import { notImplemented } from '@/shared/api/notImplemented'
+import { createSseDecoder, type SseFrame } from '@/shared/api/sse'
+import { isNetworkBlocked } from '@/shared/config/runtime'
 import type {
+  AiAnswerSource,
+  AiAnswerStreamEvent,
   CaptionStreamEvent,
   ChatMessageView,
   LiveStartOperation,
@@ -63,6 +67,14 @@ interface ApiCaptionReloadItem {
   text: string | null
   reason: string | null
   occurredAt: string
+}
+
+/** 스트림이 시작되기 **전** 실패의 오류 봉투(ADR-0047 §8 — SSE Accept여도 application/json으로 온다). */
+interface ApiErrorEnvelope {
+  code?: string
+  message?: string
+  fieldErrors?: Array<{ field: string; code: string }>
+  correlationId?: string
 }
 
 interface ApiCaptionEnvelope {
@@ -268,6 +280,88 @@ function toCaptionStreamEvent(item: ApiCaptionReloadItem): CaptionStreamEvent[] 
   return []
 }
 
+const AI_ANSWER_EVENT_TYPES = new Set(['answer.delta', 'answer.done', 'answer.insufficient', 'answer.error'])
+
+/**
+ * 근거 배열 정규화. 모르는 `type`은 **버린다** — 프록시가 ai-api 스키마를 그대로 흘리므로 AI가
+ * 근거 종류를 늘리면 우리가 모르는 항목이 섞여 올 수 있는데(ADR-0047 §2), 그리는 법을 모르는 것을
+ * 그리려다 화면이 깨지는 것보다 낫다. 답변 본문은 그대로 보인다.
+ */
+function normalizeAiAnswerSources(raw: unknown): AiAnswerSource[] {
+  if (!Array.isArray(raw)) return []
+  return raw.flatMap((item): AiAnswerSource[] => {
+    const source = item as Record<string, unknown>
+    if (source?.type === 'PPTX') {
+      return [{ type: 'PPTX', materialId: String(source.materialId ?? ''), page: Number(source.page ?? 0) }]
+    }
+    if (source?.type === 'CAPTION') {
+      return [{
+        type: 'CAPTION',
+        sessionId: String(source.sessionId ?? ''),
+        sttSessionId: String(source.sttSessionId ?? ''),
+        startMs: Number(source.startMs ?? 0),
+        endMs: Number(source.endMs ?? 0),
+      }]
+    }
+    return []
+  })
+}
+
+/** SSE 프레임 하나를 계약 이벤트로 옮긴다. 모르는 event 이름·깨진 JSON은 무시한다(하트비트 주석 등). */
+function toAiAnswerEvent(frame: SseFrame): AiAnswerStreamEvent | null {
+  if (!AI_ANSWER_EVENT_TYPES.has(frame.event)) return null
+  let payload: Record<string, unknown>
+  try {
+    payload = JSON.parse(frame.data) as Record<string, unknown>
+  } catch {
+    return null
+  }
+  const requestId = String(payload.requestId ?? '')
+  switch (frame.event) {
+    case 'answer.delta':
+      return { type: 'answer.delta', payload: { requestId, text: String(payload.text ?? '') } }
+    case 'answer.done':
+      return { type: 'answer.done', payload: { requestId, sources: normalizeAiAnswerSources(payload.sources) } }
+    case 'answer.insufficient':
+      return { type: 'answer.insufficient', payload: { requestId, message: String(payload.message ?? '') } }
+    default:
+      return {
+        type: 'answer.error',
+        payload: {
+          requestId,
+          code: String(payload.code ?? ''),
+          message: String(payload.message ?? ''),
+          retryable: payload.retryable === true,
+        },
+      }
+  }
+}
+
+function isAbort(error: unknown, signal?: AbortSignal) {
+  return signal?.aborted === true || (error instanceof Error && error.name === 'AbortError')
+}
+
+/**
+ * 스트림 시작 전 실패를 화면이 분기할 수 있는 `ApiError`로 옮긴다(axios 응답 인터셉터와 같은 모양).
+ * 401은 axios 쪽과 같은 규칙으로 CSRF 캐시를 버린다 — 재로그인 뒤 옛 토큰으로 403을 맞지 않게.
+ */
+async function toStreamStartError(response: Response) {
+  if (response.status === 401) invalidateCsrfToken()
+  let payload: ApiErrorEnvelope = {}
+  try {
+    payload = (await response.json()) as ApiErrorEnvelope
+  } catch {
+    // 봉투가 없는 실패(프록시·게이트웨이)도 있다. 상태코드만으로 안내한다.
+  }
+  return new ApiError(
+    payload.message ?? '요청을 처리하지 못했습니다.',
+    response.status,
+    payload.code,
+    payload.fieldErrors,
+    payload.correlationId,
+  )
+}
+
 export const httpLiveSessionService = {
   async getLiveSession(sessionId) {
     const { data } = await apiClient.get<ApiLiveSessionView>(`/live-sessions/${sessionId}`)
@@ -422,8 +516,72 @@ export const httpLiveSessionService = {
     const { data } = await apiClient.get<ApiCaptionReloadItem[]>(`/live-sessions/${sessionId}/captions`)
     return data.flatMap(toCaptionStreamEvent)
   },
-  async askLiveAi(lessonId) {
-    return notImplemented(`POST /lessons/${lessonId}/ai/questions:stream`)
+  // 라이브 AI 질의응답(AI-QUESTION-01 / ADR-0047). `EventSource`는 GET만 지원하는데 이건 POST라
+  // fetch + ReadableStream으로 SSE를 직접 읽는다. 쿠키 세션이라 credentials: 'include',
+  // 상태변경 요청이라 CSRF 헤더가 필요하다(ADR-0014) — axios 인터셉터를 타지 않으므로 직접 붙인다.
+  //
+  // 경로가 `/stream`으로 끝나는 것은 계약이다. 운영 nginx는 `location ~ ^/api/.+/stream$`에만
+  // proxy_buffering off를 적용해서, 다른 접미사면 토큰이 뭉쳐 스트리밍이 깨진다(운영에서만 드러난다).
+  async askLiveAi(sessionId, question, { onEvent, signal }) {
+    if (isNetworkBlocked) {
+      throw new ApiError(
+        '테스트에서는 실제 네트워크 요청을 보낼 수 없습니다.',
+        undefined,
+        'MOCK_API_NETWORK_REQUEST_BLOCKED',
+      )
+    }
+
+    let response: Response
+    try {
+      response = await fetch(`/api/live-sessions/${sessionId}/ai/answers/stream`, {
+        method: 'POST',
+        credentials: 'include',
+        signal,
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
+          ...(await resolveCsrfHeader()),
+        },
+        // body는 question 하나뿐이다. lessonId·contextTimeMs·requestId를 보내면 서버가 무시하는 게
+        // 아니라, 클라 값을 신뢰하는 설계 자체를 막아 둔 것이다(ADR-0047 §1b·§5).
+        body: JSON.stringify({ question }),
+      })
+    } catch (error) {
+      if (isAbort(error, signal)) return
+      throw new ApiError('AI 답변 요청을 보내지 못했습니다.', undefined, 'AI_ANSWER_NETWORK_FAILED')
+    }
+
+    if (!response.ok) throw await toStreamStartError(response)
+    if (!response.body) {
+      throw new ApiError('AI 답변 스트림을 읽을 수 없습니다.', response.status, 'AI_ANSWER_STREAM_UNREADABLE')
+    }
+
+    const decoder = createSseDecoder()
+    const text = new TextDecoder()
+    const reader = response.body.getReader()
+    const emit = (frames: SseFrame[]) => {
+      for (const frame of frames) {
+        const event = toAiAnswerEvent(frame)
+        if (event) onEvent(event)
+      }
+    }
+
+    try {
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        emit(decoder.push(text.decode(value, { stream: true })))
+      }
+      // 스트림이 개행 없이 끝나도 마지막 프레임을 흘리지 않는다.
+      emit(decoder.flush())
+    } catch (error) {
+      // 취소는 사용자가 방금 한 행동이다 — 오류로 올리면 화면이 재시도 버튼을 띄운다.
+      if (isAbort(error, signal)) return
+      throw new ApiError('AI 답변 스트림이 끊겼습니다.', undefined, 'AI_ANSWER_STREAM_FAILED')
+    } finally {
+      // 중단됐다면 남은 바디를 버려 서버 쪽 릴레이(=ai-api 연결)까지 정리되게 한다.
+      void reader.cancel().catch(() => undefined)
+    }
   },
   async saveBookmark(lessonId, sessionMs) {
     await apiClient.post(`/lessons/${lessonId}/bookmarks`, { sessionMs })

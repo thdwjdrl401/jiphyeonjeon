@@ -99,8 +99,8 @@ LiveLessonPage
 | `LiveCaptionRegion` | `features/caption` | 현재 재생 시각에 맞는 자막·전문용어·근거 조합 |
 | `CurrentCaption` | `features/caption` | `partial`·`final`·`revised` 자막 교체·갱신 |
 | `GlossaryPopover` | `features/ai` | 전문용어의 짧은 설명 표시 |
-| `EvidenceViewer` | `features/ai` | PPTX 자료 또는 강사 발화 근거 표시 |
-| `PersonalAiQuestionPanel` | `features/ai` | 개인 질문 입력, SSE 답변, 근거와 불충분 상태 표시 |
+| `AiEvidenceList` | `features/ai` | **구현됨** — 답변 `sources`를 근거 카드로 표시(PPTX 쪽수 / 발화 구간) |
+| `PersonalAiQuestionPanel` | `features/ai` | **구현됨** — 개인 질문 입력, SSE 답변 누적 렌더, 근거·불충분·오류·재시도·취소 |
 | `LessonMaterialPanel` | `features/lesson` | 레슨 전에 공개된 PPTX 자료 목록·열람 |
 
 ### 4.4 채팅과 질문 인사이트
