@@ -233,6 +233,7 @@ describe('커리큘럼 작업 화면', () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/new')
     await user.type(await screen.findByLabelText(/강의 제목/), '중복 방지 강의')
+    await user.type(screen.getByLabelText(/예정 시작 시각/), '2026-08-04T20:30')
     await user.click(screen.getByRole('button', { name: '강의 생성 저장' }))
 
     // 생성 성공 후엔 구성(섹션·강의 목록) 화면으로 돌아간다 — 폼을 떠나므로 연타로 매번 새
@@ -271,27 +272,31 @@ describe('커리큘럼 작업 화면', () => {
     })
   })
 
-  it('새 강의 폼에서 라이브 강의 일정을 함께 입력한다', async () => {
+  it('새 강의 폼은 체크박스 없이 제목과 라이브 일정만으로 저장할 수 있다', async () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/new')
-    const scheduleToggle = await screen.findByRole('checkbox', { name: /라이브 강의 일정 설정/ })
+    const scheduledAt = await screen.findByLabelText(/예정 시작 시각/)
+    const submit = screen.getByRole('button', { name: '강의 생성 저장' })
 
-    expect(scheduleToggle).not.toBeChecked()
-    expect(screen.queryByLabelText(/예정 시작 시각/)).not.toBeInTheDocument()
-    await user.click(scheduleToggle)
-
-    expect(screen.getByLabelText(/예정 시작 시각/)).toBeInTheDocument()
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
     expect(screen.getByLabelText(/예상 진행 시간/)).toHaveValue(90)
     expect(screen.getByLabelText(/입장 가능 창/)).toHaveValue(10)
+    expect(submit).toBeDisabled()
+
+    await user.type(screen.getByLabelText(/강의 제목/), '보안 심화 1강')
+    expect(submit).toBeDisabled()   // 일정 미입력 — 여전히 비활성
+    await user.type(scheduledAt, '2026-08-04T20:30')
+    expect(submit).toBeEnabled()
+
+    await user.click(submit)
+    expect(await screen.findByText('강의 정보와 라이브 일정 초안이 저장되었습니다.')).toBeInTheDocument()
   })
 
   it('강의 수정 폼에서 기존 라이브 일정을 불러와 수정한다', async () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/les-security/edit')
-    const scheduleToggle = await screen.findByRole('checkbox', { name: /라이브 강의 일정 설정/ })
-    const scheduledAt = screen.getByLabelText(/예정 시작 시각/)
+    const scheduledAt = await screen.findByLabelText(/예정 시작 시각/)
 
-    expect(scheduleToggle).toBeChecked()
     expect(scheduledAt).toHaveValue('2026-08-03T19:00')
     await user.clear(scheduledAt)
     await user.type(scheduledAt, '2026-08-04T20:30')
@@ -308,8 +313,8 @@ describe('커리큘럼 작업 화면', () => {
     expect(await screen.findByRole('heading', { name: '강의 수정' })).toBeInTheDocument()
     expect(screen.getByLabelText(/강의 제목/)).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '라이브 강의 일정' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('checkbox', { name: /라이브 강의 일정 설정/ })).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/예정 시작 시각/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '강의 수정 저장' })).toBeEnabled()
   })
 
   it('강사 강의 상세에 라이브 일정과 준비 상태를 통합한다', async () => {
