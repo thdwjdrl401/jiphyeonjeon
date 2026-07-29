@@ -64,6 +64,10 @@ public record EgressProperties(
          *
          * <p><b>Egress 컨테이너에서 열리는 주소여야 한다.</b> 브라우저가 보는 주소가 아니라
          * Egress가 접근하는 주소다 — 운영은 공개 도메인, 개발은 Egress가 닿는 호스트 주소를 넣는다.
+         *
+         * <p>오리진만 주면 된다. 템플릿 경로는 코드가 붙인다
+         * ({@code LiveKitEgressControl.templateUrl}) — 경로는 우리 프론트의 라우트라
+         * 운영이 알 필요가 없고, 빠뜨리면 녹화가 통째로 실패한다.
          */
         String templateBaseUrl
 ) {

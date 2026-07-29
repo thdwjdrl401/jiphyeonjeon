@@ -115,7 +115,8 @@ livekit:
     video-bitrate-kbps: ${EGRESS_VIDEO_BITRATE_KBPS:4500}
     audio-bitrate-kbps: ${EGRESS_AUDIO_BITRATE_KBPS:128}
     audio-frequency: ${EGRESS_AUDIO_FREQUENCY:44100}
-    # 합성 화면을 그릴 페이지. Egress의 헤드리스 Chrome이 여는 주소라 브라우저 주소와 다를 수 있다.
+    # 합성 화면을 그릴 페이지의 오리진. Egress의 헤드리스 Chrome이 여는 주소라 브라우저 주소와
+    # 다를 수 있다. 경로(/egress/stage)는 코드가 붙이므로 오리진만 넣는다.
     # 비우면 LiveKit 기본 템플릿 — 화면공유가 83%로 축소되고 검은 여백이 남는다(운영 실측).
     template-base-url: ${EGRESS_TEMPLATE_BASE_URL:}
     playlist-name: index.m3u8

@@ -11,7 +11,13 @@ interface InstructorLiveKitStageProps {
   onRequestEnd: () => void
 }
 
-function LocalTrackVideo({ track, label, fit = 'cover' }: { track: LocalVideoTrack; label: string; fit?: 'cover' | 'contain' }) {
+function LocalTrackVideo({ track, label, fit = 'cover', mirrored = false }: {
+  track: LocalVideoTrack
+  label: string
+  fit?: 'cover' | 'contain'
+  /** 자기 얼굴은 거울처럼 보여야 자연스럽다. 화면공유와 합성 미리보기는 뒤집지 않는다. */
+  mirrored?: boolean
+}) {
   const videoRef = useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
@@ -21,7 +27,16 @@ function LocalTrackVideo({ track, label, fit = 'cover' }: { track: LocalVideoTra
     return () => { track.detach(element) }
   }, [track])
 
-  return <video aria-label={label} autoPlay className={`instructor-local-video instructor-local-video--${fit}`} muted playsInline ref={videoRef} />
+  return (
+    <video
+      aria-label={label}
+      autoPlay
+      className={`instructor-local-video instructor-local-video--${fit}${mirrored ? ' is-mirrored' : ''}`}
+      muted
+      playsInline
+      ref={videoRef}
+    />
+  )
 }
 
 function connectionBadge(state: InstructorLiveKitConnectionState) {
@@ -55,8 +70,20 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
     <div className="video-stage video-stage--instructor" tabIndex={0}>
       <div className="video-stage__glow" />
       <div className="instructor-media-preview">
+        {/*
+          항상 contain으로 그린다. cover는 미리보기 영역 비율에 맞춰 영상을 잘라내는데, 합성 캔버스는
+          자르지 않으므로 강사에게만 안 보이는 영역이 수강생에게는 보이게 된다. 잘리지 않는 대신
+          레터박스가 생기지만, 실제로 나가는 화면과 같은 것을 보는 편이 낫다.
+        */}
         {mainTrack
-          ? <LocalTrackVideo fit={screenShareTrack ? 'contain' : 'cover'} label={screenShareTrack ? '공유 화면 미리보기' : '카메라 미리보기'} track={mainTrack} />
+          ? (
+            <LocalTrackVideo
+              fit="contain"
+              mirrored={!screenShareTrack}
+              label={screenShareTrack ? '공유 화면 미리보기' : '카메라 미리보기'}
+              track={mainTrack}
+            />
+          )
           : <div className="instructor-media-empty"><span aria-hidden="true">◉</span><strong>{emptyPreviewMessage(publisher.connectionState, publisher.cameraEnabled)}</strong></div>}
         {/*
           화면공유 위의 카메라는 단순 미리보기가 아니라 합성 화면의 편집기다. 여기서 옮긴 자리가

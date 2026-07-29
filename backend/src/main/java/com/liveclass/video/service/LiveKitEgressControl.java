@@ -27,6 +27,9 @@ public class LiveKitEgressControl implements EgressControl {
 
     private static final Logger log = LoggerFactory.getLogger(LiveKitEgressControl.class);
 
+    /** 합성 템플릿 페이지의 프론트 라우트({@code EgressStagePage}). */
+    private static final String TEMPLATE_PATH = "/egress/stage";
+
     private final EgressServiceClient client;
     private final EgressProperties egress;
 
@@ -141,8 +144,30 @@ public class LiveKitEgressControl implements EgressControl {
      * 설정이 빠졌을 때 녹화가 죽는 대신 예전 레이아웃으로 돌아가게 둔다(녹화 > 레이아웃).
      */
     private String templateBaseUrl() {
-        String configured = egress.templateBaseUrl();
-        return configured == null ? "" : configured.strip();
+        return templateUrl(egress.templateBaseUrl());
+    }
+
+    /**
+     * 설정값을 합성 템플릿 <b>페이지</b> 주소로 만든다.
+     *
+     * <p>LiveKit은 이 값 뒤에 {@code ?url=&token=&layout=}을 붙여 그대로 연다. 즉 페이지 전체
+     * 주소여야 하는데, 이름이 "base url"이라 오리진만 넣기 쉽다. 실제로 그렇게 설정했다가
+     * Egress가 앱 첫 화면을 열었고, 거기엔 {@code START_RECORDING}이 없어
+     * {@code "Start signal not received"}로 녹화가 통째로 죽었다. 백엔드는 시작 요청이
+     * 성공했다고 보므로 원인이 드러나지 않는다.
+     *
+     * <p>그래서 경로를 코드가 책임진다. 오리진만 주든 페이지 주소를 다 주든 같은 결과가 되게 해
+     * 설정 실수로 녹화가 죽지 않도록 한다. 경로는 우리 프론트의 라우트라 운영이 알 필요가 없다.
+     */
+    public static String templateUrl(String configured) {
+        if (configured == null || configured.isBlank()) {
+            return "";   // 비우면 LiveKit 기본 템플릿 — 설정 누락으로 녹화가 죽는 것보다 낫다.
+        }
+        String trimmed = configured.strip();
+        while (trimmed.endsWith("/")) {
+            trimmed = trimmed.substring(0, trimmed.length() - 1);
+        }
+        return trimmed.endsWith(TEMPLATE_PATH) ? trimmed : trimmed + TEMPLATE_PATH;
     }
 
     private LivekitEgress.EncodingOptions encodingOptions() {
