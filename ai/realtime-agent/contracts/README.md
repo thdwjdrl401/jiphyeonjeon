@@ -2,8 +2,8 @@
 
 이 디렉터리는 realtime-agent v1 계약의 JSON Schema와 대표 fixture를 보관한다.
 Spring이 생산·소비하는 경계는 [`docs/CONTRACT.md` §3-3~§3-5](../../../docs/CONTRACT.md#3-내부-계약-확정-인터페이스)에 채택됐다.
-Java producer/consumer와 양쪽 계약 테스트가 아직 없으므로 Java 통합 완료로
-간주하지 않는다.
+service health는 §3-8의 AI 제공 endpoint와 Python 계약 테스트까지 구현됐다. Java consumer는 이
+변경의 범위가 아니며 별도 backend 변경에서 연결한다.
 
 ## 경계
 
@@ -12,6 +12,7 @@ Java producer/consumer와 양쪽 계약 테스트가 아직 없으므로 Java �
 | `dispatch-metadata.schema.json` | Spring dispatch adapter | LiveKit job metadata | realtime-agent |
 | `caption-stream-entry.schema.json` | realtime-agent | Redis Stream | 향후 Spring/ai-api consumer |
 | `live-agent-status.schema.json` | realtime-agent | 서명된 내부 HTTP | 향후 Spring callback |
+| `realtime-agent-health.schema.json` | realtime-agent | loopback/reverse tunnel HTTP | 향후 Spring consumer |
 
 `sessionId`와 `lessonId`는 소문자 canonical UUID 문자열이다. 모든 payload 필드는
 `camelCase`이고 알 수 없는 필드는 거부한다.

@@ -1,0 +1,11 @@
+{
+  "contractVersion": "1",
+  "status": "ready",
+  "service": "realtime-agent",
+  "sttProvider": "nemotron",
+  "workerStarted": true,
+  "liveKitConnected": true,
+  "modelsReady": true,
+  "readyProcessCount": 1,
+  "expectedProcessCount": 1
+}

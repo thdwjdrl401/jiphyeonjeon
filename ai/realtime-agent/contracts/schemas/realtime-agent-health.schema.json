@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://liveclass.internal/contracts/realtime-agent-health.schema.json",
+  "title": "Realtime agent service health",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contractVersion", "status", "service"],
+      "properties": {
+        "contractVersion": { "const": "1" },
+        "status": { "const": "alive" },
+        "service": { "const": "realtime-agent" }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contractVersion",
+        "status",
+        "service",
+        "sttProvider",
+        "workerStarted",
+        "liveKitConnected",
+        "modelsReady",
+        "readyProcessCount",
+        "expectedProcessCount"
+      ],
+      "properties": {
+        "contractVersion": { "const": "1" },
+        "status": { "enum": ["ready", "notReady"] },
+        "service": { "const": "realtime-agent" },
+        "sttProvider": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "workerStarted": { "type": "boolean" },
+        "liveKitConnected": { "type": "boolean" },
+        "modelsReady": { "type": "boolean" },
+        "readyProcessCount": { "type": "integer", "minimum": 0 },
+        "expectedProcessCount": { "type": "integer", "minimum": 1 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "ready" } } },
+          "then": {
+            "properties": {
+              "workerStarted": { "const": true },
+              "liveKitConnected": { "const": true },
+              "modelsReady": { "const": true }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -140,11 +140,19 @@ class FakeAgentServer:
         self.active_jobs: list[object] = []
         self.entrypoint = None
         self.registered_agent_name: str | None = None
+        self.events: dict[str, object] = {}
+        self.id = "unregistered"
+        self._connecting = False
+        self._connection_failed = False
 
     def rtc_session(self, entrypoint, *, agent_name: str):
         self.entrypoint = entrypoint
         self.registered_agent_name = agent_name
         return entrypoint
+
+    def on(self, event: str, callback: object) -> object:
+        self.events[event] = callback
+        return callback
 
 
 def test_agent_server_uses_credentials_named_registration_and_bounded_load(
@@ -159,6 +167,8 @@ def test_agent_server_uses_credentials_named_registration_and_bounded_load(
     assert server.options["ws_url"] == "wss://livekit.example"
     assert server.options["api_key"] == "livekit-key"
     assert server.options["api_secret"] == "livekit-secret"
+    assert server.options["host"] == "127.0.0.1"
+    assert server.options["port"] == 0
     assert server.options["load_threshold"] == 1.0
     assert server.options["num_idle_processes"] == 1
     assert server.options["initialize_process_timeout"] == 10.0
@@ -170,6 +180,7 @@ def test_agent_server_uses_credentials_named_registration_and_bounded_load(
     assert restored_entrypoint.keywords["settings"] == configured
     restored_setup = pickle.loads(pickle.dumps(server.options["setup_fnc"]))
     assert restored_setup.keywords["settings"] == configured
+    assert restored_setup.keywords["readiness_marker"] is None
 
     load_fnc = server.options["load_fnc"]
     assert callable(load_fnc)
@@ -199,6 +210,83 @@ def test_nemotron_server_uses_twelve_job_profile_without_loading_model(
     assert load_fnc(server) == pytest.approx(11 / 12)
     server.active_jobs.append(object())
     assert load_fnc(server) == 1.0
+
+
+def test_agent_server_connects_process_and_livekit_events_to_readiness(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setattr(agent_main, "AgentServer", FakeAgentServer)
+    readiness = agent_main.SttReadinessState("stub", 1, str(tmp_path / "markers"))
+
+    server = agent_main.build_agent_server(settings(), readiness_state=readiness)
+
+    assert isinstance(server, FakeAgentServer)
+    setup = server.options["setup_fnc"]
+    assert callable(setup)
+    assert setup.keywords["readiness_marker"] == readiness.process_marker
+    assert server.events == {
+        "worker_started": readiness.mark_worker_started,
+        "worker_registered": readiness.mark_livekit_connected,
+    }
+    server.events["worker_started"]()
+    server.id = "worker-id"
+    server.events["worker_registered"]("worker-id", object())
+    assert readiness.readiness_payload()["workerStarted"] is True
+    assert readiness.readiness_payload()["liveKitConnected"] is True
+    server._connecting = True
+    assert readiness.readiness_payload()["liveKitConnected"] is False
+    readiness.close()
+
+
+def test_process_readiness_marker_is_written_only_after_successful_prewarm(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    class FakeRegistry:
+        def prewarm(self, _provider: str, _userdata: object) -> None:
+            calls.append("prewarm")
+
+    class FakeMarker:
+        def mark_current_process_ready(self) -> None:
+            calls.append("ready")
+
+    monkeypatch.setattr(agent_main, "build_engine_registry", lambda _settings: FakeRegistry())
+
+    agent_main._setup_stt_process(
+        SimpleNamespace(userdata={}),
+        settings=settings(),
+        readiness_marker=FakeMarker(),
+    )
+
+    assert calls == ["prewarm", "ready"]
+
+
+def test_process_readiness_marker_is_not_written_when_prewarm_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    class FailingRegistry:
+        def prewarm(self, _provider: str, _userdata: object) -> None:
+            calls.append("prewarm")
+            raise RuntimeError("model load failed")
+
+    class FakeMarker:
+        def mark_current_process_ready(self) -> None:
+            calls.append("ready")
+
+    monkeypatch.setattr(agent_main, "build_engine_registry", lambda _settings: FailingRegistry())
+
+    with pytest.raises(RuntimeError, match="model load failed"):
+        agent_main._setup_stt_process(
+            SimpleNamespace(userdata={}),
+            settings=settings(),
+            readiness_marker=FakeMarker(),
+        )
+
+    assert calls == ["prewarm"]
 
 
 def test_unknown_provider_fails_before_agent_server_construction(
@@ -442,7 +530,12 @@ def test_main_validates_before_building_and_running(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[object] = []
-    runtime_settings = SimpleNamespace()
+    runtime_settings = SimpleNamespace(
+        stt_provider="stub",
+        health_host="127.0.0.1",
+        health_port=8081,
+    )
+    worker_pool = SimpleNamespace(num_idle_processes=1)
     server = object()
 
     class FakeSettingsLoader:
@@ -458,8 +551,32 @@ def test_main_validates_before_building_and_running(
     monkeypatch.setattr(agent_main, "Settings", FakeSettingsLoader)
     monkeypatch.setattr(
         agent_main,
+        "resolve_worker_pool",
+        lambda actual: calls.append(("resolve", actual)) or worker_pool,
+    )
+
+    readiness = object()
+    monkeypatch.setattr(
+        agent_main,
+        "SttReadinessState",
+        lambda provider, count: calls.append(("state", provider, count)) or readiness,
+    )
+
+    class FakeHealthServer:
+        def __init__(self, host: str, port: int, state: object) -> None:
+            calls.append(("health", host, port, state))
+
+        def start(self) -> None:
+            calls.append("health-start")
+
+        def close(self) -> None:
+            calls.append("health-close")
+
+    monkeypatch.setattr(agent_main, "SttHealthServer", FakeHealthServer)
+    monkeypatch.setattr(
+        agent_main,
         "build_agent_server",
-        lambda actual: calls.append(("build", actual)) or server,
+        lambda actual, **kwargs: calls.append(("build", actual, kwargs)) or server,
     )
     monkeypatch.setattr(
         agent_main.cli,
@@ -472,6 +589,15 @@ def test_main_validates_before_building_and_running(
     assert calls == [
         "from_env",
         "validate",
-        ("build", runtime_settings),
+        ("resolve", runtime_settings),
+        ("state", "stub", 1),
+        ("health", "127.0.0.1", 8081, readiness),
+        (
+            "build",
+            runtime_settings,
+            {"worker_pool": worker_pool, "readiness_state": readiness},
+        ),
+        "health-start",
         ("run", server),
+        "health-close",
     ]

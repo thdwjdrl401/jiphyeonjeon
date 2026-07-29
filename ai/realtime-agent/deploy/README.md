@@ -94,11 +94,13 @@ Runner를 활성화하기 전 현재 checkout으로 최초 배포를 검증할 �
 ~/.local/bin/liveclass-realtime-agent-deploy \
   "$PWD/ai/realtime-agent" "$(git rev-parse HEAD)"
 ~/.local/bin/liveclass-realtime-agent-supervisor status
-curl --fail http://127.0.0.1:8081/
+curl --fail http://127.0.0.1:8081/health/live
+curl --fail http://127.0.0.1:8081/health/ready
 ~~~
 
 배포 helper는 commit SHA별 staging 복사, frozen Nemotron sync, CUDA smoke, current symlink 교체,
-tunnel·agent 재시작, health 확인 순서로 동작한다. 실패하면 이전 release로 rollback한다.
+tunnel·agent 재시작, 120초 model init ceiling을 포함하는 readiness 확인 순서로 동작한다. 실패하면
+이전 release로 rollback한다.
 GitLab job도 같은 helper를 현재 사용자로 직접 호출하며 sudo, systemctl, Docker executor는 사용하지
 않는다. 시크릿, SSH key, model checkpoint는 release에 복사하지 않는다.
 
@@ -123,14 +125,14 @@ flowchart LR
         L[LiveKit :7443]
         D[Application Redis :4000]
         T[TURN/TCP :3478]
-        J[Java health client :18081]
+        E[EC2 host health smoke :18081]
     end
     A --> C
     A --> M
     C -->|local forward :7443| L
     C -->|local forward :4000| D
     M -->|local forward :3478| T
-    J -->|control reverse :18081 → :8081| H
+    E -->|control reverse :18081 → :8081| H
     R -->|outbound HTTPS| G[GitLab]
 ```
 
@@ -139,10 +141,12 @@ flowchart LR
 | control | local | 127.0.0.1:7443 | 127.0.0.1:7443 | LiveKit |
 | control | local | 127.0.0.1:4000 | 127.0.0.1:4000 | application Redis |
 | TURN | local | 127.0.0.1:3478 | 127.0.0.1:3478 | TURN/TCP |
-| control | reverse | GPU 127.0.0.1:8081 | EC2 127.0.0.1:18081 | Java health check |
+| control | reverse | GPU 127.0.0.1:8081 | EC2 127.0.0.1:18081 | EC2 host health check |
 
-EC2 Java는 http://127.0.0.1:18081/로 GPU agent 상태를 확인한다. EC2 loopback에만 bind되므로 외부에
-공개되지 않는다.
+EC2 host smoke는 `http://127.0.0.1:18081/health/live`로 process 생존을,
+`http://127.0.0.1:18081/health/ready`로 STT warm pool과 LiveKit 연결 완료를 확인한다. 18081은 계속
+EC2 loopback에만 bind되고 readiness는 준비 전 503, 준비 뒤 200이다. backend consumer와 컨테이너
+네트워크 경로는 이 AI 배포 변경에 포함하지 않는다.
 
 `LIVEKIT_URL`은 TLS 인증서 hostname을 유지하되 배포 resolver가 그 hostname만 GPU loopback으로
 해석한다. 따라서 TLS SNI/hostname 검증을 버리지 않고 `127.0.0.1:7443` SSH tunnel을 사용한다.
@@ -155,7 +159,8 @@ EC2 Java는 http://127.0.0.1:18081/로 GPU agent 상태를 확인한다. EC2 loo
 ~/.local/bin/liveclass-realtime-agent-supervisor logs-agent
 ~/.local/bin/liveclass-realtime-agent-supervisor logs-tunnel
 ~/.local/bin/liveclass-gitlab-runner-user logs
-curl --fail http://127.0.0.1:8081/
+curl --fail http://127.0.0.1:8081/health/live
+curl --fail http://127.0.0.1:8081/health/ready
 ~~~
 
 - Runner가 offline이면 GPU job은 pending 상태이며 EC2 Runner가 대신 실행하지 않는다.

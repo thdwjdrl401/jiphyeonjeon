@@ -27,6 +27,39 @@ def test_uses_application_redis_without_assuming_livekit_redis_port() -> None:
     assert settings.redis_operation_timeout_seconds == 1
     assert settings.max_active_jobs is None
     assert settings.num_idle_processes is None
+    assert settings.health_host == "127.0.0.1"
+    assert settings.health_port == 8081
+
+
+def test_accepts_explicit_loopback_health_port() -> None:
+    settings = Settings.from_env(
+        {**BASE_ENV, "STT_HEALTH_HOST": "127.0.0.1", "STT_HEALTH_PORT": "18081"}
+    )
+
+    settings.validate_agent_server()
+
+    assert settings.health_host == "127.0.0.1"
+    assert settings.health_port == 18081
+
+
+def test_rejects_non_loopback_health_bind() -> None:
+    settings = Settings.from_env({**BASE_ENV, "STT_HEALTH_HOST": "0.0.0.0"})
+
+    with pytest.raises(RuntimeError, match="STT_HEALTH_HOST must be 127.0.0.1"):
+        settings.validate_agent_server()
+
+
+@pytest.mark.parametrize("value", ["0", "65536"])
+def test_rejects_health_port_outside_tcp_range(value: str) -> None:
+    settings = Settings.from_env({**BASE_ENV, "STT_HEALTH_PORT": value})
+
+    with pytest.raises(RuntimeError, match="STT_HEALTH_PORT must be between"):
+        settings.validate_agent_server()
+
+
+def test_rejects_noninteger_health_port() -> None:
+    with pytest.raises(ValueError, match="STT_HEALTH_PORT must be an integer"):
+        Settings.from_env({**BASE_ENV, "STT_HEALTH_PORT": "health"})
 
 
 def test_default_redis_user_accepts_password_without_username() -> None:

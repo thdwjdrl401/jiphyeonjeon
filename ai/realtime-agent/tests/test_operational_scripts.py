@@ -393,7 +393,7 @@ def test_deploy_helper_builds_before_switch_and_keeps_rollback_path() -> None:
     cuda_smoke_position = script.index("assert torch.cuda.is_available()")
     switch_position = script.index('mv -Tf "$NEXT_LINK" "$CURRENT_LINK"')
     unlock_position = script.index("flock -u 9")
-    health_position = script.index("--retry 30")
+    health_position = script.index("--retry 75")
     process_gate_position = script.index('"$SUPERVISOR" status-agent')
 
     assert (
@@ -409,3 +409,4 @@ def test_deploy_helper_builds_before_switch_and_keeps_rollback_path() -> None:
     assert "systemctl" not in script
     assert "runuser" not in script
     assert "sudo" not in script
+    assert "http://127.0.0.1:8081/health/ready" in script

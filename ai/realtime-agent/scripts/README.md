@@ -18,7 +18,7 @@ GPU의 PEM 설치와 realtime-agent/BGE 공용 설정은
 | control | local `-L` | `127.0.0.1:7443` | `localhost:7443` | LiveKit Worker WebSocket/API |
 | control | local `-L` | `127.0.0.1:4000` | `localhost:4000` | application Redis lease/caption |
 | TURN | local `-L` | `127.0.0.1:3478` | `localhost:3478` | TURN/TCP relay |
-| control | reverse `-R` | `127.0.0.1:8081` | `127.0.0.1:18081` | EC2 Java health check |
+| control | reverse `-R` | `127.0.0.1:8081` | `127.0.0.1:18081` | EC2 host health check |
 
 모든 기본 listener는 loopback이다. GPU 호스트에 inbound application port를 공개하지 않으며 OpenAI
 Realtime WSS 같은 provider outbound 연결은 이 tunnel의 대상이 아니다.

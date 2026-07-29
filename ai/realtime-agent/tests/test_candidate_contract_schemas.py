@@ -11,6 +11,7 @@ from app.adapters.redis_caption_publisher import to_stream_fields
 from app.adapters.spring_status_callback import serialize_status_event, status_signature
 from app.captions.models import CaptionDelta, CaptionStreamCompleted
 from app.contracts.live_status import LiveAgentStatusEvent
+from app.health import SttReadinessState
 
 CONTRACTS = Path(__file__).parents[1] / "contracts"
 SCHEMAS = CONTRACTS / "schemas"
@@ -40,6 +41,9 @@ def validator(name: str) -> jsonschema.Draft202012Validator:
         ("caption-stream-entry.schema.json", "caption-completed.valid.json"),
         ("live-agent-status.schema.json", "live-agent-status-succeeded.valid.json"),
         ("live-agent-status.schema.json", "live-agent-status-failed.valid.json"),
+        ("realtime-agent-health.schema.json", "realtime-agent-live.valid.json"),
+        ("realtime-agent-health.schema.json", "realtime-agent-ready.valid.json"),
+        ("realtime-agent-health.schema.json", "realtime-agent-not-ready.valid.json"),
     ],
 )
 def test_candidate_fixtures_validate(schema_name: str, fixture_name: str) -> None:
@@ -85,6 +89,19 @@ def test_status_fixture_is_exact_runtime_serializer_output() -> None:
     serialized = json.loads(serialize_status_event(event))
 
     assert serialized == load_json(FIXTURES / "live-agent-status-succeeded.valid.json")
+
+
+def test_health_fixtures_are_exact_runtime_payloads(tmp_path: Path) -> None:
+    state = SttReadinessState("nemotron", 1, str(tmp_path / "markers"))
+
+    assert state.liveness_payload() == load_json(FIXTURES / "realtime-agent-live.valid.json")
+    assert state.readiness_payload() == load_json(FIXTURES / "realtime-agent-not-ready.valid.json")
+
+    state.process_marker.mark_current_process_ready()
+    state.mark_worker_started()
+    state.mark_livekit_connected()
+    assert state.readiness_payload() == load_json(FIXTURES / "realtime-agent-ready.valid.json")
+    state.close()
 
 
 def test_status_signing_fixture_is_an_exact_cross_language_vector() -> None:
