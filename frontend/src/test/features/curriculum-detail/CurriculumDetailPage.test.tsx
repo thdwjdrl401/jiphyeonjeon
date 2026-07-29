@@ -28,6 +28,10 @@ function renderDetail(path: string) {
             <Routes>
               <Route path="/curriculums/:curriculumId" element={<CurriculumDetailPage />} />
               <Route path="/curriculums" element={<div>커리큘럼 목록 페이지</div>} />
+              <Route
+                path="/instructor/curriculums/:curriculumId/manage"
+                element={<div>커리큘럼 관리 페이지</div>}
+              />
               <Route path="/login" element={<LoginPage />} />
             </Routes>
           </ToastProvider>
@@ -52,7 +56,8 @@ describe('CurriculumDetailPage', () => {
     ).toBeInTheDocument()
     expect(screen.getByText('1. 오리엔테이션과 개발 환경')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '수강 신청' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: '관리하기' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '관리하기' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '담당 강사 관리' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '커리큘럼 강의 자료' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: '로그인하기' })).toBeInTheDocument()
   })
@@ -182,24 +187,50 @@ describe('CurriculumDetailPage', () => {
     expect(screen.queryByText('게시 준비')).not.toBeInTheDocument()
   })
 
-  it('담당 강사에게만 관리 버튼이 보인다', async () => {
+  // 관리 진입점은 제목 카드 아래 안내 카드 하나뿐이다(제목 카드·하단 패널 중복 제거).
+  it('담당 강사에게 관리 안내 카드를 관리 기능의 유일한 진입점으로 보여준다', async () => {
     await mockAuthService.login({ email: 'instructor01@example.com', password: 'password1' })
     const { unmount } = renderDetail('/curriculums/cur-spring-live')
 
-    expect(await screen.findByRole('link', { name: '관리하기' })).toBeInTheDocument()
+    const managementHeading = await screen.findByRole('heading', { name: '담당 강사 관리' })
+    const managementCard = managementHeading.closest('section')
+    expect(managementCard).not.toBeNull()
+    expect(within(managementCard!).getByText('이 커리큘럼을 관리하고 강의를 편성할 수 있어요.')).toBeInTheDocument()
+
+    expect(screen.getAllByRole('button', { name: '관리하기' })).toHaveLength(1)
+    expect(within(managementCard!).getByRole('button', { name: '관리하기' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '커리큘럼 관리' })).not.toBeInTheDocument()
+
     expect(screen.getByRole('heading', { name: '커리큘럼 강의 자료' })).toBeInTheDocument()
     expect(screen.getByText('공통 실습 환경 설정.pptx')).toBeInTheDocument()
     unmount()
   })
 
-  it('담당하지 않는 강사에게는 관리 버튼이 보이지 않는다', async () => {
+  it('관리 안내 카드의 관리하기를 누르면 커리큘럼 관리 페이지로 이동한다', async () => {
+    const user = userEvent.setup()
+    await mockAuthService.login({ email: 'instructor01@example.com', password: 'password1' })
+    renderDetail('/curriculums/cur-spring-live')
+
+    await user.click(await screen.findByRole('button', { name: '관리하기' }))
+
+    await waitFor(() =>
+      expect(window.location.pathname).toBe('/instructor/curriculums/cur-spring-live/manage'),
+    )
+  })
+
+  it('담당하지 않는 강사에게는 같은 자리에 버튼 없는 안내 카드만 보여준다', async () => {
     await mockAuthService.login({ email: 'instructor01@example.com', password: 'password1' })
     renderDetail('/curriculums/cur-data-story')
 
     await screen.findByRole('heading', { name: '데이터로 설득하는 시각화' })
-    expect(screen.queryByRole('link', { name: '관리하기' })).not.toBeInTheDocument()
-    expect(screen.getByText('다른 강사가 운영하는 커리큘럼이에요')).toBeInTheDocument()
-    expect(screen.getByText('이 커리큘럼은 강사 계정으로 수강할 수 없어요.')).toBeInTheDocument()
+    const noticeHeading = screen.getByRole('heading', { name: '다른 강사가 운영하는 커리큘럼이에요' })
+    const noticeCard = noticeHeading.closest('section')
+    expect(noticeCard).not.toBeNull()
+    expect(within(noticeCard!).getByText('이 커리큘럼은 강사 계정으로 수강할 수 없어요.')).toBeInTheDocument()
+    expect(within(noticeCard!).queryByRole('button')).not.toBeInTheDocument()
+
+    expect(screen.queryByRole('button', { name: '관리하기' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '담당 강사 관리' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '커리큘럼 강의 자료' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '수강 신청' })).not.toBeInTheDocument()
   })

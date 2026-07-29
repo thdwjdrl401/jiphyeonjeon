@@ -77,6 +77,44 @@
   margin: 0;
 }
 
+/* 제목 카드 바로 아래에서 관리 권한을 알리는 단일 안내 카드 */
+.instructor-management-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px 20px;
+  border: 1px solid rgba(20, 92, 66, .22);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  background: var(--blue-50);
+  box-shadow: 0 8px 22px rgba(20, 92, 66, .07), var(--shadow-inset);
+}
+
+.instructor-management-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.instructor-management-card h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.instructor-management-card p {
+  margin: 0;
+  color: var(--ink-700);
+}
+
+.instructor-management-card__actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .curriculum-overview,
 .instructor-summary,
 .curriculum-materials,
@@ -393,7 +431,6 @@ a.curriculum-lesson__title:hover {
   align-items: flex-start;
 }
 
-.instructor-actions__buttons,
 .guest-actions__buttons {
   display: flex;
   gap: 12px;

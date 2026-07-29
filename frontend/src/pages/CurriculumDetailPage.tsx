@@ -1,4 +1,5 @@
-import { Link, useLocation, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { instructorPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
 import CurriculumHero from '@/features/curriculum/CurriculumHero'
 import CurriculumMaterials from '@/features/curriculum/CurriculumMaterials'
@@ -8,6 +9,8 @@ import CurriculumOverview from '@/features/curriculum/CurriculumOverview'
 import InstructorSummary from '@/features/curriculum/InstructorSummary'
 import CurriculumDetailSkeleton from '@/features/curriculum-detail/CurriculumDetailSkeleton'
 import CurriculumRelationPanel from '@/features/curriculum-detail/CurriculumRelationPanel'
+import InstructorManagementCard from '@/features/curriculum-detail/InstructorManagementCard'
+import { resolveInstructorManagement } from '@/features/curriculum-detail/instructorManagement'
 import { resolvePrimaryAction } from '@/features/curriculum-detail/primaryAction'
 import { useCurriculumDetail } from '@/features/curriculum-detail/useCurriculumDetail'
 import CurriculumProgress from '@/features/enrollment/CurriculumProgress'
@@ -20,6 +23,7 @@ export default function CurriculumDetailPage() {
   const { curriculumId = '' } = useParams()
   const { user, status } = useAuth()
   const location = useLocation()
+  const navigate = useNavigate()
   const returnTo = `${location.pathname}${location.search}`
 
   const detailQuery = useCurriculumDetail(curriculumId, user ?? undefined, status !== 'loading')
@@ -54,10 +58,12 @@ export default function CurriculumDetailPage() {
 
   const detail = detailQuery.data
   const primaryAction = resolvePrimaryAction(detail, returnTo)
+  const instructorManagement = resolveInstructorManagement(detail)
   const canViewCurriculumMaterials = ['ENROLLED', 'OWNER_INSTRUCTOR'].includes(detail.viewerContext.relationship)
 
   const handleEnroll = () => enrollMutation.mutate()
   const handleCancel = () => cancelMutation.mutate()
+  const handleManage = () => navigate(instructorPaths.curriculumManage(detail.curriculumId))
 
   return (
     <div className="curriculum-detail-page page-container">
@@ -69,6 +75,10 @@ export default function CurriculumDetailPage() {
         onCancel={handleCancel}
         isCancelling={cancelMutation.isPending}
       />
+
+      {instructorManagement && (
+        <InstructorManagementCard isInstructor={instructorManagement.isInstructor} onManage={handleManage} />
+      )}
 
       <CurriculumOverview description={detail.description} />
       <InstructorSummary instructor={detail.instructor} />

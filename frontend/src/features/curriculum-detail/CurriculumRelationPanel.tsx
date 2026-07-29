@@ -1,10 +1,8 @@
 import GuestActions from '@/features/auth/GuestActions'
-import InstructorActions from '@/features/curriculum/InstructorActions'
 import type { CurriculumDetailResponse } from '@/features/curriculum/types'
 import EnrolleeActions from '@/features/enrollment/EnrolleeActions'
 import EnrollmentActions from '@/features/enrollment/EnrollmentActions'
 import EnrollmentPendingNotice from '@/features/enrollment/EnrollmentPendingNotice'
-import NonOwnerInstructorNotice from '@/features/enrollment/NonOwnerInstructorNotice'
 
 interface CurriculumRelationPanelProps {
   detail: CurriculumDetailResponse
@@ -13,6 +11,7 @@ interface CurriculumRelationPanelProps {
   isEnrolling: boolean
 }
 
+/** 강사 관계(OWNER_INSTRUCTOR·NON_OWNER_INSTRUCTOR)는 InstructorManagementCard가 상단에서 처리한다. */
 export default function CurriculumRelationPanel({
   detail,
   returnTo,
@@ -20,8 +19,6 @@ export default function CurriculumRelationPanel({
   isEnrolling,
 }: CurriculumRelationPanelProps) {
   switch (detail.viewerContext.relationship) {
-    case 'OWNER_INSTRUCTOR':
-      return <InstructorActions detail={detail} />
     case 'ENROLLED':
       return <EnrolleeActions detail={detail} />
     case 'UNENROLLED_STUDENT':
@@ -30,8 +27,6 @@ export default function CurriculumRelationPanel({
       )
     case 'PENDING_ENROLLMENT':
       return <EnrollmentPendingNotice detail={detail} />
-    case 'NON_OWNER_INSTRUCTOR':
-      return <NonOwnerInstructorNotice detail={detail} onEnroll={onEnroll} isEnrolling={isEnrolling} />
     case 'GUEST':
       return <GuestActions returnTo={returnTo} />
     default:
