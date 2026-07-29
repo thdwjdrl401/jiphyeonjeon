@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import inkLandscapeWide from '@/assets/images/ink-landscape-wide-v1.jpg'
 import { instructorPaths, publicPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
 import CurriculumCard from '@/features/curriculum/CurriculumCard'
@@ -47,8 +48,8 @@ export default function WelcomePage() {
       <section className="welcome-hero">
         <div className="page-container welcome-hero__grid">
           <div className="hero-copy">
-            <span className="hero-kicker"><i /> Live learning, reimagined with AI</span>
-            <h1>수업은 지나가도,<br /><em>배움은 남도록.</em></h1>
+            <span className="hero-kicker"><i /> DIGITAL LEARNING ARCHIVE</span>
+            <h1><span>수업은</span><br /><span>지나가도,</span><br /><em>배움은 남도록.</em></h1>
             <p>라이브 수업의 자막과 질문, AI 설명, 다시보기를<br />하나의 학습 기록으로 이어갑니다.</p>
             <div className="hero-actions">
               {user ? (
@@ -73,62 +74,18 @@ export default function WelcomePage() {
             </div>
           </div>
 
-          <div className="hero-stage" aria-label="LiveClass AI 수업 화면 예시">
-            <span className="hero-stage__halo" />
-            <div className="classroom-preview">
-              <div className="classroom-preview__topbar">
-                <span className="window-dots"><i /><i /><i /></span>
-                <span className="preview-live"><i /> LIVE</span>
-                <span className="preview-viewers">Spring Security 시작하기</span>
-              </div>
-              <div className="classroom-preview__body">
-                <div className="classroom-preview__screen">
-                  <div className="welcome-slide">
-                    <span className="welcome-slide__eyebrow">오늘의 주제</span>
-                    <h2>Spring Security<br />요청 흐름</h2>
-                    <div className="welcome-slide__flow" aria-label="클라이언트에서 서비스까지의 요청 흐름">
-                      <span>Client</span><i>→</i><span>Filter</span><i>→</i><span>Service</span>
-                    </div>
-                    <p>요청은 보안 필터를 지나 서비스 계층으로 전달됩니다.</p>
-                  </div>
-                  <div className="instructor-tile">
-                    <span className="instructor-avatar">이</span>
-                    <span>이도현 강사</span>
-                  </div>
-                  <div className="live-caption">
-                    <small><i /> 실시간 자막</small>
-                    <p>이 요청은 서비스 계층에서 하나의 트랜잭션으로 처리됩니다.</p>
-                  </div>
-                </div>
-                <aside className="classroom-preview__side" aria-label="라이브 채팅과 AI 질문 예시">
-                  <header><strong>채팅·질문</strong><span>LIVE</span></header>
-                  <article className="preview-message preview-message--question">
-                    <small>수강생-14A2</small>
-                    <p>세션과 JWT를 함께 쓰는 경우도 있나요?</p>
-                    <em>질문</em>
-                  </article>
-                  <article className="preview-message">
-                    <small>이도현 강사</small>
-                    <p>좋은 질문이에요. 다음 예제에서 바로 비교해 볼게요.</p>
-                  </article>
-                  <div className="preview-ai-prompt">
-                    <span>AI</span>
-                    <div><strong>이 구간이 궁금한가요?</strong><p>강의 자료와 현재 자막을 함께 확인해요.</p></div>
-                  </div>
-                </aside>
-              </div>
-              <div className="classroom-preview__toolbar">
-                <span>마이크</span><span>카메라</span><span className="is-active">CC 자막</span><span className="is-ai">AI 질문</span>
-              </div>
-            </div>
-          </div>
+          <figure className="hero-stage ink-hero-art" aria-label="겹겹이 쌓이는 배움을 표현한 현대 수묵화">
+            <img src={inkLandscapeWide} alt="" aria-hidden="true" fetchPriority="high" />
+            <figcaption><span>01</span><p>질문과 자막, 다시보기가<br />하나의 학습 기록으로 이어집니다.</p></figcaption>
+            <div className="ink-hero-art__index" aria-hidden="true"><span>LIVE</span><span>CAPTION</span><span>AI</span><span>REPLAY</span></div>
+          </figure>
         </div>
       </section>
 
       <section className="feature-section section-space">
         <div className="page-container">
           <div className="section-heading section-heading--center">
-            <span className="eyebrow">WHY LIVECLASS AI</span>
+            <span className="eyebrow">01 — LEARNING FLOW</span>
             <h2>수업이 끝나도, 이해는 계속됩니다</h2>
             <p>배우는 흐름을 끊지 않는 네 가지 핵심 경험</p>
           </div>
@@ -150,7 +107,7 @@ export default function WelcomePage() {
         <div className="page-container">
           <div className="section-heading section-heading--split">
             <div>
-              <span className="eyebrow">FEATURED CURRICULUMS</span>
+              <span className="eyebrow">02 — CURATED CURRICULUMS</span>
               <h2>지금, 함께 배우기 좋은 수업</h2>
               <p>라이브로 질문하고 AI와 함께 깊이 이해해 보세요.</p>
             </div>
@@ -181,7 +138,7 @@ export default function WelcomePage() {
       <section className="quick-action-section">
         <div className="page-container quick-action-panel">
           <div>
-            <span className="eyebrow eyebrow--light">READY TO LEARN?</span>
+            <span className="eyebrow eyebrow--light">03 — CONTINUE THE ARCHIVE</span>
             <h2>{user ? `${user.displayName}님, 오늘의 배움을 이어갈까요?` : '배움의 다음 장면을 시작하세요'}</h2>
             <p>{user?.role === 'INSTRUCTOR' ? '운영 중인 커리큘럼을 확인하고 다음 라이브를 준비해 보세요.' : user ? '내 커리큘럼에서 최근 학습과 다음 라이브 일정을 확인해 보세요.' : '학생으로 배우거나, 강사로 지식을 나누는 여정을 시작할 수 있어요.'}</p>
           </div>

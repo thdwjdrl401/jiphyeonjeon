@@ -2,8 +2,8 @@
 
 > 정본 규칙: [AGENTS.md](../../../AGENTS.md) · 아키텍처: [ARCHITECTURE.md](../../ARCHITECTURE.md) · 공유 계약: [CONTRACT.md](../../CONTRACT.md)
 
-- **기록 기준일**: 2026-07-23
-- **범위**: 이번 세션에서 진행한 페이지 분리, 컴포넌트 명세, 라이브·VOD 정책, 프론트 API 협의, 전체 페이지 구현 과정의 런타임·라우팅·fixture·공통 자료·사용자 이동 구조 결정
+- **기록 기준일**: 2026-07-29
+- **범위**: 페이지 분리, 컴포넌트 명세, 라이브·VOD 정책, 프론트 API 협의, 전체 페이지 구현 과정의 런타임·라우팅·fixture·공통 자료·사용자 이동 구조와 UI 시스템 결정
 - **목적**: 채택된 제품·프론트 결정을 다시 찾을 수 있게 하고, 현재 정본과 충돌하거나 아직 검증되지 않은 항목을 분리한다.
 
 ## 문서 우선순위
@@ -39,6 +39,9 @@
 | [0016](0016-enrollment-reapplication-and-immediate-policy.md) | 채택 | 종료 상태의 동일 레코드 재신청과 IMMEDIATE 소비 경로 유지 |
 | [0017](0017-independent-enrollment-feature-boundary.md) | 채택 | 수강 API·상태·훅을 독립 feature 경계로 통합 |
 | [0018](0018-centralized-frontend-test-directory.md) | 채택 | 프론트 테스트를 `src/test` 아래에서 책임별로 중앙 관리 |
+| [0019](0019-unified-learning-sidebar-and-caption-dock-preview.md) | UI 목업 기준 채택 | 라이브·다시보기 공통 4탭과 자막 도크 |
+| [0020](0020-student-live-dvr-playback-api.md) | 채택 | 학생 라이브 DVR 재생 API 경계와 입장 안내 |
+| [0021](0021-digital-ink-ui-system.md) | 채택 | 수묵 기반 모노톤 토큰과 Paper/Ink 화면 모드 |
 
 ## 이슈와 트러블슈팅
 
