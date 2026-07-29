@@ -340,6 +340,21 @@ th { color: var(--ink-500); font-size: .67rem; }
 .media-control-row { display: flex; gap: 7px; margin-top: 10px; }
 .media-toggle { flex: 1; border: 1px solid var(--ink-200); border-radius: 9px; padding: 9px; background: #fff; font-size: .67rem; font-weight: 700; }
 .media-toggle.is-on { border-color: var(--blue-200); background: var(--blue-50); color: var(--blue-700); }
+.quality-group { margin: 0 0 14px; padding: 0; border: 0; }
+.quality-group:last-of-type { margin-bottom: 16px; }
+.quality-group[disabled] { opacity: .55; }
+.quality-group legend { margin-bottom: 8px; padding: 0; color: var(--ink-600); font-size: .64rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.quality-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.quality-option { position: relative; display: grid; gap: 3px; padding: 10px 11px; border: 1px solid var(--ink-200); border-radius: 9px; background: #fff; cursor: pointer; }
+.quality-option:has(input:focus-visible) { outline: 2px solid var(--blue-500); outline-offset: 2px; }
+.quality-option input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.quality-option__label { color: var(--ink-900); font-size: .74rem; font-weight: 800; }
+.quality-option__rate { color: var(--ink-500); font-size: .6rem; font-variant-numeric: tabular-nums; }
+.quality-option__hint { color: var(--ink-600); font-size: .62rem; line-height: 1.45; }
+.quality-option.is-selected { border-color: var(--blue-200); background: var(--blue-50); }
+.quality-option.is-selected .quality-option__label { color: var(--blue-700); }
+.quality-group[disabled] .quality-option { cursor: default; }
+@media (max-width: 720px) { .quality-options { grid-template-columns: 1fr; } }
 .summary-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
 .processing-steps { display: grid; gap: 0; margin: 0 0 18px; padding: 0; list-style: none; }
 .processing-steps li { position: relative; display: flex; align-items: center; gap: 13px; min-height: 58px; }
