@@ -5,6 +5,7 @@ import com.liveclass.video.config.EgressProperties;
 import io.livekit.server.AudioMixing;
 import io.livekit.server.EgressServiceClient;
 import livekit.LivekitEgress;
+import livekit.LivekitModels;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -54,10 +55,10 @@ public class LiveKitEgressControl implements EgressControl {
                 .setS3(s3)
                 .build();
         try {
-            // preset을 안 주면 Egress 기본값 720p로 합성한다. 강사가 1080p 화면공유를 올려도 720p로
-            // 다운스케일돼 코드·슬라이드 글자가 뭉갠다(EC2 실측). options는 null 허용, audioMixing은 non-null 필수.
+            // 프리셋 대신 값으로 넘긴다 — 프리셋에는 30fps 고정본만 있어 프레임률을 낮출 수 없다.
+            // preset과 advanced는 배타적이라 preset 자리에 null을 준다. audioMixing은 non-null 필수.
             Response<LivekitEgress.EgressInfo> res = client.startRoomCompositeEgress(
-                    roomName, output, egress.layout(), encodingPreset(), null, false, false, "",
+                    roomName, output, egress.layout(), null, encodingOptions(), false, false, "",
                     AudioMixing.DEFAULT_MIXING).execute();
             if (!res.isSuccessful() || res.body() == null) {
                 throw new EgressControlException("Egress 시작 실패: HTTP " + res.code());
@@ -123,16 +124,30 @@ public class LiveKitEgressControl implements EgressControl {
     }
 
     /**
-     * 합성 출력 인코딩 프리셋. 설정값이 열거형에 없으면 기본값으로 떨어뜨린다 —
-     * 오타 하나로 녹화 자체가 죽는 것보다 낫다(녹화는 best-effort 경로다).
+     * 합성 출력 인코딩 옵션.
+     *
+     * <p>프리셋({@code H264_1080P_30} 등)은 30fps 고정이라 프레임률을 낮출 수 없어 값으로 넘긴다.
+     * 코덱·비트레이트·샘플레이트는 기존 프리셋과 동일하게 맞추고 프레임률만 내린다 — 그래야
+     * 이 변경의 효과가 프레임률 하나로 귀결되어 판단이 흐려지지 않는다.
+     *
+     * <p><b>모든 필드를 명시한다.</b> 프로토버프는 미설정 정수를 0으로 보내고 Egress는 그것을
+     * "기본값"이 아니라 "0 fps / 0 kbps"로 받는다. 하나라도 비우면 오디오가 사라지거나 녹화가 깨진다.
+     *
+     * <p>키프레임 간격은 세그먼트 길이에 맞춘다. HLS 세그먼트는 키프레임에서 시작해야 하므로,
+     * GOP가 세그먼트보다 길면 Egress가 경계마다 키프레임을 강제로 끼워 넣어 비트를 낭비한다.
      */
-    private LivekitEgress.EncodingOptionsPreset encodingPreset() {
-        try {
-            return LivekitEgress.EncodingOptionsPreset.valueOf(egress.encodingPreset());
-        } catch (IllegalArgumentException | NullPointerException e) {
-            log.warn("알 수 없는 Egress 프리셋 '{}' — 기본값 사용", egress.encodingPreset());
-            return LivekitEgress.EncodingOptionsPreset.H264_1080P_30;
-        }
+    private LivekitEgress.EncodingOptions encodingOptions() {
+        return LivekitEgress.EncodingOptions.newBuilder()
+                .setWidth(egress.encodingWidth())
+                .setHeight(egress.encodingHeight())
+                .setFramerate(egress.framerate())
+                .setVideoCodec(LivekitModels.VideoCodec.H264_MAIN)
+                .setVideoBitrate(egress.videoBitrateKbps())
+                .setKeyFrameInterval(egress.segmentDurationSeconds())
+                .setAudioCodec(LivekitModels.AudioCodec.AAC)
+                .setAudioBitrate(egress.audioBitrateKbps())
+                .setAudioFrequency(egress.audioFrequency())
+                .build();
     }
 
     @Override

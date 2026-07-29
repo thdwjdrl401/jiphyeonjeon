@@ -103,8 +103,18 @@ livekit:
     # 세그먼트가 짧으면 버퍼가 그만큼 얇아져(엣지 뒤 2개 = 2초) 네트워크가 조금만 흔들려도 바닥난다.
     # 화면공유는 비트레이트가 크게 튀는 구간이 있어 특히 취약했다. 지연보다 끊김 없는 재생이 우선이다.
     segment-duration-seconds: ${EGRESS_SEGMENT_DURATION:2}
-    # 합성 해상도. 안 주면 Egress 기본 720p라 1080p 화면공유가 다운스케일된다.
-    encoding-preset: ${EGRESS_ENCODING_PRESET:H264_1080P_30}
+    # 합성 출력 인코딩. 프리셋(H264_1080P_30 등)은 30fps 고정이라 값으로 직접 넘긴다.
+    # 안 주면 Egress 기본 720p라 1080p 송출이 다운스케일된다.
+    encoding-width: ${EGRESS_ENCODING_WIDTH:1920}
+    encoding-height: ${EGRESS_ENCODING_HEIGHT:1080}
+    # 강의 화면(슬라이드·코드·말하는 사람)에 30fps는 낭비다. 15로 낮추면 Egress 인코딩 부하가 절반이
+    # 되고, 같은 비트레이트가 프레임당 두 배로 쓰여 정지 화면의 글자가 오히려 또렷해진다.
+    # 움직임이 많은 콘텐츠로 성격이 바뀌면 30으로 올린다.
+    framerate: ${EGRESS_FRAMERATE:15}
+    # H264_1080P_30 프리셋과 같은 값 — 프레임률만 바뀌었을 때의 효과를 분리해 보기 위함이다.
+    video-bitrate-kbps: ${EGRESS_VIDEO_BITRATE_KBPS:4500}
+    audio-bitrate-kbps: ${EGRESS_AUDIO_BITRATE_KBPS:128}
+    audio-frequency: ${EGRESS_AUDIO_FREQUENCY:44100}
     playlist-name: index.m3u8
     live-playlist-name: live.m3u8
     layout: grid
