@@ -8,8 +8,11 @@ Python 소유 pgvector ACTIVE index를 함께 검색한다.
 ```bash
 cd ai/ai-api
 uv sync --frozen
-uv run --frozen python -m app.main
+uv run --frozen --env-file ../.env python -m app.main
 ```
+
+로컬 환경변수는 `ai/ai-api/`가 아니라 [`ai/env.example`](../env.example)에 realtime-agent와 함께
+정리되어 있다. `ai/env.example`을 `ai/.env`로 복사해서 채운다(git 무시됨).
 
 - `GET /healthz`: 프로세스 생존
 - `GET /readyz`: application lifespan 준비 상태

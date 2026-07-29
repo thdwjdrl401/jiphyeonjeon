@@ -24,7 +24,8 @@ Spring 쪽 서명 발급기가 아직 없어 실제 상호 인증까지는 안 �
 계약 테스트, Java live caption dispatch/consumer, multi-replica registry와 실제 GMS·Spring E2E는
 후속 협업 gate다.
 
-실행과 검증 명령은 각 서비스 README를 따른다.
+실행과 검증 명령은 각 서비스 README를 따른다. ai-api·realtime-agent를 로컬에서 같이 띄울 때 쓰는
+환경변수는 [`env.example`](env.example)에 모아뒀다 — `ai/.env`로 복사해 채운다(git 무시).
 
 ## realtime-agent 통신 요약
 
