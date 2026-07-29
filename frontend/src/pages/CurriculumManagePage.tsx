@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent as ReactDragEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, useLocation, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { instructorPaths, publicPaths } from '@/app/router/paths'
 import CurriculumAssetsFields from '@/features/curriculum/CurriculumAssetsFields'
 import CurriculumPublishPanel from '@/features/curriculum/CurriculumPublishPanel'
 import { type CurriculumImageSelection } from '@/features/curriculum/CurriculumImageField'
 import {
+  deleteCurriculum,
   deleteLesson,
   deleteSection,
   getCurriculumManagementStructure,
@@ -156,6 +157,8 @@ function CurriculumManageEditor({
   const toast = useToast()
   const [draggedLesson, setDraggedLesson] = useState<DraggedLesson | null>(null)
   const [lessonDropTarget, setLessonDropTarget] = useState<LessonDropTarget | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const navigate = useNavigate()
 
   const queryClient = useQueryClient()
   const structureVersionRef = useRef(structureVersion)
@@ -268,6 +271,30 @@ function CurriculumManageEditor({
     queryClient.invalidateQueries({ queryKey: ['my-curriculums'] })
     queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] })
     queryClient.invalidateQueries({ queryKey: ['curriculums'] })
+  }
+
+  /**
+   * 초안 삭제. 공개된 커리큘럼은 수강 이력이 붙을 수 있어 서버가 409로 막는다(ADR-0001) — 보관으로 안내한다.
+   * 삭제에 성공하면 이 화면이 가리키던 대상이 사라지므로 목록으로 되돌린다.
+   */
+  const removeCurriculum = async () => {
+    if (!window.confirm(`초안 "${curriculumInfo.title || storedCurriculum.title}"을(를) 삭제할까요? 섹션과 강의도 함께 사라지며 되돌릴 수 없습니다.`)) return
+
+    setIsDeleting(true)
+    try {
+      await deleteCurriculum(curriculumId)
+      queryClient.removeQueries({ queryKey: ['curriculum-management', curriculumId] })
+      queryClient.invalidateQueries({ queryKey: ['my-curriculums'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] })
+      queryClient.invalidateQueries({ queryKey: ['curriculums'] })
+      toast.success('커리큘럼을 삭제했습니다.')
+      navigate(instructorPaths.curriculums, { replace: true })
+    } catch (error) {
+      toast.error(error instanceof ApiError && error.code === 'CURRICULUM_STATE_CONFLICT'
+        ? '이미 공개된 커리큘럼은 삭제할 수 없어요. 먼저 보관 처리해 주세요.'
+        : '커리큘럼을 삭제하지 못했습니다.')
+      setIsDeleting(false)
+    }
   }
 
   /**
@@ -599,6 +626,9 @@ function CurriculumManageEditor({
             totalLessonCount={totalLessonCount}
             isPubliclyVisible={isPubliclyVisible}
             onPublish={(includeLessons) => void runPublish(includeLessons)}
+            canDelete={isNewDraft}
+            isDeleting={isDeleting}
+            onDelete={() => void removeCurriculum()}
           />
         </div>
       )}

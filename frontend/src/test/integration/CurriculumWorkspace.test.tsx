@@ -105,6 +105,33 @@ describe('커리큘럼 작업 화면', () => {
     expect(screen.queryByText(/아직 공개 목차에 보이지 않습니다/)).not.toBeInTheDocument()
   })
 
+  // 삭제는 초안에서만(ADR-0001). 게시와 함께 구성 탭 맨 아래 게시 카드에 모아 뒀다.
+  it('초안 커리큘럼은 게시 카드 안에서 삭제할 수 있다', async () => {
+    await renderAsInstructor('/instructor/curriculums/cur-architecture/manage')
+    const publishPanel = (await screen.findByRole('heading', { name: '커리큘럼 게시' })).closest('section')!
+
+    expect(within(publishPanel).getByRole('button', { name: '커리큘럼 삭제' })).toBeInTheDocument()
+    expect(within(publishPanel).getByRole('button', { name: '강의 7개와 함께 게시' })).toBeInTheDocument()
+  })
+
+  it('이미 공개된 커리큘럼에는 삭제 버튼을 두지 않는다', async () => {
+    await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
+    await screen.findByRole('heading', { name: '커리큘럼 게시' })
+
+    expect(screen.queryByRole('button', { name: '커리큘럼 삭제' })).not.toBeInTheDocument()
+  })
+
+  it('초안을 삭제하면 내 커리큘럼 목록으로 돌아간다', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    await renderAsInstructor('/instructor/curriculums/cur-architecture/manage')
+
+    await user.click(await screen.findByRole('button', { name: '커리큘럼 삭제' }))
+
+    await waitFor(() => expect(window.location.pathname).toBe('/instructor/curriculums'))
+    expect(getMockCurriculum('cur-architecture')).toBeNull()
+  })
+
   // 수강 방식은 강사 승인 하나뿐이라 고르게 하지 않고 안내만 한다.
   it('새 커리큘럼은 수강 방식을 고르지 않고 강사 승인 방식임을 안내한다', async () => {
     await renderAsInstructor('/instructor/curriculums/new')
@@ -398,10 +425,38 @@ describe('커리큘럼 작업 화면', () => {
       'href',
       '/instructor/curriculums/new',
     )
-    for (const detailLink of await within(operatingPanel!).findAllByRole('link', { name: '커리큘럼 상세' })) {
-      expect(detailLink).toHaveAttribute('href', expect.stringMatching(/^\/curriculums\/.+/))
+    // 상세 진입점은 카드 제목 링크다 — 별도 "커리큘럼 상세" 버튼은 없앴다.
+    const titleLinks = (await within(operatingPanel!).findAllByRole('heading', { level: 3 }))
+      .map((heading) => within(heading).getByRole('link'))
+    expect(titleLinks.length).toBeGreaterThan(0)
+    for (const titleLink of titleLinks) {
+      expect(titleLink).toHaveAttribute('href', expect.stringMatching(/^\/curriculums\/.+/))
     }
+    expect(within(operatingPanel!).queryByRole('link', { name: '커리큘럼 상세' })).not.toBeInTheDocument()
     expect(within(operatingPanel!).queryByRole('link', { name: '관리하기' })).not.toBeInTheDocument()
+  })
+
+  // 목록은 탐색·진입만 맡는다. 삭제 같은 상태 변경은 관리 화면으로 모았다.
+  it('내 커리큘럼 카드에는 관리 버튼만 남기고 삭제 버튼은 두지 않는다', async () => {
+    await renderAsInstructor('/instructor/curriculums')
+    const operatingHeading = await screen.findByRole('heading', { name: '운영 중인 커리큘럼' })
+    const operatingPanel = operatingHeading.closest('section')!
+
+    for (const manageLink of await within(operatingPanel).findAllByRole('link', { name: '관리' })) {
+      expect(manageLink).toHaveAttribute('href', expect.stringMatching(/^\/instructor\/curriculums\/.+\/manage$/))
+    }
+    expect(within(operatingPanel).queryByRole('button', { name: '삭제' })).not.toBeInTheDocument()
+  })
+
+  it('카드 제목을 누르면 커리큘럼 상세로, 관리 버튼을 누르면 관리 화면으로 간다', async () => {
+    const user = userEvent.setup()
+    await renderAsInstructor('/instructor/curriculums')
+    const operatingHeading = await screen.findByRole('heading', { name: '운영 중인 커리큘럼' })
+    const operatingPanel = operatingHeading.closest('section')!
+
+    // 카드가 통째로 링크라도 관리 버튼은 제 목적지로 가야 한다.
+    await user.click((await within(operatingPanel).findAllByRole('link', { name: '관리' }))[0])
+    await waitFor(() => expect(window.location.pathname).toMatch(/^\/instructor\/curriculums\/.+\/manage$/))
   })
 
   it('강사 프로필을 수정하면서 운영 커리큘럼 버튼은 표시하지 않는다', async () => {

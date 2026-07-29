@@ -16,6 +16,10 @@ interface CurriculumPublishPanelProps {
   /** 커리큘럼 PUBLISHED AND 게시된 강의 1개 이상(ADR-0002). */
   isPubliclyVisible: boolean
   onPublish: (includeLessons: boolean) => void
+  /** 초안(DRAFT)만 삭제할 수 있다 — 공개된 적 있으면 서버가 409로 막는다(ADR-0001). */
+  canDelete: boolean
+  isDeleting: boolean
+  onDelete: () => void
 }
 
 /**
@@ -32,6 +36,9 @@ export default function CurriculumPublishPanel({
   totalLessonCount,
   isPubliclyVisible,
   onPublish,
+  canDelete,
+  isDeleting,
+  onDelete,
 }: CurriculumPublishPanelProps) {
   return (
     <Panel title="커리큘럼 게시" description="기본 정보와 구성을 모두 확인한 뒤 마지막으로 공개합니다.">
@@ -78,6 +85,19 @@ export default function CurriculumPublishPanel({
           </button>
         </div>
       </div>
+
+      {/* 게시와 삭제 모두 커리큘럼 상태를 바꾸는 동작이라 이 카드에 모아 둔다. 되돌릴 수 없는 쪽을 아래에. */}
+      {canDelete && (
+        <div className="curriculum-danger-zone">
+          <div>
+            <strong>커리큘럼 삭제</strong>
+            <p>섹션과 강의도 함께 사라지며 되돌릴 수 없어요. 공개한 뒤에는 삭제할 수 없습니다.</p>
+          </div>
+          <button className="button button--ghost button--danger" type="button" disabled={isDeleting} onClick={onDelete}>
+            {isDeleting ? '삭제 중' : '커리큘럼 삭제'}
+          </button>
+        </div>
+      )}
     </Panel>
   )
 }
