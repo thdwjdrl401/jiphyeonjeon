@@ -5,6 +5,7 @@ import io.livekit.server.AccessToken;
 import io.livekit.server.CanPublish;
 import io.livekit.server.CanPublishData;
 import io.livekit.server.CanSubscribe;
+import io.livekit.server.CanUpdateOwnMetadata;
 import io.livekit.server.RoomJoin;
 import io.livekit.server.RoomName;
 import org.springframework.stereotype.Service;
@@ -40,7 +41,11 @@ public class LiveKitTokenService {
                 new RoomName(roomName),
                 new CanSubscribe(true),
                 new CanPublish(publisher),
-                new CanPublishData(publisher));
+                new CanPublishData(publisher),
+                // 강사가 합성 화면의 카메라 배치를 자기 participant metadata에 쓴다. Egress 템플릿이
+                // 그 값을 읽어 같은 자리에 그리므로, 강사가 보는 화면과 수강생이 보는 녹화가 일치한다.
+                // 남의 metadata는 못 건드리고(Own) 수강생 토큰에는 주지 않는다.
+                new CanUpdateOwnMetadata(publisher));
 
         return new IssuedToken(token.toJwt(), expiresAt, publisher);
     }
