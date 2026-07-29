@@ -392,8 +392,8 @@ body {
   background: var(--ink-100);
 }
 
-.curriculum-cover img { transition: filter .25s ease, transform .35s ease; filter: grayscale(1) sepia(.06) contrast(.96); }
-.curriculum-card:hover .curriculum-cover img { filter: grayscale(1) sepia(.04) contrast(1.08); transform: scale(1.025); }
+.curriculum-cover img { transition: transform .35s ease; }
+.curriculum-card:hover .curriculum-cover img { transform: scale(1.025); }
 .curriculum-card__body { padding: 19px 0 0; }
 .curriculum-card__meta { font-size: .72rem; }
 .curriculum-card h3 { margin: 12px 0 8px; font-size: 1.12rem; font-weight: 400; letter-spacing: -.025em; }
@@ -855,7 +855,6 @@ body {
 .session-summary__date,
 .big-schedule > div { border: 0; border-radius: 0; background: var(--ink-950); box-shadow: none; }
 .dashboard-curriculum-card { grid-template-columns: 150px minmax(0,1fr); overflow: hidden; }
-.dashboard-curriculum-card__cover { filter: grayscale(1); }
 .dashboard-curriculum-card__content { padding: 22px; }
 .dashboard-curriculum-card h3 { font-weight: 400; letter-spacing: -.02em; }
 .workspace-tabs { padding: 0; border: 0; border-bottom: 1px solid var(--border-medium); background: transparent; }
