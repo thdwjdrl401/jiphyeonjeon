@@ -1,5 +1,4 @@
 import type { CurriculumDetailResponse } from '@/features/curriculum/types'
-import { instructorPaths } from '@/app/router/paths'
 
 export type PrimaryAction =
   | { kind: 'link'; label: string; to: string }
@@ -11,10 +10,7 @@ export type PrimaryAction =
 export function resolvePrimaryAction(detail: CurriculumDetailResponse, returnTo: string): PrimaryAction {
   const { relationship, allowedActions } = detail.viewerContext
 
-  if (relationship === 'OWNER_INSTRUCTOR') {
-    return { kind: 'link', label: '관리하기', to: instructorPaths.curriculumManage(detail.curriculumId) }
-  }
-
+  // 강사(담당·비담당)의 관리·안내 동선은 InstructorManagementCard가 전담한다.
   if (relationship === 'ENROLLED') {
     return { kind: 'enrollmentStatus', label: '수강 중', cancelLabel: '수강 취소' }
   }
