@@ -85,6 +85,18 @@ export default function InstructorPreflightPage() {
   }, [navigate, queryClient, sessionId, startStatusQuery.data])
 
   const serverReady = readinessQuery.data?.ready === true
+  const serverCheckTone = readinessQuery.isError
+    ? 'danger'
+    : serverReady
+      ? 'success'
+      : 'info'
+  const serverCheckMessage = !localPublisherReady
+    ? 'LiveKit 연결과 마이크 송출이 확인되면 서버 점검을 자동으로 시작합니다.'
+    : readinessQuery.isError
+      ? '서버 상태를 확인하지 못했습니다. 잠시 후 자동으로 다시 확인합니다.'
+      : serverReady
+        ? '서버 점검 완료 · 강사 연결과 마이크 송출 상태가 정상입니다.'
+        : 'LiveKit 서버에서 강사 연결과 마이크 송출 상태를 확인하고 있습니다.'
   const starting = startMutation.isPending || startStatusQuery.data?.attemptStatus === 'IN_PROGRESS'
   const ready = localPublisherReady && serverReady && !starting
   const startFailure = startStatusQuery.data?.attemptStatus === 'FAILED'
@@ -240,14 +252,7 @@ export default function InstructorPreflightPage() {
               </StatusBadge>
             </li>
           </ul>
-          <button
-            className="button button--soft button--full"
-            type="button"
-            disabled={!localPublisherReady || readinessQuery.isFetching}
-            onClick={() => { void readinessQuery.refetch() }}
-          >
-            {serverReady ? '서버 점검 완료' : readinessQuery.isFetching ? '점검 중...' : '최신 상태 점검'}
-          </button>
+          <InlineNotice tone={serverCheckTone}>{serverCheckMessage}</InlineNotice>
         </Panel>
       </div>
 
