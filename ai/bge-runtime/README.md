@@ -64,8 +64,9 @@ Java/FE 공유 계약인 `docs/CONTRACT.md` 대상이 아니다.
 ## EC2 ai-worker 연결
 
 교차 호스트 운영은 [`start_ec2_reverse_tunnel.sh`](scripts/start_ec2_reverse_tunnel.sh)를 사용한다. 실행·검증은
-[scripts README](scripts/README.md), 책임과 대안은
-[ADR-0029](../../docs/decisions/canola/0029-gpu-bge-ec2-ai-worker-connectivity.md)를 정본으로 삼는다.
+[scripts README](scripts/README.md), 무권한 자동 배포는 [deploy README](deploy/README.md), 책임과 대안은
+[ADR-0029](../../docs/decisions/canola/0029-gpu-bge-ec2-ai-worker-connectivity.md)와
+[ADR-0031](../../docs/decisions/canola/0031-bge-rootless-gpu-deployment.md)을 정본으로 삼는다.
 
 ## 설정
 
