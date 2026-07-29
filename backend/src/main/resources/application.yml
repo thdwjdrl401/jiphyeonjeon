@@ -183,6 +183,16 @@ liveclass:
   # 라이브 자막 Redis Stream consumer(ADR-0043, CONTRACT §3-4). 소비 대상은 spring.data.redis가
   # 가리키는 프로필 구동 Redis다(로컬=localhost, remote=EC2 :4000 application Redis). ai-api가
   # ai-rag-live-v1로 이미 소비하므로 Spring은 반드시 별도 그룹을 쓴다.
+  # Spring→ai-api RAG SSE 프록시(ADR-0046, CONTRACT §3-9). 브라우저는 Spring만 호출한다.
+  ai:
+    # compose 내부망 서비스명. 로컬에 ai-api가 없으면 연결 실패 → 503 AI_ANSWER_UNAVAILABLE(무해).
+    api-base-url: ${AI_API_BASE_URL:http://ai-api:8010}
+    # HMAC 공유 시크릿. 콜백용 AI_CALLBACK_SECRET과 **다른 값**이다(docs/ai/CONTRACT.md §3.2).
+    # 운영은 env 주입(커밋 금지). 값이 틀리면 ai-api가 401 → 502 AI_ANSWER_UPSTREAM_REJECTED.
+    internal-secret: ${AI_INTERNAL_SECRET:dev-ai-internal-secret}
+    connect-timeout: ${AI_API_CONNECT_TIMEOUT:3s}
+    # 스트리밍이라 길게. 브라우저 SSE emitter 타임아웃도 이 값을 그대로 쓴다.
+    stream-timeout: ${AI_API_STREAM_TIMEOUT:5m}
   caption:
     enabled: ${CAPTION_CONSUMER_ENABLED:true}
     stream-key: ${CAPTION_STREAM_KEY:ai:captions:live}   # 전역 키(producer env와 정합)

@@ -67,10 +67,12 @@ public class UnhandledExceptionHandler {
         ErrorResponse body = ErrorResponse.of("INTERNAL_ERROR", "요청을 처리하지 못했습니다.");
         // traceId는 MDC에 있어 로그 패턴에 자동으로 붙는다. 본문 correlationId와 같은 값이다.
         log.error("처리되지 않은 예외 correlationId={}", body.correlationId(), e);
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
+        return ErrorResponses.of(HttpStatus.INTERNAL_SERVER_ERROR, body);
     }
 
+    // Content-Type을 못박는다 — Accept: text/event-stream인 SSE 요청에서 JSON 협상에 실패하면
+    // 오류 봉투 대신 원래 예외가 그대로 새어나간다(ErrorResponses 참고).
     private ResponseEntity<ErrorResponse> status(HttpStatus status, String code, String message) {
-        return ResponseEntity.status(status).body(ErrorResponse.of(code, message));
+        return ErrorResponses.of(status, code, message);
     }
 }
