@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { instructorPaths } from '@/app/router/paths'
+import InstructorLocalTrackVideo from '@/features/live-session/InstructorLocalTrackVideo'
 import { useInstructorLiveKit } from '@/features/live-session/useInstructorLiveKit'
 import {
   CAMERA_QUALITIES,
@@ -46,6 +47,7 @@ export default function InstructorPreflightPage() {
   const localPublisherReady = (
     publisher.connectionState === 'connected' || publisher.connectionState === 'mock'
   ) && publisher.microphoneEnabled
+  const cameraTrack = publisher.cameraEnabled ? publisher.cameraTrack : undefined
   const readinessQuery = useQuery({
     queryKey: ['live-session-preflight-readiness', sessionId, publisher.mediaRevision],
     queryFn: () => getPreflightReadiness(sessionId),
@@ -161,9 +163,29 @@ export default function InstructorPreflightPage() {
 
       <div className="preflight-grid">
         <Panel title="실제 송출 장치" description="이 연결과 트랙은 LIVE 전환 뒤 강의실에서도 그대로 사용합니다.">
-          <div className="camera-preview">
-            <div className="camera-avatar">이</div>
-            <span>{publisher.cameraEnabled ? '카메라 미리보기 송출 중' : '카메라는 선택 사항입니다'}</span>
+          <div className={`camera-preview${cameraTrack ? ' camera-preview--active' : ''}`}>
+            {cameraTrack ? (
+              <>
+                <InstructorLocalTrackVideo
+                  className="camera-preview__video"
+                  fit="contain"
+                  label="사전 점검 카메라 미리보기"
+                  track={cameraTrack}
+                />
+                <span className="camera-preview__status">카메라 미리보기 송출 중</span>
+              </>
+            ) : (
+              <>
+                <div className="camera-avatar">이</div>
+                <span>
+                  {publisher.connectionState === 'mock'
+                    ? 'Mock 모드에서는 실제 카메라 화면을 표시하지 않습니다'
+                    : publisher.cameraEnabled
+                      ? '카메라 미리보기를 준비하는 중입니다'
+                      : '카메라는 선택 사항입니다'}
+                </span>
+              </>
+            )}
           </div>
           <div className="media-control-row">
             <button
