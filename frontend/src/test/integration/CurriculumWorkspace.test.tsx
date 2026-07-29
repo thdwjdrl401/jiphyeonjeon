@@ -28,14 +28,40 @@ describe('커리큘럼 작업 화면', () => {
     vi.restoreAllMocks()
   })
 
+  // 탭은 작성 흐름(기본 정보 → 구성 → 게시)대로 보이되, 진입은 초안 작업을 이어 갈 구성 탭이다.
+  it('관리 화면 탭은 기본 정보·구성·수강생 순으로 보이고 구성 탭으로 진입한다', async () => {
+    await renderAsInstructor('/instructor/curriculums/cur-architecture/manage')
+
+    const tablist = await screen.findByRole('tablist')
+    const labels = within(tablist).getAllByRole('button').map((button) => button.textContent)
+    expect(labels).toEqual(['기본 정보', '구성', '수강생'])
+    expect(within(tablist).getByRole('button', { name: '구성' })).toHaveClass('is-active')
+
+    // 진입 탭이 구성이므로 섹션 편집과 게시 카드가 함께 보인다.
+    expect(screen.getByRole('heading', { name: '섹션과 강의' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '커리큘럼 게시' })).toBeInTheDocument()
+  })
+
+  it('게시 카드는 기본 정보 탭이 아니라 구성 탭에만 있다', async () => {
+    const user = userEvent.setup()
+    await renderAsInstructor('/instructor/curriculums/cur-architecture/manage')
+    await screen.findByRole('heading', { name: '커리큘럼 게시' })
+
+    await user.click(screen.getByRole('button', { name: '기본 정보' }))
+
+    expect(await screen.findByRole('heading', { name: '대표 이미지와 강의 자료' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '커리큘럼 게시' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /함께 게시$/ })).not.toBeInTheDocument()
+  })
+
   // 공개 = 커리큘럼 PUBLISHED AND 강의 PUBLISHED(ADR-0002). 주 버튼 한 번으로 그 상태에 도달해야 한다.
   it('초안 강의가 있으면 주 버튼 한 번으로 강의와 커리큘럼을 함께 게시한다', async () => {
     const user = userEvent.setup()
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     // cur-architecture는 DRAFT 커리큘럼이라 시드 강의 7개가 모두 DRAFT다.
     await renderAsInstructor('/instructor/curriculums/cur-architecture/manage')
-    await user.click(await screen.findByRole('button', { name: '기본 정보' }))
 
+    // 게시 카드는 진입 기본 탭인 구성 맨 아래에 있다 — 탭을 옮기지 않아도 보인다.
     expect(await screen.findByText(/게시하면 초안 강의/)).toBeInTheDocument()
     expect(screen.getByText('커리큘럼 비공개 · 게시된 강의 0/7개 — 게시해야 수강생에게 보입니다.')).toBeInTheDocument()
 
@@ -50,9 +76,7 @@ describe('커리큘럼 작업 화면', () => {
 
   // 게시된 강의가 하나도 없으면 커리큘럼만 공개해 봐야 목차가 빈 커리큘럼이 노출된다 — 우회로를 막는다.
   it('게시된 강의가 없으면 커리큘럼만 게시하는 우회로를 열지 않는다', async () => {
-    const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/cur-architecture/manage')
-    await user.click(await screen.findByRole('button', { name: '기본 정보' }))
 
     expect(await screen.findByRole('button', { name: '강의 7개와 함께 게시' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '커리큘럼만 게시' })).not.toBeInTheDocument()
@@ -72,10 +96,8 @@ describe('커리큘럼 작업 화면', () => {
   })
 
   it('이미 전부 공개된 커리큘럼은 게시 동작을 비활성한다', async () => {
-    const user = userEvent.setup()
     // cur-spring-live는 PUBLISHED 커리큘럼이고 시드 강의도 모두 PUBLISHED다.
     await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
-    await user.click(await screen.findByRole('button', { name: '기본 정보' }))
 
     expect(await screen.findByRole('button', { name: '게시 완료' })).toBeDisabled()
     expect(screen.getByText('공개 중')).toBeInTheDocument()

@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { instructorPaths, publicPaths } from '@/app/router/paths'
 import CurriculumAssetsFields from '@/features/curriculum/CurriculumAssetsFields'
+import CurriculumPublishPanel from '@/features/curriculum/CurriculumPublishPanel'
 import { type CurriculumImageSelection } from '@/features/curriculum/CurriculumImageField'
 import {
   deleteLesson,
@@ -41,6 +42,18 @@ interface CurriculumDraftState {
 type ManageTab = 'structure' | 'info' | 'enrollees'
 
 /**
+ * 탭의 표시 순서. 작성 흐름(기본 정보 → 구성 → 게시)대로 읽히게 둔다.
+ * 진입 기본 탭은 이 순서와 무관하게 DEFAULT_MANAGE_TAB이다 — 초안 생성 직후 바로 구성을 이어 가야 한다.
+ */
+const MANAGE_TABS: ReadonlyArray<{ id: ManageTab; label: string }> = [
+  { id: 'info', label: '기본 정보' },
+  { id: 'structure', label: '구성' },
+  { id: 'enrollees', label: '수강생' },
+]
+
+const DEFAULT_MANAGE_TAB: ManageTab = 'structure'
+
+/**
  * 발행 버튼은 DRAFT에서만 의미가 있다 — 서버가 DRAFT 외의 전이를 409로 막는다
  * (InstructorCurriculumService.publish). 상태를 화면의 단일 출처로 삼는다.
  *
@@ -70,7 +83,7 @@ export default function CurriculumManagePage() {
   const routeState = location.state as CurriculumDraftState | null
   // 탭은 재seed(key 교체)로 리셋되면 안 되므로 키 바깥에 둔다 — 일괄 게시나 강의 삭제 뒤에
   // 보고 있던 탭에서 계속 작업할 수 있어야 한다.
-  const [tab, setTab] = useState<ManageTab>('structure')
+  const [tab, setTab] = useState<ManageTab>(DEFAULT_MANAGE_TAB)
   const managementQuery = useQuery({
     queryKey: ['curriculum-management', curriculumId],
     queryFn: async () => {
@@ -492,83 +505,102 @@ function CurriculumManageEditor({
       />
       {saveError && <InlineNotice tone="danger">{saveError}</InlineNotice>}
       <div className="metric-grid"><MetricCard label="상태" value={storedCurriculum.lifecycleStatus} helper={isNewDraft ? '게시 전' : '운영 중'} /><MetricCard label="섹션" value={sections.length} /><MetricCard label="전체 강의" value={sections.reduce((sum, section) => sum + section.lessons.length, 0)} /><MetricCard label="수강생" value={storedCurriculum.enrolleeCount ?? '--'} /></div>
-      <div className="workspace-tabs" role="tablist"><button className={tab === 'structure' ? 'is-active' : ''} onClick={() => onTabChange('structure')} type="button">구성</button><button className={tab === 'info' ? 'is-active' : ''} onClick={() => onTabChange('info')} type="button">기본 정보</button><button className={tab === 'enrollees' ? 'is-active' : ''} onClick={() => onTabChange('enrollees')} type="button">수강생</button></div>
+      <div className="workspace-tabs" role="tablist">
+        {MANAGE_TABS.map(({ id, label }) => (
+          <button key={id} className={tab === id ? 'is-active' : ''} type="button" onClick={() => onTabChange(id)}>
+            {label}
+          </button>
+        ))}
+      </div>
 
+      {/* 구성 → 게시 순으로 읽어 내려가며 편성을 마치고 그 자리에서 공개한다. */}
       {tab === 'structure' && (
-        <Panel title="섹션과 강의" description="강의를 드래그해 순서를 바꾸거나 다른 섹션으로 옮길 수 있습니다.">
-          {/* 섹션마다 반복하지 않고 여기 한 번만 안내한다(삭제 제약 포함). */}
-          <InlineNotice tone="info"><strong>섹션</strong>은 대단원(챕터), <strong>강의</strong>는 그 안의 개별 수업이에요. 먼저 섹션을 추가하면 자동 저장된 뒤, 그 섹션의 “강의 추가”로 강의를 넣을 수 있어요. 강의가 포함된 섹션은 삭제할 수 없습니다. 먼저 강의를 삭제하거나 다른 섹션으로 이동한 뒤 섹션을 삭제해주세요.</InlineNotice>
-          <div className="structure-list">
-            {sections.map((section, sectionIndex) => (
-              <article className={`structure-section${lessonDropTarget?.sectionId === section.sectionId ? ' is-lesson-drop-target' : ''}`} key={section.sectionId}>
-                {/* 라벨·액션이 첫 줄, 입력창은 그 아래 전폭 — 버튼이 입력 폭을 깎지 않도록. */}
-                <header>
-                  <div className="drag-handle" aria-hidden="true">⋮⋮</div>
-                  <span className="structure-section__eyebrow">SECTION {sectionIndex + 1}</span>
-                  <div className="structure-section__fields">
-                    <label><small>섹션 이름</small><input aria-label={`섹션 ${sectionIndex + 1} 이름`} maxLength={200} value={section.title} onChange={(event) => updateSection(section.sectionId, 'title', event.target.value)} /></label>
-                    <label><small>섹션 설명</small><textarea aria-label={`섹션 ${sectionIndex + 1} 설명`} rows={2} value={section.description} onChange={(event) => updateSection(section.sectionId, 'description', event.target.value)} /></label>
-                  </div>
-                  <div className="structure-actions">
-                    <button aria-label="섹션 위로" disabled={sectionIndex === 0} onClick={() => moveSection(sectionIndex, -1)} type="button">↑</button>
-                    <button aria-label="섹션 아래로" disabled={sectionIndex === sections.length - 1} onClick={() => moveSection(sectionIndex, 1)} type="button">↓</button>
-                    {section.sectionId.startsWith('sec-new-')
-                      ? <button className="button button--soft button--small" type="button" disabled title="새 섹션이 자동 저장된 뒤에 강의를 추가할 수 있어요.">강의 추가</button>
-                      : <Link className="button button--soft button--small" to={instructorPaths.newLesson(curriculumId, section.sectionId)}>강의 추가</Link>}
-                    <button
-                      className="button button--soft button--small"
-                      type="button"
-                      disabled={section.lessons.length > 0}
-                      title={section.lessons.length > 0 ? '강의가 있는 섹션은 삭제할 수 없어요. 강의를 먼저 비워 주세요.' : undefined}
-                      onClick={() => void removeSection(section.sectionId, section.lessons.length)}
-                    >섹션 삭제</button>
-                  </div>
-                </header>
-                <ul
-                  className={lessonDropTarget?.sectionId === section.sectionId && lessonDropTarget.lessonIndex === section.lessons.length ? 'is-drop-at-end' : undefined}
-                  aria-label={`${section.title} 강의 목록`}
-                  onDragOver={(event) => setLessonListDropTarget(event, section.sectionId, section.lessons.length)}
-                  onDrop={(event) => dropLesson(event, section.sectionId, section.lessons.length)}
-                >
-                  {section.lessons.map((lesson, lessonIndex) => {
-                    const isDragging = draggedLesson?.lessonId === lesson.lessonId
-                    const isDropBefore = lessonDropTarget?.sectionId === section.sectionId
-                      && lessonDropTarget.lessonIndex === lessonIndex
-                    return (
-                      <li
-                        className={`${isDragging ? 'is-dragging' : ''}${isDropBefore ? ' is-drop-before' : ''}`.trim() || undefined}
-                        key={lesson.lessonId}
-                        draggable
-                        aria-label={`${lesson.title} 강의`}
-                        onDragStart={(event) => startLessonDrag(event, section.sectionId, lesson.lessonId)}
-                        onDragOver={(event) => setLessonRowDropTarget(event, section.sectionId, lessonIndex)}
-                        onDrop={(event) => dropLesson(event, section.sectionId, lessonDropTarget?.lessonIndex ?? lessonIndex)}
-                        onDragEnd={finishLessonDrag}
-                      >
-                        <span className="lesson-drag-handle" aria-hidden="true">⋮⋮</span>
-                        <span className="lesson-order">{lessonIndex + 1}</span>
-                        <div className="lesson-info"><strong>{lesson.title}</strong><small>{lesson.status}</small></div>
-                        {/* 배지와 링크·버튼을 한 flex 컨테이너에 모아 같은 수평선에 정렬한다(각각 별도 그리드 칼럼이던 시절엔 어긋났다). */}
-                        <div className="lesson-actions">
-                          <StatusBadge tone={lesson.status === 'PUBLISHED' ? 'success' : lesson.status === 'READY' ? 'warning' : 'neutral'}>{lesson.status}</StatusBadge>
-                          <div className="row-actions">
-                            <Link to={instructorPaths.lesson(curriculumId, section.sectionId, lesson.lessonId)}>상세</Link>
-                            <button className="text-button" type="button" onClick={() => void removeLesson(section.sectionId, lesson.lessonId)}>삭제</button>
+        <>
+          <Panel title="섹션과 강의" description="강의를 드래그해 순서를 바꾸거나 다른 섹션으로 옮길 수 있습니다.">
+            {/* 섹션마다 반복하지 않고 여기 한 번만 안내한다(삭제 제약 포함). */}
+            <InlineNotice tone="info"><strong>섹션</strong>은 대단원(챕터), <strong>강의</strong>는 그 안의 개별 수업이에요. 먼저 섹션을 추가하면 자동 저장된 뒤, 그 섹션의 “강의 추가”로 강의를 넣을 수 있어요. 강의가 포함된 섹션은 삭제할 수 없습니다. 먼저 강의를 삭제하거나 다른 섹션으로 이동한 뒤 섹션을 삭제해주세요.</InlineNotice>
+            <div className="structure-list">
+              {sections.map((section, sectionIndex) => (
+                <article className={`structure-section${lessonDropTarget?.sectionId === section.sectionId ? ' is-lesson-drop-target' : ''}`} key={section.sectionId}>
+                  {/* 라벨·액션이 첫 줄, 입력창은 그 아래 전폭 — 버튼이 입력 폭을 깎지 않도록. */}
+                  <header>
+                    <div className="drag-handle" aria-hidden="true">⋮⋮</div>
+                    <span className="structure-section__eyebrow">SECTION {sectionIndex + 1}</span>
+                    <div className="structure-section__fields">
+                      <label><small>섹션 이름</small><input aria-label={`섹션 ${sectionIndex + 1} 이름`} maxLength={200} value={section.title} onChange={(event) => updateSection(section.sectionId, 'title', event.target.value)} /></label>
+                      <label><small>섹션 설명</small><textarea aria-label={`섹션 ${sectionIndex + 1} 설명`} rows={2} value={section.description} onChange={(event) => updateSection(section.sectionId, 'description', event.target.value)} /></label>
+                    </div>
+                    <div className="structure-actions">
+                      <button aria-label="섹션 위로" disabled={sectionIndex === 0} onClick={() => moveSection(sectionIndex, -1)} type="button">↑</button>
+                      <button aria-label="섹션 아래로" disabled={sectionIndex === sections.length - 1} onClick={() => moveSection(sectionIndex, 1)} type="button">↓</button>
+                      {section.sectionId.startsWith('sec-new-')
+                        ? <button className="button button--soft button--small" type="button" disabled title="새 섹션이 자동 저장된 뒤에 강의를 추가할 수 있어요.">강의 추가</button>
+                        : <Link className="button button--soft button--small" to={instructorPaths.newLesson(curriculumId, section.sectionId)}>강의 추가</Link>}
+                      <button
+                        className="button button--soft button--small"
+                        type="button"
+                        disabled={section.lessons.length > 0}
+                        title={section.lessons.length > 0 ? '강의가 있는 섹션은 삭제할 수 없어요. 강의를 먼저 비워 주세요.' : undefined}
+                        onClick={() => void removeSection(section.sectionId, section.lessons.length)}
+                      >섹션 삭제</button>
+                    </div>
+                  </header>
+                  <ul
+                    className={lessonDropTarget?.sectionId === section.sectionId && lessonDropTarget.lessonIndex === section.lessons.length ? 'is-drop-at-end' : undefined}
+                    aria-label={`${section.title} 강의 목록`}
+                    onDragOver={(event) => setLessonListDropTarget(event, section.sectionId, section.lessons.length)}
+                    onDrop={(event) => dropLesson(event, section.sectionId, section.lessons.length)}
+                  >
+                    {section.lessons.map((lesson, lessonIndex) => {
+                      const isDragging = draggedLesson?.lessonId === lesson.lessonId
+                      const isDropBefore = lessonDropTarget?.sectionId === section.sectionId
+                        && lessonDropTarget.lessonIndex === lessonIndex
+                      return (
+                        <li
+                          className={`${isDragging ? 'is-dragging' : ''}${isDropBefore ? ' is-drop-before' : ''}`.trim() || undefined}
+                          key={lesson.lessonId}
+                          draggable
+                          aria-label={`${lesson.title} 강의`}
+                          onDragStart={(event) => startLessonDrag(event, section.sectionId, lesson.lessonId)}
+                          onDragOver={(event) => setLessonRowDropTarget(event, section.sectionId, lessonIndex)}
+                          onDrop={(event) => dropLesson(event, section.sectionId, lessonDropTarget?.lessonIndex ?? lessonIndex)}
+                          onDragEnd={finishLessonDrag}
+                        >
+                          <span className="lesson-drag-handle" aria-hidden="true">⋮⋮</span>
+                          <span className="lesson-order">{lessonIndex + 1}</span>
+                          <div className="lesson-info"><strong>{lesson.title}</strong><small>{lesson.status}</small></div>
+                          {/* 배지와 링크·버튼을 한 flex 컨테이너에 모아 같은 수평선에 정렬한다(각각 별도 그리드 칼럼이던 시절엔 어긋났다). */}
+                          <div className="lesson-actions">
+                            <StatusBadge tone={lesson.status === 'PUBLISHED' ? 'success' : lesson.status === 'READY' ? 'warning' : 'neutral'}>{lesson.status}</StatusBadge>
+                            <div className="row-actions">
+                              <Link to={instructorPaths.lesson(curriculumId, section.sectionId, lesson.lessonId)}>상세</Link>
+                              <button className="text-button" type="button" onClick={() => void removeLesson(section.sectionId, lesson.lessonId)}>삭제</button>
+                            </div>
                           </div>
-                        </div>
-                      </li>
-                    )
-                  })}
-                  {section.lessons.length === 0 && <li className="lesson-drop-empty" aria-hidden="true">강의를 이 섹션으로 드래그하세요.</li>}
-                </ul>
-              </article>
-            ))}
-          </div>
-          <button className="structure-add-section" type="button" onClick={addSection}>+ 섹션 추가</button>
-        </Panel>
+                        </li>
+                      )
+                    })}
+                    {section.lessons.length === 0 && <li className="lesson-drop-empty" aria-hidden="true">강의를 이 섹션으로 드래그하세요.</li>}
+                  </ul>
+                </article>
+              ))}
+            </div>
+            <button className="structure-add-section" type="button" onClick={addSection}>+ 섹션 추가</button>
+          </Panel>
+
+          <CurriculumPublishPanel
+            isNewDraft={isNewDraft}
+            lifecycleView={lifecycleView}
+            draftLessonCount={draftLessonCount}
+            publishedLessonCount={publishedLessonCount}
+            totalLessonCount={totalLessonCount}
+            isPubliclyVisible={isPubliclyVisible}
+            onPublish={(includeLessons) => void runPublish(includeLessons)}
+          />
+        </>
       )}
 
-      {/* 기본 정보 → 자산 → 게시 순으로 읽어 내려가며 확인하고 마지막에 게시한다. */}
+      {/* 기본 정보 → 자산 순으로 확인한다. 게시는 구성 탭 맨 아래에서 한다. */}
       {tab === 'info' && (
         <>
           <Panel title="기본 정보" description="일반 수정과 공개 상태 전환은 분리합니다.">
@@ -584,56 +616,6 @@ function CurriculumManageEditor({
               materials={materials}
               onMaterialsChange={updateMaterials}
             />
-          </Panel>
-
-          <Panel title="커리큘럼 게시" description="기본 정보와 자료를 모두 확인한 뒤 마지막으로 공개합니다.">
-            {/*
-              공개 = 커리큘럼 PUBLISHED AND 강의 PUBLISHED(ADR-0002). 무엇이 공개될지 먼저 알리고,
-              주 버튼 하나로 그 상태에 도달하게 한다 — 두 번 눌러야 공개되는 흐름은 만들지 않는다.
-            */}
-            {isNewDraft && draftLessonCount > 0 && (
-              <InlineNotice tone="info">
-                게시하면 초안 강의 <strong>{draftLessonCount}개</strong>도 함께 공개됩니다
-                {publishedLessonCount > 0 && `(이미 게시된 ${publishedLessonCount}개 포함 총 ${totalLessonCount}개)`}.
-                일부만 공개하려면 먼저 구성 탭에서 해당 강의를 정리해 주세요.
-              </InlineNotice>
-            )}
-            {!isNewDraft && draftLessonCount > 0 && (
-              <InlineNotice tone="warning">
-                초안 강의 <strong>{draftLessonCount}개</strong>는 아직 공개 목차에 보이지 않습니다.
-                수강생에게 보이려면 함께 게시해 주세요.
-              </InlineNotice>
-            )}
-            <div className="lifecycle-actions lifecycle-actions--standalone">
-              <div>
-                {/* 공개는 두 축의 AND다(ADR-0002) — PUBLISHED라도 게시된 강의가 0이면 보이는 게 없다. */}
-                <StatusBadge tone={isPubliclyVisible ? 'success' : lifecycleView.tone}>
-                  {lifecycleView.label}
-                </StatusBadge>
-                <p>{`커리큘럼 ${lifecycleView.label} · 게시된 강의 ${publishedLessonCount}/${totalLessonCount}개 — ${lifecycleView.description}`}</p>
-              </div>
-              <div className="lifecycle-actions__buttons">
-                {/*
-                  일부 강의를 초안으로 남겨 두고 먼저 공개하는 우회로. 주 동선은 오른쪽 버튼 하나다.
-                  게시된 강의가 하나도 없으면 목차가 빈 커리큘럼이 공개되므로 이 우회로를 열지 않는다.
-                */}
-                {isNewDraft && draftLessonCount > 0 && publishedLessonCount > 0 && (
-                  <button className="button button--ghost" type="button" onClick={() => void runPublish(false)}>
-                    커리큘럼만 게시
-                  </button>
-                )}
-                <button
-                  className="button button--primary"
-                  type="button"
-                  disabled={!isNewDraft && draftLessonCount === 0}
-                  onClick={() => void runPublish(true)}
-                >
-                  {isNewDraft
-                    ? draftLessonCount > 0 ? `강의 ${draftLessonCount}개와 함께 게시` : '커리큘럼 게시'
-                    : draftLessonCount > 0 ? `초안 강의 ${draftLessonCount}개 게시` : '게시 완료'}
-                </button>
-              </div>
-            </div>
           </Panel>
         </>
       )}
