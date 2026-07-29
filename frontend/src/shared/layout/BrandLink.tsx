@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import brandMarkHanok from '@/assets/images/brand-mark-hanok.png'
+import brandMarkHanok from '@/assets/images/brand-mark-hanok.webp'
 
 interface BrandLinkProps {
   inverse?: boolean

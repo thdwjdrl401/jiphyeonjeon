@@ -1,4 +1,4 @@
-import curriculumCoverFallback from '@/assets/images/curriculum-cover-hanji-study-flat-v4.png'
+import curriculumCoverFallback from '@/assets/images/curriculum-cover-hanji-study-flat-v4.webp'
 
 export default function CurriculumCoverFallback() {
   return (

@@ -1,5 +1,5 @@
 import type { PropsWithChildren, ReactNode } from 'react'
-import authRoyalLibraryEvening from '@/assets/images/auth-royal-library-evening.png'
+import authRoyalLibraryEvening from '@/assets/images/auth-royal-library-evening.webp'
 import BrandLink from '@/shared/layout/BrandLink'
 
 interface AuthShellProps extends PropsWithChildren {
