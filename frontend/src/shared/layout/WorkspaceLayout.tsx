@@ -90,8 +90,13 @@ export default function WorkspaceLayout() {
             role={user.role}
           />
         ) : <aside className="workspace-sidebar" aria-label="작업 메뉴">
+          <div className="workspace-sidebar__masthead" aria-hidden="true">
+            <span>MY</span>
+            <strong>CURATION</strong>
+          </div>
           <div className="workspace-user">{user && <ProfileAvatar displayName={user.displayName} imageUrl={user.profileImageUrl} decorative />}<div><strong>{user?.displayName}</strong><small>{user?.role === 'INSTRUCTOR' ? '강사 워크스페이스' : '학생 워크스페이스'}</small></div></div>
           <nav>
+            <span className="workspace-sidebar__nav-label" aria-hidden="true">ARCHIVE</span>
             <NavLink to={curriculumPath}>내 커리큘럼</NavLink>
             <NavLink to={profilePath}>내 프로필</NavLink>
           </nav>

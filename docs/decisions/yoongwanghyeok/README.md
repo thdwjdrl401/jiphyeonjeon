@@ -41,7 +41,7 @@
 | [0018](0018-centralized-frontend-test-directory.md) | 채택 | 프론트 테스트를 `src/test` 아래에서 책임별로 중앙 관리 |
 | [0019](0019-unified-learning-sidebar-and-caption-dock-preview.md) | UI 목업 기준 채택 | 라이브·다시보기 공통 4탭과 자막 도크 |
 | [0020](0020-student-live-dvr-playback-api.md) | 채택 | 학생 라이브 DVR 재생 API 경계와 입장 안내 |
-| [0021](0021-digital-ink-ui-system.md) | 채택 | 수묵 기반 모노톤 토큰과 Paper/Ink 화면 모드 |
+| [0021](0021-modern-ink-monotone-curation-ui.md) | 채택 | 감도높은모던수묵화모노톤큐레이션 UI와 Paper/Ink 화면 모드 |
 
 ## 이슈와 트러블슈팅
 
