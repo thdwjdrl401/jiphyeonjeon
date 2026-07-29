@@ -131,8 +131,48 @@ export const mockLiveSessionService = {
       },
     }))
   },
-  async askLiveAi() {
-    return { answer: 'SecurityContext는 인증이 끝난 현재 요청의 사용자 정보를 보관합니다. 세션 저장소와는 책임이 다르며, 요청이 끝나면 컨텍스트가 정리됩니다.' }
+  // 목도 스트리밍 UX를 그대로 재현한다 — 델타를 조각내 흘린 뒤 근거를 실은 answer.done으로 끝낸다.
+  // 한 번에 완성 문장을 주면 "누적 렌더·전송 중 비활성·취소"가 목 모드에서 아예 검증되지 않는다.
+  // 근거 없는 질문은 answer.insufficient로 끝내 오류가 아닌 별도 상태도 화면에서 볼 수 있게 한다.
+  async askLiveAi(sessionId, question, { onEvent, signal }) {
+    const requestId = `req-mock-${Date.now()}`
+    const insufficient = question.includes('점심')
+    const chunks = insufficient
+      ? []
+      : [
+          'SecurityContext는 인증이 끝난 현재 요청의 사용자 정보를 보관합니다. ',
+          '세션 저장소와는 책임이 다르며, ',
+          '요청이 끝나면 컨텍스트가 정리됩니다.',
+        ]
+
+    for (const text of chunks) {
+      await new Promise((resolve) => setTimeout(resolve, 120))
+      if (signal?.aborted) return
+      onEvent({ type: 'answer.delta', payload: { requestId, text } })
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 120))
+    if (signal?.aborted) return
+
+    if (insufficient) {
+      onEvent({
+        type: 'answer.insufficient',
+        payload: { requestId, message: '이 질문에 답할 근거를 강의 자료와 발화에서 찾지 못했습니다.' },
+      })
+      return
+    }
+
+    onEvent({
+      type: 'answer.done',
+      payload: {
+        requestId,
+        sources: [
+          { type: 'PPTX', materialId: 'mat-session-and-csrf', page: 12 },
+          // CAPTION의 시각은 STT attempt-local 축이다(세션-ms 아님) — 목도 같은 축으로 준다.
+          { type: 'CAPTION', sessionId, sttSessionId: 'stt-mock-1', startMs: 728_000, endMs: 761_000 },
+        ],
+      },
+    })
   },
   async saveBookmark(lessonId, sessionMs) {
     const bookmarks = bookmarksByLesson.get(lessonId) ?? []

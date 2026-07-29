@@ -1,9 +1,9 @@
-import { lazy, Suspense, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { instructorPaths } from '@/app/router/paths'
-import yeongsilImage from '@/assets/yeongsil.png'
+import PersonalAiQuestionPanel, { type AskAiAnswer } from '@/features/ai/PersonalAiQuestionPanel'
 import { useAuth } from '@/features/auth/AuthContext'
 import { getLesson } from '@/features/lesson/lessonService'
 import CaptionDock from '@/features/live-session/CaptionDock'
@@ -76,8 +76,6 @@ export default function LiveClassroomPage() {
   const [positionMs, setPositionMs] = useState(0)
   const [message, setMessage] = useState('')
   const [isQuestion, setIsQuestion] = useState(false)
-  const [aiQuestion, setAiQuestion] = useState('')
-  const [aiAnswer, setAiAnswer] = useState('')
   const [bookmarked, setBookmarked] = useState(false)
   const [studentSeekRequest, setStudentSeekRequest] = useState<PlaybackSeekRequest | null>(null)
   const [endRequested, setEndRequested] = useState(false)
@@ -95,7 +93,12 @@ export default function LiveClassroomPage() {
       (current = []) => mergeChatMessage(current, sent),
     ),
   })
-  const aiMutation = useMutation({ mutationFn: (question: string) => askLiveAi(lesson!.lessonId, question), onSuccess: (data) => setAiAnswer(data.answer) })
+  // AI 질의응답은 뮤테이션이 아니라 SSE 스트림이다(ADR-0047) — 응답 하나가 아니라 델타가 여러 번 온다.
+  // 세션 스코프라 lessonId가 아니라 sessionId를 넘긴다(서버가 lessonId를 세션에서 조회해 채운다).
+  const askAi = useCallback<AskAiAnswer>(
+    (question, options) => askLiveAi(sessionId, question, options),
+    [sessionId],
+  )
   const bookmarkMutation = useMutation({ mutationFn: () => saveBookmark(lesson!.lessonId, positionMs), onSuccess: () => setBookmarked(true) })
   const endMutation = useMutation({ mutationFn: () => endLiveSession(sessionId), onSuccess: () => navigate(instructorPaths.processing(sessionId)) })
   useEffect(() => {
@@ -160,12 +163,6 @@ export default function LiveClassroomPage() {
     event.currentTarget.form?.requestSubmit()
   }
 
-  const askAi = (event: FormEvent) => {
-    event.preventDefault()
-    if (!aiQuestion.trim()) return
-    aiMutation.mutate(aiQuestion.trim())
-  }
-
   const openGlossaryTerm = (termId: string) => {
     setSelectedTermId(termId)
     setPanel('glossary')
@@ -215,11 +212,11 @@ export default function LiveClassroomPage() {
   )
 
   const aiContent = (
-    <>
-      <div className="ai-empty"><img className="ai-empty__avatar" src={yeongsilImage} alt="AI 질문 도우미 영실" /><h3>한 번 아뢰어 보거라</h3><p>강의 자료와 현재 재생 시점까지의 발화를 근거로 답변합니다.</p></div>
-      {aiAnswer && <div className="ai-answer"><strong>답변</strong><p>{aiAnswer}</p><small>근거 · 12번 슬라이드, 12:08–12:41 발화</small></div>}
-      <form onSubmit={askAi}><textarea rows={3} value={aiQuestion} placeholder="예: SecurityContext와 세션은 어떻게 다른가요?" onChange={(event) => setAiQuestion(event.target.value)} /><button className="button button--primary button--full" type="submit">질문하기</button></form>
-    </>
+    <PersonalAiQuestionPanel
+      ask={askAi}
+      placeholder="예: SecurityContext와 세션은 어떻게 다른가요?"
+      emptyDescription="강의 자료와 지금까지의 발화를 근거로 답변합니다."
+    />
   )
 
   // 자막이 이미 흐르면(누적 라인 존재) 연결 문구로 시야를 어지럽히지 않는다.

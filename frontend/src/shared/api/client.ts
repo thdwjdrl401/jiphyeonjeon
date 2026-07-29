@@ -57,6 +57,22 @@ async function getCsrfToken() {
   return csrfRequest
 }
 
+/**
+ * CSRF 헤더 한 쌍(`{ [headerName]: token }`).
+ *
+ * axios 인터셉터를 타지 않는 요청 — 라이브 AI 답변 SSE처럼 `fetch`로 직접 보내야 하는 POST — 이
+ * 같은 토큰·같은 캐시를 쓰게 노출한다. 별도로 `/auth/csrf`를 부르면 토큰이 두 벌이 된다.
+ */
+export async function resolveCsrfHeader(): Promise<Record<string, string>> {
+  const token = await getCsrfToken()
+  return { [token.headerName]: token.token }
+}
+
+/** 401을 받은 쪽이 캐시된 토큰을 버리게 한다(아래 응답 인터셉터와 같은 규칙). */
+export function invalidateCsrfToken() {
+  csrf = null
+}
+
 apiClient.interceptors.request.use(async (config) => {
   if (isNetworkBlocked) {
     throw new ApiError(

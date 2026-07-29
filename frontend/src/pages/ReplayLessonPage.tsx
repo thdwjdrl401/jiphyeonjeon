@@ -1,7 +1,8 @@
-import { lazy, Suspense, useState, type FormEvent } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { instructorPaths, studentPaths } from '@/app/router/paths'
+import PersonalAiQuestionPanel from '@/features/ai/PersonalAiQuestionPanel'
 import { useAuth } from '@/features/auth/AuthContext'
 import { getLesson } from '@/features/lesson/lessonService'
 import CaptionDock from '@/features/live-session/CaptionDock'
@@ -10,7 +11,6 @@ import { getLiveLearningPreview, type LearningPanel } from '@/features/live-sess
 import type { PlaybackSeekRequest } from '@/features/live-session/PlaybackPlayer'
 import { usePlayback } from '@/features/live-session/usePlayback'
 import {
-  askReplayAi,
   getReplayCaptions,
   getReplayMessages,
   publishReplayReview,
@@ -19,7 +19,7 @@ import {
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import { useToast } from '@/shared/ui/Toast'
 import PageState from '@/shared/ui/PageState'
-import { InlineNotice, StatusBadge } from '@/shared/ui/WorkspaceUi'
+import { StatusBadge } from '@/shared/ui/WorkspaceUi'
 
 const { summaryBlocks, glossaryTerms } = getLiveLearningPreview()
 const reviewDraft = 'SecurityContext는 인증이 완료된 현재 요청의 인증 주체를 보관합니다.'
@@ -49,13 +49,10 @@ export default function ReplayLessonPage() {
   const [positionMs, setPositionMs] = useState(0)
   const [seekRequest, setSeekRequest] = useState<PlaybackSeekRequest | null>(null)
   const [bookmarked, setBookmarked] = useState(false)
-  const [aiQuestion, setAiQuestion] = useState('')
-  const [aiAnswer, setAiAnswer] = useState('')
   const [published, setPublished] = useState(false)
   const toast = useToast()
   // 라이브 강의실과 같은 재생 계약을 쓴다 — BE가 라이브·종료 후 VOD를 한 엔드포인트로 준다.
   const playback = usePlayback(lessonId)
-  const aiMutation = useMutation({ mutationFn: (question: string) => askReplayAi(lessonId, question, positionMs), onSuccess: (data) => setAiAnswer(data.answer) })
   // 검수 저장·게시는 방금 누른 행동의 결과다 — 화면에 남기지 않고 토스트로 알린다.
   // (게시 여부 자체는 위 툴바 배지가 계속 보여 준다.)
   const saveReviewMutation = useMutation({
@@ -69,11 +66,6 @@ export default function ReplayLessonPage() {
     onError: () => toast.error('게시본을 공개하지 못했습니다.'),
   })
   usePageTitle(`다시보기 · ${lesson?.title ?? ''}`)
-
-  const askAi = (event: FormEvent) => {
-    event.preventDefault()
-    if (aiQuestion.trim()) aiMutation.mutate(aiQuestion.trim())
-  }
 
   const openGlossaryTerm = (termId: string) => {
     setSelectedTermId(termId)
@@ -93,12 +85,11 @@ export default function ReplayLessonPage() {
   if (lessonQuery.isError) return <PageState title="다시보기를 불러오지 못했습니다" />
   if (!lesson) return <PageState title="다시보기를 불러오는 중입니다" />
 
+  // 다시보기 AI는 서버에 경로가 없다 — ai-api가 sessionId를 필수로 받고 근거 시각이 attempt-local이라,
+  // 다시보기의 세션-ms를 되돌릴 시간 앵커 계약이 서기 전에는 열 수 없다(ADR-0047 §9). 예전에는 질문을
+  // 눌러도 501이 조용히 삼켜져 아무 반응이 없었다 — 지금은 왜 못 쓰는지 패널이 먼저 밝힌다.
   const aiContent = (
-    <>
-      <InlineNotice>현재 재생 시각과 강의 전체 자료를 함께 근거로 사용합니다.</InlineNotice>
-      {aiAnswer && <div className="ai-answer"><strong>답변</strong><p>{aiAnswer}</p><small>근거 · session-and-csrf.pptx 8쪽</small></div>}
-      <form onSubmit={askAi}><textarea rows={4} value={aiQuestion} placeholder="이 구간에서 궁금한 점을 질문하세요." onChange={(event) => setAiQuestion(event.target.value)} /><button className="button button--primary button--full" type="submit">질문하기</button></form>
-    </>
+    <PersonalAiQuestionPanel unavailableNotice="다시보기 AI 질문은 아직 지원하지 않습니다. 라이브 강의 중에는 AI 질문 탭에서 바로 물어볼 수 있습니다." />
   )
 
   return (
