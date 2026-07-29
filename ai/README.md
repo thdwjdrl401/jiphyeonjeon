@@ -1,51 +1,122 @@
 # AI services
 
-Python 3.12와 `uv`를 사용하는 LiveClass AI 서비스 모음이다. 각 서비스는 의존성과
-lockfile을 독립적으로 관리한다.
+## 1. 어떤 서비스가 있는가
 
-| 서비스 | 역할 | 기본 관리 주소 |
-|---|---|---|
-| [`ai-api`](ai-api/README.md) | Redis/pgvector/BGE 근거와 GMS 답변을 조율하는 RAG SSE 서비스 | `127.0.0.1:8010` |
-| [`ai-worker`](ai-worker/README.md) | 비동기 AI 작업 프로세스 골격 | `127.0.0.1:8011` |
-| [`realtime-agent`](realtime-agent/README.md) | LiveKit 강사 오디오→provider-neutral STT→Redis caption agent | LiveKit AgentServer |
-| [`bge-runtime`](bge-runtime/README.md) | 인증된 BGE-M3 내부 GPU embedding runtime | `127.0.0.1:8020` |
+LiveClass AI는 Python 3.12와 `uv`를 사용하며 서비스별 의존성과 lockfile을 독립 관리한다.
 
-현재 범위는 ai-api의 RAG 요청→Redis/pgvector/BGE 근거 조회→GMS 답변→SSE terminal
-AI-side runtime, ai-worker의 RabbitMQ PPTX ingestion→BGE→pgvector→Spring callback 실행 경로,
-realtime-agent의 runnable AgentServer·오디오·VAD·STT·제한된 Redis caption 발행, 독립 BGE-M3
-runtime까지다. Spring의 `ingestion.embed` 큐 선기동도 연결됐다.
+| 서비스 | 실행 위치 | 역할 | 업무 입력 |
+|---|---|---|---|
+| [ai-api](ai-api/README.md) | EC2 `:8010` | RAG 검색·답변 SSE | Spring HTTP |
+| [ai-worker](ai-worker/README.md) | EC2, 관리 `:8011` | PPTX embedding·인덱싱 | RabbitMQ |
+| [realtime-agent](realtime-agent/README.md) | GPU, 관리 `:8081` | LiveKit audio→STT→Redis 자막 | LiveKit dispatch |
+| [bge-runtime](bge-runtime/README.md) | GPU `:8020` | BGE-M3 embedding | 내부 HTTP |
 
-Java가 아직 채택하지 않은 Python 경계는 각 서비스의 후보 계약으로 관리하며 공유
-`docs/CONTRACT.md`를 확정 변경하지 않는다. ai-api의 context consumer·GMS client·단일 process
-request registry는 조립했고, Spring→ai-api 내부 인증은 HMAC 공유 시크릿 방식(ADR-0023 §9)으로
-채택 확정돼 ai-api 쪽 검증기(`HmacInternalRequestAuthenticator`)까지 구현·테스트 완료했다.
-`AI_INTERNAL_SECRET` 미설정 시 production RAG endpoint는 여전히 `503`으로 fail-closed하며,
-Spring 쪽 서명 발급기가 아직 없어 실제 상호 인증까지는 안 된다. Spring 발급기·SSE proxy·양쪽
-계약 테스트, Java live caption dispatch/consumer, multi-replica registry와 실제 GMS·Spring E2E는
-후속 협업 gate다.
+Frontend는 AI 서비스를 직접 호출하지 않는다. 사용자 인증·권한과 공개 API는 Spring이 소유하고,
+강사의 microphone만 LiveKit으로 직접 전송한다.
 
-실행과 검증 명령은 각 서비스 README를 따른다. ai-api·realtime-agent를 로컬에서 같이 띄울 때 쓰는
-환경변수는 [`.env.example`](.env.example)에 모아뒀다 — `ai/.env`로 복사해 채운다(git 무시).
+## 2. 누가 어떻게 호출하는가
 
-## realtime-agent 통신 요약
+| 호출자 | 대상 | 통신 | 입력 | 출력 |
+|---|---|---|---|---|
+| Spring | ai-api | HTTP + SSE, HMAC | RAG 질문 | answer event |
+| Spring | ai-worker | RabbitMQ `ingestion.embed` | 자료 작업 | Spring callback |
+| ai-worker | Spring | HTTP, HMAC | download-url 요청·처리 결과 | presigned URL·204 |
+| Spring | realtime-agent | LiveKit explicit AgentDispatch | session metadata | Redis 자막 |
+| Frontend | LiveKit room | WebRTC | 강사 microphone | agent가 Redis에 자막 발행 |
+| ai-api·ai-worker | bge-runtime | HTTP, Bearer | text 목록 | 1024차원 vector |
+| realtime-agent | application Redis | Redis Stream | caption event | ai-api·향후 Spring 소비 |
+| 운영 환경 | 각 서비스 관리 endpoint | HTTP | health/readiness | 상태 응답 |
 
-realtime-agent는 Spring이 직접 호출하는 HTTP 서비스가 아니다. Spring이 LiveKit에 explicit dispatch를
-만들면, LiveKit에 등록된 Python Worker가 job을 받아 Room 오디오를 처리한다. 자막은 application
-Redis Stream으로 보내고, lifecycle callback은 Java 수신 구현이 준비된 경우에만 선택적으로 사용한다.
+endpoint, queue, Redis key, payload, 인증과 상태코드의 기준은
+[AI 통신 계약 지도](../docs/ai/CONTRACT.md)다. README에는 계약을 복제하지 않고 대표 사용법만 둔다.
+
+## 3. 대표 통신 흐름
+
+RAG 질문:
 
 ```text
-Spring ──dispatch──> LiveKit ──job/WebRTC audio──> realtime-agent
-                                                   ├─ local GPU: Nemotron
-                                                   ├─ outbound WSS: OpenAI Realtime
-                                                   ├─ Redis: lease + caption stream
-                                                   └─ HTTP(S): Spring callback (기본 비활성)
+Redis caption Stream → ai-api background consumer → in-memory caption store
+Spring → ai-api → bge-runtime 질문 embedding → PostgreSQL 자료 검색
+              → in-memory 최근 자막 조회 → GMS → SSE → Spring
 ```
 
-세부 protocol, 소유권과 장애 처리는
-[`realtime-agent/README.md`](realtime-agent/README.md#통신-구조)와
-[`realtime-agent/CONTRACT.md`](realtime-agent/CONTRACT.md)를 따른다.
+자료 처리:
 
-## 폴더별 문서
+```text
+Spring → RabbitMQ → ai-worker → Spring download-url → PPTX GET
+                              → bge-runtime → PostgreSQL
+                              → Spring READY/FAILED callback
+```
 
-각 서비스 README에서 실행 코드와 테스트 폴더의 상세 README로 이어진다. `.venv*`, `.uv-cache*`,
-`.pytest*`, `__pycache__`, `models/`는 로컬 생성 자산이므로 대상에서 제외한다.
+실시간 자막:
+
+```text
+Frontend microphone → LiveKit
+Spring dispatch ─────→ LiveKit → realtime-agent → Nemotron/OpenAI
+                                           └────→ Redis caption stream
+```
+
+## 4. EC2와 GPU 배치
+
+```text
+EC2 container                 EC2 host                         GPU
+ai-api / ai-worker ──HTTP──→ :18080/internal/bge ──nginx──→ :18020 ⇠SSH-R⇢ bge-runtime :8020
+Spring ──dispatch────────────→ LiveKit ⇠SSH-L(control)────── realtime-agent
+application Redis ⇠────────── SSH-L(control) ─────────────── realtime-agent
+TURN/TCP ⇠─────────────────── SSH-L(TURN) ────────────────── realtime-agent
+:18081 ⇠───────────────────── SSH-R(control) ─────────────── realtime-agent :8081
+```
+
+GPU application port는 public ingress로 열지 않는다. BGE와 realtime-agent 관리 경계는 EC2 loopback의
+`:18020`, `:18081`로 reverse-forward한다. EC2 host process는 BGE `:18020`을 직접 사용하고, 운영
+container는 host-network nginx의 `:18080/internal/bge`를 경유한다.
+
+## 5. 실행과 설정
+
+서비스별 디렉터리에서 `uv sync --frozen` 후 해당 entrypoint를 실행한다. CUDA 서비스는 별도 extra와
+GPU model 준비가 필요하다.
+
+| 서비스 | 실행 entrypoint |
+|---|---|
+| ai-api | `python -m app.main` |
+| ai-worker | `python -m app.main` |
+| realtime-agent | `python -m app.main start` |
+| bge-runtime | `python -m app.main` |
+
+ai-api·realtime-agent 로컬 설정은 [`ai/.env.example`](.env.example)을 `ai/.env`로 복사한다. EC2
+ai-api·ai-worker 운영 설정은 [`.env.ai-prod.example`](../.env.ai-prod.example)과
+[`docker-compose.ai-prod.yml`](../docker-compose.ai-prod.yml)을 따른다.
+
+| 값 | 사용하는 경계 | GPU 사용 |
+|---|---|---|
+| `AI_INTERNAL_SECRET` | Spring→ai-api RAG HMAC | 사용하지 않음 |
+| `AI_CALLBACK_SECRET` | Spring↔ai-worker 자료 HMAC | realtime callback을 켤 때만 별도 선택 사용 |
+| `BGE_RUNTIME_INTERNAL_TOKEN` | EC2 ai-api·ai-worker→GPU bge-runtime Bearer | bge-runtime이 사용 |
+| `GMS_API_KEY` | EC2 ai-api→GMS 답변 모델 | 사용하지 않음 |
+
+운영 compose는 `BGE_RUNTIME_INTERNAL_TOKEN`을 container의 `AI_API_BGE_TOKEN`과
+`AI_WORKER_BGE_INTERNAL_TOKEN`으로, `GMS_API_KEY`를 `AI_API_GMS_API_KEY`로 매핑한다. 필수
+환경변수와 tunnel 실행은 각 서비스 README를, 전체 인프라와 Spring·Frontend 실행 순서는
+[RUN.md](../RUN.md)에서 확인한다.
+
+## 6. 현재 연동 상태
+
+| 경계 | 현재 상태 |
+|---|---|
+| Spring→ai-api RAG SSE | AI 구현, Spring signer·proxy 미구현 |
+| Spring→RabbitMQ→ai-worker | `PPTX_EMBED` 양쪽 구현, Spring producer·worker 앱 기본 off, AI 운영 compose는 worker만 on; `EMBED_DELETE` 미구현(DLQ) |
+| ai-worker→Spring download-url·callback | 양쪽 구현 |
+| ai-api·ai-worker→bge-runtime | client·runtime·reverse tunnel·운영 container proxy 배선 구현 |
+| Spring→LiveKit→realtime-agent | 양쪽 dispatch 구현, job readiness 우회 중 |
+| realtime-agent→Redis caption | producer·ai-api consumer 구현, Spring consumer 미구현 |
+| realtime-agent→Spring lifecycle | AI 구현·기본 off, Spring receiver 미구현 |
+| realtime-agent `/health/live`·`/health/ready` | endpoint·schema·tunnel 구현, Spring client 미구현 |
+
+## 7. 관련 문서
+
+- [AI 통신 계약 지도](../docs/ai/CONTRACT.md)
+- [전체 공유 계약](../docs/CONTRACT.md)
+- [전체 아키텍처](../docs/ARCHITECTURE.md)
+- [통합 실행 가이드](../RUN.md)
+- [GPU realtime-agent 운영](../docs/ai/GPU-REALTIME-AGENT-RUNBOOK.md)
+- [EC2 AI 운영 compose](../docker-compose.ai-prod.yml)

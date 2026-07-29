@@ -1,6 +1,7 @@
 # CONTRACT.md — 공유 계약 (정본)
 
 > 📍 하네스 개요: [docs/harness/README.md](harness/README.md) · 정본 규칙: [AGENTS.md](../AGENTS.md) · 아키텍처: [ARCHITECTURE.md](ARCHITECTURE.md)
+> · AI endpoint·queue·stream·tunnel 지도: [AI 통신 계약](ai/CONTRACT.md)
 >
 > **FE↔Spring**, **Spring↔AI(RabbitMQ/HTTP/LiveKit AgentDispatch/Redis Streams)**,
 > **EC2 AI↔GPU AI(HTTP)** 가 동시에 지켜야 어긋나지 않는 계약. 한쪽이 바꾸면 다른 쪽이 깨지는 항목만.
