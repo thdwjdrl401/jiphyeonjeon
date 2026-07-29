@@ -21,9 +21,6 @@ INSTALL_SCRIPT = DEPLOY_DIR / "install.sh"
 RUNNER_INSTALL_SCRIPT = DEPLOY_DIR / "install-gitlab-runner-user.sh"
 DNS_REDIRECT_SOURCE = DEPLOY_DIR / "livekit-tunnel-dns.c"
 TUNNEL_CONFIGURE_SCRIPT = DEPLOY_DIR / "configure-gpu-ec2-tunnels.sh"
-REPOSITORY_ROOT = Path(__file__).parents[3]
-LIVEKIT_NGINX_CONFIG = REPOSITORY_ROOT / "infra" / "livekit" / "nginx-livekit-prod.conf"
-PRODUCTION_COMPOSE = REPOSITORY_ROOT / "docker-compose.prod.yml"
 
 
 def test_probe_settings_redact_credentials_from_repr() -> None:
@@ -349,19 +346,6 @@ def test_production_tunnel_configurator_installs_one_key_for_both_services(
     assert "BGE_EC2_PORT=18020" in bge_env
     assert (config_dir / "realtime-agent-tunnels.env").stat().st_mode & 0o777 == 0o600
     assert (config_dir / "bge-tunnel.env").stat().st_mode & 0o777 == 0o600
-
-
-def test_backend_health_proxy_reaches_loopback_tunnel_without_public_health_port() -> None:
-    nginx = LIVEKIT_NGINX_CONFIG.read_text(encoding="utf-8")
-    compose = PRODUCTION_COMPOSE.read_text(encoding="utf-8")
-
-    assert "location /internal/realtime-agent/" in nginx
-    assert "allow 172.16.0.0/12;" in nginx
-    assert "deny all;" in nginx
-    assert "proxy_pass       http://127.0.0.1:18081/;" in nginx
-    assert (
-        "LIVE_STT_HEALTH_BASE_URL: https://jiphyeonjeon.thdwjdrl.com:7443/internal/realtime-agent/"
-    ) in compose
 
 
 def test_rootless_supervisor_keeps_tunnel_and_agent_under_tmux() -> None:

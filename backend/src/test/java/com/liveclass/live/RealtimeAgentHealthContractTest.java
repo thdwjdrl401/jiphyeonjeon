@@ -26,8 +26,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class RealtimeAgentHealthContractTest {
 
-    private static final Path FIXTURES = Path.of(
-            "../ai/realtime-agent/contracts/fixtures").toAbsolutePath().normalize();
+    private static final Path REPOSITORY_ROOT = Path.of("..").toAbsolutePath().normalize();
+    private static final Path FIXTURES = REPOSITORY_ROOT.resolve(
+            "ai/realtime-agent/contracts/fixtures");
 
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
     private final AtomicReference<String> readinessBody = new AtomicReference<>();
@@ -84,6 +85,25 @@ class RealtimeAgentHealthContractTest {
         assertThat(readiness.liveKitConnected()).isTrue();
         assertThat(readiness.modelsReady()).isTrue();
         assertThat(readiness.ready()).isTrue();
+    }
+
+    @Test
+    void production_backend_proxy_reaches_loopback_tunnel_without_public_health_port()
+            throws IOException {
+        String nginx = Files.readString(
+                REPOSITORY_ROOT.resolve("infra/livekit/nginx-livekit-prod.conf"),
+                StandardCharsets.UTF_8);
+        String compose = Files.readString(
+                REPOSITORY_ROOT.resolve("docker-compose.prod.yml"), StandardCharsets.UTF_8);
+
+        assertThat(nginx).contains(
+                "location /internal/realtime-agent/",
+                "allow 172.16.0.0/12;",
+                "deny all;",
+                "proxy_pass       http://127.0.0.1:18081/;");
+        assertThat(compose).contains(
+                "LIVE_STT_HEALTH_BASE_URL: "
+                        + "https://jiphyeonjeon.thdwjdrl.com:7443/internal/realtime-agent/");
     }
 
     private static String fixture(String name) throws IOException {
