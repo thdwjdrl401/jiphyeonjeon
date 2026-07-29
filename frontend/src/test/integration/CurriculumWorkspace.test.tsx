@@ -83,9 +83,12 @@ describe('커리큘럼 작업 화면', () => {
     expect(screen.queryByText(/아직 공개 목차에 보이지 않습니다/)).not.toBeInTheDocument()
   })
 
-  it('새 커리큘럼의 수강 방식을 강사 승인 방식으로 고정한다', async () => {
+  // 수강 방식은 강사 승인 하나뿐이라 고르게 하지 않고 안내만 한다.
+  it('새 커리큘럼은 수강 방식을 고르지 않고 강사 승인 방식임을 안내한다', async () => {
     await renderAsInstructor('/instructor/curriculums/new')
-    expect(await screen.findByText('강사 승인 후 수강')).toBeInTheDocument()
+    const notice = await screen.findByText(/강사가 승인해야 수강이 시작됩니다/)
+    expect(notice).toHaveTextContent('강사 승인 후 수강')
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument()
     expect(screen.queryByText('신청 후 바로 수강')).not.toBeInTheDocument()
     expect(screen.queryByText('초대 전용')).not.toBeInTheDocument()
   })
@@ -121,6 +124,27 @@ describe('커리큘럼 작업 화면', () => {
     expect(window.location.pathname).toMatch(/^\/instructor\/curriculums\/cur-draft-.*\/manage$/)
     await user.click(await screen.findByRole('button', { name: '기본 정보' }))
     expect(await screen.findByText('curriculum-guide.pptx')).toBeInTheDocument()
+  })
+
+  // 예전엔 입력만 받고 버렸다. 입력한 운영 기간이 실제로 커리큘럼에 남는지 본다.
+  it('새 커리큘럼에 입력한 운영 기간이 저장된다', async () => {
+    const user = userEvent.setup()
+    await renderAsInstructor('/instructor/curriculums/new')
+    await user.type(
+      await screen.findByPlaceholderText('예: 라이브로 완성하는 Spring Boot'),
+      '기간을 넣은 커리큘럼',
+    )
+    fireEvent.change(screen.getByLabelText('운영 시작일'), { target: { value: '2026-08-01T10:00' } })
+    fireEvent.change(screen.getByLabelText('운영 종료일'), { target: { value: '2026-10-15T22:00' } })
+    expect(screen.getByText('약 11주 과정')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '초안 만들기' }))
+    await screen.findByRole('heading', { name: '기간을 넣은 커리큘럼', level: 1 })
+
+    const curriculumId = window.location.pathname.split('/')[3]
+    const period = getMockCurriculum(curriculumId)?.period
+    expect(period?.startsAt).toBe(new Date('2026-08-01T10:00').toISOString())
+    expect(period?.endsAt).toBe(new Date('2026-10-15T22:00').toISOString())
   })
 
   it('관리 화면에서 섹션 이름과 설명을 수정한다', async () => {

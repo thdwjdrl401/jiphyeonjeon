@@ -33,8 +33,10 @@ export const mockCurriculumManagementService = {
       description: request.description,
       thumbnailUrl: request.thumbnailPreviewUrl,
       materials: request.materials,
+      startsAt: request.startsAt,
+      endsAt: request.endsAt,
     })
-    return { curriculumId: curriculum.curriculumId }
+    return { curriculumId: curriculum.curriculumId, periodSaved: true }
   },
   async getInstructorCurriculum(curriculumId) {
     const curriculum = getMockCurriculum(curriculumId)
