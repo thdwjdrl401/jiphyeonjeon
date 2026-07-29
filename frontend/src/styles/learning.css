@@ -122,6 +122,9 @@
 .go-live.is-live { border-color: rgba(168,58,36,.4); color: #e0958a; }
 .go-live.is-live i { background: var(--red-600); box-shadow: 0 0 0 4px rgba(168,58,36,.14); }
 .caption-dock { margin-top: 10px; overflow: hidden; border: 1px solid var(--ink-100); border-radius: 13px; background: var(--white); }
+/* 라이브 미디어 레이아웃(flex column + overflow hidden)에서 video-stage가 확장하며 CaptionDock을
+   flex-shrink로 찌부내면 자막이 한 줄로 눌린다. shrink 금지로 sentences 스크롤 영역을 보장한다. */
+.media-page--live .caption-dock { flex: 0 0 auto; }
 .caption-dock > header { display: flex; min-height: 38px; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--ink-100); }
 .caption-dock > header strong { display: flex; align-items: center; gap: 7px; color: var(--ink-900); font-size: .65rem; }
 .caption-dock > header strong i { width: 6px; height: 6px; border-radius: 50%; background: var(--red-600); box-shadow: 0 0 0 4px rgba(168,58,36,.13); }

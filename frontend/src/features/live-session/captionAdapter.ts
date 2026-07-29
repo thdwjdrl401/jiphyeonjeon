@@ -116,29 +116,66 @@ export function reduceCaptionStream(
 }
 
 /** 누적 상태를 CaptionDock이 쓰는 CaptionView[]로 편다(등장 순서 유지, 빈 라인 제외). */
+/**
+ * 누적 텍스트를 발화(문장) 단위로 쪼갠다. 델타 계약에 세그먼트 경계(caption.segment.final)가 없어
+ * FE에서 문장부호로 근사한다(ADR-0044 후속: AI팀 segment.final 도입 시 대체). 종결부호로 끝나는
+ * 런과 마지막 진행중 조각을 각각 한 문장으로 낸다. startOffset은 원문 내 시작 위치(시간 매핑용).
+ */
+function splitSentences(text: string): { text: string; startOffset: number }[] {
+  const out: { text: string; startOffset: number }[] = []
+  const re = /[^.。!?…]*[.。!?…]+["'”’)\]]*\s*/g
+  let match: RegExpExecArray | null
+  let lastIndex = 0
+  while ((match = re.exec(text)) !== null) {
+    const trimmed = match[0].trim()
+    if (trimmed) out.push({ text: trimmed, startOffset: match.index })
+    lastIndex = re.lastIndex
+  }
+  const rest = text.slice(lastIndex).trim()
+  if (rest) out.push({ text: rest, startOffset: lastIndex })
+  return out
+}
+
 export function selectCaptionViews(state: CaptionStreamState): CaptionView[] {
   return [...state.lines.values()]
     .sort((left, right) => left.order - right.order)
-    .map((line): CaptionView | null => {
+    .flatMap((line): CaptionView[] => {
       const sequences = [...line.deltas.keys()].sort((left, right) => left - right)
-      if (sequences.length === 0) return null
-      const text = sequences.map((sequence) => line.deltas.get(sequence)!.text).join('')
-      if (!text) return null
-      const elapsed = sequences.map((sequence) => line.deltas.get(sequence)!.streamElapsedMs)
-      const startMs = Math.min(...elapsed)
-      const endMs = Math.max(...elapsed)
-      return {
-        // sttSessionId가 라인 정체성이자 안정 key다(같은 attempt의 델타가 한 라인으로 모인다).
-        segmentId: line.sttSessionId,
-        startMs,
-        endMs,
-        // streamElapsedMs는 stream-local이므로 그대로 라벨로 쓴다(세션 상대 ms 변환 금지).
-        at: formatTimeLabel(startMs),
-        text,
-        // 델타 계약에는 용어 참조가 없다 — 빈 배열로 두고 CaptionDock은 일반 텍스트로 렌더한다.
-        termReferences: [],
-        pending: !line.completed,
+      if (sequences.length === 0) return []
+      // 델타를 sequence 순서로 이어붙이며 (문자 offset → streamElapsedMs) 색인을 만든다.
+      let full = ''
+      const marks: { offset: number; ms: number }[] = []
+      for (const sequence of sequences) {
+        const delta = line.deltas.get(sequence)!
+        marks.push({ offset: full.length, ms: delta.streamElapsedMs })
+        full += delta.text
       }
+      if (!full.trim()) return []
+      // offset이 속한 델타의 streamElapsedMs를 찾는다(문장 시작 시각 근사).
+      const msAt = (offset: number) => {
+        let ms = marks[0].ms
+        for (const mark of marks) {
+          if (mark.offset <= offset) ms = mark.ms
+          else break
+        }
+        return ms
+      }
+      const endsFinal = /[.。!?…]["'”’)\]]*\s*$/.test(full)
+      const sentences = splitSentences(full)
+      // 한 attempt(sttSessionId)를 문장별 라인으로 편다. 마지막 진행중 조각만 pending.
+      return sentences.map((sentence, index): CaptionView => {
+        const startMs = msAt(sentence.startOffset)
+        const isTail = index === sentences.length - 1
+        return {
+          segmentId: `${line.sttSessionId}#${index}`,
+          startMs,
+          endMs: startMs,
+          // streamElapsedMs는 stream-local이므로 그대로 라벨로 쓴다(세션 상대 ms 변환 금지).
+          at: formatTimeLabel(startMs),
+          text: sentence.text,
+          termReferences: [],
+          pending: isTail && !line.completed && !endsFinal,
+        }
+      })
     })
-    .filter((view): view is CaptionView => view !== null)
 }

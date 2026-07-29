@@ -1,4 +1,4 @@
-import { Fragment } from 'react'
+import { Fragment, useEffect, useRef } from 'react'
 import type { CaptionView } from './liveSessionService.interface'
 
 interface CaptionDockProps {
@@ -38,13 +38,19 @@ function renderCaptionText(caption: CaptionView, onSelectTerm: (termId: string) 
 }
 
 export default function CaptionDock({ captions, currentSessionMs, label, onSeek, onSelectTerm, note }: CaptionDockProps) {
+  const sentencesRef = useRef<HTMLDivElement>(null)
+  // 새 자막(델타 누적)이 들어오면 최신(하단)으로 따라간다 — 라이브 자막이 시야 밖으로 밀려나지 않게.
+  useEffect(() => {
+    const el = sentencesRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [captions])
   return (
     <section className="caption-dock" aria-label={label}>
       <header>
         <strong><i />{label}</strong>
         <span>{note ?? '시간을 누르면 영상과 자막이 함께 이동합니다.'}</span>
       </header>
-      <div className="caption-dock__sentences" aria-live="polite">
+      <div className="caption-dock__sentences" aria-live="polite" ref={sentencesRef}>
         {captions.map((caption) => {
           const isCurrent = currentSessionMs >= caption.startMs && currentSessionMs <= caption.endMs
           const className = [isCurrent ? 'is-current' : '', caption.pending ? 'is-pending' : '']
