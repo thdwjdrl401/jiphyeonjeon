@@ -87,6 +87,19 @@ GPU 호스트의 SSH port forwarding은 [`deploy/`](deploy/README.md)를 따른�
 `sequence`는 `(sessionId, sttSessionId)` job attempt 범위라 retry마다 1부터 다시 시작할 수 있고,
 completion도 동일한 `sttSessionId`를 포함한다.
 
+## 서비스 health
+
+health server는 GPU `127.0.0.1:8081`에만 bind하며 기존 reverse SSH tunnel을 통해 EC2
+`127.0.0.1:18081`로 전달된다.
+
+- `GET /health/live`: Python health server가 응답 가능한 동안 200 `status=alive`
+- `GET /health/ready`: 설정된 STT child 전부의 provider prewarm, AgentServer 시작, 현재 LiveKit
+  worker 연결이 모두 확인되면 200 `status=ready`; 하나라도 아니면 같은 JSON을 503
+- `GET /`: 기존 운영 smoke 호환용 plain text `OK`; 신규 배포/Java 판단에는 사용하지 않는다.
+
+서비스 readiness는 warm pool이 배정 가능한 사전 상태를 뜻한다. 특정 dispatch job의 session lease,
+Redis, room audio와 engine queue 준비를 확인하지 않으므로 `STT_READY` job gate를 대체하지 않는다.
+
 ## provider와 실행 설정
 
 기본 환경 변수 목록은 [`.env.example`](.env.example)에 있다. 코드는 root `.env`를 자동으로 읽지
@@ -105,6 +118,7 @@ uv run --env-file /path/to/realtime-agent.env --frozen python -m app.main dev
 - SSH TCP tunnel의 coturn을 강제할 때 `LIVEKIT_TURN_URL`, `LIVEKIT_TURN_SECRET`
 - `STT_AGENT_NAME`
 - `STT_ENGINE_PROVIDER=stub|openai-realtime|nemotron`
+- `STT_HEALTH_HOST=127.0.0.1`, `STT_HEALTH_PORT=8081`: 외부 bind는 거부한다.
 - `REDIS_URL`: LiveKit 내부 Redis가 아닌 application Redis
 - `CAPTION_STREAM_MAXLEN`: `XADD MAXLEN ~` 보존 엔트리 수, 기본 `10000`(0으로 비활성화 불가)
 

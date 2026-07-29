@@ -32,7 +32,7 @@ RELEASES_DIR="$DEPLOY_ROOT/releases"
 CURRENT_LINK="$DEPLOY_ROOT/current"
 UV_BIN="${UV_BIN:-$(command -v uv || true)}"
 UV_CACHE_DIR="${UV_CACHE_DIR:-$DEPLOY_ROOT/cache/uv}"
-HEALTH_URL="${LIVECLASS_HEALTH_URL:-http://127.0.0.1:8081/}"
+HEALTH_URL="${LIVECLASS_HEALTH_URL:-http://127.0.0.1:8081/health/ready}"
 
 for command_name in curl flock nvidia-smi readlink rsync tmux; do
     if ! command -v "$command_name" >/dev/null 2>&1; then
@@ -117,7 +117,7 @@ if ! "$SUPERVISOR" status-agent; then
     exit 1
 fi
 if ! curl --fail --silent --show-error \
-    --retry 30 --retry-delay 2 --retry-all-errors --max-time 5 \
+    --retry 75 --retry-delay 2 --retry-all-errors --max-time 5 \
     "$HEALTH_URL" >/dev/null; then
     rollback
     exit 1

@@ -89,6 +89,8 @@ class Settings:
     livekit_turn_secret: str = field(default="", repr=False)
     agent_name: str = "liveclass-realtime-stt"
     stt_provider: str = ""
+    health_host: str = "127.0.0.1"
+    health_port: int = 8081
     max_active_jobs: int | None = None
     num_idle_processes: int | None = None
     redis_url: str = field(default="redis://localhost:6379/0", repr=False)
@@ -138,6 +140,8 @@ class Settings:
             livekit_turn_secret=values.get("LIVEKIT_TURN_SECRET", ""),
             agent_name=values.get("STT_AGENT_NAME", "liveclass-realtime-stt"),
             stt_provider=values.get("STT_ENGINE_PROVIDER", ""),
+            health_host=values.get("STT_HEALTH_HOST", "127.0.0.1").strip(),
+            health_port=_parse_int(values, "STT_HEALTH_PORT", 8081),
             max_active_jobs=_parse_optional_int(values, "STT_MAX_ACTIVE_JOBS"),
             num_idle_processes=_parse_optional_int(values, "STT_NUM_IDLE_PROCESSES"),
             redis_url=values.get("REDIS_URL", "redis://localhost:6379/0"),
@@ -199,6 +203,12 @@ class Settings:
             raise RuntimeError("STT_AGENT_NAME must be a 1-128 character safe identifier")
         if not _SAFE_REDIS_KEY.fullmatch(self.redis_stream_key):
             raise RuntimeError("CAPTION_STREAM_KEY must be a 1-256 character safe Redis key")
+        if self.health_host != "127.0.0.1":
+            raise RuntimeError("STT_HEALTH_HOST must be 127.0.0.1")
+        if isinstance(self.health_port, bool) or not isinstance(self.health_port, int):
+            raise TypeError("STT_HEALTH_PORT must be an integer")
+        if not 1 <= self.health_port <= 65535:
+            raise RuntimeError("STT_HEALTH_PORT must be between 1 and 65535")
         if isinstance(self.caption_stream_maxlen, bool) or not isinstance(
             self.caption_stream_maxlen, int
         ):

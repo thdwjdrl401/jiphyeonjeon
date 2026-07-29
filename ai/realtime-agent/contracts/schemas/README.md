@@ -14,6 +14,7 @@ Spring dispatch producer, realtime-agent, Redis·HTTP consumer가 같은 schema�
 - `dispatch-metadata.schema.json`: LiveKit job metadata의 네 필드와 canonical UUID
 - `caption-stream-entry.schema.json`: Redis `caption.delta`·`caption.stream.completed` entry
 - `live-agent-status.schema.json`: Spring callback 상태와 실패 오류 구조
+- `realtime-agent-health.schema.json`: service liveness와 warm-pool/LiveKit readiness
 
 ## 경계와 불변식
 

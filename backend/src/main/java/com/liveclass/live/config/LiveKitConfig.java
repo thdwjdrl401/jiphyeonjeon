@@ -1,12 +1,21 @@
 package com.liveclass.live.config;
 
 import com.liveclass.live.api.LiveKitServerAccess;
+import com.liveclass.live.api.RealtimeAgentHealth;
+import com.liveclass.live.service.HttpRealtimeAgentHealth;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.net.http.HttpClient;
 
 @Configuration
-@EnableConfigurationProperties({LiveKitProperties.class, LiveStartProperties.class})
+@EnableConfigurationProperties({
+        LiveKitProperties.class,
+        LiveStartProperties.class,
+        RealtimeAgentHealthProperties.class
+})
 public class LiveKitConfig {
 
     /**
@@ -24,5 +33,13 @@ public class LiveKitConfig {
                         .replaceFirst("^wss://", "https://")
                         .replaceFirst("^ws://", "http://");
         return new LiveKitServerAccess(apiUrl, properties.apiKey(), properties.apiSecret());
+    }
+
+    @Bean
+    public RealtimeAgentHealth realtimeAgentHealth(RealtimeAgentHealthProperties properties) {
+        HttpClient httpClient = HttpClient.newBuilder()
+                .connectTimeout(properties.timeout())
+                .build();
+        return new HttpRealtimeAgentHealth(httpClient, JsonMapper.builder().build(), properties);
     }
 }

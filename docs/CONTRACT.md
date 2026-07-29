@@ -169,6 +169,25 @@ Content-Type: application/json
 [ADR-0029](decisions/canola/0029-gpu-bge-ec2-ai-worker-connectivity.md), ai-worker 쪽 검증 규칙은
 [`ai/ai-worker/CONTRACT.md` §9.4](../ai/ai-worker/CONTRACT.md#94-remote-bge-runtime)를 따른다.
 
+### 3-8. Spring → GPU realtime-agent service health (HTTP) — 양쪽 구현됨
+
+GPU agent는 `127.0.0.1:8081`, EC2 reverse tunnel은 `127.0.0.1:18081`에만 bind한다. host에서
+실행하는 Spring의 `LIVE_STT_HEALTH_BASE_URL` 기본값은 `http://127.0.0.1:18081/`이다. 운영 Docker
+backend는 host loopback에 직접 닿지 않으므로 host-network LiveKit nginx의 private-network 전용
+`https://jiphyeonjeon.thdwjdrl.com:7443/internal/realtime-agent/` proxy를 사용한다. 18081은 public bind하지 않는다.
+
+- `GET /health/live`: **200**
+  `{"contractVersion":"1","status":"alive","service":"realtime-agent"}`.
+- `GET /health/ready`: AgentServer 시작, 현재 LiveKit worker 연결, 설정된 child process 전부의 STT
+  provider prewarm이 완료되면 **200**과 `status:"ready"`, 아니면 **503**과 `status:"notReady"`.
+  공통 body는 `{contractVersion,status,service,sttProvider,workerStarted,liveKitConnected,modelsReady,readyProcessCount,expectedProcessCount}`다.
+
+Nemotron의 process marker는 `prewarm()`의 model load가 성공한 뒤에만 생긴다. 종료된/reuse된 PID의
+marker는 준비 수에 포함하지 않는다. 이 service-level readiness는 배포 및 Java 사전 진단용이다.
+실제 dispatch를 예약하지 않고 특정 job의 session lease·Redis·room audio·engine queue를 검사하지
+않으므로 §3-3의 job-level `STT_READY` gate를 대체하지 않는다. 정본 schema와 양쪽 fixture는
+[`realtime-agent-health.schema.json`](../ai/realtime-agent/contracts/schemas/realtime-agent-health.schema.json)에 둔다.
+
 ## 4. 스키마 소유권 (공동수정 금지)
 - `core` = Spring 단독 쓰기, `ai` = Python 단독 쓰기. AI 후보(ai)→강사 게시→core read model. 상세: [ARCHITECTURE.md](ARCHITECTURE.md) 도메인 모델.
 
@@ -177,7 +196,7 @@ Content-Type: application/json
 |---|---|---|---|
 | CP0 | 인증·강좌·live_session | _미정_ | §2 |
 | CP1 | 라이브 미디어(LiveKit·채팅) | _미정_ | §2 라이브, §3-6 |
-| CP2 | 라이브 자막(STT) | _미정_ | §3-3~§3-6 |
+| CP2 | 라이브 자막(STT) | _미정_ | §3-3~§3-6, §3-8 |
 | CP3 | 용어·RAG | _미정_ | §2 AI, §3-1, §3-2, §3-7 |
 | CP4 | 녹화·다시보기(Egress) | _미정_ | §2 다시보기, §3-1 |
 | CP5 | 퀴즈·따라잡기 | _미정_ | §2 |
