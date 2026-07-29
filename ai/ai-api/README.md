@@ -24,6 +24,11 @@ uv run --frozen python -m app.main
 안 된 상태다. 이 서비스를 브라우저에 직접 노출하지 않으며 Java 채택 전 후보 계약은
 [`CONTRACT.md`](CONTRACT.md)를 따른다.
 
+`AI_API_BGE_BASE_URL`은 경로 있는 origin도 허용한다(디렉터리 순회 `..`만 차단). EC2에 컨테이너로 배포할 때는
+GPU reverse tunnel을 내보내는 기존 프록시(`docker-compose.gpu-proxy.yml`, `infra/nginx/gpu-proxy.conf`,
+[ai-worker README §EC2 ai-worker ↔ GPU BGE 연결](../ai-worker/README.md#ec2-ai-worker--gpu-bge-연결)와 동일)를
+그대로 써서 `AI_API_BGE_BASE_URL=http://host.docker.internal:18080/internal/bge`로 설정한다.
+
 로컬 검증은 기본 compose의 PostgreSQL·Redis를 사용한다. PostgreSQL 테스트는 실행마다 별도 `*_test` DB와
 role을 만들고 제거하며, Redis 테스트는 DB 15의 무작위 key만 사용한다. 둘 다 skip하지 않는다.
 
