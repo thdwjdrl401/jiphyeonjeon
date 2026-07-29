@@ -64,6 +64,11 @@ export interface SaveCurriculumManagementResult {
   structureVersion: number
   /** 새로 만든 섹션의 임시 id(sec-new-*) → 실제 sectionId. 로컬 상태를 실제 id로 바꿔 중복 생성을 막는다. */
   sectionIdMap: Record<string, string>
+  /**
+   * 저장 후 서버에 반영된 커리큘럼 자료(ADR-0042). 새로 올린 자료는 실제 materialId를 갖고 File은 없다 —
+   * 화면이 로컬 상태를 이 목록으로 교체해 같은 파일을 다음 저장에서 다시 올리지 않게 한다.
+   */
+  materials: CurriculumMaterial[]
 }
 
 export interface CurriculumManagementService {

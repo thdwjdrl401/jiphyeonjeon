@@ -170,6 +170,8 @@ function CurriculumManageEditor({
   // 임시→실제로 바뀌므로 서명에서 제외한다(내용·순서만 본다) — 그래야 id 교체가 재저장을 유발하지 않는다.
   const savedSignatureRef = useRef<string | null>(null)
 
+  // 자료는 fileName:fileSize로 지문을 만든다 — 새로 올린 자료의 임시 id·File이 저장 후 실제
+  // materialId로 바뀌어도 지문이 안정적이라(섹션 id를 지문에서 뺀 것과 같은 이유) 재저장 루프가 안 돈다.
   const currentSignature = useCallback(() => JSON.stringify({
     info: curriculumInfo,
     sections: sections.map((section) => ({
@@ -177,12 +179,12 @@ function CurriculumManageEditor({
       description: section.description,
       lessons: section.lessons.map((lesson) => lesson.lessonId),
     })),
-  }), [curriculumInfo, sections])
+    materials: materials.map((material) => `${material.fileName}:${material.fileSize}`),
+  }), [curriculumInfo, sections, materials])
 
 
-  // 구조·기본정보 자동저장. 자료(materials)는 시그니처에 넣지 않아 자료 편집만으로는 저장이 돌지 않는다
-  // — 커리큘럼-레벨 자료 연결 API가 없기 때문(ADR-0030). 구조/정보 저장 시 현재 자료를 함께 실어
-  // mock이 기존 자료를 잃지 않게만 한다.
+  // 구조·기본정보·자료 자동저장(ADR-0042). 자료 추가/삭제도 지문에 반영돼 자동저장이 돈다 —
+  // saveCurriculumManagement가 새 자료 업로드·연결과 사라진 자료 삭제를 함께 처리한다.
   /** 저장에 성공했으면(또는 저장할 게 없으면) true. 게시는 이 값이 false면 중단한다. */
   const flushSave = useCallback(async (): Promise<boolean> => {
     if (savingRef.current) {
@@ -200,8 +202,7 @@ function CurriculumManageEditor({
         curriculumId,
         info: curriculumInfo,
         sections,
-        // 커리큘럼-레벨 자료는 아직 서버에 반영되지 않지만(ADR-0030), 현재 상태를 그대로 실어
-        // mock 저장이 기존 자료를 지우지 않게 한다. 실 API에서는 자료가 비어 있어 가드를 통과한다.
+        // 커리큘럼-레벨 자료(ADR-0042). 새로 선택한 자료는 업로드·연결되고 사라진 자료는 삭제된다.
         materials,
         structureVersion: structureVersionRef.current,
       })
@@ -213,6 +214,9 @@ function CurriculumManageEditor({
             ? { ...section, sectionId: result.sectionIdMap[section.sectionId] }
             : section))
       }
+      // 저장된 자료(실제 materialId, File 없음)로 교체 — 임시 자료를 다음 저장에서 다시 올리지 않게 한다.
+      // 지문이 fileName:fileSize라 이 교체는 재저장을 유발하지 않는다.
+      setMaterials(result.materials)
       setStructureVersion(result.structureVersion)
       savedSignatureRef.current = signature
       setAutosave('saved')
@@ -648,6 +652,8 @@ function CurriculumManageEditor({
               onThumbnailChange={(selection: CurriculumImageSelection | null) => updateThumbnail(selection?.previewUrl ?? null)}
               materials={materials}
               onMaterialsChange={updateMaterials}
+              materialDownloadHref={(material) =>
+                `/api/instructor/curriculums/${curriculumId}/materials/${material.materialId}/download`}
             />
           </Panel>
         </div>

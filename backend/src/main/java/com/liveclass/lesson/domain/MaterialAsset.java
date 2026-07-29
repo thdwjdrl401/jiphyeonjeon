@@ -27,7 +27,11 @@ public class MaterialAsset {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
+    // 스코프는 정확히 하나만 채워진다(DB ck_material_scope, ADR-0042). 레슨 자료면 lessonId,
+    // 커리큘럼 자료면 curriculumId. 나머지는 null.
     private UUID lessonId;
+
+    private UUID curriculumId;
 
     private UUID assetId;
 

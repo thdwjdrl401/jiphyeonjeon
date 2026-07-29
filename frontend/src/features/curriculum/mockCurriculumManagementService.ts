@@ -11,11 +11,24 @@ import {
 } from '@/features/demo/mockDatabase'
 import { ApiError } from '@/shared/api/client'
 import type { CurriculumManagementService } from './curriculumManagementService.interface'
+import type { CurriculumMaterial } from './types'
 
 const savedStructures = new Map<
   string,
   Awaited<ReturnType<CurriculumManagementService['getCurriculumManagementStructure']>>
 >()
+
+/**
+ * "저장"된 자료로 정규화한다(HTTP 구현과 같은 계약) — File을 떼고, 새로 선택한(File 보유) 자료에는
+ * 안정적인 persisted id를 부여한다. 그래야 저장 후 화면이 같은 파일을 다시 올리지 않는다.
+ */
+function persistMockMaterials(materials: CurriculumMaterial[] | undefined): CurriculumMaterial[] {
+  return (materials ?? []).map((material) => ({
+    materialId: material.file ? `mock-material-${material.fileName}-${material.fileSize}` : material.materialId,
+    fileName: material.fileName,
+    fileSize: material.fileSize,
+  }))
+}
 
 export const mockCurriculumManagementService = {
   async uploadCurriculumThumbnail(file) {
@@ -32,7 +45,7 @@ export const mockCurriculumManagementService = {
       summary: request.summary,
       description: request.description,
       thumbnailUrl: request.thumbnailPreviewUrl,
-      materials: request.materials,
+      materials: persistMockMaterials(request.materials),
       startsAt: request.startsAt,
       endsAt: request.endsAt,
     })
@@ -98,7 +111,8 @@ export const mockCurriculumManagementService = {
 
     curriculum.sectionCount = persistedSections.length
     curriculum.lessonCount = persistedSections.reduce((count, section) => count + section.lessons.length, 0)
-    updateMockCurriculumMaterials(request.curriculumId, request.materials)
+    const materials = persistMockMaterials(request.materials)
+    updateMockCurriculumMaterials(request.curriculumId, materials)
     savedStructures.set(
       request.curriculumId,
       persistedSections.map((section) => ({
@@ -106,7 +120,7 @@ export const mockCurriculumManagementService = {
         lessons: section.lessons.map((lesson) => ({ ...lesson })),
       })),
     )
-    return { structureVersion: request.structureVersion + 1, sectionIdMap }
+    return { structureVersion: request.structureVersion + 1, sectionIdMap, materials }
   },
   async publishCurriculum(curriculumId) {
     // 강의 상태는 그대로 둔다 — 실 서버와 같이 두 축은 독립이다(ADR-0002).
