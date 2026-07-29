@@ -11,12 +11,14 @@ import {
   emptyCaptionStreamState,
   reduceCaptionStream,
   selectCaptionViews,
+  selectVisibleCaptions,
 } from '@/features/live-session/captionAdapter'
 import LearningSidebar from '@/features/live-session/LearningSidebar'
 import { getLiveLearningPreview, type LearningPanel } from '@/features/live-session/liveLearningPreview'
 import {
   askLiveAi,
   endLiveSession,
+  getCaptions,
   getChatMessages,
   getLiveSession,
   saveBookmark,
@@ -56,6 +58,9 @@ export default function LiveClassroomPage() {
     enabled: Boolean(sessionQuery.data?.lessonId),
   })
   const chatQuery = useQuery({ queryKey: ['live-chat', sessionId], queryFn: () => getChatMessages(sessionId), enabled: Boolean(sessionId) })
+  // 저장된 자막 리로드(CAPTION-01, ADR-0045). 마운트 시 세션-ms 순 자막을 받아 WS 누적기에 시드해
+  // 새로고침·재연결 뒤 이전 자막을 복원한다. 실패해도 진입 게이트를 막지 않는다(자막 없이도 미디어·채팅은 산다).
+  const captionReloadQuery = useQuery({ queryKey: ['live-captions', sessionId], queryFn: () => getCaptions(sessionId), enabled: Boolean(sessionId) })
   const session = sessionQuery.data
   const lesson = lessonQuery.data
   const messages = chatQuery.data ?? []
@@ -115,6 +120,16 @@ export default function LiveClassroomPage() {
       setCaptionConnectionState,
     )
   }, [sessionId])
+  // 리로드된 저장 자막을 누적기에 시드한다. WS 델타와 같은 이벤트라 reduceCaptionStream이 멱등하게 흡수하므로
+  // WS가 먼저 붙어 일부가 이미 쌓였어도(순서 무관) 안전하다 — 중복 sequence는 무시, 누락분만 채운다.
+  useEffect(() => {
+    const seed = captionReloadQuery.data
+    if (!seed || seed.length === 0) return
+    for (const event of seed) {
+      captionAccumulator.current = reduceCaptionStream(captionAccumulator.current, event)
+    }
+    setCaptions(selectCaptionViews(captionAccumulator.current))
+  }, [captionReloadQuery.data])
   usePageTitle(`LIVE · ${lesson?.title ?? ''}`)
 
   const sendMessage = (event: FormEvent) => {
@@ -171,6 +186,10 @@ export default function LiveClassroomPage() {
   if (!sessionId) return <PageState title="잘못된 라이브 세션 경로입니다" />
   if (sessionQuery.isError || lessonQuery.isError) return <PageState title="라이브 강의를 불러오지 못했습니다" />
   if (!session || !lesson) return <PageState title="라이브 강의를 불러오는 중입니다" />
+
+  // 뷰어 분기(ADR-0045): 강사는 라이브 실시간 append 그대로, 학생은 HLS 위치(positionMs)까지 도달한
+  // 위치 동기화 자막만 노출한다. 앞선 자막은 누적기(버퍼)에 두고 위치가 닿으면 드러난다.
+  const visibleCaptions = selectVisibleCaptions(captions, { isInstructor, positionMs })
 
   const discussionComposer = (
     <form className="chat-composer" onSubmit={sendMessage}>
@@ -309,7 +328,7 @@ export default function LiveClassroomPage() {
               </Suspense>
             )}
 
-          <CaptionDock captions={captions} currentSessionMs={positionMs} label="실시간 자막" note={captionNote} onSeek={seekSession} onSelectTerm={openGlossaryTerm} />
+          <CaptionDock captions={visibleCaptions} currentSessionMs={positionMs} label="실시간 자막" note={captionNote} onSeek={seekSession} onSelectTerm={openGlossaryTerm} />
         </section>
 
         {(!isInstructor || !sidebarWindow.isDetached) && sidebar}

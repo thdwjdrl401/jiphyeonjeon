@@ -41,13 +41,28 @@ interface ApiCaptionDeltaPayload {
   sttSessionId: string
   sequence: number
   streamElapsedMs: number
+  sessionMs: number | null
   text: string
 }
 
 interface ApiCaptionCompletedPayload {
   sttSessionId: string
   lastSequence: number
+  sessionMs: number | null
   reason: string
+}
+
+/** 리로드 응답 한 줄(WS payload와 정합, type으로 delta/completed 구분). CAPTION-01 / ADR-0045. */
+interface ApiCaptionReloadItem {
+  type: string
+  sttSessionId: string
+  sequence: number | null
+  lastSequence: number | null
+  streamElapsedMs: number
+  sessionMs: number | null
+  text: string | null
+  reason: string | null
+  occurredAt: string
 }
 
 interface ApiCaptionEnvelope {
@@ -202,6 +217,7 @@ function readCaptionEnvelope(frame: IMessage, sessionId: string): CaptionStreamE
         sttSessionId: payload.sttSessionId,
         sequence: payload.sequence,
         streamElapsedMs: payload.streamElapsedMs,
+        sessionMs: payload.sessionMs ?? null,
         text: payload.text,
       },
     }
@@ -214,11 +230,42 @@ function readCaptionEnvelope(frame: IMessage, sessionId: string): CaptionStreamE
       payload: {
         sttSessionId: payload.sttSessionId,
         lastSequence: payload.lastSequence,
+        sessionMs: payload.sessionMs ?? null,
         reason: payload.reason,
       },
     }
   }
   return null
+}
+
+// 리로드 응답 한 줄을 WS 누적기가 먹는 CaptionStreamEvent로 옮긴다. 미지 type은 버린다.
+function toCaptionStreamEvent(item: ApiCaptionReloadItem): CaptionStreamEvent[] {
+  if (item.type === 'caption.delta') {
+    return [{
+      type: 'caption.delta',
+      occurredAt: item.occurredAt,
+      payload: {
+        sttSessionId: item.sttSessionId,
+        sequence: item.sequence ?? 0,
+        streamElapsedMs: item.streamElapsedMs,
+        sessionMs: item.sessionMs ?? null,
+        text: item.text ?? '',
+      },
+    }]
+  }
+  if (item.type === 'caption.stream.completed') {
+    return [{
+      type: 'caption.stream.completed',
+      occurredAt: item.occurredAt,
+      payload: {
+        sttSessionId: item.sttSessionId,
+        lastSequence: item.lastSequence ?? 0,
+        sessionMs: item.sessionMs ?? null,
+        reason: item.reason ?? '',
+      },
+    }]
+  }
+  return []
 }
 
 export const httpLiveSessionService = {
@@ -369,10 +416,11 @@ export const httpLiveSessionService = {
       void client.deactivate()
     }
   },
-  // WS 재연결 시 누락 자막을 메우는 REST 복구 경로(CAPTION-01)는 아직 서버에 없다.
-  // 라이브 렌더는 위 subscribeCaptions(WS 델타)가 구동한다 — 이 스텁에 의존하지 않는다.
+  // 저장된 자막 리로드(CAPTION-01, ADR-0045). 새로고침·재연결 뒤 세션-ms 순 자막을 복원해 WS 누적기에
+  // 시드한다 — WS 델타와 같은 필드다. 라이브 렌더는 이어서 subscribeCaptions(WS)가 구동한다.
   async getCaptions(sessionId) {
-    return notImplemented(`GET /live-sessions/${sessionId}/captions`)
+    const { data } = await apiClient.get<ApiCaptionReloadItem[]>(`/live-sessions/${sessionId}/captions`)
+    return data.flatMap(toCaptionStreamEvent)
   },
   async askLiveAi(lessonId) {
     return notImplemented(`POST /lessons/${lessonId}/ai/questions:stream`)

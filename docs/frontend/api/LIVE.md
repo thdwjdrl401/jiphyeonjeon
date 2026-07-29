@@ -50,7 +50,7 @@ STARTING ─────────→ FAILED
 |---|---|---|---|---|
 | `LIVE-WS-01` | WebSocket | `/api/ws` | 인증 쿠키 기반 WS 연결 | **제안** |
 | `CHAT-01` | REST | `GET/POST /api/live-sessions/{sessionId}/messages` | 채팅 복구 조회·전송 fallback | **구현됨(세션 키잉)** |
-| `CAPTION-01` | REST | `GET /api/live-sessions/{sessionId}/captions` | 재연결 누락 자막 복구 | **제안** |
+| `CAPTION-01` | REST | `GET /api/live-sessions/{sessionId}/captions` | 저장 자막 리로드(새로고침·재연결 복구) | **구현됨(ADR-0045)** |
 | `AI-QUESTION-01` | SSE | `POST /api/lessons/{lessonId}/ai/questions:stream` | 개인 AI Q&A | URL **확정** |
 | `AI-TERM-01` | REST | `POST /api/lessons/{lessonId}/ai/terms:explain` | 전문용어 설명 | URL **확정** |
 | `LIVE-QUESTION-01` | REST | `GET /api/instructor/live-sessions/{sessionId}/question-pins` | 강사용 질문 시점 집계 | **제안** |
@@ -346,7 +346,7 @@ Cookie: session=...
   "type": "caption.delta",
   "sessionId": "ses_01J...",
   "occurredAt": "2026-08-01T10:02:00+09:00",
-  "payload": { "sttSessionId": "stt_01J...", "sequence": 12, "streamElapsedMs": 42000, "text": "SecurityContext가 " }
+  "payload": { "sttSessionId": "stt_01J...", "sequence": 12, "streamElapsedMs": 42000, "sessionMs": 41000, "text": "SecurityContext가 " }
 }
 ```
 
@@ -370,28 +370,40 @@ Cookie: session=...
 `caption.delta` payload — **append-only 증분**:
 
 ```json
-{ "sttSessionId": "stt_01J...", "sequence": 12, "streamElapsedMs": 42000, "text": "이어지는 조각" }
+{ "sttSessionId": "stt_01J...", "sequence": 12, "streamElapsedMs": 42000, "sessionMs": 41000, "text": "이어지는 조각" }
 ```
 
 - `sttSessionId`: 한 STT job attempt. **이것이 곧 한 자막 라인의 정체성**이다(같은 attempt의 델타가 한 라인으로 모인다).
 - `sequence`: `(sessionId, sttSessionId)` attempt 범위에서만 증가. retry(새 `sttSessionId`)마다 1부터 다시 시작할 수 있다.
 - `streamElapsedMs`: **agent 첫 오디오 프레임=0 기준 stream-local(attempt) 경과 ms**. 세션 상대 ms가 **아니다** — 세션 ms로 변환하지 말고 그대로 표시한다(계약 강제).
+- `sessionMs`(Long, **nullable**): 서버가 계산한 **근사 세션-ms**(`max(0, occurredAt − clockOriginAt)`, ADR-0045). HLS 영상 위치(`positionMs`)와 **같은 세션 축**이라 학생 위치 동기화의 기준이다. `streamElapsedMs` 변환이 아니라 occurredAt 기반 별도 근사 축이며, clockOriginAt이 없으면 `null`(그때는 `streamElapsedMs`로 fallback). 근사 오차 ~1~2s.
 - `text`: 이전까지 텍스트에 이어 붙일 증분. FE는 `sttSessionId`별로 `sequence` 순서로 이어 붙여 "자라는" 라인을 만든다.
 
 `caption.stream.completed` payload — 스트림 종료 마커(해당 `sttSessionId`에 더 이상 델타 없음):
 
 ```json
-{ "sttSessionId": "stt_01J...", "lastSequence": 12, "reason": "ROOM_DELETED" }
+{ "sttSessionId": "stt_01J...", "lastSequence": 12, "sessionMs": 43000, "reason": "ROOM_DELETED" }
 ```
 
 FE 소비 구현: 봉투 파싱은 `httpLiveSessionService.subscribeCaptions`, 누적·CaptionView 매핑은 `captionAdapter`
-(`reduceCaptionStream`/`selectCaptionViews`), 렌더는 `CaptionDock`(확정 전 라인은 `pending`). 상세 근거는 ADR-0044.
+(`reduceCaptionStream`/`selectCaptionViews`), 렌더는 `CaptionDock`(확정 전 라인은 `pending`). 상세 근거는 ADR-0044·0045.
 
-### 8.3 재연결 누락 복구(미구현)
+**뷰어별 위치 동기화(ADR-0045)**: 자막 시각을 `sessionMs`(있으면) 축에 두고, `LiveClassroomPage`가 뷰어에 따라 노출을 가른다.
+- **학생(HLS/replay, 플레이어 위치 존재)**: `selectVisibleCaptions`가 `positionMs`(+lead ~500ms)까지의 위치 동기화(`synced`) 자막만 노출한다. 앞선 자막은 누적기(버퍼)에 두고 위치가 도달하면 드러나 — HLS 지연으로 자막이 영상보다 앞서던 문제를 없앤다. 현재 cue는 위치에 도달한 마지막 라인으로 강조한다.
+- **강사(라이브, 위치 미구동)**: 기존 실시간 append 그대로.
+- `sessionMs`가 없어 fallback(`synced=false`)인 자막은 위치 축이 아니라 판단 불가라 그대로 보인다.
 
-`CAPTION-01`(`GET /api/live-sessions/{sessionId}/captions`) REST 복구 경로는 아직 서버에 없다(제안). 라이브 렌더는
-WS 델타가 구동하며 이 스냅샷에 의존하지 않는다. 델타는 fast-path라 at-least-once 유실을 허용하고, 정본 복구는
-녹화 2-pass(CP4)·`GET /lessons/{id}/transcript`의 몫이다. cursor 방식(예: `afterSequence`)은 저장 모델과 협의한다.
+**Bounded 누적(롤링 캡)**: 누적기는 최근 `CAPTION_MAX_LINES`(=300) 라인만 보관하고 초과 시 가장 오래된 라인을 drop한다 — 긴 세션에서 메모리·DOM(<article> 수)이 무한정 커지지 않게. 학생 위치 버퍼는 HLS 지연분(~수십초)뿐이라 넉넉하다. 풀 가상 스크롤은 쓰지 않는다.
+
+### 8.3 재연결·새로고침 자막 복구(구현됨, CAPTION-01/ADR-0045)
+
+`CAPTION-01`(`GET /api/live-sessions/{sessionId}/captions`)로 저장된 자막을 **세션-ms 순**으로 리로드한다. 각 항목은
+WS 델타/종료와 **같은 필드**(근사 `sessionMs` 포함)라, `LiveClassroomPage` 마운트 시 이 목록을 WS 누적기에 그대로
+시드해 새로고침·재연결 뒤 이전 자막을 복원한다(`getCaptions` → `reduceCaptionStream`). WS 델타와 **멱등 병합**되므로
+WS가 먼저 붙어 일부가 쌓였어도 순서 무관하게 안전하다(중복 sequence 무시, 누락분만 채움). 실시간 렌더는 이어서
+`subscribeCaptions`(WS)가 구동하며, 리로드 실패는 진입 게이트를 막지 않는다(자막 없이도 미디어·채팅은 산다).
+정본 복구는 녹화 2-pass(CP4)·`GET /lessons/{id}/transcript`의 몫이고, 롤링 캡을 넘어 drop된 오래된 이력의
+리로드-온디맨드는 이번 범위 밖(후속).
 
 ## 9. 채팅
 

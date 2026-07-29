@@ -56,7 +56,7 @@ describe('라이브 자막 STOMP 구독 계약', () => {
 
     const receive = client.subscribe.mock.calls[0][1] as (frame: { body: string }) => void
 
-    // delta: raw streamElapsedMs 그대로 통과.
+    // delta: raw streamElapsedMs 그대로 + 근사 sessionMs(ADR-0045) 통과.
     receive({
       body: JSON.stringify({
         eventId: 'evt-1',
@@ -69,6 +69,7 @@ describe('라이브 자막 STOMP 구독 계약', () => {
           sttSessionId: 'stt-1',
           sequence: 3,
           streamElapsedMs: 42_000,
+          sessionMs: 41_000,
           text: '자막 조각',
         },
       }),
@@ -76,10 +77,10 @@ describe('라이브 자막 STOMP 구독 계약', () => {
     expect(onEvent).toHaveBeenLastCalledWith({
       type: 'caption.delta',
       occurredAt: '2026-07-29T10:00:00+09:00',
-      payload: { sttSessionId: 'stt-1', sequence: 3, streamElapsedMs: 42_000, text: '자막 조각' },
+      payload: { sttSessionId: 'stt-1', sequence: 3, streamElapsedMs: 42_000, sessionMs: 41_000, text: '자막 조각' },
     })
 
-    // completed: 종료 마커.
+    // completed: 종료 마커. sessionMs가 없으면(clockOriginAt 전 등) null로 정규화한다.
     receive({
       body: JSON.stringify({
         eventId: 'evt-2',
@@ -92,7 +93,7 @@ describe('라이브 자막 STOMP 구독 계약', () => {
     expect(onEvent).toHaveBeenLastCalledWith({
       type: 'caption.stream.completed',
       occurredAt: '2026-07-29T10:01:00+09:00',
-      payload: { sttSessionId: 'stt-1', lastSequence: 3, reason: 'ROOM_DELETED' },
+      payload: { sttSessionId: 'stt-1', lastSequence: 3, sessionMs: null, reason: 'ROOM_DELETED' },
     })
 
     // 다른 세션·미지의 type은 무시한다.

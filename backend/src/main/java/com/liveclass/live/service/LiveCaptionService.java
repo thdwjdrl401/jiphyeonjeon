@@ -2,12 +2,16 @@ package com.liveclass.live.service;
 
 import com.liveclass.live.domain.LiveCaption;
 import com.liveclass.live.repository.LiveCaptionRepository;
+import com.liveclass.live.web.dto.CaptionReloadItem;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.UUID;
 
 /**
  * 자막 소비 멱등 적재(ADR-0043, CONTRACT §3-4). eventId 하나가 유일한 멱등키다 —
@@ -25,10 +29,25 @@ public class LiveCaptionService {
 
     private final LiveCaptionRepository repository;
     private final ApplicationEventPublisher eventPublisher;
+    private final SessionClockLookup sessionClockLookup;
 
-    public LiveCaptionService(LiveCaptionRepository repository, ApplicationEventPublisher eventPublisher) {
+    public LiveCaptionService(LiveCaptionRepository repository, ApplicationEventPublisher eventPublisher,
+                              SessionClockLookup sessionClockLookup) {
         this.repository = repository;
         this.eventPublisher = eventPublisher;
+        this.sessionClockLookup = sessionClockLookup;
+    }
+
+    /**
+     * 저장된 자막을 세션-ms 순으로 리로드한다(CONTRACT §2 자막, ADR-0045). 각 행에 근사 세션-ms를
+     * 계산해 WS payload와 같은 필드로 돌려준다 — FE가 새로고침·재연결 뒤 WS 누적기에 시드해 자막을 복원한다.
+     * 인가(세션 참가자)는 호출자(컨트롤러)가 {@code LiveAccessGuard}로 처리한다.
+     */
+    @Transactional(readOnly = true)
+    public List<CaptionReloadItem> reload(UUID sessionId) {
+        return repository.findBySessionIdOrderByOccurredAtAscIdAsc(sessionId).stream()
+                .map(row -> CaptionReloadItem.from(row, sessionClockLookup.approxSessionMs(sessionId, row.getOccurredAt())))
+                .toList();
     }
 
     /**

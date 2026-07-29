@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /** live 도메인 실패 → CONTRACT §2 상태코드 매핑. */
 @Order(Ordered.LOWEST_PRECEDENCE - 100)
-@RestControllerAdvice(assignableTypes = {LiveSessionController.class, ChatController.class})
+@RestControllerAdvice(assignableTypes = {LiveSessionController.class, ChatController.class, CaptionController.class})
 public class LiveExceptionHandler {
 
     @ExceptionHandler(LiveSessionNotFoundException.class)

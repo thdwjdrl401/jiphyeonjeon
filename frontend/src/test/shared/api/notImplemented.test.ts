@@ -52,7 +52,7 @@ describe('미구현 API 표시', () => {
 
   // 서버에 경로가 생기면 이 목록에서 한 줄씩 빠진다.
   const unimplemented: Array<[string, () => Promise<unknown>]> = [
-    ['라이브 자막', () => live.getCaptions('ses-1')],
+    // 라이브 자막 리로드(GET /live-sessions/{id}/captions)는 서버에 구현됨(CAPTION-01, ADR-0045) — 제외.
     ['라이브 AI 질문', () => live.askLiveAi('les-1', '질문')],
     ['녹화 처리 현황', () => live.getProcessingStatus('ses-1')],
     ['질문 하이라이트', () => live.getQuestionHighlights('ses-1')],

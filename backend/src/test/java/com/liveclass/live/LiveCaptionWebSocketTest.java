@@ -4,6 +4,8 @@ import com.liveclass.live.api.LiveRecordingControl;
 import com.liveclass.live.config.CaptionStreamProperties;
 import com.liveclass.live.repository.LiveSessionRepository;
 import com.liveclass.live.service.AgentDispatchControl;
+import com.liveclass.live.service.CaptionEvent;
+import com.liveclass.live.service.LiveCaptionService;
 import com.liveclass.live.service.LiveRoomControl;
 import com.liveclass.support.LiveStartTestSupport;
 import org.junit.jupiter.api.Test;
@@ -30,6 +32,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -70,6 +73,9 @@ class LiveCaptionWebSocketTest {
     @Autowired
     private CaptionStreamProperties captionProperties;
 
+    @Autowired
+    private LiveCaptionService liveCaptionService;
+
     @MockitoBean
     private LiveRoomControl roomControl;
 
@@ -100,7 +106,11 @@ class LiveCaptionWebSocketTest {
         subscribeCaptions(session, sessionId, received);
         Thread.sleep(300);   // 구독이 브로커에 반영될 시간
 
-        redis.opsForStream().add(captionProperties.streamKey(), delta(sessionId, lessonId));
+        // occurredAt을 세션 클록 원점 + 41s로 둬 근사 세션-ms(occurredAt−clockOriginAt)가 결정론적으로 41000이 되게 한다.
+        OffsetDateTime clockOrigin = liveSessionRepository.findById(UUID.fromString(sessionId)).orElseThrow()
+                .getClockOriginAt();
+        String occurredAt = clockOrigin.plusSeconds(41).toString();
+        redis.opsForStream().add(captionProperties.streamKey(), delta(sessionId, lessonId, occurredAt));
 
         Map<String, Object> envelope = received.poll(15, TimeUnit.SECONDS);
         assertThat(envelope).as("자막 브로드캐스트를 시간 내 수신").isNotNull();
@@ -113,8 +123,8 @@ class LiveCaptionWebSocketTest {
         assertThat(payload.get("sequence")).isEqualTo(1);
         assertThat(payload.get("streamElapsedMs")).isEqualTo(41000);   // raw ms 그대로(변환 금지)
         assertThat(payload.get("text")).isEqualTo("실시간 자막");
-        // 세션 상대 ms 변환 흔적이 없어야 한다(계약 §3-4).
-        assertThat(payload).doesNotContainKey("sessionMs");
+        // 근사 세션-ms(occurredAt−clockOriginAt, ADR-0045)를 표시용으로 함께 싣는다 — streamElapsedMs 변환이 아니다.
+        assertThat(payload.get("sessionMs")).isEqualTo(41000);
 
         session.disconnect();
     }
@@ -147,7 +157,7 @@ class LiveCaptionWebSocketTest {
         subscribeCaptions(outsiderSession, sessionId, outsiderInbox);
         Thread.sleep(400);
 
-        redis.opsForStream().add(captionProperties.streamKey(), delta(sessionId, lessonId));
+        redis.opsForStream().add(captionProperties.streamKey(), delta(sessionId, lessonId, "2026-08-01T10:00:41Z"));
 
         assertThat(enrolledInbox.poll(15, TimeUnit.SECONDS))
                 .as("활성 수강생은 자막을 수신한다").isNotNull();
@@ -162,7 +172,59 @@ class LiveCaptionWebSocketTest {
         }
     }
 
-    private Map<String, String> delta(String sessionId, String lessonId) {
+    @Test
+    void reload_returns_stored_captions_in_session_ms_order_with_approx_session_ms() throws Exception {
+        Client instructor = new Client();
+        instructor.signupAndLogin("INSTRUCTOR");
+        String[] ids = instructor.createStartedSession();
+        String lessonId = ids[0];
+        String sessionId = ids[1];
+        String cid = ids[2];
+
+        Client student = new Client();
+        student.signupAndLogin("STUDENT");
+        String eid = student.field(student.post("/api/curriculums/" + cid + "/enrollments", null), "enrollmentId");
+        instructor.post("/api/instructor/curriculums/" + cid + "/enrollments/" + eid + "/approve", null);
+
+        // 저장된 자막 한 줄을 직접 적재한다. occurredAt = clockOriginAt + 5s → 근사 sessionMs=5000(결정론적).
+        OffsetDateTime clockOrigin = liveSessionRepository.findById(UUID.fromString(sessionId)).orElseThrow()
+                .getClockOriginAt();
+        liveCaptionService.persist(new CaptionEvent(
+                "reload-" + UUID.randomUUID(), "caption.delta",
+                UUID.fromString(sessionId), UUID.fromString(lessonId),
+                "openai-realtime:reload", 1L, null, 41000, "복원될 자막", null,
+                clockOrigin.plusSeconds(5)));
+
+        HttpResponse<String> res = student.get("/api/live-sessions/" + sessionId + "/captions");
+        assertThat(res.statusCode()).as("참가자는 자막 리로드를 조회한다").isEqualTo(200);
+
+        JsonNode items = jsonMapper.readTree(res.body());
+        assertThat(items.isArray()).isTrue();
+        assertThat(items.size()).isEqualTo(1);
+        JsonNode item = items.get(0);
+        assertThat(item.get("type").asString()).isEqualTo("caption.delta");
+        assertThat(item.get("sttSessionId").asString()).isEqualTo("openai-realtime:reload");
+        assertThat(item.get("sequence").asLong()).isEqualTo(1L);
+        assertThat(item.get("streamElapsedMs").asLong()).isEqualTo(41000L);   // raw 그대로
+        assertThat(item.get("sessionMs").asLong()).isEqualTo(5000L);          // 근사(occurredAt−clockOriginAt)
+        assertThat(item.get("text").asString()).isEqualTo("복원될 자막");
+    }
+
+    @Test
+    void reload_is_forbidden_for_non_participant() throws Exception {
+        Client instructor = new Client();
+        instructor.signupAndLogin("INSTRUCTOR");
+        String[] ids = instructor.createStartedSession();
+        String sessionId = ids[1];
+
+        Client outsider = new Client();
+        outsider.signupAndLogin("STUDENT");   // 미수강
+
+        HttpResponse<String> res = outsider.get("/api/live-sessions/" + sessionId + "/captions");
+        assertThat(res.statusCode()).as("미참가자는 자막 리로드가 403").isEqualTo(403);
+    }
+
+    private Map<String, String> delta(String sessionId, String lessonId, String occurredAt) {
         Map<String, String> delta = new LinkedHashMap<>();
         delta.put("contractVersion", "1");
         delta.put("type", "caption.delta");
@@ -173,7 +235,7 @@ class LiveCaptionWebSocketTest {
         delta.put("sequence", "1");
         delta.put("streamElapsedMs", "41000");
         delta.put("text", "실시간 자막");
-        delta.put("occurredAt", "2026-07-27T12:34:56.789Z");
+        delta.put("occurredAt", occurredAt);
         return delta;
     }
 
