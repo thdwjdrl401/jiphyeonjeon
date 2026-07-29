@@ -145,10 +145,33 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
     let cancelled = false
     let connectionFailed = false
     const room = new Room({
+      // dynacast는 아무도 구독하지 않는 트랙의 송출을 멈춘다. 레이어가 하나뿐이어도
+      // 구독자 없는 구간에서 업링크를 아끼므로 그대로 둔다.
       dynacast: true,
       videoCaptureDefaults: { resolution: VideoPresets.h1080.resolution },
       publishDefaults: {
+        // 사이멀캐스트를 끈다. 학생은 WebRTC로 직접 구독하지 않고 HLS로만 보므로(ADR-0032)
+        // 강사 트랙의 구독자는 Egress 하나뿐이고, Egress는 언제나 최상위 레이어만 쓴다.
+        // 320x180·640x360은 아무도 보지 않는데 계속 인코딩되고 있었다.
+        //
+        // 그냥 낭비가 아니라 화질 저하의 직접 원인이었다. VP8 1080p 3레이어 소프트웨어 인코딩을
+        // 브라우저가 감당하지 못해 최상위 레이어를 버렸고(카메라 기본 degradationPreference가
+        // maintain-framerate라 프레임률 대신 해상도를 포기한다), Egress는 남은 640x360을 받아
+        // 1920x1080으로 3배 확대해 인코딩했다. 운영 세션에서 실측한 근거:
+        //
+        //   레이어 상태   HIGH 1920x1080 이 ssrc 없이 비활성, MEDIUM 640x360 만 활성
+        //   프레임 분석   가로 인접 화소 밝기차 RMS 비율 d1/d3 = 0.361
+        //                 (3배 업스케일 구간. 원본 해상도라면 0.6 이상)
+        //   배율 일치     640 x 3 = 1920
+        //
+        // 레이어가 하나면 버릴 최상위가 없다. 인코딩 부담이 1/3로 줄고 Egress가 진짜 1080p를 받는다.
+        // 학생 WebRTC 직접 구독을 도입한다면(ADR-0032 개정) 이 선택을 되돌려야 한다.
+        simulcast: false,
+        // 카메라 단독 강의에서 Egress 캔버스(1080p)를 업스케일 없이 채우려면 소스가 1080p여야 한다.
+        // 웹캠이 1080p를 못 내면 ideal 제약이라 720p로 협상된다.
         videoEncoding: VideoPresets.h1080.encoding,
+        // 화면공유는 코드·슬라이드 텍스트라 비트레이트가 판독성을 좌우한다. 기본 h1080fps15(2.5Mbps)는
+        // 스크롤 구간에서 글자가 뭉갠다. 30fps 프리셋은 같은 1080p에 5Mbps다.
         screenShareEncoding: ScreenSharePresets.h1080fps30.encoding,
       },
     })
