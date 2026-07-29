@@ -84,9 +84,11 @@
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 16px 20px;
-  background: var(--blue-50);
+  border: 1px solid rgba(20, 92, 66, .22);
   border-radius: var(--radius-lg);
   padding: 28px;
+  background: var(--blue-50);
+  box-shadow: 0 8px 22px rgba(20, 92, 66, .07), var(--shadow-inset);
 }
 
 .instructor-management-card__body {
