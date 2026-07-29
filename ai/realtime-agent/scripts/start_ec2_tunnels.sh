@@ -16,6 +16,23 @@ HEALTH_BIND_HOST="${HEALTH_BIND_HOST:-127.0.0.1}"
 SSH_CONTROL_PATH="${SSH_CONTROL_PATH:-${TMPDIR:-/tmp}/liveclass-realtime-agent-%C.sock}"
 HEALTH_REVERSE_MARKER="$SSH_CONTROL_PATH.health-$HEALTH_REMOTE_PORT"
 
+case "$SSH_TARGET" in
+    -*|*[!A-Za-z0-9@._:-]*|*@*@*|@*|*@)
+        echo "SSH_TARGET must be a safe user@host value" >&2
+        exit 1
+        ;;
+    ?*@?*)
+        ;;
+    *)
+        echo "SSH_TARGET must be in user@host form" >&2
+        exit 1
+        ;;
+esac
+if [ "$HEALTH_BIND_HOST" != "127.0.0.1" ]; then
+    echo "HEALTH_BIND_HOST must be 127.0.0.1" >&2
+    exit 1
+fi
+
 if [ ! -r "$SSH_KEY" ]; then
     echo "SSH key is not readable" >&2
     exit 1
@@ -73,9 +90,9 @@ validate_port "$TURN_REMOTE_PORT" TURN_REMOTE_PORT
 validate_port "$HEALTH_LOCAL_PORT" HEALTH_LOCAL_PORT
 validate_port "$HEALTH_REMOTE_PORT" HEALTH_REMOTE_PORT
 
-if ssh -S "$SSH_CONTROL_PATH" -O check "$SSH_TARGET" >/dev/null 2>&1; then
+if ssh -F /dev/null -S "$SSH_CONTROL_PATH" -O check "$SSH_TARGET" >/dev/null 2>&1; then
     if [ ! -e "$HEALTH_REVERSE_MARKER" ]; then
-        ssh -S "$SSH_CONTROL_PATH" -O forward \
+        ssh -F /dev/null -S "$SSH_CONTROL_PATH" -O forward \
             -R "$HEALTH_BIND_HOST:$HEALTH_REMOTE_PORT:127.0.0.1:$HEALTH_LOCAL_PORT" \
             "$SSH_TARGET"
         : >"$HEALTH_REVERSE_MARKER"
@@ -92,13 +109,20 @@ validate_listener_available "$REDIS_LOCAL_PORT" REDIS
 validate_listener_available "$TURN_LOCAL_PORT" TURN_TCP
 
 ssh \
+    -F /dev/null \
+    -T \
     -M \
     -S "$SSH_CONTROL_PATH" \
     -i "$SSH_KEY" \
     -o BatchMode=yes \
+    -o ConnectTimeout=10 \
+    -o ConnectionAttempts=1 \
     -o ExitOnForwardFailure=yes \
+    -o IdentitiesOnly=yes \
+    -o RequestTTY=no \
     -o ServerAliveInterval=30 \
     -o ServerAliveCountMax=3 \
+    -o StrictHostKeyChecking=yes \
     -f -N \
     -L "$LIVEKIT_LOCAL_PORT:localhost:$LIVEKIT_REMOTE_PORT" \
     -L "$REDIS_LOCAL_PORT:localhost:$REDIS_REMOTE_PORT" \

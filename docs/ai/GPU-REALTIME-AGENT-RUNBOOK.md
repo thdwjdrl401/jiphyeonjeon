@@ -14,6 +14,8 @@ ID는 문서나 Git에 기록하지 않는다.
 | LiveKit signaling/API | `7443` | `7443` |
 | application Redis | `4000` | `4000` |
 | TURN/TCP | `3478` | `3478` |
+| realtime-agent health(reverse) | `8081` | `18081` |
+| BGE runtime(reverse) | `8020` | `18020` |
 
 GPU agent health `127.0.0.1:8081`은 같은 SSH master의 reverse forward로 EC2
 `127.0.0.1:18081`에 연결한다. GPU inbound port는 열지 않는다.
@@ -36,19 +38,52 @@ uv run --frozen python -c "import torch; print(torch.__version__, torch.version.
 운영 host는 sudo 없는 rootless 배포를 사용한다. 사용자 Runner·tmux supervisor bootstrap과 장애
 확인은 [GPU 배포 가이드](../../ai/realtime-agent/deploy/README.md)를 따른다.
 
-## SSH tunnel
+## 운영 GPU SSH tunnel
+
+이 절차는 개발자 PC가 아니라 realtime-agent와 BGE가 실행되는 운영 GPU 호스트에서 한 번 수행한다.
+bootstrap은 전달받은 PEM을 Git 밖의 `~/.config/liveclass/ssh/gpu-to-ec2.pem`으로 복사하고 권한을
+`0600`으로 고정한 뒤, 같은 EC2 target을 사용하는 두 서비스의 tunnel env를 함께 만든다. EC2 host key는
+별도 채널로 확인해 `~/.ssh/known_hosts`에 먼저 등록한다.
 
 ```sh
-SSH_KEY=/path/to/key.pem \
-SSH_TARGET=user@host \
-./scripts/start_ec2_tunnels.sh
+cd /home/liveclass/liveclass
+ai/realtime-agent/deploy/configure-gpu-ec2-tunnels.sh \
+  /absolute/path/to/gpu-to-ec2.pem \
+  <ec2-user>@<ec2-host> \
+  --start
 ```
 
-스크립트는 host와 key 경로를 기본값으로 갖지 않는다. 포트가 다르면 `LIVEKIT_LOCAL_PORT`,
-`LIVEKIT_REMOTE_PORT`, `REDIS_LOCAL_PORT`, `REDIS_REMOTE_PORT`, `TURN_LOCAL_PORT`,
-`TURN_REMOTE_PORT`를 명시한다. listener는 `nc` 또는 `ss`로 확인한다.
+`--start`는 설치된 realtime-agent와 BGE의 사용자 tmux tunnel supervisor를 시작한다. 두 supervisor는
+같은 PEM과 target을 사용하지만 별도 SSH connection을 유지한다. 따라서 BGE local readiness 실패가
+LiveKit·Redis·TURN 연결을 끊지 않는다. 둘 다 GPU에서 EC2로 outbound 접속하므로 GPU security group에
+inbound application port를 열지 않는다.
 
-## PEM 보유 로컬 개발자의 API provider 검증
+직접 helper를 실행하는 방식은 장애 분석용이다. 포트가 다르면 `LIVEKIT_LOCAL_PORT`,
+`LIVEKIT_REMOTE_PORT`, `REDIS_LOCAL_PORT`, `REDIS_REMOTE_PORT`, `TURN_LOCAL_PORT`,
+`TURN_REMOTE_PORT`를 명시한다.
+
+```sh
+set -a
+. ~/.config/liveclass/realtime-agent-tunnels.env
+set +a
+ai/realtime-agent/scripts/start_ec2_tunnels.sh
+```
+
+GPU와 EC2 양쪽에서 listener와 HTTP 왕복을 확인한다.
+
+```sh
+# GPU
+ss -ltn | grep -E ':(7443|4000|3478|8020|8081)\b'
+~/.local/bin/liveclass-realtime-agent-supervisor status
+~/.local/bin/liveclass-bge-runtime-supervisor status
+
+# EC2
+ss -ltn | grep -E ':(18020|18081)\b'
+curl --fail http://127.0.0.1:18020/readyz
+curl --fail http://127.0.0.1:18081/
+```
+
+## PEM 보유 로컬 개발자의 API provider 검증 — 운영 절차 아님
 
 로컬 개발자는 EC2 security group에 LiveKit·Redis·TURN 포트를 새로 공개하지 않고 위 SSH local
 forwarding만 사용한다. PEM은 `chmod 600`으로 제한하고, host key를 별도 채널로 확인해

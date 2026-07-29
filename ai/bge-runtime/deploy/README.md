@@ -26,6 +26,16 @@ installer는 기존 환경파일을 덮어쓰지 않는다. BGE token은 EC2 ai-
 `AI_WORKER_BGE_INTERNAL_TOKEN`과 같아야 하고, SSH host key는 `~/.ssh/known_hosts`에 미리 등록한다.
 모델은 pinned revision이 Hugging Face cache에 있어야 하며 운영 환경은 offline mode로 실행한다.
 
+realtime-agent와 BGE의 EC2 target·PEM은 공용 bootstrap으로 함께 설정한다. PEM은 Git 밖의 사용자
+설정 디렉터리로 복사되며 두 tunnel env에는 그 복사본 경로만 기록된다.
+
+~~~sh
+ai/realtime-agent/deploy/configure-gpu-ec2-tunnels.sh \
+  /absolute/path/to/gpu-to-ec2.pem \
+  <ec2-user>@<ec2-host> \
+  --start
+~~~
+
 supervisor와 deploy helper는 inherited 환경과 무관하게 `CUDA_VISIBLE_DEVICES=0`과
 `BGE_RUNTIME_DEVICE=cuda`를 강제한다. 이 호스트에서는 GPU 1을 사용하지 않는다.
 

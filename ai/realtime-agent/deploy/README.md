@@ -17,6 +17,7 @@ Python 환경은 Conda가 아니라 프로젝트 표준인 Python 3.12와 uv를 
 cd /home/liveclass/liveclass
 ai/realtime-agent/deploy/install.sh /opt/tljh/user/bin/uv
 ai/realtime-agent/deploy/install-gitlab-runner-user.sh latest
+ai/bge-runtime/deploy/install.sh /opt/tljh/user/bin/uv
 ~~~
 
 첫 명령은 아래 항목만 사용자 홈에 설치한다.
@@ -32,6 +33,20 @@ ai/realtime-agent/deploy/install-gitlab-runner-user.sh latest
 ~~~sh
 chmod 600 ~/.config/liveclass/realtime-agent*.env
 ~~~
+
+운영 GPU↔EC2 터널은 개발자 로컬 tunnel과 구분해 공용 bootstrap으로 설정한다. 전달받은 PEM은
+저장소에 두고 계속 참조하지 않고 `~/.config/liveclass/ssh/`로 복사하며, realtime-agent와 BGE가 같은
+EC2 target을 사용하도록 두 tunnel env를 함께 생성한다.
+
+~~~sh
+ai/realtime-agent/deploy/configure-gpu-ec2-tunnels.sh \
+  /absolute/path/to/gpu-to-ec2.pem \
+  <ec2-user>@<ec2-host> \
+  --start
+~~~
+
+EC2 host key는 실행 전에 별도 채널로 확인해 `~/.ssh/known_hosts`에 등록한다. PEM과 생성된 env는
+모두 Git 밖에 있고 권한은 `0600`이다.
 
 realtime-agent.env의 LIVEKIT_URL에는 인증서 hostname을 유지하고 LIVEKIT_TUNNEL_HOST에는 그
 hostname만 넣는다. root 권한으로 /etc/hosts를 바꿀 수 없으므로 source-controlled resolver가 해당
@@ -91,6 +106,7 @@ GitLab job도 같은 helper를 현재 사용자로 직접 호출하며 sudo, sys
 
 GPU 호스트는 외부에서 inbound port를 열지 않는다. 사용자 영역 SSH client가 EC2에 연결해 세 개의
 local forward와 하나의 reverse forward를 한 control connection으로 유지한다.
+별도 BGE supervisor도 같은 PEM/target으로 EC2 `127.0.0.1:18020` reverse forward를 유지한다.
 
 ```mermaid
 flowchart LR

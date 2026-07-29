@@ -20,6 +20,7 @@ RUNNER_CONTROL_SCRIPT = DEPLOY_DIR / "bin" / "liveclass-gitlab-runner-user"
 INSTALL_SCRIPT = DEPLOY_DIR / "install.sh"
 RUNNER_INSTALL_SCRIPT = DEPLOY_DIR / "install-gitlab-runner-user.sh"
 DNS_REDIRECT_SOURCE = DEPLOY_DIR / "livekit-tunnel-dns.c"
+TUNNEL_CONFIGURE_SCRIPT = DEPLOY_DIR / "configure-gpu-ec2-tunnels.sh"
 
 
 def test_probe_settings_redact_credentials_from_repr() -> None:
@@ -155,6 +156,7 @@ def test_tunnel_script_rejects_listener_not_owned_by_managed_ssh(
         RUNNER_CONTROL_SCRIPT,
         INSTALL_SCRIPT,
         RUNNER_INSTALL_SCRIPT,
+        TUNNEL_CONFIGURE_SCRIPT,
     ],
 )
 def test_operational_shell_scripts_have_valid_syntax(script: Path) -> None:
@@ -186,6 +188,46 @@ def test_tunnel_includes_loopback_reverse_health_forward() -> None:
     assert 'HEALTH_BIND_HOST="${HEALTH_BIND_HOST:-127.0.0.1}"' in script
     assert '-R "$HEALTH_BIND_HOST:$HEALTH_REMOTE_PORT:127.0.0.1:$HEALTH_LOCAL_PORT"' in script
     assert "ExitOnForwardFailure=yes" in script
+    assert "StrictHostKeyChecking=yes" in script
+    assert "IdentitiesOnly=yes" in script
+    assert "HEALTH_BIND_HOST must be 127.0.0.1" in script
+
+
+def test_production_tunnel_configurator_installs_one_key_for_both_services(
+    tmp_path: Path,
+) -> None:
+    source_key = tmp_path / "source.pem"
+    source_key.write_text("test-private-key\n", encoding="utf-8")
+    home = tmp_path / "home"
+    config_dir = home / ".config" / "liveclass"
+    environ = {
+        **os.environ,
+        "HOME": str(home),
+        "LIVECLASS_CONFIG_DIR": str(config_dir),
+    }
+
+    result = subprocess.run(
+        [str(TUNNEL_CONFIGURE_SCRIPT), str(source_key), "ubuntu@ec2.example"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=environ,
+    )
+
+    assert result.returncode == 0, result.stderr
+    installed_key = config_dir / "ssh" / "gpu-to-ec2.pem"
+    realtime_env = (config_dir / "realtime-agent-tunnels.env").read_text(encoding="utf-8")
+    bge_env = (config_dir / "bge-tunnel.env").read_text(encoding="utf-8")
+    assert installed_key.read_text(encoding="utf-8") == "test-private-key\n"
+    assert installed_key.stat().st_mode & 0o777 == 0o600
+    assert f"SSH_KEY={installed_key}" in realtime_env
+    assert f"SSH_KEY={installed_key}" in bge_env
+    assert "SSH_TARGET=ubuntu@ec2.example" in realtime_env
+    assert "SSH_TARGET=ubuntu@ec2.example" in bge_env
+    assert "HEALTH_REMOTE_PORT=18081" in realtime_env
+    assert "BGE_EC2_PORT=18020" in bge_env
+    assert (config_dir / "realtime-agent-tunnels.env").stat().st_mode & 0o777 == 0o600
+    assert (config_dir / "bge-tunnel.env").stat().st_mode & 0o777 == 0o600
 
 
 def test_rootless_supervisor_keeps_tunnel_and_agent_under_tmux() -> None:
