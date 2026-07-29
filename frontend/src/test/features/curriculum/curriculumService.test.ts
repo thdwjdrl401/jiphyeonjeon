@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { apiClient } from '@/shared/api/client'
+import { ApiError, apiClient } from '@/shared/api/client'
 
 vi.mock('@/shared/config/runtime', () => ({ isMockApiEnabled: false, isTestMode: false }))
 
@@ -48,7 +48,9 @@ describe('커리큘럼 API 계약', () => {
       description: '설명',
       thumbnailAssetId: 'ast_1',
       thumbnailPreviewUrl: 'data:image/png;base64,mock',
-    })).resolves.toEqual({ curriculumId: 'cur-created' })
+      startsAt: null,
+      endsAt: null,
+    })).resolves.toEqual({ curriculumId: 'cur-created', periodSaved: true })
     // 미리보기용 data URL이 아니라 업로드로 받은 에셋 id가 나간다.
     expect(postSpy).toHaveBeenCalledWith('/instructor/curriculums', {
       title: '새 커리큘럼',
@@ -56,6 +58,60 @@ describe('커리큘럼 API 계약', () => {
       description: '설명',
       thumbnailAssetId: 'ast_1',
     })
+  })
+
+  // 생성 API는 기간을 받지 않는다. 입력한 운영 기간이 사라지지 않도록 PATCH로 이어 붙인다.
+  it('운영 기간을 입력하면 생성 직후 기본 정보 PATCH로 기간을 저장한다', async () => {
+    vi.spyOn(apiClient, 'post').mockResolvedValue({ data: { curriculumId: 'cur-created' } } as never)
+    const patchSpy = vi.spyOn(apiClient, 'patch').mockResolvedValue({ data: {} } as never)
+
+    await expect(createCurriculum({
+      title: '새 커리큘럼',
+      summary: '',
+      description: '',
+      thumbnailAssetId: null,
+      thumbnailPreviewUrl: null,
+      startsAt: '2026-08-01T01:00:00.000Z',
+      endsAt: '2026-10-15T13:00:00.000Z',
+    })).resolves.toEqual({ curriculumId: 'cur-created', periodSaved: true })
+
+    expect(patchSpy).toHaveBeenCalledWith('/instructor/curriculums/cur-created', {
+      startsAt: '2026-08-01T01:00:00.000Z',
+      endsAt: '2026-10-15T13:00:00.000Z',
+    })
+  })
+
+  it('기간이 비어 있으면 불필요한 PATCH를 보내지 않는다', async () => {
+    vi.spyOn(apiClient, 'post').mockResolvedValue({ data: { curriculumId: 'cur-created' } } as never)
+    const patchSpy = vi.spyOn(apiClient, 'patch').mockResolvedValue({ data: {} } as never)
+
+    await createCurriculum({
+      title: '새 커리큘럼',
+      summary: '',
+      description: '',
+      thumbnailAssetId: null,
+      thumbnailPreviewUrl: null,
+      startsAt: null,
+      endsAt: null,
+    })
+
+    expect(patchSpy).not.toHaveBeenCalled()
+  })
+
+  // 초안은 이미 만들어졌으므로 실패를 예외로 올리면 화면이 "생성 실패"로 보여 중복 생성을 부른다.
+  it('기간 PATCH만 실패하면 초안 생성은 성공으로 두고 periodSaved로 알린다', async () => {
+    vi.spyOn(apiClient, 'post').mockResolvedValue({ data: { curriculumId: 'cur-created' } } as never)
+    vi.spyOn(apiClient, 'patch').mockRejectedValue(new ApiError('일시적인 오류입니다.', 500, 'INTERNAL_ERROR'))
+
+    await expect(createCurriculum({
+      title: '새 커리큘럼',
+      summary: '',
+      description: '',
+      thumbnailAssetId: null,
+      thumbnailPreviewUrl: null,
+      startsAt: '2026-08-01T01:00:00.000Z',
+      endsAt: null,
+    })).resolves.toEqual({ curriculumId: 'cur-created', periodSaved: false })
   })
 
   it('상세 응답의 누락 필드를 보정하고 라이브 상태를 내부 모델로 정규화한다', async () => {

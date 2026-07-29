@@ -32,7 +32,22 @@ export const httpCurriculumManagementService = {
       description: request.description,
       thumbnailAssetId: request.thumbnailAssetId,
     })
-    return data
+
+    // 생성 API(POST /instructor/curriculums)는 기간을 받지 않는다. 기본 정보 수정 PATCH는 받으므로
+    // 입력이 있을 때만 이어서 보낸다. 여기서 실패해도 초안은 이미 만들어졌으니 예외를 올리지 않는다
+    // — 올리면 화면이 "생성 실패"로 보여 같은 커리큘럼을 또 만들게 된다.
+    if (request.startsAt === null && request.endsAt === null) {
+      return { curriculumId: data.curriculumId, periodSaved: true }
+    }
+    try {
+      await apiClient.patch(`/instructor/curriculums/${data.curriculumId}`, {
+        startsAt: request.startsAt,
+        endsAt: request.endsAt,
+      })
+      return { curriculumId: data.curriculumId, periodSaved: true }
+    } catch {
+      return { curriculumId: data.curriculumId, periodSaved: false }
+    }
   },
   async getInstructorCurriculum(curriculumId) {
     const { data } = await apiClient.get<InstructorCurriculumResponse>(`/instructor/curriculums/${curriculumId}`)

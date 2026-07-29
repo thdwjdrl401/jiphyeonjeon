@@ -7,10 +7,19 @@ export interface CreateCurriculumRequest {
   thumbnailAssetId: string | null
   thumbnailPreviewUrl: string | null
   materials?: CurriculumMaterial[]
+  /** 커리큘럼 운영 시작 시각(ISO-8601). 미정이면 null. */
+  startsAt: string | null
+  /** 커리큘럼 운영 종료 시각(ISO-8601). 미정이면 null. */
+  endsAt: string | null
 }
 
 export interface CreateCurriculumResponse {
   curriculumId: string
+  /**
+   * 운영 기간까지 저장됐는지. 생성 API가 기간을 받지 않아 PATCH로 이어 붙이므로
+   * 초안만 남고 기간이 빠지는 경우가 있다 — 화면이 그 사실을 알려야 한다.
+   */
+  periodSaved: boolean
 }
 
 export interface InstructorCurriculumResponse {

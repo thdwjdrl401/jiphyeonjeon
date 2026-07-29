@@ -3,12 +3,21 @@ import { Link, useNavigate } from 'react-router-dom'
 import { instructorPaths } from '@/app/router/paths'
 import CurriculumAssetsFields from '@/features/curriculum/CurriculumAssetsFields'
 import { type CurriculumImageSelection } from '@/features/curriculum/CurriculumImageField'
+import CurriculumPeriodFields from '@/features/curriculum/CurriculumPeriodFields'
+import EnrollmentPolicyField from '@/features/curriculum/EnrollmentPolicyField'
 import { createCurriculum, uploadCurriculumThumbnail } from '@/features/curriculum/curriculumManagementService'
 import type { CurriculumMaterial } from '@/features/curriculum/types'
 import { ApiError } from '@/shared/api/client'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import { useToast } from '@/shared/ui/Toast'
 import { InlineNotice, PageHeader, Panel } from '@/shared/ui/WorkspaceUi'
+
+/** datetime-local 값("2026-08-01T10:00")을 서버가 받는 오프셋 포함 ISO-8601로. 비어 있으면 null. */
+function toIsoOrNull(localValue: string): string | null {
+  if (!localValue) return null
+  const parsed = new Date(localValue)
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString()
+}
 
 export default function CurriculumFormPage() {
   usePageTitle('커리큘럼 만들기')
@@ -33,14 +42,20 @@ export default function CurriculumFormPage() {
     try {
       // 이미지는 저장 시점에 올린다 — 폼을 그만두면 아무것도 남지 않도록.
       const thumbnailAssetId = thumbnail ? await uploadCurriculumThumbnail(thumbnail.file) : null
-      const { curriculumId } = await createCurriculum({
+      const { curriculumId, periodSaved } = await createCurriculum({
         title: form.title.trim(),
         summary: form.summary.trim(),
         description: form.description.trim(),
         thumbnailAssetId,
         thumbnailPreviewUrl: thumbnail?.previewUrl ?? null,
         materials,
+        startsAt: toIsoOrNull(form.startsAt),
+        endsAt: toIsoOrNull(form.endsAt),
       })
+      // 초안은 만들어졌는데 기간만 못 붙은 경우 — 조용히 넘기면 입력한 기간이 사라진 걸 모른다.
+      if (!periodSaved) {
+        toast.error('초안은 만들었지만 운영 기간을 저장하지 못했어요. 기간을 다시 설정해 주세요.')
+      }
       // 방금 만든 건 DRAFT라 공개 상세(GET /curriculums/{id}, PUBLISHED-only)로 보내면 404로 튕긴다.
       // 강사 엔드포인트로 읽는 관리 화면으로 보낸다(ADR-0041). created 플래그로 "저장됨" 상태로 시작.
       navigate(instructorPaths.curriculumManage(curriculumId), { state: { created: true } })
@@ -73,11 +88,14 @@ export default function CurriculumFormPage() {
           />
         </Panel>
 
-        <Panel title="운영 정보" description="기간은 서버 상세 계약 확정 후 저장되며 수강은 강사 승인 방식으로 운영합니다.">
-          <div className="form-grid">
-            <label><span>시작일</span><input type="datetime-local" value={form.startsAt} onChange={(event) => update('startsAt', event.target.value)} /></label>
-            <label><span>종료일</span><input type="datetime-local" value={form.endsAt} onChange={(event) => update('endsAt', event.target.value)} /></label>
-            <div className="form-field--wide fixed-policy-field"><span>수강 방식</span><strong>강사 승인 후 수강</strong><small>학생의 신청을 강사가 승인하면 수강 상태가 활성화됩니다.</small></div>
+        <Panel title="운영 기간과 수강 방식" description="이 커리큘럼이 언제부터 언제까지 진행되고, 학생이 어떻게 등록하는지 정합니다.">
+          <div className="operation-fields">
+            <CurriculumPeriodFields
+              idPrefix="new-curriculum"
+              value={{ startsAt: form.startsAt, endsAt: form.endsAt }}
+              onChange={update}
+            />
+            <EnrollmentPolicyField value="APPROVAL_REQUIRED" />
           </div>
         </Panel>
 

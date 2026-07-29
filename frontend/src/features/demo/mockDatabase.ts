@@ -235,6 +235,8 @@ export function putMockCurriculum(
   owner: AuthUser,
   input: Pick<MockCurriculumEntity, 'title' | 'summary' | 'description' | 'thumbnailUrl'> & {
     materials?: CurriculumMaterial[]
+    startsAt?: string | null
+    endsAt?: string | null
   },
 ) {
   const curriculum: MockCurriculumEntity = {
@@ -251,7 +253,8 @@ export function putMockCurriculum(
       expertise: [],
     },
     lifecycleStatus: 'DRAFT',
-    period: null,
+    // 화면 모델의 period는 시작·종료가 함께 있을 때만 표현할 수 있다(CurriculumDetailPeriod).
+    period: input.startsAt && input.endsAt ? { startsAt: input.startsAt, endsAt: input.endsAt } : null,
     sectionCount: 0,
     lessonCount: 0,
     featured: false,

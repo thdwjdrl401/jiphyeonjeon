@@ -123,6 +123,27 @@ describe('커리큘럼 작업 화면', () => {
     expect(await screen.findByText('curriculum-guide.pptx')).toBeInTheDocument()
   })
 
+  // 예전엔 입력만 받고 버렸다. 입력한 운영 기간이 실제로 커리큘럼에 남는지 본다.
+  it('새 커리큘럼에 입력한 운영 기간이 저장된다', async () => {
+    const user = userEvent.setup()
+    await renderAsInstructor('/instructor/curriculums/new')
+    await user.type(
+      await screen.findByPlaceholderText('예: 라이브로 완성하는 Spring Boot'),
+      '기간을 넣은 커리큘럼',
+    )
+    fireEvent.change(screen.getByLabelText('운영 시작일'), { target: { value: '2026-08-01T10:00' } })
+    fireEvent.change(screen.getByLabelText('운영 종료일'), { target: { value: '2026-10-15T22:00' } })
+    expect(screen.getByText('약 11주 과정')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '초안 만들기' }))
+    await screen.findByRole('heading', { name: '기간을 넣은 커리큘럼', level: 1 })
+
+    const curriculumId = window.location.pathname.split('/')[3]
+    const period = getMockCurriculum(curriculumId)?.period
+    expect(period?.startsAt).toBe(new Date('2026-08-01T10:00').toISOString())
+    expect(period?.endsAt).toBe(new Date('2026-10-15T22:00').toISOString())
+  })
+
   it('관리 화면에서 섹션 이름과 설명을 수정한다', async () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
