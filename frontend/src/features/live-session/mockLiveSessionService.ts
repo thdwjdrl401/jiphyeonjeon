@@ -92,6 +92,28 @@ export const mockLiveSessionService = {
     onConnectionChange('connected')
     return () => onConnectionChange('disconnected')
   },
+  subscribeCaptions(_sessionId, onEvent, onConnectionChange) {
+    onConnectionChange('connected')
+    // 데모 자막을 델타 스트림 형태로 흉내 낸다: 각 데모 라인을 한 sttSession으로 흘리고,
+    // 마지막 라인은 completed 없이 남겨 "진행 중(pending)" 라이브 라인을 보여 준다.
+    const occurredAt = new Date().toISOString()
+    demoLiveCaptions.forEach((caption, index) => {
+      const sttSessionId = `mock-stt-${index}`
+      onEvent({
+        type: 'caption.delta',
+        occurredAt,
+        payload: { sttSessionId, sequence: 1, streamElapsedMs: caption.startMs, text: caption.text },
+      })
+      if (index < demoLiveCaptions.length - 1) {
+        onEvent({
+          type: 'caption.stream.completed',
+          occurredAt,
+          payload: { sttSessionId, lastSequence: 1, reason: 'ROOM_DELETED' },
+        })
+      }
+    })
+    return () => onConnectionChange('disconnected')
+  },
   async getCaptions() {
     return demoLiveCaptions
   },

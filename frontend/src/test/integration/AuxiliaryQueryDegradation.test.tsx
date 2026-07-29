@@ -58,15 +58,21 @@ describe('부가 조회 실패 시 화면 유지', () => {
     expect(await screen.findByText(/커리큘럼 목록을 불러오지 못했습니다/, undefined, AFTER_RETRY)).toBeInTheDocument()
   })
 
-  it('자막이 실패해도 라이브 강의실은 열린다', async () => {
-    const captions = vi.spyOn(liveSessionService, 'getCaptions').mockImplementation(notReady)
+  it('자막 WS 구독이 실패해도 라이브 강의실은 열린다', async () => {
+    // 자막은 REST가 아니라 WS 델타 스트림으로 구동한다(§3-4 / ADR-0043). 구독이 곧바로
+    // 에러로 끝나도(연결 실패 흉내) 미디어·채팅이 살아 있는 강의실은 열려야 한다.
+    const captions = vi.spyOn(liveSessionService, 'subscribeCaptions')
+      .mockImplementation((_sessionId, _onEvent, onConnectionChange) => {
+        onConnectionChange('error')
+        return () => {}
+      })
     await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
 
     renderAt('/instructor/live-sessions/ses-security-live/classroom')
 
     expect(await screen.findByRole('heading', { name: 'Spring Security 시작하기', level: 1 })).toBeInTheDocument()
     expect(screen.queryByText('라이브 강의를 불러오지 못했습니다')).not.toBeInTheDocument()
-    // 실패한 조회를 실제로 탔는지 확인한다 — 안 그러면 이 테스트는 헛통과한다.
+    // 자막 구독을 실제로 탔는지 확인한다 — 안 그러면 이 테스트는 헛통과한다.
     expect(captions).toHaveBeenCalled()
   })
 
