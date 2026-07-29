@@ -395,3 +395,32 @@ Spring realtime-agent health proxy client는 아직 없다. 따라서 `/internal
   `curriculumId`만, 레슨 attach는 `curriculumId + lessonId`를 발행하도록 구현됨. 현 워커가 `lessonId`
   필수라 **커리큘럼 잡 소비는 9.1 반영 후** 가능(그전까지 스위치 off로 무회귀).
 - 9.1/9.2 구현 시 루트 `docs/CONTRACT.md`(§3-1 잡 wire, RAG 요청)와 §7 상태표를 함께 갱신한다.
+
+## 10. 제안 변경 — 자막 세그먼트 경계 `caption.segment.final` [AI 오너 구현 대기]
+
+> 상태: **제안(미비준)**. §8 규칙대로 루트 [`docs/CONTRACT.md`](../CONTRACT.md)·Python/Java 구현·양측
+> 계약 테스트를 같은 변경에서 갱신해야 실제 계약이 된다.
+
+현재 realtime-agent는 `caption.delta`(append-only 증분)와 `caption.stream.completed`(attempt 종료,
+세션당 1회)만 발행한다. **발화/문장 경계 이벤트가 없다.** 결과:
+
+- 한 STT attempt(`sttSessionId`)의 델타 전부가 소비측에서 **한 문단**으로 이어진다(경계 신호가 없어
+  발화별 줄바꿈 불가). FE는 현재 문장부호 휴리스틱으로 근사 분할하나(ADR-0044) 부정확하고 발화별
+  정확한 시각을 못 준다.
+- 발화 단위 seek·하이라이트·정렬이 불가하다.
+
+**요청: `caption.segment.final` 이벤트 추가.**
+
+- 한 발화(세그먼트)가 확정될 때 1회 발행. payload(제안, camelCase):
+  - `sttSessionId`, `segmentIndex`(attempt 내 0-based), `text`(그 세그먼트 확정 텍스트),
+    `startStreamElapsedMs`·`endStreamElapsedMs`(세그먼트 시작/끝, stream-local ms), `occurredAt`.
+- `caption.delta`는 진행중(부분) 렌더용으로 유지하고, `caption.segment.final`이 그 세그먼트를
+  확정·대체한다. 멱등키는 기존과 동일 `eventId`, attempt 범위 `(sessionId, sttSessionId)`.
+
+**소비 측 정합(구현되면):**
+
+- FE: 문장부호 휴리스틱(ADR-0044)을 걷어내고 `segment.final`당 한 라인으로 렌더, 세그먼트 ms로 seek.
+- Spring: `core.live_caption`에 세그먼트 경계·시각을 함께 영속(현재 raw delta만). 루트
+  `docs/CONTRACT.md` §3-4/§3-6와 §7 상태표를 같은 변경에서 갱신.
+
+관련: ADR-0040(caption delta 계약)·ADR-0043(Spring 소비)·ADR-0044(FE delta 렌더).
