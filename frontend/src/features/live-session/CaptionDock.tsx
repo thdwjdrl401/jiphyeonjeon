@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useRef } from 'react'
+import { captionSeekMs } from './captionAdapter'
 import type { CaptionView } from './liveSessionService.interface'
 
 interface CaptionDockProps {
@@ -65,7 +66,8 @@ export default function CaptionDock({ captions, currentSessionMs, label, onSeek,
             .join(' ')
           return (
             <article className={className} key={caption.segmentId} aria-busy={caption.pending || undefined}>
-              <button type="button" onClick={() => onSeek(caption.startMs)}>{caption.at}</button>
+              {/* 라벨은 자막 시각 그대로 보이되, 이동은 STT 지연을 보정한 지점으로 간다(문장 시작에 닿게). */}
+              <button type="button" onClick={() => onSeek(captionSeekMs(caption))}>{caption.at}</button>
               <p>{renderCaptionText(caption, onSelectTerm)}</p>
             </article>
           )

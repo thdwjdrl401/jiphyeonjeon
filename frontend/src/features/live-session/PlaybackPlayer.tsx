@@ -109,8 +109,16 @@ export default function PlaybackPlayer({
   // 재생 대상이 바뀌면 이전 스트림의 길이를 물려주지 않는다.
   useEffect(() => setLiveDuration(NO_PROVIDED_DURATION), [source?.url, reloadToken])
 
+  // 이미 반영한 seek 요청의 sequence. 같은 요청을 두 번 적용하지 않기 위한 것이다.
+  const appliedSeekSequence = useRef(-1)
   useEffect(() => {
     if (!source || !seekRequest || !playerRef.current) return
+    // `source`는 재생 metadata 폴링마다 **새 객체**로 온다(usePlayback refetchInterval). 이 effect가
+    // source 동일성으로 재실행되면 지난 seek 요청을 폴링 주기마다 다시 적용해, 재생 중인 영상이 계속
+    // 그 위치로 되돌아간다. sequence로 "새 요청일 때만" 적용한다 — sequence가 있는 이유가 이것이다.
+    // (source가 아직 없어 못 옮긴 요청은 적용 표시를 남기지 않아, 준비되면 그때 한 번 반영된다.)
+    if (appliedSeekSequence.current === seekRequest.sequence) return
+    appliedSeekSequence.current = seekRequest.sequence
     playerRef.current.currentTime = toMediaTimeSeconds(seekRequest.sessionMs, source.availableFromMs)
   }, [source, seekRequest])
 
