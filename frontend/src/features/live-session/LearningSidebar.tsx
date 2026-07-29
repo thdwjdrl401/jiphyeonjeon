@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import Tabs, { tabPanelProps, type TabItem } from '@/shared/ui/Tabs'
 import type { ChatMessageView } from './liveSessionService.interface'
 import type { GlossaryTermView, LearningPanel, LiveSummaryBlock } from './liveLearningPreview'
+
+/** 패널 래퍼를 새로 만들지 않고 기존 .side-panel-content에 그대로 얹는다(flex·스크롤 구조 유지). */
+type PanelProps = ReturnType<typeof tabPanelProps>
 
 interface LearningSidebarProps {
   panel: LearningPanel
@@ -19,12 +23,14 @@ interface LearningSidebarProps {
   windowAction?: ReactNode
 }
 
-const tabs: Array<{ id: LearningPanel; label: string }> = [
+const tabs: ReadonlyArray<TabItem<LearningPanel>> = [
   { id: 'discussion', label: '채팅·질문' },
   { id: 'notes', label: '실시간 노트' },
   { id: 'ai', label: 'AI 질문' },
   { id: 'glossary', label: '핵심 용어' },
 ]
+
+const LEARNING_TAB_PREFIX = 'learning-sidebar'
 
 function formatTime(sessionMs: number) {
   const seconds = Math.floor(sessionMs / 1000)
@@ -36,7 +42,7 @@ function formatTime(sessionMs: number) {
     : `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`
 }
 
-function DiscussionPanel({ messages, composer, notice }: { messages: ChatMessageView[]; composer?: ReactNode; notice?: string }) {
+function DiscussionPanel({ messages, composer, notice, panelProps }: { messages: ChatMessageView[]; composer?: ReactNode; notice?: string; panelProps: PanelProps }) {
   const [filter, setFilter] = useState<'all' | 'questions'>('all')
   const [isFollowingLatest, setIsFollowingLatest] = useState(true)
   const chatListRef = useRef<HTMLDivElement>(null)
@@ -69,7 +75,7 @@ function DiscussionPanel({ messages, composer, notice }: { messages: ChatMessage
   }, [isFollowingLatest, scrollToLatest, visibleMessages.length])
 
   return (
-    <div className="side-panel-content discussion-panel" role="tabpanel">
+    <div className="side-panel-content discussion-panel" {...panelProps}>
       <div className="discussion-filter" aria-label="채팅 필터">
         <button className={filter === 'all' ? 'is-active' : ''} type="button" onClick={() => changeFilter('all')}>전체 {messages.length}</button>
         <button className={filter === 'questions' ? 'is-active' : ''} type="button" onClick={() => changeFilter('questions')}>질문 {messages.filter((message) => message.question).length}</button>
@@ -96,9 +102,9 @@ function DiscussionPanel({ messages, composer, notice }: { messages: ChatMessage
   )
 }
 
-function SummaryPanel({ blocks, currentSessionMs, onSeek, context }: { blocks: LiveSummaryBlock[]; currentSessionMs: number; onSeek: (sessionMs: number) => void; context: 'LIVE' | 'REPLAY' }) {
+function SummaryPanel({ blocks, currentSessionMs, onSeek, context, panelProps }: { blocks: LiveSummaryBlock[]; currentSessionMs: number; onSeek: (sessionMs: number) => void; context: 'LIVE' | 'REPLAY'; panelProps: PanelProps }) {
   return (
-    <div className="side-panel-content summary-panel" role="tabpanel">
+    <div className="side-panel-content summary-panel" {...panelProps}>
       <header className="learning-panel-heading">
         <div><strong>{context === 'LIVE' ? 'AI 실시간 강의 노트' : '라이브에서 작성된 강의 노트'}</strong><small>완성된 구간별 블록을 순서대로 누적합니다.</small></div>
         <span>{blocks.length}개 블록</span>
@@ -126,7 +132,7 @@ function SummaryPanel({ blocks, currentSessionMs, onSeek, context }: { blocks: L
   )
 }
 
-function GlossaryPanel({ terms, selectedTermId, onSelectedTermChange }: { terms: GlossaryTermView[]; selectedTermId: string | null; onSelectedTermChange: (termId: string) => void }) {
+function GlossaryPanel({ terms, selectedTermId, onSelectedTermChange, panelProps }: { terms: GlossaryTermView[]; selectedTermId: string | null; onSelectedTermChange: (termId: string) => void; panelProps: PanelProps }) {
   const [search, setSearch] = useState('')
   useEffect(() => setSearch(''), [selectedTermId])
   const normalizedSearch = search.trim().toLocaleLowerCase()
@@ -137,7 +143,7 @@ function GlossaryPanel({ terms, selectedTermId, onSelectedTermChange }: { terms:
   const selectedTerm = terms.find((term) => term.termId === selectedTermId) ?? filteredTerms[0] ?? null
 
   return (
-    <div className="side-panel-content glossary-panel" role="tabpanel">
+    <div className="side-panel-content glossary-panel" {...panelProps}>
       <header className="learning-panel-heading"><div><strong>검수된 핵심 용어</strong><small>강의 전에 강사가 확정한 설명입니다.</small></div><span>{terms.length}개</span></header>
       <label className="glossary-search"><span className="visually-hidden">핵심 용어 검색</span><input value={search} placeholder="용어 검색" onChange={(event) => setSearch(event.target.value)} /></label>
       <div className="glossary-list">
@@ -158,13 +164,18 @@ export default function LearningSidebar(props: LearningSidebarProps) {
   return (
     <aside className="media-side learning-sidebar">
       {props.windowAction && <div className="learning-sidebar-windowbar">{props.windowAction}</div>}
-      <div className="media-tabs learning-tabs" role="tablist">
-        {tabs.map((tab) => <button aria-selected={props.panel === tab.id} className={props.panel === tab.id ? 'is-active' : ''} key={tab.id} role="tab" type="button" onClick={() => props.onPanelChange(tab.id)}>{tab.label}</button>)}
-      </div>
-      {props.panel === 'discussion' && <DiscussionPanel messages={props.messages} composer={props.discussionComposer} notice={props.discussionNotice} />}
-      {props.panel === 'notes' && <SummaryPanel blocks={props.summaryBlocks} currentSessionMs={props.currentSessionMs} onSeek={props.onSeek} context={props.noteContext} />}
-      {props.panel === 'ai' && <div className="side-panel-content ai-panel" role="tabpanel">{props.aiContent}</div>}
-      {props.panel === 'glossary' && <GlossaryPanel terms={props.glossaryTerms} selectedTermId={props.selectedTermId} onSelectedTermChange={props.onSelectedTermChange} />}
+      <Tabs
+        className="media-tabs learning-tabs"
+        idPrefix={LEARNING_TAB_PREFIX}
+        label="학습 사이드바"
+        items={tabs}
+        value={props.panel}
+        onChange={props.onPanelChange}
+      />
+      {props.panel === 'discussion' && <DiscussionPanel messages={props.messages} composer={props.discussionComposer} notice={props.discussionNotice} panelProps={tabPanelProps(LEARNING_TAB_PREFIX, 'discussion')} />}
+      {props.panel === 'notes' && <SummaryPanel blocks={props.summaryBlocks} currentSessionMs={props.currentSessionMs} onSeek={props.onSeek} context={props.noteContext} panelProps={tabPanelProps(LEARNING_TAB_PREFIX, 'notes')} />}
+      {props.panel === 'ai' && <div className="side-panel-content ai-panel" {...tabPanelProps(LEARNING_TAB_PREFIX, 'ai')}>{props.aiContent}</div>}
+      {props.panel === 'glossary' && <GlossaryPanel terms={props.glossaryTerms} selectedTermId={props.selectedTermId} onSelectedTermChange={props.onSelectedTermChange} panelProps={tabPanelProps(LEARNING_TAB_PREFIX, 'glossary')} />}
     </aside>
   )
 }
