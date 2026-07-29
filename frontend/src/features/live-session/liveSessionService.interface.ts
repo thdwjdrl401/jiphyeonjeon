@@ -43,6 +43,13 @@ export interface CaptionView {
    * `caption.stream.completed`를 받은(확정된) 라인이나 세그먼트형 다시보기 자막에는 없다.
    */
   pending?: boolean
+  /**
+   * `startMs`가 근사 **세션-ms 축**(sessionMs, occurredAt−clockOriginAt)에 놓여 HLS 플레이어 위치와
+   * 같은 축인지. true면 학생 위치 동기화가 이 자막을 `positionMs` 기준으로 노출/하이라이트한다.
+   * false(clockOriginAt 없음 등 fallback)면 세션 축이 아니라 stream-local 축이라 위치 동기화가 불가능해
+   * 라이브 append처럼 그대로 보인다(ADR-0045).
+   */
+  synced?: boolean
 }
 
 /**
@@ -55,6 +62,12 @@ export interface CaptionDeltaPayload {
   sttSessionId: string
   sequence: number
   streamElapsedMs: number
+  /**
+   * 근사 **세션-ms**(occurredAt−clockOriginAt, 서버 계산, ADR-0045). HLS 영상 위치(positionMs)와 같은 축이라
+   * 학생 위치 동기화의 기준이다. streamElapsedMs 변환이 아니라 별도 근사 축이며, clockOriginAt이 없으면
+   * null — 그때는 streamElapsedMs로 fallback한다.
+   */
+  sessionMs?: number | null
   text: string
 }
 
@@ -62,6 +75,8 @@ export interface CaptionDeltaPayload {
 export interface CaptionStreamCompletedPayload {
   sttSessionId: string
   lastSequence: number
+  /** 델타와 정합을 위한 근사 세션-ms(nullable, ADR-0045). */
+  sessionMs?: number | null
   reason: string
 }
 
@@ -161,7 +176,12 @@ export interface LiveSessionService {
     onMessage: (message: ChatMessageView) => void,
     onConnectionChange: (state: ChatConnectionState) => void,
   ) => () => void
-  getCaptions: (sessionId: string) => Promise<CaptionView[]>
+  /**
+   * 저장된 자막 리로드(REST `GET /live-sessions/{id}/captions`, CAPTION-01). WS 델타/종료와 같은 필드의
+   * 스트림 이벤트 목록을 세션-ms 순으로 돌려준다 — 마운트 시 WS 누적기에 그대로 시드해 새로고침·재연결
+   * 뒤 자막을 복원한다. 실시간 렌더는 subscribeCaptions(WS)가 이어서 구동한다.
+   */
+  getCaptions: (sessionId: string) => Promise<CaptionStreamEvent[]>
   /**
    * 라이브 자막 델타 스트림 구독(STOMP `/topic/live-sessions/{id}/captions`).
    * 채팅 구독과 대칭이며, `caption.delta`·`caption.stream.completed`만 onEvent로 넘긴다.

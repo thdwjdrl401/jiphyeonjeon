@@ -1,4 +1,4 @@
-import { Fragment } from 'react'
+import { Fragment, useEffect, useRef } from 'react'
 import type { CaptionView } from './liveSessionService.interface'
 
 interface CaptionDockProps {
@@ -38,15 +38,28 @@ function renderCaptionText(caption: CaptionView, onSelectTerm: (termId: string) 
 }
 
 export default function CaptionDock({ captions, currentSessionMs, label, onSeek, onSelectTerm, note }: CaptionDockProps) {
+  const sentencesRef = useRef<HTMLDivElement>(null)
+  // 새 자막(델타 누적)이 들어오면 최신(하단)으로 따라간다 — 라이브 자막이 시야 밖으로 밀려나지 않게.
+  useEffect(() => {
+    const el = sentencesRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [captions])
+  const currentIndex = captions.reduce(
+    (latest, caption, index) => (caption.startMs <= currentSessionMs ? index : latest),
+    -1,
+  )
   return (
     <section className="caption-dock" aria-label={label}>
       <header>
         <strong><i />{label}</strong>
         <span>{note ?? '시간을 누르면 영상과 자막이 함께 이동합니다.'}</span>
       </header>
-      <div className="caption-dock__sentences" aria-live="polite">
-        {captions.map((caption) => {
-          const isCurrent = currentSessionMs >= caption.startMs && currentSessionMs <= caption.endMs
+      <div className="caption-dock__sentences" aria-live="polite" ref={sentencesRef}>
+        {captions.map((caption, index) => {
+          // 현재 cue = 재생 위치에 도달한 가장 최근 자막(startMs ≤ positionMs 중 마지막). endMs=startMs라
+          // 구간 매칭으로는 거의 안 잡히므로 위치 이하의 마지막 라인을 현재로 본다. 위치 미구동(강사,
+          // positionMs=0)이면 currentIndex=-1이라 아무 것도 강조되지 않는다.
+          const isCurrent = index === currentIndex
           const className = [isCurrent ? 'is-current' : '', caption.pending ? 'is-pending' : '']
             .filter(Boolean)
             .join(' ')

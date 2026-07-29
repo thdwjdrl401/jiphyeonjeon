@@ -102,7 +102,8 @@ export const mockLiveSessionService = {
       onEvent({
         type: 'caption.delta',
         occurredAt,
-        payload: { sttSessionId, sequence: 1, streamElapsedMs: caption.startMs, text: caption.text },
+        // 데모 startMs는 세션 축(12:08=728s)이라 sessionMs로도 실어 학생 위치 동기화가 동작하게 한다.
+        payload: { sttSessionId, sequence: 1, streamElapsedMs: caption.startMs, sessionMs: caption.startMs, text: caption.text },
       })
       if (index < demoLiveCaptions.length - 1) {
         onEvent({
@@ -115,7 +116,20 @@ export const mockLiveSessionService = {
     return () => onConnectionChange('disconnected')
   },
   async getCaptions() {
-    return demoLiveCaptions
+    // 리로드는 WS 델타와 같은 스트림 이벤트로 시드된다. sttSessionId·sequence를 subscribeCaptions와
+    // 동일하게(`mock-stt-${index}`) 둬 실제 BE처럼 WS 델타와 멱등 병합되게 한다(중복 라인 방지).
+    const occurredAt = new Date().toISOString()
+    return demoLiveCaptions.map((caption, index) => ({
+      type: 'caption.delta' as const,
+      occurredAt,
+      payload: {
+        sttSessionId: `mock-stt-${index}`,
+        sequence: 1,
+        streamElapsedMs: caption.startMs,
+        sessionMs: caption.startMs,
+        text: caption.text,
+      },
+    }))
   },
   async askLiveAi() {
     return { answer: 'SecurityContext는 인증이 끝난 현재 요청의 사용자 정보를 보관합니다. 세션 저장소와는 책임이 다르며, 요청이 끝나면 컨텍스트가 정리됩니다.' }
