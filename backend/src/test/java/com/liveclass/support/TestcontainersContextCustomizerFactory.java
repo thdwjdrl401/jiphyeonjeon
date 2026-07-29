@@ -1,10 +1,12 @@
 package com.liveclass.support;
 
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.beans.factory.support.BeanDefinitionRegistry;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.AnnotatedBeanDefinitionReader;
+import org.springframework.core.env.MapPropertySource;
 import org.springframework.test.context.ContextConfigurationAttributes;
 import org.springframework.test.context.ContextCustomizer;
 import org.springframework.test.context.ContextCustomizerFactory;
@@ -38,6 +40,12 @@ public class TestcontainersContextCustomizerFactory implements ContextCustomizer
         @Override
         public void customizeContext(
                 ConfigurableApplicationContext context, MergedContextConfiguration mergedConfig) {
+            // 자막 Redis Stream consumer는 기본적으로 모든 테스트 컨텍스트에서 끈다. 싱글턴 Testcontainers
+            // Redis/PG를 여러 컨텍스트가 공유하므로, 백그라운드 consumer들이 서로의 스트림을 소비해
+            // 교차 오염(다른 컨텍스트에서 브로드캐스트)을 일으킬 수 있다. 자막을 실제로 검증하는 테스트만
+            // properties로 격리된 stream-key/group과 함께 다시 켠다(addLast라 인라인 properties가 우선).
+            context.getEnvironment().getPropertySources().addLast(new MapPropertySource(
+                    "captionConsumerTestDefaults", Map.of("liveclass.caption.enabled", "false")));
             if (context.getBeanFactory() instanceof BeanDefinitionRegistry registry) {
                 new AnnotatedBeanDefinitionReader(registry)
                         .registerBean(TestcontainersConfiguration.class);

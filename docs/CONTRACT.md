@@ -73,7 +73,7 @@ LIVE 직전 STT 재검증만 건너뛴다. 이때 자막 없이 LIVE가 될 수 
 
 정상 종료 제어면은 별도 Python HTTP/Redis stop 명령이 아니라 **Spring의 LiveKit room 삭제**다. agent는 `ROOM_DELETED`만 정상 EOF로 보고 drain 후 §3-4 completion을 발행한다. 상세: [`dispatch schema`](../ai/realtime-agent/contracts/schemas/dispatch-metadata.schema.json)·[`fixture`](../ai/realtime-agent/contracts/fixtures/dispatch-metadata.valid.json).
 
-### 3-4. realtime-agent → application Redis 자막 Stream — AI 구현됨, Spring consumer 미구현
+### 3-4. realtime-agent → application Redis 자막 Stream — AI 구현됨, Spring consumer 구현(ADR-0043)
 Redis는 LiveKit 내부 Redis가 아닌 application Redis다. key는 `CAPTION_STREAM_KEY`로 주입하며 기본값은 전역 `ai:captions:live`. 모든 `XADD`에 `MAXLEN ~ CAPTION_STREAM_MAXLEN`(기본 10,000)을 적용한다. entry value는 모두 문자열이고 정수 필드는 부호 없는 최대 18자리 십진 문자열이다.
 
 | `type` | 필수 필드 |
@@ -83,7 +83,7 @@ Redis는 LiveKit 내부 Redis가 아닌 application Redis다. key는 `CAPTION_ST
 
 `sequence`·`lastSequence`는 `(sessionId, sttSessionId)` 한 job attempt 안에서만 증가한다. retry는 새 `sttSessionId`에서 `sequence=1`로 시작할 수 있으므로 Spring은 attempt 단위로 접고 at-least-once write는 `eventId`로 중복 제거한다. `streamElapsedMs`는 **agent가 첫 audio frame을 받은 시점을 0으로 한 attempt-local 시간**이지 Spring session clock이 아니다.
 
-현재 agent는 `caption.segment.final`·`caption.partial|final|revised`를 발행하지 않는다. consumer group, 전역 key 정리, owner fencing, session/HLS time-origin 변환은 후속 공유 계약이며 변환 전 raw `streamElapsedMs`를 세션 상대 ms로 영속·중계하지 않는다. 상세: [`caption schema`](../ai/realtime-agent/contracts/schemas/caption-stream-entry.schema.json)·[`delta fixture`](../ai/realtime-agent/contracts/fixtures/caption-delta.valid.json)·[`completion fixture`](../ai/realtime-agent/contracts/fixtures/caption-completed.valid.json).
+현재 agent는 `caption.segment.final`·`caption.partial|final|revised`를 발행하지 않는다. Spring consumer는 ai-api(`ai-rag-live-v1`)와 **별도 group `spring-caption-live-v1`**로 소비하고(ADR-0043), `eventId` 멱등으로 `caption.delta`·`caption.stream.completed`를 **append-only로 core.live_caption에 영속**한 뒤 저장분만 `/topic/live-sessions/{sessionId}/captions` WS로 전달한다(§3-6). raw `streamElapsedMs`를 **그대로 저장·중계**하며 세션 상대 ms로 변환하지 않는다 — session/HLS time-origin 변환·앵커, owner fencing, 전역 key의 session별 분리·정리는 후속 공유 계약이다(전역 key는 producer의 `MAXLEN ~`에 정리를 위임하고 consumer는 키를 DEL하지 않는다). consumer가 소비하는 Redis는 `spring.data.redis`가 가리키는 **프로필 구동 Redis**다(remote 프로필=EC2 :4000 application Redis). **prod 캡션-Redis 토폴로지(현재 prod redis ≠ 캡션 redis)는 AI/인프라 오너의 별도 작업**이며 이 구현이 해결하지 않는다(ADR-0043 §의존성). 상세: [`caption schema`](../ai/realtime-agent/contracts/schemas/caption-stream-entry.schema.json)·[`delta fixture`](../ai/realtime-agent/contracts/fixtures/caption-delta.valid.json)·[`completion fixture`](../ai/realtime-agent/contracts/fixtures/caption-completed.valid.json)·[ADR-0043](decisions/songjeongki/0043-caption-consumer-persistence.md).
 
 ### 3-5. realtime-agent → Spring lifecycle callback (HTTP, 서명) — v1 AI 구현/기본 off, v2 양쪽 미구현
 Spring 수신 endpoint를 구현하고 `SPRING_STATUS_CALLBACK_URL`로 주입하기 전까지 `SPRING_STATUS_CALLBACK_ENABLED=false`로 둔다. 기존 material callback(§3-2)과 body·header·서명이 호환되지 않으므로 `POST /api/internal/ai/callbacks`로 보내지 않으며 실제 URL은 Java 구현에서 확정한다.
@@ -115,9 +115,9 @@ Spring 수신 endpoint를 구현하고 `SPRING_STATUS_CALLBACK_URL`로 주입하
 활성화하기 전에 별도 v2 schema·fixture와 Java/Python 계약 테스트를 같은 common 변경에서 추가한다.
 
 ### 3-6. FE ↔ Spring WebSocket
-- **자막 채널**(세션/강의별): caption 이벤트 push.
-- **채팅 채널**: `chat_message { lessonId, userId, sessionMs, text, alias }`.
-- FE로 보내는 시간은 **세션 상대 ms**. §3-4의 `streamElapsedMs`를 그대로 노출하지 않는다.
+- **자막 채널** `/topic/live-sessions/{sessionId}/captions`(세션별, 구독 인가는 채팅과 동일 게이트·와일드카드 차단 불변식 ADR-0019·0043): `WsEnvelope.of(type, sessionId, occurredAt, payload)`로 push. `type`은 `caption.delta`·`caption.stream.completed`. payload는 camelCase — delta `{ sttSessionId, sequence, streamElapsedMs, text }`, completed `{ sttSessionId, lastSequence, reason }`.
+- **채팅 채널** `/topic/live-sessions/{sessionId}/chat`: `chat_message { lessonId, sessionMs, text, alias }`(실명·userId 미노출).
+- 채팅 시간은 **세션 상대 ms**(`sessionMs`)다. **자막의 `streamElapsedMs`는 §3-4의 raw attempt-local ms를 그대로 노출**한다(변환 금지) — 세션 상대 ms 변환·앵커는 후속 공유 계약이며 그 전까지 FE는 raw 값으로 취급한다(ADR-0043).
 
 ### 3-7. EC2 ai-worker → GPU bge-runtime (HTTP) — AI 구현됨
 
