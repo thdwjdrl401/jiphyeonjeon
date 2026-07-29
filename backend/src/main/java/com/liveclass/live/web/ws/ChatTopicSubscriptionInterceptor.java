@@ -15,18 +15,26 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * STOMP 채팅 토픽 구독 인가. {@code /topic/live-sessions/{sessionId}/chat} 구독 요청을
- * REST 조회·전송과 동일한 게이트(소유 강사 또는 활성 수강생)로 검증한다 — 없으면 구독을 거부한다.
+ * STOMP 라이브 토픽 구독 인가. {@code /topic/live-sessions/{sessionId}/chat}·
+ * {@code /topic/live-sessions/{sessionId}/captions} 구독 요청을 REST 조회·전송과 동일한 게이트
+ * (소유 강사 또는 활성 수강생)로 검증한다 — 없으면 구독을 거부한다.
  *
- * <p>이게 없으면 핸드셰이크만 통과한 아무 사용자나 임의 세션 토픽을 구독해 실시간 채팅을 수신할 수 있다
- * (전송은 컨트롤러에서 이미 게이팅되지만 수신-구독은 브로커 직행이라 별도 차단이 필요하다).
+ * <p>이게 없으면 핸드셰이크만 통과한 아무 사용자나 임의 세션 토픽을 구독해 실시간 채팅·자막을 수신할 수 있다
+ * (전송·발행은 서버에서 이미 게이팅되지만 수신-구독은 브로커 직행이라 별도 차단이 필요하다).
  * 인증(쿠키 세션 → Principal=userId)은 핸드셰이크에서 이미 끝나 있다.
+ *
+ * <p><b>와일드카드 차단 불변식(ADR-0019)</b>: SimpleBroker는 구독 destination을 패턴(AntPathMatcher)으로
+ * 매칭하므로 {@code /topic/**} 같은 와일드카드 구독이 게이트를 우회할 수 있다. 명시적으로 허용한 두 토픽
+ * (chat·captions)의 <b>정확 매칭</b>만 통과시키고 그 외 {@code /topic} 구독은 전부 거부한다 — 자막 토픽을
+ * 추가해도 이 불변식은 유지된다(임의 세션 자막 도청 구멍 금지).
  */
 @Component
 public class ChatTopicSubscriptionInterceptor implements ChannelInterceptor {
 
     private static final Pattern CHAT_TOPIC =
             Pattern.compile("^/topic/live-sessions/([^/]+)/chat$");
+    private static final Pattern CAPTIONS_TOPIC =
+            Pattern.compile("^/topic/live-sessions/([^/]+)/captions$");
 
     private final LiveAccessGuard accessGuard;
 
@@ -44,22 +52,23 @@ public class ChatTopicSubscriptionInterceptor implements ChannelInterceptor {
         if (destination == null || !destination.startsWith("/topic")) {
             return message;   // 브로커 토픽 구독만 통제한다(그 외 destination은 대상 아님).
         }
-        // SimpleBroker는 구독 destination을 패턴(AntPathMatcher)으로 매칭한다 — `/topic/**` 같은
-        // 와일드카드 구독이 채팅 브로드캐스트를 받아 게이트를 우회할 수 있다. 이 앱의 유일한 토픽은
-        // 채팅이므로, 구체적 채팅 토픽이 아니면(와일드카드 포함) 전부 거부해 우회를 막는다.
+        // 명시적으로 허용한 토픽(chat·captions)의 정확 매칭만 통과. 와일드카드 포함 그 외는 전부 거부.
         Matcher matcher = CHAT_TOPIC.matcher(destination);
+        if (!matcher.matches()) {
+            matcher = CAPTIONS_TOPIC.matcher(destination);
+        }
         if (!matcher.matches()) {
             throw new LiveSessionForbiddenException("허용되지 않은 구독 대상입니다.");
         }
         Principal principal = accessor.getUser();
         if (principal == null) {
-            throw new LiveSessionForbiddenException("인증되지 않은 채팅 구독입니다.");
+            throw new LiveSessionForbiddenException("인증되지 않은 구독입니다.");
         }
         UUID sessionId;
         try {
             sessionId = UUID.fromString(matcher.group(1));
         } catch (IllegalArgumentException malformed) {
-            throw new LiveSessionForbiddenException("잘못된 채팅 구독 대상입니다.");
+            throw new LiveSessionForbiddenException("잘못된 구독 대상입니다.");
         }
         // 소유 강사이거나 활성 수강생만. 아니면 예외 → 구독 프레임이 브로커에 도달하지 못하고 거부된다.
         accessGuard.requireCanAccess(sessionId, UUID.fromString(principal.getName()));

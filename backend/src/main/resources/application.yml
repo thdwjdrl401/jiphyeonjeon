@@ -180,6 +180,18 @@ liveclass:
       - http://localhost:*
       - https://jiphyeonjeon.thdwjdrl.com
       - https://*.thdwjdrl.com
+  # 라이브 자막 Redis Stream consumer(ADR-0043, CONTRACT §3-4). 소비 대상은 spring.data.redis가
+  # 가리키는 프로필 구동 Redis다(로컬=localhost, remote=EC2 :4000 application Redis). ai-api가
+  # ai-rag-live-v1로 이미 소비하므로 Spring은 반드시 별도 그룹을 쓴다.
+  caption:
+    enabled: ${CAPTION_CONSUMER_ENABLED:true}
+    stream-key: ${CAPTION_STREAM_KEY:ai:captions:live}   # 전역 키(producer env와 정합)
+    group: ${CAPTION_CONSUMER_GROUP:spring-caption-live-v1}
+    # dev 인프라를 여러 개발자가 공유하면 그룹을 분리한다(같은 그룹이면 서로 메시지를 뺏음).
+    group-instance-suffix: ${CAPTION_CONSUMER_GROUP_SUFFIX:}
+    consumer: ${CAPTION_CONSUMER_NAME:}                   # 비면 HOSTNAME 기반 안정 이름 파생
+    batch-size: ${CAPTION_CONSUMER_BATCH_SIZE:100}
+    poll-timeout: ${CAPTION_CONSUMER_POLL_TIMEOUT:1s}
 
 # AI 워커 콜백(ADR-0036) — HMAC 서명 검증 시크릿. 워커와 같은 값을 공유한다. 운영은 env로 주입(커밋 금지).
 ai:

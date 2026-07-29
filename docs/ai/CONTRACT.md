@@ -33,7 +33,7 @@ flowchart LR
     LiveKit <-->|Worker WSS / Room RTC| Agent[GPU realtime-agent]
     Agent -->|caption XADD| Redis[(EC2 application Redis)]
     Redis --> Api
-    Redis -.->|consumer 미구현| Spring
+    Redis -->|caption consumer 구현| Spring
     Worker -->|HTTP reverse tunnel| BGE[GPU bge-runtime]
     Api -->|HTTP reverse tunnel| BGE
 ```
@@ -175,7 +175,11 @@ Spring
 
 payload는 [`delta fixture`](../../ai/realtime-agent/contracts/fixtures/caption-delta.valid.json)와
 [`completion fixture`](../../ai/realtime-agent/contracts/fixtures/caption-completed.valid.json)를 따른다.
-ai-api consumer는 구현됐고 Spring caption consumer는 아직 구현되지 않았다.
+ai-api consumer는 구현됐고 Spring caption consumer도 구현됐다(별도 group `spring-caption-live-v1`,
+`eventId` 멱등, `core.live_caption` append-only 영속, `/topic/.../captions` WS 전달, raw `streamElapsedMs`
+그대로 — [ADR-0043](../../docs/decisions/songjeongki/0043-caption-consumer-persistence.md)). Spring consumer는
+`spring.data.redis`가 가리키는 프로필 구동 Redis를 소비한다. prod 캡션-Redis 토폴로지(현재 prod redis ≠
+캡션 redis)는 AI/인프라 오너 작업으로 남아 있다.
 
 ### 4.7 realtime-agent→Spring lifecycle
 
@@ -301,7 +305,7 @@ Spring realtime-agent health proxy client는 아직 없다. 따라서 `/internal
 | ai-worker→Spring download URL/callback | 양쪽 구현 |
 | ai-worker/ai-api→BGE | runtime/client/reverse tunnel/운영 container proxy 배선 구현 |
 | Spring→LiveKit→realtime-agent dispatch | 양쪽 Phase 4a 구현, STT readiness gate 우회 중 |
-| realtime-agent→Redis caption | producer와 ai-api consumer 구현, Spring consumer 미구현 |
+| realtime-agent→Redis caption | producer·ai-api consumer·Spring consumer 구현(Spring: 별도 group·eventId 멱등·core.live_caption 영속·WS 전달, ADR-0043). prod 캡션-Redis 토폴로지는 인프라 오너 후속 |
 | realtime-agent→Spring lifecycle callback | AI v1 구현·기본 off, Spring receiver 미구현 |
 | realtime-agent service health `:18081` | endpoint·schema·tunnel 구현, Spring client 미구현 |
 | nginx `:18080/internal/bge/*` | ai-api·ai-worker 운영 container caller 배선 구현 |
