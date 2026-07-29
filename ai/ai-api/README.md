@@ -1,9 +1,79 @@
 # ai-api
 
-EC2에서 실행하는 Spring 전용 FastAPI 서비스다. 관리 probe와 함께 RAG 질문을 근거 조회·답변 생성
-port로 전달하고 GMS 답변을 계약화된 SSE event로 내보내는 수직 흐름을 제공한다.
-최근 자막은 application Redis의 독립 consumer group으로 읽고, 자료는 BGE-M3 query embedding과
-Python 소유 pgvector ACTIVE index를 함께 검색한다.
+## 1. 이 서비스가 하는 일
+
+`ai-api`는 EC2에서 실행되는 Spring 전용 FastAPI 서비스다. 강의 자료와 실시간 자막을 검색하고,
+GMS가 생성한 RAG 답변을 SSE로 전달한다. 브라우저가 직접 호출하는 공개 API는 제공하지 않는다.
+
+기본 주소는 `http://127.0.0.1:8010`이다.
+
+## 2. 누가 어떻게 호출하는가
+
+| 호출자 | 대상 | 통신 | 용도 |
+|---|---|---|---|
+| Spring | `POST /internal/v1/rag/answers:stream` | HTTP + SSE, HMAC | RAG 질문과 답변 스트림 |
+| 운영 환경 | `GET /healthz`, `GET /readyz` | HTTP | 프로세스 생존·lifespan 준비 확인 |
+| realtime-agent → Redis → ai-api | `ai:captions:live` | Redis Stream consumer group | 실시간 자막 입력·처리 후 ACK |
+| ai-api | bge-runtime `POST /internal/v1/embeddings` | HTTP, Bearer | 질문 embedding 생성 |
+| ai-api | PostgreSQL `ai` schema | SQL/pgvector | 활성 강의 자료 검색 |
+| ai-api | GMS OpenAI-compatible API | HTTPS | 근거 기반 답변 생성 |
+
+Spring의 RAG 호출부와 서명 발급기는 아직 구현되지 않았다. 현재 endpoint는
+`AI_INTERNAL_SECRET`이 없으면 `503`으로 닫힌다. 주소·인증·구현 상태의 기준은
+[`docs/ai/CONTRACT.md`](../../docs/ai/CONTRACT.md)를 따른다.
+
+FastAPI가 자동 생성하는 `/docs`, `/redoc`, `/openapi.json`은 개발 편의 기능이며 서비스 통신 계약이 아니다.
+
+## 3. 통신 예시
+
+Spring은 JSON 원문 전체의 HMAC-SHA256 값을 `X-Internal-Signature`로 보낸다.
+
+```http
+POST /internal/v1/rag/answers:stream HTTP/1.1
+Accept: text/event-stream
+Content-Type: application/json
+X-Internal-Signature: <base64-hmac-signature>
+
+{
+  "requestId": "request-1",
+  "lessonId": "11111111-1111-4111-8111-111111111111",
+  "sessionId": "33333333-3333-4333-8333-333333333333",
+  "question": "방금 설명한 개념은 무엇인가요?",
+  "contextTimeMs": 615000,
+  "issuedAtMs": 1785120000000
+}
+```
+
+응답은 0개 이상의 delta 이후 하나의 terminal event로 끝난다.
+
+```text
+event: answer.delta
+data: {"requestId":"request-1","text":"RAG는 "}
+
+event: answer.done
+data: {"requestId":"request-1","sources":[{"type":"PPTX","materialId":"22222222-2222-4222-8222-222222222222","page":4}]}
+```
+
+전체 요청 필드, SSE event, 상태코드는 [`CONTRACT.md`](CONTRACT.md)에서 확인한다.
+
+## 4. 처리 흐름
+
+```text
+Redis caption Stream → background consumer → in-memory caption store
+
+Spring
+  → ai-api → bge-runtime 질문 embedding
+  → PostgreSQL 활성 자료 검색
+  → in-memory 최근 자막 조회
+  → GMS 답변 생성
+  → SSE answer.delta / terminal event
+  → Spring
+```
+
+`ai-api`는 시작할 때 Redis 자막 consumer를 실행한다. 자료와 자막에서 충분한 근거를 찾지 못하면
+GMS를 호출하지 않고 `answer.insufficient`로 종료한다.
+
+## 5. 실행과 설정
 
 ```bash
 cd ai/ai-api
@@ -11,45 +81,49 @@ uv sync --frozen
 uv run --frozen --env-file ../.env python -m app.main
 ```
 
-로컬 환경변수는 `ai/ai-api/`가 아니라 [`ai/.env.example`](../.env.example)에 realtime-agent와 함께
-정리되어 있다. `ai/.env.example`을 `ai/.env`로 복사해서 채운다(git 무시됨).
+로컬 설정은 [`ai/.env.example`](../.env.example)을 `ai/.env`로 복사하고 빈
+`AI_API_GMS_API_KEY`와 필요한 secret을 채워 사용한다.
 
-- `GET /healthz`: 프로세스 생존
-- `GET /readyz`: application lifespan 준비 상태
-- `POST /internal/v1/rag/answers:stream`: Spring 전용 RAG SSE 후보 경계
-- 기본 주소: `127.0.0.1:8010`
+| 환경변수 | 필요 조건 | 용도 |
+|---|---|---|
+| `AI_API_DATABASE_URL` | 실행 필수 | PostgreSQL `ai` schema 연결 |
+| `AI_API_BGE_BASE_URL`, `AI_API_BGE_TOKEN` | 실행 필수 | bge-runtime 주소와 Bearer token |
+| `AI_API_GMS_API_KEY` | 실행 필수 | GMS 답변 모델 인증 |
+| `AI_API_REDIS_URL` | 선택 | 자막 Redis 연결, 기본값 `redis://127.0.0.1:6379/0` |
+| `AI_INTERNAL_SECRET` | RAG 호출 필수 | Spring 요청 HMAC 검증용 공유 secret; GPU에서는 사용하지 않음 |
 
-실행 entrypoint는 Redis caption consumer, pgvector/BGE context와 GMS client를 application lifespan에
-연결한다. 실행에는 `AI_API_DATABASE_URL`, `AI_API_BGE_BASE_URL`, `AI_API_BGE_TOKEN`,
-`AI_API_GMS_API_KEY`가 필요하다. Spring→ai-api 내부 인증은 HMAC 공유 시크릿(ADR-0023 §9)으로 채택
-확정됐고, `AI_INTERNAL_SECRET`이 설정되면 `HmacInternalRequestAuthenticator`가 실제로 배선된다.
-미설정 시에는 계속 fail-closed `503`이며, Spring 쪽 서명 발급기가 아직 없어 실제 상호 인증까지는
-안 된 상태다. 이 서비스를 브라우저에 직접 노출하지 않으며 Java 채택 전 후보 계약은
-[`CONTRACT.md`](CONTRACT.md)를 따른다.
+기본 host와 port는 `AI_API_HOST=127.0.0.1`, `AI_API_PORT=8010`이다. 운영 compose는 같은 Docker
+network의 Spring이 접근할 수 있도록 container 내부 bind만 `0.0.0.0:8010`으로 바꾼다.
 
-`AI_API_BGE_BASE_URL`은 경로 있는 origin도 허용한다(디렉터리 순회 `..`만 차단). EC2에 컨테이너로 배포할 때는
-GPU reverse tunnel을 내보내는 기존 프록시(`docker-compose.gpu-proxy.yml`, `infra/nginx/gpu-proxy.conf`,
-[ai-worker README §EC2 ai-worker ↔ GPU BGE 연결](../ai-worker/README.md#ec2-ai-worker--gpu-bge-연결)와 동일)를
-그대로 써서 `AI_API_BGE_BASE_URL=http://host.docker.internal:18080/internal/bge`로 설정한다.
+| 실행 형태 | `AI_API_BGE_BASE_URL` | token 주입 |
+|---|---|---|
+| 로컬 GPU runtime | `http://127.0.0.1:8020` | `AI_API_BGE_TOKEN` |
+| EC2 host process | `http://127.0.0.1:18020` | `AI_API_BGE_TOKEN` |
+| EC2 운영 container | `http://host.docker.internal:18080/internal/bge` | root `BGE_RUNTIME_INTERNAL_TOKEN` → `AI_API_BGE_TOKEN` |
+운영 root env의 `GMS_API_KEY`는 compose에서 container의 `AI_API_GMS_API_KEY`로 매핑한다.
+backend와 GPU 서비스에는 이 값을 주입하지 않는다.
 
-로컬 검증은 기본 compose의 PostgreSQL·Redis를 사용한다. PostgreSQL 테스트는 실행마다 별도 `*_test` DB와
-role을 만들고 제거하며, Redis 테스트는 DB 15의 무작위 key만 사용한다. 둘 다 skip하지 않는다.
+경로 prefix가 있는 BGE URL은 허용하지만 credential, query, fragment와 `..` 경로는 거부한다.
+`AI_INTERNAL_SECRET`은 이름이 바뀐 값이 아니며 Spring↔ai-api 전용이다. 현재 ai-api 검증기는 구현됐지만
+Spring signer·SSE proxy는 아직 구현되지 않았다.
 
-```bash
-docker compose up -d postgres redis
-cd ai/ai-api
-uv run --frozen pytest -q -p no:cacheprovider
-```
+## 6. 상태 확인
 
-## 폴더별 상세 문서
-
-| 폴더 | 설명 |
+| endpoint | 의미 |
 |---|---|
-| [`app/`](app/README.md) | FastAPI 생명주기·RAG 코어·내부 HTTP 경계 |
-| [`docs/`](docs/README.md) | ai-api 한정 기술 결정 기록 |
-| [`tests/`](tests/README.md) | 관리 endpoint와 RAG 계약·스트림 검증 |
+| `GET /healthz` | FastAPI 프로세스가 응답할 수 있음 |
+| `GET /readyz` | application lifespan이 시작됨 |
 
-```bash
-uv run --frozen pytest -q -p no:cacheprovider
-uv run --frozen ruff check app tests
-```
+`/readyz`는 Redis, PostgreSQL, bge-runtime, GMS의 연결 상태까지 검사하지 않는다.
+
+## 7. 관련 문서
+
+- [AI 전체 통신 계약](../../docs/ai/CONTRACT.md)
+- [ai-api 상세 계약](CONTRACT.md)
+- [애플리케이션 구조](app/README.md)
+- [RAG 구조](app/rag/README.md)
+- [자료 검색 구조](app/retrieval/README.md)
+- [자막 문맥 구조](app/captions/README.md)
+- [ai-api 결정 기록](docs/README.md)
+- [EC2 AI 운영 compose](../../docker-compose.ai-prod.yml)
+- [EC2 AI 운영 환경변수](../../.env.ai-prod.example)

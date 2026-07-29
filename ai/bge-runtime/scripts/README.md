@@ -47,7 +47,7 @@ host key는 실행 계정의 기본 `known_hosts`에 미리 등록한다.
 
 ```bash
 SSH_KEY=/secure/path/bge-tunnel.pem \
-SSH_TARGET=tunnel@ec2.example.internal \
+SSH_TARGET=bge-tunnel@ec2.example.internal \
 BGE_LOCAL_PORT=8020 \
 BGE_EC2_PORT=18020 \
 ./scripts/start_ec2_reverse_tunnel.sh

@@ -1,10 +1,11 @@
 # realtime-agent v1 상세 계약
 
 이 문서는 realtime-agent의 wire 형식과 AI 런타임 불변식을 Python 테스트로 고정한 상세 계약이다.
-Spring이 생산·소비하는 공유 경계의 정본은 [`docs/CONTRACT.md` §3-3~§3-5](../../docs/CONTRACT.md#3-내부-계약-확정-인터페이스)다.
+Spring이 생산·소비하는 공유 경계의 정본은 [`docs/CONTRACT.md` §3-3~§3-5·§3-8](../../docs/CONTRACT.md#3-내부-계약-확정-인터페이스)이다.
 
-현재 Java에는 named LiveKit AgentDispatch 생성, Redis Stream consumer, live-agent callback handler가
-없으므로 계약 채택만으로 Java 연동 또는 CP2 E2E가 완료된 것은 아니다.
+Spring의 named LiveKit AgentDispatch 생성·재사용·삭제와 exact metadata 저장은 구현됐다. 현재 job별
+assignment/running readiness는 `live.stt.assume-ready=true`로 우회 중이며, Redis Stream consumer,
+live-agent callback receiver와 realtime-agent health client는 아직 없다.
 
 ## 1. Spring → LiveKit → realtime-agent dispatch metadata
 
@@ -117,17 +118,39 @@ process target이고 provider 기본값은 12다. Nemotron의 active 설정이 �
 | Worker/job 종료 | job 실패 또는 재배정 가능 | job 상태와 `sttSessionId`별 결과를 조정한다. |
 | Room 정상 삭제 | completion 후 Worker 용량 반환 | 이를 정상 stop 신호로 사용한다. |
 
-### 2.5 Java 구현 체크리스트
+### 2.5 Java 구현 상태
 
-1. Java 설정의 `agentName`을 Python의 `STT_AGENT_NAME`과 맞춘다. Java는 Worker를 등록하지 않는다.
-2. Room 이름, instructor publish 권한, metadata를 검증한 뒤 explicit dispatch를 생성한다.
-3. dispatch ID와 LiveKit job ID를 저장하고 동일 start retry에서는 기존 dispatch를 재사용한다.
-4. dispatch 생성만으로 성공 처리하지 않고 job assignment/running을 bounded polling 또는 상태 이벤트로
-   확인한다.
-5. assignment timeout, capacity failure, 사용자 취소와 Room/dispatch 정리를 멱등하게 구현한다.
-6. Redis와 callback을 `(sessionId, sttSessionId)` attempt 단위로 처리하고 event ID 중복을 제거한다.
-7. Worker 수·load, active/pending job, assignment 시간, 실패율, GPU 메모리를 모니터링한다.
-8. AVAILABLE, FULL, Worker 미등록, 중복 dispatch, Worker crash, Room 삭제를 E2E로 검증한다.
+구현된 Phase 4a 경계:
+
+- Java `agentName`과 Python `STT_AGENT_NAME`을 같은 설정으로 관리한다.
+- Python과 같은 네 필드·순서의 metadata를 직렬화한다.
+- 같은 room·agent·metadata dispatch를 조회·재사용하고, 없으면 생성한다.
+- dispatch ID와 exact metadata를 start attempt에 저장하고 시작 실패 시 dispatch를 삭제한다.
+
+남은 경계:
+
+1. dispatch 생성 뒤 job assignment/running을 bounded polling 또는 상태 event로 확인한다.
+2. assignment timeout, capacity failure, 사용자 취소와 Room/dispatch 정리를 실제 job 상태까지 포함해
+   멱등하게 처리한다.
+3. Redis와 callback을 `(sessionId, sttSessionId)` attempt 단위로 소비하고 event ID 중복을 제거한다.
+4. realtime-agent health client와 Worker 수·load, active/pending job, assignment 시간, GPU 메모리 관측을
+   연결한다.
+5. AVAILABLE, FULL, Worker 미등록, 중복 dispatch, Worker crash, Room 삭제를 E2E로 검증한다.
+
+### 2.6 service health
+
+별도 Python health server는 host로 `127.0.0.1`만 허용하고, port는 기본 `8081`이며 `1~65535` 범위로 설정할 수 있다.
+`GET /health/live`는 server가 응답 가능하면 200이다. `GET /health/ready`는 설정된 모든 child의
+provider prewarm, AgentServer 시작과 현재 LiveKit 연결이 확인되면 200 `status=ready`, 아니면
+503 `status=notReady`를 반환한다.
+
+readiness body에는 provider, expected/ready process 수, worker 시작과 LiveKit 연결 여부가 포함된다.
+expected process 수는 active job 수가 아니라 resolved idle process 수다. Redis, session lease, room
+audio, engine queue와 dispatch capacity는 검사하지 않으므로 job별 `STT_READY`를 대체하지 않는다.
+`GET /`는 기존 smoke 호환용 plain `OK`이고 `GET /worker`는 `:8081`에서 제공하지 않는다.
+
+공유 상태코드와 body는 [`docs/CONTRACT.md` §3-8](../../docs/CONTRACT.md#3-8-gpu-realtime-agent-service-health-http--ai-구현됨-spring-consumer-미구현), JSON 정본은 [health schema](contracts/schemas/realtime-agent-health.schema.json)를 따른다.
+
 
 ## 3. realtime-agent → application Redis caption stream
 
@@ -259,11 +282,11 @@ audio/event drain, engine/source cleanup, completion write, terminal callback, l
 
 ## 6. Java 연동 완료 전 필수 gate
 
-1. 2.5절의 named dispatch, idempotency, assignment timeout, Room 권한·삭제와 capacity handling을
-   구현한다.
-2. 이 metadata schema/fixture를 Java serializer와 양측 contract test로 검증한다.
+1. Phase 4a dispatch 이후 job assignment/running readiness gate와 timeout·capacity 처리를 구현한다.
+2. metadata schema/fixture의 Java serializer와 양쪽 계약 테스트를 유지한다.
 3. Redis key, consumer group, 세션 종료 후 정리, event enum, timeout 결과의 멱등/fencing과 session
-   clock 변환을 확정한다.
-4. callback URL, HMAC 방식, event ID 멱등성과 terminal first-wins 처리를 확정한다.
-5. available/full/unregistered Worker와 LiveKit·Redis·Spring 정상·실패 E2E를 별도 실행하고
+   clock 변환을 확정하고 Spring consumer를 구현한다.
+4. callback URL, HMAC 방식, event ID 멱등성과 terminal first-wins를 확정하고 Spring receiver를 구현한다.
+5. realtime-agent health client를 연결한다.
+6. available/full/unregistered Worker와 LiveKit·Redis·Spring 정상·실패 E2E를 별도 실행하고
    실제 Java 연동 결과를 계약 테스트로 고정한다.

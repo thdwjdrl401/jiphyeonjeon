@@ -1,47 +1,33 @@
 # bge-runtime
 
-`bge-runtime`은 BGE-M3 dense embedding만 제공하는 AI 내부 GPU HTTP 서비스다. PostgreSQL,
-Redis, RabbitMQ, MinIO와 Java/Spring credential을 갖지 않으며 입력 text나 embedding 값을 로그에
-남기지 않는다. ai-worker가 이 내부 HTTP 경계를 호출하며 서비스 단독 Docker image와 opt-in local
-Compose profile을 제공한다.
+## 1. 이 서비스가 하는 일
 
-## 현재 경계
+`bge-runtime`은 GPU에서 BGE-M3 dense embedding만 생성하는 내부 FastAPI 서비스다. 입력 순서를 유지한
+1024차원 정규화 vector를 반환하며 Java나 Frontend가 직접 호출하지 않는다.
 
-- `BAAI/bge-m3`와 immutable full revision
-  `5617a9f61b028005a4858fdac845db406aefb181`을 기본값으로 사용
-- `cuda` 또는 `cuda:N`만 허용하고 CUDA가 없으면 CPU fallback 없이 시작 실패
-- 요청 순서를 유지한 1024차원 unit-normalized dense vector 반환
-- model load와 GPU encode를 thread-level lock으로 직렬화
-- HTTP 요청이 취소돼도 OS inference thread 완료 전에는 admission을 반납하지 않으며 다음 CUDA
-  encode와 겹치지 않음
-- batch당 최대 4개, text당 최대 4,000자, active+queued 요청 최대 8개가 기본값
-- 인증 후 JSON parsing 전에 request body를 최대 128 KiB로 제한하며 chunked body도 누적 검사
-- request body 수신 시간이 5초를 넘으면 `408`로 종료하고 admission을 반환
-- admission 초과 요청은 대기시키지 않고 `429`와 `Retry-After: 1` 반환
-- model warmup이 완료된 뒤에만 application lifespan과 readiness가 열림
+PostgreSQL, Redis, RabbitMQ, MinIO와 Spring credential은 사용하지 않는다. CUDA를 사용할 수 없으면
+CPU로 전환하지 않고 시작에 실패한다.
 
-문자 수 제한은 GPU 보호용 보수적 경계이며 BGE-M3의 tokenizer token 수를 정확히 보장하지는
-않는다. 한도를 올리려면 실제 입력 분포와 최대 batch로 별도 CUDA smoke를 먼저 수행해야 한다.
+## 2. 누가 어떻게 호출하는가
 
-## HTTP API
+| 호출자 | 대상 | 통신 | 용도 |
+|---|---|---|---|
+| ai-api | `POST /internal/v1/embeddings` | HTTP, Bearer | RAG 질문 embedding |
+| ai-worker | `POST /internal/v1/embeddings` | HTTP, Bearer | PPTX chunk embedding |
+| ai-worker | `GET /readyz` | HTTP | 자료 consumer의 GPU 준비 확인 |
+| 운영 환경 | `GET /healthz`, `GET /readyz` | HTTP | 프로세스·model 준비 확인 |
+| GPU host | EC2 `127.0.0.1:18020` | reverse SSH tunnel | EC2의 ai-api·ai-worker에 GPU endpoint 제공 |
 
-폴더별 구현 설명은 [`app/`](app/README.md), CUDA smoke는 [`scripts/`](scripts/README.md), 자동 검증은
-[`tests/`](tests/README.md)에 있다.
+기본 및 운영 배포는 GPU `127.0.0.1:8020`을 사용한다. EC2의 `:18020`은 tunnel이 loopback bind를 강제하며 public ingress에
+노출하지 않는다. 주소·인증·구현 상태는 [`docs/ai/CONTRACT.md`](../../docs/ai/CONTRACT.md)를 따른다.
 
-관리 endpoint는 인증 없이 process 상태만 제공한다.
-
-- `GET /healthz`
-- `GET /readyz`
-
-Embedding endpoint는 body parsing 전에 Bearer token을 검증한다.
+## 3. 통신 예시
 
 ```http
-POST /internal/v1/embeddings
+POST /internal/v1/embeddings HTTP/1.1
 Authorization: Bearer <BGE_RUNTIME_INTERNAL_TOKEN>
 Content-Type: application/json
-```
 
-```json
 {
   "model": "BAAI/bge-m3",
   "revision": "5617a9f61b028005a4858fdac845db406aefb181",
@@ -49,73 +35,86 @@ Content-Type: application/json
 }
 ```
 
-응답은 요청과 같은 순서의 `embeddings`, `dimensions=1024`, `normalized=true`를 포함한다.
+성공 응답은 같은 `model`과 `revision`, `dimensions=1024`, `normalized=true`, 요청과 같은 순서의
+`embeddings`를 반환한다. 한 요청에는 기본 최대 4개 text를 보낼 수 있다.
 
-- 인증 실패: `401` + `WWW-Authenticate: Bearer`
-- request body 수신 timeout: `408`
-- model/revision 불일치: `409`
-- request body 또는 batch 초과: `413`
-- 빈 text, text 길이 초과, schema 오류: `422`
-- active+queued 요청 상한 초과: `429` + `Retry-After: 1`
+성공은 `200`이다. 잘못된 `Content-Length`는 `400`, 인증 실패는 `401`, body timeout은 `408`,
+model/revision 불일치는 `409`, 크기 초과는 `413`, schema·text 위반은 `422`다. 동시 요청 한도 초과는
+`429`와 `Retry-After: 1`을 반환한다. 상세 제한은 [애플리케이션 문서](app/README.md)에서 확인한다.
 
-이 API는 `ai-worker`와 향후 `ai-api`가 사용할 Python 서비스 간 내부 경계다. Java/FE가 직접 호출하지 않으며
-Java/FE 공유 계약인 `docs/CONTRACT.md` 대상이 아니다.
+## 4. 처리 흐름
 
-## EC2 ai-worker 연결
-
-교차 호스트 운영은 [`start_ec2_reverse_tunnel.sh`](scripts/start_ec2_reverse_tunnel.sh)를 사용한다. 실행·검증은
-[scripts README](scripts/README.md), 무권한 자동 배포는 [deploy README](deploy/README.md), 책임과 대안은
-[ADR-0029](../../docs/decisions/canola/0029-gpu-bge-ec2-ai-worker-connectivity.md)와
-[ADR-0031](../../docs/decisions/canola/0031-bge-rootless-gpu-deployment.md)을 정본으로 삼는다.
-
-## 설정
-
-모든 설정은 `BGE_RUNTIME_` prefix를 사용한다. `BGE_RUNTIME_INTERNAL_TOKEN`은 32자 이상이며
-필수다. 주요 기본값은 다음과 같다.
-
-| 환경 변수 | 기본값 |
-|---|---|
-| `BGE_RUNTIME_HOST` | `127.0.0.1` |
-| `BGE_RUNTIME_PORT` | `8020` |
-| `BGE_RUNTIME_DEVICE` | `cuda` |
-| `BGE_RUNTIME_BATCH_SIZE` | `4` |
-| `BGE_RUNTIME_MAX_BATCH_SIZE` | `4` |
-| `BGE_RUNTIME_MAX_INFLIGHT_REQUESTS` | `8` |
-| `BGE_RUNTIME_MAX_TEXT_CHARS` | `4000` |
-| `BGE_RUNTIME_MAX_REQUEST_BODY_BYTES` | `131072` |
-| `BGE_RUNTIME_REQUEST_BODY_TIMEOUT_SECONDS` | `5.0` |
-
-## 검증
-
-기본 테스트는 CUDA package와 모델 가중치 없이 fake encoder로 실행된다.
-
-```powershell
-uv sync --frozen
-uv run --frozen pytest -q -p no:cacheprovider
-uv run --frozen ruff check app tests scripts
+```text
+EC2 host process
+  → 127.0.0.1:18020
+EC2 production container
+  → host.docker.internal:18080/internal/bge
+  → host-network nginx → EC2 127.0.0.1:18020
+  → reverse SSH tunnel
+  → GPU 127.0.0.1:8020
+  → Bearer 인증 + body/admission 제한
+  → BGE-M3 CUDA encode
+  → 1024차원 normalized vectors
 ```
 
-실제 GPU runtime은 별도 extra다.
+model은 시작할 때 고정 revision으로 warmup한다. CUDA encode는 thread lock으로 직렬화하며, 취소된 HTTP
+요청의 inference thread가 끝나기 전에는 다음 작업과 겹치지 않는다.
 
-```powershell
-uv sync --frozen --extra cuda
-uv run --frozen --extra cuda python scripts/smoke_cuda.py --offline
-```
-
-실제 모델 smoke에서는 full revision, 1024차원·유한값·unit norm·입력 순서와 cold/warm latency,
-CUDA peak allocated/reserved를 기록한다. 스크립트는 입력 원문과 vector를 출력하지 않는다.
-`--offline`은 pinned revision이 로컬 Hugging Face cache에 없으면 다운로드하지 않고 실패한다.
-
-Docker image는 `Dockerfile`로 빌드한다. GPU container 실행에는 NVIDIA Container Toolkit과 Compose의
-GPU 지원이 필요하며, 로컬 격리 스택은 `--profile gpu`일 때만 이 무거운 runtime을 올린다. 전체 실행 순서는
-[material ingestion E2E runbook](../../docs/decisions/canola/0021-material-ingestion-e2e-runbook.md)에 둔다.
+## 5. 실행과 설정
 
 ```bash
-docker compose -f docker-compose.material-ingestion.yml --profile gpu up -d bge-runtime
+cd ai/bge-runtime
+uv sync --frozen --extra cuda
+BGE_RUNTIME_INTERNAL_TOKEN=<32자-이상-token> \
+uv run --frozen --extra cuda python -m app.main
 ```
-BGE와 Nemotron을 6 GB GPU에 동시에 상주시킬 수 있다는 보장은 별도 동시 실행 검증 전에는 하지
-않는다.
 
-2026-07-27 RTX 4050 Laptop 6 GB에서 위 offline smoke를 실행한 결과는 2개 입력 모두 1024차원,
-finite/unit norm, 반복 출력 최대 차이 0이었다. cold 39.3초, warm 116.8ms, CUDA peak allocated
-2175.4 MiB / reserved 2188.0 MiB를 기록했다. 이는 짧은 입력 2개의 BGE 단독 측정값이다.
+운영에서는 고정 revision model cache를 미리 준비하고 Hugging Face·Transformers offline mode로 실행한다.
+
+| 환경변수 | 기본값/조건 | 용도 |
+|---|---|---|
+| `BGE_RUNTIME_INTERNAL_TOKEN` | 실행 필수, 32자 이상 | 내부 Bearer 인증 |
+| `BGE_RUNTIME_HOST`, `BGE_RUNTIME_PORT` | `127.0.0.1`, `8020` | GPU listen 주소 |
+| `BGE_RUNTIME_DEVICE` | `cuda` | `cuda` 또는 `cuda:N` |
+| `BGE_RUNTIME_BATCH_SIZE` | `4` | 내부 encoder batch |
+| `BGE_RUNTIME_MAX_BATCH_SIZE` | `4` | 요청당 최대 text 수 |
+| `BGE_RUNTIME_MAX_INFLIGHT_REQUESTS` | `8` | active+queued 요청 상한 |
+| `BGE_RUNTIME_MAX_TEXT_CHARS` | `4000` | text 하나의 문자 수 상한 |
+| `BGE_RUNTIME_MAX_REQUEST_BODY_BYTES` | `131072` | 인증 후 body 크기 상한 |
+| `BGE_RUNTIME_REQUEST_BODY_TIMEOUT_SECONDS` | `5.0` | body 수신 시간 상한 |
+
+GPU→EC2 tunnel은 runtime이 ready인 뒤 다음 운영 script로 시작한다.
+
+```bash
+SSH_KEY=/secure/path/bge-tunnel.pem \
+SSH_TARGET=bge-tunnel@ec2.example.internal \
+./scripts/start_ec2_reverse_tunnel.sh
+```
+
+EC2 host process는 `AI_API_BGE_BASE_URL`과 `AI_WORKER_BGE_RUNTIME_URL`에
+`http://127.0.0.1:18020`을 사용한다. 운영 container는
+`http://host.docker.internal:18080/internal/bge`를 사용하며 nginx가 같은 tunnel로 전달한다.
+root 운영 env의 `BGE_RUNTIME_INTERNAL_TOKEN`은 compose에서 각 client token으로 매핑한다.
+`AI_INTERNAL_SECRET`은 Spring↔ai-api 전용이므로 GPU bge-runtime에서는 사용하지 않는다.
+
+## 6. 상태 확인
+
+| endpoint | 의미 |
+|---|---|
+| `GET /healthz` | HTTP 프로세스가 응답할 수 있음 |
+| `GET /readyz` | pinned model load와 CUDA warmup이 완료됨 |
+
+management endpoint에는 인증이 없으므로 loopback 밖에 노출하지 않는다. FastAPI 자동 생성
+`/docs`, `/redoc`, `/openapi.json`은 개발 편의 기능이며 내부 서비스 계약이 아니다.
+
+## 7. 관련 문서
+
+- [AI 전체 통신 계약](../../docs/ai/CONTRACT.md)
+- [애플리케이션 구조와 HTTP 제한](app/README.md)
+- [GPU smoke와 EC2 tunnel](scripts/README.md)
+- [GPU host 배포](deploy/README.md)
+- [실행 환경 예시](deploy/env/bge-runtime.env.example)
+- [EC2↔GPU 연결 결정](../../docs/decisions/canola/0029-gpu-bge-ec2-ai-worker-connectivity.md)
+- [EC2 container BGE 연결 결정](../../docs/decisions/jinwoo/0002-ai-worker-ai-api-container-bge-connectivity.md)
+- [EC2 AI 운영 compose](../../docker-compose.ai-prod.yml)
+- [EC2 AI 운영 환경변수](../../.env.ai-prod.example)
