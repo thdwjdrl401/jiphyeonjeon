@@ -14,6 +14,7 @@ HEALTH_LOCAL_PORT="${HEALTH_LOCAL_PORT:-8081}"
 HEALTH_REMOTE_PORT="${HEALTH_REMOTE_PORT:-18081}"
 HEALTH_BIND_HOST="${HEALTH_BIND_HOST:-127.0.0.1}"
 SSH_CONTROL_PATH="${SSH_CONTROL_PATH:-${TMPDIR:-/tmp}/liveclass-realtime-agent-%C.sock}"
+TURN_SSH_CONTROL_PATH="${TURN_SSH_CONTROL_PATH:-${TMPDIR:-/tmp}/liveclass-realtime-agent-turn-%C.sock}"
 HEALTH_REVERSE_MARKER="$SSH_CONTROL_PATH.health-$HEALTH_REMOTE_PORT"
 
 case "$SSH_TARGET" in
@@ -30,6 +31,10 @@ case "$SSH_TARGET" in
 esac
 if [ "$HEALTH_BIND_HOST" != "127.0.0.1" ]; then
     echo "HEALTH_BIND_HOST must be 127.0.0.1" >&2
+    exit 1
+fi
+if [ "$SSH_CONTROL_PATH" = "$TURN_SSH_CONTROL_PATH" ]; then
+    echo "SSH_CONTROL_PATH and TURN_SSH_CONTROL_PATH must be different" >&2
     exit 1
 fi
 
@@ -90,47 +95,98 @@ validate_port "$TURN_REMOTE_PORT" TURN_REMOTE_PORT
 validate_port "$HEALTH_LOCAL_PORT" HEALTH_LOCAL_PORT
 validate_port "$HEALTH_REMOTE_PORT" HEALTH_REMOTE_PORT
 
-if ssh -F /dev/null -S "$SSH_CONTROL_PATH" -O check "$SSH_TARGET" >/dev/null 2>&1; then
+control_connection_exists() {
+    ssh -F /dev/null -S "$SSH_CONTROL_PATH" -O check "$SSH_TARGET" >/dev/null 2>&1
+}
+
+turn_connection_exists() {
+    ssh -F /dev/null -S "$TURN_SSH_CONTROL_PATH" -O check "$SSH_TARGET" >/dev/null 2>&1
+}
+
+ensure_health_reverse() {
     if [ ! -e "$HEALTH_REVERSE_MARKER" ]; then
         ssh -F /dev/null -S "$SSH_CONTROL_PATH" -O forward \
             -R "$HEALTH_BIND_HOST:$HEALTH_REMOTE_PORT:127.0.0.1:$HEALTH_LOCAL_PORT" \
             "$SSH_TARGET"
         : >"$HEALTH_REVERSE_MARKER"
     fi
+}
+
+start_control_tunnel() {
+    validate_listener_available "$LIVEKIT_LOCAL_PORT" LIVEKIT
+    validate_listener_available "$REDIS_LOCAL_PORT" REDIS
+
+    ssh \
+        -F /dev/null \
+        -T \
+        -M \
+        -S "$SSH_CONTROL_PATH" \
+        -i "$SSH_KEY" \
+        -o BatchMode=yes \
+        -o ConnectTimeout=10 \
+        -o ConnectionAttempts=1 \
+        -o ExitOnForwardFailure=yes \
+        -o IdentitiesOnly=yes \
+        -o RequestTTY=no \
+        -o ServerAliveInterval=30 \
+        -o ServerAliveCountMax=3 \
+        -o StrictHostKeyChecking=yes \
+        -f -N \
+        -L "$LIVEKIT_LOCAL_PORT:localhost:$LIVEKIT_REMOTE_PORT" \
+        -L "$REDIS_LOCAL_PORT:localhost:$REDIS_REMOTE_PORT" \
+        -R "$HEALTH_BIND_HOST:$HEALTH_REMOTE_PORT:127.0.0.1:$HEALTH_LOCAL_PORT" \
+        "$SSH_TARGET"
+    : >"$HEALTH_REVERSE_MARKER"
+}
+
+start_turn_tunnel() {
+    validate_listener_available "$TURN_LOCAL_PORT" TURN_TCP
+
+    ssh \
+        -F /dev/null \
+        -T \
+        -M \
+        -S "$TURN_SSH_CONTROL_PATH" \
+        -i "$SSH_KEY" \
+        -o BatchMode=yes \
+        -o ConnectTimeout=10 \
+        -o ConnectionAttempts=1 \
+        -o ExitOnForwardFailure=yes \
+        -o IdentitiesOnly=yes \
+        -o RequestTTY=no \
+        -o ServerAliveInterval=30 \
+        -o ServerAliveCountMax=3 \
+        -o StrictHostKeyChecking=yes \
+        -f -N \
+        -L "$TURN_LOCAL_PORT:localhost:$TURN_REMOTE_PORT" \
+        "$SSH_TARGET"
+}
+
+if control_connection_exists; then
+    ensure_health_reverse
     validate_managed_listener "$LIVEKIT_LOCAL_PORT" LIVEKIT
     validate_managed_listener "$REDIS_LOCAL_PORT" REDIS
+else
+    rm -f -- "$HEALTH_REVERSE_MARKER"
+    start_control_tunnel
+    validate_managed_listener "$LIVEKIT_LOCAL_PORT" LIVEKIT
+    validate_managed_listener "$REDIS_LOCAL_PORT" REDIS
+fi
+
+if turn_connection_exists; then
     validate_managed_listener "$TURN_LOCAL_PORT" TURN_TCP
     exit 0
 fi
 
-rm -f -- "$HEALTH_REVERSE_MARKER"
-validate_listener_available "$LIVEKIT_LOCAL_PORT" LIVEKIT
-validate_listener_available "$REDIS_LOCAL_PORT" REDIS
-validate_listener_available "$TURN_LOCAL_PORT" TURN_TCP
+if nc -z -w 2 127.0.0.1 "$TURN_LOCAL_PORT"; then
+    if control_connection_exists && ssh -F /dev/null -S "$SSH_CONTROL_PATH" -O cancel \
+        -L "$TURN_LOCAL_PORT:localhost:$TURN_REMOTE_PORT" "$SSH_TARGET" >/dev/null 2>&1; then
+        echo "migrated TURN/TCP listener out of the legacy control connection"
+    else
+        echo "TURN_TCP port is occupied outside the managed TURN SSH tunnel" >&2
+        exit 1
+    fi
+fi
 
-ssh \
-    -F /dev/null \
-    -T \
-    -M \
-    -S "$SSH_CONTROL_PATH" \
-    -i "$SSH_KEY" \
-    -o BatchMode=yes \
-    -o ConnectTimeout=10 \
-    -o ConnectionAttempts=1 \
-    -o ExitOnForwardFailure=yes \
-    -o IdentitiesOnly=yes \
-    -o RequestTTY=no \
-    -o ServerAliveInterval=30 \
-    -o ServerAliveCountMax=3 \
-    -o StrictHostKeyChecking=yes \
-    -f -N \
-    -L "$LIVEKIT_LOCAL_PORT:localhost:$LIVEKIT_REMOTE_PORT" \
-    -L "$REDIS_LOCAL_PORT:localhost:$REDIS_REMOTE_PORT" \
-    -L "$TURN_LOCAL_PORT:localhost:$TURN_REMOTE_PORT" \
-    -R "$HEALTH_BIND_HOST:$HEALTH_REMOTE_PORT:127.0.0.1:$HEALTH_LOCAL_PORT" \
-    "$SSH_TARGET"
-: >"$HEALTH_REVERSE_MARKER"
-
-validate_managed_listener "$LIVEKIT_LOCAL_PORT" LIVEKIT
-validate_managed_listener "$REDIS_LOCAL_PORT" REDIS
+start_turn_tunnel
 validate_managed_listener "$TURN_LOCAL_PORT" TURN_TCP

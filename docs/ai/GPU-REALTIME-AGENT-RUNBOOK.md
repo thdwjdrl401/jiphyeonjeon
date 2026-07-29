@@ -6,8 +6,11 @@ ID는 문서나 Git에 기록하지 않는다.
 
 ## 네트워크 경계
 
-표준 SSH local forwarding은 TCP만 전달한다. signaling/API와 application Redis는 각각 TCP tunnel을
-사용하고, WebRTC media는 EC2 loopback coturn의 TCP listener를 별도 tunnel로 전달한다.
+표준 SSH local forwarding은 TCP만 전달한다. signaling/API와 application Redis는 control SSH
+connection을 사용하고, WebRTC media는 별도 TURN SSH connection으로 EC2 loopback coturn의 TCP
+listener를 전달한다. 두 connection 모두 EC2 22번으로 나가지만 ControlPath와 GPU source port가 달라
+외부 TCP 혼잡과 재연결 장애 범위를 분리한다. 결정 근거는
+[ADR-0033](../decisions/canola/0033-realtime-agent-ssh-channel-isolation.md)을 따른다.
 
 | 서비스 | 기본 로컬 포트 | 원격 loopback 포트 |
 |---|---:|---:|
@@ -17,7 +20,7 @@ ID는 문서나 Git에 기록하지 않는다.
 | realtime-agent health(reverse) | `8081` | `18081` |
 | BGE runtime(reverse) | `8020` | `18020` |
 
-GPU agent health `127.0.0.1:8081`은 같은 SSH master의 reverse forward로 EC2
+GPU agent health `127.0.0.1:8081`은 control SSH master의 reverse forward로 EC2
 `127.0.0.1:18081`에 연결한다. GPU inbound port는 열지 않는다.
 
 LiveKit 내부 Redis와 application Redis를 혼동하지 않는다. application Redis가 내장 `default` 사용자를
@@ -53,10 +56,11 @@ ai/realtime-agent/deploy/configure-gpu-ec2-tunnels.sh \
   --start
 ```
 
-`--start`는 설치된 realtime-agent와 BGE의 사용자 tmux tunnel supervisor를 시작한다. 두 supervisor는
-같은 PEM과 target을 사용하지만 별도 SSH connection을 유지한다. 따라서 BGE local readiness 실패가
-LiveKit·Redis·TURN 연결을 끊지 않는다. 둘 다 GPU에서 EC2로 outbound 접속하므로 GPU security group에
-inbound application port를 열지 않는다.
+`--start`는 설치된 realtime-agent와 BGE의 사용자 tmux tunnel supervisor를 시작한다. realtime-agent
+supervisor는 control과 TURN 두 connection을, BGE supervisor는 embedding reverse connection을 유지한다.
+세 connection은 같은 PEM과 target을 사용하지만 서로 다른 SSH TCP connection이다. 따라서 BGE local
+readiness나 TURN 연결 장애가 LiveKit·Redis 연결을 함께 끊지 않는다. 모두 GPU에서 EC2로 outbound
+접속하므로 GPU security group에 inbound application port를 열지 않는다.
 
 직접 helper를 실행하는 방식은 장애 분석용이다. 포트가 다르면 `LIVEKIT_LOCAL_PORT`,
 `LIVEKIT_REMOTE_PORT`, `REDIS_LOCAL_PORT`, `REDIS_REMOTE_PORT`, `TURN_LOCAL_PORT`,
@@ -67,6 +71,8 @@ set -a
 . ~/.config/liveclass/realtime-agent-tunnels.env
 set +a
 ai/realtime-agent/scripts/start_ec2_tunnels.sh
+ssh -F /dev/null -S "$SSH_CONTROL_PATH" -O check "$SSH_TARGET"
+ssh -F /dev/null -S "$TURN_SSH_CONTROL_PATH" -O check "$SSH_TARGET"
 ```
 
 GPU와 EC2 양쪽에서 listener와 HTTP 왕복을 확인한다.
@@ -130,11 +136,13 @@ uv run --env-file /path/to/realtime-agent.local.env --frozen python -m app.main 
 
 `LIVEKIT_URL`의 인증서 hostname은 loopback으로 resolve하되 URL을 `localhost`로 바꾸지 않는다.
 고유 `session-{UUID}` room과 해당 개발자 agent name으로만 manual dispatch하고 production Spring
-dispatch와 섞지 않는다. 검증이 끝나면 agent를 종료한 뒤 같은 control path로 tunnel을 닫는다.
+dispatch와 섞지 않는다. 검증이 끝나면 agent를 종료한 뒤 두 control path의 tunnel을 각각 닫는다.
 
 ```sh
 SSH_CONTROL_PATH="${TMPDIR:-/tmp}/liveclass-realtime-agent-%C.sock"
+TURN_SSH_CONTROL_PATH="${TMPDIR:-/tmp}/liveclass-realtime-agent-turn-%C.sock"
 ssh -S "$SSH_CONTROL_PATH" -O exit user@ec2-host
+ssh -S "$TURN_SSH_CONTROL_PATH" -O exit user@ec2-host
 ```
 
 ## 환경 주입과 실행
