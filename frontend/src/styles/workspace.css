@@ -302,7 +302,6 @@ th { color: var(--ink-500); font-size: .67rem; }
 .choice-row > span { display: flex; flex-direction: column; }
 .choice-row strong { font-size: .75rem; }
 .choice-row small { color: var(--ink-500); font-size: .66rem; }
-.live-schedule-fields { margin-top: 17px; }
 .input-with-unit { display: flex; align-items: center; }
 .input-with-unit input { border-radius: 10px 0 0 10px !important; }
 .input-with-unit span { align-self: stretch; display: grid; place-items: center; padding: 0 12px; border: 1px solid var(--ink-200); border-left: 0; border-radius: 0 10px 10px 0; color: var(--ink-500); font-size: .7rem; }
