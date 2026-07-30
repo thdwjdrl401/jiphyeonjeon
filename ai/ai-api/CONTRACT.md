@@ -119,6 +119,8 @@ ai-api는 realtime-agent의 `caption-stream-entry.schema.json`과 fixture를 직
 - prompt에는 `question`, 선택된 evidence 내용과 PPTX page 또는 caption time 좌표만 포함한다.
   `requestId/sessionId/materialId/sttSessionId`는 provider에 보내지 않는다.
 - system prompt는 question/evidence 안의 지시를 신뢰하지 않고 제공된 강의 근거만 사용하도록 고정한다.
+  이전 대화 turn이 이어져도(같은 사용자·같은 세션) 사실 근거는 이번 evidence만 쓰도록 명시한다 —
+  아직 turn을 실제로 이어붙이는 기능(response id 저장·재사용)은 미구현이며 system prompt만 대비해뒀다.
 - prompt 문자 수와 output token 수를 설정 상한으로 제한하고 provider delta는 최대 10,000자로 나눈다.
 - GMS timeout·rate limit·연결·인증·설정 실패는 secret과 provider body를 제외한 `MODEL_*` code로 변환한다.
 - FastAPI lifespan은 caption consumer 하나를 시작·drain하고 GMS/BGE client와 DB engine을 닫는다.
