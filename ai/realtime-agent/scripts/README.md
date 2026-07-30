@@ -23,6 +23,10 @@ GPU의 PEM 설치와 realtime-agent/BGE 공용 설정은
 모든 기본 listener는 loopback이다. GPU 호스트에 inbound application port를 공개하지 않으며 OpenAI
 Realtime WSS 같은 provider outbound 연결은 이 tunnel의 대상이 아니다.
 
+이 표의 Redis `4000`은 범용 helper의 로컬/개발 기본값이다. 운영 GPU bootstrap은 EC2 loopback에
+publish된 production application Redis에 맞춰 양쪽 포트를 `6390`으로 명시해 환경파일을 생성한다.
+운영 agent의 `REDIS_URL`도 `redis://127.0.0.1:6390/0`을 사용한다.
+
 ## 사용법
 
 아래 직접 실행은 장애 분석 또는 로컬 개발용이다. 운영 GPU 최초 설정은 deploy bootstrap을 사용한다.

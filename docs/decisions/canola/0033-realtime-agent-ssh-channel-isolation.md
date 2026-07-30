@@ -23,7 +23,7 @@ realtime-agent의 제어 트래픽과 미디어 트래픽 사이에도 적용할
 
 | connection | ControlPath | forward |
 |---|---|---|
-| realtime control | `SSH_CONTROL_PATH` | LiveKit `-L 7443`, application Redis `-L 4000`, health `-R 18081:8081` |
+| realtime control | `SSH_CONTROL_PATH` | LiveKit `-L 7443`, production application Redis `-L 6390`, health `-R 18081:8081` |
 | realtime TURN | `TURN_SSH_CONTROL_PATH` | coturn TCP `-L 3478` |
 | BGE | BGE supervisor 전용 path | embedding runtime `-R 18020:8020` |
 
@@ -37,6 +37,10 @@ OpenSSH master와 ControlPath로 생성한다. 한 connection이 정상인 동�
 
 모든 연결은 GPU outbound에서 기존 EC2 22번으로 나가며 GPU inbound와 EC2 방화벽 포트를 추가하지
 않는다. EC2 reverse listener 18020·18081도 loopback bind를 유지한다.
+
+운영 application Redis는 EC2 host의 `127.0.0.1:6390`에만 publish한다. sshd가 같은 EC2 host의
+loopback으로 접속하므로 이를 외부 interface에 bind하거나 방화벽 포트로 공개하지 않는다. 개발 Redis
+`4000`과 LiveKit 내부 Redis `6379`는 realtime-agent 운영 데이터 경로에서 제외한다.
 
 ## 대안
 
@@ -54,7 +58,7 @@ OpenSSH master와 ControlPath로 생성한다. 한 connection이 정상인 동�
   평가한다. 이번 결정은 현재 inbound 제약 안에서 failure domain을 줄이는 조치다.
 - shell 회귀 테스트는 서로 다른 ControlPath, 레거시 `-L 3478` 이관, 외부 점유 포트 fail-closed를
   검증한다.
-- 실제 운영 검증은 두 realtime control master의 `ssh -O check`, GPU의 7443·4000·3478 listener,
+- 실제 운영 검증은 두 realtime control master의 `ssh -O check`, GPU의 7443·6390·3478 listener,
   EC2의 18020·18081 reverse listener와 LiveKit/Redis/BGE 왕복으로 수행한다.
 - API JSON 필드, 상태코드, Redis entry, dispatch metadata를 바꾸지 않으므로 공유 계약 테스트는
   불필요하다.
