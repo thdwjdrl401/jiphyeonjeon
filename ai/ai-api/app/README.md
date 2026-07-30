@@ -41,6 +41,7 @@ Spring -> api/rag.py -> request registry -> rag/service.py+-> GMS AnswerModel ->
 | [`adapters/`](adapters/README.md) | Redis consumer, pgvector search, remote BGE client |
 | [`api/`](api/README.md) | 내부 인증 seam과 FastAPI RAG adapter |
 | [`captions/`](captions/README.md) | current producer 계약 parser와 attempt-aware bounded store |
+| [`lecture_notes/`](lecture_notes/README.md) | ADR-0034의 순수 window 상태 머신. Redis·GMS·lifecycle에는 아직 연결하지 않음 |
 | [`rag/`](rag/README.md) | transport-neutral 계약·port·오케스트레이션·SSE 인코딩 |
 | [`retrieval/`](retrieval/README.md) | query embedding 검증과 ACTIVE material 검색 service |
 

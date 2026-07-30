@@ -1,0 +1,25 @@
+# `ai-api/app/lecture_notes`
+
+[ADR-0034](../../../../docs/decisions/canola/0034-near-realtime-accumulative-lecture-notes.md)의
+축적형 강의 노트 MVP 코어다.
+
+현재 단계는 `CaptionDelta|CaptionCompleted`를 받아 모델 입력용 `LectureNoteWindow`로 접는 순수
+상태 머신만 제공한다. Redis consumer, GMS model, snapshot 저장, application lifecycle에는 아직
+연결하지 않았다.
+
+## 현재 보장
+
+- leading space를 포함한 delta text를 순서대로 보존한다.
+- `eventId`와 attempt-local `sequence` 중복을 제거한다.
+- sequence gap은 metric에 기록하고 이후 delta 처리는 계속한다.
+- 15/25/40초와 80/400자, 강한 문장 종결을 조합해 window를 자른다.
+- attempt 전환과 stream completion에서는 짧은 남은 text도 flush한다.
+- 다음 window에는 직전 window의 마지막 두 문장만 이전 문맥으로 전달한다.
+
+## 아직 하지 않는 것
+
+- topic reducer와 Markdown renderer
+- 세션별 모델 호출 직렬화와 pending window 병합
+- Redis snapshot·결과 Stream adapter
+- GMS `LectureNoteModel`
+- ai-api consumer·lifecycle wiring
