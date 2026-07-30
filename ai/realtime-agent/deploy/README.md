@@ -7,11 +7,11 @@ worker를 별도 tmux session으로 동시에 유지하며 LiveKit agent name, R
 | 환경 | env file | tmux session | `STT_AGENT_NAME` | Redis | GPU health | EC2 health | 기본 용량 |
 |---|---|---|---|---|---|---|---:|
 | prod | `~/.config/liveclass/realtime-agent.env` | `liveclass-realtime-agent-prod` | `liveclass-realtime-stt-prod` | `127.0.0.1:6390`, 무인증 | `127.0.0.1:8081` | `127.0.0.1:18081` | 12 |
-| dev | `~/.config/liveclass/realtime-agent-dev.env` | `liveclass-realtime-agent-dev` | `liveclass-realtime-stt` | `127.0.0.1:4000`, requirepass | `127.0.0.1:8082` | `127.0.0.1:18082` | 1 |
+| dev | `~/.config/liveclass/realtime-agent-dev.env` | `liveclass-realtime-agent-dev` | `liveclass-realtime-stt-dev` | `127.0.0.1:4000`, requirepass | `127.0.0.1:8082` | `127.0.0.1:18082` | 1 |
 
 두 worker가 같은 name을 쓰면 LiveKit이 prod dispatch를 dev Redis worker에 배정할 수 있으므로 이름을
 합치지 않는다. prod Spring은 `LIVEKIT_AGENT_NAME=liveclass-realtime-stt-prod`, dev Spring은 기존
-기본값 `liveclass-realtime-stt`를 사용한다. GPU host 또는 Jupyter service가 재시작되면 사용자 process도
+기본값 `liveclass-realtime-stt-dev`를 사용한다. GPU host 또는 Jupyter service가 재시작되면 사용자 process도
 종료되므로 Runner와 supervisor를 다시 시작해야 한다.
 
 ## 1. 사용자 영역 bootstrap

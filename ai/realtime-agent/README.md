@@ -101,7 +101,7 @@ uv run --frozen --env-file ../.env python -m app.main start
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | 실행 필수 | LiveKit Worker 등록 |
 | `STT_ENGINE_PROVIDER` | 실행 필수 | `nemotron`, `openai-realtime`, `stub` |
 | `REDIS_URL` | 운영 필수, 개발 기본 `redis://localhost:6379/0` | application Redis |
-| `STT_AGENT_NAME` | 선택 | 기본 `liveclass-realtime-stt` |
+| `STT_AGENT_NAME` | 선택 | 기본 `liveclass-realtime-stt-dev` |
 | `STT_HEALTH_HOST`, `STT_HEALTH_PORT` | 선택 | host는 `127.0.0.1` 고정, port는 기본 `8081`이며 `1~65535` 허용 |
 | `OPENAI_API_KEY` | OpenAI provider 필수 | OpenAI Realtime WSS 인증 |
 | `ASR_MODEL_ID` | Nemotron provider | model ID 또는 로컬 경로 |

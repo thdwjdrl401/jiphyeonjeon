@@ -75,7 +75,7 @@ sequenceDiagram
 - **Spring:** Room·권한 준비, explicit dispatch, assignment timeout, Room 삭제
 - **LiveKit:** 같은 `agentName`의 가용 Worker 선택과 job 단일 배정
 - **Python Worker:** 등록·재연결, 용량 보고, job process 실행, Room 참가와 STT
-- **공통 계약:** Java의 `agentName`과 Python의 `STT_AGENT_NAME`은 정확히 같아야 한다. dev는 `liveclass-realtime-stt`, prod는 `liveclass-realtime-stt-prod`다.
+- **공통 계약:** Java의 `agentName`과 Python의 `STT_AGENT_NAME`은 정확히 같아야 한다. dev는 `liveclass-realtime-stt-dev`, prod는 `liveclass-realtime-stt-prod`다.
 
 ### 2.2 Worker 등록과 용량
 
@@ -127,7 +127,7 @@ process target이고 provider 기본값은 12다. Nemotron의 active 설정이 �
 
 구현된 Phase 4a 경계:
 
-- Java `agentName`과 Python `STT_AGENT_NAME`을 환경별 같은 설정으로 관리한다(dev `liveclass-realtime-stt`, prod `liveclass-realtime-stt-prod`).
+- Java `agentName`과 Python `STT_AGENT_NAME`을 환경별 같은 설정으로 관리한다(dev `liveclass-realtime-stt-dev`, prod `liveclass-realtime-stt-prod`).
 - Python과 같은 네 필드·순서의 metadata를 직렬화한다.
 - 같은 room·agent·metadata dispatch를 조회·재사용하고, 없으면 생성한다.
 - dispatch ID와 exact metadata를 start attempt에 저장하고 시작 실패 시 dispatch를 삭제한다.

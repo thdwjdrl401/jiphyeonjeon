@@ -449,7 +449,7 @@ def test_dual_environment_examples_isolate_names_redis_health_and_capacity() -> 
     assert "STT_HEALTH_PORT=8081" in prod
     assert "STT_MAX_ACTIVE_JOBS=12" in prod
     assert "REDIS_URL=redis://:<dev-redis-password>@127.0.0.1:4000/0" in dev
-    assert "STT_AGENT_NAME=liveclass-realtime-stt-dev" in dev
+    assert "STT_AGENT_NAME=liveclass-realtime-stt-dev\n" in dev
     assert "STT_AGENT_NAME=liveclass-realtime-stt-prod" not in dev
     assert "STT_HEALTH_PORT=8082" in dev
     assert "STT_MAX_ACTIVE_JOBS=1" in dev
@@ -508,7 +508,7 @@ CUDA_VISIBLE_DEVICES=0
     prod_env.write_text(
         common
         + """REDIS_URL=redis://127.0.0.1:6390/0
-STT_AGENT_NAME=liveclass-realtime-stt
+STT_AGENT_NAME=liveclass-realtime-stt-dev
 STT_HEALTH_PORT=8081
 STT_MAX_ACTIVE_JOBS=12
 STT_NUM_IDLE_PROCESSES=12
@@ -518,7 +518,7 @@ STT_NUM_IDLE_PROCESSES=12
     (config_dir / "realtime-agent-dev.env").write_text(
         common
         + """REDIS_URL=redis://:dev-test@127.0.0.1:4000/0
-STT_AGENT_NAME=liveclass-realtime-stt
+STT_AGENT_NAME=liveclass-realtime-stt-dev
 STT_HEALTH_PORT=8082
 STT_MAX_ACTIVE_JOBS=1
 STT_NUM_IDLE_PROCESSES=1
@@ -546,7 +546,7 @@ STT_NUM_IDLE_PROCESSES=1
 
     prod_env.write_text(
         prod_env.read_text(encoding="utf-8").replace(
-            "STT_AGENT_NAME=liveclass-realtime-stt\n",
+            "STT_AGENT_NAME=liveclass-realtime-stt-dev\n",
             "STT_AGENT_NAME=liveclass-realtime-stt-prod\n",
         ),
         encoding="utf-8",

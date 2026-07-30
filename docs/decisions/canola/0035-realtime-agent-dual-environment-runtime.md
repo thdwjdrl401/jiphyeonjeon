@@ -31,16 +31,16 @@ peak는 81,468 MiB였으므로 dev에도 같은 12-process warm pool을 추가�
 |---|---|---|
 | env | `~/.config/liveclass/realtime-agent-dev.env` | `~/.config/liveclass/realtime-agent.env` |
 | tmux session | `liveclass-realtime-agent-dev` | `liveclass-realtime-agent-prod` |
-| `STT_AGENT_NAME` | `liveclass-realtime-stt` | `liveclass-realtime-stt-prod` |
+| `STT_AGENT_NAME` | `liveclass-realtime-stt-dev` | `liveclass-realtime-stt-prod` |
 | Redis tunnel | `127.0.0.1:4000` | `127.0.0.1:6390` |
 | GPU health | `127.0.0.1:8082` | `127.0.0.1:8081` |
 | EC2 reverse health | `127.0.0.1:18082` | `127.0.0.1:18081` |
 | active/idle 기본값 | `1/1` | `12/12` |
 
 두 process는 LiveKit `:7443`, TURN/TCP `:3478`, model 경로와 `CUDA_VISIBLE_DEVICES=0`을 공유한다.
-환경 격리는 named Worker pool과 Redis로 수행한다. prod Spring Compose의 기본
-`LIVEKIT_AGENT_NAME`은 `liveclass-realtime-stt-prod`로 고정하고, dev Spring의 기존 기본값
-`liveclass-realtime-stt`는 유지한다.
+환경 격리는 named Worker pool과 Redis로 수행한다. base 설정과 prod Spring Compose는
+`liveclass-realtime-stt-prod`를 지목하고, `application-remote.yml`은 `LIVEKIT_AGENT_NAME` 미지정 시
+`liveclass-realtime-stt-dev`를 지목한다.
 
 realtime control SSH connection은 LiveKit, dev/prod Redis local forward, dev/prod health reverse
 forward를 함께 가진다. TURN과 BGE connection은 ADR-0033의 장애 격리를 그대로 유지한다. 모든 reverse

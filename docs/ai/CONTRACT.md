@@ -256,14 +256,14 @@ EC2 AI 스택이 dev(`docker-compose.ai-dev.yml`, project `liveclass-ai-dev`)·p
 | `REDIS_URL` | `redis://:<REDIS_PASSWORD>@127.0.0.1:4000/0` (requirepass) | `redis://127.0.0.1:6390/0` (무인증) |
 | STT provider | nemotron | nemotron |
 | LiveKit | 공용 `:7443`, name으로 격리 | 공용 `:7443`, name으로 격리 |
-| `STT_AGENT_NAME` | `liveclass-realtime-stt` | `liveclass-realtime-stt-prod` |
+| `STT_AGENT_NAME` | `liveclass-realtime-stt-dev` | `liveclass-realtime-stt-prod` |
 | health | GPU `:8082`, EC2 `:18082` | GPU `:8081`, EC2 `:18081` |
 | active/idle | `1/1` | `12/12` |
 | caption 소비자 | dev ai-api (`liveclass-ai-dev`) | prod ai-api (`liveclass-ai`) |
 
 prod realtime-agent는 `REDIS_URL=redis://127.0.0.1:6390/0`, agent name
 `liveclass-realtime-stt-prod`를 사용한다. dev realtime-agent는 기존 password Redis `:4000`과 agent name
-`liveclass-realtime-stt`를 유지한다. 두 process는 같은 GPU0를 쓰므로 검증된 prod `12/12` 용량을 보존하고
+`liveclass-realtime-stt-dev`를 유지한다. 두 process는 같은 GPU0를 쓰므로 검증된 prod `12/12` 용량을 보존하고
 추가 dev 기본값은 `1/1`로 제한한다.
 
 세부 실행은 [`realtime-agent tunnel 문서`](../../ai/realtime-agent/scripts/README.md)와
