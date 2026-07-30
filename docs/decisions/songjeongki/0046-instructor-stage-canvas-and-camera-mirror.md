@@ -63,6 +63,10 @@ HLS**만 본다. 따라서 "수강생이 보는 것"을 바꾸려면 합성 캔�
   보는 화면은 우리 합성 캔버스가 아니다. 그래서 카메라 배치(문제 4)와 반전(문제 3)이 프론트만으로는
   고쳐지지 않는다. Egress의 헤드리스 Chrome이 열 수 있는 오리진(운영: `https://jiphyeonjeon.thdwjdrl.com`)을
   넣어야 이 ADR의 2·3항이 수강생 화면에 실제로 반영된다. 경로(`/egress/stage`)는 코드가 붙인다.
+- **오디오는 이 ADR의 범위가 아니다 → [ADR-0048](0048-egress-composite-audio-contract.md).** 이 ADR이
+  만든 합성 템플릿은 오디오 트랙을 attach하지 않아 라이브·녹화가 전부 무음이었다. Egress는 페이지의
+  재생 출력을 캡처하므로 합성 페이지는 "보이는 것"뿐 아니라 **"들리는 것"의 정본**이기도 하다. 이 파일의
+  레이아웃·반전을 손볼 때 오디오 element의 muted 계약을 함께 확인할 것.
 - 회귀 잠금: `src/test/features/live-session/cameraMirror.test.tsx`가 (a) 카메라만 `is-mirrored`이고
   화면공유는 아니라는 것, (b) 카메라 편집기가 캔버스 안에 있다는 것, (c) 합성 캔버스 스타일에서
   화면공유·캔버스에 `transform`이 없다는 것을 검사한다. 자막의 뷰어 분기는 `RouteSmoke`와
