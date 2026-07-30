@@ -36,10 +36,12 @@ def test_run_preserves_structured_logging(monkeypatch) -> None:
     captured: dict[str, object] = {}
     settings = Settings()
     rag_services = _fake_rag_services()
+    lecture_note_services = _fake_lecture_note_services()
 
     monkeypatch.setattr(main, "load_settings", lambda: settings)
     monkeypatch.setattr(main, "configure_logging", lambda *_: None)
     monkeypatch.setattr(main, "build_rag_services", lambda _: rag_services)
+    monkeypatch.setattr(main, "build_lecture_note_services", lambda _: lecture_note_services)
 
     def fake_uvicorn_run(_app, **kwargs) -> None:
         captured.update(kwargs)
@@ -65,6 +67,19 @@ def test_rag_resources_follow_application_lifespan() -> None:
         assert resources.closed is False
 
     assert app.state.caption_runtime.is_running is False
+    assert resources.closed is True
+
+
+def test_lecture_note_resources_follow_application_lifespan() -> None:
+    resources = _fake_lecture_note_services()
+    app = create_app(Settings(), lecture_note_services=resources)
+
+    assert resources.closed is False
+    with TestClient(app):
+        assert app.state.lecture_note_runtime.is_running is True
+        assert resources.closed is False
+
+    assert app.state.lecture_note_runtime.is_running is False
     assert resources.closed is True
 
 
@@ -107,6 +122,27 @@ def _fake_rag_services():
                 consumer=Consumer(),
                 consumer_state=ConsumerState(),
             )
+            self.closed = False
+
+        async def close(self) -> None:
+            self.closed = True
+
+    return Resources()
+
+
+def _fake_lecture_note_services():
+    class ConsumerState:
+        def mark_degraded(self, error_code: str) -> None:
+            self.error_code = error_code
+
+    class Consumer:
+        async def run(self, stop_event) -> None:
+            await stop_event.wait()
+
+    class Resources:
+        def __init__(self) -> None:
+            self.consumer = Consumer()
+            self.consumer_state = ConsumerState()
             self.closed = False
 
         async def close(self) -> None:

@@ -70,7 +70,7 @@ def test_same_session_runs_one_model_call_and_coalesces_pending_windows() -> Non
 
         assert [request.text for request in model.requests] == ["하나", " 둘 셋"]
         assert [snapshot.noteVersion for snapshot in store.snapshots] == ["1", "2"]
-        assert store.snapshots[-1].topics[0].keyPoints == ("하나", " 둘 셋")
+        assert store.snapshots[-1].topics[0].keyPoints == ("하나", "둘 셋")
 
     asyncio.run(scenario())
 

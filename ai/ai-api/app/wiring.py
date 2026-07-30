@@ -7,14 +7,23 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from app.adapters import (
     CaptionConsumerState,
     GmsOpenAIAnswerModel,
+    GmsOpenAILectureNoteModel,
     PgvectorActiveMaterialRepository,
     RedisCaptionConsumer,
+    RedisLectureNoteSnapshotStore,
     RemoteBgeM3QueryEmbedding,
 )
 from app.captions import CaptionContextStore, parse_caption_entry
 from app.config import Settings
+from app.lecture_notes import (
+    LectureNotePipeline,
+    LectureNoteService,
+    LectureNoteWindowAccumulator,
+)
 from app.rag import CombinedEvidenceRetriever, InMemoryRequestRegistry, RagAnswerService
 from app.retrieval import ActiveMaterialRetrievalService
+
+LECTURE_NOTE_CONSUMER_GROUP = "ai-live-notes-mvp-v1"
 
 
 @dataclass(slots=True)
@@ -45,6 +54,26 @@ class RagServices:
             await self.answer_model.aclose()
         finally:
             await self.context.close()
+
+
+@dataclass(slots=True)
+class LectureNoteServices:
+    accumulator: LectureNoteWindowAccumulator
+    service: LectureNoteService
+    pipeline: LectureNotePipeline
+    consumer: RedisCaptionConsumer
+    consumer_state: CaptionConsumerState
+    model: GmsOpenAILectureNoteModel
+    store: RedisLectureNoteSnapshotStore
+
+    async def close(self) -> None:
+        try:
+            await self.service.aclose()
+        finally:
+            try:
+                await self.model.aclose()
+            finally:
+                await self.store.aclose()
 
 
 def build_rag_context_services(settings: Settings) -> RagContextServices:
@@ -118,6 +147,65 @@ def build_answer_model(settings: Settings) -> GmsOpenAIAnswerModel:
         max_output_tokens=settings.gms_max_output_tokens,
         max_prompt_chars=settings.gms_max_prompt_chars,
         timeout_seconds=settings.gms_timeout_seconds,
+    )
+
+
+def build_lecture_note_services(settings: Settings) -> LectureNoteServices:
+    if settings.gms_api_key is None:
+        raise ValueError("AI_API_GMS_API_KEY is required to build lecture note services")
+    accumulator = LectureNoteWindowAccumulator(
+        min_window_ms=settings.lecture_note_min_window_ms,
+        target_window_ms=settings.lecture_note_target_window_ms,
+        max_window_ms=settings.lecture_note_max_window_ms,
+        min_chars=settings.lecture_note_min_chars,
+        max_chars=settings.lecture_note_max_chars,
+        max_sessions=settings.caption_context_max_sessions,
+        max_event_ids=settings.lecture_note_stream_maxlen,
+        max_retired_attempts_per_session=settings.caption_context_max_retired_attempts,
+    )
+    model = GmsOpenAILectureNoteModel(
+        api_key=settings.gms_api_key.get_secret_value(),
+        model=settings.lecture_note_model or settings.gms_model,
+        max_output_tokens=settings.lecture_note_max_output_tokens,
+        max_prompt_chars=settings.lecture_note_max_prompt_chars,
+        timeout_seconds=settings.lecture_note_timeout_seconds,
+    )
+    store = RedisLectureNoteSnapshotStore(
+        settings.redis_url,
+        snapshot_ttl_seconds=settings.lecture_note_snapshot_ttl_seconds,
+        stream_maxlen=settings.lecture_note_stream_maxlen,
+        socket_connect_timeout_seconds=settings.redis_connect_timeout_seconds,
+        socket_timeout_seconds=settings.redis_socket_timeout_seconds,
+    )
+    service = LectureNoteService(model, store)
+    pipeline = LectureNotePipeline(accumulator, service)
+    consumer_state = CaptionConsumerState()
+
+    def handle_entry(fields: Mapping[Any, Any]) -> None:
+        pipeline.ingest(parse_caption_entry(fields))
+
+    consumer = RedisCaptionConsumer(
+        settings.redis_url,
+        f"{settings.instance_id}:live-notes-mvp",
+        handle_entry,
+        state=consumer_state,
+        stream_key=settings.caption_stream_key,
+        group_name=LECTURE_NOTE_CONSUMER_GROUP,
+        batch_size=settings.caption_batch_size,
+        block_ms=settings.caption_poll_block_ms,
+        reconnect_min_seconds=settings.redis_reconnect_min_seconds,
+        reconnect_max_seconds=settings.redis_reconnect_max_seconds,
+        socket_connect_timeout_seconds=settings.redis_connect_timeout_seconds,
+        socket_timeout_seconds=settings.redis_socket_timeout_seconds,
+    )
+    return LectureNoteServices(
+        accumulator=accumulator,
+        service=service,
+        pipeline=pipeline,
+        consumer=consumer,
+        consumer_state=consumer_state,
+        model=model,
+        store=store,
     )
 
 

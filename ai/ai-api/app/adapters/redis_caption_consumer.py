@@ -159,6 +159,18 @@ class RedisCaptionConsumer:
         self._socket_timeout_seconds = socket_timeout_seconds
         self._client_factory = client_factory or self._new_client
 
+    @property
+    def consumer_name(self) -> str:
+        return self._consumer_name
+
+    @property
+    def group_name(self) -> str:
+        return self._group_name
+
+    @property
+    def stream_key(self) -> str:
+        return self._stream_key
+
     def _new_client(self) -> RedisClient:
         return Redis.from_url(
             self._redis_url,
