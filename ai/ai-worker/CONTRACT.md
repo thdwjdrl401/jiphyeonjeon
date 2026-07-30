@@ -357,18 +357,25 @@ Content-Type: application/json
 - adapter(`GmsKeyTermExtractor`)는 API 오류·응답 계약 위반을 모두 `KeyTermExtractionError`로만
   표면화한다. 원문, API key, 원본 응답 body를 로그에 남기지 않는다. adapter 자체는 재시도하지 않는다.
 
-### 10.3 application 계층의 실패 격리
+### 10.3 application 계층의 실패 격리와 재시도 캐시
 
 - `IndexPptxMaterial.execute()`는 `key_term_extractor`가 설정된 경우에만 embedding과
   `asyncio.gather`로 동시에 추출을 시도한다. 추출 예외는 전부 잡아서 경고 로그만 남기고 빈 결과로
   대체한다 — **핵심 용어 추출 실패는 8절의 embedding/stage/activate 흐름을 절대 막지 않는다.**
-- `execute()`는 추출된 용어를 저장하지 않고 `MaterialIndexResult(version_id, key_terms)`로 호출자에게
-  반환할 뿐이다. 저장·전달 책임은 이 계층에 없다.
+- `execute()`는 추출된 용어를 DB에 저장하지 않고 `MaterialIndexResult(version_id, key_terms)`로
+  호출자에게 반환한다. 다만 추출에 성공하면([ADR-0004](../../docs/decisions/jinwoo/0004-key-term-callback-delivery-timing.md))
+  `IndexPptxMaterial` 인스턴스 자신의 in-memory 캐시(`job_id -> key_terms`, 최대 1,000개, 초과 시
+  가장 오래된 항목 제거)에도 적어둔다.
+- `find_existing` 단축 경로(9.6의 idempotent 재시도 처리)를 탈 때는 이 캐시에서 `job_id`로 조회해
+  `key_terms`를 채운다. 캐시에 없으면(다른 프로세스 인스턴스, 또는 worker 재시작 이후) 빈 tuple을
+  반환한다 — 이건 in-memory 캐시의 알려진 한계이며, RabbitMQ의 유한 재시도 창(9.6, 최대 300초
+  backoff) 안에서 같은 프로세스가 살아있는 한 캐시가 채워져 있을 확률이 높다는 전제에 기댄다.
 
-### 10.4 Spring 전달 (`MATERIAL_KEY_TERMS_EXTRACTED` callback)
+### 10.4 Spring 전달 — `MATERIAL_EMBEDDED`에 `keyTerms` 포함
 
-`consumers/material_job.py`의 `MaterialJobHandler`가 9.5의 READY callback을 보낸 **뒤**,
-`result.key_terms`가 비어있지 않으면 같은 HMAC 서명 방식으로 별도 callback을 하나 더 보낸다.
+핵심 용어는 별도 eventType이 아니라 **기존 9.5의 `MATERIAL_EMBEDDED`(READY) callback 하나에 실어서**
+전달한다. `consumers/material_job.py`의 `MaterialJobHandler`는 `execute()` 결과의 `key_terms`가
+비어있지 않으면 그대로 담아 **한 번만** 보낸다.
 
 ```http
 POST /api/internal/ai/callbacks HTTP/1.1
@@ -377,7 +384,7 @@ Content-Type: application/json
 
 {
   "eventId": "uuid",
-  "eventType": "MATERIAL_KEY_TERMS_EXTRACTED",
+  "eventType": "MATERIAL_EMBEDDED",
   "jobId": "worker-side-job-id",
   "materialId": "uuid",
   "lessonId": "uuid",
@@ -388,15 +395,13 @@ Content-Type: application/json
 }
 ```
 
-- `eventId`는 9절과 같은 `material_callback_event_id(job_id, eventType)` 규칙으로 만들어 이벤트 종류별로
-  안정적이다. HTTP 재시도는 같은 `eventId`와 raw body를 재사용한다.
-- `keyTerms`는 `MATERIAL_KEY_TERMS_EXTRACTED`에서만 존재하고, 그 외 eventType에서는 직렬화 시 필드
-  자체가 생략된다(`exclude_none`). 기존 `MATERIAL_EMBEDDING`/`MATERIAL_EMBEDDED`/`MATERIAL_EMBED_FAILED`
-  callback의 wire 형태는 하나도 바뀌지 않는다.
-- 이 callback은 **best-effort**다: 전송이 실패해도(`SpringCallbackError` 포함 모든 예외) 경고 로그만
-  남기고 예외를 올리지 않는다. 이미 성공한 embedding job을 이 실패 때문에 재시도하지 않는다 — 재시도해도
-  `execute()`의 최상단 idempotent 단축 경로(9.6의 `find_existing`)가 재추출 없이 곧장 반환하므로 재시도로
-  `keyTerms`를 다시 만들 방법이 없기 때문이다.
-- Spring 쪽 실제 처리(`AiCallbackService`에서 새 eventType을 받아 저장하는 로직)는 이 문서가 다루는
-  ai-worker 범위 밖이며 아직 구현되지 않았다. Java 쪽 계약(`AiCallbackEvent` record에 `keyTerms` 필드
-  추가 등)은 backend 팀이 별도로 정한다.
+- `keyTerms`는 `MATERIAL_EMBEDDED`에서만 존재할 수 있는 optional 필드다. `MATERIAL_EMBEDDING`이나
+  `MATERIAL_EMBED_FAILED`에 실려 있으면 계약 위반으로 거부한다. 값이 없으면(추출 비활성이거나 빈
+  결과) 직렬화 시 필드 자체가 생략된다(`exclude_none`) — 이 필드가 생기기 전의 `MATERIAL_EMBEDDED`
+  wire 형태와 완전히 동일하다.
+- 이 callback은 9.5/9.6과 **동일한 필수·재시도 계약**을 따른다. 별도의 best-effort 경로는 없다 —
+  전송이 실패하면 9.6의 규칙대로 job 전체가 재시도되고, 재시도 시 `keyTerms`가 채워지는지는 10.3의
+  in-memory 캐시 히트 여부에 달려 있다.
+- Spring 쪽 실제 처리(`AiCallbackService`에서 `keyTerms` 필드를 받아 저장하는 로직)는 이 문서가 다루는
+  ai-worker 범위 밖이며 아직 구현되지 않았다 — 지금은 알 수 없는 필드로 조용히 무시된다. Java 쪽 계약
+  (`AiCallbackEvent` record에 `keyTerms` 필드 추가 등)은 backend 팀이 별도로 정한다.

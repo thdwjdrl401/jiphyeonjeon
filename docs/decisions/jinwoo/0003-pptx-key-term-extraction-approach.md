@@ -59,22 +59,24 @@
 구현될 때 ai-worker가 이 목록을 어떻게 받는지(Spring이 job과 함께 전달 / ai-worker가 직접 조회)도
 같이 정해야 한다. 그 전까지는 중복 방지 없이(또는 이 단계 자체를 건너뛰고) 동작한다.
 
-### 결과 전달 방식 (2026-07-30 갱신)
+### 결과 전달 방식 (2026-07-30 갱신, 2026-07-30 재갱신 — ADR-0004)
 
 ai-worker는 추출된 용어를 자체 DB에 저장하지 않는다. 대신 기존 자료 임베딩 완료 통지와 같은 채널
-(`POST /api/internal/ai/callbacks`, HMAC 서명)을 재사용해, 새 eventType
-`MATERIAL_KEY_TERMS_EXTRACTED`로 용어 목록을 Spring에 전달한다. 순서는 기존
-`MATERIAL_EMBEDDED`(READY) callback을 먼저 보낸 뒤, 추출된 용어가 있으면 이 callback을 추가로
-보내는 것이다.
+(`POST /api/internal/ai/callbacks`, HMAC 서명)을 재사용해 Spring에 전달한다.
 
-이 callback은 **best-effort**다 — 전송 실패는 예외를 올리지 않고 로그만 남기며, 이미 끝난 임베딩
-작업을 재시도하지 않는다(재시도해도 idempotent 단축 경로 때문에 용어를 다시 추출하지 않으므로
-재시도의 실익이 없다). 상세 wire 계약은
-[`ai/ai-worker/CONTRACT.md` §10](../../../ai/ai-worker/CONTRACT.md)을 따른다.
+최초 설계는 기존 `MATERIAL_EMBEDDED`(READY) callback을 먼저 보낸 뒤 별도 eventType으로 용어를
+추가 전달하는 것이었으나, [ADR-0004](0004-key-term-callback-delivery-timing.md)에서 **하나의
+콜백으로 합쳐서 한 번만 보내는 방식(옵션 C)**으로 최종 결정했다. 기존 `MATERIAL_EMBEDDED` event에
+optional `keyTerms` 필드를 실어서 보내고, 별도 eventType은 만들지 않는다. 재시도 시 용어가 조용히
+사라지는 것을 막기 위해 `IndexPptxMaterial`이 추출 성공 시점의 `key_terms`를 job_id 기준
+in-memory 캐시(최대 1,000개)에 잠깐 보관했다가, 같은 프로세스 안에서 재시도가 일어나면 거기서
+복원해 다시 실어 보낸다(프로세스 재시작 시에는 이 보호가 사라진다 — ADR-0004 참고).
 
-실제 저장(Spring `AiCallbackEvent`/`AiCallbackService`에 새 eventType 처리와 영속화 로직 추가)은
-backend Java 팀의 몫이며 이 ADR의 범위 밖이다. ai-worker 쪽 구현은 새 eventType으로 용어를
-전달하는 데까지다.
+상세 wire 계약은 [`ai/ai-worker/CONTRACT.md` §10](../../../ai/ai-worker/CONTRACT.md)을 따른다.
+
+실제 저장(Spring `AiCallbackEvent`/`AiCallbackService`에 `keyTerms` 필드 처리와 영속화 로직 추가)은
+backend Java 팀의 몫이며 이 ADR의 범위 밖이다. ai-worker 쪽 구현은 통합된 콜백으로 용어를 전달하는
+데까지다.
 
 ## 근거 (Rationale)
 

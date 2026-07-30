@@ -18,7 +18,7 @@
 | ai-worker | bge-runtime `GET /readyz`, `POST /internal/v1/embeddings` | HTTP, Bearer | GPU 준비 확인·embedding 생성 | 구현됨 |
 | ai-worker | GMS(OpenAI 호환) `POST /chat/completions` | HTTP, Bearer, structured output | PPTX 전체 텍스트에서 핵심 용어+정의 추출 | 구현됨, 기본 비활성 |
 | ai-worker | PostgreSQL `ai` schema | SQL/pgvector | 작업·chunk·embedding 저장 및 활성화 | 구현됨 |
-| ai-worker | Spring `POST /api/internal/ai/callbacks` | HTTP, HMAC | READY·FAILED·핵심 용어 추출 결과 전달 | 구현됨(핵심 용어는 best-effort) |
+| ai-worker | Spring `POST /api/internal/ai/callbacks` | HTTP, HMAC | READY·FAILED 및 (있으면) 핵심 용어 결과 전달 | 구현됨 |
 | ai-worker | RabbitMQ `ingestion.embed.dlq` | durable queue | 영구 실패·재시도 소진 작업 보존 | 구현됨 |
 
 consumer는 `AI_WORKER_MATERIAL_INGESTION_ENABLED=true`일 때만 연결된다. `EMBED_DELETE`는 현재
@@ -28,11 +28,14 @@ consumer는 `AI_WORKER_MATERIAL_INGESTION_ENABLED=true`일 때만 연결된다. 
 핵심 용어 추출은 `AI_WORKER_KEY_TERM_EXTRACTION_ENABLED=true`일 때만 임베딩과 동시에 실행되고,
 기본값(`false`)에서는 기존 청킹·임베딩·저장 흐름에 영향을 주지 않는다. 추출 실패는 자료 처리
 전체를 실패시키지 않고 로그만 남긴 뒤 계속 진행한다(용어 없이 정상 처리). ai-worker는 추출된
-용어를 저장하지 않는다 — READY callback을 보낸 뒤, 용어가 하나라도 있으면 새 eventType
-`MATERIAL_KEY_TERMS_EXTRACTED`로 Spring에 별도 전달한다. 이 두 번째 콜백은 best-effort다: 실패해도
-이미 끝난 embedding job을 재시도하지 않는다(재시도해도 idempotent 단축 경로 때문에 재추출되지
-않기 때문). 저장은 Spring/Java 쪽 책임이며 아직 구현되지 않았다. 설계 배경은
-[ADR-0003](../../docs/decisions/jinwoo/0003-pptx-key-term-extraction-approach.md)을 따른다.
+용어를 저장하지 않는다 — 별도 콜백을 만들지 않고, 기존 `MATERIAL_EMBEDDED`(READY) callback에
+`keyTerms`를 실어서 **한 번에** 보낸다([ADR-0004](../../docs/decisions/jinwoo/0004-key-term-callback-delivery-timing.md)).
+이 callback은 기존 READY callback과 동일하게 실패 시 job이 재시도된다(별도의 best-effort 경로
+없음). 재시도 때 용어가 조용히 사라지지 않도록 `IndexPptxMaterial`이 추출된 용어를 같은 프로세스
+안에서 잠깐 in-memory로 기억해뒀다가 재시도 시 다시 채워 넣는다(프로세스가 재시작되면 이 보호는
+사라진다). 저장은 Spring/Java 쪽 책임이며 아직 구현되지 않았다. 설계 배경은
+[ADR-0003](../../docs/decisions/jinwoo/0003-pptx-key-term-extraction-approach.md)과
+[ADR-0004](../../docs/decisions/jinwoo/0004-key-term-callback-delivery-timing.md)를 따른다.
 
 ## 3. 통신 예시
 
@@ -51,7 +54,9 @@ Spring이 `ingestion.embed`에 보내는 대표 작업은 다음과 같다.
 }
 ```
 
-저장 완료 후 worker는 JSON 원문을 HMAC-SHA256으로 서명해 Spring에 결과를 보낸다.
+저장 완료 후 worker는 JSON 원문을 HMAC-SHA256으로 서명해 Spring에 결과를 보낸다. 핵심 용어 추출이
+켜져 있고 용어가 하나라도 나왔으면 같은 callback에 `keyTerms`가 함께 실린다(꺼져 있거나 결과가
+없으면 이 필드 자체가 생략된다).
 
 ```http
 POST /api/internal/ai/callbacks HTTP/1.1
@@ -61,23 +66,6 @@ X-Signature: <base64-hmac-signature>
 {
   "eventId": "c43584d7-50ef-5ebe-8087-717248182bf7",
   "eventType": "MATERIAL_EMBEDDED",
-  "jobId": "PPTX_EMBED:11111111-1111-4111-8111-111111111111",
-  "materialId": "11111111-1111-4111-8111-111111111111",
-  "lessonId": "33333333-3333-4333-8333-333333333333",
-  "status": "READY"
-}
-```
-
-핵심 용어 추출이 켜져 있고 용어가 하나라도 나오면, READY callback 뒤에 별도 콜백을 하나 더 보낸다.
-
-```http
-POST /api/internal/ai/callbacks HTTP/1.1
-Content-Type: application/json
-X-Signature: <base64-hmac-signature>
-
-{
-  "eventId": "3f9c9a8e-...",
-  "eventType": "MATERIAL_KEY_TERMS_EXTRACTED",
   "jobId": "PPTX_EMBED:11111111-1111-4111-8111-111111111111",
   "materialId": "11111111-1111-4111-8111-111111111111",
   "lessonId": "33333333-3333-4333-8333-333333333333",

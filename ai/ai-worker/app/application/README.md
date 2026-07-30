@@ -18,8 +18,11 @@ read_pptx -> parse/chunk -> embed -> ChunkRecord -> stage -> activate
                          -> (선택) GMS 핵심 용어 추출 -> MaterialIndexResult.key_terms
 ```
 
-`execute()`는 `MaterialIndexResult(version_id, key_terms)`를 반환한다. 이 계층은 용어를 저장하거나
-Spring에 보내지 않고 반환만 한다 — 실제 Spring 콜백 발신은 `consumers/material_job.py`가 담당한다.
+`execute()`는 `MaterialIndexResult(version_id, key_terms)`를 반환한다. 이 계층은 Spring에 직접
+보내지 않는다 — 실제 콜백 발신은 `consumers/material_job.py`가 담당한다. 다만 재시도 시 용어가
+사라지지 않도록, 추출에 성공하면 `job_id` 기준 in-memory 캐시(`_key_term_cache`, 최대 1,000개)에
+잠깐 기억해뒀다가 `find_existing` 단축 경로에서 다시 채워 넣는다(DB 저장은 아니며, 프로세스가
+재시작되면 사라진다 — [ADR-0004](../../../../docs/decisions/jinwoo/0004-key-term-callback-delivery-timing.md)).
 
 ## 파일 구성
 
@@ -31,8 +34,10 @@ Spring에 보내지 않고 반환만 한다 — 실제 Spring 콜백 발신은 `
 - RabbitMQ, HTTP, MinIO SDK를 직접 알지 않는다.
 - cancellation과 typed ingestion 오류를 숨기지 않는다.
 - 핵심 용어 추출 실패는 예외이며 embedding/저장 경로의 실패와 다르게 처리한다(삼키고 계속 진행).
-- 추출된 용어는 이 계층에서 저장하지 않는다. `MaterialIndexResult.key_terms`로 반환해 상위(consumer)가
-  Spring 콜백으로 보내도록 위임한다([ADR-0003](../../../../docs/decisions/jinwoo/0003-pptx-key-term-extraction-approach.md)).
+- 추출된 용어는 DB에 저장하지 않는다. `MaterialIndexResult.key_terms`로 반환해 상위(consumer)가 Spring
+  콜백으로 보내도록 위임하고, 인스턴스 in-memory 캐시는 재시도 안전장치일 뿐 영속 저장이 아니다
+  ([ADR-0003](../../../../docs/decisions/jinwoo/0003-pptx-key-term-extraction-approach.md),
+  [ADR-0004](../../../../docs/decisions/jinwoo/0004-key-term-callback-delivery-timing.md)).
 
 ## 검증
 

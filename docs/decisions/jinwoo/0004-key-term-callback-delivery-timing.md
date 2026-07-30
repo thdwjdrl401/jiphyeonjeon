@@ -1,6 +1,6 @@
 # ADR-0004: 핵심 용어 콜백 전달 타이밍 — 별도 콜백 vs 통합 콜백
 
-- **상태**: 제안 — 옵션 정리 완료, 최종 선택 대기
+- **상태**: 채택 — 옵션 C (통합 콜백 + 재시도 안전장치)
 - **일자**: 2026-07-30
 - **관련**: [ADR-0003](0003-pptx-key-term-extraction-approach.md),
   `ai/ai-worker/app/consumers/material_job.py`,
@@ -88,7 +88,25 @@ execute() 완료 (embedding + 용어 추출 둘 다 끝남)
 "한 번에 보내고 싶다"는 요구를 살리려면 옵션 C가 맞는 방향이지만, 그러려면 재시도 창 동안 용어를
 어딘가에 잠깐 저장하는 설계가 먼저 필요하다 — 이건 이 ADR의 범위를 넘는 별도 작업이다.
 
-## 결정 (사용자 확인 필요)
+## 결정
 
-ـ A(현재 유지) / B(유실 감수하고 통합) / C(안전장치 만들고 통합) 중 하나를 선택해야 다음 구현으로
-넘어갈 수 있다. 아직 선택되지 않았다.
+**옵션 C를 채택한다.**
+
+- `MaterialCallbackType`에서 `MATERIAL_KEY_TERMS_EXTRACTED`를 제거하고, 기존 `MATERIAL_EMBEDDED`
+  event에 optional `keyTerms` 필드를 추가했다(`MATERIAL_EMBEDDING`/`MATERIAL_EMBED_FAILED`에는
+  `keyTerms`가 있으면 검증 오류). `MaterialJobHandler`는 이제 콜백을 **한 번만** 보낸다.
+- 재시도 안전장치는 DB나 새 저장소가 아니라 **`IndexPptxMaterial` 인스턴스의 in-memory 캐시**
+  (`job_id -> key_terms`, 최대 1,000개, 초과 시 가장 오래된 항목 제거)로 구현했다. 추출에 성공하면
+  캐시에 적어두고, `find_existing` 단축 경로를 탈 때 이 캐시에서 값을 꺼내 채운다.
+- 이 캐시는 **같은 프로세스 안에서의 재시도**만 보호한다. RabbitMQ의 유한 재시도(§9.6, 최대 300초
+  backoff)는 보통 이 창 안에서 끝나므로 실질적인 보호 효과가 있지만, worker 프로세스가 재시작되면
+  캐시가 비워져 그 시점 이후의 재시도는 `key_terms` 없이 콜백이 나간다 — 옵션 C의 "완벽한 보장은
+  아니다"라는 한계를 그대로 받아들인 것이다. DB 저장(완전 보장)은 ADR-0003이 미뤄둔 "ai-worker가
+  용어를 저장할지" 문제로 되돌아가므로 채택하지 않았다.
+- 구현: `ai/ai-worker/app/application/index_pptx_material.py`(`_key_term_cache`,
+  `_remember_key_terms`), `ai/ai-worker/app/consumers/material_job.py`(`_send_terminal`에
+  `key_terms` 파라미터 추가), `ai/ai-worker/app/contracts/spring_callbacks.py`.
+- 테스트: `tests/test_index_pptx_material.py`의
+  `test_retry_after_success_recovers_cached_key_terms_same_instance`(캐시 히트)와
+  `test_retry_after_process_restart_loses_cached_key_terms`(캐시 미스 시 한계 문서화)로 두 경로
+  모두 검증했다.
