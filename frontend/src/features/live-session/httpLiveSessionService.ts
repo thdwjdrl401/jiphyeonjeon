@@ -29,10 +29,16 @@ interface ApiLiveSessionView {
 
 interface ApiChatMessage {
   messageId: string
+  clientMessageId?: string
   alias: string
   text: string
   createdAt?: string
   isQuestion: boolean
+  /**
+   * 요청자 본인이 보낸 메시지 여부. REST(전송 응답·복구 조회)에만 있고 WS 브로드캐스트 payload에는 없다 —
+   * 토픽 브로드캐스트는 뷰어별이 될 수 없기 때문이다(ChatMessagePayload 계약).
+   */
+  mine?: boolean
 }
 
 interface ApiChatEnvelope {
@@ -244,10 +250,13 @@ function normalizeLiveSession(
 function normalizeMessage(message: ApiChatMessage): ChatMessageView {
   return {
     id: message.messageId,
+    clientMessageId: message.clientMessageId,
     alias: message.alias,
     text: message.text,
     time: message.createdAt ? new Date(message.createdAt).toLocaleTimeString('ko-KR') : '-',
     question: message.isQuestion,
+    // WS 에코엔 mine이 없다 — 그때는 화면이 자기 clientMessageId 대조로 채운다(undefined를 false로 굳히지 않는다).
+    mine: message.mine,
   }
 }
 
@@ -467,15 +476,23 @@ export const httpLiveSessionService = {
     const { data } = await apiClient.get<ApiChatMessage[]>(`/live-sessions/${sessionId}/messages`)
     return data.map(normalizeMessage)
   },
-  async sendChatMessage(sessionId, text, question) {
+  async sendChatMessage(sessionId, input) {
     const { data } = await apiClient.post<ApiChatMessage>(`/live-sessions/${sessionId}/messages`, {
-      clientMessageId: `local-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
-      text,
-      isQuestion: question,
+      clientMessageId: input.clientMessageId,
+      text: input.text,
+      isQuestion: input.question,
+      // 익명은 발신자 선택이다(ADR-0050). 체크하지 않으면 false로 보내 표시 이름이 노출된다.
+      anonymous: input.anonymous,
       viewingSessionMs: null,
     })
     const message = normalizeMessage(data)
-    return { ...message, time: data.createdAt ? message.time : '현재' }
+    return {
+      ...message,
+      // 서버가 mine을 주지만(전송 응답), 내가 보낸 것이라는 사실은 응답 필드 유무와 무관하게 확정이다.
+      mine: true,
+      clientMessageId: message.clientMessageId ?? input.clientMessageId,
+      time: data.createdAt ? message.time : '현재',
+    }
   },
   subscribeChatMessages(sessionId, onMessage, onConnectionChange) {
     let active = true

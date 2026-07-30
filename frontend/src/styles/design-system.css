@@ -989,6 +989,11 @@ body {
 .panel-empty { color: #8e8e89; }
 .chat-list article { border-radius: 4px; background: #222; }
 .chat-list article.is-question { border-left-color: var(--seal); background: #282322; }
+/* 내 메시지 구분색. 라이트의 --blue-50은 어두운 표면에서 튀므로 ink 전용 값을 준다.
+   is-question은 내 메시지에서도 주황 계열을 유지한다(질문 표시가 정렬보다 중요하다). */
+.chat-list article.is-mine { background: #1d2a25; }
+.chat-list article.is-mine.is-question { background: #282322; }
+.chat-list article.is-mine p { color: #e6e6e1; }
 .chat-list strong { color: #f2f2ef; font-size: .75rem; }
 .chat-list time { color: #777; font-size: .66rem; }
 .chat-list p { color: #d1d1cc; font-size: .78rem; }

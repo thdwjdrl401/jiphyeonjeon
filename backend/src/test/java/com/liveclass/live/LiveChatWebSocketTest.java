@@ -107,8 +107,10 @@ class LiveChatWebSocketTest {
         // 구독 등록이 브로커에 반영될 시간을 준다(전송 전에 활성화돼야 브로드캐스트를 놓치지 않음).
         Thread.sleep(300);
 
+        // 익명은 발신자 선택이다(ADR-0050) — WS 경로도 REST와 같은 command DTO를 쓰므로 여기서 켜서
+        // 브로드캐스트 payload가 가명만 싣는지(표시 이름 유출 없음) 확인한다.
         session.send("/app/live-sessions/" + sessionId + "/chat",
-                Map.of("clientMessageId", "ws-1", "text", "실시간이다", "isQuestion", true));
+                Map.of("clientMessageId", "ws-1", "text", "실시간이다", "isQuestion", true, "anonymous", true));
 
         Map<String, Object> envelope = received.poll(10, TimeUnit.SECONDS);
         assertThat(envelope).as("브로드캐스트를 시간 내 수신").isNotNull();

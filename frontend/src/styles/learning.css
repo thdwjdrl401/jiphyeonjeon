@@ -206,6 +206,15 @@
 .chat-list time { color: var(--ink-500); font-size: .55rem; }
 .chat-list p { margin: 4px 0 0; color: var(--ink-700); font-size: .69rem; line-height: 1.55; overflow-wrap: anywhere; white-space: pre-wrap; }
 .chat-list article > small { color: var(--orange-500); font-size: .55rem; }
+/* 내 메시지는 우측, 남의 메시지는 좌측(강사·수강생 같은 컴포넌트라 자동으로 통일된다).
+   폭을 85%로 묶어 좌우 정렬이 눈에 보이게 한다 — 100%면 정렬해도 차이가 나지 않는다.
+   말풍선 색으로도 구분하되 is-question(주황)이 내 메시지에서도 살아남게 배경만 덮지 않는다. */
+.chat-list article { max-width: 85%; margin-right: auto; }
+.chat-list article.is-mine { margin-right: 0; margin-left: auto; background: var(--blue-50); }
+.chat-list article.is-mine.is-question { background: #f7e6c8; }
+/* 내 메시지엔 이름이 없어 header에 시각만 남는다 — 왼쪽에 붙지 않게 우측으로 민다. */
+.chat-list article.is-mine header { justify-content: flex-end; }
+.chat-list article.is-mine p { color: var(--ink-900); }
 .chat-latest-jump { display: flex; flex: 0 0 auto; justify-content: center; padding: 7px 10px; border-top: 1px solid var(--ink-100); background: linear-gradient(180deg, rgba(250,244,231,.7), var(--ink-50)); }
 .chat-latest-jump button { border: 1px solid var(--blue-200); border-radius: 99px; padding: 6px 11px; background: var(--blue-50); color: var(--blue-700); font-size: .58rem; font-weight: 700; }
 .chat-latest-jump button:hover { border-color: var(--blue-500); background: var(--blue-100); }

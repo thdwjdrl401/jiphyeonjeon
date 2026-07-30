@@ -85,8 +85,17 @@ export const mockLiveSessionService = {
   async getChatMessages() {
     return demoMessages
   },
-  async sendChatMessage(_sessionId, text, question) {
-    return { id: `msg_${Date.now()}`, alias: '나', text, time: '현재', question }
+  async sendChatMessage(_sessionId, input) {
+    // 익명을 켜면 서버가 세션 한정 가명을 붙인다 — 데모도 같은 모양으로 흉내 낸다(ADR-0050).
+    return {
+      id: `msg_${Date.now()}`,
+      clientMessageId: input.clientMessageId,
+      alias: input.anonymous ? '수강생-0473' : '김학생',
+      text: input.text,
+      time: '현재',
+      question: input.question,
+      mine: true,
+    }
   },
   subscribeChatMessages(_sessionId, _onMessage, onConnectionChange) {
     onConnectionChange('connected')

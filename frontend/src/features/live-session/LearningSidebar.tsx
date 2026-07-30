@@ -83,8 +83,17 @@ function DiscussionPanel({ messages, composer, notice, panelProps }: { messages:
       <div className="chat-list" ref={chatListRef} onScroll={handleChatScroll}>
         {visibleMessages.length > 0
           ? visibleMessages.map((item) => (
-              <article className={item.question ? 'is-question' : ''} key={item.id}>
-                <header><strong>{item.alias}</strong><time>{item.time}</time></header>
+              <article
+                className={[item.question ? 'is-question' : '', item.mine ? 'is-mine' : '']
+                  .filter(Boolean).join(' ')}
+                key={item.id}
+              >
+                {/* 내 메시지엔 이름을 쓰지 않는다 — 우측 정렬 자체가 "내 것"이라는 표시다.
+                    시각은 서버가 확정한 뒤에만 있다(낙관적 항목은 빈 문자열). */}
+                <header>
+                  {!item.mine && <strong>{item.alias}</strong>}
+                  {item.time && <time>{item.time}</time>}
+                </header>
                 <p>{item.text}</p>
                 {item.question && <small>질문으로 등록됨</small>}
               </article>

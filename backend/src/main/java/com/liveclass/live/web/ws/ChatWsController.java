@@ -49,7 +49,8 @@ public class ChatWsController {
         }
         UUID senderId = UUID.fromString(principal.getName());
         chatService.sendToSession(sessionId, senderId, request.clientMessageId(),
-                request.text(), Boolean.TRUE.equals(request.isQuestion()));
+                request.text(), Boolean.TRUE.equals(request.isQuestion()),
+                Boolean.TRUE.equals(request.anonymous()));
     }
 
     // ── STOMP 오류 변환 ──
