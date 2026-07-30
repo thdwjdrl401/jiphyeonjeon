@@ -2,3 +2,5 @@ node_modules/
 dist/
 npm-debug.log
 yarn-error.log
+# Excalidraw 폰트는 빌드 때 node_modules에서 꺼내 쓴다(13MB, scripts/copy-excalidraw-assets.mjs)
+public/excalidraw/
