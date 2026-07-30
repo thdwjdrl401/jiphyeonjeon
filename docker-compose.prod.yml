@@ -159,6 +159,10 @@ services:
       SPRING_RABBITMQ_PORT: "5672"
       SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER:-liveclass}
       SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD 필요}
+      # 자료 임베딩 스위치. 이 줄이 없으면 .env.prod에 값을 넣어도 컨테이너로 전달되지 않아
+      # 기본 false가 되고, 자료를 연결해도 임베딩 잡이 발행되지 않는다. 그때도 자료 상태는
+      # READY로 남아(무회귀 동작) "준비됐는데 AI가 근거를 못 찾는" 상태가 조용히 생긴다.
+      MATERIAL_EMBEDDING_ENABLED: ${MATERIAL_EMBEDDING_ENABLED:-false}
       # AI 질의응답 SSE 프록시(ADR-0047). ai-api는 별도 compose(docker-compose.ai-prod.yml)지만 같은
       # liveclass_default 네트워크라 서비스명으로 닿는다. 시크릿은 ai-api의 AI_INTERNAL_SECRET과
       # **같은 값**이어야 한다 — 다르면 서명 검증에서 401이라 답변이 아예 시작되지 않는다.
