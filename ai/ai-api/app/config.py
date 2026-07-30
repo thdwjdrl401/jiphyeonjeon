@@ -77,7 +77,7 @@ class Settings(BaseSettings):
     caption_shutdown_timeout_seconds: float = Field(default=3.0, gt=0, le=30)
     caption_cancel_grace_seconds: float = Field(default=1.0, gt=0, le=10)
 
-    material_top_k: int = Field(default=8, ge=1, le=50)
+    material_top_k: int = Field(default=3, ge=1, le=50)
     material_vector_threshold: float = Field(default=0.25, ge=0, le=1)
     material_lexical_threshold: float = Field(default=0.0, ge=0, le=1)
     caption_evidence_max_items: int = Field(default=32, ge=1, le=1_000)

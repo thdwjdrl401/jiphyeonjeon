@@ -36,7 +36,7 @@ class CombinedEvidenceRetriever:
         materials: MaterialRetrievalPort,
         captions: CaptionContextPort,
         *,
-        material_top_k: int = 8,
+        material_top_k: int = 3,
         material_vector_threshold: float = 0.25,
         material_lexical_threshold: float = 0.0,
         caption_max_items: int = 32,
