@@ -294,8 +294,9 @@ describe('전체 페이지 라우트', () => {
       .toEqual(['왼쪽', '오른쪽', '양쪽'])
 
     await user.click(await screen.findByRole('button', { name: /테스트 시작/ }))
-    // 테스트음이 약 3초라 확인 버튼은 그 뒤에 뜬다 — 기본 대기(1초)로는 모자라다.
-    await user.click(await screen.findByRole('button', { name: '네, 모두 들려요' }, { timeout: 6000 }))
+    // 테스트음이 약 5초라(1.55초 차임 × 3구간 + 구간 사이 침묵) 확인 버튼은 그 뒤에 뜬다 —
+    // 기본 대기(1초)로는 모자라고, 테스트 전체 제한(5초)도 넘으므로 아래에서 함께 늘렸다.
+    await user.click(await screen.findByRole('button', { name: '네, 모두 들려요' }, { timeout: 9_000 }))
     await user.click(await screen.findByRole('link', { name: '라이브 입장' }, { timeout: 3000 }))
 
     expect(await screen.findByRole('tab', { name: 'AI 질문' })).toBeInTheDocument()
@@ -313,7 +314,8 @@ describe('전체 페이지 라우트', () => {
     // 자막 독은 수강생 화면에만 있다(강사 화면 테스트의 반대편). 라인 자체는 재생 위치가 자막 시각에
     // 닿아야 드러나므로(ADR-0045) 여기서는 독의 존재만 확인한다.
     expect(screen.getByRole('region', { name: '실시간 자막' })).toBeInTheDocument()
-  })
+    // 테스트음(약 5초)을 실제로 기다리는 흐름이라 기본 제한(5초)으로는 끝낼 수 없다.
+  }, 20_000)
 
   it('강사에게 다시보기 검수 화면을 제공한다', async () => {
     await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
