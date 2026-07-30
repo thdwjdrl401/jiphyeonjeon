@@ -356,7 +356,7 @@ Spring realtime-agent health proxy client는 아직 없다. 따라서 `/internal
 | ai-worker→Spring download URL/callback | 양쪽 구현 |
 | ai-worker/ai-api→BGE | runtime/client/reverse tunnel/운영 container proxy 배선 구현 |
 | Spring→LiveKit→realtime-agent dispatch | 양쪽 Phase 4a 구현, STT readiness gate 우회 중 |
-| realtime-agent→Redis caption | producer·ai-api consumer·Spring consumer 구현(Spring: 별도 group·eventId 멱등·core.live_caption 영속·WS 전달, ADR-0043). prod 캡션-Redis 토폴로지는 인프라 오너 후속 |
+| realtime-agent→Redis caption | producer·ai-api consumer·Spring consumer 구현(Spring: 별도 group·eventId 멱등·core.live_caption 영속·WS 전달, ADR-0043). `caption.stream.started`·`caption.segment.final`도 발행(!233)·Spring 영속 구현(ADR-0052; 표시 대상 `delta`/`completed`만 WS·리로드·RAG 중계, 신규 2종은 영속만). prod 캡션-Redis 토폴로지는 인프라 오너 후속 |
 | ai-api→Redis 실시간 강의 노트 | append·capture 완료·refined snapshot producer와 단일 process 재시작 복구 구현. 공유 payload 계약 §3-4a 확정, Spring consumer·DB·REST·WebSocket 미구현 |
 | realtime-agent→Spring lifecycle callback | AI v1 구현·기본 off, Spring receiver 미구현 |
 | realtime-agent service health `:18081` | endpoint·schema·tunnel 구현, Spring client 미구현 |
@@ -421,10 +421,14 @@ Spring realtime-agent health proxy client는 아직 없다. 따라서 `/internal
   필수라 **커리큘럼 잡 소비는 9.1 반영 후** 가능(그전까지 스위치 off로 무회귀).
 - 9.1/9.2 구현 시 루트 `docs/CONTRACT.md`(§3-1 잡 wire, RAG 요청)와 §7 상태표를 함께 갱신한다.
 
-## 10. 제안 변경 — 자막 세그먼트 경계 `caption.segment.final` [AI 오너 구현 대기]
+## 10. 자막 세그먼트 경계 `caption.segment.final`·시간 앵커 `caption.stream.started` — 부분 구현
 
-> 상태: **제안(미비준)**. §8 규칙대로 루트 [`docs/CONTRACT.md`](../CONTRACT.md)·Python/Java 구현·양측
-> 계약 테스트를 같은 변경에서 갱신해야 실제 계약이 된다.
+> 상태: **부분 구현**(2026-07-31). AI producer는 `!233`으로 병합됐고(schema·fixture 반영), 루트
+> [`docs/CONTRACT.md`](../CONTRACT.md) §3-4에 두 신규 type을 정본화했다. Spring은 ADR-0052로 **영속까지
+> 구현**(두 type을 `core.live_caption` 신규 컬럼에 append-only 적재, 계약 테스트 통과). 표시 대상은 여전히
+> `caption.delta`/`caption.stream.completed`만이며(WS·리로드·RAG 중계), 두 신규 type의 **FE 세그먼트 렌더
+> (ADR-0044 휴리스틱 제거)·시간 앵커 기반 seek·RAG 앵커 활용은 후속 슬라이스**다. 아래 본문은 최초 제안
+> 기록이다.
 
 현재 realtime-agent는 `caption.delta`(append-only 증분)와 `caption.stream.completed`(attempt 종료,
 세션당 1회)만 발행한다. **발화/문장 경계 이벤트가 없다.** 결과:
