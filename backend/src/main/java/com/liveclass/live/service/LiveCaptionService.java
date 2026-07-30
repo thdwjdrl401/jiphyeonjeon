@@ -86,10 +86,10 @@ public class LiveCaptionService {
             return false;
         }
 
-        // 1차 슬라이스(ADR-0052): started·segment.final은 append-only 영속만 하고 WS로 흘리지 않는다.
-        // 현 WsCaptionBroadcaster는 completed가 아닌 것을 전부 delta로 취급하므로, 신규 type을 발행하면
-        // FE에 깨진 delta가 간다. FE 전달(세그먼트 렌더·앵커 seek)은 후속 슬라이스에서 payload와 함께 켠다.
-        if (event.isDelta() || event.isCompleted()) {
+        // 표시 대상(delta·completed·segment.final, RELAYED_TYPES)만 WS로 발행한다. started(시간 앵커)는
+        // 영속만 하고 흘리지 않는다 — FE 세그먼트 렌더는 segment.final의 권위 텍스트로 하고, 앵커 기반
+        // 세션-ms 정밀화·seek는 후속 슬라이스다(ADR-0052).
+        if (CaptionEvent.RELAYED_TYPES.contains(event.type())) {
             eventPublisher.publishEvent(LiveCaptionStoredEvent.from(event));
         }
         if (event.isCompleted()) {

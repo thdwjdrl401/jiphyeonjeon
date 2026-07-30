@@ -7,6 +7,7 @@ import { isNetworkBlocked } from '@/shared/config/runtime'
 import type {
   AiAnswerSource,
   AiAnswerStreamEvent,
+  CaptionSegmentFinalPayload,
   CaptionStreamEvent,
   ChatMessageView,
   LiveStartOperation,
@@ -62,7 +63,19 @@ interface ApiCaptionCompletedPayload {
   reason: string
 }
 
-/** 리로드 응답 한 줄(WS payload와 정합, type으로 delta/completed 구분). CAPTION-01 / ADR-0045. */
+/** 확정 세그먼트 경계 payload(camelCase, raw ms 그대로). caption.segment.final. */
+interface ApiCaptionSegmentPayload {
+  sttSessionId: string
+  segmentIndex: number
+  lastSequence: number
+  text: string
+  startStreamElapsedMs: number
+  endStreamElapsedMs: number
+  boundaryReason: 'SILENCE' | 'MAX_DURATION' | 'STREAM_END'
+  sessionMs: number | null
+}
+
+/** 리로드 응답 한 줄(WS payload와 정합, type으로 delta/segment.final/completed 구분). CAPTION-01 / ADR-0045. */
 interface ApiCaptionReloadItem {
   type: string
   sttSessionId: string
@@ -73,6 +86,11 @@ interface ApiCaptionReloadItem {
   text: string | null
   reason: string | null
   occurredAt: string
+  /** segment.final 전용(그 외 type이면 null). */
+  segmentIndex: number | null
+  startStreamElapsedMs: number | null
+  endStreamElapsedMs: number | null
+  boundaryReason: string | null
 }
 
 /** 스트림이 시작되기 **전** 실패의 오류 봉투(ADR-0047 §8 — SSE Accept여도 application/json으로 온다). */
@@ -290,6 +308,23 @@ function readCaptionEnvelope(frame: IMessage, sessionId: string): CaptionStreamE
       },
     }
   }
+  if (envelope.type === 'caption.segment.final') {
+    const payload = envelope.payload as ApiCaptionSegmentPayload
+    return {
+      type: 'caption.segment.final',
+      occurredAt: envelope.occurredAt,
+      payload: {
+        sttSessionId: payload.sttSessionId,
+        segmentIndex: payload.segmentIndex,
+        lastSequence: payload.lastSequence,
+        text: payload.text,
+        startStreamElapsedMs: payload.startStreamElapsedMs,
+        endStreamElapsedMs: payload.endStreamElapsedMs,
+        boundaryReason: payload.boundaryReason,
+        sessionMs: payload.sessionMs ?? null,
+      },
+    }
+  }
   if (envelope.type === 'caption.stream.completed') {
     const payload = envelope.payload as ApiCaptionCompletedPayload
     return {
@@ -318,6 +353,22 @@ function toCaptionStreamEvent(item: ApiCaptionReloadItem): CaptionStreamEvent[] 
         streamElapsedMs: item.streamElapsedMs,
         sessionMs: item.sessionMs ?? null,
         text: item.text ?? '',
+      },
+    }]
+  }
+  if (item.type === 'caption.segment.final') {
+    return [{
+      type: 'caption.segment.final',
+      occurredAt: item.occurredAt,
+      payload: {
+        sttSessionId: item.sttSessionId,
+        segmentIndex: item.segmentIndex ?? 0,
+        lastSequence: item.lastSequence ?? 0,
+        text: item.text ?? '',
+        startStreamElapsedMs: item.startStreamElapsedMs ?? item.streamElapsedMs,
+        endStreamElapsedMs: item.endStreamElapsedMs ?? item.streamElapsedMs,
+        boundaryReason: (item.boundaryReason ?? 'STREAM_END') as CaptionSegmentFinalPayload['boundaryReason'],
+        sessionMs: item.sessionMs ?? null,
       },
     }]
   }

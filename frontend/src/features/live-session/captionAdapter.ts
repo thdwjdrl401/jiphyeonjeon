@@ -45,9 +45,11 @@ export function normalizeCaption(caption: ApiCaptionView, index: number): Captio
 
 // --- 라이브 델타 스트림 누적 (CONTRACT §3-4 / ADR-0040·0043·0045) ---
 //
-// 델타는 append-only 증분이고 세그먼트 경계(caption.segment.final)가 계약에 없다. 그래서
-// `sttSessionId`(한 STT job attempt) 하나가 곧 한 자막 라인이며, 델타를 sequence 순서로
-// 이어 붙여 실시간으로 자라는 라인을 만든다.
+// 델타는 append-only 증분이고, AI가 확정 세그먼트 경계(caption.segment.final)를 권위 있게 내려 준다
+// (ADR-0044 문장부호 휴리스틱 대체). 그래서 `sttSessionId`(한 STT job attempt) 하나가 한 자막 라인이며,
+// 그 라인은 확정 세그먼트들(segmentIndex 순) + 아직 확정 안 된 진행 중 델타 조각 하나로 렌더된다.
+// 세그먼트의 `text`가 누적 델타를 덮어쓰는 최종 텍스트이고, `lastSequence`보다 큰 sequence의 델타만
+// 아직 어느 세그먼트에도 안 잡힌 진행 중(pending) 조각이다.
 //
 // 시각 축: 서버가 함께 주는 근사 `sessionMs`(occurredAt−clockOriginAt)를 우선 쓴다 — HLS 영상 위치와
 // 같은 세션 축이라 학생 위치 동기화의 기준이 된다(ADR-0045). sessionMs가 없으면(clockOriginAt 전 등)
@@ -76,12 +78,25 @@ export const CAPTION_MAX_LINES = 300
  */
 export const CAPTION_STT_LAG_MS = 1_500
 
+/** 확정 세그먼트 하나(caption.segment.final). `text`가 누적 델타를 덮어쓰는 권위 있는 최종 텍스트다. */
+interface CaptionSegmentState {
+  segmentIndex: number
+  lastSequence: number
+  text: string
+  startStreamElapsedMs: number
+  endStreamElapsedMs: number
+  boundaryReason: string
+  sessionMs: number | null
+}
+
 interface CaptionLineState {
   sttSessionId: string
   /** 처음 등장한 순서 — 렌더 순서를 sequence 리셋(retry)과 무관하게 안정적으로 유지한다. */
   order: number
   /** sequence → 증분 텍스트·시간. sequence로 키잉해 at-least-once 중복 전달을 흡수한다. */
   deltas: Map<number, { text: string; streamElapsedMs: number; sessionMs: number | null }>
+  /** segmentIndex → 확정 세그먼트. 같은 index 재전달은 last-wins(멱등). */
+  segments: Map<number, CaptionSegmentState>
   completed: boolean
   lastSequence: number | null
 }
@@ -102,7 +117,7 @@ function ensureLine(
   const existing = state.lines.get(sttSessionId)
   const lines = new Map(state.lines)
   if (existing) {
-    const line = { ...existing, deltas: new Map(existing.deltas) }
+    const line = { ...existing, deltas: new Map(existing.deltas), segments: new Map(existing.segments) }
     lines.set(sttSessionId, line)
     return { lines, nextOrder: state.nextOrder, line }
   }
@@ -110,6 +125,7 @@ function ensureLine(
     sttSessionId,
     order: state.nextOrder,
     deltas: new Map(),
+    segments: new Map(),
     completed: false,
     lastSequence: null,
   }
@@ -146,6 +162,23 @@ export function reduceCaptionStream(
     if (isNewLine) pruneOldestLines(lines)
     return { lines, nextOrder }
   }
+  if (event.type === 'caption.segment.final') {
+    // 확정 세그먼트: 이 segmentIndex를 권위 있는 최종 텍스트로 기록한다(같은 index 재전달은 last-wins).
+    const { sttSessionId, segmentIndex, lastSequence, text, startStreamElapsedMs, endStreamElapsedMs, boundaryReason, sessionMs } = event.payload
+    const isNewLine = !state.lines.has(sttSessionId)
+    const { lines, nextOrder, line } = ensureLine(state, sttSessionId)
+    line.segments.set(segmentIndex, {
+      segmentIndex,
+      lastSequence,
+      text,
+      startStreamElapsedMs,
+      endStreamElapsedMs,
+      boundaryReason,
+      sessionMs: sessionMs ?? null,
+    })
+    if (isNewLine) pruneOldestLines(lines)
+    return { lines, nextOrder }
+  }
   // caption.stream.completed: 라인을 확정(더 이상 델타 없음)으로 표시한다.
   const { sttSessionId, lastSequence } = event.payload
   const isNewLine = !state.lines.has(sttSessionId)
@@ -156,77 +189,82 @@ export function reduceCaptionStream(
   return { lines, nextOrder }
 }
 
-/** 누적 상태를 CaptionDock이 쓰는 CaptionView[]로 편다(등장 순서 유지, 빈 라인 제외). */
 /**
- * 누적 텍스트를 발화(문장) 단위로 쪼갠다. 델타 계약에 세그먼트 경계(caption.segment.final)가 없어
- * FE에서 문장부호로 근사한다(ADR-0044 후속: AI팀 segment.final 도입 시 대체). 종결부호로 끝나는
- * 런과 마지막 진행중 조각을 각각 한 문장으로 낸다. startOffset은 원문 내 시작 위치(시간 매핑용).
+ * 누적 상태를 CaptionDock이 쓰는 CaptionView[]로 편다(등장 순서 유지, 빈 라인 제외).
+ *
+ * 한 라인(sttSessionId)당:
+ *  1. 확정 세그먼트(caption.segment.final)마다 권위 있는 CaptionView 하나 — segmentIndex 순, pending=false.
+ *     `startMs`는 계약상 raw `startStreamElapsedMs`를 그대로 쓴다(세션-ms 변환 금지). raw stream-local 축이라
+ *     synced=false다(위치 동기화 축이 아니므로 학생 화면에서 그대로 노출된다).
+ *  2. 아직 어느 세그먼트에도 안 잡힌(=sequence > 세그먼트들의 max lastSequence) 델타를 이어 붙인 진행 중 조각
+ *     하나 — pending(라인이 completed면 false). 나중 세그먼트가 이 조각을 덮으면 조각은 줄거나 사라진다.
+ *     세그먼트가 아직 없으면 델타 전체가 이 진행 중 조각이다(과거 동작과 같되 문장부호 분할은 없다).
  */
-function splitSentences(text: string): { text: string; startOffset: number }[] {
-  const out: { text: string; startOffset: number }[] = []
-  const re = /[^.。!?…]*[.。!?…]+["'”’)\]]*\s*/g
-  let match: RegExpExecArray | null
-  let lastIndex = 0
-  while ((match = re.exec(text)) !== null) {
-    const trimmed = match[0].trim()
-    if (trimmed) out.push({ text: trimmed, startOffset: match.index })
-    lastIndex = re.lastIndex
-  }
-  const rest = text.slice(lastIndex).trim()
-  if (rest) out.push({ text: rest, startOffset: lastIndex })
-  return out
-}
-
 export function selectCaptionViews(state: CaptionStreamState): CaptionView[] {
   return [...state.lines.values()]
     .sort((left, right) => left.order - right.order)
     .flatMap((line): CaptionView[] => {
+      const views: CaptionView[] = []
+      // 1. 확정 세그먼트 — segmentIndex 순으로 권위 있는 라인을 낸다.
+      const segments = [...line.segments.values()].sort((left, right) => left.segmentIndex - right.segmentIndex)
+      let maxSegmentIndex = -1
+      let maxLastSequence: number | null = null
+      for (const segment of segments) {
+        views.push({
+          segmentId: `${line.sttSessionId}#${segment.segmentIndex}`,
+          startMs: segment.startStreamElapsedMs,
+          endMs: segment.endStreamElapsedMs,
+          at: formatTimeLabel(segment.startStreamElapsedMs),
+          text: segment.text,
+          termReferences: [],
+          pending: false,
+          synced: false,
+        })
+        if (segment.segmentIndex > maxSegmentIndex) maxSegmentIndex = segment.segmentIndex
+        if (maxLastSequence == null || segment.lastSequence > maxLastSequence) maxLastSequence = segment.lastSequence
+      }
+
+      // 2. 진행 중 조각 — max lastSequence보다 큰(아직 확정 안 된) 델타만 이어 붙인다.
+      // 한 델타의 시각은 그 조각을 **내보낸** 시점이라, 그 조각의 말이 **시작된** 시점은 직전 델타의 시각에
+      // 가깝다. 그래서 진행 중 조각의 시작 시각으로 첫 진행중 델타의 직전 델타 시각을 쓴다(첫 델타면 자기 시각).
+      // 시각 축은 근사 sessionMs 우선, 없으면 stream-local streamElapsedMs fallback(ADR-0045).
       const sequences = [...line.deltas.keys()].sort((left, right) => left - right)
-      if (sequences.length === 0) return []
-      // 델타를 sequence 순서로 이어붙이며 (문자 offset → 시각) 색인을 만든다. 시각은 근사 sessionMs를
-      // 우선 쓰고(세션 축 = HLS 위치와 정합) 없으면 stream-local streamElapsedMs로 fallback한다(ADR-0045).
-      // 한 델타의 시각은 그 조각을 **내보낸** 시점이라, 그 조각의 말이 **시작된** 시점은 직전 델타의
-      // 시각에 가깝다(그 사이 구간의 음성이 이 조각으로 나온 것이다). 그래서 각 델타의 시작 시각으로
-      // 직전 델타의 시각을 쓴다 — 그러지 않으면 문장 시작이 한 조각만큼 늦게 잡혀 seek이 뒤로 밀린다.
-      // 첫 델타는 직전이 없어 자기 시각을 쓰고, 남은 편향은 CAPTION_STT_LAG_MS가 상쇄한다.
-      let full = ''
-      const marks: { offset: number; ms: number; synced: boolean }[] = []
       let previousMs: number | null = null
+      let partialText = ''
+      let partialStartMs: number | null = null
+      let partialSynced = false
+      let started = false
       for (const sequence of sequences) {
         const delta = line.deltas.get(sequence)!
         const synced = delta.sessionMs != null
         const emittedMs = synced ? delta.sessionMs! : delta.streamElapsedMs
-        marks.push({ offset: full.length, ms: previousMs ?? emittedMs, synced })
+        const isPartial = maxLastSequence == null || sequence > maxLastSequence
+        if (isPartial) {
+          if (!started) {
+            partialStartMs = previousMs ?? emittedMs
+            partialSynced = synced
+            started = true
+          }
+          partialText += delta.text
+        }
         previousMs = emittedMs
-        full += delta.text
       }
-      if (!full.trim()) return []
-      // offset이 속한 델타의 시각(과 축)을 찾는다(문장 시작 시각 근사).
-      const markAt = (offset: number) => {
-        let mark = marks[0]
-        for (const candidate of marks) {
-          if (candidate.offset <= offset) mark = candidate
-          else break
-        }
-        return mark
-      }
-      const endsFinal = /[.。!?…]["'”’)\]]*\s*$/.test(full)
-      const sentences = splitSentences(full)
-      // 한 attempt(sttSessionId)를 문장별 라인으로 편다. 마지막 진행중 조각만 pending.
-      return sentences.map((sentence, index): CaptionView => {
-        const mark = markAt(sentence.startOffset)
-        const isTail = index === sentences.length - 1
-        return {
-          segmentId: `${line.sttSessionId}#${index}`,
-          startMs: mark.ms,
-          endMs: mark.ms,
-          at: formatTimeLabel(mark.ms),
-          text: sentence.text,
+
+      if (started && partialText.trim()) {
+        const startMs = partialStartMs ?? 0
+        views.push({
+          segmentId: `${line.sttSessionId}#${maxSegmentIndex + 1}`,
+          startMs,
+          endMs: startMs,
+          at: formatTimeLabel(startMs),
+          text: partialText,
           termReferences: [],
-          pending: isTail && !line.completed && !endsFinal,
-          synced: mark.synced,
-        }
-      })
+          pending: !line.completed,
+          synced: partialSynced,
+        })
+      }
+
+      return views
     })
 }
 

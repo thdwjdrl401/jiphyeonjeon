@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
+import { apiClient } from '@/shared/api/client'
 import type { CaptionStreamEvent } from '@/features/live-session/liveSessionService.interface'
 
 const stompHarness = vi.hoisted(() => ({ clients: [] as unknown[] }))
@@ -96,6 +97,40 @@ describe('라이브 자막 STOMP 구독 계약', () => {
       payload: { sttSessionId: 'stt-1', lastSequence: 3, sessionMs: null, reason: 'ROOM_DELETED' },
     })
 
+    // segment.final: 확정 세그먼트 경계. raw start/end streamElapsedMs 그대로 통과, sessionMs 없으면 null.
+    receive({
+      body: JSON.stringify({
+        eventId: 'evt-3',
+        type: 'caption.segment.final',
+        sessionId: 'ses-live-1',
+        occurredAt: '2026-07-29T10:02:00+09:00',
+        payload: {
+          contractVersion: '1',
+          sttSessionId: 'stt-1',
+          segmentIndex: 0,
+          lastSequence: 3,
+          text: '인증이 끝나면 SecurityContext가 남는다.',
+          startStreamElapsedMs: 40_000,
+          endStreamElapsedMs: 44_000,
+          boundaryReason: 'SILENCE',
+        },
+      }),
+    })
+    expect(onEvent).toHaveBeenLastCalledWith({
+      type: 'caption.segment.final',
+      occurredAt: '2026-07-29T10:02:00+09:00',
+      payload: {
+        sttSessionId: 'stt-1',
+        segmentIndex: 0,
+        lastSequence: 3,
+        text: '인증이 끝나면 SecurityContext가 남는다.',
+        startStreamElapsedMs: 40_000,
+        endStreamElapsedMs: 44_000,
+        boundaryReason: 'SILENCE',
+        sessionMs: null,
+      },
+    })
+
     // 다른 세션·미지의 type은 무시한다.
     onEvent.mockClear()
     receive({ body: JSON.stringify({ type: 'caption.delta', sessionId: 'other', occurredAt: 'x', payload: {} }) })
@@ -105,5 +140,73 @@ describe('라이브 자막 STOMP 구독 계약', () => {
     unsubscribe()
     expect(onConnectionChange).toHaveBeenLastCalledWith('disconnected')
     expect(client.deactivate).toHaveBeenCalledOnce()
+  })
+})
+
+describe('저장된 자막 리로드(getCaptions) 매핑', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('리로드 응답의 caption.segment.final 항목을 세그먼트 스트림 이벤트로 옮긴다', async () => {
+    vi.spyOn(apiClient, 'get').mockResolvedValue({
+      data: [
+        {
+          type: 'caption.delta',
+          sttSessionId: 'stt-1',
+          sequence: 1,
+          lastSequence: null,
+          streamElapsedMs: 40_000,
+          sessionMs: null,
+          text: '인증이 끝나면 ',
+          reason: null,
+          occurredAt: '2026-07-29T10:00:00+09:00',
+          segmentIndex: null,
+          startStreamElapsedMs: null,
+          endStreamElapsedMs: null,
+          boundaryReason: null,
+        },
+        {
+          type: 'caption.segment.final',
+          sttSessionId: 'stt-1',
+          sequence: null,
+          lastSequence: 1,
+          streamElapsedMs: 40_000,
+          sessionMs: 39_000,
+          text: '인증이 끝나면 SecurityContext가 남는다.',
+          reason: null,
+          occurredAt: '2026-07-29T10:00:05+09:00',
+          segmentIndex: 0,
+          startStreamElapsedMs: 40_000,
+          endStreamElapsedMs: 44_000,
+          boundaryReason: 'SILENCE',
+        },
+      ],
+    } as never)
+
+    const events = await httpLiveSessionService.getCaptions('ses-live-1')
+
+    expect(apiClient.get).toHaveBeenCalledWith('/live-sessions/ses-live-1/captions')
+    expect(events).toEqual([
+      {
+        type: 'caption.delta',
+        occurredAt: '2026-07-29T10:00:00+09:00',
+        payload: { sttSessionId: 'stt-1', sequence: 1, streamElapsedMs: 40_000, sessionMs: null, text: '인증이 끝나면 ' },
+      },
+      {
+        type: 'caption.segment.final',
+        occurredAt: '2026-07-29T10:00:05+09:00',
+        payload: {
+          sttSessionId: 'stt-1',
+          segmentIndex: 0,
+          lastSequence: 1,
+          text: '인증이 끝나면 SecurityContext가 남는다.',
+          startStreamElapsedMs: 40_000,
+          endStreamElapsedMs: 44_000,
+          boundaryReason: 'SILENCE',
+          sessionMs: 39_000,
+        },
+      },
+    ])
   })
 })

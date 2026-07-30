@@ -31,9 +31,11 @@ public class WsCaptionBroadcaster {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onStored(LiveCaptionStoredEvent event) {
         Long sessionMs = sessionClockLookup.approxSessionMs(event.sessionId(), event.occurredAt());
-        Object payload = CaptionEvent.TYPE_COMPLETED.equals(event.eventType())
-                ? CaptionCompletedPayload.from(event, sessionMs)
-                : CaptionDeltaPayload.from(event, sessionMs);
+        Object payload = switch (event.eventType()) {
+            case CaptionEvent.TYPE_COMPLETED -> CaptionCompletedPayload.from(event, sessionMs);
+            case CaptionEvent.TYPE_SEGMENT_FINAL -> CaptionSegmentPayload.from(event, sessionMs);
+            default -> CaptionDeltaPayload.from(event, sessionMs);   // caption.delta
+        };
         WsEnvelope envelope = WsEnvelope.of(event.eventType(), event.sessionId(), event.occurredAt(), payload);
         messagingTemplate.convertAndSend(
                 "/topic/live-sessions/" + event.sessionId() + "/captions", envelope);
