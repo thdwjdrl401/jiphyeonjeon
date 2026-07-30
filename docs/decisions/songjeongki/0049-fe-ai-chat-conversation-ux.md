@@ -1,4 +1,4 @@
-# ADR-0048: FE 개인 AI 질의응답 — 단발 폼에서 대화형(챗) UX로, 이력은 클라이언트 메모리만
+# ADR-0049: FE 개인 AI 질의응답 — 단발 폼에서 대화형(챗) UX로, 이력은 클라이언트 메모리만
 
 > 📍 하네스 개요: [../../harness/README.md](../../harness/README.md) · 아키텍처: [../../ARCHITECTURE.md](../../ARCHITECTURE.md) · 계약: [../../CONTRACT.md](../../CONTRACT.md)
 

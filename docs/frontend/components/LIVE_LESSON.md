@@ -104,7 +104,7 @@ LiveLessonPage
 | `AiChatTurn` | `features/ai` | **구현됨** — 한 턴(내 질문 + AI 답변) 말풍선·상태·근거·재시도 렌더(memo) |
 | `LessonMaterialPanel` | `features/lesson` | 레슨 전에 공개된 PPTX 자료 목록·열람 |
 
-AI 패널은 일반적인 챗 UI 규약을 따른다(ADR-0048).
+AI 패널은 일반적인 챗 UI 규약을 따른다(ADR-0049).
 
 - 전송하면 내 질문이 **즉시** 이력에 붙고 입력창이 비워진다. 그 아래 AI 턴이 생겨 델타가 도착하는 대로 자란다.
 - `Enter` 전송 / `Shift+Enter` 줄바꿈. 한글 IME 조합 중(`isComposing`) Enter는 전송하지 않는다.
