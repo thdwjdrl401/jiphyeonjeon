@@ -174,8 +174,8 @@ MVP Redis key와 event는 실험용이며 `docs/CONTRACT.md`의 공유 계약이
 
 ## 구현 순서와 단계별 제한
 
-한 변경에서 전체 runtime을 한꺼번에 연결하지 않고 아래 단계가 각각 테스트를 통과한 뒤 다음 단계로
-넘어간다.
+전체 구조를 빠르게 확인할 수 있도록 아래 단계를 독립 커밋으로 연결하고, 자동 테스트와 리뷰는
+1~6단계 구조를 만든 뒤 한 번에 수행한다. 실제 Redis·GMS 동작은 7단계 EC2 실험에서 별도로 검증한다.
 
 1. **순수 window 상태 머신**: Redis·GMS·async task 없이 delta 순서, 중복·gap, 15/25/40초와
    80/400자 경계, 문장부호, attempt 전환, completion flush만 구현한다.
@@ -192,8 +192,8 @@ MVP Redis key와 event는 실험용이며 `docs/CONTRACT.md`의 공유 계약이
    시작하며 별도 enable 환경변수를 두지 않는다.
 7. **30분 강의 실험**: Redis 결과와 metric을 관찰해 품질·지연·비용을 기록한 뒤 후속 범위를 결정한다.
 
-첫 구현 변경은 1단계만 포함한다. config·wiring·lifecycle, Redis, GMS, Spring, Frontend, DB, HTTP API는
-건드리지 않는다.
+현재 1~6단계 구현과 자동 테스트까지 완료했다. Spring, Frontend, DB, HTTP API는 여전히 범위 밖이며,
+다음 작업은 코드를 더 확장하는 대신 EC2 단일 ai-api replica에서 7단계 실험을 수행하는 것이다.
 
 ## MVP에서 하지 않는 것
 
@@ -213,7 +213,7 @@ MVP Redis key와 event는 실험용이며 `docs/CONTRACT.md`의 공유 계약이
 
 ## 검증과 다음 결정
 
-자동 테스트는 다음만 만든다.
+자동 테스트는 다음 범위로 제한한다.
 
 - 별도 consumer group이 RAG group과 같은 delta를 독립적으로 받음
 - sequence 중복·gap·새 attempt·completion 처리
@@ -236,7 +236,8 @@ topic 분리가 괜찮으면 다음 ADR 개정에서 Spring·Frontend 연결을 
 
 ## 계약·완료 판단
 
-이번 단계는 순수 window 상태 머신과 ai-api 단위 테스트까지 추가하며 실제 Redis event나 API는 아직
-만들지 않는다. 공유 런타임 계약과 HTTP 상태코드를 바꾸지 않으므로 FE/BE 계약 테스트와
-`docs/CONTRACT.md` 수정은 불필요하다. Redis adapter가 들어가는 단계에는 integration test를 함께
-추가하며, Redis 결과만 나온 상태를 사용자 기능 완료로 보고하지 않는다.
+현재 단계는 ai-api 내부에서 별도 caption consumer group, GMS adapter, Redis snapshot·관찰 Stream까지
+연결했다. 공유 HTTP 계약과 상태코드, Spring·Frontend가 의존하는 DTO를 바꾸지 않았으므로 FE/BE 계약
+테스트와 `docs/CONTRACT.md` 수정은 불필요하다. Redis 명령과 consumer group 분리는 fake와 실제 Redis
+integration test로 검증하며, 운영 Redis 연결·GMS JSON 호환성·30분 품질은 EC2 실험의 완료 조건이다.
+Redis 결과가 생성되는 것만으로 사용자 기능 완료로 보고하지 않는다.

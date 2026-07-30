@@ -58,6 +58,13 @@ def _completed(
     )
 
 
+def _windows(
+    accumulator: LectureNoteWindowAccumulator,
+    entry: CaptionDelta | CaptionCompleted,
+):
+    return accumulator.ingest(entry).windows
+
+
 @pytest.mark.parametrize(
     ("stream_elapsed_ms", "text"),
     [
@@ -71,13 +78,13 @@ def test_strong_boundary_requires_both_minimum_time_and_characters(
 ) -> None:
     accumulator = LectureNoteWindowAccumulator()
 
-    assert accumulator.ingest(_delta(1, stream_elapsed_ms, text)) == ()
+    assert _windows(accumulator, _delta(1, stream_elapsed_ms, text)) == ()
 
 
 def test_target_time_flushes_without_strong_boundary_after_minimum_characters() -> None:
     accumulator = LectureNoteWindowAccumulator()
 
-    windows = accumulator.ingest(_delta(1, 25_000, "가" * 80))
+    windows = _windows(accumulator, _delta(1, 25_000, "가" * 80))
 
     assert len(windows) == 1
     assert windows[0].flush_reason is WindowFlushReason.TARGET_REACHED
@@ -88,7 +95,7 @@ def test_target_time_flushes_without_strong_boundary_after_minimum_characters() 
 def test_strong_boundary_flushes_at_minimum_boundary(ending: str) -> None:
     accumulator = LectureNoteWindowAccumulator()
 
-    windows = accumulator.ingest(_delta(1, 15_000, "가" * 79 + ending))
+    windows = _windows(accumulator, _delta(1, 15_000, "가" * 79 + ending))
 
     assert len(windows) == 1
     assert windows[0].flush_reason is WindowFlushReason.STRONG_BOUNDARY
@@ -109,7 +116,7 @@ def test_forced_threshold_ignores_minimum_window(
 ) -> None:
     accumulator = LectureNoteWindowAccumulator()
 
-    windows = accumulator.ingest(_delta(1, stream_elapsed_ms, text))
+    windows = _windows(accumulator, _delta(1, stream_elapsed_ms, text))
 
     assert len(windows) == 1
     assert windows[0].flush_reason is WindowFlushReason.FORCED_THRESHOLD
@@ -118,10 +125,10 @@ def test_forced_threshold_ignores_minimum_window(
 
 def test_second_window_uses_elapsed_time_since_previous_flush() -> None:
     accumulator = LectureNoteWindowAccumulator()
-    accumulator.ingest(_delta(1, 15_000, "가" * 79 + "."))
+    _windows(accumulator, _delta(1, 15_000, "가" * 79 + "."))
 
-    assert accumulator.ingest(_delta(2, 16_000, "나" * 79 + ".")) == ()
-    windows = accumulator.ingest(_delta(3, 30_000, "."))
+    assert _windows(accumulator, _delta(2, 16_000, "나" * 79 + ".")) == ()
+    windows = _windows(accumulator, _delta(3, 30_000, "."))
 
     assert len(windows) == 1
     assert windows[0].start_sequence == 2
@@ -131,10 +138,10 @@ def test_second_window_uses_elapsed_time_since_previous_flush() -> None:
 
 def test_completion_flushes_short_text_and_preserves_delta_whitespace() -> None:
     accumulator = LectureNoteWindowAccumulator()
-    accumulator.ingest(_delta(1, 1_000, "첫째"))
-    accumulator.ingest(_delta(2, 2_000, " 둘째"))
+    _windows(accumulator, _delta(1, 1_000, "첫째"))
+    _windows(accumulator, _delta(2, 2_000, " 둘째"))
 
-    windows = accumulator.ingest(_completed(2, 2_000))
+    windows = _windows(accumulator, _completed(2, 2_000))
 
     assert len(windows) == 1
     assert windows[0].flush_reason is WindowFlushReason.COMPLETED
@@ -147,11 +154,11 @@ def test_duplicate_event_sequence_and_gap_do_not_duplicate_text() -> None:
     accumulator = LectureNoteWindowAccumulator()
     first = _delta(1, 1_000, "하나")
 
-    accumulator.ingest(first)
-    assert accumulator.ingest(first) == ()
-    assert accumulator.ingest(_delta(1, 1_000, "변조", event_id="other-event")) == ()
-    accumulator.ingest(_delta(3, 3_000, " 셋"))
-    windows = accumulator.ingest(_completed(3, 3_000))
+    _windows(accumulator, first)
+    assert _windows(accumulator, first) == ()
+    assert _windows(accumulator, _delta(1, 1_000, "변조", event_id="other-event")) == ()
+    _windows(accumulator, _delta(3, 3_000, " 셋"))
+    windows = _windows(accumulator, _completed(3, 3_000))
 
     assert windows[0].text == "하나 셋"
     metrics = accumulator.metrics_snapshot()
@@ -163,10 +170,13 @@ def test_duplicate_event_sequence_and_gap_do_not_duplicate_text() -> None:
 
 def test_new_attempt_flushes_short_window_and_rejects_late_old_attempt() -> None:
     accumulator = LectureNoteWindowAccumulator()
-    accumulator.ingest(_delta(1, 1_000, "이전 시도의 짧은 문장"))
+    _windows(accumulator, _delta(1, 1_000, "이전 시도의 짧은 문장"))
 
-    windows = accumulator.ingest(_delta(1, 100, "새 시도", stt_session_id="attempt-2"))
-    stale = accumulator.ingest(_delta(2, 2_000, " 늦은 이전"))
+    windows = _windows(
+        accumulator,
+        _delta(1, 100, "새 시도", stt_session_id="attempt-2"),
+    )
+    stale = _windows(accumulator, _delta(2, 2_000, " 늦은 이전"))
 
     assert len(windows) == 1
     assert windows[0].flush_reason is WindowFlushReason.ATTEMPT_CHANGED
@@ -179,10 +189,10 @@ def test_new_attempt_flushes_short_window_and_rejects_late_old_attempt() -> None
 def test_next_window_receives_only_previous_two_sentences_as_context() -> None:
     accumulator = LectureNoteWindowAccumulator()
     first_text = "가" * 30 + "." + "나" * 48 + "."
-    first = accumulator.ingest(_delta(1, 15_000, first_text))
+    first = _windows(accumulator, _delta(1, 15_000, first_text))
 
-    accumulator.ingest(_delta(2, 16_000, "다음 내용"))
-    second = accumulator.ingest(_completed(2, 16_000))
+    _windows(accumulator, _delta(2, 16_000, "다음 내용"))
+    second = _windows(accumulator, _completed(2, 16_000))
 
     assert first[0].previous_context == ""
     assert second[0].previous_context == "가" * 30 + ". " + "나" * 48 + "."
@@ -190,25 +200,27 @@ def test_next_window_receives_only_previous_two_sentences_as_context() -> None:
 
 def test_sessions_keep_sequence_text_and_context_isolated() -> None:
     accumulator = LectureNoteWindowAccumulator()
-    accumulator.ingest(_delta(1, 1_000, "세션 A"))
-    accumulator.ingest(
+    _windows(accumulator, _delta(1, 1_000, "세션 A"))
+    _windows(
+        accumulator,
         _delta(
             1,
             1_000,
             "세션 B",
             session_id=OTHER_SESSION_ID,
             event_id="other-session-delta",
-        )
+        ),
     )
 
-    session_a = accumulator.ingest(_completed(1, 2_000))
-    session_b = accumulator.ingest(
+    session_a = _windows(accumulator, _completed(1, 2_000))
+    session_b = _windows(
+        accumulator,
         _completed(
             1,
             2_000,
             session_id=OTHER_SESSION_ID,
             event_id="other-session-completed",
-        )
+        ),
     )
 
     assert session_a[0].session_id == SESSION_ID
@@ -220,11 +232,11 @@ def test_sessions_keep_sequence_text_and_context_isolated() -> None:
 
 def test_stream_regression_and_entry_after_completion_do_not_mutate_text() -> None:
     accumulator = LectureNoteWindowAccumulator()
-    accumulator.ingest(_delta(1, 2_000, "정상"))
-    accumulator.ingest(_delta(2, 1_000, " 역행"))
+    _windows(accumulator, _delta(1, 2_000, "정상"))
+    _windows(accumulator, _delta(2, 1_000, " 역행"))
 
-    completed = accumulator.ingest(_completed(1, 2_000))
-    assert accumulator.ingest(_delta(2, 3_000, " 종료 뒤", event_id="after-completion")) == ()
+    completed = _windows(accumulator, _completed(1, 2_000))
+    assert _windows(accumulator, _delta(2, 3_000, " 종료 뒤", event_id="after-completion")) == ()
 
     assert completed[0].text == "정상"
     metrics = accumulator.metrics_snapshot()
@@ -238,17 +250,18 @@ def test_long_lived_state_is_bounded() -> None:
         max_event_ids=2,
         max_retired_attempts_per_session=1,
     )
-    accumulator.ingest(_delta(1, 1_000, "첫 시도"))
-    accumulator.ingest(_delta(1, 100, "둘째", stt_session_id="attempt-2"))
-    accumulator.ingest(_delta(1, 100, "셋째", stt_session_id="attempt-3"))
-    accumulator.ingest(
+    _windows(accumulator, _delta(1, 1_000, "첫 시도"))
+    _windows(accumulator, _delta(1, 100, "둘째", stt_session_id="attempt-2"))
+    _windows(accumulator, _delta(1, 100, "셋째", stt_session_id="attempt-3"))
+    _windows(
+        accumulator,
         _delta(
             1,
             100,
             "다른 세션",
             session_id=OTHER_SESSION_ID,
             event_id="other-session-delta",
-        )
+        ),
     )
 
     metrics = accumulator.metrics_snapshot()
@@ -262,7 +275,7 @@ def test_long_lived_state_is_bounded() -> None:
 def test_completion_without_buffer_emits_no_window() -> None:
     accumulator = LectureNoteWindowAccumulator()
 
-    assert accumulator.ingest(_completed(0, 0)) == ()
-    assert accumulator.ingest(_completed(0, 0, event_id="other-completion")) == ()
+    assert _windows(accumulator, _completed(0, 0)) == ()
+    assert _windows(accumulator, _completed(0, 0, event_id="other-completion")) == ()
     assert accumulator.metrics_snapshot()["completed_total"] == 1
     assert accumulator.metrics_snapshot()["duplicate_completion_total"] == 1

@@ -18,10 +18,14 @@ Spring 전용 `ai-api`의 실행 골격과 RAG application core다.
 ## 구조와 흐름
 
 ```text
-realtime-agent -> Redis Streams -> captions/store.py --.
-BGE runtime -> query vector -> pgvector ACTIVE chunks ---+-> CombinedEvidenceRetriever
-Spring -> api/rag.py -> request registry -> rag/service.py+-> GMS AnswerModel -> SSE
-                 `-> lecture_notes pipeline -> GMS JSON -> Redis snapshot/Stream
+[RAG]
+caption evidence: Redis caption Stream -> ai-rag-live-v1 -> captions/store.py
+material evidence: BGE runtime -> pgvector ACTIVE chunks
+request: Spring -> api/rag.py -> rag/service.py -> CombinedEvidenceRetriever -> GMS AnswerModel -> SSE
+
+[강의 노트]
+같은 Redis caption Stream -> ai-live-notes-mvp-v1 -> lecture_notes pipeline
+                                                   `-> GMS JSON -> Redis snapshot/Stream
 ```
 
 | 요청 | 응답 |

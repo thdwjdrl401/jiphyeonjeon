@@ -1,10 +1,12 @@
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from app.adapters import (
+    CAPTION_CONSUMER_GROUP,
     CaptionConsumerState,
     GmsOpenAIAnswerModel,
     GmsOpenAILectureNoteModel,
@@ -67,13 +69,37 @@ class LectureNoteServices:
     store: RedisLectureNoteSnapshotStore
 
     async def close(self) -> None:
-        try:
+        """모델 호출을 비운 뒤 외부 client를 모두 닫는다."""
+        async with AsyncExitStack() as cleanup:
+            cleanup.push_async_callback(self.store.aclose)
+            cleanup.push_async_callback(self.model.aclose)
             await self.service.aclose()
-        finally:
-            try:
-                await self.model.aclose()
-            finally:
-                await self.store.aclose()
+
+
+def _build_caption_consumer(
+    settings: Settings,
+    *,
+    consumer_name: str,
+    group_name: str,
+    handle_entry: Callable[[Mapping[Any, Any]], object],
+) -> tuple[RedisCaptionConsumer, CaptionConsumerState]:
+    """두 caption 소비 경로가 공유하는 Redis 연결 정책을 한곳에서 조립한다."""
+    state = CaptionConsumerState()
+    consumer = RedisCaptionConsumer(
+        settings.redis_url,
+        consumer_name,
+        handle_entry,
+        state=state,
+        stream_key=settings.caption_stream_key,
+        group_name=group_name,
+        batch_size=settings.caption_batch_size,
+        block_ms=settings.caption_poll_block_ms,
+        reconnect_min_seconds=settings.redis_reconnect_min_seconds,
+        reconnect_max_seconds=settings.redis_reconnect_max_seconds,
+        socket_connect_timeout_seconds=settings.redis_connect_timeout_seconds,
+        socket_timeout_seconds=settings.redis_socket_timeout_seconds,
+    )
+    return consumer, state
 
 
 def build_rag_context_services(settings: Settings) -> RagContextServices:
@@ -89,23 +115,15 @@ def build_rag_context_services(settings: Settings) -> RagContextServices:
         max_sessions=settings.caption_context_max_sessions,
         max_retired_attempts_per_session=settings.caption_context_max_retired_attempts,
     )
-    consumer_state = CaptionConsumerState()
 
     def handle_entry(fields: Mapping[Any, Any]) -> None:
         store.ingest(parse_caption_entry(fields))
 
-    consumer = RedisCaptionConsumer(
-        settings.redis_url,
-        settings.instance_id,
-        handle_entry,
-        state=consumer_state,
-        stream_key=settings.caption_stream_key,
-        batch_size=settings.caption_batch_size,
-        block_ms=settings.caption_poll_block_ms,
-        reconnect_min_seconds=settings.redis_reconnect_min_seconds,
-        reconnect_max_seconds=settings.redis_reconnect_max_seconds,
-        socket_connect_timeout_seconds=settings.redis_connect_timeout_seconds,
-        socket_timeout_seconds=settings.redis_socket_timeout_seconds,
+    consumer, consumer_state = _build_caption_consumer(
+        settings,
+        consumer_name=settings.instance_id,
+        group_name=CAPTION_CONSUMER_GROUP,
+        handle_entry=handle_entry,
     )
     engine = create_async_engine(settings.database_url, pool_pre_ping=True)
     embedding = RemoteBgeM3QueryEmbedding(
@@ -159,9 +177,6 @@ def build_lecture_note_services(settings: Settings) -> LectureNoteServices:
         max_window_ms=settings.lecture_note_max_window_ms,
         min_chars=settings.lecture_note_min_chars,
         max_chars=settings.lecture_note_max_chars,
-        max_sessions=settings.caption_context_max_sessions,
-        max_event_ids=settings.lecture_note_stream_maxlen,
-        max_retired_attempts_per_session=settings.caption_context_max_retired_attempts,
     )
     model = GmsOpenAILectureNoteModel(
         api_key=settings.gms_api_key.get_secret_value(),
@@ -179,24 +194,15 @@ def build_lecture_note_services(settings: Settings) -> LectureNoteServices:
     )
     service = LectureNoteService(model, store)
     pipeline = LectureNotePipeline(accumulator, service)
-    consumer_state = CaptionConsumerState()
 
     def handle_entry(fields: Mapping[Any, Any]) -> None:
         pipeline.ingest(parse_caption_entry(fields))
 
-    consumer = RedisCaptionConsumer(
-        settings.redis_url,
-        f"{settings.instance_id}:live-notes-mvp",
-        handle_entry,
-        state=consumer_state,
-        stream_key=settings.caption_stream_key,
+    consumer, consumer_state = _build_caption_consumer(
+        settings,
+        consumer_name=f"{settings.instance_id}:live-notes-mvp",
         group_name=LECTURE_NOTE_CONSUMER_GROUP,
-        batch_size=settings.caption_batch_size,
-        block_ms=settings.caption_poll_block_ms,
-        reconnect_min_seconds=settings.redis_reconnect_min_seconds,
-        reconnect_max_seconds=settings.redis_reconnect_max_seconds,
-        socket_connect_timeout_seconds=settings.redis_connect_timeout_seconds,
-        socket_timeout_seconds=settings.redis_socket_timeout_seconds,
+        handle_entry=handle_entry,
     )
     return LectureNoteServices(
         accumulator=accumulator,

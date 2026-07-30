@@ -1,6 +1,6 @@
 import logging
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI, Request, Response, status
@@ -72,21 +72,13 @@ def create_app(
             yield
         finally:
             resolved_runtime.ready = False
-            try:
-                if lecture_note_runtime is not None:
-                    await lecture_note_runtime.stop()
-            finally:
-                try:
-                    if caption_runtime is not None:
-                        await caption_runtime.stop()
-                finally:
-                    try:
-                        if lecture_note_services is not None:
-                            await lecture_note_services.close()
-                    finally:
-                        if rag_services is not None:
-                            await rag_services.close()
-                        logger.info("ai-api stopped", extra={"event": "service.stopped"})
+            await _shutdown_services(
+                lecture_note_runtime=lecture_note_runtime,
+                caption_runtime=caption_runtime,
+                lecture_note_services=lecture_note_services,
+                rag_services=rag_services,
+            )
+            logger.info("ai-api stopped", extra={"event": "service.stopped"})
 
     app = FastAPI(title="LiveClass AI API", lifespan=lifespan)
     app.include_router(create_rag_router(resolved_rag_service, internal_authenticator))
@@ -123,6 +115,25 @@ def create_app(
     app.state.lecture_note_services = lecture_note_services
     app.state.lecture_note_runtime = lecture_note_runtime
     return app
+
+
+async def _shutdown_services(
+    *,
+    lecture_note_runtime: CaptionRuntime | None,
+    caption_runtime: CaptionRuntime | None,
+    lecture_note_services: LectureNoteServices | None,
+    rag_services: RagServices | None,
+) -> None:
+    """consumer를 먼저 멈춘 뒤 application 작업과 외부 client를 순서대로 정리한다."""
+    async with AsyncExitStack() as cleanup:
+        if rag_services is not None:
+            cleanup.push_async_callback(rag_services.close)
+        if lecture_note_services is not None:
+            cleanup.push_async_callback(lecture_note_services.close)
+        if caption_runtime is not None:
+            cleanup.push_async_callback(caption_runtime.stop)
+        if lecture_note_runtime is not None:
+            cleanup.push_async_callback(lecture_note_runtime.stop)
 
 
 def build_internal_authenticator(settings: Settings) -> InternalRequestAuthenticator | None:

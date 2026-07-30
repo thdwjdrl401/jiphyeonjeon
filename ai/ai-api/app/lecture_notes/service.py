@@ -125,6 +125,7 @@ class LectureNoteService:
         try:
             while state.pending is not None:
                 batch = state.pending
+                # 호출 전에 비워야 호출 중 들어온 window가 다음 batch 하나로만 합쳐진다.
                 state.pending = None
                 await self._process_batch(session_id, state, batch)
         finally:
@@ -179,6 +180,7 @@ class LectureNoteService:
                 },
             )
             return
+        # 저장 실패 시 메모리 상태만 앞서가지 않도록 snapshot 성공 뒤에 note를 교체한다.
         state.note = note
         self._metrics.snapshots_saved_total += 1
         if completed:
@@ -198,10 +200,9 @@ class LectureNotePipeline:
         self._service = service
 
     def ingest(self, entry: CaptionEntry) -> tuple[LectureNoteWindow, ...]:
-        windows = self._accumulator.ingest(entry)
-        completion = entry if isinstance(entry, CaptionCompleted) else None
-        self._service.enqueue(windows, completion=completion)
-        return windows
+        result = self._accumulator.ingest(entry)
+        self._service.enqueue(result.windows, completion=result.completion)
+        return result.windows
 
 
 def _scope(

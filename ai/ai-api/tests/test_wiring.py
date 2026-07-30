@@ -62,7 +62,7 @@ def test_answer_model_requires_gms_key() -> None:
         build_answer_model(Settings())
 
 
-def test_lecture_note_wiring_uses_independent_group_and_ec2_safe_identity() -> None:
+def test_lecture_note_wiring_uses_independent_group_and_stable_identity() -> None:
     services = build_lecture_note_services(_settings())
 
     assert services.consumer.group_name == LECTURE_NOTE_CONSUMER_GROUP

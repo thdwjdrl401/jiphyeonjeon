@@ -12,7 +12,11 @@ from app.lecture_notes.models import (
 )
 from app.lecture_notes.reducer import apply_model_result, render_markdown
 from app.lecture_notes.service import LectureNotePipeline, LectureNoteService
-from app.lecture_notes.windowing import LectureNoteWindowAccumulator, WindowMetrics
+from app.lecture_notes.windowing import (
+    LectureNoteWindowAccumulator,
+    WindowIngestResult,
+    WindowMetrics,
+)
 
 __all__ = [
     "LectureNote",
@@ -28,6 +32,7 @@ __all__ = [
     "LectureNoteWindowAccumulator",
     "TopicAction",
     "WindowFlushReason",
+    "WindowIngestResult",
     "WindowMetrics",
     "apply_model_result",
     "render_markdown",

@@ -53,6 +53,14 @@ class _SessionBuffer:
     completed: bool = False
 
 
+@dataclass(frozen=True, slots=True)
+class WindowIngestResult:
+    """한 entry가 만든 window와 실제로 수락된 completion을 함께 반환한다."""
+
+    windows: tuple[LectureNoteWindow, ...] = ()
+    completion: CaptionCompleted | None = None
+
+
 class LectureNoteWindowAccumulator:
     """자막 entry를 I/O 없이 크기가 제한된 모델 입력 window로 접는다."""
 
@@ -98,11 +106,11 @@ class LectureNoteWindowAccumulator:
         self._seen_event_ids: OrderedDict[str, None] = OrderedDict()
         self._metrics = WindowMetrics()
 
-    def ingest(self, entry: CaptionEntry) -> tuple[LectureNoteWindow, ...]:
+    def ingest(self, entry: CaptionEntry) -> WindowIngestResult:
         if entry.eventId in self._seen_event_ids:
             self._seen_event_ids.move_to_end(entry.eventId)
             self._metrics.duplicate_event_total += 1
-            return ()
+            return WindowIngestResult()
         self._remember_event(entry.eventId)
 
         session = self._sessions.get(entry.sessionId)
@@ -128,13 +136,13 @@ class LectureNoteWindowAccumulator:
                 self._metrics.duplicate_completion_total += 1
             else:
                 self._metrics.after_completion_total += 1
-            return ()
+            return WindowIngestResult()
 
         windows: list[LectureNoteWindow] = []
         if entry.sttSessionId != session.current.stt_session_id:
             if entry.sttSessionId in session.retired_attempts:
                 self._metrics.stale_attempt_total += 1
-                return ()
+                return WindowIngestResult()
             # attempt가 바뀌면 짧은 text도 버리지 않고 이전 window로 먼저 내보낸다.
             previous = self._flush(
                 entry.sessionId,
@@ -155,7 +163,10 @@ class LectureNoteWindowAccumulator:
             emitted = self._ingest_completed(entry, session)
             if emitted is not None:
                 windows.append(emitted)
-        return tuple(windows)
+        return WindowIngestResult(
+            windows=tuple(windows),
+            completion=entry if isinstance(entry, CaptionCompleted) else None,
+        )
 
     def metrics_snapshot(self) -> dict[str, int]:
         snapshot = {
