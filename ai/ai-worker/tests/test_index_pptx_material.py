@@ -19,6 +19,7 @@ from app.domain import (
     ExistingIndexVersion,
     StagedMaterial,
 )
+from app.ingestion import KeyTerm
 
 
 MODEL_REVISION = "5617a9f61b028005a4858fdac845db406aefb181"
@@ -100,6 +101,24 @@ class FakeIndexStorage:
         self.activated.append((material, version_id))
 
 
+class FakeKeyTermExtractor:
+    def __init__(
+        self,
+        *,
+        terms: Sequence[KeyTerm] = (),
+        error: BaseException | None = None,
+    ) -> None:
+        self.terms = terms
+        self.error = error
+        self.calls: list[str] = []
+
+    async def extract(self, text: str) -> Sequence[KeyTerm]:
+        self.calls.append(text)
+        if self.error is not None:
+            raise self.error
+        return self.terms
+
+
 def material() -> StagedMaterial:
     return StagedMaterial(
         job_id="job-1",
@@ -145,13 +164,14 @@ async def test_indexes_ordered_chunks_and_activates_the_same_material_identity()
     embedding_model = FakeEmbeddingModel()
     index_storage = FakeIndexStorage(version_id=73)
 
-    version_id = await IndexPptxMaterial(
+    result = await IndexPptxMaterial(
         asset_store,
         embedding_model,
         index_storage,
     ).execute(staged_material)
 
-    assert version_id == 73
+    assert result.version_id == 73
+    assert result.key_terms == ()
     assert index_storage.lookups == [staged_material]
     assert asset_store.reads == [(staged_material.source_bucket, staged_material.source_object_key)]
     assert embedding_model.calls == [("first block\nsecond block", "third block")]
@@ -177,13 +197,14 @@ async def test_existing_result_skips_source_and_embedding(
         existing=ExistingIndexVersion(73, activation_required=activation_required)
     )
 
-    version_id = await IndexPptxMaterial(
+    result = await IndexPptxMaterial(
         asset_store,
         embedding_model,
         index_storage,
     ).execute(staged_material)
 
-    assert version_id == 73
+    assert result.version_id == 73
+    assert result.key_terms == ()
     assert asset_store.reads == []
     assert embedding_model.calls == []
     assert index_storage.staged == []
@@ -331,3 +352,67 @@ async def test_cancellation_propagates_without_downstream_calls(cancel_at: str) 
     assert len(embedding_model.calls) == (0 if cancel_at == "read" else 1)
     assert len(index_storage.staged) == (1 if cancel_at == "stage" else 0)
     assert index_storage.activated == []
+
+
+async def test_extracts_key_terms_alongside_embeddings_when_extractor_configured() -> None:
+    staged_material = material()
+    asset_store = FakeAssetStore(
+        presentation_bytes(("first block", "second block"), ("third block",))
+    )
+    embedding_model = FakeEmbeddingModel()
+    index_storage = FakeIndexStorage(version_id=73)
+    key_term_extractor = FakeKeyTermExtractor(terms=(KeyTerm(term="용어", definition="정의"),))
+
+    result = await IndexPptxMaterial(
+        asset_store,
+        embedding_model,
+        index_storage,
+        key_term_extractor=key_term_extractor,
+    ).execute(staged_material)
+
+    assert result.version_id == 73
+    assert result.key_terms == (KeyTerm(term="용어", definition="정의"),)
+    assert len(key_term_extractor.calls) == 1
+    extracted_text = key_term_extractor.calls[0]
+    assert "[슬라이드1]" in extracted_text
+    assert "first block" in extracted_text
+    assert "second block" in extracted_text
+    assert "[슬라이드2]" in extracted_text
+    assert "third block" in extracted_text
+
+
+async def test_key_term_extraction_failure_never_blocks_indexing() -> None:
+    staged_material = material()
+    asset_store = FakeAssetStore(presentation_bytes(("index me",)))
+    embedding_model = FakeEmbeddingModel()
+    index_storage = FakeIndexStorage(version_id=73)
+    key_term_extractor = FakeKeyTermExtractor(error=RuntimeError("gms unavailable"))
+
+    result = await IndexPptxMaterial(
+        asset_store,
+        embedding_model,
+        index_storage,
+        key_term_extractor=key_term_extractor,
+    ).execute(staged_material)
+
+    assert result.version_id == 73
+    assert result.key_terms == ()
+    assert len(key_term_extractor.calls) == 1
+    assert len(index_storage.staged) == 1
+    assert len(index_storage.activated) == 1
+
+
+async def test_no_extractor_configured_never_touches_key_term_extraction() -> None:
+    staged_material = material()
+    asset_store = FakeAssetStore(presentation_bytes(("index me",)))
+    embedding_model = FakeEmbeddingModel()
+    index_storage = FakeIndexStorage(version_id=73)
+
+    result = await IndexPptxMaterial(
+        asset_store,
+        embedding_model,
+        index_storage,
+    ).execute(staged_material)
+
+    assert result.version_id == 73
+    assert result.key_terms == ()

@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from typing import Protocol
 
 from app.domain import ChunkRecord, ExistingIndexVersion, StagedMaterial
+from app.ingestion.models import KeyTerm
 
 
 class MaterialAssetStore(Protocol):
@@ -19,6 +20,10 @@ class TextEmbeddingModel(Protocol):
     def dimensions(self) -> int: ...
 
     async def embed(self, texts: Sequence[str]) -> Sequence[Sequence[float]]: ...
+
+
+class KeyTermExtractor(Protocol):
+    async def extract(self, text: str) -> Sequence[KeyTerm]: ...
 
 
 class IndexStorage(Protocol):

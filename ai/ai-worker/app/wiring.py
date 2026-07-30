@@ -9,6 +9,7 @@ from pydantic import SecretStr
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
+from app.adapters.gms_key_term_extractor import GmsKeyTermExtractor
 from app.adapters.pgvector_index import PgvectorIndexRepository
 from app.adapters.rabbitmq_material_consumer import RabbitMaterialConsumer
 from app.adapters.remote_bge_embedding import RemoteBgeM3EmbeddingModel
@@ -42,6 +43,7 @@ class PptxIngestionRuntime:
     _embedding_client: AsyncClient
     _database_engine: AsyncEngine
     _bge_readiness_timeout_seconds: float
+    _key_term_extractor: GmsKeyTermExtractor | None = None
     _bge_readiness_failure: str | None = None
     _closed: bool = False
 
@@ -116,7 +118,11 @@ class PptxIngestionRuntime:
             try:
                 await self._embedding_client.aclose()
             finally:
-                await self._database_engine.dispose()
+                try:
+                    if self._key_term_extractor is not None:
+                        await self._key_term_extractor.aclose()
+                finally:
+                    await self._database_engine.dispose()
 
 
 def build_pptx_ingestion_runtime(settings: Settings) -> PptxIngestionRuntime:
@@ -159,12 +165,23 @@ def build_pptx_ingestion_runtime(settings: Settings) -> PptxIngestionRuntime:
         signer,
         timeout_seconds=settings.spring_callback_timeout_seconds,
     )
+    key_term_extractor: GmsKeyTermExtractor | None = None
+    if settings.key_term_extraction_enabled:
+        gms_api_key = _required_secret(settings.gms_api_key, "AI_WORKER_GMS_API_KEY")
+        key_term_extractor = GmsKeyTermExtractor(
+            api_key=gms_api_key,
+            model=settings.gms_model,
+            max_output_tokens=settings.gms_max_output_tokens,
+            max_prompt_chars=settings.gms_max_prompt_chars,
+            timeout_seconds=settings.gms_timeout_seconds,
+        )
     index_pptx_material = IndexPptxMaterial(
         asset_store,
         embedding_model,
         PgvectorIndexRepository(database_engine),
         validation_limits=PptxValidationLimits(source_max_bytes=settings.source_max_bytes),
         chunk_max_chars=settings.chunk_max_chars,
+        key_term_extractor=key_term_extractor,
     )
     return PptxIngestionRuntime(
         index_pptx_material=index_pptx_material,
@@ -176,6 +193,7 @@ def build_pptx_ingestion_runtime(settings: Settings) -> PptxIngestionRuntime:
         _embedding_client=embedding_client,
         _database_engine=database_engine,
         _bge_readiness_timeout_seconds=settings.bge_readiness_timeout_seconds,
+        _key_term_extractor=key_term_extractor,
     )
 
 

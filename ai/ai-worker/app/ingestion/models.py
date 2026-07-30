@@ -42,6 +42,18 @@ class ParsedPresentation:
 
 
 @dataclass(frozen=True, slots=True)
+class KeyTerm:
+    term: str
+    definition: str
+
+    def __post_init__(self) -> None:
+        if not self.term or not self.term.strip():
+            raise ValueError("term must not be empty")
+        if not self.definition or not self.definition.strip():
+            raise ValueError("definition must not be empty")
+
+
+@dataclass(frozen=True, slots=True)
 class MaterialChunk:
     chunk_index: int
     page: int
