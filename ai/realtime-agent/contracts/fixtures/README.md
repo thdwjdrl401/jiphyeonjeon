@@ -8,6 +8,9 @@
 
 schema 테스트가 fixture를 읽어 wire shape를 확인한다. 향후 Java producer·consumer도 동일 파일을 사용해
 언어 간 직렬화와 서명이 같은지 비교할 수 있다.
+started/final fixture는 AI 구현 검증용 후보이며 공유 소비 계약이 확정됐다는 의미가 아니다. 채택 전에는
+Spring·ai-api 계약 테스트의 정본으로 사용하지 않는다.
+
 
 ## 파일 구성
 

@@ -27,6 +27,9 @@ Redis 자막 entry는 다음 camelCase 필드를 사용한다.
   `startStreamElapsedMs`, `endStreamElapsedMs`, `boundaryReason`, `occurredAt`
 - completed: 위 식별 필드와 `type=caption.stream.completed`, `lastSequence`,
   `streamElapsedMs`, `reason=ROOM_DELETED`, `occurredAt`
+started/final field는 AI producer 구현 기준의 변경 중 후보다. 공유 채택 상태와 버전 논의는
+[`../../CONTRACT.md` 3절](../../CONTRACT.md)을 따른다.
+
 
 Spring callback body는 `contractVersion`, `eventId`, `eventType=LIVE_AGENT_STATUS`, `sessionId`,
 `lessonId`, `jobId`, `state`, `occurredAt`과 실패 시 `error`를 담는다. 요청 헤더는
