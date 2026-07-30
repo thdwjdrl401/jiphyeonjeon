@@ -33,10 +33,13 @@ import {
   type CameraOverlay,
 } from './cameraOverlay'
 import {
+  ANNOTATION_LASER_TOPIC,
   ANNOTATION_TOPIC,
   encodeAnnotationOp,
+  encodeLaserStroke,
   type AnnotationChange,
   type AnnotationOp,
+  type LaserStroke,
 } from './annotation'
 
 export type InstructorLiveKitConnectionState =
@@ -77,6 +80,11 @@ export interface InstructorLiveMedia extends InstructorLiveKitState {
    * 번호를 매기는 곳이 하나여야 한다.
    */
   publishAnnotation: (change: AnnotationChange) => void
+  /**
+   * 레이저 궤적을 내보낸다. 판서 op와 <b>다른 topic에 lossy로</b> 보낸다 — 초당 수십 건이고 1초면
+   * 사라지므로 유실돼도 무해하고, revision을 태우면 유실 감지가 의미를 잃는다.
+   */
+  publishLaser: (stroke: LaserStroke) => void
   /**
    * 새 참가자가 들어올 때마다 오른다. 판서를 들고 있는 화면이 이 값을 보고 <b>스냅샷을 다시 내보낸다</b> —
    * 새로 들어온 Egress는 그 전에 흐른 op를 받을 수 없어, 이것이 없으면 판서가 빈 채로 녹화된다.
@@ -489,6 +497,42 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
       })
   }, [])
 
+  /**
+   * 새 페이지에서 접속하면 <b>빈 스냅샷</b>을 한 번 보내 Egress를 강사의 실제 상태로 맞춘다.
+   *
+   * <p>강사가 새로고침하면 두 가지가 어긋난다.
+   *
+   * <ol>
+   *   <li>강사 화면의 판서는 사라지는데 Egress는 자기 문서를 계속 렌더한다 — 수강생과 녹화에만 남는다.
+   *       페이지가 죽는 순간이라 `clear`를 보낼 기회조차 없다.</li>
+   *   <li>{@code annotationRevisionRef}가 0부터 다시 시작해, 새로 그린 획이 revision 1·2·3…으로 나간다.
+   *       Egress의 문서 revision은 살아 있어(예: 47) <b>전부 중복으로 보고 버린다</b> — 강사 화면에는
+   *       그려지는데 수강생에게는 영영 나타나지 않는다.</li>
+   * </ol>
+   *
+   * <p>빈 스냅샷 하나가 둘 다 푼다. `snapshot`은 revision 검사를 건너뛰므로(applyAnnotationOp) Egress가
+   * 반드시 받아들이고, 그 값으로 revision이 내려앉아 이후 op가 정상 적용된다. `clear`로는 안 된다 —
+   * 그건 revision 검사를 받아 똑같이 버려진다.
+   *
+   * <p>이번 페이지에서 이미 무언가 publish했다면 보내지 않는다. 그때의 재연결은 새로고침이 아니라
+   * 네트워크 끊김이고, 강사는 판서를 들고 있으므로 비우면 안 된다.
+   */
+  useEffect(() => {
+    if (state.connectionState !== 'connected') return
+    if (annotationRevisionRef.current !== 0) return
+    publishAnnotation({ type: 'snapshot', elements: [] })
+  }, [publishAnnotation, state.connectionState])
+
+  const publishLaser = useCallback((stroke: LaserStroke) => {
+    const room = roomRef.current
+    if (!room || room.state !== 'connected') return
+    // reliable=false: 재전송하지 않는다. 늦게 도착한 잔상 조각은 이미 사라졌어야 할 점이라 오히려
+    // 궤적을 어지럽힌다. 실패도 조용히 넘긴다 — 레이저 한 조각이 강의를 막을 이유가 없다.
+    void room.localParticipant
+      .publishData(encodeLaserStroke(stroke), { reliable: false, topic: ANNOTATION_LASER_TOPIC })
+      .catch(() => undefined)
+  }, [])
+
   // 재연결하면 participant가 새로 만들어져 metadata가 비고, 합성 화면이 기본 배치로 돌아간다.
   // 강사가 옮겨 둔 자리를 다시 실어 준다.
   useEffect(() => {
@@ -512,13 +556,14 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
     cameraOverlay,
     moveCameraOverlay,
     publishAnnotation,
+    publishLaser,
     annotationAudienceRevision,
     applyingQuality,
     retry: () => setRetryCount((current) => current + 1),
     toggleCamera: () => { void toggleControl('camera') },
     toggleMicrophone: () => { void toggleControl('microphone') },
     toggleScreenShare: () => { void toggleControl('screenShare') },
-  }), [annotationAudienceRevision, applyingQuality, cameraOverlay, changeQuality, moveCameraOverlay, pendingControl, publishAnnotation, quality, sessionId, state, toggleControl])
+  }), [annotationAudienceRevision, applyingQuality, cameraOverlay, changeQuality, moveCameraOverlay, pendingControl, publishAnnotation, publishLaser, quality, sessionId, state, toggleControl])
 
   return (
     <InstructorLiveMediaContext.Provider value={value}>

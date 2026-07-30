@@ -33,7 +33,7 @@ declare global {
  */
 export const EXCALIDRAW_ASSET_PATH = '/excalidraw/'
 
-type ExcalidrawModule = typeof import('@excalidraw/excalidraw')
+export type ExcalidrawModule = typeof import('@excalidraw/excalidraw')
 
 let pending: Promise<ExcalidrawModule> | null = null
 
@@ -46,7 +46,18 @@ let pending: Promise<ExcalidrawModule> | null = null
 export function loadExcalidraw(): Promise<ExcalidrawModule> {
   if (!pending) {
     window.EXCALIDRAW_ASSET_PATH = EXCALIDRAW_ASSET_PATH
-    pending = import('@excalidraw/excalidraw')
+    /*
+     * 스타일시트를 <b>같이</b> 가져온다. 이걸 빼면 에디터가 뜨긴 하는데 툴바가 스타일 없이 무너지고
+     * `.excalidraw` 컨테이너가 자기 레이아웃 규칙을 못 받아 캔버스 배치까지 어긋난다 — "켜도 어떻게
+     * 쓰는지 모르겠고 그려지지도 않는" 상태가 된다. 실제로 그렇게 배포한 적이 있다.
+     *
+     * 정적 import로 올리면 이 모듈이 초기 그래프에 있어 CSS 144KB가 초기 로드에 실린다. 동적으로
+     * 가져와야 청크와 함께 내려온다.
+     */
+    pending = Promise.all([
+      import('@excalidraw/excalidraw'),
+      import('@excalidraw/excalidraw/index.css'),
+    ]).then(([module]) => module)
   }
   return pending
 }

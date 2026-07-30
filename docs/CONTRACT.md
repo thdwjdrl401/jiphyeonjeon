@@ -213,6 +213,17 @@ Spring 수신 endpoint를 구현하고 `SPRING_STATUS_CALLBACK_URL`로 주입하
 - **유실 처리**: `revision`이 이어지지 않으면 그 op를 버리고 다음 `snapshot`을 기다린다(반쪽짜리 판서를 녹화하지 않는다). 강사는 **참가자가 새로 접속할 때마다** 전체 `snapshot`을 다시 publish한다 — 도중에 재접속한 Egress의 유일한 복구 경로다.
 - **강사가 단일 writer**다. 그래서 CRDT 없이 `revision` 하나로 충분하고, 같은 op를 두 번 받아도 결과가 같다(멱등).
 - 수강생은 이 채널을 구독하지 않는다 — 합성 결과만 본다(ADR-0032). 따라서 판서는 Egress 프레임을 거쳐서만 수강생에게 도달한다.
+- **z-order**: 수신 측은 렌더 직전 요소의 `index`(Excalidraw fractional index)로 정렬한다. op에는 순서 정보가 없어 도착 순으로 재구성하면 나중에 온 요소가 항상 맨 위가 된다 — 강사가 아래에 깔아 둔 화이트보드가 수강생 화면에서 판서를 덮는다. 화이트보드(`liveclass-whiteboard`)는 정의상 배경이라 언제나 맨 아래다.
+- **강사 접속 시 빈 스냅샷**: 강사가 새 페이지에서 접속하면(새로고침 포함) `snapshot`을 한 번 보내 Egress를 강사의 실제 상태로 맞춘다. 그러지 않으면 ①강사 화면에는 없는 판서가 수강생·녹화에만 남고 ②강사의 revision이 0부터 다시 시작해 이후 op가 전부 "이미 본 op"로 버려진다(`snapshot`만 revision 검사를 건너뛴다).
+
+### 3-6c. 강사 FE → Egress 레이저 포인터 (LiveKit 데이터 채널) — FE 양쪽 구현됨
+- **topic** `annotation-laser`, **lossy**(`reliable: false`)로 publish. 판서 op와 <b>같은 채널에 섞지 않는다</b> — 초당 수십 건이고 1초면 사라지므로 revision을 태우면 유실 감지가 의미를 잃는다.
+- **payload** `{ "v": 1, "laser": { "phase": "start|move|end", "points": [{ "x", "y", "t" }], "zoom": number } }`
+- 레이저는 Excalidraw의 **scene 요소가 아니다**(사라지는 궤적을 별도 오버레이가 그린다). 그래서 `onChange`에 잡히지 않고 판서 op 경로로는 수강생에게 도달하지 않는다 — 강사 FE가 포인터 좌표를 직접 주워 보낸다.
+- **포인터를 누르고 있는 동안만** 보낸다(Excalidraw가 `button === "down"`일 때만 궤적을 만든다). 그냥 움직이는 것으로는 아무것도 그려지지 않아야 한다.
+- `t`는 강사 시계 기준 단조 시각이며 `LaserPointer`의 `pressure` 자리에 들어가 감쇠 계산에 쓰인다(Excalidraw도 `addPoint([x, y, performance.now()])`로 같게 한다). 수신 측 시계로 계산하면 시계 차이만큼 잔상 길이가 어긋난다.
+- `zoom`은 굵기 보정용이다. Excalidraw는 외곽선을 `size / zoom`으로 만든 뒤 viewport로 변환해(× zoom) 늘 화면 2px을 낸다 — 수신 측이 이 보정을 못 하면 강사 창이 작을수록 궤적이 가늘어진다.
+- 저장하지 않는다. 다시보기에는 Egress 합성 프레임에 **픽셀로** 남는다.
 
 ### 3-7. EC2 ai-worker → GPU bge-runtime (HTTP) — AI 구현됨
 
