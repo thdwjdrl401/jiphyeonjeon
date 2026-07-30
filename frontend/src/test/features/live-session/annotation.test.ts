@@ -6,6 +6,7 @@ import {
   annotationStageScale,
   decodeLaserStroke,
   encodeLaserStroke,
+  laserOutlinePath,
   laserPointFromPointer,
   applyAnnotationOp,
   decodeAnnotationOp,
@@ -224,6 +225,31 @@ describe('레이저 포인터', () => {
       v: 1, laser: { phase: 'move', points: [{ x: 1, y: 2, t: 3 }, { x: 'a', y: 2, t: 3 }, { x: 4, y: 5 }] },
     }))
     expect(decodeLaserStroke(payload)).toEqual({ phase: 'move', points: [{ x: 1, y: 2, t: 3 }], zoom: 1 })
+  })
+
+  /**
+   * 강사 화면은 Excalidraw가, 수강생 화면은 우리가 그린다. Excalidraw는 외곽선 점을 직선으로 잇지
+   * 않고 각 변의 <b>중점</b>을 지나는 2차 곡선으로 이으므로(`getSvgPathFromStroke`), 직선으로 이으면
+   * 같은 점을 써도 획이 조금 더 두껍고 끝이 더 뻗는다 — 레이저가 살짝 밀려 보인다.
+   */
+  describe('외곽선 path — Excalidraw와 같은 곡선으로 잇는다', () => {
+    it('첫 점에서 시작해 중점을 지나는 곡선으로 잇고 닫는다', () => {
+      expect(laserOutlinePath([[0, 0], [10, 0], [10, 10], [0, 10]]))
+        .toBe('M0.00,0.00 Q10.00,0.00 10.00,5.00 T5.00,10.00 Z')
+    })
+
+    it('마지막 점도 중점 계산에 쓴다 — 빼면 끝이 짧아진다', () => {
+      const path = laserOutlinePath([[0, 0], [2, 0], [4, 0], [6, 0], [8, 0]])
+
+      // 마지막 두 점 (6,0)·(8,0)의 중점
+      expect(path).toContain('7.00,0.00')
+    })
+
+    /** Excalidraw도 점이 4개 미만이면 아무것도 그리지 않는다. 우리만 그리면 없어야 할 점이 남는다. */
+    it('점이 4개 미만이면 아무것도 그리지 않는다', () => {
+      expect(laserOutlinePath([])).toBe('')
+      expect(laserOutlinePath([[0, 0], [1, 1], [2, 2]])).toBe('')
+    })
   })
 })
 

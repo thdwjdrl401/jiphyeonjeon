@@ -21,7 +21,9 @@ const liveKit = vi.hoisted(() => {
     setScreenShareEnabled: vi.fn(async (enabled: boolean) => {
       localParticipant.isScreenShareEnabled = enabled
     }),
-    publishData: vi.fn(async () => {}),
+    publishData: vi.fn<(payload: Uint8Array, options?: { topic?: string }) => Promise<void>>(
+      async () => {},
+    ),
     setMetadata: vi.fn(async () => {}),
     metadata: undefined as string | undefined,
   }

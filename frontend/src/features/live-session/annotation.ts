@@ -45,6 +45,36 @@ export const LASER_DECAY_LENGTH = 50
 export const LASER_COLOR = 'red'
 
 /**
+ * 레이저 외곽선을 Excalidraw와 <b>같은 모양의</b> path로 만든다(`getSvgPathFromStroke`).
+ *
+ * <p>Excalidraw는 외곽선 점을 직선으로 잇지 않는다. 각 변의 <b>중점</b>을 지나는 2차 곡선(`Q`·`T`)으로
+ * 이어 모서리를 깎는다. 직선으로 이으면 같은 점을 써도 획이 조금 더 두껍고 <b>끝이 조금 더 뻗는다</b> —
+ * 눈에는 레이저가 강사가 가리킨 곳에서 살짝 밀린 것으로 읽힌다. 강사 화면은 Excalidraw가, 수강생
+ * 화면은 우리가 그리므로 이 차이가 그대로 두 화면의 차이가 된다.
+ *
+ * <p>점이 4개 미만이면 빈 문자열이다 — Excalidraw도 그때는 아무것도 그리지 않는다.
+ */
+export function laserOutlinePath(outline: readonly (readonly number[])[]): string {
+  const length = outline.length
+  if (length < 4) return ''
+
+  const mid = (a: number, b: number) => ((a + b) / 2).toFixed(2)
+  const first = outline[0]
+  const second = outline[1]
+  const third = outline[2]
+
+  let path = `M${first[0].toFixed(2)},${first[1].toFixed(2)}`
+    + ` Q${second[0].toFixed(2)},${second[1].toFixed(2)}`
+    + ` ${mid(second[0], third[0])},${mid(second[1], third[1])} T`
+  for (let i = 2; i < length - 1; i += 1) {
+    const current = outline[i]
+    const next = outline[i + 1]
+    path += `${mid(current[0], next[0])},${mid(current[1], next[1])} `
+  }
+  return `${path}Z`
+}
+
+/**
  * Excalidraw가 `LaserPointer`에 넘기는 옵션 그대로. 강사 화면은 Excalidraw가 그리고 수강생 화면은
  * 우리가 그리므로, <b>같은 라이브러리에 같은 옵션</b>을 주어야 두 화면이 같아진다.
  *
