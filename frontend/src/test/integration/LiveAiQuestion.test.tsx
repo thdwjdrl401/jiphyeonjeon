@@ -45,8 +45,7 @@ describe('AI 질의응답 화면 연결', () => {
     renderAt('/instructor/live-sessions/ses-security-live/classroom')
 
     await openAiPanel(user)
-    await user.type(screen.getByRole('textbox', { name: 'AI에게 할 질문' }), 'SecurityContext가 무엇인가요?')
-    await user.click(screen.getByRole('button', { name: '질문하기' }))
+    await user.type(screen.getByRole('textbox', { name: 'AI에게 할 질문' }), 'SecurityContext가 무엇인가요?{Enter}')
 
     // 서버는 세션 스코프다 — lessonId를 넘기면 다른 강의의 근거를 열람할 여지가 생긴다(ADR-0047 §1b).
     expect(askLiveAi).toHaveBeenCalledWith(
@@ -55,6 +54,8 @@ describe('AI 질의응답 화면 연결', () => {
       expect.objectContaining({ onEvent: expect.any(Function), signal: expect.any(AbortSignal) }),
     )
 
+    // 내 질문은 응답을 기다리지 않고 말풍선으로 올라간다.
+    expect(screen.getByText('SecurityContext가 무엇인가요?')).toBeInTheDocument()
     // 델타가 누적돼 한 문단으로 자란다.
     expect(await screen.findByText(/요청이 끝나면 컨텍스트가 정리됩니다\./, undefined, { timeout: 3000 })).toBeInTheDocument()
     // 하드코딩 문구가 아니라 실제 sources로 그린 근거 카드다.
@@ -71,6 +72,6 @@ describe('AI 질의응답 화면 연결', () => {
 
     expect(screen.getAllByText(/다시보기 AI 질문은 아직 지원하지 않습니다/).length).toBeGreaterThan(0)
     expect(screen.getByRole('textbox', { name: 'AI에게 할 질문' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: '질문하기' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '전송' })).toBeDisabled()
   })
 })
