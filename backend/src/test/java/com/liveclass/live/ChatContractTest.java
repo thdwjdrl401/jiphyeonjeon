@@ -269,6 +269,11 @@ class ChatContractTest {
     private String[] createStartedSession(Cookie[] auth) throws Exception {
         String cid = json(write(post("/api/instructor/curriculums"), auth, "{\"title\":\"채팅\"}")
                 .andReturn()).get("curriculumId").asString();
+        // 게시 선행 조건(ADR-0006): 섹션·강의가 각각 1개 이상 있어야 발행된다.
+        String seedSectionId = json(write(post("/api/instructor/curriculums/" + cid + "/sections"), auth,
+                "{\"title\":\"게시용 섹션\"}").andExpect(status().isCreated()).andReturn()).get("sectionId").asString();
+        write(post("/api/instructor/sections/" + seedSectionId + "/lessons"), auth,
+                "{\"title\":\"게시용 강의\"}").andExpect(status().isCreated());
         write(post("/api/instructor/curriculums/" + cid + "/publish"), auth, null).andExpect(status().isOk());
         String sid = json(write(post("/api/instructor/curriculums/" + cid + "/sections"), auth, "{\"title\":\"s\"}")
                 .andReturn()).get("sectionId").asString();

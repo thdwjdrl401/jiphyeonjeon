@@ -1,6 +1,7 @@
 import architectureCurriculumImage from '@/assets/images/curriculum-architecture.svg'
 import dataCurriculumImage from '@/assets/images/curriculum-data.svg'
 import springCurriculumImage from '@/assets/images/curriculum-spring.svg'
+import { evaluatePublishReadiness } from '@/features/curriculum/publishPreconditions'
 import { ApiError } from '@/shared/api/client'
 import type { AuthUser } from '@/features/auth/types'
 import type {
@@ -35,7 +36,6 @@ const deletedLessonIds = new Set<string>()
 const deletedSectionIds = new Set<string>()
 // 게시/게시취소로 바뀐 레슨 상태를 세션 동안 기억한다. seed는 매 조회마다 다시 만들어지므로
 // seed를 직접 고치지 않고 이 덮어쓰기 맵을 우선한다.
-const lessonStatusOverrides = new Map<string, LessonStatus>()
 
 export interface MockCurriculumEntity {
   curriculumId: string
@@ -224,7 +224,6 @@ export function resetMockDatabase() {
   resetMockEnrollmentStore()
   deletedLessonIds.clear()
   deletedSectionIds.clear()
-  lessonStatusOverrides.clear()
   mockCurriculumEntities.splice(0, mockCurriculumEntities.length, ...initialCurriculumEntities.map((curriculum) => ({ ...curriculum })))
   for (const curriculum of mockCurriculumEntities) {
     curriculum.materials = initialCurriculumMaterials.get(curriculum.curriculumId)?.map((material) => ({ ...material })) ?? []
@@ -298,13 +297,18 @@ export function publishMockCurriculum(curriculumId: string) {
   if (curriculum.lifecycleStatus !== 'DRAFT') {
     throw new ApiError('DRAFT 상태에서만 발행할 수 있습니다.', 409, 'CURRICULUM_STATE_CONFLICT')
   }
-  for (const section of buildMockCurriculumOutline(curriculum)) {
-    for (const lesson of section.lessons) {
-      if (!lessonStatusOverrides.has(lesson.lessonId)) {
-        lessonStatusOverrides.set(lesson.lessonId, lesson.status)
-      }
-    }
+  // 게시 선행 조건도 서버와 같게 본다(ADR-0006). mock이 느슨하면 "화면에선 됐는데 실서버에서
+  // 409"가 되고, mock 검증이 정책 문제를 가린다 — ADR-0005에서 겪은 divergence와 같은 함정이다.
+  const outline = buildMockCurriculumOutline(curriculum)
+  const readiness = evaluatePublishReadiness(
+    outline.length,
+    outline.reduce((sum, section) => sum + section.lessons.length, 0),
+  )
+  if (!readiness.canPublish) {
+    throw new ApiError(readiness.reason!, 409, 'CURRICULUM_NOT_PUBLISHABLE')
   }
+  // 예전에는 여기서 레슨 상태를 먼저 고정했다 — 커리큘럼을 게시하면 레슨까지 딸려 올라가
+  // 실 서버와 어긋났기 때문이다(ADR-0002). 레슨 상태 축이 없어져 그 보정이 필요 없다(ADR-0005).
   curriculum.lifecycleStatus = 'PUBLISHED'
   curriculum.catalogVisible = true
   return curriculum
@@ -400,9 +404,10 @@ export function buildMockCurriculumOutline(curriculum: MockCurriculumEntity): Cu
         lessonId,
         title: lessonSeed?.title ?? `${lessonOrder}강. 학습 주제 ${lessonOrder}`,
         order: lessonOrder,
-        status: lessonStatusOverrides.get(lessonId)
-          ?? lessonSeed?.status
-          ?? (curriculum.lifecycleStatus === 'DRAFT' ? 'DRAFT' : 'PUBLISHED'),
+        // 레슨은 만들어지는 순간 게시 상태다 — 커리큘럼이 초안이어도 마찬가지이고, 외부 노출은
+        // curriculum.lifecycleStatus가 막는다(ADR-0005). 실제 서버와 같은 모델을 지켜야
+        // mock 검증이 정책 문제를 가리지 않는다.
+        status: 'PUBLISHED',
         scheduledAt: availability.liveSession?.scheduledAt ?? null,
         durationMs: 3_600_000,
         ...availability,
@@ -494,14 +499,6 @@ export function findMockLesson(lessonId: string) {
 }
 
 // 강사의 레슨 게시/게시취소를 mock 상태에 반영한다. 존재하지 않는 레슨은 실제 서버와 같은 404로 거절한다.
-export function setMockLessonStatus(lessonId: string, status: LessonStatus) {
-  if (!findMockLesson(lessonId)) {
-    throw new ApiError('강의를 찾을 수 없습니다.', 404, 'LESSON_NOT_FOUND')
-  }
-  lessonStatusOverrides.set(lessonId, status)
-  return { lessonId, status }
-}
-
 // 강사의 강의/섹션 삭제를 mock 상태에 반영한다. 존재하지 않으면 실제 서버와 같은 404로 거절한다.
 export function deleteMockLesson(lessonId: string) {
   if (!findMockLesson(lessonId)) {

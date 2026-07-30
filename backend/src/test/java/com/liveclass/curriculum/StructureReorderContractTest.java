@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -105,10 +106,20 @@ class StructureReorderContractTest {
         String sectionB = createSection(auth, curriculumId, "B");
         String a1 = createLesson(auth, sectionA, "a1");
         String b1 = createLesson(auth, sectionB, "b1");
-        publishLesson(auth, a1);
-        publishLesson(auth, b1);
+        addLesson(auth, a1);
+        addLesson(auth, b1);
+        // 게시 선행 조건(ADR-0006): 섹션·강의가 각각 1개 이상 있어야 발행된다.
+        String seedSectionId = json(write(post("/api/instructor/curriculums/" + curriculumId + "/sections"), auth,
+                "{\"title\":\"게시용 섹션\"}").andExpect(status().isCreated()).andReturn()).get("sectionId").asString();
+        String seedLessonId = json(write(post("/api/instructor/sections/" + seedSectionId + "/lessons"), auth,
+                "{\"title\":\"게시용 강의\"}").andExpect(status().isCreated()).andReturn()).get("lessonId").asString();
         write(post("/api/instructor/curriculums/" + curriculumId + "/publish"), auth, null)
                 .andExpect(status().isOk());
+        // 발행 조건만 채우려고 만든 것이라 지운다 — 이 테스트가 세는 강의·목차 인덱스를 원래대로 둔다.
+        write(delete("/api/instructor/lessons/" + seedLessonId), auth, null)
+                .andExpect(status().isNoContent());
+        write(delete("/api/instructor/sections/" + seedSectionId), auth, null)
+                .andExpect(status().isNoContent());
 
         syncWithDatabase();
         mockMvc.perform(get("/api/curriculums/" + curriculumId))
@@ -409,9 +420,7 @@ class StructureReorderContractTest {
         return json(result).get("lessonId").asString();
     }
 
-    private void publishLesson(Cookie[] auth, String lessonId) throws Exception {
-        write(post("/api/instructor/lessons/" + lessonId + "/publish"), auth, null)
-                .andExpect(status().isOk());
+    private void addLesson(Cookie[] auth, String lessonId) throws Exception {
     }
 
     /** 변경 요청: CSRF 핸드셰이크(쿠키+헤더) + 로그인 세션 쿠키를 함께 실어 보낸다. */

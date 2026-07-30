@@ -280,9 +280,10 @@ class LiveCaptionWebSocketTest {
 
         String[] createStartedSession() throws Exception {
             String cid = field(post("/api/instructor/curriculums", "{\"title\":\"cap\"}"), "curriculumId");
-            post("/api/instructor/curriculums/" + cid + "/publish", null);
             String sid = field(post("/api/instructor/curriculums/" + cid + "/sections", "{\"title\":\"s\"}"), "sectionId");
             String lessonId = field(post("/api/instructor/sections/" + sid + "/lessons", "{\"title\":\"l\"}"), "lessonId");
+            // 게시는 섹션·강의가 생긴 뒤에 한다 — 게시 선행 조건(ADR-0006).
+            post("/api/instructor/curriculums/" + cid + "/publish", null);
             String sessionId = field(post("/api/instructor/lessons/" + lessonId + "/live-sessions", null), "sessionId");
             String instructorId = field(get("/api/auth/me"), "userId");
             LiveStartTestSupport.stubInstructorPublishing(roomControl, sessionId, instructorId);

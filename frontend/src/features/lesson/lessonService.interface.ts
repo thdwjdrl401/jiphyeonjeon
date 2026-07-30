@@ -68,6 +68,4 @@ export interface LessonService {
   saveLesson: (request: SaveLessonRequest) => Promise<{ lessonId: string; sectionId: string; title: string; description: string; status: LessonStatus }>
   deleteLessonMaterial: (lessonId: string, materialId: string) => Promise<void>
   prepareLessonAi: (lessonId: string) => Promise<void>
-  publishLesson: (lessonId: string) => Promise<LessonStatusResult>
-  unpublishLesson: (lessonId: string) => Promise<LessonStatusResult>
 }

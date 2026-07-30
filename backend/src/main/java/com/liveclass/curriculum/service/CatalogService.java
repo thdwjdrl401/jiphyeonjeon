@@ -42,7 +42,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * 공개 커리큘럼 탐색(카탈로그). PUBLISHED만 노출한다.
+ * 공개 커리큘럼 탐색(카탈로그). 커리큘럼 lifecycleStatus=PUBLISHED만 노출한다 — 레슨 상태는 보지 않는다(ADR-0005).
  * 강사·레슨·수강·라이브 정보는 각 모듈의 포트(InstructorDirectory·LessonDirectory·
  * EnrollmentDirectory·LiveSessionDirectory)로만 얻는다 — 타 모듈 엔티티에 직접 접근하지 않는다
  * (모듈 경계, AGENTS.md).
@@ -208,9 +208,6 @@ public class CatalogService {
         if (!"OWNER_INSTRUCTOR".equals(relationship) && !"ENROLLED".equals(relationship)) {
             throw new LessonAccessDeniedException("이 강의를 수강해야 열 수 있습니다.");
         }
-        if ("ENROLLED".equals(relationship) && !"PUBLISHED".equals(lesson.status())) {
-            throw new LessonNotFoundException("레슨을 찾을 수 없습니다.");
-        }
 
         return new CatalogLessonDetail(
                 lesson.lessonId(),
@@ -270,7 +267,13 @@ public class CatalogService {
                 .toList();
     }
 
-    /** 공개 목차: 섹션 순서대로, 각 섹션의 PUBLISHED 레슨만 노출한다. */
+    /**
+     * 공개 목차: 섹션 순서대로 그 섹션의 레슨 전부를 노출한다.
+     *
+     * <p>레슨 상태로 거르지 않는다 — 레슨에는 초안이 없고 공개 여부는 커리큘럼 lifecycleStatus만으로
+     * 결정된다(ADR-0005). 이 메서드에 도달했다는 것은 이미 커리큘럼이 PUBLISHED라는 뜻이므로
+     * (호출자가 findByIdAndLifecycleStatus로 걸렀다) 그 안의 레슨은 모두 공개 대상이다.
+     */
     private List<CatalogOutlineSection> buildOutline(List<Section> sections, String relationship) {
         if (sections.isEmpty()) {
             return List.of();
@@ -278,7 +281,7 @@ public class CatalogService {
         List<UUID> sectionIds = sections.stream().map(Section::getId).toList();
 
         Map<UUID, List<LessonOutlineView>> lessonsBySection =
-                lessonDirectory.findPublishedBySections(sectionIds).stream()
+                lessonDirectory.findBySections(sectionIds).stream()
                         .collect(Collectors.groupingBy(LessonOutlineView::sectionId));
 
         // 레슨마다 라이브 세션을 묻지 않도록 목차 전체분을 한 번에 받아 온다.
@@ -324,26 +327,22 @@ public class CatalogService {
                 durationMs,
                 liveSession,
                 replayStatus,
-                lessonAccess(lesson, liveSession, replayStatus, relationship),
+                lessonAccess(liveSession, replayStatus, relationship),
                 null
         );
     }
 
     /**
      * 레슨을 열 수 있는지와, 열면 어디로 갈지.
-     * 목차에 담기는 레슨은 이미 PUBLISHED만 걸러져 있지만, 게시 상태 판정은 여기서 한 번 더 명시한다 —
-     * 나중에 강사에게 미게시 레슨까지 보여주게 되어도 규칙이 한 곳에 남도록.
+     * 판정 축은 <b>관계 하나</b>다 — 레슨 상태로는 막지 않는다(ADR-0005). 커리큘럼이 공개됐다면
+     * 그 안의 레슨은 수강생에게 전부 열린다.
      */
-    private CatalogLessonAccess lessonAccess(LessonOutlineView lesson,
-                                             CatalogLiveSession liveSession,
+    private CatalogLessonAccess lessonAccess(CatalogLiveSession liveSession,
                                              String replayStatus,
                                              String relationship) {
         boolean canOpen = "OWNER_INSTRUCTOR".equals(relationship) || "ENROLLED".equals(relationship);
         if (!canOpen) {
             return CatalogLessonAccess.blocked("ENROLLMENT_REQUIRED");
-        }
-        if ("ENROLLED".equals(relationship) && !"PUBLISHED".equals(lesson.status())) {
-            return CatalogLessonAccess.blocked("LESSON_NOT_PUBLISHED");
         }
         return CatalogLessonAccess.open(destination(liveSession, replayStatus));
     }
@@ -511,7 +510,7 @@ public class CatalogService {
         List<UUID> sectionIds = sections.stream().map(Section::getId).toList();
 
         Map<UUID, List<UUID>> lessonsByCurriculum = new HashMap<>();
-        for (LessonOutlineView lesson : lessonDirectory.findPublishedBySections(sectionIds)) {
+        for (LessonOutlineView lesson : lessonDirectory.findBySections(sectionIds)) {
             UUID curriculumId = sectionToCurriculum.get(lesson.sectionId());
             if (curriculumId != null) {
                 lessonsByCurriculum.computeIfAbsent(curriculumId, k -> new ArrayList<>()).add(lesson.lessonId());

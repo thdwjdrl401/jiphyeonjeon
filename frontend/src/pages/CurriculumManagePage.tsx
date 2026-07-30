@@ -7,7 +7,6 @@ import CurriculumPublishPanel from '@/features/curriculum/CurriculumPublishPanel
 import { type CurriculumImageSelection } from '@/features/curriculum/CurriculumImageField'
 import {
   deleteCurriculum,
-  deleteLesson,
   deleteSection,
   getCurriculumManagementStructure,
   getInstructorCurriculum,
@@ -16,8 +15,8 @@ import {
   type CurriculumManagementSection,
   type InstructorCurriculumResponse,
 } from '@/features/curriculum/curriculumManagementService'
+import { evaluatePublishReadiness } from '@/features/curriculum/publishPreconditions'
 import type { CurriculumMaterial } from '@/features/curriculum/types'
-import { publishLesson } from '@/features/lesson/lessonService'
 import InstructorEnrollmentRoster from '@/features/enrollment/InstructorEnrollmentRoster'
 import { ApiError } from '@/shared/api/client'
 import { isNotImplemented } from '@/shared/api/notImplemented'
@@ -25,7 +24,7 @@ import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
 import Tabs, { tabPanelProps, type TabItem } from '@/shared/ui/Tabs'
 import { useToast } from '@/shared/ui/Toast'
-import { InlineNotice, MetricCard, PageHeader, Panel, StatusBadge } from '@/shared/ui/WorkspaceUi'
+import { InlineNotice, MetricCard, PageHeader, Panel } from '@/shared/ui/WorkspaceUi'
 
 interface CurriculumDraftState {
   created?: boolean
@@ -302,24 +301,20 @@ function CurriculumManageEditor({
   }
 
   /**
-   * 게시 카드의 주 동작. 수강생에게 보이려면 커리큘럼과 강의가 모두 PUBLISHED여야 하므로
-   * (ADR-0002), 초안 강의를 올리고 커리큘럼 공개까지 한 번에 끝낸다. 서버 축은 여전히 분리돼
-   * 있지만(ADR-0021) 강사가 두 번 눌러야 하는 일은 없어야 한다 — 한 번 눌러 "공개" 상태에 도달한다.
+   * 게시 카드의 주 동작 — 커리큘럼 하나만 공개 상태로 바꾼다.
    *
-   * @param includeLessons false면 초안 강의는 그대로 두고 커리큘럼만 공개한다(일부만 먼저 공개하는 경우).
+   * 예전에는 초안 강의를 먼저 일괄 게시한 뒤 커리큘럼을 공개하는 2단 오케스트레이션이었다
+   * (ADR-0002). 레슨에서 초안 상태가 없어졌으므로(ADR-0005) 공개 축이 커리큘럼 하나로 줄었고,
+   * 이 버튼을 누르는 순간 커리큘럼과 그 안의 모든 강의가 함께 공개된다.
    */
-  const runPublish = async (includeLessons: boolean) => {
-    const draftLessons = includeLessons
-      ? sections.flatMap((section) => section.lessons.filter((lesson) => lesson.status === 'DRAFT'))
-      : []
-    const willPublishCurriculum = isNewDraft
-    if (draftLessons.length === 0 && !willPublishCurriculum) return
-
-    const plan = [
-      draftLessons.length > 0 ? `초안 강의 ${draftLessons.length}개` : null,
-      willPublishCurriculum ? '커리큘럼' : null,
-    ].filter(Boolean).join('와 ')
-    if (!window.confirm(`${plan}을(를) 게시할까요? 게시하면 수강생에게 바로 공개됩니다.`)) return
+  const runPublish = async () => {
+    if (!isNewDraft) return
+    // 버튼이 잠겨 있어도 한 번 더 본다 — 낡은 화면 상태로 요청이 새는 것을 막는다.
+    if (!publishReadiness.canPublish) {
+      setSaveError(publishReadiness.reason ?? '')
+      return
+    }
+    if (!window.confirm('커리큘럼을 게시할까요? 게시하면 안에 있는 강의가 모두 수강생에게 공개됩니다.')) return
 
     setSaveError('')
     // 저장이 실패한 채로 게시하면 화면에 보이는 내용과 공개되는 내용이 갈린다 — 게시를 멈춘다.
@@ -328,49 +323,22 @@ function CurriculumManageEditor({
       return
     }
 
-    // 일부만 실패해도 나머지는 게시된 채로 둔다 — 전부 되돌릴 방법이 없으므로 결과를 그대로 알린다.
-    const results = await Promise.allSettled(draftLessons.map((lesson) => publishLesson(lesson.lessonId)))
-    const lessonFailed = results.filter((result) => result.status === 'rejected').length
-    const lessonPublished = results.length - lessonFailed
-    const visibleLessonCount = publishedLessonCount + lessonPublished
-
-    // 목차가 빈 커리큘럼을 공개하지 않는다 — 강의가 하나도 안 올라갔으면 공개를 보류한다.
-    if (willPublishCurriculum && totalLessonCount > 0 && visibleLessonCount === 0) {
+    try {
+      await publishCurriculum(curriculumId)
+      setAutosave('saved')
       invalidateAfterPublish()
-      toast.error('강의를 게시하지 못해 커리큘럼 공개를 중단했습니다. 잠시 후 다시 시도해 주세요.')
-      return
+      toast.success(`커리큘럼을 게시했습니다. 강의 ${totalLessonCount}개가 수강생에게 공개됩니다.`)
+    } catch (error) {
+      // 상태 충돌(이미 발행됨 등)은 서버 메시지가 원인을 정확히 말해준다 — 뭉개면 사용자가
+      // 같은 버튼을 계속 누르게 된다. 재조회로 화면 상태도 정합시킨다.
+      // 서버가 거절한 이유는 서버 메시지가 가장 정확하다(선행 조건 미충족·상태 충돌 모두).
+      // 뭉개면 사용자가 같은 버튼을 계속 누른다.
+      const serverExplained = error instanceof ApiError
+        && (error.code === 'CURRICULUM_NOT_PUBLISHABLE' || error.code === 'CURRICULUM_STATE_CONFLICT')
+      setSaveError(serverExplained ? (error as ApiError).message : '커리큘럼을 게시하지 못했습니다.')
+      invalidateAfterPublish()
+      toast.error(serverExplained ? (error as ApiError).message : '커리큘럼을 게시하지 못했습니다.')
     }
-
-    let curriculumPublished = false
-    if (willPublishCurriculum) {
-      try {
-        await publishCurriculum(curriculumId)
-        curriculumPublished = true
-        setAutosave('saved')
-      } catch (error) {
-        // 상태 충돌(이미 발행됨 등)은 서버 메시지가 원인을 정확히 말해준다 — 뭉개면 사용자가
-        // 같은 버튼을 계속 누르게 된다. 재조회로 화면 상태도 정합시킨다.
-        setSaveError(error instanceof ApiError && error.code === 'CURRICULUM_STATE_CONFLICT'
-          ? error.message
-          : '커리큘럼을 게시하지 못했습니다.')
-      }
-    }
-
-    invalidateAfterPublish()
-
-    if (lessonFailed > 0) {
-      toast.error(lessonPublished > 0
-        ? `강의 ${lessonPublished}개를 게시했고 ${lessonFailed}개는 실패했습니다.`
-        : '강의를 게시하지 못했습니다.')
-      return
-    }
-    if (willPublishCurriculum && !curriculumPublished) {
-      toast.error('커리큘럼을 게시하지 못했습니다.')
-      return
-    }
-    toast.success(curriculumPublished
-      ? `커리큘럼을 게시했습니다. 강의 ${visibleLessonCount}개가 수강생에게 공개됩니다.`
-      : `강의 ${lessonPublished}개를 게시했습니다.`)
   }
 
   const updateSection = (sectionId: string, field: SectionInfoField, value: string) => {
@@ -400,19 +368,6 @@ function CurriculumManageEditor({
     ])
   }
 
-  const removeLesson = async (sectionId: string, lessonId: string) => {
-    if (!window.confirm('이 강의를 삭제할까요? 되돌릴 수 없습니다.')) return
-    try {
-      await deleteLesson(lessonId)
-      // 로컬 state를 직접 고치면 자동저장이 옛 structureVersion으로 돌아 409(구조 변경)가 난다.
-      // 서버 구조를 다시 읽어(structureKey 변경) 최신 버전으로 다시 그리고 사이드바도 갱신한다.
-      queryClient.invalidateQueries({ queryKey: ['curriculum-management', curriculumId] })
-      queryClient.invalidateQueries({ queryKey: ['curriculum-lesson-navigation', curriculumId] })
-      toast.success('강의를 삭제했습니다.')
-    } catch {
-      toast.error('강의를 삭제하지 못했습니다.')
-    }
-  }
 
   const removeSection = async (sectionId: string, lessonCount: number) => {
     // 강의가 남은 섹션은 서버가 409(SECTION_NOT_EMPTY)로 막는다 — 실수로 강의까지 지우지 않도록.
@@ -520,14 +475,13 @@ function CurriculumManageEditor({
     setLessonDropTarget(null)
   }
 
-  // 게시 카드에서 "무엇이 실제로 공개되는지"를 보여 준다 — 공개 목차는 PUBLISHED 강의만 담는다.
+  // 게시 카드에서 "무엇이 공개되는지"를 보여 준다. 강의 수는 커리큘럼 전체 기준이고
+  // 게시 선행 조건(섹션·강의 각 1개 이상, ADR-0006)도 이 값으로 판정한다.
   const allLessons = sections.flatMap((section) => section.lessons)
   const totalLessonCount = allLessons.length
-  const draftLessonCount = allLessons.filter((lesson) => lesson.status === 'DRAFT').length
-  const publishedLessonCount = allLessons.filter((lesson) => lesson.status === 'PUBLISHED').length
-  // 수강생에게 실제로 보이려면 두 축이 모두 PUBLISHED여야 한다(ADR-0002) — 카탈로그는 PUBLISHED
-  // 커리큘럼만 열고, 그 안에서 PUBLISHED 강의만 목차에 담는다.
-  const isPubliclyVisible = storedCurriculum.lifecycleStatus === 'PUBLISHED' && publishedLessonCount > 0
+  const publishReadiness = evaluatePublishReadiness(sections.length, totalLessonCount)
+  // 공개 여부는 커리큘럼 상태만으로 결정된다(ADR-0005).
+  const isPubliclyVisible = storedCurriculum.lifecycleStatus === 'PUBLISHED'
 
   return (
     <div className="workspace-page">
@@ -602,13 +556,14 @@ function CurriculumManageEditor({
                         >
                           <span className="lesson-drag-handle" aria-hidden="true">⋮⋮</span>
                           <span className="lesson-order">{lessonIndex + 1}</span>
-                          <div className="lesson-info"><strong>{lesson.title}</strong><small>{lesson.status}</small></div>
-                          {/* 배지와 링크·버튼을 한 flex 컨테이너에 모아 같은 수평선에 정렬한다(각각 별도 그리드 칼럼이던 시절엔 어긋났다). */}
+                          <div className="lesson-info"><strong>{lesson.title}</strong></div>
+                          {/* 상태 배지는 없다 — 레슨 상태가 PUBLISHED 하나뿐이라 표시할 것이 없다(ADR-0005).
+                              삭제도 여기 두지 않는다: 목록에서 한 번의 실수로 강의가 사라지던 자리라
+                              수정 화면 안으로 옮겼다. */}
                           <div className="lesson-actions">
-                            <StatusBadge tone={lesson.status === 'PUBLISHED' ? 'success' : lesson.status === 'READY' ? 'warning' : 'neutral'}>{lesson.status}</StatusBadge>
                             <div className="row-actions">
                               <Link to={instructorPaths.lesson(curriculumId, section.sectionId, lesson.lessonId)}>상세</Link>
-                              <button className="text-button" type="button" onClick={() => void removeLesson(section.sectionId, lesson.lessonId)}>삭제</button>
+                              <Link to={instructorPaths.editLesson(curriculumId, section.sectionId, lesson.lessonId)}>수정</Link>
                             </div>
                           </div>
                         </li>
@@ -625,11 +580,10 @@ function CurriculumManageEditor({
           <CurriculumPublishPanel
             isNewDraft={isNewDraft}
             lifecycleView={lifecycleView}
-            draftLessonCount={draftLessonCount}
-            publishedLessonCount={publishedLessonCount}
             totalLessonCount={totalLessonCount}
+            readiness={publishReadiness}
             isPubliclyVisible={isPubliclyVisible}
-            onPublish={(includeLessons) => void runPublish(includeLessons)}
+            onPublish={() => void runPublish()}
             canDelete={isNewDraft}
             isDeleting={isDeleting}
             onDelete={() => void removeCurriculum()}

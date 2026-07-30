@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -58,7 +59,7 @@ class CatalogViewerContextContractTest {
     void owner_instructor_can_manage_and_open_lessons() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
-        publishLesson(instructor, cid, "1강");
+        addLesson(instructor, cid, "1강");
 
         write(get("/api/curriculums/" + cid), instructor, null)
                 .andExpect(status().isOk())
@@ -80,7 +81,7 @@ class CatalogViewerContextContractTest {
     void outline_lesson_status_uses_contract_field_name() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
-        publishLesson(instructor, cid, "1강");
+        addLesson(instructor, cid, "1강");
 
         mockMvc.perform(get("/api/curriculums/" + cid))
                 .andExpect(status().isOk())
@@ -104,7 +105,7 @@ class CatalogViewerContextContractTest {
     void unenrolled_student_can_enroll_but_cannot_open_lessons() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
-        publishLesson(instructor, cid, "1강");
+        addLesson(instructor, cid, "1강");
         Cookie[] student = loginAs("STUDENT");
 
         write(get("/api/curriculums/" + cid), student, null)
@@ -134,7 +135,7 @@ class CatalogViewerContextContractTest {
     void approved_student_can_open_lessons() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
-        publishLesson(instructor, cid, "1강");
+        addLesson(instructor, cid, "1강");
         Cookie[] student = loginAs("STUDENT");
         approveEnrollment(instructor, student, cid);
 
@@ -150,7 +151,7 @@ class CatalogViewerContextContractTest {
     void scheduled_live_session_appears_on_outline_lesson() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
-        String lessonId = publishLesson(instructor, cid, "라이브 예정 강의");
+        String lessonId = addLesson(instructor, cid, "라이브 예정 강의");
         write(post("/api/instructor/lessons/" + lessonId + "/live-sessions"), instructor,
                 "{\"scheduledAt\":\"2026-08-01T10:00:00+09:00\"}")
                 .andExpect(status().isCreated());
@@ -202,17 +203,26 @@ class CatalogViewerContextContractTest {
     private String createPublishedCurriculum(Cookie[] instructor) throws Exception {
         String cid = json(write(post("/api/instructor/curriculums"), instructor, "{\"title\":\"수강강좌\"}")
                 .andReturn()).get("curriculumId").asString();
+        // 게시 선행 조건(ADR-0006): 섹션·강의가 각각 1개 이상 있어야 발행된다.
+        String seedSectionId = json(write(post("/api/instructor/curriculums/" + cid + "/sections"), instructor,
+                "{\"title\":\"게시용 섹션\"}").andExpect(status().isCreated()).andReturn()).get("sectionId").asString();
+        String seedLessonId = json(write(post("/api/instructor/sections/" + seedSectionId + "/lessons"), instructor,
+                "{\"title\":\"게시용 강의\"}").andExpect(status().isCreated()).andReturn()).get("lessonId").asString();
         write(post("/api/instructor/curriculums/" + cid + "/publish"), instructor, null).andExpect(status().isOk());
+        // 발행 조건만 채우려고 만든 것이라 지운다 — 이 테스트가 세는 강의·목차 인덱스를 원래대로 둔다.
+        write(delete("/api/instructor/lessons/" + seedLessonId), instructor, null)
+                .andExpect(status().isNoContent());
+        write(delete("/api/instructor/sections/" + seedSectionId), instructor, null)
+                .andExpect(status().isNoContent());
         return cid;
     }
 
     /** 섹션 하나 + 게시된 레슨 하나를 만든다. 공개 목차는 PUBLISHED 레슨만 담기 때문에 게시까지 한다. */
-    private String publishLesson(Cookie[] instructor, String curriculumId, String title) throws Exception {
+    private String addLesson(Cookie[] instructor, String curriculumId, String title) throws Exception {
         String sectionId = json(write(post("/api/instructor/curriculums/" + curriculumId + "/sections"), instructor,
                 "{\"title\":\"1주차\"}").andReturn()).get("sectionId").asString();
         String lessonId = json(write(post("/api/instructor/sections/" + sectionId + "/lessons"), instructor,
                 "{\"title\":\"%s\"}".formatted(title)).andReturn()).get("lessonId").asString();
-        write(post("/api/instructor/lessons/" + lessonId + "/publish"), instructor, null).andExpect(status().isOk());
         return lessonId;
     }
 

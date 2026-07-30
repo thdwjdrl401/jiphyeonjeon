@@ -1,6 +1,7 @@
 package com.liveclass.curriculum.web;
 
 import com.liveclass.curriculum.service.CurriculumNotFoundException;
+import com.liveclass.curriculum.service.CurriculumNotPublishableException;
 import com.liveclass.curriculum.service.CurriculumStateConflictException;
 import com.liveclass.curriculum.service.LessonAccessDeniedException;
 import com.liveclass.curriculum.service.LessonNotFoundException;
@@ -41,6 +42,13 @@ public class CurriculumExceptionHandler {
     }
 
     /** 허용되지 않는 수강 상태 전이(중복 신청·잘못된 승인 등). */
+    /** 게시 선행 조건(섹션·강의 각 1개 이상) 미충족. 메시지가 무엇을 추가해야 하는지 알려 준다. */
+    @ExceptionHandler(CurriculumNotPublishableException.class)
+    public ResponseEntity<ErrorResponse> handleNotPublishable(CurriculumNotPublishableException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ErrorResponse.of("CURRICULUM_NOT_PUBLISHABLE", e.getMessage()));
+    }
+
     @ExceptionHandler(EnrollmentStateConflictException.class)
     public ResponseEntity<ErrorResponse> handleEnrollmentConflict(EnrollmentStateConflictException e) {
         return ResponseEntity.status(HttpStatus.CONFLICT)

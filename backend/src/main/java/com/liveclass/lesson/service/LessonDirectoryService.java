@@ -34,12 +34,12 @@ public class LessonDirectoryService implements LessonDirectory {
 
     @Override
     @Transactional(readOnly = true)
-    public List<LessonOutlineView> findPublishedBySections(Collection<UUID> sectionIds) {
+    public List<LessonOutlineView> findBySections(Collection<UUID> sectionIds) {
         if (sectionIds.isEmpty()) {
             return List.of();
         }
         return lessonRepository
-                .findBySectionIdInAndStatusOrderByOrderIndexAsc(sectionIds, LessonStatus.PUBLISHED)
+                .findBySectionIdInOrderByOrderIndexAsc(sectionIds)
                 .stream()
                 .map(this::toView)
                 .toList();

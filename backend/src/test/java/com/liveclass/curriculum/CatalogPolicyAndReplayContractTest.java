@@ -32,6 +32,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -150,7 +151,7 @@ class CatalogPolicyAndReplayContractTest {
     void lesson_without_recording_reports_not_ready() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
-        publishLesson(instructor, cid, "녹화 없는 강의");
+        addLesson(instructor, cid, "녹화 없는 강의");
 
         write(get("/api/curriculums/" + cid), instructor, null)
                 .andExpect(status().isOk())
@@ -162,7 +163,7 @@ class CatalogPolicyAndReplayContractTest {
     void recorded_lesson_reports_its_replay_status() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
-        String lessonId = publishLesson(instructor, cid, "녹화된 강의");
+        String lessonId = addLesson(instructor, cid, "녹화된 강의");
         seedRecording(instructor, lessonId, ReplayStatus.DRAFT);
 
         // 녹화가 잡히면 더 이상 "녹화 없음"이 아니다. 게시 검수 흐름이 없어 DRAFT에 머문다
@@ -178,7 +179,7 @@ class CatalogPolicyAndReplayContractTest {
     void published_replay_sends_the_lesson_to_vod() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
-        String lessonId = publishLesson(instructor, cid, "게시된 녹화");
+        String lessonId = addLesson(instructor, cid, "게시된 녹화");
         seedRecording(instructor, lessonId, ReplayStatus.PUBLISHED);
 
         // 라이브가 끝난 뒤 게시된 녹화가 있으면 강의를 열었을 때 다시보기로 간다.
@@ -235,16 +236,25 @@ class CatalogPolicyAndReplayContractTest {
     private String createPublishedCurriculum(Cookie[] instructor) throws Exception {
         String cid = json(write(post("/api/instructor/curriculums"), instructor, "{\"title\":\"정책강좌\"}")
                 .andReturn()).get("curriculumId").asString();
+        // 게시 선행 조건(ADR-0006): 섹션·강의가 각각 1개 이상 있어야 발행된다.
+        String seedSectionId = json(write(post("/api/instructor/curriculums/" + cid + "/sections"), instructor,
+                "{\"title\":\"게시용 섹션\"}").andExpect(status().isCreated()).andReturn()).get("sectionId").asString();
+        String seedLessonId = json(write(post("/api/instructor/sections/" + seedSectionId + "/lessons"), instructor,
+                "{\"title\":\"게시용 강의\"}").andExpect(status().isCreated()).andReturn()).get("lessonId").asString();
         write(post("/api/instructor/curriculums/" + cid + "/publish"), instructor, null).andExpect(status().isOk());
+        // 발행 조건만 채우려고 만든 것이라 지운다 — 이 테스트가 세는 강의·목차 인덱스를 원래대로 둔다.
+        write(delete("/api/instructor/lessons/" + seedLessonId), instructor, null)
+                .andExpect(status().isNoContent());
+        write(delete("/api/instructor/sections/" + seedSectionId), instructor, null)
+                .andExpect(status().isNoContent());
         return cid;
     }
 
-    private String publishLesson(Cookie[] instructor, String curriculumId, String title) throws Exception {
+    private String addLesson(Cookie[] instructor, String curriculumId, String title) throws Exception {
         String sectionId = json(write(post("/api/instructor/curriculums/" + curriculumId + "/sections"), instructor,
                 "{\"title\":\"1주차\"}").andReturn()).get("sectionId").asString();
         String lessonId = json(write(post("/api/instructor/sections/" + sectionId + "/lessons"), instructor,
                 "{\"title\":\"%s\"}".formatted(title)).andReturn()).get("lessonId").asString();
-        write(post("/api/instructor/lessons/" + lessonId + "/publish"), instructor, null).andExpect(status().isOk());
         return lessonId;
     }
 

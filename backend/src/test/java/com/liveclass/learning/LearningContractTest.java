@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -44,7 +45,7 @@ class LearningContractTest {
     void progress_upsert_then_context_reflects_it() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
-        String lessonId = publishLesson(instructor, cid, "1강");
+        String lessonId = addLesson(instructor, cid, "1강");
         Cookie[] student = loginAs("STUDENT");
         approveEnrollment(instructor, student, cid);
 
@@ -70,7 +71,7 @@ class LearningContractTest {
     void progress_over_threshold_is_completed_and_sticky() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
-        String lessonId = publishLesson(instructor, cid, "1강");
+        String lessonId = addLesson(instructor, cid, "1강");
         Cookie[] student = loginAs("STUDENT");
         approveEnrollment(instructor, student, cid);
 
@@ -94,7 +95,7 @@ class LearningContractTest {
     void stale_client_update_is_ignored() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
-        String lessonId = publishLesson(instructor, cid, "1강");
+        String lessonId = addLesson(instructor, cid, "1강");
         Cookie[] student = loginAs("STUDENT");
         approveEnrollment(instructor, student, cid);
 
@@ -115,7 +116,7 @@ class LearningContractTest {
     void bookmark_is_idempotent() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
-        String lessonId = publishLesson(instructor, cid, "1강");
+        String lessonId = addLesson(instructor, cid, "1강");
         Cookie[] student = loginAs("STUDENT");
         approveEnrollment(instructor, student, cid);
 
@@ -137,7 +138,7 @@ class LearningContractTest {
     void unenrolled_student_cannot_learn() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
-        String lessonId = publishLesson(instructor, cid, "1강");
+        String lessonId = addLesson(instructor, cid, "1강");
         Cookie[] student = loginAs("STUDENT");
 
         write(get("/api/lessons/" + lessonId + "/learning-context"), student, null)
@@ -161,7 +162,7 @@ class LearningContractTest {
     void invalid_progress_percent_is_rejected_400() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
-        String lessonId = publishLesson(instructor, cid, "1강");
+        String lessonId = addLesson(instructor, cid, "1강");
         Cookie[] student = loginAs("STUDENT");
         approveEnrollment(instructor, student, cid);
 
@@ -174,8 +175,8 @@ class LearningContractTest {
     void catalog_progress_is_no_longer_always_null() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
-        String l1 = publishLesson(instructor, cid, "1강");
-        publishLesson(instructor, cid, "2강");
+        String l1 = addLesson(instructor, cid, "1강");
+        addLesson(instructor, cid, "2강");
         Cookie[] student = loginAs("STUDENT");
         approveEnrollment(instructor, student, cid);
 
@@ -201,8 +202,8 @@ class LearningContractTest {
     void learning_summary_aggregates_enrolled_progress() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
-        String l1 = publishLesson(instructor, cid, "1강");
-        publishLesson(instructor, cid, "2강");
+        String l1 = addLesson(instructor, cid, "1강");
+        addLesson(instructor, cid, "2강");
         Cookie[] student = loginAs("STUDENT");
         approveEnrollment(instructor, student, cid);
 
@@ -243,16 +244,25 @@ class LearningContractTest {
     private String createPublishedCurriculum(Cookie[] instructor) throws Exception {
         String cid = json(write(post("/api/instructor/curriculums"), instructor, "{\"title\":\"학습강좌\"}")
                 .andReturn()).get("curriculumId").asString();
+        // 게시 선행 조건(ADR-0006): 섹션·강의가 각각 1개 이상 있어야 발행된다.
+        String seedSectionId = json(write(post("/api/instructor/curriculums/" + cid + "/sections"), instructor,
+                "{\"title\":\"게시용 섹션\"}").andExpect(status().isCreated()).andReturn()).get("sectionId").asString();
+        String seedLessonId = json(write(post("/api/instructor/sections/" + seedSectionId + "/lessons"), instructor,
+                "{\"title\":\"게시용 강의\"}").andExpect(status().isCreated()).andReturn()).get("lessonId").asString();
         write(post("/api/instructor/curriculums/" + cid + "/publish"), instructor, null).andExpect(status().isOk());
+        // 발행 조건만 채우려고 만든 것이라 지운다 — 이 테스트가 세는 강의·목차 인덱스를 원래대로 둔다.
+        write(delete("/api/instructor/lessons/" + seedLessonId), instructor, null)
+                .andExpect(status().isNoContent());
+        write(delete("/api/instructor/sections/" + seedSectionId), instructor, null)
+                .andExpect(status().isNoContent());
         return cid;
     }
 
-    private String publishLesson(Cookie[] instructor, String curriculumId, String title) throws Exception {
+    private String addLesson(Cookie[] instructor, String curriculumId, String title) throws Exception {
         String sectionId = json(write(post("/api/instructor/curriculums/" + curriculumId + "/sections"), instructor,
                 "{\"title\":\"1주차\"}").andReturn()).get("sectionId").asString();
         String lessonId = json(write(post("/api/instructor/sections/" + sectionId + "/lessons"), instructor,
                 "{\"title\":\"%s\"}".formatted(title)).andReturn()).get("lessonId").asString();
-        write(post("/api/instructor/lessons/" + lessonId + "/publish"), instructor, null).andExpect(status().isOk());
         return lessonId;
     }
 

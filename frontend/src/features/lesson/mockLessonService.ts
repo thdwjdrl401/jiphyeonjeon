@@ -1,5 +1,4 @@
 import { getDemoCurriculumLessonNavigation, getDemoLesson } from '@/features/demo/demoData'
-import { setMockLessonStatus } from '@/features/demo/mockDatabase'
 import type { LessonService } from './lessonService.interface'
 
 export const mockLessonService = {
@@ -24,11 +23,5 @@ export const mockLessonService = {
   async prepareLessonAi() {
     if (import.meta.env.MODE === 'test') return
     await new Promise<void>((resolve) => window.setTimeout(resolve, 700))
-  },
-  async publishLesson(lessonId) {
-    return setMockLessonStatus(lessonId, 'PUBLISHED')
-  },
-  async unpublishLesson(lessonId) {
-    return setMockLessonStatus(lessonId, 'DRAFT')
   },
 } satisfies LessonService

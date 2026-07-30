@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { instructorPaths, publicPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
 import { getInstructorCurriculum } from '@/features/curriculum/curriculumManagementService'
+import { deleteLesson } from '@/features/curriculum/curriculumManagementService'
 import { deleteLessonMaterial, getLesson, prepareLessonAi, saveLesson } from '@/features/lesson/lessonService'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
@@ -26,6 +27,7 @@ export default function LessonFormPage() {
   const queryClient = useQueryClient()
   const toast = useToast()
   const isEdit = Boolean(lessonId)
+  const [deleting, setDeleting] = useState(false)
   const curriculumQuery = useQuery({
     queryKey: ['instructor-curriculum', curriculumId],
     queryFn: () => getInstructorCurriculum(curriculumId),
@@ -53,6 +55,27 @@ export default function LessonFormPage() {
   const [duration, setDuration] = useState('90')
   const [entryWindow, setEntryWindow] = useState('10')
   const [submitting, setSubmitting] = useState(false)
+  /**
+   * 강의 삭제. 관리 화면 목록이 아니라 이 화면에만 둔다 — 목록에서는 행마다 삭제 버튼이 있어
+   * 한 번의 오클릭으로 강의가 사라졌다. 수정 화면까지 들어온 사람은 대상을 분명히 알고 있다.
+   */
+  const removeLesson = async () => {
+    if (!lessonId) return
+    if (!window.confirm(`강의 "${title.trim() || currentLesson?.title || ''}"을(를) 삭제할까요? 되돌릴 수 없습니다.`)) return
+    setDeleting(true)
+    try {
+      await deleteLesson(lessonId)
+      await queryClient.invalidateQueries({ queryKey: ['curriculum-management', curriculumId] })
+      await queryClient.invalidateQueries({ queryKey: ['curriculum'] })
+      toast.success('강의를 삭제했습니다.')
+      navigate(instructorPaths.curriculumManage(curriculumId))
+    } catch {
+      toast.error('강의를 삭제하지 못했습니다.')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   usePageTitle(isEdit ? '강의 수정' : '강의 만들기')
 
   useEffect(() => {
@@ -143,7 +166,7 @@ export default function LessonFormPage() {
         <Panel title="PPTX 강의 자료" description={isEdit ? '초기 준비 이후에는 자료를 하나씩 추가하고 영향 범위만 다시 처리합니다.' : '초기 자료는 여러 개를 선택한 뒤 한 번에 AI 준비를 시작합니다.'}>
           <label className="material-dropzone"><input type="file" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation" multiple={!isEdit} onChange={selectFiles} /><span className="material-dropzone__icon">P</span><strong>PPTX 파일 선택</strong><small>{isEdit ? '한 번에 한 파일 · 기존 자료는 유지됩니다.' : '여러 파일을 함께 선택할 수 있습니다.'}</small></label>
           {materials.length > 0 && <ul className="material-list">{materials.map((material) => <li key={material.id}><span className="file-icon">PPTX</span><div><strong>{material.name}</strong><small>{material.size}</small></div>{isEdit && !material.file && <a className="button button--soft button--small" href={`/api/instructor/lessons/${lessonId}/materials/${material.id}/download`}>다운로드</a>}<StatusBadge tone={processing ? 'warning' : 'success'}>{processing ? 'EMBEDDING' : 'READY'}</StatusBadge><button type="button" aria-label={`${material.name} 제거`} onClick={() => void removeMaterial(material)}>×</button></li>)}</ul>}
-          <InlineNotice tone={materials.length ? 'info' : 'warning'}>{materials.length ? `${materials.length}개 자료가 준비 목록에 있습니다. AI 준비 중에는 추가·삭제가 제한됩니다.` : '자료 없이도 DRAFT 저장은 가능하지만 게시와 라이브 시작은 할 수 없습니다.'}</InlineNotice>
+          <InlineNotice tone={materials.length ? 'info' : 'warning'}>{materials.length ? `${materials.length}개 자료가 준비 목록에 있습니다. AI 준비 중에는 추가·삭제가 제한됩니다.` : '자료가 없어도 강의는 저장됩니다. 라이브 시작 전에 자료를 준비해 주세요.'}</InlineNotice>
           <div className="form-actions"><button className="button button--soft" type="button" disabled={!materials.length || processing} onClick={prepare}>{processing ? 'AI 준비 중…' : 'AI 준비 시작'}</button></div>
         </Panel>
 
@@ -157,8 +180,22 @@ export default function LessonFormPage() {
 
         {canEditLiveSchedule && <Panel title="항상 적용되는 운영 정책">
           <ul className="policy-list"><li><span>●</span><div><strong>녹화</strong><p>라이브 시작과 함께 Egress HLS 녹화가 시작됩니다.</p></div></li><li><span>CC</span><div><strong>실시간 자막</strong><p>발화가 자막과 AI 근거에 사용됩니다.</p></div></li><li><span>AI</span><div><strong>학습 보조</strong><p>채팅, 개인 질문과 강의 자료가 학습 기능에 연결됩니다.</p></div></li></ul>
-          <InlineNotice tone="warning">강의가 게시되지 않았거나 AI 준비가 끝나지 않으면 일정 저장은 가능하지만 라이브 시작은 차단됩니다.</InlineNotice>
+          <InlineNotice tone="warning">AI 준비가 끝나지 않으면 일정 저장은 가능하지만 라이브 시작은 차단됩니다.</InlineNotice>
         </Panel>}
+
+        {isEdit && (
+          <Panel title="강의 삭제" description="강의와 연결된 라이브 일정·자료가 함께 사라집니다.">
+            <div className="curriculum-danger-zone">
+              <div>
+                <strong>이 강의를 삭제합니다</strong>
+                <p>되돌릴 수 없어요. 삭제는 이 화면에서만 할 수 있습니다.</p>
+              </div>
+              <button className="button button--ghost button--danger" type="button" disabled={deleting} onClick={() => void removeLesson()}>
+                {deleting ? '삭제 중' : '강의 삭제'}
+              </button>
+            </div>
+          </Panel>
+        )}
 
         <div className="sticky-form-actions">
           <Link className="button button--ghost" to={isEdit ? lessonDetailPath : publicPaths.curriculum(curriculumId)}>취소</Link>

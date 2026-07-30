@@ -38,7 +38,11 @@ public class LessonManagementService implements LessonManagement {
         lesson.setSectionId(sectionId);
         lesson.setTitle(title);
         lesson.setDescription(description);
-        lesson.setStatus(LessonStatus.DRAFT);
+        // 만들어지는 순간 게시 상태다 — 레슨에 초안이 없다(ADR-0005). 외부 공개 여부는
+        // 커리큘럼 lifecycleStatus가 결정하므로, 비공개 커리큘럼의 레슨은 여기서 PUBLISHED여도
+        // 카탈로그에 노출되지 않는다.
+        lesson.setStatus(LessonStatus.PUBLISHED);
+        lesson.setPublishedAt(OffsetDateTime.now());
         // 새 레슨은 맨 뒤. UNIQUE(section_id, order_index) 충돌을 피해 마지막+1.
         lesson.setOrderIndex(nextOrder(sectionId));
         return toView(lessonRepository.save(lesson));
@@ -112,26 +116,6 @@ public class LessonManagementService implements LessonManagement {
             lesson.setSectionId(placement.sectionId());
             lesson.setOrderIndex(placement.orderIndex());
         }
-    }
-
-    @Override
-    @Transactional
-    public LessonView publish(UUID lessonId) {
-        Lesson lesson = lessonRepository.findById(lessonId)
-                .orElseThrow(() -> new LessonNotFoundException("레슨이 없습니다: " + lessonId));
-        lesson.setStatus(LessonStatus.PUBLISHED);
-        lesson.setPublishedAt(OffsetDateTime.now());
-        return toView(lesson);
-    }
-
-    @Override
-    @Transactional
-    public LessonView unpublish(UUID lessonId) {
-        Lesson lesson = lessonRepository.findById(lessonId)
-                .orElseThrow(() -> new LessonNotFoundException("레슨이 없습니다: " + lessonId));
-        lesson.setStatus(LessonStatus.DRAFT);
-        lesson.setPublishedAt(null);
-        return toView(lesson);
     }
 
     private int nextOrder(UUID sectionId) {
