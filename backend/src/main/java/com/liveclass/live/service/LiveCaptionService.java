@@ -45,7 +45,8 @@ public class LiveCaptionService {
      */
     @Transactional(readOnly = true)
     public List<CaptionReloadItem> reload(UUID sessionId) {
-        return repository.findBySessionIdOrderByOccurredAtAscIdAsc(sessionId).stream()
+        return repository.findBySessionIdAndEventTypeInOrderByOccurredAtAscIdAsc(sessionId, CaptionEvent.RELAYED_TYPES)
+                .stream()
                 .map(row -> CaptionReloadItem.from(row, sessionClockLookup.approxSessionMs(sessionId, row.getOccurredAt())))
                 .toList();
     }
@@ -73,6 +74,11 @@ public class LiveCaptionService {
         row.setText(event.text());
         row.setReason(event.reason());
         row.setOccurredAt(event.occurredAt());
+        row.setAudioStartedAt(event.audioStartedAt());
+        row.setSegmentIndex(event.segmentIndex());
+        row.setStartStreamElapsedMs(event.startStreamElapsedMs());
+        row.setEndStreamElapsedMs(event.endStreamElapsedMs());
+        row.setBoundaryReason(event.boundaryReason());
         try {
             repository.saveAndFlush(row);   // event_id UNIQUE 경합이면 예외 → 멱등 무시
         } catch (DataIntegrityViolationException race) {
@@ -80,7 +86,12 @@ public class LiveCaptionService {
             return false;
         }
 
-        eventPublisher.publishEvent(LiveCaptionStoredEvent.from(event));
+        // 1차 슬라이스(ADR-0052): started·segment.final은 append-only 영속만 하고 WS로 흘리지 않는다.
+        // 현 WsCaptionBroadcaster는 completed가 아닌 것을 전부 delta로 취급하므로, 신규 type을 발행하면
+        // FE에 깨진 delta가 간다. FE 전달(세그먼트 렌더·앵커 seek)은 후속 슬라이스에서 payload와 함께 켠다.
+        if (event.isDelta() || event.isCompleted()) {
+            eventPublisher.publishEvent(LiveCaptionStoredEvent.from(event));
+        }
         if (event.isCompleted()) {
             // 전역 키라 키 DEL은 하지 않는다(MAXLEN에 위임). 종료 마커 적재만 로그로 남긴다.
             log.info("자막 스트림 종료 sessionId={} sttSessionId={} lastSequence={}",

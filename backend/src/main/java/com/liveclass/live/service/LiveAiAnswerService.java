@@ -68,9 +68,10 @@ public class LiveAiAnswerService {
     public RagAnswerCommand prepare(UUID sessionId, String question) {
         LiveSession session = liveSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new LiveSessionNotFoundException("라이브 세션을 찾을 수 없습니다."));
-        long contextTimeMs = liveCaptionRepository.findFirstBySessionIdOrderByOccurredAtDescIdDesc(sessionId)
+        long contextTimeMs = liveCaptionRepository
+                .findFirstBySessionIdAndEventTypeInOrderByOccurredAtDescIdDesc(sessionId, CaptionEvent.RELAYED_TYPES)
                 .map(LiveCaption::getStreamElapsedMs)
-                .filter(ms -> ms >= 0)
+                .filter(ms -> ms != null && ms >= 0)
                 .orElse(0L);
         return new RagAnswerCommand(
                 UUID.randomUUID().toString(),
