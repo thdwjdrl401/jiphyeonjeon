@@ -350,6 +350,9 @@ th { color: var(--ink-500); font-size: .67rem; }
 .speaker-check__row small { color: var(--ink-500); font-size: .65rem; }
 .speaker-check__row b { color: var(--blue-600); font-size: .68rem; }
 .speaker-check.is-pass .speaker-check__row b { color: var(--green-700); }
+.speaker-channels { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin: 0; padding: 0; list-style: none; }
+.speaker-channels li { padding: 8px 6px; border: 1px solid var(--ink-200); border-radius: 9px; background: #fff; color: var(--ink-500); font-size: .66rem; font-weight: 700; text-align: center; transition: background .12s, border-color .12s, color .12s; }
+.speaker-channels li.is-active { border-color: var(--blue-200); background: var(--blue-50); color: var(--blue-700); }
 .speaker-confirm { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: 10px; background: var(--ink-50); }
 .speaker-confirm p { margin: 0; font-size: .72rem; font-weight: 600; }
 .speaker-confirm > div { display: flex; gap: 7px; }

@@ -288,8 +288,14 @@ describe('전체 페이지 라우트', () => {
 
     // 자동 점검(자동 재생·네트워크)은 진입 시 자동으로 통과된다.
     // 스피커 테스트는 사용자가 직접 재생하고 결과를 확인해야 한다.
+    // 좌 → 우 → 양쪽 3구간을 안내한다(순서·채널 자체는 speakerTest.test.ts가 고정).
+    const channels = await screen.findByRole('list', { name: '테스트음 재생 위치' })
+    expect(within(channels).getAllByRole('listitem').map((item) => item.textContent))
+      .toEqual(['왼쪽', '오른쪽', '양쪽'])
+
     await user.click(await screen.findByRole('button', { name: /테스트 시작/ }))
-    await user.click(await screen.findByRole('button', { name: '네, 잘 들려요' }, { timeout: 3000 }))
+    // 테스트음이 약 3초라 확인 버튼은 그 뒤에 뜬다 — 기본 대기(1초)로는 모자라다.
+    await user.click(await screen.findByRole('button', { name: '네, 모두 들려요' }, { timeout: 6000 }))
     await user.click(await screen.findByRole('link', { name: '라이브 입장' }, { timeout: 3000 }))
 
     expect(await screen.findByRole('tab', { name: 'AI 질문' })).toBeInTheDocument()
