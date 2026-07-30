@@ -53,3 +53,11 @@
 .egress-stage .is-hidden {
   display: none;
 }
+
+/* 원격 오디오 element 싱크. 합성 프레임에는 보이지 않아야 하지만 <b>소리는 나야 한다</b> —
+ * Egress는 이 페이지의 재생 출력을 pulseaudio로 캡처하므로 페이지가 조용하면 녹화도 무음이다.
+ * <audio>는 레이아웃 박스가 없어 display:none으로도 재생이 멈추지 않는다(LiveKit RoomAudioRenderer도
+ * 같은 방식). 여기에 muted를 거는 스타일·속성을 추가하지 말 것. */
+.egress-stage__audio {
+  display: none;
+}
