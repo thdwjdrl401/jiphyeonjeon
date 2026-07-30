@@ -326,7 +326,7 @@ body {
   top: 16%;
   left: 7%;
   margin: 0;
-  color: var(--ink-950);
+  color: var(--ink-500);
   font-family: var(--font-display);
   font-size: clamp(2.15rem, 3.15vw, 3.15rem);
   font-weight: 400;
@@ -341,7 +341,7 @@ body {
 }
 
 .ink-hero-art__statement em {
-  color: var(--ink-500);
+  color: var(--ink-950);
   font-style: normal;
 }
 
