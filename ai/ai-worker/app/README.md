@@ -7,11 +7,16 @@
 - 설정·signal·관리 FastAPI server와 runtime readiness를 관리한다.
 - PPTX index use case, port, pgvector 저장 구현을 제공한다.
 - Spring이 선언한 `ingestion.embed`를 passive lookup하고 완료 callback 뒤 ACK한다.
+- `AI_WORKER_KEY_TERM_EXTRACTION_ENABLED=true`일 때 GMS로 PPTX 핵심 용어+정의를 임베딩과 동시에
+  추출한다(기본 off, 실패해도 기존 인덱싱을 막지 않음).
+- 추출된 용어는 저장하지 않고 새 Spring 콜백 `MATERIAL_KEY_TERMS_EXTRACTED`로 전달한다(best-effort,
+  실패해도 완료된 embedding job을 재시도하지 않음).
 
 ## 구조와 흐름
 
 ```text
 RabbitMQ -> consumers/ -> application/ -> ingestion/ -> ports/ <- adapters/
+                                        -> (선택) GMS key term 추출 -> ports/ <- adapters/
 python -m app.main -> WorkerRuntime -> RabbitMaterialConsumer + management FastAPI
 ```
 

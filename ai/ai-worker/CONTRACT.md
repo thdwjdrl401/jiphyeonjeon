@@ -324,3 +324,79 @@ callback은 `POST /api/internal/ai/callbacks`에 9.2의 HMAC으로 보낸다.
 
 현재 `EMBED_DELETE`는 DLQ에 보존할 뿐 완료하지 않는다. delete resolver와 실제 Spring·RabbitMQ·BGE·PostgreSQL
 E2E가 준비되기 전에는 Python consumer와 Spring의 `MATERIAL_EMBEDDING_ENABLED`를 모두 켜지 않는다.
+
+## 10. GMS 핵심 용어 추출과 Spring 전달 (선택 기능)
+
+이 절은 9절의 Spring 자료 임베딩 wire 계약과 독립이다. `AI_WORKER_KEY_TERM_EXTRACTION_ENABLED=true`일
+때만 동작하며, 기본값(`false`)에서는 이 절의 어떤 호출도 발생하지 않고 8절의 embedding/storage 흐름과
+100% 동일하게 동작한다. 설계 근거는
+[ADR-0003](../../docs/decisions/jinwoo/0003-pptx-key-term-extraction-approach.md)을 따른다.
+
+### 10.1 GMS endpoint와 인증
+
+```http
+POST https://api.openai.com/v1/chat/completions
+Authorization: Bearer <AI_WORKER_GMS_API_KEY>
+Content-Type: application/json
+```
+
+- `AI_WORKER_GMS_API_KEY`는 ai-api의 `AI_API_GMS_API_KEY`와 같은 GMS 게이트웨이 키를 재사용할 수 있지만,
+  Spring HMAC secret이나 BGE Bearer token과는 절대 공유하지 않는다.
+- 요청은 `openai` SDK(`AsyncOpenAI`)로 구성하며 `response_format: {"type": "json_schema", ...}`로
+  구조화 출력을 강제한다. 자유 텍스트 파싱에 의존하지 않는다.
+
+### 10.2 GMS 요청 입력과 응답 규약
+
+- 입력은 PPTX 전체 텍스트를 슬라이드 순서대로 이어붙이고 `[슬라이드N]` 구분자로 슬라이드 경계를 표시한
+  단일 문자열이다(8.3의 chunk와 별개로, chunk 이전 `ParsedPresentation`에서 직접 구성한다).
+- 입력이 `AI_WORKER_GMS_MAX_PROMPT_CHARS`(기본 100,000자)를 넘으면 앞부분만 잘라서 보낸다.
+- system prompt는 PPTX 텍스트를 신뢰하지 않는 데이터로 명시하고, 텍스트 안에 포함된 지시·명령을 따르지
+  말라고 강제한다(prompt injection 방어).
+- 성공 응답은 `{"terms": [{"term": "...", "definition": "..."}]}` 형태다. 스키마를 벗어나면 응답 계약
+  위반으로 처리하고, `term`/`definition`은 domain의 `KeyTerm(term, definition)`으로만 변환한다.
+- adapter(`GmsKeyTermExtractor`)는 API 오류·응답 계약 위반을 모두 `KeyTermExtractionError`로만
+  표면화한다. 원문, API key, 원본 응답 body를 로그에 남기지 않는다. adapter 자체는 재시도하지 않는다.
+
+### 10.3 application 계층의 실패 격리
+
+- `IndexPptxMaterial.execute()`는 `key_term_extractor`가 설정된 경우에만 embedding과
+  `asyncio.gather`로 동시에 추출을 시도한다. 추출 예외는 전부 잡아서 경고 로그만 남기고 빈 결과로
+  대체한다 — **핵심 용어 추출 실패는 8절의 embedding/stage/activate 흐름을 절대 막지 않는다.**
+- `execute()`는 추출된 용어를 저장하지 않고 `MaterialIndexResult(version_id, key_terms)`로 호출자에게
+  반환할 뿐이다. 저장·전달 책임은 이 계층에 없다.
+
+### 10.4 Spring 전달 (`MATERIAL_KEY_TERMS_EXTRACTED` callback)
+
+`consumers/material_job.py`의 `MaterialJobHandler`가 9.5의 READY callback을 보낸 **뒤**,
+`result.key_terms`가 비어있지 않으면 같은 HMAC 서명 방식으로 별도 callback을 하나 더 보낸다.
+
+```http
+POST /api/internal/ai/callbacks HTTP/1.1
+X-Signature: <9.2의 HMAC>
+Content-Type: application/json
+
+{
+  "eventId": "uuid",
+  "eventType": "MATERIAL_KEY_TERMS_EXTRACTED",
+  "jobId": "worker-side-job-id",
+  "materialId": "uuid",
+  "lessonId": "uuid",
+  "status": "READY",
+  "keyTerms": [
+    { "term": "지도학습", "definition": "정답(레이블)이 있는 데이터로 모델을 학습시키는 방식" }
+  ]
+}
+```
+
+- `eventId`는 9절과 같은 `material_callback_event_id(job_id, eventType)` 규칙으로 만들어 이벤트 종류별로
+  안정적이다. HTTP 재시도는 같은 `eventId`와 raw body를 재사용한다.
+- `keyTerms`는 `MATERIAL_KEY_TERMS_EXTRACTED`에서만 존재하고, 그 외 eventType에서는 직렬화 시 필드
+  자체가 생략된다(`exclude_none`). 기존 `MATERIAL_EMBEDDING`/`MATERIAL_EMBEDDED`/`MATERIAL_EMBED_FAILED`
+  callback의 wire 형태는 하나도 바뀌지 않는다.
+- 이 callback은 **best-effort**다: 전송이 실패해도(`SpringCallbackError` 포함 모든 예외) 경고 로그만
+  남기고 예외를 올리지 않는다. 이미 성공한 embedding job을 이 실패 때문에 재시도하지 않는다 — 재시도해도
+  `execute()`의 최상단 idempotent 단축 경로(9.6의 `find_existing`)가 재추출 없이 곧장 반환하므로 재시도로
+  `keyTerms`를 다시 만들 방법이 없기 때문이다.
+- Spring 쪽 실제 처리(`AiCallbackService`에서 새 eventType을 받아 저장하는 로직)는 이 문서가 다루는
+  ai-worker 범위 밖이며 아직 구현되지 않았다. Java 쪽 계약(`AiCallbackEvent` record에 `keyTerms` 필드
+  추가 등)은 backend 팀이 별도로 정한다.

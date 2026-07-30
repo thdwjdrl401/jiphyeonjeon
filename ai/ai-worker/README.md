@@ -16,13 +16,23 @@
 | ai-worker | Spring `POST /api/internal/ai/materials/download-url` | HTTP, HMAC | PPTX 임시 다운로드 URL 발급 | 구현됨 |
 | ai-worker | 발급된 presigned URL | HTTP GET | PPTX 원본 다운로드 | 구현됨 |
 | ai-worker | bge-runtime `GET /readyz`, `POST /internal/v1/embeddings` | HTTP, Bearer | GPU 준비 확인·embedding 생성 | 구현됨 |
+| ai-worker | GMS(OpenAI 호환) `POST /chat/completions` | HTTP, Bearer, structured output | PPTX 전체 텍스트에서 핵심 용어+정의 추출 | 구현됨, 기본 비활성 |
 | ai-worker | PostgreSQL `ai` schema | SQL/pgvector | 작업·chunk·embedding 저장 및 활성화 | 구현됨 |
-| ai-worker | Spring `POST /api/internal/ai/callbacks` | HTTP, HMAC | READY 또는 FAILED 결과 전달 | 구현됨 |
+| ai-worker | Spring `POST /api/internal/ai/callbacks` | HTTP, HMAC | READY·FAILED·핵심 용어 추출 결과 전달 | 구현됨(핵심 용어는 best-effort) |
 | ai-worker | RabbitMQ `ingestion.embed.dlq` | durable queue | 영구 실패·재시도 소진 작업 보존 | 구현됨 |
 
 consumer는 `AI_WORKER_MATERIAL_INGESTION_ENABLED=true`일 때만 연결된다. `EMBED_DELETE`는 현재
 저장 범위를 복원할 정보가 부족하므로 완료하지 않고 DLQ에 보존한다. 전체 주소·인증·구현 상태는
 [`docs/ai/CONTRACT.md`](../../docs/ai/CONTRACT.md)를 따른다.
+
+핵심 용어 추출은 `AI_WORKER_KEY_TERM_EXTRACTION_ENABLED=true`일 때만 임베딩과 동시에 실행되고,
+기본값(`false`)에서는 기존 청킹·임베딩·저장 흐름에 영향을 주지 않는다. 추출 실패는 자료 처리
+전체를 실패시키지 않고 로그만 남긴 뒤 계속 진행한다(용어 없이 정상 처리). ai-worker는 추출된
+용어를 저장하지 않는다 — READY callback을 보낸 뒤, 용어가 하나라도 있으면 새 eventType
+`MATERIAL_KEY_TERMS_EXTRACTED`로 Spring에 별도 전달한다. 이 두 번째 콜백은 best-effort다: 실패해도
+이미 끝난 embedding job을 재시도하지 않는다(재시도해도 idempotent 단축 경로 때문에 재추출되지
+않기 때문). 저장은 Spring/Java 쪽 책임이며 아직 구현되지 않았다. 설계 배경은
+[ADR-0003](../../docs/decisions/jinwoo/0003-pptx-key-term-extraction-approach.md)을 따른다.
 
 ## 3. 통신 예시
 
@@ -55,6 +65,26 @@ X-Signature: <base64-hmac-signature>
   "materialId": "11111111-1111-4111-8111-111111111111",
   "lessonId": "33333333-3333-4333-8333-333333333333",
   "status": "READY"
+}
+```
+
+핵심 용어 추출이 켜져 있고 용어가 하나라도 나오면, READY callback 뒤에 별도 콜백을 하나 더 보낸다.
+
+```http
+POST /api/internal/ai/callbacks HTTP/1.1
+Content-Type: application/json
+X-Signature: <base64-hmac-signature>
+
+{
+  "eventId": "3f9c9a8e-...",
+  "eventType": "MATERIAL_KEY_TERMS_EXTRACTED",
+  "jobId": "PPTX_EMBED:11111111-1111-4111-8111-111111111111",
+  "materialId": "11111111-1111-4111-8111-111111111111",
+  "lessonId": "33333333-3333-4333-8333-333333333333",
+  "status": "READY",
+  "keyTerms": [
+    {"term": "지도학습", "definition": "정답(레이블)이 있는 데이터로 모델을 학습시키는 방식"}
+  ]
 }
 ```
 
@@ -95,6 +125,9 @@ uv run --frozen python -m app.main
 | `AI_WORKER_BGE_INTERNAL_TOKEN` | consumer 활성화 시 필수 | bge-runtime Bearer token |
 | `AI_WORKER_SPRING_INTERNAL_BASE_URL` | 선택 | 기본 `http://127.0.0.1:8080` |
 | `AI_WORKER_BGE_RUNTIME_URL` | 선택 | 로컬 `:8020`, EC2 host `:18020`, 운영 container `:18080/internal/bge` |
+| `AI_WORKER_KEY_TERM_EXTRACTION_ENABLED` | 선택, 기본 `false` | PPTX 핵심 용어 추출 활성화 |
+| `AI_WORKER_GMS_API_KEY` | 핵심 용어 추출 활성화 시 필수 | GMS(OpenAI 호환) API key |
+| `AI_WORKER_GMS_MODEL` | 선택 | 기본 `gpt-4.1` |
 
 운영에서는 root [`.env.ai-prod.example`](../../.env.ai-prod.example)의 `AI_CALLBACK_SECRET`을
 container의 `AI_WORKER_SPRING_HMAC_SECRET`으로, `BGE_RUNTIME_INTERNAL_TOKEN`을
@@ -138,3 +171,4 @@ DB role과 권한 조건은 [migration 문서](migrations/README.md)를 따른�
 - [GPU BGE 연결과 운영 스크립트](../bge-runtime/scripts/README.md)
 - [EC2 AI 운영 compose](../../docker-compose.ai-prod.yml)
 - [EC2 AI 운영 환경변수](../../.env.ai-prod.example)
+- [PPTX 핵심 용어 추출 방식 ADR](../../docs/decisions/jinwoo/0003-pptx-key-term-extraction-approach.md)

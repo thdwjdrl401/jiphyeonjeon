@@ -24,6 +24,7 @@ Frontend는 AI 서비스를 직접 호출하지 않는다. 사용자 인증·권
 | Spring | realtime-agent | LiveKit explicit AgentDispatch | session metadata | Redis 자막 |
 | Frontend | LiveKit room | WebRTC | 강사 microphone | agent가 Redis에 자막 발행 |
 | ai-api·ai-worker | bge-runtime | HTTP, Bearer | text 목록 | 1024차원 vector |
+| ai-worker | GMS | HTTP, Bearer | PPTX 전체 텍스트 | 핵심 용어+정의(선택 기능, 기본 off) |
 | realtime-agent | application Redis | Redis Stream | caption event | ai-api·향후 Spring 소비 |
 | 운영 환경 | 각 서비스 관리 endpoint | HTTP | health/readiness | 상태 응답 |
 
@@ -93,11 +94,14 @@ ai-api·ai-worker 운영 설정은 [`.env.ai-prod.example`](../.env.ai-prod.exam
 | `AI_CALLBACK_SECRET` | Spring↔ai-worker 자료 HMAC | realtime callback을 켤 때만 별도 선택 사용 |
 | `BGE_RUNTIME_INTERNAL_TOKEN` | EC2 ai-api·ai-worker→GPU bge-runtime Bearer | bge-runtime이 사용 |
 | `GMS_API_KEY` | EC2 ai-api→GMS 답변 모델 | 사용하지 않음 |
+| `AI_WORKER_GMS_API_KEY` | EC2 ai-worker→GMS 핵심 용어 추출(선택, `AI_WORKER_KEY_TERM_EXTRACTION_ENABLED=true`일 때만 필수) | 사용하지 않음 |
 
 운영 compose는 `BGE_RUNTIME_INTERNAL_TOKEN`을 container의 `AI_API_BGE_TOKEN`과
-`AI_WORKER_BGE_INTERNAL_TOKEN`으로, `GMS_API_KEY`를 `AI_API_GMS_API_KEY`로 매핑한다. 필수
-환경변수와 tunnel 실행은 각 서비스 README를, 전체 인프라와 Spring·Frontend 실행 순서는
-[RUN.md](../RUN.md)에서 확인한다.
+`AI_WORKER_BGE_INTERNAL_TOKEN`으로, `GMS_API_KEY`를 `AI_API_GMS_API_KEY`로 매핑한다.
+`AI_WORKER_GMS_API_KEY`는 아직 `docker-compose.ai-prod.yml`/`.env.ai-prod.example`에 배선되지
+않았다 — 핵심 용어 추출을 운영에서 켜려면 이 매핑을 먼저 추가해야 한다. 필수 환경변수와 tunnel
+실행은 각 서비스 README를, 전체 인프라와 Spring·Frontend 실행 순서는 [RUN.md](../RUN.md)에서
+확인한다.
 
 ## 6. 현재 연동 상태
 
@@ -107,6 +111,7 @@ ai-api·ai-worker 운영 설정은 [`.env.ai-prod.example`](../.env.ai-prod.exam
 | Spring→RabbitMQ→ai-worker | `PPTX_EMBED` 양쪽 구현, Spring producer·worker 앱 기본 off, AI 운영 compose는 worker만 on; `EMBED_DELETE` 미구현(DLQ) |
 | ai-worker→Spring download-url·callback | 양쪽 구현 |
 | ai-api·ai-worker→bge-runtime | client·runtime·reverse tunnel·운영 container proxy 배선 구현 |
+| ai-worker→GMS(핵심 용어 추출) | AI 구현·기본 off, 운영 compose(`docker-compose.ai-prod.yml`)에 `AI_WORKER_GMS_API_KEY` 배선 미완료. 추출 결과는 ai-worker가 저장하지 않고 `MATERIAL_KEY_TERMS_EXTRACTED` Spring 콜백으로 전달(AI 구현, best-effort); Spring 쪽 수신·저장은 미구현([ADR-0003](../docs/decisions/jinwoo/0003-pptx-key-term-extraction-approach.md)) |
 | Spring→LiveKit→realtime-agent | 양쪽 dispatch 구현, job readiness 우회 중 |
 | realtime-agent→Redis caption | producer·ai-api consumer 구현, Spring consumer 미구현 |
 | realtime-agent→Spring lifecycle | AI 구현·기본 off, Spring receiver 미구현 |
