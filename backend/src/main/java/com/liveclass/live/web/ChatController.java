@@ -23,7 +23,8 @@ import java.util.UUID;
  * 라이브 채팅 저장·복구(REST). 실시간 push는 WebSocket으로 별도 — 이건 접속·새로고침·되감기 때
  * 과거 채팅을 복구하고 WS가 없거나 끊겨도 채팅이 남게 하는 뼈대다. 채팅은 라이브 세션 범위라
  * WS와 동일하게 sessionId로 키잉한다(향후 lesson:session 1:N 전환에도 안 깨지게).
- * 프라이버시: 응답에 실명·userId를 넣지 않고 가명만 노출한다.
+ * 프라이버시: 응답에 실명 필드·내부 userId를 넣지 않는다. 노출되는 이름(alias)은 발신자가 익명을 선택하면
+ * 세션 한정 가명, 아니면 발신자가 스스로 지정한 표시 이름이다(ADR-0050).
  */
 @Tag(name = "라이브 채팅", description = "채팅 저장·복구(REST, 세션 기준). 실시간 전달은 WebSocket으로 별도.")
 @RestController
@@ -43,7 +44,8 @@ public class ChatController {
                                     Authentication authentication) {
         UUID requesterId = UUID.fromString(authentication.getName());
         var saved = chatService.sendToSession(sessionId, requesterId,
-                request.clientMessageId(), request.text(), Boolean.TRUE.equals(request.isQuestion()));
+                request.clientMessageId(), request.text(), Boolean.TRUE.equals(request.isQuestion()),
+                Boolean.TRUE.equals(request.anonymous()));
         return ChatMessageResponse.from(saved, request.viewingSessionMs(), requesterId);
     }
 

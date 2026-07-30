@@ -451,7 +451,17 @@ POST /api/live-sessions/{sessionId}/messages
 GET /api/live-sessions/{sessionId}/messages?afterSessionMs=115000&limit=100
 ```
 
-가명, 삭제·제재 상태, `isQuestion`을 포함한다. 사용자 실명과 내부 userId는 수강생 채팅 응답에 포함하지 않는다.
+표시 이름(`alias`), 삭제·제재 상태, `isQuestion`, `mine`을 포함한다. **내부 userId는 어떤 경우에도 응답에
+포함하지 않는다.**
+
+`alias`는 **발신자가 익명을 선택했는지에 따라 달라진다**([ADR-0050](../../decisions/songjeongki/0050-chat-anonymity-is-sender-choice.md)):
+전송 시 `anonymous=true`면 세션 한정 가명(`수강생-0473`), 생략·`false`면 발신자가 스스로 지정한 표시 이름이다.
+강사는 요청이 `anonymous=true`여도 서버가 무시해 항상 표시 이름이다. 노출되는 것은 사용자가 프로필에 넣은
+표시 이름이며 시스템이 보관한 실명 필드가 아니다.
+
+`mine`(요청자 본인이 보낸 메시지)은 **REST 응답에만 있다** — WS 브로드캐스트는 뷰어별로 값을 달리할 수 없어
+넣지 않는다. 라이브 중에는 클라이언트가 자기 `clientMessageId` 대조로 판별하고, 조회·전송 응답에서는 서버가
+준 `mine`을 쓴다. FE는 이 값으로 내 메시지를 우측 정렬한다(강사·수강생 화면 공통).
 
 ## 10. 개인 AI Q&A와 용어
 

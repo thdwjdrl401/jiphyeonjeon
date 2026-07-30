@@ -17,10 +17,39 @@ export interface LiveSessionView {
 
 export interface ChatMessageView {
   id: string
+  /**
+   * 전송할 때 클라이언트가 만든 키. 서버 응답·WS 에코·낙관적 항목을 같은 메시지로 잇는다.
+   * WS 브로드캐스트 payload에는 `mine`이 없으므로(뷰어별이 될 수 없다) 라이브 중 "내 메시지" 판별은
+   * 이 값이 내가 보낸 것인지로 한다. 데모·다시보기처럼 전송 경로를 거치지 않은 항목엔 없다.
+   */
+  clientMessageId?: string
+  /**
+   * 노출 이름. 발신자가 익명을 선택했으면 세션 한정 가명(수강생-0473), 아니면 발신자가 스스로 지정한
+   * 표시 이름이다(ADR-0050). 강사는 항상 표시 이름이다.
+   */
   alias: string
   text: string
   time: string
   question?: boolean
+  /** 요청자 본인이 보낸 메시지(REST `mine` 또는 내 clientMessageId 에코). 우측 정렬용. */
+  mine?: boolean
+  /** 서버가 아직 확정하지 않은 낙관적 항목(전송 중). */
+  pending?: boolean
+}
+
+/**
+ * 채팅 전송 입력. `clientMessageId`는 호출자(화면)가 만든다 — 낙관적 항목을 먼저 그려 두고 서버 응답·WS
+ * 에코와 같은 메시지로 이으려면 전송 전에 키를 알아야 한다.
+ */
+export interface SendChatMessageInput {
+  clientMessageId: string
+  text: string
+  question: boolean
+  /**
+   * 익명 전송(수강생 선택, ADR-0050). false면 발신자가 지정한 표시 이름이 노출된다.
+   * 강사는 익명이 될 수 없어 서버가 이 값을 무시한다.
+   */
+  anonymous: boolean
 }
 
 export type ChatConnectionState = 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'error'
@@ -208,7 +237,7 @@ export interface LiveSessionService {
   getInstructorLiveToken: (sessionId: string) => Promise<{ token: string; wsUrl?: string }>
   getParticipants: (sessionId: string) => Promise<Array<{ alias: string; state: string; joinedAt: string }>>
   getChatMessages: (sessionId: string) => Promise<ChatMessageView[]>
-  sendChatMessage: (sessionId: string, text: string, question: boolean) => Promise<ChatMessageView>
+  sendChatMessage: (sessionId: string, input: SendChatMessageInput) => Promise<ChatMessageView>
   subscribeChatMessages: (
     sessionId: string,
     onMessage: (message: ChatMessageView) => void,

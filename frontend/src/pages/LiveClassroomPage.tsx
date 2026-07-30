@@ -28,6 +28,7 @@ import {
   type CaptionView,
   type ChatConnectionState,
   type ChatMessageView,
+  type SendChatMessageInput,
 } from '@/features/live-session/liveSessionService'
 import type { PlaybackSeekRequest } from '@/features/live-session/PlaybackPlayer'
 import { useDetachedSidebarWindow } from '@/features/live-session/useDetachedSidebarWindow'
@@ -39,10 +40,27 @@ const { summaryBlocks, glossaryTerms } = getLiveLearningPreview()
 const InstructorLiveKitStage = lazy(() => import('@/features/live-session/InstructorLiveKitStage'))
 const PlaybackPlayer = lazy(() => import('@/features/live-session/PlaybackPlayer'))
 
-function mergeChatMessage(messages: ChatMessageView[], incoming: ChatMessageView) {
-  const existingIndex = messages.findIndex((message) => message.id === incoming.id)
+/**
+ * 같은 메시지를 두 번 그리지 않게 합친다. 한 메시지가 세 번 도착할 수 있다 —
+ * 낙관적 항목(전송 즉시) → WS 브로드캐스트 에코 → REST 전송 응답. messageId는 서버가 붙이므로
+ * 낙관적 항목엔 없고, `clientMessageId`가 세 경로를 잇는 유일한 키다.
+ *
+ * `mine`은 WS 에코에 없다(토픽 브로드캐스트는 뷰어별이 될 수 없다). 그래서 이미 내 것으로 확정된
+ * 항목을 에코가 덮어 좌측으로 튀지 않도록 기존 값을 살린다.
+ */
+export function mergeChatMessage(messages: ChatMessageView[], incoming: ChatMessageView) {
+  const existingIndex = messages.findIndex((message) => (
+    incoming.clientMessageId !== undefined && message.clientMessageId === incoming.clientMessageId
+  ) || message.id === incoming.id)
   if (existingIndex < 0) return [...messages, incoming]
-  return messages.map((message, index) => index === existingIndex ? incoming : message)
+  const existing = messages[existingIndex]
+  const merged: ChatMessageView = { ...incoming, mine: incoming.mine ?? existing.mine }
+  return messages.map((message, index) => index === existingIndex ? merged : message)
+}
+
+/** 낙관적 항목·서버 응답·WS 에코를 잇는 키. 서버는 이 값으로 재전송을 멱등 처리한다. */
+function createClientMessageId() {
+  return `local-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
 export default function LiveClassroomPage() {
@@ -76,6 +94,8 @@ export default function LiveClassroomPage() {
   const [positionMs, setPositionMs] = useState(0)
   const [message, setMessage] = useState('')
   const [isQuestion, setIsQuestion] = useState(false)
+  // 익명은 기본 꺼짐 — 켰을 때만 세션 한정 가명으로 나간다(ADR-0050). 끄면 본인이 지정한 표시 이름.
+  const [anonymous, setAnonymous] = useState(false)
   const [bookmarked, setBookmarked] = useState(false)
   const [studentSeekRequest, setStudentSeekRequest] = useState<PlaybackSeekRequest | null>(null)
   const [endRequested, setEndRequested] = useState(false)
@@ -87,7 +107,23 @@ export default function LiveClassroomPage() {
   // 강사는 LiveKit로 직접 송출하므로 재생 경로를 타지 않는다. 학생도 녹화 안내를 확인한 뒤에 붙는다.
   const playback = usePlayback(sessionQuery.data?.lessonId, !isInstructor && recordingNoticeAck)
   const sendMutation = useMutation({
-    mutationFn: ({ text, question }: { text: string; question: boolean }) => sendChatMessage(sessionId, text, question),
+    mutationFn: (input: SendChatMessageInput) => sendChatMessage(sessionId, input),
+    // 낙관적 항목을 먼저 올린다 — 내 말풍선이 전송 즉시 우측에 보여야 한다. clientMessageId가
+    // 낙관적 항목·WS 에코·전송 응답을 잇는 키다(mergeChatMessage).
+    onMutate: (input) => queryClient.setQueryData<ChatMessageView[]>(
+      ['live-chat', sessionId],
+      (current = []) => mergeChatMessage(current, {
+        id: input.clientMessageId,
+        clientMessageId: input.clientMessageId,
+        // 서버가 확정할 값이라 여기서 가명/표시 이름을 흉내내지 않는다 — 내 말풍선엔 이름을 쓰지 않는다.
+        alias: '',
+        text: input.text,
+        time: '',
+        question: input.question,
+        mine: true,
+        pending: true,
+      }),
+    ),
     onSuccess: (sent) => queryClient.setQueryData<ChatMessageView[]>(
       ['live-chat', sessionId],
       (current = []) => mergeChatMessage(current, sent),
@@ -142,7 +178,13 @@ export default function LiveClassroomPage() {
   const sendMessage = (event: FormEvent) => {
     event.preventDefault()
     if (!message.trim()) return
-    sendMutation.mutate({ text: message.trim(), question: isInstructor ? false : isQuestion })
+    sendMutation.mutate({
+      clientMessageId: createClientMessageId(),
+      text: message.trim(),
+      // 강사는 질문 등록·익명 둘 다 해당 없다(서버도 강사 익명을 무시한다).
+      question: isInstructor ? false : isQuestion,
+      anonymous: isInstructor ? false : anonymous,
+    })
     setMessage('')
     setIsQuestion(false)
   }
@@ -204,7 +246,12 @@ export default function LiveClassroomPage() {
       />
       <div>
         {!isInstructor
-          ? <label><input type="checkbox" checked={isQuestion} onChange={(event) => setIsQuestion(event.target.checked)} /> 질문으로 등록</label>
+          ? (
+            <>
+              <label><input type="checkbox" checked={isQuestion} onChange={(event) => setIsQuestion(event.target.checked)} /> 질문으로 등록</label>
+              <label><input type="checkbox" checked={anonymous} onChange={(event) => setAnonymous(event.target.checked)} /> 익명으로 보내기</label>
+            </>
+          )
           : <span>강사 메시지로 전송됩니다.</span>}
         <button className="button button--primary button--small" type="submit">전송</button>
       </div>

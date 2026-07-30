@@ -29,7 +29,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 라이브 채팅 저장·복구 계약 검증. 프라이버시(실명·userId 미노출), 멱등, 강사/학생 가명, 복구 조회.
+ * 라이브 채팅 저장·복구 계약 검증. 프라이버시(userId 미노출), 멱등, 익명 선택(ADR-0050), 복구 조회.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -55,7 +55,7 @@ class ChatContractTest {
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
 
     @Test
-    void student_message_uses_anonymous_alias_and_hides_identity() throws Exception {
+    void student_message_with_anonymous_true_uses_alias_and_hides_identity() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String[] created = createStartedSession(instructor);
         String sessionId = created[0];
@@ -63,21 +63,53 @@ class ChatContractTest {
         Cookie[] student = loginAs("STUDENT");
         enrollActive(created[1], student, instructor);   // 활성 수강생이어야 채팅 가능
         MvcResult res = write(post("/api/live-sessions/" + sessionId + "/messages"), student, """
-                {"clientMessageId":"c-1","text":"질문 있어요","isQuestion":true}
+                {"clientMessageId":"c-1","text":"질문 있어요","isQuestion":true,"anonymous":true}
                 """)
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.text").value("질문 있어요"))
                 .andExpect(jsonPath("$.isQuestion").value(true))
                 .andExpect(jsonPath("$.alias").exists())
+                .andExpect(jsonPath("$.mine").value(true))   // 익명이어도 보낸 본인에겐 내 메시지다
                 .andReturn();
 
         String body = res.getResponse().getContentAsString();
-        // 프라이버시: 실명·내부 userId·displayName은 응답에 없어야 한다.
+        // 프라이버시: 내부 userId는 없고, 익명을 켰으니 표시 이름도 새어 나가지 않는다.
         org.assertj.core.api.Assertions.assertThat(body)
                 .doesNotContain("userId")
                 .doesNotContain("테스터");
-        // 학생 가명은 익명 형식.
+        // 익명을 켠 학생만 가명 형식.
         org.assertj.core.api.Assertions.assertThat(json(res).get("alias").asString()).startsWith("수강생-");
+    }
+
+    /**
+     * 익명은 기본값이 아니라 발신자 선택이다(ADR-0050). 체크하지 않은 전송은 본인이 지정한 표시 이름으로
+     * 나가고, 그래도 내부 userId는 응답에 없다.
+     */
+    @Test
+    void student_message_without_anonymous_shows_own_display_name() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String[] created = createStartedSession(instructor);
+        String sessionId = created[0];
+
+        Cookie[] student = loginAs("STUDENT");
+        enrollActive(created[1], student, instructor);
+
+        // 필드 생략 = 체크 안 함 → 표시 이름.
+        MvcResult omitted = write(post("/api/live-sessions/" + sessionId + "/messages"), student, """
+                {"clientMessageId":"c-plain","text":"이름 보여도 괜찮아요"}
+                """)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.alias").value("테스터"))
+                .andReturn();
+        org.assertj.core.api.Assertions.assertThat(omitted.getResponse().getContentAsString())
+                .doesNotContain("userId");
+
+        // 명시적 false도 같은 뜻이어야 한다(체크박스를 켰다 끈 전송).
+        write(post("/api/live-sessions/" + sessionId + "/messages"), student, """
+                {"clientMessageId":"c-plain-2","text":"두 번째","anonymous":false}
+                """)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.alias").value("테스터"));
     }
 
     @Test
@@ -93,6 +125,20 @@ class ChatContractTest {
                 .andExpect(jsonPath("$.alias").value("테스터"));   // 강사는 표시 이름
     }
 
+    /** 강사는 요청으로 익명을 켜도 익명이 되지 않는다 — 수업 진행자 신원은 드러나야 한다(ADR-0050). */
+    @Test
+    void instructor_cannot_be_anonymous_even_when_requested() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String[] created = createStartedSession(instructor);
+        String sessionId = created[0];
+
+        write(post("/api/live-sessions/" + sessionId + "/messages"), instructor, """
+                {"clientMessageId":"c-i-anon","text":"익명으로 보내볼까","anonymous":true}
+                """)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.alias").value("테스터"));
+    }
+
     @Test
     void list_marks_only_my_messages_as_mine_for_the_requester() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
@@ -103,7 +149,8 @@ class ChatContractTest {
         enrollActive(created[1], me, instructor);
         enrollActive(created[1], other, instructor);
 
-        write(post("/api/live-sessions/" + sessionId + "/messages"), me, "{\"clientMessageId\":\"m1\",\"text\":\"내가 보냄\"}").andReturn();
+        // 내 메시지는 익명으로 보낸다 — mine은 alias가 아니라 저장된 발신자로 판정되므로 익명이어도 정확해야 한다.
+        write(post("/api/live-sessions/" + sessionId + "/messages"), me, "{\"clientMessageId\":\"m1\",\"text\":\"내가 보냄\",\"anonymous\":true}").andReturn();
         write(post("/api/live-sessions/" + sessionId + "/messages"), other, "{\"clientMessageId\":\"o1\",\"text\":\"남이 보냄\"}").andReturn();
 
         // 새로고침/재접속처럼 clientMessageId 로컬 기억 없이 GET만으로도 서버가 세션 기준 mine을 판정한다.
@@ -111,8 +158,10 @@ class ChatContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].text").value("내가 보냄"))
                 .andExpect(jsonPath("$[0].mine").value(true))
+                .andExpect(jsonPath("$[0].alias").value(org.hamcrest.Matchers.startsWith("수강생-")))
                 .andExpect(jsonPath("$[1].text").value("남이 보냄"))
-                .andExpect(jsonPath("$[1].mine").value(false));
+                .andExpect(jsonPath("$[1].mine").value(false))
+                .andExpect(jsonPath("$[1].alias").value("테스터"));   // 익명 미선택 → 본인이 지정한 표시 이름
 
         // 같은 목록을 다른 사람이 조회하면 mine 판정이 뒤바뀐다(뷰어별 계산).
         mockMvc.perform(get("/api/live-sessions/" + sessionId + "/messages").cookie(other))
