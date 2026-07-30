@@ -86,6 +86,9 @@ describe('저장된 문서 복원', () => {
 describe('기록 대기열', () => {
   const op = (revision: number): AnnotationOp => ({ type: 'upsert', revision, elements: [element(`e${revision}`)] })
 
+  /** 전송 프라미스 체인(then→catch→finally)이 다 풀릴 때까지. 그래야 다음 flush가 나간다. */
+  const settle = async () => { for (let i = 0; i < 4; i += 1) await Promise.resolve() }
+
   it('묶어서 한 번에 보낸다', async () => {
     const send = vi.fn().mockResolvedValue(undefined)
     const sink = createAnnotationOpSink('s1', { send, flushIntervalMs: 10_000 })
@@ -99,6 +102,104 @@ describe('기록 대기열', () => {
 
     expect(send).toHaveBeenCalledTimes(1)
     expect(send.mock.calls[0][1].map((o: { revision: number }) => o.revision)).toEqual([1, 2])
+    sink.stop()
+  })
+
+  /**
+   * `keepalive` 요청은 브라우저가 본문을 64KB로 제한한다(Fetch 표준). 평소 요청까지 켜 두면 판서가
+   * 조금만 쌓여도 묶음이 그 한도를 넘어 전송이 통째로 실패하고, 실패한 묶음이 대기열 맨 앞에 다시
+   * 들어가 <b>그 뒤로 아무것도 저장되지 않는다</b> — 라이브 전달은 멀쩡하므로 강사는 알 수 없다.
+   */
+  it('평소에는 keepalive를 쓰지 않는다 — 페이지를 떠날 때만 쓴다', async () => {
+    const send = vi.fn().mockResolvedValue(undefined)
+    const sink = createAnnotationOpSink('s1', { send, flushIntervalMs: 10_000 })
+
+    sink.push(op(1))
+    sink.flush()
+    await settle()
+    expect(send.mock.calls[0][2]).toBe(false)
+
+    sink.push(op(2))
+    sink.flush(true)
+    await settle()
+    expect(send.mock.calls[1][2]).toBe(true)
+
+    sink.stop()
+  })
+
+  /** 떠나며 보내는 묶음이 64KB를 넘으면 요청이 아예 나가지 않는다. 재시도할 기회도 없다. */
+  it('떠날 때 보내는 묶음은 브라우저 한도 아래로 자른다', async () => {
+    const send = vi.fn().mockResolvedValue(undefined)
+    const sink = createAnnotationOpSink('s1', { send, flushIntervalMs: 10_000 })
+
+    // 요소 하나가 5KB인 op 30개 = 150KB. 서로 다른 id라 합쳐지지 않는다.
+    for (let i = 1; i <= 30; i += 1) {
+      sink.push({ type: 'upsert', revision: i, elements: [element(`e${i}`, { text: 'x'.repeat(5_000) })] })
+    }
+
+    sink.flush(true)
+    await Promise.resolve()
+
+    const body = JSON.stringify(send.mock.calls[0][1])
+    expect(body.length).toBeLessThan(64 * 1024)
+    expect(sink.pending()).toBeGreaterThan(0)   // 나머지는 대기열에 남는다
+    sink.stop()
+  })
+
+  /**
+   * Excalidraw는 획을 긋는 동안 점이 하나 늘 때마다 `onChange`를 부른다. 획 하나가 수십 개의 op가
+   * 되고 뒤로 갈수록 요소 전체가 실려 커진다(실측: 획 하나에 40건, 합쳐서 61KB).
+   */
+  it('같은 요소를 이어서 고치는 upsert는 마지막 것만 남긴다', async () => {
+    const send = vi.fn().mockResolvedValue(undefined)
+    const sink = createAnnotationOpSink('s1', {
+      send, flushIntervalMs: 10_000, now: () => new Date('2026-07-31T00:00:00.000Z'),
+    })
+
+    sink.push({ type: 'upsert', revision: 1, elements: [element('stroke', { version: 1 })] })
+    sink.push({ type: 'upsert', revision: 2, elements: [element('stroke', { version: 2 })] })
+    sink.push({ type: 'upsert', revision: 3, elements: [element('stroke', { version: 3 })] })
+
+    expect(sink.pending()).toBe(1)
+
+    sink.flush()
+    await Promise.resolve()
+
+    const sent = send.mock.calls[0][1]
+    expect(sent).toHaveLength(1)
+    expect(sent[0].revision).toBe(3)
+    expect(JSON.parse(sent[0].payload).elements[0].version).toBe(3)
+    sink.stop()
+  })
+
+  /** 다른 요소로 넘어가면 합치지 않는다 — 합치면 앞 획이 사라진다. */
+  it('다른 요소의 upsert는 합치지 않는다', () => {
+    const sink = createAnnotationOpSink('s1', { send: vi.fn().mockResolvedValue(undefined), flushIntervalMs: 10_000 })
+
+    sink.push({ type: 'upsert', revision: 1, elements: [element('a')] })
+    sink.push({ type: 'upsert', revision: 2, elements: [element('b')] })
+    sink.push({ type: 'upsert', revision: 3, elements: [element('a')] })
+
+    expect(sink.pending()).toBe(3)
+    sink.stop()
+  })
+
+  /** 앵커는 "강사가 이걸 그리기 시작한 순간"을 가리켜야 한다. 합칠 때 시각은 처음 것을 남긴다. */
+  it('합쳐도 시각은 처음 op의 것을 남긴다', async () => {
+    const send = vi.fn().mockResolvedValue(undefined)
+    const times = ['2026-07-31T00:00:01.000Z', '2026-07-31T00:00:02.000Z']
+    let call = 0
+    const sink = createAnnotationOpSink('s1', {
+      send, flushIntervalMs: 10_000, now: () => new Date(times[Math.min(call++, times.length - 1)]),
+    })
+
+    sink.push({ type: 'upsert', revision: 1, elements: [element('stroke')] })
+    sink.push({ type: 'upsert', revision: 2, elements: [element('stroke')] })
+
+    sink.flush()
+    await Promise.resolve()
+
+    expect(send.mock.calls[0][1][0].occurredAt).toBe(times[0])
     sink.stop()
   })
 
