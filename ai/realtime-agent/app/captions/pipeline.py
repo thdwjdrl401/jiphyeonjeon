@@ -5,12 +5,21 @@ from datetime import UTC, datetime
 from typing import Protocol
 from uuid import UUID, uuid4
 
-from app.captions.models import CaptionDelta, CaptionStreamCompleted
-from app.stt.engine import EngineCompleted, EngineWarning, TextDelta
+from app.captions.models import (
+    CaptionDelta,
+    CaptionSegmentFinal,
+    CaptionStreamCompleted,
+    CaptionStreamStarted,
+)
+from app.stt.engine import EngineCompleted, EngineWarning, SegmentFinal, TextDelta
 
 
 class CaptionPublisher(Protocol):
+    async def publish_started(self, event: CaptionStreamStarted) -> None: ...
+
     async def publish_delta(self, event: CaptionDelta) -> None: ...
+
+    async def publish_segment_final(self, event: CaptionSegmentFinal) -> None: ...
 
     async def publish_completed(self, event: CaptionStreamCompleted) -> None: ...
 
@@ -40,6 +49,9 @@ class CaptionEventMapper:
         self._clock = clock or (lambda: datetime.now(UTC))
         self._sequence = 0
         self._last_stream_elapsed_ms = 0
+        self._segment_index = 0
+        self._last_final_sequence = 0
+        self._started = False
         self._completed = False
 
     @property
@@ -50,10 +62,30 @@ class CaptionEventMapper:
     def last_stream_elapsed_ms(self) -> int:
         return self._last_stream_elapsed_ms
 
-    async def __call__(self, event: TextDelta | EngineWarning) -> None:
+    async def publish_started(self, audio_started_at: datetime) -> CaptionStreamStarted:
+        if self._started:
+            raise RuntimeError("caption stream is already started")
+        if self._completed:
+            raise RuntimeError("caption stream is already completed")
+        started = CaptionStreamStarted(
+            event_id=self._event_id_factory(),
+            session_id=self._session_id,
+            lesson_id=self._lesson_id,
+            stt_session_id=self._stt_session_id,
+            audio_started_at=audio_started_at,
+            occurred_at=self._clock(),
+        )
+        await self._publisher.publish_started(started)
+        self._started = True
+        return started
+
+    async def __call__(self, event: TextDelta | SegmentFinal | EngineWarning) -> None:
         if isinstance(event, EngineWarning):
             return
-        await self.publish_delta(event)
+        if isinstance(event, SegmentFinal):
+            await self.publish_segment_final(event)
+        else:
+            await self.publish_delta(event)
 
     async def publish_delta(self, event: TextDelta) -> CaptionDelta:
         if self._completed:
@@ -75,6 +107,32 @@ class CaptionEventMapper:
         self._sequence = caption.sequence
         self._last_stream_elapsed_ms = stream_elapsed_ms
         return caption
+
+    async def publish_segment_final(self, event: SegmentFinal) -> CaptionSegmentFinal:
+        if self._completed:
+            raise RuntimeError("caption stream is already completed")
+        if self._sequence <= self._last_final_sequence:
+            raise ValueError("segment final requires at least one new caption delta")
+        if event.end_stream_elapsed_ms < self._last_stream_elapsed_ms:
+            raise ValueError("caption stream_elapsed_ms must not regress")
+        segment = CaptionSegmentFinal(
+            event_id=self._event_id_factory(),
+            session_id=self._session_id,
+            lesson_id=self._lesson_id,
+            stt_session_id=self._stt_session_id,
+            segment_index=self._segment_index,
+            last_sequence=self._sequence,
+            text=event.text,
+            start_stream_elapsed_ms=event.start_stream_elapsed_ms,
+            end_stream_elapsed_ms=event.end_stream_elapsed_ms,
+            boundary_reason=event.boundary_reason,
+            occurred_at=self._clock(),
+        )
+        await self._publisher.publish_segment_final(segment)
+        self._segment_index += 1
+        self._last_final_sequence = self._sequence
+        self._last_stream_elapsed_ms = event.end_stream_elapsed_ms
+        return segment
 
     async def publish_completed(
         self,

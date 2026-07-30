@@ -3,9 +3,14 @@ from uuid import UUID
 
 import pytest
 
-from app.captions.models import CaptionDelta, CaptionStreamCompleted
+from app.captions.models import (
+    CaptionDelta,
+    CaptionSegmentFinal,
+    CaptionStreamCompleted,
+    CaptionStreamStarted,
+)
 from app.captions.pipeline import CaptionEventMapper
-from app.stt.engine import EngineCompleted, EngineWarning, TextDelta
+from app.stt.engine import EngineCompleted, EngineWarning, SegmentFinal, TextDelta
 
 SESSION_ID = UUID("11111111-1111-4111-8111-111111111111")
 LESSON_ID = UUID("22222222-2222-4222-8222-222222222222")
@@ -14,12 +19,24 @@ NOW = datetime(2026, 7, 27, 12, 34, 56, 789000, tzinfo=UTC)
 
 class RecordingPublisher:
     def __init__(self, failure: BaseException | None = None) -> None:
+        self.started: list[CaptionStreamStarted] = []
         self.deltas: list[CaptionDelta] = []
+        self.segments: list[CaptionSegmentFinal] = []
         self.completed: list[CaptionStreamCompleted] = []
         self.failure = failure
 
+    async def publish_started(self, event: CaptionStreamStarted) -> None:
+        self.started.append(event)
+        if self.failure is not None:
+            raise self.failure
+
     async def publish_delta(self, event: CaptionDelta) -> None:
         self.deltas.append(event)
+        if self.failure is not None:
+            raise self.failure
+
+    async def publish_segment_final(self, event: CaptionSegmentFinal) -> None:
+        self.segments.append(event)
         if self.failure is not None:
             raise self.failure
 
@@ -44,6 +61,26 @@ def mapper(
         event_id_factory=lambda: next(event_ids),
         clock=lambda: NOW,
     )
+
+
+async def test_publishes_started_then_authoritative_segment_boundary() -> None:
+    publisher = RecordingPublisher()
+    sink = mapper(publisher, ["started-1", "delta-1", "segment-1", "completed-1"])
+
+    started = await sink.publish_started(NOW)
+    await sink(TextDelta("초안", 20))
+    await sink(SegmentFinal("확정본", 5, 20, "SILENCE"))
+    completed = await sink.publish_completed(EngineCompleted(20))
+
+    assert publisher.started == [started]
+    assert publisher.segments[0].segment_index == 0
+    assert publisher.segments[0].last_sequence == 1
+    assert publisher.segments[0].text == "확정본"
+    assert (
+        publisher.segments[0].start_stream_elapsed_ms,
+        publisher.segments[0].end_stream_elapsed_ms,
+    ) == (5, 20)
+    assert completed.last_sequence == 1
 
 
 async def test_maps_single_consumer_events_to_gapless_sequence_and_completion() -> None:

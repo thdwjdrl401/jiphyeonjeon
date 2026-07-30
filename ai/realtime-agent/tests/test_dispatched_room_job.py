@@ -8,7 +8,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.captions.models import CaptionDelta, CaptionStreamCompleted
+from app.captions.models import (
+    CaptionDelta,
+    CaptionSegmentFinal,
+    CaptionStreamCompleted,
+    CaptionStreamStarted,
+)
 from app.contracts.live_status import LiveAgentError
 from app.jobs.dispatched_room_job import (
     DuplicateSessionJobError,
@@ -178,19 +183,32 @@ class BlockingSuccessReporter(FakeReporter):
 
 class FakePublisher:
     def __init__(self, *, fail_delta: bool = False, fail_completed: bool = False) -> None:
+        self.started: list[CaptionStreamStarted] = []
         self.deltas: list[CaptionDelta] = []
+        self.segments: list[CaptionSegmentFinal] = []
         self.completed: list[CaptionStreamCompleted] = []
+        self.calls: list[str] = []
         self.fail_delta = fail_delta
         self.fail_completed = fail_completed
+
+    async def publish_started(self, event: CaptionStreamStarted) -> None:
+        self.calls.append(event.type)
+        self.started.append(event)
 
     async def publish_delta(self, event: CaptionDelta) -> None:
         if self.fail_delta:
             raise TimeoutError("caption delta timed out")
+        self.calls.append(event.type)
         self.deltas.append(event)
+
+    async def publish_segment_final(self, event: CaptionSegmentFinal) -> None:
+        self.calls.append(event.type)
+        self.segments.append(event)
 
     async def publish_completed(self, event: CaptionStreamCompleted) -> None:
         if self.fail_completed:
             raise TimeoutError("caption completion timed out")
+        self.calls.append(event.type)
         self.completed.append(event)
 
 
@@ -277,10 +295,17 @@ async def test_wires_one_session_through_lease_stt_caption_and_lifecycle() -> No
     assert result.stream_elapsed_ms == 20
     assert engine_calls == source_calls == 1
     assert engine.stream_context == SttStreamContext(stream_id=SESSION_ID, language="ko-KR")
+    assert len(publisher.started) == 1
+    assert publisher.started[0].audio_started_at.utcoffset() is not None
     assert [event.sequence for event in publisher.deltas] == [1]
     assert publisher.deltas[0].text == "[stub]"
     assert publisher.completed[0].reason == "ROOM_DELETED"
     assert publisher.completed[0].last_sequence == 1
+    assert publisher.calls == [
+        "caption.stream.started",
+        "caption.delta",
+        "caption.stream.completed",
+    ]
     assert [state for state, _error in reporter.events] == [
         "ROOM_CONNECTED",
         "STT_STARTED",

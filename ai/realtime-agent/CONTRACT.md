@@ -1,11 +1,16 @@
-# realtime-agent v1 상세 계약
+# realtime-agent 상세 계약과 변경 중 후보
 
 이 문서는 realtime-agent의 wire 형식과 AI 런타임 불변식을 Python 테스트로 고정한 상세 계약이다.
 Spring이 생산·소비하는 공유 경계의 정본은 [`docs/CONTRACT.md` §3-3~§3-5·§3-8](../../docs/CONTRACT.md#3-내부-계약-확정-인터페이스)이다.
 
+> **변경 상태:** 3절의 `caption.stream.started`·`caption.segment.final`은 AI producer 구현과 Python
+> schema/fixture 검증까지 완료된 **후보 계약**이다. 루트 계약과 Spring·ai-api consumer에는 아직 채택되지
+> 않았으므로 운영 확정 계약이 아니다. 필드, event type과 `contractVersion`은 양측 합의 과정에서 바뀔 수 있다.
+
 Spring의 named LiveKit AgentDispatch 생성·재사용·삭제와 exact metadata 저장은 구현됐다. 현재 job별
-assignment/running readiness는 `live.stt.assume-ready=true`로 우회 중이며, Redis Stream consumer,
-live-agent callback receiver와 realtime-agent health client는 아직 없다.
+assignment/running readiness는 `live.stt.assume-ready=true`로 우회 중이다. Spring Redis caption consumer는
+현재 delta/completed만 처리하고 신규 started/final은 알 수 없는 type으로 폐기한다. live-agent callback
+receiver와 realtime-agent health client도 아직 없다.
 
 ## 1. Spring → LiveKit → realtime-agent dispatch metadata
 
@@ -152,7 +157,11 @@ audio, engine queue와 dispatch capacity는 검사하지 않으므로 job별 `ST
 공유 상태코드와 body는 [`docs/CONTRACT.md` §3-8](../../docs/CONTRACT.md#3-8-gpu-realtime-agent-service-health-http--ai-구현됨-spring-consumer-미구현), JSON 정본은 [health schema](contracts/schemas/realtime-agent-health.schema.json)를 따른다.
 
 
-## 3. realtime-agent → application Redis caption stream
+## 3. realtime-agent → application Redis caption stream — 후보 계약 변경 중
+
+> AI 런타임은 아래 네 이벤트를 발행하도록 구현됐다. 공유 소비 계약은 아직 delta/completed 2종이며,
+> started/final의 채택·버전·롤아웃 순서는 Spring·ai-api 오너와 확정해야 한다. 소비자 반영 전에는 신규
+> 이벤트가 ACK 후 폐기되므로 발화별 렌더링과 정확 시간축은 end-to-end로 활성화되지 않는다.
 
 - Redis URL: `REDIS_URL`로 주입한다. LiveKit 내부 Redis나 host `6380`을 전제로 하지 않는다.
 - stream key: `CAPTION_STREAM_KEY`, 기본값 `ai:captions:live`
@@ -161,6 +170,21 @@ audio, engine queue와 dispatch capacity는 검사하지 않으므로 job별 `ST
   값은 양의 정수만 허용해 무제한 누적 설정을 막는다. 근사 trimming이므로 실제 길이는 일시적으로
   기준보다 조금 클 수 있고, 이는 바이트 상한이나 Redis 전체 `maxmemory` 설정이 아니다.
 - 모든 정수 필드: 부호 없는 최대 18자리 십진 문자열
+
+`caption.stream.started` fields:
+
+```json
+{
+  "contractVersion": "1",
+  "eventId": "22222222-2222-4222-8222-222222222222",
+  "type": "caption.stream.started",
+  "sessionId": "11111111-1111-4111-8111-111111111111",
+  "lessonId": "22222222-2222-4222-8222-222222222222",
+  "sttSessionId": "provider-session-01",
+  "audioStartedAt": "2026-07-27T00:00:00.000Z",
+  "occurredAt": "2026-07-27T00:00:00.001Z"
+}
+```
 
 `caption.delta` fields:
 
@@ -176,6 +200,26 @@ audio, engine queue와 dispatch capacity는 검사하지 않으므로 job별 `ST
   "streamElapsedMs": "1200",
   "text": "안녕하세요",
   "occurredAt": "2026-07-27T00:00:01.200Z"
+}
+```
+
+`caption.segment.final` fields:
+
+```json
+{
+  "contractVersion": "1",
+  "eventId": "33333333-3333-4333-8333-333333333334",
+  "type": "caption.segment.final",
+  "sessionId": "11111111-1111-4111-8111-111111111111",
+  "lessonId": "22222222-2222-4222-8222-222222222222",
+  "sttSessionId": "provider-session-01",
+  "segmentIndex": "0",
+  "lastSequence": "1",
+  "text": "안녕하세요",
+  "startStreamElapsedMs": "200",
+  "endStreamElapsedMs": "1200",
+  "boundaryReason": "SILENCE",
+  "occurredAt": "2026-07-27T00:00:01.210Z"
 }
 ```
 
@@ -196,13 +240,15 @@ audio, engine queue와 dispatch capacity는 검사하지 않으므로 job별 `ST
 }
 ```
 
-`sequence`와 `lastSequence`의 범위는 `(sessionId, sttSessionId)`로 식별되는 **한 job attempt의
-STT stream**이다. 각 attempt는 `sequence=1`부터 시작할 수 있으므로 consumer는 `sessionId`만으로
-sequence를 합치면 안 된다. completion에도 같은 `sttSessionId`를 넣어 어느 attempt를 닫는지
-명시한다. sequence는 publish 성공 뒤에만 commit한다. 빈 문자열 delta는 거부하지만 STT가 생성한
-공백 문자열은 바꾸거나 trim하지 않는다. `streamElapsedMs`는 Spring session clock이 아니라
-realtime-agent가 받은 첫 audio frame을 0으로 보는 stream-local clock이다. session-relative 자막에
-사용하려면 Java와 time-origin 변환 계약을 먼저 합의해야 한다.
+AI producer가 현재 구현한 attempt 순서는 started 1회, delta와 segment.final 반복, completion 1회다. `sequence`와
+`lastSequence` 범위는 `(sessionId, sttSessionId)`이고 `segmentIndex`는 0부터 증가한다. 각 retry는 새
+`sttSessionId`에서 시작하므로 consumer는 sessionId만으로 합치면 안 된다. sequence는 publish 성공 뒤에만
+commit한다. final의 `lastSequence` 이하 delta는 같은 발화의 미리보기이며 final text가 권위 있다.
+
+`audioStartedAt`은 첫 audio frame 시작, 즉 `streamElapsedMs=0`의 UTC다. segment start/end는 VAD가
+관측한 실제 speech frame 구간이며 pre-roll/trailing silence를 제외한다. 제안하는 Spring 변환은 raw 값을
+보존한 뒤 `audioStartedAt - clockOriginAt + streamElapsedMs`로 세션-ms를 계산하는 방식이다. 이 공식과
+fallback 정책은 아직 미확정이며, 채택 시 GPU와 Spring host의 NTP 동기가 전제다.
 
 completion은 LiveKit `ROOM_DELETED`를 명시적으로 받아 남은 audio와 engine event를 정상 drain한
 뒤에만 새로 발행을 시도한다. 다른 disconnect, cancellation, lease loss, provider 오류에서는 새
@@ -284,8 +330,8 @@ audio/event drain, engine/source cleanup, completion write, terminal callback, l
 
 1. Phase 4a dispatch 이후 job assignment/running readiness gate와 timeout·capacity 처리를 구현한다.
 2. metadata schema/fixture의 Java serializer와 양쪽 계약 테스트를 유지한다.
-3. Redis key, consumer group, 세션 종료 후 정리, event enum, timeout 결과의 멱등/fencing과 session
-   clock 변환을 확정하고 Spring consumer를 구현한다.
+3. Redis key, consumer group, 세션 종료 후 정리, event enum, `contractVersion`, timeout 결과의
+   멱등/fencing과 session clock 변환을 확정하고 Spring consumer를 구현한다.
 4. callback URL, HMAC 방식, event ID 멱등성과 terminal first-wins를 확정하고 Spring receiver를 구현한다.
 5. realtime-agent health client를 연결한다.
 6. available/full/unregistered Worker와 LiveKit·Redis·Spring 정상·실패 E2E를 별도 실행하고

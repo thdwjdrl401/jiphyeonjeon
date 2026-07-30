@@ -1,29 +1,32 @@
-# Realtime agent v1 contract artifacts
+# Realtime agent contract artifacts
 
-이 디렉터리는 realtime-agent v1 계약의 JSON Schema와 대표 fixture를 보관한다.
-Spring이 생산·소비하는 경계는 [`docs/CONTRACT.md` §3-3~§3-5](../../../docs/CONTRACT.md#3-내부-계약-확정-인터페이스)에 채택됐다.
-service health는 §3-8의 AI 제공 endpoint와 Python 계약 테스트까지 구현됐다. Java consumer는 이
-변경의 범위가 아니며 별도 backend 변경에서 연결한다.
+이 디렉터리는 realtime-agent의 JSON Schema와 대표 fixture를 보관한다. dispatch와 기존
+delta/completed 등 채택된 경계의 정본은 [`docs/CONTRACT.md`](../../../docs/CONTRACT.md)다. 신규
+started/final schema와 fixture는 AI producer 구현을 검증하는 **변경 중 후보**이며 아직 Spring·ai-api와
+루트 계약에 채택되지 않았다. service health는 AI endpoint와 Python 계약 테스트까지 구현됐고 Java
+consumer는 별도 backend 변경에서 연결한다.
 
 ## 경계
 
 | Schema | Producer | Transport | Consumer |
 |---|---|---|---|
 | `dispatch-metadata.schema.json` | Spring dispatch adapter | LiveKit job metadata | realtime-agent |
-| `caption-stream-entry.schema.json` | realtime-agent | Redis Stream | 향후 Spring/ai-api consumer |
+| `caption-stream-entry.schema.json` | realtime-agent | Redis Stream | 현재 Spring·ai-api는 delta/completed만, started/final은 채택 대기 |
 | `live-agent-status.schema.json` | realtime-agent | 서명된 내부 HTTP | 향후 Spring callback |
 | `realtime-agent-health.schema.json` | realtime-agent | loopback/reverse tunnel HTTP | 향후 Spring consumer |
 
 `sessionId`와 `lessonId`는 소문자 canonical UUID 문자열이다. 모든 payload 필드는
 `camelCase`이고 알 수 없는 필드는 거부한다.
 
-`streamElapsedMs`는 라이브 세션 생성 시각 기준 시간이 아니다. **realtime-agent가 첫
-오디오 프레임을 받은 시점을 0으로 한 단조 증가 시간**이다. 공유 계약으로 승격할 때는
-Spring이 가진 세션 clock으로 변환할 기준점 또는 별도 offset 계약을 먼저 확정해야 한다.
+`streamElapsedMs`는 라이브 세션 생성 시각 기준 시간이 아니라 첫 오디오 프레임 시작을 0으로 한 단조
+증가 시간이다. 후보 started 이벤트의 `audioStartedAt`은 그 0의 UTC 앵커다. 제안하는 Spring 변환은
+raw 값을 보존하고 `audioStartedAt - clockOriginAt + streamElapsedMs`로 세션 축을 만드는 방식이며,
+fallback과 버전 정책을 포함해 아직 미확정이다.
 
 caption `sequence`는 `(sessionId, sttSessionId)`로 식별되는 한 job attempt의 STT stream 안에서만
 단조 증가한다. 순차 retry는 새 `sttSessionId`로 다시 `sequence=1`부터 시작할 수 있으며,
-`caption.stream.completed`도 동일한 `sttSessionId`로 종료할 attempt를 명시한다.
+`caption.segment.final.segmentIndex`는 0부터 증가한다. final은 `lastSequence` 이하 delta를 권위 text로
+대체하고 completed는 동일한 `sttSessionId`로 종료 attempt를 명시한다.
 
 Redis endpoint는 런타임 URL로 주입한다. 기본 stream key는 `ai:captions:live`이며 XADD는
 기본 `MAXLEN ~ 10000`으로 근사 trimming하면서 직접 await한다. 쓰기 오류와 timeout은 호출자에게

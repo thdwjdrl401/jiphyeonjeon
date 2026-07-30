@@ -210,6 +210,11 @@ async def _run_caption_job(
         return mapper
 
     async def observe(event: RoomJobLifecycleEvent) -> None:
+        if event.state == "AUDIO_STARTED":
+            if mapper is None or event.audio_started_at is None:
+                raise RuntimeError("caption mapper or audioStartedAt was not bound before audio")
+            await mapper.publish_started(event.audio_started_at)
+
         if event.state == "COMPLETED":
             if mapper is None or event.stream_elapsed_ms is None:
                 raise RuntimeError("caption mapper was not bound before completion")

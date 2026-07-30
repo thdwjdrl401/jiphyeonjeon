@@ -9,6 +9,9 @@
 FastAPI 서비스가 아니며 작업을 받는 POST endpoint도 없다. LiveKit `AgentServer`가 outbound WebSocket으로
 등록한 뒤 named dispatch를 통해 room job을 받는다.
 
+> 자막 `caption.stream.started`·`caption.segment.final`은 AI producer에는 구현됐지만 공유 계약은 변경 중이다.
+> Spring·ai-api 소비자와 루트 계약이 채택하기 전에는 운영 확정 계약으로 간주하지 않는다.
+
 ## 2. 누가 어떻게 호출하는가
 
 | 호출자 | 대상 | 통신 | 용도 | 상태 |
@@ -17,17 +20,19 @@ FastAPI 서비스가 아니며 작업을 받는 POST endpoint도 없다. LiveKit
 | LiveKit | realtime-agent | persistent Worker WebSocket | 등록·load·job 배정 | 구현됨 |
 | 강사 브라우저 → LiveKit → job | instructor microphone | WebRTC | STT audio 입력 | 구현됨 |
 | job | Nemotron 또는 OpenAI Realtime | local CUDA 또는 WSS | transcript 생성 | 구현됨 |
-| realtime-agent | Redis `ai:captions:live` | Redis Stream `XADD` | 자막 delta·완료 event | 구현됨 |
+| realtime-agent | Redis `ai:captions:live` | Redis Stream `XADD` | 자막 started·delta·segment.final·완료 event | AI 구현, 공유 계약 변경 중 |
 | realtime-agent | Redis `agent:session:{sessionId}` | Redis lease | 중복 job 방지 | 구현됨 |
 | realtime-agent | Spring callback URL | HTTP, HMAC | job lifecycle 상태 전달 | 기본 비활성, Java 미구현 |
 | 운영 환경 | `GET /health/live`, `GET /health/ready` | HTTP | process 생존·warm pool/LiveKit 준비 확인 | 구현됨 |
 
 Spring은 agent를 직접 HTTP 호출하지 않는다. named dispatch 생성·재사용·삭제는 구현됐지만 job별 readiness는
-`live.stt.assume-ready=true`로 우회 중이다. Spring caption consumer, lifecycle callback receiver,
-realtime-agent health client는 아직 없다. Python stop API나 Redis stop command도 없으며
+`live.stt.assume-ready=true`로 우회 중이다. Spring caption consumer는 현재 delta/completed만 처리하고,
+신규 started/final 처리는 미구현이다. lifecycle callback receiver와 realtime-agent health client도 아직 없다.
+Python stop API나 Redis stop command도 없으며
 Spring의 LiveKit room 삭제로 발생한 `ROOM_DELETED`만 정상 종료 신호로 사용한다.
 
-전체 metadata, Redis event, callback, 구현 상태는 [`docs/ai/CONTRACT.md`](../../docs/ai/CONTRACT.md)를 따른다.
+채택된 서비스 간 계약과 구현 상태는 [`docs/ai/CONTRACT.md`](../../docs/ai/CONTRACT.md)를 따른다. 아직
+비준되지 않은 started/final 후보의 AI 구현 상세는 이 폴더의 [`CONTRACT.md`](CONTRACT.md)가 기록한다.
 
 ## 3. 통신 예시
 
@@ -43,7 +48,8 @@ Spring이 LiveKit explicit dispatch에 넣어야 하는 metadata다. 대상 room
 }
 ```
 
-STT delta는 application Redis `ai:captions:live`에 다음 field로 기록된다.
+AI producer의 변경 중인 자막 계약은 application Redis `ai:captions:live`에
+`stream.started → delta/segment.final 반복 → stream.completed` 순서로 기록된다. delta 예시는 다음과 같다.
 
 ```text
 contractVersion=1
@@ -58,8 +64,9 @@ text=오늘은 벡터 검색을 설명하겠습니다.
 occurredAt=2026-07-29T04:00:01.250Z
 ```
 
-정상 종료 시 같은 stream에 `caption.stream.completed`를 기록한다. 전체 field와 callback 서명은
-[`CONTRACT.md`](CONTRACT.md)에서 확인한다.
+첫 frame 전에 `caption.stream.started.audioStartedAt`으로 stream 0의 UTC를 고정하고, VAD가 발화를
+확정할 때 `caption.segment.final`에 실제 speech start/end와 권위 text를 기록한다. 정상 종료는 같은 stream의
+`caption.stream.completed`다. 전체 필드는 [`CONTRACT.md`](CONTRACT.md)에서 확인한다.
 
 ## 4. 처리 흐름
 
@@ -68,7 +75,9 @@ Spring → LiveKit named dispatch
              ↓
 Frontend microphone → LiveKit Room → realtime-agent job
                                       → Nemotron CUDA / OpenAI WSS
+                                      → Redis caption.stream.started
                                       → Redis caption.delta
+                                      → Redis caption.segment.final
 Spring room delete → ROOM_DELETED     → Redis caption.stream.completed
                                       → Spring lifecycle callback (선택)
 ```

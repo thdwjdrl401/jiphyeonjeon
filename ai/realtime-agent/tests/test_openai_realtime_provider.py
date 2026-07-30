@@ -10,6 +10,7 @@ import pytest
 from app.audio.segmentation import SpeechSegment
 from app.stt.engine import AudioChunk, SttStreamContext
 from app.stt.providers.openai_realtime import OpenAiRealtimeStreamingEngine
+from app.stt.providers.segmented import ProviderSegmentFinal
 
 
 class FakeWebSocket:
@@ -88,7 +89,7 @@ async def test_uses_current_transcription_session_and_correlates_item_deltas() -
         )
     ]
 
-    assert deltas == ["안녕", " 하세요", "!"]
+    assert deltas == ["안녕", " 하세요", "!", ProviderSegmentFinal("안녕 하세요!")]
     assert calls == [
         (
             "wss://api.openai.com/v1/realtime?intent=transcription",
@@ -148,11 +149,11 @@ async def test_completed_transcript_is_emitted_when_no_delta_was_received() -> N
         )
     ]
 
-    assert result == ["완료 문장"]
+    assert result == ["완료 문장", ProviderSegmentFinal("완료 문장")]
     await engine.close()
 
 
-async def test_divergent_final_transcript_preserves_emitted_realtime_text(caplog) -> None:
+async def test_divergent_final_transcript_is_authoritative_after_realtime_delta(caplog) -> None:
     socket = FakeWebSocket(
         [
             {"type": "input_audio_buffer.committed", "item_id": "item-1"},
@@ -185,8 +186,8 @@ async def test_divergent_final_transcript_preserves_emitted_realtime_text(caplog
         )
     ]
 
-    assert result == ["초안"]
-    assert "preserving emitted text" in caplog.text
+    assert result == ["초안", ProviderSegmentFinal("수정본")]
+    assert "publishing provider final as authoritative segment text" in caplog.text
     assert "수정본" not in caplog.text
     await engine.close()
 

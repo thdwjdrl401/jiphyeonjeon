@@ -3,13 +3,16 @@ from __future__ import annotations
 from collections import deque
 from dataclasses import dataclass
 from importlib import import_module
-from typing import Protocol, cast
+from typing import Literal, Protocol, cast
 
 from app.audio.normalizer import Pcm16Normalizer
 from app.stt.engine import AudioChunk
 
 _VALID_SAMPLE_RATES = frozenset({8_000, 16_000, 32_000, 48_000})
 _VALID_FRAME_DURATIONS_MS = frozenset({10, 20, 30})
+
+
+SegmentBoundaryReason = Literal["SILENCE", "MAX_DURATION", "STREAM_END"]
 
 
 class VoiceActivityDetector(Protocol):
@@ -22,6 +25,7 @@ class SpeechSegment:
     sample_rate: int
     start_ms: int
     end_ms: int
+    boundary_reason: SegmentBoundaryReason = "SILENCE"
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,7 +70,8 @@ class VadSegmenter:
         self._frames: list[_VadFrame] = []
         self._active = False
         self._elapsed_ms = 0
-        self._start_ms = 0
+        self._speech_start_ms = 0
+        self._speech_end_ms = 0
         self._speech_ms = 0
         self._silence_ms = 0
 
@@ -82,7 +87,7 @@ class VadSegmenter:
     def finish(self) -> list[SpeechSegment]:
         completed: list[SpeechSegment] = []
         if self._active and self._speech_ms >= self._min_speech_ms:
-            completed.append(self._flush(preserve_preroll=False))
+            completed.append(self._flush("STREAM_END", preserve_preroll=False))
         else:
             self._reset_active(preserve_preroll=False)
         self._buffer = b""
@@ -103,6 +108,7 @@ class VadSegmenter:
             if frame.is_speech:
                 self._speech_ms += self._frame_ms
                 self._silence_ms = 0
+                self._speech_end_ms = self._elapsed_ms
             else:
                 self._silence_ms += self._frame_ms
 
@@ -111,7 +117,7 @@ class VadSegmenter:
             # boundary would duplicate captions. The next frame starts a contiguous
             # segment instead.
             if self._speech_ms >= self._min_speech_ms:
-                return [self._flush(preserve_preroll=False)]
+                return [self._flush("MAX_DURATION", preserve_preroll=False)]
             self._reset_active(preserve_preroll=False)
             return []
         if self._silence_ms >= self._silence_close_ms:
@@ -122,22 +128,29 @@ class VadSegmenter:
         self._active = True
         self._frames = [*self._preroll, frame]
         self._preroll.clear()
-        self._start_ms = self._elapsed_ms - len(self._frames) * self._frame_ms
+        self._speech_start_ms = self._elapsed_ms - self._frame_ms
+        self._speech_end_ms = self._elapsed_ms
         self._speech_ms = sum(item.is_speech for item in self._frames) * self._frame_ms
         self._silence_ms = 0
 
     def _close_if_long_enough(self) -> list[SpeechSegment]:
         if self._speech_ms >= self._min_speech_ms:
-            return [self._flush(preserve_preroll=True)]
+            return [self._flush("SILENCE", preserve_preroll=True)]
         self._reset_active(preserve_preroll=True)
         return []
 
-    def _flush(self, *, preserve_preroll: bool) -> SpeechSegment:
+    def _flush(
+        self,
+        boundary_reason: SegmentBoundaryReason,
+        *,
+        preserve_preroll: bool,
+    ) -> SpeechSegment:
         segment = SpeechSegment(
             pcm=b"".join(frame.pcm for frame in self._frames),
             sample_rate=self.sample_rate,
-            start_ms=self._start_ms,
-            end_ms=self._elapsed_ms,
+            start_ms=self._speech_start_ms,
+            end_ms=self._speech_end_ms,
+            boundary_reason=boundary_reason,
         )
         self._reset_active(preserve_preroll=preserve_preroll)
         return segment

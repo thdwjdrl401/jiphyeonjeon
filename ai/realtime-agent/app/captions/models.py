@@ -33,6 +33,35 @@ def _validate_occurred_at(value: datetime) -> None:
 
 
 @dataclass(frozen=True, slots=True)
+class CaptionStreamStarted:
+    event_id: str
+    session_id: UUID
+    lesson_id: UUID
+    stt_session_id: str
+    audio_started_at: datetime
+    occurred_at: datetime
+    contract_version: str = "1"
+
+    def __post_init__(self) -> None:
+        if self.contract_version != "1":
+            raise ValueError("contract_version must be '1'")
+        _validate_identifier(self.event_id, "event_id")
+        _validate_uuid(self.session_id, "session_id")
+        _validate_uuid(self.lesson_id, "lesson_id")
+        _validate_identifier(self.stt_session_id, "stt_session_id")
+        if (
+            not isinstance(self.audio_started_at, datetime)
+            or self.audio_started_at.utcoffset() is None
+        ):
+            raise ValueError("audio_started_at must be a timezone-aware datetime")
+        _validate_occurred_at(self.occurred_at)
+
+    @property
+    def type(self) -> str:
+        return "caption.stream.started"
+
+
+@dataclass(frozen=True, slots=True)
 class CaptionDelta:
     event_id: str
     session_id: UUID
@@ -64,6 +93,49 @@ class CaptionDelta:
     @property
     def type(self) -> str:
         return "caption.delta"
+
+
+@dataclass(frozen=True, slots=True)
+class CaptionSegmentFinal:
+    event_id: str
+    session_id: UUID
+    lesson_id: UUID
+    stt_session_id: str
+    segment_index: int
+    last_sequence: int
+    text: str
+    start_stream_elapsed_ms: int
+    end_stream_elapsed_ms: int
+    boundary_reason: str
+    occurred_at: datetime
+    contract_version: str = "1"
+
+    def __post_init__(self) -> None:
+        if self.contract_version != "1":
+            raise ValueError("contract_version must be '1'")
+        _validate_identifier(self.event_id, "event_id")
+        _validate_uuid(self.session_id, "session_id")
+        _validate_uuid(self.lesson_id, "lesson_id")
+        _validate_identifier(self.stt_session_id, "stt_session_id")
+        _validate_integer(self.segment_index, "segment_index", minimum=0)
+        _validate_integer(self.last_sequence, "last_sequence", minimum=1)
+        _validate_integer(self.start_stream_elapsed_ms, "start_stream_elapsed_ms", minimum=0)
+        _validate_integer(self.end_stream_elapsed_ms, "end_stream_elapsed_ms", minimum=0)
+        if self.end_stream_elapsed_ms < self.start_stream_elapsed_ms:
+            raise ValueError("end_stream_elapsed_ms must not precede start_stream_elapsed_ms")
+        if not isinstance(self.text, str):
+            raise TypeError("text must be a string")
+        if not self.text:
+            raise ValueError("text must not be empty")
+        if len(self.text) > MAX_CAPTION_TEXT_LENGTH:
+            raise ValueError(f"text must not exceed {MAX_CAPTION_TEXT_LENGTH} characters")
+        if self.boundary_reason not in {"SILENCE", "MAX_DURATION", "STREAM_END"}:
+            raise ValueError("unsupported boundary_reason")
+        _validate_occurred_at(self.occurred_at)
+
+    @property
+    def type(self) -> str:
+        return "caption.segment.final"
 
 
 @dataclass(frozen=True, slots=True)
