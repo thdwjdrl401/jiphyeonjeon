@@ -168,20 +168,28 @@
 .side-panel-content { min-height: 0; flex: 1; overflow-y: auto; padding: 13px; }
 .media-page--live .side-panel-content,
 .media-page--live .chat-list,
+.media-page--live .ai-chat-log,
 .detached-sidebar-root .side-panel-content,
-.detached-sidebar-root .chat-list { overscroll-behavior: contain; scrollbar-color: rgba(74,113,79,.4) transparent; scrollbar-width: thin; }
+.detached-sidebar-root .chat-list,
+.detached-sidebar-root .ai-chat-log { overscroll-behavior: contain; scrollbar-color: rgba(74,113,79,.4) transparent; scrollbar-width: thin; }
 .media-page--live .side-panel-content::-webkit-scrollbar,
 .media-page--live .chat-list::-webkit-scrollbar,
+.media-page--live .ai-chat-log::-webkit-scrollbar,
 .detached-sidebar-root .side-panel-content::-webkit-scrollbar,
-.detached-sidebar-root .chat-list::-webkit-scrollbar { width: 7px; }
+.detached-sidebar-root .chat-list::-webkit-scrollbar,
+.detached-sidebar-root .ai-chat-log::-webkit-scrollbar { width: 7px; }
 .media-page--live .side-panel-content::-webkit-scrollbar-thumb,
 .media-page--live .chat-list::-webkit-scrollbar-thumb,
+.media-page--live .ai-chat-log::-webkit-scrollbar-thumb,
 .detached-sidebar-root .side-panel-content::-webkit-scrollbar-thumb,
-.detached-sidebar-root .chat-list::-webkit-scrollbar-thumb { border-radius: 99px; background: rgba(74,113,79,.32); }
+.detached-sidebar-root .chat-list::-webkit-scrollbar-thumb,
+.detached-sidebar-root .ai-chat-log::-webkit-scrollbar-thumb { border-radius: 99px; background: rgba(74,113,79,.32); }
 .media-page--live .side-panel-content::-webkit-scrollbar-track,
 .media-page--live .chat-list::-webkit-scrollbar-track,
+.media-page--live .ai-chat-log::-webkit-scrollbar-track,
 .detached-sidebar-root .side-panel-content::-webkit-scrollbar-track,
-.detached-sidebar-root .chat-list::-webkit-scrollbar-track { background: transparent; }
+.detached-sidebar-root .chat-list::-webkit-scrollbar-track,
+.detached-sidebar-root .ai-chat-log::-webkit-scrollbar-track { background: transparent; }
 .chat-panel { display: flex; padding: 0; overflow: hidden; flex-direction: column; }
 .discussion-panel { display: flex; padding: 0; overflow: hidden; flex-direction: column; }
 .discussion-filter { display: flex; gap: 6px; padding: 10px 11px 4px; }
@@ -215,13 +223,11 @@
 .evidence-card span, .ai-answer small { color: var(--blue-700); font-size: .57rem; }
 .evidence-card strong, .ai-answer strong { display: block; margin-top: 3px; color: var(--ink-950); font-size: .72rem; }
 .evidence-card p, .ai-answer p { margin: 4px 0; color: var(--ink-700); font-size: .65rem; }
-.ai-panel { display: flex; flex-direction: column; gap: 11px; }
+.ai-panel { display: flex; padding: 0; overflow: hidden; flex-direction: column; }
 .ai-empty { padding: 20px 8px; text-align: center; }
 .ai-empty__avatar { display: inline-block; width: 84px; height: 84px; border: 1px solid var(--ink-100); border-radius: 16px; object-fit: cover; box-shadow: var(--shadow-sm); }
 .ai-empty h3 { margin: 12px 0 4px; font-family: var(--font-display); font-size: 1.05rem; }
 .ai-empty p { color: var(--ink-600); font-size: .68rem; }
-.ai-panel form { margin-top: auto; }
-.ai-panel form .button { margin-top: 7px; }
 /* 스트리밍 답변은 줄바꿈을 살리고, 근거 자료 ID처럼 긴 토큰이 패널 폭을 밀지 않게 잘라 넣는다. */
 .ai-answer p { overflow-wrap: anywhere; white-space: pre-wrap; }
 .ai-answer__pending { display: inline-block; margin-top: 4px; }
@@ -230,6 +236,26 @@
 .ai-evidence { display: grid; gap: 9px; margin: 10px 0 0; padding: 0; list-style: none; }
 .ai-evidence .evidence-card { margin-top: 0; }
 .ai-evidence__note { display: block; margin-top: 7px; line-height: 1.5; }
+/* 대화형 AI 패널: 이력은 스크롤 영역에 쌓고 입력창은 아래에 고정한다(채팅 패널과 같은 골격). */
+.ai-chat-log { min-height: 0; flex: 1; overflow-y: auto; padding: 12px; }
+.ai-turn { display: grid; gap: 7px; margin-bottom: 14px; }
+.ai-turn:last-child { margin-bottom: 0; }
+/* 370px 사이드바 기준이라 말풍선은 폭을 스스로 제한하고 긴 코드·URL은 그 안에서 잘린다. */
+.ai-bubble { min-width: 0; }
+.ai-bubble > p { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.ai-bubble--mine { justify-self: end; max-width: 90%; padding: 9px 11px; border: 1px solid var(--ink-100); border-radius: 12px 12px 4px 12px; background: var(--ink-50); }
+.ai-bubble--mine > p { color: var(--ink-900); font-size: .68rem; line-height: 1.55; }
+.ai-bubble--ai { margin-top: 0; border-radius: 12px 12px 12px 4px; }
+.ai-bubble--ai.is-streaming { border-color: var(--blue-200); }
+.ai-bubble--ai > p { font-size: .68rem; line-height: 1.6; }
+.ai-bubble > .ai-answer__notice { margin-top: 8px; color: var(--ink-600); font-size: .63rem; line-height: 1.5; }
+.ai-bubble > .ai-answer__notice.is-error { color: var(--red-600); }
+.ai-answer__pending i { display: inline-block; width: 5px; height: 5px; margin-right: 5px; border-radius: 99px; background: var(--blue-600); animation: ai-typing-pulse 1.1s ease-in-out infinite; vertical-align: middle; }
+@keyframes ai-typing-pulse { 0%, 100% { opacity: .25; transform: scale(.7); } 50% { opacity: 1; transform: scale(1); } }
+.ai-composer { flex: 0 0 auto; padding: 11px; border-top: 1px solid var(--ink-100); }
+.ai-composer__row { display: flex; align-items: center; justify-content: space-between; gap: 9px; margin-top: 7px; }
+.ai-composer__row small { min-width: 0; color: var(--ink-500); font-size: .55rem; line-height: 1.4; }
+.ai-composer__row .button { flex: 0 0 auto; }
 .learning-panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 9px; margin-bottom: 12px; }
 .learning-panel-heading > div { display: grid; gap: 3px; }
 .learning-panel-heading strong { color: var(--ink-950); font-size: .72rem; }
@@ -393,6 +419,7 @@
 @media (prefers-reduced-motion: reduce) {
   .video-status-overlay, .video-controls-overlay { transition: none; }
   .summary-generating > i { animation: none; }
+  .ai-answer__pending i { animation: none; }
 }
 
 /* Light royal-library media canvas */
@@ -564,7 +591,8 @@
 }
 
 .side-panel-content,
-.chat-composer {
+.chat-composer,
+.ai-composer {
   background: rgba(255, 252, 243, .7);
 }
 

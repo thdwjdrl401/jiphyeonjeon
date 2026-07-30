@@ -214,7 +214,7 @@ export default function LiveClassroomPage() {
   const aiContent = (
     <PersonalAiQuestionPanel
       ask={askAi}
-      placeholder="예: SecurityContext와 세션은 어떻게 다른가요?"
+      placeholder="예: SecurityContext와 세션은 어떻게 다른가요? (Enter 전송 · Shift+Enter 줄바꿈)"
       emptyDescription="강의 자료와 지금까지의 발화를 근거로 답변합니다."
     />
   )

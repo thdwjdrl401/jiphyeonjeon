@@ -100,8 +100,18 @@ LiveLessonPage
 | `CurrentCaption` | `features/caption` | `partial`·`final`·`revised` 자막 교체·갱신 |
 | `GlossaryPopover` | `features/ai` | 전문용어의 짧은 설명 표시 |
 | `AiEvidenceList` | `features/ai` | **구현됨** — 답변 `sources`를 근거 카드로 표시(PPTX 쪽수 / 발화 구간) |
-| `PersonalAiQuestionPanel` | `features/ai` | **구현됨** — 개인 질문 입력, SSE 답변 누적 렌더, 근거·불충분·오류·재시도·취소 |
+| `PersonalAiQuestionPanel` | `features/ai` | **구현됨** — 대화형(챗) 질의응답: 턴 이력, 낙관적 질문 표시, Enter 전송, SSE 누적, 중단·재시도 |
+| `AiChatTurn` | `features/ai` | **구현됨** — 한 턴(내 질문 + AI 답변) 말풍선·상태·근거·재시도 렌더(memo) |
 | `LessonMaterialPanel` | `features/lesson` | 레슨 전에 공개된 PPTX 자료 목록·열람 |
+
+AI 패널은 일반적인 챗 UI 규약을 따른다(ADR-0048).
+
+- 전송하면 내 질문이 **즉시** 이력에 붙고 입력창이 비워진다. 그 아래 AI 턴이 생겨 델타가 도착하는 대로 자란다.
+- `Enter` 전송 / `Shift+Enter` 줄바꿈. 한글 IME 조합 중(`isComposing`) Enter는 전송하지 않는다.
+- 응답 중에는 전송 버튼 자리가 `답변 중단`으로 바뀐다(질문 겹침 방지 + `AbortController` 취소).
+- 새 델타·새 턴은 하단을 따라가되, 사용자가 위로 올려 읽는 중이면 끌어내리지 않는다(하단 48px 이내일 때만).
+- 상태별 표현: `done`은 근거 카드, `insufficient`는 **오류가 아닌 안내**(재시도 없음), `error`는 메시지 + `retryable`일 때만 재시도.
+- **이력은 클라이언트 메모리뿐이다.** 서버 AI Q&A 이력 API(`AI-HISTORY-01`)가 없어 새로고침·탭 재마운트면 사라지며, 화면도 입력창 옆에서 이를 밝힌다("대화는 이 화면에서만 유지되며 새로고침하면 사라집니다").
 
 ### 4.4 채팅과 질문 인사이트
 
