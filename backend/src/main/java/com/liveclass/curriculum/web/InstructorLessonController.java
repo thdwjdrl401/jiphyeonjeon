@@ -28,8 +28,8 @@ import java.util.UUID;
 
 /**
  * 강사용 레슨 관리 (CONTRACT §2, 소유권 검증). 데이터는 lesson 모듈이 소유하고, 여기선 소유권
- * 검증 후 위임한다. 발행/게시취소는 MVP 직행 DRAFT↔PUBLISHED command다(ADR-0021) — AI 준비도
- * 게이팅(READY→PUBLISHED)은 CP2로 유보. 자료(PPTX/AI) 파이프라인은 여전히 범위 밖.
+ * 검증 후 위임한다. CRUD는 생성·수정·삭제뿐이다 — 발행/게시취소 command는 없다(ADR-0005).
+ * 자료(PPTX/AI) 파이프라인은 범위 밖.
  */
 @Tag(name = "레슨 관리(강사)", description = "강사가 섹션 안의 레슨을 만들고 수정한다. 본인 커리큘럼의 레슨만 접근할 수 있다.")
 @RestController
@@ -41,7 +41,7 @@ public class InstructorLessonController {
         this.service = service;
     }
 
-    @Operation(summary = "레슨 생성", description = "섹션 맨 뒤에 새 레슨을 추가한다. 처음엔 초안 상태다.")
+    @Operation(summary = "레슨 생성", description = "섹션 맨 뒤에 새 레슨을 추가한다. 만들어지는 순간 게시 상태이며, 외부 공개는 커리큘럼 발행이 결정한다.")
     @PostMapping("/api/instructor/sections/{sectionId}/lessons")
     @ResponseStatus(HttpStatus.CREATED)
     public LessonView create(@PathVariable UUID sectionId,
@@ -77,17 +77,8 @@ public class InstructorLessonController {
         service.deleteLesson(currentUserId(authentication), lessonId);
     }
 
-    @Operation(summary = "레슨 발행", description = "레슨을 PUBLISHED로 바꿔 공개 목차에 노출한다. MVP 직행(DRAFT→PUBLISHED).")
-    @PostMapping("/api/instructor/lessons/{lessonId}/publish")
-    public LessonView publish(@PathVariable UUID lessonId, Authentication authentication) {
-        return service.publishLesson(currentUserId(authentication), lessonId);
-    }
-
-    @Operation(summary = "레슨 게시취소", description = "레슨을 DRAFT로 되돌려 공개 목차에서 내린다(PUBLISHED→DRAFT).")
-    @PostMapping("/api/instructor/lessons/{lessonId}/unpublish")
-    public LessonView unpublish(@PathVariable UUID lessonId, Authentication authentication) {
-        return service.unpublishLesson(currentUserId(authentication), lessonId);
-    }
+    // 레슨 발행·게시취소 엔드포인트는 없다 — 레슨은 만들어지는 순간 게시 상태이고 되돌릴 상태가
+    // 없다. 공개 여부는 커리큘럼 발행(POST /instructor/curriculums/{id}/publish)이 결정한다(ADR-0005).
 
     @Operation(summary = "레슨 자료 연결",
             description = "미리 업로드한 자료 에셋(kind=MATERIAL)을 레슨에 연결한다. 본문의 assetId는 "

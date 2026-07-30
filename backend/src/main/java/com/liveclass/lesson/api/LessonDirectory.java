@@ -15,8 +15,11 @@ public interface LessonDirectory {
     /** 섹션에 속한 레슨 수. 빈 섹션 판정 등에 쓴다. */
     long countInSection(UUID sectionId);
 
-    /** 여러 섹션의 PUBLISHED 레슨을 순서대로(한 번에) 반환한다 — 공개 목차용. */
-    List<LessonOutlineView> findPublishedBySections(Collection<UUID> sectionIds);
+    /**
+     * 여러 섹션의 레슨을 순서대로(한 번에) 반환한다 — 공개 목차용.
+     * 상태로 거르지 않는다: 레슨에는 초안이 없고 공개 여부는 커리큘럼이 결정한다(ADR-0005).
+     */
+    List<LessonOutlineView> findBySections(Collection<UUID> sectionIds);
 
     /**
      * 레슨 ID → 제목을 <b>한 번에</b> 조회한다(N+1 방지). 다른 모듈이 목록 응답에 레슨 제목만
@@ -25,8 +28,7 @@ public interface LessonDirectory {
     Map<UUID, String> findTitles(Collection<UUID> lessonIds);
 
     /**
-     * 레슨 한 건을 상태와 무관하게 조회한다. 게시 여부·수강 관계 판정은 호출하는 쪽 몫이다 —
-     * 여기서 미게시를 걸러 버리면 소유 강사에게 자기 초안을 보여줄 수 없다.
+     * 레슨 한 건을 조회한다. 수강 관계 판정은 호출하는 쪽 몫이다.
      */
     Optional<LessonDetailView> findDetail(UUID lessonId);
 }

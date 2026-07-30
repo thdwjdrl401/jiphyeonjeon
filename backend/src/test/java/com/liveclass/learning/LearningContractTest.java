@@ -44,7 +44,7 @@ class LearningContractTest {
     void progress_upsert_then_context_reflects_it() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
-        String lessonId = publishLesson(instructor, cid, "1강");
+        String lessonId = addLesson(instructor, cid, "1강");
         Cookie[] student = loginAs("STUDENT");
         approveEnrollment(instructor, student, cid);
 
@@ -70,7 +70,7 @@ class LearningContractTest {
     void progress_over_threshold_is_completed_and_sticky() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
-        String lessonId = publishLesson(instructor, cid, "1강");
+        String lessonId = addLesson(instructor, cid, "1강");
         Cookie[] student = loginAs("STUDENT");
         approveEnrollment(instructor, student, cid);
 
@@ -94,7 +94,7 @@ class LearningContractTest {
     void stale_client_update_is_ignored() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
-        String lessonId = publishLesson(instructor, cid, "1강");
+        String lessonId = addLesson(instructor, cid, "1강");
         Cookie[] student = loginAs("STUDENT");
         approveEnrollment(instructor, student, cid);
 
@@ -115,7 +115,7 @@ class LearningContractTest {
     void bookmark_is_idempotent() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
-        String lessonId = publishLesson(instructor, cid, "1강");
+        String lessonId = addLesson(instructor, cid, "1강");
         Cookie[] student = loginAs("STUDENT");
         approveEnrollment(instructor, student, cid);
 
@@ -137,7 +137,7 @@ class LearningContractTest {
     void unenrolled_student_cannot_learn() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
-        String lessonId = publishLesson(instructor, cid, "1강");
+        String lessonId = addLesson(instructor, cid, "1강");
         Cookie[] student = loginAs("STUDENT");
 
         write(get("/api/lessons/" + lessonId + "/learning-context"), student, null)
@@ -161,7 +161,7 @@ class LearningContractTest {
     void invalid_progress_percent_is_rejected_400() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
-        String lessonId = publishLesson(instructor, cid, "1강");
+        String lessonId = addLesson(instructor, cid, "1강");
         Cookie[] student = loginAs("STUDENT");
         approveEnrollment(instructor, student, cid);
 
@@ -174,8 +174,8 @@ class LearningContractTest {
     void catalog_progress_is_no_longer_always_null() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
-        String l1 = publishLesson(instructor, cid, "1강");
-        publishLesson(instructor, cid, "2강");
+        String l1 = addLesson(instructor, cid, "1강");
+        addLesson(instructor, cid, "2강");
         Cookie[] student = loginAs("STUDENT");
         approveEnrollment(instructor, student, cid);
 
@@ -201,8 +201,8 @@ class LearningContractTest {
     void learning_summary_aggregates_enrolled_progress() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
-        String l1 = publishLesson(instructor, cid, "1강");
-        publishLesson(instructor, cid, "2강");
+        String l1 = addLesson(instructor, cid, "1강");
+        addLesson(instructor, cid, "2강");
         Cookie[] student = loginAs("STUDENT");
         approveEnrollment(instructor, student, cid);
 
@@ -247,12 +247,11 @@ class LearningContractTest {
         return cid;
     }
 
-    private String publishLesson(Cookie[] instructor, String curriculumId, String title) throws Exception {
+    private String addLesson(Cookie[] instructor, String curriculumId, String title) throws Exception {
         String sectionId = json(write(post("/api/instructor/curriculums/" + curriculumId + "/sections"), instructor,
                 "{\"title\":\"1주차\"}").andReturn()).get("sectionId").asString();
         String lessonId = json(write(post("/api/instructor/sections/" + sectionId + "/lessons"), instructor,
                 "{\"title\":\"%s\"}".formatted(title)).andReturn()).get("lessonId").asString();
-        write(post("/api/instructor/lessons/" + lessonId + "/publish"), instructor, null).andExpect(status().isOk());
         return lessonId;
     }
 

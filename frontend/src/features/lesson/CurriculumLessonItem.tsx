@@ -17,7 +17,6 @@ interface LessonActivity {
 
 const reasonLabel: Record<string, string> = {
   ENROLLMENT_REQUIRED: '수강 승인 후 이용',
-  LESSON_NOT_PUBLISHED: '강의 준비 중',
   LIVE_NOT_STARTED: '라이브 예정',
   REPLAY_NOT_PUBLISHED: '다시보기 준비 중',
 }
@@ -43,16 +42,15 @@ export default function CurriculumLessonItem({ lesson, relationship, curriculumI
   const detailPath = resolveLessonPath({ curriculumId, sectionId, lessonId: lesson.lessonId, destination: 'LESSON_DETAIL', role })
   const activity = resolveActivity(lesson)
   const isStudentView = relationship !== 'OWNER_INSTRUCTOR'
-  const publicationLabel = lesson.status === 'PUBLISHED' ? '게시됨' : '준비 중'
-  const publicationTone = lesson.status === 'PUBLISHED' ? 'published' : 'default'
 
   return (
     <li className={`curriculum-lesson${canOpen ? '' : ' curriculum-lesson--locked'}`}>
       <div className="curriculum-lesson__main">
         {canOpen ? <Link className="curriculum-lesson__title" to={detailPath}>{lesson.order}. {lesson.title}</Link> : <strong className="curriculum-lesson__title">{lesson.order}. {lesson.title}</strong>}
-        {!isStudentView && <div className="curriculum-lesson__states">
-          <span className={`curriculum-lesson__state curriculum-lesson__state--${publicationTone}`}>{publicationLabel}</span>
-          {canOpen && <span className={`curriculum-lesson__state curriculum-lesson__state--${activity.tone}`}>{activity.statusLabel}</span>}
+        {/* 게시 상태 배지는 없다 — 레슨 상태가 PUBLISHED 하나뿐이라 알려줄 것이 없다(ADR-0005).
+            라이브·다시보기 진행 배지는 실제로 변하는 정보라 남긴다. */}
+        {!isStudentView && canOpen && <div className="curriculum-lesson__states">
+          <span className={`curriculum-lesson__state curriculum-lesson__state--${activity.tone}`}>{activity.statusLabel}</span>
         </div>}
       </div>
 

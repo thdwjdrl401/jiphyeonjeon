@@ -150,7 +150,7 @@ class CatalogPolicyAndReplayContractTest {
     void lesson_without_recording_reports_not_ready() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
-        publishLesson(instructor, cid, "녹화 없는 강의");
+        addLesson(instructor, cid, "녹화 없는 강의");
 
         write(get("/api/curriculums/" + cid), instructor, null)
                 .andExpect(status().isOk())
@@ -162,7 +162,7 @@ class CatalogPolicyAndReplayContractTest {
     void recorded_lesson_reports_its_replay_status() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
-        String lessonId = publishLesson(instructor, cid, "녹화된 강의");
+        String lessonId = addLesson(instructor, cid, "녹화된 강의");
         seedRecording(instructor, lessonId, ReplayStatus.DRAFT);
 
         // 녹화가 잡히면 더 이상 "녹화 없음"이 아니다. 게시 검수 흐름이 없어 DRAFT에 머문다
@@ -178,7 +178,7 @@ class CatalogPolicyAndReplayContractTest {
     void published_replay_sends_the_lesson_to_vod() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
-        String lessonId = publishLesson(instructor, cid, "게시된 녹화");
+        String lessonId = addLesson(instructor, cid, "게시된 녹화");
         seedRecording(instructor, lessonId, ReplayStatus.PUBLISHED);
 
         // 라이브가 끝난 뒤 게시된 녹화가 있으면 강의를 열었을 때 다시보기로 간다.
@@ -239,12 +239,11 @@ class CatalogPolicyAndReplayContractTest {
         return cid;
     }
 
-    private String publishLesson(Cookie[] instructor, String curriculumId, String title) throws Exception {
+    private String addLesson(Cookie[] instructor, String curriculumId, String title) throws Exception {
         String sectionId = json(write(post("/api/instructor/curriculums/" + curriculumId + "/sections"), instructor,
                 "{\"title\":\"1주차\"}").andReturn()).get("sectionId").asString();
         String lessonId = json(write(post("/api/instructor/sections/" + sectionId + "/lessons"), instructor,
                 "{\"title\":\"%s\"}".formatted(title)).andReturn()).get("lessonId").asString();
-        write(post("/api/instructor/lessons/" + lessonId + "/publish"), instructor, null).andExpect(status().isOk());
         return lessonId;
     }
 

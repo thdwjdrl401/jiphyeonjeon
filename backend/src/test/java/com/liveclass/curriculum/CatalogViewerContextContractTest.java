@@ -58,7 +58,7 @@ class CatalogViewerContextContractTest {
     void owner_instructor_can_manage_and_open_lessons() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
-        publishLesson(instructor, cid, "1강");
+        addLesson(instructor, cid, "1강");
 
         write(get("/api/curriculums/" + cid), instructor, null)
                 .andExpect(status().isOk())
@@ -80,7 +80,7 @@ class CatalogViewerContextContractTest {
     void outline_lesson_status_uses_contract_field_name() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
-        publishLesson(instructor, cid, "1강");
+        addLesson(instructor, cid, "1강");
 
         mockMvc.perform(get("/api/curriculums/" + cid))
                 .andExpect(status().isOk())
@@ -104,7 +104,7 @@ class CatalogViewerContextContractTest {
     void unenrolled_student_can_enroll_but_cannot_open_lessons() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
-        publishLesson(instructor, cid, "1강");
+        addLesson(instructor, cid, "1강");
         Cookie[] student = loginAs("STUDENT");
 
         write(get("/api/curriculums/" + cid), student, null)
@@ -134,7 +134,7 @@ class CatalogViewerContextContractTest {
     void approved_student_can_open_lessons() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
-        publishLesson(instructor, cid, "1강");
+        addLesson(instructor, cid, "1강");
         Cookie[] student = loginAs("STUDENT");
         approveEnrollment(instructor, student, cid);
 
@@ -150,7 +150,7 @@ class CatalogViewerContextContractTest {
     void scheduled_live_session_appears_on_outline_lesson() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
-        String lessonId = publishLesson(instructor, cid, "라이브 예정 강의");
+        String lessonId = addLesson(instructor, cid, "라이브 예정 강의");
         write(post("/api/instructor/lessons/" + lessonId + "/live-sessions"), instructor,
                 "{\"scheduledAt\":\"2026-08-01T10:00:00+09:00\"}")
                 .andExpect(status().isCreated());
@@ -207,12 +207,11 @@ class CatalogViewerContextContractTest {
     }
 
     /** 섹션 하나 + 게시된 레슨 하나를 만든다. 공개 목차는 PUBLISHED 레슨만 담기 때문에 게시까지 한다. */
-    private String publishLesson(Cookie[] instructor, String curriculumId, String title) throws Exception {
+    private String addLesson(Cookie[] instructor, String curriculumId, String title) throws Exception {
         String sectionId = json(write(post("/api/instructor/curriculums/" + curriculumId + "/sections"), instructor,
                 "{\"title\":\"1주차\"}").andReturn()).get("sectionId").asString();
         String lessonId = json(write(post("/api/instructor/sections/" + sectionId + "/lessons"), instructor,
                 "{\"title\":\"%s\"}".formatted(title)).andReturn()).get("lessonId").asString();
-        write(post("/api/instructor/lessons/" + lessonId + "/publish"), instructor, null).andExpect(status().isOk());
         return lessonId;
     }
 

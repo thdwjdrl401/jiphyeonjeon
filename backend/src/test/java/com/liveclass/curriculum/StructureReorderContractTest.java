@@ -105,8 +105,8 @@ class StructureReorderContractTest {
         String sectionB = createSection(auth, curriculumId, "B");
         String a1 = createLesson(auth, sectionA, "a1");
         String b1 = createLesson(auth, sectionB, "b1");
-        publishLesson(auth, a1);
-        publishLesson(auth, b1);
+        addLesson(auth, a1);
+        addLesson(auth, b1);
         write(post("/api/instructor/curriculums/" + curriculumId + "/publish"), auth, null)
                 .andExpect(status().isOk());
 
@@ -409,9 +409,7 @@ class StructureReorderContractTest {
         return json(result).get("lessonId").asString();
     }
 
-    private void publishLesson(Cookie[] auth, String lessonId) throws Exception {
-        write(post("/api/instructor/lessons/" + lessonId + "/publish"), auth, null)
-                .andExpect(status().isOk());
+    private void addLesson(Cookie[] auth, String lessonId) throws Exception {
     }
 
     /** 변경 요청: CSRF 핸드셰이크(쿠키+헤더) + 로그인 세션 쿠키를 함께 실어 보낸다. */

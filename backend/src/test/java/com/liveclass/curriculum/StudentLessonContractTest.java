@@ -44,7 +44,7 @@ class StudentLessonContractTest {
     void enrolled_student_opens_published_lesson_with_description_and_path() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
-        String lessonId = publishLesson(instructor, cid, "1강", "세션과 인증의 책임 차이");
+        String lessonId = addLesson(instructor, cid, "1강", "세션과 인증의 책임 차이");
         Cookie[] student = loginAs("STUDENT");
         approveEnrollment(instructor, student, cid);
 
@@ -61,7 +61,7 @@ class StudentLessonContractTest {
     }
 
     @Test
-    void owner_instructor_can_open_own_unpublished_lesson() throws Exception {
+    void owner_instructor_can_open_lesson_in_unpublished_curriculum() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
         String sectionId = createSection(instructor, cid);
@@ -70,14 +70,14 @@ class StudentLessonContractTest {
         // 초안이라 공개 목차엔 없지만, 만든 강사는 열 수 있어야 편집 화면이 뜬다.
         write(get("/api/lessons/" + lessonId), instructor, null)
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("DRAFT"));
+                .andExpect(jsonPath("$.status").value("PUBLISHED"));
     }
 
     @Test
     void unenrolled_student_gets_403_with_enrollment_reason_code() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
-        String lessonId = publishLesson(instructor, cid, "1강", "설명");
+        String lessonId = addLesson(instructor, cid, "1강", "설명");
         Cookie[] student = loginAs("STUDENT");
 
         // 공개 목차가 이미 레슨의 존재를 드러내므로 숨길 것이 없다 — 404가 아니라 403이 맞다.
@@ -91,7 +91,7 @@ class StudentLessonContractTest {
     void pending_student_cannot_open_lesson_yet() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
-        String lessonId = publishLesson(instructor, cid, "1강", "설명");
+        String lessonId = addLesson(instructor, cid, "1강", "설명");
         Cookie[] student = loginAs("STUDENT");
         write(post("/api/curriculums/" + cid + "/enrollments"), student, null).andExpect(status().isCreated());
 
@@ -101,24 +101,25 @@ class StudentLessonContractTest {
     }
 
     @Test
-    void enrolled_student_gets_404_for_unpublished_lesson() throws Exception {
+    void enrolled_student_opens_newly_created_lesson_without_publish_step() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
         String sectionId = createSection(instructor, cid);
-        String draftId = createLesson(instructor, sectionId, "초안 강의", "");
+        String lessonId = createLesson(instructor, sectionId, "방금 만든 강의", "");
         Cookie[] student = loginAs("STUDENT");
         approveEnrollment(instructor, student, cid);
 
-        // 수강 중이라도 그 사람의 목차엔 없는 레슨이다. 403으로 답하면 초안의 존재가 새어 나간다.
-        write(get("/api/lessons/" + draftId), student, null)
-                .andExpect(status().isNotFound());
+        // 공개 커리큘럼에 강의를 만들면 그 순간 수강생에게 열린다 — 게시 단계가 없다(ADR-0005).
+        write(get("/api/lessons/" + lessonId), student, null)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PUBLISHED"));
     }
 
     @Test
     void non_owner_instructor_cannot_open_someone_elses_lesson() throws Exception {
         Cookie[] owner = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(owner);
-        String lessonId = publishLesson(owner, cid, "1강", "설명");
+        String lessonId = addLesson(owner, cid, "1강", "설명");
         Cookie[] other = loginAs("INSTRUCTOR");
 
         write(get("/api/lessons/" + lessonId), other, null)
@@ -137,7 +138,7 @@ class StudentLessonContractTest {
     void anonymous_request_returns_401() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
-        String lessonId = publishLesson(instructor, cid, "1강", "설명");
+        String lessonId = addLesson(instructor, cid, "1강", "설명");
 
         mockMvc.perform(get("/api/lessons/" + lessonId))
                 .andExpect(status().isUnauthorized());
@@ -164,10 +165,9 @@ class StudentLessonContractTest {
                 .get("lessonId").asString();
     }
 
-    private String publishLesson(Cookie[] instructor, String curriculumId, String title, String description)
+    private String addLesson(Cookie[] instructor, String curriculumId, String title, String description)
             throws Exception {
         String lessonId = createLesson(instructor, createSection(instructor, curriculumId), title, description);
-        write(post("/api/instructor/lessons/" + lessonId + "/publish"), instructor, null).andExpect(status().isOk());
         return lessonId;
     }
 

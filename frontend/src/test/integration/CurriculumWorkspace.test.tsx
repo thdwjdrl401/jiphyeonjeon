@@ -54,45 +54,46 @@ describe('커리큘럼 작업 화면', () => {
     expect(screen.queryByRole('button', { name: /함께 게시$/ })).not.toBeInTheDocument()
   })
 
-  // 공개 = 커리큘럼 PUBLISHED AND 강의 PUBLISHED(ADR-0002). 주 버튼 한 번으로 그 상태에 도달해야 한다.
-  it('초안 강의가 있으면 주 버튼 한 번으로 강의와 커리큘럼을 함께 게시한다', async () => {
+  // 공개 축은 커리큘럼 하나다(ADR-0005) — 게시 버튼을 누르면 안의 강의가 함께 공개된다.
+  it('커리큘럼을 게시하면 안의 강의가 함께 공개된다', async () => {
     const user = userEvent.setup()
     vi.spyOn(window, 'confirm').mockReturnValue(true)
-    // cur-architecture는 DRAFT 커리큘럼이라 시드 강의 7개가 모두 DRAFT다.
+    // cur-architecture는 DRAFT 커리큘럼이고 시드 강의는 7개다(레슨 상태는 언제나 PUBLISHED).
     await renderAsInstructor('/instructor/curriculums/cur-architecture/manage')
 
     // 게시 카드는 진입 기본 탭인 구성 맨 아래에 있다 — 탭을 옮기지 않아도 보인다.
-    expect(await screen.findByText(/게시하면 초안 강의/)).toBeInTheDocument()
-    expect(screen.getByText('커리큘럼 비공개 · 게시된 강의 0/7개 — 게시해야 수강생에게 보입니다.')).toBeInTheDocument()
+    const publishNotice = await screen.findByText(/모두 수강생에게 공개됩니다/)
+    expect(publishNotice.textContent).toContain('강의 7개')
+    expect(screen.getByText('커리큘럼 비공개 · 강의 7개 — 게시해야 수강생에게 보입니다.')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: '강의 7개와 함께 게시' }))
+    await user.click(screen.getByRole('button', { name: '커리큘럼 게시' }))
 
-    // 한 번의 클릭으로 두 축이 모두 PUBLISHED가 된다 — 남은 단계가 없어야 한다.
-    expect(await screen.findByText('커리큘럼 공개 중 · 게시된 강의 7/7개 — 카탈로그에서 검색·수강신청할 수 있습니다.')).toBeInTheDocument()
+    expect(await screen.findByText('커리큘럼 공개 중 · 강의 7개 — 카탈로그에서 검색·수강신청할 수 있습니다.')).toBeInTheDocument()
     expect(screen.getByText('공개 중')).toBeInTheDocument()
-    expect(screen.queryByText(/게시하면 초안 강의/)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '게시 완료' })).toBeDisabled()
   })
 
-  // 게시된 강의가 하나도 없으면 커리큘럼만 공개해 봐야 목차가 빈 커리큘럼이 노출된다 — 우회로를 막는다.
-  it('게시된 강의가 없으면 커리큘럼만 게시하는 우회로를 열지 않는다', async () => {
+  // 강의를 따로 게시하는 축이 없어졌으므로 '커리큘럼만 게시' 우회로도 없다.
+  it('강의를 따로 게시하는 우회로를 두지 않는다', async () => {
     await renderAsInstructor('/instructor/curriculums/cur-architecture/manage')
 
-    expect(await screen.findByRole('button', { name: '강의 7개와 함께 게시' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: '커리큘럼 게시' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '커리큘럼만 게시' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /함께 게시/ })).not.toBeInTheDocument()
   })
 
-  // mock이 실 서버와 같은 두 축 모델을 지켜야 한다 — 커리큘럼 게시가 강의를 딸려 올리면 안 된다.
-  it('커리큘럼 게시는 강의 상태를 바꾸지 않는다', async () => {
+  // 레슨에 초안이 없다는 성질을 mock도 지켜야 한다 — 어긋나면 mock 검증이 정책 문제를 가린다.
+  it('강의는 커리큘럼이 초안이어도 게시 상태다', async () => {
     await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
+    expect(getMockCurriculum('cur-architecture')?.lifecycleStatus).toBe('DRAFT')
     const before = buildMockCurriculumOutline(getMockCurriculum('cur-architecture')!)
-    expect(before.flatMap((section) => section.lessons).every((lesson) => lesson.status === 'DRAFT')).toBe(true)
+    expect(before.flatMap((section) => section.lessons).every((lesson) => lesson.status === 'PUBLISHED')).toBe(true)
 
     publishMockCurriculum('cur-architecture')
 
     const after = buildMockCurriculumOutline(getMockCurriculum('cur-architecture')!)
     expect(getMockCurriculum('cur-architecture')?.lifecycleStatus).toBe('PUBLISHED')
-    expect(after.flatMap((section) => section.lessons).every((lesson) => lesson.status === 'DRAFT')).toBe(true)
+    expect(after.flatMap((section) => section.lessons).every((lesson) => lesson.status === 'PUBLISHED')).toBe(true)
   })
 
   it('이미 전부 공개된 커리큘럼은 게시 동작을 비활성한다', async () => {
@@ -102,7 +103,6 @@ describe('커리큘럼 작업 화면', () => {
     expect(await screen.findByRole('button', { name: '게시 완료' })).toBeDisabled()
     expect(screen.getByText('공개 중')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '커리큘럼만 게시' })).not.toBeInTheDocument()
-    expect(screen.queryByText(/아직 공개 목차에 보이지 않습니다/)).not.toBeInTheDocument()
   })
 
   // 삭제는 초안에서만(ADR-0001). 게시와 함께 구성 탭 맨 아래 게시 카드에 모아 뒀다.
@@ -111,7 +111,7 @@ describe('커리큘럼 작업 화면', () => {
     const publishPanel = (await screen.findByRole('heading', { name: '커리큘럼 게시' })).closest('section')!
 
     expect(within(publishPanel).getByRole('button', { name: '커리큘럼 삭제' })).toBeInTheDocument()
-    expect(within(publishPanel).getByRole('button', { name: '강의 7개와 함께 게시' })).toBeInTheDocument()
+    expect(within(publishPanel).getByRole('button', { name: '커리큘럼 게시' })).toBeInTheDocument()
   })
 
   it('이미 공개된 커리큘럼에는 삭제 버튼을 두지 않는다', async () => {
@@ -247,10 +247,19 @@ describe('커리큘럼 작업 화면', () => {
     })
   })
 
-  it('커리큘럼 관리에서는 강의 상세만 제공하고 수정 진입점을 숨긴다', async () => {
+  /**
+   * 관리 화면 강의 행은 상세·수정 두 링크만 둔다(ADR-0005).
+   * 상태 배지는 표시할 것이 없어서 빼고, 삭제는 목록에서 한 번의 오클릭으로 강의가 사라지던
+   * 자리라 수정 화면 안으로 옮겼다.
+   */
+  it('관리 화면 강의 행에 상세·수정만 두고 상태와 삭제는 두지 않는다', async () => {
     await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
-    expect(await screen.findAllByRole('link', { name: '상세' })).not.toHaveLength(0)
-    expect(screen.queryByRole('link', { name: '수정' })).not.toBeInTheDocument()
+
+    const lessonRow = (await screen.findAllByRole('link', { name: '상세' }))[0].closest('li')!
+    expect(within(lessonRow).getByRole('link', { name: '상세' })).toBeInTheDocument()
+    expect(within(lessonRow).getByRole('link', { name: '수정' })).toBeInTheDocument()
+    expect(within(lessonRow).queryByRole('button', { name: '삭제' })).not.toBeInTheDocument()
+    expect(within(lessonRow).queryByText('PUBLISHED')).not.toBeInTheDocument()
   })
 
   it('관리 화면에서 실제 수강 신청 목록을 조회하고 승인 상태를 변경한다', async () => {

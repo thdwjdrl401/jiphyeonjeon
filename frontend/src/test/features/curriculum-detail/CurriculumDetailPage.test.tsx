@@ -160,7 +160,7 @@ describe('CurriculumDetailPage', () => {
     expect(screen.queryByRole('link', { name: '이어보기' })).not.toBeInTheDocument()
   })
 
-  it('담당 강사 목차는 강의 버튼과 공개·라이브 상태 태그를 단순화한다', async () => {
+  it('담당 강사 목차는 강의 버튼과 라이브 상태 태그만 둔다', async () => {
     await mockAuthService.login({ email: 'instructor01@example.com', password: 'password1' })
     renderDetail('/curriculums/cur-spring-live')
 
@@ -169,7 +169,9 @@ describe('CurriculumDetailPage', () => {
     for (const link of detailLinks) {
       expect(link).toHaveAttribute('href', expect.stringMatching(/^\/instructor\/curriculums\/.+\/sections\/.+\/lessons\/.+$/))
     }
-    expect(screen.getAllByText('게시됨').length).toBeGreaterThan(0)
+    // 게시 상태 배지는 없다 — 레슨 상태가 PUBLISHED 하나뿐이라 알려줄 것이 없다(ADR-0005).
+    expect(screen.queryByText('게시됨')).not.toBeInTheDocument()
+    expect(screen.queryByText('준비 중')).not.toBeInTheDocument()
     expect(screen.getAllByText('라이브 일정 준비 중').length).toBeGreaterThan(0)
     expect(screen.getAllByText('라이브 예정').length).toBeGreaterThan(0)
     expect(screen.getAllByText('다시보기 준비 중').length).toBeGreaterThan(0)

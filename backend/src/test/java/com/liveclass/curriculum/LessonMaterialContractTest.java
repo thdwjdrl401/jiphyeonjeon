@@ -182,7 +182,6 @@ class LessonMaterialContractTest {
                 "{\"title\":\"1주차\"}").andExpect(status().isCreated()).andReturn()).get("sectionId").asString();
         String lessonId = json(write(post("/api/instructor/sections/" + sectionId + "/lessons"), instructor,
                 "{\"title\":\"1강\"}").andExpect(status().isCreated()).andReturn()).get("lessonId").asString();
-        write(post("/api/instructor/lessons/" + lessonId + "/publish"), instructor, null).andExpect(status().isOk());
         write(post("/api/instructor/curriculums/" + curriculumId + "/publish"), instructor, null).andExpect(status().isOk());
 
         String assetId = uploadedMaterialAsset(instructor);

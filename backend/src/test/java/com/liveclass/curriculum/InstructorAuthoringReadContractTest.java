@@ -46,7 +46,7 @@ class InstructorAuthoringReadContractTest {
     // ---- #5: 강사 레슨 조회가 (DRAFT여도) 라이브 세션을 준다 ----
 
     @Test
-    void instructor_lesson_get_includes_live_session_even_for_draft() throws Exception {
+    void instructor_lesson_get_includes_live_session_for_unpublished_curriculum() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String curriculumId = createCurriculum(instructor);          // DRAFT (발행 안 함)
         String sectionId = createSection(instructor, curriculumId);
@@ -58,8 +58,7 @@ class InstructorAuthoringReadContractTest {
         // 커리큘럼·레슨 모두 DRAFT여도 강사 조회는 방금 만든 세션을 그대로 돌려준다.
         write(get("/api/instructor/lessons/" + lessonId), instructor, null)
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("DRAFT"))
-                .andExpect(jsonPath("$.liveSession.sessionId").exists())
+                                .andExpect(jsonPath("$.liveSession.sessionId").exists())
                 .andExpect(jsonPath("$.liveSession.status").value("SCHEDULED"))
                 .andExpect(jsonPath("$.liveSession.scheduledAt").exists());
     }
@@ -87,7 +86,6 @@ class InstructorAuthoringReadContractTest {
         // 공개 커리큘럼에 라이브 예정 세션 + 승인된 수강생 하나.
         String sectionId = createSection(instructor, published);
         String lessonId = createLesson(instructor, sectionId, "1강");
-        write(post("/api/instructor/lessons/" + lessonId + "/publish"), instructor, null).andExpect(status().isOk());
         write(post("/api/instructor/lessons/" + lessonId + "/live-sessions"), instructor,
                 "{\"scheduledAt\":\"2026-08-01T10:00:00+09:00\"}").andExpect(status().isCreated());
         enrollAndApprove(instructor, published);

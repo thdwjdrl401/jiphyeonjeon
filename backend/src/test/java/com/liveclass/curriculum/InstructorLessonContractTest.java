@@ -43,7 +43,7 @@ class InstructorLessonContractTest {
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
 
     @Test
-    void create_lesson_returns_201_draft_camelCase() throws Exception {
+    void create_lesson_returns_201_published_camelCase() throws Exception {
         Cookie[] auth = loginAs("INSTRUCTOR");
         String sectionId = createSection(auth);
 
@@ -54,7 +54,7 @@ class InstructorLessonContractTest {
                 .andExpect(jsonPath("$.lessonId").exists())
                 .andExpect(jsonPath("$.sectionId").value(sectionId))
                 .andExpect(jsonPath("$.title").value("오리엔테이션"))
-                .andExpect(jsonPath("$.status").value("DRAFT"))
+                .andExpect(jsonPath("$.status").value("PUBLISHED"))
                 .andExpect(jsonPath("$.order").value(0))
                 .andExpect(jsonPath("$.lesson_id").doesNotExist());
     }

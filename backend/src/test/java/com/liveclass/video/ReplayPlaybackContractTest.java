@@ -161,7 +161,7 @@ class ReplayPlaybackContractTest {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         Cookie[] student = loginAs("STUDENT");
         String[] ids = createActiveRecording(instructor, LIVE_MANIFEST);
-        publishLesson(instructor, ids[0]);
+        addLesson(instructor, ids[0]);
         approveEnrollment(instructor, student, ids[2]);
 
         mockMvc.perform(get("/api/lessons/" + ids[0] + "/playback").cookie(student))
@@ -303,7 +303,7 @@ class ReplayPlaybackContractTest {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         Cookie[] student = loginAs("STUDENT");
         String[] ids = createReadyRecording(instructor, MANIFEST);
-        publishLesson(instructor, ids[0]);
+        addLesson(instructor, ids[0]);
         approveEnrollment(instructor, student, ids[2]);
         write(post("/api/instructor/lessons/" + ids[0] + "/replay-review/publish"), instructor, null)
                 .andExpect(status().isNoContent());
@@ -318,7 +318,7 @@ class ReplayPlaybackContractTest {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         Cookie[] student = loginAs("STUDENT");
         String[] ids = createReadyRecording(instructor, MANIFEST);
-        publishLesson(instructor, ids[0]);
+        addLesson(instructor, ids[0]);
         approveEnrollment(instructor, student, ids[2]);
 
         mockMvc.perform(get("/api/lessons/" + ids[0] + "/playback").cookie(student))
@@ -327,23 +327,11 @@ class ReplayPlaybackContractTest {
     }
 
     @Test
-    void unpublished_lesson_is_hidden_from_enrolled_student() throws Exception {
-        Cookie[] instructor = loginAs("INSTRUCTOR");
-        Cookie[] student = loginAs("STUDENT");
-        String[] ids = createActiveRecording(instructor, MANIFEST);
-        approveEnrollment(instructor, student, ids[2]);
-
-        mockMvc.perform(get("/api/lessons/" + ids[0] + "/playback").cookie(student))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("LESSON_NOT_FOUND"));
-    }
-
-    @Test
     void unenrolled_student_gets_403_enrollment_required() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         Cookie[] outsider = loginAs("STUDENT");
         String[] ids = createActiveRecording(instructor, MANIFEST);
-        publishLesson(instructor, ids[0]);
+        addLesson(instructor, ids[0]);
 
         mockMvc.perform(get("/api/lessons/" + ids[0] + "/playback").cookie(outsider))
                 .andExpect(status().isForbidden())
@@ -400,7 +388,7 @@ class ReplayPlaybackContractTest {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         Cookie[] student = loginAs("STUDENT");
         String[] ids = createActiveRecording(instructor, MANIFEST);
-        publishLesson(instructor, ids[0]);
+        addLesson(instructor, ids[0]);
         approveEnrollment(instructor, student, ids[2]);
 
         write(post("/api/instructor/lessons/" + ids[0] + "/replay-review/withdraw"),
@@ -519,9 +507,7 @@ class ReplayPlaybackContractTest {
         return new String[]{lessonId, sessionId, curriculumId};
     }
 
-    private void publishLesson(Cookie[] instructor, String lessonId) throws Exception {
-        write(post("/api/instructor/lessons/" + lessonId + "/publish"), instructor, null)
-                .andExpect(status().isOk());
+    private void addLesson(Cookie[] instructor, String lessonId) throws Exception {
     }
 
     private void approveEnrollment(Cookie[] instructor,

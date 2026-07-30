@@ -2,9 +2,14 @@
 
 > 📍 하네스 개요: [../../harness/README.md](../../harness/README.md) · 판단 정책: [../../harness/POLICY.md](../../harness/POLICY.md)
 
-- **상태**: 채택
+- **상태**: 대체됨(→ [ADR-0005](0005-lesson-has-no-draft-state.md))
 - **일자**: 2026-07-28
 - **관련**: Sub Ⅱ, 브랜치 `fix/fe/authoring-ux`, [songjeongki/0021](../songjeongki/0021-lesson-publish-mvp-direct.md)(유지), [seominkyeong/0001](0001-draft-only-curriculum-delete.md)
+
+> ⚠️ **2026-07-30 대체됨**: 공개 축이 **하나**로 줄었다. 레슨에서 초안 상태와 게시/게시취소를
+> 없애고 생성·수정·삭제만 남겼으며, 공개 여부는 커리큘럼 `lifecycleStatus`만 결정한다 —
+> [ADR-0005](0005-lesson-has-no-draft-state.md)를 보라. 이 ADR이 기록한 "두 축 AND" 모델과
+> 화면이 두 축을 묶어 실행하는 오케스트레이션은 더 이상 유효하지 않다.
 
 ## 맥락 (Context)
 
