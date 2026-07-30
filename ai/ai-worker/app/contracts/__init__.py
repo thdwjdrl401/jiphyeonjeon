@@ -6,6 +6,7 @@ from app.contracts.material_jobs import (
     parse_material_job,
 )
 from app.contracts.spring_callbacks import (
+    KeyTermPayload,
     MaterialCallbackEvent,
     MaterialCallbackStatus,
     MaterialCallbackType,
@@ -15,6 +16,7 @@ from app.contracts.spring_callbacks import (
 __all__ = [
     "EmbedDeleteJob",
     "EmbedPolicy",
+    "KeyTermPayload",
     "MaterialJob",
     "MaterialCallbackEvent",
     "MaterialCallbackStatus",
