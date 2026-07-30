@@ -10,7 +10,13 @@ import pytest
 from app.adapters import HmacInternalRequestAuthenticator
 from app.config import Settings
 from app.main import build_internal_authenticator
-from app.wiring import build_answer_model, build_rag_context_services, build_rag_services
+from app.wiring import (
+    LECTURE_NOTE_CONSUMER_GROUP,
+    build_answer_model,
+    build_lecture_note_services,
+    build_rag_context_services,
+    build_rag_services,
+)
 
 DATABASE_URL = "postgresql+asyncpg://ai_runtime:secret@127.0.0.1:5432/liveclass"
 BGE_TOKEN = "bge-runtime-token-that-is-at-least-32-characters"
@@ -54,6 +60,17 @@ def test_context_wiring_builds_closeable_components_without_connecting() -> None
 def test_answer_model_requires_gms_key() -> None:
     with pytest.raises(ValueError, match="AI_API_GMS_API_KEY"):
         build_answer_model(Settings())
+
+
+def test_lecture_note_wiring_uses_independent_group_and_stable_identity() -> None:
+    services = build_lecture_note_services(_settings())
+
+    assert services.consumer.group_name == LECTURE_NOTE_CONSUMER_GROUP
+    assert services.consumer.group_name == "ai-live-notes-mvp-v1"
+    assert services.consumer.consumer_name == "ai-api-test-1:live-notes-mvp"
+    assert services.consumer.stream_key == "ai:test:captions"
+
+    asyncio.run(services.close())
 
 
 def test_full_rag_wiring_builds_registry_and_closes_all_clients() -> None:

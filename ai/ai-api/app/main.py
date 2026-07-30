@@ -1,6 +1,6 @@
 import logging
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI, Request, Response, status
@@ -14,7 +14,12 @@ from app.config import Settings, load_settings
 from app.logging_config import configure_logging
 from app.rag import RagAnswerService
 from app.runtime import CaptionRuntime, RuntimeState
-from app.wiring import RagServices, build_rag_services
+from app.wiring import (
+    LectureNoteServices,
+    RagServices,
+    build_lecture_note_services,
+    build_rag_services,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +31,7 @@ def create_app(
     rag_service: RagAnswerService | None = None,
     internal_authenticator: InternalRequestAuthenticator | None = None,
     rag_services: RagServices | None = None,
+    lecture_note_services: LectureNoteServices | None = None,
 ) -> FastAPI:
     resolved_settings = settings or load_settings()
     resolved_runtime = runtime or RuntimeState()
@@ -42,24 +48,37 @@ def create_app(
         if rag_services is not None
         else None
     )
+    lecture_note_runtime = (
+        CaptionRuntime(
+            lecture_note_services.consumer,
+            lecture_note_services.consumer_state,
+            shutdown_timeout_seconds=resolved_settings.caption_shutdown_timeout_seconds,
+            cancel_grace_seconds=resolved_settings.caption_cancel_grace_seconds,
+            task_name="lecture-note-consumer",
+        )
+        if lecture_note_services is not None
+        else None
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         if caption_runtime is not None:
             caption_runtime.start()
+        if lecture_note_runtime is not None:
+            lecture_note_runtime.start()
         resolved_runtime.ready = True
         logger.info("ai-api ready", extra={"event": "service.ready"})
         try:
             yield
         finally:
             resolved_runtime.ready = False
-            try:
-                if caption_runtime is not None:
-                    await caption_runtime.stop()
-            finally:
-                if rag_services is not None:
-                    await rag_services.close()
-                logger.info("ai-api stopped", extra={"event": "service.stopped"})
+            await _shutdown_services(
+                lecture_note_runtime=lecture_note_runtime,
+                caption_runtime=caption_runtime,
+                lecture_note_services=lecture_note_services,
+                rag_services=rag_services,
+            )
+            logger.info("ai-api stopped", extra={"event": "service.stopped"})
 
     app = FastAPI(title="LiveClass AI API", lifespan=lifespan)
     app.include_router(create_rag_router(resolved_rag_service, internal_authenticator))
@@ -93,22 +112,51 @@ def create_app(
     app.state.internal_authenticator = internal_authenticator
     app.state.rag_services = rag_services
     app.state.caption_runtime = caption_runtime
+    app.state.lecture_note_services = lecture_note_services
+    app.state.lecture_note_runtime = lecture_note_runtime
     return app
+
+
+async def _shutdown_services(
+    *,
+    lecture_note_runtime: CaptionRuntime | None,
+    caption_runtime: CaptionRuntime | None,
+    lecture_note_services: LectureNoteServices | None,
+    rag_services: RagServices | None,
+) -> None:
+    """consumer를 먼저 멈춘 뒤 application 작업과 외부 client를 순서대로 정리한다."""
+    async with AsyncExitStack() as cleanup:
+        if rag_services is not None:
+            cleanup.push_async_callback(rag_services.close)
+        if lecture_note_services is not None:
+            cleanup.push_async_callback(lecture_note_services.close)
+        if caption_runtime is not None:
+            cleanup.push_async_callback(caption_runtime.stop)
+        if lecture_note_runtime is not None:
+            cleanup.push_async_callback(lecture_note_runtime.stop)
 
 
 def build_internal_authenticator(settings: Settings) -> InternalRequestAuthenticator | None:
     if settings.ai_internal_secret is None:
         return None
-    return HmacInternalRequestAuthenticator(settings.ai_internal_secret.get_secret_value().encode("utf-8"))
+    return HmacInternalRequestAuthenticator(
+        settings.ai_internal_secret.get_secret_value().encode("utf-8")
+    )
 
 
 def run() -> None:
     settings = load_settings()
     configure_logging("ai-api", settings.log_level)
     rag_services = build_rag_services(settings)
+    lecture_note_services = build_lecture_note_services(settings)
     internal_authenticator = build_internal_authenticator(settings)
     uvicorn.run(
-        create_app(settings, rag_services=rag_services, internal_authenticator=internal_authenticator),
+        create_app(
+            settings,
+            rag_services=rag_services,
+            lecture_note_services=lecture_note_services,
+            internal_authenticator=internal_authenticator,
+        ),
         host=settings.host,
         port=settings.port,
         log_config=None,

@@ -58,6 +58,18 @@ class Settings(BaseSettings):
     gms_max_prompt_chars: int = Field(default=100_000, ge=1_000, le=1_000_000)
     gms_timeout_seconds: float = Field(default=55.0, gt=0, le=120)
 
+    lecture_note_model: str | None = Field(default=None, min_length=1, max_length=128)
+    lecture_note_max_output_tokens: int = Field(default=512, ge=1, le=4_096)
+    lecture_note_max_prompt_chars: int = Field(default=20_000, ge=1_000, le=200_000)
+    lecture_note_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
+    lecture_note_min_window_ms: int = Field(default=15_000, ge=1_000, le=120_000)
+    lecture_note_target_window_ms: int = Field(default=25_000, ge=1_000, le=120_000)
+    lecture_note_max_window_ms: int = Field(default=40_000, ge=1_000, le=120_000)
+    lecture_note_min_chars: int = Field(default=80, ge=1, le=10_000)
+    lecture_note_max_chars: int = Field(default=400, ge=1, le=20_000)
+    lecture_note_snapshot_ttl_seconds: int = Field(default=86_400, ge=60, le=604_800)
+    lecture_note_stream_maxlen: int = Field(default=10_000, ge=100, le=1_000_000)
+
     rag_retrieval_timeout_seconds: float = Field(default=10.0, gt=0, le=120)
     rag_model_timeout_seconds: float = Field(default=60.0, gt=0, le=180)
     rag_request_max_active: int = Field(default=256, ge=1, le=10_000)
@@ -96,6 +108,16 @@ class Settings(BaseSettings):
     def validate_gms_model(cls, value: str) -> str:
         if value != value.strip():
             raise ValueError("gms_model must not contain surrounding whitespace")
+        return value
+
+    @field_validator("lecture_note_model", mode="before")
+    @classmethod
+    def validate_lecture_note_model(cls, value: object) -> object:
+        if isinstance(value, str):
+            if not value.strip():
+                return None
+            if value != value.strip():
+                raise ValueError("lecture_note_model must not contain surrounding whitespace")
         return value
 
     @field_validator("database_role")
@@ -158,6 +180,14 @@ class Settings(BaseSettings):
             raise ValueError("RAG retrieval timeout must exceed the BGE client timeout")
         if self.rag_model_timeout_seconds <= self.gms_timeout_seconds:
             raise ValueError("RAG model timeout must exceed the GMS client timeout")
+        if not (
+            self.lecture_note_min_window_ms
+            <= self.lecture_note_target_window_ms
+            <= self.lecture_note_max_window_ms
+        ):
+            raise ValueError("lecture note time bounds must be ordered")
+        if self.lecture_note_min_chars > self.lecture_note_max_chars:
+            raise ValueError("lecture note character bounds must be ordered")
         return self
 
 

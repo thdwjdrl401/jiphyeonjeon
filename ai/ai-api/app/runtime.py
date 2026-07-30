@@ -31,13 +31,17 @@ class CaptionRuntime:
         *,
         shutdown_timeout_seconds: float,
         cancel_grace_seconds: float,
+        task_name: str = "caption-consumer",
     ) -> None:
         if min(shutdown_timeout_seconds, cancel_grace_seconds) <= 0:
             raise ValueError("caption shutdown deadlines must be positive")
+        if not task_name or task_name != task_name.strip():
+            raise ValueError("consumer task name must be non-empty and unpadded")
         self._consumer = consumer
         self._state = state
         self._shutdown_timeout_seconds = shutdown_timeout_seconds
         self._cancel_grace_seconds = cancel_grace_seconds
+        self._task_name = task_name
         self._stop_event: asyncio.Event | None = None
         self._task: asyncio.Task[None] | None = None
 
@@ -49,7 +53,7 @@ class CaptionRuntime:
         if self._task is not None:
             raise RuntimeError("caption runtime can only be started once")
         stop_event = asyncio.Event()
-        task = asyncio.create_task(self._consumer.run(stop_event), name="caption-consumer")
+        task = asyncio.create_task(self._consumer.run(stop_event), name=self._task_name)
         task.add_done_callback(lambda completed: self._observe_task(completed, stop_event))
         self._stop_event = stop_event
         self._task = task
