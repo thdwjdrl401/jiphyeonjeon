@@ -198,7 +198,7 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
     annotationSinkRef.current = sink
     // 새로고침·탭 전환으로 페이지가 사라지기 직전이 마지막 기회다. 여기서 비우지 않으면 방금 그린
     // 획이 저장되지 않아, 복원했을 때 끝부분만 빠진 판서가 나온다.
-    const flush = () => { sink.flush() }
+    const flush = () => { sink.flush(true) }
     window.addEventListener('pagehide', flush)
     document.addEventListener('visibilitychange', flush)
     return () => {
