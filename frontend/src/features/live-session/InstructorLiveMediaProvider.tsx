@@ -38,9 +38,11 @@ import {
   encodeAnnotationOp,
   encodeLaserStroke,
   type AnnotationChange,
+  type AnnotationDocument,
   type AnnotationOp,
   type LaserStroke,
 } from './annotation'
+import { createAnnotationOpSink, fetchAnnotationDocument, type AnnotationOpSink } from './annotationPersistence'
 
 export type InstructorLiveKitConnectionState =
   | 'idle'
@@ -90,6 +92,14 @@ export interface InstructorLiveMedia extends InstructorLiveKitState {
    * 새로 들어온 Egress는 그 전에 흐른 op를 받을 수 없어, 이것이 없으면 판서가 빈 채로 녹화된다.
    */
   annotationAudienceRevision: number
+  /**
+   * 서버에 저장돼 있던 판서(ADR-0051). 강사가 새로고침해도 이걸로 에디터를 되살린다 — 없으면
+   * 강사 화면만 비고 수강생·녹화에는 남아, 같은 화면이라는 전제가 깨진다.
+   *
+   * <p>아직 불러오지 못했으면 null이다. 빈 문서(`elements: []`)와 구분해야 한다 — 빈 문서로 에디터를
+   * 열어 버리면 나중에 도착한 복원본이 강사가 그 사이 그린 획을 덮는다.
+   */
+  restoredAnnotation: AnnotationDocument | null
   /** 품질 변경으로 트랙을 다시 올리는 중. 이때는 선택을 잠근다. */
   applyingQuality: boolean
   retry: () => void
@@ -176,6 +186,28 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
    */
   const annotationRevisionRef = useRef(0)
   const [annotationAudienceRevision, setAnnotationAudienceRevision] = useState(0)
+  const [restoredAnnotation, setRestoredAnnotation] = useState<AnnotationDocument | null>(null)
+
+  /**
+   * 판서를 서버에 남기는 대기열(ADR-0051). 라이브 전달과 <b>병렬</b>이라 여기가 막히거나 실패해도
+   * 강사 화면과 수강생 화면은 그대로 간다.
+   */
+  const annotationSinkRef = useRef<AnnotationOpSink | null>(null)
+  useEffect(() => {
+    const sink = createAnnotationOpSink(sessionId)
+    annotationSinkRef.current = sink
+    // 새로고침·탭 전환으로 페이지가 사라지기 직전이 마지막 기회다. 여기서 비우지 않으면 방금 그린
+    // 획이 저장되지 않아, 복원했을 때 끝부분만 빠진 판서가 나온다.
+    const flush = () => { sink.flush() }
+    window.addEventListener('pagehide', flush)
+    document.addEventListener('visibilitychange', flush)
+    return () => {
+      window.removeEventListener('pagehide', flush)
+      document.removeEventListener('visibilitychange', flush)
+      sink.stop()
+      annotationSinkRef.current = null
+    }
+  }, [sessionId])
 
   const syncLocalState = useCallback((room: Room) => {
     setState((current) => ({
@@ -495,6 +527,8 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
       .catch((error) => {
         console.warn('판서를 합성 화면에 전달하지 못했습니다', error)
       })
+    // 전달과 별개로 기록을 남긴다. 순서가 중요하다 — 저장을 먼저 기다리면 그 왕복이 획마다 끼어든다.
+    annotationSinkRef.current?.push(op)
   }, [])
 
   /**
@@ -517,11 +551,29 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
    * <p>이번 페이지에서 이미 무언가 publish했다면 보내지 않는다. 그때의 재연결은 새로고침이 아니라
    * 네트워크 끊김이고, 강사는 판서를 들고 있으므로 비우면 안 된다.
    */
+  const annotationRestoredRef = useRef(false)
   useEffect(() => {
     if (state.connectionState !== 'connected') return
-    if (annotationRevisionRef.current !== 0) return
-    publishAnnotation({ type: 'snapshot', elements: [] })
-  }, [publishAnnotation, state.connectionState])
+    // 이 페이지에서 한 번만. 재연결은 새로고침이 아니라 끊김이고, 그때 서버를 다시 읽으면 아직
+    // 저장되지 않은 최근 획이 빠진 문서가 강사 화면을 덮어쓴다. 새로 들어온 Egress를 맞추는 일은
+    // annotationAudienceRevision이 따로 한다.
+    if (annotationRestoredRef.current) return
+    annotationRestoredRef.current = true
+
+    let cancelled = false
+    void fetchAnnotationDocument(sessionId).then((restored) => {
+      if (cancelled) return
+      // 강사가 복원을 기다리지 않고 이미 그렸다면 그 획이 먼저다. 번호만 이어 붙이고 덮어쓰지 않는다.
+      if (annotationRevisionRef.current !== 0) {
+        annotationRevisionRef.current += restored.nextRevision
+        return
+      }
+      annotationRevisionRef.current = restored.nextRevision - 1
+      setRestoredAnnotation(restored.document)
+      publishAnnotation({ type: 'snapshot', elements: restored.document.elements })
+    })
+    return () => { cancelled = true }
+  }, [publishAnnotation, sessionId, state.connectionState])
 
   const publishLaser = useCallback((stroke: LaserStroke) => {
     const room = roomRef.current
@@ -558,12 +610,13 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
     publishAnnotation,
     publishLaser,
     annotationAudienceRevision,
+    restoredAnnotation,
     applyingQuality,
     retry: () => setRetryCount((current) => current + 1),
     toggleCamera: () => { void toggleControl('camera') },
     toggleMicrophone: () => { void toggleControl('microphone') },
     toggleScreenShare: () => { void toggleControl('screenShare') },
-  }), [annotationAudienceRevision, applyingQuality, cameraOverlay, changeQuality, moveCameraOverlay, pendingControl, publishAnnotation, publishLaser, quality, sessionId, state, toggleControl])
+  }), [annotationAudienceRevision, applyingQuality, cameraOverlay, changeQuality, moveCameraOverlay, pendingControl, publishAnnotation, publishLaser, quality, restoredAnnotation, sessionId, state, toggleControl])
 
   return (
     <InstructorLiveMediaContext.Provider value={value}>

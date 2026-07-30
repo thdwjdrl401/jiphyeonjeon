@@ -7,6 +7,7 @@ import {
   ANNOTATION_LASER_TOPIC,
   LASER_COLOR,
   decodeLaserStroke,
+  laserOutlinePath,
   laserTrailOptions,
 } from './annotation'
 
@@ -108,12 +109,11 @@ export default function EgressLaserTrail({ room }: { room: Room | null }) {
         // Excalidraw와 같은 보정: 외곽선을 `size / zoom`으로 만든다. 빼면 강사 창이 작을수록
         // 수강생 화면의 궤적이 가늘어진다(강사는 늘 2px, 우리는 2×zoom px).
         const outline = trail.getStrokeOutline(trail.options.size / zoomRef.current)
-        if (outline.length === 0) continue
-        context.beginPath()
-        context.moveTo(outline[0][0], outline[0][1])
-        for (let i = 1; i < outline.length; i += 1) context.lineTo(outline[i][0], outline[i][1])
-        context.closePath()
-        context.fill()
+        // Excalidraw와 같은 곡선 path로 채운다. 직선으로 이으면 획이 조금 더 두껍고 끝이 더 뻗어,
+        // 레이저가 강사가 가리킨 곳에서 살짝 밀린 것처럼 보인다(laserOutlinePath).
+        const path = laserOutlinePath(outline)
+        if (path === '') continue
+        context.fill(new Path2D(path))
       }
       painted = true
     }

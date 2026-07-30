@@ -1,0 +1,78 @@
+package com.liveclass.live.web;
+
+import com.liveclass.live.service.LiveAccessGuard;
+import com.liveclass.live.service.LiveAnnotationService;
+import com.liveclass.live.web.dto.AnnotationDocumentResponse;
+import com.liveclass.live.web.dto.AnnotationOpRequest;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * 판서 영속화(REST, 세션 기준) — ADR-0051, CONTRACT §3-6b.
+ *
+ * <p><b>라이브 전달 경로가 아니다.</b> 판서가 수강생에게 도달하는 경로는 LiveKit 데이터 채널
+ * → Egress 합성 프레임이고, 이 API는 그와 병렬로 기록만 남긴다. 그래서 적재는 획을 그을 때마다가
+ * 아니라 <b>묶어서</b> 오고, 응답을 기다려 화면을 갱신하지 않는다 — 저장을 라이브 경로에 넣으면
+ * 그리는 동안의 부드러움이 깨진다.
+ *
+ * <p>얻는 것은 둘이다. 강사가 새로고침해도 판서가 남고, 각 op에 세션 상대 시각이 붙어 나중에
+ * "강사가 이걸 강조한 순간"으로 다시보기를 이동할 수 있다(자막과 같은 축, ADR-0045).
+ *
+ * <p>인가는 세션 참가자 게이트({@link LiveAccessGuard})를 쓴다 — 자막·채팅과 같은 규칙이다. 다만
+ * <b>쓰기는 소유 강사만</b> 한다. 판서의 writer는 강사 하나이고, 수강생이 쓸 수 있으면 revision 채번의
+ * 단일 writer 전제가 깨진다.
+ */
+@Tag(name = "라이브 판서", description = "판서 op 적재·복원(REST). 실시간 전달은 LiveKit 데이터 채널로 별개.")
+@RestController
+public class AnnotationController {
+
+    private final LiveAnnotationService annotationService;
+    private final LiveAccessGuard accessGuard;
+
+    public AnnotationController(LiveAnnotationService annotationService, LiveAccessGuard accessGuard) {
+        this.annotationService = annotationService;
+        this.accessGuard = accessGuard;
+    }
+
+    @Operation(summary = "판서 op 적재",
+            description = "강사가 그린 변경을 기록한다. 라이브 전달과 별개이며 묶어서 보낸다. "
+                    + "같은 revision이 다시 오면 중복 적재하지 않는다.")
+    @PostMapping("/api/live-sessions/{sessionId}/annotation/ops")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public void append(@PathVariable UUID sessionId,
+                       @Valid @RequestBody List<AnnotationOpRequest> ops,
+                       Authentication authentication) {
+        accessGuard.requireOwner(sessionId, UUID.fromString(authentication.getName()));
+        for (AnnotationOpRequest op : ops) {
+            annotationService.append(sessionId, op.revision(), op.opType(), op.payload(), op.occurredAt());
+        }
+    }
+
+    @Operation(summary = "판서 문서 복원",
+            description = "저장된 판서를 마지막 스냅샷과 그 이후 op로 돌려준다. 강사가 새로고침한 뒤 "
+                    + "이걸로 복원하고, nextRevision부터 이어서 채번한다.")
+    @GetMapping("/api/live-sessions/{sessionId}/annotation")
+    public AnnotationDocumentResponse document(@PathVariable UUID sessionId, Authentication authentication) {
+        accessGuard.requireCanAccess(sessionId, UUID.fromString(authentication.getName()));
+        LiveAnnotationService.AnnotationDocumentView view = annotationService.restore(sessionId);
+        return new AnnotationDocumentResponse(
+                view.revision(),
+                annotationService.nextRevision(sessionId),
+                view.snapshotPayload(),
+                view.ops().stream()
+                        .map(op -> new AnnotationDocumentResponse.Op(op.revision(), op.opType(), op.payload()))
+                        .toList());
+    }
+}

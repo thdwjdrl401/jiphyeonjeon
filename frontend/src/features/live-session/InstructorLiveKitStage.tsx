@@ -149,6 +149,7 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
             whiteboard={whiteboard}
             onLaser={publisher.publishLaser}
             onPublish={publisher.publishAnnotation}
+            restoredElements={publisher.restoredAnnotation?.elements ?? null}
           />
         </div>
       </div>

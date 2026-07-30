@@ -62,6 +62,13 @@ interface InstructorAnnotationLayerProps {
    * 움직이는 것으로는 아무것도 그려지지 않아야 한다.
    */
   onLaser: (stroke: LaserStroke) => void
+  /**
+   * 서버에 저장돼 있던 판서(ADR-0051). 강사가 새로고침한 뒤 에디터를 이걸로 되살린다.
+   *
+   * <p>아직 불러오지 못했으면 null. 빈 배열과 다르다 — 빈 배열로 seed해 버리면 나중에 도착한
+   * 복원본이 무시되거나, 반대로 강사가 그 사이 그린 획을 덮는다.
+   */
+  restoredElements: AnnotationElement[] | null
 }
 
 /**
@@ -84,6 +91,7 @@ export default function InstructorAnnotationLayer({
   showPropertyPanel,
   whiteboard,
   onLaser,
+  restoredElements,
 }: InstructorAnnotationLayerProps) {
   /**
    * 에디터 컴포넌트와 메뉴 조립에 쓰는 `MainMenu`를 함께 들고 있는다. 둘 다 같은 지연 청크에서 오므로
@@ -175,6 +183,30 @@ export default function InstructorAnnotationLayer({
     knownRef.current = known
     for (const change of changes) onPublish(change)
   }, [applyFrameMapping, onPublish])
+
+  /**
+   * 저장돼 있던 판서를 에디터에 되돌린다(ADR-0051). 새로고침해도 강사 화면이 수강생 화면과 같아야
+   * 하는데, Egress는 자기 문서를 계속 들고 있으므로 되살리지 않으면 강사만 빈 화면을 본다.
+   *
+   * <p>한 번만 한다. 그리고 강사가 이미 그렸다면 하지 않는다 — 복원이 늦게 도착해 방금 그린 획을
+   * 덮으면, 그 획은 강사 화면에서 사라지는데 수강생 화면에는 남아 둘이 갈린다.
+   *
+   * <p>`knownRef`도 함께 채운다. 비워 두면 다음 `onChange`에서 복원된 요소 전부가 "새로 그린 것"으로
+   * 잡혀 그대로 다시 나간다.
+   */
+  const seededRef = useRef(false)
+  useEffect(() => {
+    const api = apiRef.current
+    if (seededRef.current || !api) return
+    if (!restoredElements || restoredElements.length === 0) return
+    if (elementsRef.current.length > 0) return
+    seededRef.current = true
+    elementsRef.current = [...restoredElements]
+    const known = new Map<string, number>()
+    for (const element of restoredElements) known.set(element.id, element.version ?? 0)
+    knownRef.current = known
+    api.updateScene({ elements: restoredElements })
+  }, [restoredElements, ui])
 
   /**
    * 화이트보드를 깔거나 걷는다.
