@@ -5,6 +5,7 @@ RAG context core가 외부 Redis, PostgreSQL과 BGE runtime을 사용하는 outb
 | 파일 | 책임 |
 |---|---|
 | `redis_caption_consumer.py` | 독립 consumer group, owned PEL recovery, handle 후 수동 ACK |
+| `redis_lecture_note_store.py` | 강의 노트 MVP snapshot TTL과 관찰용 결과 Stream 저장 |
 | `pgvector_material_retrieval.py` | `ai_app` role로 ACTIVE lesson chunk만 hybrid 검색 |
 | `remote_bge_m3_embedding.py` | 인증된 BGE-M3 query embedding HTTP client |
 | `gms_openai_answer.py` | 고정 GMS gateway의 grounded OpenAI-compatible 답변 stream |

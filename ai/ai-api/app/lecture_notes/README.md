@@ -5,8 +5,8 @@
 
 현재 단계는 `CaptionDelta|CaptionCompleted`를 모델 입력용 `LectureNoteWindow`로 접고, 구조화 모델
 결과를 topic 정본과 제한된 Markdown으로 반영한다. application service는 세션별 호출을 직렬화하고
-대기 window를 한 batch로 합친 뒤 snapshot port로 내보낸다. Redis consumer, 실제 GMS model,
-snapshot Redis 저장, application lifecycle에는 아직 연결하지 않았다.
+대기 window를 한 batch로 합친 뒤 snapshot port로 내보낸다. Redis snapshot·결과 Stream adapter는
+구현했으며, input consumer, 실제 GMS model, application lifecycle에는 아직 연결하지 않았다.
 
 ## 현재 보장
 
@@ -23,6 +23,5 @@ snapshot Redis 저장, application lifecycle에는 아직 연결하지 않았다
 
 ## 아직 하지 않는 것
 
-- Redis snapshot·결과 Stream adapter
 - GMS `LectureNoteModel`
 - ai-api consumer·lifecycle wiring
