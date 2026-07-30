@@ -124,6 +124,7 @@ class RedisCaptionConsumer:
         consumer_name: str,
         handle_entry: Callable[[Mapping[Any, Any]], object],
         *,
+        after_ack: Callable[[Mapping[Any, Any]], object] | None = None,
         state: CaptionConsumerState | None = None,
         stream_key: str = CAPTION_STREAM_KEY,
         group_name: str = CAPTION_CONSUMER_GROUP,
@@ -149,6 +150,7 @@ class RedisCaptionConsumer:
         self._redis_url = redis_url
         self._consumer_name = consumer_name
         self._handle_entry = handle_entry
+        self._after_ack = after_ack
         self._stream_key = stream_key
         self._group_name = group_name
         self._batch_size = batch_size
@@ -290,10 +292,12 @@ class RedisCaptionConsumer:
         for _, entries in messages:
             for entry_id, raw_fields in entries:
                 self.state.consumed_total += 1
+                handled = False
                 try:
                     result = self._handle_entry(raw_fields)
                     if inspect.isawaitable(result):
                         await result
+                    handled = True
                 except (UnicodeError, ValueError) as exc:
                     self.state.invalid_total += 1
                     logger.warning(
@@ -307,7 +311,21 @@ class RedisCaptionConsumer:
                 except Exception:
                     self.state.processing_error_total += 1
                     raise
-                await self._ack_entry(client, _decode_text(entry_id))
+                acked = await self._ack_entry(client, _decode_text(entry_id))
+                if handled and acked and self._after_ack is not None:
+                    try:
+                        result = self._after_ack(raw_fields)
+                        if inspect.isawaitable(result):
+                            await result
+                    except Exception as exc:
+                        logger.warning(
+                            "caption post-ACK handler failed",
+                            extra={
+                                "event": "caption.post_ack_failed",
+                                "redis_entry_id": _decode_text(entry_id),
+                                "error_code": type(exc).__name__,
+                            },
+                        )
 
     async def _ack_entry(self, client: RedisClient, entry_id: str) -> bool:
         acked = await client.xack(

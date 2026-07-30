@@ -143,9 +143,13 @@ Backend가 전체 Markdown을 단순 결합할 경우 첫 조각은 그대로 �
 4. completion은 `lastChunkSequence`가 현재 정상 반영 순번과 일치할 때만 capture 완료로 반영한다.
 5. DB commit 뒤에만 ACK하고, commit된 새 조각만 Frontend WebSocket으로 전달한다.
 
-Spring consumer·DB·REST·WebSocket은 아직 구현되지 않았다. 또한 현재 AI producer는 process-local 세션 상태를
-사용하므로 재시작 시 `chunkSequence/topicId` 연속성을 복원하지 못한다. 따라서 payload 계약은 확정됐지만,
-Spring 소비 활성화의 선행 조건은 producer 재시작 복원 또는 session owner fencing과 gap 복구 정책 확정이다.
+Spring consumer·DB·REST·WebSocket은 아직 구현되지 않았다. AI producer는 caption과 미처리 작업을
+`ai:lecture-notes:mvp:state:{sessionId}`에 저장한 뒤 caption을 ACK하고,
+`ai:lecture-notes:mvp:active-sessions`에서 시작 시 복원한다. 발행할 payload를 outbox에 먼저 고정한 뒤 결과
+`XADD`와 outbox를 비운 checkpoint 저장을 같은 Redis transaction으로 처리하므로 단일 ai-api 프로세스
+재시작에서도 `eventId`, `chunkSequence`, `topicId`를 이어간다. 이 내부 key는 Spring이 소비하거나 수정하지
+않는다. Redis 자체 장애 내구성, 여러 ai-api replica의 session owner fencing, 다른 consumer의 pending
+회수는 아직 보장하지 않는다. Spring 소비 활성화 전에는 이 제한과 gap 복구 운영 정책을 함께 검토한다.
 상세 결정과 현재 제한은 [ADR-0034](decisions/canola/0034-near-realtime-accumulative-lecture-notes.md)를 따른다.
 
 ### 3-5. realtime-agent → Spring lifecycle callback (HTTP, 서명) — v1 AI 구현/기본 off, v2 양쪽 미구현

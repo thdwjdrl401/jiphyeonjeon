@@ -6,6 +6,10 @@ from dataclasses import dataclass, field, fields
 
 from app.captions import CaptionCompleted, CaptionDelta, CaptionEntry
 from app.lecture_notes.models import LectureNoteWindow, WindowFlushReason
+from app.lecture_notes.recovery import (
+    AttemptBufferCheckpoint,
+    WindowAccumulatorCheckpoint,
+)
 
 _STRONG_ENDINGS = (".", "?", "!", "。", "？", "！", "\n")
 _SENTENCE_PATTERN = re.compile(r"[^.!?。？！\n]+(?:[.!?。？！]+|\n|$)")
@@ -103,7 +107,7 @@ class LectureNoteWindowAccumulator:
         self._max_event_ids = max_event_ids
         self._max_retired_attempts = max_retired_attempts_per_session
         self._sessions: OrderedDict[str, _SessionBuffer] = OrderedDict()
-        self._seen_event_ids: OrderedDict[str, None] = OrderedDict()
+        self._seen_event_ids: OrderedDict[str, str] = OrderedDict()
         self._metrics = WindowMetrics()
 
     def ingest(self, entry: CaptionEntry) -> WindowIngestResult:
@@ -111,7 +115,7 @@ class LectureNoteWindowAccumulator:
             self._seen_event_ids.move_to_end(entry.eventId)
             self._metrics.duplicate_event_total += 1
             return WindowIngestResult()
-        self._remember_event(entry.eventId)
+        self._remember_event(entry.eventId, entry.sessionId)
 
         session = self._sessions.get(entry.sessionId)
         if session is None:
@@ -179,6 +183,64 @@ class LectureNoteWindowAccumulator:
             active_sessions=sum(not session.completed for session in self._sessions.values()),
         )
         return snapshot
+
+    def export_session(self, session_id: str) -> WindowAccumulatorCheckpoint | None:
+        """재시작에 필요한 한 세션의 자막 누적 상태만 복사한다."""
+        session = self._sessions.get(session_id)
+        if session is None:
+            return None
+        attempt = session.current
+        return WindowAccumulatorCheckpoint(
+            sessionId=session_id,
+            lessonId=session.lesson_id,
+            current=AttemptBufferCheckpoint(
+                sttSessionId=attempt.stt_session_id,
+                lastSequence=attempt.last_sequence,
+                lastStreamElapsedMs=attempt.last_stream_elapsed_ms,
+                windowStartedAtMs=attempt.window_started_at_ms,
+                windowStartSequence=attempt.window_start_sequence,
+                partialText=attempt.text,
+            ),
+            retiredAttempts=tuple(session.retired_attempts),
+            previousContext=session.previous_context,
+            completed=session.completed,
+            seenEventIds=tuple(
+                event_id
+                for event_id, owner_session_id in self._seen_event_ids.items()
+                if owner_session_id == session_id
+            ),
+        )
+
+    def restore_session(self, checkpoint: WindowAccumulatorCheckpoint) -> None:
+        """검증된 checkpoint로 한 세션을 덮어써 replay 중복 경계를 복원한다."""
+        attempt = checkpoint.current
+        self._sessions[checkpoint.sessionId] = _SessionBuffer(
+            lesson_id=checkpoint.lessonId,
+            current=_AttemptBuffer(
+                stt_session_id=attempt.sttSessionId,
+                last_sequence=attempt.lastSequence,
+                last_stream_elapsed_ms=attempt.lastStreamElapsedMs,
+                window_started_at_ms=attempt.windowStartedAtMs,
+                window_start_sequence=attempt.windowStartSequence,
+                text_parts=[attempt.partialText] if attempt.partialText else [],
+            ),
+            retired_attempts=OrderedDict.fromkeys(checkpoint.retiredAttempts),
+            previous_context=checkpoint.previousContext,
+            completed=checkpoint.completed,
+        )
+        self._sessions.move_to_end(checkpoint.sessionId)
+        while len(self._sessions) > self._max_sessions:
+            self._sessions.popitem(last=False)
+
+        stale_event_ids = [
+            event_id
+            for event_id, owner_session_id in self._seen_event_ids.items()
+            if owner_session_id == checkpoint.sessionId
+        ]
+        for event_id in stale_event_ids:
+            self._seen_event_ids.pop(event_id, None)
+        for event_id in checkpoint.seenEventIds:
+            self._remember_event(event_id, checkpoint.sessionId)
 
     def _ingest_delta(
         self,
@@ -272,8 +334,8 @@ class LectureNoteWindowAccumulator:
         self._metrics.windows_emitted_total += 1
         return window
 
-    def _remember_event(self, event_id: str) -> None:
-        self._seen_event_ids[event_id] = None
+    def _remember_event(self, event_id: str, session_id: str) -> None:
+        self._seen_event_ids[event_id] = session_id
         if len(self._seen_event_ids) > self._max_event_ids:
             self._seen_event_ids.popitem(last=False)
             self._metrics.event_dedupe_evicted_total += 1

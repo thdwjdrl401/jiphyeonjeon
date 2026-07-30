@@ -72,14 +72,15 @@ Spring
   → Spring
 ```
 
-`ai-api`는 시작할 때 같은 caption Stream을 서로 다른 group으로 읽는 RAG consumer와 강의 노트
-consumer를 실행한다. 서로 다른 group이므로 한쪽 ACK가 다른 쪽 전달을 제거하지 않는다. 자료와 자막에서
+`ai-api`는 시작할 때 강의 노트 checkpoint를 복원한 뒤, 같은 caption Stream을 서로 다른 group으로 읽는
+RAG consumer와 강의 노트 consumer를 실행한다. 서로 다른 group이므로 한쪽 ACK가 다른 쪽 전달을 제거하지 않는다. 자료와 자막에서
 충분한 근거를 찾지 못하면 GMS를 호출하지 않고 `answer.insufficient`로 종료한다.
 
 강의 노트 출력은 전체 snapshot이 아니라 `lecture.note.chunk.appended` 추가분과
 `lecture.note.capture.completed` 종료 event만 `ai:lecture-notes:mvp`에 발행한다. wire 필드·길이·순서·멱등·ACK
 규칙의 정본은 [공유 계약 §3-4a](../../docs/CONTRACT.md#3-4a-ai-api--application-redis-실시간-강의-노트-stream--ai-producer-구현-spring-consumer-미구현)다.
-AI producer는 구현됐지만 Spring consumer·DB·REST·WebSocket은 아직 구현되지 않았다.
+강의 노트 caption은 Redis session checkpoint 저장 뒤 ACK하며, 결과 event와 다음 checkpoint는 같은 Redis
+transaction으로 확정한다. AI producer는 구현됐지만 Spring consumer·DB·REST·WebSocket은 아직 구현되지 않았다.
 
 ## 5. 실행과 설정
 
@@ -113,9 +114,9 @@ network의 Spring이 접근할 수 있도록 container 내부 bind만 `0.0.0.0:8
 운영 root env의 `GMS_API_KEY`는 compose에서 container의 `AI_API_GMS_API_KEY`로 매핑한다.
 backend와 GPU 서비스에는 이 값을 주입하지 않는다.
 
-강의 노트 MVP는 in-memory 세션 상태를 사용하므로 운영 ai-api는 단일 replica로 띄운다. 같은 EC2의
-Spring, Redis, ai-worker와 함께 실행해도 별도 port를 사용하지 않으며 application Redis key와 consumer
-group만 공유한다.
+강의 노트 MVP는 Redis session checkpoint로 프로세스 재시작을 복구하지만 session owner fencing은 없으므로
+운영 ai-api는 단일 replica로 띄운다. 같은 EC2의 Spring, Redis, ai-worker와 함께 실행해도 별도 port를
+사용하지 않으며 application Redis key와 consumer group만 공유한다.
 
 경로 prefix가 있는 BGE URL은 허용하지만 credential, query, fragment와 `..` 경로는 거부한다.
 `AI_INTERNAL_SECRET`은 이름이 바뀐 값이 아니며 Spring↔ai-api 전용이다. 현재 ai-api 검증기는 구현됐지만

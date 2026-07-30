@@ -12,7 +12,7 @@ from app.adapters import (
     GmsOpenAILectureNoteModel,
     PgvectorActiveMaterialRepository,
     RedisCaptionConsumer,
-    RedisLectureNoteEventPublisher,
+    RedisLectureNoteStore,
     RemoteBgeM3QueryEmbedding,
 )
 from app.captions import CaptionContextStore, parse_caption_entry
@@ -66,12 +66,15 @@ class LectureNoteServices:
     consumer: RedisCaptionConsumer
     consumer_state: CaptionConsumerState
     model: GmsOpenAILectureNoteModel
-    publisher: RedisLectureNoteEventPublisher
+    store: RedisLectureNoteStore
+
+    async def restore(self) -> None:
+        await self.pipeline.restore()
 
     async def close(self) -> None:
         """모델 호출을 비운 뒤 외부 client를 모두 닫는다."""
         async with AsyncExitStack() as cleanup:
-            cleanup.push_async_callback(self.publisher.aclose)
+            cleanup.push_async_callback(self.store.aclose)
             cleanup.push_async_callback(self.model.aclose)
             await self.service.aclose()
 
@@ -82,6 +85,7 @@ def _build_caption_consumer(
     consumer_name: str,
     group_name: str,
     handle_entry: Callable[[Mapping[Any, Any]], object],
+    after_ack: Callable[[Mapping[Any, Any]], object] | None = None,
 ) -> tuple[RedisCaptionConsumer, CaptionConsumerState]:
     """두 caption 소비 경로가 공유하는 Redis 연결 정책을 한곳에서 조립한다."""
     state = CaptionConsumerState()
@@ -89,6 +93,7 @@ def _build_caption_consumer(
         settings.redis_url,
         consumer_name,
         handle_entry,
+        after_ack=after_ack,
         state=state,
         stream_key=settings.caption_stream_key,
         group_name=group_name,
@@ -185,23 +190,27 @@ def build_lecture_note_services(settings: Settings) -> LectureNoteServices:
         max_prompt_chars=settings.lecture_note_max_prompt_chars,
         timeout_seconds=settings.lecture_note_timeout_seconds,
     )
-    publisher = RedisLectureNoteEventPublisher(
+    store = RedisLectureNoteStore(
         settings.redis_url,
         stream_maxlen=settings.lecture_note_stream_maxlen,
         socket_connect_timeout_seconds=settings.redis_connect_timeout_seconds,
         socket_timeout_seconds=settings.redis_socket_timeout_seconds,
     )
-    service = LectureNoteService(model, publisher)
+    service = LectureNoteService(model, store, accumulator)
     pipeline = LectureNotePipeline(accumulator, service)
 
-    def handle_entry(fields: Mapping[Any, Any]) -> None:
-        pipeline.ingest(parse_caption_entry(fields))
+    async def handle_entry(fields: Mapping[Any, Any]) -> None:
+        await pipeline.ingest(parse_caption_entry(fields))
+
+    async def after_ack(fields: Mapping[Any, Any]) -> None:
+        await pipeline.after_ack(parse_caption_entry(fields))
 
     consumer, consumer_state = _build_caption_consumer(
         settings,
         consumer_name=f"{settings.instance_id}:live-notes-mvp",
         group_name=LECTURE_NOTE_CONSUMER_GROUP,
         handle_entry=handle_entry,
+        after_ack=after_ack,
     )
     return LectureNoteServices(
         accumulator=accumulator,
@@ -210,7 +219,7 @@ def build_lecture_note_services(settings: Settings) -> LectureNoteServices:
         consumer=consumer,
         consumer_state=consumer_state,
         model=model,
-        publisher=publisher,
+        store=store,
     )
 
 

@@ -186,6 +186,39 @@ def test_transient_handler_failure_remains_pending() -> None:
     assert state.processing_error_total == 1
 
 
+def test_async_checkpoint_finishes_before_ack_and_post_ack_hook() -> None:
+    async def scenario() -> None:
+        fake = FakeRedis()
+        order: list[str] = []
+
+        async def handle_entry(fields) -> None:
+            parse_caption_entry(fields)
+            await asyncio.sleep(0)
+            order.append("checkpoint")
+
+        async def after_ack(fields) -> None:
+            parse_caption_entry(fields)
+            assert fake.acked == ["1-0"]
+            order.append("after_ack")
+
+        consumer = RedisCaptionConsumer(
+            "redis://unused",
+            "ai-api-test",
+            handle_entry,
+            after_ack=after_ack,
+            client_factory=lambda: fake,
+        )
+        messages = [
+            ["ai:captions:live", [["1-0", _fixture("caption-delta.valid.json")]]]
+        ]
+
+        await consumer._process_messages(fake, messages)
+
+        assert order == ["checkpoint", "after_ack"]
+
+    asyncio.run(scenario())
+
+
 def test_ack_failure_replays_without_duplicating_context() -> None:
     fake = FakeRedis(ack_results=[ResponseError("connection lost"), 1])
     state = CaptionConsumerState()

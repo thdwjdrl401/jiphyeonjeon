@@ -62,6 +62,8 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        if lecture_note_services is not None:
+            await lecture_note_services.restore()
         if caption_runtime is not None:
             caption_runtime.start()
         if lecture_note_runtime is not None:

@@ -7,11 +7,24 @@ from app.lecture_notes.models import (
     LectureNoteModelRequest,
     LectureNoteModelResult,
 )
+from app.lecture_notes.recovery import LectureNoteSessionCheckpoint
 
 
 class LectureNoteModel(Protocol):
     async def generate(self, request: LectureNoteModelRequest) -> LectureNoteModelResult: ...
 
 
-class LectureNoteEventPublisher(Protocol):
-    async def publish(self, event: LectureNoteEvent) -> None: ...
+class LectureNoteStateStore(Protocol):
+    async def save(self, checkpoint: LectureNoteSessionCheckpoint) -> None: ...
+
+    async def commit(
+        self,
+        checkpoint: LectureNoteSessionCheckpoint,
+        event: LectureNoteEvent,
+    ) -> None: ...
+
+    async def load_active(self) -> tuple[LectureNoteSessionCheckpoint, ...]: ...
+
+    async def load(self, session_id: str) -> LectureNoteSessionCheckpoint | None: ...
+
+    async def deactivate(self, session_id: str) -> None: ...
