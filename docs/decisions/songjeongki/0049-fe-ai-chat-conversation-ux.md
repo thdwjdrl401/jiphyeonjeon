@@ -52,19 +52,37 @@
 
 `AI-HISTORY-01`이 없으므로 이력을 localStorage·서버에 저장하지 **않는다.** 대신 입력창 옆에 "대화는 이 화면에서만 유지되며 새로고침하면 사라집니다."를 상시 노출한다. "저장됨"으로 읽힐 문구는 쓰지 않는다.
 
+### 8. 근거는 기본 접힘 + 턴별 인라인 토글 (보강, 2026-07-30)
+
+> §1~7과 같은 결정 축(AI 패널 챗 UX)의 표시 세부다. 서버 계약·상태 구조·오너 경계가 그대로라 새 ADR을 열지 않고 여기 붙인다.
+
+턴 목록이 생긴 뒤 실제 문제가 하나 남았다 — `AiEvidenceList`가 `sources`를 **항상 펼친 카드 목록**으로 그려서, 370px 사이드바에서 근거 카드 두 장(≈130px)이 답변 본문보다 자리를 더 먹었다. 턴이 쌓이면 스크롤의 절반이 근거였다.
+
+- **접힌 상태는 알약 토글 한 줄뿐이다.** 답변 아래에 `근거 n`(`.ai-evidence-toggle`, ≈24px)만 남기고 목록은 누를 때 펼친다. 일반 챗 UI의 인용 표시와 같은 결이며, 모달·사이드패널·툴팁 라이브러리를 들이지 않는다.
+- **펼침은 턴별 로컬 상태다**(`useState` in `AiEvidenceList`). 전역·리듀서 상태로 올리지 않는다 — 어떤 근거를 펼쳐 뒀는지는 서버 계약도 대화 상태도 아니고, `AiChatTurn`이 `memo`라 로컬 상태가 델타마다 초기화되지도 않는다. 대화가 길어져도 새 턴의 기본값은 접힘이다.
+- **접근성은 실제 `<button>` + `aria-expanded`/`aria-controls`**로 낸다. 패널은 접힌 동안에도 DOM에 남기고 `hidden`으로만 감춘다 — `aria-controls`가 없는 노드를 가리키면 참조가 끊기고, `hidden`이면 접근성 트리와 시각 양쪽에서 함께 빠진다.
+- **근거 0개면 토글 자체를 렌더하지 않는다.** 눌러도 빈 목록만 나오는 버튼은 잡음이다.
+- **한 항목 = 한 줄.** 계약에 자료 제목이 없어 UUID뿐이므로(`materialId`/`sttSessionId`) 사람이 읽을 값인 **쪽수·시각을 앞세우고** ID는 앞 8자로 줄여 꼬리에 붙인다(전체 값은 `title`). `overflow-wrap: anywhere`로 좁은 폭에서도 레이아웃을 밀지 않는다.
+- **이동 불가는 그대로다.** CAPTION 항목은 계속 `<li>`이고(ADR-0047 §9), 왜 못 가는지는 **펼친 목록 아래에 한 번만** 남는다 — 접힌 줄에 경고를 얹으면 접기의 이유가 사라진다.
+- 펼침 애니메이션은 `.16s` 페이드/슬라이드 하나뿐이고 `prefers-reduced-motion: reduce`에서 생략한다.
+
 ## 근거
 
 - **계약을 늘리지 않는다**: 서버 이벤트·엔드포인트 그대로다. 챗 UX는 순수 FE 상태 구조 변경이라 BE 합의를 기다릴 이유가 없다.
 - **분기 중복 제거**: 답변 상태 전이를 `reduceAiAnswer` 한 곳에 남겨 두면 계약 변경(예: 새 terminal) 때 고칠 자리가 하나다. 대화 리듀서는 라우팅만 한다.
 - **오전송 방지**: IME 검사가 없으면 한글 사용자에게 최악의 버그(미완성 질문 전송)가 상시 발생한다. 채팅과 같은 패턴을 복제해 규약을 하나로 유지했다.
 - **정직성**: 이력이 남는 것처럼 보이는 UI에서 새로고침으로 사라지면 신뢰를 잃는다. 지속성 없음을 UI가 직접 말한다.
+- **읽는 것이 기본, 확인은 요청**(§8): 근거는 답변을 의심할 때만 필요하다. 항상 펼쳐 두면 매 턴이 근거 세금을 내고, 정작 답변 흐름이 안 읽힌다. 접힌 요약이 "근거가 몇 개 있다"는 사실은 그대로 알려 주므로 정보 손실도 없다.
 
 ## 테스트
 
-`src/test/features/ai/aiConversationState.test.ts`(순수 리듀서: 턴 누적·참조 안정성·겹침 거부·재시도 제자리 복귀·취소·미지 턴 무시)와 `src/test/features/ai/PersonalAiQuestionPanel.test.tsx`(Enter 전송, IME 조합 중 Enter 무전송, Shift+Enter 줄바꿈, 입력창 비움 + 즉시 표시, 델타 누적, terminal 3종, 다중 턴 유지, 재시도/비재시도, 중단, 미지원 모드, trim)로 고정한다. 화면 연결은 `src/test/integration/LiveAiQuestion.test.tsx`가 Enter 경로로 확인한다.
+`src/test/features/ai/aiConversationState.test.ts`(순수 리듀서: 턴 누적·참조 안정성·겹침 거부·재시도 제자리 복귀·취소·미지 턴 무시)와 `src/test/features/ai/PersonalAiQuestionPanel.test.tsx`(Enter 전송, IME 조합 중 Enter 무전송, Shift+Enter 줄바꿈, 입력창 비움 + 즉시 표시, 델타 누적, terminal 3종, 다중 턴 유지, 재시도/비재시도, 중단, 미지원 모드, trim, **근거 토글의 턴별 독립**)로 고정한다. 화면 연결은 `src/test/integration/LiveAiQuestion.test.tsx`가 Enter 경로로 확인한다.
+
+§8의 접힘 UX는 `src/test/features/ai/AiEvidenceList.test.tsx`가 단위로 고정한다 — 기본 접힘, 토글 펼침/접힘과 `aria-expanded` 전이, `aria-controls`가 실제 패널을 가리킴, 키보드(Enter/Space) 조작, 근거 0개면 토글 없음, 펼쳐도 CAPTION은 버튼이 아님, 이동 불가 안내 1회, UUID 축약 + `title` 보존. ID 축약 함수 자체는 `aiAnswerState.test.ts`에 있다.
 
 ## 남은 이슈
 
 - **이력 미영속**: 새로고침·탭 이동(패널 언마운트)이면 대화가 사라진다. 서버 이력이 필요하면 `AI-HISTORY-01`(라이브 스코프 포함)을 계약으로 올려야 한다 — 그때 세션 스코프 인가(ADR-0047 §1b)와 보존 기간을 함께 정한다.
 - **다시보기**: `ask`가 없는 미지원 모드는 그대로다(ADR-0047 §9의 시간축 문제 미해결).
 - **질문 핀 연동**: "개인 AI 질문을 강사 질문 핀에 포함"(LIVE_LESSON.md §4.4)은 여전히 서버 몫이라 FE 이력과 무관하다.
+- **근거에 사람이 읽을 이름이 없다**(§8): `sources`가 `materialId`/`sttSessionId`만 주므로 축약 UUID가 최선이다. 자료 제목·파일명을 `sources`에 실어 주면(`AI-ANSWER-SOURCE-TITLE`) 축약 로직을 지우고 `자료명 12쪽`으로 바꿀 수 있다 — 계약 확장이라 BE 합의가 먼저다.

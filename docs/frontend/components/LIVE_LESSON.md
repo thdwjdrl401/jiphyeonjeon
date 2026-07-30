@@ -99,7 +99,7 @@ LiveLessonPage
 | `LiveCaptionRegion` | `features/caption` | 현재 재생 시각에 맞는 자막·전문용어·근거 조합 |
 | `CurrentCaption` | `features/caption` | `partial`·`final`·`revised` 자막 교체·갱신 |
 | `GlossaryPopover` | `features/ai` | 전문용어의 짧은 설명 표시 |
-| `AiEvidenceList` | `features/ai` | **구현됨** — 답변 `sources`를 근거 카드로 표시(PPTX 쪽수 / 발화 구간) |
+| `AiEvidenceList` | `features/ai` | **구현됨** — 답변 `sources`를 접었다 펴는 근거 목록으로 표시(PPTX 쪽수 / 발화 구간) |
 | `PersonalAiQuestionPanel` | `features/ai` | **구현됨** — 대화형(챗) 질의응답: 턴 이력, 낙관적 질문 표시, Enter 전송, SSE 누적, 중단·재시도 |
 | `AiChatTurn` | `features/ai` | **구현됨** — 한 턴(내 질문 + AI 답변) 말풍선·상태·근거·재시도 렌더(memo) |
 | `LessonMaterialPanel` | `features/lesson` | 레슨 전에 공개된 PPTX 자료 목록·열람 |
@@ -110,8 +110,17 @@ AI 패널은 일반적인 챗 UI 규약을 따른다(ADR-0049).
 - `Enter` 전송 / `Shift+Enter` 줄바꿈. 한글 IME 조합 중(`isComposing`) Enter는 전송하지 않는다.
 - 응답 중에는 전송 버튼 자리가 `답변 중단`으로 바뀐다(질문 겹침 방지 + `AbortController` 취소).
 - 새 델타·새 턴은 하단을 따라가되, 사용자가 위로 올려 읽는 중이면 끌어내리지 않는다(하단 48px 이내일 때만).
-- 상태별 표현: `done`은 근거 카드, `insufficient`는 **오류가 아닌 안내**(재시도 없음), `error`는 메시지 + `retryable`일 때만 재시도.
+- 상태별 표현: `done`은 근거 토글, `insufficient`는 **오류가 아닌 안내**(재시도 없음), `error`는 메시지 + `retryable`일 때만 재시도.
 - **이력은 클라이언트 메모리뿐이다.** 서버 AI Q&A 이력 API(`AI-HISTORY-01`)가 없어 새로고침·탭 재마운트면 사라지며, 화면도 입력창 옆에서 이를 밝힌다("대화는 이 화면에서만 유지되며 새로고침하면 사라집니다").
+
+**근거 표시**(ADR-0049 §8) — 370px 패널에서 근거가 답변보다 자리를 먹지 않게, 기본은 접혀 있다.
+
+- 답변 아래에는 `근거 n` **토글 한 줄**만 남고(근거가 0개면 토글도 없다), 누르면 그 자리에서 목록이 펼쳐진다. 모달·사이드패널을 열지 않는다.
+- 펼침은 **턴별로 독립**이며 상태를 저장하지 않는다 — 새 턴은 항상 접힌 채로 붙는다.
+- 토글은 실제 `<button>` + `aria-expanded`·`aria-controls`라 키보드(`Enter`/`Space`)로 열고 닫는다. 목록은 접힌 동안 `hidden`이라 접근성 트리에서도 빠진다.
+- 항목 하나가 한 줄이다: `12쪽 · 강의 자료 · mat-c3f1…` / `12:08–12:41 · 강의 발화 · stt-9a2b…`. `sources`에 **자료 제목이 없어** UUID뿐이므로 사람이 읽는 값(쪽수·시각)을 앞세우고 ID는 앞 8자로 줄인다(전체 값은 `title` 속성).
+- 발화 근거는 **여전히 누를 수 없다**(ADR-0047 §9 — `startMs`/`endMs`가 STT attempt-local 축이라 seek에 쓰면 엉뚱한 지점으로 간다). 그 이유는 **펼친 목록 아래에 한 번만** 적는다.
+- 펼침 애니메이션은 `prefers-reduced-motion: reduce`에서 생략한다.
 
 ### 4.4 채팅과 질문 인사이트
 

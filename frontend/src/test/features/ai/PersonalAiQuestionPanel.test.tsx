@@ -143,7 +143,7 @@ describe('개인 AI 질문 패널 — 대화형 UX', () => {
     expect(screen.getByText('대화는 이 화면에서만 유지되며 새로고침하면 사라집니다.')).toBeInTheDocument()
   })
 
-  it('answer.done의 근거를 카드로 그리고, 발화 근거는 축이 달라 이동을 제공하지 않는다', async () => {
+  it('answer.done의 근거는 접힌 토글로 요약되고, 펼치면 표시 전용 목록이 나온다', async () => {
     const user = userEvent.setup()
     const harness = controllableAsk()
     renderPanel({ ask: harness.ask })
@@ -161,15 +161,66 @@ describe('개인 AI 질문 패널 — 대화형 UX', () => {
     })
     harness.calls[0].finish()
 
-    expect(await screen.findByText('12쪽')).toBeInTheDocument()
-    expect(screen.getByText('자료 mat-csrf')).toBeInTheDocument()
-    expect(screen.getByText('12:08–12:41')).toBeInTheDocument()
-    expect(screen.getByText(/영상 위치와 다를 수 있어 이동을 제공하지 않습니다/)).toBeInTheDocument()
+    // 답변 아래에 남는 건 "근거 2" 한 줄이다 — 카드를 항상 펼쳐 두면 패널이 근거로 찬다(ADR-0049 §8).
+    const evidenceToggle = await screen.findByRole('button', { name: '근거 2' })
+    expect(evidenceToggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('list')).not.toBeInTheDocument()
+
+    await user.click(evidenceToggle)
+
+    expect(evidenceToggle).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText('12쪽')).toBeVisible()
+    expect(screen.getByTitle('mat-csrf')).toBeVisible()
+    expect(screen.getByText('12:08–12:41')).toBeVisible()
+    expect(screen.getByText(/영상 위치와 다를 수 있어 이동을 제공하지 않습니다/)).toBeVisible()
     // 근거는 표시 전용이다 — 누르면 엉뚱한 지점으로 가므로 버튼으로 만들지 않는다.
     expect(screen.queryByRole('button', { name: /12:08/ })).not.toBeInTheDocument()
     // 정상 종료에는 재시도가 없고, 다시 물어볼 수 있는 상태로 돌아온다.
     expect(screen.queryByRole('button', { name: '다시 시도' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '전송' })).toBeInTheDocument()
+  })
+
+  it('근거 펼침은 턴별로 독립이고, 근거가 없는 턴에는 토글이 없다', async () => {
+    const user = userEvent.setup()
+    const harness = controllableAsk()
+    renderPanel({ ask: harness.ask })
+
+    await askQuestion(user, '첫 질문')
+    harness.emit({
+      type: 'answer.done',
+      payload: { requestId: 'r1', sources: [{ type: 'PPTX', materialId: 'mat-a', page: 3 }] },
+    })
+    harness.calls[0].finish()
+
+    await askQuestion(user, '두 번째 질문')
+    harness.emit({
+      type: 'answer.done',
+      payload: {
+        requestId: 'r2',
+        sources: [
+          { type: 'PPTX', materialId: 'mat-b', page: 7 },
+          { type: 'PPTX', materialId: 'mat-c', page: 9 },
+        ],
+      },
+    })
+    harness.calls[1].finish()
+
+    await askQuestion(user, '세 번째 질문')
+    harness.emit({ type: 'answer.insufficient', payload: { requestId: 'r3', message: '근거를 찾지 못했습니다.' } })
+    harness.calls[2].finish()
+
+    // 근거 0개인 턴은 토글도 만들지 않는다.
+    const toggles = await screen.findAllByRole('button', { name: /^근거 \d+$/ })
+    expect(toggles.map((button) => button.textContent)).toEqual(['근거 1', '근거 2'])
+
+    await user.click(toggles[1])
+
+    // 두 번째 턴만 열린다 — 대화가 길어져도 나머지는 접힌 채 남는다.
+    expect(toggles[0]).toHaveAttribute('aria-expanded', 'false')
+    expect(toggles[1]).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText('3쪽')).not.toBeVisible()
+    expect(screen.getByText('7쪽')).toBeVisible()
+    expect(screen.getByText('9쪽')).toBeVisible()
   })
 
   it('answer.insufficient는 오류가 아니라 안내로 끝난다', async () => {
