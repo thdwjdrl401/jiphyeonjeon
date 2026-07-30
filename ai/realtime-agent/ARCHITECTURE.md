@@ -88,9 +88,11 @@ room job이 소유한 단일 event consumer의 sink로만 동작한다. 따라�
 | 자막 이벤트 | `CAPTION_STREAM_KEY` (기본 `ai:captions:live`) | `XADD MAXLEN ~ CAPTION_STREAM_MAXLEN` | 기본 최대 길이 10,000, 각 write를 timeout 안에서 직접 await |
 | session lease | `agent:session:{sessionId}` | `SET NX EX`, owner 비교 renew/release Lua | 같은 session의 중복 job 차단 |
 
-자막 Stream에는 두 이벤트가 들어간다.
+자막 Stream에는 네 이벤트가 들어간다.
 
+- `caption.stream.started`: attempt 첫 audio frame 시작의 UTC 앵커
 - `caption.delta`: STT text 조각, `sequence`, `streamElapsedMs` 포함
+- `caption.segment.final`: VAD가 확정한 발화 본문·실제 음성 프레임 구간·경계 사유
 - `caption.stream.completed`: 정상 종료 attempt의 `lastSequence`, 종료 시각, `ROOM_DELETED` 사유 포함
 
 `sequence`는 전역 번호가 아니라 `(sessionId, sttSessionId)`로 식별되는 한 job attempt 안에서 1부터

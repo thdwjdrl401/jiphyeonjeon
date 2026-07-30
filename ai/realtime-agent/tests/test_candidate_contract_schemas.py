@@ -9,7 +9,12 @@ import pytest
 
 from app.adapters.redis_caption_publisher import to_stream_fields
 from app.adapters.spring_status_callback import serialize_status_event, status_signature
-from app.captions.models import CaptionDelta, CaptionStreamCompleted
+from app.captions.models import (
+    CaptionDelta,
+    CaptionSegmentFinal,
+    CaptionStreamCompleted,
+    CaptionStreamStarted,
+)
 from app.contracts.live_status import LiveAgentStatusEvent
 from app.health import SttReadinessState
 
@@ -37,7 +42,9 @@ def validator(name: str) -> jsonschema.Draft202012Validator:
     ("schema_name", "fixture_name"),
     [
         ("dispatch-metadata.schema.json", "dispatch-metadata.valid.json"),
+        ("caption-stream-entry.schema.json", "caption-stream-started.valid.json"),
         ("caption-stream-entry.schema.json", "caption-delta.valid.json"),
+        ("caption-stream-entry.schema.json", "caption-segment-final.valid.json"),
         ("caption-stream-entry.schema.json", "caption-completed.valid.json"),
         ("live-agent-status.schema.json", "live-agent-status-succeeded.valid.json"),
         ("live-agent-status.schema.json", "live-agent-status-failed.valid.json"),
@@ -51,6 +58,14 @@ def test_candidate_fixtures_validate(schema_name: str, fixture_name: str) -> Non
 
 
 def test_caption_fixtures_are_exact_runtime_serializer_outputs() -> None:
+    started = CaptionStreamStarted(
+        event_id="caption-event-started-1",
+        session_id=SESSION_ID,
+        lesson_id=LESSON_ID,
+        stt_session_id="openai-realtime:session-1",
+        audio_started_at=datetime(2026, 7, 27, 12, 34, 15, 789000, tzinfo=UTC),
+        occurred_at=datetime(2026, 7, 27, 12, 34, 15, 790000, tzinfo=UTC),
+    )
     delta = CaptionDelta(
         event_id="caption-event-1",
         session_id=SESSION_ID,
@@ -60,6 +75,19 @@ def test_caption_fixtures_are_exact_runtime_serializer_outputs() -> None:
         stream_elapsed_ms=41_000,
         text=" 외",
         occurred_at=datetime(2026, 7, 27, 12, 34, 56, 789000, tzinfo=UTC),
+    )
+    segment = CaptionSegmentFinal(
+        event_id="caption-event-segment-1",
+        session_id=SESSION_ID,
+        lesson_id=LESSON_ID,
+        stt_session_id="openai-realtime:session-1",
+        segment_index=0,
+        last_sequence=1,
+        text=" 외",
+        start_stream_elapsed_ms=40_000,
+        end_stream_elapsed_ms=41_000,
+        boundary_reason="SILENCE",
+        occurred_at=datetime(2026, 7, 27, 12, 34, 56, 790000, tzinfo=UTC),
     )
     completed = CaptionStreamCompleted(
         event_id="caption-event-2",
@@ -72,7 +100,9 @@ def test_caption_fixtures_are_exact_runtime_serializer_outputs() -> None:
         occurred_at=datetime(2026, 7, 27, 12, 35, tzinfo=UTC),
     )
 
+    assert to_stream_fields(started) == load_json(FIXTURES / "caption-stream-started.valid.json")
     assert to_stream_fields(delta) == load_json(FIXTURES / "caption-delta.valid.json")
+    assert to_stream_fields(segment) == load_json(FIXTURES / "caption-segment-final.valid.json")
     assert to_stream_fields(completed) == load_json(FIXTURES / "caption-completed.valid.json")
 
 
@@ -151,6 +181,11 @@ def test_schemas_reject_contract_drift_and_unimplemented_completion_reason() -> 
     del completed["sttSessionId"]
     with pytest.raises(jsonschema.ValidationError):
         validator("caption-stream-entry.schema.json").validate(completed)
+
+    started = load_json(FIXTURES / "caption-stream-started.valid.json")
+    started["audioStartedAt"] = "2026-07-30T09:00:00+09:00"
+    with pytest.raises(jsonschema.ValidationError):
+        validator("caption-stream-entry.schema.json").validate(started)
 
 
 def test_status_schema_requires_error_only_for_failed() -> None:

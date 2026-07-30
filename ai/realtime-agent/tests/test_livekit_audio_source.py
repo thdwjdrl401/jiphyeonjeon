@@ -4,6 +4,7 @@ import asyncio
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -179,7 +180,11 @@ async def test_pcm_frames_are_mono_and_use_cumulative_sample_time(
     publication = microphone()
     participant = FakeParticipant(INSTRUCTOR_IDENTITY, {publication.sid: publication})
     room.remote_participants[participant.identity] = participant
-    source = LiveKitInstructorAudioSource(FakeContext(room))  # type: ignore[arg-type]
+    frame_received_at = datetime(2026, 7, 30, 0, 22, 37, 410000, tzinfo=UTC)
+    source = LiveKitInstructorAudioSource(
+        FakeContext(room),  # type: ignore[arg-type]
+        clock=lambda: frame_received_at,
+    )
     await source.connect()
     captured: dict[str, object] = {}
     frames = [
@@ -231,6 +236,8 @@ async def test_pcm_frames_are_mono_and_use_cumulative_sample_time(
     assert (second.pcm, second.stream_elapsed_ms) == (b"second", 30)
     assert first.sample_rate == second.sample_rate == 48_000
     assert first.num_channels == second.num_channels == 1
+    assert first.audio_started_at == frame_received_at - timedelta(milliseconds=10)
+    assert second.audio_started_at == first.audio_started_at
     assert captured == {
         "sample_rate": 48_000,
         "num_channels": 1,

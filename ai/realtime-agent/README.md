@@ -43,7 +43,7 @@ Spring이 LiveKit explicit dispatch에 넣어야 하는 metadata다. 대상 room
 }
 ```
 
-STT delta는 application Redis `ai:captions:live`에 다음 field로 기록된다.
+STT attempt는 application Redis `ai:captions:live`에 `stream.started → delta/segment.final 반복 → stream.completed` 순서로 기록된다. delta 예시는 다음과 같다.
 
 ```text
 contractVersion=1
@@ -58,8 +58,9 @@ text=오늘은 벡터 검색을 설명하겠습니다.
 occurredAt=2026-07-29T04:00:01.250Z
 ```
 
-정상 종료 시 같은 stream에 `caption.stream.completed`를 기록한다. 전체 field와 callback 서명은
-[`CONTRACT.md`](CONTRACT.md)에서 확인한다.
+첫 frame 전에 `caption.stream.started.audioStartedAt`으로 stream 0의 UTC를 고정하고, VAD가 발화를
+확정할 때 `caption.segment.final`에 실제 speech start/end와 권위 text를 기록한다. 정상 종료는 같은 stream의
+`caption.stream.completed`다. 전체 필드는 [`CONTRACT.md`](CONTRACT.md)에서 확인한다.
 
 ## 4. 처리 흐름
 
@@ -68,7 +69,9 @@ Spring → LiveKit named dispatch
              ↓
 Frontend microphone → LiveKit Room → realtime-agent job
                                       → Nemotron CUDA / OpenAI WSS
+                                      → Redis caption.stream.started
                                       → Redis caption.delta
+                                      → Redis caption.segment.final
 Spring room delete → ROOM_DELETED     → Redis caption.stream.completed
                                       → Spring lifecycle callback (선택)
 ```

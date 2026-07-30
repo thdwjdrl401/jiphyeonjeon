@@ -12,7 +12,8 @@ schema 테스트가 fixture를 읽어 wire shape를 확인한다. 향후 Java pr
 ## 파일 구성
 
 - `dispatch-metadata.valid.json`: LiveKit dispatch 정상 예시
-- `caption-delta.valid.json`, `caption-completed.valid.json`: Redis 자막 이벤트 정상 예시
+- `caption-stream-started.valid.json`, `caption-delta.valid.json`, `caption-segment-final.valid.json`,
+  `caption-completed.valid.json`: Redis 자막 attempt의 네 이벤트 정상 예시
 - `live-agent-status-*.valid.json`: 성공·실패 callback 예시
 - `live-agent-status-signing.valid.json`: timestamp, raw body, 예상 HMAC 서명 고정 vector
 - `realtime-agent-*.valid.json`: liveness와 ready/not-ready service health 응답

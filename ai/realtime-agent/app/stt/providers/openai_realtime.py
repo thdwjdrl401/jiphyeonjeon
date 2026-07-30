@@ -10,7 +10,11 @@ from typing import Any
 
 from app.audio.segmentation import SpeechSegment
 from app.stt.engine import SttStreamContext
-from app.stt.providers.segmented import SegmentedStreamingEngine, SpeechSegmenter
+from app.stt.providers.segmented import (
+    ProviderSegmentFinal,
+    SegmentedStreamingEngine,
+    SpeechSegmenter,
+)
 
 _REALTIME_SAMPLE_RATE = 24_000
 _REALTIME_TRANSCRIPTION_URL = "wss://api.openai.com/v1/realtime?intent=transcription"
@@ -65,7 +69,7 @@ class OpenAiRealtimeStreamingEngine(SegmentedStreamingEngine):
         self,
         segment: SpeechSegment,
         context: SttStreamContext,
-    ) -> AsyncIterator[str]:
+    ) -> AsyncIterator[str | ProviderSegmentFinal]:
         ws = await self._ensure_connected(context.language)
         pcm24, _state = audioop.ratecv(
             segment.pcm,
@@ -141,12 +145,13 @@ class OpenAiRealtimeStreamingEngine(SegmentedStreamingEngine):
             elif transcript.strip() != emitted.strip():
                 logger.warning(
                     "OpenAI final transcript revised already emitted realtime deltas; "
-                    "preserving emitted text",
+                    "publishing provider final as authoritative segment text",
                     extra={
                         "emitted_length": len(emitted),
                         "final_length": len(transcript),
                     },
                 )
+            yield ProviderSegmentFinal(transcript or emitted)
             return
 
     async def _ensure_connected(self, language: str) -> Any:

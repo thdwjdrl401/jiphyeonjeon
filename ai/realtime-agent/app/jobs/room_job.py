@@ -6,6 +6,7 @@ import sys
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, Protocol
 
 from app.jobs.shutdown_deadline import ShutdownDeadline
@@ -18,6 +19,7 @@ from app.stt.engine import (
     AudioChunk,
     EngineCompleted,
     EngineWarning,
+    SegmentFinal,
     StreamingSttEngine,
     SttStreamContext,
     SttStreamStarted,
@@ -54,7 +56,7 @@ class AudioSource(Protocol):
 
 
 AudioSourceFactory = Callable[[Any], AudioSource]
-EngineSinkEvent = TextDelta | EngineWarning
+EngineSinkEvent = TextDelta | SegmentFinal | EngineWarning
 EngineEventSink = Callable[[EngineSinkEvent], Awaitable[None]]
 EngineEventSinkFactory = Callable[[SttStreamStarted], EngineEventSink]
 RoomJobLifecycleState = Literal[
@@ -79,6 +81,7 @@ class RoomJobLifecycleEvent:
     state: RoomJobLifecycleState
     stt_session_id: str | None = None
     stream_elapsed_ms: int | None = None
+    audio_started_at: datetime | None = None
     completion_reason: AudioCompletionReason | None = None
     shutdown_deadline: float | None = None
 
@@ -337,12 +340,16 @@ async def _pump_audio(
     last_elapsed_ms = 0
     async for chunk in source.chunks():
         if first_chunk:
+            audio_started_at = chunk.audio_started_at or datetime.now(UTC) - timedelta(
+                milliseconds=chunk.stream_elapsed_ms
+            )
             await _notify_lifecycle(
                 lifecycle_observer,
                 RoomJobLifecycleEvent(
                     "AUDIO_STARTED",
                     stt_session_id=stt_session_id,
                     stream_elapsed_ms=chunk.stream_elapsed_ms,
+                    audio_started_at=audio_started_at,
                 ),
             )
             first_chunk = False

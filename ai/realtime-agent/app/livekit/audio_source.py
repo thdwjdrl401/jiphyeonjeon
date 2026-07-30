@@ -3,8 +3,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from livekit import rtc
@@ -60,10 +61,12 @@ class LiveKitInstructorAudioSource:
         context: JobContext,
         *,
         rtc_config: rtc.RtcConfiguration | None = None,
+        clock: Callable[[], datetime] | None = None,
     ) -> None:
         self._context = context
         self._room = context.room
         self._rtc_config = rtc_config
+        self._clock = clock or (lambda: datetime.now(UTC))
         self._queue: asyncio.Queue[AudioChunk | _AudioStreamFailure | object] = asyncio.Queue(
             maxsize=_OUTPUT_QUEUE_CAPACITY_FRAMES
         )
@@ -72,6 +75,7 @@ class LiveKitInstructorAudioSource:
         self._publisher_identity: str | None = None
         self._selected_track_sid: str | None = None
         self._captured_nanoseconds = 0
+        self._audio_started_at: datetime | None = None
         self._connected = False
         self._closed = False
         self._accepting_tracks = True
@@ -299,12 +303,17 @@ class LiveKitInstructorAudioSource:
                 duration_ns = (
                     frame.samples_per_channel * _NANOSECONDS_PER_SECOND + frame.sample_rate // 2
                 ) // frame.sample_rate
+                if self._audio_started_at is None:
+                    self._audio_started_at = self._clock() - timedelta(
+                        microseconds=duration_ns // 1_000
+                    )
                 self._captured_nanoseconds += duration_ns
                 chunk = AudioChunk(
                     pcm=bytes(frame.data),
                     sample_rate=frame.sample_rate,
                     num_channels=frame.num_channels,
                     stream_elapsed_ms=self._captured_nanoseconds // 1_000_000,
+                    audio_started_at=self._audio_started_at,
                 )
                 try:
                     self._queue.put_nowait(chunk)

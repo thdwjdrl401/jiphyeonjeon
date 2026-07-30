@@ -6,8 +6,9 @@ LiveKit room의 remote microphone track을 선택해 bounded PCM stream으로 ap
 
 ## 구조와 흐름
 
-subscription이 publisher와 track 이벤트를 감시해 허용된 microphone 하나를 고르고, audio source가 frame을
-20 ms 단위로 읽어 room job에 전달한다.
+subscription이 허용된 microphone 하나를 고르고 audio source가 frame을 20ms 단위로 읽는다. 첫 frame을
+bounded queue에 넣기 전에 frame 시작 UTC를 `audioStartedAt`으로 캡처하고 모든 `AudioChunk`에 같은 값을
+전달한다. 따라서 GPU/STT backlog가 stream 시간 앵커를 늦추지 않는다.
 
 ## 파일 구성
 
@@ -19,6 +20,7 @@ subscription이 publisher와 track 이벤트를 감시해 허용된 microphone �
 
 같은 publisher의 여러 microphone track 중 하나만 선택하고 두 번째 microphone publisher는 fail-closed 처리한다.
 queue가 가득 차면 frame을 조용히 버리지 않고 `AudioBacklogError`로 job을 실패시킨다.
+`audioStartedAt`은 host UTC clock에 의존하므로 Spring host와 NTP 동기가 필요하다.
 TURN을 설정하지 않으면 SDK 기본 ICE를 유지한다. TURN TCP tunnel을 사용할 때는 LiveKit API secret과
 분리한 `LIVEKIT_TURN_SECRET`으로 단기 credential을 만들고 relay-only RTC 설정을 명시적으로 주입한다.
 

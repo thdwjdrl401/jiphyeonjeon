@@ -12,6 +12,7 @@ from app.stt.engine import (
     EngineCapabilities,
     EngineCompleted,
     EngineWarning,
+    SegmentFinal,
     SttStreamContext,
     TextDelta,
 )
@@ -105,7 +106,13 @@ async def test_segments_are_transcribed_serially_and_finish_completes_stream(
     assert engine.transcribed == [first, final]
     assert segmenter.pushed == [chunk(20), chunk(80)]
     assert segmenter.finish_calls == 1
-    assert events == [TextDelta("one", 20), TextDelta("two", 60), EngineCompleted(80)]
+    assert events == [
+        TextDelta("one", 20),
+        SegmentFinal("one", 0, 20, "SILENCE"),
+        TextDelta("two", 60),
+        SegmentFinal("two", 20, 60, "SILENCE"),
+        EngineCompleted(80),
+    ]
     assert engine.close_calls == 1
     segment_logs = [
         message for message in caplog.messages if message.startswith("STT segment processed:")
@@ -289,6 +296,7 @@ async def test_bounded_event_queue_backpressures_without_dropping_deltas() -> No
     assert [event async for event in engine.events()] == [
         TextDelta("one", 20),
         TextDelta("two", 20),
+        SegmentFinal("onetwo", 0, 20, "SILENCE"),
         EngineCompleted(20),
     ]
     await engine.close()

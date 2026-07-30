@@ -10,20 +10,21 @@ service health는 §3-8의 AI 제공 endpoint와 Python 계약 테스트까지 �
 | Schema | Producer | Transport | Consumer |
 |---|---|---|---|
 | `dispatch-metadata.schema.json` | Spring dispatch adapter | LiveKit job metadata | realtime-agent |
-| `caption-stream-entry.schema.json` | realtime-agent | Redis Stream | 향후 Spring/ai-api consumer |
+| `caption-stream-entry.schema.json` | realtime-agent | Redis Stream | Spring(네 이벤트 구현), ai-api(delta/completed만; 후속 확장) |
 | `live-agent-status.schema.json` | realtime-agent | 서명된 내부 HTTP | 향후 Spring callback |
 | `realtime-agent-health.schema.json` | realtime-agent | loopback/reverse tunnel HTTP | 향후 Spring consumer |
 
 `sessionId`와 `lessonId`는 소문자 canonical UUID 문자열이다. 모든 payload 필드는
 `camelCase`이고 알 수 없는 필드는 거부한다.
 
-`streamElapsedMs`는 라이브 세션 생성 시각 기준 시간이 아니다. **realtime-agent가 첫
-오디오 프레임을 받은 시점을 0으로 한 단조 증가 시간**이다. 공유 계약으로 승격할 때는
-Spring이 가진 세션 clock으로 변환할 기준점 또는 별도 offset 계약을 먼저 확정해야 한다.
+`streamElapsedMs`는 라이브 세션 생성 시각 기준 시간이 아니라 첫 오디오 프레임 시작을 0으로 한 단조
+증가 시간이다. `caption.stream.started.audioStartedAt`이 그 0의 UTC 앵커다. Spring은 raw 값을 보존하고
+`audioStartedAt - clockOriginAt + streamElapsedMs`로 세션 축을 만든다. 두 host의 NTP 동기가 전제다.
 
 caption `sequence`는 `(sessionId, sttSessionId)`로 식별되는 한 job attempt의 STT stream 안에서만
 단조 증가한다. 순차 retry는 새 `sttSessionId`로 다시 `sequence=1`부터 시작할 수 있으며,
-`caption.stream.completed`도 동일한 `sttSessionId`로 종료할 attempt를 명시한다.
+`caption.segment.final.segmentIndex`는 0부터 증가한다. final은 `lastSequence` 이하 delta를 권위 text로
+대체하고 completed는 동일한 `sttSessionId`로 종료 attempt를 명시한다.
 
 Redis endpoint는 런타임 URL로 주입한다. 기본 stream key는 `ai:captions:live`이며 XADD는
 기본 `MAXLEN ~ 10000`으로 근사 trimming하면서 직접 await한다. 쓰기 오류와 timeout은 호출자에게

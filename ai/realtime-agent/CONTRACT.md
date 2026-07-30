@@ -162,6 +162,21 @@ audio, engine queue와 dispatch capacity는 검사하지 않으므로 job별 `ST
   기준보다 조금 클 수 있고, 이는 바이트 상한이나 Redis 전체 `maxmemory` 설정이 아니다.
 - 모든 정수 필드: 부호 없는 최대 18자리 십진 문자열
 
+`caption.stream.started` fields:
+
+```json
+{
+  "contractVersion": "1",
+  "eventId": "22222222-2222-4222-8222-222222222222",
+  "type": "caption.stream.started",
+  "sessionId": "11111111-1111-4111-8111-111111111111",
+  "lessonId": "22222222-2222-4222-8222-222222222222",
+  "sttSessionId": "provider-session-01",
+  "audioStartedAt": "2026-07-27T00:00:00.000Z",
+  "occurredAt": "2026-07-27T00:00:00.001Z"
+}
+```
+
 `caption.delta` fields:
 
 ```json
@@ -176,6 +191,26 @@ audio, engine queue와 dispatch capacity는 검사하지 않으므로 job별 `ST
   "streamElapsedMs": "1200",
   "text": "안녕하세요",
   "occurredAt": "2026-07-27T00:00:01.200Z"
+}
+```
+
+`caption.segment.final` fields:
+
+```json
+{
+  "contractVersion": "1",
+  "eventId": "33333333-3333-4333-8333-333333333334",
+  "type": "caption.segment.final",
+  "sessionId": "11111111-1111-4111-8111-111111111111",
+  "lessonId": "22222222-2222-4222-8222-222222222222",
+  "sttSessionId": "provider-session-01",
+  "segmentIndex": "0",
+  "lastSequence": "1",
+  "text": "안녕하세요",
+  "startStreamElapsedMs": "200",
+  "endStreamElapsedMs": "1200",
+  "boundaryReason": "SILENCE",
+  "occurredAt": "2026-07-27T00:00:01.210Z"
 }
 ```
 
@@ -196,13 +231,14 @@ audio, engine queue와 dispatch capacity는 검사하지 않으므로 job별 `ST
 }
 ```
 
-`sequence`와 `lastSequence`의 범위는 `(sessionId, sttSessionId)`로 식별되는 **한 job attempt의
-STT stream**이다. 각 attempt는 `sequence=1`부터 시작할 수 있으므로 consumer는 `sessionId`만으로
-sequence를 합치면 안 된다. completion에도 같은 `sttSessionId`를 넣어 어느 attempt를 닫는지
-명시한다. sequence는 publish 성공 뒤에만 commit한다. 빈 문자열 delta는 거부하지만 STT가 생성한
-공백 문자열은 바꾸거나 trim하지 않는다. `streamElapsedMs`는 Spring session clock이 아니라
-realtime-agent가 받은 첫 audio frame을 0으로 보는 stream-local clock이다. session-relative 자막에
-사용하려면 Java와 time-origin 변환 계약을 먼저 합의해야 한다.
+attempt 순서는 started 1회, delta와 segment.final 반복, completion 1회다. `sequence`와
+`lastSequence` 범위는 `(sessionId, sttSessionId)`이고 `segmentIndex`는 0부터 증가한다. 각 retry는 새
+`sttSessionId`에서 시작하므로 consumer는 sessionId만으로 합치면 안 된다. sequence는 publish 성공 뒤에만
+commit한다. final의 `lastSequence` 이하 delta는 같은 발화의 미리보기이며 final text가 권위 있다.
+
+`audioStartedAt`은 첫 audio frame 시작, 즉 `streamElapsedMs=0`의 UTC다. segment start/end는 VAD가
+관측한 실제 speech frame 구간이며 pre-roll/trailing silence를 제외한다. Spring은 raw 값을 보존하고
+`audioStartedAt - clockOriginAt + streamElapsedMs`로 정확 세션-ms를 계산한다. 호스트 NTP 동기가 전제다.
 
 completion은 LiveKit `ROOM_DELETED`를 명시적으로 받아 남은 audio와 engine event를 정상 drain한
 뒤에만 새로 발행을 시도한다. 다른 disconnect, cancellation, lease loss, provider 오류에서는 새

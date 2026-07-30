@@ -3,7 +3,9 @@
   "$id": "https://liveclass.local/ai-candidates/caption-stream-entry.schema.json",
   "title": "RealtimeCaptionStreamEntryCandidateV1",
   "oneOf": [
+    {"$ref": "#/$defs/started"},
     {"$ref": "#/$defs/delta"},
+    {"$ref": "#/$defs/segmentFinal"},
     {"$ref": "#/$defs/completed"}
   ],
   "$defs": {
@@ -34,6 +36,24 @@
       "lessonId": {"$ref": "#/$defs/canonicalUuid"},
       "occurredAt": {"type": "string", "format": "date-time"}
     },
+    "started": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contractVersion", "eventId", "type", "sessionId", "lessonId",
+        "sttSessionId", "audioStartedAt", "occurredAt"
+      ],
+      "properties": {
+        "contractVersion": {"const": "1"},
+        "eventId": {"$ref": "#/$defs/safeIdentifier"},
+        "type": {"const": "caption.stream.started"},
+        "sessionId": {"$ref": "#/$defs/canonicalUuid"},
+        "lessonId": {"$ref": "#/$defs/canonicalUuid"},
+        "sttSessionId": {"$ref": "#/$defs/safeIdentifier"},
+        "audioStartedAt": {"type": "string", "format": "date-time", "pattern": "(Z|\\+00:00)$"},
+        "occurredAt": {"type": "string", "format": "date-time"}
+      }
+    },
     "delta": {
       "type": "object",
       "additionalProperties": false,
@@ -51,6 +71,32 @@
         "sequence": {"$ref": "#/$defs/positiveIntegerString"},
         "streamElapsedMs": {"$ref": "#/$defs/nonNegativeIntegerString"},
         "text": {"type": "string", "minLength": 1, "maxLength": 10000},
+        "occurredAt": {"type": "string", "format": "date-time"}
+      }
+    },
+    "segmentFinal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contractVersion", "eventId", "type", "sessionId", "lessonId",
+        "sttSessionId", "segmentIndex", "lastSequence", "text",
+        "startStreamElapsedMs", "endStreamElapsedMs", "boundaryReason", "occurredAt"
+      ],
+      "properties": {
+        "contractVersion": {"const": "1"},
+        "eventId": {"$ref": "#/$defs/safeIdentifier"},
+        "type": {"const": "caption.segment.final"},
+        "sessionId": {"$ref": "#/$defs/canonicalUuid"},
+        "lessonId": {"$ref": "#/$defs/canonicalUuid"},
+        "sttSessionId": {"$ref": "#/$defs/safeIdentifier"},
+        "segmentIndex": {"$ref": "#/$defs/nonNegativeIntegerString"},
+        "lastSequence": {"$ref": "#/$defs/positiveIntegerString"},
+        "text": {"type": "string", "minLength": 1, "maxLength": 10000},
+        "startStreamElapsedMs": {"$ref": "#/$defs/nonNegativeIntegerString"},
+        "endStreamElapsedMs": {"$ref": "#/$defs/nonNegativeIntegerString"},
+        "boundaryReason": {
+          "enum": ["SILENCE", "MAX_DURATION", "STREAM_END"]
+        },
         "occurredAt": {"type": "string", "format": "date-time"}
       }
     },
