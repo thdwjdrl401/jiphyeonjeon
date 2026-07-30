@@ -9,6 +9,7 @@ import {
   visibleAnnotationElements,
   type AnnotationDocument,
 } from './annotation'
+import EgressLaserTrail from './EgressLaserTrail'
 import { loadExcalidraw } from './excalidrawRuntime'
 
 interface EgressAnnotationLayerProps {
@@ -111,5 +112,10 @@ export default function EgressAnnotationLayer({ room }: EgressAnnotationLayerPro
     return () => { cancelled = true }
   }, [document])
 
-  return <div ref={hostRef} className="egress-stage__annotation" aria-hidden="true" />
+  return (
+    <>
+      <div ref={hostRef} className="egress-stage__annotation" aria-hidden="true" />
+      <EgressLaserTrail room={room} />
+    </>
+  )
 }
