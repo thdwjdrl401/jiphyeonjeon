@@ -9,6 +9,7 @@ RAG context core가 외부 Redis, PostgreSQL과 BGE runtime을 사용하는 outb
 | `pgvector_material_retrieval.py` | `ai_app` role로 ACTIVE lesson chunk만 hybrid 검색 |
 | `remote_bge_m3_embedding.py` | 인증된 BGE-M3 query embedding HTTP client |
 | `gms_openai_answer.py` | 고정 GMS gateway의 grounded OpenAI-compatible 답변 stream |
+| `gms_openai_lecture_note.py` | GMS 구조화 JSON 강의 노트 topic 판단 |
 
 ## 경계와 불변식
 
@@ -21,4 +22,5 @@ RAG context core가 외부 Redis, PostgreSQL과 BGE runtime을 사용하는 outb
 - token, DB URL, 질문 원문과 embedding 값은 로그에 남기지 않는다.
 - GMS prompt에는 질문과 선택된 근거·최소 citation 좌표만 넣고 request/session/material/attempt ID를 제외한다.
 - GMS SDK retry는 0으로 두고 timeout·rate limit·인증·설정 실패를 공개 가능한 고정 code로 바꾼다.
+- 강의 노트 모델은 별도 JSON object 호출이며 현재 topic·직전 topic·이전 문맥·새 window만 전달한다.
 - provider delta는 SSE data 제한에 맞춰 최대 10,000자로 다시 자르고 취소 시 provider stream을 닫는다.
