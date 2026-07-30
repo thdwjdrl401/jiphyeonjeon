@@ -85,6 +85,91 @@ Redis는 LiveKit 내부 Redis가 아닌 application Redis다. key는 `CAPTION_ST
 
 현재 agent는 `caption.segment.final`·`caption.partial|final|revised`를 발행하지 않는다. Spring consumer는 ai-api(`ai-rag-live-v1`)와 **별도 group `spring-caption-live-v1`**로 소비하고(ADR-0043), `eventId` 멱등으로 `caption.delta`·`caption.stream.completed`를 **append-only로 core.live_caption에 영속**한 뒤 저장분만 `/topic/live-sessions/{sessionId}/captions` WS로 전달한다(§3-6). raw `streamElapsedMs`를 **그대로 저장·중계**하며 세션 상대 ms로 변환하지 않는다 — session/HLS time-origin 변환·앵커, owner fencing, 전역 key의 session별 분리·정리는 후속 공유 계약이다(전역 key는 producer의 `MAXLEN ~`에 정리를 위임하고 consumer는 키를 DEL하지 않는다). consumer가 소비하는 Redis는 `spring.data.redis`가 가리키는 **프로필 구동 Redis**다(remote 프로필=EC2 :4000 application Redis). **prod 캡션-Redis 토폴로지(현재 prod redis ≠ 캡션 redis)는 AI/인프라 오너의 별도 작업**이며 이 구현이 해결하지 않는다(ADR-0043 §의존성). 상세: [`caption schema`](../ai/realtime-agent/contracts/schemas/caption-stream-entry.schema.json)·[`delta fixture`](../ai/realtime-agent/contracts/fixtures/caption-delta.valid.json)·[`completion fixture`](../ai/realtime-agent/contracts/fixtures/caption-completed.valid.json)·[ADR-0043](decisions/songjeongki/0043-caption-consumer-persistence.md).
 
+### 3-4a. ai-api → application Redis 실시간 강의 노트 Stream — AI producer 구현, Spring consumer 미구현
+
+ai-api는 §3-4의 자막을 별도 consumer group `ai-live-notes-mvp-v1`로 읽고, 라이브 중에는 새로 생성된 노트
+조각만 application Redis Stream `ai:lecture-notes:mvp`에 발행한다. capture 완료 뒤에는 라이브 event를
+수정하지 않고 별도 refined snapshot을 한 번 발행한다. Redis String cache는 만들지 않는다. 모든 write는
+`XADD ... MAXLEN ~ AI_API_LECTURE_NOTE_STREAM_MAXLEN`(기본 10,000)이며 Redis entry value는 모두 UTF-8
+문자열이다.
+정수 필드는 부호 없는 최대 18자리 십진 문자열이고, 알 수 없는 필드·누락 필드·중복 필드는 계약 위반이다.
+
+공통 필드는 다음 조건을 지킨다.
+
+| 필드 | 계약 |
+|---|---|
+| `contractVersion` | 문자열 literal `"1"` |
+| `eventId` | 1~128자의 `[A-Za-z0-9][A-Za-z0-9._:-]*`; 논리 event의 전역 멱등 key |
+| `sessionId`, `lessonId` | 소문자 canonical UUID |
+| `sttSessionId` | `eventId`와 같은 1~128자 identifier; `latestSttSequence`·`lastSttSequence`의 attempt 범위 |
+| `occurredAt` | timezone offset을 포함한 RFC 3339 datetime |
+
+| `type` | 추가 필수 필드 |
+|---|---|
+| `lecture.note.chunk.appended` | `chunkSequence`, `latestSttSequence`, `topicAction`, `topicId`, `topicTitle`, `keyPoints`, `markdownFragment` |
+| `lecture.note.capture.completed` | `lastChunkSequence`, `lastSttSequence`, `reason="ROOM_DELETED"` |
+| `lecture.note.refined.snapshot` | `sourceLastChunkSequence`, `topics`, `markdownSnapshot` |
+
+`lecture.note.chunk.appended`의 필드 조건은 다음과 같다.
+
+- `chunkSequence`: 세션 범위의 1-based 양의 정수이며 실제 새 조각을 발행할 때만 정확히 1 증가한다.
+- `latestSttSequence`: 이 조각이 반영한 마지막 자막 sequence다. `sttSessionId` attempt 안의 1-based
+  값이며 세션 전체 자막 번호나 session/HLS ms가 아니다.
+- `topicAction`: `START_NEW|CONTINUE`. 세션의 첫 조각은 모델 응답과 무관하게 `START_NEW`다.
+- `topicId`: `eventId`와 같은 1~128자 형식이며 세션 안에서 topic을 식별하는 opaque identifier다.
+  Backend는 문자열 형식을 해석하지 않는다.
+- `topicTitle`: 1~80자의 단일 행 문자열이다.
+- `keyPoints`: 논리 payload에서는 1~3개 배열이며 각 항목은 trim·NFC 정규화된 1~300자 단일 행
+  문자열이다. Redis field에는 compact JSON 배열 문자열로 싣는다.
+- `markdownFragment`: 1~8,192자다. `START_NEW`는 `## 제목`과 bullet을, `CONTINUE`는 새 bullet만
+  포함한다. raw HTML·image·외부 link는 허용하지 않고 heading, unordered list, bold, inline code만 허용한다.
+- 구조화 `topicAction/topicTitle/keyPoints`가 의미상 정본이며 `markdownFragment`는 동일 값에서 결정론적으로
+  만든 파생 표현이다. 둘이 불일치하면 계약 위반이다.
+
+Backend가 전체 Markdown을 단순 결합할 경우 첫 조각은 그대로 저장하고, 이후 `START_NEW` 앞에는 `\n\n`,
+`CONTINUE` 앞에는 `\n`을 삽입한다. 또는 구조화 필드를 누적한 뒤 같은 renderer로 전체 Markdown을
+다시 만들 수 있다. AI wire event에는 `noteVersion`이 없다. Backend read model이 version을 노출한다면
+정상 반영한 chunk 수를 기준으로 별도 관리한다.
+
+`lecture.note.capture.completed`는 해당 세션의 라이브 자막 수집이 끝났다는 append 경로의 terminal event다.
+`lastChunkSequence`는 조각이 없으면 `0`, 있으면 마지막 발행 순번이며, `lastSttSequence`는 completion이
+가리킨 STT attempt의 마지막 자막 sequence다. completion은 전체 노트가 검수·게시·최종 교정됐다는 의미가
+아니다. 정상 completion 뒤 같은 세션의 새 `lecture.note.chunk.appended`는 허용하지 않는다.
+
+`lecture.note.refined.snapshot`은 live draft의 전체 구조화 topic만 입력으로 사용해 capture 완료 뒤 한 번
+정제한 별도 전체 snapshot이다. raw caption, 녹화 HLS, 자료 RAG는 다시 입력하지 않는다.
+
+- `sourceLastChunkSequence`: 정제 입력이 된 마지막 live `chunkSequence`와 같은 1-based 양의 정수다.
+- `topics`: 1~30개 compact JSON 배열 문자열이다. 각 항목은 정확히 `topicId`, `topicTitle`, `keyPoints`를
+  가지며 `topicId`는 세션 refined snapshot 안의 opaque identifier, 제목은 1~80자 단일 행, 요점은
+  1~20개의 1~300자 단일 행 문자열이다.
+- `markdownSnapshot`: 1~262,144자이며 같은 `topics`에서 결정론적으로 만든 전체 Markdown이다. live
+  `markdownFragment`에 append하는 값이 아니라 별도 refined read model을 교체하는 값이다.
+- refined snapshot은 live `chunkSequence`를 증가시키거나 과거 chunk event를 수정·취소하지 않는다.
+- 재시도는 같은 `eventId`, payload, `occurredAt`을 유지한다. 같은 세션·같은
+  `sourceLastChunkSequence`의 뒤늦은 중복 snapshot은 `eventId` 멱등으로 무시한다.
+
+발행 재시도는 최초 event와 **같은 `eventId`, sequence, payload, `occurredAt`**을 사용한다. Spring 구현 시
+별도 group `spring-lecture-notes-live-v1`을 `0-0`에서 만들고, 세션별 처리를 직렬화하며 다음 순서로 처리한다.
+
+1. `(source=ai-api, eventId)` 멱등 기록과 노트 조각 누적을 같은 DB transaction에서 처리한다.
+2. 이미 처리한 `eventId` 또는 현재 값 이하의 `chunkSequence`는 중복·stale로 기록하고 ACK한다.
+3. 기대값보다 큰 `chunkSequence`는 aggregate와 WS를 갱신하지 않고 pending에 남기며 gap metric·log를 남긴다.
+4. completion은 `lastChunkSequence`가 현재 정상 반영 순번과 일치할 때만 capture 완료로 반영한다.
+5. refined snapshot은 capture 완료가 반영됐고 `sourceLastChunkSequence`가 live 마지막 순번과 일치할 때만
+   별도 refined read model 전체를 교체한다. live draft에는 append하지 않는다.
+6. DB commit 뒤에만 ACK하고, commit된 새 조각만 Frontend WebSocket으로 전달한다. refined snapshot의
+   Frontend 전달 방식은 Spring·Frontend 구현 시 별도로 확정한다.
+
+Spring consumer·DB·REST·WebSocket은 아직 구현되지 않았다. AI producer는 caption과 미처리 작업을
+`ai:lecture-notes:mvp:state:{sessionId}`에 저장한 뒤 caption을 ACK하고,
+`ai:lecture-notes:mvp:active-sessions`에서 시작 시 복원한다. 발행할 payload를 outbox에 먼저 고정한 뒤 결과
+`XADD`와 outbox를 비운 checkpoint 저장을 같은 Redis transaction으로 처리하므로 단일 ai-api 프로세스
+재시작에서도 `eventId`, `chunkSequence`, `topicId`를 이어간다. 이 내부 key는 Spring이 소비하거나 수정하지
+않는다. Redis 자체 장애 내구성, 여러 ai-api replica의 session owner fencing, 다른 consumer의 pending
+회수는 아직 보장하지 않는다. Spring 소비 활성화 전에는 이 제한과 gap 복구 운영 정책을 함께 검토한다.
+상세 결정과 현재 제한은 [ADR-0034](decisions/canola/0034-near-realtime-accumulative-lecture-notes.md)를 따른다.
+
 ### 3-5. realtime-agent → Spring lifecycle callback (HTTP, 서명) — v1 AI 구현/기본 off, v2 양쪽 미구현
 Spring 수신 endpoint를 구현하고 `SPRING_STATUS_CALLBACK_URL`로 주입하기 전까지 `SPRING_STATUS_CALLBACK_ENABLED=false`로 둔다. 기존 material callback(§3-2)과 body·header·서명이 호환되지 않으므로 `POST /api/internal/ai/callbacks`로 보내지 않으며 실제 URL은 Java 구현에서 확정한다.
 

@@ -3,7 +3,7 @@
 ## 1. 이 서비스가 하는 일
 
 `ai-api`는 EC2에서 실행되는 Spring 전용 FastAPI 서비스다. 강의 자료와 실시간 자막을 검색하고,
-GMS가 생성한 RAG 답변을 SSE로 전달하며 실시간 자막에서 축적형 강의 노트 MVP snapshot을 만든다.
+GMS가 생성한 RAG 답변을 SSE로 전달하며 실시간 자막에서 축적형 강의 노트 조각을 만든다.
 브라우저가 직접 호출하는 공개 API는 제공하지 않는다.
 
 기본 주소는 `http://127.0.0.1:8010`이다.
@@ -15,7 +15,7 @@ GMS가 생성한 RAG 답변을 SSE로 전달하며 실시간 자막에서 축적
 | Spring | `POST /internal/v1/rag/answers:stream` | HTTP + SSE, HMAC | RAG 질문과 답변 스트림 |
 | 운영 환경 | `GET /healthz`, `GET /readyz` | HTTP | 프로세스 생존·lifespan 준비 확인 |
 | realtime-agent → Redis → ai-api | `ai:captions:live` | Redis Stream consumer group | 실시간 자막 입력·처리 후 ACK |
-| ai-api → Redis | `ai:lecture-notes:mvp:*` | Redis String + Stream | 강의 노트 snapshot과 관찰 event |
+| ai-api → Redis | `ai:lecture-notes:mvp` | Redis Stream | 강의 노트 추가 조각·수집 완료·정제 snapshot event |
 | ai-api | bge-runtime `POST /internal/v1/embeddings` | HTTP, Bearer | 질문 embedding 생성 |
 | ai-api | PostgreSQL `ai` schema | SQL/pgvector | 활성 강의 자료 검색 |
 | ai-api | GMS OpenAI-compatible API | HTTPS | 근거 기반 답변 생성 |
@@ -72,9 +72,16 @@ Spring
   → Spring
 ```
 
-`ai-api`는 시작할 때 같은 caption Stream을 서로 다른 group으로 읽는 RAG consumer와 강의 노트
-consumer를 실행한다. 서로 다른 group이므로 한쪽 ACK가 다른 쪽 전달을 제거하지 않는다. 자료와 자막에서
+`ai-api`는 시작할 때 강의 노트 checkpoint를 복원한 뒤, 같은 caption Stream을 서로 다른 group으로 읽는
+RAG consumer와 강의 노트 consumer를 실행한다. 서로 다른 group이므로 한쪽 ACK가 다른 쪽 전달을 제거하지 않는다. 자료와 자막에서
 충분한 근거를 찾지 못하면 GMS를 호출하지 않고 `answer.insufficient`로 종료한다.
+
+강의 노트 live 출력은 `lecture.note.chunk.appended` 추가분과 `lecture.note.capture.completed`를 발행하고,
+종료 후 정제 결과만 `lecture.note.refined.snapshot` 전체본으로 `ai:lecture-notes:mvp`에 발행한다.
+wire 필드·길이·순서·멱등·ACK 규칙의 정본은
+[공유 계약 §3-4a](../../docs/CONTRACT.md#3-4a-ai-api--application-redis-실시간-강의-노트-stream--ai-producer-구현-spring-consumer-미구현)다.
+강의 노트 caption은 Redis session checkpoint 저장 뒤 ACK하며, 결과 event와 다음 checkpoint는 같은 Redis
+transaction으로 확정한다. AI producer는 구현됐지만 Spring consumer·DB·REST·WebSocket은 아직 구현되지 않았다.
 
 ## 5. 실행과 설정
 
@@ -94,7 +101,7 @@ uv run --frozen --env-file ../.env python -m app.main
 | `AI_API_GMS_API_KEY` | 실행 필수 | GMS 답변 모델 인증 |
 | `AI_API_REDIS_URL` | 선택 | 자막 Redis 연결, 기본값 `redis://127.0.0.1:6379/0` |
 | `AI_API_INSTANCE_ID` | 운영 권장 | Redis consumer name 충돌 방지. EC2의 ai-api replica마다 고유해야 함 |
-| `AI_API_LECTURE_NOTE_*` | 선택 | 강의 노트 window·모델·snapshot 한도 조정 |
+| `AI_API_LECTURE_NOTE_*` | 선택 | 강의 노트 window·모델·Stream 한도 조정 |
 | `AI_INTERNAL_SECRET` | RAG 호출 필수 | Spring 요청 HMAC 검증용 공유 secret; GPU에서는 사용하지 않음 |
 
 기본 host와 port는 `AI_API_HOST=127.0.0.1`, `AI_API_PORT=8010`이다. 운영 compose는 같은 Docker
@@ -108,9 +115,9 @@ network의 Spring이 접근할 수 있도록 container 내부 bind만 `0.0.0.0:8
 운영 root env의 `GMS_API_KEY`는 compose에서 container의 `AI_API_GMS_API_KEY`로 매핑한다.
 backend와 GPU 서비스에는 이 값을 주입하지 않는다.
 
-강의 노트 MVP는 in-memory 세션 상태를 사용하므로 운영 ai-api는 단일 replica로 띄운다. 같은 EC2의
-Spring, Redis, ai-worker와 함께 실행해도 별도 port를 사용하지 않으며 application Redis key와 consumer
-group만 공유한다.
+강의 노트 MVP는 Redis session checkpoint로 프로세스 재시작을 복구하지만 session owner fencing은 없으므로
+운영 ai-api는 단일 replica로 띄운다. 같은 EC2의 Spring, Redis, ai-worker와 함께 실행해도 별도 port를
+사용하지 않으며 application Redis key와 consumer group만 공유한다.
 
 경로 prefix가 있는 BGE URL은 허용하지만 credential, query, fragment와 `..` 경로는 거부한다.
 `AI_INTERNAL_SECRET`은 이름이 바뀐 값이 아니며 Spring↔ai-api 전용이다. 현재 ai-api 검증기는 구현됐지만

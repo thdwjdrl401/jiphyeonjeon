@@ -18,11 +18,12 @@ ai:captions:live
   → 15~40초 text window
   → LLM 구조화 결과
   → 주제별 누적 Markdown
-  → Redis MVP snapshot + Stream
+  → Redis MVP append event Stream
 ```
 
-MVP 결과가 만족스러울 때만 Spring REST·WebSocket, core read model, topic accordion을 공통 계약으로
-승격한다. 녹화본 기반 다시보기 교정 자막은 이번 MVP 범위에 포함하지 않고 별도 결정으로 다룬다.
+AI→Redis event payload는 Backend가 구현 전에 의존 조건을 검토할 수 있도록 공유 계약으로 먼저 고정한다.
+Spring REST·WebSocket, core read model, topic accordion은 MVP 결과가 만족스러울 때 구현한다. 녹화본 기반
+다시보기 교정 자막은 이번 MVP 범위에 포함하지 않고 별도 결정으로 다룬다.
 
 ## MVP 결정
 
@@ -44,8 +45,9 @@ group은 최초 생성할 때 `0-0`에서 시작해 Redis Stream에 아직 보�
 
 `caption.delta`를 `(sessionId, sttSessionId, sequence)` 순으로 붙이고 `eventId`와 sequence로 중복을
 제거한다. sequence가 `10` 다음 `12`처럼 건너뛰면 누락을 metric과 log로 기록하되 `12` 이후 delta는
-계속 처리한다. MVP snapshot에 별도 `incomplete` 필드는 추가하지 않는다. handler가 in-memory session
-buffer에 반영되면 ACK한다. 프로세스 재시작 시 snapshot을 복원하는 동작은 후속으로 구체화한다.
+계속 처리한다. MVP 출력 event에 별도 `incomplete` 필드는 추가하지 않는다. handler가 자막과 미처리 작업을
+Redis session checkpoint에 저장한 뒤 ACK한다. ACK는 노트 생성 완료가 아니라 **재시작해도 다시 처리할 수
+있는 durable acceptance**를 뜻한다.
 
 새 `sttSessionId`가 시작되면 이전 window에 text가 있는 한 최소 시간·글자 조건과 무관하게 모두 flush하고
 새 attempt로 전환한다. `caption.stream.completed`가 와도 같은 방식으로 남은 text를 모두 처리하고 note를
@@ -79,14 +81,14 @@ delta 하나는 sequence 중복 제거의 원자 단위이므로 400자 경계�
 현재 `streamElapsedMs`는 attempt-local 시계이므로 window 길이 계산에만 사용한다. 이를 세션 상대
 `startMs/endMs`로 저장하거나 FE seek에 사용하지 않는다.
 
-### 3. LLM은 두 가지 판단만 한다
+### 3. LLM은 세 가지 내부 판단만 한다
 
 MVP에서는 복잡한 candidate·subtopic·return 상태를 만들지 않는다. 모델은 현재 topic을 계속할지 새
-topic을 시작할지만 판단한다.
+topic을 시작할지, 노트로 남길 내용이 아닌지를 판단한다.
 
 ```json
 {
-  "topicAction": "CONTINUE",
+  "action": "APPEND",
   "topicTitle": "Refresh Token의 역할",
   "keyPoints": [
     "Access Token 만료 뒤 재발급에 사용한다."
@@ -94,11 +96,13 @@ topic을 시작할지만 판단한다.
 }
 ```
 
-허용값과 제한은 다음과 같다.
+허용값과 제한은 다음과 같다. 이 값은 AI 내부 모델 결과이며 Redis wire의 `topicAction`과 구분한다.
 
-- `topicAction`: `CONTINUE|START_NEW`
+- `action`: `IGNORE|APPEND|START_NEW`
+- `IGNORE`: `topicTitle=null`, `keyPoints=[]`; operation만 완료하고 event·`chunkSequence`를 만들지 않음
+- `APPEND`: 외부 event에서는 `topicAction=CONTINUE`로 변환
 - `topicTitle`: 최대 80자
-- `keyPoints`: 호출당 최대 3개, 각 300자
+- `keyPoints`: `APPEND|START_NEW`에서 호출당 1~3개, 각 300자
 - 정의·사례·강조 여부는 만들지 않고 말한 내용의 요점만 생성
 - 강의 text는 신뢰하지 않는 데이터로 전달하고 tool은 사용하지 않음
 
@@ -115,10 +119,10 @@ MVP 결과를 본 뒤 결정한다.
 
 ### 4. topic은 즉시 축적한다
 
-- 첫 결과로 첫 topic을 만든다.
-- `CONTINUE`면 현재 topic에 새 point를 추가한다.
+- 첫 `APPEND|START_NEW` 결과로 첫 topic을 만든다.
+- `APPEND`면 현재 topic에 새 point를 추가한다.
 - `START_NEW`면 현재 topic을 닫고 새 topic을 즉시 만든다.
-- 완전히 같은 point만 정규화해 중복 제거한다.
+- Unicode, 연속 공백, 끝 문장부호, 영문 대소문자만 가볍게 정규화해 같은 point를 제거한다.
 - 잘못 나뉜 topic의 자동 합치기·되돌리기는 MVP에 넣지 않는다.
 
 구조화 topic이 정본이고 Markdown은 애플리케이션이 다음처럼 만든다.
@@ -134,43 +138,71 @@ MVP 결과를 본 뒤 결정한다.
 접기·펼치기 문법이 없고 `<details>`는 raw HTML이므로 MVP 출력에 넣지 않는다. topic accordion은 추후
 Frontend가 구조화 `topics`를 사용해 제공한다. raw HTML·image·외부 link는 만들지 않는다.
 
-### 5. 결과도 Redis에 싣는다
+### 5. 새로 추가된 노트 조각만 Redis Stream에 싣는다
 
-MVP는 변경분 patch 대신 작은 전체 snapshot을 매번 저장한다. 구현과 결과 확인이 가장 단순하기
-때문이다.
+실시간으로 노트가 쌓이는 흐름과 Backend의 누적 저장 책임을 분리하기 위해 매 모델 결과의 전체 snapshot이
+아니라 실제로 새로 추가된 조각만 발행한다. AI 내부 reducer는 다음 모델 요청의 문맥과 중복 제거를 위해
+현재 topic 상태를 계속 보관하지만, Redis에는 과거 Markdown을 반복해서 보내지 않는다.
 
 ```text
-SET ai:lecture-notes:mvp:snapshot:{sessionId} <snapshot-json> EX 86400
 XADD ai:lecture-notes:mvp MAXLEN ~ 10000 ...
 ```
 
-snapshot과 Stream event에는 다음을 담는다.
+새 요점이 생기면 다음 event를 발행한다. 첫 topic 또는 `START_NEW`는 heading과 요점을 함께 보내고,
+`CONTINUE`는 새 bullet만 `markdownFragment`에 담는다. 완전히 같은 요점만 나온 호출은 event와
+`chunkSequence`를 만들지 않는다.
 
 ```json
 {
-  "schemaVersion": "1",
-  "type": "lecture.note.snapshot",
+  "contractVersion": "1",
+  "type": "lecture.note.chunk.appended",
   "eventId": "evt-...",
   "sessionId": "...",
   "lessonId": "...",
   "sttSessionId": "...",
-  "noteVersion": "4",
-  "coveredThroughSequence": "128",
-  "status": "PROCESSING",
-  "topics": [
-    {
-      "topicId": "topic-1",
-      "title": "Refresh Token의 역할",
-      "keyPoints": ["Access Token 만료 뒤 재발급에 사용한다."]
-    }
-  ],
-  "markdown": "## Refresh Token의 역할\n\n- Access Token 만료 뒤 재발급에 사용한다.",
+  "chunkSequence": "4",
+  "latestSttSequence": "128",
+  "topicAction": "CONTINUE",
+  "topicId": "topic-1",
+  "topicTitle": "Refresh Token의 역할",
+  "keyPoints": ["Access Token 만료 뒤 재발급에 사용한다."],
+  "markdownFragment": "- Access Token 만료 뒤 재발급에 사용한다.",
   "occurredAt": "2026-07-29T12:00:30+09:00"
 }
 ```
 
-MVP Redis key와 event는 실험용이며 `docs/CONTRACT.md`의 공유 계약이 아니다. Spring이나 Frontend가
-직접 의존하지 않는다. 결과는 monitor script 또는 Redis CLI로 보고 평가한다.
+caption 수집이 끝나면 먼저 `lecture.note.capture.completed`를 발행한다. 여기에는 `lastChunkSequence`,
+`lastSttSequence`, `reason`만 담는다. 그 뒤 종료 후 정제 결과는 live append와 섞지 않고 별도
+`lecture.note.refined.snapshot` 전체 snapshot으로 한 번 발행한다. `chunkSequence`는 세션별 live 추가 조각
+순번이며 `1`부터 증가하고 refined snapshot은 이 값을 증가시키지 않는다. 재전송 event는 같은 `eventId`와
+payload를 유지한다.
+
+Redis field 값은 STT event와 마찬가지로 모두 string으로 싣고, `keyPoints`만 compact JSON 배열 문자열로
+직렬화한다. AI event에는 `noteVersion`을 싣지 않는다. Backend가 조각을 누적 저장한 횟수가 필요하면
+Backend read model의 `noteVersion`으로 별도 관리한다.
+
+Redis key와 event payload·순서·멱등·ACK 규칙은 [공유 계약 §3-4a](../../CONTRACT.md#3-4a-ai-api--application-redis-실시간-강의-노트-stream--ai-producer-구현-spring-consumer-미구현)로
+고정한다. Spring과 Frontend 구현은 아직 이 ADR의 범위 밖이다. Backend 연동 시에는 event를 순서대로 누적
+저장하고, REST 재접속 응답은 Backend가 만든 전체 노트를 반환하며, 실시간 WebSocket에는 새 조각만 전달한다.
+Spring은 별도 consumer group을 사용하고 DB 반영 뒤 ACK하며, `eventId` 중복과 이미 반영한
+`chunkSequence`는 무시한다. 기대 순번보다 큰 조각은 조용히 이어 붙이지 않고 누락으로 기록하되 복구
+정책은 다음 단계에서 확정한다.
+
+### 6. 기준선 구현 범위와 예상 문제
+
+기준선은 AI publisher와 내부 event model, Redis Stream 직렬화까지 구현했다. 후속 단계에서 단일 ai-api
+프로세스의 checkpoint·restore와 outbox 원자 발행을 추가했다. Spring consumer, DB, REST, WebSocket은
+만들지 않는다. 또한 라이브 중 이미 발행한 조각은 수정·병합·삭제하지 않고 새 조각만 추가한다.
+
+남은 문제와 제한은 다음과 같다.
+
+- Redis retention 밖의 event를 놓치면 append event만으로 전체 노트를 재구성할 수 없다. Backend 영속화와
+  재동기화용 전체 조회 또는 checkpoint는 연동 단계에서 결정한다.
+- 라이브 중 잘못 나뉜 topic을 고치거나 이전 요점을 수정하지 않는다. 라이브는 append-only로 제한하고,
+  강의 종료 후 별도 refined snapshot에서만 merge/split·제목·중복을 정제한다.
+- checkpoint 저장 뒤 caption을 ACK하므로 모델 호출이나 결과 발행 도중 프로세스가 종료돼도 window와
+  발행 대기 event를 재시작 후 복원한다. 모델 자체 실패의 retry 횟수·backoff·최종 실패 상태는 별도다.
+- 여러 ai-api replica가 같은 세션을 처리하면 순번 충돌이 생길 수 있다. 현재는 단일 replica만 허용한다.
 
 ## 구현 순서와 단계별 제한
 
@@ -179,12 +211,12 @@ MVP Redis key와 event는 실험용이며 `docs/CONTRACT.md`의 공유 계약이
 
 1. **순수 window 상태 머신**: Redis·GMS·async task 없이 delta 순서, 중복·gap, 15/25/40초와
    80/400자 경계, 문장부호, attempt 전환, completion flush만 구현한다.
-2. **note reducer와 Markdown renderer**: `CONTINUE|START_NEW`, key point 중복 제거, `noteVersion`,
+2. **note reducer와 Markdown renderer**: `IGNORE|APPEND|START_NEW`, key point 중복 제거, `chunkSequence`,
    제한된 Markdown 생성을 순수 로직으로 구현한다.
-3. **application orchestration**: `LectureNoteModel`과 snapshot store를 port로 두고 fake 구현으로 세션별
+3. **application orchestration**: `LectureNoteModel`과 state store를 port로 두고 fake 구현으로 세션별
    단일 호출과 호출 중 window 병합을 검증한다.
-4. **Redis 결과 adapter**: snapshot TTL과 결과 Stream `MAXLEN`을 구현하고 Redis integration test를
-   추가한다.
+4. **Redis 결과 adapter**: 추가 조각·수집 완료 event와 결과 Stream `MAXLEN`을 구현하고 Redis integration
+   test를 추가한다.
 5. **GMS adapter**: RAG adapter와 분리된 `LectureNoteModel`을 구현하고 구조화 JSON 지원 여부, latency,
    호출 수를 확인한다.
 6. **별도 caption consumer와 lifecycle**: `ai-live-notes-mvp-v1` group을 ai-api lifecycle에 연결하고
@@ -192,8 +224,84 @@ MVP Redis key와 event는 실험용이며 `docs/CONTRACT.md`의 공유 계약이
    시작하며 별도 enable 환경변수를 두지 않는다.
 7. **30분 강의 실험**: Redis 결과와 metric을 관찰해 품질·지연·비용을 기록한 뒤 후속 범위를 결정한다.
 
-현재 1~6단계 구현과 자동 테스트까지 완료했다. Spring, Frontend, DB, HTTP API는 여전히 범위 밖이며,
-다음 작업은 코드를 더 확장하는 대신 EC2 단일 ai-api replica에서 7단계 실험을 수행하는 것이다.
+현재 1~6단계 구현과 자동 테스트까지 완료했다. 4단계 결과 형식은 전체 snapshot에서 append event로
+변경했고, 후속 1~3단계의 단일 프로세스 재시작 복구, 판단 품질, 종료 후 refined snapshot도 구현했다.
+Spring, Frontend, DB, HTTP API는 여전히 범위 밖이다. 다음 작업은 EC2 단일 ai-api replica에서 7단계
+30분 강의 실험을 수행하는 것이다.
+
+## 재시작 복구와 품질 고도화 단계
+
+기준선 구현 뒤 다음 순서로 확장한다. 한 단계에서 다음 단계의 문제까지 미리 해결하지 않는다.
+
+### 1. 단일 ai-api 프로세스 재시작 복구
+
+세션별 상태는 `ai:lecture-notes:mvp:state:{sessionId}`에 저장하고,
+`ai:lecture-notes:mvp:active-sessions` Set은 시작 시 복원할 checkpoint를 찾는 색인으로 사용한다.
+checkpoint에는 window accumulator, 현재 note와 `chunkSequence`, 대기·처리 중 batch, 완료 입력과
+발행 전 outbox를 둔다. 내부 `operationId`는 입력 window 묶음의 처리 단위이며 외부
+`chunkSequence`와 별개다. 중복 결과처럼 출력 event가 없는 작업도 operation만 완료하고 순번은 만들지
+않는다.
+
+처리 경계는 다음과 같다.
+
+1. caption entry를 accumulator와 pending batch에 반영한다.
+2. session checkpoint를 저장한 뒤 caption handler를 반환하고 consumer가 ACK한다.
+3. 모델 호출 전 pending을 in-flight로 옮긴 checkpoint를 저장한다.
+4. 모델 결과로 만들 event의 `eventId`·payload·시각을 outbox에 그대로 저장한다.
+5. Redis transaction으로 결과 Stream `XADD`와 outbox를 비운 다음 checkpoint 저장을 원자화한다.
+6. 재시작하면 active session을 읽고 outbox, in-flight, pending 순서로 이어서 처리한다.
+
+completion도 마지막 window 결과를 먼저 확정한 뒤 완료 event를 발행한다. caption completion의 ACK 여부와
+노트 완료 여부가 모두 확인된 session만 active index에서 제거한다. 이번 단계는 Redis가 정상이라는 전제의
+**프로세스 비정상 종료·재시작**만 보장한다. Redis 자체 장애 내구성, AOF 정책, 여러 replica의 session
+lease·fencing, 다른 consumer의 pending 회수(`XAUTOCLAIM`)는 다음 결정으로 미룬다.
+
+재시작한 고정 consumer는 자기 pending entry를 먼저 모두 재처리한다. 이 drain 뒤에도
+`completed=true`, `completionAcked=false`인 checkpoint가 남으면 이전 프로세스가 XACK을 성공시키고
+checkpoint를 갱신하기 전에 종료된 경계로 보고 ACK 완료를 확정한다. 다른 consumer가 가진 pending은 이
+판단 대상이 아니며, 이 복구 규칙은 단일 replica와 고정 consumer name 전제에 한정한다.
+
+복구 테스트는 checkpoint 전·후, caption ACK 전·후, 모델 호출 전·후, outbox 저장 후, 결과 transaction
+후 경계를 고정한다. 재처리 시 같은 출력 event가 중복 발행되지 않고 partial text, topic,
+`chunkSequence`, completion 순서가 유지되는지를 검증한다.
+
+### 2. 라이브 노트 판단 품질
+
+복구 기반을 고정한 다음 모델의 내부 판단을 `IGNORE|APPEND|START_NEW`로 변경했다. 외부 append event의
+`topicAction` 계약은 그대로 두고 `APPEND`만 `CONTINUE`로 변환한다. `IGNORE`는 operation만 완료하며 빈
+event와 `chunkSequence`를 만들지 않는다.
+
+prompt v2는 반복·잡음·미완성 발화를 `IGNORE`, 같은 개념의 설명·예시를 `APPEND`, 독립적으로 이름 붙일
+수 있는 새 개념만 `START_NEW`로 판단하게 구현했다. 첫 구현은 Unicode·공백·문장부호 수준의 가벼운 중복
+정규화까지만 사용하며 embedding, confidence, 자동 topic merge/split은 넣지 않는다.
+
+8개 고정 한국어 강의 샘플과 v1/v2 실행 도구를 추가했다. 2026-07-30 실제 GMS A/B에서 v1은 유효 응답
+7/8·실질 action 일치 5/8, v2는 유효 응답 8/8·실질 action 일치 8/8이었다. v2는 반복·미완성·운영 안내를
+모두 `IGNORE`했고 유효 내용을 무시하지 않았다. 현재 topic이 없는 첫 결과의 `APPEND|START_NEW`는 같은 첫
+topic을 만들기 때문에 과분할로 세지 않는다. 현재 topic에서 실제 과분할이 0건이므로 한-window topic 전환
+확인은 추가하지 않고 라이브 지연을 늘리지 않는다. 상세 실행법과 표는
+[ai-api scripts](../../../ai/ai-api/scripts/README.md)에 기록한다.
+
+### 3. 종료 후 refined snapshot
+
+라이브 출력은 append-only 초안으로 유지한다. capture 완료 event를 확정한 뒤 현재 구조화 draft topic만
+GMS에 한 번 전달해 topic merge/split, 제목 교정, 중복 제거를 수행한다. raw caption 전체, 녹화 HLS, 자료
+RAG는 다시 넣지 않는다.
+
+결과는 `lecture.note.refined.snapshot`으로 같은 Redis Stream에 발행한다. event에는
+`sourceLastChunkSequence`, 전체 구조화 `topics`, 여기서 결정론적으로 만든 `markdownSnapshot`을 담는다.
+refined topic id는 `refined-topic-{n}`의 별도 공간을 사용하고 live `chunkSequence`를 늘리거나 과거 append
+event를 수정하지 않는다. Backend는 live draft와 refined read model을 구분해야 한다.
+
+정제 호출 전 pending checkpoint와 결과 outbox를 저장하며 snapshot `XADD`도 다음 checkpoint와 원자화한다.
+따라서 snapshot 발행 도중 프로세스가 종료되면 같은 event를 복원한다. 정제 모델의 bounded retry·backoff,
+최종 실패 상태, 강사 검수·게시, Spring/DB/Frontend 반영은 아직 범위 밖이다. 정제할 live topic이 하나도
+없으면 모델과 snapshot 발행을 생략하고 capture 완료만 유지한다. 2026-07-30 고정 draft의 실제 GMS
+smoke에서 두 ACK topic을 하나로 합친 유효 구조화 JSON 응답을 확인했다.
+
+정제 모델 호출이나 결과 발행이 실패한 현재 프로세스는 즉시 반복 호출하지 않는다. checkpoint의
+`refinementPending` 또는 outbox를 유지하고 ai-api 재시작 때 이어서 처리한다. 따라서 재시작 없는
+same-process retry, 최대 시도 횟수와 backoff, 장기 실패 세션 정리는 이번 단계에서 보장하지 않는다.
 
 ## MVP에서 하지 않는 것
 
@@ -203,7 +311,7 @@ MVP Redis key와 event는 실험용이며 `docs/CONTRACT.md`의 공유 계약이
 - Frontend topic accordion 실연동
 - session-relative time 변환과 영상 seek
 - 여러 ai-api instance의 session lease·`XAUTOCLAIM`
-- 프로세스 재시작 시 기존 snapshot 복원
+- Redis 자체 장애와 여러 인스턴스 사이의 checkpoint 합의
 - LLM 실패 retry·실패 window 복구·최종 실패 상태 설계
 - topic 변경 재확인, 과거 topic 복귀, 자동 merge/split
 - 강사 검수·게시·최종 강의 노트
@@ -220,7 +328,8 @@ MVP Redis key와 event는 실험용이며 `docs/CONTRACT.md`의 공유 계약이
 - 15/25/40초와 80/400자 window 경계
 - 공백 보존과 문장부호 우선 cut
 - LLM JSON validation 실패가 기존 note를 훼손하지 않음
-- snapshot TTL, noteVersion 증가, Stream `MAXLEN`
+- append event의 chunkSequence 증가, 완료 event, Stream `MAXLEN`
+- 종료 후 refined snapshot 순서·전체 topic 직렬화·outbox 복원
 
 실제 한국어 강의 30분에서 다음을 기록한다.
 
@@ -236,8 +345,8 @@ topic 분리가 괜찮으면 다음 ADR 개정에서 Spring·Frontend 연결을 
 
 ## 계약·완료 판단
 
-현재 단계는 ai-api 내부에서 별도 caption consumer group, GMS adapter, Redis snapshot·관찰 Stream까지
-연결했다. 공유 HTTP 계약과 상태코드, Spring·Frontend가 의존하는 DTO를 바꾸지 않았으므로 FE/BE 계약
-테스트와 `docs/CONTRACT.md` 수정은 불필요하다. Redis 명령과 consumer group 분리는 fake와 실제 Redis
-integration test로 검증하며, 운영 Redis 연결·GMS JSON 호환성·30분 품질은 EC2 실험의 완료 조건이다.
-Redis 결과가 생성되는 것만으로 사용자 기능 완료로 보고하지 않는다.
+현재 단계는 ai-api 내부에서 별도 caption consumer group, GMS adapter, Redis append event Stream까지
+연결했다. AI→Spring Redis payload를 공유 계약으로 승격했으므로 `docs/CONTRACT.md` §3-4a와 AI 통신 계약을
+같이 갱신한다. Python producer의 field·직렬화·순번은 unit·실제 Redis integration test로 검증한다.
+Spring consumer가 아직 없으므로 Java 소비 계약 테스트는 해당 구현에서 추가하며, 그 전에는 사용자 기능
+완료로 보고하지 않는다. 운영 Redis 연결·GMS JSON 호환성·30분 품질은 EC2 실험의 완료 조건이다.
