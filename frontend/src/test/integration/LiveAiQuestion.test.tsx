@@ -58,9 +58,11 @@ describe('AI 질의응답 화면 연결', () => {
     expect(screen.getByText('SecurityContext가 무엇인가요?')).toBeInTheDocument()
     // 델타가 누적돼 한 문단으로 자란다.
     expect(await screen.findByText(/요청이 끝나면 컨텍스트가 정리됩니다\./, undefined, { timeout: 3000 })).toBeInTheDocument()
-    // 하드코딩 문구가 아니라 실제 sources로 그린 근거 카드다.
-    expect(await screen.findByText('12쪽')).toBeInTheDocument()
-    expect(screen.getByText('12:08–12:41')).toBeInTheDocument()
+    // 근거는 접힌 토글로 먼저 요약된다(ADR-0049 §8) — 펼쳐야 목록이 보인다.
+    await user.click(await screen.findByRole('button', { name: /^근거 \d+$/ }))
+    // 하드코딩 문구가 아니라 실제 sources로 그린 근거 항목이다.
+    expect(screen.getByText('12쪽')).toBeVisible()
+    expect(screen.getByText('12:08–12:41')).toBeVisible()
   })
 
   it('다시보기 AI 탭은 아직 지원하지 않음을 밝히고 입력을 잠근다', async () => {

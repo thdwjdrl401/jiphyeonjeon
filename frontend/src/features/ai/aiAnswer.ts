@@ -145,3 +145,17 @@ export function formatStreamElapsed(streamElapsedMs: number): string {
   const tail = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
   return hours > 0 ? `${hours}:${tail}` : tail
 }
+
+/** 축약 없이 그대로 보여도 한 줄에 들어가는 길이. 이보다 길면 UUID로 보고 앞부분만 남긴다. */
+const SOURCE_ID_LABEL_LIMIT = 12
+
+/**
+ * 근거 식별자 꼬리표.
+ *
+ * `sources`에는 **자료 제목이 없다**(LIVE.md §10.1) — PPTX는 `materialId`, CAPTION은 `sttSessionId`뿐이라
+ * 사람이 읽을 이름이 없다. 36자 UUID를 370px 패널에 그대로 흘리면 근거 한 줄이 두세 줄로 접히므로
+ * 앞 8자만 남긴다. 전체 값은 `title`에 남겨 두니 필요하면 짚어 볼 수 있다.
+ */
+export function shortenSourceId(id: string): string {
+  return id.length > SOURCE_ID_LABEL_LIMIT ? `${id.slice(0, 8)}…` : id
+}
