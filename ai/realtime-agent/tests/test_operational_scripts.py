@@ -21,6 +21,7 @@ INSTALL_SCRIPT = DEPLOY_DIR / "install.sh"
 RUNNER_INSTALL_SCRIPT = DEPLOY_DIR / "install-gitlab-runner-user.sh"
 DNS_REDIRECT_SOURCE = DEPLOY_DIR / "livekit-tunnel-dns.c"
 TUNNEL_CONFIGURE_SCRIPT = DEPLOY_DIR / "configure-gpu-ec2-tunnels.sh"
+AGENT_ENV_EXAMPLE = DEPLOY_DIR / "env" / "realtime-agent.env.example"
 
 
 def test_probe_settings_redact_credentials_from_repr() -> None:
@@ -343,9 +344,18 @@ def test_production_tunnel_configurator_installs_one_key_for_both_services(
         if line and not line.startswith("#")
     )
     assert realtime_values["SSH_CONTROL_PATH"] != realtime_values["TURN_SSH_CONTROL_PATH"]
+    assert realtime_values["REDIS_LOCAL_PORT"] == "6390"
+    assert realtime_values["REDIS_REMOTE_PORT"] == "6390"
     assert "BGE_EC2_PORT=18020" in bge_env
     assert (config_dir / "realtime-agent-tunnels.env").stat().st_mode & 0o777 == 0o600
     assert (config_dir / "bge-tunnel.env").stat().st_mode & 0o777 == 0o600
+
+
+def test_production_agent_env_uses_loopback_production_redis() -> None:
+    example = AGENT_ENV_EXAMPLE.read_text(encoding="utf-8")
+
+    assert "REDIS_URL=redis://127.0.0.1:6390/0" in example
+    assert "redis-password" not in example
 
 
 def test_rootless_supervisor_keeps_tunnel_and_agent_under_tmux() -> None:

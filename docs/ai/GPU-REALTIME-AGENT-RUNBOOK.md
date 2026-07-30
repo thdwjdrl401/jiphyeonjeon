@@ -15,7 +15,7 @@ listener를 전달한다. 두 connection 모두 EC2 22번으로 나가지만 Con
 | 서비스 | 기본 로컬 포트 | 원격 loopback 포트 |
 |---|---:|---:|
 | LiveKit signaling/API | `7443` | `7443` |
-| application Redis | `4000` | `4000` |
+| production application Redis | `6390` | `6390` |
 | TURN/TCP | `3478` | `3478` |
 | realtime-agent health(reverse) | `8081` | `18081` |
 | BGE runtime(reverse) | `8020` | `18020` |
@@ -23,8 +23,10 @@ listener를 전달한다. 두 connection 모두 EC2 22번으로 나가지만 Con
 GPU agent health `127.0.0.1:8081`은 control SSH master의 reverse forward로 EC2
 `127.0.0.1:18081`에 연결한다. GPU inbound port는 열지 않는다.
 
-LiveKit 내부 Redis와 application Redis를 혼동하지 않는다. application Redis가 내장 `default` 사용자를
-쓰면 URL의 username은 비우고 password만 주입한다.
+LiveKit 내부 Redis와 application Redis를 혼동하지 않는다. 운영 application Redis는 EC2 host의
+`127.0.0.1:6390`에만 publish되어 있고 현재 인증 없이 loopback 접근만 허용한다. SSH local forward도
+같은 loopback에 붙으므로 EC2 방화벽 또는 외부 bind를 추가하지 않는다. Redis 인증을 도입하면 URL의
+username/password는 문서가 아니라 secret 환경파일로 함께 주입한다.
 
 ## 설치와 CUDA smoke
 
@@ -79,7 +81,7 @@ GPU와 EC2 양쪽에서 listener와 HTTP 왕복을 확인한다.
 
 ```sh
 # GPU
-ss -ltn | grep -E ':(7443|4000|3478|8020|8081)\b'
+ss -ltn | grep -E ':(7443|6390|3478|8020|8081)\b'
 ~/.local/bin/liveclass-realtime-agent-supervisor status
 ~/.local/bin/liveclass-bge-runtime-supervisor status
 
@@ -88,6 +90,37 @@ ss -ltn | grep -E ':(18020|18081)\b'
 curl --fail http://127.0.0.1:18020/readyz
 curl --fail http://127.0.0.1:18081/
 ```
+
+## 기존 4000 설정을 운영 6390으로 전환
+
+운영 GPU에 이미 `4000` control forward가 있으면 환경파일만 바꿔서는 기존 OpenSSH master의 forward가
+바뀌지 않는다. agent와 realtime tunnel supervisor를 멈추고 control master를 명시적으로 종료한 뒤
+재생성한다. TURN master와 BGE supervisor는 별도 connection이므로 유지된다.
+
+```sh
+cp -p ~/.config/liveclass/realtime-agent-tunnels.env \
+  ~/.config/liveclass/realtime-agent-tunnels.env.before-prod-redis
+cp -p ~/.config/liveclass/realtime-agent.env \
+  ~/.config/liveclass/realtime-agent.env.before-prod-redis
+
+# realtime-agent-tunnels.env
+# REDIS_LOCAL_PORT=6390
+# REDIS_REMOTE_PORT=6390
+# realtime-agent.env
+# REDIS_URL=redis://127.0.0.1:6390/0
+
+set -a
+. ~/.config/liveclass/realtime-agent-tunnels.env
+set +a
+~/.local/bin/liveclass-realtime-agent-supervisor stop
+ssh -F /dev/null -S "$SSH_CONTROL_PATH" -O exit "$SSH_TARGET" || true
+~/.local/bin/liveclass-realtime-agent-supervisor start
+```
+
+GPU `127.0.0.1:6390`에서 Redis `PING`을 수행한 뒤 agent의 `/health/ready`가 200이고
+`liveKitConnected=true`, `modelsReady=true`인지 확인한다. EC2에서도 reverse health
+`http://127.0.0.1:18081/health/ready`가 같은 응답을 반환해야 한다. 실패하면 백업 환경파일을 복원하고
+동일하게 control master를 종료·재생성한다.
 
 ## PEM 보유 로컬 개발자의 API provider 검증 — 운영 절차 아님
 
@@ -154,7 +187,7 @@ production은 process environment나 secret manager로 값을 주입한다. `.en
 LIVEKIT_URL=wss://livekit.example:7443
 LIVEKIT_TURN_URL=turn:127.0.0.1:3478?transport=tcp
 LIVEKIT_TURN_SECRET=<coturn-rest-auth-secret>
-REDIS_URL=redis://:<password>@127.0.0.1:4000/0
+REDIS_URL=redis://127.0.0.1:6390/0
 CUDA_VISIBLE_DEVICES=0
 STT_ENGINE_PROVIDER=nemotron
 STT_MAX_ACTIVE_JOBS=12
@@ -227,12 +260,20 @@ uv run --frozen ruff format --check app tests scripts
 - 약 157초 후 disconnect: LiveKit disconnect reason, ICE/TURN 연결, tunnel keepalive와 queue backlog를 함께
   기록하고 30분 gate를 재실행한다.
 
+## 2026-07-30 production Redis 전환 기록
+
+- EC2 loopback `127.0.0.1:6390`에 publish된 production application Redis를 GPU
+  `127.0.0.1:6390`으로 local forward했다. EC2 방화벽과 외부 bind는 추가하지 않았다.
+- control SSH master를 `-L 6390:localhost:6390`으로 재생성했고 TURN·BGE connection은 유지했다.
+- production Redis PING, GPU agent live/ready, EC2 reverse ready, Nemotron 12/12 warm process와 LiveKit
+  worker 등록을 확인했다.
+
 ## 2026-07-28 migration 검증 기록
 
 - H200 NVL 2장 환경에서 `torch 2.11.0+cu128`, CUDA runtime 12.8, CUDA available을 확인했다.
 - 저장소 밖 로컬 Nemotron 모델을 offline으로 `cuda:0`에 로드했다.
 - frozen 환경의 realtime-agent 테스트 296개와 Ruff check/format이 통과했다.
-- SSH tunnel의 LiveKit 7443, application Redis 4000, TURN/TCP 3478 listener를 확인했다.
+- 당시 개발 검증 경로에서 LiveKit 7443, application Redis 4000, TURN/TCP 3478 listener를 확인했다.
 - application Redis의 내장 `default` 사용자 password 인증 PING이 성공했다.
 - RoomService read-only probe로 기존 room과 unmuted microphone publication을 확인했다.
 - relay-only custom ICE로 기존 room에 연결해 TURN/TCP peer connection을 확인했다.

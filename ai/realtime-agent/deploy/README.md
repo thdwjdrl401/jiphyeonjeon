@@ -123,14 +123,14 @@ flowchart LR
     end
     subgraph EC2[EC2]
         L[LiveKit :7443]
-        D[Application Redis :4000]
+        D[Production application Redis 127.0.0.1:6390]
         T[TURN/TCP :3478]
         E[EC2 host health smoke :18081]
     end
     A --> C
     A --> M
     C -->|local forward :7443| L
-    C -->|local forward :4000| D
+    C -->|local forward :6390| D
     M -->|local forward :3478| T
     E -->|control reverse :18081 → :8081| H
     R -->|outbound HTTPS| G[GitLab]
@@ -139,7 +139,7 @@ flowchart LR
 | 연결 | 방향 | GPU 측 | EC2 측 | 용도 |
 |---|---|---|---|---|
 | control | local | 127.0.0.1:7443 | 127.0.0.1:7443 | LiveKit |
-| control | local | 127.0.0.1:4000 | 127.0.0.1:4000 | application Redis |
+| control | local | 127.0.0.1:6390 | 127.0.0.1:6390 | production application Redis |
 | TURN | local | 127.0.0.1:3478 | 127.0.0.1:3478 | TURN/TCP |
 | control | reverse | GPU 127.0.0.1:8081 | EC2 127.0.0.1:18081 | EC2 host health check |
 
@@ -150,9 +150,11 @@ EC2 loopback에만 bind되고 readiness는 준비 전 503, 준비 뒤 200이다.
 
 `LIVEKIT_URL`은 TLS 인증서 hostname을 유지하되 배포 resolver가 그 hostname만 GPU loopback으로
 해석한다. 따라서 TLS SNI/hostname 검증을 버리지 않고 `127.0.0.1:7443` SSH tunnel을 사용한다.
-`REDIS_URL`과 TURN도 GPU loopback listener를 가리킨다. OpenAI provider로 전환하는 경우 OpenAI WSS는
-이 SSH tunnel을 거치지 않는 별도 outbound TLS 연결이며 `OPENAI_API_KEY`를 agent 환경파일로 주입해야
-한다.
+`REDIS_URL=redis://127.0.0.1:6390/0`과 TURN도 GPU loopback listener를 가리킨다. EC2 Redis의
+`127.0.0.1:6390` publish는 sshd가 EC2 loopback에서 접근하므로 방화벽이나 외부 bind를 추가하지 않는다.
+개발 Redis `4000`과 LiveKit 내부 Redis `6379`를 운영 agent에 사용하지 않는다. OpenAI provider로
+전환하는 경우 OpenAI WSS는 이 SSH tunnel을 거치지 않는 별도 outbound TLS 연결이며
+`OPENAI_API_KEY`를 agent 환경파일로 주입해야 한다.
 
 ~~~sh
 ~/.local/bin/liveclass-realtime-agent-supervisor status
