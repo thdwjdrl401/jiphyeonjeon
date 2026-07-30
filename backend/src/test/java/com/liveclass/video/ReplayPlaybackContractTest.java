@@ -513,6 +513,11 @@ class ReplayPlaybackContractTest {
     private void approveEnrollment(Cookie[] instructor,
                                    Cookie[] student,
                                    String curriculumId) throws Exception {
+        // 게시 선행 조건(ADR-0006): 섹션·강의가 각각 1개 이상 있어야 발행된다.
+        String seedSectionId = json(write(post("/api/instructor/curriculums/" + curriculumId + "/sections"), instructor,
+                "{\"title\":\"게시용 섹션\"}").andExpect(status().isCreated()).andReturn()).get("sectionId").asString();
+        write(post("/api/instructor/sections/" + seedSectionId + "/lessons"), instructor,
+                "{\"title\":\"게시용 강의\"}").andExpect(status().isCreated());
         write(post("/api/instructor/curriculums/" + curriculumId + "/publish"), instructor, null)
                 .andExpect(status().isOk());
         String enrollmentId = json(write(

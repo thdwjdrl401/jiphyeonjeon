@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -243,7 +244,17 @@ class LearningContractTest {
     private String createPublishedCurriculum(Cookie[] instructor) throws Exception {
         String cid = json(write(post("/api/instructor/curriculums"), instructor, "{\"title\":\"학습강좌\"}")
                 .andReturn()).get("curriculumId").asString();
+        // 게시 선행 조건(ADR-0006): 섹션·강의가 각각 1개 이상 있어야 발행된다.
+        String seedSectionId = json(write(post("/api/instructor/curriculums/" + cid + "/sections"), instructor,
+                "{\"title\":\"게시용 섹션\"}").andExpect(status().isCreated()).andReturn()).get("sectionId").asString();
+        String seedLessonId = json(write(post("/api/instructor/sections/" + seedSectionId + "/lessons"), instructor,
+                "{\"title\":\"게시용 강의\"}").andExpect(status().isCreated()).andReturn()).get("lessonId").asString();
         write(post("/api/instructor/curriculums/" + cid + "/publish"), instructor, null).andExpect(status().isOk());
+        // 발행 조건만 채우려고 만든 것이라 지운다 — 이 테스트가 세는 강의·목차 인덱스를 원래대로 둔다.
+        write(delete("/api/instructor/lessons/" + seedLessonId), instructor, null)
+                .andExpect(status().isNoContent());
+        write(delete("/api/instructor/sections/" + seedSectionId), instructor, null)
+                .andExpect(status().isNoContent());
         return cid;
     }
 

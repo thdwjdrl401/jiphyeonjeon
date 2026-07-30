@@ -15,6 +15,7 @@ import {
   type CurriculumManagementSection,
   type InstructorCurriculumResponse,
 } from '@/features/curriculum/curriculumManagementService'
+import { evaluatePublishReadiness } from '@/features/curriculum/publishPreconditions'
 import type { CurriculumMaterial } from '@/features/curriculum/types'
 import InstructorEnrollmentRoster from '@/features/enrollment/InstructorEnrollmentRoster'
 import { ApiError } from '@/shared/api/client'
@@ -308,6 +309,11 @@ function CurriculumManageEditor({
    */
   const runPublish = async () => {
     if (!isNewDraft) return
+    // 버튼이 잠겨 있어도 한 번 더 본다 — 낡은 화면 상태로 요청이 새는 것을 막는다.
+    if (!publishReadiness.canPublish) {
+      setSaveError(publishReadiness.reason ?? '')
+      return
+    }
     if (!window.confirm('커리큘럼을 게시할까요? 게시하면 안에 있는 강의가 모두 수강생에게 공개됩니다.')) return
 
     setSaveError('')
@@ -325,11 +331,13 @@ function CurriculumManageEditor({
     } catch (error) {
       // 상태 충돌(이미 발행됨 등)은 서버 메시지가 원인을 정확히 말해준다 — 뭉개면 사용자가
       // 같은 버튼을 계속 누르게 된다. 재조회로 화면 상태도 정합시킨다.
-      setSaveError(error instanceof ApiError && error.code === 'CURRICULUM_STATE_CONFLICT'
-        ? error.message
-        : '커리큘럼을 게시하지 못했습니다.')
+      // 서버가 거절한 이유는 서버 메시지가 가장 정확하다(선행 조건 미충족·상태 충돌 모두).
+      // 뭉개면 사용자가 같은 버튼을 계속 누른다.
+      const serverExplained = error instanceof ApiError
+        && (error.code === 'CURRICULUM_NOT_PUBLISHABLE' || error.code === 'CURRICULUM_STATE_CONFLICT')
+      setSaveError(serverExplained ? (error as ApiError).message : '커리큘럼을 게시하지 못했습니다.')
       invalidateAfterPublish()
-      toast.error('커리큘럼을 게시하지 못했습니다.')
+      toast.error(serverExplained ? (error as ApiError).message : '커리큘럼을 게시하지 못했습니다.')
     }
   }
 
@@ -467,13 +475,13 @@ function CurriculumManageEditor({
     setLessonDropTarget(null)
   }
 
-  // 게시 카드에서 "무엇이 실제로 공개되는지"를 보여 준다 — 공개 목차는 PUBLISHED 강의만 담는다.
+  // 게시 카드에서 "무엇이 공개되는지"를 보여 준다. 강의 수는 커리큘럼 전체 기준이고
+  // 게시 선행 조건(섹션·강의 각 1개 이상, ADR-0006)도 이 값으로 판정한다.
   const allLessons = sections.flatMap((section) => section.lessons)
   const totalLessonCount = allLessons.length
-  const publishedLessonCount = allLessons.filter((lesson) => lesson.status === 'PUBLISHED').length
-  // 수강생에게 실제로 보이려면 두 축이 모두 PUBLISHED여야 한다(ADR-0002) — 카탈로그는 PUBLISHED
-  // 커리큘럼만 열고, 그 안에서 PUBLISHED 강의만 목차에 담는다.
-  const isPubliclyVisible = storedCurriculum.lifecycleStatus === 'PUBLISHED' && publishedLessonCount > 0
+  const publishReadiness = evaluatePublishReadiness(sections.length, totalLessonCount)
+  // 공개 여부는 커리큘럼 상태만으로 결정된다(ADR-0005).
+  const isPubliclyVisible = storedCurriculum.lifecycleStatus === 'PUBLISHED'
 
   return (
     <div className="workspace-page">
@@ -573,6 +581,7 @@ function CurriculumManageEditor({
             isNewDraft={isNewDraft}
             lifecycleView={lifecycleView}
             totalLessonCount={totalLessonCount}
+            readiness={publishReadiness}
             isPubliclyVisible={isPubliclyVisible}
             onPublish={() => void runPublish()}
             canDelete={isNewDraft}

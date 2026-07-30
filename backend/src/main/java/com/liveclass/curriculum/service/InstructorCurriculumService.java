@@ -194,10 +194,31 @@ public class InstructorCurriculumService {
         if (curriculum.getLifecycleStatus() != CurriculumLifecycleStatus.DRAFT) {
             throw new CurriculumStateConflictException("DRAFT 상태에서만 발행할 수 있습니다.");
         }
+        requirePublishableStructure(curriculumId);
         curriculum.setLifecycleStatus(CurriculumLifecycleStatus.PUBLISHED);
         curriculum.setPublishedAt(OffsetDateTime.now());
         log.info(Audit.MARKER, "커리큘럼 발행 curriculumId={} instructorId={}", curriculumId, instructorId);
         return curriculum;
+    }
+
+    /**
+     * 게시 선행 조건: 섹션 1개 이상 AND 커리큘럼 전체 강의 1개 이상.
+     *
+     * <p>강의는 <b>커리큘럼 전체</b> 기준이다 — 섹션마다 강의가 있어야 하는 것이 아니다.
+     * 빈 커리큘럼이나 목차만 있고 내용이 없는 커리큘럼이 카탈로그에 올라가는 것을 막는다.
+     *
+     * <p>FE도 같은 조건으로 버튼을 잠그지만 여기서 다시 본다 — 버튼을 우회한 직접 호출과, 화면이
+     * 낡은 캐시를 들고 있는 경우가 남기 때문이다. 카운터 컬럼(section_count·lesson_count) 대신 실제
+     * 행을 세는 이유는 게시가 되돌릴 수 없는 노출이라 트리거 드리프트에 기대지 않는 편이 낫다.
+     */
+    private void requirePublishableStructure(UUID curriculumId) {
+        List<Section> sections = sectionRepository.findByCurriculumIdOrderByOrderIndexAsc(curriculumId);
+        boolean hasSection = !sections.isEmpty();
+        boolean hasLesson = hasSection && !lessonDirectory.findBySections(
+                sections.stream().map(Section::getId).toList()).isEmpty();
+        if (!hasSection || !hasLesson) {
+            throw CurriculumNotPublishableException.of(hasSection, hasLesson);
+        }
     }
 
     /** 보관: PUBLISHED → ARCHIVED. 카탈로그에서 내려간다. 되돌리기·삭제 정책은 범위 밖. */

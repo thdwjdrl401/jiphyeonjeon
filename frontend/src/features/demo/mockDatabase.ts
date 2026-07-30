@@ -1,6 +1,7 @@
 import architectureCurriculumImage from '@/assets/images/curriculum-architecture.svg'
 import dataCurriculumImage from '@/assets/images/curriculum-data.svg'
 import springCurriculumImage from '@/assets/images/curriculum-spring.svg'
+import { evaluatePublishReadiness } from '@/features/curriculum/publishPreconditions'
 import { ApiError } from '@/shared/api/client'
 import type { AuthUser } from '@/features/auth/types'
 import type {
@@ -295,6 +296,16 @@ export function publishMockCurriculum(curriculumId: string) {
   if (!curriculum) throw new ApiError('커리큘럼을 찾을 수 없습니다.', 404, 'CURRICULUM_NOT_FOUND')
   if (curriculum.lifecycleStatus !== 'DRAFT') {
     throw new ApiError('DRAFT 상태에서만 발행할 수 있습니다.', 409, 'CURRICULUM_STATE_CONFLICT')
+  }
+  // 게시 선행 조건도 서버와 같게 본다(ADR-0006). mock이 느슨하면 "화면에선 됐는데 실서버에서
+  // 409"가 되고, mock 검증이 정책 문제를 가린다 — ADR-0005에서 겪은 divergence와 같은 함정이다.
+  const outline = buildMockCurriculumOutline(curriculum)
+  const readiness = evaluatePublishReadiness(
+    outline.length,
+    outline.reduce((sum, section) => sum + section.lessons.length, 0),
+  )
+  if (!readiness.canPublish) {
+    throw new ApiError(readiness.reason!, 409, 'CURRICULUM_NOT_PUBLISHABLE')
   }
   // 예전에는 여기서 레슨 상태를 먼저 고정했다 — 커리큘럼을 게시하면 레슨까지 딸려 올라가
   // 실 서버와 어긋났기 때문이다(ADR-0002). 레슨 상태 축이 없어져 그 보정이 필요 없다(ADR-0005).

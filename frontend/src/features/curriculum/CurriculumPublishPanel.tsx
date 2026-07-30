@@ -1,4 +1,5 @@
 import { InlineNotice, Panel, StatusBadge } from '@/shared/ui/WorkspaceUi'
+import type { CurriculumPublishReadiness } from './publishPreconditions'
 
 export interface CurriculumLifecycleView {
   tone: 'warning' | 'success' | 'neutral'
@@ -11,6 +12,8 @@ interface CurriculumPublishPanelProps {
   isNewDraft: boolean
   lifecycleView: CurriculumLifecycleView
   totalLessonCount: number
+  /** 게시 선행 조건 판정(ADR-0006). 못 채웠으면 버튼을 잠그고 사유를 그대로 보여 준다. */
+  readiness: CurriculumPublishReadiness
   /** 공개 중인지. 커리큘럼 lifecycleStatus만으로 결정된다(ADR-0005). */
   isPubliclyVisible: boolean
   onPublish: () => void
@@ -31,6 +34,7 @@ export default function CurriculumPublishPanel({
   isNewDraft,
   lifecycleView,
   totalLessonCount,
+  readiness,
   isPubliclyVisible,
   onPublish,
   canDelete,
@@ -39,11 +43,15 @@ export default function CurriculumPublishPanel({
 }: CurriculumPublishPanelProps) {
   return (
     <Panel title="커리큘럼 게시" description="기본 정보와 구성을 모두 확인한 뒤 마지막으로 공개합니다.">
+      {/*
+        비활성 사유는 버튼 tooltip에만 두지 않는다 — 터치 기기와 스크린리더에서는 tooltip에 닿기
+        어렵다. 카드 안 인접 안내로 같은 문장을 함께 보여 준다.
+      */}
       {isNewDraft && (
-        <InlineNotice tone={totalLessonCount > 0 ? 'info' : 'warning'}>
-          {totalLessonCount > 0
+        <InlineNotice tone={readiness.canPublish ? 'info' : 'warning'}>
+          {readiness.canPublish
             ? <>게시하면 이 커리큘럼의 강의 <strong>{totalLessonCount}개</strong>가 모두 수강생에게 공개됩니다.</>
-            : '아직 강의가 없습니다. 지금 게시하면 목차가 빈 커리큘럼이 공개됩니다.'}
+            : readiness.reason}
         </InlineNotice>
       )}
       <div className="lifecycle-actions lifecycle-actions--standalone">
@@ -57,7 +65,8 @@ export default function CurriculumPublishPanel({
           <button
             className="button button--primary"
             type="button"
-            disabled={!isNewDraft}
+            disabled={!isNewDraft || !readiness.canPublish}
+            title={isNewDraft && !readiness.canPublish ? readiness.reason ?? undefined : undefined}
             onClick={onPublish}
           >
             {isNewDraft ? '커리큘럼 게시' : '게시 완료'}

@@ -71,7 +71,17 @@ class CurriculumDeleteContractTest {
     void deleting_a_published_curriculum_returns_409_state_conflict() throws Exception {
         Cookie[] auth = loginAs("INSTRUCTOR");
         String id = createCurriculum(auth, "공개된 커리큘럼");
+        // 게시 선행 조건(ADR-0006): 섹션·강의가 각각 1개 이상 있어야 발행된다.
+        String seedSectionId = json(write(post("/api/instructor/curriculums/" + id + "/sections"), auth,
+                "{\"title\":\"게시용 섹션\"}").andExpect(status().isCreated()).andReturn()).get("sectionId").asString();
+        String seedLessonId = json(write(post("/api/instructor/sections/" + seedSectionId + "/lessons"), auth,
+                "{\"title\":\"게시용 강의\"}").andExpect(status().isCreated()).andReturn()).get("lessonId").asString();
         write(post("/api/instructor/curriculums/" + id + "/publish"), auth, null).andExpect(status().isOk());
+        // 발행 조건만 채우려고 만든 것이라 지운다 — 이 테스트가 세는 강의·목차 인덱스를 원래대로 둔다.
+        write(delete("/api/instructor/lessons/" + seedLessonId), auth, null)
+                .andExpect(status().isNoContent());
+        write(delete("/api/instructor/sections/" + seedSectionId), auth, null)
+                .andExpect(status().isNoContent());
 
         write(delete("/api/instructor/curriculums/" + id), auth, null)
                 .andExpect(status().isConflict())
@@ -82,6 +92,11 @@ class CurriculumDeleteContractTest {
     void deleting_an_archived_curriculum_returns_409_state_conflict() throws Exception {
         Cookie[] auth = loginAs("INSTRUCTOR");
         String id = createCurriculum(auth, "보관된 커리큘럼");
+        // 게시 선행 조건(ADR-0006). 이 테스트는 강의 수를 세지 않으므로 지우지 않고 둔다.
+        String archivedSeedSection = json(write(post("/api/instructor/curriculums/" + id + "/sections"), auth,
+                "{\"title\":\"게시용 섹션\"}").andExpect(status().isCreated()).andReturn()).get("sectionId").asString();
+        write(post("/api/instructor/sections/" + archivedSeedSection + "/lessons"), auth,
+                "{\"title\":\"게시용 강의\"}").andExpect(status().isCreated());
         write(post("/api/instructor/curriculums/" + id + "/publish"), auth, null).andExpect(status().isOk());
         write(post("/api/instructor/curriculums/" + id + "/archive"), auth, null).andExpect(status().isOk());
 

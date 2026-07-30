@@ -277,9 +277,10 @@ class LiveChatWebSocketTest {
         /** 강사로 커리큘럼→섹션→레슨→라이브세션 생성·발행·시작. {lessonId, sessionId, curriculumId} 반환. */
         String[] createStartedSession() throws Exception {
             String cid = field(post("/api/instructor/curriculums", "{\"title\":\"ws\"}"), "curriculumId");
-            post("/api/instructor/curriculums/" + cid + "/publish", null);
             String sid = field(post("/api/instructor/curriculums/" + cid + "/sections", "{\"title\":\"s\"}"), "sectionId");
             String lessonId = field(post("/api/instructor/sections/" + sid + "/lessons", "{\"title\":\"l\"}"), "lessonId");
+            // 게시는 섹션·강의가 생긴 뒤에 한다 — 게시 선행 조건(ADR-0006).
+            post("/api/instructor/curriculums/" + cid + "/publish", null);
             String sessionId = field(post("/api/instructor/lessons/" + lessonId + "/live-sessions", null), "sessionId");
             String instructorId = field(get("/api/auth/me"), "userId");
             LiveStartTestSupport.stubInstructorPublishing(roomControl, sessionId, instructorId);
