@@ -124,41 +124,53 @@ export default function SignupPage() {
           <legend>가입 유형 <span>*</span></legend>
           <div className="role-selector__grid">
             <button type="button" className={role === 'STUDENT' ? 'is-selected' : undefined} aria-pressed={role === 'STUDENT'} onClick={() => { setRole('STUDENT'); clearError('role') }}>
-              <span className="role-icon role-icon--student" aria-hidden="true">✦</span>
-              <span><strong>학생으로 배우기</strong><small>라이브로 질문하고 나만의 학습 기록을 만들어요.</small></span>
+              <span className="role-icon role-icon--student" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="m3 9.5 9-4.5 9 4.5-9 4.5-9-4.5Z" />
+                  <path d="M7 11.6v4.2c2.8 2.1 7.2 2.1 10 0v-4.2M21 9.5v5" />
+                </svg>
+              </span>
+              <span><strong>학생으로 배우기</strong></span>
               <i aria-hidden="true">✓</i>
             </button>
             <button type="button" className={role === 'INSTRUCTOR' ? 'is-selected' : undefined} aria-pressed={role === 'INSTRUCTOR'} onClick={() => { setRole('INSTRUCTOR'); clearError('role') }}>
-              <span className="role-icon role-icon--teacher" aria-hidden="true">◇</span>
-              <span><strong>강사로 가르치기</strong><small>라이브 수업을 열고 AI로 학습 경험을 확장해요.</small></span>
+              <span className="role-icon role-icon--teacher" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <rect x="3.5" y="4.5" width="17" height="11" rx="1.5" />
+                  <path d="m7.5 11.5 3-2.5 2.5 2 3.5-3M12 15.5v4M8 19.5h8" />
+                </svg>
+              </span>
+              <span><strong>강사로 가르치기</strong></span>
               <i aria-hidden="true">✓</i>
             </button>
           </div>
           {errors.role && <p className="field-error">{errors.role}</p>}
         </fieldset>
 
-        <div className={`form-group${errors.displayName ? ' has-error' : ''}`}>
-          <label htmlFor="displayName">닉네임 <span>*</span></label>
-          <div className="input-shell">
-            <span className="input-icon" aria-hidden="true">○</span>
-            <input id="displayName" autoComplete="nickname" maxLength={100} value={displayName} placeholder="서비스에서 사용할 닉네임" aria-invalid={Boolean(errors.displayName)} onChange={(event) => { setDisplayName(event.target.value); clearError('displayName') }} />
-          </div>
-          {errors.displayName && <p className="field-error">{errors.displayName}</p>}
-        </div>
-
-        <div className={`form-group${errors.email ? ' has-error' : availability === 'available' ? ' has-success' : ''}`}>
-          <label htmlFor="signup-email">이메일 <span>*</span></label>
-          <div className="input-with-button">
+        <div className="signup-identity-row">
+          <div className={`form-group${errors.displayName ? ' has-error' : ''}`}>
+            <label htmlFor="displayName">닉네임 <span>*</span></label>
             <div className="input-shell">
-              <span className="input-icon" aria-hidden="true">@</span>
-              <input id="signup-email" name="email" type="email" autoComplete="email" maxLength={320} value={email} placeholder="name@example.com" aria-invalid={Boolean(errors.email)} onChange={(event) => { setEmail(event.target.value); setAvailability('idle'); clearError('email') }} />
+              <span className="input-icon" aria-hidden="true">○</span>
+              <input id="displayName" autoComplete="nickname" maxLength={100} value={displayName} placeholder="사용할 닉네임" aria-invalid={Boolean(errors.displayName)} onChange={(event) => { setDisplayName(event.target.value); clearError('displayName') }} />
             </div>
-            <button className="button button--soft input-check-button" type="button" disabled={availability === 'checking'} onClick={handleAvailabilityCheck}>
-              {availability === 'checking' ? '확인 중' : '중복 확인'}
-            </button>
+            {errors.displayName && <p className="field-error">{errors.displayName}</p>}
           </div>
-          {availability === 'available' && <p className="field-success">사용할 수 있는 이메일입니다.</p>}
-          {errors.email && <p className="field-error">{errors.email}</p>}
+
+          <div className={`form-group${errors.email ? ' has-error' : availability === 'available' ? ' has-success' : ''}`}>
+            <label htmlFor="signup-email">이메일 <span>*</span></label>
+            <div className="input-with-button">
+              <div className="input-shell">
+                <span className="input-icon" aria-hidden="true">@</span>
+                <input id="signup-email" name="email" type="email" autoComplete="email" maxLength={320} value={email} placeholder="name@example.com" aria-invalid={Boolean(errors.email)} onChange={(event) => { setEmail(event.target.value); setAvailability('idle'); clearError('email') }} />
+              </div>
+              <button className="button button--soft input-check-button" type="button" disabled={availability === 'checking'} onClick={handleAvailabilityCheck}>
+                {availability === 'checking' ? '확인 중' : '중복 확인'}
+              </button>
+            </div>
+            {availability === 'available' && <p className="field-success">사용할 수 있는 이메일입니다.</p>}
+            {errors.email && <p className="field-error">{errors.email}</p>}
+          </div>
         </div>
 
         <div className="form-row">

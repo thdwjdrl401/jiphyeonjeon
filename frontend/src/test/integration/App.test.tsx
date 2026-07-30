@@ -20,9 +20,9 @@ describe('LiveClass AI 공개 페이지', () => {
   it('웰컴 페이지에서 핵심 가치와 추천 커리큘럼을 보여준다', async () => {
     renderAt('/')
 
-    expect(
-      screen.getByRole('heading', { name: /수업은 지나가도, 배움은 남도록/ }),
-    ).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '집현전 LIVECLASS AI' })).toBeInTheDocument()
+    expect(screen.getByText('수업은 지나가도,')).toBeInTheDocument()
+    expect(screen.getByText('배움은 남도록.')).toBeInTheDocument()
     expect(screen.getByText('몰입하는 라이브 수업')).toBeInTheDocument()
     expect(
       await screen.findByRole('heading', { name: '라이브로 완성하는 Spring Boot' }),
