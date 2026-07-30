@@ -1,0 +1,25 @@
+# ai-api scripts
+
+## 강의 노트 prompt A/B
+
+고정된 한국어 8개 case로 기존 v1과 production v2를 같은 GMS 모델에서 비교한다.
+
+```bash
+uv run --frozen --env-file ../.env python -m scripts.evaluate_lecture_note_prompts
+```
+
+자동 점수는 유효 JSON, 기대 action 일치, 현재 topic이 있는데 불필요하게 `START_NEW`한 횟수, 유효 내용을
+`IGNORE`한 횟수만 센다. 첫 topic의 `APPEND`와 `START_NEW`는 reducer 결과가 같으므로 동등하게 본다.
+요점의 근거성·문장 품질은 출력된 case별 결과를 사람이 함께 확인한다.
+
+2026-07-30 현재 `.env`의 GMS 모델로 실행한 결과다.
+
+| 항목 | v1 | v2 |
+|---|---:|---:|
+| 유효 응답 | 7/8 | 8/8 |
+| 실질 action 일치 | 5/8 | 8/8 |
+| 실제 topic 과분할 | 0 | 0 |
+| 유효 내용 `IGNORE` | 0 | 0 |
+
+v2는 반복, 미완성 발화, 운영 안내를 모두 `IGNORE`했고 현재 topic의 예시·주의사항은 `APPEND`했다. 실제
+topic 과분할이 확인되지 않았으므로 한-window topic 전환 확인은 추가하지 않는다.

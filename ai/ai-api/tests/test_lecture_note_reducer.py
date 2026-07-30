@@ -3,6 +3,7 @@ from pydantic import ValidationError
 
 from app.lecture_notes import (
     LectureNote,
+    LectureNoteDecisionAction,
     LectureNoteModelResult,
     TopicAction,
     apply_model_result,
@@ -12,21 +13,21 @@ from app.lecture_notes import (
 
 
 def _result(
-    action: TopicAction,
-    title: str,
+    action: LectureNoteDecisionAction,
+    title: str | None,
     *points: str,
 ) -> LectureNoteModelResult:
     return LectureNoteModelResult(
-        topicAction=action,
+        action=action,
         topicTitle=title,
         keyPoints=points,
     )
 
 
-def test_first_result_creates_topic_even_when_action_is_continue() -> None:
+def test_first_result_creates_topic_even_when_action_is_append() -> None:
     note = apply_model_result(
         LectureNote(),
-        _result(TopicAction.CONTINUE, "Refresh Token", "재발급에 사용한다."),
+        _result(LectureNoteDecisionAction.APPEND, "Refresh Token", "재발급에 사용한다."),
     )
 
     assert note.chunk_sequence == 1
@@ -35,31 +36,50 @@ def test_first_result_creates_topic_even_when_action_is_continue() -> None:
     assert note.topics[0].key_points == ("재발급에 사용한다.",)
 
 
-def test_continue_keeps_title_and_removes_only_normalized_exact_points() -> None:
+def test_append_keeps_title_and_removes_lightly_normalized_duplicates() -> None:
     note = apply_model_result(
         LectureNote(),
-        _result(TopicAction.START_NEW, "기존 제목", "공통 요점"),
+        _result(LectureNoteDecisionAction.START_NEW, "기존 제목", "공통 요점."),
     )
 
     updated = apply_model_result(
         note,
-        _result(TopicAction.CONTINUE, "모델의 새 제목", " 공통 요점 ", "추가 요점"),
+        _result(
+            LectureNoteDecisionAction.APPEND,
+            "모델의 새 제목",
+            " 공통   요점 ",
+            "추가 요점",
+        ),
     )
 
     assert updated.chunk_sequence == 2
     assert updated.topics[0].title == "기존 제목"
-    assert updated.topics[0].key_points == ("공통 요점", "추가 요점")
+    assert updated.topics[0].key_points == ("공통 요점.", "추가 요점")
 
 
 def test_exact_duplicate_does_not_advance_chunk_sequence() -> None:
     note = apply_model_result(
         LectureNote(),
-        _result(TopicAction.START_NEW, "기존 제목", "공통 요점"),
+        _result(LectureNoteDecisionAction.START_NEW, "기존 제목", "공통 요점"),
     )
 
     unchanged = apply_model_result(
         note,
-        _result(TopicAction.CONTINUE, "기존 제목", "공통 요점"),
+        _result(LectureNoteDecisionAction.APPEND, "기존 제목", "공통 요점"),
+    )
+
+    assert unchanged == note
+
+
+def test_ignore_keeps_note_without_advancing_chunk_sequence() -> None:
+    note = apply_model_result(
+        LectureNote(),
+        _result(LectureNoteDecisionAction.START_NEW, "기존 제목", "기존 요점"),
+    )
+
+    unchanged = apply_model_result(
+        note,
+        _result(LectureNoteDecisionAction.IGNORE, None),
     )
 
     assert unchanged == note
@@ -68,12 +88,12 @@ def test_exact_duplicate_does_not_advance_chunk_sequence() -> None:
 def test_start_new_appends_deterministic_topic() -> None:
     first = apply_model_result(
         LectureNote(),
-        _result(TopicAction.START_NEW, "첫 주제", "첫 요점"),
+        _result(LectureNoteDecisionAction.START_NEW, "첫 주제", "첫 요점"),
     )
 
     second = apply_model_result(
         first,
-        _result(TopicAction.START_NEW, "둘째 주제", "둘째 요점"),
+        _result(LectureNoteDecisionAction.START_NEW, "둘째 주제", "둘째 요점"),
     )
 
     assert [topic.topic_id for topic in second.topics] == ["topic-1", "topic-2"]
@@ -84,7 +104,7 @@ def test_renderer_keeps_inline_emphasis_and_neutralizes_disallowed_markdown() ->
     note = apply_model_result(
         LectureNote(),
         _result(
-            TopicAction.START_NEW,
+            LectureNoteDecisionAction.START_NEW,
             "<script> **강조**",
             "`code` [링크](https://example.com)",
         ),
@@ -107,7 +127,7 @@ def test_renderer_keeps_inline_emphasis_and_neutralizes_disallowed_markdown() ->
 @pytest.mark.parametrize(
     "mutation",
     [
-        {"topicAction": "UNKNOWN"},
+        {"action": "UNKNOWN"},
         {"topicTitle": ""},
         {"topicTitle": "제목\n삽입"},
         {"keyPoints": []},
@@ -117,7 +137,7 @@ def test_renderer_keeps_inline_emphasis_and_neutralizes_disallowed_markdown() ->
 )
 def test_model_result_rejects_values_outside_mvp_contract(mutation: dict[str, object]) -> None:
     payload: dict[str, object] = {
-        "topicAction": "CONTINUE",
+        "action": "APPEND",
         "topicTitle": "주제",
         "keyPoints": ["요점"],
     }

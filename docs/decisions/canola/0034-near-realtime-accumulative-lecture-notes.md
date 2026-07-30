@@ -81,14 +81,14 @@ delta 하나는 sequence 중복 제거의 원자 단위이므로 400자 경계�
 현재 `streamElapsedMs`는 attempt-local 시계이므로 window 길이 계산에만 사용한다. 이를 세션 상대
 `startMs/endMs`로 저장하거나 FE seek에 사용하지 않는다.
 
-### 3. LLM은 두 가지 판단만 한다
+### 3. LLM은 세 가지 내부 판단만 한다
 
 MVP에서는 복잡한 candidate·subtopic·return 상태를 만들지 않는다. 모델은 현재 topic을 계속할지 새
-topic을 시작할지만 판단한다.
+topic을 시작할지, 노트로 남길 내용이 아닌지를 판단한다.
 
 ```json
 {
-  "topicAction": "CONTINUE",
+  "action": "APPEND",
   "topicTitle": "Refresh Token의 역할",
   "keyPoints": [
     "Access Token 만료 뒤 재발급에 사용한다."
@@ -96,11 +96,13 @@ topic을 시작할지만 판단한다.
 }
 ```
 
-허용값과 제한은 다음과 같다.
+허용값과 제한은 다음과 같다. 이 값은 AI 내부 모델 결과이며 Redis wire의 `topicAction`과 구분한다.
 
-- `topicAction`: `CONTINUE|START_NEW`
+- `action`: `IGNORE|APPEND|START_NEW`
+- `IGNORE`: `topicTitle=null`, `keyPoints=[]`; operation만 완료하고 event·`chunkSequence`를 만들지 않음
+- `APPEND`: 외부 event에서는 `topicAction=CONTINUE`로 변환
 - `topicTitle`: 최대 80자
-- `keyPoints`: 호출당 최대 3개, 각 300자
+- `keyPoints`: `APPEND|START_NEW`에서 호출당 1~3개, 각 300자
 - 정의·사례·강조 여부는 만들지 않고 말한 내용의 요점만 생성
 - 강의 text는 신뢰하지 않는 데이터로 전달하고 tool은 사용하지 않음
 
@@ -117,10 +119,10 @@ MVP 결과를 본 뒤 결정한다.
 
 ### 4. topic은 즉시 축적한다
 
-- 첫 결과로 첫 topic을 만든다.
-- `CONTINUE`면 현재 topic에 새 point를 추가한다.
+- 첫 `APPEND|START_NEW` 결과로 첫 topic을 만든다.
+- `APPEND`면 현재 topic에 새 point를 추가한다.
 - `START_NEW`면 현재 topic을 닫고 새 topic을 즉시 만든다.
-- 완전히 같은 point만 정규화해 중복 제거한다.
+- Unicode, 연속 공백, 끝 문장부호, 영문 대소문자만 가볍게 정규화해 같은 point를 제거한다.
 - 잘못 나뉜 topic의 자동 합치기·되돌리기는 MVP에 넣지 않는다.
 
 구조화 topic이 정본이고 Markdown은 애플리케이션이 다음처럼 만든다.
@@ -208,7 +210,7 @@ Spring은 별도 consumer group을 사용하고 DB 반영 뒤 ACK하며, `eventI
 
 1. **순수 window 상태 머신**: Redis·GMS·async task 없이 delta 순서, 중복·gap, 15/25/40초와
    80/400자 경계, 문장부호, attempt 전환, completion flush만 구현한다.
-2. **note reducer와 Markdown renderer**: `CONTINUE|START_NEW`, key point 중복 제거, `chunkSequence`,
+2. **note reducer와 Markdown renderer**: `IGNORE|APPEND|START_NEW`, key point 중복 제거, `chunkSequence`,
    제한된 Markdown 생성을 순수 로직으로 구현한다.
 3. **application orchestration**: `LectureNoteModel`과 state store를 port로 두고 fake 구현으로 세션별
    단일 호출과 호출 중 window 병합을 검증한다.
@@ -259,17 +261,20 @@ lease·fencing, 다른 consumer의 pending 회수(`XAUTOCLAIM`)는 다음 결정
 
 ### 2. 라이브 노트 판단 품질
 
-복구 기반을 고정한 다음 모델의 내부 판단을 `IGNORE|APPEND|START_NEW`로 바꾼다. 외부 append event의
+복구 기반을 고정한 다음 모델의 내부 판단을 `IGNORE|APPEND|START_NEW`로 변경했다. 외부 append event의
 `topicAction` 계약은 그대로 두고 `APPEND`만 `CONTINUE`로 변환한다. `IGNORE`는 operation만 완료하며 빈
 event와 `chunkSequence`를 만들지 않는다.
 
 prompt v2는 반복·잡음·미완성 발화를 `IGNORE`, 같은 개념의 설명·예시를 `APPEND`, 독립적으로 이름 붙일
-수 있는 새 개념만 `START_NEW`로 판단하게 한다. 첫 구현은 Unicode·공백·문장부호 수준의 가벼운 중복
+수 있는 새 개념만 `START_NEW`로 판단하게 구현했다. 첫 구현은 Unicode·공백·문장부호 수준의 가벼운 중복
 정규화까지만 사용하며 embedding, confidence, 자동 topic merge/split은 넣지 않는다.
 
-고정 한국어 강의 샘플로 기존 prompt와 v2를 A/B 평가하고 근거성, 누락, 의미 중복, topic 경계,
-요점 원자성, 제목 품질, 지연·호출 비용을 기록한다. 실제 과분할이 확인될 때만 한 window 동안 topic 전환을
-보류해 다음 window로 재확인한다. 확인되지 않으면 라이브 지연을 늘리지 않는다.
+8개 고정 한국어 강의 샘플과 v1/v2 실행 도구를 추가했다. 2026-07-30 실제 GMS A/B에서 v1은 유효 응답
+7/8·실질 action 일치 5/8, v2는 유효 응답 8/8·실질 action 일치 8/8이었다. v2는 반복·미완성·운영 안내를
+모두 `IGNORE`했고 유효 내용을 무시하지 않았다. 현재 topic이 없는 첫 결과의 `APPEND|START_NEW`는 같은 첫
+topic을 만들기 때문에 과분할로 세지 않는다. 현재 topic에서 실제 과분할이 0건이므로 한-window topic 전환
+확인은 추가하지 않고 라이브 지연을 늘리지 않는다. 상세 실행법과 표는
+[ai-api scripts](../../../ai/ai-api/scripts/README.md)에 기록한다.
 
 ### 3. 종료 후 refined snapshot
 

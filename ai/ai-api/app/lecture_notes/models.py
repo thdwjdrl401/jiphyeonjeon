@@ -5,7 +5,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Literal, TypeAlias
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.captions.models import (
     CanonicalUuid,
@@ -28,25 +28,41 @@ class TopicAction(StrEnum):
     START_NEW = "START_NEW"
 
 
+class LectureNoteDecisionAction(StrEnum):
+    IGNORE = "IGNORE"
+    APPEND = "APPEND"
+    START_NEW = "START_NEW"
+
+
 InlineText = Annotated[str, Field(min_length=1, max_length=300)]
 
 
 class LectureNoteModelResult(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
 
-    topicAction: TopicAction
-    topicTitle: str = Field(min_length=1, max_length=80)
-    keyPoints: tuple[InlineText, ...] = Field(min_length=1, max_length=3)
+    action: LectureNoteDecisionAction
+    topicTitle: str | None = Field(default=None, min_length=1, max_length=80)
+    keyPoints: tuple[InlineText, ...] = Field(default=(), max_length=3)
 
     @field_validator("topicTitle")
     @classmethod
-    def validate_topic_title(cls, value: str) -> str:
-        return _validate_single_line(value, "topicTitle")
+    def validate_topic_title(cls, value: str | None) -> str | None:
+        return None if value is None else _validate_single_line(value, "topicTitle")
 
     @field_validator("keyPoints")
     @classmethod
     def validate_key_points(cls, values: tuple[str, ...]) -> tuple[str, ...]:
         return tuple(_validate_single_line(value, "keyPoints") for value in values)
+
+    @model_validator(mode="after")
+    def validate_action_payload(self) -> LectureNoteModelResult:
+        if self.action is LectureNoteDecisionAction.IGNORE:
+            if self.topicTitle is not None or self.keyPoints:
+                raise ValueError("IGNORE must not include topicTitle or keyPoints")
+            return self
+        if self.topicTitle is None or not self.keyPoints:
+            raise ValueError("APPEND and START_NEW require topicTitle and keyPoints")
+        return self
 
 
 @dataclass(frozen=True, slots=True)

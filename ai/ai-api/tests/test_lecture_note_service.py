@@ -5,11 +5,11 @@ from app.captions import CaptionCompleted, CaptionDelta
 from app.lecture_notes import (
     LectureNoteCaptureCompleted,
     LectureNoteChunkAppended,
+    LectureNoteDecisionAction,
     LectureNoteModelResult,
     LectureNotePipeline,
     LectureNoteService,
     LectureNoteWindowAccumulator,
-    TopicAction,
 )
 from app.lecture_notes.recovery import LectureNoteSessionCheckpoint
 
@@ -25,7 +25,7 @@ class ImmediateModel:
     async def generate(self, request):
         self.requests.append(request)
         return LectureNoteModelResult(
-            topicAction=TopicAction.CONTINUE,
+            action=LectureNoteDecisionAction.APPEND,
             topicTitle="주제",
             keyPoints=(request.text,),
         )
@@ -42,7 +42,7 @@ class BlockingModel(ImmediateModel):
         self.started.set()
         await self.release.wait()
         return LectureNoteModelResult(
-            topicAction=TopicAction.CONTINUE,
+            action=LectureNoteDecisionAction.APPEND,
             topicTitle="주제",
             keyPoints=(request.text,),
         )
@@ -215,6 +215,28 @@ def test_outbox_reuses_same_event_without_second_model_call() -> None:
         assert restored_model.requests == []
         assert store.events[0].eventId == saved_event.eventId
         assert store.checkpoints[SESSION_ID].outbox is None
+
+    asyncio.run(scenario())
+
+
+def test_ignore_completes_operation_without_event_or_chunk_sequence() -> None:
+    class IgnoreModel:
+        async def generate(self, request):
+            return LectureNoteModelResult(action=LectureNoteDecisionAction.IGNORE)
+
+    async def scenario() -> None:
+        store = InMemoryStore()
+        service, pipeline = _components(IgnoreModel(), store)
+
+        await pipeline.ingest(_delta(1, "반복 안내"))
+        await service.drain()
+
+        checkpoint = store.checkpoints[SESSION_ID]
+        assert checkpoint.inFlight is None
+        assert checkpoint.pending is None
+        assert checkpoint.outbox is None
+        assert checkpoint.note.chunk_sequence == 0
+        assert store.events == []
 
     asyncio.run(scenario())
 

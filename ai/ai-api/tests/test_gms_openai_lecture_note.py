@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.adapters.gms_openai_lecture_note import GmsOpenAILectureNoteModel
-from app.lecture_notes import LectureNoteModelRequest, TopicAction
+from app.lecture_notes import LectureNoteDecisionAction, LectureNoteModelRequest
 
 
 class FakeCompletions:
@@ -44,7 +44,7 @@ def test_model_requests_json_object_and_validates_result() -> None:
         client = FakeClient(
             json.dumps(
                 {
-                    "topicAction": "START_NEW",
+                    "action": "START_NEW",
                     "topicTitle": "Refresh Token",
                     "keyPoints": ["Access Token 재발급에 사용한다."],
                 },
@@ -62,20 +62,22 @@ def test_model_requests_json_object_and_validates_result() -> None:
 
         result = await model.generate(_request())
 
-        assert result.topicAction is TopicAction.START_NEW
+        assert result.action is LectureNoteDecisionAction.START_NEW
         call = client.chat.completions.calls[0]
         assert call["response_format"] == {"type": "json_object"}
         prompt = json.loads(call["messages"][1]["content"])
         assert prompt["currentTopic"]["title"] == "Access Token"
         assert prompt["previousTopicTitle"] == "인증 개요"
         assert prompt["lectureText"].startswith(" ")
+        assert "IGNORE" in call["messages"][0]["content"]
+        assert "경계가 불확실하면 APPEND" in call["messages"][0]["content"]
 
     asyncio.run(scenario())
 
 
 def test_model_rejects_invalid_structured_json() -> None:
     async def scenario() -> None:
-        client = FakeClient('{"topicAction":"CONTINUE","topicTitle":"주제"}')
+        client = FakeClient('{"action":"APPEND","topicTitle":"주제"}')
         model = GmsOpenAILectureNoteModel(
             api_key="test-key",
             model="gpt-test",
@@ -89,3 +91,24 @@ def test_model_rejects_invalid_structured_json() -> None:
             await model.generate(_request())
 
     asyncio.run(scenario())
+
+
+def test_v1_baseline_prompt_excludes_ignore_for_ab_evaluation() -> None:
+    client = FakeClient(
+        '{"action":"APPEND","topicTitle":"주제","keyPoints":["요점"]}'
+    )
+    model = GmsOpenAILectureNoteModel(
+        api_key="test-key",
+        model="gpt-test",
+        max_output_tokens=512,
+        max_prompt_chars=10_000,
+        timeout_seconds=10,
+        prompt_version="v1",
+        client=client,
+    )
+
+    asyncio.run(model.generate(_request()))
+
+    system_prompt = client.chat.completions.calls[0]["messages"][0]["content"]
+    assert "APPEND 또는 START_NEW" in system_prompt
+    assert "IGNORE:" not in system_prompt

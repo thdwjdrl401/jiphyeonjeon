@@ -39,6 +39,10 @@ Redis event의 정본은 [공유 계약 §3-4a](../../../../docs/CONTRACT.md#3-4
 AI는 내부 topic 상태를 모델 문맥과 중복 제거에 사용하지만 Redis에는 새 `markdownFragment`와 구조화
 요점만 발행한다. Spring consumer·DB·REST·WebSocket은 아직 미구현이다.
 
+모델의 내부 action은 `IGNORE|APPEND|START_NEW`다. `IGNORE`는 operation만 완료하고 출력 event와
+`chunkSequence`를 만들지 않는다. `APPEND`는 wire의 `CONTINUE`로 변환하며, Unicode·연속 공백·끝
+문장부호·영문 대소문자까지만 정규화해 중복 요점을 거른다.
+
 Redis에 접속한 뒤 다음 값으로 생성 여부와 갱신 상태를 확인한다.
 
 ```bash
@@ -48,6 +52,16 @@ redis-cli SMEMBERS ai:lecture-notes:mvp:active-sessions
 
 [공통 ai-api 검증 명령](../README.md#검증)은 unit·integration test와 lint를 함께 실행한다. 실제 Redis
 integration test는 기본 `redis://127.0.0.1:6379/15`를 사용하며 `AI_API_TEST_REDIS_URL`로 바꿀 수 있다.
+
+prompt v1/v2는 같은 8개 한국어 경계 샘플로 비교한다. `AI_API_GMS_API_KEY`가 있는 환경에서 실행하면
+action 일치, 과분할, 유효 내용 무시 횟수와 case별 결과를 JSON으로 출력한다.
+
+```bash
+uv run --frozen --env-file ../.env python -m scripts.evaluate_lecture_note_prompts
+```
+
+이 결과에서 실제 `START_NEW` 과분할이 확인될 때만 한 window topic 전환 확인을 추가한다. 현재는 라이브
+지연을 늘리는 전환 보류를 구현하지 않았다.
 
 ## 현재 비범위
 
