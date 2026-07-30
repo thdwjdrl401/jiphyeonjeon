@@ -28,6 +28,7 @@ function renderStage() {
     publishAnnotation: vi.fn(),
     publishLaser: vi.fn(),
     annotationAudienceRevision: 0,
+    restoredAnnotation: null,
     applyingQuality: false,
     retry: vi.fn(),
     toggleCamera: vi.fn(),

@@ -214,7 +214,19 @@ Spring 수신 endpoint를 구현하고 `SPRING_STATUS_CALLBACK_URL`로 주입하
 - **강사가 단일 writer**다. 그래서 CRDT 없이 `revision` 하나로 충분하고, 같은 op를 두 번 받아도 결과가 같다(멱등).
 - 수강생은 이 채널을 구독하지 않는다 — 합성 결과만 본다(ADR-0032). 따라서 판서는 Egress 프레임을 거쳐서만 수강생에게 도달한다.
 - **z-order**: 수신 측은 렌더 직전 요소의 `index`(Excalidraw fractional index)로 정렬한다. op에는 순서 정보가 없어 도착 순으로 재구성하면 나중에 온 요소가 항상 맨 위가 된다 — 강사가 아래에 깔아 둔 화이트보드가 수강생 화면에서 판서를 덮는다. 화이트보드(`liveclass-whiteboard`)는 정의상 배경이라 언제나 맨 아래다.
-- **강사 접속 시 빈 스냅샷**: 강사가 새 페이지에서 접속하면(새로고침 포함) `snapshot`을 한 번 보내 Egress를 강사의 실제 상태로 맞춘다. 그러지 않으면 ①강사 화면에는 없는 판서가 수강생·녹화에만 남고 ②강사의 revision이 0부터 다시 시작해 이후 op가 전부 "이미 본 op"로 버려진다(`snapshot`만 revision 검사를 건너뛴다).
+- **강사 접속 시 복원 스냅샷**: 강사가 새 페이지에서 접속하면(새로고침 포함) §3-6d로 저장된 문서를 불러와 그 내용으로 `snapshot`을 한 번 보내 Egress를 강사의 실제 상태로 맞춘다. 그러지 않으면 ①강사 화면에는 없는 판서가 수강생·녹화에만 남고 ②강사의 revision이 0부터 다시 시작해 이후 op가 전부 "이미 본 op"로 버려진다(`snapshot`만 revision 검사를 건너뛴다). 복원에 실패하면 빈 스냅샷으로 떨어진다 — 판서를 잃더라도 ②는 반드시 막아야 한다.
+
+### 3-6d. 강사 FE → Spring 판서 영속화 (REST) — FE·BE 구현됨
+- **라이브 전달 경로가 아니다.** 판서가 수강생에게 닿는 길은 §3-6b(데이터 채널 → Egress)이고, 이 API는 그와 **병렬로** 기록만 남긴다. 그래서 응답을 기다려 화면을 갱신하지 않으며, 저장 실패가 강의를 막지 않는다.
+- `POST /api/live-sessions/{sessionId}/annotation/ops` → `202 Accepted`. body는 op **배열**(묶어 보낸다, FE 기본 1.5초 주기). 각 항목 `{ revision, opType: "snapshot|upsert|delete|clear", payload, occurredAt }`.
+- `payload`는 op 본문의 **JSON 문자열**이며 **서버는 해석하지 않는다**. Excalidraw가 요소 필드를 늘릴 때마다 서버 마이그레이션이 따라오지 않게 하기 위해서다.
+- **멱등**: `(session_id, revision)` UNIQUE. 같은 revision이 다시 와도 중복 적재하지 않으므로 FE는 실패한 묶음을 그대로 재전송한다.
+- `GET /api/live-sessions/{sessionId}/annotation` → `{ revision, nextRevision, snapshotPayload, ops[] }`. **마지막 스냅샷과 그 이후 op만** 돌려준다 — 세션 전체를 접으면 강의가 길어질수록 복원이 느려지고, 스냅샷은 그 자체로 전체 상태다. 접는 것은 FE가 한다(같은 로직이 이미 수신 측에 있다).
+- **`nextRevision`은 서버가 정한다.** FE가 접힌 문서의 revision으로 대신 채번하면, 저장에 실패한 op가 있을 때 이미 쓴 번호를 다시 써서 Egress가 새 획을 "이미 본 op"로 버린다.
+- 복원 시 FE는 §3-6b의 유실 감지(revision 불연속 → 버리고 스냅샷 대기)를 **적용하지 않는다**. 저장된 행은 전송 중 유실이 아니라 실제로 남은 전부이며, 번호가 띄엄하다고 뒤따르는 획까지 버리면 그 이후가 통째로 사라진다.
+- **인가**: 읽기는 세션 참가자(§자막·채팅과 같은 게이트), **쓰기는 소유 강사만**. 판서의 writer는 강사 하나라는 전제 위에 revision 채번이 서 있다.
+- `session_ms`(세션 상대 ms, 근사 — ADR-0045와 같은 축)를 각 op에 함께 적재한다. 다시보기에서 "강사가 이걸 강조한 순간"으로 이동하는 앵커이며, 그 구간 판서를 RAG 컨텍스트로 쓰는 후속의 입력이다.
+- 레이저(§3-6c)는 저장하지 않는다.
 
 ### 3-6c. 강사 FE → Egress 레이저 포인터 (LiveKit 데이터 채널) — FE 양쪽 구현됨
 - **topic** `annotation-laser`, **lossy**(`reliable: false`)로 publish. 판서 op와 <b>같은 채널에 섞지 않는다</b> — 초당 수십 건이고 1초면 사라지므로 revision을 태우면 유실 감지가 의미를 잃는다.
