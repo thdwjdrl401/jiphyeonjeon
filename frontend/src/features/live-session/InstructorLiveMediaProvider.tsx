@@ -528,7 +528,11 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
         console.warn('판서를 합성 화면에 전달하지 못했습니다', error)
       })
     // 전달과 별개로 기록을 남긴다. 순서가 중요하다 — 저장을 먼저 기다리면 그 왕복이 획마다 끼어든다.
-    annotationSinkRef.current?.push(op)
+    //
+    // `clear`는 <b>남기지 않는다.</b> 그건 문서를 지우는 편집이 아니라 판서를 껐을 때 수강생 화면에서
+    // 감추라는 <b>표시 상태</b>다(InstructorAnnotationLayer). 강사의 문서는 그대로 남아 다시 켜면
+    // 돌아오는데, 저장해 버리면 서버 쪽 문서만 비어 새로고침했을 때 판서가 통째로 사라진다.
+    if (op.type !== 'clear') annotationSinkRef.current?.push(op)
   }, [])
 
   /**
@@ -570,7 +574,12 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
       }
       annotationRevisionRef.current = restored.nextRevision - 1
       setRestoredAnnotation(restored.document)
-      publishAnnotation({ type: 'snapshot', elements: restored.document.elements })
+      // 복원한 판서를 여기서 내보내지 않는다. 새로고침 직후 판서는 <b>꺼진 상태</b>로 시작하므로,
+      // 여기서 내보내면 강사에게는 안 보이는 판서가 수강생 화면에만 뜬다. 내보내는 일은 판서를 켤 때
+      // 레이어가 한다(InstructorAnnotationLayer). 여기서는 <b>빈 스냅샷</b>으로 번호만 맞춘다 —
+      // Egress는 revision 0에서 시작하는데 강사는 이어받은 번호(예: 48)부터 매기므로, 이 기준점이
+      // 없으면 이후 op가 전부 "중간이 빠졌다"로 버려진다.
+      publishAnnotation({ type: 'snapshot', elements: [] })
     })
     return () => { cancelled = true }
   }, [publishAnnotation, sessionId, state.connectionState])

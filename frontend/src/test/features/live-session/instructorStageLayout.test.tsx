@@ -11,7 +11,7 @@ vi.mock('@/features/live-session/useInstructorLiveKit', () => ({
   useInstructorLiveKit: () => publisher.current,
 }))
 
-function renderStage() {
+function renderStage(overrides: Partial<InstructorLiveMedia> = {}) {
   publisher.current = {
     connectionState: 'connected',
     cameraEnabled: true,
@@ -34,6 +34,7 @@ function renderStage() {
     toggleCamera: vi.fn(),
     toggleMicrophone: vi.fn(),
     toggleScreenShare: vi.fn(),
+    ...overrides,
   } as InstructorLiveMedia
   return render(
     <InstructorLiveKitStage
@@ -86,6 +87,26 @@ describe('강사 스테이지 배치', () => {
   it('판서 토글은 기본이 꺼짐이다 — 켜져 있으면 카메라 배치를 드래그할 수 없다', () => {
     const { getByRole } = renderStage()
 
-    expect(getByRole('button', { name: /판서/ }).getAttribute('aria-pressed')).toBe('false')
+    expect(getByRole('button', { name: /^판서 (켜짐|꺼짐)$/ }).getAttribute('aria-pressed')).toBe('false')
+  })
+
+  /**
+   * 새로고침해도 화면이 그대로여야 한다. 켜 주지 않으면 판서는 살아 있는데 보이지 않아 강사에게는
+   * 사라진 것과 구분되지 않고, 켜기 전까지 수강생 화면에도 나오지 않는다.
+   */
+  it('저장돼 있던 판서가 있으면 판서를 자동으로 켠다', () => {
+    const { getByRole } = renderStage({
+      restoredAnnotation: { revision: 47, elements: [{ id: 'a', type: 'freedraw', version: 1 }] },
+    } as Partial<InstructorLiveMedia>)
+
+    expect(getByRole('button', { name: /^판서 (켜짐|꺼짐)$/ }).getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('저장된 판서가 비어 있으면 켜지 않는다', () => {
+    const { getByRole } = renderStage({
+      restoredAnnotation: { revision: 0, elements: [] },
+    } as Partial<InstructorLiveMedia>)
+
+    expect(getByRole('button', { name: /^판서 (켜짐|꺼짐)$/ }).getAttribute('aria-pressed')).toBe('false')
   })
 })

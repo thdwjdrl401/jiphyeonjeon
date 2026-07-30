@@ -472,6 +472,7 @@ describe('강사 판서 레이어', () => {
       <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />,
     )
     await findByTestId('excalidraw-editor')
+    onPublish.mockClear()   // 판서를 켤 때 나가는 기준점 스냅샷은 여기 관심사가 아니다
     const onChange = excalidrawProps.onChange as (elements: unknown[]) => void
 
     onChange([element('a', 1)])
@@ -534,7 +535,9 @@ describe('강사 판서 레이어', () => {
 
     ;(excalidrawProps.onChange as (elements: unknown[]) => void)(restored)
 
-    expect(onPublish).not.toHaveBeenCalled()
+    // 스냅샷(기준점·복원 전달)은 나가야 하지만, 복원된 요소를 "새로 그린 것"으로 보고 upsert로
+    // 다시 내보내면 같은 획이 op로 한 번 더 흐른다.
+    expect(onPublish.mock.calls.map(([change]) => change.type)).not.toContain('upsert')
   })
 
   /**
@@ -555,17 +558,51 @@ describe('강사 판서 레이어', () => {
       .not.toContainEqual([element('저장된', 9)])
   })
 
-  it('판서가 비어 있으면 스냅샷을 보내지 않는다 — 보낼 것이 없다', async () => {
-    const onPublish = vi.fn()
+  /**
+   * Egress는 revision 0에서 시작하는데 강사는 서버에서 이어받은 번호(예: 48)부터 매긴다. 기준점이
+   * 없으면 이후 op가 전부 "중간이 빠졌다"로 버려져 <b>강사 화면에는 그려지는데 수강생 화면에는
+   * 아무것도 나타나지 않는다</b>. `snapshot`만 revision 검사를 건너뛰므로 이것이 유일한 기준점이다.
+   */
+  it('판서를 켜면 비어 있어도 스냅샷을 보내 기준점을 잡는다', async () => {
+    const onPublish = vi.fn<(change: AnnotationChange) => void>()
+    const { findByTestId, rerender } = render(
+      <InstructorAnnotationLayer active={false} audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />,
+    )
+
+    rerender(<InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />)
+    await findByTestId('excalidraw-editor')
+
+    expect(onPublish).toHaveBeenCalledWith({ type: 'snapshot', elements: [] })
+  })
+
+  it('새 참가자가 들어오면 판서가 비어 있어도 기준점을 다시 보낸다', async () => {
+    const onPublish = vi.fn<(change: AnnotationChange) => void>()
     const { findByTestId, rerender } = render(
       <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />,
     )
     await findByTestId('excalidraw-editor')
+    onPublish.mockClear()
 
     rerender(<InstructorAnnotationLayer active audienceRevision={1} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />)
 
-    expect(onPublish).not.toHaveBeenCalled()
+    expect(onPublish).toHaveBeenCalledWith({ type: 'snapshot', elements: [] })
   })
+
+  /**
+   * 복원은 `knownRef`를 함께 채우므로 뒤따르는 `onChange`의 diff가 아무것도 찾지 못한다. 여기서
+   * 보내지 않으면 강사 화면에만 판서가 돌아오고 수강생 화면은 빈 채로 남는다.
+   */
+  it('되돌린 판서를 수신 측에도 스냅샷으로 내보낸다', async () => {
+    const restored = [element('a', 3)]
+    const onPublish = vi.fn<(change: AnnotationChange) => void>()
+    const { findByTestId } = render(
+      <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={restored} />,
+    )
+    await findByTestId('excalidraw-editor')
+
+    expect(onPublish).toHaveBeenCalledWith({ type: 'snapshot', elements: restored })
+  })
+
 })
 
 describe('Egress 판서 레이어', () => {
