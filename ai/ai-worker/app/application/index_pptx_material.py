@@ -28,6 +28,8 @@ from app.ports import IndexStorage, KeyTermExtractor, MaterialAssetStore, TextEm
 
 logger = logging.getLogger(__name__)
 
+_KEY_TERM_CACHE_MAX_ENTRIES = 1_000
+
 
 @dataclass(frozen=True, slots=True)
 class MaterialIndexResult:
@@ -55,6 +57,11 @@ class IndexPptxMaterial:
         self._chunk_max_chars = chunk_max_chars
         self._chunk_strategy = chunk_strategy(chunk_max_chars)
         self._key_term_extractor = key_term_extractor
+        # Best-effort retry safety net for the combined callback (ADR-0004 option C): if the
+        # single terminal callback fails and the job redelivers, execute()'s idempotent
+        # short-circuit below never re-extracts, so a same-process retry recovers key_terms
+        # from here instead of silently dropping them. A process restart still loses it.
+        self._key_term_cache: dict[str, tuple[KeyTerm, ...]] = {}
 
     async def execute(self, material: StagedMaterial) -> MaterialIndexResult:
         self._validate_contract(material)
@@ -62,7 +69,8 @@ class IndexPptxMaterial:
         if existing is not None:
             if existing.activation_required:
                 await self._index_storage.activate(material, existing.version_id)
-            return MaterialIndexResult(version_id=existing.version_id)
+            cached_key_terms = self._key_term_cache.get(material.job_id, ())
+            return MaterialIndexResult(version_id=existing.version_id, key_terms=cached_key_terms)
 
         source = await self._asset_store.read_pptx(
             material.source_bucket,
@@ -88,6 +96,7 @@ class IndexPptxMaterial:
                 _safe_extract_key_terms(self._key_term_extractor, presentation),
             )
         if key_terms:
+            self._remember_key_terms(material.job_id, key_terms)
             logger.info(
                 "extracted PPTX key terms",
                 extra={
@@ -114,6 +123,15 @@ class IndexPptxMaterial:
 
         self._validate_contract(material)
         return await self._index_storage.find_existing(material)
+
+    def _remember_key_terms(self, job_id: str, key_terms: tuple[KeyTerm, ...]) -> None:
+        if (
+            job_id not in self._key_term_cache
+            and len(self._key_term_cache) >= _KEY_TERM_CACHE_MAX_ENTRIES
+        ):
+            oldest_job_id = next(iter(self._key_term_cache))
+            del self._key_term_cache[oldest_job_id]
+        self._key_term_cache[job_id] = key_terms
 
     def _validate_contract(self, material: StagedMaterial) -> None:
         if material.chunk_strategy != self._chunk_strategy:

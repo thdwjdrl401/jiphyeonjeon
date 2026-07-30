@@ -96,33 +96,25 @@ async def test_success_indexes_then_sends_only_ready_callback() -> None:
     assert event.job_id == "PPTX_EMBED:550e8400-e29b-41d4-a716-446655440000"
 
 
-async def test_success_with_key_terms_also_sends_a_key_terms_callback_after_ready() -> None:
+async def test_success_with_key_terms_sends_a_single_combined_callback() -> None:
     callback = AsyncMock()
     indexer = Indexer(key_terms=(KeyTerm(term="용어", definition="정의"),))
 
     await MaterialJobHandler(Runtime(indexer, callback)).handle(embed_body())
 
-    assert callback.await_count == 2
-    ready_event, key_terms_event = (call.args[0] for call in callback.await_args_list)
-    assert ready_event.event_type == "MATERIAL_EMBEDDED"
-    assert key_terms_event.event_type == "MATERIAL_KEY_TERMS_EXTRACTED"
-    assert key_terms_event.status == "READY"
-    assert [(term.term, term.definition) for term in key_terms_event.key_terms] == [
-        ("용어", "정의")
-    ]
+    assert callback.await_count == 1
+    event = callback.await_args.args[0]
+    assert event.event_type == "MATERIAL_EMBEDDED"
+    assert event.status == "READY"
+    assert [(term.term, term.definition) for term in event.key_terms] == [("용어", "정의")]
 
 
-async def test_key_terms_callback_failure_is_swallowed_and_job_still_succeeds() -> None:
-    async def send(event):
-        if event.event_type == "MATERIAL_KEY_TERMS_EXTRACTED":
-            raise SpringCallbackError("timeout", retryable=True)
-
-    callback = AsyncMock(side_effect=send)
+async def test_combined_callback_failure_retries_the_whole_job_like_before() -> None:
+    callback = AsyncMock(side_effect=SpringCallbackError("timeout", retryable=True))
     indexer = Indexer(key_terms=(KeyTerm(term="용어", definition="정의"),))
 
-    await MaterialJobHandler(Runtime(indexer, callback)).handle(embed_body())
-
-    assert callback.await_count == 2
+    with pytest.raises(SpringCallbackError):
+        await MaterialJobHandler(Runtime(indexer, callback)).handle(embed_body())
 
 
 @pytest.mark.parametrize("body", [b"not-json", delete_body()])

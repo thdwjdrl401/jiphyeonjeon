@@ -98,15 +98,12 @@ def test_rejects_event_and_status_mismatch(event_type: str, status: str) -> None
         _event(eventType=event_type, status=status)
 
 
-def test_key_terms_event_serializes_with_key_terms_present() -> None:
-    event = _event(
-        eventType="MATERIAL_KEY_TERMS_EXTRACTED",
-        keyTerms=[{"term": "지도학습", "definition": "정답이 있는 데이터로 학습"}],
-    )
+def test_ready_event_can_carry_key_terms_in_the_same_callback() -> None:
+    event = _event(keyTerms=[{"term": "지도학습", "definition": "정답이 있는 데이터로 학습"}])
 
     assert json.loads(event.raw_body()) == {
         "eventId": str(event.event_id),
-        "eventType": "MATERIAL_KEY_TERMS_EXTRACTED",
+        "eventType": "MATERIAL_EMBEDDED",
         "jobId": JOB_ID,
         "materialId": str(MATERIAL_ID),
         "lessonId": str(LESSON_ID),
@@ -115,18 +112,21 @@ def test_key_terms_event_serializes_with_key_terms_present() -> None:
     }
 
 
-def test_key_terms_field_is_omitted_for_other_event_types() -> None:
+def test_key_terms_field_is_omitted_when_not_provided() -> None:
     event = _event()
 
     assert "keyTerms" not in json.loads(event.raw_body())
 
 
-def test_key_terms_is_required_for_and_exclusive_to_its_own_event_type() -> None:
+@pytest.mark.parametrize("event_type", ["MATERIAL_EMBEDDING", "MATERIAL_EMBED_FAILED"])
+def test_key_terms_rejected_on_non_embedded_event_types(event_type: str) -> None:
+    status = "PROCESSING" if event_type == "MATERIAL_EMBEDDING" else "FAILED"
     with pytest.raises(ValidationError, match="keyTerms"):
-        _event(eventType="MATERIAL_KEY_TERMS_EXTRACTED")
-
-    with pytest.raises(ValidationError, match="keyTerms"):
-        _event(keyTerms=[{"term": "x", "definition": "y"}])
+        _event(
+            eventType=event_type,
+            status=status,
+            keyTerms=[{"term": "x", "definition": "y"}],
+        )
 
 
 def test_key_term_payload_rejects_blank_fields() -> None:

@@ -10,15 +10,14 @@ MaterialCallbackType = Literal[
     "MATERIAL_EMBEDDING",
     "MATERIAL_EMBEDDED",
     "MATERIAL_EMBED_FAILED",
-    "MATERIAL_KEY_TERMS_EXTRACTED",
 ]
 MaterialCallbackStatus = Literal["PROCESSING", "READY", "FAILED"]
 _STATUS_BY_EVENT: dict[str, str] = {
     "MATERIAL_EMBEDDING": "PROCESSING",
     "MATERIAL_EMBEDDED": "READY",
     "MATERIAL_EMBED_FAILED": "FAILED",
-    "MATERIAL_KEY_TERMS_EXTRACTED": "READY",
 }
+_KEY_TERMS_EVENT_TYPE: MaterialCallbackType = "MATERIAL_EMBEDDED"
 _CALLBACK_EVENT_NAMESPACE = UUID("9bdc3985-1818-4c55-b084-2eaa0de6b050")
 
 
@@ -48,10 +47,8 @@ class MaterialCallbackEvent(BaseModel):
 
     @model_validator(mode="after")
     def validate_key_terms_scoped_to_its_event_type(self) -> Self:
-        if (self.event_type == "MATERIAL_KEY_TERMS_EXTRACTED") != (self.key_terms is not None):
-            raise ValueError(
-                "keyTerms is required for and exclusive to MATERIAL_KEY_TERMS_EXTRACTED"
-            )
+        if self.key_terms is not None and self.event_type != _KEY_TERMS_EVENT_TYPE:
+            raise ValueError(f"keyTerms may only be present on {_KEY_TERMS_EVENT_TYPE}")
         return self
 
     def raw_body(self) -> bytes:

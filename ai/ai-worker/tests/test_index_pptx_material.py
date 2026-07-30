@@ -402,6 +402,49 @@ async def test_key_term_extraction_failure_never_blocks_indexing() -> None:
     assert len(index_storage.activated) == 1
 
 
+async def test_retry_after_success_recovers_cached_key_terms_same_instance() -> None:
+    staged_material = material()
+    asset_store = FakeAssetStore(presentation_bytes(("index me",)))
+    embedding_model = FakeEmbeddingModel()
+    key_term_extractor = FakeKeyTermExtractor(terms=(KeyTerm(term="용어", definition="정의"),))
+    index_storage = FakeIndexStorage(version_id=73)
+    indexer = IndexPptxMaterial(
+        asset_store,
+        embedding_model,
+        index_storage,
+        key_term_extractor=key_term_extractor,
+    )
+
+    first_result = await indexer.execute(staged_material)
+    assert first_result.key_terms == (KeyTerm(term="용어", definition="정의"),)
+
+    # Simulate a RabbitMQ redelivery of the same job after it already succeeded: the real
+    # PgvectorIndexRepository.find_existing would now report the completed job, so execute()
+    # takes the idempotent short-circuit and never re-extracts.
+    index_storage.existing = ExistingIndexVersion(73, activation_required=False)
+    retried_result = await indexer.execute(staged_material)
+
+    assert retried_result.version_id == 73
+    assert retried_result.key_terms == (KeyTerm(term="용어", definition="정의"),)
+    assert len(key_term_extractor.calls) == 1
+
+
+async def test_retry_after_process_restart_loses_cached_key_terms() -> None:
+    staged_material = material()
+    index_storage = FakeIndexStorage(existing=ExistingIndexVersion(73, activation_required=False))
+    fresh_indexer = IndexPptxMaterial(
+        FakeAssetStore(b"must not be read"),
+        FakeEmbeddingModel(),
+        index_storage,
+        key_term_extractor=FakeKeyTermExtractor(),
+    )
+
+    result = await fresh_indexer.execute(staged_material)
+
+    assert result.version_id == 73
+    assert result.key_terms == ()
+
+
 async def test_no_extractor_configured_never_touches_key_term_extraction() -> None:
     staged_material = material()
     asset_store = FakeAssetStore(presentation_bytes(("index me",)))
