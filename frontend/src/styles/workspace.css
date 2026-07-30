@@ -59,7 +59,7 @@
 .inline-notice--success { border-color: #cceee4; background: var(--green-50); color: var(--green-700); }
 .inline-notice--warning { border-color: #ffe0b8; background: #fff8ed; color: #995416; }
 .inline-notice--danger { border-color: #ffd1d7; background: var(--red-50); color: var(--red-600); }
-.profile-grid, .session-detail-grid, .preflight-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.session-detail-grid, .preflight-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
 .identity-list, .summary-grid { display: grid; gap: 13px; margin: 0; }
 .identity-list > div, .summary-grid > div { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding-bottom: 12px; border-bottom: 1px solid var(--ink-100); }
 .identity-list > div:last-child, .summary-grid > div:last-child { padding-bottom: 0; border: 0; }
@@ -115,11 +115,43 @@
 .profile-preview .user-avatar { flex: 0 0 auto; }
 .profile-preview p { margin: 3px 0; color: var(--ink-600); font-size: .75rem; }
 .profile-preview small { color: var(--blue-600); }
-.profile-summary-card { display: flex; align-items: center; gap: 16px; min-height: 92px; }
-.profile-summary-card > div { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
-.profile-summary-card strong { color: var(--ink-950); font-size: 1rem; }
-.profile-summary-card span { overflow: hidden; color: var(--ink-600); font-size: .76rem; text-overflow: ellipsis; white-space: nowrap; }
-.profile-summary-card small { color: var(--ink-500); font-size: .67rem; }
+/*
+ * 계정 프로필 카드(ProfileIdentityCard).
+ *
+ * 예전에는 "계정 정보"·"기본 프로필" 두 패널로 갈라져 이메일이 두 번 나왔다. 3열
+ * (아바타 │ 이름·가입유형·이메일 │ 수정 버튼)로 합쳐 한 줄에서 계정을 다 확인하게 한다.
+ * 카드 표면(테두리·배경)은 design-system.css의 공통 카드 규칙에서 함께 받는다.
+ */
+.profile-identity { display: grid; min-width: 0; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 20px; padding: 18px 22px; border: 1px solid var(--ink-100); background: #fff; }
+.profile-identity__info { display: flex; min-width: 0; flex-direction: column; gap: 7px; }
+.profile-identity__name { margin: 0; color: var(--ink-950); font-size: 1.28rem; letter-spacing: -.03em; line-height: 1.25; overflow-wrap: anywhere; }
+.profile-identity__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 0; }
+.profile-identity__meta > div { display: flex; min-width: 0; align-items: center; }
+.profile-identity__meta dd { margin: 0; }
+/* 긴 이메일은 말줄임하지 않고 줄바꿈한다 — 잘라 버리면 확인해야 할 계정을 읽을 수 없다. */
+.profile-identity__email { min-width: 0; color: var(--ink-600); font-size: .82rem; overflow-wrap: anywhere; }
+.profile-identity__action { justify-self: end; white-space: nowrap; }
+
+/*
+ * 학생 학습 요약. 예전에는 MetricCard 4개(각 min-height 140px)라 숫자 네 개가 화면을 크게
+ * 차지했다. 숫자 크기는 유지하고 높이만 줄인 한 줄 통계로 바꿨다.
+ */
+.profile-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; margin: 0; background: var(--ink-100); }
+.profile-stats > div { display: flex; min-width: 0; flex-direction: column; gap: 4px; padding: 12px 14px; background: #fff; }
+.profile-stats dt { color: var(--ink-500); font-size: .72rem; }
+.profile-stats dd { margin: 0; color: var(--ink-950); font-size: 1.5rem; font-weight: 500; letter-spacing: -.02em; }
+
+/*
+ * 이 페이지에서만 밀도를 높인다. 선택자가 클래스 2개라 design-system.css의 기본값(클래스 1개)을
+ * 파일 순서와 무관하게 이긴다 — 다른 워크스페이스 화면의 여백 리듬은 건드리지 않는다.
+ */
+.workspace-page.profile-page { gap: 16px; }
+.profile-page .workspace-page-header { min-height: 72px; padding: 4px 2px 6px; }
+/* 제목 위 장식 막대. 헤더가 낮아졌으니 함께 올려 제목과 겹치지 않게 한다. */
+.profile-page .workspace-page-header::before { top: 6px; }
+.profile-page .workspace-page-header h1 { margin: 0; font-size: clamp(1.75rem, 2.6vw, 2.2rem); }
+.profile-page .workspace-panel { padding: 20px 22px; }
+.profile-page .workspace-panel__header { margin-bottom: 15px; padding-bottom: 12px; }
 .user-avatar--large { width: 76px; height: 76px; flex: 0 0 76px; border-radius: 22px; font-size: 1.45rem; }
 .profile-modal-backdrop { position: fixed; z-index: 1000; inset: 0; display: grid; overflow-y: auto; place-items: center; padding: 24px; background: rgba(12,18,34,.56); backdrop-filter: blur(6px); }
 .profile-modal { width: min(100%, 520px); padding: 28px; border: 1px solid rgba(255,255,255,.8); border-radius: 22px; background: #fff; box-shadow: 0 24px 80px rgba(15,24,48,.28); }
@@ -402,7 +434,8 @@ th { color: var(--ink-500); font-size: .67rem; }
   .workspace-sidebar nav { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); }
   .workspace-sidebar--lesson .lesson-navigation__sections { display: flex; max-height: none; flex-direction: column; }
   .workspace-sidebar__tip { display: none; }
-  .profile-grid, .session-detail-grid, .preflight-grid { grid-template-columns: 1fr; }
+  .session-detail-grid, .preflight-grid { grid-template-columns: 1fr; }
+  .profile-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dashboard-curriculum-card__content { align-items: stretch; }
   .next-action-card, .session-summary, .replay-summary { grid-template-columns: auto minmax(0,1fr); }
   .next-action-card > .button, .session-summary > .card-actions, .replay-summary > .button { grid-column: 1 / -1; }
@@ -412,6 +445,12 @@ th { color: var(--ink-500); font-size: .67rem; }
   .workspace-page-header__action, .workspace-page-header__action > .button { width: 100%; }
   .workspace-sidebar nav { grid-template-columns: 1fr; }
   .metric-grid, .form-grid, .summary-grid, .notice-grid, .check-grid, .curriculum-assets-grid { grid-template-columns: 1fr; }
+  /*
+   * 좁은 화면에서는 아바타와 정보만 나란히 두고 수정 버튼을 아래 전체폭으로 내린다. 3열을
+   * 유지하면 이름·이메일이 버튼에 밀려 한 글자씩 끊기고, 버튼도 눌리기 어려울 만큼 좁아진다.
+   */
+  .profile-identity { grid-template-columns: auto minmax(0, 1fr); gap: 14px 16px; padding: 16px; }
+  .profile-identity__action { grid-column: 1 / -1; justify-self: stretch; }
   .curriculum-image-field { grid-template-columns: 1fr; }
   .curriculum-image-field > p, .curriculum-image-field > small { grid-column: 1; margin-top: 0; }
   .workspace-panel { padding: 19px; }

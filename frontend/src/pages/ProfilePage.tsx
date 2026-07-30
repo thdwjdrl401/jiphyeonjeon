@@ -4,12 +4,12 @@ import { useNavigate } from 'react-router-dom'
 import { publicPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
 import { getStudentDashboardSummary } from '@/features/curriculum/myCurriculumsService'
-import ProfileAvatar from '@/features/profile/ProfileAvatar'
 import ProfileEditModal from '@/features/profile/ProfileEditModal'
+import ProfileIdentityCard from '@/features/profile/ProfileIdentityCard'
 import { profileService } from '@/features/profile/profileService'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import { useToast } from '@/shared/ui/Toast'
-import { InlineNotice, MetricCard, PageHeader, Panel, StatusBadge } from '@/shared/ui/WorkspaceUi'
+import { InlineNotice, PageHeader, Panel } from '@/shared/ui/WorkspaceUi'
 
 export default function ProfilePage() {
   usePageTitle('내 프로필')
@@ -93,27 +93,18 @@ export default function ProfilePage() {
   if (!user) return null
 
   return (
-    <div className="workspace-page">
-      <PageHeader title="내 프로필" description="계정 정보와 서비스에 표시되는 프로필을 확인하세요." />
+    <div className="workspace-page profile-page">
+      {/* 설명 문구를 두지 않는다 — 바로 아래 프로필 카드가 그 내용을 그대로 보여 준다. */}
+      <PageHeader title="내 프로필" />
 
-      <div className="profile-grid">
-        <Panel title="계정 정보" description="이메일과 가입 유형은 가입 계정의 기본 정보입니다.">
-          <dl className="identity-list"><div><dt>이메일</dt><dd>{user.email}</dd></div><div><dt>가입 유형</dt><dd><StatusBadge tone={user.role === 'INSTRUCTOR' ? 'warning' : 'success'}>{user.role === 'INSTRUCTOR' ? '강사' : '학생'}</StatusBadge></dd></div></dl>
-        </Panel>
-        <Panel
-          title="기본 프로필"
-          description="서비스 전반에서 표시되는 프로필입니다."
-          action={<button ref={editButtonRef} className="button button--primary button--small" type="button" onClick={() => setIsEditOpen(true)}>프로필 수정</button>}
-        >
-          <div className="profile-summary-card">
-            <ProfileAvatar displayName={user.displayName} imageUrl={user.profileImageUrl} className="user-avatar--large" />
-            <div><strong>{user.displayName}</strong><span>{user.email}</span><small>닉네임과 프로필 이미지를 변경할 수 있습니다.</small></div>
-          </div>
-        </Panel>
-      </div>
+      <ProfileIdentityCard
+        user={user}
+        editButtonRef={editButtonRef}
+        onEdit={() => setIsEditOpen(true)}
+      />
 
       {user.role === 'INSTRUCTOR' ? (
-        <Panel title="강사 공개 프로필" description="커리큘럼 상세에서 수강생에게 공개되는 정보입니다.">
+        <Panel title="강사 공개 프로필" description="커리큘럼 상세에서 수강생에게 공개됩니다.">
           {instructorProfileQuery.isPending ? (
             <p>강사 프로필을 불러오는 중입니다.</p>
           ) : instructorProfileQuery.isError ? (
@@ -129,11 +120,20 @@ export default function ProfilePage() {
       ) : (
         <Panel title="나의 학습 요약" description="상세 진도는 내 커리큘럼에서 확인할 수 있어요.">
           {studentSummaryQuery.isError && <InlineNotice tone="danger">학습 요약을 불러오지 못했습니다.</InlineNotice>}
-          <div className="metric-grid"><MetricCard label="수강 중인 커리큘럼" value={studentSummaryQuery.data?.inProgressCurriculumCount ?? '--'} /><MetricCard label="완료한 커리큘럼" value={studentSummaryQuery.data?.completedCurriculumCount ?? '--'} /><MetricCard label="평균 진행률" value={studentSummaryQuery.data ? `${studentSummaryQuery.data.averageProgress}%` : '--'} /><MetricCard label="완료한 강의" value={studentSummaryQuery.data?.completedLessonCount ?? '--'} /></div>
+          {/*
+            예전에는 MetricCard 4개(각 min-height 140px)를 썼다. 숫자 4개를 보여 주는 데 화면
+            절반을 쓰고 있어서, 같은 정보를 한 줄짜리 통계 행으로 바꿨다.
+          */}
+          <dl className="profile-stats">
+            <div><dt>수강 중인 커리큘럼</dt><dd>{studentSummaryQuery.data?.inProgressCurriculumCount ?? '--'}</dd></div>
+            <div><dt>완료한 커리큘럼</dt><dd>{studentSummaryQuery.data?.completedCurriculumCount ?? '--'}</dd></div>
+            <div><dt>평균 진행률</dt><dd>{studentSummaryQuery.data ? `${studentSummaryQuery.data.averageProgress}%` : '--'}</dd></div>
+            <div><dt>완료한 강의</dt><dd>{studentSummaryQuery.data?.completedLessonCount ?? '--'}</dd></div>
+          </dl>
         </Panel>
       )}
 
-      <Panel title="계정 보안" description="비밀번호를 변경하거나 계정 탈퇴를 진행할 수 있습니다.">
+      <Panel title="계정 보안" description="비밀번호 변경과 회원 탈퇴.">
         <form className="workspace-form" onSubmit={changePassword}>
           <div className="form-grid">
             <label><span>현재 비밀번호</span><input type="password" value={currentPassword} autoComplete="current-password" onChange={(event) => setCurrentPassword(event.target.value)} /></label>

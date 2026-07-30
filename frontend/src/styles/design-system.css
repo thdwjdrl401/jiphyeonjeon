@@ -1125,7 +1125,8 @@ body {
 .structure-section,
 .workspace-tabs,
 .precheck-list button,
-.speaker-check {
+.speaker-check,
+.profile-identity {
   border-color: var(--border-medium);
   border-radius: 0;
   background: var(--paper-light);
@@ -1138,6 +1139,9 @@ body {
 .workspace-panel__header p { font-size: .8rem; }
 .highlight-panel { border-color: var(--ink-950); background: var(--ink-50); }
 .metric-grid { gap: 0; border-top: 1px solid var(--border-medium); border-left: 1px solid var(--border-medium); }
+/* 통계 행의 칸 사이 선과 배경을 디자인 시스템 색으로 맞춘다(구분선은 1px gap + 배경색으로 낸다). */
+.profile-stats { background: var(--border-medium); }
+.profile-stats > div { background: var(--paper-light); }
 .metric-card { min-height: 140px; border-top: 0; border-left: 0; padding: 24px; }
 .metric-card::before { display: none; }
 .metric-card > span { font-size: .75rem; }
