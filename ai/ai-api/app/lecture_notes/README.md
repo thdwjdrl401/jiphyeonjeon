@@ -4,8 +4,9 @@
 축적형 강의 노트 MVP 코어다.
 
 현재 단계는 `CaptionDelta|CaptionCompleted`를 모델 입력용 `LectureNoteWindow`로 접고, 구조화 모델
-결과를 topic 정본과 제한된 Markdown으로 반영하는 순수 로직을 제공한다. Redis consumer, GMS model,
-snapshot 저장, application lifecycle에는 아직 연결하지 않았다.
+결과를 topic 정본과 제한된 Markdown으로 반영한다. application service는 세션별 호출을 직렬화하고
+대기 window를 한 batch로 합친 뒤 snapshot port로 내보낸다. Redis consumer, 실제 GMS model,
+snapshot Redis 저장, application lifecycle에는 아직 연결하지 않았다.
 
 ## 현재 보장
 
@@ -17,10 +18,11 @@ snapshot 저장, application lifecycle에는 아직 연결하지 않았다.
 - 다음 window에는 직전 window의 마지막 두 문장만 이전 문맥으로 전달한다.
 - `CONTINUE|START_NEW` 결과를 topic 정본에 반영하고 완전히 같은 key point만 제거한다.
 - Markdown 구조는 애플리케이션이 만들고 raw HTML·image·외부 link를 무력화한다.
+- 같은 세션의 모델 호출은 하나만 실행하고 호출 중 도착한 window는 다음 batch 하나로 합친다.
+- caption handler는 모델을 기다리지 않고 in-memory enqueue까지만 끝낸다.
 
 ## 아직 하지 않는 것
 
-- 세션별 모델 호출 직렬화와 pending window 병합
 - Redis snapshot·결과 Stream adapter
 - GMS `LectureNoteModel`
 - ai-api consumer·lifecycle wiring
