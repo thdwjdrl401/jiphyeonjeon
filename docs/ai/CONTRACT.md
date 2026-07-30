@@ -33,7 +33,7 @@ flowchart LR
     LiveKit <-->|Worker WSS / Room RTC| Agent[GPU realtime-agent]
     Agent -->|caption XADD| Redis[(EC2 application Redis)]
     Redis --> Api
-    Api -->|lecture note append XADD| Redis
+    Api -->|lecture note event XADD| Redis
     Redis -->|caption consumer 구현| Spring
     Worker -->|HTTP reverse tunnel| BGE[GPU bge-runtime]
     Api -->|HTTP reverse tunnel| BGE
@@ -194,14 +194,15 @@ ai-api consumer는 구현됐고 Spring caption consumer도 구현됐다(별도 g
 | Redis | caption과 같은 application Redis (`AI_API_REDIS_URL`) |
 | Stream key | `ai:lecture-notes:mvp` |
 | write | `XADD MAXLEN ~ AI_API_LECTURE_NOTE_STREAM_MAXLEN`(기본 10,000) |
-| event | `lecture.note.chunk.appended`, `lecture.note.capture.completed` |
+| event | `lecture.note.chunk.appended`, `lecture.note.capture.completed`, `lecture.note.refined.snapshot` |
 | 순서 | 세션별 `chunkSequence`, 1부터 실제 추가 조각마다 증가 |
 | 멱등 | `eventId` |
 | Spring group | `spring-lecture-notes-live-v1` |
 
-AI producer는 구현됐고 Spring consumer·DB·REST·WebSocket은 미구현이다. 전체 snapshot을 보내지 않으므로
-Spring은 정상 chunk를 transaction으로 누적한 뒤 ACK해야 하며 재접속용 전체 노트는 Backend read model이
-제공한다. payload 제한, Markdown 결합법, gap·terminal 처리는
+AI producer와 단일 process 재시작 복구는 구현됐고 Spring consumer·DB·REST·WebSocket은 미구현이다.
+라이브 중에는 append 조각만 보내고 capture 완료 뒤 정제한 전체 snapshot을 별도 event로 한 번 보낸다.
+Spring은 정상 chunk를 transaction으로 누적한 뒤 ACK하고, refined snapshot은 live draft에 append하지 않고
+별도 read model 전체 교체로 반영해야 한다. payload 제한, Markdown 결합법, gap·terminal·refined 처리는
 [공유 계약 §3-4a](../CONTRACT.md#3-4a-ai-api--application-redis-실시간-강의-노트-stream--ai-producer-구현-spring-consumer-미구현)가 정본이다.
 
 ### 4.7 realtime-agent→Spring lifecycle
@@ -356,7 +357,7 @@ Spring realtime-agent health proxy client는 아직 없다. 따라서 `/internal
 | ai-worker/ai-api→BGE | runtime/client/reverse tunnel/운영 container proxy 배선 구현 |
 | Spring→LiveKit→realtime-agent dispatch | 양쪽 Phase 4a 구현, STT readiness gate 우회 중 |
 | realtime-agent→Redis caption | producer·ai-api consumer·Spring consumer 구현(Spring: 별도 group·eventId 멱등·core.live_caption 영속·WS 전달, ADR-0043). prod 캡션-Redis 토폴로지는 인프라 오너 후속 |
-| ai-api→Redis 실시간 강의 노트 | append event producer 구현. 공유 payload 계약 §3-4a 확정, Spring consumer·DB·REST·WebSocket 및 producer 재시작 복원 미구현 |
+| ai-api→Redis 실시간 강의 노트 | append·capture 완료·refined snapshot producer와 단일 process 재시작 복구 구현. 공유 payload 계약 §3-4a 확정, Spring consumer·DB·REST·WebSocket 미구현 |
 | realtime-agent→Spring lifecycle callback | AI v1 구현·기본 off, Spring receiver 미구현 |
 | realtime-agent service health `:18081` | endpoint·schema·tunnel 구현, Spring client 미구현 |
 | nginx `:18080/internal/bge/*` | ai-api·ai-worker 운영 container caller 배선 구현 |

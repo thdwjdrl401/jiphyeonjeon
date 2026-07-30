@@ -15,7 +15,7 @@ GMS가 생성한 RAG 답변을 SSE로 전달하며 실시간 자막에서 축적
 | Spring | `POST /internal/v1/rag/answers:stream` | HTTP + SSE, HMAC | RAG 질문과 답변 스트림 |
 | 운영 환경 | `GET /healthz`, `GET /readyz` | HTTP | 프로세스 생존·lifespan 준비 확인 |
 | realtime-agent → Redis → ai-api | `ai:captions:live` | Redis Stream consumer group | 실시간 자막 입력·처리 후 ACK |
-| ai-api → Redis | `ai:lecture-notes:mvp` | Redis Stream | 공유 계약의 강의 노트 추가 조각과 수집 완료 event |
+| ai-api → Redis | `ai:lecture-notes:mvp` | Redis Stream | 강의 노트 추가 조각·수집 완료·정제 snapshot event |
 | ai-api | bge-runtime `POST /internal/v1/embeddings` | HTTP, Bearer | 질문 embedding 생성 |
 | ai-api | PostgreSQL `ai` schema | SQL/pgvector | 활성 강의 자료 검색 |
 | ai-api | GMS OpenAI-compatible API | HTTPS | 근거 기반 답변 생성 |

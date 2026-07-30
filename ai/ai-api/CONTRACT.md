@@ -94,7 +94,8 @@ ai-api는 realtime-agent의 `caption-stream-entry.schema.json`과 fixture를 직
 - terminal: `caption.stream.completed` + 같은 scope + `lastSequence/reason=ROOM_DELETED/occurredAt`
 - `sequence`와 `streamElapsedMs`는 session 전체가 아니라 `(sessionId, sttSessionId)` attempt 안에서 증가한다.
 - 새 `sttSessionId`는 새 attempt이므로 이전 자막 문맥을 교체하고 `sequence=1`을 허용한다.
-- ai-api consumer group은 `ai-rag-live-v1`로 Spring consumer group과 분리한다. handler 반영 뒤에만 ACK한다.
+- ai-api는 RAG용 `ai-rag-live-v1`과 강의 노트용 `ai-live-notes-mvp-v1`을 사용한다. 두 group은
+  Spring consumer group과 분리하며 handler의 durable 반영 뒤에만 ACK한다.
 - Redis endpoint는 `AI_API_REDIS_URL`로 주입하며 기본 개발값은 `redis://127.0.0.1:6379/0`이다.
   LiveKit 내부 Redis 포트 `6380`으로 고정하지 않는다.
 
@@ -104,23 +105,27 @@ payload나 시간축 규칙을 바꾸면 Python·Java 구현과 양쪽 계약 �
 ## 5-1. 실시간 강의 노트 Redis 출력 계약
 
 Java와 공유하는 wire 정본은 [`docs/CONTRACT.md` §3-4a](../../docs/CONTRACT.md#3-4a-ai-api--application-redis-실시간-강의-노트-stream--ai-producer-구현-spring-consumer-미구현)다.
-ai-api는 application Redis의 `ai:lecture-notes:mvp`에 다음 두 event만 발행한다.
+ai-api는 application Redis의 `ai:lecture-notes:mvp`에 다음 세 event를 발행한다.
 
 - `lecture.note.chunk.appended`: 새 topic 또는 새 key point와 append 가능한 `markdownFragment`
 - `lecture.note.capture.completed`: 자막 수집 종료와 마지막 chunk/STT sequence
+- `lecture.note.refined.snapshot`: 종료 후 정제한 전체 `topics`와 `markdownSnapshot`
 
 Python 구현은 `extra="forbid"` Pydantic event model로 필수 필드·literal·UUID·identifier·숫자 문자열·길이와
-timezone offset을 검증한다. `keyPoints`는 Redis에서 compact JSON 배열 문자열로 직렬화하고 나머지 값은
-문자열로 싣는다. Redis publisher는 `XADD MAXLEN ~ AI_API_LECTURE_NOTE_STREAM_MAXLEN`(기본 10,000)만
-수행하며 이전 전체 노트를 String이나 Stream에 다시 저장하지 않는다.
+timezone offset을 검증한다. `keyPoints`와 refined `topics`는 Redis에서 compact JSON 문자열로 직렬화하고
+나머지 값은 문자열로 싣는다. Redis publisher는
+`XADD MAXLEN ~ AI_API_LECTURE_NOTE_STREAM_MAXLEN`(기본 10,000)을 사용한다. 라이브 중에는 이전 전체 노트를
+반복 발행하지 않고, capture 완료 뒤에만 별도 refined snapshot 전체본을 한 번 발행한다.
 
 같은 세션의 모델 호출과 event 발행은 process 안에서 직렬화한다. 실제 추가 요점이 없는 모델 결과는
 `chunkSequence`를 올리거나 빈 event를 발행하지 않는다. 첫 조각의 유효 `topicAction`은 `START_NEW`이며,
 completion은 마지막 남은 window의 chunk 발행이 성공한 뒤에만 발행한다.
 
-현재 구현에는 Redis publish retry, process 재시작 복원, multi-replica session owner가 없다. 따라서 Spring
-consumer는 공유 wire 계약을 기준으로 구현하되, 운영 활성화는 공유 계약 §3-4a의 연속성 선행 조건을
-충족한 뒤에 한다.
+window·note·미처리 batch·outbox는 Redis session checkpoint에 저장하고 단일 ai-api 프로세스 재시작 때
+복원한다. 결과 `XADD`와 다음 checkpoint는 한 Redis transaction으로 확정한다. Redis 자체 장애 내구성,
+same-process bounded retry, multi-replica session owner는 아직 보장하지 않는다. Spring consumer는
+`lecture.note.chunk.appended`를 누적하고 capture 완료를 확인한 뒤, refined snapshot을 별도 read model
+전체 교체로 반영해야 한다. 세부 순서·멱등·ACK 규칙은 공유 계약 §3-4a를 따른다.
 
 ## 6. 자료 검색과 BGE 경계
 
