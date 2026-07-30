@@ -154,6 +154,7 @@ services:
       # extra_hosts로 도메인을 호스트에 직결시켜야 7443에 닿는다(아래 참조).
       LIVEKIT_URL: wss://jiphyeonjeon.thdwjdrl.com:7443
       LIVEKIT_API_URL: https://jiphyeonjeon.thdwjdrl.com:7443
+      LIVEKIT_AGENT_NAME: liveclass-realtime-stt-prod
       # AI 배치 잡 발행(ADR-0036). outbox 릴레이가 rabbitmq로 publish. 스위치 material.embedding.enabled로 켠다.
       SPRING_RABBITMQ_HOST: rabbitmq
       SPRING_RABBITMQ_PORT: "5672"
