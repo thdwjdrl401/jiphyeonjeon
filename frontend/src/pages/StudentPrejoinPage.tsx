@@ -1,10 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { studentPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
 import { isLiveEntryOpen } from '@/features/live-session/liveEntry'
 import { getLiveSession } from '@/features/live-session/liveSessionService'
+import {
+  playSpeakerTest,
+  SPEAKER_TEST_CHANNEL_LABEL,
+  SPEAKER_TEST_STEPS,
+  type SpeakerTestChannel,
+} from '@/features/live-session/speakerTest'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
 import { InlineNotice, PageHeader, Panel, StatusBadge } from '@/shared/ui/WorkspaceUi'
@@ -13,29 +19,8 @@ import { InlineNotice, PageHeader, Panel, StatusBadge } from '@/shared/ui/Worksp
 const AUTO_CHECK_ORDER = ['autoplay', 'network'] as const
 const AUTO_CHECK_STEP_MS = 350
 const NICKNAME_SAVE_DEBOUNCE_MS = 500
-const TEST_TONE_MS = 950
 
 type SpeakerStage = 'idle' | 'testing' | 'confirm'
-
-// 스피커 테스트용 짧은 음을 Web Audio로 직접 생성해 재생한다(외부 오디오 자산 불필요).
-function playTestTone() {
-  const AudioCtx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
-  if (!AudioCtx) return
-  const ctx = new AudioCtx()
-  const oscillator = ctx.createOscillator()
-  const gain = ctx.createGain()
-  const now = ctx.currentTime
-  oscillator.type = 'sine'
-  oscillator.frequency.value = 523.25
-  gain.gain.setValueAtTime(0.0001, now)
-  gain.gain.exponentialRampToValueAtTime(0.18, now + 0.04)
-  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.9)
-  oscillator.connect(gain)
-  gain.connect(ctx.destination)
-  oscillator.start(now)
-  oscillator.stop(now + 0.95)
-  oscillator.onended = () => { void ctx.close() }
-}
 
 export default function StudentPrejoinPage() {
   const { sessionId = '' } = useParams()
@@ -44,6 +29,8 @@ export default function StudentPrejoinPage() {
   const { user, updateDisplayName } = useAuth()
   const [checks, setChecks] = useState({ speaker: false, autoplay: false, network: false })
   const [speakerStage, setSpeakerStage] = useState<SpeakerStage>('idle')
+  const [testChannel, setTestChannel] = useState<SpeakerTestChannel | null>(null)
+  const stopSpeakerTestRef = useRef<(() => void) | null>(null)
   const [nickname, setNickname] = useState(user?.displayName ?? '')
   const ready = Object.values(checks).every(Boolean)
   const autoDone = checks.autoplay && checks.network
@@ -59,6 +46,10 @@ export default function StudentPrejoinPage() {
 
   useEffect(() => setNickname(user?.displayName ?? ''), [user?.displayName])
 
+  // 재생 중에 화면을 떠나면 소리가 남는다 — 입장 버튼을 눌러 강의실로 넘어가는 게 정상 흐름이라
+  // 실제로 자주 일어난다.
+  useEffect(() => () => stopSpeakerTestRef.current?.(), [])
+
   // 닉네임을 수정하면 디바운스 후 선택된 인증 서비스 구현체에 즉시 반영한다.
   useEffect(() => {
     const trimmed = nickname.trim()
@@ -70,11 +61,19 @@ export default function StudentPrejoinPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nickname])
 
-  // 스피커 테스트: 사용자가 버튼을 눌러 테스트 음을 재생한 뒤 직접 결과를 확인한다.
+  // 스피커 테스트: 좌 → 우 → 양쪽 3초 테스트음을 듣고 사용자가 직접 결과를 확인한다.
+  // 재생 중인 채널을 화면에도 같이 표시해야 "지금 왼쪽인데 안 들린다"를 학생이 알 수 있다.
   const runSpeakerTest = () => {
+    stopSpeakerTestRef.current?.()   // 다시 듣기 — 겹쳐 울리면 좌우 판단이 불가능해진다.
     setSpeakerStage('testing')
-    playTestTone()
-    window.setTimeout(() => setSpeakerStage('confirm'), TEST_TONE_MS)
+    setTestChannel(null)
+    stopSpeakerTestRef.current = playSpeakerTest({
+      onStep: setTestChannel,
+      onEnd: () => {
+        setTestChannel(null)
+        setSpeakerStage('confirm')
+      },
+    })
   }
   const confirmSpeaker = () => setChecks((current) => ({ ...current, speaker: true }))
 
@@ -92,19 +91,38 @@ export default function StudentPrejoinPage() {
         <button className={checks.network ? 'is-pass' : ''} type="button" disabled><span>{checks.network ? '✓' : '2'}</span><div><strong>네트워크 상태</strong><small>현재 연결은 라이브 수신에 안정적입니다.</small></div><b>{checks.network ? '양호' : '확인 중'}</b></button>
       </div>
     </Panel>
-    <Panel title="직접 확인" description="테스트 음성을 직접 듣고 확인해 주세요. 이 항목만 완료하면 입장할 수 있어요." action={<StatusBadge tone={checks.speaker ? 'success' : 'warning'}>{checks.speaker ? '완료' : '확인 필요'}</StatusBadge>}>
+    <Panel title="직접 확인" description="테스트음을 직접 듣고 확인해 주세요. 이 항목만 완료하면 입장할 수 있어요." action={<StatusBadge tone={checks.speaker ? 'success' : 'warning'}>{checks.speaker ? '완료' : '확인 필요'}</StatusBadge>}>
       <div className={`speaker-check${checks.speaker ? ' is-pass' : ''}`}>
         <div className="speaker-check__row">
           <span>{checks.speaker ? '✓' : '♪'}</span>
-          <div><strong>스피커 테스트</strong><small>테스트 음성을 재생하고 소리가 잘 들리는지 확인하세요.</small></div>
+          <div><strong>스피커 테스트</strong><small>왼쪽 → 오른쪽 → 양쪽 순서로 약 3초간 소리가 납니다. 좌우가 모두 들리는지 확인하세요.</small></div>
           <b>{checks.speaker ? '완료' : speakerStage === 'testing' ? '재생 중' : '확인 필요'}</b>
         </div>
+        {!checks.speaker && (
+          // 소리와 같은 순서로 켜지는 표시. 지금 어느 채널이 울리는지 눈으로 확인할 수 있어야
+          // "왼쪽에서 안 들렸다"처럼 학생이 스스로 원인을 짚을 수 있다.
+          <ol className="speaker-channels" aria-label="테스트음 재생 위치">
+            {SPEAKER_TEST_STEPS.map((step) => (
+              <li
+                key={step.channel}
+                className={testChannel === step.channel ? 'is-active' : undefined}
+                aria-current={testChannel === step.channel ? 'step' : undefined}
+              >
+                {SPEAKER_TEST_CHANNEL_LABEL[step.channel]}
+              </li>
+            ))}
+          </ol>
+        )}
         {!checks.speaker && speakerStage === 'idle' && <button className="button button--soft button--small" type="button" onClick={runSpeakerTest}>▶ 테스트 시작</button>}
-        {!checks.speaker && speakerStage === 'testing' && <button className="button button--soft button--small" type="button" disabled>테스트 음성 재생 중…</button>}
+        {!checks.speaker && speakerStage === 'testing' && (
+          <button className="button button--soft button--small" type="button" disabled>
+            {testChannel ? `${SPEAKER_TEST_CHANNEL_LABEL[testChannel]} 재생 중…` : '테스트 음성 재생 중…'}
+          </button>
+        )}
         {!checks.speaker && speakerStage === 'confirm' && (
           <div className="speaker-confirm" role="group" aria-label="스피커 테스트 결과 확인">
-            <p>테스트 음성이 잘 들렸나요?</p>
-            <div><button className="button button--ghost button--small" type="button" onClick={runSpeakerTest}>다시 듣기</button><button className="button button--primary button--small" type="button" onClick={confirmSpeaker}>네, 잘 들려요</button></div>
+            <p>왼쪽과 오른쪽에서 모두 잘 들렸나요?</p>
+            <div><button className="button button--ghost button--small" type="button" onClick={runSpeakerTest}>다시 듣기</button><button className="button button--primary button--small" type="button" onClick={confirmSpeaker}>네, 모두 들려요</button></div>
           </div>
         )}
       </div>

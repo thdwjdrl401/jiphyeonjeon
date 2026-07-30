@@ -30,6 +30,25 @@ function renderAt(path: string) {
   return render(<App />)
 }
 
+/**
+ * 강의 목차 사이드바의 구조 지문. 두 화면이 "같은 사이드바"인지를 aria-label 하나가 아니라
+ * 실제로 그려진 것 — 머스트헤드·커리큘럼 제목·섹션 구분·강의 순서·현재 강의 강조 — 으로 비교한다.
+ * 사이드바를 새로 만들거나 갈라지면 이 지문이 어긋난다.
+ */
+async function readLessonIndexSignature() {
+  const sidebar = await screen.findByRole('complementary', { name: '커리큘럼 강의 목록' })
+  await within(sidebar).findByRole('link', { name: '라이브로 완성하는 Spring Boot' })
+  return {
+    masthead: sidebar.querySelector('.workspace-sidebar__masthead')?.textContent,
+    curriculum: within(sidebar).getByRole('link', { name: '라이브로 완성하는 Spring Boot' }).textContent,
+    sections: within(sidebar).getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent),
+    lessons: Array.from(sidebar.querySelectorAll('.lesson-navigation__lessons a')).map((lesson) => ({
+      text: lesson.textContent,
+      current: lesson.getAttribute('aria-current'),
+    })),
+  }
+}
+
 describe('전체 페이지 라우트', () => {
   beforeEach(() => {
     resetMockAuth()
@@ -71,6 +90,34 @@ describe('전체 페이지 라우트', () => {
     const navigation = await screen.findByRole('complementary', { name: '커리큘럼 강의 목록' })
     expect(await within(navigation).findByRole('link', { name: '라이브로 완성하는 Spring Boot' })).toBeInTheDocument()
     expect(within(navigation).queryByRole('link', { name: '내 프로필' })).not.toBeInTheDocument()
+  })
+
+  /**
+   * 두 점검 화면은 커리큘럼 상세(강의 선택 시 가는 화면)와 **같은 사이드바 컴포넌트**를 쓴다.
+   * 별도 사이드바를 만들거나 스타일·순서·강조 방식이 갈리면 여기서 잡힌다.
+   * 세션 ses-security-live가 걸린 강의가 les-security라 활성 강의까지 같아야 한다.
+   */
+  it.each([
+    ['강사 최종 점검', '/instructor/live-sessions/ses-security-live/preflight', 'instructor@liveclass.ai'],
+    ['학생 입장 전 점검', '/student/live-sessions/ses-security-live/prejoin', 'student01@example.com'],
+  ])('%s의 사이드바가 커리큘럼 상세의 강의 목차와 구조가 같다', async (_name, path, email) => {
+    await mockAuthService.login({ email, password: 'password1' })
+    const rolePath = email.startsWith('instructor')
+      ? '/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/les-security'
+      : '/student/curriculums/cur-spring-live/sections/sec-security/lessons/les-security'
+
+    const detail = renderAt(rolePath)
+    const expected = await readLessonIndexSignature()
+    detail.unmount()
+
+    const precheck = renderAt(path)
+    expect(await readLessonIndexSignature()).toEqual(expected)
+    precheck.unmount()
+
+    // 목차가 비어 있으면 위 비교가 무의미하게 통과한다 — 실제 내용이 있었음을 못 박는다.
+    expect(expected.masthead).toBe('LESSONINDEX')
+    expect(expected.sections.length).toBeGreaterThan(0)
+    expect(expected.lessons.filter((lesson) => lesson.current === 'page')).toHaveLength(1)
   })
 
   it.each([
@@ -241,8 +288,14 @@ describe('전체 페이지 라우트', () => {
 
     // 자동 점검(자동 재생·네트워크)은 진입 시 자동으로 통과된다.
     // 스피커 테스트는 사용자가 직접 재생하고 결과를 확인해야 한다.
+    // 좌 → 우 → 양쪽 3구간을 안내한다(순서·채널 자체는 speakerTest.test.ts가 고정).
+    const channels = await screen.findByRole('list', { name: '테스트음 재생 위치' })
+    expect(within(channels).getAllByRole('listitem').map((item) => item.textContent))
+      .toEqual(['왼쪽', '오른쪽', '양쪽'])
+
     await user.click(await screen.findByRole('button', { name: /테스트 시작/ }))
-    await user.click(await screen.findByRole('button', { name: '네, 잘 들려요' }, { timeout: 3000 }))
+    // 테스트음이 약 3초라 확인 버튼은 그 뒤에 뜬다 — 기본 대기(1초)로는 모자라다.
+    await user.click(await screen.findByRole('button', { name: '네, 모두 들려요' }, { timeout: 6000 }))
     await user.click(await screen.findByRole('link', { name: '라이브 입장' }, { timeout: 3000 }))
 
     expect(await screen.findByRole('tab', { name: 'AI 질문' })).toBeInTheDocument()

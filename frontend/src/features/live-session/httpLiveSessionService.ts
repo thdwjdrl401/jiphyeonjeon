@@ -173,16 +173,63 @@ function normalizePlayback(data: ApiPlayback, lessonId: string): PlaybackView {
   }
 }
 
-function normalizeLiveSession(data: ApiLiveSessionView): LiveSessionView {
+/**
+ * 세션이 속한 레슨의 커리큘럼 맥락. 세션 응답에는 없다 — live 모듈은 커리큘럼을 참조하지 않으므로
+ * (모듈 경계) 레슨 조회로 채운다. 실패하면 null이고 세션은 맥락 없이 열린다(아래 fetch 주석 참고).
+ */
+interface LessonCurriculumContext {
+  lessonTitle: string
+  curriculumId: string
+  curriculumTitle: string
+  sectionId: string
+}
+
+interface ApiLessonCurriculumContext {
+  sectionId: string
+  curriculumId: string
+  curriculumTitle: string
+  title: string
+}
+
+/**
+ * lessonId로 커리큘럼 맥락을 읽는다. 역할을 가리지 않고 `GET /lessons/{id}` 하나만 쓴다.
+ *
+ * 강사에게도 이 경로가 열린다 — `CatalogService.lessonDetail`은 OWNER_INSTRUCTOR와 ENROLLED를
+ * 모두 통과시키고, 미게시(DRAFT) 레슨을 막는 게이트는 **ENROLLED에만** 걸린다. 소유 강사 판정도
+ * `curriculum.instructorId == viewer`뿐이라 커리큘럼이 DRAFT여도 상관없다
+ * (계약 테스트 `StudentLessonContractTest.owner_instructor_can_open_own_unpublished_lesson`).
+ * 그래서 강사 엔드포인트를 따로 타거나 BE에 필드를 더할 이유가 없다.
+ *
+ * 실패를 삼키는 이유: 이 맥락은 사이드바·제목용 부가 정보다. 마이크 점검과 라이브 입장이라는
+ * 필수 흐름을 제목 조회 하나가 막으면 안 된다. 못 채우면 사이드바가 기본 메뉴로 내려간다.
+ */
+async function fetchLessonCurriculumContext(lessonId: string): Promise<LessonCurriculumContext | null> {
+  try {
+    const { data } = await apiClient.get<ApiLessonCurriculumContext>(`/lessons/${lessonId}`)
+    return {
+      lessonTitle: data.title,
+      curriculumId: data.curriculumId,
+      curriculumTitle: data.curriculumTitle,
+      sectionId: data.sectionId,
+    }
+  } catch {
+    return null
+  }
+}
+
+function normalizeLiveSession(
+  data: ApiLiveSessionView,
+  context: LessonCurriculumContext | null,
+): LiveSessionView {
   const entryWindowMinutes = data.entryWindowMinutes ?? 10
   const scheduledAt = data.scheduledAt ? new Date(data.scheduledAt) : null
   return {
     sessionId: data.sessionId,
     lessonId: data.lessonId,
-    lessonTitle: '',
-    curriculumId: '',
-    curriculumTitle: '',
-    sectionId: '',
+    lessonTitle: context?.lessonTitle ?? '',
+    curriculumId: context?.curriculumId ?? '',
+    curriculumTitle: context?.curriculumTitle ?? '',
+    sectionId: context?.sectionId ?? '',
     status: data.liveSessionStatus as CurriculumLiveSessionStatus,
     scheduledAt: data.scheduledAt,
     entryOpensAt: scheduledAt
@@ -365,7 +412,7 @@ async function toStreamStartError(response: Response) {
 export const httpLiveSessionService = {
   async getLiveSession(sessionId) {
     const { data } = await apiClient.get<ApiLiveSessionView>(`/live-sessions/${sessionId}`)
-    return normalizeLiveSession(data)
+    return normalizeLiveSession(data, await fetchLessonCurriculumContext(data.lessonId))
   },
   async getPlayback(lessonId) {
     const { data } = await apiClient.get<ApiPlayback>(`/lessons/${lessonId}/playback`)
@@ -392,9 +439,13 @@ export const httpLiveSessionService = {
       `/live-sessions/${sessionId}/start-status`,
       operationId ? { params: { operationId } } : undefined,
     )
+    // 여기서 맥락을 빼면 폴링 응답이 캐시의 세션을 덮어써 사이드바가 도중에 기본 메뉴로 떨어진다.
     return {
       ...data,
-      session: normalizeLiveSession(data.session),
+      session: normalizeLiveSession(
+        data.session,
+        await fetchLessonCurriculumContext(data.session.lessonId),
+      ),
     } satisfies LiveStartStatus
   },
   async endLiveSession(sessionId) {
