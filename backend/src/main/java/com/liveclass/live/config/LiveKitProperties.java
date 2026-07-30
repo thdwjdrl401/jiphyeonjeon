@@ -36,6 +36,26 @@ public record LiveKitProperties(
          * explicit AgentDispatch로 지목할 STT agent 이름(CONTRACT §3-3). realtime-agent의
          * {@code STT_AGENT_NAME} 환경변수와 <b>반드시 같은 값</b>이어야 job이 배정된다 — 같은 배포 변수로 관리한다.
          */
-        String agentName
+        String agentName,
+
+        /**
+         * 강사가 <b>끊긴 뒤</b> 방을 얼마나 열어 둘지(초).
+         *
+         * <p>LiveKit 기본값은 20초다. 그 안에 강사가 돌아오지 못하면 방이 닫히고, 방이 닫히면 Egress가
+         * 종료되어 <b>HLS와 녹화가 영구히 끊긴다</b> — 강사가 다시 들어와도 그 방송은 되살아나지 않는다.
+         * 지하철·와이파이 전환처럼 수십 초 끊기는 일이 흔하므로 기본값으로는 강의를 진행할 수 없다.
+         *
+         * <p>길게 두는 대가는 빈 방이 그만큼 남는 것뿐이다(참가자가 없으면 미디어도 흐르지 않는다).
+         * 강의 종료는 명시적 종료 버튼이 처리하므로 이 값이 세션 수명을 늘리지도 않는다.
+         */
+        int roomDepartureTimeoutSeconds,
+
+        /**
+         * 방을 만든 뒤 <b>아무도 들어오지 않을 때</b> 닫기까지의 시간(초). LiveKit 기본값 300초.
+         *
+         * <p>preflight에서 방을 먼저 만들고 강사가 장치를 점검한 뒤 접속하므로, 이 시간이 점검에 걸리는
+         * 시간보다 짧으면 접속 직전에 방이 사라진다.
+         */
+        int roomEmptyTimeoutSeconds
 ) {
 }

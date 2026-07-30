@@ -1,8 +1,10 @@
 package com.liveclass.live.service;
 
 import com.liveclass.live.api.LiveKitServerAccess;
+import com.liveclass.live.config.LiveKitProperties;
 import io.livekit.server.RoomServiceClient;
 import livekit.LivekitModels;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import retrofit2.Response;
 
@@ -16,19 +18,43 @@ import java.util.List;
 public class LiveKitRoomControl implements LiveRoomControl {
 
     private final RoomServiceClient client;
+    private final int emptyTimeoutSeconds;
+    private final int departureTimeoutSeconds;
 
-    public LiveKitRoomControl(LiveKitServerAccess access) {
-        this.client = RoomServiceClient.create(access.apiUrl(), access.apiKey(), access.apiSecret(), false, null);
+    // 생성자가 둘이라 Spring이 쓸 것을 명시한다. 없으면 테스트용 생성자를 고르려다 int 인자를
+    // 채우지 못해 "No default constructor found"로 컨텍스트가 통째로 실패한다.
+    @Autowired
+    public LiveKitRoomControl(LiveKitServerAccess access, LiveKitProperties properties) {
+        this(RoomServiceClient.create(access.apiUrl(), access.apiKey(), access.apiSecret(), false, null),
+                properties.roomEmptyTimeoutSeconds(),
+                properties.roomDepartureTimeoutSeconds());
+    }
+
+    /**
+     * 클라이언트를 직접 받는다. 방 타임아웃 인자가 <b>올바른 자리</b>에 들어가는지 테스트로 고정하기
+     * 위해서다 — `createRoom`은 같은 타입 인자가 여러 개 나열돼 있어(Integer 4개) 위치가 밀려도
+     * 컴파일이 통과하고, 밀리면 강사 끊김 때 방이 20초에 닫히는 것으로만 드러난다.
+     */
+    LiveKitRoomControl(RoomServiceClient client, int emptyTimeoutSeconds, int departureTimeoutSeconds) {
+        this.client = client;
+        this.emptyTimeoutSeconds = emptyTimeoutSeconds;
+        this.departureTimeoutSeconds = departureTimeoutSeconds;
     }
 
     /**
      * LiveKit {@code CreateRoom}은 같은 이름의 방이 이미 있으면 오류 대신 <b>기존 방</b>을 돌려준다.
      * 그래서 별도 존재 확인 없이 호출 한 번으로 멱등하게 준비된다.
+     *
+     * <p><b>타임아웃을 명시한다.</b> 비워 두면 LiveKit 기본값 `departure_timeout=20`이 적용되는데,
+     * 강사가 20초 안에 돌아오지 못하면 방이 닫히고 Egress가 종료되어 HLS·녹화가 영구히 끊긴다.
+     * 인자 순서에 주의: `departureTimeout`은 <b>마지막</b> 파라미터다
+     * ({@code createRoom(name, emptyTimeout, maxParticipants, nodeId, metadata,
+     * minPlayoutDelay, maxPlayoutDelay, syncStreams, departureTimeout)}).
      */
     @Override
     public String ensureRoom(String room) {
-        Response<LivekitModels.Room> response =
-                execute("createRoom", client.createRoom(room, null, null, null, null, null, null, null, null));
+        Response<LivekitModels.Room> response = execute("createRoom", client.createRoom(
+                room, emptyTimeoutSeconds, null, null, null, null, null, null, departureTimeoutSeconds));
         LivekitModels.Room body = response.body();
         if (body == null) {
             throw new LiveRoomControlException("LiveKit createRoom 응답이 비어 있습니다: " + room, null);
