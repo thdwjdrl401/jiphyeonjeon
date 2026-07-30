@@ -26,6 +26,7 @@ class _ContractModel(BaseModel):
 class RagAnswerRequest(_ContractModel):
     requestId: Identifier
     lessonId: UUID
+    curriculumId: UUID
     sessionId: SessionId
     question: Question
     contextTimeMs: int = Field(ge=0)
@@ -101,11 +102,16 @@ AnswerEvent = AnswerDelta | AnswerDone | AnswerInsufficient | AnswerError
 
 
 class RetrievedEvidence(BaseModel):
-    """Prompt-ready excerpt with the scope key its source can prove."""
+    """Prompt-ready excerpt with the scope key its source can prove.
+
+    curriculum_id is the PptxSource scope key (materials are shared curriculum-wide,
+    ADR-0005) and is None for CaptionSource, which stays lesson_id/sessionId-scoped.
+    """
 
     model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=False)
 
     lesson_id: UUID
+    curriculum_id: UUID | None = None
     content: str = Field(min_length=1, max_length=50_000)
     source: AnswerSource
 

@@ -26,6 +26,7 @@ from app.rag import (
 
 TOKEN = "signed-token-placeholder"
 LESSON_ID = UUID("11111111-1111-4111-8111-111111111111")
+CURRICULUM_ID = UUID("44444444-4444-4444-8444-444444444444")
 MATERIAL_ID = UUID("22222222-2222-4222-8222-222222222222")
 SESSION_ID = "33333333-3333-4333-8333-333333333333"
 PATH = "/internal/v1/rag/answers:stream"
@@ -48,6 +49,7 @@ class Retriever:
             evidence=(
                 RetrievedEvidence(
                     lesson_id=request.lessonId,
+                    curriculum_id=request.curriculumId,
                     content="PPTX 근거",
                     source=PptxSource(materialId=MATERIAL_ID, page=4),
                 ),
@@ -87,6 +89,7 @@ def _payload(**overrides: object) -> dict[str, object]:
     payload: dict[str, object] = {
         "requestId": "request-1",
         "lessonId": str(LESSON_ID),
+        "curriculumId": str(CURRICULUM_ID),
         "sessionId": SESSION_ID,
         "question": "방금 설명한 개념은 무엇인가요?",
         "contextTimeMs": 61_500,
@@ -274,9 +277,7 @@ def test_internal_endpoint_accepts_real_hmac_signed_request() -> None:
     HMAC authenticator and the RagAnswerRequest contract, end to end."""
     secret = b"integration-test-shared-secret"
     body = json.dumps(_payload(issuedAtMs=int(time.time() * 1000))).encode("utf-8")
-    signature = base64.b64encode(hmac.new(secret, body, hashlib.sha256).digest()).decode(
-        "ascii"
-    )
+    signature = base64.b64encode(hmac.new(secret, body, hashlib.sha256).digest()).decode("ascii")
     app = create_app(
         Settings(),
         rag_service=RagAnswerService(Retriever(), Model()),

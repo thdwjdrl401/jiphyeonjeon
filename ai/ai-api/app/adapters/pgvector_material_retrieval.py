@@ -20,6 +20,7 @@ WITH scoped AS (
     dc.id AS chunk_id,
     mv.id AS material_version_id,
     mv.lesson_id,
+    mv.curriculum_id,
     mv.material_id,
     mv.material_version,
     dc.page,
@@ -30,7 +31,7 @@ WITH scoped AS (
   FROM ai.material_version mv
   JOIN ai.document_chunk dc ON dc.material_version_id = mv.id
   JOIN ai.chunk_embedding ce ON ce.chunk_id = dc.id
-  WHERE mv.lesson_id = CAST(:lesson_id AS uuid)
+  WHERE mv.curriculum_id = CAST(:curriculum_id AS uuid)
     AND mv.state = 'ACTIVE'
 ),
 scored AS (
@@ -38,6 +39,7 @@ scored AS (
     chunk_id,
     material_version_id,
     lesson_id,
+    curriculum_id,
     material_id,
     material_version,
     page,
@@ -67,6 +69,7 @@ SELECT
   chunk_id,
   material_version_id,
   lesson_id,
+  curriculum_id,
   material_id,
   material_version,
   page,
@@ -93,7 +96,7 @@ LIMIT :top_k
 
 
 class PgvectorActiveMaterialRepository:
-    """Search active material versions in exactly one UUID lesson scope."""
+    """Search active material versions across one curriculum's shared scope (ADR-0005)."""
 
     def __init__(self, engine: AsyncEngine, *, runtime_role: str = "ai_app") -> None:
         if not _DATABASE_ROLE.fullmatch(runtime_role):
@@ -104,13 +107,13 @@ class PgvectorActiveMaterialRepository:
     async def search_active(
         self,
         *,
-        lesson_id: UUID,
+        curriculum_id: UUID,
         query_text: str,
         query_embedding: Sequence[float],
         top_k: int,
     ) -> tuple[MaterialChunkHit, ...]:
-        if not isinstance(lesson_id, UUID):
-            raise TypeError("lesson_id must be a UUID")
+        if not isinstance(curriculum_id, UUID):
+            raise TypeError("curriculum_id must be a UUID")
         normalized_query = query_text.strip()
         if not normalized_query:
             raise ValueError("query_text must contain non-whitespace text")
@@ -118,7 +121,7 @@ class PgvectorActiveMaterialRepository:
             raise ValueError(f"top_k must be between 1 and {MAX_TOP_K}")
 
         parameters: dict[str, object] = {
-            "lesson_id": str(lesson_id),
+            "curriculum_id": str(curriculum_id),
             "query_text": normalized_query,
             "query_embedding": _vector_literal(query_embedding),
             "top_k": top_k,
@@ -135,6 +138,7 @@ def _row_to_hit(row: Mapping[str, Any]) -> MaterialChunkHit:
         chunk_id=int(row["chunk_id"]),
         material_version_id=int(row["material_version_id"]),
         lesson_id=_uuid_value(row["lesson_id"], "lesson_id"),
+        curriculum_id=_uuid_value(row["curriculum_id"], "curriculum_id"),
         material_id=_uuid_value(row["material_id"], "material_id"),
         material_version=int(row["material_version"]),
         page=int(row["page"]),

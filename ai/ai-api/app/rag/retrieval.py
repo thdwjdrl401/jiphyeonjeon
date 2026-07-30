@@ -18,7 +18,7 @@ class MaterialRetrievalPort(Protocol):
     async def retrieve(
         self,
         *,
-        lesson_id: UUID,
+        curriculum_id: UUID,
         query_text: str,
         top_k: int,
     ) -> tuple[MaterialChunkHit, ...]: ...
@@ -62,13 +62,14 @@ class CombinedEvidenceRetriever:
 
     async def retrieve(self, request: RagAnswerRequest) -> RetrievalResult:
         material_hits = await self._materials.retrieve(
-            lesson_id=request.lessonId,
+            curriculum_id=request.curriculumId,
             query_text=request.question,
             top_k=self._material_top_k,
         )
         evidence = [
             RetrievedEvidence(
                 lesson_id=hit.lesson_id,
+                curriculum_id=hit.curriculum_id,
                 content=hit.text,
                 source=PptxSource(materialId=hit.material_id, page=hit.page),
             )
