@@ -18,8 +18,8 @@ interface ApiLessonView {
   description: string
   status: LessonStatus
   materials?: ApiLessonMaterial[]
-  // 강사 레슨 조회(/instructor/lessons/{id})만 함께 준다. 공개 카탈로그는 PUBLISHED만 보여
-  // DRAFT에서 방금 만든 세션이 안 보였다 — 강사 저작 읽기를 강사 권한 축으로(BE ADR).
+  // 강사 레슨 조회(/instructor/lessons/{id})만 함께 준다. 공개 카탈로그는
+  // PUBLISHED 커리큘럼만 보이므로 강사 저작 읽기는 강사 권한 축을 쓴다(BE ADR).
   liveSession?: {
     sessionId: string
     status: CurriculumLiveSessionStatus
@@ -79,7 +79,7 @@ interface ApiCurriculumDetail {
 }
 
 /**
- * 강사 레슨 상세 — 전부 강사 엔드포인트로 읽는다(DRAFT여도 보이도록).
+ * 강사 레슨 상세 — 커리큘럼이 DRAFT여도 보이도록 강사 엔드포인트로 읽는다.
  * liveSession은 레슨 응답이 직접 준다. 커리큘럼·섹션 제목은 강사 커리큘럼/섹션 조회로 채운다.
  * replayStatus·learning은 저작 화면에서 쓰지 않으므로 안전한 기본값(NOT_READY·null).
  */
@@ -125,8 +125,8 @@ async function getInstructorLesson(request: {
 
 export const httpLessonService = {
   async getLesson(request) {
-    // 강사 저작(수정 폼·상세)은 공개 카탈로그로 읽지 않는다 — 그 경로는 PUBLISHED만 보여
-    // DRAFT 커리큘럼·레슨에서 404가 나거나 방금 만든 세션이 빠진다. 강사 엔드포인트로 읽는다.
+    // 강사 저작(수정 폼·상세)은 공개 카탈로그로 읽지 않는다. 그 경로는
+    // PUBLISHED 커리큘럼만 보이므로 강사 엔드포인트로 읽는다.
     if (request.role === 'INSTRUCTOR') {
       return getInstructorLesson(request)
     }

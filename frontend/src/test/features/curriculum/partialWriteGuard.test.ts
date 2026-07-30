@@ -141,7 +141,7 @@ describe('커리큘럼 저장 계약', () => {
   })
 
   it('자료가 없는 레슨 저장은 그대로 생성된다', async () => {
-    const created = { lessonId: 'les-9', sectionId: 'sec-1', title: '새 강의', description: '설명', status: 'DRAFT' }
+    const created = { lessonId: 'les-9', sectionId: 'sec-1', title: '새 강의', description: '설명', status: 'PUBLISHED' }
     const post = vi.spyOn(apiClient, 'post').mockResolvedValue({ data: created } as never)
 
     await expect(httpLessonService.saveLesson({

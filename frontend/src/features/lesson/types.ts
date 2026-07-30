@@ -1,12 +1,8 @@
-export type LessonStatus = 'DRAFT' | 'AI_NOT_READY' | 'READY' | 'PUBLISHED'
+export type LessonStatus = 'PUBLISHED'
 
 export type LessonAccessDestination = 'LESSON_DETAIL' | 'LIVE_SESSION' | 'LIVE_CLASSROOM' | 'VOD'
 
-export type LessonAccessReasonCode =
-  | 'ENROLLMENT_REQUIRED'
-  | 'LESSON_NOT_PUBLISHED'
-  | 'LIVE_NOT_STARTED'
-  | 'REPLAY_NOT_PUBLISHED'
+export type LessonAccessReasonCode = 'ENROLLMENT_REQUIRED'
 
 export type CurriculumLiveSessionStatus =
   | 'DRAFT'

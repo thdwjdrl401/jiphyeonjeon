@@ -17,8 +17,6 @@ interface LessonActivity {
 
 const reasonLabel: Record<string, string> = {
   ENROLLMENT_REQUIRED: '수강 승인 후 이용',
-  LIVE_NOT_STARTED: '라이브 예정',
-  REPLAY_NOT_PUBLISHED: '다시보기 준비 중',
 }
 
 function resolveActivity(lesson: CurriculumOutlineLesson): LessonActivity {

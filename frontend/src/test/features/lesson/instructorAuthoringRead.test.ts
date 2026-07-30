@@ -7,7 +7,7 @@ import { httpLessonService } from '@/features/lesson/httpLessonService'
 
 /**
  * 강사 저작(수정 폼·사이드바) 읽기는 공개 카탈로그({@code /curriculums/{id}}, PUBLISHED-only)가 아니라
- * 강사 엔드포인트로 가야 한다 — 안 그러면 DRAFT 커리큘럼·레슨에서 404가 나거나 방금 만든 세션이 빠진다.
+ * 강사 엔드포인트로 가야 한다 — 안 그러면 DRAFT 커리큘럼에서 404가 나거나 방금 만든 세션이 빠진다.
  */
 describe('강사 저작 읽기 경로', () => {
   afterEach(() => {
@@ -19,7 +19,7 @@ describe('강사 저작 읽기 경로', () => {
       if (url === '/instructor/lessons/les-1') {
         return {
           data: {
-            lessonId: 'les-1', sectionId: 'sec-1', title: '1강', description: '설명', status: 'DRAFT',
+            lessonId: 'les-1', sectionId: 'sec-1', title: '1강', description: '설명', status: 'PUBLISHED',
             materials: [],
             liveSession: { sessionId: 'ses-1', status: 'SCHEDULED', scheduledAt: '2026-08-01T10:00:00+09:00' },
           },
@@ -51,7 +51,7 @@ describe('강사 저작 읽기 경로', () => {
         return { data: [{ sectionId: 'sec-1', title: '1주차', orderIndex: 0 }] }
       }
       if (url === '/instructor/sections/sec-1/lessons') {
-        return { data: [{ lessonId: 'les-1', sectionId: 'sec-1', title: '1강', description: '', status: 'DRAFT' }] }
+        return { data: [{ lessonId: 'les-1', sectionId: 'sec-1', title: '1강', description: '', status: 'PUBLISHED' }] }
       }
       throw new Error(`예상치 못한 호출: ${url}`)
     }) as never)

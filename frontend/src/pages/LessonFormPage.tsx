@@ -6,6 +6,7 @@ import { useAuth } from '@/features/auth/AuthContext'
 import { getInstructorCurriculum } from '@/features/curriculum/curriculumManagementService'
 import { deleteLesson } from '@/features/curriculum/curriculumManagementService'
 import { deleteLessonMaterial, getLesson, prepareLessonAi, saveLesson } from '@/features/lesson/lessonService'
+import { invalidateAfterLessonWrite } from '@/features/lesson/lessonQueryCache'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
 import { useToast } from '@/shared/ui/Toast'
@@ -65,8 +66,7 @@ export default function LessonFormPage() {
     setDeleting(true)
     try {
       await deleteLesson(lessonId)
-      await queryClient.invalidateQueries({ queryKey: ['curriculum-management', curriculumId] })
-      await queryClient.invalidateQueries({ queryKey: ['curriculum'] })
+      await invalidateAfterLessonWrite(queryClient, curriculumId)
       toast.success('강의를 삭제했습니다.')
       navigate(instructorPaths.curriculumManage(curriculumId))
     } catch {
@@ -120,12 +120,11 @@ export default function LessonFormPage() {
         expectedDurationMinutes: Number(duration),
         materials: materials.flatMap((material) => material.file ? [material.file] : []),
       })
+      await invalidateAfterLessonWrite(queryClient, curriculumId)
       toast.success(canEditLiveSchedule ? '강의 정보와 라이브 일정 초안이 저장되었습니다.' : '강의 정보가 저장되었습니다.')
       // 생성 성공 시엔 구성(섹션·강의 목록) 화면으로 돌아간다. 폼을 떠나므로 연타로 매번 새
       // 레슨이 생기던 것도 막힌다. 저장 토스트는 앱 최상단이라 이동 후에도 그대로 보인다.
       if (!isEdit) {
-        queryClient.invalidateQueries({ queryKey: ['curriculum-management', curriculumId] })
-        queryClient.invalidateQueries({ queryKey: ['curriculum-lesson-navigation', curriculumId] })
         navigate(instructorPaths.curriculumManage(curriculumId), { replace: true })
       }
     } catch {
