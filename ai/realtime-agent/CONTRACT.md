@@ -75,7 +75,7 @@ sequenceDiagram
 - **Spring:** Room·권한 준비, explicit dispatch, assignment timeout, Room 삭제
 - **LiveKit:** 같은 `agentName`의 가용 Worker 선택과 job 단일 배정
 - **Python Worker:** 등록·재연결, 용량 보고, job process 실행, Room 참가와 STT
-- **공통 계약:** Java의 `agentName`과 Python의 `STT_AGENT_NAME`은 정확히 같아야 한다.
+- **공통 계약:** Java의 `agentName`과 Python의 `STT_AGENT_NAME`은 정확히 같아야 한다. dev는 `liveclass-realtime-stt`, prod는 `liveclass-realtime-stt-prod`다.
 
 ### 2.2 Worker 등록과 용량
 
@@ -97,7 +97,7 @@ process target이고 provider 기본값은 12다. Nemotron의 active 설정이 �
 수로 계산하므로 12-request burst를 받으려면 idle도 12여야 한다. SDK reserved slot도 load에 포함해
 12개 한도를 초과해 수락하지 않는다. 13번째 이후 요청은 기존 job을 중단하지 않고 pending으로 둔다.
 
-같은 `STT_AGENT_NAME`의 Worker가 여러 개면 LiveKit이 가용 Worker에 분배한다. 모든 Worker가 FULL
+같은 **환경 안에서** `STT_AGENT_NAME`이 같은 Worker가 여러 개면 LiveKit이 가용 Worker에 분배한다. dev와 prod는 이름을 공유하면 안 된다. 공유하면 prod dispatch가 dev Redis에 연결된 Worker로 배정될 수 있다. 모든 Worker가 FULL
 이거나 없으면 job은 pending 상태로 남는다. LiveKit은 GPU EC2를 자동 확장하지 않으며 pending 순서와
 대기 SLA도 보장하지 않으므로 Java가 assignment timeout을 정해야 한다.
 
@@ -127,7 +127,7 @@ process target이고 provider 기본값은 12다. Nemotron의 active 설정이 �
 
 구현된 Phase 4a 경계:
 
-- Java `agentName`과 Python `STT_AGENT_NAME`을 같은 설정으로 관리한다.
+- Java `agentName`과 Python `STT_AGENT_NAME`을 환경별 같은 설정으로 관리한다(dev `liveclass-realtime-stt`, prod `liveclass-realtime-stt-prod`).
 - Python과 같은 네 필드·순서의 metadata를 직렬화한다.
 - 같은 room·agent·metadata dispatch를 조회·재사용하고, 없으면 생성한다.
 - dispatch ID와 exact metadata를 start attempt에 저장하고 시작 실패 시 dispatch를 삭제한다.
@@ -144,7 +144,7 @@ process target이고 provider 기본값은 12다. Nemotron의 active 설정이 �
 
 ### 2.6 service health
 
-별도 Python health server는 host로 `127.0.0.1`만 허용하고, port는 기본 `8081`이며 `1~65535` 범위로 설정할 수 있다.
+별도 Python health server는 host로 `127.0.0.1`만 허용하고 port는 `1~65535` 범위로 설정할 수 있다. 배포 기본은 prod `8081`, dev `8082`다.
 `GET /health/live`는 server가 응답 가능하면 200이다. `GET /health/ready`는 설정된 모든 child의
 provider prewarm, AgentServer 시작과 현재 LiveKit 연결이 확인되면 200 `status=ready`, 아니면
 503 `status=notReady`를 반환한다.
@@ -152,7 +152,7 @@ provider prewarm, AgentServer 시작과 현재 LiveKit 연결이 확인되면 20
 readiness body에는 provider, expected/ready process 수, worker 시작과 LiveKit 연결 여부가 포함된다.
 expected process 수는 active job 수가 아니라 resolved idle process 수다. Redis, session lease, room
 audio, engine queue와 dispatch capacity는 검사하지 않으므로 job별 `STT_READY`를 대체하지 않는다.
-`GET /`는 기존 smoke 호환용 plain `OK`이고 `GET /worker`는 `:8081`에서 제공하지 않는다.
+`GET /`는 기존 smoke 호환용 plain `OK`이고 `GET /worker`는 prod `:8081`과 dev `:8082`에서 제공하지 않는다.
 
 공유 상태코드와 body는 [`docs/CONTRACT.md` §3-8](../../docs/CONTRACT.md#3-8-gpu-realtime-agent-service-health-http--ai-구현됨-spring-consumer-미구현), JSON 정본은 [health schema](contracts/schemas/realtime-agent-health.schema.json)를 따른다.
 
@@ -163,7 +163,7 @@ audio, engine queue와 dispatch capacity는 검사하지 않으므로 job별 `ST
 > started/final의 채택·버전·롤아웃 순서는 Spring·ai-api 오너와 확정해야 한다. 소비자 반영 전에는 신규
 > 이벤트가 ACK 후 폐기되므로 발화별 렌더링과 정확 시간축은 end-to-end로 활성화되지 않는다.
 
-- Redis URL: `REDIS_URL`로 주입한다. LiveKit 내부 Redis나 host `6380`을 전제로 하지 않는다.
+- Redis URL: `REDIS_URL`로 주입한다. dev는 password Redis tunnel `127.0.0.1:4000`, prod는 prod Redis tunnel `127.0.0.1:6390`을 사용한다. LiveKit 내부 Redis나 host `6380`을 전제로 하지 않는다.
 - stream key: `CAPTION_STREAM_KEY`, 기본값 `ai:captions:live`
 - write: 각 `XADD`를 직접 await하고 제한 시간 안에 응답하지 않거나 실패하면 job을 실패시킨다.
 - retention: 모든 `XADD`에 `MAXLEN ~ CAPTION_STREAM_MAXLEN`을 적용하며 기본값은 10,000 엔트리다.

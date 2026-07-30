@@ -5,9 +5,12 @@ COMMAND="${1:-status}"
 DEPLOY_ROOT="${LIVECLASS_DEPLOY_ROOT:-$HOME/.local/share/liveclass/realtime-agent}"
 CURRENT_LINK="$DEPLOY_ROOT/current"
 CONFIG_DIR="${LIVECLASS_CONFIG_DIR:-$HOME/.config/liveclass}"
-AGENT_ENV="${LIVECLASS_AGENT_ENV:-$CONFIG_DIR/realtime-agent.env}"
+PROD_AGENT_ENV="${LIVECLASS_PROD_AGENT_ENV:-$CONFIG_DIR/realtime-agent.env}"
+DEV_AGENT_ENV="${LIVECLASS_DEV_AGENT_ENV:-$CONFIG_DIR/realtime-agent-dev.env}"
 TUNNEL_ENV="${LIVECLASS_TUNNEL_ENV:-$CONFIG_DIR/realtime-agent-tunnels.env}"
-AGENT_SESSION="${LIVECLASS_AGENT_SESSION:-liveclass-realtime-agent}"
+PROD_AGENT_SESSION="${LIVECLASS_PROD_AGENT_SESSION:-liveclass-realtime-agent-prod}"
+DEV_AGENT_SESSION="${LIVECLASS_DEV_AGENT_SESSION:-liveclass-realtime-agent-dev}"
+LEGACY_AGENT_SESSION="liveclass-realtime-agent"
 TUNNEL_SESSION="${LIVECLASS_TUNNEL_SESSION:-liveclass-realtime-agent-tunnels}"
 RESTART_DELAY_SECONDS="${LIVECLASS_RESTART_DELAY_SECONDS:-5}"
 
@@ -34,6 +37,40 @@ load_env() {
     set +a
 }
 
+validate_agent_env_profile() {
+    profile="$1"
+    env_file="$2"
+    expected_name="$3"
+    expected_health_port="$4"
+    expected_capacity="$5"
+    (
+        unset REDIS_URL STT_AGENT_NAME STT_ENGINE_PROVIDER STT_HEALTH_HOST \
+            STT_HEALTH_PORT STT_MAX_ACTIVE_JOBS STT_NUM_IDLE_PROCESSES \
+            CUDA_VISIBLE_DEVICES
+        load_env "$env_file"
+        if [ "${STT_AGENT_NAME:-}" != "$expected_name" ] || \
+            [ "${STT_HEALTH_HOST:-127.0.0.1}" != "127.0.0.1" ] || \
+            [ "${STT_HEALTH_PORT:-8081}" != "$expected_health_port" ] || \
+            [ "${STT_MAX_ACTIVE_JOBS:-}" != "$expected_capacity" ] || \
+            [ "${STT_NUM_IDLE_PROCESSES:-}" != "$expected_capacity" ] || \
+            [ "${CUDA_VISIBLE_DEVICES:-}" != "0" ] || \
+            [ "${STT_ENGINE_PROVIDER:-}" != "nemotron" ]; then
+            echo "$profile agent env profile mismatch" >&2
+            exit 1
+        fi
+        case "$profile:${REDIS_URL:-}" in
+            prod:redis://127.0.0.1:6390/*)
+                ;;
+            dev:redis://:?*@127.0.0.1:4000/*)
+                ;;
+            *)
+                echo "$profile agent Redis endpoint mismatch" >&2
+                exit 1
+                ;;
+        esac
+    )
+}
+
 session_exists() {
     tmux has-session -t "=$1" 2>/dev/null
 }
@@ -49,21 +86,58 @@ start_tunnel() {
     echo "tunnel supervisor started"
 }
 
-start_agent() {
-    if session_exists "$AGENT_SESSION"; then
-        echo "agent supervisor is already running"
+start_agent_instance() {
+    agent_environment="$1"
+    agent_env="$2"
+    agent_session="$3"
+    agent_command="$4"
+    if session_exists "$agent_session"; then
+        echo "$agent_environment agent supervisor is already running"
         return
     fi
-    require_file "$AGENT_ENV"
+    require_file "$agent_env"
     require_file "$CURRENT_LINK/.venv/bin/python"
-    tmux new-session -d -s "$AGENT_SESSION" "$CURRENT_LINK/deploy/bin/liveclass-realtime-agent-supervisor _run-agent"
-    echo "agent supervisor started"
+    tmux new-session -d -s "$agent_session" \
+        "$CURRENT_LINK/deploy/bin/liveclass-realtime-agent-supervisor $agent_command"
+    echo "$agent_environment agent supervisor started"
+}
+
+start_agents() {
+    require_file "$PROD_AGENT_ENV"
+    require_file "$DEV_AGENT_ENV"
+    validate_agent_env_profile prod "$PROD_AGENT_ENV" \
+        liveclass-realtime-stt-prod 8081 12
+    validate_agent_env_profile dev "$DEV_AGENT_ENV" \
+        liveclass-realtime-stt 8082 1
+    if session_exists "$LEGACY_AGENT_SESSION"; then
+        stop_session "$LEGACY_AGENT_SESSION"
+        echo "stopped legacy single-agent supervisor"
+    fi
+    start_agent_instance prod "$PROD_AGENT_ENV" "$PROD_AGENT_SESSION" _run-agent-prod
+    start_agent_instance dev "$DEV_AGENT_ENV" "$DEV_AGENT_SESSION" _run-agent-dev
 }
 
 stop_session() {
     if session_exists "$1"; then
         tmux kill-session -t "=$1"
     fi
+}
+
+show_agent_status() {
+    status=0
+    if session_exists "$PROD_AGENT_SESSION"; then
+        echo "prod agent: running"
+    else
+        echo "prod agent: stopped"
+        status=1
+    fi
+    if session_exists "$DEV_AGENT_SESSION"; then
+        echo "dev agent: running"
+    else
+        echo "dev agent: stopped"
+        status=1
+    fi
+    return "$status"
 }
 
 show_status() {
@@ -74,23 +148,56 @@ show_status() {
         echo "tunnel: stopped"
         status=1
     fi
-    if session_exists "$AGENT_SESSION"; then
-        echo "agent: running"
-    else
-        echo "agent: stopped"
+    if ! show_agent_status; then
         status=1
     fi
     return "$status"
 }
 
-show_agent_status() {
-    if session_exists "$AGENT_SESSION"; then
-        echo "agent: running"
-        return 0
-    fi
-    echo "agent: stopped"
-    return 1
+stop_agents() {
+    stop_session "$LEGACY_AGENT_SESSION"
+    stop_session "$PROD_AGENT_SESSION"
+    stop_session "$DEV_AGENT_SESSION"
 }
+
+run_agent() {
+    run_agent_env="$1"
+    load_env "$run_agent_env"
+    if [ -n "${LIVEKIT_TUNNEL_HOST:-}" ]; then
+        DNS_REDIRECT_LIB="${LIVEKIT_DNS_REDIRECT_LIB:-$HOME/.local/lib/liveclass/livekit-tunnel-dns.so}"
+        require_file "$DNS_REDIRECT_LIB"
+        LD_PRELOAD="$DNS_REDIRECT_LIB${LD_PRELOAD:+:$LD_PRELOAD}"
+        export LD_PRELOAD
+    fi
+    cd "$CURRENT_LINK"
+    while :; do
+        set +e
+        "$CURRENT_LINK/.venv/bin/python" -m app.main start
+        agent_status=$?
+        set -e
+        if [ "$agent_status" -eq 0 ]; then
+            exit 0
+        fi
+        echo "agent exited with status $agent_status; retrying in ${RESTART_DELAY_SECONDS}s" >&2
+        sleep "$RESTART_DELAY_SECONDS"
+    done
+}
+
+show_agent_logs() {
+    agent_environment="$1"
+    agent_session="$2"
+    echo "== $agent_environment agent =="
+    if session_exists "$agent_session"; then
+        tmux capture-pane -p -t "$agent_session:0.0" -S -200
+    else
+        echo "$agent_environment agent: stopped"
+    fi
+}
+
+if [ "$PROD_AGENT_SESSION" = "$DEV_AGENT_SESSION" ]; then
+    echo "prod and dev agent sessions must be different" >&2
+    exit 1
+fi
 
 require_command tmux
 
@@ -104,50 +211,38 @@ case "$COMMAND" in
             sleep "$RESTART_DELAY_SECONDS"
         done
         ;;
-    _run-agent)
-        load_env "$AGENT_ENV"
-        if [ -n "${LIVEKIT_TUNNEL_HOST:-}" ]; then
-            DNS_REDIRECT_LIB="${LIVEKIT_DNS_REDIRECT_LIB:-$HOME/.local/lib/liveclass/livekit-tunnel-dns.so}"
-            require_file "$DNS_REDIRECT_LIB"
-            LD_PRELOAD="$DNS_REDIRECT_LIB${LD_PRELOAD:+:$LD_PRELOAD}"
-            export LD_PRELOAD
-        fi
-        cd "$CURRENT_LINK"
-        while :; do
-            set +e
-            "$CURRENT_LINK/.venv/bin/python" -m app.main start
-            agent_status=$?
-            set -e
-            if [ "$agent_status" -eq 0 ]; then
-                exit 0
-            fi
-            echo "agent exited with status $agent_status; retrying in ${RESTART_DELAY_SECONDS}s" >&2
-            sleep "$RESTART_DELAY_SECONDS"
-        done
+    _run-agent-prod)
+        run_agent "$PROD_AGENT_ENV"
+        ;;
+    _run-agent-dev)
+        run_agent "$DEV_AGENT_ENV"
         ;;
     start)
         start_tunnel
-        start_agent
+        start_agents
+        ;;
+    start-agent)
+        start_agents
         ;;
     start-tunnel)
         start_tunnel
         ;;
     restart)
-        stop_session "$AGENT_SESSION"
+        stop_agents
         stop_session "$TUNNEL_SESSION"
         start_tunnel
-        start_agent
+        start_agents
         ;;
     restart-agent)
-        stop_session "$AGENT_SESSION"
-        start_agent
+        stop_agents
+        start_agents
         ;;
     stop)
-        stop_session "$AGENT_SESSION"
+        stop_agents
         stop_session "$TUNNEL_SESSION"
         ;;
     stop-agent)
-        stop_session "$AGENT_SESSION"
+        stop_agents
         ;;
     status)
         show_status
@@ -156,13 +251,20 @@ case "$COMMAND" in
         show_agent_status
         ;;
     logs-agent)
-        tmux capture-pane -p -t "$AGENT_SESSION:0.0" -S -200
+        show_agent_logs prod "$PROD_AGENT_SESSION"
+        show_agent_logs dev "$DEV_AGENT_SESSION"
+        ;;
+    logs-agent-prod)
+        show_agent_logs prod "$PROD_AGENT_SESSION"
+        ;;
+    logs-agent-dev)
+        show_agent_logs dev "$DEV_AGENT_SESSION"
         ;;
     logs-tunnel)
         tmux capture-pane -p -t "$TUNNEL_SESSION:0.0" -S -200
         ;;
     *)
-        echo "usage: liveclass-realtime-agent-supervisor {start|start-tunnel|restart|restart-agent|stop|stop-agent|status|status-agent|logs-agent|logs-tunnel}" >&2
+        echo "usage: liveclass-realtime-agent-supervisor {start|start-agent|start-tunnel|restart|restart-agent|stop|stop-agent|status|status-agent|logs-agent|logs-agent-prod|logs-agent-dev|logs-tunnel}" >&2
         exit 2
         ;;
 esac

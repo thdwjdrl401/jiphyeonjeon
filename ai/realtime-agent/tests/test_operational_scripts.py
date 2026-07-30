@@ -21,7 +21,8 @@ INSTALL_SCRIPT = DEPLOY_DIR / "install.sh"
 RUNNER_INSTALL_SCRIPT = DEPLOY_DIR / "install-gitlab-runner-user.sh"
 DNS_REDIRECT_SOURCE = DEPLOY_DIR / "livekit-tunnel-dns.c"
 TUNNEL_CONFIGURE_SCRIPT = DEPLOY_DIR / "configure-gpu-ec2-tunnels.sh"
-AGENT_ENV_EXAMPLE = DEPLOY_DIR / "env" / "realtime-agent.env.example"
+PROD_AGENT_ENV_EXAMPLE = DEPLOY_DIR / "env" / "realtime-agent.env.example"
+DEV_AGENT_ENV_EXAMPLE = DEPLOY_DIR / "env" / "realtime-agent-dev.env.example"
 
 
 def test_probe_settings_redact_credentials_from_repr() -> None:
@@ -187,7 +188,7 @@ exit 92
         """#!/bin/sh
 for port do :; done
 case "$port" in
-    7443|4000) exit 0 ;;
+    7443|4000|6390) exit 0 ;;
     3478)
         if [ ! -e "$FAKE_STATE/legacy-turn-cancelled" ] || [ -e "$FAKE_STATE/turn-started" ]; then
             exit 0
@@ -206,6 +207,7 @@ exit 1
     control_path = tmp_path / "control.sock"
     turn_control_path = tmp_path / "turn-control.sock"
     (tmp_path / "control.sock.health-18081").touch()
+    (tmp_path / "control.sock.health-18082").touch()
     environ = {
         **os.environ,
         "PATH": f"{fake_bin}:{os.environ['PATH']}",
@@ -234,6 +236,74 @@ exit 1
     assert "-L 3478:localhost:3478" in turn_start
     assert "-L 7443:localhost:7443" not in turn_start
     assert "-L 4000:localhost:4000" not in turn_start
+    assert "-L 6390:localhost:6390" not in turn_start
+
+
+def test_tunnel_adds_missing_prod_redis_forward_to_existing_control(
+    tmp_path: Path,
+) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    state = tmp_path / "state"
+    state.mkdir()
+    fake_ssh = fake_bin / "ssh"
+    fake_ssh.write_text(
+        """#!/bin/sh
+printf '%s\n' "$*" >> "$FAKE_STATE/ssh.log"
+case " $* " in
+    *" -O check "*) exit 0 ;;
+    *" -O forward "*)
+        case " $* " in
+            *" -L 6390:localhost:6390 "*)
+                : > "$FAKE_STATE/prod-redis-forwarded"
+                exit 0
+                ;;
+        esac
+        ;;
+esac
+exit 92
+""",
+        encoding="utf-8",
+    )
+    fake_nc = fake_bin / "nc"
+    fake_nc.write_text(
+        """#!/bin/sh
+for port do :; done
+case "$port" in
+    7443|4000|3478) exit 0 ;;
+    6390) test -e "$FAKE_STATE/prod-redis-forwarded" && exit 0 ;;
+esac
+exit 1
+""",
+        encoding="utf-8",
+    )
+    fake_ssh.chmod(0o700)
+    fake_nc.chmod(0o700)
+    key = tmp_path / "test-key.pem"
+    key.touch(mode=0o600)
+    control_path = tmp_path / "control.sock"
+    turn_control_path = tmp_path / "turn-control.sock"
+    (tmp_path / "control.sock.health-18081").touch()
+    (tmp_path / "control.sock.health-18082").touch()
+    result = subprocess.run(
+        ["sh", str(TUNNEL_SCRIPT)],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={
+            **os.environ,
+            "PATH": f"{fake_bin}:{os.environ['PATH']}",
+            "FAKE_STATE": str(state),
+            "SSH_KEY": str(key),
+            "SSH_TARGET": "user@example.invalid",
+            "SSH_CONTROL_PATH": str(control_path),
+            "TURN_SSH_CONTROL_PATH": str(turn_control_path),
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    ssh_log = (state / "ssh.log").read_text(encoding="utf-8")
+    assert "-O forward -L 6390:localhost:6390" in ssh_log
 
 
 def test_tunnel_requires_distinct_control_paths(tmp_path: Path) -> None:
@@ -293,11 +363,25 @@ def test_deploy_helper_rejects_unsafe_release_id_before_privileged_work() -> Non
     assert "release ID" in result.stderr
 
 
-def test_tunnel_includes_loopback_reverse_health_forward() -> None:
+def test_tunnel_includes_dev_prod_redis_and_loopback_health_forwards() -> None:
     script = TUNNEL_SCRIPT.read_text(encoding="utf-8")
 
+    assert 'DEV_REDIS_LOCAL_PORT="${DEV_REDIS_LOCAL_PORT:-4000}"' in script
+    assert 'PROD_REDIS_LOCAL_PORT="${PROD_REDIS_LOCAL_PORT:-6390}"' in script
+    assert 'PROD_HEALTH_LOCAL_PORT="${PROD_HEALTH_LOCAL_PORT:-8081}"' in script
+    assert 'DEV_HEALTH_LOCAL_PORT="${DEV_HEALTH_LOCAL_PORT:-8082}"' in script
+    assert 'PROD_HEALTH_REMOTE_PORT="${PROD_HEALTH_REMOTE_PORT:-18081}"' in script
+    assert 'DEV_HEALTH_REMOTE_PORT="${DEV_HEALTH_REMOTE_PORT:-18082}"' in script
     assert 'HEALTH_BIND_HOST="${HEALTH_BIND_HOST:-127.0.0.1}"' in script
-    assert '-R "$HEALTH_BIND_HOST:$HEALTH_REMOTE_PORT:127.0.0.1:$HEALTH_LOCAL_PORT"' in script
+    assert '-L "$DEV_REDIS_LOCAL_PORT:localhost:$DEV_REDIS_REMOTE_PORT"' in script
+    assert '-L "$PROD_REDIS_LOCAL_PORT:localhost:$PROD_REDIS_REMOTE_PORT"' in script
+    assert (
+        '-R "$HEALTH_BIND_HOST:$PROD_HEALTH_REMOTE_PORT:127.0.0.1:'
+        '$PROD_HEALTH_LOCAL_PORT"' in script
+    )
+    assert (
+        '-R "$HEALTH_BIND_HOST:$DEV_HEALTH_REMOTE_PORT:127.0.0.1:$DEV_HEALTH_LOCAL_PORT"' in script
+    )
     assert "ExitOnForwardFailure=yes" in script
     assert "StrictHostKeyChecking=yes" in script
     assert "IdentitiesOnly=yes" in script
@@ -335,7 +419,8 @@ def test_production_tunnel_configurator_installs_one_key_for_both_services(
     assert f"SSH_KEY={installed_key}" in bge_env
     assert "SSH_TARGET=ubuntu@ec2.example" in realtime_env
     assert "SSH_TARGET=ubuntu@ec2.example" in bge_env
-    assert "HEALTH_REMOTE_PORT=18081" in realtime_env
+    assert "PROD_HEALTH_REMOTE_PORT=18081" in realtime_env
+    assert "DEV_HEALTH_REMOTE_PORT=18082" in realtime_env
     assert "SSH_CONTROL_PATH=" in realtime_env
     assert "TURN_SSH_CONTROL_PATH=" in realtime_env
     realtime_values = dict(
@@ -344,34 +429,153 @@ def test_production_tunnel_configurator_installs_one_key_for_both_services(
         if line and not line.startswith("#")
     )
     assert realtime_values["SSH_CONTROL_PATH"] != realtime_values["TURN_SSH_CONTROL_PATH"]
-    assert realtime_values["REDIS_LOCAL_PORT"] == "6390"
-    assert realtime_values["REDIS_REMOTE_PORT"] == "6390"
+    assert realtime_values["DEV_REDIS_LOCAL_PORT"] == "4000"
+    assert realtime_values["DEV_REDIS_REMOTE_PORT"] == "4000"
+    assert realtime_values["PROD_REDIS_LOCAL_PORT"] == "6390"
+    assert realtime_values["PROD_REDIS_REMOTE_PORT"] == "6390"
+    assert realtime_values["PROD_HEALTH_LOCAL_PORT"] == "8081"
+    assert realtime_values["DEV_HEALTH_LOCAL_PORT"] == "8082"
     assert "BGE_EC2_PORT=18020" in bge_env
     assert (config_dir / "realtime-agent-tunnels.env").stat().st_mode & 0o777 == 0o600
     assert (config_dir / "bge-tunnel.env").stat().st_mode & 0o777 == 0o600
 
 
-def test_production_agent_env_uses_loopback_production_redis() -> None:
-    example = AGENT_ENV_EXAMPLE.read_text(encoding="utf-8")
+def test_dual_environment_examples_isolate_names_redis_health_and_capacity() -> None:
+    prod = PROD_AGENT_ENV_EXAMPLE.read_text(encoding="utf-8")
+    dev = DEV_AGENT_ENV_EXAMPLE.read_text(encoding="utf-8")
 
-    assert "REDIS_URL=redis://127.0.0.1:6390/0" in example
-    assert "redis-password" not in example
+    assert "REDIS_URL=redis://127.0.0.1:6390/0" in prod
+    assert "STT_AGENT_NAME=liveclass-realtime-stt-prod" in prod
+    assert "STT_HEALTH_PORT=8081" in prod
+    assert "STT_MAX_ACTIVE_JOBS=12" in prod
+    assert "REDIS_URL=redis://:<dev-redis-password>@127.0.0.1:4000/0" in dev
+    assert "STT_AGENT_NAME=liveclass-realtime-stt-dev" in dev
+    assert "STT_AGENT_NAME=liveclass-realtime-stt-prod" not in dev
+    assert "STT_HEALTH_PORT=8082" in dev
+    assert "STT_MAX_ACTIVE_JOBS=1" in dev
+    assert "STT_NUM_IDLE_PROCESSES=1" in dev
 
 
-def test_rootless_supervisor_keeps_tunnel_and_agent_under_tmux() -> None:
+def test_rootless_supervisor_keeps_tunnel_and_dual_agents_under_tmux() -> None:
     supervisor = SUPERVISOR_SCRIPT.read_text(encoding="utf-8")
     installer = INSTALL_SCRIPT.read_text(encoding="utf-8")
 
     assert "tmux new-session -d" in supervisor
     assert "tmux has-session" in supervisor
-    assert '"$AGENT_SESSION:0.0"' in supervisor
+    assert "liveclass-realtime-agent-prod" in supervisor
+    assert "liveclass-realtime-agent-dev" in supervisor
+    assert "realtime-agent-dev.env" in supervisor
+    assert "_run-agent-prod" in supervisor
+    assert "_run-agent-dev" in supervisor
+    assert 'stop_session "$LEGACY_AGENT_SESSION"' in supervisor
     assert "status-agent)" in supervisor
+    assert "logs-agent-prod)" in supervisor
+    assert "logs-agent-dev)" in supervisor
     assert "LIVEKIT_TUNNEL_HOST" in supervisor
     assert "LD_PRELOAD" in supervisor
+    assert "realtime-agent-dev.env.example" in installer
     assert "systemctl" not in supervisor
     assert "sudo" not in supervisor
     assert "systemctl" not in installer
     assert "sudo" not in installer
+
+
+def test_rootless_supervisor_rejects_mixed_environment_before_stopping_sessions(
+    tmp_path: Path,
+) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_tmux = fake_bin / "tmux"
+    fake_tmux.write_text(
+        """#!/bin/sh
+printf '%s\\n' "$*" >> "$FAKE_TMUX_LOG"
+case "$1" in
+    has-session) exit 1 ;;
+    new-session) exit 0 ;;
+esac
+exit 0
+""",
+        encoding="utf-8",
+    )
+    fake_tmux.chmod(0o700)
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    common = """STT_HEALTH_HOST=127.0.0.1
+STT_ENGINE_PROVIDER=nemotron
+CUDA_VISIBLE_DEVICES=0
+"""
+    prod_env = config_dir / "realtime-agent.env"
+    prod_env.write_text(
+        common
+        + """REDIS_URL=redis://127.0.0.1:6390/0
+STT_AGENT_NAME=liveclass-realtime-stt
+STT_HEALTH_PORT=8081
+STT_MAX_ACTIVE_JOBS=12
+STT_NUM_IDLE_PROCESSES=12
+""",
+        encoding="utf-8",
+    )
+    (config_dir / "realtime-agent-dev.env").write_text(
+        common
+        + """REDIS_URL=redis://:dev-test@127.0.0.1:4000/0
+STT_AGENT_NAME=liveclass-realtime-stt
+STT_HEALTH_PORT=8082
+STT_MAX_ACTIVE_JOBS=1
+STT_NUM_IDLE_PROCESSES=1
+""",
+        encoding="utf-8",
+    )
+    tmux_log = tmp_path / "tmux.log"
+
+    result = subprocess.run(
+        [str(SUPERVISOR_SCRIPT), "start-agent"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={
+            **os.environ,
+            "PATH": f"{fake_bin}:{os.environ['PATH']}",
+            "FAKE_TMUX_LOG": str(tmux_log),
+            "LIVECLASS_CONFIG_DIR": str(config_dir),
+        },
+    )
+
+    assert result.returncode != 0
+    assert "prod agent env profile mismatch" in result.stderr
+    assert not tmux_log.exists()
+
+    prod_env.write_text(
+        prod_env.read_text(encoding="utf-8").replace(
+            "STT_AGENT_NAME=liveclass-realtime-stt\n",
+            "STT_AGENT_NAME=liveclass-realtime-stt-prod\n",
+        ),
+        encoding="utf-8",
+    )
+    deploy_root = tmp_path / "deploy"
+    python_path = deploy_root / "current" / ".venv" / "bin" / "python"
+    python_path.parent.mkdir(parents=True)
+    python_path.touch()
+
+    valid_result = subprocess.run(
+        [str(SUPERVISOR_SCRIPT), "start-agent"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={
+            **os.environ,
+            "PATH": f"{fake_bin}:{os.environ['PATH']}",
+            "FAKE_TMUX_LOG": str(tmux_log),
+            "LIVECLASS_CONFIG_DIR": str(config_dir),
+            "LIVECLASS_DEPLOY_ROOT": str(deploy_root),
+        },
+    )
+
+    assert valid_result.returncode == 0, valid_result.stderr
+    logged_commands = tmux_log.read_text(encoding="utf-8")
+    assert "new-session -d -s liveclass-realtime-agent-prod" in logged_commands
+    assert "_run-agent-prod" in logged_commands
+    assert "new-session -d -s liveclass-realtime-agent-dev" in logged_commands
+    assert "_run-agent-dev" in logged_commands
 
 
 def test_dns_redirect_source_compiles(tmp_path: Path) -> None:
@@ -405,6 +609,7 @@ def test_deploy_helper_builds_before_switch_and_keeps_rollback_path() -> None:
     unlock_position = script.index("flock -u 9")
     health_position = script.index("--retry 75")
     process_gate_position = script.index('"$SUPERVISOR" status-agent')
+    command_refresh_position = script.index("refresh_runtime_command")
 
     assert (
         sync_position
@@ -413,6 +618,7 @@ def test_deploy_helper_builds_before_switch_and_keeps_rollback_path() -> None:
         < unlock_position
         < process_gate_position
         < health_position
+        < command_refresh_position
     )
     assert 'PREVIOUS_RELEASE="$(readlink -f "$CURRENT_LINK"' in script
     assert 'mv -Tf "$ROLLBACK_LINK" "$CURRENT_LINK"' in script
@@ -420,3 +626,8 @@ def test_deploy_helper_builds_before_switch_and_keeps_rollback_path() -> None:
     assert "runuser" not in script
     assert "sudo" not in script
     assert "http://127.0.0.1:8081/health/ready" in script
+    assert "http://127.0.0.1:8082/health/ready" in script
+    assert 'for health_url in "$PROD_HEALTH_URL" "$DEV_HEALTH_URL"' in script
+    assert '"$RELEASE_DIR/deploy/bin/liveclass-realtime-agent-supervisor" stop-agent' in script
+    assert "liveclass-realtime-agent-supervisor" in script[command_refresh_position:]
+    assert "liveclass-realtime-agent-deploy" in script[command_refresh_position:]

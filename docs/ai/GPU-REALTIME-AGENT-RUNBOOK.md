@@ -10,23 +10,26 @@ ID는 문서나 Git에 기록하지 않는다.
 connection을 사용하고, WebRTC media는 별도 TURN SSH connection으로 EC2 loopback coturn의 TCP
 listener를 전달한다. 두 connection 모두 EC2 22번으로 나가지만 ControlPath와 GPU source port가 달라
 외부 TCP 혼잡과 재연결 장애 범위를 분리한다. 결정 근거는
-[ADR-0033](../decisions/canola/0033-realtime-agent-ssh-channel-isolation.md)을 따른다.
+[ADR-0033](../decisions/canola/0033-realtime-agent-ssh-channel-isolation.md)과
+[ADR-0035](../decisions/canola/0035-realtime-agent-dual-environment-runtime.md)를 따른다.
 
 | 서비스 | 기본 로컬 포트 | 원격 loopback 포트 |
 |---|---:|---:|
 | LiveKit signaling/API | `7443` | `7443` |
-| production application Redis | `6390` | `6390` |
+| dev application Redis | `4000` | `4000` |
+| prod application Redis | `6390` | `6390` |
 | TURN/TCP | `3478` | `3478` |
-| realtime-agent health(reverse) | `8081` | `18081` |
+| prod realtime-agent health(reverse) | `8081` | `18081` |
+| dev realtime-agent health(reverse) | `8082` | `18082` |
 | BGE runtime(reverse) | `8020` | `18020` |
 
-GPU agent health `127.0.0.1:8081`은 control SSH master의 reverse forward로 EC2
-`127.0.0.1:18081`에 연결한다. GPU inbound port는 열지 않는다.
+prod health `127.0.0.1:8081`은 EC2 `127.0.0.1:18081`, dev health `127.0.0.1:8082`는 EC2
+`127.0.0.1:18082`로 reverse forward한다. GPU inbound port는 열지 않는다.
 
-LiveKit 내부 Redis와 application Redis를 혼동하지 않는다. 운영 application Redis는 EC2 host의
-`127.0.0.1:6390`에만 publish되어 있고 현재 인증 없이 loopback 접근만 허용한다. SSH local forward도
-같은 loopback에 붙으므로 EC2 방화벽 또는 외부 bind를 추가하지 않는다. Redis 인증을 도입하면 URL의
-username/password는 문서가 아니라 secret 환경파일로 함께 주입한다.
+LiveKit 내부 Redis와 application Redis를 혼동하지 않는다. dev Redis `4000`은 `requirepass`라 URL에
+password를 넣고, prod Redis `6390`은 EC2 loopback+SSH key로 제한되어 인증 없는 URL을 쓴다. SSH local
+forward도 EC2 loopback에 붙으므로 외부 interface bind나 방화벽 개방을 추가하지 않는다. 인증을 바꾸면
+credential은 문서가 아니라 각 secret 환경파일에 주입한다.
 
 ## 설치와 CUDA smoke
 
@@ -65,8 +68,8 @@ readiness나 TURN 연결 장애가 LiveKit·Redis 연결을 함께 끊지 않는
 접속하므로 GPU security group에 inbound application port를 열지 않는다.
 
 직접 helper를 실행하는 방식은 장애 분석용이다. 포트가 다르면 `LIVEKIT_LOCAL_PORT`,
-`LIVEKIT_REMOTE_PORT`, `REDIS_LOCAL_PORT`, `REDIS_REMOTE_PORT`, `TURN_LOCAL_PORT`,
-`TURN_REMOTE_PORT`를 명시한다.
+`LIVEKIT_REMOTE_PORT`, `DEV_REDIS_*`, `PROD_REDIS_*`, `TURN_*`, `PROD_HEALTH_*`,
+`DEV_HEALTH_*`를 명시한다.
 
 ```sh
 set -a
@@ -81,46 +84,38 @@ GPU와 EC2 양쪽에서 listener와 HTTP 왕복을 확인한다.
 
 ```sh
 # GPU
-ss -ltn | grep -E ':(7443|6390|3478|8020|8081)\b'
+ss -ltn | grep -E ':(7443|4000|6390|3478|8020|8081|8082)\b'
 ~/.local/bin/liveclass-realtime-agent-supervisor status
 ~/.local/bin/liveclass-bge-runtime-supervisor status
 
 # EC2
-ss -ltn | grep -E ':(18020|18081)\b'
+ss -ltn | grep -E ':(18020|18081|18082)\b'
 curl --fail http://127.0.0.1:18020/readyz
-curl --fail http://127.0.0.1:18081/
+curl --fail http://127.0.0.1:18081/health/ready
+curl --fail http://127.0.0.1:18082/health/ready
 ```
 
-## 기존 4000 설정을 운영 6390으로 전환
+## 기존 단일 worker에서 dev/prod로 전환
 
-운영 GPU에 이미 `4000` control forward가 있으면 환경파일만 바꿔서는 기존 OpenSSH master의 forward가
-바뀌지 않는다. agent와 realtime tunnel supervisor를 멈추고 control master를 명시적으로 종료한 뒤
-재생성한다. TURN master와 BGE supervisor는 별도 connection이므로 유지된다.
+현재 `realtime-agent.env`를 prod 설정으로 유지하고, 기존 dev 설정의 안전한 백업에서
+`realtime-agent-dev.env`를 만든다. dev 파일은 agent name `liveclass-realtime-stt-dev`, Redis credential,
+health `8082`, active/idle `1/1`로 맞추고 prod 파일은 agent name `liveclass-realtime-stt-prod`와 운영 Redis
+`6390`을 유지한다. secret을 명령행이나 로그로 출력하지 않는다.
+
+새 tunnel script는 살아 있는 control master에 누락된 Redis `4000` 또는 `6390` forward와 dev health
+`18082→8082` reverse를 동적으로 추가한다. 배포 helper의 `restart-agent`는 레거시
+`liveclass-realtime-agent` tmux session을 종료하고 prod/dev session을 각각 시작한다. 병합 전 다음 파일이
+모두 준비되어 있지 않으면 GPU 배포는 fail-closed한다.
 
 ```sh
-cp -p ~/.config/liveclass/realtime-agent-tunnels.env \
-  ~/.config/liveclass/realtime-agent-tunnels.env.before-prod-redis
-cp -p ~/.config/liveclass/realtime-agent.env \
-  ~/.config/liveclass/realtime-agent.env.before-prod-redis
-
-# realtime-agent-tunnels.env
-# REDIS_LOCAL_PORT=6390
-# REDIS_REMOTE_PORT=6390
-# realtime-agent.env
-# REDIS_URL=redis://127.0.0.1:6390/0
-
-set -a
-. ~/.config/liveclass/realtime-agent-tunnels.env
-set +a
-~/.local/bin/liveclass-realtime-agent-supervisor stop
-ssh -F /dev/null -S "$SSH_CONTROL_PATH" -O exit "$SSH_TARGET" || true
-~/.local/bin/liveclass-realtime-agent-supervisor start
+test -r ~/.config/liveclass/realtime-agent.env
+test -r ~/.config/liveclass/realtime-agent-dev.env
+test -r ~/.config/liveclass/realtime-agent-tunnels.env
 ```
 
-GPU `127.0.0.1:6390`에서 Redis `PING`을 수행한 뒤 agent의 `/health/ready`가 200이고
-`liveKitConnected=true`, `modelsReady=true`인지 확인한다. EC2에서도 reverse health
-`http://127.0.0.1:18081/health/ready`가 같은 응답을 반환해야 한다. 실패하면 백업 환경파일을 복원하고
-동일하게 control master를 종료·재생성한다.
+EC2 앱 배포가 prod `LIVEKIT_AGENT_NAME`을 먼저 바꾸므로 GPU 배포까지 잠깐 dispatch가 pending일 수 있다.
+무중단 요구는 없지만 두 readiness와 각 이름의 worker 등록을 확인한 뒤 E2E를 시작한다. dev health proxy가
+필요하면 `deploy-gpu-proxy` manual job도 실행한다.
 
 ## PEM 보유 로컬 개발자의 API provider 검증 — 운영 절차 아님
 
@@ -137,7 +132,8 @@ chmod 600 /path/to/developer.pem
 SSH_KEY=/path/to/developer.pem \
 SSH_TARGET=user@ec2-host \
 LIVEKIT_LOCAL_PORT=17443 \
-REDIS_LOCAL_PORT=14000 \
+DEV_REDIS_LOCAL_PORT=14000 \
+PROD_REDIS_LOCAL_PORT=16390 \
 TURN_LOCAL_PORT=13478 \
 ./scripts/start_ec2_tunnels.sh
 ```
@@ -180,33 +176,48 @@ ssh -S "$TURN_SSH_CONTROL_PATH" -O exit user@ec2-host
 
 ## 환경 주입과 실행
 
-production은 process environment나 secret manager로 값을 주입한다. `.env`를 자동 로드하지 않는다.
-로컬 개발에서만 `uv --env-file`에 파일 경로를 명시한다.
+supervisor는 prod `~/.config/liveclass/realtime-agent.env`와 dev
+`~/.config/liveclass/realtime-agent-dev.env`를 각각 로드한다. 두 파일은 LiveKit/TURN credential과 model
+경로를 공유하지만 다음 값은 반드시 다르게 둔다.
 
 ```dotenv
-LIVEKIT_URL=wss://livekit.example:7443
-LIVEKIT_TURN_URL=turn:127.0.0.1:3478?transport=tcp
-LIVEKIT_TURN_SECRET=<coturn-rest-auth-secret>
+# prod realtime-agent.env
 REDIS_URL=redis://127.0.0.1:6390/0
+STT_AGENT_NAME=liveclass-realtime-stt-prod
+STT_HEALTH_PORT=8081
 CUDA_VISIBLE_DEVICES=0
 STT_ENGINE_PROVIDER=nemotron
 STT_MAX_ACTIVE_JOBS=12
 STT_NUM_IDLE_PROCESSES=12
-ASR_MODEL_ID=/path/outside/git/nemotron-3.5-asr-streaming-0.6b
 ```
+
+```dotenv
+# dev realtime-agent-dev.env
+REDIS_URL=redis://:<dev-password>@127.0.0.1:4000/0
+STT_AGENT_NAME=liveclass-realtime-stt-dev
+STT_HEALTH_PORT=8082
+CUDA_VISIBLE_DEVICES=0
+STT_ENGINE_PROVIDER=nemotron
+STT_MAX_ACTIVE_JOBS=1
+STT_NUM_IDLE_PROCESSES=1
+```
+
+prod Spring Compose는 `LIVEKIT_AGENT_NAME=liveclass-realtime-stt-prod`, `remote` 프로필의 dev Spring은
+`LIVEKIT_AGENT_NAME` 미지정 시 `liveclass-realtime-stt-dev`를 사용한다. 값이 뒤바뀌면 dispatch가 다른 Redis
+환경에 배정되므로 배포를 중단한다.
 
 `LIVEKIT_URL`은 인증서 hostname을 유지해야 한다. sudo 없는 운영 host는 배포에 포함된 C source를
 `~/.local/lib/liveclass/livekit-tunnel-dns.so`로 빌드하고, `LIVEKIT_TUNNEL_HOST`와
 `LD_PRELOAD`로 해당 hostname만 loopback tunnel에 연결한다. `/tmp`의 사전 빌드 바이너리는
 사용하지 않는다.
-`CUDA_VISIBLE_DEVICES=0`은 worker와 모든 job child에 물리 GPU 한 장만 노출한다. 그 안에서 CUDA는
-노출된 장치를 논리 `cuda:0`으로 본다. LiveKit Agents 1.6.6의 reserved-slot 계산상 시작 직후
-12-request burst를 모두 받으려면 active cap과 warm idle을 모두 12로 둬야 한다. full load에서는
-active 12벌과 replacement idle 12벌, 최대 24 model이 상주한다. H200 NVL 실측 peak는 81,468 MiB로
-143,771 MiB 안에 들어갔지만 더 작은 GPU에서는 idle과 active 값을 함께 낮추고 재검증해야 한다.
+`CUDA_VISIBLE_DEVICES=0`은 두 worker와 모든 child에 같은 물리 GPU 한 장만 노출한다. 검증된 prod
+12-request burst는 active/idle `12/12`와 peak 81,468 MiB를 유지한다. dev를 같은 `12/12`로 복제하면 두
+환경 full load에서 기존 단일-worker 실측 상한을 합산하게 되므로 기본 `1/1`만 허용한다. dev 용량을
+늘리려면 prod와 동시에 부하를 건 GPU memory·latency 검증과 ADR 갱신이 먼저다.
 
 ```sh
-uv run --env-file /path/to/realtime-agent.env --frozen python -m app.main start
+~/.local/bin/liveclass-realtime-agent-supervisor restart-agent
+~/.local/bin/liveclass-realtime-agent-supervisor status-agent
 ```
 
 ## read-only probe와 수동 E2E
