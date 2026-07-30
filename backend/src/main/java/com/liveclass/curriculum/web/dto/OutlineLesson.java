@@ -17,7 +17,7 @@ public record OutlineLesson(
         int order,
         // 레슨 상태는 어디서나 status다(관리 응답 LessonView와 동일). lessonStatus로 되돌리지 말 것 —
         // FE는 status만 읽으므로 이름이 어긋나면 목차의 상태 배지·진입 버튼이 조용히 죽는다.
-        @Schema(description = "DRAFT·AI_NOT_READY·READY·PUBLISHED. 공개 목차엔 PUBLISHED만 담긴다.")
+        @Schema(description = "PUBLISHED — 값은 하나다(ADR-0005). 공개 목차에 담기려면 커리큘럼이 공개돼야 한다.")
         String status,
         @Schema(description = "라이브 예정 시각. 세션이 없으면 null.")
         OffsetDateTime scheduledAt,

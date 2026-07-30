@@ -20,7 +20,7 @@ public record LessonDetailResponse(
         String title,
         String description,
         int order,
-        @Schema(description = "DRAFT·AI_NOT_READY·READY·PUBLISHED")
+        @Schema(description = "PUBLISHED — 값은 하나다. 레슨에는 초안이 없고 공개 여부는 커리큘럼이 결정한다(ADR-0005).")
         String status,
         @Schema(description = "레슨 강의 자료(PPTX).")
         List<CurriculumMaterialResponse> materials
