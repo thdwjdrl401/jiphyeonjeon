@@ -65,8 +65,10 @@ export default function WorkspaceLayout() {
     : user?.role === 'INSTRUCTOR'
       ? getInstructorLessonContext(pathname)
       : null
+  // 사전 점검·입장 전 점검은 경로에 sessionId만 있어서 세션을 읽어 커리큘럼을 알아낸다.
+  // 키는 페이지와 같은 ['live-session', sessionId]다 — 따로 두면 같은 세션을 두 번 받아 온다.
   const navigationSessionQuery = useQuery({
-    queryKey: ['live-session-navigation', lessonContext?.sessionId],
+    queryKey: ['live-session', lessonContext?.sessionId],
     queryFn: () => getLiveSession(lessonContext!.sessionId!),
     enabled: Boolean(lessonContext?.sessionId),
   })
