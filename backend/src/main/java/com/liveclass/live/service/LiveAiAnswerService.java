@@ -69,7 +69,7 @@ public class LiveAiAnswerService {
         LiveSession session = liveSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new LiveSessionNotFoundException("라이브 세션을 찾을 수 없습니다."));
         long contextTimeMs = liveCaptionRepository
-                .findFirstBySessionIdAndEventTypeInOrderByOccurredAtDescIdDesc(sessionId, CaptionEvent.RELAYED_TYPES)
+                .findFirstBySessionIdAndEventTypeInOrderByOccurredAtDescIdDesc(sessionId, CaptionEvent.CONTEXT_TIME_TYPES)
                 .map(LiveCaption::getStreamElapsedMs)
                 .filter(ms -> ms != null && ms >= 0)
                 .orElse(0L);

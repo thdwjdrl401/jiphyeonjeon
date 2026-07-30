@@ -48,12 +48,18 @@ public record CaptionEvent(
     public static final String TYPE_SEGMENT_FINAL = "caption.segment.final";
 
     /**
-     * FE에 실시간 중계·리로드되고 RAG {@code contextTimeMs}의 좌표(raw {@code streamElapsedMs})를 갖는
-     * 표시 대상 type. started·segment.final은 여기 포함되지 않아 기존 WS/REST/RAG 경로가 그대로
-     * 보존된다(ADR-0052 1차 슬라이스: 신규 type은 영속만, FE 전달은 후속). 두 신규 type의 표시·앵커
-     * 활용은 후속 슬라이스에서 이 집합을 넓히며 도입한다.
+     * FE에 실시간 WS 중계·리로드되는 표시 대상 type(ADR-0052 2차 슬라이스). `delta`(진행중 부분 렌더)와
+     * `completed`(종료 마커)에 더해 `segment.final`(확정 발화)을 포함한다. `started`(시간 앵커)는 표시
+     * 대상이 아니라 영속만 하고 WS/리로드로 내보내지 않는다.
      */
-    public static final List<String> RELAYED_TYPES = List.of(TYPE_DELTA, TYPE_COMPLETED);
+    public static final List<String> RELAYED_TYPES = List.of(TYPE_DELTA, TYPE_COMPLETED, TYPE_SEGMENT_FINAL);
+
+    /**
+     * RAG {@code contextTimeMs}의 좌표(raw 단일 {@code streamElapsedMs})를 갖는 type. `started`(앵커만)·
+     * `segment.final`(start/end 쌍)은 단일 좌표가 없어 제외한다 — 최신행이 이들이면 좌표가 null이 되어
+     * RAG가 깨지므로 이 집합으로 배제한다(ADR-0052).
+     */
+    public static final List<String> CONTEXT_TIME_TYPES = List.of(TYPE_DELTA, TYPE_COMPLETED);
 
     public boolean isDelta() {
         return TYPE_DELTA.equals(type);

@@ -109,8 +109,27 @@ export interface CaptionStreamCompletedPayload {
   reason: string
 }
 
+/**
+ * 확정된 발화 세그먼트 경계(AI가 내려 주는 권위 있는 문장 단위). 문장부호 휴리스틱(ADR-0044)을 대체한다.
+ * `text`는 누적 델타를 **덮어쓰는** 이 세그먼트의 최종 텍스트다. `startStreamElapsedMs`/`endStreamElapsedMs`는
+ * attempt-local raw ms(변환 금지). `lastSequence`는 이 세그먼트가 덮는 델타 sequence의 최댓값 —
+ * 이보다 큰 sequence의 델타만 아직 확정 안 된 진행 중 조각이다.
+ */
+export interface CaptionSegmentFinalPayload {
+  sttSessionId: string
+  segmentIndex: number
+  lastSequence: number
+  text: string
+  startStreamElapsedMs: number
+  endStreamElapsedMs: number
+  boundaryReason: 'SILENCE' | 'MAX_DURATION' | 'STREAM_END'
+  /** 근사 세션-ms(델타·완료 payload와 같은 의미, nullable, ADR-0045). */
+  sessionMs?: number | null
+}
+
 export type CaptionStreamEvent =
   | { type: 'caption.delta'; occurredAt: string; payload: CaptionDeltaPayload }
+  | { type: 'caption.segment.final'; occurredAt: string; payload: CaptionSegmentFinalPayload }
   | { type: 'caption.stream.completed'; occurredAt: string; payload: CaptionStreamCompletedPayload }
 
 /**
@@ -251,7 +270,7 @@ export interface LiveSessionService {
   getCaptions: (sessionId: string) => Promise<CaptionStreamEvent[]>
   /**
    * 라이브 자막 델타 스트림 구독(STOMP `/topic/live-sessions/{id}/captions`).
-   * 채팅 구독과 대칭이며, `caption.delta`·`caption.stream.completed`만 onEvent로 넘긴다.
+   * 채팅 구독과 대칭이며, `caption.delta`·`caption.segment.final`·`caption.stream.completed`만 onEvent로 넘긴다.
    * 누적·CaptionView 매핑은 captionAdapter의 reduceCaptionStream/selectCaptionViews가 맡는다.
    */
   subscribeCaptions: (

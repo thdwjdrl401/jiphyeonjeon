@@ -32,7 +32,7 @@ delta로 노출한다.
 
 ### 1. 영속 — 같은 append-only ingest 로그 확장
 
-- 별도 테이블을 만들지 않고 `core.live_caption`을 확장한다(V11). 두 신규 type도 같은 스트림의 엔트리이고
+- 별도 테이블을 만들지 않고 `core.live_caption`을 확장한다(V12 — 최초 V11이었으나 판서 마이그레이션과 버전 충돌로 rename, hotfix `!242`). 두 신규 type도 같은 스트림의 엔트리이고
   같은 멱등키(`eventId`)·같은 소비 경로를 쓰므로 delta/completed와 공존시키는 게 ADR-0043 모델과 일치한다.
 - 신규 컬럼(그 외 type엔 NULL): `audio_started_at`(started 앵커), `segment_index`·`start_stream_elapsed_ms`·
   `end_stream_elapsed_ms`·`boundary_reason`(segment.final). `event_type` CHECK를 4종으로 확장한다.

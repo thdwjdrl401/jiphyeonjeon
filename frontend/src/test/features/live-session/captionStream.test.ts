@@ -47,13 +47,38 @@ function completed(sttSessionId: string, lastSequence: number): CaptionStreamEve
   return { type: 'caption.stream.completed', occurredAt: '2026-07-29T10:00:00+09:00', payload: { sttSessionId, lastSequence, reason: 'ROOM_DELETED' } }
 }
 
+function segmentFinal(
+  sttSessionId: string,
+  segmentIndex: number,
+  lastSequence: number,
+  startStreamElapsedMs: number,
+  text: string,
+  overrides: Partial<Extract<CaptionStreamEvent, { type: 'caption.segment.final' }>['payload']> = {},
+): CaptionStreamEvent {
+  return {
+    type: 'caption.segment.final',
+    occurredAt: '2026-07-29T10:00:00+09:00',
+    payload: {
+      sttSessionId,
+      segmentIndex,
+      lastSequence,
+      text,
+      startStreamElapsedMs,
+      endStreamElapsedMs: startStreamElapsedMs + 3_000,
+      boundaryReason: 'SILENCE',
+      sessionMs: null,
+      ...overrides,
+    },
+  }
+}
+
 function fold(events: CaptionStreamEvent[]) {
   return events.reduce(reduceCaptionStream, emptyCaptionStreamState())
 }
 
 describe('라이브 자막 델타 누적', () => {
   it('한 sttSession의 델타를 sequence 순서로 이어 붙여 자라는 한 라인을 만든다', () => {
-    // 종결부호 없이 진행 중인 라인(문장 분할 시 마지막 조각 = pending). segmentId는 `sttSessionId#문장index`.
+    // 세그먼트 확정 전이라 델타 전체가 진행 중(pending) 조각 하나다. segmentId는 `sttSessionId#0`.
     const views = selectCaptionViews(fold([
       delta('stt-1', 1, 1_000, '인증이 '),
       delta('stt-1', 2, 2_000, '끝나면 '),
@@ -137,17 +162,89 @@ describe('근사 세션-ms 축 (ADR-0045)', () => {
     expect(views[0].synced).toBe(false)
   })
 
-  it('뒤 델타에서 시작한 문장은 그 델타의 방출 시각이 아니라 직전 델타 시각을 시작으로 잡는다', () => {
-    // 델타 시각은 그 조각을 "내보낸" 시점이라, 그 조각의 말이 시작된 시점은 직전 델타 시각에 가깝다.
-    // 두 번째 문장은 델타2에서 시작하므로 시작 시각은 델타2(20_000)가 아니라 델타1(10_000)이어야 한다.
+  it('세그먼트 확정 전의 델타들은 문장부호로 쪼개지 않고 하나의 진행 중 조각으로 이어 붙인다', () => {
+    // ADR-0044 문장부호 휴리스틱 제거: segment.final이 오기 전엔 종결부호가 있어도 한 pending 라인이다.
+    // 진행 중 조각의 시작 시각은 첫 델타(직전 없음)의 자기 시각(10_000)이다.
     const views = selectCaptionViews(fold([
       syncedDelta('stt-1', 1, 10_000, '첫 문장이다. '),
       syncedDelta('stt-1', 2, 20_000, '둘째 문장이다.'),
     ]))
 
+    expect(views).toHaveLength(1)
+    expect(views[0].text).toBe('첫 문장이다. 둘째 문장이다.')
+    expect(views[0].startMs).toBe(10_000)
+    expect(views[0].pending).toBe(true)
+    expect(views[0].synced).toBe(true)
+  })
+})
+
+describe('확정 세그먼트 경계 (caption.segment.final)', () => {
+  it('세그먼트마다 권위 있는 CaptionView를 segmentIndex 순으로 낸다(pending=false, raw startStreamElapsedMs)', () => {
+    const views = selectCaptionViews(fold([
+      delta('stt-1', 1, 1_000, '인증이 끝나면 '),
+      delta('stt-1', 2, 2_000, 'SecurityContext가 남는다. '),
+      segmentFinal('stt-1', 0, 2, 1_000, '인증이 끝나면 SecurityContext가 남는다.'),
+      delta('stt-1', 3, 3_000, '다음은 필터 순서다.'),
+      segmentFinal('stt-1', 1, 3, 2_500, '다음은 필터 순서다.'),
+    ]))
+
     expect(views).toHaveLength(2)
-    expect(views[0].startMs).toBe(10_000)   // 첫 델타는 직전이 없어 자기 시각
-    expect(views[1].startMs).toBe(10_000)   // 델타2의 말은 10_000부터 시작된 것
+    expect(views[0]).toMatchObject({
+      segmentId: 'stt-1#0',
+      text: '인증이 끝나면 SecurityContext가 남는다.',
+      startMs: 1_000,
+      endMs: 4_000,
+      at: '00:01',
+      pending: false,
+      synced: false,
+    })
+    expect(views[1]).toMatchObject({
+      segmentId: 'stt-1#1',
+      text: '다음은 필터 순서다.',
+      startMs: 2_500,
+      pending: false,
+    })
+  })
+
+  it('세그먼트가 덮지 않은(sequence > lastSequence) 델타는 뒤에 진행 중 조각으로 붙는다', () => {
+    const views = selectCaptionViews(fold([
+      delta('stt-1', 1, 1_000, '확정된 문장이다. '),
+      segmentFinal('stt-1', 0, 1, 1_000, '확정된 문장이다.'),
+      delta('stt-1', 2, 2_000, '아직 말하는 중'),
+    ]))
+
+    expect(views).toHaveLength(2)
+    expect(views[0]).toMatchObject({ segmentId: 'stt-1#0', text: '확정된 문장이다.', pending: false })
+    // 진행 중 조각은 세그먼트 뒤 index로, pending=true.
+    expect(views[1]).toMatchObject({ segmentId: 'stt-1#1', text: '아직 말하는 중', pending: true })
+  })
+
+  it('나중 세그먼트가 진행 중 조각을 덮으면 조각이 사라진다(권위 텍스트로 대체)', () => {
+    const withPartial = selectCaptionViews(fold([
+      delta('stt-1', 1, 1_000, '말하는 중 '),
+      delta('stt-1', 2, 2_000, '계속'),
+    ]))
+    expect(withPartial).toHaveLength(1)
+    expect(withPartial[0].pending).toBe(true)
+
+    const finalized = selectCaptionViews(fold([
+      delta('stt-1', 1, 1_000, '말하는 중 '),
+      delta('stt-1', 2, 2_000, '계속'),
+      segmentFinal('stt-1', 0, 2, 1_000, '말하는 중 계속.'),
+    ]))
+    // 델타 두 개가 모두 lastSequence=2에 덮여 진행 중 조각은 없어지고, 권위 세그먼트만 남는다.
+    expect(finalized).toHaveLength(1)
+    expect(finalized[0]).toMatchObject({ segmentId: 'stt-1#0', text: '말하는 중 계속.', pending: false })
+  })
+
+  it('같은 segmentIndex 재전달은 마지막 값으로 대체한다(멱등, last-wins)', () => {
+    const views = selectCaptionViews(fold([
+      segmentFinal('stt-1', 0, 1, 1_000, '먼저 온 텍스트'),
+      segmentFinal('stt-1', 0, 1, 1_000, '교정된 텍스트'),
+    ]))
+
+    expect(views).toHaveLength(1)
+    expect(views[0].text).toBe('교정된 텍스트')
   })
 })
 
