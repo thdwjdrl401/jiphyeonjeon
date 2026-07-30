@@ -14,7 +14,7 @@ export const mockLessonService = {
       sectionId: request.sectionId,
       title: request.title,
       description: request.description,
-      status: 'DRAFT' as const,
+      status: 'PUBLISHED' as const,
     }
   },
   async deleteLessonMaterial() {

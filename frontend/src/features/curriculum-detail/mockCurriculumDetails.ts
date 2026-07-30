@@ -32,14 +32,13 @@ function applyViewerAccess(
     ...section,
     lessons: section.lessons.map((lesson) => {
       flatIndex += 1
-      const isStudentDraft = relationship === 'ENROLLED' && lesson.status !== 'PUBLISHED'
-      if (!canOpen || isStudentDraft) {
+      if (!canOpen) {
         return {
           ...lesson,
           access: {
             allowed: false,
             destination: null,
-            reasonCode: isStudentDraft ? 'LESSON_NOT_PUBLISHED' as const : 'ENROLLMENT_REQUIRED' as const,
+            reasonCode: 'ENROLLMENT_REQUIRED' as const,
           },
           learning: null,
         }

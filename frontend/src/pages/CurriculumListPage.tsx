@@ -93,13 +93,19 @@ export default function CurriculumListPage() {
 
       <section className="catalog-content page-container">
         <form className="catalog-controls" onSubmit={handleSearch} role="search">
+          <div className="catalog-summary" aria-live="polite">
+            <div>
+              <h2>{queryText ? `‘${queryText}’ 검색 결과` : '전체 커리큘럼'}</h2>
+              {data && <p><strong>{data.totalElements}</strong>개</p>}
+            </div>
+            {hasConditions && <button className="reset-button" type="button" onClick={resetFilters}>초기화</button>}
+          </div>
           <label className="search-field">
             <span className="visually-hidden">커리큘럼 검색</span>
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
             <input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="제목과 소개로 검색" />
             {searchInput && <button type="button" aria-label="검색어 지우기" onClick={() => setSearchInput('')}>×</button>}
           </label>
-          <button className="button button--primary catalog-search-button" type="submit">검색</button>
           <label className="sort-field">
             <span className="visually-hidden">정렬 기준</span>
             <select value={sort} onChange={(event) => updateParams({ sort: event.target.value === 'LATEST' ? null : event.target.value, page: null })}>
@@ -108,14 +114,6 @@ export default function CurriculumListPage() {
             </select>
           </label>
         </form>
-
-        <div className="catalog-summary" aria-live="polite">
-          <div>
-            <h2>{queryText ? `‘${queryText}’ 검색 결과` : '전체 커리큘럼'}</h2>
-            {data && <p>총 <strong>{data.totalElements}</strong>개의 커리큘럼을 찾았어요.</p>}
-          </div>
-          {hasConditions && <button className="reset-button" type="button" onClick={resetFilters}>조건 초기화</button>}
-        </div>
 
         {curriculumQuery.isPending ? (
           <CurriculumCardSkeleton count={6} />
