@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { StatusBadge } from '@/shared/ui/WorkspaceUi'
 import CameraOverlayControl from './CameraOverlayControl'
+import InstructorAnnotationLayer from './InstructorAnnotationLayer'
 import InstructorLocalTrackVideo from './InstructorLocalTrackVideo'
 import { useInstructorLiveKit, type InstructorLiveKitConnectionState } from './useInstructorLiveKit'
 
@@ -31,6 +33,8 @@ function emptyPreviewMessage(state: InstructorLiveKitConnectionState, cameraEnab
 
 export default function InstructorLiveKitStage({ sessionId, lessonTitle, participantCount, onRequestEnd }: InstructorLiveKitStageProps) {
   const publisher = useInstructorLiveKit()
+  // 판서는 기본으로 꺼 둔다. 켜져 있으면 캔버스가 포인터를 먹어 카메라 배치를 드래그할 수 없다.
+  const [annotating, setAnnotating] = useState(false)
   const screenShareTrack = publisher.screenShareEnabled ? publisher.screenShareTrack : undefined
   const cameraTrack = publisher.cameraEnabled ? publisher.cameraTrack : undefined
   const mainTrack = screenShareTrack ?? cameraTrack
@@ -81,6 +85,16 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
               <InstructorLocalTrackVideo mirrored label="카메라 미리보기" track={cameraTrack} />
             </CameraOverlayControl>
           )}
+          {/*
+            판서는 합성 캔버스 안에 둔다 — 이 사각형이 곧 수강생이 받는 프레임이므로, 강사가 여기에
+            그린 좌표가 그대로 Egress 렌더 좌표가 된다. 미리보기 영역 전체에 두면 실제로 나가지 않는
+            여백에도 그릴 수 있게 되어 강사만 보이는 판서가 생긴다.
+          */}
+          <InstructorAnnotationLayer
+            active={annotating}
+            audienceRevision={publisher.annotationAudienceRevision}
+            onPublish={publisher.publishAnnotation}
+          />
         </div>
       </div>
 
@@ -111,6 +125,19 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
               카메라 자체를 끄지 않고 합성 화면에서만 내린다. 강사는 계속 자기 카메라를 보면서
               수강생 화면에는 자료만 띄울 수 있다 — 자료에 집중시키고 싶은 구간에서 쓴다.
             */}
+            {/*
+              판서를 켜면 캔버스가 포인터를 받는다. 그래서 카메라 배치 드래그와 동시에 쓸 수 없고,
+              토글로 둔다 — 켠 상태를 유지하면 강사가 왜 카메라를 못 옮기는지 알기 어렵다.
+            */}
+            <button
+              aria-pressed={annotating}
+              className={annotating ? 'is-active' : ''}
+              disabled={!publisher.canControl}
+              type="button"
+              onClick={() => setAnnotating((current) => !current)}
+            >
+              판서 {annotating ? '켜짐' : '꺼짐'}
+            </button>
             {showCameraPictureInPicture && (
               <button
                 aria-pressed={publisher.cameraOverlay.visible}

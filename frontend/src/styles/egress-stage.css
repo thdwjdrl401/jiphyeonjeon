@@ -54,6 +54,23 @@
   display: none;
 }
 
+/* 강사 판서(ADR-0051). 화면공유·카메라 위에 얹는다 — 자료 위에 쓴 설명이 카메라 타일에 가려지면
+ * 판서의 의미가 없다.
+ *
+ * 이 레이어는 <b>합성 프레임의 기준면</b>이다. `inset: 0`으로 프레임 전체를 덮고, 안의 캔버스는
+ * `annotationPlacement()`가 계산한 비율(%)로 자리를 잡는다. 스스로 비율을 잡지 않고 이미 프레임인
+ * 부모를 덮는 이유는 기준면이 한 곳에만 정의되어야 하기 때문이다(.camera-overlay-frame과 같은 규칙).
+ *
+ * 프레임을 벗어난 판서는 `.egress-stage`의 overflow로 잘린다 — 좌표를 클램프해 획을 프레임 안으로
+ * 순간이동시키지 않는다. 강사가 그린 자리에 그대로 두는 편이 맞다.
+ *
+ * 카메라와 달리 <b>뒤집지 않는다.</b> 판서에는 글자와 수식이 들어가고, 뒤집으면 읽을 수 없다. */
+.egress-stage__annotation {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+}
+
 /* 원격 오디오 element 싱크. 합성 프레임에는 보이지 않아야 하지만 <b>소리는 나야 한다</b> —
  * Egress는 이 페이지의 재생 출력을 pulseaudio로 캡처하므로 페이지가 조용하면 녹화도 무음이다.
  * <audio>는 레이아웃 박스가 없어 display:none으로도 재생이 멈추지 않는다(LiveKit RoomAudioRenderer도

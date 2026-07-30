@@ -32,6 +32,12 @@ import {
   withCameraOverlay,
   type CameraOverlay,
 } from './cameraOverlay'
+import {
+  ANNOTATION_TOPIC,
+  encodeAnnotationOp,
+  type AnnotationChange,
+  type AnnotationOp,
+} from './annotation'
 
 export type InstructorLiveKitConnectionState =
   | 'idle'
@@ -66,6 +72,16 @@ export interface InstructorLiveMedia extends InstructorLiveKitState {
   /** 합성 화면에서 카메라가 놓일 자리. 강사가 옮긴 그대로 수강생 녹화에 반영된다. */
   cameraOverlay: CameraOverlay
   moveCameraOverlay: (next: Partial<CameraOverlay>) => void
+  /**
+   * 판서 변경을 데이터 채널로 내보낸다(ADR-0051). `revision`은 여기서 붙는다 — 강사가 단일 writer이므로
+   * 번호를 매기는 곳이 하나여야 한다.
+   */
+  publishAnnotation: (change: AnnotationChange) => void
+  /**
+   * 새 참가자가 들어올 때마다 오른다. 판서를 들고 있는 화면이 이 값을 보고 <b>스냅샷을 다시 내보낸다</b> —
+   * 새로 들어온 Egress는 그 전에 흐른 op를 받을 수 없어, 이것이 없으면 판서가 빈 채로 녹화된다.
+   */
+  annotationAudienceRevision: number
   /** 품질 변경으로 트랙을 다시 올리는 중. 이때는 선택을 잠근다. */
   applyingQuality: boolean
   retry: () => void
@@ -145,6 +161,13 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
   const [cameraOverlay, setCameraOverlay] = useState<CameraOverlay>(DEFAULT_CAMERA_OVERLAY)
   const overlayRef = useRef(cameraOverlay)
   overlayRef.current = cameraOverlay
+
+  /**
+   * 판서 op 번호. state가 아니라 ref다 — op를 낼 때마다 렌더를 유발하면 획을 그을 때마다 강사 화면
+   * 전체가 다시 그려진다.
+   */
+  const annotationRevisionRef = useRef(0)
+  const [annotationAudienceRevision, setAnnotationAudienceRevision] = useState(0)
 
   const syncLocalState = useCallback((room: Room) => {
     setState((current) => ({
@@ -261,6 +284,14 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
     const onLocalTrackChanged = () => {
       if (!cancelled) syncLocalState(room)
     }
+    /**
+     * 새로 들어온 참가자는 그 전에 흐른 판서 op를 받을 방법이 없다. Egress가 강의 도중 재접속하면
+     * 판서가 통째로 빈 채로 녹화되므로, "누가 들어왔다"를 화면 쪽에 알려 스냅샷을 다시 내보내게 한다
+     * (ADR-0051). 여기서 직접 보내지 않는 이유는 판서 문서를 들고 있는 곳이 화면 쪽이기 때문이다.
+     */
+    const onParticipantConnected = () => {
+      if (!cancelled) setAnnotationAudienceRevision((current) => current + 1)
+    }
 
     room
       .on(RoomEvent.Reconnecting, onReconnecting)
@@ -271,6 +302,7 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
       .on(RoomEvent.LocalTrackUnpublished, onLocalTrackChanged)
       .on(RoomEvent.TrackMuted, onLocalTrackChanged)
       .on(RoomEvent.TrackUnmuted, onLocalTrackChanged)
+      .on(RoomEvent.ParticipantConnected, onParticipantConnected)
 
     const connect = async () => {
       await disconnectRef.current.catch(() => undefined)
@@ -333,6 +365,7 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
         .off(RoomEvent.LocalTrackUnpublished, onLocalTrackChanged)
         .off(RoomEvent.TrackMuted, onLocalTrackChanged)
         .off(RoomEvent.TrackUnmuted, onLocalTrackChanged)
+        .off(RoomEvent.ParticipantConnected, onParticipantConnected)
       if (roomRef.current === room) roomRef.current = null
       disconnectRef.current = room.disconnect(true).catch(() => undefined)
     }
@@ -434,6 +467,28 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
       })
   }, [state.connectionState])
 
+  /**
+   * 판서 변경을 데이터 채널로 보낸다.
+   *
+   * <p>`reliable`로 보낸다 — 판서는 유실되면 화면에서 획이 빠진 채로 남는다. 카메라 배치처럼 "다음
+   * 값이 덮어쓰는" 성질이 아니므로 한 번 놓친 획은 스냅샷 전까지 복구되지 않는다.
+   *
+   * <p>실패해도 강사 화면은 건드리지 않는다. 강사는 자기 에디터를 직접 보고 있으므로 이미 그린 획을
+   * 되돌리면 오히려 혼란스럽다 — 대신 콘솔에 남기고 다음 스냅샷이 상태를 맞춘다.
+   */
+  const publishAnnotation = useCallback((change: AnnotationChange) => {
+    const room = roomRef.current
+    if (!room || room.state !== 'connected') return
+
+    annotationRevisionRef.current += 1
+    const op = { ...change, revision: annotationRevisionRef.current } as AnnotationOp
+    void room.localParticipant
+      .publishData(encodeAnnotationOp(op), { reliable: true, topic: ANNOTATION_TOPIC })
+      .catch((error) => {
+        console.warn('판서를 합성 화면에 전달하지 못했습니다', error)
+      })
+  }, [])
+
   // 재연결하면 participant가 새로 만들어져 metadata가 비고, 합성 화면이 기본 배치로 돌아간다.
   // 강사가 옮겨 둔 자리를 다시 실어 준다.
   useEffect(() => {
@@ -456,12 +511,14 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
     changeQuality,
     cameraOverlay,
     moveCameraOverlay,
+    publishAnnotation,
+    annotationAudienceRevision,
     applyingQuality,
     retry: () => setRetryCount((current) => current + 1),
     toggleCamera: () => { void toggleControl('camera') },
     toggleMicrophone: () => { void toggleControl('microphone') },
     toggleScreenShare: () => { void toggleControl('screenShare') },
-  }), [applyingQuality, cameraOverlay, changeQuality, moveCameraOverlay, pendingControl, quality, sessionId, state, toggleControl])
+  }), [annotationAudienceRevision, applyingQuality, cameraOverlay, changeQuality, moveCameraOverlay, pendingControl, publishAnnotation, quality, sessionId, state, toggleControl])
 
   return (
     <InstructorLiveMediaContext.Provider value={value}>

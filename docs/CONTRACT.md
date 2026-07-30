@@ -119,6 +119,16 @@ Spring 수신 endpoint를 구현하고 `SPRING_STATUS_CALLBACK_URL`로 주입하
 - **채팅 채널** `/topic/live-sessions/{sessionId}/chat`: `chat_message { lessonId, sessionMs, text, alias }`(실명·userId 미노출).
 - 채팅 시간은 **세션 상대 ms**(`sessionMs`)다. **자막의 `streamElapsedMs`는 §3-4의 raw attempt-local ms를 그대로 노출**한다(변환 금지) — 세션 상대 ms 변환·앵커는 후속 공유 계약이며 그 전까지 FE는 raw 값으로 취급한다(ADR-0043). **추가로 자막 payload에 근사 `sessionMs`(Long, nullable)를 함께 싣는다**: `max(0, occurredAt − session.clockOriginAt)`로 서버가 읽기 시 계산하는 **근사 세션-ms**로, 학생이 HLS 영상 위치에 자막을 맞추는 **표시용**이다([ADR-0045](decisions/songjeongki/0045-live-caption-position-sync-approx-session-ms.md)). 이는 `streamElapsedMs` 변환이 아니라 occurredAt 기반의 별도 근사 축이며(streamElapsedMs는 raw 그대로 유지), §3-4의 "streamElapsedMs→세션ms 변환 금지"에 대한 **의도적 편차**다 — 오차 ~1~2s(STT 지연+시계 스큐)는 HLS 지연(수초~수십초)보다 작다. clockOriginAt이 없으면 null. 앵커 기반 정밀화는 후속.
 
+### 3-6b. 강사 FE → Egress 합성 화면 판서 (LiveKit 데이터 채널) — FE 양쪽 구현됨
+- **topic** `annotation`, **reliable**로 publish. 다른 topic은 판서로 해석하지 않는다.
+- **payload** `{ "v": 1, "op": { … } }` (UTF-8 JSON). `v`가 1이 아니면 버린다 — 옛 Egress 페이지가 새 op를 조용히 오해석하면 안 된다.
+- **op** 네 가지, 모두 `revision`(단조 증가 Long) 필수. `upsert { elements[] }` · `delete { ids[] }` · `clear` · `snapshot { elements[] }`.
+- `elements`는 **Excalidraw 요소 JSON 그대로**다. 이것이 판서 문서의 정본 포맷이며, 손그림 → 도형 인식 결과도 같은 형식으로 주입해 편집 가능성을 유지한다([ADR-0051](decisions/songjeongki/0051-instructor-annotation-excalidraw.md)).
+- **좌표계는 `1920x1080` 논리 프레임**(§합성 캔버스와 동일). 다만 수신 측은 프레임을 가정하지 않고 `getCommonBounds()`로 **실제 오프셋을 보정**해 얹는다 — `exportToCanvas`가 프레임이 아니라 내용 바운딩 박스 기준으로 그리기 때문이며, `freedraw`의 `points`는 선언된 `x/y/width/height`를 넘을 수 있어 좌표 클램프로는 막지 못한다. 프레임을 벗어난 판서는 CSS로 클립한다(좌표를 잘라내지 않는다).
+- **유실 처리**: `revision`이 이어지지 않으면 그 op를 버리고 다음 `snapshot`을 기다린다(반쪽짜리 판서를 녹화하지 않는다). 강사는 **참가자가 새로 접속할 때마다** 전체 `snapshot`을 다시 publish한다 — 도중에 재접속한 Egress의 유일한 복구 경로다.
+- **강사가 단일 writer**다. 그래서 CRDT 없이 `revision` 하나로 충분하고, 같은 op를 두 번 받아도 결과가 같다(멱등).
+- 수강생은 이 채널을 구독하지 않는다 — 합성 결과만 본다(ADR-0032). 따라서 판서는 Egress 프레임을 거쳐서만 수강생에게 도달한다.
+
 ### 3-7. EC2 ai-worker → GPU bge-runtime (HTTP) — AI 구현됨
 
 이 호출은 **Spring이 보내는 API가 아니다**. Spring은 §3-1의 자료 잡을 RabbitMQ에 발행하고 §3-2의 최종

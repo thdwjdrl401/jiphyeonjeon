@@ -15,6 +15,7 @@ import {
   parseCameraOverlay,
   type CameraOverlay,
 } from '@/features/live-session/cameraOverlay'
+import EgressAnnotationLayer from '@/features/live-session/EgressAnnotationLayer'
 import '@/styles/egress-stage.css'
 
 /**
@@ -74,11 +75,14 @@ export default function EgressStagePage() {
   const [overlay, setOverlay] = useState<CameraOverlay>(DEFAULT_CAMERA_OVERLAY)
   const [hasScreen, setHasScreen] = useState(false)
   const [hasCamera, setHasCamera] = useState(false)
+  // 판서 레이어가 데이터 채널을 구독하려면 Room이 필요하다(ADR-0051).
+  const [connectedRoom, setConnectedRoom] = useState<Room | null>(null)
 
   useEffect(() => {
     if (!url || !token) return undefined
 
     const room = new Room({ adaptiveStream: false, dynacast: false })
+    setConnectedRoom(room)
     let ended = false
     let audioRecoveryAttempts = 0
     const attachedAudio = new Set<RemoteAudioTrack>()
@@ -211,6 +215,7 @@ export default function EgressStagePage() {
         .off(RoomEvent.Disconnected, signalEnd)
       // 오디오 element는 우리가 직접 만들어 붙였으니 React가 정리해 주지 않는다.
       for (const track of [...attachedAudio]) detachAudio(track)
+      setConnectedRoom(null)
       void room.disconnect(true)
     }
   }, [token, url])
@@ -247,6 +252,11 @@ export default function EgressStagePage() {
         muted
         playsInline
       />
+      {/*
+        판서는 카메라보다 위에 그린다 — 강사가 자료 위에 쓴 설명이 카메라 타일에 가려지면 안 된다.
+        에디터가 아니라 렌더 결과만 얹으므로 선택 핸들이나 툴바는 존재하지 않는다(ADR-0051).
+      */}
+      <EgressAnnotationLayer room={connectedRoom} />
       {/*
         원격 오디오 element가 사는 자리. `display: none`이라 합성 프레임에는 한 픽셀도 남기지 않지만
         오디오 재생은 계속된다(LiveKit의 RoomAudioRenderer도 같은 방식이다). 여기 들어가는 element는

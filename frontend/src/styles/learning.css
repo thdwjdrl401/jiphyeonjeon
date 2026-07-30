@@ -80,6 +80,21 @@
  * 0~1 비율을 읽는 기준면이라 Egress 캔버스와 한 치도 어긋나면 안 된다. 그래서 스스로 비율을 잡지 않고
  * 이미 캔버스인 부모(.instructor-media-canvas)를 그대로 덮는다 — 기준면이 한 곳에만 정의된다. */
 .camera-overlay-frame { position: absolute; z-index: 3; inset: 0; pointer-events: none; }
+/* 강사 판서 편집기(ADR-0051).
+ *
+ * 기준면은 합성 캔버스 전체다 — 카메라 배치 편집기와 같은 이유로 스스로 비율을 잡지 않고 이미
+ * 캔버스인 부모(.instructor-media-canvas)를 덮는다. 강사가 여기에 그린 좌표가 그대로 Egress 렌더
+ * 좌표가 되므로 두 기준면이 어긋나면 판서가 밀린다.
+ *
+ * 카메라 PIP(z-index 3)보다 위에 둔다. 판서를 켠 동안에는 캔버스가 포인터를 받아야 하므로
+ * pointer-events를 넘기지 않는다 — 그래서 판서와 카메라 배치 드래그는 토글로 갈라 쓴다.
+ *
+ * 배경을 칠하지 않는다. 아래 화면공유가 비쳐야 한다(Excalidraw의 흰 배경은 appState에서 껐다). */
+.instructor-annotation-layer { position: absolute; z-index: 4; inset: 0; }
+.instructor-annotation-layer .excalidraw { --ui-font: inherit; background: transparent; }
+/* 청크가 내려오는 동안. 아래 영상은 계속 보여야 하므로 아무것도 덮지 않는다. */
+.instructor-annotation-layer--loading { pointer-events: none; }
+.instructor-annotation-layer--failed { display: grid; padding: 12px 16px; place-items: center; background: rgba(20,10,10,.72); color: #ffd9d9; font-size: .74rem; }
 /* 실제로 녹화되는 경계를 옅게 표시한다. 이게 없으면 강사는 미리보기 영역과 캔버스를 구분할 수 없어
    "화면 밖으로 옮긴 것 같은데 녹화에는 남아 있다"는 어긋남을 눈치채지 못한다. */
 .camera-overlay-frame::before { position: absolute; z-index: 0; inset: 0; border: 1px dashed rgba(255,252,243,.22); border-radius: 4px; content: ''; }
