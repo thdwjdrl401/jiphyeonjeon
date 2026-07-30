@@ -1,27 +1,46 @@
 # `ai-api/app/lecture_notes`
 
-[ADR-0034](../../../../docs/decisions/canola/0034-near-realtime-accumulative-lecture-notes.md)의
-축적형 강의 노트 MVP 코어다.
+실시간 caption을 주제별 Markdown 강의 노트로 축적하는 ai-api 내부 MVP core다. 정책과 단계별 판단은
+[ADR-0034](../../../../docs/decisions/canola/0034-near-realtime-accumulative-lecture-notes.md), 실행과 EC2
+구성은 [ai-api README](../../README.md)를 기준으로 한다.
 
-현재 단계는 `CaptionDelta|CaptionCompleted`를 모델 입력용 `LectureNoteWindow`로 접고, 구조화 모델
-결과를 topic 정본과 제한된 Markdown으로 반영한다. application service는 세션별 호출을 직렬화하고
-대기 window를 한 batch로 합친 뒤 snapshot port로 내보낸다. Redis snapshot·결과 Stream adapter는
-구현했고 별도 GMS 구조화 JSON model도 제공한다. `ai-live-notes-mvp-v1` input group과 ai-api
-application lifecycle까지 연결하며 현재 단일 ai-api instance를 전제로 한다.
+## 흐름
 
-## 현재 보장
+```text
+ai:captions:live
+  -> ai-live-notes-mvp-v1
+  -> window accumulator
+  -> GMS structured JSON
+  -> topic reducer + Markdown renderer
+  -> Redis snapshot + observation Stream
+```
 
-- leading space를 포함한 delta text를 순서대로 보존한다.
-- `eventId`와 attempt-local `sequence` 중복을 제거한다.
-- sequence gap은 metric에 기록하고 이후 delta 처리는 계속한다.
-- 15/25/40초와 80/400자, 강한 문장 종결을 조합해 window를 자른다.
-- attempt 전환과 stream completion에서는 짧은 남은 text도 flush한다.
-- 다음 window에는 직전 window의 마지막 두 문장만 이전 문맥으로 전달한다.
-- `CONTINUE|START_NEW` 결과를 topic 정본에 반영하고 완전히 같은 key point만 제거한다.
-- Markdown 구조는 애플리케이션이 만들고 raw HTML·image·외부 link를 무력화한다.
-- 같은 세션의 모델 호출은 하나만 실행하고 호출 중 도착한 window는 다음 batch 하나로 합친다.
-- caption handler는 모델을 기다리지 않고 in-memory enqueue까지만 끝낸다.
+RAG consumer group `ai-rag-live-v1`과 별도 group을 사용하므로 서로의 ACK에 영향을 주지 않는다. ai-api
+lifecycle이 consumer를 함께 시작하며 별도 process나 port는 만들지 않는다. 노트 상태와 모델 호출 직렬화가
+in-memory이므로 [EC2 Compose](../../../../docker-compose.ai-prod.yml)는 ai-api를 단일 replica로 운용한다.
 
-## 아직 하지 않는 것
+## Redis 결과와 확인
 
-- 여러 ai-api instance의 session owner fencing과 pending claim
+- 최신 snapshot: `ai:lecture-notes:mvp:snapshot:{sessionId}` (`SET EX`, 기본 TTL 86,400초)
+- 관찰 Stream: `ai:lecture-notes:mvp` (`XADD MAXLEN ~`, 기본 10,000개)
+
+두 결과는 실험 관찰용이며 Spring·Frontend가 의존하는 공유 계약이 아니다.
+
+Redis에 접속한 뒤 다음 값으로 생성 여부와 갱신 상태를 확인한다.
+
+```bash
+redis-cli GET 'ai:lecture-notes:mvp:snapshot:{sessionId}'
+redis-cli TTL 'ai:lecture-notes:mvp:snapshot:{sessionId}'
+redis-cli XREVRANGE ai:lecture-notes:mvp + - COUNT 10
+```
+
+[공통 ai-api 검증 명령](../README.md#검증)은 unit·integration test와 lint를 함께 실행한다. 실제 Redis
+integration test는 기본 `redis://127.0.0.1:6379/15`를 사용하며 `AI_API_TEST_REDIS_URL`로 바꿀 수 있다.
+
+## 현재 비범위
+
+- Spring·Frontend가 소비하는 API/DTO와 DB 영속화
+- multi-replica session owner, 다른 consumer의 pending claim, 재시작 복원
+- LLM retry·실패 window 복구와 VOD 기반 최종 교정·강사 검수
+
+전체 비범위와 다음 완료 조건은 [ADR-0034의 MVP 범위와 검증](../../../../docs/decisions/canola/0034-near-realtime-accumulative-lecture-notes.md#mvp에서-하지-않는-것)을 따른다.

@@ -131,6 +131,7 @@ Spring signer·SSE proxy는 아직 구현되지 않았다.
 - [ai-api 상세 계약](CONTRACT.md)
 - [애플리케이션 구조](app/README.md)
 - [RAG 구조](app/rag/README.md)
+- [강의 노트 MVP 구조](app/lecture_notes/README.md)
 - [자료 검색 구조](app/retrieval/README.md)
 - [자막 문맥 구조](app/captions/README.md)
 - [ai-api 결정 기록](docs/README.md)
