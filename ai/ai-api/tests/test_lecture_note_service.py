@@ -6,7 +6,8 @@ from app.lecture_notes import (
     LectureNoteModelResult,
     LectureNotePipeline,
     LectureNoteService,
-    LectureNoteStatus,
+    LectureNoteCaptureCompleted,
+    LectureNoteChunkAppended,
     LectureNoteWindow,
     LectureNoteWindowAccumulator,
     TopicAction,
@@ -35,12 +36,12 @@ class BlockingModel:
         )
 
 
-class RecordingStore:
+class RecordingPublisher:
     def __init__(self) -> None:
-        self.snapshots = []
+        self.events = []
 
-    async def save(self, snapshot) -> None:
-        self.snapshots.append(snapshot)
+    async def publish(self, event) -> None:
+        self.events.append(event)
 
 
 def _window(sequence: int, text: str) -> LectureNoteWindow:
@@ -61,8 +62,8 @@ def _window(sequence: int, text: str) -> LectureNoteWindow:
 def test_same_session_runs_one_model_call_and_coalesces_pending_windows() -> None:
     async def scenario() -> None:
         model = BlockingModel()
-        store = RecordingStore()
-        service = LectureNoteService(model, store)
+        publisher = RecordingPublisher()
+        service = LectureNoteService(model, publisher)
 
         service.enqueue((_window(1, "하나"),))
         await model.started.wait()
@@ -72,18 +73,19 @@ def test_same_session_runs_one_model_call_and_coalesces_pending_windows() -> Non
         await service.drain()
 
         assert [request.text for request in model.requests] == ["하나", " 둘 셋"]
-        assert [snapshot.noteVersion for snapshot in store.snapshots] == ["1", "2"]
-        assert store.snapshots[-1].topics[0].keyPoints == ("하나", "둘 셋")
+        assert [event.chunkSequence for event in publisher.events] == ["1", "2"]
+        assert publisher.events[0].markdownFragment == "## 주제\n\n- 하나"
+        assert publisher.events[1].markdownFragment == "- 둘 셋"
 
     asyncio.run(scenario())
 
 
-def test_completion_without_remaining_text_saves_completed_snapshot() -> None:
+def test_completion_without_remaining_text_publishes_completed_event() -> None:
     async def scenario() -> None:
         model = BlockingModel()
         model.release.set()
-        store = RecordingStore()
-        service = LectureNoteService(model, store)
+        publisher = RecordingPublisher()
+        service = LectureNoteService(model, publisher)
         completion = CaptionCompleted(
             contractVersion="1",
             type="caption.stream.completed",
@@ -101,9 +103,9 @@ def test_completion_without_remaining_text_saves_completed_snapshot() -> None:
         await service.drain()
 
         assert model.requests == []
-        assert len(store.snapshots) == 1
-        assert store.snapshots[0].status is LectureNoteStatus.COMPLETED
-        assert store.snapshots[0].noteVersion == "1"
+        assert len(publisher.events) == 1
+        assert isinstance(publisher.events[0], LectureNoteCaptureCompleted)
+        assert publisher.events[0].lastChunkSequence == "0"
         assert service.metrics_snapshot()["tracked_sessions"] == 0
 
     asyncio.run(scenario())
@@ -113,8 +115,8 @@ def test_pipeline_ignores_replayed_completion_without_overwriting_note() -> None
     async def scenario() -> None:
         model = BlockingModel()
         model.release.set()
-        store = RecordingStore()
-        service = LectureNoteService(model, store)
+        publisher = RecordingPublisher()
+        service = LectureNoteService(model, publisher)
         pipeline = LectureNotePipeline(
             LectureNoteWindowAccumulator(
                 min_window_ms=1,
@@ -153,15 +155,17 @@ def test_pipeline_ignores_replayed_completion_without_overwriting_note() -> None
         await service.drain()
         pipeline.ingest(completion)
         await service.drain()
-        completed_snapshot = store.snapshots[-1]
+        completed_event = publisher.events[-1]
 
         pipeline.ingest(completion)
         await service.drain()
 
-        assert len(store.snapshots) == 2
-        assert store.snapshots[-1] == completed_snapshot
-        assert completed_snapshot.topics[0].keyPoints == ("기존 노트",)
-        assert completed_snapshot.noteVersion == "2"
+        assert len(publisher.events) == 2
+        assert publisher.events[-1] == completed_event
+        assert isinstance(publisher.events[0], LectureNoteChunkAppended)
+        assert publisher.events[0].keyPoints == ("기존 노트",)
+        assert isinstance(completed_event, LectureNoteCaptureCompleted)
+        assert completed_event.lastChunkSequence == "1"
 
     asyncio.run(scenario())
 
@@ -189,8 +193,8 @@ def test_model_validation_failure_keeps_previous_note_for_next_window() -> None:
 
     async def scenario() -> None:
         model = ValidationFailingModel()
-        store = RecordingStore()
-        service = LectureNoteService(model, store)
+        publisher = RecordingPublisher()
+        service = LectureNoteService(model, publisher)
 
         service.enqueue((_window(1, "첫째"),))
         await service.drain()
@@ -200,8 +204,8 @@ def test_model_validation_failure_keeps_previous_note_for_next_window() -> None:
         await service.drain()
 
         assert model.calls == 3
-        assert [snapshot.noteVersion for snapshot in store.snapshots] == ["1", "2"]
-        assert store.snapshots[-1].topics[0].keyPoints == ("첫째", "셋째")
+        assert [event.chunkSequence for event in publisher.events] == ["1", "2"]
+        assert [event.keyPoints for event in publisher.events] == [("첫째",), ("셋째",)]
         assert service.metrics_snapshot()["model_failures_total"] == 1
 
     asyncio.run(scenario())

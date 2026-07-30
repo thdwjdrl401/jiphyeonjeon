@@ -2,21 +2,22 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from uuid import uuid4
 
 from app.captions import CaptionCompleted, CaptionEntry
 from app.lecture_notes.models import (
     LectureNote,
+    LectureNoteCaptureCompleted,
+    LectureNoteChunkAppended,
+    LectureNoteEvent,
     LectureNoteModelRequest,
-    LectureNoteSnapshot,
-    LectureNoteSnapshotTopic,
-    LectureNoteStatus,
     LectureNoteWindow,
+    TopicAction,
 )
-from app.lecture_notes.ports import LectureNoteModel, LectureNoteSnapshotStore
-from app.lecture_notes.reducer import apply_model_result, render_markdown
+from app.lecture_notes.ports import LectureNoteEventPublisher, LectureNoteModel
+from app.lecture_notes.reducer import apply_model_result, render_markdown_fragment
 from app.lecture_notes.windowing import LectureNoteWindowAccumulator
 
 logger = logging.getLogger(__name__)
@@ -28,8 +29,8 @@ class LectureNoteServiceMetrics:
     windows_coalesced_total: int = 0
     model_calls_total: int = 0
     model_failures_total: int = 0
-    snapshots_saved_total: int = 0
-    snapshot_failures_total: int = 0
+    events_published_total: int = 0
+    publish_failures_total: int = 0
     completed_total: int = 0
 
 
@@ -54,10 +55,10 @@ class LectureNoteService:
     def __init__(
         self,
         model: LectureNoteModel,
-        store: LectureNoteSnapshotStore,
+        publisher: LectureNoteEventPublisher,
     ) -> None:
         self._model = model
-        self._store = store
+        self._publisher = publisher
         self._sessions: dict[str, _SessionState] = {}
         self._tasks: set[asyncio.Task[None]] = set()
         self._metrics = LectureNoteServiceMetrics()
@@ -114,8 +115,8 @@ class LectureNoteService:
             "windows_coalesced_total": self._metrics.windows_coalesced_total,
             "model_calls_total": self._metrics.model_calls_total,
             "model_failures_total": self._metrics.model_failures_total,
-            "snapshots_saved_total": self._metrics.snapshots_saved_total,
-            "snapshot_failures_total": self._metrics.snapshot_failures_total,
+            "events_published_total": self._metrics.events_published_total,
+            "publish_failures_total": self._metrics.publish_failures_total,
             "completed_total": self._metrics.completed_total,
             "tracked_sessions": len(self._sessions),
             "running_tasks": len(self._tasks),
@@ -156,36 +157,39 @@ class LectureNoteService:
                     },
                 )
                 return
-            note = apply_model_result(note, result)
-        elif batch.completion is not None:
-            note = replace(note, note_version=note.note_version + 1)
-        else:
-            return
+            updated_note = apply_model_result(note, result)
+            if updated_note != note:
+                event = _chunk_appended_event(note, updated_note, batch.windows[-1])
+                if not await self._publish(event, session_id):
+                    return
+                note = updated_note
+                state.note = note
 
-        scope = batch.windows[-1] if batch.windows else batch.completion
-        if scope is None:  # pragma: no cover - guarded above
+        if batch.completion is None:
             return
-        completed = batch.completion is not None
-        snapshot = _snapshot(note, scope, completed=completed)
+        event = _capture_completed_event(note, batch.completion)
+        if not await self._publish(event, session_id):
+            return
+        state.completed = True
+        self._metrics.completed_total += 1
+
+    async def _publish(self, event: LectureNoteEvent, session_id: str) -> bool:
         try:
-            await self._store.save(snapshot)
+            await self._publisher.publish(event)
         except Exception as exc:
-            self._metrics.snapshot_failures_total += 1
+            self._metrics.publish_failures_total += 1
             logger.warning(
-                "강의 노트 snapshot 저장 실패",
+                "강의 노트 event 발행 실패",
                 extra={
-                    "event": "lecture_note.snapshot_failed",
+                    "event": "lecture_note.publish_failed",
                     "session_id": session_id,
+                    "note_event_type": event.type,
                     "error_code": type(exc).__name__,
                 },
             )
-            return
-        # 저장 실패 시 메모리 상태만 앞서가지 않도록 snapshot 성공 뒤에 note를 교체한다.
-        state.note = note
-        self._metrics.snapshots_saved_total += 1
-        if completed:
-            state.completed = True
-            self._metrics.completed_total += 1
+            return False
+        self._metrics.events_published_total += 1
+        return True
 
 
 class LectureNotePipeline:
@@ -235,38 +239,47 @@ def _model_request(
     )
 
 
-def _snapshot(
-    note: LectureNote,
-    scope: LectureNoteWindow | CaptionCompleted,
-    *,
-    completed: bool,
-) -> LectureNoteSnapshot:
-    if isinstance(scope, LectureNoteWindow):
-        session_id = scope.session_id
-        lesson_id = scope.lesson_id
-        stt_session_id = scope.stt_session_id
-        covered_sequence = scope.end_sequence
-    else:
-        session_id = scope.sessionId
-        lesson_id = scope.lessonId
-        stt_session_id = scope.sttSessionId
-        covered_sequence = int(scope.lastSequence)
-    return LectureNoteSnapshot(
+def _chunk_appended_event(
+    previous: LectureNote,
+    updated: LectureNote,
+    window: LectureNoteWindow,
+) -> LectureNoteChunkAppended:
+    topic = updated.topics[-1]
+    starts_new_topic = len(updated.topics) > len(previous.topics)
+    topic_action = TopicAction.START_NEW if starts_new_topic else TopicAction.CONTINUE
+    previous_points = set(previous.topics[-1].key_points) if previous.topics else set()
+    key_points = (
+        topic.key_points
+        if starts_new_topic
+        else tuple(point for point in topic.key_points if point not in previous_points)
+    )
+    return LectureNoteChunkAppended(
         eventId=f"evt-{uuid4().hex}",
-        sessionId=session_id,
-        lessonId=lesson_id,
-        sttSessionId=stt_session_id,
-        noteVersion=str(note.note_version),
-        coveredThroughSequence=str(covered_sequence),
-        status=LectureNoteStatus.COMPLETED if completed else LectureNoteStatus.PROCESSING,
-        topics=tuple(
-            LectureNoteSnapshotTopic(
-                topicId=topic.topic_id,
-                title=topic.title,
-                keyPoints=topic.key_points,
-            )
-            for topic in note.topics
-        ),
-        markdown=render_markdown(note),
+        sessionId=window.session_id,
+        lessonId=window.lesson_id,
+        sttSessionId=window.stt_session_id,
+        chunkSequence=str(updated.chunk_sequence),
+        latestSttSequence=str(window.end_sequence),
+        topicAction=topic_action,
+        topicId=topic.topic_id,
+        topicTitle=topic.title,
+        keyPoints=key_points,
+        markdownFragment=render_markdown_fragment(topic.title, key_points, topic_action),
+        occurredAt=datetime.now(UTC),
+    )
+
+
+def _capture_completed_event(
+    note: LectureNote,
+    completion: CaptionCompleted,
+) -> LectureNoteCaptureCompleted:
+    return LectureNoteCaptureCompleted(
+        eventId=f"evt-{uuid4().hex}",
+        sessionId=completion.sessionId,
+        lessonId=completion.lessonId,
+        sttSessionId=completion.sttSessionId,
+        lastChunkSequence=str(note.chunk_sequence),
+        lastSttSequence=completion.lastSequence,
+        reason=completion.reason,
         occurredAt=datetime.now(UTC),
     )

@@ -7,15 +7,12 @@ from typing import Any, Protocol
 
 from redis.asyncio import Redis
 
-from app.lecture_notes import LectureNoteSnapshot
+from app.lecture_notes import LectureNoteEvent
 
-LECTURE_NOTE_SNAPSHOT_PREFIX = "ai:lecture-notes:mvp:snapshot"
 LECTURE_NOTE_STREAM_KEY = "ai:lecture-notes:mvp"
 
 
 class RedisLectureNoteClient(Protocol):
-    async def set(self, name: str, value: str, *, ex: int) -> object: ...
-
     async def xadd(
         self,
         name: str,
@@ -28,16 +25,14 @@ class RedisLectureNoteClient(Protocol):
     async def aclose(self) -> None: ...
 
 
-class RedisLectureNoteSnapshotStore:
-    """MVP snapshot JSON과 관찰용 Stream event를 application Redis에 기록한다."""
+class RedisLectureNoteEventPublisher:
+    """추가 노트 조각과 수집 완료 event를 bounded Redis Stream에 발행한다."""
 
     def __init__(
         self,
         redis_url: str,
         *,
-        snapshot_prefix: str = LECTURE_NOTE_SNAPSHOT_PREFIX,
         stream_key: str = LECTURE_NOTE_STREAM_KEY,
-        snapshot_ttl_seconds: int = 86_400,
         stream_maxlen: int = 10_000,
         socket_connect_timeout_seconds: float = 2.0,
         socket_timeout_seconds: float = 15.0,
@@ -45,22 +40,12 @@ class RedisLectureNoteSnapshotStore:
     ) -> None:
         if not redis_url:
             raise ValueError("Redis URL must not be empty")
-        if not snapshot_prefix or not stream_key:
-            raise ValueError("lecture note Redis keys must not be empty")
-        if (
-            min(
-                snapshot_ttl_seconds,
-                stream_maxlen,
-                socket_connect_timeout_seconds,
-                socket_timeout_seconds,
-            )
-            <= 0
-        ):
+        if not stream_key:
+            raise ValueError("lecture note Redis Stream key must not be empty")
+        if min(stream_maxlen, socket_connect_timeout_seconds, socket_timeout_seconds) <= 0:
             raise ValueError("lecture note Redis bounds must be positive")
         self._redis_url = redis_url
-        self._snapshot_prefix = snapshot_prefix
         self._stream_key = stream_key
-        self._snapshot_ttl_seconds = snapshot_ttl_seconds
         self._stream_maxlen = stream_maxlen
         self._socket_connect_timeout_seconds = socket_connect_timeout_seconds
         self._socket_timeout_seconds = socket_timeout_seconds
@@ -75,14 +60,8 @@ class RedisLectureNoteSnapshotStore:
             socket_timeout=self._socket_timeout_seconds,
         )
 
-    async def save(self, snapshot: LectureNoteSnapshot) -> None:
-        payload = snapshot.model_dump(mode="json")
-        snapshot_json = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
-        await self._client.set(
-            f"{self._snapshot_prefix}:{snapshot.sessionId}",
-            snapshot_json,
-            ex=self._snapshot_ttl_seconds,
-        )
+    async def publish(self, event: LectureNoteEvent) -> None:
+        payload = event.model_dump(mode="json")
         await self._client.xadd(
             self._stream_key,
             _stream_fields(payload),

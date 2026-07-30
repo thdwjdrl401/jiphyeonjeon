@@ -18,11 +18,12 @@ ai:captions:live
   → 15~40초 text window
   → LLM 구조화 결과
   → 주제별 누적 Markdown
-  → Redis MVP snapshot + Stream
+  → Redis MVP append event Stream
 ```
 
-MVP 결과가 만족스러울 때만 Spring REST·WebSocket, core read model, topic accordion을 공통 계약으로
-승격한다. 녹화본 기반 다시보기 교정 자막은 이번 MVP 범위에 포함하지 않고 별도 결정으로 다룬다.
+AI→Redis event payload는 Backend가 구현 전에 의존 조건을 검토할 수 있도록 공유 계약으로 먼저 고정한다.
+Spring REST·WebSocket, core read model, topic accordion은 MVP 결과가 만족스러울 때 구현한다. 녹화본 기반
+다시보기 교정 자막은 이번 MVP 범위에 포함하지 않고 별도 결정으로 다룬다.
 
 ## MVP 결정
 
@@ -44,8 +45,8 @@ group은 최초 생성할 때 `0-0`에서 시작해 Redis Stream에 아직 보�
 
 `caption.delta`를 `(sessionId, sttSessionId, sequence)` 순으로 붙이고 `eventId`와 sequence로 중복을
 제거한다. sequence가 `10` 다음 `12`처럼 건너뛰면 누락을 metric과 log로 기록하되 `12` 이후 delta는
-계속 처리한다. MVP snapshot에 별도 `incomplete` 필드는 추가하지 않는다. handler가 in-memory session
-buffer에 반영되면 ACK한다. 프로세스 재시작 시 snapshot을 복원하는 동작은 후속으로 구체화한다.
+계속 처리한다. MVP 출력 event에 별도 `incomplete` 필드는 추가하지 않는다. handler가 in-memory session
+buffer에 반영되면 ACK한다. 프로세스 재시작 시 노트 상태를 복원하는 동작은 후속으로 구체화한다.
 
 새 `sttSessionId`가 시작되면 이전 window에 text가 있는 한 최소 시간·글자 조건과 무관하게 모두 flush하고
 새 attempt로 전환한다. `caption.stream.completed`가 와도 같은 방식으로 남은 text를 모두 처리하고 note를
@@ -134,43 +135,72 @@ MVP 결과를 본 뒤 결정한다.
 접기·펼치기 문법이 없고 `<details>`는 raw HTML이므로 MVP 출력에 넣지 않는다. topic accordion은 추후
 Frontend가 구조화 `topics`를 사용해 제공한다. raw HTML·image·외부 link는 만들지 않는다.
 
-### 5. 결과도 Redis에 싣는다
+### 5. 새로 추가된 노트 조각만 Redis Stream에 싣는다
 
-MVP는 변경분 patch 대신 작은 전체 snapshot을 매번 저장한다. 구현과 결과 확인이 가장 단순하기
-때문이다.
+실시간으로 노트가 쌓이는 흐름과 Backend의 누적 저장 책임을 분리하기 위해 매 모델 결과의 전체 snapshot이
+아니라 실제로 새로 추가된 조각만 발행한다. AI 내부 reducer는 다음 모델 요청의 문맥과 중복 제거를 위해
+현재 topic 상태를 계속 보관하지만, Redis에는 과거 Markdown을 반복해서 보내지 않는다.
 
 ```text
-SET ai:lecture-notes:mvp:snapshot:{sessionId} <snapshot-json> EX 86400
 XADD ai:lecture-notes:mvp MAXLEN ~ 10000 ...
 ```
 
-snapshot과 Stream event에는 다음을 담는다.
+새 요점이 생기면 다음 event를 발행한다. 첫 topic 또는 `START_NEW`는 heading과 요점을 함께 보내고,
+`CONTINUE`는 새 bullet만 `markdownFragment`에 담는다. 완전히 같은 요점만 나온 호출은 event와
+`chunkSequence`를 만들지 않는다.
 
 ```json
 {
-  "schemaVersion": "1",
-  "type": "lecture.note.snapshot",
+  "contractVersion": "1",
+  "type": "lecture.note.chunk.appended",
   "eventId": "evt-...",
   "sessionId": "...",
   "lessonId": "...",
   "sttSessionId": "...",
-  "noteVersion": "4",
-  "coveredThroughSequence": "128",
-  "status": "PROCESSING",
-  "topics": [
-    {
-      "topicId": "topic-1",
-      "title": "Refresh Token의 역할",
-      "keyPoints": ["Access Token 만료 뒤 재발급에 사용한다."]
-    }
-  ],
-  "markdown": "## Refresh Token의 역할\n\n- Access Token 만료 뒤 재발급에 사용한다.",
+  "chunkSequence": "4",
+  "latestSttSequence": "128",
+  "topicAction": "CONTINUE",
+  "topicId": "topic-1",
+  "topicTitle": "Refresh Token의 역할",
+  "keyPoints": ["Access Token 만료 뒤 재발급에 사용한다."],
+  "markdownFragment": "- Access Token 만료 뒤 재발급에 사용한다.",
   "occurredAt": "2026-07-29T12:00:30+09:00"
 }
 ```
 
-MVP Redis key와 event는 실험용이며 `docs/CONTRACT.md`의 공유 계약이 아니다. Spring이나 Frontend가
-직접 의존하지 않는다. 결과는 monitor script 또는 Redis CLI로 보고 평가한다.
+caption 수집이 끝나면 전체 노트를 다시 보내지 않고 `lecture.note.capture.completed`를 별도로 발행한다.
+여기에는 `lastChunkSequence`, `lastSttSequence`, `reason`만 담는다. `chunkSequence`는 세션별 추가 조각
+순번이며 `1`부터 증가한다. 재전송 event는 같은 `eventId`와 순번을 유지해야 하지만 retry 자체는 이번
+구현 범위가 아니다.
+
+Redis field 값은 STT event와 마찬가지로 모두 string으로 싣고, `keyPoints`만 compact JSON 배열 문자열로
+직렬화한다. AI event에는 `noteVersion`을 싣지 않는다. Backend가 조각을 누적 저장한 횟수가 필요하면
+Backend read model의 `noteVersion`으로 별도 관리한다.
+
+Redis key와 event payload·순서·멱등·ACK 규칙은 [공유 계약 §3-4a](../../CONTRACT.md#3-4a-ai-api--application-redis-실시간-강의-노트-stream--ai-producer-구현-spring-consumer-미구현)로
+고정한다. Spring과 Frontend 구현은 아직 이 ADR의 범위 밖이다. Backend 연동 시에는 event를 순서대로 누적
+저장하고, REST 재접속 응답은 Backend가 만든 전체 노트를 반환하며, 실시간 WebSocket에는 새 조각만 전달한다.
+Spring은 별도 consumer group을 사용하고 DB 반영 뒤 ACK하며, `eventId` 중복과 이미 반영한
+`chunkSequence`는 무시한다. 기대 순번보다 큰 조각은 조용히 이어 붙이지 않고 누락으로 기록하되 복구
+정책은 다음 단계에서 확정한다.
+
+### 6. 이번 변경의 구현 범위와 예상 문제
+
+이번 변경은 AI publisher와 내부 event model, Redis Stream 직렬화까지만 구현한다. Spring consumer, DB,
+REST, WebSocket은 만들지 않는다. 또한 라이브 중 이미 발행한 조각은 수정·병합·삭제하지 않고 새 조각만
+추가한다.
+
+예상되지만 이번에는 구현하지 않는 문제는 다음과 같다.
+
+- 프로세스 재시작 시 in-memory `chunkSequence`와 topic id가 다시 시작될 수 있다. Backend가 정식으로
+  소비하기 전 Redis 또는 DB 기반 복원 정책이 필요하다.
+- Redis retention 밖의 event를 놓치면 append event만으로 전체 노트를 재구성할 수 없다. Backend 영속화와
+  재동기화용 전체 조회 또는 checkpoint는 연동 단계에서 결정한다.
+- 라이브 중 잘못 나뉜 topic을 고치거나 이전 요점을 수정할 수 없다. 라이브는 append-only로 제한하고,
+  강의 종료 후 재정제는 별도 event/파이프라인으로 다룬다.
+- caption ACK 뒤 모델 호출이나 결과 발행이 실패하면 해당 window가 유실될 수 있다. retry와 실패 window
+  복구는 실제 실험 결과를 본 뒤 설계한다.
+- 여러 ai-api replica가 같은 세션을 처리하면 순번 충돌이 생길 수 있다. 현재는 단일 replica만 허용한다.
 
 ## 구현 순서와 단계별 제한
 
@@ -179,12 +209,12 @@ MVP Redis key와 event는 실험용이며 `docs/CONTRACT.md`의 공유 계약이
 
 1. **순수 window 상태 머신**: Redis·GMS·async task 없이 delta 순서, 중복·gap, 15/25/40초와
    80/400자 경계, 문장부호, attempt 전환, completion flush만 구현한다.
-2. **note reducer와 Markdown renderer**: `CONTINUE|START_NEW`, key point 중복 제거, `noteVersion`,
+2. **note reducer와 Markdown renderer**: `CONTINUE|START_NEW`, key point 중복 제거, `chunkSequence`,
    제한된 Markdown 생성을 순수 로직으로 구현한다.
-3. **application orchestration**: `LectureNoteModel`과 snapshot store를 port로 두고 fake 구현으로 세션별
+3. **application orchestration**: `LectureNoteModel`과 event publisher를 port로 두고 fake 구현으로 세션별
    단일 호출과 호출 중 window 병합을 검증한다.
-4. **Redis 결과 adapter**: snapshot TTL과 결과 Stream `MAXLEN`을 구현하고 Redis integration test를
-   추가한다.
+4. **Redis 결과 adapter**: 추가 조각·수집 완료 event와 결과 Stream `MAXLEN`을 구현하고 Redis integration
+   test를 추가한다.
 5. **GMS adapter**: RAG adapter와 분리된 `LectureNoteModel`을 구현하고 구조화 JSON 지원 여부, latency,
    호출 수를 확인한다.
 6. **별도 caption consumer와 lifecycle**: `ai-live-notes-mvp-v1` group을 ai-api lifecycle에 연결하고
@@ -192,7 +222,8 @@ MVP Redis key와 event는 실험용이며 `docs/CONTRACT.md`의 공유 계약이
    시작하며 별도 enable 환경변수를 두지 않는다.
 7. **30분 강의 실험**: Redis 결과와 metric을 관찰해 품질·지연·비용을 기록한 뒤 후속 범위를 결정한다.
 
-현재 1~6단계 구현과 자동 테스트까지 완료했다. Spring, Frontend, DB, HTTP API는 여전히 범위 밖이며,
+현재 1~6단계 구현과 자동 테스트까지 완료했다. 4단계 결과 형식은 전체 snapshot에서 append event로
+변경했다. Spring, Frontend, DB, HTTP API는 여전히 범위 밖이며,
 다음 작업은 코드를 더 확장하는 대신 EC2 단일 ai-api replica에서 7단계 실험을 수행하는 것이다.
 
 ## MVP에서 하지 않는 것
@@ -203,7 +234,7 @@ MVP Redis key와 event는 실험용이며 `docs/CONTRACT.md`의 공유 계약이
 - Frontend topic accordion 실연동
 - session-relative time 변환과 영상 seek
 - 여러 ai-api instance의 session lease·`XAUTOCLAIM`
-- 프로세스 재시작 시 기존 snapshot 복원
+- 프로세스 재시작 시 기존 노트와 chunk 순번 복원
 - LLM 실패 retry·실패 window 복구·최종 실패 상태 설계
 - topic 변경 재확인, 과거 topic 복귀, 자동 merge/split
 - 강사 검수·게시·최종 강의 노트
@@ -220,7 +251,7 @@ MVP Redis key와 event는 실험용이며 `docs/CONTRACT.md`의 공유 계약이
 - 15/25/40초와 80/400자 window 경계
 - 공백 보존과 문장부호 우선 cut
 - LLM JSON validation 실패가 기존 note를 훼손하지 않음
-- snapshot TTL, noteVersion 증가, Stream `MAXLEN`
+- append event의 chunkSequence 증가, 완료 event, Stream `MAXLEN`
 
 실제 한국어 강의 30분에서 다음을 기록한다.
 
@@ -236,8 +267,8 @@ topic 분리가 괜찮으면 다음 ADR 개정에서 Spring·Frontend 연결을 
 
 ## 계약·완료 판단
 
-현재 단계는 ai-api 내부에서 별도 caption consumer group, GMS adapter, Redis snapshot·관찰 Stream까지
-연결했다. 공유 HTTP 계약과 상태코드, Spring·Frontend가 의존하는 DTO를 바꾸지 않았으므로 FE/BE 계약
-테스트와 `docs/CONTRACT.md` 수정은 불필요하다. Redis 명령과 consumer group 분리는 fake와 실제 Redis
-integration test로 검증하며, 운영 Redis 연결·GMS JSON 호환성·30분 품질은 EC2 실험의 완료 조건이다.
-Redis 결과가 생성되는 것만으로 사용자 기능 완료로 보고하지 않는다.
+현재 단계는 ai-api 내부에서 별도 caption consumer group, GMS adapter, Redis append event Stream까지
+연결했다. AI→Spring Redis payload를 공유 계약으로 승격했으므로 `docs/CONTRACT.md` §3-4a와 AI 통신 계약을
+같이 갱신한다. Python producer의 field·직렬화·순번은 unit·실제 Redis integration test로 검증한다.
+Spring consumer가 아직 없으므로 Java 소비 계약 테스트는 해당 구현에서 추가하며, 그 전에는 사용자 기능
+완료로 보고하지 않는다. 운영 Redis 연결·GMS JSON 호환성·30분 품질은 EC2 실험의 완료 조건이다.

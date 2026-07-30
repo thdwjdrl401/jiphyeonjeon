@@ -3,11 +3,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import Annotated, Literal
+from typing import Annotated, Literal, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.captions.models import CanonicalUuid, NonNegativeIntegerString, SafeIdentifier
+from app.captions.models import (
+    CanonicalUuid,
+    NonNegativeIntegerString,
+    PositiveIntegerString,
+    SafeIdentifier,
+)
 
 
 class WindowFlushReason(StrEnum):
@@ -21,11 +26,6 @@ class WindowFlushReason(StrEnum):
 class TopicAction(StrEnum):
     CONTINUE = "CONTINUE"
     START_NEW = "START_NEW"
-
-
-class LectureNoteStatus(StrEnum):
-    PROCESSING = "PROCESSING"
-    COMPLETED = "COMPLETED"
 
 
 InlineText = Annotated[str, Field(min_length=1, max_length=300)]
@@ -61,28 +61,14 @@ class LectureNoteModelRequest:
     text: str
 
 
-class LectureNoteSnapshotTopic(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
+class _LectureNoteEvent(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=False)
 
-    topicId: SafeIdentifier
-    title: str = Field(min_length=1, max_length=80)
-    keyPoints: tuple[InlineText, ...]
-
-
-class LectureNoteSnapshot(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    schemaVersion: Literal["1"] = "1"
-    type: Literal["lecture.note.snapshot"] = "lecture.note.snapshot"
+    contractVersion: Literal["1"] = "1"
     eventId: SafeIdentifier
     sessionId: CanonicalUuid
     lessonId: CanonicalUuid
     sttSessionId: SafeIdentifier
-    noteVersion: NonNegativeIntegerString
-    coveredThroughSequence: NonNegativeIntegerString
-    status: LectureNoteStatus
-    topics: tuple[LectureNoteSnapshotTopic, ...]
-    markdown: str
     occurredAt: datetime
 
     @field_validator("occurredAt")
@@ -91,6 +77,27 @@ class LectureNoteSnapshot(BaseModel):
         if value.utcoffset() is None:
             raise ValueError("occurredAt must include a timezone offset")
         return value
+
+
+class LectureNoteChunkAppended(_LectureNoteEvent):
+    type: Literal["lecture.note.chunk.appended"] = "lecture.note.chunk.appended"
+    chunkSequence: PositiveIntegerString
+    latestSttSequence: PositiveIntegerString
+    topicAction: TopicAction
+    topicId: SafeIdentifier
+    topicTitle: str = Field(min_length=1, max_length=80)
+    keyPoints: tuple[InlineText, ...] = Field(min_length=1, max_length=3)
+    markdownFragment: str = Field(min_length=1, max_length=8_192)
+
+
+class LectureNoteCaptureCompleted(_LectureNoteEvent):
+    type: Literal["lecture.note.capture.completed"] = "lecture.note.capture.completed"
+    lastChunkSequence: NonNegativeIntegerString
+    lastSttSequence: NonNegativeIntegerString
+    reason: Literal["ROOM_DELETED"]
+
+
+LectureNoteEvent: TypeAlias = LectureNoteChunkAppended | LectureNoteCaptureCompleted
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,7 +124,7 @@ class LectureNoteTopic:
 @dataclass(frozen=True, slots=True)
 class LectureNote:
     topics: tuple[LectureNoteTopic, ...] = ()
-    note_version: int = 0
+    chunk_sequence: int = 0
 
 
 def _validate_single_line(value: str, field_name: str) -> str:

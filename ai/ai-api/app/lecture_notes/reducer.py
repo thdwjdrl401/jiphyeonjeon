@@ -34,7 +34,9 @@ def apply_model_result(
             key_points=_unique_points((*current.key_points, *points)),
         )
         topics = (*note.topics[:-1], topic)
-    return LectureNote(topics=topics, note_version=note.note_version + 1)
+    if topics == note.topics:
+        return note
+    return LectureNote(topics=topics, chunk_sequence=note.chunk_sequence + 1)
 
 
 def render_markdown(note: LectureNote) -> str:
@@ -44,6 +46,19 @@ def render_markdown(note: LectureNote) -> str:
         lines.extend(f"- {_safe_inline_markdown(point)}" for point in topic.key_points)
         sections.append("\n".join(lines))
     return "\n\n".join(sections)
+
+
+def render_markdown_fragment(
+    topic_title: str,
+    key_points: tuple[str, ...],
+    topic_action: TopicAction,
+) -> str:
+    """새로 추가된 요점만 기존 Markdown 뒤에 붙일 수 있는 조각으로 만든다."""
+    lines: list[str] = []
+    if topic_action is TopicAction.START_NEW:
+        lines.extend((f"## {_safe_inline_markdown(topic_title)}", ""))
+    lines.extend(f"- {_safe_inline_markdown(point)}" for point in key_points)
+    return "\n".join(lines)
 
 
 def _unique_points(points: tuple[str, ...]) -> tuple[str, ...]:

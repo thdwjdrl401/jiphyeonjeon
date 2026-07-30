@@ -12,7 +12,7 @@ ai:captions:live
   -> window accumulator
   -> GMS structured JSON
   -> topic reducer + Markdown renderer
-  -> Redis snapshot + observation Stream
+  -> Redis append event Stream
 ```
 
 RAG consumer group `ai-rag-live-v1`과 별도 group을 사용하므로 서로의 ACK에 영향을 주지 않는다. ai-api
@@ -21,16 +21,17 @@ in-memory이므로 [EC2 Compose](../../../../docker-compose.ai-prod.yml)는 ai-a
 
 ## Redis 결과와 확인
 
-- 최신 snapshot: `ai:lecture-notes:mvp:snapshot:{sessionId}` (`SET EX`, 기본 TTL 86,400초)
-- 관찰 Stream: `ai:lecture-notes:mvp` (`XADD MAXLEN ~`, 기본 10,000개)
+- 추가 노트 조각: `lecture.note.chunk.appended`
+- caption 수집 완료: `lecture.note.capture.completed`
+- 결과 Stream: `ai:lecture-notes:mvp` (`XADD MAXLEN ~`, 기본 10,000개)
 
-두 결과는 실험 관찰용이며 Spring·Frontend가 의존하는 공유 계약이 아니다.
+Redis event의 정본은 [공유 계약 §3-4a](../../../../docs/CONTRACT.md#3-4a-ai-api--application-redis-실시간-강의-노트-stream--ai-producer-구현-spring-consumer-미구현)다.
+AI는 내부 topic 상태를 모델 문맥과 중복 제거에 사용하지만 Redis에는 새 `markdownFragment`와 구조화
+요점만 발행한다. Spring consumer·DB·REST·WebSocket은 아직 미구현이다.
 
 Redis에 접속한 뒤 다음 값으로 생성 여부와 갱신 상태를 확인한다.
 
 ```bash
-redis-cli GET 'ai:lecture-notes:mvp:snapshot:{sessionId}'
-redis-cli TTL 'ai:lecture-notes:mvp:snapshot:{sessionId}'
 redis-cli XREVRANGE ai:lecture-notes:mvp + - COUNT 10
 ```
 

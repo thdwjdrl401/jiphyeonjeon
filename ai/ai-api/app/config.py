@@ -67,7 +67,6 @@ class Settings(BaseSettings):
     lecture_note_max_window_ms: int = Field(default=40_000, ge=1_000, le=120_000)
     lecture_note_min_chars: int = Field(default=80, ge=1, le=10_000)
     lecture_note_max_chars: int = Field(default=400, ge=1, le=20_000)
-    lecture_note_snapshot_ttl_seconds: int = Field(default=86_400, ge=60, le=604_800)
     lecture_note_stream_maxlen: int = Field(default=10_000, ge=100, le=1_000_000)
 
     rag_retrieval_timeout_seconds: float = Field(default=10.0, gt=0, le=120)

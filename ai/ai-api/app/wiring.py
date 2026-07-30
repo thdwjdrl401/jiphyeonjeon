@@ -12,7 +12,7 @@ from app.adapters import (
     GmsOpenAILectureNoteModel,
     PgvectorActiveMaterialRepository,
     RedisCaptionConsumer,
-    RedisLectureNoteSnapshotStore,
+    RedisLectureNoteEventPublisher,
     RemoteBgeM3QueryEmbedding,
 )
 from app.captions import CaptionContextStore, parse_caption_entry
@@ -66,12 +66,12 @@ class LectureNoteServices:
     consumer: RedisCaptionConsumer
     consumer_state: CaptionConsumerState
     model: GmsOpenAILectureNoteModel
-    store: RedisLectureNoteSnapshotStore
+    publisher: RedisLectureNoteEventPublisher
 
     async def close(self) -> None:
         """모델 호출을 비운 뒤 외부 client를 모두 닫는다."""
         async with AsyncExitStack() as cleanup:
-            cleanup.push_async_callback(self.store.aclose)
+            cleanup.push_async_callback(self.publisher.aclose)
             cleanup.push_async_callback(self.model.aclose)
             await self.service.aclose()
 
@@ -185,14 +185,13 @@ def build_lecture_note_services(settings: Settings) -> LectureNoteServices:
         max_prompt_chars=settings.lecture_note_max_prompt_chars,
         timeout_seconds=settings.lecture_note_timeout_seconds,
     )
-    store = RedisLectureNoteSnapshotStore(
+    publisher = RedisLectureNoteEventPublisher(
         settings.redis_url,
-        snapshot_ttl_seconds=settings.lecture_note_snapshot_ttl_seconds,
         stream_maxlen=settings.lecture_note_stream_maxlen,
         socket_connect_timeout_seconds=settings.redis_connect_timeout_seconds,
         socket_timeout_seconds=settings.redis_socket_timeout_seconds,
     )
-    service = LectureNoteService(model, store)
+    service = LectureNoteService(model, publisher)
     pipeline = LectureNotePipeline(accumulator, service)
 
     def handle_entry(fields: Mapping[Any, Any]) -> None:
@@ -211,7 +210,7 @@ def build_lecture_note_services(settings: Settings) -> LectureNoteServices:
         consumer=consumer,
         consumer_state=consumer_state,
         model=model,
-        store=store,
+        publisher=publisher,
     )
 
 
