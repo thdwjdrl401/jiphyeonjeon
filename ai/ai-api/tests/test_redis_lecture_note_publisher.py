@@ -9,7 +9,13 @@ from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
 from app.adapters.redis_lecture_note_publisher import RedisLectureNoteStore
-from app.lecture_notes import LectureNote, LectureNoteChunkAppended, TopicAction
+from app.lecture_notes import (
+    LectureNote,
+    LectureNoteChunkAppended,
+    LectureNoteRefinedSnapshot,
+    LectureNoteRefinedTopic,
+    TopicAction,
+)
 from app.lecture_notes.recovery import (
     AttemptBufferCheckpoint,
     LectureNoteSessionCheckpoint,
@@ -122,6 +128,25 @@ def _checkpoint(*, outbox=None) -> LectureNoteSessionCheckpoint:
     )
 
 
+def _refined_event() -> LectureNoteRefinedSnapshot:
+    return LectureNoteRefinedSnapshot(
+        eventId="evt-refined-1",
+        sessionId=SESSION_ID,
+        lessonId=LESSON_ID,
+        sttSessionId="attempt-1",
+        sourceLastChunkSequence="4",
+        topics=(
+            LectureNoteRefinedTopic(
+                topicId="refined-topic-1",
+                topicTitle="정제 주제",
+                keyPoints=("정제 요점이다.",),
+            ),
+        ),
+        markdownSnapshot="## 정제 주제\n\n- 정제 요점이다.",
+        occurredAt=datetime.now(UTC),
+    )
+
+
 def test_store_saves_and_restores_active_checkpoint() -> None:
     async def scenario() -> None:
         redis = FakeRedis()
@@ -152,6 +177,45 @@ def test_store_commits_checkpoint_and_append_event_in_one_transaction() -> None:
         assert json.loads(fields["keyPoints"]) == ["Access Token 재발급에 사용한다."]
         assert maxlen == 10_000
         assert approximate is True
+
+    asyncio.run(scenario())
+
+
+def test_store_serializes_refined_topics_as_compact_json() -> None:
+    async def scenario() -> None:
+        redis = FakeRedis()
+        store = RedisLectureNoteStore("redis://unused", client_factory=lambda: redis)
+
+        await store.commit(_checkpoint(), _refined_event())
+
+        _, fields, _, _ = redis.xadd_calls[0]
+        assert set(fields) == {
+            "contractVersion",
+            "type",
+            "eventId",
+            "sessionId",
+            "lessonId",
+            "sttSessionId",
+            "occurredAt",
+            "sourceLastChunkSequence",
+            "topics",
+            "markdownSnapshot",
+        }
+        assert fields["type"] == "lecture.note.refined.snapshot"
+        assert fields["sourceLastChunkSequence"] == "4"
+        assert fields["topics"] == json.dumps(
+            json.loads(fields["topics"]),
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        assert json.loads(fields["topics"]) == [
+            {
+                "topicId": "refined-topic-1",
+                "topicTitle": "정제 주제",
+                "keyPoints": ["정제 요점이다."],
+            }
+        ]
+        assert fields["markdownSnapshot"] == "## 정제 주제\n\n- 정제 요점이다."
 
     asyncio.run(scenario())
 

@@ -8,6 +8,9 @@ from app.lecture_notes import (
     LectureNoteDecisionAction,
     LectureNoteModelResult,
     LectureNotePipeline,
+    LectureNoteRefinedSnapshot,
+    LectureNoteRefinementResult,
+    LectureNoteRefinementTopic,
     LectureNoteService,
     LectureNoteWindowAccumulator,
 )
@@ -48,23 +51,57 @@ class BlockingModel(ImmediateModel):
         )
 
 
+class RefiningModel(ImmediateModel):
+    def __init__(self) -> None:
+        super().__init__()
+        self.refinement_requests = []
+
+    async def refine(self, request):
+        self.refinement_requests.append(request)
+        return LectureNoteRefinementResult(
+            topics=(
+                LectureNoteRefinementTopic(
+                    topicTitle="정제된 주제",
+                    keyPoints=("중복을 제거한 요점이다.",),
+                ),
+                LectureNoteRefinementTopic(
+                    topicTitle="후속 주제",
+                    keyPoints=("학습 순서를 유지한 후속 요점이다.",),
+                ),
+            )
+        )
+
+
+class FailingRefiningModel(ImmediateModel):
+    async def refine(self, request):
+        raise RuntimeError("refinement failed")
+
+
 class InMemoryStore:
     def __init__(self) -> None:
         self.checkpoints: dict[str, LectureNoteSessionCheckpoint] = {}
         self.events = []
         self.commit_failures = 0
         self.commit_response_losses = 0
+        self.lose_response_event_type = None
+        self.fail_event_type = None
         self.deactivated = []
 
     async def save(self, checkpoint) -> None:
         self.checkpoints[checkpoint.sessionId] = _copy_checkpoint(checkpoint)
 
     async def commit(self, checkpoint, event) -> None:
+        if event.type == self.fail_event_type:
+            self.fail_event_type = None
+            raise RuntimeError("selected event commit failed")
         if self.commit_failures:
             self.commit_failures -= 1
             raise RuntimeError("commit failed")
         self.checkpoints[checkpoint.sessionId] = _copy_checkpoint(checkpoint)
         self.events.append(event)
+        if event.type == self.lose_response_event_type:
+            self.lose_response_event_type = None
+            raise RuntimeError("selected event commit response lost")
         if self.commit_response_losses:
             self.commit_response_losses -= 1
             raise RuntimeError("commit response lost")
@@ -114,14 +151,19 @@ def _completion(last_sequence: int) -> CaptionCompleted:
     )
 
 
-def _components(model, store, *, min_chars: int = 1):
+def _components(model, store, *, min_chars: int = 1, refinement_model=None):
     accumulator = LectureNoteWindowAccumulator(
         min_window_ms=1,
         target_window_ms=1,
         max_window_ms=40_000,
         min_chars=min_chars,
     )
-    service = LectureNoteService(model, store, accumulator)
+    service = LectureNoteService(
+        model,
+        store,
+        accumulator,
+        refinement_model=refinement_model,
+    )
     return service, LectureNotePipeline(accumulator, service)
 
 
@@ -282,5 +324,203 @@ def test_completion_is_deactivated_only_after_note_commit_and_caption_ack() -> N
         await pipeline.after_ack(completion)
         await service.drain()
         assert len(store.events) == 2
+
+    asyncio.run(scenario())
+
+
+def test_completion_publishes_refined_snapshot_after_live_events() -> None:
+    async def scenario() -> None:
+        model = RefiningModel()
+        store = InMemoryStore()
+        service, pipeline = _components(model, store, refinement_model=model)
+        completion = _completion(1)
+
+        await pipeline.ingest(_delta(1, "라이브 초안"))
+        await service.drain()
+        await pipeline.ingest(completion)
+        await service.drain()
+
+        assert [event.type for event in store.events] == [
+            "lecture.note.chunk.appended",
+            "lecture.note.capture.completed",
+            "lecture.note.refined.snapshot",
+        ]
+        snapshot = store.events[-1]
+        assert isinstance(snapshot, LectureNoteRefinedSnapshot)
+        assert snapshot.sourceLastChunkSequence == "1"
+        assert [topic.topicId for topic in snapshot.topics] == [
+            "refined-topic-1",
+            "refined-topic-2",
+        ]
+        assert snapshot.markdownSnapshot == (
+            "## 정제된 주제\n\n- 중복을 제거한 요점이다.\n\n"
+            "## 후속 주제\n\n- 학습 순서를 유지한 후속 요점이다."
+        )
+        assert len(model.refinement_requests) == 1
+        assert store.deactivated == []
+        assert store.checkpoints[SESSION_ID].refined is True
+        assert store.checkpoints[SESSION_ID].completionAcked is False
+
+        await pipeline.after_ack(completion)
+
+        assert store.deactivated == [SESSION_ID]
+
+    asyncio.run(scenario())
+
+
+def test_completion_ack_is_reconciled_after_owned_pending_drain() -> None:
+    async def scenario() -> None:
+        store = InMemoryStore()
+        first_service, first_pipeline = _components(ImmediateModel(), store)
+        completion = _completion(1)
+
+        await first_pipeline.ingest(_delta(1, "ACK 경계 복구"))
+        await first_service.drain()
+        await first_pipeline.ingest(completion)
+        await first_service.drain()
+
+        checkpoint = store.checkpoints[SESSION_ID]
+        assert checkpoint.completed is True
+        assert checkpoint.completionAcked is False
+        assert store.deactivated == []
+
+        restored_service, restored_pipeline = _components(ImmediateModel(), store)
+        await restored_pipeline.restore()
+        await restored_service.drain()
+        assert store.deactivated == []
+
+        # 같은 consumer의 pending을 모두 비운 뒤에도 completion이 없다면 이전 XACK은 끝난 것이다.
+        await restored_pipeline.after_owned_pending_drained()
+
+        assert store.deactivated == [SESSION_ID]
+
+    asyncio.run(scenario())
+
+
+def test_refinement_failure_is_resumed_after_restart() -> None:
+    async def scenario() -> None:
+        store = InMemoryStore()
+        failing_model = FailingRefiningModel()
+        first_service, first_pipeline = _components(
+            failing_model,
+            store,
+            refinement_model=failing_model,
+        )
+        completion = _completion(1)
+
+        await first_pipeline.ingest(_delta(1, "재시작할 정제 초안"))
+        await first_service.drain()
+        await first_pipeline.ingest(completion)
+        await first_pipeline.after_ack(completion)
+        await first_service.drain()
+
+        checkpoint = store.checkpoints[SESSION_ID]
+        assert checkpoint.refinementPending is True
+        assert checkpoint.refined is False
+        assert [event.type for event in store.events] == [
+            "lecture.note.chunk.appended",
+            "lecture.note.capture.completed",
+        ]
+
+        restored_model = RefiningModel()
+        restored_service, restored_pipeline = _components(
+            restored_model,
+            store,
+            refinement_model=restored_model,
+        )
+        await restored_pipeline.restore()
+        await restored_service.drain()
+
+        assert len(restored_model.refinement_requests) == 1
+        assert isinstance(store.events[-1], LectureNoteRefinedSnapshot)
+        assert store.deactivated == [SESSION_ID]
+
+    asyncio.run(scenario())
+
+
+def test_lost_refined_commit_response_is_reconciled_without_duplicate_snapshot() -> None:
+    async def scenario() -> None:
+        store = InMemoryStore()
+        store.lose_response_event_type = "lecture.note.refined.snapshot"
+        model = RefiningModel()
+        service, pipeline = _components(model, store, refinement_model=model)
+        completion = _completion(1)
+
+        await pipeline.ingest(_delta(1, "응답 유실 정제 초안"))
+        await service.drain()
+        await pipeline.ingest(completion)
+        await pipeline.after_ack(completion)
+        await service.drain()
+
+        refined_events = [
+            event for event in store.events if isinstance(event, LectureNoteRefinedSnapshot)
+        ]
+        assert len(refined_events) == 1
+        assert service.metrics_snapshot()["publish_failures_total"] == 0
+        assert store.deactivated == [SESSION_ID]
+
+    asyncio.run(scenario())
+
+
+def test_empty_draft_skips_refinement_and_snapshot() -> None:
+    class IgnoreModel:
+        async def generate(self, request):
+            return LectureNoteModelResult(action=LectureNoteDecisionAction.IGNORE)
+
+        async def refine(self, request):
+            raise AssertionError("empty draft must not call refinement")
+
+    async def scenario() -> None:
+        store = InMemoryStore()
+        model = IgnoreModel()
+        service, pipeline = _components(model, store, refinement_model=model)
+        completion = _completion(1)
+
+        await pipeline.ingest(_delta(1, "반복 안내"))
+        await service.drain()
+        await pipeline.ingest(completion)
+        await pipeline.after_ack(completion)
+        await service.drain()
+
+        assert len(store.events) == 1
+        assert isinstance(store.events[0], LectureNoteCaptureCompleted)
+        assert store.events[0].lastChunkSequence == "0"
+        assert store.deactivated == [SESSION_ID]
+
+    asyncio.run(scenario())
+
+
+def test_refined_outbox_is_restored_without_second_refinement_call() -> None:
+    async def scenario() -> None:
+        store = InMemoryStore()
+        store.fail_event_type = "lecture.note.refined.snapshot"
+        first_model = RefiningModel()
+        first_service, first_pipeline = _components(
+            first_model,
+            store,
+            refinement_model=first_model,
+        )
+        completion = _completion(1)
+
+        await first_pipeline.ingest(_delta(1, "복구할 정제 초안"))
+        await first_service.drain()
+        await first_pipeline.ingest(completion)
+        await first_pipeline.after_ack(completion)
+        await first_service.drain()
+
+        saved_event = store.checkpoints[SESSION_ID].outbox
+        assert isinstance(saved_event, LectureNoteRefinedSnapshot)
+        restored_model = RefiningModel()
+        restored_service, restored_pipeline = _components(
+            restored_model,
+            store,
+            refinement_model=restored_model,
+        )
+        await restored_pipeline.restore()
+        await restored_service.drain()
+
+        assert restored_model.refinement_requests == []
+        assert store.events[-1].eventId == saved_event.eventId
+        assert store.deactivated == [SESSION_ID]
 
     asyncio.run(scenario())

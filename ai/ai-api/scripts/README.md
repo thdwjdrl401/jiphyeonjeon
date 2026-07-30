@@ -23,3 +23,11 @@ uv run --frozen --env-file ../.env python -m scripts.evaluate_lecture_note_promp
 
 v2는 반복, 미완성 발화, 운영 안내를 모두 `IGNORE`했고 현재 topic의 예시·주의사항은 `APPEND`했다. 실제
 topic 과분할이 확인되지 않았으므로 한-window topic 전환 확인은 추가하지 않는다.
+
+종료 후 refinement JSON 호환성은 고정된 구조화 draft로 한 번 확인한다.
+
+```bash
+uv run --frozen --env-file ../.env python -m scripts.smoke_lecture_note_refinement
+```
+
+2026-07-30 실제 GMS 호출에서 두 ACK topic을 하나로 합친 유효 `topics` JSON 응답을 확인했다.

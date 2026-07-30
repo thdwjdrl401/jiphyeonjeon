@@ -6,6 +6,11 @@ from app.lecture_notes.models import (
     LectureNoteEvent,
     LectureNoteModelRequest,
     LectureNoteModelResult,
+    LectureNoteRefinedSnapshot,
+    LectureNoteRefinedTopic,
+    LectureNoteRefinementRequest,
+    LectureNoteRefinementResult,
+    LectureNoteRefinementTopic,
     LectureNoteTopic,
     LectureNoteWindow,
     TopicAction,
@@ -15,6 +20,7 @@ from app.lecture_notes.reducer import (
     apply_model_result,
     render_markdown,
     render_markdown_fragment,
+    render_refined_markdown,
 )
 from app.lecture_notes.service import LectureNotePipeline, LectureNoteService
 from app.lecture_notes.windowing import (
@@ -31,6 +37,11 @@ __all__ = [
     "LectureNoteEvent",
     "LectureNoteModelRequest",
     "LectureNoteModelResult",
+    "LectureNoteRefinedSnapshot",
+    "LectureNoteRefinedTopic",
+    "LectureNoteRefinementRequest",
+    "LectureNoteRefinementResult",
+    "LectureNoteRefinementTopic",
     "LectureNotePipeline",
     "LectureNoteService",
     "LectureNoteTopic",
@@ -43,4 +54,5 @@ __all__ = [
     "apply_model_result",
     "render_markdown",
     "render_markdown_fragment",
+    "render_refined_markdown",
 ]

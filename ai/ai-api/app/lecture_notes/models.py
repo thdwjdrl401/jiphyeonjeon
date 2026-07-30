@@ -77,6 +77,40 @@ class LectureNoteModelRequest:
     text: str
 
 
+class _LectureNoteTopicContent(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
+
+    topicTitle: str = Field(min_length=1, max_length=80)
+    keyPoints: tuple[InlineText, ...] = Field(min_length=1, max_length=20)
+
+    @field_validator("topicTitle")
+    @classmethod
+    def validate_topic_title(cls, value: str) -> str:
+        return _validate_single_line(value, "topicTitle")
+
+    @field_validator("keyPoints")
+    @classmethod
+    def validate_key_points(cls, values: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(_validate_single_line(value, "keyPoints") for value in values)
+
+
+class LectureNoteRefinementTopic(_LectureNoteTopicContent):
+    """종료 후 정제 모델이 반환하는 topic 내용."""
+
+
+class LectureNoteRefinementResult(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    topics: tuple[LectureNoteRefinementTopic, ...] = Field(min_length=1, max_length=30)
+
+
+@dataclass(frozen=True, slots=True)
+class LectureNoteRefinementRequest:
+    session_id: str
+    lesson_id: str
+    note: LectureNote
+
+
 class _LectureNoteEvent(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=False)
 
@@ -113,7 +147,20 @@ class LectureNoteCaptureCompleted(_LectureNoteEvent):
     reason: Literal["ROOM_DELETED"]
 
 
-LectureNoteEvent: TypeAlias = LectureNoteChunkAppended | LectureNoteCaptureCompleted
+class LectureNoteRefinedTopic(_LectureNoteTopicContent):
+    topicId: SafeIdentifier
+
+
+class LectureNoteRefinedSnapshot(_LectureNoteEvent):
+    type: Literal["lecture.note.refined.snapshot"] = "lecture.note.refined.snapshot"
+    sourceLastChunkSequence: PositiveIntegerString
+    topics: tuple[LectureNoteRefinedTopic, ...] = Field(min_length=1, max_length=30)
+    markdownSnapshot: str = Field(min_length=1, max_length=262_144)
+
+
+LectureNoteEvent: TypeAlias = (
+    LectureNoteChunkAppended | LectureNoteCaptureCompleted | LectureNoteRefinedSnapshot
+)
 
 
 @dataclass(frozen=True, slots=True)

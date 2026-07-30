@@ -7,6 +7,7 @@ from app.lecture_notes.models import (
     LectureNote,
     LectureNoteDecisionAction,
     LectureNoteModelResult,
+    LectureNoteRefinedTopic,
     LectureNoteTopic,
     TopicAction,
 )
@@ -66,6 +67,15 @@ def render_markdown_fragment(
         lines.extend((f"## {_safe_inline_markdown(topic_title)}", ""))
     lines.extend(f"- {_safe_inline_markdown(point)}" for point in key_points)
     return "\n".join(lines)
+
+
+def render_refined_markdown(topics: tuple[LectureNoteRefinedTopic, ...]) -> str:
+    sections: list[str] = []
+    for topic in topics:
+        lines = [f"## {_safe_inline_markdown(topic.topicTitle)}", ""]
+        lines.extend(f"- {_safe_inline_markdown(point)}" for point in topic.keyPoints)
+        sections.append("\n".join(lines))
+    return "\n\n".join(sections)
 
 
 def _unique_points(points: tuple[str, ...]) -> tuple[str, ...]:

@@ -13,12 +13,16 @@ ai:captions:live
   -> GMS structured JSON
   -> topic reducer + Markdown renderer
   -> Redis outbox transaction + append event Stream
+  -> capture completed -> GMS draft refinement -> refined snapshot
 ```
 
 RAG consumer group `ai-rag-live-v1`과 별도 group을 사용하므로 서로의 ACK에 영향을 주지 않는다. ai-api
 lifecycle은 checkpoint restore를 끝낸 뒤 consumer를 시작하며 별도 process나 port는 만들지 않는다.
 caption은 session checkpoint 저장 뒤 ACK하고, 모델 결과는 outbox 저장 뒤 결과 `XADD`와 다음 checkpoint를
 한 Redis transaction으로 확정한다. 같은 세션의 모델 호출은 ai-api 내부에서 직렬화한다.
+재시작 시 고정 consumer가 자기 pending entry를 먼저 모두 처리한다. 그 뒤에도
+`completed=true`, `completionAcked=false`인 복원 checkpoint는 이전 프로세스가 XACK 직후 종료된 경우로
+간주해 ACK 완료를 확정한다. 이 판단은 단일 replica와 고정 consumer name 전제에서만 유효하다.
 
 재시작 상태는 다음 두 key가 소유한다.
 
@@ -33,11 +37,17 @@ application Redis 단일 인스턴스를 전제로 하며 Redis 자체 장애 �
 
 - 추가 노트 조각: `lecture.note.chunk.appended`
 - caption 수집 완료: `lecture.note.capture.completed`
+- 종료 후 전체 정제본: `lecture.note.refined.snapshot`
 - 결과 Stream: `ai:lecture-notes:mvp` (`XADD MAXLEN ~`, 기본 10,000개)
 
 Redis event의 정본은 [공유 계약 §3-4a](../../../../docs/CONTRACT.md#3-4a-ai-api--application-redis-실시간-강의-노트-stream--ai-producer-구현-spring-consumer-미구현)다.
-AI는 내부 topic 상태를 모델 문맥과 중복 제거에 사용하지만 Redis에는 새 `markdownFragment`와 구조화
-요점만 발행한다. Spring consumer·DB·REST·WebSocket은 아직 미구현이다.
+AI는 live 중 내부 topic 상태를 모델 문맥과 중복 제거에 사용하고 Redis에는 새 `markdownFragment`와
+구조화 요점만 발행한다. capture 완료 뒤 현재 구조화 draft만 한 번 정제해 별도 전체 snapshot을 발행한다.
+Spring consumer·DB·REST·WebSocket은 아직 미구현이다.
+
+정제 모델 호출이나 결과 발행이 실패하면 `refinementPending` 또는 outbox checkpoint를 유지한다. 현재
+프로세스 안에서 자동 재시도하지 않고 ai-api 재시작 때 이어서 처리하며, bounded retry·backoff·최종 실패
+상태는 후속 범위다.
 
 모델의 내부 action은 `IGNORE|APPEND|START_NEW`다. `IGNORE`는 operation만 완료하고 출력 event와
 `chunkSequence`를 만들지 않는다. `APPEND`는 wire의 `CONTINUE`로 변환하며, Unicode·연속 공백·끝

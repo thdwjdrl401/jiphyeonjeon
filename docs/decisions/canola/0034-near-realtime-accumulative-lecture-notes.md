@@ -171,10 +171,11 @@ XADD ai:lecture-notes:mvp MAXLEN ~ 10000 ...
 }
 ```
 
-caption 수집이 끝나면 전체 노트를 다시 보내지 않고 `lecture.note.capture.completed`를 별도로 발행한다.
-여기에는 `lastChunkSequence`, `lastSttSequence`, `reason`만 담는다. `chunkSequence`는 세션별 추가 조각
-순번이며 `1`부터 증가한다. 재전송 event는 같은 `eventId`와 순번을 유지해야 하지만 retry 자체는 이번
-구현 범위가 아니다.
+caption 수집이 끝나면 먼저 `lecture.note.capture.completed`를 발행한다. 여기에는 `lastChunkSequence`,
+`lastSttSequence`, `reason`만 담는다. 그 뒤 종료 후 정제 결과는 live append와 섞지 않고 별도
+`lecture.note.refined.snapshot` 전체 snapshot으로 한 번 발행한다. `chunkSequence`는 세션별 live 추가 조각
+순번이며 `1`부터 증가하고 refined snapshot은 이 값을 증가시키지 않는다. 재전송 event는 같은 `eventId`와
+payload를 유지한다.
 
 Redis field 값은 STT event와 마찬가지로 모두 string으로 싣고, `keyPoints`만 compact JSON 배열 문자열로
 직렬화한다. AI event에는 `noteVersion`을 싣지 않는다. Backend가 조각을 누적 저장한 횟수가 필요하면
@@ -197,8 +198,8 @@ Spring은 별도 consumer group을 사용하고 DB 반영 뒤 ACK하며, `eventI
 
 - Redis retention 밖의 event를 놓치면 append event만으로 전체 노트를 재구성할 수 없다. Backend 영속화와
   재동기화용 전체 조회 또는 checkpoint는 연동 단계에서 결정한다.
-- 라이브 중 잘못 나뉜 topic을 고치거나 이전 요점을 수정할 수 없다. 라이브는 append-only로 제한하고,
-  강의 종료 후 재정제는 별도 event/파이프라인으로 다룬다.
+- 라이브 중 잘못 나뉜 topic을 고치거나 이전 요점을 수정하지 않는다. 라이브는 append-only로 제한하고,
+  강의 종료 후 별도 refined snapshot에서만 merge/split·제목·중복을 정제한다.
 - checkpoint 저장 뒤 caption을 ACK하므로 모델 호출이나 결과 발행 도중 프로세스가 종료돼도 window와
   발행 대기 event를 재시작 후 복원한다. 모델 자체 실패의 retry 횟수·backoff·최종 실패 상태는 별도다.
 - 여러 ai-api replica가 같은 세션을 처리하면 순번 충돌이 생길 수 있다. 현재는 단일 replica만 허용한다.
@@ -224,9 +225,9 @@ Spring은 별도 consumer group을 사용하고 DB 반영 뒤 ACK하며, `eventI
 7. **30분 강의 실험**: Redis 결과와 metric을 관찰해 품질·지연·비용을 기록한 뒤 후속 범위를 결정한다.
 
 현재 1~6단계 구현과 자동 테스트까지 완료했다. 4단계 결과 형식은 전체 snapshot에서 append event로
-변경했고, 후속 1단계의 단일 프로세스 재시작 복구도 구현했다. Spring, Frontend, DB, HTTP API는 여전히
-범위 밖이다. 다음 작업은 후속 2단계의 판단 품질을 고정 샘플로 비교한 뒤 EC2 단일 ai-api replica에서
-7단계 실험을 수행하는 것이다.
+변경했고, 후속 1~3단계의 단일 프로세스 재시작 복구, 판단 품질, 종료 후 refined snapshot도 구현했다.
+Spring, Frontend, DB, HTTP API는 여전히 범위 밖이다. 다음 작업은 EC2 단일 ai-api replica에서 7단계
+30분 강의 실험을 수행하는 것이다.
 
 ## 재시작 복구와 품질 고도화 단계
 
@@ -255,6 +256,11 @@ completion도 마지막 window 결과를 먼저 확정한 뒤 완료 event를 �
 **프로세스 비정상 종료·재시작**만 보장한다. Redis 자체 장애 내구성, AOF 정책, 여러 replica의 session
 lease·fencing, 다른 consumer의 pending 회수(`XAUTOCLAIM`)는 다음 결정으로 미룬다.
 
+재시작한 고정 consumer는 자기 pending entry를 먼저 모두 재처리한다. 이 drain 뒤에도
+`completed=true`, `completionAcked=false`인 checkpoint가 남으면 이전 프로세스가 XACK을 성공시키고
+checkpoint를 갱신하기 전에 종료된 경계로 보고 ACK 완료를 확정한다. 다른 consumer가 가진 pending은 이
+판단 대상이 아니며, 이 복구 규칙은 단일 replica와 고정 consumer name 전제에 한정한다.
+
 복구 테스트는 checkpoint 전·후, caption ACK 전·후, 모델 호출 전·후, outbox 저장 후, 결과 transaction
 후 경계를 고정한다. 재처리 시 같은 출력 event가 중복 발행되지 않고 partial text, topic,
 `chunkSequence`, completion 순서가 유지되는지를 검증한다.
@@ -278,9 +284,24 @@ topic을 만들기 때문에 과분할로 세지 않는다. 현재 topic에서 �
 
 ### 3. 종료 후 refined snapshot
 
-라이브 출력은 append-only 초안으로 유지한다. 강의 종료 뒤 별도 정제 단계가 전체 초안을 보고 topic
-merge/split, 제목 교정, 중복 제거를 수행해 하나의 refined snapshot으로 발행한다. 라이브 event를 수정하거나
-덮어쓰지 않으며, snapshot 계약·저장 주체·실패 처리는 이 단계 착수 시 별도 확정한다.
+라이브 출력은 append-only 초안으로 유지한다. capture 완료 event를 확정한 뒤 현재 구조화 draft topic만
+GMS에 한 번 전달해 topic merge/split, 제목 교정, 중복 제거를 수행한다. raw caption 전체, 녹화 HLS, 자료
+RAG는 다시 넣지 않는다.
+
+결과는 `lecture.note.refined.snapshot`으로 같은 Redis Stream에 발행한다. event에는
+`sourceLastChunkSequence`, 전체 구조화 `topics`, 여기서 결정론적으로 만든 `markdownSnapshot`을 담는다.
+refined topic id는 `refined-topic-{n}`의 별도 공간을 사용하고 live `chunkSequence`를 늘리거나 과거 append
+event를 수정하지 않는다. Backend는 live draft와 refined read model을 구분해야 한다.
+
+정제 호출 전 pending checkpoint와 결과 outbox를 저장하며 snapshot `XADD`도 다음 checkpoint와 원자화한다.
+따라서 snapshot 발행 도중 프로세스가 종료되면 같은 event를 복원한다. 정제 모델의 bounded retry·backoff,
+최종 실패 상태, 강사 검수·게시, Spring/DB/Frontend 반영은 아직 범위 밖이다. 정제할 live topic이 하나도
+없으면 모델과 snapshot 발행을 생략하고 capture 완료만 유지한다. 2026-07-30 고정 draft의 실제 GMS
+smoke에서 두 ACK topic을 하나로 합친 유효 구조화 JSON 응답을 확인했다.
+
+정제 모델 호출이나 결과 발행이 실패한 현재 프로세스는 즉시 반복 호출하지 않는다. checkpoint의
+`refinementPending` 또는 outbox를 유지하고 ai-api 재시작 때 이어서 처리한다. 따라서 재시작 없는
+same-process retry, 최대 시도 횟수와 backoff, 장기 실패 세션 정리는 이번 단계에서 보장하지 않는다.
 
 ## MVP에서 하지 않는 것
 
@@ -308,6 +329,7 @@ merge/split, 제목 교정, 중복 제거를 수행해 하나의 refined snapsho
 - 공백 보존과 문장부호 우선 cut
 - LLM JSON validation 실패가 기존 note를 훼손하지 않음
 - append event의 chunkSequence 증가, 완료 event, Stream `MAXLEN`
+- 종료 후 refined snapshot 순서·전체 topic 직렬화·outbox 복원
 
 실제 한국어 강의 30분에서 다음을 기록한다.
 

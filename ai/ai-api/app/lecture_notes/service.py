@@ -13,15 +13,27 @@ from app.lecture_notes.models import (
     LectureNoteChunkAppended,
     LectureNoteEvent,
     LectureNoteModelRequest,
+    LectureNoteRefinedSnapshot,
+    LectureNoteRefinedTopic,
+    LectureNoteRefinementRequest,
+    LectureNoteRefinementResult,
     LectureNoteWindow,
     TopicAction,
 )
-from app.lecture_notes.ports import LectureNoteModel, LectureNoteStateStore
+from app.lecture_notes.ports import (
+    LectureNoteModel,
+    LectureNoteRefinementModel,
+    LectureNoteStateStore,
+)
 from app.lecture_notes.recovery import (
     LectureNoteSessionCheckpoint,
     LectureNoteWorkCheckpoint,
 )
-from app.lecture_notes.reducer import apply_model_result, render_markdown_fragment
+from app.lecture_notes.reducer import (
+    apply_model_result,
+    render_markdown_fragment,
+    render_refined_markdown,
+)
 from app.lecture_notes.windowing import LectureNoteWindowAccumulator
 
 logger = logging.getLogger(__name__)
@@ -33,6 +45,9 @@ class LectureNoteServiceMetrics:
     windows_coalesced_total: int = 0
     model_calls_total: int = 0
     model_failures_total: int = 0
+    refinement_calls_total: int = 0
+    refinement_failures_total: int = 0
+    refinements_completed_total: int = 0
     events_published_total: int = 0
     publish_failures_total: int = 0
     checkpoints_saved_total: int = 0
@@ -73,6 +88,8 @@ class _SessionState:
     task: asyncio.Task[None] | None = None
     completed: bool = False
     completion_acked: bool = False
+    refinement_pending: bool = False
+    refined: bool = False
     deactivated: bool = False
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
@@ -85,8 +102,11 @@ class LectureNoteService:
         model: LectureNoteModel,
         store: LectureNoteStateStore,
         accumulator: LectureNoteWindowAccumulator,
+        *,
+        refinement_model: LectureNoteRefinementModel | None = None,
     ) -> None:
         self._model = model
+        self._refinement_model = refinement_model
         self._store = store
         self._accumulator = accumulator
         self._sessions: dict[str, _SessionState] = {}
@@ -138,12 +158,19 @@ class LectureNoteService:
                 outbox=checkpoint.outbox,
                 completed=checkpoint.completed,
                 completion_acked=checkpoint.completionAcked,
+                refinement_pending=checkpoint.refinementPending,
+                refined=checkpoint.refined,
             )
             self._sessions[checkpoint.sessionId] = state
             self._metrics.sessions_restored_total += 1
-            if state.completed and state.completion_acked:
+            if state.refined and state.completion_acked:
                 await self._deactivate(checkpoint.sessionId, state)
-            elif state.outbox is not None or state.in_flight is not None or state.pending:
+            elif (
+                state.outbox is not None
+                or state.in_flight is not None
+                or state.pending
+                or state.refinement_pending
+            ):
                 self._kick(checkpoint.sessionId, state)
 
     async def mark_completion_acked(self, session_id: str) -> None:
@@ -153,7 +180,7 @@ class LectureNoteService:
             return
         async with state.lock:
             state.completion_acked = True
-            if state.completed:
+            if state.refined:
                 await self._deactivate(session_id, state)
             else:
                 await self._save_checkpoint(session_id, state)
@@ -172,6 +199,9 @@ class LectureNoteService:
             "windows_coalesced_total": self._metrics.windows_coalesced_total,
             "model_calls_total": self._metrics.model_calls_total,
             "model_failures_total": self._metrics.model_failures_total,
+            "refinement_calls_total": self._metrics.refinement_calls_total,
+            "refinement_failures_total": self._metrics.refinement_failures_total,
+            "refinements_completed_total": self._metrics.refinements_completed_total,
             "events_published_total": self._metrics.events_published_total,
             "publish_failures_total": self._metrics.publish_failures_total,
             "checkpoints_saved_total": self._metrics.checkpoints_saved_total,
@@ -183,9 +213,14 @@ class LectureNoteService:
         }
 
     def _kick(self, session_id: str, state: _SessionState) -> None:
-        if state.task is not None or state.completed:
+        if state.task is not None or state.deactivated:
             return
-        if state.outbox is None and state.in_flight is None and state.pending is None:
+        if (
+            state.outbox is None
+            and state.in_flight is None
+            and state.pending is None
+            and not state.refinement_pending
+        ):
             return
         task = asyncio.create_task(
             self._drain_session(session_id, state),
@@ -197,20 +232,29 @@ class LectureNoteService:
 
     async def _drain_session(self, session_id: str, state: _SessionState) -> None:
         try:
-            while not state.completed:
+            while True:
+                batch: _PendingBatch | None = None
+                should_refine = False
                 async with state.lock:
                     if state.outbox is not None:
                         if not await self._commit_outbox(session_id, state):
                             return
                         continue
-                    if state.in_flight is None:
-                        if state.pending is None:
-                            return
+                    if state.in_flight is None and state.pending is not None:
                         # 모델 호출 전에 durable state도 pending에서 in-flight로 옮긴다.
                         state.in_flight = state.pending
                         state.pending = None
                         await self._save_checkpoint(session_id, state)
-                    batch = state.in_flight
+                    if state.in_flight is not None:
+                        batch = state.in_flight
+                    elif state.refinement_pending and not state.refined:
+                        should_refine = True
+                    else:
+                        return
+                if should_refine:
+                    if not await self._process_refinement(session_id, state):
+                        return
+                    continue
                 if batch is None:  # pragma: no cover - lock 안에서 보장한다
                     return
                 if not await self._process_batch(session_id, state, batch):
@@ -290,12 +334,75 @@ class LectureNoteService:
             await self._save_checkpoint(session_id, state)
             return await self._commit_outbox(session_id, state)
 
+    async def _process_refinement(self, session_id: str, state: _SessionState) -> bool:
+        if self._refinement_model is None or not state.note.topics:
+            async with state.lock:
+                state.refinement_pending = False
+                state.refined = True
+                await self._save_checkpoint(session_id, state)
+                if state.completion_acked:
+                    await self._deactivate(session_id, state)
+            return True
+
+        self._metrics.refinement_calls_total += 1
+        try:
+            result = await self._refinement_model.refine(
+                LectureNoteRefinementRequest(
+                    session_id=session_id,
+                    lesson_id=state.lesson_id,
+                    note=state.note,
+                )
+            )
+        except Exception as exc:
+            self._metrics.refinement_failures_total += 1
+            logger.warning(
+                "강의 노트 종료 후 정제 실패",
+                extra={
+                    "event": "lecture_note.refinement_failed",
+                    "session_id": session_id,
+                    "error_code": type(exc).__name__,
+                },
+            )
+            return False
+
+        async with state.lock:
+            if not state.refinement_pending or state.refined:
+                return True
+            accumulator = self._accumulator.export_session(session_id)
+            if accumulator is None:
+                raise ValueError("lecture note accumulator state is missing")
+            state.outbox = _refined_snapshot_event(
+                session_id=session_id,
+                lesson_id=state.lesson_id,
+                stt_session_id=accumulator.current.sttSessionId,
+                note=state.note,
+                result=result,
+            )
+            await self._save_checkpoint(session_id, state)
+            return await self._commit_outbox(session_id, state)
+
+    async def reconcile_completion_acks_after_pending_drain(self) -> None:
+        """소유 pending에 completion이 없었던 복원 세션의 ACK 완료를 확정한다."""
+        for session_id, state in tuple(self._sessions.items()):
+            async with state.lock:
+                if not state.completed or state.completion_acked:
+                    continue
+                state.completion_acked = True
+                if state.refined:
+                    await self._deactivate(session_id, state)
+                else:
+                    await self._save_checkpoint(session_id, state)
+
     async def _commit_outbox(self, session_id: str, state: _SessionState) -> bool:
         event = state.outbox
         if event is None:  # pragma: no cover - caller가 보장한다
             return True
 
-        final_state = _state_after_commit(state, event)
+        final_state = _state_after_commit(
+            state,
+            event,
+            refinement_enabled=self._refinement_model is not None,
+        )
         checkpoint = self._checkpoint(session_id, final_state)
         try:
             await self._store.commit(checkpoint, event)
@@ -328,11 +435,15 @@ class LectureNoteService:
         state.outbox = None
         state.completed = final_state.completed
         state.completion_acked = final_state.completion_acked
+        state.refinement_pending = final_state.refinement_pending
+        state.refined = final_state.refined
         self._metrics.events_published_total += 1
-        if state.completed:
+        if isinstance(event, LectureNoteCaptureCompleted):
             self._metrics.completed_total += 1
-            if state.completion_acked:
-                await self._deactivate(session_id, state)
+        elif isinstance(event, LectureNoteRefinedSnapshot):
+            self._metrics.refinements_completed_total += 1
+        if state.refined and state.completion_acked:
+            await self._deactivate(session_id, state)
         return True
 
     async def _save_checkpoint(self, session_id: str, state: _SessionState) -> None:
@@ -357,6 +468,8 @@ class LectureNoteService:
             outbox=state.outbox,
             completed=state.completed,
             completionAcked=state.completion_acked,
+            refinementPending=state.refinement_pending,
+            refined=state.refined,
             updatedAt=datetime.now(UTC),
         )
 
@@ -403,6 +516,9 @@ class LectureNotePipeline:
         if isinstance(entry, CaptionCompleted):
             await self._service.mark_completion_acked(entry.sessionId)
 
+    async def after_owned_pending_drained(self) -> None:
+        await self._service.reconcile_completion_acks_after_pending_drain()
+
 
 def _restore_work(checkpoint: LectureNoteWorkCheckpoint | None) -> _PendingBatch | None:
     return None if checkpoint is None else _PendingBatch.from_checkpoint(checkpoint)
@@ -411,9 +527,13 @@ def _restore_work(checkpoint: LectureNoteWorkCheckpoint | None) -> _PendingBatch
 def _state_after_commit(
     state: _SessionState,
     event: LectureNoteEvent,
+    *,
+    refinement_enabled: bool,
 ) -> _SessionState:
     in_flight = state.in_flight
     completed = state.completed
+    refinement_pending = state.refinement_pending
+    refined = state.refined
     if isinstance(event, LectureNoteChunkAppended):
         if in_flight is not None:
             in_flight = _PendingBatch(
@@ -423,9 +543,14 @@ def _state_after_commit(
             )
             if in_flight.completion is None:
                 in_flight = None
-    else:
+    elif isinstance(event, LectureNoteCaptureCompleted):
         in_flight = None
         completed = True
+        refinement_pending = bool(state.note.topics and refinement_enabled)
+        refined = not refinement_pending
+    else:
+        refinement_pending = False
+        refined = True
     return _SessionState(
         lesson_id=state.lesson_id,
         note=state.note,
@@ -434,6 +559,8 @@ def _state_after_commit(
         outbox=None,
         completed=completed,
         completion_acked=state.completion_acked,
+        refinement_pending=refinement_pending,
+        refined=refined,
     )
 
 
@@ -445,8 +572,12 @@ def _checkpoint_contains_event(
         return False
     if isinstance(event, LectureNoteChunkAppended):
         return checkpoint.note.chunk_sequence == int(event.chunkSequence)
-    return checkpoint.completed and checkpoint.note.chunk_sequence == int(
-        event.lastChunkSequence
+    if isinstance(event, LectureNoteCaptureCompleted):
+        return checkpoint.completed and checkpoint.note.chunk_sequence == int(
+            event.lastChunkSequence
+        )
+    return checkpoint.refined and checkpoint.note.chunk_sequence == int(
+        event.sourceLastChunkSequence
     )
 
 
@@ -511,5 +642,33 @@ def _capture_completed_event(
         lastChunkSequence=str(note.chunk_sequence),
         lastSttSequence=completion.lastSequence,
         reason=completion.reason,
+        occurredAt=datetime.now(UTC),
+    )
+
+
+def _refined_snapshot_event(
+    *,
+    session_id: str,
+    lesson_id: str,
+    stt_session_id: str,
+    note: LectureNote,
+    result: LectureNoteRefinementResult,
+) -> LectureNoteRefinedSnapshot:
+    topics = tuple(
+        LectureNoteRefinedTopic(
+            topicId=f"refined-topic-{index}",
+            topicTitle=topic.topicTitle,
+            keyPoints=topic.keyPoints,
+        )
+        for index, topic in enumerate(result.topics, start=1)
+    )
+    return LectureNoteRefinedSnapshot(
+        eventId=f"evt-{uuid4().hex}",
+        sessionId=session_id,
+        lessonId=lesson_id,
+        sttSessionId=stt_session_id,
+        sourceLastChunkSequence=str(note.chunk_sequence),
+        topics=topics,
+        markdownSnapshot=render_refined_markdown(topics),
         occurredAt=datetime.now(UTC),
     )

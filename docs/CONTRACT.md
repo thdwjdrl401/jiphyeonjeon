@@ -87,10 +87,11 @@ Redis는 LiveKit 내부 Redis가 아닌 application Redis다. key는 `CAPTION_ST
 
 ### 3-4a. ai-api → application Redis 실시간 강의 노트 Stream — AI producer 구현, Spring consumer 미구현
 
-ai-api는 §3-4의 자막을 별도 consumer group `ai-live-notes-mvp-v1`로 읽고, 새로 생성된 노트 조각만
-application Redis Stream `ai:lecture-notes:mvp`에 발행한다. 전체 노트 snapshot이나 Redis String cache는
-발행하지 않는다. 모든 write는 `XADD ... MAXLEN ~ AI_API_LECTURE_NOTE_STREAM_MAXLEN`(기본 10,000)이며
-Redis entry value는 모두 UTF-8 문자열이다.
+ai-api는 §3-4의 자막을 별도 consumer group `ai-live-notes-mvp-v1`로 읽고, 라이브 중에는 새로 생성된 노트
+조각만 application Redis Stream `ai:lecture-notes:mvp`에 발행한다. capture 완료 뒤에는 라이브 event를
+수정하지 않고 별도 refined snapshot을 한 번 발행한다. Redis String cache는 만들지 않는다. 모든 write는
+`XADD ... MAXLEN ~ AI_API_LECTURE_NOTE_STREAM_MAXLEN`(기본 10,000)이며 Redis entry value는 모두 UTF-8
+문자열이다.
 정수 필드는 부호 없는 최대 18자리 십진 문자열이고, 알 수 없는 필드·누락 필드·중복 필드는 계약 위반이다.
 
 공통 필드는 다음 조건을 지킨다.
@@ -107,6 +108,7 @@ Redis entry value는 모두 UTF-8 문자열이다.
 |---|---|
 | `lecture.note.chunk.appended` | `chunkSequence`, `latestSttSequence`, `topicAction`, `topicId`, `topicTitle`, `keyPoints`, `markdownFragment` |
 | `lecture.note.capture.completed` | `lastChunkSequence`, `lastSttSequence`, `reason="ROOM_DELETED"` |
+| `lecture.note.refined.snapshot` | `sourceLastChunkSequence`, `topics`, `markdownSnapshot` |
 
 `lecture.note.chunk.appended`의 필드 조건은 다음과 같다.
 
@@ -129,10 +131,23 @@ Backend가 전체 Markdown을 단순 결합할 경우 첫 조각은 그대로 �
 다시 만들 수 있다. AI wire event에는 `noteVersion`이 없다. Backend read model이 version을 노출한다면
 정상 반영한 chunk 수를 기준으로 별도 관리한다.
 
-`lecture.note.capture.completed`는 해당 세션의 라이브 자막 수집이 끝났다는 terminal event다.
+`lecture.note.capture.completed`는 해당 세션의 라이브 자막 수집이 끝났다는 append 경로의 terminal event다.
 `lastChunkSequence`는 조각이 없으면 `0`, 있으면 마지막 발행 순번이며, `lastSttSequence`는 completion이
 가리킨 STT attempt의 마지막 자막 sequence다. completion은 전체 노트가 검수·게시·최종 교정됐다는 의미가
 아니다. 정상 completion 뒤 같은 세션의 새 `lecture.note.chunk.appended`는 허용하지 않는다.
+
+`lecture.note.refined.snapshot`은 live draft의 전체 구조화 topic만 입력으로 사용해 capture 완료 뒤 한 번
+정제한 별도 전체 snapshot이다. raw caption, 녹화 HLS, 자료 RAG는 다시 입력하지 않는다.
+
+- `sourceLastChunkSequence`: 정제 입력이 된 마지막 live `chunkSequence`와 같은 1-based 양의 정수다.
+- `topics`: 1~30개 compact JSON 배열 문자열이다. 각 항목은 정확히 `topicId`, `topicTitle`, `keyPoints`를
+  가지며 `topicId`는 세션 refined snapshot 안의 opaque identifier, 제목은 1~80자 단일 행, 요점은
+  1~20개의 1~300자 단일 행 문자열이다.
+- `markdownSnapshot`: 1~262,144자이며 같은 `topics`에서 결정론적으로 만든 전체 Markdown이다. live
+  `markdownFragment`에 append하는 값이 아니라 별도 refined read model을 교체하는 값이다.
+- refined snapshot은 live `chunkSequence`를 증가시키거나 과거 chunk event를 수정·취소하지 않는다.
+- 재시도는 같은 `eventId`, payload, `occurredAt`을 유지한다. 같은 세션·같은
+  `sourceLastChunkSequence`의 뒤늦은 중복 snapshot은 `eventId` 멱등으로 무시한다.
 
 발행 재시도는 최초 event와 **같은 `eventId`, sequence, payload, `occurredAt`**을 사용한다. Spring 구현 시
 별도 group `spring-lecture-notes-live-v1`을 `0-0`에서 만들고, 세션별 처리를 직렬화하며 다음 순서로 처리한다.
@@ -141,7 +156,10 @@ Backend가 전체 Markdown을 단순 결합할 경우 첫 조각은 그대로 �
 2. 이미 처리한 `eventId` 또는 현재 값 이하의 `chunkSequence`는 중복·stale로 기록하고 ACK한다.
 3. 기대값보다 큰 `chunkSequence`는 aggregate와 WS를 갱신하지 않고 pending에 남기며 gap metric·log를 남긴다.
 4. completion은 `lastChunkSequence`가 현재 정상 반영 순번과 일치할 때만 capture 완료로 반영한다.
-5. DB commit 뒤에만 ACK하고, commit된 새 조각만 Frontend WebSocket으로 전달한다.
+5. refined snapshot은 capture 완료가 반영됐고 `sourceLastChunkSequence`가 live 마지막 순번과 일치할 때만
+   별도 refined read model 전체를 교체한다. live draft에는 append하지 않는다.
+6. DB commit 뒤에만 ACK하고, commit된 새 조각만 Frontend WebSocket으로 전달한다. refined snapshot의
+   Frontend 전달 방식은 Spring·Frontend 구현 시 별도로 확정한다.
 
 Spring consumer·DB·REST·WebSocket은 아직 구현되지 않았다. AI producer는 caption과 미처리 작업을
 `ai:lecture-notes:mvp:state:{sessionId}`에 저장한 뒤 caption을 ACK하고,

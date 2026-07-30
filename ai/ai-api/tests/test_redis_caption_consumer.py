@@ -97,10 +97,12 @@ def test_run_creates_group_recovers_owned_pending_before_new_entries() -> None:
     async def scenario() -> None:
         stop_event = asyncio.Event()
         observed: list[str] = []
+        order: list[str] = []
 
         class OneCycleRedis(FakeRedis):
             async def xreadgroup(self, *args, **kwargs):
                 assert observed == [" 외"]
+                assert order == ["pending", "pending_drained"]
                 result = await super().xreadgroup(*args, **kwargs)
                 stop_event.set()
                 return result
@@ -111,10 +113,20 @@ def test_run_creates_group_recovers_owned_pending_before_new_entries() -> None:
             stream_entries={"1-0": ("1-0", fields)},
         )
         state = CaptionConsumerState()
+
+        def handle_entry(entry) -> None:
+            observed.append(parse_caption_entry(entry).text)
+            order.append("pending")
+
+        async def after_owned_pending_drained() -> None:
+            assert fake.acked == ["1-0"]
+            order.append("pending_drained")
+
         consumer = RedisCaptionConsumer(
             "redis://unused",
             "ai-api-test",
-            lambda entry: observed.append(parse_caption_entry(entry).text),
+            handle_entry,
+            after_owned_pending_drained=after_owned_pending_drained,
             state=state,
             block_ms=100,
             client_factory=lambda: fake,
@@ -126,6 +138,7 @@ def test_run_creates_group_recovers_owned_pending_before_new_entries() -> None:
         assert fake.pending_range_calls == ["ai-api-test", "ai-api-test"]
         assert fake.read_calls == [{"ai:captions:live": ">"}]
         assert fake.acked == ["1-0"]
+        assert order == ["pending", "pending_drained"]
         assert state.lag == 3
         assert fake.closed is True
 

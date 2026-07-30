@@ -125,6 +125,7 @@ class RedisCaptionConsumer:
         handle_entry: Callable[[Mapping[Any, Any]], object],
         *,
         after_ack: Callable[[Mapping[Any, Any]], object] | None = None,
+        after_owned_pending_drained: Callable[[], object] | None = None,
         state: CaptionConsumerState | None = None,
         stream_key: str = CAPTION_STREAM_KEY,
         group_name: str = CAPTION_CONSUMER_GROUP,
@@ -151,6 +152,7 @@ class RedisCaptionConsumer:
         self._consumer_name = consumer_name
         self._handle_entry = handle_entry
         self._after_ack = after_ack
+        self._after_owned_pending_drained = after_owned_pending_drained
         self._stream_key = stream_key
         self._group_name = group_name
         self._batch_size = batch_size
@@ -191,6 +193,10 @@ class RedisCaptionConsumer:
                 await self._ensure_group(client)
                 self.state.mark_connected()
                 await self._drain_owned_pending(client, stop_event)
+                if self._after_owned_pending_drained is not None:
+                    result = self._after_owned_pending_drained()
+                    if inspect.isawaitable(result):
+                        await result
                 delay = self._reconnect_min_seconds
                 while not stop_event.is_set():
                     messages = await client.xreadgroup(

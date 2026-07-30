@@ -76,9 +76,10 @@ Spring
 RAG consumer와 강의 노트 consumer를 실행한다. 서로 다른 group이므로 한쪽 ACK가 다른 쪽 전달을 제거하지 않는다. 자료와 자막에서
 충분한 근거를 찾지 못하면 GMS를 호출하지 않고 `answer.insufficient`로 종료한다.
 
-강의 노트 출력은 전체 snapshot이 아니라 `lecture.note.chunk.appended` 추가분과
-`lecture.note.capture.completed` 종료 event만 `ai:lecture-notes:mvp`에 발행한다. wire 필드·길이·순서·멱등·ACK
-규칙의 정본은 [공유 계약 §3-4a](../../docs/CONTRACT.md#3-4a-ai-api--application-redis-실시간-강의-노트-stream--ai-producer-구현-spring-consumer-미구현)다.
+강의 노트 live 출력은 `lecture.note.chunk.appended` 추가분과 `lecture.note.capture.completed`를 발행하고,
+종료 후 정제 결과만 `lecture.note.refined.snapshot` 전체본으로 `ai:lecture-notes:mvp`에 발행한다.
+wire 필드·길이·순서·멱등·ACK 규칙의 정본은
+[공유 계약 §3-4a](../../docs/CONTRACT.md#3-4a-ai-api--application-redis-실시간-강의-노트-stream--ai-producer-구현-spring-consumer-미구현)다.
 강의 노트 caption은 Redis session checkpoint 저장 뒤 ACK하며, 결과 event와 다음 checkpoint는 같은 Redis
 transaction으로 확정한다. AI producer는 구현됐지만 Spring consumer·DB·REST·WebSocket은 아직 구현되지 않았다.
 

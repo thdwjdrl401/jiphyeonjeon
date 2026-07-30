@@ -62,6 +62,13 @@ class Settings(BaseSettings):
     lecture_note_max_output_tokens: int = Field(default=512, ge=1, le=4_096)
     lecture_note_max_prompt_chars: int = Field(default=20_000, ge=1_000, le=200_000)
     lecture_note_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
+    lecture_note_refinement_max_output_tokens: int = Field(default=4_096, ge=1, le=16_384)
+    lecture_note_refinement_max_prompt_chars: int = Field(
+        default=50_000,
+        ge=1_000,
+        le=500_000,
+    )
+    lecture_note_refinement_timeout_seconds: float = Field(default=55.0, gt=0, le=120)
     lecture_note_min_window_ms: int = Field(default=15_000, ge=1_000, le=120_000)
     lecture_note_target_window_ms: int = Field(default=25_000, ge=1_000, le=120_000)
     lecture_note_max_window_ms: int = Field(default=40_000, ge=1_000, le=120_000)

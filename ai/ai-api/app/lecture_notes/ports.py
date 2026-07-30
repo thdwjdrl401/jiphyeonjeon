@@ -6,12 +6,21 @@ from app.lecture_notes.models import (
     LectureNoteEvent,
     LectureNoteModelRequest,
     LectureNoteModelResult,
+    LectureNoteRefinementRequest,
+    LectureNoteRefinementResult,
 )
 from app.lecture_notes.recovery import LectureNoteSessionCheckpoint
 
 
 class LectureNoteModel(Protocol):
     async def generate(self, request: LectureNoteModelRequest) -> LectureNoteModelResult: ...
+
+
+class LectureNoteRefinementModel(Protocol):
+    async def refine(
+        self,
+        request: LectureNoteRefinementRequest,
+    ) -> LectureNoteRefinementResult: ...
 
 
 class LectureNoteStateStore(Protocol):

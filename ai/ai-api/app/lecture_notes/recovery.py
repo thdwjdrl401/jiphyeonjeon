@@ -49,4 +49,7 @@ class LectureNoteSessionCheckpoint(_CheckpointModel):
     outbox: LectureNoteEvent | None = None
     completed: bool = False
     completionAcked: bool = False
+    refinementPending: bool = False
+    # 구 checkpoint는 refined 단계 도입 전 완료본이므로 migration 시 다시 정제하지 않는다.
+    refined: bool = True
     updatedAt: datetime
