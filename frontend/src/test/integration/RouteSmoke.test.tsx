@@ -4,7 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '@/App'
 import { mockAuthService, resetMockAuth } from '@/features/auth/mockAuthService'
 import type { LiveSessionService } from '@/features/live-session/liveSessionService.interface'
-import { mockLiveSessionService } from '@/features/live-session/mockLiveSessionService'
+import {
+  mockLiveSessionService,
+  resetMockLiveSessionState,
+} from '@/features/live-session/mockLiveSessionService'
 
 vi.mock('@/features/live-session/PlaybackPlayer', () => ({
   default: ({
@@ -52,6 +55,7 @@ async function readLessonIndexSignature() {
 describe('전체 페이지 라우트', () => {
   beforeEach(() => {
     resetMockAuth()
+    resetMockLiveSessionState()
     window.history.replaceState({}, '', '/')
   })
 
@@ -189,6 +193,8 @@ describe('전체 페이지 라우트', () => {
   it('강사에게 라이브 운영 화면을 제공한다', async () => {
     const user = userEvent.setup()
     await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
+    await mockLiveSessionService.startLiveSession('ses-security-live')
+    await mockLiveSessionService.getLiveStartStatus('ses-security-live')
     renderAt('/instructor/live-sessions/ses-security-live/classroom')
     const liveInformation = await screen.findByRole('banner', { name: '라이브 강의 정보' })
     expect(within(liveInformation).getByText('강사 운영 모드')).toBeInTheDocument()

@@ -38,6 +38,11 @@ export const subscribeChatMessages = (
   onMessage: Parameters<LiveSessionService['subscribeChatMessages']>[1],
   onConnectionChange: Parameters<LiveSessionService['subscribeChatMessages']>[2],
 ) => liveSessionService.subscribeChatMessages(sessionId, onMessage, onConnectionChange)
+export const subscribeSessionState = (
+  sessionId: string,
+  onEvent: Parameters<LiveSessionService['subscribeSessionState']>[1],
+  onConnectionChange: Parameters<LiveSessionService['subscribeSessionState']>[2],
+) => liveSessionService.subscribeSessionState(sessionId, onEvent, onConnectionChange)
 export const getCaptions = (sessionId: string) => liveSessionService.getCaptions(sessionId)
 export const subscribeCaptions = (
   sessionId: string,
@@ -64,6 +69,7 @@ export type {
   ChatConnectionState,
   ChatMessageView,
   LiveSessionService,
+  LiveSessionStateEvent,
   LiveSessionView,
   PlaybackSourceView,
   PlaybackView,

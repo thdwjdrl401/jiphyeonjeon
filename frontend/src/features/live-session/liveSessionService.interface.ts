@@ -54,6 +54,18 @@ export interface SendChatMessageInput {
 
 export type ChatConnectionState = 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'error'
 
+export type LiveSessionStateEvent =
+  | {
+      type: 'session.ending'
+      occurredAt: string
+      payload: { liveSessionStatus: 'ENDING'; endedAt: null }
+    }
+  | {
+      type: 'session.ended'
+      occurredAt: string
+      payload: { liveSessionStatus: 'ENDED'; endedAt: string }
+    }
+
 export interface CaptionTermReference {
   termId: string
   startIndex: number
@@ -251,7 +263,7 @@ export interface LiveSessionService {
   getPreflightReadiness: (sessionId: string) => Promise<PreflightReadiness>
   startLiveSession: (sessionId: string) => Promise<LiveStartOperation>
   getLiveStartStatus: (sessionId: string, operationId?: string) => Promise<LiveStartStatus>
-  endLiveSession: (sessionId: string) => Promise<void>
+  endLiveSession: (sessionId: string) => Promise<LiveSessionView>
   /** 강사 WebRTC 송출 전용 토큰. 수강생 재생은 LiveKit이 아니라 HLS를 사용한다. */
   getInstructorLiveToken: (sessionId: string) => Promise<{ token: string; wsUrl?: string }>
   getParticipants: (sessionId: string) => Promise<Array<{ alias: string; state: string; joinedAt: string }>>
@@ -260,6 +272,12 @@ export interface LiveSessionService {
   subscribeChatMessages: (
     sessionId: string,
     onMessage: (message: ChatMessageView) => void,
+    onConnectionChange: (state: ChatConnectionState) => void,
+  ) => () => void
+  /** 세션 종료 상태 구독. ENDING은 안내만, ENDED는 학생 상호작용 잠금의 권위 있는 신호다. */
+  subscribeSessionState: (
+    sessionId: string,
+    onEvent: (event: LiveSessionStateEvent) => void,
     onConnectionChange: (state: ChatConnectionState) => void,
   ) => () => void
   /**
