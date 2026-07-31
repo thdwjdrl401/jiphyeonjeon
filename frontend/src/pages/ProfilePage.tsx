@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
-import { publicPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
 import { getStudentDashboardSummary } from '@/features/curriculum/myCurriculumsService'
+import AccountWithdrawPanel from '@/features/profile/AccountWithdrawPanel'
+import PasswordChangePanel from '@/features/profile/PasswordChangePanel'
 import ProfileEditModal from '@/features/profile/ProfileEditModal'
 import ProfileIdentityCard from '@/features/profile/ProfileIdentityCard'
 import { profileService } from '@/features/profile/profileService'
@@ -13,8 +13,7 @@ import { InlineNotice, PageHeader, Panel } from '@/shared/ui/WorkspaceUi'
 
 export default function ProfilePage() {
   usePageTitle('내 프로필')
-  const navigate = useNavigate()
-  const { user, updateDisplayName, updateProfileImage, logout } = useAuth()
+  const { user, updateDisplayName, updateProfileImage } = useAuth()
   const studentSummaryQuery = useQuery({
     queryKey: ['dashboard-summary', 'student', user?.userId],
     queryFn: () => getStudentDashboardSummary(user?.userId ?? ''),
@@ -30,9 +29,6 @@ export default function ProfilePage() {
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [bio, setBio] = useState('')
   const [expertise, setExpertise] = useState('')
-  const [currentPassword, setCurrentPassword] = useState('')
-  const [newPassword, setNewPassword] = useState('')
-  const [withdrawConfirmed, setWithdrawConfirmed] = useState(false)
 
   useEffect(() => {
     if (!instructorProfileQuery.data) return
@@ -52,23 +48,6 @@ export default function ProfilePage() {
     },
     onError: (error) => toast.error(error.message || '공개 프로필을 저장하지 못했습니다.'),
   })
-  const passwordMutation = useMutation({
-    mutationFn: () => profileService.changePassword({ currentPassword, newPassword }),
-    onSuccess: () => {
-      setCurrentPassword('')
-      setNewPassword('')
-      toast.success('비밀번호가 변경되었습니다.')
-    },
-    onError: (error) => toast.error(error.message || '비밀번호를 변경하지 못했습니다.'),
-  })
-  const withdrawMutation = useMutation({
-    mutationFn: profileService.withdrawAccount,
-    onSuccess: async () => {
-      await logout()
-      navigate(publicPaths.home, { replace: true })
-    },
-    onError: (error) => toast.error(error.message || '회원 탈퇴를 처리하지 못했습니다.'),
-  })
 
   const closeEdit = useCallback(() => {
     setIsEditOpen(false)
@@ -84,10 +63,6 @@ export default function ProfilePage() {
   const saveInstructorProfile = (event: FormEvent) => {
     event.preventDefault()
     instructorProfileMutation.mutate()
-  }
-  const changePassword = (event: FormEvent) => {
-    event.preventDefault()
-    passwordMutation.mutate()
   }
 
   if (!user) return null
@@ -133,17 +108,19 @@ export default function ProfilePage() {
         </Panel>
       )}
 
+      {/*
+        비밀번호 변경과 회원 탈퇴는 예전처럼 "계정 보안" 카드 한 장에 함께 둔다. 다만 각각을 패널
+        컴포넌트로 떼어 냈다(ADR-0010) — 탈퇴는 안내 항목과 동의 절차를, 비밀번호 변경은 확인
+        필드와 재설정 링크를 갖게 되어, 페이지가 두 폼의 상태를 직접 들고 있을 이유가 없어졌다.
+        구분선을 두는 이유는 탈퇴 안내가 길어져 두 기능이 한 덩어리로 읽히기 때문이다.
+      */}
       <Panel title="계정 보안" description="비밀번호 변경과 회원 탈퇴.">
-        <form className="workspace-form" onSubmit={changePassword}>
-          <div className="form-grid">
-            <label><span>현재 비밀번호</span><input type="password" value={currentPassword} autoComplete="current-password" onChange={(event) => setCurrentPassword(event.target.value)} /></label>
-            <label><span>새 비밀번호</span><input type="password" value={newPassword} minLength={8} autoComplete="new-password" onChange={(event) => setNewPassword(event.target.value)} /></label>
-          </div>
-          <div className="form-actions"><button className="button button--soft" type="submit" disabled={!currentPassword || newPassword.length < 8 || passwordMutation.isPending}>{passwordMutation.isPending ? '변경 중' : '비밀번호 변경'}</button></div>
-        </form>
-        <div className="settings-list settings-list__danger">
-          <div><div><strong>회원 탈퇴</strong><p>탈퇴하면 현재 세션이 종료되고 로그인 화면으로 돌아갑니다.</p></div><label className="choice-row"><input type="checkbox" checked={withdrawConfirmed} onChange={(event) => setWithdrawConfirmed(event.target.checked)} /><span>계정 탈퇴에 동의합니다.</span></label><button className="button button--ghost" type="button" disabled={!withdrawConfirmed || withdrawMutation.isPending} onClick={() => withdrawMutation.mutate()}>{withdrawMutation.isPending ? '처리 중' : '회원 탈퇴'}</button></div>
-        </div>
+        <PasswordChangePanel />
+
+        <section className="settings-section">
+          <h3>회원 탈퇴</h3>
+          <AccountWithdrawPanel role={user.role} />
+        </section>
       </Panel>
 
       {isEditOpen && (

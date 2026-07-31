@@ -20,6 +20,8 @@ import LiveSessionProcessingPage from '@/pages/LiveSessionProcessingPage'
 import LoginPage from '@/pages/LoginPage'
 import MyCurriculumsPage from '@/pages/MyCurriculumsPage'
 import NotFoundPage from '@/pages/NotFoundPage'
+import PasswordResetConfirmPage from '@/pages/PasswordResetConfirmPage'
+import PasswordResetRequestPage from '@/pages/PasswordResetRequestPage'
 import ProfilePage from '@/pages/ProfilePage'
 import ReplayLessonPage from '@/pages/ReplayLessonPage'
 import SignupPage from '@/pages/SignupPage'
@@ -43,6 +45,13 @@ export default function AppRouter() {
             <Route path="login" element={<LoginPage />} />
             <Route path="signup" element={<SignupPage />} />
           </Route>
+          {/*
+            재설정 흐름은 GuestOnlyRoute에 넣지 않는다. 로그인한 사람도 "현재 비밀번호"를
+            기억하지 못하면 비밀번호 변경 폼을 채울 수 없어서, 계정 보안 탭의 링크로 이 화면에
+            와야 한다. 게스트 전용으로 묶으면 그 링크가 홈으로 튕긴다.
+          */}
+          <Route path="password-reset" element={<PasswordResetRequestPage />} />
+          <Route path="password-reset/confirm" element={<PasswordResetConfirmPage />} />
         </Route>
         <Route path="student" element={<RequireRoleRoute role="STUDENT" />}>
           <Route index element={<Navigate to={studentPaths.curriculums} replace />} />

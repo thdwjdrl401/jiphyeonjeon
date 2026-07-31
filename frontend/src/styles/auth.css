@@ -355,6 +355,39 @@
   text-align: right;
 }
 
+/* 비밀번호 재설정 — 폼 대신 결과·안내만 남는 상태(발송 완료, 토큰 없음). */
+.auth-result {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px;
+  border: 1px solid var(--border-soft);
+  background: var(--surface-muted);
+}
+
+.auth-result strong {
+  color: var(--ink-900);
+  font-size: 0.95rem;
+}
+
+.auth-result p {
+  margin: 0;
+  color: var(--ink-600);
+  font-size: 0.78rem;
+  line-height: 1.6;
+}
+
+.auth-result .demo-notice {
+  margin: 4px 0 0;
+}
+
+/* 비밀번호 라벨 오른쪽의 "비밀번호를 잊으셨나요?" — 라벨과 같은 줄에서 보조로 읽히게 둔다. */
+.label-row__link {
+  color: var(--blue-600);
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
 .auth-footer {
   margin-top: 25px;
   padding-top: 21px;
