@@ -26,7 +26,7 @@ RagAnswerRequest
 
 ## 경계와 불변식
 
-- PPTX evidence는 요청 `curriculumId`와 일치해야 한다(ADR-0005, curriculum 전체 공유). caption
+- PPTX evidence는 요청 `curriculumId`와 일치해야 한다(ADR-0007, curriculum 전체 공유). caption
   evidence는 지금처럼 `lessonId`·`sessionId`가 모두 일치해야 한다 — 실시간 자막은 공유하지 않는다.
 - caption citation은 sequence가 다시 시작되는 attempt를 구분하도록 `sttSessionId`를 포함한다.
 - 근거가 부족하면 모델을 호출하지 않고 `answer.insufficient` 하나만 낸다.

@@ -2,7 +2,7 @@
 
 - 상태: 채택
 - 일자: 2026-07-31
-- 관련: [ADR-0005](0005-key-term-storage-schema.md), `ai/ai-worker/app/consumers/material_job.py`,
+- 관련: [ADR-0007](0007-curriculum-scoped-rag-material-sharing.md), `ai/ai-worker/app/consumers/material_job.py`,
   `ai/ai-worker/app/adapters/pgvector_index.py`
 
 ## 맥락
@@ -18,15 +18,15 @@ DB에서 실제로 지우는 `PgvectorIndexRepository.delete_job()`도 이미 �
 ai-worker가 `material_id`로 `ai.material_version`을 먼저 조회해 `curriculum_id`와 현재 최대
 `material_version`을 스스로 알아낸 뒤 삭제를 진행한다. Spring 쪽 wire 계약은 바꾸지 않는다.
 
-이 방식이 안전한 이유는 ADR-0005(RAG 커리큘럼 공유)의 self-lookup 거부 사유가 여기엔 적용되지
-않기 때문이다 — ADR-0005는 "아직 자료가 없는 새 세션"에서 self-lookup이 실패하는 문제였지만,
+이 방식이 안전한 이유는 ADR-0007(RAG 커리큘럼 공유)의 self-lookup 거부 사유가 여기엔 적용되지
+않기 때문이다 — ADR-0007은 "아직 자료가 없는 새 세션"에서 self-lookup이 실패하는 문제였지만,
 삭제 대상은 정의상 **이미 임베딩된 자료**라 조회가 실패할 수 없다(있으면 지우고, 없으면 이미 지워진
 것으로 간주해 성공 처리한다).
 
 ### 대안: Spring이 `curriculumId`를 payload에 추가
 
 - 장점: ai-worker가 DB를 미리 조회할 필요 없음.
-- 단점: ADR-0005와 똑같은 Spring 쪽 계약 변경·배포 순서 의존이 또 생긴다. self-lookup으로 이미
+- 단점: ADR-0007과 똑같은 Spring 쪽 계약 변경·배포 순서 의존이 또 생긴다. self-lookup으로 이미
   충분히 안전한데 굳이 외부 의존을 추가할 이유가 없어 채택하지 않는다.
 
 ## 세부 동작

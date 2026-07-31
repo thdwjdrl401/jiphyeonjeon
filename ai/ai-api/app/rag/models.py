@@ -105,7 +105,7 @@ class RetrievedEvidence(BaseModel):
     """Prompt-ready excerpt with the scope key its source can prove.
 
     curriculum_id is the PptxSource scope key (materials are shared curriculum-wide,
-    ADR-0005) and is None for CaptionSource, which stays lesson_id/sessionId-scoped.
+    ADR-0007) and is None for CaptionSource, which stays lesson_id/sessionId-scoped.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=False)

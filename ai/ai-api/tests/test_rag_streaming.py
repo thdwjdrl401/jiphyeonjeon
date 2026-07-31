@@ -293,7 +293,7 @@ async def test_cross_scope_evidence_never_reaches_model(
 
 @async_test
 async def test_pptx_evidence_from_a_sibling_lesson_in_the_same_curriculum_is_accepted() -> None:
-    """ADR-0005: PPTX materials are shared curriculum-wide, so a hit whose lesson_id differs
+    """ADR-0007: PPTX materials are shared curriculum-wide, so a hit whose lesson_id differs
     from the requesting lesson must still reach the model as long as curriculum_id matches."""
 
     evidence = (pptx_evidence(lesson_id=OTHER_LESSON_ID, curriculum_id=CURRICULUM_ID),)

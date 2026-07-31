@@ -16,7 +16,7 @@ RAG context core가 외부 Redis, PostgreSQL과 BGE runtime을 사용하는 outb
 - Redis는 application Redis URL을 주입받으며 LiveKit 내부 Redis·host `6380`을 가정하지 않는다.
 - poison caption은 계약 위반으로 기록 후 ACK하고, 일시적인 handler 실패는 pending에 남긴다.
 - consumer group은 Spring consumer와 분리돼 한쪽 ACK가 다른 쪽 전달을 제거하지 않는다.
-- pgvector query는 요청 UUID `curriculumId`와 `state='ACTIVE'`를 SQL에서 강제하고(ADR-0005) runtime
+- pgvector query는 요청 UUID `curriculumId`와 `state='ACTIVE'`를 SQL에서 강제하고(ADR-0007) runtime
   role을 안전한 identifier로 제한한다.
 - BGE 응답은 pinned model/revision, 1024차원, finite unit vector와 단일 입력-출력을 검증한다.
 - token, DB URL, 질문 원문과 embedding 값은 로그에 남기지 않는다.

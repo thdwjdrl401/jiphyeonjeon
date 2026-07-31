@@ -125,7 +125,7 @@ async def _insert_chunk(
 def test_real_postgres_shares_active_chunks_across_lessons_in_the_same_curriculum(
     integration_database: IntegrationDatabase,
 ) -> None:
-    """ADR-0005: search is scoped by curriculum_id, so a sibling lesson's active material is
+    """ADR-0007: search is scoped by curriculum_id, so a sibling lesson's active material is
     included, while a different curriculum's material (even if ACTIVE) is excluded."""
 
     async def scenario() -> None:

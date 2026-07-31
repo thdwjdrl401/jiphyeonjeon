@@ -4,7 +4,7 @@ from uuid import UUID
 
 @dataclass(frozen=True, slots=True)
 class MaterialChunkHit:
-    """One curriculum-scoped chunk from an active PPTX material version (ADR-0005)."""
+    """One curriculum-scoped chunk from an active PPTX material version (ADR-0007)."""
 
     chunk_id: int
     material_version_id: int
