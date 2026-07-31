@@ -37,6 +37,7 @@ import {
   ANNOTATION_TOPIC,
   encodeAnnotationOp,
   encodeLaserStroke,
+  trimOpPrecision,
   type AnnotationChange,
   type AnnotationDocument,
   type AnnotationOp,
@@ -521,7 +522,14 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
     if (!room || room.state !== 'connected') return
 
     annotationRevisionRef.current += 1
-    const op = { ...change, revision: annotationRevisionRef.current } as AnnotationOp
+    /*
+     * 나가는 사본에서 의미 없는 좌표 정밀도를 덜어낸다(§3-6b).
+     *
+     * <p>여기가 유일한 관문이다 — 데이터 채널과 영속화가 모두 이 op를 쓰므로, 한 곳에서 다듬으면
+     * 둘 다 줄어든다. 강사의 문서는 그대로 둔다: 에디터가 들고 있는 값을 바꾸면 version 기반
+     * diff가 그것을 "바뀐 요소"로 보고 다시 내보낸다.
+     */
+    const op = trimOpPrecision({ ...change, revision: annotationRevisionRef.current } as AnnotationOp)
     void room.localParticipant
       .publishData(encodeAnnotationOp(op), { reliable: true, topic: ANNOTATION_TOPIC })
       .catch((error) => {
