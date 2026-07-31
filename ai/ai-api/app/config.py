@@ -62,12 +62,18 @@ class Settings(BaseSettings):
     lecture_note_max_output_tokens: int = Field(default=512, ge=1, le=4_096)
     lecture_note_max_prompt_chars: int = Field(default=20_000, ge=1_000, le=200_000)
     lecture_note_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
+    lecture_note_refinement_max_output_tokens: int = Field(default=4_096, ge=1, le=16_384)
+    lecture_note_refinement_max_prompt_chars: int = Field(
+        default=50_000,
+        ge=1_000,
+        le=500_000,
+    )
+    lecture_note_refinement_timeout_seconds: float = Field(default=55.0, gt=0, le=120)
     lecture_note_min_window_ms: int = Field(default=15_000, ge=1_000, le=120_000)
     lecture_note_target_window_ms: int = Field(default=25_000, ge=1_000, le=120_000)
     lecture_note_max_window_ms: int = Field(default=40_000, ge=1_000, le=120_000)
     lecture_note_min_chars: int = Field(default=80, ge=1, le=10_000)
     lecture_note_max_chars: int = Field(default=400, ge=1, le=20_000)
-    lecture_note_snapshot_ttl_seconds: int = Field(default=86_400, ge=60, le=604_800)
     lecture_note_stream_maxlen: int = Field(default=10_000, ge=100, le=1_000_000)
 
     rag_retrieval_timeout_seconds: float = Field(default=10.0, gt=0, le=120)
@@ -77,7 +83,7 @@ class Settings(BaseSettings):
     caption_shutdown_timeout_seconds: float = Field(default=3.0, gt=0, le=30)
     caption_cancel_grace_seconds: float = Field(default=1.0, gt=0, le=10)
 
-    material_top_k: int = Field(default=8, ge=1, le=50)
+    material_top_k: int = Field(default=3, ge=1, le=50)
     material_vector_threshold: float = Field(default=0.25, ge=0, le=1)
     material_lexical_threshold: float = Field(default=0.0, ge=0, le=1)
     caption_evidence_max_items: int = Field(default=32, ge=1, le=1_000)

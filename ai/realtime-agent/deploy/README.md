@@ -1,17 +1,22 @@
 # GPU realtime-agent rootless 배포
 
-GPU 호스트는 sudo 권한이 없고 Jupyter service에 NoNewPrivileges=yes가 적용돼 있다. 따라서
-GitLab Runner, SSH tunnel, realtime-agent를 모두 liveclass 계정으로 실행한다. LiveKit Worker
-등록은 agent process의 authenticated WebSocket 연결 상태이므로 agent가 시작되면 같은
-STT_AGENT_NAME으로 자동 등록된다.
+GPU 호스트는 sudo 권한이 없고 Jupyter service에 `NoNewPrivileges=yes`가 적용돼 있다. GitLab Runner,
+SSH tunnel, realtime-agent는 모두 `liveclass` 사용자 영역에서 실행한다. 한 물리 GPU0에서 prod와 dev
+worker를 별도 tmux session으로 동시에 유지하며 LiveKit agent name, Redis, health port를 분리한다.
 
-이 방식은 브라우저나 terminal 연결이 끊겨도 tmux session으로 계속 실행된다. 단, GPU host 또는
-Jupyter service가 재시작되면 사용자 process도 종료되므로 아래의 Runner 시작 명령을 한 번 다시
-실행해야 한다. 현재 권한에서는 boot-time 자동 시작을 설정할 수 없다.
+| 환경 | env file | tmux session | `STT_AGENT_NAME` | Redis | GPU health | EC2 health | 기본 용량 |
+|---|---|---|---|---|---|---|---:|
+| prod | `~/.config/liveclass/realtime-agent.env` | `liveclass-realtime-agent-prod` | `liveclass-realtime-stt-prod` | `127.0.0.1:6390`, 무인증 | `127.0.0.1:8081` | `127.0.0.1:18081` | 12 |
+| dev | `~/.config/liveclass/realtime-agent-dev.env` | `liveclass-realtime-agent-dev` | `liveclass-realtime-stt-dev` | `127.0.0.1:4000`, requirepass | `127.0.0.1:8082` | `127.0.0.1:18082` | 1 |
+
+두 worker가 같은 name을 쓰면 LiveKit이 prod dispatch를 dev Redis worker에 배정할 수 있으므로 이름을
+합치지 않는다. prod Spring은 `LIVEKIT_AGENT_NAME=liveclass-realtime-stt-prod`, dev Spring은 기존
+기본값 `liveclass-realtime-stt-dev`를 사용한다. GPU host 또는 Jupyter service가 재시작되면 사용자 process도
+종료되므로 Runner와 supervisor를 다시 시작해야 한다.
 
 ## 1. 사용자 영역 bootstrap
 
-Python 환경은 Conda가 아니라 프로젝트 표준인 Python 3.12와 uv를 사용한다.
+Python 환경은 프로젝트 표준인 Python 3.12와 uv를 사용한다.
 
 ~~~sh
 cd /home/liveclass/liveclass
@@ -20,23 +25,25 @@ ai/realtime-agent/deploy/install-gitlab-runner-user.sh latest
 ai/bge-runtime/deploy/install.sh /opt/tljh/user/bin/uv
 ~~~
 
-첫 명령은 아래 항목만 사용자 홈에 설치한다.
+첫 명령은 실행파일을 `~/.local/bin`, release/cache를
+`~/.local/share/liveclass/realtime-agent`, 환경파일을 `~/.config/liveclass`에 설치한다. 기존 환경파일은
+덮어쓰지 않는다. 다음 세 파일을 실제 값으로 채우고 `0600`을 유지한다.
 
-- 실행 파일: ~/.local/bin
-- agent release/cache: ~/.local/share/liveclass/realtime-agent
-- 환경파일: ~/.config/liveclass/realtime-agent*.env
-- TLS hostname loopback resolver: ~/.local/lib/liveclass/livekit-tunnel-dns.so
-
-설치 스크립트는 기존 환경파일을 덮어쓰지 않는다. 두 환경파일을 실제 값으로 수정하고 권한을
-0600으로 유지한다.
+- `realtime-agent.env`: prod worker
+- `realtime-agent-dev.env`: dev worker
+- `realtime-agent-tunnels.env`: 공용 LiveKit/TURN, dev/prod Redis·health SSH forward
 
 ~~~sh
 chmod 600 ~/.config/liveclass/realtime-agent*.env
 ~~~
 
-운영 GPU↔EC2 터널은 개발자 로컬 tunnel과 구분해 공용 bootstrap으로 설정한다. 전달받은 PEM은
-저장소에 두고 계속 참조하지 않고 `~/.config/liveclass/ssh/`로 복사하며, realtime-agent와 BGE가 같은
-EC2 target을 사용하도록 두 tunnel env를 함께 생성한다.
+두 agent env의 `LIVEKIT_URL`은 인증서 hostname을 유지하고 `LIVEKIT_TUNNEL_HOST`에 같은 hostname을
+넣는다. source-controlled resolver가 그 hostname만 GPU loopback으로 해석한다. 두 env 모두
+`CUDA_VISIBLE_DEVICES=0`과 같은 외부 model 절대경로를 사용한다. 검증된 prod 12-slot 용량을 유지하면서
+추가 dev worker가 GPU 상한을 침범하지 않도록 dev는 active/idle을 `1/1`로 제한한다.
+
+운영 tunnel bootstrap은 전달받은 PEM을 Git 밖의 `~/.config/liveclass/ssh/`로 복사하고 realtime-agent와
+BGE tunnel env를 만든다. EC2 host key는 별도 채널로 확인해 `known_hosts`에 먼저 등록한다.
 
 ~~~sh
 ai/realtime-agent/deploy/configure-gpu-ec2-tunnels.sh \
@@ -45,28 +52,10 @@ ai/realtime-agent/deploy/configure-gpu-ec2-tunnels.sh \
   --start
 ~~~
 
-EC2 host key는 실행 전에 별도 채널로 확인해 `~/.ssh/known_hosts`에 등록한다. PEM과 생성된 env는
-모두 Git 밖에 있고 권한은 `0600`이다.
-
-realtime-agent.env의 LIVEKIT_URL에는 인증서 hostname을 유지하고 LIVEKIT_TUNNEL_HOST에는 그
-hostname만 넣는다. root 권한으로 /etc/hosts를 바꿀 수 없으므로 source-controlled resolver가 해당
-hostname만 127.0.0.1로 해석한다.
-
-한 GPU만 쓰는 profile은 CUDA_VISIBLE_DEVICES=0, STT_MAX_ACTIVE_JOBS=12,
-STT_NUM_IDLE_PROCESSES=12를 사용한다. 모델은 Git 밖의 기존 절대경로를 ASR_MODEL_ID로 지정한다.
-
 ## 2. GPU project Runner 등록
 
-GitLab 프로젝트에서 새 project Runner를 만든다.
-
-- tag: gpu-realtime
-- project에 lock
-- protected branch만 허용
-- untagged job 실행 금지
-- 동시 실행 수 1
-
-GitLab 화면에 한 번 표시되는 Runner authentication token은 파일·로그·문서에 남기지 않는다.
-사용자 모드로 등록한다.
+GitLab project Runner는 tag `gpu-realtime`, project lock, protected branch 전용, untagged job 비활성,
+동시 실행 수 1로 등록한다. authentication token은 파일·로그·문서에 남기지 않는다.
 
 ~~~sh
 ~/.local/bin/gitlab-runner register \
@@ -74,102 +63,89 @@ GitLab 화면에 한 번 표시되는 Runner authentication token은 파일·로
   --url <gitlab-url> \
   --token <runner-authentication-token> \
   --executor shell
-~~~
-
-등록 후 Runner를 tmux에서 시작한다.
-
-~~~sh
 ~/.local/bin/liveclass-gitlab-runner-user start
-~/.local/bin/liveclass-gitlab-runner-user status
 ~~~
 
-Runner와 최초 GPU 배포가 정상임을 확인한 뒤 protected CI 변수 GPU_DEPLOY_ENABLED=1을 설정한다.
+Runner와 최초 GPU 배포가 정상임을 확인한 뒤 protected CI 변수 `GPU_DEPLOY_ENABLED=1`을 설정한다.
 GPU Runner는 GitLab와 EC2로 outbound 연결만 사용하며 GPU inbound port를 열지 않는다.
 
-## 3. 최초 배포와 pipeline
-
-Runner를 활성화하기 전 현재 checkout으로 최초 배포를 검증할 수 있다.
+## 3. 배포와 rollback
 
 ~~~sh
 ~/.local/bin/liveclass-realtime-agent-deploy \
   "$PWD/ai/realtime-agent" "$(git rev-parse HEAD)"
 ~/.local/bin/liveclass-realtime-agent-supervisor status
-curl --fail http://127.0.0.1:8081/health/live
 curl --fail http://127.0.0.1:8081/health/ready
+curl --fail http://127.0.0.1:8082/health/ready
 ~~~
 
-배포 helper는 commit SHA별 staging 복사, frozen Nemotron sync, CUDA smoke, current symlink 교체,
-tunnel·agent 재시작, 120초 model init ceiling을 포함하는 readiness 확인 순서로 동작한다. 실패하면
-이전 release로 rollback한다.
-GitLab job도 같은 helper를 현재 사용자로 직접 호출하며 sudo, systemctl, Docker executor는 사용하지
-않는다. 시크릿, SSH key, model checkpoint는 release에 복사하지 않는다.
+배포 helper는 commit SHA별 release 생성, frozen Nemotron sync, CUDA smoke, current symlink 교체 후 기존
+단일 agent session을 종료하고 prod/dev 두 session을 재시작한다. 두 readiness가 모두 성공해야 배포를
+완료하며 하나라도 실패하면 두 신규 session을 정리하고 이전 release로 rollback한다. 시크릿, SSH key,
+model checkpoint는 release에 복사하지 않는다.
 
-## 4. 연결과 상태 확인
+GitLab `deploy-realtime-agent` job도 같은 helper를 현재 사용자로 호출한다. active 강의의 drain은
+지원하지 않으므로 배포 시 두 worker job이 끊길 수 있다.
 
-GPU 호스트는 외부에서 inbound port를 열지 않는다. 사용자 영역 SSH client가 EC2 22번에 두 개의
-realtime-agent 연결을 만든다. control connection은 LiveKit·Redis local forward와 health reverse를,
-TURN connection은 미디어 local forward만 담당한다. 별도 BGE supervisor도 같은 PEM/target으로 세 번째
-SSH connection을 열어 EC2 `127.0.0.1:18020` reverse forward를 유지한다. 세 연결은 목적지가 같아도
-서로 다른 ControlPath와 TCP connection을 사용한다.
+## 4. 연결 구조와 상태 확인
 
 ```mermaid
 flowchart LR
-    subgraph GPU[GPU host]
-        A[realtime-agent]
-        H[health 127.0.0.1:8081]
-        C[SSH control connection]
-        M[SSH TURN connection]
-        R[GitLab Runner]
+    subgraph GPU[GPU0]
+        P[prod agent :8081]
+        D[dev agent :8082]
+        C[SSH control]
+        T[SSH TURN]
     end
-    subgraph EC2[EC2]
+    subgraph EC2[EC2 loopback]
         L[LiveKit :7443]
-        D[Production application Redis 127.0.0.1:6390]
-        T[TURN/TCP :3478]
-        E[EC2 host health smoke :18081]
+        RD[dev Redis :4000]
+        RP[prod Redis :6390]
+        HP[prod health :18081]
+        HD[dev health :18082]
+        CT[TURN TCP :3478]
     end
-    A --> C
-    A --> M
-    C -->|local forward :7443| L
-    C -->|local forward :6390| D
-    M -->|local forward :3478| T
-    E -->|control reverse :18081 → :8081| H
-    R -->|outbound HTTPS| G[GitLab]
+    P --> C
+    D --> C
+    P --> T
+    D --> T
+    C -->|local 7443| L
+    C -->|local 4000| RD
+    C -->|local 6390| RP
+    HP -->|reverse 18081 to 8081| P
+    HD -->|reverse 18082 to 8082| D
+    T -->|local 3478| CT
 ```
 
-| 연결 | 방향 | GPU 측 | EC2 측 | 용도 |
-|---|---|---|---|---|
-| control | local | 127.0.0.1:7443 | 127.0.0.1:7443 | LiveKit |
-| control | local | 127.0.0.1:6390 | 127.0.0.1:6390 | production application Redis |
-| TURN | local | 127.0.0.1:3478 | 127.0.0.1:3478 | TURN/TCP |
-| control | reverse | GPU 127.0.0.1:8081 | EC2 127.0.0.1:18081 | EC2 host health check |
+realtime control과 TURN은 서로 다른 SSH TCP connection이다. BGE도 전용 supervisor와 세 번째
+connection에서 `EC2 18020 → GPU 8020`을 유지한다. 모두 GPU에서 EC2 22번으로 시작하므로 GPU inbound와
+EC2 application 방화벽 포트를 추가하지 않는다.
 
-EC2 host smoke는 `http://127.0.0.1:18081/health/live`로 process 생존을,
-`http://127.0.0.1:18081/health/ready`로 STT warm pool과 LiveKit 연결 완료를 확인한다. 18081은 계속
-EC2 loopback에만 bind되고 readiness는 준비 전 503, 준비 뒤 200이다. backend consumer와 컨테이너
-네트워크 경로는 이 AI 배포 변경에 포함하지 않는다.
-
-`LIVEKIT_URL`은 TLS 인증서 hostname을 유지하되 배포 resolver가 그 hostname만 GPU loopback으로
-해석한다. 따라서 TLS SNI/hostname 검증을 버리지 않고 `127.0.0.1:7443` SSH tunnel을 사용한다.
-`REDIS_URL=redis://127.0.0.1:6390/0`과 TURN도 GPU loopback listener를 가리킨다. EC2 Redis의
-`127.0.0.1:6390` publish는 sshd가 EC2 loopback에서 접근하므로 방화벽이나 외부 bind를 추가하지 않는다.
-개발 Redis `4000`과 LiveKit 내부 Redis `6379`를 운영 agent에 사용하지 않는다. OpenAI provider로
-전환하는 경우 OpenAI WSS는 이 SSH tunnel을 거치지 않는 별도 outbound TLS 연결이며
-`OPENAI_API_KEY`를 agent 환경파일로 주입해야 한다.
+`LIVEKIT_URL`은 TLS 인증서 hostname을 유지하되 배포 resolver가 그 hostname만 GPU loopback으로 해석한다.
+prod는 `redis://127.0.0.1:6390/0`, dev는 password를 포함한 `redis://...@127.0.0.1:4000/0`을 사용하며
+LiveKit 내부 Redis `6379`는 사용하지 않는다. OpenAI provider의 WSS는 tunnel과 별도인 outbound TLS 연결이고
+`OPENAI_API_KEY`는 각 agent 환경파일로만 주입한다.
 
 ~~~sh
 ~/.local/bin/liveclass-realtime-agent-supervisor status
-~/.local/bin/liveclass-realtime-agent-supervisor logs-agent
+~/.local/bin/liveclass-realtime-agent-supervisor logs-agent-prod
+~/.local/bin/liveclass-realtime-agent-supervisor logs-agent-dev
 ~/.local/bin/liveclass-realtime-agent-supervisor logs-tunnel
-~/.local/bin/liveclass-gitlab-runner-user logs
-curl --fail http://127.0.0.1:8081/health/live
-curl --fail http://127.0.0.1:8081/health/ready
+ss -ltn | grep -E ':(3478|4000|6390|7443|8081|8082)\b'
 ~~~
 
-- Runner가 offline이면 GPU job은 pending 상태이며 EC2 Runner가 대신 실행하지 않는다.
-- tunnel 또는 agent가 비정상 종료하면 tmux supervisor loop가 다시 시작한다.
-- control SSH 장애는 TURN SSH를 종료하지 않고, TURN SSH 장애도 LiveKit·Redis·health를 종료하지 않는다.
-- active 강의 중 배포는 기존 process의 drain을 기다리지 않고 tmux session을 교체한다.
-- GPU/Jupyter 재시작 후에는 ~/.local/bin/liveclass-gitlab-runner-user start를 다시 실행한다.
+EC2 host에서는 prod `18081`, dev `18082`를 확인한다. host-network gpu-proxy를 수동 재배포하면 container
+내부에서는 prod `/internal/realtime-agent/`, dev `/internal/realtime-agent-dev/` prefix를 사용할 수 있다.
+두 reverse port는 계속 EC2 loopback에만 bind한다.
 
-수동 tunnel helper의 입력·port 변경과 검증 방법은 [`../scripts/README.md`](../scripts/README.md)를
-참고한다.
+~~~sh
+curl --fail http://127.0.0.1:18081/health/ready
+curl --fail http://127.0.0.1:18082/health/ready
+~~~
+
+기존 SSH control master에 한 Redis forward만 있더라도 새 tunnel script가 누락된 `4000` 또는 `6390`
+forward와 dev health reverse를 `ssh -O forward`로 추가한다. control 장애는 TURN을 종료하지 않고 TURN
+장애도 LiveKit·Redis·health를 종료하지 않는다.
+
+수동 tunnel helper의 입력과 검증은 [`../scripts/README.md`](../scripts/README.md), 전체 운영 절차는
+[`../../../docs/ai/GPU-REALTIME-AGENT-RUNBOOK.md`](../../../docs/ai/GPU-REALTIME-AGENT-RUNBOOK.md)를 따른다.

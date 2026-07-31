@@ -45,7 +45,8 @@ public class LiveCaptionService {
      */
     @Transactional(readOnly = true)
     public List<CaptionReloadItem> reload(UUID sessionId) {
-        return repository.findBySessionIdOrderByOccurredAtAscIdAsc(sessionId).stream()
+        return repository.findBySessionIdAndEventTypeInOrderByOccurredAtAscIdAsc(sessionId, CaptionEvent.RELAYED_TYPES)
+                .stream()
                 .map(row -> CaptionReloadItem.from(row, sessionClockLookup.approxSessionMs(sessionId, row.getOccurredAt())))
                 .toList();
     }
@@ -73,6 +74,11 @@ public class LiveCaptionService {
         row.setText(event.text());
         row.setReason(event.reason());
         row.setOccurredAt(event.occurredAt());
+        row.setAudioStartedAt(event.audioStartedAt());
+        row.setSegmentIndex(event.segmentIndex());
+        row.setStartStreamElapsedMs(event.startStreamElapsedMs());
+        row.setEndStreamElapsedMs(event.endStreamElapsedMs());
+        row.setBoundaryReason(event.boundaryReason());
         try {
             repository.saveAndFlush(row);   // event_id UNIQUE 경합이면 예외 → 멱등 무시
         } catch (DataIntegrityViolationException race) {
@@ -80,7 +86,12 @@ public class LiveCaptionService {
             return false;
         }
 
-        eventPublisher.publishEvent(LiveCaptionStoredEvent.from(event));
+        // 표시 대상(delta·completed·segment.final, RELAYED_TYPES)만 WS로 발행한다. started(시간 앵커)는
+        // 영속만 하고 흘리지 않는다 — FE 세그먼트 렌더는 segment.final의 권위 텍스트로 하고, 앵커 기반
+        // 세션-ms 정밀화·seek는 후속 슬라이스다(ADR-0052).
+        if (CaptionEvent.RELAYED_TYPES.contains(event.type())) {
+            eventPublisher.publishEvent(LiveCaptionStoredEvent.from(event));
+        }
         if (event.isCompleted()) {
             // 전역 키라 키 DEL은 하지 않는다(MAXLEN에 위임). 종료 마커 적재만 로그로 남긴다.
             log.info("자막 스트림 종료 sessionId={} sttSessionId={} lastSequence={}",

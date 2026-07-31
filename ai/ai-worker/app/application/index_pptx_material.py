@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass, field
+import logging
 from collections.abc import Sequence
 
 from app.domain import (
@@ -14,13 +16,31 @@ from app.domain import (
 )
 from app.ingestion import (
     DEFAULT_CHUNK_MAX_CHARS,
+    KeyTerm,
     MaterialChunk,
+    ParsedPresentation,
     PptxValidationLimits,
     chunk_presentation,
     chunk_strategy,
     parse_pptx,
 )
-from app.ports import IndexStorage, MaterialAssetStore, TextEmbeddingModel
+from app.ports import (
+    IndexStorage,
+    KeyTermExtractor,
+    KeyTermStorage,
+    MaterialAssetStore,
+    TextEmbeddingModel,
+)
+
+logger = logging.getLogger(__name__)
+
+_KEY_TERM_CACHE_MAX_ENTRIES = 1_000
+
+
+@dataclass(frozen=True, slots=True)
+class MaterialIndexResult:
+    version_id: int
+    key_terms: tuple[KeyTerm, ...] = field(default=())
 
 
 class IndexPptxMaterial:
@@ -34,6 +54,8 @@ class IndexPptxMaterial:
         *,
         validation_limits: PptxValidationLimits = PptxValidationLimits(),
         chunk_max_chars: int = DEFAULT_CHUNK_MAX_CHARS,
+        key_term_extractor: KeyTermExtractor | None = None,
+        key_term_storage: KeyTermStorage | None = None,
     ) -> None:
         self._asset_store = asset_store
         self._embedding_model = embedding_model
@@ -41,20 +63,32 @@ class IndexPptxMaterial:
         self._validation_limits = validation_limits
         self._chunk_max_chars = chunk_max_chars
         self._chunk_strategy = chunk_strategy(chunk_max_chars)
+        self._key_term_extractor = key_term_extractor
+        self._key_term_storage = key_term_storage
+        # Best-effort retry safety net for the combined callback (ADR-0004 option C): if the
+        # single terminal callback fails and the job redelivers, execute()'s idempotent
+        # short-circuit below never re-extracts, so a same-process retry recovers key_terms
+        # from here instead of silently dropping them. A process restart still loses it.
+        self._key_term_cache: dict[str, tuple[KeyTerm, ...]] = {}
 
-    async def execute(self, material: StagedMaterial) -> int:
+    async def execute(self, material: StagedMaterial) -> MaterialIndexResult:
         self._validate_contract(material)
         existing = await self._index_storage.find_existing(material)
         if existing is not None:
             if existing.activation_required:
                 await self._index_storage.activate(material, existing.version_id)
-            return existing.version_id
+            cached_key_terms = self._key_term_cache.get(material.job_id, ())
+            if cached_key_terms and self._key_term_storage is not None:
+                await _safe_store_key_terms(
+                    self._key_term_storage, existing.version_id, cached_key_terms
+                )
+            return MaterialIndexResult(version_id=existing.version_id, key_terms=cached_key_terms)
 
         source = await self._asset_store.read_pptx(
             material.source_bucket,
             material.source_object_key,
         )
-        chunks = await asyncio.to_thread(
+        presentation, chunks = await asyncio.to_thread(
             _parse_and_chunk,
             source,
             self._validation_limits,
@@ -63,7 +97,27 @@ class IndexPptxMaterial:
         if not chunks:
             raise EmptyPptxContentError("PPTX contains no supported indexable text")
 
-        raw_embeddings = await self._embedding_model.embed(tuple(chunk.text for chunk in chunks))
+        if self._key_term_extractor is None:
+            raw_embeddings = await self._embedding_model.embed(
+                tuple(chunk.text for chunk in chunks)
+            )
+            key_terms: tuple[KeyTerm, ...] = ()
+        else:
+            raw_embeddings, key_terms = await asyncio.gather(
+                self._embedding_model.embed(tuple(chunk.text for chunk in chunks)),
+                _safe_extract_key_terms(self._key_term_extractor, presentation),
+            )
+        if key_terms:
+            self._remember_key_terms(material.job_id, key_terms)
+            logger.info(
+                "extracted PPTX key terms",
+                extra={
+                    "event": "material.key_terms_extracted",
+                    "material_id": str(material.material_id),
+                    "key_term_count": len(key_terms),
+                },
+            )
+
         try:
             embeddings = tuple(raw_embeddings)
         except TypeError as exc:
@@ -74,13 +128,24 @@ class IndexPptxMaterial:
         records = _chunk_records(chunks, embeddings)
         version_id = await self._index_storage.stage(material, records)
         await self._index_storage.activate(material, version_id)
-        return version_id
+        if key_terms and self._key_term_storage is not None:
+            await _safe_store_key_terms(self._key_term_storage, version_id, key_terms)
+        return MaterialIndexResult(version_id=version_id, key_terms=key_terms)
 
     async def find_existing(self, material: StagedMaterial) -> ExistingIndexVersion | None:
         """Return a resumable/completed DB result before source or GPU work."""
 
         self._validate_contract(material)
         return await self._index_storage.find_existing(material)
+
+    def _remember_key_terms(self, job_id: str, key_terms: tuple[KeyTerm, ...]) -> None:
+        if (
+            job_id not in self._key_term_cache
+            and len(self._key_term_cache) >= _KEY_TERM_CACHE_MAX_ENTRIES
+        ):
+            oldest_job_id = next(iter(self._key_term_cache))
+            del self._key_term_cache[oldest_job_id]
+        self._key_term_cache[job_id] = key_terms
 
     def _validate_contract(self, material: StagedMaterial) -> None:
         if material.chunk_strategy != self._chunk_strategy:
@@ -102,9 +167,55 @@ def _parse_and_chunk(
     source: bytes,
     validation_limits: PptxValidationLimits,
     chunk_max_chars: int,
-) -> tuple[MaterialChunk, ...]:
+) -> tuple[ParsedPresentation, tuple[MaterialChunk, ...]]:
     presentation = parse_pptx(source, limits=validation_limits)
-    return chunk_presentation(presentation, max_chars=chunk_max_chars)
+    chunks = chunk_presentation(presentation, max_chars=chunk_max_chars)
+    return presentation, chunks
+
+
+async def _safe_extract_key_terms(
+    extractor: KeyTermExtractor,
+    presentation: ParsedPresentation,
+) -> tuple[KeyTerm, ...]:
+    """Extraction is additive: any failure is logged and swallowed, never blocking indexing."""
+
+    try:
+        return tuple(await extractor.extract(_presentation_text(presentation)))
+    except Exception:
+        logger.warning(
+            "PPTX key term extraction failed; continuing without key terms",
+            extra={"event": "material.key_term_extraction_failed"},
+            exc_info=True,
+        )
+        return ()
+
+
+async def _safe_store_key_terms(
+    storage: KeyTermStorage,
+    version_id: int,
+    key_terms: tuple[KeyTerm, ...],
+) -> None:
+    """Storage is additive: any failure is logged and swallowed, never blocking the callback."""
+
+    try:
+        await storage.store(version_id, key_terms)
+    except Exception:
+        logger.warning(
+            "storing PPTX key terms failed; continuing without persisted key terms",
+            extra={"event": "material.key_term_storage_failed"},
+            exc_info=True,
+        )
+
+
+def _presentation_text(presentation: ParsedPresentation) -> str:
+    lines: list[str] = []
+    current_page: int | None = None
+    for block in presentation.blocks:
+        if block.page != current_page:
+            lines.append(f"[슬라이드{block.page}]")
+            current_page = block.page
+        lines.append(block.text)
+    return "\n".join(lines)
 
 
 def _chunk_records(

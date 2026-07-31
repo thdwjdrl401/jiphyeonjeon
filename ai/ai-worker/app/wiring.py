@@ -9,13 +9,15 @@ from pydantic import SecretStr
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
+from app.adapters.gms_key_term_extractor import GmsKeyTermExtractor
 from app.adapters.pgvector_index import PgvectorIndexRepository
+from app.adapters.pgvector_key_term_storage import PgvectorKeyTermRepository
 from app.adapters.rabbitmq_material_consumer import RabbitMaterialConsumer
 from app.adapters.remote_bge_embedding import RemoteBgeM3EmbeddingModel
 from app.adapters.spring_hmac import SpringHmacSigner
 from app.adapters.spring_material_asset_store import SpringPresignedPptxAssetStore
 from app.adapters.spring_material_callback import SpringMaterialCallbackClient
-from app.application import IndexPptxMaterial, map_pptx_embed_job
+from app.application import DeleteMaterialIndex, IndexPptxMaterial, map_pptx_embed_job
 from app.config import Settings
 from app.consumers import MaterialJobHandler
 from app.contracts import PptxEmbedJob
@@ -34,6 +36,7 @@ class PptxRuntimeConfigurationError(RuntimeError):
 @dataclass(slots=True)
 class PptxIngestionRuntime:
     index_pptx_material: IndexPptxMaterial
+    delete_material_index: DeleteMaterialIndex
     callback_client: SpringMaterialCallbackClient
     tenant_id: str
     model_revision: str
@@ -42,6 +45,7 @@ class PptxIngestionRuntime:
     _embedding_client: AsyncClient
     _database_engine: AsyncEngine
     _bge_readiness_timeout_seconds: float
+    _key_term_extractor: GmsKeyTermExtractor | None = None
     _bge_readiness_failure: str | None = None
     _closed: bool = False
 
@@ -116,7 +120,11 @@ class PptxIngestionRuntime:
             try:
                 await self._embedding_client.aclose()
             finally:
-                await self._database_engine.dispose()
+                try:
+                    if self._key_term_extractor is not None:
+                        await self._key_term_extractor.aclose()
+                finally:
+                    await self._database_engine.dispose()
 
 
 def build_pptx_ingestion_runtime(settings: Settings) -> PptxIngestionRuntime:
@@ -159,15 +167,35 @@ def build_pptx_ingestion_runtime(settings: Settings) -> PptxIngestionRuntime:
         signer,
         timeout_seconds=settings.spring_callback_timeout_seconds,
     )
+    key_term_extractor: GmsKeyTermExtractor | None = None
+    if settings.key_term_extraction_enabled:
+        gms_api_key = _required_secret(settings.gms_api_key, "AI_WORKER_GMS_API_KEY")
+        key_term_extractor = GmsKeyTermExtractor(
+            api_key=gms_api_key,
+            model=settings.gms_model,
+            max_output_tokens=settings.gms_max_output_tokens,
+            max_prompt_chars=settings.gms_max_prompt_chars,
+            timeout_seconds=settings.gms_timeout_seconds,
+        )
+    index_storage = PgvectorIndexRepository(database_engine)
     index_pptx_material = IndexPptxMaterial(
         asset_store,
         embedding_model,
-        PgvectorIndexRepository(database_engine),
+        index_storage,
         validation_limits=PptxValidationLimits(source_max_bytes=settings.source_max_bytes),
+        chunk_max_chars=settings.chunk_max_chars,
+        key_term_extractor=key_term_extractor,
+        key_term_storage=PgvectorKeyTermRepository(database_engine),
+    )
+    delete_material_index = DeleteMaterialIndex(
+        index_storage,
+        tenant_id=settings.tenant_id,
+        model_revision=settings.embedding_revision,
         chunk_max_chars=settings.chunk_max_chars,
     )
     return PptxIngestionRuntime(
         index_pptx_material=index_pptx_material,
+        delete_material_index=delete_material_index,
         callback_client=callback_client,
         tenant_id=settings.tenant_id,
         model_revision=settings.embedding_revision,
@@ -176,6 +204,7 @@ def build_pptx_ingestion_runtime(settings: Settings) -> PptxIngestionRuntime:
         _embedding_client=embedding_client,
         _database_engine=database_engine,
         _bge_readiness_timeout_seconds=settings.bge_readiness_timeout_seconds,
+        _key_term_extractor=key_term_extractor,
     )
 
 

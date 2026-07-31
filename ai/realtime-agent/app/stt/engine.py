@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Protocol
 
 
@@ -39,6 +40,7 @@ class AudioChunk:
     sample_rate: int
     num_channels: int
     stream_elapsed_ms: int
+    audio_started_at: datetime | None = None
 
     def __post_init__(self) -> None:
         if self.sample_rate <= 0:
@@ -47,6 +49,11 @@ class AudioChunk:
             raise ValueError("num_channels must be positive")
         if self.stream_elapsed_ms < 0:
             raise ValueError("stream_elapsed_ms must not be negative")
+        if self.audio_started_at is not None:
+            if not isinstance(self.audio_started_at, datetime):
+                raise TypeError("audio_started_at must be a datetime")
+            if self.audio_started_at.utcoffset() is None:
+                raise ValueError("audio_started_at must be a timezone-aware datetime")
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,11 +69,29 @@ class EngineWarning:
 
 
 @dataclass(frozen=True, slots=True)
+class SegmentFinal:
+    text: str
+    start_stream_elapsed_ms: int
+    end_stream_elapsed_ms: int
+    boundary_reason: str
+
+    def __post_init__(self) -> None:
+        if not self.text:
+            raise ValueError("text must not be empty")
+        if self.start_stream_elapsed_ms < 0:
+            raise ValueError("start_stream_elapsed_ms must not be negative")
+        if self.end_stream_elapsed_ms < self.start_stream_elapsed_ms:
+            raise ValueError("end_stream_elapsed_ms must not precede start_stream_elapsed_ms")
+        if self.boundary_reason not in {"SILENCE", "MAX_DURATION", "STREAM_END"}:
+            raise ValueError("unsupported segment boundary_reason")
+
+
+@dataclass(frozen=True, slots=True)
 class EngineCompleted:
     stream_elapsed_ms: int
 
 
-EngineEvent = TextDelta | EngineWarning | EngineCompleted
+EngineEvent = TextDelta | SegmentFinal | EngineWarning | EngineCompleted
 
 
 class StreamingSttEngine(Protocol):

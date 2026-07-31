@@ -1,16 +1,27 @@
 from app.lecture_notes.models import (
     LectureNote,
+    LectureNoteCaptureCompleted,
+    LectureNoteChunkAppended,
+    LectureNoteDecisionAction,
+    LectureNoteEvent,
     LectureNoteModelRequest,
     LectureNoteModelResult,
-    LectureNoteSnapshot,
-    LectureNoteSnapshotTopic,
-    LectureNoteStatus,
+    LectureNoteRefinedSnapshot,
+    LectureNoteRefinedTopic,
+    LectureNoteRefinementRequest,
+    LectureNoteRefinementResult,
+    LectureNoteRefinementTopic,
     LectureNoteTopic,
     LectureNoteWindow,
     TopicAction,
     WindowFlushReason,
 )
-from app.lecture_notes.reducer import apply_model_result, render_markdown
+from app.lecture_notes.reducer import (
+    apply_model_result,
+    render_markdown,
+    render_markdown_fragment,
+    render_refined_markdown,
+)
 from app.lecture_notes.service import LectureNotePipeline, LectureNoteService
 from app.lecture_notes.windowing import (
     LectureNoteWindowAccumulator,
@@ -20,13 +31,19 @@ from app.lecture_notes.windowing import (
 
 __all__ = [
     "LectureNote",
+    "LectureNoteCaptureCompleted",
+    "LectureNoteChunkAppended",
+    "LectureNoteDecisionAction",
+    "LectureNoteEvent",
     "LectureNoteModelRequest",
     "LectureNoteModelResult",
+    "LectureNoteRefinedSnapshot",
+    "LectureNoteRefinedTopic",
+    "LectureNoteRefinementRequest",
+    "LectureNoteRefinementResult",
+    "LectureNoteRefinementTopic",
     "LectureNotePipeline",
     "LectureNoteService",
-    "LectureNoteSnapshot",
-    "LectureNoteSnapshotTopic",
-    "LectureNoteStatus",
     "LectureNoteTopic",
     "LectureNoteWindow",
     "LectureNoteWindowAccumulator",
@@ -36,4 +53,6 @@ __all__ = [
     "WindowMetrics",
     "apply_model_result",
     "render_markdown",
+    "render_markdown_fragment",
+    "render_refined_markdown",
 ]

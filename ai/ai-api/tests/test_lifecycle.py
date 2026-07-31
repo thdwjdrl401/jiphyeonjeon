@@ -77,6 +77,7 @@ def test_lecture_note_resources_follow_application_lifespan() -> None:
     assert resources.closed is False
     with TestClient(app):
         assert app.state.lecture_note_runtime.is_running is True
+        assert resources.restored is True
         assert resources.closed is False
 
     assert app.state.lecture_note_runtime.is_running is False
@@ -144,6 +145,10 @@ def _fake_lecture_note_services():
             self.consumer = Consumer()
             self.consumer_state = ConsumerState()
             self.closed = False
+            self.restored = False
+
+        async def restore(self) -> None:
+            self.restored = True
 
         async def close(self) -> None:
             self.closed = True

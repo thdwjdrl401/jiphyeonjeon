@@ -20,7 +20,7 @@
 | 인증 | `POST /auth/login`·`/auth/signup`·`/auth/logout`·`GET /auth/email-availability` | 인증 식별자는 **`email`**(구현됨, `loginId` 아님). 상태코드: 생성 201·중복 409·인증실패 401·권한 403. **HttpOnly 쿠키 세션(Redis 저장)** — FE는 `withCredentials`, `Authorization: Bearer` 미사용. 변경요청 CSRF 토큰([decisions/songjeongki/0014](decisions/songjeongki/0014-auth-redis-session-cookie.md)). 내 계정: `PUT /me/profile-image`(전원)·`PUT /me/display-name`(표시 이름만, `email`·역할 불변)·`GET·PUT /me/instructor-profile`(강사 전용 소개·전문분야, 비강사 403)·`PUT /me/password`(현재 비번 불일치 401)·`DELETE /me`(탈퇴). 탈퇴는 **소프트 삭제**(status WITHDRAWN, 데이터 보존)이고 진행 중 라이브가 있으면 409, 탈퇴 시 이메일을 tombstone 처리해 **같은 이메일 재가입 허용**([decisions/songjeongki/0031](decisions/songjeongki/0031-account-profile-security.md)) |
 | 카탈로그 | `GET /curriculums`·`GET /curriculums/{id}` | 검색·필터·페이지네이션. **응답에 `viewerContext`(관계·allowedActions) 포함(구현됨)** — 비로그인도 호출 가능하고, 쿠키가 있으면 그 사용자 기준으로 채운다. 상세는 `enrollmentPolicy`와 목차 레슨별 `liveSession`·`access`까지. ([decisions/songjeongki/0026](decisions/songjeongki/0026-catalog-viewer-context.md)) |
 | 커리큘럼(강사) | `POST/PATCH/DELETE /instructor/curriculums`·`.../sections`·`.../curriculum/order` | 소유권 검증. **게시 선행 조건**: `POST /instructor/curriculums/{id}/publish`는 섹션 1개 이상 AND 커리큘럼 전체 강의 1개 이상일 때만 성공한다 — 미충족은 **409 `CURRICULUM_NOT_PUBLISHABLE`**이고 메시지가 무엇을 추가해야 하는지 알려 준다(섹션/강의/둘 다). 강의는 커리큘럼 전체 기준이라 빈 섹션이 남아 있어도 막지 않는다([decisions/seominkyeong/0006](decisions/seominkyeong/0006-curriculum-publish-preconditions.md)). **삭제는 초안만** — `DELETE /instructor/curriculums/{id}`는 `lifecycleStatus=DRAFT`일 때만 204이고, 공개·보관 상태는 409 `CURRICULUM_STATE_CONFLICT`로 거절한다(보관으로 유도). 섹션·레슨은 DB 캐스케이드로 함께 사라진다 ([decisions/seominkyeong/0001](decisions/seominkyeong/0001-draft-only-curriculum-delete.md)). **섹션 삭제는 비어 있을 때만** — 레슨이 남아 있으면 409 `SECTION_NOT_EMPTY` |
-| 강의 | `POST /instructor/sections/{id}/lessons`·`PATCH /instructor/lessons/{id}`·`GET /lessons/{id}` | 상태 필드는 **어디서나 `status`**(목차·관리 응답 동일, `lessonStatus` 아님). 값은 **`PUBLISHED` 하나** — 레슨에는 초안이 없고 만들어지는 순간 게시 상태다. **레슨 발행·게시취소 엔드포인트는 없다**(`POST /instructor/lessons/{id}/publish`·`/unpublish` 제거). 외부 공개 여부는 **커리큘럼 `lifecycleStatus`만** 결정하며, 커리큘럼을 발행하면 그 안의 강의가 함께 공개된다([decisions/seominkyeong/0005](decisions/seominkyeong/0005-lesson-has-no-draft-state.md)). 수강생용 `GET /lessons/{id}`는 소유권이 아니라 **수강 관계**로 연다 — 미수강 403 `ENROLLMENT_REQUIRED`([decisions/songjeongki/0029](decisions/songjeongki/0029-lesson-detail-and-display-name.md)). 미게시 레슨이라는 개념이 없어져 수강자에게는 목차의 강의가 모두 열린다. **강사 저작 화면은 공개 카탈로그가 아니라 강사 엔드포인트로 읽는다** — `GET /instructor/lessons/{id}`는 DRAFT여도 열리고 그 레슨의 **`liveSession`(sessionId·status·scheduledAt, 없으면 null)을 함께 준다**([decisions/songjeongki/0041](decisions/songjeongki/0041-instructor-authoring-reads-and-autosave.md)) |
+| 강의 | `POST /instructor/sections/{id}/lessons`·`PATCH /instructor/lessons/{id}`·`GET /lessons/{id}` | 상태 필드는 **어디서나 `status`**(목차·관리 응답 동일, `lessonStatus` 아님). 값은 **`PUBLISHED` 하나** — 레슨에는 초안이 없고 만들어지는 순간 게시 상태다. **레슨 발행·게시취소 엔드포인트는 없다**(`POST /instructor/lessons/{id}/publish`·`/unpublish` 제거). 외부 공개 여부는 **커리큘럼 `lifecycleStatus`만** 결정하며, 커리큘럼을 발행하면 그 안의 강의가 함께 공개된다([decisions/seominkyeong/0005](decisions/seominkyeong/0005-lesson-has-no-draft-state.md)). 수강생용 `GET /lessons/{id}`는 소유권이 아니라 **수강 관계**로 연다 — 미수강 403 `ENROLLMENT_REQUIRED`([decisions/songjeongki/0029](decisions/songjeongki/0029-lesson-detail-and-display-name.md)). 미게시 레슨이라는 개념이 없어져 수강자에게는 목차의 강의가 모두 열린다. **강사 저작 화면은 공개 카탈로그가 아니라 강사 엔드포인트로 읽는다** — `GET /instructor/lessons/{id}`는 상위 커리큘럼이 DRAFT여도 열리고 그 레슨의 **`liveSession`(sessionId·status·scheduledAt, 없으면 null)을 함께 준다**([decisions/songjeongki/0041](decisions/songjeongki/0041-instructor-authoring-reads-and-autosave.md)) |
 | 자료 | `POST /instructor/lessons/{id}/materials` (PPTX) | presigned→MinIO. **영상 업로드 없음**. 본문은 `{"assetId":"..."}`(먼저 에셋으로 올린 PPTX를 연결, multipart 아님). 소유 강사만(비소유 403·없는 레슨 404), 성공 **201** `{materialId, assetId, fileName, status}`. 같은 (레슨,에셋) 중복 연결 **409** `MATERIAL_ALREADY_ATTACHED`(DB 부분 유니크 인덱스로 동시요청도 차단), 잘못된 에셋(없음·kind 불일치·미완료·업로더 불일치) **400** `MATERIAL_INVALID`. 레슨 상세(`GET /lessons/{id}`)·커리큘럼 상세·**강사 관리용 `GET /instructor/lessons/{id}`**의 `materials`는 연결된 활성 자료로 채워지되, **커리큘럼 상세는 ENROLLED·OWNER_INSTRUCTOR에게만 노출**(게스트·미수강자는 빈 목록). **삭제** `DELETE .../materials/{materialId}`(소프트, 멱등)·**다운로드** `GET .../materials/{materialId}/download`(presigned 302). 자료 응답에 **`embeddingStatus`**(PENDING/PROCESSING/READY/FAILED, [0036](decisions/songjeongki/0036-material-embedding-pipeline.md)) — 임베딩 파이프라인(outbox→RabbitMQ→AI→pgvector→콜백)은 스위치(`material.embedding.enabled`) 뒤, 기본 off라 지금은 READY. **AI 콜백** `POST /api/internal/ai/callbacks`(§3-2, HMAC 서명·inbox 멱등)로 상태 확정 ([decisions/songjeongki/0035](decisions/songjeongki/0035-lesson-material-attach.md), [0036](decisions/songjeongki/0036-material-embedding-pipeline.md)). **커리큘럼-레벨 자료(ADR-0042)**: 같은 계약을 스코프만 달리해 `POST/DELETE /instructor/curriculums/{id}/materials[/{materialId}]`·`GET .../download`으로 제공(레슨 자료와 대칭 — 201·409·400·204·302 동일, 같은 `material_asset` 테이블). 커리큘럼 공통 자료는 **강사 관리용 `GET /instructor/curriculums/{id}`의 `materials`**와 공개 상세(`GET /curriculums/{id}`, ENROLLED·OWNER_INSTRUCTOR 게이트)에 함께 노출된다 ([decisions/songjeongki/0042](decisions/songjeongki/0042-curriculum-material-attach-and-embedding-scope.md)) |
 | 에셋 | `POST /assets/upload-requests` → presigned `PUT` → `POST /assets/{id}/complete` | 바이트는 앱 서버를 통과하지 않는다. 받은 `assetId`를 도메인 요청에 실어 보낸다(커리큘럼 `thumbnailAssetId`, 프로필 `assetId`, 레슨 자료 `assetId`). kind별 발급: **PROFILE_IMAGE는 인증된 누구나**, **THUMBNAIL·MATERIAL은 강사만**(학생 403). MATERIAL은 **PPTX만·50MiB**, 이미지 kind는 jpeg·png·webp·5MiB — 형식·크기 위반은 400 ([decisions/songjeongki/0023](decisions/songjeongki/0023-asset-presigned-upload.md), [0035](decisions/songjeongki/0035-lesson-material-attach.md)) |
 | 다시보기 | `GET /lessons/{id}/playback` · `GET /lessons/{id}/playback/manifest` · `POST /instructor/lessons/{id}/replay-review/publish` · `POST /instructor/lessons/{id}/replay-review/withdraw` · `POST /webhooks/livekit` | **라이브 되감기·종료 후 재생 API 구현됨**([decisions/choinhoo/0001](decisions/choinhoo/0001-live-replay-playback-api.md), [decisions/songjeongki/0039](decisions/songjeongki/0039-replay-playback-api.md)). metadata 응답은 `{lessonId, videoAssetId, sessionId, startedAt, liveSessionStatus, currentSessionMs, sessionOffsetMs, durationMs, source}`이고 `source`는 `{url, availableFromMs, availableToMs}` 또는 manifest 생성 전이면 `null`이다. **STARTING은 준비 상태 조회만 허용하고, manifest가 이미 있어도 `source=null`이며 manifest endpoint는 409 `RECORDING_STARTING`이다. 실제 HLS source는 원자적 LIVE 전환 뒤에만 공개한다.** source는 하나다 — 라이브 중 재생목록은 `#EXT-X-ENDLIST` 없이 자라는 EVENT 목록이라 라이브 엣지와 세션 처음까지의 seek을 한 목록이 동시에 준다. `url`은 인증된 manifest endpoint이며 `application/vnd.apple.mpegurl`·`Cache-Control: no-store`; 그 본문의 일반 세그먼트와 `EXT-X-MAP/KEY` URI를 presigned GET으로 재작성한다. **라이브 중에는 `#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL`(기본 60s, `video.playback.can-skip-until`)로 델타 재생목록을 광고하고, 플레이어가 `_HLS_skip=YES`로 다시 물으면 경계보다 오래된 세그먼트를 `#EXT-X-SKIP:SKIPPED-SEGMENTS=N`으로 생략한다**(RFC 8216bis §6.2.5.1). 생략은 삭제가 아니라 병합 지시라 `EXT-X-MEDIA-SEQUENCE`가 불변이고 플레이어 진행 바는 강의 전체를 유지한다. 종료 후 재생목록은 ENDLIST가 있어 플레이어가 다시 받지 않으므로 델타를 쓰지 않는다. 학생은 활성 수강 + 레슨 PUBLISHED가 필수이고, 세션 `STARTING/LIVE/ENDING` 중에는 `replayStatus`와 무관하게 metadata를 조회하며 실제 재생은 LIVE/ENDING부터 한다. 종료 후에는 자산 READY + replay PUBLISHED만 시청한다. 소유 강사는 게시 전에도 미리보기한다. 첫 PDT − 세션 시작시각을 `sessionOffsetMs`로 요청마다 계산한다. 세그먼트 URL TTL은 `video.playback.segment-url-ttl`(기본 **6h**) — **델타는 옛 세그먼트 URL을 다시 주지 않으므로 강의 길이보다 짧으면 오래 시청한 학생의 되감기가 403이 된다**. 세그먼트는 공개 도메인(`video.playback.public-endpoint`)으로 서명해 nginx `/recordings/`로 서빙하며, backend가 매니페스트를 읽는 내부 주소(`livekit.egress.s3-endpoint`)와 다르다(SigV4가 Host를 서명에 포함). manifest 생성 지연 409 `RECORDING_STARTING`, 종료 자산 미준비·manifest 유실 409 `REPLAY_NOT_READY`, 스토리지 장애 503 `PLAYBACK_STORAGE_UNAVAILABLE`; 세그먼트 403/장시간 일시정지 뒤에는 같은 URL을 다시 로드한다. 게시·철회는 소유 강사만, 둘 다 204 멱등이며 게시에는 READY가 필요하고 라이브 중 철회는 409 `REPLAY_WITHDRAW_WHILE_LIVE`다. 검수 데이터 저장(`PUT .../replay-review`)은 CP2·CP3 산출물이 없어 미구현. LiveKit webhook은 JWT 검증 후 자산 READY/FAILED와 녹화 통계를 멱등 확정한다([0034](decisions/songjeongki/0034-egress-completion-webhook.md)). |
@@ -41,7 +41,7 @@
 `POST /api/internal/ai/callbacks` — permitAll이되 **HMAC-SHA256 서명이 실질 인증**이다(egress webhook 0034와 동일 패턴). 워커가 공유 시크릿(`ai.callback-secret`)으로 **원시 바이트 body**를 서명해 `X-Signature`(base64) 헤더에 실어 보내고, 검증 실패는 401. body: `{ eventId, eventType, jobId, materialId, lessonId, status }`(미지의 필드는 무시). Spring은 `external_event_inbox`에 `(source=ai-worker, eventId)` 복합키로 삽입해 **멱등** 처리(중복이면 무시). eventType → 자료 임베딩 상태 매핑: `MATERIAL_EMBEDDED`→READY, `MATERIAL_EMBED_FAILED`→FAILED, `MATERIAL_EMBEDDING`→PROCESSING, 그 외는 inbox에만 남기고 상태 불변. 코드: `aiintegration/service/AiCallbackService.java`·`web/AiCallbackVerifier.java`. 상세: [decisions/songjeongki/0036](decisions/songjeongki/0036-material-embedding-pipeline.md).
 
 ### 3-3. Spring → realtime-agent (LiveKit explicit AgentDispatch) — AI 구현됨, Spring Phase 4a 구현
-Spring은 LiveKit room·권한·생명주기를 소유하고, realtime-agent는 Worker 등록과 배정된 STT job을 소유한다. Java의 `agentName`과 Python의 `STT_AGENT_NAME`은 정확히 같아야 하며 assigned/connected room은 모두 `session-{sessionId}`여야 한다. 근거: [ADR-0025](decisions/canola/0025-realtime-agent-spring-handoff-contract.md).
+Spring은 LiveKit room·권한·생명주기를 소유하고, realtime-agent는 Worker 등록과 배정된 STT job을 소유한다. Java의 `agentName`과 Python의 `STT_AGENT_NAME`은 정확히 같아야 하며 assigned/connected room은 모두 `session-{sessionId}`여야 한다. dev는 양쪽 모두 `liveclass-realtime-stt-dev`, prod는 양쪽 모두 `liveclass-realtime-stt-prod`를 사용해 같은 LiveKit의 Worker pool을 환경별로 격리한다. 근거: [ADR-0025](decisions/canola/0025-realtime-agent-spring-handoff-contract.md)·[ADR-0035](decisions/canola/0035-realtime-agent-dual-environment-runtime.md).
 
 dispatch metadata는 최대 4,096 UTF-8 byte의 JSON object다. 아래 네 필드만 허용하며 알 수 없는/중복/누락 필드는 agent가 외부 자원을 열기 전에 거부한다.
 
@@ -73,17 +73,104 @@ LIVE 직전 STT 재검증만 건너뛴다. 이때 자막 없이 LIVE가 될 수 
 
 정상 종료 제어면은 별도 Python HTTP/Redis stop 명령이 아니라 **Spring의 LiveKit room 삭제**다. agent는 `ROOM_DELETED`만 정상 EOF로 보고 drain 후 §3-4 completion을 발행한다. 상세: [`dispatch schema`](../ai/realtime-agent/contracts/schemas/dispatch-metadata.schema.json)·[`fixture`](../ai/realtime-agent/contracts/fixtures/dispatch-metadata.valid.json).
 
-### 3-4. realtime-agent → application Redis 자막 Stream — AI 구현됨, Spring consumer 구현(ADR-0043)
+### 3-4. realtime-agent → application Redis 자막 Stream — AI 구현됨, Spring consumer 구현(ADR-0043·0052)
 Redis는 LiveKit 내부 Redis가 아닌 application Redis다. key는 `CAPTION_STREAM_KEY`로 주입하며 기본값은 전역 `ai:captions:live`. 모든 `XADD`에 `MAXLEN ~ CAPTION_STREAM_MAXLEN`(기본 10,000)을 적용한다. entry value는 모두 문자열이고 정수 필드는 부호 없는 최대 18자리 십진 문자열이다.
 
 | `type` | 필수 필드 |
 |---|---|
 | `caption.delta` | `contractVersion="1"`, `eventId`, `sessionId`, `lessonId`, `sttSessionId`, `sequence`, `streamElapsedMs`, `text`, `occurredAt` |
 | `caption.stream.completed` | `contractVersion="1"`, `eventId`, `sessionId`, `lessonId`, `sttSessionId`, `lastSequence`, `streamElapsedMs`, `reason="ROOM_DELETED"`, `occurredAt` |
+| `caption.stream.started` | `contractVersion="1"`, `eventId`, `sessionId`, `lessonId`, `sttSessionId`, `audioStartedAt`(UTC=`Z`\|`+00:00`), `occurredAt` |
+| `caption.segment.final` | `contractVersion="1"`, `eventId`, `sessionId`, `lessonId`, `sttSessionId`, `segmentIndex`, `lastSequence`, `text`, `startStreamElapsedMs`, `endStreamElapsedMs`, `boundaryReason`(`SILENCE`\|`MAX_DURATION`\|`STREAM_END`), `occurredAt` |
 
 `sequence`·`lastSequence`는 `(sessionId, sttSessionId)` 한 job attempt 안에서만 증가한다. retry는 새 `sttSessionId`에서 `sequence=1`로 시작할 수 있으므로 Spring은 attempt 단위로 접고 at-least-once write는 `eventId`로 중복 제거한다. `streamElapsedMs`는 **agent가 첫 audio frame을 받은 시점을 0으로 한 attempt-local 시간**이지 Spring session clock이 아니다.
 
-현재 agent는 `caption.segment.final`·`caption.partial|final|revised`를 발행하지 않는다. Spring consumer는 ai-api(`ai-rag-live-v1`)와 **별도 group `spring-caption-live-v1`**로 소비하고(ADR-0043), `eventId` 멱등으로 `caption.delta`·`caption.stream.completed`를 **append-only로 core.live_caption에 영속**한 뒤 저장분만 `/topic/live-sessions/{sessionId}/captions` WS로 전달한다(§3-6). raw `streamElapsedMs`를 **그대로 저장·중계**하며 세션 상대 ms로 변환하지 않는다 — session/HLS time-origin 변환·앵커, owner fencing, 전역 key의 session별 분리·정리는 후속 공유 계약이다(전역 key는 producer의 `MAXLEN ~`에 정리를 위임하고 consumer는 키를 DEL하지 않는다). consumer가 소비하는 Redis는 `spring.data.redis`가 가리키는 **프로필 구동 Redis**다(remote 프로필=EC2 :4000 application Redis). **prod 캡션-Redis 토폴로지(현재 prod redis ≠ 캡션 redis)는 AI/인프라 오너의 별도 작업**이며 이 구현이 해결하지 않는다(ADR-0043 §의존성). 상세: [`caption schema`](../ai/realtime-agent/contracts/schemas/caption-stream-entry.schema.json)·[`delta fixture`](../ai/realtime-agent/contracts/fixtures/caption-delta.valid.json)·[`completion fixture`](../ai/realtime-agent/contracts/fixtures/caption-completed.valid.json)·[ADR-0043](decisions/songjeongki/0043-caption-consumer-persistence.md).
+agent는 `caption.stream.started`·`caption.segment.final`도 발행한다(!233 병합). `caption.partial|final|revised`는 발행하지 않는다. Spring consumer는 ai-api(`ai-rag-live-v1`)와 **별도 group `spring-caption-live-v1`**로 소비하고(ADR-0043·0052), `eventId` 멱등으로 **네 type 모두 append-only로 core.live_caption에 영속**한다(`started`·`segment.final`은 ADR-0052 신규 컬럼 `audio_started_at`·`segment_index`·`start/end_stream_elapsed_ms`·`boundary_reason`에 적재). WS 실시간 전달·자막 리로드(§3-6)는 표시 대상 `caption.delta`·`caption.stream.completed`·`caption.segment.final`(ADR-0053)을 대상으로 하며, `segment.final`은 신규 `CaptionSegmentPayload`(`sttSessionId`·`segmentIndex`·`lastSequence`·`text`·`startStreamElapsedMs`·`endStreamElapsedMs`·`boundaryReason`·근사 `sessionMs`)로 `/topic/live-sessions/{sessionId}/captions` WS와 리로드에 함께 나간다. `caption.stream.started`(시간 앵커)는 **표시 대상이 아니라 영속만** 한다. RAG `contextTimeMs`(§3-9)는 단일 `streamElapsedMs` 좌표를 갖는 `caption.delta`·`caption.stream.completed`만 대상으로 한다(`started`·`segment.final`은 좌표 없어 제외). FE는 `segment.final`의 권위 텍스트로 발화 단위 렌더하고 문장부호 휴리스틱(ADR-0044)을 제거한다(ADR-0053). raw `streamElapsedMs`를 **그대로 저장·중계**하며 세션 상대 ms로 변환하지 않는다 — session/HLS time-origin 변환·앵커, owner fencing, 전역 key의 session별 분리·정리는 후속 공유 계약이다(전역 key는 producer의 `MAXLEN ~`에 정리를 위임하고 consumer는 키를 DEL하지 않는다). consumer가 소비하는 Redis는 `spring.data.redis`가 가리키는 **환경별 application Redis**다. dev는 Spring service endpoint `redis:6379`와 GPU tunnel `:4000`, prod는 Spring service endpoint `redis:6379`와 GPU tunnel `:6390`을 각각 사용하며 두 caption stream을 섞지 않는다([ADR-0035](decisions/canola/0035-realtime-agent-dual-environment-runtime.md)). 상세: [`caption schema`](../ai/realtime-agent/contracts/schemas/caption-stream-entry.schema.json)·[`delta fixture`](../ai/realtime-agent/contracts/fixtures/caption-delta.valid.json)·[`completion fixture`](../ai/realtime-agent/contracts/fixtures/caption-completed.valid.json)·[ADR-0043](decisions/songjeongki/0043-caption-consumer-persistence.md).
+
+### 3-4a. ai-api → application Redis 실시간 강의 노트 Stream — AI producer 구현, Spring consumer 미구현
+
+ai-api는 §3-4의 자막을 별도 consumer group `ai-live-notes-mvp-v1`로 읽고, 라이브 중에는 새로 생성된 노트
+조각만 application Redis Stream `ai:lecture-notes:mvp`에 발행한다. capture 완료 뒤에는 라이브 event를
+수정하지 않고 별도 refined snapshot을 한 번 발행한다. Redis String cache는 만들지 않는다. 모든 write는
+`XADD ... MAXLEN ~ AI_API_LECTURE_NOTE_STREAM_MAXLEN`(기본 10,000)이며 Redis entry value는 모두 UTF-8
+문자열이다.
+정수 필드는 부호 없는 최대 18자리 십진 문자열이고, 알 수 없는 필드·누락 필드·중복 필드는 계약 위반이다.
+
+공통 필드는 다음 조건을 지킨다.
+
+| 필드 | 계약 |
+|---|---|
+| `contractVersion` | 문자열 literal `"1"` |
+| `eventId` | 1~128자의 `[A-Za-z0-9][A-Za-z0-9._:-]*`; 논리 event의 전역 멱등 key |
+| `sessionId`, `lessonId` | 소문자 canonical UUID |
+| `sttSessionId` | `eventId`와 같은 1~128자 identifier; `latestSttSequence`·`lastSttSequence`의 attempt 범위 |
+| `occurredAt` | timezone offset을 포함한 RFC 3339 datetime |
+
+| `type` | 추가 필수 필드 |
+|---|---|
+| `lecture.note.chunk.appended` | `chunkSequence`, `latestSttSequence`, `topicAction`, `topicId`, `topicTitle`, `keyPoints`, `markdownFragment` |
+| `lecture.note.capture.completed` | `lastChunkSequence`, `lastSttSequence`, `reason="ROOM_DELETED"` |
+| `lecture.note.refined.snapshot` | `sourceLastChunkSequence`, `topics`, `markdownSnapshot` |
+
+`lecture.note.chunk.appended`의 필드 조건은 다음과 같다.
+
+- `chunkSequence`: 세션 범위의 1-based 양의 정수이며 실제 새 조각을 발행할 때만 정확히 1 증가한다.
+- `latestSttSequence`: 이 조각이 반영한 마지막 자막 sequence다. `sttSessionId` attempt 안의 1-based
+  값이며 세션 전체 자막 번호나 session/HLS ms가 아니다.
+- `topicAction`: `START_NEW|CONTINUE`. 세션의 첫 조각은 모델 응답과 무관하게 `START_NEW`다.
+- `topicId`: `eventId`와 같은 1~128자 형식이며 세션 안에서 topic을 식별하는 opaque identifier다.
+  Backend는 문자열 형식을 해석하지 않는다.
+- `topicTitle`: 1~80자의 단일 행 문자열이다.
+- `keyPoints`: 논리 payload에서는 1~3개 배열이며 각 항목은 trim·NFC 정규화된 1~300자 단일 행
+  문자열이다. Redis field에는 compact JSON 배열 문자열로 싣는다.
+- `markdownFragment`: 1~8,192자다. `START_NEW`는 `## 제목`과 bullet을, `CONTINUE`는 새 bullet만
+  포함한다. raw HTML·image·외부 link는 허용하지 않고 heading, unordered list, bold, inline code만 허용한다.
+- 구조화 `topicAction/topicTitle/keyPoints`가 의미상 정본이며 `markdownFragment`는 동일 값에서 결정론적으로
+  만든 파생 표현이다. 둘이 불일치하면 계약 위반이다.
+
+Backend가 전체 Markdown을 단순 결합할 경우 첫 조각은 그대로 저장하고, 이후 `START_NEW` 앞에는 `\n\n`,
+`CONTINUE` 앞에는 `\n`을 삽입한다. 또는 구조화 필드를 누적한 뒤 같은 renderer로 전체 Markdown을
+다시 만들 수 있다. AI wire event에는 `noteVersion`이 없다. Backend read model이 version을 노출한다면
+정상 반영한 chunk 수를 기준으로 별도 관리한다.
+
+`lecture.note.capture.completed`는 해당 세션의 라이브 자막 수집이 끝났다는 append 경로의 terminal event다.
+`lastChunkSequence`는 조각이 없으면 `0`, 있으면 마지막 발행 순번이며, `lastSttSequence`는 completion이
+가리킨 STT attempt의 마지막 자막 sequence다. completion은 전체 노트가 검수·게시·최종 교정됐다는 의미가
+아니다. 정상 completion 뒤 같은 세션의 새 `lecture.note.chunk.appended`는 허용하지 않는다.
+
+`lecture.note.refined.snapshot`은 live draft의 전체 구조화 topic만 입력으로 사용해 capture 완료 뒤 한 번
+정제한 별도 전체 snapshot이다. raw caption, 녹화 HLS, 자료 RAG는 다시 입력하지 않는다.
+
+- `sourceLastChunkSequence`: 정제 입력이 된 마지막 live `chunkSequence`와 같은 1-based 양의 정수다.
+- `topics`: 1~30개 compact JSON 배열 문자열이다. 각 항목은 정확히 `topicId`, `topicTitle`, `keyPoints`를
+  가지며 `topicId`는 세션 refined snapshot 안의 opaque identifier, 제목은 1~80자 단일 행, 요점은
+  1~20개의 1~300자 단일 행 문자열이다.
+- `markdownSnapshot`: 1~262,144자이며 같은 `topics`에서 결정론적으로 만든 전체 Markdown이다. live
+  `markdownFragment`에 append하는 값이 아니라 별도 refined read model을 교체하는 값이다.
+- refined snapshot은 live `chunkSequence`를 증가시키거나 과거 chunk event를 수정·취소하지 않는다.
+- 재시도는 같은 `eventId`, payload, `occurredAt`을 유지한다. 같은 세션·같은
+  `sourceLastChunkSequence`의 뒤늦은 중복 snapshot은 `eventId` 멱등으로 무시한다.
+
+발행 재시도는 최초 event와 **같은 `eventId`, sequence, payload, `occurredAt`**을 사용한다. Spring 구현 시
+별도 group `spring-lecture-notes-live-v1`을 `0-0`에서 만들고, 세션별 처리를 직렬화하며 다음 순서로 처리한다.
+
+1. `(source=ai-api, eventId)` 멱등 기록과 노트 조각 누적을 같은 DB transaction에서 처리한다.
+2. 이미 처리한 `eventId` 또는 현재 값 이하의 `chunkSequence`는 중복·stale로 기록하고 ACK한다.
+3. 기대값보다 큰 `chunkSequence`는 aggregate와 WS를 갱신하지 않고 pending에 남기며 gap metric·log를 남긴다.
+4. completion은 `lastChunkSequence`가 현재 정상 반영 순번과 일치할 때만 capture 완료로 반영한다.
+5. refined snapshot은 capture 완료가 반영됐고 `sourceLastChunkSequence`가 live 마지막 순번과 일치할 때만
+   별도 refined read model 전체를 교체한다. live draft에는 append하지 않는다.
+6. DB commit 뒤에만 ACK하고, commit된 새 조각만 Frontend WebSocket으로 전달한다. refined snapshot의
+   Frontend 전달 방식은 Spring·Frontend 구현 시 별도로 확정한다.
+
+Spring consumer·DB·REST·WebSocket은 아직 구현되지 않았다. AI producer는 caption과 미처리 작업을
+`ai:lecture-notes:mvp:state:{sessionId}`에 저장한 뒤 caption을 ACK하고,
+`ai:lecture-notes:mvp:active-sessions`에서 시작 시 복원한다. 발행할 payload를 outbox에 먼저 고정한 뒤 결과
+`XADD`와 outbox를 비운 checkpoint 저장을 같은 Redis transaction으로 처리하므로 단일 ai-api 프로세스
+재시작에서도 `eventId`, `chunkSequence`, `topicId`를 이어간다. 이 내부 key는 Spring이 소비하거나 수정하지
+않는다. Redis 자체 장애 내구성, 여러 ai-api replica의 session owner fencing, 다른 consumer의 pending
+회수는 아직 보장하지 않는다. Spring 소비 활성화 전에는 이 제한과 gap 복구 운영 정책을 함께 검토한다.
+상세 결정과 현재 제한은 [ADR-0034](decisions/canola/0034-near-realtime-accumulative-lecture-notes.md)를 따른다.
 
 ### 3-5. realtime-agent → Spring lifecycle callback (HTTP, 서명) — v1 AI 구현/기본 off, v2 양쪽 미구현
 Spring 수신 endpoint를 구현하고 `SPRING_STATUS_CALLBACK_URL`로 주입하기 전까지 `SPRING_STATUS_CALLBACK_ENABLED=false`로 둔다. 기존 material callback(§3-2)과 body·header·서명이 호환되지 않으므로 `POST /api/internal/ai/callbacks`로 보내지 않으며 실제 URL은 Java 구현에서 확정한다.
@@ -128,6 +215,33 @@ Spring 수신 endpoint를 구현하고 `SPRING_STATUS_CALLBACK_URL`로 주입하
 - **유실 처리**: `revision`이 이어지지 않으면 그 op를 버리고 다음 `snapshot`을 기다린다(반쪽짜리 판서를 녹화하지 않는다). 강사는 **참가자가 새로 접속할 때마다** 전체 `snapshot`을 다시 publish한다 — 도중에 재접속한 Egress의 유일한 복구 경로다.
 - **강사가 단일 writer**다. 그래서 CRDT 없이 `revision` 하나로 충분하고, 같은 op를 두 번 받아도 결과가 같다(멱등).
 - 수강생은 이 채널을 구독하지 않는다 — 합성 결과만 본다(ADR-0032). 따라서 판서는 Egress 프레임을 거쳐서만 수강생에게 도달한다.
+- **z-order**: 수신 측은 렌더 직전 요소의 `index`(Excalidraw fractional index)로 정렬한다. op에는 순서 정보가 없어 도착 순으로 재구성하면 나중에 온 요소가 항상 맨 위가 된다 — 강사가 아래에 깔아 둔 화이트보드가 수강생 화면에서 판서를 덮는다. 화이트보드(`liveclass-whiteboard`)는 정의상 배경이라 언제나 맨 아래다.
+- **판서를 켤 때·새 참가자가 들어올 때 `snapshot`을 낸다 — 판서가 비어 있어도 보낸다.** 수신 측은 revision 0에서 시작하는데 강사는 서버에서 이어받은 번호(예: 48)부터 매기므로, 이 **기준점**이 없으면 이후 op가 전부 "중간이 빠졌다"로 버려진다 — 강사 화면에는 그려지는데 수강생 화면에는 아무것도 나타나지 않는다. `snapshot`만 revision 검사를 건너뛰므로 이것이 유일한 기준점이다.
+- **강사 접속 시 복원 스냅샷**: 강사가 새 페이지에서 접속하면(새로고침 포함) §3-6d로 저장된 문서를 불러와 `snapshot`을 한 번 보내 Egress를 강사의 실제 상태로 맞춘다. 그러지 않으면 ①강사 화면에는 없는 판서가 수강생·녹화에만 남고 ②강사의 revision이 0부터 다시 시작해 이후 op가 전부 "이미 본 op"로 버려진다(`snapshot`만 revision 검사를 건너뛴다). 복원에 실패하면 빈 스냅샷으로 떨어진다 — 판서를 잃더라도 ②는 반드시 막아야 한다.
+
+### 3-6d. 강사 FE → Spring 판서 영속화 (REST) — FE·BE 구현됨
+- **라이브 전달 경로가 아니다.** 판서가 수강생에게 닿는 길은 §3-6b(데이터 채널 → Egress)이고, 이 API는 그와 **병렬로** 기록만 남긴다. 그래서 응답을 기다려 화면을 갱신하지 않으며, 저장 실패가 강의를 막지 않는다.
+- `POST /api/live-sessions/{sessionId}/annotation/ops` → `202 Accepted`. body는 op **배열**(묶어 보낸다, FE 기본 1.5초 주기). 각 항목 `{ revision, opType: "snapshot|upsert|delete|clear", payload, occurredAt }`.
+- `payload`는 op 본문의 **JSON 문자열**이며 **서버는 해석하지 않는다**. Excalidraw가 요소 필드를 늘릴 때마다 서버 마이그레이션이 따라오지 않게 하기 위해서다.
+- **멱등**: `(session_id, revision)` UNIQUE. 같은 revision이 다시 와도 중복 적재하지 않으므로 FE는 실패한 묶음을 그대로 재전송한다.
+- `GET /api/live-sessions/{sessionId}/annotation` → `{ revision, nextRevision, snapshotPayload, ops[] }`. **마지막 스냅샷과 그 이후 op만** 돌려준다 — 세션 전체를 접으면 강의가 길어질수록 복원이 느려지고, 스냅샷은 그 자체로 전체 상태다. 접는 것은 FE가 한다(같은 로직이 이미 수신 측에 있다).
+- **`nextRevision`은 서버가 정한다.** FE가 접힌 문서의 revision으로 대신 채번하면, 저장에 실패한 op가 있을 때 이미 쓴 번호를 다시 써서 Egress가 새 획을 "이미 본 op"로 버린다.
+- 복원 시 FE는 §3-6b의 유실 감지(revision 불연속 → 버리고 스냅샷 대기)를 **적용하지 않는다**. 저장된 행은 전송 중 유실이 아니라 실제로 남은 전부이며, 번호가 띄엄하다고 뒤따르는 획까지 버리면 그 이후가 통째로 사라진다.
+- **인가**: 읽기는 세션 참가자(§자막·채팅과 같은 게이트), **쓰기는 소유 강사만**. 판서의 writer는 강사 하나라는 전제 위에 revision 채번이 서 있다.
+- **전달에만 쓰는 op는 저장하지 않는다 — `clear`와 빈 스냅샷.** 복원이 마지막 스냅샷부터 접기 때문에, 문서를 담지 않은 op가 그 자리에 앉으면 그 앞의 판서가 통째로 사라진다. `clear`는 지우기가 아니라 강사가 판서를 껐을 때 수강생 화면에서 감추라는 **표시 상태**이고(§3-6b), 빈 스냅샷은 수신 측 **revision 기준점**을 잡는 장치라 페이지를 열 때마다 하나씩 나간다. 문서가 실제로 비는 것은 `delete`로 기록되므로 빈 스냅샷을 남길 이유가 없다. 둘 다 라이브 전달에는 그대로 나간다.
+- **`clear`는 저장하지 않는다.** 그건 문서를 지우는 편집이 아니라 강사가 판서를 껐을 때 수강생 화면에서 감추라는 **표시 상태**다(§3-6b). 강사의 문서는 그대로 남아 다시 켜면 돌아오므로, 저장하면 서버 쪽 문서만 비어 새로고침했을 때 판서가 통째로 사라진다. 라이브 전달에는 그대로 나간다.
+- **복원 직후 내보내는 스냅샷은 비어 있다.** 새로고침하면 판서는 꺼진 상태로 시작하므로, 복원한 내용을 그때 내보내면 강사에게는 안 보이는 판서가 수강생 화면에만 뜬다(§3-6b 불변식 위반). 빈 스냅샷은 **revision 기준점** 역할만 한다 — 수신 측은 0에서 시작하는데 강사는 `nextRevision`부터 매기므로, 기준점이 없으면 이후 op가 전부 "중간이 빠졌다"로 버려진다. 내용은 강사가 판서를 켤 때 나간다.
+- `session_ms`(세션 상대 ms, 근사 — ADR-0045와 같은 축)를 각 op에 함께 적재한다. 다시보기에서 "강사가 이걸 강조한 순간"으로 이동하는 앵커이며, 그 구간 판서를 RAG 컨텍스트로 쓰는 후속의 입력이다.
+- 레이저(§3-6c)는 저장하지 않는다.
+
+### 3-6c. 강사 FE → Egress 레이저 포인터 (LiveKit 데이터 채널) — FE 양쪽 구현됨
+- **topic** `annotation-laser`, **lossy**(`reliable: false`)로 publish. 판서 op와 <b>같은 채널에 섞지 않는다</b> — 초당 수십 건이고 1초면 사라지므로 revision을 태우면 유실 감지가 의미를 잃는다.
+- **payload** `{ "v": 1, "laser": { "phase": "start|move|end", "points": [{ "x", "y", "t" }], "zoom": number } }`
+- 레이저는 Excalidraw의 **scene 요소가 아니다**(사라지는 궤적을 별도 오버레이가 그린다). 그래서 `onChange`에 잡히지 않고 판서 op 경로로는 수강생에게 도달하지 않는다 — 강사 FE가 포인터 좌표를 직접 주워 보낸다.
+- **포인터를 누르고 있는 동안만** 보낸다(Excalidraw가 `button === "down"`일 때만 궤적을 만든다). 그냥 움직이는 것으로는 아무것도 그려지지 않아야 한다.
+- `t`는 강사 시계 기준 단조 시각이며 `LaserPointer`의 `pressure` 자리에 들어가 감쇠 계산에 쓰인다(Excalidraw도 `addPoint([x, y, performance.now()])`로 같게 한다). 수신 측 시계로 계산하면 시계 차이만큼 잔상 길이가 어긋난다.
+- `zoom`은 굵기 보정용이다. Excalidraw는 외곽선을 `size / zoom`으로 만든 뒤 viewport로 변환해(× zoom) 늘 화면 2px을 낸다 — 수신 측이 이 보정을 못 하면 강사 창이 작을수록 궤적이 가늘어진다.
+- 저장하지 않는다. 다시보기에는 Egress 합성 프레임에 **픽셀로** 남는다.
 
 ### 3-7. EC2 ai-worker → GPU bge-runtime (HTTP) — AI 구현됨
 
@@ -182,9 +296,10 @@ Content-Type: application/json
 
 ### 3-8. GPU realtime-agent service health (HTTP) — AI 구현됨, Spring consumer 미구현
 
-GPU agent는 `127.0.0.1:8081`, EC2 reverse tunnel은 `127.0.0.1:18081`에만 bind한다. EC2 host에서는
-reverse tunnel 주소로 상태를 확인할 수 있지만 Spring consumer와 backend container의 접근 경로는
-아직 구현하지 않았다. 18081은 public bind하지 않는다.
+prod GPU agent는 `127.0.0.1:8081`에서 EC2 `127.0.0.1:18081`로, dev GPU agent는
+`127.0.0.1:8082`에서 EC2 `127.0.0.1:18082`로 reverse tunnel을 연다. EC2 host에서는 각 reverse
+tunnel 주소로 상태를 확인할 수 있고 host-network nginx는 container용 내부 prefix를 제공하지만 Spring
+health consumer는 아직 구현하지 않았다. 18081·18082는 public bind하지 않는다.
 
 - `GET /health/live`: **200**
   `{"contractVersion":"1","status":"alive","service":"realtime-agent"}`.

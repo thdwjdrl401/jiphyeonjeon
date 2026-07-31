@@ -74,9 +74,9 @@ realtime-agent가 application Redis Stream 전역 키 `ai:captions:live`에 `cap
 - realtime-agent→Spring **lifecycle HTTP callback**(§3-5, `SPRING_STATUS_CALLBACK_ENABLED=false`): 별도 endpoint, 기본 off, material callback과 서명·body 비호환. 이번 범위 아님. 스트림 종료는 in-band `caption.stream.completed`로만 처리한다.
 - 시간축 session-ms 변환, session별 키 전환, HLS 정합 — 후속 공유 계약.
 
-## 의존성 (미해결, 이 구현이 해결하지 않음)
+## 의존성 후속 상태
 
-- **prod 캡션-Redis 토폴로지**: 현재 prod redis ≠ 캡션 redis다. Spring consumer는 `spring.data.redis`가 가리키는 Redis를 소비하므로, prod에서 캡션을 소비하려면 **prod redis를 캡션 redis로 통합하거나 별도 캡션-Redis 접속을 배선하는 AI/인프라 오너 작업**이 선행돼야 한다. 이번 구현은 로컬/remote 프로필까지만 소비를 보장한다.
+- **prod 캡션-Redis 토폴로지 — 2026-07-30 해소**: [canola ADR-0035](../canola/0035-realtime-agent-dual-environment-runtime.md)에서 prod agent를 prod Redis의 GPU tunnel `:6390`, dev agent를 dev Redis tunnel `:4000`에 각각 연결했다. Spring consumer도 자기 환경의 같은 Redis instance를 사용하므로 caption stream이 환경을 넘지 않는다.
 
 ## 계약 테스트 (POLICY: Python↔Spring 스트림 필드 계약 + 자막 전달 핵심경로)
 

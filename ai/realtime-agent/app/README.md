@@ -22,7 +22,7 @@ flowchart TD
     W -->|process.userdata 소유권 이전| J[한 Room의 job handler]
     J --> L[livekit/: audio source]
     L --> T[stt/: StreamingSttEngine]
-    T --> Q[captions/: sequence mapping]
+    T --> Q[captions/: anchor·delta·segment mapping]
     Q --> D[adapters/: Redis publisher]
     J -.-> H[adapters/: Spring callback]
 ```
@@ -35,12 +35,15 @@ resource는 각 child의 `setup_fnc`에서 미리 만들고 `process.userdata`�
 
 - `AgentServer` ↔ LiveKit: Worker 등록, load 보고, job 배정용 persistent WebSocket
 - `LiveKitInstructorAudioSource` ↔ LiveKit Room: WebRTC 참가, microphone 구독, Room lifecycle
-- `RedisSessionLease`·`RedisCaptionPublisher` → application Redis: lease Lua 연산과 bounded `XADD`
+- `RedisSessionLease`·`RedisCaptionPublisher` → application Redis: lease Lua와 자막 started/delta/final/completed `XADD`
 - `SpringStatusCallback` → Spring: 선택적인 HTTP(S) HMAC callback
 - `OpenAiRealtimeStreamingEngine` → OpenAI: provider가 선택된 경우에만 outbound WebSocket
 
 `main.py`는 위 통신을 조립하지만 payload를 새로 정의하지 않는다. 세부 wire format은 각 하위 README와
 [`../CONTRACT.md`](../CONTRACT.md)가 소유한다.
+신규 started/final wire는 AI-side 후보로 구현됐고 공유 계약은 변경 중이다. 채택 상태와 미확정 항목은
+[`../CONTRACT.md` 3절](../CONTRACT.md)을 따른다.
+
 
 ## 파일 구성
 

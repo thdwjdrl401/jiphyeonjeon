@@ -81,7 +81,7 @@ services:
     # in-memory session owner가 하나뿐인 MVP이므로 Compose 수준에서도 replica를 하나로 고정한다.
     deploy:
       replicas: 1
-    # 진행 중인 GMS 호출(기본 30초)과 Redis snapshot 저장을 graceful shutdown에서 마칠 시간을 준다.
+    # 진행 중인 GMS 호출(기본 30초)과 Redis event 발행을 graceful shutdown에서 마칠 시간을 준다.
     stop_grace_period: 45s
     depends_on:
       ai-migrate:
@@ -107,7 +107,6 @@ services:
       AI_API_LECTURE_NOTE_MAX_WINDOW_MS: ${AI_API_LECTURE_NOTE_MAX_WINDOW_MS:-40000}
       AI_API_LECTURE_NOTE_MIN_CHARS: ${AI_API_LECTURE_NOTE_MIN_CHARS:-80}
       AI_API_LECTURE_NOTE_MAX_CHARS: ${AI_API_LECTURE_NOTE_MAX_CHARS:-400}
-      AI_API_LECTURE_NOTE_SNAPSHOT_TTL_SECONDS: ${AI_API_LECTURE_NOTE_SNAPSHOT_TTL_SECONDS:-86400}
       AI_API_LECTURE_NOTE_STREAM_MAXLEN: ${AI_API_LECTURE_NOTE_STREAM_MAXLEN:-10000}
       AI_INTERNAL_SECRET: ${AI_INTERNAL_SECRET:?AI_INTERNAL_SECRET 필요 — Spring과 공유하는 HMAC 시크릿}
     healthcheck:

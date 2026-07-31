@@ -50,7 +50,8 @@ def test_vad_closes_after_minimum_speech_and_silence_with_preroll() -> None:
 
     assert len(segments) == 1
     assert segments[0].pcm == b"".join(frames)
-    assert (segments[0].start_ms, segments[0].end_ms) == (0, 100)
+    assert (segments[0].start_ms, segments[0].end_ms) == (20, 60)
+    assert segments[0].boundary_reason == "SILENCE"
 
 
 def test_maximum_bounds_total_buffered_pcm_not_only_speech_time() -> None:
@@ -90,6 +91,8 @@ def test_forced_flush_makes_contiguous_segments_without_retranscribed_overlap() 
     assert segments[1].pcm == b"".join(frames[4:])
     assert (segments[0].start_ms, segments[0].end_ms) == (0, 80)
     assert (segments[1].start_ms, segments[1].end_ms) == (80, 120)
+    assert segments[0].boundary_reason == "MAX_DURATION"
+    assert segments[1].boundary_reason == "STREAM_END"
     assert b"".join(segment.pcm for segment in segments) == b"".join(frames)
     assert all(len(segment.pcm) <= _SAMPLE_RATE * 80 // 1_000 * 2 for segment in segments)
 
@@ -110,7 +113,8 @@ def test_finish_flushes_eligible_tail_once_and_clears_preroll() -> None:
 
     assert len(segments) == 1
     assert segments[0].pcm == b"".join(frames)
-    assert (segments[0].start_ms, segments[0].end_ms) == (0, 60)
+    assert (segments[0].start_ms, segments[0].end_ms) == (20, 60)
+    assert segments[0].boundary_reason == "STREAM_END"
     assert segmenter.finish() == []
 
 

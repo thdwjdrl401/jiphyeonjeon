@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { StatusBadge } from '@/shared/ui/WorkspaceUi'
 import CameraOverlayControl from './CameraOverlayControl'
 import InstructorAnnotationLayer from './InstructorAnnotationLayer'
@@ -35,6 +35,61 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
   const publisher = useInstructorLiveKit()
   // 판서는 기본으로 꺼 둔다. 켜져 있으면 캔버스가 포인터를 먹어 카메라 배치를 드래그할 수 없다.
   const [annotating, setAnnotating] = useState(false)
+
+  /**
+   * 저장돼 있던 판서가 있으면 판서를 <b>자동으로 켠다</b>(ADR-0051).
+   *
+   * <p>새로고침해도 화면이 그대로여야 한다. 켜 주지 않으면 판서는 살아 있는데 보이지 않아 강사에게는
+   * 사라진 것과 구분되지 않고, 켜기 전까지 수강생 화면에도 나오지 않는다.
+   *
+   * <p>한 번만 본다. 강사가 그 뒤에 판서를 껐다면 그 선택을 되돌리지 않는다.
+   */
+  const restoredAnnotationCount = publisher.restoredAnnotation?.elements.length ?? 0
+  const autoEnabledRef = useRef(false)
+  useEffect(() => {
+    if (autoEnabledRef.current || restoredAnnotationCount === 0) return
+    autoEnabledRef.current = true
+    setAnnotating(true)
+  }, [restoredAnnotationCount])
+  /**
+   * 판서 속성 패널(색·굵기·투명도)은 <b>접힌 상태로 시작</b>한다. 자료 위에 그리는 화면에서 좌우
+   * 패널이 시야를 가리고, 색·굵기는 매 획마다 바꾸는 것이 아니다. 필요할 때만 펼친다.
+   */
+  const [propertyPanel, setPropertyPanel] = useState(false)
+  /**
+   * 화이트보드. 화면공유 없이 판서만 할 때 프레임 전체를 흰 판으로 덮는다 — 카메라만 켠 상태에서
+   * 얼굴 위에 그리는 것보다 판을 깔고 쓰는 편이 낫다.
+   */
+  const [whiteboard, setWhiteboard] = useState(false)
+
+  /**
+   * 전체화면. 판서를 하려면 합성 캔버스가 커야 하는데, 기본 배치에서는 사이드바에 눌려 작다.
+   *
+   * <p>대상은 <b>스테이지 전체</b>다. 미리보기만 전체화면으로 만들면 하단 컨트롤(판서 토글·카메라 등)이
+   * 화면 밖으로 나가 강사가 아무것도 조작할 수 없다.
+   *
+   * <p>전체화면이 되어도 판서 좌표는 흔들리지 않는다 — 에디터는 고정 1920x1080 무대에 살고 배율만
+   * 바뀌므로, 커진 화면에서 그린 획도 같은 프레임 좌표로 기록된다.
+   */
+  const stageRef = useRef<HTMLDivElement>(null)
+  const [fullscreen, setFullscreen] = useState(false)
+
+  useEffect(() => {
+    const onChange = () => { setFullscreen(document.fullscreenElement === stageRef.current) }
+    document.addEventListener('fullscreenchange', onChange)
+    return () => { document.removeEventListener('fullscreenchange', onChange) }
+  }, [])
+
+  const toggleFullscreen = useCallback(() => {
+    // 실패해도 강의는 계속되어야 한다. 브라우저가 거부하는 경우(권한·정책)가 있어 조용히 흘린다.
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => undefined)
+      return
+    }
+    void stageRef.current?.requestFullscreen().catch((error: unknown) => {
+      console.warn('전체화면으로 전환하지 못했습니다', error)
+    })
+  }, [])
   const screenShareTrack = publisher.screenShareEnabled ? publisher.screenShareTrack : undefined
   const cameraTrack = publisher.cameraEnabled ? publisher.cameraTrack : undefined
   const mainTrack = screenShareTrack ?? cameraTrack
@@ -42,8 +97,21 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
   const canRetry = publisher.connectionState === 'error' || publisher.connectionState === 'disconnected'
 
   return (
-    <div className="video-stage video-stage--instructor" tabIndex={0}>
+    <div
+      ref={stageRef}
+      className={`video-stage video-stage--instructor${fullscreen ? ' is-fullscreen' : ''}`}
+      tabIndex={0}
+    >
       <div className="video-stage__glow" />
+      <header className="video-status-overlay" aria-label="라이브 강의 정보">
+        <div className="video-status-overlay__identity"><span className="live-dot" /><strong>LIVE</strong><h1>{lessonTitle}</h1><small>강의 {sessionId}</small></div>
+        <div className="video-status-overlay__status">
+          <StatusBadge tone="warning">강사 운영 모드</StatusBadge>
+          {connectionBadge(publisher.connectionState)}
+          <span>{participantCount}명 참여 중</span>
+          <button className="button button--soft button--small" type="button" onClick={onRequestEnd}>강의 종료</button>
+        </div>
+      </header>
       <div className="instructor-media-preview">
         {/*
           미리보기 영역이 아니라 <b>합성 캔버스(16:9)</b>를 그린다. 미리보기 영역은 창 크기와 사이드바에
@@ -93,20 +161,15 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
           <InstructorAnnotationLayer
             active={annotating}
             audienceRevision={publisher.annotationAudienceRevision}
+            showPropertyPanel={propertyPanel}
+            whiteboard={whiteboard}
+            onLaser={publisher.publishLaser}
             onPublish={publisher.publishAnnotation}
+            restoredElements={publisher.restoredAnnotation?.elements ?? null}
           />
         </div>
       </div>
 
-      <header className="video-status-overlay" aria-label="라이브 강의 정보">
-        <div className="video-status-overlay__identity"><span className="live-dot" /><strong>LIVE</strong><h1>{lessonTitle}</h1><small>강의 {sessionId}</small></div>
-        <div className="video-status-overlay__status">
-          <StatusBadge tone="warning">강사 운영 모드</StatusBadge>
-          {connectionBadge(publisher.connectionState)}
-          <span>{participantCount}명 참여 중</span>
-          <button className="button button--soft button--small" type="button" onClick={onRequestEnd}>강의 종료</button>
-        </div>
-      </header>
 
       {publisher.errorMessage && (
         <div className="instructor-media-error" role="alert">
@@ -138,6 +201,34 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
             >
               판서 {annotating ? '켜짐' : '꺼짐'}
             </button>
+            {/*
+              색·굵기·투명도 패널. 판서를 켠 동안에만 의미가 있고, 기본은 접혀 있다 —
+              자료 위에 그리는 화면에서 좌우 패널이 시야를 가린다.
+            */}
+            {annotating && (
+              <button
+                aria-pressed={propertyPanel}
+                className={propertyPanel ? 'is-active' : ''}
+                type="button"
+                onClick={() => setPropertyPanel((current) => !current)}
+              >
+                판서 도구 {propertyPanel ? '펼침' : '접힘'}
+              </button>
+            )}
+            {/*
+              화이트보드. 배경색이 아니라 맨 뒤에 깔리는 잠긴 요소라, 켜고 끄는 것이 그대로
+              수강생 화면·녹화에 반영된다.
+            */}
+            {annotating && (
+              <button
+                aria-pressed={whiteboard}
+                className={whiteboard ? 'is-active' : ''}
+                type="button"
+                onClick={() => setWhiteboard((current) => !current)}
+              >
+                화이트보드 {whiteboard ? '켜짐' : '꺼짐'}
+              </button>
+            )}
             {showCameraPictureInPicture && (
               <button
                 aria-pressed={publisher.cameraOverlay.visible}
@@ -150,7 +241,27 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
               </button>
             )}
           </div>
-          {publisher.pendingControl && <span>장치 상태 변경 중...</span>}
+          <div className="control-row__trailing">
+            {publisher.pendingControl && <span>장치 상태 변경 중...</span>}
+            {/*
+              영상 플레이어의 그 자리 그대로 — 컨트롤 줄 오른쪽 끝에 아이콘만. 판서를 하려면 캔버스가
+              커야 하는데 사이드바에 눌린 기본 배치에서는 글씨를 쓸 공간이 없다.
+            */}
+            <button
+              aria-label={fullscreen ? '전체화면 해제' : '전체화면'}
+              aria-pressed={fullscreen}
+              className={`video-controls-overlay__icon${fullscreen ? ' is-active' : ''}`}
+              title={fullscreen ? '전체화면 해제' : '전체화면'}
+              type="button"
+              onClick={toggleFullscreen}
+            >
+              <svg aria-hidden="true" fill="none" height="16" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24" width="16">
+                {fullscreen
+                  ? <path d="M9 3H5a2 2 0 0 0-2 2v4M15 3h4a2 2 0 0 1 2 2v4M9 21H5a2 2 0 0 1-2-2v-4M15 21h4a2 2 0 0 0 2-2v-4" />
+                  : <path d="M3 9V5a2 2 0 0 1 2-2h4M21 9V5a2 2 0 0 0-2-2h-4M3 15v4a2 2 0 0 0 2 2h4M21 15v4a2 2 0 0 1-2 2h-4" />}
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
     </div>

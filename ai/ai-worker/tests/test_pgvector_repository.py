@@ -12,9 +12,11 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from app.adapters.pgvector_index import PgvectorIndexRepository
+from app.adapters.pgvector_key_term_storage import PgvectorKeyTermRepository
 from app.config import load_settings
 from app.database_urls import parse_async_database_url, parse_migration_database_url
 from app.domain import BGE_M3_DIMENSIONS, ChunkRecord, StagedMaterial, StaleMaterialVersionError
+from app.ingestion import KeyTerm
 from conftest import IntegrationDatabase
 
 
@@ -129,7 +131,7 @@ def migrate_database(integration_database: IntegrationDatabase) -> None:
         command.upgrade(config, "head")
         with sync_engine.connect() as connection:
             assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
-                "0001_rag_index_storage"
+                "0002_material_key_terms"
             )
 
         command.downgrade(config, "base")
@@ -204,6 +206,17 @@ def repository(
     integration_database: IntegrationDatabase,
 ) -> PgvectorIndexRepository:
     return PgvectorIndexRepository(
+        database_engine,
+        runtime_role=integration_database.runtime_role,
+    )
+
+
+@pytest.fixture
+def key_term_repository(
+    database_engine: AsyncEngine,
+    integration_database: IntegrationDatabase,
+) -> PgvectorKeyTermRepository:
+    return PgvectorKeyTermRepository(
         database_engine,
         runtime_role=integration_database.runtime_role,
     )
@@ -756,3 +769,140 @@ async def test_same_material_uuid_is_isolated_by_tenant(
             .all()
         )
     assert active_tenants == ["tenant-a", "tenant-b"]
+
+
+async def test_key_terms_are_stored_and_upserted_for_a_material_version(
+    repository: PgvectorIndexRepository,
+    key_term_repository: PgvectorKeyTermRepository,
+    database_engine: AsyncEngine,
+) -> None:
+    material = _material(1)
+    version_id = await repository.stage(material, [_chunk(0.1)])
+    await repository.activate(material, version_id)
+
+    await key_term_repository.store(
+        version_id,
+        [
+            KeyTerm(term="지도학습", definition="정답이 있는 데이터로 학습하는 방식"),
+            KeyTerm(term="비지도학습", definition="정답 없이 패턴을 찾는 방식"),
+        ],
+    )
+
+    async with database_engine.connect() as connection:
+        rows = (
+            await connection.execute(
+                text(
+                    """
+                        SELECT term, definition
+                        FROM ai.material_key_term
+                        WHERE material_version_id = :version_id
+                        """
+                ),
+                {"version_id": version_id},
+            )
+        ).all()
+    assert dict(rows) == {
+        "지도학습": "정답이 있는 데이터로 학습하는 방식",
+        "비지도학습": "정답 없이 패턴을 찾는 방식",
+    }
+
+    await key_term_repository.store(
+        version_id,
+        [KeyTerm(term="지도학습", definition="갱신된 정의")],
+    )
+
+    async with database_engine.connect() as connection:
+        updated_definition = await connection.scalar(
+            text(
+                """
+                SELECT definition FROM ai.material_key_term
+                WHERE material_version_id = :version_id AND term = '지도학습'
+                """
+            ),
+            {"version_id": version_id},
+        )
+        remaining_count = await connection.scalar(
+            text(
+                "SELECT count(*) FROM ai.material_key_term WHERE material_version_id = :version_id"
+            ),
+            {"version_id": version_id},
+        )
+    assert updated_definition == "갱신된 정의"
+    assert remaining_count == 2
+
+
+async def test_key_terms_cascade_delete_with_their_material_version(
+    repository: PgvectorIndexRepository,
+    key_term_repository: PgvectorKeyTermRepository,
+    database_engine: AsyncEngine,
+) -> None:
+    material = _material(1)
+    version_id = await repository.stage(material, [_chunk(0.1)])
+    await repository.activate(material, version_id)
+    await key_term_repository.store(
+        version_id,
+        [KeyTerm(term="지도학습", definition="정답이 있는 데이터로 학습하는 방식")],
+    )
+
+    deleted = replace(
+        _material(2),
+        job_id="job-delete-key-terms",
+        idempotency_key="material-key-terms-delete",
+    )
+    assert await repository.delete_job(deleted) == 1
+
+    async with database_engine.connect() as connection:
+        remaining = await connection.scalar(
+            text(
+                "SELECT count(*) FROM ai.material_key_term WHERE material_version_id = :version_id"
+            ),
+            {"version_id": version_id},
+        )
+    assert remaining == 0
+
+
+async def test_resolve_active_scope_returns_none_when_never_indexed(
+    repository: PgvectorIndexRepository,
+) -> None:
+    assert await repository.resolve_active_scope("tenant-test", MATERIAL_ID) is None
+
+
+async def test_resolve_active_scope_recovers_curriculum_id_and_current_version(
+    repository: PgvectorIndexRepository,
+) -> None:
+    first = _material(1)
+    second = _material(2)
+    await repository.activate(first, await repository.stage(first, [_chunk(0.1)]))
+    await repository.stage(second, [_chunk(0.2)])
+
+    scope = await repository.resolve_active_scope("tenant-test", MATERIAL_ID)
+
+    assert scope is not None
+    assert scope.curriculum_id == CURRICULUM_ID
+    assert scope.lesson_id == LESSON_ID
+    assert scope.material_version == 2
+
+
+async def test_resolve_active_scope_then_delete_job_removes_the_material(
+    repository: PgvectorIndexRepository,
+    database_engine: AsyncEngine,
+) -> None:
+    material = _material(1)
+    await repository.activate(material, await repository.stage(material, [_chunk(0.1)]))
+
+    scope = await repository.resolve_active_scope("tenant-test", MATERIAL_ID)
+    assert scope is not None
+
+    deleted = replace(
+        _material(scope.material_version),
+        curriculum_id=scope.curriculum_id,
+        lesson_id=scope.lesson_id,
+        job_id="job-delete-resolved",
+        idempotency_key="material-delete-resolved",
+    )
+    assert await repository.delete_job(deleted) == 1
+    assert await repository.resolve_active_scope("tenant-test", MATERIAL_ID) is None
+
+    async with database_engine.connect() as connection:
+        remaining = await connection.scalar(text("SELECT count(*) FROM ai.material_version"))
+    assert remaining == 0

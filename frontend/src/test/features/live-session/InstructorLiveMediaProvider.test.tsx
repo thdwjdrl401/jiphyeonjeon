@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import InstructorLiveMediaProvider, {
   useInstructorLiveKit,
 } from '@/features/live-session/InstructorLiveMediaProvider'
+import { ANNOTATION_TOPIC, decodeAnnotationOp, type AnnotationOp } from '@/features/live-session/annotation'
 
 const liveKit = vi.hoisted(() => {
   const localParticipant = {
@@ -20,9 +21,15 @@ const liveKit = vi.hoisted(() => {
     setScreenShareEnabled: vi.fn(async (enabled: boolean) => {
       localParticipant.isScreenShareEnabled = enabled
     }),
+    publishData: vi.fn<(payload: Uint8Array, options?: { topic?: string }) => Promise<void>>(
+      async () => {},
+    ),
+    setMetadata: vi.fn(async () => {}),
+    metadata: undefined as string | undefined,
   }
   const room = {
     localParticipant,
+    state: 'connected',
     on: vi.fn(),
     off: vi.fn(),
     connect: vi.fn(),
@@ -45,6 +52,14 @@ vi.mock('@/shared/config/runtime', () => ({
 }))
 
 vi.mock('@/features/live-session/liveSessionService', () => liveSessionApi)
+
+const annotationSink = vi.hoisted(() => ({ push: vi.fn(), flush: vi.fn(), stop: vi.fn(), pending: () => 0 }))
+const annotationApi = vi.hoisted(() => ({
+  fetchAnnotationDocument: vi.fn(),
+  createAnnotationOpSink: vi.fn(),
+  emptyRestoredAnnotation: vi.fn(),
+}))
+vi.mock('@/features/live-session/annotationPersistence', () => annotationApi)
 
 vi.mock('livekit-client', () => ({
   LocalVideoTrack: class LocalVideoTrack {},
@@ -83,8 +98,12 @@ vi.mock('livekit-client', () => ({
   },
 }))
 
+/** 테스트에서 provider의 publish 함수를 직접 부르기 위한 통로. */
+let publisherRef: ReturnType<typeof useInstructorLiveKit> | null = null
+
 function ProviderStateProbe() {
   const publisher = useInstructorLiveKit()
+  publisherRef = publisher
   return (
     <output>
       {[
@@ -114,7 +133,22 @@ describe('InstructorLiveMediaProvider', () => {
       token: 'publisher-token',
       wsUrl: 'wss://live.example.test',
     })
+    liveKit.localParticipant.publishData.mockClear()
+    annotationSink.push.mockClear()
+    annotationApi.createAnnotationOpSink.mockReturnValue(annotationSink)
+    annotationApi.fetchAnnotationDocument.mockResolvedValue({
+      document: { revision: 0, elements: [] },
+      nextRevision: 1,
+    })
   })
+
+  /** 판서 op만 골라 디코드한다. 레이저는 다른 topic으로 나간다. */
+  function publishedAnnotationOps(): AnnotationOp[] {
+    return liveKit.localParticipant.publishData.mock.calls
+      .filter(([, options]) => (options as { topic?: string } | undefined)?.topic === ANNOTATION_TOPIC)
+      .map(([payload]) => decodeAnnotationOp(payload as Uint8Array))
+      .filter((op): op is AnnotationOp => op !== null)
+  }
 
   it('강사 전용 토큰을 받아 연결하고 Provider 상태를 소비자에게 전달한다', async () => {
     render(
@@ -147,5 +181,122 @@ describe('InstructorLiveMediaProvider', () => {
       'publisher-token',
       { autoSubscribe: false },
     )
+  })
+
+  /**
+   * 판서 영속화(ADR-0051). 강사가 새로고침하면 두 가지가 어긋난다 — 강사 화면만 비고, op 번호가
+   * 1로 돌아간다. 저장된 문서를 불러와 <b>스냅샷으로</b> 다시 내보내는 것이 둘 다 푼다.
+   */
+  describe('저장된 판서 복원', () => {
+    function renderProvider() {
+      return render(
+        <MemoryRouter initialEntries={['/instructor/live-sessions/session-1/preflight']}>
+          <Routes>
+            <Route
+              path="/instructor/live-sessions/:sessionId/preflight"
+              element={(
+                <InstructorLiveMediaProvider>
+                  <ProviderStateProbe />
+                </InstructorLiveMediaProvider>
+              )}
+            />
+          </Routes>
+        </MemoryRouter>,
+      )
+    }
+
+    /**
+     * `clear`나 `upsert`로는 안 된다 — 그것들은 revision 검사를 받아 Egress가 버린다. 스냅샷만
+     * 검사를 건너뛰므로 복구 경로가 될 수 있다.
+     */
+    it('접속하면 빈 스냅샷으로 revision 기준점을 잡는다', async () => {
+      const elements = [{ id: 'a', type: 'freedraw', version: 3 }]
+      annotationApi.fetchAnnotationDocument.mockResolvedValue({
+        document: { revision: 47, elements },
+        nextRevision: 48,
+      })
+
+      renderProvider()
+
+      // 복원한 판서 자체는 여기서 내보내지 않는다 — 새로고침 직후 판서는 꺼진 상태라, 여기서 보내면
+      // 강사에게는 안 보이는 판서가 수강생 화면에만 뜬다. 내보내는 일은 판서를 켤 때 레이어가 한다.
+      await waitFor(() => {
+        expect(publishedAnnotationOps()).toContainEqual({ type: 'snapshot', revision: 48, elements: [] })
+      })
+    })
+
+    /**
+     * `clear`는 문서를 지우는 편집이 아니라 판서를 껐을 때 수강생 화면에서 감추라는 <b>표시 상태</b>다.
+     * 강사의 문서는 그대로 남아 다시 켜면 돌아오는데, 저장해 버리면 서버 쪽 문서만 비어 새로고침했을 때
+     * 판서가 통째로 사라진다.
+     */
+    /**
+     * 복원은 <b>마지막 스냅샷부터</b> 접는다. 그래서 문서를 담지 않은 op가 그 자리에 앉으면 그 앞의
+     * 판서가 통째로 사라진다. 전달에만 쓰는 op는 남기지 않는다.
+     *
+     * <ul>
+     *   <li>`clear` — 지우기가 아니라 판서를 껐을 때 감추라는 표시 상태다. 강사 문서는 그대로 남는다.</li>
+     *   <li>빈 스냅샷 — revision 기준점을 잡는 장치다. 페이지를 열 때마다 하나씩 쌓인다.</li>
+     * </ul>
+     *
+     * <p>문서가 실제로 비는 것은 `delete`로 기록되므로(diffAnnotationElements) 빈 스냅샷을 남길 필요가 없다.
+     */
+    it('전달에만 쓰는 op는 서버에 남기지 않는다 — clear와 빈 스냅샷', async () => {
+      const { getByRole } = renderProvider()
+      await waitFor(() => { expect(getByRole('status')).toHaveTextContent('connected') })
+      // 접속하며 나가는 기준점 스냅샷이 이미 전달됐다.
+      await waitFor(() => { expect(publishedAnnotationOps().length).toBeGreaterThan(0) })
+
+      // 기준점(빈 스냅샷)은 전달만 되고 기록되지 않는다.
+      expect(annotationSink.push).not.toHaveBeenCalled()
+      expect(publishedAnnotationOps()).toContainEqual(
+        expect.objectContaining({ type: 'snapshot', elements: [] }),
+      )
+
+      publisherRef!.publishAnnotation({ type: 'clear' })
+      publisherRef!.publishAnnotation({ type: 'snapshot', elements: [] })
+      publisherRef!.publishAnnotation({ type: 'delete', ids: ['a'] })
+      publisherRef!.publishAnnotation({ type: 'upsert', elements: [{ id: 'a', type: 'freedraw', version: 1 }] })
+
+      const kinds = annotationSink.push.mock.calls.map(([op]) => (op as AnnotationOp).type)
+      expect(kinds).toEqual(['delete', 'upsert'])
+      // 라이브 전달에는 그대로 나간다 — 안 보내면 강사만 껐다고 믿고 수강생·녹화에는 남는다.
+      expect(publishedAnnotationOps().map((op) => op.type)).toContain('clear')
+    })
+
+    /** 내용이 있는 스냅샷은 남긴다 — 다음 복원이 이 지점부터 접으면 되므로 갈수록 빨라진다. */
+    it('내용이 있는 스냅샷은 남긴다', async () => {
+      const { getByRole } = renderProvider()
+      await waitFor(() => { expect(getByRole('status')).toHaveTextContent('connected') })
+      annotationSink.push.mockClear()
+
+      publisherRef!.publishAnnotation({
+        type: 'snapshot', elements: [{ id: 'a', type: 'freedraw', version: 1 }],
+      })
+
+      expect(annotationSink.push).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'snapshot' }),
+      )
+    })
+
+    /**
+     * 새로고침하면 브라우저의 카운터가 0으로 돌아간다. 서버가 알려 준 번호에서 이어가지 않으면 새로
+     * 그린 획이 전부 "이미 본 op"로 버려져 <b>수강생에게 영영 나타나지 않는다</b> — 강사 화면에는
+     * 그려지므로 눈치채기 어렵다.
+     */
+    it('서버가 알려 준 번호부터 이어서 채번한다', async () => {
+      annotationApi.fetchAnnotationDocument.mockResolvedValue({
+        document: { revision: 47, elements: [] },
+        nextRevision: 48,
+      })
+
+      const { getByRole } = renderProvider()
+      await waitFor(() => { expect(getByRole('status')).toHaveTextContent('connected') })
+      await waitFor(() => { expect(publishedAnnotationOps().length).toBeGreaterThan(0) })
+
+      expect(publishedAnnotationOps()[0].revision).toBe(48)
+    })
+
+    /** 복원 스냅샷도 기록에 남긴다 — 다음 복원이 이 지점부터 접으면 되므로 갈수록 빨라진다. */
   })
 })

@@ -11,10 +11,13 @@
 
 ## 파일 구성
 
-- `test_candidate_contract_schemas.py`, `test_job_metadata.py`: dispatch·schema 계약
+- `test_candidate_contract_schemas.py`: started/delta/segment.final/completed 후보 schema와 UTF-8 fixture
+- `test_caption_pipeline.py`: started 선행, delta/segment 순번, provider final 권위와 completion
+- `test_audio_segmentation.py`, `test_livekit_audio_source.py`: VAD speech 경계와 첫 frame UTC 앵커
+- `test_*provider*.py`: provider delta/final 정규화와 lifecycle
 - `test_redis_*.py`, `test_spring_status_callback.py`: 외부 adapter wire shape와 실패 처리
-- `test_room_job*.py`, `test_lifecycle.py`, `test_shutdown_deadline.py`: job 생명주기와 race
-- `test_audio_*.py`, `test_*provider*.py`: 오디오와 STT provider 계약
+- `test_room_job*.py`, `test_lifecycle.py`, `test_shutdown_deadline.py`: started-before-audio와 job 종료 race
+- `test_job_metadata.py`: dispatch schema 계약
 - `test_stt_catalog.py`, `test_stt_registry.py`: provider profile, active/idle 상한과 prewarm resource 소유권
 - `test_main.py`, `test_config.py`: AgentServer load 계산과 환경 변수 조립
 - `test_operational_scripts.py`: SSH tunnel·배포 helper의 port와 secret 취급

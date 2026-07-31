@@ -1,11 +1,16 @@
-# realtime-agent v1 상세 계약
+# realtime-agent 상세 계약과 변경 중 후보
 
 이 문서는 realtime-agent의 wire 형식과 AI 런타임 불변식을 Python 테스트로 고정한 상세 계약이다.
 Spring이 생산·소비하는 공유 경계의 정본은 [`docs/CONTRACT.md` §3-3~§3-5·§3-8](../../docs/CONTRACT.md#3-내부-계약-확정-인터페이스)이다.
 
+> **변경 상태:** 3절의 `caption.stream.started`·`caption.segment.final`은 AI producer 구현과 Python
+> schema/fixture 검증까지 완료된 **후보 계약**이다. 루트 계약과 Spring·ai-api consumer에는 아직 채택되지
+> 않았으므로 운영 확정 계약이 아니다. 필드, event type과 `contractVersion`은 양측 합의 과정에서 바뀔 수 있다.
+
 Spring의 named LiveKit AgentDispatch 생성·재사용·삭제와 exact metadata 저장은 구현됐다. 현재 job별
-assignment/running readiness는 `live.stt.assume-ready=true`로 우회 중이며, Redis Stream consumer,
-live-agent callback receiver와 realtime-agent health client는 아직 없다.
+assignment/running readiness는 `live.stt.assume-ready=true`로 우회 중이다. Spring Redis caption consumer는
+현재 delta/completed만 처리하고 신규 started/final은 알 수 없는 type으로 폐기한다. live-agent callback
+receiver와 realtime-agent health client도 아직 없다.
 
 ## 1. Spring → LiveKit → realtime-agent dispatch metadata
 
@@ -70,7 +75,7 @@ sequenceDiagram
 - **Spring:** Room·권한 준비, explicit dispatch, assignment timeout, Room 삭제
 - **LiveKit:** 같은 `agentName`의 가용 Worker 선택과 job 단일 배정
 - **Python Worker:** 등록·재연결, 용량 보고, job process 실행, Room 참가와 STT
-- **공통 계약:** Java의 `agentName`과 Python의 `STT_AGENT_NAME`은 정확히 같아야 한다.
+- **공통 계약:** Java의 `agentName`과 Python의 `STT_AGENT_NAME`은 정확히 같아야 한다. dev는 `liveclass-realtime-stt-dev`, prod는 `liveclass-realtime-stt-prod`다.
 
 ### 2.2 Worker 등록과 용량
 
@@ -92,7 +97,7 @@ process target이고 provider 기본값은 12다. Nemotron의 active 설정이 �
 수로 계산하므로 12-request burst를 받으려면 idle도 12여야 한다. SDK reserved slot도 load에 포함해
 12개 한도를 초과해 수락하지 않는다. 13번째 이후 요청은 기존 job을 중단하지 않고 pending으로 둔다.
 
-같은 `STT_AGENT_NAME`의 Worker가 여러 개면 LiveKit이 가용 Worker에 분배한다. 모든 Worker가 FULL
+같은 **환경 안에서** `STT_AGENT_NAME`이 같은 Worker가 여러 개면 LiveKit이 가용 Worker에 분배한다. dev와 prod는 이름을 공유하면 안 된다. 공유하면 prod dispatch가 dev Redis에 연결된 Worker로 배정될 수 있다. 모든 Worker가 FULL
 이거나 없으면 job은 pending 상태로 남는다. LiveKit은 GPU EC2를 자동 확장하지 않으며 pending 순서와
 대기 SLA도 보장하지 않으므로 Java가 assignment timeout을 정해야 한다.
 
@@ -122,7 +127,7 @@ process target이고 provider 기본값은 12다. Nemotron의 active 설정이 �
 
 구현된 Phase 4a 경계:
 
-- Java `agentName`과 Python `STT_AGENT_NAME`을 같은 설정으로 관리한다.
+- Java `agentName`과 Python `STT_AGENT_NAME`을 환경별 같은 설정으로 관리한다(dev `liveclass-realtime-stt-dev`, prod `liveclass-realtime-stt-prod`).
 - Python과 같은 네 필드·순서의 metadata를 직렬화한다.
 - 같은 room·agent·metadata dispatch를 조회·재사용하고, 없으면 생성한다.
 - dispatch ID와 exact metadata를 start attempt에 저장하고 시작 실패 시 dispatch를 삭제한다.
@@ -139,7 +144,7 @@ process target이고 provider 기본값은 12다. Nemotron의 active 설정이 �
 
 ### 2.6 service health
 
-별도 Python health server는 host로 `127.0.0.1`만 허용하고, port는 기본 `8081`이며 `1~65535` 범위로 설정할 수 있다.
+별도 Python health server는 host로 `127.0.0.1`만 허용하고 port는 `1~65535` 범위로 설정할 수 있다. 배포 기본은 prod `8081`, dev `8082`다.
 `GET /health/live`는 server가 응답 가능하면 200이다. `GET /health/ready`는 설정된 모든 child의
 provider prewarm, AgentServer 시작과 현재 LiveKit 연결이 확인되면 200 `status=ready`, 아니면
 503 `status=notReady`를 반환한다.
@@ -147,20 +152,39 @@ provider prewarm, AgentServer 시작과 현재 LiveKit 연결이 확인되면 20
 readiness body에는 provider, expected/ready process 수, worker 시작과 LiveKit 연결 여부가 포함된다.
 expected process 수는 active job 수가 아니라 resolved idle process 수다. Redis, session lease, room
 audio, engine queue와 dispatch capacity는 검사하지 않으므로 job별 `STT_READY`를 대체하지 않는다.
-`GET /`는 기존 smoke 호환용 plain `OK`이고 `GET /worker`는 `:8081`에서 제공하지 않는다.
+`GET /`는 기존 smoke 호환용 plain `OK`이고 `GET /worker`는 prod `:8081`과 dev `:8082`에서 제공하지 않는다.
 
 공유 상태코드와 body는 [`docs/CONTRACT.md` §3-8](../../docs/CONTRACT.md#3-8-gpu-realtime-agent-service-health-http--ai-구현됨-spring-consumer-미구현), JSON 정본은 [health schema](contracts/schemas/realtime-agent-health.schema.json)를 따른다.
 
 
-## 3. realtime-agent → application Redis caption stream
+## 3. realtime-agent → application Redis caption stream — 후보 계약 변경 중
 
-- Redis URL: `REDIS_URL`로 주입한다. LiveKit 내부 Redis나 host `6380`을 전제로 하지 않는다.
+> AI 런타임은 아래 네 이벤트를 발행하도록 구현됐다. 공유 소비 계약은 아직 delta/completed 2종이며,
+> started/final의 채택·버전·롤아웃 순서는 Spring·ai-api 오너와 확정해야 한다. 소비자 반영 전에는 신규
+> 이벤트가 ACK 후 폐기되므로 발화별 렌더링과 정확 시간축은 end-to-end로 활성화되지 않는다.
+
+- Redis URL: `REDIS_URL`로 주입한다. dev는 password Redis tunnel `127.0.0.1:4000`, prod는 prod Redis tunnel `127.0.0.1:6390`을 사용한다. LiveKit 내부 Redis나 host `6380`을 전제로 하지 않는다.
 - stream key: `CAPTION_STREAM_KEY`, 기본값 `ai:captions:live`
 - write: 각 `XADD`를 직접 await하고 제한 시간 안에 응답하지 않거나 실패하면 job을 실패시킨다.
 - retention: 모든 `XADD`에 `MAXLEN ~ CAPTION_STREAM_MAXLEN`을 적용하며 기본값은 10,000 엔트리다.
   값은 양의 정수만 허용해 무제한 누적 설정을 막는다. 근사 trimming이므로 실제 길이는 일시적으로
   기준보다 조금 클 수 있고, 이는 바이트 상한이나 Redis 전체 `maxmemory` 설정이 아니다.
 - 모든 정수 필드: 부호 없는 최대 18자리 십진 문자열
+
+`caption.stream.started` fields:
+
+```json
+{
+  "contractVersion": "1",
+  "eventId": "22222222-2222-4222-8222-222222222222",
+  "type": "caption.stream.started",
+  "sessionId": "11111111-1111-4111-8111-111111111111",
+  "lessonId": "22222222-2222-4222-8222-222222222222",
+  "sttSessionId": "provider-session-01",
+  "audioStartedAt": "2026-07-27T00:00:00.000Z",
+  "occurredAt": "2026-07-27T00:00:00.001Z"
+}
+```
 
 `caption.delta` fields:
 
@@ -176,6 +200,26 @@ audio, engine queue와 dispatch capacity는 검사하지 않으므로 job별 `ST
   "streamElapsedMs": "1200",
   "text": "안녕하세요",
   "occurredAt": "2026-07-27T00:00:01.200Z"
+}
+```
+
+`caption.segment.final` fields:
+
+```json
+{
+  "contractVersion": "1",
+  "eventId": "33333333-3333-4333-8333-333333333334",
+  "type": "caption.segment.final",
+  "sessionId": "11111111-1111-4111-8111-111111111111",
+  "lessonId": "22222222-2222-4222-8222-222222222222",
+  "sttSessionId": "provider-session-01",
+  "segmentIndex": "0",
+  "lastSequence": "1",
+  "text": "안녕하세요",
+  "startStreamElapsedMs": "200",
+  "endStreamElapsedMs": "1200",
+  "boundaryReason": "SILENCE",
+  "occurredAt": "2026-07-27T00:00:01.210Z"
 }
 ```
 
@@ -196,13 +240,15 @@ audio, engine queue와 dispatch capacity는 검사하지 않으므로 job별 `ST
 }
 ```
 
-`sequence`와 `lastSequence`의 범위는 `(sessionId, sttSessionId)`로 식별되는 **한 job attempt의
-STT stream**이다. 각 attempt는 `sequence=1`부터 시작할 수 있으므로 consumer는 `sessionId`만으로
-sequence를 합치면 안 된다. completion에도 같은 `sttSessionId`를 넣어 어느 attempt를 닫는지
-명시한다. sequence는 publish 성공 뒤에만 commit한다. 빈 문자열 delta는 거부하지만 STT가 생성한
-공백 문자열은 바꾸거나 trim하지 않는다. `streamElapsedMs`는 Spring session clock이 아니라
-realtime-agent가 받은 첫 audio frame을 0으로 보는 stream-local clock이다. session-relative 자막에
-사용하려면 Java와 time-origin 변환 계약을 먼저 합의해야 한다.
+AI producer가 현재 구현한 attempt 순서는 started 1회, delta와 segment.final 반복, completion 1회다. `sequence`와
+`lastSequence` 범위는 `(sessionId, sttSessionId)`이고 `segmentIndex`는 0부터 증가한다. 각 retry는 새
+`sttSessionId`에서 시작하므로 consumer는 sessionId만으로 합치면 안 된다. sequence는 publish 성공 뒤에만
+commit한다. final의 `lastSequence` 이하 delta는 같은 발화의 미리보기이며 final text가 권위 있다.
+
+`audioStartedAt`은 첫 audio frame 시작, 즉 `streamElapsedMs=0`의 UTC다. segment start/end는 VAD가
+관측한 실제 speech frame 구간이며 pre-roll/trailing silence를 제외한다. 제안하는 Spring 변환은 raw 값을
+보존한 뒤 `audioStartedAt - clockOriginAt + streamElapsedMs`로 세션-ms를 계산하는 방식이다. 이 공식과
+fallback 정책은 아직 미확정이며, 채택 시 GPU와 Spring host의 NTP 동기가 전제다.
 
 completion은 LiveKit `ROOM_DELETED`를 명시적으로 받아 남은 audio와 engine event를 정상 drain한
 뒤에만 새로 발행을 시도한다. 다른 disconnect, cancellation, lease loss, provider 오류에서는 새
@@ -284,8 +330,8 @@ audio/event drain, engine/source cleanup, completion write, terminal callback, l
 
 1. Phase 4a dispatch 이후 job assignment/running readiness gate와 timeout·capacity 처리를 구현한다.
 2. metadata schema/fixture의 Java serializer와 양쪽 계약 테스트를 유지한다.
-3. Redis key, consumer group, 세션 종료 후 정리, event enum, timeout 결과의 멱등/fencing과 session
-   clock 변환을 확정하고 Spring consumer를 구현한다.
+3. Redis key, consumer group, 세션 종료 후 정리, event enum, `contractVersion`, timeout 결과의
+   멱등/fencing과 session clock 변환을 확정하고 Spring consumer를 구현한다.
 4. callback URL, HMAC 방식, event ID 멱등성과 terminal first-wins를 확정하고 Spring receiver를 구현한다.
 5. realtime-agent health client를 연결한다.
 6. available/full/unregistered Worker와 LiveKit·Redis·Spring 정상·실패 E2E를 별도 실행하고

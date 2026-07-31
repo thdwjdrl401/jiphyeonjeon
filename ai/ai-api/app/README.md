@@ -12,7 +12,7 @@ Spring 전용 `ai-api`의 실행 골격과 RAG application core다.
 - remote BGE query embedding과 SELECT-only pgvector hybrid 검색 adapter를 제공한다.
 - 근거만 포함한 prompt를 고정 GMS gateway로 보내 답변 text delta를 streaming한다.
 - 한 process에서 active/recent `requestId`를 제한하고 Redis consumer와 외부 client 생명주기를 소유한다.
-- 별도 consumer group으로 caption을 읽어 강의 노트 window·topic·Redis snapshot으로 축적한다.
+- 별도 consumer group으로 caption을 읽어 강의 노트 초안을 축적하고 종료 후 정제 snapshot을 발행한다.
 - Spring 내부 인증 구현을 교체 가능한 port 뒤에 두고, 미배선 상태는 fail-closed 처리한다.
 
 ## 구조와 흐름
@@ -25,7 +25,8 @@ request: Spring -> api/rag.py -> rag/service.py -> CombinedEvidenceRetriever -> 
 
 [강의 노트]
 같은 Redis caption Stream -> ai-live-notes-mvp-v1 -> lecture_notes pipeline
-                                                   `-> GMS JSON -> Redis snapshot/Stream
+                                                   `-> GMS JSON -> Redis note event Stream
+capture completed -> structured draft refinement -> refined snapshot
 ```
 
 | 요청 | 응답 |
@@ -47,7 +48,7 @@ request: Spring -> api/rag.py -> rag/service.py -> CombinedEvidenceRetriever -> 
 | [`adapters/`](adapters/README.md) | Redis consumer, pgvector search, remote BGE client |
 | [`api/`](api/README.md) | 내부 인증 seam과 FastAPI RAG adapter |
 | [`captions/`](captions/README.md) | current producer 계약 parser와 attempt-aware bounded store |
-| [`lecture_notes/`](lecture_notes/README.md) | ADR-0034의 window·topic·모델 호출·snapshot pipeline |
+| [`lecture_notes/`](lecture_notes/README.md) | ADR-0034의 window·topic·append·refined snapshot pipeline |
 | [`rag/`](rag/README.md) | transport-neutral 계약·port·오케스트레이션·SSE 인코딩 |
 | [`retrieval/`](retrieval/README.md) | query embedding 검증과 ACTIVE material 검색 service |
 

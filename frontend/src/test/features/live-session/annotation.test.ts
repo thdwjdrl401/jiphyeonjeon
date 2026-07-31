@@ -3,12 +3,18 @@ import {
   ANNOTATION_FRAME_HEIGHT,
   ANNOTATION_FRAME_WIDTH,
   annotationPlacement,
+  annotationStageScale,
+  decodeLaserStroke,
+  encodeLaserStroke,
+  laserOutlinePath,
+  laserPointFromPointer,
   applyAnnotationOp,
   decodeAnnotationOp,
   diffAnnotationElements,
   emptyAnnotationDocument,
   encodeAnnotationOp,
   visibleAnnotationElements,
+  WHITEBOARD_ELEMENT_ID,
   type AnnotationDocument,
   type AnnotationOp,
 } from '@/features/live-session/annotation'
@@ -101,6 +107,152 @@ describe('판서 배치 — 내용 바운딩 박스 오프셋 보정', () => {
   })
 })
 
+/**
+ * 강사 에디터는 고정 1920x1080 박스 안에서 살고, 그 박스를 배율로 축소해 보여준다.
+ *
+ * 이 배율을 쓰지 않고 에디터를 컨테이너에 그대로 채우면 문서 좌표가 <b>강사 창 크기에 종속</b>된다 —
+ * 창이 1000px일 때 중앙에 그은 획이 (500,281)로 기록되고 Egress는 26% 지점에 그린다. 창 크기를
+ * 바꾸면 판서가 영상 위에서 통째로 어긋난다. 실제로 그렇게 배포한 적이 있다.
+ */
+describe('판서 무대 배율', () => {
+  it('컨테이너 폭이 프레임 폭의 절반이면 배율도 절반이다', () => {
+    expect(annotationStageScale({ width: 960, height: 540 })).toBeCloseTo(0.5, 6)
+  })
+
+  it('창 크기가 달라져도 같은 scene 좌표가 화면에서 같은 비율 위치를 가리킨다', () => {
+    // scene (960, 540) = 프레임 중앙. 어떤 컨테이너에서도 화면 중앙이어야 한다.
+    for (const container of [
+      { width: 1920, height: 1080 },
+      { width: 1000, height: 562.5 },
+      { width: 640, height: 360 },
+      { width: 3840, height: 2160 },
+    ]) {
+      const scale = annotationStageScale(container)
+      expect((960 * scale) / container.width).toBeCloseTo(0.5, 6)
+      expect((540 * scale) / container.height).toBeCloseTo(0.5, 6)
+    }
+  })
+
+  it('16:9가 아닌 컨테이너에서는 짧은 축을 따른다 — 나가지 않는 영역에 그리지 않게 한다', () => {
+    // 세로가 부족한 경우: 높이 기준
+    expect(annotationStageScale({ width: 1920, height: 540 })).toBeCloseTo(0.5, 6)
+    // 가로가 부족한 경우: 폭 기준
+    expect(annotationStageScale({ width: 960, height: 1080 })).toBeCloseTo(0.5, 6)
+  })
+
+  it('크기를 아직 모르면 0이다 — 첫 렌더에서 잘못된 배율로 그리지 않는다', () => {
+    expect(annotationStageScale({ width: 0, height: 0 })).toBe(0)
+    expect(annotationStageScale({ width: 100, height: 0 })).toBe(0)
+  })
+})
+
+/**
+ * 레이저는 요소가 아니라 사라지는 궤적이라 op 파이프라인에 잡히지 않는다. 별도 topic으로 좌표만
+ * 흘려보내고 수신 측이 잔상을 그린다.
+ */
+describe('레이저 포인터', () => {
+  it('포인터 위치를 프레임 좌표로 옮긴다 — 컨테이너 크기와 무관하게 같은 지점', () => {
+    // 컨테이너가 절반 크기든 4배든, 화면 중앙은 프레임 (960, 540)이다.
+    for (const container of [
+      { left: 0, top: 0, width: 1920, height: 1080 },
+      { left: 100, top: 50, width: 960, height: 540 },
+      { left: 0, top: 0, width: 3840, height: 2160 },
+    ]) {
+      const point = laserPointFromPointer(
+        { clientX: container.left + container.width / 2, clientY: container.top + container.height / 2 },
+        container,
+        1000,
+      )
+      expect(point!.x).toBeCloseTo(960, 6)
+      expect(point!.y).toBeCloseTo(540, 6)
+    }
+  })
+
+  it('컨테이너 크기를 모르면 좌표를 만들지 않는다', () => {
+    expect(laserPointFromPointer({ clientX: 10, clientY: 10 }, { left: 0, top: 0, width: 0, height: 0 }, 1)).toBeNull()
+  })
+
+  /**
+   * Excalidraw는 <b>포인터를 누르고 있는 동안만</b> 궤적을 만든다(`button === "down"`).
+   * 그냥 마우스를 움직일 때도 보내면 강사 화면에는 아무것도 없는데 수강생 화면에만 궤적이 생긴다.
+   */
+  it('획 경계를 함께 싣는다 — 누른 순간·이동·뗀 순간', () => {
+    for (const phase of ['start', 'move', 'end'] as const) {
+      const stroke = { phase, points: [{ x: 1, y: 2, t: 3 }], zoom: 0.5 }
+      expect(decodeLaserStroke(encodeLaserStroke(stroke))).toEqual(stroke)
+    }
+  })
+
+  it('뗀 순간에는 점이 없어도 된다 — 획을 닫는 신호다', () => {
+    const stroke = { phase: 'end' as const, points: [], zoom: 1 }
+    expect(decodeLaserStroke(encodeLaserStroke(stroke))).toEqual(stroke)
+  })
+
+  /** Egress에서 예외가 나면 녹화 중 화면이 멈춘다 — 어떤 payload도 예외로 번지지 않게 한다. */
+  it.each([
+    ['빈 payload', new Uint8Array()],
+    ['JSON 아님', new Uint8Array([0xff, 0x00])],
+    ['봉투 버전 다름', new TextEncoder().encode(JSON.stringify({ v: 2, laser: { phase: 'move', points: [] } }))],
+    ['phase 없음', new TextEncoder().encode(JSON.stringify({ v: 1, laser: { points: [] } }))],
+    ['모르는 phase', new TextEncoder().encode(JSON.stringify({ v: 1, laser: { phase: 'zap', points: [] } }))],
+    ['points가 배열 아님', new TextEncoder().encode(JSON.stringify({ v: 1, laser: { phase: 'move', points: {} } }))],
+    ['판서 op를 잘못 넣음', new TextEncoder().encode(JSON.stringify({ v: 1, op: { type: 'clear', revision: 1 } }))],
+  ])('%s → 예외 없이 null', (_label, payload) => {
+    expect(decodeLaserStroke(payload)).toBeNull()
+  })
+
+  /**
+   * Excalidraw는 외곽선을 `size / zoom`으로 만든 뒤 viewport로 변환해(× zoom) 늘 화면 2px을 낸다.
+   * 수신 측이 zoom을 모르면 이 보정을 못 해 `2 × zoom`px이 되고, 강사 창이 작을수록 수강생 화면의
+   * 궤적이 가늘어진다.
+   */
+  it('굵기 보정용 zoom을 함께 싣는다', () => {
+    const stroke = { phase: 'move' as const, points: [{ x: 1, y: 2, t: 3 }], zoom: 0.25 }
+    expect(decodeLaserStroke(encodeLaserStroke(stroke))?.zoom).toBe(0.25)
+  })
+
+  it('zoom이 없거나 이상하면 1로 본다 — 굵기만 어긋나고 궤적은 그대로 보인다', () => {
+    for (const bad of [undefined, 0, -1, 'x']) {
+      const payload = new TextEncoder().encode(JSON.stringify({
+        v: 1, laser: { phase: 'move', points: [], zoom: bad },
+      }))
+      expect(decodeLaserStroke(payload)?.zoom).toBe(1)
+    }
+  })
+
+  it('좌표가 숫자가 아닌 점은 버린다', () => {
+    const payload = new TextEncoder().encode(JSON.stringify({
+      v: 1, laser: { phase: 'move', points: [{ x: 1, y: 2, t: 3 }, { x: 'a', y: 2, t: 3 }, { x: 4, y: 5 }] },
+    }))
+    expect(decodeLaserStroke(payload)).toEqual({ phase: 'move', points: [{ x: 1, y: 2, t: 3 }], zoom: 1 })
+  })
+
+  /**
+   * 강사 화면은 Excalidraw가, 수강생 화면은 우리가 그린다. Excalidraw는 외곽선 점을 직선으로 잇지
+   * 않고 각 변의 <b>중점</b>을 지나는 2차 곡선으로 이으므로(`getSvgPathFromStroke`), 직선으로 이으면
+   * 같은 점을 써도 획이 조금 더 두껍고 끝이 더 뻗는다 — 레이저가 살짝 밀려 보인다.
+   */
+  describe('외곽선 path — Excalidraw와 같은 곡선으로 잇는다', () => {
+    it('첫 점에서 시작해 중점을 지나는 곡선으로 잇고 닫는다', () => {
+      expect(laserOutlinePath([[0, 0], [10, 0], [10, 10], [0, 10]]))
+        .toBe('M0.00,0.00 Q10.00,0.00 10.00,5.00 T5.00,10.00 Z')
+    })
+
+    it('마지막 점도 중점 계산에 쓴다 — 빼면 끝이 짧아진다', () => {
+      const path = laserOutlinePath([[0, 0], [2, 0], [4, 0], [6, 0], [8, 0]])
+
+      // 마지막 두 점 (6,0)·(8,0)의 중점
+      expect(path).toContain('7.00,0.00')
+    })
+
+    /** Excalidraw도 점이 4개 미만이면 아무것도 그리지 않는다. 우리만 그리면 없어야 할 점이 남는다. */
+    it('점이 4개 미만이면 아무것도 그리지 않는다', () => {
+      expect(laserOutlinePath([])).toBe('')
+      expect(laserOutlinePath([[0, 0], [1, 1], [2, 2]])).toBe('')
+    })
+  })
+})
+
 describe('판서 op 적용', () => {
   function docWith(elements: Array<{ id: string; isDeleted?: boolean }>, revision = 1): AnnotationDocument {
     return { revision, elements }
@@ -174,6 +326,44 @@ describe('판서 op 적용', () => {
     expect(document.elements.map((e) => e.id)).toEqual(['x', 'y'])
   })
 
+  /**
+   * 강사가 새로고침하면 revision 카운터가 0부터 다시 시작하는데 Egress의 문서 revision은 살아 있다.
+   * 그 상태에서 새로 그린 획은 전부 "이미 본 op"로 버려져 <b>수강생에게 영영 나타나지 않는다</b> —
+   * 강사 화면에는 그려지므로 눈치채기 어렵다.
+   *
+   * 빈 스냅샷이 유일한 탈출구다. `snapshot`은 revision 검사를 건너뛰므로 반드시 적용되고, 그 값으로
+   * revision이 내려앉아 이후 낮은 번호의 op가 정상 처리된다.
+   */
+  it('새로고침으로 revision이 역행해도 빈 스냅샷으로 복구된다', () => {
+    // Egress는 이미 47까지 진행한 상태.
+    let doc: AnnotationDocument = { revision: 47, elements: [{ id: 'old' }] }
+
+    // 새로고침 직후의 획들 — revision이 1부터라 전부 버려진다.
+    for (const revision of [1, 2, 3]) {
+      const result = applyAnnotationOp(doc, { type: 'upsert', revision, elements: [{ id: `new-${revision}` }] })
+      doc = result.document
+    }
+    expect(doc.elements.map((e) => e.id)).toEqual(['old'])
+    expect(doc.revision).toBe(47)
+
+    // 접속 시 보내는 빈 스냅샷이 문서와 revision을 강사의 실제 상태로 되돌린다.
+    doc = applyAnnotationOp(doc, { type: 'snapshot', revision: 1, elements: [] }).document
+    expect(doc.elements).toEqual([])
+    expect(doc.revision).toBe(1)
+
+    // 이제 낮은 번호의 op가 정상 적용된다.
+    doc = applyAnnotationOp(doc, { type: 'upsert', revision: 2, elements: [{ id: 'after-reload' }] }).document
+    expect(doc.elements.map((e) => e.id)).toEqual(['after-reload'])
+  })
+
+  it('clear로는 복구되지 않는다 — revision 검사를 받아 똑같이 버려진다', () => {
+    const doc: AnnotationDocument = { revision: 47, elements: [{ id: 'old' }] }
+
+    const { document } = applyAnnotationOp(doc, { type: 'clear', revision: 1 })
+
+    expect(document.elements.map((e) => e.id)).toEqual(['old'])
+  })
+
   it('빈 문서는 revision 0에서 시작한다 — 첫 op(revision 1)가 바로 이어진다', () => {
     const { document, stale } = applyAnnotationOp(emptyAnnotationDocument(), {
       type: 'upsert',
@@ -183,6 +373,64 @@ describe('판서 op 적용', () => {
 
     expect(stale).toBe(false)
     expect(document.elements.map((e) => e.id)).toEqual(['first'])
+  })
+
+  /**
+   * op에는 순서 정보가 없어 수신 측은 도착 순으로 배열을 재구성한다(`upsert`는 Map 병합이라 새 id가
+   * 맨 뒤 = 맨 위층). 그래서 강사가 화이트보드를 판서 <b>아래</b>에 깔아도 수강생 화면에서는 나중에
+   * 도착한 화이트보드가 판서를 덮었다. 렌더 직전에 `index`로 정렬해야 양쪽이 같아진다.
+   */
+  it('z-order를 index로 복원한다 — 나중에 온 화이트보드가 판서를 덮지 않는다', () => {
+    // 도착 순: 판서가 먼저, 화이트보드가 나중. 하지만 index는 화이트보드가 더 아래(a0 < a1).
+    const document: AnnotationDocument = {
+      revision: 2,
+      elements: [
+        { id: 'stroke', index: 'a1' },
+        { id: 'whiteboard', index: 'a0' },
+      ],
+    }
+
+    expect(visibleAnnotationElements(document).map((e) => e.id)).toEqual(['whiteboard', 'stroke'])
+  })
+
+  it('index가 없는 요소는 들어온 순서를 지킨다', () => {
+    const document: AnnotationDocument = {
+      revision: 1,
+      elements: [{ id: 'first' }, { id: 'second' }, { id: 'third' }],
+    }
+
+    expect(visibleAnnotationElements(document).map((e) => e.id)).toEqual(['first', 'second', 'third'])
+  })
+
+  /**
+   * 일부만 index를 가진 상태에서 섞어 비교하면 추이적이지 않은 비교가 되어 정렬 결과를 예측할 수 없다.
+   * 그럴 때는 손대지 않는 편이 낫다 — 예측 가능한 쪽이 디버깅할 수 있다.
+   */
+  /**
+   * 화이트보드는 우리가 손으로 만든 요소라 index가 없다. index 정렬에만 기대면 정렬에서 빠져
+   * 도착 순(맨 뒤 = 맨 위)에 남아 판서를 덮는다 — 실제로 보고된 증상이다.
+   */
+  it('화이트보드는 index와 무관하게 언제나 맨 아래다', () => {
+    const document: AnnotationDocument = {
+      revision: 3,
+      elements: [
+        { id: 'stroke-1', index: 'a1' },
+        { id: WHITEBOARD_ELEMENT_ID },
+        { id: 'stroke-2', index: 'a2' },
+      ],
+    }
+
+    expect(visibleAnnotationElements(document).map((e) => e.id))
+      .toEqual([WHITEBOARD_ELEMENT_ID, 'stroke-1', 'stroke-2'])
+  })
+
+  it('index가 하나라도 없으면 정렬하지 않고 도착 순을 지킨다', () => {
+    const document: AnnotationDocument = {
+      revision: 1,
+      elements: [{ id: 'a', index: 'a2' }, { id: 'no-index' }, { id: 'b', index: 'a1' }],
+    }
+
+    expect(visibleAnnotationElements(document).map((e) => e.id)).toEqual(['a', 'no-index', 'b'])
   })
 
   it('지운 요소는 배열에 남기고 렌더에서만 뺀다 — Excalidraw 되돌리기가 그 표현을 요구한다', () => {

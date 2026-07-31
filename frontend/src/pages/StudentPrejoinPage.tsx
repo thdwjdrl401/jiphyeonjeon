@@ -7,6 +7,7 @@ import { isLiveEntryOpen } from '@/features/live-session/liveEntry'
 import { getLiveSession } from '@/features/live-session/liveSessionService'
 import {
   playSpeakerTest,
+  prefetchSpeakerTestChime,
   SPEAKER_TEST_CHANNEL_LABEL,
   SPEAKER_TEST_STEPS,
   type SpeakerTestChannel,
@@ -49,6 +50,10 @@ export default function StudentPrejoinPage() {
   // 재생 중에 화면을 떠나면 소리가 남는다 — 입장 버튼을 눌러 강의실로 넘어가는 게 정상 흐름이라
   // 실제로 자주 일어난다.
   useEffect(() => () => stopSpeakerTestRef.current?.(), [])
+
+  // 테스트음을 미리 받아 둔다. 버튼을 누른 뒤 내려받기 시작하면 느린 회선에서 "재생 중"인데
+  // 소리가 안 나는 구간이 생긴다.
+  useEffect(() => { prefetchSpeakerTestChime() }, [])
 
   // 닉네임을 수정하면 디바운스 후 선택된 인증 서비스 구현체에 즉시 반영한다.
   useEffect(() => {

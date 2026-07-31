@@ -3,8 +3,10 @@ package com.liveclass.live.service;
 import org.springframework.stereotype.Component;
 
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
@@ -12,10 +14,13 @@ import java.util.regex.Pattern;
  * Redis 자막 엔트리(모든 값 문자열) → {@link CaptionEvent} 파싱·검증. 와이어 정본
  * {@code caption-stream-entry.schema.json}의 필드 규칙을 강제한다:
  * <ul>
- *   <li>{@code contractVersion="1"}, {@code type} 2종만 허용.</li>
- *   <li>정수 필드(sequence·lastSequence·streamElapsedMs)는 부호 없는 십진 문자열(최대 18자리).</li>
+ *   <li>{@code contractVersion="1"}, {@code type} 4종만 허용(delta·completed·started·segment.final).</li>
+ *   <li>정수 필드(sequence·lastSequence·streamElapsedMs·segmentIndex·start/endStreamElapsedMs)는
+ *       부호 없는 십진 문자열(최대 18자리).</li>
  *   <li>{@code sessionId}·{@code lessonId}는 canonical UUID, {@code eventId}·{@code sttSessionId}는
  *       safeIdentifier(UUID 아님).</li>
+ *   <li>{@code audioStartedAt}(started)는 UTC(Z 또는 +00:00) date-time, {@code boundaryReason}
+ *       (segment.final)은 SILENCE·MAX_DURATION·STREAM_END만 허용.</li>
  * </ul>
  * 위반은 {@link CaptionParseException}(unchecked)으로 던진다 — consumer가 poison으로 ACK 폐기한다
  * (참조 구현 {@code ai/ai-api/app/adapters/redis_caption_consumer.py}와 대칭).
@@ -26,6 +31,7 @@ public class CaptionEventParser {
     private static final String CONTRACT_VERSION = "1";
     private static final int MAX_TEXT_LENGTH = 10_000;
     private static final String COMPLETED_REASON = "ROOM_DELETED";
+    private static final Set<String> BOUNDARY_REASONS = Set.of("SILENCE", "MAX_DURATION", "STREAM_END");
 
     /** 부호 없는 십진, 최대 18자리(스키마 nonNegativeIntegerString). Long 범위 안에 든다. */
     private static final Pattern UNSIGNED_DECIMAL = Pattern.compile("^(0|[1-9][0-9]{0,17})$");
@@ -48,12 +54,26 @@ public class CaptionEventParser {
                     eventId, type, sessionId, lessonId, sttSessionId,
                     unsignedLong(fields, "sequence"), null,
                     unsignedLong(fields, "streamElapsedMs"),
-                    text(fields), null, occurredAt);
+                    text(fields), null, occurredAt,
+                    null, null, null, null, null);
             case CaptionEvent.TYPE_COMPLETED -> new CaptionEvent(
                     eventId, type, sessionId, lessonId, sttSessionId,
                     null, unsignedLong(fields, "lastSequence"),
                     unsignedLong(fields, "streamElapsedMs"),
-                    null, requireEquals(fields, "reason", COMPLETED_REASON), occurredAt);
+                    null, requireEquals(fields, "reason", COMPLETED_REASON), occurredAt,
+                    null, null, null, null, null);
+            case CaptionEvent.TYPE_STARTED -> new CaptionEvent(
+                    eventId, type, sessionId, lessonId, sttSessionId,
+                    null, null, null, null, null, occurredAt,
+                    utcTimestamp(fields, "audioStartedAt"), null, null, null, null);
+            case CaptionEvent.TYPE_SEGMENT_FINAL -> new CaptionEvent(
+                    eventId, type, sessionId, lessonId, sttSessionId,
+                    null, unsignedLong(fields, "lastSequence"), null,
+                    text(fields), null, occurredAt, null,
+                    unsignedLong(fields, "segmentIndex"),
+                    unsignedLong(fields, "startStreamElapsedMs"),
+                    unsignedLong(fields, "endStreamElapsedMs"),
+                    boundaryReason(fields));
             default -> throw new CaptionParseException("알 수 없는 자막 type: " + type);
         };
     }
@@ -123,5 +143,25 @@ public class CaptionEventParser {
         } catch (DateTimeParseException e) {
             throw new CaptionParseException(key + " date-time 파싱 실패");
         }
+    }
+
+    /**
+     * UTC date-time({@code audioStartedAt}). 스키마 pattern {@code (Z|+00:00)$}를 강제한다 — 시각 앵커라
+     * 오프셋 표기를 UTC로 고정해 소비 측 변환 오차를 없앤다.
+     */
+    private OffsetDateTime utcTimestamp(Map<String, String> fields, String key) {
+        OffsetDateTime parsed = timestamp(fields, key);
+        if (!parsed.getOffset().equals(ZoneOffset.UTC)) {
+            throw new CaptionParseException(key + " UTC(Z 또는 +00:00) 아님");
+        }
+        return parsed;
+    }
+
+    private String boundaryReason(Map<String, String> fields) {
+        String value = requirePresent(fields, "boundaryReason");
+        if (!BOUNDARY_REASONS.contains(value)) {
+            throw new CaptionParseException("boundaryReason 허용값 아님: " + value);
+        }
+        return value;
     }
 }

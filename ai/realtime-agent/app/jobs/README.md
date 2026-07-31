@@ -7,8 +7,9 @@ LiveKit dispatch metadata를 검증하고 한 room job의 시작부터 종료·�
 ## 구조와 흐름
 
 metadata를 strict parsing한 뒤 assigned room이 정확히 `session-{sessionId}`인지 확인한다. Redis lease를 획득하고
-room 연결, audio 구독, STT·caption task를 시작한다. `ROOM_DELETED`를 정상 종료 신호로 삼아 deadline 안에서
-drain, completion, callback, lease 해제를 수행한다.
+room 연결, audio 구독, STT·caption task를 시작한다. 첫 chunk에서는 lifecycle observer를 await해
+`caption.stream.started` Redis write를 끝낸 뒤 engine에 audio를 넣으므로 delta가 앵커보다 앞설 수 없다.
+`ROOM_DELETED`를 정상 종료 신호로 삼아 deadline 안에서 drain, completion, callback, lease 해제를 수행한다.
 
 ## 파일 구성
 

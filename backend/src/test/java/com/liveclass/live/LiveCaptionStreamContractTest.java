@@ -3,6 +3,7 @@ package com.liveclass.live;
 import com.liveclass.live.config.CaptionStreamProperties;
 import com.liveclass.live.domain.LiveCaption;
 import com.liveclass.live.repository.LiveCaptionRepository;
+import com.liveclass.live.service.CaptionEvent;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -14,6 +15,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -85,7 +87,34 @@ class LiveCaptionStreamContractTest {
         assertThat(completed.getSequence()).isNull();
         assertThat(completed.getText()).isNull();
 
-        // 4) poison(sessionId 누락 → 스키마 위반) → 저장 안 함, ACK 폐기.
+        // 4) started fixture XADD → 시간 앵커 영속(ADR-0052). 단일 streamElapsedMs 없음.
+        redis.opsForStream().add(key, fixture("caption-stream-started.valid.json"));
+        await(() -> repository.existsByEventId("caption-event-started-1"));
+
+        LiveCaption started = repository.findByEventId("caption-event-started-1").orElseThrow();
+        assertThat(started.getEventType()).isEqualTo("caption.stream.started");
+        assertThat(started.getAudioStartedAt().toInstant())
+                .isEqualTo(OffsetDateTime.parse("2026-07-27T12:34:15.789Z").toInstant());
+        assertThat(started.getStreamElapsedMs()).isNull();
+        assertThat(started.getSequence()).isNull();
+        assertThat(started.getText()).isNull();
+        assertThat(started.getSegmentIndex()).isNull();
+
+        // 5) segment.final fixture XADD → 발화 경계·시각 영속(ADR-0052).
+        redis.opsForStream().add(key, fixture("caption-segment-final.valid.json"));
+        await(() -> repository.existsByEventId("caption-event-segment-1"));
+
+        LiveCaption segment = repository.findByEventId("caption-event-segment-1").orElseThrow();
+        assertThat(segment.getEventType()).isEqualTo("caption.segment.final");
+        assertThat(segment.getSegmentIndex()).isEqualTo(0L);
+        assertThat(segment.getLastSequence()).isEqualTo(1L);
+        assertThat(segment.getText()).isEqualTo(" 외");
+        assertThat(segment.getStartStreamElapsedMs()).isEqualTo(40000L);
+        assertThat(segment.getEndStreamElapsedMs()).isEqualTo(41000L);
+        assertThat(segment.getBoundaryReason()).isEqualTo("SILENCE");
+        assertThat(segment.getStreamElapsedMs()).isNull();   // 단일 좌표 없음
+
+        // 6) poison(sessionId 누락 → 스키마 위반) → 저장 안 함, ACK 폐기.
         Map<String, String> poison = new LinkedHashMap<>();
         poison.put("contractVersion", "1");
         poison.put("type", "caption.delta");
@@ -102,8 +131,20 @@ class LiveCaptionStreamContractTest {
         await(() -> pending(key) == 0L);
 
         assertThat(repository.existsByEventId("poison-1")).isFalse();
-        // delta(1) + completed(1) = 2행. 중복 delta·poison은 늘리지 않는다.
-        assertThat(repository.countBySessionId(FIXTURE_SESSION_ID)).isEqualTo(2L);
+        // delta·completed·started·segment.final = 4행. 중복 delta·poison은 늘리지 않는다.
+        assertThat(repository.countBySessionId(FIXTURE_SESSION_ID)).isEqualTo(4L);
+
+        // 7) 표시 대상 필터(RELAYED_TYPES, ADR-0052 2차): WS/리로드는 delta·completed·segment.final을 노출하고
+        //    started(시간 앵커)는 배제한다. 4행 중 started 1행만 빠진 3행.
+        assertThat(repository.findBySessionIdAndEventTypeInOrderByOccurredAtAscIdAsc(
+                FIXTURE_SESSION_ID, CaptionEvent.RELAYED_TYPES)).hasSize(3);
+        // 8) RAG contextTimeMs(CONTEXT_TIME_TYPES): segment.final(occurredAt 12:34:56.790Z)이 delta(…789Z)보다
+        //    늦지만 단일 streamElapsedMs가 없어 제외 → 최신 좌표 행은 streamElapsedMs가 있는 delta/completed다
+        //    (신규 type 최신행에서 null NPE 나던 회귀 방지).
+        LiveCaption latestCtx = repository.findFirstBySessionIdAndEventTypeInOrderByOccurredAtDescIdDesc(
+                FIXTURE_SESSION_ID, CaptionEvent.CONTEXT_TIME_TYPES).orElseThrow();
+        assertThat(CaptionEvent.CONTEXT_TIME_TYPES).contains(latestCtx.getEventType());
+        assertThat(latestCtx.getStreamElapsedMs()).isNotNull();
     }
 
     private long pending(String key) {

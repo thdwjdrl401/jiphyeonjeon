@@ -6,19 +6,20 @@ STT 엔진 이벤트를 순서가 있는 실시간 자막 이벤트로 바꾸고
 
 ## 구조와 흐름
 
-pipeline은 단일 `engine.events()` consumer로 delta를 읽고 `sequence`와 첫 audio frame 기준
-`streamElapsedMs`를 계산해 Redis publisher를 await한다. 정상 room 삭제 후에만 completed 이벤트를 만든다.
+pipeline은 첫 audio frame에서 started를 먼저 publish하고, 단일 `engine.events()` consumer로 delta와
+segment.final을 순서대로 Redis publisher에 await한다. final은 `segmentIndex`와 `lastSequence`로 delta를
+확정하며 정상 room 삭제 후에만 completed를 만든다.
 
 ## 파일 구성
 
-- `models.py`: 자막 delta·completed 내부 모델
-- `pipeline.py`: STT 이벤트 매핑, 순번·경과 시간, 완료 처리
+- `models.py`: started·delta·segment.final·completed 내부 모델
+- `pipeline.py`: STT 이벤트 매핑, delta/segment 순번, 시간 앵커와 완료 처리
 
 ## 경계와 불변식
 
-`sequence`는 `(sessionId, sttSessionId)` 범위에서 1부터 증가한다. `streamElapsedMs`는 세션 생성 시간이 아니라
-realtime-agent가 첫 audio frame을 받은 때가 0이다. `ROOM_DELETED`가 아닌 실패에서는 거짓 completed 이벤트를
-발행하지 않는다.
+`sequence`는 attempt에서 1부터, `segmentIndex`는 0부터 증가한다. `audioStartedAt`은
+`streamElapsedMs=0`인 첫 frame 시작 UTC다. segment.final 본문은 해당 `lastSequence`까지의 delta보다
+권위 있다. `ROOM_DELETED`가 아닌 실패에서는 거짓 completed를 발행하지 않는다.
 
 ## 검증
 

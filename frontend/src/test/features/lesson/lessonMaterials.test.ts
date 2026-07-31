@@ -20,7 +20,7 @@ describe('레슨 자료 API 계약', () => {
   })
 
   it('자료가 있으면 presigned 3단계와 연결 POST를 순서대로 호출한다', async () => {
-    const created = { lessonId: 'les-9', sectionId: 'sec-1', title: '새 강의', description: '설명', status: 'DRAFT' }
+    const created = { lessonId: 'les-9', sectionId: 'sec-1', title: '새 강의', description: '설명', status: 'PUBLISHED' }
     const ticket = {
       assetId: 'ast-1',
       uploadUrl: 'https://storage.example.com/upload',
@@ -68,7 +68,7 @@ describe('레슨 자료 API 계약', () => {
   })
 
   it('자료 업로드가 실패하면 어느 파일인지·레슨은 이미 저장됐음을 알리는 에러를 던진다', async () => {
-    const created = { lessonId: 'les-9', sectionId: 'sec-1', title: '새 강의', description: '설명', status: 'DRAFT' }
+    const created = { lessonId: 'les-9', sectionId: 'sec-1', title: '새 강의', description: '설명', status: 'PUBLISHED' }
     vi.spyOn(apiClient, 'post')
       .mockResolvedValueOnce({ data: created } as never)
       .mockRejectedValueOnce(new Error('발급 실패'))
@@ -107,7 +107,7 @@ describe('레슨 자료 API 계약', () => {
         sectionId: 'sec-1',
         title: '강의',
         description: '설명',
-        status: 'DRAFT',
+        status: 'PUBLISHED',
       },
     } as never)
 

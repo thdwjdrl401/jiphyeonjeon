@@ -103,42 +103,77 @@ export const mockLiveSessionService = {
   },
   subscribeCaptions(_sessionId, onEvent, onConnectionChange) {
     onConnectionChange('connected')
-    // 데모 자막을 델타 스트림 형태로 흉내 낸다: 각 데모 라인을 한 sttSession으로 흘리고,
-    // 마지막 라인은 completed 없이 남겨 "진행 중(pending)" 라이브 라인을 보여 준다.
+    // 데모 자막을 델타 + 확정 세그먼트 스트림으로 흉내 낸다: 각 데모 라인을 한 sttSession으로 흘리되,
+    // 델타(진행 중) 뒤에 caption.segment.final(권위 있는 확정 텍스트)로 마감한다. 마지막 라인은 세그먼트·
+    // completed 없이 델타만 남겨 "진행 중(pending)" 라이브 조각을 보여 준다.
     const occurredAt = new Date().toISOString()
     demoLiveCaptions.forEach((caption, index) => {
-      const sttSessionId = `mock-stt-${index}`
       onEvent({
         type: 'caption.delta',
         occurredAt,
-        // 데모 startMs는 세션 축(12:08=728s)이라 sessionMs로도 실어 학생 위치 동기화가 동작하게 한다.
-        payload: { sttSessionId, sequence: 1, streamElapsedMs: caption.startMs, sessionMs: caption.startMs, text: caption.text },
+        // 데모 startMs는 세션 축(12:08=728s)이라 sessionMs로도 실어 진행 중 조각의 위치 동기화가 동작하게 한다.
+        payload: { sttSessionId: `mock-stt-${index}`, sequence: 1, streamElapsedMs: caption.startMs, sessionMs: caption.startMs, text: caption.text },
       })
       if (index < demoLiveCaptions.length - 1) {
         onEvent({
+          type: 'caption.segment.final',
+          occurredAt,
+          payload: {
+            sttSessionId: `mock-stt-${index}`,
+            segmentIndex: 0,
+            lastSequence: 1,
+            text: caption.text,
+            startStreamElapsedMs: caption.startMs,
+            endStreamElapsedMs: caption.endMs,
+            boundaryReason: 'SILENCE',
+            sessionMs: caption.startMs,
+          },
+        })
+        onEvent({
           type: 'caption.stream.completed',
           occurredAt,
-          payload: { sttSessionId, lastSequence: 1, reason: 'ROOM_DELETED' },
+          payload: { sttSessionId: `mock-stt-${index}`, lastSequence: 1, reason: 'ROOM_DELETED' },
         })
       }
     })
     return () => onConnectionChange('disconnected')
   },
   async getCaptions() {
-    // 리로드는 WS 델타와 같은 스트림 이벤트로 시드된다. sttSessionId·sequence를 subscribeCaptions와
-    // 동일하게(`mock-stt-${index}`) 둬 실제 BE처럼 WS 델타와 멱등 병합되게 한다(중복 라인 방지).
+    // 리로드는 WS와 같은 스트림 이벤트로 시드된다. sttSessionId·sequence·segmentIndex를 subscribeCaptions와
+    // 동일하게 둬 실제 BE처럼 WS 이벤트와 멱등 병합되게 한다(중복 라인 방지). 확정 라인은 segment.final로,
+    // 마지막 진행 중 라인은 델타로만 시드한다.
     const occurredAt = new Date().toISOString()
-    return demoLiveCaptions.map((caption, index) => ({
-      type: 'caption.delta' as const,
-      occurredAt,
-      payload: {
-        sttSessionId: `mock-stt-${index}`,
-        sequence: 1,
-        streamElapsedMs: caption.startMs,
-        sessionMs: caption.startMs,
-        text: caption.text,
-      },
-    }))
+    return demoLiveCaptions.flatMap((caption, index) => {
+      const delta = {
+        type: 'caption.delta' as const,
+        occurredAt,
+        payload: {
+          sttSessionId: `mock-stt-${index}`,
+          sequence: 1,
+          streamElapsedMs: caption.startMs,
+          sessionMs: caption.startMs,
+          text: caption.text,
+        },
+      }
+      if (index === demoLiveCaptions.length - 1) return [delta]
+      return [
+        delta,
+        {
+          type: 'caption.segment.final' as const,
+          occurredAt,
+          payload: {
+            sttSessionId: `mock-stt-${index}`,
+            segmentIndex: 0,
+            lastSequence: 1,
+            text: caption.text,
+            startStreamElapsedMs: caption.startMs,
+            endStreamElapsedMs: caption.endMs,
+            boundaryReason: 'SILENCE' as const,
+            sessionMs: caption.startMs,
+          },
+        },
+      ]
+    })
   },
   // 목도 스트리밍 UX를 그대로 재현한다 — 델타를 조각내 흘린 뒤 근거를 실은 answer.done으로 끝낸다.
   // 한 번에 완성 문장을 주면 "누적 렌더·전송 중 비활성·취소"가 목 모드에서 아예 검증되지 않는다.

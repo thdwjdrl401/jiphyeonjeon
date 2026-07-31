@@ -35,13 +35,14 @@ describe('LiveClass AI 공개 페이지', () => {
 
     const search = screen.getByPlaceholderText('제목과 소개로 검색')
     await user.type(search, 'WebRTC')
-    await user.click(screen.getByRole('button', { name: '검색' }))
 
     await waitFor(() => expect(window.location.search).toContain('q=WebRTC'))
     expect(
       await screen.findByRole('heading', { name: 'WebRTC와 실시간 미디어' }),
     ).toBeInTheDocument()
-    expect(screen.getByText(/총/)).toHaveTextContent('1개의 커리큘럼')
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: '‘WebRTC’ 검색 결과' }).parentElement).toHaveTextContent('1개')
+    })
   })
 
   it('커리큘럼 상세 경로를 실제 앱 라우터에서 연다', async () => {

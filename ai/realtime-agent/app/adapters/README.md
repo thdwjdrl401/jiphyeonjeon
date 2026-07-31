@@ -11,7 +11,7 @@ application Redis와 Spring HTTP callback처럼 프로세스 밖 시스템에 �
 
 ## 파일 구성
 
-- `redis_caption_publisher.py`: `ai:captions:live` Stream에 delta·completed 이벤트를
+- `redis_caption_publisher.py`: `ai:captions:live` Stream에 started·delta·segment.final·completed를
   `XADD MAXLEN ~`로 제한 발행
 - `redis_session_lease.py`: `SET NX EX` 및 owner 비교 Lua로 중복 job 방지
 - `spring_status_callback.py`: 상태 payload 직렬화, 서명, 제한된 재시도
@@ -20,10 +20,16 @@ application Redis와 Spring HTTP callback처럼 프로세스 밖 시스템에 �
 
 Redis 자막 entry는 다음 camelCase 필드를 사용한다.
 
+- started: `type=caption.stream.started`, `sttSessionId`, `audioStartedAt`, `occurredAt`
 - delta: `contractVersion`, `eventId`, `type=caption.delta`, `sessionId`, `lessonId`,
   `sttSessionId`, `sequence`, `streamElapsedMs`, `text`, `occurredAt`
+- segment final: 공통 식별 필드와 `type=caption.segment.final`, `segmentIndex`, `lastSequence`, `text`,
+  `startStreamElapsedMs`, `endStreamElapsedMs`, `boundaryReason`, `occurredAt`
 - completed: 위 식별 필드와 `type=caption.stream.completed`, `lastSequence`,
-  `reason=ROOM_DELETED`, `occurredAt`
+  `streamElapsedMs`, `reason=ROOM_DELETED`, `occurredAt`
+started/final field는 AI producer 구현 기준의 변경 중 후보다. 공유 채택 상태와 버전 논의는
+[`../../CONTRACT.md` 3절](../../CONTRACT.md)을 따른다.
+
 
 Spring callback body는 `contractVersion`, `eventId`, `eventType=LIVE_AGENT_STATUS`, `sessionId`,
 `lessonId`, `jobId`, `state`, `occurredAt`과 실패 시 `error`를 담는다. 요청 헤더는

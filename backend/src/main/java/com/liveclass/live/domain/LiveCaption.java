@@ -35,7 +35,7 @@ public class LiveCaption {
     /** AI 스트림 이벤트 ID(safeIdentifier). 유일한 멱등키 — UNIQUE. */
     private String eventId;
 
-    /** caption.delta 또는 caption.stream.completed. */
+    /** caption.delta·caption.stream.completed·caption.stream.started·caption.segment.final. */
     private String eventType;
 
     private UUID sessionId;
@@ -45,23 +45,38 @@ public class LiveCaption {
     /** STT job attempt 식별자. sequence 접기 범위 = (sessionId, sttSessionId). */
     private String sttSessionId;
 
-    /** delta의 attempt-local 순번. completed에는 없어 null. */
+    /** delta의 attempt-local 순번. 그 외 type에는 없어 null. */
     private Long sequence;
 
-    /** completed가 보고한 마지막 sequence. delta에는 없어 null. */
+    /** completed·segment.final이 보고한 마지막 sequence. delta·started에는 없어 null. */
     private Long lastSequence;
 
-    /** raw attempt-local ms(agent 첫 프레임=0). 세션 상대 ms 아님. */
+    /** raw attempt-local ms(agent 첫 프레임=0). 세션 상대 ms 아님. started·segment.final엔 없어 null. */
     private Long streamElapsedMs;
 
-    /** delta 본문. completed에는 없어 null. */
+    /** delta·segment.final 본문. started·completed에는 없어 null. */
     private String text;
 
-    /** completed 종료 사유(ROOM_DELETED). delta에는 없어 null. */
+    /** completed 종료 사유(ROOM_DELETED). 그 외 type엔 없어 null. */
     private String reason;
 
     /** agent가 이벤트를 만든 시각(스트림 occurredAt). */
     private OffsetDateTime occurredAt;
+
+    /** started의 절대 시간 앵커(streamElapsedMs=0의 UTC, ADR-0052). 그 외 type엔 null. */
+    private OffsetDateTime audioStartedAt;
+
+    /** segment.final의 attempt 내 0-based 세그먼트 순번(ADR-0052). 그 외 type엔 null. */
+    private Long segmentIndex;
+
+    /** segment.final 세그먼트 시작 raw attempt-local ms(ADR-0052). 그 외 type엔 null. */
+    private Long startStreamElapsedMs;
+
+    /** segment.final 세그먼트 끝 raw attempt-local ms(ADR-0052). 그 외 type엔 null. */
+    private Long endStreamElapsedMs;
+
+    /** segment.final 경계 사유(SILENCE·MAX_DURATION·STREAM_END, ADR-0052). 그 외 type엔 null. */
+    private String boundaryReason;
 
     @CreationTimestamp
     private OffsetDateTime receivedAt;

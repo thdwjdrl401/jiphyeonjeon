@@ -4,7 +4,12 @@ import asyncio
 import math
 from typing import Protocol
 
-from app.captions.models import CaptionDelta, CaptionStreamCompleted
+from app.captions.models import (
+    CaptionDelta,
+    CaptionSegmentFinal,
+    CaptionStreamCompleted,
+    CaptionStreamStarted,
+)
 from app.contracts.serialization import utc_rfc3339
 
 CAPTION_STREAM_KEY = "ai:captions:live"
@@ -22,7 +27,9 @@ class RedisStreamClient(Protocol):
     ) -> object: ...
 
 
-def to_stream_fields(event: CaptionDelta | CaptionStreamCompleted) -> dict[str, str]:
+def to_stream_fields(
+    event: CaptionStreamStarted | CaptionDelta | CaptionSegmentFinal | CaptionStreamCompleted,
+) -> dict[str, str]:
     common = {
         "contractVersion": event.contract_version,
         "eventId": event.event_id,
@@ -30,6 +37,13 @@ def to_stream_fields(event: CaptionDelta | CaptionStreamCompleted) -> dict[str, 
         "sessionId": str(event.session_id),
         "lessonId": str(event.lesson_id),
     }
+    if isinstance(event, CaptionStreamStarted):
+        return {
+            **common,
+            "sttSessionId": event.stt_session_id,
+            "audioStartedAt": utc_rfc3339(event.audio_started_at),
+            "occurredAt": utc_rfc3339(event.occurred_at),
+        }
     if isinstance(event, CaptionDelta):
         return {
             **common,
@@ -37,6 +51,18 @@ def to_stream_fields(event: CaptionDelta | CaptionStreamCompleted) -> dict[str, 
             "sequence": str(event.sequence),
             "streamElapsedMs": str(event.stream_elapsed_ms),
             "text": event.text,
+            "occurredAt": utc_rfc3339(event.occurred_at),
+        }
+    if isinstance(event, CaptionSegmentFinal):
+        return {
+            **common,
+            "sttSessionId": event.stt_session_id,
+            "segmentIndex": str(event.segment_index),
+            "lastSequence": str(event.last_sequence),
+            "text": event.text,
+            "startStreamElapsedMs": str(event.start_stream_elapsed_ms),
+            "endStreamElapsedMs": str(event.end_stream_elapsed_ms),
+            "boundaryReason": event.boundary_reason,
             "occurredAt": utc_rfc3339(event.occurred_at),
         }
     return {
@@ -77,13 +103,22 @@ class RedisCaptionPublisher:
         self._stream_maxlen = stream_maxlen
         self._publish_timeout_seconds = float(publish_timeout_seconds)
 
+    async def publish_started(self, event: CaptionStreamStarted) -> None:
+        await self._publish(event)
+
     async def publish_delta(self, event: CaptionDelta) -> None:
+        await self._publish(event)
+
+    async def publish_segment_final(self, event: CaptionSegmentFinal) -> None:
         await self._publish(event)
 
     async def publish_completed(self, event: CaptionStreamCompleted) -> None:
         await self._publish(event)
 
-    async def _publish(self, event: CaptionDelta | CaptionStreamCompleted) -> None:
+    async def _publish(
+        self,
+        event: CaptionStreamStarted | CaptionDelta | CaptionSegmentFinal | CaptionStreamCompleted,
+    ) -> None:
         async with asyncio.timeout(self._publish_timeout_seconds):
             await self._client.xadd(
                 self._stream_key,

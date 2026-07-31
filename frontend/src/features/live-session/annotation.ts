@@ -22,6 +22,113 @@ export const ANNOTATION_FRAME_HEIGHT = 1080
 export const ANNOTATION_TOPIC = 'annotation'
 
 /**
+ * 레이저 포인터 전용 topic. 판서 op와 <b>같은 채널에 섞지 않는다.</b>
+ *
+ * <p>레이저는 성격이 정반대다 — 초당 수십 건이고, 1초면 사라지며, 유실돼도 무해하다. op 스트림에
+ * 태우면 `revision`이 폭증하고(유실 감지가 의미를 잃는다) 신뢰성 전송의 재전송 비용만 든다.
+ * 그래서 별도 topic에 <b>lossy</b>로 보낸다.
+ */
+export const ANNOTATION_LASER_TOPIC = 'annotation-laser'
+
+/**
+ * 레이저 잔상 감쇠 시간(ms). Excalidraw의 `DECAY_TIME`과 같은 값이어야 강사·수강생 화면이 같아진다
+ * (excalidraw `laser-trails.ts`의 `getTrailOptions`).
+ */
+export const LASER_DECAY_TIME = 1000
+
+/**
+ * 머리로부터 이 개수만큼 떨어진 점부터 가늘어진다. Excalidraw의 `DECAY_LENGTH`와 같은 값.
+ */
+export const LASER_DECAY_LENGTH = 50
+
+/** Excalidraw가 레이저에 쓰는 색(`DEFAULT_LASER_COLOR`). */
+export const LASER_COLOR = 'red'
+
+/**
+ * 레이저 외곽선을 Excalidraw와 <b>같은 모양의</b> path로 만든다(`getSvgPathFromStroke`).
+ *
+ * <p>Excalidraw는 외곽선 점을 직선으로 잇지 않는다. 각 변의 <b>중점</b>을 지나는 2차 곡선(`Q`·`T`)으로
+ * 이어 모서리를 깎는다. 직선으로 이으면 같은 점을 써도 획이 조금 더 두껍고 <b>끝이 조금 더 뻗는다</b> —
+ * 눈에는 레이저가 강사가 가리킨 곳에서 살짝 밀린 것으로 읽힌다. 강사 화면은 Excalidraw가, 수강생
+ * 화면은 우리가 그리므로 이 차이가 그대로 두 화면의 차이가 된다.
+ *
+ * <p>점이 4개 미만이면 빈 문자열이다 — Excalidraw도 그때는 아무것도 그리지 않는다.
+ */
+export function laserOutlinePath(outline: readonly (readonly number[])[]): string {
+  const length = outline.length
+  if (length < 4) return ''
+
+  const mid = (a: number, b: number) => ((a + b) / 2).toFixed(2)
+  const first = outline[0]
+  const second = outline[1]
+  const third = outline[2]
+
+  let path = `M${first[0].toFixed(2)},${first[1].toFixed(2)}`
+    + ` Q${second[0].toFixed(2)},${second[1].toFixed(2)}`
+    + ` ${mid(second[0], third[0])},${mid(second[1], third[1])} T`
+  for (let i = 2; i < length - 1; i += 1) {
+    const current = outline[i]
+    const next = outline[i + 1]
+    path += `${mid(current[0], next[0])},${mid(current[1], next[1])} `
+  }
+  return `${path}Z`
+}
+
+/**
+ * Excalidraw가 `LaserPointer`에 넘기는 옵션 그대로. 강사 화면은 Excalidraw가 그리고 수강생 화면은
+ * 우리가 그리므로, <b>같은 라이브러리에 같은 옵션</b>을 주어야 두 화면이 같아진다.
+ *
+ * <p>`sizeMapping`은 나이와 머리로부터의 거리 둘 다로 굵기를 줄인다. `pressure` 자리에는 압력이
+ * 아니라 <b>점이 찍힌 시각</b>이 들어간다 — Excalidraw가 `addPoint([x, y, performance.now()])`로
+ * 그렇게 쓰기 때문이다.
+ */
+export function laserTrailOptions(now: () => number) {
+  const easeOut = (t: number) => 1 - (1 - t) * (1 - t)
+  return {
+    simplify: 0,
+    streamline: 0.4,
+    sizeMapping: (c: { pressure: number; totalLength: number; currentIndex: number }) => {
+      const age = Math.max(0, 1 - (now() - c.pressure) / LASER_DECAY_TIME)
+      const tail = (LASER_DECAY_LENGTH - Math.min(LASER_DECAY_LENGTH, c.totalLength - c.currentIndex))
+        / LASER_DECAY_LENGTH
+      return Math.min(easeOut(tail), easeOut(age))
+    },
+  }
+}
+
+/**
+ * 레이저 궤적 한 조각. 프레임 좌표(1920x1080)와 강사 기준 시각을 함께 싣는다.
+ *
+ * <p>시각을 싣는 이유는 잔상 소멸 때문만이 아니다. 나중에 "강사가 어디에 머물렀나"(dwell)를 뽑아
+ * 강조 지점으로 쓰려면 시간축이 필요하다 — 지금 저장하지 않더라도 그 선택지를 닫지 않는다.
+ */
+export interface LaserPoint {
+  x: number
+  y: number
+  /** 강사 브라우저 기준 단조 시각(ms). 절대 시각이 아니라 잔상 계산용 상대값이다. */
+  t: number
+}
+
+/**
+ * 레이저 한 획의 경계. <b>포인터를 누르고 있는 동안만</b> 궤적이 존재한다 — Excalidraw가 그렇게
+ * 동작한다(`button === "down"`일 때만 `startPath`/`addPointToPath`). 그냥 마우스를 움직이는 것으로는
+ * 아무것도 그려지지 않는다.
+ */
+export interface LaserStroke {
+  phase: 'start' | 'move' | 'end'
+  points: LaserPoint[]
+  /**
+   * 획을 그릴 때 강사 화면의 zoom. <b>굵기를 맞추는 데 쓴다.</b>
+   *
+   * <p>Excalidraw는 외곽선을 `size / zoom` scene 단위로 만든 뒤 viewport로 변환한다(`× zoom`) —
+   * 결과가 zoom과 무관하게 늘 화면 2px이다. 수신 측이 이 보정을 빼면 `2 × zoom`px이 되어, 강사 창이
+   * 작을수록(zoom이 작을수록) 수강생 화면의 궤적이 가늘어진다. Egress는 강사의 zoom을 알 수 없으므로
+   * 획에 실어 보낸다.
+   */
+  zoom: number
+}
+
+/**
  * 판서 요소. Excalidraw 요소 JSON을 그대로 싣는다.
  *
  * <p>우리가 직접 다루는 필드만 좁게 선언하고 나머지는 통과시킨다. Excalidraw의 내부 타입 경로는
@@ -34,6 +141,14 @@ export interface AnnotationElement {
    * ({@link diffAnnotationElements}).
    */
   version?: number
+  /**
+   * Excalidraw의 fractional index. <b>z-order의 정본</b>이다(사전식으로 비교한다).
+   *
+   * <p>op에는 순서 정보가 없어 수신 측은 도착 순으로 배열을 재구성한다. 그러면 나중에 온 요소가 항상
+   * 맨 위가 되어, 강사 화면에서 아래에 깔린 화이트보드가 수강생 화면에서는 판서를 덮는다. 렌더 직전에
+   * 이 값으로 정렬해야 양쪽이 같아진다({@link visibleAnnotationElements}).
+   */
+  index?: string
   /** 지운 요소도 남긴다 — Excalidraw가 되돌리기(undo)를 위해 요구하는 표현이다. */
   isDeleted?: boolean
   [key: string]: unknown
@@ -154,9 +269,35 @@ export function applyAnnotationOp(
   }
 }
 
-/** 화면에 실제로 그려지는 요소만. Excalidraw는 지운 요소를 배열에 남겨 둔다. */
+/**
+ * 화면에 실제로 그려지는 요소만, <b>z-order대로</b>.
+ *
+ * <p>두 가지를 한다. 지운 요소를 빼고(Excalidraw는 배열에 남겨 둔다), `index`(fractional index)로
+ * 정렬한다.
+ *
+ * <p><b>정렬이 없으면 강사와 수강생 화면이 갈린다.</b> op에는 순서 정보가 없어 수신 측은 도착 순으로
+ * 배열을 재구성한다({@link applyAnnotationOp}의 `upsert`는 Map 병합이라 새 id가 맨 뒤에 붙는다).
+ * 그래서 강사가 화이트보드를 판서 <b>아래</b>에 깔아도 수강생 화면에서는 나중에 도착한 화이트보드가
+ * 맨 위로 올라와 판서를 덮는다. 속성 패널의 Layers(앞으로/뒤로)도 같은 이유로 수강생에게만 안 먹는다.
+ *
+ * <p>`index`는 사전식으로 비교하는 문자열이다. <b>모든 요소가 index를 가질 때만</b> 정렬한다 —
+ * 일부만 가진 상태에서 섞어 비교하면 "A는 B보다 앞, B는 C보다 앞, 그런데 A와 C는 도착 순"처럼
+ * 추이적이지 않은 비교가 되어 정렬 결과를 예측할 수 없다. 하나라도 없으면 도착 순을 그대로 둔다.
+ *
+ * <p>실제로는 Excalidraw가 씬을 갱신할 때 index를 채워 주므로 publish되는 요소는 모두 index를 갖는다.
+ * 이 분기는 옛 op나 손으로 만든 요소를 위한 방어다.
+ */
 export function visibleAnnotationElements(document: AnnotationDocument): AnnotationElement[] {
-  return document.elements.filter((element) => element.isDeleted !== true)
+  const visible = document.elements.filter((element) => element.isDeleted !== true)
+
+  // 화이트보드는 정의상 <b>배경</b>이라 언제나 맨 아래다. 우리가 손으로 만든 요소라 index가 없을 수
+  // 있어 아래 정렬에서 빠질 수 있는데, 그러면 나중에 도착한 판이 판서를 덮는다. 규칙으로 못박는다.
+  const board = visible.filter((element) => element.id === WHITEBOARD_ELEMENT_ID)
+  const rest = visible.filter((element) => element.id !== WHITEBOARD_ELEMENT_ID)
+
+  if (!rest.every((element) => typeof element.index === 'string')) return [...board, ...rest]
+  const ordered = [...rest].sort((a, b) => (a.index! < b.index! ? -1 : a.index! > b.index! ? 1 : 0))
+  return [...board, ...ordered]
 }
 
 /**
@@ -190,6 +331,76 @@ export function annotationPlacement(
 }
 
 /**
+ * 화이트보드 요소의 고정 id. 토글을 여러 번 눌러도 하나만 존재하게 하고, 지울 때 이 id로 찾는다.
+ */
+export const WHITEBOARD_ELEMENT_ID = 'liveclass-whiteboard'
+
+/**
+ * 프레임 전체를 덮는 불투명 판. 화면공유 없이 판서만 할 때 쓴다.
+ *
+ * <p><b>왜 배경색이 아니라 요소인가.</b> Excalidraw의 `viewBackgroundColor`는 요소가 아니라 appState라
+ * 데이터 채널로 흐르지 않는다. 그것을 쓰려면 op에 필드를 더하고 Egress 렌더에도 분기를 넣어야 한다.
+ * 반면 요소로 두면 <b>기존 upsert/delete/스냅샷 경로를 그대로 타고</b> Egress는 아무 변경 없이 그린다.
+ *
+ * <p>맨 뒤에 놓고 `locked`로 잠근다 — 잠그지 않으면 강사가 판서를 하려다 판을 선택해 끌어버린다.
+ */
+export function whiteboardElement(color = '#ffffff'): AnnotationElement {
+  return {
+    id: WHITEBOARD_ELEMENT_ID,
+    type: 'rectangle',
+    x: 0,
+    y: 0,
+    width: ANNOTATION_FRAME_WIDTH,
+    height: ANNOTATION_FRAME_HEIGHT,
+    angle: 0,
+    strokeColor: 'transparent',
+    backgroundColor: color,
+    fillStyle: 'solid',
+    strokeWidth: 1,
+    strokeStyle: 'solid',
+    // 손그림 질감을 끈다. 판 테두리가 삐뚤면 화면 경계가 지저분해진다.
+    roughness: 0,
+    opacity: 100,
+    roundness: null,
+    seed: 1,
+    version: 1,
+    versionNonce: 1,
+    isDeleted: false,
+    groupIds: [],
+    frameId: null,
+    boundElements: null,
+    updated: 1,
+    link: null,
+    locked: true,
+  }
+}
+
+/**
+ * 강사 에디터의 zoom. 이 값이 논리 프레임을 강사 컨테이너에 매핑한다.
+ *
+ * <p><b>왜 zoom인가.</b> Excalidraw의 scene 좌표 단위는 `zoom: 1`일 때 컨테이너의 CSS 픽셀이다.
+ * 에디터를 컨테이너에 그대로 채우면 <b>문서 좌표가 강사 창 크기에 종속</b>된다 — 창이 1000px일 때
+ * 화면 중앙에 그은 획이 `(500, 281)`로 기록되고, Egress는 그것을 `500/1920 = 26%` 지점에 그린다.
+ * 창 크기를 바꾸면 판서가 영상 위에서 통째로 어긋난다.
+ *
+ * <p>대신 `zoom = 컨테이너폭 / 1920`, `scroll = 0`으로 두면 Excalidraw의 좌표 변환
+ * (`viewport = (scene + scroll) * zoom`)에 따라 scene `(1920, 1080)`이 컨테이너 우하단에 정확히
+ * 맞는다. scene 좌표가 곧 논리 프레임 좌표가 되어 창 크기·전체화면과 무관해진다.
+ *
+ * <p>CSS `transform: scale()`로 고정 1920x1080 박스를 축소하는 방법을 먼저 시도했지만 <b>동작하지
+ * 않는다</b>. Excalidraw가 `getBoundingClientRect()`로 컨테이너를 재는데 그 값은 transform이 적용된
+ * 크기여서, 에디터가 자기 viewport를 축소된 크기로 잡고 거기에 배율이 한 번 더 걸린다(실측: 무대
+ * 960x540인데 캔버스가 480x270).
+ *
+ * <p>컨테이너가 16:9가 아닐 수도 있으므로 짧은 축을 기준으로 삼는다 — 넘치는 쪽이 잘려 강사가
+ * 실제로 나가지 않는 영역에 그리는 일을 막는다.
+ */
+export function annotationStageScale(container: { width: number; height: number }): number {
+  if (!(container.width > 0) || !(container.height > 0)) return 0
+  return Math.min(container.width / ANNOTATION_FRAME_WIDTH, container.height / ANNOTATION_FRAME_HEIGHT)
+}
+
+/**
  * 판서 op를 데이터 채널 payload로 만든다.
  *
  * <p>topic으로 이미 걸러지지만 payload에도 형식을 남긴다 — 다른 기능이 topic을 재사용하거나 옛
@@ -202,6 +413,61 @@ export function annotationPlacement(
 export function encodeAnnotationOp(op: AnnotationOp): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(JSON.stringify({ v: 1, op })) as Uint8Array<ArrayBuffer>
 }
+
+/**
+ * 강사 화면의 포인터 위치를 논리 프레임 좌표로 옮긴다.
+ *
+ * <p>에디터는 `zoom = 컨테이너폭 / 1920`, `scroll = 0`으로 프레임을 컨테이너에 맞춘다
+ * ({@link annotationStageScale}). 그 역이 곧 이 변환이다 — 컨테이너 안 거리(px)를 zoom으로 나누면
+ * 프레임 좌표가 된다.
+ *
+ * <p>이게 틀리면 <b>학생 화면에서 레이저가 엉뚱한 곳을 가리킨다</b>. 강사는 자기 커서를 보므로
+ * 어긋남이 드러나지 않는다.
+ */
+export function laserPointFromPointer(
+  pointer: { clientX: number; clientY: number },
+  container: { left: number; top: number; width: number; height: number },
+  at: number,
+): LaserPoint | null {
+  const zoom = annotationStageScale(container)
+  if (zoom <= 0) return null
+  return {
+    x: (pointer.clientX - container.left) / zoom,
+    y: (pointer.clientY - container.top) / zoom,
+    t: at,
+  }
+}
+
+/** 레이저 궤적 payload. op와 형식을 나눠 서로를 오해석하지 않게 한다. */
+export function encodeLaserStroke(stroke: LaserStroke): Uint8Array<ArrayBuffer> {
+  return new TextEncoder().encode(
+    JSON.stringify({ v: 1, laser: { phase: stroke.phase, points: stroke.points, zoom: stroke.zoom } }),
+  ) as Uint8Array<ArrayBuffer>
+}
+
+/**
+ * 레이저 payload를 되돌린다. 해석할 수 없으면 `null`이다 — Egress에서 예외가 나면 녹화가 멈춘다.
+ */
+export function decodeLaserStroke(payload: Uint8Array): LaserStroke | null {
+  try {
+    const parsed = JSON.parse(new TextDecoder().decode(payload)) as { v?: unknown; laser?: unknown }
+    if (!parsed || parsed.v !== 1 || !parsed.laser || typeof parsed.laser !== 'object') return null
+    const laser = parsed.laser as { phase?: unknown; points?: unknown; zoom?: unknown }
+    if (laser.phase !== 'start' && laser.phase !== 'move' && laser.phase !== 'end') return null
+    if (!Array.isArray(laser.points)) return null
+    // zoom이 없거나 이상하면 1로 본다 — 굵기만 어긋나고 궤적은 그대로 보이는 편이 낫다.
+    const zoom = typeof laser.zoom === 'number' && laser.zoom > 0 ? laser.zoom : 1
+    const points = (laser.points as unknown[]).filter((point): point is LaserPoint => {
+      if (!point || typeof point !== 'object') return false
+      const p = point as Partial<LaserPoint>
+      return [p.x, p.y, p.t].every((value) => typeof value === 'number' && Number.isFinite(value))
+    })
+    return { phase: laser.phase, points, zoom }
+  } catch {
+    return null
+  }
+}
+
 
 /**
  * payload를 op로 되돌린다. 해석할 수 없으면 `null`이다.

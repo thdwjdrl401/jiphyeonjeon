@@ -15,6 +15,7 @@ from app.domain import (
     BGE_M3_DIMENSIONS,
     ChunkRecord,
     ExistingIndexVersion,
+    MaterialScope,
     StagedMaterial,
     StaleMaterialVersionError,
 )
@@ -341,6 +342,42 @@ class PgvectorIndexRepository:
                 ),
                 {"version_id": version_id},
             )
+
+    async def resolve_active_scope(self, tenant_id: str, material_id: UUID) -> MaterialScope | None:
+        """Recover a material's invariant scope and current version by identity alone.
+
+        Lets a delete request that only carries materialId/lessonId (ADR-0006) still pass
+        curriculum_id and the current material_version into delete_job's scope check, without
+        Spring adding curriculum_id to the EMBED_DELETE wire payload.
+        """
+
+        async with self._engine.begin() as connection:
+            await connection.execute(self._set_runtime_role)
+            row = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT curriculum_id, lesson_id,
+                                   max(material_version) AS material_version
+                            FROM ai.material_version
+                            WHERE tenant_id = :tenant_id AND material_id = :material_id
+                            GROUP BY curriculum_id, lesson_id
+                            """
+                        ),
+                        {"tenant_id": tenant_id, "material_id": material_id},
+                    )
+                )
+                .mappings()
+                .one_or_none()
+            )
+        if row is None:
+            return None
+        return MaterialScope(
+            curriculum_id=row["curriculum_id"],
+            lesson_id=row["lesson_id"],
+            material_version=int(row["material_version"]),
+        )
 
     async def delete_job(self, material: StagedMaterial) -> int:
         """Delete a material index while retaining an idempotent version tombstone."""

@@ -36,4 +36,19 @@ public class LiveAccessGuard {
         }
         throw new LiveSessionForbiddenException("이 라이브에 접근 권한이 없습니다. 수강 신청·승인이 필요합니다.");
     }
+
+    /**
+     * 쓰기 허용: <b>세션 소유 강사만</b>. 수강생은 읽을 수 있어도 쓸 수 없다.
+     *
+     * <p>판서(ADR-0051)가 이 게이트를 쓴다. 판서의 writer는 강사 하나라는 전제 위에 revision 채번이
+     * 서 있어서, 수강생이 쓸 수 있으면 번호가 충돌하고 수신 측의 유실 감지가 무의미해진다.
+     */
+    @Transactional(readOnly = true)
+    public void requireOwner(UUID sessionId, UUID userId) {
+        LiveSession session = liveSessionRepository.findById(sessionId)
+                .orElseThrow(() -> new LiveSessionNotFoundException("라이브 세션을 찾을 수 없습니다."));
+        if (!userId.equals(session.getInstructorId())) {
+            throw new LiveSessionForbiddenException("이 라이브의 강사만 할 수 있습니다.");
+        }
+    }
 }

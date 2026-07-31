@@ -14,7 +14,6 @@ def test_uses_loopback_defaults() -> None:
     assert settings.bge_base_url is None
     assert settings.gms_api_key is None
     assert settings.lecture_note_model is None
-    assert settings.lecture_note_snapshot_ttl_seconds == 86_400
     assert settings.rag_request_max_active == 256
 
 

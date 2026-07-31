@@ -16,6 +16,7 @@ from app.stt.engine import (
     EngineCompleted,
     EngineEvent,
     EngineWarning,
+    SegmentFinal,
     SttStreamContext,
     SttStreamStarted,
     TextDelta,
@@ -36,6 +37,13 @@ class SpeechSegmenter(Protocol):
 @dataclass(frozen=True, slots=True)
 class _WorkerFailure:
     error: Exception
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderSegmentFinal:
+    """Provider-authoritative final transcript for one VAD segment."""
+
+    text: str
 
 
 class SegmentedStreamingEngine(ABC):
@@ -177,16 +185,35 @@ class SegmentedStreamingEngine(ABC):
                 assert isinstance(item, SpeechSegment)
                 transcript = self._transcribe(item, context)
                 provider_wall_latency_ms = 0.0
+                emitted_parts: list[str] = []
+                authoritative_final: str | None = None
                 while True:
                     started_at = time.perf_counter()
                     try:
-                        text = await anext(transcript)
+                        output = await anext(transcript)
                     except StopAsyncIteration:
                         provider_wall_latency_ms += (time.perf_counter() - started_at) * 1_000
                         break
                     provider_wall_latency_ms += (time.perf_counter() - started_at) * 1_000
-                    if text:
-                        await self._events.put(TextDelta(text, item.end_ms))
+                    if isinstance(output, ProviderSegmentFinal):
+                        authoritative_final = output.text
+                    elif output:
+                        emitted_parts.append(output)
+                        await self._events.put(TextDelta(output, item.end_ms))
+                final_text = (
+                    authoritative_final
+                    if authoritative_final is not None
+                    else "".join(emitted_parts)
+                )
+                if final_text:
+                    await self._events.put(
+                        SegmentFinal(
+                            final_text,
+                            item.start_ms,
+                            item.end_ms,
+                            item.boundary_reason,
+                        )
+                    )
                 logger.debug(
                     "STT segment processed: provider=%s segment_duration_ms=%d "
                     "provider_wall_latency_ms=%.3f queue_depth=%d",
@@ -221,7 +248,7 @@ class SegmentedStreamingEngine(ABC):
         self,
         segment: SpeechSegment,
         context: SttStreamContext,
-    ) -> AsyncIterator[str]: ...
+    ) -> AsyncIterator[str | ProviderSegmentFinal]: ...
 
     async def _close_provider(self) -> None:
         return None
