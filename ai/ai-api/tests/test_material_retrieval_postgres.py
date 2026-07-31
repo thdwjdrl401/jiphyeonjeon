@@ -29,6 +29,7 @@ async def _create_schema(engine: AsyncEngine, runtime_role: str) -> None:
                 CREATE TABLE ai.material_version (
                   id bigint PRIMARY KEY,
                   lesson_id uuid NOT NULL,
+                  curriculum_id uuid NOT NULL,
                   material_id uuid NOT NULL,
                   material_version integer NOT NULL,
                   state varchar(16) NOT NULL
@@ -71,6 +72,7 @@ async def _insert_chunk(
     *,
     row_id: int,
     lesson_id,
+    curriculum_id,
     material_id,
     state: str,
     content: str,
@@ -79,6 +81,7 @@ async def _insert_chunk(
     values: Mapping[str, object] = {
         "id": row_id,
         "lesson_id": str(lesson_id),
+        "curriculum_id": str(curriculum_id),
         "material_id": str(material_id),
         "state": state,
         "content": content,
@@ -89,8 +92,11 @@ async def _insert_chunk(
             text(
                 """
                 INSERT INTO ai.material_version (
-                  id, lesson_id, material_id, material_version, state
-                ) VALUES (:id, CAST(:lesson_id AS uuid), CAST(:material_id AS uuid), 1, :state)
+                  id, lesson_id, curriculum_id, material_id, material_version, state
+                ) VALUES (
+                  :id, CAST(:lesson_id AS uuid), CAST(:curriculum_id AS uuid),
+                  CAST(:material_id AS uuid), 1, :state
+                )
                 """
             ),
             values,
@@ -116,20 +122,27 @@ async def _insert_chunk(
         )
 
 
-def test_real_postgres_returns_only_active_chunks_from_requested_lesson(
+def test_real_postgres_shares_active_chunks_across_lessons_in_the_same_curriculum(
     integration_database: IntegrationDatabase,
 ) -> None:
+    """ADR-0005: search is scoped by curriculum_id, so a sibling lesson's active material is
+    included, while a different curriculum's material (even if ACTIVE) is excluded."""
+
     async def scenario() -> None:
         engine = create_async_engine(integration_database.database_url)
         lesson_id = uuid4()
-        other_lesson_id = uuid4()
+        sibling_lesson_id = uuid4()
+        curriculum_id = uuid4()
+        other_curriculum_id = uuid4()
         active_material_id = uuid4()
+        sibling_material_id = uuid4()
         try:
             await _create_schema(engine, integration_database.runtime_role)
             await _insert_chunk(
                 engine,
                 row_id=1,
                 lesson_id=lesson_id,
+                curriculum_id=curriculum_id,
                 material_id=active_material_id,
                 state="ACTIVE",
                 content="target active material",
@@ -139,6 +152,7 @@ def test_real_postgres_returns_only_active_chunks_from_requested_lesson(
                 engine,
                 row_id=2,
                 lesson_id=lesson_id,
+                curriculum_id=curriculum_id,
                 material_id=uuid4(),
                 state="RETIRED",
                 content="target retired material",
@@ -147,10 +161,21 @@ def test_real_postgres_returns_only_active_chunks_from_requested_lesson(
             await _insert_chunk(
                 engine,
                 row_id=3,
-                lesson_id=other_lesson_id,
+                lesson_id=sibling_lesson_id,
+                curriculum_id=curriculum_id,
+                material_id=sibling_material_id,
+                state="ACTIVE",
+                content="target sibling lesson material",
+                embedding=_vector(1.0),
+            )
+            await _insert_chunk(
+                engine,
+                row_id=4,
+                lesson_id=uuid4(),
+                curriculum_id=other_curriculum_id,
                 material_id=uuid4(),
                 state="ACTIVE",
-                content="target other lesson",
+                content="target other curriculum",
                 embedding=_vector(1.0),
             )
 
@@ -162,13 +187,13 @@ def test_real_postgres_returns_only_active_chunks_from_requested_lesson(
                 ),
             )
             hits = await service.retrieve(
-                lesson_id=lesson_id,
+                curriculum_id=curriculum_id,
                 query_text="target",
                 top_k=10,
             )
 
-            assert [hit.material_id for hit in hits] == [active_material_id]
-            assert [hit.text for hit in hits] == ["target active material"]
+            assert {hit.material_id for hit in hits} == {active_material_id, sibling_material_id}
+            assert all(hit.curriculum_id == curriculum_id for hit in hits)
         finally:
             await engine.dispose()
 

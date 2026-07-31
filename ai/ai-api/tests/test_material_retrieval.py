@@ -74,11 +74,12 @@ class FakeEngine:
         return FakeTransaction(self.connection)
 
 
-def _hit(lesson_id: UUID, material_id: UUID) -> MaterialChunkHit:
+def _hit(lesson_id: UUID, curriculum_id: UUID, material_id: UUID) -> MaterialChunkHit:
     return MaterialChunkHit(
         chunk_id=10,
         material_version_id=20,
         lesson_id=lesson_id,
+        curriculum_id=curriculum_id,
         material_id=material_id,
         material_version=2,
         page=3,
@@ -91,20 +92,20 @@ def _hit(lesson_id: UUID, material_id: UUID) -> MaterialChunkHit:
 
 
 def test_service_normalizes_query_embedding_before_scoped_search() -> None:
-    lesson_id = uuid4()
-    expected_hit = _hit(lesson_id, uuid4())
+    curriculum_id = uuid4()
+    expected_hit = _hit(uuid4(), curriculum_id, uuid4())
     embedding = FakeEmbedding([3.0, 4.0, *([0.0] * 1022)])
     repository = FakeRepository((expected_hit,))
     service = ActiveMaterialRetrievalService(embedding, repository)
 
     result = asyncio.run(
-        service.retrieve(lesson_id=lesson_id, query_text="  vector query  ", top_k=7)
+        service.retrieve(curriculum_id=curriculum_id, query_text="  vector query  ", top_k=7)
     )
 
     assert result == (expected_hit,)
     assert embedding.observed_text == "vector query"
     assert repository.call is not None
-    assert repository.call["lesson_id"] == lesson_id
+    assert repository.call["curriculum_id"] == curriculum_id
     assert repository.call["query_text"] == "vector query"
     observed_vector = repository.call["query_embedding"]
     assert isinstance(observed_vector, tuple)
@@ -124,11 +125,12 @@ def test_service_rejects_invalid_query_embedding(vector, error: str) -> None:
     service = ActiveMaterialRetrievalService(FakeEmbedding(vector), FakeRepository())
 
     with pytest.raises(ValueError, match=error):
-        asyncio.run(service.retrieve(lesson_id=uuid4(), query_text="question"))
+        asyncio.run(service.retrieve(curriculum_id=uuid4(), query_text="question"))
 
 
-def test_repository_sql_enforces_role_active_lesson_scope_and_maps_hits() -> None:
+def test_repository_sql_enforces_role_active_curriculum_scope_and_maps_hits() -> None:
     lesson_id = uuid4()
+    curriculum_id = uuid4()
     material_id = uuid4()
     engine = FakeEngine(
         [
@@ -136,6 +138,7 @@ def test_repository_sql_enforces_role_active_lesson_scope_and_maps_hits() -> Non
                 "chunk_id": 10,
                 "material_version_id": 20,
                 "lesson_id": lesson_id,
+                "curriculum_id": curriculum_id,
                 "material_id": str(material_id),
                 "material_version": 2,
                 "page": 3,
@@ -154,24 +157,24 @@ def test_repository_sql_enforces_role_active_lesson_scope_and_maps_hits() -> Non
 
     hits = asyncio.run(
         repository.search_active(
-            lesson_id=lesson_id,
+            curriculum_id=curriculum_id,
             query_text="active query",
             query_embedding=[1.0, *([0.0] * 1023)],
             top_k=5,
         )
     )
 
-    assert hits == (_hit(lesson_id, material_id),)
+    assert hits == (_hit(lesson_id, curriculum_id, material_id),)
     assert engine.connection.calls[0] == ("SET LOCAL ROLE ai_reader_test", None)
     statement, parameters = engine.connection.calls[1]
     compact_sql = " ".join(statement.split())
     assert "JOIN ai.document_chunk dc ON dc.material_version_id = mv.id" in compact_sql
     assert "JOIN ai.chunk_embedding ce ON ce.chunk_id = dc.id" in compact_sql
-    assert "mv.lesson_id = CAST(:lesson_id AS uuid)" in compact_sql
+    assert "mv.curriculum_id = CAST(:curriculum_id AS uuid)" in compact_sql
     assert "mv.state = 'ACTIVE'" in compact_sql
     assert "1.0 / (60.0 + vector_rank)" in compact_sql
     assert parameters is not None
-    assert parameters["lesson_id"] == str(lesson_id)
+    assert parameters["curriculum_id"] == str(curriculum_id)
 
 
 @pytest.mark.parametrize("runtime_role", ["AI_APP", "bad-role", "x; DROP ROLE x"])

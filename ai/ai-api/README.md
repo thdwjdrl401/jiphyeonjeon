@@ -39,6 +39,7 @@ X-Internal-Signature: <base64-hmac-signature>
 {
   "requestId": "request-1",
   "lessonId": "11111111-1111-4111-8111-111111111111",
+  "curriculumId": "55555555-5555-4555-8555-555555555555",
   "sessionId": "33333333-3333-4333-8333-333333333333",
   "question": "방금 설명한 개념은 무엇인가요?",
   "contextTimeMs": 615000,
