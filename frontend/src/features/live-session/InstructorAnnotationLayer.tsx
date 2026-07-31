@@ -3,14 +3,26 @@ import {
   WHITEBOARD_ELEMENT_ID,
   annotationStageScale,
   diffAnnotationElements,
+  referencedFiles,
   laserPointFromPointer,
   whiteboardElement,
   type AnnotationChange,
   type AnnotationElement,
+  type AnnotationFiles,
   type LaserPoint,
   type LaserStroke,
 } from './annotation'
-import { loadExcalidraw, type ExcalidrawModule } from './excalidrawRuntime'
+import AnnotationActionRing, { type AnnotationAction } from './AnnotationActionRing'
+import {
+  interpretAnnotation,
+  latexFontSize,
+  placeAtSelection,
+  selectionBounds,
+  type AnnotationInterpretation,
+  type InterpretMode,
+} from './annotationInterpret'
+import { loadExcalidraw, loadMermaid, type ExcalidrawModule } from './excalidrawRuntime'
+import { mathFileEntry, renderMathSvg } from './mathRuntime'
 
 /**
  * 판서 기본 색. 강의 화면은 대체로 밝은 슬라이드거나 어두운 코드 에디터인데, Excalidraw 기본
@@ -23,17 +35,31 @@ const DEFAULT_STROKE_COLOR = '#e03131'
  * 여기서 그 경로에 의존하면 업그레이드가 이 파일의 컴파일을 깨뜨린다.
  */
 interface ExcalidrawApi {
-  updateScene: (scene: { elements?: readonly AnnotationElement[]; appState?: Record<string, unknown> }) => void
+  updateScene: (scene: {
+    elements?: readonly AnnotationElement[]
+    appState?: Record<string, unknown>
+    /** 이 변경을 되돌리기 스택에 올릴지. 확인 절차를 없앤 대신 Ctrl+Z가 유일한 되돌림이다. */
+    captureUpdate?: string
+  }) => void
   getAppState: () => {
     zoom?: { value: number }
     scrollX?: number
     scrollY?: number
     activeTool?: { type?: string }
+    selectedElementIds?: Record<string, boolean>
   }
   getSceneElements: () => readonly AnnotationElement[]
+  getFiles: () => AnnotationFiles
+  /**
+   * 파일은 <b>여기로</b> 넣는다. `updateScene`은 files를 받지 않아 실어 보내면 조용히 버려지고,
+   * 이미지 요소만 남아 그림이 보이지 않는다.
+   */
+  addFiles: (files: readonly { id: string; mimeType: string; dataURL: string; created: number }[]) => void
 }
 
 interface InstructorAnnotationLayerProps {
+  /** 판서 해석 요청에 쓴다(§3-6e). 브라우저가 모델 게이트웨이를 직접 부르지 않는다. */
+  sessionId: string
   /** 판서를 켜 둔 동안만 mount한다. 껐을 때 무거운 에디터를 붙여 둘 이유가 없다. */
   active: boolean
   /** 판서 변경을 데이터 채널로 내보낸다. */
@@ -69,6 +95,11 @@ interface InstructorAnnotationLayerProps {
    * 복원본이 무시되거나, 반대로 강사가 그 사이 그린 획을 덮는다.
    */
   restoredElements: AnnotationElement[] | null
+  /**
+   * 저장돼 있던 파일들(수식 SVG 등). 요소만 되살리면 이미지가 가리킬 것이 없어 <b>빈 자리</b>가
+   * 된다 — 새로고침하면 수식이 사라진 것처럼 보인다.
+   */
+  restoredFiles: AnnotationFiles | null
 }
 
 /**
@@ -85,6 +116,7 @@ interface InstructorAnnotationLayerProps {
  * 배경을 그대로 쓰면 영상을 덮어버린다.
  */
 export default function InstructorAnnotationLayer({
+  sessionId,
   active,
   onPublish,
   audienceRevision,
@@ -92,6 +124,7 @@ export default function InstructorAnnotationLayer({
   whiteboard,
   onLaser,
   restoredElements,
+  restoredFiles,
 }: InstructorAnnotationLayerProps) {
   /**
    * 에디터 컴포넌트와 메뉴 조립에 쓰는 `MainMenu`를 함께 들고 있는다. 둘 다 같은 지연 청크에서 오므로
@@ -107,6 +140,11 @@ export default function InstructorAnnotationLayer({
   const knownRef = useRef(new Map<string, number>())
   /** 마지막으로 본 전체 요소. 스냅샷을 다시 낼 때 쓴다. */
   const elementsRef = useRef<AnnotationElement[]>([])
+  /**
+   * 마지막으로 본 파일들. 스냅샷에도 실어야 한다 — 도중에 합류한 Egress는 그 전에 흐른 upsert를
+   * 받지 못하므로, 스냅샷에 파일이 없으면 수식이 빈 자리로 녹화된다.
+   */
+  const filesRef = useRef<AnnotationFiles>({})
 
   /**
    * 논리 프레임(1920x1080)을 컨테이너에 매핑하는 zoom을 유지한다.
@@ -172,16 +210,52 @@ export default function InstructorAnnotationLayer({
    * Excalidraw는 `onChange`로 <b>매번 전체 요소 배열</b>을 준다(diff가 아니다). 그대로 실어 보내면
    * 판서가 쌓일수록 획 하나가 수백 KB가 되므로, 요소의 `version`을 비교해 바뀐 것만 보낸다.
    */
-  const handleChange = useCallback((elements: readonly AnnotationElement[]) => {
+  /**
+   * 강사가 지금 고른 요소들. 판서 해석(§3-6e)의 <b>범위</b>다 — 모델에게 "어느 요소를 바꿀지"
+   * 맞히게 하지 않고 이 선택을 그대로 넘긴다.
+   *
+   * <p>화이트보드는 제외한다. 배경으로 깔아 둔 판이지 정리 대상이 아니다.
+   */
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+
+  /**
+   * 그린 것이 하나라도 있는지. <b>`elementsRef`로는 안 된다</b> — ref를 바꿔도 리렌더가 일어나지
+   * 않아서, 강사가 처음 획을 그어도 정리 진입점이 나타나지 않는다.
+   */
+  const [hasElements, setHasElements] = useState(false)
+
+  const handleChange = useCallback((
+    elements: readonly AnnotationElement[],
+    appState?: { selectedElementIds?: Record<string, boolean> },
+    files?: AnnotationFiles,
+  ) => {
     // 스크롤·확대가 조금이라도 밀리면 되돌린다. 판서는 영상 위에 얹히므로 캔버스가 밀리는 순간
     // 강사가 보는 자리와 합성에 나가는 자리가 갈린다 — 그런데 강사 화면에서는 정상으로 보인다.
     // 입력을 막는 것(handleWheel/키보드)이 1차 방어고, 이건 그것을 빠져나간 경우의 2차 방어다.
     applyFrameMapping()
 
     elementsRef.current = elements.filter((element) => element.isDeleted !== true)
+    if (files) filesRef.current = files
+    setHasElements(elementsRef.current.some((element) => element.id !== WHITEBOARD_ELEMENT_ID))
     const { changes, known } = diffAnnotationElements(knownRef.current, elements)
     knownRef.current = known
-    for (const change of changes) onPublish(change)
+    for (const change of changes) {
+      // 이미지 요소는 데이터를 담지 않고 `fileId`로 가리키기만 한다. 파일을 함께 싣지 않으면
+      // 수식이 수강생 화면에서 빈 자리가 된다(§3-6b).
+      //
+      // 다만 <b>이번에 실린 요소가 가리키는 것만</b> 보낸다. 전부 실으면 획 하나를 그을 때마다
+      // 판서에 있는 모든 수식 SVG가 데이터 채널과 DB로 다시 나간다.
+      onPublish(change.type === 'upsert'
+        ? { ...change, files: referencedFiles(change.elements, filesRef.current) }
+        : change)
+    }
+
+    const picked = Object.entries(appState?.selectedElementIds ?? {})
+      .filter(([id, on]) => on && id !== WHITEBOARD_ELEMENT_ID)
+      .map(([id]) => id)
+    // 같은 값이면 state를 건드리지 않는다 — onChange는 포인터가 움직일 때도 불린다.
+    setSelectedIds((current) =>
+      current.length === picked.length && current.every((id, i) => id === picked[i]) ? current : picked)
   }, [applyFrameMapping, onPublish])
 
   /**
@@ -202,14 +276,280 @@ export default function InstructorAnnotationLayer({
     if (elementsRef.current.length > 0) return
     seededRef.current = true
     elementsRef.current = [...restoredElements]
+    // 파일을 <b>먼저</b> 넣는다. 요소가 먼저 들어가면 그 사이 렌더에서 가리킬 파일이 없다.
+    if (restoredFiles) {
+      const list = Object.values(restoredFiles)
+      if (list.length > 0) api.addFiles(list)
+      filesRef.current = { ...filesRef.current, ...restoredFiles }
+    }
     const known = new Map<string, number>()
     for (const element of restoredElements) known.set(element.id, element.version ?? 0)
     knownRef.current = known
     api.updateScene({ elements: restoredElements })
     // 수신 측에도 내보낸다. `knownRef`를 채웠으므로 뒤따르는 `onChange`의 diff는 아무것도 찾지 못한다 —
     // 여기서 보내지 않으면 강사 화면에만 판서가 돌아오고 수강생 화면은 빈 채로 남는다.
-    onPublish({ type: 'snapshot', elements: restoredElements })
-  }, [onPublish, restoredElements, ui])
+    onPublish({
+      type: 'snapshot',
+      elements: restoredElements,
+      files: referencedFiles(restoredElements, filesRef.current),
+    })
+  }, [onPublish, restoredElements, restoredFiles, ui])
+
+  /* ── 판서 해석(ADR-0054, §3-6e) ────────────────────────────────────────────── */
+
+  const [busyAction, setBusyAction] = useState<string | null>(null)
+  /** 지금 고치고 있는 수식의 LaTeX. null이면 편집 중이 아니다. */
+  const [editingMath, setEditingMath] = useState<string | null>(null)
+  const [failure, setFailure] = useState<string | null>(null)
+  /** 방금 무엇을 넣었는지. 되돌리는 방법과 함께 잠깐 보여 준다. */
+  const [applied, setApplied] = useState<string | null>(null)
+  useEffect(() => {
+    if (!applied) return undefined
+    // 확인 절차를 없앤 만큼 무슨 일이 일어났는지는 알려야 한다. 다만 계속 떠 있으면 판서를 가린다.
+    const timer = setTimeout(() => setApplied(null), 4000)
+    return () => { clearTimeout(timer) }
+  }, [applied])
+
+  const selectedElements = useCallback(
+    () => elementsRef.current.filter((element) => selectedIds.includes(element.id)),
+    [selectedIds])
+
+  /**
+   * 선택한 요소만 PNG로 뽑는다. 모델이 <b>읽을</b> 용도다.
+   *
+   * <p>판서 문서가 벡터인데도 굳이 래스터화하는 이유는 필기 인식이 지각 문제이기 때문이다 —
+   * 좌표 배열로는 손글씨를 읽어내지 못한다(ADR-0054). 좌표는 이미 우리가 갖고 있으므로 이미지에서
+   * 얻을 필요가 없다.
+   *
+   * <p>배경을 <b>흰색으로 칠한다.</b> 투명 PNG는 검게 합성되어 검은 획이 사라진다.
+   */
+  const exportSelectionPng = useCallback(async (elements: readonly AnnotationElement[]) => {
+    const { exportToCanvas } = await loadExcalidraw()
+    const canvas = await exportToCanvas({
+      elements: elements as never,
+      appState: { exportBackground: true, viewBackgroundColor: '#ffffff' } as never,
+      files: null,
+      exportPadding: 16,
+    })
+    return canvas.toDataURL('image/png')
+  }, [])
+
+  /**
+   * 해석 결과를 씬에 넣는다.
+   *
+   * <p><b>여기가 유일한 주입 지점이다.</b> 서버는 판서를 발행하지 않는다 — 그러면 revision 채번의
+   * 단일 writer 전제가 깨지고, 그 어긋남은 강사 화면에 드러나지 않는다(§3-6b). 씬을 고치면 그 뒤는
+   * 기존 경로가 알아서 간다: `onChange` → diff → 데이터 채널 → 영속화.
+   *
+   * <p><b>확인을 받지 않는다.</b> 매 정리마다 확인 창을 띄우면 강의 흐름이 끊기고, 잘못 나온 것을
+   * 되돌리는 비용은 그보다 훨씬 싸다 — 강사는 이미 되돌리기를 쓰고 있다. 대신 이 변경이 되돌리기
+   * 스택에 반드시 올라가야 한다(`captureUpdate`).
+   */
+  /**
+   * 선택한 것이 우리가 넣은 수식 하나인지. 그렇다면 <b>다시 쓸 수 있다</b>.
+   *
+   * <p>수식을 그림으로 넣는 순간 내용을 고칠 수 없게 된다 — ADR-0051이 Excalidraw를 고른 이유가
+   * "결과가 다시 고칠 수 있는 객체여야 한다"였으므로 그대로 두면 그 전제를 깬다. 그래서 넣을 때
+   * LaTeX 원문을 요소에 붙여 두고(`customData`), 여기서 그것을 꺼내 다시 렌더한다.
+   */
+  const selectedMathLatex = useCallback((): string | null => {
+    const picked = selectedElements()
+    if (picked.length !== 1) return null
+    const custom = picked[0].customData as { liveclassMathLatex?: string } | undefined
+    return custom?.liveclassMathLatex ?? null
+  }, [selectedElements])
+
+  /**
+   * 고친 LaTeX로 수식 그림을 갈아 끼운다.
+   *
+   * <p>자리와 크기는 <b>지금 그 요소가 놓인 자리</b>를 그대로 쓴다. 강사가 옮겨 두었을 수 있는데
+   * 고쳤다고 원래 자리로 되돌아가면 놀란다.
+   */
+  const reeditMath = useCallback(async (latex: string) => {
+    const api = apiRef.current
+    const picked = selectedElements()
+    if (!api || picked.length !== 1) return
+    const target = picked[0]
+    const bounds = selectionBounds([target])
+    if (!bounds) return
+
+    setBusyAction('math')
+    try {
+      const { convertToExcalidrawElements, CaptureUpdateAction } = await loadExcalidraw()
+      const fileId = `math-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+      const rendered = await renderMathSvg(latex, latexFontSize(bounds))
+      const created = convertToExcalidrawElements([{
+        type: 'image',
+        x: 0,
+        y: 0,
+        width: rendered.width,
+        height: rendered.height,
+        fileId,
+        customData: { liveclassMathLatex: latex },
+      }] as never) as unknown as AnnotationElement[]
+
+      const placed = placeAtSelection(created, bounds)
+      api.addFiles(Object.values(mathFileEntry(fileId, rendered, Date.now())))
+      api.updateScene({
+        elements: [...api.getSceneElements().filter((element) => element.id !== target.id), ...placed],
+        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+      })
+      setEditingMath(null)
+      setSelectedIds([])
+      setRingExpanded(false)
+      setApplied('수식을 고쳤습니다')
+    } catch (error) {
+      console.warn('수식 재편집 실패', error)
+      setFailure('수식을 고치지 못했습니다.')
+    } finally {
+      setBusyAction(null)
+    }
+  }, [selectedElements])
+
+  const applyResult = useCallback(async (
+    result: AnnotationInterpretation,
+    bounds: NonNullable<ReturnType<typeof selectionBounds>>,
+  ) => {
+    const api = apiRef.current
+    if (!api) return
+
+    try {
+      const { convertToExcalidrawElements, CaptureUpdateAction } = await loadExcalidraw()
+      let created: AnnotationElement[]
+      let mathFiles: AnnotationFiles = {}
+      const fileId = `math-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+
+      if (result.kind === 'mermaid') {
+        const { parseMermaidToExcalidraw } = await loadMermaid()
+        const { elements: skeleton } = await parseMermaidToExcalidraw(result.body)
+        created = convertToExcalidrawElements(skeleton as never) as unknown as AnnotationElement[]
+      } else {
+        // 수식은 <b>그림</b>으로 넣는다. 분수의 가로줄이나 적분 기호의 상하 구조는 글자로 표현할 수
+        // 없다. 다만 그림이 되면 내용을 고칠 수 없으므로, LaTeX 원문을 요소에 붙여 두어 나중에
+        // 다시 렌더할 수 있게 한다(ADR-0051의 "고칠 수 있어야 한다"를 지키는 방법이다).
+        const latex = result.source || result.body
+        const rendered = await renderMathSvg(latex, latexFontSize(bounds))
+        mathFiles = mathFileEntry(fileId, rendered, Date.now())
+        // 자리는 아래 placeAtSelection이 정한다. 여기서 좌표를 주면 그 값이 덮여 죽은 코드가 된다.
+        created = convertToExcalidrawElements([{
+          type: 'image',
+          x: 0,
+          y: 0,
+          width: rendered.width,
+          height: rendered.height,
+          fileId,
+          customData: { liveclassMathLatex: latex },
+        }] as never) as unknown as AnnotationElement[]
+      }
+
+      // 배치는 우리가 정한다. mermaid는 자기 원점에서 계산했고, 모델은 위치를 말한 적이 없다.
+      const placed = placeAtSelection(created, bounds)
+      const removed = new Set(result.replace)
+      // 파일을 <b>먼저</b> 넣는다. 요소가 먼저 들어가면 그 사이 렌더에서 가리킬 파일이 없어
+      // 빈 자리가 보인다. `updateScene`은 files를 받지 않으므로 이 경로가 유일하다.
+      const fileList = Object.values(mathFiles)
+      if (fileList.length > 0) api.addFiles(fileList)
+      api.updateScene({
+        elements: [...api.getSceneElements().filter((element) => !removed.has(element.id)), ...placed],
+        // 되돌리기 스택에 올린다. 확인 절차를 없앤 대신 Ctrl+Z가 유일한 되돌림이라, 이게 빠지면
+        // 잘못 나온 정리를 강사가 손으로 지워야 한다.
+        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+      })
+      setSelectedIds([])
+      setRingExpanded(false)
+      setApplied(result.kind === 'mermaid' ? '다이어그램으로 정리했습니다' : '수식으로 정리했습니다')
+    } catch (error) {
+      console.warn('판서 정리 적용 실패', error)
+      setFailure('정리한 결과를 넣지 못했습니다.')
+    }
+  }, [])
+
+  const runInterpret = useCallback(async (mode: InterpretMode) => {
+    const elements = selectedElements()
+    const bounds = selectionBounds(elements)
+    if (elements.length === 0 || !bounds) return
+
+    setFailure(null)
+    setBusyAction(mode)
+    try {
+      const image = await exportSelectionPng(elements)
+      const result = await interpretAnnotation(sessionId, mode, image, elements.map((e) => e.id))
+      if (result.unreadable || !result.body) {
+        setFailure('판서를 알아보지 못했습니다. 더 또렷하게 그린 뒤 다시 시도해 주세요.')
+        return
+      }
+      // 확인을 거치지 않고 바로 넣는다. 되돌림은 Ctrl+Z가 맡는다 — 매번 확인 창을 띄우면
+      // 강의 흐름이 끊기고, 잘못 나온 것을 되돌리는 비용은 그보다 훨씬 싸다.
+      await applyResult(result, bounds)
+    } catch (error) {
+      console.warn('판서 해석 실패', error)
+      setFailure('판서를 정리하지 못했습니다. 잠시 후 다시 시도해 주세요.')
+    } finally {
+      setBusyAction(null)
+    }
+  }, [applyResult, exportSelectionPng, selectedElements, sessionId])
+
+
+  /**
+   * "정리" 진입점을 눌렀는지. 눌렀으면 선택 도구로 바꾸고 무엇을 해야 하는지 알려 준다.
+   *
+   * <p><b>왜 필요한가.</b> 액션 링은 선택이 있어야 뜬다. 그런데 판서를 켜면 펜이 잠긴 채로
+   * 시작하므로(그래야 켜자마자 그릴 수 있다) 강사는 <b>선택하는 방법을 모른 채</b> 정리 기능을
+   * 찾게 된다. 실제로 "바꾸는 버튼이 어디 있냐"는 말이 나왔다. 기능이 있어도 닿을 길이 없으면
+   * 없는 것과 같다.
+   */
+  const [ringExpanded, setRingExpanded] = useState(false)
+
+  /** 선택 도구로 바꾼다. 펜이 잠겨 있으면 드래그도 클릭도 선택이 아니라 획이 된다. */
+  const startPicking = useCallback(() => {
+    apiRef.current?.updateScene({
+      appState: { activeTool: { type: 'selection', locked: false, lastActiveTool: null, customType: null } },
+    })
+    setRingExpanded(true)
+  }, [])
+
+  /**
+   * 링 바깥을 누르면 접는다.
+   *
+   * <p>펼쳐 놓은 메뉴가 스스로 닫히지 않으면 판서를 계속 가린다. 링 위에서 시작한 클릭은 그대로
+   * 둔다 — 항목을 고르려던 것을 접어 버리면 아무것도 고를 수 없다.
+   */
+  useEffect(() => {
+    const host = hostRef.current
+    if (!active || !host || !ringExpanded) return undefined
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Element | null
+      if (target?.closest('.annotation-action-ring')) return
+      setRingExpanded(false)
+    }
+    host.addEventListener('pointerdown', onPointerDown)
+    return () => { host.removeEventListener('pointerdown', onPointerDown) }
+  }, [active, ringExpanded])
+
+  /**
+   * 링 중심(컨테이너 px).
+   *
+   * <p>선택이 있으면 <b>그 위에</b> 띄운다 — 무엇에 적용되는지가 자리로 드러난다. 선택이 없는데
+   * 펼쳐진 경우(칩을 눌러 연 상태)는 칩이 있던 좌하단에 그대로 둔다. 링이 화면 밖으로 나가지
+   * 않도록 가장자리에서 반지름만큼 띄운다.
+   */
+  const ringCenter = useCallback(() => {
+    const host = hostRef.current
+    if (!host) return null
+    const rect = host.getBoundingClientRect()
+    const zoom = annotationStageScale(rect)
+    if (zoom <= 0) return null
+
+    const bounds = selectionBounds(selectedElements())
+    const margin = 110
+    if (!bounds) {
+      return { x: margin, y: Math.max(margin, rect.height - margin) }
+    }
+    return {
+      x: Math.min(Math.max((bounds.x + bounds.width / 2) * zoom, margin), Math.max(margin, rect.width - margin)),
+      y: Math.min(Math.max((bounds.y + bounds.height / 2) * zoom, margin), Math.max(margin, rect.height - margin)),
+    }
+  }, [selectedElements])
 
   /**
    * 화이트보드를 깔거나 걷는다.
@@ -336,7 +676,11 @@ export default function InstructorAnnotationLayer({
    */
   useEffect(() => {
     if (!active) return
-    onPublish({ type: 'snapshot', elements: elementsRef.current })
+    onPublish({
+      type: 'snapshot',
+      elements: elementsRef.current,
+      files: referencedFiles(elementsRef.current, filesRef.current),
+    })
   }, [active, audienceRevision, onPublish])
 
   /**
@@ -373,6 +717,13 @@ export default function InstructorAnnotationLayer({
   }
 
   const { Excalidraw, MainMenu } = ui
+  /*
+   * 링을 여는 두 경로. 획을 고르면(클릭이든 드래그든) 바로 뜨고, 아무것도 안 골랐어도 칩을 누르면
+   * 펼쳐진다 — 후자는 "무엇을 골라야 하는지"부터 알려 주는 자리다.
+   */
+  const ringOpen = selectedIds.length > 0 || ringExpanded
+  const mathLatex = selectedMathLatex()
+  const center = ringOpen ? ringCenter() : null
 
   return (
     <div ref={hostRef} className="instructor-annotation-layer">
@@ -445,6 +796,109 @@ export default function InstructorAnnotationLayer({
           <MainMenu.DefaultItems.Help />
         </MainMenu>
       </Excalidraw>
+
+      {/*
+        선택한 판서 위에 뜨는 액션 링(ADR-0054). 강사는 지금 화면 한가운데를 보고 있으므로
+        구석의 툴바로 시선을 옮기게 하지 않는다.
+      */}
+      {/*
+        정리 기능의 진입점. 링은 선택이 있어야 뜨는데, 판서를 켜면 펜이 잠긴 채 시작해서 강사가
+        선택하는 방법을 모른 채 기능을 찾게 된다 — 그래서 눈에 보이는 자리에 하나 둔다.
+      */}
+      {!ringOpen && hasElements && (
+        <button type="button" className="annotation-interpret-entry" onClick={startPicking}>
+          <span aria-hidden="true">✨</span> AI로 정리
+        </button>
+      )}
+
+      {/*
+        우리가 넣은 수식을 고르면 "고치기"를 띄운다. 그림이 되면 내용을 못 고치므로, 붙여 둔 LaTeX를
+        꺼내 다시 렌더하는 것이 유일한 편집 경로다(ADR-0051의 "고칠 수 있어야 한다").
+      */}
+      {mathLatex !== null && editingMath === null && (
+        <button
+          type="button"
+          className="annotation-math-edit"
+          onClick={() => setEditingMath(mathLatex)}
+        >
+          수식 고치기
+        </button>
+      )}
+
+      {editingMath !== null && (
+        <form
+          className="annotation-math-editor"
+          onSubmit={(event) => { event.preventDefault(); void reeditMath(editingMath) }}
+        >
+          <label htmlFor="annotation-math-input">LaTeX</label>
+          <input
+            id="annotation-math-input"
+            value={editingMath}
+            onChange={(event) => setEditingMath(event.target.value)}
+            autoFocus
+            spellCheck={false}
+          />
+          <button type="button" onClick={() => setEditingMath(null)}>취소</button>
+          <button type="submit" className="is-primary" disabled={busyAction === 'math'}>
+            {busyAction === 'math' ? '고치는 중…' : '다시 렌더'}
+          </button>
+        </form>
+      )}
+
+      {ringOpen && center && editingMath === null && (
+        <AnnotationActionRing
+          center={center}
+          actions={INTERPRET_ACTIONS}
+          busyActionId={busyAction}
+          needsSelection={selectedIds.length === 0}
+          onPick={(id) => { void runInterpret(id as InterpretMode) }}
+          onDismiss={() => { setSelectedIds([]); setRingExpanded(false) }}
+        />
+      )}
+
+      {applied && (
+        <p className="annotation-interpret-applied" role="status">
+          {applied} · 되돌리려면 <kbd>Ctrl</kbd>+<kbd>Z</kbd>
+        </p>
+      )}
+
+      {failure && (
+        <p className="annotation-interpret-failure" role="alert" onClick={() => setFailure(null)}>
+          {failure}
+        </p>
+      )}
     </div>
   )
 }
+
+/**
+ * 링에 놓는 항목. 지금은 모델을 부르는 둘뿐이다 — 도형 정리(사각형·원·직선)는 인식이 아니라
+ * 기하 계산이라 별도 경로로 붙인다(ADR-0054 결정 4).
+ */
+const INTERPRET_ACTIONS: readonly AnnotationAction[] = [
+  {
+    id: 'diagram',
+    label: '다이어그램',
+    hint: '손그림 다이어그램을 깔끔한 도형과 화살표로 바꿉니다.',
+    usesModel: true,
+    icon: (
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <rect x="2" y="4" width="7" height="5" rx="1" />
+        <rect x="15" y="4" width="7" height="5" rx="1" />
+        <rect x="8.5" y="15" width="7" height="5" rx="1" />
+        <path d="M9 6.5h6M5.5 9v3.5h13V9M12 12.5V15" />
+      </svg>
+    ),
+  },
+  {
+    id: 'math',
+    label: '수식',
+    hint: '손글씨 수식을 읽어 글자로 바꿉니다.',
+    usesModel: true,
+    icon: (
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path d="M4 5h6l-4 14M3 12h8M14 9l6 8M20 9l-6 8" />
+      </svg>
+    ),
+  },
+]

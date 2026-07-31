@@ -88,7 +88,7 @@ export function foldStoredDocument(api: ApiAnnotationDocument): RestoredAnnotati
   }
 
   return {
-    document: { revision: api.revision, elements: document.elements },
+    document: { revision: api.revision, elements: document.elements, files: document.files },
     nextRevision: Math.max(1, api.nextRevision),
   }
 }

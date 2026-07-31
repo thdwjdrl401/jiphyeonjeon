@@ -122,6 +122,35 @@
  * (annotationStageScale), 강사가 이걸 누르면 곧바로 되돌려져 눌러도 안 되는 버튼처럼 보인다.
  * 아예 없는 편이 낫다 — 휠 확대·이동은 코드에서 막고 있다. */
 .instructor-annotation-layer .excalidraw .zoom-actions { display: none; }
+/* 선택한 판서 위에 뜨는 방사형 액션 링(ADR-0054).
+ *
+ * 강사는 지금 화면 한가운데를 보며 펜을 들고 있다. 화면 구석의 툴바로 시선과 손을 옮기게 하면
+ * 그리던 흐름이 끊긴다. 선택한 자리에 바로 띄우고, 항목을 같은 거리의 원주에 놓아 어느 것을
+ * 고르든 이동 거리가 같게 한다.
+ *
+ * z-index는 Excalidraw 캔버스(기본 1~4)보다 위, 하지만 판서 레이어 안에 갇힌다. 링 자체는
+ * 포인터를 먹지 않고 버튼만 먹는다 — 링이 떠 있는 동안에도 캔버스를 계속 쓸 수 있어야 한다. */
+.annotation-action-ring { position: absolute; z-index: 6; pointer-events: none; }
+.annotation-action-ring__item,
+.annotation-action-ring__close { position: absolute; left: 0; top: 0; pointer-events: auto; display: grid; place-items: center; border: 1px solid rgba(255,252,243,.22); border-radius: 999px; background: rgba(28,22,13,.92); color: #fdf8ee; box-shadow: 0 8px 24px rgba(0,0,0,.4); cursor: pointer; }
+.annotation-action-ring__item { width: 74px; height: 74px; gap: 3px; padding: 6px; }
+.annotation-action-ring__item:hover:not(:disabled) { border-color: rgba(224,149,138,.8); background: rgba(48,38,24,.96); }
+.annotation-action-ring__item:disabled { opacity: .5; cursor: default; }
+.annotation-action-ring__item.is-running { border-color: #e0958a; }
+.annotation-action-ring__label { font-size: .68rem; font-weight: 700; letter-spacing: .02em; }
+.annotation-action-ring__close { width: 26px; height: 26px; font-size: .7rem; opacity: .75; }
+.annotation-action-ring__close:hover:not(:disabled) { opacity: 1; }
+
+/* 우리가 넣은 수식을 고르면 뜨는 편집 진입점. 수식은 그림이라 내용을 직접 고칠 수 없고,
+ * 붙여 둔 LaTeX를 다시 렌더하는 것이 유일한 편집 경로다(ADR-0051의 "고칠 수 있어야 한다"). */
+.annotation-math-edit { position: absolute; z-index: 7; bottom: 16px; left: 50%; transform: translateX(-50%); padding: 8px 14px; border: 1px solid rgba(255,252,243,.22); border-radius: 999px; background: rgba(28,22,13,.92); color: #fdf8ee; font-size: .74rem; font-weight: 700; cursor: pointer; }
+.annotation-math-editor { position: absolute; z-index: 8; bottom: 16px; left: 50%; display: flex; align-items: center; gap: 8px; width: min(560px, 80%); transform: translateX(-50%); padding: 10px 14px; border: 1px solid rgba(255,252,243,.2); border-radius: 12px; background: rgba(28,22,13,.97); color: #fdf8ee; box-shadow: 0 16px 40px rgba(0,0,0,.45); }
+.annotation-math-editor label { font-size: .68rem; font-weight: 700; opacity: .75; }
+.annotation-math-editor input { flex: 1; min-width: 0; padding: 7px 10px; border: 1px solid rgba(255,252,243,.24); border-radius: 8px; background: rgba(0,0,0,.35); color: inherit; font-family: ui-monospace, monospace; font-size: .76rem; }
+.annotation-math-editor button { padding: 6px 12px; border: 1px solid rgba(255,252,243,.24); border-radius: 8px; background: transparent; color: inherit; font-size: .72rem; font-weight: 700; cursor: pointer; }
+.annotation-math-editor button.is-primary { border-color: transparent; background: #237a58; }
+.annotation-math-editor button:disabled { opacity: .55; cursor: default; }
+.annotation-interpret-failure { position: absolute; z-index: 7; right: 16px; bottom: 16px; margin: 0; padding: 10px 14px; border: 1px solid rgba(224,149,138,.5); border-radius: 10px; background: rgba(60,24,20,.95); color: #ffd9d2; font-size: .74rem; cursor: pointer; }
 /* 레이저 포인터는 scene 요소가 아니라 사라지는 궤적이라 판서 op 경로로는 수강생에게 도달하지 않는다.
  * 그래서 포인터 좌표를 별도 topic으로 중계한다(InstructorAnnotationLayer). 도구 자체는 열어 둔다. */
 /* 컨트롤 줄 오른쪽 끝 묶음(상태 문구 + 전체화면 아이콘). */

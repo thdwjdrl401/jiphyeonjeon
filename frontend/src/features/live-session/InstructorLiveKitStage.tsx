@@ -160,12 +160,14 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
           */}
           <InstructorAnnotationLayer
             active={annotating}
+            sessionId={sessionId}
             audienceRevision={publisher.annotationAudienceRevision}
             showPropertyPanel={propertyPanel}
             whiteboard={whiteboard}
             onLaser={publisher.publishLaser}
             onPublish={publisher.publishAnnotation}
             restoredElements={publisher.restoredAnnotation?.elements ?? null}
+            restoredFiles={publisher.restoredAnnotation?.files ?? null}
           />
         </div>
       </div>
