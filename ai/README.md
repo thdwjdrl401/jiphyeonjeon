@@ -108,7 +108,7 @@ ai-api·ai-worker 운영 설정은 [`.env.ai-prod.example`](../.env.ai-prod.exam
 | 경계 | 현재 상태 |
 |---|---|
 | Spring→ai-api RAG SSE | AI 구현, Spring signer·proxy 미구현 |
-| Spring→RabbitMQ→ai-worker | `PPTX_EMBED` 양쪽 구현, Spring producer·worker 앱 기본 off, AI 운영 compose는 worker만 on; `EMBED_DELETE` 미구현(DLQ) |
+| Spring→RabbitMQ→ai-worker | `PPTX_EMBED`·`EMBED_DELETE` 모두 AI 구현(삭제는 `materialId` self-lookup으로 curriculum_id 해석, [ADR-0006](decisions/jinwoo/0006-pptx-material-delete-resolution.md)), Spring producer·worker 앱 기본 off, AI 운영 compose는 worker만 on |
 | ai-worker→Spring download-url·callback | 양쪽 구현 |
 | ai-api·ai-worker→bge-runtime | client·runtime·reverse tunnel·운영 container proxy 배선 구현 |
 | ai-worker→GMS(핵심 용어 추출) | AI 구현·기본 off, 운영 compose(`docker-compose.ai-prod.yml`)에 `AI_WORKER_GMS_API_KEY` 배선 미완료. 추출 결과는 기존 `MATERIAL_EMBEDDED` Spring 콜백에 `keyTerms`를 실어 한 번에 전달하고(AI 구현, [ADR-0004](../docs/decisions/jinwoo/0004-key-term-callback-delivery-timing.md)), 동시에 ai-worker가 소유한 `ai.material_key_term`에도 best-effort로 저장([ADR-0005](../docs/decisions/jinwoo/0005-key-term-storage-schema.md)); Spring 쪽 `keyTerms` 콜백 수신과 `ai.material_key_term` 읽기 API는 둘 다 미구현([ADR-0003](../docs/decisions/jinwoo/0003-pptx-key-term-extraction-approach.md)) |

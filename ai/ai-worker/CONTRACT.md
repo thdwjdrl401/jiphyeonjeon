@@ -305,7 +305,9 @@ callback은 `POST /api/internal/ai/callbacks`에 9.2의 HMAC으로 보낸다.
 ```
 
 - 성공은 `204`다. `MATERIAL_EMBEDDED`는 READY, `MATERIAL_EMBED_FAILED`는 FAILED,
-  `MATERIAL_EMBEDDING`은 PROCESSING으로 전이한다.
+  `MATERIAL_EMBEDDING`은 PROCESSING으로 전이한다. `MATERIAL_DELETED`(status `DELETED`)·
+  `MATERIAL_DELETE_FAILED`(status `FAILED`)는 §9.6의 삭제 전용 eventType이며, Spring이 아직
+  매핑하지 않아 inbox에만 남는다.
 - 같은 사건의 HTTP 재시도는 동일 `eventId`와 동일 raw body를 사용한다. 새로운 결과 사건만 새 event ID를
   만든다.
 - index activate가 commit된 뒤에만 success callback을 보낸다. callback 실패로 message가 재전달되면 완료된
@@ -323,17 +325,21 @@ callback은 `POST /api/internal/ai/callbacks`에 9.2의 HMAC으로 보낸다.
 - 일시 실패는 `x-ai-retry-count`를 1씩 올려 persistent message를 default exchange의 `ingestion.embed`로 먼저
   publish-confirm한 뒤 원본을 ACK한다. 기본 retry는 3회, 지연은 5초에서 시작하는 지수 backoff이며 최대 300초다.
   지연 중에는 원본 message를 unacked로 유지하므로 worker가 종료되면 broker가 원본을 다시 전달한다.
-- 잘못된 envelope, non-retryable 실패, 아직 scope를 복원할 수 없는 `EMBED_DELETE`와 retry 소진 message는
-  AI가 선언한 durable `ingestion.embed.dlq`에 먼저 publish-confirm한 뒤 원본을 ACK한다. DLQ publish가 실패하면
-  원본을 `nack(requeue=true)`해 유실을 막는다.
+- 잘못된 envelope, non-retryable 실패, retry 소진 message는 AI가 선언한 durable `ingestion.embed.dlq`에
+  먼저 publish-confirm한 뒤 원본을 ACK한다. DLQ publish가 실패하면 원본을 `nack(requeue=true)`해 유실을 막는다.
 - retry 소진 시 DB가 이미 SUCCEEDED면 FAILED callback을 보내지 않는다. 이는 READY callback만 실패한 성공 작업의
   상태를 FAILED로 덮지 않기 위한 규칙이다.
 - consumer 등록과 RabbitMQ·PostgreSQL 연결, BGE `/readyz`가 모두 정상일 때만 management readiness를 true로 둔다.
 - 종료 요청은 새 delivery를 취소하고 진행 중인 작업 하나를 기본 30초 drain한다. 제한을 넘기면 task를 취소하고
   ACK하지 않은 원본은 broker 재전달 대상으로 남긴다.
 
-현재 `EMBED_DELETE`는 DLQ에 보존할 뿐 완료하지 않는다. delete resolver와 실제 Spring·RabbitMQ·BGE·PostgreSQL
-E2E가 준비되기 전에는 Python consumer와 Spring의 `MATERIAL_EMBEDDING_ENABLED`를 모두 켜지 않는다.
+`EMBED_DELETE`는 payload에 없는 `curriculum_id`를 `materialId`로 `ai.material_version`을 조회해
+self-lookup한 뒤 삭제한다([ADR-0006](../../docs/decisions/jinwoo/0006-pptx-material-delete-resolution.md)).
+조회 결과가 없으면(이미 삭제됐거나 존재한 적 없음) 성공(멱등)으로 끝내고 실제 삭제를 시도하지 않는다.
+성공은 `MATERIAL_DELETED`(status `DELETED`), 실패는 `MATERIAL_DELETE_FAILED`(status `FAILED`)
+콜백으로 보낸다 — 둘 다 Spring이 아직 처리하지 않는 eventType이라 inbox에만 남고 자료 상태는
+바뀌지 않는다(루트 `docs/CONTRACT.md` §3-2). Python consumer와 Spring의
+`MATERIAL_EMBEDDING_ENABLED`를 모두 켜지 않는다.
 
 ## 10. GMS 핵심 용어 추출과 Spring 전달 (선택 기능)
 

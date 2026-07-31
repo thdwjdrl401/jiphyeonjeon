@@ -12,12 +12,15 @@
 - 추출된 용어는 기존 `MATERIAL_EMBEDDED` Spring 콜백에 `keyTerms`로 실어 한 번에 전달하는 동시에,
   `ai.material_key_term`에도 best-effort로 저장한다(ADR-0005). 재시도 시 콜백 용어가 사라지지
   않도록 job_id 기준 in-memory 캐시로 잠깐 기억해둔다(ADR-0004).
+- `EMBED_DELETE`는 payload에 없는 curriculum_id를 materialId로 self-lookup한 뒤 삭제한다(ADR-0006).
+  지울 게 없으면 성공(멱등)으로 끝낸다.
 
 ## 구조와 흐름
 
 ```text
-RabbitMQ -> consumers/ -> application/ -> ingestion/ -> ports/ <- adapters/
-                                        -> (선택) GMS key term 추출 -> ports/ <- adapters/
+RabbitMQ -> consumers/ -> application/IndexPptxMaterial   -> ingestion/ -> ports/ <- adapters/
+                                                            -> (선택) GMS key term 추출 -> ports/ <- adapters/
+                        -> application/DeleteMaterialIndex -> ports/ <- adapters/ (self-lookup)
 python -m app.main -> WorkerRuntime -> RabbitMaterialConsumer + management FastAPI
 ```
 

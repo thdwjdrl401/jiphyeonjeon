@@ -21,9 +21,11 @@
 | ai-worker | Spring `POST /api/internal/ai/callbacks` | HTTP, HMAC | READY·FAILED 및 (있으면) 핵심 용어 결과 전달 | 구현됨 |
 | ai-worker | RabbitMQ `ingestion.embed.dlq` | durable queue | 영구 실패·재시도 소진 작업 보존 | 구현됨 |
 
-consumer는 `AI_WORKER_MATERIAL_INGESTION_ENABLED=true`일 때만 연결된다. `EMBED_DELETE`는 현재
-저장 범위를 복원할 정보가 부족하므로 완료하지 않고 DLQ에 보존한다. 전체 주소·인증·구현 상태는
-[`docs/ai/CONTRACT.md`](../../docs/ai/CONTRACT.md)를 따른다.
+consumer는 `AI_WORKER_MATERIAL_INGESTION_ENABLED=true`일 때만 연결된다. `EMBED_DELETE`는
+`materialId`만으로 `ai.material_version`을 self-lookup해 `curriculum_id`와 현재 버전을 알아낸 뒤
+삭제한다([ADR-0006](../../docs/decisions/jinwoo/0006-pptx-material-delete-resolution.md)) — Spring
+계약에 필드를 추가하지 않는다. 지울 게 이미 없으면(중복 요청 등) 성공으로 처리하는 멱등 동작이다.
+전체 주소·인증·구현 상태는 [`docs/ai/CONTRACT.md`](../../docs/ai/CONTRACT.md)를 따른다.
 
 핵심 용어 추출은 `AI_WORKER_KEY_TERM_EXTRACTION_ENABLED=true`일 때만 임베딩과 동시에 실행되고,
 기본값(`false`)에서는 기존 청킹·임베딩·저장 흐름에 영향을 주지 않는다. 추출 실패는 자료 처리
@@ -168,3 +170,4 @@ DB role과 권한 조건은 [migration 문서](migrations/README.md)를 따른�
 - [PPTX 핵심 용어 추출 방식 ADR](../../docs/decisions/jinwoo/0003-pptx-key-term-extraction-approach.md)
 - [핵심 용어 콜백 전달 타이밍 ADR](../../docs/decisions/jinwoo/0004-key-term-callback-delivery-timing.md)
 - [핵심 용어 저장 스키마 ADR](../../docs/decisions/jinwoo/0005-key-term-storage-schema.md)
+- [PPTX 자료 삭제 스코프 해석 ADR](../../docs/decisions/jinwoo/0006-pptx-material-delete-resolution.md)
