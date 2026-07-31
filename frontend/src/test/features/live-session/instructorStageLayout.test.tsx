@@ -26,6 +26,7 @@ function renderStage(overrides: Partial<InstructorLiveMedia> = {}) {
     cameraOverlay: DEFAULT_CAMERA_OVERLAY,
     moveCameraOverlay: vi.fn(),
     publishAnnotation: vi.fn(),
+    publishAnnotationState: vi.fn(),
     publishLaser: vi.fn(),
     annotationAudienceRevision: 0,
     restoredAnnotation: null,

@@ -37,6 +37,7 @@ import {
   ANNOTATION_TOPIC,
   encodeAnnotationOp,
   encodeLaserStroke,
+  trimOpPrecision,
   type AnnotationChange,
   type AnnotationDocument,
   type AnnotationOp,
@@ -82,6 +83,17 @@ export interface InstructorLiveMedia extends InstructorLiveKitState {
    * 번호를 매기는 곳이 하나여야 한다.
    */
   publishAnnotation: (change: AnnotationChange) => void
+  /**
+   * "여기까지의 전체 상태"를 수신 측에 알린다(ADR-0055).
+   *
+   * <p>밀린 저장을 비운 뒤 <b>포인터</b>만 보낸다 — 문서 전체를 실어 보내면 판서가 길어질수록
+   * 커져 데이터 채널의 64KB 한도를 넘고, 넘는 순간 수강생 화면에 판서가 아예 나오지 않는다.
+   *
+   * <p>저장이 밀려 있어 포인터가 거짓이 될 상황이면 인자로 받은 스냅샷으로 물러선다. 그래서
+   * 스냅샷을 <b>값이 아니라 함수로</b> 받는다 — 물러설 때만 만들면 되고, 그때는 flush를 기다린
+   * 뒤라 가장 최근 문서를 담을 수 있다.
+   */
+  publishAnnotationState: (snapshot: () => AnnotationChange) => void
   /**
    * 레이저 궤적을 내보낸다. 판서 op와 <b>다른 topic에 lossy로</b> 보낸다 — 초당 수십 건이고 1초면
    * 사라지므로 유실돼도 무해하고, revision을 태우면 유실 감지가 의미를 잃는다.
@@ -521,7 +533,14 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
     if (!room || room.state !== 'connected') return
 
     annotationRevisionRef.current += 1
-    const op = { ...change, revision: annotationRevisionRef.current } as AnnotationOp
+    /*
+     * 나가는 사본에서 의미 없는 좌표 정밀도를 덜어낸다(§3-6b).
+     *
+     * <p>여기가 유일한 관문이다 — 데이터 채널과 영속화가 모두 이 op를 쓰므로, 한 곳에서 다듬으면
+     * 둘 다 줄어든다. 강사의 문서는 그대로 둔다: 에디터가 들고 있는 값을 바꾸면 version 기반
+     * diff가 그것을 "바뀐 요소"로 보고 다시 내보낸다.
+     */
+    const op = trimOpPrecision({ ...change, revision: annotationRevisionRef.current } as AnnotationOp)
     void room.localParticipant
       .publishData(encodeAnnotationOp(op), { reliable: true, topic: ANNOTATION_TOPIC })
       .catch((error) => {
@@ -538,10 +557,39 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
     //   <li><b>빈 스냅샷</b> — 수신 측의 revision 기준점을 잡는 장치다. 문서가 실제로 비었다는 뜻이
     //       아니다(그건 `delete`로 기록된다). 페이지를 열 때마다 하나씩 쌓여, 저장하면 그 뒤로
     //       새로고침했을 때 복원이 빈 문서에서 시작한다.</li>
+    //   <li>`pointer` — 문서가 아니라 "전체 상태는 서버에 있다"는 안내다(ADR-0055). 담을 내용이 없다.</li>
     // </ul>
-    const transportOnly = op.type === 'clear' || (op.type === 'snapshot' && op.elements.length === 0)
+    const transportOnly = op.type === 'clear'
+      || op.type === 'pointer'
+      || (op.type === 'snapshot' && op.elements.length === 0)
     if (!transportOnly) annotationSinkRef.current?.push(op)
   }, [])
+
+  /**
+   * 전체 상태를 알린다 — 스냅샷을 밀지 않고 <b>포인터</b>를 낸다(ADR-0055).
+   *
+   * <p><b>비우고 나서 낸다.</b> 영속화는 1.5초 주기 묶음이라 서버가 강사보다 뒤처져 있다. 그대로
+   * 포인터를 내면 수신 측이 받는 문서에 마지막 몇 획이 빠지고, 그 뒤 델타와 이어지지 않아 <b>이후
+   * op가 전부 버려진다</b> — 강사 화면에는 그려지는데 녹화에는 나타나지 않는다.
+   *
+   * <p><b>비우지 못하면 포인터를 내지 않는다.</b> 그때의 포인터는 지킬 수 없는 약속이다. 대신
+   * 예전처럼 스냅샷을 민다 — 64KB를 넘을 수 있지만 그건 저장이 이미 실패하고 있는 예외 상황이고,
+   * 아무것도 보내지 않는 것보다 낫다.
+   */
+  const publishAnnotationState = useCallback((snapshot: () => AnnotationChange) => {
+    const room = roomRef.current
+    if (!room || room.state !== 'connected') return
+
+    const sink = annotationSinkRef.current
+    void (sink ? sink.flushAll() : Promise.resolve(true)).then((stored) => {
+      // flush를 기다리는 동안 끊겼을 수 있다. 재연결하면 그쪽에서 다시 맞춘다.
+      if (roomRef.current?.state !== 'connected') return
+      publishAnnotation(stored ? { type: 'pointer' } : snapshot())
+      if (!stored) {
+        console.warn('판서 저장이 밀려 포인터 대신 스냅샷을 보냅니다(크기 한도를 넘을 수 있습니다).')
+      }
+    })
+  }, [publishAnnotation])
 
   /**
    * 새 페이지에서 접속하면 <b>빈 스냅샷</b>을 한 번 보내 Egress를 강사의 실제 상태로 맞춘다.
@@ -625,6 +673,7 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
     cameraOverlay,
     moveCameraOverlay,
     publishAnnotation,
+    publishAnnotationState,
     publishLaser,
     annotationAudienceRevision,
     restoredAnnotation,
@@ -633,7 +682,7 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
     toggleCamera: () => { void toggleControl('camera') },
     toggleMicrophone: () => { void toggleControl('microphone') },
     toggleScreenShare: () => { void toggleControl('screenShare') },
-  }), [annotationAudienceRevision, applyingQuality, cameraOverlay, changeQuality, moveCameraOverlay, pendingControl, publishAnnotation, publishLaser, quality, restoredAnnotation, sessionId, state, toggleControl])
+  }), [annotationAudienceRevision, applyingQuality, cameraOverlay, changeQuality, moveCameraOverlay, pendingControl, publishAnnotation, publishAnnotationState, publishLaser, quality, restoredAnnotation, sessionId, state, toggleControl])
 
   return (
     <InstructorLiveMediaContext.Provider value={value}>

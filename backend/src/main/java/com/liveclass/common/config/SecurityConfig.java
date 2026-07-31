@@ -42,6 +42,12 @@ public class SecurityConfig {
                         // AI 워커 콜백·자료 URL 발급 — 로그인 세션 아니라 HMAC 서명으로 인증한다(AiCallbackVerifier). ADR-0036.
                         .requestMatchers(HttpMethod.POST, "/api/internal/ai/callbacks").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/internal/ai/materials/download-url").permitAll()
+                        // 판서 문서 조회 — Egress(헤드리스 Chrome)는 세션 쿠키가 없고 LiveKit 토큰만
+                        // 갖고 있다. 그 토큰 서명과 방 이름을 컨트롤러가 검증한다(ADR-0055).
+                        // 세션이 있으면 참가자 게이트를, 없으면 토큰을 본다 — 둘 중 하나는 반드시 통과해야 한다.
+                        // 쓰기(POST .../annotation/ops)는 여기 열지 않는다: 방에 들어올 수 있다는 것과
+                        // 문서를 고칠 수 있다는 것은 다르다.
+                        .requestMatchers(HttpMethod.GET, "/api/live-sessions/*/annotation").permitAll()
                         // 공개 카탈로그 조회는 비로그인도 가능(GET만).
                         .requestMatchers(HttpMethod.GET, "/api/curriculums", "/api/curriculums/**").permitAll()
                         // 수강 신청·취소는 학생만(강사 계정은 수강 불가 — 계정 분리 정책). 강사 승인 등은 /api/instructor/**.

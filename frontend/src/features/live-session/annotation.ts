@@ -194,6 +194,17 @@ export type AnnotationOp =
   | { type: 'upsert'; revision: number; elements: AnnotationElement[]; files?: AnnotationFiles }
   | { type: 'delete'; revision: number; ids: string[] }
   | { type: 'clear'; revision: number }
+  /**
+   * "여기까지의 전체 상태는 서버에 있다"(ADR-0055).
+   *
+   * <p>스냅샷을 대신한다. 스냅샷은 문서 전체라 판서가 길어지면 데이터 채널의 64KB 한도를 넘고
+   * (실측 74.9KB) 넘는 순간 통째로 실패해 <b>수강생 화면에 판서가 아예 나오지 않는다</b>. 포인터는
+   * 수십 바이트라 그런 일이 없다.
+   *
+   * <p>수신 측은 이걸 받으면 §3-6d의 `GET`으로 문서를 가져오고, 버퍼에 쌓아 둔 op 중
+   * `revision > N`인 것만 얹는다.
+   */
+  | { type: 'pointer'; revision: number }
 
 /**
  * 강사가 내는 변경. `revision`은 전송 계층이 붙인다 — 강사가 단일 writer이므로 번호를 매기는 곳이
@@ -203,6 +214,7 @@ export type AnnotationChange = Omit<Extract<AnnotationOp, { type: 'snapshot' }>,
   | Omit<Extract<AnnotationOp, { type: 'upsert' }>, 'revision'>
   | Omit<Extract<AnnotationOp, { type: 'delete' }>, 'revision'>
   | Omit<Extract<AnnotationOp, { type: 'clear' }>, 'revision'>
+  | Omit<Extract<AnnotationOp, { type: 'pointer' }>, 'revision'>
 
 /** 아직 아무것도 그리지 않은 상태. */
 export function emptyAnnotationDocument(): AnnotationDocument {
@@ -266,6 +278,10 @@ export function applyAnnotationOp(
       stale: false,
     }
   }
+
+  // 포인터는 문서를 바꾸지 않는다 — "서버에 있다"는 안내일 뿐이고, 실제 적용은 가져온 뒤에 한다.
+  // 여기서 revision을 올려 버리면 그 사이 흐른 op가 "이미 본 것"으로 버려진다.
+  if (op.type === 'pointer') return { document, stale: false }
 
   // 이미 본 op의 재전송이면 무시한다. 같은 op를 두 번 적용해도 결과가 같아야 한다(멱등).
   if (op.revision <= document.revision) return { document, stale: false }
@@ -528,6 +544,7 @@ export function decodeAnnotationOp(payload: Uint8Array): AnnotationOp | null {
       case 'delete':
         return Array.isArray(op.ids) ? op : null
       case 'clear':
+      case 'pointer':
         return op
       default:
         return null
@@ -553,4 +570,59 @@ export function referencedFiles(
     if (typeof fileId === 'string' && files[fileId]) picked[fileId] = files[fileId]
   }
   return picked
+}
+
+/**
+ * op에 실을 좌표의 소수 자릿수.
+ *
+ * <p>Excalidraw가 주는 좌표는 소수점 15자리다 — `-0.66668701171875` 같은 값이 그대로 실린다.
+ * 1920x1080 프레임에서 그 끝자리는 <b>0.0007픽셀</b> 차이라 눈으로도 렌더링으로도 구분되지 않는데,
+ * 점 하나에 40자를 쓴다.
+ *
+ * <p>2자리면 최대 오차가 <b>0.005px</b>다. 획 굵기(2px)의 1/400이고, 우리 판서는 확대가 없어
+ * (zoom = 컨테이너폭 / 1920 고정, §3-6b) 들여다볼 방법도 없다. 4K 전체화면에서 2배로 봐도
+ * 0.01 화면px이다.
+ *
+ * <p>더 줄여도(1자리) 절감은 2%밖에 늘지 않는다 — 실측 기준 29% vs 31%. 오차만 10배가 되므로
+ * 2자리가 분명한 지점이다.
+ */
+const COORDINATE_DECIMALS = 2
+
+function round(value: number): number {
+  const scale = 10 ** COORDINATE_DECIMALS
+  return Math.round(value * scale) / scale
+}
+
+/**
+ * op에 실을 요소에서 <b>의미 없는 좌표 정밀도를 덜어낸다</b>.
+ *
+ * <p>스냅샷은 문서 전체라 판서가 길어질수록 커지는데, 실측에서 요소 53개가 66.5KB였고 그중
+ * <b>75%가 획의 점</b>이었다. WebRTC 데이터 채널의 기본 최대 메시지는 64KB이고 넘으면 스냅샷이
+ * 통째로 실패해 <b>수강생 화면에 판서가 아예 나오지 않는다</b>(§3-6b).
+ *
+ * <p><b>강사의 문서는 건드리지 않는다.</b> 나가는 사본만 다듬는다 — 에디터가 들고 있는 값을 바꾸면
+ * `version` 기반 diff가 그것을 "바뀐 요소"로 보고 다시 내보낸다.
+ *
+ * <p>각도(`angle`)는 손대지 않는다. 라디안이라 2자리면 0.57도가 어긋나 회전한 글자가 눈에 띄게
+ * 틀어진다 — 좌표와 달리 이건 보인다.
+ */
+export function trimAnnotationPrecision(element: AnnotationElement): AnnotationElement {
+  const trimmed: AnnotationElement = { ...element }
+  for (const key of ['x', 'y', 'width', 'height'] as const) {
+    const value = element[key]
+    if (typeof value === 'number') trimmed[key] = round(value)
+  }
+  if (Array.isArray(element.points)) {
+    trimmed.points = (element.points as unknown[]).map((point) =>
+      Array.isArray(point) && point.length >= 2 && typeof point[0] === 'number' && typeof point[1] === 'number'
+        ? [round(point[0]), round(point[1])]
+        : point)
+  }
+  return trimmed
+}
+
+/** op 하나에 실린 요소 전부를 다듬는다. 요소가 없는 op(`delete`·`clear`)는 그대로 둔다. */
+export function trimOpPrecision(op: AnnotationOp): AnnotationOp {
+  if (op.type !== 'snapshot' && op.type !== 'upsert') return op
+  return { ...op, elements: op.elements.map(trimAnnotationPrecision) }
 }

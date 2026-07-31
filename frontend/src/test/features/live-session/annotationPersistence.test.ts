@@ -236,4 +236,74 @@ describe('기록 대기열', () => {
     expect(() => { sink.push(op(1)); sink.flush() }).not.toThrow()
     sink.stop()
   })
+
+  /* ── 포인터를 내기 전의 비우기(ADR-0055) ──────────────────────────────────── */
+
+  /**
+   * 포인터는 "여기까지의 상태는 서버에 있다"는 약속이라, 대기열이 <b>다 빠질 때까지</b> 보내야 한다.
+   * 한 묶음만 보내고 끝나면 크기 상한에 걸려 앞부분만 나간 채로 참이라고 답하게 된다.
+   */
+  it('flushAll은 대기열이 빌 때까지 보낸다', async () => {
+    const send = vi.fn().mockResolvedValue(undefined)
+    const sink = createAnnotationOpSink('s1', { send, flushIntervalMs: 10_000 })
+
+    // 요소 하나가 200KB인 op 세 건. 한 묶음(1MB)에 다 들어가지 않는다.
+    for (let i = 1; i <= 3; i += 1) {
+      sink.push({ type: 'upsert', revision: i, elements: [element(`e${i}`, { text: 'x'.repeat(400_000) })] })
+    }
+
+    await expect(sink.flushAll()).resolves.toBe(true)
+
+    expect(send.mock.calls.length).toBeGreaterThan(1)
+    expect(sink.pending()).toBe(0)
+    sink.stop()
+  })
+
+  /**
+   * <b>지키지 못할 약속은 하지 않는다.</b> 저장이 실패한 채로 포인터를 내면 수신 측이 받는 문서에
+   * 마지막 몇 획이 빠지고, 그 뒤 델타와 이어지지 않아 이후 op가 전부 버려진다 — 강사 화면에는
+   * 그려지는데 녹화에는 나타나지 않는다.
+   */
+  it('flushAll은 하나라도 저장하지 못하면 false다', async () => {
+    const send = vi.fn().mockRejectedValue(new Error('503'))
+    const sink = createAnnotationOpSink('s1', { send, flushIntervalMs: 10_000 })
+    sink.push(op(1))
+
+    await expect(sink.flushAll()).resolves.toBe(false)
+
+    expect(sink.pending()).toBe(1)   // 버리지 않는다. 다음 주기에 다시 보낸다.
+    sink.stop()
+  })
+
+  /**
+   * 대기열이 넘쳐 버린 op는 서버가 <b>영영</b> 메우지 못한다. 그 뒤에 대기열이 비었다고 참이라
+   * 답하면, 강사는 이미 구멍 난 문서를 가리키며 "전체 상태는 서버에 있다"고 말하게 된다.
+   */
+  it('flushAll은 op를 버린 적이 있으면 대기열이 비어도 false다', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const send = vi.fn().mockResolvedValue(undefined)
+    const sink = createAnnotationOpSink('s1', { send, flushIntervalMs: 10_000 })
+
+    // 상한(2000)을 넘겨 오래된 것이 밀려난다. 서로 다른 id라 합쳐지지 않는다.
+    for (let i = 1; i <= 2_100; i += 1) {
+      sink.push({ type: 'upsert', revision: i, elements: [element(`e${i}`)] })
+    }
+
+    await expect(sink.flushAll()).resolves.toBe(false)
+
+    expect(sink.pending()).toBe(0)   // 남은 것은 다 보냈지만, 버린 것은 돌아오지 않는다
+    warn.mockRestore()
+    sink.stop()
+  })
+
+  /** 보낼 것이 없으면 곧바로 참이다 — 그때의 포인터는 지킬 수 있는 약속이다. */
+  it('flushAll은 대기열이 비어 있으면 바로 참이다', async () => {
+    const send = vi.fn().mockResolvedValue(undefined)
+    const sink = createAnnotationOpSink('s1', { send, flushIntervalMs: 10_000 })
+
+    await expect(sink.flushAll()).resolves.toBe(true)
+
+    expect(send).not.toHaveBeenCalled()
+    sink.stop()
+  })
 })
