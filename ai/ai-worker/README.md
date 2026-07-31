@@ -27,15 +27,21 @@ consumer는 `AI_WORKER_MATERIAL_INGESTION_ENABLED=true`일 때만 연결된다. 
 
 핵심 용어 추출은 `AI_WORKER_KEY_TERM_EXTRACTION_ENABLED=true`일 때만 임베딩과 동시에 실행되고,
 기본값(`false`)에서는 기존 청킹·임베딩·저장 흐름에 영향을 주지 않는다. 추출 실패는 자료 처리
-전체를 실패시키지 않고 로그만 남긴 뒤 계속 진행한다(용어 없이 정상 처리). ai-worker는 추출된
-용어를 저장하지 않는다 — 별도 콜백을 만들지 않고, 기존 `MATERIAL_EMBEDDED`(READY) callback에
-`keyTerms`를 실어서 **한 번에** 보낸다([ADR-0004](../../docs/decisions/jinwoo/0004-key-term-callback-delivery-timing.md)).
-이 callback은 기존 READY callback과 동일하게 실패 시 job이 재시도된다(별도의 best-effort 경로
-없음). 재시도 때 용어가 조용히 사라지지 않도록 `IndexPptxMaterial`이 추출된 용어를 같은 프로세스
-안에서 잠깐 in-memory로 기억해뒀다가 재시도 시 다시 채워 넣는다(프로세스가 재시작되면 이 보호는
-사라진다). 저장은 Spring/Java 쪽 책임이며 아직 구현되지 않았다. 설계 배경은
-[ADR-0003](../../docs/decisions/jinwoo/0003-pptx-key-term-extraction-approach.md)과
-[ADR-0004](../../docs/decisions/jinwoo/0004-key-term-callback-delivery-timing.md)를 따른다.
+전체를 실패시키지 않고 로그만 남긴 뒤 계속 진행한다(용어 없이 정상 처리).
+
+추출된 용어는 두 경로로 나간다. 하나는 기존 `MATERIAL_EMBEDDED`(READY) callback에 `keyTerms`를
+실어서 **한 번에** 보내는 것이고([ADR-0004](../../docs/decisions/jinwoo/0004-key-term-callback-delivery-timing.md)),
+다른 하나는 ai-worker가 소유하는 `ai.material_key_term` 테이블에 자료 버전 단위로 영속 저장하는
+것이다([ADR-0005](../../docs/decisions/jinwoo/0005-key-term-storage-schema.md)). callback은 기존
+READY callback과 동일하게 실패 시 job이 재시도된다(별도의 best-effort 경로 없음). 재시도 때 용어가
+조용히 사라지지 않도록 `IndexPptxMaterial`이 추출된 용어를 같은 프로세스 안에서 잠깐 in-memory로
+기억해뒀다가 재시도 시 callback과 DB 저장 양쪽에 다시 채워 넣는다(프로세스가 재시작되면 이 보호는
+사라진다). DB 저장은 best-effort이며 실패해도 로그만 남기고 callback 전송이나 job 자체를 막지
+않는다. Java는 `ai.material_key_term`을 아직 읽지 않는다 — 읽기 API·권한 부여는 별도 작업이다.
+설계 배경은
+[ADR-0003](../../docs/decisions/jinwoo/0003-pptx-key-term-extraction-approach.md),
+[ADR-0004](../../docs/decisions/jinwoo/0004-key-term-callback-delivery-timing.md),
+[ADR-0005](../../docs/decisions/jinwoo/0005-key-term-storage-schema.md)를 따른다.
 
 ## 3. 통신 예시
 
@@ -160,3 +166,5 @@ DB role과 권한 조건은 [migration 문서](migrations/README.md)를 따른�
 - [EC2 AI 운영 compose](../../docker-compose.ai-prod.yml)
 - [EC2 AI 운영 환경변수](../../.env.ai-prod.example)
 - [PPTX 핵심 용어 추출 방식 ADR](../../docs/decisions/jinwoo/0003-pptx-key-term-extraction-approach.md)
+- [핵심 용어 콜백 전달 타이밍 ADR](../../docs/decisions/jinwoo/0004-key-term-callback-delivery-timing.md)
+- [핵심 용어 저장 스키마 ADR](../../docs/decisions/jinwoo/0005-key-term-storage-schema.md)

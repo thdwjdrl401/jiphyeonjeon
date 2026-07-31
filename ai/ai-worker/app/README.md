@@ -9,9 +9,9 @@
 - Spring이 선언한 `ingestion.embed`를 passive lookup하고 완료 callback 뒤 ACK한다.
 - `AI_WORKER_KEY_TERM_EXTRACTION_ENABLED=true`일 때 GMS로 PPTX 핵심 용어+정의를 임베딩과 동시에
   추출한다(기본 off, 실패해도 기존 인덱싱을 막지 않음).
-- 추출된 용어는 저장하지 않고 기존 `MATERIAL_EMBEDDED` Spring 콜백에 `keyTerms`로 실어 한 번에
-  전달한다. 재시도 시 용어가 사라지지 않도록 job_id 기준 in-memory 캐시로 잠깐 기억해둔다
-  (ADR-0004).
+- 추출된 용어는 기존 `MATERIAL_EMBEDDED` Spring 콜백에 `keyTerms`로 실어 한 번에 전달하는 동시에,
+  `ai.material_key_term`에도 best-effort로 저장한다(ADR-0005). 재시도 시 콜백 용어가 사라지지
+  않도록 job_id 기준 in-memory 캐시로 잠깐 기억해둔다(ADR-0004).
 
 ## 구조와 흐름
 

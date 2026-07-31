@@ -22,6 +22,16 @@ Alembic revision `0001_rag_index_storage`가 아래 테이블을 소유한다.
 - `ai.material_version`: 자료별 shadow version과 상태
 - `ai.document_chunk`: 슬라이드 chunk와 FTS vector
 - `ai.chunk_embedding`: 정규화된 `vector(1024)`
+- `ai.material_key_term`: 자료 버전별 추출 용어와 정의 (revision `0002_material_key_terms`)
+
+`material_key_term`은 `(material_version_id, term)`을 기본키로 사용한다. Java는
+`ai.material_version.state = 'ACTIVE'`인 자료 버전과 조인해 최신 자료의 용어만 읽는다(읽기 API는
+아직 없다). 재임베딩으로 기존 버전이 교체되거나 자료 버전이 삭제되면 FK cascade로 해당 용어도
+함께 정리된다.
+
+ai-worker는 `IndexPptxMaterial.execute()`가 stage/activate를 마친 뒤 추출된 용어를 이 테이블에
+upsert한다(`(material_version_id, term)` 충돌 시 `definition`만 갱신). 이 저장은 best-effort다 —
+실패해도 로그만 남기고 Spring 콜백 전송이나 job 자체를 막지 않는다([ADR-0005](../../docs/decisions/jinwoo/0005-key-term-storage-schema.md)).
 
 `ai` schema 자체와 `vector` extension은 공유 인프라가 미리 만들 수 있다. 따라서 downgrade는 위 테이블만
 역순으로 제거하고 schema, extension, role은 제거하지 않는다.
