@@ -65,7 +65,7 @@ export default function CurriculumDetailPage() {
   const handleManage = () => navigate(instructorPaths.curriculumManage(detail.curriculumId))
 
   return (
-    <div className="curriculum-detail-page page-container">
+    <div className={`curriculum-detail-page page-container${user?.role === 'STUDENT' ? ' curriculum-detail-page--student' : ''}`}>
       <div className="curriculum-detail__content">
         <div className="curriculum-detail__main">
           <CurriculumHero
@@ -95,13 +95,13 @@ export default function CurriculumDetailPage() {
               <CurriculumMaterials materials={detail.materials} />
             )}
 
-            <CurriculumOverview description={detail.description} />
-
-            <CurriculumRelationPanel detail={detail} returnTo={returnTo} />
-
             {detail.viewerContext.relationship === 'ENROLLED' && detail.viewerContext.progress && (
               <CurriculumProgress progress={detail.viewerContext.progress} />
             )}
+
+            <CurriculumOverview description={detail.description} />
+
+            <CurriculumRelationPanel detail={detail} returnTo={returnTo} />
 
             <CurriculumNotice detail={detail} />
           </div>

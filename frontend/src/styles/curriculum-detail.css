@@ -175,7 +175,7 @@
 /* 보조 정보 영역에서 관리 권한을 알리는 단일 안내 카드 */
 .instructor-management-card {
   display: block;
-  border: 1px solid var(--ink-950);
+  border: 1px solid var(--border-medium);
   border-radius: var(--radius-lg);
   padding: 20px;
   background: var(--ink-950);
