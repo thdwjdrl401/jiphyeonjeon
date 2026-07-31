@@ -18,6 +18,7 @@ const updateScene = vi.fn()
 const exportToCanvas = vi.fn()
 const parseMermaidToExcalidraw = vi.fn()
 const convertToExcalidrawElements = vi.fn()
+const addFiles = vi.fn()
 let excalidrawProps: Record<string, unknown> = {}
 let sceneElements: AnnotationElement[] = []
 
@@ -33,6 +34,7 @@ vi.mock('@/features/live-session/excalidrawRuntime', () => ({
           getAppState: () => ({}),
           getSceneElements: () => sceneElements,
           getFiles: () => ({}),
+          addFiles: addFiles,
         })
       }
       return <div data-testid="excalidraw-editor">{props.children as React.ReactNode}</div>
@@ -91,6 +93,7 @@ describe('해석 결과 적용', () => {
     sceneElements = [...DRAWN]
     excalidrawProps = {}
     updateScene.mockClear()
+    addFiles.mockClear()
     exportToCanvas.mockResolvedValue({ toDataURL: () => 'data:image/png;base64,AAAA' })
     parseMermaidToExcalidraw.mockResolvedValue({ elements: [{ type: 'rectangle' }] })
     convertToExcalidrawElements.mockReturnValue([
@@ -112,7 +115,7 @@ describe('해석 결과 적용', () => {
 
   async function selectAndPick(label: string) {
     const view = render(
-      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} restoredFiles={null} />,
     )
     await view.findByTestId('excalidraw-editor')
     const onChange = excalidrawProps.onChange as (els: unknown[], state?: unknown) => void
@@ -209,12 +212,10 @@ describe('해석 결과 적용', () => {
     await selectAndPick('수식')
 
     await waitFor(() => {
-      const withElements = updateScene.mock.calls
-        .map(([arg]) => arg as { elements?: unknown[]; files?: Record<string, unknown> })
-        .filter((arg) => Boolean(arg?.elements))
-      const call = withElements[withElements.length - 1]
-      expect(call?.files).toBeDefined()
-      expect(Object.keys(call!.files!)).toHaveLength(1)
+      // `updateScene`은 files를 받지 않는다. 거기 실어 보내면 조용히 버려지고 이미지 요소만
+      // 남아 그림이 보이지 않는다 — 실제로 그렇게 배포할 뻔했다.
+      expect(addFiles).toHaveBeenCalled()
+      expect(addFiles.mock.calls[0][0]).toHaveLength(1)
     })
   })
 
@@ -251,7 +252,7 @@ describe('수식 재편집', () => {
   async function selectMath() {
     sceneElements = [MATH_ELEMENT]
     const view = render(
-      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} restoredFiles={null} />,
     )
     await view.findByTestId('excalidraw-editor')
     const onChange = excalidrawProps.onChange as (els: unknown[], state?: unknown) => void
@@ -268,7 +269,7 @@ describe('수식 재편집', () => {
   it('보통 판서를 고르면 고치기가 뜨지 않는다 — 고칠 LaTeX가 없다', async () => {
     sceneElements = [...DRAWN]
     const view = render(
-      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} restoredFiles={null} />,
     )
     await view.findByTestId('excalidraw-editor')
     ;(excalidrawProps.onChange as (els: unknown[], state?: unknown) => void)(

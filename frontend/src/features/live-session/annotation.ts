@@ -536,3 +536,21 @@ export function decodeAnnotationOp(payload: Uint8Array): AnnotationOp | null {
     return null
   }
 }
+
+/**
+ * 주어진 요소들이 실제로 가리키는 파일만 골라낸다.
+ *
+ * <p>전부 실으면 획 하나를 그을 때마다 판서에 있는 모든 수식 SVG가 데이터 채널과 DB로 다시 나간다.
+ * 수식 하나가 6KB대이므로 몇 개만 쌓여도 획마다 수십 KB가 붙는다.
+ */
+export function referencedFiles(
+  elements: readonly AnnotationElement[],
+  files: AnnotationFiles,
+): AnnotationFiles {
+  const picked: AnnotationFiles = {}
+  for (const element of elements) {
+    const fileId = element.fileId
+    if (typeof fileId === 'string' && files[fileId]) picked[fileId] = files[fileId]
+  }
+  return picked
+}

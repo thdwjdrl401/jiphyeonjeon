@@ -167,6 +167,7 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
             onLaser={publisher.publishLaser}
             onPublish={publisher.publishAnnotation}
             restoredElements={publisher.restoredAnnotation?.elements ?? null}
+            restoredFiles={publisher.restoredAnnotation?.files ?? null}
           />
         </div>
       </div>

@@ -3,6 +3,7 @@ import {
   WHITEBOARD_ELEMENT_ID,
   annotationStageScale,
   diffAnnotationElements,
+  referencedFiles,
   laserPointFromPointer,
   whiteboardElement,
   type AnnotationChange,
@@ -36,7 +37,6 @@ const DEFAULT_STROKE_COLOR = '#e03131'
 interface ExcalidrawApi {
   updateScene: (scene: {
     elements?: readonly AnnotationElement[]
-    files?: AnnotationFiles
     appState?: Record<string, unknown>
     /** 이 변경을 되돌리기 스택에 올릴지. 확인 절차를 없앤 대신 Ctrl+Z가 유일한 되돌림이다. */
     captureUpdate?: string
@@ -50,6 +50,11 @@ interface ExcalidrawApi {
   }
   getSceneElements: () => readonly AnnotationElement[]
   getFiles: () => AnnotationFiles
+  /**
+   * 파일은 <b>여기로</b> 넣는다. `updateScene`은 files를 받지 않아 실어 보내면 조용히 버려지고,
+   * 이미지 요소만 남아 그림이 보이지 않는다.
+   */
+  addFiles: (files: readonly { id: string; mimeType: string; dataURL: string; created: number }[]) => void
 }
 
 interface InstructorAnnotationLayerProps {
@@ -90,6 +95,11 @@ interface InstructorAnnotationLayerProps {
    * 복원본이 무시되거나, 반대로 강사가 그 사이 그린 획을 덮는다.
    */
   restoredElements: AnnotationElement[] | null
+  /**
+   * 저장돼 있던 파일들(수식 SVG 등). 요소만 되살리면 이미지가 가리킬 것이 없어 <b>빈 자리</b>가
+   * 된다 — 새로고침하면 수식이 사라진 것처럼 보인다.
+   */
+  restoredFiles: AnnotationFiles | null
 }
 
 /**
@@ -114,6 +124,7 @@ export default function InstructorAnnotationLayer({
   whiteboard,
   onLaser,
   restoredElements,
+  restoredFiles,
 }: InstructorAnnotationLayerProps) {
   /**
    * 에디터 컴포넌트와 메뉴 조립에 쓰는 `MainMenu`를 함께 들고 있는다. 둘 다 같은 지연 청크에서 오므로
@@ -129,6 +140,11 @@ export default function InstructorAnnotationLayer({
   const knownRef = useRef(new Map<string, number>())
   /** 마지막으로 본 전체 요소. 스냅샷을 다시 낼 때 쓴다. */
   const elementsRef = useRef<AnnotationElement[]>([])
+  /**
+   * 마지막으로 본 파일들. 스냅샷에도 실어야 한다 — 도중에 합류한 Egress는 그 전에 흐른 upsert를
+   * 받지 못하므로, 스냅샷에 파일이 없으면 수식이 빈 자리로 녹화된다.
+   */
+  const filesRef = useRef<AnnotationFiles>({})
 
   /**
    * 논리 프레임(1920x1080)을 컨테이너에 매핑하는 zoom을 유지한다.
@@ -219,13 +235,19 @@ export default function InstructorAnnotationLayer({
     applyFrameMapping()
 
     elementsRef.current = elements.filter((element) => element.isDeleted !== true)
+    if (files) filesRef.current = files
     setHasElements(elementsRef.current.some((element) => element.id !== WHITEBOARD_ELEMENT_ID))
     const { changes, known } = diffAnnotationElements(knownRef.current, elements)
     knownRef.current = known
     for (const change of changes) {
       // 이미지 요소는 데이터를 담지 않고 `fileId`로 가리키기만 한다. 파일을 함께 싣지 않으면
       // 수식이 수강생 화면에서 빈 자리가 된다(§3-6b).
-      onPublish(change.type === 'upsert' ? { ...change, files } : change)
+      //
+      // 다만 <b>이번에 실린 요소가 가리키는 것만</b> 보낸다. 전부 실으면 획 하나를 그을 때마다
+      // 판서에 있는 모든 수식 SVG가 데이터 채널과 DB로 다시 나간다.
+      onPublish(change.type === 'upsert'
+        ? { ...change, files: referencedFiles(change.elements, filesRef.current) }
+        : change)
     }
 
     const picked = Object.entries(appState?.selectedElementIds ?? {})
@@ -254,14 +276,24 @@ export default function InstructorAnnotationLayer({
     if (elementsRef.current.length > 0) return
     seededRef.current = true
     elementsRef.current = [...restoredElements]
+    // 파일을 <b>먼저</b> 넣는다. 요소가 먼저 들어가면 그 사이 렌더에서 가리킬 파일이 없다.
+    if (restoredFiles) {
+      const list = Object.values(restoredFiles)
+      if (list.length > 0) api.addFiles(list)
+      filesRef.current = { ...filesRef.current, ...restoredFiles }
+    }
     const known = new Map<string, number>()
     for (const element of restoredElements) known.set(element.id, element.version ?? 0)
     knownRef.current = known
     api.updateScene({ elements: restoredElements })
     // 수신 측에도 내보낸다. `knownRef`를 채웠으므로 뒤따르는 `onChange`의 diff는 아무것도 찾지 못한다 —
     // 여기서 보내지 않으면 강사 화면에만 판서가 돌아오고 수강생 화면은 빈 채로 남는다.
-    onPublish({ type: 'snapshot', elements: restoredElements })
-  }, [onPublish, restoredElements, ui])
+    onPublish({
+      type: 'snapshot',
+      elements: restoredElements,
+      files: referencedFiles(restoredElements, filesRef.current),
+    })
+  }, [onPublish, restoredElements, restoredFiles, ui])
 
   /* ── 판서 해석(ADR-0054, §3-6e) ────────────────────────────────────────────── */
 
@@ -357,9 +389,9 @@ export default function InstructorAnnotationLayer({
       }] as never) as unknown as AnnotationElement[]
 
       const placed = placeAtSelection(created, bounds)
+      api.addFiles(Object.values(mathFileEntry(fileId, rendered, Date.now())))
       api.updateScene({
         elements: [...api.getSceneElements().filter((element) => element.id !== target.id), ...placed],
-        files: { ...api.getFiles(), ...mathFileEntry(fileId, rendered, Date.now()) },
         captureUpdate: CaptureUpdateAction.IMMEDIATELY,
       })
       setEditingMath(null)
@@ -413,10 +445,12 @@ export default function InstructorAnnotationLayer({
       // 배치는 우리가 정한다. mermaid는 자기 원점에서 계산했고, 모델은 위치를 말한 적이 없다.
       const placed = placeAtSelection(created, bounds)
       const removed = new Set(result.replace)
+      // 파일을 <b>먼저</b> 넣는다. 요소가 먼저 들어가면 그 사이 렌더에서 가리킬 파일이 없어
+      // 빈 자리가 보인다. `updateScene`은 files를 받지 않으므로 이 경로가 유일하다.
+      const fileList = Object.values(mathFiles)
+      if (fileList.length > 0) api.addFiles(fileList)
       api.updateScene({
         elements: [...api.getSceneElements().filter((element) => !removed.has(element.id)), ...placed],
-        // 요소보다 파일이 늦게 들어가면 그 사이 렌더에서 빈 자리가 보인다. 같은 호출에 담는다.
-        files: { ...api.getFiles(), ...mathFiles },
         // 되돌리기 스택에 올린다. 확인 절차를 없앤 대신 Ctrl+Z가 유일한 되돌림이라, 이게 빠지면
         // 잘못 나온 정리를 강사가 손으로 지워야 한다.
         captureUpdate: CaptureUpdateAction.IMMEDIATELY,
@@ -642,7 +676,11 @@ export default function InstructorAnnotationLayer({
    */
   useEffect(() => {
     if (!active) return
-    onPublish({ type: 'snapshot', elements: elementsRef.current })
+    onPublish({
+      type: 'snapshot',
+      elements: elementsRef.current,
+      files: referencedFiles(elementsRef.current, filesRef.current),
+    })
   }, [active, audienceRevision, onPublish])
 
   /**
