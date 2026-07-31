@@ -76,35 +76,37 @@ export default function CurriculumDetailPage() {
         isCancelling={cancelMutation.isPending}
       />
 
-      {instructorManagement && (
-        <InstructorManagementCard isInstructor={instructorManagement.isInstructor} onManage={handleManage} />
-      )}
+      <div className="curriculum-detail__content">
+        <div className="curriculum-detail__main">
+          <CurriculumOverview description={detail.description} />
+          <CurriculumOutline
+            key={detail.curriculumId}
+            outline={detail.outline}
+            relationship={detail.viewerContext.relationship}
+            curriculumId={detail.curriculumId}
+          />
+        </div>
 
-      <CurriculumOverview description={detail.description} />
-      <InstructorSummary instructor={detail.instructor} />
+        <aside className="curriculum-detail__sidebar" aria-label="커리큘럼 보조 정보">
+          {instructorManagement && (
+            <InstructorManagementCard isInstructor={instructorManagement.isInstructor} onManage={handleManage} />
+          )}
 
-      {canViewCurriculumMaterials && detail.materials.length > 0 && (
-        <CurriculumMaterials materials={detail.materials} />
-      )}
+          <CurriculumRelationPanel detail={detail} returnTo={returnTo} />
 
-      {detail.viewerContext.relationship === 'ENROLLED' && detail.viewerContext.progress && (
-        <CurriculumProgress progress={detail.viewerContext.progress} />
-      )}
+          {detail.viewerContext.relationship === 'ENROLLED' && detail.viewerContext.progress && (
+            <CurriculumProgress progress={detail.viewerContext.progress} />
+          )}
 
-      <CurriculumOutline
-        outline={detail.outline}
-        relationship={detail.viewerContext.relationship}
-        curriculumId={detail.curriculumId}
-      />
+          <InstructorSummary instructor={detail.instructor} />
 
-      <CurriculumRelationPanel
-        detail={detail}
-        returnTo={returnTo}
-        onEnroll={handleEnroll}
-        isEnrolling={enrollMutation.isPending}
-      />
+          {canViewCurriculumMaterials && detail.materials.length > 0 && (
+            <CurriculumMaterials materials={detail.materials} />
+          )}
 
-      <CurriculumNotice detail={detail} />
+          <CurriculumNotice detail={detail} />
+        </aside>
+      </div>
     </div>
   )
 }

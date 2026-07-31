@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import CurriculumLessonItem from '@/features/lesson/CurriculumLessonItem'
 import type { CurriculumOutlineSection, CurriculumRelationship } from './types'
 
@@ -6,11 +5,17 @@ interface CurriculumSectionProps {
   section: CurriculumOutlineSection
   relationship: CurriculumRelationship
   curriculumId: string
+  expanded: boolean
+  onToggle: () => void
 }
 
-export default function CurriculumSection({ section, relationship, curriculumId }: CurriculumSectionProps) {
-  const [expanded, setExpanded] = useState(true)
-
+export default function CurriculumSection({
+  section,
+  relationship,
+  curriculumId,
+  expanded,
+  onToggle,
+}: CurriculumSectionProps) {
   return (
     <li className="curriculum-section">
       <div className="curriculum-section__header">
@@ -18,7 +23,7 @@ export default function CurriculumSection({ section, relationship, curriculumId 
           type="button"
           className="curriculum-section__toggle"
           aria-expanded={expanded}
-          onClick={() => setExpanded((current) => !current)}
+          onClick={onToggle}
         >
           <span>{section.order}. {section.title}</span>
           <span className="curriculum-section__count">{section.lessons.length}개 강의</span>

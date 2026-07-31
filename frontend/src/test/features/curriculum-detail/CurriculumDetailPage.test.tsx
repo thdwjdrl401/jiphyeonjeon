@@ -62,6 +62,19 @@ describe('CurriculumDetailPage', () => {
     expect(screen.getByRole('link', { name: '로그인하기' })).toBeInTheDocument()
   })
 
+  it('첫 섹션만 펼친 뒤 전체 목차를 한 번에 펼치거나 접을 수 있다', async () => {
+    const user = userEvent.setup()
+    renderDetail('/curriculums/cur-spring-live')
+
+    const expandAllButton = await screen.findByRole('button', { name: '모두 펼치기' })
+    expect(screen.getAllByRole('button', { expanded: false }).length).toBeGreaterThan(0)
+
+    await user.click(expandAllButton)
+
+    expect(screen.getByRole('button', { name: '모두 접기' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { expanded: false })).not.toBeInTheDocument()
+  })
+
   it('비로그인 사용자가 로그인 CTA를 누르면 returnTo를 보존한 채 로그인으로 이동한다', async () => {
     const user = userEvent.setup()
     renderDetail('/curriculums/cur-spring-live')
@@ -138,9 +151,11 @@ describe('CurriculumDetailPage', () => {
   })
 
   it('완료 직후 바로 다음 예정 강의는 라이브 준비 안내 페이지로 연결된다', async () => {
+    const user = userEvent.setup()
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
     renderDetail('/curriculums/cur-spring-live')
 
+    await user.click(await screen.findByRole('button', { name: '모두 펼치기' }))
     const nextUpLink = await screen.findByRole('link', { name: /^7\. 7강\. 학습 주제 7$/ })
     expect(nextUpLink).toHaveAttribute(
       'href',
@@ -161,9 +176,11 @@ describe('CurriculumDetailPage', () => {
   })
 
   it('담당 강사 목차는 강의 버튼과 라이브 상태 태그만 둔다', async () => {
+    const user = userEvent.setup()
     await mockAuthService.login({ email: 'instructor01@example.com', password: 'password1' })
     renderDetail('/curriculums/cur-spring-live')
 
+    await user.click(await screen.findByRole('button', { name: '모두 펼치기' }))
     const detailLinks = await screen.findAllByRole('link', { name: '강의 상세' })
     expect(detailLinks.length).toBeGreaterThan(0)
     for (const link of detailLinks) {
@@ -189,7 +206,7 @@ describe('CurriculumDetailPage', () => {
     expect(screen.queryByText('게시 준비')).not.toBeInTheDocument()
   })
 
-  // 관리 진입점은 제목 카드 아래 안내 카드 하나뿐이다(제목 카드·하단 패널 중복 제거).
+  // 관리 진입점은 보조 정보 영역의 안내 카드 하나뿐이다(제목 카드·하단 패널 중복 제거).
   it('담당 강사에게 관리 안내 카드를 관리 기능의 유일한 진입점으로 보여준다', async () => {
     await mockAuthService.login({ email: 'instructor01@example.com', password: 'password1' })
     const { unmount } = renderDetail('/curriculums/cur-spring-live')
@@ -242,7 +259,7 @@ describe('CurriculumDetailPage', () => {
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
     renderDetail('/curriculums/cur-ux-research')
 
-    const enrollButton = await screen.findByRole('button', { name: '수강 신청' })
+    const enrollButton = await screen.findByRole('button', { name: '수강 신청하기' })
     await user.click(enrollButton)
 
     expect(await screen.findByText('승인 대기 중이에요')).toBeInTheDocument()
@@ -256,7 +273,7 @@ describe('CurriculumDetailPage', () => {
     renderDetail('/curriculums/cur-typescript')
 
     expect(await screen.findByText('신청 즉시 수강을 시작할 수 있어요.')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: '수강 신청' }))
+    await user.click(screen.getByRole('button', { name: '수강 신청하기' }))
 
     expect(await screen.findByText('수강 중')).toBeInTheDocument()
     expect(screen.queryByText('승인 대기 중이에요')).not.toBeInTheDocument()
@@ -276,7 +293,6 @@ describe('CurriculumDetailPage', () => {
 
     // 취소 후 다시 수강 신청 상태로 돌아온다
     expect(await screen.findByRole('button', { name: '수강 신청하기' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '수강 신청' })).toBeInTheDocument()
     expect(screen.queryByText('승인 대기 중이에요')).not.toBeInTheDocument()
 
     // 다시 신청하면 승인 대기 상태로 되돌아간다
@@ -296,7 +312,7 @@ describe('CurriculumDetailPage', () => {
     const spy = vi.spyOn(enrollmentService, 'enrollInCurriculum').mockReturnValue(pending)
 
     renderDetail('/curriculums/cur-ux-research')
-    const enrollButton = await screen.findByRole('button', { name: '수강 신청' })
+    const enrollButton = await screen.findByRole('button', { name: '수강 신청하기' })
     await user.click(enrollButton)
 
     await waitFor(() => expect(screen.getAllByRole('button', { name: /신청 중/ }).length).toBeGreaterThan(0))
@@ -328,12 +344,12 @@ describe('CurriculumDetailPage', () => {
       .mockRejectedValue(new ApiError('이미 신청했거나 수강 중이에요.', 409, 'ENROLLMENT_ALREADY_EXISTS'))
 
     renderDetail('/curriculums/cur-ux-research')
-    const enrollButton = await screen.findByRole('button', { name: '수강 신청' })
+    const enrollButton = await screen.findByRole('button', { name: '수강 신청하기' })
     await user.click(enrollButton)
 
     const toastRegion = await screen.findByRole('region', { name: '알림' })
     expect(await within(toastRegion).findByText('이미 신청했거나 수강 중이에요.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '수강 신청' })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: '수강 신청하기' })).not.toBeDisabled()
     spy.mockRestore()
   })
 
