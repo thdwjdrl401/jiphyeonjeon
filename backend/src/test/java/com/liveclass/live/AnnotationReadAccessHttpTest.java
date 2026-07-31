@@ -3,6 +3,7 @@ package com.liveclass.live;
 import com.auth0.jwt.JWT;
 import com.auth0.jwt.algorithms.Algorithm;
 import com.liveclass.live.api.LiveKitServerAccess;
+import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -16,6 +17,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -55,16 +57,52 @@ class AnnotationReadAccessHttpTest {
                 .sign(Algorithm.HMAC256(secret));
     }
 
+    /**
+     * 실제 로그인 쿠키를 얻는다. CSRF 토큰을 먼저 받아 실어야 한다(SPA용 쿠키+헤더 에코, ADR-0014).
+     */
+    private String lastEmail;
+
+    private Cookie[] loginAsInstructor() throws Exception {
+        String email = "annot-read-" + java.util.UUID.randomUUID() + "@liveclass.test";
+        lastEmail = email;
+        write(post("/api/auth/signup"), null, """
+                {"email":"%s","password":"password123","displayName":"강사","role":"INSTRUCTOR"}
+                """.formatted(email)).andExpect(status().isCreated());
+        return write(post("/api/auth/login"), null, """
+                {"email":"%s","password":"password123"}
+                """.formatted(email)).andExpect(status().isOk()).andReturn().getResponse().getCookies();
+    }
+
+    /** CSRF 토큰을 붙여 쓰기 요청을 보낸다. */
+    private org.springframework.test.web.servlet.ResultActions write(
+            org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder builder,
+            Cookie[] authCookies, String body) throws Exception {
+        var csrf = mockMvc.perform(get("/api/auth/csrf")).andReturn();
+        var node = new com.fasterxml.jackson.databind.ObjectMapper()
+                .readTree(csrf.getResponse().getContentAsString());
+        java.util.List<Cookie> cookies = new java.util.ArrayList<>();
+        cookies.add(csrf.getResponse().getCookie("XSRF-TOKEN"));
+        if (authCookies != null) cookies.addAll(java.util.List.of(authCookies));
+        builder = builder.cookie(cookies.toArray(new Cookie[0]))
+                .header(node.get("headerName").asText(), node.get("token").asText());
+        if (body != null) builder = builder.contentType("application/json").content(body);
+        return mockMvc.perform(builder);
+    }
+
     /** op는 실재하는 세션에만 매달린다(FK). 그래서 랜덤 UUID가 아니라 실제 세션을 만든다. */
     private UUID newSession() {
-        UUID instructorId = UUID.randomUUID();
+        return newSession(UUID.randomUUID());
+    }
+
+    /** 소유 강사를 지정해 세션을 만든다. 쿠키 경로는 <b>소유자</b>여야 통과한다. */
+    private UUID newSession(UUID instructorId) {
         UUID curriculumId = UUID.randomUUID();
         UUID sectionId = UUID.randomUUID();
         UUID lessonId = UUID.randomUUID();
         UUID sessionId = UUID.randomUUID();
 
         jdbc.update("insert into core.app_user (id, email, password_hash, display_name, role, status) "
-                        + "values (?, ?, 'x', '강사', 'INSTRUCTOR', 'ACTIVE')",
+                        + "values (?, ?, 'x', '강사', 'INSTRUCTOR', 'ACTIVE') on conflict (id) do nothing",
                 instructorId, "annotation-read-" + instructorId + "@test.local");
         jdbc.update("insert into core.curriculum (id, instructor_id, title) values (?, ?, '판서')",
                 curriculumId, instructorId);
@@ -88,6 +126,26 @@ class AnnotationReadAccessHttpTest {
 
         mockMvc.perform(get("/api/live-sessions/" + sessionId + "/annotation")
                         .header("Authorization", "Bearer " + tokenFor(sessionId, livekit.apiSecret())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nextRevision").exists());
+    }
+
+    /**
+     * <b>쿠키로 로그인한 강사가 읽는다.</b> 새로고침 복원이 타는 바로 그 경로다 — 여기가 막히면
+     * 강사 화면에서만 판서가 사라지고 수강생·녹화에는 그대로 남는다.
+     *
+     * <p>이 엔드포인트는 Egress를 위해 {@code permitAll}이 되었다. 그 순간 <b>세션 쿠키로도 여전히
+     * 읽히는지</b>가 새 검증 대상이 된다 — permitAll은 인가를 컨트롤러로 옮길 뿐이고, 컨트롤러가
+     * 인증 주체를 못 알아보면 로그인한 강사가 자기 판서를 못 읽는다.
+     */
+    @Test
+    void 로그인한_강사는_쿠키로_읽는다() throws Exception {
+        Cookie[] auth = loginAsInstructor();
+        UUID instructorId = UUID.fromString(
+                jdbc.queryForObject("select id::text from core.app_user where email = ?", String.class, lastEmail));
+        UUID sessionId = newSession(instructorId);
+
+        mockMvc.perform(get("/api/live-sessions/" + sessionId + "/annotation").cookie(auth))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.nextRevision").exists());
     }
