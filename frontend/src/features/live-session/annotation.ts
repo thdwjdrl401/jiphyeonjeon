@@ -194,6 +194,17 @@ export type AnnotationOp =
   | { type: 'upsert'; revision: number; elements: AnnotationElement[]; files?: AnnotationFiles }
   | { type: 'delete'; revision: number; ids: string[] }
   | { type: 'clear'; revision: number }
+  /**
+   * "여기까지의 전체 상태는 서버에 있다"(ADR-0055).
+   *
+   * <p>스냅샷을 대신한다. 스냅샷은 문서 전체라 판서가 길어지면 데이터 채널의 64KB 한도를 넘고
+   * (실측 74.9KB) 넘는 순간 통째로 실패해 <b>수강생 화면에 판서가 아예 나오지 않는다</b>. 포인터는
+   * 수십 바이트라 그런 일이 없다.
+   *
+   * <p>수신 측은 이걸 받으면 §3-6d의 `GET`으로 문서를 가져오고, 버퍼에 쌓아 둔 op 중
+   * `revision > N`인 것만 얹는다.
+   */
+  | { type: 'pointer'; revision: number }
 
 /**
  * 강사가 내는 변경. `revision`은 전송 계층이 붙인다 — 강사가 단일 writer이므로 번호를 매기는 곳이
@@ -203,6 +214,7 @@ export type AnnotationChange = Omit<Extract<AnnotationOp, { type: 'snapshot' }>,
   | Omit<Extract<AnnotationOp, { type: 'upsert' }>, 'revision'>
   | Omit<Extract<AnnotationOp, { type: 'delete' }>, 'revision'>
   | Omit<Extract<AnnotationOp, { type: 'clear' }>, 'revision'>
+  | Omit<Extract<AnnotationOp, { type: 'pointer' }>, 'revision'>
 
 /** 아직 아무것도 그리지 않은 상태. */
 export function emptyAnnotationDocument(): AnnotationDocument {
@@ -266,6 +278,10 @@ export function applyAnnotationOp(
       stale: false,
     }
   }
+
+  // 포인터는 문서를 바꾸지 않는다 — "서버에 있다"는 안내일 뿐이고, 실제 적용은 가져온 뒤에 한다.
+  // 여기서 revision을 올려 버리면 그 사이 흐른 op가 "이미 본 것"으로 버려진다.
+  if (op.type === 'pointer') return { document, stale: false }
 
   // 이미 본 op의 재전송이면 무시한다. 같은 op를 두 번 적용해도 결과가 같아야 한다(멱등).
   if (op.revision <= document.revision) return { document, stale: false }
@@ -528,6 +544,7 @@ export function decodeAnnotationOp(payload: Uint8Array): AnnotationOp | null {
       case 'delete':
         return Array.isArray(op.ids) ? op : null
       case 'clear':
+      case 'pointer':
         return op
       default:
         return null
