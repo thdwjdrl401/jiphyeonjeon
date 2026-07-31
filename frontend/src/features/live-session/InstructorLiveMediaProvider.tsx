@@ -529,10 +529,18 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
       })
     // 전달과 별개로 기록을 남긴다. 순서가 중요하다 — 저장을 먼저 기다리면 그 왕복이 획마다 끼어든다.
     //
-    // `clear`는 <b>남기지 않는다.</b> 그건 문서를 지우는 편집이 아니라 판서를 껐을 때 수강생 화면에서
-    // 감추라는 <b>표시 상태</b>다(InstructorAnnotationLayer). 강사의 문서는 그대로 남아 다시 켜면
-    // 돌아오는데, 저장해 버리면 서버 쪽 문서만 비어 새로고침했을 때 판서가 통째로 사라진다.
-    if (op.type !== 'clear') annotationSinkRef.current?.push(op)
+    // 다만 <b>전달에만 쓰는 op는 남기지 않는다.</b> 복원은 마지막 스냅샷부터 접으므로, 문서를 담지
+    // 않은 op가 그 자리에 앉으면 그 앞의 판서가 통째로 사라진다.
+    //
+    // <ul>
+    //   <li>`clear` — 지우기가 아니라 판서를 껐을 때 수강생 화면에서 <b>감추라는</b> 표시 상태다.
+    //       강사의 문서는 그대로 남아 다시 켜면 돌아온다.</li>
+    //   <li><b>빈 스냅샷</b> — 수신 측의 revision 기준점을 잡는 장치다. 문서가 실제로 비었다는 뜻이
+    //       아니다(그건 `delete`로 기록된다). 페이지를 열 때마다 하나씩 쌓여, 저장하면 그 뒤로
+    //       새로고침했을 때 복원이 빈 문서에서 시작한다.</li>
+    // </ul>
+    const transportOnly = op.type === 'clear' || (op.type === 'snapshot' && op.elements.length === 0)
+    if (!transportOnly) annotationSinkRef.current?.push(op)
   }, [])
 
   /**

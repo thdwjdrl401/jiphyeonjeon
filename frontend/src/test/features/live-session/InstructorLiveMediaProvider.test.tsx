@@ -230,19 +230,53 @@ describe('InstructorLiveMediaProvider', () => {
      * 강사의 문서는 그대로 남아 다시 켜면 돌아오는데, 저장해 버리면 서버 쪽 문서만 비어 새로고침했을 때
      * 판서가 통째로 사라진다.
      */
-    it('clear는 서버에 남기지 않는다 — 지우는 것이 아니라 감추는 것이다', async () => {
+    /**
+     * 복원은 <b>마지막 스냅샷부터</b> 접는다. 그래서 문서를 담지 않은 op가 그 자리에 앉으면 그 앞의
+     * 판서가 통째로 사라진다. 전달에만 쓰는 op는 남기지 않는다.
+     *
+     * <ul>
+     *   <li>`clear` — 지우기가 아니라 판서를 껐을 때 감추라는 표시 상태다. 강사 문서는 그대로 남는다.</li>
+     *   <li>빈 스냅샷 — revision 기준점을 잡는 장치다. 페이지를 열 때마다 하나씩 쌓인다.</li>
+     * </ul>
+     *
+     * <p>문서가 실제로 비는 것은 `delete`로 기록되므로(diffAnnotationElements) 빈 스냅샷을 남길 필요가 없다.
+     */
+    it('전달에만 쓰는 op는 서버에 남기지 않는다 — clear와 빈 스냅샷', async () => {
       const { getByRole } = renderProvider()
       await waitFor(() => { expect(getByRole('status')).toHaveTextContent('connected') })
-      await waitFor(() => { expect(annotationSink.push).toHaveBeenCalled() })
-      annotationSink.push.mockClear()
+      // 접속하며 나가는 기준점 스냅샷이 이미 전달됐다.
+      await waitFor(() => { expect(publishedAnnotationOps().length).toBeGreaterThan(0) })
+
+      // 기준점(빈 스냅샷)은 전달만 되고 기록되지 않는다.
+      expect(annotationSink.push).not.toHaveBeenCalled()
+      expect(publishedAnnotationOps()).toContainEqual(
+        expect.objectContaining({ type: 'snapshot', elements: [] }),
+      )
 
       publisherRef!.publishAnnotation({ type: 'clear' })
+      publisherRef!.publishAnnotation({ type: 'snapshot', elements: [] })
+      publisherRef!.publishAnnotation({ type: 'delete', ids: ['a'] })
       publisherRef!.publishAnnotation({ type: 'upsert', elements: [{ id: 'a', type: 'freedraw', version: 1 }] })
 
       const kinds = annotationSink.push.mock.calls.map(([op]) => (op as AnnotationOp).type)
-      expect(kinds).toEqual(['upsert'])
+      expect(kinds).toEqual(['delete', 'upsert'])
       // 라이브 전달에는 그대로 나간다 — 안 보내면 강사만 껐다고 믿고 수강생·녹화에는 남는다.
       expect(publishedAnnotationOps().map((op) => op.type)).toContain('clear')
+    })
+
+    /** 내용이 있는 스냅샷은 남긴다 — 다음 복원이 이 지점부터 접으면 되므로 갈수록 빨라진다. */
+    it('내용이 있는 스냅샷은 남긴다', async () => {
+      const { getByRole } = renderProvider()
+      await waitFor(() => { expect(getByRole('status')).toHaveTextContent('connected') })
+      annotationSink.push.mockClear()
+
+      publisherRef!.publishAnnotation({
+        type: 'snapshot', elements: [{ id: 'a', type: 'freedraw', version: 1 }],
+      })
+
+      expect(annotationSink.push).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'snapshot' }),
+      )
     })
 
     /**
@@ -264,19 +298,5 @@ describe('InstructorLiveMediaProvider', () => {
     })
 
     /** 복원 스냅샷도 기록에 남긴다 — 다음 복원이 이 지점부터 접으면 되므로 갈수록 빨라진다. */
-    it('복원 스냅샷을 서버 기록에도 남긴다', async () => {
-      annotationApi.fetchAnnotationDocument.mockResolvedValue({
-        document: { revision: 47, elements: [] },
-        nextRevision: 48,
-      })
-
-      renderProvider()
-
-      await waitFor(() => {
-        expect(annotationSink.push).toHaveBeenCalledWith(
-          expect.objectContaining({ type: 'snapshot', revision: 48 }),
-        )
-      })
-    })
   })
 })
