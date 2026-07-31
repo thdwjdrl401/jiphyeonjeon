@@ -833,3 +833,143 @@ describe('Egress 판서 레이어', () => {
 /** 타입이 맞는지 컴파일 단계에서 확인한다. op 모양이 바뀌면 여기서 먼저 깨진다. */
 const _typeCheck: AnnotationOp = { type: 'clear', revision: 1 }
 void _typeCheck
+
+/**
+ * 선택 → 액션 링(ADR-0054). 링은 <b>선택이 있을 때만</b> 뜨므로, 선택이 우리 쪽에 전달되는지가
+ * 전부다. Excalidraw는 `onChange(elements, appState)`로 알려 준다.
+ */
+describe('판서 정리 액션 링 배선', () => {
+  function rectStub() {
+    return vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
+      width: 960, height: 540, x: 0, y: 0, top: 0, left: 0, right: 960, bottom: 540,
+      toJSON: () => ({}),
+    } as DOMRect)
+  }
+
+  it('요소를 선택하면 그 자리에 링이 뜬다', async () => {
+    const restore = rectStub()
+    const { findByTestId, container } = render(
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
+    )
+    await findByTestId('excalidraw-editor')
+    const onChange = excalidrawProps.onChange as (els: unknown[], state?: unknown) => void
+
+    // 강사가 획 하나를 그리고 그것을 선택했다.
+    const drawn = { id: 'a', type: 'freedraw', version: 1, x: 100, y: 200, points: [[0, 0], [80, 40]] }
+    onChange([drawn], { selectedElementIds: { a: true } })
+
+    await waitFor(() => {
+      expect(container.querySelector('.annotation-action-ring')).not.toBeNull()
+    })
+    expect(container.querySelectorAll('.annotation-action-ring__item')).toHaveLength(2)
+    restore.mockRestore()
+  })
+
+  it('선택이 없으면 링을 그리지 않는다', async () => {
+    const restore = rectStub()
+    const { findByTestId, container } = render(
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
+    )
+    await findByTestId('excalidraw-editor')
+    const onChange = excalidrawProps.onChange as (els: unknown[], state?: unknown) => void
+
+    onChange([{ id: 'a', type: 'freedraw', version: 1, x: 0, y: 0, points: [[0, 0]] }], { selectedElementIds: {} })
+
+    expect(container.querySelector('.annotation-action-ring')).toBeNull()
+    restore.mockRestore()
+  })
+
+  /** 화이트보드는 배경으로 깔아 둔 판이지 정리 대상이 아니다. */
+  it('화이트보드만 선택된 것은 정리 대상으로 치지 않는다', async () => {
+    const restore = rectStub()
+    const { findByTestId, container } = render(
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
+    )
+    await findByTestId('excalidraw-editor')
+    const onChange = excalidrawProps.onChange as (els: unknown[], state?: unknown) => void
+
+    onChange([{ id: WHITEBOARD_ELEMENT_ID, type: 'rectangle', version: 1, x: 0, y: 0, width: 10, height: 10 }],
+      { selectedElementIds: { [WHITEBOARD_ELEMENT_ID]: true } })
+
+    expect(container.querySelector('.annotation-action-ring')).toBeNull()
+    restore.mockRestore()
+  })
+})
+
+/**
+ * 정리 기능의 <b>진입점</b>. 링은 선택이 있어야 뜨는데, 판서를 켜면 펜이 잠긴 채 시작하므로
+ * 강사는 선택하는 방법을 모른 채 기능을 찾게 된다 — 실제로 "바꾸는 버튼이 어디 있냐"는 말이
+ * 나왔다. 기능이 있어도 닿을 길이 없으면 없는 것과 같다.
+ */
+describe('판서 정리 진입점', () => {
+  function rectStub() {
+    return vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
+      width: 960, height: 540, x: 0, y: 0, top: 0, left: 0, right: 960, bottom: 540,
+      toJSON: () => ({}),
+    } as DOMRect)
+  }
+
+  async function draw() {
+    const { findByTestId, container, getByRole, queryByRole } = render(
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
+    )
+    await findByTestId('excalidraw-editor')
+    const onChange = excalidrawProps.onChange as (els: unknown[], state?: unknown) => void
+    return { container, getByRole, queryByRole, onChange }
+  }
+
+  it('그린 것이 없으면 진입점을 보이지 않는다 — 정리할 것이 없다', async () => {
+    const restore = rectStub()
+    const { onChange, queryByRole } = await draw()
+
+    onChange([], { selectedElementIds: {} })
+
+    expect(queryByRole('button', { name: /AI로 정리/ })).toBeNull()
+    restore.mockRestore()
+  })
+
+  it('그린 것이 있으면 진입점을 보인다', async () => {
+    const restore = rectStub()
+    const { onChange, getByRole } = await draw()
+
+    onChange([{ id: 'a', type: 'freedraw', version: 1, x: 0, y: 0, points: [[0, 0], [10, 10]] }],
+      { selectedElementIds: {} })
+
+    await waitFor(() => { expect(getByRole('button', { name: /AI로 정리/ })).toBeTruthy() })
+    restore.mockRestore()
+  })
+
+  /** 펜이 잠겨 있으면 드래그가 선택이 아니라 획이 된다. 눌렀을 때 도구까지 바꿔 줘야 한다. */
+  it('누르면 선택 도구로 바꾸고 무엇을 해야 하는지 알려 준다', async () => {
+    const restore = rectStub()
+    const { onChange, getByRole, container } = await draw()
+    onChange([{ id: 'a', type: 'freedraw', version: 1, x: 0, y: 0, points: [[0, 0], [10, 10]] }],
+      { selectedElementIds: {} })
+    await waitFor(() => { expect(getByRole('button', { name: /AI로 정리/ })).toBeTruthy() })
+    updateScene.mockClear()
+
+    getByRole('button', { name: /AI로 정리/ }).click()
+
+    const tool = updateScene.mock.calls
+      .map(([arg]) => (arg as { appState?: { activeTool?: { type?: string } } }).appState?.activeTool?.type)
+      .filter(Boolean)
+    expect(tool).toContain('selection')
+    await waitFor(() => {
+      expect(container.querySelector('.annotation-interpret-entry--hint')?.textContent)
+        .toContain('선택하세요')
+    })
+    restore.mockRestore()
+  })
+
+  it('선택하면 진입점 대신 링이 뜬다', async () => {
+    const restore = rectStub()
+    const { onChange, container, queryByRole } = await draw()
+    const element = { id: 'a', type: 'freedraw', version: 1, x: 0, y: 0, points: [[0, 0], [10, 10]] }
+
+    onChange([element], { selectedElementIds: { a: true } })
+
+    await waitFor(() => { expect(container.querySelector('.annotation-action-ring')).not.toBeNull() })
+    expect(queryByRole('button', { name: /AI로 정리/ })).toBeNull()
+    restore.mockRestore()
+  })
+})

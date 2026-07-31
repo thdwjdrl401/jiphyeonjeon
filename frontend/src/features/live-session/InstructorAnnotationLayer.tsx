@@ -194,6 +194,12 @@ export default function InstructorAnnotationLayer({
    */
   const [selectedIds, setSelectedIds] = useState<string[]>([])
 
+  /**
+   * 그린 것이 하나라도 있는지. <b>`elementsRef`로는 안 된다</b> — ref를 바꿔도 리렌더가 일어나지
+   * 않아서, 강사가 처음 획을 그어도 정리 진입점이 나타나지 않는다.
+   */
+  const [hasElements, setHasElements] = useState(false)
+
   const handleChange = useCallback((
     elements: readonly AnnotationElement[],
     appState?: { selectedElementIds?: Record<string, boolean> },
@@ -204,6 +210,7 @@ export default function InstructorAnnotationLayer({
     applyFrameMapping()
 
     elementsRef.current = elements.filter((element) => element.isDeleted !== true)
+    setHasElements(elementsRef.current.some((element) => element.id !== WHITEBOARD_ELEMENT_ID))
     const { changes, known } = diffAnnotationElements(knownRef.current, elements)
     knownRef.current = known
     for (const change of changes) onPublish(change)
@@ -343,6 +350,28 @@ export default function InstructorAnnotationLayer({
       setApplying(false)
     }
   }, [pending])
+
+  /**
+   * "정리" 진입점을 눌렀는지. 눌렀으면 선택 도구로 바꾸고 무엇을 해야 하는지 알려 준다.
+   *
+   * <p><b>왜 필요한가.</b> 액션 링은 선택이 있어야 뜬다. 그런데 판서를 켜면 펜이 잠긴 채로
+   * 시작하므로(그래야 켜자마자 그릴 수 있다) 강사는 <b>선택하는 방법을 모른 채</b> 정리 기능을
+   * 찾게 된다. 실제로 "바꾸는 버튼이 어디 있냐"는 말이 나왔다. 기능이 있어도 닿을 길이 없으면
+   * 없는 것과 같다.
+   */
+  const [pickingForInterpret, setPickingForInterpret] = useState(false)
+
+  useEffect(() => {
+    if (selectedIds.length > 0) setPickingForInterpret(false)
+  }, [selectedIds])
+
+  /** 선택 도구로 바꾼다. 펜이 잠겨 있으면 드래그가 선택이 아니라 획이 된다. */
+  const startPicking = useCallback(() => {
+    apiRef.current?.updateScene({
+      appState: { activeTool: { type: 'selection', locked: false, lastActiveTool: null, customType: null } },
+    })
+    setPickingForInterpret(true)
+  }, [])
 
   /** 링 중심(컨테이너 px). scene 좌표에 zoom만 곱하면 된다 — scroll을 0으로 고정해 두었다. */
   const ringCenter = useCallback(() => {
@@ -595,6 +624,22 @@ export default function InstructorAnnotationLayer({
         선택한 판서 위에 뜨는 액션 링(ADR-0054). 강사는 지금 화면 한가운데를 보고 있으므로
         구석의 툴바로 시선을 옮기게 하지 않는다.
       */}
+      {/*
+        정리 기능의 진입점. 링은 선택이 있어야 뜨는데, 판서를 켜면 펜이 잠긴 채 시작해서 강사가
+        선택하는 방법을 모른 채 기능을 찾게 된다 — 그래서 눈에 보이는 자리에 하나 둔다.
+      */}
+      {selectedIds.length === 0 && !pending && hasElements && (
+        pickingForInterpret ? (
+          <p className="annotation-interpret-entry annotation-interpret-entry--hint" role="status">
+            정리할 판서를 드래그해 선택하세요
+          </p>
+        ) : (
+          <button type="button" className="annotation-interpret-entry" onClick={startPicking}>
+            <span aria-hidden="true">✨</span> AI로 정리
+          </button>
+        )
+      )}
+
       {center && selectedIds.length > 0 && (
         <AnnotationActionRing
           center={center}
