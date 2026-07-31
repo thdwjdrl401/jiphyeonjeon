@@ -859,3 +859,50 @@ async def test_key_terms_cascade_delete_with_their_material_version(
             {"version_id": version_id},
         )
     assert remaining == 0
+
+
+async def test_resolve_active_scope_returns_none_when_never_indexed(
+    repository: PgvectorIndexRepository,
+) -> None:
+    assert await repository.resolve_active_scope("tenant-test", MATERIAL_ID) is None
+
+
+async def test_resolve_active_scope_recovers_curriculum_id_and_current_version(
+    repository: PgvectorIndexRepository,
+) -> None:
+    first = _material(1)
+    second = _material(2)
+    await repository.activate(first, await repository.stage(first, [_chunk(0.1)]))
+    await repository.stage(second, [_chunk(0.2)])
+
+    scope = await repository.resolve_active_scope("tenant-test", MATERIAL_ID)
+
+    assert scope is not None
+    assert scope.curriculum_id == CURRICULUM_ID
+    assert scope.lesson_id == LESSON_ID
+    assert scope.material_version == 2
+
+
+async def test_resolve_active_scope_then_delete_job_removes_the_material(
+    repository: PgvectorIndexRepository,
+    database_engine: AsyncEngine,
+) -> None:
+    material = _material(1)
+    await repository.activate(material, await repository.stage(material, [_chunk(0.1)]))
+
+    scope = await repository.resolve_active_scope("tenant-test", MATERIAL_ID)
+    assert scope is not None
+
+    deleted = replace(
+        _material(scope.material_version),
+        curriculum_id=scope.curriculum_id,
+        lesson_id=scope.lesson_id,
+        job_id="job-delete-resolved",
+        idempotency_key="material-delete-resolved",
+    )
+    assert await repository.delete_job(deleted) == 1
+    assert await repository.resolve_active_scope("tenant-test", MATERIAL_ID) is None
+
+    async with database_engine.connect() as connection:
+        remaining = await connection.scalar(text("SELECT count(*) FROM ai.material_version"))
+    assert remaining == 0

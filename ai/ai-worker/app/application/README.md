@@ -1,6 +1,7 @@
 # `ai-worker/app/application`
 
-PPTX 한 version을 파싱·임베딩·저장·활성화하는 유스케이스다.
+PPTX 한 version을 파싱·임베딩·저장·활성화하는 유스케이스(`IndexPptxMaterial`)와, 자료 삭제
+유스케이스(`DeleteMaterialIndex`)를 담는다.
 
 ## 역할
 
@@ -13,6 +14,10 @@ PPTX 한 version을 파싱·임베딩·저장·활성화하는 유스케이스�
 - `key_term_storage`가 설정된 경우, stage/activate가 끝난 뒤 추출된 용어를
   `ai.material_key_term`에 best-effort로 저장한다(ADR-0005). 저장 실패도 추출 실패와 같은 방식으로
   로그만 남기고 삼켜서 콜백 전송을 막지 않는다.
+- `DeleteMaterialIndex`는 `EMBED_DELETE` job(materialId·lessonId만 있음)을 받아
+  `IndexStorage.resolve_active_scope`로 curriculum_id와 현재 버전을 self-lookup한 뒤 `delete_job`을
+  호출한다(ADR-0006). 조회 결과가 없으면(이미 삭제됐거나 존재한 적 없음) `delete_job`을 호출하지
+  않고 바로 성공(멱등)으로 끝낸다.
 
 ## 구조와 흐름
 
@@ -32,7 +37,9 @@ DB 저장이 실패했더라도 재시도 때 복구될 수 있게 하기 위해
 
 ## 파일 구성
 
-`index_pptx_material.py`가 `IndexPptxMaterial`, `MaterialIndexResult`와 내부 변환을 구현한다.
+`index_pptx_material.py`가 `IndexPptxMaterial`·`MaterialIndexResult`, `delete_material_index.py`가
+`DeleteMaterialIndex`·`MaterialDeleteResult`, `map_material_job.py`가 wire job → 내부 identity 변환
+(`map_pptx_embed_job`, `map_embed_delete_job`, `embed_delete_job_id`)을 구현한다.
 
 ## 경계와 불변식
 
@@ -48,7 +55,10 @@ DB 저장이 실패했더라도 재시도 때 복구될 수 있게 하기 위해
   ([ADR-0003](../../../../docs/decisions/jinwoo/0003-pptx-key-term-extraction-approach.md),
   [ADR-0004](../../../../docs/decisions/jinwoo/0004-key-term-callback-delivery-timing.md),
   [ADR-0005](../../../../docs/decisions/jinwoo/0005-key-term-storage-schema.md)).
+- `DeleteMaterialIndex`는 wire의 `lesson_id`를 그대로 `delete_job`에 넘긴다 — 실제 저장된 값과
+  다르면 `delete_job` 내부의 스코프 검증이 이미 거부하므로 별도 검증을 추가하지 않는다
+  ([ADR-0006](../../../../docs/decisions/jinwoo/0006-pptx-material-delete-resolution.md)).
 
 ## 검증
 
-`uv run --frozen pytest -q tests/test_index_pptx_material.py tests/test_pgvector_key_term_storage_unit.py`
+`uv run --frozen pytest -q tests/test_index_pptx_material.py tests/test_pgvector_key_term_storage_unit.py tests/test_delete_material_index.py`

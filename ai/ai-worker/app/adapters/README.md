@@ -7,6 +7,8 @@ adapter를 둔다.
 
 - `ai` schema에 shadow material version과 chunk/embedding을 transaction으로 저장한다.
 - advisory lock, idempotency, version 역행 방지와 단일 ACTIVE 전환을 강제한다.
+- `resolve_active_scope`로 materialId만으로 curriculum_id·현재 버전을 self-lookup하고, `delete_job`으로
+  자료를 tombstone과 함께 삭제한다(ADR-0006).
 - vector를 unit norm으로 저장하고 material scope 변경을 거부한다.
 - Spring HMAC으로 단명 다운로드 URL과 완료 callback을 주고받는다.
 - BGE-M3 HTTP 입력 순서를 보존하고 RabbitMQ ACK/retry/DLQ를 관리한다.
@@ -44,5 +46,6 @@ KeyTermStorage -> PgvectorKeyTermRepository -> PostgreSQL ai schema
 
 ## 검증
 
-`tests/test_pgvector_repository.py`, `tests/test_gms_key_term_extractor.py`,
-`tests/test_pgvector_key_term_storage_unit.py`와 unit test를 실행한다.
+`tests/test_pgvector_repository.py`(실 Postgres, `resolve_active_scope`/`delete_job` 포함),
+`tests/test_gms_key_term_extractor.py`, `tests/test_pgvector_key_term_storage_unit.py`와 unit
+test를 실행한다.
