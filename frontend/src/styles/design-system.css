@@ -1139,12 +1139,11 @@ body {
 .workspace-panel__header p { font-size: .8rem; }
 .highlight-panel { border-color: var(--ink-950); background: var(--ink-50); }
 .metric-grid { gap: 0; border-top: 1px solid var(--border-medium); border-left: 1px solid var(--border-medium); }
-/* 통계 행의 칸 사이 선과 배경을 디자인 시스템 색으로 맞춘다(구분선은 1px gap + 배경색으로 낸다). */
-.profile-stats { background: var(--border-medium); }
-.profile-stats > div { background: var(--paper-light); }
-/* 계정 보안 카드 안의 구분선·소제목을 다른 카드와 같은 색·굵기로 맞춘다. */
-.settings-section { border-top-color: var(--border-medium); }
-.settings-section h3 { font-weight: 400; letter-spacing: -.02em; }
+.profile-page__eyebrow { color: var(--ink-600); font-weight: 500; }
+/* 카드 안에서 비밀번호 변경과 회원 탈퇴를 가르는 선을 다른 카드 경계와 같은 색으로 맞춘다. */
+.withdraw-trigger { border-color: var(--border-medium); }
+/* 카드 소제목은 패널 제목과 같은 굵기 규칙을 따른다(이 테마는 굵게 쓰지 않는다). */
+.settings-block > h3, .withdraw-trigger h3 { font-weight: 400; }
 .withdraw-panel__notice { border-radius: 0; background: var(--ink-50); }
 .metric-card { min-height: 140px; border-top: 0; border-left: 0; padding: 24px; }
 .metric-card::before { display: none; }
