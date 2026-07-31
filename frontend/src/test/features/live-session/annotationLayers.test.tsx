@@ -76,7 +76,7 @@ describe('강사 판서 레이어', () => {
 
   it('꺼져 있으면 에디터를 붙이지 않는다 — 무거운 청크를 미리 내려받을 이유가 없다', () => {
     const { queryByTestId } = render(
-      <InstructorAnnotationLayer active={false} audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active={false} audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
     )
 
     expect(queryByTestId('excalidraw-editor')).toBeNull()
@@ -84,7 +84,7 @@ describe('강사 판서 레이어', () => {
 
   it('켜면 에디터를 붙이고 배경을 투명하게 둔다 — 아래 화면공유가 비쳐야 한다', async () => {
     const { findByTestId } = render(
-      <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
     )
     await findByTestId('excalidraw-editor')
 
@@ -113,7 +113,7 @@ describe('강사 판서 레이어', () => {
     })
 
     const { findByTestId } = render(
-      <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
     )
     await findByTestId('excalidraw-editor')
 
@@ -129,7 +129,7 @@ describe('강사 판서 레이어', () => {
   it('컨테이너 크기를 아직 모르면 zoom을 건드리지 않는다 — 0으로 그리면 아무것도 안 보인다', async () => {
     // jsdom 기본값은 0x0이다. 첫 렌더에서 잘못된 배율을 적용하지 않아야 한다.
     const { findByTestId } = render(
-      <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
     )
     await findByTestId('excalidraw-editor')
 
@@ -149,7 +149,7 @@ describe('강사 판서 레이어', () => {
     drifted = { zoom: { value: 3 }, scrollX: -120, scrollY: 40 }
 
     const { findByTestId } = render(
-      <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
     )
     await findByTestId('excalidraw-editor')
     updateScene.mockClear()
@@ -174,7 +174,7 @@ describe('강사 판서 레이어', () => {
     drifted = { zoom: { value: 0.5 }, scrollX: 0, scrollY: 0 }
 
     const { findByTestId } = render(
-      <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
     )
     await findByTestId('excalidraw-editor')
     updateScene.mockClear()
@@ -194,7 +194,7 @@ describe('강사 판서 레이어', () => {
    */
   it('메뉴에는 다크모드·전체 지우기·도움말만 넣는다', async () => {
     const { findByTestId, queryByText } = render(
-      <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
     )
     const menu = await findByTestId('main-menu')
 
@@ -212,7 +212,7 @@ describe('강사 판서 레이어', () => {
    */
   it('이미지 도구와 위험한 캔버스 액션을 끈다', async () => {
     const { findByTestId } = render(
-      <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
     )
     await findByTestId('excalidraw-editor')
 
@@ -236,13 +236,13 @@ describe('강사 판서 레이어', () => {
   it('판서를 끄면 수강생 화면에서도 감춘다', async () => {
     const onPublish = vi.fn<(change: AnnotationChange) => void>()
     const { findByTestId, rerender } = render(
-      <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />,
     )
     await findByTestId('excalidraw-editor')
     ;(excalidrawProps.onChange as (elements: unknown[]) => void)([element('a', 1)])
     onPublish.mockClear()
 
-    rerender(<InstructorAnnotationLayer active={false} audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />)
+    rerender(<InstructorAnnotationLayer sessionId="ses-1" active={false} audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />)
 
     expect(onPublish).toHaveBeenCalledWith({ type: 'clear' })
   })
@@ -250,12 +250,12 @@ describe('강사 판서 레이어', () => {
   it('그린 것이 없으면 끌 때 아무것도 보내지 않는다', async () => {
     const onPublish = vi.fn()
     const { findByTestId, rerender } = render(
-      <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />,
     )
     await findByTestId('excalidraw-editor')
     onPublish.mockClear()
 
-    rerender(<InstructorAnnotationLayer active={false} audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />)
+    rerender(<InstructorAnnotationLayer sessionId="ses-1" active={false} audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />)
 
     expect(onPublish).not.toHaveBeenCalled()
   })
@@ -267,15 +267,15 @@ describe('강사 판서 레이어', () => {
   it('판서를 껐다 켜면 그린 문서를 되돌려준다 — 수강생 판서까지 지우지 않는다', async () => {
     const onPublish = vi.fn<(change: AnnotationChange) => void>()
     const { findByTestId, rerender } = render(
-      <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />,
     )
     await findByTestId('excalidraw-editor')
     ;(excalidrawProps.onChange as (elements: unknown[]) => void)([element('a', 1), element('b', 1)])
 
     // 판서 끄기 → 켜기
-    rerender(<InstructorAnnotationLayer active={false} audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />)
+    rerender(<InstructorAnnotationLayer sessionId="ses-1" active={false} audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />)
     onPublish.mockClear()
-    rerender(<InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />)
+    rerender(<InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />)
     await findByTestId('excalidraw-editor')
 
     const initialData = excalidrawProps.initialData as { elements?: Array<{ id: string }> }
@@ -298,7 +298,7 @@ describe('강사 판서 레이어', () => {
   describe('화이트보드', () => {
     function renderWithBoard(whiteboard: boolean) {
       return render(
-        <InstructorAnnotationLayer
+        <InstructorAnnotationLayer sessionId="ses-1"
           active
           audienceRevision={0}
           showPropertyPanel={false}
@@ -377,7 +377,7 @@ describe('강사 판서 레이어', () => {
 
     function renderLaser(onLaser: ReturnType<typeof vi.fn>) {
       return render(
-        <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={onLaser} onPublish={vi.fn()} restoredElements={null} />,
+        <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={onLaser} onPublish={vi.fn()} restoredElements={null} />,
       )
     }
 
@@ -469,7 +469,7 @@ describe('강사 판서 레이어', () => {
   it('바뀐 요소만 내보낸다 — 같은 배열이 다시 와도 다시 보내지 않는다', async () => {
     const onPublish = vi.fn<(change: AnnotationChange) => void>()
     const { findByTestId } = render(
-      <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />,
     )
     await findByTestId('excalidraw-editor')
     onPublish.mockClear()   // 판서를 켤 때 나가는 기준점 스냅샷은 여기 관심사가 아니다
@@ -495,13 +495,13 @@ describe('강사 판서 레이어', () => {
   it('새 참가자가 들어오면 전체 스냅샷을 다시 내보낸다', async () => {
     const onPublish = vi.fn<(change: AnnotationChange) => void>()
     const { findByTestId, rerender } = render(
-      <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />,
     )
     await findByTestId('excalidraw-editor')
     ;(excalidrawProps.onChange as (elements: unknown[]) => void)([element('a', 1), element('b', 1)])
     onPublish.mockClear()
 
-    rerender(<InstructorAnnotationLayer active audienceRevision={1} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />)
+    rerender(<InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={1} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />)
 
     expect(onPublish).toHaveBeenCalledWith({
       type: 'snapshot',
@@ -516,7 +516,7 @@ describe('강사 판서 레이어', () => {
   it('저장돼 있던 판서를 에디터에 되돌린다', async () => {
     const restored = [element('a', 3), element('b', 5)]
     const { findByTestId } = render(
-      <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={restored} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={restored} />,
     )
     await findByTestId('excalidraw-editor')
 
@@ -529,7 +529,7 @@ describe('강사 판서 레이어', () => {
     const restored = [element('a', 3)]
     const onPublish = vi.fn<(change: AnnotationChange) => void>()
     const { findByTestId } = render(
-      <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={restored} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={restored} />,
     )
     await findByTestId('excalidraw-editor')
 
@@ -546,13 +546,13 @@ describe('강사 판서 레이어', () => {
    */
   it('강사가 이미 그렸으면 복원본으로 덮지 않는다', async () => {
     const { findByTestId, rerender } = render(
-      <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
     )
     await findByTestId('excalidraw-editor')
     ;(excalidrawProps.onChange as (elements: unknown[]) => void)([element('방금', 1)])
     updateScene.mockClear()
 
-    rerender(<InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={[element('저장된', 9)]} />)
+    rerender(<InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={[element('저장된', 9)]} />)
 
     expect(updateScene.mock.calls.map(([arg]) => (arg as { elements?: unknown[] }).elements))
       .not.toContainEqual([element('저장된', 9)])
@@ -566,10 +566,10 @@ describe('강사 판서 레이어', () => {
   it('판서를 켜면 비어 있어도 스냅샷을 보내 기준점을 잡는다', async () => {
     const onPublish = vi.fn<(change: AnnotationChange) => void>()
     const { findByTestId, rerender } = render(
-      <InstructorAnnotationLayer active={false} audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active={false} audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />,
     )
 
-    rerender(<InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />)
+    rerender(<InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />)
     await findByTestId('excalidraw-editor')
 
     expect(onPublish).toHaveBeenCalledWith({ type: 'snapshot', elements: [] })
@@ -578,12 +578,12 @@ describe('강사 판서 레이어', () => {
   it('새 참가자가 들어오면 판서가 비어 있어도 기준점을 다시 보낸다', async () => {
     const onPublish = vi.fn<(change: AnnotationChange) => void>()
     const { findByTestId, rerender } = render(
-      <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />,
     )
     await findByTestId('excalidraw-editor')
     onPublish.mockClear()
 
-    rerender(<InstructorAnnotationLayer active audienceRevision={1} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />)
+    rerender(<InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={1} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />)
 
     expect(onPublish).toHaveBeenCalledWith({ type: 'snapshot', elements: [] })
   })
@@ -596,7 +596,7 @@ describe('강사 판서 레이어', () => {
     const restored = [element('a', 3)]
     const onPublish = vi.fn<(change: AnnotationChange) => void>()
     const { findByTestId } = render(
-      <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={restored} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={restored} />,
     )
     await findByTestId('excalidraw-editor')
 

@@ -10,7 +10,17 @@ import {
   type LaserPoint,
   type LaserStroke,
 } from './annotation'
-import { loadExcalidraw, type ExcalidrawModule } from './excalidrawRuntime'
+import AnnotationActionRing, { type AnnotationAction } from './AnnotationActionRing'
+import AnnotationInterpretPreview from './AnnotationInterpretPreview'
+import {
+  interpretAnnotation,
+  latexPlacement,
+  placeAtSelection,
+  selectionBounds,
+  type AnnotationInterpretation,
+  type InterpretMode,
+} from './annotationInterpret'
+import { loadExcalidraw, loadMermaid, type ExcalidrawModule } from './excalidrawRuntime'
 
 /**
  * 판서 기본 색. 강의 화면은 대체로 밝은 슬라이드거나 어두운 코드 에디터인데, Excalidraw 기본
@@ -29,11 +39,14 @@ interface ExcalidrawApi {
     scrollX?: number
     scrollY?: number
     activeTool?: { type?: string }
+    selectedElementIds?: Record<string, boolean>
   }
   getSceneElements: () => readonly AnnotationElement[]
 }
 
 interface InstructorAnnotationLayerProps {
+  /** 판서 해석 요청에 쓴다(§3-6e). 브라우저가 모델 게이트웨이를 직접 부르지 않는다. */
+  sessionId: string
   /** 판서를 켜 둔 동안만 mount한다. 껐을 때 무거운 에디터를 붙여 둘 이유가 없다. */
   active: boolean
   /** 판서 변경을 데이터 채널로 내보낸다. */
@@ -85,6 +98,7 @@ interface InstructorAnnotationLayerProps {
  * 배경을 그대로 쓰면 영상을 덮어버린다.
  */
 export default function InstructorAnnotationLayer({
+  sessionId,
   active,
   onPublish,
   audienceRevision,
@@ -172,7 +186,18 @@ export default function InstructorAnnotationLayer({
    * Excalidraw는 `onChange`로 <b>매번 전체 요소 배열</b>을 준다(diff가 아니다). 그대로 실어 보내면
    * 판서가 쌓일수록 획 하나가 수백 KB가 되므로, 요소의 `version`을 비교해 바뀐 것만 보낸다.
    */
-  const handleChange = useCallback((elements: readonly AnnotationElement[]) => {
+  /**
+   * 강사가 지금 고른 요소들. 판서 해석(§3-6e)의 <b>범위</b>다 — 모델에게 "어느 요소를 바꿀지"
+   * 맞히게 하지 않고 이 선택을 그대로 넘긴다.
+   *
+   * <p>화이트보드는 제외한다. 배경으로 깔아 둔 판이지 정리 대상이 아니다.
+   */
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+
+  const handleChange = useCallback((
+    elements: readonly AnnotationElement[],
+    appState?: { selectedElementIds?: Record<string, boolean> },
+  ) => {
     // 스크롤·확대가 조금이라도 밀리면 되돌린다. 판서는 영상 위에 얹히므로 캔버스가 밀리는 순간
     // 강사가 보는 자리와 합성에 나가는 자리가 갈린다 — 그런데 강사 화면에서는 정상으로 보인다.
     // 입력을 막는 것(handleWheel/키보드)이 1차 방어고, 이건 그것을 빠져나간 경우의 2차 방어다.
@@ -182,6 +207,13 @@ export default function InstructorAnnotationLayer({
     const { changes, known } = diffAnnotationElements(knownRef.current, elements)
     knownRef.current = known
     for (const change of changes) onPublish(change)
+
+    const picked = Object.entries(appState?.selectedElementIds ?? {})
+      .filter(([id, on]) => on && id !== WHITEBOARD_ELEMENT_ID)
+      .map(([id]) => id)
+    // 같은 값이면 state를 건드리지 않는다 — onChange는 포인터가 움직일 때도 불린다.
+    setSelectedIds((current) =>
+      current.length === picked.length && current.every((id, i) => id === picked[i]) ? current : picked)
   }, [applyFrameMapping, onPublish])
 
   /**
@@ -210,6 +242,118 @@ export default function InstructorAnnotationLayer({
     // 여기서 보내지 않으면 강사 화면에만 판서가 돌아오고 수강생 화면은 빈 채로 남는다.
     onPublish({ type: 'snapshot', elements: restoredElements })
   }, [onPublish, restoredElements, ui])
+
+  /* ── 판서 해석(ADR-0054, §3-6e) ────────────────────────────────────────────── */
+
+  const [busyAction, setBusyAction] = useState<string | null>(null)
+  const [pending, setPending] = useState<{ result: AnnotationInterpretation; bounds: ReturnType<typeof selectionBounds> } | null>(null)
+  const [applying, setApplying] = useState(false)
+  const [failure, setFailure] = useState<string | null>(null)
+
+  const selectedElements = useCallback(
+    () => elementsRef.current.filter((element) => selectedIds.includes(element.id)),
+    [selectedIds])
+
+  /**
+   * 선택한 요소만 PNG로 뽑는다. 모델이 <b>읽을</b> 용도다.
+   *
+   * <p>판서 문서가 벡터인데도 굳이 래스터화하는 이유는 필기 인식이 지각 문제이기 때문이다 —
+   * 좌표 배열로는 손글씨를 읽어내지 못한다(ADR-0054). 좌표는 이미 우리가 갖고 있으므로 이미지에서
+   * 얻을 필요가 없다.
+   *
+   * <p>배경을 <b>흰색으로 칠한다.</b> 투명 PNG는 검게 합성되어 검은 획이 사라진다.
+   */
+  const exportSelectionPng = useCallback(async (elements: readonly AnnotationElement[]) => {
+    const { exportToCanvas } = await loadExcalidraw()
+    const canvas = await exportToCanvas({
+      elements: elements as never,
+      appState: { exportBackground: true, viewBackgroundColor: '#ffffff' } as never,
+      files: null,
+      exportPadding: 16,
+    })
+    return canvas.toDataURL('image/png')
+  }, [])
+
+  const runInterpret = useCallback(async (mode: InterpretMode) => {
+    const elements = selectedElements()
+    const bounds = selectionBounds(elements)
+    if (elements.length === 0 || !bounds) return
+
+    setFailure(null)
+    setBusyAction(mode)
+    try {
+      const image = await exportSelectionPng(elements)
+      const result = await interpretAnnotation(sessionId, mode, image, elements.map((e) => e.id))
+      // 결과를 바로 넣지 않는다. 모델이 낸 confidence는 근거가 못 된다 — 실측에서 틀린 한글
+      // 라벨에 1.0이 붙었다(ADR-0054 결정 6).
+      setPending({ result, bounds })
+    } catch (error) {
+      console.warn('판서 해석 실패', error)
+      setFailure('판서를 정리하지 못했습니다. 잠시 후 다시 시도해 주세요.')
+    } finally {
+      setBusyAction(null)
+    }
+  }, [exportSelectionPng, selectedElements, sessionId])
+
+  /**
+   * 확인한 결과를 씬에 넣는다.
+   *
+   * <p><b>여기가 유일한 주입 지점이다.</b> 서버는 판서를 발행하지 않는다 — 그러면 revision 채번의
+   * 단일 writer 전제가 깨지고, 그 어긋남은 강사 화면에 드러나지 않는다(§3-6b). 씬을 고치면 그 뒤는
+   * 기존 경로가 알아서 간다: `onChange` → diff → 데이터 채널 → 영속화.
+   */
+  const applyPending = useCallback(async () => {
+    const api = apiRef.current
+    if (!api || !pending || !pending.bounds) return
+    const { result, bounds } = pending
+
+    setApplying(true)
+    try {
+      const { convertToExcalidrawElements } = await loadExcalidraw()
+      let created: AnnotationElement[]
+
+      if (result.kind === 'mermaid') {
+        const { parseMermaidToExcalidraw } = await loadMermaid()
+        const { elements: skeleton } = await parseMermaidToExcalidraw(result.body)
+        created = convertToExcalidrawElements(skeleton as never) as unknown as AnnotationElement[]
+      } else {
+        const placement = latexPlacement(bounds)
+        created = convertToExcalidrawElements([{
+          type: 'text',
+          x: placement.x,
+          y: placement.y,
+          text: result.body,
+          fontSize: placement.fontSize,
+          strokeColor: DEFAULT_STROKE_COLOR,
+        }] as never) as unknown as AnnotationElement[]
+      }
+
+      // 배치는 우리가 정한다. mermaid는 자기 원점에서 계산했고, 모델은 위치를 말한 적이 없다.
+      const placed = placeAtSelection(created, bounds)
+      const removed = new Set(result.replace)
+      api.updateScene({
+        elements: [...api.getSceneElements().filter((element) => !removed.has(element.id)), ...placed],
+      })
+      setPending(null)
+      setSelectedIds([])
+    } catch (error) {
+      console.warn('판서 정리 적용 실패', error)
+      setFailure('정리한 결과를 넣지 못했습니다.')
+    } finally {
+      setApplying(false)
+    }
+  }, [pending])
+
+  /** 링 중심(컨테이너 px). scene 좌표에 zoom만 곱하면 된다 — scroll을 0으로 고정해 두었다. */
+  const ringCenter = useCallback(() => {
+    const host = hostRef.current
+    const bounds = selectionBounds(selectedElements())
+    if (!host || !bounds) return null
+    const rect = host.getBoundingClientRect()
+    const zoom = annotationStageScale(rect)
+    if (zoom <= 0) return null
+    return { x: (bounds.x + bounds.width / 2) * zoom, y: (bounds.y + bounds.height / 2) * zoom }
+  }, [selectedElements])
 
   /**
    * 화이트보드를 깔거나 걷는다.
@@ -373,6 +517,7 @@ export default function InstructorAnnotationLayer({
   }
 
   const { Excalidraw, MainMenu } = ui
+  const center = pending ? null : ringCenter()
 
   return (
     <div ref={hostRef} className="instructor-annotation-layer">
@@ -445,6 +590,67 @@ export default function InstructorAnnotationLayer({
           <MainMenu.DefaultItems.Help />
         </MainMenu>
       </Excalidraw>
+
+      {/*
+        선택한 판서 위에 뜨는 액션 링(ADR-0054). 강사는 지금 화면 한가운데를 보고 있으므로
+        구석의 툴바로 시선을 옮기게 하지 않는다.
+      */}
+      {center && selectedIds.length > 0 && (
+        <AnnotationActionRing
+          center={center}
+          actions={INTERPRET_ACTIONS}
+          busyActionId={busyAction}
+          onPick={(id) => { void runInterpret(id as InterpretMode) }}
+          onDismiss={() => setSelectedIds([])}
+        />
+      )}
+
+      {pending && (
+        <AnnotationInterpretPreview
+          result={pending.result}
+          applying={applying}
+          onApply={() => { void applyPending() }}
+          onCancel={() => setPending(null)}
+        />
+      )}
+
+      {failure && (
+        <p className="annotation-interpret-failure" role="alert" onClick={() => setFailure(null)}>
+          {failure}
+        </p>
+      )}
     </div>
   )
 }
+
+/**
+ * 링에 놓는 항목. 지금은 모델을 부르는 둘뿐이다 — 도형 정리(사각형·원·직선)는 인식이 아니라
+ * 기하 계산이라 별도 경로로 붙인다(ADR-0054 결정 4).
+ */
+const INTERPRET_ACTIONS: readonly AnnotationAction[] = [
+  {
+    id: 'diagram',
+    label: '다이어그램',
+    hint: '손그림 다이어그램을 깔끔한 도형과 화살표로 바꿉니다.',
+    usesModel: true,
+    icon: (
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <rect x="2" y="4" width="7" height="5" rx="1" />
+        <rect x="15" y="4" width="7" height="5" rx="1" />
+        <rect x="8.5" y="15" width="7" height="5" rx="1" />
+        <path d="M9 6.5h6M5.5 9v3.5h13V9M12 12.5V15" />
+      </svg>
+    ),
+  },
+  {
+    id: 'math',
+    label: '수식',
+    hint: '손글씨 수식을 읽어 글자로 바꿉니다.',
+    usesModel: true,
+    icon: (
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path d="M4 5h6l-4 14M3 12h8M14 9l6 8M20 9l-6 8" />
+      </svg>
+    ),
+  },
+]
