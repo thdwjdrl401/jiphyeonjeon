@@ -1,7 +1,6 @@
 package com.liveclass.live.service;
 
 import com.liveclass.live.api.LiveSessionDirectory;
-import com.liveclass.live.api.LiveSessionEndedEvent;
 import com.liveclass.live.api.LiveSessionManagement;
 import com.liveclass.live.api.LiveSessionView;
 import com.liveclass.live.domain.LiveSession;
@@ -9,7 +8,6 @@ import com.liveclass.live.domain.LiveSessionStatus;
 import com.liveclass.live.repository.LiveSessionRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,13 +43,10 @@ public class LiveSessionService implements LiveSessionManagement, LiveSessionDir
 
     private final LiveSessionRepository liveSessionRepository;
     private final LiveRoomControl roomControl;
-    private final ApplicationEventPublisher eventPublisher;
 
-    public LiveSessionService(LiveSessionRepository liveSessionRepository, LiveRoomControl roomControl,
-                              ApplicationEventPublisher eventPublisher) {
+    public LiveSessionService(LiveSessionRepository liveSessionRepository, LiveRoomControl roomControl) {
         this.liveSessionRepository = liveSessionRepository;
         this.roomControl = roomControl;
-        this.eventPublisher = eventPublisher;
     }
 
     /** 세션 ID로 결정론적 방 이름(토큰과 동일 규칙). 시작 오케스트레이터·preflight도 같은 규칙을 쓴다. */
@@ -120,32 +115,6 @@ public class LiveSessionService implements LiveSessionManagement, LiveSessionDir
         return nextByCurriculum;
     }
 
-    /**
-     * 라이브 종료(멱등). 세션 강사만. 현재는 한 요청 안에서 {@code LIVE → ENDING → ENDED}를
-     * 처리하고 이미 ENDED면 그대로 돌려준다.
-     *
-     * <p>ADR-0002 §10의 완전한 종료 상태기계는 아직 아니다. 방 삭제 실패를 기록·재시도하는 지속
-     * reconciler가 없어 현재 호출은 best-effort이고 응답도 최종 {@code ENDED}다. Phase 7에서는
-     * 실패 시 ENDING을 유지하고 room·agent·Egress 정리가 끝난 뒤에만 ENDED를 확정해야 한다.
-     */
-    @Transactional
-    public LiveSessionView end(UUID sessionId, UUID requesterId) {
-        LiveSession s = requireOwned(sessionId, requesterId);
-        switch (s.getStatus()) {
-            case ENDED -> { /* 멱등: 이미 종료됨 */ }
-            case LIVE, ENDING -> {
-                s.setStatus(LiveSessionStatus.ENDING);   // 신규 토큰·시작 요청을 먼저 막는다.
-                closeRoomBestEffort(sessionId);
-                s.setStatus(LiveSessionStatus.ENDED);
-                s.setEndedAt(OffsetDateTime.now());
-                // 커밋 후 녹화 중지 등 정리 처리를 트리거.
-                eventPublisher.publishEvent(new LiveSessionEndedEvent(sessionId));
-            }
-            default -> throw new LiveSessionStateConflictException("진행 중이 아니라 종료할 수 없습니다.");
-        }
-        return toView(s);
-    }
-
     /** 방 참여자 목록(강사). 실제 LiveKit 서버 조회. */
     @Transactional(readOnly = true)
     public List<LiveRoomControl.RoomParticipant> listParticipants(UUID sessionId, UUID requesterId) {
@@ -159,14 +128,6 @@ public class LiveSessionService implements LiveSessionManagement, LiveSessionDir
         requireOwned(sessionId, requesterId);
         roomControl.removeParticipant(roomName(sessionId), identity);
         log.info("참여자 강퇴 sessionId={} identity={}", sessionId, identity);
-    }
-
-    private void closeRoomBestEffort(UUID sessionId) {
-        try {
-            roomControl.closeRoom(roomName(sessionId));
-        } catch (RuntimeException e) {
-            log.warn("종료 시 방 닫기 실패(무시) sessionId={} : {}", sessionId, e.getMessage());
-        }
     }
 
     /** 일정 수정(강사). 시작 전(DRAFT/SCHEDULED/OPEN)에만 가능. null은 "변경 안 함". 상태 자동 전이는 없다. */

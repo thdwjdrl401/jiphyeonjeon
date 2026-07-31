@@ -4,6 +4,7 @@ import com.liveclass.live.api.LiveSessionView;
 import com.liveclass.live.domain.LiveSessionStatus;
 import com.liveclass.live.service.LiveKitTokenService;
 import com.liveclass.live.service.LiveAccessGuard;
+import com.liveclass.live.service.LiveEndOrchestrator;
 import com.liveclass.live.service.LiveParticipantIdentity;
 import com.liveclass.live.service.LivePreflightService;
 import com.liveclass.live.service.LiveSessionForbiddenException;
@@ -43,15 +44,18 @@ import java.util.UUID;
 public class LiveSessionController {
 
     private final LiveSessionService liveSessionService;
+    private final LiveEndOrchestrator endOrchestrator;
     private final LiveStartOrchestrator startOrchestrator;
     private final LivePreflightService preflightService;
     private final LiveKitTokenService tokenService;
     private final LiveAccessGuard accessGuard;
 
-    public LiveSessionController(LiveSessionService liveSessionService, LiveStartOrchestrator startOrchestrator,
+    public LiveSessionController(LiveSessionService liveSessionService, LiveEndOrchestrator endOrchestrator,
+                                LiveStartOrchestrator startOrchestrator,
                                 LivePreflightService preflightService, LiveKitTokenService tokenService,
                                 LiveAccessGuard accessGuard) {
         this.liveSessionService = liveSessionService;
+        this.endOrchestrator = endOrchestrator;
         this.startOrchestrator = startOrchestrator;
         this.preflightService = preflightService;
         this.tokenService = tokenService;
@@ -151,7 +155,7 @@ public class LiveSessionController {
     @Operation(summary = "라이브 종료", description = "진행 중인 라이브를 강사가 끝낸다. 이미 종료됐어도 문제없이 종료 상태를 유지한다(멱등).")
     @PostMapping("/api/live-sessions/{sessionId}/end")
     public LiveSessionView end(@PathVariable UUID sessionId, Authentication authentication) {
-        return liveSessionService.end(sessionId, UUID.fromString(authentication.getName()));
+        return endOrchestrator.end(sessionId, UUID.fromString(authentication.getName()));
     }
 
     /** 강사 WebRTC 송출 토큰 발급. 수강생은 LiveKit 방에 참여하지 않고 HLS로만 재생한다(ADR-0032). */
