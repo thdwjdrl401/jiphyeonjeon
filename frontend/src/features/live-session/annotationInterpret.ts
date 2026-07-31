@@ -80,15 +80,16 @@ export function selectionBounds(elements: readonly AnnotationElement[]): Selecti
 }
 
 /**
- * 변환된 요소를 <b>원래 그린 자리로</b> 옮긴다.
+ * 변환된 요소를 <b>원래 그린 자리·크기에</b> 맞춘다.
  *
- * <p>여기가 ADR-0054의 핵심이 실제로 사는 곳이다. 모델은 위치를 말하지 않았고, mermaid는 자기
- * 원점에서 배치를 계산했다. 그 결과를 강사가 그렸던 자리에 겹쳐 놓는 일은 <b>우리가</b> 한다 —
- * 원본 획의 bbox를 알고 있으므로 추측이 필요 없다.
+ * <p>여기가 ADR-0054의 핵심이 실제로 사는 곳이다. 모델은 위치도 크기도 말하지 않았고, mermaid는
+ * 자기 원점에서 자기 기준으로 배치했다. 강사가 그렸던 자리에 그만한 크기로 얹는 일은 <b>우리가</b>
+ * 한다 — 원본 획의 bbox를 알고 있으므로 추측이 필요 없다.
  *
- * <p><b>크기는 건드리지 않는다.</b> 늘리면 글자만 뭉개지고, 줄이면 읽을 수 없게 된다. 대신
- * <b>가운데를 맞춘다</b> — 정리된 그림이 손그림이 있던 자리에 그대로 나타나는 것이 강사가 기대하는
- * 모습이고, 크기 조절은 Excalidraw가 이미 잘 하는 일이다.
+ * <p><b>비율은 유지한다.</b> 가로세로를 따로 늘리면 원이 타원이 되고 글자가 찌그러진다. 짧은 쪽에
+ * 맞춰 균일하게 줄이고 남는 방향은 가운데로 둔다.
+ *
+ * <p>글자 크기도 함께 곱한다. 상자만 줄이고 글자를 그대로 두면 라벨이 상자를 삐져나온다.
  */
 export function placeAtSelection<T extends AnnotationElement>(
   elements: readonly T[],
@@ -97,14 +98,40 @@ export function placeAtSelection<T extends AnnotationElement>(
   const converted = selectionBounds(elements)
   if (!converted) return [...elements]
 
-  const dx = bounds.x + (bounds.width - converted.width) / 2 - converted.x
-  const dy = bounds.y + (bounds.height - converted.height) / 2 - converted.y
+  const scale = fitScale(converted, bounds)
+  const dx = bounds.x + (bounds.width - converted.width * scale) / 2
+  const dy = bounds.y + (bounds.height - converted.height * scale) / 2
 
-  return elements.map((element) => ({
-    ...element,
-    x: (typeof element.x === 'number' ? element.x : 0) + dx,
-    y: (typeof element.y === 'number' ? element.y : 0) + dy,
-  }))
+  return elements.map((element) => {
+    const originX = typeof element.x === 'number' ? element.x : 0
+    const originY = typeof element.y === 'number' ? element.y : 0
+    const scaled: Record<string, unknown> = {
+      ...element,
+      x: dx + (originX - converted.x) * scale,
+      y: dy + (originY - converted.y) * scale,
+    }
+    if (typeof element.width === 'number') scaled.width = element.width * scale
+    if (typeof element.height === 'number') scaled.height = element.height * scale
+    if (typeof element.fontSize === 'number') scaled.fontSize = element.fontSize * scale
+    if (Array.isArray(element.points)) {
+      scaled.points = (element.points as [number, number][]).map(([x, y]) => [x * scale, y * scale])
+    }
+    return scaled as T
+  })
+}
+
+/**
+ * 원본 자리에 들어가도록 줄일 배율.
+ *
+ * <p>원본보다 작게 그려졌으면 <b>키우지 않는다</b>. mermaid가 낸 그림이 이미 읽을 만한 크기인데
+ * 강사가 작게 스케치했다고 억지로 늘리면 글자만 뭉개진다 — 남는 자리는 그냥 비워 둔다.
+ */
+function fitScale(converted: SelectionBounds, bounds: SelectionBounds): number {
+  const byWidth = converted.width > 0 ? bounds.width / converted.width : 1
+  const byHeight = converted.height > 0 ? bounds.height / converted.height : 1
+  const fit = Math.min(byWidth, byHeight)
+  if (!Number.isFinite(fit) || fit <= 0) return 1
+  return Math.min(1, fit)
 }
 
 /**

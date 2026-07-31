@@ -65,8 +65,53 @@ describe('변환 결과 배치', () => {
     expect(placed.map((e) => [e.x, e.y])).toEqual([[600, 375], [660, 375]])
   })
 
-  /** 늘리면 글자가 뭉개지고 줄이면 못 읽는다. 크기 조절은 Excalidraw가 이미 잘 한다. */
-  it('크기는 건드리지 않는다', () => {
+  /**
+   * 정리한 그림이 손그림보다 훨씬 크면 옆의 판서를 덮는다. 원본이 차지하던 만큼으로 줄인다.
+   */
+  it('원본 자리에 들어가도록 줄인다', () => {
+    // mermaid가 (0,0)-(400,200)에 그렸는데 강사는 (0,0)-(200,200)에 스케치했다
+    const converted = [box('m1', 0, 0, 400, 200)]
+
+    const placed = placeAtSelection(converted, { x: 0, y: 0, width: 200, height: 200 })
+
+    // 짧은 쪽(가로) 기준 0.5배
+    expect(placed[0].width).toBe(200)
+    expect(placed[0].height).toBe(100)
+  })
+
+  /** 가로세로를 따로 늘리면 원이 타원이 되고 글자가 찌그러진다. */
+  it('비율을 유지한다', () => {
+    const converted = [box('m1', 0, 0, 400, 100)]
+
+    const placed = placeAtSelection(converted, { x: 0, y: 0, width: 200, height: 200 })
+
+    const shape = placed[0] as unknown as { width: number; height: number }
+    expect(shape.width / shape.height).toBeCloseTo(4)
+  })
+
+  /** 상자만 줄이고 글자를 그대로 두면 라벨이 상자를 삐져나온다. */
+  it('글자 크기도 함께 줄인다', () => {
+    const text = { ...box('t1', 0, 0, 400, 100), fontSize: 40 }
+
+    const placed = placeAtSelection([text] as AnnotationElement[], { x: 0, y: 0, width: 200, height: 100 })
+
+    expect((placed[0] as { fontSize?: number }).fontSize).toBe(20)
+  })
+
+  /** 획으로 이뤄진 요소는 점까지 줄여야 한다 — 상자만 줄이면 선이 상자 밖으로 뻗는다. */
+  it('선의 점도 함께 줄인다', () => {
+    const line = { id: 'l1', type: 'line', version: 1, x: 0, y: 0, points: [[0, 0], [400, 0]] }
+
+    const placed = placeAtSelection([line] as unknown as AnnotationElement[], { x: 0, y: 0, width: 200, height: 200 })
+
+    expect((placed[0] as unknown as { points: [number, number][] }).points[1][0]).toBe(200)
+  })
+
+  /**
+   * 원본보다 작게 그려졌으면 키우지 않는다. mermaid가 낸 그림이 이미 읽을 만한데 강사가 작게
+   * 스케치했다고 억지로 늘리면 글자만 뭉개진다.
+   */
+  it('원본이 더 크면 키우지 않는다', () => {
     const converted = [box('m1', 0, 0, 40, 50)]
 
     const placed = placeAtSelection(converted, { x: 0, y: 0, width: 1000, height: 800 })
