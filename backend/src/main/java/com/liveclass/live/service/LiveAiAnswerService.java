@@ -40,16 +40,19 @@ public class LiveAiAnswerService {
     private final LiveSessionRepository liveSessionRepository;
     private final LiveCaptionRepository liveCaptionRepository;
     private final RagAnswerStreaming ragAnswerStreaming;
+    private final LiveInteractionGuard interactionGuard;
     private final long streamTimeoutMs;
     // 릴레이 펌프 전용. blocking read라 platform thread면 동시 질문 수만큼 스레드를 잡는다(ADR-0009).
     private final ExecutorService relayExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
     public LiveAiAnswerService(LiveSessionRepository liveSessionRepository,
                                LiveCaptionRepository liveCaptionRepository,
-                               RagAnswerStreaming ragAnswerStreaming) {
+                               RagAnswerStreaming ragAnswerStreaming,
+                               LiveInteractionGuard interactionGuard) {
         this.liveSessionRepository = liveSessionRepository;
         this.liveCaptionRepository = liveCaptionRepository;
         this.ragAnswerStreaming = ragAnswerStreaming;
+        this.interactionGuard = interactionGuard;
         // 브라우저 emitter 타임아웃은 업스트림 상한과 같아야 한다 — 짧으면 정상 응답이 중간에 끊긴다.
         this.streamTimeoutMs = ragAnswerStreaming.streamTimeout().toMillis();
     }
@@ -68,6 +71,8 @@ public class LiveAiAnswerService {
     public RagAnswerCommand prepare(UUID sessionId, String question) {
         LiveSession session = liveSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new LiveSessionNotFoundException("라이브 세션을 찾을 수 없습니다."));
+        // ENDING은 HLS 지연 구간이므로 질문을 허용하고, ENDED부터 업스트림 호출 전에 닫는다.
+        interactionGuard.requireOpen(session);
         long contextTimeMs = liveCaptionRepository
                 .findFirstBySessionIdAndEventTypeInOrderByOccurredAtDescIdDesc(sessionId, CaptionEvent.CONTEXT_TIME_TYPES)
                 .map(LiveCaption::getStreamElapsedMs)

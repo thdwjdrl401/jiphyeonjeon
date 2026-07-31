@@ -3,6 +3,7 @@ package com.liveclass.live.web.ws;
 import com.liveclass.common.web.ErrorResponse;
 import com.liveclass.live.service.ChatService;
 import com.liveclass.live.service.LiveSessionForbiddenException;
+import com.liveclass.live.service.LiveSessionInteractionClosedException;
 import com.liveclass.live.service.LiveSessionNotFoundException;
 import com.liveclass.live.service.LiveSessionStateConflictException;
 import com.liveclass.live.web.dto.SendChatMessageRequest;
@@ -73,6 +74,12 @@ public class ChatWsController {
     @SendToUser(destinations = "/queue/errors", broadcast = false)
     public ErrorResponse handleStateConflict(LiveSessionStateConflictException e) {
         return ErrorResponse.of("LIVE_SESSION_STATE_CONFLICT", e.getMessage());
+    }
+
+    @MessageExceptionHandler({LiveSessionInteractionClosedException.class})
+    @SendToUser(destinations = "/queue/errors", broadcast = false)
+    public ErrorResponse handleInteractionClosed(LiveSessionInteractionClosedException e) {
+        return ErrorResponse.of("LIVE_SESSION_INTERACTION_CLOSED", e.getMessage());
     }
 
     /** 잘못된 입력(필수 누락·길이 초과) → 400 계열. */

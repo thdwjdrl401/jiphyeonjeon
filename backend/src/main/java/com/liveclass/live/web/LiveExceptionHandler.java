@@ -4,6 +4,7 @@ import com.liveclass.aiintegration.api.RagAnswerUpstreamException;
 import com.liveclass.common.web.ErrorResponse;
 import com.liveclass.common.web.ErrorResponses;
 import com.liveclass.live.service.LiveRoomControlException;
+import com.liveclass.live.service.LiveSessionInteractionClosedException;
 import com.liveclass.live.service.LiveSessionForbiddenException;
 import com.liveclass.live.service.LiveSessionNotFoundException;
 import com.liveclass.live.service.LiveSessionStateConflictException;
@@ -36,6 +37,12 @@ public class LiveExceptionHandler {
     public ResponseEntity<ErrorResponse> handleStateConflict(LiveSessionStateConflictException e) {
         return ErrorResponses.of(HttpStatus.CONFLICT,
                 ErrorResponse.of("LIVE_SESSION_STATE_CONFLICT", e.getMessage()));
+    }
+
+    @ExceptionHandler(LiveSessionInteractionClosedException.class)
+    public ResponseEntity<ErrorResponse> handleInteractionClosed(LiveSessionInteractionClosedException e) {
+        return ErrorResponses.of(HttpStatus.CONFLICT,
+                ErrorResponse.of("LIVE_SESSION_INTERACTION_CLOSED", e.getMessage()));
     }
 
     /**

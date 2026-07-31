@@ -1,6 +1,8 @@
 package com.liveclass.live;
 
 import com.liveclass.live.api.LiveRecordingControl;
+import com.liveclass.live.domain.LiveSessionStatus;
+import com.liveclass.live.repository.LiveSessionRepository;
 import com.liveclass.live.service.AgentDispatchControl;
 import com.liveclass.live.service.LiveRoomControl;
 import com.liveclass.live.service.LiveStartOrchestrator;
@@ -51,6 +53,9 @@ class ChatContractTest {
 
     @Autowired
     private LiveStartOrchestrator startOrchestrator;
+
+    @Autowired
+    private LiveSessionRepository liveSessionRepository;
 
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
 
@@ -205,6 +210,28 @@ class ChatContractTest {
                 .andExpect(jsonPath("$.length()").value(2))
                 .andExpect(jsonPath("$[0].text").value("첫째"))
                 .andExpect(jsonPath("$[1].text").value("둘째"));
+    }
+
+    @Test
+    void ending_allows_chat_but_ended_rejects_it_with_the_closed_contract_code() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String[] created = createStartedSession(instructor);
+        Cookie[] student = loginAs("STUDENT");
+        enrollActive(created[1], student, instructor);
+        UUID sessionId = UUID.fromString(created[0]);
+
+        liveSessionRepository.findById(sessionId).orElseThrow().setStatus(LiveSessionStatus.ENDING);
+        write(post("/api/live-sessions/" + sessionId + "/messages"), student, """
+                {"clientMessageId":"ending-ok","text":"남은 HLS 구간 질문"}
+                """)
+                .andExpect(status().isCreated());
+
+        liveSessionRepository.findById(sessionId).orElseThrow().setStatus(LiveSessionStatus.ENDED);
+        write(post("/api/live-sessions/" + sessionId + "/messages"), student, """
+                {"clientMessageId":"ended-no","text":"종료 뒤 질문"}
+                """)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("LIVE_SESSION_INTERACTION_CLOSED"));
     }
 
     @Test
