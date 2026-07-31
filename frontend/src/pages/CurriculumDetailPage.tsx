@@ -6,7 +6,6 @@ import CurriculumMaterials from '@/features/curriculum/CurriculumMaterials'
 import CurriculumNotice from '@/features/curriculum/CurriculumNotice'
 import CurriculumOutline from '@/features/curriculum/CurriculumOutline'
 import CurriculumOverview from '@/features/curriculum/CurriculumOverview'
-import InstructorSummary from '@/features/curriculum/InstructorSummary'
 import CurriculumDetailSkeleton from '@/features/curriculum-detail/CurriculumDetailSkeleton'
 import CurriculumRelationPanel from '@/features/curriculum-detail/CurriculumRelationPanel'
 import InstructorManagementCard from '@/features/curriculum-detail/InstructorManagementCard'
@@ -66,45 +65,48 @@ export default function CurriculumDetailPage() {
   const handleManage = () => navigate(instructorPaths.curriculumManage(detail.curriculumId))
 
   return (
-    <div className="curriculum-detail-page page-container">
-      <CurriculumHero
-        detail={detail}
-        primaryAction={primaryAction}
-        onEnroll={handleEnroll}
-        isEnrolling={enrollMutation.isPending}
-        onCancel={handleCancel}
-        isCancelling={cancelMutation.isPending}
-      />
+    <div className={`curriculum-detail-page page-container${user?.role === 'STUDENT' ? ' curriculum-detail-page--student' : ''}`}>
+      <div className="curriculum-detail__content">
+        <div className="curriculum-detail__main">
+          <CurriculumHero
+            detail={detail}
+            primaryAction={primaryAction}
+            onEnroll={handleEnroll}
+            isEnrolling={enrollMutation.isPending}
+            onCancel={handleCancel}
+            isCancelling={cancelMutation.isPending}
+          />
 
-      {instructorManagement && (
-        <InstructorManagementCard isInstructor={instructorManagement.isInstructor} onManage={handleManage} />
-      )}
+          <CurriculumOutline
+            key={detail.curriculumId}
+            outline={detail.outline}
+            relationship={detail.viewerContext.relationship}
+            curriculumId={detail.curriculumId}
+          />
+        </div>
 
-      <CurriculumOverview description={detail.description} />
-      <InstructorSummary instructor={detail.instructor} />
+        <aside className="curriculum-detail__sidebar-track" aria-label="커리큘럼 보조 정보">
+          <div className="curriculum-detail__sidebar">
+            {instructorManagement && (
+              <InstructorManagementCard isInstructor={instructorManagement.isInstructor} onManage={handleManage} />
+            )}
 
-      {canViewCurriculumMaterials && detail.materials.length > 0 && (
-        <CurriculumMaterials materials={detail.materials} />
-      )}
+            {canViewCurriculumMaterials && detail.materials.length > 0 && (
+              <CurriculumMaterials materials={detail.materials} />
+            )}
 
-      {detail.viewerContext.relationship === 'ENROLLED' && detail.viewerContext.progress && (
-        <CurriculumProgress progress={detail.viewerContext.progress} />
-      )}
+            {detail.viewerContext.relationship === 'ENROLLED' && detail.viewerContext.progress && (
+              <CurriculumProgress progress={detail.viewerContext.progress} />
+            )}
 
-      <CurriculumOutline
-        outline={detail.outline}
-        relationship={detail.viewerContext.relationship}
-        curriculumId={detail.curriculumId}
-      />
+            <CurriculumOverview description={detail.description} />
 
-      <CurriculumRelationPanel
-        detail={detail}
-        returnTo={returnTo}
-        onEnroll={handleEnroll}
-        isEnrolling={enrollMutation.isPending}
-      />
+            <CurriculumRelationPanel detail={detail} returnTo={returnTo} />
 
-      <CurriculumNotice detail={detail} />
+            <CurriculumNotice detail={detail} />
+          </div>
+        </aside>
+      </div>
     </div>
   )
 }

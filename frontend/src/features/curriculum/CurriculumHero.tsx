@@ -13,11 +13,20 @@ interface CurriculumHeroProps {
   isCancelling: boolean
 }
 
+const lifecycleLabel: Record<string, string> = {
+  PUBLISHED: '공개 중',
+  DRAFT: '준비 중',
+  CLOSED: '운영 종료',
+}
+
 export default function CurriculumHero({ detail, primaryAction, onEnroll, isEnrolling, onCancel, isCancelling }: CurriculumHeroProps) {
   return (
     <section className="curriculum-hero">
       <div className="curriculum-hero__grid">
-        <CurriculumIdentity title={detail.title} summary={detail.summary} lifecycleStatus={detail.lifecycleStatus} />
+        <CurriculumIdentity title={detail.title} summary={detail.summary} />
+        <span className="curriculum-lifecycle-badge">
+          {lifecycleLabel[detail.lifecycleStatus] ?? detail.lifecycleStatus}
+        </span>
         <CurriculumMetadata
           instructorName={detail.instructor.displayName}
           period={detail.period}

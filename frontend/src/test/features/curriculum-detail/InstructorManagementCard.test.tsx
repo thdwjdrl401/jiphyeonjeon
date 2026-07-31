@@ -9,7 +9,7 @@ describe('InstructorManagementCard', () => {
     const onManage = vi.fn()
     render(<InstructorManagementCard isInstructor onManage={onManage} />)
 
-    expect(screen.getByRole('heading', { name: '담당 강사 관리' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '담당 커리큘럼 관리' })).toBeInTheDocument()
     expect(screen.getByText('이 커리큘럼을 관리하고 강의를 편성할 수 있어요.')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '관리하기' }))
