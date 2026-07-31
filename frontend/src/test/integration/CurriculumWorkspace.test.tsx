@@ -512,10 +512,12 @@ describe('커리큘럼 작업 화면', () => {
 
     await user.type(await screen.findByLabelText('현재 비밀번호'), 'current-password')
     await user.type(screen.getByLabelText('새 비밀번호'), 'new-password-123')
+    // 확인 필드까지 맞아야 제출이 열린다.
+    await user.type(screen.getByLabelText('새 비밀번호 확인'), 'new-password-123')
     await user.click(screen.getByRole('button', { name: '비밀번호 변경' }))
     expect(await screen.findByText('비밀번호가 변경되었습니다.')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('checkbox', { name: '계정 탈퇴에 동의합니다.' }))
+    await user.click(screen.getByRole('checkbox', { name: /위 안내 사항을 모두 확인하였으며/ }))
     await user.click(screen.getByRole('button', { name: '회원 탈퇴' }))
     await waitFor(() => expect(window.location.pathname).toBe('/login'))
     expect(await screen.findByRole('link', { name: '로그인' })).toBeInTheDocument()

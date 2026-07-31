@@ -1142,6 +1142,10 @@ body {
 /* 통계 행의 칸 사이 선과 배경을 디자인 시스템 색으로 맞춘다(구분선은 1px gap + 배경색으로 낸다). */
 .profile-stats { background: var(--border-medium); }
 .profile-stats > div { background: var(--paper-light); }
+/* 계정 보안 카드 안의 구분선·소제목을 다른 카드와 같은 색·굵기로 맞춘다. */
+.settings-section { border-top-color: var(--border-medium); }
+.settings-section h3 { font-weight: 400; letter-spacing: -.02em; }
+.withdraw-panel__notice { border-radius: 0; background: var(--ink-50); }
 .metric-card { min-height: 140px; border-top: 0; border-left: 0; padding: 24px; }
 .metric-card::before { display: none; }
 .metric-card > span { font-size: .75rem; }
@@ -1535,6 +1539,7 @@ body {
   .metric-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .sticky-form-actions { bottom: 8px; border-radius: 12px; }
   .dashboard-curriculum-card { grid-template-columns: 1fr; }
+  /* 세로 탭이 가로로 눕는 폭 — 구분선이 오른쪽에서 아래로 옮겨간다. */
   .profile-modal { border-radius: 0; }
 }
 

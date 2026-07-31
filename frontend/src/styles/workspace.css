@@ -153,13 +153,6 @@
 .profile-page .workspace-panel { padding: 20px 22px; }
 .profile-page .workspace-panel__header { margin-bottom: 15px; padding-bottom: 12px; }
 .user-avatar--large { width: 76px; height: 76px; flex: 0 0 76px; border-radius: 22px; font-size: 1.45rem; }
-.profile-modal-backdrop { position: fixed; z-index: 1000; inset: 0; display: grid; overflow-y: auto; place-items: center; padding: 24px; background: rgba(12,18,34,.56); backdrop-filter: blur(6px); }
-.profile-modal { width: min(100%, 520px); padding: 28px; border: 1px solid rgba(255,255,255,.8); border-radius: 22px; background: #fff; box-shadow: 0 24px 80px rgba(15,24,48,.28); }
-.profile-modal__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
-.profile-modal__header h2 { margin: 6px 0 5px; color: var(--ink-950); font-size: 1.45rem; letter-spacing: -.04em; }
-.profile-modal__header p { margin: 0; color: var(--ink-500); font-size: .76rem; }
-.profile-modal__close { display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; border: 0; border-radius: 10px; background: var(--ink-50); color: var(--ink-700); font-size: 1.45rem; line-height: 1; }
-.profile-modal__close:hover:not(:disabled) { background: var(--ink-100); color: var(--ink-950); }
 .profile-image-editor { display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; gap: 18px; padding: 18px; border: 1px solid var(--ink-100); border-radius: 16px; background: var(--ink-50); }
 .profile-image-editor > div { display: flex; min-width: 0; align-items: flex-start; flex-direction: column; gap: 7px; }
 .profile-image-editor strong { color: var(--ink-900); font-size: .82rem; }
@@ -167,13 +160,32 @@
 .profile-image-editor input { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; }
 .profile-image-editor label { width: auto; cursor: pointer; }
 .profile-image-editor small { max-width: 100%; overflow: hidden; color: var(--blue-600); font-size: .65rem; text-overflow: ellipsis; white-space: nowrap; }
+.profile-modal-backdrop { position: fixed; z-index: 1000; inset: 0; display: grid; overflow-y: auto; place-items: center; padding: 24px; background: rgba(12,18,34,.56); backdrop-filter: blur(6px); }
+.profile-modal { width: min(100%, 520px); padding: 28px; border: 1px solid rgba(255,255,255,.8); border-radius: 22px; background: #fff; box-shadow: 0 24px 80px rgba(15,24,48,.28); }
+.profile-modal__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
+.profile-modal__header h2 { margin: 6px 0 5px; color: var(--ink-950); font-size: 1.45rem; letter-spacing: -.04em; }
+.profile-modal__header p { margin: 0; color: var(--ink-500); font-size: .76rem; }
+.profile-modal__close { display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; border: 0; border-radius: 10px; background: var(--ink-50); color: var(--ink-700); font-size: 1.45rem; line-height: 1; }
+.profile-modal__close:hover:not(:disabled) { background: var(--ink-100); color: var(--ink-950); }
 .profile-modal input[readonly] { background: var(--ink-50); color: var(--ink-600); cursor: not-allowed; }
 .profile-modal__error { margin: -4px 0 0; color: var(--red-600); font-size: .72rem; }
 .profile-modal__actions { margin-top: 2px; }
-.settings-list > div { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 16px 0; border-bottom: 1px solid var(--ink-100); }
-.settings-list > div:last-child { border: 0; }
-.settings-list p { margin: 3px 0 0; color: var(--ink-500); font-size: .73rem; }
-.settings-list__danger strong { color: var(--red-600); }
+
+/*
+  "계정 보안" 카드 안에서 비밀번호 변경과 회원 탈퇴를 가르는 구분선.
+  탈퇴 안내가 네 항목으로 길어져, 두 기능이 한 덩어리로 붙어 있으면 어디까지가 무엇인지 흐려진다.
+*/
+.settings-section { display: flex; flex-direction: column; gap: 16px; margin-top: 4px; padding-top: 22px; border-top: 1px solid var(--ink-100); }
+.settings-section h3 { margin: 0; color: var(--ink-950); font-size: .95rem; letter-spacing: -.02em; }
+/* 폼 아래 보조 안내("비밀번호를 잊으셨나요?"). */
+.settings-aside { margin: 0; color: var(--ink-500); font-size: .74rem; }
+
+/* 회원 탈퇴 — 안내를 읽는 순서(요약 → 항목 → 질문 → 동의)가 그대로 시각 위계가 된다. */
+.withdraw-panel { display: flex; flex-direction: column; gap: 14px; }
+.withdraw-panel__lead { margin: 0; color: var(--ink-900); font-size: .85rem; font-weight: 500; }
+.withdraw-panel__notice { display: flex; flex-direction: column; gap: 9px; margin: 0; padding: 15px 18px 15px 34px; border-radius: 11px; background: var(--ink-50); color: var(--ink-600); font-size: .78rem; line-height: 1.55; }
+.withdraw-panel__question { margin: 2px 0 0; color: var(--ink-950); font-size: .85rem; font-weight: 700; }
+.withdraw-panel .choice-row { margin-top: 0; }
 .panel-footer { margin-top: 18px; text-align: right; }
 .next-action-card, .session-summary, .replay-summary { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 20px; }
 .next-action-card__date, .session-summary__date { display: flex; min-width: 76px; flex-direction: column; align-items: center; padding: 13px; border-radius: 14px; background: var(--ink-950); color: #fff; }
@@ -445,6 +457,7 @@ th { color: var(--ink-500); font-size: .67rem; }
   .workspace-page-header__action, .workspace-page-header__action > .button { width: 100%; }
   .workspace-sidebar nav { grid-template-columns: 1fr; }
   .metric-grid, .form-grid, .summary-grid, .notice-grid, .check-grid, .curriculum-assets-grid { grid-template-columns: 1fr; }
+  .profile-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   /*
    * 좁은 화면에서는 아바타와 정보만 나란히 두고 수정 버튼을 아래 전체폭으로 내린다. 3열을
    * 유지하면 이름·이메일이 버튼에 밀려 한 글자씩 끊기고, 버튼도 눌리기 어려울 만큼 좁아진다.
