@@ -325,5 +325,18 @@ describe('판서 한 바퀴 — 강사가 그린 것이 수신 측에서 같은 
     await waitFor(() => {
       expect(visibleAnnotationElements(receiverDocument()).map((e) => e.id)).toEqual(['a', 'b'])
     })
+
+    // 그리고 <b>다음</b> 새로고침도 살아남아야 한다. 복원은 마지막 스냅샷부터 접으므로, 접속하며
+    // 나가는 빈 기준점 스냅샷이 저장되면 그 앞의 판서가 통째로 사라진다 — 이번 페이지에서는 멀쩡해
+    // 보이고 다음 번에야 드러난다.
+    window.dispatchEvent(new Event('pagehide'))
+    await waitFor(() => {
+      expect(server.rows.some((r) => r.opType === 'snapshot')).toBe(true)
+    })
+    // 빈 스냅샷은 한 건도 저장되면 안 된다. 복원은 마지막 스냅샷부터 접으므로, 그런 op가 마지막에
+    // 앉는 순간 그 앞의 판서가 통째로 사라진다 — 뒤에 내용 스냅샷이 따라붙느냐에 기대면 안 된다.
+    const empties = server.rows.filter(
+      (r) => r.opType === 'snapshot' && JSON.parse(r.payload).elements.length === 0)
+    expect(empties).toHaveLength(0)
   })
 })
