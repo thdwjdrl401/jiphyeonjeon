@@ -38,11 +38,15 @@ if [ ! -e "$CONFIG_DIR/realtime-agent.env" ]; then
     install -m 0600 "$SCRIPT_DIR/env/realtime-agent.env.example" \
         "$CONFIG_DIR/realtime-agent.env"
 fi
+if [ ! -e "$CONFIG_DIR/realtime-agent-dev.env" ]; then
+    install -m 0600 "$SCRIPT_DIR/env/realtime-agent-dev.env.example" \
+        "$CONFIG_DIR/realtime-agent-dev.env"
+fi
 if [ ! -e "$CONFIG_DIR/realtime-agent-tunnels.env" ]; then
     install -m 0600 "$SCRIPT_DIR/env/realtime-agent-tunnels.env.example" \
         "$CONFIG_DIR/realtime-agent-tunnels.env"
 fi
 
 echo "rootless runtime installed under $USER_PREFIX"
-echo "edit $CONFIG_DIR/realtime-agent*.env before the first deployment"
+echo "edit $CONFIG_DIR/realtime-agent.env, realtime-agent-dev.env, and realtime-agent-tunnels.env before the first deployment"
 echo "install and register GitLab Runner, then run: $BIN_DIR/liveclass-gitlab-runner-user start"

@@ -51,13 +51,16 @@ flowchart LR
 | bge-runtime | GPU `127.0.0.1:8020` | host `:18020`; container `:18080/internal/bge` | `GET /healthz` | EC2 AI/운영 | 없음, 내부망 전제 | FastAPI 생존 |
 | bge-runtime | GPU `127.0.0.1:8020` | host `:18020`; container `:18080/internal/bge` | `GET /readyz` | ai-api, ai-worker | 없음, 내부망 전제 | model warmup 완료 |
 | bge-runtime | GPU `127.0.0.1:8020` | host `:18020`; container `:18080/internal/bge` | `POST /internal/v1/embeddings` | ai-api, ai-worker | Bearer token | embedding |
-| realtime-agent | GPU `127.0.0.1:8081` | EC2 `127.0.0.1:18081` | `GET /health/live` | 운영/Spring 목표 경로 | 없음, loopback 전제 | Python health server 생존 |
-| realtime-agent | GPU `127.0.0.1:8081` | EC2 `127.0.0.1:18081` | `GET /health/ready` | 운영/Spring 목표 경로 | 없음, loopback 전제 | STT prewarm·AgentServer·LiveKit 준비 |
-| realtime-agent | GPU `127.0.0.1:8081` | EC2 `127.0.0.1:18081` | `GET /` | 기존 운영 smoke | 없음, loopback 전제 | 호환용 plain `OK` |
+| prod realtime-agent | GPU `127.0.0.1:8081` | EC2 `127.0.0.1:18081` | `GET /health/live` | 운영/Spring 목표 경로 | 없음, loopback 전제 | Python health server 생존 |
+| prod realtime-agent | GPU `127.0.0.1:8081` | EC2 `127.0.0.1:18081` | `GET /health/ready` | 운영/Spring 목표 경로 | 없음, loopback 전제 | STT prewarm·AgentServer·LiveKit 준비 |
+| prod realtime-agent | GPU `127.0.0.1:8081` | EC2 `127.0.0.1:18081` | `GET /` | 기존 운영 smoke | 없음, loopback 전제 | 호환용 plain `OK` |
+| dev realtime-agent | GPU `127.0.0.1:8082` | EC2 `127.0.0.1:18082` | `GET /health/live` | 개발/Spring 목표 경로 | 없음, loopback 전제 | Python health server 생존 |
+| dev realtime-agent | GPU `127.0.0.1:8082` | EC2 `127.0.0.1:18082` | `GET /health/ready` | 개발/Spring 목표 경로 | 없음, loopback 전제 | STT prewarm·AgentServer·LiveKit 준비 |
+| dev realtime-agent | GPU `127.0.0.1:8082` | EC2 `127.0.0.1:18082` | `GET /` | 개발 smoke | 없음, loopback 전제 | 호환용 plain `OK` |
 
-realtime-agent는 FastAPI가 아니다. Python `ThreadingHTTPServer`가 loopback `:8081`의 service health를
-제공하고 LiveKit Agents SDK의 자체 HTTP server는 loopback 임의 port를 사용한다. `:8081/worker`는
-존재하지 않으며 알 수 없는 path는 404다.
+realtime-agent는 FastAPI가 아니다. Python `ThreadingHTTPServer`가 prod loopback `:8081`, dev
+loopback `:8082`의 service health를 제공하고 LiveKit Agents SDK의 자체 HTTP server는 각 process의
+loopback 임의 port를 사용한다. 두 management port에 `/worker`는 없고 알 수 없는 path는 404다.
 
 ### 3.1 management endpoint 의미
 
@@ -183,9 +186,9 @@ payload는 [`delta fixture`](../../ai/realtime-agent/contracts/fixtures/caption-
 [`completion fixture`](../../ai/realtime-agent/contracts/fixtures/caption-completed.valid.json)를 따른다.
 ai-api consumer는 구현됐고 Spring caption consumer도 구현됐다(별도 group `spring-caption-live-v1`,
 `eventId` 멱등, `core.live_caption` append-only 영속, `/topic/.../captions` WS 전달, raw `streamElapsedMs`
-그대로 — [ADR-0043](../../docs/decisions/songjeongki/0043-caption-consumer-persistence.md)). Spring consumer는
-`spring.data.redis`가 가리키는 프로필 구동 Redis를 소비한다. prod 캡션-Redis 토폴로지(현재 prod redis ≠
-캡션 redis)는 AI/인프라 오너 작업으로 남아 있다.
+그대로 — [ADR-0043](../../docs/decisions/songjeongki/0043-caption-consumer-persistence.md)). Spring consumer는 `spring.data.redis`가 가리키는 환경별 application Redis를 소비한다. dev agent의
+GPU tunnel `:4000`과 dev Spring의 `redis:6379`, prod agent의 GPU tunnel `:6390`과 prod Spring의
+`redis:6379`는 각각 같은 환경별 Redis instance를 가리킨다.
 
 ### 4.6a ai-api→application Redis 실시간 강의 노트
 
@@ -227,17 +230,18 @@ GPU host는 application inbound port를 public ingress로 열지 않는다. GPU�
 | local `-L` | `127.0.0.1:4000` | `localhost:4000` | **dev** application Redis lease/caption (dev-infra redis, requirepass) |
 | local `-L` | `127.0.0.1:6390` | `127.0.0.1:6390` | **prod** application Redis lease/caption (prod redis, 무인증) |
 | local `-L` | `127.0.0.1:3478` | `localhost:3478` | TURN/TCP Room media |
-| reverse `-R` | realtime-agent `127.0.0.1:8081` | `127.0.0.1:18081` | service liveness/readiness |
+| reverse `-R` | prod realtime-agent `127.0.0.1:8081` | `127.0.0.1:18081` | prod liveness/readiness |
+| reverse `-R` | dev realtime-agent `127.0.0.1:8082` | `127.0.0.1:18082` | dev liveness/readiness |
 | reverse `-R` | bge-runtime `127.0.0.1:8020` | `127.0.0.1:18020` | BGE readiness/embedding |
 
-실제 SSH TCP connection은 realtime control(LiveKit·Redis·health), TURN media, BGE supervisor 세 개로
+실제 SSH TCP connection은 realtime control(LiveKit·두 Redis·두 health), TURN media, BGE supervisor 세 개로
 분리한다. 같은 EC2 SSH endpoint와 key를 사용해도 ControlPath와 장애 범위를 공유하지 않는다.
 
 application Redis는 dev/prod 두 벌이다. dev는 dev-infra(`docker-compose.dev-infra.yml`)의 redis가
 host `:4000`(→ 컨테이너 6379, `--requirepass REDIS_PASSWORD`)으로 발행되고, prod는
 `docker-compose.prod.yml`의 redis가 loopback `127.0.0.1:6390`(→ 6379, 무인증, loopback+SSH키 게이팅)으로
-발행된다. GPU realtime-agent는 어느 스택에 붙느냐에 따라 서로 **다른 터널·다른 redis·다른
-`STT_AGENT_NAME`**을 쓴다(§5.5).
+발행된다. GPU의 두 realtime-agent는 같은 control SSH connection 안에서도 서로 **다른 local
+forward·다른 Redis·다른 `STT_AGENT_NAME`**을 쓴다(§5.5).
 
 ### 5.5 dev/prod realtime-agent 요구사항 (handoff)
 
@@ -251,13 +255,16 @@ EC2 AI 스택이 dev(`docker-compose.ai-dev.yml`, project `liveclass-ai-dev`)·p
 | Redis 터널 | local `-L 127.0.0.1:4000` (기존) | local `-L 127.0.0.1:6390` (신규) |
 | `REDIS_URL` | `redis://:<REDIS_PASSWORD>@127.0.0.1:4000/0` (requirepass) | `redis://127.0.0.1:6390/0` (무인증) |
 | STT provider | nemotron | nemotron |
-| LiveKit | dev LiveKit | prod LiveKit |
-| `STT_AGENT_NAME` | dev 전용 이름 | prod 전용 이름 (dev와 달라야 함) |
+| LiveKit | 공용 `:7443`, name으로 격리 | 공용 `:7443`, name으로 격리 |
+| `STT_AGENT_NAME` | `liveclass-realtime-stt-dev` | `liveclass-realtime-stt-prod` |
+| health | GPU `:8082`, EC2 `:18082` | GPU `:8081`, EC2 `:18081` |
+| active/idle | `1/1` | `12/12` |
 | caption 소비자 | dev ai-api (`liveclass-ai-dev`) | prod ai-api (`liveclass-ai`) |
 
-prod realtime-agent를 새로 붙일 때 프로세스 요구사항: `REDIS_URL=redis://127.0.0.1:6390/0`(무인증,
-prod redis가 loopback `:6390`으로 발행), nemotron STT, prod LiveKit 접속, dev와 겹치지 않는
-`STT_AGENT_NAME`. dev realtime-agent는 기존 `:4000` 터널·이름을 그대로 유지한다.
+prod realtime-agent는 `REDIS_URL=redis://127.0.0.1:6390/0`, agent name
+`liveclass-realtime-stt-prod`를 사용한다. dev realtime-agent는 기존 password Redis `:4000`과 agent name
+`liveclass-realtime-stt-dev`를 유지한다. 두 process는 같은 GPU0를 쓰므로 검증된 prod `12/12` 용량을 보존하고
+추가 dev 기본값은 `1/1`로 제한한다.
 
 세부 실행은 [`realtime-agent tunnel 문서`](../../ai/realtime-agent/scripts/README.md)와
 [`BGE tunnel 문서`](../../ai/bge-runtime/scripts/README.md)를 따른다.
@@ -289,6 +296,8 @@ Content-Type: application/json
 
 ### 5.3 EC2→GPU realtime-agent management
 
+prod는 EC2 `127.0.0.1:18081`, dev는 EC2 `127.0.0.1:18082`를 사용하며 endpoint와 schema는 같다.
+
 ```http
 GET http://127.0.0.1:18081/health/live
 ```
@@ -309,8 +318,9 @@ GET http://127.0.0.1:18081/health/ready
 {"contractVersion":"1","status":"notReady","service":"realtime-agent","sttProvider":"nemotron","workerStarted":true,"liveKitConnected":false,"modelsReady":true,"readyProcessCount":12,"expectedProcessCount":12}
 ```
 
-`GET /`는 호환용 plain `OK`이고 `:18081/worker`는 존재하지 않는다. 두 health 경로는 dispatch 생성,
-slot 예약 또는 job stop에 사용하지 않는다. 상세 body와 의미는
+dev 확인은 위 URL의 port를 `18082`로 바꾼다. `GET /`는 호환용 plain `OK`이고 두 port 모두
+`/worker`는 존재하지 않는다. health 경로는 dispatch 생성, slot 예약 또는 job stop에 사용하지 않는다.
+상세 body와 의미는
 [공유 계약 §3-8](../CONTRACT.md#3-8-gpu-realtime-agent-service-health-http--ai-구현됨-spring-consumer-미구현)을 따른다.
 
 ### 5.4 EC2 container용 내부 nginx proxy
@@ -319,13 +329,17 @@ slot 예약 또는 job stop에 사용하지 않는다. 상세 body와 의미는
 
 | 요청 prefix | upstream |
 |---|---|
-| `/internal/realtime-agent/` | EC2 `127.0.0.1:18081/` |
+| `/internal/realtime-agent/` | EC2 prod `127.0.0.1:18081/` |
+| `/internal/realtime-agent-dev/` | EC2 dev `127.0.0.1:18082/` |
 | `/internal/bge/` | EC2 `127.0.0.1:18020/` |
 
 ```text
 GET  /internal/realtime-agent/health/live
 GET  /internal/realtime-agent/health/ready
-GET  /internal/realtime-agent/              # 호환용 smoke
+GET  /internal/realtime-agent/              # prod 호환용 smoke
+GET  /internal/realtime-agent-dev/health/live
+GET  /internal/realtime-agent-dev/health/ready
+GET  /internal/realtime-agent-dev/          # dev 호환용 smoke
 GET  /internal/bge/readyz
 POST /internal/bge/internal/v1/embeddings
 ```
@@ -334,8 +348,9 @@ POST /internal/bge/internal/v1/embeddings
 `http://host.docker.internal:18080/internal/bge`로 주입한다. 두 client 설정은 안전한 path prefix를
 허용하므로 embedding 요청이 `/internal/bge/internal/v1/embeddings`로 전달된다.
 
-Spring realtime-agent health proxy client는 아직 없다. 따라서 `/internal/realtime-agent/*`는 proxy만
-준비됐고, `/internal/bge/*`는 운영 AI container caller까지 배선된 상태다.
+Spring realtime-agent health proxy client는 아직 없다. 따라서 prod `/internal/realtime-agent/*`와 dev
+`/internal/realtime-agent-dev/*`는 proxy만 준비됐고, `/internal/bge/*`는 운영 AI container caller까지
+배선된 상태다.
 
 ## 6. 지원하지 않는 직접 호출
 
@@ -344,7 +359,7 @@ Spring realtime-agent health proxy client는 아직 없다. 따라서 `/internal
 - Spring→realtime-agent 업무 HTTP 호출
 - ai-worker HTTP job submit
 - realtime-agent HTTP stop
-- GPU `8020`·`8081` public ingress
+- GPU `8020`·`8081`·`8082` public ingress
 - material callback body를 realtime lifecycle callback으로 재사용
 
 ## 7. 현재 구현 상태
@@ -356,12 +371,12 @@ Spring realtime-agent health proxy client는 아직 없다. 따라서 `/internal
 | ai-worker→Spring download URL/callback | 양쪽 구현 |
 | ai-worker/ai-api→BGE | runtime/client/reverse tunnel/운영 container proxy 배선 구현 |
 | Spring→LiveKit→realtime-agent dispatch | 양쪽 Phase 4a 구현, STT readiness gate 우회 중 |
-| realtime-agent→Redis caption | producer·ai-api consumer·Spring consumer 구현(Spring: 별도 group·eventId 멱등·core.live_caption 영속·WS 전달, ADR-0043). `caption.stream.started`·`caption.segment.final`도 발행(!233)·Spring 영속 구현(ADR-0052; 표시 대상 `delta`/`completed`만 WS·리로드·RAG 중계, 신규 2종은 영속만). prod 캡션-Redis 토폴로지는 인프라 오너 후속 |
+| realtime-agent→Redis caption | producer·ai-api consumer·Spring consumer 구현(Spring: 별도 group·eventId 멱등·core.live_caption 영속·WS 전달, ADR-0043). `caption.stream.started`·`caption.segment.final`도 발행(!233)·Spring 영속 구현(ADR-0052; 표시 대상 `delta`/`completed`만 WS·리로드·RAG 중계, 신규 2종은 영속만). dev/prod agent가 각 환경의 application Redis를 사용 |
 | ai-api→Redis 실시간 강의 노트 | append·capture 완료·refined snapshot producer와 단일 process 재시작 복구 구현. 공유 payload 계약 §3-4a 확정, Spring consumer·DB·REST·WebSocket 미구현 |
 | realtime-agent→Spring lifecycle callback | AI v1 구현·기본 off, Spring receiver 미구현 |
-| realtime-agent service health `:18081` | endpoint·schema·tunnel 구현, Spring client 미구현 |
+| realtime-agent service health prod `:18081`·dev `:18082` | endpoint·schema·tunnel 구현, Spring client 미구현 |
 | nginx `:18080/internal/bge/*` | ai-api·ai-worker 운영 container caller 배선 구현 |
-| nginx `:18080/internal/realtime-agent/*` | proxy 구현, Spring health client 미구현 |
+| nginx prod `/internal/realtime-agent/*`·dev `/internal/realtime-agent-dev/*` | proxy 구현, Spring health client 미구현 |
 | EC2 AI 스택 dev/prod 2벌 | prod `docker-compose.ai-prod.yml`(project `liveclass-ai`, network `liveclass_default`) + dev `docker-compose.ai-dev.yml`(project `liveclass-ai-dev`, network `liveclass-dev_default`). 각각 자기 pg/redis/rabbitmq에 접속, GPU BGE 프록시는 공용. prod redis loopback `:6390`, dev redis `:4000`(§5.1·§5.5) |
 
 ## 8. 변경 규칙

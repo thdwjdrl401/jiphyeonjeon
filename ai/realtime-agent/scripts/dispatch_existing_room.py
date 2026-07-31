@@ -18,7 +18,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--lesson-id", required=True)
     parser.add_argument("--correlation-id", required=True)
     parser.add_argument(
-        "--agent-name", default=os.getenv("STT_AGENT_NAME", "liveclass-realtime-stt")
+        "--agent-name", default=os.getenv("STT_AGENT_NAME", "liveclass-realtime-stt-dev")
     )
     return parser.parse_args(argv)
 

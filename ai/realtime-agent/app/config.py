@@ -87,7 +87,7 @@ class Settings:
     livekit_api_secret: str = field(repr=False)
     livekit_turn_url: str = ""
     livekit_turn_secret: str = field(default="", repr=False)
-    agent_name: str = "liveclass-realtime-stt"
+    agent_name: str = "liveclass-realtime-stt-dev"
     stt_provider: str = ""
     health_host: str = "127.0.0.1"
     health_port: int = 8081
@@ -138,7 +138,7 @@ class Settings:
             livekit_api_secret=values.get("LIVEKIT_API_SECRET", ""),
             livekit_turn_url=values.get("LIVEKIT_TURN_URL", "").strip(),
             livekit_turn_secret=values.get("LIVEKIT_TURN_SECRET", ""),
-            agent_name=values.get("STT_AGENT_NAME", "liveclass-realtime-stt"),
+            agent_name=values.get("STT_AGENT_NAME", "liveclass-realtime-stt-dev"),
             stt_provider=values.get("STT_ENGINE_PROVIDER", ""),
             health_host=values.get("STT_HEALTH_HOST", "127.0.0.1").strip(),
             health_port=_parse_int(values, "STT_HEALTH_PORT", 8081),

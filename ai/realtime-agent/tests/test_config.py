@@ -17,6 +17,7 @@ BASE_ENV = {
 def test_uses_application_redis_without_assuming_livekit_redis_port() -> None:
     settings = Settings.from_env(BASE_ENV)
 
+    assert settings.agent_name == "liveclass-realtime-stt-dev"
     assert settings.redis_url == "redis://localhost:6379/0"
     assert ":6380" not in settings.redis_url
     assert settings.caption_stream_maxlen == 10_000

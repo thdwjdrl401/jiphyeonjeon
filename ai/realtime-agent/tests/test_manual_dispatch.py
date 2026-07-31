@@ -66,7 +66,7 @@ class FakeDispatchService:
 def request(**changes: str) -> ManualDispatchRequest:
     values = {
         "room_name": f"session-{SESSION_ID}",
-        "agent_name": "liveclass-realtime-stt",
+        "agent_name": "liveclass-realtime-stt-dev",
         "session_id": SESSION_ID,
         "lesson_id": LESSON_ID,
         "instructor_identity": "av-bot",

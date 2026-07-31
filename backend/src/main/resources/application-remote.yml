@@ -50,6 +50,8 @@ asset:
 # 도메인 대신 IP를 쓰는 이유는 asset.storage와 같다 — 도메인에 HSTS가 걸려 http가 https로 승격된다.
 # MinIO 기본 CORS가 모든 origin을 허용해 localhost:8083에서 세그먼트를 바로 받을 수 있다(실측 확인).
 livekit:
+  # remote 프로필은 EC2 dev Redis를 소비하는 dev realtime-agent worker pool을 지목한다.
+  agent-name: ${LIVEKIT_AGENT_NAME:liveclass-realtime-stt-dev}
   egress:
     s3-endpoint: ${EGRESS_S3_ENDPOINT:http://43.201.249.3:9090}
     upload-endpoint: ${EGRESS_UPLOAD_ENDPOINT:http://127.0.0.1:9090}

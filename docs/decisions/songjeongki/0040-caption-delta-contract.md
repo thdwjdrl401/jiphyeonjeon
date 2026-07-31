@@ -58,7 +58,7 @@
 ## 데이터 흐름 (개정 후 전체)
 
 ```
-BE(세션 start) ── named dispatch(agent_name=liveclass-realtime-stt, metadata{sessionId,lessonId}) ──> LiveKit
+BE(세션 start) ── named dispatch(agent_name=liveclass-realtime-stt-dev, metadata{sessionId,lessonId}) ──> LiveKit
 agent: 오디오 구독 → PCM 정규화 → VAD → STT
   ├─ caption.delta ──────────┐
   ├─ caption.segment.final ──┤→ Redis Stream ai:captions:{sessionId}
