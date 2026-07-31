@@ -10,8 +10,8 @@ EC2의 prod `ai-api`·`ai-worker`는 Spring과 같은 Docker network에 있어 h
 dev network에는 Spring container가 없어 dev `ai-api`에 외부에서 도달할 경로도 없었다.
 
 realtime-agent는 prod와 dev의 LiveKit·TURN 연결 값을 중복하면서 provider와 관계없는
-Nemotron·OpenAI 변수까지 같이 실었다. 코드 기본값과 같다는 이유로 운영 정책 값을 생략하면
-배포 의도와 런타임 기본값을 구분할 수 없다.
+Nemotron·OpenAI 변수까지 같이 실었다. 반대로 강의 노트 생성 정책처럼 dev/prod가 같은 기본값을
+쓰는 선택적 튜닝 값까지 필수 env로 만들면 배포 환경파일만 불필요하게 커진다.
 
 ## 결정
 
@@ -21,8 +21,9 @@ Nemotron·OpenAI 변수까지 같이 실었다. 코드 기본값과 같다는 �
    prod는 `127.0.0.1:8010/8011`, dev는 `127.0.0.1:18010/18011`을 쓴다.
 3. port forwarding이 container process에 도달하도록 container 내부 bind는 `0.0.0.0`으로
    설정하되 host publish 주소를 `127.0.0.1`로 제한한다.
-4. 운영 정책 값은 코드·compose 기본값과 같아도 env 예시에 명시한다. 필수 값은
-   compose 렌더링 단계에서 누락을 거부한다.
+4. 시크릿·identity·관리 port·Spring 주소처럼 환경마다 달라지는 값은 env에 명시하고 compose 렌더링
+   단계에서 누락을 거부한다. 강의 노트 생성 정책처럼 dev/prod 공통인 선택적 튜닝 값은 ai-api 코드와
+   같은 compose 기본값을 사용하고, 의도적으로 조정할 때만 env에서 override한다.
 5. dev Docker network에 Spring이 없으므로 `AI_WORKER_SPRING_INTERNAL_BASE_URL`은 환경별
    필수 값으로 주입한다. prod는 `http://backend:8080`을 명시한다.
 6. realtime-agent는 `realtime-agent-common.env`에 LiveKit·TURN·공통 운영 정책을 두고,
@@ -35,6 +36,7 @@ Nemotron·OpenAI 변수까지 같이 실었다. 코드 기본값과 같다는 �
   노출되지 않는다.
 - dev와 prod를 동시에 올려도 host port가 충돌하지 않는다.
 - dev worker는 도달 가능한 Spring 주소가 없으면 compose config 단계에서 fail-closed한다.
+- 강의 노트 정책을 조정하지 않는 배포는 `AI_API_LECTURE_NOTE_*` 값을 별도로 관리하지 않는다.
 - provider 전환 시 대상 profile만 바꾸고 `restart-agent-prod|dev`로 해당 process만 재시작한다.
 - 배포전 실제 시크릿 env에 공통 파일을 추가하고 기존 중복·provider 미사용 키를
   제거하는 migration이 필요하다.
