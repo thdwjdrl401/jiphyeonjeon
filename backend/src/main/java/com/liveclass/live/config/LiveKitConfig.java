@@ -23,6 +23,10 @@ public class LiveKitConfig {
                 : properties.url()
                         .replaceFirst("^wss://", "https://")
                         .replaceFirst("^ws://", "http://");
-        return new LiveKitServerAccess(apiUrl, properties.apiKey(), properties.apiSecret());
+        return new LiveKitServerAccess(
+                apiUrl,
+                properties.apiKey(),
+                properties.apiSecret(),
+                properties.controlTimeout());
     }
 }

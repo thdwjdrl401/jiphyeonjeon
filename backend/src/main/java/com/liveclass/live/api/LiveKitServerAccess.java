@@ -1,5 +1,7 @@
 package com.liveclass.live.api;
 
+import java.time.Duration;
+
 /**
  * LiveKit 서버 API 접속 정보(경계 DTO). LiveKit 설정은 live 모듈이 소유하고, 서버 API를 직접
  * 호출해야 하는 형제 모듈(video의 Egress 제어)에는 이 포트로만 노출한다 — live.config는 내부다.
@@ -11,6 +13,7 @@ public record LiveKitServerAccess(
 
         String apiUrl,
         String apiKey,
-        String apiSecret
+        String apiSecret,
+        Duration controlTimeout
 ) {
 }
