@@ -37,3 +37,9 @@ RagAnswerRequest
 - client 취소·오류·terminal 모두 request lease를 recent 상태로 옮겨 같은 ID의 재사용을 막는다.
 - GMS streaming과 context consumer lifecycle은 연결했지만 Spring 인증이 채택되기 전 production API는 닫혀 있다.
 - multi-replica registry와 재연결 replay 정책은 후속 범위다.
+
+## 다시보기 RAG 요구사항
+
+다시보기 질문에 필요한 endpoint, 세션-ms 자막 문맥, material Top K와 source excerpt 요구사항은
+[`ADR-0037`](../../../../docs/decisions/canola/0037-replay-ai-caption-context-contract.md)에 정리돼 있다.
+아직 runtime route와 계약에는 반영되지 않았으며 구현 방법은 AI 오너가 결정한다.
