@@ -110,10 +110,12 @@ body {
 
 /* Brand and global navigation */
 .global-header {
+  --font-ui: var(--font-display);
   position: sticky;
   top: 0;
   border-bottom: 1px solid var(--border-medium);
   background: rgba(245, 244, 242, .92);
+  font-family: var(--font-display);
   backdrop-filter: blur(18px) saturate(120%);
 }
 
@@ -871,10 +873,10 @@ body {
 .auth-footer { margin-top: 14px; padding-top: 12px; }
 
 /* Curriculum detail */
-.curriculum-detail-page { gap: 24px; padding-block: 32px 72px; }
+.curriculum-detail-page { gap: 24px; padding-block: 32px; }
 .curriculum-hero { border-color: var(--border-medium); border-radius: 0; padding: 30px 32px; background: var(--paper-pure); box-shadow: none; }
-.curriculum-hero::before { top: 20px; right: 20px; left: auto; width: 10px; height: 10px; background: var(--seal); }
-.curriculum-identity h1 { max-width: 840px; margin: 10px 0 6px; font-size: clamp(2rem, 3.6vw, 3.4rem); font-weight: 400; letter-spacing: -.04em; line-height: 1.1; }
+.curriculum-hero::before { display: none; }
+.curriculum-identity h1 { max-width: 840px; margin: 0 0 6px; font-size: clamp(2rem, 3.6vw, 3.4rem); font-weight: 400; letter-spacing: -.04em; line-height: 1.1; }
 .curriculum-metadata { padding-top: 16px; border-top: 1px solid var(--border-medium); }
 .curriculum-overview,
 .curriculum-outline {
@@ -885,7 +887,9 @@ body {
   background: transparent;
   box-shadow: none;
 }
-.curriculum-detail__sidebar > .instructor-summary,
+/* 상세 페이지의 세로 기준은 마지막 강의 목록(ul) 하단이다. */
+.curriculum-outline { padding-bottom: 0; }
+.curriculum-detail__sidebar > .curriculum-overview,
 .curriculum-detail__sidebar > .curriculum-materials,
 .curriculum-detail__sidebar > .curriculum-progress-panel {
   border: 1px solid var(--border-medium);
@@ -893,6 +897,32 @@ body {
   padding: 18px;
   background: var(--paper-pure);
   box-shadow: none;
+}
+.curriculum-detail__sidebar > .curriculum-materials {
+  border-color: var(--ink-950);
+  background: var(--paper-pure);
+}
+.curriculum-detail__sidebar > .curriculum-overview { border-color: var(--ink-950); }
+.curriculum-detail__sidebar > .curriculum-materials h2 {
+  color: var(--ink-950);
+  font-size: 1.05rem;
+  letter-spacing: -.025em;
+}
+.curriculum-detail__sidebar > .curriculum-materials .curriculum-materials__body p {
+  color: var(--ink-600);
+  font-size: .82rem;
+  white-space: nowrap;
+}
+.curriculum-detail__sidebar > .curriculum-materials .curriculum-materials__open-button {
+  border-color: var(--ink-950);
+  background: var(--ink-950);
+  color: var(--paper-pure);
+  box-shadow: none;
+}
+.curriculum-detail__sidebar > .curriculum-materials .curriculum-materials__open-button:hover:not(:disabled) {
+  border-color: #000;
+  background: #000;
+  color: #fff;
 }
 .curriculum-section { border-color: var(--border-medium); border-radius: 0; background: var(--paper-pure); }
 .curriculum-section__toggle { min-height: 48px; }
@@ -904,12 +934,12 @@ body {
   border-color: var(--ink-950);
   border-radius: 0;
   padding: 18px;
-  background: var(--ink-50);
+  background: var(--ink-950);
   box-shadow: none;
 }
 .instructor-management-card__body { gap: 6px; }
-.instructor-management-card h2 { font-size: 1.05rem; letter-spacing: -.025em; }
-.instructor-management-card p { color: var(--ink-600); font-size: .82rem; }
+.instructor-management-card h2 { color: var(--paper-pure); font-size: 1.05rem; letter-spacing: -.025em; }
+.instructor-management-card p { color: rgba(255,255,255,.68); font-size: .82rem; }
 
 /* Workspace: paper mode */
 .workspace-shell {
@@ -1485,7 +1515,7 @@ body {
 @media (max-width: 720px) {
   .page-container { width: min(calc(100% - 32px), var(--container)); }
   .curriculum-detail-page,
-  .curriculum-detail-skeleton { gap: 18px; padding-block: 20px 48px; }
+  .curriculum-detail-skeleton { gap: 18px; padding-block: 20px; }
   .section-space { padding-block: 86px; }
   .welcome-hero__grid { padding-block: 58px 65px; }
   .hero-copy h1 { font-size: clamp(2.1rem, 10.8vw, 3.25rem); }

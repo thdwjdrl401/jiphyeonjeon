@@ -1,10 +1,11 @@
 /* 커리큘럼 상세 페이지 (/curriculums/:curriculumId) */
 
 .curriculum-detail-page {
+  --curriculum-detail-viewport-gap: 32px;
   display: flex;
   flex-direction: column;
   gap: 24px;
-  padding-block: 32px 72px;
+  padding-block: 32px;
 }
 
 .curriculum-hero {
@@ -32,11 +33,12 @@
 .curriculum-hero__grid {
   display: grid;
   grid-template-areas:
+    'identity status'
     'identity action'
     'metadata metadata';
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 18px 28px;
-  align-items: center;
+  gap: 12px 28px;
+  align-items: start;
 }
 
 .curriculum-identity {
@@ -63,6 +65,24 @@
   overflow-wrap: anywhere;
 }
 
+.curriculum-lifecycle-badge {
+  position: static;
+  display: inline-flex;
+  grid-area: status;
+  min-height: 28px;
+  align-items: center;
+  justify-self: end;
+  border: 1px solid var(--seal);
+  border-radius: 0;
+  padding: 5px 10px;
+  background: var(--seal);
+  color: var(--paper-pure);
+  font-size: .72rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .curriculum-metadata {
   display: grid;
   grid-area: metadata;
@@ -79,6 +99,7 @@
   margin: 4px 0 0;
   font-weight: 600;
   color: var(--ink-900);
+  font-family: var(--font-display);
 }
 
 .curriculum-primary-action {
@@ -106,13 +127,18 @@
 }
 
 .curriculum-detail__content {
+  position: relative;
   display: grid;
+  min-height: calc(
+    100vh - 71px - var(--curriculum-detail-viewport-gap) - var(--curriculum-detail-viewport-gap)
+  );
   grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
   gap: 32px;
   align-items: start;
 }
 
 .curriculum-detail__main,
+.curriculum-detail__sidebar-track,
 .curriculum-detail__sidebar {
   min-width: 0;
 }
@@ -123,41 +149,65 @@
   gap: 24px;
 }
 
+.curriculum-detail__sidebar-track {
+  /* 본문만 페이지 높이를 결정하고, 사이드바는 그 본문의 위·아래 경계를 그대로 사용한다. */
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 320px;
+}
+
 .curriculum-detail__sidebar {
+  position: sticky;
+  top: calc(71px + var(--curriculum-detail-viewport-gap));
+  bottom: var(--curriculum-detail-viewport-gap);
   display: flex;
+  height: min(
+    calc(100vh - 71px - var(--curriculum-detail-viewport-gap) - var(--curriculum-detail-viewport-gap)),
+    100%
+  );
   flex-direction: column;
   gap: 16px;
+  overflow: hidden;
 }
 
 /* 보조 정보 영역에서 관리 권한을 알리는 단일 안내 카드 */
 .instructor-management-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 16px 20px;
-  border: 1px solid rgba(20, 92, 66, .22);
+  display: block;
+  border: 1px solid var(--ink-950);
   border-radius: var(--radius-lg);
   padding: 20px;
-  background: var(--blue-50);
-  box-shadow: 0 8px 22px rgba(20, 92, 66, .07), var(--shadow-inset);
+  background: var(--ink-950);
+  box-shadow: none;
 }
 
 .instructor-management-card__body {
   display: flex;
+  width: 100%;
   flex-direction: column;
   gap: 6px;
   min-width: 0;
 }
 
+.instructor-management-card__header,
+.curriculum-materials__header {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .instructor-management-card h2 {
   margin: 0;
+  color: var(--paper-pure);
   font-size: 1.1rem;
 }
 
 .instructor-management-card p {
   margin: 0;
-  color: var(--ink-700);
+  color: rgba(255, 255, 255, .68);
 }
 
 .instructor-management-card__actions {
@@ -167,8 +217,20 @@
   flex-wrap: wrap;
 }
 
+.instructor-management-card .button--primary {
+  border-color: var(--paper-pure);
+  background: var(--paper-pure);
+  color: var(--ink-950);
+  box-shadow: none;
+}
+
+.instructor-management-card .button--primary:hover:not(:disabled) {
+  border-color: var(--white);
+  background: var(--white);
+  color: #000;
+}
+
 .curriculum-overview,
-.instructor-summary,
 .curriculum-materials,
 .curriculum-progress-panel,
 .curriculum-outline {
@@ -179,11 +241,69 @@
   box-shadow: 0 10px 28px rgba(59, 40, 16, .06), var(--shadow-inset);
 }
 
+.curriculum-detail__sidebar > .curriculum-overview {
+  display: flex;
+  min-height: 160px;
+  flex: 1 1 500px;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.curriculum-detail__sidebar > .curriculum-materials {
+  display: block;
+}
+
+.curriculum-materials__body {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.curriculum-materials__body p {
+  overflow: hidden;
+  margin: 0;
+  color: var(--ink-700);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.curriculum-materials__actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.instructor-management-card__actions .button,
+.curriculum-materials__actions .button {
+  width: 60px;
+  min-height: 28px;
+  border-radius: 0;
+  padding: 5px 3px;
+  font-size: .72rem;
+  line-height: 1;
+}
+
+.curriculum-detail__sidebar > .curriculum-overview p {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 6px;
+  scrollbar-gutter: stable;
+}
+
 .curriculum-materials > header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+}
+
+.curriculum-materials > header > div {
+  min-width: 0;
 }
 
 .curriculum-materials h2 {
@@ -195,15 +315,29 @@
   margin: 5px 0 0;
   color: var(--ink-500);
   font-size: .82rem;
+  white-space: nowrap;
 }
 
 .curriculum-materials header > span {
+  flex: 0 0 auto;
   padding: 4px 10px;
   border-radius: 999px;
   background: var(--blue-50);
   color: var(--blue-700);
   font-size: .76rem;
   font-weight: 700;
+  white-space: nowrap;
+}
+
+.curriculum-detail__sidebar .curriculum-materials > header {
+  gap: 8px;
+}
+
+.curriculum-detail__sidebar .curriculum-materials header p {
+  overflow: hidden;
+  font-size: .72rem;
+  letter-spacing: -.025em;
+  text-overflow: ellipsis;
 }
 
 .curriculum-materials ul {
@@ -220,7 +354,7 @@
   gap: 10px;
   padding: 10px 12px;
   border: 1px solid var(--ink-100);
-  border-radius: var(--radius-md);
+  border-radius: 0;
   background: var(--ink-50);
 }
 
@@ -252,32 +386,78 @@
   height: 36px;
   flex: 0 0 auto;
   place-items: center;
-  border-radius: 10px;
+  border-radius: 0;
   background: #f7e6c8;
   color: var(--orange-500);
   font-size: .58rem;
   font-weight: 800;
 }
 
-.instructor-summary__expertise {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  list-style: none;
-  padding: 0;
-  margin: 12px 0 0;
+.curriculum-materials-modal-backdrop {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background: rgba(12, 12, 12, .56);
 }
 
-.instructor-summary__expertise li {
-  background: var(--blue-50);
-  color: var(--blue-700);
-  border-radius: 999px;
-  padding: 4px 12px;
-  font-size: 0.85rem;
+.curriculum-materials-modal {
+  display: flex;
+  width: min(100%, 640px);
+  max-height: min(720px, calc(100dvh - 64px));
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--ink-950);
+  border-radius: 0;
+  padding: 0;
+  background: var(--paper-pure);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, .24);
+}
+
+.curriculum-materials-modal__header {
+  flex: 0 0 auto;
+  align-items: flex-start;
+  border-bottom: 1px solid var(--border-medium);
+  padding: 22px 24px;
+}
+
+.curriculum-materials-modal__header p {
+  white-space: normal;
+}
+
+.curriculum-materials-modal__close {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--border-medium);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-800);
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.curriculum-materials-modal__close:hover {
+  border-color: var(--ink-950);
+  background: var(--ink-950);
+  color: var(--paper-pure);
+}
+
+.curriculum-materials-modal > ul {
+  min-height: 0;
+  margin: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 20px 24px 24px;
+  scrollbar-gutter: stable;
 }
 
 .curriculum-overview h2,
-.instructor-summary h2,
 .curriculum-progress-panel h2,
 .curriculum-outline h2 {
   margin: 0;
@@ -285,14 +465,16 @@
   letter-spacing: -.025em;
 }
 
-.curriculum-overview p,
-.instructor-summary p {
-  margin: 8px 0 0;
+.curriculum-overview p {
+  margin: 12px 0 0;
+  border-top: 1px solid var(--border-soft);
+  padding-top: 12px;
   color: var(--ink-700);
   line-height: 1.65;
   text-wrap: pretty;
   word-break: keep-all;
   overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .curriculum-outline__header {
@@ -580,7 +762,7 @@ a.curriculum-lesson__title:hover {
   display: flex;
   flex-direction: column;
   gap: 24px;
-  padding-block: 32px 72px;
+  padding-block: 32px;
 }
 
 .curriculum-detail-skeleton__hero {
@@ -642,31 +824,62 @@ a.curriculum-lesson__title:hover {
 @media (max-width: 960px) {
   .curriculum-detail__content,
   .curriculum-detail-skeleton__content {
+    min-height: 0;
     grid-template-columns: 1fr;
     gap: 24px;
   }
 
+  .curriculum-detail__sidebar-track {
+    position: static;
+    width: auto;
+  }
+
   .curriculum-detail__sidebar,
   .curriculum-detail-skeleton__sidebar {
+    position: static;
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    height: auto;
+    max-height: none;
+    overflow: visible;
+    overscroll-behavior: auto;
+    scrollbar-gutter: auto;
+  }
+
+  .curriculum-detail__sidebar > .curriculum-overview,
+  .curriculum-detail__sidebar > .curriculum-materials {
+    min-height: 0;
+    flex: none;
+    overflow: visible;
+  }
+
+  .curriculum-detail__sidebar > .curriculum-overview p {
+    overflow: visible;
+    overscroll-behavior: auto;
+    scrollbar-gutter: auto;
   }
 }
 
 @media (max-width: 720px) {
   .curriculum-detail-page,
   .curriculum-detail-skeleton {
+    --curriculum-detail-viewport-gap: 20px;
     gap: 18px;
-    padding-block: 20px 48px;
+    padding-block: 20px;
   }
 
   .curriculum-hero__grid {
     grid-template-areas:
+      'status'
       'identity'
       'metadata'
       'action';
     grid-template-columns: 1fr;
     gap: 16px;
+  }
+
+  .curriculum-lifecycle-badge {
+    justify-self: end;
   }
 
   .curriculum-primary-action,
@@ -685,5 +898,26 @@ a.curriculum-lesson__title:hover {
   .curriculum-detail__sidebar,
   .curriculum-detail-skeleton__sidebar {
     display: flex;
+  }
+
+  .curriculum-materials-modal-backdrop {
+    align-items: end;
+    padding: 0;
+  }
+
+  .curriculum-materials-modal {
+    width: 100%;
+    max-height: 88dvh;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+  }
+
+  .curriculum-materials-modal__header {
+    padding: 20px;
+  }
+
+  .curriculum-materials-modal > ul {
+    padding: 16px 20px 24px;
   }
 }

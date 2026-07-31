@@ -5,7 +5,7 @@ interface InstructorManagementCardProps {
 
 const CARD_COPY = {
   owner: {
-    title: '담당 강사 관리',
+    title: '담당 커리큘럼 관리',
     description: '이 커리큘럼을 관리하고 강의를 편성할 수 있어요.',
   },
   nonOwner: {
@@ -24,16 +24,18 @@ export default function InstructorManagementCard({ isInstructor, onManage }: Ins
   return (
     <section className="instructor-management-card">
       <div className="instructor-management-card__body">
-        <h2>{copy.title}</h2>
+        <div className="instructor-management-card__header">
+          <h2>{copy.title}</h2>
+          {isInstructor && (
+            <div className="instructor-management-card__actions">
+              <button className="button button--primary" type="button" onClick={onManage}>
+                관리하기
+              </button>
+            </div>
+          )}
+        </div>
         <p>{copy.description}</p>
       </div>
-      {isInstructor && (
-        <div className="instructor-management-card__actions">
-          <button className="button button--primary" type="button" onClick={onManage}>
-            관리하기
-          </button>
-        </div>
-      )}
     </section>
   )
 }

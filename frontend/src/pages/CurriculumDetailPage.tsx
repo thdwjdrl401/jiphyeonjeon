@@ -6,7 +6,6 @@ import CurriculumMaterials from '@/features/curriculum/CurriculumMaterials'
 import CurriculumNotice from '@/features/curriculum/CurriculumNotice'
 import CurriculumOutline from '@/features/curriculum/CurriculumOutline'
 import CurriculumOverview from '@/features/curriculum/CurriculumOverview'
-import InstructorSummary from '@/features/curriculum/InstructorSummary'
 import CurriculumDetailSkeleton from '@/features/curriculum-detail/CurriculumDetailSkeleton'
 import CurriculumRelationPanel from '@/features/curriculum-detail/CurriculumRelationPanel'
 import InstructorManagementCard from '@/features/curriculum-detail/InstructorManagementCard'
@@ -67,18 +66,17 @@ export default function CurriculumDetailPage() {
 
   return (
     <div className="curriculum-detail-page page-container">
-      <CurriculumHero
-        detail={detail}
-        primaryAction={primaryAction}
-        onEnroll={handleEnroll}
-        isEnrolling={enrollMutation.isPending}
-        onCancel={handleCancel}
-        isCancelling={cancelMutation.isPending}
-      />
-
       <div className="curriculum-detail__content">
         <div className="curriculum-detail__main">
-          <CurriculumOverview description={detail.description} />
+          <CurriculumHero
+            detail={detail}
+            primaryAction={primaryAction}
+            onEnroll={handleEnroll}
+            isEnrolling={enrollMutation.isPending}
+            onCancel={handleCancel}
+            isCancelling={cancelMutation.isPending}
+          />
+
           <CurriculumOutline
             key={detail.curriculumId}
             outline={detail.outline}
@@ -87,24 +85,26 @@ export default function CurriculumDetailPage() {
           />
         </div>
 
-        <aside className="curriculum-detail__sidebar" aria-label="커리큘럼 보조 정보">
-          {instructorManagement && (
-            <InstructorManagementCard isInstructor={instructorManagement.isInstructor} onManage={handleManage} />
-          )}
+        <aside className="curriculum-detail__sidebar-track" aria-label="커리큘럼 보조 정보">
+          <div className="curriculum-detail__sidebar">
+            {instructorManagement && (
+              <InstructorManagementCard isInstructor={instructorManagement.isInstructor} onManage={handleManage} />
+            )}
 
-          <CurriculumRelationPanel detail={detail} returnTo={returnTo} />
+            {canViewCurriculumMaterials && detail.materials.length > 0 && (
+              <CurriculumMaterials materials={detail.materials} />
+            )}
 
-          {detail.viewerContext.relationship === 'ENROLLED' && detail.viewerContext.progress && (
-            <CurriculumProgress progress={detail.viewerContext.progress} />
-          )}
+            <CurriculumOverview description={detail.description} />
 
-          <InstructorSummary instructor={detail.instructor} />
+            <CurriculumRelationPanel detail={detail} returnTo={returnTo} />
 
-          {canViewCurriculumMaterials && detail.materials.length > 0 && (
-            <CurriculumMaterials materials={detail.materials} />
-          )}
+            {detail.viewerContext.relationship === 'ENROLLED' && detail.viewerContext.progress && (
+              <CurriculumProgress progress={detail.viewerContext.progress} />
+            )}
 
-          <CurriculumNotice detail={detail} />
+            <CurriculumNotice detail={detail} />
+          </div>
         </aside>
       </div>
     </div>

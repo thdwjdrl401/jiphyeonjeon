@@ -57,7 +57,8 @@ describe('CurriculumDetailPage', () => {
     expect(screen.getByText('1. 오리엔테이션과 개발 환경')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '수강 신청' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '관리하기' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: '담당 강사 관리' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '담당 커리큘럼 관리' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '담당 강사' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '커리큘럼 강의 자료' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: '로그인하기' })).toBeInTheDocument()
   })
@@ -103,7 +104,8 @@ describe('CurriculumDetailPage', () => {
 
     expect(await screen.findByText('학습 진행률')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '커리큘럼 강의 자료' })).toBeInTheDocument()
-    expect(screen.getByText('Spring Boot 커리큘럼 가이드.pptx')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '자료 목록' })).toBeInTheDocument()
+    expect(screen.queryByText('Spring Boot 커리큘럼 가이드.pptx')).not.toBeInTheDocument()
     expect(screen.getByText('수강 중')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '수강 취소' })).toBeInTheDocument()
   })
@@ -211,9 +213,21 @@ describe('CurriculumDetailPage', () => {
     await mockAuthService.login({ email: 'instructor01@example.com', password: 'password1' })
     const { unmount } = renderDetail('/curriculums/cur-spring-live')
 
-    const managementHeading = await screen.findByRole('heading', { name: '담당 강사 관리' })
+    const managementHeading = await screen.findByRole('heading', { name: '담당 커리큘럼 관리' })
     const managementCard = managementHeading.closest('section')
     expect(managementCard).not.toBeNull()
+
+    const sidebar = managementCard!.parentElement
+    const overviewCard = sidebar?.querySelector('.curriculum-overview') ?? null
+    const materialsCard = sidebar?.querySelector('.curriculum-materials') ?? null
+    expect(sidebar).not.toBeNull()
+    expect(overviewCard).not.toBeNull()
+    expect(materialsCard).not.toBeNull()
+
+    const sidebarCards = Array.from(sidebar!.children)
+    expect(sidebarCards.indexOf(managementCard!)).toBeLessThan(sidebarCards.indexOf(materialsCard!))
+    expect(sidebarCards.indexOf(materialsCard!)).toBeLessThan(sidebarCards.indexOf(overviewCard!))
+
     expect(within(managementCard!).getByText('이 커리큘럼을 관리하고 강의를 편성할 수 있어요.')).toBeInTheDocument()
 
     expect(screen.getAllByRole('button', { name: '관리하기' })).toHaveLength(1)
@@ -221,7 +235,8 @@ describe('CurriculumDetailPage', () => {
     expect(screen.queryByRole('link', { name: '커리큘럼 관리' })).not.toBeInTheDocument()
 
     expect(screen.getByRole('heading', { name: '커리큘럼 강의 자료' })).toBeInTheDocument()
-    expect(screen.getByText('공통 실습 환경 설정.pptx')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '자료 목록' })).toBeInTheDocument()
+    expect(screen.queryByText('공통 실습 환경 설정.pptx')).not.toBeInTheDocument()
     unmount()
   })
 
@@ -249,7 +264,7 @@ describe('CurriculumDetailPage', () => {
     expect(within(noticeCard!).queryByRole('button')).not.toBeInTheDocument()
 
     expect(screen.queryByRole('button', { name: '관리하기' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: '담당 강사 관리' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '담당 커리큘럼 관리' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '커리큘럼 강의 자료' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '수강 신청' })).not.toBeInTheDocument()
   })
