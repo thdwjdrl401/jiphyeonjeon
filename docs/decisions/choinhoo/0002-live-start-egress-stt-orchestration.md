@@ -57,8 +57,11 @@ best-effort 녹화를 선택했다. 당시에는 녹화 장애와 현재 WebRTC 
 `DRAFT/SCHEDULED/OPEN`을 즉시 `LIVE`로 바꾸고 같은 요청 시각을 `startedAt`과 `clockOriginAt`에
 기록한 뒤 `LiveSessionStartedEvent`를 발행한다.
 
-[`RecordingEventListener`](../../../backend/src/main/java/com/liveclass/video/service/RecordingEventListener.java)는
-`AFTER_COMMIT`이지만 비동기·지속 작업이 아니므로 시작 요청 스레드에서 Egress를 호출한다.
+이 결정 당시의 `RecordingEventListener`는 `AFTER_COMMIT`이지만 비동기·지속 작업이 아니므로
+시작 요청 스레드에서 Egress를 호출했다. 시작 제어는 이 ADR 구현에서
+[`RecordingOrchestrationService`](../../../backend/src/main/java/com/liveclass/video/service/RecordingOrchestrationService.java)의
+동기 포트 호출로 교체됐고, 종료 리스너도 후속 [ADR-0003](0003-simple-live-end-sequential-process.md)의
+순차 종료 façade로 교체됐다.
 반면 [`InstructorPreflightPage`](../../../frontend/src/pages/InstructorPreflightPage.tsx)는 `/start`
 성공 후 classroom으로 이동하고,
 [`useInstructorLiveKit`](../../../frontend/src/features/live-session/useInstructorLiveKit.ts)은 classroom에

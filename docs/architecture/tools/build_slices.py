@@ -242,8 +242,8 @@ D.append(("08 · 자료 업로드 (presigned)", [
 
 # ---------- 09 녹화·다시보기 ----------
 D.append(("09 · 녹화와 다시보기", [
-    N("r1", "라이브 세션 종료", "이벤트", X[0], Y[0], 180, 56, BUILT),
-    N("r2", "RecordingEventListener", "AFTER_COMMIT", X[1], Y[0], 210, 56, BUILT),
+    N("r1", "LiveEndOrchestrator", "동기 순차", X[0], Y[0], 180, 56, BUILT),
+    N("r2", "LiveRecordingControl", "동기 포트", X[1], Y[0], 210, 56, BUILT),
     N("r3", "EgressControl", "시작 · 정지", X[2]+20, Y[0], 190, 56, BUILT),
     N("r4", "LiveKit Egress", "합성 → HLS", X[3]+30, Y[0], 180, 56, BUILT),
     N("r5", "MinIO / S3", "세그먼트 · manifest", X[3]+30, Y[1], 180, 60, DATA),
