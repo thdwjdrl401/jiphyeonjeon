@@ -199,6 +199,21 @@ liveclass:
     connect-timeout: ${AI_API_CONNECT_TIMEOUT:3s}
     # 스트리밍이라 길게. 브라우저 SSE emitter 타임아웃도 이 값을 그대로 쓴다.
     stream-timeout: ${AI_API_STREAM_TIMEOUT:5m}
+  # 판서 해석(ADR-0054, CONTRACT §3-6e). 손그림 → mermaid/LaTeX.
+  #
+  # ai-api를 거치지 않고 Spring이 GMS를 직접 부른다 — 이 호출에는 검색도 임베딩도 자막 컨텍스트도
+  # 없어 파이썬이 할 도메인 일이 없다. RAG 컨텍스트가 필요해지면 그때 옮기며, FE 계약은 그대로다.
+  #
+  # 키가 없으면 기능이 꺼진 것으로 본다(502 ANNOTATION_INTERPRET_FAILED). 로컬에서 키 없이 띄워도
+  # 강의는 그대로 돌아야 하므로 기동을 막지 않는다. 브라우저는 이 키를 절대 받지 않는다.
+  annotation-ai:
+    base-url: ${ANNOTATION_AI_BASE_URL:https://api.openai.com/v1}
+    api-key: ${ANNOTATION_AI_API_KEY:${AI_API_GMS_API_KEY:}}
+    model: ${ANNOTATION_AI_MODEL:gpt-4.1}
+    connect-timeout: ${ANNOTATION_AI_CONNECT_TIMEOUT:5s}
+    # 이미지를 읽는 호출이라 텍스트 질의보다 길다. 강사가 기다리는 화면이라 무한정 둘 수도 없다.
+    request-timeout: ${ANNOTATION_AI_REQUEST_TIMEOUT:60s}
+    max-image-bytes: ${ANNOTATION_AI_MAX_IMAGE_BYTES:4194304}   # 4MB
   caption:
     enabled: ${CAPTION_CONSUMER_ENABLED:true}
     stream-key: ${CAPTION_STREAM_KEY:ai:captions:live}   # 전역 키(producer env와 정합)

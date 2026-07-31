@@ -61,3 +61,22 @@ export function loadExcalidraw(): Promise<ExcalidrawModule> {
   }
   return pending
 }
+
+export type MermaidModule = typeof import('@excalidraw/mermaid-to-excalidraw')
+
+let mermaidPending: Promise<MermaidModule> | null = null
+
+/**
+ * mermaid 변환기를 가져온다(ADR-0054). Excalidraw보다도 무겁고(mermaid + dagre) <b>판서 해석을
+ * 실제로 쓸 때만</b> 필요하므로 별도 청크로 떼어 둔다.
+ *
+ * <p><b>브라우저에서만 돈다.</b> mermaid가 SVG에 글자를 그려 폭을 실측해 배치하므로 `getBBox`가
+ * 필요하다(jsdom에서는 `text.getBBox is not a function`으로 실패한다). 서버에서 돌리려면 헤드리스
+ * 브라우저가 필요한데, 어차피 결과를 씬에 넣는 주체가 강사 클라이언트라 여기가 맞는 자리다.
+ */
+export function loadMermaid(): Promise<MermaidModule> {
+  if (!mermaidPending) {
+    mermaidPending = import('@excalidraw/mermaid-to-excalidraw')
+  }
+  return mermaidPending
+}
