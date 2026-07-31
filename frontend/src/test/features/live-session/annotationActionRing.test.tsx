@@ -74,7 +74,7 @@ function preview(result: Partial<AnnotationInterpretation>, overrides: Record<st
   return render(
     <AnnotationInterpretPreview
       result={{
-        kind: 'mermaid', body: 'flowchart LR\n  A[요청] --> B[인증]',
+        kind: 'mermaid', body: 'flowchart LR\n  A[요청] --> B[인증]', source: '',
         replace: ['e1', 'e2'], confidence: 1, unreadable: false, ...result,
       }}
       applying={false}

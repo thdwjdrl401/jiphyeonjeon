@@ -6,7 +6,7 @@ import type { AnnotationElement } from './annotation'
  *
  * <p><b>서버는 좌표를 돌려주지 않는다.</b> 모델에게 위치를 묻지 않기 때문이다 — 실측에서 모델이 낸
  * 도형 좌표는 최대 96px(그림 크기의 2~13%) 틀렸고, 같은 좌표를 우리는 획의 점에서 오차 없이 갖고
- * 있다. 그래서 서버는 <b>의미</b>만 주고(mermaid 정의 또는 LaTeX), <b>어디에 어떤 크기로 놓을지는
+ * 있다. 그래서 서버는 <b>의미</b>만 주고(mermaid 정의 또는 유니코드 수식), <b>어디에 어떤 크기로 놓을지는
  * 이 모듈이 정한다</b>.
  *
  * <p>결과를 화면에 바로 넣지 않는다. 강사가 확인한 뒤 적용한다 — 모델이 낸 `confidence`는 근거가
@@ -16,9 +16,17 @@ import type { AnnotationElement } from './annotation'
 export type InterpretMode = 'diagram' | 'math'
 
 export interface AnnotationInterpretation {
-  kind: 'mermaid' | 'latex'
-  /** mermaid 정의 전체 또는 LaTeX 수식. `unreadable`이면 빈 문자열. */
+  kind: 'mermaid' | 'math'
+  /**
+   * 판서에 <b>그대로 넣을</b> 것. 다이어그램은 mermaid 정의, 수식은 유니코드 문자열이다.
+   *
+   * <p>수식이 LaTeX가 아닌 이유: Excalidraw에는 수식 렌더러가 없어 `y = ax^2 + bx + c`를 넣으면
+   * 글자 그대로 보인다. 이미지로 넣는 방법은 못 쓴다 — 데이터 채널로 파일이 흐르지 않아 수강생
+   * 화면에 나타나지 않는다(강사 화면 = 수강생 화면).
+   */
   body: string
+  /** 수식일 때의 LaTeX 원문. 지금은 넣지 않고 다시보기 앵커·그래프·RAG에 쓰려고 받아 둔다. */
+  source: string
   /** 지울 요소 id. 강사가 선택한 것들이다. */
   replace: string[]
   /** 모델이 스스로 매긴 값. <b>자동 적용의 근거로 쓰지 않는다.</b> 강사에게 보여 주는 참고값이다. */
@@ -102,7 +110,7 @@ export function placeAtSelection<T extends AnnotationElement>(
 /**
  * 인식한 수식을 넣을 글자 크기.
  *
- * <p>Excalidraw에는 수식 렌더가 없어 LaTeX를 <b>글자 그대로</b> 넣는다. 크기는 원본 손글씨의
+ * <p>수식은 유니코드 글자로 들어간다(Excalidraw에 수식 렌더러가 없다). 크기는 원본 손글씨의
  * 높이에서 가져온다 — 강사가 크게 썼으면 크게, 작게 썼으면 작게 나오는 편이 자연스럽다.
  *
  * <p><b>자리는 여기서 정하지 않는다.</b> 다이어그램과 마찬가지로 {@link placeAtSelection}이 원본이

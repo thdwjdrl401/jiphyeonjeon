@@ -94,7 +94,7 @@ describe('해석 결과 적용', () => {
       { id: 'm1', type: 'rectangle', version: 1, x: 0, y: 0, width: 100, height: 50 },
     ])
     interpretApi.interpretAnnotation.mockResolvedValue({
-      kind: 'mermaid', body: 'flowchart LR\n  A[요청] --> B[인증]',
+      kind: 'mermaid', body: 'flowchart LR\n  A[요청] --> B[인증]', source: '',
       replace: ['a', 'b'], confidence: 0.98, unreadable: false,
     })
     vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
@@ -161,7 +161,8 @@ describe('해석 결과 적용', () => {
   /** 수식은 mermaid를 거치지 않는다. 잘못 태우면 LaTeX가 다이어그램 파서로 들어가 깨진다. */
   it('수식은 mermaid 변환을 거치지 않는다', async () => {
     interpretApi.interpretAnnotation.mockResolvedValue({
-      kind: 'latex', body: 'y = ax^2 + bx + c', replace: ['a'], confidence: 0.98, unreadable: false,
+      kind: 'math', body: 'y = ax² + bx + c', source: 'y = ax^2 + bx + c',
+      replace: ['a'], confidence: 0.98, unreadable: false,
     })
     convertToExcalidrawElements.mockReturnValue([
       { id: 't1', type: 'text', version: 1, x: 0, y: 0, width: 200, height: 40 },

@@ -66,15 +66,67 @@ class AnnotationInterpretContractTest {
         assertThat(result.unreadable()).isFalse();
     }
 
+    /**
+     * 판서에 들어가는 것은 <b>유니코드</b>다. Excalidraw에는 수식 렌더러가 없어 LaTeX를 그대로 넣으면
+     * `y = ax^2 + bx + c`가 글자 그대로 보인다. 이미지로 넣는 방법은 못 쓴다 — 데이터 채널로 파일이
+     * 흐르지 않아 수강생 화면에 나타나지 않는다(강사 화면 = 수강생 화면).
+     */
     @Test
-    void 수식은_LaTeX로_돌려준다() {
+    void 수식은_판서에_넣을_유니코드를_돌려준다() {
         StubModel model = new StubModel("""
-                {"latex":"y = ax^2 + bx + c","confidence":0.95,"unreadable":false}""");
+                {"latex":"y = ax^2 + bx + c","plain":"y = ax² + bx + c","confidence":0.95,"unreadable":false}""");
 
         AnnotationInterpretation result = interpret("math", model, List.of("e1"));
 
-        assertThat(result.kind()).isEqualTo("latex");
-        assertThat(result.body()).isEqualTo("y = ax^2 + bx + c");
+        assertThat(result.kind()).isEqualTo("math");
+        assertThat(result.body()).isEqualTo("y = ax² + bx + c");
+    }
+
+    /** LaTeX는 넣지 않지만 버리지도 않는다 — 다시보기 앵커·그래프·RAG가 이걸 쓴다. */
+    @Test
+    void LaTeX_원문은_따로_남긴다() {
+        StubModel model = new StubModel("""
+                {"latex":"\\\\int x^2 dx","plain":"∫x² dx","confidence":0.9,"unreadable":false}""");
+
+        AnnotationInterpretation result = interpret("math", model, List.of());
+
+        assertThat(result.body()).isEqualTo("∫x² dx");
+        assertThat(result.source()).isEqualTo("\\int x^2 dx");
+    }
+
+    /**
+     * 프롬프트로 "반드시 flowchart로 시작하라"고 적어도 실측에서 <b>3회 중 2회</b> 빠졌다. 없으면
+     * mermaid 파서가 예외를 내고 강사에게는 "정리한 결과를 넣지 못했습니다"로만 보인다.
+     */
+    @Test
+    void 다이어그램_선언이_빠지면_채워_준다() {
+        StubModel model = new StubModel("""
+                {"definition":"A[요청] --> B[인증] --> C[입장]","confidence":0.98,"unreadable":false}""");
+
+        AnnotationInterpretation result = interpret("diagram", model, List.of("e1"));
+
+        assertThat(result.body()).startsWith("flowchart LR");
+        assertThat(result.body()).contains("A[요청] --> B[인증] --> C[입장]");
+    }
+
+    @Test
+    void 이미_선언이_있으면_건드리지_않는다() {
+        StubModel model = new StubModel("""
+                {"definition":"graph TD\\n  A[a] --> B[b]","confidence":0.9,"unreadable":false}""");
+
+        assertThat(interpret("diagram", model, List.of()).body()).startsWith("graph TD");
+    }
+
+    /** 모델이 ```mermaid로 감싸 보내면 첫 줄이 선언이 아니게 되어 파서가 걸린다. */
+    @Test
+    void 코드펜스를_걷어낸다() {
+        StubModel model = new StubModel("""
+                {"definition":"```mermaid\\nflowchart LR\\n  A[a] --> B[b]\\n```","confidence":0.9,"unreadable":false}""");
+
+        String body = interpret("diagram", model, List.of()).body();
+
+        assertThat(body).doesNotContain("```");
+        assertThat(body).startsWith("flowchart LR");
     }
 
     /**
@@ -125,7 +177,7 @@ class AnnotationInterpretContractTest {
     @Test
     void 선택이_없으면_지울_것도_없다() {
         StubModel model = new StubModel("""
-                {"latex":"x","confidence":0.9,"unreadable":false}""");
+                {"latex":"x","plain":"x","confidence":0.9,"unreadable":false}""");
 
         assertThat(interpret("math", model, List.of()).replace()).isEmpty();
     }
@@ -134,7 +186,7 @@ class AnnotationInterpretContractTest {
     @Test
     void 읽지_못하면_본문을_비운다() {
         StubModel model = new StubModel("""
-                {"latex":"","confidence":0.1,"unreadable":true}""");
+                {"latex":"","plain":"","confidence":0.1,"unreadable":true}""");
 
         AnnotationInterpretation result = interpret("math", model, List.of("e1"));
 
@@ -164,9 +216,9 @@ class AnnotationInterpretContractTest {
     @Test
     void confidence는_0과_1_사이로_고정한다() {
         StubModel high = new StubModel("""
-                {"latex":"x","confidence":7.5,"unreadable":false}""");
+                {"latex":"x","plain":"x","confidence":7.5,"unreadable":false}""");
         StubModel low = new StubModel("""
-                {"latex":"x","confidence":-3,"unreadable":false}""");
+                {"latex":"x","plain":"x","confidence":-3,"unreadable":false}""");
 
         assertThat(interpret("math", high, List.of()).confidence()).isEqualTo(1.0);
         assertThat(interpret("math", low, List.of()).confidence()).isZero();
@@ -184,7 +236,7 @@ class AnnotationInterpretContractTest {
         StubModel diagram = new StubModel("""
                 {"definition":"flowchart LR\\n A[a] --> B[b]","confidence":1,"unreadable":false}""");
         StubModel math = new StubModel("""
-                {"latex":"x","confidence":1,"unreadable":false}""");
+                {"latex":"x","plain":"x","confidence":1,"unreadable":false}""");
 
         interpret("diagram", diagram, List.of());
         interpret("math", math, List.of());

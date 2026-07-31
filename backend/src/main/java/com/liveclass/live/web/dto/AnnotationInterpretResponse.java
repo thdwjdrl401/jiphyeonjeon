@@ -14,11 +14,15 @@ import java.util.List;
 @Schema(description = "판서 해석 결과. 좌표를 담지 않는다 — 배치는 클라이언트가 계산한다.")
 public record AnnotationInterpretResponse(
 
-        @Schema(description = "결과 종류.", allowableValues = {"mermaid", "latex"})
+        @Schema(description = "결과 종류.", allowableValues = {"mermaid", "math"})
         String kind,
 
-        @Schema(description = "mermaid 정의 전체 또는 LaTeX 수식. unreadable이면 빈 문자열.")
+        @Schema(description = "판서에 그대로 넣을 것. 다이어그램은 mermaid 정의, 수식은 유니코드 문자열이다 "
+                + "— Excalidraw에 수식 렌더러가 없어 LaTeX를 넣으면 글자 그대로 보인다. unreadable이면 빈 문자열.")
         String body,
+
+        @Schema(description = "수식일 때의 LaTeX 원문. 지금은 넣지 않고 다시보기 앵커·그래프·RAG에 쓰려고 남긴다.")
+        String source,
 
         @Schema(description = "지울 요소 id. 요청의 elementIds 부분집합이다.")
         List<String> replace,
@@ -32,6 +36,6 @@ public record AnnotationInterpretResponse(
 
     public static AnnotationInterpretResponse from(AnnotationInterpretation result) {
         return new AnnotationInterpretResponse(
-                result.kind(), result.body(), result.replace(), result.confidence(), result.unreadable());
+                result.kind(), result.body(), result.source(), result.replace(), result.confidence(), result.unreadable());
     }
 }
