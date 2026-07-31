@@ -77,7 +77,7 @@ describe('라우트 이동 시 스크롤 초기화', () => {
 
     await screen.findByRole('heading', { name: '상세' })
     // 부드러운 스크롤이면 이동이 끝나기 전에 다음 조작이 들어와 위치가 어긋난다.
-    expect(scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'auto' })
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'instant' })
   })
 
   it('버튼으로 자동 이동해도(replace) 맨 위로 되돌린다', async () => {
@@ -90,7 +90,7 @@ describe('라우트 이동 시 스크롤 초기화', () => {
     await user.click(screen.getByRole('button', { name: '저장하고 이동' }))
 
     await screen.findByRole('heading', { name: '저장 결과' })
-    expect(scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'auto' })
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'instant' })
   })
 
   it('브라우저 뒤로 가기도 맨 위에서 시작한다', async () => {
@@ -103,7 +103,7 @@ describe('라우트 이동 시 스크롤 초기화', () => {
     window.history.back()
 
     await screen.findByRole('heading', { name: '목록' })
-    await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'auto' }))
+    await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'instant' }))
   })
 
   it('브라우저가 스크롤 위치를 되살리지 못하게 막고, 정리할 때 되돌린다', () => {
@@ -130,7 +130,7 @@ describe('라우트 이동 시 스크롤 초기화', () => {
     await user.click(screen.getByRole('link', { name: '상세로' }))
 
     await screen.findByRole('heading', { name: '상세' })
-    expect(scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'auto' })
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'instant' })
   })
 
   it('레이아웃 안쪽 스크롤 컨테이너(main)도 함께 되돌린다', async () => {
@@ -170,6 +170,6 @@ describe('라우트 이동 시 스크롤 초기화', () => {
     await user.click(screen.getAllByRole('link', { name: '커리큘럼 탐색' })[0])
 
     await waitFor(() => expect(window.location.pathname).toBe('/curriculums'))
-    expect(scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'auto' })
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0, left: 0, behavior: 'instant' })
   })
 })

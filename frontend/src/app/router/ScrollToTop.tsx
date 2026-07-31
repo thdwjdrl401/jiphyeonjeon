@@ -38,7 +38,7 @@ export default function ScrollToTop() {
   useLayoutEffect(() => {
     // 부드러운 스크롤이 아니라 즉시 이동한다 — 화면이 바뀌는 순간에 애니메이션이 겹치면
     // 이동이 끝나기 전에 다음 조작이 들어와 위치가 어긋난다.
-    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
 
     /*
      * 문서가 아니라 레이아웃 안쪽이 스크롤되는 구조로 바뀌어도 버티게, 현재 떠 있는 `main`도 같이
