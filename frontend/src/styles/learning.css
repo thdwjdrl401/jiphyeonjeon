@@ -159,7 +159,8 @@
  * 좌하단에 둔다 — 상단은 Excalidraw 툴바, 우하단은 결과 패널이 쓴다. */
 .annotation-interpret-entry { position: absolute; z-index: 6; bottom: 16px; left: 16px; display: flex; align-items: center; gap: 6px; margin: 0; padding: 8px 14px; border: 1px solid rgba(255,252,243,.22); border-radius: 999px; background: rgba(28,22,13,.92); color: #fdf8ee; font-size: .74rem; font-weight: 700; box-shadow: 0 8px 24px rgba(0,0,0,.35); cursor: pointer; }
 .annotation-interpret-entry:hover { border-color: rgba(224,149,138,.8); }
-.annotation-interpret-entry--hint { border-color: rgba(224,149,138,.6); background: rgba(60,40,24,.95); cursor: default; }
+/* 링 가운데 안내. 대상이 없으면 왜 눌리지 않는지 여기서 말한다 — 펼쳐 놓고 이유를 감추면 안 된다. */
+.annotation-action-ring__need { position: absolute; left: 0; top: 0; width: 96px; margin: 0; padding: 6px; border-radius: 10px; background: rgba(28,22,13,.92); color: rgba(255,252,243,.86); font-size: .66rem; font-weight: 700; text-align: center; line-height: 1.35; pointer-events: none; }
 .annotation-interpret-failure { position: absolute; z-index: 7; right: 16px; bottom: 16px; margin: 0; padding: 10px 14px; border: 1px solid rgba(224,149,138,.5); border-radius: 10px; background: rgba(60,24,20,.95); color: #ffd9d2; font-size: .74rem; cursor: pointer; }
 /* 레이저 포인터는 scene 요소가 아니라 사라지는 궤적이라 판서 op 경로로는 수강생에게 도달하지 않는다.
  * 그래서 포인터 좌표를 별도 topic으로 중계한다(InstructorAnnotationLayer). 도구 자체는 열어 둔다. */

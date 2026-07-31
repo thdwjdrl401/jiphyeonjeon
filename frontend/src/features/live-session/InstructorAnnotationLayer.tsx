@@ -359,29 +359,57 @@ export default function InstructorAnnotationLayer({
    * 찾게 된다. 실제로 "바꾸는 버튼이 어디 있냐"는 말이 나왔다. 기능이 있어도 닿을 길이 없으면
    * 없는 것과 같다.
    */
-  const [pickingForInterpret, setPickingForInterpret] = useState(false)
+  const [ringExpanded, setRingExpanded] = useState(false)
 
-  useEffect(() => {
-    if (selectedIds.length > 0) setPickingForInterpret(false)
-  }, [selectedIds])
-
-  /** 선택 도구로 바꾼다. 펜이 잠겨 있으면 드래그가 선택이 아니라 획이 된다. */
+  /** 선택 도구로 바꾼다. 펜이 잠겨 있으면 드래그도 클릭도 선택이 아니라 획이 된다. */
   const startPicking = useCallback(() => {
     apiRef.current?.updateScene({
       appState: { activeTool: { type: 'selection', locked: false, lastActiveTool: null, customType: null } },
     })
-    setPickingForInterpret(true)
+    setRingExpanded(true)
   }, [])
 
-  /** 링 중심(컨테이너 px). scene 좌표에 zoom만 곱하면 된다 — scroll을 0으로 고정해 두었다. */
+  /**
+   * 링 바깥을 누르면 접는다.
+   *
+   * <p>펼쳐 놓은 메뉴가 스스로 닫히지 않으면 판서를 계속 가린다. 링 위에서 시작한 클릭은 그대로
+   * 둔다 — 항목을 고르려던 것을 접어 버리면 아무것도 고를 수 없다.
+   */
+  useEffect(() => {
+    const host = hostRef.current
+    if (!active || !host || !ringExpanded) return undefined
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Element | null
+      if (target?.closest('.annotation-action-ring')) return
+      setRingExpanded(false)
+    }
+    host.addEventListener('pointerdown', onPointerDown)
+    return () => { host.removeEventListener('pointerdown', onPointerDown) }
+  }, [active, ringExpanded])
+
+  /**
+   * 링 중심(컨테이너 px).
+   *
+   * <p>선택이 있으면 <b>그 위에</b> 띄운다 — 무엇에 적용되는지가 자리로 드러난다. 선택이 없는데
+   * 펼쳐진 경우(칩을 눌러 연 상태)는 칩이 있던 좌하단에 그대로 둔다. 링이 화면 밖으로 나가지
+   * 않도록 가장자리에서 반지름만큼 띄운다.
+   */
   const ringCenter = useCallback(() => {
     const host = hostRef.current
-    const bounds = selectionBounds(selectedElements())
-    if (!host || !bounds) return null
+    if (!host) return null
     const rect = host.getBoundingClientRect()
     const zoom = annotationStageScale(rect)
     if (zoom <= 0) return null
-    return { x: (bounds.x + bounds.width / 2) * zoom, y: (bounds.y + bounds.height / 2) * zoom }
+
+    const bounds = selectionBounds(selectedElements())
+    const margin = 110
+    if (!bounds) {
+      return { x: margin, y: Math.max(margin, rect.height - margin) }
+    }
+    return {
+      x: Math.min(Math.max((bounds.x + bounds.width / 2) * zoom, margin), Math.max(margin, rect.width - margin)),
+      y: Math.min(Math.max((bounds.y + bounds.height / 2) * zoom, margin), Math.max(margin, rect.height - margin)),
+    }
   }, [selectedElements])
 
   /**
@@ -546,7 +574,12 @@ export default function InstructorAnnotationLayer({
   }
 
   const { Excalidraw, MainMenu } = ui
-  const center = pending ? null : ringCenter()
+  /*
+   * 링을 여는 두 경로. 획을 고르면(클릭이든 드래그든) 바로 뜨고, 아무것도 안 골랐어도 칩을 누르면
+   * 펼쳐진다 — 후자는 "무엇을 골라야 하는지"부터 알려 주는 자리다.
+   */
+  const ringOpen = !pending && (selectedIds.length > 0 || ringExpanded)
+  const center = ringOpen ? ringCenter() : null
 
   return (
     <div ref={hostRef} className="instructor-annotation-layer">
@@ -628,25 +661,20 @@ export default function InstructorAnnotationLayer({
         정리 기능의 진입점. 링은 선택이 있어야 뜨는데, 판서를 켜면 펜이 잠긴 채 시작해서 강사가
         선택하는 방법을 모른 채 기능을 찾게 된다 — 그래서 눈에 보이는 자리에 하나 둔다.
       */}
-      {selectedIds.length === 0 && !pending && hasElements && (
-        pickingForInterpret ? (
-          <p className="annotation-interpret-entry annotation-interpret-entry--hint" role="status">
-            정리할 판서를 드래그해 선택하세요
-          </p>
-        ) : (
-          <button type="button" className="annotation-interpret-entry" onClick={startPicking}>
-            <span aria-hidden="true">✨</span> AI로 정리
-          </button>
-        )
+      {!ringOpen && !pending && hasElements && (
+        <button type="button" className="annotation-interpret-entry" onClick={startPicking}>
+          <span aria-hidden="true">✨</span> AI로 정리
+        </button>
       )}
 
-      {center && selectedIds.length > 0 && (
+      {ringOpen && center && (
         <AnnotationActionRing
           center={center}
           actions={INTERPRET_ACTIONS}
           busyActionId={busyAction}
+          needsSelection={selectedIds.length === 0}
           onPick={(id) => { void runInterpret(id as InterpretMode) }}
-          onDismiss={() => setSelectedIds([])}
+          onDismiss={() => { setSelectedIds([]); setRingExpanded(false) }}
         />
       )}
 

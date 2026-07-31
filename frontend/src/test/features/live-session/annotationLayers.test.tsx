@@ -939,8 +939,8 @@ describe('판서 정리 진입점', () => {
     restore.mockRestore()
   })
 
-  /** 펜이 잠겨 있으면 드래그가 선택이 아니라 획이 된다. 눌렀을 때 도구까지 바꿔 줘야 한다. */
-  it('누르면 선택 도구로 바꾸고 무엇을 해야 하는지 알려 준다', async () => {
+  /** 펜이 잠겨 있으면 클릭도 드래그도 선택이 아니라 획이 된다. 눌렀을 때 도구까지 바꿔 줘야 한다. */
+  it('누르면 선택 도구로 바꾸고 링을 펼친다', async () => {
     const restore = rectStub()
     const { onChange, getByRole, container } = await draw()
     onChange([{ id: 'a', type: 'freedraw', version: 1, x: 0, y: 0, points: [[0, 0], [10, 10]] }],
@@ -954,10 +954,13 @@ describe('판서 정리 진입점', () => {
       .map(([arg]) => (arg as { appState?: { activeTool?: { type?: string } } }).appState?.activeTool?.type)
       .filter(Boolean)
     expect(tool).toContain('selection')
+    // 링이 펼쳐지되, 대상이 없으므로 고를 수는 없고 무엇이 필요한지 알려 준다.
     await waitFor(() => {
-      expect(container.querySelector('.annotation-interpret-entry--hint')?.textContent)
-        .toContain('선택하세요')
+      expect(container.querySelector('.annotation-action-ring')).not.toBeNull()
     })
+    expect(container.querySelector('.annotation-action-ring__need')?.textContent).toContain('선택하세요')
+    const items = [...container.querySelectorAll<HTMLButtonElement>('.annotation-action-ring__item')]
+    expect(items.every((b) => b.disabled)).toBe(true)
     restore.mockRestore()
   })
 
@@ -970,6 +973,77 @@ describe('판서 정리 진입점', () => {
 
     await waitFor(() => { expect(container.querySelector('.annotation-action-ring')).not.toBeNull() })
     expect(queryByRole('button', { name: /AI로 정리/ })).toBeNull()
+    restore.mockRestore()
+  })
+})
+
+/**
+ * 링을 여는 두 경로와 닫는 한 경로. 강사가 획을 고르면 바로 뜨고(클릭이든 드래그든), 아무것도
+ * 고르지 않았어도 칩을 눌러 펼칠 수 있다. 펼쳐 놓은 메뉴가 스스로 닫히지 않으면 판서를 가린다.
+ */
+describe('액션 링 펼침·접힘', () => {
+  function rectStub() {
+    return vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
+      width: 960, height: 540, x: 0, y: 0, top: 0, left: 0, right: 960, bottom: 540,
+      toJSON: () => ({}),
+    } as DOMRect)
+  }
+
+  async function open() {
+    const view = render(
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
+    )
+    await view.findByTestId('excalidraw-editor')
+    const onChange = excalidrawProps.onChange as (els: unknown[], state?: unknown) => void
+    onChange([{ id: 'a', type: 'freedraw', version: 1, x: 0, y: 0, points: [[0, 0], [10, 10]] }],
+      { selectedElementIds: {} })
+    await waitFor(() => { expect(view.getByRole('button', { name: /AI로 정리/ })).toBeTruthy() })
+    view.getByRole('button', { name: /AI로 정리/ }).click()
+    await waitFor(() => { expect(view.container.querySelector('.annotation-action-ring')).not.toBeNull() })
+    return view
+  }
+
+  it('링 바깥을 누르면 접힌다', async () => {
+    const restore = rectStub()
+    const view = await open()
+
+    view.container.querySelector('.instructor-annotation-layer')!
+      .dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }))
+
+    await waitFor(() => { expect(view.container.querySelector('.annotation-action-ring')).toBeNull() })
+    expect(view.getByRole('button', { name: /AI로 정리/ })).toBeTruthy()
+    restore.mockRestore()
+  })
+
+  /** 항목을 고르려던 클릭이 링을 접어 버리면 아무것도 고를 수 없다. */
+  it('링 위에서 누른 것은 접지 않는다', async () => {
+    const restore = rectStub()
+    const view = await open()
+
+    view.container.querySelector('.annotation-action-ring__item')!
+      .dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }))
+
+    await new Promise((resolve) => { setTimeout(resolve, 0) })
+    expect(view.container.querySelector('.annotation-action-ring')).not.toBeNull()
+    restore.mockRestore()
+  })
+
+  /** 획 하나를 클릭해 고르는 경우다 — 드래그로 감싸지 않아도 링이 떠야 한다. */
+  it('획을 하나만 골라도 링이 뜨고 고를 수 있다', async () => {
+    const restore = rectStub()
+    const view = render(
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
+    )
+    await view.findByTestId('excalidraw-editor')
+    const onChange = excalidrawProps.onChange as (els: unknown[], state?: unknown) => void
+
+    onChange([{ id: 'a', type: 'freedraw', version: 1, x: 100, y: 100, points: [[0, 0], [40, 40]] }],
+      { selectedElementIds: { a: true } })
+
+    await waitFor(() => { expect(view.container.querySelector('.annotation-action-ring')).not.toBeNull() })
+    const items = [...view.container.querySelectorAll<HTMLButtonElement>('.annotation-action-ring__item')]
+    expect(items.every((b) => b.disabled)).toBe(false)
+    expect(view.container.querySelector('.annotation-action-ring__need')).toBeNull()
     restore.mockRestore()
   })
 })

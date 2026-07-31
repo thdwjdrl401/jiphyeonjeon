@@ -26,6 +26,11 @@ interface AnnotationActionRingProps {
   actions: readonly AnnotationAction[]
   /** 진행 중인 항목 id. 그 동안 링 전체를 잠근다 — 같은 선택에 두 번 요청하면 결과가 겹친다. */
   busyActionId?: string | null
+  /**
+   * 아직 정리할 대상이 없다. 링은 펼쳐 두되 <b>고를 수는 없게</b> 한다 — 무엇에 적용되는지 모르는
+   * 채로 눌리면 강사가 의도하지 않은 판서가 바뀐다.
+   */
+  needsSelection?: boolean
   onPick: (actionId: string) => void
   onDismiss: () => void
 }
@@ -48,11 +53,13 @@ export default function AnnotationActionRing({
   center,
   actions,
   busyActionId,
+  needsSelection,
   onPick,
   onDismiss,
 }: AnnotationActionRingProps) {
   if (actions.length === 0) return null
   const busy = Boolean(busyActionId)
+  const locked = busy || Boolean(needsSelection)
 
   return (
     <div
@@ -70,7 +77,7 @@ export default function AnnotationActionRing({
             type="button"
             className={`annotation-action-ring__item${running ? ' is-running' : ''}`}
             style={{ transform: `translate(calc(-50% + ${offset.x}px), calc(-50% + ${offset.y}px))` }}
-            disabled={busy}
+            disabled={locked}
             aria-busy={running}
             title={action.hint}
             onClick={() => onPick(action.id)}
@@ -80,16 +87,26 @@ export default function AnnotationActionRing({
           </button>
         )
       })}
-      <button
-        type="button"
-        className="annotation-action-ring__close"
-        style={{ transform: 'translate(-50%, -50%)' }}
-        disabled={busy}
-        onClick={onDismiss}
-        aria-label="정리 메뉴 닫기"
-      >
-        ✕
-      </button>
+      {/*
+        가운데는 <b>지금 무엇이 필요한지</b>를 말한다. 대상이 없으면 그것부터 알려 주고, 있으면
+        닫는 버튼이 된다 — 링을 펼쳐 놓고 왜 눌리지 않는지 알 수 없게 두면 안 된다.
+      */}
+      {needsSelection ? (
+        <p className="annotation-action-ring__need" style={{ transform: 'translate(-50%, -50%)' }} role="status">
+          판서를 선택하세요
+        </p>
+      ) : (
+        <button
+          type="button"
+          className="annotation-action-ring__close"
+          style={{ transform: 'translate(-50%, -50%)' }}
+          disabled={busy}
+          onClick={onDismiss}
+          aria-label="정리 메뉴 닫기"
+        >
+          ✕
+        </button>
+      )}
     </div>
   )
 }
