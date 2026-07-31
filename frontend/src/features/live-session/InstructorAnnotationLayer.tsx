@@ -64,7 +64,12 @@ interface InstructorAnnotationLayerProps {
   active: boolean
   /** 판서 변경을 데이터 채널로 내보낸다. */
   onPublish: (change: AnnotationChange) => void
-  /** 새 참가자가 들어올 때마다 오르는 값. 오르면 스냅샷을 다시 내보낸다. */
+  /**
+   * "여기까지의 전체 상태"를 알린다(ADR-0055). 밀린 저장을 비운 뒤 <b>포인터</b>가 나가고, 비우지
+   * 못했을 때만 인자로 준 스냅샷이 나간다.
+   */
+  onPublishState: (snapshot: () => AnnotationChange) => void
+  /** 새 참가자가 들어올 때마다 오르는 값. 오르면 전체 상태를 다시 알린다. */
   audienceRevision: number
   /**
    * 속성 패널(색·굵기·투명도)을 펼칠지. 기본은 접어 둔다 — 자료 위에 그리는 화면에서 좌우 패널이
@@ -119,6 +124,7 @@ export default function InstructorAnnotationLayer({
   sessionId,
   active,
   onPublish,
+  onPublishState,
   audienceRevision,
   showPropertyPanel,
   whiteboard,
@@ -286,14 +292,17 @@ export default function InstructorAnnotationLayer({
     for (const element of restoredElements) known.set(element.id, element.version ?? 0)
     knownRef.current = known
     api.updateScene({ elements: restoredElements })
-    // 수신 측에도 내보낸다. `knownRef`를 채웠으므로 뒤따르는 `onChange`의 diff는 아무것도 찾지 못한다 —
-    // 여기서 보내지 않으면 강사 화면에만 판서가 돌아오고 수강생 화면은 빈 채로 남는다.
-    onPublish({
+    // 수신 측에도 알린다. `knownRef`를 채웠으므로 뒤따르는 `onChange`의 diff는 아무것도 찾지 못한다 —
+    // 여기서 알리지 않으면 강사 화면에만 판서가 돌아오고 수강생 화면은 빈 채로 남는다.
+    //
+    // 문서를 실어 보내지 않는다(ADR-0055). 방금 복원한 이 문서는 <b>서버에서 온 것</b>이라 이미
+    // 서버에 있고, 그대로 다시 밀면 판서가 길어졌을 때 데이터 채널의 64KB 한도를 넘는다.
+    onPublishState(() => ({
       type: 'snapshot',
       elements: restoredElements,
       files: referencedFiles(restoredElements, filesRef.current),
-    })
-  }, [onPublish, restoredElements, restoredFiles, ui])
+    }))
+  }, [onPublishState, restoredElements, restoredFiles, ui])
 
   /* ── 판서 해석(ADR-0054, §3-6e) ────────────────────────────────────────────── */
 
@@ -664,24 +673,28 @@ export default function InstructorAnnotationLayer({
   }, [active, onLaser])
 
   /**
-   * 판서를 켤 때, 그리고 새 참가자가 들어올 때마다 전체 스냅샷을 낸다.
+   * 판서를 켤 때, 그리고 새 참가자가 들어올 때마다 <b>전체 상태를 알린다</b>.
    *
    * <p>두 가지를 한다. 도중에 접속한 Egress는 그 전에 흐른 op를 받을 수 없으므로 <b>판서가 빈 채로
    * 녹화되는 것</b>을 막고, 동시에 수신 측의 <b>revision 기준점</b>을 잡는다.
    *
-   * <p><b>비어 있어도 보낸다.</b> Egress는 revision 0에서 시작하는데 강사는 서버에서 이어받은 번호
+   * <p><b>문서를 싣지 않는다</b>(ADR-0055). 예전에는 여기서 스냅샷을 통째로 밀었는데, 실측에서
+   * 요소 53개 + 수식 1개가 74.9KB로 데이터 채널 한도(64KB)를 넘었다. 넘으면 전송이 통째로 실패해
+   * 수강생 화면에 판서가 아예 나오지 않는다 — 강사 화면에는 멀쩡히 보이므로 알아챌 수 없다.
+   * 대신 포인터를 내고 수신 측이 서버에서 받아간다.
+   *
+   * <p><b>비어 있어도 알린다.</b> Egress는 revision 0에서 시작하는데 강사는 서버에서 이어받은 번호
    * (예: 48)부터 매긴다. 기준점이 없으면 이후 op가 전부 "중간이 빠졌다"로 버려져 — 강사 화면에는
-   * 그려지는데 수강생 화면에는 아무것도 나타나지 않는다. `snapshot`만 revision 검사를 건너뛰므로
-   * 이것이 유일한 기준점이다. 빈 스냅샷은 수십 바이트라 아낄 이유도 없다.
+   * 그려지는데 수강생 화면에는 아무것도 나타나지 않는다.
    */
   useEffect(() => {
     if (!active) return
-    onPublish({
+    onPublishState(() => ({
       type: 'snapshot',
       elements: elementsRef.current,
       files: referencedFiles(elementsRef.current, filesRef.current),
-    })
-  }, [active, audienceRevision, onPublish])
+    }))
+  }, [active, audienceRevision, onPublishState])
 
   /**
    * 판서를 끄면 <b>수강생 화면에서도 감춘다.</b>

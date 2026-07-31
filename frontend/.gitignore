@@ -1,4 +1,7 @@
-node_modules/
+# 슬래시를 붙이지 않는다: `node_modules/`는 디렉토리만 무시하므로 다른 워크트리를
+# 가리키는 심볼릭 링크가 그대로 커밋된다. 그러면 CI 러너가 그 링크를 체크아웃하고,
+# 컨테이너가 그 자리에 root 소유로 npm ci를 쏟아부어 다음 잡의 체크아웃이 죽는다.
+node_modules
 dist/
 npm-debug.log
 yarn-error.log

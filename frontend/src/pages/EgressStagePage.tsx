@@ -256,7 +256,7 @@ export default function EgressStagePage() {
         판서는 카메라보다 위에 그린다 — 강사가 자료 위에 쓴 설명이 카메라 타일에 가려지면 안 된다.
         에디터가 아니라 렌더 결과만 얹으므로 선택 핸들이나 툴바는 존재하지 않는다(ADR-0051).
       */}
-      <EgressAnnotationLayer room={connectedRoom} />
+      <EgressAnnotationLayer room={connectedRoom} livekitToken={token} />
       {/*
         원격 오디오 element가 사는 자리. `display: none`이라 합성 프레임에는 한 픽셀도 남기지 않지만
         오디오 재생은 계속된다(LiveKit의 RoomAudioRenderer도 같은 방식이다). 여기 들어가는 element는

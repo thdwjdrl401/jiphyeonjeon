@@ -14,6 +14,9 @@ import type { AnnotationElement } from '@/features/live-session/annotation'
  * 프로그램으로 넣은 변경은 기본적으로 되돌리기 스택에 올라가지 않는다.
  */
 
+/** 전체 상태 알림은 이 테스트의 관심사가 아니다(ADR-0055). 모듈 상수라 렌더마다 identity가 같다. */
+const noopState = () => {}
+
 const updateScene = vi.fn()
 const exportToCanvas = vi.fn()
 const parseMermaidToExcalidraw = vi.fn()
@@ -115,7 +118,7 @@ describe('해석 결과 적용', () => {
 
   async function selectAndPick(label: string) {
     const view = render(
-      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} restoredFiles={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} restoredElements={null} restoredFiles={null} />,
     )
     await view.findByTestId('excalidraw-editor')
     const onChange = excalidrawProps.onChange as (els: unknown[], state?: unknown) => void
@@ -252,7 +255,7 @@ describe('수식 재편집', () => {
   async function selectMath() {
     sceneElements = [MATH_ELEMENT]
     const view = render(
-      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} restoredFiles={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} restoredElements={null} restoredFiles={null} />,
     )
     await view.findByTestId('excalidraw-editor')
     const onChange = excalidrawProps.onChange as (els: unknown[], state?: unknown) => void
@@ -269,7 +272,7 @@ describe('수식 재편집', () => {
   it('보통 판서를 고르면 고치기가 뜨지 않는다 — 고칠 LaTeX가 없다', async () => {
     sceneElements = [...DRAWN]
     const view = render(
-      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} restoredFiles={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} restoredElements={null} restoredFiles={null} />,
     )
     await view.findByTestId('excalidraw-editor')
     ;(excalidrawProps.onChange as (els: unknown[], state?: unknown) => void)(

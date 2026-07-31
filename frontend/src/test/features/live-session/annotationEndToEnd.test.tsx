@@ -10,7 +10,9 @@ import {
   visibleAnnotationElements,
   type AnnotationDocument,
   type AnnotationElement,
+  type AnnotationOp,
 } from '@/features/live-session/annotation'
+import { applyPulledDocument, pullAnnotationDocument } from '@/features/live-session/annotationPull'
 
 /**
  * 판서 한 바퀴 — 강사가 그린 것이 <b>수신 측(Egress)에서 같은 문서로 수렴하는가</b>, 그리고
@@ -169,19 +171,40 @@ function fakeServer() {
 /**
  * 수신 측(Egress)과 같은 로직. 발행된 op를 순서대로 얹어 문서를 만든다.
  *
+ * <p><b>포인터를 만나면 서버에서 받아간다</b>(ADR-0055). 강사는 더 이상 문서 전체를 데이터 채널로
+ * 밀지 않으므로, 발행된 op만 접어서는 수신 측 문서가 나오지 않는다 — 실제 Egress가 하는 그대로
+ * {@link pullAnnotationDocument}를 부른다(전역 fetch가 이 테스트의 가짜 서버로 가 있다).
+ *
  * <p>`joinedAt`은 이 수신자가 <b>합류한 시점</b>이다(그때까지의 publish 횟수). Egress는 강의를 시작할
  * 때 방에 들어오므로 강사 페이지가 접속하며 낸 op를 <b>받지 못한다</b> — 처음부터 다 본다고 두면
  * 늦게 합류한 수신자에게만 생기는 어긋남을 통째로 놓친다.
  */
-function receiverDocument(joinedAt = 0): AnnotationDocument {
+async function receiverDocument(joinedAt = 0): Promise<AnnotationDocument> {
   let document = emptyAnnotationDocument()
   for (const [payload, options] of liveKit.localParticipant.publishData.mock.calls.slice(joinedAt)) {
     if ((options as { topic?: string } | undefined)?.topic !== ANNOTATION_TOPIC) continue
     const op = decodeAnnotationOp(payload)
     if (!op) continue
+    if (op.type === 'pointer') {
+      const pulled = await pullAnnotationDocument({ sessionId: 'ses-1', livekitToken: 't' })
+      // 받아오지 못하면 번호만 맞추고 이어 그린다 — EgressAnnotationLayer와 같은 처리다.
+      document = pulled ? applyPulledDocument(pulled, op.revision) : { ...document, revision: op.revision }
+      continue
+    }
     document = applyAnnotationOp(document, op).document
   }
   return document
+}
+
+/** 그때 이후 판서 topic으로 나간 것들. 크기까지 보려고 payload를 함께 준다. */
+function publishedSince(from: number): { op: AnnotationOp; bytes: number }[] {
+  const out: { op: AnnotationOp; bytes: number }[] = []
+  for (const [payload, options] of liveKit.localParticipant.publishData.mock.calls.slice(from)) {
+    if ((options as { topic?: string } | undefined)?.topic !== ANNOTATION_TOPIC) continue
+    const op = decodeAnnotationOp(payload)
+    if (op) out.push({ op, bytes: payload.length })
+  }
+  return out
 }
 
 /** 지금 합류하는 수신자의 시작점. */
@@ -259,7 +282,9 @@ describe('판서 한 바퀴 — 강사가 그린 것이 수신 측에서 같은 
 
     draw([element('첫획', 1)])
 
-    expect(visibleAnnotationElements(receiverDocument(egressJoined)).map((e) => e.id)).toEqual(['첫획'])
+    await waitFor(async () => {
+      expect(visibleAnnotationElements(await receiverDocument(egressJoined)).map((e) => e.id)).toEqual(['첫획'])
+    })
   })
 
   /**
@@ -277,11 +302,11 @@ describe('판서 한 바퀴 — 강사가 그린 것이 수신 측에서 같은 
 
     const toggle = getByRole('button', { name: /^판서 (켜짐|꺼짐)$/ })
     toggle.click()   // 끄기 → clear(감추기)
-    await waitFor(() => { expect(visibleAnnotationElements(receiverDocument())).toHaveLength(0) })
+    await waitFor(async () => { expect(visibleAnnotationElements(await receiverDocument())).toHaveLength(0) })
 
     toggle.click()   // 다시 켜기
-    await waitFor(() => {
-      expect(visibleAnnotationElements(receiverDocument()).map((e) => e.id)).toEqual(['a', 'b'])
+    await waitFor(async () => {
+      expect(visibleAnnotationElements(await receiverDocument()).map((e) => e.id)).toEqual(['a', 'b'])
     })
   })
 
@@ -322,21 +347,110 @@ describe('판서 한 바퀴 — 강사가 그린 것이 수신 측에서 같은 
     })
 
     // 수신 측: 같은 문서로 수렴한다.
-    await waitFor(() => {
-      expect(visibleAnnotationElements(receiverDocument()).map((e) => e.id)).toEqual(['a', 'b'])
+    await waitFor(async () => {
+      expect(visibleAnnotationElements(await receiverDocument()).map((e) => e.id)).toEqual(['a', 'b'])
     })
 
-    // 그리고 <b>다음</b> 새로고침도 살아남아야 한다. 복원은 마지막 스냅샷부터 접으므로, 접속하며
-    // 나가는 빈 기준점 스냅샷이 저장되면 그 앞의 판서가 통째로 사라진다 — 이번 페이지에서는 멀쩡해
-    // 보이고 다음 번에야 드러난다.
+    // 그리고 <b>다음</b> 새로고침도 살아남아야 한다. 서버에 남은 것만으로 접었을 때 판서가 그대로여야
+    // 한다 — 이 검사가 없으면 이번 페이지에서는 멀쩡해 보이고 다음 번에야 드러나는 어긋남을 놓친다.
     window.dispatchEvent(new Event('pagehide'))
-    await waitFor(() => {
-      expect(server.rows.some((r) => r.opType === 'snapshot')).toBe(true)
+    await waitFor(async () => {
+      const stored = await pullAnnotationDocument({ sessionId: 'ses-1', livekitToken: 't' })
+      expect(visibleAnnotationElements(stored!).map((e) => e.id)).toEqual(['a', 'b'])
     })
     // 빈 스냅샷은 한 건도 저장되면 안 된다. 복원은 마지막 스냅샷부터 접으므로, 그런 op가 마지막에
     // 앉는 순간 그 앞의 판서가 통째로 사라진다 — 뒤에 내용 스냅샷이 따라붙느냐에 기대면 안 된다.
     const empties = server.rows.filter(
       (r) => r.opType === 'snapshot' && JSON.parse(r.payload).elements.length === 0)
     expect(empties).toHaveLength(0)
+  })
+
+  /**
+   * <b>전체 상태를 알리는 크기가 판서 길이에 비례하면 안 된다</b>(ADR-0055).
+   *
+   * <p>이것이 이 변경의 이유다. 예전에는 참가자가 들어올 때마다 문서 전체를 데이터 채널로 밀었고,
+   * 실측에서 요소 53개 + 수식 1개가 74,952 B로 한도(65,536 B)의 114%였다. 넘으면 전송이 통째로
+   * 실패해 <b>수강생 화면에 판서가 아예 나오지 않는다</b> — 강사 화면에는 멀쩡히 보이므로 알아챌 수
+   * 없다. 좌표 정밀도를 다듬어 85%까지 내렸지만 그건 절벽에서 한 걸음 물러난 것일 뿐이다.
+   *
+   * <p>그래서 여기서 고정하는 것은 "작다"가 아니라 <b>"커지지 않는다"</b>이다.
+   */
+  it('전체 상태를 알리는 크기는 판서가 길어져도 늘지 않는다', async () => {
+    const { getByRole, findByRole } = await renderStage()
+    await findByRole('button', { name: /^판서 (켜짐|꺼짐)$/ })
+    await waitFor(() => { expect(liveKit.localParticipant.publishData).toHaveBeenCalled() })
+
+    turnAnnotationOn(getByRole)
+    await waitFor(() => { expect(excalidrawProps.onChange).toBeDefined() })
+
+    const toggle = getByRole('button', { name: /^판서 (켜짐|꺼짐)$/ })
+    const announceAgain = async () => {
+      toggle.click()   // 끄기
+      // 한 tick 쉰다. 같은 tick에 껐다 켜면 React가 한 번의 갱신으로 합쳐 `active`가 바뀌지 않는다.
+      await waitFor(() => { expect(toggle.getAttribute('aria-pressed')).toBe('false') })
+      const from = joinNow()
+      toggle.click()   // 켜기 → 전체 상태를 다시 알린다
+      await waitFor(() => {
+        expect(publishedSince(from).some((p) => p.op.type === 'pointer' || p.op.type === 'snapshot')).toBe(true)
+      })
+      const announced = publishedSince(from).find((p) => p.op.type === 'pointer' || p.op.type === 'snapshot')!
+      return announced
+    }
+
+    draw([element('a', 1)])
+    const small = await announceAgain()
+
+    // 획 하나가 아니라 60개짜리 판서. 요소마다 좌표가 길게 붙는 실제 freedraw에 가깝게 만든다.
+    const many = Array.from({ length: 60 }, (_, i) => ({
+      ...element(`e${i}`, 1),
+      points: Array.from({ length: 40 }, (_, k) => [k * 1.5, k * 2.25]),
+    })) as AnnotationElement[]
+    draw(many)
+    const big = await announceAgain()
+
+    // 문서를 실었다면 이 둘의 크기가 수십 배 벌어진다.
+    expect(small.op.type).toBe('pointer')
+    expect(big.op.type).toBe('pointer')
+    expect(big.bytes).toBe(small.bytes)
+    expect(big.bytes).toBeLessThan(200)
+  })
+
+  /**
+   * 포인터는 <b>"여기까지의 상태는 서버에 있다"는 약속</b>이다. 저장이 밀려 있는데 그대로 내면
+   * 수신 측이 받는 문서에 마지막 몇 획이 빠지고, 그 뒤 델타와 이어지지 않아 이후 op가 전부 버려진다 —
+   * 강사 화면에는 그려지는데 녹화에는 나타나지 않는다. 지킬 수 없으면 예전처럼 스냅샷을 민다.
+   */
+  it('저장이 밀려 있으면 포인터 대신 스냅샷으로 물러선다', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const { getByRole, findByRole } = await renderStage()
+    await findByRole('button', { name: /^판서 (켜짐|꺼짐)$/ })
+    await waitFor(() => { expect(liveKit.localParticipant.publishData).toHaveBeenCalled() })
+
+    turnAnnotationOn(getByRole)
+    await waitFor(() => { expect(excalidrawProps.onChange).toBeDefined() })
+    draw([element('a', 1)])
+
+    // 이제부터 서버가 op를 받지 않는다.
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => (
+      init && (init.method ?? 'GET') !== 'GET'
+        ? new Response(null, { status: 500 })
+        : server.handle(String(url), init)
+    )))
+
+    const toggle = getByRole('button', { name: /^판서 (켜짐|꺼짐)$/ })
+    toggle.click()
+    await waitFor(() => { expect(toggle.getAttribute('aria-pressed')).toBe('false') })
+    const from = joinNow()
+    toggle.click()
+
+    await waitFor(() => {
+      const announced = publishedSince(from).find((p) => p.op.type === 'pointer' || p.op.type === 'snapshot')
+      expect(announced?.op.type).toBe('snapshot')
+    })
+    // 그리고 그 스냅샷에는 지금 그린 것이 들어 있다 — 수신 측이 이것만으로 맞춰야 하기 때문이다.
+    const announced = publishedSince(from).find((p) => p.op.type === 'snapshot')!
+    expect((announced.op as { elements: AnnotationElement[] }).elements.map((e) => e.id)).toEqual(['a'])
+
+    warn.mockRestore()
   })
 })
