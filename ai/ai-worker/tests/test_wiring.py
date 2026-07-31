@@ -255,6 +255,7 @@ async def test_runtime_readiness_requires_database_and_bge() -> None:
     embedding_client = SimpleNamespace(get=AsyncMock())
     runtime = PptxIngestionRuntime(
         index_pptx_material=object(),  # type: ignore[arg-type]
+        delete_material_index=object(),  # type: ignore[arg-type]
         callback_client=object(),  # type: ignore[arg-type]
         tenant_id="liveclass",
         model_revision=REVISION,

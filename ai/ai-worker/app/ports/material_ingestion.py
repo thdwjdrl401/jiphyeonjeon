@@ -1,7 +1,8 @@
 from collections.abc import Sequence
 from typing import Protocol
+from uuid import UUID
 
-from app.domain import ChunkRecord, ExistingIndexVersion, StagedMaterial
+from app.domain import ChunkRecord, ExistingIndexVersion, MaterialScope, StagedMaterial
 from app.ingestion.models import KeyTerm
 
 
@@ -32,6 +33,12 @@ class IndexStorage(Protocol):
     async def stage(self, material: StagedMaterial, chunks: Sequence[ChunkRecord]) -> int: ...
 
     async def activate(self, material: StagedMaterial, version_id: int) -> None: ...
+
+    async def resolve_active_scope(
+        self, tenant_id: str, material_id: UUID
+    ) -> MaterialScope | None: ...
+
+    async def delete_job(self, material: StagedMaterial) -> int: ...
 
 
 class KeyTermStorage(Protocol):

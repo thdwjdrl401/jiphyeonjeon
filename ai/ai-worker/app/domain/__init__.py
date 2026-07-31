@@ -11,6 +11,7 @@ from app.domain.index_models import (
     BGE_M3_MODEL,
     ChunkRecord,
     ExistingIndexVersion,
+    MaterialScope,
     StagedMaterial,
 )
 
@@ -23,6 +24,7 @@ __all__ = [
     "ExistingIndexVersion",
     "InvalidPptxError",
     "MaterialIngestionError",
+    "MaterialScope",
     "PptxLimitExceededError",
     "StagedMaterial",
     "StaleMaterialVersionError",

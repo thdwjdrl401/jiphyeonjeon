@@ -7,7 +7,7 @@ import pytest
 
 from app.adapters.remote_bge_embedding import RemoteEmbeddingError
 from app.adapters.spring_material_callback import SpringCallbackError
-from app.application import MaterialIndexResult, map_pptx_embed_job
+from app.application import MaterialDeleteResult, MaterialIndexResult, map_pptx_embed_job
 from app.consumers import MaterialJobHandler, PermanentMaterialJobError
 from app.domain import ExistingIndexVersion, MaterialIngestionError
 from app.ingestion import KeyTerm
@@ -68,9 +68,39 @@ class Indexer:
         return self.existing
 
 
+class Deleter:
+    def __init__(
+        self,
+        error: Exception | None = None,
+        deleted: bool = True,
+        pending: bool = True,
+    ) -> None:
+        self.error = error
+        self.deleted = deleted
+        self.pending = pending
+        self.executed = []
+        self.pending_checks = []
+
+    async def execute(self, job) -> MaterialDeleteResult:
+        self.executed.append(job)
+        if self.error is not None:
+            raise self.error
+        return MaterialDeleteResult(deleted=self.deleted)
+
+    async def has_pending_data(self, job) -> bool:
+        self.pending_checks.append(job)
+        return self.pending
+
+
 class Runtime:
-    def __init__(self, indexer: Indexer, callback: AsyncMock) -> None:
+    def __init__(
+        self,
+        indexer: Indexer,
+        callback: AsyncMock,
+        deleter: Deleter | None = None,
+    ) -> None:
         self.index_pptx_material = indexer
+        self.delete_material_index = deleter or Deleter()
         self.callback_client = SimpleNamespace(send=callback)
 
     def material_for(self, job):
@@ -117,14 +147,78 @@ async def test_combined_callback_failure_retries_the_whole_job_like_before() -> 
         await MaterialJobHandler(Runtime(indexer, callback)).handle(embed_body())
 
 
-@pytest.mark.parametrize("body", [b"not-json", delete_body()])
-async def test_invalid_or_unresolved_delete_goes_to_dlq_without_callback(body: bytes) -> None:
+async def test_invalid_body_goes_to_dlq_without_callback() -> None:
     callback = AsyncMock()
 
     with pytest.raises(PermanentMaterialJobError):
-        await MaterialJobHandler(Runtime(Indexer(), callback)).handle(body)
+        await MaterialJobHandler(Runtime(Indexer(), callback)).handle(b"not-json")
 
     callback.assert_not_awaited()
+
+
+async def test_delete_success_sends_deleted_callback() -> None:
+    callback = AsyncMock()
+    deleter = Deleter(deleted=True)
+
+    await MaterialJobHandler(Runtime(Indexer(), callback, deleter)).handle(delete_body())
+
+    assert len(deleter.executed) == 1
+    event = callback.await_args.args[0]
+    assert event.event_type == "MATERIAL_DELETED"
+    assert event.status == "DELETED"
+    assert event.job_id == "EMBED_DELETE:550e8400-e29b-41d4-a716-446655440000"
+
+
+async def test_delete_with_nothing_to_remove_is_still_a_success() -> None:
+    callback = AsyncMock()
+    deleter = Deleter(deleted=False)
+
+    await MaterialJobHandler(Runtime(Indexer(), callback, deleter)).handle(delete_body())
+
+    event = callback.await_args.args[0]
+    assert event.event_type == "MATERIAL_DELETED"
+    assert event.status == "DELETED"
+
+
+async def test_permanent_delete_failure_reports_failed_before_dlq() -> None:
+    callback = AsyncMock()
+    deleter = Deleter(error=MaterialIngestionError("delete rejected"))
+    handler = MaterialJobHandler(Runtime(Indexer(), callback, deleter))
+
+    with pytest.raises(PermanentMaterialJobError):
+        await handler.handle(delete_body())
+
+    event = callback.await_args.args[0]
+    assert event.event_type == "MATERIAL_DELETE_FAILED"
+    assert event.status == "FAILED"
+
+
+async def test_retryable_delete_failure_does_not_emit_terminal_callback() -> None:
+    callback = AsyncMock()
+    deleter = Deleter(error=RemoteEmbeddingError("db unavailable", retryable=True))
+
+    with pytest.raises(RemoteEmbeddingError):
+        await MaterialJobHandler(Runtime(Indexer(), callback, deleter)).handle(delete_body())
+
+    callback.assert_not_awaited()
+
+
+@pytest.mark.parametrize("pending", [True, False])
+async def test_delete_retry_exhaustion_only_reports_failed_if_data_still_exists(
+    pending: bool,
+) -> None:
+    callback = AsyncMock()
+    deleter = Deleter(pending=pending)
+    handler = MaterialJobHandler(Runtime(Indexer(), callback, deleter))
+
+    await handler.report_retry_exhausted(delete_body())
+
+    assert len(deleter.pending_checks) == 1
+    if pending:
+        event = callback.await_args.args[0]
+        assert event.event_type == "MATERIAL_DELETE_FAILED"
+    else:
+        callback.assert_not_awaited()
 
 
 async def test_permanent_ingestion_failure_reports_failed_before_dlq() -> None:

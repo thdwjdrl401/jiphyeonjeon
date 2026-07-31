@@ -17,7 +17,7 @@ from app.adapters.remote_bge_embedding import RemoteBgeM3EmbeddingModel
 from app.adapters.spring_hmac import SpringHmacSigner
 from app.adapters.spring_material_asset_store import SpringPresignedPptxAssetStore
 from app.adapters.spring_material_callback import SpringMaterialCallbackClient
-from app.application import IndexPptxMaterial, map_pptx_embed_job
+from app.application import DeleteMaterialIndex, IndexPptxMaterial, map_pptx_embed_job
 from app.config import Settings
 from app.consumers import MaterialJobHandler
 from app.contracts import PptxEmbedJob
@@ -36,6 +36,7 @@ class PptxRuntimeConfigurationError(RuntimeError):
 @dataclass(slots=True)
 class PptxIngestionRuntime:
     index_pptx_material: IndexPptxMaterial
+    delete_material_index: DeleteMaterialIndex
     callback_client: SpringMaterialCallbackClient
     tenant_id: str
     model_revision: str
@@ -176,17 +177,25 @@ def build_pptx_ingestion_runtime(settings: Settings) -> PptxIngestionRuntime:
             max_prompt_chars=settings.gms_max_prompt_chars,
             timeout_seconds=settings.gms_timeout_seconds,
         )
+    index_storage = PgvectorIndexRepository(database_engine)
     index_pptx_material = IndexPptxMaterial(
         asset_store,
         embedding_model,
-        PgvectorIndexRepository(database_engine),
+        index_storage,
         validation_limits=PptxValidationLimits(source_max_bytes=settings.source_max_bytes),
         chunk_max_chars=settings.chunk_max_chars,
         key_term_extractor=key_term_extractor,
         key_term_storage=PgvectorKeyTermRepository(database_engine),
     )
+    delete_material_index = DeleteMaterialIndex(
+        index_storage,
+        tenant_id=settings.tenant_id,
+        model_revision=settings.embedding_revision,
+        chunk_max_chars=settings.chunk_max_chars,
+    )
     return PptxIngestionRuntime(
         index_pptx_material=index_pptx_material,
+        delete_material_index=delete_material_index,
         callback_client=callback_client,
         tenant_id=settings.tenant_id,
         model_revision=settings.embedding_revision,
