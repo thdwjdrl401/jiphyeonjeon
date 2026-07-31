@@ -206,7 +206,10 @@ export default function InstructorAnnotationLayer({
     for (const element of restoredElements) known.set(element.id, element.version ?? 0)
     knownRef.current = known
     api.updateScene({ elements: restoredElements })
-  }, [restoredElements, ui])
+    // 수신 측에도 내보낸다. `knownRef`를 채웠으므로 뒤따르는 `onChange`의 diff는 아무것도 찾지 못한다 —
+    // 여기서 보내지 않으면 강사 화면에만 판서가 돌아오고 수강생 화면은 빈 채로 남는다.
+    onPublish({ type: 'snapshot', elements: restoredElements })
+  }, [onPublish, restoredElements, ui])
 
   /**
    * 화이트보드를 깔거나 걷는다.
@@ -321,13 +324,18 @@ export default function InstructorAnnotationLayer({
   }, [active, onLaser])
 
   /**
-   * 새 참가자(특히 도중에 재접속한 Egress)는 그 전에 흐른 op를 받을 수 없다. 전체 스냅샷을 다시 내
-   * 판서가 빈 채로 녹화되는 것을 막는다.
+   * 판서를 켤 때, 그리고 새 참가자가 들어올 때마다 전체 스냅샷을 낸다.
    *
-   * <p>첫 렌더에도 한 번 도는데, 그때는 판서가 비어 있어 보낼 것이 없다.
+   * <p>두 가지를 한다. 도중에 접속한 Egress는 그 전에 흐른 op를 받을 수 없으므로 <b>판서가 빈 채로
+   * 녹화되는 것</b>을 막고, 동시에 수신 측의 <b>revision 기준점</b>을 잡는다.
+   *
+   * <p><b>비어 있어도 보낸다.</b> Egress는 revision 0에서 시작하는데 강사는 서버에서 이어받은 번호
+   * (예: 48)부터 매긴다. 기준점이 없으면 이후 op가 전부 "중간이 빠졌다"로 버려져 — 강사 화면에는
+   * 그려지는데 수강생 화면에는 아무것도 나타나지 않는다. `snapshot`만 revision 검사를 건너뛰므로
+   * 이것이 유일한 기준점이다. 빈 스냅샷은 수십 바이트라 아낄 이유도 없다.
    */
   useEffect(() => {
-    if (!active || elementsRef.current.length === 0) return
+    if (!active) return
     onPublish({ type: 'snapshot', elements: elementsRef.current })
   }, [active, audienceRevision, onPublish])
 

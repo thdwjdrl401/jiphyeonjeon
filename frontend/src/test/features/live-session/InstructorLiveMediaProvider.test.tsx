@@ -98,8 +98,12 @@ vi.mock('livekit-client', () => ({
   },
 }))
 
+/** 테스트에서 provider의 publish 함수를 직접 부르기 위한 통로. */
+let publisherRef: ReturnType<typeof useInstructorLiveKit> | null = null
+
 function ProviderStateProbe() {
   const publisher = useInstructorLiveKit()
+  publisherRef = publisher
   return (
     <output>
       {[
@@ -205,7 +209,7 @@ describe('InstructorLiveMediaProvider', () => {
      * `clear`나 `upsert`로는 안 된다 — 그것들은 revision 검사를 받아 Egress가 버린다. 스냅샷만
      * 검사를 건너뛰므로 복구 경로가 될 수 있다.
      */
-    it('접속하면 저장된 판서를 스냅샷으로 다시 내보낸다', async () => {
+    it('접속하면 빈 스냅샷으로 revision 기준점을 잡는다', async () => {
       const elements = [{ id: 'a', type: 'freedraw', version: 3 }]
       annotationApi.fetchAnnotationDocument.mockResolvedValue({
         document: { revision: 47, elements },
@@ -214,9 +218,31 @@ describe('InstructorLiveMediaProvider', () => {
 
       renderProvider()
 
+      // 복원한 판서 자체는 여기서 내보내지 않는다 — 새로고침 직후 판서는 꺼진 상태라, 여기서 보내면
+      // 강사에게는 안 보이는 판서가 수강생 화면에만 뜬다. 내보내는 일은 판서를 켤 때 레이어가 한다.
       await waitFor(() => {
-        expect(publishedAnnotationOps()).toContainEqual({ type: 'snapshot', revision: 48, elements })
+        expect(publishedAnnotationOps()).toContainEqual({ type: 'snapshot', revision: 48, elements: [] })
       })
+    })
+
+    /**
+     * `clear`는 문서를 지우는 편집이 아니라 판서를 껐을 때 수강생 화면에서 감추라는 <b>표시 상태</b>다.
+     * 강사의 문서는 그대로 남아 다시 켜면 돌아오는데, 저장해 버리면 서버 쪽 문서만 비어 새로고침했을 때
+     * 판서가 통째로 사라진다.
+     */
+    it('clear는 서버에 남기지 않는다 — 지우는 것이 아니라 감추는 것이다', async () => {
+      const { getByRole } = renderProvider()
+      await waitFor(() => { expect(getByRole('status')).toHaveTextContent('connected') })
+      await waitFor(() => { expect(annotationSink.push).toHaveBeenCalled() })
+      annotationSink.push.mockClear()
+
+      publisherRef!.publishAnnotation({ type: 'clear' })
+      publisherRef!.publishAnnotation({ type: 'upsert', elements: [{ id: 'a', type: 'freedraw', version: 1 }] })
+
+      const kinds = annotationSink.push.mock.calls.map(([op]) => (op as AnnotationOp).type)
+      expect(kinds).toEqual(['upsert'])
+      // 라이브 전달에는 그대로 나간다 — 안 보내면 강사만 껐다고 믿고 수강생·녹화에는 남는다.
+      expect(publishedAnnotationOps().map((op) => op.type)).toContain('clear')
     })
 
     /**

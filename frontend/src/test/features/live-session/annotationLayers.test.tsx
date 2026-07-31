@@ -472,6 +472,7 @@ describe('강사 판서 레이어', () => {
       <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />,
     )
     await findByTestId('excalidraw-editor')
+    onPublish.mockClear()   // 판서를 켤 때 나가는 기준점 스냅샷은 여기 관심사가 아니다
     const onChange = excalidrawProps.onChange as (elements: unknown[]) => void
 
     onChange([element('a', 1)])
@@ -534,7 +535,9 @@ describe('강사 판서 레이어', () => {
 
     ;(excalidrawProps.onChange as (elements: unknown[]) => void)(restored)
 
-    expect(onPublish).not.toHaveBeenCalled()
+    // 스냅샷(기준점·복원 전달)은 나가야 하지만, 복원된 요소를 "새로 그린 것"으로 보고 upsert로
+    // 다시 내보내면 같은 획이 op로 한 번 더 흐른다.
+    expect(onPublish.mock.calls.map(([change]) => change.type)).not.toContain('upsert')
   })
 
   /**
@@ -555,17 +558,51 @@ describe('강사 판서 레이어', () => {
       .not.toContainEqual([element('저장된', 9)])
   })
 
-  it('판서가 비어 있으면 스냅샷을 보내지 않는다 — 보낼 것이 없다', async () => {
-    const onPublish = vi.fn()
+  /**
+   * Egress는 revision 0에서 시작하는데 강사는 서버에서 이어받은 번호(예: 48)부터 매긴다. 기준점이
+   * 없으면 이후 op가 전부 "중간이 빠졌다"로 버려져 <b>강사 화면에는 그려지는데 수강생 화면에는
+   * 아무것도 나타나지 않는다</b>. `snapshot`만 revision 검사를 건너뛰므로 이것이 유일한 기준점이다.
+   */
+  it('판서를 켜면 비어 있어도 스냅샷을 보내 기준점을 잡는다', async () => {
+    const onPublish = vi.fn<(change: AnnotationChange) => void>()
+    const { findByTestId, rerender } = render(
+      <InstructorAnnotationLayer active={false} audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />,
+    )
+
+    rerender(<InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />)
+    await findByTestId('excalidraw-editor')
+
+    expect(onPublish).toHaveBeenCalledWith({ type: 'snapshot', elements: [] })
+  })
+
+  it('새 참가자가 들어오면 판서가 비어 있어도 기준점을 다시 보낸다', async () => {
+    const onPublish = vi.fn<(change: AnnotationChange) => void>()
     const { findByTestId, rerender } = render(
       <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />,
     )
     await findByTestId('excalidraw-editor')
+    onPublish.mockClear()
 
     rerender(<InstructorAnnotationLayer active audienceRevision={1} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />)
 
-    expect(onPublish).not.toHaveBeenCalled()
+    expect(onPublish).toHaveBeenCalledWith({ type: 'snapshot', elements: [] })
   })
+
+  /**
+   * 복원은 `knownRef`를 함께 채우므로 뒤따르는 `onChange`의 diff가 아무것도 찾지 못한다. 여기서
+   * 보내지 않으면 강사 화면에만 판서가 돌아오고 수강생 화면은 빈 채로 남는다.
+   */
+  it('되돌린 판서를 수신 측에도 스냅샷으로 내보낸다', async () => {
+    const restored = [element('a', 3)]
+    const onPublish = vi.fn<(change: AnnotationChange) => void>()
+    const { findByTestId } = render(
+      <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={restored} />,
+    )
+    await findByTestId('excalidraw-editor')
+
+    expect(onPublish).toHaveBeenCalledWith({ type: 'snapshot', elements: restored })
+  })
+
 })
 
 describe('Egress 판서 레이어', () => {
@@ -664,6 +701,56 @@ describe('Egress 판서 레이어', () => {
 
     await new Promise((resolve) => { setTimeout(resolve, 0) })
     expect(exportToCanvas).not.toHaveBeenCalled()
+  })
+
+  /**
+   * op 하나마다 그리면 밀린다. 획을 긋는 동안 op는 <b>33.6ms마다</b> 오는데(실측 40건/1.35초)
+   * `exportToCanvas`는 문서 전체를 매번 다시 그려 획 50개에 32.5ms, 200개에 55.1ms가 든다
+   * (ADR-0051 실측). 그리는 시간이 도착 간격을 넘어서면 렌더가 op마다 쌓여 <b>획을 그을수록 수강생
+   * 화면이 뒤처지고 획을 멈춰야 따라잡는다</b>.
+   *
+   * <p>중간 상태를 버려도 잃는 것이 없다 — 어차피 다음 op가 곧 덮어쓸 그림이고, 마지막 상태는
+   * 반드시 그린다.
+   */
+  it('렌더가 밀리는 동안 도착한 op는 합쳐서 한 번만 그린다', async () => {
+    const { room, receive } = fakeRoom()
+    getCommonBounds.mockReturnValue([0, 0, 100, 100])
+
+    // 첫 export를 우리가 붙잡아 둔다 — 그동안 op가 계속 도착하는 상황이다.
+    let releaseFirst: (canvas: HTMLCanvasElement) => void = () => {}
+    const first = new Promise<HTMLCanvasElement>((resolve) => { releaseFirst = resolve })
+    exportToCanvas.mockReturnValueOnce(first)
+    const done = document.createElement('canvas')
+    done.width = 100
+    done.height = 100
+    exportToCanvas.mockResolvedValue(done)
+
+    render(<EgressAnnotationLayer room={room} />)
+
+    receive(encodeAnnotationOp({ type: 'upsert', revision: 1, elements: [element('a', 1)] }), ANNOTATION_TOPIC)
+    await waitFor(() => { expect(exportToCanvas).toHaveBeenCalledTimes(1) })
+
+    // 그리는 동안 세 건이 더 온다. 실제처럼 <b>따로따로</b> 도착시킨다 — 한 tick에 몰아 넣으면
+    // React가 한 번의 갱신으로 합쳐 버려, op마다 그리는 구현도 멀쩡해 보인다.
+    const tick = () => new Promise((resolve) => { setTimeout(resolve, 0) })
+    for (const [revision, id] of [[2, 'b'], [3, 'c'], [4, 'd']] as const) {
+      receive(encodeAnnotationOp({ type: 'upsert', revision, elements: [element(id, 1)] }), ANNOTATION_TOPIC)
+      await tick()
+    }
+    expect(exportToCanvas).toHaveBeenCalledTimes(1)   // 아직 첫 렌더가 끝나지 않았다
+
+    const stub = document.createElement('canvas')
+    stub.width = 100
+    stub.height = 100
+    releaseFirst(stub)
+
+    // 밀려 있던 것을 다 소화하고, 마지막 그림에는 그동안 온 것이 전부 들어 있다.
+    await waitFor(() => {
+      const last = exportToCanvas.mock.calls.at(-1)![0] as { elements: { id: string }[] }
+      expect(last.elements.map((e) => e.id)).toEqual(['a', 'b', 'c', 'd'])
+    })
+    // op 하나마다 그렸다면 네 번이다. 중간 상태를 건너뛰므로 그보다 적어야 한다.
+    expect(exportToCanvas.mock.calls.length).toBeLessThan(4)
   })
 
   /**

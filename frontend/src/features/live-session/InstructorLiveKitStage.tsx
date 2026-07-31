@@ -35,6 +35,22 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
   const publisher = useInstructorLiveKit()
   // 판서는 기본으로 꺼 둔다. 켜져 있으면 캔버스가 포인터를 먹어 카메라 배치를 드래그할 수 없다.
   const [annotating, setAnnotating] = useState(false)
+
+  /**
+   * 저장돼 있던 판서가 있으면 판서를 <b>자동으로 켠다</b>(ADR-0051).
+   *
+   * <p>새로고침해도 화면이 그대로여야 한다. 켜 주지 않으면 판서는 살아 있는데 보이지 않아 강사에게는
+   * 사라진 것과 구분되지 않고, 켜기 전까지 수강생 화면에도 나오지 않는다.
+   *
+   * <p>한 번만 본다. 강사가 그 뒤에 판서를 껐다면 그 선택을 되돌리지 않는다.
+   */
+  const restoredAnnotationCount = publisher.restoredAnnotation?.elements.length ?? 0
+  const autoEnabledRef = useRef(false)
+  useEffect(() => {
+    if (autoEnabledRef.current || restoredAnnotationCount === 0) return
+    autoEnabledRef.current = true
+    setAnnotating(true)
+  }, [restoredAnnotationCount])
   /**
    * 판서 속성 패널(색·굵기·투명도)은 <b>접힌 상태로 시작</b>한다. 자료 위에 그리는 화면에서 좌우
    * 패널이 시야를 가리고, 색·굵기는 매 획마다 바꾸는 것이 아니다. 필요할 때만 펼친다.
