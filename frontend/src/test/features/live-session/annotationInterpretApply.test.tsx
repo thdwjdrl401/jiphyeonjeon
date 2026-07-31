@@ -1,5 +1,5 @@
 import type React from 'react'
-import { render, waitFor } from '@testing-library/react'
+import { fireEvent, render, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AnnotationElement } from '@/features/live-session/annotation'
 
@@ -28,7 +28,12 @@ vi.mock('@/features/live-session/excalidrawRuntime', () => ({
       excalidrawProps = props
       const give = props.excalidrawAPI as ((api: unknown) => void) | undefined
       if (give) {
-        give({ updateScene, getAppState: () => ({}), getSceneElements: () => sceneElements })
+        give({
+          updateScene,
+          getAppState: () => ({}),
+          getSceneElements: () => sceneElements,
+          getFiles: () => ({}),
+        })
       }
       return <div data-testid="excalidraw-editor">{props.children as React.ReactNode}</div>
     },
@@ -50,6 +55,13 @@ vi.mock('@/features/live-session/excalidrawRuntime', () => ({
   }),
   loadMermaid: () => Promise.resolve({ parseMermaidToExcalidraw }),
 }))
+
+/** 수식은 그림으로 들어간다. MathJax는 무겁고 jsdom에서 돌릴 이유도 없어 결과만 흉내낸다. */
+const mathApi = vi.hoisted(() => ({
+  renderMathSvg: vi.fn(),
+  mathFileEntry: vi.fn(),
+}))
+vi.mock('@/features/live-session/mathRuntime', () => mathApi)
 
 const interpretApi = vi.hoisted(() => ({ interpretAnnotation: vi.fn() }))
 vi.mock('@/features/live-session/annotationInterpret', async () => ({
@@ -88,6 +100,10 @@ describe('해석 결과 적용', () => {
       kind: 'mermaid', body: 'flowchart LR\n  A[요청] --> B[인증]', source: '',
       replace: ['a', 'b'], confidence: 0.98, unreadable: false,
     })
+    mathApi.renderMathSvg.mockResolvedValue({ dataUrl: 'data:image/svg+xml;utf8,<svg/>', width: 200, height: 40 })
+    mathApi.mathFileEntry.mockImplementation((id: string) => ({
+      [id]: { id, mimeType: 'image/svg+xml', dataURL: 'data:image/svg+xml;utf8,<svg/>', created: 0 },
+    }))
     vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
       width: 960, height: 540, x: 0, y: 0, top: 0, left: 0, right: 960, bottom: 540,
       toJSON: () => ({}),
@@ -162,16 +178,44 @@ describe('해석 결과 적용', () => {
       replace: ['a'], confidence: 0.98, unreadable: false,
     })
     convertToExcalidrawElements.mockReturnValue([
-      { id: 't1', type: 'text', version: 1, x: 0, y: 0, width: 200, height: 40 },
+      { id: 't1', type: 'image', version: 1, x: 0, y: 0, width: 200, height: 40, fileId: 'f1' },
     ])
 
     await selectAndPick('수식')
 
     await waitFor(() => { expect(convertToExcalidrawElements).toHaveBeenCalled() })
     expect(parseMermaidToExcalidraw).not.toHaveBeenCalled()
-    // 판서에 들어가는 것은 유니코드다 — Excalidraw에 수식 렌더러가 없다.
-    const created = convertToExcalidrawElements.mock.calls.at(-1)![0] as { text: string }[]
-    expect(created[0].text).toBe('y = ax² + bx + c')
+    // 분수·적분의 상하 구조는 글자로 표현할 수 없어 렌더한 그림으로 넣는다.
+    const created = convertToExcalidrawElements.mock.calls.at(-1)![0] as Record<string, unknown>[]
+    expect(created[0].type).toBe('image')
+    // LaTeX 원문을 요소에 붙여 둔다 — 그림이 되면 내용을 고칠 수 없으므로 다시 렌더할 근거가 필요하다.
+    expect((created[0].customData as { liveclassMathLatex: string }).liveclassMathLatex)
+      .toBe('y = ax^2 + bx + c')
+  })
+
+  /**
+   * 이미지 요소는 데이터를 담지 않고 `fileId`로 가리키기만 한다. 파일을 함께 넣지 않으면 수식이
+   * <b>빈 자리로</b> 합성된다 — 강사 화면에는 보이는데 수강생과 녹화에는 없다.
+   */
+  it('수식 그림을 파일과 함께 넣는다', async () => {
+    interpretApi.interpretAnnotation.mockResolvedValue({
+      kind: 'math', body: 'y = ax² + bx + c', source: 'y = ax^2 + bx + c',
+      replace: ['a'], confidence: 0.98, unreadable: false,
+    })
+    convertToExcalidrawElements.mockReturnValue([
+      { id: 't1', type: 'image', version: 1, x: 0, y: 0, width: 200, height: 40, fileId: 'f1' },
+    ])
+
+    await selectAndPick('수식')
+
+    await waitFor(() => {
+      const withElements = updateScene.mock.calls
+        .map(([arg]) => arg as { elements?: unknown[]; files?: Record<string, unknown> })
+        .filter((arg) => Boolean(arg?.elements))
+      const call = withElements[withElements.length - 1]
+      expect(call?.files).toBeDefined()
+      expect(Object.keys(call!.files!)).toHaveLength(1)
+    })
   })
 
   /** 읽지 못한 것을 넣지 않는다. 지어낸 것을 판서에 올리는 것보다 못 읽었다고 말하는 편이 낫다. */
@@ -187,5 +231,83 @@ describe('해석 결과 적용', () => {
         .toContain('알아보지 못했습니다')
     })
     expect(convertToExcalidrawElements).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * 수식 재편집(ADR-0051 · ADR-0054).
+ *
+ * <p>수식을 그림으로 넣는 순간 내용을 고칠 수 없게 된다. ADR-0051이 Excalidraw를 고른 이유가
+ * "결과가 이미지가 아니라 다시 고칠 수 있는 객체여야 한다"였으므로, 그대로 두면 그 전제를 깬다.
+ * 그래서 넣을 때 LaTeX 원문을 요소에 붙여 두고 여기서 꺼내 다시 렌더한다 — 이 경로가 없으면
+ * 수식을 그림으로 넣기로 한 결정 자체가 성립하지 않는다.
+ */
+describe('수식 재편집', () => {
+  const MATH_ELEMENT = {
+    id: 'm', type: 'image', version: 1, x: 100, y: 100, width: 200, height: 50,
+    fileId: 'f1', customData: { liveclassMathLatex: 'y = ax^2' },
+  } as unknown as AnnotationElement
+
+  async function selectMath() {
+    sceneElements = [MATH_ELEMENT]
+    const view = render(
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
+    )
+    await view.findByTestId('excalidraw-editor')
+    const onChange = excalidrawProps.onChange as (els: unknown[], state?: unknown) => void
+    onChange([MATH_ELEMENT], { selectedElementIds: { m: true } })
+    return view
+  }
+
+  it('우리가 넣은 수식을 고르면 고치기가 뜬다', async () => {
+    const view = await selectMath()
+
+    await waitFor(() => { expect(view.getByText('수식 고치기')).toBeTruthy() })
+  })
+
+  it('보통 판서를 고르면 고치기가 뜨지 않는다 — 고칠 LaTeX가 없다', async () => {
+    sceneElements = [...DRAWN]
+    const view = render(
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
+    )
+    await view.findByTestId('excalidraw-editor')
+    ;(excalidrawProps.onChange as (els: unknown[], state?: unknown) => void)(
+      DRAWN, { selectedElementIds: { a: true } })
+
+    await waitFor(() => { expect(view.container.querySelector('.annotation-action-ring')).not.toBeNull() })
+    expect(view.queryByText('수식 고치기')).toBeNull()
+  })
+
+  it('붙여 둔 LaTeX를 그대로 꺼내 보여 준다', async () => {
+    const view = await selectMath()
+    await waitFor(() => { expect(view.getByText('수식 고치기')).toBeTruthy() })
+
+    view.getByText('수식 고치기').click()
+
+    await waitFor(() => {
+      expect(view.container.querySelector<HTMLInputElement>('#annotation-math-input')!.value)
+        .toBe('y = ax^2')
+    })
+  })
+
+  it('고쳐서 다시 렌더하면 그 LaTeX로 갈아 끼운다', async () => {
+    convertToExcalidrawElements.mockReturnValue([
+      { id: 'm2', type: 'image', version: 1, x: 0, y: 0, width: 200, height: 50, fileId: 'f2' },
+    ])
+    const view = await selectMath()
+    await waitFor(() => { expect(view.getByText('수식 고치기')).toBeTruthy() })
+    view.getByText('수식 고치기').click()
+    await waitFor(() => { expect(view.container.querySelector('#annotation-math-input')).not.toBeNull() })
+
+    // React 제어 입력이라 value를 직접 넣으면 상태가 바뀌지 않는다. fireEvent가 그 처리를 한다.
+    fireEvent.change(view.container.querySelector('#annotation-math-input')!,
+      { target: { value: 'y = bx^3' } })
+    fireEvent.submit(view.container.querySelector('form.annotation-math-editor')!)
+
+    await waitFor(() => { expect(mathApi.renderMathSvg).toHaveBeenCalledWith('y = bx^3', expect.any(Number)) })
+    // 원본은 지우고 새 그림만 남는다.
+    await waitFor(() => {
+      expect(lastSceneWrite()!.elements.map((e) => (e as { id: string }).id)).toEqual(['m2'])
+    })
   })
 })

@@ -600,7 +600,11 @@ describe('강사 판서 레이어', () => {
     )
     await findByTestId('excalidraw-editor')
 
-    expect(onPublish).toHaveBeenCalledWith({ type: 'snapshot', elements: restored })
+    // 복원 시딩은 에디터가 붙은 뒤 이펙트에서 일어난다. 마운트 직후를 바로 단언하면 부하에 따라
+    // 아직 돌지 않은 순간을 잡아 간헐적으로 실패한다.
+    await waitFor(() => {
+      expect(onPublish).toHaveBeenCalledWith({ type: 'snapshot', elements: restored })
+    })
   })
 
 })

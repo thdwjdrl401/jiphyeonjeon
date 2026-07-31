@@ -255,7 +255,7 @@ describe('레이저 포인터', () => {
 
 describe('판서 op 적용', () => {
   function docWith(elements: Array<{ id: string; isDeleted?: boolean }>, revision = 1): AnnotationDocument {
-    return { revision, elements }
+    return { revision, elements, files: {} }
   }
 
   it('upsert는 같은 id를 덮어쓰고 새 id는 추가한다', () => {
@@ -336,7 +336,7 @@ describe('판서 op 적용', () => {
    */
   it('새로고침으로 revision이 역행해도 빈 스냅샷으로 복구된다', () => {
     // Egress는 이미 47까지 진행한 상태.
-    let doc: AnnotationDocument = { revision: 47, elements: [{ id: 'old' }] }
+    let doc: AnnotationDocument = { revision: 47, elements: [{ id: 'old' }], files: {} }
 
     // 새로고침 직후의 획들 — revision이 1부터라 전부 버려진다.
     for (const revision of [1, 2, 3]) {
@@ -357,7 +357,7 @@ describe('판서 op 적용', () => {
   })
 
   it('clear로는 복구되지 않는다 — revision 검사를 받아 똑같이 버려진다', () => {
-    const doc: AnnotationDocument = { revision: 47, elements: [{ id: 'old' }] }
+    const doc: AnnotationDocument = { revision: 47, elements: [{ id: 'old' }], files: {} }
 
     const { document } = applyAnnotationOp(doc, { type: 'clear', revision: 1 })
 
@@ -384,6 +384,7 @@ describe('판서 op 적용', () => {
     // 도착 순: 판서가 먼저, 화이트보드가 나중. 하지만 index는 화이트보드가 더 아래(a0 < a1).
     const document: AnnotationDocument = {
       revision: 2,
+      files: {},
       elements: [
         { id: 'stroke', index: 'a1' },
         { id: 'whiteboard', index: 'a0' },
@@ -396,6 +397,7 @@ describe('판서 op 적용', () => {
   it('index가 없는 요소는 들어온 순서를 지킨다', () => {
     const document: AnnotationDocument = {
       revision: 1,
+      files: {},
       elements: [{ id: 'first' }, { id: 'second' }, { id: 'third' }],
     }
 
@@ -413,6 +415,7 @@ describe('판서 op 적용', () => {
   it('화이트보드는 index와 무관하게 언제나 맨 아래다', () => {
     const document: AnnotationDocument = {
       revision: 3,
+      files: {},
       elements: [
         { id: 'stroke-1', index: 'a1' },
         { id: WHITEBOARD_ELEMENT_ID },
@@ -427,6 +430,7 @@ describe('판서 op 적용', () => {
   it('index가 하나라도 없으면 정렬하지 않고 도착 순을 지킨다', () => {
     const document: AnnotationDocument = {
       revision: 1,
+      files: {},
       elements: [{ id: 'a', index: 'a2' }, { id: 'no-index' }, { id: 'b', index: 'a1' }],
     }
 

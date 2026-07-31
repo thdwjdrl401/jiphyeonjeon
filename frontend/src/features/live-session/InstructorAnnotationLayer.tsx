@@ -7,6 +7,7 @@ import {
   whiteboardElement,
   type AnnotationChange,
   type AnnotationElement,
+  type AnnotationFiles,
   type LaserPoint,
   type LaserStroke,
 } from './annotation'
@@ -20,6 +21,7 @@ import {
   type InterpretMode,
 } from './annotationInterpret'
 import { loadExcalidraw, loadMermaid, type ExcalidrawModule } from './excalidrawRuntime'
+import { mathFileEntry, renderMathSvg } from './mathRuntime'
 
 /**
  * 판서 기본 색. 강의 화면은 대체로 밝은 슬라이드거나 어두운 코드 에디터인데, Excalidraw 기본
@@ -34,6 +36,7 @@ const DEFAULT_STROKE_COLOR = '#e03131'
 interface ExcalidrawApi {
   updateScene: (scene: {
     elements?: readonly AnnotationElement[]
+    files?: AnnotationFiles
     appState?: Record<string, unknown>
     /** 이 변경을 되돌리기 스택에 올릴지. 확인 절차를 없앤 대신 Ctrl+Z가 유일한 되돌림이다. */
     captureUpdate?: string
@@ -46,6 +49,7 @@ interface ExcalidrawApi {
     selectedElementIds?: Record<string, boolean>
   }
   getSceneElements: () => readonly AnnotationElement[]
+  getFiles: () => AnnotationFiles
 }
 
 interface InstructorAnnotationLayerProps {
@@ -207,6 +211,7 @@ export default function InstructorAnnotationLayer({
   const handleChange = useCallback((
     elements: readonly AnnotationElement[],
     appState?: { selectedElementIds?: Record<string, boolean> },
+    files?: AnnotationFiles,
   ) => {
     // 스크롤·확대가 조금이라도 밀리면 되돌린다. 판서는 영상 위에 얹히므로 캔버스가 밀리는 순간
     // 강사가 보는 자리와 합성에 나가는 자리가 갈린다 — 그런데 강사 화면에서는 정상으로 보인다.
@@ -217,7 +222,11 @@ export default function InstructorAnnotationLayer({
     setHasElements(elementsRef.current.some((element) => element.id !== WHITEBOARD_ELEMENT_ID))
     const { changes, known } = diffAnnotationElements(knownRef.current, elements)
     knownRef.current = known
-    for (const change of changes) onPublish(change)
+    for (const change of changes) {
+      // 이미지 요소는 데이터를 담지 않고 `fileId`로 가리키기만 한다. 파일을 함께 싣지 않으면
+      // 수식이 수강생 화면에서 빈 자리가 된다(§3-6b).
+      onPublish(change.type === 'upsert' ? { ...change, files } : change)
+    }
 
     const picked = Object.entries(appState?.selectedElementIds ?? {})
       .filter(([id, on]) => on && id !== WHITEBOARD_ELEMENT_ID)
@@ -257,6 +266,8 @@ export default function InstructorAnnotationLayer({
   /* ── 판서 해석(ADR-0054, §3-6e) ────────────────────────────────────────────── */
 
   const [busyAction, setBusyAction] = useState<string | null>(null)
+  /** 지금 고치고 있는 수식의 LaTeX. null이면 편집 중이 아니다. */
+  const [editingMath, setEditingMath] = useState<string | null>(null)
   const [failure, setFailure] = useState<string | null>(null)
   /** 방금 무엇을 넣었는지. 되돌리는 방법과 함께 잠깐 보여 준다. */
   const [applied, setApplied] = useState<string | null>(null)
@@ -302,6 +313,67 @@ export default function InstructorAnnotationLayer({
    * 되돌리는 비용은 그보다 훨씬 싸다 — 강사는 이미 되돌리기를 쓰고 있다. 대신 이 변경이 되돌리기
    * 스택에 반드시 올라가야 한다(`captureUpdate`).
    */
+  /**
+   * 선택한 것이 우리가 넣은 수식 하나인지. 그렇다면 <b>다시 쓸 수 있다</b>.
+   *
+   * <p>수식을 그림으로 넣는 순간 내용을 고칠 수 없게 된다 — ADR-0051이 Excalidraw를 고른 이유가
+   * "결과가 다시 고칠 수 있는 객체여야 한다"였으므로 그대로 두면 그 전제를 깬다. 그래서 넣을 때
+   * LaTeX 원문을 요소에 붙여 두고(`customData`), 여기서 그것을 꺼내 다시 렌더한다.
+   */
+  const selectedMathLatex = useCallback((): string | null => {
+    const picked = selectedElements()
+    if (picked.length !== 1) return null
+    const custom = picked[0].customData as { liveclassMathLatex?: string } | undefined
+    return custom?.liveclassMathLatex ?? null
+  }, [selectedElements])
+
+  /**
+   * 고친 LaTeX로 수식 그림을 갈아 끼운다.
+   *
+   * <p>자리와 크기는 <b>지금 그 요소가 놓인 자리</b>를 그대로 쓴다. 강사가 옮겨 두었을 수 있는데
+   * 고쳤다고 원래 자리로 되돌아가면 놀란다.
+   */
+  const reeditMath = useCallback(async (latex: string) => {
+    const api = apiRef.current
+    const picked = selectedElements()
+    if (!api || picked.length !== 1) return
+    const target = picked[0]
+    const bounds = selectionBounds([target])
+    if (!bounds) return
+
+    setBusyAction('math')
+    try {
+      const { convertToExcalidrawElements, CaptureUpdateAction } = await loadExcalidraw()
+      const fileId = `math-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+      const rendered = await renderMathSvg(latex, latexFontSize(bounds))
+      const created = convertToExcalidrawElements([{
+        type: 'image',
+        x: 0,
+        y: 0,
+        width: rendered.width,
+        height: rendered.height,
+        fileId,
+        customData: { liveclassMathLatex: latex },
+      }] as never) as unknown as AnnotationElement[]
+
+      const placed = placeAtSelection(created, bounds)
+      api.updateScene({
+        elements: [...api.getSceneElements().filter((element) => element.id !== target.id), ...placed],
+        files: { ...api.getFiles(), ...mathFileEntry(fileId, rendered, Date.now()) },
+        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+      })
+      setEditingMath(null)
+      setSelectedIds([])
+      setRingExpanded(false)
+      setApplied('수식을 고쳤습니다')
+    } catch (error) {
+      console.warn('수식 재편집 실패', error)
+      setFailure('수식을 고치지 못했습니다.')
+    } finally {
+      setBusyAction(null)
+    }
+  }, [selectedElements])
+
   const applyResult = useCallback(async (
     result: AnnotationInterpretation,
     bounds: NonNullable<ReturnType<typeof selectionBounds>>,
@@ -312,20 +384,29 @@ export default function InstructorAnnotationLayer({
     try {
       const { convertToExcalidrawElements, CaptureUpdateAction } = await loadExcalidraw()
       let created: AnnotationElement[]
+      let mathFiles: AnnotationFiles = {}
+      const fileId = `math-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 
       if (result.kind === 'mermaid') {
         const { parseMermaidToExcalidraw } = await loadMermaid()
         const { elements: skeleton } = await parseMermaidToExcalidraw(result.body)
         created = convertToExcalidrawElements(skeleton as never) as unknown as AnnotationElement[]
       } else {
+        // 수식은 <b>그림</b>으로 넣는다. 분수의 가로줄이나 적분 기호의 상하 구조는 글자로 표현할 수
+        // 없다. 다만 그림이 되면 내용을 고칠 수 없으므로, LaTeX 원문을 요소에 붙여 두어 나중에
+        // 다시 렌더할 수 있게 한다(ADR-0051의 "고칠 수 있어야 한다"를 지키는 방법이다).
+        const latex = result.source || result.body
+        const rendered = await renderMathSvg(latex, latexFontSize(bounds))
+        mathFiles = mathFileEntry(fileId, rendered, Date.now())
         // 자리는 아래 placeAtSelection이 정한다. 여기서 좌표를 주면 그 값이 덮여 죽은 코드가 된다.
         created = convertToExcalidrawElements([{
-          type: 'text',
+          type: 'image',
           x: 0,
           y: 0,
-          text: result.body,
-          fontSize: latexFontSize(bounds),
-          strokeColor: DEFAULT_STROKE_COLOR,
+          width: rendered.width,
+          height: rendered.height,
+          fileId,
+          customData: { liveclassMathLatex: latex },
         }] as never) as unknown as AnnotationElement[]
       }
 
@@ -334,6 +415,8 @@ export default function InstructorAnnotationLayer({
       const removed = new Set(result.replace)
       api.updateScene({
         elements: [...api.getSceneElements().filter((element) => !removed.has(element.id)), ...placed],
+        // 요소보다 파일이 늦게 들어가면 그 사이 렌더에서 빈 자리가 보인다. 같은 호출에 담는다.
+        files: { ...api.getFiles(), ...mathFiles },
         // 되돌리기 스택에 올린다. 확인 절차를 없앤 대신 Ctrl+Z가 유일한 되돌림이라, 이게 빠지면
         // 잘못 나온 정리를 강사가 손으로 지워야 한다.
         captureUpdate: CaptureUpdateAction.IMMEDIATELY,
@@ -601,6 +684,7 @@ export default function InstructorAnnotationLayer({
    * 펼쳐진다 — 후자는 "무엇을 골라야 하는지"부터 알려 주는 자리다.
    */
   const ringOpen = selectedIds.length > 0 || ringExpanded
+  const mathLatex = selectedMathLatex()
   const center = ringOpen ? ringCenter() : null
 
   return (
@@ -689,7 +773,41 @@ export default function InstructorAnnotationLayer({
         </button>
       )}
 
-      {ringOpen && center && (
+      {/*
+        우리가 넣은 수식을 고르면 "고치기"를 띄운다. 그림이 되면 내용을 못 고치므로, 붙여 둔 LaTeX를
+        꺼내 다시 렌더하는 것이 유일한 편집 경로다(ADR-0051의 "고칠 수 있어야 한다").
+      */}
+      {mathLatex !== null && editingMath === null && (
+        <button
+          type="button"
+          className="annotation-math-edit"
+          onClick={() => setEditingMath(mathLatex)}
+        >
+          수식 고치기
+        </button>
+      )}
+
+      {editingMath !== null && (
+        <form
+          className="annotation-math-editor"
+          onSubmit={(event) => { event.preventDefault(); void reeditMath(editingMath) }}
+        >
+          <label htmlFor="annotation-math-input">LaTeX</label>
+          <input
+            id="annotation-math-input"
+            value={editingMath}
+            onChange={(event) => setEditingMath(event.target.value)}
+            autoFocus
+            spellCheck={false}
+          />
+          <button type="button" onClick={() => setEditingMath(null)}>취소</button>
+          <button type="submit" className="is-primary" disabled={busyAction === 'math'}>
+            {busyAction === 'math' ? '고치는 중…' : '다시 렌더'}
+          </button>
+        </form>
+      )}
+
+      {ringOpen && center && editingMath === null && (
         <AnnotationActionRing
           center={center}
           actions={INTERPRET_ACTIONS}

@@ -161,7 +161,27 @@ export interface AnnotationDocument {
   /** 강사가 op를 낼 때마다 1씩 오른다. 수신 측이 유실을 알아채는 유일한 근거다. */
   revision: number
   elements: AnnotationElement[]
+  /**
+   * 이미지 요소가 참조하는 파일들(`fileId` → 내용).
+   *
+   * <p>Excalidraw는 이미지 요소에 데이터를 담지 않고 `fileId`로 <b>가리키기만</b> 한다. 그래서
+   * 요소만 보내면 수신 측에는 빈 자리가 남는다 — 강사 화면에는 보이는데 수강생 화면에는 없는,
+   * 이 프로젝트에서 반복해 겪은 그 어긋남이다.
+   *
+   * <p>수식(ADR-0054)이 이 경로를 쓴다. 분수·적분의 상하 구조는 글자로 표현할 수 없어 렌더한
+   * SVG를 이미지로 넣는데, 그 SVG가 여기 실려야 수강생에게도 같은 것이 보인다.
+   */
+  files: AnnotationFiles
 }
+
+/** `fileId` → Excalidraw가 이해하는 파일 한 벌. 내용은 data URI다(외부 요청이 없어야 한다). */
+export type AnnotationFiles = Record<string, {
+  id: string
+  mimeType: string
+  dataURL: string
+  created: number
+  [key: string]: unknown
+}>
 
 /**
  * 판서 변경 op. 데이터 채널로 흐르는 단위다.
@@ -170,8 +190,8 @@ export interface AnnotationDocument {
  * 그 전에 흐른 op를 받을 방법이 없으므로, 스냅샷이 유실 복구의 유일한 경로다.
  */
 export type AnnotationOp =
-  | { type: 'snapshot'; revision: number; elements: AnnotationElement[] }
-  | { type: 'upsert'; revision: number; elements: AnnotationElement[] }
+  | { type: 'snapshot'; revision: number; elements: AnnotationElement[]; files?: AnnotationFiles }
+  | { type: 'upsert'; revision: number; elements: AnnotationElement[]; files?: AnnotationFiles }
   | { type: 'delete'; revision: number; ids: string[] }
   | { type: 'clear'; revision: number }
 
@@ -186,7 +206,7 @@ export type AnnotationChange = Omit<Extract<AnnotationOp, { type: 'snapshot' }>,
 
 /** 아직 아무것도 그리지 않은 상태. */
 export function emptyAnnotationDocument(): AnnotationDocument {
-  return { revision: 0, elements: [] }
+  return { revision: 0, elements: [], files: {} }
 }
 
 /**
@@ -240,7 +260,11 @@ export function applyAnnotationOp(
   op: AnnotationOp,
 ): { document: AnnotationDocument; stale: boolean } {
   if (op.type === 'snapshot') {
-    return { document: { revision: op.revision, elements: [...op.elements] }, stale: false }
+    // 스냅샷은 전체 상태다. 파일도 그 시점의 전부로 갈아 끼운다.
+    return {
+      document: { revision: op.revision, elements: [...op.elements], files: { ...op.files } },
+      stale: false,
+    }
   }
 
   // 이미 본 op의 재전송이면 무시한다. 같은 op를 두 번 적용해도 결과가 같아야 한다(멱등).
@@ -252,7 +276,16 @@ export function applyAnnotationOp(
     case 'upsert': {
       const byId = new Map(document.elements.map((element) => [element.id, element]))
       for (const element of op.elements) byId.set(element.id, element)
-      return { document: { revision: op.revision, elements: [...byId.values()] }, stale: false }
+      // 파일은 <b>더한다</b>. upsert는 부분 변경이라 이번에 안 실린 파일은 그대로 살아 있어야 한다 —
+      // 갈아 끼우면 앞서 넣은 수식이 빈 자리가 된다.
+      return {
+        document: {
+          revision: op.revision,
+          elements: [...byId.values()],
+          files: { ...document.files, ...op.files },
+        },
+        stale: false,
+      }
     }
     case 'delete': {
       const removed = new Set(op.ids)
@@ -260,12 +293,14 @@ export function applyAnnotationOp(
         document: {
           revision: op.revision,
           elements: document.elements.filter((element) => !removed.has(element.id)),
+          // 파일은 지우지 않는다. 되돌리기로 요소가 돌아올 수 있고, 그때 파일이 없으면 빈 자리가 된다.
+          files: document.files,
         },
         stale: false,
       }
     }
     case 'clear':
-      return { document: { revision: op.revision, elements: [] }, stale: false }
+      return { document: { revision: op.revision, elements: [], files: document.files }, stale: false }
   }
 }
 

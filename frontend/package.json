@@ -24,6 +24,7 @@
     "core-js": "^3.37.1",
     "hls.js": "^1.6.16",
     "livekit-client": "^2.21.0",
+    "mathjax-full": "^3.2.2",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-router-dom": "^6.28.0"

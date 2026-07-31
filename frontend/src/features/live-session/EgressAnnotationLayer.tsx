@@ -85,7 +85,12 @@ export default function EgressAnnotationLayer({ room }: EgressAnnotationLayerPro
       const canvas = await exportToCanvas({
         elements: elements as never,
         appState: { exportBackground: false },
-        files: null,
+        /*
+         * 이미지 요소는 데이터를 담지 않고 `fileId`로 가리키기만 한다. 여기에 파일을 넘기지 않으면
+         * 수식(ADR-0054)이 <b>빈 자리로</b> 합성된다 — 강사 화면에는 보이는데 수강생과 녹화에는
+         * 없는, 이 프로젝트에서 반복해 겪은 그 어긋남이다.
+         */
+        files: current.files as never,
         exportPadding: 0,
         // scale 1은 확대가 아니라 "내용 크기 그대로"를 뜻한다. 캔버스가 내용만큼만 생겨
         // 늘 1920x1080을 할당하는 것보다 싸다.

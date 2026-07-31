@@ -96,7 +96,7 @@ describe('강사 스테이지 배치', () => {
    */
   it('저장돼 있던 판서가 있으면 판서를 자동으로 켠다', () => {
     const { getByRole } = renderStage({
-      restoredAnnotation: { revision: 47, elements: [{ id: 'a', type: 'freedraw', version: 1 }] },
+      restoredAnnotation: { revision: 47, elements: [{ id: 'a', type: 'freedraw', version: 1 }], files: {} },
     } as Partial<InstructorLiveMedia>)
 
     expect(getByRole('button', { name: /^판서 (켜짐|꺼짐)$/ }).getAttribute('aria-pressed')).toBe('true')
@@ -104,7 +104,7 @@ describe('강사 스테이지 배치', () => {
 
   it('저장된 판서가 비어 있으면 켜지 않는다', () => {
     const { getByRole } = renderStage({
-      restoredAnnotation: { revision: 0, elements: [] },
+      restoredAnnotation: { revision: 0, elements: [], files: {} },
     } as Partial<InstructorLiveMedia>)
 
     expect(getByRole('button', { name: /^판서 (켜짐|꺼짐)$/ }).getAttribute('aria-pressed')).toBe('false')
