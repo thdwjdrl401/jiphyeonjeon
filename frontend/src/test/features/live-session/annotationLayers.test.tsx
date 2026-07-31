@@ -545,8 +545,12 @@ describe('강사 판서 레이어', () => {
     )
     await findByTestId('excalidraw-editor')
 
-    expect(updateScene.mock.calls.map(([arg]) => (arg as { elements?: unknown[] }).elements))
-      .toContainEqual(restored)
+    // 에디터가 붙은 것과 시딩 effect가 <b>돈 것</b>은 다르다. 바로 단언하면 로컬에서는 통과하고
+    // 부하가 걸린 CI에서만 깨진다(실제로 그렇게 깨졌다).
+    await waitFor(() => {
+      expect(updateScene.mock.calls.map(([arg]) => (arg as { elements?: unknown[] }).elements))
+        .toContainEqual(restored)
+    })
   })
 
   /** 복원된 요소는 이미 서버·Egress 양쪽에 있다. 다시 내보내면 같은 획이 op로 한 번 더 흐른다. */
