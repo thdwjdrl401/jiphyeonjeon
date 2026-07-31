@@ -243,7 +243,7 @@ Spring 수신 endpoint를 구현하고 `SPRING_STATUS_CALLBACK_URL`로 주입하
 - **인가는 소유 강사만**(§3-6d 쓰기와 같은 게이트). 판서 문서를 고치는 행위다.
 - 요청 `{ mode, image, elements[] }`
   - `mode`: `"diagram" | "math"`. 도형 정리(사각형·원·직선)는 **이 API를 쓰지 않는다** — 클라이언트 기하 계산이다(ADR-0054 결정 4).
-  - `image`: 강사가 **선택한 영역**만 렌더한 PNG(base64 data URI). 1920x1080 논리 프레임과 같은 축척이라 이미지 픽셀이 곧 scene 좌표다.
+  - `image`: 강사가 **선택한 영역**만 렌더한 PNG(base64 data URI, 상한 6MB). 선택 내용의 바운딩 박스만 담기므로 **이미지 원점은 프레임 원점이 아니다** — 이 이미지에서 좌표를 읽어 낼 수 없고, 읽을 필요도 없다. 좌표는 클라이언트가 획의 `points`에서 오차 없이 얻는다.
   - `elements[]`: 선택한 요소의 `{ id, x, y, width, height }`. 모델이 "어느 요소를 바꿀지" 맞히게 하지 않고 **강사의 선택을 스코프로 넘긴다.** 응답의 `replace` 대상이 여기서 나온다.
 - 응답 `{ kind, definition | latex, replace[], confidence, unreadable }`
   - `kind: "mermaid"` — `definition`은 mermaid 정의 **전체**이며 **좌표를 담지 않는다.** 배치는 클라이언트가 `@excalidraw/mermaid-to-excalidraw`로 계산한다(브라우저 전용 — mermaid가 글자 폭을 실측하므로 `getBBox`가 필요하다).
