@@ -704,6 +704,56 @@ describe('Egress 판서 레이어', () => {
   })
 
   /**
+   * op 하나마다 그리면 밀린다. 획을 긋는 동안 op는 <b>33.6ms마다</b> 오는데(실측 40건/1.35초)
+   * `exportToCanvas`는 문서 전체를 매번 다시 그려 획 50개에 32.5ms, 200개에 55.1ms가 든다
+   * (ADR-0051 실측). 그리는 시간이 도착 간격을 넘어서면 렌더가 op마다 쌓여 <b>획을 그을수록 수강생
+   * 화면이 뒤처지고 획을 멈춰야 따라잡는다</b>.
+   *
+   * <p>중간 상태를 버려도 잃는 것이 없다 — 어차피 다음 op가 곧 덮어쓸 그림이고, 마지막 상태는
+   * 반드시 그린다.
+   */
+  it('렌더가 밀리는 동안 도착한 op는 합쳐서 한 번만 그린다', async () => {
+    const { room, receive } = fakeRoom()
+    getCommonBounds.mockReturnValue([0, 0, 100, 100])
+
+    // 첫 export를 우리가 붙잡아 둔다 — 그동안 op가 계속 도착하는 상황이다.
+    let releaseFirst: (canvas: HTMLCanvasElement) => void = () => {}
+    const first = new Promise<HTMLCanvasElement>((resolve) => { releaseFirst = resolve })
+    exportToCanvas.mockReturnValueOnce(first)
+    const done = document.createElement('canvas')
+    done.width = 100
+    done.height = 100
+    exportToCanvas.mockResolvedValue(done)
+
+    render(<EgressAnnotationLayer room={room} />)
+
+    receive(encodeAnnotationOp({ type: 'upsert', revision: 1, elements: [element('a', 1)] }), ANNOTATION_TOPIC)
+    await waitFor(() => { expect(exportToCanvas).toHaveBeenCalledTimes(1) })
+
+    // 그리는 동안 세 건이 더 온다. 실제처럼 <b>따로따로</b> 도착시킨다 — 한 tick에 몰아 넣으면
+    // React가 한 번의 갱신으로 합쳐 버려, op마다 그리는 구현도 멀쩡해 보인다.
+    const tick = () => new Promise((resolve) => { setTimeout(resolve, 0) })
+    for (const [revision, id] of [[2, 'b'], [3, 'c'], [4, 'd']] as const) {
+      receive(encodeAnnotationOp({ type: 'upsert', revision, elements: [element(id, 1)] }), ANNOTATION_TOPIC)
+      await tick()
+    }
+    expect(exportToCanvas).toHaveBeenCalledTimes(1)   // 아직 첫 렌더가 끝나지 않았다
+
+    const stub = document.createElement('canvas')
+    stub.width = 100
+    stub.height = 100
+    releaseFirst(stub)
+
+    // 밀려 있던 것을 다 소화하고, 마지막 그림에는 그동안 온 것이 전부 들어 있다.
+    await waitFor(() => {
+      const last = exportToCanvas.mock.calls.at(-1)![0] as { elements: { id: string }[] }
+      expect(last.elements.map((e) => e.id)).toEqual(['a', 'b', 'c', 'd'])
+    })
+    // op 하나마다 그렸다면 네 번이다. 중간 상태를 건너뛰므로 그보다 적어야 한다.
+    expect(exportToCanvas.mock.calls.length).toBeLessThan(4)
+  })
+
+  /**
    * 이 컴포넌트는 Egress의 헤드리스 Chrome에서 돈다. 여기서 예외가 나면 녹화 중 화면이 멈춘다 —
    * 판서 한 획을 잃는 것과 강의 녹화가 끊기는 것은 비교할 수 없다.
    */

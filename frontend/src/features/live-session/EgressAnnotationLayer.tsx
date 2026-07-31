@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { RoomEvent, type Room } from 'livekit-client'
 import {
   ANNOTATION_TOPIC,
@@ -61,56 +61,87 @@ export default function EgressAnnotationLayer({ room }: EgressAnnotationLayerPro
   }, [room])
 
   /**
-   * 문서가 바뀔 때만 다시 렌더한다.
+   * 문서 하나를 캔버스로 그려 얹는다.
    *
    * <p>Excalidraw 청크는 <b>첫 판서 op가 도착할 때</b> 내려온다 — 판서를 쓰지 않는 강의에서
    * Egress가 +309KB를 지불할 이유가 없다.
    */
-  useEffect(() => {
-    const elements = visibleAnnotationElements(document)
+  const renderOnce = useCallback(async (current: AnnotationDocument) => {
+    const elements = visibleAnnotationElements(current)
     const host = hostRef.current
-    if (!host) return undefined
+    if (!host) return
 
     if (elements.length === 0) {
       host.replaceChildren()
-      return undefined
+      return
     }
 
-    let cancelled = false
+    try {
+      const { exportToCanvas, getCommonBounds } = await loadExcalidraw()
+
+      // 오프셋을 export와 같은 근거(실제 geometry)로 읽는다. 선언된 x/y/width/height를 쓰면
+      // freedraw의 points가 그 bbox를 넘어갈 때 어긋난다.
+      const bounds = getCommonBounds(elements as never) as readonly [number, number, number, number]
+      const canvas = await exportToCanvas({
+        elements: elements as never,
+        appState: { exportBackground: false },
+        files: null,
+        exportPadding: 0,
+        // scale 1은 확대가 아니라 "내용 크기 그대로"를 뜻한다. 캔버스가 내용만큼만 생겨
+        // 늘 1920x1080을 할당하는 것보다 싸다.
+        getDimensions: (width: number, height: number) => ({ width, height, scale: 1 }),
+      })
+
+      const placement = annotationPlacement(bounds, canvas)
+      canvas.style.position = 'absolute'
+      canvas.style.left = `${placement.x * 100}%`
+      canvas.style.top = `${placement.y * 100}%`
+      canvas.style.width = `${placement.w * 100}%`
+      canvas.style.height = `${placement.h * 100}%`
+      host.replaceChildren(canvas)
+    } catch (error) {
+      // 판서를 잃는 것과 녹화가 끊기는 것은 비교할 수 없다. 이전 화면을 그대로 두고 넘어간다.
+      console.error('판서를 합성 화면에 렌더하지 못했습니다', error)
+    }
+  }, [])
+
+  const latestRef = useRef(document)
+  const busyRef = useRef(false)
+  const dirtyRef = useRef(false)
+  const disposedRef = useRef(false)
+  useEffect(() => {
+    disposedRef.current = false
+    return () => { disposedRef.current = true }
+  }, [])
+
+  /**
+   * 문서가 바뀌면 다시 그리되, <b>한 번에 하나만</b> 그리고 중간 상태는 건너뛴다.
+   *
+   * <p>op 하나마다 그리면 밀린다. 획 하나를 긋는 동안 Excalidraw는 점이 늘 때마다 `onChange`를 부르고,
+   * 실측한 op 도착 간격은 <b>33.6ms</b>였다(40건 / 1.35초). 그런데 `exportToCanvas`는 문서 전체를 매번
+   * 다시 그려 획 50개에 32.5ms, 200개에 55.1ms가 든다(ADR-0051 실측). 판서가 조금만 쌓여도 그리는
+   * 시간이 도착 간격을 넘어서고, 그때부터 <b>렌더가 op마다 밀려 쌓인다</b> — 획을 그을수록 수강생
+   * 화면이 뒤처지고 획을 멈춰야 따라잡는다.
+   *
+   * <p>중간 상태를 버려도 잃는 것이 없다. 어차피 다음 op가 곧 덮어쓸 그림이고, 마지막 상태는 반드시
+   * 그린다. 이렇게 두면 지연이 <b>export 한 번</b>으로 묶이고 쌓이지 않는다.
+   */
+  useEffect(() => {
+    latestRef.current = document
+    dirtyRef.current = true
+    if (busyRef.current) return
+    busyRef.current = true
     void (async () => {
       try {
-        const { exportToCanvas, getCommonBounds } = await loadExcalidraw()
-        if (cancelled) return
-
-        // 오프셋을 export와 같은 근거(실제 geometry)로 읽는다. 선언된 x/y/width/height를 쓰면
-        // freedraw의 points가 그 bbox를 넘어갈 때 어긋난다.
-        const bounds = getCommonBounds(elements as never) as readonly [number, number, number, number]
-        const canvas = await exportToCanvas({
-          elements: elements as never,
-          appState: { exportBackground: false },
-          files: null,
-          exportPadding: 0,
-          // scale 1은 확대가 아니라 "내용 크기 그대로"를 뜻한다. 캔버스가 내용만큼만 생겨
-          // 늘 1920x1080을 할당하는 것보다 싸다.
-          getDimensions: (width: number, height: number) => ({ width, height, scale: 1 }),
-        })
-        if (cancelled) return
-
-        const placement = annotationPlacement(bounds, canvas)
-        canvas.style.position = 'absolute'
-        canvas.style.left = `${placement.x * 100}%`
-        canvas.style.top = `${placement.y * 100}%`
-        canvas.style.width = `${placement.w * 100}%`
-        canvas.style.height = `${placement.h * 100}%`
-        host.replaceChildren(canvas)
-      } catch (error) {
-        // 판서를 잃는 것과 녹화가 끊기는 것은 비교할 수 없다. 이전 화면을 그대로 두고 넘어간다.
-        console.error('판서를 합성 화면에 렌더하지 못했습니다', error)
+        while (dirtyRef.current && !disposedRef.current) {
+          dirtyRef.current = false
+          await renderOnce(latestRef.current)
+        }
+      } finally {
+        busyRef.current = false
       }
     })()
-
-    return () => { cancelled = true }
-  }, [document])
+  }, [document, renderOnce])
 
   return (
     <>
