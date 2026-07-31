@@ -32,6 +32,22 @@
 | 채팅 | `GET/POST /live-sessions/{sessionId}/messages` | **세션 키잉(구현됨)**, 본문도 세션 기준. WS 실시간 + REST 보완. **익명은 발신자 선택**([ADR-0050](decisions/songjeongki/0050-chat-anonymity-is-sender-choice.md)) — 전송 `anonymous=true`면 세션 한정 가명(`수강생-0473`), 생략·`false`면 발신자가 지정한 표시 이름. **강사는 요청해도 익명이 되지 않는다.** `userId`는 응답·WS에 넣지 않는다. `mine`(본인 여부, 우측 정렬용)은 **REST 응답에만** 둔다 — 브로드캐스트는 뷰어별이 될 수 없어 라이브 중엔 `clientMessageId` 대조로 판별한다 |
 | 라이브 | `POST /instructor/live-sessions/{id}/preflight` · `GET /instructor/live-sessions/{id}/preflight/readiness` · `POST /instructor/live-sessions/{id}/token` · `POST /live-sessions/{id}/start` · `GET /live-sessions/{id}/start-status` · `POST /live-sessions/{id}/end` | LiveKit token은 **소유 강사 WebRTC 송출 전용**이다. 활성 수강생에게도 발급하지 않으며 학생은 `GET /lessons/{id}/playback`의 HLS source로만 시청한다([ADR-0032](decisions/songjeongki/0032-media-playback-hls-only.md)). 학생의 token 요청은 역할 게이트 403, 비소유 강사는 403 `LIVE_SESSION_FORBIDDEN`이며 구 공용 경로 `POST /live-sessions/{id}/token`은 제공하지 않는다. preflight prepare는 **200** `{sessionId,roomName,roomSid}`. 강사 FE가 token으로 실제 room에 연결해 microphone을 publish한 뒤 readiness를 조회하며 **200** `{ready,instructorPresent,microphonePublished,microphoneMuted,instructorMicrophoneTrackCount,unexpectedMicrophonePublishers}`; `ready=true`는 소유 강사·정확히 1개인 unmuted microphone·다른 microphone publisher 없음이다. start는 readiness를 다시 검사하고 **202** `{operationId,sessionId,status:"STARTING"}`를 반환한다(이미 STARTING이면 같은 active operation, LIVE면 `status:"LIVE"`). 상태 조회는 optional `operationId` query와 **200** `{operationId,attemptStatus,step,failureCode,failureMessage,session}`이며 attemptStatus는 `IN_PROGRESS|SUCCEEDED|FAILED`, step은 `ACCEPTED|STT_DISPATCHED|EGRESS_STARTING|EGRESS_READY|PUBLISHER_RECHECK|LIVE|FAILED`. 소유권 위반 403, 없는 세션 404, preflight/상태/recording 조건 위반은 409 `LIVE_SESSION_STATE_CONFLICT`, LiveKit room 준비·participant 조회 실패는 502 `LIVE_ROOM_CONTROL_FAILED`이며 이를 마이크 미준비 409로 숨기지 않는다. 시작 실패의 안정 code는 상태 응답의 `failureCode`(`STT_DISPATCH_FAILED|STT_READINESS_GATE_UNAVAILABLE|EGRESS_START_FAILED|EGRESS_NOT_READY|EGRESS_FAILED|EGRESS_ABORTED|EGRESS_LIMIT_REACHED|INSTRUCTOR_NOT_PUBLISHING|START_FAILED`)로 전달한다. 상세: [ADR-0002](decisions/choinhoo/0002-live-start-egress-stt-orchestration.md). **세션 응답은 `lessonId`까지만 준다 — 커리큘럼·섹션·강의 제목은 담지 않는다**(live 모듈은 curriculum을 참조하지 않는다, [decisions/songjeongki/0007](decisions/songjeongki/0007-domain-live-session.md)). 그 맥락이 필요한 화면은 `lessonId`로 **기존 `GET /lessons/{id}`** 를 읽어 채우며(소유 강사도 열리므로 역할 분기가 없다), 없는 값을 빈 문자열로 채우지 않는다([decisions/seominkyeong/0004](decisions/seominkyeong/0004-live-session-curriculum-context.md)). |
 
+### 2-1. 라이브 종료와 상호작용 마감 — 구현됨
+
+`POST /live-sessions/{sessionId}/end`는 별도 operation 없이 한 요청에서 다음을 순차 수행하고
+최종 세션 표현을 **200**으로 반환한다([ADR-0003](decisions/choinhoo/0003-simple-live-end-sequential-process.md)).
+
+```text
+LIVE → ENDING 커밋 → LiveKit Room 삭제 → Egress stop 보완 → ENDING → ENDED 커밋
+```
+
+- Room 삭제 실패는 **502 `LIVE_ROOM_CONTROL_FAILED`**이고 세션은 `ENDING`에 남는다. 강사가 같은 요청으로 재시도한다.
+- Egress stop 실패는 라이브 종료를 막지 않는다. 세션은 `ENDED`가 되고 녹화 자산에서 후속 상태를 관리한다.
+- 채팅 REST·STOMP와 AI SSE 쓰기는 `LIVE`·`ENDING`에서 허용한다. `ENDED`부터 업스트림 호출·저장 전에
+  **409 `LIVE_SESSION_INTERACTION_CLOSED`**를 반환한다. 기존 채팅·자막·세션 읽기는 계속 허용한다.
+- 학생 UI도 같은 기준을 사용한다. `ENDING`은 HLS 지연 구간을 위한 유예 상태이고,
+  `ENDED`에서 채팅·AI 질문·자막 시각 이동을 잠근다.
+
 ## 3. 내부 계약 (확정 인터페이스)
 
 ### 3-1. Spring → AI 배치 잡 (RabbitMQ)
@@ -204,6 +220,11 @@ Spring 수신 endpoint를 구현하고 `SPRING_STATUS_CALLBACK_URL`로 주입하
 ### 3-6. FE ↔ Spring WebSocket
 - **자막 채널** `/topic/live-sessions/{sessionId}/captions`(세션별, 구독 인가는 채팅과 동일 게이트·와일드카드 차단 불변식 ADR-0019·0043): `WsEnvelope.of(type, sessionId, occurredAt, payload)`로 push. `type`은 `caption.delta`·`caption.stream.completed`. payload는 camelCase — delta `{ sttSessionId, sequence, streamElapsedMs, sessionMs, text }`, completed `{ sttSessionId, lastSequence, sessionMs, reason }`.
 - **채팅 채널** `/topic/live-sessions/{sessionId}/chat`: `chat_message { lessonId, sessionMs, text, alias }`(실명·userId 미노출).
+- **세션 상태 채널** `/topic/live-sessions/{sessionId}/state`([ADR-0003](decisions/choinhoo/0003-simple-live-end-sequential-process.md)):
+  `session.ending` payload `{liveSessionStatus:"ENDING",endedAt:null}`와
+  `session.ended` payload `{liveSessionStatus:"ENDED",endedAt:"..."}`를 각 DB 전이의 **커밋 후** push한다.
+  `session.ending`은 종료 진행 안내이고 상호작용을 잠그지 않는다. `session.ended`가 학생 잠금의 최종 신호다.
+  재연결 뒤 FE는 `GET /live-sessions/{sessionId}`를 다시 조회해 이벤트 유실을 보완한다.
 - 채팅 시간은 **세션 상대 ms**(`sessionMs`)다. **자막의 `streamElapsedMs`는 §3-4의 raw attempt-local ms를 그대로 노출**한다(변환 금지) — 세션 상대 ms 변환·앵커는 후속 공유 계약이며 그 전까지 FE는 raw 값으로 취급한다(ADR-0043). **추가로 자막 payload에 근사 `sessionMs`(Long, nullable)를 함께 싣는다**: `max(0, occurredAt − session.clockOriginAt)`로 서버가 읽기 시 계산하는 **근사 세션-ms**로, 학생이 HLS 영상 위치에 자막을 맞추는 **표시용**이다([ADR-0045](decisions/songjeongki/0045-live-caption-position-sync-approx-session-ms.md)). 이는 `streamElapsedMs` 변환이 아니라 occurredAt 기반의 별도 근사 축이며(streamElapsedMs는 raw 그대로 유지), §3-4의 "streamElapsedMs→세션ms 변환 금지"에 대한 **의도적 편차**다 — 오차 ~1~2s(STT 지연+시계 스큐)는 HLS 지연(수초~수십초)보다 작다. clockOriginAt이 없으면 null. 앵커 기반 정밀화는 후속.
 
 ### 3-6b. 강사 FE → Egress 합성 화면 판서 (LiveKit 데이터 채널) — FE 양쪽 구현됨
