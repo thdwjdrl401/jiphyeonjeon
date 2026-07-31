@@ -233,6 +233,51 @@ class LiveChatWebSocketTest {
         }
     }
 
+    @Test
+    void ending_and_ended_are_broadcast_after_each_committed_transition() throws Exception {
+        Client instructor = new Client();
+        instructor.signupAndLogin("INSTRUCTOR");
+        String[] ids = instructor.createStartedSession();
+        String sessionId = ids[1];
+
+        Client student = new Client();
+        student.signupAndLogin("STUDENT");
+        String enrollmentId = student.field(
+                student.post("/api/curriculums/" + ids[2] + "/enrollments", null),
+                "enrollmentId");
+        instructor.post(
+                "/api/instructor/curriculums/" + ids[2] + "/enrollments/" + enrollmentId + "/approve",
+                null);
+
+        BlockingQueue<Map<String, Object>> stateInbox = new LinkedBlockingQueue<>();
+        StompSession stateSession = connect(student);
+        stateSession.subscribe(
+                "/topic/live-sessions/" + sessionId + "/state",
+                frameHandler(stateInbox));
+        Thread.sleep(300);
+
+        HttpResponse<String> end = instructor.post("/api/live-sessions/" + sessionId + "/end", null);
+        assertThat(end.statusCode()).isEqualTo(200);
+
+        Map<String, Object> ending = stateInbox.poll(10, TimeUnit.SECONDS);
+        Map<String, Object> ended = stateInbox.poll(10, TimeUnit.SECONDS);
+        assertThat(ending).isNotNull();
+        assertThat(ended).isNotNull();
+        assertThat(ending.get("type")).isEqualTo("session.ending");
+        assertThat(ended.get("type")).isEqualTo("session.ended");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> endingPayload = (Map<String, Object>) ending.get("payload");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> endedPayload = (Map<String, Object>) ended.get("payload");
+        assertThat(endingPayload.get("liveSessionStatus")).isEqualTo("ENDING");
+        assertThat(endingPayload.get("endedAt")).isNull();
+        assertThat(endedPayload.get("liveSessionStatus")).isEqualTo("ENDED");
+        assertThat(endedPayload.get("endedAt")).isNotNull();
+
+        stateSession.disconnect();
+    }
+
     private StompSession connect(Client client) throws Exception {
         WebSocketStompClient stompClient = new WebSocketStompClient(new StandardWebSocketClient());
         stompClient.setMessageConverter(new JacksonJsonMessageConverter());
