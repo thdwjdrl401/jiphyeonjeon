@@ -21,6 +21,7 @@ INSTALL_SCRIPT = DEPLOY_DIR / "install.sh"
 RUNNER_INSTALL_SCRIPT = DEPLOY_DIR / "install-gitlab-runner-user.sh"
 DNS_REDIRECT_SOURCE = DEPLOY_DIR / "livekit-tunnel-dns.c"
 TUNNEL_CONFIGURE_SCRIPT = DEPLOY_DIR / "configure-gpu-ec2-tunnels.sh"
+COMMON_AGENT_ENV_EXAMPLE = DEPLOY_DIR / "env" / "realtime-agent-common.env.example"
 PROD_AGENT_ENV_EXAMPLE = DEPLOY_DIR / "env" / "realtime-agent.env.example"
 DEV_AGENT_ENV_EXAMPLE = DEPLOY_DIR / "env" / "realtime-agent-dev.env.example"
 
@@ -441,19 +442,33 @@ def test_production_tunnel_configurator_installs_one_key_for_both_services(
 
 
 def test_dual_environment_examples_isolate_names_redis_health_and_capacity() -> None:
+    common = COMMON_AGENT_ENV_EXAMPLE.read_text(encoding="utf-8")
     prod = PROD_AGENT_ENV_EXAMPLE.read_text(encoding="utf-8")
     dev = DEV_AGENT_ENV_EXAMPLE.read_text(encoding="utf-8")
+
+    assert "CAPTION_STREAM_KEY=ai:captions:live" in common
+    assert "SESSION_LEASE_TTL_SECONDS=30" in common
+    assert "SPRING_STATUS_CALLBACK_ENABLED=false" in common
+    assert "ASR_LANGUAGE=ko-KR" in common
+    assert "STT_HEALTH_HOST=127.0.0.1" in common
 
     assert "REDIS_URL=redis://127.0.0.1:6390/0" in prod
     assert "STT_AGENT_NAME=liveclass-realtime-stt-prod" in prod
     assert "STT_HEALTH_PORT=8081" in prod
     assert "STT_MAX_ACTIVE_JOBS=12" in prod
+    assert "STT_ENGINE_PROVIDER=nemotron" in prod
+    assert "ASR_MODEL_ID=" in prod
+    assert "OPENAI_API_KEY=" not in prod
     assert "REDIS_URL=redis://:<dev-redis-password>@127.0.0.1:4000/0" in dev
     assert "STT_AGENT_NAME=liveclass-realtime-stt-dev\n" in dev
     assert "STT_AGENT_NAME=liveclass-realtime-stt-prod" not in dev
     assert "STT_HEALTH_PORT=8082" in dev
     assert "STT_MAX_ACTIVE_JOBS=1" in dev
     assert "STT_NUM_IDLE_PROCESSES=1" in dev
+    assert "STT_ENGINE_PROVIDER=openai-realtime" in dev
+    assert "OPENAI_REALTIME_TRANSCRIPTION_MODEL=gpt-realtime-whisper" in dev
+    assert "ASR_MODEL_ID=" not in dev
+    assert "CUDA_VISIBLE_DEVICES=" not in dev
 
 
 def test_rootless_supervisor_keeps_tunnel_and_dual_agents_under_tmux() -> None:
@@ -465,15 +480,19 @@ def test_rootless_supervisor_keeps_tunnel_and_dual_agents_under_tmux() -> None:
     assert "liveclass-realtime-agent-prod" in supervisor
     assert "liveclass-realtime-agent-dev" in supervisor
     assert "realtime-agent-dev.env" in supervisor
+    assert "realtime-agent-common.env" in supervisor
     assert "_run-agent-prod" in supervisor
     assert "_run-agent-dev" in supervisor
     assert 'stop_session "$LEGACY_AGENT_SESSION"' in supervisor
     assert "status-agent)" in supervisor
     assert "logs-agent-prod)" in supervisor
     assert "logs-agent-dev)" in supervisor
+    assert "restart-agent-prod)" in supervisor
+    assert "restart-agent-dev)" in supervisor
     assert "LIVEKIT_TUNNEL_HOST" in supervisor
     assert "LD_PRELOAD" in supervisor
     assert "realtime-agent-dev.env.example" in installer
+    assert "realtime-agent-common.env.example" in installer
     assert "systemctl" not in supervisor
     assert "sudo" not in supervisor
     assert "systemctl" not in installer
@@ -501,12 +520,22 @@ exit 0
     config_dir = tmp_path / "config"
     config_dir.mkdir()
     common = """STT_HEALTH_HOST=127.0.0.1
-STT_ENGINE_PROVIDER=nemotron
+"""
+    (config_dir / "realtime-agent-common.env").write_text(
+        common, encoding="utf-8"
+    )
+    prod_provider = """STT_ENGINE_PROVIDER=nemotron
 CUDA_VISIBLE_DEVICES=0
+ASR_MODEL_ID=/tmp/nemotron
+"""
+    dev_provider = """STT_ENGINE_PROVIDER=openai-realtime
+OPENAI_API_KEY=test-key
+OPENAI_REALTIME_TRANSCRIPTION_MODEL=gpt-realtime-whisper
+OPENAI_REALTIME_TRANSCRIPTION_DELAY=low
 """
     prod_env = config_dir / "realtime-agent.env"
     prod_env.write_text(
-        common
+        prod_provider
         + """REDIS_URL=redis://127.0.0.1:6390/0
 STT_AGENT_NAME=liveclass-realtime-stt-dev
 STT_HEALTH_PORT=8081
@@ -516,7 +545,7 @@ STT_NUM_IDLE_PROCESSES=12
         encoding="utf-8",
     )
     (config_dir / "realtime-agent-dev.env").write_text(
-        common
+        dev_provider
         + """REDIS_URL=redis://:dev-test@127.0.0.1:4000/0
 STT_AGENT_NAME=liveclass-realtime-stt-dev
 STT_HEALTH_PORT=8082

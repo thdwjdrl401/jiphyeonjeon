@@ -1,8 +1,9 @@
 # GPU realtime-agent rootless 배포
 
 GPU 호스트는 sudo 권한이 없고 Jupyter service에 `NoNewPrivileges=yes`가 적용돼 있다. GitLab Runner,
-SSH tunnel, realtime-agent는 모두 `liveclass` 사용자 영역에서 실행한다. 한 물리 GPU0에서 prod와 dev
-worker를 별도 tmux session으로 동시에 유지하며 LiveKit agent name, Redis, health port를 분리한다.
+SSH tunnel과 realtime-agent는 모두 `liveclass` 사용자 영역에서 실행한다. prod는 GPU0의 Nemotron
+12-slot worker, dev는 outbound OpenAI Realtime 1-slot worker로 별도 tmux session에 유지하며 LiveKit
+agent name, Redis, health port를 분리한다.
 
 | 환경 | env file | tmux session | `STT_AGENT_NAME` | Redis | GPU health | EC2 health | 기본 용량 |
 |---|---|---|---|---|---|---|---:|
@@ -27,8 +28,9 @@ ai/bge-runtime/deploy/install.sh /opt/tljh/user/bin/uv
 
 첫 명령은 실행파일을 `~/.local/bin`, release/cache를
 `~/.local/share/liveclass/realtime-agent`, 환경파일을 `~/.config/liveclass`에 설치한다. 기존 환경파일은
-덮어쓰지 않는다. 다음 세 파일을 실제 값으로 채우고 `0600`을 유지한다.
+덮어쓰지 않는다. 다음 네 파일을 실제 값으로 채우고 `0600`을 유지한다.
 
+- `realtime-agent-common.env`: 두 worker가 공유하는 LiveKit/TURN과 명시적 운영 정책
 - `realtime-agent.env`: prod worker
 - `realtime-agent-dev.env`: dev worker
 - `realtime-agent-tunnels.env`: 공용 LiveKit/TURN, dev/prod Redis·health SSH forward
@@ -37,10 +39,16 @@ ai/bge-runtime/deploy/install.sh /opt/tljh/user/bin/uv
 chmod 600 ~/.config/liveclass/realtime-agent*.env
 ~~~
 
-두 agent env의 `LIVEKIT_URL`은 인증서 hostname을 유지하고 `LIVEKIT_TUNNEL_HOST`에 같은 hostname을
-넣는다. source-controlled resolver가 그 hostname만 GPU loopback으로 해석한다. 두 env 모두
-`CUDA_VISIBLE_DEVICES=0`과 같은 외부 model 절대경로를 사용한다. 검증된 prod 12-slot 용량을 유지하면서
-추가 dev worker가 GPU 상한을 침범하지 않도록 dev는 active/idle을 `1/1`로 제한한다.
+`LIVEKIT_URL`·TURN과 공통 정책은 `realtime-agent-common.env`에 한 번만 둔다. prod profile은
+`STT_ENGINE_PROVIDER=nemotron`, `CUDA_VISIBLE_DEVICES=0`, model 경로와 `12/12` 용량을 명시한다.
+dev profile은 `STT_ENGINE_PROVIDER=openai-realtime`, OpenAI key/model/delay와 `1/1` 용량만 갖고
+Nemotron·CUDA 변수는 넣지 않는다. 공통 파일을 먼저, 환경 profile을 나중에 로드한다.
+
+기존 설치 업그레이드는 **새 supervisor 배포 전에** `realtime-agent-common.env`를 먼저 만들고 실제 공통값을
+옮긴 뒤 두 profile의 중복값을 지운다. 설치 스크립트는 기존 env를 덮어쓰지 않으며 새 supervisor는 공통
+파일이 없으면 fail-closed한다. prod profile에는 OpenAI 변수를, dev profile에는 `ASR_MODEL_ID`와
+`CUDA_VISIBLE_DEVICES`를 남기지 않는다. 파일 권한과 profile 검증을 마친 뒤 환경별
+`restart-agent-prod` 또는 `restart-agent-dev`로 하나씩 전환한다.
 
 운영 tunnel bootstrap은 전달받은 PEM을 Git 밖의 `~/.config/liveclass/ssh/`로 복사하고 realtime-agent와
 BGE tunnel env를 만든다. EC2 host key는 별도 채널로 확인해 `known_hosts`에 먼저 등록한다.
@@ -124,12 +132,14 @@ EC2 application 방화벽 포트를 추가하지 않는다.
 `LIVEKIT_URL`은 TLS 인증서 hostname을 유지하되 배포 resolver가 그 hostname만 GPU loopback으로 해석한다.
 prod는 `redis://127.0.0.1:6390/0`, dev는 password를 포함한 `redis://...@127.0.0.1:4000/0`을 사용하며
 LiveKit 내부 Redis `6379`는 사용하지 않는다. OpenAI provider의 WSS는 tunnel과 별도인 outbound TLS 연결이고
-`OPENAI_API_KEY`는 각 agent 환경파일로만 주입한다.
+`OPENAI_API_KEY`는 dev profile 파일로만 주입한다.
 
 ~~~sh
 ~/.local/bin/liveclass-realtime-agent-supervisor status
 ~/.local/bin/liveclass-realtime-agent-supervisor logs-agent-prod
 ~/.local/bin/liveclass-realtime-agent-supervisor logs-agent-dev
+~/.local/bin/liveclass-realtime-agent-supervisor restart-agent-prod
+~/.local/bin/liveclass-realtime-agent-supervisor restart-agent-dev
 ~/.local/bin/liveclass-realtime-agent-supervisor logs-tunnel
 ss -ltn | grep -E ':(3478|4000|6390|7443|8081|8082)\b'
 ~~~
