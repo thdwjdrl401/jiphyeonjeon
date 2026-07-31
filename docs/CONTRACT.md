@@ -234,6 +234,27 @@ Spring 수신 endpoint를 구현하고 `SPRING_STATUS_CALLBACK_URL`로 주입하
 - `session_ms`(세션 상대 ms, 근사 — ADR-0045와 같은 축)를 각 op에 함께 적재한다. 다시보기에서 "강사가 이걸 강조한 순간"으로 이동하는 앵커이며, 그 구간 판서를 RAG 컨텍스트로 쓰는 후속의 입력이다.
 - 레이저(§3-6c)는 저장하지 않는다.
 
+### 3-6e. 강사 FE → Spring 판서 해석 (REST) — 설계 확정, 구현 전
+
+근거: [ADR-0054](decisions/songjeongki/0054-annotation-ai-semantics-not-coordinates.md).
+
+- **원칙: 의미만 모델에게 묻고 좌표는 클라이언트가 계산한다.** 실측에서 모델이 낸 도형 좌표는 최대 **96px**(그림 크기의 2~13%) 틀렸고, 같은 도형의 좌표는 획의 `points`에서 오차 없이 얻는다. 그래서 **응답에 좌표가 들어오지 않는다.**
+- `POST /api/live-sessions/{sessionId}/annotation/interpret` → `200 OK`.
+- **인가는 소유 강사만**(§3-6d 쓰기와 같은 게이트). 판서 문서를 고치는 행위다.
+- 요청 `{ mode, image, elements[] }`
+  - `mode`: `"diagram" | "math"`. 도형 정리(사각형·원·직선)는 **이 API를 쓰지 않는다** — 클라이언트 기하 계산이다(ADR-0054 결정 4).
+  - `image`: 강사가 **선택한 영역**만 렌더한 PNG(base64 data URI). 1920x1080 논리 프레임과 같은 축척이라 이미지 픽셀이 곧 scene 좌표다.
+  - `elements[]`: 선택한 요소의 `{ id, x, y, width, height }`. 모델이 "어느 요소를 바꿀지" 맞히게 하지 않고 **강사의 선택을 스코프로 넘긴다.** 응답의 `replace` 대상이 여기서 나온다.
+- 응답 `{ kind, definition | latex, replace[], confidence, unreadable }`
+  - `kind: "mermaid"` — `definition`은 mermaid 정의 **전체**이며 **좌표를 담지 않는다.** 배치는 클라이언트가 `@excalidraw/mermaid-to-excalidraw`로 계산한다(브라우저 전용 — mermaid가 글자 폭을 실측하므로 `getBBox`가 필요하다).
+  - `kind: "latex"` — `latex`는 수식 문자열. 놓을 자리와 크기는 원본 획의 bbox에서 클라이언트가 정한다.
+  - `replace[]`: 지울 요소 `id` 목록. 요청 `elements[]`의 부분집합이어야 한다.
+  - `unreadable: true`면 `definition`·`latex`를 쓰지 않는다(§3-9의 `answer.insufficient`와 같은 자리).
+- **`confidence`를 자동 적용의 근거로 쓰지 않는다.** 실측에서 **틀린 라벨에 1.0**이 붙었다. 결과는 항상 강사 확인을 거쳐 적용한다.
+- **적용은 강사 클라이언트가 한다. 서버는 판서를 publish하지 않는다.** 주입 뒤에는 기존 경로를 그대로 탄다(`onChange` → diff → §3-6b 데이터 채널 → §3-6d 영속화). 판서의 writer가 강사 하나라는 §3-6b의 전제가 이렇게 유지된다 — 서버가 끼어들면 revision이 충돌하고, 그 어긋남은 **강사 화면에 드러나지 않는다.**
+- **Spring이 GMS를 직접 호출한다. ai-api를 거치지 않는다**(ADR-0054 결정 7). 이 해석에는 검색·임베딩·자막 컨텍스트가 없어 파이썬이 할 도메인 일이 없다. RAG 컨텍스트가 필요해지면 그때 ai-api로 옮기며, **이 절의 FE ↔ Spring 계약은 그대로다.**
+- **브라우저는 GMS를 직접 부르지 않는다** — 키가 클라이언트에 노출된다.
+
 ### 3-6c. 강사 FE → Egress 레이저 포인터 (LiveKit 데이터 채널) — FE 양쪽 구현됨
 - **topic** `annotation-laser`, **lossy**(`reliable: false`)로 publish. 판서 op와 <b>같은 채널에 섞지 않는다</b> — 초당 수십 건이고 1초면 사라지므로 revision을 태우면 유실 감지가 의미를 잃는다.
 - **payload** `{ "v": 1, "laser": { "phase": "start|move|end", "points": [{ "x", "y", "t" }], "zoom": number } }`
