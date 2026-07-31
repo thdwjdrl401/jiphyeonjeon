@@ -156,8 +156,18 @@ class LiveAiAnswerContractTest {
         assertThat(request.headers().get("Content-Type")).contains("application/json");
     }
 
+    /**
+     * ai-api의 {@code RagAnswerRequest}와 <b>필드 집합이 정확히 같아야</b> 한다 — 늘어도({@code
+     * extra="forbid"}) 줄어도(필수 누락) 요청이 통째로 거부되고, 그 거부는 422가 아니라 <b>400</b>으로
+     * 온다(ai-api가 RequestValidationError를 400으로 매핑).
+     *
+     * <p><b>이 테스트만으로는 부족하다는 것을 기억할 것.</b> 여기는 <i>우리가 보내는 것</i>만 고정한다.
+     * ai-api가 필수 필드를 늘려도 우리가 가만히 있으면 이 테스트는 계속 통과한다 — 실제로 그렇게
+     * 뚫렸다(2026-07-30 {@code curriculumId} 추가 → 라이브 AI 질문이 이틀간 전부 400). 정본은
+     * {@code ai/ai-api/app/rag/models.py::RagAnswerRequest}이고, 그쪽이 바뀌면 여기도 같이 고쳐야 한다.
+     */
     @Test
-    void request_body_has_only_the_six_contract_fields() throws Exception {
+    void request_body_has_only_the_seven_contract_fields() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String[] created = createStartedSession(instructor);
         String sessionId = created[0];
@@ -167,10 +177,12 @@ class LiveAiAnswerContractTest {
         long after = System.currentTimeMillis();
 
         JsonNode body = jsonMapper.readTree(new String(awaitRequest().rawBody(), StandardCharsets.UTF_8));
-        // ai-api는 extra="forbid" — 필드가 하나라도 늘면 400이다.
-        assertThat(body.size()).isEqualTo(6);
+        // ai-api는 extra="forbid" — 필드가 하나라도 늘면 400이고, 필수가 빠져도 400이다.
+        assertThat(body.size()).isEqualTo(7);
         assertThat(body.has("requestId")).isTrue();
         assertThat(body.has("lessonId")).isTrue();
+        // 자료 검색 범위(ADR-0042). 이게 빠져 라이브 AI 질문이 이틀 동안 죽어 있었다.
+        assertThat(body.has("curriculumId")).isTrue();
         assertThat(body.has("sessionId")).isTrue();
         assertThat(body.has("question")).isTrue();
         assertThat(body.has("contextTimeMs")).isTrue();
@@ -183,6 +195,8 @@ class LiveAiAnswerContractTest {
         assertThat(sessionIdField).isEqualTo(UUID.fromString(sessionIdField).toString());
         assertThat(lessonIdField).isEqualTo(created[2].toLowerCase());
         assertThat(lessonIdField).isEqualTo(UUID.fromString(lessonIdField).toString());
+        String curriculumIdField = body.get("curriculumId").asString();
+        assertThat(curriculumIdField).isEqualTo(UUID.fromString(curriculumIdField).toString());
 
         // 질문은 trim하지 않는다(양끝 공백 보존).
         assertThat(body.get("question").asString()).isEqualTo("  질문 원문 그대로  ");

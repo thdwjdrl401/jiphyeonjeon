@@ -356,8 +356,15 @@ Accept: text/event-stream
 Content-Type: application/json
 X-Internal-Signature: base64(HMAC-SHA256(AI_INTERNAL_SECRET, rawBody))
 
-{"requestId":"...","lessonId":"...","sessionId":"...","question":"...","contextTimeMs":0,"issuedAtMs":1785120000000}
+{"requestId":"...","lessonId":"...","curriculumId":"...","sessionId":"...","question":"...","contextTimeMs":0,"issuedAtMs":1785120000000}
 ```
+
+**본문 필드는 이 7개가 전부다 — 더도 덜도 안 된다.** ai-api의 요청 모델이 `extra="forbid"`라 필드를 늘리면 거부되고, 필수 필드가 빠져도 거부된다. 그리고 그 거부는 422가 아니라 **400**으로 온다(ai-api가 `RequestValidationError`를 400으로 매핑). 실제로 `curriculumId`가 빠져 라이브 AI 질문이 이틀 동안 전부 400으로 죽었다(2026-07-30~08-01) — 양쪽이 각자 테스트를 통과하며 계약만 갈라졌고, **운영에서 질문을 눌러야만** 드러났다. 그래서 Spring 쪽에 이 필드 집합을 고정하는 계약 테스트를 둔다(`RagAnswerWireContractTest`), ai-api 쪽 정본은 `app/rag/models.py::RagAnswerRequest`다.
+
+- `lessonId`·`curriculumId`·`sessionId`는 **서버가 세션에서 조회한 값**이다(클라 입력 신뢰 금지). 소문자 canonical UUID 문자열.
+- `curriculumId`는 ai-api의 **자료 검색 범위**다 — PPTX 검색이 레슨이 아니라 커리큘럼 단위이고([ADR-0042](decisions/songjeongki/0042-curriculum-material-attach-and-embedding-scope.md)), 근거의 커리큘럼이 다르면 버린다.
+- `issuedAtMs`는 **전송 직전**에 찍는다. 수신 시각과 60초 이상 차이나면 401이므로 명령을 만든 시각을 쓰면 안 된다.
+- `question`은 사용자가 보낸 그대로 — 임의 trim·정규화 금지.
 
 인증은 [ADR-0023 §9](decisions/canola/0023-spring-to-ai-rag-jwt-contract.md)의 **HMAC 공유 시크릿**이다(RS256 JWT는 phase-2 로드맵). 시크릿은 `AI_INTERNAL_SECRET`으로 **콜백용 `AI_CALLBACK_SECRET`과 다른 값**이다([ai/CONTRACT.md §3.2](ai/CONTRACT.md)). Spring 구현은 [ADR-0047](decisions/songjeongki/0047-live-ai-answer-sse-proxy.md), ai-api 상세 검증 규칙은 [`ai/ai-api/CONTRACT.md`](../ai/ai-api/CONTRACT.md)가 소유한다.
 

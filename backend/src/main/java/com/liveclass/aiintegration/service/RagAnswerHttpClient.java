@@ -87,23 +87,32 @@ class RagAnswerHttpClient implements RagAnswerStreaming {
     }
 
     /**
-     * ai-api가 {@code extra="forbid"}라 <b>이 6개 필드만</b> 나가야 한다. UUID는 {@code toString()}이
+     * ai-api가 {@code extra="forbid"}라 <b>이 7개 필드만</b> 나가야 한다. UUID는 {@code toString()}이
      * 소문자 canonical이라 그대로 문자열로 싣는다.
      */
     private static Wire wire(RagAnswerCommand command, long issuedAtMs) {
         return new Wire(
                 command.requestId(),
                 command.lessonId().toString(),
+                command.curriculumId().toString(),
                 command.sessionId().toString(),
                 command.question(),
                 command.contextTimeMs(),
                 issuedAtMs);
     }
 
-    /** record 선언 순서가 곧 JSON 필드 순서다. 필드를 늘리면 ai-api가 400으로 거부한다. */
+    /**
+     * record 선언 순서가 곧 JSON 필드 순서다.
+     *
+     * <p><b>ai-api의 모델과 정확히 일치해야 한다.</b> {@code extra="forbid"}라 늘려도 거부되고, 필수
+     * 필드가 빠져도 거부된다 — 그리고 그 거부는 422가 아니라 <b>400</b>으로 온다(ai-api가
+     * RequestValidationError를 400으로 매핑한다). 실제로 {@code curriculumId}가 빠져 라이브 AI 질문이
+     * 통째로 막혔다(2026-07-30~08-01).
+     */
     private record Wire(
             String requestId,
             String lessonId,
+            String curriculumId,
             String sessionId,
             String question,
             long contextTimeMs,
