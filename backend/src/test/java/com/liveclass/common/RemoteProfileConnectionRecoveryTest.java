@@ -60,14 +60,44 @@ class RemoteProfileConnectionRecoveryTest {
     /**
      * Hikari는 꺼낼 때 검증해 스스로 회복하지만, 그 비용을 <b>첫 요청 몇 개</b>가 치른다.
      * keepalive로 유휴 연결을 미리 찔러 두면 그 비용이 백그라운드로 간다.
+     *
+     * <p><b>값이 밀리초 숫자인지까지 본다.</b> 이 블록은 Spring의 Duration 변환을 거치지 않고
+     * {@code HikariConfig}의 {@code long} 필드에 그대로 바인딩되므로, {@code "30s"} 같은 문자열을
+     * 쓰면 <b>애플리케이션이 기동조차 하지 못한다</b>:
+     *
+     * <pre>
+     * Failed to bind properties under 'spring.datasource.hikari.keepalive-time' to long:
+     *     Value: "${REMOTE_DB_KEEPALIVE:30s}"
+     *     Reason: For input string: "30s"
+     * </pre>
+     *
+     * <p>실제로 그렇게 적어 두어 remote 프로필이 한동안 뜨지 못했다. 이전 버전의 이 테스트는 그
+     * 문자열을 <b>기대값으로 고정하고 있어</b> 오히려 버그를 지키고 있었다 — 그래서 여기서 고정할
+     * 것은 특정 문자열이 아니라 <b>단위</b>다.
      */
     @Test
     void remote_프로필은_커넥션_풀을_주기적으로_검증한다() throws IOException {
         PropertySource<?> remote = load("application-remote.yml");
 
-        assertThat(defaultOf(remote.getProperty("spring.datasource.hikari.keepalive-time"))).isEqualTo("30s");
-        assertThat(defaultOf(remote.getProperty("spring.datasource.hikari.max-lifetime"))).isEqualTo("5m");
-        assertThat(defaultOf(remote.getProperty("spring.datasource.hikari.validation-timeout"))).isEqualTo("3s");
+        // 의도한 값: 30초 / 5분 / 3초. Hikari는 밀리초 long만 받는다.
+        assertThat(millisOf(remote, "spring.datasource.hikari.keepalive-time")).isEqualTo(30_000L);
+        assertThat(millisOf(remote, "spring.datasource.hikari.max-lifetime")).isEqualTo(300_000L);
+        assertThat(millisOf(remote, "spring.datasource.hikari.validation-timeout")).isEqualTo(3_000L);
+    }
+
+    /**
+     * Hikari 설정값을 밀리초 {@code long}으로 읽는다. 숫자가 아니면 여기서 실패한다 — 기동 때
+     * 터지는 것을 테스트 시점으로 당기는 것이 이 메서드의 전부다.
+     */
+    private static long millisOf(PropertySource<?> source, String key) {
+        String raw = defaultOf(source.getProperty(key));
+        try {
+            return Long.parseLong(raw);
+        } catch (NumberFormatException e) {
+            throw new AssertionError(
+                    "%s 는 밀리초 숫자여야 한다(HikariConfig의 long 필드에 그대로 바인딩된다). 실제: \"%s\""
+                            .formatted(key, raw), e);
+        }
     }
 
     /**
