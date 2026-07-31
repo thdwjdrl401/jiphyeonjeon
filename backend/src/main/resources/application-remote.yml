@@ -20,11 +20,13 @@ spring:
       # (실측 로그: "Failed to validate connection ... This connection has been closed").
       # 다만 그 검증은 <b>꺼낼 때</b> 일어나므로 첫 요청 몇 개가 그 값을 치른다. keepalive로 유휴
       # 연결을 미리 찔러 두면 그 비용이 사용자 요청이 아니라 백그라운드로 간다.
-      keepalive-time: ${REMOTE_DB_KEEPALIVE:30s}
+      # 값은 <b>밀리초</b>다. 이 블록은 Spring의 Duration 변환을 거치지 않고 HikariConfig의 long
+      # 필드에 그대로 바인딩되므로, "30s" 같은 문자열을 쓰면 <b>기동 자체가 실패한다</b>.
+      keepalive-time: ${REMOTE_DB_KEEPALIVE:30000}
       # 오래 살아남은 연결일수록 NAT·방화벽이 조용히 끊어 놓았을 확률이 높다. 공유 dev 인프라라
       # 재연결 비용도 싸다. prod 기본값(30분)을 여기서만 줄인다.
-      max-lifetime: ${REMOTE_DB_MAX_LIFETIME:5m}
-      validation-timeout: ${REMOTE_DB_VALIDATION_TIMEOUT:3s}
+      max-lifetime: ${REMOTE_DB_MAX_LIFETIME:300000}
+      validation-timeout: ${REMOTE_DB_VALIDATION_TIMEOUT:3000}
   data:
     redis:
       host: ${EC2_INFRA_HOST:jiphyeonjeon.thdwjdrl.com}
