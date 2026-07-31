@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from typing import Protocol
 
 from app.domain import ChunkRecord, ExistingIndexVersion, StagedMaterial
+from app.ingestion.models import KeyTerm
 
 
 class MaterialAssetStore(Protocol):
@@ -21,9 +22,17 @@ class TextEmbeddingModel(Protocol):
     async def embed(self, texts: Sequence[str]) -> Sequence[Sequence[float]]: ...
 
 
+class KeyTermExtractor(Protocol):
+    async def extract(self, text: str) -> Sequence[KeyTerm]: ...
+
+
 class IndexStorage(Protocol):
     async def find_existing(self, material: StagedMaterial) -> ExistingIndexVersion | None: ...
 
     async def stage(self, material: StagedMaterial, chunks: Sequence[ChunkRecord]) -> int: ...
 
     async def activate(self, material: StagedMaterial, version_id: int) -> None: ...
+
+
+class KeyTermStorage(Protocol):
+    async def store(self, version_id: int, key_terms: Sequence[KeyTerm]) -> None: ...

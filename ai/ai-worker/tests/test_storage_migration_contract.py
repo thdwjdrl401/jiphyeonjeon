@@ -63,3 +63,49 @@ def test_upgrade_rejects_unsafe_runtime_role_before_executing_sql(monkeypatch) -
         migration.upgrade()
 
     assert statements == []
+
+
+def test_key_term_storage_is_versioned_and_runtime_writable(monkeypatch) -> None:
+    migration = importlib.import_module("migrations.versions.0002_material_key_terms")
+    monkeypatch.delenv("AI_WORKER_DATABASE_ROLE", raising=False)
+    statements = []
+    monkeypatch.setattr(migration.op, "execute", statements.append)
+
+    migration.upgrade()
+    ddl = "\n".join(str(statement) for statement in statements)
+
+    assert "CREATE TABLE ai.material_key_term" in ddl
+    assert "material_version_id bigint NOT NULL" in ddl
+    assert "REFERENCES ai.material_version(id) ON DELETE CASCADE" in ddl
+    assert "PRIMARY KEY (material_version_id, term)" in ddl
+    assert "definition text NOT NULL" in ddl
+    assert "GRANT SELECT, INSERT, UPDATE, DELETE" in ddl
+    assert migration.revision == "0002_material_key_terms"
+    assert migration.down_revision == "0001_rag_index_storage"
+
+
+def test_key_term_storage_downgrade_drops_only_its_own_table(monkeypatch) -> None:
+    migration = importlib.import_module("migrations.versions.0002_material_key_terms")
+    monkeypatch.delenv("AI_WORKER_DATABASE_ROLE", raising=False)
+    statements = []
+    monkeypatch.setattr(migration.op, "execute", statements.append)
+
+    migration.downgrade()
+    ddl = "\n".join(str(statement) for statement in statements)
+
+    assert "DROP TABLE IF EXISTS ai.material_key_term" in ddl
+    assert "DROP SCHEMA" not in ddl
+
+
+def test_key_term_storage_upgrade_rejects_unsafe_runtime_role_before_executing_sql(
+    monkeypatch,
+) -> None:
+    migration = importlib.import_module("migrations.versions.0002_material_key_terms")
+    statements = []
+    monkeypatch.setattr(migration.op, "execute", statements.append)
+    monkeypatch.setenv("AI_WORKER_DATABASE_ROLE", "ai_app; RESET ROLE")
+
+    with pytest.raises(ValueError, match="safe PostgreSQL role"):
+        migration.upgrade()
+
+    assert statements == []

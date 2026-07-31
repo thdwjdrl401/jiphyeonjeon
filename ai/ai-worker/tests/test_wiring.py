@@ -134,9 +134,61 @@ def test_builds_spring_bge_pgvector_and_use_case_with_shared_dependencies(monkey
     assert indexer_args[2]._engine is engine
     assert indexer_options["validation_limits"].source_max_bytes == 50 * 1024 * 1024
     assert indexer_options["chunk_max_chars"] == 1_200
+    assert indexer_options["key_term_extractor"] is None
+    assert indexer_options["key_term_storage"]._engine is engine
     assert runtime.index_pptx_material.name == "indexer"
     assert runtime.callback_client.name == "callback"
     assert runtime._bge_readiness_timeout_seconds == 7.5
+    assert runtime._key_term_extractor is None
+
+
+def test_key_term_extraction_enabled_builds_and_wires_the_gms_extractor(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+    engine = FakeEngine()
+    extractor = SimpleNamespace(name="key-term-extractor")
+
+    def fake_gms_extractor(**kwargs: object) -> object:
+        captured["gms_extractor"] = kwargs
+        return extractor
+
+    monkeypatch.setattr(wiring, "AsyncClient", FakeHttpClient)
+    monkeypatch.setattr(wiring, "create_async_engine", lambda *_args, **_kwargs: engine)
+    monkeypatch.setattr(wiring, "GmsKeyTermExtractor", fake_gms_extractor)
+    monkeypatch.setattr(
+        wiring,
+        "IndexPptxMaterial",
+        lambda *args, **kwargs: SimpleNamespace(name="indexer", options=kwargs),
+    )
+
+    runtime = wiring.build_pptx_ingestion_runtime(
+        _settings(key_term_extraction_enabled=True, gms_api_key="x" * 32)
+    )
+
+    assert captured["gms_extractor"] == {
+        "api_key": "x" * 32,
+        "model": "gpt-4.1",
+        "max_output_tokens": 1_024,
+        "max_prompt_chars": 100_000,
+        "timeout_seconds": 55.0,
+    }
+    assert runtime.index_pptx_material.options["key_term_extractor"] is extractor
+    assert runtime._key_term_extractor is extractor
+
+
+async def test_runtime_closes_the_key_term_extractor_when_configured(monkeypatch) -> None:
+    engine = FakeEngine()
+    extractor = SimpleNamespace(aclose=AsyncMock())
+    monkeypatch.setattr(wiring, "AsyncClient", FakeHttpClient)
+    monkeypatch.setattr(wiring, "create_async_engine", lambda *_args, **_kwargs: engine)
+    monkeypatch.setattr(wiring, "GmsKeyTermExtractor", lambda **_kwargs: extractor)
+    monkeypatch.setattr(wiring, "IndexPptxMaterial", lambda *_args, **_kwargs: object())
+
+    runtime = wiring.build_pptx_ingestion_runtime(
+        _settings(key_term_extraction_enabled=True, gms_api_key="x" * 32)
+    )
+    await runtime.aclose()
+
+    extractor.aclose.assert_awaited_once()
 
 
 def test_runtime_maps_wire_job_with_its_validated_configuration(monkeypatch) -> None:

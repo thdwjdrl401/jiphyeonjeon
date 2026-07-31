@@ -17,7 +17,15 @@ _STATUS_BY_EVENT: dict[str, str] = {
     "MATERIAL_EMBEDDED": "READY",
     "MATERIAL_EMBED_FAILED": "FAILED",
 }
+_KEY_TERMS_EVENT_TYPE: MaterialCallbackType = "MATERIAL_EMBEDDED"
 _CALLBACK_EVENT_NAMESPACE = UUID("9bdc3985-1818-4c55-b084-2eaa0de6b050")
+
+
+class KeyTermPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    term: str = Field(min_length=1)
+    definition: str = Field(min_length=1)
 
 
 class MaterialCallbackEvent(BaseModel):
@@ -29,6 +37,7 @@ class MaterialCallbackEvent(BaseModel):
     material_id: UUID = Field(alias="materialId")
     lesson_id: UUID = Field(alias="lessonId")
     status: MaterialCallbackStatus
+    key_terms: tuple[KeyTermPayload, ...] | None = Field(default=None, alias="keyTerms")
 
     @model_validator(mode="after")
     def validate_status_matches_event(self) -> Self:
@@ -36,8 +45,14 @@ class MaterialCallbackEvent(BaseModel):
             raise ValueError("callback status must match eventType")
         return self
 
+    @model_validator(mode="after")
+    def validate_key_terms_scoped_to_its_event_type(self) -> Self:
+        if self.key_terms is not None and self.event_type != _KEY_TERMS_EVENT_TYPE:
+            raise ValueError(f"keyTerms may only be present on {_KEY_TERMS_EVENT_TYPE}")
+        return self
+
     def raw_body(self) -> bytes:
-        return self.model_dump_json(by_alias=True).encode("utf-8")
+        return self.model_dump_json(by_alias=True, exclude_none=True).encode("utf-8")
 
 
 def material_callback_event_id(job_id: str, event_type: MaterialCallbackType) -> UUID:

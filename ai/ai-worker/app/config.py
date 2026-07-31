@@ -1,8 +1,8 @@
 from functools import lru_cache
-from typing import Literal
+from typing import Literal, Self
 from urllib.parse import urlsplit
 
-from pydantic import AliasChoices, Field, SecretStr, field_validator
+from pydantic import AliasChoices, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.database_urls import parse_async_database_url
@@ -78,6 +78,13 @@ class Settings(BaseSettings):
     source_max_bytes: int = Field(default=50 * 1024 * 1024, gt=0)
     chunk_max_chars: int = Field(default=1_200, ge=100, le=10_000)
 
+    key_term_extraction_enabled: bool = False
+    gms_api_key: SecretStr | None = Field(default=None, min_length=1)
+    gms_model: str = Field(default="gpt-4.1", min_length=1, max_length=128)
+    gms_max_output_tokens: int = Field(default=1_024, ge=1, le=8_192)
+    gms_max_prompt_chars: int = Field(default=100_000, ge=1_000, le=1_000_000)
+    gms_timeout_seconds: float = Field(default=55.0, gt=0, le=120)
+
     @field_validator("database_url")
     @classmethod
     def validate_database_url(cls, value: SecretStr) -> SecretStr:
@@ -125,7 +132,7 @@ class Settings(BaseSettings):
         # trailing slash, so any well-formed path is safe to allow here.
         return _validate_internal_http_url(value, allow_path=True)
 
-    @field_validator("spring_hmac_secret", "bge_internal_token")
+    @field_validator("spring_hmac_secret", "bge_internal_token", "gms_api_key")
     @classmethod
     def validate_optional_secret(cls, value: SecretStr | None) -> SecretStr | None:
         if value is None:
@@ -134,6 +141,19 @@ class Settings(BaseSettings):
         if not revealed.strip() or revealed != revealed.strip():
             raise ValueError("secret values must not be blank or padded")
         return value
+
+    @field_validator("gms_model")
+    @classmethod
+    def validate_gms_model(cls, value: str) -> str:
+        if value != value.strip():
+            raise ValueError("gms_model must not contain surrounding whitespace")
+        return value
+
+    @model_validator(mode="after")
+    def validate_key_term_extraction(self) -> Self:
+        if self.key_term_extraction_enabled and self.gms_api_key is None:
+            raise ValueError("key_term_extraction_enabled requires gms_api_key")
+        return self
 
 
 @lru_cache

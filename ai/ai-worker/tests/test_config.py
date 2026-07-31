@@ -126,6 +126,54 @@ def test_rejects_invalid_pptx_runtime_configuration(field: str, value: object) -
         Settings(instance_id="worker-1", database_url=DATABASE_URL, **{field: value})
 
 
+def test_key_term_extraction_defaults_to_disabled_without_gms_credentials() -> None:
+    settings = Settings(instance_id="worker-1", database_url=DATABASE_URL)
+
+    assert settings.key_term_extraction_enabled is False
+    assert settings.gms_api_key is None
+    assert settings.gms_model == "gpt-4.1"
+    assert settings.gms_max_output_tokens == 1_024
+    assert settings.gms_max_prompt_chars == 100_000
+    assert settings.gms_timeout_seconds == 55.0
+
+
+def test_key_term_extraction_enabled_requires_gms_api_key() -> None:
+    with pytest.raises(ValidationError, match="gms_api_key"):
+        Settings(
+            instance_id="worker-1",
+            database_url=DATABASE_URL,
+            key_term_extraction_enabled=True,
+        )
+
+
+def test_key_term_extraction_enabled_accepts_configured_gms_api_key() -> None:
+    settings = Settings(
+        instance_id="worker-1",
+        database_url=DATABASE_URL,
+        key_term_extraction_enabled=True,
+        gms_api_key="x" * 32,
+    )
+
+    assert settings.key_term_extraction_enabled is True
+    assert settings.gms_api_key is not None
+    assert settings.gms_api_key.get_secret_value() == "x" * 32
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("gms_api_key", " padded"),
+        ("gms_model", " gpt-4.1"),
+        ("gms_max_output_tokens", 0),
+        ("gms_max_prompt_chars", 0),
+        ("gms_timeout_seconds", 0),
+    ],
+)
+def test_rejects_invalid_gms_configuration(field: str, value: object) -> None:
+    with pytest.raises(ValidationError):
+        Settings(instance_id="worker-1", database_url=DATABASE_URL, **{field: value})
+
+
 def test_migration_url_requires_an_explicit_psycopg_driver() -> None:
     migration_url = "postgresql+psycopg://ai:p%25ss@db.internal:5433/liveclass?sslmode=require"
 

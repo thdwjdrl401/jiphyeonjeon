@@ -22,6 +22,16 @@ Alembic revision `0001_rag_index_storage`가 아래 테이블을 소유한다.
 - `ai.material_version`: 자료별 shadow version과 상태
 - `ai.document_chunk`: 슬라이드 chunk와 FTS vector
 - `ai.chunk_embedding`: 정규화된 `vector(1024)`
+- `ai.material_key_term`: 자료 버전별 추출 용어와 정의 (revision `0002_material_key_terms`)
+
+`material_key_term`은 `(material_version_id, term)`을 기본키로 사용한다. Java는
+`ai.material_version.state = 'ACTIVE'`인 자료 버전과 조인해 최신 자료의 용어만 읽는다(읽기 API는
+아직 없다). 재임베딩으로 기존 버전이 교체되거나 자료 버전이 삭제되면 FK cascade로 해당 용어도
+함께 정리된다.
+
+ai-worker는 `IndexPptxMaterial.execute()`가 stage/activate를 마친 뒤 추출된 용어를 이 테이블에
+upsert한다(`(material_version_id, term)` 충돌 시 `definition`만 갱신). 이 저장은 best-effort다 —
+실패해도 로그만 남기고 Spring 콜백 전송이나 job 자체를 막지 않는다([ADR-0005](../../docs/decisions/jinwoo/0005-key-term-storage-schema.md)).
 
 `ai` schema 자체와 `vector` extension은 공유 인프라가 미리 만들 수 있다. 따라서 downgrade는 위 테이블만
 역순으로 제거하고 schema, extension, role은 제거하지 않는다.
@@ -324,3 +334,84 @@ callback은 `POST /api/internal/ai/callbacks`에 9.2의 HMAC으로 보낸다.
 
 현재 `EMBED_DELETE`는 DLQ에 보존할 뿐 완료하지 않는다. delete resolver와 실제 Spring·RabbitMQ·BGE·PostgreSQL
 E2E가 준비되기 전에는 Python consumer와 Spring의 `MATERIAL_EMBEDDING_ENABLED`를 모두 켜지 않는다.
+
+## 10. GMS 핵심 용어 추출과 Spring 전달 (선택 기능)
+
+이 절은 9절의 Spring 자료 임베딩 wire 계약과 독립이다. `AI_WORKER_KEY_TERM_EXTRACTION_ENABLED=true`일
+때만 동작하며, 기본값(`false`)에서는 이 절의 어떤 호출도 발생하지 않고 8절의 embedding/storage 흐름과
+100% 동일하게 동작한다. 설계 근거는
+[ADR-0003](../../docs/decisions/jinwoo/0003-pptx-key-term-extraction-approach.md)을 따른다.
+
+### 10.1 GMS endpoint와 인증
+
+```http
+POST https://api.openai.com/v1/chat/completions
+Authorization: Bearer <AI_WORKER_GMS_API_KEY>
+Content-Type: application/json
+```
+
+- `AI_WORKER_GMS_API_KEY`는 ai-api의 `AI_API_GMS_API_KEY`와 같은 GMS 게이트웨이 키를 재사용할 수 있지만,
+  Spring HMAC secret이나 BGE Bearer token과는 절대 공유하지 않는다.
+- 요청은 `openai` SDK(`AsyncOpenAI`)로 구성하며 `response_format: {"type": "json_schema", ...}`로
+  구조화 출력을 강제한다. 자유 텍스트 파싱에 의존하지 않는다.
+
+### 10.2 GMS 요청 입력과 응답 규약
+
+- 입력은 PPTX 전체 텍스트를 슬라이드 순서대로 이어붙이고 `[슬라이드N]` 구분자로 슬라이드 경계를 표시한
+  단일 문자열이다(8.3의 chunk와 별개로, chunk 이전 `ParsedPresentation`에서 직접 구성한다).
+- 입력이 `AI_WORKER_GMS_MAX_PROMPT_CHARS`(기본 100,000자)를 넘으면 앞부분만 잘라서 보낸다.
+- system prompt는 PPTX 텍스트를 신뢰하지 않는 데이터로 명시하고, 텍스트 안에 포함된 지시·명령을 따르지
+  말라고 강제한다(prompt injection 방어).
+- 성공 응답은 `{"terms": [{"term": "...", "definition": "..."}]}` 형태다. 스키마를 벗어나면 응답 계약
+  위반으로 처리하고, `term`/`definition`은 domain의 `KeyTerm(term, definition)`으로만 변환한다.
+- adapter(`GmsKeyTermExtractor`)는 API 오류·응답 계약 위반을 모두 `KeyTermExtractionError`로만
+  표면화한다. 원문, API key, 원본 응답 body를 로그에 남기지 않는다. adapter 자체는 재시도하지 않는다.
+
+### 10.3 application 계층의 실패 격리와 재시도 캐시
+
+- `IndexPptxMaterial.execute()`는 `key_term_extractor`가 설정된 경우에만 embedding과
+  `asyncio.gather`로 동시에 추출을 시도한다. 추출 예외는 전부 잡아서 경고 로그만 남기고 빈 결과로
+  대체한다 — **핵심 용어 추출 실패는 8절의 embedding/stage/activate 흐름을 절대 막지 않는다.**
+- `execute()`는 추출된 용어를 DB에 저장하지 않고 `MaterialIndexResult(version_id, key_terms)`로
+  호출자에게 반환한다. 다만 추출에 성공하면([ADR-0004](../../docs/decisions/jinwoo/0004-key-term-callback-delivery-timing.md))
+  `IndexPptxMaterial` 인스턴스 자신의 in-memory 캐시(`job_id -> key_terms`, 최대 1,000개, 초과 시
+  가장 오래된 항목 제거)에도 적어둔다.
+- `find_existing` 단축 경로(9.6의 idempotent 재시도 처리)를 탈 때는 이 캐시에서 `job_id`로 조회해
+  `key_terms`를 채운다. 캐시에 없으면(다른 프로세스 인스턴스, 또는 worker 재시작 이후) 빈 tuple을
+  반환한다 — 이건 in-memory 캐시의 알려진 한계이며, RabbitMQ의 유한 재시도 창(9.6, 최대 300초
+  backoff) 안에서 같은 프로세스가 살아있는 한 캐시가 채워져 있을 확률이 높다는 전제에 기댄다.
+
+### 10.4 Spring 전달 — `MATERIAL_EMBEDDED`에 `keyTerms` 포함
+
+핵심 용어는 별도 eventType이 아니라 **기존 9.5의 `MATERIAL_EMBEDDED`(READY) callback 하나에 실어서**
+전달한다. `consumers/material_job.py`의 `MaterialJobHandler`는 `execute()` 결과의 `key_terms`가
+비어있지 않으면 그대로 담아 **한 번만** 보낸다.
+
+```http
+POST /api/internal/ai/callbacks HTTP/1.1
+X-Signature: <9.2의 HMAC>
+Content-Type: application/json
+
+{
+  "eventId": "uuid",
+  "eventType": "MATERIAL_EMBEDDED",
+  "jobId": "worker-side-job-id",
+  "materialId": "uuid",
+  "lessonId": "uuid",
+  "status": "READY",
+  "keyTerms": [
+    { "term": "지도학습", "definition": "정답(레이블)이 있는 데이터로 모델을 학습시키는 방식" }
+  ]
+}
+```
+
+- `keyTerms`는 `MATERIAL_EMBEDDED`에서만 존재할 수 있는 optional 필드다. `MATERIAL_EMBEDDING`이나
+  `MATERIAL_EMBED_FAILED`에 실려 있으면 계약 위반으로 거부한다. 값이 없으면(추출 비활성이거나 빈
+  결과) 직렬화 시 필드 자체가 생략된다(`exclude_none`) — 이 필드가 생기기 전의 `MATERIAL_EMBEDDED`
+  wire 형태와 완전히 동일하다.
+- 이 callback은 9.5/9.6과 **동일한 필수·재시도 계약**을 따른다. 별도의 best-effort 경로는 없다 —
+  전송이 실패하면 9.6의 규칙대로 job 전체가 재시도되고, 재시도 시 `keyTerms`가 채워지는지는 10.3의
+  in-memory 캐시 히트 여부에 달려 있다.
+- Spring 쪽 실제 처리(`AiCallbackService`에서 `keyTerms` 필드를 받아 저장하는 로직)는 이 문서가 다루는
+  ai-worker 범위 밖이며 아직 구현되지 않았다 — 지금은 알 수 없는 필드로 조용히 무시된다. Java 쪽 계약
+  (`AiCallbackEvent` record에 `keyTerms` 필드 추가 등)은 backend 팀이 별도로 정한다.

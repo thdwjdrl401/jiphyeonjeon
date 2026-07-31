@@ -16,6 +16,7 @@ from app.adapters.spring_material_callback import (
     SpringMaterialCallbackClient,
 )
 from app.contracts import (
+    KeyTermPayload,
     MaterialCallbackEvent,
     material_callback_event_id,
 )
@@ -95,6 +96,44 @@ def test_callback_event_id_and_raw_body_are_stable_for_http_retry() -> None:
 def test_rejects_event_and_status_mismatch(event_type: str, status: str) -> None:
     with pytest.raises(ValidationError, match="status must match"):
         _event(eventType=event_type, status=status)
+
+
+def test_ready_event_can_carry_key_terms_in_the_same_callback() -> None:
+    event = _event(keyTerms=[{"term": "지도학습", "definition": "정답이 있는 데이터로 학습"}])
+
+    assert json.loads(event.raw_body()) == {
+        "eventId": str(event.event_id),
+        "eventType": "MATERIAL_EMBEDDED",
+        "jobId": JOB_ID,
+        "materialId": str(MATERIAL_ID),
+        "lessonId": str(LESSON_ID),
+        "status": "READY",
+        "keyTerms": [{"term": "지도학습", "definition": "정답이 있는 데이터로 학습"}],
+    }
+
+
+def test_key_terms_field_is_omitted_when_not_provided() -> None:
+    event = _event()
+
+    assert "keyTerms" not in json.loads(event.raw_body())
+
+
+@pytest.mark.parametrize("event_type", ["MATERIAL_EMBEDDING", "MATERIAL_EMBED_FAILED"])
+def test_key_terms_rejected_on_non_embedded_event_types(event_type: str) -> None:
+    status = "PROCESSING" if event_type == "MATERIAL_EMBEDDING" else "FAILED"
+    with pytest.raises(ValidationError, match="keyTerms"):
+        _event(
+            eventType=event_type,
+            status=status,
+            keyTerms=[{"term": "x", "definition": "y"}],
+        )
+
+
+def test_key_term_payload_rejects_blank_fields() -> None:
+    with pytest.raises(ValidationError):
+        KeyTermPayload(term="", definition="정의")
+    with pytest.raises(ValidationError):
+        KeyTermPayload(term="용어", definition="")
 
 
 @pytest.mark.parametrize(

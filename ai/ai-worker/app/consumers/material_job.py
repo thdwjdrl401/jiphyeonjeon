@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 from sqlalchemy.exc import SQLAlchemyError
@@ -8,6 +9,7 @@ from app.adapters.remote_bge_embedding import RemoteEmbeddingError
 from app.adapters.spring_material_asset_store import SpringMaterialSourceError
 from app.adapters.spring_material_callback import SpringCallbackError
 from app.contracts import (
+    KeyTermPayload,
     MaterialCallbackEvent,
     MaterialCallbackStatus,
     MaterialCallbackType,
@@ -16,6 +18,7 @@ from app.contracts import (
     parse_material_job,
 )
 from app.domain import MaterialIngestionError, StagedMaterial, StaleMaterialVersionError
+from app.ingestion import KeyTerm
 
 if TYPE_CHECKING:
     from app.wiring import PptxIngestionRuntime
@@ -41,14 +44,16 @@ class MaterialJobHandler:
 
         material = self._runtime.material_for(job)
         try:
-            await self._runtime.index_pptx_material.execute(material)
+            result = await self._runtime.index_pptx_material.execute(material)
         except Exception as exc:
             if _is_retryable(exc):
                 raise
             await self._send_terminal(job, material, "MATERIAL_EMBED_FAILED", "FAILED")
             raise PermanentMaterialJobError("material ingestion failed permanently") from exc
 
-        await self._send_terminal(job, material, "MATERIAL_EMBEDDED", "READY")
+        await self._send_terminal(
+            job, material, "MATERIAL_EMBEDDED", "READY", key_terms=result.key_terms
+        )
 
     async def report_retry_exhausted(self, body: bytes) -> None:
         """Report failure unless DB completion proves only the READY callback is pending."""
@@ -72,17 +77,21 @@ class MaterialJobHandler:
         material: StagedMaterial,
         event_type: MaterialCallbackType,
         status: MaterialCallbackStatus,
+        key_terms: Sequence[KeyTerm] = (),
     ) -> None:
-        event = MaterialCallbackEvent.model_validate(
-            {
-                "eventId": material_callback_event_id(material.job_id, event_type),
-                "eventType": event_type,
-                "jobId": material.job_id,
-                "materialId": job.material_id,
-                "lessonId": job.lesson_id,
-                "status": status,
-            }
-        )
+        payload: dict[str, object] = {
+            "eventId": material_callback_event_id(material.job_id, event_type),
+            "eventType": event_type,
+            "jobId": material.job_id,
+            "materialId": job.material_id,
+            "lessonId": job.lesson_id,
+            "status": status,
+        }
+        if key_terms:
+            payload["keyTerms"] = [
+                KeyTermPayload(term=term.term, definition=term.definition) for term in key_terms
+            ]
+        event = MaterialCallbackEvent.model_validate(payload)
         try:
             await self._runtime.callback_client.send(event)
         except SpringCallbackError as exc:
