@@ -101,6 +101,17 @@ class FakeIndexStorage:
         self.activated.append((material, version_id))
 
 
+class FakeKeyTermStorage:
+    def __init__(self, *, error: BaseException | None = None) -> None:
+        self.error = error
+        self.calls: list[tuple[int, tuple[KeyTerm, ...]]] = []
+
+    async def store(self, version_id: int, key_terms: Sequence[KeyTerm]) -> None:
+        self.calls.append((version_id, tuple(key_terms)))
+        if self.error is not None:
+            raise self.error
+
+
 class FakeKeyTermExtractor:
     def __init__(
         self,
@@ -459,3 +470,93 @@ async def test_no_extractor_configured_never_touches_key_term_extraction() -> No
 
     assert result.version_id == 73
     assert result.key_terms == ()
+
+
+async def test_stores_key_terms_in_the_same_run_they_are_extracted() -> None:
+    staged_material = material()
+    asset_store = FakeAssetStore(presentation_bytes(("index me",)))
+    embedding_model = FakeEmbeddingModel()
+    index_storage = FakeIndexStorage(version_id=73)
+    key_term_extractor = FakeKeyTermExtractor(terms=(KeyTerm(term="용어", definition="정의"),))
+    key_term_storage = FakeKeyTermStorage()
+
+    result = await IndexPptxMaterial(
+        asset_store,
+        embedding_model,
+        index_storage,
+        key_term_extractor=key_term_extractor,
+        key_term_storage=key_term_storage,
+    ).execute(staged_material)
+
+    assert result.version_id == 73
+    assert key_term_storage.calls == [(73, (KeyTerm(term="용어", definition="정의"),))]
+
+
+async def test_no_key_terms_never_calls_storage() -> None:
+    staged_material = material()
+    asset_store = FakeAssetStore(presentation_bytes(("index me",)))
+    embedding_model = FakeEmbeddingModel()
+    index_storage = FakeIndexStorage(version_id=73)
+    key_term_storage = FakeKeyTermStorage()
+
+    result = await IndexPptxMaterial(
+        asset_store,
+        embedding_model,
+        index_storage,
+        key_term_storage=key_term_storage,
+    ).execute(staged_material)
+
+    assert result.version_id == 73
+    assert key_term_storage.calls == []
+
+
+async def test_key_term_storage_failure_never_blocks_indexing_or_callback_result() -> None:
+    staged_material = material()
+    asset_store = FakeAssetStore(presentation_bytes(("index me",)))
+    embedding_model = FakeEmbeddingModel()
+    index_storage = FakeIndexStorage(version_id=73)
+    key_term_extractor = FakeKeyTermExtractor(terms=(KeyTerm(term="용어", definition="정의"),))
+    key_term_storage = FakeKeyTermStorage(error=RuntimeError("db unavailable"))
+
+    result = await IndexPptxMaterial(
+        asset_store,
+        embedding_model,
+        index_storage,
+        key_term_extractor=key_term_extractor,
+        key_term_storage=key_term_storage,
+    ).execute(staged_material)
+
+    assert result.version_id == 73
+    assert result.key_terms == (KeyTerm(term="용어", definition="정의"),)
+    assert len(key_term_storage.calls) == 1
+
+
+async def test_retry_short_circuit_also_retries_storing_cached_key_terms() -> None:
+    staged_material = material()
+    key_term_extractor = FakeKeyTermExtractor(terms=(KeyTerm(term="용어", definition="정의"),))
+    index_storage = FakeIndexStorage(version_id=73)
+    key_term_storage = FakeKeyTermStorage()
+    indexer = IndexPptxMaterial(
+        FakeAssetStore(presentation_bytes(("index me",))),
+        FakeEmbeddingModel(),
+        index_storage,
+        key_term_extractor=key_term_extractor,
+        key_term_storage=key_term_storage,
+    )
+
+    first_result = await indexer.execute(staged_material)
+    assert first_result.key_terms == (KeyTerm(term="용어", definition="정의"),)
+    assert len(key_term_storage.calls) == 1
+
+    # Simulate a RabbitMQ redelivery after success: execute() takes the idempotent
+    # short-circuit and never re-extracts, but the cached key_terms should still be
+    # retried against storage in case the first attempt's store() failed.
+    index_storage.existing = ExistingIndexVersion(73, activation_required=False)
+    retried_result = await indexer.execute(staged_material)
+
+    assert retried_result.version_id == 73
+    assert retried_result.key_terms == (KeyTerm(term="용어", definition="정의"),)
+    assert key_term_storage.calls == [
+        (73, (KeyTerm(term="용어", definition="정의"),)),
+        (73, (KeyTerm(term="용어", definition="정의"),)),
+    ]

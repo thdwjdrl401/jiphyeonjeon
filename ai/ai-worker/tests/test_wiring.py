@@ -135,6 +135,7 @@ def test_builds_spring_bge_pgvector_and_use_case_with_shared_dependencies(monkey
     assert indexer_options["validation_limits"].source_max_bytes == 50 * 1024 * 1024
     assert indexer_options["chunk_max_chars"] == 1_200
     assert indexer_options["key_term_extractor"] is None
+    assert indexer_options["key_term_storage"]._engine is engine
     assert runtime.index_pptx_material.name == "indexer"
     assert runtime.callback_client.name == "callback"
     assert runtime._bge_readiness_timeout_seconds == 7.5

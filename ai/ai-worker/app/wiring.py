@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from app.adapters.gms_key_term_extractor import GmsKeyTermExtractor
 from app.adapters.pgvector_index import PgvectorIndexRepository
+from app.adapters.pgvector_key_term_storage import PgvectorKeyTermRepository
 from app.adapters.rabbitmq_material_consumer import RabbitMaterialConsumer
 from app.adapters.remote_bge_embedding import RemoteBgeM3EmbeddingModel
 from app.adapters.spring_hmac import SpringHmacSigner
@@ -182,6 +183,7 @@ def build_pptx_ingestion_runtime(settings: Settings) -> PptxIngestionRuntime:
         validation_limits=PptxValidationLimits(source_max_bytes=settings.source_max_bytes),
         chunk_max_chars=settings.chunk_max_chars,
         key_term_extractor=key_term_extractor,
+        key_term_storage=PgvectorKeyTermRepository(database_engine),
     )
     return PptxIngestionRuntime(
         index_pptx_material=index_pptx_material,

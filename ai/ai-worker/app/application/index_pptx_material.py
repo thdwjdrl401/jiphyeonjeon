@@ -24,7 +24,13 @@ from app.ingestion import (
     chunk_strategy,
     parse_pptx,
 )
-from app.ports import IndexStorage, KeyTermExtractor, MaterialAssetStore, TextEmbeddingModel
+from app.ports import (
+    IndexStorage,
+    KeyTermExtractor,
+    KeyTermStorage,
+    MaterialAssetStore,
+    TextEmbeddingModel,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +55,7 @@ class IndexPptxMaterial:
         validation_limits: PptxValidationLimits = PptxValidationLimits(),
         chunk_max_chars: int = DEFAULT_CHUNK_MAX_CHARS,
         key_term_extractor: KeyTermExtractor | None = None,
+        key_term_storage: KeyTermStorage | None = None,
     ) -> None:
         self._asset_store = asset_store
         self._embedding_model = embedding_model
@@ -57,6 +64,7 @@ class IndexPptxMaterial:
         self._chunk_max_chars = chunk_max_chars
         self._chunk_strategy = chunk_strategy(chunk_max_chars)
         self._key_term_extractor = key_term_extractor
+        self._key_term_storage = key_term_storage
         # Best-effort retry safety net for the combined callback (ADR-0004 option C): if the
         # single terminal callback fails and the job redelivers, execute()'s idempotent
         # short-circuit below never re-extracts, so a same-process retry recovers key_terms
@@ -70,6 +78,10 @@ class IndexPptxMaterial:
             if existing.activation_required:
                 await self._index_storage.activate(material, existing.version_id)
             cached_key_terms = self._key_term_cache.get(material.job_id, ())
+            if cached_key_terms and self._key_term_storage is not None:
+                await _safe_store_key_terms(
+                    self._key_term_storage, existing.version_id, cached_key_terms
+                )
             return MaterialIndexResult(version_id=existing.version_id, key_terms=cached_key_terms)
 
         source = await self._asset_store.read_pptx(
@@ -116,6 +128,8 @@ class IndexPptxMaterial:
         records = _chunk_records(chunks, embeddings)
         version_id = await self._index_storage.stage(material, records)
         await self._index_storage.activate(material, version_id)
+        if key_terms and self._key_term_storage is not None:
+            await _safe_store_key_terms(self._key_term_storage, version_id, key_terms)
         return MaterialIndexResult(version_id=version_id, key_terms=key_terms)
 
     async def find_existing(self, material: StagedMaterial) -> ExistingIndexVersion | None:
@@ -174,6 +188,23 @@ async def _safe_extract_key_terms(
             exc_info=True,
         )
         return ()
+
+
+async def _safe_store_key_terms(
+    storage: KeyTermStorage,
+    version_id: int,
+    key_terms: tuple[KeyTerm, ...],
+) -> None:
+    """Storage is additive: any failure is logged and swallowed, never blocking the callback."""
+
+    try:
+        await storage.store(version_id, key_terms)
+    except Exception:
+        logger.warning(
+            "storing PPTX key terms failed; continuing without persisted key terms",
+            extra={"event": "material.key_term_storage_failed"},
+            exc_info=True,
+        )
 
 
 def _presentation_text(presentation: ParsedPresentation) -> str:
