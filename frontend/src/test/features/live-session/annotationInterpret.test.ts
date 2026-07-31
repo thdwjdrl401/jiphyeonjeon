@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AnnotationElement } from '@/features/live-session/annotation'
 import {
-  latexPlacement,
+  latexFontSize,
   placeAtSelection,
   selectionBounds,
 } from '@/features/live-session/annotationInterpret'
@@ -84,22 +84,16 @@ describe('변환 결과 배치', () => {
   })
 })
 
-describe('수식 배치', () => {
+describe('수식 글자 크기', () => {
   /** 강사가 크게 썼으면 크게, 작게 썼으면 작게 나오는 편이 자연스럽다. */
-  it('글자 크기를 원본 손글씨 높이에서 가져온다', () => {
-    expect(latexPlacement({ x: 0, y: 0, width: 800, height: 100 }).fontSize).toBe(70)
-    expect(latexPlacement({ x: 0, y: 0, width: 200, height: 40 }).fontSize).toBe(28)
+  it('원본 손글씨 높이에서 가져온다', () => {
+    expect(latexFontSize({ x: 0, y: 0, width: 800, height: 100 })).toBe(70)
+    expect(latexFontSize({ x: 0, y: 0, width: 200, height: 40 })).toBe(28)
   })
 
   /** 아주 작게 쓴 첨자나 아주 크게 쓴 제목에서도 읽을 수 있는 범위에 둔다. */
   it('너무 작거나 크지 않게 묶는다', () => {
-    expect(latexPlacement({ x: 0, y: 0, width: 10, height: 5 }).fontSize).toBe(16)
-    expect(latexPlacement({ x: 0, y: 0, width: 10, height: 900 }).fontSize).toBe(72)
-  })
-
-  it('원본이 있던 왼쪽 위에 놓는다', () => {
-    const placement = latexPlacement({ x: 456, y: 351, width: 838, height: 197 })
-
-    expect([placement.x, placement.y]).toEqual([456, 351])
+    expect(latexFontSize({ x: 0, y: 0, width: 10, height: 5 })).toBe(16)
+    expect(latexFontSize({ x: 0, y: 0, width: 10, height: 900 })).toBe(72)
   })
 })

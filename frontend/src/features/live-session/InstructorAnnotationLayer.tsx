@@ -14,7 +14,7 @@ import AnnotationActionRing, { type AnnotationAction } from './AnnotationActionR
 import AnnotationInterpretPreview from './AnnotationInterpretPreview'
 import {
   interpretAnnotation,
-  latexPlacement,
+  latexFontSize,
   placeAtSelection,
   selectionBounds,
   type AnnotationInterpretation,
@@ -324,13 +324,13 @@ export default function InstructorAnnotationLayer({
         const { elements: skeleton } = await parseMermaidToExcalidraw(result.body)
         created = convertToExcalidrawElements(skeleton as never) as unknown as AnnotationElement[]
       } else {
-        const placement = latexPlacement(bounds)
+        // 자리는 아래 placeAtSelection이 정한다. 여기서 좌표를 주면 그 값이 덮여 죽은 코드가 된다.
         created = convertToExcalidrawElements([{
           type: 'text',
-          x: placement.x,
-          y: placement.y,
+          x: 0,
+          y: 0,
           text: result.body,
-          fontSize: placement.fontSize,
+          fontSize: latexFontSize(bounds),
           strokeColor: DEFAULT_STROKE_COLOR,
         }] as never) as unknown as AnnotationElement[]
       }

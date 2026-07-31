@@ -100,14 +100,16 @@ export function placeAtSelection<T extends AnnotationElement>(
 }
 
 /**
- * 인식한 수식을 놓을 자리와 크기.
+ * 인식한 수식을 넣을 글자 크기.
  *
- * <p>Excalidraw에는 수식 렌더가 없어 LaTeX를 <b>글자 그대로</b> 넣는다. 글자 크기는 원본 손글씨의
+ * <p>Excalidraw에는 수식 렌더가 없어 LaTeX를 <b>글자 그대로</b> 넣는다. 크기는 원본 손글씨의
  * 높이에서 가져온다 — 강사가 크게 썼으면 크게, 작게 썼으면 작게 나오는 편이 자연스럽다.
+ *
+ * <p><b>자리는 여기서 정하지 않는다.</b> 다이어그램과 마찬가지로 {@link placeAtSelection}이 원본이
+ * 있던 자리의 가운데로 옮긴다 — 여기서 좌표까지 돌려주면 그 값이 뒤에서 덮여 죽은 코드가 된다.
  */
-export function latexPlacement(bounds: SelectionBounds): { x: number; y: number; fontSize: number } {
-  const fontSize = Math.min(72, Math.max(16, Math.round(bounds.height * 0.7)))
-  return { x: bounds.x, y: bounds.y, fontSize }
+export function latexFontSize(bounds: SelectionBounds): number {
+  return Math.min(72, Math.max(16, Math.round(bounds.height * 0.7)))
 }
 
 /**

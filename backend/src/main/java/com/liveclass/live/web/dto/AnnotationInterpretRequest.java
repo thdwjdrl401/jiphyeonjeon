@@ -21,9 +21,17 @@ public record AnnotationInterpretRequest(
         @Pattern(regexp = "diagram|math")
         String mode,
 
-        @Schema(description = "강사가 선택한 영역만 렌더한 PNG. data URI. 1920x1080 논리 프레임과 같은 축척이다.",
+        /*
+         * <b>상한을 여기서 건다.</b> 없으면 큰 본문이 그대로 통과해 힙에 올라간다 — Spring은 JSON
+         * 본문 크기를 기본으로 제한하지 않고, 상류(GMS) 호출 직전에야 크기를 보면 이미 늦다.
+         *
+         * base64는 원본의 약 4/3이므로 6MB면 원본 4.5MB쯤이다. 선택 영역 하나를 PNG로 담으면
+         * 이보다 훨씬 작다(실측: 판서 15개 1528x721이 12KB).
+         */
+        @Schema(description = "강사가 선택한 영역만 렌더한 PNG. data URI. 선택 내용만 담기며 프레임 전체가 아니다.",
                 example = "data:image/png;base64,iVBORw0KGgo...")
         @NotBlank
+        @Size(max = 6_000_000, message = "판서 이미지가 너무 큽니다.")
         @Pattern(regexp = "data:image/(png|jpeg);base64,[A-Za-z0-9+/=]+", message = "PNG 또는 JPEG data URI여야 합니다.")
         String image,
 
