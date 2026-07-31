@@ -5,6 +5,7 @@ COMMAND="${1:-status}"
 DEPLOY_ROOT="${LIVECLASS_DEPLOY_ROOT:-$HOME/.local/share/liveclass/realtime-agent}"
 CURRENT_LINK="$DEPLOY_ROOT/current"
 CONFIG_DIR="${LIVECLASS_CONFIG_DIR:-$HOME/.config/liveclass}"
+COMMON_AGENT_ENV="${LIVECLASS_COMMON_AGENT_ENV:-$CONFIG_DIR/realtime-agent-common.env}"
 PROD_AGENT_ENV="${LIVECLASS_PROD_AGENT_ENV:-$CONFIG_DIR/realtime-agent.env}"
 DEV_AGENT_ENV="${LIVECLASS_DEV_AGENT_ENV:-$CONFIG_DIR/realtime-agent-dev.env}"
 TUNNEL_ENV="${LIVECLASS_TUNNEL_ENV:-$CONFIG_DIR/realtime-agent-tunnels.env}"
@@ -36,6 +37,21 @@ load_env() {
     . "$1"
     set +a
 }
+load_agent_env() {
+    require_file "$COMMON_AGENT_ENV"
+    unset LIVEKIT_URL LIVEKIT_TUNNEL_HOST LIVEKIT_API_KEY LIVEKIT_API_SECRET \
+        LIVEKIT_TURN_URL LIVEKIT_TURN_SECRET REDIS_URL CAPTION_STREAM_KEY \
+        SESSION_LEASE_TTL_SECONDS SPRING_STATUS_CALLBACK_ENABLED \
+        SPRING_STATUS_CALLBACK_URL SPRING_STATUS_CALLBACK_TIMEOUT_SECONDS \
+        SPRING_STATUS_CALLBACK_ATTEMPTS AI_CALLBACK_SECRET ASR_LANGUAGE LOG_LEVEL \
+        STT_AGENT_NAME STT_ENGINE_PROVIDER STT_HEALTH_HOST STT_HEALTH_PORT \
+        STT_MAX_ACTIVE_JOBS STT_NUM_IDLE_PROCESSES CUDA_VISIBLE_DEVICES ASR_MODEL_ID \
+        OPENAI_API_KEY OPENAI_REALTIME_TRANSCRIPTION_MODEL \
+        OPENAI_REALTIME_TRANSCRIPTION_DELAY
+    load_env "$COMMON_AGENT_ENV"
+    load_env "$1"
+}
+
 
 validate_agent_env_profile() {
     profile="$1"
@@ -44,17 +60,13 @@ validate_agent_env_profile() {
     expected_health_port="$4"
     expected_capacity="$5"
     (
-        unset REDIS_URL STT_AGENT_NAME STT_ENGINE_PROVIDER STT_HEALTH_HOST \
-            STT_HEALTH_PORT STT_MAX_ACTIVE_JOBS STT_NUM_IDLE_PROCESSES \
-            CUDA_VISIBLE_DEVICES
-        load_env "$env_file"
+        load_agent_env "$env_file"
         if [ "${STT_AGENT_NAME:-}" != "$expected_name" ] || \
-            [ "${STT_HEALTH_HOST:-127.0.0.1}" != "127.0.0.1" ] || \
-            [ "${STT_HEALTH_PORT:-8081}" != "$expected_health_port" ] || \
+            [ "${STT_HEALTH_HOST:-}" != "127.0.0.1" ] || \
+            [ "${STT_HEALTH_PORT:-}" != "$expected_health_port" ] || \
             [ "${STT_MAX_ACTIVE_JOBS:-}" != "$expected_capacity" ] || \
             [ "${STT_NUM_IDLE_PROCESSES:-}" != "$expected_capacity" ] || \
-            [ "${CUDA_VISIBLE_DEVICES:-}" != "0" ] || \
-            [ "${STT_ENGINE_PROVIDER:-}" != "nemotron" ]; then
+            [ -z "${STT_ENGINE_PROVIDER:-}" ]; then
             echo "$profile agent env profile mismatch" >&2
             exit 1
         fi
@@ -65,6 +77,27 @@ validate_agent_env_profile() {
                 ;;
             *)
                 echo "$profile agent Redis endpoint mismatch" >&2
+                exit 1
+                ;;
+        esac
+        case "$STT_ENGINE_PROVIDER" in
+            nemotron)
+                if [ "${CUDA_VISIBLE_DEVICES:-}" != "0" ] || \
+                    [ -z "${ASR_MODEL_ID:-}" ]; then
+                    echo "$profile nemotron env profile mismatch" >&2
+                    exit 1
+                fi
+                ;;
+            openai-realtime)
+                if [ -z "${OPENAI_API_KEY:-}" ] || \
+                    [ -z "${OPENAI_REALTIME_TRANSCRIPTION_MODEL:-}" ] || \
+                    [ -z "${OPENAI_REALTIME_TRANSCRIPTION_DELAY:-}" ]; then
+                    echo "$profile openai-realtime env profile mismatch" >&2
+                    exit 1
+                fi
+                ;;
+            *)
+                echo "$profile agent provider is not deployable: $STT_ENGINE_PROVIDER" >&2
                 exit 1
                 ;;
         esac
@@ -95,6 +128,7 @@ start_agent_instance() {
         echo "$agent_environment agent supervisor is already running"
         return
     fi
+    require_file "$COMMON_AGENT_ENV"
     require_file "$agent_env"
     require_file "$CURRENT_LINK/.venv/bin/python"
     tmux new-session -d -s "$agent_session" \
@@ -102,13 +136,22 @@ start_agent_instance() {
     echo "$agent_environment agent supervisor started"
 }
 
-start_agents() {
-    require_file "$PROD_AGENT_ENV"
-    require_file "$DEV_AGENT_ENV"
+validate_prod_agent() {
     validate_agent_env_profile prod "$PROD_AGENT_ENV" \
         liveclass-realtime-stt-prod 8081 12
+}
+
+validate_dev_agent() {
     validate_agent_env_profile dev "$DEV_AGENT_ENV" \
         liveclass-realtime-stt-dev 8082 1
+}
+
+start_agents() {
+    require_file "$COMMON_AGENT_ENV"
+    require_file "$PROD_AGENT_ENV"
+    require_file "$DEV_AGENT_ENV"
+    validate_prod_agent
+    validate_dev_agent
     if session_exists "$LEGACY_AGENT_SESSION"; then
         stop_session "$LEGACY_AGENT_SESSION"
         echo "stopped legacy single-agent supervisor"
@@ -162,7 +205,7 @@ stop_agents() {
 
 run_agent() {
     run_agent_env="$1"
-    load_env "$run_agent_env"
+    load_agent_env "$run_agent_env"
     if [ -n "${LIVEKIT_TUNNEL_HOST:-}" ]; then
         DNS_REDIRECT_LIB="${LIVEKIT_DNS_REDIRECT_LIB:-$HOME/.local/lib/liveclass/livekit-tunnel-dns.so}"
         require_file "$DNS_REDIRECT_LIB"
@@ -237,6 +280,16 @@ case "$COMMAND" in
         stop_agents
         start_agents
         ;;
+    restart-agent-prod)
+        validate_prod_agent
+        stop_session "$PROD_AGENT_SESSION"
+        start_agent_instance prod "$PROD_AGENT_ENV" "$PROD_AGENT_SESSION" _run-agent-prod
+        ;;
+    restart-agent-dev)
+        validate_dev_agent
+        stop_session "$DEV_AGENT_SESSION"
+        start_agent_instance dev "$DEV_AGENT_ENV" "$DEV_AGENT_SESSION" _run-agent-dev
+        ;;
     stop)
         stop_agents
         stop_session "$TUNNEL_SESSION"
@@ -264,7 +317,7 @@ case "$COMMAND" in
         tmux capture-pane -p -t "$TUNNEL_SESSION:0.0" -S -200
         ;;
     *)
-        echo "usage: liveclass-realtime-agent-supervisor {start|start-agent|start-tunnel|restart|restart-agent|stop|stop-agent|status|status-agent|logs-agent|logs-agent-prod|logs-agent-dev|logs-tunnel}" >&2
+        echo "usage: liveclass-realtime-agent-supervisor {start|start-agent|start-tunnel|restart|restart-agent|restart-agent-prod|restart-agent-dev|stop|stop-agent|status|status-agent|logs-agent|logs-agent-prod|logs-agent-dev|logs-tunnel}" >&2
         exit 2
         ;;
 esac

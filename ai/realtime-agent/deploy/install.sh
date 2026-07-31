@@ -34,6 +34,10 @@ cc -shared -fPIC -O2 -Wall -Wextra -Werror \
     "$SCRIPT_DIR/livekit-tunnel-dns.c" -ldl -o "$LIB_DIR/livekit-tunnel-dns.so"
 chmod 0755 "$LIB_DIR/livekit-tunnel-dns.so"
 
+if [ ! -e "$CONFIG_DIR/realtime-agent-common.env" ]; then
+    install -m 0600 "$SCRIPT_DIR/env/realtime-agent-common.env.example" \
+        "$CONFIG_DIR/realtime-agent-common.env"
+fi
 if [ ! -e "$CONFIG_DIR/realtime-agent.env" ]; then
     install -m 0600 "$SCRIPT_DIR/env/realtime-agent.env.example" \
         "$CONFIG_DIR/realtime-agent.env"
@@ -48,5 +52,5 @@ if [ ! -e "$CONFIG_DIR/realtime-agent-tunnels.env" ]; then
 fi
 
 echo "rootless runtime installed under $USER_PREFIX"
-echo "edit $CONFIG_DIR/realtime-agent.env, realtime-agent-dev.env, and realtime-agent-tunnels.env before the first deployment"
+echo "edit $CONFIG_DIR/realtime-agent-common.env, realtime-agent.env, realtime-agent-dev.env, and realtime-agent-tunnels.env before the first deployment"
 echo "install and register GitLab Runner, then run: $BIN_DIR/liveclass-gitlab-runner-user start"

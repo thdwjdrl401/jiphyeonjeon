@@ -95,6 +95,7 @@ uv run --frozen --env-file ../.env python -m app.main start
 ```
 
 기본 설정은 [`ai/.env.example`](../.env.example)을 `ai/.env`로 복사해 사용한다.
+GPU 배포에서는 `deploy/env/realtime-agent-common.env.example`의 공통 LiveKit/TURN·운영 정책을 먼저 로드하고, prod/dev provider profile을 나중에 덮어쓴다. 같은 provider에 필요하지 않은 model key나 CUDA 변수는 profile에 넣지 않는다.
 
 | 환경변수 | 필요 조건 | 용도 |
 |---|---|---|
@@ -112,10 +113,11 @@ uv run --frozen --env-file ../.env python -m app.main start
 `AI_INTERNAL_SECRET`은 Spring↔EC2 ai-api RAG 전용이므로 GPU realtime-agent에는 주입하지 않는다.
 realtime-agent의 `AI_CALLBACK_SECRET`도 lifecycle callback을 명시적으로 켠 경우에만 필요하다.
 
-GPU 운영에서는 prod/dev 두 process가 GPU0와 LiveKit/TURN tunnel을 공유하되 agent name, Redis와
-health port를 분리한다. prod는 Redis `6390`, health `8081→18081`, active/idle `12/12`이고 dev는
-Redis `4000`, health `8082→18082`, active/idle `1/1`이다. realtime control과 TURN은 서로 다른 SSH
-connection이며 별도 BGE supervisor가 세 번째 connection으로 `18020→8020` reverse forward를 유지한다.
+GPU 운영에서는 prod/dev 두 process가 같은 호스트와 LiveKit/TURN tunnel을 공유하되 agent name, Redis와
+health port를 분리한다. prod는 GPU0 Nemotron, Redis `6390`, health `8081→18081`, active/idle
+`12/12`이고 dev는 OpenAI Realtime API, Redis `4000`, health `8082→18082`, active/idle `1/1`이다.
+realtime control과 TURN은 서로 다른 SSH connection이며 별도 BGE supervisor가 세 번째 connection으로
+`18020→8020` reverse forward를 유지한다.
 
 ## 6. 상태 확인
 
@@ -149,3 +151,4 @@ Redis, room audio, engine queue 또는 capacity 예약은 검사하지 않으므
 - [service health 결정](../../docs/decisions/canola/0032-realtime-agent-service-health-contract.md)
 - [SSH 연결 격리 결정](../../docs/decisions/canola/0033-realtime-agent-ssh-channel-isolation.md)
 - [dev/prod 동시 운영 결정](../../docs/decisions/canola/0035-realtime-agent-dual-environment-runtime.md)
+- [AI compose·env profile 결정](../../docs/decisions/canola/0036-ai-compose-and-realtime-env-profiles.md)
