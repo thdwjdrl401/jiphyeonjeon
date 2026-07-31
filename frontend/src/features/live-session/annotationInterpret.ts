@@ -121,17 +121,20 @@ export function placeAtSelection<T extends AnnotationElement>(
 }
 
 /**
- * 원본 자리에 들어가도록 줄일 배율.
+ * 원본 자리에 꽉 차게 맞출 배율.
  *
- * <p>원본보다 작게 그려졌으면 <b>키우지 않는다</b>. mermaid가 낸 그림이 이미 읽을 만한 크기인데
- * 강사가 작게 스케치했다고 억지로 늘리면 글자만 뭉개진다 — 남는 자리는 그냥 비워 둔다.
+ * <p><b>줄이기도 키우기도 한다.</b> 처음에는 키우지 않았다 — "늘리면 글자가 뭉개진다"고 봤는데
+ * 틀렸다. 여기서 다루는 것은 벡터 요소이고 글자 크기도 같은 배율로 곱하므로, 키워도 선명하다.
+ * 강사가 크게 스케치했으면 정리된 그림도 그만큼 커야 "그 자리를 대신한" 것으로 보인다.
+ *
+ * <p>짧은 쪽에 맞춘다. 긴 쪽에 맞추면 원본 영역을 넘어가 옆의 판서를 덮는다.
  */
 function fitScale(converted: SelectionBounds, bounds: SelectionBounds): number {
-  const byWidth = converted.width > 0 ? bounds.width / converted.width : 1
-  const byHeight = converted.height > 0 ? bounds.height / converted.height : 1
+  const byWidth = converted.width > 0 ? bounds.width / converted.width : Infinity
+  const byHeight = converted.height > 0 ? bounds.height / converted.height : Infinity
   const fit = Math.min(byWidth, byHeight)
   if (!Number.isFinite(fit) || fit <= 0) return 1
-  return Math.min(1, fit)
+  return fit
 }
 
 /**

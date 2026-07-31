@@ -55,14 +55,14 @@ describe('변환 결과 배치', () => {
    * mermaid는 자기 원점에서 배치를 계산한다. 그 결과를 강사가 그렸던 자리에 겹쳐 놓는 일은 우리가
    * 한다 — 원본 bbox를 알고 있으므로 추측이 필요 없다.
    */
-  it('손그림이 있던 자리의 가운데로 옮긴다', () => {
+  it('손그림이 있던 자리에 맞춰 옮기고 키운다', () => {
     // mermaid가 (0,0)-(100,50)에 그린 결과
     const converted = [box('m1', 0, 0, 40, 50), box('m2', 60, 0, 40, 50)]
-    // 강사는 (500,300)-(800,500)에 그렸다
+    // 강사는 (500,300)-(800,500)에 그렸다 → 짧은 쪽(가로) 기준 3배
     const placed = placeAtSelection(converted, { x: 500, y: 300, width: 300, height: 200 })
 
-    // 가로 (300-100)/2 = 100, 세로 (200-50)/2 = 75 만큼 안쪽으로
-    expect(placed.map((e) => [e.x, e.y])).toEqual([[600, 375], [660, 375]])
+    // 가로는 꽉 차고(300), 세로는 150이라 (200-150)/2 = 25 만큼 안쪽으로
+    expect(placed.map((e) => [e.x, e.y])).toEqual([[500, 325], [680, 325]])
   })
 
   /**
@@ -108,16 +108,27 @@ describe('변환 결과 배치', () => {
   })
 
   /**
-   * 원본보다 작게 그려졌으면 키우지 않는다. mermaid가 낸 그림이 이미 읽을 만한데 강사가 작게
-   * 스케치했다고 억지로 늘리면 글자만 뭉개진다.
+   * 작게 나왔으면 키운다. 벡터 요소이고 글자 크기도 같은 배율로 곱하므로 키워도 선명하다 —
+   * 강사가 크게 스케치했으면 정리된 그림도 그만큼 커야 "그 자리를 대신한" 것으로 보인다.
    */
-  it('원본이 더 크면 키우지 않는다', () => {
-    const converted = [box('m1', 0, 0, 40, 50)]
+  it('원본이 더 크면 키운다', () => {
+    const converted = [{ ...box('m1', 0, 0, 40, 50), fontSize: 20 }]
 
-    const placed = placeAtSelection(converted, { x: 0, y: 0, width: 1000, height: 800 })
+    const placed = placeAtSelection(converted as AnnotationElement[], { x: 0, y: 0, width: 400, height: 500 })
 
-    expect(placed[0].width).toBe(40)
-    expect(placed[0].height).toBe(50)
+    expect(placed[0].width).toBe(400)
+    expect(placed[0].height).toBe(500)
+    expect((placed[0] as { fontSize?: number }).fontSize).toBe(200)
+  })
+
+  /** 긴 쪽에 맞추면 원본 영역을 넘어가 옆의 판서를 덮는다. */
+  it('짧은 쪽에 맞춘다', () => {
+    const converted = [box('m1', 0, 0, 100, 100)]
+
+    const placed = placeAtSelection(converted, { x: 0, y: 0, width: 600, height: 200 })
+
+    expect(placed[0].width).toBe(200)
+    expect(placed[0].height).toBe(200)
   })
 
   it('옮겨도 요소의 나머지 속성은 그대로다', () => {

@@ -4,14 +4,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AnnotationElement } from '@/features/live-session/annotation'
 
 /**
- * 해석 결과를 실제로 <b>씬에 넣는</b> 경로(ADR-0054, §3-6e).
+ * 해석 결과를 <b>바로</b> 씬에 넣는 경로(ADR-0054, §3-6e).
  *
- * <p>이 경로가 지금까지 통째로 미검증이었다. 배치 계산(`placeAtSelection`)과 링 컴포넌트는 각각
- * 단위 테스트가 있었지만, "고른 것을 지우고 새 요소를 같은 자리에 넣는" 실제 흐름은 아무도 확인하지
- * 않았다. 같은 공백 때문에 정리 진입점이 아예 보이지 않는 버그를 강사가 먼저 발견했다.
+ * <p>처음에는 적용 전에 강사 확인을 받았다. 모델이 낸 `confidence`를 믿을 수 없다는 실측(틀린 한글
+ * 라벨에 1.0)이 근거였다. 그런데 실제로 써 보니 매 정리마다 확인 창이 강의 흐름을 끊었고, 잘못
+ * 나온 것을 <b>되돌리는 비용이 훨씬 쌌다</b> — 강사는 이미 Excalidraw의 되돌리기를 쓰고 있다.
  *
- * <p>여기서 고정하는 것은 셋이다 — <b>원본을 지우는가</b>, <b>새 요소가 원래 자리에 놓이는가</b>,
- * 그리고 <b>확인 전에는 아무것도 바뀌지 않는가</b>.
+ * <p>그래서 확인 절차를 없앴다. 다만 그 결정은 <b>되돌리기가 실제로 된다는 전제</b> 위에 선다.
+ * 프로그램으로 넣은 변경은 기본적으로 되돌리기 스택에 올라가지 않는다.
  */
 
 const updateScene = vi.fn()
@@ -28,17 +28,14 @@ vi.mock('@/features/live-session/excalidrawRuntime', () => ({
       excalidrawProps = props
       const give = props.excalidrawAPI as ((api: unknown) => void) | undefined
       if (give) {
-        give({
-          updateScene,
-          getAppState: () => ({}),
-          getSceneElements: () => sceneElements,
-        })
+        give({ updateScene, getAppState: () => ({}), getSceneElements: () => sceneElements })
       }
       return <div data-testid="excalidraw-editor">{props.children as React.ReactNode}</div>
     },
     exportToCanvas,
     getCommonBounds: vi.fn(() => [0, 0, 100, 100]),
     convertToExcalidrawElements,
+    CaptureUpdateAction: { IMMEDIATELY: 'IMMEDIATELY', NEVER: 'NEVER', EVENTUALLY: 'EVENTUALLY' },
     MainMenu: Object.assign(
       ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
       {
@@ -62,16 +59,11 @@ vi.mock('@/features/live-session/annotationInterpret', async () => ({
 
 const { default: InstructorAnnotationLayer } = await import('@/features/live-session/InstructorAnnotationLayer')
 
-/**
- * 요소를 실제로 쓴 마지막 `updateScene` 호출.
- *
- * <p>`.at(-1)`을 그냥 보면 안 된다 — 리렌더마다 프레임 매핑이 `appState`만 담아 호출하므로 우리가
- * 넣은 요소가 뒤로 밀린다.
- */
-function lastSceneWrite(): readonly unknown[] | null {
+/** 요소를 실제로 쓴 마지막 `updateScene` 호출. 리렌더마다 appState만 담은 호출이 뒤에 붙는다. */
+function lastSceneWrite(): { elements: readonly unknown[]; captureUpdate?: string } | null {
   for (let i = updateScene.mock.calls.length - 1; i >= 0; i -= 1) {
-    const arg = updateScene.mock.calls[i][0] as { elements?: readonly unknown[] }
-    if (arg?.elements) return arg.elements
+    const arg = updateScene.mock.calls[i][0] as { elements?: readonly unknown[]; captureUpdate?: string }
+    if (arg?.elements) return arg as { elements: readonly unknown[]; captureUpdate?: string }
   }
   return null
 }
@@ -88,7 +80,6 @@ describe('해석 결과 적용', () => {
     excalidrawProps = {}
     updateScene.mockClear()
     exportToCanvas.mockResolvedValue({ toDataURL: () => 'data:image/png;base64,AAAA' })
-    // mermaid가 자기 원점 (0,0)-(100,50)에 배치한 결과
     parseMermaidToExcalidraw.mockResolvedValue({ elements: [{ type: 'rectangle' }] })
     convertToExcalidrawElements.mockReturnValue([
       { id: 'm1', type: 'rectangle', version: 1, x: 0, y: 0, width: 100, height: 50 },
@@ -116,49 +107,55 @@ describe('해석 결과 적용', () => {
     return view
   }
 
-  /** 강사가 확인하기 전에는 화면이 바뀌면 안 된다 — 틀린 것으로 바뀌면 수강생은 이미 봤다. */
-  it('확인 전에는 씬을 건드리지 않는다', async () => {
-    const view = await selectAndPick('다이어그램')
-
-    await waitFor(() => { expect(view.getByText('적용')).toBeTruthy() })
-
-    const touched = updateScene.mock.calls.some(([arg]) =>
-      (arg as { elements?: unknown[] }).elements?.some((e) => (e as { id?: string }).id === 'm1'))
-    expect(touched).toBe(false)
-  })
-
-  it('적용하면 고른 것을 지우고 새 요소를 넣는다', async () => {
-    const view = await selectAndPick('다이어그램')
-    await waitFor(() => { expect(view.getByText('적용')).toBeTruthy() })
-
-    view.getByText('적용').closest('button')!.click()
+  it('고르면 확인 없이 바로 넣고, 고른 것은 지운다', async () => {
+    await selectAndPick('다이어그램')
 
     await waitFor(() => {
       expect(lastSceneWrite()).not.toBeNull()
-      expect(lastSceneWrite()!.map((e) => (e as { id: string }).id)).toEqual(['m1'])
+      expect(lastSceneWrite()!.elements.map((e) => (e as { id: string }).id)).toEqual(['m1'])
     })
   })
 
   /**
-   * 모델은 위치를 말한 적이 없고 mermaid는 자기 원점에서 배치했다. 원래 그린 자리에 겹쳐 놓는 일은
-   * 우리가 한다 — 안 그러면 정리한 그림이 화면 구석에 나타난다.
+   * <b>이 테스트가 확인 절차를 없앤 결정을 떠받친다.</b> 프로그램으로 넣은 변경은 기본적으로
+   * 되돌리기 스택에 올라가지 않는다. 이게 빠지면 잘못 나온 정리를 강사가 손으로 지워야 한다.
    */
-  it('새 요소를 원래 그린 자리 가운데로 옮긴다', async () => {
-    const view = await selectAndPick('다이어그램')
-    await waitFor(() => { expect(view.getByText('적용')).toBeTruthy() })
+  it('되돌리기로 취소할 수 있게 넣는다', async () => {
+    await selectAndPick('다이어그램')
 
-    view.getByText('적용').closest('button')!.click()
+    await waitFor(() => { expect(lastSceneWrite()).not.toBeNull() })
+    expect(lastSceneWrite()!.captureUpdate).toBe('IMMEDIATELY')
+  })
+
+  /** 바로 적용되므로 무슨 일이 일어났는지와 되돌리는 방법은 알려 줘야 한다. */
+  it('무엇을 넣었는지와 되돌리는 방법을 알린다', async () => {
+    const view = await selectAndPick('다이어그램')
+
+    await waitFor(() => {
+      const applied = view.container.querySelector('.annotation-interpret-applied')
+      expect(applied?.textContent).toContain('다이어그램으로 정리했습니다')
+      expect(applied?.textContent).toContain('Ctrl')
+    })
+  })
+
+  /**
+   * 모델은 위치도 크기도 말한 적이 없고 mermaid는 자기 기준으로 배치했다. 원래 그린 자리에 그만한
+   * 크기로 얹는 일은 우리가 한다 — 안 그러면 정리한 그림이 엉뚱한 자리에 엉뚱한 크기로 나타난다.
+   */
+  it('새 요소를 원래 그린 자리·크기에 맞춘다', async () => {
+    await selectAndPick('다이어그램')
 
     await waitFor(() => {
       const written = lastSceneWrite()
       expect(written).not.toBeNull()
-      const first = written![0] as { x: number; y: number }
-      // 원본 bbox (500,300)-(800,500) 가운데에 100x50을 놓으면 (600, 375)
-      expect([first.x, first.y]).toEqual([600, 375])
+      const first = written!.elements[0] as { x: number; y: number; width: number }
+      // 원본 (500,300)-(800,500)에 100x50을 맞추면 짧은 쪽(가로) 기준 3배 → 300x150
+      expect(first.width).toBe(300)
+      expect([first.x, first.y]).toEqual([500, 325])
     })
   })
 
-  /** 수식은 mermaid를 거치지 않는다. 잘못 태우면 LaTeX가 다이어그램 파서로 들어가 깨진다. */
+  /** 수식은 mermaid를 거치지 않는다. 잘못 태우면 유니코드 수식이 다이어그램 파서로 들어가 깨진다. */
   it('수식은 mermaid 변환을 거치지 않는다', async () => {
     interpretApi.interpretAnnotation.mockResolvedValue({
       kind: 'math', body: 'y = ax² + bx + c', source: 'y = ax^2 + bx + c',
@@ -168,24 +165,27 @@ describe('해석 결과 적용', () => {
       { id: 't1', type: 'text', version: 1, x: 0, y: 0, width: 200, height: 40 },
     ])
 
-    const view = await selectAndPick('수식')
-    await waitFor(() => { expect(view.getByText('적용')).toBeTruthy() })
-    view.getByText('적용').closest('button')!.click()
+    await selectAndPick('수식')
 
     await waitFor(() => { expect(convertToExcalidrawElements).toHaveBeenCalled() })
     expect(parseMermaidToExcalidraw).not.toHaveBeenCalled()
-    // 글자 크기는 원본 손글씨 높이(200)에서 온다.
-    const created = convertToExcalidrawElements.mock.calls.at(-1)![0] as { fontSize: number }[]
-    expect(created[0].fontSize).toBe(72)
+    // 판서에 들어가는 것은 유니코드다 — Excalidraw에 수식 렌더러가 없다.
+    const created = convertToExcalidrawElements.mock.calls.at(-1)![0] as { text: string }[]
+    expect(created[0].text).toBe('y = ax² + bx + c')
   })
 
-  it('취소하면 아무것도 바뀌지 않는다', async () => {
+  /** 읽지 못한 것을 넣지 않는다. 지어낸 것을 판서에 올리는 것보다 못 읽었다고 말하는 편이 낫다. */
+  it('읽지 못했으면 아무것도 넣지 않고 알린다', async () => {
+    interpretApi.interpretAnnotation.mockResolvedValue({
+      kind: 'mermaid', body: '', source: '', replace: [], confidence: 0.1, unreadable: true,
+    })
+
     const view = await selectAndPick('다이어그램')
-    await waitFor(() => { expect(view.getByText('취소')).toBeTruthy() })
 
-    view.getByText('취소').closest('button')!.click()
-
-    await waitFor(() => { expect(view.queryByText('적용')).toBeNull() })
+    await waitFor(() => {
+      expect(view.container.querySelector('.annotation-interpret-failure')?.textContent)
+        .toContain('알아보지 못했습니다')
+    })
     expect(convertToExcalidrawElements).not.toHaveBeenCalled()
   })
 })

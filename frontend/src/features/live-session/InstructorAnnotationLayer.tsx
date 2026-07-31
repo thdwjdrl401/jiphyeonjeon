@@ -11,7 +11,6 @@ import {
   type LaserStroke,
 } from './annotation'
 import AnnotationActionRing, { type AnnotationAction } from './AnnotationActionRing'
-import AnnotationInterpretPreview from './AnnotationInterpretPreview'
 import {
   interpretAnnotation,
   latexFontSize,
@@ -33,7 +32,12 @@ const DEFAULT_STROKE_COLOR = '#e03131'
  * 여기서 그 경로에 의존하면 업그레이드가 이 파일의 컴파일을 깨뜨린다.
  */
 interface ExcalidrawApi {
-  updateScene: (scene: { elements?: readonly AnnotationElement[]; appState?: Record<string, unknown> }) => void
+  updateScene: (scene: {
+    elements?: readonly AnnotationElement[]
+    appState?: Record<string, unknown>
+    /** 이 변경을 되돌리기 스택에 올릴지. 확인 절차를 없앤 대신 Ctrl+Z가 유일한 되돌림이다. */
+    captureUpdate?: string
+  }) => void
   getAppState: () => {
     zoom?: { value: number }
     scrollX?: number
@@ -253,9 +257,15 @@ export default function InstructorAnnotationLayer({
   /* ── 판서 해석(ADR-0054, §3-6e) ────────────────────────────────────────────── */
 
   const [busyAction, setBusyAction] = useState<string | null>(null)
-  const [pending, setPending] = useState<{ result: AnnotationInterpretation; bounds: ReturnType<typeof selectionBounds> } | null>(null)
-  const [applying, setApplying] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
+  /** 방금 무엇을 넣었는지. 되돌리는 방법과 함께 잠깐 보여 준다. */
+  const [applied, setApplied] = useState<string | null>(null)
+  useEffect(() => {
+    if (!applied) return undefined
+    // 확인 절차를 없앤 만큼 무슨 일이 일어났는지는 알려야 한다. 다만 계속 떠 있으면 판서를 가린다.
+    const timer = setTimeout(() => setApplied(null), 4000)
+    return () => { clearTimeout(timer) }
+  }, [applied])
 
   const selectedElements = useCallback(
     () => elementsRef.current.filter((element) => selectedIds.includes(element.id)),
@@ -281,42 +291,26 @@ export default function InstructorAnnotationLayer({
     return canvas.toDataURL('image/png')
   }, [])
 
-  const runInterpret = useCallback(async (mode: InterpretMode) => {
-    const elements = selectedElements()
-    const bounds = selectionBounds(elements)
-    if (elements.length === 0 || !bounds) return
-
-    setFailure(null)
-    setBusyAction(mode)
-    try {
-      const image = await exportSelectionPng(elements)
-      const result = await interpretAnnotation(sessionId, mode, image, elements.map((e) => e.id))
-      // 결과를 바로 넣지 않는다. 모델이 낸 confidence는 근거가 못 된다 — 실측에서 틀린 한글
-      // 라벨에 1.0이 붙었다(ADR-0054 결정 6).
-      setPending({ result, bounds })
-    } catch (error) {
-      console.warn('판서 해석 실패', error)
-      setFailure('판서를 정리하지 못했습니다. 잠시 후 다시 시도해 주세요.')
-    } finally {
-      setBusyAction(null)
-    }
-  }, [exportSelectionPng, selectedElements, sessionId])
-
   /**
-   * 확인한 결과를 씬에 넣는다.
+   * 해석 결과를 씬에 넣는다.
    *
    * <p><b>여기가 유일한 주입 지점이다.</b> 서버는 판서를 발행하지 않는다 — 그러면 revision 채번의
    * 단일 writer 전제가 깨지고, 그 어긋남은 강사 화면에 드러나지 않는다(§3-6b). 씬을 고치면 그 뒤는
    * 기존 경로가 알아서 간다: `onChange` → diff → 데이터 채널 → 영속화.
+   *
+   * <p><b>확인을 받지 않는다.</b> 매 정리마다 확인 창을 띄우면 강의 흐름이 끊기고, 잘못 나온 것을
+   * 되돌리는 비용은 그보다 훨씬 싸다 — 강사는 이미 되돌리기를 쓰고 있다. 대신 이 변경이 되돌리기
+   * 스택에 반드시 올라가야 한다(`captureUpdate`).
    */
-  const applyPending = useCallback(async () => {
+  const applyResult = useCallback(async (
+    result: AnnotationInterpretation,
+    bounds: NonNullable<ReturnType<typeof selectionBounds>>,
+  ) => {
     const api = apiRef.current
-    if (!api || !pending || !pending.bounds) return
-    const { result, bounds } = pending
+    if (!api) return
 
-    setApplying(true)
     try {
-      const { convertToExcalidrawElements } = await loadExcalidraw()
+      const { convertToExcalidrawElements, CaptureUpdateAction } = await loadExcalidraw()
       let created: AnnotationElement[]
 
       if (result.kind === 'mermaid') {
@@ -340,16 +334,44 @@ export default function InstructorAnnotationLayer({
       const removed = new Set(result.replace)
       api.updateScene({
         elements: [...api.getSceneElements().filter((element) => !removed.has(element.id)), ...placed],
+        // 되돌리기 스택에 올린다. 확인 절차를 없앤 대신 Ctrl+Z가 유일한 되돌림이라, 이게 빠지면
+        // 잘못 나온 정리를 강사가 손으로 지워야 한다.
+        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
       })
-      setPending(null)
       setSelectedIds([])
+      setRingExpanded(false)
+      setApplied(result.kind === 'mermaid' ? '다이어그램으로 정리했습니다' : '수식으로 정리했습니다')
     } catch (error) {
       console.warn('판서 정리 적용 실패', error)
       setFailure('정리한 결과를 넣지 못했습니다.')
-    } finally {
-      setApplying(false)
     }
-  }, [pending])
+  }, [])
+
+  const runInterpret = useCallback(async (mode: InterpretMode) => {
+    const elements = selectedElements()
+    const bounds = selectionBounds(elements)
+    if (elements.length === 0 || !bounds) return
+
+    setFailure(null)
+    setBusyAction(mode)
+    try {
+      const image = await exportSelectionPng(elements)
+      const result = await interpretAnnotation(sessionId, mode, image, elements.map((e) => e.id))
+      if (result.unreadable || !result.body) {
+        setFailure('판서를 알아보지 못했습니다. 더 또렷하게 그린 뒤 다시 시도해 주세요.')
+        return
+      }
+      // 확인을 거치지 않고 바로 넣는다. 되돌림은 Ctrl+Z가 맡는다 — 매번 확인 창을 띄우면
+      // 강의 흐름이 끊기고, 잘못 나온 것을 되돌리는 비용은 그보다 훨씬 싸다.
+      await applyResult(result, bounds)
+    } catch (error) {
+      console.warn('판서 해석 실패', error)
+      setFailure('판서를 정리하지 못했습니다. 잠시 후 다시 시도해 주세요.')
+    } finally {
+      setBusyAction(null)
+    }
+  }, [applyResult, exportSelectionPng, selectedElements, sessionId])
+
 
   /**
    * "정리" 진입점을 눌렀는지. 눌렀으면 선택 도구로 바꾸고 무엇을 해야 하는지 알려 준다.
@@ -578,7 +600,7 @@ export default function InstructorAnnotationLayer({
    * 링을 여는 두 경로. 획을 고르면(클릭이든 드래그든) 바로 뜨고, 아무것도 안 골랐어도 칩을 누르면
    * 펼쳐진다 — 후자는 "무엇을 골라야 하는지"부터 알려 주는 자리다.
    */
-  const ringOpen = !pending && (selectedIds.length > 0 || ringExpanded)
+  const ringOpen = selectedIds.length > 0 || ringExpanded
   const center = ringOpen ? ringCenter() : null
 
   return (
@@ -661,7 +683,7 @@ export default function InstructorAnnotationLayer({
         정리 기능의 진입점. 링은 선택이 있어야 뜨는데, 판서를 켜면 펜이 잠긴 채 시작해서 강사가
         선택하는 방법을 모른 채 기능을 찾게 된다 — 그래서 눈에 보이는 자리에 하나 둔다.
       */}
-      {!ringOpen && !pending && hasElements && (
+      {!ringOpen && hasElements && (
         <button type="button" className="annotation-interpret-entry" onClick={startPicking}>
           <span aria-hidden="true">✨</span> AI로 정리
         </button>
@@ -678,13 +700,10 @@ export default function InstructorAnnotationLayer({
         />
       )}
 
-      {pending && (
-        <AnnotationInterpretPreview
-          result={pending.result}
-          applying={applying}
-          onApply={() => { void applyPending() }}
-          onCancel={() => setPending(null)}
-        />
+      {applied && (
+        <p className="annotation-interpret-applied" role="status">
+          {applied} · 되돌리려면 <kbd>Ctrl</kbd>+<kbd>Z</kbd>
+        </p>
       )}
 
       {failure && (

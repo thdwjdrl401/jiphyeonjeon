@@ -1,8 +1,6 @@
 import { render } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import AnnotationActionRing, { type AnnotationAction } from '@/features/live-session/AnnotationActionRing'
-import AnnotationInterpretPreview from '@/features/live-session/AnnotationInterpretPreview'
-import type { AnnotationInterpretation } from '@/features/live-session/annotationInterpret'
 
 const ACTIONS: AnnotationAction[] = [
   { id: 'diagram', label: '다이어그램', hint: '다이어그램으로', icon: null },
@@ -67,57 +65,5 @@ describe('판서 액션 링', () => {
     const { container } = ring({ actions: [] })
 
     expect(container.querySelector('.annotation-action-ring')).toBeNull()
-  })
-})
-
-function preview(result: Partial<AnnotationInterpretation>, overrides: Record<string, unknown> = {}) {
-  return render(
-    <AnnotationInterpretPreview
-      result={{
-        kind: 'mermaid', body: 'flowchart LR\n  A[요청] --> B[인증]', source: '',
-        replace: ['e1', 'e2'], confidence: 1, unreadable: false, ...result,
-      }}
-      applying={false}
-      onApply={vi.fn()}
-      onCancel={vi.fn()}
-      {...overrides}
-    />,
-  )
-}
-
-/**
- * 모델이 낸 `confidence`를 자동 적용의 근거로 쓸 수 없다 — 실측에서 한글 라벨을 `요청` → `유정`으로
- * 잘못 읽고도 <b>1.0</b>을 줬다. 그래서 확신도와 무관하게 항상 확인을 거친다.
- */
-describe('해석 결과 확인', () => {
-  it('확신도가 1.0이어도 원문을 보여 주고 확인을 받는다', () => {
-    const { getByText, container } = preview({ confidence: 1 })
-
-    expect(container.querySelector('.annotation-interpret-preview__body')!.textContent)
-      .toContain('A[요청] --> B[인증]')
-    expect(getByText('적용')).toBeTruthy()
-    expect(getByText('취소')).toBeTruthy()
-  })
-
-  it('무엇이 지워지는지 개수로 알린다', () => {
-    const { container } = preview({ replace: ['a', 'b', 'c'] })
-
-    expect(container.querySelector('.annotation-interpret-preview__note')!.textContent)
-      .toContain('3개')
-  })
-
-  /** 읽지 못한 것을 "적용"할 수는 없다. 지어낸 것을 넣는 것보다 못 읽었다고 말하는 편이 낫다. */
-  it('읽지 못했으면 적용 버튼을 두지 않는다', () => {
-    const { queryByText, getByText } = preview({ unreadable: true, body: '' })
-
-    expect(queryByText('적용')).toBeNull()
-    expect(getByText('닫기')).toBeTruthy()
-  })
-
-  it('적용하는 동안 두 버튼을 모두 잠근다', () => {
-    const { getByText } = preview({}, { applying: true })
-
-    expect(getByText('취소').closest('button')!.disabled).toBe(true)
-    expect(getByText('적용하는 중…').closest('button')!.disabled).toBe(true)
   })
 })
