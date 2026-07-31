@@ -15,6 +15,8 @@
 .media-page--live { display: flex; height: calc(100vh - 58px); height: calc(100dvh - 58px); min-height: 0; overflow: hidden; flex-direction: column; padding-top: 12px; }
 .media-page--instructor { background: radial-gradient(circle at 86% 0,rgba(201,134,26,.07),transparent 26%); }
 .media-page--live .instructor-end-confirm { flex: 0 0 auto; }
+.live-session-state-banner { flex: 0 0 auto; margin-bottom: 13px; padding: 11px 14px; border: 1px solid var(--ink-100); border-radius: 12px; background: var(--blue-50); color: var(--blue-700); font-size: .68rem; }
+.live-session-state-banner.is-ended { border-color: rgba(168,58,36,.24); background: var(--red-50); color: var(--red-700); }
 .instructor-end-confirm { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 13px; padding: 12px 14px; border: 1px solid rgba(168,58,36,.24); border-radius: 12px; background: var(--red-50); }
 .instructor-end-confirm strong { color: var(--ink-950); font-size: .74rem; }
 .instructor-end-confirm p { margin: 3px 0 0; color: var(--ink-700); font-size: .62rem; }
@@ -192,7 +194,8 @@
 .caption-dock__sentences { max-height: 152px; overflow-y: auto; padding: 5px 9px 8px; }
 .caption-dock__sentences article { display: grid; grid-template-columns: 52px minmax(0,1fr); align-items: start; gap: 8px; border-radius: 8px; padding: 7px; transition: background .15s ease; }
 .caption-dock__sentences article.is-current { background: var(--blue-50); }
-.caption-dock__sentences article > button { border: 0; padding: 2px 0; background: transparent; color: var(--blue-600); font-size: .6rem; text-align: left; }
+.caption-dock__sentences article > :is(button,time) { border: 0; padding: 2px 0; background: transparent; color: var(--blue-600); font-size: .6rem; text-align: left; }
+.caption-dock__sentences article > time { color: var(--ink-500); }
 .caption-dock__sentences article > button:hover { color: var(--blue-700); text-decoration: underline; }
 .caption-dock__sentences p { margin: 0; color: var(--ink-700); font-size: .68rem; line-height: 1.65; }
 .caption-term { display: inline; margin: 0 1px; border: 0; border-radius: 4px; padding: 1px 3px; background: #f3ddab; color: #7a4e0f; font: inherit; font-weight: 700; cursor: pointer; }

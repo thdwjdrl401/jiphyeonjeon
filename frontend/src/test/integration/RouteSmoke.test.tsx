@@ -323,6 +323,24 @@ describe('전체 페이지 라우트', () => {
     // 테스트음(약 5초)을 실제로 기다리는 흐름이라 기본 제한(5초)으로는 끝낼 수 없다.
   }, 20_000)
 
+  it('ENDED 학생 화면은 종료 문구를 표시하고 채팅·AI 입력을 잠근다', async () => {
+    const user = userEvent.setup()
+    await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
+    await mockLiveSessionService.endLiveSession('ses-security-live')
+
+    renderAt('/student/live-sessions/ses-security-live/classroom')
+
+    expect(await screen.findByText('라이브가 종료된 강의입니다.')).toBeInTheDocument()
+    expect(screen.queryByLabelText('채팅 메시지')).not.toBeInTheDocument()
+    expect(screen.getByText('라이브가 종료되어 새 채팅을 보낼 수 없습니다.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: 'AI 질문' }))
+    expect(screen.getByRole('textbox', { name: 'AI에게 할 질문' })).toBeDisabled()
+    expect(screen.getAllByText('라이브가 종료되어 새 AI 질문을 보낼 수 없습니다.').length)
+      .toBeGreaterThan(0)
+    expect(await screen.findByText('Mock HLS 재생 준비 · ses-security-live')).toBeInTheDocument()
+  })
+
   it('강사에게 다시보기 검수 화면을 제공한다', async () => {
     await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
     renderAt('/instructor/lessons/les-security/replay')

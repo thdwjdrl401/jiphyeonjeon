@@ -25,9 +25,11 @@ import {
   sendChatMessage,
   subscribeCaptions,
   subscribeChatMessages,
+  subscribeSessionState,
   type CaptionView,
   type ChatConnectionState,
   type ChatMessageView,
+  type LiveSessionView,
   type SendChatMessageInput,
 } from '@/features/live-session/liveSessionService'
 import type { PlaybackSeekRequest } from '@/features/live-session/PlaybackPlayer'
@@ -83,6 +85,8 @@ export default function LiveClassroomPage() {
   const captionReloadQuery = useQuery({ queryKey: ['live-captions', sessionId], queryFn: () => getCaptions(sessionId), enabled: Boolean(sessionId) && !isInstructor })
   const session = sessionQuery.data
   const lesson = lessonQuery.data
+  const canInteract = session?.status === 'LIVE' || session?.status === 'ENDING'
+  const hasEnded = session?.status === 'ENDED'
   const messages = chatQuery.data ?? []
   // 라이브 자막은 REST 스냅샷이 아니라 WS 델타 스트림으로 구동한다(§3-4 / ADR-0043).
   // 누적기는 ref에 두고, 파생 CaptionView[]만 state로 올려 CaptionDock에 넘긴다.
@@ -105,7 +109,10 @@ export default function LiveClassroomPage() {
   // 상시 배너 대신 진입 모달로 알려 시야를 가리지 않게 한다.
   const [recordingNoticeAck, setRecordingNoticeAck] = useState(false)
   // 강사는 LiveKit로 직접 송출하므로 재생 경로를 타지 않는다. 학생도 녹화 안내를 확인한 뒤에 붙는다.
-  const playback = usePlayback(sessionQuery.data?.lessonId, !isInstructor && recordingNoticeAck)
+  const playback = usePlayback(
+    sessionQuery.data?.lessonId,
+    !isInstructor && (recordingNoticeAck || hasEnded),
+  )
   const sendMutation = useMutation({
     mutationFn: (input: SendChatMessageInput) => sendChatMessage(sessionId, input),
     // 낙관적 항목을 먼저 올린다 — 내 말풍선이 전송 즉시 우측에 보여야 한다. clientMessageId가
@@ -137,6 +144,30 @@ export default function LiveClassroomPage() {
   )
   const bookmarkMutation = useMutation({ mutationFn: () => saveBookmark(lesson!.lessonId, positionMs), onSuccess: () => setBookmarked(true) })
   const endMutation = useMutation({ mutationFn: () => endLiveSession(sessionId), onSuccess: () => navigate(instructorPaths.processing(sessionId)) })
+  useEffect(() => {
+    if (!sessionId) return undefined
+    return subscribeSessionState(
+      sessionId,
+      (event) => {
+        const current = queryClient.getQueryData<LiveSessionView>(['live-session', sessionId])
+        queryClient.setQueryData<LiveSessionView>(
+          ['live-session', sessionId],
+          (cached) => cached
+            ? { ...cached, status: event.payload.liveSessionStatus }
+            : cached,
+        )
+        if (!current) {
+          void queryClient.invalidateQueries({ queryKey: ['live-session', sessionId] })
+        }
+      },
+      (state) => {
+        // 최초 연결·재연결 모두 REST 정본을 다시 읽어 이벤트 유실을 보완한다.
+        if (state === 'connected') {
+          void queryClient.invalidateQueries({ queryKey: ['live-session', sessionId] })
+        }
+      },
+    )
+  }, [queryClient, sessionId])
   useEffect(() => {
     if (!sessionId) return undefined
     return subscribeChatMessages(
@@ -173,11 +204,14 @@ export default function LiveClassroomPage() {
     }
     setCaptions(selectCaptionViews(captionAccumulator.current))
   }, [captionReloadQuery.data])
+  useEffect(() => {
+    if (hasEnded) setStudentSeekRequest(null)
+  }, [hasEnded])
   usePageTitle(`LIVE · ${lesson?.title ?? ''}`)
 
   const sendMessage = (event: FormEvent) => {
     event.preventDefault()
-    if (!message.trim()) return
+    if (!canInteract || !message.trim()) return
     sendMutation.mutate({
       clientMessageId: createClientMessageId(),
       text: message.trim(),
@@ -234,7 +268,7 @@ export default function LiveClassroomPage() {
   // 앞선 자막은 누적기(버퍼)에 두었다가 위치가 닿으면 드러낸다(ADR-0045).
   const visibleCaptions = selectVisibleCaptions(captions, { isInstructor, positionMs })
 
-  const discussionComposer = (
+  const discussionComposer = canInteract ? (
     <form className="chat-composer" onSubmit={sendMessage}>
       <textarea
         aria-label="채팅 메시지"
@@ -256,11 +290,12 @@ export default function LiveClassroomPage() {
         <button className="button button--primary button--small" type="submit">전송</button>
       </div>
     </form>
-  )
+  ) : undefined
 
   const aiContent = (
     <PersonalAiQuestionPanel
-      ask={askAi}
+      ask={canInteract ? askAi : undefined}
+      unavailableNotice={hasEnded ? '라이브가 종료되어 새 AI 질문을 보낼 수 없습니다.' : undefined}
       placeholder="예: SecurityContext와 세션은 어떻게 다른가요? (Enter 전송 · Shift+Enter 줄바꿈)"
       emptyDescription="강의 자료와 지금까지의 발화를 근거로 답변합니다."
     />
@@ -268,25 +303,29 @@ export default function LiveClassroomPage() {
 
   // 자막이 이미 흐르면(누적 라인 존재) 연결 문구로 시야를 어지럽히지 않는다.
   // 아직 한 줄도 없을 때만 연결 상태를 안내한다.
-  const captionNote = captions.length > 0 || captionConnectionState === 'connected'
-    ? undefined
-    : captionConnectionState === 'connecting'
-      ? '실시간 자막을 연결하고 있습니다.'
-      : captionConnectionState === 'reconnecting'
-        ? '실시간 자막 연결이 끊겨 다시 연결하고 있습니다.'
-        : captionConnectionState === 'error'
-          ? '실시간 자막 연결에 문제가 생겼습니다. 자동 재연결을 시도합니다.'
-          : '실시간 자막 연결이 종료되었습니다.'
+  const captionNote = hasEnded
+    ? '라이브가 종료되어 자막 시간 이동을 사용할 수 없습니다.'
+    : captions.length > 0 || captionConnectionState === 'connected'
+      ? undefined
+      : captionConnectionState === 'connecting'
+        ? '실시간 자막을 연결하고 있습니다.'
+        : captionConnectionState === 'reconnecting'
+          ? '실시간 자막 연결이 끊겨 다시 연결하고 있습니다.'
+          : captionConnectionState === 'error'
+            ? '실시간 자막 연결에 문제가 생겼습니다. 자동 재연결을 시도합니다.'
+            : '실시간 자막 연결이 종료되었습니다.'
 
-  const chatConnectionNotice = chatConnectionState === 'connected'
-    ? undefined
-    : chatConnectionState === 'connecting'
-      ? '실시간 채팅을 연결하고 있습니다.'
-      : chatConnectionState === 'reconnecting'
-        ? '실시간 채팅 연결이 끊겨 다시 연결하고 있습니다.'
-        : chatConnectionState === 'error'
-          ? '실시간 채팅 연결에 문제가 생겼습니다. 자동 재연결을 시도합니다.'
-          : '실시간 채팅 연결이 종료되었습니다.'
+  const chatConnectionNotice = hasEnded
+    ? '라이브가 종료되어 새 채팅을 보낼 수 없습니다.'
+    : chatConnectionState === 'connected'
+      ? undefined
+      : chatConnectionState === 'connecting'
+        ? '실시간 채팅을 연결하고 있습니다.'
+        : chatConnectionState === 'reconnecting'
+          ? '실시간 채팅 연결이 끊겨 다시 연결하고 있습니다.'
+          : chatConnectionState === 'error'
+            ? '실시간 채팅 연결에 문제가 생겼습니다. 자동 재연결을 시도합니다.'
+            : '실시간 채팅 연결이 종료되었습니다.'
 
   const sidebar = (
     <LearningSidebar
@@ -327,7 +366,7 @@ export default function LiveClassroomPage() {
 
   return (
     <div className={`media-page media-page--live${isInstructor ? ' media-page--instructor' : ''}`}>
-      {!recordingNoticeAck && (
+      {!recordingNoticeAck && !hasEnded && (
         <div className="recording-consent-overlay" role="dialog" aria-modal="true" aria-labelledby="recording-consent-title">
           <div className="recording-consent-modal">
             <span className="recording-consent-modal__badge"><i aria-hidden="true" /> 녹화 안내</span>
@@ -335,6 +374,18 @@ export default function LiveClassroomPage() {
             <p>AI 기능 제공을 위해 채팅과 자막이 함께 처리됩니다. 참여하면 안내를 확인한 것으로 간주됩니다.</p>
             <button className="button button--primary button--full" type="button" onClick={() => setRecordingNoticeAck(true)}>확인하고 참여하기</button>
           </div>
+        </div>
+      )}
+
+      {!isInstructor && session.status === 'ENDING' && (
+        <div className="live-session-state-banner" role="status">
+          강사가 수업을 종료하고 있습니다. 남은 영상을 재생 중입니다.
+        </div>
+      )}
+
+      {!isInstructor && hasEnded && (
+        <div className="live-session-state-banner is-ended" role="status">
+          라이브가 종료된 강의입니다.
         </div>
       )}
 
@@ -381,7 +432,15 @@ export default function LiveClassroomPage() {
             차지하는 높이만큼 송출 미리보기가 눌려 실제로 나가는 프레임을 작게 보게 된다.
           */}
           {!isInstructor && (
-            <CaptionDock captions={visibleCaptions} currentSessionMs={positionMs} label="실시간 자막" note={captionNote} onSeek={seekSession} onSelectTerm={openGlossaryTerm} />
+            <CaptionDock
+              captions={visibleCaptions}
+              currentSessionMs={positionMs}
+              label="실시간 자막"
+              note={captionNote}
+              onSeek={seekSession}
+              onSelectTerm={openGlossaryTerm}
+              canSeek={!hasEnded}
+            />
           )}
         </section>
 

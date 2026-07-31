@@ -5,7 +5,7 @@ import type { AiConversationTurn } from './aiConversation'
 interface AiChatTurnProps {
   turn: AiConversationTurn
   /** 실패한 턴을 같은 질문으로 다시 보낸다. */
-  onRetry: (turnId: string) => void
+  onRetry?: (turnId: string) => void
 }
 
 /**
@@ -42,7 +42,7 @@ function AiChatTurn({ turn, onRetry }: AiChatTurnProps) {
           </p>
         )}
         <AiEvidenceList sources={turn.sources} />
-        {isError && turn.retryable && (
+        {isError && turn.retryable && onRetry && (
           <div className="ai-answer__actions">
             <button className="button button--soft button--small" type="button" onClick={() => onRetry(turn.id)}>
               다시 시도

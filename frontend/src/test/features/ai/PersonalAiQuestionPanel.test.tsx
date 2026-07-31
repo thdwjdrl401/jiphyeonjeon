@@ -316,6 +316,24 @@ describe('개인 AI 질문 패널 — 대화형 UX', () => {
     expect(harness.calls[0].options.signal?.aborted).toBe(true)
   })
 
+  it('ENDED 전환으로 ask가 사라지면 진행 중 요청을 끊고 기존 대화는 유지한다', async () => {
+    const user = userEvent.setup()
+    const harness = controllableAsk()
+    const { rerender } = render(<PersonalAiQuestionPanel ask={harness.ask} />)
+    await askQuestion(user, '종료 직전 질문')
+    harness.emit({ type: 'answer.delta', payload: { requestId: 'r1', text: '받은 답변 조각' } })
+
+    rerender(
+      <PersonalAiQuestionPanel unavailableNotice="라이브가 종료되어 새 AI 질문을 보낼 수 없습니다." />,
+    )
+
+    await waitFor(() => expect(harness.calls[0].options.signal?.aborted).toBe(true))
+    expect(composer()).toBeDisabled()
+    expect(screen.getByText('종료 직전 질문')).toBeInTheDocument()
+    expect(screen.getByText('받은 답변 조각')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '다시 시도' })).not.toBeInTheDocument()
+  })
+
   it('ask가 없으면 미지원 안내를 띄우고 입력을 잠근다', () => {
     renderPanel({ unavailableNotice: '다시보기 AI 질문은 아직 지원하지 않습니다.' })
 
