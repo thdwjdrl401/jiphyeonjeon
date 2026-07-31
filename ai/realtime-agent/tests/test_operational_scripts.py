@@ -521,9 +521,7 @@ exit 0
     config_dir.mkdir()
     common = """STT_HEALTH_HOST=127.0.0.1
 """
-    (config_dir / "realtime-agent-common.env").write_text(
-        common, encoding="utf-8"
-    )
+    (config_dir / "realtime-agent-common.env").write_text(common, encoding="utf-8")
     prod_provider = """STT_ENGINE_PROVIDER=nemotron
 CUDA_VISIBLE_DEVICES=0
 ASR_MODEL_ID=/tmp/nemotron
