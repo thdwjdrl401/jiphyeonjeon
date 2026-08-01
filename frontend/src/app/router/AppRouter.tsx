@@ -9,6 +9,7 @@ import CurriculumDetailPage from '@/pages/CurriculumDetailPage'
 import CurriculumFormPage from '@/pages/CurriculumFormPage'
 import CurriculumListPage from '@/pages/CurriculumListPage'
 import CurriculumManagePage from '@/pages/CurriculumManagePage'
+import EgressAdminPage from '@/pages/EgressAdminPage'
 import EgressStagePage from '@/pages/EgressStagePage'
 import ForbiddenPage from '@/pages/ForbiddenPage'
 import InstructorPreflightPage from '@/pages/InstructorPreflightPage'
@@ -80,6 +81,8 @@ export default function AppRouter() {
             <Route path="curriculums/:curriculumId/sections/:sectionId/lessons/:lessonId" element={<LessonDetailPage />} />
             <Route path="curriculums/:curriculumId/sections/:sectionId/lessons/:lessonId/edit" element={<LessonFormPage />} />
             <Route path="live-sessions/:sessionId/processing" element={<LiveSessionProcessingPage />} />
+            {/* Egress 운영 콘솔(유령 Egress 정지). FE 라우트는 여기 두되 실제 인가는 백엔드 ROLE_ADMIN — 관리자 아니면 API가 403. */}
+            <Route path="egress" element={<EgressAdminPage />} />
           </Route>
           <Route path="live-sessions/:sessionId" element={<InstructorLiveMediaProvider />}>
             <Route index element={<Navigate to="preflight" replace />} />
