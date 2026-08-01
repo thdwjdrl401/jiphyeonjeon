@@ -376,18 +376,23 @@ export default function InstructorAnnotationLayer({
     if (seededRef.current) return
     if (!restoredElements || restoredElements.length === 0) return
     /*
-     * <b>건너뛸 때는 이유를 남긴다.</b> 이 자리는 조용히 지나가면 증상이 "강사 화면에서만 판서가
+     * <b>건너뛸 때는 이유를 남긴다.</b> 이 자리가 조용히 지나가면 증상이 "강사 화면에서만 판서가
      * 사라진다"로 나타나고, 서버·전송·복원이 전부 정상이라 밖에서는 어디서 막혔는지 알 수 없다.
      * 실제로 그 상태로 한참을 헤맸다.
+     *
+     * <p><b>다만 수준을 구분한다.</b> 아래 둘은 <b>정상 경로</b>다 — 에디터가 지연 청크라 늦게
+     * 오는 것도, 강사가 복원보다 먼저 그리는 것도 이상한 일이 아니다. 그것을 `warn`으로 찍으면
+     * 콘솔에 노란 경고와 스택 트레이스가 남아 <b>고장처럼 보인다</b>. 실제로 "이 로그는 왜 뜨냐"는
+     * 질문을 받았다. 진짜 이상은 아래 `updateScene`이 먹히지 않았을 때뿐이고, 그것만 `warn`이다.
      */
     if (!api) {
-      console.warn('판서 복원 대기 — 에디터 API가 아직 없다')
+      console.debug('판서 복원 대기 — 편집기 청크를 불러오는 중이다. 도착하면 넣는다.')
       return
     }
     if (elementsRef.current.length > 0) {
-      console.warn(
-        `판서 복원 건너뜀 — 이미 씬에 요소가 있다(${elementsRef.current.length}개). `
-        + '강사가 복원보다 먼저 그렸다면 정상이다.')
+      console.debug(
+        `판서 복원 생략 — 강사가 복원보다 먼저 그렸다(씬에 ${elementsRef.current.length}개). `
+        + '방금 그린 획을 복원본으로 덮지 않는다.')
       return
     }
     seededRef.current = true
@@ -423,6 +428,7 @@ export default function InstructorAnnotationLayer({
       if (!current) return
       const inScene = current.getSceneElements()
       if (inScene.length > 0) return
+      // 여기는 진짜 이상이다 — `updateScene`이 무시됐다는 뜻이라 경고로 남긴다.
       console.warn('판서 복원이 씬에 반영되지 않았다 — 다시 넣는다')
       current.updateScene({ elements: orderedForScene(restoredElements) })
     }, 0)
