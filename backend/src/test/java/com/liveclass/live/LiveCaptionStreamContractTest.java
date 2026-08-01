@@ -4,10 +4,13 @@ import com.liveclass.live.config.CaptionStreamProperties;
 import com.liveclass.live.domain.LiveCaption;
 import com.liveclass.live.repository.LiveCaptionRepository;
 import com.liveclass.live.service.CaptionEvent;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.jdbc.core.JdbcTemplate;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -53,7 +56,28 @@ class LiveCaptionStreamContractTest {
     @Autowired
     private CaptionStreamProperties properties;
 
+    @Autowired
+    private JdbcTemplate jdbc;
+
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
+
+    /**
+     * fixture 세션의 잔여 행을 <b>앞뒤로</b> 지운다.
+     *
+     * <p>이 클래스는 실제 소비자가 커밋해야 검증이 되므로 {@code @Transactional} 롤백을 쓸 수 없다.
+     * 그런데 정리도 없고 fixture의 {@code eventId}·{@code sessionId}가 고정이라, DB가 재사용되면
+     * (Testcontainers reuse를 켜거나 로컬 Postgres를 물리면) <b>이전 실행이 남긴 행</b> 때문에
+     * {@code await(existsByEventId(...))}가 즉시 참이 된다 — 소비자가 한 번도 안 돌아도 초록이다.
+     * 빨간 실패보다 나쁘다: 회귀가 조용히 안 잡힌다.
+     *
+     * <p>그래서 <b>앞에서</b> 지워 이 실행이 스스로 만든 행만 보게 하고(가짜 통과 차단),
+     * <b>뒤에서</b> 지워 다른 테스트의 절대 카운트 단언을 오염시키지 않는다.
+     */
+    @BeforeEach
+    @AfterEach
+    void clearFixtureRows() {
+        jdbc.update("DELETE FROM core.live_caption WHERE session_id = ?", FIXTURE_SESSION_ID);
+    }
 
     @Test
     void fixtures_are_consumed_persisted_and_acked_with_idempotency_and_poison_discard() throws Exception {
