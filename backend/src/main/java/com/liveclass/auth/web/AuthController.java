@@ -1,6 +1,7 @@
 package com.liveclass.auth.web;
 
 import com.liveclass.auth.domain.AppUser;
+import com.liveclass.auth.service.AdminAccounts;
 import com.liveclass.auth.service.AuthService;
 import com.liveclass.auth.web.dto.AuthUserResponse;
 import com.liveclass.auth.web.dto.CsrfResponse;
@@ -18,6 +19,7 @@ import jakarta.validation.constraints.NotBlank;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -36,6 +38,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -49,12 +52,14 @@ import java.util.UUID;
 public class AuthController {
 
     private final AuthService authService;
+    private final AdminAccounts adminAccounts;
     private final SecurityContextRepository securityContextRepository = new HttpSessionSecurityContextRepository();
     private final SecurityContextHolderStrategy securityContextHolderStrategy = SecurityContextHolder.getContextHolderStrategy();
     private final SessionAuthenticationStrategy sessionAuthenticationStrategy = new ChangeSessionIdAuthenticationStrategy();
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, AdminAccounts adminAccounts) {
         this.authService = authService;
+        this.adminAccounts = adminAccounts;
     }
 
     @Operation(summary = "CSRF 토큰 발급",
@@ -127,10 +132,17 @@ public class AuthController {
      * 프로필이 바뀌었을 때 세션이 낡은 값을 들고 있게 되므로 조회 시점에 DB에서 읽는다.
      */
     private void establishSession(AppUser user, HttpServletRequest request, HttpServletResponse response) {
+        // 기본 권한은 계정 역할(ROLE_STUDENT/INSTRUCTOR). 관리자 allowlist에 든 이메일이면 ROLE_ADMIN을
+        // 덧입힌다(AdminAccounts) — 별도 회원가입 역할 없이 운영 도구(Egress 콘솔 등)를 게이팅한다.
+        List<GrantedAuthority> authorities = new ArrayList<>();
+        authorities.add(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()));
+        if (adminAccounts.isAdmin(user.getEmail())) {
+            authorities.add(new SimpleGrantedAuthority("ROLE_ADMIN"));
+        }
         Authentication authentication = UsernamePasswordAuthenticationToken.authenticated(
                 user.getId().toString(),
                 null,
-                List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()))
+                authorities
         );
 
         // 세션 고정 공격 방지: 인증 성공 시 세션 ID를 갈아끼운다.

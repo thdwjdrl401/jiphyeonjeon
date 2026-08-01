@@ -59,6 +59,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/api/curriculums/*/enrollments/me").hasRole("STUDENT")
                         // 강사 관리 API는 INSTRUCTOR 역할 필수. 소유권(내 커리큘럼인가)은 서비스가 별도로 검증한다.
                         .requestMatchers("/api/instructor/**").hasRole("INSTRUCTOR")
+                        // 운영 관리 API(Egress 콘솔 등)는 ADMIN 전용. ADMIN은 security.admin-emails allowlist로
+                        // 로그인 시 오버레이되는 권한이다(AdminAccounts) — 별도 회원가입 역할이 아니다.
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         // 에셋 업로드는 로그인 필수(익명 발급 금지). kind별 세부 권한(THUMBNAIL=강사)은
                         // 컨트롤러가 판정한다. anyRequest().authenticated()로도 덮이지만 의도를 못박아 둔다.
                         .requestMatchers("/api/assets/**").authenticated()
