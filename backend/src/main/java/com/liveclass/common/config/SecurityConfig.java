@@ -1,15 +1,19 @@
 package com.liveclass.common.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.DelegatingPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+
+import java.util.Map;
 
 /**
  * 인증 = HttpOnly 쿠키 + Redis 세션 (ADR-0014).
@@ -65,9 +69,24 @@ public class SecurityConfig {
         return http.build();
     }
 
-    /** {bcrypt} 접두사를 붙여 저장 → 나중에 해시 알고리즘을 바꿔도 기존 행을 읽을 수 있다. */
+    /**
+     * {bcrypt} 접두사를 붙여 저장 → 나중에 해시 알고리즘을 바꿔도 기존 행을 읽을 수 있다.
+     *
+     * <p>강도를 프로퍼티로 뺀 이유는 <b>테스트 속도</b>다. BCrypt는 일부러 느리게 설계됐고 기본 강도 10은
+     * encode+match 한 쌍에 약 100ms다. 계약 테스트가 매번 회원가입·로그인을 실제로 태우므로 호출이
+     * 371번 쌓이고, 그것만으로 스위트 실행의 <b>약 40초(전체의 1/4)</b>가 해시 계산에 쓰인다. 테스트
+     * 컨텍스트에서만 최소 강도로 낮춰 그 시간을 돌려받는다 — 운영 기본값 10은 그대로다.
+     *
+     * <p>{@code createDelegatingPasswordEncoder()}는 강도를 지정할 수 없어 직접 구성한다. 저장 형식은
+     * 그대로 {@code {bcrypt}$2a$<강도>$...}이고 DelegatingPasswordEncoder가 접두사로 검증기를 고르므로
+     * <b>이미 저장된 해시도 그대로 검증된다</b>(강도는 해시 문자열에 박혀 있다). 운영 DB의 기존 해시가
+     * 전부 {@code {bcrypt}} 접두사임을 확인하고 바꿨다.
+     */
     @Bean
-    public PasswordEncoder passwordEncoder() {
-        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
+    public PasswordEncoder passwordEncoder(
+            @Value("${liveclass.security.bcrypt-strength:10}") int bcryptStrength) {
+        String encodingId = "bcrypt";
+        return new DelegatingPasswordEncoder(encodingId,
+                Map.of(encodingId, new BCryptPasswordEncoder(bcryptStrength)));
     }
 }
