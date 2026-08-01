@@ -174,6 +174,12 @@ export default function InstructorAnnotationLayer({
    */
   const sinceSnapshotRef = useRef(0)
 
+  /**
+   * 마지막으로 부모에게 알린 화이트보드 존재 여부. 같은 값을 다시 알리지 않기 위한 것이다 —
+   * `onChange`마다 부모 setState를 부르면 렌더 루프가 된다(위 `handleChange` 참조).
+   */
+  const reportedBoardRef = useRef<boolean | null>(null)
+
   /** 지금까지 내보낸 요소의 `id → version`. 바뀐 것만 골라내는 기준이다. */
   const knownRef = useRef(new Map<string, number>())
   /** 마지막으로 본 전체 요소. 스냅샷을 다시 낼 때 쓴다. */
@@ -298,8 +304,23 @@ export default function InstructorAnnotationLayer({
     elementsRef.current = elements.filter((element) => element.isDeleted !== true)
     if (files) filesRef.current = files
     setHasElements(elementsRef.current.some((element) => element.id !== WHITEBOARD_ELEMENT_ID))
-    // 문서에 판이 있는지 그대로 알린다. 버튼은 이 값을 따른다(ADR-0056).
-    onWhiteboardPresence(elementsRef.current.some((element) => element.id === WHITEBOARD_ELEMENT_ID))
+
+    /*
+     * 문서에 판이 있는지 알린다. 버튼은 이 값을 따른다(ADR-0056).
+     *
+     * <p><b>바뀔 때만 부른다.</b> `onChange`는 포인터가 움직일 때도 불리는데, 여기서 매번 부모의
+     * setState를 부르면 <b>부모 렌더 → Excalidraw 갱신 → componentDidUpdate → onChange</b>가 돌면서
+     * "Maximum update depth exceeded"로 앱이 통째로 죽는다(React #185). 실제로 화이트보드를 켜는
+     * 순간 화면이 하얗게 되며 그렇게 터졌다.
+     *
+     * <p>같은 이유로 이 파일의 다른 보고(`setHasElements`·`setSelectedIds`)도 값이 같으면 건드리지
+     * 않는다. 부모로 올라가는 호출은 전부 이 규칙을 지켜야 한다.
+     */
+    const boardPresent = elementsRef.current.some((element) => element.id === WHITEBOARD_ELEMENT_ID)
+    if (reportedBoardRef.current !== boardPresent) {
+      reportedBoardRef.current = boardPresent
+      onWhiteboardPresence(boardPresent)
+    }
     const { changes, known } = diffAnnotationElements(knownRef.current, elements)
     knownRef.current = known
     for (const change of changes) {

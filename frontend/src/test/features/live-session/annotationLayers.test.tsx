@@ -526,6 +526,42 @@ describe('강사 판서 레이어', () => {
   })
 
   /**
+   * <b>부모로 올라가는 보고는 값이 바뀔 때만 한다.</b>
+   *
+   * <p>`onChange`는 포인터가 움직일 때도 불린다. 거기서 매번 부모의 setState를 부르면
+   * <b>부모 렌더 → Excalidraw 갱신 → componentDidUpdate → onChange</b>가 돌면서 React가
+   * "Maximum update depth exceeded"(#185)로 앱을 통째로 죽인다.
+   *
+   * <p>실제로 그렇게 터졌다 — 화이트보드를 켜는 순간 화면이 하얗게 되고 라이브 연결까지 끊겼다.
+   * 같은 파일의 다른 보고들은 원래 이 규칙을 지키고 있었고, 나중에 추가된 것 하나만 빠져 있었다.
+   */
+  it('화이트보드 존재는 값이 바뀔 때만 알린다 — 렌더 루프를 만들지 않는다', async () => {
+    const onWhiteboardPresence = vi.fn<(present: boolean) => void>()
+    const { findByTestId } = render(
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={onWhiteboardPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
+    )
+    await findByTestId('excalidraw-editor')
+    const onChange = excalidrawProps.onChange as (els: unknown[]) => void
+
+    // 판이 없는 상태로 여러 번 — 포인터가 움직이는 상황이다.
+    onChange([element('a', 1)])
+    onChange([element('a', 1)])
+    onChange([element('a', 2)])
+    expect(onWhiteboardPresence).not.toHaveBeenCalledWith(true)
+    const beforeBoard = onWhiteboardPresence.mock.calls.length
+
+    // 판이 생기면 <b>한 번</b> 알린다.
+    const board = { id: WHITEBOARD_ELEMENT_ID, type: 'rectangle', version: 1, index: 'a0' }
+    onChange([board, element('a', 2)])
+    onChange([board, element('a', 3)])
+    onChange([board, element('a', 4)])
+
+    const trueCalls = onWhiteboardPresence.mock.calls.filter(([present]) => present === true)
+    expect(trueCalls).toHaveLength(1)
+    expect(onWhiteboardPresence.mock.calls.length).toBeLessThanOrEqual(beforeBoard + 1)
+  })
+
+  /**
    * <b>주기적으로 복원 체크포인트를 남긴다</b>(ADR-0057).
    *
    * <p>없으면 복원이 세션 시작부터 전부 내려온다 — 실측에서 op 233건이 983kB였고, 강의가 길어질수록
