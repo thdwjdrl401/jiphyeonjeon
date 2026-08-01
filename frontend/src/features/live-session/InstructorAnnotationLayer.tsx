@@ -174,10 +174,28 @@ export default function InstructorAnnotationLayer({
     api.updateScene({ appState: { zoom: { value: zoom }, scrollX: 0, scrollY: 0 } })
   }, [])
 
+  /**
+   * 에디터 API가 도착했는가. <b>ref가 아니라 state여야 한다.</b>
+   *
+   * <p>Excalidraw는 이 콜백을 <b>렌더 중에</b> 부른다 — 아직 mount 전이라 그 자리에서
+   * {@code updateScene}을 부르면 React가 조용히 무시한다("Can't call setState on a component
+   * that is not yet mounted"). 게다가 ref에만 담으면 <b>API가 준비된 것이 effect를 다시 돌게
+   * 하지 못한다</b> — 복원 시딩이 다른 값(`ui`)이 바뀌는 것에 얹혀 우연히 도는 구조가 된다.
+   *
+   * <p>state로 두면 API 도착이 그 자체로 렌더를 만들고, 뒤따르는 effect는 mount가 끝난 뒤에 돈다.
+   */
+  const [apiReady, setApiReady] = useState(false)
+
   const handleApi = useCallback((api: ExcalidrawApi) => {
     apiRef.current = api
+    setApiReady(true)
+  }, [])
+
+  // mount가 끝난 뒤에 프레임 매핑을 건다. handleApi 안에서 부르면 무시된다(위 참조).
+  useEffect(() => {
+    if (!apiReady) return
     applyFrameMapping()
-  }, [applyFrameMapping])
+  }, [apiReady, applyFrameMapping])
 
   useEffect(() => {
     const host = hostRef.current
@@ -277,9 +295,23 @@ export default function InstructorAnnotationLayer({
   const seededRef = useRef(false)
   useEffect(() => {
     const api = apiRef.current
-    if (seededRef.current || !api) return
+    if (seededRef.current) return
     if (!restoredElements || restoredElements.length === 0) return
-    if (elementsRef.current.length > 0) return
+    /*
+     * <b>건너뛸 때는 이유를 남긴다.</b> 이 자리는 조용히 지나가면 증상이 "강사 화면에서만 판서가
+     * 사라진다"로 나타나고, 서버·전송·복원이 전부 정상이라 밖에서는 어디서 막혔는지 알 수 없다.
+     * 실제로 그 상태로 한참을 헤맸다.
+     */
+    if (!api) {
+      console.warn('판서 복원 대기 — 에디터 API가 아직 없다')
+      return
+    }
+    if (elementsRef.current.length > 0) {
+      console.warn(
+        `판서 복원 건너뜀 — 이미 씬에 요소가 있다(${elementsRef.current.length}개). `
+        + '강사가 복원보다 먼저 그렸다면 정상이다.')
+      return
+    }
     seededRef.current = true
     elementsRef.current = [...restoredElements]
     // 파일을 <b>먼저</b> 넣는다. 요소가 먼저 들어가면 그 사이 렌더에서 가리킬 파일이 없다.
@@ -292,6 +324,21 @@ export default function InstructorAnnotationLayer({
     for (const element of restoredElements) known.set(element.id, element.version ?? 0)
     knownRef.current = known
     api.updateScene({ elements: restoredElements })
+    /*
+     * <b>들어갔는지 확인한다.</b> `updateScene`은 실패해도 던지지 않는다 — 에디터가 아직 mount되지
+     * 않았으면 그냥 무시된다(React가 "Can't call setState on a component that is not yet mounted"만
+     * 남긴다). 그러면 강사 화면만 빈 채로 남고 아무도 모른다.
+     *
+     * 다음 tick에 다시 확인해, 비어 있으면 한 번 더 넣는다. 그때는 mount가 끝나 있다.
+     */
+    setTimeout(() => {
+      const current = apiRef.current
+      if (!current) return
+      const inScene = current.getSceneElements()
+      if (inScene.length > 0) return
+      console.warn('판서 복원이 씬에 반영되지 않았다 — 다시 넣는다')
+      current.updateScene({ elements: restoredElements })
+    }, 0)
     // 수신 측에도 알린다. `knownRef`를 채웠으므로 뒤따르는 `onChange`의 diff는 아무것도 찾지 못한다 —
     // 여기서 알리지 않으면 강사 화면에만 판서가 돌아오고 수강생 화면은 빈 채로 남는다.
     //
@@ -302,7 +349,7 @@ export default function InstructorAnnotationLayer({
       elements: restoredElements,
       files: referencedFiles(restoredElements, filesRef.current),
     }))
-  }, [onPublishState, restoredElements, restoredFiles, ui])
+  }, [apiReady, onPublishState, restoredElements, restoredFiles, ui])
 
   /* ── 판서 해석(ADR-0054, §3-6e) ────────────────────────────────────────────── */
 

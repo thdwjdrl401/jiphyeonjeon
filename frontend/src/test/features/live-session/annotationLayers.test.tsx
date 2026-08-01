@@ -50,6 +50,8 @@ let drifted: Record<string, unknown> = {}
 /** getSceneElements가 돌려줄 씬. 화이트보드 토글이 기존 요소를 보존하는지 보려면 필요하다. */
 let sceneElements: Array<Record<string, unknown>> = []
 let excalidrawProps: Record<string, unknown> = {}
+/** true면 `excalidrawAPI`를 렌더가 아니라 <b>mount 이후</b>에 넘긴다(실제 지연 청크에 가깝다). */
+let lateApi = false
 
 vi.mock('@/features/live-session/excalidrawRuntime', () => ({
   EXCALIDRAW_ASSET_PATH: '/excalidraw/',
@@ -58,7 +60,9 @@ vi.mock('@/features/live-session/excalidrawRuntime', () => ({
       excalidrawProps = props
       // 실제 컴포넌트처럼 마운트 시 명령형 API를 넘겨준다.
       const give = props.excalidrawAPI as ((api: unknown) => void) | undefined
-      if (give) give({ updateScene, getAppState: () => drifted, getSceneElements: () => sceneElements, getFiles: () => ({}), addFiles: () => {} })
+      const api = { updateScene, getAppState: () => drifted, getSceneElements: () => sceneElements, getFiles: () => ({}), addFiles: () => {} }
+      if (give && lateApi) setTimeout(() => give(api), 0)
+      else if (give) give(api)
       // 실제 컴포넌트처럼 children(우리가 조립한 MainMenu)을 그린다.
       return <div data-testid="excalidraw-editor">{props.children as React.ReactNode}</div>
     },
@@ -538,6 +542,29 @@ describe('강사 판서 레이어', () => {
    * 강사가 새로고침해도 판서가 남아야 한다(ADR-0051). Egress는 자기 문서를 계속 들고 있으므로,
    * 되살리지 않으면 <b>강사만</b> 빈 화면을 보고 수강생 화면과 갈린다.
    */
+  /**
+   * <b>API가 mount 뒤에 도착해도</b> 복원이 씬에 들어가야 한다.
+   *
+   * <p>실제 Excalidraw는 지연 청크라, `excalidrawAPI` 콜백이 우리 effect보다 늦게 올 수 있다.
+   * 그런데 API를 <b>ref에만</b> 담으면 "도착했다"는 사실이 렌더를 만들지 못해, 시딩 effect가 다시
+   * 돌 기회가 없다 — 다른 값(`ui`)이 우연히 바뀌어 줘야만 돈다. 그러면 강사 화면에서만 판서가
+   * 사라지고 수강생 화면에는 그대로 남는다(운영에서 실제로 그렇게 보였다).
+   */
+  it('에디터 API가 늦게 도착해도 복원을 씬에 넣는다', async () => {
+    const restored = [element('a', 3), element('b', 5)]
+    lateApi = true
+    const { findByTestId } = render(
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} restoredElements={restored} restoredFiles={null} />,
+    )
+    await findByTestId('excalidraw-editor')
+
+    await waitFor(() => {
+      expect(updateScene.mock.calls.map(([arg]) => (arg as { elements?: unknown[] }).elements))
+        .toContainEqual(restored)
+    })
+    lateApi = false
+  })
+
   it('저장돼 있던 판서를 에디터에 되돌린다', async () => {
     const restored = [element('a', 3), element('b', 5)]
     const { findByTestId } = render(
