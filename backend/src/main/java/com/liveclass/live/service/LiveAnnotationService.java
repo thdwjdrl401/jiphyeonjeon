@@ -1,7 +1,9 @@
 package com.liveclass.live.service;
 
 import com.liveclass.live.domain.LiveAnnotationOp;
+import com.liveclass.live.domain.LiveSession;
 import com.liveclass.live.repository.LiveAnnotationOpRepository;
+import com.liveclass.live.repository.LiveSessionRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -29,10 +31,31 @@ public class LiveAnnotationService {
 
     private final LiveAnnotationOpRepository repository;
     private final SessionClockLookup sessionClock;
+    private final LiveSessionRepository sessionRepository;
 
-    public LiveAnnotationService(LiveAnnotationOpRepository repository, SessionClockLookup sessionClock) {
+    public LiveAnnotationService(LiveAnnotationOpRepository repository, SessionClockLookup sessionClock,
+                                 LiveSessionRepository sessionRepository) {
         this.repository = repository;
         this.sessionClock = sessionClock;
+        this.sessionRepository = sessionRepository;
+    }
+
+    /**
+     * 판서 표시 상태를 바꾼다(ADR-0056).
+     *
+     * <p>판서 <b>내용</b>이 아니라 "지금 보여주는가"다. 강사가 새로고침해도 이전 상태로 돌아와야
+     * 하고, 그래야 <b>강사 화면과 수강생 화면이 갈리지 않는다</b> — 이 값이 없으면 강사는 꺼진
+     * 화면을 보는데 Egress는 자기 문서를 계속 그린다.
+     */
+    @Transactional
+    public void setVisible(UUID sessionId, boolean visible) {
+        sessionRepository.findById(sessionId).ifPresent(session -> session.setAnnotationVisible(visible));
+    }
+
+    /** 지금 표시 중인가. 세션이 없으면 false — 없는 세션의 판서를 보여줄 이유가 없다. */
+    @Transactional(readOnly = true)
+    public boolean isVisible(UUID sessionId) {
+        return sessionRepository.findById(sessionId).map(LiveSession::isAnnotationVisible).orElse(false);
     }
 
     /**

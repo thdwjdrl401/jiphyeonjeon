@@ -18,7 +18,9 @@ import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -180,6 +182,52 @@ class AnnotationReadAccessHttpTest {
 
         mockMvc.perform(get("/api/live-sessions/" + sessionId + "/annotation"))
                 .andExpect(status().isForbidden());
+    }
+
+    /* ── 판서 표시 상태(ADR-0056) ─────────────────────────────────────────────── */
+
+    /**
+     * 표시 상태가 <b>새로고침을 넘어 남는다.</b> 이것이 없으면 강사는 판서가 꺼진 화면을 보는데
+     * Egress는 자기 문서를 계속 그려서, <b>수강생에게만 판서가 남는다</b> — 강사 화면에서는
+     * 정상으로 보이므로 알아챌 수 없다.
+     */
+    @Test
+    void 판서_표시_상태를_세션에_남긴다() throws Exception {
+        Cookie[] auth = loginAsInstructor();
+        UUID instructorId = UUID.fromString(
+                jdbc.queryForObject("select id::text from core.app_user where email = ?", String.class, lastEmail));
+        UUID sessionId = newSession(instructorId);
+
+        // 새 세션은 꺼진 채로 시작한다.
+        assertVisible(sessionId, auth, false);
+
+        write(put("/api/live-sessions/" + sessionId + "/annotation/visibility"), auth, "{\"visible\":true}")
+                .andExpect(status().isNoContent());
+        assertVisible(sessionId, auth, true);
+
+        write(put("/api/live-sessions/" + sessionId + "/annotation/visibility"), auth, "{\"visible\":false}")
+                .andExpect(status().isNoContent());
+        assertVisible(sessionId, auth, false);
+    }
+
+    /** 표시 상태는 <b>소유 강사만</b> 바꾼다. 수강생이 남의 판서를 켜고 끌 수 있으면 안 된다. */
+    @Test
+    void 표시_상태는_소유_강사만_바꾼다() throws Exception {
+        Cookie[] other = loginAsInstructor();
+        UUID sessionId = newSession();   // 다른(랜덤) 강사 소유
+
+        write(put("/api/live-sessions/" + sessionId + "/annotation/visibility"), other, "{\"visible\":true}")
+                .andExpect(status().isForbidden());
+    }
+
+    /**
+     * <b>API 표면으로 확인한다.</b> 컬럼을 직접 읽으면 두 가지를 놓친다 — 값이 응답에 실리는지
+     * 검증되지 않고, 같은 트랜잭션에서 JPA 변경이 아직 flush되지 않아 raw JDBC로는 보이지도 않는다.
+     */
+    private void assertVisible(UUID sessionId, Cookie[] auth, boolean expected) throws Exception {
+        mockMvc.perform(get("/api/live-sessions/" + sessionId).cookie(auth))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.annotationVisible").value(expected));
     }
 
     /**

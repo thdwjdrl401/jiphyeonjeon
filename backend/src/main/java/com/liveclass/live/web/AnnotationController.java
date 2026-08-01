@@ -5,6 +5,7 @@ import com.liveclass.live.service.LiveRoomTokenVerifier;
 import com.liveclass.live.service.LiveAnnotationService;
 import com.liveclass.live.web.dto.AnnotationDocumentResponse;
 import com.liveclass.live.web.dto.AnnotationOpRequest;
+import com.liveclass.live.web.dto.AnnotationVisibilityRequest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -14,6 +15,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -65,6 +67,18 @@ public class AnnotationController {
         for (AnnotationOpRequest op : ops) {
             annotationService.append(sessionId, op.revision(), op.opType(), op.payload(), op.occurredAt());
         }
+    }
+
+    @Operation(summary = "판서 표시 상태 변경",
+            description = "판서를 수강생 화면에 보여줄지 바꾼다. 내용이 아니라 표시 상태다(ADR-0056). "
+                    + "강사가 새로고침해도 이 값으로 이전 상태가 돌아온다.")
+    @PutMapping("/api/live-sessions/{sessionId}/annotation/visibility")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void setVisibility(@PathVariable UUID sessionId,
+                              @Valid @RequestBody AnnotationVisibilityRequest request,
+                              Authentication authentication) {
+        accessGuard.requireOwner(sessionId, UUID.fromString(authentication.getName()));
+        annotationService.setVisible(sessionId, request.visible());
     }
 
     @Operation(summary = "판서 문서 복원",

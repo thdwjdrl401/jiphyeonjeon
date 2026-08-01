@@ -1,6 +1,5 @@
 package com.liveclass.curriculum;
 
-import com.liveclass.support.TestSchedules;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,6 +16,9 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -53,7 +55,7 @@ class InstructorAuthoringReadContractTest {
         String sectionId = createSection(instructor, curriculumId);
         String lessonId = createLesson(instructor, sectionId, "라이브 예정 강의");  // DRAFT
         write(post("/api/instructor/lessons/" + lessonId + "/live-sessions"), instructor,
-                TestSchedules.futureScheduledAtBody())
+                "{\"scheduledAt\":\"2026-08-01T10:00:00+09:00\"}")
                 .andExpect(status().isCreated());
 
         // 커리큘럼·레슨 모두 DRAFT여도 강사 조회는 방금 만든 세션을 그대로 돌려준다.
@@ -87,8 +89,16 @@ class InstructorAuthoringReadContractTest {
         // 공개 커리큘럼에 라이브 예정 세션 + 승인된 수강생 하나.
         String sectionId = createSection(instructor, published);
         String lessonId = createLesson(instructor, sectionId, "1강");
+        /*
+         * <b>고정 날짜를 쓰지 않는다.</b> `upcomingLiveCount`와 `todayLiveSession`은 "앞으로 있을"
+         * 라이브를 세므로, 박아 둔 시각이 지나가는 순간 테스트가 저절로 깨진다 — 실제로
+         * 2026-08-01이 지나며 master가 빨개졌다. 코드가 바뀌지 않았는데 날짜만으로 깨지는 테스트는
+         * 신호가 아니라 소음이다.
+         */
+        String scheduledAt = OffsetDateTime.now(ZoneOffset.ofHours(9)).plusDays(1)
+                .truncatedTo(ChronoUnit.MINUTES).toString();
         write(post("/api/instructor/lessons/" + lessonId + "/live-sessions"), instructor,
-                TestSchedules.futureScheduledAtBody()).andExpect(status().isCreated());
+                "{\"scheduledAt\":\"%s\"}".formatted(scheduledAt)).andExpect(status().isCreated());
         enrollAndApprove(instructor, published);
 
         write(get("/api/instructor/dashboard-summary"), instructor, null)
