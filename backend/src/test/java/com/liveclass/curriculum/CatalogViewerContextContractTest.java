@@ -1,5 +1,6 @@
 package com.liveclass.curriculum;
 
+import com.liveclass.support.TestSchedules;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -153,7 +154,7 @@ class CatalogViewerContextContractTest {
         String cid = createPublishedCurriculum(instructor);
         String lessonId = addLesson(instructor, cid, "라이브 예정 강의");
         write(post("/api/instructor/lessons/" + lessonId + "/live-sessions"), instructor,
-                "{\"scheduledAt\":\"2026-08-01T10:00:00+09:00\"}")
+                TestSchedules.futureScheduledAtBody())
                 .andExpect(status().isCreated());
 
         // 라이브가 잡혀 있으면 학생은 레슨을 열었을 때 라이브 쪽으로 가야 한다.

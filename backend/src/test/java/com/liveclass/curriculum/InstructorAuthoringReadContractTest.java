@@ -1,5 +1,6 @@
 package com.liveclass.curriculum;
 
+import com.liveclass.support.TestSchedules;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -52,7 +53,7 @@ class InstructorAuthoringReadContractTest {
         String sectionId = createSection(instructor, curriculumId);
         String lessonId = createLesson(instructor, sectionId, "라이브 예정 강의");  // DRAFT
         write(post("/api/instructor/lessons/" + lessonId + "/live-sessions"), instructor,
-                "{\"scheduledAt\":\"2026-08-01T10:00:00+09:00\"}")
+                TestSchedules.futureScheduledAtBody())
                 .andExpect(status().isCreated());
 
         // 커리큘럼·레슨 모두 DRAFT여도 강사 조회는 방금 만든 세션을 그대로 돌려준다.
@@ -87,7 +88,7 @@ class InstructorAuthoringReadContractTest {
         String sectionId = createSection(instructor, published);
         String lessonId = createLesson(instructor, sectionId, "1강");
         write(post("/api/instructor/lessons/" + lessonId + "/live-sessions"), instructor,
-                "{\"scheduledAt\":\"2026-08-01T10:00:00+09:00\"}").andExpect(status().isCreated());
+                TestSchedules.futureScheduledAtBody()).andExpect(status().isCreated());
         enrollAndApprove(instructor, published);
 
         write(get("/api/instructor/dashboard-summary"), instructor, null)
