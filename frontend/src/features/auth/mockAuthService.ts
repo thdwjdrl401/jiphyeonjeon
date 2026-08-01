@@ -1,5 +1,6 @@
 import { ApiError } from '@/shared/api/client'
 import { MOCK_INSTRUCTOR_ID, MOCK_STUDENT_ID, resetMockDatabase } from '@/features/demo/mockDatabase'
+import { resetMockLiveSessions } from '@/features/live-session/mockLiveSessionService'
 import type {
   AuthUser,
   EmailAvailability,
@@ -30,6 +31,7 @@ export function peekMockUser() {
 export function resetMockAuth() {
   currentUser = null
   resetMockDatabase()
+  resetMockLiveSessions()
   reservedEmails.clear()
   initialReservedEmails.forEach((email) => reservedEmails.add(email))
   issuedResetTokens.clear()

@@ -85,8 +85,20 @@ export default defineConfig({
     setupFiles: './src/test/setup.ts',
     css: true,
     clearMocks: true,
+    // clearMocks는 호출 기록만 지운다 — vi.spyOn은 그대로 남아 다음 테스트까지 살아남고, 그래서 순서에
+    // 따라 결과가 달라졌다(shuffle 시드 3개로 4건 재현). 다만 전역 restoreMocks는 쓰지 않는다: 이 코드베이스는
+    // 모듈 레벨 `vi.mock` 팩토리 안에서 `vi.fn(구현)`으로 목을 만드는데, restoreAllMocks가 그 구현까지
+    // 되돌려 Room 목이 undefined가 된다(실측 12개 실패). 스파이를 남기는 파일에서 afterEach로 개별 원복한다.
     // 개별 테스트 한도. setup.ts의 asyncUtilTimeout(5초)을 여러 번 기다리는 테스트가 있어
     // 기본 5초로는 부하가 걸린 러너에서 테스트 자체가 먼저 끊긴다.
     testTimeout: 30_000,
+    // 시각 포맷 단언(`오후 7:00` 등)은 KST를 전제한다. 지금까지 그 보장은 .gitlab-ci.yml의 TZ 환경변수
+    // 하나에만 있어 로컬(UTC 계열)에서는 깨졌다. 하네스에 박아 어디서 돌려도 같게 만든다.
+    env: { TZ: 'Asia/Seoul' },
+    poolOptions: {
+      // CI 러너는 운영 LiveKit Egress와 같은 4코어 박스다. 기본값(코어 수만큼 fork)이면 녹화가 도는
+      // 동안 프로세스가 몰려 테스트가 무더기로 타임아웃한다(반대로 녹화 품질도 깎는다). CI에서만 조인다.
+      forks: { maxForks: process.env.CI ? 2 : undefined },
+    },
   },
 })
