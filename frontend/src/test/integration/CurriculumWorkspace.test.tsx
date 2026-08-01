@@ -223,10 +223,10 @@ describe('커리큘럼 작업 화면', () => {
     // 디바운스 자동 저장이 새 섹션에 실제 id를 부여하면 "강의 추가"가 링크로 바뀐다.
     await waitFor(() => {
       expect(screen.getByText('자동 저장됨')).toBeInTheDocument()
-    }, { timeout: 3000 })
+    })
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: '강의 추가' })).not.toBeInTheDocument()
-    }, { timeout: 3000 })
+    })
   })
 
   it('새 강의를 저장하면 구성 화면으로 돌아가 중복 생성을 막는다', async () => {

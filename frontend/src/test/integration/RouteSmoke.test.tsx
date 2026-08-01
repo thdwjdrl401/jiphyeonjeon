@@ -1,6 +1,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { FROZEN_NOW } from '@/test/setup'
 import App from '@/App'
 import { mockAuthService, resetMockAuth } from '@/features/auth/mockAuthService'
 import type { LiveSessionService } from '@/features/live-session/liveSessionService.interface'
@@ -267,7 +268,7 @@ describe('전체 페이지 라우트', () => {
     expect(startStatus).toHaveBeenNthCalledWith(1, sessionId, `op-${sessionId}`)
 
     expect(
-      await screen.findByRole('banner', { name: '라이브 강의 정보' }, { timeout: 3_000 }),
+      await screen.findByRole('banner', { name: '라이브 강의 정보' }),
     ).toBeInTheDocument()
     expect(window.location.pathname).toBe(`/instructor/live-sessions/${sessionId}/classroom`)
     expect(startStatus).toHaveBeenCalledTimes(2)
@@ -297,7 +298,7 @@ describe('전체 페이지 라우트', () => {
     // 테스트음이 약 5초라(1.55초 차임 × 3구간 + 구간 사이 침묵) 확인 버튼은 그 뒤에 뜬다 —
     // 기본 대기(1초)로는 모자라고, 테스트 전체 제한(5초)도 넘으므로 아래에서 함께 늘렸다.
     await user.click(await screen.findByRole('button', { name: '네, 모두 들려요' }, { timeout: 9_000 }))
-    await user.click(await screen.findByRole('link', { name: '라이브 입장' }, { timeout: 3000 }))
+    await user.click(await screen.findByRole('link', { name: '라이브 입장' }))
 
     expect(await screen.findByRole('tab', { name: 'AI 질문' })).toBeInTheDocument()
     expect(await screen.findByRole('region', { name: '강의 영상' })).toBeInTheDocument()
@@ -315,7 +316,7 @@ describe('전체 페이지 라우트', () => {
     // 닿아야 드러나므로(ADR-0045) 여기서는 독의 존재만 확인한다.
     expect(screen.getByRole('region', { name: '실시간 자막' })).toBeInTheDocument()
     // 테스트음(약 5초)을 실제로 기다리는 흐름이라 기본 제한(5초)으로는 끝낼 수 없다.
-  }, 20_000)
+  })
 
   it('강사에게 다시보기 검수 화면을 제공한다', async () => {
     await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
@@ -392,13 +393,28 @@ describe('전체 페이지 라우트', () => {
     expect(screen.queryByRole('link', { name: '다시보기' })).not.toBeInTheDocument()
   })
 
+  /**
+   * "입장 가능 시간 <b>전</b>"이라는 전제는 데모 fixture의 절대 일정(2026-08-03T19:00+09:00)과
+   * 지금의 <b>관계</b>다. `isLiveEntryOpen`이 `now >= scheduledAt − 10분`이라, 벽시계가 그 지점을
+   * 지나면 버튼이 링크로 바뀌어 이 테스트는 <b>영구히</b> 실패한다 — 재시도로 못 살리는 시한폭탄이고
+   * 그 시점은 2026-08-03 18:50 KST였다. 그래서 이 테스트에서만 시계를 그 이전으로 고정한다.
+   *
+   * <p>전역으로 고정하지 않는 이유는 setup.ts에 적어 뒀다(자체 타이머를 쓰거나 `Date.now()`로 번호를
+   * 채는 테스트가 함께 무너진다). `Date`만 고정하고 실제 타이머는 살려 user-event는 그대로 돈다.
+   */
   it('입장 가능 시간 전에는 학생 강의 상세에서 안내를 표시한다', async () => {
-    const user = userEvent.setup()
-    await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
-    renderAt('/student/curriculums/cur-spring-live/sections/sec-foundation/lessons/les-service-layer')
+    vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: true })
+    vi.setSystemTime(FROZEN_NOW)
+    try {
+      const user = userEvent.setup()
+      await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
+      renderAt('/student/curriculums/cur-spring-live/sections/sec-foundation/lessons/les-service-layer')
 
-    await user.click(await screen.findByRole('button', { name: '입장 점검' }))
-    expect(screen.getByText('강의 시간이 아닙니다.')).toBeInTheDocument()
+      await user.click(await screen.findByRole('button', { name: '입장 점검' }))
+      expect(screen.getByText('강의 시간이 아닙니다.')).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('학생의 강사 전용 라우트 접근을 차단한다', async () => {

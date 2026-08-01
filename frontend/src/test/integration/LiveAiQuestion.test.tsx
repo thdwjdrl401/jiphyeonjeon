@@ -57,7 +57,7 @@ describe('AI 질의응답 화면 연결', () => {
     // 내 질문은 응답을 기다리지 않고 말풍선으로 올라간다.
     expect(screen.getByText('SecurityContext가 무엇인가요?')).toBeInTheDocument()
     // 델타가 누적돼 한 문단으로 자란다.
-    expect(await screen.findByText(/요청이 끝나면 컨텍스트가 정리됩니다\./, undefined, { timeout: 3000 })).toBeInTheDocument()
+    expect(await screen.findByText(/요청이 끝나면 컨텍스트가 정리됩니다\./)).toBeInTheDocument()
     // 근거는 접힌 토글로 먼저 요약된다(ADR-0049 §8) — 펼쳐야 목록이 보인다.
     await user.click(await screen.findByRole('button', { name: /^근거 \d+$/ }))
     // 하드코딩 문구가 아니라 실제 sources로 그린 근거 항목이다.

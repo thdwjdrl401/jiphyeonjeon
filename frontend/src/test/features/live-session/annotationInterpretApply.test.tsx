@@ -1,6 +1,6 @@
 import type React from 'react'
 import { fireEvent, render, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AnnotationElement } from '@/features/live-session/annotation'
 
 /**
@@ -91,31 +91,44 @@ const DRAWN: AnnotationElement[] = [
   { id: 'b', type: 'freedraw', version: 1, x: 600, y: 350, points: [[0, 0], [50, 50]] },
 ] as unknown as AnnotationElement[]
 
-describe('해석 결과 적용', () => {
-  beforeEach(() => {
-    sceneElements = [...DRAWN]
-    excalidrawProps = {}
-    updateScene.mockClear()
-    addFiles.mockClear()
-    exportToCanvas.mockResolvedValue({ toDataURL: () => 'data:image/png;base64,AAAA' })
-    parseMermaidToExcalidraw.mockResolvedValue({ elements: [{ type: 'rectangle' }] })
-    convertToExcalidrawElements.mockReturnValue([
-      { id: 'm1', type: 'rectangle', version: 1, x: 0, y: 0, width: 100, height: 50 },
-    ])
-    interpretApi.interpretAnnotation.mockResolvedValue({
-      kind: 'mermaid', body: 'flowchart LR\n  A[요청] --> B[인증]', source: '',
-      replace: ['a', 'b'], confidence: 0.98, unreadable: false,
-    })
-    mathApi.renderMathSvg.mockResolvedValue({ dataUrl: 'data:image/svg+xml;utf8,<svg/>', width: 200, height: 40 })
-    mathApi.mathFileEntry.mockImplementation((id: string) => ({
-      [id]: { id, mimeType: 'image/svg+xml', dataURL: 'data:image/svg+xml;utf8,<svg/>', created: 0 },
-    }))
-    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
-      width: 960, height: 540, x: 0, y: 0, top: 0, left: 0, right: 960, bottom: 540,
-      toJSON: () => ({}),
-    } as DOMRect)
+/**
+ * 이 셋업은 <b>두 describe가 모두</b> 필요로 한다 — 목 구현이 있어야 해석·수식 렌더 경로가 돌고,
+ * getBoundingClientRect 스파이가 있어야 선택 액션 링이 그려진다.
+ *
+ * <p>예전엔 `해석 결과 적용` 안에만 있어서, `수식 재편집`은 <b>앞선 describe가 남긴 목</b>에 얹혀
+ * 돌았다(구현은 테스트 사이에 지워지지 않는다). 파일 순서가 우연히 맞아 통과했을 뿐이라, 순서를
+ * 섞어 `수식 재편집`이 먼저 오면 목이 없어 그대로 깨졌다. 최상위로 올려 각 describe가 각자 선다.
+ */
+beforeEach(() => {
+  sceneElements = [...DRAWN]
+  excalidrawProps = {}
+  updateScene.mockClear()
+  addFiles.mockClear()
+  exportToCanvas.mockResolvedValue({ toDataURL: () => 'data:image/png;base64,AAAA' })
+  parseMermaidToExcalidraw.mockResolvedValue({ elements: [{ type: 'rectangle' }] })
+  convertToExcalidrawElements.mockReturnValue([
+    { id: 'm1', type: 'rectangle', version: 1, x: 0, y: 0, width: 100, height: 50 },
+  ])
+  interpretApi.interpretAnnotation.mockResolvedValue({
+    kind: 'mermaid', body: 'flowchart LR\n  A[요청] --> B[인증]', source: '',
+    replace: ['a', 'b'], confidence: 0.98, unreadable: false,
   })
+  mathApi.renderMathSvg.mockResolvedValue({ dataUrl: 'data:image/svg+xml;utf8,<svg/>', width: 200, height: 40 })
+  mathApi.mathFileEntry.mockImplementation((id: string) => ({
+    [id]: { id, mimeType: 'image/svg+xml', dataURL: 'data:image/svg+xml;utf8,<svg/>', created: 0 },
+  }))
+  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
+    width: 960, height: 540, x: 0, y: 0, top: 0, left: 0, right: 960, bottom: 540,
+    toJSON: () => ({}),
+  } as DOMRect)
+})
 
+// 위 스파이는 Element.prototype을 덮는다 — 원복이 없으면 프로토타입 패치가 테스트마다 쌓인다.
+afterEach(() => {
+  vi.restoreAllMocks()
+})
+
+describe('해석 결과 적용', () => {
   async function selectAndPick(label: string) {
     const view = render(
       <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} restoredElements={null} restoredFiles={null} />,

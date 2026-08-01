@@ -163,7 +163,7 @@ describe('라우트 이동 시 스크롤 초기화', () => {
     // 페이지별로 넣는 방식이면 새 페이지에서 빠뜨린다 — 공통 계층에 한 번 걸려 있어야 한다.
     const user = userEvent.setup()
     render(<App />)
-    await screen.findByRole('heading', { level: 1 }, { timeout: 3_000 })
+    await screen.findByRole('heading', { level: 1 })
     scrollTo.mockClear()
 
     // 헤더와 푸터에 같은 이름의 링크가 있다 — 어느 쪽이든 라우트 이동이면 결과는 같다.
