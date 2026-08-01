@@ -338,6 +338,22 @@ export function applyAnnotationOp(
  * <p>실제로는 Excalidraw가 씬을 갱신할 때 index를 채워 주므로 publish되는 요소는 모두 index를 갖는다.
  * 이 분기는 옛 op나 손으로 만든 요소를 위한 방어다.
  */
+/**
+ * 강사 에디터에 넣을 순서. <b>화이트보드는 언제나 맨 아래다.</b>
+ *
+ * <p>Excalidraw는 배열 순서를 z-order로 쓴다(앞이 뒤쪽 레이어). 서버에서 복원한 순서는 그리기
+ * 순서라 화이트보드가 맨 앞이라는 보장이 없고, 그대로 넣으면 판이 판서를 덮는다 — 강사는
+ * 화이트보드를 껐다 켜야 판서를 다시 본다.
+ *
+ * <p>수신 측은 {@link visibleAnnotationElements}가 같은 일을 한다. 그쪽에만 있어서 <b>같은 문서가
+ * 두 화면에서 다르게 그려지고</b> 있었다 — 강사 화면 = 수강생 화면을 깨는 자리다.
+ */
+export function orderedForScene(elements: readonly AnnotationElement[]): AnnotationElement[] {
+  const board = elements.filter((element) => element.id === WHITEBOARD_ELEMENT_ID)
+  if (board.length === 0) return [...elements]
+  return [...board, ...elements.filter((element) => element.id !== WHITEBOARD_ELEMENT_ID)]
+}
+
 export function visibleAnnotationElements(document: AnnotationDocument): AnnotationElement[] {
   const visible = document.elements.filter((element) => element.isDeleted !== true)
 

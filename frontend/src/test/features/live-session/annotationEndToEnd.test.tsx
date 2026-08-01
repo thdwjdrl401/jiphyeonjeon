@@ -143,9 +143,16 @@ vi.mock('livekit-client', () => ({
  */
 function fakeServer() {
   const rows: { revision: number; opType: string; payload: string }[] = []
+  /** 판서 표시 상태(ADR-0056). op가 아니라 세션에 붙는 값이라 따로 둔다. */
+  const state = { visible: false }
   return {
     rows,
+    state,
     async handle(url: string, init?: RequestInit): Promise<Response> {
+      if (init && init.method === 'PUT') {
+        state.visible = (JSON.parse(String(init.body)) as { visible: boolean }).visible
+        return new Response(null, { status: 204 })
+      }
       if (!init || (init.method ?? 'GET') === 'GET') {
         const lastSnapshot = [...rows].reverse().find((r) => r.opType === 'snapshot')
         const from = lastSnapshot?.revision ?? 0
@@ -156,6 +163,7 @@ function fakeServer() {
           nextRevision: (rows.reduce((max, r) => Math.max(max, r.revision), 0)) + 1,
           snapshotPayload: lastSnapshot?.payload ?? null,
           ops: after,
+          visible: state.visible,
         }), { status: 200 })
       }
       for (const op of JSON.parse(String(init.body)) as { revision: number; opType: string; payload: string }[]) {
@@ -338,10 +346,18 @@ describe('판서 한 바퀴 — 강사가 그린 것이 수신 측에서 같은 
 
     const second = await renderStage()
 
-    // 강사 화면: 판서가 자동으로 켜지고 에디터에 그림이 돌아온다.
+    /*
+     * <b>강사가 끈 채로 떠났으면 꺼진 채로 돌아온다</b>(ADR-0056).
+     *
+     * <p>예전에는 "저장된 요소가 있으면 켠다"라서 강사의 선택이 무시됐다. 표시 상태를 세션에
+     * 남기면서 그 선택이 그대로 돌아온다 — 영속화의 목적이 원래 그것이다.
+     */
     await waitFor(() => {
-      expect(second.getByRole('button', { name: /^판서 (켜짐|꺼짐)$/ }).getAttribute('aria-pressed')).toBe('true')
+      expect(second.getByRole('button', { name: /^판서 (켜짐|꺼짐)$/ }).getAttribute('aria-pressed')).toBe('false')
     })
+
+    // 그리고 켜면 이전에 그린 것이 그대로 나온다.
+    second.getByRole('button', { name: /^판서 (켜짐|꺼짐)$/ }).click()
     await waitFor(() => {
       expect(sceneElements.map((e) => e.id)).toEqual(['a', 'b'])
     })
@@ -411,7 +427,8 @@ describe('판서 한 바퀴 — 강사가 그린 것이 수신 측에서 같은 
     // 문서를 실었다면 이 둘의 크기가 수십 배 벌어진다.
     expect(small.op.type).toBe('pointer')
     expect(big.op.type).toBe('pointer')
-    expect(big.bytes).toBe(small.bytes)
+    // 문서를 실었다면 수십 배 벌어진다. revision 자릿수가 늘어 몇 바이트 차이 나는 것은 무관하다.
+    expect(big.bytes - small.bytes).toBeLessThanOrEqual(4)
     expect(big.bytes).toBeLessThan(200)
   })
 

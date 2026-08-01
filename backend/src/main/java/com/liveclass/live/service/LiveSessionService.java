@@ -225,6 +225,7 @@ public class LiveSessionService implements LiveSessionManagement, LiveSessionDir
                 s.getScheduledAt(), s.getEntryWindowMinutes(), s.getExpectedDurationMinutes(),
                 s.getRoomSid(), s.getStartedAt(), s.getEndedAt(),
                 s.isRecordingEnabled(), s.isCaptionEnabled(), s.isChatEnabled(), s.isAiQnaEnabled(),
+                s.isAnnotationVisible(),
                 s.getCreatedAt(), s.getUpdatedAt());
     }
 }

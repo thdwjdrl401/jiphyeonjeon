@@ -238,6 +238,9 @@ Spring 수신 endpoint를 구현하고 `SPRING_STATUS_CALLBACK_URL`로 주입하
 - `GET /api/live-sessions/{sessionId}/annotation` → `{ revision, nextRevision, snapshotPayload, ops[] }`. **마지막 스냅샷과 그 이후 op만** 돌려준다 — 세션 전체를 접으면 강의가 길어질수록 복원이 느려지고, 스냅샷은 그 자체로 전체 상태다. 접는 것은 FE가 한다(같은 로직이 이미 수신 측에 있다).
 - **`nextRevision`은 서버가 정한다.** FE가 접힌 문서의 revision으로 대신 채번하면, 저장에 실패한 op가 있을 때 이미 쓴 번호를 다시 써서 Egress가 새 획을 "이미 본 op"로 버린다.
 - 복원 시 FE는 §3-6b의 유실 감지(revision 불연속 → 버리고 스냅샷 대기)를 **적용하지 않는다**. 저장된 행은 전송 중 유실이 아니라 실제로 남은 전부이며, 번호가 띄엄하다고 뒤따르는 획까지 버리면 그 이후가 통째로 사라진다.
+- **판서 표시 상태**(ADR-0056): `GET` 응답에 `visible`(boolean)이 함께 온다. **op가 아니다** — 저장은 `live_session.annotation_visible`이고 위 `ops` fold에 끼어들지 않는다. 판서 **내용**은 문서에, "지금 보여주는가"는 세션에 둔다. `PUT /api/live-sessions/{sessionId}/annotation/visibility`(body `{visible}`) → `204`, **소유 강사만**.
+  - **복원할 때 그 상태를 수신 측에도 반드시 알린다.** 켜짐이면 `pointer`, 꺼짐이면 `clear`. 아무것도 보내지 않으면 강사 화면은 비었는데 Egress는 자기 문서를 계속 그려 **수강생에게만 판서가 남는다** — 강사 화면에서는 정상으로 보이므로 알아챌 수 없다.
+  - **화이트보드는 여기 없다.** 그건 문서 안의 요소(`liveclass-whiteboard`)라 이미 저장·복원된다. 강사 화면의 버튼은 그 요소의 존재에서 **파생**한다.
 - **인가**: 읽기는 세션 참가자(§자막·채팅과 같은 게이트), **쓰기는 소유 강사만**. 판서의 writer는 강사 하나라는 전제 위에 revision 채번이 서 있다.
 - **읽기에 한해 LiveKit 액세스 토큰을 받는다**(ADR-0055). Egress는 `?url=&token=`으로 열리는 헤드리스 Chrome이라 세션 쿠키가 없다. `Authorization: Bearer <livekit-token>`이 오면 서버가 `LIVEKIT_API_SECRET`으로 서명을 검증하고 `video.room` 클레임이 `session-{sessionId}`와 같은지 본다 — 새 시크릿도, 새 발급 경로도 만들지 않는다(LiveKit webhook JWT를 검증하는 방식과 같다). **읽기 전용이다.** 이 경로로는 쓸 수 없다. 거부 사유는 구분해 알려주지 않는다(서명 실패와 방 불일치를 가르면 탐색에 쓰인다).
 - **전달에만 쓰는 op는 저장하지 않는다 — `clear`·빈 스냅샷·`pointer`.** 복원이 마지막 스냅샷부터 접기 때문에, 문서를 담지 않은 op가 그 자리에 앉으면 그 앞의 판서가 통째로 사라진다. `clear`는 지우기가 아니라 강사가 판서를 껐을 때 수강생 화면에서 감추라는 **표시 상태**이고(§3-6b), 빈 스냅샷은 수신 측 **revision 기준점**을 잡는 장치라 페이지를 열 때마다 하나씩 나간다. 문서가 실제로 비는 것은 `delete`로 기록되므로 빈 스냅샷을 남길 이유가 없다. `pointer`는 문서가 아니라 "전체 상태는 서버에 있다"는 안내라 담을 내용이 없다. 셋 다 라이브 전달에는 그대로 나간다.
