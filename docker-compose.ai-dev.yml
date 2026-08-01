@@ -93,7 +93,11 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "127.0.0.1:${AI_API_HOST_PORT:?AI_API_HOST_PORT 필요}:8010"
+      # dev ai-api는 dev-infra의 pg·redis·rabbitmq·minio와 같은 방식(0.0.0.0 노출 + SG 팀 IP 게이트)으로 게시한다.
+      # 로컬(노트북) backend가 remote 프로필로 붙을 때 SSH 터널 없이 EC2 호스트 포트로 바로 닿게 하기 위함.
+      # prod ai-api(docker-compose.ai-prod.yml)는 loopback 유지 — 노출은 dev 편의용이고 HMAC + SG로 게이트한다.
+      # AI_API_HOST_PORT는 dev 관례상 18010(prod 8010과 EC2 host에서 충돌 방지, .env.ai-dev.example 참고).
+      - "${AI_API_HOST_PORT:?AI_API_HOST_PORT 필요}:8010"
     environment:
       AI_API_ENVIRONMENT: staging   # pydantic 허용값: local/test/staging/production ('development' 불가)
       AI_API_INSTANCE_ID: ${AI_API_INSTANCE_ID:?AI_API_INSTANCE_ID 필요}
