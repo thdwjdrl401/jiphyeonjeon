@@ -179,6 +179,10 @@ services:
       # 502로 떨어지고 기동은 막지 않는다 — 강의가 키 하나로 안 뜨는 상황을 만들지 않는다.
       ANNOTATION_AI_API_KEY: ${ANNOTATION_AI_API_KEY:-}
       ANNOTATION_AI_MODEL: ${ANNOTATION_AI_MODEL:-gpt-4.1}
+      # 운영 콘솔(ROLE_ADMIN) 허용 이메일 — 콤마 구분. 비면 관리자가 아무도 없다(콘솔은 403).
+      # 별도 가입 역할이 아니라 로그인 시 기존 계정에 권한을 덧입히는 방식이라(AdminAccounts),
+      # 목록을 바꾸면 해당 사용자는 재로그인해야 반영된다. 이 줄이 없으면 .env.prod에 넣어도 전달되지 않는다.
+      SECURITY_ADMIN_EMAILS: ${SECURITY_ADMIN_EMAILS:-}
     depends_on:
       postgres:
         condition: service_healthy   # Flyway 마이그레이션 전 DB 준비 대기
