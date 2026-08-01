@@ -85,5 +85,8 @@ export default defineConfig({
     setupFiles: './src/test/setup.ts',
     css: true,
     clearMocks: true,
+    // 개별 테스트 한도. setup.ts의 asyncUtilTimeout(5초)을 여러 번 기다리는 테스트가 있어
+    // 기본 5초로는 부하가 걸린 러너에서 테스트 자체가 먼저 끊긴다.
+    testTimeout: 30_000,
   },
 })
