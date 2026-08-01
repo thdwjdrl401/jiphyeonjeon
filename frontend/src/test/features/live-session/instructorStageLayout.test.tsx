@@ -29,6 +29,7 @@ function renderStage(overrides: Partial<InstructorLiveMedia> = {}) {
     publishAnnotationState: vi.fn(),
     restoredAnnotationVisible: null,
     saveAnnotationVisible: vi.fn(),
+    saveAnnotationSnapshot: vi.fn(),
     publishLaser: vi.fn(),
     annotationAudienceRevision: 0,
     restoredAnnotation: null,

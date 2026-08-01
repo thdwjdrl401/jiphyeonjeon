@@ -45,6 +45,12 @@ const noopState = () => {}
 /** 화이트보드 문서 상태 보고. 대부분의 테스트는 이걸 보지 않는다. */
 const noopPresence = () => {}
 
+/** 체크포인트 저장. 대부분의 테스트는 이걸 보지 않는다(ADR-0057). */
+const noopSnapshot = () => {}
+
+/** 레이어의 체크포인트 임계값과 같은 값. 여기서 바뀌면 테스트도 같이 바꿔야 한다(ADR-0057). */
+const OPS_PER_SNAPSHOT_FOR_TEST = 100
+
 const exportToCanvas = vi.fn()
 const getCommonBounds = vi.fn()
 const updateScene = vi.fn()
@@ -107,7 +113,7 @@ describe('강사 판서 레이어', () => {
 
   it('꺼져 있으면 에디터를 붙이지 않는다 — 무거운 청크를 미리 내려받을 이유가 없다', () => {
     const { queryByTestId } = render(
-      <InstructorAnnotationLayer sessionId="ses-1" active={false} audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} restoredElements={null} restoredFiles={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active={false} audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
 
     expect(queryByTestId('excalidraw-editor')).toBeNull()
@@ -115,7 +121,7 @@ describe('강사 판서 레이어', () => {
 
   it('켜면 에디터를 붙이고 배경을 투명하게 둔다 — 아래 화면공유가 비쳐야 한다', async () => {
     const { findByTestId } = render(
-      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} restoredElements={null} restoredFiles={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
 
@@ -144,7 +150,7 @@ describe('강사 판서 레이어', () => {
     })
 
     const { findByTestId } = render(
-      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} restoredElements={null} restoredFiles={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
 
@@ -160,7 +166,7 @@ describe('강사 판서 레이어', () => {
   it('컨테이너 크기를 아직 모르면 zoom을 건드리지 않는다 — 0으로 그리면 아무것도 안 보인다', async () => {
     // jsdom 기본값은 0x0이다. 첫 렌더에서 잘못된 배율을 적용하지 않아야 한다.
     const { findByTestId } = render(
-      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} restoredElements={null} restoredFiles={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
 
@@ -180,7 +186,7 @@ describe('강사 판서 레이어', () => {
     drifted = { zoom: { value: 3 }, scrollX: -120, scrollY: 40 }
 
     const { findByTestId } = render(
-      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} restoredElements={null} restoredFiles={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
     updateScene.mockClear()
@@ -205,7 +211,7 @@ describe('강사 판서 레이어', () => {
     drifted = { zoom: { value: 0.5 }, scrollX: 0, scrollY: 0 }
 
     const { findByTestId } = render(
-      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} restoredElements={null} restoredFiles={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
     updateScene.mockClear()
@@ -225,7 +231,7 @@ describe('강사 판서 레이어', () => {
    */
   it('메뉴에는 다크모드·전체 지우기·도움말만 넣는다', async () => {
     const { findByTestId, queryByText } = render(
-      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} restoredElements={null} restoredFiles={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     const menu = await findByTestId('main-menu')
 
@@ -243,7 +249,7 @@ describe('강사 판서 레이어', () => {
    */
   it('이미지 도구와 위험한 캔버스 액션을 끈다', async () => {
     const { findByTestId } = render(
-      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} restoredElements={null} restoredFiles={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
 
@@ -267,13 +273,13 @@ describe('강사 판서 레이어', () => {
   it('판서를 끄면 수강생 화면에서도 감춘다', async () => {
     const onPublish = vi.fn<(change: AnnotationChange) => void>()
     const { findByTestId, rerender } = render(
-      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} restoredElements={null} restoredFiles={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
     ;(excalidrawProps.onChange as (elements: unknown[]) => void)([element('a', 1)])
     onPublish.mockClear()
 
-    rerender(<InstructorAnnotationLayer sessionId="ses-1" active={false} audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} restoredElements={null} restoredFiles={null} />)
+    rerender(<InstructorAnnotationLayer sessionId="ses-1" active={false} audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />)
 
     expect(onPublish).toHaveBeenCalledWith({ type: 'clear' })
   })
@@ -281,12 +287,12 @@ describe('강사 판서 레이어', () => {
   it('그린 것이 없으면 끌 때 아무것도 보내지 않는다', async () => {
     const onPublish = vi.fn()
     const { findByTestId, rerender } = render(
-      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} restoredElements={null} restoredFiles={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
     onPublish.mockClear()
 
-    rerender(<InstructorAnnotationLayer sessionId="ses-1" active={false} audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} restoredElements={null} restoredFiles={null} />)
+    rerender(<InstructorAnnotationLayer sessionId="ses-1" active={false} audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />)
 
     expect(onPublish).not.toHaveBeenCalled()
   })
@@ -298,15 +304,15 @@ describe('강사 판서 레이어', () => {
   it('판서를 껐다 켜면 그린 문서를 되돌려준다 — 수강생 판서까지 지우지 않는다', async () => {
     const onPublish = vi.fn<(change: AnnotationChange) => void>()
     const { findByTestId, rerender } = render(
-      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} restoredElements={null} restoredFiles={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
     ;(excalidrawProps.onChange as (elements: unknown[]) => void)([element('a', 1), element('b', 1)])
 
     // 판서 끄기 → 켜기
-    rerender(<InstructorAnnotationLayer sessionId="ses-1" active={false} audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} restoredElements={null} restoredFiles={null} />)
+    rerender(<InstructorAnnotationLayer sessionId="ses-1" active={false} audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />)
     onPublish.mockClear()
-    rerender(<InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} restoredElements={null} restoredFiles={null} />)
+    rerender(<InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />)
     await findByTestId('excalidraw-editor')
 
     const initialData = excalidrawProps.initialData as { elements?: Array<{ id: string }> }
@@ -334,7 +340,7 @@ describe('강사 판서 레이어', () => {
           audienceRevision={0}
           showPropertyPanel={false}
           whiteboard={whiteboard}
-          onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} restoredElements={null} restoredFiles={null}
+          onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null}
         />,
       )
     }
@@ -408,7 +414,7 @@ describe('강사 판서 레이어', () => {
 
     function renderLaser(onLaser: ReturnType<typeof vi.fn>) {
       return render(
-        <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={onLaser} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} restoredElements={null} restoredFiles={null} />,
+        <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={onLaser} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
       )
     }
 
@@ -500,7 +506,7 @@ describe('강사 판서 레이어', () => {
   it('바뀐 요소만 내보낸다 — 같은 배열이 다시 와도 다시 보내지 않는다', async () => {
     const onPublish = vi.fn<(change: AnnotationChange) => void>()
     const { findByTestId } = render(
-      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} restoredElements={null} restoredFiles={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
     onPublish.mockClear()   // 판서를 켤 때 나가는 기준점 스냅샷은 여기 관심사가 아니다
@@ -520,19 +526,60 @@ describe('강사 판서 레이어', () => {
   })
 
   /**
+   * <b>주기적으로 복원 체크포인트를 남긴다</b>(ADR-0057).
+   *
+   * <p>없으면 복원이 세션 시작부터 전부 내려온다 — 실측에서 op 233건이 983kB였고, 강의가 길어질수록
+   * 무한히 자란다. ADR-0055에서 복원 시딩을 스냅샷 → 포인터로 바꾸며 저장되던 스냅샷이 사라진 탓이다.
+   *
+   * <p><b>데이터 채널로는 나가지 않는다.</b> 문서 전체를 채널에 실으면 ADR-0055가 없앤 64KB 문제가
+   * 되돌아온다 — 그래서 `onPublish`가 아니라 별도 경로다.
+   */
+  it('문서 변경이 쌓이면 복원 체크포인트를 남긴다 — 데이터 채널로는 보내지 않는다', async () => {
+    const onPublish = vi.fn<(change: AnnotationChange) => void>()
+    const onSaveSnapshot = vi.fn<(make: () => AnnotationChange) => void>()
+    const { findByTestId } = render(
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={onSaveSnapshot} restoredElements={null} restoredFiles={null} />,
+    )
+    await findByTestId('excalidraw-editor')
+    const onChange = excalidrawProps.onChange as (els: unknown[]) => void
+
+    // 요소를 하나씩 늘려 문서-변경 op를 100건 넘긴다.
+    const drawn: ReturnType<typeof element>[] = []
+    for (let i = 1; i <= 101; i += 1) {
+      drawn.push(element(`e${i}`, 1))
+      onChange([...drawn])
+    }
+
+    expect(onSaveSnapshot).toHaveBeenCalledTimes(1)
+    /*
+     * 체크포인트에는 <b>그 시점의 문서 전체</b>가 담긴다. 정확히 몇 번째 변경에서 찍히는지는 계약이
+     * 아니다 — 임계값 근처에서 한 tick 차이가 나도 복원은 똑같이 동작한다. 고정할 것은 "일부가 아니라
+     * 전체가 담긴다"는 것이다.
+     */
+    const made = onSaveSnapshot.mock.calls[0][0]()
+    expect(made.type).toBe('snapshot')
+    const saved = (made as { elements: { id: string }[] }).elements
+    expect(saved.length).toBeGreaterThanOrEqual(OPS_PER_SNAPSHOT_FOR_TEST)
+    expect(new Set(saved.map((e) => e.id)).size).toBe(saved.length)
+
+    // 그리고 그것이 데이터 채널로는 나가지 않는다 — 나갔다면 64KB 문제가 되돌아온다.
+    expect(onPublish.mock.calls.map(([c]) => c.type)).not.toContain('snapshot')
+  })
+
+  /**
    * 새로 들어온 Egress는 그 전에 흐른 op를 받을 수 없다. 스냅샷을 다시 내지 않으면 판서가 통째로
    * 빈 채로 녹화된다.
    */
   it('새 참가자가 들어오면 전체 스냅샷을 다시 내보낸다', async () => {
     const onPublish = vi.fn<(change: AnnotationChange) => void>()
     const { findByTestId, rerender } = render(
-      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} restoredElements={null} restoredFiles={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
     ;(excalidrawProps.onChange as (elements: unknown[]) => void)([element('a', 1), element('b', 1)])
     onPublish.mockClear()
 
-    rerender(<InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={1} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} restoredElements={null} restoredFiles={null} />)
+    rerender(<InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={1} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />)
 
     expect(onPublish).toHaveBeenCalledWith({
       type: 'snapshot',
@@ -557,7 +604,7 @@ describe('강사 판서 레이어', () => {
     const restored = [element('a', 3), element('b', 5)]
     lateApi = true
     const { findByTestId } = render(
-      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} restoredElements={restored} restoredFiles={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={restored} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
 
@@ -571,7 +618,7 @@ describe('강사 판서 레이어', () => {
   it('저장돼 있던 판서를 에디터에 되돌린다', async () => {
     const restored = [element('a', 3), element('b', 5)]
     const { findByTestId } = render(
-      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} restoredElements={restored} restoredFiles={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={restored} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
 
@@ -588,7 +635,7 @@ describe('강사 판서 레이어', () => {
     const restored = [element('a', 3)]
     const onPublish = vi.fn<(change: AnnotationChange) => void>()
     const { findByTestId } = render(
-      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} restoredElements={restored} restoredFiles={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={restored} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
     // 시딩이 끝나야 knownRef가 채워진다. 그 전에 onChange를 밀어 넣으면 복원본이 "새로 그린 것"으로
@@ -610,13 +657,13 @@ describe('강사 판서 레이어', () => {
    */
   it('강사가 이미 그렸으면 복원본으로 덮지 않는다', async () => {
     const { findByTestId, rerender } = render(
-      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} restoredElements={null} restoredFiles={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
     ;(excalidrawProps.onChange as (elements: unknown[]) => void)([element('방금', 1)])
     updateScene.mockClear()
 
-    rerender(<InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} restoredElements={[element('저장된', 9)]} restoredFiles={null} />)
+    rerender(<InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={[element('저장된', 9)]} restoredFiles={null} />)
 
     expect(updateScene.mock.calls.map(([arg]) => (arg as { elements?: unknown[] }).elements))
       .not.toContainEqual([element('저장된', 9)])
@@ -630,10 +677,10 @@ describe('강사 판서 레이어', () => {
   it('판서를 켜면 비어 있어도 스냅샷을 보내 기준점을 잡는다', async () => {
     const onPublish = vi.fn<(change: AnnotationChange) => void>()
     const { findByTestId, rerender } = render(
-      <InstructorAnnotationLayer sessionId="ses-1" active={false} audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} restoredElements={null} restoredFiles={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active={false} audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
 
-    rerender(<InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} restoredElements={null} restoredFiles={null} />)
+    rerender(<InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />)
     await findByTestId('excalidraw-editor')
 
     expect(onPublish).toHaveBeenCalledWith({ type: 'snapshot', elements: [], files: {} })
@@ -642,12 +689,12 @@ describe('강사 판서 레이어', () => {
   it('새 참가자가 들어오면 판서가 비어 있어도 기준점을 다시 보낸다', async () => {
     const onPublish = vi.fn<(change: AnnotationChange) => void>()
     const { findByTestId, rerender } = render(
-      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} restoredElements={null} restoredFiles={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
     onPublish.mockClear()
 
-    rerender(<InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={1} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} restoredElements={null} restoredFiles={null} />)
+    rerender(<InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={1} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />)
 
     expect(onPublish).toHaveBeenCalledWith({ type: 'snapshot', elements: [], files: {} })
   })
@@ -660,7 +707,7 @@ describe('강사 판서 레이어', () => {
     const restored = [element('a', 3)]
     const onPublish = vi.fn<(change: AnnotationChange) => void>()
     const { findByTestId } = render(
-      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} restoredElements={restored} restoredFiles={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={restored} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
 
@@ -1035,7 +1082,7 @@ describe('판서 정리 액션 링 배선', () => {
   it('요소를 선택하면 그 자리에 링이 뜬다', async () => {
     const restore = rectStub()
     const { findByTestId, container } = render(
-      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} restoredElements={null} restoredFiles={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
     const onChange = excalidrawProps.onChange as (els: unknown[], state?: unknown) => void
@@ -1054,7 +1101,7 @@ describe('판서 정리 액션 링 배선', () => {
   it('선택이 없으면 링을 그리지 않는다', async () => {
     const restore = rectStub()
     const { findByTestId, container } = render(
-      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} restoredElements={null} restoredFiles={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
     const onChange = excalidrawProps.onChange as (els: unknown[], state?: unknown) => void
@@ -1069,7 +1116,7 @@ describe('판서 정리 액션 링 배선', () => {
   it('화이트보드만 선택된 것은 정리 대상으로 치지 않는다', async () => {
     const restore = rectStub()
     const { findByTestId, container } = render(
-      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} restoredElements={null} restoredFiles={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
     const onChange = excalidrawProps.onChange as (els: unknown[], state?: unknown) => void
@@ -1097,7 +1144,7 @@ describe('판서 정리 진입점', () => {
 
   async function draw() {
     const { findByTestId, container, getByRole, queryByRole } = render(
-      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} restoredElements={null} restoredFiles={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
     const onChange = excalidrawProps.onChange as (els: unknown[], state?: unknown) => void
@@ -1177,7 +1224,7 @@ describe('액션 링 펼침·접힘', () => {
 
   async function open() {
     const view = render(
-      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} restoredElements={null} restoredFiles={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await view.findByTestId('excalidraw-editor')
     const onChange = excalidrawProps.onChange as (els: unknown[], state?: unknown) => void
@@ -1218,7 +1265,7 @@ describe('액션 링 펼침·접힘', () => {
   it('획을 하나만 골라도 링이 뜨고 고를 수 있다', async () => {
     const restore = rectStub()
     const view = render(
-      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} restoredElements={null} restoredFiles={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await view.findByTestId('excalidraw-editor')
     const onChange = excalidrawProps.onChange as (els: unknown[], state?: unknown) => void

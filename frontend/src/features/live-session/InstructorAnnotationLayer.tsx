@@ -78,6 +78,12 @@ interface InstructorAnnotationLayerProps {
    * 않았기 때문이다.
    */
   onWhiteboardPresence: (present: boolean) => void
+  /**
+   * 복원 체크포인트를 남긴다(ADR-0057). 문서-변경 op가 일정 수 쌓일 때마다 부른다.
+   *
+   * <p>스냅샷을 <b>값이 아니라 함수로</b> 넘긴다 — 실제로 저장할 때만 문서를 만들면 된다.
+   */
+  onSaveSnapshot: (snapshot: () => AnnotationChange) => void
   /** 새 참가자가 들어올 때마다 오르는 값. 오르면 전체 상태를 다시 알린다. */
   audienceRevision: number
   /**
@@ -129,12 +135,21 @@ interface InstructorAnnotationLayerProps {
  * <p><b>배경을 투명하게 둔다.</b> 이 레이어 아래에 화면공유 영상이 깔린다. Excalidraw의 기본 흰
  * 배경을 그대로 쓰면 영상을 덮어버린다.
  */
+/**
+ * 체크포인트 사이의 문서-변경 op 수(ADR-0057).
+ *
+ * <p>실측에서 op 하나가 평균 4.2kB였다(983kB / 233건). 100건이면 복원이 "체크포인트 + 최대 100건"으로
+ * 묶인다. 정확한 상한은 판서 크기에 따라 달라지므로 실측으로 조정할 값이다.
+ */
+const OPS_PER_SNAPSHOT = 100
+
 export default function InstructorAnnotationLayer({
   sessionId,
   active,
   onPublish,
   onPublishState,
   onWhiteboardPresence,
+  onSaveSnapshot,
   audienceRevision,
   showPropertyPanel,
   whiteboard,
@@ -151,6 +166,13 @@ export default function InstructorAnnotationLayer({
     MainMenu: ExcalidrawModule['MainMenu']
   } | null>(null)
   const [loadFailed, setLoadFailed] = useState(false)
+
+  /**
+   * 마지막 체크포인트 이후 내보낸 <b>문서-변경</b> op 수(ADR-0057).
+   *
+   * <p>포인터·`clear`처럼 문서를 바꾸지 않는 op는 세지 않는다 — 그것들은 복원 크기를 늘리지 않는다.
+   */
+  const sinceSnapshotRef = useRef(0)
 
   /** 지금까지 내보낸 요소의 `id → version`. 바뀐 것만 골라내는 기준이다. */
   const knownRef = useRef(new Map<string, number>())
@@ -289,6 +311,24 @@ export default function InstructorAnnotationLayer({
       onPublish(change.type === 'upsert'
         ? { ...change, files: referencedFiles(change.elements, filesRef.current) }
         : change)
+      sinceSnapshotRef.current += 1
+    }
+
+    /*
+     * <b>주기적으로 복원 체크포인트를 남긴다</b>(ADR-0057).
+     *
+     * <p>없으면 복원이 세션 시작부터 전부 내려온다 — 실측에서 op 233건이 983kB였고, 강의가 길어질수록
+     * 무한히 자란다. 여기서 문서 전체를 한 번 저장해 두면 복원이 "체크포인트 + 그 이후 몇 건"으로 묶인다.
+     *
+     * <p>데이터 채널로는 나가지 않는다. 저장 경로로만 보낸다.
+     */
+    if (sinceSnapshotRef.current >= OPS_PER_SNAPSHOT) {
+      sinceSnapshotRef.current = 0
+      onSaveSnapshot(() => ({
+        type: 'snapshot',
+        elements: elementsRef.current,
+        files: referencedFiles(elementsRef.current, filesRef.current),
+      }))
     }
 
     const picked = Object.entries(appState?.selectedElementIds ?? {})
@@ -297,7 +337,7 @@ export default function InstructorAnnotationLayer({
     // 같은 값이면 state를 건드리지 않는다 — onChange는 포인터가 움직일 때도 불린다.
     setSelectedIds((current) =>
       current.length === picked.length && current.every((id, i) => id === picked[i]) ? current : picked)
-  }, [applyFrameMapping, onPublish, onWhiteboardPresence])
+  }, [applyFrameMapping, onPublish, onSaveSnapshot, onWhiteboardPresence])
 
   /**
    * 저장돼 있던 판서를 에디터에 되돌린다(ADR-0051). 새로고침해도 강사 화면이 수강생 화면과 같아야

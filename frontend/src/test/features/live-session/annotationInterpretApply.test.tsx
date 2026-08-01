@@ -20,6 +20,9 @@ const noopState = () => {}
 /** 화이트보드 문서 상태 보고. 대부분의 테스트는 이걸 보지 않는다. */
 const noopPresence = () => {}
 
+/** 체크포인트 저장. 대부분의 테스트는 이걸 보지 않는다(ADR-0057). */
+const noopSnapshot = () => {}
+
 const updateScene = vi.fn()
 const exportToCanvas = vi.fn()
 const parseMermaidToExcalidraw = vi.fn()
@@ -134,7 +137,7 @@ afterEach(() => {
 describe('해석 결과 적용', () => {
   async function selectAndPick(label: string) {
     const view = render(
-      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} restoredElements={null} restoredFiles={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await view.findByTestId('excalidraw-editor')
     const onChange = excalidrawProps.onChange as (els: unknown[], state?: unknown) => void
@@ -271,7 +274,7 @@ describe('수식 재편집', () => {
   async function selectMath() {
     sceneElements = [MATH_ELEMENT]
     const view = render(
-      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} restoredElements={null} restoredFiles={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await view.findByTestId('excalidraw-editor')
     const onChange = excalidrawProps.onChange as (els: unknown[], state?: unknown) => void
@@ -288,7 +291,7 @@ describe('수식 재편집', () => {
   it('보통 판서를 고르면 고치기가 뜨지 않는다 — 고칠 LaTeX가 없다', async () => {
     sceneElements = [...DRAWN]
     const view = render(
-      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} restoredElements={null} restoredFiles={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await view.findByTestId('excalidraw-editor')
     ;(excalidrawProps.onChange as (els: unknown[], state?: unknown) => void)(
