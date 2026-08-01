@@ -32,14 +32,39 @@ def test_prod_and_dev_compose_share_operational_shape() -> None:
         assert "127.0.0.1:${AI_API_HOST_PORT" in compose
         assert re.search(r"(?m)^    deploy:\n      replicas: 1$", compose)
 
-    prod_note_keys = set(
-        re.findall(r"(?m)^      (AI_API_LECTURE_NOTE_[A-Z0-9_]+):", prod)
-    )
-    dev_note_keys = set(
-        re.findall(r"(?m)^      (AI_API_LECTURE_NOTE_[A-Z0-9_]+):", dev)
-    )
+    prod_note_keys = set(re.findall(r"(?m)^      (AI_API_LECTURE_NOTE_[A-Z0-9_]+):", prod))
+    dev_note_keys = set(re.findall(r"(?m)^      (AI_API_LECTURE_NOTE_[A-Z0-9_]+):", dev))
     assert prod_note_keys == dev_note_keys
     assert len(prod_note_keys) == 10
+
+
+def test_lecture_note_policy_uses_compose_defaults() -> None:
+    expected_defaults = {
+        "AI_API_LECTURE_NOTE_MODEL": "",
+        "AI_API_LECTURE_NOTE_MAX_OUTPUT_TOKENS": "512",
+        "AI_API_LECTURE_NOTE_MAX_PROMPT_CHARS": "20000",
+        "AI_API_LECTURE_NOTE_TIMEOUT_SECONDS": "30",
+        "AI_API_LECTURE_NOTE_MIN_WINDOW_MS": "15000",
+        "AI_API_LECTURE_NOTE_TARGET_WINDOW_MS": "25000",
+        "AI_API_LECTURE_NOTE_MAX_WINDOW_MS": "40000",
+        "AI_API_LECTURE_NOTE_MIN_CHARS": "80",
+        "AI_API_LECTURE_NOTE_MAX_CHARS": "400",
+        "AI_API_LECTURE_NOTE_STREAM_MAXLEN": "10000",
+    }
+    composes = (
+        AI_PROD_COMPOSE.read_text(encoding="utf-8"),
+        AI_DEV_COMPOSE.read_text(encoding="utf-8"),
+    )
+    env_examples = (
+        AI_PROD_ENV_EXAMPLE.read_text(encoding="utf-8"),
+        AI_DEV_ENV_EXAMPLE.read_text(encoding="utf-8"),
+    )
+
+    for key, default in expected_defaults.items():
+        for compose in composes:
+            assert f"{key}: ${{{key}:-{default}}}" in compose
+        for env_example in env_examples:
+            assert re.search(rf"(?m)^{key}=", env_example) is None
 
 
 def test_compose_host_ports_are_explicit_and_do_not_collide() -> None:
