@@ -122,6 +122,13 @@ export interface InstructorLiveMedia extends InstructorLiveKitState {
   restoredAnnotationVisible: boolean | null
   /** 표시 상태를 서버에 남긴다. 강사가 판서를 켜고 끌 때 부른다. */
   saveAnnotationVisible: (visible: boolean) => void
+  /**
+   * 복원 체크포인트를 남긴다(ADR-0057). 문서-변경 op가 일정 수 쌓일 때마다 화면 쪽이 부른다.
+   *
+   * <p><b>데이터 채널로는 나가지 않는다.</b> 영속화 경로로만 보낸다 — 문서 전체를 채널에 실으면
+   * ADR-0055가 없앤 64KB 문제가 되돌아온다.
+   */
+  saveAnnotationSnapshot: (snapshot: () => AnnotationChange) => void
   /** 품질 변경으로 트랙을 다시 올리는 중. 이때는 선택을 잠근다. */
   applyingQuality: boolean
   retry: () => void
@@ -697,6 +704,38 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
     })()
   }, [sessionId])
 
+  /**
+   * 복원 체크포인트를 저장한다(ADR-0057).
+   *
+   * <p>이것이 없으면 복원이 세션 시작부터 전부 내려온다 — 실측에서 op 233건이 983kB였고 강의가
+   * 길어질수록 무한히 자란다. ADR-0055에서 복원 시딩을 스냅샷 → 포인터로 바꾸며 생긴 부작용이다.
+   *
+   * <p>실패해도 조용히 넘어간다. 체크포인트는 복원을 <b>빠르게</b> 하는 장치지 복원의 조건이 아니다 —
+   * 없으면 그냥 전부 접는다.
+   */
+  const saveAnnotationSnapshot = useCallback((snapshot: () => AnnotationChange) => {
+    const revision = annotationRevisionRef.current
+    if (revision <= 0) return
+    const body = snapshot()
+    void (async () => {
+      try {
+        const response = await fetch(`/api/live-sessions/${sessionId}/annotation/snapshot`, {
+          method: 'PUT',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json', ...(await resolveCsrfHeader()) },
+          body: JSON.stringify({
+            revision,
+            // op와 같은 형태로 담는다 — 복원 fold가 snapshot op와 똑같이 다룬다.
+            payload: JSON.stringify({ elements: body.type === 'snapshot' ? body.elements : [], files: body.type === 'snapshot' ? body.files ?? {} : {} }),
+          }),
+        })
+        if (!response.ok) throw new Error(`체크포인트 저장 실패: ${response.status}`)
+      } catch (error) {
+        console.warn('판서 복원 체크포인트를 남기지 못했습니다(복원이 느려질 뿐입니다)', error)
+      }
+    })()
+  }, [sessionId])
+
   const publishLaser = useCallback((stroke: LaserStroke) => {
     const room = roomRef.current
     if (!room || room.state !== 'connected') return
@@ -736,12 +775,13 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
     restoredAnnotation,
     restoredAnnotationVisible,
     saveAnnotationVisible,
+    saveAnnotationSnapshot,
     applyingQuality,
     retry: () => setRetryCount((current) => current + 1),
     toggleCamera: () => { void toggleControl('camera') },
     toggleMicrophone: () => { void toggleControl('microphone') },
     toggleScreenShare: () => { void toggleControl('screenShare') },
-  }), [annotationAudienceRevision, applyingQuality, cameraOverlay, changeQuality, moveCameraOverlay, pendingControl, publishAnnotation, publishAnnotationState, publishLaser, quality, restoredAnnotation, restoredAnnotationVisible, saveAnnotationVisible, sessionId, state, toggleControl])
+  }), [annotationAudienceRevision, applyingQuality, cameraOverlay, changeQuality, moveCameraOverlay, pendingControl, publishAnnotation, publishAnnotationState, publishLaser, quality, restoredAnnotation, restoredAnnotationVisible, saveAnnotationSnapshot, saveAnnotationVisible, sessionId, state, toggleControl])
 
   return (
     <InstructorLiveMediaContext.Provider value={value}>

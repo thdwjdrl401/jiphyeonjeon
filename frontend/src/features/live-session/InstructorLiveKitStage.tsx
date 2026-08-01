@@ -221,6 +221,7 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
             onLaser={publisher.publishLaser}
             onPublish={publisher.publishAnnotation}
             onWhiteboardPresence={setWhiteboard}
+            onSaveSnapshot={publisher.saveAnnotationSnapshot}
             onPublishState={publisher.publishAnnotationState}
             restoredElements={publisher.restoredAnnotation?.elements ?? null}
             restoredFiles={publisher.restoredAnnotation?.files ?? null}

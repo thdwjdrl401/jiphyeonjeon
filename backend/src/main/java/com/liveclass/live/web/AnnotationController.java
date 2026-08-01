@@ -5,6 +5,7 @@ import com.liveclass.live.service.LiveRoomTokenVerifier;
 import com.liveclass.live.service.LiveAnnotationService;
 import com.liveclass.live.web.dto.AnnotationDocumentResponse;
 import com.liveclass.live.web.dto.AnnotationOpRequest;
+import com.liveclass.live.web.dto.AnnotationSnapshotRequest;
 import com.liveclass.live.web.dto.AnnotationVisibilityRequest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -67,6 +68,18 @@ public class AnnotationController {
         for (AnnotationOpRequest op : ops) {
             annotationService.append(sessionId, op.revision(), op.opType(), op.payload(), op.occurredAt());
         }
+    }
+
+    @Operation(summary = "판서 복원 체크포인트 저장",
+            description = "복원이 세션 시작부터 전부 내려오지 않게 하는 체크포인트(ADR-0057). "
+                    + "강사 클라이언트가 주기적으로 보낸다. 데이터 채널로는 나가지 않는다.")
+    @PutMapping("/api/live-sessions/{sessionId}/annotation/snapshot")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void saveSnapshot(@PathVariable UUID sessionId,
+                             @Valid @RequestBody AnnotationSnapshotRequest request,
+                             Authentication authentication) {
+        accessGuard.requireOwner(sessionId, UUID.fromString(authentication.getName()));
+        annotationService.saveSnapshot(sessionId, request.revision(), request.payload());
     }
 
     @Operation(summary = "판서 표시 상태 변경",

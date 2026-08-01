@@ -230,6 +230,73 @@ class AnnotationReadAccessHttpTest {
                 .andExpect(jsonPath("$.annotationVisible").value(expected));
     }
 
+    /* ── 복원 체크포인트(ADR-0057) ────────────────────────────────────────────── */
+
+    /**
+     * <b>체크포인트부터 접는다.</b> 이것이 없으면 복원이 세션 시작부터 전부 내려온다 — 실측에서
+     * op 233건이 983kB였고, 강의가 길어질수록 무한히 자란다.
+     */
+    @Test
+    void 체크포인트를_저장하면_그_이후_op만_돌려준다() throws Exception {
+        Cookie[] auth = loginAsInstructor();
+        UUID instructorId = UUID.fromString(
+                jdbc.queryForObject("select id::text from core.app_user where email = ?", String.class, lastEmail));
+        UUID sessionId = newSession(instructorId);
+
+        // op 다섯 건을 남긴다.
+        for (int revision = 1; revision <= 5; revision += 1) {
+            write(post("/api/live-sessions/" + sessionId + "/annotation/ops"), auth, """
+                    [{"revision":%d,"opType":"upsert","payload":"{\\"elements\\":[]}","occurredAt":"2026-08-01T10:00:00Z"}]
+                    """.formatted(revision)).andExpect(status().isAccepted());
+        }
+        mockMvc.perform(get("/api/live-sessions/" + sessionId + "/annotation").cookie(auth))
+                .andExpect(jsonPath("$.ops.length()").value(5))
+                .andExpect(jsonPath("$.snapshotPayload").doesNotExist());
+
+        // revision 3까지 반영한 체크포인트를 남기면, 그 뒤 두 건만 내려온다.
+        write(put("/api/live-sessions/" + sessionId + "/annotation/snapshot"), auth,
+                "{\"revision\":3,\"payload\":\"{\\\"elements\\\":[]}\"}")
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/live-sessions/" + sessionId + "/annotation").cookie(auth))
+                .andExpect(jsonPath("$.ops.length()").value(2))
+                .andExpect(jsonPath("$.snapshotPayload").exists());
+    }
+
+    /**
+     * <b>뒤로 가는 체크포인트는 무시한다.</b> 강사가 창을 둘 열면 늦게 온 것이 더 옛 문서일 수 있고,
+     * 그것으로 덮으면 복원이 오히려 과거로 돌아간다.
+     */
+    @Test
+    void 더_옛_체크포인트로는_덮지_않는다() throws Exception {
+        Cookie[] auth = loginAsInstructor();
+        UUID instructorId = UUID.fromString(
+                jdbc.queryForObject("select id::text from core.app_user where email = ?", String.class, lastEmail));
+        UUID sessionId = newSession(instructorId);
+
+        write(put("/api/live-sessions/" + sessionId + "/annotation/snapshot"), auth,
+                "{\"revision\":10,\"payload\":\"{\\\"elements\\\":[],\\\"mark\\\":\\\"new\\\"}\"}")
+                .andExpect(status().isNoContent());
+        write(put("/api/live-sessions/" + sessionId + "/annotation/snapshot"), auth,
+                "{\"revision\":4,\"payload\":\"{\\\"elements\\\":[],\\\"mark\\\":\\\"old\\\"}\"}")
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/live-sessions/" + sessionId + "/annotation").cookie(auth))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.snapshotPayload").value(org.hamcrest.Matchers.containsString("new")));
+    }
+
+    /** 체크포인트도 <b>소유 강사만</b> 쓴다. 남의 판서 복원을 바꿀 수 있으면 안 된다. */
+    @Test
+    void 체크포인트는_소유_강사만_저장한다() throws Exception {
+        Cookie[] other = loginAsInstructor();
+        UUID sessionId = newSession();
+
+        write(put("/api/live-sessions/" + sessionId + "/annotation/snapshot"), other,
+                "{\"revision\":1,\"payload\":\"{}\"}")
+                .andExpect(status().isForbidden());
+    }
+
     /**
      * <b>읽기 전용이다.</b> 방에 들어올 수 있다는 것과 문서를 고칠 수 있다는 것은 다르다 — 쓰기가
      * 열리면 revision 채번의 단일 writer 전제가 깨진다.

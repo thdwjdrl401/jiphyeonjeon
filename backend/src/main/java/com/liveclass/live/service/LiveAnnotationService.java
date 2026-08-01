@@ -1,8 +1,10 @@
 package com.liveclass.live.service;
 
 import com.liveclass.live.domain.LiveAnnotationOp;
+import com.liveclass.live.domain.LiveAnnotationSnapshot;
 import com.liveclass.live.domain.LiveSession;
 import com.liveclass.live.repository.LiveAnnotationOpRepository;
+import com.liveclass.live.repository.LiveAnnotationSnapshotRepository;
 import com.liveclass.live.repository.LiveSessionRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,12 +34,36 @@ public class LiveAnnotationService {
     private final LiveAnnotationOpRepository repository;
     private final SessionClockLookup sessionClock;
     private final LiveSessionRepository sessionRepository;
+    private final LiveAnnotationSnapshotRepository snapshotRepository;
 
     public LiveAnnotationService(LiveAnnotationOpRepository repository, SessionClockLookup sessionClock,
-                                 LiveSessionRepository sessionRepository) {
+                                 LiveSessionRepository sessionRepository,
+                                 LiveAnnotationSnapshotRepository snapshotRepository) {
         this.repository = repository;
         this.sessionClock = sessionClock;
         this.sessionRepository = sessionRepository;
+        this.snapshotRepository = snapshotRepository;
+    }
+
+    /**
+     * 복원 체크포인트를 저장한다(ADR-0057). 세션당 한 행이라 새 것이 오면 덮어쓴다.
+     *
+     * <p>이것이 없으면 복원이 세션 시작부터 전부 내려온다 — 실측에서 op 233건이 983kB였다.
+     */
+    @Transactional
+    public void saveSnapshot(UUID sessionId, long revision, String payload) {
+        LiveAnnotationSnapshot snapshot = snapshotRepository.findById(sessionId)
+                .orElseGet(() -> {
+                    LiveAnnotationSnapshot created = new LiveAnnotationSnapshot();
+                    created.setSessionId(sessionId);
+                    return created;
+                });
+        // 뒤로 가는 체크포인트는 무시한다. 창이 둘 열려 있으면 늦게 온 것이 더 옛 문서일 수 있다.
+        if (snapshot.getPayload() != null && snapshot.getRevision() >= revision) return;
+        snapshot.setRevision(revision);
+        snapshot.setPayload(payload);
+        snapshot.setUpdatedAt(OffsetDateTime.now());
+        snapshotRepository.save(snapshot);
     }
 
     /**
@@ -92,16 +118,40 @@ public class LiveAnnotationService {
      */
     @Transactional(readOnly = true)
     public AnnotationDocumentView restore(UUID sessionId) {
-        Optional<LiveAnnotationOp> snapshot =
+        /*
+         * 시작점 후보가 둘이다(ADR-0057).
+         *
+         *   체크포인트 테이블 — 지금 쓰는 경로. 강사 클라이언트가 주기적으로 저장한다.
+         *   snapshot op     — 옛 세션에 남아 있을 수 있고, ADR-0055의 안전망(저장이 밀리면 강사가
+         *                     스냅샷을 민다)도 여전히 이 경로를 쓴다.
+         *
+         * 둘 중 <b>더 최근 것</b>에서 시작한다. 하나만 보면 다른 쪽이 더 앞서 있을 때 그만큼을
+         * 헛되이 다시 접는다.
+         */
+        Optional<LiveAnnotationOp> snapshotOp =
                 repository.findFirstBySessionIdAndOpTypeOrderByRevisionDesc(sessionId, SNAPSHOT);
-        long from = snapshot.map(LiveAnnotationOp::getRevision).orElse(0L);
+        Optional<LiveAnnotationSnapshot> checkpoint = snapshotRepository.findById(sessionId);
+
+        long opRevision = snapshotOp.map(LiveAnnotationOp::getRevision).orElse(0L);
+        long checkpointRevision = checkpoint.map(LiveAnnotationSnapshot::getRevision).orElse(0L);
+
+        long from;
+        String payload;
+        if (checkpoint.isPresent() && checkpointRevision >= opRevision) {
+            from = checkpointRevision;
+            payload = checkpoint.get().getPayload();
+        } else {
+            from = opRevision;
+            payload = snapshotOp.map(LiveAnnotationOp::getPayload).orElse(null);
+        }
+
         List<LiveAnnotationOp> after =
                 repository.findBySessionIdAndRevisionGreaterThanOrderByRevisionAsc(sessionId, from);
 
         long revision = after.isEmpty() ? from : after.get(after.size() - 1).getRevision();
         return new AnnotationDocumentView(
                 revision,
-                snapshot.map(LiveAnnotationOp::getPayload).orElse(null),
+                payload,
                 after.stream().map(op -> new OpView(op.getRevision(), op.getOpType(), op.getPayload())).toList());
     }
 

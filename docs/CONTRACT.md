@@ -238,6 +238,10 @@ Spring 수신 endpoint를 구현하고 `SPRING_STATUS_CALLBACK_URL`로 주입하
 - `GET /api/live-sessions/{sessionId}/annotation` → `{ revision, nextRevision, snapshotPayload, ops[] }`. **마지막 스냅샷과 그 이후 op만** 돌려준다 — 세션 전체를 접으면 강의가 길어질수록 복원이 느려지고, 스냅샷은 그 자체로 전체 상태다. 접는 것은 FE가 한다(같은 로직이 이미 수신 측에 있다).
 - **`nextRevision`은 서버가 정한다.** FE가 접힌 문서의 revision으로 대신 채번하면, 저장에 실패한 op가 있을 때 이미 쓴 번호를 다시 써서 Egress가 새 획을 "이미 본 op"로 버린다.
 - 복원 시 FE는 §3-6b의 유실 감지(revision 불연속 → 버리고 스냅샷 대기)를 **적용하지 않는다**. 저장된 행은 전송 중 유실이 아니라 실제로 남은 전부이며, 번호가 띄엄하다고 뒤따르는 획까지 버리면 그 이후가 통째로 사라진다.
+- **복원 체크포인트**(ADR-0057): `PUT /api/live-sessions/{sessionId}/annotation/snapshot`(body `{revision, payload}`) → `204`, **소유 강사만**. 강사 클라이언트가 문서-변경 op 100건마다 보낸다. **데이터 채널로는 나가지 않는다** — 문서 전체를 채널에 실으면 §3-6b의 64KB 문제가 되돌아온다.
+  - **op가 아니다.** 별도 테이블(`core.live_annotation_snapshot`, 세션당 한 행)에 둔다. op 테이블에 넣으면 `(session_id, revision)` UNIQUE에 걸리거나, 새 번호를 소비해 **수신 측에 번호 구멍**이 생겨 그 뒤 op가 전부 버려진다.
+  - 복원은 **체크포인트와 `snapshot` op 중 더 최근 것**에서 시작한다. 옛 세션에는 snapshot op가 남아 있고, ADR-0055의 안전망도 그 경로를 쓴다.
+  - **뒤로 가는 체크포인트는 무시한다.** 강사가 창을 둘 열면 늦게 온 것이 더 옛 문서일 수 있다.
 - **판서 표시 상태**(ADR-0056): `GET` 응답에 `visible`(boolean)이 함께 온다. **op가 아니다** — 저장은 `live_session.annotation_visible`이고 위 `ops` fold에 끼어들지 않는다. 판서 **내용**은 문서에, "지금 보여주는가"는 세션에 둔다. `PUT /api/live-sessions/{sessionId}/annotation/visibility`(body `{visible}`) → `204`, **소유 강사만**.
   - **복원할 때 그 상태를 수신 측에도 반드시 알린다.** 켜짐이면 `pointer`, 꺼짐이면 `clear`. 아무것도 보내지 않으면 강사 화면은 비었는데 Egress는 자기 문서를 계속 그려 **수강생에게만 판서가 남는다** — 강사 화면에서는 정상으로 보이므로 알아챌 수 없다.
   - **화이트보드는 여기 없다.** 그건 문서 안의 요소(`liveclass-whiteboard`)라 이미 저장·복원된다. 강사 화면의 버튼은 그 요소의 존재에서 **파생**한다.
