@@ -16,6 +16,7 @@ import {
   RoomEvent,
   Track,
 } from 'livekit-client'
+import { resolveCsrfHeader } from '@/shared/api/client'
 import { isMockApiEnabled } from '@/shared/config/runtime'
 import { getInstructorLiveToken, preparePreflightRoom } from './liveSessionService'
 import {
@@ -112,6 +113,15 @@ export interface InstructorLiveMedia extends InstructorLiveKitState {
    * 열어 버리면 나중에 도착한 복원본이 강사가 그 사이 그린 획을 덮는다.
    */
   restoredAnnotation: AnnotationDocument | null
+  /**
+   * 새로고침 직전의 판서 표시 상태(ADR-0056). 아직 불러오지 못했으면 null.
+   *
+   * <p>화면은 이 값으로 판서를 켤지 정한다. 서버가 정본이고, 이 값이 오기 전까지는 로컬 캐시가
+   * 임시로 화면을 채운다.
+   */
+  restoredAnnotationVisible: boolean | null
+  /** 표시 상태를 서버에 남긴다. 강사가 판서를 켜고 끌 때 부른다. */
+  saveAnnotationVisible: (visible: boolean) => void
   /** 품질 변경으로 트랙을 다시 올리는 중. 이때는 선택을 잠근다. */
   applyingQuality: boolean
   retry: () => void
@@ -197,8 +207,18 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
    * 전체가 다시 그려진다.
    */
   const annotationRevisionRef = useRef(0)
+  /**
+   * 강사가 <b>실제로 그렸는가</b>. 번호가 올라갔는지와 다르다.
+   *
+   * <p>복원본을 덮어쓰지 않으려는 가드는 "강사가 복원을 기다리지 않고 이미 그렸다"를 뜻해야 한다.
+   * 그런데 번호는 포인터·빈 스냅샷·`clear`처럼 <b>문서를 바꾸지 않는 op</b>에도 올라간다. 그것들을
+   * "그렸다"로 세면, 강사가 복원 전에 판서를 켜기만 해도 복원본이 통째로 버려진다 — 이전에 그린
+   * 판서가 강사 화면에서 사라진다.
+   */
+  const annotationDrawnRef = useRef(false)
   const [annotationAudienceRevision, setAnnotationAudienceRevision] = useState(0)
   const [restoredAnnotation, setRestoredAnnotation] = useState<AnnotationDocument | null>(null)
+  const [restoredAnnotationVisible, setRestoredAnnotationVisible] = useState<boolean | null>(null)
 
   /**
    * 판서를 서버에 남기는 대기열(ADR-0051). 라이브 전달과 <b>병렬</b>이라 여기가 막히거나 실패해도
@@ -559,6 +579,7 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
     //       새로고침했을 때 복원이 빈 문서에서 시작한다.</li>
     //   <li>`pointer` — 문서가 아니라 "전체 상태는 서버에 있다"는 안내다(ADR-0055). 담을 내용이 없다.</li>
     // </ul>
+    if (op.type === 'upsert' || op.type === 'delete') annotationDrawnRef.current = true
     const transportOnly = op.type === 'clear'
       || op.type === 'pointer'
       || (op.type === 'snapshot' && op.elements.length === 0)
@@ -624,21 +645,57 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
     void fetchAnnotationDocument(sessionId).then((restored) => {
       if (cancelled) return
       // 강사가 복원을 기다리지 않고 이미 그렸다면 그 획이 먼저다. 번호만 이어 붙이고 덮어쓰지 않는다.
-      if (annotationRevisionRef.current !== 0) {
+      // <b>그렸는지</b>로 본다 — 번호로 보면 판서를 켜기만 해도(포인터) 복원본이 버려진다.
+      if (annotationDrawnRef.current) {
         annotationRevisionRef.current += restored.nextRevision
         return
       }
       annotationRevisionRef.current = restored.nextRevision - 1
       setRestoredAnnotation(restored.document)
+      setRestoredAnnotationVisible(restored.visible)
       // 복원한 판서를 여기서 내보내지 않는다. 새로고침 직후 판서는 <b>꺼진 상태</b>로 시작하므로,
       // 여기서 내보내면 강사에게는 안 보이는 판서가 수강생 화면에만 뜬다. 내보내는 일은 판서를 켤 때
       // 레이어가 한다(InstructorAnnotationLayer). 여기서는 <b>빈 스냅샷</b>으로 번호만 맞춘다 —
       // Egress는 revision 0에서 시작하는데 강사는 이어받은 번호(예: 48)부터 매기므로, 이 기준점이
       // 없으면 이후 op가 전부 "중간이 빠졌다"로 버려진다.
       publishAnnotation({ type: 'snapshot', elements: [] })
+
+      /*
+       * <b>강사 화면 = 수강생 화면.</b> 복원한 표시 상태를 수신 측에도 반드시 알린다(ADR-0056).
+       *
+       * <p>판서를 끈 채로 새로고침하면 강사 화면은 비어 있는데 Egress는 자기 문서를 계속 그린다 —
+       * 여기서 `clear`를 내지 않으면 <b>수강생에게만 판서가 남는다.</b> 그 어긋남은 강사 화면에서
+       * 정상으로 보이므로 알아챌 수 없다.
+       *
+       * <p>켜진 상태로 복원할 때는 화면 쪽(레이어)이 켜지면서 포인터를 낸다. 여기서 또 내면 같은
+       * 일이 두 번 일어난다.
+       */
+      if (!restored.visible) publishAnnotation({ type: 'clear' })
     })
     return () => { cancelled = true }
   }, [publishAnnotation, sessionId, state.connectionState])
+
+  /**
+   * 표시 상태를 서버에 남긴다(ADR-0056).
+   *
+   * <p>실패해도 화면을 되돌리지 않는다 — 강사는 이미 켜거나 끈 화면을 보고 있고, 그것을 되돌리면
+   * 오히려 혼란스럽다. 다음 조작이나 다음 새로고침이 상태를 맞춘다.
+   */
+  const saveAnnotationVisible = useCallback((visible: boolean) => {
+    void (async () => {
+      try {
+        const response = await fetch(`/api/live-sessions/${sessionId}/annotation/visibility`, {
+          method: 'PUT',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json', ...(await resolveCsrfHeader()) },
+          body: JSON.stringify({ visible }),
+        })
+        if (!response.ok) throw new Error(`판서 표시 상태 저장 실패: ${response.status}`)
+      } catch (error) {
+        console.warn('판서 표시 상태를 서버에 남기지 못했습니다', error)
+      }
+    })()
+  }, [sessionId])
 
   const publishLaser = useCallback((stroke: LaserStroke) => {
     const room = roomRef.current
@@ -677,12 +734,14 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
     publishLaser,
     annotationAudienceRevision,
     restoredAnnotation,
+    restoredAnnotationVisible,
+    saveAnnotationVisible,
     applyingQuality,
     retry: () => setRetryCount((current) => current + 1),
     toggleCamera: () => { void toggleControl('camera') },
     toggleMicrophone: () => { void toggleControl('microphone') },
     toggleScreenShare: () => { void toggleControl('screenShare') },
-  }), [annotationAudienceRevision, applyingQuality, cameraOverlay, changeQuality, moveCameraOverlay, pendingControl, publishAnnotation, publishAnnotationState, publishLaser, quality, restoredAnnotation, sessionId, state, toggleControl])
+  }), [annotationAudienceRevision, applyingQuality, cameraOverlay, changeQuality, moveCameraOverlay, pendingControl, publishAnnotation, publishAnnotationState, publishLaser, quality, restoredAnnotation, restoredAnnotationVisible, saveAnnotationVisible, sessionId, state, toggleControl])
 
   return (
     <InstructorLiveMediaContext.Provider value={value}>

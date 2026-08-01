@@ -24,7 +24,18 @@ public record AnnotationDocumentResponse(
         String snapshotPayload,
 
         @Schema(description = "스냅샷 이후의 op들. revision 오름차순.")
-        List<Op> ops) {
+        List<Op> ops,
+
+        /*
+         * 표시 상태를 여기 함께 싣는 이유는 왕복을 하나로 줄이기 위해서다. 복원할 때 어차피 이
+         * 응답을 받으므로 세션을 따로 조회할 이유가 없다.
+         *
+         * <p><b>op가 아니다.</b> 저장은 세션(`live_session.annotation_visible`)에 있고, 위 `ops`를
+         * 접는 과정에 끼어들지 않는다 — ADR-0056이 기각한 것은 "표시 상태를 문서 fold에 넣는 것"이지
+         * 같은 응답에 실어 보내는 것이 아니다.
+         */
+        @Schema(description = "판서를 수강생 화면에 표시 중인가(ADR-0056). 문서 내용이 아니라 세션의 표시 상태.")
+        boolean visible) {
 
     @Schema(description = "판서 op 하나.")
     public record Op(long revision, String opType, String payload) {

@@ -5,6 +5,7 @@ import {
   diffAnnotationElements,
   referencedFiles,
   laserPointFromPointer,
+  orderedForScene,
   whiteboardElement,
   type AnnotationChange,
   type AnnotationElement,
@@ -69,6 +70,14 @@ interface InstructorAnnotationLayerProps {
    * 못했을 때만 인자로 준 스냅샷이 나간다.
    */
   onPublishState: (snapshot: () => AnnotationChange) => void
+  /**
+   * 문서에 화이트보드 요소가 있는지 알린다(ADR-0056).
+   *
+   * <p>화이트보드 버튼은 <b>이 값에서 파생</b>한다. 예전에는 버튼이 자기 상태를 따로 들고 있어서,
+   * 새로고침하면 화면에는 판이 있는데 버튼은 "꺼짐"이 됐다 — 문서가 정본인데 버튼이 그것을 읽지
+   * 않았기 때문이다.
+   */
+  onWhiteboardPresence: (present: boolean) => void
   /** 새 참가자가 들어올 때마다 오르는 값. 오르면 전체 상태를 다시 알린다. */
   audienceRevision: number
   /**
@@ -125,6 +134,7 @@ export default function InstructorAnnotationLayer({
   active,
   onPublish,
   onPublishState,
+  onWhiteboardPresence,
   audienceRevision,
   showPropertyPanel,
   whiteboard,
@@ -188,7 +198,12 @@ export default function InstructorAnnotationLayer({
 
   const handleApi = useCallback((api: ExcalidrawApi) => {
     apiRef.current = api
-    setApiReady(true)
+    /*
+     * Excalidraw는 이 콜백을 <b>자기 렌더 중에</b> 부른다. 그 자리에서 setState하면 React가
+     * "Cannot update a component while rendering a different component"으로 거부한다.
+     * 마이크로태스크로 미뤄 렌더가 끝난 뒤에 알린다.
+     */
+    queueMicrotask(() => setApiReady(true))
   }, [])
 
   // mount가 끝난 뒤에 프레임 매핑을 건다. handleApi 안에서 부르면 무시된다(위 참조).
@@ -261,6 +276,8 @@ export default function InstructorAnnotationLayer({
     elementsRef.current = elements.filter((element) => element.isDeleted !== true)
     if (files) filesRef.current = files
     setHasElements(elementsRef.current.some((element) => element.id !== WHITEBOARD_ELEMENT_ID))
+    // 문서에 판이 있는지 그대로 알린다. 버튼은 이 값을 따른다(ADR-0056).
+    onWhiteboardPresence(elementsRef.current.some((element) => element.id === WHITEBOARD_ELEMENT_ID))
     const { changes, known } = diffAnnotationElements(knownRef.current, elements)
     knownRef.current = known
     for (const change of changes) {
@@ -280,7 +297,7 @@ export default function InstructorAnnotationLayer({
     // 같은 값이면 state를 건드리지 않는다 — onChange는 포인터가 움직일 때도 불린다.
     setSelectedIds((current) =>
       current.length === picked.length && current.every((id, i) => id === picked[i]) ? current : picked)
-  }, [applyFrameMapping, onPublish])
+  }, [applyFrameMapping, onPublish, onWhiteboardPresence])
 
   /**
    * 저장돼 있던 판서를 에디터에 되돌린다(ADR-0051). 새로고침해도 강사 화면이 수강생 화면과 같아야
@@ -323,7 +340,16 @@ export default function InstructorAnnotationLayer({
     const known = new Map<string, number>()
     for (const element of restoredElements) known.set(element.id, element.version ?? 0)
     knownRef.current = known
-    api.updateScene({ elements: restoredElements })
+    /*
+     * <b>Egress와 같은 순서로 넣는다</b>(ADR-0056). Excalidraw는 배열 순서를 z-order로 쓰는데,
+     * 서버에서 온 순서는 그리기 순서라 화이트보드가 맨 앞이라는 보장이 없다. 그대로 넣으면 판이
+     * 판서를 덮고, 강사는 화이트보드를 껐다 켜야 판서를 다시 본다.
+     *
+     * <p>수신 측(Egress)에는 이 보정이 원래 있었다. 강사 에디터에만 없어서 <b>같은 문서가 두
+     * 화면에서 다르게 그려지고</b> 있었다.
+     */
+    const ordered = orderedForScene(restoredElements)
+    api.updateScene({ elements: ordered })
     /*
      * <b>들어갔는지 확인한다.</b> `updateScene`은 실패해도 던지지 않는다 — 에디터가 아직 mount되지
      * 않았으면 그냥 무시된다(React가 "Can't call setState on a component that is not yet mounted"만
@@ -337,7 +363,7 @@ export default function InstructorAnnotationLayer({
       const inScene = current.getSceneElements()
       if (inScene.length > 0) return
       console.warn('판서 복원이 씬에 반영되지 않았다 — 다시 넣는다')
-      current.updateScene({ elements: restoredElements })
+      current.updateScene({ elements: orderedForScene(restoredElements) })
     }, 0)
     // 수신 측에도 알린다. `knownRef`를 채웠으므로 뒤따르는 `onChange`의 diff는 아무것도 찾지 못한다 —
     // 여기서 알리지 않으면 강사 화면에만 판서가 돌아오고 수강생 화면은 빈 채로 남는다.
@@ -624,7 +650,7 @@ export default function InstructorAnnotationLayer({
     if (whiteboard === hasBoard) return
     api.updateScene({
       elements: whiteboard
-        ? [whiteboardElement(), ...current]
+        ? orderedForScene([whiteboardElement(), ...current])
         : current.filter((element) => element.id !== WHITEBOARD_ELEMENT_ID),
     })
   }, [active, whiteboard, ui])

@@ -18,17 +18,25 @@ interface ApiAnnotationDocument {
   nextRevision: number
   snapshotPayload: string | null
   ops: { revision: number; opType: string; payload: string }[]
+  /** 판서를 표시 중인가(ADR-0056). op가 아니라 세션의 표시 상태다 — fold에 끼어들지 않는다. */
+  visible?: boolean
 }
 
 /** 복원된 판서. `nextRevision`은 강사가 이어서 채번할 번호다. */
 export interface RestoredAnnotation {
   document: AnnotationDocument
   nextRevision: number
+  /**
+   * 새로고침 직전의 표시 상태(ADR-0056). 이 값으로 판서를 켤지 정하고, <b>그 상태를 수신 측에도
+   * 알린다</b> — 그러지 않으면 강사 화면은 비었는데 Egress는 자기 문서를 계속 그려서 수강생에게만
+   * 판서가 남는다.
+   */
+  visible: boolean
 }
 
 /** 아무것도 저장돼 있지 않은(또는 복원에 실패한) 상태. 강사는 1번부터 채번한다. */
 export function emptyRestoredAnnotation(): RestoredAnnotation {
-  return { document: emptyAnnotationDocument(), nextRevision: 1 }
+  return { document: emptyAnnotationDocument(), nextRevision: 1, visible: false }
 }
 
 /**
@@ -90,6 +98,7 @@ export function foldStoredDocument(api: ApiAnnotationDocument): RestoredAnnotati
   return {
     document: { revision: api.revision, elements: document.elements, files: document.files },
     nextRevision: Math.max(1, api.nextRevision),
+    visible: api.visible === true,
   }
 }
 

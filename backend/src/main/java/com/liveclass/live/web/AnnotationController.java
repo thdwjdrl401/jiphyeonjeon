@@ -114,7 +114,8 @@ public class AnnotationController {
                 view.snapshotPayload(),
                 view.ops().stream()
                         .map(op -> new AnnotationDocumentResponse.Op(op.revision(), op.opType(), op.payload()))
-                        .toList());
+                        .toList(),
+                annotationService.isVisible(sessionId));
     }
 
     /**

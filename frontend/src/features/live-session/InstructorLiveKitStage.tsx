@@ -31,26 +31,73 @@ function emptyPreviewMessage(state: InstructorLiveKitConnectionState, cameraEnab
   return '카메라가 꺼져 있습니다. 카메라를 켜거나 화면을 공유해 주세요.'
 }
 
+/**
+ * 마지막으로 본 판서 표시 상태. <b>정본이 아니다</b> — 서버 응답이 오기 전까지 화면을 채우는
+ * 임시값이다(ADR-0056).
+ *
+ * <p>`sessionStorage`를 쓴다. 탭을 닫으면 사라지는 것이 맞다 — 다른 기기·다른 창에서는 서버 값이
+ * 정본이고, 여기 남은 값이 그것을 이기면 안 된다.
+ */
+const ANNOTATING_CACHE_PREFIX = 'liveclass.annotating.'
+
+function readCachedAnnotating(sessionId: string): boolean {
+  try {
+    return sessionStorage.getItem(ANNOTATING_CACHE_PREFIX + sessionId) === 'true'
+  } catch {
+    // 프라이빗 모드 등에서 접근이 막힐 수 있다. 캐시가 없는 것과 같게 다룬다.
+    return false
+  }
+}
+
+function writeCachedAnnotating(sessionId: string, visible: boolean): void {
+  try {
+    sessionStorage.setItem(ANNOTATING_CACHE_PREFIX + sessionId, String(visible))
+  } catch {
+    // 저장하지 못해도 기능에는 영향이 없다 — 다음 새로고침에서 깜빡일 뿐이다.
+  }
+}
+
 export default function InstructorLiveKitStage({ sessionId, lessonTitle, participantCount, onRequestEnd }: InstructorLiveKitStageProps) {
   const publisher = useInstructorLiveKit()
-  // 판서는 기본으로 꺼 둔다. 켜져 있으면 캔버스가 포인터를 먹어 카메라 배치를 드래그할 수 없다.
-  const [annotating, setAnnotating] = useState(false)
+  /**
+   * 판서를 켤지. <b>정본은 서버이고 이것은 그 사본이다</b>(ADR-0056).
+   *
+   * <p>첫 프레임은 로컬 캐시로 채운다 — 복원 응답이 오기까지 몇백 ms가 걸리는데(실측 최대 983kB)
+   * 그동안 "꺼짐 → 켜짐"으로 깜빡이면 안 된다. 서버 값이 도착하면 <b>무조건 그것이 이긴다.</b>
+   */
+  const [annotating, setAnnotating] = useState(() => readCachedAnnotating(sessionId))
 
   /**
-   * 저장돼 있던 판서가 있으면 판서를 <b>자동으로 켠다</b>(ADR-0051).
+   * 서버가 답하면 그 값으로 맞춘다. 이것이 "로컬은 캐시"라는 규칙이 실제로 지켜지는 자리다 —
+   * 여기서 비교하지 않으면 로컬이 두 번째 정본이 되어 서로 갈린다(그게 지금까지의 버그였다).
    *
-   * <p>새로고침해도 화면이 그대로여야 한다. 켜 주지 않으면 판서는 살아 있는데 보이지 않아 강사에게는
-   * 사라진 것과 구분되지 않고, 켜기 전까지 수강생 화면에도 나오지 않는다.
-   *
-   * <p>한 번만 본다. 강사가 그 뒤에 판서를 껐다면 그 선택을 되돌리지 않는다.
+   * <p>한 번만 본다. 그 뒤 강사가 켜고 끄는 것은 강사의 선택이므로 되돌리지 않는다.
    */
-  const restoredAnnotationCount = publisher.restoredAnnotation?.elements.length ?? 0
-  const autoEnabledRef = useRef(false)
+  const restoredVisible = publisher.restoredAnnotationVisible
+  const restoredAppliedRef = useRef(false)
+  /**
+   * 강사가 이미 켜거나 껐는가.
+   *
+   * <p><b>복원이 사용자의 나중 조작을 덮으면 안 된다.</b> 복원 응답은 몇백 ms 뒤에 오는데, 그
+   * 사이에 강사가 판서를 켰다면 그것이 최신 의사다. 그때 서버 값(그 조작 이전의 상태)으로 되돌리면
+   * <b>켠 판서가 저절로 꺼진다</b> — 실제로 그렇게 동작했다.
+   *
+   * <p>"서버가 이긴다"는 규칙은 <b>사용자가 아직 말하지 않았을 때</b>의 규칙이다.
+   */
+  const userChangedRef = useRef(false)
   useEffect(() => {
-    if (autoEnabledRef.current || restoredAnnotationCount === 0) return
-    autoEnabledRef.current = true
-    setAnnotating(true)
-  }, [restoredAnnotationCount])
+    if (restoredAppliedRef.current || userChangedRef.current || restoredVisible === null) return
+    restoredAppliedRef.current = true
+    setAnnotating(restoredVisible)
+  }, [restoredVisible])
+
+  /** 켜고 끌 때마다 서버에 남기고 로컬 캐시도 갱신한다. */
+  const changeAnnotating = useCallback((next: boolean) => {
+    userChangedRef.current = true
+    setAnnotating(next)
+    writeCachedAnnotating(sessionId, next)
+    publisher.saveAnnotationVisible(next)
+  }, [publisher, sessionId])
   /**
    * 판서 속성 패널(색·굵기·투명도)은 <b>접힌 상태로 시작</b>한다. 자료 위에 그리는 화면에서 좌우
    * 패널이 시야를 가리고, 색·굵기는 매 획마다 바꾸는 것이 아니다. 필요할 때만 펼친다.
@@ -59,6 +106,13 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
   /**
    * 화이트보드. 화면공유 없이 판서만 할 때 프레임 전체를 흰 판으로 덮는다 — 카메라만 켠 상태에서
    * 얼굴 위에 그리는 것보다 판을 깔고 쓰는 편이 낫다.
+   */
+  /**
+   * 화이트보드. <b>별도 상태가 아니라 문서의 사본이다</b>(ADR-0056).
+   *
+   * <p>화이트보드는 이미 문서 안의 요소(`liveclass-whiteboard`)라 서버에 저장되고 복원된다. 예전에는
+   * 버튼이 그것을 읽지 않고 따로 `false`로 시작해서, 새로고침하면 <b>화면에는 판이 있는데 버튼은
+   * "꺼짐"</b>이 됐다. 레이어가 실제 문서 상태를 알려 주면 그 어긋남이 정의상 사라진다.
    */
   const [whiteboard, setWhiteboard] = useState(false)
 
@@ -166,6 +220,7 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
             whiteboard={whiteboard}
             onLaser={publisher.publishLaser}
             onPublish={publisher.publishAnnotation}
+            onWhiteboardPresence={setWhiteboard}
             onPublishState={publisher.publishAnnotationState}
             restoredElements={publisher.restoredAnnotation?.elements ?? null}
             restoredFiles={publisher.restoredAnnotation?.files ?? null}
@@ -200,7 +255,7 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
               className={annotating ? 'is-active' : ''}
               disabled={!publisher.canControl}
               type="button"
-              onClick={() => setAnnotating((current) => !current)}
+              onClick={() => changeAnnotating(!annotating)}
             >
               판서 {annotating ? '켜짐' : '꺼짐'}
             </button>
