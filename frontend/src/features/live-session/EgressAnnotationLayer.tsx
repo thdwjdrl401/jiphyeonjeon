@@ -9,11 +9,25 @@ import {
   visibleAnnotationElements,
   type AnnotationDocument,
 } from './annotation'
+import { AnnotationOpBuffer, applyPulledDocument, pullAnnotationDocument } from './annotationPull'
 import EgressLaserTrail from './EgressLaserTrail'
 import { loadExcalidraw } from './excalidrawRuntime'
 
 interface EgressAnnotationLayerProps {
   room: Room | null
+  /**
+   * Egress를 열 때 받은 LiveKit 액세스 토큰. 전체 상태를 서버에서 받아갈 때 <b>이 방의 참가자</b>임을
+   * 증명하는 데 쓴다(ADR-0055 결정 4).
+   *
+   * <p>없으면 받아가지 않는다 — 그때는 강사가 내는 스냅샷이 유일한 경로다.
+   */
+  livekitToken?: string
+}
+
+/** 방 이름은 `session-{sessionId}`다(백엔드 `LiveSessionService.roomName`과 같은 규칙). */
+function sessionIdOf(room: Room | null): string | null {
+  const name = room?.name ?? ''
+  return name.startsWith('session-') ? name.slice('session-'.length) : null
 }
 
 /**
@@ -33,32 +47,94 @@ interface EgressAnnotationLayerProps {
  * 보정하지 않으면 판서가 영상 대비 밀린다 — 그런데 <b>강사 화면에서는 정상으로 보이고 녹화에서만
  * 어긋난다</b>.
  */
-export default function EgressAnnotationLayer({ room }: EgressAnnotationLayerProps) {
+export default function EgressAnnotationLayer({ room, livekitToken }: EgressAnnotationLayerProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   const [document, setDocument] = useState<AnnotationDocument>(emptyAnnotationDocument)
+
+  /**
+   * 지금 화면이 그리고 있는 문서. state와 나란히 ref로도 들고 있는다 — 한 tick에 op가 여러 개
+   * 도착하면 state는 아직 이전 값이라, 그것을 기준으로 적용하면 앞의 op가 사라진다.
+   */
+  const documentRef = useRef<AnnotationDocument>(document)
+  const commit = useCallback((next: AnnotationDocument) => {
+    documentRef.current = next
+    setDocument(next)
+  }, [])
+
+  /** 전체 상태를 받아오는 동안 흐른 op를 담아 둔다(ADR-0055). */
+  const bufferRef = useRef(new AnnotationOpBuffer())
+  /** 받아오기가 겹칠 때 마지막 것만 반영하기 위한 표. */
+  const pullSeqRef = useRef(0)
 
   // 데이터 채널 수신. 판서가 없는 강의에서는 이 훅이 아무 일도 하지 않는다.
   useEffect(() => {
     if (!room) return undefined
+    const buffer = bufferRef.current
+    let disposed = false
+
+    /**
+     * 포인터를 받았다 — 전체 상태는 서버에 있다(ADR-0055).
+     *
+     * <p><b>버퍼를 먼저 연다.</b> 왕복이 도는 동안에도 강사는 계속 그리고 있고, 그 op를 놓치면
+     * 이어붙일 자리가 비어 <b>그 뒤 op가 전부 버려진다</b>.
+     */
+    const pull = async (pointerRevision: number) => {
+      const sessionId = sessionIdOf(room)
+      if (!sessionId || !livekitToken) {
+        // 받아갈 수단이 없다. 포인터를 무시하고 지금 문서로 버틴다 — 강사가 저장 실패를 만나면
+        // 예전처럼 스냅샷을 밀어 준다.
+        console.warn('판서 전체 상태를 받아갈 수 없습니다(방 이름 또는 토큰 없음).')
+        return
+      }
+      const seq = (pullSeqRef.current += 1)
+      buffer.start()
+      const pulled = await pullAnnotationDocument({ sessionId, livekitToken })
+      // 그 사이 새 포인터가 왔다면 이 결과는 낡았다. 그쪽이 버퍼를 이미 다시 열었으므로 손대지 않는다.
+      if (disposed || seq !== pullSeqRef.current) return
+
+      if (!pulled) {
+        /*
+         * 받아오지 못했다. 그래도 <b>번호는 맞춘다.</b> 지금까지 그린 판서는 잃지만, 이걸 하지
+         * 않으면 이후 델타가 전부 "중간이 빠졌다"로 버려져 강의가 끝날 때까지 아무것도 나타나지
+         * 않는다 — 그쪽이 훨씬 나쁘다.
+         */
+        console.warn('판서 전체 상태를 받아오지 못했습니다 — 번호만 맞추고 이후 판서를 이어 그립니다.')
+        commit(buffer.drainOnto({ ...documentRef.current, revision: pointerRevision }))
+        return
+      }
+      commit(buffer.drainOnto(applyPulledDocument(pulled, pointerRevision)))
+    }
 
     const onData = (payload: Uint8Array, _participant?: unknown, _kind?: unknown, topic?: string) => {
       if (topic !== ANNOTATION_TOPIC) return
       const op = decodeAnnotationOp(payload)
       // 해석할 수 없는 payload는 버린다. 여기서 예외가 나면 녹화 중 화면이 멈출 수 있다.
       if (!op) return
-      setDocument((current) => {
-        const { document: next, stale } = applyAnnotationOp(current, op)
-        if (stale) {
-          // 유실을 조용히 넘기지 않는다. 강사가 새 참가자에게 보내는 스냅샷이 상태를 맞춰 줄 것이다.
-          console.warn(`판서 op를 건너뛰었다(revision ${current.revision} → ${op.revision}) — 스냅샷을 기다린다`)
-        }
-        return next
-      })
+
+      if (op.type === 'pointer') {
+        void pull(op.revision)
+        return
+      }
+      // 받아오는 중이면 쌓아 둔다. 지금 적용하면 곧 도착할 문서가 덮어써 사라진다.
+      if (buffer.push(op)) return
+
+      const current = documentRef.current
+      const { document: next, stale } = applyAnnotationOp(current, op)
+      if (stale) {
+        // 유실을 조용히 넘기지 않는다. 강사가 새 참가자에게 내는 포인터가 상태를 맞춰 줄 것이다.
+        console.warn(`판서 op를 건너뛰었다(revision ${current.revision} → ${op.revision}) — 전체 상태를 기다린다`)
+      }
+      commit(next)
     }
 
     room.on(RoomEvent.DataReceived, onData)
-    return () => { room.off(RoomEvent.DataReceived, onData) }
-  }, [room])
+    return () => {
+      disposed = true
+      // 열린 채로 남기지 않는다. 다시 구독했을 때 op를 쌓기만 하고 그리지 않게 된다.
+      buffer.close()
+      room.off(RoomEvent.DataReceived, onData)
+    }
+  }, [commit, livekitToken, room])
 
   /**
    * 문서 하나를 캔버스로 그려 얹는다.
@@ -85,7 +161,12 @@ export default function EgressAnnotationLayer({ room }: EgressAnnotationLayerPro
       const canvas = await exportToCanvas({
         elements: elements as never,
         appState: { exportBackground: false },
-        files: null,
+        /*
+         * 이미지 요소는 데이터를 담지 않고 `fileId`로 가리키기만 한다. 여기에 파일을 넘기지 않으면
+         * 수식(ADR-0054)이 <b>빈 자리로</b> 합성된다 — 강사 화면에는 보이는데 수강생과 녹화에는
+         * 없는, 이 프로젝트에서 반복해 겪은 그 어긋남이다.
+         */
+        files: current.files as never,
         exportPadding: 0,
         // scale 1은 확대가 아니라 "내용 크기 그대로"를 뜻한다. 캔버스가 내용만큼만 생겨
         // 늘 1920x1080을 할당하는 것보다 싸다.

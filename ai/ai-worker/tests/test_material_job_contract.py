@@ -6,8 +6,9 @@ from uuid import UUID
 import pytest
 from pydantic import ValidationError
 
-from app.application import SPRING_ASSET_SOURCE, map_pptx_embed_job
+from app.application import SPRING_ASSET_SOURCE, map_embed_delete_job, map_pptx_embed_job
 from app.contracts import EmbedDeleteJob, PptxEmbedJob, parse_material_job
+from app.domain import MaterialScope
 
 
 MATERIAL_ID = "550e8400-e29b-41d4-a716-446655440000"
@@ -118,3 +119,39 @@ def test_maps_wire_job_to_deterministic_internal_material_identity() -> None:
     assert first.chunk_strategy == "slide-max-1200-v1"
     assert first.model_name == "BAAI/bge-m3"
     assert first.model_revision == REVISION
+
+
+def test_maps_delete_job_and_resolved_scope_to_deterministic_material_identity() -> None:
+    job = parse_material_job(
+        _body(
+            {
+                "taskType": "EMBED_DELETE",
+                "materialId": MATERIAL_ID,
+                "lessonId": LESSON_ID,
+                "contractVersion": 1,
+            }
+        )
+    )
+    assert isinstance(job, EmbedDeleteJob)
+    scope = MaterialScope(
+        curriculum_id=UUID(CURRICULUM_ID),
+        lesson_id=UUID(LESSON_ID),
+        material_version=3,
+    )
+
+    material = map_embed_delete_job(
+        job,
+        tenant_id="liveclass",
+        scope=scope,
+        model_revision=REVISION,
+        chunk_max_chars=1_200,
+    )
+
+    assert material.job_id == f"EMBED_DELETE:{MATERIAL_ID}"
+    assert material.idempotency_key == f"material:{MATERIAL_ID}:delete"
+    assert material.tenant_id == "liveclass"
+    assert material.curriculum_id == UUID(CURRICULUM_ID)
+    assert material.lesson_id == UUID(LESSON_ID)
+    assert material.material_id == UUID(MATERIAL_ID)
+    assert material.material_version == 3
+    assert material.correlation_id == f"material:{MATERIAL_ID}"

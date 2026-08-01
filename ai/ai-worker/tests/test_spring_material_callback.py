@@ -91,11 +91,39 @@ def test_callback_event_id_and_raw_body_are_stable_for_http_retry() -> None:
         ("MATERIAL_EMBEDDING", "READY"),
         ("MATERIAL_EMBEDDED", "FAILED"),
         ("MATERIAL_EMBED_FAILED", "PROCESSING"),
+        ("MATERIAL_DELETED", "FAILED"),
+        ("MATERIAL_DELETE_FAILED", "DELETED"),
     ],
 )
 def test_rejects_event_and_status_mismatch(event_type: str, status: str) -> None:
     with pytest.raises(ValidationError, match="status must match"):
         _event(eventType=event_type, status=status)
+
+
+def test_delete_events_round_trip_with_their_matching_status() -> None:
+    deleted = _event(
+        eventId=str(material_callback_event_id(JOB_ID, "MATERIAL_DELETED")),
+        eventType="MATERIAL_DELETED",
+        status="DELETED",
+    )
+    failed = _event(
+        eventId=str(material_callback_event_id(JOB_ID, "MATERIAL_DELETE_FAILED")),
+        eventType="MATERIAL_DELETE_FAILED",
+        status="FAILED",
+    )
+
+    assert json.loads(deleted.raw_body())["status"] == "DELETED"
+    assert json.loads(failed.raw_body())["status"] == "FAILED"
+    assert "keyTerms" not in json.loads(deleted.raw_body())
+
+
+def test_key_terms_rejected_on_delete_event_types() -> None:
+    with pytest.raises(ValidationError, match="keyTerms"):
+        _event(
+            eventType="MATERIAL_DELETED",
+            status="DELETED",
+            keyTerms=[{"term": "x", "definition": "y"}],
+        )
 
 
 def test_ready_event_can_carry_key_terms_in_the_same_callback() -> None:

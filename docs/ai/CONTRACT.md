@@ -43,11 +43,11 @@ flowchart LR
 
 | 제공자 | 기본 bind | 운영 접근 주소 | method/path | 호출자 | 인증 | 용도 |
 |---|---|---|---|---|---|---|
-| ai-api | `127.0.0.1:8010` | 배포 설정 주입 | `GET /healthz` | 운영 probe | 없음, loopback 전제 | 프로세스 생존 |
-| ai-api | `127.0.0.1:8010` | 배포 설정 주입 | `GET /readyz` | 운영 probe | 없음, loopback 전제 | lifespan 준비 |
-| ai-api | `127.0.0.1:8010` | 배포 설정 주입 | `POST /internal/v1/rag/answers:stream` | Spring | `X-Internal-Signature` HMAC | RAG SSE |
-| ai-worker | `127.0.0.1:8011` | 배포 설정 주입 | `GET /healthz` | 운영 probe | 없음, loopback 전제 | worker 생존 |
-| ai-worker | `127.0.0.1:8011` | 배포 설정 주입 | `GET /readyz` | 운영 probe | 없음, loopback 전제 | runtime 준비 |
+| ai-api | 기본 `127.0.0.1:8010`; compose `0.0.0.0:8010` | container `ai-api:8010`; host prod `127.0.0.1:8010`, dev `127.0.0.1:18010` | `GET /healthz` | 운영 probe | 없음, loopback 전제 | 프로세스 생존 |
+| ai-api | 기본 `127.0.0.1:8010`; compose `0.0.0.0:8010` | container `ai-api:8010`; host prod `127.0.0.1:8010`, dev `127.0.0.1:18010` | `GET /readyz` | 운영 probe | 없음, loopback 전제 | lifespan 준비 |
+| ai-api | 기본 `127.0.0.1:8010`; compose `0.0.0.0:8010` | container `ai-api:8010`; host prod `127.0.0.1:8010`, dev `127.0.0.1:18010` | `POST /internal/v1/rag/answers:stream` | Spring | `X-Internal-Signature` HMAC | RAG SSE |
+| ai-worker | 기본 `127.0.0.1:8011`; compose `0.0.0.0:8011` | host prod `127.0.0.1:8011`, dev `127.0.0.1:18011` | `GET /healthz` | 운영 probe | 없음, loopback 전제 | worker 생존 |
+| ai-worker | 기본 `127.0.0.1:8011`; compose `0.0.0.0:8011` | host prod `127.0.0.1:8011`, dev `127.0.0.1:18011` | `GET /readyz` | 운영 probe | 없음, loopback 전제 | runtime 준비 |
 | bge-runtime | GPU `127.0.0.1:8020` | host `:18020`; container `:18080/internal/bge` | `GET /healthz` | EC2 AI/운영 | 없음, 내부망 전제 | FastAPI 생존 |
 | bge-runtime | GPU `127.0.0.1:8020` | host `:18020`; container `:18080/internal/bge` | `GET /readyz` | ai-api, ai-worker | 없음, 내부망 전제 | model warmup 완료 |
 | bge-runtime | GPU `127.0.0.1:8020` | host `:18020`; container `:18080/internal/bge` | `POST /internal/v1/embeddings` | ai-api, ai-worker | Bearer token | embedding |
@@ -57,6 +57,11 @@ flowchart LR
 | dev realtime-agent | GPU `127.0.0.1:8082` | EC2 `127.0.0.1:18082` | `GET /health/live` | 개발/Spring 목표 경로 | 없음, loopback 전제 | Python health server 생존 |
 | dev realtime-agent | GPU `127.0.0.1:8082` | EC2 `127.0.0.1:18082` | `GET /health/ready` | 개발/Spring 목표 경로 | 없음, loopback 전제 | STT prewarm·AgentServer·LiveKit 준비 |
 | dev realtime-agent | GPU `127.0.0.1:8082` | EC2 `127.0.0.1:18082` | `GET /` | 개발 smoke | 없음, loopback 전제 | 호환용 plain `OK` |
+
+EC2 compose의 `0.0.0.0` bind는 Docker network와 port forwarding을 위한 **컨테이너 내부 bind**다.
+host publish는 항상 `127.0.0.1`로 제한하므로 public interface에는 열리지 않는다. prod/dev를 동시에
+띄울 수 있도록 container port `8010/8011`은 같게 유지하고 host port만 `8010/8011`과 `18010/18011`로 나눈다.
+상세 근거는 [ADR-0036](../decisions/canola/0036-ai-compose-and-realtime-env-profiles.md)을 따른다.
 
 realtime-agent는 FastAPI가 아니다. Python `ThreadingHTTPServer`가 prod loopback `:8081`, dev
 loopback `:8082`의 service health를 제공하고 LiveKit Agents SDK의 자체 HTTP server는 각 process의
@@ -254,17 +259,17 @@ EC2 AI 스택이 dev(`docker-compose.ai-dev.yml`, project `liveclass-ai-dev`)·p
 |---|---|---|
 | Redis 터널 | local `-L 127.0.0.1:4000` (기존) | local `-L 127.0.0.1:6390` (신규) |
 | `REDIS_URL` | `redis://:<REDIS_PASSWORD>@127.0.0.1:4000/0` (requirepass) | `redis://127.0.0.1:6390/0` (무인증) |
-| STT provider | nemotron | nemotron |
+| STT provider | OpenAI Realtime API | local Nemotron |
 | LiveKit | 공용 `:7443`, name으로 격리 | 공용 `:7443`, name으로 격리 |
 | `STT_AGENT_NAME` | `liveclass-realtime-stt-dev` | `liveclass-realtime-stt-prod` |
 | health | GPU `:8082`, EC2 `:18082` | GPU `:8081`, EC2 `:18081` |
 | active/idle | `1/1` | `12/12` |
 | caption 소비자 | dev ai-api (`liveclass-ai-dev`) | prod ai-api (`liveclass-ai`) |
 
-prod realtime-agent는 `REDIS_URL=redis://127.0.0.1:6390/0`, agent name
-`liveclass-realtime-stt-prod`를 사용한다. dev realtime-agent는 기존 password Redis `:4000`과 agent name
-`liveclass-realtime-stt-dev`를 유지한다. 두 process는 같은 GPU0를 쓰므로 검증된 prod `12/12` 용량을 보존하고
-추가 dev 기본값은 `1/1`로 제한한다.
+prod realtime-agent는 local Nemotron과 `REDIS_URL=redis://127.0.0.1:6390/0`, agent name
+`liveclass-realtime-stt-prod`를 사용한다. dev realtime-agent는 OpenAI Realtime API와 password Redis
+`:4000`, agent name `liveclass-realtime-stt-dev`를 사용한다. dev profile에는 Nemotron model 경로와
+`CUDA_VISIBLE_DEVICES`를 넣지 않으며 API 호출·비용 상한으로 active/idle을 `1/1`로 제한한다.
 
 세부 실행은 [`realtime-agent tunnel 문서`](../../ai/realtime-agent/scripts/README.md)와
 [`BGE tunnel 문서`](../../ai/bge-runtime/scripts/README.md)를 따른다.
@@ -377,7 +382,7 @@ Spring realtime-agent health proxy client는 아직 없다. 따라서 prod `/int
 | realtime-agent service health prod `:18081`·dev `:18082` | endpoint·schema·tunnel 구현, Spring client 미구현 |
 | nginx `:18080/internal/bge/*` | ai-api·ai-worker 운영 container caller 배선 구현 |
 | nginx prod `/internal/realtime-agent/*`·dev `/internal/realtime-agent-dev/*` | proxy 구현, Spring health client 미구현 |
-| EC2 AI 스택 dev/prod 2벌 | prod `docker-compose.ai-prod.yml`(project `liveclass-ai`, network `liveclass_default`) + dev `docker-compose.ai-dev.yml`(project `liveclass-ai-dev`, network `liveclass-dev_default`). 각각 자기 pg/redis/rabbitmq에 접속, GPU BGE 프록시는 공용. prod redis loopback `:6390`, dev redis `:4000`(§5.1·§5.5) |
+| EC2 AI 스택 dev/prod 2벌 | 두 compose는 같은 서비스 구조다. prod는 host loopback `:8010/:8011`, dev는 `:18010/:18011`로 관리 포트만 분리하고 각각 자기 pg/redis/rabbitmq에 접속한다. GPU BGE 프록시는 공용이며 dev Spring 주소는 별도 env로 주입(§3·§5.1·§5.5) |
 
 ## 8. 변경 규칙
 

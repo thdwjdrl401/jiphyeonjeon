@@ -172,6 +172,18 @@ services:
       # 콜백용 AI_CALLBACK_SECRET과는 별개 값이다(docs/ai/CONTRACT.md §3.2).
       AI_API_BASE_URL: http://ai-api:8010
       AI_INTERNAL_SECRET: ${AI_INTERNAL_SECRET:?AI_INTERNAL_SECRET 필요 — ai-api와 공유하는 RAG HMAC 시크릿}
+      # 판서 해석(ADR-0054, §3-6e). backend가 GMS를 직접 부른다 — 이 호출에는 검색도 임베딩도
+      # 자막 컨텍스트도 없어 ai-api를 거치면 홉과 HMAC 서명만 는다.
+      #
+      # 이 줄이 없으면 .env.prod에 값을 넣어도 컨테이너로 전달되지 않는다. MATERIAL_EMBEDDING_ENABLED가
+      # 정확히 그렇게 조용히 꺼져 있던 적이 있다(위 참조). 기본값을 비워 두므로 키가 없으면 판서 해석만
+      # 502로 떨어지고 기동은 막지 않는다 — 강의가 키 하나로 안 뜨는 상황을 만들지 않는다.
+      ANNOTATION_AI_API_KEY: ${ANNOTATION_AI_API_KEY:-}
+      ANNOTATION_AI_MODEL: ${ANNOTATION_AI_MODEL:-gpt-4.1}
+      # 운영 콘솔(ROLE_ADMIN) 허용 이메일 — 콤마 구분. 비면 관리자가 아무도 없다(콘솔은 403).
+      # 별도 가입 역할이 아니라 로그인 시 기존 계정에 권한을 덧입히는 방식이라(AdminAccounts),
+      # 목록을 바꾸면 해당 사용자는 재로그인해야 반영된다. 이 줄이 없으면 .env.prod에 넣어도 전달되지 않는다.
+      SECURITY_ADMIN_EMAILS: ${SECURITY_ADMIN_EMAILS:-}
     depends_on:
       postgres:
         condition: service_healthy   # Flyway 마이그레이션 전 DB 준비 대기

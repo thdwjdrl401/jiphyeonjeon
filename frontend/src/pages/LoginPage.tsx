@@ -108,6 +108,8 @@ export default function LoginPage() {
         <div className={`form-group${errors.password ? ' has-error' : ''}`}>
           <div className="label-row">
             <label htmlFor="password">비밀번호</label>
+            {/* 재설정의 주 진입점 — 로그인을 못 하는 사람이 실제로 서 있는 화면이 여기다. */}
+            <Link className="label-row__link" to={publicPaths.passwordResetRequest}>비밀번호를 잊으셨나요?</Link>
           </div>
           <div className="input-shell">
             <span className="input-icon" aria-hidden="true">●</span>

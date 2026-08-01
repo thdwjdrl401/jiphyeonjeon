@@ -7,6 +7,8 @@ import {
   decodeLaserStroke,
   encodeLaserStroke,
   laserOutlinePath,
+  trimAnnotationPrecision,
+  trimOpPrecision,
   laserPointFromPointer,
   applyAnnotationOp,
   decodeAnnotationOp,
@@ -16,6 +18,7 @@ import {
   visibleAnnotationElements,
   WHITEBOARD_ELEMENT_ID,
   type AnnotationDocument,
+  type AnnotationElement,
   type AnnotationOp,
 } from '@/features/live-session/annotation'
 
@@ -255,7 +258,7 @@ describe('레이저 포인터', () => {
 
 describe('판서 op 적용', () => {
   function docWith(elements: Array<{ id: string; isDeleted?: boolean }>, revision = 1): AnnotationDocument {
-    return { revision, elements }
+    return { revision, elements, files: {} }
   }
 
   it('upsert는 같은 id를 덮어쓰고 새 id는 추가한다', () => {
@@ -336,7 +339,7 @@ describe('판서 op 적용', () => {
    */
   it('새로고침으로 revision이 역행해도 빈 스냅샷으로 복구된다', () => {
     // Egress는 이미 47까지 진행한 상태.
-    let doc: AnnotationDocument = { revision: 47, elements: [{ id: 'old' }] }
+    let doc: AnnotationDocument = { revision: 47, elements: [{ id: 'old' }], files: {} }
 
     // 새로고침 직후의 획들 — revision이 1부터라 전부 버려진다.
     for (const revision of [1, 2, 3]) {
@@ -357,7 +360,7 @@ describe('판서 op 적용', () => {
   })
 
   it('clear로는 복구되지 않는다 — revision 검사를 받아 똑같이 버려진다', () => {
-    const doc: AnnotationDocument = { revision: 47, elements: [{ id: 'old' }] }
+    const doc: AnnotationDocument = { revision: 47, elements: [{ id: 'old' }], files: {} }
 
     const { document } = applyAnnotationOp(doc, { type: 'clear', revision: 1 })
 
@@ -384,6 +387,7 @@ describe('판서 op 적용', () => {
     // 도착 순: 판서가 먼저, 화이트보드가 나중. 하지만 index는 화이트보드가 더 아래(a0 < a1).
     const document: AnnotationDocument = {
       revision: 2,
+      files: {},
       elements: [
         { id: 'stroke', index: 'a1' },
         { id: 'whiteboard', index: 'a0' },
@@ -396,6 +400,7 @@ describe('판서 op 적용', () => {
   it('index가 없는 요소는 들어온 순서를 지킨다', () => {
     const document: AnnotationDocument = {
       revision: 1,
+      files: {},
       elements: [{ id: 'first' }, { id: 'second' }, { id: 'third' }],
     }
 
@@ -413,6 +418,7 @@ describe('판서 op 적용', () => {
   it('화이트보드는 index와 무관하게 언제나 맨 아래다', () => {
     const document: AnnotationDocument = {
       revision: 3,
+      files: {},
       elements: [
         { id: 'stroke-1', index: 'a1' },
         { id: WHITEBOARD_ELEMENT_ID },
@@ -427,6 +433,7 @@ describe('판서 op 적용', () => {
   it('index가 하나라도 없으면 정렬하지 않고 도착 순을 지킨다', () => {
     const document: AnnotationDocument = {
       revision: 1,
+      files: {},
       elements: [{ id: 'a', index: 'a2' }, { id: 'no-index' }, { id: 'b', index: 'a1' }],
     }
 
@@ -543,5 +550,94 @@ describe('판서 op 인코딩', () => {
     ['delete인데 ids가 없음', new TextEncoder().encode(JSON.stringify({ v: 1, op: { type: 'delete', revision: 1 } }))],
   ])('%s → 예외 없이 null', (_label, payload) => {
     expect(decodeAnnotationOp(payload)).toBeNull()
+  })
+})
+
+/**
+ * op 페이로드 정밀도(§3-6b).
+ *
+ * <p>스냅샷은 문서 전체라 판서가 길어질수록 커진다. WebRTC 데이터 채널의 기본 최대 메시지는
+ * <b>64KB</b>이고, 넘으면 스냅샷이 통째로 실패해 <b>수강생 화면에 판서가 아예 나오지 않는다</b> —
+ * 강사 화면에는 멀쩡히 보이므로 알아채기 어렵다.
+ *
+ * <p>실측: 요소 53개 + 수식 1개가 74.9KB(한도의 114%)였고, 그중 요소가 66.5KB, 다시 그중
+ * <b>75%가 획의 점</b>이었다. 좌표를 2자리로 다듬으니 55.9KB(85%)가 됐다.
+ */
+describe('op 페이로드 정밀도', () => {
+  it('좌표를 소수 2자리로 다듬는다', () => {
+    const element = {
+      id: 'a', type: 'freedraw', version: 1,
+      x: 393.35349688211795, y: 322.7123707105784,
+      points: [[0, 0], [0.66668701171875, -1.333343505859375]],
+    } as unknown as AnnotationElement
+
+    const trimmed = trimAnnotationPrecision(element)
+
+    expect(trimmed.x).toBe(393.35)
+    expect(trimmed.y).toBe(322.71)
+    expect(trimmed.points).toEqual([[0, 0], [0.67, -1.33]])
+  })
+
+  /**
+   * 각도는 라디안이라 2자리면 0.57도가 어긋난다. 회전한 글자가 눈에 띄게 틀어진다 — 좌표와 달리
+   * 이건 보인다.
+   */
+  it('각도는 건드리지 않는다', () => {
+    const element = { id: 'a', type: 'text', version: 1, angle: 0.7853981633974483 } as unknown as AnnotationElement
+
+    expect(trimAnnotationPrecision(element).angle).toBe(0.7853981633974483)
+  })
+
+  /** id·index·seed 같은 값이 숫자라고 반올림되면 z-order와 멱등성이 깨진다. */
+  it('좌표가 아닌 값은 그대로 둔다', () => {
+    const element = {
+      id: 'a', type: 'freedraw', version: 7, index: 'a1', seed: 208629102,
+      versionNonce: 1184557170, strokeColor: '#e03131',
+      x: 1.005, y: 2, points: [[0, 0]],
+    } as unknown as AnnotationElement
+
+    expect(trimAnnotationPrecision(element)).toMatchObject({
+      id: 'a', version: 7, index: 'a1', seed: 208629102,
+      versionNonce: 1184557170, strokeColor: '#e03131',
+    })
+  })
+
+  /**
+   * <b>강사의 문서를 건드리면 안 된다.</b> 에디터가 들고 있는 값을 바꾸면 version 기반 diff가
+   * 그것을 "바뀐 요소"로 보고 같은 획을 다시 내보낸다.
+   */
+  it('원본 요소를 바꾸지 않는다', () => {
+    const element = { id: 'a', type: 'freedraw', version: 1, x: 1.23456789, points: [[0.98765, 0]] } as unknown as AnnotationElement
+
+    trimAnnotationPrecision(element)
+
+    expect(element.x).toBe(1.23456789)
+    expect((element.points as number[][])[0][0]).toBe(0.98765)
+  })
+
+  it('요소를 담은 op만 다듬는다', () => {
+    const upsert = trimOpPrecision({
+      type: 'upsert', revision: 1,
+      elements: [{ id: 'a', type: 'freedraw', version: 1, x: 1.23456 } as unknown as AnnotationElement],
+    })
+    expect((upsert as { elements: AnnotationElement[] }).elements[0].x).toBe(1.23)
+
+    // 요소가 없는 op는 그대로 지나간다.
+    const remove = { type: 'delete' as const, revision: 2, ids: ['a'] }
+    expect(trimOpPrecision(remove)).toBe(remove)
+  })
+
+  /** 다듬은 뒤에도 수신 측이 같은 문서를 만들 수 있어야 한다 — 형태가 깨지면 안 된다. */
+  it('다듬어도 문서로 접힌다', () => {
+    const op = trimOpPrecision({
+      type: 'snapshot', revision: 5,
+      elements: [{ id: 'a', type: 'freedraw', version: 1, x: 1.239, points: [[0, 0], [2.005, 3.004]] } as unknown as AnnotationElement],
+    })
+
+    const { document } = applyAnnotationOp(emptyAnnotationDocument(), op)
+
+    expect(document.revision).toBe(5)
+    expect(document.elements[0].x).toBe(1.24)
+    expect(document.elements[0].points).toEqual([[0, 0], [2.01, 3]])
   })
 })

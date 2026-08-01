@@ -61,7 +61,8 @@ public class LiveAiAnswerService {
      * 서버 신뢰 값으로 요청을 조립한다.
      *
      * <ul>
-     *   <li>{@code lessonId} — 세션에서 조회(클라 입력 금지).</li>
+     *   <li>{@code lessonId}·{@code curriculumId} — 세션에서 조회(클라 입력 금지). 커리큘럼은 ai-api의
+     *       자료 검색 범위다(ADR-0042) — 레슨만 보내면 같은 커리큘럼의 다른 자료를 못 찾는다.</li>
      *   <li>{@code requestId} — 서버 생성. 클라가 재사용하면 ai-api가 409를 내므로 충돌을 원천 차단한다.</li>
      *   <li>{@code contextTimeMs} — 해당 세션 <b>최신 자막 행의 raw {@code streamElapsedMs}</b>. 자막이
      *       없으면 0. 세션-ms로 변환하지 않으므로 attempt 앵커 문제가 생기지 않는다.</li>
@@ -81,6 +82,7 @@ public class LiveAiAnswerService {
         return new RagAnswerCommand(
                 UUID.randomUUID().toString(),
                 session.getLessonId(),
+                session.getCurriculumId(),
                 sessionId,
                 question,
                 contextTimeMs);

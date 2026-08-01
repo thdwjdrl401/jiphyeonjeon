@@ -21,6 +21,7 @@ from app.rag import CaptionSource, PptxSource, RagAnswerRequest, RagStreamFailur
 from app.rag.models import RetrievedEvidence
 
 LESSON_ID = UUID("11111111-1111-4111-8111-111111111111")
+CURRICULUM_ID = UUID("55555555-5555-4555-8555-555555555555")
 MATERIAL_ID = UUID("33333333-3333-4333-8333-333333333333")
 SESSION_ID = "44444444-4444-4444-8444-444444444444"
 
@@ -29,6 +30,7 @@ def _request() -> RagAnswerRequest:
     return RagAnswerRequest(
         requestId="request-private",
         lessonId=LESSON_ID,
+        curriculumId=CURRICULUM_ID,
         sessionId=SESSION_ID,
         question="방금 설명한 개념은 무엇인가요?",
         contextTimeMs=615_000,
@@ -40,6 +42,7 @@ def _evidence() -> tuple[RetrievedEvidence, ...]:
     return (
         RetrievedEvidence(
             lesson_id=LESSON_ID,
+            curriculum_id=CURRICULUM_ID,
             content="슬라이드의 검색 증강 생성 설명",
             source=PptxSource(materialId=MATERIAL_ID, page=4),
         ),

@@ -102,4 +102,8 @@ tasks.named('test') {
     // 테스트는 @SpringBootTest 컨텍스트가 여러 개 캐시되고 각자 Hikari 풀을 잡는다. 로컬 Postgres
     // max_connections(=100)를 넘지 않도록 컨텍스트당 풀을 작게 제한한다(설정파일 불변, 시스템 프로퍼티로).
     systemProperty 'spring.datasource.hikari.maximum-pool-size', '3'
+    // 테스트 JVM 기본 힙(512m)은 캐시된 컨텍스트 13개가 각자 풀·EntityManagerFactory를 들고 있기엔 빠듯해
+    // GC가 잦아진다. 병렬 포크는 켜지 않는다 — 컨테이너가 JVM당 하나라 포크마다 PG·Redis가 새로 뜨고,
+    // 타이밍에 민감한 WS 테스트가 같은 러너에서 서로를 밀어낸다.
+    maxHeapSize = '1500m'
 }

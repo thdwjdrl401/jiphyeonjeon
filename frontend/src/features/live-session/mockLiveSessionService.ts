@@ -13,7 +13,16 @@ const bookmarksByLesson = new Map<string, number[]>()
 const stateSubscribers = new Map<string, Set<(event: LiveSessionStateEvent) => void>>()
 const mockLivePlaybackUrl = 'https://files.vidstack.io/sprite-fight/hls/stream.m3u8'
 
-export function resetMockLiveSessionState() {
+/**
+ * 모듈 상태 초기화. 위 Map들은 한 번 쓰이면 프로세스가 끝날 때까지 남는다 — 라이브를 시작하는
+ * 테스트가 세션을 LIVE로 바꿔 두면 <b>그 뒤에 도는 다른 테스트</b>가 SCHEDULED를 기대하다 깨진다.
+ * 지금까지는 파일 안 테스트 순서가 우연히 맞아 가려져 있었고, 순서를 섞으면 바로 재현됐다.
+ * {@code resetMockAuth}가 데모 상태를 되돌릴 때 함께 부른다.
+ *
+ * <p>종료 상태 구독자(`stateSubscribers`)도 함께 지운다 — 남겨 두면 이전 테스트가 붙여 둔 구독자가
+ * 다음 테스트의 이벤트를 받아 엉뚱한 화면 전환을 만든다.
+ */
+export function resetMockLiveSessions() {
   liveStatusOverrides.clear()
   liveStartOperations.clear()
   bookmarksByLesson.clear()

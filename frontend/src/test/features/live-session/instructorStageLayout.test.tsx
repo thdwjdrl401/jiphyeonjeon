@@ -26,6 +26,10 @@ function renderStage(overrides: Partial<InstructorLiveMedia> = {}) {
     cameraOverlay: DEFAULT_CAMERA_OVERLAY,
     moveCameraOverlay: vi.fn(),
     publishAnnotation: vi.fn(),
+    publishAnnotationState: vi.fn(),
+    restoredAnnotationVisible: null,
+    saveAnnotationVisible: vi.fn(),
+    saveAnnotationSnapshot: vi.fn(),
     publishLaser: vi.fn(),
     annotationAudienceRevision: 0,
     restoredAnnotation: null,
@@ -91,22 +95,40 @@ describe('강사 스테이지 배치', () => {
   })
 
   /**
-   * 새로고침해도 화면이 그대로여야 한다. 켜 주지 않으면 판서는 살아 있는데 보이지 않아 강사에게는
-   * 사라진 것과 구분되지 않고, 켜기 전까지 수강생 화면에도 나오지 않는다.
+   * <b>서버에 남은 표시 상태대로 돌아온다</b>(ADR-0056).
+   *
+   * <p>예전에는 "저장된 요소가 있으면 켠다"였다. 그래서 강사가 판서를 <b>끄고</b> 나갔어도 새로고침하면
+   * 멋대로 켜졌다 — 강사의 선택이 사라졌다. 표시 상태를 세션에 남기면 그 선택이 그대로 돌아온다.
    */
-  it('저장돼 있던 판서가 있으면 판서를 자동으로 켠다', () => {
+  it('서버에 켜짐으로 남아 있으면 켜진 채로 돌아온다', () => {
     const { getByRole } = renderStage({
-      restoredAnnotation: { revision: 47, elements: [{ id: 'a', type: 'freedraw', version: 1 }] },
+      restoredAnnotation: { revision: 47, elements: [{ id: 'a', type: 'freedraw', version: 1 }], files: {} },
+      restoredAnnotationVisible: true,
     } as Partial<InstructorLiveMedia>)
 
     expect(getByRole('button', { name: /^판서 (켜짐|꺼짐)$/ }).getAttribute('aria-pressed')).toBe('true')
   })
 
-  it('저장된 판서가 비어 있으면 켜지 않는다', () => {
+  /**
+   * <b>요소가 있어도</b> 꺼진 채로 남겼으면 꺼진 채로 돌아온다. 이것이 예전과 갈리는 지점이다 —
+   * 강사가 끈 것을 시스템이 되돌리면 안 된다.
+   */
+  it('그린 것이 있어도 꺼짐으로 남아 있으면 꺼진 채로 돌아온다', () => {
     const { getByRole } = renderStage({
-      restoredAnnotation: { revision: 0, elements: [] },
+      restoredAnnotation: { revision: 47, elements: [{ id: 'a', type: 'freedraw', version: 1 }], files: {} },
+      restoredAnnotationVisible: false,
     } as Partial<InstructorLiveMedia>)
 
     expect(getByRole('button', { name: /^판서 (켜짐|꺼짐)$/ }).getAttribute('aria-pressed')).toBe('false')
+  })
+
+  /** 판서를 켜고 끄면 서버에 남긴다 — 그래야 다음 새로고침에 그대로 돌아온다. */
+  it('판서를 켜면 표시 상태를 서버에 남긴다', () => {
+    const saveAnnotationVisible = vi.fn()
+    const { getByRole } = renderStage({ saveAnnotationVisible } as Partial<InstructorLiveMedia>)
+
+    getByRole('button', { name: /^판서 (켜짐|꺼짐)$/ }).click()
+
+    expect(saveAnnotationVisible).toHaveBeenCalledWith(true)
   })
 })

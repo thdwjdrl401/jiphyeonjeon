@@ -15,6 +15,7 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.converter.JacksonJsonMessageConverter;
 import org.springframework.messaging.simp.stomp.StompFrameHandler;
+import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaders;
 import org.springframework.messaging.simp.stomp.StompSession;
 import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter;
@@ -151,11 +152,16 @@ class LiveCaptionWebSocketTest {
         BlockingQueue<Map<String, Object>> enrolledInbox = new LinkedBlockingQueue<>();
         BlockingQueue<Map<String, Object>> outsiderInbox = new LinkedBlockingQueue<>();
 
+        BlockingQueue<String> outsiderRejections = new LinkedBlockingQueue<>();
         StompSession enrolledSession = connect(enrolled);
-        StompSession outsiderSession = connect(outsider);
+        StompSession outsiderSession = connect(outsider, outsiderRejections);
         subscribeCaptions(enrolledSession, sessionId, enrolledInbox);
         subscribeCaptions(outsiderSession, sessionId, outsiderInbox);
-        Thread.sleep(400);
+
+        // 서버가 미참가자의 SUBSCRIBE를 실제로 거부했는지 먼저 확인한다 — 이게 없으면 아래 "수신 없음"은
+        // 게이트가 뚫렸는데 구독이 늦게 등록돼 조용한 경우와 구별되지 않는다.
+        assertThat(outsiderRejections.poll(10, TimeUnit.SECONDS))
+                .as("서버가 미참가자의 자막 구독을 능동적으로 거부한다(ERROR 프레임)").isNotNull();
 
         redis.opsForStream().add(captionProperties.streamKey(), delta(sessionId, lessonId, "2026-08-01T10:00:41Z"));
 
@@ -241,12 +247,32 @@ class LiveCaptionWebSocketTest {
     }
 
     private StompSession connect(Client client) throws Exception {
+        return connect(client, new LinkedBlockingQueue<>());
+    }
+
+    /**
+     * {@code rejections}에 서버가 보낸 ERROR 프레임을 모은다. 구독 인가를 "아무것도 안 왔다"로만 보면
+     * <b>게이트가 뚫려도 통과</b>할 수 있다 — 공격자의 SUBSCRIBE가 브로드캐스트보다 늦게 등록되면 받을
+     * 게 없어 큐가 비기 때문이다. 서버가 능동적으로 거부했다는 증거를 함께 확인해 그 둘을 구별한다.
+     */
+    private StompSession connect(Client client, BlockingQueue<String> rejections) throws Exception {
         WebSocketStompClient stompClient = new WebSocketStompClient(new StandardWebSocketClient());
         stompClient.setMessageConverter(new JacksonJsonMessageConverter());
         WebSocketHttpHeaders handshake = new WebSocketHttpHeaders();
         handshake.add("Cookie", client.cookieHeader());
         return stompClient.connectAsync("ws://localhost:" + port + "/api/ws", handshake, new StompHeaders(),
-                new StompSessionHandlerAdapter() {}).get(10, TimeUnit.SECONDS);
+                new StompSessionHandlerAdapter() {
+                    @Override
+                    public void handleException(StompSession session, StompCommand command,
+                                                StompHeaders headers, byte[] payload, Throwable exception) {
+                        rejections.add(String.valueOf(exception.getMessage()));
+                    }
+
+                    @Override
+                    public void handleTransportError(StompSession session, Throwable exception) {
+                        rejections.add(String.valueOf(exception.getMessage()));
+                    }
+                }).get(10, TimeUnit.SECONDS);
     }
 
     private void subscribeCaptions(StompSession session, String sessionId, BlockingQueue<Map<String, Object>> inbox) {

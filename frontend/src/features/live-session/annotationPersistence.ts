@@ -18,17 +18,25 @@ interface ApiAnnotationDocument {
   nextRevision: number
   snapshotPayload: string | null
   ops: { revision: number; opType: string; payload: string }[]
+  /** 판서를 표시 중인가(ADR-0056). op가 아니라 세션의 표시 상태다 — fold에 끼어들지 않는다. */
+  visible?: boolean
 }
 
 /** 복원된 판서. `nextRevision`은 강사가 이어서 채번할 번호다. */
 export interface RestoredAnnotation {
   document: AnnotationDocument
   nextRevision: number
+  /**
+   * 새로고침 직전의 표시 상태(ADR-0056). 이 값으로 판서를 켤지 정하고, <b>그 상태를 수신 측에도
+   * 알린다</b> — 그러지 않으면 강사 화면은 비었는데 Egress는 자기 문서를 계속 그려서 수강생에게만
+   * 판서가 남는다.
+   */
+  visible: boolean
 }
 
 /** 아무것도 저장돼 있지 않은(또는 복원에 실패한) 상태. 강사는 1번부터 채번한다. */
 export function emptyRestoredAnnotation(): RestoredAnnotation {
-  return { document: emptyAnnotationDocument(), nextRevision: 1 }
+  return { document: emptyAnnotationDocument(), nextRevision: 1, visible: false }
 }
 
 /**
@@ -88,8 +96,9 @@ export function foldStoredDocument(api: ApiAnnotationDocument): RestoredAnnotati
   }
 
   return {
-    document: { revision: api.revision, elements: document.elements },
+    document: { revision: api.revision, elements: document.elements, files: document.files },
     nextRevision: Math.max(1, api.nextRevision),
+    visible: api.visible === true,
   }
 }
 
@@ -186,6 +195,21 @@ export interface AnnotationOpSink {
    * 보내고, 그 대신 본문을 브라우저 한도(64KB) 아래로 자른다.
    */
   flush(unloading?: boolean): void
+  /**
+   * 대기열이 <b>빌 때까지</b> 보내고, 지금까지 push한 것이 모두 서버에 남았는지 알려준다.
+   *
+   * <p>포인터를 내기 전에 쓴다(ADR-0055). 포인터는 "여기까지의 상태는 서버에 있다"는 약속이라,
+   * 밀린 저장이 남은 채로 내면 수신 측이 받은 문서와 이후 델타 사이에 구멍이 생긴다 — 그 구멍은
+   * 수강생 화면에서만 보이므로 강사가 알아챌 수 없다. 거짓말을 하느니 <b>false</b>를 돌려주고
+   * 호출자가 스냅샷으로 물러서게 한다.
+   *
+   * <p>`flush`와 달리 한 묶음만 보내고 끝나지 않는다 — 한 번의 `flush`는 크기 상한에 걸려 앞부분만
+   * 보낼 수 있다.
+   *
+   * <p>대기열이 넘쳐 op를 버린 적이 있으면 <b>대기열이 비어도 false</b>다. 그 구멍은 서버가 영영
+   * 메우지 못하므로, 비었다는 사실만으로 "서버가 강사를 따라잡았다"고 말하면 거짓이 된다.
+   */
+  flushAll(): Promise<boolean>
   /** 타이머를 정리하고 남은 것을 한 번 보낸다. */
   stop(): void
   /** 대기 중인 op 수(테스트·진단용). */
@@ -231,26 +255,42 @@ export function createAnnotationOpSink(sessionId: string, options: SinkOptions =
   const interval = options.flushIntervalMs ?? FLUSH_INTERVAL_MS
 
   let queue: QueuedOp[] = []
-  let inFlight = false
+  /** 지금 날아가고 있는 묶음. 성공 여부로 resolve한다(reject하지 않는다). */
+  let inFlight: Promise<boolean> | null = null
   let stopped = false
-  let droppedLogged = false
+  /**
+   * 대기열이 넘쳐 op를 버린 적이 있는가. 한 번이라도 버렸다면 <b>이 페이지에서는 서버가 강사의
+   * 문서를 다시 따라잡을 수 없다</b> — 그래서 이 값은 되돌아가지 않고, 포인터(ADR-0055)를 내는
+   * 자격을 영구히 잃는다.
+   */
+  let dropped = false
 
-  const drain = (unloading = false) => {
-    if (inFlight || stopped || queue.length === 0) return
+  const drain = (unloading = false): Promise<boolean> => {
+    // 이미 나간 묶음이 있으면 그것을 기다린다. 겹쳐 보내면 실패한 묶음을 앞에 다시 넣을 때 순서가
+    // 뒤집힌다.
+    if (inFlight) return inFlight
+    if (stopped || queue.length === 0) return Promise.resolve(true)
     const { batch, rest } = takeBatch(queue, unloading ? KEEPALIVE_BODY_LIMIT : BODY_LIMIT)
     queue = rest
-    inFlight = true
-    void send(sessionId, batch.map((item) => item.api), unloading)
-      .catch((error) => {
+    // 성공·실패를 <b>한 then에서</b> 받는다. `.catch().finally()`로 늘리면 그만큼 마이크로태스크가
+    // 더 걸려, 실패 직후 곧바로 다시 flush하는 호출자가 "아직 날아가는 중"으로 막힌다.
+    const attempt = send(sessionId, batch.map((item) => item.api), unloading).then(
+      () => {
+        inFlight = null
+        return true
+      },
+      (error: unknown) => {
         queue = [...batch, ...queue]
+        inFlight = null
         console.warn('판서 기록을 서버에 남기지 못했습니다(재시도합니다)', error)
-      })
-      .finally(() => {
-        inFlight = false
-      })
+        return false
+      },
+    )
+    inFlight = attempt
+    return attempt
   }
 
-  const timer = setInterval(drain, interval)
+  const timer = setInterval(() => { void drain() }, interval)
 
   return {
     /**
@@ -270,18 +310,33 @@ export function createAnnotationOpSink(sessionId: string, options: SinkOptions =
         return
       }
       if (queue.length >= MAX_PENDING) {
-        if (!droppedLogged) {
+        if (!dropped) {
           console.warn('판서 기록이 계속 밀려 오래된 op를 버립니다. 라이브 전달에는 영향이 없습니다.')
-          droppedLogged = true
+          dropped = true
         }
         queue.shift()
       }
       queue.push({ api, key })
     },
-    flush: (unloading = false) => { drain(unloading) },
+    flush: (unloading = false) => { void drain(unloading) },
+    /**
+     * 대기열이 빌 때까지 반복해 보낸다. 한 번이라도 실패하면 <b>거기서 멈추고 false</b>다 — 같은
+     * 요청을 곧바로 다시 던져 봐야 결과가 같고, 주기 타이머가 어차피 계속 재시도한다.
+     */
+    async flushAll() {
+      // 묶음 수의 상한. 대기열은 MAX_PENDING(2000)개까지 쌓이고 묶음 하나가 최소 한 건은 가져가므로
+      // 정상 경로에서는 여기 닿지 않는다. 큐가 줄지 않는 상황에서 영원히 도는 것만 막는다.
+      // 버린 적이 있어도 <b>보내기는 계속한다.</b> 답은 false지만 남은 기록은 여전히 남길 값어치가
+      // 있다 — 강사 새로고침 복원은 구멍 난 문서라도 없는 것보다 낫다.
+      for (let round = 0; round < MAX_PENDING; round += 1) {
+        if (stopped || queue.length === 0) break
+        if (!(await drain())) return false
+      }
+      return queue.length === 0 && !dropped
+    },
     stop() {
       clearInterval(timer)
-      drain()
+      void drain()
       stopped = true
     },
     pending: () => queue.length,

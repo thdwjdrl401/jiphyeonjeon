@@ -123,6 +123,28 @@ public class LiveKitEgressControl implements EgressControl {
         }
     }
 
+    @Override
+    public List<ActiveEgress> listActive() {
+        try {
+            // 방/egressId 필터 없이 active=true → 서버 전체의 진행 중 Egress. 유령(끝난 방에 남은 것)까지 잡힌다.
+            Response<List<LivekitEgress.EgressInfo>> res = client.listEgress(null, null, true).execute();
+            if (!res.isSuccessful() || res.body() == null) {
+                throw new EgressControlException("전역 Egress 조회 실패: HTTP " + res.code());
+            }
+            return res.body().stream()
+                    .filter(info -> info.getStatus() == LivekitEgress.EgressStatus.EGRESS_STARTING
+                            || info.getStatus() == LivekitEgress.EgressStatus.EGRESS_ACTIVE)
+                    .map(info -> new ActiveEgress(
+                            info.getEgressId(),
+                            info.getRoomName(),
+                            toState(info.getStatus()),
+                            info.getStartedAt() / 1_000_000L))   // LiveKit started_at은 ns → ms
+                    .toList();
+        } catch (IOException e) {
+            throw new EgressControlException("전역 Egress 조회 통신 실패", e);
+        }
+    }
+
     /** 프로토버프 enum → 경계 enum. 우리가 모르는 값(UNRECOGNIZED 등)은 UNKNOWN으로 접어 계속 기다린다. */
     private EgressState toState(LivekitEgress.EgressStatus status) {
         try {

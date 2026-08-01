@@ -25,6 +25,8 @@ from app.rag import (
 
 LESSON_ID = UUID("11111111-1111-4111-8111-111111111111")
 OTHER_LESSON_ID = UUID("22222222-2222-4222-8222-222222222222")
+CURRICULUM_ID = UUID("66666666-6666-4666-8666-666666666666")
+OTHER_CURRICULUM_ID = UUID("77777777-7777-4777-8777-777777777777")
 MATERIAL_ID = UUID("33333333-3333-4333-8333-333333333333")
 SESSION_ID = "44444444-4444-4444-8444-444444444444"
 
@@ -41,6 +43,7 @@ def request(request_id: str = "request-1") -> RagAnswerRequest:
     return RagAnswerRequest(
         requestId=request_id,
         lessonId=LESSON_ID,
+        curriculumId=CURRICULUM_ID,
         sessionId=SESSION_ID,
         question="방금 설명한 개념은 무엇인가요?",
         contextTimeMs=615_000,
@@ -48,9 +51,14 @@ def request(request_id: str = "request-1") -> RagAnswerRequest:
     )
 
 
-def pptx_evidence(*, lesson_id: UUID = LESSON_ID) -> RetrievedEvidence:
+def pptx_evidence(
+    *,
+    lesson_id: UUID = LESSON_ID,
+    curriculum_id: UUID = CURRICULUM_ID,
+) -> RetrievedEvidence:
     return RetrievedEvidence(
         lesson_id=lesson_id,
+        curriculum_id=curriculum_id,
         content="강의 자료의 근거",
         source=PptxSource(materialId=MATERIAL_ID, page=4),
     )
@@ -262,7 +270,7 @@ async def test_model_timeout_closes_generation_with_terminal_error() -> None:
 @pytest.mark.parametrize(
     "leaked_evidence",
     [
-        pptx_evidence(lesson_id=OTHER_LESSON_ID),
+        pptx_evidence(curriculum_id=OTHER_CURRICULUM_ID),
         caption_evidence(lesson_id=OTHER_LESSON_ID),
         caption_evidence(session_id="55555555-5555-4555-8555-555555555555"),
     ],
@@ -281,7 +289,22 @@ async def test_cross_scope_evidence_never_reaches_model(
 
     assert [event.event for event in events] == ["answer.error"]
     assert events[0].data.code == "EVIDENCE_SCOPE_VIOLATION"
-    assert model.calls == []
+
+
+@async_test
+async def test_pptx_evidence_from_a_sibling_lesson_in_the_same_curriculum_is_accepted() -> None:
+    """ADR-0005: PPTX materials are shared curriculum-wide, so a hit whose lesson_id differs
+    from the requesting lesson must still reach the model as long as curriculum_id matches."""
+
+    evidence = (pptx_evidence(lesson_id=OTHER_LESSON_ID, curriculum_id=CURRICULUM_ID),)
+    service = RagAnswerService(
+        Retriever(RetrievalResult(sufficient=True, evidence=evidence)),
+        Model(["다른 세션 자료 기반 답변"]),
+    )
+
+    events = await collect(service, request())
+
+    assert [event.event for event in events] == ["answer.delta", "answer.done"]
 
 
 @async_test

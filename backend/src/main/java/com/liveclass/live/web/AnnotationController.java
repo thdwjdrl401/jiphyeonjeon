@@ -1,18 +1,24 @@
 package com.liveclass.live.web;
 
 import com.liveclass.live.service.LiveAccessGuard;
+import com.liveclass.live.service.LiveRoomTokenVerifier;
 import com.liveclass.live.service.LiveAnnotationService;
 import com.liveclass.live.web.dto.AnnotationDocumentResponse;
 import com.liveclass.live.web.dto.AnnotationOpRequest;
+import com.liveclass.live.web.dto.AnnotationSnapshotRequest;
+import com.liveclass.live.web.dto.AnnotationVisibilityRequest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -40,10 +46,14 @@ public class AnnotationController {
 
     private final LiveAnnotationService annotationService;
     private final LiveAccessGuard accessGuard;
+    private final LiveRoomTokenVerifier roomTokenVerifier;
 
-    public AnnotationController(LiveAnnotationService annotationService, LiveAccessGuard accessGuard) {
+    public AnnotationController(LiveAnnotationService annotationService,
+                                LiveAccessGuard accessGuard,
+                                LiveRoomTokenVerifier roomTokenVerifier) {
         this.annotationService = annotationService;
         this.accessGuard = accessGuard;
+        this.roomTokenVerifier = roomTokenVerifier;
     }
 
     @Operation(summary = "판서 op 적재",
@@ -60,12 +70,56 @@ public class AnnotationController {
         }
     }
 
+    @Operation(summary = "판서 복원 체크포인트 저장",
+            description = "복원이 세션 시작부터 전부 내려오지 않게 하는 체크포인트(ADR-0057). "
+                    + "강사 클라이언트가 주기적으로 보낸다. 데이터 채널로는 나가지 않는다.")
+    @PutMapping("/api/live-sessions/{sessionId}/annotation/snapshot")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void saveSnapshot(@PathVariable UUID sessionId,
+                             @Valid @RequestBody AnnotationSnapshotRequest request,
+                             Authentication authentication) {
+        accessGuard.requireOwner(sessionId, UUID.fromString(authentication.getName()));
+        annotationService.saveSnapshot(sessionId, request.revision(), request.payload());
+    }
+
+    @Operation(summary = "판서 표시 상태 변경",
+            description = "판서를 수강생 화면에 보여줄지 바꾼다. 내용이 아니라 표시 상태다(ADR-0056). "
+                    + "강사가 새로고침해도 이 값으로 이전 상태가 돌아온다.")
+    @PutMapping("/api/live-sessions/{sessionId}/annotation/visibility")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void setVisibility(@PathVariable UUID sessionId,
+                              @Valid @RequestBody AnnotationVisibilityRequest request,
+                              Authentication authentication) {
+        accessGuard.requireOwner(sessionId, UUID.fromString(authentication.getName()));
+        annotationService.setVisible(sessionId, request.visible());
+    }
+
     @Operation(summary = "판서 문서 복원",
             description = "저장된 판서를 마지막 스냅샷과 그 이후 op로 돌려준다. 강사가 새로고침한 뒤 "
                     + "이걸로 복원하고, nextRevision부터 이어서 채번한다.")
     @GetMapping("/api/live-sessions/{sessionId}/annotation")
-    public AnnotationDocumentResponse document(@PathVariable UUID sessionId, Authentication authentication) {
-        accessGuard.requireCanAccess(sessionId, UUID.fromString(authentication.getName()));
+    public AnnotationDocumentResponse document(
+            @PathVariable UUID sessionId,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            Authentication authentication) {
+        /*
+         * 읽는 주체가 둘이다(ADR-0055).
+         *
+         *   강사·수강생  세션 쿠키 → 참가자 게이트
+         *   Egress      LiveKit 토큰 → 그 방의 참가자임을 증명
+         *
+         * Egress는 헤드리스 Chrome이라 세션 쿠키가 없다. 그렇다고 판서 전체를 데이터 채널로 밀면
+         * 64KB 한도에 걸린다(실측 74.9KB) — 그래서 스스로 가져가야 하고, 가진 것이 LiveKit 토큰뿐이다.
+         *
+         * 쓰기(append)에는 이 길을 열지 않는다. 방에 들어올 수 있다는 것과 문서를 고칠 수 있다는
+         * 것은 다르다.
+         */
+        UUID viewer = sessionUser(authentication);
+        if (viewer != null) {
+            accessGuard.requireCanAccess(sessionId, viewer);
+        } else {
+            roomTokenVerifier.requireRoomParticipant(sessionId, authorization);
+        }
         LiveAnnotationService.AnnotationDocumentView view = annotationService.restore(sessionId);
         return new AnnotationDocumentResponse(
                 view.revision(),
@@ -73,6 +127,29 @@ public class AnnotationController {
                 view.snapshotPayload(),
                 view.ops().stream()
                         .map(op -> new AnnotationDocumentResponse.Op(op.revision(), op.opType(), op.payload()))
-                        .toList());
+                        .toList(),
+                annotationService.isVisible(sessionId));
+    }
+
+    /**
+     * 세션 쿠키로 로그인한 사용자. 없으면 null이고, 그때는 LiveKit 토큰을 본다.
+     *
+     * <p>이 경로는 {@code permitAll}이라 로그인하지 않은 요청도 여기까지 들어온다. 지금은 익명
+     * 요청에서 이 파라미터가 null로 들어오지만(서블릿 principal은 익명 토큰을 null로 준다),
+     * <b>그 사실에 기대지 않는다</b> — 익명 토큰이 그대로 넘어오면 {@code UUID.fromString}이 터져
+     * Egress가 토큰을 제대로 들고 와도 500이 되고, 판서는 수강생 화면에서만 사라진다. 이름이
+     * userId가 아닌 주체는 전부 "로그인 아님"으로 떨어뜨린다(카탈로그 공개 조회도 같은 처리다).
+     */
+    private static UUID sessionUser(Authentication authentication) {
+        if (authentication == null
+                || !authentication.isAuthenticated()
+                || authentication instanceof AnonymousAuthenticationToken) {
+            return null;
+        }
+        try {
+            return UUID.fromString(authentication.getName());
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 }

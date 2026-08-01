@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.messaging.converter.JacksonJsonMessageConverter;
+import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompFrameHandler;
 import org.springframework.messaging.simp.stomp.StompHeaders;
 import org.springframework.messaging.simp.stomp.StompSession;
@@ -160,11 +161,16 @@ class LiveChatWebSocketTest {
         BlockingQueue<Map<String, Object>> enrolledInbox = new LinkedBlockingQueue<>();
         BlockingQueue<Map<String, Object>> outsiderInbox = new LinkedBlockingQueue<>();
 
+        BlockingQueue<String> outsiderRejections = new LinkedBlockingQueue<>();
         StompSession enrolledSession = connect(enrolled);
-        StompSession outsiderSession = connect(outsider);
+        StompSession outsiderSession = connect(outsider, outsiderRejections);
         subscribeChat(enrolledSession, sessionId, enrolledInbox);
         subscribeChat(outsiderSession, sessionId, outsiderInbox);
-        Thread.sleep(400);   // 허용된 구독이 브로커에 반영될 시간
+
+        // 서버가 미수강자의 SUBSCRIBE를 실제로 <b>거부</b>했는지 먼저 확인한다. 이게 없으면 아래
+        // "수신 없음"은 게이트가 뚫렸는데 구독이 늦게 등록돼 조용한 경우와 구별되지 않는다.
+        assertThat(outsiderRejections.poll(10, TimeUnit.SECONDS))
+                .as("서버가 미수강자의 구독을 능동적으로 거부한다(ERROR 프레임)").isNotNull();
 
         // 활성 수강생이 채팅을 보낸다(전송은 컨트롤러 게이트를 통과).
         enrolledSession.send("/app/live-sessions/" + sessionId + "/chat",
@@ -211,11 +217,15 @@ class LiveChatWebSocketTest {
         BlockingQueue<Map<String, Object>> enrolledInbox = new LinkedBlockingQueue<>();
         BlockingQueue<Map<String, Object>> wildcardInbox = new LinkedBlockingQueue<>();
 
+        BlockingQueue<String> wildcardRejections = new LinkedBlockingQueue<>();
         StompSession enrolledSession = connect(enrolled);
-        StompSession wildcardSession = connect(wildcardAttempt);
+        StompSession wildcardSession = connect(wildcardAttempt, wildcardRejections);
         subscribeChat(enrolledSession, sessionId, enrolledInbox);
         wildcardSession.subscribe("/topic/live-sessions/*/chat", frameHandler(wildcardInbox));   // 와일드카드
-        Thread.sleep(400);
+
+        // 위와 같은 이유 — 패턴 구독이 실제로 거부됐음을 먼저 못 박는다.
+        assertThat(wildcardRejections.poll(10, TimeUnit.SECONDS))
+                .as("서버가 와일드카드 구독을 능동적으로 거부한다(ERROR 프레임)").isNotNull();
 
         enrolledSession.send("/app/live-sessions/" + sessionId + "/chat",
                 Map.of("clientMessageId", "wc-1", "text", "패턴 구독은 차단", "isQuestion", false));
@@ -279,12 +289,35 @@ class LiveChatWebSocketTest {
     }
 
     private StompSession connect(Client client) throws Exception {
+        return connect(client, new LinkedBlockingQueue<>());
+    }
+
+    /**
+     * {@code rejections}에 서버가 보낸 ERROR 프레임을 모은다.
+     *
+     * <p>구독 인가를 "아무것도 안 왔다"로만 검증하면 <b>게이트가 뚫려도 통과</b>할 수 있다 — 공격자의
+     * SUBSCRIBE가 브로드캐스트보다 늦게 등록되면 받을 게 없어서 큐가 비기 때문이다. 지금까지 그 순서를
+     * {@code Thread.sleep(400)} 하나로 기대고 있었다. 서버가 <b>능동적으로 거부했다</b>는 증거(ERROR
+     * 프레임)를 함께 확인하면, 늦게 등록돼 우연히 조용한 경우와 실제로 막힌 경우가 구별된다.
+     */
+    private StompSession connect(Client client, BlockingQueue<String> rejections) throws Exception {
         WebSocketStompClient stompClient = new WebSocketStompClient(new StandardWebSocketClient());
         stompClient.setMessageConverter(new JacksonJsonMessageConverter());
         WebSocketHttpHeaders handshake = new WebSocketHttpHeaders();
         handshake.add("Cookie", client.cookieHeader());
         return stompClient.connectAsync("ws://localhost:" + port + "/api/ws", handshake, new StompHeaders(),
-                new StompSessionHandlerAdapter() {}).get(10, TimeUnit.SECONDS);
+                new StompSessionHandlerAdapter() {
+                    @Override
+                    public void handleException(StompSession session, StompCommand command,
+                                                StompHeaders headers, byte[] payload, Throwable exception) {
+                        rejections.add(String.valueOf(exception.getMessage()));
+                    }
+
+                    @Override
+                    public void handleTransportError(StompSession session, Throwable exception) {
+                        rejections.add(String.valueOf(exception.getMessage()));
+                    }
+                }).get(10, TimeUnit.SECONDS);
     }
 
     private void subscribeChat(StompSession session, String sessionId, BlockingQueue<Map<String, Object>> inbox) {

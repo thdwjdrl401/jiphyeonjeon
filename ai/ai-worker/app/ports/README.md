@@ -6,18 +6,21 @@ PPTX ingestion core가 외부 구현을 호출하는 protocol 경계다.
 
 - `MaterialAssetStore.read_pptx`
 - `TextEmbeddingModel`의 identity와 positional batch embedding
-- `IndexStorage.stage/activate`
+- `IndexStorage.find_existing/stage/activate` — 색인, `resolve_active_scope/delete_job` — 삭제
+  (`resolve_active_scope`는 materialId만으로 curriculum_id·현재 버전을 self-lookup한다, ADR-0006)
 - `KeyTermExtractor.extract` — PPTX 전체 텍스트에서 `KeyTerm`(용어+정의) 목록 추출(선택 기능)
+- `KeyTermStorage.store` — 추출된 용어를 자료 버전에 upsert(선택 기능)
 
 ## 구조와 흐름
 
 ```text
-IndexPptxMaterial -> port <- runtime adapter
+IndexPptxMaterial    -> IndexStorage, KeyTermExtractor, KeyTermStorage <- runtime adapter
+DeleteMaterialIndex  -> IndexStorage                                   <- runtime adapter
 ```
 
 ## 파일 구성
 
-`material_ingestion.py`에 네 protocol, `__init__.py`에 공개 export가 있다.
+`material_ingestion.py`에 여섯 protocol, `__init__.py`에 공개 export가 있다.
 
 ## 경계와 불변식
 
@@ -27,4 +30,5 @@ IndexPptxMaterial -> port <- runtime adapter
 
 ## 검증
 
-fake port를 사용하는 `tests/test_index_pptx_material.py`로 검증한다.
+fake port를 사용하는 `tests/test_index_pptx_material.py`, `tests/test_delete_material_index.py`로
+검증한다.

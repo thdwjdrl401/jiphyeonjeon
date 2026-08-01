@@ -3,6 +3,7 @@ package com.liveclass.live.web;
 import com.liveclass.aiintegration.api.RagAnswerUpstreamException;
 import com.liveclass.common.web.ErrorResponse;
 import com.liveclass.common.web.ErrorResponses;
+import com.liveclass.live.service.AnnotationInterpretException;
 import com.liveclass.live.service.LiveRoomControlException;
 import com.liveclass.live.service.LiveSessionInteractionClosedException;
 import com.liveclass.live.service.LiveSessionForbiddenException;
@@ -18,8 +19,23 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 /** live 도메인 실패 → CONTRACT §2 상태코드 매핑. */
 @Order(Ordered.LOWEST_PRECEDENCE - 100)
 @RestControllerAdvice(assignableTypes = {LiveSessionController.class, ChatController.class, CaptionController.class,
-        LiveAiAnswerController.class})
+        LiveAiAnswerController.class, AnnotationController.class, AnnotationInterpretController.class})
 public class LiveExceptionHandler {
+
+    /**
+     * 판서 해석 실패(ADR-0054). 강사 화면에 "다시 시도"를 띄우는 자리다.
+     *
+     * <p>상류 상태코드를 그대로 흘리지 않는다 — 특히 401(키 거부)을 브라우저에 주면 FE가 세션
+     * 만료로 오해해 로그아웃 처리한다(§3-9에서 같은 이유로 정한 규칙이다).
+     *
+     * <p>해석에 <b>실패</b>한 것과 <b>읽지 못한</b> 것은 다르다. 후자는 200에 {@code unreadable: true}로
+     * 나간다 — 모델이 정상 동작했고 판서가 알아볼 수 없었을 뿐이다.
+     */
+    @ExceptionHandler(AnnotationInterpretException.class)
+    public ResponseEntity<ErrorResponse> handleInterpret(AnnotationInterpretException e) {
+        return ErrorResponses.of(HttpStatus.BAD_GATEWAY,
+                ErrorResponse.of("ANNOTATION_INTERPRET_FAILED", e.getMessage()));
+    }
 
     @ExceptionHandler(LiveSessionNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleNotFound(LiveSessionNotFoundException e) {

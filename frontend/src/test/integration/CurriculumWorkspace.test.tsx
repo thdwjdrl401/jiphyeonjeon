@@ -223,10 +223,10 @@ describe('커리큘럼 작업 화면', () => {
     // 디바운스 자동 저장이 새 섹션에 실제 id를 부여하면 "강의 추가"가 링크로 바뀐다.
     await waitFor(() => {
       expect(screen.getByText('자동 저장됨')).toBeInTheDocument()
-    }, { timeout: 3000 })
+    })
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: '강의 추가' })).not.toBeInTheDocument()
-    }, { timeout: 3000 })
+    })
   })
 
   it('새 강의를 저장하면 구성 화면으로 돌아가 중복 생성을 막는다', async () => {
@@ -512,10 +512,12 @@ describe('커리큘럼 작업 화면', () => {
 
     await user.type(await screen.findByLabelText('현재 비밀번호'), 'current-password')
     await user.type(screen.getByLabelText('새 비밀번호'), 'new-password-123')
+    // 확인 필드까지 맞아야 제출이 열린다.
+    await user.type(screen.getByLabelText('새 비밀번호 확인'), 'new-password-123')
     await user.click(screen.getByRole('button', { name: '비밀번호 변경' }))
     expect(await screen.findByText('비밀번호가 변경되었습니다.')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('checkbox', { name: '계정 탈퇴에 동의합니다.' }))
+    await user.click(screen.getByRole('checkbox', { name: /위 안내 사항을 모두 확인하였으며/ }))
     await user.click(screen.getByRole('button', { name: '회원 탈퇴' }))
     await waitFor(() => expect(window.location.pathname).toBe('/login'))
     expect(await screen.findByRole('link', { name: '로그인' })).toBeInTheDocument()

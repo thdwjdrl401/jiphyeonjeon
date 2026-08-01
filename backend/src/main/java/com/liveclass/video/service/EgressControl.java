@@ -1,5 +1,6 @@
 package com.liveclass.video.service;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -32,7 +33,17 @@ public interface EgressControl {
      */
     Optional<EgressSnapshot> findActiveForRoom(String roomName);
 
+    /**
+     * 전역으로 진행 중(STARTING/ACTIVE)인 모든 Egress를 나열한다 — 운영/디버그용(관리 콘솔).
+     * 방 단위가 아니라 서버 전체를 훑어, 끝난 방에 남은 "유령 Egress"(전역 슬롯을 잡아먹는)를 찾아 정지하는 데 쓴다.
+     */
+    List<ActiveEgress> listActive();
+
     record EgressSnapshot(String egressId, EgressState state) {
+    }
+
+    /** 관리 콘솔 표시용 진행 중 Egress 한 건(egressId·방·상태·시작시각ms). */
+    record ActiveEgress(String egressId, String roomName, EgressState state, long startedAtMs) {
     }
 
     /** LiveKit {@code EgressStatus}를 그대로 옮긴 경계 enum. */

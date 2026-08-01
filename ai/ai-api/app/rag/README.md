@@ -26,7 +26,8 @@ RagAnswerRequest
 
 ## 경계와 불변식
 
-- 모든 evidence는 요청 `lessonId`와 일치해야 하며 caption은 `sessionId`도 일치해야 한다.
+- PPTX evidence는 요청 `curriculumId`와 일치해야 한다(ADR-0005, curriculum 전체 공유). caption
+  evidence는 지금처럼 `lessonId`·`sessionId`가 모두 일치해야 한다 — 실시간 자막은 공유하지 않는다.
 - caption citation은 sequence가 다시 시작되는 attempt를 구분하도록 `sttSessionId`를 포함한다.
 - 근거가 부족하면 모델을 호출하지 않고 `answer.insufficient` 하나만 낸다.
 - 충분한 결과는 중복 제거된 citation을 가진 `answer.done`으로 끝난다.
@@ -36,3 +37,9 @@ RagAnswerRequest
 - client 취소·오류·terminal 모두 request lease를 recent 상태로 옮겨 같은 ID의 재사용을 막는다.
 - GMS streaming과 context consumer lifecycle은 연결했지만 Spring 인증이 채택되기 전 production API는 닫혀 있다.
 - multi-replica registry와 재연결 replay 정책은 후속 범위다.
+
+## 다시보기 RAG 요구사항
+
+다시보기 질문에 필요한 endpoint, 세션-ms 자막 문맥, material Top K와 source excerpt 요구사항은
+[`ADR-0037`](../../../../docs/decisions/canola/0037-replay-ai-caption-context-contract.md)에 정리돼 있다.
+아직 runtime route와 계약에는 반영되지 않았으며 구현 방법은 AI 오너가 결정한다.

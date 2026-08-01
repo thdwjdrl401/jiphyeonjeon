@@ -12,6 +12,7 @@ import com.liveclass.video.domain.ReplayStatus;
 import com.liveclass.video.domain.VideoAsset;
 import com.liveclass.video.domain.VideoAssetStatus;
 import com.liveclass.video.repository.VideoAssetRepository;
+import com.liveclass.support.TestSchedules;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -199,7 +200,7 @@ class CatalogPolicyAndReplayContractTest {
      */
     private void seedRecording(Cookie[] instructor, String lessonId, ReplayStatus replayStatus) throws Exception {
         String sessionId = json(write(post("/api/instructor/lessons/" + lessonId + "/live-sessions"), instructor,
-                "{\"scheduledAt\":\"2026-08-01T10:00:00+09:00\"}")
+                TestSchedules.futureScheduledAtBody())
                 .andExpect(status().isCreated()).andReturn()).get("sessionId").asString();
         // /start는 202만 돌려주므로 게이트를 동기로 돌려 LIVE까지 올린 뒤 종료한다(운영에서는 커밋 후 비동기).
         String instructorId = json(mockMvc.perform(get("/api/auth/me").cookie(instructor)).andReturn())

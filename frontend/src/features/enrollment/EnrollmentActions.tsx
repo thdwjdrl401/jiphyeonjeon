@@ -2,8 +2,6 @@ import type { CurriculumDetailResponse } from '@/features/curriculum/types'
 
 interface EnrollmentActionsProps {
   detail: CurriculumDetailResponse
-  onEnroll: () => void
-  isEnrolling: boolean
 }
 
 const policyLabel: Record<string, string> = {
@@ -12,21 +10,14 @@ const policyLabel: Record<string, string> = {
   INVITATION_ONLY: '초대받은 사용자만 신청할 수 있어요.',
 }
 
-export default function EnrollmentActions({ detail, onEnroll, isEnrolling }: EnrollmentActionsProps) {
+export default function EnrollmentActions({ detail }: EnrollmentActionsProps) {
   const canEnroll = detail.viewerContext.allowedActions.includes('ENROLL')
 
   return (
     <div className="relation-panel enrollment-actions">
       <h2>수강 신청</h2>
       <p>{policyLabel[detail.enrollmentPolicy.type] ?? '수강 방식을 확인해 주세요.'}</p>
-      {canEnroll ? (
-        <button className="button button--primary" type="button" onClick={onEnroll} disabled={isEnrolling}>
-          {isEnrolling ? <><span className="spinner spinner--light" aria-hidden="true" /> 신청 중</> : '수강 신청'}
-        </button>
-      ) : (
-        <p>지금은 수강 신청을 받고 있지 않아요.</p>
-      )}
-      {/* 신청 실패 알림은 useEnrollMutation이 토스트로 낸다 — 여기서 중복 표시하지 않는다. */}
+      {!canEnroll && <p>지금은 수강 신청을 받고 있지 않아요.</p>}
     </div>
   )
 }

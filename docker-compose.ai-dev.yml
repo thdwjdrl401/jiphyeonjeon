@@ -3,7 +3,8 @@
 #
 # 네트워크: prod가 liveclass_default(앱 스택)에 붙는 것처럼, dev는 dev-infra 스택
 # (docker-compose.dev-infra.yml, project name: liveclass-dev)이 만든 liveclass-dev_default에
-# external로 붙어 postgres·redis·rabbitmq를 서비스명으로 바로 호출한다 — 포트 새로 게시할 필요 없음.
+# external로 붙어 postgres·redis·rabbitmq를 서비스명으로 바로 호출한다. ai-api/worker 관리 endpoint는
+# prod와 겹치지 않는 EC2 host loopback 포트에만 게시한다.
 #   ⚠️ dev redis는 --requirepass(REDIS_PASSWORD)라 prod와 달리 URL에 비밀번호가 들어간다.
 #
 # GPU(bge-runtime)는 prod와 동일하다 — 물리적으로 다른 컴퓨터라 도커 네트워크 밖이고,
@@ -54,17 +55,20 @@ services:
         condition: service_completed_successfully
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:${AI_WORKER_MANAGEMENT_HOST_PORT:?AI_WORKER_MANAGEMENT_HOST_PORT 필요}:8011"
+    stop_grace_period: 45s
     environment:
-      AI_WORKER_INSTANCE_ID: ai-worker-dev-1
+      AI_WORKER_INSTANCE_ID: ${AI_WORKER_INSTANCE_ID:?AI_WORKER_INSTANCE_ID 필요}
       AI_WORKER_ENVIRONMENT: staging   # pydantic 허용값: local/test/staging/production ('development' 불가)
-      AI_WORKER_MANAGEMENT_HOST: 127.0.0.1
+      # container에서는 publish를 위해 all-interface bind, host에서는 127.0.0.1로 제한한다.
+      AI_WORKER_MANAGEMENT_HOST: 0.0.0.0
       AI_WORKER_MANAGEMENT_PORT: "8011"
       AI_WORKER_DATABASE_URL: postgresql+asyncpg://${AI_RUNTIME_DB_USER:?AI_RUNTIME_DB_USER 필요}:${AI_RUNTIME_DB_PASSWORD:?AI_RUNTIME_DB_PASSWORD 필요}@postgres:5432/${POSTGRES_DB:-liveclass}
       AI_WORKER_MATERIAL_INGESTION_ENABLED: "true"
       AI_WORKER_RABBITMQ_URL: amqp://${RABBITMQ_USER:?RABBITMQ_USER 필요}:${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD 필요}@rabbitmq:5672/
-      # dev에는 이 네트워크에 backend 서비스가 없다(로컬에서 돌리는 전제, dev-infra는 인프라만). 자료 콜백을
-      # 실제로 받으려면 backend를 liveclass-dev_default에 올리거나 이 값을 도달 가능한 dev Spring 주소로 바꾼다.
-      AI_WORKER_SPRING_INTERNAL_BASE_URL: http://backend:8080
+      # dev network에는 backend가 없으므로 도달 가능한 dev Spring 주소를 env에 명시한다.
+      AI_WORKER_SPRING_INTERNAL_BASE_URL: ${AI_WORKER_SPRING_INTERNAL_BASE_URL:?AI_WORKER_SPRING_INTERNAL_BASE_URL 필요}
       AI_WORKER_SPRING_HMAC_SECRET: ${AI_CALLBACK_SECRET:?AI_CALLBACK_SECRET 필요 — Spring이 이미 쓰는 기존 값}
       AI_WORKER_BGE_RUNTIME_URL: http://host.docker.internal:18080/internal/bge
       AI_WORKER_BGE_INTERNAL_TOKEN: ${BGE_RUNTIME_INTERNAL_TOKEN:?BGE_RUNTIME_INTERNAL_TOKEN 필요 — GPU 쪽과 동일 값}
@@ -79,15 +83,25 @@ services:
     build: ./ai/ai-api
     container_name: liveclass-ai-api-dev
     restart: unless-stopped
+    # prod와 동일하게 in-memory session owner를 하나로 고정한다.
+    deploy:
+      replicas: 1
+    stop_grace_period: 45s
     depends_on:
       ai-migrate:
         condition: service_completed_successfully
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    ports:
+      # dev ai-api는 dev-infra의 pg·redis·rabbitmq·minio와 같은 방식(0.0.0.0 노출 + SG 팀 IP 게이트)으로 게시한다.
+      # 로컬(노트북) backend가 remote 프로필로 붙을 때 SSH 터널 없이 EC2 호스트 포트로 바로 닿게 하기 위함.
+      # prod ai-api(docker-compose.ai-prod.yml)는 loopback 유지 — 노출은 dev 편의용이고 HMAC + SG로 게이트한다.
+      # AI_API_HOST_PORT는 dev 관례상 18010(prod 8010과 EC2 host에서 충돌 방지, .env.ai-dev.example 참고).
+      - "${AI_API_HOST_PORT:?AI_API_HOST_PORT 필요}:8010"
     environment:
       AI_API_ENVIRONMENT: staging   # pydantic 허용값: local/test/staging/production ('development' 불가)
-      AI_API_INSTANCE_ID: ai-api-dev-1
-      AI_API_HOST: 0.0.0.0   # backend 컨테이너가 이 네트워크로 ai-api:8010 호출하므로 loopback만으론 안 됨
+      AI_API_INSTANCE_ID: ${AI_API_INSTANCE_ID:?AI_API_INSTANCE_ID 필요}
+      AI_API_HOST: 0.0.0.0   # Docker network와 host port forwarding이 접근하므로 container 내부는 all-interface bind
       AI_API_PORT: "8010"
       AI_API_DATABASE_URL: postgresql+asyncpg://${AI_RUNTIME_DB_USER:?AI_RUNTIME_DB_USER 필요}:${AI_RUNTIME_DB_PASSWORD:?AI_RUNTIME_DB_PASSWORD 필요}@postgres:5432/${POSTGRES_DB:-liveclass}
       # dev redis는 --requirepass라 prod(redis://redis:6379/0)와 달리 비밀번호가 필요하다.
@@ -95,6 +109,16 @@ services:
       AI_API_BGE_BASE_URL: http://host.docker.internal:18080/internal/bge
       AI_API_BGE_TOKEN: ${BGE_RUNTIME_INTERNAL_TOKEN:?BGE_RUNTIME_INTERNAL_TOKEN 필요 — GPU 쪽과 동일 값}
       AI_API_GMS_API_KEY: ${GMS_API_KEY:?GMS_API_KEY 필요}
+      AI_API_LECTURE_NOTE_MODEL: ${AI_API_LECTURE_NOTE_MODEL:-}
+      AI_API_LECTURE_NOTE_MAX_OUTPUT_TOKENS: ${AI_API_LECTURE_NOTE_MAX_OUTPUT_TOKENS:-512}
+      AI_API_LECTURE_NOTE_MAX_PROMPT_CHARS: ${AI_API_LECTURE_NOTE_MAX_PROMPT_CHARS:-20000}
+      AI_API_LECTURE_NOTE_TIMEOUT_SECONDS: ${AI_API_LECTURE_NOTE_TIMEOUT_SECONDS:-30}
+      AI_API_LECTURE_NOTE_MIN_WINDOW_MS: ${AI_API_LECTURE_NOTE_MIN_WINDOW_MS:-15000}
+      AI_API_LECTURE_NOTE_TARGET_WINDOW_MS: ${AI_API_LECTURE_NOTE_TARGET_WINDOW_MS:-25000}
+      AI_API_LECTURE_NOTE_MAX_WINDOW_MS: ${AI_API_LECTURE_NOTE_MAX_WINDOW_MS:-40000}
+      AI_API_LECTURE_NOTE_MIN_CHARS: ${AI_API_LECTURE_NOTE_MIN_CHARS:-80}
+      AI_API_LECTURE_NOTE_MAX_CHARS: ${AI_API_LECTURE_NOTE_MAX_CHARS:-400}
+      AI_API_LECTURE_NOTE_STREAM_MAXLEN: ${AI_API_LECTURE_NOTE_STREAM_MAXLEN:-10000}
       AI_INTERNAL_SECRET: ${AI_INTERNAL_SECRET:?AI_INTERNAL_SECRET 필요 — Spring과 공유하는 HMAC 시크릿}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/healthz', timeout=2)"]

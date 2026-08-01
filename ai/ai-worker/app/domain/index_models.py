@@ -45,6 +45,22 @@ class ChunkRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class MaterialScope:
+    """The (tenant_id, material_id) identity's invariant scope and current version."""
+
+    curriculum_id: UUID
+    lesson_id: UUID
+    material_version: int
+
+    def __post_init__(self) -> None:
+        for field in ("curriculum_id", "lesson_id"):
+            if not isinstance(getattr(self, field), UUID):
+                raise ValueError(f"{field} must be a UUID")
+        if self.material_version < 1:
+            raise ValueError("material_version must be positive")
+
+
+@dataclass(frozen=True, slots=True)
 class ExistingIndexVersion:
     version_id: int
     activation_required: bool

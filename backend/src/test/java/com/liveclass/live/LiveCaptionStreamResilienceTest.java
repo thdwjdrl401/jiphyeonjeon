@@ -9,10 +9,13 @@ import com.liveclass.live.repository.LiveCaptionRepository;
 import com.liveclass.live.service.CaptionEventParser;
 import com.liveclass.live.service.CaptionStreamListener;
 import com.liveclass.live.service.LiveCaptionService;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration;
@@ -80,6 +83,20 @@ class LiveCaptionStreamResilienceTest {
 
     @Autowired
     private LiveCaptionRepository repository;
+
+    @Autowired
+    private JdbcTemplate jdbc;
+
+    /**
+     * 이 세션의 잔여 행을 앞뒤로 지운다. Redis 키는 이미 지우고 있었지만({@code redis.delete}) <b>PG는
+     * 그대로 뒀다.</b> 그래서 DB가 재사용되면 이전 실행이 남긴 2행 때문에 {@code countBySessionId == 2}가
+     * 소비자를 한 번도 안 태우고 통과한다 — 끊김 뒤 재소비라는 이 테스트의 본론이 조용히 사라진다.
+     */
+    @BeforeEach
+    @AfterEach
+    void clearFixtureRows() {
+        jdbc.update("DELETE FROM core.live_caption WHERE session_id = ?", SESSION_ID);
+    }
 
     @Test
     void consumption_resumes_after_transient_connection_failure() throws Exception {

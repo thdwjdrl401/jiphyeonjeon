@@ -91,4 +91,44 @@ describe('내 프로필 화면', () => {
     await screen.findByRole('heading', { name: '강사 공개 프로필' })
     expect(screen.queryByRole('heading', { name: '나의 학습 요약' })).not.toBeInTheDocument()
   })
+
+  /**
+   * 아래 세 가지가 이 브랜치에서 보강한 부분이다 — 계정 보안 카드 한 장 안에 비밀번호 변경과
+   * 회원 탈퇴가 함께 있고, 각각이 확인 필드·재설정 링크·실제 동작에 맞춘 안내를 갖는다.
+   * 패널 자체의 규칙은 AccountWithdrawPanel.test.tsx가 따로 본다.
+   */
+  it('계정 보안 카드에 비밀번호 변경과 회원 탈퇴를 함께 둔다', async () => {
+    await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
+    renderAt('/student/profile')
+
+    const panel = (await screen.findByRole('heading', { name: '계정 보안' })).closest('section')!
+    expect(within(panel).getByLabelText('현재 비밀번호')).toBeInTheDocument()
+    // 오타로 바꾼 비밀번호는 로그인 실패로만 드러나므로 확인 필드가 유일한 방어다.
+    expect(within(panel).getByLabelText('새 비밀번호 확인')).toBeInTheDocument()
+    expect(within(panel).getByRole('heading', { name: '회원 탈퇴' })).toBeInTheDocument()
+  })
+
+  it('비밀번호 변경 폼에서 재설정 화면으로 갈 수 있다', async () => {
+    const user = userEvent.setup()
+    await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
+    renderAt('/student/profile')
+
+    // 로그인한 사람도 현재 비밀번호를 모르면 이 링크로 나가야 한다 — 게스트 전용 라우트면 튕긴다.
+    await user.click(await screen.findByRole('link', { name: '비밀번호를 잊으셨나요?' }))
+    await screen.findByRole('heading', { name: '비밀번호를 잊으셨나요?' })
+  })
+
+  it('회원 탈퇴 안내가 실제 동작(소프트 삭제·재가입 허용)을 말한다', async () => {
+    await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
+    renderAt('/student/profile')
+
+    expect(await screen.findByText('회원 탈퇴 시 계정이 비활성화되어 더 이상 로그인할 수 없습니다.')).toBeInTheDocument()
+    expect(screen.getByText('강의, 커리큘럼 및 학습 기록은 서비스 운영을 위해 보존됩니다.')).toBeInTheDocument()
+    expect(screen.getByText('동일한 이메일로 언제든지 다시 회원가입할 수 있습니다.')).toBeInTheDocument()
+
+    // 탈퇴는 소프트 삭제다(ADR-0031). "즉시 삭제·복구 불가" 류 문구가 되살아나면 거짓 고지가 된다.
+    expect(screen.queryByText(/복구할 수 없습니다/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/영구적으로 사라집니다/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/재가입이 제한/)).not.toBeInTheDocument()
+  })
 })

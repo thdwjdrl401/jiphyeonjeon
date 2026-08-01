@@ -18,6 +18,39 @@ import {
  * jsdom에는 캔버스 렌더가 없어 어차피 그림을 검증할 수 없다. 우리가 검증할 것은 <b>배선</b>이다 —
  * 무엇을 언제 내보내고, 받은 op를 어떤 좌표로 얹는지.
  */
+/**
+ * "전체 상태를 알린다"를 확인하는 스파이(ADR-0055).
+ *
+ * <p>레이어는 더 이상 문서 전체를 데이터 채널로 밀지 않는다 — 실제로 나가는 것은 포인터이고, 밀린
+ * 저장이 있을 때만 여기서 만든 스냅샷으로 물러선다. 그 선택은 전송을 쥔 Provider의 몫이므로, 레이어
+ * 테스트에서 확인할 것은 <b>알리는 내용</b>이다. 그래서 스냅샷 팩토리를 풀어 같은 스파이에 흘린다.
+ */
+const stateSpies = new WeakMap<object, (make: () => AnnotationChange) => void>()
+
+/**
+ * 같은 스파이에는 <b>같은 함수</b>를 돌려준다. 렌더마다 새 함수를 주면 이 prop을 의존하는 effect가
+ * 매번 다시 돌아, 전체 상태가 몇 번 나갔는지 세는 검증이 무의미해진다.
+ */
+function stateSpy(spy: (change: AnnotationChange) => void): (make: () => AnnotationChange) => void {
+  const existing = stateSpies.get(spy)
+  if (existing) return existing
+  const fn = (make: () => AnnotationChange) => { spy(make()) }
+  stateSpies.set(spy, fn)
+  return fn
+}
+
+/** 전체 상태를 확인하지 않는 테스트용. 모듈 상수라 렌더마다 identity가 바뀌지 않는다. */
+const noopState = () => {}
+
+/** 화이트보드 문서 상태 보고. 대부분의 테스트는 이걸 보지 않는다. */
+const noopPresence = () => {}
+
+/** 체크포인트 저장. 대부분의 테스트는 이걸 보지 않는다(ADR-0057). */
+const noopSnapshot = () => {}
+
+/** 레이어의 체크포인트 임계값과 같은 값. 여기서 바뀌면 테스트도 같이 바꿔야 한다(ADR-0057). */
+const OPS_PER_SNAPSHOT_FOR_TEST = 100
+
 const exportToCanvas = vi.fn()
 const getCommonBounds = vi.fn()
 const updateScene = vi.fn()
@@ -26,6 +59,8 @@ let drifted: Record<string, unknown> = {}
 /** getSceneElements가 돌려줄 씬. 화이트보드 토글이 기존 요소를 보존하는지 보려면 필요하다. */
 let sceneElements: Array<Record<string, unknown>> = []
 let excalidrawProps: Record<string, unknown> = {}
+/** true면 `excalidrawAPI`를 렌더가 아니라 <b>mount 이후</b>에 넘긴다(실제 지연 청크에 가깝다). */
+let lateApi = false
 
 vi.mock('@/features/live-session/excalidrawRuntime', () => ({
   EXCALIDRAW_ASSET_PATH: '/excalidraw/',
@@ -34,7 +69,9 @@ vi.mock('@/features/live-session/excalidrawRuntime', () => ({
       excalidrawProps = props
       // 실제 컴포넌트처럼 마운트 시 명령형 API를 넘겨준다.
       const give = props.excalidrawAPI as ((api: unknown) => void) | undefined
-      if (give) give({ updateScene, getAppState: () => drifted, getSceneElements: () => sceneElements })
+      const api = { updateScene, getAppState: () => drifted, getSceneElements: () => sceneElements, getFiles: () => ({}), addFiles: () => {} }
+      if (give && lateApi) setTimeout(() => give(api), 0)
+      else if (give) give(api)
       // 실제 컴포넌트처럼 children(우리가 조립한 MainMenu)을 그린다.
       return <div data-testid="excalidraw-editor">{props.children as React.ReactNode}</div>
     },
@@ -76,7 +113,7 @@ describe('강사 판서 레이어', () => {
 
   it('꺼져 있으면 에디터를 붙이지 않는다 — 무거운 청크를 미리 내려받을 이유가 없다', () => {
     const { queryByTestId } = render(
-      <InstructorAnnotationLayer active={false} audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active={false} audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
 
     expect(queryByTestId('excalidraw-editor')).toBeNull()
@@ -84,7 +121,7 @@ describe('강사 판서 레이어', () => {
 
   it('켜면 에디터를 붙이고 배경을 투명하게 둔다 — 아래 화면공유가 비쳐야 한다', async () => {
     const { findByTestId } = render(
-      <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
 
@@ -113,7 +150,7 @@ describe('강사 판서 레이어', () => {
     })
 
     const { findByTestId } = render(
-      <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
 
@@ -129,7 +166,7 @@ describe('강사 판서 레이어', () => {
   it('컨테이너 크기를 아직 모르면 zoom을 건드리지 않는다 — 0으로 그리면 아무것도 안 보인다', async () => {
     // jsdom 기본값은 0x0이다. 첫 렌더에서 잘못된 배율을 적용하지 않아야 한다.
     const { findByTestId } = render(
-      <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
 
@@ -149,7 +186,7 @@ describe('강사 판서 레이어', () => {
     drifted = { zoom: { value: 3 }, scrollX: -120, scrollY: 40 }
 
     const { findByTestId } = render(
-      <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
     updateScene.mockClear()
@@ -174,7 +211,7 @@ describe('강사 판서 레이어', () => {
     drifted = { zoom: { value: 0.5 }, scrollX: 0, scrollY: 0 }
 
     const { findByTestId } = render(
-      <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
     updateScene.mockClear()
@@ -194,7 +231,7 @@ describe('강사 판서 레이어', () => {
    */
   it('메뉴에는 다크모드·전체 지우기·도움말만 넣는다', async () => {
     const { findByTestId, queryByText } = render(
-      <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     const menu = await findByTestId('main-menu')
 
@@ -212,7 +249,7 @@ describe('강사 판서 레이어', () => {
    */
   it('이미지 도구와 위험한 캔버스 액션을 끈다', async () => {
     const { findByTestId } = render(
-      <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
 
@@ -236,13 +273,13 @@ describe('강사 판서 레이어', () => {
   it('판서를 끄면 수강생 화면에서도 감춘다', async () => {
     const onPublish = vi.fn<(change: AnnotationChange) => void>()
     const { findByTestId, rerender } = render(
-      <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
     ;(excalidrawProps.onChange as (elements: unknown[]) => void)([element('a', 1)])
     onPublish.mockClear()
 
-    rerender(<InstructorAnnotationLayer active={false} audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />)
+    rerender(<InstructorAnnotationLayer sessionId="ses-1" active={false} audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />)
 
     expect(onPublish).toHaveBeenCalledWith({ type: 'clear' })
   })
@@ -250,12 +287,12 @@ describe('강사 판서 레이어', () => {
   it('그린 것이 없으면 끌 때 아무것도 보내지 않는다', async () => {
     const onPublish = vi.fn()
     const { findByTestId, rerender } = render(
-      <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
     onPublish.mockClear()
 
-    rerender(<InstructorAnnotationLayer active={false} audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />)
+    rerender(<InstructorAnnotationLayer sessionId="ses-1" active={false} audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />)
 
     expect(onPublish).not.toHaveBeenCalled()
   })
@@ -267,15 +304,15 @@ describe('강사 판서 레이어', () => {
   it('판서를 껐다 켜면 그린 문서를 되돌려준다 — 수강생 판서까지 지우지 않는다', async () => {
     const onPublish = vi.fn<(change: AnnotationChange) => void>()
     const { findByTestId, rerender } = render(
-      <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
     ;(excalidrawProps.onChange as (elements: unknown[]) => void)([element('a', 1), element('b', 1)])
 
     // 판서 끄기 → 켜기
-    rerender(<InstructorAnnotationLayer active={false} audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />)
+    rerender(<InstructorAnnotationLayer sessionId="ses-1" active={false} audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />)
     onPublish.mockClear()
-    rerender(<InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />)
+    rerender(<InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />)
     await findByTestId('excalidraw-editor')
 
     const initialData = excalidrawProps.initialData as { elements?: Array<{ id: string }> }
@@ -298,12 +335,12 @@ describe('강사 판서 레이어', () => {
   describe('화이트보드', () => {
     function renderWithBoard(whiteboard: boolean) {
       return render(
-        <InstructorAnnotationLayer
+        <InstructorAnnotationLayer sessionId="ses-1"
           active
           audienceRevision={0}
           showPropertyPanel={false}
           whiteboard={whiteboard}
-          onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null}
+          onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null}
         />,
       )
     }
@@ -377,7 +414,7 @@ describe('강사 판서 레이어', () => {
 
     function renderLaser(onLaser: ReturnType<typeof vi.fn>) {
       return render(
-        <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={onLaser} onPublish={vi.fn()} restoredElements={null} />,
+        <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={onLaser} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
       )
     }
 
@@ -469,7 +506,7 @@ describe('강사 판서 레이어', () => {
   it('바뀐 요소만 내보낸다 — 같은 배열이 다시 와도 다시 보내지 않는다', async () => {
     const onPublish = vi.fn<(change: AnnotationChange) => void>()
     const { findByTestId } = render(
-      <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
     onPublish.mockClear()   // 판서를 켤 때 나가는 기준점 스냅샷은 여기 관심사가 아니다
@@ -477,7 +514,7 @@ describe('강사 판서 레이어', () => {
 
     onChange([element('a', 1)])
     expect(onPublish).toHaveBeenCalledTimes(1)
-    expect(onPublish).toHaveBeenCalledWith({ type: 'upsert', elements: [element('a', 1)] })
+    expect(onPublish).toHaveBeenCalledWith({ type: 'upsert', elements: [element('a', 1)], files: {} })
 
     // Excalidraw는 아무것도 안 바뀌어도 onChange를 부른다(포인터 이동 등).
     onChange([element('a', 1)])
@@ -485,7 +522,84 @@ describe('강사 판서 레이어', () => {
 
     onChange([element('a', 2)])
     expect(onPublish).toHaveBeenCalledTimes(2)
-    expect(onPublish).toHaveBeenLastCalledWith({ type: 'upsert', elements: [element('a', 2)] })
+    expect(onPublish).toHaveBeenLastCalledWith({ type: 'upsert', elements: [element('a', 2)], files: {} })
+  })
+
+  /**
+   * <b>부모로 올라가는 보고는 값이 바뀔 때만 한다.</b>
+   *
+   * <p>`onChange`는 포인터가 움직일 때도 불린다. 거기서 매번 부모의 setState를 부르면
+   * <b>부모 렌더 → Excalidraw 갱신 → componentDidUpdate → onChange</b>가 돌면서 React가
+   * "Maximum update depth exceeded"(#185)로 앱을 통째로 죽인다.
+   *
+   * <p>실제로 그렇게 터졌다 — 화이트보드를 켜는 순간 화면이 하얗게 되고 라이브 연결까지 끊겼다.
+   * 같은 파일의 다른 보고들은 원래 이 규칙을 지키고 있었고, 나중에 추가된 것 하나만 빠져 있었다.
+   */
+  it('화이트보드 존재는 값이 바뀔 때만 알린다 — 렌더 루프를 만들지 않는다', async () => {
+    const onWhiteboardPresence = vi.fn<(present: boolean) => void>()
+    const { findByTestId } = render(
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={onWhiteboardPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
+    )
+    await findByTestId('excalidraw-editor')
+    const onChange = excalidrawProps.onChange as (els: unknown[]) => void
+
+    // 판이 없는 상태로 여러 번 — 포인터가 움직이는 상황이다.
+    onChange([element('a', 1)])
+    onChange([element('a', 1)])
+    onChange([element('a', 2)])
+    expect(onWhiteboardPresence).not.toHaveBeenCalledWith(true)
+    const beforeBoard = onWhiteboardPresence.mock.calls.length
+
+    // 판이 생기면 <b>한 번</b> 알린다.
+    const board = { id: WHITEBOARD_ELEMENT_ID, type: 'rectangle', version: 1, index: 'a0' }
+    onChange([board, element('a', 2)])
+    onChange([board, element('a', 3)])
+    onChange([board, element('a', 4)])
+
+    const trueCalls = onWhiteboardPresence.mock.calls.filter(([present]) => present === true)
+    expect(trueCalls).toHaveLength(1)
+    expect(onWhiteboardPresence.mock.calls.length).toBeLessThanOrEqual(beforeBoard + 1)
+  })
+
+  /**
+   * <b>주기적으로 복원 체크포인트를 남긴다</b>(ADR-0057).
+   *
+   * <p>없으면 복원이 세션 시작부터 전부 내려온다 — 실측에서 op 233건이 983kB였고, 강의가 길어질수록
+   * 무한히 자란다. ADR-0055에서 복원 시딩을 스냅샷 → 포인터로 바꾸며 저장되던 스냅샷이 사라진 탓이다.
+   *
+   * <p><b>데이터 채널로는 나가지 않는다.</b> 문서 전체를 채널에 실으면 ADR-0055가 없앤 64KB 문제가
+   * 되돌아온다 — 그래서 `onPublish`가 아니라 별도 경로다.
+   */
+  it('문서 변경이 쌓이면 복원 체크포인트를 남긴다 — 데이터 채널로는 보내지 않는다', async () => {
+    const onPublish = vi.fn<(change: AnnotationChange) => void>()
+    const onSaveSnapshot = vi.fn<(make: () => AnnotationChange) => void>()
+    const { findByTestId } = render(
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={onSaveSnapshot} restoredElements={null} restoredFiles={null} />,
+    )
+    await findByTestId('excalidraw-editor')
+    const onChange = excalidrawProps.onChange as (els: unknown[]) => void
+
+    // 요소를 하나씩 늘려 문서-변경 op를 100건 넘긴다.
+    const drawn: ReturnType<typeof element>[] = []
+    for (let i = 1; i <= 101; i += 1) {
+      drawn.push(element(`e${i}`, 1))
+      onChange([...drawn])
+    }
+
+    expect(onSaveSnapshot).toHaveBeenCalledTimes(1)
+    /*
+     * 체크포인트에는 <b>그 시점의 문서 전체</b>가 담긴다. 정확히 몇 번째 변경에서 찍히는지는 계약이
+     * 아니다 — 임계값 근처에서 한 tick 차이가 나도 복원은 똑같이 동작한다. 고정할 것은 "일부가 아니라
+     * 전체가 담긴다"는 것이다.
+     */
+    const made = onSaveSnapshot.mock.calls[0][0]()
+    expect(made.type).toBe('snapshot')
+    const saved = (made as { elements: { id: string }[] }).elements
+    expect(saved.length).toBeGreaterThanOrEqual(OPS_PER_SNAPSHOT_FOR_TEST)
+    expect(new Set(saved.map((e) => e.id)).size).toBe(saved.length)
+
+    // 그리고 그것이 데이터 채널로는 나가지 않는다 — 나갔다면 64KB 문제가 되돌아온다.
+    expect(onPublish.mock.calls.map(([c]) => c.type)).not.toContain('snapshot')
   })
 
   /**
@@ -495,17 +609,18 @@ describe('강사 판서 레이어', () => {
   it('새 참가자가 들어오면 전체 스냅샷을 다시 내보낸다', async () => {
     const onPublish = vi.fn<(change: AnnotationChange) => void>()
     const { findByTestId, rerender } = render(
-      <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
     ;(excalidrawProps.onChange as (elements: unknown[]) => void)([element('a', 1), element('b', 1)])
     onPublish.mockClear()
 
-    rerender(<InstructorAnnotationLayer active audienceRevision={1} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />)
+    rerender(<InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={1} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />)
 
     expect(onPublish).toHaveBeenCalledWith({
       type: 'snapshot',
       elements: [element('a', 1), element('b', 1)],
+      files: {},
     })
   })
 
@@ -513,15 +628,42 @@ describe('강사 판서 레이어', () => {
    * 강사가 새로고침해도 판서가 남아야 한다(ADR-0051). Egress는 자기 문서를 계속 들고 있으므로,
    * 되살리지 않으면 <b>강사만</b> 빈 화면을 보고 수강생 화면과 갈린다.
    */
-  it('저장돼 있던 판서를 에디터에 되돌린다', async () => {
+  /**
+   * <b>API가 mount 뒤에 도착해도</b> 복원이 씬에 들어가야 한다.
+   *
+   * <p>실제 Excalidraw는 지연 청크라, `excalidrawAPI` 콜백이 우리 effect보다 늦게 올 수 있다.
+   * 그런데 API를 <b>ref에만</b> 담으면 "도착했다"는 사실이 렌더를 만들지 못해, 시딩 effect가 다시
+   * 돌 기회가 없다 — 다른 값(`ui`)이 우연히 바뀌어 줘야만 돈다. 그러면 강사 화면에서만 판서가
+   * 사라지고 수강생 화면에는 그대로 남는다(운영에서 실제로 그렇게 보였다).
+   */
+  it('에디터 API가 늦게 도착해도 복원을 씬에 넣는다', async () => {
     const restored = [element('a', 3), element('b', 5)]
+    lateApi = true
     const { findByTestId } = render(
-      <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={restored} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={restored} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
 
-    expect(updateScene.mock.calls.map(([arg]) => (arg as { elements?: unknown[] }).elements))
-      .toContainEqual(restored)
+    await waitFor(() => {
+      expect(updateScene.mock.calls.map(([arg]) => (arg as { elements?: unknown[] }).elements))
+        .toContainEqual(restored)
+    })
+    lateApi = false
+  })
+
+  it('저장돼 있던 판서를 에디터에 되돌린다', async () => {
+    const restored = [element('a', 3), element('b', 5)]
+    const { findByTestId } = render(
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={restored} restoredFiles={null} />,
+    )
+    await findByTestId('excalidraw-editor')
+
+    // 에디터가 붙은 것과 시딩 effect가 <b>돈 것</b>은 다르다. 바로 단언하면 로컬에서는 통과하고
+    // 부하가 걸린 CI에서만 깨진다(실제로 그렇게 깨졌다).
+    await waitFor(() => {
+      expect(updateScene.mock.calls.map(([arg]) => (arg as { elements?: unknown[] }).elements))
+        .toContainEqual(restored)
+    })
   })
 
   /** 복원된 요소는 이미 서버·Egress 양쪽에 있다. 다시 내보내면 같은 획이 op로 한 번 더 흐른다. */
@@ -529,9 +671,14 @@ describe('강사 판서 레이어', () => {
     const restored = [element('a', 3)]
     const onPublish = vi.fn<(change: AnnotationChange) => void>()
     const { findByTestId } = render(
-      <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={restored} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={restored} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
+    // 시딩이 끝나야 knownRef가 채워진다. 그 전에 onChange를 밀어 넣으면 복원본이 "새로 그린 것"으로
+    // 보이는 게 당연하므로, 여기서 기다리지 않으면 부하에 따라 간헐적으로 실패한다.
+    await waitFor(() => {
+      expect(onPublish).toHaveBeenCalledWith({ type: 'snapshot', elements: restored, files: {} })
+    })
 
     ;(excalidrawProps.onChange as (elements: unknown[]) => void)(restored)
 
@@ -546,13 +693,13 @@ describe('강사 판서 레이어', () => {
    */
   it('강사가 이미 그렸으면 복원본으로 덮지 않는다', async () => {
     const { findByTestId, rerender } = render(
-      <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
     ;(excalidrawProps.onChange as (elements: unknown[]) => void)([element('방금', 1)])
     updateScene.mockClear()
 
-    rerender(<InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} restoredElements={[element('저장된', 9)]} />)
+    rerender(<InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={[element('저장된', 9)]} restoredFiles={null} />)
 
     expect(updateScene.mock.calls.map(([arg]) => (arg as { elements?: unknown[] }).elements))
       .not.toContainEqual([element('저장된', 9)])
@@ -566,26 +713,26 @@ describe('강사 판서 레이어', () => {
   it('판서를 켜면 비어 있어도 스냅샷을 보내 기준점을 잡는다', async () => {
     const onPublish = vi.fn<(change: AnnotationChange) => void>()
     const { findByTestId, rerender } = render(
-      <InstructorAnnotationLayer active={false} audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active={false} audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
 
-    rerender(<InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />)
+    rerender(<InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />)
     await findByTestId('excalidraw-editor')
 
-    expect(onPublish).toHaveBeenCalledWith({ type: 'snapshot', elements: [] })
+    expect(onPublish).toHaveBeenCalledWith({ type: 'snapshot', elements: [], files: {} })
   })
 
   it('새 참가자가 들어오면 판서가 비어 있어도 기준점을 다시 보낸다', async () => {
     const onPublish = vi.fn<(change: AnnotationChange) => void>()
     const { findByTestId, rerender } = render(
-      <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
     onPublish.mockClear()
 
-    rerender(<InstructorAnnotationLayer active audienceRevision={1} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={null} />)
+    rerender(<InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={1} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />)
 
-    expect(onPublish).toHaveBeenCalledWith({ type: 'snapshot', elements: [] })
+    expect(onPublish).toHaveBeenCalledWith({ type: 'snapshot', elements: [], files: {} })
   })
 
   /**
@@ -596,11 +743,15 @@ describe('강사 판서 레이어', () => {
     const restored = [element('a', 3)]
     const onPublish = vi.fn<(change: AnnotationChange) => void>()
     const { findByTestId } = render(
-      <InstructorAnnotationLayer active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} restoredElements={restored} />,
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={onPublish} onPublishState={stateSpy(onPublish)} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={restored} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
 
-    expect(onPublish).toHaveBeenCalledWith({ type: 'snapshot', elements: restored })
+    // 복원 시딩은 에디터가 붙은 뒤 이펙트에서 일어난다. 마운트 직후를 바로 단언하면 부하에 따라
+    // 아직 돌지 않은 순간을 잡아 간헐적으로 실패한다.
+    await waitFor(() => {
+      expect(onPublish).toHaveBeenCalledWith({ type: 'snapshot', elements: restored, files: {} })
+    })
   })
 
 })
@@ -610,6 +761,9 @@ describe('Egress 판서 레이어', () => {
   function fakeRoom() {
     const handlers = new Map<string, Set<(...args: never[]) => void>>()
     const room = {
+      // 방 이름이 곧 세션이다(백엔드 `LiveSessionService.roomName`과 같은 규칙). 전체 상태를
+      // 받아갈 때 여기서 sessionId를 꺼낸다.
+      name: 'session-ses-1',
       on(event: string, handler: (...args: never[]) => void) {
         if (!handlers.has(event)) handlers.set(event, new Set())
         handlers.get(event)!.add(handler)
@@ -814,6 +968,121 @@ describe('Egress 판서 레이어', () => {
     warn.mockRestore()
   })
 
+  /* ── 전체 상태는 받아간다(ADR-0055) ──────────────────────────────────────── */
+
+  /** §3-6d 응답 한 건. 서버는 마지막 스냅샷과 그 이후 op를 준다. */
+  function storedDocument(elements: ReturnType<typeof element>[], revision: number) {
+    return {
+      revision,
+      nextRevision: revision + 1,
+      snapshotPayload: JSON.stringify({ elements, files: {} }),
+      ops: [],
+    }
+  }
+
+  /**
+   * 포인터를 받으면 문서를 <b>서버에서</b> 가져온다(ADR-0055).
+   *
+   * <p>강사가 문서 전체를 데이터 채널로 밀지 않게 된 이유는 실측 74.9KB가 한도(64KB)를 넘었기
+   * 때문이다. 넘으면 전송이 통째로 실패해 수강생 화면에 판서가 아예 나오지 않는다.
+   */
+  it('포인터를 받으면 서버에서 전체 상태를 받아 그린다', async () => {
+    const { room, receive } = fakeRoom()
+    getCommonBounds.mockReturnValue([0, 0, 100, 100])
+    stubCanvas(100, 100)
+    const fetchMock = vi.fn(async () => new Response(
+      JSON.stringify(storedDocument([element('a', 1), element('b', 1)], 7)), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<EgressAnnotationLayer room={room} livekitToken="lk-token" />)
+    receive(encodeAnnotationOp({ type: 'pointer', revision: 9 }), ANNOTATION_TOPIC)
+
+    await waitFor(() => {
+      const last = exportToCanvas.mock.calls.at(-1)![0] as { elements: { id: string }[] }
+      expect(last.elements.map((e) => e.id)).toEqual(['a', 'b'])
+    })
+
+    // 세션 쿠키가 없으므로 LiveKit 토큰으로 방 참가자임을 증명한다. 방 이름에서 세션을 꺼낸다.
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    expect(url).toBe('/api/live-sessions/ses-1/annotation')
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer lk-token')
+
+    vi.unstubAllGlobals()
+  })
+
+  /**
+   * <b>받아오는 동안에도 강사는 계속 그린다.</b> 그 사이 도착한 op를 잃으면 이어붙일 자리가 비어
+   * 그 뒤 op가 전부 버려진다 — 강사 화면에는 그려지는데 녹화에는 나타나지 않는, 이 프로젝트에서
+   * 반복해 겪은 그 모양이다.
+   */
+  it('전체 상태를 받아오는 동안 도착한 op를 잃지 않는다', async () => {
+    const { room, receive } = fakeRoom()
+    getCommonBounds.mockReturnValue([0, 0, 100, 100])
+    stubCanvas(100, 100)
+    let release: (response: Response) => void = () => {}
+    const pending = new Promise<Response>((resolve) => { release = resolve })
+    vi.stubGlobal('fetch', vi.fn(() => pending))
+
+    render(<EgressAnnotationLayer room={room} livekitToken="lk-token" />)
+    receive(encodeAnnotationOp({ type: 'pointer', revision: 9 }), ANNOTATION_TOPIC)
+
+    // 왕복이 도는 동안 강사가 한 획 더 그었다.
+    receive(encodeAnnotationOp({ type: 'upsert', revision: 10, elements: [element('c', 1)] }), ANNOTATION_TOPIC)
+    await new Promise((resolve) => { setTimeout(resolve, 0) })
+
+    release(new Response(JSON.stringify(storedDocument([element('a', 1)], 7)), { status: 200 }))
+
+    await waitFor(() => {
+      const last = exportToCanvas.mock.calls.at(-1)![0] as { elements: { id: string }[] }
+      expect(last.elements.map((e) => e.id)).toEqual(['a', 'c'])
+    })
+
+    vi.unstubAllGlobals()
+  })
+
+  /**
+   * 받아오지 못했을 때 <b>번호만이라도 맞춘다.</b> 그러지 않으면 이후 델타가 전부 "중간이 빠졌다"로
+   * 버려져 강의가 끝날 때까지 아무것도 나타나지 않는다 — 그쪽이 훨씬 나쁘다.
+   */
+  it('전체 상태를 받아오지 못해도 이후 판서는 이어 그린다', async () => {
+    const { room, receive } = fakeRoom()
+    getCommonBounds.mockReturnValue([0, 0, 100, 100])
+    stubCanvas(100, 100)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 403 })))
+
+    render(<EgressAnnotationLayer room={room} livekitToken="lk-token" />)
+    receive(encodeAnnotationOp({ type: 'pointer', revision: 9 }), ANNOTATION_TOPIC)
+    await waitFor(() => { expect(warn).toHaveBeenCalled() })
+
+    receive(encodeAnnotationOp({ type: 'upsert', revision: 10, elements: [element('c', 1)] }), ANNOTATION_TOPIC)
+    await waitFor(() => {
+      const last = exportToCanvas.mock.calls.at(-1)![0] as { elements: { id: string }[] }
+      expect(last.elements.map((e) => e.id)).toEqual(['c'])
+    })
+
+    warn.mockRestore()
+    vi.unstubAllGlobals()
+  })
+
+  /** 토큰 없이 열린 페이지에서도 녹화는 계속돼야 한다 — 예외로 화면을 멈추지 않는다. */
+  it('토큰이 없으면 받아가지 않고 넘어간다', async () => {
+    const { room, receive } = fakeRoom()
+    stubCanvas(10, 10)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<EgressAnnotationLayer room={room} />)
+    expect(() => receive(encodeAnnotationOp({ type: 'pointer', revision: 9 }), ANNOTATION_TOPIC)).not.toThrow()
+
+    await new Promise((resolve) => { setTimeout(resolve, 0) })
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    warn.mockRestore()
+    vi.unstubAllGlobals()
+  })
+
   it('room이 없으면 아무것도 구독하지 않는다', () => {
     expect(() => render(<EgressAnnotationLayer room={null} />)).not.toThrow()
   })
@@ -833,3 +1102,217 @@ describe('Egress 판서 레이어', () => {
 /** 타입이 맞는지 컴파일 단계에서 확인한다. op 모양이 바뀌면 여기서 먼저 깨진다. */
 const _typeCheck: AnnotationOp = { type: 'clear', revision: 1 }
 void _typeCheck
+
+/**
+ * 선택 → 액션 링(ADR-0054). 링은 <b>선택이 있을 때만</b> 뜨므로, 선택이 우리 쪽에 전달되는지가
+ * 전부다. Excalidraw는 `onChange(elements, appState)`로 알려 준다.
+ */
+describe('판서 정리 액션 링 배선', () => {
+  function rectStub() {
+    return vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
+      width: 960, height: 540, x: 0, y: 0, top: 0, left: 0, right: 960, bottom: 540,
+      toJSON: () => ({}),
+    } as DOMRect)
+  }
+
+  it('요소를 선택하면 그 자리에 링이 뜬다', async () => {
+    const restore = rectStub()
+    const { findByTestId, container } = render(
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
+    )
+    await findByTestId('excalidraw-editor')
+    const onChange = excalidrawProps.onChange as (els: unknown[], state?: unknown) => void
+
+    // 강사가 획 하나를 그리고 그것을 선택했다.
+    const drawn = { id: 'a', type: 'freedraw', version: 1, x: 100, y: 200, points: [[0, 0], [80, 40]] }
+    onChange([drawn], { selectedElementIds: { a: true } })
+
+    await waitFor(() => {
+      expect(container.querySelector('.annotation-action-ring')).not.toBeNull()
+    })
+    expect(container.querySelectorAll('.annotation-action-ring__item')).toHaveLength(2)
+    restore.mockRestore()
+  })
+
+  it('선택이 없으면 링을 그리지 않는다', async () => {
+    const restore = rectStub()
+    const { findByTestId, container } = render(
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
+    )
+    await findByTestId('excalidraw-editor')
+    const onChange = excalidrawProps.onChange as (els: unknown[], state?: unknown) => void
+
+    onChange([{ id: 'a', type: 'freedraw', version: 1, x: 0, y: 0, points: [[0, 0]] }], { selectedElementIds: {} })
+
+    expect(container.querySelector('.annotation-action-ring')).toBeNull()
+    restore.mockRestore()
+  })
+
+  /** 화이트보드는 배경으로 깔아 둔 판이지 정리 대상이 아니다. */
+  it('화이트보드만 선택된 것은 정리 대상으로 치지 않는다', async () => {
+    const restore = rectStub()
+    const { findByTestId, container } = render(
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
+    )
+    await findByTestId('excalidraw-editor')
+    const onChange = excalidrawProps.onChange as (els: unknown[], state?: unknown) => void
+
+    onChange([{ id: WHITEBOARD_ELEMENT_ID, type: 'rectangle', version: 1, x: 0, y: 0, width: 10, height: 10 }],
+      { selectedElementIds: { [WHITEBOARD_ELEMENT_ID]: true } })
+
+    expect(container.querySelector('.annotation-action-ring')).toBeNull()
+    restore.mockRestore()
+  })
+})
+
+/**
+ * 정리 기능의 <b>진입점</b>. 링은 선택이 있어야 뜨는데, 판서를 켜면 펜이 잠긴 채 시작하므로
+ * 강사는 선택하는 방법을 모른 채 기능을 찾게 된다 — 실제로 "바꾸는 버튼이 어디 있냐"는 말이
+ * 나왔다. 기능이 있어도 닿을 길이 없으면 없는 것과 같다.
+ */
+describe('판서 정리 진입점', () => {
+  function rectStub() {
+    return vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
+      width: 960, height: 540, x: 0, y: 0, top: 0, left: 0, right: 960, bottom: 540,
+      toJSON: () => ({}),
+    } as DOMRect)
+  }
+
+  async function draw() {
+    const { findByTestId, container, getByRole, queryByRole } = render(
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
+    )
+    await findByTestId('excalidraw-editor')
+    const onChange = excalidrawProps.onChange as (els: unknown[], state?: unknown) => void
+    return { container, getByRole, queryByRole, onChange }
+  }
+
+  it('그린 것이 없으면 진입점을 보이지 않는다 — 정리할 것이 없다', async () => {
+    const restore = rectStub()
+    const { onChange, queryByRole } = await draw()
+
+    onChange([], { selectedElementIds: {} })
+
+    expect(queryByRole('button', { name: /AI로 정리/ })).toBeNull()
+    restore.mockRestore()
+  })
+
+  it('그린 것이 있으면 진입점을 보인다', async () => {
+    const restore = rectStub()
+    const { onChange, getByRole } = await draw()
+
+    onChange([{ id: 'a', type: 'freedraw', version: 1, x: 0, y: 0, points: [[0, 0], [10, 10]] }],
+      { selectedElementIds: {} })
+
+    await waitFor(() => { expect(getByRole('button', { name: /AI로 정리/ })).toBeTruthy() })
+    restore.mockRestore()
+  })
+
+  /** 펜이 잠겨 있으면 클릭도 드래그도 선택이 아니라 획이 된다. 눌렀을 때 도구까지 바꿔 줘야 한다. */
+  it('누르면 선택 도구로 바꾸고 링을 펼친다', async () => {
+    const restore = rectStub()
+    const { onChange, getByRole, container } = await draw()
+    onChange([{ id: 'a', type: 'freedraw', version: 1, x: 0, y: 0, points: [[0, 0], [10, 10]] }],
+      { selectedElementIds: {} })
+    await waitFor(() => { expect(getByRole('button', { name: /AI로 정리/ })).toBeTruthy() })
+    updateScene.mockClear()
+
+    getByRole('button', { name: /AI로 정리/ }).click()
+
+    const tool = updateScene.mock.calls
+      .map(([arg]) => (arg as { appState?: { activeTool?: { type?: string } } }).appState?.activeTool?.type)
+      .filter(Boolean)
+    expect(tool).toContain('selection')
+    // 링이 펼쳐지되, 대상이 없으므로 고를 수는 없고 무엇이 필요한지 알려 준다.
+    await waitFor(() => {
+      expect(container.querySelector('.annotation-action-ring')).not.toBeNull()
+    })
+    expect(container.querySelector('.annotation-action-ring__need')?.textContent).toContain('선택하세요')
+    const items = [...container.querySelectorAll<HTMLButtonElement>('.annotation-action-ring__item')]
+    expect(items.every((b) => b.disabled)).toBe(true)
+    restore.mockRestore()
+  })
+
+  it('선택하면 진입점 대신 링이 뜬다', async () => {
+    const restore = rectStub()
+    const { onChange, container, queryByRole } = await draw()
+    const element = { id: 'a', type: 'freedraw', version: 1, x: 0, y: 0, points: [[0, 0], [10, 10]] }
+
+    onChange([element], { selectedElementIds: { a: true } })
+
+    await waitFor(() => { expect(container.querySelector('.annotation-action-ring')).not.toBeNull() })
+    expect(queryByRole('button', { name: /AI로 정리/ })).toBeNull()
+    restore.mockRestore()
+  })
+})
+
+/**
+ * 링을 여는 두 경로와 닫는 한 경로. 강사가 획을 고르면 바로 뜨고(클릭이든 드래그든), 아무것도
+ * 고르지 않았어도 칩을 눌러 펼칠 수 있다. 펼쳐 놓은 메뉴가 스스로 닫히지 않으면 판서를 가린다.
+ */
+describe('액션 링 펼침·접힘', () => {
+  function rectStub() {
+    return vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
+      width: 960, height: 540, x: 0, y: 0, top: 0, left: 0, right: 960, bottom: 540,
+      toJSON: () => ({}),
+    } as DOMRect)
+  }
+
+  async function open() {
+    const view = render(
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
+    )
+    await view.findByTestId('excalidraw-editor')
+    const onChange = excalidrawProps.onChange as (els: unknown[], state?: unknown) => void
+    onChange([{ id: 'a', type: 'freedraw', version: 1, x: 0, y: 0, points: [[0, 0], [10, 10]] }],
+      { selectedElementIds: {} })
+    await waitFor(() => { expect(view.getByRole('button', { name: /AI로 정리/ })).toBeTruthy() })
+    view.getByRole('button', { name: /AI로 정리/ }).click()
+    await waitFor(() => { expect(view.container.querySelector('.annotation-action-ring')).not.toBeNull() })
+    return view
+  }
+
+  it('링 바깥을 누르면 접힌다', async () => {
+    const restore = rectStub()
+    const view = await open()
+
+    view.container.querySelector('.instructor-annotation-layer')!
+      .dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }))
+
+    await waitFor(() => { expect(view.container.querySelector('.annotation-action-ring')).toBeNull() })
+    expect(view.getByRole('button', { name: /AI로 정리/ })).toBeTruthy()
+    restore.mockRestore()
+  })
+
+  /** 항목을 고르려던 클릭이 링을 접어 버리면 아무것도 고를 수 없다. */
+  it('링 위에서 누른 것은 접지 않는다', async () => {
+    const restore = rectStub()
+    const view = await open()
+
+    view.container.querySelector('.annotation-action-ring__item')!
+      .dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }))
+
+    await new Promise((resolve) => { setTimeout(resolve, 0) })
+    expect(view.container.querySelector('.annotation-action-ring')).not.toBeNull()
+    restore.mockRestore()
+  })
+
+  /** 획 하나를 클릭해 고르는 경우다 — 드래그로 감싸지 않아도 링이 떠야 한다. */
+  it('획을 하나만 골라도 링이 뜨고 고를 수 있다', async () => {
+    const restore = rectStub()
+    const view = render(
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
+    )
+    await view.findByTestId('excalidraw-editor')
+    const onChange = excalidrawProps.onChange as (els: unknown[], state?: unknown) => void
+
+    onChange([{ id: 'a', type: 'freedraw', version: 1, x: 100, y: 100, points: [[0, 0], [40, 40]] }],
+      { selectedElementIds: { a: true } })
+
+    await waitFor(() => { expect(view.container.querySelector('.annotation-action-ring')).not.toBeNull() })
+    const items = [...view.container.querySelectorAll<HTMLButtonElement>('.annotation-action-ring__item')]
+    expect(items.every((b) => b.disabled)).toBe(false)
+    expect(view.container.querySelector('.annotation-action-ring__need')).toBeNull()
+    restore.mockRestore()
+  })
+})

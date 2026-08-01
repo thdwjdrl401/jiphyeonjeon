@@ -1,5 +1,6 @@
 import { ApiError } from '@/shared/api/client'
 import { MOCK_INSTRUCTOR_ID, MOCK_STUDENT_ID, resetMockDatabase } from '@/features/demo/mockDatabase'
+import { resetMockLiveSessions } from '@/features/live-session/mockLiveSessionService'
 import type {
   AuthUser,
   EmailAvailability,
@@ -14,6 +15,9 @@ const initialReservedEmails = [
   'teacher@liveclass.ai',
 ]
 const reservedEmails = new Set(initialReservedEmails)
+/** 발급된 재설정 토큰 → 요청 이메일. 1회용이라 확인 성공 시 지운다. */
+const issuedResetTokens = new Map<string, string>()
+let resetTokenSequence = 0
 
 async function wait() {
   if (import.meta.env.MODE === 'test') return
@@ -27,8 +31,11 @@ export function peekMockUser() {
 export function resetMockAuth() {
   currentUser = null
   resetMockDatabase()
+  resetMockLiveSessions()
   reservedEmails.clear()
   initialReservedEmails.forEach((email) => reservedEmails.add(email))
+  issuedResetTokens.clear()
+  resetTokenSequence = 0
 }
 
 export const mockAuthService = {
@@ -113,5 +120,39 @@ export const mockAuthService = {
     if (!currentUser) throw new ApiError('로그인이 필요합니다.', 401, 'AUTH_SESSION_REQUIRED')
     currentUser = { ...currentUser, profileImageUrl }
     return currentUser
+  },
+
+  /**
+   * 재설정 메일 발송 요청. **계정이 있든 없든 똑같이 성공한다** — 이메일이 로그인 식별자라
+   * 존재 여부를 응답으로 흘리면 가입자 목록 확인 수단이 된다.
+   *
+   * <p>`devResetToken`은 mock에서만 돌려준다. 실제 서버는 메일로만 보내므로, 이 값에
+   * 의존하는 화면 코드를 쓰면 안 된다 — mock 모드 안내 문구에서만 쓴다.
+   */
+  async requestPasswordReset(email: string) {
+    await wait()
+    const normalized = email.trim().toLowerCase()
+    if (!normalized) {
+      throw new ApiError('이메일을 입력해 주세요.', 400, 'AUTH_EMAIL_REQUIRED')
+    }
+    const token = `mock-reset-${(resetTokenSequence += 1)}`
+    issuedResetTokens.set(token, normalized)
+    return { devResetToken: token }
+  },
+
+  /** 토큰은 **1회용**이다. 성공하면 즉시 폐기해 같은 링크가 두 번 통하지 않는다. */
+  async confirmPasswordReset({ token, newPassword }: { token: string; newPassword: string }) {
+    await wait()
+    if (!issuedResetTokens.has(token)) {
+      throw new ApiError(
+        '재설정 링크가 만료되었거나 이미 사용되었습니다. 다시 요청해 주세요.',
+        410,
+        'AUTH_PASSWORD_RESET_TOKEN_INVALID',
+      )
+    }
+    if (newPassword.length < 8) {
+      throw new ApiError('새 비밀번호는 8자 이상이어야 합니다.', 400, 'AUTH_PASSWORD_INVALID')
+    }
+    issuedResetTokens.delete(token)
   },
 }

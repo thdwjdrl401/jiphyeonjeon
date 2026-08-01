@@ -1,5 +1,6 @@
 package com.liveclass.live;
 
+import com.liveclass.support.TestSchedules;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,9 +41,8 @@ class LiveSessionContractTest {
         Cookie[] auth = loginAs("INSTRUCTOR");
         String lessonId = createLesson(auth);
 
-        write(post("/api/instructor/lessons/" + lessonId + "/live-sessions"), auth, """
-                {"scheduledAt":"2026-08-01T20:00:00+09:00"}
-                """)
+        write(post("/api/instructor/lessons/" + lessonId + "/live-sessions"), auth,
+                TestSchedules.futureScheduledAtBody())
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.sessionId").exists())
                 .andExpect(jsonPath("$.lessonId").value(lessonId))

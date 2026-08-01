@@ -85,8 +85,9 @@ GPU model 준비가 필요하다.
 | bge-runtime | `python -m app.main` |
 
 ai-api·realtime-agent 로컬 설정은 [`ai/.env.example`](.env.example)을 `ai/.env`로 복사한다. EC2
-ai-api·ai-worker 운영 설정은 [`.env.ai-prod.example`](../.env.ai-prod.example)과
-[`docker-compose.ai-prod.yml`](../docker-compose.ai-prod.yml)을 따른다.
+ai-api·ai-worker는 prod [env](../.env.ai-prod.example)·[compose](../docker-compose.ai-prod.yml)와
+dev [env](../.env.ai-dev.example)·[compose](../docker-compose.ai-dev.yml)를 같은 서비스 구조로 유지한다.
+host 관리 포트는 외부에 열지 않고 prod `127.0.0.1:8010/8011`, dev `127.0.0.1:18010/18011`로 분리한다.
 
 | 값 | 사용하는 경계 | GPU 사용 |
 |---|---|---|
@@ -107,7 +108,7 @@ ai-api·ai-worker 운영 설정은 [`.env.ai-prod.example`](../.env.ai-prod.exam
 
 | 경계 | 현재 상태 |
 |---|---|
-| Spring→ai-api RAG SSE | AI 구현, Spring signer·proxy 미구현 |
+| Spring→ai-api RAG SSE | AI 구현, Spring signer·proxy 미구현. PPTX 자료 검색은 커리큘럼 전체로 공유됨([ADR-0005](../docs/decisions/jinwoo/0005-curriculum-scoped-rag-material-sharing.md)) — 요청에 `curriculumId` 필수, Spring이 아직 안 보내 계약 위반으로 거부됨 |
 | Spring→RabbitMQ→ai-worker | `PPTX_EMBED` 양쪽 구현, Spring producer·worker 앱 기본 off, AI 운영 compose는 worker만 on; `EMBED_DELETE` 미구현(DLQ) |
 | ai-worker→Spring download-url·callback | 양쪽 구현 |
 | ai-api·ai-worker→bge-runtime | client·runtime·reverse tunnel·운영 container proxy 배선 구현 |

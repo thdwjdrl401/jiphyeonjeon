@@ -17,6 +17,7 @@ from app.rag.models import (
     AnswerInsufficientData,
     AnswerSource,
     CaptionSource,
+    PptxSource,
     RagAnswerRequest,
     RetrievedEvidence,
 )
@@ -185,9 +186,15 @@ def _validate_evidence_scope(
     evidence: Sequence[RetrievedEvidence],
 ) -> None:
     for item in evidence:
-        if item.lesson_id != request.lessonId:
-            raise _EvidenceScopeViolation
-        if isinstance(item.source, CaptionSource) and item.source.sessionId != request.sessionId:
+        if isinstance(item.source, PptxSource):
+            # PPTX materials are shared curriculum-wide (ADR-0005): a hit's lesson_id may
+            # legitimately differ from the requesting lesson, so curriculum_id is the proof.
+            if item.curriculum_id != request.curriculumId:
+                raise _EvidenceScopeViolation
+        elif isinstance(item.source, CaptionSource):
+            if item.lesson_id != request.lessonId or item.source.sessionId != request.sessionId:
+                raise _EvidenceScopeViolation
+        else:  # pragma: no cover - AnswerSource is a closed discriminated union
             raise _EvidenceScopeViolation
 
 

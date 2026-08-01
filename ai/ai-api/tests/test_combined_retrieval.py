@@ -7,6 +7,8 @@ from app.retrieval import MaterialChunkHit
 
 LESSON_ID = UUID("11111111-1111-4111-8111-111111111111")
 OTHER_LESSON_ID = UUID("22222222-2222-4222-8222-222222222222")
+CURRICULUM_ID = UUID("55555555-5555-4555-8555-555555555555")
+OTHER_CURRICULUM_ID = UUID("66666666-6666-4666-8666-666666666666")
 MATERIAL_ID = UUID("33333333-3333-4333-8333-333333333333")
 SESSION_ID = "44444444-4444-4444-8444-444444444444"
 
@@ -15,6 +17,7 @@ def _request() -> RagAnswerRequest:
     return RagAnswerRequest(
         requestId="request-1",
         lessonId=LESSON_ID,
+        curriculumId=CURRICULUM_ID,
         sessionId=SESSION_ID,
         question="방금 설명한 개념은 무엇인가요?",
         contextTimeMs=61_500,
@@ -25,6 +28,7 @@ def _request() -> RagAnswerRequest:
 def _hit(
     *,
     lesson_id: UUID = LESSON_ID,
+    curriculum_id: UUID = CURRICULUM_ID,
     vector_score: float = 0.8,
     lexical_score: float = 0.0,
     score: float = 0.8,
@@ -33,6 +37,7 @@ def _hit(
         chunk_id=1,
         material_version_id=2,
         lesson_id=lesson_id,
+        curriculum_id=curriculum_id,
         material_id=MATERIAL_ID,
         material_version=1,
         page=4,
@@ -111,7 +116,7 @@ def test_combines_scoped_material_and_bounded_latest_attempt_caption() -> None:
 
     assert result.sufficient is True
     assert materials.call == {
-        "lesson_id": LESSON_ID,
+        "curriculum_id": CURRICULUM_ID,
         "query_text": "방금 설명한 개념은 무엇인가요?",
         "top_k": 8,
     }
@@ -141,10 +146,12 @@ def test_rrf_rank_alone_cannot_make_irrelevant_material_sufficient() -> None:
 
 def test_adapter_scope_is_preserved_for_final_service_revalidation() -> None:
     retriever = CombinedEvidenceRetriever(
-        Materials((_hit(lesson_id=OTHER_LESSON_ID),)),
+        Materials((_hit(curriculum_id=OTHER_CURRICULUM_ID),)),
         Captions(_context(lesson_id=OTHER_LESSON_ID)),
     )
 
     result = asyncio.run(retriever.retrieve(_request()))
 
-    assert {item.lesson_id for item in result.evidence} == {OTHER_LESSON_ID}
+    pptx_evidence, caption_evidence = result.evidence
+    assert pptx_evidence.curriculum_id == OTHER_CURRICULUM_ID
+    assert caption_evidence.lesson_id == OTHER_LESSON_ID

@@ -42,6 +42,7 @@
 | `CHAT-REPLAY-01` | `GET` | `/api/live-sessions/{sessionId}/messages` | 저장 채팅 리플레이 | **구현됨(세션 키잉)**. 리플레이 페이지는 `lessonId` 기준이므로 lesson→session 해석 필요(설계 후속) |
 | `AI-HISTORY-01` | `GET` | `/api/lessons/{lessonId}/ai/questions` | 본인 AI Q&A 기록 | **제안** |
 | `AI-QUESTION-01` | `POST/SSE` | `/api/live-sessions/{sessionId}/ai/answers/stream` | 현재 시점 개인 AI 질문 | **라이브만 구현됨**([ADR-0047](../../decisions/songjeongki/0047-live-ai-answer-sse-proxy.md)) — VOD/다시보기는 미구현 |
+| `AI-QUESTION-REPLAY-01` | `POST/SSE` | `/api/lessons/{lessonId}/ai/answers/stream` | 재생 위치 주변 자막 기반 개인 AI 질문 | **요구사항 제안**([ADR-0037](../../decisions/canola/0037-replay-ai-caption-context-contract.md)) |
 
 ### 2.3 퀴즈
 
@@ -339,16 +340,10 @@ GET /api/lessons/{lessonId}/ai/questions?page=0&size=20
 
 ### 8.2 새 질문
 
-> ⚠️ **VOD/다시보기 AI 질문은 아직 없다.** 라이브 경로는
-> `POST /api/live-sessions/{sessionId}/ai/answers/stream`으로 구현됐지만([LIVE.md §10.1](LIVE.md)),
-> 다시보기는 열지 못했다 — ai-api가 `sessionId`를 필수로 받고 시간 좌표가 STT attempt-local이라,
-> 다시보기의 세션-ms를 그 축으로 되돌릴 **시간 앵커 공유 계약이 아직 없다**
-> ([ADR-0047 §9](../../decisions/songjeongki/0047-live-ai-answer-sse-proxy.md)). FE의 `askReplayAi(...)`는
-> 501 스텁을 유지한다.
-
-앵커 계약이 서면 라이브와 같은 SSE 이벤트 계약(`answer.delta`/`answer.done`/`answer.insufficient`/`answer.error`,
-[LIVE.md §10.1](LIVE.md))을 그대로 쓰고, VOD에서는 현재 활성 자막·PPTX와 `sessionMs`를 scope로 사용하며
-근거 선택 시 해당 영상 시각으로 이동할 수 있어야 한다.
+> ⚠️ **아직 미구현이며 runtime 계약에는 반영되지 않았다.** 시간 앵커와 최종 요청안은
+> [ADR-0037](../../decisions/canola/0037-replay-ai-caption-context-contract.md)에 한 번에 정리한다. 구현 방법은
+> FE·Spring·AI 각 오너가 합의해 결정한다. FE의 `askReplayAi(...)`는 실제 계약이 구현될 때까지 501 스텁을
+> 유지한다.
 
 게시본 version이 질문 도중 바뀌더라도 질문 시작 시점 version으로 응답을 완료한다(version 노출 방법은
 현재 이벤트 계약에 없어 후속 결정 대상이다).

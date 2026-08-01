@@ -4,6 +4,10 @@ export const publicPaths = {
   home: '/',
   login: '/login',
   signup: '/signup',
+  // 비밀번호 재설정은 로그인을 못 하는 사람이 쓰는 흐름이라 공개 경로에 둔다.
+  passwordResetRequest: '/password-reset',
+  passwordResetConfirm: (token?: string) =>
+    token ? `/password-reset/confirm?token=${encodeURIComponent(token)}` : '/password-reset/confirm',
   curriculums: '/curriculums',
   curriculum: (curriculumId: string) => `/curriculums/${curriculumId}`,
   forbidden: (reason?: 'student' | 'instructor' | 'enrollment' | 'ownership') =>

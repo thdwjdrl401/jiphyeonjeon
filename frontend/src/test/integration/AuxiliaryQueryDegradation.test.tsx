@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '@/App'
 import { ApiError } from '@/shared/api/client'
 import { mockAuthService, resetMockAuth } from '@/features/auth/mockAuthService'
@@ -41,15 +41,25 @@ function notReady() {
 }
 
 /**
- * 앱 QueryClient는 `retry: 1`이라 실패가 화면에 닿기까지 재시도 백오프만큼 걸린다.
- * findBy 기본 대기(1초)로는 모자라므로 오류 상태를 기다릴 때만 넉넉히 준다.
+ * 앱 QueryClient는 `retry: 1`이라 실패가 화면에 닿기까지 재시도 백오프만큼 걸린다. 그 백오프는
+ * 실제로 흐르는 시간이라 부하가 걸린 러너에서는 더 늘어난다.
+ *
+ * <p>이 값은 기본 대기가 1초이던 시절의 "넉넉히"였는데, 그 뒤 기본이 5초로 올라가면서 오히려
+ * <b>기본보다 좁은</b> 한도가 됐다 — 늘려 둔 여유를 이 상수가 도로 깎고 있었다. 기본보다 넓게 둔다.
  */
-const AFTER_RETRY = { timeout: 3_000 }
+const AFTER_RETRY = { timeout: 10_000 }
 
 describe('부가 조회 실패 시 화면 유지', () => {
   beforeEach(() => {
     resetMockAuth()
     window.history.replaceState({}, '', '/')
+  })
+
+  // 이 파일은 테스트마다 서비스 함수를 vi.spyOn으로 실패시키는데, 원복이 없어 그 스텁이 다음
+  // 테스트까지 살아남았다(500을 내도록 바꾼 getLiveSession이 계속 500을 내는 식). 순서를 섞으면
+  // 바로 드러난다. 전역 restoreMocks는 모듈 목 구현까지 되돌려 못 쓰므로 여기서만 원복한다.
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
   it('학습 요약이 실패해도 커리큘럼 목록은 뜨고, 준비 중임을 알린다', async () => {

@@ -44,8 +44,15 @@ public class TestcontainersContextCustomizerFactory implements ContextCustomizer
             // Redis/PG를 여러 컨텍스트가 공유하므로, 백그라운드 consumer들이 서로의 스트림을 소비해
             // 교차 오염(다른 컨텍스트에서 브로드캐스트)을 일으킬 수 있다. 자막을 실제로 검증하는 테스트만
             // properties로 격리된 stream-key/group과 함께 다시 켠다(addLast라 인라인 properties가 우선).
+            //
+            // BCrypt 강도는 테스트에서만 최소(4)로 낮춘다. 강도 10은 encode+match 한 쌍에 약 100ms이고,
+            // 계약 테스트가 매번 회원가입·로그인을 실제로 태워 371번 쌓인다 — 그것만으로 스위트의 약 40초,
+            // 전체의 1/4이 해시 계산이었다. 강도는 지수라 4는 10보다 64배 싸다. 운영 기본값(10)은 그대로다.
+            // 여기 두는 이유: 이 커스터마이저는 모든 테스트 컨텍스트에 적용되면서도 캐시 키를 쪼개지 않는다.
             context.getEnvironment().getPropertySources().addLast(new MapPropertySource(
-                    "captionConsumerTestDefaults", Map.of("liveclass.caption.enabled", "false")));
+                    "captionConsumerTestDefaults", Map.of(
+                            "liveclass.caption.enabled", "false",
+                            "liveclass.security.bcrypt-strength", "4")));
             if (context.getBeanFactory() instanceof BeanDefinitionRegistry registry) {
                 new AnnotatedBeanDefinitionReader(registry)
                         .registerBean(TestcontainersConfiguration.class);

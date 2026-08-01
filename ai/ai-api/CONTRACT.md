@@ -23,6 +23,7 @@
 {
   "requestId": "request-1",
   "lessonId": "11111111-1111-4111-8111-111111111111",
+  "curriculumId": "55555555-5555-4555-8555-555555555555",
   "sessionId": "33333333-3333-4333-8333-333333333333",
   "question": "방금 설명한 개념은 무엇인가요?",
   "contextTimeMs": 615000,
@@ -33,7 +34,11 @@
 - JSON field는 camelCase이며 정의하지 않은 field를 거부한다.
 - `requestId`: 1~128자. 한 process의 active/recent registry에서 SSE 시작 전에 확보한다. terminal·오류·client
   취소 뒤에도 bounded recent 목록에 남으며 같은 ID는 `409`다. replay 가능한 멱등 응답 key는 아니다.
-- `lessonId`: 소문자 canonical UUID. 모든 PPTX와 자막 evidence가 이 lesson scope임을 내부에서 검증한다.
+- `lessonId`: 소문자 canonical UUID. 자막(caption) evidence가 이 lesson·session scope임을 내부에서
+  검증한다.
+- `curriculumId`: 소문자 canonical UUID. PPTX material evidence가 이 curriculum scope임을 내부에서
+  검증한다(ADR-0005) — 같은 curriculum의 다른 lesson에 업로드된 자료도 검색 대상이 된다. Spring이
+  아직 이 field를 보내지 않으면 요청 자체가 `400`으로 거부된다.
 - `sessionId`: 소문자 canonical UUID. 모든 자막 evidence가 이 session scope여야 한다.
 - `question`: 1~4,000자. whitespace를 임의로 trim하지 않는다.
 - `contextTimeMs`: 0 이상의 **최신 STT attempt-local `streamElapsedMs` 좌표**다. Spring은 자신의
@@ -129,7 +134,8 @@ same-process bounded retry, multi-replica session owner는 아직 보장하지 �
 
 ## 6. 자료 검색과 BGE 경계
 
-- pgvector 검색은 요청 `lessonId`와 `ai.material_version.state='ACTIVE'`를 SQL에서 강제한다.
+- pgvector 검색은 요청 `curriculumId`와 `ai.material_version.state='ACTIVE'`를 SQL에서 강제한다
+  (ADR-0005 — lesson이 아니라 curriculum 전체가 검색 스코프다).
 - runtime DB role은 안전한 identifier만 허용하며 production에서는 read-only 권한으로 제공해야 한다.
 - query embedding은 인증된 `POST /internal/v1/embeddings`를 호출한다.
 - 요청은 고정 `model=BAAI/bge-m3`, full revision, 단일 text를 전달한다.

@@ -230,15 +230,26 @@ Spring 수신 endpoint를 구현하고 `SPRING_STATUS_CALLBACK_URL`로 주입하
 ### 3-6b. 강사 FE → Egress 합성 화면 판서 (LiveKit 데이터 채널) — FE 양쪽 구현됨
 - **topic** `annotation`, **reliable**로 publish. 다른 topic은 판서로 해석하지 않는다.
 - **payload** `{ "v": 1, "op": { … } }` (UTF-8 JSON). `v`가 1이 아니면 버린다 — 옛 Egress 페이지가 새 op를 조용히 오해석하면 안 된다.
-- **op** 네 가지, 모두 `revision`(단조 증가 Long) 필수. `upsert { elements[] }` · `delete { ids[] }` · `clear` · `snapshot { elements[] }`.
+- **op** 다섯 가지, 모두 `revision`(단조 증가 Long) 필수. `upsert { elements[] }` · `delete { ids[] }` · `clear` · `snapshot { elements[] }` · `pointer`.
 - `elements`는 **Excalidraw 요소 JSON 그대로**다. 이것이 판서 문서의 정본 포맷이며, 손그림 → 도형 인식 결과도 같은 형식으로 주입해 편집 가능성을 유지한다([ADR-0051](decisions/songjeongki/0051-instructor-annotation-excalidraw.md)).
 - **좌표계는 `1920x1080` 논리 프레임**(§합성 캔버스와 동일). 다만 수신 측은 프레임을 가정하지 않고 `getCommonBounds()`로 **실제 오프셋을 보정**해 얹는다 — `exportToCanvas`가 프레임이 아니라 내용 바운딩 박스 기준으로 그리기 때문이며, `freedraw`의 `points`는 선언된 `x/y/width/height`를 넘을 수 있어 좌표 클램프로는 막지 못한다. 프레임을 벗어난 판서는 CSS로 클립한다(좌표를 잘라내지 않는다).
-- **유실 처리**: `revision`이 이어지지 않으면 그 op를 버리고 다음 `snapshot`을 기다린다(반쪽짜리 판서를 녹화하지 않는다). 강사는 **참가자가 새로 접속할 때마다** 전체 `snapshot`을 다시 publish한다 — 도중에 재접속한 Egress의 유일한 복구 경로다.
+- **`files`**: `snapshot`·`upsert`는 `files`(=`fileId` → `{ id, mimeType, dataURL, created }`)를 함께 실을 수 있다. Excalidraw 이미지 요소는 데이터를 담지 않고 `fileId`로 **가리키기만** 하므로, 이것 없이는 수신 측에 빈 자리가 남는다 — 강사 화면에는 보이는데 수강생 화면에는 없다. 수식(§3-6e)이 이 경로를 쓴다.
+  - `dataURL`은 **자체 완결**이어야 한다(외부 요청 0건). Egress의 헤드리스 Chrome은 외부 폰트·이미지를 받지 못할 수 있다.
+  - `upsert`는 **이번에 실린 요소가 가리키는 파일만** 보낸다. 전부 실으면 획 하나를 그을 때마다 판서의 모든 수식이 다시 나간다(수식 하나 6KB대).
+  - 수신 측은 `upsert`의 파일을 **더하고**, `snapshot`의 파일로는 **갈아 끼우며**, `delete`·`clear`에서는 **지우지 않는다** — 되돌리기로 요소가 돌아올 수 있고 그때 파일이 없으면 빈 자리가 된다.
+- **유실 처리**: `revision`이 이어지지 않으면 그 op를 버리고 다음 전체 상태를 기다린다(반쪽짜리 판서를 녹화하지 않는다). 강사는 **참가자가 새로 접속할 때마다** 전체 상태를 다시 알린다 — 도중에 재접속한 Egress의 유일한 복구 경로다.
 - **강사가 단일 writer**다. 그래서 CRDT 없이 `revision` 하나로 충분하고, 같은 op를 두 번 받아도 결과가 같다(멱등).
 - 수강생은 이 채널을 구독하지 않는다 — 합성 결과만 본다(ADR-0032). 따라서 판서는 Egress 프레임을 거쳐서만 수강생에게 도달한다.
 - **z-order**: 수신 측은 렌더 직전 요소의 `index`(Excalidraw fractional index)로 정렬한다. op에는 순서 정보가 없어 도착 순으로 재구성하면 나중에 온 요소가 항상 맨 위가 된다 — 강사가 아래에 깔아 둔 화이트보드가 수강생 화면에서 판서를 덮는다. 화이트보드(`liveclass-whiteboard`)는 정의상 배경이라 언제나 맨 아래다.
-- **판서를 켤 때·새 참가자가 들어올 때 `snapshot`을 낸다 — 판서가 비어 있어도 보낸다.** 수신 측은 revision 0에서 시작하는데 강사는 서버에서 이어받은 번호(예: 48)부터 매기므로, 이 **기준점**이 없으면 이후 op가 전부 "중간이 빠졌다"로 버려진다 — 강사 화면에는 그려지는데 수강생 화면에는 아무것도 나타나지 않는다. `snapshot`만 revision 검사를 건너뛰므로 이것이 유일한 기준점이다.
-- **강사 접속 시 복원 스냅샷**: 강사가 새 페이지에서 접속하면(새로고침 포함) §3-6d로 저장된 문서를 불러와 `snapshot`을 한 번 보내 Egress를 강사의 실제 상태로 맞춘다. 그러지 않으면 ①강사 화면에는 없는 판서가 수강생·녹화에만 남고 ②강사의 revision이 0부터 다시 시작해 이후 op가 전부 "이미 본 op"로 버려진다(`snapshot`만 revision 검사를 건너뛴다). 복원에 실패하면 빈 스냅샷으로 떨어진다 — 판서를 잃더라도 ②는 반드시 막아야 한다.
+- **전체 상태는 밀지 않고 받아간다 — `pointer`**([ADR-0055](decisions/songjeongki/0055-annotation-full-state-is-pulled.md)). 강사는 판서를 켤 때·새 참가자가 들어올 때 `{ type: "pointer", revision: N }`만 낸다. "여기까지의 전체 상태는 서버에 있다"는 뜻이고, 수신 측은 §3-6d의 `GET`으로 문서를 가져온다.
+  - **왜.** 스냅샷은 문서 전체라 판서가 길어질수록 커진다. WebRTC 데이터 채널의 기본 최대 메시지는 **65,536 B**인데 실측(2026-07-31)에서 요소 53개 + 수식 1개가 **74,952 B**로 114%였다. 넘으면 전송이 통째로 실패해 **수강생 화면에 판서가 아예 나오지 않는다** — 강사 화면에는 멀쩡히 보이므로 알아챌 수 없다. 델타(`upsert`·`delete`)는 작고 잦고 지연에 민감하므로 계속 이 채널로 민다.
+  - **포인터를 내기 전에 §3-6d의 밀린 저장을 비운다.** 영속화는 1.5초 주기 묶음이라 서버가 강사보다 뒤처져 있고, 그대로 내면 수신 측이 받는 문서와 이후 델타 사이에 구멍이 생긴다. **비우지 못하면 포인터를 내지 않고 예전처럼 `snapshot`을 민다** — 지킬 수 없는 약속을 하지 않는다.
+  - **`revision`은 강사의 번호다.** 서버가 매긴 번호가 아니다. 강사는 저장하지 않는 op(`clear`, 빈 스냅샷)에도 번호를 소비하므로 서버 번호는 늘 낮고, 그것을 쓰면 이후 델타가 전부 "중간이 빠졌다"로 버려진다. 수신 측은 **가져온 내용**에 **포인터의 번호**를 붙인다.
+  - **수신 측은 먼저 구독하고 나중에 가져온다.** 포인터를 받으면 그 순간부터 도착하는 op를 버퍼에 쌓고, 문서를 받아온 뒤 `revision > N`인 것만 얹는다. 순서가 반대면 왕복이 도는 사이 흐른 op가 사라지고, 그 구멍 때문에 이후 op가 전부 버려진다.
+  - **가져오지 못하면 번호만 맞춘다.** 그때까지의 판서는 잃지만, 그러지 않으면 강의가 끝날 때까지 아무것도 나타나지 않는다.
+  - **옛 수신 페이지는 이 op를 모르므로 무시한다.** 배포 순서상 잠깐 전체 상태 없이 도는 구간이 생기므로 `snapshot` 경로를 안전망으로 남긴다.
+- **혼자서도 기준점이 되는 것은 `snapshot`뿐이다 — 판서가 비어 있어도 보낸다.** 수신 측은 revision 0에서 시작하는데 강사는 서버에서 이어받은 번호(예: 48)부터 매기므로, 이 **기준점**이 없으면 이후 op가 전부 "중간이 빠졌다"로 버려진다. `snapshot`만 revision 검사를 건너뛴다. 강사는 새 페이지에서 접속할 때 **빈 스냅샷**을 한 번 내 번호를 맞춘다(수십 바이트라 크기 문제가 없다).
+- **강사 접속 시 복원**: 강사가 새 페이지에서 접속하면(새로고침 포함) §3-6d로 저장된 문서를 불러와 **빈 스냅샷으로 번호를 맞추고**, 판서를 켤 때 `pointer`로 전체 상태를 알린다. 그러지 않으면 ①강사 화면에는 없는 판서가 수강생·녹화에만 남고 ②강사의 revision이 0부터 다시 시작해 이후 op가 전부 "이미 본 op"로 버려진다(`snapshot`만 revision 검사를 건너뛴다). 복원에 실패하면 빈 스냅샷으로 떨어진다 — 판서를 잃더라도 ②는 반드시 막아야 한다.
 
 ### 3-6d. 강사 FE → Spring 판서 영속화 (REST) — FE·BE 구현됨
 - **라이브 전달 경로가 아니다.** 판서가 수강생에게 닿는 길은 §3-6b(데이터 채널 → Egress)이고, 이 API는 그와 **병렬로** 기록만 남긴다. 그래서 응답을 기다려 화면을 갱신하지 않으며, 저장 실패가 강의를 막지 않는다.
@@ -248,12 +259,43 @@ Spring 수신 endpoint를 구현하고 `SPRING_STATUS_CALLBACK_URL`로 주입하
 - `GET /api/live-sessions/{sessionId}/annotation` → `{ revision, nextRevision, snapshotPayload, ops[] }`. **마지막 스냅샷과 그 이후 op만** 돌려준다 — 세션 전체를 접으면 강의가 길어질수록 복원이 느려지고, 스냅샷은 그 자체로 전체 상태다. 접는 것은 FE가 한다(같은 로직이 이미 수신 측에 있다).
 - **`nextRevision`은 서버가 정한다.** FE가 접힌 문서의 revision으로 대신 채번하면, 저장에 실패한 op가 있을 때 이미 쓴 번호를 다시 써서 Egress가 새 획을 "이미 본 op"로 버린다.
 - 복원 시 FE는 §3-6b의 유실 감지(revision 불연속 → 버리고 스냅샷 대기)를 **적용하지 않는다**. 저장된 행은 전송 중 유실이 아니라 실제로 남은 전부이며, 번호가 띄엄하다고 뒤따르는 획까지 버리면 그 이후가 통째로 사라진다.
+- **복원 체크포인트**(ADR-0057): `PUT /api/live-sessions/{sessionId}/annotation/snapshot`(body `{revision, payload}`) → `204`, **소유 강사만**. 강사 클라이언트가 문서-변경 op 100건마다 보낸다. **데이터 채널로는 나가지 않는다** — 문서 전체를 채널에 실으면 §3-6b의 64KB 문제가 되돌아온다.
+  - **op가 아니다.** 별도 테이블(`core.live_annotation_snapshot`, 세션당 한 행)에 둔다. op 테이블에 넣으면 `(session_id, revision)` UNIQUE에 걸리거나, 새 번호를 소비해 **수신 측에 번호 구멍**이 생겨 그 뒤 op가 전부 버려진다.
+  - 복원은 **체크포인트와 `snapshot` op 중 더 최근 것**에서 시작한다. 옛 세션에는 snapshot op가 남아 있고, ADR-0055의 안전망도 그 경로를 쓴다.
+  - **뒤로 가는 체크포인트는 무시한다.** 강사가 창을 둘 열면 늦게 온 것이 더 옛 문서일 수 있다.
+- **판서 표시 상태**(ADR-0056): `GET` 응답에 `visible`(boolean)이 함께 온다. **op가 아니다** — 저장은 `live_session.annotation_visible`이고 위 `ops` fold에 끼어들지 않는다. 판서 **내용**은 문서에, "지금 보여주는가"는 세션에 둔다. `PUT /api/live-sessions/{sessionId}/annotation/visibility`(body `{visible}`) → `204`, **소유 강사만**.
+  - **복원할 때 그 상태를 수신 측에도 반드시 알린다.** 켜짐이면 `pointer`, 꺼짐이면 `clear`. 아무것도 보내지 않으면 강사 화면은 비었는데 Egress는 자기 문서를 계속 그려 **수강생에게만 판서가 남는다** — 강사 화면에서는 정상으로 보이므로 알아챌 수 없다.
+  - **화이트보드는 여기 없다.** 그건 문서 안의 요소(`liveclass-whiteboard`)라 이미 저장·복원된다. 강사 화면의 버튼은 그 요소의 존재에서 **파생**한다.
 - **인가**: 읽기는 세션 참가자(§자막·채팅과 같은 게이트), **쓰기는 소유 강사만**. 판서의 writer는 강사 하나라는 전제 위에 revision 채번이 서 있다.
-- **전달에만 쓰는 op는 저장하지 않는다 — `clear`와 빈 스냅샷.** 복원이 마지막 스냅샷부터 접기 때문에, 문서를 담지 않은 op가 그 자리에 앉으면 그 앞의 판서가 통째로 사라진다. `clear`는 지우기가 아니라 강사가 판서를 껐을 때 수강생 화면에서 감추라는 **표시 상태**이고(§3-6b), 빈 스냅샷은 수신 측 **revision 기준점**을 잡는 장치라 페이지를 열 때마다 하나씩 나간다. 문서가 실제로 비는 것은 `delete`로 기록되므로 빈 스냅샷을 남길 이유가 없다. 둘 다 라이브 전달에는 그대로 나간다.
+- **읽기에 한해 LiveKit 액세스 토큰을 받는다**(ADR-0055). Egress는 `?url=&token=`으로 열리는 헤드리스 Chrome이라 세션 쿠키가 없다. `Authorization: Bearer <livekit-token>`이 오면 서버가 `LIVEKIT_API_SECRET`으로 서명을 검증하고 `video.room` 클레임이 `session-{sessionId}`와 같은지 본다 — 새 시크릿도, 새 발급 경로도 만들지 않는다(LiveKit webhook JWT를 검증하는 방식과 같다). **읽기 전용이다.** 이 경로로는 쓸 수 없다. 거부 사유는 구분해 알려주지 않는다(서명 실패와 방 불일치를 가르면 탐색에 쓰인다).
+- **전달에만 쓰는 op는 저장하지 않는다 — `clear`·빈 스냅샷·`pointer`.** 복원이 마지막 스냅샷부터 접기 때문에, 문서를 담지 않은 op가 그 자리에 앉으면 그 앞의 판서가 통째로 사라진다. `clear`는 지우기가 아니라 강사가 판서를 껐을 때 수강생 화면에서 감추라는 **표시 상태**이고(§3-6b), 빈 스냅샷은 수신 측 **revision 기준점**을 잡는 장치라 페이지를 열 때마다 하나씩 나간다. 문서가 실제로 비는 것은 `delete`로 기록되므로 빈 스냅샷을 남길 이유가 없다. `pointer`는 문서가 아니라 "전체 상태는 서버에 있다"는 안내라 담을 내용이 없다. 셋 다 라이브 전달에는 그대로 나간다.
 - **`clear`는 저장하지 않는다.** 그건 문서를 지우는 편집이 아니라 강사가 판서를 껐을 때 수강생 화면에서 감추라는 **표시 상태**다(§3-6b). 강사의 문서는 그대로 남아 다시 켜면 돌아오므로, 저장하면 서버 쪽 문서만 비어 새로고침했을 때 판서가 통째로 사라진다. 라이브 전달에는 그대로 나간다.
 - **복원 직후 내보내는 스냅샷은 비어 있다.** 새로고침하면 판서는 꺼진 상태로 시작하므로, 복원한 내용을 그때 내보내면 강사에게는 안 보이는 판서가 수강생 화면에만 뜬다(§3-6b 불변식 위반). 빈 스냅샷은 **revision 기준점** 역할만 한다 — 수신 측은 0에서 시작하는데 강사는 `nextRevision`부터 매기므로, 기준점이 없으면 이후 op가 전부 "중간이 빠졌다"로 버려진다. 내용은 강사가 판서를 켤 때 나간다.
 - `session_ms`(세션 상대 ms, 근사 — ADR-0045와 같은 축)를 각 op에 함께 적재한다. 다시보기에서 "강사가 이걸 강조한 순간"으로 이동하는 앵커이며, 그 구간 판서를 RAG 컨텍스트로 쓰는 후속의 입력이다.
 - 레이저(§3-6c)는 저장하지 않는다.
+
+### 3-6e. 강사 FE → Spring 판서 해석 (REST) — 설계 확정, 구현 전
+
+근거: [ADR-0054](decisions/songjeongki/0054-annotation-ai-semantics-not-coordinates.md).
+
+- **원칙: 의미만 모델에게 묻고 좌표는 클라이언트가 계산한다.** 실측에서 모델이 낸 도형 좌표는 최대 **96px**(그림 크기의 2~13%) 틀렸고, 같은 도형의 좌표는 획의 `points`에서 오차 없이 얻는다. 그래서 **응답에 좌표가 들어오지 않는다.**
+- `POST /api/live-sessions/{sessionId}/annotation/interpret` → `200 OK`.
+- **인가는 소유 강사만**(§3-6d 쓰기와 같은 게이트). 판서 문서를 고치는 행위다.
+- 요청 `{ mode, image, elementIds[] }`
+  - `mode`: `"diagram" | "math"`. 도형 정리(사각형·원·직선)는 **이 API를 쓰지 않는다** — 클라이언트 기하 계산이다(ADR-0054 결정 4).
+  - `image`: 강사가 **선택한 영역**만 렌더한 PNG(base64 data URI, 상한 6MB). 선택 내용의 바운딩 박스만 담기므로 **이미지 원점은 프레임 원점이 아니다** — 이 이미지에서 좌표를 읽어 낼 수 없고, 읽을 필요도 없다. 좌표는 클라이언트가 획의 `points`에서 오차 없이 얻는다.
+  - `elementIds[]`: 강사가 선택한 요소 id. 모델이 "어느 요소를 바꿀지" 맞히게 하지 않고 **강사의 선택을 스코프로 넘긴다** — 응답의 `replace`가 여기서 나온다.
+  - **좌표는 보내지 않는다.** 서버는 좌표를 쓰지 않고(배치는 클라이언트가 원본 획의 `points`에서 계산한다), 쓰지 않을 값을 실어 보내면 계약이 그만큼 넓어져 나중에 누군가 그것을 근거로 삼는다.
+- 응답 `{ kind, definition | latex, replace[], confidence, unreadable }`
+  - `kind: "mermaid"` — `definition`은 mermaid 정의 **전체**이며 **좌표를 담지 않는다.** 배치는 클라이언트가 `@excalidraw/mermaid-to-excalidraw`로 계산한다(브라우저 전용 — mermaid가 글자 폭을 실측하므로 `getBBox`가 필요하다).
+  - `kind: "latex"` — `latex`는 수식 문자열. 놓을 자리와 크기는 원본 획의 bbox에서 클라이언트가 정한다.
+  - `replace[]`: 지울 요소 `id` 목록. 요청 `elements[]`의 부분집합이어야 한다.
+  - `unreadable: true`면 `definition`·`latex`를 쓰지 않는다(§3-9의 `answer.insufficient`와 같은 자리).
+- **`confidence`를 판단 근거로 쓰지 않는다.** 실측에서 **틀린 라벨에 1.0**이 붙었다. 강사에게 보여 주는 참고값일 뿐이다.
+- **결과는 확인 없이 바로 적용한다.** 매번 확인을 받으면 강의 흐름이 끊기고, 잘못 나온 것을 되돌리는 비용이 훨씬 싸다. 다만 그 주입은 **되돌리기 스택에 올라가야 한다** — 되돌릴 수 없으면 확인을 없앤 것이 손해가 된다.
+- **적용은 강사 클라이언트가 한다. 서버는 판서를 publish하지 않는다.** 주입 뒤에는 기존 경로를 그대로 탄다(`onChange` → diff → §3-6b 데이터 채널 → §3-6d 영속화). 판서의 writer가 강사 하나라는 §3-6b의 전제가 이렇게 유지된다 — 서버가 끼어들면 revision이 충돌하고, 그 어긋남은 **강사 화면에 드러나지 않는다.**
+- **Spring이 GMS를 직접 호출한다. ai-api를 거치지 않는다**(ADR-0054 결정 7). 이 해석에는 검색·임베딩·자막 컨텍스트가 없어 파이썬이 할 도메인 일이 없다. RAG 컨텍스트가 필요해지면 그때 ai-api로 옮기며, **이 절의 FE ↔ Spring 계약은 그대로다.**
+- **브라우저는 GMS를 직접 부르지 않는다** — 키가 클라이언트에 노출된다.
 
 ### 3-6c. 강사 FE → Egress 레이저 포인터 (LiveKit 데이터 채널) — FE 양쪽 구현됨
 - **topic** `annotation-laser`, **lossy**(`reliable: false`)로 publish. 판서 op와 <b>같은 채널에 섞지 않는다</b> — 초당 수십 건이고 1초면 사라지므로 revision을 태우면 유실 감지가 의미를 잃는다.
@@ -342,8 +384,15 @@ Accept: text/event-stream
 Content-Type: application/json
 X-Internal-Signature: base64(HMAC-SHA256(AI_INTERNAL_SECRET, rawBody))
 
-{"requestId":"...","lessonId":"...","sessionId":"...","question":"...","contextTimeMs":0,"issuedAtMs":1785120000000}
+{"requestId":"...","lessonId":"...","curriculumId":"...","sessionId":"...","question":"...","contextTimeMs":0,"issuedAtMs":1785120000000}
 ```
+
+**본문 필드는 이 7개가 전부다 — 더도 덜도 안 된다.** ai-api의 요청 모델이 `extra="forbid"`라 필드를 늘리면 거부되고, 필수 필드가 빠져도 거부된다. 그리고 그 거부는 422가 아니라 **400**으로 온다(ai-api가 `RequestValidationError`를 400으로 매핑). 실제로 `curriculumId`가 빠져 라이브 AI 질문이 이틀 동안 전부 400으로 죽었다(2026-07-30~08-01) — 양쪽이 각자 테스트를 통과하며 계약만 갈라졌고, **운영에서 질문을 눌러야만** 드러났다. 그래서 Spring 쪽에 이 필드 집합을 고정하는 계약 테스트를 둔다(`RagAnswerWireContractTest`), ai-api 쪽 정본은 `app/rag/models.py::RagAnswerRequest`다.
+
+- `lessonId`·`curriculumId`·`sessionId`는 **서버가 세션에서 조회한 값**이다(클라 입력 신뢰 금지). 소문자 canonical UUID 문자열.
+- `curriculumId`는 ai-api의 **자료 검색 범위**다 — PPTX 검색이 레슨이 아니라 커리큘럼 단위이고([ADR-0042](decisions/songjeongki/0042-curriculum-material-attach-and-embedding-scope.md)), 근거의 커리큘럼이 다르면 버린다.
+- `issuedAtMs`는 **전송 직전**에 찍는다. 수신 시각과 60초 이상 차이나면 401이므로 명령을 만든 시각을 쓰면 안 된다.
+- `question`은 사용자가 보낸 그대로 — 임의 trim·정규화 금지.
 
 인증은 [ADR-0023 §9](decisions/canola/0023-spring-to-ai-rag-jwt-contract.md)의 **HMAC 공유 시크릿**이다(RS256 JWT는 phase-2 로드맵). 시크릿은 `AI_INTERNAL_SECRET`으로 **콜백용 `AI_CALLBACK_SECRET`과 다른 값**이다([ai/CONTRACT.md §3.2](ai/CONTRACT.md)). Spring 구현은 [ADR-0047](decisions/songjeongki/0047-live-ai-answer-sse-proxy.md), ai-api 상세 검증 규칙은 [`ai/ai-api/CONTRACT.md`](../ai/ai-api/CONTRACT.md)가 소유한다.
 
