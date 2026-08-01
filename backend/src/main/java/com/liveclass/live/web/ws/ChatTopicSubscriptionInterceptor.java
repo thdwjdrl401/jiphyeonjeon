@@ -16,7 +16,8 @@ import java.util.regex.Pattern;
 
 /**
  * STOMP 라이브 토픽 구독 인가. {@code /topic/live-sessions/{sessionId}/chat}·
- * {@code /topic/live-sessions/{sessionId}/captions} 구독 요청을 REST 조회·전송과 동일한 게이트
+ * {@code /topic/live-sessions/{sessionId}/captions}·{@code /topic/live-sessions/{sessionId}/state}
+ * 구독 요청을 REST 조회·전송과 동일한 게이트
  * (소유 강사 또는 활성 수강생)로 검증한다 — 없으면 구독을 거부한다.
  *
  * <p>이게 없으면 핸드셰이크만 통과한 아무 사용자나 임의 세션 토픽을 구독해 실시간 채팅·자막을 수신할 수 있다
@@ -24,8 +25,8 @@ import java.util.regex.Pattern;
  * 인증(쿠키 세션 → Principal=userId)은 핸드셰이크에서 이미 끝나 있다.
  *
  * <p><b>와일드카드 차단 불변식(ADR-0019)</b>: SimpleBroker는 구독 destination을 패턴(AntPathMatcher)으로
- * 매칭하므로 {@code /topic/**} 같은 와일드카드 구독이 게이트를 우회할 수 있다. 명시적으로 허용한 두 토픽
- * (chat·captions)의 <b>정확 매칭</b>만 통과시키고 그 외 {@code /topic} 구독은 전부 거부한다 — 자막 토픽을
+ * 매칭하므로 {@code /topic/**} 같은 와일드카드 구독이 게이트를 우회할 수 있다. 명시적으로 허용한 세 토픽
+ * (chat·captions·state)의 <b>정확 매칭</b>만 통과시키고 그 외 {@code /topic} 구독은 전부 거부한다 — 토픽을
  * 추가해도 이 불변식은 유지된다(임의 세션 자막 도청 구멍 금지).
  */
 @Component
@@ -35,6 +36,8 @@ public class ChatTopicSubscriptionInterceptor implements ChannelInterceptor {
             Pattern.compile("^/topic/live-sessions/([^/]+)/chat$");
     private static final Pattern CAPTIONS_TOPIC =
             Pattern.compile("^/topic/live-sessions/([^/]+)/captions$");
+    private static final Pattern STATE_TOPIC =
+            Pattern.compile("^/topic/live-sessions/([^/]+)/state$");
 
     private final LiveAccessGuard accessGuard;
 
@@ -56,6 +59,9 @@ public class ChatTopicSubscriptionInterceptor implements ChannelInterceptor {
         Matcher matcher = CHAT_TOPIC.matcher(destination);
         if (!matcher.matches()) {
             matcher = CAPTIONS_TOPIC.matcher(destination);
+        }
+        if (!matcher.matches()) {
+            matcher = STATE_TOPIC.matcher(destination);
         }
         if (!matcher.matches()) {
             throw new LiveSessionForbiddenException("허용되지 않은 구독 대상입니다.");

@@ -75,6 +75,14 @@ export default function PersonalAiQuestionPanel({
 
   useEffect(() => { conversationRef.current = conversation }, [conversation])
   useEffect(() => () => requestRef.current?.abort(), [])
+  useEffect(() => {
+    if (isAvailable) return
+    requestRef.current?.abort()
+    requestRef.current = null
+    if (selectStreamingTurn(conversationRef.current)) {
+      dispatch({ kind: 'cancel' })
+    }
+  }, [isAvailable])
 
   // 새 턴·새 델타를 따라 하단으로 붙는다. 위로 올려 읽는 중이면(isFollowingLatest=false) 건드리지 않는다.
   useLayoutEffect(() => {
@@ -158,7 +166,9 @@ export default function PersonalAiQuestionPanel({
     <>
       <div className="ai-chat-log" ref={logRef} onScroll={handleLogScroll}>
         {hasTurns
-          ? conversation.turns.map((turn) => <AiChatTurn key={turn.id} turn={turn} onRetry={retryTurn} />)
+          ? conversation.turns.map((turn) => (
+              <AiChatTurn key={turn.id} turn={turn} onRetry={isAvailable ? retryTurn : undefined} />
+            ))
           : (
             <>
               {/* 빈 상태는 대화가 하나도 없을 때만. 답변이 온 뒤에도 남아 있으면 이력을 밀어낸다. */}

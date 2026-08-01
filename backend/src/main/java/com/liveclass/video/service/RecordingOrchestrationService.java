@@ -99,6 +99,11 @@ public class RecordingOrchestrationService implements LiveRecordingControl {
         }
     }
 
+    @Override
+    public void stopRecording(UUID sessionId) {
+        recordingService.stopRecording(sessionId);
+    }
+
     /**
      * Gate C — 학생 재생 가능. manifest가 존재하고 {@code #EXTM3U}로 파싱되며, media URI를 하나 이상 갖고,
      * 그 첫 세그먼트가 같은 버킷에 실재하고, 아직 {@code #EXT-X-ENDLIST}가 없어야 한다.

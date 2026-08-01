@@ -8,6 +8,8 @@ interface CaptionDockProps {
   label: string
   onSeek: (sessionMs: number) => void
   onSelectTerm: (termId: string) => void
+  /** false면 시각을 표시만 하고 HLS seek 요청을 만들지 않는다. */
+  canSeek?: boolean
   /** 헤더 힌트를 대체하는 안내(예: 라이브 자막 연결 상태). 없으면 기본 힌트를 보인다. */
   note?: string
 }
@@ -38,7 +40,15 @@ function renderCaptionText(caption: CaptionView, onSelectTerm: (termId: string) 
   )
 }
 
-export default function CaptionDock({ captions, currentSessionMs, label, onSeek, onSelectTerm, note }: CaptionDockProps) {
+export default function CaptionDock({
+  captions,
+  currentSessionMs,
+  label,
+  onSeek,
+  onSelectTerm,
+  canSeek = true,
+  note,
+}: CaptionDockProps) {
   const sentencesRef = useRef<HTMLDivElement>(null)
   // 새 자막(델타 누적)이 들어오면 최신(하단)으로 따라간다 — 라이브 자막이 시야 밖으로 밀려나지 않게.
   useEffect(() => {
@@ -67,7 +77,9 @@ export default function CaptionDock({ captions, currentSessionMs, label, onSeek,
           return (
             <article className={className} key={caption.segmentId} aria-busy={caption.pending || undefined}>
               {/* 라벨은 자막 시각 그대로 보이되, 이동은 STT 지연을 보정한 지점으로 간다(문장 시작에 닿게). */}
-              <button type="button" onClick={() => onSeek(captionSeekMs(caption))}>{caption.at}</button>
+              {canSeek
+                ? <button type="button" onClick={() => onSeek(captionSeekMs(caption))}>{caption.at}</button>
+                : <time>{caption.at}</time>}
               <p>{renderCaptionText(caption, onSelectTerm)}</p>
             </article>
           )

@@ -40,7 +40,7 @@ STARTING ─────────→ FAILED
 | `LIVE-SESSION-05` | `POST` | `/api/instructor/live-sessions/{sessionId}/preflight` | 서버·미디어 시작 조건 점검 | **제안** |
 | `LIVE-SESSION-06` | `POST` | `/api/live-sessions/{sessionId}/start` | 멱등 라이브 시작 | URL **확정** |
 | `LIVE-SESSION-07` | `POST` | `/api/instructor/live-sessions/{sessionId}/token` | 소유 강사 LiveKit 송출 token 발급 | URL **확정** |
-| `LIVE-SESSION-08` | `POST` | `/api/live-sessions/{sessionId}/end` | 멱등 라이브 종료 | URL **확정** |
+| `LIVE-SESSION-08` | `POST` | `/api/live-sessions/{sessionId}/end` | 동기 순차·멱등 라이브 종료 | **구현됨(ADR-0003)** |
 | `LIVE-SESSION-09` | `GET` | `/api/instructor/live-sessions/{sessionId}/processing` | 종료 후 녹화·AI 처리 조회 | **제안** |
 | `LIVE-PLAYBACK-01` | `GET` | `/api/live-sessions/{sessionId}/playback` | 최근·전체 DVR HLS 재생 정보 | **제안** |
 
@@ -263,22 +263,25 @@ POST /api/instructor/live-sessions/{sessionId}/token
 
 ```http
 POST /api/live-sessions/{sessionId}/end
-Idempotency-Key: 01K...
 ```
 
 ```json
 {
   "sessionId": "ses_01J...",
-  "liveSessionStatus": "ENDING",
-  "operationId": "lop_01K..."
+  "lessonId": "les_01J...",
+  "liveSessionStatus": "ENDED",
+  "endedAt": "2026-08-01T11:32:03+09:00"
 }
 ```
 
 - 강사만 요청 가능
-- 신규 입장 차단, room 종료, Egress stop/finalize를 조정
-- room 종료 확정 후 session `ENDED`
+- 별도 `operationId` 없이 `LIVE → ENDING` 커밋, Room 삭제, Egress stop 보완,
+  `ENDING → ENDED` 커밋을 한 요청에서 순차 수행
+- 성공은 최종 세션 표현과 `200 OK`; 이미 `ENDED`면 외부 제어를 반복하지 않고 같은 성공 응답
+- Room 삭제 실패는 `502 LIVE_ROOM_CONTROL_FAILED`, 세션은 `ENDING` 유지
+- Egress stop 실패는 세션 `ENDED`를 막지 않음
 - Egress 완료는 별도 `videoAssetStatus`로 추적
-- 중복 종료 요청은 기존 종료 operation으로 수렴
+- `ENDING` 재요청은 Room·Egress 종료 제어를 멱등하게 다시 수행
 
 ## 6. 라이브 classroom 초기 데이터
 
@@ -356,10 +359,39 @@ Cookie: session=...
 |---|---|---|
 | `/topic/live-sessions/{sessionId}/captions` | `caption.delta`, `caption.stream.completed` | **구현됨(ADR-0043)** |
 | `/topic/live-sessions/{sessionId}/chat` | `chat.message.created` | **구현됨** |
-| `/topic/live-sessions/{sessionId}/state` | `session.starting`, `session.live`, `session.ending`, `session.ended`, degraded 상태 | 제안 |
+| `/topic/live-sessions/{sessionId}/state` | `session.ending`, `session.ended` | **구현됨(ADR-0003)** |
 | `/topic/live-sessions/{sessionId}/presence` | 참가자 수·접속 요약 | 제안 |
 
 구독 인가(참가자만)는 서버 STOMP 인터셉터가 정확 매칭으로 처리한다(와일드카드 구독 차단, ADR-0043) — FE는 토픽만 구독한다.
+
+`session.ending`:
+
+```json
+{
+  "type": "session.ending",
+  "sessionId": "ses_01J...",
+  "occurredAt": "2026-08-01T11:32:00+09:00",
+  "payload": { "liveSessionStatus": "ENDING", "endedAt": null }
+}
+```
+
+`session.ended`:
+
+```json
+{
+  "type": "session.ended",
+  "sessionId": "ses_01J...",
+  "occurredAt": "2026-08-01T11:32:03+09:00",
+  "payload": {
+    "liveSessionStatus": "ENDED",
+    "endedAt": "2026-08-01T11:32:03+09:00"
+  }
+}
+```
+
+- `session.ending`: 종료 진행 안내만 표시하며 채팅·AI 질문·자막 시각 이동은 계속 허용
+- `session.ended`: **“라이브가 종료된 강의입니다.”**를 표시하고 채팅·AI 질문·자막 시각 이동 잠금
+- 재연결 직후 `GET /api/live-sessions/{sessionId}`를 다시 조회해 이벤트 유실을 보완
 
 ### 8.2 자막 payload — 델타 스트림(CONTRACT §3-4 / ADR-0040·0043)
 

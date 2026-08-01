@@ -155,6 +155,7 @@ services:
       LIVEKIT_URL: wss://jiphyeonjeon.thdwjdrl.com:7443
       LIVEKIT_API_URL: https://jiphyeonjeon.thdwjdrl.com:7443
       # dev worker(liveclass-realtime-stt-dev)와 분리해 prod 캡션이 dev Redis로 섞이지 않게 한다.
+      LIVEKIT_CONTROL_TIMEOUT: ${LIVEKIT_CONTROL_TIMEOUT:-10s}
       LIVEKIT_AGENT_NAME: liveclass-realtime-stt-prod
       # AI 배치 잡 발행(ADR-0036). outbox 릴레이가 rabbitmq로 publish. 스위치 material.embedding.enabled로 켠다.
       SPRING_RABBITMQ_HOST: rabbitmq

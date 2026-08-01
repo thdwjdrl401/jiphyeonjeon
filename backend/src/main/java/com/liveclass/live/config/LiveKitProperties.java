@@ -2,6 +2,8 @@ package com.liveclass.live.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+import java.time.Duration;
+
 /**
  * LiveKit 접속·서명 설정. apiSecret은 커밋하지 않는다 — 운영은 환경변수(LIVEKIT_API_SECRET 등)로 주입.
  * dev/test 기본값은 더미(서명은 되지만 실제 LiveKit 서버는 인증 안 함)라 서버 없이 토큰 구조를 테스트할 수 있다.
@@ -28,6 +30,9 @@ public record LiveKitProperties(
 
         /** API 시크릿(서명 키). 절대 응답·로그·커밋에 노출 금지. */
         String apiSecret,
+
+        /** Room·Egress 같은 동기 서버 제어 HTTP 호출의 전체 제한 시간. */
+        Duration controlTimeout,
 
         /** 토큰 유효시간(초). */
         long tokenTtlSeconds,
@@ -58,4 +63,9 @@ public record LiveKitProperties(
          */
         int roomEmptyTimeoutSeconds
 ) {
+    public LiveKitProperties {
+        if (controlTimeout == null || controlTimeout.isZero() || controlTimeout.isNegative()) {
+            controlTimeout = Duration.ofSeconds(10);
+        }
+    }
 }

@@ -2,7 +2,9 @@ package com.liveclass.live;
 
 import com.liveclass.live.api.LiveRecordingControl;
 import com.liveclass.live.domain.LiveCaption;
+import com.liveclass.live.domain.LiveSessionStatus;
 import com.liveclass.live.repository.LiveCaptionRepository;
+import com.liveclass.live.repository.LiveSessionRepository;
 import com.liveclass.live.service.AgentDispatchControl;
 import com.liveclass.live.service.LiveRoomControl;
 import com.liveclass.live.service.LiveStartOrchestrator;
@@ -117,6 +119,9 @@ class LiveAiAnswerContractTest {
 
     @Autowired
     private LiveCaptionRepository liveCaptionRepository;
+
+    @Autowired
+    private LiveSessionRepository liveSessionRepository;
 
     @MockitoBean
     private LiveRoomControl roomControl;
@@ -320,6 +325,24 @@ class LiveAiAnswerContractTest {
 
         ask(created[0], student, "수강생 질문").andExpect(status().isOk());
         assertThat(awaitRequest()).isNotNull();
+    }
+
+    @Test
+    void ending_allows_ai_but_ended_rejects_before_calling_the_upstream() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String[] created = createStartedSession(instructor);
+        UUID sessionId = UUID.fromString(created[0]);
+
+        liveSessionRepository.findById(sessionId).orElseThrow().setStatus(LiveSessionStatus.ENDING);
+        ask(created[0], instructor, "남은 영상 질문").andExpect(status().isOk());
+        assertThat(awaitRequest()).isNotNull();
+
+        captured.set(null);
+        liveSessionRepository.findById(sessionId).orElseThrow().setStatus(LiveSessionStatus.ENDED);
+        ask(created[0], instructor, "종료 뒤 질문")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("LIVE_SESSION_INTERACTION_CLOSED"));
+        assertThat(captured.get()).isNull();
     }
 
     @Test

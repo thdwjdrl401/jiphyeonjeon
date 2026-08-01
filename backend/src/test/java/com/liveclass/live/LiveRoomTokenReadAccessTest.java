@@ -29,8 +29,9 @@ class LiveRoomTokenReadAccessTest {
     private static final String SECRET = "test-secret-test-secret-test-secret";
     private static final UUID SESSION = UUID.fromString("11111111-1111-1111-1111-111111111111");
 
+    /** `controlTimeout`은 토큰 검증과 무관하다(Room·Egress 제어에만 쓰인다). 아무 값이나 둔다. */
     private static final LiveKitServerAccess ACCESS =
-            new LiveKitServerAccess("http://localhost:7880", "devkey", SECRET);
+            new LiveKitServerAccess("http://localhost:7880", "devkey", SECRET, java.time.Duration.ofSeconds(5));
 
     private final LiveRoomTokenVerifier verifier = new LiveRoomTokenVerifier(ACCESS);
 

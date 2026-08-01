@@ -4,6 +4,7 @@ import com.liveclass.live.api.LiveKitServerAccess;
 import com.liveclass.live.config.LiveKitProperties;
 import io.livekit.server.RoomServiceClient;
 import livekit.LivekitModels;
+import okhttp3.OkHttpClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import retrofit2.Response;
@@ -25,7 +26,13 @@ public class LiveKitRoomControl implements LiveRoomControl {
     // 채우지 못해 "No default constructor found"로 컨텍스트가 통째로 실패한다.
     @Autowired
     public LiveKitRoomControl(LiveKitServerAccess access, LiveKitProperties properties) {
-        this(RoomServiceClient.create(access.apiUrl(), access.apiKey(), access.apiSecret(), false, null),
+        this(RoomServiceClient.createClient(
+                        access.apiUrl(),
+                        access.apiKey(),
+                        access.apiSecret(),
+                        () -> new OkHttpClient.Builder()
+                                .callTimeout(access.controlTimeout())
+                                .build()),
                 properties.roomEmptyTimeoutSeconds(),
                 properties.roomDepartureTimeoutSeconds());
     }

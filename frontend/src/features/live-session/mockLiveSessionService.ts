@@ -1,11 +1,16 @@
 import { demoLiveCaptions, demoMessages, getDemoLiveSession } from '@/features/demo/demoData'
 import { findMockLesson } from '@/features/demo/mockDatabase'
 import type { CurriculumLiveSessionStatus } from '@/features/lesson/types'
-import type { LiveSessionService } from './liveSessionService.interface'
+import type {
+  LiveSessionService,
+  LiveSessionStateEvent,
+  LiveSessionView,
+} from './liveSessionService.interface'
 
 const liveStatusOverrides = new Map<string, CurriculumLiveSessionStatus>()
 const liveStartOperations = new Map<string, string>()
 const bookmarksByLesson = new Map<string, number[]>()
+const stateSubscribers = new Map<string, Set<(event: LiveSessionStateEvent) => void>>()
 const mockLivePlaybackUrl = 'https://files.vidstack.io/sprite-fight/hls/stream.m3u8'
 
 /**
@@ -13,24 +18,30 @@ const mockLivePlaybackUrl = 'https://files.vidstack.io/sprite-fight/hls/stream.m
  * 테스트가 세션을 LIVE로 바꿔 두면 <b>그 뒤에 도는 다른 테스트</b>가 SCHEDULED를 기대하다 깨진다.
  * 지금까지는 파일 안 테스트 순서가 우연히 맞아 가려져 있었고, 순서를 섞으면 바로 재현됐다.
  * {@code resetMockAuth}가 데모 상태를 되돌릴 때 함께 부른다.
+ *
+ * <p>종료 상태 구독자(`stateSubscribers`)도 함께 지운다 — 남겨 두면 이전 테스트가 붙여 둔 구독자가
+ * 다음 테스트의 이벤트를 받아 엉뚱한 화면 전환을 만든다.
  */
 export function resetMockLiveSessions() {
   liveStatusOverrides.clear()
   liveStartOperations.clear()
   bookmarksByLesson.clear()
+  stateSubscribers.clear()
+}
+
+async function getMockLiveSession(sessionId: string): Promise<LiveSessionView> {
+  const session = getDemoLiveSession(sessionId)
+  const status = liveStatusOverrides.get(sessionId) ?? session.status
+  return {
+    ...session,
+    status,
+    participants: status === 'LIVE' ? Math.max(session.participants, 1) : 0,
+    entryWindowMinutes: 10,
+  }
 }
 
 export const mockLiveSessionService = {
-  async getLiveSession(sessionId) {
-    const session = getDemoLiveSession(sessionId)
-    const status = liveStatusOverrides.get(sessionId) ?? session.status
-    return {
-      ...session,
-      status,
-      participants: status === 'LIVE' ? Math.max(session.participants, 1) : 0,
-      entryWindowMinutes: 10,
-    }
-  },
+  getLiveSession: getMockLiveSession,
   async getPlayback(lessonId) {
     // 실 API가 레슨의 라이브 세션을 찾아 응답에 싣듯, 목도 데모 데이터에서 세션을 찾는다.
     const liveSession = findMockLesson(lessonId)?.lesson.liveSession
@@ -82,7 +93,20 @@ export const mockLiveSessionService = {
     }
   },
   async endLiveSession(sessionId) {
+    liveStatusOverrides.set(sessionId, 'ENDING')
+    stateSubscribers.get(sessionId)?.forEach((subscriber) => subscriber({
+      type: 'session.ending',
+      occurredAt: new Date().toISOString(),
+      payload: { liveSessionStatus: 'ENDING', endedAt: null },
+    }))
     liveStatusOverrides.set(sessionId, 'ENDED')
+    const endedAt = new Date().toISOString()
+    stateSubscribers.get(sessionId)?.forEach((subscriber) => subscriber({
+      type: 'session.ended',
+      occurredAt: endedAt,
+      payload: { liveSessionStatus: 'ENDED', endedAt },
+    }))
+    return getMockLiveSession(sessionId)
   },
   async getInstructorLiveToken(sessionId) {
     return { token: `mock-token-${sessionId}` }
@@ -112,6 +136,17 @@ export const mockLiveSessionService = {
   subscribeChatMessages(_sessionId, _onMessage, onConnectionChange) {
     onConnectionChange('connected')
     return () => onConnectionChange('disconnected')
+  },
+  subscribeSessionState(sessionId, onEvent, onConnectionChange) {
+    const subscribers = stateSubscribers.get(sessionId) ?? new Set()
+    subscribers.add(onEvent)
+    stateSubscribers.set(sessionId, subscribers)
+    onConnectionChange('connected')
+    return () => {
+      subscribers.delete(onEvent)
+      if (subscribers.size === 0) stateSubscribers.delete(sessionId)
+      onConnectionChange('disconnected')
+    }
   },
   subscribeCaptions(_sessionId, onEvent, onConnectionChange) {
     onConnectionChange('connected')

@@ -3,7 +3,10 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '@/App'
 import { mockAuthService, resetMockAuth } from '@/features/auth/mockAuthService'
-import { mockLiveSessionService } from '@/features/live-session/mockLiveSessionService'
+import {
+  mockLiveSessionService,
+  resetMockLiveSessions,
+} from '@/features/live-session/mockLiveSessionService'
 
 vi.mock('@/features/live-session/PlaybackPlayer', () => ({
   default: () => <div aria-label="강의 영상" role="region" />,
@@ -31,6 +34,7 @@ const openAiPanel = async (user: ReturnType<typeof userEvent.setup>) => {
 describe('AI 질의응답 화면 연결', () => {
   beforeEach(() => {
     resetMockAuth()
+    resetMockLiveSessions()
     window.history.replaceState({}, '', '/')
   })
 
@@ -42,6 +46,8 @@ describe('AI 질의응답 화면 연결', () => {
     const askLiveAi = vi.spyOn(mockLiveSessionService, 'askLiveAi')
     const user = userEvent.setup()
     await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
+    await mockLiveSessionService.startLiveSession('ses-security-live')
+    await mockLiveSessionService.getLiveStartStatus('ses-security-live')
     renderAt('/instructor/live-sessions/ses-security-live/classroom')
 
     await openAiPanel(user)

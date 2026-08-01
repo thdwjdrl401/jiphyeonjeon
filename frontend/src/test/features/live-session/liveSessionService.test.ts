@@ -105,14 +105,19 @@ describe('라이브 세션 HTTP 서비스 계약', () => {
       .mockResolvedValueOnce({
         data: { operationId: 'op-1', sessionId: 'ses-live-1', status: 'STARTING' },
       } as never)
-      .mockResolvedValueOnce({ data: {} } as never)
+      .mockResolvedValueOnce({
+        data: { ...SESSION_RESPONSE, liveSessionStatus: 'ENDED' },
+      } as never)
 
     await expect(httpLiveSessionService.startLiveSession('ses-live-1')).resolves.toEqual({
       operationId: 'op-1',
       sessionId: 'ses-live-1',
       status: 'STARTING',
     })
-    await httpLiveSessionService.endLiveSession('ses-live-1')
+    await expect(httpLiveSessionService.endLiveSession('ses-live-1')).resolves.toMatchObject({
+      sessionId: 'ses-live-1',
+      status: 'ENDED',
+    })
 
     expect(post).toHaveBeenNthCalledWith(1, '/live-sessions/ses-live-1/start')
     expect(post).toHaveBeenNthCalledWith(2, '/live-sessions/ses-live-1/end')

@@ -2,7 +2,8 @@
 
 > 📍 하네스 개요: [../../harness/README.md](../../harness/README.md) · 아키텍처: [../../ARCHITECTURE.md](../../ARCHITECTURE.md) · 계약: [../../CONTRACT.md](../../CONTRACT.md)
 
-- **상태**: 채택
+- **상태**: 대체됨 — 시작은 [ADR-0002](../choinhoo/0002-live-start-egress-stt-orchestration.md),
+  종료는 [ADR-0003](../choinhoo/0003-simple-live-end-sequential-process.md)
 - **일자**: 2026-07-19
 - **관련**: [0010](0010-self-host-vod.md), [0007](0007-domain-live-session.md), [0019](0019-ws-realtime-chat-stomp.md)
 
@@ -12,6 +13,10 @@
 - 원칙 #6([ARCHITECTURE](../../ARCHITECTURE.md)): **미디어/AI 장애가 코어(라이브)를 막지 않는다(degraded).** 녹화가 안 켜져도 강의는 진행돼야 한다.
 
 ## 결정
+
+> 아래는 2026-07-19 당시의 원결정이다. `video_asset` 상태축과 webhook 후처리는 유지하지만,
+> 시작·종료의 이벤트 기반 제어는 위 후속 ADR들의 동기 포트·순차 façade로 대체됐다.
+
 1. **세션 이벤트 기반, best-effort.** `LiveSessionService`가 LIVE/ENDED 전이 커밋 후 `LiveSessionStartedEvent`·`LiveSessionEndedEvent`(live.api, 노출)를 발행한다. `video` 모듈의 리스너가 `@TransactionalEventListener(AFTER_COMMIT)`로 받아 Egress를 켜고 끈다.
    - **왜 커밋 후 이벤트인가**: (a) Egress 네트워크 호출이 세션 트랜잭션을 물지 않게, (b) 녹화 실패가 세션 시작/종료를 롤백하지 않게, (c) 롤백된 세션은 녹화하지 않게. ([0019](0019-ws-realtime-chat-stomp.md)의 채팅 브로드캐스트와 같은 패턴.)
 2. **EgressControl 포트** — `RoomServiceClient` 래핑([0019] 이전의 `LiveRoomControl`)과 같은 모양. HLS 세그먼트 출력 + S3/MinIO 업로드는 `EgressServiceClient.startRoomCompositeEgress(SegmentedFileOutput)`. 중지는 `stopEgress`(대상 없으면 멱등 성공).

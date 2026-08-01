@@ -418,23 +418,23 @@ REQUESTED → STARTING → RECORDING → FINALIZING → VERIFYING → READY
 현재 실제 전이:
 
 ```text
-REQUESTED → RECORDING → FINALIZING
-          └→ FAILED
+REQUESTED/FAILED → STARTING → RECORDING → FINALIZING → VERIFYING → READY
+                         └→ FAILED                     └→ FAILED
 ```
 
 현재 코드 특성:
 
-- 녹화 시작 성공 경로가 `STARTING`을 건너뛴다.
-- 녹화 종료 후 `FINALIZING`까지만 구현돼 있다.
-- Egress 완료 webhook과 `VERIFYING → READY` 전이가 없다.
-- 라이브 시작·종료 이벤트가 녹화 시작·중지를 best-effort로 호출한다.
+- 라이브 시작 오케스트레이터가 `LiveRecordingControl` 동기 포트로 Egress 준비를 확인한 뒤 `LIVE`를 확정한다.
+- 라이브 종료 오케스트레이터가 Room 삭제 뒤 같은 포트로 Egress stop을 보완 호출한다.
+- 녹화 종료 후 `FINALIZING`, Egress 완료 webhook 뒤 `VERIFYING → READY/FAILED`를 별도 상태축으로 관리한다.
 - 녹화 실패가 라이브 강의 상태를 실패로 되돌리지는 않는다.
 
 근거:
 
 - `backend/src/main/java/com/liveclass/video/domain/VideoAssetStatus.java`
 - `backend/src/main/java/com/liveclass/video/service/RecordingService.java`
-- `backend/src/main/java/com/liveclass/video/service/RecordingEventListener.java`
+- `backend/src/main/java/com/liveclass/video/service/RecordingOrchestrationService.java`
+- `backend/src/main/java/com/liveclass/live/service/LiveEndOrchestrator.java`
 
 ### 4.10 다시보기 공개 상태
 

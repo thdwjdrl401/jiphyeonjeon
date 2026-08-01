@@ -6,6 +6,7 @@ import io.livekit.server.AudioMixing;
 import io.livekit.server.EgressServiceClient;
 import livekit.LivekitEgress;
 import livekit.LivekitModels;
+import okhttp3.OkHttpClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -34,7 +35,13 @@ public class LiveKitEgressControl implements EgressControl {
     private final EgressProperties egress;
 
     public LiveKitEgressControl(LiveKitServerAccess livekit, EgressProperties egress) {
-        this.client = EgressServiceClient.Companion.create(livekit.apiUrl(), livekit.apiKey(), livekit.apiSecret());
+        this.client = EgressServiceClient.createClient(
+                livekit.apiUrl(),
+                livekit.apiKey(),
+                livekit.apiSecret(),
+                () -> new OkHttpClient.Builder()
+                        .callTimeout(livekit.controlTimeout())
+                        .build());
         this.egress = egress;
     }
 

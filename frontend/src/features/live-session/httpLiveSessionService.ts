@@ -13,6 +13,7 @@ import type {
   LiveStartOperation,
   LiveStartStatus,
   LiveSessionService,
+  LiveSessionStateEvent,
   LiveSessionView,
   PreflightReadiness,
   PreflightRoom,
@@ -106,6 +107,16 @@ interface ApiCaptionEnvelope {
   sessionId: string
   occurredAt: string
   payload: unknown
+}
+
+interface ApiSessionStateEnvelope {
+  type: string
+  sessionId: string
+  occurredAt: string
+  payload: {
+    liveSessionStatus?: string
+    endedAt?: string | null
+  }
 }
 
 interface ApiLiveToken {
@@ -287,6 +298,30 @@ function readChatEnvelope(frame: IMessage, sessionId: string) {
   const envelope = JSON.parse(frame.body) as ApiChatEnvelope
   if (envelope.type !== 'chat.message.created' || envelope.sessionId !== sessionId) return null
   return normalizeMessage(envelope.payload)
+}
+
+function readSessionStateEnvelope(frame: IMessage, sessionId: string): LiveSessionStateEvent | null {
+  const envelope = JSON.parse(frame.body) as ApiSessionStateEnvelope
+  if (envelope.sessionId !== sessionId) return null
+  if (envelope.type === 'session.ending' && envelope.payload.liveSessionStatus === 'ENDING') {
+    return {
+      type: 'session.ending',
+      occurredAt: envelope.occurredAt,
+      payload: { liveSessionStatus: 'ENDING', endedAt: null },
+    }
+  }
+  if (
+    envelope.type === 'session.ended'
+    && envelope.payload.liveSessionStatus === 'ENDED'
+    && typeof envelope.payload.endedAt === 'string'
+  ) {
+    return {
+      type: 'session.ended',
+      occurredAt: envelope.occurredAt,
+      payload: { liveSessionStatus: 'ENDED', endedAt: envelope.payload.endedAt },
+    }
+  }
+  return null
 }
 
 // 자막 봉투는 채팅과 동형(WsEnvelope)에 occurredAt이 더 있다. delta·completed 2종만 통과시키고
@@ -509,7 +544,8 @@ export const httpLiveSessionService = {
     } satisfies LiveStartStatus
   },
   async endLiveSession(sessionId) {
-    await apiClient.post(`/live-sessions/${sessionId}/end`)
+    const { data } = await apiClient.post<ApiLiveSessionView>(`/live-sessions/${sessionId}/end`)
+    return normalizeLiveSession(data, await fetchLessonCurriculumContext(data.lessonId))
   },
   async getInstructorLiveToken(sessionId) {
     const { data } = await apiClient.post<ApiLiveToken>(`/instructor/live-sessions/${sessionId}/token`)
@@ -564,6 +600,47 @@ export const httpLiveSessionService = {
         try {
           const message = readChatEnvelope(frame, sessionId)
           if (message) onMessage(message)
+        } catch {
+          onConnectionChange('error')
+        }
+      })
+    }
+    client.onStompError = () => {
+      if (active) onConnectionChange('error')
+    }
+    client.onWebSocketError = () => {
+      if (active) onConnectionChange('reconnecting')
+    }
+    client.onWebSocketClose = () => {
+      if (active) onConnectionChange('reconnecting')
+    }
+    client.activate()
+
+    return () => {
+      active = false
+      onConnectionChange('disconnected')
+      void client.deactivate()
+    }
+  },
+  subscribeSessionState(sessionId, onEvent, onConnectionChange) {
+    let active = true
+    onConnectionChange('connecting')
+
+    const client = new Client({
+      brokerURL: getBrokerUrl(),
+      connectionTimeout: 10_000,
+      heartbeatIncoming: 10_000,
+      heartbeatOutgoing: 10_000,
+      reconnectDelay: 3_000,
+    })
+
+    client.onConnect = () => {
+      if (!active) return
+      onConnectionChange('connected')
+      client.subscribe(`/topic/live-sessions/${sessionId}/state`, (frame) => {
+        try {
+          const event = readSessionStateEnvelope(frame, sessionId)
+          if (event) onEvent(event)
         } catch {
           onConnectionChange('error')
         }

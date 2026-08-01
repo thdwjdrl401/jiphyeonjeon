@@ -81,6 +81,8 @@ livekit:
   api-url: ${LIVEKIT_API_URL:}
   api-key: ${LIVEKIT_API_KEY:devkey}                  # dev/test 더미. 운영은 환경변수 주입.
   api-secret: ${LIVEKIT_API_SECRET:devsecretdevsecretdevsecretdevsecret}  # 커밋 금지 값은 env로
+  # /end 동기 순차 요청이 Room·Egress 서버 제어에서 무기한 멈추지 않게 호출 전체에 적용한다.
+  control-timeout: ${LIVEKIT_CONTROL_TIMEOUT:10s}
   token-ttl-seconds: ${LIVEKIT_TOKEN_TTL:600}         # 10분
   # explicit AgentDispatch로 지목할 STT agent 이름(CONTRACT §3-3).
   # realtime-agent의 STT_AGENT_NAME(ai/realtime-agent/.env.example)과 반드시 같은 값이어야 job이 배정된다.

@@ -14,8 +14,8 @@ import java.util.UUID;
  * 접속 정보)에 의존한다. live가 {@code video.api}를 참조하면 두 모듈이 순환하게 되어 Modulith 경계 검증이
  * 깨진다. 그래서 포트를 소비자(live) 쪽에 두고 video가 구현한다 — 의존 방향은 video → live 하나로 유지된다.
  *
- * <p>종료 경로({@link LiveSessionEndedEvent} → stopRecording)는 그대로 이벤트 기반 best-effort로 둔다.
- * 시작(Gate A~C)만 동기다.
+ * <p>종료 경로는 ADR choinhoo/0003에 따라 Room 삭제 다음 이 포트의 {@link #stopRecording(UUID)}을
+ * 동기 순차 호출한다. 중지 실패는 라이브 {@code ENDED} 전이를 막지 않는다.
  */
 public interface LiveRecordingControl {
 
@@ -36,6 +36,12 @@ public interface LiveRecordingControl {
      * 예외를 던지지 않는다 — 정리 실패가 강사의 재시도를 막으면 안 된다.
      */
     void abortRecording(UUID sessionId, String failureCode);
+
+    /**
+     * 종료 오케스트레이터의 Egress 중지 보완 호출. 멱등이며, 녹화 자산의 후속 webhook·READY 수명주기는
+     * 라이브 세션 상태와 독립적으로 진행한다.
+     */
+    void stopRecording(UUID sessionId);
 
     /**
      * Egress 준비 상태 스냅샷.

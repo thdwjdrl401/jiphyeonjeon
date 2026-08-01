@@ -17,6 +17,7 @@ import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -39,6 +40,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -339,7 +341,46 @@ class LiveSessionLifecycleTest {
         write(post("/api/live-sessions/" + ids[0] + "/end"), instructor, null)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.liveSessionStatus").value("ENDED"));
+
+        InOrder order = inOrder(roomControl, recordingControl);
+        order.verify(roomControl).closeRoom("session-" + ids[0]);
+        order.verify(recordingControl).stopRecording(UUID.fromString(ids[0]));
+
         // 두 번째 종료도 성공(멱등).
+        write(post("/api/live-sessions/" + ids[0] + "/end"), instructor, null)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.liveSessionStatus").value("ENDED"));
+        verify(roomControl).closeRoom("session-" + ids[0]);
+        verify(recordingControl).stopRecording(UUID.fromString(ids[0]));
+    }
+
+    @Test
+    void room_close_failure_returns_502_and_leaves_the_session_ending() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String[] ids = createSession(instructor);
+        readyGates(ids);
+        startAndRunGates(instructor, ids[0]);
+        doThrow(new LiveRoomControlException("delete failed", null))
+                .when(roomControl).closeRoom("session-" + ids[0]);
+
+        write(post("/api/live-sessions/" + ids[0] + "/end"), instructor, null)
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.code").value("LIVE_ROOM_CONTROL_FAILED"));
+
+        assertThat(liveSessionRepository.findById(UUID.fromString(ids[0])).orElseThrow().getStatus())
+                .isEqualTo(LiveSessionStatus.ENDING);
+        verify(recordingControl, never()).stopRecording(any());
+    }
+
+    @Test
+    void egress_stop_failure_does_not_block_ended() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String[] ids = createSession(instructor);
+        readyGates(ids);
+        startAndRunGates(instructor, ids[0]);
+        doThrow(new IllegalStateException("egress failed"))
+                .when(recordingControl).stopRecording(UUID.fromString(ids[0]));
+
         write(post("/api/live-sessions/" + ids[0] + "/end"), instructor, null)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.liveSessionStatus").value("ENDED"));

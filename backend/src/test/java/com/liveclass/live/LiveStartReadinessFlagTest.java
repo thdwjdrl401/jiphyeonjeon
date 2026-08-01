@@ -66,7 +66,8 @@ class LiveStartReadinessFlagTest {
                 recordingControl,
                 new LiveKitProperties(
                         "ws://localhost:7880", "http://localhost:7880",
-                        "devkey", "secret", 3600, "stt-agent", 600, 900),
+                        "devkey", "secret", Duration.ofSeconds(10),
+                        3600, "stt-agent", 600, 900),
                 properties);
 
         when(transitions.claim(eq(attemptId), anyString(), eq(Duration.ofSeconds(90))))

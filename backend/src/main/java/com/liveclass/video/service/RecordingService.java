@@ -15,14 +15,14 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * 라이브 녹화 생명주기(songjeongki/0020, choinhoo/0002). 시작 오케스트레이터와 종료 이벤트를 받아
+ * 라이브 녹화 생명주기(songjeongki/0020, choinhoo/0002·0003). 시작·종료 오케스트레이터의 호출을 받아
  * Egress를 켜고 끄며 {@code video_asset} 상태기계를 전이한다. HLS-only 정책에서 시작 전 Egress 실패는
- * LIVE를 막고, 종료 정리는 기존 이벤트 기반 흐름을 유지한다.
+ * LIVE를 막고, 종료 중지는 {@code LiveEndOrchestrator → LiveRecordingControl} 순차 호출로 수행한다.
  *
  * <p>상태: REQUESTED/FAILED → STARTING → (egress ID 저장) RECORDING → (세션 종료) FINALIZING
  * → (egress 완료 webhook) VERIFYING → (스토리지에 매니페스트 확인) READY / FAILED.
  *
- * <p>live 모듈에 의존하지 않는다 — 이벤트 필드를 원시값으로 받는다(경계는 {@link RecordingEventListener}가 담당).
+ * <p>live 모듈에 의존하지 않는다 — live가 선언한 포트의 구현 어댑터가 원시 sessionId를 넘긴다.
  */
 @Service
 public class RecordingService {
@@ -34,15 +34,17 @@ public class RecordingService {
     private final EgressProperties egressProperties;
     private final RecordingStorage recordingStorage;
     private final RecordingStartStore startStore;
+    private final RecordingStopStore stopStore;
 
     public RecordingService(VideoAssetRepository videoAssetRepository, EgressControl egressControl,
                             EgressProperties egressProperties, RecordingStorage recordingStorage,
-                            RecordingStartStore startStore) {
+                            RecordingStartStore startStore, RecordingStopStore stopStore) {
         this.videoAssetRepository = videoAssetRepository;
         this.egressControl = egressControl;
         this.egressProperties = egressProperties;
         this.recordingStorage = recordingStorage;
         this.startStore = startStore;
+        this.stopStore = stopStore;
     }
 
     /**
@@ -128,28 +130,19 @@ public class RecordingService {
     public record RecordingTarget(String egressId, String bucket, String manifestKey, VideoAssetStatus status) {
     }
 
-    /**
-     * 세션 녹화 중지. 녹화 중인 자산만 FINALIZING으로. Egress 중지 실패는 무시(webhook이 최종 정리).
-     * REQUIRES_NEW 필수 — startRecording과 같은 이유(AFTER_COMMIT 경로).
-     */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    /** 세션 녹화 중지. DB 전이는 짧게 커밋하고, Egress 외부 호출은 트랜잭션 밖에서 수행한다. */
     public void stopRecording(UUID sessionId) {
-        VideoAsset asset = videoAssetRepository.findByLiveSessionId(sessionId).orElse(null);
-        if (asset == null) {
-            log.debug("녹화 자산 없음(녹화 안 함) session={}", sessionId);
-            return;
+        RecordingStopStore.StopTarget target = stopStore.prepare(sessionId).orElse(null);
+        if (target == null) {
+            return;   // 자산 없음 또는 이미 중지·실패 — 멱등
         }
-        if (asset.getStatus() != VideoAssetStatus.RECORDING && asset.getStatus() != VideoAssetStatus.STARTING) {
-            return;   // 이미 중지·실패 등 — 멱등
-        }
-        asset.setRecordingEndedAt(OffsetDateTime.now());
-        asset.setStatus(VideoAssetStatus.FINALIZING);
-        if (asset.getEgressId() != null) {
+        if (target.egressId() != null) {
             try {
-                egressControl.stopRecording(asset.getEgressId());
-                log.info("녹화 중지 session={} egressId={}", sessionId, asset.getEgressId());
+                egressControl.stopRecording(target.egressId());
+                log.info("녹화 중지 session={} egressId={}", sessionId, target.egressId());
             } catch (RuntimeException e) {
-                log.warn("녹화 중지 실패(무시) session={} egressId={}: {}", sessionId, asset.getEgressId(), e.getMessage());
+                log.warn("녹화 중지 실패(무시) session={} egressId={}: {}",
+                        sessionId, target.egressId(), e.getMessage());
             }
         }
     }
