@@ -5,7 +5,7 @@
 > [ADR-0043 자막 소비·영속](0043-live-caption-consumer.md) ·
 > [공유 계약 §3-4a](../../CONTRACT.md)
 
-- **상태**: 채택 — 저장·조회·전파 구현됨, Redis consumer는 후속
+- **상태**: 채택 — 구현됨(기본 꺼짐, 환경별로 켠다)
 - **일자**: 2026-08-02
 - **적용 범위**: `core.live_lecture_note`, `GET /api/live-sessions/{id}/notes`,
   `/topic/live-sessions/{id}/notes`, 강의실 "실시간 노트" 패널
@@ -105,13 +105,41 @@ AI가 주는 노트에는 자막 진행도만 있고 세션 상대 ms가 없어,
 
 ### 한계
 
-- **아직 노트가 채워지지 않는다.** Redis Stream을 읽는 consumer가 없다.
+- **기본이 꺼져 있다**(`liveclass.lecture-note.enabled=false`). 켜는 순간 운영 노트가 쌓이기 시작하므로
+  환경별로 명시적으로 켠다. 실제 강의로 한 번 검증한 뒤 켜는 것을 전제로 한다.
+- 8/1 이후 세션들의 조각 수가 적다(1~2건, 조각 0인 세션도 있다). 짧은 세션이라 그런지 새 경로가 덜
+  만들어 내는지는 스트림만으로는 모른다 — 켜고 실제 강의를 한 번 돌리면 드러난다.
 - 종료 후 정제본(`refined.snapshot`)은 `status=REFINED`로 표현할 자리만 만들어 뒀고, 실제 반영은
   consumer와 함께 온다. 계약도 "refined snapshot의 FE 전달 방식은 별도로 확정한다"고 열어 둔 상태다.
 - 다시보기 화면은 아직 기존 블록 표현(`liveLearningPreview`)을 쓴다. 라이브만 서버 노트로 바꿨다.
 
+### 발행 방식 확인 (2026-08-02)
+
+계약과 실제가 어긋나 보였으나 **시간축을 보니 갈린다**. 7/30 세션 5개는 전부 문서에 없는
+`lecture.note.snapshot`(전체 스냅샷)이고, 8/1 이후 세션 7개는 전부 계약 타입(`chunk.appended` ·
+`capture.completed` · `refined.snapshot`)이다. **한 세션 안에 두 방식이 섞인 적이 없다** —
+producer가 8/1에 계약 방식으로 넘어왔고 옛 타입은 잔재다. 따라서 증분만 소비한다.
+
+둘 다 지원하는 것도 가능하다(read model이 "현재 전체"만 받으므로 스냅샷은 그대로 교체하면 된다).
+그러나 옛 세션 5개는 다시 재생할 일이 없어 지금은 넣지 않는다 — 쓰지 않는 분기는 나중에 "이게 왜
+있지"가 된다.
+
+### ACK 규칙
+
+갭인 조각은 <b>ACK하지 않는다</b>. 이것이 이 소비의 핵심이다 — ACK하면 그 조각이 영영 사라져 노트에
+구멍이 남는다. 남겨 두면 앞 조각이 도착한 뒤 재기동 drain이나 재소비로 순번이 맞아 이어진다.
+그래서 "반영 안 됨"을 두 가지로 나눠야 한다: 이미 반영한 중복은 ACK해 흘려보내고, 앞이 빠진 것은
+ACK하지 않는다. 모르는 type·형식 오류는 다시 처리해도 같은 결과라 ACK로 폐기한다.
+
 ## 검증
 
+- `LectureNoteEventParserTest` — 세 이벤트 파싱, 모르는 type(옛 `lecture.note.snapshot` 포함)은 던지지
+  않고 폐기, 형식 오류 폐기, 숫자가 아닌 sequence는 0으로 떨어져 소비를 멈추지 않음.
+- `LectureNoteStreamConsumerReadRequestTest` — `cancelOnError=false`·`autoAcknowledge=false`·`">"` 오프셋,
+  계약이 정한 group·stream 키, 기본 꺼짐. 회귀하면 노트가 조용히 안 쌓이는 것으로만 드러난다.
+- `LectureNoteAccumulatorTest` — START_NEW/CONTINUE 누적, 재전송 무시, 앞선 조각이 빠지면 반영 보류,
+  빠진 조각이 채워지면 이어서 반영, 완료는 순번이 맞을 때만, 정제본은 완료 뒤에만·입력이 맞을 때만
+  교체, Markdown 결합 규칙, 깨진 payload가 소비를 멈추지 않음.
 - `LiveLectureNoteContractTest` — 노트 없는 세션이 404가 아니라 빈 노트를 주고, 조회가 전체를 주며,
   뒤늦은 옛 갱신·같은 진행도의 재전송이 최신 노트를 덮지 않고, 첫 갱신이 sequence 0이어도 반영되며,
   외부인 403·없는 세션 404.

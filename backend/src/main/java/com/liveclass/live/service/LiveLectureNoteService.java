@@ -69,7 +69,7 @@ public class LiveLectureNoteService {
         return Optional.of(toView(repository.save(note)));
     }
 
-    private static LiveLectureNoteView toView(LiveLectureNote note) {
+    static LiveLectureNoteView toView(LiveLectureNote note) {
         return new LiveLectureNoteView(
                 note.getSessionId(),
                 note.getCoveredThroughSequence(),
