@@ -2,6 +2,7 @@ package com.liveclass.live;
 
 import com.liveclass.live.service.LectureNoteAccumulator;
 import com.liveclass.live.service.LectureNoteEvent;
+import com.liveclass.live.repository.LiveLectureNoteRepository;
 import com.liveclass.live.service.LiveLectureNoteService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,6 +30,9 @@ class LectureNoteAccumulatorTest {
     @Autowired
     private LiveLectureNoteService noteService;
 
+    @Autowired
+    private LiveLectureNoteRepository repository;
+
     private UUID session;
     private UUID lesson;
 
@@ -42,6 +46,24 @@ class LectureNoteAccumulatorTest {
         return new LectureNoteEvent.ChunkAppended("evt-" + UUID.randomUUID(), session, lesson,
                 sequence, sequence * 10, action, "topic-" + sequence, title, points,
                 ("START_NEW".equals(action) ? "## " + title + "\n" : "") + "- 요점");
+    }
+
+    @Test
+    void the_note_actually_reaches_postgres() {
+        accumulator.append(chunk(1, "START_NEW", "필터 체인", "[\"순서가 결과를 바꾼다\"]"));
+
+        /*
+         * flush로 INSERT를 실제로 내보낸다. 이게 없으면 영속성 컨텍스트 안에서만 오가고, NOT NULL·CHECK
+         * 위반 같은 스키마 제약은 커밋 시점(테스트 롤백)까지 드러나지 않는다 — 규칙은 맞는데 저장이
+         * 안 되는 상태를 통과시킬 수 있다.
+         */
+        repository.flush();
+
+        var stored = repository.findById(session).orElseThrow();
+        assertThat(stored.getTopics()).contains("필터 체인");
+        assertThat(stored.getStatus()).isEqualTo("CAPTURING");
+        assertThat(stored.getLastChunkSequence()).isEqualTo(1);
+        assertThat(stored.getUpdatedAt()).isNotNull();
     }
 
     @Test
