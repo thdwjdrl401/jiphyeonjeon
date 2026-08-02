@@ -20,6 +20,7 @@ const student: AuthUser = {
   displayName: '김학생',
   role: 'STUDENT',
   profileImageUrl: null,
+  isAdmin: false,
 }
 
 const instructor: AuthUser = {
@@ -28,6 +29,7 @@ const instructor: AuthUser = {
   displayName: '박강사',
   role: 'INSTRUCTOR',
   profileImageUrl: 'https://cdn.example.com/avatar.png',
+  isAdmin: false,
 }
 
 function renderCard(user: AuthUser, onEdit = vi.fn()) {

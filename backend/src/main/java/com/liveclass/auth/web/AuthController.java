@@ -85,7 +85,7 @@ public class AuthController {
                 request.displayName(),
                 request.role().toRole()
         );
-        return AuthUserResponse.from(user);
+        return AuthUserResponse.from(user, null, adminAccounts.isAdmin(user.getEmail()));
     }
 
     @Operation(summary = "로그인", description = "이메일·비밀번호로 로그인한다. 성공하면 세션 쿠키가 발급돼 이후 요청이 자동으로 인증된다.")
@@ -101,7 +101,7 @@ public class AuthController {
     ) {
         AppUser user = authService.authenticate(request.email(), request.password());
         establishSession(user, httpRequest, httpResponse);
-        return AuthUserResponse.from(user);
+        return AuthUserResponse.from(user, null, adminAccounts.isAdmin(user.getEmail()));
     }
 
     @Operation(summary = "로그아웃", description = "로그아웃한다. 이미 로그아웃 상태여도 정상 성공으로 처리된다.")
@@ -118,7 +118,7 @@ public class AuthController {
     public AuthUserResponse me(Authentication authentication) {
         UUID userId = UUID.fromString(authentication.getName());
         AppUser user = authService.getById(userId);
-        return AuthUserResponse.from(user, authService.resolveProfileImageUrl(user));
+        return AuthUserResponse.from(user, authService.resolveProfileImageUrl(user), adminAccounts.isAdmin(user.getEmail()));
     }
 
     @Operation(summary = "이메일 사용 가능 여부", description = "회원가입 화면에서 이 이메일이 이미 쓰이는지 확인한다. 로그인 없이 호출할 수 있다.")

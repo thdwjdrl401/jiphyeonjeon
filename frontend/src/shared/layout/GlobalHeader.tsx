@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
-import { getRoleHomePath, instructorPaths, publicPaths, studentPaths } from '@/app/router/paths'
+import { adminPaths, getRoleHomePath, instructorPaths, publicPaths, studentPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
 import { USER_ROLE_LABEL } from '@/features/auth/types'
 import ProfileAvatar from '@/features/profile/ProfileAvatar'
@@ -112,6 +112,8 @@ export default function GlobalHeader() {
                 <div className="header-my-menu__items" id="my-page-menu">
                   <Link to={workspaceHome} onClick={closeMenu}>내 커리큘럼</Link>
                   <Link to={profilePath} onClick={closeMenu}>내 프로필</Link>
+                  {/* 운영 콘솔은 권한이 있는 계정에만 보인다. 없으면 존재 자체를 노출하지 않는다. */}
+                  {user?.isAdmin && <Link to={adminPaths.overview} onClick={closeMenu}>운영 콘솔</Link>}
                 </div>
               </div>
             )}

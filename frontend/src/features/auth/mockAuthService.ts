@@ -61,6 +61,8 @@ export const mockAuthService = {
       displayName: isInstructor ? '이도현' : '김학생',
       role: isInstructor ? 'INSTRUCTOR' : 'STUDENT',
       profileImageUrl: null,
+      // 데모에서는 강사 계정이 운영 콘솔도 볼 수 있게 둔다 — 실서버는 allowlist가 정한다.
+      isAdmin: isInstructor,
     }
     return currentUser
   },
@@ -81,6 +83,7 @@ export const mockAuthService = {
       displayName: request.displayName,
       role: request.role,
       profileImageUrl: null,
+      isAdmin: false,
     } satisfies AuthUser
   },
 

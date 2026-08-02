@@ -20,20 +20,28 @@ public record AuthUserResponse(
         Role role,
 
         @Schema(description = "표시용 프로필 이미지 URL. 미설정/미해결 시 null.")
-        String profileImageUrl
+        String profileImageUrl,
+
+        @Schema(description = "운영 콘솔(ROLE_ADMIN) 접근 권한 여부. 가입 역할이 아니라 "
+                + "security.admin-emails allowlist로 로그인 시 덧입혀지는 권한이다.", example = "false")
+        boolean isAdmin
 ) {
 
-    public static AuthUserResponse from(AppUser user) {
-        return from(user, null);
-    }
-
-    public static AuthUserResponse from(AppUser user, String profileImageUrl) {
+    /**
+     * {@code isAdmin}은 <b>화면 표시용</b>이다 — 관리 메뉴를 띄울지 결정하는 데 쓴다. 실제 인가는 언제나
+     * 서버가 {@code /api/admin/**}에서 {@code ROLE_ADMIN}으로 판정하므로, 이 값을 위조해도 얻는 것은 없다.
+     *
+     * <p>기본값을 두지 않고 호출자가 명시하게 한다. 조용히 {@code false}로 흘려보내면 관리자인데 메뉴가
+     * 안 보이는(=원인을 찾기 어려운) 상태가 만들어진다.
+     */
+    public static AuthUserResponse from(AppUser user, String profileImageUrl, boolean isAdmin) {
         return new AuthUserResponse(
                 user.getId().toString(),
                 user.getEmail(),
                 user.getDisplayName(),
                 user.getRole(),
-                profileImageUrl
+                profileImageUrl,
+                isAdmin
         );
     }
 }

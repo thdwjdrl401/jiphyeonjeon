@@ -16,6 +16,13 @@ export interface AuthUser {
   role: UserRole
   /** 업로드한 프로필 이미지의 표시 URL. 미설정이면 null. */
   profileImageUrl: string | null
+  /**
+   * 운영 콘솔 접근 권한. 가입 역할(`role`)이 아니라 서버 allowlist로 로그인할 때 덧입혀진다.
+   *
+   * 이 값은 **메뉴를 보여줄지 정하는 표시용**이다. 실제 인가는 언제나 서버가 `/api/admin/**`에서
+   * 판정하므로, 조작해도 데이터는 열리지 않는다 — 화면만 열리고 요청은 403이 된다.
+   */
+  isAdmin: boolean
 }
 
 export interface LoginRequest {

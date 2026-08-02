@@ -1,7 +1,9 @@
 package com.liveclass.video.repository;
 
 import com.liveclass.video.domain.VideoAsset;
+import com.liveclass.video.domain.VideoAssetStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
 import java.util.Collection;
 import java.util.List;
@@ -24,4 +26,15 @@ public interface VideoAssetRepository extends JpaRepository<VideoAsset, UUID> {
     boolean existsByLiveSessionId(UUID liveSessionId);
 
     List<VideoAsset> findByLessonIdIn(Collection<UUID> lessonIds);
+
+    /**
+     * 운영 콘솔용 상태 분포. 녹화가 어디서 멈춰 있는지를 한눈에 본다 — 실제로 READY가 <b>한 건도</b>
+     * 없이 FINALIZING만 쌓여 있던 적이 있고(LiveKit이 완료 webhook을 보내도록 설정돼 있지 않았다),
+     * 그걸 알아채는 데 DB를 직접 들여다봐야 했다.
+     */
+    @Query("SELECT a.status, COUNT(a), MAX(a.createdAt) FROM VideoAsset a GROUP BY a.status")
+    List<Object[]> countByStatus();
+
+    /** 가장 오래 멈춰 있는 자산의 생성 시각(정체 판단용). 없으면 empty. */
+    Optional<VideoAsset> findFirstByStatusOrderByCreatedAtAsc(VideoAssetStatus status);
 }
