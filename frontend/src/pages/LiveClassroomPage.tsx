@@ -8,6 +8,7 @@ import { useAuth } from '@/features/auth/AuthContext'
 import { getLesson } from '@/features/lesson/lessonService'
 import { getLearningContext } from '@/features/learning/learningService'
 import BookmarkStrip from '@/features/live-session/BookmarkStrip'
+import { mergeLectureNote } from '@/features/live-session/lectureNoteMerge'
 import CaptionDock from '@/features/live-session/CaptionDock'
 import {
   emptyCaptionStreamState,
@@ -213,15 +214,19 @@ export default function LiveClassroomPage() {
   const [liveNote, setLiveNote] = useState<LectureNoteView | null>(null)
   useEffect(() => {
     if (!sessionId) return undefined
-    return subscribeLectureNotes(sessionId, setLiveNote, () => {})
-  }, [sessionId])
-  /*
-   * 뒤로 가지 않는다. 재연결 직후의 조회가 방금 받은 WS 노트보다 오래된 것을 들고 올 수 있어,
-   * 자막 진행도가 큰 쪽을 남긴다.
-   */
-  const note = (liveNote && noteQuery.data)
-    ? (liveNote.coveredThroughSequence >= noteQuery.data.coveredThroughSequence ? liveNote : noteQuery.data)
-    : (liveNote ?? noteQuery.data ?? null)
+    return subscribeLectureNotes(sessionId, setLiveNote, (state) => {
+      /*
+       * 최초 연결·재연결 모두 조회를 다시 한다(CONTRACT §3-6의 유실 보완 규칙). 끊겼다 붙는 사이의
+       * 갱신을 놓치면, 다음 갱신이 올 때까지 뒤처진 노트가 남는다 — 강의가 끝나 더 이상 갱신이 없으면
+       * 새로고침 전까지 영영 그대로다. 채팅·세션 상태가 이미 같은 규칙을 쓴다.
+       */
+      if (state === 'connected') {
+        void queryClient.invalidateQueries({ queryKey: ['lecture-notes', sessionId] })
+      }
+    })
+  }, [queryClient, sessionId])
+  // 조회와 WS는 같은 것의 다른 도착 경로다. 더 멀리 간 쪽을 고른다(뒤로 가지 않는다).
+  const note = mergeLectureNote(liveNote, noteQuery.data)
 
   useEffect(() => {
     if (!sessionId) return undefined
