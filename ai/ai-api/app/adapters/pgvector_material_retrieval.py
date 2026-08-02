@@ -96,7 +96,7 @@ LIMIT :top_k
 
 
 class PgvectorActiveMaterialRepository:
-    """Search active material versions across one curriculum's shared scope (ADR-0005)."""
+    """Search active material versions across one curriculum's shared scope (ADR-0007)."""
 
     def __init__(self, engine: AsyncEngine, *, runtime_role: str = "ai_app") -> None:
         if not _DATABASE_ROLE.fullmatch(runtime_role):

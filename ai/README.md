@@ -108,7 +108,7 @@ host 관리 포트는 외부에 열지 않고 prod `127.0.0.1:8010/8011`, dev `1
 
 | 경계 | 현재 상태 |
 |---|---|
-| Spring→ai-api RAG SSE | AI 구현, Spring signer·proxy 미구현. PPTX 자료 검색은 커리큘럼 전체로 공유됨([ADR-0005](../docs/decisions/jinwoo/0005-curriculum-scoped-rag-material-sharing.md)) — 요청에 `curriculumId` 필수, Spring이 아직 안 보내 계약 위반으로 거부됨 |
+| Spring→ai-api RAG SSE | AI 구현, Spring signer·proxy 미구현. PPTX 자료 검색은 커리큘럼 전체로 공유됨([ADR-0007](../docs/decisions/jinwoo/0007-curriculum-scoped-rag-material-sharing.md)) — 요청에 `curriculumId` 필수, Spring이 아직 안 보내 계약 위반으로 거부됨 |
 | Spring→RabbitMQ→ai-worker | `PPTX_EMBED` 양쪽 구현, Spring producer·worker 앱 기본 off, AI 운영 compose는 worker만 on; `EMBED_DELETE` 미구현(DLQ) |
 | ai-worker→Spring download-url·callback | 양쪽 구현 |
 | ai-api·ai-worker→bge-runtime | client·runtime·reverse tunnel·운영 container proxy 배선 구현 |

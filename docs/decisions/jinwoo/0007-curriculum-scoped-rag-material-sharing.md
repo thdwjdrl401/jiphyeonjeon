@@ -1,4 +1,4 @@
-# ADR-0005: RAG PPTX 자료 검색 범위를 lesson에서 curriculum으로 확장
+# ADR-0007: RAG PPTX 자료 검색 범위를 lesson에서 curriculum으로 확장
 
 - **상태**: 채택
 - **일자**: 2026-07-30

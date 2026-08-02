@@ -1,7 +1,7 @@
 # `ai-api/app/retrieval`
 
 질문 embedding을 검증하고 curriculum 범위의 ACTIVE material chunk 검색을 호출하는 application
-service다(ADR-0005: 같은 curriculum 내 lesson들이 PPTX 자료를 공유한다).
+service다(ADR-0007: 같은 curriculum 내 lesson들이 PPTX 자료를 공유한다).
 
 ## 흐름
 

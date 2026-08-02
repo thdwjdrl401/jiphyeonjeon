@@ -187,7 +187,7 @@ def _validate_evidence_scope(
 ) -> None:
     for item in evidence:
         if isinstance(item.source, PptxSource):
-            # PPTX materials are shared curriculum-wide (ADR-0005): a hit's lesson_id may
+            # PPTX materials are shared curriculum-wide (ADR-0007): a hit's lesson_id may
             # legitimately differ from the requesting lesson, so curriculum_id is the proof.
             if item.curriculum_id != request.curriculumId:
                 raise _EvidenceScopeViolation
