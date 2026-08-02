@@ -478,6 +478,8 @@ class LectureNoteService:
             return
         await self._store.deactivate(session_id)
         state.deactivated = True
+        self._sessions.pop(session_id, None)
+        self._accumulator.remove_session(session_id)
 
 
 class LectureNotePipeline:
@@ -493,10 +495,8 @@ class LectureNotePipeline:
 
     async def ingest(self, entry: CaptionEntry) -> tuple[LectureNoteWindow, ...]:
         result = self._accumulator.ingest(entry)
-        checkpoint = self._accumulator.export_session(entry.sessionId)
         if (
-            checkpoint is not None
-            and checkpoint.completed
+            self._accumulator.is_completed(entry.sessionId)
             and not result.windows
             and result.completion is None
         ):

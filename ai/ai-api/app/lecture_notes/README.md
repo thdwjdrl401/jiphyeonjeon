@@ -49,6 +49,11 @@ Spring consumer·DB·REST·WebSocket은 아직 미구현이다.
 프로세스 안에서 자동 재시도하지 않고 ai-api 재시작 때 이어서 처리하며, bounded retry·backoff·최종 실패
 상태는 후속 범위다.
 
+refined snapshot 발행과 caption completion ACK가 모두 끝나면 Redis checkpoint와 Python의 전체 세션
+상태를 해제한다. 같은 `sessionId`의 늦은 caption으로 세션이 다시 살아나지 않도록 accumulator에는 크기가
+제한된 완료 tombstone만 남긴다. GMS 전역 동시성·우선순위·재시도 정책은
+[ADR-0038](../../../../docs/decisions/canola/0038-lecture-note-session-reclamation-and-gms-concurrency.md)을 따른다.
+
 모델의 내부 action은 `IGNORE|APPEND|START_NEW`다. `IGNORE`는 operation만 완료하고 출력 event와
 `chunkSequence`를 만들지 않는다. `APPEND`는 wire의 `CONTINUE`로 변환하며, Unicode·연속 공백·끝
 문장부호·영문 대소문자까지만 정규화해 중복 요점을 거른다.
