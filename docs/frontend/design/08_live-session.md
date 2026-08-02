@@ -115,11 +115,13 @@ InstructorPreflightPanel
 ```text
 SessionEndSummary
 VideoAssetProcessingSteps   — FINALIZING → VERIFYING → READY (또는 FAILED)
-AiPostProcessingSummary
 ProcessingRecoveryActions
-ReplayReviewEntry           — 자산 READY 시 VOD 검수 화면으로 진입
+ReplayAutoEntry             — READY + PUBLISHED 시 강사 VOD 화면으로 자동 이동
 ```
-녹화 자산 실패 시 재업로드 버튼은 제공하지 않는다(복구 불가 시 실패 안내만).
+종료 성공 직후 한 번 조회하고, 진행 상태는 최초 30초 2초 간격·이후 5초 간격으로 DB snapshot을
+폴링한다. `READY + PUBLISHED`에서 폴링을 멈추고 강사 VOD 화면으로 `replace` 이동한다. `FAILED`에서는
+폴링을 멈추고 실패 사유와 복귀 동선을 표시하며 재업로드 버튼은 제공하지 않는다. AI 후처리는 영상
+자동 게시의 완료 조건이 아니며 이 화면의 polling 응답에 합치지 않는다.
 
 ---
 
@@ -129,4 +131,4 @@ ReplayReviewEntry           — 자산 READY 시 VOD 검수 화면으로 진입
 - 5xx/네트워크 장애와 권한·상태 충돌을 구분해 표시
 
 ## 다음 화면
-세션 상세 "사전 점검" → 강사 사전 점검 · "입장 전 점검" → 수강생 prejoin · 시작 성공 → 09_live-lesson(강의실) · 종료 감지 → 세션 상세 또는 녹화 처리 현황 · 처리 현황 "검수 진입" → 10_vod-lesson
+세션 상세 "사전 점검" → 강사 사전 점검 · "입장 전 점검" → 수강생 prejoin · 시작 성공 → 09_live-lesson(강의실) · 강사 종료 성공 → 녹화 처리 현황 · 처리 현황 `READY + PUBLISHED` → 10_vod-lesson 자동 이동

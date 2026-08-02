@@ -12,6 +12,7 @@
 - `videoAssetStatus=READY`와 `replayStatus=PUBLISHED`를 분리
 - 강사는 자산 `READY`부터 미리보기·검수 가능
 - 수강생은 replay `PUBLISHED` 이후 재생 가능
+- 새 정상 녹화는 manifest 검증 성공 시 영상 replay를 자동 `PUBLISHED`로 전환
 - 영상은 AI 콘텐츠 게시 여부와 독립적으로 공개 가능
 - AI 원본·후보는 자동 게시하지 않고 강사 검수 후 core 게시본 생성
 - AI 원본은 보존하고 게시본은 영역별 version 관리
@@ -27,7 +28,7 @@
 | ID | Method | Path | 설명 | 상태 |
 |---|---|---|---|---|
 | `VOD-01` | `GET` | `/api/lessons/{lessonId}/learning-context` | VOD 화면 초기 context | URL **확정** |
-| `VOD-02` | `GET` | `/api/lessons/{lessonId}/playback` | 권한 적용 HLS URL 발급 | URL **확정** |
+| `VOD-02` | `GET` | `/api/lessons/{lessonId}/playback` | 권한 적용 HLS metadata 조회 | **구현됨** |
 | `PROGRESS-01` | `PUT` | `/api/lessons/{lessonId}/progress` | 마지막 위치·유효 시청 구간 저장 | URL **확정** |
 | `BOOKMARK-01` | `GET/POST` | `/api/lessons/{lessonId}/bookmarks` | 내 북마크 조회·생성 | URL 계열 **확정** |
 | `BOOKMARK-02` | `DELETE` | `/api/lessons/{lessonId}/bookmarks/{bookmarkId}` | 내 북마크 삭제 | **제안** |
@@ -136,11 +137,18 @@ GET /api/lessons/{lessonId}/playback
 {
   "lessonId": "les_01J...",
   "videoAssetId": "vid_01J...",
-  "hlsUrl": "https://media.example.com/vod/master.m3u8?...",
-  "expiresAt": "2026-08-02T10:10:00+09:00",
+  "sessionId": "ses_01J...",
+  "startedAt": "2026-08-02T09:00:00+09:00",
+  "liveSessionStatus": "ENDED",
+  "replayStatus": "PUBLISHED",
+  "currentSessionMs": 5400000,
+  "sessionOffsetMs": 0,
   "durationMs": 5400000,
-  "sessionTimeOffsetMs": 0,
-  "contentType": "application/vnd.apple.mpegurl"
+  "source": {
+    "url": "/api/lessons/les_01J.../playback/manifest",
+    "availableFromMs": 0,
+    "availableToMs": 5400000
+  }
 }
 ```
 
@@ -149,17 +157,18 @@ GET /api/lessons/{lessonId}/playback
 - 강사: `videoAssetStatus=READY`이면 replay 게시 전에도 미리보기 가능
 - 수강생: 활성 enrollment, lesson `PUBLISHED`, replay `PUBLISHED` 모두 검증
 - 다른 강사·비수강·비로그인은 URL 미발급
-- URL은 짧은 만료 시간을 가지며 재생 중 만료 시 같은 endpoint로 재발급
+- `source.url`은 인증된 manifest endpoint다. 본문 안 세그먼트 URL이 만료되면 metadata를 다시 읽고 플레이어를 재로드한다.
 
 ### 4.2 오류
 
 | 상태 | 오류 코드 예시 | 의미 |
 |---|---|---|
-| `403` | `REPLAY_ACCESS_FORBIDDEN` | 재생 권한 없음 |
-| `404` | `REPLAY_NOT_FOUND` | 존재 은닉 또는 자산 없음 |
-| `409` | `VIDEO_ASSET_NOT_READY` | finalizing·verifying 중 |
-| `409` | `REPLAY_NOT_PUBLISHED` | 수강생 공개 전 |
-| `410` | `PLAYBACK_URL_EXPIRED` | 이미 발급한 URL의 media gate에서 사용할지 협의 |
+| `403` | `ENROLLMENT_REQUIRED` | 소유 강사도 활성 수강생도 아님 |
+| `404` | `LESSON_NOT_FOUND` | 레슨 부재 또는 존재 은닉 |
+| `404` | `REPLAY_NOT_FOUND` | 자산 없음 또는 학생에게 미게시 replay 은닉 |
+| `409` | `RECORDING_STARTING` | 라이브 manifest 생성 지연 |
+| `409` | `REPLAY_NOT_READY` | 종료 자산 finalizing·verifying·failed 또는 manifest 유실 |
+| `503` | `PLAYBACK_STORAGE_UNAVAILABLE` | 저장소 읽기·presign 실패 |
 
 ## 5. 학습 진도
 
@@ -610,13 +619,15 @@ GET /api/instructor/lessons/{lessonId}/learning-summary
 | 상태 조합 | 수강생 처리 |
 |---|---|
 | 자산 `FINALIZING/VERIFYING` | 레슨 상세에서 준비 중 |
-| 자산 `READY` + replay `READY_FOR_REVIEW` | 게시 대기, 재생 불가 |
+| 자산 `READY` + replay `DRAFT/READY_FOR_REVIEW` | 기존 미게시 자산: 게시 대기, 재생 불가 |
 | 자산 `READY` + replay `PUBLISHED` + AI 미게시 | 영상 재생, AI 영역 숨김 또는 준비 상태 |
 | 일부 AI 게시 | 게시된 영역만 활성화 |
 | 일부 AI 실패 | 영상과 기존 게시 영역 유지 |
 | replay `WITHDRAWN` | 공개 중단, 신규 재생 불가 |
 
 - transcript·glossary·chapters·quiz 실패를 하나의 전역 AI 실패로 합치지 않는다.
+- 새 정상 녹화는 webhook에서 자산 `READY`와 replay `PUBLISHED`를 원자적으로 확정해 영상만 자동
+  공개한다. AI 후보·검수본은 이 전이에 포함하지 않는다.
 - 재생 URL 만료는 URL 재발급으로 복구하고 HLS 자체 오류와 구분한다.
 - 진도 저장·AI·퀴즈 오류가 영상 재생을 중단하지 않는다.
 - 인증·수강 권한이 회수되면 재생 URL·SSE·학습 요청을 중단한다.
@@ -635,4 +646,3 @@ GET /api/instructor/lessons/{lessonId}/learning-summary
 10. replay 회수와 AI 게시본 독립성
 11. 질문 핀 bucket과 익명화 기준
 12. 학습 통계 갱신 주기와 최소 집계 인원 기준
-

@@ -16,7 +16,9 @@ VOD 레슨은 종료된 라이브 레슨의 Egress HLS 녹화를 재생하고, �
 > **UI 목업 기준(2026-07-23)**: 학생·강사 다시보기의 기본 학습 사이드바는 라이브와 같은 `채팅·질문 / 실시간 노트 / AI 질문 / 핵심 용어` 네 탭을 사용한다. 라이브에서 생성된 구간 요약 블록과 검수 용어를 읽기 형태로 재사용하며, 역할별 검수·통계·퀴즈의 최종 위치는 후속 논의한다. 상세 결정은 [ADR-0019](../../decisions/yoongwanghyeok/0019-unified-learning-sidebar-and-caption-dock-preview.md)를 따른다.
 
 - VOD는 라이브 Egress가 생성한 HLS만 사용하며 영상 업로드는 제공하지 않음
-- `videoAssetStatus=READY`는 강사 미리보기 가능 상태이며 수강생 자동 공개를 의미하지 않음
+- 새 정상 녹화는 `videoAssetStatus=READY`와 `replayStatus=PUBLISHED`를 같은 webhook 트랜잭션에서
+  확정해 수강생 영상을 자동 공개
+- 기존 `READY + DRAFT/READY_FOR_REVIEW`와 `WITHDRAWN`은 자동 공개하지 않고 수동 게시·재게시
 - 수강생 영상 재생은 `replayStatus=PUBLISHED`일 때만 허용
 - 영상과 자막·용어·요약·퀴즈 준비 상태를 분리
 - AI 원본과 후보는 자동 게시하지 않고 강사 승인 후 게시본 생성
@@ -180,7 +182,7 @@ VodLessonPage
 | 영상 상태 | replay 상태 | AI 콘텐츠 상태 | 수강생 화면 |
 |---|---|---|---|
 | 자산 `FINALIZING/VERIFYING` | 무관 | 무관 | 레슨 상세에서 준비 중 안내 |
-| 자산 `READY` | `READY_FOR_REVIEW` | 무관 | 게시 대기 안내, 재생 불가 |
+| 자산 `READY` | `DRAFT/READY_FOR_REVIEW` | 무관 | 기존 미게시 자산: 게시 대기 안내, 재생 불가 |
 | 자산 `READY` | `PUBLISHED` | AI 처리 중·미게시 | 영상 재생, 해당 AI 영역은 준비 중 또는 미제공 |
 | 자산 `READY` | `PUBLISHED` | 일부 게시 완료 | 영상과 승인·게시된 영역만 표시 |
 | 자산 `READY` | `PUBLISHED` | 일부 AI 실패 | 영상과 기존 게시 기능 유지, 실패 영역만 안내 |

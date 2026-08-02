@@ -86,13 +86,17 @@
 
 ### 9. 다시보기 게시와 AI 게시본
 
-- [ ] `videoAssetStatus=READY` 후 replay 기본 상태
-- [ ] 영상만 먼저 게시하고 AI 콘텐츠를 나중에 추가할 수 있는지
+- [x] `videoAssetStatus=READY` 후 replay 기본 상태 — 새 정상 녹화는 같은 webhook 트랜잭션에서
+  `replayStatus=PUBLISHED`, 기존·철회 자산은 수동 게시
+- [x] 영상만 먼저 게시하고 AI 콘텐츠를 나중에 추가할 수 있는지 — 영상은 자동 게시하고 AI 영역은
+  독립 검수·게시
 - [ ] 자막·요약·용어·퀴즈 게시본의 버전 단위
 - [ ] 새 퀴즈 버전 게시 후 기존 응시 기록 처리
 - [ ] 90% 완료 판정의 시청 구간 합산 방식
 
-권장안: 영상과 AI 영역을 독립적으로 게시한다. AI 원본은 보존하고 수강생에게는 강사가 승인한 현재 게시본만 노출한다.
+확정: [ADR-0007](../decisions/choinhoo/0007-recording-ready-auto-publish-and-processing-polling.md)에 따라
+새 정상 영상은 `READY + PUBLISHED`로 자동 공개한다. AI 원본은 보존하고 수강생에게는 강사가 승인한
+현재 게시본만 노출한다.
 
 ## P2 — 운영 정책 확정 후 활성화
 

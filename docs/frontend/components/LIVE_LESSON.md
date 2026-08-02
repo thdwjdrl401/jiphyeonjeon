@@ -146,7 +146,8 @@ AI 패널은 일반적인 챗 UI 규약을 따른다(ADR-0049).
 - 해당 커리큘럼 강사 또는 수강생만 접근
 - 비로그인·미수강 학생·다른 커리큘럼 강사는 라우트 진입 단계에서 차단
 - 강사는 `/instructor/live-sessions/:sessionId/classroom`, 학생은 `/student/live-sessions/:sessionId/classroom`에서 `liveSessionStatus=LIVE`일 때 입장
-- 세션 종료를 감지하면 라이브 세션 상세 또는 녹화 처리 상태로 이동
+- 강사의 종료 API 성공은 녹화 processing 화면으로 이동. 수강생은 `session.ended`만으로 이동하지 않고
+  현재 HLS의 마지막 버퍼까지 재생
 - 권한과 상태는 프론트 라우트 가드뿐 아니라 서버에서도 검증
 
 ### 5.2 강사
@@ -266,10 +267,14 @@ sessionMs
 
 종료 상태별 학생 동작은 HLS 지연을 기준으로 구분한다.
 
-- `ENDING`: **“강사가 수업을 종료하고 있습니다. 남은 영상을 재생 중입니다.”** 안내를 표시하고
-  채팅·AI 질문·자막 시각 이동은 유지한다.
-- `ENDED`: **“라이브가 종료된 강의입니다.”**를 표시하고 채팅 작성·AI 질문과 재시도·자막 시각 이동을
-  잠근다. 진행 중 AI SSE는 중단하되 기존 채팅·AI 대화·자막·HLS 플레이어는 유지한다.
+- `ENDING`: 종료 처리 중에도 채팅·AI 질문·HLS·자막 시각 이동을 유지한다.
+- `ENDED`: 강사 송출과 LiveKit Room만 종료된 상태다. 학생에게 **“송출이 종료되어 남은 영상을
+  재생 중입니다”** 같은 별도 배너·토스트·오버레이를 표시하지 않고, 재생 중인 HLS와 자막 시각 이동을
+  그대로 유지한다. 채팅 작성·AI 질문·재시도와 진행 중 AI SSE도 유지한다.
+- `caption.stream.completed`: 새 자막 생성만 종료한다. 기존 자막은 남은 HLS의 player 위치에 맞춰
+  계속 노출하고 HLS를 사용할 수 있는 동안 시각 이동도 유지한다.
+- `VideoAsset READY`: 최종 HLS 확정 신호다. 즉시 player를 중지하지 않고 마지막 버퍼를 소비한
+  browser player의 `ended`에서 해당 학생의 재생을 완료한다.
 
 ## 10. 연결과 장애 처리
 
@@ -333,12 +338,19 @@ AI 장애가 라이브 미디어와 채팅을 막지 않는 것을 기본 원칙
 
 ### 11.5 종료 감지
 
-- `/topic/live-sessions/{sessionId}/state`의 `session.ending`에서는 종료 진행 안내만 표시
-- `session.ended` 또는 최초 REST 조회의 `ENDED`부터 메시지 작성·새 AI 질문·AI 재시도·자막 시각 이동 중단
-- 진행 중 AI SSE 중단, 아직 적용하지 않은 자막 seek 요청 폐기
-- **“라이브가 종료된 강의입니다.”** 표시
+- `/topic/live-sessions/{sessionId}/state`의 `session.ending`은 종료 처리 상태만 갱신
+- `session.ended` 또는 최초 REST 조회의 `ENDED`는 강사 송출·Room 종료로만 해석
+- `session.ended`만으로 종료 안내를 표시하거나 HLS player·자막 시각 이동·미적용 seek를 중단하지 않음
+- `caption.stream.completed` 뒤 동일 attempt의 새 자막을 만들지 않고 기존 자막은 유지
+- `VideoAsset FINALIZING/VERIFYING` 동안 기존 HLS 접근과 manifest 갱신 유지
+- `READY` 뒤 마지막 세그먼트를 재생하고 player `ended`에서 학생별 미디어 재생 완료
+- 메시지 작성·새 AI 질문·AI 재시도와 진행 중 AI SSE는 유지
 - 강사에게 종료 결과와 Egress 처리 상태 안내
-- 기존 HLS 플레이어와 채팅·AI 대화·자막은 유지하며 자동 이동하지 않음
+- 기존 HLS 플레이어와 채팅·AI 대화·자막 유지
+
+> 구현 상태: 위 drain 정책은 [ADR-0005](../../decisions/choinhoo/0005-ended-hls-caption-drain.md)로
+> 확정됐으나, 현재 `LiveClassroomPage`의 `ENDED` 배너·자막 seek 잠금과 backend playback의
+> `ENDED` 즉시 replay 판정에는 아직 코드 반영이 필요하다.
 
 ### 11.6 접근 실패
 

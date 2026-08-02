@@ -252,12 +252,15 @@ AI 미준비와 Egress 문제는 경고만 표시하고 우회하는 선택지�
 
 - 강사 종료 요청 시 `ENDING`
 - 신규 학생 입장 차단
-- LiveKit room 종료와 Egress stop/finalize 별도 추적
+- LiveKit Room 삭제 뒤 `egressId`가 있으면 실패를 허용하는 `StopEgress` 중복 안전장치 호출
 - room 종료가 확인되면 session `ENDED`
 - video asset은 `FINALIZING → VERIFYING → READY` 또는 `FAILED`
-- AI 후처리 상태는 video asset과 별도 표시
-- 자산 `READY` 후 강사 VOD 미리보기·검수 진입
-- replay 게시 전 수강생 재생 불가
+- 종료 성공 뒤 강사 처리 화면에서 DB snapshot을 최초 30초 2초 간격, 이후 5초 간격으로 폴링
+- 성공 webhook은 자산 `READY`와 replay `PUBLISHED`를 같은 트랜잭션에서 확정
+- 처리 화면은 `READY + PUBLISHED`에서 폴링을 멈추고 강사 VOD로 자동 이동
+- 자산 `FAILED`에서는 폴링 중단·실패 안내, 자동 이동 없음
+- AI 후처리·검수 상태는 영상 자동 게시와 별도 표시
+- 기존 `READY + DRAFT/READY_FOR_REVIEW`와 `WITHDRAWN`만 수동 게시·재게시
 
 종료 후 잃어버린 미디어를 업로드로 대체하는 버튼은 제공하지 않는다.
 

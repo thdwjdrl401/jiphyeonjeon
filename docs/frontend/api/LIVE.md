@@ -41,7 +41,7 @@ STARTING ─────────→ FAILED
 | `LIVE-SESSION-06` | `POST` | `/api/live-sessions/{sessionId}/start` | 멱등 라이브 시작 | URL **확정** |
 | `LIVE-SESSION-07` | `POST` | `/api/instructor/live-sessions/{sessionId}/token` | 소유 강사 LiveKit 송출 token 발급 | URL **확정** |
 | `LIVE-SESSION-08` | `POST` | `/api/live-sessions/{sessionId}/end` | 동기 순차·멱등 라이브 종료 | **구현됨(ADR-0003)** |
-| `LIVE-SESSION-09` | `GET` | `/api/instructor/live-sessions/{sessionId}/processing` | 종료 후 녹화 처리 조회 | **구현됨(ADR-0059)** |
+| `LIVE-SESSION-09` | `GET` | `/api/instructor/live-sessions/{sessionId}/processing` | 종료 후 녹화 처리 조회 | **구현됨(ADR-0059·ADR-0007)** |
 | `LIVE-PLAYBACK-01` | `GET` | `/api/live-sessions/{sessionId}/playback` | 최근·전체 DVR HLS 재생 정보 | **제안** |
 
 ### 2.2 실시간·학습
@@ -714,14 +714,41 @@ GET /api/instructor/live-sessions/{sessionId}/processing
 }
 ```
 
-`videoAsset.status`: `REQUESTED|STARTING|RECORDING|FINALIZING|VERIFYING|READY|FAILED`.
-**HLS가 `READY`여도 replay는 자동 게시하지 않는다** — `replayStatus`가 별도 축이라 둘을 한 필드로 합치지 않는다.
+`videoAsset.status`: `STARTING|RECORDING|FINALIZING|VERIFYING|READY|FAILED`.
+`replayStatus`는 자산 안에 있지만 기술 준비 상태와 별도 축이다. 새 정상 녹화는 성공 webhook의 같은
+트랜잭션에서 `READY + PUBLISHED`로 자동 게시한다. 기존 `READY + DRAFT`와 `WITHDRAWN`은 자동으로
+되살리지 않고 수동 게시 동선을 유지한다.
 
 - 서버는 **상태만** 준다. `steps[].label` 같은 표시 문구는 화면이 만든다(계약 테스트가 부재를 고정).
 - `videoAsset`은 null일 수 있고 그 부재는 실패가 아니다. `recordingEnabled`로 "아직 없음"과 "녹화 안 함"을 가른다.
 - 자산 전이는 Egress 완료 webhook이 나중에 몰고 오므로 종착 상태(`READY`·`FAILED`) 전까지 폴링한다.
 - `aiPostProcessing`(transcript·glossary·chapters·quiz)은 받쳐줄 서버 데이터가 없어 **넣지 않는다**. 산출물이 생기면 추가한다.
 - 소유 강사만. 비소유 403 `LIVE_SESSION_FORBIDDEN`, 없는 세션 404 `LIVE_SESSION_NOT_FOUND`, 학생은 역할 게이트 403.
+
+### 13.1 상태와 응답 처리
+
+| 조건 | 응답·FE 처리 |
+|---|---|
+| 자산 없음·`recordingEnabled=true` | 200, `videoAsset:null`; 자산 생성을 기다리며 폴링 유지 |
+| 자산 없음·`recordingEnabled=false` | 200, `videoAsset:null`; 녹화 비활성 안내 후 폴링 중단 |
+| `STARTING/RECORDING/FINALIZING/VERIFYING` | 200 진행 상태 |
+| `READY + PUBLISHED` | 폴링 중단 후 강사 replay 화면으로 자동 이동 |
+| `READY + DRAFT/READY_FOR_REVIEW/WITHDRAWN` | 폴링 중단, 기존 자산의 수동 게시 동선 제공 |
+| `FAILED` | 폴링 중단, `failureCode`와 복귀 동선 표시 |
+
+정상 전이는 `(신규 또는 FAILED) → STARTING → RECORDING → FINALIZING → VERIFYING → READY`다.
+`VideoAssetStatus`와 `ReplayStatus`는 서로 다른 사실을 표현하며, 새 녹화의 자동 게시 정책만 두 값을
+한 트랜잭션에서 확정한다. 상세 결정은
+[ADR-0006](../../decisions/choinhoo/0006-remove-video-asset-requested-status.md),
+[ADR-0007](../../decisions/choinhoo/0007-recording-ready-auto-publish-and-processing-polling.md)을 따른다.
+
+### 13.2 FE 폴링과 자동 이동
+
+- 종료 API 200 뒤 processing 화면으로 이동하고 즉시 한 번 조회한다.
+- 진행 상태는 최초 30초 동안 2초, 이후 5초 간격으로 조회한다.
+- 비활성 탭에서는 백그라운드 폴링을 멈추고, 긴 지연을 FE timeout으로 `FAILED` 처리하지 않는다.
+- processing 응답에는 `lessonId`를 중복하지 않는다. FE는 세션 상세의 `lessonId`로 강사 replay 경로를 만든다.
+- `READY + PUBLISHED`를 모두 확인하면 `/instructor/lessons/{lessonId}/replay`로 `replace` 이동한다.
 
 ## 14. 오류·장애 원칙
 
