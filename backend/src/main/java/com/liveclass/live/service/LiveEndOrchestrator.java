@@ -40,7 +40,8 @@ public class LiveEndOrchestrator {
         // Room 삭제 실패는 상위로 전파한다. ENDING은 이미 커밋됐으며 강사의 같은 요청으로 재시도한다.
         roomControl.closeRoom(LiveSessionService.roomName(sessionId));
 
-        // 녹화 정리는 별도 상태축이다. 실패해도 라이브 종료를 되돌리거나 ENDED 전이를 막지 않는다.
+        // 현재 구현에 남은 best-effort 보완 호출이다. MVP 종료 계약은 Room 삭제까지만 요구한다.
+        // 녹화 정리는 별도 상태축이므로 실패해도 라이브 종료를 되돌리거나 ENDED 전이를 막지 않는다.
         try {
             recordingControl.stopRecording(sessionId);
         } catch (RuntimeException e) {

@@ -55,11 +55,11 @@ public class ChatService {
     @Transactional
     public ChatMessage sendToSession(UUID sessionId, UUID senderId, String clientMessageId, String text,
                                      boolean isQuestion, boolean anonymousRequested) {
-        // 종료 확정과 채팅 저장을 같은 세션 행 잠금으로 직렬화한다. 먼저 잠금을 얻은 쪽의 커밋 상태가
-        // 기준이며, ENDED 뒤 시작한 전송은 저장 전에 반드시 거절된다.
+        // 세션 상태 전이와 채팅 저장을 같은 행 잠금으로 직렬화한다. ENDED도 후속 토론을 위해 허용하고,
+        // 시작 전·취소·실패 상태만 저장 전에 거절한다.
         LiveSession session = liveSessionRepository.findByIdForUpdate(sessionId)
                 .orElseThrow(() -> new LiveSessionNotFoundException("라이브 세션이 없습니다."));
-        interactionGuard.requireOpen(session);
+        interactionGuard.requireInteractionAllowed(session);
         return sendIdempotent(session, session.getLessonId(), senderId, clientMessageId, text, isQuestion, anonymousRequested);
     }
 

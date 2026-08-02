@@ -19,6 +19,7 @@ import type {
   PreflightRoom,
   PlaybackView,
   ProcessingStatus,
+  ReplayStatus,
 } from './liveSessionService.interface'
 
 interface ApiLiveSessionView {
@@ -145,6 +146,7 @@ interface ApiPlayback {
   lessonId: string
   sessionId: string
   liveSessionStatus: string
+  replayStatus: ReplayStatus
   currentSessionMs: number | null
   durationMs: number | null
   source: ApiPlaybackSource | null
@@ -188,7 +190,12 @@ function normalizePlayback(data: ApiPlayback, lessonId: string): PlaybackView {
   // source가 null인 건 정상 상태다 — Egress가 아직 첫 세그먼트를 안 올렸다는 뜻이라
   // 계약 위반으로 다루면 대기 화면 대신 오류 화면이 뜬다.
   const url = data.source?.url?.trim()
-  if (data.lessonId !== lessonId || (data.source && !url) || !data.liveSessionStatus) {
+  if (
+    data.lessonId !== lessonId
+    || (data.source && !url)
+    || !data.liveSessionStatus
+    || !REPLAY_STATUSES.includes(data.replayStatus)
+  ) {
     throw new ApiError(
       '재생 API 응답이 계약과 일치하지 않습니다.',
       undefined,
@@ -200,6 +207,7 @@ function normalizePlayback(data: ApiPlayback, lessonId: string): PlaybackView {
     lessonId: data.lessonId,
     sessionId: data.sessionId,
     liveSessionStatus: data.liveSessionStatus,
+    replayStatus: data.replayStatus,
     currentSessionMs: nullableNumber(data.currentSessionMs),
     durationMs: nullableNumber(data.durationMs),
     source: url
@@ -211,6 +219,10 @@ function normalizePlayback(data: ApiPlayback, lessonId: string): PlaybackView {
       : null,
   }
 }
+
+const REPLAY_STATUSES: ReplayStatus[] = [
+  'DRAFT', 'READY_FOR_REVIEW', 'PUBLISHED', 'WITHDRAWN',
+]
 
 /**
  * 세션이 속한 레슨의 커리큘럼 맥락. 세션 응답에는 없다 — live 모듈은 커리큘럼을 참조하지 않으므로

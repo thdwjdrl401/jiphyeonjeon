@@ -87,4 +87,7 @@ LessonStatusRegion
 - 접근 실패: 인증 만료/미수강/시작 전/종료 후를 구분해 안내
 
 ## 다음 화면
-"세션 종료" → 08_live-session(세션 상세 또는 녹화 처리 현황) · 종료 감지 후 자동 이동 없음, 사용자가 "레슨 상세로" 등 명시적 버튼으로 07_lesson-detail 또는 08_live-session · 접근 실패 → 11_system-pages(접근 불가)
+강사가 누른 "세션 종료" API가 성공하면 08_live-session의 녹화 처리 현황으로 자동 이동한다. 처리
+화면은 `READY + PUBLISHED`를 확인한 뒤 강사 VOD로 다시 자동 이동한다. 수강생은
+`session.ended`만으로 이동하지 않고 현재 HLS의 마지막 버퍼까지 재생하며, 명시적 버튼으로 레슨
+상세에 돌아간다. 접근 실패는 11_system-pages(접근 불가)로 이동한다.

@@ -56,7 +56,7 @@ flowchart LR
 | **CP1** ★ | ✅ LiveKit 토큰·채팅 WS·세션 수명주기·참가자 관리 | 🟡 세션·채팅 API 연동 ✅ / `livekit-client` ⬜ | — |
 | **CP2** | ⬜ | ⬜ | ⬜ realtime-agent |
 | **CP3** ★ | 🟡 BE 슬라이스 착수(자료 연결·삭제·다운로드, 임베딩 outbox→RabbitMQ→콜백 inbox, 스위치 off) | ⬜ | ⬜ ai-api·ai-worker |
-| **CP4** | 🟡 Egress 제어·`VideoAsset`·재생 API·게시 전환 완료 / 검수 데이터 저장 미착수(선행 CP2·CP3) | ⬜ | — |
+| **CP4** | 🟡 Egress 제어·`VideoAsset`·재생 API·자동/수동 게시·processing 조회 완료 / 검수 데이터 저장 미구현 | 🟡 종료 뒤 processing 이동·폴링·replay 자동 이동·실제 게시 상태 연결 완료 / 자막·용어·RAG 재생 미구현 | — |
 | **CP5** | ⬜ | ⬜ | ⬜ |
 
 ## 단계별 상세
@@ -68,7 +68,7 @@ flowchart LR
 | **CP1** ★ | 라이브 미디어 | LiveKit 토큰, **WebRTC 화상 입장**(강사 publish/학생 subscribe), Spring **채팅**(WS) | — |
 | **CP2** | 라이브 자막 | **realtime-agent 스트리밍 STT(VAD)** → Redis Streams → Spring 영속+WS, 자막 렌더·검수 | realtime-agent · **`ai` 스키마+Alembic** · 외부 STT API |
 | **CP3** ★ | 용어·근거(RAG) | PPTX 업로드·파싱, chunk·embedding(pgvector), 용어 후보·카드, **RAG SSE**(FTS+vector+RRF+scope+citation+insufficient) | ai-api · ai-worker · **RabbitMQ** · model gateway |
-| **CP4** | 녹화·다시보기 | Egress 녹화→HLS→MinIO, **egress 웹훅 수신기**(상태 전이, [0034](decisions/songjeongki/0034-egress-completion-webhook.md)) ✅, **라이브 되감기·종료 VOD 재생 API**(metadata + 인증 manifest, presigned URI + 시간축 계산 + 델타 재생목록, [0039](decisions/songjeongki/0039-replay-playback-api.md), [choinhoo/0001](decisions/choinhoo/0001-live-replay-playback-api.md)) ✅, **게시·철회** ✅, HLS 플레이어 + 교정 자막·용어·RAG 재생(FE, 검수 데이터 저장은 CP2·CP3 산출물 선행) | HLS.js |
+| **CP4** | 녹화·다시보기 | Egress 녹화→HLS→MinIO, **egress 웹훅 수신기**(상태 전이, [0034](decisions/songjeongki/0034-egress-completion-webhook.md)) ✅, **라이브 되감기·종료 VOD 재생 API**(metadata + 인증 manifest, presigned URI + 시간축 계산 + 델타 재생목록, [0039](decisions/songjeongki/0039-replay-playback-api.md), [choinhoo/0001](decisions/choinhoo/0001-live-replay-playback-api.md)) ✅, 수동 **게시·철회** ✅, **READY+PUBLISHED 자동 게시·강사 processing 폴링·replay 자동 이동** ✅([choinhoo/0007](decisions/choinhoo/0007-recording-ready-auto-publish-and-processing-polling.md)), HLS 플레이어 + 교정 자막·용어·RAG 재생(FE, 검수 데이터 저장은 CP2·CP3 산출물 선행) | HLS.js |
 | **CP5** | 퀴즈·따라잡기 | 퀴즈 후보→검수→응시(**결정론 채점**), 재접속 catch-up | — |
 
 > **RabbitMQ 배선은 CP3에서 이뤄졌다.** backend에 `spring-amqp` 의존성·설정이 들어가 outbox 릴레이가 `ingestion.embed`로 발행하고, prod compose에도 RabbitMQ가 추가됐다([ADR-0036](decisions/songjeongki/0036-material-embedding-pipeline.md), [ARCHITECTURE §9-4](ARCHITECTURE.md)). CP2 자막 경로는 여전히 Redis Streams만으로 충분하다. 자료 임베딩 파이프라인은 스위치(`material.embedding.enabled`) 뒤에서 기본 off다.
@@ -85,7 +85,7 @@ flowchart LR
 | CP1 | LiveKit 토큰·채팅 WS | LiveKit 클라·화상·채팅 UI | — |
 | CP2 | 자막 영속·WS 전달 | 자막 렌더·싱크 | **realtime-agent STT** |
 | CP3 | 자료→레슨 연결·AI 게이트웨이·정책·SSE 중계 | 챗봇·용어카드 UI | **chunk·embed·RAG·citation** |
-| CP4 | Egress 제어·라이브/다시보기 재생 API·게시/철회 ✅ | HLS 플레이어·LIVE 배지/되감기 UI·다시보기 UI | *(2-pass 교정 옵션)* |
+| CP4 | Egress 제어·라이브/다시보기 재생 API·자동/수동 게시·processing 조회 ✅ | processing 폴링·replay 자동 이동·서버 게시 상태 연결 ✅, 자막·용어·RAG 재생·검수 데이터 저장 ⬜ | *(2-pass 교정 옵션)* |
 | CP5 | 퀴즈 채점·API | 퀴즈 UI | *(퀴즈 후보)* |
 
 > **선행 스파이크(Week1 병렬)**: 한국어 STT bake-off + LiveKit/Egress self-host PoC — CP1·CP2 리스크 검증. **미디어·라이브는 3그룹 합동.**

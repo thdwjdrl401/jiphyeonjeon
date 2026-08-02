@@ -247,7 +247,7 @@ D.append(("09 · 녹화와 다시보기", [
     N("r3", "EgressControl", "시작 · 정지", X[2]+20, Y[0], 190, 56, BUILT),
     N("r4", "LiveKit Egress", "합성 → HLS", X[3]+30, Y[0], 180, 56, BUILT),
     N("r5", "MinIO / S3", "세그먼트 · manifest", X[3]+30, Y[1], 180, 60, DATA),
-    N("r6", "video_asset", "REQUESTED → … → READY", X[2]+20, Y[1], 190, 60, DATA),
+    N("r6", "video_asset", "STARTING → … → READY", X[2]+20, Y[1], 190, 60, DATA),
     N("r7", "ReplayDirectory", "다시보기 유무", X[1], Y[1], 210, 56, BUILT),
     N("r8", "카탈로그", "카드에 표시", X[0], Y[1], 180, 56, BUILT),
     N("r9", "재생 API", "GET /api/lessons/{id}/playback", X[1], Y[2], 210, 56, PLAN),

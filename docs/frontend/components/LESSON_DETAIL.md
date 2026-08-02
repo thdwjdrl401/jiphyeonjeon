@@ -166,7 +166,7 @@ lesson 상세는 세션 시작·종료 요청을 직접 보내지 않는다.
 |---|---|---|
 | 세션 `ENDING/ENDED` + 자산 `FINALIZING/VERIFYING` | 처리 현황 | 다시보기 준비 중 |
 | 자산 `FAILED` | 실패 원인·운영 복구 동선 | 준비 실패 안내 |
-| 자산 `READY` + replay `READY_FOR_REVIEW` | 미리보기·검수·게시 | 게시 대기 |
+| 자산 `READY` + replay `DRAFT/READY_FOR_REVIEW` | 기존 자산 미리보기·수동 게시 | 게시 대기 |
 | 자산 `READY` + replay `PUBLISHED` | 재생·게시본 관리 | 다시보기 |
 | 자산 `READY` + replay `WITHDRAWN` | 미리보기·재게시 검토 | 공개 중단 안내 |
 
@@ -177,7 +177,8 @@ AI 콘텐츠가 일부 준비 중이거나 실패해도 게시된 HLS 재생을 
 - 페이지 진입과 브라우저 포커스 복귀 시 최신 조회
 - 자료·AI·녹화 처리 중에는 제한적인 polling 허용
 - `sessionId`가 생성되거나 상태가 바뀌면 세션 요약 갱신
-- 상태가 `LIVE` 또는 replay `PUBLISHED`가 되어도 자동 이동하지 않음
+- 일반 상세 조회에서 상태가 `LIVE` 또는 replay `PUBLISHED`가 되어도 자동 이동하지 않음. 단, 강사
+  종료 뒤 전용 processing 화면은 `READY + PUBLISHED`를 확인하면 강사 replay로 자동 이동
 - 향후 계약이 생기면 WS 또는 SSE 갱신으로 교체 가능
 
 ## 11. 주요 사용자 행동
@@ -189,7 +190,7 @@ AI 콘텐츠가 일부 준비 중이거나 실패해도 게시된 HLS 재생을 
 - `READY` lesson 게시
 - live session 생성·관리로 이동
 - 진행 중 라이브 운영으로 이동
-- 종료 세션 처리 현황·VOD 검수·replay 게시로 이동
+- 종료 세션 처리 현황·VOD 검수로 이동, 기존·철회 자산은 replay 수동 게시·재게시
 
 ### 11.2 수강생
 

@@ -71,7 +71,7 @@
 | 레슨 | `PUBLISHED` | 강사가 공식 게시하여 수강생에게 노출 가능 |
 | AI 처리 | `NOT_STARTED`·`PROCESSING`·`READY`·`FAILED` | 대기·처리 중·완료·실패 UI 구분 |
 | 라이브 세션 | `DRAFT`·`SCHEDULED`·`OPEN`·`STARTING`·`LIVE`·`ENDING`·`ENDED`·`CANCELLED`·`FAILED` | 일정 작성부터 종료까지의 실제 세션 상태 |
-| 녹화 자산 | `REQUESTED`·`STARTING`·`RECORDING`·`FINALIZING`·`VERIFYING`·`READY`·`FAILED` | Egress 요청부터 HLS 검증까지의 기술 상태 |
+| 녹화 자산 | `STARTING`·`RECORDING`·`FINALIZING`·`VERIFYING`·`READY`·`FAILED` | Egress 시작부터 HLS 검증까지의 기술 상태 |
 | 다시보기 공개 | `DRAFT`·`READY_FOR_REVIEW`·`PUBLISHED`·`WITHDRAWN` | 강사 검수 가능 여부와 수강생 공개 여부 구분 |
 
 - 레슨 `PUBLISHED`를 라이브 진행·종료 상태로 사용하지 않는다.
@@ -80,7 +80,9 @@
 - `AI_NOT_READY`에서는 라이브 시작을 허용하지 않는다.
 - PPTX 자료는 레슨 전부터 수강생에게 공개한다.
 - 라이브 종료 직후에는 `liveSessionStatus=ENDED`, `videoAssetStatus=FINALIZING`일 수 있다.
-- Egress HLS 검증이 끝나 `videoAssetStatus=READY`가 되면 강사 미리보기·검수를 허용한다.
+- 새 정상 녹화는 Egress HLS 검증이 끝나면 `videoAssetStatus=READY`와
+  `replayStatus=PUBLISHED`를 원자적으로 확정해 학생 영상 다시보기를 자동 공개한다.
+- 기존 `READY + DRAFT/READY_FOR_REVIEW`와 `WITHDRAWN`은 자동 공개하지 않고 강사의 수동 게시·재게시 동선을 유지한다.
 - 수강생 다시보기는 `videoAssetStatus=READY`와 `replayStatus=PUBLISHED`를 모두 만족할 때만 허용한다.
 - VOD는 라이브 레슨의 Egress 녹화 결과로만 생성하며 영상 파일 업로드는 제공하지 않는다.
 - AI 처리 실패는 라이브 영상·채팅 장애와 구분해서 표시한다.
@@ -109,7 +111,7 @@
 | 라이브 | 라이브 세션 상세 | 강사·수강생 | 일정·상태·녹화 고지와 역할별 진입 행동 확인 | CP1~4 |
 | 라이브 | 입장 전 점검 | 강사·수강생 | 역할별 장치·네트워크·재생 환경과 입장 조건 점검 | CP1 |
 | 라이브 | 라이브 레슨 | 강사·수강생 | 실시간 수업·채팅·자막·AI 기능 이용 | CP1~3, CP5 |
-| 라이브 | 녹화 처리 현황 | 해당 커리큘럼 강사 | 종료 세션의 Egress·HLS·AI 처리와 게시 gate 확인 | CP4~5 |
+| 라이브 | 녹화 처리 현황 | 해당 커리큘럼 강사 | 종료 세션의 녹화 상태 폴링, 자동 게시 확인과 replay 자동 이동 | CP4 |
 | VOD | VOD 레슨 | 강사·수강생 | Egress 녹화 재생·자막·AI 기능 이용 | CP4~5 |
 | 시스템 | 접근 불가 | 전체 | 접근 불가 사유 및 복구 동선 안내 | CP0 |
 | 시스템 | 찾을 수 없음 | 전체 | 잘못된 경로·리소스 안내 | CP0 |
@@ -354,7 +356,7 @@
 | `PUBLISHED` + 세션 없음 | 라이브 세션 생성 | 게시 레슨·자료 확인 |
 | `PUBLISHED` + 세션 존재 | 라이브 세션 상세·관리 | 라이브 세션 상세 |
 | 자산 `FINALIZING/VERIFYING` | 녹화 처리 현황 | 다시보기 준비 중 안내 |
-| 자산 `READY` + replay `READY_FOR_REVIEW` | 미리보기·게시본 검수·replay 게시 | 게시 대기 안내 |
+| 자산 `READY` + replay `DRAFT/READY_FOR_REVIEW` | 기존 자산 미리보기·수동 게시 | 게시 대기 안내 |
 | 자산 `READY` + replay `PUBLISHED` | 다시보기·게시본 관리 | 다시보기 재생 |
 | 자산 `READY` + replay `WITHDRAWN` | 미리보기·재게시 검토 | 공개 중단 안내 |
 
@@ -372,7 +374,9 @@ AI 준비가 끝나 `READY`가 된 레슨을 강사가 게시하면 `PUBLISHED`�
 - 사전 점검에서 카메라·마이크·네트워크·LiveKit·Egress·STT 확인
 - 레슨 AI 준비 상태가 아니거나 LiveKit·Egress 문제가 있으면 시작 차단
 - 시작 요청 중 `STARTING`, 종료 요청 중 `ENDING`을 별도 표시
-- 종료 후 녹화 처리 현황으로 이동
+- 종료 API 200 뒤 녹화 처리 현황으로 이동하고 DB snapshot을 폴링
+- 진행 상태는 최초 30초 2초 간격, 이후 5초 간격으로 조회하고 `READY + PUBLISHED`에서
+  강사 replay 화면으로 자동 이동
 
 **수강생**
 
@@ -448,7 +452,13 @@ AI 준비가 끝나 `READY`가 된 레슨을 강사가 게시하면 `PUBLISHED`�
 - 마지막 재생 지점부터 이어보기
 - 퀴즈 버전별 응시 결과와 새 버전 재응시 가능 상태 확인
 
-HLS `READY`는 기술적으로 재생 가능한 상태이며 수강생 자동 공개를 의미하지 않는다. 강사가 replay를 `PUBLISHED`로 전환해야 수강생에게 영상을 공개한다. AI 원본과 후보는 자동 게시하지 않고, 강사가 승인한 영역별 게시본만 수강생에게 제공한다. 영상은 AI 게시본 없이도 게시할 수 있으며, 이후 승인된 AI 콘텐츠를 영역별로 추가할 수 있다. 강사용 검수 패널은 우선 VOD 페이지 안에 배치하고, 기능이 복잡해지면 별도 관리 페이지로 분리한다. 세부 구성은 [VOD 레슨 컴포넌트 명세](components/VOD_LESSON.md)를 따른다.
+HLS `READY`는 기술 상태지만 새 정상 녹화는 성공 webhook이 replay를 `PUBLISHED`로 함께 확정하므로
+학생에게 영상이 자동 공개된다. 강사는 처리 현황 폴링이 `READY + PUBLISHED`를 확인하면 이 화면으로
+자동 이동한다. 기존 `READY + DRAFT/READY_FOR_REVIEW`와 철회된 자산만 수동 게시·재게시한다.
+AI 원본과 후보는 자동 게시하지 않고, 강사가 승인한 영역별 게시본만 수강생에게 제공한다. 영상은 AI
+게시본 없이 먼저 공개될 수 있으며, 이후 승인된 AI 콘텐츠를 영역별로 추가할 수 있다. 강사용 검수
+패널은 우선 VOD 페이지 안에 배치하고, 기능이 복잡해지면 별도 관리 페이지로 분리한다. 세부 구성은
+[VOD 레슨 컴포넌트 명세](components/VOD_LESSON.md)를 따른다.
 
 ### 5.16 접근 불가
 
@@ -493,7 +503,8 @@ HLS `READY`는 기술적으로 재생 가능한 상태이며 수강생 자동 �
 | 강사가 live session 일정 수정 선택 | 라이브 세션 수정 |
 | 강사가 사전 점검에서 세션 시작 완료 | `sessionId` 기준 라이브 레슨 |
 | 수강생이 진행 중 세션 입장 | `sessionId` 기준 라이브 레슨 |
-| 라이브 세션 종료 감지 | 라이브 세션 상세 또는 녹화 처리 현황 |
+| 강사 종료 API 성공 | 녹화 처리 현황 → `READY + PUBLISHED` 확인 뒤 강사 VOD replay 자동 이동 |
+| 수강생 라이브 종료 감지 | 현재 HLS의 마지막 버퍼까지 재생, 자동 이동 없음 |
 | 종료 레슨에서 다시 보기 선택 | VOD 레슨 |
 | 권한 부족 | 접근 불가 |
 | 존재하지 않는 커리큘럼·섹션·레슨·라이브 세션 또는 경로 | 찾을 수 없음 |

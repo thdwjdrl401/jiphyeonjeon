@@ -1,6 +1,8 @@
 # ADR-0059: 종료 후 처리 현황은 두 상태축을 접지 않고 그대로 준다
 
 > 관련 결정: [ADR-0003 라이브 종료 순차 처리](../choinhoo/0003-simple-live-end-sequential-process.md) ·
+> [ADR-0006 REQUESTED 상태 제거](../choinhoo/0006-remove-video-asset-requested-status.md) ·
+> [ADR-0007 녹화 자동 게시·processing 폴링](../choinhoo/0007-recording-ready-auto-publish-and-processing-polling.md) ·
 > [ADR-0034 Egress 완료 webhook](0034-egress-completion-webhook.md) ·
 > [ADR-0039 다시보기 재생 API](0039-replay-playback-api.md) ·
 > [공유 계약](../../CONTRACT.md) · [프론트 라이브 API](../../frontend/api/LIVE.md)
@@ -78,6 +80,8 @@ interface ProcessingStatus {
 
 `status=READY`는 "재생할 수 있다"이고 `replayStatus=PUBLISHED`는 "수강생에게 공개했다"이다. 서로 다른
 사실이라 한 필드로 접지 않는다. 접으면 화면이 "영상은 준비됐지만 게시 전"을 표현할 수 없다.
+후속 ADR-0007은 새 정상 녹화에서 두 값을 같은 트랜잭션으로 `READY + PUBLISHED` 확정하지만,
+응답 축은 합치지 않는다. 기존 `READY + DRAFT`와 철회 자산을 표현해야 하기 때문이다.
 
 ### 2. 표시 문구는 응답에 담지 않는다
 
@@ -98,8 +102,8 @@ interface ProcessingStatus {
 ### 5. 화면은 아직 움직일 상태일 때만 다시 묻는다
 
 `READY`·`FAILED`는 종착 상태라 폴링을 멈춘다. 녹화를 끄고 진행해 자산이 영영 생기지 않는 세션도
-멈춘다. 그 외에는 4초 간격으로 다시 읽는다 — webhook이 나중에 도착하므로 한 번 읽고 멈추면 변화를
-놓친다.
+멈춘다. 후속 ADR-0007에 따라 그 외 상태는 최초 30초 동안 2초, 이후 5초 간격으로 다시 읽는다.
+webhook이 나중에 도착하므로 한 번 읽고 멈추면 변화를 놓친다.
 
 ## 채택하지 않은 대안
 
@@ -124,18 +128,20 @@ FE 타입을 그대로 두면 화면을 안 고쳐도 된다. 그러나 문구�
 
 - 종료 후 오류 화면이 사라진다. 강사가 녹화 성공·실패를 처음으로 확인할 수 있다.
 - 실패 시 `failureCode`가 그대로 보여, 재시도하면 되는지 영상이 날아갔는지 판단할 수 있다.
-- 자산이 `READY`가 되면 검수·게시(`POST .../replay-review/publish`, 이미 구현됨)로 갈 수 있다.
+- 새 자산이 `READY + PUBLISHED`가 되면 replay로 자동 이동한다. 기존 미게시·철회 자산은
+  검수·수동 게시(`POST .../replay-review/publish`)로 갈 수 있다.
 
 ### 한계
 
 - 검수 원고 저장(`PUT .../replay-review`)은 여전히 서버에 없다(CP2·CP3 산출물 대기).
 - AI 후처리 진행 상태는 이 응답에 없다. 받쳐줄 데이터가 생길 때 추가한다.
-- 폴링이라 전이 반영이 최대 4초 늦다. 강사 혼자 보는 화면이라 감수한다.
+- 폴링이라 전이 반영이 최초 30초에는 최대 2초, 이후에는 최대 5초 늦다. 강사 혼자 보는 화면이라 감수한다.
 
 ## 검증
 
 - 백엔드 계약 테스트 `LiveProcessingContractTest` — 두 축 분리, 표시 문구 부재, `FAILED`의 `failureCode`,
   자산 없음이 실패가 아님, 소유권 403·역할 403·404.
-- 프론트 `liveSessionProcessing.test.tsx` — 요약이 서버 값으로 채워짐(하드코딩 제거), READY+DRAFT와
-  READY+PUBLISHED의 문구 구분, READY 전 링크 미생성, 실패 코드 표시, 자산 없음/녹화 끔 구분.
+- 프론트 `liveSessionProcessing.test.tsx` — 요약이 서버 값으로 채워짐(하드코딩 제거), READY+DRAFT의
+  수동 게시와 READY+PUBLISHED의 자동 이동 구분, READY 전 링크 미생성, 실패 코드 표시,
+  자산 없음/녹화 끔 구분.
 - 두 축 분리는 응답에서 `replayStatus`를 접어 보고 계약 테스트가 실제로 깨지는 것을 확인했다.

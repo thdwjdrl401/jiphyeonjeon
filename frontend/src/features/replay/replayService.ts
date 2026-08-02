@@ -9,7 +9,7 @@ export const getReplayCaptions = (lessonId: string) => replayService.getReplayCa
 export const getReplayMessages = (lessonId: string) => replayService.getReplayMessages(lessonId)
 export const askReplayAi = (lessonId: string, question: string, sessionMs: number) => replayService.askReplayAi(lessonId, question, sessionMs)
 export const saveReplayReview = (lessonId: string, transcript: string) => replayService.saveReplayReview(lessonId, transcript)
-export const publishReplayReview = (lessonId: string, transcript: string) => replayService.publishReplayReview(lessonId, transcript)
+export const publishReplayReview = (lessonId: string) => replayService.publishReplayReview(lessonId)
 export const submitReplayQuiz = (lessonId: string, answer: string) => replayService.submitReplayQuiz(lessonId, answer)
 
 export type { ReplayService } from './replayService.interface'

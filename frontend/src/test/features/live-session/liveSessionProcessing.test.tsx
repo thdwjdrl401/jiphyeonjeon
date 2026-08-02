@@ -49,6 +49,7 @@ function renderPage() {
       <MemoryRouter initialEntries={['/instructor/live-sessions/ses-1/processing']}>
         <Routes>
           <Route element={<LiveSessionProcessingPage />} path="/instructor/live-sessions/:sessionId/processing" />
+          <Route element={<h1>다시보기 도착</h1>} path="/instructor/lessons/:lessonId/replay" />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -77,11 +78,11 @@ describe('종료 후 처리 현황 화면', () => {
     expect(await screen.findByText(/아직 수강생에게 공개하지 않았습니다/)).toBeInTheDocument()
   })
 
-  it('게시까지 끝나면 공개 상태로 말이 바뀐다', async () => {
+  it('게시까지 끝나면 다시보기로 자동 이동한다', async () => {
     getProcessingStatus.mockResolvedValue(processing({ status: 'READY', replayStatus: 'PUBLISHED' }))
     renderPage()
 
-    expect(await screen.findByText('수강생에게 공개된 상태입니다.')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '다시보기 도착' })).toBeInTheDocument()
   })
 
   it('READY 전에는 검수로 가는 링크를 만들지 않는다', async () => {

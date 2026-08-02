@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { instructorPaths, studentPaths } from '@/app/router/paths'
 import PersonalAiQuestionPanel from '@/features/ai/PersonalAiQuestionPanel'
 import { useAuth } from '@/features/auth/AuthContext'
@@ -49,7 +49,7 @@ export default function ReplayLessonPage() {
   const [positionMs, setPositionMs] = useState(0)
   const [seekRequest, setSeekRequest] = useState<PlaybackSeekRequest | null>(null)
   const [bookmarked, setBookmarked] = useState(false)
-  const [published, setPublished] = useState(false)
+  const queryClient = useQueryClient()
   const toast = useToast()
   // 라이브 강의실과 같은 재생 계약을 쓴다 — BE가 라이브·종료 후 VOD를 한 엔드포인트로 준다.
   const playback = usePlayback(lessonId)
@@ -61,9 +61,12 @@ export default function ReplayLessonPage() {
     onError: () => toast.error('검수 초안을 저장하지 못했습니다.'),
   })
   const publishMutation = useMutation({
-    mutationFn: () => publishReplayReview(lessonId, reviewDraft),
-    onSuccess: () => { setPublished(true); toast.success('교정 자막 게시본을 공개했습니다.') },
-    onError: () => toast.error('게시본을 공개하지 못했습니다.'),
+    mutationFn: () => publishReplayReview(lessonId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['playback', lessonId] })
+      toast.success('다시보기를 수강생에게 공개했습니다.')
+    },
+    onError: () => toast.error('다시보기를 공개하지 못했습니다.'),
   })
   usePageTitle(`다시보기 · ${lesson?.title ?? ''}`)
 
@@ -85,6 +88,12 @@ export default function ReplayLessonPage() {
   if (lessonQuery.isError) return <PageState title="다시보기를 불러오지 못했습니다" />
   if (!lesson) return <PageState title="다시보기를 불러오는 중입니다" />
 
+  const replayStatus = playback.playback?.replayStatus ?? 'NOT_READY'
+  const published = replayStatus === 'PUBLISHED'
+  const canPublishManually = replayStatus === 'DRAFT'
+    || replayStatus === 'READY_FOR_REVIEW'
+    || replayStatus === 'WITHDRAWN'
+
   // 다시보기 AI는 서버에 경로가 없다 — ai-api가 sessionId를 필수로 받고 근거 시각이 attempt-local이라,
   // 다시보기의 세션-ms를 되돌릴 시간 앵커 계약이 서기 전에는 열 수 없다(ADR-0047 §9). 예전에는 질문을
   // 눌러도 501이 조용히 삼켜져 아무 반응이 없었다 — 지금은 왜 못 쓰는지 패널이 먼저 밝힌다.
@@ -97,12 +106,12 @@ export default function ReplayLessonPage() {
       <header className="media-page__title">
         <div><StatusBadge tone="success">REPLAY</StatusBadge><h1>{lesson.title}</h1><small>강의 {lesson.lessonId} · 교정 자막 v2</small></div>
         <div className="media-page__status">
-          {isInstructor ? <><StatusBadge tone="warning">강사 검수 모드</StatusBadge><span>VIDEO READY · {published ? 'PUBLISHED' : 'READY_FOR_REVIEW'}</span></> : <span>학습 진행률 42%</span>}
+          {isInstructor ? <><StatusBadge tone="warning">강사 검수 모드</StatusBadge><span>VIDEO {playback.playback ? `READY · ${replayStatus}` : '상태 확인 중'}</span></> : <span>학습 진행률 42%</span>}
           <Link className="button button--soft button--small" to={lessonPath}>강의 상세</Link>
         </div>
       </header>
 
-      {isInstructor && <div className="review-toolbar"><div><StatusBadge tone={published ? 'success' : 'warning'}>{published ? '게시 완료' : '강사 미리보기'}</StatusBadge><strong>{published ? '새 게시본이 수강생 화면에 반영되었습니다.' : '현재는 라이브 학습 화면과 같은 탭 구성을 미리 봅니다.'}</strong></div><div><button className="button button--soft button--small" type="button" onClick={() => saveReviewMutation.mutate()}>검수 초안 저장</button><button className="button button--primary button--small" type="button" onClick={() => publishMutation.mutate()}>게시본 공개</button></div></div>}
+      {isInstructor && <div className="review-toolbar"><div><StatusBadge tone={published ? 'success' : 'warning'}>{published ? '게시 완료' : '강사 미리보기'}</StatusBadge><strong>{published ? '영상 다시보기가 수강생에게 공개되어 있습니다.' : '기존 미게시 또는 철회된 다시보기입니다.'}</strong></div><div><button className="button button--soft button--small" type="button" onClick={() => saveReviewMutation.mutate()}>검수 초안 저장</button>{canPublishManually && <button className="button button--primary button--small" type="button" disabled={publishMutation.isPending} onClick={() => publishMutation.mutate()}>다시보기 공개</button>}</div></div>}
 
       <div className="media-layout">
         <section className="media-primary">

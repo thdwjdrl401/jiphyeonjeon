@@ -8,6 +8,7 @@ import com.liveclass.live.service.AgentDispatchControl;
 import com.liveclass.live.service.LiveRoomControl;
 import com.liveclass.support.LiveStartTestSupport;
 import com.liveclass.video.domain.VideoAssetStatus;
+import com.liveclass.video.domain.ReplayStatus;
 import com.liveclass.video.repository.VideoAssetRepository;
 import com.liveclass.video.service.EgressControl;
 import com.liveclass.video.service.S3RecordingStorage;
@@ -29,7 +30,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -38,6 +41,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -66,6 +70,7 @@ class LiveKitWebhookContractTest {
 
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
     private final List<UUID> createdSessions = new ArrayList<>();
+    private final Map<String, Cookie[]> ownersBySession = new HashMap<>();
 
     @AfterEach
     void cleanup() {
@@ -73,6 +78,7 @@ class LiveKitWebhookContractTest {
             videoAssetRepository.findByLiveSessionId(sessionId).ifPresent(videoAssetRepository::delete);
         }
         createdSessions.clear();
+        ownersBySession.clear();
     }
 
     @Test
@@ -94,6 +100,15 @@ class LiveKitWebhookContractTest {
         assertThat(asset.getSizeBytes()).isEqualTo(10_485_760L);
         assertThat(asset.getSegmentCount()).isEqualTo(300);
         assertThat(asset.getReadyAt()).isNotNull();
+        assertThat(asset.getReplayStatus()).isEqualTo(ReplayStatus.PUBLISHED);
+        assertThat(asset.getPublishedAt()).isEqualTo(asset.getReadyAt());
+        assertThat(asset.getPublishedBy()).isNull();
+        assertThat(asset.getFailureCode()).isNull();
+        mockMvc.perform(get("/api/instructor/live-sessions/" + sessionId + "/processing")
+                        .cookie(ownersBySession.get(sessionId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.videoAsset.status").value("READY"))
+                .andExpect(jsonPath("$.videoAsset.replayStatus").value("PUBLISHED"));
     }
 
     @Test
@@ -109,6 +124,14 @@ class LiveKitWebhookContractTest {
         var asset = videoAssetRepository.findByLiveSessionId(UUID.fromString(sessionId)).orElseThrow();
         assertThat(asset.getStatus()).isEqualTo(VideoAssetStatus.FAILED);
         assertThat(asset.getFailureCode()).contains("disk full");
+        assertThat(asset.getReplayStatus()).isEqualTo(ReplayStatus.DRAFT);
+        assertThat(asset.getPublishedAt()).isNull();
+        mockMvc.perform(get("/api/instructor/live-sessions/" + sessionId + "/processing")
+                        .cookie(ownersBySession.get(sessionId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.videoAsset.status").value("FAILED"))
+                .andExpect(jsonPath("$.videoAsset.failureCode").value(org.hamcrest.Matchers.containsString("disk full")))
+                .andExpect(jsonPath("$.videoAsset.replayStatus").value("DRAFT"));
     }
 
     @Test
@@ -164,11 +187,17 @@ class LiveKitWebhookContractTest {
                 "segmentResults":[{"playlistName":"index.m3u8","duration":"600000000000","size":"10485760","segmentCount":300}]}}
                 """.formatted(egressId);
         postWebhook(body, sign(body)).andExpect(status().isNoContent());
+        var first = videoAssetRepository.findByLiveSessionId(UUID.fromString(sessionId)).orElseThrow();
+        var firstReadyAt = first.getReadyAt();
+        var firstPublishedAt = first.getPublishedAt();
         // 같은 완료가 또 와도 안전(멱등).
         postWebhook(body, sign(body)).andExpect(status().isNoContent());
 
         var asset = videoAssetRepository.findByLiveSessionId(UUID.fromString(sessionId)).orElseThrow();
         assertThat(asset.getStatus()).isEqualTo(VideoAssetStatus.READY);
+        assertThat(asset.getReplayStatus()).isEqualTo(ReplayStatus.PUBLISHED);
+        assertThat(asset.getReadyAt()).isEqualTo(firstReadyAt);
+        assertThat(asset.getPublishedAt()).isEqualTo(firstPublishedAt);
     }
 
     @Test
@@ -210,6 +239,8 @@ class LiveKitWebhookContractTest {
         var asset = videoAssetRepository.findByLiveSessionId(UUID.fromString(sessionId)).orElseThrow();
         assertThat(asset.getStatus()).isEqualTo(VideoAssetStatus.FAILED);
         assertThat(asset.getFailureCode()).isEqualTo("MANIFEST_MISSING");
+        assertThat(asset.getReplayStatus()).isEqualTo(ReplayStatus.DRAFT);
+        assertThat(asset.getPublishedAt()).isNull();
     }
 
     @Test
@@ -228,6 +259,30 @@ class LiveKitWebhookContractTest {
         var asset = videoAssetRepository.findByLiveSessionId(UUID.fromString(sessionId)).orElseThrow();
         assertThat(asset.getStatus()).isEqualTo(VideoAssetStatus.READY);
         assertThat(asset.getDurationMs()).isEqualTo(600_000L);
+        assertThat(asset.getReplayStatus()).isEqualTo(ReplayStatus.PUBLISHED);
+        assertThat(asset.getPublishedAt()).isEqualTo(asset.getReadyAt());
+    }
+
+    @Test
+    void withdrawn_asset_is_not_republished_by_late_complete_webhook() throws Exception {
+        String egressId = "EG_" + UUID.randomUUID();
+        String sessionId = startRecording(egressId);
+        var before = videoAssetRepository.findByLiveSessionId(UUID.fromString(sessionId)).orElseThrow();
+        before.setReplayStatus(ReplayStatus.WITHDRAWN);
+        before.setWithdrawReason("강사 철회");
+        videoAssetRepository.saveAndFlush(before);
+        when(recordingStorage.head(any(), any())).thenReturn(Optional.of(10_485_760L));
+
+        String body = """
+                {"event":"egress_ended","egressInfo":{"egressId":"%s","status":"EGRESS_COMPLETE"}}
+                """.formatted(egressId);
+        postWebhook(body, sign(body)).andExpect(status().isNoContent());
+
+        var asset = videoAssetRepository.findByLiveSessionId(UUID.fromString(sessionId)).orElseThrow();
+        assertThat(asset.getStatus()).isEqualTo(VideoAssetStatus.READY);
+        assertThat(asset.getReplayStatus()).isEqualTo(ReplayStatus.WITHDRAWN);
+        assertThat(asset.getPublishedAt()).isNull();
+        assertThat(asset.getWithdrawReason()).isEqualTo("강사 철회");
     }
 
     // ---- 헬퍼 ----
@@ -242,6 +297,7 @@ class LiveKitWebhookContractTest {
         Cookie[] instructor = loginAs();
         String[] ids = createSession(instructor);
         String sessionId = ids[1];
+        ownersBySession.put(sessionId, instructor);
         String instructorId = json(mockMvc.perform(get("/api/auth/me").cookie(instructor)).andReturn())
                 .get("userId").asString();
         LiveStartTestSupport.stubInstructorPublishing(roomControl, sessionId, instructorId);

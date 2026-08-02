@@ -32,7 +32,7 @@
 | 자료 업로드 | 업로드·검증·활성·삭제·실패 상태 | 브라우저·서버 | 진행률, 재시도, 편집 잠금 |
 | 자료 처리 작업 | `QUEUED`부터 `COMPLETED` 또는 `FAILED` | AI worker | polling과 단계 안내 |
 | 라이브 세션 | `DRAFT`부터 `ENDED`, `CANCELLED`, `FAILED` | 강사·라이브 오케스트레이터 | 입장, 시작, 종료, 재시도 |
-| 녹화 자산 | `REQUESTED`부터 `READY` 또는 `FAILED` | Egress·webhook | 강사 미리보기와 처리 안내 |
+| 녹화 자산 | `STARTING`부터 `READY` 또는 `FAILED` | Egress·webhook | 강사 미리보기와 처리 안내 |
 | 다시보기 | `DRAFT`, `READY_FOR_REVIEW`, `PUBLISHED`, `WITHDRAWN` | 강사 | 수강생 VOD 공개 여부 |
 | AI 게시 콘텐츠 | 준비·검수·초안·게시·실패 상태 | AI worker·강사 | 자막·용어·챕터·퀴즈 노출 |
 
@@ -224,13 +224,12 @@ DRAFT/SCHEDULED/OPEN → CANCELLED
 라이브 세션과 녹화 자산은 독립적으로 움직인다.
 
 ```text
-REQUESTED → STARTING → RECORDING → FINALIZING → VERIFYING → READY
-     └──────────── 각 기동·처리 단계 오류 ───────────────→ FAILED
+STARTING → RECORDING → FINALIZING → VERIFYING → READY
+    └────────── 각 기동·처리 단계 오류 ─────────────→ FAILED
 ```
 
 | 상태 | 의미 | 프론트 처리 |
 |---|---|---|
-| `REQUESTED` | 녹화 생성 요청 저장 | 준비 중 |
 | `STARTING` | Egress 기동 중 | 준비 중, 중복 시작 차단 |
 | `RECORDING` | 녹화 진행 중 | 라이브 화면에 녹화 상태 표시 |
 | `FINALIZING` | 세션 종료 후 HLS 마무리 | 다시보기 준비 중 |
@@ -238,22 +237,29 @@ REQUESTED → STARTING → RECORDING → FINALIZING → VERIFYING → READY
 | `READY` | 재생 가능한 HLS 자산 확인 완료 | 강사 미리보기·검수 가능 |
 | `FAILED` | 녹화 또는 처리 실패 | 라이브와 분리해 실패 안내 |
 
-현재 백엔드는 `REQUESTED → RECORDING → FINALIZING`과 시작 실패 시 `FAILED`까지 구현한다. `FINALIZING → VERIFYING → READY`는 Egress 완료 webhook 연동이 추가되어야 한다. 현재 시작 성공 경로는 `STARTING`을 실질적으로 건너뛴다.
+현재 백엔드는 `STARTING → RECORDING → FINALIZING → VERIFYING → READY/FAILED`를 구현한다.
+`STARTING`은 Egress 시작 결과가 불확실할 때 실제로 유지되며, 사용하지 않던 `REQUESTED`는
+[ADR-0006](decisions/choinhoo/0006-remove-video-asset-requested-status.md)으로 제거했다.
 
-`videoAssetStatus=READY`는 파일이 재생 가능하다는 뜻일 뿐 학생 공개를 뜻하지 않는다.
+`videoAssetStatus=READY` 자체는 파일이 재생 가능하다는 기술 상태다. 새 정상 녹화는
+[ADR-0007](decisions/choinhoo/0007-recording-ready-auto-publish-and-processing-polling.md)에 따라 성공
+webhook 트랜잭션에서 `replayStatus=PUBLISHED`도 함께 커밋하므로 결과적으로 학생에게 즉시 공개된다.
+기존 `READY + DRAFT`와 `WITHDRAWN`은 자동 공개하지 않는다.
 
 ## 10. 다시보기 공개 상태
 
 ```text
-DRAFT → READY_FOR_REVIEW → PUBLISHED → WITHDRAWN
+새 정상 녹화: DRAFT ──(VideoAsset READY와 원자적 확정)──→ PUBLISHED
+기존 자산:    DRAFT 또는 READY_FOR_REVIEW ──(강사 수동 게시)──→ PUBLISHED
+공개 관리:    PUBLISHED → WITHDRAWN ──(강사 수동 재게시)──→ PUBLISHED
 ```
 
 | 상태 | 의미 | 강사 | 학생 |
 |---|---|---|---|
-| `DRAFT` | 녹화 생성 시 만들어진 공개 초안 | 처리 상태 확인 | 재생 불가 |
-| `READY_FOR_REVIEW` | 영상 자산 준비가 끝나 검수 가능 | 미리보기·검수·게시 | 재생 불가 |
-| `PUBLISHED` | 강사가 다시보기를 게시 | 관리·공개 중단 | 조건 충족 시 재생 가능 |
-| `WITHDRAWN` | 공개 중단 | 재게시 정책 미정 | 신규 재생 불가 |
+| `DRAFT` | 녹화 생성·처리 중 또는 기존 미게시 자산 | 처리 상태 확인, 기존 자산 수동 게시 | 재생 불가 |
+| `READY_FOR_REVIEW` | 기존 수동 검수 정책의 호환 상태. 새 정상 경로는 거치지 않음 | 미리보기·검수·게시 | 재생 불가 |
+| `PUBLISHED` | 새 정상 녹화의 시스템 자동 게시 또는 강사의 수동 게시 | 관리·공개 중단 | 조건 충족 시 재생 가능 |
+| `WITHDRAWN` | 강사가 공개 중단 | 미리보기·수동 재게시 | 신규 재생 불가 |
 
 학생 VOD 접근은 최소한 다음 조건을 모두 만족해야 한다.
 
@@ -264,7 +270,11 @@ status=PUBLISHED
 + replayStatus=PUBLISHED
 ```
 
-실제 허용 여부는 서버의 접근 검사와 `allowedActions`를 따른다. 이미 발급된 재생 URL을 `WITHDRAWN` 또는 `REVOKED` 시 즉시 무효화할지는 TTL 정책과 함께 확정해야 한다.
+새 정상 녹화는 manifest 검증 성공 시 `videoAssetStatus=READY`와 `replayStatus=PUBLISHED`를 같은 DB
+트랜잭션에서 확정한다. 실패 자산은 `FAILED + DRAFT`로 남기며, 배포 전에 존재하던
+`READY + DRAFT`는 일괄 자동 게시하지 않는다. 실제 허용 여부는 서버의 접근 검사와
+`allowedActions`를 따른다. 이미 발급된 재생 URL을 `WITHDRAWN` 또는 `REVOKED` 시 즉시 무효화할지는
+TTL 정책과 함께 확정해야 한다.
 
 ## 11. AI 후처리와 게시 콘텐츠 상태
 
@@ -311,7 +321,7 @@ NOT_READY → PROCESSING → READY_FOR_REVIEW → DRAFT_SAVED → PUBLISHED
 | 레슨 게시 | 레슨 `READY` | 강사의 명시적 게시 명령 필요 |
 | 라이브 시작 | 레슨 `PUBLISHED` + 필수 자료 존재 + AI 준비 완료 + 진행 중 자료 작업 없음 + 세션 `SCHEDULED` 또는 `OPEN` + preflight 통과 | 최종 판단은 서버 |
 | 학생 라이브 입장 | 수강 `ACTIVE` + 입장 가능한 세션 상태 | token 발급 결과와 `allowedActions` 사용 |
-| 강사 VOD 미리보기 | 녹화 자산 `READY` | replay 게시 전에도 가능 |
+| 강사 VOD 확인 | 녹화 자산 `READY` + replay `PUBLISHED` | 새 정상 경로는 처리 폴링을 멈추고 replay 화면으로 자동 이동. 기존 미게시 자산은 수동 진입·게시 가능 |
 | 학생 VOD 재생 | 레슨 `PUBLISHED` + 수강 `ACTIVE` + 녹화 자산 `READY` + replay `PUBLISHED` | 네 축을 모두 확인 |
 | AI 콘텐츠 노출 | 해당 영역 `PUBLISHED` | 영역별 독립 노출 |
 
@@ -326,7 +336,16 @@ transcriptStatus   = PROCESSING
 quizStatus         = NOT_STARTED
 ```
 
-이 조합은 모순이 아니다. 레슨은 게시 상태를 유지하고, 라이브는 끝났으며, 녹화와 AI는 별도로 후처리 중인 상태다.
+이 조합은 모순이 아니다. 레슨은 게시 상태를 유지하고, 라이브는 끝났으며, 녹화와 AI는 별도로 후처리
+중인 상태다. 정상 녹화 webhook 처리가 끝나면 영상 관련 두 상태만 다음처럼 함께 바뀐다.
+
+```text
+liveSessionStatus = ENDED
+videoAssetStatus  = READY
+replayStatus      = PUBLISHED
+```
+
+자막·용어·챕터·퀴즈의 AI 게시 상태는 이 영상 자동 게시와 무관하게 계속 처리·검수한다.
 
 ## 13. 상태처럼 보이지만 별도로 다룰 값
 

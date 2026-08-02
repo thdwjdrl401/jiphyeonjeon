@@ -2,6 +2,11 @@
 
 > VOD 컴포넌트: [VOD_LESSON.md](../../frontend/components/VOD_LESSON.md) · API 초안: [VOD_LEARNING_AI.md](../../frontend/api/VOD_LEARNING_AI.md) · VOD 기반 ADR: [0010](../songjeongki/0010-self-host-vod.md)
 
+> **2026-08-02 영상 게시 정책 부분 대체**: 새 정상 녹화는
+> [ADR-0007](../choinhoo/0007-recording-ready-auto-publish-and-processing-polling.md)에 따라
+> `videoAssetStatus=READY + replayStatus=PUBLISHED`로 자동 게시한다. 아래 AI 후보·검수본의 수동 게시,
+> 영상과 AI 게시 상태의 분리, 기존·철회 영상의 수동 게시 정책은 유지한다.
+
 - **상태**: 제품 목표 채택
 - **일자**: 2026-07-21
 - **적용 범위**: VOD 공개, AI 콘텐츠 검수, 개인 학습, 퀴즈
@@ -20,7 +25,9 @@
    - `videoAssetStatus`: 녹화·검증의 기술 상태
    - `replayStatus`: 학생 영상 공개 상태
    - 자막·용어·챕터·퀴즈의 영역별 AI 처리·게시 상태
-3. `videoAssetStatus=READY`는 강사 미리보기 가능을 뜻하며 학생 자동 공개가 아니다.
+3. `videoAssetStatus=READY`는 기술 상태지만, 새 정상 녹화는 성공 webhook이
+   `replayStatus=PUBLISHED`를 같은 트랜잭션에서 확정해 학생 영상을 자동 공개한다. 기존
+   `READY + DRAFT/READY_FOR_REVIEW`와 `WITHDRAWN`은 자동 공개하지 않는다.
 4. 수강생 영상 재생은 `replayStatus=PUBLISHED`일 때만 허용한다.
 5. 영상은 AI 게시본 없이 먼저 공개할 수 있다. AI 일부 실패도 이미 게시된 영상과 다른 게시 영역을 막지 않는다.
 6. AI 원본과 후보는 `ai` 영역에 보존하고 학생에게 자동 공개하지 않는다.
@@ -59,4 +66,3 @@
 - 90% 완료를 계산할 watched range 병합·중복 재생·out-of-order 저장 정책이 필요하다.
 - 퀴즈 재응시 횟수와 정답·해설 공개 범위를 별도 확정한다.
 - 게시본 되돌리기와 종료 후 자료 revision은 후속 범위다.
-

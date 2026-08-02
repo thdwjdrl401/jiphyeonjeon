@@ -72,8 +72,8 @@ public class LiveAiAnswerService {
     public RagAnswerCommand prepare(UUID sessionId, String question) {
         LiveSession session = liveSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new LiveSessionNotFoundException("라이브 세션을 찾을 수 없습니다."));
-        // ENDING은 HLS 지연 구간이므로 질문을 허용하고, ENDED부터 업스트림 호출 전에 닫는다.
-        interactionGuard.requireOpen(session);
+        // 종료된 세션도 저장된 전체 자막을 근거로 후속 질문할 수 있다.
+        interactionGuard.requireInteractionAllowed(session);
         long contextTimeMs = liveCaptionRepository
                 .findFirstBySessionIdAndEventTypeInOrderByOccurredAtDescIdDesc(sessionId, CaptionEvent.CONTEXT_TIME_TYPES)
                 .map(LiveCaption::getStreamElapsedMs)

@@ -63,6 +63,7 @@ function pollingPlayback(): PlaybackView {
     lessonId: 'les-1',
     sessionId: 'ses-1',
     liveSessionStatus: 'LIVE',
+    replayStatus: 'DRAFT',
     currentSessionMs: 600_000,
     durationMs: null,
     source: { url: '/api/lessons/les-1/playback/manifest', availableFromMs: 1_250, availableToMs: 600_000 },

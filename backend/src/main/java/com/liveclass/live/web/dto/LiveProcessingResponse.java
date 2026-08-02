@@ -13,8 +13,8 @@ import java.time.OffsetDateTime;
  * 문구를 계약에 넣으면 한 줄 고치는 데 서버 배포가 필요해진다.
  *
  * <p><b>준비와 게시를 하나로 접지 않는다.</b> {@code videoAsset.status=READY}는 "영상을 재생할 수 있다"이고
- * {@code replayStatus=PUBLISHED}는 "수강생에게 공개했다"이다. 자산이 READY여도 게시는 강사가 따로 한다
- * (ADR-0003 §3 — 독립된 상태축).
+ * {@code replayStatus=PUBLISHED}는 "수강생에게 공개했다"이다. 새 정상 녹화는 둘을 한 트랜잭션에서
+ * 확정하지만 기존 미게시·철회 자산에는 다른 조합이 남을 수 있다(ADR-0059, choinhoo/0007).
  */
 @Schema(description = "종료 후 녹화 처리 현황. 라이브 상태와 녹화 자산 상태는 별개로 움직인다.")
 public record LiveProcessingResponse(
@@ -41,7 +41,7 @@ public record LiveProcessingResponse(
 
             String videoAssetId,
 
-            @Schema(description = "REQUESTED·STARTING·RECORDING·FINALIZING·VERIFYING·READY·FAILED",
+            @Schema(description = "STARTING·RECORDING·FINALIZING·VERIFYING·READY·FAILED",
                     example = "READY")
             String status,
 

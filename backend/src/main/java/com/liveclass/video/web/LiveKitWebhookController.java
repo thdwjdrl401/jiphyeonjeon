@@ -39,7 +39,8 @@ public class LiveKitWebhookController {
     }
 
     @Operation(summary = "LiveKit egress webhook",
-            description = "egress 완료/실패 신호를 받아 VideoAsset을 READY 또는 FAILED로 확정한다. 서명으로 인증한다.")
+            description = "egress 완료/실패 신호를 받아 VideoAsset을 READY 또는 FAILED로 확정하고, "
+                    + "신규 정상 녹화는 READY와 ReplayStatus PUBLISHED를 함께 저장한다. 서명으로 인증한다.")
     @PostMapping(value = "/api/webhooks/livekit", consumes = MediaType.ALL_VALUE)
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void onWebhook(@RequestBody(required = false) byte[] body,

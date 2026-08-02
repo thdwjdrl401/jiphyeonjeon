@@ -1,5 +1,6 @@
 package com.liveclass.video.web.dto;
 
+import com.liveclass.video.domain.ReplayStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.OffsetDateTime;
@@ -19,6 +20,8 @@ public record PlaybackResponse(
         UUID sessionId,
         OffsetDateTime startedAt,
         String liveSessionStatus,
+        @Schema(description = "영상 다시보기 공개 상태. AI 산출물 게시 상태와는 별개다.")
+        ReplayStatus replayStatus,
         @Schema(description = "재생 가능한 최신 지점(세션 상대 ms). 라이브 엣지.")
         Long currentSessionMs,
         @Schema(description = "첫 PDT − 세션 시작시각(ms). 자막 싱크 기준. 구할 수 없으면 null.")

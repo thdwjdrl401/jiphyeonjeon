@@ -59,7 +59,7 @@ class LiveProcessingContractTest {
                 .andExpect(jsonPath("$.sessionId").value(ids[1]))
                 .andExpect(jsonPath("$.liveSessionStatus").exists())
                 .andExpect(jsonPath("$.recordingEnabled").value(true))
-                // 자산이 READY여도 게시는 별개다. 이 둘이 한 필드로 접히면 안 된다.
+                // 기존 미게시 자산처럼 READY + DRAFT도 표현할 수 있어야 두 축이 접히지 않는다.
                 .andExpect(jsonPath("$.videoAsset.status").value("READY"))
                 .andExpect(jsonPath("$.videoAsset.replayStatus").value("DRAFT"))
                 .andExpect(jsonPath("$.videoAsset.failureCode").doesNotExist());

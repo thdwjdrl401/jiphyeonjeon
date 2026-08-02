@@ -62,7 +62,7 @@
 - **커리큘럼과의 관계**: 해당 커리큘럼 강사 / 수강생 / 학생·미수강 / 수강 승인 대기 / 강사·비운영자 / 그 외
 - **레슨 상태**: `DRAFT` → `AI_NOT_READY` → `READY` → `PUBLISHED`
 - **라이브 세션 상태**: `DRAFT` → `SCHEDULED` → `OPEN` → `STARTING` → `LIVE` → `ENDING` → `ENDED` (또는 `CANCELLED` / `FAILED`)
-- **녹화·다시보기 상태**: 자산 처리(`FINALIZING`~`READY`/`FAILED`) + 공개(`READY_FOR_REVIEW`/`PUBLISHED`/`WITHDRAWN`)
+- **녹화·다시보기 상태**: 자산 처리(`FINALIZING`~`READY`/`FAILED`) + 공개(`DRAFT`/`READY_FOR_REVIEW`/`PUBLISHED`/`WITHDRAWN`). 새 정상 경로는 `READY + PUBLISHED`를 원자적으로 확정
 
 각 화면 문서의 "역할별 화면"은 이 축들의 조합 중 실제로 화면이 달라지는 지점만 정리한 것이다.
 
@@ -98,8 +98,9 @@
 레슨 상세 ──▶ 라이브 세션 상세
 라이브 세션 상세(강사) ──▶ 사전 점검 ──▶ 라이브 레슨(강의실)
 라이브 세션 상세(수강생) ──▶ 입장 전 점검 ──▶ 라이브 레슨(강의실)
-라이브 레슨 종료 감지 ──▶ 라이브 세션 상세 / 녹화 처리 현황
-녹화 처리 현황(자산 READY) ──▶ VOD 레슨(강사 검수)
+강사 라이브 종료 성공 ──▶ 녹화 처리 현황(2초→5초 폴링)
+녹화 처리 현황(자산 READY + replay PUBLISHED) ──▶ VOD 레슨(강사, 자동 이동)
+수강생 라이브 종료 감지 ──▶ 현재 HLS 마지막 버퍼까지 재생(자동 이동 없음)
 레슨 상세(다시보기 공개됨) ──▶ VOD 레슨
 
 권한 부족 ──▶ 접근 불가

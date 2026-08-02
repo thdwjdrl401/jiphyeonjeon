@@ -76,7 +76,7 @@ fixture 로그인 계정은 이메일 문자열로 역할을 구분한다.
 | 강사 사전 점검 | `/instructor/live-sessions/:sessionId/preflight` | 장치·서버 필수 조건 점검 UI |
 | 학생 라이브 강의실 | `/student/live-sessions/:sessionId/classroom` | 학생 미디어 stage, 되감기, 채팅, 자막, AI, 자료 |
 | 강사 라이브 강의실 | `/instructor/live-sessions/:sessionId/classroom` | 강사 미디어 송출과 세션 운영 제어 |
-| 녹화 처리 | `/instructor/live-sessions/:sessionId/processing` | Egress/HLS·AI 단계 UI |
+| 녹화 처리 | `/instructor/live-sessions/:sessionId/processing` | 녹화 DB snapshot 폴링·자동 게시 확인·강사 replay 자동 이동 |
 | 학생 VOD 다시보기 | `/student/lessons/:lessonId/replay` | 플레이어, 챕터, 자막 검색, 채팅 replay, AI, 퀴즈 |
 | 강사 VOD 검수 | `/instructor/lessons/:lessonId/replay` | replay 콘텐츠 검수와 학습 통계 |
 | 접근 불가 | `/forbidden` | 실패 사유별 복구 동선 |
@@ -147,7 +147,8 @@ src/styles/learning.css            라이브·VOD 스타일
 4. 라이브 세션 상세·폼: 구현된 일정·상태 API 연결
 5. prejoin/preflight: 브라우저 장치 점검과 서버 readiness 연결
 6. 라이브 강의실: LiveKit → STOMP 채팅 → 자막 → AI 순으로 연결
-7. 녹화 처리와 VOD: Egress webhook·playback 계약 확정 후 연결
+7. 녹화 처리와 VOD: ADR-0007의 processing API, 2초→5초 폴링,
+   `READY + PUBLISHED` replay 자동 이동과 서버 게시 상태 연결 완료. 남은 자막·용어·RAG 재생을 연결
 8. 프로필: 수정 API와 계정 정책 확정 후 연결
 
 각 페이지를 실제 API로 전환할 때 fixture와 실제 응답을 같은 도메인 모델로 정규화하고, API JSON 필드·경로·상태코드를 검증하는 계약 테스트를 추가한다.

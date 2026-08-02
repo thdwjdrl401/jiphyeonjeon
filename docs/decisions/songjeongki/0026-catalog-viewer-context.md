@@ -6,6 +6,11 @@
 - **일자**: 2026-07-22
 - **관련**: Sub Ⅱ / CP0 · [CONTRACT §2](../../CONTRACT.md) · [ADR-0023](0023-asset-presigned-upload.md)
 
+> **후속 상태(2026-08-02)**: 아래 “값이 비는 필드”는 이 ADR 채택 당시의 구현 기록이다. 녹화 완료
+> webhook은 이후 구현됐고, 새 정상 녹화는
+> [ADR-0007](../choinhoo/0007-recording-ready-auto-publish-and-processing-polling.md)에 따라
+> `READY + PUBLISHED`로 자동 확정하는 목표가 채택됐다. 기존 `READY + DRAFT`만 수동 게시 대상으로 남는다.
+
 ## 맥락 (Context)
 
 프론트가 mock에서 실 API로 넘어가려는 시점에 두 가지가 걸렸다.
@@ -74,12 +79,13 @@ FE가 역할·수강상태를 스스로 조합해 CTA를 정하는 방법도 있
 - `enrollment/web` 패키지 제거(컨트롤러·DTO가 `curriculum/web`으로 이동). `enrollment`는 도메인·포트만
   갖는 모듈이 된다.
 - `LiveSessionDirectory.findByLessons`(배치 조회) 추가 — 목차가 레슨마다 세션을 묻지 않도록.
-- **값이 비는 필드와 그 이유** (각각 사실 확인함):
+- **채택 당시 값이 비던 필드와 그 이유** (당시 각각 사실 확인함):
   - `progress`·`learning` — `learning` 패키지(`LearningProgress`·`Bookmark`)가 엔티티만 있고
     배선되지 않았다([ADR-0024](0024-orphan-module-scaffolding.md)). 배선 시 채운다.
   - `durationMs` — `video_asset`에 컬럼은 있으나 녹화 완료 webhook(FINALIZING→VERIFYING→READY)이
     아직 없어 채워지지 않는다. 값이 생기면 그대로 흘러나간다.
-  - `replayStatus` — **비어 있지 않다.** 녹화가 없으면 `NOT_READY`, 라이브를 한 번 한 레슨은 `DRAFT`다.
-    게시 검수 흐름이 없어 `PUBLISHED`에는 아직 도달하지 않으므로 `destination=VOD`도 현재는 나오지 않는다.
+  - `replayStatus` — **비어 있지 않다.** 당시 녹화가 없으면 `NOT_READY`, 라이브를 한 번 한 레슨은
+    `DRAFT`였고 게시 검수 흐름 전이라 `PUBLISHED`와 `destination=VOD`에 도달하지 않았다. 현재 목표
+    정책은 위 후속 상태처럼 새 정상 녹화를 자동 게시한다.
   - `materials` — 커리큘럼 단위 자료를 연결하는 API가 없다. 스키마의 `material_asset`은 **강의 단위**라
     모델이 갈린다(별건으로 정리 필요). 에셋 업로드도 `MATERIAL` kind는 현재 400으로 거부된다.
