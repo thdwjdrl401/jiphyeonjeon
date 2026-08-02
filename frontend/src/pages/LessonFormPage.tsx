@@ -62,7 +62,15 @@ export default function LessonFormPage() {
    */
   const removeLesson = async () => {
     if (!lessonId) return
-    if (!window.confirm(`강의 "${title.trim() || currentLesson?.title || ''}"을(를) 삭제할까요? 되돌릴 수 없습니다.`)) return
+    // 녹화가 있으면 영상 파일까지 지운다. 무엇이 사라지는지 적지 않으면 다시보기가 없어질 줄 모르고
+    // 누르게 되고, 파일은 복구할 수 없다.
+    const confirmed = window.confirm(
+      `강의 "${title.trim() || currentLesson?.title || ''}"을(를) 삭제할까요?\n\n`
+        + '· 라이브 일정·자료·채팅이 함께 사라집니다.\n'
+        + '· 녹화가 있으면 다시보기 영상도 함께 삭제됩니다.\n\n'
+        + '되돌릴 수 없습니다.',
+    )
+    if (!confirmed) return
     setDeleting(true)
     try {
       await deleteLesson(lessonId)
@@ -183,11 +191,11 @@ export default function LessonFormPage() {
         </Panel>}
 
         {isEdit && (
-          <Panel title="강의 삭제" description="강의와 연결된 라이브 일정·자료가 함께 사라집니다.">
+          <Panel title="강의 삭제" description="라이브 일정·자료·채팅과 함께, 녹화가 있으면 다시보기 영상까지 사라집니다.">
             <div className="curriculum-danger-zone">
               <div>
                 <strong>이 강의를 삭제합니다</strong>
-                <p>되돌릴 수 없어요. 삭제는 이 화면에서만 할 수 있습니다.</p>
+                <p>다시보기 영상은 복구할 수 없어요. 삭제는 이 화면에서만 할 수 있습니다.</p>
               </div>
               <button className="button button--ghost button--danger" type="button" disabled={deleting} onClick={() => void removeLesson()}>
                 {deleting ? '삭제 중' : '강의 삭제'}

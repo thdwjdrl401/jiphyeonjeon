@@ -4,6 +4,7 @@ import com.liveclass.aiintegration.api.OutboxPublisher;
 import com.liveclass.asset.api.AssetDirectory;
 import com.liveclass.asset.api.AssetRef;
 import com.liveclass.curriculum.domain.Curriculum;
+import com.liveclass.video.api.LessonRecordingCleanup;
 import com.liveclass.curriculum.domain.CurriculumLifecycleStatus;
 import com.liveclass.curriculum.domain.EnrollmentType;
 import com.liveclass.curriculum.domain.Section;
@@ -59,6 +60,8 @@ public class InstructorCurriculumService {
     private final LiveSessionDirectory liveSessionDirectory;
     private final AssetDirectory assetDirectory;
     private final OutboxPublisher outboxPublisher;
+    /** 강의 삭제 시 녹화(자산 행 + 산출물)를 함께 정리하는 video 모듈 포트. */
+    private final LessonRecordingCleanup lessonRecordingCleanup;
     private final boolean embeddingEnabled;
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
 
@@ -72,6 +75,7 @@ public class InstructorCurriculumService {
                                        LiveSessionDirectory liveSessionDirectory,
                                        AssetDirectory assetDirectory,
                                        OutboxPublisher outboxPublisher,
+                                       LessonRecordingCleanup lessonRecordingCleanup,
                                        @Value("${material.embedding.enabled:false}") boolean embeddingEnabled) {
         this.curriculumRepository = curriculumRepository;
         this.sectionRepository = sectionRepository;
@@ -83,6 +87,7 @@ public class InstructorCurriculumService {
         this.liveSessionDirectory = liveSessionDirectory;
         this.assetDirectory = assetDirectory;
         this.outboxPublisher = outboxPublisher;
+        this.lessonRecordingCleanup = lessonRecordingCleanup;
         this.embeddingEnabled = embeddingEnabled;
     }
 
@@ -390,14 +395,25 @@ public class InstructorCurriculumService {
         return lessonManagement.update(lessonId, title, description);
     }
 
+    /**
+     * 강의를 지운다. 세션·자료·북마크·학습기록은 DB가 CASCADE로 함께 지우지만 <b>녹화 자산은 아니다</b> —
+     * {@code video_asset}의 FK가 NO ACTION이라, 녹화가 한 번이라도 남은 강의는 삭제가 DB에서 막혔다.
+     * 게다가 그 실패가 "구조가 동시에 변경되었습니다. 다시 시도해 주세요"로 올라와, 될 리 없는 일을
+     * 재시도하라고 안내하고 있었다.
+     *
+     * <p>그래서 녹화를 먼저 정리하고 지운다. 무엇을 지울지는 video 모듈이 정한다(포트). 영상 파일은 그
+     * 모듈이 <b>커밋 뒤에</b> 지우므로 이 트랜잭션이 되돌아가면 파일도 그대로 남는다.
+     */
     @Transactional
     public void deleteLesson(UUID instructorId, UUID lessonId) {
         LessonView lesson = requireOwnedLesson(instructorId, lessonId);
+        int removedRecordings = lessonRecordingCleanup.deleteByLesson(lessonId);
         lessonManagement.delete(lessonId);
         // lesson_count는 트리거가 −1. 구조 변경이므로 structure_version만 올린다.
         Section section = requireOwnedSection(instructorId, lesson.sectionId());
         curriculumRepository.bumpStructureVersion(section.getCurriculumId());
-        log.info(Audit.MARKER, "레슨 삭제 sectionId={} lessonId={}", lesson.sectionId(), lessonId);
+        log.info(Audit.MARKER, "레슨 삭제 sectionId={} lessonId={} 녹화자산={}",
+                lesson.sectionId(), lessonId, removedRecordings);
     }
 
     /**

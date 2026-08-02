@@ -9,11 +9,17 @@ import software.amazon.awssdk.core.ResponseBytes;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3Configuration;
+import software.amazon.awssdk.services.s3.model.Delete;
+import software.amazon.awssdk.services.s3.model.DeleteObjectsRequest;
+import software.amazon.awssdk.services.s3.model.DeleteObjectsResponse;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
+import software.amazon.awssdk.services.s3.model.ObjectIdentifier;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
@@ -21,6 +27,7 @@ import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignReques
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -98,6 +105,37 @@ public class S3RecordingStorage implements RecordingStorage, ReplayStorage {
             }
             throw e;   // 그 외(권한·타임아웃·5xx 등)는 '확인 불가' — 호출자가 fail-open 판단
         }
+    }
+
+    @Override
+    public long deletePrefix(String bucket, String prefix) {
+        long deleted = 0;
+        String continuationToken = null;
+        do {
+            ListObjectsV2Response listed = s3Client.listObjectsV2(ListObjectsV2Request.builder()
+                    .bucket(bucket)
+                    .prefix(prefix)
+                    .continuationToken(continuationToken)
+                    .build());
+            List<ObjectIdentifier> keys = listed.contents().stream()
+                    .map(o -> ObjectIdentifier.builder().key(o.key()).build())
+                    .toList();
+            if (!keys.isEmpty()) {
+                // DeleteObjects는 한 번에 1000개까지고 목록 페이지도 기본 1000이라 페이지 단위로 그대로 넘긴다.
+                DeleteObjectsResponse result = s3Client.deleteObjects(DeleteObjectsRequest.builder()
+                        .bucket(bucket)
+                        .delete(Delete.builder().objects(keys).build())
+                        .build());
+                deleted += keys.size() - result.errors().size();
+                if (!result.errors().isEmpty()) {
+                    // 일부만 지워진 것을 조용히 성공으로 넘기지 않는다 — 파일이 남았는지 호출자가 알아야 한다.
+                    throw new IllegalStateException("녹화 객체 일부를 지우지 못했습니다: prefix=" + prefix
+                            + ", 실패=" + result.errors().size() + "건, 첫 사유=" + result.errors().get(0).message());
+                }
+            }
+            continuationToken = Boolean.TRUE.equals(listed.isTruncated()) ? listed.nextContinuationToken() : null;
+        } while (continuationToken != null);
+        return deleted;
     }
 
     @Override
