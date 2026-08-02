@@ -333,4 +333,39 @@ describe('수식 재편집', () => {
       expect(lastSceneWrite()!.elements.map((e) => (e as { id: string }).id)).toEqual(['m2'])
     })
   })
+
+  /**
+   * <b>모델에 보내는 이미지의 긴 변을 상한에 맞춰 줄인다.</b>
+   *
+   * <p>기본값을 쓰면 Excalidraw가 `scale: 2`로 그리고 캔버스는 선택 범위 크기로 생긴다. 다이어그램이
+   * 커질수록 픽셀이 제곱으로 늘어 모델의 이미지 한도를 넘고, 상류가 400을 돌려주면 우리는 502로
+   * 감싼다 — 강사에게는 "조금 그리면 되는데 많이 그리면 안 된다"로 보인다. 운영에서 실제로 그렇게
+   * 났다(GMS status=400 반복).
+   *
+   * <p>줄여도 잃는 것이 없다. 여기서 묻는 것은 무엇을 그렸는가이지 좌표가 아니다(ADR-0054).
+   */
+  it('해석 이미지는 긴 변을 상한으로 줄여 보낸다', async () => {
+    const { findByTestId } = render(
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
+    )
+    await findByTestId('excalidraw-editor')
+    const onChange = excalidrawProps.onChange as (els: unknown[], state?: unknown) => void
+    onChange([{ id: 'a', type: 'freedraw', version: 1, x: 0, y: 0, points: [[0, 0], [10, 10]] }],
+      { selectedElementIds: { a: true } })
+
+    await waitFor(() => { expect(document.querySelector('.annotation-action-ring')).not.toBeNull() })
+    fireEvent.click(document.querySelectorAll('.annotation-action-ring__item')[0])
+
+    await waitFor(() => { expect(exportToCanvas).toHaveBeenCalled() })
+    const getDimensions = (exportToCanvas.mock.calls.at(-1)![0] as {
+      getDimensions?: (w: number, h: number) => { scale: number }
+    }).getDimensions
+    expect(getDimensions).toBeTypeOf('function')
+
+    // 작은 그림은 그대로(확대하지 않는다).
+    expect(getDimensions!(800, 600).scale).toBe(1)
+    // 긴 변이 상한을 넘으면 비율을 지켜 줄인다.
+    expect(getDimensions!(4000, 1000).scale).toBeCloseTo(1600 / 4000, 5)
+    expect(getDimensions!(1000, 3200).scale).toBeCloseTo(1600 / 3200, 5)
+  })
 })

@@ -143,6 +143,14 @@ interface InstructorAnnotationLayerProps {
  */
 const OPS_PER_SNAPSHOT = 100
 
+/**
+ * 판서 해석에 보낼 이미지의 긴 변 상한(px).
+ *
+ * <p>이보다 크면 비율을 지켜 줄인다. 모델이 손글씨·도형을 알아보는 데는 이 정도면 충분하고,
+ * 넘기면 상류가 400으로 거절해 강사에게는 502로 보인다.
+ */
+const INTERPRET_IMAGE_MAX_EDGE = 1600
+
 export default function InstructorAnnotationLayer({
   sessionId,
   active,
@@ -479,6 +487,22 @@ export default function InstructorAnnotationLayer({
       appState: { exportBackground: true, viewBackgroundColor: '#ffffff' } as never,
       files: null,
       exportPadding: 16,
+      /*
+       * <b>긴 변을 상한에 맞춰 줄인다.</b>
+       *
+       * <p>기본값을 쓰면 Excalidraw가 `scale: 2`로 그리고 캔버스는 <b>선택 범위 크기</b>로 생긴다.
+       * 다이어그램이 커질수록 픽셀 수가 제곱으로 늘어 모델의 이미지 한도를 넘고, 상류가 400을
+       * 돌려주면 우리는 502로 감싼다 — 강사에게는 "조금 그리면 되는데 많이 그리면 안 된다"로 보인다.
+       *
+       * <p>줄여도 잃는 것이 없다. 여기서 묻는 것은 <b>무엇을 그렸는가</b>이지 좌표가 아니다 —
+       * 좌표는 이미 우리가 획의 점으로 갖고 있다(ADR-0054). 손글씨를 알아보는 데 필요한 해상도만
+       * 있으면 된다.
+       */
+      getDimensions: (width: number, height: number) => {
+        const longest = Math.max(width, height)
+        const scale = longest > INTERPRET_IMAGE_MAX_EDGE ? INTERPRET_IMAGE_MAX_EDGE / longest : 1
+        return { width, height, scale }
+      },
     })
     return canvas.toDataURL('image/png')
   }, [])
