@@ -178,6 +178,7 @@ describe('라이브 세션 HTTP 서비스 계약', () => {
         lessonId: 'les-1',
         sessionId: 'ses-live-1',
         liveSessionStatus: 'LIVE',
+        replayStatus: 'DRAFT',
         currentSessionMs: 3_721_000,
         sessionOffsetMs: 1_250,
         durationMs: null,
@@ -193,6 +194,7 @@ describe('라이브 세션 HTTP 서비스 계약', () => {
       lessonId: 'les-1',
       sessionId: 'ses-live-1',
       liveSessionStatus: 'LIVE',
+      replayStatus: 'DRAFT',
       currentSessionMs: 3_721_000,
       durationMs: null,
       source: {
@@ -212,6 +214,7 @@ describe('라이브 세션 HTTP 서비스 계약', () => {
         lessonId: 'les-1',
         sessionId: 'ses-live-1',
         liveSessionStatus: 'STARTING',
+        replayStatus: 'DRAFT',
         currentSessionMs: null,
         durationMs: null,
         source: null,
@@ -230,6 +233,7 @@ describe('라이브 세션 HTTP 서비스 계약', () => {
         lessonId: 'les-2',
         sessionId: 'ses-live-1',
         liveSessionStatus: 'LIVE',
+        replayStatus: 'DRAFT',
         currentSessionMs: null,
         durationMs: null,
         source: { url: '', availableFromMs: 0, availableToMs: 0 },
@@ -239,6 +243,30 @@ describe('라이브 세션 HTTP 서비스 계약', () => {
     await expect(httpLiveSessionService.getPlayback('les-1')).rejects.toMatchObject({
       code: 'PLAYBACK_CONTRACT_INVALID',
     })
+  })
+
+  it('강사 녹화 처리 DB snapshot을 실제 endpoint에서 그대로 매핑한다', async () => {
+    const response = {
+      sessionId: 'ses-live-1',
+      liveSessionStatus: 'ENDED' as const,
+      recordingEnabled: true,
+      startedAt: '2026-08-01T10:00:00+09:00',
+      endedAt: '2026-08-01T11:32:00+09:00',
+      videoAsset: {
+        videoAssetId: 'asset-1',
+        status: 'FINALIZING' as const,
+        replayStatus: 'DRAFT' as const,
+        failureCode: null,
+        durationMs: null,
+        sizeBytes: null,
+        recordingStartedAt: '2026-08-01T10:00:04+09:00',
+        recordingEndedAt: '2026-08-01T11:32:00+09:00',
+      },
+    }
+    const get = vi.spyOn(apiClient, 'get').mockResolvedValue({ data: response } as never)
+
+    await expect(httpLiveSessionService.getProcessingStatus('ses-live-1')).resolves.toEqual(response)
+    expect(get).toHaveBeenCalledWith('/instructor/live-sessions/ses-live-1/processing')
   })
 })
 

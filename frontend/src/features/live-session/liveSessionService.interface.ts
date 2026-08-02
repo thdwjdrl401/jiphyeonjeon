@@ -225,7 +225,7 @@ export interface LiveStartStatus {
 
 /** 녹화 자산이 지나는 단계. 라이브 종료와 무관하게 Egress 완료 webhook이 진행시킨다. */
 export type VideoAssetStatus =
-  | 'REQUESTED' | 'STARTING' | 'RECORDING' | 'FINALIZING' | 'VERIFYING' | 'READY' | 'FAILED'
+  | 'STARTING' | 'RECORDING' | 'FINALIZING' | 'VERIFYING' | 'READY' | 'FAILED'
 
 /** 다시보기 게시 축. 자산 준비와 <b>다른 축</b>이다 — READY여도 게시는 강사가 따로 한다. */
 export type ReplayStatus = 'DRAFT' | 'READY_FOR_REVIEW' | 'PUBLISHED' | 'WITHDRAWN'
@@ -275,6 +275,8 @@ export interface PlaybackView {
   sessionId: string
   /** STARTING/LIVE/ENDING이면 라이브, ENDED면 종료. 플레이어 UI와 폴링 주기를 가른다. */
   liveSessionStatus: string
+  /** 영상 다시보기 공개 상태. 자막·요약 등 AI 게시 상태와는 별개다. */
+  replayStatus: ReplayStatus
   /** 재생 가능한 최신 지점(세션 상대 ms) = 라이브 엣지. */
   currentSessionMs: number | null
   /** 종료된 녹화의 총 길이(ms). 라이브 중에는 null. */

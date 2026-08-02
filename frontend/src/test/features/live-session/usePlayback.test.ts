@@ -11,6 +11,7 @@ function view(overrides: Partial<PlaybackView> = {}): PlaybackView {
     lessonId: 'les-1',
     sessionId: 'ses-1',
     liveSessionStatus: 'LIVE',
+    replayStatus: 'DRAFT',
     currentSessionMs: 0,
     durationMs: null,
     source: { url: '/api/lessons/les-1/playback/manifest', availableFromMs: 0, availableToMs: 0 },

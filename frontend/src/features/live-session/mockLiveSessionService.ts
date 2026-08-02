@@ -10,6 +10,7 @@ import type {
 const liveStatusOverrides = new Map<string, CurriculumLiveSessionStatus>()
 const liveStartOperations = new Map<string, string>()
 const bookmarksByLesson = new Map<string, number[]>()
+const processingPollCounts = new Map<string, number>()
 const stateSubscribers = new Map<string, Set<(event: LiveSessionStateEvent) => void>>()
 const mockLivePlaybackUrl = 'https://files.vidstack.io/sprite-fight/hls/stream.m3u8'
 
@@ -26,6 +27,7 @@ export function resetMockLiveSessions() {
   liveStatusOverrides.clear()
   liveStartOperations.clear()
   bookmarksByLesson.clear()
+  processingPollCounts.clear()
   stateSubscribers.clear()
 }
 
@@ -49,6 +51,7 @@ export const mockLiveSessionService = {
       lessonId,
       sessionId: liveSession?.sessionId ?? `ses-mock-${lessonId}`,
       liveSessionStatus: liveSession?.status ?? 'LIVE',
+      replayStatus: liveSession?.status === 'ENDED' ? 'PUBLISHED' as const : 'DRAFT' as const,
       currentSessionMs: null,
       durationMs: null,
       source: { url: mockLivePlaybackUrl, availableFromMs: 0, availableToMs: null },
@@ -277,6 +280,9 @@ export const mockLiveSessionService = {
   },
   async getProcessingStatus(sessionId) {
     // 서버와 같은 모양으로 돌려준다 — 목이 화면 문구를 만들어 주면 실서버에서만 깨지는 화면이 된다.
+    const pollCount = (processingPollCounts.get(sessionId) ?? 0) + 1
+    processingPollCounts.set(sessionId, pollCount)
+    const ready = pollCount >= 2
     return {
       sessionId,
       liveSessionStatus: 'ENDED' as const,
@@ -285,11 +291,11 @@ export const mockLiveSessionService = {
       endedAt: '2026-08-01T11:32:00+09:00',
       videoAsset: {
         videoAssetId: 'vid_mock_0001',
-        status: 'VERIFYING' as const,
-        replayStatus: 'DRAFT' as const,
+        status: ready ? 'READY' as const : 'FINALIZING' as const,
+        replayStatus: ready ? 'PUBLISHED' as const : 'DRAFT' as const,
         failureCode: null,
-        durationMs: 5_520_000,
-        sizeBytes: 1_284_000_000,
+        durationMs: ready ? 5_520_000 : null,
+        sizeBytes: ready ? 1_284_000_000 : null,
         recordingStartedAt: '2026-08-01T10:00:04+09:00',
         recordingEndedAt: '2026-08-01T11:32:06+09:00',
       },

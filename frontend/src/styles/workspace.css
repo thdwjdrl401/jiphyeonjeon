@@ -429,6 +429,7 @@ th { color: var(--ink-500); font-size: .67rem; }
 .processing-steps li > span { position: relative; z-index: 1; display: grid; width: 34px; height: 34px; place-items: center; border-radius: 50%; background: var(--ink-100); color: var(--ink-500); font-size: .7rem; font-weight: 700; }
 .processing-steps li.is-complete > span { background: var(--green-700); color: #fff; }
 .processing-steps li.is-current > span { background: var(--blue-600); color: #fff; box-shadow: 0 0 0 5px var(--blue-100); }
+.processing-steps li.is-failed > span { background: var(--red-600, #dc2626); color: #fff; }
 .processing-steps li div { display: flex; flex-direction: column; }
 .processing-steps strong { font-size: .77rem; }
 .processing-steps small { color: var(--ink-500); font-size: .64rem; }
