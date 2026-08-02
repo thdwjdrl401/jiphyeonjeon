@@ -71,14 +71,15 @@ describe('AI 질의응답 화면 연결', () => {
     expect(screen.getByText('12:08–12:41')).toBeVisible()
   })
 
-  it('다시보기 AI 탭은 아직 지원하지 않음을 밝히고 입력을 잠근다', async () => {
+  it('다시보기 AI 탭은 새 질문을 잠그되 라이브 때 물어본 것은 보여준다', async () => {
     const user = userEvent.setup()
     await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
     renderAt('/instructor/lessons/les-security/replay')
 
     await openAiPanel(user)
 
-    expect(screen.getAllByText(/다시보기 AI 질문은 아직 지원하지 않습니다/).length).toBeGreaterThan(0)
+    // 예전에는 "아직 지원하지 않습니다"로 끝났다. 이제 라이브 때 물어본 기록은 그대로 남는다.
+    expect(screen.getAllByText(/다시보기에서는 새 질문을 보낼 수 없습니다/).length).toBeGreaterThan(0)
     expect(screen.getByRole('textbox', { name: 'AI에게 할 질문' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '전송' })).toBeDisabled()
   })

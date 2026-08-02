@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { instructorPaths, studentPaths } from '@/app/router/paths'
@@ -8,11 +8,20 @@ import { getLesson } from '@/features/lesson/lessonService'
 import CaptionDock from '@/features/live-session/CaptionDock'
 import LearningSidebar from '@/features/live-session/LearningSidebar'
 import { getLiveLearningPreview, type LearningPanel } from '@/features/live-session/liveLearningPreview'
+import {
+  emptyCaptionStreamState,
+  reduceCaptionStream,
+  selectCaptionViews,
+} from '@/features/live-session/captionAdapter'
+import {
+  getAiAnswerHistory,
+  getCaptions,
+  getChatMessages,
+  getLectureNotes,
+} from '@/features/live-session/liveSessionService'
 import type { PlaybackSeekRequest } from '@/features/live-session/PlaybackPlayer'
 import { usePlayback } from '@/features/live-session/usePlayback'
 import {
-  getReplayCaptions,
-  getReplayMessages,
   publishReplayReview,
   saveReplayReview,
 } from '@/features/replay/replayService'
@@ -34,11 +43,7 @@ export default function ReplayLessonPage() {
     queryFn: () => getLesson({ lessonId, role: user?.role, userId: user?.userId }),
     enabled: Boolean(lessonId),
   })
-  const captionsQuery = useQuery({ queryKey: ['replay-captions', lessonId], queryFn: () => getReplayCaptions(lessonId), enabled: Boolean(lessonId) })
-  const messagesQuery = useQuery({ queryKey: ['replay-messages', lessonId], queryFn: () => getReplayMessages(lessonId), enabled: Boolean(lessonId) })
   const lesson = lessonQuery.data
-  const captions = captionsQuery.data ?? []
-  const messages = messagesQuery.data ?? []
   const lessonPath = lesson
     ? isInstructor
       ? instructorPaths.lesson(lesson.curriculumId, lesson.sectionId, lesson.lessonId)
@@ -53,6 +58,45 @@ export default function ReplayLessonPage() {
   const toast = useToast()
   // 라이브 강의실과 같은 재생 계약을 쓴다 — BE가 라이브·종료 후 VOD를 한 엔드포인트로 준다.
   const playback = usePlayback(lessonId)
+  /*
+   * 다시보기가 보여줄 것들은 <b>세션 단위로 이미 저장돼 있다</b> — 자막·채팅·노트·AI 질문 모두
+   * 라이브 중에 그대로 쌓였다. 그래서 다시보기 전용 엔드포인트를 새로 만들지 않고, 재생 응답이
+   * 알려주는 sessionId로 같은 조회를 그대로 쓴다.
+   *
+   * 인가도 같다 — 세션 참가자(소유 강사·활성 수강생)만 읽는다.
+   */
+  const sessionId = playback.playback?.sessionId ?? ''
+  const captionsQuery = useQuery({
+    queryKey: ['replay-captions', sessionId],
+    queryFn: () => getCaptions(sessionId),
+    enabled: Boolean(sessionId),
+  })
+  const messagesQuery = useQuery({
+    queryKey: ['replay-messages', sessionId],
+    queryFn: () => getChatMessages(sessionId),
+    enabled: Boolean(sessionId),
+  })
+  const noteQuery = useQuery({
+    queryKey: ['replay-notes', sessionId],
+    queryFn: () => getLectureNotes(sessionId),
+    enabled: Boolean(sessionId),
+  })
+  const aiHistoryQuery = useQuery({
+    queryKey: ['replay-ai-answers', sessionId],
+    queryFn: () => getAiAnswerHistory(sessionId),
+    enabled: Boolean(sessionId),
+  })
+  /*
+   * 저장된 자막 이벤트를 라이브와 같은 누적기로 접는다. 다시보기라고 다른 규칙으로 접으면
+   * 같은 강의가 두 화면에서 다르게 보인다.
+   */
+  const captions = useMemo(() => {
+    const events = captionsQuery.data ?? []
+    let state = emptyCaptionStreamState()
+    for (const event of events) state = reduceCaptionStream(state, event)
+    return selectCaptionViews(state)
+  }, [captionsQuery.data])
+  const messages = messagesQuery.data ?? []
   // 검수 저장·게시는 방금 누른 행동의 결과다 — 화면에 남기지 않고 토스트로 알린다.
   // (게시 여부 자체는 위 툴바 배지가 계속 보여 준다.)
   const saveReviewMutation = useMutation({
@@ -98,13 +142,16 @@ export default function ReplayLessonPage() {
   // 다시보기의 세션-ms를 되돌릴 시간 앵커 계약이 서기 전에는 열 수 없다(ADR-0047 §9). 예전에는 질문을
   // 눌러도 501이 조용히 삼켜져 아무 반응이 없었다 — 지금은 왜 못 쓰는지 패널이 먼저 밝힌다.
   const aiContent = (
-    <PersonalAiQuestionPanel unavailableNotice="다시보기 AI 질문은 아직 지원하지 않습니다. 라이브 강의 중에는 AI 질문 탭에서 바로 물어볼 수 있습니다." />
+    <PersonalAiQuestionPanel
+      history={aiHistoryQuery.data}
+      unavailableNotice="다시보기에서는 새 질문을 보낼 수 없습니다. 라이브 중에 물어본 내용은 아래에 그대로 남아 있습니다."
+    />
   )
 
   return (
     <div className={`media-page replay-page${isInstructor ? ' media-page--instructor' : ''}`}>
       <header className="media-page__title">
-        <div><StatusBadge tone="success">REPLAY</StatusBadge><h1>{lesson.title}</h1><small>강의 {lesson.lessonId} · 교정 자막 v2</small></div>
+        <div><StatusBadge tone="success">REPLAY</StatusBadge><h1>{lesson.title}</h1><small>강의 {lesson.title}</small></div>
         <div className="media-page__status">
           {isInstructor ? <><StatusBadge tone="warning">강사 검수 모드</StatusBadge><span>VIDEO {playback.playback ? `READY · ${replayStatus}` : '상태 확인 중'}</span></> : <span>학습 진행률 42%</span>}
           <Link className="button button--soft button--small" to={lessonPath}>강의 상세</Link>
@@ -131,7 +178,8 @@ export default function ReplayLessonPage() {
             />
           </Suspense>
 
-          <CaptionDock captions={captions} currentSessionMs={positionMs} label="교정 자막" onSeek={seekSession} onSelectTerm={openGlossaryTerm} />
+          {/* 라이브 당시 저장된 자막이다. "교정"은 후처리가 붙은 뒤의 이름이라 아직 쓰지 않는다. */}
+          <CaptionDock captions={captions} currentSessionMs={positionMs} label="자막" onSeek={seekSession} onSelectTerm={openGlossaryTerm} />
 
           <div className="chapter-row"><button type="button" onClick={() => seekSession(0)}><span>00:00</span>인증 흐름</button><button type="button" onClick={() => seekSession(1_880_000)}><span>31:20</span>세션 저장소</button><button type="button" onClick={() => seekSession(3_700_000)}><span>1:01:40</span>CSRF 실습</button></div>
         </section>
@@ -144,6 +192,7 @@ export default function ReplayLessonPage() {
           selectedTermId={selectedTermId}
           onSelectedTermChange={setSelectedTermId}
           summaryBlocks={summaryBlocks}
+          lectureNote={noteQuery.data ?? null}
           glossaryTerms={glossaryTerms}
           messages={messages}
           discussionNotice="라이브 당시 채팅을 읽기 전용으로 표시합니다. 질문 필터로 질문만 모아볼 수 있습니다."

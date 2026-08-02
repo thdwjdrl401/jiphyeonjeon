@@ -9,12 +9,6 @@ import type { ReplayService } from './replayService.interface'
  * 아직 명시적인 미구현 오류를 유지한다.
  */
 export const httpReplayService = {
-  async getReplayCaptions(lessonId) {
-    return notImplemented(`GET /lessons/${lessonId}/captions`)
-  },
-  async getReplayMessages(lessonId) {
-    return notImplemented(`GET /lessons/${lessonId}/messages`)
-  },
   async askReplayAi(lessonId) {
     return notImplemented(`POST /lessons/${lessonId}/ai/questions:stream`)
   },
