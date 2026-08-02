@@ -22,13 +22,16 @@ import {
   endLiveSession,
   getCaptions,
   getChatMessages,
+  getLectureNotes,
   getLiveSession,
   saveBookmark,
   sendChatMessage,
   subscribeCaptions,
   subscribeChatMessages,
+  subscribeLectureNotes,
   subscribeSessionState,
   type CaptionView,
+  type LectureNoteView,
   type ChatConnectionState,
   type ChatMessageView,
   type LiveSessionView,
@@ -198,6 +201,28 @@ export default function LiveClassroomPage() {
       },
     )
   }, [queryClient, sessionId])
+  /*
+   * 강의 노트(CONTRACT §3-4a). 새로고침·재연결 복구는 조회가, 이후 갱신은 WS가 맡는다 — 둘이 같은
+   * 모양(현재 전체)이라 화면은 마지막 것만 들고 있으면 된다.
+   */
+  const noteQuery = useQuery({
+    queryKey: ['lecture-notes', sessionId],
+    queryFn: () => getLectureNotes(sessionId),
+    enabled: Boolean(sessionId),
+  })
+  const [liveNote, setLiveNote] = useState<LectureNoteView | null>(null)
+  useEffect(() => {
+    if (!sessionId) return undefined
+    return subscribeLectureNotes(sessionId, setLiveNote, () => {})
+  }, [sessionId])
+  /*
+   * 뒤로 가지 않는다. 재연결 직후의 조회가 방금 받은 WS 노트보다 오래된 것을 들고 올 수 있어,
+   * 자막 진행도가 큰 쪽을 남긴다.
+   */
+  const note = (liveNote && noteQuery.data)
+    ? (liveNote.coveredThroughSequence >= noteQuery.data.coveredThroughSequence ? liveNote : noteQuery.data)
+    : (liveNote ?? noteQuery.data ?? null)
+
   useEffect(() => {
     if (!sessionId) return undefined
     return subscribeChatMessages(
@@ -363,6 +388,7 @@ export default function LiveClassroomPage() {
       selectedTermId={selectedTermId}
       onSelectedTermChange={setSelectedTermId}
       summaryBlocks={summaryBlocks}
+      lectureNote={note}
       glossaryTerms={glossaryTerms}
       messages={messages}
       discussionComposer={discussionComposer}

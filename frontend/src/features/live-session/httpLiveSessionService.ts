@@ -20,6 +20,8 @@ import type {
   PlaybackView,
   ProcessingStatus,
   ReplayStatus,
+  LectureNoteView,
+  LectureNoteTopic,
 } from './liveSessionService.interface'
 
 interface ApiLiveSessionView {
@@ -121,6 +123,41 @@ interface ApiSessionStateEnvelope {
     liveSessionStatus?: string
     endedAt?: string | null
     participantCount?: number
+  }
+}
+
+/** 노트 조회·WS payload는 같은 필드다. topics는 서버가 해석하지 않는 JSON **문자열**로 온다. */
+interface ApiLectureNote {
+  coveredThroughSequence: number
+  topics: string
+  markdown: string
+  status: string
+  updatedAt: string | null
+}
+
+/**
+ * `topics`를 파싱한다. 서버가 해석하지 않고 옮기기만 하는 값이라 여기서 처음 구조를 본다 —
+ * 형식이 어긋나면 화면을 깨뜨리는 대신 빈 목록으로 떨어진다(노트는 부가 정보이고 강의를 막지 않는다).
+ */
+function parseLectureNote(data: ApiLectureNote): LectureNoteView {
+  let topics: LectureNoteTopic[] = []
+  try {
+    const parsed: unknown = JSON.parse(data.topics || '[]')
+    if (Array.isArray(parsed)) {
+      topics = parsed.filter((topic): topic is LectureNoteTopic =>
+        Boolean(topic) && typeof (topic as LectureNoteTopic).title === 'string'
+        && Array.isArray((topic as LectureNoteTopic).keyPoints))
+    }
+  } catch {
+    topics = []
+  }
+  const status = data.status === 'COMPLETED' || data.status === 'REFINED' ? data.status : 'CAPTURING'
+  return {
+    coveredThroughSequence: data.coveredThroughSequence ?? 0,
+    topics,
+    markdown: data.markdown ?? '',
+    status,
+    updatedAt: data.updatedAt ?? null,
   }
 }
 
@@ -809,6 +846,56 @@ export const httpLiveSessionService = {
   },
   async saveBookmark(lessonId, sessionMs) {
     await apiClient.post(`/lessons/${lessonId}/bookmarks`, { sessionMs })
+  },
+  async getLectureNotes(sessionId) {
+    const { data } = await apiClient.get<ApiLectureNote>(`/live-sessions/${sessionId}/notes`)
+    return parseLectureNote(data)
+  },
+  subscribeLectureNotes(sessionId, onNote, onConnectionChange) {
+    let active = true
+    onConnectionChange('connecting')
+
+    const client = new Client({
+      brokerURL: getBrokerUrl(),
+      connectionTimeout: 10_000,
+      heartbeatIncoming: 10_000,
+      heartbeatOutgoing: 10_000,
+      reconnectDelay: 3_000,
+    })
+
+    client.onConnect = () => {
+      if (!active) return
+      onConnectionChange('connected')
+      client.subscribe(`/topic/live-sessions/${sessionId}/notes`, (frame) => {
+        try {
+          const envelope = JSON.parse(frame.body) as {
+            type: string
+            sessionId: string
+            payload: ApiLectureNote
+          }
+          if (envelope.sessionId !== sessionId || envelope.type !== 'lecture.note.updated') return
+          onNote(parseLectureNote(envelope.payload))
+        } catch {
+          onConnectionChange('error')
+        }
+      })
+    }
+    client.onStompError = () => {
+      if (active) onConnectionChange('error')
+    }
+    client.onWebSocketError = () => {
+      if (active) onConnectionChange('reconnecting')
+    }
+    client.onWebSocketClose = () => {
+      if (active) onConnectionChange('reconnecting')
+    }
+    client.activate()
+
+    return () => {
+      active = false
+      onConnectionChange('disconnected')
+      void client.deactivate()
+    }
   },
   async getProcessingStatus(sessionId) {
     const { data } = await apiClient.get<ProcessingStatus>(

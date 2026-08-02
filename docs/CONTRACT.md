@@ -189,7 +189,7 @@ Redis는 LiveKit 내부 Redis가 아닌 application Redis다. key는 `CAPTION_ST
 
 agent는 `caption.stream.started`·`caption.segment.final`도 발행한다(!233 병합). `caption.partial|final|revised`는 발행하지 않는다. Spring consumer는 ai-api(`ai-rag-live-v1`)와 **별도 group `spring-caption-live-v1`**로 소비하고(ADR-0043·0052), `eventId` 멱등으로 **네 type 모두 append-only로 core.live_caption에 영속**한다(`started`·`segment.final`은 ADR-0052 신규 컬럼 `audio_started_at`·`segment_index`·`start/end_stream_elapsed_ms`·`boundary_reason`에 적재). WS 실시간 전달·자막 리로드(§3-6)는 표시 대상 `caption.delta`·`caption.stream.completed`·`caption.segment.final`(ADR-0053)을 대상으로 하며, `segment.final`은 신규 `CaptionSegmentPayload`(`sttSessionId`·`segmentIndex`·`lastSequence`·`text`·`startStreamElapsedMs`·`endStreamElapsedMs`·`boundaryReason`·근사 `sessionMs`)로 `/topic/live-sessions/{sessionId}/captions` WS와 리로드에 함께 나간다. `caption.stream.started`(시간 앵커)는 **표시 대상이 아니라 영속만** 한다. RAG `contextTimeMs`(§3-9)는 단일 `streamElapsedMs` 좌표를 갖는 `caption.delta`·`caption.stream.completed`만 대상으로 한다(`started`·`segment.final`은 좌표 없어 제외). FE는 `segment.final`의 권위 텍스트로 발화 단위 렌더하고 문장부호 휴리스틱(ADR-0044)을 제거한다(ADR-0053). raw `streamElapsedMs`를 **그대로 저장·중계**하며 세션 상대 ms로 변환하지 않는다 — session/HLS time-origin 변환·앵커, owner fencing, 전역 key의 session별 분리·정리는 후속 공유 계약이다(전역 key는 producer의 `MAXLEN ~`에 정리를 위임하고 consumer는 키를 DEL하지 않는다). consumer가 소비하는 Redis는 `spring.data.redis`가 가리키는 **환경별 application Redis**다. dev는 Spring service endpoint `redis:6379`와 GPU tunnel `:4000`, prod는 Spring service endpoint `redis:6379`와 GPU tunnel `:6390`을 각각 사용하며 두 caption stream을 섞지 않는다([ADR-0035](decisions/canola/0035-realtime-agent-dual-environment-runtime.md)). 상세: [`caption schema`](../ai/realtime-agent/contracts/schemas/caption-stream-entry.schema.json)·[`delta fixture`](../ai/realtime-agent/contracts/fixtures/caption-delta.valid.json)·[`completion fixture`](../ai/realtime-agent/contracts/fixtures/caption-completed.valid.json)·[ADR-0043](decisions/songjeongki/0043-caption-consumer-persistence.md).
 
-### 3-4a. ai-api → application Redis 실시간 강의 노트 Stream — AI producer 구현, Spring consumer 미구현
+### 3-4a. ai-api → application Redis 실시간 강의 노트 Stream — AI producer 구현, Spring 저장·조회·전파 구현·consumer 미구현
 
 ai-api는 §3-4의 자막을 별도 consumer group `ai-live-notes-mvp-v1`로 읽고, 라이브 중에는 새로 생성된 노트
 조각만 application Redis Stream `ai:lecture-notes:mvp`에 발행한다. capture 완료 뒤에는 라이브 event를
@@ -265,7 +265,14 @@ Backend가 전체 Markdown을 단순 결합할 경우 첫 조각은 그대로 �
 6. DB commit 뒤에만 ACK하고, commit된 새 조각만 Frontend WebSocket으로 전달한다. refined snapshot의
    Frontend 전달 방식은 Spring·Frontend 구현 시 별도로 확정한다.
 
-Spring consumer·DB·REST·WebSocket은 아직 구현되지 않았다. AI producer는 caption과 미처리 작업을
+Spring의 **저장·조회·전파는 구현됐고 consumer만 남았다**([ADR-0061](decisions/songjeongki/0061-lecture-note-read-model-is-producer-agnostic.md)).
+`core.live_lecture_note`가 세션당 한 행으로 **현재 전체 노트**를 들고 있고,
+`GET /api/live-sessions/{sessionId}/notes`와 `/topic/live-sessions/{sessionId}/notes`의
+`lecture.note.updated`가 **같은 모양**(`{coveredThroughSequence, topics, markdown, status, updatedAt}`)을 준다 —
+조각 이어 붙이기는 서버가 한 번만 하고 화면은 마지막 것만 들면 된다. `topics`는 서버가 해석하지 않는
+JSON 문자열이며, `coveredThroughSequence`가 지금 값보다 크지 않은 갱신은 무시한다(재전송·순서 역전 방어).
+구독 인가는 자막·채팅과 같은 게이트이고 허용목록에 `notes` 하나가 더해졌다(ADR-0019 와일드카드 차단 불변식 유지).
+남은 것은 Redis Stream을 읽어 이 read model을 갱신하는 consumer 하나뿐이다. AI producer는 caption과 미처리 작업을
 `ai:lecture-notes:mvp:state:{sessionId}`에 저장한 뒤 caption을 ACK하고,
 `ai:lecture-notes:mvp:active-sessions`에서 시작 시 복원한다. 발행할 payload를 outbox에 먼저 고정한 뒤 결과
 `XADD`와 outbox를 비운 checkpoint 저장을 같은 Redis transaction으로 처리하므로 단일 ai-api 프로세스
@@ -306,6 +313,9 @@ Spring 수신 endpoint를 구현하고 `SPRING_STATUS_CALLBACK_URL`로 주입하
 ### 3-6. FE ↔ Spring WebSocket
 - **자막 채널** `/topic/live-sessions/{sessionId}/captions`(세션별, 구독 인가는 채팅과 동일 게이트·와일드카드 차단 불변식 ADR-0019·0043): `WsEnvelope.of(type, sessionId, occurredAt, payload)`로 push. `type`은 `caption.delta`·`caption.stream.completed`. payload는 camelCase — delta `{ sttSessionId, sequence, streamElapsedMs, sessionMs, text }`, completed `{ sttSessionId, lastSequence, sessionMs, reason }`. `caption.stream.completed`는 해당 `(sessionId,sttSessionId)`의 terminal event이며 `lastSequence` 뒤 새 자막을 생성·반영하지 않는다. 기존 자막은 HLS 잔여 재생 동안 유지한다([ADR-0005](decisions/choinhoo/0005-ended-hls-caption-drain.md)).
 - **채팅 채널** `/topic/live-sessions/{sessionId}/chat`: `chat_message { lessonId, sessionMs, text, alias }`(실명·userId 미노출).
+- **강의 노트 채널** `/topic/live-sessions/{sessionId}/notes`(§3-4a): `lecture.note.updated` payload
+  `{coveredThroughSequence, topics, markdown, status, updatedAt}`. **증분이 아니라 늘 전체**이며 조회
+  응답과 같은 모양이다. 구독 인가는 자막·채팅과 동일 게이트.
 - **세션 상태 채널** `/topic/live-sessions/{sessionId}/state`([ADR-0003](decisions/choinhoo/0003-simple-live-end-sequential-process.md)):
   `session.ending` payload `{liveSessionStatus:"ENDING",endedAt:null}`와
   `session.ended` payload `{liveSessionStatus:"ENDED",endedAt:"..."}`를 각 DB 전이의 **커밋 후** push한다.

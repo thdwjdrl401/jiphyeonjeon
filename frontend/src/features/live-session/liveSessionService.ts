@@ -68,6 +68,8 @@ export type {
   CaptionStreamEvent,
   ChatConnectionState,
   ChatMessageView,
+  LectureNoteTopic,
+  LectureNoteView,
   LiveSessionService,
   LiveSessionStateEvent,
   LiveSessionView,
@@ -81,3 +83,11 @@ export type {
   QuestionHighlight,
   SendChatMessageInput,
 } from './liveSessionService.interface'
+
+export const getLectureNotes = (sessionId: string) => liveSessionService.getLectureNotes(sessionId)
+
+export const subscribeLectureNotes = (
+  sessionId: string,
+  onNote: Parameters<LiveSessionService['subscribeLectureNotes']>[1],
+  onConnectionChange: Parameters<LiveSessionService['subscribeLectureNotes']>[2],
+) => liveSessionService.subscribeLectureNotes(sessionId, onNote, onConnectionChange)

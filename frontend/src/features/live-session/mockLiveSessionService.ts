@@ -278,6 +278,34 @@ export const mockLiveSessionService = {
     const bookmarks = bookmarksByLesson.get(lessonId) ?? []
     bookmarksByLesson.set(lessonId, [...bookmarks, sessionMs])
   },
+  async getLectureNotes() {
+    // 목도 서버와 같은 모양을 돌려준다 — 목이 다르면 실서버에서만 깨지는 화면이 된다.
+    return {
+      coveredThroughSequence: 21,
+      topics: [
+        {
+          topicId: 'topic-1',
+          title: '요청이 인증되는 전체 흐름',
+          keyPoints: [
+            'HTTP 요청은 보안 필터 체인을 먼저 통과합니다.',
+            '인증 성공 결과는 현재 요청의 보안 컨텍스트에 저장됩니다.',
+          ],
+        },
+        {
+          topicId: 'topic-2',
+          title: 'SecurityContext의 책임',
+          keyPoints: ['SecurityContext는 현재 실행 흐름의 인증 정보를 제공합니다.'],
+        },
+      ],
+      markdown: '## 요청이 인증되는 전체 흐름\n- HTTP 요청은 보안 필터 체인을 먼저 통과합니다.',
+      status: 'CAPTURING' as const,
+      updatedAt: '2026-08-02T21:00:00+09:00',
+    }
+  },
+  subscribeLectureNotes(_sessionId, _onNote, onConnectionChange) {
+    onConnectionChange('connected')
+    return () => onConnectionChange('disconnected')
+  },
   async getProcessingStatus(sessionId) {
     // 서버와 같은 모양으로 돌려준다 — 목이 화면 문구를 만들어 주면 실서버에서만 깨지는 화면이 된다.
     const pollCount = (processingPollCounts.get(sessionId) ?? 0) + 1
