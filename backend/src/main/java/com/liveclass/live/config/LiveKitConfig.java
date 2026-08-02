@@ -6,7 +6,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-@EnableConfigurationProperties({LiveKitProperties.class, LiveStartProperties.class, CaptionStreamProperties.class,
+@EnableConfigurationProperties({LiveKitProperties.class, LiveStartProperties.class, CaptionStreamProperties.class, LectureNoteStreamProperties.class,
         AnnotationAiProperties.class})
 public class LiveKitConfig {
 

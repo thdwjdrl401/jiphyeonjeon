@@ -228,6 +228,16 @@ liveclass:
     consumer: ${CAPTION_CONSUMER_NAME:}                   # 비면 HOSTNAME 기반 안정 이름 파생
     batch-size: ${CAPTION_CONSUMER_BATCH_SIZE:100}
     poll-timeout: ${CAPTION_CONSUMER_POLL_TIMEOUT:1s}
+  # 강의 노트 소비(CONTRACT §3-4a). 자막과 같은 Redis를 본다.
+  # 기본 꺼짐 — 켜는 순간 운영 노트가 쌓이기 시작하므로 환경별로 명시적으로 켠다.
+  lecture-note:
+    enabled: ${LECTURE_NOTE_CONSUMER_ENABLED:false}
+    stream-key: ${LECTURE_NOTE_STREAM_KEY:ai:lecture-notes:mvp}
+    group: ${LECTURE_NOTE_CONSUMER_GROUP:spring-lecture-notes-live-v1}
+    group-instance-suffix: ${LECTURE_NOTE_CONSUMER_GROUP_SUFFIX:}
+    consumer: ${LECTURE_NOTE_CONSUMER_NAME:}
+    batch-size: ${LECTURE_NOTE_CONSUMER_BATCH_SIZE:50}
+    poll-timeout: ${LECTURE_NOTE_CONSUMER_POLL_TIMEOUT:1s}
 
 # AI 워커 콜백(ADR-0036) — HMAC 서명 검증 시크릿. 워커와 같은 값을 공유한다. 운영은 env로 주입(커밋 금지).
 ai:

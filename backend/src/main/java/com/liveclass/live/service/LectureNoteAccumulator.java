@@ -135,6 +135,37 @@ public class LectureNoteAccumulator {
         return Optional.of(LiveLectureNoteService.toView(repository.save(note)));
     }
 
+    /**
+     * 이 조각이 <b>기대값보다 앞서 있는가</b>(= 중간이 빠졌는가).
+     *
+     * <p>소비자가 ACK 여부를 가르는 데 쓴다. 같은 "반영 안 됨"이라도 이미 반영한 중복은 ACK해 흘려보내야
+     * 하고, 앞이 빠진 것은 ACK하지 않고 pending에 남겨야 나중에 이어진다.
+     */
+    @Transactional(readOnly = true)
+    public boolean isAheadOfExpected(LectureNoteEvent.ChunkAppended event) {
+        return repository.findById(event.sessionId())
+                .map(note -> event.chunkSequence() > note.getLastChunkSequence() + 1)
+                .orElse(event.chunkSequence() > 1);
+    }
+
+    /** 완료가 가리킨 순번이 아직 반영되지 않았는가 — 그러면 조각을 더 기다린다. */
+    @Transactional(readOnly = true)
+    public boolean isWaitingForChunks(LectureNoteEvent.CaptureCompleted event) {
+        return repository.findById(event.sessionId())
+                .map(note -> note.getLastChunkSequence() < event.lastChunkSequence())
+                .orElse(event.lastChunkSequence() > 0);
+    }
+
+    /** 정제본이 기다려야 하는가 — 아직 수집이 확정되지 않았거나 입력 순번에 못 미쳤을 때. */
+    @Transactional(readOnly = true)
+    public boolean isWaitingForCompletion(LectureNoteEvent.RefinedSnapshot event) {
+        return repository.findById(event.sessionId())
+                .map(note -> !"REFINED".equals(note.getStatus())
+                        && (!"COMPLETED".equals(note.getStatus())
+                            || note.getLastChunkSequence() < event.sourceLastChunkSequence()))
+                .orElse(true);
+    }
+
     private LiveLectureNote loadOrCreate(UUID sessionId, UUID lessonId) {
         return repository.findById(sessionId).orElseGet(() -> {
             LiveLectureNote created = new LiveLectureNote();
