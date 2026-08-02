@@ -23,6 +23,7 @@ import {
   endLiveSession,
   getCaptions,
   getChatMessages,
+  getAiAnswerHistory,
   getLectureNotes,
   getLiveSession,
   saveBookmark,
@@ -206,6 +207,15 @@ export default function LiveClassroomPage() {
    * 강의 노트(CONTRACT §3-4a). 새로고침·재연결 복구는 조회가, 이후 갱신은 WS가 맡는다 — 둘이 같은
    * 모양(현재 전체)이라 화면은 마지막 것만 들고 있으면 된다.
    */
+  /*
+   * 내 AI 질문 기록. 새로고침하면 대화가 통째로 사라지던 것을 되살린다 — 이 기능만 휘발이었다
+   * (채팅·자막·노트는 모두 서버에 남는다).
+   */
+  const aiHistoryQuery = useQuery({
+    queryKey: ['ai-answers', sessionId],
+    queryFn: () => getAiAnswerHistory(sessionId),
+    enabled: Boolean(sessionId),
+  })
   const noteQuery = useQuery({
     queryKey: ['lecture-notes', sessionId],
     queryFn: () => getLectureNotes(sessionId),
@@ -355,6 +365,7 @@ export default function LiveClassroomPage() {
   const aiContent = (
     <PersonalAiQuestionPanel
       ask={canUseConversation ? askAi : undefined}
+      history={aiHistoryQuery.data}
       placeholder="예: SecurityContext와 세션은 어떻게 다른가요? (Enter 전송 · Shift+Enter 줄바꿈)"
       emptyDescription="강의 자료와 지금까지의 발화를 근거로 답변합니다."
     />

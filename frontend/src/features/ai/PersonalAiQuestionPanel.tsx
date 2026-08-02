@@ -9,7 +9,7 @@ import {
   type KeyboardEvent,
 } from 'react'
 import yeongsilImage from '@/assets/yeongsil.png'
-import type { AiAnswerStreamOptions } from '@/features/live-session/liveSessionService'
+import type { AiAnswerHistoryItem, AiAnswerSource, AiAnswerStreamOptions } from '@/features/live-session/liveSessionService'
 import { InlineNotice } from '@/shared/ui/WorkspaceUi'
 import AiChatTurn from './AiChatTurn'
 import {
@@ -17,6 +17,7 @@ import {
   reduceAiConversation,
   selectStreamingTurn,
   type AiConversationState,
+  type AiConversationTurn,
 } from './aiConversation'
 
 export type AskAiAnswer = (question: string, options: AiAnswerStreamOptions) => Promise<void>
@@ -32,6 +33,12 @@ interface PersonalAiQuestionPanelProps {
   placeholder?: string
   /** 빈 상태에서 무엇을 근거로 답하는지 안내. */
   emptyDescription?: string
+  /**
+   * 서버에 남은 내 질문 기록. 새로고침·재접속 뒤 대화를 되살린다.
+   *
+   * 없으면(다시보기 등 기록 경로가 없는 화면) 예전처럼 이 컴포넌트가 사는 동안만 남는다.
+   */
+  history?: AiAnswerHistoryItem[]
 }
 
 const DEFAULT_UNAVAILABLE_NOTICE = '이 화면에서는 AI 질문을 아직 지원하지 않습니다.'
@@ -52,11 +59,40 @@ const FOLLOW_THRESHOLD_PX = 48
  * 라이브·다시보기 사이드바가 같은 컴포넌트를 쓴다. 실패해도 영상·채팅은 그대로 두고 이 패널 안에서만
  * 재시도한다(LIVE_LESSON.md §10.3 "AI Q&A 실패").
  */
+/**
+ * 서버 기록 한 건을 화면의 턴으로 옮긴다.
+ *
+ * 근거(`sources`)는 서버가 해석하지 않는 JSON 문자열이라 여기서 처음 읽는다 — 형식이 어긋나면
+ * 근거만 비우고 답변은 살린다(근거 때문에 읽던 답이 사라지면 안 된다).
+ */
+function toRestoredTurn(item: AiAnswerHistoryItem): AiConversationTurn {
+  let sources: AiAnswerSource[] = []
+  try {
+    const parsed: unknown = JSON.parse(item.sources || '[]')
+    if (Array.isArray(parsed)) sources = parsed as AiAnswerSource[]
+  } catch {
+    sources = []
+  }
+  const status = item.status === 'DONE' ? 'done' : item.status === 'INSUFFICIENT' ? 'insufficient' : 'error'
+  return {
+    id: `history-${item.requestId}`,
+    status,
+    question: item.question,
+    text: item.answer,
+    sources,
+    notice: status === 'error' ? '이 답변은 끝까지 받지 못했습니다.' : '',
+    code: item.failureCode,
+    // 지난 대화는 다시 시도하지 않는다 — 그때의 문맥(자막 위치)이 이미 달라졌다.
+    retryable: false,
+  }
+}
+
 export default function PersonalAiQuestionPanel({
   ask,
   unavailableNotice,
   placeholder = DEFAULT_PLACEHOLDER,
   emptyDescription = '강의 자료와 현재까지의 발화를 근거로 답변합니다.',
+  history,
 }: PersonalAiQuestionPanelProps) {
   const [conversation, dispatch] = useReducer(reduceAiConversation, emptyAiConversationState)
   const [question, setQuestion] = useState('')
@@ -67,6 +103,15 @@ export default function PersonalAiQuestionPanel({
   const conversationRef = useRef<AiConversationState>(conversation)
   const logRef = useRef<HTMLDivElement>(null)
   const [isFollowingLatest, setIsFollowingLatest] = useState(true)
+
+  /*
+   * 기록이 도착하면 대화를 되살린다. 리듀서가 "이미 턴이 있거나 진행 중이면 무시"를 지키므로,
+   * 늦게 온 조회가 지금 흐르는 답변을 지우거나 같은 대화를 두 번 쌓지 않는다.
+   */
+  useEffect(() => {
+    if (!history || history.length === 0) return
+    dispatch({ kind: 'restore', turns: history.map(toRestoredTurn) })
+  }, [history])
 
   const isAvailable = Boolean(ask)
   const streamingTurn = selectStreamingTurn(conversation)

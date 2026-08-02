@@ -278,6 +278,20 @@ export const mockLiveSessionService = {
     const bookmarks = bookmarksByLesson.get(lessonId) ?? []
     bookmarksByLesson.set(lessonId, [...bookmarks, sessionMs])
   },
+  async getAiAnswerHistory() {
+    // 목도 서버와 같은 모양을 돌려준다 — 목이 다르면 실서버에서만 깨지는 화면이 된다.
+    return [
+      {
+        requestId: 'req-mock-1',
+        question: '세션과 JWT를 함께 쓰는 기준이 뭔가요?',
+        answer: '세션은 서버가 상태를 들고, JWT는 토큰 자체가 상태를 나릅니다.',
+        sources: '[]',
+        status: 'DONE' as const,
+        failureCode: null,
+        askedAt: '2026-08-02T21:00:00+09:00',
+      },
+    ]
+  },
   async getLectureNotes() {
     // 목도 서버와 같은 모양을 돌려준다 — 목이 다르면 실서버에서만 깨지는 화면이 된다.
     return {

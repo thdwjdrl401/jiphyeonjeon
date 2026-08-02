@@ -41,6 +41,8 @@ public class LiveAiAnswerService {
     private final LiveCaptionRepository liveCaptionRepository;
     private final RagAnswerStreaming ragAnswerStreaming;
     private final LiveInteractionGuard interactionGuard;
+    private final LiveAiAnswerRecorder recorder;
+    private final com.liveclass.live.repository.LiveAiAnswerRepository aiAnswerRepository;
     private final long streamTimeoutMs;
     // 릴레이 펌프 전용. blocking read라 platform thread면 동시 질문 수만큼 스레드를 잡는다(ADR-0009).
     private final ExecutorService relayExecutor = Executors.newVirtualThreadPerTaskExecutor();
@@ -48,11 +50,15 @@ public class LiveAiAnswerService {
     public LiveAiAnswerService(LiveSessionRepository liveSessionRepository,
                                LiveCaptionRepository liveCaptionRepository,
                                RagAnswerStreaming ragAnswerStreaming,
-                               LiveInteractionGuard interactionGuard) {
+                               LiveInteractionGuard interactionGuard,
+                               LiveAiAnswerRecorder recorder,
+                               com.liveclass.live.repository.LiveAiAnswerRepository aiAnswerRepository) {
         this.liveSessionRepository = liveSessionRepository;
         this.liveCaptionRepository = liveCaptionRepository;
         this.ragAnswerStreaming = ragAnswerStreaming;
         this.interactionGuard = interactionGuard;
+        this.recorder = recorder;
+        this.aiAnswerRepository = aiAnswerRepository;
         // 브라우저 emitter 타임아웃은 업스트림 상한과 같아야 한다 — 짧으면 정상 응답이 중간에 끊긴다.
         this.streamTimeoutMs = ragAnswerStreaming.streamTimeout().toMillis();
     }
@@ -97,8 +103,19 @@ public class LiveAiAnswerService {
         return ragAnswerStreaming.open(command);
     }
 
+    /**
+     * 이 세션에서 <b>내가</b> 한 질문 기록. 새로고침·재접속 복구용이다.
+     *
+     * <p>{@code userId}를 조건에서 빼면 같은 세션의 남의 질문이 함께 나온다 — 무엇을 모르는지가
+     * 드러나므로 개인 범위를 레포지토리 메서드 이름에 박아 둔다.
+     */
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public java.util.List<com.liveclass.live.domain.LiveAiAnswer> history(UUID sessionId, UUID userId) {
+        return aiAnswerRepository.findBySessionIdAndUserIdOrderByAskedAtAscIdAsc(sessionId, userId);
+    }
+
     /** 열린 업스트림을 브라우저 SSE로 잇는다. 프레임마다 즉시 flush되도록 {@link SseEmitter}가 처리한다. */
-    public SseEmitter relay(RagAnswerCommand command, RagAnswerStreamHandle handle) {
+    public SseEmitter relay(RagAnswerCommand command, RagAnswerStreamHandle handle, UUID askedBy) {
         SseEmitter emitter = new SseEmitter(streamTimeoutMs);
         // 클라 취소·타임아웃·오류 — 어느 쪽이든 업스트림을 닫아야 ai-api의 active 슬롯이 풀린다.
         emitter.onCompletion(handle::close);
@@ -107,17 +124,23 @@ public class LiveAiAnswerService {
             emitter.complete();
         });
         emitter.onError(e -> handle.close());
-        relayExecutor.execute(() -> pump(command, handle, emitter));
+        relayExecutor.execute(() -> pump(command, handle, emitter, askedBy));
         return emitter;
     }
 
-    private void pump(RagAnswerCommand command, RagAnswerStreamHandle handle, SseEmitter emitter) {
+    private void pump(RagAnswerCommand command, RagAnswerStreamHandle handle, SseEmitter emitter, UUID askedBy) {
         AtomicBoolean sawTerminal = new AtomicBoolean(false);
+        /*
+         * 흘러가는 답변을 옆에서 받아 적는다. 새로고침하면 대화가 통째로 사라지던 것을 남기기 위해서다.
+         * 기록은 중계를 방해하지 않는다 — recorder가 모든 실패를 삼킨다.
+         */
+        LiveAiAnswerRecorder.Recording recording = recorder.start(command, askedBy);
         try {
             handle.forEachEvent(event -> {
                 if (event.isTerminal()) {
                     sawTerminal.set(true);
                 }
+                recording.observe(event);
                 write(emitter, event);
             });
             if (!sawTerminal.get()) {
@@ -142,6 +165,8 @@ public class LiveAiAnswerService {
             emitter.completeWithError(e);
         } finally {
             handle.close();
+            // terminal을 못 본 채 끊겼어도 남긴다 — 받은 데까지는 새로고침 뒤에도 읽을 수 있어야 한다.
+            recording.save();
         }
     }
 

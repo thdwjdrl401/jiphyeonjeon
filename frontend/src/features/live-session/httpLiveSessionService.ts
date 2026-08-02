@@ -22,6 +22,7 @@ import type {
   ReplayStatus,
   LectureNoteView,
   LectureNoteTopic,
+  AiAnswerHistoryItem,
 } from './liveSessionService.interface'
 
 interface ApiLiveSessionView {
@@ -846,6 +847,11 @@ export const httpLiveSessionService = {
   },
   async saveBookmark(lessonId, sessionMs) {
     await apiClient.post(`/lessons/${lessonId}/bookmarks`, { sessionMs })
+  },
+  async getAiAnswerHistory(sessionId) {
+    const { data } = await apiClient.get<AiAnswerHistoryItem[]>(
+      `/live-sessions/${sessionId}/ai/answers`)
+    return data
   },
   async getLectureNotes(sessionId) {
     const { data } = await apiClient.get<ApiLectureNote>(`/live-sessions/${sessionId}/notes`)
