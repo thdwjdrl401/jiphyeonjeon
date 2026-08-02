@@ -61,6 +61,11 @@ FE 명세는 `meta`/`delta`/`citation`/`done(status)`/`error`였고 ai-api 실�
 `live_session.aiQnaEnabled` 플래그로 추가 게이트를 걸지 **않는다** — 이번 범위는 경로 개통이고,
 기능 스위치 정책(누가 언제 끄나)은 별도 결정이다. 필요해지면 여기에 409를 추가한다.
 
+세션 상태 게이트는 후속 [ADR-0004](../choinhoo/0004-ended-session-conversation.md)가 개정했다.
+질문은 `LIVE`·`ENDING`뿐 아니라 `ENDED`에서도 허용한다. `ENDED` classroom은 같은 `sessionId`와
+저장된 최신 자막 좌표를 그대로 사용하므로 아래 §9의 다시보기 시점 기반 AI를 여는 결정이 아니다.
+시작 전·취소·실패 상태는 409 `LIVE_SESSION_STATE_CONFLICT`다.
+
 ### 4. `contextTimeMs`는 해당 세션 **최신 자막 행의 raw `streamElapsedMs`**
 
 ai-api 규격은 "0 이상의 **최신 STT attempt-local `streamElapsedMs` 좌표**"다. 세션-ms가 아니다.

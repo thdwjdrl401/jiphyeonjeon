@@ -213,7 +213,7 @@ class ChatContractTest {
     }
 
     @Test
-    void ending_allows_chat_but_ended_rejects_it_with_the_closed_contract_code() throws Exception {
+    void ending_and_ended_allow_chat_for_follow_up_discussion() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String[] created = createStartedSession(instructor);
         Cookie[] student = loginAs("STUDENT");
@@ -228,10 +228,28 @@ class ChatContractTest {
 
         liveSessionRepository.findById(sessionId).orElseThrow().setStatus(LiveSessionStatus.ENDED);
         write(post("/api/live-sessions/" + sessionId + "/messages"), student, """
-                {"clientMessageId":"ended-no","text":"종료 뒤 질문"}
+                {"clientMessageId":"ended-ok","text":"종료 뒤 질문"}
+                """)
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/live-sessions/" + sessionId + "/messages").cookie(student))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[1].text").value("종료 뒤 질문"));
+    }
+
+    @Test
+    void chat_before_live_still_returns_state_conflict() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String[] created = createStartedSession(instructor);
+        UUID sessionId = UUID.fromString(created[0]);
+        liveSessionRepository.findById(sessionId).orElseThrow().setStatus(LiveSessionStatus.SCHEDULED);
+
+        write(post("/api/live-sessions/" + sessionId + "/messages"), instructor, """
+                {"clientMessageId":"before-live","text":"시작 전 메시지"}
                 """)
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("LIVE_SESSION_INTERACTION_CLOSED"));
+                .andExpect(jsonPath("$.code").value("LIVE_SESSION_STATE_CONFLICT"));
     }
 
     @Test

@@ -328,7 +328,7 @@ class LiveAiAnswerContractTest {
     }
 
     @Test
-    void ending_allows_ai_but_ended_rejects_before_calling_the_upstream() throws Exception {
+    void ending_and_ended_allow_ai_for_follow_up_questions() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String[] created = createStartedSession(instructor);
         UUID sessionId = UUID.fromString(created[0]);
@@ -340,8 +340,21 @@ class LiveAiAnswerContractTest {
         captured.set(null);
         liveSessionRepository.findById(sessionId).orElseThrow().setStatus(LiveSessionStatus.ENDED);
         ask(created[0], instructor, "종료 뒤 질문")
+                .andExpect(status().isOk());
+        assertThat(awaitRequest()).isNotNull();
+    }
+
+    @Test
+    void ai_before_live_still_returns_state_conflict_without_calling_the_upstream() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String[] created = createStartedSession(instructor);
+        UUID sessionId = UUID.fromString(created[0]);
+        liveSessionRepository.findById(sessionId).orElseThrow().setStatus(LiveSessionStatus.SCHEDULED);
+        captured.set(null);
+
+        ask(created[0], instructor, "시작 전 질문")
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("LIVE_SESSION_INTERACTION_CLOSED"));
+                .andExpect(jsonPath("$.code").value("LIVE_SESSION_STATE_CONFLICT"));
         assertThat(captured.get()).isNull();
     }
 

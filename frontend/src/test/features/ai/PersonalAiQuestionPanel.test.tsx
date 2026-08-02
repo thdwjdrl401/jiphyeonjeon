@@ -316,7 +316,7 @@ describe('개인 AI 질문 패널 — 대화형 UX', () => {
     expect(harness.calls[0].options.signal?.aborted).toBe(true)
   })
 
-  it('ENDED 전환으로 ask가 사라지면 진행 중 요청을 끊고 기존 대화는 유지한다', async () => {
+  it('상위 화면에서 ask 지원을 거두면 진행 중 요청을 끊고 기존 대화는 유지한다', async () => {
     const user = userEvent.setup()
     const harness = controllableAsk()
     const { rerender } = render(<PersonalAiQuestionPanel ask={harness.ask} />)
@@ -324,7 +324,7 @@ describe('개인 AI 질문 패널 — 대화형 UX', () => {
     harness.emit({ type: 'answer.delta', payload: { requestId: 'r1', text: '받은 답변 조각' } })
 
     rerender(
-      <PersonalAiQuestionPanel unavailableNotice="라이브가 종료되어 새 AI 질문을 보낼 수 없습니다." />,
+      <PersonalAiQuestionPanel unavailableNotice="현재 화면에서는 새 AI 질문을 보낼 수 없습니다." />,
     )
 
     await waitFor(() => expect(harness.calls[0].options.signal?.aborted).toBe(true))

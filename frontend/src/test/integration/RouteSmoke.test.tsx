@@ -324,7 +324,7 @@ describe('전체 페이지 라우트', () => {
     // 테스트음(약 5초)을 실제로 기다리는 흐름이라 기본 제한(5초)으로는 끝낼 수 없다.
   })
 
-  it('ENDED 학생 화면은 종료 문구를 표시하고 채팅·AI 입력을 잠근다', async () => {
+  it('ENDED 학생 화면은 종료 문구를 표시하되 채팅·AI 질문을 유지한다', async () => {
     const user = userEvent.setup()
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
     await mockLiveSessionService.endLiveSession('ses-security-live')
@@ -332,13 +332,14 @@ describe('전체 페이지 라우트', () => {
     renderAt('/student/live-sessions/ses-security-live/classroom')
 
     expect(await screen.findByText('라이브가 종료된 강의입니다.')).toBeInTheDocument()
-    expect(screen.queryByLabelText('채팅 메시지')).not.toBeInTheDocument()
-    expect(screen.getByText('라이브가 종료되어 새 채팅을 보낼 수 없습니다.')).toBeInTheDocument()
+    const chatInput = screen.getByLabelText('채팅 메시지')
+    expect(chatInput).toBeEnabled()
+    await user.type(chatInput, '종료 뒤에도 이어가는 질문')
+    await user.click(screen.getByRole('button', { name: '전송' }))
+    expect(await screen.findByText('종료 뒤에도 이어가는 질문')).toBeInTheDocument()
 
     await user.click(screen.getByRole('tab', { name: 'AI 질문' }))
-    expect(screen.getByRole('textbox', { name: 'AI에게 할 질문' })).toBeDisabled()
-    expect(screen.getAllByText('라이브가 종료되어 새 AI 질문을 보낼 수 없습니다.').length)
-      .toBeGreaterThan(0)
+    expect(screen.getByRole('textbox', { name: 'AI에게 할 질문' })).toBeEnabled()
     expect(await screen.findByText('Mock HLS 재생 준비 · ses-security-live')).toBeInTheDocument()
   })
 

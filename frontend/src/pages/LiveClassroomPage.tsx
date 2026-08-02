@@ -87,7 +87,11 @@ export default function LiveClassroomPage() {
   const captionReloadQuery = useQuery({ queryKey: ['live-captions', sessionId], queryFn: () => getCaptions(sessionId), enabled: Boolean(sessionId) && !isInstructor })
   const session = sessionQuery.data
   const lesson = lessonQuery.data
-  const canInteract = session?.status === 'LIVE' || session?.status === 'ENDING'
+  // 라이브 송출이 끝나도 이 세션의 후속 토론·복습 질문은 이어 간다. 자막 seek와 미디어 상태는
+  // hasEnded로 별도 잠그므로 대화 가능 상태와 섞지 않는다.
+  const canUseConversation = session?.status === 'LIVE'
+    || session?.status === 'ENDING'
+    || session?.status === 'ENDED'
   const hasEnded = session?.status === 'ENDED'
   const messages = chatQuery.data ?? []
   // 라이브 자막은 REST 스냅샷이 아니라 WS 델타 스트림으로 구동한다(§3-4 / ADR-0043).
@@ -237,7 +241,7 @@ export default function LiveClassroomPage() {
 
   const sendMessage = (event: FormEvent) => {
     event.preventDefault()
-    if (!canInteract || !message.trim()) return
+    if (!canUseConversation || !message.trim()) return
     sendMutation.mutate({
       clientMessageId: createClientMessageId(),
       text: message.trim(),
@@ -294,7 +298,7 @@ export default function LiveClassroomPage() {
   // 앞선 자막은 누적기(버퍼)에 두었다가 위치가 닿으면 드러낸다(ADR-0045).
   const visibleCaptions = selectVisibleCaptions(captions, { isInstructor, positionMs })
 
-  const discussionComposer = canInteract ? (
+  const discussionComposer = canUseConversation ? (
     <form className="chat-composer" onSubmit={sendMessage}>
       <textarea
         aria-label="채팅 메시지"
@@ -320,8 +324,7 @@ export default function LiveClassroomPage() {
 
   const aiContent = (
     <PersonalAiQuestionPanel
-      ask={canInteract ? askAi : undefined}
-      unavailableNotice={hasEnded ? '라이브가 종료되어 새 AI 질문을 보낼 수 없습니다.' : undefined}
+      ask={canUseConversation ? askAi : undefined}
       placeholder="예: SecurityContext와 세션은 어떻게 다른가요? (Enter 전송 · Shift+Enter 줄바꿈)"
       emptyDescription="강의 자료와 지금까지의 발화를 근거로 답변합니다."
     />
@@ -341,17 +344,15 @@ export default function LiveClassroomPage() {
             ? '실시간 자막 연결에 문제가 생겼습니다. 자동 재연결을 시도합니다.'
             : '실시간 자막 연결이 종료되었습니다.'
 
-  const chatConnectionNotice = hasEnded
-    ? '라이브가 종료되어 새 채팅을 보낼 수 없습니다.'
-    : chatConnectionState === 'connected'
-      ? undefined
-      : chatConnectionState === 'connecting'
-        ? '실시간 채팅을 연결하고 있습니다.'
-        : chatConnectionState === 'reconnecting'
-          ? '실시간 채팅 연결이 끊겨 다시 연결하고 있습니다.'
-          : chatConnectionState === 'error'
-            ? '실시간 채팅 연결에 문제가 생겼습니다. 자동 재연결을 시도합니다.'
-            : '실시간 채팅 연결이 종료되었습니다.'
+  const chatConnectionNotice = chatConnectionState === 'connected'
+    ? undefined
+    : chatConnectionState === 'connecting'
+      ? '실시간 채팅을 연결하고 있습니다.'
+      : chatConnectionState === 'reconnecting'
+        ? '실시간 채팅 연결이 끊겨 다시 연결하고 있습니다.'
+        : chatConnectionState === 'error'
+          ? '실시간 채팅 연결에 문제가 생겼습니다. 자동 재연결을 시도합니다.'
+          : '실시간 채팅 연결이 종료되었습니다.'
 
   const sidebar = (
     <LearningSidebar
