@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Tabs, { tabPanelProps, type TabItem } from '@/shared/ui/Tabs'
-import type { ChatMessageView } from './liveSessionService.interface'
+import LectureNotePanel from './LectureNotePanel'
+import type { ChatMessageView, LectureNoteView } from './liveSessionService.interface'
 import type { GlossaryTermView, LearningPanel, LiveSummaryBlock } from './liveLearningPreview'
 
 /** 패널 래퍼를 새로 만들지 않고 기존 .side-panel-content에 그대로 얹는다(flex·스크롤 구조 유지). */
@@ -14,6 +15,11 @@ interface LearningSidebarProps {
   selectedTermId: string | null
   onSelectedTermChange: (termId: string) => void
   summaryBlocks: LiveSummaryBlock[]
+  /**
+   * 서버가 준 실시간 강의 노트(CONTRACT §3-4a). 주어지면 `summaryBlocks` 대신 이걸 그린다 —
+   * 라이브는 서버 노트를, 다시보기는 아직 기존 블록 표현을 쓴다.
+   */
+  lectureNote?: LectureNoteView | null
   glossaryTerms: GlossaryTermView[]
   messages: ChatMessageView[]
   discussionComposer?: ReactNode
@@ -182,7 +188,9 @@ export default function LearningSidebar(props: LearningSidebarProps) {
         onChange={props.onPanelChange}
       />
       {props.panel === 'discussion' && <DiscussionPanel messages={props.messages} composer={props.discussionComposer} notice={props.discussionNotice} panelProps={tabPanelProps(LEARNING_TAB_PREFIX, 'discussion')} />}
-      {props.panel === 'notes' && <SummaryPanel blocks={props.summaryBlocks} currentSessionMs={props.currentSessionMs} onSeek={props.onSeek} context={props.noteContext} panelProps={tabPanelProps(LEARNING_TAB_PREFIX, 'notes')} />}
+      {props.panel === 'notes' && (props.lectureNote !== undefined
+        ? <LectureNotePanel note={props.lectureNote} live={props.noteContext === 'LIVE'} panelProps={tabPanelProps(LEARNING_TAB_PREFIX, 'notes')} />
+        : <SummaryPanel blocks={props.summaryBlocks} currentSessionMs={props.currentSessionMs} onSeek={props.onSeek} context={props.noteContext} panelProps={tabPanelProps(LEARNING_TAB_PREFIX, 'notes')} />)}
       {props.panel === 'ai' && <div className="side-panel-content ai-panel" {...tabPanelProps(LEARNING_TAB_PREFIX, 'ai')}>{props.aiContent}</div>}
       {props.panel === 'glossary' && <GlossaryPanel terms={props.glossaryTerms} selectedTermId={props.selectedTermId} onSelectedTermChange={props.onSelectedTermChange} panelProps={tabPanelProps(LEARNING_TAB_PREFIX, 'glossary')} />}
     </aside>

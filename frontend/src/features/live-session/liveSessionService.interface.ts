@@ -257,6 +257,28 @@ export interface ProcessingStatus {
   } | null
 }
 
+/**
+ * AI가 자막에서 만든 주제별 강의 노트의 **현재 전체**(CONTRACT §3-4a).
+ *
+ * 증분이 아니라 늘 전체다 — 조각 이어 붙이기는 서버가 한 번만 하고, 그 결과가 새로고침·재연결·실시간
+ * 모두에서 같아야 한다. 조회 응답과 WebSocket payload가 같은 모양인 이유도 그것이다.
+ */
+export interface LectureNoteTopic {
+  topicId?: string
+  title: string
+  keyPoints: string[]
+}
+
+export interface LectureNoteView {
+  /** 이 노트가 반영한 자막 진행도. 오래된 갱신을 버리는 기준. */
+  coveredThroughSequence: number
+  topics: LectureNoteTopic[]
+  markdown: string
+  /** CAPTURING(자라는 중) · COMPLETED(자막 수집 종료) · REFINED(종료 후 정제본으로 교체됨) */
+  status: 'CAPTURING' | 'COMPLETED' | 'REFINED'
+  updatedAt: string | null
+}
+
 export interface QuestionHighlight {
   at: string
   count: number
@@ -354,6 +376,12 @@ export interface LiveSessionService {
    */
   askLiveAi: (sessionId: string, question: string, options: AiAnswerStreamOptions) => Promise<void>
   saveBookmark: (lessonId: string, sessionMs: number) => Promise<void>
+  getLectureNotes: (sessionId: string) => Promise<LectureNoteView>
+  subscribeLectureNotes: (
+    sessionId: string,
+    onNote: (note: LectureNoteView) => void,
+    onConnectionChange: (state: ChatConnectionState) => void,
+  ) => () => void
   getProcessingStatus: (sessionId: string) => Promise<ProcessingStatus>
   getQuestionHighlights: (sessionId: string) => Promise<QuestionHighlight[]>
 }

@@ -1670,3 +1670,6 @@ body {
 .quality-panel fieldset button.is-active { border-color: #fff; background: #fff; color: #111; }
 .quality-panel fieldset:disabled button { opacity: .5; cursor: default; }
 .quality-panel__hint { flex-basis: 100%; margin: 0; font-size: .72rem; color: rgba(255,255,255,.58); }
+
+/* 노트가 아직 없을 때. 가짜 예시 대신 비어 있다고 정직하게 말한다. */
+.summary-empty { margin: .75rem 0 0; font-size: .82rem; line-height: 1.6; color: rgba(255,255,255,.58); }

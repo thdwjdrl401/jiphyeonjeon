@@ -8,6 +8,7 @@ import com.liveclass.live.service.LiveEndOrchestrator;
 import com.liveclass.live.service.LiveParticipantIdentity;
 import com.liveclass.live.service.LivePreflightService;
 import com.liveclass.live.service.LiveProcessingService;
+import com.liveclass.live.service.LiveLectureNoteService;
 import com.liveclass.live.service.LivePresenceRegistry;
 import com.liveclass.live.service.LiveSessionForbiddenException;
 import com.liveclass.live.service.LiveSessionNotFoundException;
@@ -16,6 +17,7 @@ import com.liveclass.live.service.LiveSessionStateConflictException;
 import com.liveclass.live.service.LiveStartOrchestrator;
 import com.liveclass.live.web.dto.LivePreflightReadinessResponse;
 import com.liveclass.live.web.dto.LivePreflightRoomResponse;
+import com.liveclass.live.web.dto.LiveLectureNoteResponse;
 import com.liveclass.live.web.dto.LiveProcessingResponse;
 import com.liveclass.live.web.dto.LiveStartResponse;
 import com.liveclass.live.web.dto.LiveStartStatusResponse;
@@ -54,12 +56,14 @@ public class LiveSessionController {
     private final LiveAccessGuard accessGuard;
     private final LiveProcessingService processingService;
     private final LivePresenceRegistry presenceRegistry;
+    private final LiveLectureNoteService lectureNoteService;
 
     public LiveSessionController(LiveSessionService liveSessionService, LiveEndOrchestrator endOrchestrator,
                                 LiveStartOrchestrator startOrchestrator,
                                 LivePreflightService preflightService, LiveKitTokenService tokenService,
                                 LiveAccessGuard accessGuard, LiveProcessingService processingService,
-                                LivePresenceRegistry presenceRegistry) {
+                                LivePresenceRegistry presenceRegistry,
+                                LiveLectureNoteService lectureNoteService) {
         this.liveSessionService = liveSessionService;
         this.endOrchestrator = endOrchestrator;
         this.startOrchestrator = startOrchestrator;
@@ -68,6 +72,7 @@ public class LiveSessionController {
         this.accessGuard = accessGuard;
         this.processingService = processingService;
         this.presenceRegistry = presenceRegistry;
+        this.lectureNoteService = lectureNoteService;
     }
 
     @Operation(summary = "라이브 세션 조회",
@@ -83,6 +88,16 @@ public class LiveSessionController {
                 .orElseThrow(() -> new LiveSessionNotFoundException("라이브 세션을 찾을 수 없습니다."))
                 // 조회 시점의 접속 현황. 이후 변화는 state 토픽으로 온다(ADR-0060).
                 .withParticipantCount(presenceRegistry.audienceCount(sessionId));
+    }
+
+    @Operation(summary = "라이브 강의 노트 조회",
+            description = "AI가 자막에서 만든 주제별 노트의 현재 전체를 준다(CONTRACT §3-4a). 증분이 아니라 늘 전체이며, "
+                    + "이후 갱신은 notes 토픽의 lecture.note.updated로 온다. 소유 강사 또는 활성 수강생만.")
+    @GetMapping("/api/live-sessions/{sessionId}/notes")
+    public LiveLectureNoteResponse notes(@PathVariable UUID sessionId, Authentication authentication) {
+        // 자막·채팅과 같은 게이트. 노트는 자막에서 파생된 것이라 자막을 볼 수 있는 사람이 볼 수 있다.
+        accessGuard.requireCanAccess(sessionId, UUID.fromString(authentication.getName()));
+        return LiveLectureNoteResponse.from(lectureNoteService.find(sessionId));
     }
 
     @Operation(summary = "라이브 시작 요청",
