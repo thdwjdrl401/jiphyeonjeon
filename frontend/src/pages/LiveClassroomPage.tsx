@@ -6,6 +6,8 @@ import { instructorPaths } from '@/app/router/paths'
 import PersonalAiQuestionPanel, { type AskAiAnswer } from '@/features/ai/PersonalAiQuestionPanel'
 import { useAuth } from '@/features/auth/AuthContext'
 import { getLesson } from '@/features/lesson/lessonService'
+import { getLearningContext } from '@/features/learning/learningService'
+import BookmarkStrip from '@/features/live-session/BookmarkStrip'
 import CaptionDock from '@/features/live-session/CaptionDock'
 import {
   emptyCaptionStreamState,
@@ -142,7 +144,23 @@ export default function LiveClassroomPage() {
     (question, options) => askLiveAi(sessionId, question, options),
     [sessionId],
   )
-  const bookmarkMutation = useMutation({ mutationFn: () => saveBookmark(lesson!.lessonId, positionMs), onSuccess: () => setBookmarked(true) })
+  /*
+   * 찍은 북마크를 다시 보여주기 위한 조회. 저장만 하고 돌아올 길이 없으면 그 버튼은 아무것도 하지
+   * 않는 것과 같다. 강사는 자기 강의에 북마크를 찍지 않으므로 수강생 화면에서만 읽는다.
+   */
+  const learningQuery = useQuery({
+    queryKey: ['learning-context', lesson?.lessonId],
+    queryFn: () => getLearningContext(lesson!.lessonId),
+    enabled: Boolean(lesson?.lessonId) && !isInstructor,
+  })
+  const bookmarkMutation = useMutation({
+    mutationFn: () => saveBookmark(lesson!.lessonId, positionMs),
+    onSuccess: () => {
+      setBookmarked(true)
+      // 방금 찍은 것이 목록에 바로 보여야 한다 — 안 보이면 저장됐는지 알 수 없다.
+      void queryClient.invalidateQueries({ queryKey: ['learning-context', lesson?.lessonId] })
+    },
+  })
   const endMutation = useMutation({ mutationFn: () => endLiveSession(sessionId), onSuccess: () => navigate(instructorPaths.processing(sessionId)) })
   useEffect(() => {
     if (!sessionId) return undefined
@@ -439,6 +457,14 @@ export default function LiveClassroomPage() {
             자막은 수강생 화면에만 둔다. 강사는 자기가 말한 것을 다시 읽을 이유가 없고, 자막 독이
             차지하는 높이만큼 송출 미리보기가 눌려 실제로 나가는 프레임을 작게 보게 된다.
           */}
+          {!isInstructor && (
+            <BookmarkStrip
+              bookmarks={learningQuery.data?.bookmarks ?? []}
+              canSeek={!hasEnded}
+              onSeek={seekSession}
+            />
+          )}
+
           {!isInstructor && (
             <CaptionDock
               captions={visibleCaptions}

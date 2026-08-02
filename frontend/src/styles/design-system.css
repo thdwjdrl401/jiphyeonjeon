@@ -1649,3 +1649,14 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .curriculum-cover img { transition: none; }
 }
+
+/* 내 북마크 스트립 — 플레이어와 자막 독 사이의 얇은 줄. 자주 보는 것이 아니라 사이드바 탭을 늘리지 않는다. */
+.bookmark-strip { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+  padding: .5rem .75rem; border: 1px solid #333; border-radius: .5rem; background: #171717; }
+.bookmark-strip__label { font-size: .75rem; color: rgba(255,255,255,.58); white-space: nowrap; }
+.bookmark-strip ul { display: flex; gap: .4rem; flex-wrap: wrap; margin: 0; padding: 0; list-style: none; }
+.bookmark-strip button, .bookmark-strip time { font-variant-numeric: tabular-nums; font-size: .78rem;
+  padding: .18rem .5rem; border-radius: .35rem; }
+.bookmark-strip button { border: 1px solid #444; background: transparent; color: #fff; cursor: pointer; }
+.bookmark-strip button:hover { border-color: #fff; }
+.bookmark-strip time { color: rgba(255,255,255,.58); }
