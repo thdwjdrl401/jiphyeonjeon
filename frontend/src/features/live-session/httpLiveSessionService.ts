@@ -18,6 +18,7 @@ import type {
   PreflightReadiness,
   PreflightRoom,
   PlaybackView,
+  ProcessingStatus,
 } from './liveSessionService.interface'
 
 interface ApiLiveSessionView {
@@ -783,7 +784,9 @@ export const httpLiveSessionService = {
     await apiClient.post(`/lessons/${lessonId}/bookmarks`, { sessionMs })
   },
   async getProcessingStatus(sessionId) {
-    return notImplemented(`GET /instructor/live-sessions/${sessionId}/processing`)
+    const { data } = await apiClient.get<ProcessingStatus>(
+      `/instructor/live-sessions/${sessionId}/processing`)
+    return data
   },
   async getQuestionHighlights(sessionId) {
     return notImplemented(`GET /instructor/live-sessions/${sessionId}/question-highlights`)

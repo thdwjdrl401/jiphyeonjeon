@@ -55,7 +55,7 @@ describe('미구현 API 표시', () => {
     // 라이브 자막 리로드(GET /live-sessions/{id}/captions)는 서버에 구현됨(CAPTION-01, ADR-0045) — 제외.
     // 라이브 AI 질문(POST /live-sessions/{id}/ai/answers/stream)도 구현됨(AI-QUESTION-01, ADR-0047) — 제외.
     // 다시보기 AI는 시간 앵커 계약 전까지 열 수 없어(ADR-0047 §9) 아래 목록에 남는다.
-    ['녹화 처리 현황', () => live.getProcessingStatus('ses-1')],
+    // 녹화 처리 현황(GET /instructor/live-sessions/{id}/processing)도 구현됨(ADR-0059) — 제외.
     ['질문 하이라이트', () => live.getQuestionHighlights('ses-1')],
     ['다시보기 자막', () => replay.getReplayCaptions('les-1')],
     ['다시보기 채팅', () => replay.getReplayMessages('les-1')],

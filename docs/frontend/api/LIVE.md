@@ -41,7 +41,7 @@ STARTING ─────────→ FAILED
 | `LIVE-SESSION-06` | `POST` | `/api/live-sessions/{sessionId}/start` | 멱등 라이브 시작 | URL **확정** |
 | `LIVE-SESSION-07` | `POST` | `/api/instructor/live-sessions/{sessionId}/token` | 소유 강사 LiveKit 송출 token 발급 | URL **확정** |
 | `LIVE-SESSION-08` | `POST` | `/api/live-sessions/{sessionId}/end` | 동기 순차·멱등 라이브 종료 | **구현됨(ADR-0003)** |
-| `LIVE-SESSION-09` | `GET` | `/api/instructor/live-sessions/{sessionId}/processing` | 종료 후 녹화·AI 처리 조회 | **제안** |
+| `LIVE-SESSION-09` | `GET` | `/api/instructor/live-sessions/{sessionId}/processing` | 종료 후 녹화 처리 조회 | **구현됨(ADR-0059)** |
 | `LIVE-PLAYBACK-01` | `GET` | `/api/live-sessions/{sessionId}/playback` | 최근·전체 DVR HLS 재생 정보 | **제안** |
 
 ### 2.2 실시간·학습
@@ -688,7 +688,7 @@ GET /api/instructor/live-sessions/{sessionId}/question-pins/{pinId}/questions?pa
 
 userId, 실명, 가명과 개인 AI 답변은 포함하지 않는다. 초기에는 의미 기반 유사 질문 묶음을 제공하지 않는다.
 
-## 13. 종료 후 처리 조회
+## 13. 종료 후 처리 조회 — 구현됨(ADR-0059)
 
 ```http
 GET /api/instructor/live-sessions/{sessionId}/processing
@@ -698,25 +698,30 @@ GET /api/instructor/live-sessions/{sessionId}/processing
 {
   "sessionId": "ses_01J...",
   "liveSessionStatus": "ENDED",
+  "recordingEnabled": true,
+  "startedAt": "2026-08-01T10:00:00+09:00",
+  "endedAt": "2026-08-01T11:32:00+09:00",
   "videoAsset": {
     "videoAssetId": "vid_01J...",
     "status": "VERIFYING",
-    "attempt": 1,
-    "failureCode": null
-  },
-  "aiPostProcessing": {
-    "status": "PROCESSING",
-    "transcript": "PROCESSING",
-    "glossary": "NOT_STARTED",
-    "chapters": "NOT_STARTED",
-    "quiz": "NOT_STARTED"
-  },
-  "replayStatus": "NOT_READY",
-  "allowedActions": []
+    "replayStatus": "DRAFT",
+    "failureCode": null,
+    "durationMs": 5520000,
+    "sizeBytes": 1284000000,
+    "recordingStartedAt": "2026-08-01T10:00:04+09:00",
+    "recordingEndedAt": "2026-08-01T11:32:06+09:00"
+  }
 }
 ```
 
-`videoAssetStatus`: `FINALIZING`, `VERIFYING`, `READY`, `FAILED` 제안. HLS가 `READY`여도 replay는 자동 게시하지 않는다.
+`videoAsset.status`: `REQUESTED|STARTING|RECORDING|FINALIZING|VERIFYING|READY|FAILED`.
+**HLS가 `READY`여도 replay는 자동 게시하지 않는다** — `replayStatus`가 별도 축이라 둘을 한 필드로 합치지 않는다.
+
+- 서버는 **상태만** 준다. `steps[].label` 같은 표시 문구는 화면이 만든다(계약 테스트가 부재를 고정).
+- `videoAsset`은 null일 수 있고 그 부재는 실패가 아니다. `recordingEnabled`로 "아직 없음"과 "녹화 안 함"을 가른다.
+- 자산 전이는 Egress 완료 webhook이 나중에 몰고 오므로 종착 상태(`READY`·`FAILED`) 전까지 폴링한다.
+- `aiPostProcessing`(transcript·glossary·chapters·quiz)은 받쳐줄 서버 데이터가 없어 **넣지 않는다**. 산출물이 생기면 추가한다.
+- 소유 강사만. 비소유 403 `LIVE_SESSION_FORBIDDEN`, 없는 세션 404 `LIVE_SESSION_NOT_FOUND`, 학생은 역할 게이트 403.
 
 ## 14. 오류·장애 원칙
 

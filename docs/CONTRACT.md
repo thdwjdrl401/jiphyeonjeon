@@ -48,6 +48,35 @@ LIVE → ENDING 커밋 → LiveKit Room 삭제 → Egress stop 보완 → ENDING
 - 학생 UI도 같은 기준을 사용한다. `ENDING`은 HLS 지연 구간을 위한 유예 상태이고,
   `ENDED`에서 채팅·AI 질문·자막 시각 이동을 잠근다.
 
+### 2-2. 종료 후 처리 현황 — 구현됨
+
+`GET /api/instructor/live-sessions/{sessionId}/processing` (소유 강사 전용, 200)
+— [ADR-0059](decisions/songjeongki/0059-live-processing-status-is-two-axes.md).
+
+```json
+{
+  "sessionId": "...", "liveSessionStatus": "ENDED", "recordingEnabled": true,
+  "startedAt": "...", "endedAt": "...",
+  "videoAsset": {
+    "videoAssetId": "...", "status": "READY", "replayStatus": "DRAFT", "failureCode": null,
+    "durationMs": 5520000, "sizeBytes": 1284000000,
+    "recordingStartedAt": "...", "recordingEndedAt": "..."
+  }
+}
+```
+
+- **두 상태축을 접지 않는다.** `videoAsset.status`(`REQUESTED|STARTING|RECORDING|FINALIZING|VERIFYING|READY|FAILED`)는
+  "재생할 수 있는가"이고 `replayStatus`(`DRAFT|READY_FOR_REVIEW|PUBLISHED|WITHDRAWN`)는 "수강생에게 공개했는가"다.
+  서로 다른 사실이라 `ready` 같은 단일 불리언으로 합치지 않는다(§2-1·ADR-0003 §3의 독립 상태축).
+- **표시 문구를 담지 않는다.** 서버는 상태 enum만 주고 단계 이름·설명은 FE가 고른다. 응답에 `steps`·`ready`·`label`이
+  들어오면 계약 위반이다(`LiveProcessingContractTest`가 부재를 고정).
+- **`videoAsset`은 null일 수 있고 그 부재는 실패가 아니다.** 녹화 미시작이거나 녹화를 끄고 진행한 세션이다.
+  `recordingEnabled`로 둘을 구분한다.
+- 자산 전이는 Egress 완료 webhook([ADR-0034](decisions/songjeongki/0034-egress-completion-webhook.md))이 나중에 몰고 오므로
+  FE는 종착 상태(`READY`·`FAILED`) 전까지 폴링한다. AI 후처리 상태는 받쳐줄 데이터가 없어 이 응답에 넣지 않는다.
+- 소유권 위반 403 `LIVE_SESSION_FORBIDDEN`, 없는 세션 404 `LIVE_SESSION_NOT_FOUND`,
+  학생은 `/api/instructor/**` 역할 게이트로 403.
+
 ## 3. 내부 계약 (확정 인터페이스)
 
 ### 3-1. Spring → AI 배치 잡 (RabbitMQ)

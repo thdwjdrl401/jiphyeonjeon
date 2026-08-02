@@ -7,6 +7,7 @@ import com.liveclass.live.service.LiveAccessGuard;
 import com.liveclass.live.service.LiveEndOrchestrator;
 import com.liveclass.live.service.LiveParticipantIdentity;
 import com.liveclass.live.service.LivePreflightService;
+import com.liveclass.live.service.LiveProcessingService;
 import com.liveclass.live.service.LiveSessionForbiddenException;
 import com.liveclass.live.service.LiveSessionNotFoundException;
 import com.liveclass.live.service.LiveSessionService;
@@ -14,6 +15,7 @@ import com.liveclass.live.service.LiveSessionStateConflictException;
 import com.liveclass.live.service.LiveStartOrchestrator;
 import com.liveclass.live.web.dto.LivePreflightReadinessResponse;
 import com.liveclass.live.web.dto.LivePreflightRoomResponse;
+import com.liveclass.live.web.dto.LiveProcessingResponse;
 import com.liveclass.live.web.dto.LiveStartResponse;
 import com.liveclass.live.web.dto.LiveStartStatusResponse;
 import com.liveclass.live.web.dto.LiveTokenResponse;
@@ -49,17 +51,19 @@ public class LiveSessionController {
     private final LivePreflightService preflightService;
     private final LiveKitTokenService tokenService;
     private final LiveAccessGuard accessGuard;
+    private final LiveProcessingService processingService;
 
     public LiveSessionController(LiveSessionService liveSessionService, LiveEndOrchestrator endOrchestrator,
                                 LiveStartOrchestrator startOrchestrator,
                                 LivePreflightService preflightService, LiveKitTokenService tokenService,
-                                LiveAccessGuard accessGuard) {
+                                LiveAccessGuard accessGuard, LiveProcessingService processingService) {
         this.liveSessionService = liveSessionService;
         this.endOrchestrator = endOrchestrator;
         this.startOrchestrator = startOrchestrator;
         this.preflightService = preflightService;
         this.tokenService = tokenService;
         this.accessGuard = accessGuard;
+        this.processingService = processingService;
     }
 
     @Operation(summary = "라이브 세션 조회", description = "라이브 세션의 기본 정보를 조회한다. 소유 강사 또는 활성 수강생만.")
@@ -156,6 +160,16 @@ public class LiveSessionController {
     @PostMapping("/api/live-sessions/{sessionId}/end")
     public LiveSessionView end(@PathVariable UUID sessionId, Authentication authentication) {
         return endOrchestrator.end(sessionId, UUID.fromString(authentication.getName()));
+    }
+
+    @Operation(summary = "종료 후 처리 현황 조회",
+            description = "라이브 종료 뒤 녹화 자산이 어디까지 왔는지 조회한다(소유 강사). 라이브 종료와 녹화 완결은 "
+                    + "별개 상태축이라, 세션이 ENDED여도 자산은 FINALIZING→VERIFYING→READY를 따로 지나간다. "
+                    + "표시 문구는 담지 않는다 — 상태만 주고 FE가 문장을 고른다.")
+    @GetMapping("/api/instructor/live-sessions/{sessionId}/processing")
+    public LiveProcessingResponse processing(@PathVariable UUID sessionId, Authentication authentication) {
+        return LiveProcessingResponse.from(
+                processingService.get(sessionId, UUID.fromString(authentication.getName())));
     }
 
     /** 강사 WebRTC 송출 토큰 발급. 수강생은 LiveKit 방에 참여하지 않고 HLS로만 재생한다(ADR-0032). */
