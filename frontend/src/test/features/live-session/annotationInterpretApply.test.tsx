@@ -335,16 +335,25 @@ describe('수식 재편집', () => {
   })
 
   /**
-   * <b>모델에 보내는 이미지의 긴 변을 상한에 맞춰 줄인다.</b>
+   * <b>예산에 맞을 때까지 줄여서 보낸다.</b>
    *
-   * <p>기본값을 쓰면 Excalidraw가 `scale: 2`로 그리고 캔버스는 선택 범위 크기로 생긴다. 다이어그램이
-   * 커질수록 픽셀이 제곱으로 늘어 모델의 이미지 한도를 넘고, 상류가 400을 돌려주면 우리는 502로
-   * 감싼다 — 강사에게는 "조금 그리면 되는데 많이 그리면 안 된다"로 보인다. 운영에서 실제로 그렇게
-   * 났다(GMS status=400 반복).
+   * <p>상류(GMS)는 요청 본문이 약 100KB를 넘으면 본문을 읽지 못하고 엉뚱한 오류를 돌려준다
+   * (실측: 99,000B 통과 / 102,400B 실패, `"Model not found in request"`). 모델 이름 문제처럼
+   * 읽히지만 아니다 — 같은 이름으로 작은 요청은 통과한다.
    *
-   * <p>줄여도 잃는 것이 없다. 여기서 묻는 것은 무엇을 그렸는가이지 좌표가 아니다(ADR-0054).
+   * <p>고정 크기로는 맞출 수 없다. 같은 픽셀 수라도 획이 많으면 PNG가 훨씬 커지므로, 재 보고
+   * 줄이는 수밖에 없다. 그래서 여기서 고정하는 것은 특정 픽셀 값이 아니라 <b>"예산에 들어올
+   * 때까지 다시 그린다"</b>는 동작이다.
    */
-  it('해석 이미지는 긴 변을 상한으로 줄여 보낸다', async () => {
+  it('해석 이미지는 예산에 들어올 때까지 줄여서 보낸다', async () => {
+    // 처음 두 번은 예산을 넘고, 세 번째에 들어온다.
+    const big = 'data:image/png;base64,' + 'A'.repeat(200_000)
+    const fits = 'data:image/png;base64,' + 'A'.repeat(1_000)
+    exportToCanvas
+      .mockResolvedValueOnce({ toDataURL: () => big })
+      .mockResolvedValueOnce({ toDataURL: () => big })
+      .mockResolvedValueOnce({ toDataURL: () => fits })
+
     const { findByTestId } = render(
       <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
@@ -356,16 +365,15 @@ describe('수식 재편집', () => {
     await waitFor(() => { expect(document.querySelector('.annotation-action-ring')).not.toBeNull() })
     fireEvent.click(document.querySelectorAll('.annotation-action-ring__item')[0])
 
-    await waitFor(() => { expect(exportToCanvas).toHaveBeenCalled() })
-    const getDimensions = (exportToCanvas.mock.calls.at(-1)![0] as {
-      getDimensions?: (w: number, h: number) => { scale: number }
-    }).getDimensions
-    expect(getDimensions).toBeTypeOf('function')
+    // 예산에 들어올 때까지 다시 그렸고, 들어온 순간 멈췄다.
+    await waitFor(() => { expect(exportToCanvas).toHaveBeenCalledTimes(3) })
 
-    // 작은 그림은 그대로(확대하지 않는다).
-    expect(getDimensions!(800, 600).scale).toBe(1)
-    // 긴 변이 상한을 넘으면 비율을 지켜 줄인다.
-    expect(getDimensions!(4000, 1000).scale).toBeCloseTo(1600 / 4000, 5)
-    expect(getDimensions!(1000, 3200).scale).toBeCloseTo(1600 / 3200, 5)
+    // 그리고 회차마다 더 작게 그린다.
+    const edges = exportToCanvas.mock.calls.map(([arg]) => {
+      const getDimensions = (arg as { getDimensions: (w: number, h: number) => { scale: number } }).getDimensions
+      return getDimensions(4000, 4000).scale
+    })
+    expect(edges[1]).toBeLessThan(edges[0])
+    expect(edges[2]).toBeLessThan(edges[1])
   })
 })
