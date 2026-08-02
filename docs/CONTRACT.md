@@ -23,30 +23,105 @@
 | 강의 | `POST /instructor/sections/{id}/lessons`·`PATCH /instructor/lessons/{id}`·`GET /lessons/{id}` | 상태 필드는 **어디서나 `status`**(목차·관리 응답 동일, `lessonStatus` 아님). 값은 **`PUBLISHED` 하나** — 레슨에는 초안이 없고 만들어지는 순간 게시 상태다. **레슨 발행·게시취소 엔드포인트는 없다**(`POST /instructor/lessons/{id}/publish`·`/unpublish` 제거). 외부 공개 여부는 **커리큘럼 `lifecycleStatus`만** 결정하며, 커리큘럼을 발행하면 그 안의 강의가 함께 공개된다([decisions/seominkyeong/0005](decisions/seominkyeong/0005-lesson-has-no-draft-state.md)). 수강생용 `GET /lessons/{id}`는 소유권이 아니라 **수강 관계**로 연다 — 미수강 403 `ENROLLMENT_REQUIRED`([decisions/songjeongki/0029](decisions/songjeongki/0029-lesson-detail-and-display-name.md)). 미게시 레슨이라는 개념이 없어져 수강자에게는 목차의 강의가 모두 열린다. **강사 저작 화면은 공개 카탈로그가 아니라 강사 엔드포인트로 읽는다** — `GET /instructor/lessons/{id}`는 상위 커리큘럼이 DRAFT여도 열리고 그 레슨의 **`liveSession`(sessionId·status·scheduledAt, 없으면 null)을 함께 준다**([decisions/songjeongki/0041](decisions/songjeongki/0041-instructor-authoring-reads-and-autosave.md)) |
 | 자료 | `POST /instructor/lessons/{id}/materials` (PPTX) | presigned→MinIO. **영상 업로드 없음**. 본문은 `{"assetId":"..."}`(먼저 에셋으로 올린 PPTX를 연결, multipart 아님). 소유 강사만(비소유 403·없는 레슨 404), 성공 **201** `{materialId, assetId, fileName, status}`. 같은 (레슨,에셋) 중복 연결 **409** `MATERIAL_ALREADY_ATTACHED`(DB 부분 유니크 인덱스로 동시요청도 차단), 잘못된 에셋(없음·kind 불일치·미완료·업로더 불일치) **400** `MATERIAL_INVALID`. 레슨 상세(`GET /lessons/{id}`)·커리큘럼 상세·**강사 관리용 `GET /instructor/lessons/{id}`**의 `materials`는 연결된 활성 자료로 채워지되, **커리큘럼 상세는 ENROLLED·OWNER_INSTRUCTOR에게만 노출**(게스트·미수강자는 빈 목록). **삭제** `DELETE .../materials/{materialId}`(소프트, 멱등)·**다운로드** `GET .../materials/{materialId}/download`(presigned 302). 자료 응답에 **`embeddingStatus`**(PENDING/PROCESSING/READY/FAILED, [0036](decisions/songjeongki/0036-material-embedding-pipeline.md)) — 임베딩 파이프라인(outbox→RabbitMQ→AI→pgvector→콜백)은 스위치(`material.embedding.enabled`) 뒤, 기본 off라 지금은 READY. **AI 콜백** `POST /api/internal/ai/callbacks`(§3-2, HMAC 서명·inbox 멱등)로 상태 확정 ([decisions/songjeongki/0035](decisions/songjeongki/0035-lesson-material-attach.md), [0036](decisions/songjeongki/0036-material-embedding-pipeline.md)). **커리큘럼-레벨 자료(ADR-0042)**: 같은 계약을 스코프만 달리해 `POST/DELETE /instructor/curriculums/{id}/materials[/{materialId}]`·`GET .../download`으로 제공(레슨 자료와 대칭 — 201·409·400·204·302 동일, 같은 `material_asset` 테이블). 커리큘럼 공통 자료는 **강사 관리용 `GET /instructor/curriculums/{id}`의 `materials`**와 공개 상세(`GET /curriculums/{id}`, ENROLLED·OWNER_INSTRUCTOR 게이트)에 함께 노출된다 ([decisions/songjeongki/0042](decisions/songjeongki/0042-curriculum-material-attach-and-embedding-scope.md)) |
 | 에셋 | `POST /assets/upload-requests` → presigned `PUT` → `POST /assets/{id}/complete` | 바이트는 앱 서버를 통과하지 않는다. 받은 `assetId`를 도메인 요청에 실어 보낸다(커리큘럼 `thumbnailAssetId`, 프로필 `assetId`, 레슨 자료 `assetId`). kind별 발급: **PROFILE_IMAGE는 인증된 누구나**, **THUMBNAIL·MATERIAL은 강사만**(학생 403). MATERIAL은 **PPTX만·50MiB**, 이미지 kind는 jpeg·png·webp·5MiB — 형식·크기 위반은 400 ([decisions/songjeongki/0023](decisions/songjeongki/0023-asset-presigned-upload.md), [0035](decisions/songjeongki/0035-lesson-material-attach.md)) |
-| 다시보기 | `GET /lessons/{id}/playback` · `GET /lessons/{id}/playback/manifest` · `POST /instructor/lessons/{id}/replay-review/publish` · `POST /instructor/lessons/{id}/replay-review/withdraw` · `POST /webhooks/livekit` | **라이브 되감기·종료 후 재생 API 구현됨**([decisions/choinhoo/0001](decisions/choinhoo/0001-live-replay-playback-api.md), [decisions/songjeongki/0039](decisions/songjeongki/0039-replay-playback-api.md)). metadata 응답은 `{lessonId, videoAssetId, sessionId, startedAt, liveSessionStatus, currentSessionMs, sessionOffsetMs, durationMs, source}`이고 `source`는 `{url, availableFromMs, availableToMs}` 또는 manifest 생성 전이면 `null`이다. **STARTING은 준비 상태 조회만 허용하고, manifest가 이미 있어도 `source=null`이며 manifest endpoint는 409 `RECORDING_STARTING`이다. 실제 HLS source는 원자적 LIVE 전환 뒤에만 공개한다.** source는 하나다 — 라이브 중 재생목록은 `#EXT-X-ENDLIST` 없이 자라는 EVENT 목록이라 라이브 엣지와 세션 처음까지의 seek을 한 목록이 동시에 준다. `url`은 인증된 manifest endpoint이며 `application/vnd.apple.mpegurl`·`Cache-Control: no-store`; 그 본문의 일반 세그먼트와 `EXT-X-MAP/KEY` URI를 presigned GET으로 재작성한다. **라이브 중에는 `#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL`(기본 60s, `video.playback.can-skip-until`)로 델타 재생목록을 광고하고, 플레이어가 `_HLS_skip=YES`로 다시 물으면 경계보다 오래된 세그먼트를 `#EXT-X-SKIP:SKIPPED-SEGMENTS=N`으로 생략한다**(RFC 8216bis §6.2.5.1). 생략은 삭제가 아니라 병합 지시라 `EXT-X-MEDIA-SEQUENCE`가 불변이고 플레이어 진행 바는 강의 전체를 유지한다. 종료 후 재생목록은 ENDLIST가 있어 플레이어가 다시 받지 않으므로 델타를 쓰지 않는다. 학생은 활성 수강 + 레슨 PUBLISHED가 필수이고, 세션 `STARTING/LIVE/ENDING` 중에는 `replayStatus`와 무관하게 metadata를 조회하며 실제 재생은 LIVE/ENDING부터 한다. 종료 후에는 자산 READY + replay PUBLISHED만 시청한다. 소유 강사는 게시 전에도 미리보기한다. 첫 PDT − 세션 시작시각을 `sessionOffsetMs`로 요청마다 계산한다. 세그먼트 URL TTL은 `video.playback.segment-url-ttl`(기본 **6h**) — **델타는 옛 세그먼트 URL을 다시 주지 않으므로 강의 길이보다 짧으면 오래 시청한 학생의 되감기가 403이 된다**. 세그먼트는 공개 도메인(`video.playback.public-endpoint`)으로 서명해 nginx `/recordings/`로 서빙하며, backend가 매니페스트를 읽는 내부 주소(`livekit.egress.s3-endpoint`)와 다르다(SigV4가 Host를 서명에 포함). manifest 생성 지연 409 `RECORDING_STARTING`, 종료 자산 미준비·manifest 유실 409 `REPLAY_NOT_READY`, 스토리지 장애 503 `PLAYBACK_STORAGE_UNAVAILABLE`; 세그먼트 403/장시간 일시정지 뒤에는 같은 URL을 다시 로드한다. 게시·철회는 소유 강사만, 둘 다 204 멱등이며 게시에는 READY가 필요하고 라이브 중 철회는 409 `REPLAY_WITHDRAW_WHILE_LIVE`다. 검수 데이터 저장(`PUT .../replay-review`)은 CP2·CP3 산출물이 없어 미구현. LiveKit webhook은 JWT 검증 후 자산 READY/FAILED와 녹화 통계를 멱등 확정한다([0034](decisions/songjeongki/0034-egress-completion-webhook.md)). |
+| 다시보기 | `GET /lessons/{id}/playback` · `GET /lessons/{id}/playback/manifest` · `GET /instructor/live-sessions/{id}/processing` · `POST /instructor/lessons/{id}/replay-review/publish` · `POST /instructor/lessons/{id}/replay-review/withdraw` · `POST /webhooks/livekit` | **라이브 되감기·종료 후 재생 API 구현됨**([decisions/choinhoo/0001](decisions/choinhoo/0001-live-replay-playback-api.md), [decisions/songjeongki/0039](decisions/songjeongki/0039-replay-playback-api.md)). metadata 응답은 `{lessonId, videoAssetId, sessionId, startedAt, liveSessionStatus, replayStatus, currentSessionMs, sessionOffsetMs, durationMs, source}`이고 `source`는 `{url, availableFromMs, availableToMs}` 또는 manifest 생성 전이면 `null`이다. `replayStatus`는 영상 공개 상태이며 AI 게시 상태와 별개다. **STARTING은 준비 상태 조회만 허용하고, manifest가 이미 있어도 `source=null`이며 manifest endpoint는 409 `RECORDING_STARTING`이다. 실제 HLS source는 원자적 LIVE 전환 뒤에만 공개한다.** source는 하나다 — 라이브 중 재생목록은 `#EXT-X-ENDLIST` 없이 자라는 EVENT 목록이라 라이브 엣지와 세션 처음까지의 seek을 한 목록이 동시에 준다. `url`은 인증된 manifest endpoint이며 `application/vnd.apple.mpegurl`·`Cache-Control: no-store`; 그 본문의 일반 세그먼트와 `EXT-X-MAP/KEY` URI를 presigned GET으로 재작성한다. **라이브 중에는 `#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL`(기본 60s, `video.playback.can-skip-until`)로 델타 재생목록을 광고하고, 플레이어가 `_HLS_skip=YES`로 다시 물으면 경계보다 오래된 세그먼트를 `#EXT-X-SKIP:SKIPPED-SEGMENTS=N`으로 생략한다**(RFC 8216bis §6.2.5.1). 생략은 삭제가 아니라 병합 지시라 `EXT-X-MEDIA-SEQUENCE`가 불변이고 플레이어 진행 바는 강의 전체를 유지한다. 종료 후 재생목록은 ENDLIST가 있어 플레이어가 다시 받지 않으므로 델타를 쓰지 않는다. 학생은 활성 수강 + 레슨 PUBLISHED가 필수이고 실제 HLS는 LIVE부터 공개한다. **기존 classroom 시청자는 `session.ended` 뒤에도 `VideoAsset FINALIZING/VERIFYING → READY` 동안 같은 HLS와 manifest 갱신을 유지하고 마지막 버퍼까지 소비한다. 별도 송출 종료 안내를 표시하거나 player를 중단하지 않는다.** 새로 다시보기에 진입하는 학생에게만 `READY + replay PUBLISHED` 게이트를 적용한다([ADR-0005](decisions/choinhoo/0005-ended-hls-caption-drain.md), 목표 계약·코드 반영 필요). 새 정상 녹화는 성공 webhook의 한 DB 트랜잭션에서 `VideoAsset READY + ReplayStatus PUBLISHED`가 되어 즉시 학생에게 공개된다([ADR-0007](decisions/choinhoo/0007-recording-ready-auto-publish-and-processing-polling.md), **구현됨**). 기존 `READY + DRAFT`와 `WITHDRAWN`은 자동 공개하지 않으며 수동 publish API는 기존 자산·철회 후 재게시 용도로 유지한다. 소유 강사는 게시 전에도 미리보기한다. 첫 PDT − 세션 시작시각을 `sessionOffsetMs`로 요청마다 계산한다. 세그먼트 URL TTL은 `video.playback.segment-url-ttl`(기본 **6h**) — **델타는 옛 세그먼트 URL을 다시 주지 않으므로 강의 길이보다 짧으면 오래 시청한 학생의 되감기가 403이 된다**. 세그먼트는 공개 도메인(`video.playback.public-endpoint`)으로 서명해 nginx `/recordings/`로 서빙하며, backend가 매니페스트를 읽는 내부 주소(`livekit.egress.s3-endpoint`)와 다르다(SigV4가 Host를 서명에 포함). manifest 생성 지연 409 `RECORDING_STARTING`, 새 replay 진입의 종료 자산 미준비·manifest 유실 409 `REPLAY_NOT_READY`, 스토리지 장애 503 `PLAYBACK_STORAGE_UNAVAILABLE`; 세그먼트 403/장시간 일시정지 뒤에는 같은 URL을 다시 로드한다. 게시·철회는 소유 강사만, 둘 다 204 멱등이며 게시에는 READY가 필요하고 라이브 중 철회는 409 `REPLAY_WITHDRAW_WHILE_LIVE`다. 검수 데이터 저장(`PUT .../replay-review`)은 CP2·CP3 산출물이 없어 미구현. LiveKit webhook은 JWT 검증 후 자산 READY/FAILED와 녹화 통계를 멱등 확정하고, 정상 자동 게시 경로에서는 READY와 PUBLISHED를 함께 커밋한다([0034](decisions/songjeongki/0034-egress-completion-webhook.md), [ADR-0007](decisions/choinhoo/0007-recording-ready-auto-publish-and-processing-polling.md)). |
 | 학습 | `GET /lessons/{id}/learning-context`·`PUT /lessons/{id}/progress`·`POST .../bookmarks` | **구현됨**(learning 배선, [decisions/songjeongki/0033](decisions/songjeongki/0033-learning-progress-wiring.md)). 수강자만(미수강 403 `ENROLLMENT_REQUIRED`, 없는 레슨 404). 진도율은 **클라이언트 계산·서버 저장**(0~100), 90% 넘으면 완료(sticky), `clientUpdatedAt`으로 순서역전 방어. 북마크는 멱등. **카탈로그 `progress`는 이제 활성 수강자에게 채워진다**(완료 레슨 수 기준, 상세·내 수강 목록). watched_ranges 정교화는 후속 |
 | 내 수강·대시보드 | `GET /me/enrollments`·`GET /me/learning-summary`·`GET /instructor/dashboard-summary` | **항목마다 커리큘럼 카드 동봉(구현됨)** — 목록을 받고 커리큘럼을 건건이 다시 조회하지 않도록. **학습 요약(구현됨)**: 활성 수강 전반의 `inProgressCurriculumCount`·`completedCurriculumCount`·`averageProgress`(0~100)·`completedLessonCount`와 `todayLiveSession`(가장 이른 예정/진행 라이브, 없으면 null). 로그인 필요, 비학생·수강 없음은 0 요약. **강사 대시보드 요약(구현됨)**: `GET /instructor/dashboard-summary` — `totalCurriculumCount`·`publishedCurriculumCount`·`upcomingLiveCount`·`totalEnrolleeCount`와 `todayLiveSession`([decisions/songjeongki/0041](decisions/songjeongki/0041-instructor-authoring-reads-and-autosave.md)). 소유 모듈은 curriculum |
 | 자막/용어 | `GET /lessons/{id}/transcript`·`/glossary` · **`GET /live-sessions/{sessionId}/captions`** | transcript·glossary는 게시본(core). **라이브 자막 리로드(구현됨, CAPTION-01/[ADR-0045](decisions/songjeongki/0045-live-caption-position-sync-approx-session-ms.md))**: 저장된 `core.live_caption`을 세션-ms 순으로 반환하며 각 항목은 WS 델타/종료 payload와 **같은 필드**(`type`·`sttSessionId`·`sequence`·`lastSequence`·`streamElapsedMs`·근사 `sessionMs`·`text`·`reason`·`occurredAt`)다. 인가는 세션 참가자(소유 강사/활성 수강생, 미참가 403). FE가 새로고침·재연결 뒤 WS 누적기에 그대로 시드해 자막을 복원한다. |
-| AI | **`POST /live-sessions/{sessionId}/ai/answers/stream`(SSE, 구현됨)** · `/lessons/{id}/ai/terms:explain` | **라이브 AI 질의응답(AI-QUESTION-01, [ADR-0047](decisions/songjeongki/0047-live-ai-answer-sse-proxy.md))**: 요청 `{question}`(1~4,000자, 서버가 trim하지 않음)만 받고 `lessonId`·`contextTimeMs`·`requestId`는 **서버가 채운다**(클라 입력 신뢰 금지). 응답은 `text/event-stream`으로 **ai-api 이벤트를 변환 없이 그대로 릴레이**한다 — `answer.delta{requestId,text}` 0개 이상 + `answer.done{requestId,sources}`\|`answer.insufficient{requestId,message}`\|`answer.error{requestId,code,message,retryable}` **정확히 하나**(§3-9). 인가는 세션 참가자(소유 강사/활성 수강생) — 자막 리로드와 같은 게이트(미참가 403 `LIVE_SESSION_FORBIDDEN`, 없는 세션 404). **경로가 `/stream`으로 끝나는 것은 계약이다** — `frontend/nginx/default.conf`의 `location ~ ^/api/.+/stream$`만 `proxy_buffering off`를 적용하므로 다른 접미사(`:stream` 등)면 운영에서 스트리밍이 깨진다. 오류(스트림 **시작 전**): 503 `AI_ANSWER_UNAVAILABLE`(ai-api 503·연결 실패)·409 `AI_ANSWER_REQUEST_CONFLICT`·502 `AI_ANSWER_UPSTREAM_REJECTED`(ai-api 400/401/406 등). **업스트림 401을 401로 흘리지 않는다**(FE가 세션 만료로 오해). 시작 **후** 실패는 상태코드를 바꾸지 않고 `answer.error`(`PROXY_UPSTREAM_FAILED`·`PROXY_STREAM_INCOMPLETE`)로 알린다. 다시보기(replay) AI는 시간 앵커 계약 전이라 **미구현**(ADR-0047 §9). 용어 설명(`terms:explain`)은 미구현 |
+| AI | **`POST /live-sessions/{sessionId}/ai/answers/stream`(SSE, 구현됨)** · `/lessons/{id}/ai/terms:explain` | **라이브 AI 질의응답(AI-QUESTION-01, [ADR-0047](decisions/songjeongki/0047-live-ai-answer-sse-proxy.md))**: 요청 `{question}`(1~4,000자, 서버가 trim하지 않음)만 받고 `lessonId`·`contextTimeMs`·`requestId`는 **서버가 채운다**(클라 입력 신뢰 금지). 응답은 `text/event-stream`으로 **ai-api 이벤트를 변환 없이 그대로 릴레이**한다 — `answer.delta{requestId,text}` 0개 이상 + `answer.done{requestId,sources}`\|`answer.insufficient{requestId,message}`\|`answer.error{requestId,code,message,retryable}` **정확히 하나**(§3-9). 인가는 세션 참가자(소유 강사/활성 수강생) — 자막 리로드와 같은 게이트(미참가 403 `LIVE_SESSION_FORBIDDEN`, 없는 세션 404). 세션 상태는 **`LIVE`·`ENDING`·`ENDED`에서 질문 허용**, 시작 전·취소·실패 상태는 409 `LIVE_SESSION_STATE_CONFLICT`다([ADR-0004](decisions/choinhoo/0004-ended-session-conversation.md)). **경로가 `/stream`으로 끝나는 것은 계약이다** — `frontend/nginx/default.conf`의 `location ~ ^/api/.+/stream$`만 `proxy_buffering off`를 적용하므로 다른 접미사(`:stream` 등)면 운영에서 스트리밍이 깨진다. 오류(스트림 **시작 전**): 503 `AI_ANSWER_UNAVAILABLE`(ai-api 503·연결 실패)·409 `AI_ANSWER_REQUEST_CONFLICT`·502 `AI_ANSWER_UPSTREAM_REJECTED`(ai-api 400/401/406 등). **업스트림 401을 401로 흘리지 않는다**(FE가 세션 만료로 오해). 시작 **후** 실패는 상태코드를 바꾸지 않고 `answer.error`(`PROXY_UPSTREAM_FAILED`·`PROXY_STREAM_INCOMPLETE`)로 알린다. 다시보기(replay) AI는 시간 앵커 계약 전이라 **미구현**(ADR-0047 §9). 용어 설명(`terms:explain`)은 미구현 |
 | 퀴즈 | `GET /lessons/{id}/quizzes`·`POST /quizzes/{id}/attempts` | 결정론 채점 |
-| 채팅 | `GET/POST /live-sessions/{sessionId}/messages` | **세션 키잉(구현됨)**, 본문도 세션 기준. WS 실시간 + REST 보완. **익명은 발신자 선택**([ADR-0050](decisions/songjeongki/0050-chat-anonymity-is-sender-choice.md)) — 전송 `anonymous=true`면 세션 한정 가명(`수강생-0473`), 생략·`false`면 발신자가 지정한 표시 이름. **강사는 요청해도 익명이 되지 않는다.** `userId`는 응답·WS에 넣지 않는다. `mine`(본인 여부, 우측 정렬용)은 **REST 응답에만** 둔다 — 브로드캐스트는 뷰어별이 될 수 없어 라이브 중엔 `clientMessageId` 대조로 판별한다 |
+| 채팅 | `GET/POST /live-sessions/{sessionId}/messages` | **세션 키잉(구현됨)**, 본문도 세션 기준. WS 실시간 + REST 보완. 메시지 작성은 **`LIVE`·`ENDING`·`ENDED`에서 허용**하고 시작 전·취소·실패 상태는 409 `LIVE_SESSION_STATE_CONFLICT`다([ADR-0004](decisions/choinhoo/0004-ended-session-conversation.md)). **익명은 발신자 선택**([ADR-0050](decisions/songjeongki/0050-chat-anonymity-is-sender-choice.md)) — 전송 `anonymous=true`면 세션 한정 가명(`수강생-0473`), 생략·`false`면 발신자가 지정한 표시 이름. **강사는 요청해도 익명이 되지 않는다.** `userId`는 응답·WS에 넣지 않는다. `mine`(본인 여부, 우측 정렬용)은 **REST 응답에만** 둔다 — 브로드캐스트는 뷰어별이 될 수 없어 라이브 중엔 `clientMessageId` 대조로 판별한다 |
 | 라이브 | `POST /instructor/live-sessions/{id}/preflight` · `GET /instructor/live-sessions/{id}/preflight/readiness` · `POST /instructor/live-sessions/{id}/token` · `POST /live-sessions/{id}/start` · `GET /live-sessions/{id}/start-status` · `POST /live-sessions/{id}/end` | LiveKit token은 **소유 강사 WebRTC 송출 전용**이다. 활성 수강생에게도 발급하지 않으며 학생은 `GET /lessons/{id}/playback`의 HLS source로만 시청한다([ADR-0032](decisions/songjeongki/0032-media-playback-hls-only.md)). 학생의 token 요청은 역할 게이트 403, 비소유 강사는 403 `LIVE_SESSION_FORBIDDEN`이며 구 공용 경로 `POST /live-sessions/{id}/token`은 제공하지 않는다. preflight prepare는 **200** `{sessionId,roomName,roomSid}`. 강사 FE가 token으로 실제 room에 연결해 microphone을 publish한 뒤 readiness를 조회하며 **200** `{ready,instructorPresent,microphonePublished,microphoneMuted,instructorMicrophoneTrackCount,unexpectedMicrophonePublishers}`; `ready=true`는 소유 강사·정확히 1개인 unmuted microphone·다른 microphone publisher 없음이다. start는 readiness를 다시 검사하고 **202** `{operationId,sessionId,status:"STARTING"}`를 반환한다(이미 STARTING이면 같은 active operation, LIVE면 `status:"LIVE"`). 상태 조회는 optional `operationId` query와 **200** `{operationId,attemptStatus,step,failureCode,failureMessage,session}`이며 attemptStatus는 `IN_PROGRESS|SUCCEEDED|FAILED`, step은 `ACCEPTED|STT_DISPATCHED|EGRESS_STARTING|EGRESS_READY|PUBLISHER_RECHECK|LIVE|FAILED`. 소유권 위반 403, 없는 세션 404, preflight/상태/recording 조건 위반은 409 `LIVE_SESSION_STATE_CONFLICT`, LiveKit room 준비·participant 조회 실패는 502 `LIVE_ROOM_CONTROL_FAILED`이며 이를 마이크 미준비 409로 숨기지 않는다. 시작 실패의 안정 code는 상태 응답의 `failureCode`(`STT_DISPATCH_FAILED|STT_READINESS_GATE_UNAVAILABLE|EGRESS_START_FAILED|EGRESS_NOT_READY|EGRESS_FAILED|EGRESS_ABORTED|EGRESS_LIMIT_REACHED|INSTRUCTOR_NOT_PUBLISHING|START_FAILED`)로 전달한다. 상세: [ADR-0002](decisions/choinhoo/0002-live-start-egress-stt-orchestration.md). **세션 응답은 `lessonId`까지만 준다 — 커리큘럼·섹션·강의 제목은 담지 않는다**(live 모듈은 curriculum을 참조하지 않는다, [decisions/songjeongki/0007](decisions/songjeongki/0007-domain-live-session.md)). 그 맥락이 필요한 화면은 `lessonId`로 **기존 `GET /lessons/{id}`** 를 읽어 채우며(소유 강사도 열리므로 역할 분기가 없다), 없는 값을 빈 문자열로 채우지 않는다([decisions/seominkyeong/0004](decisions/seominkyeong/0004-live-session-curriculum-context.md)). |
 
-### 2-1. 라이브 종료와 상호작용 마감 — 구현됨
+### 2-1. 라이브 송출 종료와 세션 대화·학생 HLS 지속
 
 `POST /live-sessions/{sessionId}/end`는 별도 operation 없이 한 요청에서 다음을 순차 수행하고
 최종 세션 표현을 **200**으로 반환한다([ADR-0003](decisions/choinhoo/0003-simple-live-end-sequential-process.md)).
 
 ```text
-LIVE → ENDING 커밋 → LiveKit Room 삭제 → Egress stop 보완 → ENDING → ENDED 커밋
+LiveSessionStatus: LIVE → ENDING 커밋
+→ LiveKit Room 삭제
+→ VideoAssetStatus: RECORDING → FINALIZING 커밋
+→ egressId가 있으면 StopEgress 중복 안전장치 호출(실패 허용)
+→ LiveSessionStatus: ENDING → ENDED 커밋
 ```
 
 - Room 삭제 실패는 **502 `LIVE_ROOM_CONTROL_FAILED`**이고 세션은 `ENDING`에 남는다. 강사가 같은 요청으로 재시도한다.
-- Egress stop 실패는 라이브 종료를 막지 않는다. 세션은 `ENDED`가 되고 녹화 자산에서 후속 상태를 관리한다.
-- 채팅 REST·STOMP와 AI SSE 쓰기는 `LIVE`·`ENDING`에서 허용한다. `ENDED`부터 업스트림 호출·저장 전에
-  **409 `LIVE_SESSION_INTERACTION_CLOSED`**를 반환한다. 기존 채팅·자막·세션 읽기는 계속 허용한다.
-- 학생 UI도 같은 기준을 사용한다. `ENDING`은 HLS 지연 구간을 위한 유예 상태이고,
-  `ENDED`에서 채팅·AI 질문·자막 시각 이동을 잠근다.
+- RoomComposite Egress 종료와 서명된 `egress_ended` webhook은 LiveKit·녹화 자산의 후속 생명주기다.
+  Room 삭제 뒤 `egressId`가 있으면 `StopEgress`를 중복 안전장치로 호출하되, 성공 여부는 종료 API의
+  완료 조건이 아니며 실패해도 세션은 `ENDED`가 된다([ADR-0003](decisions/choinhoo/0003-simple-live-end-sequential-process.md),
+  [ADR-0007](decisions/choinhoo/0007-recording-ready-auto-publish-and-processing-polling.md)).
+- 채팅 REST·STOMP와 AI SSE 쓰기는 `LIVE`·`ENDING`·`ENDED`에서 허용한다. `ENDED`는 송출 종료
+  상태이지 세션 대화 종료 상태가 아니며, 복습 질문과 후속 토론을 계속할 수 있다
+  ([ADR-0004](decisions/choinhoo/0004-ended-session-conversation.md)).
+- `session.ended`는 강사 송출과 Room 종료만 뜻한다. 학생 UI는 별도 송출 종료 안내 없이 재생 중인
+  HLS, 자막 노출·시각 이동, 채팅·AI 질문과 진행 중 AI SSE를 유지한다.
+- 새 자막 생성의 terminal 신호는 `caption.stream.completed`다. agent는 남은 audio·STT event와
+  마지막 자막을 drain한 뒤 completion을 발행하며, 동일 `(sessionId, sttSessionId)`에는 그 뒤 새
+  delta·segment를 생성하지 않는다. 기존 자막은 남은 HLS 위치에 맞춰 계속 사용한다.
+- HLS 파일 확정은 `VideoAsset READY/FAILED`, 학생별 실제 재생 완료는 browser player의 `ended`가
+  판단한다. 이 drain 정책은 [ADR-0005](decisions/choinhoo/0005-ended-hls-caption-drain.md)에
+  확정됐으며 현재 FE 종료 배너·자막 잠금과 backend `ENDED` replay 게이트에는 **코드 반영이 필요하다**.
+- 시작 전·취소·실패 상태의 새 대화는 **409 `LIVE_SESSION_STATE_CONFLICT`**다.
+
+### 2-2. `VideoAssetStatus` 상태축
+
+`VideoAssetStatus`는 HLS 파일 생성·검증 상태이며 공개 여부인 `ReplayStatus`
+(`DRAFT`·`READY_FOR_REVIEW`·`PUBLISHED`·`WITHDRAWN`)와 의미상 독립이다. 다만 새 정상 녹화의
+성공 확정 정책은 학생에게 바로 영상을 열기 위해 두 상태를 같은 트랜잭션에서 `READY + PUBLISHED`로
+커밋한다. AI 산출물의 검수·게시 상태는 이 자동 게시에 포함하지 않는다.
+
+| 상태 | 의미와 처리 |
+|---|---|
+| `STARTING` | Egress 시작 준비·응답 재조정 중. Egress ID가 아직 없을 수 있다 |
+| `RECORDING` | Egress ID가 저장됐고 HLS 세그먼트·manifest를 생성 중 |
+| `FINALIZING` | 중지 요청 뒤 마지막 세그먼트와 ENDLIST, webhook을 기다리는 상태 |
+| `VERIFYING` | 성공 webhook 뒤 스토리지 manifest를 확인하는 상태. 현재는 최종 확정과 같은 트랜잭션이라 일반 조회에서 거의 관찰되지 않는다 |
+| `READY` | 최종 manifest가 확인됐거나 검증 장애에서 성공 webhook을 신뢰해 파일을 확정한 상태 |
+| `FAILED` | 시작·Egress·manifest 검증 실패. `failureCode`를 기록하며 시작 재시도 시 `STARTING`으로 초기화할 수 있다 |
+
+정상 전이는 `(신규 또는 FAILED) → STARTING → RECORDING → FINALIZING → VERIFYING → READY`다.
+종료 요청은 먼저 자산을 `FINALIZING`으로 커밋하고 Egress 중지를 요청한다. `egress_ended`의
+`EGRESS_COMPLETE`는 manifest 검증 뒤 `READY`, 실패·중단 또는 manifest 부재는 `FAILED`로 확정한다.
+webhook handler는 `READY/FAILED`가 아닌 자산을 멱등 처리하므로 Egress가 조기 종료되면
+`STARTING`·`RECORDING`에서도 바로 `VERIFYING → READY/FAILED`로 갈 수 있다.
+사용하지 않던 `REQUESTED`는 [ADR-0006](decisions/choinhoo/0006-remove-video-asset-requested-status.md)에
+따라 enum·DB 기본값·현재 CHECK 제약에서 제거했다.
+
+### 2-3. 강사 녹화 처리 현황 조회와 자동 이동 — 구현됨
+
+`POST /live-sessions/{sessionId}/end`가 200을 반환하면 강사 FE는
+`/instructor/live-sessions/{sessionId}/processing`으로 이동하고 다음 snapshot을 폴링한다.
+
+```http
+GET /api/instructor/live-sessions/{sessionId}/processing
+```
+
+```json
+{
+  "sessionId": "20000000-0000-4000-8000-000000000001",
+  "lessonId": "30000000-0000-4000-8000-000000000001",
+  "liveSessionStatus": "ENDED",
+  "videoAsset": {
+    "videoAssetId": "40000000-0000-4000-8000-000000000001",
+    "status": "FINALIZING",
+    "failureCode": null,
+    "durationMs": null,
+    "recordingEndedAt": "2026-08-02T15:00:03+09:00",
+    "readyAt": null
+  },
+  "replayStatus": "DRAFT"
+}
+```
+
+- 소유 강사는 200, 비소유 사용자·수강생은 403 `LIVE_SESSION_FORBIDDEN`, 없는 세션은 404다.
+- 자산이 없으면 200과 `videoAsset:null`, `replayStatus:null`을 반환한다.
+- `FINALIZING`·`VERIFYING`과 `FAILED`도 조회 자체는 200이며, 실패는 `failureCode`로 구분한다.
+- 조회는 DB snapshot만 반환하고 매 요청에서 LiveKit·MinIO를 다시 호출하지 않는다.
+- FE는 진입 즉시 조회한다. 진행 상태는 최초 30초 동안 2초 간격, 이후 5초 간격으로 폴링하며
+  비활성 탭에서는 중단한다. FE timeout으로 서버 상태를 `FAILED`로 해석하지 않는다.
+- `VideoAssetStatus=READY + ReplayStatus=PUBLISHED`면 폴링을 멈추고
+  `/instructor/lessons/{lessonId}/replay`로 `replace` 이동한다. `FAILED`도 폴링을 멈추되 이동하지 않는다.
+- 이 endpoint, 자동 게시 전이, 폴링과 자동 이동은 [ADR-0007](decisions/choinhoo/0007-recording-ready-auto-publish-and-processing-polling.md)에 따라 FE/BE에 구현됐다.
 
 ### 2-2. 종료 후 처리 현황 — 구현됨
 
@@ -247,12 +322,13 @@ Spring 수신 endpoint를 구현하고 `SPRING_STATUS_CALLBACK_URL`로 주입하
 활성화하기 전에 별도 v2 schema·fixture와 Java/Python 계약 테스트를 같은 common 변경에서 추가한다.
 
 ### 3-6. FE ↔ Spring WebSocket
-- **자막 채널** `/topic/live-sessions/{sessionId}/captions`(세션별, 구독 인가는 채팅과 동일 게이트·와일드카드 차단 불변식 ADR-0019·0043): `WsEnvelope.of(type, sessionId, occurredAt, payload)`로 push. `type`은 `caption.delta`·`caption.stream.completed`. payload는 camelCase — delta `{ sttSessionId, sequence, streamElapsedMs, sessionMs, text }`, completed `{ sttSessionId, lastSequence, sessionMs, reason }`.
+- **자막 채널** `/topic/live-sessions/{sessionId}/captions`(세션별, 구독 인가는 채팅과 동일 게이트·와일드카드 차단 불변식 ADR-0019·0043): `WsEnvelope.of(type, sessionId, occurredAt, payload)`로 push. `type`은 `caption.delta`·`caption.stream.completed`. payload는 camelCase — delta `{ sttSessionId, sequence, streamElapsedMs, sessionMs, text }`, completed `{ sttSessionId, lastSequence, sessionMs, reason }`. `caption.stream.completed`는 해당 `(sessionId,sttSessionId)`의 terminal event이며 `lastSequence` 뒤 새 자막을 생성·반영하지 않는다. 기존 자막은 HLS 잔여 재생 동안 유지한다([ADR-0005](decisions/choinhoo/0005-ended-hls-caption-drain.md)).
 - **채팅 채널** `/topic/live-sessions/{sessionId}/chat`: `chat_message { lessonId, sessionMs, text, alias }`(실명·userId 미노출).
 - **세션 상태 채널** `/topic/live-sessions/{sessionId}/state`([ADR-0003](decisions/choinhoo/0003-simple-live-end-sequential-process.md)):
   `session.ending` payload `{liveSessionStatus:"ENDING",endedAt:null}`와
   `session.ended` payload `{liveSessionStatus:"ENDED",endedAt:"..."}`를 각 DB 전이의 **커밋 후** push한다.
-  `session.ending`은 종료 진행 안내이고 상호작용을 잠그지 않는다. `session.ended`가 학생 잠금의 최종 신호다.
+  `session.ending`은 종료 진행 상태이고 상호작용을 잠그지 않는다. `session.ended`도 강사 송출·Room
+  종료 신호일 뿐 학생 HLS·자막·대화 잠금 신호가 아니다. 학생에게 별도 송출 종료 안내를 표시하지 않는다.
   재연결 뒤 FE는 `GET /live-sessions/{sessionId}`를 다시 조회해 이벤트 유실을 보완한다.
   같은 채널로 **`session.presence`** payload `{participantCount}`도 push한다([ADR-0060](decisions/songjeongki/0060-live-presence-counts-subscriptions.md))
   — 지금 강의실에 있는 **수강생 수**이며 **강사는 세지 않는다**(혼자일 때 1이 되면 오해를 만든다).

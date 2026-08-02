@@ -16,6 +16,11 @@
 > `ReplayStorage.readManifest`와 `ReplayManifestMissingException`은 **삭제**됐다(부재는
 > `findManifest`의 빈 `Optional`로 표현하고 호출자가 상황에 맞는 409를 고른다).
 > §3-2의 만료 복구 계약도 대상이 `GET .../playback`이 아니라 **manifest 엔드포인트 재로드**다.
+>
+> **2026-08-02 게시 정책 부분 대체**: 새 정상 녹화의 최초 공개는
+> [choinhoo/0007](../choinhoo/0007-recording-ready-auto-publish-and-processing-polling.md)에 따라 성공
+> webhook에서 `READY + PUBLISHED`로 자동 확정한다. 아래 §5의 수동 publish API는 기존
+> `READY + DRAFT/READY_FOR_REVIEW`와 철회 후 재게시 용도로 유지한다.
 
 ## 맥락
 
@@ -82,9 +87,12 @@ TTL과 녹화 길이의 관계: 기본 1시간 TTL은 일반적인 강의(수십
 
 `RecordingService.startRecording`이 아직 `video_asset.hls_manifest_key`를 채우지 않는다(이 작업 범위 밖). 재생 서비스는 컬럼 값이 있으면 그것을, 없으면 `RecordingService`와 공유하는 규약(`sessions/{liveSessionId}/index.m3u8`)으로 파생한다 — 두 값이 항상 같으므로 당장은 동작에 차이가 없고, 후속에서 `hls_manifest_key`를 실제로 채우기 시작해도(예: 매니페스트 파일명이 세션마다 달라지는 확장) 이 서비스가 자동으로 그 값을 우선한다.
 
-### 5. 게시(publish) 최소형 — 상태 전환만, 검수 데이터 저장은 범위 밖
+### 5. 수동 게시(publish) 최소형 — 기존·철회 자산용, 검수 데이터 저장은 범위 밖
 
-FE가 이미 참조하는 두 경로 중 **게시**(`POST .../replay-review/publish`)만 구현한다: 소유 강사·자산 READY 조건 하에 `replay_status`를 `PUBLISHED`로 전환하고 `published_by`·`published_at`을 채운다. 이미 PUBLISHED면 멱등(204).
+FE가 이미 참조하는 두 경로 중 **게시**(`POST .../replay-review/publish`)를 구현했다: 소유 강사·자산
+READY 조건 하에 `replay_status`를 `PUBLISHED`로 전환하고 `published_by`·`published_at`을 채운다.
+이미 PUBLISHED면 멱등(204). ADR-0007 이후 새 정상 녹화의 최초 게이트로는 사용하지 않지만, 기존
+미게시 자산과 철회 후 재게시를 위해 유지한다.
 
 **검수 데이터 저장**(`PUT .../replay-review` — 자막 교정·용어 확정 등)은 **구현하지 않는다.** 이 엔드포인트가 저장해야 할 산출물(교정 자막·확정 용어)은 CP2(STT)·CP3(용어·RAG)가 아직 없어 저장할 데이터 자체가 없다. 미리 빈 스텁을 만들면 "검수 저장이 된다"는 거짓 신호를 준다 — CP2·CP3가 자막·용어를 core에 반영하기 시작할 때 이 ADR을 대체하는 후속에서 정의한다.
 

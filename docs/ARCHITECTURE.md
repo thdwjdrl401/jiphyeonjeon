@@ -251,14 +251,16 @@ Python은 `core`에 직접 쓰지 않는다 — 결과는 큐 이벤트로 돌�
 flowchart LR
   L["라이브 세션"] -->|"✅ Egress 제어"| EG["녹화 → HLS → MinIO"]
   L -->|"⬜ CP2·CP3"| DB["자막·용어·근거 영속"]
-  EG -->|"✅ VideoAsset 상태 추적"| VA["REQUESTED→…→READY"]
-  VA -->|"✅ 재생 API"| RP["다시보기 플레이어"]
+  EG -->|"✅ VideoAsset 상태 추적"| VA["STARTING→…→READY"]
+  VA -->|"✅ READY+PUBLISHED 자동 확정"| PUB["영상 다시보기 자동 게시"]
+  PUB -->|"✅ 재생 API"| RP["다시보기 플레이어"]
   DB --> RP
   RP --> DONE["교정 자막 · 용어 호버 · 저장 컨텍스트 Q&A"]
 ```
 
-**지금 되는 것**: 세션 시작·종료 이벤트로 Egress를 제어하고, `VideoAsset`이 녹화 수명주기를 추적하며, 카탈로그가 "다시보기 있음"을 표시한다. **재생 metadata API**(`GET /lessons/{id}/playback`)가 source와 시간축을 반환하고, **manifest API**(`GET .../playback/manifest`)가 권한을 재검증한 뒤 세그먼트 URI를 presigned로 재작성한다([ADR-0039](decisions/songjeongki/0039-replay-playback-api.md), [ADR-0001](decisions/choinhoo/0001-live-replay-playback-api.md)). 라이브 중에는 **델타 재생목록**(`CAN-SKIP-UNTIL` 광고 → `_HLS_skip=YES` → `EXT-X-SKIP`)으로 갱신 크기를 잡는다 — 진행 바는 강의 전체를 유지하면서 폴링 비용만 줄인다. **게시·철회**(`POST .../replay-review/publish`, `POST .../replay-review/withdraw`)로 강사가 종료 VOD 공개 상태를 관리한다.
-**남은 것**: FE HLS.js 플레이어 연동, 실제 Egress 출력으로 델타 병합 e2e 검증, Egress 지연 실측, 자막·용어·RAG 재생(CP2·CP3 산출물 의존), 검수 데이터 저장([0039](decisions/songjeongki/0039-replay-playback-api.md) §5 범위 제외 근거).
+**지금 되는 것**: 세션 시작·종료 이벤트로 Egress를 제어하고, `VideoAsset`이 녹화 수명주기를 추적하며, 카탈로그가 "다시보기 있음"을 표시한다. **재생 metadata API**(`GET /lessons/{id}/playback`)가 source와 시간축을 반환하고, **manifest API**(`GET .../playback/manifest`)가 권한을 재검증한 뒤 세그먼트 URI를 presigned로 재작성한다([ADR-0039](decisions/songjeongki/0039-replay-playback-api.md), [ADR-0001](decisions/choinhoo/0001-live-replay-playback-api.md)). 라이브 중에는 **델타 재생목록**(`CAN-SKIP-UNTIL` 광고 → `_HLS_skip=YES` → `EXT-X-SKIP`)으로 갱신 크기를 잡는다 — 진행 바는 강의 전체를 유지하면서 폴링 비용만 줄인다. **수동 게시·철회 API**(`POST .../replay-review/publish`, `POST .../replay-review/withdraw`)도 구현되어 있으며, 수동 게이트는 기존 미게시 자산과 철회 후 재게시를 위해 유지한다.
+**구현된 종료·자동 게시 흐름([ADR-0007](decisions/choinhoo/0007-recording-ready-auto-publish-and-processing-polling.md))**: 종료 API는 `ENDING` 선커밋 → Room 삭제 → `VideoAsset FINALIZING` 선커밋 → 실패 허용 `StopEgress` 안전장치 → `ENDED` 순서로 끝난다. LiveKit `egress_ended(EGRESS_COMPLETE)` webhook이 manifest를 검증하면 같은 DB 트랜잭션에서 `VideoAsset READY + ReplayStatus PUBLISHED`를 확정한다. 강사 FE는 종료 성공 뒤 처리 화면에서 DB snapshot API를 2초 간격(30초 뒤 5초)으로 폴링하고, `READY + PUBLISHED`에서 replay 화면으로 자동 이동한다. 이 완료 알림 용도로 새 WebSocket은 추가하지 않는다.
+**남은 것**: 실제 Egress 출력으로 델타 병합 e2e 검증, Egress 지연 실측, 자막·용어·RAG 재생(CP2·CP3 산출물 의존), 검수 데이터 저장([0039](decisions/songjeongki/0039-replay-playback-api.md) §5 범위 제외 근거).
 
 다시보기는 라이브 때 만든 산출물을 **그대로 재생**한다. 지평선 뒤라 이미 교정이 끝난 상태이고, 세션 상대 ms 좌표로 HLS와 자막을 자동 정렬한다.
 
@@ -439,11 +441,13 @@ HLS 재생목록은 **"지금 존재하는 세그먼트 전체 목록"** 이고,
 ### 9-11. 🟡 `ai` 스키마와 Alembic이 아직 없다
 T0에 만들기로 했으나 미이행. `core`만 존재한다. 리스크는 낮지만 CP2 착수 시 **DB 롤(`core_app`/`ai_app`) 분리와 함께** 세워야 원칙 2가 실제로 강제된다.
 
-### 9-12. 🟠 프론트가 아직 없는 백엔드 API를 이미 호출 형태로 굳혀 뒀다
+### 9-12. 🟡 남은 프론트 임시 API 경로를 계약화해야 한다
 FE는 **오퍼레이션 단위 하이브리드 라우팅**을 쓴다 — 각 호출에 `apiImplemented` 플래그가 붙어 구현된 API는 실 HTTP로, 미구현은 목으로 간다([ADR-0027](decisions/songjeongki/0027-frontend-incremental-api-cutover.md)). 현재 인증·커리큘럼·레슨·라이브 세션에서 **28개 오퍼레이션이 실 연동**됐다(세션 시작/종료·토큰·참가자·채팅 포함).
 
-문제는 **미구현 쪽**이다. `/live-sessions/{id}/captions`, `/lessons/{id}/ai/questions:stream`, `/instructor/live-sessions/{id}/processing`, `/instructor/lessons/{id}/ai-preparation` 같은 CP2·CP3 경로가 이미 FE 코드에 문자열로 박혀 있는데 **CONTRACT.md에는 정의가 없다.** 이대로 CP2에 들어가면 계약 드리프트가 반복된다.
-→ **CP2 착수 전에 이 경로들을 계약으로 승격**시키거나, FE가 임시 경로임을 코드에 명시해야 한다.
+`/instructor/live-sessions/{id}/processing`은 [ADR-0007](decisions/choinhoo/0007-recording-ready-auto-publish-and-processing-polling.md)과
+`CONTRACT.md` §2-3의 계약대로 FE adapter와 backend endpoint가 구현됐다.
+`/instructor/lessons/{id}/ai-preparation` 등 나머지 임시 경로는 구현 전에 계약으로 승격하거나 FE 코드에
+임시 경로임을 계속 명시해야 한다.
 
 > ✅ 이전에 충돌하던 자료 업로드 경로는 해소됐다. FE가 `POST /instructor/lessons/{id}/materials`를 **presigned 티켓 흐름**(에셋 업로드 후 `{"assetId":"..."}` 연결, multipart 아님)으로 배선해 원칙 4·[ADR-0023](decisions/songjeongki/0023-asset-presigned-upload.md)·[ADR-0035](decisions/songjeongki/0035-lesson-material-attach.md)와 일치한다.
 
@@ -460,7 +464,7 @@ FE는 **오퍼레이션 단위 하이브리드 라우팅**을 쓴다 — 각 호
 | **CP1** ★ | 라이브 미디어 | ✅ LiveKit 토큰·채팅 WS·세션 수명주기 | 🟡 세션·채팅 API 연동 ✅ / 미디어 클라이언트 ⬜ | — |
 | **CP2** | 라이브 자막 | ⬜ | ⬜ | ⬜ realtime-agent |
 | **CP3** ★ | 용어·근거 RAG | ⬜ (선행: §9-2) | ⬜ | ⬜ ai-api·ai-worker |
-| **CP4** | 녹화·다시보기 | 🟡 Egress 제어·`VideoAsset`·재생 API·게시 전환 ✅ / 검수 데이터 저장 ⬜(선행: CP2·CP3) | ⬜ | — |
+| **CP4** | 녹화·다시보기 | 🟡 Egress 제어·`VideoAsset`·재생 API·자동/수동 게시·processing 조회 ✅ / 검수 데이터 저장 ⬜ | 🟡 종료 뒤 처리 화면·폴링·replay 자동 이동·실제 게시 상태 연결 ✅ / 자막·용어·RAG 재생 ⬜ | — |
 | **CP5** | 퀴즈 | ⬜ | ⬜ | ⬜ |
 
 **지금 위치**: CP0 백엔드 완료, CP1 백엔드 완료, **CP1 데모까지 남은 건 FE 미디어 연동**.

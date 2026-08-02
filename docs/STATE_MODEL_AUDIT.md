@@ -1,6 +1,7 @@
 # 상태 모델 구현 감사
 
 > 기준일: 2026-07-22  
+> 부분 재감사: 2026-08-02 — 라이브 종료·녹화·replay 공개 축만 ADR-0007 기준으로 갱신
 > 상태 전이 목표: [STATE_TRANSITIONS.md](STATE_TRANSITIONS.md)  
 > 런타임 계약: [CONTRACT.md](CONTRACT.md)
 
@@ -51,9 +52,10 @@
 - 계정: 회원가입 시 `ACTIVE`, 로그인은 `ACTIVE`만 허용
 - 공용 asset: `PENDING → UPLOADED`, 만료된 `PENDING → FAILED`
 - 라이브 강의: `DRAFT/SCHEDULED/OPEN → LIVE → ENDED`, 시작 전 `→ CANCELLED`
-- 녹화 자산: `REQUESTED → RECORDING → FINALIZING`, 시작 실패 시 `FAILED`
+- 녹화 자산: `STARTING → RECORDING → FINALIZING → VERIFYING → READY`, 각 단계 실패 시 `FAILED`
 
-레슨 AI 준비, 라이브 중간 상태, 녹화 검증 완료, 다시보기 게시, 자료 작업, 학습 진도는 전체 상태값에 비해 실제 서비스 전이가 부족하다.
+레슨 AI 준비, 자료 작업, 학습 진도는 전체 상태값에 비해 실제 서비스 전이가 부족하다. 녹화 검증,
+영상 자동/수동 게시·철회, 강사 processing 조회·폴링은 부분 재감사 뒤 구현됐다.
 
 백엔드 계약 정리 후 명칭과 구현 범위를 다시 대조한 결과는 다음과 같다.
 
@@ -237,7 +239,7 @@ ACTIVE ─────────────────────→ CANCEL
 DRAFT | AI_NOT_READY | READY | PUBLISHED
 ```
 
-목표 전이:
+ADR-0007 확정 목표 전이:
 
 ```text
 DRAFT → AI_NOT_READY → READY → PUBLISHED
@@ -405,21 +407,21 @@ DRAFT/SCHEDULED/OPEN → CANCELLED
 가능한 값:
 
 ```text
-REQUESTED | STARTING | RECORDING | FINALIZING | VERIFYING | READY | FAILED
+STARTING | RECORDING | FINALIZING | VERIFYING | READY | FAILED
 ```
 
 목표 전이:
 
 ```text
-REQUESTED → STARTING → RECORDING → FINALIZING → VERIFYING → READY
-                                                        └→ FAILED
+STARTING → RECORDING → FINALIZING → VERIFYING → READY
+                                              └→ FAILED
 ```
 
 현재 실제 전이:
 
 ```text
-REQUESTED/FAILED → STARTING → RECORDING → FINALIZING → VERIFYING → READY
-                         └→ FAILED                     └→ FAILED
+신규/FAILED → STARTING → RECORDING → FINALIZING → VERIFYING → READY
+                    └→ FAILED                     └→ FAILED
 ```
 
 현재 코드 특성:
@@ -427,6 +429,7 @@ REQUESTED/FAILED → STARTING → RECORDING → FINALIZING → VERIFYING → REA
 - 라이브 시작 오케스트레이터가 `LiveRecordingControl` 동기 포트로 Egress 준비를 확인한 뒤 `LIVE`를 확정한다.
 - 라이브 종료 오케스트레이터가 Room 삭제 뒤 같은 포트로 Egress stop을 보완 호출한다.
 - 녹화 종료 후 `FINALIZING`, Egress 완료 webhook 뒤 `VERIFYING → READY/FAILED`를 별도 상태축으로 관리한다.
+- 사용하지 않던 `REQUESTED`는 ADR-0006으로 enum과 현재 DB 제약에서 제거했다.
 - 녹화 실패가 라이브 강의 상태를 실패로 되돌리지는 않는다.
 
 근거:
@@ -447,13 +450,18 @@ DRAFT | READY_FOR_REVIEW | PUBLISHED | WITHDRAWN
 목표 전이:
 
 ```text
-DRAFT → READY_FOR_REVIEW → PUBLISHED → WITHDRAWN
+새 정상 녹화: DRAFT ──(VideoAsset READY와 원자적 확정)──→ PUBLISHED
+기존 자산:    DRAFT/READY_FOR_REVIEW ──(강사 수동 게시)──→ PUBLISHED
+공개 관리:    PUBLISHED → WITHDRAWN ──(강사 수동 재게시)──→ PUBLISHED
 ```
 
 현재 구현:
 
 - 녹화 자산 생성 시 `DRAFT`를 설정한다.
-- `READY_FOR_REVIEW`, `PUBLISHED`, `WITHDRAWN`으로 전환하는 서비스와 API가 없다.
+- 소유 강사의 수동 publish·withdraw 서비스와 API는 구현돼 있다.
+- 성공 webhook은 `VideoAsset READY + ReplayStatus PUBLISHED`를 같은 트랜잭션에서 확정한다.
+- 강사 processing 조회 API, FE polling과 `READY + PUBLISHED` replay `replace` 이동이 구현됐다.
+- `READY_FOR_REVIEW`는 enum 호환 상태로 남지만 새 정상 자동 게시 경로는 거치지 않는다.
 - 프론트에는 녹화 자산 또는 replay 자체가 없음을 나타내는 `NOT_READY`가 추가되어 있다.
 - `NOT_READY`는 서버 enum이 아니라 프론트 파생 상태다.
 
@@ -670,7 +678,8 @@ VITE_USE_MOCK_API=true + API 미구현 → mock
 
 카탈로그, 내 커리큘럼, 프로필 요약, 커리큘럼 관리, 레슨, prejoin/preflight, 라이브, 녹화 처리, replay와 좌측 레슨 탐색은 모두 `requestByDataSource`를 통과한다. 페이지·레이아웃은 demo/mock 모듈을 직접 읽지 않는다.
 
-백엔드 미구현으로 표시된 대시보드 요약, 자료 업로드, AI 준비·질문, 자막, preflight, 녹화 처리, replay 검수·퀴즈는 mock=true에서만 fixture를 사용한다. mock=false에서는 예상 HTTP endpoint를 호출해 미구현 오류를 드러낸다.
+아직 미구현인 AI 준비·다시보기 자막·검수 저장·퀴즈 등은 mock=true에서만 fixture를 사용한다.
+녹화 processing 조회와 replay publish는 실제 HTTP adapter로 전환됐으며, mock=false에서도 계약 endpoint를 호출한다.
 
 근거:
 
@@ -796,9 +805,12 @@ mock 삭제 방식은 백엔드 상태기, 이력, 재신청, 동시 상태 충�
 
 문서는 90% 유효 시청 완료를 설명하지만 서버 계산이 없고 mock은 커리큘럼 진행률 100%를 완료 기준으로 사용한다.
 
-#### 11. 녹화와 replay 전이 중단
+#### 11. 녹화 자동 게시와 processing 흐름 구현 완료
 
-녹화는 `FINALIZING`, replay는 `DRAFT`에서 더 진행되지 않는다. 현재 프론트 `VERIFYING`, `READY`, replay 게시 UI는 서버 결과가 아니다.
+녹화는 webhook에서 `FINALIZING → VERIFYING → READY/FAILED`로 진행되고 정상 성공 시
+`READY + PUBLISHED`를 원자적으로 확정한다. processing API와 FE adapter, 2초→5초 폴링,
+terminal 중단, replay `replace` 자동 이동과 실제 서버 게시 상태 표시가 구현됐다. 기존
+`READY + DRAFT`와 `WITHDRAWN`은 자동 게시하지 않고 수동 게시 동선을 유지한다.
 
 #### 12. 프로필 UI의 저장 상태와 서버 구현 범위 불일치
 
@@ -851,15 +863,13 @@ REST와 실제 WebSocket 전송은 `sessionId` 기준으로 구현됐지만 프�
 3. 라이브 입장 가능 시간과 토큰 발급 상태를 서버에서 강제한다.
 4. 강사 preflight 결과와 `/start` 명령을 연결하고 시작 조건을 서버가 최종 검사한다.
 5. 레슨 상태를 현재 MVP 직행으로 유지할지 AI 준비 상태기로 전환할지 계약을 하나로 맞춘다.
-6. Egress webhook을 연결해 녹화 자산을 `FINALIZING → VERIFYING → READY`로 진행시킨다.
-7. replay 검수·게시·철회 API를 추가하고 프론트 `NOT_READY` 표현을 계약화한다.
-8. 채팅 WebSocket payload 계약과 VOD의 `lessonId → sessionId` 해석 방식을 확정한 뒤 FE REST·WS 소비를 연결한다.
-9. 프로필 텍스트 편집은 미구현 상태를 명확히 하고, 구현된 `profileImageUrl`과 프로필 이미지 지정 API를 FE 인증 모델·UI에 연결한다.
-10. 자료 연결과 자료 작업 상태기를 구현하고 프론트 로컬 타이머 표시를 서버 상태 조회로 교체한다.
-11. 학습 진도 저장·완료 계산 API를 구현하고 90% 완료 기준과 DB 제약을 일치시킨다.
-12. 통합 mock이 종료 상태와 실제 전이를 보존하도록 백엔드 상태기를 따라가게 수정한다.
-13. 별도 라이브 세션 페이지를 전제로 한 프론트 문서를 현재 레슨 중심 구조로 갱신한다.
-14. 해결된 인증 식별자 질문을 `cp0-open-questions.md`에서 닫고 WebSocket 채팅 결론을 `CONTRACT.md`에 반영한다.
+6. 채팅 WebSocket payload 계약과 VOD의 `lessonId → sessionId` 해석 방식을 확정한 뒤 FE REST·WS 소비를 연결한다.
+7. 프로필 텍스트 편집은 미구현 상태를 명확히 하고, 구현된 `profileImageUrl`과 프로필 이미지 지정 API를 FE 인증 모델·UI에 연결한다.
+8. 자료 연결과 자료 작업 상태기를 구현하고 프론트 로컬 타이머 표시를 서버 상태 조회로 교체한다.
+9. 학습 진도 저장·완료 계산 API를 구현하고 90% 완료 기준과 DB 제약을 일치시킨다.
+10. 통합 mock이 종료 상태와 실제 전이를 보존하도록 백엔드 상태기를 따라가게 수정한다.
+11. 별도 라이브 세션 페이지를 전제로 한 프론트 문서를 현재 레슨 중심 구조로 갱신한다.
+12. 해결된 인증 식별자 질문을 `cp0-open-questions.md`에서 닫고 WebSocket 채팅 결론을 `CONTRACT.md`에 반영한다.
 
 ## 9. 상태 해석 원칙
 
