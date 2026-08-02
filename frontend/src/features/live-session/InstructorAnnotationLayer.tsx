@@ -144,12 +144,31 @@ interface InstructorAnnotationLayerProps {
 const OPS_PER_SNAPSHOT = 100
 
 /**
- * 판서 해석에 보낼 이미지의 긴 변 상한(px).
+ * 판서 해석 이미지의 <b>바이트 예산</b>(data URI 문자 수).
  *
- * <p>이보다 크면 비율을 지켜 줄인다. 모델이 손글씨·도형을 알아보는 데는 이 정도면 충분하고,
- * 넘기면 상류가 400으로 거절해 강사에게는 502로 보인다.
+ * <p>픽셀이 아니라 바이트로 재는 이유는 상류가 그렇게 막기 때문이다. GMS 게이트웨이는 요청 본문이
+ * <b>약 100KB</b>를 넘으면 본문을 읽지 못하고 엉뚱한 오류를 돌려준다 — 실측(2026-08-02):
+ *
+ * <pre>
+ *   99,000 B → 통과
+ *  102,400 B → {"message":"[GMS 에러] Model not found in request for domain api.openai.com"}
+ * </pre>
+ *
+ * <p>모델 이름이 잘못된 것처럼 읽히지만 아니다. 같은 이름으로 작은 요청을 보내면 통과한다 —
+ * 본문이 잘려 파싱에 실패한 것을 그렇게 알릴 뿐이다. 그래서 "조금 그리면 되는데 많이 그리면
+ * 안 된다"로 나타난다.
+ *
+ * <p>프롬프트와 도구 스키마가 함께 실리므로 이미지에는 그보다 낮은 예산을 준다.
  */
-const INTERPRET_IMAGE_MAX_EDGE = 1600
+const INTERPRET_IMAGE_BUDGET_BYTES = 80_000
+
+/**
+ * 예산에 맞을 때까지 시도할 긴 변(px). 큰 것부터 줄여 가며 <b>처음 들어맞는 것</b>을 쓴다.
+ *
+ * <p>고정 크기로는 맞출 수 없다. 같은 픽셀 수라도 획이 많으면 PNG가 훨씬 커지므로, 재 보고
+ * 줄이는 수밖에 없다.
+ */
+const INTERPRET_IMAGE_EDGES = [1400, 1000, 720, 520, 360] as const
 
 export default function InstructorAnnotationLayer({
   sessionId,
@@ -482,29 +501,38 @@ export default function InstructorAnnotationLayer({
    */
   const exportSelectionPng = useCallback(async (elements: readonly AnnotationElement[]) => {
     const { exportToCanvas } = await loadExcalidraw()
-    const canvas = await exportToCanvas({
-      elements: elements as never,
-      appState: { exportBackground: true, viewBackgroundColor: '#ffffff' } as never,
-      files: null,
-      exportPadding: 16,
-      /*
-       * <b>긴 변을 상한에 맞춰 줄인다.</b>
-       *
-       * <p>기본값을 쓰면 Excalidraw가 `scale: 2`로 그리고 캔버스는 <b>선택 범위 크기</b>로 생긴다.
-       * 다이어그램이 커질수록 픽셀 수가 제곱으로 늘어 모델의 이미지 한도를 넘고, 상류가 400을
-       * 돌려주면 우리는 502로 감싼다 — 강사에게는 "조금 그리면 되는데 많이 그리면 안 된다"로 보인다.
-       *
-       * <p>줄여도 잃는 것이 없다. 여기서 묻는 것은 <b>무엇을 그렸는가</b>이지 좌표가 아니다 —
-       * 좌표는 이미 우리가 획의 점으로 갖고 있다(ADR-0054). 손글씨를 알아보는 데 필요한 해상도만
-       * 있으면 된다.
-       */
-      getDimensions: (width: number, height: number) => {
-        const longest = Math.max(width, height)
-        const scale = longest > INTERPRET_IMAGE_MAX_EDGE ? INTERPRET_IMAGE_MAX_EDGE / longest : 1
-        return { width, height, scale }
-      },
-    })
-    return canvas.toDataURL('image/png')
+
+    /*
+     * <b>예산에 맞을 때까지 줄인다.</b> 한 번 그려 보고 크면 더 작게 다시 그린다.
+     *
+     * <p>고정 크기로는 맞출 수 없다 — 같은 픽셀 수라도 획이 많으면 PNG가 훨씬 커진다. 상류가
+     * 막는 것은 픽셀이 아니라 <b>본문 바이트</b>이므로 재 보고 줄이는 것이 유일하게 확실한 방법이다.
+     *
+     * <p>줄여도 잃는 것이 없다. 여기서 묻는 것은 <b>무엇을 그렸는가</b>이지 좌표가 아니다 —
+     * 좌표는 이미 획의 점으로 갖고 있다(ADR-0054).
+     */
+    let smallest = ''
+    for (const edge of INTERPRET_IMAGE_EDGES) {
+      const canvas = await exportToCanvas({
+        elements: elements as never,
+        appState: { exportBackground: true, viewBackgroundColor: '#ffffff' } as never,
+        files: null,
+        exportPadding: 16,
+        getDimensions: (width: number, height: number) => {
+          const longest = Math.max(width, height)
+          return { width, height, scale: longest > edge ? edge / longest : 1 }
+        },
+      })
+      smallest = canvas.toDataURL('image/png')
+      if (smallest.length <= INTERPRET_IMAGE_BUDGET_BYTES) return smallest
+    }
+
+    // 가장 작게 그려도 예산을 넘었다. 그래도 보낸다 — 실패하더라도 상류가 사유를 돌려주고,
+    // 그 사유가 로그에 남는다. 여기서 미리 포기하면 무엇이 문제인지 알 길이 없다.
+    console.warn(
+      `판서 해석 이미지가 예산을 넘는다(${smallest.length}B > ${INTERPRET_IMAGE_BUDGET_BYTES}B). `
+      + '선택 범위를 좁히면 성공할 수 있다.')
+    return smallest
   }, [])
 
   /**
@@ -656,7 +684,12 @@ export default function InstructorAnnotationLayer({
       await applyResult(result, bounds)
     } catch (error) {
       console.warn('판서 해석 실패', error)
-      setFailure('판서를 정리하지 못했습니다. 잠시 후 다시 시도해 주세요.')
+      /*
+       * "잠시 후 다시"는 이 실패에 맞지 않는다. 가장 흔한 원인은 <b>선택 범위가 넓어 이미지가
+       * 큰 것</b>이고(상류 본문 한도 ~100KB), 그때는 기다려도 같은 결과다. 강사가 지금 할 수 있는
+       * 일을 알려 준다.
+       */
+      setFailure('판서를 정리하지 못했습니다. 선택 범위를 좁혀 다시 시도해 주세요.')
     } finally {
       setBusyAction(null)
     }
