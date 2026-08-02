@@ -58,4 +58,16 @@ public interface LiveSessionRepository extends JpaRepository<LiveSession, UUID> 
 
     /** 이 강사가 소유한 세션 중 주어진 상태의 것이 하나라도 있는가(탈퇴 가드용). */
     boolean existsByInstructorIdAndStatusIn(UUID instructorId, Collection<LiveSessionStatus> statuses);
+
+    /** 운영 콘솔용 상태 분포. */
+    @Query("SELECT s.status, COUNT(s) FROM LiveSession s GROUP BY s.status")
+    List<Object[]> countByStatus();
+
+    /**
+     * 진행 계열인데 오래 머물러 있는 세션(운영 콘솔). 라이브는 길어야 몇 시간이므로, 그보다 오래
+     * STARTING/LIVE/ENDING에 남아 있으면 종료 경로가 끊긴 것이다 — 그 세션의 방과 Egress가 계속
+     * 살아 있어 <b>전역 Egress 슬롯을 물고</b> 다음 강의를 막는다.
+     */
+    List<LiveSession> findByStatusInAndStartedAtBeforeOrderByStartedAtAsc(
+            Collection<LiveSessionStatus> statuses, OffsetDateTime before);
 }
