@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { instructorPaths, studentPaths } from './paths'
 import ScrollToTop from './ScrollToTop'
 import GuestOnlyRoute from '@/features/auth/GuestOnlyRoute'
+import RequireAdminRoute from '@/features/auth/RequireAdminRoute'
 import RequireRoleRoute from '@/features/auth/RequireRoleRoute'
 import RequireStudentPrejoinRoute from '@/features/live-session/RequireStudentPrejoinRoute'
 import InstructorLiveMediaProvider from '@/features/live-session/InstructorLiveMediaProvider'
@@ -9,8 +10,10 @@ import CurriculumDetailPage from '@/pages/CurriculumDetailPage'
 import CurriculumFormPage from '@/pages/CurriculumFormPage'
 import CurriculumListPage from '@/pages/CurriculumListPage'
 import CurriculumManagePage from '@/pages/CurriculumManagePage'
-import EgressAdminPage from '@/pages/EgressAdminPage'
 import EgressStagePage from '@/pages/EgressStagePage'
+import AdminLayout from '@/pages/admin/AdminLayout'
+import AdminOverviewPage from '@/pages/admin/AdminOverviewPage'
+import EgressAdminPage from '@/pages/admin/EgressAdminPage'
 import ForbiddenPage from '@/pages/ForbiddenPage'
 import InstructorPreflightPage from '@/pages/InstructorPreflightPage'
 import LessonDetailPage from '@/pages/LessonDetailPage'
@@ -70,6 +73,13 @@ export default function AppRouter() {
             <Route path="lessons/:lessonId/replay" element={<ReplayLessonPage />} />
           </Route>
         </Route>
+        {/* 운영 콘솔. 가입 역할과 다른 축이라 별도 트리다 — 화면만 막고, 데이터는 서버가 ROLE_ADMIN으로 막는다. */}
+        <Route path="admin" element={<RequireAdminRoute />}>
+          <Route element={<AdminLayout />}>
+            <Route index element={<AdminOverviewPage />} />
+            <Route path="egress" element={<EgressAdminPage />} />
+          </Route>
+        </Route>
         <Route path="instructor" element={<RequireRoleRoute role="INSTRUCTOR" />}>
           <Route index element={<Navigate to={instructorPaths.curriculums} replace />} />
           <Route element={<WorkspaceLayout />}>
@@ -81,8 +91,6 @@ export default function AppRouter() {
             <Route path="curriculums/:curriculumId/sections/:sectionId/lessons/:lessonId" element={<LessonDetailPage />} />
             <Route path="curriculums/:curriculumId/sections/:sectionId/lessons/:lessonId/edit" element={<LessonFormPage />} />
             <Route path="live-sessions/:sessionId/processing" element={<LiveSessionProcessingPage />} />
-            {/* Egress 운영 콘솔(유령 Egress 정지). FE 라우트는 여기 두되 실제 인가는 백엔드 ROLE_ADMIN — 관리자 아니면 API가 403. */}
-            <Route path="egress" element={<EgressAdminPage />} />
           </Route>
           <Route path="live-sessions/:sessionId" element={<InstructorLiveMediaProvider />}>
             <Route index element={<Navigate to="preflight" replace />} />

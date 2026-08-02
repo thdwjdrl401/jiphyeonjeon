@@ -45,6 +45,17 @@ export const instructorPaths = {
   replay: (lessonId: string) => `/instructor/lessons/${lessonId}/replay`,
 }
 
+/**
+ * 운영 콘솔. 가입 역할과 무관한 축이라 student/instructor와 나란히 두지 않고 별도 트리로 둔다 —
+ * 강사 화면 밑에 얹으면 "강사=운영자"라는 잘못된 전제가 경로에 굳는다(처음 Egress 콘솔이
+ * `/instructor/egress`에 있었고, 그래서 메뉴에 걸 자리가 없어 URL을 직접 쳐야 했다).
+ */
+export const adminPaths = {
+  root: '/admin',
+  overview: '/admin',
+  egress: '/admin/egress',
+}
+
 export function getRoleHomePath(role: UserRole) {
   return role === 'INSTRUCTOR' ? instructorPaths.curriculums : studentPaths.curriculums
 }

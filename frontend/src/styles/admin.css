@@ -1,0 +1,127 @@
+/*
+ * 운영 콘솔 전용 스타일. design-system.css에 넣지 않는 이유는 두 가지다.
+ * 하나, 이 화면은 운영자만 보는 도구라 제품 화면의 디자인 토큰과 수명이 다르다.
+ * 둘, design-system.css는 여러 작업이 동시에 건드리는 파일이라 여기에 얹으면 충돌이 잦다.
+ * 색·간격은 기존 토큰(var(--...))을 그대로 쓴다 — 별도 팔레트를 만들지 않는다.
+ */
+
+.admin-shell {
+  display: grid;
+  grid-template-columns: minmax(180px, 220px) 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 720px) {
+  .admin-shell {
+    grid-template-columns: 1fr;
+  }
+}
+
+.admin-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--border, #2a2a2a);
+  border-radius: 12px;
+}
+
+.admin-nav__title {
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted, #888);
+  padding: 4px 8px 8px;
+}
+
+.admin-nav a {
+  padding: 8px 10px;
+  border-radius: 8px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.admin-nav a:hover {
+  background: var(--surface-hover, rgba(127, 127, 127, 0.12));
+}
+
+.admin-nav a.is-active {
+  background: var(--surface-hover, rgba(127, 127, 127, 0.18));
+  font-weight: 600;
+}
+
+/* 신호 카드 — 숫자 하나로 "정상/이상"이 읽혀야 한다. */
+.admin-signals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.admin-signal {
+  border: 1px solid var(--border, #2a2a2a);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.admin-signal__label {
+  font-size: 0.85rem;
+  color: var(--text-muted, #888);
+}
+
+.admin-signal__value {
+  font-size: 1.6rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-signal__hint {
+  font-size: 0.8rem;
+  color: var(--text-muted, #888);
+}
+
+/* 이상 신호는 색이 아니라 테두리로도 구분한다(색각 이상·흑백 출력 대비). */
+.admin-signal.is-warning {
+  border-color: var(--warning, #b8860b);
+  border-left-width: 4px;
+}
+
+.admin-signal.is-danger {
+  border-color: var(--danger, #b04141);
+  border-left-width: 4px;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 6px 8px;
+  text-align: left;
+}
+
+.admin-table tbody tr {
+  border-top: 1px solid var(--border, #2a2a2a);
+}
+
+.admin-table td.is-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
+}
+
+.admin-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.admin-toolbar__spacer {
+  margin-left: auto;
+  color: var(--text-muted, #888);
+}

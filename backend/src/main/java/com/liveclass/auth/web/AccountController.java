@@ -1,6 +1,7 @@
 package com.liveclass.auth.web;
 
 import com.liveclass.auth.domain.AppUser;
+import com.liveclass.auth.service.AdminAccounts;
 import com.liveclass.auth.service.AuthService;
 import com.liveclass.auth.web.dto.AuthUserResponse;
 import com.liveclass.auth.web.dto.ChangePasswordRequest;
@@ -47,10 +48,15 @@ public class AccountController {
      */
     private final ObjectProvider<FindByIndexNameSessionRepository<? extends Session>> sessionRepositoryProvider;
 
+    /** 응답의 {@code isAdmin}(관리 메뉴 표시용) 판정. 실제 인가는 서버가 ROLE_ADMIN으로 따로 한다. */
+    private final AdminAccounts adminAccounts;
+
     public AccountController(AuthService authService,
-                             ObjectProvider<FindByIndexNameSessionRepository<? extends Session>> sessionRepositoryProvider) {
+                             ObjectProvider<FindByIndexNameSessionRepository<? extends Session>> sessionRepositoryProvider,
+                             AdminAccounts adminAccounts) {
         this.authService = authService;
         this.sessionRepositoryProvider = sessionRepositoryProvider;
+        this.adminAccounts = adminAccounts;
     }
 
     @Operation(summary = "프로필 이미지 설정",
@@ -60,7 +66,7 @@ public class AccountController {
                                                Authentication authentication) {
         UUID userId = UUID.fromString(authentication.getName());
         AppUser user = authService.updateProfileImage(userId, request.assetId());
-        return AuthUserResponse.from(user, authService.resolveProfileImageUrl(user));
+        return AuthUserResponse.from(user, authService.resolveProfileImageUrl(user), adminAccounts.isAdmin(user.getEmail()));
     }
 
     @Operation(summary = "표시 이름 변경",
@@ -70,7 +76,7 @@ public class AccountController {
                                               Authentication authentication) {
         UUID userId = UUID.fromString(authentication.getName());
         AppUser user = authService.updateDisplayName(userId, request.displayName());
-        return AuthUserResponse.from(user, authService.resolveProfileImageUrl(user));
+        return AuthUserResponse.from(user, authService.resolveProfileImageUrl(user), adminAccounts.isAdmin(user.getEmail()));
     }
 
     @Operation(summary = "강사 공개 프로필 조회",
