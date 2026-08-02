@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { adminPaths } from '@/app/router/paths'
-import { getActiveEgresses, getRecordingSummary, reconcileRecordings } from '@/features/admin/adminService'
+import { getActiveEgresses, getLiveSummary, getRecordingSummary, reconcileRecordings } from '@/features/admin/adminService'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import { useToast } from '@/shared/ui/Toast'
 import { InlineNotice, PageHeader, Panel } from '@/shared/ui/WorkspaceUi'
@@ -55,6 +55,11 @@ export default function AdminOverviewPage() {
     queryFn: getRecordingSummary,
     refetchInterval: 30_000,
   })
+  const liveQuery = useQuery({
+    queryKey: ['admin-live-summary'],
+    queryFn: getLiveSummary,
+    refetchInterval: 15_000,
+  })
 
   const toast = useToast()
   const reconcile = useMutation({
@@ -90,6 +95,31 @@ export default function AdminOverviewPage() {
 
   const oldest = recordingsQuery.data?.oldestFinalizingAt ?? null
   const oldestStale = oldest ? Date.now() - new Date(oldest).getTime() > FINALIZING_STALE_MS : false
+
+  // --- 라이브 ---
+  const liveByStatus = liveQuery.data?.byStatus ?? []
+  const liveCountOf = (status: string) => liveByStatus.find((s) => s.status === status)?.count ?? 0
+  const inProgress = liveCountOf('STARTING') + liveCountOf('LIVE') + liveCountOf('ENDING')
+  const stuck = liveQuery.data?.stuck ?? []
+  const stuckAfterHours = liveQuery.data?.stuckAfterHours ?? 0
+
+  // 자막은 "숫자 하나"로 읽히지 않는다 — 꺼져 있는 것/한 번도 안 돈 것/밀린 것이 다 다르다.
+  // 그 셋을 구분해 보여 주지 않으면 정상인데 고장으로, 고장인데 정상으로 읽힌다.
+  const caption = ((): { value: string; hint?: string; tone: 'normal' | 'warning' | 'danger' } => {
+    const cs = liveQuery.data?.captionStream
+    if (!cs) return { value: '-', tone: 'normal' }
+    if (!cs.enabled) return { value: '꺼짐', hint: '이 배포에서 자막 소비가 비활성', tone: 'normal' }
+    if (cs.length == null) return { value: '알 수 없음', hint: 'Redis 조회 실패', tone: 'warning' }
+    if (!cs.groupExists) {
+      return { value: '대기', hint: '아직 소비를 시작하지 않음(강의 후 생성)', tone: 'normal' }
+    }
+    const pending = cs.pending ?? 0
+    return {
+      value: pending === 0 ? '정상' : `밀림 ${pending}`,
+      hint: `스트림 ${cs.length}건 · 미처리 ${pending}건`,
+      tone: pending > 0 ? 'warning' : 'normal',
+    }
+  })()
 
   // 녹화가 한 건이라도 있는데 READY가 0이면 완료 경로 자체가 끊긴 것이다(webhook 미수신 등).
   const completionBroken = totalAssets > 0 && ready === 0
@@ -147,6 +177,50 @@ export default function AdminOverviewPage() {
         <p style={{ marginTop: 12 }}>
           <Link to={adminPaths.egress}>진행 중 Egress 관리 →</Link>
         </p>
+      </Panel>
+
+      <Panel title="라이브">
+        <div className="admin-signals">
+          <Signal
+            label="진행 중 세션"
+            value={liveQuery.isError ? '-' : inProgress}
+            hint={stuck.length > 0 ? `${stuckAfterHours}시간 넘게 안 끝난 세션 ${stuck.length}건` : undefined}
+            tone={stuck.length > 0 ? 'danger' : 'normal'}
+          />
+          <Signal label="자막 소비" value={caption.value} hint={caption.hint} tone={caption.tone} />
+        </div>
+        {liveQuery.isError && <InlineNotice tone="danger">라이브 현황을 불러오지 못했습니다.</InlineNotice>}
+
+        {stuck.length > 0 && (
+          <>
+            <InlineNotice tone="danger">
+              끝나지 않은 세션이 있습니다. 그 방과 Egress가 계속 살아 있어{' '}
+              <strong>다음 강의의 녹화를 막을 수 있습니다.</strong>
+            </InlineNotice>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>세션</th>
+                    <th>상태</th>
+                    <th>시작</th>
+                    <th>경과</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stuck.map((s) => (
+                    <tr key={s.sessionId}>
+                      <td className="is-mono">{s.sessionId}</td>
+                      <td>{s.status}</td>
+                      <td>{new Date(s.startedAt).toLocaleString()}</td>
+                      <td>{formatAge(s.startedAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </Panel>
     </div>
   )

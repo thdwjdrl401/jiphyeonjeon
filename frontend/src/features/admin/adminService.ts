@@ -36,6 +36,39 @@ export async function getRecordingSummary(): Promise<RecordingSummary> {
   return data
 }
 
+export interface StuckSession {
+  sessionId: string
+  status: string
+  startedAt: string
+}
+
+export interface CaptionStreamState {
+  streamKey: string
+  group: string
+  /** 이 배포에서 자막 소비가 켜져 있는가. 꺼져 있으면 pending이 쌓여도 정상이다. */
+  enabled: boolean
+  /** 소비 그룹이 만들어졌는가. 한 번도 소비하지 않았으면 없다. */
+  groupExists: boolean
+  /** 스트림 엔트리 수. 조회 실패면 null. */
+  length: number | null
+  /** 소비 그룹 미처리 수. 조회 실패면 null. */
+  pending: number | null
+}
+
+export interface LiveSummary {
+  byStatus: StatusCount[]
+  stuck: StuckSession[]
+  /** 갇힘 판정에 쓴 기준 시간. 화면이 같은 기준으로 설명하도록 서버가 함께 준다. */
+  stuckAfterHours: number
+  captionStream: CaptionStreamState
+}
+
+/** 라이브 세션 상태 분포 + 갇힌 세션 + 자막 소비 상태. */
+export async function getLiveSummary(): Promise<LiveSummary> {
+  const { data } = await apiClient.get<LiveSummary>('/admin/live/summary')
+  return data
+}
+
 export interface ReconcileResult {
   checked: number
   completed: number
