@@ -16,8 +16,9 @@ export const mockReplayService = {
   async saveReplayReview(lessonId, transcript) {
     replayReviews.set(lessonId, { transcript, published: false })
   },
-  async publishReplayReview(lessonId, transcript) {
-    replayReviews.set(lessonId, { transcript, published: true })
+  async publishReplayReview(lessonId) {
+    const current = replayReviews.get(lessonId)
+    replayReviews.set(lessonId, { transcript: current?.transcript ?? '', published: true })
   },
   async submitReplayQuiz(_lessonId, answer) {
     return { correct: answer === 'SecurityContext' }

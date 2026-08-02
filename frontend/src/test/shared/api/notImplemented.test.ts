@@ -61,7 +61,6 @@ describe('미구현 API 표시', () => {
     ['다시보기 채팅', () => replay.getReplayMessages('les-1')],
     ['다시보기 AI 질문', () => replay.askReplayAi('les-1', '질문', 0)],
     ['검수 저장', () => replay.saveReplayReview('les-1', '자막')],
-    ['검수 게시', () => replay.publishReplayReview('les-1', '자막')],
     ['퀴즈 제출', () => replay.submitReplayQuiz('les-1', '답')],
     // 학생 학습 요약(GET /me/learning-summary)·강사 대시보드 요약(GET /instructor/dashboard-summary)은
     // 모두 서버에 구현됨 — 여기서 제외.
@@ -77,5 +76,12 @@ describe('미구현 API 표시', () => {
     expect(get).not.toHaveBeenCalled()
     expect(post).not.toHaveBeenCalled()
     expect(put).not.toHaveBeenCalled()
+  })
+
+  it('구현된 기존 자산 수동 게시 API는 실제 endpoint를 호출한다', async () => {
+    const post = vi.spyOn(apiClient, 'post').mockResolvedValue({ data: undefined } as never)
+
+    await expect(replay.publishReplayReview('les-1')).resolves.toBeUndefined()
+    expect(post).toHaveBeenCalledWith('/instructor/lessons/les-1/replay-review/publish')
   })
 })
