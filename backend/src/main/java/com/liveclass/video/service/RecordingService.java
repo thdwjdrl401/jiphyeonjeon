@@ -1,6 +1,7 @@
 package com.liveclass.video.service;
 
 import com.liveclass.video.config.EgressProperties;
+import com.liveclass.video.domain.ReplayStatus;
 import com.liveclass.video.domain.VideoAsset;
 import com.liveclass.video.domain.VideoAssetStatus;
 import com.liveclass.video.repository.VideoAssetRepository;
@@ -19,7 +20,7 @@ import java.util.UUID;
  * Egress를 켜고 끄며 {@code video_asset} 상태기계를 전이한다. HLS-only 정책에서 시작 전 Egress 실패는
  * LIVE를 막고, 종료 중지는 {@code LiveEndOrchestrator → LiveRecordingControl} 순차 호출로 수행한다.
  *
- * <p>상태: REQUESTED/FAILED → STARTING → (egress ID 저장) RECORDING → (세션 종료) FINALIZING
+ * <p>상태: 신규/FAILED → STARTING → (egress ID 저장) RECORDING → (세션 종료) FINALIZING
  * → (egress 완료 webhook) VERIFYING → (스토리지에 매니페스트 확인) READY / FAILED.
  *
  * <p>live 모듈에 의존하지 않는다 — live가 선언한 포트의 구현 어댑터가 원시 sessionId를 넘긴다.
@@ -148,8 +149,7 @@ public class RecordingService {
     }
 
     /**
-     * Egress 완료/실패 webhook을 반영해 자산을 확정한다(ADR-0034). 재생과는 무관한 뒷정리 —
-     * 목록·썸네일 표시(duration/size)와 실패 감지를 위한 것이다.
+     * Egress 완료/실패 webhook을 반영해 자산과 공개 상태를 확정한다(ADR-0034, choinhoo/0007).
      *
      * <p>멱등: 같은 완료 신호가 여러 번 와도 안전하다. 이미 READY/FAILED면 무시한다. 모르는 egressId도
      * 조용히 무시한다(우리 자산이 아님 — 잘못된 실패 표시를 만들지 않는다).
@@ -216,8 +216,18 @@ public class RecordingService {
 
     private void markReady(VideoAsset asset, String egressId,
                            Long durationMs, Long sizeBytes, Integer segmentCount) {
+        OffsetDateTime now = OffsetDateTime.now();
         asset.setStatus(VideoAssetStatus.READY);
-        asset.setReadyAt(OffsetDateTime.now());
+        asset.setReadyAt(now);
+        asset.setFailureCode(null);
+        // 새 정상 녹화만 즉시 공개한다. 이미 READY인 기존 DRAFT는 위 terminal 멱등 가드에서
+        // 반환되고, 철회된 자산(WITHDRAWN)과 별도 검수 상태도 여기서 되살리지 않는다.
+        if (asset.getReplayStatus() == ReplayStatus.DRAFT) {
+            asset.setReplayStatus(ReplayStatus.PUBLISHED);
+            asset.setPublishedAt(now);
+            asset.setPublishedBy(null);     // 시스템 자동 게시
+            asset.setWithdrawReason(null);
+        }
         if (durationMs != null) {
             asset.setDurationMs(durationMs);
         }
@@ -227,7 +237,8 @@ public class RecordingService {
         if (segmentCount != null) {
             asset.setSegmentCount(segmentCount);
         }
-        log.info("녹화 완료 확정 egressId={} durationMs={} size={}", egressId, durationMs, sizeBytes);
+        log.info("녹화 완료 확정 egressId={} durationMs={} size={} replayStatus={}",
+                egressId, durationMs, sizeBytes, asset.getReplayStatus());
     }
 
     /** Egress HLS 출력 객체 prefix — 재생 API도 같은 규약을 사용한다. */

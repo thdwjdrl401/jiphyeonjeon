@@ -147,6 +147,7 @@ class ReplayPlaybackContractTest {
                 .andExpect(jsonPath("$.videoAssetId").isString())
                 .andExpect(jsonPath("$.sessionId").value(ids[1]))
                 .andExpect(jsonPath("$.liveSessionStatus").value("ENDED"))
+                .andExpect(jsonPath("$.replayStatus").value("PUBLISHED"))
                 .andExpect(jsonPath("$.currentSessionMs").isNumber())
                 .andExpect(jsonPath("$.sessionOffsetMs").isNumber())
                 .andExpect(jsonPath("$.durationMs").value(600_000))
@@ -299,15 +300,12 @@ class ReplayPlaybackContractTest {
     }
 
     @Test
-    void enrolled_student_can_play_published_replay() throws Exception {
+    void enrolled_student_can_play_automatically_published_replay() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         Cookie[] student = loginAs("STUDENT");
         String[] ids = createReadyRecording(instructor, MANIFEST);
         addLesson(instructor, ids[0]);
         approveEnrollment(instructor, student, ids[2]);
-        write(post("/api/instructor/lessons/" + ids[0] + "/replay-review/publish"), instructor, null)
-                .andExpect(status().isNoContent());
-
         mockMvc.perform(get("/api/lessons/" + ids[0] + "/playback").cookie(student))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.source").exists());
@@ -320,6 +318,12 @@ class ReplayPlaybackContractTest {
         String[] ids = createReadyRecording(instructor, MANIFEST);
         addLesson(instructor, ids[0]);
         approveEnrollment(instructor, student, ids[2]);
+        // 배포 이전에 이미 존재하던 READY + DRAFT 자산은 일괄 자동 공개하지 않는다.
+        var legacyDraft = videoAssetRepository.findByLiveSessionId(UUID.fromString(ids[1])).orElseThrow();
+        legacyDraft.setReplayStatus(ReplayStatus.DRAFT);
+        legacyDraft.setPublishedAt(null);
+        legacyDraft.setPublishedBy(null);
+        videoAssetRepository.saveAndFlush(legacyDraft);
 
         mockMvc.perform(get("/api/lessons/" + ids[0] + "/playback").cookie(student))
                 .andExpect(status().isNotFound())

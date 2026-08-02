@@ -76,6 +76,7 @@ public class ReplayPlaybackService {
                 session.sessionId(),
                 session.startedAt(),
                 session.liveSessionStatus(),
+                asset.getReplayStatus(),
                 source != null ? source.availableToMs() : null,
                 snapshot.map(HlsManifestProcessor.ManifestSnapshot::sessionOffsetMs).orElse(null),
                 asset.getDurationMs(),
