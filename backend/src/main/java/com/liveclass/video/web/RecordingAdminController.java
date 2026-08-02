@@ -1,9 +1,19 @@
 package com.liveclass.video.web;
 
+import com.liveclass.common.web.ErrorResponse;
 import com.liveclass.video.domain.VideoAsset;
 import com.liveclass.video.domain.VideoAssetStatus;
 import com.liveclass.video.repository.VideoAssetRepository;
+import com.liveclass.video.service.EgressControl;
+import com.liveclass.video.service.EgressControlException;
+import com.liveclass.video.service.RecordingService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -31,10 +41,18 @@ import java.util.Map;
 @RequestMapping("/api/admin/recordings")
 public class RecordingAdminController {
 
-    private final VideoAssetRepository repository;
+    private static final Logger log = LoggerFactory.getLogger(RecordingAdminController.class);
 
-    public RecordingAdminController(VideoAssetRepository repository) {
+    private final VideoAssetRepository repository;
+    private final EgressControl egressControl;
+    private final RecordingService recordingService;
+
+    public RecordingAdminController(VideoAssetRepository repository,
+                                    EgressControl egressControl,
+                                    RecordingService recordingService) {
         this.repository = repository;
+        this.egressControl = egressControl;
+        this.recordingService = recordingService;
     }
 
     @GetMapping("/summary")
@@ -58,6 +76,63 @@ public class RecordingAdminController {
     }
 
     /**
+     * 멈춘 자산을 <b>LiveKit에 직접 물어</b> 확정한다.
+     *
+     * <p>완료 확정은 원래 egress webhook이 한다. 그 경로가 끊기면(설정 누락·네트워크 등) 자산은 영원히
+     * FINALIZING에 남고, 지나간 이벤트는 다시 오지 않으므로 webhook을 고쳐도 <b>과거 건은 복구되지 않는다.</b>
+     * 그래서 서버에 결과를 물어 같은 확정 경로({@code completeFromWebhook})로 흘린다 — 확정 로직이 두 벌이
+     * 되면 webhook 경로와 값이 갈라진다.
+     *
+     * <p>아직 진행 중인 Egress는 건드리지 않는다(끝나면 정상 경로로 확정된다). LiveKit이 모르는 작업은
+     * 실패로 단정하지 않고 {@code unknown}으로 보고만 한다 — 보존 기간이 지나 목록에서 빠졌을 수 있고,
+     * 그걸 FAILED로 굳히면 실제로는 재생 가능한 녹화를 잃는다.
+     */
+    @PostMapping("/reconcile")
+    public ReconcileResult reconcile() {
+        List<VideoAsset> stuck = repository.findByStatusOrderByCreatedAtAsc(VideoAssetStatus.FINALIZING);
+        int completed = 0;
+        int failed = 0;
+        int stillRunning = 0;
+        int unknown = 0;
+        for (VideoAsset asset : stuck) {
+            String egressId = asset.getEgressId();
+            if (egressId == null || egressId.isBlank()) {
+                unknown++;
+                continue;
+            }
+            var found = egressControl.findResult(egressId);
+            if (found.isEmpty()) {
+                unknown++;
+                continue;
+            }
+            EgressControl.EgressResult result = found.get();
+            if (result.state() == EgressControl.EgressState.EGRESS_COMPLETE) {
+                recordingService.completeFromWebhook(egressId, true,
+                        result.durationMs(), result.sizeBytes(), result.segmentCount(), null);
+                completed++;
+            } else if (result.state().terminalFailure()) {
+                String error = result.error() == null || result.error().isBlank()
+                        ? "EGRESS_FAILED" : "EGRESS_FAILED: " + result.error();
+                recordingService.completeFromWebhook(egressId, false, null, null, null, error);
+                failed++;
+            } else {
+                stillRunning++;
+            }
+        }
+        log.info("녹화 보정 실행 대상={} 완료={} 실패={} 진행중={} 미확인={}",
+                stuck.size(), completed, failed, stillRunning, unknown);
+        return new ReconcileResult(stuck.size(), completed, failed, stillRunning, unknown);
+    }
+
+    /** LiveKit 통신 실패는 502로 — 서버 버그가 아니라 업스트림 문제임을 알린다. */
+    @ExceptionHandler(EgressControlException.class)
+    public ResponseEntity<ErrorResponse> handleControl(EgressControlException e) {
+        log.warn("녹화 보정 실패: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                .body(ErrorResponse.of("EGRESS_CONTROL_FAILED", e.getMessage()));
+    }
+
+    /**
      * @param byStatus           상태별 자산 수(0인 상태도 포함 — "READY가 0건"이 보여야 한다)
      * @param oldestFinalizingAt 가장 오래 FINALIZING인 자산의 생성 시각. 없으면 null
      */
@@ -65,5 +140,15 @@ public class RecordingAdminController {
     }
 
     public record StatusCount(String status, long count) {
+    }
+
+    /**
+     * @param checked      확인한 FINALIZING 자산 수
+     * @param completed    READY로 확정한 수
+     * @param failed       FAILED로 확정한 수
+     * @param stillRunning 아직 진행 중이라 두고 온 수
+     * @param unknown      LiveKit이 모르는 작업(단정하지 않고 보고만 한다)
+     */
+    public record ReconcileResult(int checked, int completed, int failed, int stillRunning, int unknown) {
     }
 }

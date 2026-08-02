@@ -35,3 +35,20 @@ export async function getRecordingSummary(): Promise<RecordingSummary> {
   const { data } = await apiClient.get<RecordingSummary>('/admin/recordings/summary')
   return data
 }
+
+export interface ReconcileResult {
+  checked: number
+  completed: number
+  failed: number
+  stillRunning: number
+  unknown: number
+}
+
+/**
+ * 멈춘 녹화를 LiveKit에 직접 물어 확정한다. 완료 webhook이 끊겨 FINALIZING에 남은 자산의 복구 경로다 —
+ * 지나간 webhook은 다시 오지 않아, webhook을 고쳐도 과거 건은 이걸로만 되살릴 수 있다.
+ */
+export async function reconcileRecordings(): Promise<ReconcileResult> {
+  const { data } = await apiClient.post<ReconcileResult>('/admin/recordings/reconcile')
+  return data
+}

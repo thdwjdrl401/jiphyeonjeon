@@ -102,6 +102,36 @@ public class LiveKitEgressControl implements EgressControl {
     }
 
     @Override
+    public Optional<EgressResult> findResult(String egressId) {
+        try {
+            Response<List<LivekitEgress.EgressInfo>> res = client.listEgress(null, egressId, null).execute();
+            if (!res.isSuccessful() || res.body() == null) {
+                throw new EgressControlException("Egress 결과 조회 실패: HTTP " + res.code());
+            }
+            return res.body().stream()
+                    .filter(info -> egressId.equals(info.getEgressId()))
+                    .findFirst()
+                    .map(info -> {
+                        Long durationMs = null;
+                        Long sizeBytes = null;
+                        Integer segmentCount = null;
+                        if (!info.getSegmentResultsList().isEmpty()) {
+                            // 세그먼트 출력은 보통 하나(index.m3u8). duration은 나노초라 ms로 환산한다 —
+                            // webhook 경로(LiveKitWebhookController)와 같은 규칙이어야 두 경로의 값이 어긋나지 않는다.
+                            var seg = info.getSegmentResultsList().get(0);
+                            durationMs = seg.getDuration() / 1_000_000L;
+                            sizeBytes = seg.getSize();
+                            segmentCount = Math.toIntExact(seg.getSegmentCount());
+                        }
+                        return new EgressResult(toState(info.getStatus()), durationMs, sizeBytes, segmentCount,
+                                info.getError());
+                    });
+        } catch (IOException e) {
+            throw new EgressControlException("Egress 결과 조회 통신 실패: " + egressId, e);
+        }
+    }
+
+    @Override
     public Optional<EgressSnapshot> findActiveForRoom(String roomName) {
         try {
             Response<List<LivekitEgress.EgressInfo>> res = client.listEgress(roomName, null, true).execute();
