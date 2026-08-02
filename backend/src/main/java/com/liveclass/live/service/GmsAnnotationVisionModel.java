@@ -66,8 +66,16 @@ class GmsAnnotationVisionModel implements AnnotationVisionModel {
         }
 
         if (response.statusCode() / 100 != 2) {
-            // 응답 본문에 키가 실릴 이유는 없지만, 상류 오류를 그대로 흘리지 않고 상태만 남긴다.
-            log.warn("판서 해석 상류 실패 status={}", response.statusCode());
+            /*
+             * <b>사유를 남긴다.</b> 예전에는 상태코드만 찍었는데, 그러면 400이 왔을 때 "무엇이
+             * 잘못됐는지"를 밖에서 알 방법이 없다 — 실제로 이미지가 커서 나는 400인지 다른
+             * 이유인지 가리지 못해 추측으로 시간을 썼다.
+             *
+             * <p>본문은 <b>앞부분만</b> 남긴다. 오류 메시지는 앞에 오고, 길게 남기면 로그가 부풀거나
+             * 우리가 보낸 내용이 되비쳐 들어올 수 있다. 우리가 보낸 프롬프트·이미지는 절대 찍지 않는다.
+             */
+            log.warn("판서 해석 상류 실패 status={} reason={}",
+                    response.statusCode(), summarize(response.body()));
             throw new AnnotationInterpretException("판서 해석 모델이 응답하지 않았습니다: " + response.statusCode());
         }
 
@@ -83,6 +91,20 @@ class GmsAnnotationVisionModel implements AnnotationVisionModel {
             return null;   // 툴을 부르지 않았다 — 호출자가 "읽지 못함"으로 처리한다
         }
         return toolCalls.path(0).path("function").path("arguments").asString(null);
+    }
+
+    /**
+     * 상류 오류 본문에서 사유만 짧게 뽑는다.
+     *
+     * <p>앞부분만 남긴다 — 오류 메시지는 앞에 오고, 길게 남기면 로그가 부풀거나 우리가 보낸 내용이
+     * 되비쳐 들어올 수 있다. 우리가 보낸 프롬프트·이미지는 절대 찍지 않는다.
+     */
+    private static String summarize(String body) {
+        if (body == null || body.isBlank()) {
+            return "(본문 없음)";
+        }
+        String trimmed = body.strip();
+        return trimmed.length() > 300 ? trimmed.substring(0, 300) + "…" : trimmed;
     }
 
     private byte[] requestBody(String prompt, String imageDataUri, String toolName, String toolParameters) {
