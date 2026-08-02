@@ -184,6 +184,10 @@ services:
       # 별도 가입 역할이 아니라 로그인 시 기존 계정에 권한을 덧입히는 방식이라(AdminAccounts),
       # 목록을 바꾸면 해당 사용자는 재로그인해야 반영된다. 이 줄이 없으면 .env.prod에 넣어도 전달되지 않는다.
       SECURITY_ADMIN_EMAILS: ${SECURITY_ADMIN_EMAILS:-}
+      # AI 강의 노트 소비(CONTRACT §3-4a). 이 줄이 없으면 .env.prod에 넣어도 전달되지 않는다 —
+      # 위 두 사례와 같은 함정이고, 실제로 여기서 한 번 더 걸렸다. 기본 꺼짐이라 켜는 것은 환경별 결정이며
+      # 켜는 순간 그동안 스트림에 쌓인 이벤트를 처음(0-0)부터 읽어 지난 세션 노트가 먼저 채워진다.
+      LECTURE_NOTE_CONSUMER_ENABLED: ${LECTURE_NOTE_CONSUMER_ENABLED:-false}
     depends_on:
       postgres:
         condition: service_healthy   # Flyway 마이그레이션 전 DB 준비 대기
