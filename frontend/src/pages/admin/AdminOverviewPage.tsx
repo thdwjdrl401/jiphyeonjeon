@@ -66,10 +66,16 @@ export default function AdminOverviewPage() {
     onError: () => toast.error('녹화 확정에 실패했습니다.'),
   })
 
-  // 상태를 되돌릴 수 없는 조작이라 한 번 묻는다. 진행 중인 녹화는 대상이 아니라는 것도 함께 알린다.
+  // 되돌릴 수 없는 데다 결과가 수강생에게 바로 보이는 조작이라, 무엇이 일어나는지 다 적고 묻는다.
+  // 확정은 webhook과 같은 경로를 타는데 그 경로가 정상 녹화를 자동 게시한다(choinhoo/0007) —
+  // "완료 처리"로만 안내하면 게시까지 되는 줄 모르고 누르게 된다.
   const runReconcile = () => {
     const ok = window.confirm(
-      '멈춘 녹화를 LiveKit 결과로 확정합니다.\n완료/실패가 확정되면 되돌릴 수 없습니다. 진행하시겠습니까?',
+      '멈춘 녹화를 LiveKit 결과로 확정합니다.\n\n'
+        + '· 완료된 녹화는 다시보기로 자동 게시되어 수강생에게 바로 보입니다.\n'
+        + '· 실패한 녹화는 실패로 확정됩니다.\n'
+        + '· 진행 중이거나 확인할 수 없는 건은 건드리지 않습니다.\n\n'
+        + '확정 후에는 되돌릴 수 없습니다. 진행하시겠습니까?',
     )
     if (ok) reconcile.mutate()
   }
@@ -125,7 +131,7 @@ export default function AdminOverviewPage() {
               {reconcile.isPending ? '확인 중…' : '멈춘 녹화 확정하기'}
             </button>
             <span className="admin-toolbar__spacer">
-              LiveKit에 결과를 물어 완료/실패로 확정합니다. 진행 중인 녹화는 건드리지 않습니다.
+              LiveKit에 결과를 물어 확정합니다. 완료된 녹화는 다시보기로 자동 게시됩니다.
             </span>
           </div>
         )}
