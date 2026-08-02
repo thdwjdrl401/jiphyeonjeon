@@ -108,7 +108,7 @@ class LiveKitWebhookContractTest {
                         .cookie(ownersBySession.get(sessionId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.videoAsset.status").value("READY"))
-                .andExpect(jsonPath("$.replayStatus").value("PUBLISHED"));
+                .andExpect(jsonPath("$.videoAsset.replayStatus").value("PUBLISHED"));
     }
 
     @Test
@@ -131,7 +131,7 @@ class LiveKitWebhookContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.videoAsset.status").value("FAILED"))
                 .andExpect(jsonPath("$.videoAsset.failureCode").value(org.hamcrest.Matchers.containsString("disk full")))
-                .andExpect(jsonPath("$.replayStatus").value("DRAFT"));
+                .andExpect(jsonPath("$.videoAsset.replayStatus").value("DRAFT"));
     }
 
     @Test

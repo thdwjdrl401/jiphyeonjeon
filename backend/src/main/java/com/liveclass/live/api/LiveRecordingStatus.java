@@ -27,9 +27,10 @@ public interface LiveRecordingStatus {
      * 처리 현황이 필요로 하는 만큼만 담는다. HLS 키·버킷 같은 저장소 내부는 내보내지 않는다 —
      * 화면이 알 필요가 없고, 재생은 별도 playback 계약이 담당한다.
      *
-     * @param status       {@code REQUESTED|STARTING|RECORDING|FINALIZING|VERIFYING|READY|FAILED}
+     * @param status       {@code STARTING|RECORDING|FINALIZING|VERIFYING|READY|FAILED}
      * @param replayStatus {@code DRAFT|READY_FOR_REVIEW|PUBLISHED|WITHDRAWN} — 자산 준비와 <b>다른 축</b>이다.
-     *                     자산이 READY여도 게시는 강사가 따로 한다.
+     *                     새 정상 녹화는 READY와 PUBLISHED를 함께 확정하지만 기존 미게시·철회 자산은
+     *                     수동 게시 상태로 남을 수 있다.
      * @param failureCode  {@code status=FAILED}일 때의 안정적인 code. 아니면 null
      * @param durationMs   녹화 길이. 완료 webhook 전에는 null
      * @param sizeBytes    총 크기. 완료 webhook 전에는 null
