@@ -23,6 +23,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.event.ApplicationEvents;
 import org.springframework.test.context.event.RecordApplicationEvents;
@@ -67,6 +68,7 @@ class RecordingLifecycleTest {
     @Autowired private VideoAssetRepository videoAssetRepository;
     @Autowired private LiveSessionRepository liveSessionRepository;
     @Autowired private ApplicationEvents events;
+    @Autowired private JdbcTemplate jdbcTemplate;
 
     @MockitoBean private EgressControl egressControl;
     @MockitoBean private LiveRoomControl roomControl;   // 방 준비·참가자 조회·방 닫기가 실 LiveKit을 안 타게 목.
@@ -75,6 +77,32 @@ class RecordingLifecycleTest {
 
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
     private final List<UUID> createdSessions = new ArrayList<>();
+
+    @Test
+    void video_asset_schema_does_not_allow_the_removed_requested_status() {
+        assertThat(List.of(VideoAssetStatus.values()))
+                .extracting(VideoAssetStatus::name)
+                .doesNotContain("REQUESTED");
+
+        String defaultExpression = jdbcTemplate.queryForObject("""
+                SELECT column_default
+                FROM information_schema.columns
+                WHERE table_schema = 'core'
+                  AND table_name = 'video_asset'
+                  AND column_name = 'status'
+                """, String.class);
+        assertThat(defaultExpression).isNull();
+
+        String constraintDefinition = jdbcTemplate.queryForObject("""
+                SELECT pg_get_constraintdef(oid)
+                FROM pg_constraint
+                WHERE conrelid = 'core.video_asset'::regclass
+                  AND conname = 'video_asset_status_check'
+                """, String.class);
+        assertThat(constraintDefinition)
+                .contains("STARTING", "RECORDING", "FINALIZING", "VERIFYING", "READY", "FAILED")
+                .doesNotContain("REQUESTED");
+    }
 
     @AfterEach
     void cleanupVideoAssets() {
