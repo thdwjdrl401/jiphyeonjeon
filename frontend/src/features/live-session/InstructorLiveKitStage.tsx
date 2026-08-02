@@ -3,6 +3,7 @@ import { StatusBadge } from '@/shared/ui/WorkspaceUi'
 import CameraOverlayControl from './CameraOverlayControl'
 import InstructorAnnotationLayer from './InstructorAnnotationLayer'
 import InstructorLocalTrackVideo from './InstructorLocalTrackVideo'
+import PublishQualityPanel from './PublishQualityPanel'
 import { useInstructorLiveKit, type InstructorLiveKitConnectionState } from './useInstructorLiveKit'
 
 interface InstructorLiveKitStageProps {
@@ -126,6 +127,11 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
    * 바뀌므로, 커진 화면에서 그린 획도 같은 프레임 좌표로 기록된다.
    */
   const stageRef = useRef<HTMLDivElement>(null)
+  /*
+   * 송출 화질 패널. 기본은 접혀 있다 — 한 번 정하면 브라우저에 남아 다음 강의까지 유지되므로
+   * 매 강의 펼쳐 둘 이유가 없고, 펼쳐 두면 미리보기를 가린다.
+   */
+  const [qualityPanel, setQualityPanel] = useState(false)
   const [fullscreen, setFullscreen] = useState(false)
 
   useEffect(() => {
@@ -230,6 +236,14 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
       </div>
 
 
+      {qualityPanel && (
+        <PublishQualityPanel
+          applying={publisher.applyingQuality}
+          quality={publisher.quality}
+          onChange={publisher.changeQuality}
+        />
+      )}
+
       {publisher.errorMessage && (
         <div className="instructor-media-error" role="alert">
           <span>{publisher.errorMessage}</span>
@@ -288,6 +302,19 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
                 화이트보드 {whiteboard ? '켜짐' : '꺼짐'}
               </button>
             )}
+            {/*
+              송출 화질. 구현은 처음부터 있었지만 이걸 여는 버튼이 없어 강사가 쓸 수 없었다 —
+              업로드가 좁거나 노트북이 버거울 때 낮출 수단이 화면에 있어야 한다.
+            */}
+            <button
+              aria-pressed={qualityPanel}
+              className={qualityPanel ? 'is-active' : ''}
+              disabled={!publisher.canControl}
+              type="button"
+              onClick={() => setQualityPanel((current) => !current)}
+            >
+              화질 {qualityPanel ? '펼침' : '접힘'}
+            </button>
             {showCameraPictureInPicture && (
               <button
                 aria-pressed={publisher.cameraOverlay.visible}
