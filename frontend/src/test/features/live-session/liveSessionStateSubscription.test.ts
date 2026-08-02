@@ -103,4 +103,40 @@ describe('라이브 세션 상태 STOMP 구독 계약', () => {
     expect(onConnectionChange).toHaveBeenLastCalledWith('disconnected')
     expect(client.deactivate).toHaveBeenCalledOnce()
   })
+
+  it('같은 토픽의 접속자 수 이벤트를 상태 전이와 섞지 않고 넘긴다', () => {
+    const onEvent = vi.fn<(event: LiveSessionStateEvent) => void>()
+    httpLiveSessionService.subscribeSessionState('ses-live-1', onEvent, vi.fn())
+    const client = stompHarness.clients[0] as StompClientDouble
+    client.onConnect()
+    const receive = client.subscribe.mock.calls[0][1] as (frame: { body: string }) => void
+
+    receive({
+      body: JSON.stringify({
+        eventId: 'evt-presence',
+        type: 'session.presence',
+        sessionId: 'ses-live-1',
+        occurredAt: '2026-08-02T20:00:00+09:00',
+        payload: { participantCount: 12 },
+      }),
+    })
+
+    expect(onEvent).toHaveBeenCalledTimes(1)
+    expect(onEvent.mock.calls[0][0]).toEqual({
+      type: 'session.presence',
+      occurredAt: '2026-08-02T20:00:00+09:00',
+      payload: { participantCount: 12 },
+    })
+
+    // 숫자가 아닌 값은 화면 카운터를 NaN으로 만든다. 통과시키지 않는다.
+    receive({
+      body: JSON.stringify({
+        type: 'session.presence',
+        sessionId: 'ses-live-1',
+        occurredAt: '2026-08-02T20:00:01+09:00',
+        payload: { participantCount: null },
+      }),
+    })
+    expect(onEvent).toHaveBeenCalledTimes(1)
+  })
 })

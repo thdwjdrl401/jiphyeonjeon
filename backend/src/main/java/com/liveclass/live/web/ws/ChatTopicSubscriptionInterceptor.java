@@ -1,6 +1,7 @@
 package com.liveclass.live.web.ws;
 
 import com.liveclass.live.service.LiveAccessGuard;
+import com.liveclass.live.service.LivePresenceRegistry;
 import com.liveclass.live.service.LiveSessionForbiddenException;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
@@ -40,9 +41,15 @@ public class ChatTopicSubscriptionInterceptor implements ChannelInterceptor {
             Pattern.compile("^/topic/live-sessions/([^/]+)/state$");
 
     private final LiveAccessGuard accessGuard;
+    private final LivePresenceRegistry presenceRegistry;
+    private final WsLivePresenceBroadcaster presenceBroadcaster;
 
-    public ChatTopicSubscriptionInterceptor(LiveAccessGuard accessGuard) {
+    public ChatTopicSubscriptionInterceptor(LiveAccessGuard accessGuard,
+                                            LivePresenceRegistry presenceRegistry,
+                                            WsLivePresenceBroadcaster presenceBroadcaster) {
         this.accessGuard = accessGuard;
+        this.presenceRegistry = presenceRegistry;
+        this.presenceBroadcaster = presenceBroadcaster;
     }
 
     @Override
@@ -77,7 +84,19 @@ public class ChatTopicSubscriptionInterceptor implements ChannelInterceptor {
             throw new LiveSessionForbiddenException("잘못된 구독 대상입니다.");
         }
         // 소유 강사이거나 활성 수강생만. 아니면 예외 → 구독 프레임이 브로커에 도달하지 못하고 거부된다.
-        accessGuard.requireCanAccess(sessionId, UUID.fromString(principal.getName()));
+        UUID userId = UUID.fromString(principal.getName());
+        boolean instructor = accessGuard.requireCanAccess(sessionId, userId);
+
+        /*
+         * 인가를 통과한 뒤에만 접속자로 센다. 거부된 구독은 예외로 위에서 끝나므로 여기 오지 않는다.
+         *
+         * <p>연결 하나가 토픽을 여러 개(chat·captions·state) 구독하므로 처음 한 번만 등록되고, 그때만
+         * 알린다 — 구독마다 알리면 접속 한 번에 브로드캐스트가 세 번 나간다.
+         */
+        String connectionId = accessor.getSessionId();
+        if (connectionId != null && presenceRegistry.join(connectionId, sessionId, userId, instructor)) {
+            presenceBroadcaster.announce(sessionId);
+        }
         return message;
     }
 }

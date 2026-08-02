@@ -149,6 +149,14 @@ export default function LiveClassroomPage() {
     return subscribeSessionState(
       sessionId,
       (event) => {
+        // 접속자 수는 세션 상태가 아니다. 같은 토픽으로 오지만 status를 건드리면 안 된다.
+        if (event.type === 'session.presence') {
+          queryClient.setQueryData<LiveSessionView>(
+            ['live-session', sessionId],
+            (cached) => cached ? { ...cached, participants: event.payload.participantCount } : cached,
+          )
+          return
+        }
         const current = queryClient.getQueryData<LiveSessionView>(['live-session', sessionId])
         queryClient.setQueryData<LiveSessionView>(
           ['live-session', sessionId],

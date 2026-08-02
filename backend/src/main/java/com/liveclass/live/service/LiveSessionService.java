@@ -187,6 +187,8 @@ public class LiveSessionService implements LiveSessionManagement, LiveSessionDir
                 s.getRoomSid(), s.getStartedAt(), s.getEndedAt(),
                 s.isRecordingEnabled(), s.isCaptionEnabled(), s.isChatEnabled(), s.isAiQnaEnabled(),
                 s.isAnnotationVisible(),
-                s.getCreatedAt(), s.getUpdatedAt());
+                s.getCreatedAt(), s.getUpdatedAt(),
+                // 접속 현황은 세션 속성이 아니다. 조회 경로에서만 얹는다(ADR-0060).
+                0);
     }
 }

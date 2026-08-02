@@ -8,6 +8,7 @@ import com.liveclass.live.service.LiveEndOrchestrator;
 import com.liveclass.live.service.LiveParticipantIdentity;
 import com.liveclass.live.service.LivePreflightService;
 import com.liveclass.live.service.LiveProcessingService;
+import com.liveclass.live.service.LivePresenceRegistry;
 import com.liveclass.live.service.LiveSessionForbiddenException;
 import com.liveclass.live.service.LiveSessionNotFoundException;
 import com.liveclass.live.service.LiveSessionService;
@@ -52,11 +53,13 @@ public class LiveSessionController {
     private final LiveKitTokenService tokenService;
     private final LiveAccessGuard accessGuard;
     private final LiveProcessingService processingService;
+    private final LivePresenceRegistry presenceRegistry;
 
     public LiveSessionController(LiveSessionService liveSessionService, LiveEndOrchestrator endOrchestrator,
                                 LiveStartOrchestrator startOrchestrator,
                                 LivePreflightService preflightService, LiveKitTokenService tokenService,
-                                LiveAccessGuard accessGuard, LiveProcessingService processingService) {
+                                LiveAccessGuard accessGuard, LiveProcessingService processingService,
+                                LivePresenceRegistry presenceRegistry) {
         this.liveSessionService = liveSessionService;
         this.endOrchestrator = endOrchestrator;
         this.startOrchestrator = startOrchestrator;
@@ -64,16 +67,22 @@ public class LiveSessionController {
         this.tokenService = tokenService;
         this.accessGuard = accessGuard;
         this.processingService = processingService;
+        this.presenceRegistry = presenceRegistry;
     }
 
-    @Operation(summary = "라이브 세션 조회", description = "라이브 세션의 기본 정보를 조회한다. 소유 강사 또는 활성 수강생만.")
+    @Operation(summary = "라이브 세션 조회",
+            description = "라이브 세션의 기본 정보를 조회한다. 소유 강사 또는 활성 수강생만. "
+                    + "지금 강의실에 있는 수강생 수(participantCount)를 함께 준다 — 이후 변화는 "
+                    + "state 토픽의 session.presence로 온다(ADR-0060).")
     @GetMapping("/api/live-sessions/{sessionId}")
     public LiveSessionView get(@PathVariable UUID sessionId, Authentication authentication) {
         // 접근 게이트: 소유 강사이거나 활성 수강생만 세션 정보를 볼 수 있다(없으면 404, 미수강 403).
         // 없으면 아무 로그인 사용자나 임의 세션의 강사·일정·roomSid를 조회할 수 있었다(IDOR).
         accessGuard.requireCanAccess(sessionId, UUID.fromString(authentication.getName()));
         return liveSessionService.findById(sessionId)
-                .orElseThrow(() -> new LiveSessionNotFoundException("라이브 세션을 찾을 수 없습니다."));
+                .orElseThrow(() -> new LiveSessionNotFoundException("라이브 세션을 찾을 수 없습니다."))
+                // 조회 시점의 접속 현황. 이후 변화는 state 토픽으로 온다(ADR-0060).
+                .withParticipantCount(presenceRegistry.audienceCount(sessionId));
     }
 
     @Operation(summary = "라이브 시작 요청",

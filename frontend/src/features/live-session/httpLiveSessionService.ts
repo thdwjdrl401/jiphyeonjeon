@@ -28,6 +28,8 @@ interface ApiLiveSessionView {
   scheduledAt: string | null
   entryWindowMinutes: number | null
   expectedDurationMinutes: number | null
+  /** 조회 시점의 접속 수강생 수(ADR-0060). 이후 변화는 state 토픽의 session.presence로 온다. */
+  participantCount?: number
 }
 
 interface ApiChatMessage {
@@ -117,6 +119,7 @@ interface ApiSessionStateEnvelope {
   payload: {
     liveSessionStatus?: string
     endedAt?: string | null
+    participantCount?: number
   }
 }
 
@@ -273,7 +276,12 @@ function normalizeLiveSession(
       : null,
     entryWindowMinutes,
     expectedDurationMinutes: data.expectedDurationMinutes ?? 0,
-    participants: 0,
+    /*
+     * 접속 수강생 수(ADR-0060). LiveKit 방 참여자가 아니라 세션 토픽 구독을 사람 단위로 센 값이다 —
+     * 수강생은 LiveKit 방에 들어오지 않는다(ADR-0032). 여기서는 조회 시점의 초기값만 받고,
+     * 이후 변화는 session.presence 이벤트가 갱신한다.
+     */
+    participants: data.participantCount ?? 0,
   }
 }
 
@@ -320,6 +328,13 @@ function readSessionStateEnvelope(frame: IMessage, sessionId: string): LiveSessi
       type: 'session.ended',
       occurredAt: envelope.occurredAt,
       payload: { liveSessionStatus: 'ENDED', endedAt: envelope.payload.endedAt },
+    }
+  }
+  if (envelope.type === 'session.presence' && typeof envelope.payload.participantCount === 'number') {
+    return {
+      type: 'session.presence',
+      occurredAt: envelope.occurredAt,
+      payload: { participantCount: envelope.payload.participantCount },
     }
   }
   return null
