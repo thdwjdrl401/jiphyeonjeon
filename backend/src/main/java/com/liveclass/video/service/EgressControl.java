@@ -39,7 +39,26 @@ public interface EgressControl {
      */
     List<ActiveEgress> listActive();
 
+    /**
+     * 종료된 Egress의 <b>결과</b>까지 조회한다(상태 + 세그먼트 산출물). 완료 webhook이 오지 않아 자산이
+     * FINALIZING에 멈춰 있을 때 서버에 직접 물어 확정하는 복구 경로다. LiveKit이 그 작업을 모르면 empty.
+     *
+     * <p>{@link #findState}와 나눈 이유는 확정에 상태만으로는 부족해서다 — 길이·크기·세그먼트 수가 없으면
+     * 자산이 READY가 되어도 재생 메타가 비어 화면이 반쪽이 된다.
+     */
+    Optional<EgressResult> findResult(String egressId);
+
     record EgressSnapshot(String egressId, EgressState state) {
+    }
+
+    /**
+     * @param state        현재 상태
+     * @param durationMs   세그먼트 길이(ms). 알 수 없으면 null
+     * @param sizeBytes    산출물 크기(byte). 알 수 없으면 null
+     * @param segmentCount 세그먼트 수. 알 수 없으면 null
+     * @param error        실패 사유. 성공이면 null 또는 빈 문자열
+     */
+    record EgressResult(EgressState state, Long durationMs, Long sizeBytes, Integer segmentCount, String error) {
     }
 
     /** 관리 콘솔 표시용 진행 중 Egress 한 건(egressId·방·상태·시작시각ms). */

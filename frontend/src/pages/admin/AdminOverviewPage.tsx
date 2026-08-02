@@ -1,8 +1,9 @@
 import { Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { adminPaths } from '@/app/router/paths'
-import { getActiveEgresses, getRecordingSummary } from '@/features/admin/adminService'
+import { getActiveEgresses, getRecordingSummary, reconcileRecordings } from '@/features/admin/adminService'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
+import { useToast } from '@/shared/ui/Toast'
 import { InlineNotice, PageHeader, Panel } from '@/shared/ui/WorkspaceUi'
 
 /** 정체 판단 기준. 녹화 완료는 보통 분 단위라, 1시간을 넘겼으면 사람이 봐야 한다. */
@@ -55,6 +56,24 @@ export default function AdminOverviewPage() {
     refetchInterval: 30_000,
   })
 
+  const toast = useToast()
+  const reconcile = useMutation({
+    mutationFn: reconcileRecordings,
+    onSuccess: () => {
+      void recordingsQuery.refetch()
+      void egressQuery.refetch()
+    },
+    onError: () => toast.error('녹화 확정에 실패했습니다.'),
+  })
+
+  // 상태를 되돌릴 수 없는 조작이라 한 번 묻는다. 진행 중인 녹화는 대상이 아니라는 것도 함께 알린다.
+  const runReconcile = () => {
+    const ok = window.confirm(
+      '멈춘 녹화를 LiveKit 결과로 확정합니다.\n완료/실패가 확정되면 되돌릴 수 없습니다. 진행하시겠습니까?',
+    )
+    if (ok) reconcile.mutate()
+  }
+
   const activeEgress = egressQuery.data?.length ?? 0
   const byStatus = recordingsQuery.data?.byStatus ?? []
   const countOf = (status: string) => byStatus.find((s) => s.status === status)?.count ?? 0
@@ -99,6 +118,26 @@ export default function AdminOverviewPage() {
         </div>
         {egressQuery.isError && <InlineNotice tone="danger">Egress 목록을 불러오지 못했습니다.</InlineNotice>}
         {recordingsQuery.isError && <InlineNotice tone="danger">녹화 현황을 불러오지 못했습니다.</InlineNotice>}
+
+        {finalizing > 0 && (
+          <div className="admin-toolbar" style={{ marginTop: 12 }}>
+            <button type="button" disabled={reconcile.isPending} onClick={runReconcile}>
+              {reconcile.isPending ? '확인 중…' : '멈춘 녹화 확정하기'}
+            </button>
+            <span className="admin-toolbar__spacer">
+              LiveKit에 결과를 물어 완료/실패로 확정합니다. 진행 중인 녹화는 건드리지 않습니다.
+            </span>
+          </div>
+        )}
+        {reconcile.data && (
+          <InlineNotice tone={reconcile.data.completed > 0 ? 'success' : 'info'}>
+            {reconcile.data.checked}건 확인 · 완료 {reconcile.data.completed} · 실패 {reconcile.data.failed}
+            {reconcile.data.stillRunning > 0 && ` · 진행 중 ${reconcile.data.stillRunning}`}
+            {reconcile.data.unknown > 0 && ` · 미확인 ${reconcile.data.unknown}`}
+            {reconcile.data.unknown > 0 && ' (LiveKit이 모르는 작업은 단정하지 않고 그대로 뒀습니다)'}
+          </InlineNotice>
+        )}
+
         <p style={{ marginTop: 12 }}>
           <Link to={adminPaths.egress}>진행 중 Egress 관리 →</Link>
         </p>

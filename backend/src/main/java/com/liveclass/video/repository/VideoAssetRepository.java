@@ -37,4 +37,7 @@ public interface VideoAssetRepository extends JpaRepository<VideoAsset, UUID> {
 
     /** 가장 오래 멈춰 있는 자산의 생성 시각(정체 판단용). 없으면 empty. */
     Optional<VideoAsset> findFirstByStatusOrderByCreatedAtAsc(VideoAssetStatus status);
+
+    /** 보정 대상 조회(오래된 것부터). 완료 webhook이 오지 않아 멈춘 자산을 서버에 직접 물어 확정한다. */
+    List<VideoAsset> findByStatusOrderByCreatedAtAsc(VideoAssetStatus status);
 }
