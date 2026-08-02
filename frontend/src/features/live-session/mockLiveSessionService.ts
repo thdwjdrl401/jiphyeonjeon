@@ -269,15 +269,24 @@ export const mockLiveSessionService = {
     const bookmarks = bookmarksByLesson.get(lessonId) ?? []
     bookmarksByLesson.set(lessonId, [...bookmarks, sessionMs])
   },
-  async getProcessingStatus() {
+  async getProcessingStatus(sessionId) {
+    // 서버와 같은 모양으로 돌려준다 — 목이 화면 문구를 만들어 주면 실서버에서만 깨지는 화면이 된다.
     return {
-      steps: [
-        { label: '녹화 종료 요청', status: 'COMPLETE' as const },
-        { label: 'HLS 세그먼트 정리', status: 'COMPLETE' as const },
-        { label: '재생 가능성 검증', status: 'COMPLETE' as const },
-        { label: '다시보기 검수 준비', status: 'PROCESSING' as const },
-      ],
-      ready: false,
+      sessionId,
+      liveSessionStatus: 'ENDED' as const,
+      recordingEnabled: true,
+      startedAt: '2026-08-01T10:00:00+09:00',
+      endedAt: '2026-08-01T11:32:00+09:00',
+      videoAsset: {
+        videoAssetId: 'vid_mock_0001',
+        status: 'VERIFYING' as const,
+        replayStatus: 'DRAFT' as const,
+        failureCode: null,
+        durationMs: 5_520_000,
+        sizeBytes: 1_284_000_000,
+        recordingStartedAt: '2026-08-01T10:00:04+09:00',
+        recordingEndedAt: '2026-08-01T11:32:06+09:00',
+      },
     }
   },
   async getQuestionHighlights() {

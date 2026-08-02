@@ -212,9 +212,38 @@ export interface LiveStartStatus {
   session: LiveSessionView
 }
 
+/** 녹화 자산이 지나는 단계. 라이브 종료와 무관하게 Egress 완료 webhook이 진행시킨다. */
+export type VideoAssetStatus =
+  | 'REQUESTED' | 'STARTING' | 'RECORDING' | 'FINALIZING' | 'VERIFYING' | 'READY' | 'FAILED'
+
+/** 다시보기 게시 축. 자산 준비와 <b>다른 축</b>이다 — READY여도 게시는 강사가 따로 한다. */
+export type ReplayStatus = 'DRAFT' | 'READY_FOR_REVIEW' | 'PUBLISHED' | 'WITHDRAWN'
+
+/**
+ * 종료 후 처리 현황(CONTRACT §2-2).
+ *
+ * 서버는 <b>상태만</b> 준다. "HLS 세그먼트 정리 중" 같은 표시 문구는 이 화면이 고른다 — 문구를 계약에
+ * 넣으면 한 줄 고치는 데 서버 배포가 필요해진다.
+ */
 export interface ProcessingStatus {
-  steps: Array<{ label: string; status: 'COMPLETE' | 'PROCESSING' | 'PENDING' }>
-  ready: boolean
+  sessionId: string
+  liveSessionStatus: LiveSessionView['status']
+  /** 녹화를 켜고 진행했는가. `videoAsset`이 null일 때 "아직 없음"과 "애초에 녹화 안 함"을 가른다. */
+  recordingEnabled: boolean
+  startedAt: string | null
+  endedAt: string | null
+  /** 녹화 자산. 아직 만들어지지 않았으면 null — 이 부재는 실패가 아니다. */
+  videoAsset: {
+    videoAssetId: string
+    status: VideoAssetStatus
+    replayStatus: ReplayStatus | null
+    /** `status === 'FAILED'`일 때의 안정적인 code. 아니면 null. */
+    failureCode: string | null
+    durationMs: number | null
+    sizeBytes: number | null
+    recordingStartedAt: string | null
+    recordingEndedAt: string | null
+  } | null
 }
 
 export interface QuestionHighlight {
