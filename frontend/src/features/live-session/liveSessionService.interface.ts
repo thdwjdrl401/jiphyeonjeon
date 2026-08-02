@@ -65,6 +65,17 @@ export type LiveSessionStateEvent =
       occurredAt: string
       payload: { liveSessionStatus: 'ENDED'; endedAt: string }
     }
+  /**
+   * 지금 강의실에 들어와 있는 수강생 수. 강사는 포함하지 않는다.
+   *
+   * 수강생은 LiveKit 방에 들어오지 않으므로(ADR-0032) 방 참여자 목록으로는 청중을 셀 수 없다.
+   * 서버는 세션 토픽 구독을 사람 단위로 세어 이 이벤트로 알려준다.
+   */
+  | {
+      type: 'session.presence'
+      occurredAt: string
+      payload: { participantCount: number }
+    }
 
 export interface CaptionTermReference {
   termId: string

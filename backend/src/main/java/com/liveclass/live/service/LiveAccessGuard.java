@@ -23,16 +23,21 @@ public class LiveAccessGuard {
         this.enrollmentDirectory = enrollmentDirectory;
     }
 
-    /** 접근 허용: 세션 소유 강사이거나, 소속 커리큘럼의 ACTIVE 수강생. 아니면 403(Forbidden). */
+    /**
+     * 접근 허용: 세션 소유 강사이거나, 소속 커리큘럼의 ACTIVE 수강생. 아니면 403(Forbidden).
+     *
+     * @return 요청자가 <b>소유 강사</b>인가. 통과한 사람이 강사인지 수강생인지 호출자가 다시 조회하지
+     *         않도록 돌려준다(접속자 집계가 강사를 빼는 데 쓴다). 필요 없으면 무시하면 된다.
+     */
     @Transactional(readOnly = true)
-    public void requireCanAccess(UUID sessionId, UUID userId) {
+    public boolean requireCanAccess(UUID sessionId, UUID userId) {
         LiveSession session = liveSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new LiveSessionNotFoundException("라이브 세션을 찾을 수 없습니다."));
         if (userId.equals(session.getInstructorId())) {
-            return;   // 세션을 만든 강사
+            return true;   // 세션을 만든 강사
         }
         if (enrollmentDirectory.isActive(session.getCurriculumId(), userId)) {
-            return;   // 활성 수강생
+            return false;   // 활성 수강생
         }
         throw new LiveSessionForbiddenException("이 라이브에 접근 권한이 없습니다. 수강 신청·승인이 필요합니다.");
     }

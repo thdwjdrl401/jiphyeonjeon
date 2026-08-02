@@ -142,6 +142,12 @@ export const mockLiveSessionService = {
     subscribers.add(onEvent)
     stateSubscribers.set(sessionId, subscribers)
     onConnectionChange('connected')
+    // 서버도 구독 직후 현재 인원을 한 번 보낸다 — 목이 이걸 빠뜨리면 접속자 수가 목에서만 0이 된다.
+    onEvent({
+      type: 'session.presence',
+      occurredAt: new Date().toISOString(),
+      payload: { participantCount: getDemoLiveSession(sessionId).participants },
+    })
     return () => {
       subscribers.delete(onEvent)
       if (subscribers.size === 0) stateSubscribers.delete(sessionId)

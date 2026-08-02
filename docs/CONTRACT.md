@@ -254,6 +254,15 @@ Spring 수신 endpoint를 구현하고 `SPRING_STATUS_CALLBACK_URL`로 주입하
   `session.ended` payload `{liveSessionStatus:"ENDED",endedAt:"..."}`를 각 DB 전이의 **커밋 후** push한다.
   `session.ending`은 종료 진행 안내이고 상호작용을 잠그지 않는다. `session.ended`가 학생 잠금의 최종 신호다.
   재연결 뒤 FE는 `GET /live-sessions/{sessionId}`를 다시 조회해 이벤트 유실을 보완한다.
+  같은 채널로 **`session.presence`** payload `{participantCount}`도 push한다([ADR-0060](decisions/songjeongki/0060-live-presence-counts-subscriptions.md))
+  — 지금 강의실에 있는 **수강생 수**이며 **강사는 세지 않는다**(혼자일 때 1이 되면 오해를 만든다).
+  수강생은 LiveKit 방에 들어오지 않으므로(ADR-0032) 방 참여자 목록으로는 청중을 셀 수 없다. 서버는 이 채널의
+  **구독을 사람 단위로**(한 사람이 탭을 여러 개 열어도 1) 센다. **초기값은 이 채널이 아니라 `GET /live-sessions/{id}`의
+  `participantCount`로 준다** — 구독 인가는 브로커가 구독을 등록하기 전에 지나가므로 그때 보낸 브로드캐스트는
+  방금 들어온 본인에게 닿지 않는다. 이 이벤트는 **이미 있던 사람들에게** 증감을 알리는 용도다.
+  FE는 이 이벤트를 세션 상태 전이와 **섞지 않는다**
+  (`liveSessionStatus`를 건드리지 않는다). 단일 인스턴스 전제이며(SimpleBroker와 동일 전제, ADR-0019)
+  다중 인스턴스에서는 외부 relay 전환과 함께 공유 저장소로 옮겨야 한다.
 - 채팅 시간은 **세션 상대 ms**(`sessionMs`)다. **자막의 `streamElapsedMs`는 §3-4의 raw attempt-local ms를 그대로 노출**한다(변환 금지) — 세션 상대 ms 변환·앵커는 후속 공유 계약이며 그 전까지 FE는 raw 값으로 취급한다(ADR-0043). **추가로 자막 payload에 근사 `sessionMs`(Long, nullable)를 함께 싣는다**: `max(0, occurredAt − session.clockOriginAt)`로 서버가 읽기 시 계산하는 **근사 세션-ms**로, 학생이 HLS 영상 위치에 자막을 맞추는 **표시용**이다([ADR-0045](decisions/songjeongki/0045-live-caption-position-sync-approx-session-ms.md)). 이는 `streamElapsedMs` 변환이 아니라 occurredAt 기반의 별도 근사 축이며(streamElapsedMs는 raw 그대로 유지), §3-4의 "streamElapsedMs→세션ms 변환 금지"에 대한 **의도적 편차**다 — 오차 ~1~2s(STT 지연+시계 스큐)는 HLS 지연(수초~수십초)보다 작다. clockOriginAt이 없으면 null. 앵커 기반 정밀화는 후속.
 
 ### 3-6b. 강사 FE → Egress 합성 화면 판서 (LiveKit 데이터 채널) — FE 양쪽 구현됨
