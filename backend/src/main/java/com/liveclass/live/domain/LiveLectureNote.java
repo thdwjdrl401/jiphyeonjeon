@@ -40,6 +40,13 @@ public class LiveLectureNote {
      */
     private long coveredThroughSequence;
 
+    /**
+     * 마지막으로 반영한 조각 번호. {@code coveredThroughSequence}(자막 진행도)와 <b>다른 축</b>이다 —
+     * 그쪽은 "어디까지 들었나", 이건 "몇 번째 조각까지 반영했나"다. 갭 판정과 {@code capture.completed}
+     * 검증이 이 값을 쓴다.
+     */
+    private long lastChunkSequence;
+
     /** {@code [{topicId, title, keyPoints[]}]} JSON 배열 문자열. 서버는 해석하지 않는다. */
     @JdbcTypeCode(SqlTypes.JSON)
     private String topics;
