@@ -33,8 +33,11 @@ class GmsAnnotationVisionModel implements AnnotationVisionModel {
     private final HttpClient httpClient;
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
 
-    GmsAnnotationVisionModel(AnnotationAiProperties properties) {
+    private final AnnotationInterpretImageStore imageStore;
+
+    GmsAnnotationVisionModel(AnnotationAiProperties properties, AnnotationInterpretImageStore imageStore) {
         this.properties = properties;
+        this.imageStore = imageStore;
         this.httpClient = HttpClient.newBuilder().connectTimeout(properties.connectTimeout()).build();
     }
 
@@ -43,10 +46,57 @@ class GmsAnnotationVisionModel implements AnnotationVisionModel {
         if (!properties.enabled()) {
             throw new AnnotationInterpretException("판서 해석이 설정되지 않았습니다(GMS 키 없음).");
         }
-        byte[] body = requestBody(prompt, imageDataUri, toolName, toolParameters);
-        if (body.length > properties.maxImageBytes() + 8192) {
+        /*
+         * <b>이미지를 본문에 싣지 않는다</b>(ADR-0058). 대신 모델이 가져갈 URL을 준다.
+         *
+         * <p>본문에 실으면 GMS 게이트웨이의 본문 한도(~100KB)에 걸린다. 넘으면 본문을 읽지 못하고
+         * {@code "Model not found in request"}라는 크기와 무관해 보이는 오류를 돌려주므로, 판서를
+         * 크게 그릴수록 해석이 실패했다. URL을 주면 본문이 수백 바이트로 고정되어 이미지 크기와
+         * 무관해진다 — 화질을 깎지 않아도 된다.
+         */
+        String token = imageStore.publish(decodeImage(imageDataUri), dataUriMediaType(imageDataUri));
+        try {
+            return callWithImageUrl(prompt, imageUrl(token), toolName, toolParameters);
+        } finally {
+            // 성공이든 실패든 남겨 둘 이유가 없다. 노출 창을 여기서 닫는다.
+            imageStore.discard(token);
+        }
+    }
+
+    private String imageUrl(String token) {
+        return properties.imageBaseUrl() + "/api/annotation-interpret-images/" + token;
+    }
+
+    /** {@code data:image/png;base64,...}에서 바이트만 꺼낸다. */
+    private byte[] decodeImage(String dataUri) {
+        int comma = dataUri.indexOf(',');
+        if (!dataUri.startsWith("data:") || comma < 0) {
+            throw new AnnotationInterpretException("판서 이미지 형식을 읽을 수 없습니다.");
+        }
+        byte[] bytes;
+        try {
+            bytes = java.util.Base64.getDecoder().decode(dataUri.substring(comma + 1));
+        } catch (IllegalArgumentException e) {
+            throw new AnnotationInterpretException("판서 이미지를 해석할 수 없습니다.", e);
+        }
+        if (bytes.length > properties.maxImageBytes()) {
             throw new AnnotationInterpretException("판서 이미지가 너무 큽니다.");
         }
+        return bytes;
+    }
+
+    /** {@code data:image/png;base64,...}의 media type. 없으면 PNG로 본다. */
+    private static String dataUriMediaType(String dataUri) {
+        int semicolon = dataUri.indexOf(';');
+        if (!dataUri.startsWith("data:") || semicolon < 0) {
+            return "image/png";
+        }
+        String type = dataUri.substring("data:".length(), semicolon);
+        return type.isBlank() ? "image/png" : type;
+    }
+
+    private String callWithImageUrl(String prompt, String imageUrl, String toolName, String toolParameters) {
+        byte[] body = requestBody(prompt, imageUrl, toolName, toolParameters);
 
         HttpRequest request = HttpRequest.newBuilder(properties.chatCompletionsUri())
                 .timeout(properties.requestTimeout())
@@ -107,7 +157,8 @@ class GmsAnnotationVisionModel implements AnnotationVisionModel {
         return trimmed.length() > 300 ? trimmed.substring(0, 300) + "…" : trimmed;
     }
 
-    private byte[] requestBody(String prompt, String imageDataUri, String toolName, String toolParameters) {
+    /** {@code imageUrl}은 <b>모델이 가져갈 주소</b>다. data URI를 싣지 않는다(ADR-0058). */
+    private byte[] requestBody(String prompt, String imageUrl, String toolName, String toolParameters) {
         var root = jsonMapper.createObjectNode();
         root.put("model", properties.model());
         // 같은 판서에 늘 같은 해석이 나오게 한다. 강사가 다시 눌렀을 때 답이 흔들리면 신뢰를 잃는다.
@@ -117,7 +168,7 @@ class GmsAnnotationVisionModel implements AnnotationVisionModel {
         var content = jsonMapper.createArrayNode();
         content.addObject().put("type", "text").put("text", prompt);
         content.addObject().put("type", "image_url")
-                .putObject("image_url").put("url", imageDataUri);
+                .putObject("image_url").put("url", imageUrl);
         root.putArray("messages").addObject().put("role", "user").set("content", content);
 
         var function = jsonMapper.createObjectNode();

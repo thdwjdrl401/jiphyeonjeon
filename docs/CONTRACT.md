@@ -275,6 +275,9 @@ Spring 수신 endpoint를 구현하고 `SPRING_STATUS_CALLBACK_URL`로 주입하
 - 레이저(§3-6c)는 저장하지 않는다.
 
 ### 3-6e. 강사 FE → Spring 판서 해석 (REST) — 설계 확정, 구현 전
+- **모델에 이미지를 <b>본문으로 싣지 않는다</b>**([ADR-0058](decisions/songjeongki/0058-annotation-interpret-image-by-url.md)). 서버가 `GET /api/annotation-interpret-images/{token}`(공개, 인증 없음)로 잠깐 노출하고 그 URL을 모델에 준다. 게이트웨이 본문 한도(실측 ~100KB)를 넘으면 본문을 읽지 못하고 `"Model not found in request"`라는 크기와 무관해 보이는 오류가 오므로, 판서를 크게 그릴수록 해석이 실패했다.
+  - 받아가는 쪽이 <b>모델 제공자의 서버</b>라 우리 인증 주체가 아니다. 토큰이 곧 자격이므로 **128비트 난수 · TTL 2분 · 호출 종료 시 즉시 폐기**로 노출 창을 좁힌다.
+  - 브라우저는 이 경로를 쓰지 않는다. FE는 지금처럼 data URI를 서버에 보내고, URL로 바꾸는 것은 서버가 한다.
 
 근거: [ADR-0054](decisions/songjeongki/0054-annotation-ai-semantics-not-coordinates.md).
 

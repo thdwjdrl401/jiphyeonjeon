@@ -335,25 +335,16 @@ describe('수식 재편집', () => {
   })
 
   /**
-   * <b>예산에 맞을 때까지 줄여서 보낸다.</b>
+   * <b>이미지는 URL로 전달되므로 화질을 깎지 않는다</b>(ADR-0058).
    *
-   * <p>상류(GMS)는 요청 본문이 약 100KB를 넘으면 본문을 읽지 못하고 엉뚱한 오류를 돌려준다
-   * (실측: 99,000B 통과 / 102,400B 실패, `"Model not found in request"`). 모델 이름 문제처럼
-   * 읽히지만 아니다 — 같은 이름으로 작은 요청은 통과한다.
+   * <p>예전에는 게이트웨이 본문 한도(~100KB)에 맞추려 예산에 들어올 때까지 줄여서 보냈다. 크게
+   * 그릴수록 모델이 판서를 못 읽었고, 그것이 애초에 해석을 쓰는 이유를 지웠다. 이미지를 본문에서
+   * 빼면서 그 제약이 사라졌다.
    *
-   * <p>고정 크기로는 맞출 수 없다. 같은 픽셀 수라도 획이 많으면 PNG가 훨씬 커지므로, 재 보고
-   * 줄이는 수밖에 없다. 그래서 여기서 고정하는 것은 특정 픽셀 값이 아니라 <b>"예산에 들어올
-   * 때까지 다시 그린다"</b>는 동작이다.
+   * <p>그래도 긴 변 상한은 남긴다 — Excalidraw 기본이 `scale: 2`라 선택 범위가 넓으면 캔버스가
+   * 무한정 커지고, 그 비용은 강사가 기다리는 시간이 된다.
    */
-  it('해석 이미지는 예산에 들어올 때까지 줄여서 보낸다', async () => {
-    // 처음 두 번은 예산을 넘고, 세 번째에 들어온다.
-    const big = 'data:image/png;base64,' + 'A'.repeat(200_000)
-    const fits = 'data:image/png;base64,' + 'A'.repeat(1_000)
-    exportToCanvas
-      .mockResolvedValueOnce({ toDataURL: () => big })
-      .mockResolvedValueOnce({ toDataURL: () => big })
-      .mockResolvedValueOnce({ toDataURL: () => fits })
-
+  it('해석 이미지는 한 번만 그리고 긴 변만 제한한다', async () => {
     const { findByTestId } = render(
       <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
@@ -365,15 +356,14 @@ describe('수식 재편집', () => {
     await waitFor(() => { expect(document.querySelector('.annotation-action-ring')).not.toBeNull() })
     fireEvent.click(document.querySelectorAll('.annotation-action-ring__item')[0])
 
-    // 예산에 들어올 때까지 다시 그렸고, 들어온 순간 멈췄다.
-    await waitFor(() => { expect(exportToCanvas).toHaveBeenCalledTimes(3) })
+    // 예산에 맞추느라 여러 번 다시 그리지 않는다.
+    await waitFor(() => { expect(exportToCanvas).toHaveBeenCalledTimes(1) })
 
-    // 그리고 회차마다 더 작게 그린다.
-    const edges = exportToCanvas.mock.calls.map(([arg]) => {
-      const getDimensions = (arg as { getDimensions: (w: number, h: number) => { scale: number } }).getDimensions
-      return getDimensions(4000, 4000).scale
-    })
-    expect(edges[1]).toBeLessThan(edges[0])
-    expect(edges[2]).toBeLessThan(edges[1])
+    const getDimensions = (exportToCanvas.mock.calls[0][0] as {
+      getDimensions: (w: number, h: number) => { scale: number }
+    }).getDimensions
+    // 작은 그림은 그대로. 큰 그림만 긴 변 기준으로 줄인다.
+    expect(getDimensions(1200, 800).scale).toBe(1)
+    expect(getDimensions(5000, 1000).scale).toBeCloseTo(2000 / 5000, 5)
   })
 })
