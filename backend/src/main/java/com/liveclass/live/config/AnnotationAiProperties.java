@@ -23,7 +23,8 @@ public record AnnotationAiProperties(
         String model,
         Duration connectTimeout,
         Duration requestTimeout,
-        int maxImageBytes
+        int maxImageBytes,
+        String imageBaseUrl
 ) {
 
     public AnnotationAiProperties {
@@ -35,6 +36,16 @@ public record AnnotationAiProperties(
         requestTimeout = positive(requestTimeout) ? requestTimeout : Duration.ofSeconds(60);
         // 프레임 한 장을 PNG로 담아도 이보다 훨씬 작다. 상한이 없으면 큰 body 하나로 힙을 밀 수 있다.
         maxImageBytes = maxImageBytes > 0 ? maxImageBytes : 4 * 1024 * 1024;
+        /*
+         * 모델이 이미지를 <b>가져갈</b> 공개 주소의 오리진(ADR-0058).
+         *
+         * <p>이미지를 요청 본문에 실으면 GMS 게이트웨이의 본문 한도(~100KB)에 걸린다. 넘으면 본문을
+         * 읽지 못하고 "Model not found"라는 엉뚱한 오류를 돌려주므로, 판서를 크게 그릴수록 해석이
+         * 실패했다. 대신 URL을 주면 본문이 수백 바이트로 고정되고 <b>이미지 크기와 무관</b>해진다.
+         *
+         * <p>이 주소는 <b>인터넷에서 닿아야 한다</b> — 받아가는 쪽이 모델 제공자의 서버다.
+         */
+        imageBaseUrl = hasText(imageBaseUrl) ? stripTrailingSlash(imageBaseUrl) : "https://jiphyeonjeon.thdwjdrl.com";
     }
 
     /** 키가 없으면 기능을 끈 것으로 본다 — 로컬에서 키 없이 띄워도 강의는 그대로 돌아야 한다. */

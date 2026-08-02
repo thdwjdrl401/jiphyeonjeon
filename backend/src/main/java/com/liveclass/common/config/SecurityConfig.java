@@ -52,6 +52,10 @@ public class SecurityConfig {
                         // 쓰기(POST .../annotation/ops)는 여기 열지 않는다: 방에 들어올 수 있다는 것과
                         // 문서를 고칠 수 있다는 것은 다르다.
                         .requestMatchers(HttpMethod.GET, "/api/live-sessions/*/annotation").permitAll()
+                        // 판서 해석 이미지 — 받아가는 쪽이 모델 제공자의 서버라 우리 인증 주체가
+                        // 아니다(ADR-0058). 토큰 자체가 자격이고, 128비트 난수 + 짧은 TTL +
+                        // 호출 종료 시 즉시 폐기로 노출 창을 좁힌다.
+                        .requestMatchers(HttpMethod.GET, "/api/annotation-interpret-images/*").permitAll()
                         // 공개 카탈로그 조회는 비로그인도 가능(GET만).
                         .requestMatchers(HttpMethod.GET, "/api/curriculums", "/api/curriculums/**").permitAll()
                         // 수강 신청·취소는 학생만(강사 계정은 수강 불가 — 계정 분리 정책). 강사 승인 등은 /api/instructor/**.

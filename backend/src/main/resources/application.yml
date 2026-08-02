@@ -216,6 +216,9 @@ liveclass:
     # 이미지를 읽는 호출이라 텍스트 질의보다 길다. 강사가 기다리는 화면이라 무한정 둘 수도 없다.
     request-timeout: ${ANNOTATION_AI_REQUEST_TIMEOUT:60s}
     max-image-bytes: ${ANNOTATION_AI_MAX_IMAGE_BYTES:4194304}   # 4MB
+    # 모델이 이미지를 가져갈 공개 오리진(ADR-0058). 인터넷에서 닿아야 한다 — 받아가는 쪽이 모델
+    # 제공자의 서버다. 이미지를 본문에 실으면 게이트웨이 본문 한도(~100KB)에 걸린다.
+    image-base-url: ${ANNOTATION_AI_IMAGE_BASE_URL:https://jiphyeonjeon.thdwjdrl.com}
   caption:
     enabled: ${CAPTION_CONSUMER_ENABLED:true}
     stream-key: ${CAPTION_STREAM_KEY:ai:captions:live}   # 전역 키(producer env와 정합)
