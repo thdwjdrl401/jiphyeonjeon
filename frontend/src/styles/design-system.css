@@ -1660,3 +1660,13 @@ body {
 .bookmark-strip button { border: 1px solid #444; background: transparent; color: #fff; cursor: pointer; }
 .bookmark-strip button:hover { border-color: #fff; }
 .bookmark-strip time { color: rgba(255,255,255,.58); }
+/* 송출 화질 패널 — 미리보기 아래 접히는 줄. 기본은 닫혀 있어 미리보기를 가리지 않는다. */
+.quality-panel { display: flex; align-items: flex-start; gap: 1rem; flex-wrap: wrap;
+  padding: .6rem .75rem; border: 1px solid #333; border-radius: .5rem; background: #171717; }
+.quality-panel fieldset { display: flex; align-items: center; gap: .35rem; border: 0; margin: 0; padding: 0; }
+.quality-panel legend { float: left; margin-right: .5rem; font-size: .75rem; color: rgba(255,255,255,.58); }
+.quality-panel fieldset button { font-size: .78rem; padding: .2rem .55rem; border-radius: .35rem;
+  border: 1px solid #444; background: transparent; color: #fff; cursor: pointer; }
+.quality-panel fieldset button.is-active { border-color: #fff; background: #fff; color: #111; }
+.quality-panel fieldset:disabled button { opacity: .5; cursor: default; }
+.quality-panel__hint { flex-basis: 100%; margin: 0; font-size: .72rem; color: rgba(255,255,255,.58); }
