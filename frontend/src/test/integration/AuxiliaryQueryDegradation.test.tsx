@@ -5,7 +5,6 @@ import { ApiError } from '@/shared/api/client'
 import { mockAuthService, resetMockAuth } from '@/features/auth/mockAuthService'
 import * as myCurriculumsService from '@/features/curriculum/myCurriculumsService'
 import * as liveSessionService from '@/features/live-session/liveSessionService'
-import * as replayService from '@/features/replay/replayService'
 
 // vidstack/hls.js는 jsdom에서 재생 경로를 세울 수 없다. 이 파일이 확인하는 것은 재생 자체가 아니라
 // "부가 조회가 실패해도 화면이 열리는가"이므로 플레이어는 영역만 남기고 대체한다.
@@ -132,8 +131,9 @@ describe('부가 조회 실패 시 화면 유지', () => {
   })
 
   it('게시본 자막·채팅이 실패해도 다시보기는 열린다', async () => {
-    const captions = vi.spyOn(replayService, 'getReplayCaptions').mockImplementation(notReady)
-    vi.spyOn(replayService, 'getReplayMessages').mockImplementation(notReady)
+    // 다시보기 자막·채팅은 세션 단위로 이미 저장된 것을 그대로 읽는다(다시보기 전용 경로가 아니다).
+    const captions = vi.spyOn(liveSessionService, 'getCaptions').mockImplementation(notReady)
+    vi.spyOn(liveSessionService, 'getChatMessages').mockImplementation(notReady)
     await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
 
     renderAt('/instructor/lessons/les-security/replay')

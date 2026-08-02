@@ -364,6 +364,20 @@ describe('전체 페이지 라우트', () => {
     expect(screen.queryByText('강사 검수 모드')).not.toBeInTheDocument()
   })
 
+  it('다시보기가 라이브 때 쌓인 노트·AI 기록을 그대로 보여준다', async () => {
+    // 다시보기 전용 데이터가 따로 있는 게 아니다 — 세션 단위로 저장된 것을 같은 조회로 읽는다.
+    await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
+    renderAt('/student/lessons/les-security/replay')
+    const user = userEvent.setup()
+
+    await user.click(await screen.findByRole('tab', { name: '실시간 노트' }))
+    // 하드코딩 예시가 아니라 서버가 준 주제가 나온다.
+    expect(await screen.findByRole('heading', { name: '요청이 인증되는 전체 흐름' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: 'AI 질문' }))
+    expect(await screen.findByText(/세션과 JWT를 함께 쓰는 기준/)).toBeInTheDocument()
+  })
+
   it('다시보기도 라이브와 같은 재생 계약으로 실제 플레이어를 띄운다', async () => {
     // 목업 재생 컨트롤(▶ 버튼·range 슬라이더)이 아니라 라이브와 같은 플레이어를 쓴다.
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
