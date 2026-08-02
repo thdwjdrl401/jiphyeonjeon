@@ -7,8 +7,9 @@ import { emptyAiAnswerState, reduceAiAnswer, type AiAnswerAction, type AiAnswerS
  * 그대로 재사용하고 이 리듀서는 **어느 턴에 이벤트를 흘릴지**만 정한다 — 델타 누적·terminal 3분기·
  * 재시도 가능 판정은 이미 계약대로 고정돼 있으므로 두 번 쓰지 않는다.
  *
- * 이력은 **이 컴포넌트가 살아 있는 동안만** 남는다. 서버에 AI Q&A 이력 API가 없다
- * (`AI-HISTORY-01` 미구현, `docs/frontend/api/LIVE.md` §마지막). 새로고침·탭 재마운트면 사라진다.
+ * 새로고침·탭 재마운트에도 남는다 — 서버가 내 질문 기록을 돌려주고(`GET .../ai/answers`) 화면이
+ * 그것으로 대화를 되살린다(`restore`). 이전에는 이 컴포넌트가 살아 있는 동안만 남아서, 새로고침 한 번에
+ * 대화가 통째로 사라졌다.
  */
 export interface AiConversationTurn extends AiAnswerState {
   /** 렌더 key와 이벤트 라우팅용 턴 식별자. 서버 requestId와는 무관하다(스트림 시작 전 실패도 턴이다). */
@@ -20,6 +21,13 @@ export interface AiConversationState {
 }
 
 export type AiConversationAction =
+  /**
+   * 서버에 남은 내 질문 기록으로 대화를 되살린다(새로고침·재접속).
+   *
+   * 진행 중인 턴이 있으면 무시한다 — 늦게 도착한 조회 응답이 지금 흐르는 답변을 지우면 안 된다.
+   * 이미 되살린 뒤에도 무시한다(같은 대화를 두 번 쌓지 않는다).
+   */
+  | { kind: 'restore'; turns: AiConversationTurn[] }
   /** 새 질문을 목록 끝에 붙인다(낙관적 표시 — 전송 즉시 내 질문이 보인다). */
   | { kind: 'ask'; id: string; question: string }
   /** 실패한 턴을 그 자리에서 같은 질문으로 되돌린다. 질문 말풍선이 중복되지 않는다. */
@@ -42,6 +50,10 @@ export function reduceAiConversation(state: AiConversationState, action: AiConve
       if (selectStreamingTurn(state)) return state
       const turn = { ...reduceAiAnswer(emptyAiAnswerState, { kind: 'ask', question: action.question }), id: action.id }
       return { turns: [...state.turns, turn] }
+    }
+    case 'restore': {
+      if (state.turns.length > 0 || selectStreamingTurn(state)) return state
+      return { turns: action.turns }
     }
     case 'retry': {
       const target = state.turns.find((turn) => turn.id === action.id)

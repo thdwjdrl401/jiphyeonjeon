@@ -68,6 +68,7 @@ export type {
   CaptionStreamEvent,
   ChatConnectionState,
   ChatMessageView,
+  AiAnswerHistoryItem,
   LectureNoteTopic,
   LectureNoteView,
   LiveSessionService,
@@ -91,3 +92,5 @@ export const subscribeLectureNotes = (
   onNote: Parameters<LiveSessionService['subscribeLectureNotes']>[1],
   onConnectionChange: Parameters<LiveSessionService['subscribeLectureNotes']>[2],
 ) => liveSessionService.subscribeLectureNotes(sessionId, onNote, onConnectionChange)
+
+export const getAiAnswerHistory = (sessionId: string) => liveSessionService.getAiAnswerHistory(sessionId)

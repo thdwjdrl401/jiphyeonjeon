@@ -5,17 +5,20 @@ import com.liveclass.aiintegration.api.RagAnswerStreamHandle;
 import com.liveclass.live.service.LiveAccessGuard;
 import com.liveclass.live.service.LiveAiAnswerService;
 import com.liveclass.live.web.dto.AiAnswerQuestionRequest;
+import com.liveclass.live.web.dto.LiveAiAnswerHistoryResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -50,11 +53,26 @@ public class LiveAiAnswerController {
                              @Valid @RequestBody AiAnswerQuestionRequest request,
                              Authentication authentication) {
         // 접근 게이트: 소유 강사이거나 활성 수강생만(없으면 404, 미수강 403). 자막·채팅과 같은 규칙.
-        accessGuard.requireCanAccess(sessionId, UUID.fromString(authentication.getName()));
+        UUID askedBy = UUID.fromString(authentication.getName());
+        accessGuard.requireCanAccess(sessionId, askedBy);
         RagAnswerCommand command = liveAiAnswerService.prepare(sessionId, request.question());
         // 업스트림 헤더를 받을 때까지 여기서 블로킹한다 — 시작 실패는 SSE가 아직 안 열렸으므로
         // 평범한 JSON 오류(503/409/502)로 나간다(LiveExceptionHandler).
         RagAnswerStreamHandle handle = liveAiAnswerService.open(command);
-        return liveAiAnswerService.relay(command, handle);
+        return liveAiAnswerService.relay(command, handle, askedBy);
+    }
+
+    @Operation(summary = "내 AI 질문 기록 조회",
+            description = "이 세션에서 내가 한 질문과 받은 답변을 물어본 순서대로 돌려준다. 새로고침·재접속 뒤 "
+                    + "대화를 되살리는 용도이며, 개인 질문이라 남의 것은 나오지 않는다.")
+    @GetMapping("/api/live-sessions/{sessionId}/ai/answers")
+    public List<LiveAiAnswerHistoryResponse> history(@PathVariable UUID sessionId,
+                                                     Authentication authentication) {
+        UUID userId = UUID.fromString(authentication.getName());
+        // 스트림과 같은 게이트. 세션에 못 들어가는 사람은 자기 기록도 조회하지 않는다.
+        accessGuard.requireCanAccess(sessionId, userId);
+        return liveAiAnswerService.history(sessionId, userId).stream()
+                .map(LiveAiAnswerHistoryResponse::from)
+                .toList();
     }
 }

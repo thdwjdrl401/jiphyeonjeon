@@ -279,6 +279,23 @@ export interface LectureNoteView {
   updatedAt: string | null
 }
 
+/**
+ * 이 세션에서 <b>내가</b> 한 AI 질문 한 건(ADR-0047 확장). 새로고침·재접속 복구용이다.
+ *
+ * 개인 질문이라 남의 것은 조회되지 않는다 — 무엇을 모르는지가 드러나면 안 된다.
+ */
+export interface AiAnswerHistoryItem {
+  requestId: string
+  question: string
+  /** 이어 붙인 최종 답변. 실패로 끝났으면 받은 데까지만 있다. */
+  answer: string
+  /** 근거 목록의 JSON 문자열. 서버는 해석하지 않는다. */
+  sources: string
+  status: 'DONE' | 'INSUFFICIENT' | 'ERROR'
+  failureCode: string | null
+  askedAt: string
+}
+
 export interface QuestionHighlight {
   at: string
   count: number
@@ -376,6 +393,7 @@ export interface LiveSessionService {
    */
   askLiveAi: (sessionId: string, question: string, options: AiAnswerStreamOptions) => Promise<void>
   saveBookmark: (lessonId: string, sessionMs: number) => Promise<void>
+  getAiAnswerHistory: (sessionId: string) => Promise<AiAnswerHistoryItem[]>
   getLectureNotes: (sessionId: string) => Promise<LectureNoteView>
   subscribeLectureNotes: (
     sessionId: string,
