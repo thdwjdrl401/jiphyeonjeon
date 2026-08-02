@@ -188,17 +188,20 @@ GET /api/instructor/live-sessions/{sessionId}/processing
 ```json
 {
   "sessionId": "20000000-0000-4000-8000-000000000001",
-  "lessonId": "30000000-0000-4000-8000-000000000001",
   "liveSessionStatus": "ENDED",
+  "recordingEnabled": true,
+  "startedAt": "2026-07-31T13:30:00+09:00",
+  "endedAt": "2026-07-31T15:00:03+09:00",
   "videoAsset": {
     "videoAssetId": "40000000-0000-4000-8000-000000000001",
     "status": "FINALIZING",
+    "replayStatus": "DRAFT",
     "failureCode": null,
     "durationMs": null,
-    "recordingEndedAt": "2026-07-31T15:00:03+09:00",
-    "readyAt": null
-  },
-  "replayStatus": "DRAFT"
+    "sizeBytes": null,
+    "recordingStartedAt": "2026-07-31T13:30:04+09:00",
+    "recordingEndedAt": "2026-07-31T15:00:03+09:00"
+  }
 }
 ```
 
@@ -207,17 +210,20 @@ GET /api/instructor/live-sessions/{sessionId}/processing
 ```json
 {
   "sessionId": "20000000-0000-4000-8000-000000000001",
-  "lessonId": "30000000-0000-4000-8000-000000000001",
   "liveSessionStatus": "ENDED",
+  "recordingEnabled": true,
+  "startedAt": "2026-07-31T13:30:00+09:00",
+  "endedAt": "2026-07-31T15:00:03+09:00",
   "videoAsset": {
     "videoAssetId": "40000000-0000-4000-8000-000000000001",
     "status": "READY",
+    "replayStatus": "PUBLISHED",
     "failureCode": null,
     "durationMs": 5423000,
-    "recordingEndedAt": "2026-07-31T15:00:03+09:00",
-    "readyAt": "2026-07-31T15:00:11+09:00"
-  },
-  "replayStatus": "PUBLISHED"
+    "sizeBytes": 1284000000,
+    "recordingStartedAt": "2026-07-31T13:30:04+09:00",
+    "recordingEndedAt": "2026-07-31T15:00:03+09:00"
+  }
 }
 ```
 
@@ -228,12 +234,13 @@ API 규칙:
 | 소유 강사 | 200 |
 | 비소유 사용자·수강생 | 403 `LIVE_SESSION_FORBIDDEN` |
 | 세션 없음 | 404 |
-| 자산 없음 | 200, `videoAsset:null`, `replayStatus:null` |
+| 자산 없음 | 200, `videoAsset:null`; `recordingEnabled`로 생성 대기와 녹화 비활성을 구분 |
 | `FINALIZING`·`VERIFYING` | 오류가 아니라 200 진행 상태 |
 | `FAILED` | 200과 `failureCode`; terminal 상태를 정상 조회한 것 |
 
 `ready`나 화면용 단계 배열은 원본 상태에서 파생할 수 있으므로 서버 응답에 중복 저장하지 않는다.
-FE는 `VideoAssetStatus`를 화면 단계로 매핑한다.
+응답 형태와 두 상태축 결정은 선행 [ADR-0059](../songjeongki/0059-live-processing-status-is-two-axes.md)를
+유지하고, 이 ADR은 자동 게시·폴링 주기·자동 이동 정책을 추가한다.
 
 ## 프론트엔드 폴링과 이동
 
@@ -434,7 +441,7 @@ webhook 유실로 장기 `FINALIZING`에 남는 자산을 재조회하는 reconc
 - 수강생은 `PUBLISHED` 뒤 기존 lesson playback API로만 접근한다.
 - webhook은 기존 LiveKit JWT 서명과 원시 body hash 검증을 유지한다.
 - 클라이언트가 `READY`·`PUBLISHED`를 요청 body로 지정하거나 상태를 확정할 수 없다.
-- 자동 이동 URL은 응답의 권위 있는 `lessonId`로 FE가 조립하며 서버가 임의 외부 URL을 반환하지 않는다.
+- 자동 이동 URL은 별도 세션 상세에서 얻은 권위 있는 `lessonId`로 FE가 조립하며 서버가 임의 외부 URL을 반환하지 않는다.
 
 ## 구현 변경 범위
 
@@ -442,15 +449,13 @@ webhook 유실로 장기 `FINALIZING`에 남는 자산을 재조회하는 reconc
 
 - `RecordingService` 성공 확정에서 `READY + PUBLISHED` 원자적 전이
 - 자동 게시의 `publishedAt`·`publishedBy=null` 규칙
-- 강사 소유권을 검사하는 processing 조회 service·controller·DTO
-- `VideoAssetRepository.findByLiveSessionId` 기반 read model
+- ADR-0059의 processing 조회 service·controller·DTO와 두 상태축 응답을 재사용
 - 기존 수동 publish는 기존 자산·철회 후 재게시 용도로 유지
 - OpenAPI와 `CONTRACT.md` 갱신
 
 ### Frontend
 
-- `ProcessingStatus`를 실제 backend DTO에 맞게 확장
-- `httpLiveSessionService.getProcessingStatus`의 501 stub을 실제 GET으로 교체
+- ADR-0059의 `ProcessingStatus`와 실제 GET adapter를 재사용
 - 처리 화면의 2초→5초 폴링과 terminal 중단
 - `READY + PUBLISHED`에서 강사 replay 경로로 `replace` 이동
 - 고정 진행 시간·종료 시각·AI 상태 제거

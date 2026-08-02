@@ -89,8 +89,9 @@ webhook handler는 `READY/FAILED`가 아닌 자산을 멱등 처리하므로 Egr
 
 ### 2-3. 강사 녹화 처리 현황 조회와 자동 이동 — 구현됨
 
-`POST /live-sessions/{sessionId}/end`가 200을 반환하면 강사 FE는
-`/instructor/live-sessions/{sessionId}/processing`으로 이동하고 다음 snapshot을 폴링한다.
+`POST /live-sessions/{sessionId}/end`가 200을 반환하면 강사 FE는 processing 화면으로 이동하고
+다음 DB snapshot을 폴링한다([ADR-0059](decisions/songjeongki/0059-live-processing-status-is-two-axes.md),
+[ADR-0007](decisions/choinhoo/0007-recording-ready-auto-publish-and-processing-polling.md)).
 
 ```http
 GET /api/instructor/live-sessions/{sessionId}/processing
@@ -99,58 +100,39 @@ GET /api/instructor/live-sessions/{sessionId}/processing
 ```json
 {
   "sessionId": "20000000-0000-4000-8000-000000000001",
-  "lessonId": "30000000-0000-4000-8000-000000000001",
   "liveSessionStatus": "ENDED",
+  "recordingEnabled": true,
+  "startedAt": "2026-08-02T13:30:00+09:00",
+  "endedAt": "2026-08-02T15:00:03+09:00",
   "videoAsset": {
     "videoAssetId": "40000000-0000-4000-8000-000000000001",
     "status": "FINALIZING",
+    "replayStatus": "DRAFT",
     "failureCode": null,
     "durationMs": null,
-    "recordingEndedAt": "2026-08-02T15:00:03+09:00",
-    "readyAt": null
-  },
-  "replayStatus": "DRAFT"
-}
-```
-
-- 소유 강사는 200, 비소유 사용자·수강생은 403 `LIVE_SESSION_FORBIDDEN`, 없는 세션은 404다.
-- 자산이 없으면 200과 `videoAsset:null`, `replayStatus:null`을 반환한다.
-- `FINALIZING`·`VERIFYING`과 `FAILED`도 조회 자체는 200이며, 실패는 `failureCode`로 구분한다.
-- 조회는 DB snapshot만 반환하고 매 요청에서 LiveKit·MinIO를 다시 호출하지 않는다.
-- FE는 진입 즉시 조회한다. 진행 상태는 최초 30초 동안 2초 간격, 이후 5초 간격으로 폴링하며
-  비활성 탭에서는 중단한다. FE timeout으로 서버 상태를 `FAILED`로 해석하지 않는다.
-- `VideoAssetStatus=READY + ReplayStatus=PUBLISHED`면 폴링을 멈추고
-  `/instructor/lessons/{lessonId}/replay`로 `replace` 이동한다. `FAILED`도 폴링을 멈추되 이동하지 않는다.
-- 이 endpoint, 자동 게시 전이, 폴링과 자동 이동은 [ADR-0007](decisions/choinhoo/0007-recording-ready-auto-publish-and-processing-polling.md)에 따라 FE/BE에 구현됐다.
-
-### 2-2. 종료 후 처리 현황 — 구현됨
-
-`GET /api/instructor/live-sessions/{sessionId}/processing` (소유 강사 전용, 200)
-— [ADR-0059](decisions/songjeongki/0059-live-processing-status-is-two-axes.md).
-
-```json
-{
-  "sessionId": "...", "liveSessionStatus": "ENDED", "recordingEnabled": true,
-  "startedAt": "...", "endedAt": "...",
-  "videoAsset": {
-    "videoAssetId": "...", "status": "READY", "replayStatus": "DRAFT", "failureCode": null,
-    "durationMs": 5520000, "sizeBytes": 1284000000,
-    "recordingStartedAt": "...", "recordingEndedAt": "..."
+    "sizeBytes": null,
+    "recordingStartedAt": "2026-08-02T13:30:04+09:00",
+    "recordingEndedAt": "2026-08-02T15:00:03+09:00"
   }
 }
 ```
 
-- **두 상태축을 접지 않는다.** `videoAsset.status`(`REQUESTED|STARTING|RECORDING|FINALIZING|VERIFYING|READY|FAILED`)는
-  "재생할 수 있는가"이고 `replayStatus`(`DRAFT|READY_FOR_REVIEW|PUBLISHED|WITHDRAWN`)는 "수강생에게 공개했는가"다.
-  서로 다른 사실이라 `ready` 같은 단일 불리언으로 합치지 않는다(§2-1·ADR-0003 §3의 독립 상태축).
-- **표시 문구를 담지 않는다.** 서버는 상태 enum만 주고 단계 이름·설명은 FE가 고른다. 응답에 `steps`·`ready`·`label`이
-  들어오면 계약 위반이다(`LiveProcessingContractTest`가 부재를 고정).
-- **`videoAsset`은 null일 수 있고 그 부재는 실패가 아니다.** 녹화 미시작이거나 녹화를 끄고 진행한 세션이다.
-  `recordingEnabled`로 둘을 구분한다.
-- 자산 전이는 Egress 완료 webhook([ADR-0034](decisions/songjeongki/0034-egress-completion-webhook.md))이 나중에 몰고 오므로
-  FE는 종착 상태(`READY`·`FAILED`) 전까지 폴링한다. AI 후처리 상태는 받쳐줄 데이터가 없어 이 응답에 넣지 않는다.
-- 소유권 위반 403 `LIVE_SESSION_FORBIDDEN`, 없는 세션 404 `LIVE_SESSION_NOT_FOUND`,
-  학생은 `/api/instructor/**` 역할 게이트로 403.
+- **두 상태축을 접지 않는다.** `videoAsset.status`
+  (`STARTING|RECORDING|FINALIZING|VERIFYING|READY|FAILED`)와 자산 내부 `replayStatus`
+  (`DRAFT|READY_FOR_REVIEW|PUBLISHED|WITHDRAWN`)를 `ready` 같은 단일 값으로 합치지 않는다.
+  새 정상 녹화는 성공 webhook의 한 트랜잭션에서 `READY + PUBLISHED`로 확정하지만, 기존 미게시·철회
+  자산에는 다른 조합이 남을 수 있다.
+- **표시 문구를 담지 않는다.** 서버는 상태만 반환하고 단계 이름·설명은 FE가 만든다.
+  응답에 `steps`·`ready`·`label`이 들어오면 계약 위반이다.
+- `videoAsset`은 null일 수 있으며 실패를 뜻하지 않는다. `recordingEnabled=true`면 자산 생성을 기다리고,
+  `false`면 녹화 비활성 안내 후 폴링을 멈춘다.
+- `STARTING/RECORDING/FINALIZING/VERIFYING`은 최초 30초 동안 2초, 이후 5초 간격으로 폴링한다.
+  비활성 탭에서는 중단하며 FE timeout을 `FAILED`로 해석하지 않는다.
+- `READY + PUBLISHED`면 폴링을 멈추고, 별도 세션 상세에서 얻은 `lessonId`의 강사 replay 경로로
+  `replace` 이동한다. `READY + DRAFT/READY_FOR_REVIEW/WITHDRAWN`은 수동 게시 동선을 제공한다.
+  `FAILED`는 폴링을 멈추고 `failureCode`를 표시한다.
+- 소유 강사는 200, 비소유 사용자·수강생은 403 `LIVE_SESSION_FORBIDDEN`, 없는 세션은
+  404 `LIVE_SESSION_NOT_FOUND`다. 조회는 매번 LiveKit·MinIO를 호출하지 않고 DB 상태만 반환한다.
 
 ## 3. 내부 계약 (확정 인터페이스)
 
