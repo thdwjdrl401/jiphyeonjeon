@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -8,7 +8,7 @@ import { useAuth } from '@/features/auth/AuthContext'
 import { getLesson } from '@/features/lesson/lessonService'
 import { getLearningContext } from '@/features/learning/learningService'
 import BookmarkStrip from '@/features/live-session/BookmarkStrip'
-import WatchHeatmapStrip from '@/features/live-session/WatchHeatmapStrip'
+import WatchHeatmapCurve from '@/features/live-session/WatchHeatmapCurve'
 import { useWatchTracking } from '@/features/live-session/useWatchTracking'
 import { mergeLectureNote } from '@/features/live-session/lectureNoteMerge'
 import { attachGlossary } from '@/features/live-session/glossaryView'
@@ -20,7 +20,7 @@ import {
   selectVisibleCaptions,
 } from '@/features/live-session/captionAdapter'
 import LearningSidebar from '@/features/live-session/LearningSidebar'
-import { getLiveLearningPreview, type LearningPanel } from '@/features/live-session/liveLearningPreview'
+import type { LearningPanel } from '@/features/live-session/liveLearningPreview'
 import {
   askLiveAi,
   endLiveSession,
@@ -47,10 +47,10 @@ import {
 import type { PlaybackSeekRequest } from '@/features/live-session/PlaybackPlayer'
 import { useDetachedSidebarWindow } from '@/features/live-session/useDetachedSidebarWindow'
 import { usePlayback } from '@/features/live-session/usePlayback'
+import { useResizablePane } from '@/features/live-session/useResizablePane'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
 
-const { summaryBlocks } = getLiveLearningPreview()
 const InstructorLiveKitStage = lazy(() => import('@/features/live-session/InstructorLiveKitStage'))
 const PlaybackPlayer = lazy(() => import('@/features/live-session/PlaybackPlayer'))
 
@@ -117,6 +117,22 @@ export default function LiveClassroomPage() {
   // 익명은 기본 꺼짐 — 켰을 때만 세션 한정 가명으로 나간다(ADR-0050). 끄면 본인이 지정한 표시 이름.
   const [anonymous, setAnonymous] = useState(false)
   const [bookmarked, setBookmarked] = useState(false)
+  // 재생바 위에 재시청 곡선을 얹으려면 플레이어 루트가 필요하다(WatchHeatmapCurve).
+  const [playerRoot, setPlayerRoot] = useState<HTMLElement | null>(null)
+  /*
+   * 영상·자막·사이드패널의 배분은 사람마다 다르다. 경계를 끌어 정하고, 최소치 아래로 끌면 접힌다.
+   * 강사 화면에는 자막 독이 없으므로 세로 손잡이도 두지 않는다.
+   */
+  const sidebarPane = useResizablePane({
+    storageKey: 'liveclass.live.sidebarWidth',
+    defaultSize: 370, min: 260, max: 620, axis: 'inline', direction: -1,
+    label: '사이드 패널 너비 조절',
+  })
+  const captionPane = useResizablePane({
+    storageKey: 'liveclass.live.captionHeight',
+    defaultSize: 152, min: 96, max: 420, axis: 'block', direction: -1,
+    label: '자막 높이 조절',
+  })
   const [studentSeekRequest, setStudentSeekRequest] = useState<PlaybackSeekRequest | null>(null)
   const [endRequested, setEndRequested] = useState(false)
   const [chatConnectionState, setChatConnectionState] = useState<ChatConnectionState>('connecting')
@@ -426,11 +442,8 @@ export default function LiveClassroomPage() {
     <LearningSidebar
       panel={panel}
       onPanelChange={setPanel}
-      currentSessionMs={positionMs}
-      onSeek={seekSession}
       selectedTermId={selectedTermId}
       onSelectedTermChange={setSelectedTermId}
-      summaryBlocks={summaryBlocks}
       lectureNote={note}
       glossaryTerms={glossary.terms}
       messages={messages}
@@ -492,7 +505,10 @@ export default function LiveClassroomPage() {
         </div>
       )}
 
-      <div className={`media-layout${isInstructor && sidebarWindow.isDetached ? ' is-sidebar-detached' : ''}`}>
+      <div
+        className={`media-layout${isInstructor && sidebarWindow.isDetached ? ' is-sidebar-detached' : ''}${sidebarPane.collapsed ? ' is-sidebar-collapsed' : ''}`}
+        style={{ '--sidebar-width': `${sidebarPane.size}px` } as CSSProperties}
+      >
         <section className="media-primary">
           {isInstructor
             ? (
@@ -518,22 +534,18 @@ export default function LiveClassroomPage() {
                   seekRequest={studentSeekRequest}
                   onBookmark={() => bookmarkMutation.mutate()}
                   onRetry={playback.reload}
+                  onRootChange={setPlayerRoot}
                   onSessionTimeChange={setPositionMs}
                 />
               </Suspense>
             )}
 
+          {!isInstructor && <WatchHeatmapCurve heatmap={heatmapQuery.data ?? null} playerRoot={playerRoot} />}
+
           {/*
             자막은 수강생 화면에만 둔다. 강사는 자기가 말한 것을 다시 읽을 이유가 없고, 자막 독이
             차지하는 높이만큼 송출 미리보기가 눌려 실제로 나가는 프레임을 작게 보게 된다.
           */}
-          {!isInstructor && (
-            <WatchHeatmapStrip
-              durationMs={watchDurationMs}
-              heatmap={heatmapQuery.data ?? null}
-            />
-          )}
-
           {!isInstructor && (
             <BookmarkStrip
               bookmarks={learningQuery.data?.bookmarks ?? []}
@@ -542,7 +554,9 @@ export default function LiveClassroomPage() {
             />
           )}
 
-          {!isInstructor && (
+          {!isInstructor && <div {...captionPane.handleProps} />}
+
+          {!isInstructor && !captionPane.collapsed && (
             <CaptionDock
               captions={glossary.captions}
               currentSessionMs={positionMs}
@@ -551,10 +565,12 @@ export default function LiveClassroomPage() {
               onSeek={seekSession}
               onSelectTerm={openGlossaryTerm}
               canSeek={!hasEnded}
+              heightPx={captionPane.size}
             />
           )}
         </section>
 
+        {(!isInstructor || !sidebarWindow.isDetached) && <div {...sidebarPane.handleProps} />}
         {(!isInstructor || !sidebarWindow.isDetached) && sidebar}
         {isInstructor && sidebarWindow.portalContainer && createPortal(sidebar, sidebarWindow.portalContainer)}
       </div>

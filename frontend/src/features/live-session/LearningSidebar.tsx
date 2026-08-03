@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import Tabs, { tabPanelProps, type TabItem } from '@/shared/ui/Tabs'
 import LectureNotePanel from './LectureNotePanel'
 import type { ChatMessageView, LectureNoteView } from './liveSessionService.interface'
-import type { GlossaryTermView, LearningPanel, LiveSummaryBlock } from './liveLearningPreview'
+import type { GlossaryTermView, LearningPanel } from './liveLearningPreview'
 
 /** 패널 래퍼를 새로 만들지 않고 기존 .side-panel-content에 그대로 얹는다(flex·스크롤 구조 유지). */
 type PanelProps = ReturnType<typeof tabPanelProps>
@@ -10,16 +10,10 @@ type PanelProps = ReturnType<typeof tabPanelProps>
 interface LearningSidebarProps {
   panel: LearningPanel
   onPanelChange: (panel: LearningPanel) => void
-  currentSessionMs: number
-  onSeek: (sessionMs: number) => void
   selectedTermId: string | null
   onSelectedTermChange: (termId: string) => void
-  summaryBlocks: LiveSummaryBlock[]
-  /**
-   * 서버가 준 실시간 강의 노트(CONTRACT §3-4a). 주어지면 `summaryBlocks` 대신 이걸 그린다 —
-   * 라이브는 서버 노트를, 다시보기는 아직 기존 블록 표현을 쓴다.
-   */
-  lectureNote?: LectureNoteView | null
+  /** 서버가 준 강의 노트(CONTRACT §3-4a). 아직 없으면 null — 패널이 비었다고 정직하게 말한다. */
+  lectureNote: LectureNoteView | null
   glossaryTerms: GlossaryTermView[]
   messages: ChatMessageView[]
   discussionComposer?: ReactNode
@@ -37,16 +31,6 @@ const tabs: ReadonlyArray<TabItem<LearningPanel>> = [
 ]
 
 const LEARNING_TAB_PREFIX = 'learning-sidebar'
-
-function formatTime(sessionMs: number) {
-  const seconds = Math.floor(sessionMs / 1000)
-  const hours = Math.floor(seconds / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
-  const remainingSeconds = seconds % 60
-  return hours > 0
-    ? `${hours}:${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`
-    : `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`
-}
 
 function DiscussionPanel({ messages, composer, notice, panelProps }: { messages: ChatMessageView[]; composer?: ReactNode; notice?: string; panelProps: PanelProps }) {
   const [filter, setFilter] = useState<'all' | 'questions'>('all')
@@ -117,36 +101,6 @@ function DiscussionPanel({ messages, composer, notice, panelProps }: { messages:
   )
 }
 
-function SummaryPanel({ blocks, currentSessionMs, onSeek, context, panelProps }: { blocks: LiveSummaryBlock[]; currentSessionMs: number; onSeek: (sessionMs: number) => void; context: 'LIVE' | 'REPLAY'; panelProps: PanelProps }) {
-  return (
-    <div className="side-panel-content summary-panel" {...panelProps}>
-      <header className="learning-panel-heading">
-        <div><strong>{context === 'LIVE' ? 'AI 실시간 강의 노트' : '라이브에서 작성된 강의 노트'}</strong><small>완성된 구간별 블록을 순서대로 누적합니다.</small></div>
-        <span>{blocks.length}개 블록</span>
-      </header>
-      <div className="summary-block-list">
-        {blocks.map((block) => {
-          const isCurrent = currentSessionMs >= block.startMs && currentSessionMs <= block.endMs
-          return (
-            <article className={isCurrent ? 'is-current' : ''} key={block.summaryBlockId}>
-              <header>
-                <button type="button" onClick={() => onSeek(block.startMs)}>{formatTime(block.startMs)}–{formatTime(block.endMs)}</button>
-                <small>{block.createdAtLabel}</small>
-              </header>
-              <h3>{block.title}</h3>
-              <section><strong>현재까지의 핵심 내용</strong><ul>{block.keyPoints.map((point) => <li key={point}>{point}</li>)}</ul></section>
-              <section><strong>주요 개념</strong>{block.concepts.map((concept) => <div className="summary-concept" key={concept.name}><b>{concept.name}</b><p>{concept.description}</p></div>)}</section>
-              <section className="summary-emphasis"><strong>강사 강조</strong><p>{block.emphasis.join(' ')}</p></section>
-              <section><strong>예시와 사례</strong><p>{block.examples.join(' ')}</p></section>
-            </article>
-          )
-        })}
-      </div>
-      {context === 'LIVE' && <div className="summary-generating"><i /><span><strong>다음 구간을 정리하고 있어요</strong><small>완성되면 새 블록으로 추가됩니다.</small></span></div>}
-    </div>
-  )
-}
-
 function GlossaryPanel({ terms, selectedTermId, onSelectedTermChange, panelProps }: { terms: GlossaryTermView[]; selectedTermId: string | null; onSelectedTermChange: (termId: string) => void; panelProps: PanelProps }) {
   const [search, setSearch] = useState('')
   useEffect(() => setSearch(''), [selectedTermId])
@@ -188,9 +142,7 @@ export default function LearningSidebar(props: LearningSidebarProps) {
         onChange={props.onPanelChange}
       />
       {props.panel === 'discussion' && <DiscussionPanel messages={props.messages} composer={props.discussionComposer} notice={props.discussionNotice} panelProps={tabPanelProps(LEARNING_TAB_PREFIX, 'discussion')} />}
-      {props.panel === 'notes' && (props.lectureNote !== undefined
-        ? <LectureNotePanel note={props.lectureNote} live={props.noteContext === 'LIVE'} panelProps={tabPanelProps(LEARNING_TAB_PREFIX, 'notes')} />
-        : <SummaryPanel blocks={props.summaryBlocks} currentSessionMs={props.currentSessionMs} onSeek={props.onSeek} context={props.noteContext} panelProps={tabPanelProps(LEARNING_TAB_PREFIX, 'notes')} />)}
+      {props.panel === 'notes' && <LectureNotePanel note={props.lectureNote} live={props.noteContext === 'LIVE'} panelProps={tabPanelProps(LEARNING_TAB_PREFIX, 'notes')} />}
       {props.panel === 'ai' && <div className="side-panel-content ai-panel" {...tabPanelProps(LEARNING_TAB_PREFIX, 'ai')}>{props.aiContent}</div>}
       {props.panel === 'glossary' && <GlossaryPanel terms={props.glossaryTerms} selectedTermId={props.selectedTermId} onSelectedTermChange={props.onSelectedTermChange} panelProps={tabPanelProps(LEARNING_TAB_PREFIX, 'glossary')} />}
     </aside>

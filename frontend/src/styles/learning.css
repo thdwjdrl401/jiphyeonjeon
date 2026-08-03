@@ -1,6 +1,8 @@
 /* 라이브 강의실(학생/강사 공용) — 집현전 라이트 테마와 같은 표면 체계를 사용한다. */
 .lesson-shell { min-height: 100vh; background: var(--paper); color: var(--ink-900); }
-.lesson-shell__header { display: grid; grid-template-columns: 1fr auto 1fr; min-height: 58px; align-items: center; gap: 18px; padding: 0 22px; border-bottom: 1px solid var(--ink-100); background: var(--white); }
+/* 브랜드 → 돌아가기 → (여백) → 이름. 가운데 칸을 두면 "← 내 커리큘럼"이 화면 정중앙에 떠서
+   무엇으로 돌아가는 버튼인지 읽히지 않는다. 돌아가기는 왼쪽 위가 관례다. */
+.lesson-shell__header { display: grid; grid-template-columns: auto auto minmax(0,1fr); min-height: 58px; align-items: center; gap: 18px; padding: 0 22px; border-bottom: 1px solid var(--ink-100); background: var(--white); }
 .lesson-shell__header .brand-link { color: var(--ink-950); }
 .lesson-shell__header > a:nth-child(2) { color: var(--ink-600); font-size: .72rem; }
 .lesson-shell__header > span { justify-self: end; color: var(--ink-600); font-size: .72rem; }
@@ -14,7 +16,11 @@
 .media-page__status { display: flex; align-items: center; gap: 10px; color: var(--ink-600); font-size: .68rem; }
 .media-page--live { display: flex; height: calc(100vh - 58px); height: calc(100dvh - 58px); min-height: 0; overflow: hidden; flex-direction: column; padding-top: 12px; }
 .media-page--instructor { background: radial-gradient(circle at 86% 0,rgba(201,134,26,.07),transparent 26%); }
-.media-page--live .instructor-end-confirm { flex: 0 0 auto; }
+/* 화면 높이에 맞춘 세로 flex라, 줄어들면 안 되는 띠들은 스스로 고정해야 한다.
+   안 그러면 아래 영역이 늘어날 때 이쪽이 눌려 글자가 잘린다. */
+.media-page--live .instructor-end-confirm,
+.media-page--live .review-toolbar,
+.media-page--live .media-page__title { flex: 0 0 auto; }
 .live-session-state-banner { flex: 0 0 auto; margin-bottom: 13px; padding: 11px 14px; border: 1px solid var(--ink-100); border-radius: 12px; background: var(--blue-50); color: var(--blue-700); font-size: .68rem; }
 .live-session-state-banner.is-ended { border-color: rgba(168,58,36,.24); background: var(--red-50); color: var(--red-700); }
 .instructor-end-confirm { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 13px; padding: 12px 14px; border: 1px solid rgba(168,58,36,.24); border-radius: 12px; background: var(--red-50); }
@@ -27,8 +33,32 @@
 .recording-consent-modal__badge i { width: 9px; height: 9px; flex: 0 0 auto; border-radius: 50%; background: var(--red-600); box-shadow: 0 0 0 5px rgba(168,58,36,.16); }
 .recording-consent-modal h2 { margin: 0 0 8px; color: var(--ink-950); font-size: .98rem; letter-spacing: -.02em; }
 .recording-consent-modal p { margin: 0 0 18px; color: var(--ink-600); font-size: .72rem; line-height: 1.6; }
-.media-layout { display: grid; grid-template-columns: minmax(0,1fr) 370px; gap: 13px; }
+/*
+ * 경계를 끌어 크기를 바꾼다(useResizablePane). 폭/높이는 훅이 넘겨 준 CSS 변수로만 오고,
+ * 여기서는 기본값을 둔다 — 스크립트가 안 돌아도 레이아웃이 무너지지 않는다.
+ */
+.media-layout { display: grid; grid-template-columns: minmax(0,1fr) auto var(--sidebar-width, 370px); gap: 0; }
+.media-layout > .media-primary { margin-right: 13px; }
+.media-layout.is-sidebar-collapsed { grid-template-columns: minmax(0,1fr) auto 0; }
+.media-layout.is-sidebar-collapsed > .media-side { display: none; }
+
+/* 손잡이. 얇게 두되 잡는 영역은 넉넉히 준다 — 1px짜리 경계는 마우스로 못 잡는다. */
+.pane-handle { position: relative; z-index: 5; flex: 0 0 auto; border: 0; padding: 0; background: transparent; }
+.pane-handle::before { position: absolute; border-radius: 999px; background: var(--border-medium); content: ''; transition: background .12s; }
+.pane-handle:hover::before, .pane-handle:focus-visible::before { background: var(--seal); }
+.pane-handle--inline { width: 13px; cursor: col-resize; }
+.pane-handle--inline::before { inset: 12px 5px; }
+.pane-handle--block { height: 13px; cursor: row-resize; }
+.pane-handle--block::before { inset: 5px 12px; }
+/* 접히면 손잡이만 남는다. 이때는 더 또렷해야 다시 펼 수 있다는 것이 보인다. */
+.pane-handle.is-collapsed::before { background: var(--ink-400); }
+.pane-handle.is-collapsed::after { position: absolute; color: var(--ink-500); font-size: .6rem; content: '⋮'; }
+.pane-handle--inline.is-collapsed::after { top: 50%; left: 50%; transform: translate(-50%,-50%); }
+.pane-handle--block.is-collapsed::after { top: 50%; left: 50%; transform: translate(-50%,-50%) rotate(90deg); }
+@media (prefers-reduced-motion: reduce) { .pane-handle::before { transition: none; } }
+
 .media-layout.is-sidebar-detached { grid-template-columns: minmax(0,1fr); }
+.media-layout.is-sidebar-detached > .pane-handle { display: none; }
 .media-primary { min-width: 0; }
 .media-page--live .media-layout { min-height: 0; flex: 1; overflow: hidden; }
 .media-page--live .media-primary { display: flex; min-height: 0; overflow: hidden; flex-direction: column; }
@@ -220,7 +250,11 @@
 .caption-dock > header strong { display: flex; align-items: center; gap: 7px; color: var(--ink-900); font-size: .65rem; }
 .caption-dock > header strong i { width: 6px; height: 6px; border-radius: 50%; background: var(--red-600); box-shadow: 0 0 0 4px rgba(168,58,36,.13); }
 .caption-dock > header span { color: var(--ink-500); font-size: .56rem; }
-.caption-dock__sentences { max-height: 152px; overflow-y: auto; padding: 5px 9px 8px; }
+/* 높이를 처음부터 고정한다. max-height만 두면 자막이 0줄에서 시작해 도착할 때마다 독이 자라고,
+   그만큼 아래 요소가 밀려 화면이 계속 움직인다. 자란 뒤와 같은 높이를 처음부터 준다.
+   (사용자가 경계를 끌어 조절하면 --caption-dock-height가 이 값을 대신한다 — useResizablePane) */
+.caption-dock__sentences { height: var(--caption-dock-height, 152px); overflow-y: auto; padding: 5px 9px 8px; }
+.caption-dock__empty { display: grid; height: 100%; place-items: center; margin: 0; color: var(--ink-500); font-size: .62rem; }
 .caption-dock__sentences article { display: grid; grid-template-columns: 52px minmax(0,1fr); align-items: start; gap: 8px; border-radius: 8px; padding: 7px; transition: background .15s ease; }
 .caption-dock__sentences article.is-current { background: var(--blue-50); }
 .caption-dock__sentences article > :is(button,time) { border: 0; padding: 2px 0; background: transparent; color: var(--blue-600); font-size: .6rem; text-align: left; }
@@ -230,9 +264,6 @@
 .caption-term { display: inline; margin: 0 1px; border: 0; border-radius: 4px; padding: 1px 3px; background: #f3ddab; color: #7a4e0f; font: inherit; font-weight: 700; cursor: pointer; }
 .caption-term:hover, .caption-term:focus-visible { outline: 1px solid rgba(201,134,26,.5); background: #f0cd9a; }
 .media-primary > .inline-notice { margin-top: 9px; }
-.chapter-row { display: flex; align-items: center; gap: 7px; margin-top: 9px; padding: 10px; border: 1px solid var(--ink-100); border-radius: 11px; background: var(--white); }
-.chapter-row button { border: 1px solid var(--ink-100); border-radius: 8px; padding: 7px 9px; background: var(--ink-50); color: var(--ink-700); font-size: .6rem; }
-.chapter-row span { color: var(--blue-600); }
 .media-side { display: flex; min-height: calc(100vh - 154px); overflow: hidden; flex-direction: column; border: 1px solid var(--ink-100); border-radius: 15px; background: var(--white); }
 .learning-sidebar-windowbar { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; flex-wrap: wrap; padding: 8px 9px; border-bottom: 1px solid var(--ink-100); background: var(--ink-50); }
 .learning-sidebar-windowbar__status { min-width: 0; flex: 1; color: var(--ink-600); font-size: .58rem; }
@@ -452,8 +483,6 @@
 .analytics-progress b { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg,var(--blue-600),var(--blue-500)); }
 .replay-video { min-height: min(62vh,650px); }
 .play-button { position: absolute; z-index: 5; top: 50%; left: 50%; display: grid; width: 62px; height: 62px; place-items: center; border: 1px solid rgba(255,252,243,.28); border-radius: 50%; background: rgba(28,22,13,.72); color: #fdf8ee; font-size: 1.2rem; transform: translate(-50%,-50%); backdrop-filter: blur(8px); }
-.chapter-row { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); }
-.chapter-row button { display: flex; justify-content: flex-start; gap: 8px; }
 .replay-outline { display: grid; gap: 7px; }
 .replay-outline button { display: grid; grid-template-columns: 46px minmax(0,1fr); gap: 8px; border: 1px solid transparent; border-radius: 10px; padding: 10px; background: transparent; color: var(--ink-900); text-align: left; }
 .replay-outline button.is-current { border-color: var(--blue-200); background: var(--blue-50); }
@@ -473,11 +502,15 @@
 .system-code--forbidden { color: #f3ddab; }
 
 @media (max-width: 1050px) {
-  .media-layout { grid-template-columns: minmax(0,1fr) 320px; }
+  .media-layout { grid-template-columns: minmax(0,1fr) auto min(var(--sidebar-width, 320px), 320px); }
   .video-stage { min-height: 520px; }
 }
+/* 한 줄로 접히는 폭에서는 경계를 끌 자리가 없다 — 손잡이를 감추고 기본 비율로 돌린다. */
 @media (max-width: 840px) {
-  .media-layout { grid-template-columns: 1fr; }
+  .media-layout, .media-layout.is-sidebar-collapsed { grid-template-columns: 1fr; }
+  .media-layout > .pane-handle--inline { display: none; }
+  .media-layout > .media-primary { margin-right: 0; }
+  .media-layout.is-sidebar-collapsed > .media-side { display: flex; }
   .media-page--live .media-layout { grid-template-rows: minmax(260px,3fr) minmax(240px,2fr); }
   .media-side { min-height: 520px; }
   .media-page--live .media-side { min-height: 0; }
@@ -486,7 +519,7 @@
   .media-page__status { width: 100%; flex-wrap: wrap; }
 }
 @media (max-width: 600px) {
-  .lesson-shell__header { grid-template-columns: 1fr auto; padding-inline: 14px; }
+  .lesson-shell__header { grid-template-columns: auto minmax(0,1fr); padding-inline: 14px; }
   .lesson-shell__header > a:nth-child(2) { display: none; }
   .media-page { padding: 10px; }
   .media-page__title > div:first-child { align-items: flex-start; flex-wrap: wrap; }
@@ -513,8 +546,6 @@
   .student-live-status > div { width: 100%; }
   .student-live-status > div:last-child { justify-content: space-between; }
   .instructor-media-error { align-items: stretch; flex-direction: column; }
-  .chapter-row { display: flex; overflow-x: auto; }
-  .chapter-row button { min-width: 160px; }
   .review-toolbar { align-items: stretch; flex-direction: column; }
   .review-toolbar > div:last-child { display: grid; grid-template-columns: 1fr 1fr; }
   .instructor-end-confirm { align-items: stretch; flex-direction: column; }
@@ -674,7 +705,6 @@
 }
 
 .caption-dock,
-.chapter-row,
 .media-side,
 .live-controls,
 .replay-controls,

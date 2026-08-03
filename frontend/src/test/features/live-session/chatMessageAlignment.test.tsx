@@ -13,11 +13,9 @@ function sidebar(messages: ChatMessageView[]) {
     <LearningSidebar
       panel="discussion"
       onPanelChange={() => undefined}
-      currentSessionMs={0}
-      onSeek={() => undefined}
       selectedTermId={null}
       onSelectedTermChange={() => undefined}
-      summaryBlocks={[]}
+      lectureNote={null}
       glossaryTerms={[]}
       messages={messages}
       aiContent={null}

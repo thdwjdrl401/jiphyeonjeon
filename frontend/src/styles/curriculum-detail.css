@@ -312,7 +312,7 @@
 
 .curriculum-materials header p {
   margin: 5px 0 0;
-  color: var(--ink-500);
+  color: var(--ink-muted);
   font-size: .82rem;
   white-space: nowrap;
 }
@@ -375,7 +375,7 @@
 }
 
 .curriculum-materials li small {
-  color: var(--ink-500);
+  color: var(--ink-muted);
   font-size: .72rem;
 }
 
