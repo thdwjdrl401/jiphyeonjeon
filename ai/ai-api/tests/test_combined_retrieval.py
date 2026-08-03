@@ -125,12 +125,14 @@ def test_combines_scoped_material_and_bounded_latest_attempt_caption() -> None:
         "PPTX 근거",
         "둘째 문장. 셋째 문장.",
     ]
+    assert result.evidence[0].source.excerpt == "PPTX 근거"
     assert result.evidence[1].lesson_id == LESSON_ID
     assert result.evidence[1].source == CaptionSource(
         sessionId=SESSION_ID,
         sttSessionId="provider-attempt-1",
         startMs=2_000,
         endMs=3_000,
+        excerpt="둘째 문장. 셋째 문장.",
     )
 
 

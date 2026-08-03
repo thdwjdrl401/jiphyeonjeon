@@ -46,6 +46,7 @@ class CombinedEvidenceRetriever:
         material_lexical_threshold: float = 0.0,
         caption_max_items: int = 32,
         caption_max_chars: int = 20_000,
+        excerpt_max_chars: int = 300,
     ) -> None:
         if not 1 <= material_top_k <= 50:
             raise ValueError("material_top_k must be between 1 and 50")
@@ -57,6 +58,8 @@ class CombinedEvidenceRetriever:
             raise ValueError("caption_max_items must be positive")
         if not 1 <= caption_max_chars <= 50_000:
             raise ValueError("caption_max_chars must be between 1 and 50000")
+        if excerpt_max_chars <= 0:
+            raise ValueError("excerpt_max_chars must be positive")
         self._materials = materials
         self._captions = captions
         self._material_top_k = material_top_k
@@ -64,6 +67,7 @@ class CombinedEvidenceRetriever:
         self._material_lexical_threshold = material_lexical_threshold
         self._caption_max_items = caption_max_items
         self._caption_max_chars = caption_max_chars
+        self._excerpt_max_chars = excerpt_max_chars
 
     async def retrieve(self, request: RagAnswerRequest) -> RetrievalResult:
         material_hits = await self._materials.retrieve(
@@ -76,7 +80,11 @@ class CombinedEvidenceRetriever:
                 lesson_id=hit.lesson_id,
                 curriculum_id=hit.curriculum_id,
                 content=hit.text,
-                source=PptxSource(materialId=hit.material_id, page=hit.page),
+                source=PptxSource(
+                    materialId=hit.material_id,
+                    page=hit.page,
+                    excerpt=_truncate(hit.text, self._excerpt_max_chars),
+                ),
             )
             for hit in material_hits
             if (
@@ -116,14 +124,16 @@ class CombinedEvidenceRetriever:
             return None
         selected.reverse()
 
+        content = "".join(item.text for item in selected)
         return RetrievedEvidence(
             lesson_id=context.lesson_id,
-            content="".join(item.text for item in selected),
+            content=content,
             source=CaptionSource(
                 sessionId=context.session_id,
                 sttSessionId=context.stt_session_id,
                 startMs=selected[0].stream_elapsed_ms,
                 endMs=selected[-1].stream_elapsed_ms,
+                excerpt=_truncate(content, self._excerpt_max_chars),
             ),
         )
 
