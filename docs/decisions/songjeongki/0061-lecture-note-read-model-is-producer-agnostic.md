@@ -2,7 +2,7 @@
 
 > 관련 결정: [ADR-0034(canola) 누적형 실시간 강의 노트](../canola/0034-near-realtime-accumulative-lecture-notes.md) ·
 > [ADR-0019 채팅 STOMP·구독 인가](0019-ws-realtime-chat-stomp.md) ·
-> [ADR-0043 자막 소비·영속](0043-live-caption-consumer.md) ·
+> [ADR-0043 자막 소비·영속](0043-caption-consumer-persistence.md) ·
 > [공유 계약 §3-4a](../../CONTRACT.md)
 
 - **상태**: 채택 — 구현됨(기본 꺼짐, 환경별로 켠다)

@@ -1,6 +1,6 @@
 # 내 커리큘럼 API
 
-> 공통 규칙: [API_MAP.md](../API_MAP.md) · 화면 명세: [MY_CURRICULUMS.md](../components/MY_CURRICULUMS.md) · 공유 계약: [CONTRACT.md](../../CONTRACT.md)
+> 공통 규칙: [API_MAP.md](API_MAP.md) · 화면 명세: [MY_CURRICULUMS.md](../components/MY_CURRICULUMS.md) · 공유 계약: [CONTRACT.md](../../CONTRACT.md)
 
 ## 1. 범위
 

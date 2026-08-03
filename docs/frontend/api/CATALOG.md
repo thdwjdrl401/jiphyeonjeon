@@ -1,6 +1,6 @@
 # 공개 커리큘럼 탐색 API
 
-> 공통 규칙: [API_MAP.md](../API_MAP.md) · 화면 명세: [PUBLIC_PAGES.md](../components/PUBLIC_PAGES.md) · 공유 계약: [CONTRACT.md](../../CONTRACT.md)
+> 공통 규칙: [API_MAP.md](API_MAP.md) · 화면 명세: [PUBLIC_PAGES.md](../components/PUBLIC_PAGES.md) · 공유 계약: [CONTRACT.md](../../CONTRACT.md)
 
 ## 1. 범위
 

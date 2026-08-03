@@ -1,6 +1,6 @@
 # 레슨 생성·수정·상세·PPTX 자료 API
 
-> 공통 규칙: [API_MAP.md](../API_MAP.md) · 폼 명세: [LESSON_FORM.md](../components/LESSON_FORM.md) · 상세 명세: [LESSON_DETAIL.md](../components/LESSON_DETAIL.md) · 공유 계약: [CONTRACT.md](../../CONTRACT.md)
+> 공통 규칙: [API_MAP.md](API_MAP.md) · 폼 명세: [LESSON_FORM.md](../components/LESSON_FORM.md) · 상세 명세: [LESSON_DETAIL.md](../components/LESSON_DETAIL.md) · 공유 계약: [CONTRACT.md](../../CONTRACT.md)
 
 ## 1. 범위
 

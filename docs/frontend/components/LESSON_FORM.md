@@ -421,7 +421,7 @@ PPTX 한 개 선택
 
 ## 19. 필요한 데이터와 연결
 
-정확한 필드와 API는 [API_MAP.md](../API_MAP.md)에서 확정한다.
+정확한 필드와 API는 [API_MAP.md](../api/API_MAP.md)에서 확정한다.
 
 ### 19.1 초기 데이터
 

@@ -1,6 +1,6 @@
 # 커리큘럼 상세·수강 API
 
-> 공통 규칙: [API_MAP.md](../API_MAP.md) · 화면 명세: [CURRICULUM_DETAIL.md](../components/CURRICULUM_DETAIL.md) · 공유 계약: [CONTRACT.md](../../CONTRACT.md)
+> 공통 규칙: [API_MAP.md](API_MAP.md) · 화면 명세: [CURRICULUM_DETAIL.md](../components/CURRICULUM_DETAIL.md) · 공유 계약: [CONTRACT.md](../../CONTRACT.md)
 
 ## 1. 범위
 

@@ -264,7 +264,7 @@ StudentLearningDashboard
 
 ## 10. 필요한 데이터
 
-실제 필드와 API는 [API_MAP.md](../API_MAP.md)에서 확정한다.
+실제 필드와 API는 [API_MAP.md](../api/API_MAP.md)에서 확정한다.
 
 ### 10.1 공통
 

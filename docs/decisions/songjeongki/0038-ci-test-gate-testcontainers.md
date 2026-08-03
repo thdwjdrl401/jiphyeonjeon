@@ -4,7 +4,7 @@
 
 - **상태**: 채택
 - **일자**: 2026-07-26
-- **관련**: [0005](0005-db-postgres.md)(pgvector 이미지), [0022](0022-local-vs-ec2-infra-profile.md)(인프라 프로필), [backend/src/test/java/com/liveclass/LiveClassApplicationTests.java](../../../backend/src/test/java/com/liveclass/LiveClassApplicationTests.java)
+- **관련**: [0005](0005-db-postgres-pgvector.md)(pgvector 이미지), [0022](0022-local-vs-ec2-infra-profile.md)(인프라 프로필), [backend/src/test/java/com/liveclass/LiveClassApplicationTests.java](../../../backend/src/test/java/com/liveclass/LiveClassApplicationTests.java)
 
 ## 맥락
 - `.gitlab-ci.yml`의 MR 파이프라인은 prod 이미지가 빌드되는지만 확인했고 **테스트를 전혀 돌리지 않았다**. 계약 테스트 267개(39개 클래스)가 로컬 실행에만 의존해 왔다.

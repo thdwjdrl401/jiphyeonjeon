@@ -1,6 +1,6 @@
 # LiveClass AI — 프론트엔드 컴포넌트 명세 안내
 
-> 페이지 기준: [PAGES.md](../PAGES.md) · API 연동 맵: [API_MAP.md](../API_MAP.md) · 공통 컴포넌트: [COMMON.md](COMMON.md)
+> 페이지 기준: [PAGES.md](../PAGES.md) · API 연동 맵: [API_MAP.md](../api/API_MAP.md) · 공통 컴포넌트: [COMMON.md](COMMON.md)
 
 ## 1. 목적
 

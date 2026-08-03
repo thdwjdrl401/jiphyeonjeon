@@ -2,7 +2,7 @@
 
 > 관련 결정: [ADR-0047 라이브 AI 답변 SSE 프록시](0047-live-ai-answer-sse-proxy.md) ·
 > [ADR-0050 채팅 익명은 발신자 선택](0050-chat-anonymity-is-sender-choice.md) ·
-> [ADR-0043 자막 소비·영속](0043-live-caption-consumer.md) ·
+> [ADR-0043 자막 소비·영속](0043-caption-consumer-persistence.md) ·
 > [공유 계약 §2 AI](../../CONTRACT.md)
 
 - **상태**: 채택 — 구현됨

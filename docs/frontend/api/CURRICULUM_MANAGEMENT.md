@@ -1,6 +1,6 @@
 # 커리큘럼 생성·수정·관리 API
 
-> 공통 규칙: [API_MAP.md](../API_MAP.md) · 폼 명세: [CURRICULUM_FORM.md](../components/CURRICULUM_FORM.md) · 관리 명세: [CURRICULUM_MANAGEMENT.md](../components/CURRICULUM_MANAGEMENT.md) · 공유 계약: [CONTRACT.md](../../CONTRACT.md)
+> 공통 규칙: [API_MAP.md](API_MAP.md) · 폼 명세: [CURRICULUM_FORM.md](../components/CURRICULUM_FORM.md) · 관리 명세: [CURRICULUM_MANAGEMENT.md](../components/CURRICULUM_MANAGEMENT.md) · 공유 계약: [CONTRACT.md](../../CONTRACT.md)
 
 ## 1. 범위
 

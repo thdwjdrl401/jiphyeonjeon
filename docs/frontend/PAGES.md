@@ -1,6 +1,6 @@
 # LiveClass AI — 프론트엔드 페이지·컴포넌트·API 맵
 
-> 정본 아키텍처: [architecture.md](../architecture.md) · 공유 계약: [CONTRACT.md](../CONTRACT.md)
+> 정본 아키텍처: [architecture.md](../architecture/README.md) · 공유 계약: [CONTRACT.md](../CONTRACT.md)
 >
 > 이 문서는 프론트엔드 관점에서 **페이지 → 컴포넌트 → 사용자 행동 → 연동**을 단계적으로 구체화한다. 시스템 구조와 공유 계약을 새로 정의하지 않으며, 확정된 계약은 `CONTRACT.md`를 따른다.
 
