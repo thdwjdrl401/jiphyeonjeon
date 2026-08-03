@@ -269,6 +269,122 @@
 .dashboard-progress b { display: block; height: 100%; border-radius: inherit; background: var(--blue-600); }
 .dashboard-curriculum-card .card-actions { flex: 0 0 auto; flex-wrap: nowrap; }
 .dashboard-curriculum-card .card-actions .button { min-width: 72px; flex: 0 0 auto; white-space: nowrap; }
+
+/*
+ * 내 커리큘럼(강사·학생 공용 화면) — 한 화면 정보량을 늘리는 페이지 한정 밀도 조정.
+ * 위 .profile-page 블록과 같은 방식이다: 선택자가 클래스 2개라 design-system.css의
+ * 기본값(클래스 1개)을 파일 순서와 무관하게 이긴다 — 다른 워크스페이스 화면은 그대로 둔다.
+ * 색·테두리·radius·shadow(모노톤 토큰)는 건드리지 않고 여백·크기·줄바꿈만 조정한다.
+ */
+.workspace-content:has(.my-curriculums-page) { padding-bottom: 40px; }
+.workspace-page.my-curriculums-page { gap: 16px; }
+/*
+ * 제목 크기는 다른 워크스페이스 화면(예: "새 커리큘럼 만들기")과 같게 기본값을 그대로 쓴다.
+ * 줄이는 건 min-height가 잡아 두던 여유와 위아래 padding뿐이다.
+ * 제목 왼쪽 위의 붉은 seal(::before)은 절대 위치라 제목을 따라오지 않는다 — 원래는
+ * align-items: flex-end가 큰 제목을 아래로 밀어 자리가 났지만, min-height를 풀면 제목이
+ * 올라와 seal과 겹친다. padding-top으로 seal이 앉을 자리를 명시적으로 남긴다.
+ */
+.my-curriculums-page .workspace-page-header { min-height: auto; padding: 26px 2px 8px; }
+.my-curriculums-page .workspace-page-header::before { top: 6px; }
+.my-curriculums-page .workspace-page-header h1 { margin: 0; }
+.my-curriculums-page .workspace-panel { padding: 20px 22px; }
+.my-curriculums-page .workspace-panel__header { margin-bottom: 14px; padding-bottom: 12px; }
+/*
+ * 라이브가 없는 날의 한 줄 띠(있는 날은 highlight-panel을 그대로 쓴다).
+ * 패널이 아니라 한 줄이므로 강조 테두리(--ink-950) 대신 일반 테두리를 쓴다.
+ */
+.my-curriculums-page .today-live-empty {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 0;
+  padding: 12px 16px;
+  border: 1px solid var(--border-medium);
+  background: var(--ink-50);
+  color: var(--ink-600);
+  font-size: .8rem;
+}
+.my-curriculums-page .today-live-empty b { color: var(--ink-900); font-size: .72rem; font-weight: 700; letter-spacing: .04em; }
+
+/* 숫자 하나만 든 칸이 140px을 쓰고 있었다. */
+.my-curriculums-page .metric-card { min-height: 92px; padding: 16px 18px; }
+.my-curriculums-page .metric-card strong { margin-top: 6px; font-size: 1.7rem; }
+
+/*
+ * 카드는 세로형(커버 위, 내용 아래)이고 넓은 화면에서 2열로 깐다.
+ * 가로형 카드를 그대로 2열로 쪼개면 열 폭이 반이 되어 메타가 다시 접히지만(F-1안),
+ * 세로형은 좁아진 열 폭을 온전히 써서 그 문제가 없다.
+ * auto-fill이라 폭이 줄면 미디어쿼리 없이 1열로 내려간다(2열 최소 폭 400px).
+ */
+.my-curriculums-page .dashboard-curriculum-list {
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  gap: 8px;
+}
+.my-curriculums-page .dashboard-curriculum-card { grid-template-columns: 1fr; }
+/*
+ * 커버 높이는 폭에 비례시키지 않는다 — 2열이면 카드 폭이 ~570px이라 16:9로 두면 커버만
+ * 320px가 되어 세로 총량이 오히려 늘어난다. 고정 높이 띠로 쓴다.
+ * 이 한 줄이 페이지 세로 총량을 정하는 레버다(20건 기준 96px ≈ 2,600px, 128px ≈ 2,920px).
+ */
+.my-curriculums-page .dashboard-curriculum-card__cover { min-height: 0; height: 96px; aspect-ratio: auto; }
+.my-curriculums-page .dashboard-curriculum-card__content {
+  align-items: stretch;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 9px;
+  padding: 13px 15px 14px;
+}
+.my-curriculums-page .dashboard-curriculum-card h3 { margin: 4px 0 3px; }
+/*
+ * 하단 줄(진행률·메타 + 액션). margin-top: auto라 요약 길이가 달라도 카드 바닥에 붙는다 —
+ * 같은 행의 카드는 그리드가 높이를 맞추므로 하단 줄이 서로 정렬된다.
+ */
+.my-curriculums-page .dashboard-curriculum-card__foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 9px 12px;
+  margin-top: auto;
+}
+/* 세로형에서는 진행률·메타가 카드 폭을 온전히 쓴다(가로형의 170px·210px 고정폭이 필요 없다). */
+.my-curriculums-page .dashboard-curriculum-card__foot .dashboard-progress { width: auto; flex: 1 1 140px; }
+.my-curriculums-page .dashboard-curriculum-card__foot .dashboard-meta { flex: 1 1 auto; }
+
+/*
+ * 요약은 두 줄로 자른다 — max-width: 430px로 묶여 있어 좌우 여유가 있는데도 접히고,
+ * 줄 수 제한이 없어 요약 길이에 따라 카드 높이가 들쭉날쭉했다. 전문은 title 속성에 남긴다.
+ */
+.my-curriculums-page .dashboard-curriculum-card__summary {
+  display: -webkit-box;
+  overflow: hidden;
+  max-width: none;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-height: 1.5;
+  word-break: keep-all;
+}
+
+/*
+ * 메타는 항목(span)마다 끊고 구분점은 앞 항목의 ::after로 그린다. 210px 고정폭에 긴 한
+ * 문자열을 넣어 4~5줄로 깨지던 것을 남은 폭을 써서 1~2줄로 만든다. 구분점을 뒤 항목의
+ * ::before로 두면 그 항목이 줄바꿈될 때 '·'가 줄 맨앞에 홀로 남으므로 앞 항목에 붙인다.
+ */
+.dashboard-meta.dashboard-meta--split {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: 2px 6px;
+  max-width: none;
+  margin: 0;
+  color: var(--ink-500);
+  font-size: .72rem;
+  word-break: keep-all;
+}
+.dashboard-meta--split > span { white-space: nowrap; }
+.dashboard-meta--split > span:not(:last-child)::after { margin-left: 6px; color: var(--ink-300); content: '·'; }
 .workspace-tabs { display: flex; gap: 6px; padding: 5px; border: 1px solid var(--ink-100); border-radius: 12px; background: #fff; }
 .workspace-tabs button { flex: 1; border: 0; border-radius: 8px; padding: 9px 14px; background: transparent; color: var(--ink-500); font-size: .78rem; font-weight: 700; }
 .workspace-tabs button.is-active { background: var(--blue-600); color: #fff; }
@@ -532,6 +648,8 @@ th { color: var(--ink-500); font-size: .67rem; }
   .enrollment-status-cell { min-width: 0; }
   .dashboard-curriculum-card { grid-template-columns: 1fr; }
   .dashboard-curriculum-card__cover { min-height: 110px; }
+  /* 좁은 화면에서는 커버 띠를 더 낮춘다. min-height: 0은 위 110px 최소값을 풀기 위해 필요하다. */
+  .my-curriculums-page .dashboard-curriculum-card__cover { min-height: 0; height: 84px; }
   .lifecycle-actions { align-items: stretch; flex-direction: column; }
   .lifecycle-actions__buttons { flex-wrap: wrap; }
   .lifecycle-actions__buttons .button { flex: 1 1 auto; }
