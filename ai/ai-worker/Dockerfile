@@ -19,7 +19,10 @@ RUN uv sync --frozen --no-dev
 FROM python:3.12-slim-bookworm AS runtime
 
 WORKDIR /app
-RUN groupadd --system liveclass \
+RUN apt-get update \
+ && apt-get install --no-install-recommends --yes ffmpeg \
+ && rm -rf /var/lib/apt/lists/* \
+ && groupadd --system liveclass \
  && useradd --system --gid liveclass --create-home liveclass
 
 COPY --from=build --chown=liveclass:liveclass /app/.venv /app/.venv
