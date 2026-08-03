@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import {
   adminNavigationItem,
   isNavigationItemActive,
@@ -19,7 +19,6 @@ export default function GlobalHeader() {
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const { user, status, logout } = useAuth()
   const { pathname } = useLocation()
-  const navigate = useNavigate()
 
   /**
    * 역할 메뉴는 로그인 상태가 확정된 뒤에만 낸다. status가 'loading'인 동안 학생 메뉴를
@@ -37,7 +36,11 @@ export default function GlobalHeader() {
     try {
       await logout()
       closeMenu()
-      navigate(publicPaths.home)
+      /*
+       * 보호 경로에 있었다면 가드가 `GuestRedirect`로 랜딩페이지에 내려놓는다. 공개 화면에서
+       * 로그아웃했다면 보던 자리에 그대로 남는 것이 맞다 — 읽던 것을 빼앗을 이유가 없다.
+       * 여기서 한 번 더 옮기면 가드와 목적지를 두고 다투게 된다.
+       */
     } catch {
       setLogoutError('로그아웃하지 못했습니다. 잠시 후 다시 시도해 주세요.')
     } finally {

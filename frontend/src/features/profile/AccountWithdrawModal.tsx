@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
-import { publicPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
 import type { UserRole } from '@/features/auth/types'
 import { ApiError } from '@/shared/api/client'
@@ -31,7 +29,6 @@ interface AccountWithdrawModalProps {
  * 실패와 함께 모달을 닫아 버리면 왜 실패했는지가 사라지고, 사용자는 안내를 처음부터 다시 읽어야 한다.
  */
 export default function AccountWithdrawModal({ role, onClose }: AccountWithdrawModalProps) {
-  const navigate = useNavigate()
   const { logout } = useAuth()
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const [confirmed, setConfirmed] = useState(false)
@@ -40,8 +37,14 @@ export default function AccountWithdrawModal({ role, onClose }: AccountWithdrawM
   const withdrawMutation = useMutation({
     mutationFn: profileService.withdrawAccount,
     onSuccess: async () => {
+      /*
+       * <b>어디로 갈지 여기서 정하지 않는다.</b> 로그아웃하면 이 화면은 보호 경로 밖이 되고,
+       * 가드가 `GuestRedirect`로 랜딩페이지에 내려놓는다 — 로그아웃 목적지를 아는 곳은 거기 하나다.
+       *
+       * 예전에는 여기서도 홈으로 옮겼는데, 같은 순간 가드는 `/login?returnTo=…`을 가리켜
+       * 어느 쪽이 마지막에 그리느냐로 목적지가 실행마다 달라졌다.
+       */
       await logout()
-      navigate(publicPaths.home, { replace: true })
     },
     onError: (mutationError) => {
       if (mutationError instanceof ApiError && mutationError.code === 'AUTH_WITHDRAWAL_BLOCKED') {

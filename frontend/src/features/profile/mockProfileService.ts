@@ -57,8 +57,16 @@ export const mockProfileService = {
       throw new ApiError('새 비밀번호는 8자 이상이어야 합니다.', 400, 'NEW_PASSWORD_INVALID')
     }
   },
+  /*
+   * 탈퇴는 <b>계정만</b> 처리한다. 세션을 여기서 끊지 않는다 — 실제 어댑터(`DELETE /me`)도 그렇고,
+   * 로그아웃은 호출한 화면이 `useAuth().logout()`으로 이어서 한다.
+   *
+   * 예전에는 여기서 곧바로 `mockAuthService.logout()`을 불러, 목에서만 <b>뮤테이션 도중에</b> 인증이
+   * 사라졌다. 그러면 아직 보호 경로(`/student/profile`)에 서 있는 채로 `RequireRoleRoute`가 게스트를
+   * 보고 `/login?returnTo=…` 이동을 예약해, 화면이 랜딩페이지로 옮긴 뒤에 그 예약이 덮어썼다.
+   * 목이 실제와 달라서 생긴 문제였고, 그 탓에 탈퇴 목적지가 실행마다 달라 보였다.
+   */
   async withdrawAccount() {
     requireUser()
-    await mockAuthService.logout()
   },
 } satisfies ProfileService

@@ -549,17 +549,8 @@ describe('커리큘럼 작업 화면', () => {
     await user.click(within(withdrawDialog).getByRole('checkbox', { name: /위 안내 사항을 모두 확인하였으며/ }))
     await user.click(within(withdrawDialog).getByRole('button', { name: '탈퇴하기' }))
 
-    /*
-     * 탈퇴 뒤 <b>어느 공개 화면</b>에 서는지는 지금 확정돼 있지 않다.
-     *
-     * `AccountWithdrawModal`은 `logout()` 뒤 홈('/')으로 보내는데, 그 사이 `RequireRoleRoute`가
-     * 사용자가 사라진 것을 보고 `/login`으로 보낸다 — 둘이 경합해서 어느 쪽이 마지막에 그리느냐로
-     * 결과가 갈린다. 예전에는 `/login`을 못박아 두어 이 테스트가 간헐적으로 깨졌다.
-     *
-     * 여기서 지켜야 하는 것은 <b>탈퇴가 끝나 로그아웃된 공개 화면에 선다</b>는 것이다. 목적지를
-     * 하나로 정하는 것은 별도 결정이 필요하다(경합 자체를 없애야 한다).
-     */
-    await waitFor(() => expect(['/', '/login']).toContain(window.location.pathname))
+    // 탈퇴하면 랜딩페이지다(ADR-0068). 규칙 자체는 guestRedirect.test.tsx가 고정한다.
+    await waitFor(() => expect(window.location.pathname).toBe('/'))
     expect(await screen.findByRole('link', { name: '로그인' })).toBeInTheDocument()
   })
 

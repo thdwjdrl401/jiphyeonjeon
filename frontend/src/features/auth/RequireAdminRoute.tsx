@@ -1,5 +1,6 @@
-import { Navigate, Outlet, useLocation } from 'react-router-dom'
+import { Navigate, Outlet } from 'react-router-dom'
 import { publicPaths } from '@/app/router/paths'
+import GuestRedirect from './GuestRedirect'
 import { useAuth } from './AuthContext'
 
 /**
@@ -11,7 +12,6 @@ import { useAuth } from './AuthContext'
  */
 export default function RequireAdminRoute() {
   const { status, user } = useAuth()
-  const location = useLocation()
 
   if (status === 'loading') {
     return (
@@ -22,10 +22,8 @@ export default function RequireAdminRoute() {
     )
   }
 
-  if (status === 'guest') {
-    const returnTo = `${location.pathname}${location.search}`
-    return <Navigate to={`${publicPaths.login}?returnTo=${encodeURIComponent(returnTo)}`} replace />
-  }
+  // 운영 콘솔도 같은 규칙을 쓴다 — 로그아웃 목적지가 화면마다 다르면 그것이 곧 버그다.
+  if (status === 'guest') return <GuestRedirect />
 
   if (!user?.isAdmin) {
     return <Navigate to={publicPaths.forbidden()} replace />
