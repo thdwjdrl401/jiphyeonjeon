@@ -11,7 +11,7 @@ export function validateRecordedLessonVideo(file: File): string | null {
 
   if (!hasMp4Extension || !hasMp4Mime) return 'MP4 형식의 영상 파일만 선택할 수 있습니다.'
   if (file.size <= 0) return '내용이 없는 영상 파일은 업로드할 수 없습니다.'
-  if (file.size > RECORDED_LESSON_MAX_BYTES) return '영상 파일은 최대 5GB까지 업로드할 수 있습니다.'
+  if (file.size > RECORDED_LESSON_MAX_BYTES) return '영상 파일은 최대 5GiB까지 업로드할 수 있습니다.'
   return null
 }
 

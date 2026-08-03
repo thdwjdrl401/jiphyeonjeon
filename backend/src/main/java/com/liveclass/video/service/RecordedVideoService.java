@@ -89,12 +89,21 @@ public class RecordedVideoService implements RecordedVideoManagement {
             throw new RecordedVideoConflictException(
                     "RECORDED_VIDEO_UPLOAD_CONFLICT", "업로드를 새로 시작할 수 없는 처리 상태입니다.");
         }
-        if (video.getSourceAssetId() != null) {
-            assetUploadManagement.abandonPendingRecordedVideoSource(video.getSourceAssetId(), uploaderId);
+        AssetUploadManagement.UploadTicket ticket;
+        try {
+            if (video.getSourceAssetId() != null) {
+                assetUploadManagement.abandonPendingRecordedVideoSource(video.getSourceAssetId(), uploaderId);
+            }
+            ticket = assetUploadManagement.createRecordedVideoSource(
+                    fileName, contentType, fileSize, uploaderId);
+        } catch (AssetUploadException e) {
+            throw switch (e.reason()) {
+                case INVALID -> new RecordedVideoInvalidException("RECORDED_VIDEO_INVALID", e.getMessage());
+                case FORBIDDEN -> new RecordedVideoForbiddenException(e.getMessage());
+                case NOT_FOUND, STATE_CONFLICT -> new RecordedVideoConflictException(
+                        "RECORDED_VIDEO_UPLOAD_CONFLICT", e.getMessage());
+            };
         }
-
-        AssetUploadManagement.UploadTicket ticket = assetUploadManagement.createRecordedVideoSource(
-                fileName, contentType, fileSize, uploaderId);
         video.setSourceAssetId(ticket.assetId());
         return new RecordedUploadTicket(
                 ticket.assetId(), ticket.uploadUrl(), ticket.method(), ticket.headers(), ticket.expiresAt());

@@ -160,6 +160,27 @@ class RecordedLessonUploadContractTest {
     }
 
     @Test
+    void recorded_source_accepts_exactly_5_gib_but_rejects_one_more_byte() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String sectionId = createSection(instructor);
+        MvcResult created = write(post("/api/instructor/sections/" + sectionId + "/recorded-lessons"),
+                instructor, "{\"clientRequestId\":\"%s\",\"title\":\"크기 경계 강의\"}"
+                        .formatted(UUID.randomUUID()))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String lessonId = json(created).get("lessonId").asString();
+
+        write(post("/api/instructor/recorded-lessons/" + lessonId + "/video/upload-requests"), instructor,
+                "{\"fileName\":\"limit.mp4\",\"contentType\":\"video/mp4\",\"fileSize\":5368709120}")
+                .andExpect(status().isCreated());
+
+        write(post("/api/instructor/recorded-lessons/" + lessonId + "/video/upload-requests"), instructor,
+                "{\"fileName\":\"too-big.mp4\",\"contentType\":\"video/mp4\",\"fileSize\":5368709121}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("RECORDED_VIDEO_INVALID"));
+    }
+
+    @Test
     void another_instructor_cannot_issue_upload_ticket() throws Exception {
         Cookie[] owner = loginAs("INSTRUCTOR");
         String sectionId = createSection(owner);
