@@ -24,6 +24,7 @@ import LiveSessionProcessingPage from '@/pages/LiveSessionProcessingPage'
 import LoginPage from '@/pages/LoginPage'
 import MyCurriculumsPage from '@/pages/MyCurriculumsPage'
 import NotFoundPage from '@/pages/NotFoundPage'
+import NotificationsPage from '@/pages/NotificationsPage'
 import PasswordResetConfirmPage from '@/pages/PasswordResetConfirmPage'
 import PasswordResetRequestPage from '@/pages/PasswordResetRequestPage'
 import ProfilePage from '@/pages/ProfilePage'
@@ -61,6 +62,7 @@ export default function AppRouter() {
           <Route index element={<Navigate to={studentPaths.curriculums} replace />} />
           <Route element={<WorkspaceLayout />}>
             <Route path="profile" element={<ProfilePage />} />
+            <Route path="notifications" element={<NotificationsPage />} />
             <Route path="curriculums" element={<MyCurriculumsPage />} />
             <Route path="curriculums/:curriculumId/sections/:sectionId/lessons/:lessonId" element={<LessonDetailPage />} />
             <Route path="curriculums/:curriculumId/lessons/:lessonId/live-upcoming" element={<LessonLiveUpcomingPage />} />
@@ -84,6 +86,7 @@ export default function AppRouter() {
           <Route index element={<Navigate to={instructorPaths.curriculums} replace />} />
           <Route element={<WorkspaceLayout />}>
             <Route path="profile" element={<ProfilePage />} />
+            <Route path="notifications" element={<NotificationsPage />} />
             <Route path="curriculums" element={<MyCurriculumsPage />} />
             <Route path="curriculums/new" element={<CurriculumFormPage />} />
             <Route path="curriculums/:curriculumId/manage" element={<CurriculumManagePage />} />

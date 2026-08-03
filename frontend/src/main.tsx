@@ -9,6 +9,7 @@ import './styles/curriculum-detail.css'
 import './styles/workspace.css'
 import './styles/learning.css'
 import './styles/toast.css'
+import './styles/notification.css'
 import './styles/design-system.css'
 
 const rootElement = document.getElementById('root')

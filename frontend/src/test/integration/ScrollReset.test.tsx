@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -43,7 +44,7 @@ function Harness() {
           )}
         >
           <Route path="/" element={<ListScreen />} />
-          <Route path="/detail" element={<h1>상세</h1>} />
+          <Route path="/detail" element={<DetailScreen />} />
           <Route path="/saved" element={<h1>저장 결과</h1>} />
         </Route>
       </Routes>
@@ -58,10 +59,29 @@ function ListScreen() {
     <div>
       <h1>목록</h1>
       <Link to="/detail">상세로</Link>
+      <Link to="/detail#detail-materials">상세의 자료 영역으로</Link>
       <button type="button" onClick={() => navigate('/saved', { replace: true })}>저장하고 이동</button>
       <button type="button" onClick={() => setParams({ q: String(Number(params.get('q') ?? 0) + 1) })}>
         필터 변경
       </button>
+    </div>
+  )
+}
+
+/**
+ * 상세 화면. 자료 영역이 <b>데이터를 받은 뒤</b> 붙는 상황을 흉내 낸다 — 알림이 `#anchor`로
+ * 데려오는 화면이 실제로 이렇다(강의 상세는 조회가 끝나야 자료 패널을 그린다).
+ */
+function DetailScreen() {
+  const [loaded, setLoaded] = useState(false)
+  useEffect(() => {
+    const timer = window.setTimeout(() => setLoaded(true), 30)
+    return () => window.clearTimeout(timer)
+  }, [])
+  return (
+    <div>
+      <h1>상세</h1>
+      {loaded && <section id="detail-materials">강의 자료</section>}
     </div>
   )
 }
@@ -156,6 +176,25 @@ describe('라우트 이동 시 스크롤 초기화', () => {
 
     // 검색·필터는 "같은 화면의 내용 갱신"이다. 맨 위로 튀면 결과를 보며 조건을 바꿀 수 없다.
     await waitFor(() => expect(window.location.search).toBe('?q=1'))
+    expect(scrollTo).not.toHaveBeenCalled()
+  })
+
+  it('목적지에 hash가 있으면 맨 위가 아니라 그 영역으로 간다', async () => {
+    const user = userEvent.setup()
+    render(<Harness />)
+    await screen.findByRole('heading', { name: '목록' })
+    scrollTo.mockClear()
+
+    // setup.ts가 심어 둔 스텁을 spy로 바꿔 어느 요소가 호출됐는지 본다.
+    const scrollIntoView = vi.spyOn(Element.prototype, 'scrollIntoView')
+
+    await user.click(screen.getByRole('link', { name: '상세의 자료 영역으로' }))
+
+    // 자료 영역은 조회가 끝난 뒤에 붙는다 — 첫 프레임에 못 찾아도 나중에 찾아 옮겨야 한다.
+    const materials = await screen.findByText('강의 자료')
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start', behavior: 'instant' }))
+    expect(scrollIntoView.mock.instances).toContain(materials)
+    // 요청받은 위치가 있으므로 맨 위로 올리지 않는다.
     expect(scrollTo).not.toHaveBeenCalled()
   })
 

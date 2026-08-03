@@ -14,9 +14,40 @@ export const publicPaths = {
     reason ? `/forbidden?reason=${reason}` : '/forbidden',
 }
 
+/**
+ * 커리큘럼 관리 화면의 탭. 탭 선택이 URL에 남아야 알림·북마크·새로고침이 같은 탭을 다시 연다 —
+ * 로컬 state에만 두면 "수강생 탭으로 이동"을 링크로 표현할 수 없다.
+ */
+export type CurriculumManageTab = 'info' | 'structure' | 'enrollees'
+
+/** 관리 화면 딥링크의 쿼리 키. 만드는 쪽(알림)과 읽는 쪽(관리 화면)이 같은 상수를 쓴다. */
+export const curriculumManageParams = {
+  tab: 'tab',
+  enrollmentStatus: 'enrollmentStatus',
+  highlightEnrollment: 'highlightEnrollment',
+} as const
+
+export interface CurriculumManageOptions {
+  tab?: CurriculumManageTab
+  /** 수강생 탭의 초기 상태 필터(`PENDING` 등). 승인 대기 목록으로 바로 들어가게 한다. */
+  enrollmentStatus?: string
+  /** 목록에서 강조할 수강 신청. 어느 신청 때문에 왔는지 화면에서 보이게 한다. */
+  highlightEnrollmentId?: string
+}
+
+function withQuery(path: string, entries: Array<[string, string | undefined]>) {
+  const query = new URLSearchParams()
+  for (const [key, value] of entries) {
+    if (value) query.set(key, value)
+  }
+  const search = query.toString()
+  return search ? `${path}?${search}` : path
+}
+
 export const studentPaths = {
   root: '/student',
   profile: '/student/profile',
+  notifications: '/student/notifications',
   curriculums: '/student/curriculums',
   lesson: (curriculumId: string, sectionId: string, lessonId: string) =>
     `/student/curriculums/${curriculumId}/sections/${sectionId}/lessons/${lessonId}`,
@@ -30,9 +61,15 @@ export const studentPaths = {
 export const instructorPaths = {
   root: '/instructor',
   profile: '/instructor/profile',
+  notifications: '/instructor/notifications',
   curriculums: '/instructor/curriculums',
   newCurriculum: '/instructor/curriculums/new',
-  curriculumManage: (curriculumId: string) => `/instructor/curriculums/${curriculumId}/manage`,
+  curriculumManage: (curriculumId: string, options: CurriculumManageOptions = {}) =>
+    withQuery(`/instructor/curriculums/${curriculumId}/manage`, [
+      [curriculumManageParams.tab, options.tab],
+      [curriculumManageParams.enrollmentStatus, options.enrollmentStatus],
+      [curriculumManageParams.highlightEnrollment, options.highlightEnrollmentId],
+    ]),
   lesson: (curriculumId: string, sectionId: string, lessonId: string) =>
     `/instructor/curriculums/${curriculumId}/sections/${sectionId}/lessons/${lessonId}`,
   newLesson: (curriculumId: string, sectionId: string) =>
@@ -66,4 +103,9 @@ export function getRoleHomePath(role: UserRole) {
  */
 export function getProfilePath(role: UserRole) {
   return role === 'INSTRUCTOR' ? instructorPaths.profile : studentPaths.profile
+}
+
+/** 알림 페이지 경로. 헤더 종과 알림 목록이 각자 역할 삼항식을 두지 않게 여기서만 판별한다. */
+export function getNotificationsPath(role: UserRole) {
+  return role === 'INSTRUCTOR' ? instructorPaths.notifications : studentPaths.notifications
 }

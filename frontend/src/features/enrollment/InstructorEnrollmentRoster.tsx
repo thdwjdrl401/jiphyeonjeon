@@ -60,8 +60,31 @@ function actionButton(
   )
 }
 
-export default function InstructorEnrollmentRoster({ curriculumId }: { curriculumId: string }) {
-  const [status, setStatus] = useState<EnrollmentStatus | ''>('')
+const ALL_STATUSES: readonly EnrollmentStatus[] = ['PENDING', 'ACTIVE', 'REJECTED', 'REVOKED', 'CANCELLED']
+
+/** 딥링크로 들어온 필터 값을 신뢰하지 않는다 — 모르는 값이면 전체로 본다. */
+function toStatusFilter(value: string | null): EnrollmentStatus | '' {
+  return ALL_STATUSES.includes(value as EnrollmentStatus) ? (value as EnrollmentStatus) : ''
+}
+
+interface InstructorEnrollmentRosterProps {
+  curriculumId: string
+  /** 진입 시 적용할 상태 필터. 알림에서 온 경우 `PENDING`(승인 대기)이 넘어온다. */
+  initialStatus?: string | null
+  /** 목록에서 강조할 수강 신청. 어느 신청 때문에 이 화면에 왔는지 보이게 한다. */
+  highlightEnrollmentId?: string | null
+}
+
+export default function InstructorEnrollmentRoster({
+  curriculumId,
+  initialStatus = null,
+  highlightEnrollmentId = null,
+}: InstructorEnrollmentRosterProps) {
+  /*
+    초기값으로만 쓴다(제어 상태로 만들지 않는다) — 알림에서 승인 대기 필터로 들어온 뒤 강사가
+    "전체 상태"로 바꿨을 때 URL이 그대로라고 필터가 되돌아가면 조작이 먹지 않는 것처럼 보인다.
+  */
+  const [status, setStatus] = useState<EnrollmentStatus | ''>(() => toStatusFilter(initialStatus))
   const [page, setPage] = useState(0)
   const query = useInstructorEnrollmentRosterQuery(curriculumId, {
     status: status || undefined,
@@ -81,6 +104,9 @@ export default function InstructorEnrollmentRoster({ curriculumId }: { curriculu
   }
 
   const { items, summary } = query.data
+  const highlighted = highlightEnrollmentId
+    ? items.find((item) => item.enrollmentId === highlightEnrollmentId) ?? null
+    : null
 
   // 셀 클릭도 select와 같은 필터를 건드린다 — 집계·필터 로직은 그대로 두고 진입점만 늘렸다.
   const selectStatus = (next: EnrollmentStatus | '') => {
@@ -90,6 +116,16 @@ export default function InstructorEnrollmentRoster({ curriculumId }: { curriculu
 
   return (
     <div>
+      {/*
+        알림에서 특정 신청자를 보러 왔는데 그 줄이 이 페이지에 없을 수 있다(이미 처리됐거나 다른
+        페이지에 있다). 조용히 아무 것도 강조하지 않으면 "왜 여기로 데려왔는지" 알 수 없으므로
+        찾지 못했다는 사실을 알린다.
+      */}
+      {highlightEnrollmentId && !highlighted && (
+        <InlineNotice tone="info">
+          알림이 가리킨 수강 신청을 이 목록에서 찾지 못했습니다. 이미 처리되었거나 다른 상태일 수 있어요.
+        </InlineNotice>
+      )}
       <div className="enrollment-roster-controls">
         <select
           aria-label="수강 상태 필터"
@@ -130,8 +166,16 @@ export default function InstructorEnrollmentRoster({ curriculumId }: { curriculu
           </thead>
           <tbody>
             {items.map((item) => (
-              <tr key={item.enrollmentId}>
-                <td>{item.student.displayName ?? '이름 없음'}</td>
+              <tr
+                className={item.enrollmentId === highlightEnrollmentId ? 'is-highlighted' : undefined}
+                key={item.enrollmentId}
+              >
+                <td>
+                  {item.student.displayName ?? '이름 없음'}
+                  {item.enrollmentId === highlightEnrollmentId && (
+                    <span className="visually-hidden">알림에서 확인한 수강 신청</span>
+                  )}
+                </td>
                 <td>{item.student.email ?? '-'}</td>
                 <td>{dateFormatter.format(new Date(item.requestedAt))}</td>
                 <td><StatusBadge tone={statusTone(item.status)}>{statusLabel[item.status]}</StatusBadge></td>

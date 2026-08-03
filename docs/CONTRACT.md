@@ -134,6 +134,81 @@ GET /api/instructor/live-sessions/{sessionId}/processing
 - 소유 강사는 200, 비소유 사용자·수강생은 403 `LIVE_SESSION_FORBIDDEN`, 없는 세션은
   404 `LIVE_SESSION_NOT_FOUND`다. 조회는 매번 LiveKit·MinIO를 호출하지 않고 DB 상태만 반환한다.
 
+### 2-4. 알림 센터 — **서버 미구현** (FE 완료, BE 착수 전)
+
+알림 도메인은 아직 서버에 없다. `backend/src/main/java/com/liveclass` 아래에 알림 패키지·테이블·
+엔드포인트가 없고, 알림을 만들어야 할 사건(수강 판정·강의 게시·Egress 완료)에도 발행 지점이 없다.
+FE는 타입·Interface·Mock·화면·이동 규칙을 모두 구현했고 HTTP 어댑터는 501 `API_NOT_IMPLEMENTED`를
+던진다([ADR-0012](decisions/seominkyeong/0012-notification-center-two-status-axes.md)).
+아래는 **FE가 소비할 준비가 된 형태**이며, 서버 구현 시 이 규격을 그대로 채우면 화면 변경이 없다.
+
+| 목적 | Method·URL | 응답 | 권한 |
+|---|---|---|---|
+| 배지 개수 | `GET /api/me/notifications/summary` | `{ unreadCount, actionRequiredCount }` | 로그인 필요(401) |
+| 목록 | `GET /api/me/notifications?filter=ALL\|UNREAD\|ACTION_REQUIRED&page=&size=` | 아래 페이지 응답 | 본인 것만 |
+| 개별 읽음 | `POST /api/me/notifications/{id}/read` | 갱신된 알림 1건 | 남의 알림은 **404**(403 아님) |
+| 모두 읽음 | `POST /api/me/notifications/read-all` | `{ unreadCount: 0, actionRequiredCount }` | 본인 것만 |
+| 클릭 대상 재판정 | `GET /api/me/notifications/{id}/target` | `AVAILABLE` + 상태 또는 `GONE` + 이유 | 본인 것만 |
+
+```json
+{
+  "items": [
+    {
+      "notificationId": "ntf_0001",
+      "recipientId": "usr_instructor_01",
+      "type": "ENROLLMENT_REQUESTED",
+      "readStatus": "UNREAD",
+      "actionStatus": "ACTION_REQUIRED",
+      "severity": "NORMAL",
+      "title": "새로운 수강 신청이 있습니다.",
+      "message": "김민수 님이 ‘React 실시간 클래스’ 수강을 신청했습니다.",
+      "targets": {
+        "curriculumId": "cur_0001",
+        "enrollmentId": "enr_0001",
+        "studentId": "usr_student_01",
+        "actorId": "usr_student_01"
+      },
+      "groupKey": "ENROLLMENT_REQUESTED:cur_0001",
+      "createdAt": "2026-08-02T09:31:00+09:00",
+      "readAt": null,
+      "completedAt": null,
+      "scheduleChange": null
+    }
+  ],
+  "page": 0, "size": 10, "totalElements": 23, "totalPages": 3, "hasNext": true,
+  "unreadCount": 8, "actionRequiredCount": 3
+}
+```
+
+- **`readStatus`와 `actionStatus`를 하나로 합치지 않는다.** `readStatus`(`UNREAD|READ`)는 "봤는가",
+  `actionStatus`(`INFO|ACTION_REQUIRED|COMPLETED|EXPIRED`)는 "처리했는가"다. 읽음 처리는 처리 축을
+  **절대** 건드리지 않는다 — 강사가 수강 신청 알림을 읽어도 승인·거절 전까지 `ACTION_REQUIRED`다.
+  §2-2의 두 상태축 원칙과 같은 이유다.
+- **`type`은 12개 고정 union**: `ENROLLMENT_REQUESTED`·`ENROLLMENT_APPROVED`·`ENROLLMENT_REJECTED`·
+  `LIVE_SCHEDULED`·`LIVE_STARTING_SOON`·`LIVE_SCHEDULE_CHANGED`·`LIVE_CANCELED`·`LESSON_PUBLISHED`·
+  `MATERIAL_PUBLISHED`·`RECORDING_READY`·`RECORDING_FAILED`·`VOD_PUBLISHED`. 임의 문자열 금지.
+- **프론트 라우트 URL을 담지 않는다.** 목적지는 `type` + `targets`의 리소스 id + 클릭 시점의 리소스
+  상태로 FE(`notificationRouting`)가 계산한다. 응답에 `link`·`url`·`screen`이 들어오면 계약 위반이다.
+- **개수는 필터와 무관한 전체 기준**이다. `filter=UNREAD`로 걸러도 `unreadCount`는 전체 미읽음 수다.
+- **중복 방지는 서버 책임.** `(type, recipientId, 관련 리소스 id)` 멱등 키로 같은 사건이 재시도돼도
+  (Egress webhook 재전송 등) 한 건만 남긴다. 이 키는 응답에 노출하지 않는다. `groupKey`는 향후
+  묶음 표시("수강 신청 3건")를 위한 값이며 지금은 FE가 표시에 쓰지 않는다.
+- **목록은 반드시 페이지네이션**한다. 무제한 응답을 주지 않는다(드롭다운 `size=5`, 알림 페이지 `size=8`).
+- **대상 재판정은 생성 시점 권한을 믿지 않는다.** `GET .../target`은
+  `{ "status": "AVAILABLE", "state": { curriculumId, sectionId, lessonId, liveSessionId, enrollmentId,
+  studentId, liveSessionStatus, scheduledAt, replayStatus } }` 또는
+  `{ "status": "GONE", "reasonCode": "TARGET_DELETED|ACCESS_REVOKED|TARGET_EXPIRED" }`를 준다.
+  `GONE`은 **오류가 아니라 정상 200 응답**이다 — 404로 주면 FE가 서버 장애와 구별할 수 없다.
+  `GONE`일 때 서버는 해당 알림의 `actionStatus`를 `EXPIRED`로 내린다.
+- **수신자 판정**: 수강 신청 알림은 해당 커리큘럼의 실제 담당 강사에게만, 라이브·강의·자료·다시보기
+  알림은 `EnrollmentStatus=ACTIVE`인 학생에게만. 강사 계정이라는 이유만으로 남의 커리큘럼 알림을
+  받지 않는다. `PENDING`·`REJECTED`·`REVOKED`·`CANCELLED`는 수신 대상이 아니다.
+- **BE 후속 작업**: (1) 알림 테이블(멱등 키 unique 제약 포함)과 위 5개 엔드포인트,
+  (2) 수강 판정·강의 저장·자료 게시·Egress 완료·다시보기 게시 지점의 알림 발행,
+  (3) `LIVE_STARTING_SOON`·오늘의 라이브 일정 알림을 만드는 예약 작업(현재 `@Scheduled`는
+  `LiveStartReconciler`·`AssetReaper`·`OutboxRelay`에만 있어 알림용 잡이 없다),
+  (4) 실시간 push(WS/SSE) — 없는 동안 FE는 60초 주기로 `summary`를 폴링한다.
+
 ## 3. 내부 계약 (확정 인터페이스)
 
 ### 3-1. Spring → AI 배치 잡 (RabbitMQ)

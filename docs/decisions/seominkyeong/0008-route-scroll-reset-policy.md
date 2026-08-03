@@ -25,6 +25,8 @@
 1. **`ScrollToTop` 컴포넌트를 `AppRouter`에 한 번만 둔다.** 페이지마다 `useEffect`로 스크롤을
    초기화하지 않는다.
 2. **`pathname`이 바뀔 때만 초기화한다. `search`는 보지 않는다.**
+   (보완: [ADR-0012](0012-notification-center-two-status-axes.md)에서 `hash`를 감시 대상에 넣었다 —
+   목적지가 화면 안의 특정 영역이면 맨 위가 아니라 그 영역으로 간다. `search`는 그대로 보지 않는다.)
 3. **`useLayoutEffect`로 처리한다** — 브라우저가 그리기 전에 옮긴다.
 4. **`window.scrollTo({ top: 0, left: 0, behavior: 'auto' })`** — 부드러운 스크롤을 쓰지 않는다.
 5. **`history.scrollRestoration`을 `'manual'`로 바꾼다.** 언마운트 시 원래 값으로 되돌린다.

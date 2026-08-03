@@ -137,6 +137,20 @@ Object.defineProperty(globalThis, 'scrollTo', {
   value: () => {},
 })
 
+/*
+ * jsdom은 `Element.prototype.scrollIntoView`를 아예 정의하지 않는다(window.scrollTo와 달리
+ * not-implemented 스텁조차 없다). `#anchor`가 붙은 경로로 이동하면 라우팅 계층이 이 메서드를
+ * 부르므로(ScrollToTop), 없으면 TypeError가 타이머 콜백에서 터져 테스트가 알 수 없는 이유로 죽는다.
+ * 위치를 단언하는 테스트는 스스로 spy를 심는다.
+ */
+if (typeof Element !== 'undefined') {
+  Object.defineProperty(Element.prototype, 'scrollIntoView', {
+    configurable: true,
+    writable: true,
+    value: () => {},
+  })
+}
+
 // EgressLaserTrail이 canvas 2D 컨텍스트를 쓴다. 그리기 결과를 단언하는 테스트는 없으므로 호출만 삼킨다.
 if (typeof HTMLCanvasElement !== 'undefined') {
   Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {

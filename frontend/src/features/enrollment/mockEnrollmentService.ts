@@ -1,6 +1,11 @@
 import { peekMockUser } from '@/features/auth/mockAuthService'
 import type { CurriculumLifecycleStatus } from '@/features/curriculum/types'
 import { getMockCurriculum, getMockProgress } from '@/features/demo/mockDatabase'
+import {
+  expireEnrollmentRequest,
+  publishEnrollmentDecided,
+  publishEnrollmentRequested,
+} from '@/features/notification/mockNotificationEvents'
 import { ApiError } from '@/shared/api/client'
 import type { EnrollmentService } from './enrollmentService.interface'
 import {
@@ -8,6 +13,7 @@ import {
   getMockEnrollmentById,
   getMockEnrollments,
   getMockEnrollmentsByCurriculum,
+  getMockStudentContact,
   putMockEnrollment,
   setMockEnrollmentStatus,
   type MockEnrollmentState,
@@ -18,12 +24,6 @@ import type {
   EnrollmentStatus,
   EnrollmentStatusSummary,
 } from './types'
-
-const mockStudentContacts: Record<string, { displayName: string; email: string }> = {
-  'usr-student-01': { displayName: '김학생', email: 'student01@example.com' },
-  'usr-student-02': { displayName: '수강생-21B3', email: 'student02@example.com' },
-  'usr-student-03': { displayName: '박학습', email: 'student03@example.com' },
-}
 
 async function wait() {
   if (import.meta.env.MODE === 'test') return
@@ -81,7 +81,7 @@ function allowedTransitions(status: EnrollmentStatus): EnrollmentStatus[] {
 }
 
 function toRosterItem(enrollment: MockEnrollmentState): EnrollmentRosterItem {
-  const contact = mockStudentContacts[enrollment.userId]
+  const contact = getMockStudentContact(enrollment.userId)
   return {
     enrollmentId: enrollment.enrollmentId,
     student: {
@@ -123,7 +123,15 @@ export const mockEnrollmentService = {
     }
     const requestedAt = new Date().toISOString()
     const status = curriculum.enrollmentPolicyType === 'IMMEDIATE' ? 'ACTIVE' : 'PENDING'
-    return toEnrollResult(putMockEnrollment(user.userId, curriculumId, status, requestedAt))
+    const enrollment = putMockEnrollment(user.userId, curriculumId, status, requestedAt)
+    /*
+      승인이 필요한 신청만 강사에게 알린다. 즉시 수강 확정(IMMEDIATE)에는 강사가 처리할 일이 없어
+      "확인 필요" 알림을 만들면 아무 것도 할 수 없는 항목이 남는다.
+    */
+    if (enrollment.status === 'PENDING') {
+      publishEnrollmentRequested(enrollment.enrollmentId, requestedAt)
+    }
+    return toEnrollResult(enrollment)
   },
   async cancel(curriculumId) {
     await wait()
@@ -138,6 +146,8 @@ export const mockEnrollmentService = {
       'CANCELLED',
       enrollment.decidedAt,
     )
+    // 강사에게 남아 있던 "확인 필요"를 만료시킨다 — 처리할 수 없게 된 일이 목록에 계속 남지 않게.
+    expireEnrollmentRequest(enrollment.enrollmentId)
     return toEnrollResult(cancelled!)
   },
   async getMyEnrollments() {
@@ -188,7 +198,10 @@ export const mockEnrollmentService = {
       throw new ApiError('승인 대기 상태가 아니에요.', 409, 'ENROLLMENT_STATE_CONFLICT')
     }
     const now = new Date().toISOString()
-    return toEnrollResult(setMockEnrollmentStatus(enrollmentId, 'ACTIVE', now, now)!)
+    const approved = toEnrollResult(setMockEnrollmentStatus(enrollmentId, 'ACTIVE', now, now)!)
+    // 학생에게 승인 결과를 알리고, 강사의 "확인 필요" 알림을 처리 완료로 내린다.
+    publishEnrollmentDecided(enrollmentId, 'APPROVED', now)
+    return approved
   },
   async reject(curriculumId, enrollmentId) {
     await wait()
@@ -196,7 +209,10 @@ export const mockEnrollmentService = {
     if (enrollment.status !== 'PENDING') {
       throw new ApiError('승인 대기 상태가 아니에요.', 409, 'ENROLLMENT_STATE_CONFLICT')
     }
-    return toEnrollResult(setMockEnrollmentStatus(enrollmentId, 'REJECTED', new Date().toISOString())!)
+    const decidedAt = new Date().toISOString()
+    const rejected = toEnrollResult(setMockEnrollmentStatus(enrollmentId, 'REJECTED', decidedAt)!)
+    publishEnrollmentDecided(enrollmentId, 'REJECTED', decidedAt)
+    return rejected
   },
   async revoke(curriculumId, enrollmentId) {
     await wait()

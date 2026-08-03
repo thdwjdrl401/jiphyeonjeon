@@ -1,6 +1,10 @@
 import { demoLiveCaptions, demoMessages, getDemoLiveSession } from '@/features/demo/demoData'
-import { findMockLesson } from '@/features/demo/mockDatabase'
+import { findMockLesson, findMockLiveSession } from '@/features/demo/mockDatabase'
 import type { CurriculumLiveSessionStatus } from '@/features/lesson/types'
+import {
+  publishRecordingReady,
+  publishVodPublished,
+} from '@/features/notification/mockNotificationEvents'
 import type {
   LiveSessionService,
   LiveSessionStateEvent,
@@ -355,6 +359,22 @@ export const mockLiveSessionService = {
     const pollCount = (processingPollCounts.get(sessionId) ?? 0) + 1
     processingPollCounts.set(sessionId, pollCount)
     const ready = pollCount >= 2
+    if (ready) {
+      /*
+        녹화가 READY로 넘어가는 순간이 알림의 방아쇠다. 서버에서는 Egress COMPLETE webhook이
+        같은 자리에 있고, 그 webhook은 재전송될 수 있다 — 여기서도 폴링마다 다시 들어오지만
+        중복 방지 키가 같아 알림은 한 건만 남는다.
+
+        학생용 다시보기 알림을 함께 만드는 이유: 현재 서버는 새 정상 녹화를 READY와 동시에
+        게시한다(`RecordingService.markReady`가 DRAFT → PUBLISHED). 즉 이 시점이 "학생에게
+        공개된" 시점이기도 하다. 강사 검수 후 게시로 흐름이 바뀌면 이 줄을 지우고
+        `publishReplayReview`만 남기면 된다.
+      */
+      publishRecordingReady(sessionId)
+      const found = findMockLiveSession(sessionId)
+      // 목차상 실제로 공개된 다시보기만 알린다 — 미게시·철회 자산은 학생 알림을 만들지 않는다.
+      if (found?.lesson.replayStatus === 'PUBLISHED') publishVodPublished(found.lesson.lessonId)
+    }
     return {
       sessionId,
       liveSessionStatus: 'ENDED' as const,

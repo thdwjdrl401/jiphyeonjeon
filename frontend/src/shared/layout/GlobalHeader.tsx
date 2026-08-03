@@ -10,6 +10,7 @@ import {
 import { getProfilePath, publicPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
 import { USER_ROLE_LABEL } from '@/features/auth/types'
+import NotificationBell from '@/features/notification/NotificationBell'
 import ProfileAvatar from '@/features/profile/ProfileAvatar'
 import BrandLink from './BrandLink'
 
@@ -96,6 +97,8 @@ export default function GlobalHeader() {
               <span className="header-auth-loading" aria-label="로그인 상태 확인 중" />
             ) : user ? (
               <>
+                {/* 알림 → 프로필 순. 프로필 왼쪽에 두면 "내 계정 영역"이 오른쪽 끝에 모인다. */}
+                <NotificationBell />
                 {/*
                   프로필 영역 전체가 "내 프로필"로 가는 링크다. 이미지만 누를 수 있으면
                   이름·역할을 눌러 본 사람은 아무 일도 일어나지 않는다고 읽는다.
