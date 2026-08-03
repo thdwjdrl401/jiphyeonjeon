@@ -49,7 +49,8 @@ describe('커리큘럼 작업 화면', () => {
 
     await user.click(screen.getByRole('tab', { name: '기본 정보' }))
 
-    expect(await screen.findByRole('heading', { name: '대표 이미지와 강의 자료' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '대표 이미지' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '커리큘럼 강의 자료' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '커리큘럼 게시' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /함께 게시$/ })).not.toBeInTheDocument()
   })
@@ -164,8 +165,11 @@ describe('커리큘럼 작업 화면', () => {
       type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
     })
 
-    await user.upload(screen.getByLabelText('커리큘럼 강의 자료 등록'), material)
+    const materialDropzone = screen.getByText('PPTX 파일을 드래그하거나 클릭해 선택').closest('label')
+    expect(materialDropzone).not.toBeNull()
+    fireEvent.drop(materialDropzone!, { dataTransfer: { files: [material] } })
     expect(screen.getByText('curriculum-guide.pptx')).toBeInTheDocument()
+    expect(screen.getByText('추가 예정')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '초안 만들기' }))
 
     // 공개 상세를 거치지 않고 관리 화면으로 직행한다.
@@ -267,6 +271,12 @@ describe('커리큘럼 작업 화면', () => {
     await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
     await user.click(await screen.findByRole('tab', { name: '수강생' }))
 
+    expect(await screen.findByText('Spring 수강생 01')).toBeInTheDocument()
+    expect(within(screen.getByRole('table')).getAllByRole('row')).toHaveLength(8)
+    const rosterPagination = screen.getByRole('navigation', { name: '수강생 목록 페이지' })
+    expect(within(rosterPagination).getAllByRole('button').map((button) => button.textContent)).toEqual(['1', '2', '3', '4', '5'])
+    expect(within(rosterPagination).getByRole('button', { name: '1페이지' })).toHaveAttribute('aria-current', 'page')
+    expect(within(rosterPagination).queryByRole('button', { name: /이전|다음/ })).not.toBeInTheDocument()
     const pendingEmail = await screen.findByText('student02@example.com')
     const pendingRow = pendingEmail.closest('tr')
     expect(pendingRow).not.toBeNull()

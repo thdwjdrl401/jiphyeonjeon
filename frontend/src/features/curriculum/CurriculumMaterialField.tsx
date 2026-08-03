@@ -1,4 +1,5 @@
-import { useState, type ChangeEvent } from 'react'
+import { useState, type ChangeEvent, type DragEvent } from 'react'
+import { StatusBadge } from '@/shared/ui/WorkspaceUi'
 import type { CurriculumMaterial } from './types'
 
 interface CurriculumMaterialFieldProps {
@@ -18,18 +19,13 @@ function formatFileSize(fileSize: number) {
 
 export default function CurriculumMaterialField({ id, value, onChange, downloadHref }: CurriculumMaterialFieldProps) {
   const [error, setError] = useState('')
+  const [dragActive, setDragActive] = useState(false)
 
-  const selectFiles = (event: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files ?? [])
-    const invalidFile = files.find((file) => file.type !== PPTX_MIME && !file.name.toLowerCase().endsWith('.pptx'))
-    if (invalidFile) {
-      setError('PPTX 파일만 등록할 수 있습니다.')
-      event.target.value = ''
-      return
-    }
-
+  const addFiles = (files: File[]) => {
+    const validFiles = files.filter((file) => file.type === PPTX_MIME || file.name.toLowerCase().endsWith('.pptx'))
+    setError(validFiles.length === files.length ? '' : 'PPTX 파일만 등록할 수 있습니다.')
     // 원본 File을 함께 들고 있어야 저장 시 presigned 업로드→attach로 실제 반영된다(ADR-0042).
-    const selected: CurriculumMaterial[] = files.map((file, index) => ({
+    const selected: CurriculumMaterial[] = validFiles.map((file, index) => ({
       materialId: `curriculum-material-${file.lastModified}-${file.size}-${index}`,
       fileName: file.name,
       fileSize: file.size,
@@ -40,14 +36,30 @@ export default function CurriculumMaterialField({ id, value, onChange, downloadH
       const duplicate = next.some((item) => item.fileName === material.fileName && item.fileSize === material.fileSize)
       if (!duplicate) next.push(material)
     }
-    setError('')
     onChange(next)
+  }
+
+  const selectFiles = (event: ChangeEvent<HTMLInputElement>) => {
+    addFiles(Array.from(event.target.files ?? []))
     event.target.value = ''
+  }
+
+  const dropFiles = (event: DragEvent<HTMLLabelElement>) => {
+    event.preventDefault()
+    setDragActive(false)
+    addFiles(Array.from(event.dataTransfer.files))
   }
 
   return (
     <div className="curriculum-material-field">
-      <label className="material-dropzone" htmlFor={id}>
+      <label
+        className={`material-dropzone lesson-form__dropzone curriculum-material-field__dropzone${dragActive ? ' is-drag-active' : ''}`}
+        htmlFor={id}
+        onDragEnter={(event) => { event.preventDefault(); setDragActive(true) }}
+        onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy' }}
+        onDragLeave={() => setDragActive(false)}
+        onDrop={dropFiles}
+      >
         <input
           id={id}
           aria-label="커리큘럼 강의 자료 등록"
@@ -56,12 +68,14 @@ export default function CurriculumMaterialField({ id, value, onChange, downloadH
           multiple
           onChange={selectFiles}
         />
-        <span className="material-dropzone__icon">P</span>
-        <strong>PPTX 파일 선택</strong>
-        <small>여러 파일을 등록할 수 있으며 등록하지 않아도 저장할 수 있습니다.</small>
+        <span className="lesson-form__pptx-icon" aria-hidden="true"><span>PPTX</span></span>
+        <span className="lesson-form__dropzone-copy">
+          <strong>PPTX 파일을 드래그하거나 클릭해 선택</strong>
+          <small>여러 파일 동시 등록 가능 · 등록하지 않아도 저장할 수 있습니다.</small>
+        </span>
       </label>
       {value.length > 0 && (
-        <ul className="material-list">
+        <ul className="material-list curriculum-material-field__list">
           {value.map((material) => (
             <li key={material.materialId}>
               <span className="file-icon">PPTX</span>
@@ -69,6 +83,7 @@ export default function CurriculumMaterialField({ id, value, onChange, downloadH
               {downloadHref && !material.file && (
                 <a className="button button--soft button--small" href={downloadHref(material)}>다운로드</a>
               )}
+              <StatusBadge tone={material.file ? 'warning' : 'success'}>{material.file ? '추가 예정' : '등록됨'}</StatusBadge>
               <button
                 type="button"
                 aria-label={`${material.fileName} 제거`}

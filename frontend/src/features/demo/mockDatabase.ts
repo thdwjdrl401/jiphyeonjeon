@@ -92,7 +92,7 @@ export const mockCurriculumEntities: MockCurriculumEntity[] = [
     ],
     period: { startsAt: '2026-08-03T19:00:00+09:00', endsAt: '2026-09-24T21:00:00+09:00' },
     sectionCount: 6, lessonCount: 18, featured: true, catalogVisible: true,
-    enrollmentPolicyType: 'APPROVAL_REQUIRED', enrolleeCount: 48,
+    enrollmentPolicyType: 'APPROVAL_REQUIRED', enrolleeCount: 50,
   },
   {
     curriculumId: 'cur-data-story', title: '데이터로 설득하는 시각화',

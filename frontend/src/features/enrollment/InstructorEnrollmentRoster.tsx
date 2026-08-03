@@ -10,6 +10,8 @@ import { useInstructorEnrollmentTransition } from './useEnrollmentMutations'
 import { useInstructorEnrollmentRosterQuery } from './useEnrollmentQueries'
 
 const dateFormatter = new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium' })
+const MAX_VISIBLE_PAGES = 5
+const ROSTER_PAGE_SIZE = 7
 
 const statusLabel: Record<EnrollmentStatus, string> = {
   PENDING: '승인 대기',
@@ -89,7 +91,7 @@ export default function InstructorEnrollmentRoster({
   const query = useInstructorEnrollmentRosterQuery(curriculumId, {
     status: status || undefined,
     page,
-    size: 20,
+    size: ROSTER_PAGE_SIZE,
   })
   // 승인·거절·제적의 결과 알림은 useInstructorEnrollmentTransition이 토스트로 낸다.
   const transition = useInstructorEnrollmentTransition(curriculumId)
@@ -107,6 +109,12 @@ export default function InstructorEnrollmentRoster({
   const highlighted = highlightEnrollmentId
     ? items.find((item) => item.enrollmentId === highlightEnrollmentId) ?? null
     : null
+  const visiblePageCount = Math.min(MAX_VISIBLE_PAGES, query.data.totalPages)
+  const firstVisiblePage = Math.min(
+    Math.max(0, page - Math.floor(visiblePageCount / 2)),
+    query.data.totalPages - visiblePageCount,
+  )
+  const visiblePages = Array.from({ length: visiblePageCount }, (_, index) => firstVisiblePage + index)
 
   // 셀 클릭도 select와 같은 필터를 건드린다 — 집계·필터 로직은 그대로 두고 진입점만 늘렸다.
   const selectStatus = (next: EnrollmentStatus | '') => {
@@ -198,15 +206,20 @@ export default function InstructorEnrollmentRoster({
       </div>
 
       {query.data.totalPages > 1 && (
-        <div className="pagination">
-          <button type="button" disabled={page === 0} onClick={() => setPage((value) => value - 1)}>이전</button>
-          <span className="pagination__status">
-            <span className="pagination__number is-current" aria-current="page" aria-label={`${page + 1}페이지`}>{page + 1}</span>
-            <span aria-hidden="true">/</span>
-            <span aria-label={`전체 ${query.data.totalPages}페이지`}>{query.data.totalPages}</span>
-          </span>
-          <button type="button" disabled={!query.data.hasNext} onClick={() => setPage((value) => value + 1)}>다음</button>
-        </div>
+        <nav className="pagination" aria-label="수강생 목록 페이지">
+          {visiblePages.map((pageNumber) => (
+            <button
+              className={`pagination__number${pageNumber === page ? ' is-current' : ''}`}
+              type="button"
+              aria-current={pageNumber === page ? 'page' : undefined}
+              aria-label={`${pageNumber + 1}페이지`}
+              key={pageNumber}
+              onClick={() => setPage(pageNumber)}
+            >
+              {pageNumber + 1}
+            </button>
+          ))}
+        </nav>
       )}
     </div>
   )

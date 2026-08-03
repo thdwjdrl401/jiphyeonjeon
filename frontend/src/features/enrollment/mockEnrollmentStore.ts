@@ -10,6 +10,44 @@ export interface MockEnrollmentState extends CurriculumEnrollmentRecord {
   sessionMs: number
 }
 
+const springRosterStatuses: readonly EnrollmentStatus[] = [
+  'ACTIVE',
+  'ACTIVE',
+  'PENDING',
+  'REJECTED',
+  'REVOKED',
+  'CANCELLED',
+]
+
+/**
+ * 수강생 관리 화면의 필터·내부 스크롤·페이지네이션을 한 번에 확인할 수 있는 대량 시드.
+ * 아래에 별도로 둔 기존 3명과 합쳐 Spring Boot 커리큘럼 로스터가 정확히 50명이 된다.
+ */
+const springRosterEnrollments: MockEnrollmentState[] = Array.from({ length: 47 }, (_, offset) => {
+  const number = offset + 1
+  const status = springRosterStatuses[offset % springRosterStatuses.length]
+  // 7월 22일부터 시간 단위로 신청된 것으로 두어 기존 테스트 계정 3명이 첫 페이지에 남게 한다.
+  const requestedAt = new Date(Date.UTC(2026, 6, 22, number)).toISOString()
+  const decidedAt = status === 'PENDING' || status === 'CANCELLED'
+    ? null
+    : new Date(new Date(requestedAt).getTime() + 2 * 60 * 60 * 1000).toISOString()
+  const enrolledAt = status === 'ACTIVE' || status === 'REVOKED' ? decidedAt : null
+  const completedLessonCount = status === 'ACTIVE' || status === 'REVOKED' ? number % 8 : 0
+
+  return {
+    enrollmentId: `enr-spring-roster-${String(number).padStart(2, '0')}`,
+    userId: `usr-spring-roster-${String(number).padStart(2, '0')}`,
+    curriculumId: 'cur-spring-live',
+    status,
+    requestedAt,
+    decidedAt,
+    enrolledAt,
+    completedLessonCount,
+    lastLessonId: completedLessonCount > 0 ? `cur-spring-live-lesson-${completedLessonCount}` : null,
+    sessionMs: completedLessonCount * 18_000,
+  }
+})
+
 const initialEnrollments: MockEnrollmentState[] = [
   {
     enrollmentId: 'enr-spring-active',
@@ -83,6 +121,7 @@ const initialEnrollments: MockEnrollmentState[] = [
     lastLessonId: 'cur-spring-live-lesson-2',
     sessionMs: 40_000,
   },
+  ...springRosterEnrollments,
 ]
 
 /**
@@ -96,7 +135,13 @@ const mockStudentContacts: Record<string, { displayName: string; email: string }
 }
 
 export function getMockStudentContact(userId: string) {
-  return mockStudentContacts[userId] ?? null
+  const storedContact = mockStudentContacts[userId]
+  if (storedContact) return storedContact
+
+  const rosterNumber = /^usr-spring-roster-(\d{2})$/.exec(userId)?.[1]
+  return rosterNumber
+    ? { displayName: `Spring 수강생 ${rosterNumber}`, email: `spring.student${rosterNumber}@example.com` }
+    : null
 }
 
 function enrollmentKey(userId: string, curriculumId: string) {

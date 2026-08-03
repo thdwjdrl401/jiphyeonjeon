@@ -66,18 +66,34 @@ export default function CurriculumFormPage() {
   }
 
   return (
-    <div className="workspace-page workspace-page--narrow">
-      <PageHeader title="새 커리큘럼 만들기" description="핵심 정보를 먼저 저장한 뒤 커리큘럼 상세에서 관리 화면으로 이동할 수 있습니다." />
-      <form className="workspace-form" onSubmit={submit}>
-        <Panel title="기본 정보" description="제목만으로 초안을 만들 수 있으며 나머지는 나중에 보완할 수 있어요.">
-          <div className="form-grid">
-            <label className="form-field--wide"><span>제목 *</span><input value={form.title} maxLength={200} placeholder="예: 라이브로 완성하는 Spring Boot" onChange={(event) => update('title', event.target.value)} /><small>{form.title.length}/200</small></label>
-            <label className="form-field--wide"><span>짧은 소개</span><input value={form.summary} maxLength={500} placeholder="목록 카드에 표시할 한 줄 소개" onChange={(event) => update('summary', event.target.value)} /></label>
-            <label className="form-field--wide"><span>상세 설명</span><textarea rows={7} value={form.description} placeholder="학습 목표, 진행 방식, 추천 대상을 설명해 주세요." onChange={(event) => update('description', event.target.value)} /></label>
-          </div>
-        </Panel>
+    <div className="workspace-page curriculum-form-page">
+      <PageHeader title="새 커리큘럼 만들기" description="기본 정보와 운영 설정을 입력해 커리큘럼 초안을 만듭니다." />
+      <form className="workspace-form curriculum-form" onSubmit={submit}>
+        <div className="curriculum-form__top-grid">
+          <Panel className="curriculum-form__panel curriculum-form__panel--basic" title="기본 정보" description="제목만 입력해도 초안을 만들 수 있으며 나머지는 나중에 보완할 수 있어요.">
+            <div className="form-grid curriculum-form__basic-grid">
+              <label><span>제목 *</span><input value={form.title} maxLength={200} placeholder="예: 라이브로 완성하는 Spring Boot" onChange={(event) => update('title', event.target.value)} /><small>{form.title.length}/200</small></label>
+              <label><span>짧은 소개</span><input value={form.summary} maxLength={500} placeholder="목록 카드에 표시할 한 줄 소개" onChange={(event) => update('summary', event.target.value)} /></label>
+              <label className="form-field--wide"><span>상세 설명</span><textarea rows={4} value={form.description} placeholder="학습 목표, 진행 방식, 추천 대상을 설명해 주세요." onChange={(event) => update('description', event.target.value)} /></label>
+            </div>
+          </Panel>
 
-        <Panel title="대표 이미지와 강의 자료" description="대표 이미지와 커리큘럼 전체에서 공통으로 사용할 선택 자료를 등록합니다.">
+          <Panel className="curriculum-form__panel curriculum-form__panel--period" title="운영 기간" description="커리큘럼의 진행 기간과 수강 방식을 설정합니다.">
+            <div className="operation-fields">
+              <CurriculumPeriodFields
+                idPrefix="new-curriculum"
+                value={{ startsAt: form.startsAt, endsAt: form.endsAt }}
+                onChange={update}
+              />
+              <InlineNotice tone="info">
+                수강은 <strong>강사 승인 후 수강</strong> 방식으로 운영돼요. 학생이 신청하면 승인 대기 상태가 되고,
+                강사가 승인해야 수강이 시작됩니다.
+              </InlineNotice>
+            </div>
+          </Panel>
+        </div>
+
+        <Panel className="curriculum-form__panel curriculum-form__panel--assets" title="대표 이미지와 강의 자료" description="목록에 표시할 이미지와 커리큘럼 공통 자료를 선택해서 등록합니다.">
           <CurriculumAssetsFields
             idPrefix="new-curriculum"
             thumbnailPreviewUrl={thumbnail?.previewUrl ?? null}
@@ -87,22 +103,8 @@ export default function CurriculumFormPage() {
           />
         </Panel>
 
-        <Panel title="커리큘럼 운영 기간" description="이 커리큘럼이 언제부터 언제까지 진행되는지 정합니다.">
-          <div className="operation-fields">
-            <CurriculumPeriodFields
-              idPrefix="new-curriculum"
-              value={{ startsAt: form.startsAt, endsAt: form.endsAt }}
-              onChange={update}
-            />
-            <InlineNotice tone="info">
-              수강은 <strong>강사 승인 후 수강</strong> 방식으로 운영돼요. 학생이 신청하면 승인 대기 상태가 되고,
-              강사가 승인해야 수강이 시작됩니다.
-            </InlineNotice>
-          </div>
-        </Panel>
-
         {error && <InlineNotice tone="danger">{error}</InlineNotice>}
-        <div className="sticky-form-actions"><Link className="button button--ghost" to={instructorPaths.curriculums}>취소</Link><button className="button button--primary button--large" type="submit" disabled={submitting}>{submitting ? '초안 만드는 중' : '초안 만들기'}</button></div>
+        <div className="sticky-form-actions curriculum-form__actions"><Link className="button button--ghost" to={instructorPaths.curriculums}>취소</Link><button className="button button--primary button--large" type="submit" disabled={submitting}>{submitting ? '초안 만드는 중' : '초안 만들기'}</button></div>
       </form>
     </div>
   )

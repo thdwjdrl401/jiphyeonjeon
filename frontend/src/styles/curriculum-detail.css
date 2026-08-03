@@ -291,8 +291,19 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   padding-right: 6px;
-  scrollbar-gutter: stable;
+  scrollbar-color: transparent transparent;
+  scrollbar-gutter: auto;
+  scrollbar-width: thin;
 }
+
+.curriculum-detail__sidebar > .curriculum-overview:hover p { scrollbar-color: rgba(47,45,40,.22) transparent; }
+.curriculum-detail__sidebar > .curriculum-overview p::-webkit-scrollbar { width: 3px; height: 3px; background: transparent; }
+.curriculum-detail__sidebar > .curriculum-overview p::-webkit-scrollbar-thumb { border: 0; border-radius: 99px; background: transparent; }
+.curriculum-detail__sidebar > .curriculum-overview:hover p::-webkit-scrollbar-thumb { background: rgba(47,45,40,.16); }
+.curriculum-detail__sidebar > .curriculum-overview:hover p::-webkit-scrollbar-thumb:hover { background: rgba(47,45,40,.3); }
+.curriculum-detail__sidebar > .curriculum-overview p::-webkit-scrollbar-track,
+.curriculum-detail__sidebar > .curriculum-overview p::-webkit-scrollbar-track-piece,
+.curriculum-detail__sidebar > .curriculum-overview p::-webkit-scrollbar-corner { background: transparent; }
 
 .curriculum-materials > header {
   display: flex;
