@@ -66,7 +66,9 @@ occurredAt=2026-07-29T04:00:01.250Z
 
 첫 frame 전에 `caption.stream.started.audioStartedAt`으로 stream 0의 UTC를 고정하고, VAD가 발화를
 확정할 때 `caption.segment.final`에 실제 speech start/end와 권위 text를 기록한다. 정상 종료는 같은 stream의
-`caption.stream.completed`다. 전체 필드는 [`CONTRACT.md`](CONTRACT.md)에서 확인한다.
+`caption.stream.completed`다. Redis 직전에는 provider 공통 표시 정규화를 적용해 모든 dash와 반복
+`ㅋ`·`ㅎ`, 괄호형 웃음 marker를 제거한다. 정규화 후 빈 발화는 delta·final과 sequence를 만들지 않는다.
+전체 필드와 정책은 [`CONTRACT.md`](CONTRACT.md)에서 확인한다.
 
 ## 4. 처리 흐름
 

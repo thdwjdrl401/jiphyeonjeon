@@ -170,6 +170,9 @@ audio, engine queue와 dispatch capacity는 검사하지 않으므로 job별 `ST
 - retention: 모든 `XADD`에 `MAXLEN ~ CAPTION_STREAM_MAXLEN`을 적용하며 기본값은 10,000 엔트리다.
   값은 양의 정수만 허용해 무제한 누적 설정을 막는다. 근사 trimming이므로 실제 길이는 일시적으로
   기준보다 조금 클 수 있고, 이는 바이트 상한이나 Redis 전체 `maxmemory` 설정이 아니다.
+- text normalization: Caption contract 객체를 만들기 전에 provider 공통으로 모든 Unicode dash와
+  `ㅋ`·`ㅎ` 반복 자모, 괄호형 웃음 marker를 단어 경계 공백으로 정규화한다. 빈 delta는 XADD와
+  sequence를 소비하지 않고 발화 전체가 비면 segment.final과 segmentIndex도 만들지 않는다.
 - 모든 정수 필드: 부호 없는 최대 18자리 십진 문자열
 
 `caption.stream.started` fields:

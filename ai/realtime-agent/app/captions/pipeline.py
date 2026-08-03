@@ -11,6 +11,7 @@ from app.captions.models import (
     CaptionStreamCompleted,
     CaptionStreamStarted,
 )
+from app.captions.text_normalizer import CaptionTextNormalizer
 from app.stt.engine import EngineCompleted, EngineWarning, SegmentFinal, TextDelta
 
 
@@ -40,6 +41,7 @@ class CaptionEventMapper:
         stt_session_id: str,
         event_id_factory: Callable[[], str] | None = None,
         clock: Callable[[], datetime] | None = None,
+        text_normalizer: CaptionTextNormalizer | None = None,
     ) -> None:
         self._publisher = publisher
         self._session_id = session_id
@@ -47,6 +49,7 @@ class CaptionEventMapper:
         self._stt_session_id = stt_session_id
         self._event_id_factory = event_id_factory or (lambda: str(uuid4()))
         self._clock = clock or (lambda: datetime.now(UTC))
+        self._text_normalizer = text_normalizer or CaptionTextNormalizer()
         self._sequence = 0
         self._last_stream_elapsed_ms = 0
         self._segment_index = 0
@@ -87,12 +90,22 @@ class CaptionEventMapper:
         else:
             await self.publish_delta(event)
 
-    async def publish_delta(self, event: TextDelta) -> CaptionDelta:
+    async def publish_delta(self, event: TextDelta) -> CaptionDelta | None:
         if self._completed:
             raise RuntimeError("caption stream is already completed")
         if event.stream_elapsed_ms < self._last_stream_elapsed_ms:
             raise ValueError("caption stream_elapsed_ms must not regress")
-        stream_elapsed_ms = event.stream_elapsed_ms
+        text = self._text_normalizer.normalize_delta(event.text)
+        if not text:
+            self._last_stream_elapsed_ms = event.stream_elapsed_ms
+            return None
+        return await self._publish_normalized_delta(text, event.stream_elapsed_ms)
+
+    async def _publish_normalized_delta(
+        self,
+        text: str,
+        stream_elapsed_ms: int,
+    ) -> CaptionDelta:
         caption = CaptionDelta(
             event_id=self._event_id_factory(),
             session_id=self._session_id,
@@ -100,7 +113,7 @@ class CaptionEventMapper:
             stt_session_id=self._stt_session_id,
             sequence=self._sequence + 1,
             stream_elapsed_ms=stream_elapsed_ms,
-            text=event.text,
+            text=text,
             occurred_at=self._clock(),
         )
         await self._publisher.publish_delta(caption)
@@ -108,13 +121,20 @@ class CaptionEventMapper:
         self._last_stream_elapsed_ms = stream_elapsed_ms
         return caption
 
-    async def publish_segment_final(self, event: SegmentFinal) -> CaptionSegmentFinal:
+    async def publish_segment_final(self, event: SegmentFinal) -> CaptionSegmentFinal | None:
         if self._completed:
             raise RuntimeError("caption stream is already completed")
-        if self._sequence <= self._last_final_sequence:
-            raise ValueError("segment final requires at least one new caption delta")
         if event.end_stream_elapsed_ms < self._last_stream_elapsed_ms:
             raise ValueError("caption stream_elapsed_ms must not regress")
+        text = self._text_normalizer.normalize_final(event.text)
+        if not text:
+            text = self._text_normalizer.current_text.strip()
+        if not text:
+            self._last_stream_elapsed_ms = event.end_stream_elapsed_ms
+            self._text_normalizer.reset_segment()
+            return None
+        if self._sequence <= self._last_final_sequence:
+            await self._publish_normalized_delta(text, event.end_stream_elapsed_ms)
         segment = CaptionSegmentFinal(
             event_id=self._event_id_factory(),
             session_id=self._session_id,
@@ -122,7 +142,7 @@ class CaptionEventMapper:
             stt_session_id=self._stt_session_id,
             segment_index=self._segment_index,
             last_sequence=self._sequence,
-            text=event.text,
+            text=text,
             start_stream_elapsed_ms=event.start_stream_elapsed_ms,
             end_stream_elapsed_ms=event.end_stream_elapsed_ms,
             boundary_reason=event.boundary_reason,
@@ -132,6 +152,7 @@ class CaptionEventMapper:
         self._segment_index += 1
         self._last_final_sequence = self._sequence
         self._last_stream_elapsed_ms = event.end_stream_elapsed_ms
+        self._text_normalizer.reset_segment()
         return segment
 
     async def publish_completed(
