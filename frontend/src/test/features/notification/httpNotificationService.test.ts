@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { apiClient } from '@/shared/api/client'
-import { API_NOT_IMPLEMENTED } from '@/shared/api/notImplemented'
 
 vi.mock('@/shared/config/runtime', () => ({
   isMockApiEnabled: false,
@@ -34,8 +33,8 @@ const notification = {
  * 응답을 <b>변환 없이</b> 통과시킨다는 사실이다 — 필드 이름을 서버와 맞춰 둔 것이 계약이므로, 중간에
  * 매핑이 끼어들면 그 합의가 조용히 깨진다.
  *
- * <p>`resolveTarget`만 아직 501이다. 그 사실도 함께 고정한다 — 없는 경로를 추측해 호출하거나 임의
- * 성공으로 대체하면 화면은 통과하는데 실제 연동에서 404가 난다.
+ * <p>`resolveTarget`의 `GONE`은 <b>정상 200</b>이라는 것도 여기서 고정한다. 404로 받으면 화면이
+ * "삭제된 강의입니다"와 "잠시 후 다시 시도해 주세요"를 구별할 수 없다.
  */
 describe('알림 HTTP 서비스 계약', () => {
   afterEach(() => {
@@ -129,10 +128,28 @@ describe('알림 HTTP 서비스 계약', () => {
     })
   })
 
-  it('대상 재판정은 아직 서버 장애와 구별되는 미구현 오류를 던진다', async () => {
-    await expect(httpNotificationService.resolveTarget('ntf_42'))
-      .rejects.toMatchObject({ status: 501, code: API_NOT_IMPLEMENTED })
-    await expect(httpNotificationService.resolveTarget('ntf_42'))
-      .rejects.toThrow('GET /me/notifications/ntf_42/target')
+  it('대상 재판정을 알림 경로로 조회한다', async () => {
+    const getSpy = vi.spyOn(apiClient, 'get').mockResolvedValue({
+      data: { status: 'AVAILABLE', state: { curriculumId: 'cur_1', lessonId: null }, reasonCode: null },
+    } as never)
+
+    const result = await httpNotificationService.resolveTarget('ntf_42')
+
+    expect(getSpy).toHaveBeenCalledWith('/me/notifications/ntf_42/target')
+    expect(result.status).toBe('AVAILABLE')
+  })
+
+  /*
+   * 대상이 사라진 것은 오류가 아니다. 서버가 200에 이유를 담아 주므로, 어댑터는 그걸 그대로
+   * 통과시키고 화면이 이유별 문구를 고른다.
+   */
+  it('사라진 대상은 오류가 아니라 이유가 담긴 정상 응답이다', async () => {
+    vi.spyOn(apiClient, 'get').mockResolvedValue({
+      data: { status: 'GONE', state: null, reasonCode: 'TARGET_DELETED' },
+    } as never)
+
+    const result = await httpNotificationService.resolveTarget('ntf_42')
+
+    expect(result).toMatchObject({ status: 'GONE', reasonCode: 'TARGET_DELETED' })
   })
 })

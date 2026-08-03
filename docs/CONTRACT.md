@@ -134,7 +134,7 @@ GET /api/instructor/live-sessions/{sessionId}/processing
 - 소유 강사는 200, 비소유 사용자·수강생은 403 `LIVE_SESSION_FORBIDDEN`, 없는 세션은
   404 `LIVE_SESSION_NOT_FOUND`다. 조회는 매번 LiveKit·MinIO를 호출하지 않고 DB 상태만 반환한다.
 
-### 2-4. 알림 센터 — **조회 4개·수강/자료 알림 발행 구현됨, 나머지 발행·재판정은 남음**
+### 2-4. 알림 센터 — **다섯 경로 모두 구현됨, 나머지 발행 지점은 남음**
 
 FE는 타입·Interface·Mock·화면·이동 규칙을 모두 구현했다
 ([ADR-0012](decisions/seominkyeong/0012-notification-center-two-status-axes.md)).
@@ -151,9 +151,14 @@ HTTP 어댑터도 그 넷은 실제 호출로 배선됐다.
 `MATERIAL_PUBLISHED`가 간다. 수신자 명단은 앱을 통과하지 않는다 — 조건은 SQL이 걸고, 워커가 커서로
 조각을 잘라 자기 다음 조각을 큐에 넣는다(ADR-0073 §5). 임베딩 스위치와 무관하게 발행된다.
 
-**아직 없는 것 둘.** (1) 나머지 **발행 지점**(라이브 일정, Egress 완료, 다시보기 게시).
-(2) `GET /{id}/target`(대상 재판정)은 다른 모듈 넷을 읽어야 해서 뒤로 미뤘고, 어댑터는 그 하나만
-501 `API_NOT_IMPLEMENTED`를 던진다.
+**대상 재판정도 붙었다.** 누른 시점에 커리큘럼·강의·라이브·다시보기를 다시 읽어 `AVAILABLE` 또는
+`GONE`을 준다. 필요한 권한은 **알림 종류가 정한다** — 신청 알림은 담당 강사, 자료 알림은 수강 중,
+거절 알림은 게시 여부만 본다(거절당한 학생은 정의상 수강 중이 아니라, 하나로 뭉개면 그 알림이
+자기 자신 때문에 막힌다). `GONE`이면 그 알림의 처리 축을 `EXPIRED`로 내린다 — 갈 곳 없는 항목이
+처리 대기 목록에 영원히 남지 않게.
+
+**아직 없는 것.** 나머지 **발행 지점**(라이브 일정, Egress 완료, 다시보기 게시)과 실시간 push.
+FE 어댑터는 이제 501을 던지지 않는다.
 
 | 목적 | Method·URL | 응답 | 권한 | 상태 |
 |---|---|---|---|---|
@@ -161,7 +166,7 @@ HTTP 어댑터도 그 넷은 실제 호출로 배선됐다.
 | 목록 | `GET /api/me/notifications?scope=ALL\|ACTION_REQUIRED&readState=UNREAD\|READ&page=&size=` | 아래 페이지 응답 | 본인 것만 | 구현됨 |
 | 개별 읽음 | `POST /api/me/notifications/{id}/read` | 갱신된 알림 1건 | 남의 알림은 **404**(403 아님) | 구현됨 |
 | 모두 읽음 | `POST /api/me/notifications/read-all` | `{ unreadCount: 0, actionRequiredCount }` | 본인 것만 | 구현됨 |
-| 클릭 대상 재판정 | `GET /api/me/notifications/{id}/target` | `AVAILABLE` + 상태 또는 `GONE` + 이유 | 본인 것만 | **미구현(501)** |
+| 클릭 대상 재판정 | `GET /api/me/notifications/{id}/target` | `AVAILABLE` + 상태 또는 `GONE` + 이유 | 본인 것만 | 구현됨 |
 
 ```json
 {
@@ -225,7 +230,7 @@ HTTP 어댑터도 그 넷은 실제 호출로 배선됐다.
   (`V23__notification.sql`의 `dedupe_key` UNIQUE + `NotificationController`),
   (2) ~~수강 판정~~ 완료(`CurriculumEnrollmentService` → `EnrollmentRequestedEvent`·`EnrollmentDecidedEvent`).
   ~~자료 게시~~ 완료(`InstructorCurriculumService` → `CurriculumMaterialPublishedEvent`, 넓은 팬아웃).
-  라이브 일정·Egress 완료·다시보기 게시 지점의 알림 발행은 남음,
+  라이브 일정·Egress 완료·다시보기 게시 지점의 알림 발행은 남음, ~~`/target`~~ 완료,
   (3) `LIVE_STARTING_SOON`·오늘의 라이브 일정 알림을 만드는 예약 작업(현재 `@Scheduled`는
   `LiveStartReconciler`·`AssetReaper`·`OutboxRelay`에만 있어 알림용 잡이 없다),
   (4) 실시간 push(WS/SSE) — 없는 동안 FE는 60초 주기로 `summary`를 폴링한다.
