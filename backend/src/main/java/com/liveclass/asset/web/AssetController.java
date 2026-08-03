@@ -3,6 +3,7 @@ package com.liveclass.asset.web;
 import com.liveclass.asset.api.AssetRef;
 import com.liveclass.asset.domain.AssetKind;
 import com.liveclass.asset.service.AssetForbiddenException;
+import com.liveclass.asset.service.AssetKindNotPublicException;
 import com.liveclass.asset.service.AssetService;
 import com.liveclass.asset.service.AssetUploadTicket;
 import com.liveclass.asset.web.dto.UploadRequest;
@@ -52,6 +53,9 @@ public class AssetController {
 
     /** kind 게이트: THUMBNAIL·MATERIAL은 강사만, PROFILE_IMAGE는 인증만으로 통과(ADR-0035). */
     private void requireKindAllowed(AssetKind kind, Authentication authentication) {
+        if (kind == AssetKind.RECORDED_VIDEO_SOURCE) {
+            throw new AssetKindNotPublicException("녹화강의 원본은 녹화강의 전용 API로만 업로드할 수 있습니다.");
+        }
         if (kind == AssetKind.THUMBNAIL && !hasRole(authentication, "ROLE_INSTRUCTOR")) {
             throw new AssetForbiddenException("썸네일 업로드는 강사만 가능합니다.");
         }

@@ -1,6 +1,7 @@
 package com.liveclass.asset.web;
 
 import com.liveclass.asset.service.AssetForbiddenException;
+import com.liveclass.asset.service.AssetKindNotPublicException;
 import com.liveclass.asset.service.AssetNotFoundException;
 import com.liveclass.asset.service.AssetStateConflictException;
 import com.liveclass.asset.service.AssetValidationException;
@@ -34,6 +35,12 @@ public class AssetExceptionHandler {
     public ResponseEntity<ErrorResponse> handleValidation(AssetValidationException e) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ErrorResponse.of("ASSET_INVALID", e.getMessage()));
+    }
+
+    @ExceptionHandler(AssetKindNotPublicException.class)
+    public ResponseEntity<ErrorResponse> handleKindNotPublic(AssetKindNotPublicException e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponse.of("ASSET_KIND_NOT_PUBLIC", e.getMessage()));
     }
 
     /** 완료 통지가 왔지만 스토리지에 바이트가 아직 없음 → 재시도 가능한 충돌. */
