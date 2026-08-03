@@ -24,7 +24,7 @@ import { useLocation } from 'react-router-dom'
  * 복원하려면 이 값을 되돌리고 복원 대상을 명시적으로 정하면 된다.
  */
 export default function ScrollToTop() {
-  const { pathname } = useLocation()
+  const { pathname, hash } = useLocation()
 
   useLayoutEffect(() => {
     if (!('scrollRestoration' in window.history)) return
@@ -36,6 +36,31 @@ export default function ScrollToTop() {
   }, [])
 
   useLayoutEffect(() => {
+    /*
+     * 목적지가 화면 안의 특정 영역이면(`#lesson-materials` 같은 hash) 맨 위가 아니라 그 영역으로
+     * 간다. 자료 등록 알림처럼 "강의 상세의 자료 영역"을 가리키는 링크가 있고, 맨 위로 올려 버리면
+     * 그 링크가 일반 화면 이동과 구별되지 않는다.
+     *
+     * <p>대상이 아직 없을 수 있다 — 상세 화면은 데이터를 받은 뒤에 그려지므로 첫 프레임에는
+     * 자료 영역이 문서에 없다. 그래서 잠깐 동안만 프레임마다 다시 찾는다. 찾지 못하면 그냥
+     * 아무 것도 하지 않는다(맨 위로 튀게 만들지도 않는다 — 사용자가 요청한 위치가 아니다).
+     */
+    if (hash) {
+      let attempts = 0
+      let frame = 0
+      const scrollToHash = () => {
+        const target = document.getElementById(decodeURIComponent(hash.slice(1)))
+        if (target) {
+          target.scrollIntoView({ block: 'start', behavior: 'instant' })
+          return
+        }
+        // 약 1.5초(60fps 기준). 이보다 늦게 그려지는 화면은 로딩 자체가 문제다.
+        if (attempts++ < 90) frame = requestAnimationFrame(scrollToHash)
+      }
+      scrollToHash()
+      return () => cancelAnimationFrame(frame)
+    }
+
     // 부드러운 스크롤이 아니라 즉시 이동한다 — 화면이 바뀌는 순간에 애니메이션이 겹치면
     // 이동이 끝나기 전에 다음 조작이 들어와 위치가 어긋난다.
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
@@ -51,7 +76,7 @@ export default function ScrollToTop() {
     document.querySelectorAll('main').forEach((main) => {
       if (main.scrollTop !== 0) main.scrollTop = 0
     })
-  }, [pathname])
+  }, [pathname, hash])
 
   return null
 }

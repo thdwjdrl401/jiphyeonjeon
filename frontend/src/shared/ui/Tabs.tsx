@@ -3,6 +3,13 @@ import { useRef, type KeyboardEvent } from 'react'
 export interface TabItem<T extends string = string> {
   id: T
   label: string
+  /**
+   * 탭 이름 뒤에 붙는 건수. 라벨 문자열에 숫자를 이어 붙이지 않고 따로 받는다 — 숫자만 다른 서식으로
+   * 그려야 하고, 라벨을 문자열로 남겨 두면 접근성 이름·테스트가 탭 이름을 그대로 쓸 수 있다.
+   *
+   * <p>0이면 그리지 않는다. "할 일 0건"을 배지로 강조하면 없는 일을 있는 것처럼 보이게 만든다.
+   */
+  count?: number
 }
 
 export function tabButtonId(idPrefix: string, tabId: string) {
@@ -90,6 +97,7 @@ export default function Tabs<T extends string>({
             onClick={() => onChange(item.id)}
           >
             {item.label}
+            {Boolean(item.count) && <span className="tab-count">{item.count}</span>}
           </button>
         )
       })}

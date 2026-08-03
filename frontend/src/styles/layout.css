@@ -117,6 +117,21 @@
   gap: 6px;
 }
 
+/*
+  메뉴와 "내 영역"을 가르는 구분선. 알림 종이 들어오면서 오른쪽에 아이콘·이름·버튼이 나란히 서는데,
+  경계가 없으면 종이 메뉴의 마지막 항목처럼 읽힌다. 종·프로필·로그아웃은 화면 이동이 아니라
+  내 계정에 대한 것이라는 묶음을 선 하나로 표시한다.
+
+  모바일에서는 메뉴가 세로로 펼쳐져 왼쪽 경계가 의미를 잃으므로 아래 미디어쿼리에서 끈다.
+*/
+.header-actions::before {
+  width: 1px;
+  height: 20px;
+  margin-right: 6px;
+  background: var(--ink-200);
+  content: '';
+}
+
 .header-auth-loading {
   width: 116px;
   height: 38px;
@@ -331,6 +346,11 @@
     align-items: stretch;
     flex-wrap: wrap;
     margin-top: 15px;
+  }
+
+  /* 세로로 펼쳐진 메뉴에서는 왼쪽 세로선이 경계를 뜻하지 않는다. */
+  .header-actions::before {
+    display: none;
   }
 
   .header-actions .button {

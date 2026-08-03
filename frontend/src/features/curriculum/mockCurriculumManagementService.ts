@@ -9,6 +9,7 @@ import {
   putMockCurriculum,
   updateMockCurriculumMaterials,
 } from '@/features/demo/mockDatabase'
+import { publishLiveCanceled } from '@/features/notification/mockNotificationEvents'
 import { ApiError } from '@/shared/api/client'
 import type { CurriculumManagementService } from './curriculumManagementService.interface'
 import type { CurriculumMaterial } from './types'
@@ -131,6 +132,12 @@ export const mockCurriculumManagementService = {
     savedStructures.delete(curriculumId)
   },
   async deleteLesson(lessonId) {
+    /*
+      삭제 <b>전에</b> 알린다. 지운 뒤에는 강의 제목도, 어느 커리큘럼의 수강생에게 보내야 하는지도
+      알 수 없다. 없는 강의를 지우려는 경우에는 알림도 만들어지지 않고(대상을 못 찾으므로)
+      이어지는 `deleteMockLesson`이 실제 서버와 같은 404를 던진다.
+    */
+    publishLiveCanceled(lessonId)
     deleteMockLesson(lessonId)
     for (const [key, structure] of savedStructures) {
       savedStructures.set(key, structure.map((section) => ({

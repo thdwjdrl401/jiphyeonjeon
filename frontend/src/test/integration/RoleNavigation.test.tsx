@@ -220,6 +220,9 @@ describe('역할별 상단 네비게이션', () => {
       expect(within(nav).getByRole('link', { name: '커리큘럼 만들기' })).toHaveFocus()
       await user.tab()
       expect(within(nav).getByRole('link', { name: '운영 콘솔' })).toHaveFocus()
+      // 메뉴 다음은 알림 종, 그 다음이 프로필 영역이다(헤더의 오른쪽 순서와 같다).
+      await user.tab()
+      expect(screen.getByRole('button', { name: /^알림/ })).toHaveFocus()
       await user.tab()
       expect(headerProfileLink()).toHaveFocus()
     })

@@ -85,6 +85,20 @@ const initialEnrollments: MockEnrollmentState[] = [
   },
 ]
 
+/**
+ * 수강생 연락처. 강사 화면(수강생 명단)과 알림 문구("김학생 님이 …")가 같은 이름을 써야 하므로
+ * 이름의 출처를 하나만 둔다 — 각자 자기 map을 들면 같은 학생이 화면마다 다른 이름으로 보인다.
+ */
+const mockStudentContacts: Record<string, { displayName: string; email: string }> = {
+  'usr-student-01': { displayName: '김학생', email: 'student01@example.com' },
+  'usr-student-02': { displayName: '수강생-21B3', email: 'student02@example.com' },
+  'usr-student-03': { displayName: '박학습', email: 'student03@example.com' },
+}
+
+export function getMockStudentContact(userId: string) {
+  return mockStudentContacts[userId] ?? null
+}
+
 function enrollmentKey(userId: string, curriculumId: string) {
   return `${userId}:${curriculumId}`
 }

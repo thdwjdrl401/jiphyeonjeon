@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { instructorPaths, publicPaths, studentPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
+import { LESSON_MATERIALS_ANCHOR } from '@/features/lesson/lessonRouting'
 import { getLesson } from '@/features/lesson/lessonService'
 import { isLiveEntryOpen } from '@/features/live-session/liveEntry'
 import { getLiveSession } from '@/features/live-session/liveSessionService'
@@ -124,7 +125,8 @@ export default function LessonDetailPage() {
           </Panel>
         )}
 
-        <Panel className="lesson-detail__materials" title="강의 자료" description="수강생에게 공개되는 PPTX 원본입니다." action={<StatusBadge>{lesson.materials.length}개</StatusBadge>}>
+        {/* 자료 전용 화면이 없어 자료 등록 알림이 이 영역을 직접 가리킨다(LESSON_MATERIALS_ANCHOR). */}
+        <Panel id={LESSON_MATERIALS_ANCHOR} className="lesson-detail__materials" title="강의 자료" description="수강생에게 공개되는 PPTX 원본입니다." action={<StatusBadge>{lesson.materials.length}개</StatusBadge>}>
           {lesson.materials.length > 0
             ? <ul className="material-list material-list--compact">{lesson.materials.map((material) => <li key={material.id}><span className="file-icon">PPTX</span><div><strong>{material.name}</strong><small>{material.size}</small></div><button className="text-button" type="button">다운로드</button></li>)}</ul>
             : <p className="lesson-detail__material-empty">등록된 강의 자료가 없습니다.</p>}

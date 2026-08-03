@@ -492,6 +492,18 @@ export function findNextLiveLesson(curriculums: Array<{ curriculum: MockCurricul
   }
 }
 
+/**
+ * 섹션이 속한 커리큘럼. 아직 목차에 없는 강의(방금 만든 것)의 커리큘럼을 알아내야 할 때 쓴다 —
+ * 강의 id로는 찾을 수 없지만 섹션 id는 요청에 들어 있다.
+ */
+export function findMockSection(sectionId: string) {
+  for (const curriculum of mockCurriculumEntities) {
+    const section = buildMockCurriculumOutline(curriculum).find((item) => item.sectionId === sectionId)
+    if (section) return { curriculum, section }
+  }
+  return null
+}
+
 export function findMockLesson(lessonId: string) {
   for (const curriculum of mockCurriculumEntities) {
     for (const section of buildMockCurriculumOutline(curriculum)) {

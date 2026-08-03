@@ -9,9 +9,10 @@ export function PageHeader({ title, description, action }: { title: string; desc
   )
 }
 
-export function Panel({ title, description, action, children, className = '' }: PropsWithChildren<{ title?: string; description?: string; action?: ReactNode; className?: string }>) {
+/** `id`는 화면 안의 특정 영역으로 데려가는 링크(#anchor)를 위한 것이다 — 알림이 그 링크를 쓴다. */
+export function Panel({ id, title, description, action, children, className = '' }: PropsWithChildren<{ id?: string; title?: string; description?: string; action?: ReactNode; className?: string }>) {
   return (
-    <section className={`workspace-panel ${className}`.trim()}>
+    <section className={`workspace-panel ${className}`.trim()} id={id}>
       {(title || action) && <header className="workspace-panel__header"><div>{title && <h2>{title}</h2>}{description && <p>{description}</p>}</div>{action}</header>}
       {children}
     </section>

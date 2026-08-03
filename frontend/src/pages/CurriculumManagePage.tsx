@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent as ReactDragEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { instructorPaths, publicPaths } from '@/app/router/paths'
+import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import {
+  curriculumManageParams,
+  instructorPaths,
+  publicPaths,
+  type CurriculumManageTab,
+} from '@/app/router/paths'
 import CurriculumAssetsFields from '@/features/curriculum/CurriculumAssetsFields'
 import CurriculumPublishPanel from '@/features/curriculum/CurriculumPublishPanel'
 import { type CurriculumImageSelection } from '@/features/curriculum/CurriculumImageField'
@@ -40,19 +45,21 @@ interface CurriculumDraftState {
   }
 }
 
-type ManageTab = 'structure' | 'info' | 'enrollees'
-
 /**
  * 탭의 표시 순서. 작성 흐름(기본 정보 → 구성 → 게시)대로 읽히게 둔다.
  * 진입 기본 탭은 이 순서와 무관하게 DEFAULT_MANAGE_TAB이다 — 초안 생성 직후 바로 구성을 이어 가야 한다.
  */
-const MANAGE_TABS: ReadonlyArray<TabItem<ManageTab>> = [
+const MANAGE_TABS: ReadonlyArray<TabItem<CurriculumManageTab>> = [
   { id: 'info', label: '기본 정보' },
   { id: 'structure', label: '구성' },
   { id: 'enrollees', label: '수강생' },
 ]
 
-const DEFAULT_MANAGE_TAB: ManageTab = 'structure'
+const DEFAULT_MANAGE_TAB: CurriculumManageTab = 'structure'
+
+function isManageTab(value: string | null): value is CurriculumManageTab {
+  return MANAGE_TABS.some((item) => item.id === value)
+}
 const MANAGE_TAB_PREFIX = 'curriculum-manage'
 
 /**
@@ -83,9 +90,25 @@ export default function CurriculumManagePage() {
   const { curriculumId } = useParams()
   const location = useLocation()
   const routeState = location.state as CurriculumDraftState | null
-  // 탭은 재seed(key 교체)로 리셋되면 안 되므로 키 바깥에 둔다 — 일괄 게시나 강의 삭제 뒤에
-  // 보고 있던 탭에서 계속 작업할 수 있어야 한다.
-  const [tab, setTab] = useState<ManageTab>(DEFAULT_MANAGE_TAB)
+  /*
+    탭은 URL 쿼리에 둔다. 재seed(key 교체)로 리셋되지 않아야 하고 — 일괄 게시나 강의 삭제 뒤에
+    보고 있던 탭에서 계속 작업할 수 있어야 한다 — 그와 별개로 "수강생 탭으로 이동"을 링크로
+    표현할 수 있어야 한다(알림 클릭이 그 링크를 쓴다). 로컬 state로는 두 번째가 불가능하다.
+  */
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tabParam = searchParams.get(curriculumManageParams.tab)
+  const tab = isManageTab(tabParam) ? tabParam : DEFAULT_MANAGE_TAB
+  const setTab = (next: CurriculumManageTab) => {
+    const params = new URLSearchParams(searchParams)
+    params.set(curriculumManageParams.tab, next)
+    // 다른 탭으로 나가면 수강생 탭 딥링크 조건(필터·강조 대상)은 의미가 없다.
+    if (next !== 'enrollees') {
+      params.delete(curriculumManageParams.enrollmentStatus)
+      params.delete(curriculumManageParams.highlightEnrollment)
+    }
+    // 탭 전환은 뒤로 가기 이력을 남기지 않는다 — 같은 화면 안의 내용 교체다.
+    setSearchParams(params, { replace: true })
+  }
   const managementQuery = useQuery({
     queryKey: ['curriculum-management', curriculumId],
     queryFn: async () => {
@@ -127,6 +150,8 @@ export default function CurriculumManagePage() {
     initialSections={managementQuery.data.sections}
     tab={tab}
     onTabChange={setTab}
+    enrollmentStatusFilter={searchParams.get(curriculumManageParams.enrollmentStatus)}
+    highlightEnrollmentId={searchParams.get(curriculumManageParams.highlightEnrollment)}
   />
 }
 
@@ -137,13 +162,19 @@ function CurriculumManageEditor({
   initialSections,
   tab,
   onTabChange,
+  enrollmentStatusFilter,
+  highlightEnrollmentId,
 }: {
   curriculumId: string
   routeState: CurriculumDraftState | null
   storedCurriculum: InstructorCurriculumResponse
   initialSections: CurriculumManagementSection[]
-  tab: ManageTab
-  onTabChange: (tab: ManageTab) => void
+  tab: CurriculumManageTab
+  onTabChange: (tab: CurriculumManageTab) => void
+  /** 알림 등 딥링크가 지정한 수강생 목록의 초기 상태 필터. */
+  enrollmentStatusFilter: string | null
+  /** 딥링크가 지정한 강조 대상 수강 신청. */
+  highlightEnrollmentId: string | null
 }) {
   const isNewDraft = storedCurriculum?.lifecycleStatus === 'DRAFT'
   const lifecycleView = LIFECYCLE_VIEW[storedCurriculum.lifecycleStatus]
@@ -624,7 +655,11 @@ function CurriculumManageEditor({
       {tab === 'enrollees' && (
         <div className="workspace-tabpanel" {...tabPanelProps(MANAGE_TAB_PREFIX, 'enrollees')}>
           <Panel title="수강 신청과 수강생" description="승인 대기, 수강 중, 종료된 수강 상태를 관리합니다.">
-            <InstructorEnrollmentRoster curriculumId={curriculumId} />
+            <InstructorEnrollmentRoster
+              curriculumId={curriculumId}
+              initialStatus={enrollmentStatusFilter}
+              highlightEnrollmentId={highlightEnrollmentId}
+            />
           </Panel>
         </div>
       )}
