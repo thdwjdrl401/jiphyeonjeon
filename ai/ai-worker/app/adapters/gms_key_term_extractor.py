@@ -24,6 +24,7 @@ def _clean_term(term: str) -> str:
     cleaned = re.sub(r"\s*[\(\[\{][^()\[\]{}]*[\)\]\}]", "", term)
     return cleaned.strip()
 
+
 _KEY_TERMS_JSON_SCHEMA = {
     "name": "key_terms",
     "strict": True,

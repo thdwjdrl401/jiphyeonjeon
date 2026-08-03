@@ -62,9 +62,15 @@ async def test_cleans_parentheses_and_english_suffixes_from_term() -> None:
     payload = json.dumps(
         {
             "terms": [
-                {"term": "인공지능 (Artificial Intelligence)", "definition": "인간의 지능을 모방하는 기술"},
+                {
+                    "term": "인공지능 (Artificial Intelligence)",
+                    "definition": "인간의 지능을 모방하는 기술",
+                },
                 {"term": "컴파일러(Compiler)", "definition": "고서의 소스코드를 변환하는 프로그램"},
-                {"term": "자연어 처리 [NLP]", "definition": "사람의 언어를 컴퓨터가 이해하도록 하는 분야"},
+                {
+                    "term": "자연어 처리 [NLP]",
+                    "definition": "사람의 언어를 컴퓨터가 이해하도록 하는 분야",
+                },
             ]
         }
     )
