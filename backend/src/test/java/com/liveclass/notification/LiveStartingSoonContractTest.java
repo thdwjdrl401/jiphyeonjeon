@@ -4,6 +4,7 @@ import com.liveclass.aiintegration.domain.OutboxEvent;
 import com.liveclass.aiintegration.repository.OutboxEventRepository;
 import com.liveclass.live.api.LiveSessionManagement;
 import com.liveclass.live.service.LiveSessionService;
+import com.liveclass.notification.api.NotificationLeadTimes;
 import com.liveclass.notification.config.NotificationMessagingConfig;
 import com.liveclass.notification.domain.NotificationSchedule;
 import com.liveclass.notification.repository.NotificationScheduleRepository;
@@ -51,11 +52,15 @@ class LiveStartingSoonContractTest {
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
 
     /**
-     * 예약 행에는 <b>시각만</b> 있다. 수강생 수와 무관하게 세션당 리드타임 수만큼이다 — 예약 시점에
-     * 사람별 행을 만들면 그때의 명단이 굳어, 뒤에 수강한 사람은 못 받고 취소한 사람은 받는다.
+     * 예약 행에는 <b>시각만</b> 있다. 수강생 수와 무관하게 <b>리드타임 선택지 수만큼</b>이다 —
+     * 예약 시점에 사람별 행을 만들면 그때의 명단이 굳어, 뒤에 수강한 사람은 못 받고 취소한 사람은
+     * 받는다.
+     *
+     * <p>선택지 전부를 미리 만드는 이유는 <b>설정이 바뀌어도 예정 표를 손대지 않기 위해서</b>다.
+     * 고른 사람이 없는 리드타임의 행은 발화해도 0건을 넣고 끝난다(ADR-0073 4단계).
      */
     @Test
-    void scheduling_a_live_creates_one_timing_row_regardless_of_roster_size() {
+    void scheduling_a_live_creates_one_row_per_lead_choice_regardless_of_roster_size() {
         Fixture f = fixture(3);
         OffsetDateTime startsAt = OffsetDateTime.now().plusHours(2);
 
@@ -63,11 +68,13 @@ class LiveStartingSoonContractTest {
                 .create(f.lessonId, f.curriculumId, f.instructorId, startsAt).sessionId();
 
         List<NotificationSchedule> rows = schedulesOf(sessionId);
-        assertThat(rows).as("수강생이 셋이어도 예약 행은 하나다").hasSize(1);
-        assertThat(rows.getFirst().getFireAt())
-                .as("기본 리드타임 10분")
-                .isCloseTo(startsAt.minusMinutes(10), within1Second());
-        assertThat(rows.getFirst().getFiredAt()).isNull();
+        assertThat(rows)
+                .as("수강생이 셋이어도 행 수는 리드타임 선택지 수와 같다")
+                .hasSize(NotificationLeadTimes.CHOICES.size());
+        assertThat(rows).allSatisfy(row ->
+                assertThat(row.getFireAt())
+                        .isCloseTo(startsAt.minusMinutes(row.getLeadMinutes()), within1Second()));
+        assertThat(rows).allSatisfy(row -> assertThat(row.getFiredAt()).isNull());
     }
 
     @Test
@@ -81,8 +88,10 @@ class LiveStartingSoonContractTest {
         liveSessionService.updateSchedule(sessionId, f.instructorId, moved, null, null);
 
         List<NotificationSchedule> rows = schedulesOf(sessionId);
-        assertThat(rows).hasSize(1);
-        assertThat(rows.getFirst().getFireAt()).isCloseTo(moved.minusMinutes(10), within1Second());
+        assertThat(rows).hasSize(NotificationLeadTimes.CHOICES.size());
+        assertThat(rows).allSatisfy(row ->
+                assertThat(row.getFireAt())
+                        .isCloseTo(moved.minusMinutes(row.getLeadMinutes()), within1Second()));
     }
 
     /** 취소된 라이브에 "곧 시작합니다"가 나가면 안 된다. */
@@ -107,16 +116,25 @@ class LiveStartingSoonContractTest {
         Fixture f = fixture(2);
         UUID sessionId = liveSessionManagement
                 .create(f.lessonId, f.curriculumId, f.instructorId, OffsetDateTime.now().plusMinutes(9))
-                .sessionId();   // 리드타임 10분 → 발화 시각이 이미 지났다
+                .sessionId();   // 기본 10분 행의 발화 시각이 이미 지났다(5분 행은 아직이다)
 
         scheduler.fireDue();
         scheduler.fireDue();   // 두 번 돌아도 한 번만
 
+        /*
+         * 시각이 지난 행만 발화한다 — 9분 뒤 시작이면 10분·30분·1시간·3시간·하루 전 행이 모두
+         * 지났고, 5분 전 행만 아직이다.
+         */
         List<JsonNode> payloads = fanoutPayloadsFor(sessionId, "LIVE_STARTING_SOON");
-        assertThat(payloads).hasSize(1);
-        assertThat(schedulesOf(sessionId).getFirst().getFiredAt()).isNotNull();
+        assertThat(payloads).hasSize(NotificationLeadTimes.CHOICES.size() - 1);
+        assertThat(schedulesOf(sessionId).stream().filter(r -> r.getFiredAt() != null).toList())
+                .hasSize(NotificationLeadTimes.CHOICES.size() - 1);
 
-        worker.handle(payloads.getFirst().toString());
+        /*
+         * 설정하지 않은 사람은 기본값(10분)이다. 그래서 10분 행만 실제로 알림을 만들고 나머지
+         * 리드타임 행은 0건으로 끝난다 — 아무도 그 값을 고르지 않았기 때문이다.
+         */
+        payloads.forEach(p -> worker.handle(p.toString()));
         assertThat(recipientsOf(f.curriculumId, "LIVE_STARTING_SOON"))
                 .containsExactlyInAnyOrderElementsOf(f.studentIds);
     }
@@ -141,9 +159,9 @@ class LiveStartingSoonContractTest {
         scheduler.fireDue();
 
         assertThat(fanoutPayloadsFor(sessionId, "LIVE_STARTING_SOON")).isEmpty();
-        assertThat(schedulesOf(sessionId).getFirst().getFiredAt())
+        assertThat(schedulesOf(sessionId))
                 .as("보내지 않았어도 끝난 것으로 표시해야 매 주기 다시 집지 않는다")
-                .isNotNull();
+                .allSatisfy(row -> assertThat(row.getFiredAt()).isNotNull());
     }
 
     /**

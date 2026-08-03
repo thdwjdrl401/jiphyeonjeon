@@ -82,6 +82,51 @@ public class NotificationFanoutRepository {
                    (SELECT s.user_id FROM slice s ORDER BY s.user_id DESC LIMIT 1) AS last_user_id
             """;
 
+    /*
+     * 곧 시작 알림 전용 조각. 보통의 넓은 팬아웃과 다른 점은 <b>리드타임이 맞는 사람만</b>
+     * 고른다는 것이다 — 같은 세션에 예약 행이 선택지 수만큼 있고, 각 행은 자기 리드타임을 고른
+     * 사람에게만 나가야 한다.
+     *
+     * 우선순위는 강의 설정 → 커리큘럼 설정 → 기본값이다. 끄기(enabled=false)는 어느 층에서든
+     * 걸리면 제외한다 — 강의별로 켜 두었어도 커리큘럼을 껐으면 그 강의는 <b>덮어쓴 값이 이기므로</b>
+     * 강의 설정을 먼저 본다(끄기도 덮어쓰기의 일부다).
+     */
+    private static final String INSERT_STARTING_SOON_SLICE = """
+            WITH slice AS (
+                SELECT e.user_id
+                FROM core.enrollment e
+                LEFT JOIN core.notification_preference lp
+                       ON lp.user_id = e.user_id AND lp.lesson_id = CAST(:lessonId AS uuid)
+                LEFT JOIN core.notification_preference cp
+                       ON cp.user_id = e.user_id
+                      AND cp.curriculum_id = CAST(:curriculumId AS uuid)
+                      AND cp.lesson_id IS NULL
+                WHERE e.curriculum_id = CAST(:curriculumId AS uuid)
+                  AND e.status = 'ACTIVE'
+                  AND (CAST(:afterUserId AS uuid) IS NULL OR e.user_id > CAST(:afterUserId AS uuid))
+                  AND COALESCE(lp.enabled, cp.enabled, true)
+                  AND COALESCE(lp.lead_minutes, cp.lead_minutes, :defaultLead) = :leadMinutes
+                ORDER BY e.user_id
+                LIMIT :sliceLimit
+            ), inserted AS (
+                INSERT INTO core.notification (
+                    id, recipient_id, type, read_status, action_status, severity,
+                    title, message, targets, group_key, dedupe_key,
+                    previous_starts_at, next_starts_at)
+                SELECT gen_random_uuid(), s.user_id, :type, 'UNREAD', :actionStatus, :severity,
+                       :title, :message, CAST(:targets AS jsonb), :groupKey,
+                       :dedupePrefix || s.user_id,
+                       CAST(:previousStartsAt AS timestamptz), CAST(:nextStartsAt AS timestamptz)
+                FROM slice s
+                ON CONFLICT (dedupe_key) DO NOTHING
+                RETURNING recipient_id
+            )
+            SELECT (SELECT count(*) FROM slice)    AS scanned,
+                   (SELECT count(*) FROM inserted) AS inserted,
+                   (SELECT array_agg(recipient_id) FROM inserted) AS inserted_recipients,
+                   (SELECT s.user_id FROM slice s ORDER BY s.user_id DESC LIMIT 1) AS last_user_id
+            """;
+
     private final NamedParameterJdbcTemplate jdbc;
 
     public NotificationFanoutRepository(NamedParameterJdbcTemplate jdbc) {
@@ -118,9 +163,43 @@ public class NotificationFanoutRepository {
                  */
                 .addValue("previousStartsAt", previousStartsAt == null ? null : previousStartsAt.toString())
                 .addValue("nextStartsAt", nextStartsAt == null ? null : nextStartsAt.toString());
-        return jdbc.queryForObject(INSERT_SLICE, params, (rs, i) -> new Slice(
-                rs.getInt("scanned"), rs.getInt("inserted"), recipients(rs.getArray("inserted_recipients")),
-                rs.getObject("last_user_id", UUID.class)));
+        return jdbc.queryForObject(INSERT_SLICE, params, NotificationFanoutRepository::readSlice);
+    }
+
+    /**
+     * 곧 시작 알림 한 조각. 리드타임이 맞고 <b>끄지 않은</b> 수강생만 받는다.
+     *
+     * @param leadMinutes 이 예약 행의 리드타임. 이 값을 고른 사람만 대상이다.
+     */
+    public Slice insertForStartingSoon(UUID curriculumId, UUID lessonId, UUID afterUserId, int sliceLimit,
+                                       int leadMinutes, int defaultLead,
+                                       String type, String actionStatus, String severity,
+                                       String title, String message, String targetsJson,
+                                       String groupKey, String dedupePrefix,
+                                       OffsetDateTime nextStartsAt) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("curriculumId", curriculumId.toString())
+                .addValue("lessonId", lessonId == null ? null : lessonId.toString())
+                .addValue("afterUserId", afterUserId == null ? null : afterUserId.toString())
+                .addValue("sliceLimit", sliceLimit)
+                .addValue("leadMinutes", leadMinutes)
+                .addValue("defaultLead", defaultLead)
+                .addValue("type", type)
+                .addValue("actionStatus", actionStatus)
+                .addValue("severity", severity)
+                .addValue("title", title)
+                .addValue("message", message)
+                .addValue("targets", targetsJson)
+                .addValue("groupKey", groupKey)
+                .addValue("dedupePrefix", dedupePrefix)
+                .addValue("previousStartsAt", null)
+                .addValue("nextStartsAt", nextStartsAt == null ? null : nextStartsAt.toString());
+        return jdbc.queryForObject(INSERT_STARTING_SOON_SLICE, params, NotificationFanoutRepository::readSlice);
+    }
+
+    private static Slice readSlice(java.sql.ResultSet rs, int i) throws java.sql.SQLException {
+        return new Slice(rs.getInt("scanned"), rs.getInt("inserted"),
+                recipients(rs.getArray("inserted_recipients")), rs.getObject("last_user_id", UUID.class));
     }
 
     /** 한 명도 새로 넣지 못했으면 배열 자체가 null이다(전부 중복인 조각). */

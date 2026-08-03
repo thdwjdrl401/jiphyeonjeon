@@ -14,13 +14,23 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * 앞서지 않으면 우리 404가 그쪽 500에 먹힌다(다른 모듈 핸들러도 같은 값을 쓴다).
  */
 @Order(Ordered.LOWEST_PRECEDENCE - 100)
-@RestControllerAdvice(assignableTypes = NotificationController.class)
+@RestControllerAdvice(assignableTypes = {NotificationController.class, NotificationPreferenceController.class})
 public class NotificationExceptionHandler {
 
     /**
      * 없는 알림과 <b>남의 알림</b>이 같은 404다. 403을 주면 "그 알림이 존재한다"는 사실이 샌다
      * (CONTRACT §2-4).
      */
+    /**
+     * 선택지에 없는 리드타임 같은 잘못된 입력. <b>400이다</b> — 자유 입력을 허용하지 않는다는 것이
+     * 계약이고, 그걸 어긴 요청은 서버 잘못이 아니다.
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ErrorResponse> handleBadRequest(IllegalArgumentException e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponse.of("NOTIFICATION_BAD_REQUEST", e.getMessage()));
+    }
+
     @ExceptionHandler(NotificationNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleNotFound(NotificationNotFoundException e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
