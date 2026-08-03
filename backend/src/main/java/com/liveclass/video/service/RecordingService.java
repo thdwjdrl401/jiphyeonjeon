@@ -1,12 +1,16 @@
 package com.liveclass.video.service;
 
 import com.liveclass.video.config.EgressProperties;
+import com.liveclass.video.api.RecordingFailedEvent;
+import com.liveclass.video.api.RecordingReadyEvent;
+import com.liveclass.video.api.ReplayPublishedEvent;
 import com.liveclass.video.domain.ReplayStatus;
 import com.liveclass.video.domain.VideoAsset;
 import com.liveclass.video.domain.VideoAssetStatus;
 import com.liveclass.video.repository.VideoAssetRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,16 +40,19 @@ public class RecordingService {
     private final RecordingStorage recordingStorage;
     private final RecordingStartStore startStore;
     private final RecordingStopStore stopStore;
+    private final ApplicationEventPublisher eventPublisher;
 
     public RecordingService(VideoAssetRepository videoAssetRepository, EgressControl egressControl,
                             EgressProperties egressProperties, RecordingStorage recordingStorage,
-                            RecordingStartStore startStore, RecordingStopStore stopStore) {
+                            RecordingStartStore startStore, RecordingStopStore stopStore,
+                            ApplicationEventPublisher eventPublisher) {
         this.videoAssetRepository = videoAssetRepository;
         this.egressControl = egressControl;
         this.egressProperties = egressProperties;
         this.recordingStorage = recordingStorage;
         this.startStore = startStore;
         this.stopStore = stopStore;
+        this.eventPublisher = eventPublisher;
     }
 
     /**
@@ -180,6 +187,7 @@ public class RecordingService {
             asset.setStatus(VideoAssetStatus.FAILED);
             asset.setFailureCode(failureCode != null ? failureCode : "EGRESS_FAILED");
             log.warn("녹화 실패 감지 egressId={} code={}", egressId, asset.getFailureCode());
+            publishFailed(asset);
         }
     }
 
@@ -209,6 +217,7 @@ public class RecordingService {
             asset.setStatus(VideoAssetStatus.FAILED);
             asset.setFailureCode("MANIFEST_MISSING");
             log.warn("egress COMPLETE인데 매니페스트 부재 → FAILED egressId={} key={}", egressId, manifestKey);
+            publishFailed(asset);
             return;
         }
         markReady(asset, egressId, durationMs, sizeBytes, segmentCount);
@@ -222,7 +231,8 @@ public class RecordingService {
         asset.setFailureCode(null);
         // 새 정상 녹화만 즉시 공개한다. 이미 READY인 기존 DRAFT는 위 terminal 멱등 가드에서
         // 반환되고, 철회된 자산(WITHDRAWN)과 별도 검수 상태도 여기서 되살리지 않는다.
-        if (asset.getReplayStatus() == ReplayStatus.DRAFT) {
+        boolean autoPublished = asset.getReplayStatus() == ReplayStatus.DRAFT;
+        if (autoPublished) {
             asset.setReplayStatus(ReplayStatus.PUBLISHED);
             asset.setPublishedAt(now);
             asset.setPublishedBy(null);     // 시스템 자동 게시
@@ -239,6 +249,26 @@ public class RecordingService {
         }
         log.info("녹화 완료 확정 egressId={} durationMs={} size={} replayStatus={}",
                 egressId, durationMs, sizeBytes, asset.getReplayStatus());
+
+        eventPublisher.publishEvent(new RecordingReadyEvent(
+                asset.getId(), asset.getLessonId(), asset.getLiveSessionId(), now));
+        /*
+         * 자동 공개된 경우에만 학생에게 알린다. 이미 PUBLISHED였거나 철회된 자산은 여기서
+         * 되살아나지 않으므로(위 가드), 학생에게 새로 알릴 일도 없다.
+         */
+        if (autoPublished) {
+            eventPublisher.publishEvent(new ReplayPublishedEvent(
+                    asset.getId(), asset.getLessonId(), asset.getLiveSessionId(), now));
+        }
+    }
+
+    /**
+     * 실패는 <b>강사만</b> 알아야 한다. 학생에게 "녹화가 실패했습니다"를 보내면 할 수 있는 일이
+     * 없는데 불안만 준다 — 다시 찍을 사람은 강사다.
+     */
+    private void publishFailed(VideoAsset asset) {
+        eventPublisher.publishEvent(new RecordingFailedEvent(asset.getId(), asset.getLessonId(),
+                asset.getLiveSessionId(), asset.getFailureCode(), OffsetDateTime.now()));
     }
 
     /** Egress HLS 출력 객체 prefix — 재생 API도 같은 규약을 사용한다. */

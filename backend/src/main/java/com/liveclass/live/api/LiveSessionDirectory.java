@@ -18,6 +18,15 @@ public interface LiveSessionDirectory {
     boolean existsForLesson(UUID lessonId);
 
     /**
+     * 이 세션이 속한 커리큘럼. 세션은 접근 게이팅을 위해 커리큘럼을 비정규화해 들고 있는데,
+     * {@link LiveSessionView}는 그것을 노출하지 않는다 — 화면 응답에 필요한 값이 아니어서다.
+     *
+     * <p>녹화 알림이 첫 소비자다. 녹화 자산은 커리큘럼을 모르고 세션만 아는데, 수강생 전원에게
+     * 팬아웃하려면 커리큘럼이 있어야 한다. 뷰에 필드를 더하는 대신 이 좁은 조회를 낸다.
+     */
+    Optional<UUID> findCurriculumId(UUID sessionId);
+
+    /**
      * 커리큘럼별 "가장 가까운 예정 세션"을 <b>한 번에</b> 조회한다(목록 화면의 다음 일정).
      * 커리큘럼 목록 한 페이지를 통째로 넘겨 한 쿼리로 해결하기 위한 배치 포트다 — 행마다 호출하면 N+1이다.
      *

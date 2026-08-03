@@ -161,7 +161,17 @@ HTTP 어댑터도 그 넷은 실제 호출로 배선됐다.
 바뀌면 `LIVE_SCHEDULE_CHANGED`(변경 전·후를 함께 저장), 취소되면 `LIVE_CANCELED`가 수강 중 학생
 전원에게 간다. 시각 없는 초안·입장창만 수정·같은 시각 재저장·멱등 취소에는 **알림이 없다**.
 
-**아직 없는 것.** Egress 완료·다시보기 게시 발행 지점과 실시간 push.
+**녹화는 강사에게, 다시보기는 학생에게 간다.** Egress가 끝나면 강사에게 `RECORDING_READY`,
+실패하면 `RECORDING_FAILED`(ERROR)가 간다 — 학생에게 실패를 보내면 할 수 있는 일이 없는데 불안만
+준다. 다시보기가 공개되면(자동·수동 모두) 수강 중 학생 전원에게 `VOD_PUBLISHED`가 간다. 철회했다
+다시 공개해도 **다시 알리지 않는다** — 그 다시보기가 있다는 것은 이미 알고 있다.
+
+**`LESSON_PUBLISHED`는 발행 지점이 없다.** 레슨에는 초안이 없고 공개 여부는 커리큘럼이 결정하므로
+([ADR-0005](decisions/seominkyeong/0005-lesson-has-no-draft-state.md)) "강의가 게시됐다"는 사건 자체가
+생기지 않는다. FE 타입·목·문구는 있지만 **서버는 이 종류를 만들지 않는다** — 지우지 않는 이유는
+레슨에 공개 상태가 생기면 그때 쓸 자리이기 때문이고, 그전까지는 이 줄이 유일한 설명이다.
+
+**아직 없는 것.** 실시간 push(STOMP·Web Push)와 `LIVE_STARTING_SOON`(유일한 시각형).
 FE 어댑터는 이제 501을 던지지 않는다.
 
 | 목적 | Method·URL | 응답 | 권한 | 상태 |
@@ -235,7 +245,7 @@ FE 어댑터는 이제 501을 던지지 않는다.
   (2) ~~수강 판정~~ 완료(`CurriculumEnrollmentService` → `EnrollmentRequestedEvent`·`EnrollmentDecidedEvent`).
   ~~자료 게시~~ 완료(`InstructorCurriculumService` → `CurriculumMaterialPublishedEvent`, 넓은 팬아웃).
   ~~라이브 일정~~ 완료(`LiveSessionService` → `LiveScheduleEvent`).
-  Egress 완료·다시보기 게시 지점의 알림 발행은 남음, ~~`/target`~~ 완료,
+  ~~Egress 완료·다시보기 게시~~ 완료(`RecordingService`·`ReplayPublicationService`), ~~`/target`~~ 완료,
   (3) `LIVE_STARTING_SOON`·오늘의 라이브 일정 알림을 만드는 예약 작업(현재 `@Scheduled`는
   `LiveStartReconciler`·`AssetReaper`·`OutboxRelay`에만 있어 알림용 잡이 없다),
   (4) 실시간 push(WS/SSE) — 없는 동안 FE는 60초 주기로 `summary`를 폴링한다.
