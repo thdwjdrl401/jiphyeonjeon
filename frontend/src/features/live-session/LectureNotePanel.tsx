@@ -1,3 +1,4 @@
+import NoteMarkdown from './NoteMarkdown'
 import type { LectureNoteView } from './liveSessionService.interface'
 
 /**
@@ -5,6 +6,10 @@ import type { LectureNoteView } from './liveSessionService.interface'
  *
  * <p><b>서버가 준 것만 그린다.</b> 이 자리에는 오래 하드코딩된 예시 텍스트가 들어 있었다 — 실제 강의와
  * 무관한 내용이 그럴듯하게 보여서, 노트 기능이 동작하지 않는다는 사실이 가려졌다.
+ *
+ * <p><b>본문은 서버가 준 Markdown을 그대로 그린다.</b> 예전에는 `topics[].keyPoints`를 화면이 직접
+ * `<ul><li>`로 강제했는데, 그러면 계약이 허용하는 굵게·인라인 코드가 `**이렇게**` 글자로 남는다.
+ * 주제 개수는 구조화 필드에서 센다 — 둘은 같은 값에서 나온 두 표현이라 어긋나지 않는 것이 계약이다.
  *
  * <p>구간 시각(seek)이 없다. AI가 주는 노트에는 자막 진행도(`coveredThroughSequence`)만 있고 세션 상대
  * ms가 없어, 시각을 만들어 붙이면 엉뚱한 지점으로 보내게 된다. 시간 앵커 계약이 서면 그때 붙인다.
@@ -18,6 +23,11 @@ interface Props {
 
 export default function LectureNotePanel({ note, live, panelProps }: Props) {
   const topics = note?.topics ?? []
+  /*
+   * 빈 판정은 <b>본문</b>으로 한다. topics만 보면, 구조화 필드는 왔는데 Markdown이 비어 있는
+   * 어긋난 상태에서 "3개 주제"라는 머리말 아래 아무것도 없는 화면이 나온다.
+   */
+  const markdown = (note?.markdown ?? '').trim()
 
   return (
     <div className="side-panel-content summary-panel" {...panelProps}>
@@ -29,7 +39,7 @@ export default function LectureNotePanel({ note, live, panelProps }: Props) {
         <span>{topics.length}개 주제</span>
       </header>
 
-      {topics.length === 0
+      {markdown === ''
         ? (
           <p className="summary-empty">
             {live
@@ -37,16 +47,7 @@ export default function LectureNotePanel({ note, live, panelProps }: Props) {
               : '이 강의에서는 노트가 만들어지지 않았습니다.'}
           </p>
         )
-        : (
-          <div className="summary-block-list">
-            {topics.map((topic, index) => (
-              <article key={topic.topicId ?? `${topic.title}-${index}`}>
-                <h3>{topic.title}</h3>
-                <ul>{topic.keyPoints.map((point) => <li key={point}>{point}</li>)}</ul>
-              </article>
-            ))}
-          </div>
-        )}
+        : <NoteMarkdown markdown={markdown} />}
 
       {/* 정제본으로 바뀐 뒤에는 더 자라지 않는다 — 계속 기다리게 두면 안 된다. */}
       {live && note?.status === 'CAPTURING' && (

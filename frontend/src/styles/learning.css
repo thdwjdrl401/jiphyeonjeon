@@ -400,6 +400,30 @@
 .learning-panel-heading small { color: var(--ink-500); font-size: .56rem; line-height: 1.45; }
 .learning-panel-heading > span { flex: 0 0 auto; border-radius: 99px; padding: 5px 7px; background: var(--blue-50); color: var(--blue-700); font-size: .54rem; }
 .summary-block-list { display: grid; gap: 10px; }
+
+/*
+ * 서버가 준 강의 노트 Markdown. 주제 하나가 `## 제목` + 목록이라, 제목마다 카드처럼 떨어져 보이게
+ * 위쪽 여백과 구분선을 준다 — 그냥 흘려 놓으면 주제 경계가 사라져 한 덩어리로 읽힌다.
+ */
+.note-markdown { margin-top: 10px; color: var(--ink-700); font-size: .72rem; line-height: 1.75; }
+.note-markdown > :first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+.note-markdown h1, .note-markdown h2, .note-markdown h3 {
+  margin: 16px 0 7px; padding-top: 13px; border-top: 1px solid var(--ink-100);
+  color: var(--ink-950); font-size: .78rem; letter-spacing: -.01em; }
+.note-markdown p { margin: 0 0 7px; }
+.note-markdown ul, .note-markdown ol { margin: 0 0 7px; padding-left: 17px; }
+.note-markdown li { margin-bottom: 3px; }
+.note-markdown li::marker { color: var(--ink-400); }
+.note-markdown strong { color: var(--ink-950); font-weight: 700; }
+.note-markdown code { padding: 1px 4px; border-radius: 4px; background: var(--ink-100);
+  color: var(--ink-900); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .92em; }
+.note-markdown pre { overflow-x: auto; margin: 0 0 7px; padding: 9px 10px; border-radius: 8px; background: var(--ink-100); }
+.note-markdown pre code { padding: 0; background: transparent; }
+.note-markdown blockquote { margin: 0 0 7px; padding-left: 10px; border-left: 2px solid var(--ink-200); color: var(--ink-600); }
+/* 계약 밖이지만 GFM으로 올 수 있는 것들 — 와도 깨지지 않게만 둔다. */
+.note-markdown table { display: block; overflow-x: auto; border-collapse: collapse; margin: 0 0 7px; }
+.note-markdown :is(th, td) { padding: 4px 8px; border: 1px solid var(--ink-100); text-align: left; }
+.note-markdown__loading { margin: 10px 0 0; color: var(--ink-500); font-size: .68rem; }
 .summary-block-list > article { padding: 12px; border: 1px solid var(--ink-100); border-radius: 11px; background: var(--ink-50); }
 .summary-block-list > article.is-current { border-color: var(--blue-200); background: var(--blue-50); box-shadow: inset 2px 0 var(--blue-600); }
 .summary-block-list article > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
