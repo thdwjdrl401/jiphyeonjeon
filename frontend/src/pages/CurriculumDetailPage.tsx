@@ -56,13 +56,26 @@ export default function CurriculumDetailPage() {
   }
 
   const detail = detailQuery.data
-  const primaryAction = resolvePrimaryAction(detail, returnTo)
+  const primaryAction = resolvePrimaryAction(detail)
   const instructorManagement = resolveInstructorManagement(detail)
   const canViewCurriculumMaterials = ['ENROLLED', 'OWNER_INSTRUCTOR'].includes(detail.viewerContext.relationship)
 
   const handleEnroll = () => enrollMutation.mutate()
   const handleCancel = () => cancelMutation.mutate()
   const handleManage = () => navigate(instructorPaths.curriculumManage(detail.curriculumId))
+  const hasPriorityRelationPanel = ['UNENROLLED_STUDENT', 'PENDING_ENROLLMENT'].includes(
+    detail.viewerContext.relationship,
+  )
+  const relationPanel = (
+    <CurriculumRelationPanel
+      detail={detail}
+      returnTo={returnTo}
+      onEnroll={handleEnroll}
+      isEnrolling={enrollMutation.isPending}
+      onCancel={handleCancel}
+      isCancelling={cancelMutation.isPending}
+    />
+  )
 
   return (
     <div className={`curriculum-detail-page page-container${user?.role === 'STUDENT' ? ' curriculum-detail-page--student' : ''}`}>
@@ -71,8 +84,6 @@ export default function CurriculumDetailPage() {
           <CurriculumHero
             detail={detail}
             primaryAction={primaryAction}
-            onEnroll={handleEnroll}
-            isEnrolling={enrollMutation.isPending}
             onCancel={handleCancel}
             isCancelling={cancelMutation.isPending}
           />
@@ -99,9 +110,11 @@ export default function CurriculumDetailPage() {
               <CurriculumProgress progress={detail.viewerContext.progress} />
             )}
 
+            {hasPriorityRelationPanel && relationPanel}
+
             <CurriculumOverview description={detail.description} />
 
-            <CurriculumRelationPanel detail={detail} returnTo={returnTo} />
+            {!hasPriorityRelationPanel && relationPanel}
 
             <CurriculumNotice detail={detail} />
           </div>

@@ -298,7 +298,22 @@ describe('커리큘럼 작업 화면', () => {
     expect(submit).toBeEnabled()
 
     await user.click(submit)
-    expect(await screen.findByText('강의 정보와 라이브 일정 초안이 저장되었습니다.')).toBeInTheDocument()
+    expect(await screen.findByText('강의 정보와 라이브 일정이 저장되었습니다.')).toBeInTheDocument()
+  })
+
+  it('새 강의 폼의 자료 영역에 PPTX 파일을 드롭해 추가한다', async () => {
+    await renderAsInstructor('/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/new')
+    const dropzoneCopy = await screen.findByText('PPTX 파일을 드래그하거나 클릭해 선택')
+    const dropzone = dropzoneCopy.closest('label')
+    const material = new File(['pptx'], 'security-live.pptx', {
+      type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    })
+
+    expect(dropzone).not.toBeNull()
+    fireEvent.drop(dropzone!, { dataTransfer: { files: [material] } })
+
+    expect(await screen.findByText('security-live.pptx')).toBeInTheDocument()
+    expect(screen.getByText('1개 · 준비 필요')).toBeInTheDocument()
   })
 
   it('강의 수정 폼에서 기존 라이브 일정을 불러와 수정한다', async () => {
@@ -310,7 +325,7 @@ describe('커리큘럼 작업 화면', () => {
     await user.clear(scheduledAt)
     await user.type(scheduledAt, '2026-08-04T20:30')
     await user.click(screen.getByRole('button', { name: '강의 수정 저장' }))
-    expect(await screen.findByText('강의 정보와 라이브 일정 초안이 저장되었습니다.')).toBeInTheDocument()
+    expect(await screen.findByText('강의 정보와 라이브 일정이 저장되었습니다.')).toBeInTheDocument()
   })
 
   it.each([
@@ -331,13 +346,18 @@ describe('커리큘럼 작업 화면', () => {
     const editLink = await screen.findByRole('link', { name: '강의 수정' })
 
     expect(editLink).toHaveClass('button--primary')
-    expect(screen.getByRole('heading', { name: '강의 준비 상태' })).toBeInTheDocument()
-    expect(screen.getByText('자료 작업')).toBeInTheDocument()
-    expect(screen.getByText('완료')).toBeInTheDocument()
+    const lessonInfo = screen.getByRole('heading', { name: '강의 정보' }).closest('section')
+    expect(lessonInfo).not.toBeNull()
+    expect(within(lessonInfo!).getByText('인증 필터와 세션의 흐름을 실제 요청을 따라가며 이해합니다.')).toBeInTheDocument()
+    expect(within(editLink.closest('header')!).queryByText('인증 필터와 세션의 흐름을 실제 요청을 따라가며 이해합니다.')).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '강의 준비 상태' })).not.toBeInTheDocument()
+    const readiness = screen.getByRole('list', { name: '강의 준비 상태' })
+    expect(within(readiness).getByText('자료 작업')).toBeInTheDocument()
+    expect(within(readiness).getByText('완료')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '라이브 일정' })).toBeInTheDocument()
     expect(screen.getByText('오후 7:00')).toBeInTheDocument()
     expect(screen.getByText('오후 6:50부터')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '사전 점검' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: '사전 점검 시작' })).toHaveAttribute(
       'href',
       '/instructor/live-sessions/ses-security-live/preflight',
     )

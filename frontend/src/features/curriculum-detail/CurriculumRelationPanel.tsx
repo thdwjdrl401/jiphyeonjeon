@@ -6,20 +6,28 @@ import EnrollmentPendingNotice from '@/features/enrollment/EnrollmentPendingNoti
 interface CurriculumRelationPanelProps {
   detail: CurriculumDetailResponse
   returnTo: string
+  onEnroll: () => void
+  isEnrolling: boolean
+  onCancel: () => void
+  isCancelling: boolean
 }
 
 /** 강사 관계(OWNER_INSTRUCTOR·NON_OWNER_INSTRUCTOR)는 InstructorManagementCard가 보조 정보 영역에서 처리한다. */
 export default function CurriculumRelationPanel({
   detail,
   returnTo,
+  onEnroll,
+  isEnrolling,
+  onCancel,
+  isCancelling,
 }: CurriculumRelationPanelProps) {
   switch (detail.viewerContext.relationship) {
     case 'ENROLLED':
       return null
     case 'UNENROLLED_STUDENT':
-      return <EnrollmentActions detail={detail} />
+      return <EnrollmentActions detail={detail} onEnroll={onEnroll} isEnrolling={isEnrolling} />
     case 'PENDING_ENROLLMENT':
-      return <EnrollmentPendingNotice detail={detail} />
+      return <EnrollmentPendingNotice detail={detail} onCancel={onCancel} isCancelling={isCancelling} />
     case 'GUEST':
       return <GuestActions returnTo={returnTo} />
     default:
