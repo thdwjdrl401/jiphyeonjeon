@@ -1089,6 +1089,22 @@ body {
   opacity: 1;
   transform: translateX(0);
 }
+/*
+ * 내 프로필 화면에서만 붙는 하단 알림 진입점. 남은 공간을 전부 밀어 사이드바 바닥에 앉힌다.
+ *
+ * 아래 tip이 원래 `margin: auto 0 0`으로 그 자리를 쓰고 있어서, 둘 다 auto를 들고 있으면
+ * flex가 남은 공간을 반씩 갈라 줘 어느 쪽도 바닥에 붙지 않는다 — tip의 auto를 내려놓게 한다.
+ *
+ * 선택자가 긴 이유: 위쪽 `...nav { padding: 0 }`와 `...nav a { padding: 11px 0 18px }`가
+ * 클래스 두 개짜리라 `.workspace-sidebar__footer-nav`만으로는 특이도에서 밀린다.
+ */
+.workspace-sidebar:not(.workspace-sidebar--lesson) nav.workspace-sidebar__footer-nav {
+  margin-top: auto;
+  padding-top: 18px;
+  border-top: 1px solid var(--border-soft);
+}
+.workspace-sidebar:not(.workspace-sidebar--lesson) nav.workspace-sidebar__footer-nav a { padding: 0 0 2px; }
+.workspace-sidebar__footer-nav + .workspace-sidebar__tip { margin-top: 20px; }
 .workspace-sidebar__tip {
   margin: auto 0 0;
   padding: 20px 0 0;
@@ -1602,6 +1618,15 @@ body {
     column-gap: 24px;
   }
   .workspace-sidebar__nav-label { grid-column: 1 / -1; }
+  /*
+    사이드바가 가로 띠로 바뀌면 바닥에 밀어 넣을 남은 공간이 없다 — auto 여백은 0이 되므로
+    구분선과 간격만 남긴다. 위 nav의 2열 그리드도 항목이 하나뿐인 이 그룹에는 물려받지 않는다.
+  */
+  .workspace-sidebar:not(.workspace-sidebar--lesson) nav.workspace-sidebar__footer-nav {
+    display: block;
+    margin-top: 18px;
+    padding-top: 16px;
+  }
   .workspace-sidebar__tip { display: none; }
   .workspace-sidebar--lesson { border-right: 0; }
   .workspace-sidebar--lesson .workspace-sidebar__masthead { margin-bottom: 26px; }
