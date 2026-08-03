@@ -4,8 +4,9 @@ FastAPI transport가 RAG application core를 호출하는 내부 HTTP adapter다
 
 ## 역할
 
-- `POST /internal/v1/rag/answers:stream`의 header와 body 경계를 검증한다.
-- 주입된 `InternalRequestAuthenticator`로 Spring 호출을 인증한다.
+- `POST /internal/v1/rag/answers:stream`과 `POST /internal/v2/rag/answers:stream`(Replay)의 header와
+  body 경계를 검증한다.
+- 주입된 `InternalRequestAuthenticator`로 Spring 호출을 인증한다(v1·v2 동일 인증기 공유).
 - RAG event iterator를 buffering 금지 SSE 응답으로 전달한다.
 
 ## 파일 구성
@@ -13,7 +14,7 @@ FastAPI transport가 RAG application core를 호출하는 내부 HTTP adapter다
 | 파일 | 책임 |
 |---|---|
 | `internal_auth.py` | 인증 port(`raw_body`, `signature` 기반)와 실패 타입 — 실제 HMAC 구현체는 `app/adapters/hmac_internal_authenticator.py` |
-| `rag.py` | 인증·Accept·상태코드·StreamingResponse adapter |
+| `rag.py` | v1 `create_rag_router`와 Replay `create_rag_router_v2` — 인증·Accept·상태코드·StreamingResponse adapter |
 
 ## 경계와 불변식
 
@@ -23,3 +24,5 @@ FastAPI transport가 RAG application core를 호출하는 내부 HTTP adapter다
 - Spring→ai-api 인증은 HMAC 공유 시크릿(ADR-0023 §9, 채택 확정)으로 검증한다. `AI_INTERNAL_SECRET`이
   설정된 경우에만 `main.py`가 `HmacInternalRequestAuthenticator`를 실제로 배선한다.
 - retrieval/model 실패는 HTTP status를 뒤집지 않고 계약화된 terminal SSE event로 표현한다.
+- v2(Replay)는 별도 prefix(`/internal/v2/rag`)의 별도 라우터이며 v1 라우터 코드는 그대로 둔다
+  (ADR-0008). v1과 v2는 서로 다른 request registry를 쓰므로 `requestId` 네임스페이스도 분리된다.

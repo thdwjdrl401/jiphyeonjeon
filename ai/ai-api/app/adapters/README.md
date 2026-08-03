@@ -8,7 +8,8 @@ RAG context core가 외부 Redis, PostgreSQL과 BGE runtime을 사용하는 outb
 | `redis_lecture_note_publisher.py` | 강의 노트 추가 조각·수집 완료·정제 snapshot을 결과 Stream에 발행 |
 | `pgvector_material_retrieval.py` | `ai_app` role로 ACTIVE lesson chunk만 hybrid 검색 |
 | `remote_bge_m3_embedding.py` | 인증된 BGE-M3 query embedding HTTP client |
-| `gms_openai_answer.py` | 고정 GMS gateway의 grounded OpenAI-compatible 답변 stream |
+| `gms_openai_answer.py` | 고정 GMS gateway의 grounded OpenAI-compatible 답변 stream (v1) |
+| `gms_openai_answer_v2.py` | 같은 GMS gateway를 쓰는 Replay(v2) 답변 stream 어댑터 — v1 코드를 복제해 v1을 안 건드림 |
 | `gms_openai_lecture_note.py` | GMS 구조화 JSON 강의 노트 topic 판단과 종료 후 정제 |
 
 ## 경계와 불변식
