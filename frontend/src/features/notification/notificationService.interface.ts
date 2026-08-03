@@ -3,6 +3,7 @@ import type {
   NotificationListQuery,
   NotificationListResponse,
   NotificationSummary,
+  NotificationSignal,
   NotificationTargetResolution,
 } from './types'
 
@@ -25,4 +26,12 @@ export interface NotificationService {
    * 열람 권한이 있는지는 서버만 안다(요구사항 §10·§11).
    */
   resolveTarget: (notificationId: string) => Promise<NotificationTargetResolution>
+  /**
+   * 새 알림이 도착했다는 <b>신호</b>를 구독한다. 내용은 오지 않는다 — 받으면 목록·개수를 다시
+   * 읽는다. 서버가 그렇게 보내는 이유는 넓은 팬아웃이 집합 삽입이라 행 데이터가 앱에 없기
+   * 때문이고, 알림 모양이 REST와 WS 두 곳에 생기는 것도 피한다.
+   *
+   * @returns 구독 해제 함수
+   */
+  subscribeNotifications: (onSignal: (signal: NotificationSignal) => void) => () => void
 }

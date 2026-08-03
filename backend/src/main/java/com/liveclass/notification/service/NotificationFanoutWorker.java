@@ -10,6 +10,7 @@ import com.liveclass.notification.config.NotificationMessagingConfig;
 import com.liveclass.notification.domain.NotificationStatus;
 import com.liveclass.notification.repository.NotificationFanoutRepository;
 import com.liveclass.notification.repository.NotificationInsertRepository;
+import com.liveclass.notification.web.ws.WsNotificationBroadcaster;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -72,19 +73,22 @@ public class NotificationFanoutWorker {
     private final LessonDirectory lessonDirectory;
     private final LiveSessionDirectory liveSessionDirectory;
     private final RabbitTemplate rabbitTemplate;
+    private final WsNotificationBroadcaster broadcaster;
 
     public NotificationFanoutWorker(NotificationInsertRepository insertRepository,
                                     NotificationFanoutRepository fanoutRepository,
                                     UserDirectory userDirectory,
                                     LessonDirectory lessonDirectory,
                                     LiveSessionDirectory liveSessionDirectory,
-                                    RabbitTemplate rabbitTemplate) {
+                                    RabbitTemplate rabbitTemplate,
+                                    WsNotificationBroadcaster broadcaster) {
         this.insertRepository = insertRepository;
         this.fanoutRepository = fanoutRepository;
         this.userDirectory = userDirectory;
         this.lessonDirectory = lessonDirectory;
         this.liveSessionDirectory = liveSessionDirectory;
         this.rabbitTemplate = rabbitTemplate;
+        this.broadcaster = broadcaster;
     }
 
     @RabbitListener(queues = NotificationMessagingConfig.FANOUT_QUEUE,
@@ -112,10 +116,18 @@ public class NotificationFanoutWorker {
                 return;
             }
             int sent = insertRepository.insert(buildForInstructor(filled));
+            if (sent > 0) {
+                broadcaster.announce(filled.instructorId(), filled.type());
+            }
             log.info("녹화 알림 type={} asset={} 삽입={}", filled.type(), filled.videoAssetId(), sent);
             return;
         }
-        int inserted = insertRepository.insert(buildForEnrollment(command));
+        NewNotification notification = buildForEnrollment(command);
+        int inserted = insertRepository.insert(notification);
+        // 새로 넣었을 때만 알린다. 재배달로 중복이면 화면에 두 번 뜰 이유가 없다.
+        if (inserted > 0) {
+            broadcaster.announce(notification.recipientId(), command.type());
+        }
         log.info("알림 팬아웃 type={} enrollment={} 삽입={}", command.type(), command.enrollmentId(), inserted);
     }
 
@@ -203,6 +215,8 @@ public class NotificationFanoutWorker {
                 command.type() + ':' + command.curriculumId(),
                 dedupePrefix(command),
                 command.previousStartsAt(), command.nextStartsAt());
+
+        broadcaster.announceAll(slice.insertedRecipients(), command.type());
 
         log.info("넓은 팬아웃 조각 type={} curriculum={} 커서={} 훑음={} 삽입={}",
                 command.type(), command.curriculumId(), command.afterUserId(),

@@ -17,5 +17,7 @@ export const markNotificationAsRead = (notificationId: string) =>
 export const markAllNotificationsAsRead = () => notificationService.markAllAsRead()
 export const resolveNotificationTarget = (notificationId: string) =>
   notificationService.resolveTarget(notificationId)
+export const subscribeNotifications = (onSignal: Parameters<NotificationService['subscribeNotifications']>[0]) =>
+  notificationService.subscribeNotifications(onSignal)
 
 export type { NotificationService } from './notificationService.interface'

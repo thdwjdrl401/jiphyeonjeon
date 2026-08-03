@@ -5,6 +5,7 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -29,7 +30,7 @@ public class NotificationFanoutRepository {
      * <p>{@code inserted}로 다음을 판단하면 안 된다 — 재시도로 전부 중복이면 0이 나오지만 뒤에
      * 수강생이 남아 있을 수 있고, 그러면 거기서 체인이 끊긴다. 더 있는지는 {@code scanned}가 답한다.
      */
-    public record Slice(int scanned, int inserted, UUID lastUserId) {
+    public record Slice(int scanned, int inserted, List<UUID> insertedRecipients, UUID lastUserId) {
 
         /** 조각이 가득 찼으면 뒤가 더 있을 수 있다. 몇 조각인지 미리 세지 않는다 — COUNT(*)를 피한다. */
         public boolean mayHaveMore(int limit) {
@@ -66,10 +67,16 @@ public class NotificationFanoutRepository {
                        CAST(:previousStartsAt AS timestamptz), CAST(:nextStartsAt AS timestamptz)
                 FROM slice s
                 ON CONFLICT (dedupe_key) DO NOTHING
-                RETURNING 1
+                RETURNING recipient_id
             )
             SELECT (SELECT count(*) FROM slice)    AS scanned,
                    (SELECT count(*) FROM inserted) AS inserted,
+                   /*
+                    * 실시간 알림을 보낼 사람들. ON CONFLICT로 걸러진 뒤에 남은 <b>새로 받은 사람만</b>
+                    * 나온다 — 재배달로 같은 조각을 다시 처리해도 알림이 두 번 뜨지 않는다.
+                    * 조각 크기가 상한이라 이 배열은 수신자 총수와 무관하게 일정하다.
+                    */
+                   (SELECT array_agg(recipient_id) FROM inserted) AS inserted_recipients,
                    -- max(uuid) 집계는 Postgres에 없다. 조각이 이미 user_id 오름차순이므로
                    -- 내림차순 첫 행이 곧 마지막 사람이고, 그게 다음 조각의 시작점이다.
                    (SELECT s.user_id FROM slice s ORDER BY s.user_id DESC LIMIT 1) AS last_user_id
@@ -112,6 +119,15 @@ public class NotificationFanoutRepository {
                 .addValue("previousStartsAt", previousStartsAt == null ? null : previousStartsAt.toString())
                 .addValue("nextStartsAt", nextStartsAt == null ? null : nextStartsAt.toString());
         return jdbc.queryForObject(INSERT_SLICE, params, (rs, i) -> new Slice(
-                rs.getInt("scanned"), rs.getInt("inserted"), rs.getObject("last_user_id", UUID.class)));
+                rs.getInt("scanned"), rs.getInt("inserted"), recipients(rs.getArray("inserted_recipients")),
+                rs.getObject("last_user_id", UUID.class)));
+    }
+
+    /** 한 명도 새로 넣지 못했으면 배열 자체가 null이다(전부 중복인 조각). */
+    private static List<UUID> recipients(java.sql.Array array) throws java.sql.SQLException {
+        if (array == null) {
+            return List.of();
+        }
+        return List.of((UUID[]) array.getArray());
     }
 }

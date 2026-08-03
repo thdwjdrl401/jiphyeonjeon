@@ -193,4 +193,11 @@ export const mockNotificationService = {
     const record = requireOwnNotification(notificationId, user.userId)
     return resolveMockTarget(record)
   },
+  /**
+   * 목에는 실시간 채널이 없다. 브로커에 붙지 않고 <b>아무것도 하지 않는 해제 함수</b>를 준다 —
+   * 화면은 폴링으로도 동작하므로 목 모드에서 알림이 늦게 뜰 뿐 깨지지 않는다.
+   */
+  subscribeNotifications() {
+    return () => {}
+  },
 } satisfies NotificationService
