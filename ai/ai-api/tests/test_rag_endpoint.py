@@ -150,13 +150,14 @@ def test_internal_endpoint_streams_contract_events_and_citations() -> None:
             {
                 "requestId": "request-1",
                 "sources": [
-                    {"type": "PPTX", "materialId": str(MATERIAL_ID), "page": 4},
+                    {"type": "PPTX", "materialId": str(MATERIAL_ID), "page": 4, "excerpt": None},
                     {
                         "type": "CAPTION",
                         "sessionId": SESSION_ID,
                         "sttSessionId": "provider-session-1",
                         "startMs": 55_000,
                         "endMs": 59_000,
+                        "excerpt": None,
                     },
                 ],
             },

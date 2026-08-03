@@ -42,6 +42,7 @@ class PptxSource(_ContractModel):
     type: Literal["PPTX"] = "PPTX"
     materialId: UUID
     page: int = Field(ge=1)
+    excerpt: str | None = Field(default=None, max_length=1000)
 
 
 class CaptionSource(_ContractModel):
@@ -50,6 +51,7 @@ class CaptionSource(_ContractModel):
     sttSessionId: SafeIdentifier
     startMs: int = Field(ge=0)
     endMs: int = Field(ge=0)
+    excerpt: str | None = Field(default=None, max_length=1000)
 
     @model_validator(mode="after")
     def validate_time_range(self) -> CaptionSource:
