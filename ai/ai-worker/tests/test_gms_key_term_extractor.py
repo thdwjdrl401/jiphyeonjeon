@@ -58,6 +58,27 @@ async def test_extracts_terms_from_structured_json_response() -> None:
     assert completions.calls[0]["response_format"]["type"] == "json_schema"
 
 
+async def test_cleans_parentheses_and_english_suffixes_from_term() -> None:
+    payload = json.dumps(
+        {
+            "terms": [
+                {"term": "인공지능 (Artificial Intelligence)", "definition": "인간의 지능을 모방하는 기술"},
+                {"term": "컴파일러(Compiler)", "definition": "고서의 소스코드를 변환하는 프로그램"},
+                {"term": "자연어 처리 [NLP]", "definition": "사람의 언어를 컴퓨터가 이해하도록 하는 분야"},
+            ]
+        }
+    )
+    completions = FakeCompletions(content=payload)
+
+    result = await _extractor(completions).extract("슬라이드 텍스트")
+
+    assert result == (
+        KeyTerm(term="인공지능", definition="인간의 지능을 모방하는 기술"),
+        KeyTerm(term="컴파일러", definition="고서의 소스코드를 변환하는 프로그램"),
+        KeyTerm(term="자연어 처리", definition="사람의 언어를 컴퓨터가 이해하도록 하는 분야"),
+    )
+
+
 async def test_empty_text_short_circuits_without_a_request() -> None:
     completions = FakeCompletions(content="{}")
 
