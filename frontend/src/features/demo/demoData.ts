@@ -117,6 +117,7 @@ export function getDemoLiveSession(sessionId: string) {
     curriculumId: context.curriculum.curriculumId,
     curriculumTitle: context.curriculum.title,
     sectionId: context.section.sectionId,
+    sectionTitle: context.section.title,
     status: context.liveSession.status,
     scheduledAt: context.liveSession.scheduledAt,
     entryOpensAt: context.liveSession.scheduledAt,

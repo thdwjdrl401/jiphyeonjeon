@@ -143,6 +143,12 @@ describe('전체 페이지 라우트', () => {
     renderAt('/instructor/live-sessions/ses-security-live/preflight')
 
     await screen.findByRole('heading', { name: '라이브 시작 전 최종 점검' })
+    const breadcrumbs = screen.getByRole('navigation', { name: '강의 경로' })
+    expect(within(breadcrumbs).getByRole('link', { name: 'Spring Security 시작하기' })).toHaveAttribute(
+      'href',
+      '/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/les-security',
+    )
+    expect(within(breadcrumbs).queryByText('사전 점검')).not.toBeInTheDocument()
     const camera = await screen.findByRole('group', { name: '카메라' })
     const fullHd = within(camera).getByRole('radio', { name: /1080p/ })
     expect(fullHd).toBeChecked()
@@ -183,6 +189,12 @@ describe('전체 페이지 라우트', () => {
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
     renderAt('/student/live-sessions/ses-security-live/prejoin')
     expect(await screen.findByRole('heading', { name: '입장 전 점검' })).toBeInTheDocument()
+    const breadcrumbs = screen.getByRole('navigation', { name: '강의 경로' })
+    expect(within(breadcrumbs).getByRole('link', { name: 'Spring Security 시작하기' })).toHaveAttribute(
+      'href',
+      '/student/curriculums/cur-spring-live/sections/sec-security/lessons/les-security',
+    )
+    expect(within(breadcrumbs).queryByText('입장 전 점검')).not.toBeInTheDocument()
     const lessonNavigation = screen.getByRole('complementary', { name: '커리큘럼 강의 목록' })
     expect(await within(lessonNavigation).findByRole('link', { name: /Spring Security 시작하기/ })).toHaveAttribute(
       'aria-current',

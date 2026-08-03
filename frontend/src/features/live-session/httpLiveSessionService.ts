@@ -273,10 +273,12 @@ interface LessonCurriculumContext {
   curriculumId: string
   curriculumTitle: string
   sectionId: string
+  sectionTitle: string
 }
 
 interface ApiLessonCurriculumContext {
   sectionId: string
+  sectionTitle: string
   curriculumId: string
   curriculumTitle: string
   title: string
@@ -302,6 +304,7 @@ async function fetchLessonCurriculumContext(lessonId: string): Promise<LessonCur
       curriculumId: data.curriculumId,
       curriculumTitle: data.curriculumTitle,
       sectionId: data.sectionId,
+      sectionTitle: data.sectionTitle,
     }
   } catch {
     return null
@@ -321,6 +324,7 @@ function normalizeLiveSession(
     curriculumId: context?.curriculumId ?? '',
     curriculumTitle: context?.curriculumTitle ?? '',
     sectionId: context?.sectionId ?? '',
+    sectionTitle: context?.sectionTitle ?? '',
     status: data.liveSessionStatus as CurriculumLiveSessionStatus,
     scheduledAt: data.scheduledAt,
     entryOpensAt: scheduledAt

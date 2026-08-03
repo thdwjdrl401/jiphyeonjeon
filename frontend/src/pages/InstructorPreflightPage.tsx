@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { instructorPaths } from '@/app/router/paths'
+import { instructorPaths, publicPaths } from '@/app/router/paths'
+import LessonBreadcrumbs from '@/features/lesson/LessonBreadcrumbs'
 import InstructorLocalTrackVideo from '@/features/live-session/InstructorLocalTrackVideo'
 import { useInstructorLiveKit } from '@/features/live-session/useInstructorLiveKit'
 import {
@@ -110,6 +111,15 @@ export default function InstructorPreflightPage() {
 
   return (
     <div className="workspace-page instructor-preflight-page">
+      <LessonBreadcrumbs
+        curriculumPath={session.curriculumId ? publicPaths.curriculum(session.curriculumId) : undefined}
+        curriculumTitle={session.curriculumTitle}
+        lessonPath={session.curriculumId && session.sectionId
+          ? instructorPaths.lesson(session.curriculumId, session.sectionId, session.lessonId)
+          : undefined}
+        lessonTitle={session.lessonTitle}
+        sectionTitle={session.sectionTitle}
+      />
       <PageHeader title="라이브 시작 전 최종 점검" />
 
       <div className="instructor-preflight__layout">

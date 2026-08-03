@@ -6,6 +6,7 @@ import { useAuth } from '@/features/auth/AuthContext'
 import { getInstructorCurriculum } from '@/features/curriculum/curriculumManagementService'
 import { deleteLesson } from '@/features/curriculum/curriculumManagementService'
 import { deleteLessonMaterial, getLesson, prepareLessonAi, saveLesson } from '@/features/lesson/lessonService'
+import LessonBreadcrumbs from '@/features/lesson/LessonBreadcrumbs'
 import { invalidateAfterLessonWrite } from '@/features/lesson/lessonQueryCache'
 import { ApiError } from '@/shared/api/client'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
@@ -181,9 +182,18 @@ export default function LessonFormPage() {
 
   return (
     <div className="workspace-page workspace-page--narrow lesson-form-page">
+      {isEdit && currentLesson && (
+        <LessonBreadcrumbs
+          curriculumPath={curriculumReturnPath}
+          curriculumTitle={curriculum?.title ?? currentLesson.curriculumTitle}
+          lessonPath={lessonDetailPath}
+          lessonTitle={currentLesson.title}
+          sectionTitle={currentLesson.sectionTitle}
+        />
+      )}
       <PageHeader
         title={isEdit ? '강의 수정' : '새 강의 만들기'}
-        description={`${curriculum?.title ?? ''} · ${isEdit ? currentLesson?.sectionTitle ?? '' : '선택한 섹션'}`}
+        description={isEdit ? undefined : `${curriculum?.title ?? ''} · 선택한 섹션`}
         action={<Link className="button button--soft" to={curriculumReturnPath}>{isEdit ? '커리큘럼 상세로 돌아가기' : '커리큘럼 관리로 돌아가기'}</Link>}
       />
       <form className="workspace-form lesson-form" onSubmit={save}>

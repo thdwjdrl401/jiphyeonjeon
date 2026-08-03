@@ -5,6 +5,7 @@ import { instructorPaths, publicPaths, studentPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
 import { LESSON_MATERIALS_ANCHOR } from '@/features/lesson/lessonRouting'
 import { getLesson } from '@/features/lesson/lessonService'
+import LessonBreadcrumbs from '@/features/lesson/LessonBreadcrumbs'
 import { isLiveEntryOpen } from '@/features/live-session/liveEntry'
 import { getLiveSession } from '@/features/live-session/liveSessionService'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
@@ -67,7 +68,12 @@ export default function LessonDetailPage() {
 
   return (
     <div className="workspace-page lesson-detail-page">
-      <div className="breadcrumbs"><Link to={curriculumPath}>{lesson.curriculumTitle}</Link><span>/</span><span>{lesson.sectionTitle}</span><span>/</span><strong>{lesson.title}</strong></div>
+      <LessonBreadcrumbs
+        curriculumPath={curriculumPath}
+        curriculumTitle={lesson.curriculumTitle}
+        lessonTitle={lesson.title}
+        sectionTitle={lesson.sectionTitle}
+      />
       <PageHeader
         title={lesson.title}
         // 게시·게시취소 버튼과 상태 배지는 없다 — 레슨 상태가 하나뿐이고 공개는 커리큘럼이 결정한다(ADR-0005).
