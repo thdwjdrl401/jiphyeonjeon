@@ -185,6 +185,10 @@ services:
       SPRING_RABBITMQ_PORT: "5672"
       SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER:-liveclass}
       SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD 필요}
+      # 업로드 녹화강의(media-worker) — source URL과 callback은 용도별 HMAC 시크릿을 분리한다.
+      RECORDED_VIDEO_ENABLED: ${RECORDED_VIDEO_ENABLED:-true}
+      MEDIA_SOURCE_SECRET: ${MEDIA_SOURCE_SECRET:?MEDIA_SOURCE_SECRET 필요}
+      MEDIA_CALLBACK_SECRET: ${MEDIA_CALLBACK_SECRET:?MEDIA_CALLBACK_SECRET 필요}
       # 자료 임베딩 스위치. 이 줄이 없으면 .env.prod에 값을 넣어도 컨테이너로 전달되지 않아
       # 기본 false가 되고, 자료를 연결해도 임베딩 잡이 발행되지 않는다. 그때도 자료 상태는
       # READY로 남아(무회귀 동작) "준비됐는데 AI가 근거를 못 찾는" 상태가 조용히 생긴다.
@@ -241,6 +245,28 @@ services:
       retries: 10
       start_period: 60s
     # 호스트 포트 미노출 — nginx(frontend)만 접근
+
+  media-worker:
+    build: ./media-worker
+    container_name: liveclass-media-worker-prod
+    restart: unless-stopped
+    environment:
+      MEDIA_RABBITMQ_URL: amqp://${RABBITMQ_USER:-liveclass}:${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD 필요}@rabbitmq:5672/
+      MEDIA_BACKEND_URL: http://backend:8080
+      MEDIA_SOURCE_SECRET: ${MEDIA_SOURCE_SECRET:?MEDIA_SOURCE_SECRET 필요}
+      MEDIA_CALLBACK_SECRET: ${MEDIA_CALLBACK_SECRET:?MEDIA_CALLBACK_SECRET 필요}
+      MEDIA_OUTPUT_ENDPOINT: http://minio:9000
+      MEDIA_OUTPUT_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MEDIA_OUTPUT_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD 필요}
+      MEDIA_OUTPUT_BUCKET: ${EGRESS_BUCKET:-recordings}
+      MEDIA_OUTPUT_REGION: ${EGRESS_S3_REGION:-us-east-1}
+    depends_on:
+      backend:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio-init:
+        condition: service_started
 
   frontend:
     build: ./frontend
