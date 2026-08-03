@@ -472,6 +472,13 @@ FE는 **오퍼레이션 단위 하이브리드 라우팅**을 쓴다 — 각 호
 
 ---
 
+## 10-1. 알림 센터
+
+사건에서 알림까지의 경로, 명단을 앱에 올리지 않는 팬아웃, 실시간 두 층(STOMP·Web Push)은
+분량이 커서 별도 문서로 뺐다 — **[NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md)**.
+설계 결정은 [ADR-0073](decisions/songjeongki/0073-notification-fanout-architecture.md),
+API 규격은 [CONTRACT §2-4](CONTRACT.md)가 정본이다.
+
 ## 11. 신뢰성 · 관측성
 
 - **추적**: Micrometer Tracing(Brave)이 요청마다 traceId/spanId를 MDC에 넣어 로그와 에러 응답을 한 요청으로 묶는다 ✅. 익스포터(Zipkin/OTel) 연결은 후속 ⬜.

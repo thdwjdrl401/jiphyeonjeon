@@ -1,3 +1,21 @@
+# 알림 센터 백엔드 인수 문서 — **완료됨**
+
+> ⚠️ **이 문서의 역할은 끝났다.** 여기 적혀 있던 "BE 알림 도메인 없음 / FE 어댑터 501" 상태는
+> 더 이상 사실이 아니다. 알림 센터는 ADR-0073 여섯 단계가 모두 구현됐다.
+>
+> - **지금 무엇이 있는지·왜 그렇게 됐는지**: [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md)
+> - **API 규격의 정본**: [CONTRACT §2-4](CONTRACT.md)
+> - **설계 결정**: [ADR-0073](decisions/songjeongki/0073-notification-fanout-architecture.md) ·
+>   [ADR-0012](decisions/seominkyeong/0012-notification-center-two-status-axes.md)
+
+이 파일을 지우지 않고 남기는 이유는 CONTRACT·ADR 두 곳에서 링크가 걸려 있고, **"착수 전에
+무엇을 몰랐는지"가 기록으로 의미가 있기 때문**이다. 아래는 당시 원문이다.
+
+---
+
+<details>
+<summary>착수 전 원문 (2026-08-03 이전)</summary>
+
 # 알림 센터 백엔드 인수 문서 (이슈 초안)
 
 > 📍 **API 규격의 정본은 [CONTRACT §2-4](CONTRACT.md#2-4-알림-센터--서버-미구현-fe-완료-be-착수-전)다.**
@@ -147,3 +165,6 @@ WS/SSE 채널이 없어 FE는 60초 주기로 `summary`를 폴링한다. 채널�
 ```
 /label ~"Type: Enhancement" ~"Priority: Medium" ~"Status: Pending"
 ```
+
+
+</details>
