@@ -3,6 +3,8 @@ package com.liveclass.support;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
@@ -66,6 +68,20 @@ public class TestcontainersConfiguration {
                                     REDIS.stop();
                                     POSTGRES.stop();
                                 }));
+    }
+
+    /**
+     * <b>RabbitMQ 컨테이너는 띄우지 않는다.</b> 테스트가 검증하는 것은 메시지가 브로커를 왕복하는
+     * 일이 아니라 <b>어떤 메시지를 어디로 보내는가</b>와 <b>워커가 그 메시지로 무엇을 만드는가</b>라,
+     * 발행은 목으로 확인하고 워커는 직접 부른다.
+     *
+     * <p>다만 {@code @RabbitListener}는 컨텍스트가 뜨는 순간 브로커에 붙으려 하고, 없으면 재접속을
+     * 계속 시도하며 모든 테스트 로그를 채운다. 그래서 리스너 <b>기동만</b> 꺼 둔다 — 선언과 배선은
+     * 그대로 검증되고, 실제 소비 경로는 워커를 직접 호출해 확인한다.
+     */
+    @DynamicPropertySource
+    static void disableRabbitListeners(DynamicPropertyRegistry registry) {
+        registry.add("spring.rabbitmq.listener.simple.auto-startup", () -> "false");
     }
 
     @Bean

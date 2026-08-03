@@ -6,10 +6,13 @@ import com.liveclass.curriculum.domain.EnrollmentType;
 import com.liveclass.auth.api.UserContact;
 import com.liveclass.auth.api.UserDirectory;
 import com.liveclass.curriculum.repository.CurriculumRepository;
+import com.liveclass.enrollment.api.EnrollmentDecidedEvent;
 import com.liveclass.enrollment.api.EnrollmentDirectory;
 import com.liveclass.enrollment.api.EnrollmentManagement;
+import com.liveclass.enrollment.api.EnrollmentRequestedEvent;
 import com.liveclass.enrollment.api.EnrollmentStatus;
 import com.liveclass.enrollment.api.EnrollmentView;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -33,15 +36,18 @@ public class CurriculumEnrollmentService {
     private final EnrollmentManagement enrollmentManagement;
     private final EnrollmentDirectory enrollmentDirectory;
     private final UserDirectory userDirectory;
+    private final ApplicationEventPublisher eventPublisher;
 
     public CurriculumEnrollmentService(CurriculumRepository curriculumRepository,
                                        EnrollmentManagement enrollmentManagement,
                                        EnrollmentDirectory enrollmentDirectory,
-                                       UserDirectory userDirectory) {
+                                       UserDirectory userDirectory,
+                                       ApplicationEventPublisher eventPublisher) {
         this.curriculumRepository = curriculumRepository;
         this.enrollmentManagement = enrollmentManagement;
         this.enrollmentDirectory = enrollmentDirectory;
         this.userDirectory = userDirectory;
+        this.eventPublisher = eventPublisher;
     }
 
     /** 학생 수강 신청. 발행·모집창·정책 검증 후 정책에 맞는 초기 상태로 생성. */
@@ -65,7 +71,21 @@ public class CurriculumEnrollmentService {
         }
 
         boolean requiresApproval = c.getEnrollmentType() == EnrollmentType.APPROVAL_REQUIRED;
-        return enrollmentManagement.apply(curriculumId, studentId, requiresApproval);
+        EnrollmentView applied = enrollmentManagement.apply(curriculumId, studentId, requiresApproval);
+
+        /*
+         * 사건은 **승인 대기로 들어갔을 때만** 낸다. 즉시 수강은 강사가 처리할 일이 없는데,
+         * 그런데도 "신청이 들어왔습니다"를 보내면 처리 대기 목록이 영영 줄지 않는다.
+         *
+         * 여기서 알림을 직접 만들지 않는 이유는 ADR-0073 §1이다 — 수강 로직이 알림의 존재를
+         * 알아야 할 이유가 없고, 알게 되는 순간 네 모듈이 알림에 의존한다.
+         */
+        if (applied.status() == EnrollmentStatus.PENDING) {
+            eventPublisher.publishEvent(new EnrollmentRequestedEvent(
+                    applied.id(), curriculumId, c.getTitle(),
+                    c.getInstructorId(), studentId, applied.requestedAt()));
+        }
+        return applied;
     }
 
     /** 학생 본인 신청/수강 취소. */
@@ -100,15 +120,25 @@ public class CurriculumEnrollmentService {
     /** 강사 승인. 소유권 + 그 커리큘럼 소속 검증. */
     @Transactional
     public EnrollmentView approve(UUID curriculumId, UUID enrollmentId, UUID instructorId) {
-        requireEnrollmentInOwnedCurriculum(curriculumId, enrollmentId, instructorId);
-        return enrollmentManagement.approve(enrollmentId);
+        Curriculum c = requireEnrollmentInOwnedCurriculum(curriculumId, enrollmentId, instructorId);
+        EnrollmentView decided = enrollmentManagement.approve(enrollmentId);
+        publishDecided(c, decided, true);
+        return decided;
     }
 
     /** 강사 거절. */
     @Transactional
     public EnrollmentView reject(UUID curriculumId, UUID enrollmentId, UUID instructorId) {
-        requireEnrollmentInOwnedCurriculum(curriculumId, enrollmentId, instructorId);
-        return enrollmentManagement.reject(enrollmentId);
+        Curriculum c = requireEnrollmentInOwnedCurriculum(curriculumId, enrollmentId, instructorId);
+        EnrollmentView decided = enrollmentManagement.reject(enrollmentId);
+        publishDecided(c, decided, false);
+        return decided;
+    }
+
+    private void publishDecided(Curriculum c, EnrollmentView decided, boolean approved) {
+        eventPublisher.publishEvent(new EnrollmentDecidedEvent(
+                decided.id(), c.getId(), c.getTitle(),
+                c.getInstructorId(), decided.userId(), approved, decided.decidedAt()));
     }
 
     /** 강사 수강 제적(강퇴). */
@@ -118,14 +148,15 @@ public class CurriculumEnrollmentService {
         return enrollmentManagement.revoke(enrollmentId);
     }
 
-    private void requireEnrollmentInOwnedCurriculum(UUID curriculumId, UUID enrollmentId, UUID instructorId) {
-        requireOwned(curriculumId, instructorId);
+    private Curriculum requireEnrollmentInOwnedCurriculum(UUID curriculumId, UUID enrollmentId, UUID instructorId) {
+        Curriculum c = requireOwned(curriculumId, instructorId);
         EnrollmentView e = enrollmentDirectory.findById(enrollmentId)
                 .orElseThrow(() -> new CurriculumNotFoundException("수강 기록을 찾을 수 없습니다."));
         if (!e.curriculumId().equals(curriculumId)) {
             // 다른 커리큘럼의 수강 기록을 이 경로로 조작하지 못하게.
             throw new CurriculumNotFoundException("이 커리큘럼의 수강 기록이 아닙니다.");
         }
+        return c;
     }
 
     private Curriculum requireOwned(UUID curriculumId, UUID instructorId) {
