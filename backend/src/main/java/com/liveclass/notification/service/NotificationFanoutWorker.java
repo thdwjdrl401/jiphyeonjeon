@@ -2,6 +2,7 @@ package com.liveclass.notification.service;
 
 import com.liveclass.auth.api.UserDirectory;
 import com.liveclass.lesson.api.LessonDirectory;
+import com.liveclass.live.api.LiveSessionDirectory;
 import com.liveclass.auth.api.UserView;
 import com.liveclass.notification.api.NewNotification;
 import com.liveclass.notification.api.NotificationTypes;
@@ -56,23 +57,32 @@ public class NotificationFanoutWorker {
             NotificationTypes.MATERIAL_PUBLISHED,
             NotificationTypes.LIVE_SCHEDULED,
             NotificationTypes.LIVE_SCHEDULE_CHANGED,
-            NotificationTypes.LIVE_CANCELED);
+            NotificationTypes.LIVE_CANCELED,
+            NotificationTypes.VOD_PUBLISHED);
+
+    /** 담당 강사 한 명에게 가는 종류들. 학생에게 보내면 할 수 있는 일이 없는데 불안만 준다. */
+    private static final Set<String> INSTRUCTOR_TYPES = Set.of(
+            NotificationTypes.RECORDING_READY,
+            NotificationTypes.RECORDING_FAILED);
 
     private final NotificationInsertRepository insertRepository;
     private final NotificationFanoutRepository fanoutRepository;
     private final UserDirectory userDirectory;
     private final LessonDirectory lessonDirectory;
+    private final LiveSessionDirectory liveSessionDirectory;
     private final RabbitTemplate rabbitTemplate;
 
     public NotificationFanoutWorker(NotificationInsertRepository insertRepository,
                                     NotificationFanoutRepository fanoutRepository,
                                     UserDirectory userDirectory,
                                     LessonDirectory lessonDirectory,
+                                    LiveSessionDirectory liveSessionDirectory,
                                     RabbitTemplate rabbitTemplate) {
         this.insertRepository = insertRepository;
         this.fanoutRepository = fanoutRepository;
         this.userDirectory = userDirectory;
         this.lessonDirectory = lessonDirectory;
+        this.liveSessionDirectory = liveSessionDirectory;
         this.rabbitTemplate = rabbitTemplate;
     }
 
@@ -86,11 +96,76 @@ public class NotificationFanoutWorker {
             throw new IllegalArgumentException("알 수 없는 알림 종류입니다: " + command.type());
         }
         if (WIDE_TYPES.contains(command.type())) {
-            fanOutToCurriculumStudents(command);
+            NotificationFanoutCommand filled = withSessionContext(command);
+            if (filled.curriculumId() == null) {
+                logMissingContext(filled, "커리큘럼");
+                return;
+            }
+            fanOutToCurriculumStudents(filled);
+            return;
+        }
+        if (INSTRUCTOR_TYPES.contains(command.type())) {
+            NotificationFanoutCommand filled = withSessionContext(command);
+            if (filled.instructorId() == null) {
+                logMissingContext(filled, "강사");
+                return;
+            }
+            int sent = insertRepository.insert(buildForInstructor(filled));
+            log.info("녹화 알림 type={} asset={} 삽입={}", filled.type(), filled.videoAssetId(), sent);
             return;
         }
         int inserted = insertRepository.insert(buildForEnrollment(command));
         log.info("알림 팬아웃 type={} enrollment={} 삽입={}", command.type(), command.enrollmentId(), inserted);
+    }
+
+    /**
+     * 보낼 곳을 못 찾았다. <b>예외를 던지지 않는다</b> — 재시도해도 같고(세션은 다시 생기지 않는다),
+     * 알릴 대상이 없는 것은 DLQ에 쌓아 둘 만큼 심각한 일이 아니다. 다만 조용히 사라지면 나중에
+     * "알림이 안 왔다"를 추적할 수 없으므로 로그는 남긴다.
+     */
+    private void logMissingContext(NotificationFanoutCommand command, String missing) {
+        log.warn("알림 대상을 찾지 못해 건너뜀 type={} session={} 없는값={}",
+                command.type(), command.liveSessionId(), missing);
+    }
+
+    /**
+     * 라이브 세션에서 커리큘럼·강사를 채운다. 녹화 사건은 둘 다 모르고 세션이 안다.
+     *
+     * <p>세션이 사라졌으면 채우지 못한 채로 돌아온다. 그 판단(보낼 곳이 없다)은 부르는 쪽이 한다.
+     */
+    private NotificationFanoutCommand withSessionContext(NotificationFanoutCommand command) {
+        if (command.liveSessionId() == null
+                || (command.curriculumId() != null && command.instructorId() != null)) {
+            return command;
+        }
+        return liveSessionDirectory.findById(command.liveSessionId())
+                .map(session -> command.withSession(
+                        liveSessionDirectory.findCurriculumId(command.liveSessionId()).orElse(null),
+                        session.instructorId()))
+                .orElse(command);
+    }
+
+    /** 강사 한 명에게 가는 녹화 알림. */
+    private NewNotification buildForInstructor(NotificationFanoutCommand command) {
+        String subject = lessonTitleOf(command.lessonId());
+        ObjectNode targets = JSON.createObjectNode();
+        targets.put("curriculumId", String.valueOf(command.curriculumId()));
+        targets.put("lessonId", String.valueOf(command.lessonId()));
+        targets.put("liveSessionId", String.valueOf(command.liveSessionId()));
+        targets.put("recordingId", String.valueOf(command.videoAssetId()));
+
+        return NewNotification.of(
+                command.instructorId(),
+                command.type(),
+                // 녹화 실패는 강사가 **다시 찍어야** 하는 일이지만, 처리 축은 우리가 완료를 판정할
+                // 수 있을 때만 쓴다. 재촬영 완료를 서버가 알 방법이 없으므로 INFO로 둔다.
+                NotificationStatus.INFO,
+                NotificationTypes.severityOf(command.type()),
+                NotificationCopy.title(command.type()),
+                NotificationCopy.recordingMessage(command.type(), subject),
+                JSON.writeValueAsString(targets),
+                command.type() + ':' + command.liveSessionId(),
+                command.type() + ':' + command.instructorId() + ':' + command.videoAssetId());
     }
 
     // ---- 넓은 팬아웃 ----
@@ -148,7 +223,9 @@ public class NotificationFanoutWorker {
     private static String dedupePrefix(NotificationFanoutCommand command) {
         String subject = command.materialId() != null
                 ? command.materialId().toString()
-                : String.valueOf(command.liveSessionId());
+                : command.videoAssetId() != null
+                        ? command.videoAssetId().toString()
+                        : String.valueOf(command.liveSessionId());
         if (NotificationTypes.LIVE_SCHEDULE_CHANGED.equals(command.type())) {
             long at = command.nextStartsAt() == null ? 0L : command.nextStartsAt().toInstant().toEpochMilli();
             return command.type() + ':' + subject + ':' + at + ':';
@@ -172,6 +249,9 @@ public class NotificationFanoutWorker {
         }
         if (command.liveSessionId() != null) {
             targets.put("liveSessionId", command.liveSessionId().toString());
+        }
+        if (command.videoAssetId() != null) {
+            targets.put("recordingId", command.videoAssetId().toString());
         }
         // 레슨 자료·라이브면 레슨으로, 커리큘럼 전체 자료면 커리큘럼으로 보낸다.
         if (command.lessonId() != null) {

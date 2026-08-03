@@ -3,6 +3,7 @@ package com.liveclass.video.service;
 import com.liveclass.live.api.LiveSessionDirectory;
 import com.liveclass.live.api.LiveSessionView;
 import com.liveclass.video.api.LessonPlaybackAccess;
+import com.liveclass.video.api.ReplayPublishedEvent;
 import com.liveclass.video.api.PlaybackAccessException;
 import com.liveclass.video.domain.ReplayStatus;
 import com.liveclass.video.domain.VideoAsset;
@@ -10,6 +11,7 @@ import com.liveclass.video.domain.VideoAssetStatus;
 import com.liveclass.video.repository.VideoAssetRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,13 +29,16 @@ public class ReplayPublicationService {
     private final VideoAssetRepository videoAssetRepository;
     private final LessonPlaybackAccess playbackAccess;
     private final LiveSessionDirectory liveSessionDirectory;
+    private final ApplicationEventPublisher eventPublisher;
 
     public ReplayPublicationService(VideoAssetRepository videoAssetRepository,
                                     LessonPlaybackAccess playbackAccess,
-                                    LiveSessionDirectory liveSessionDirectory) {
+                                    LiveSessionDirectory liveSessionDirectory,
+                                    ApplicationEventPublisher eventPublisher) {
         this.videoAssetRepository = videoAssetRepository;
         this.playbackAccess = playbackAccess;
         this.liveSessionDirectory = liveSessionDirectory;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -50,6 +55,9 @@ public class ReplayPublicationService {
         asset.setPublishedAt(OffsetDateTime.now());
         asset.setWithdrawReason(null);
         log.info("다시보기 게시 lesson={} by={}", lessonId, userId);
+        // 자동 공개와 같은 사건이다 — 학생 입장에서는 "다시 볼 수 있게 됐다"로 같다.
+        eventPublisher.publishEvent(new ReplayPublishedEvent(
+                asset.getId(), asset.getLessonId(), asset.getLiveSessionId(), asset.getPublishedAt()));
     }
 
     @Transactional

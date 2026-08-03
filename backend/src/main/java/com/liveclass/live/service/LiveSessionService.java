@@ -100,6 +100,12 @@ public class LiveSessionService implements LiveSessionManagement, LiveSessionDir
 
     @Override
     @Transactional(readOnly = true)
+    public Optional<UUID> findCurriculumId(UUID sessionId) {
+        return liveSessionRepository.findById(sessionId).map(LiveSession::getCurriculumId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<LiveSessionView> findByLessons(Collection<UUID> lessonIds) {
         if (lessonIds.isEmpty()) {
             return List.of();   // 빈 IN 절로 쿼리를 쏘지 않는다.

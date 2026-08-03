@@ -41,6 +41,7 @@ public record NotificationFanoutCommand(
         UUID afterUserId,
         Integer sliceLimit,
         UUID liveSessionId,
+        UUID videoAssetId,
         /** 일정 변경의 "언제에서". 변경 알림에만 값이 있다. */
         OffsetDateTime previousStartsAt,
         /** 예정·변경의 새 시각. 취소에는 없다. */
@@ -52,7 +53,7 @@ public record NotificationFanoutCommand(
                                                    String curriculumTitle, UUID instructorId,
                                                    UUID studentId, OffsetDateTime occurredAt) {
         return new NotificationFanoutCommand(type, enrollmentId, curriculumId, curriculumTitle,
-                instructorId, studentId, null, null, null, occurredAt, null, null, null, null, null);
+                instructorId, studentId, null, null, null, occurredAt, null, null, null, null, null, null);
     }
 
     /** 넓은 팬아웃의 <b>첫</b> 조각. 커서는 비어 있고 워커가 이어 간다. */
@@ -63,7 +64,7 @@ public record NotificationFanoutCommand(
         return new NotificationFanoutCommand(
                 com.liveclass.notification.api.NotificationTypes.MATERIAL_PUBLISHED,
                 null, curriculumId, curriculumTitle, null, null,
-                lessonId, materialId, fileName, occurredAt, null, sliceLimit, null, null, null);
+                lessonId, materialId, fileName, occurredAt, null, sliceLimit, null, null, null, null);
     }
 
     /**
@@ -76,13 +77,32 @@ public record NotificationFanoutCommand(
                                                      int sliceLimit) {
         return new NotificationFanoutCommand(type, null, curriculumId, null, null, null,
                 lessonId, null, null, occurredAt, null, sliceLimit,
-                liveSessionId, previousStartsAt, nextStartsAt);
+                liveSessionId, null, previousStartsAt, nextStartsAt);
+    }
+
+    /**
+     * 녹화·다시보기 사건. <b>커리큘럼도 강사도 싣지 않는다</b> — 녹화 자산은 둘 다 모르고 라이브
+     * 세션이 안다. 그것을 발행 시점에 조회하면 webhook 처리 트랜잭션이 길어지므로 워커에 맡긴다.
+     */
+    static NotificationFanoutCommand forRecording(String type, UUID videoAssetId, UUID lessonId,
+                                                  UUID liveSessionId, OffsetDateTime occurredAt,
+                                                  int sliceLimit) {
+        return new NotificationFanoutCommand(type, null, null, null, null, null,
+                lessonId, null, null, occurredAt, null, sliceLimit,
+                liveSessionId, videoAssetId, null, null);
+    }
+
+    /** 라이브 세션에서 알아낸 커리큘럼·강사를 채워 넣는다. */
+    NotificationFanoutCommand withSession(UUID sessionCurriculumId, UUID sessionInstructorId) {
+        return new NotificationFanoutCommand(type, enrollmentId, sessionCurriculumId, curriculumTitle,
+                sessionInstructorId, studentId, lessonId, materialId, subjectName, occurredAt,
+                afterUserId, sliceLimit, liveSessionId, videoAssetId, previousStartsAt, nextStartsAt);
     }
 
     /** 다음 조각. 사건은 그대로 두고 커서만 옮긴다. */
     NotificationFanoutCommand nextSlice(UUID lastUserId) {
         return new NotificationFanoutCommand(type, enrollmentId, curriculumId, curriculumTitle,
                 instructorId, studentId, lessonId, materialId, subjectName, occurredAt,
-                lastUserId, sliceLimit, liveSessionId, previousStartsAt, nextStartsAt);
+                lastUserId, sliceLimit, liveSessionId, videoAssetId, previousStartsAt, nextStartsAt);
     }
 }
