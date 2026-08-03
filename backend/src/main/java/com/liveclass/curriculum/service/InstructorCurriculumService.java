@@ -244,6 +244,10 @@ public class InstructorCurriculumService {
      *
      * <p>섹션·레슨·자료·라이브 세션은 DDL의 ON DELETE CASCADE가 함께 지운다(V1__init_core.sql).
      * 카운터 트리거는 이미 사라진 부모 행을 UPDATE하려다 0건으로 무시되므로 별도 처리가 필요 없다.
+     *
+     * <p><b>녹화만 예외다.</b> {@code video_asset.lesson_id}는 일부러 NO ACTION으로 남겨 뒀다(ADR-0064) —
+     * 행만 CASCADE로 지우면 스토리지에 파일이 조용히 고아로 남기 때문이다. 그래서 레슨 삭제와 똑같이
+     * 정리 포트를 거친다. 안 거치면 여기서 FK에 막힌다.
      */
     @Transactional
     public void delete(UUID instructorId, UUID curriculumId) {
@@ -251,8 +255,22 @@ public class InstructorCurriculumService {
         if (curriculum.getLifecycleStatus() != CurriculumLifecycleStatus.DRAFT) {
             throw new CurriculumStateConflictException("초안(DRAFT) 커리큘럼만 삭제할 수 있습니다.");
         }
+        int removedRecordings = deleteRecordingsUnder(curriculumId);
         curriculumRepository.delete(curriculum);
-        log.info(Audit.MARKER, "커리큘럼 삭제 curriculumId={} instructorId={}", curriculumId, instructorId);
+        log.info(Audit.MARKER, "커리큘럼 삭제 curriculumId={} instructorId={} 녹화자산={}",
+                curriculumId, instructorId, removedRecordings);
+    }
+
+    /** 커리큘럼 아래 모든 레슨의 녹화(자산 행 + 산출물)를 정리한다. 레슨이 없으면 아무 일도 하지 않는다. */
+    private int deleteRecordingsUnder(UUID curriculumId) {
+        List<UUID> sectionIds = sectionRepository.findByCurriculumIdOrderByOrderIndexAsc(curriculumId)
+                .stream().map(Section::getId).toList();
+        if (sectionIds.isEmpty()) {
+            return 0;
+        }
+        List<UUID> lessonIds = lessonManagement.findBySections(sectionIds)
+                .stream().map(LessonView::lessonId).toList();
+        return lessonRecordingCleanup.deleteByLessons(lessonIds);
     }
 
     /** null 인자는 "변경 안 함"으로 다룬다 — PATCH 부분 수정. 기간 검증 규칙은 미확정(골격). */
