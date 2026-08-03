@@ -74,6 +74,8 @@ export const instructorPaths = {
     `/instructor/curriculums/${curriculumId}/sections/${sectionId}/lessons/${lessonId}`,
   newLesson: (curriculumId: string, sectionId: string) =>
     `/instructor/curriculums/${curriculumId}/sections/${sectionId}/lessons/new`,
+  newRecordedLesson: (curriculumId: string, sectionId: string) =>
+    `/instructor/curriculums/${curriculumId}/sections/${sectionId}/recorded-lessons/new`,
   editLesson: (curriculumId: string, sectionId: string, lessonId: string) =>
     `/instructor/curriculums/${curriculumId}/sections/${sectionId}/lessons/${lessonId}/edit`,
   preflight: (sessionId: string) => `/instructor/live-sessions/${sessionId}/preflight`,
