@@ -11,14 +11,14 @@ import java.util.UUID;
  * @param completedCurriculumCount  완료(모든 게시 레슨 완료, 100%) 커리큘럼 수
  * @param averageProgress           활성 수강 전반의 평균 진도(0~100)
  * @param completedLessonCount      완료한 레슨 총합
- * @param todayLiveSession          가장 가까운 예정/진행 라이브(없으면 null)
+ * @param upcomingLiveSession       가장 가까운 예정/진행 라이브(없으면 null)
  */
 public record StudentLearningSummary(
         int inProgressCurriculumCount,
         int completedCurriculumCount,
         int averageProgress,
         int completedLessonCount,
-        TodayLiveSession todayLiveSession
+        UpcomingLiveSession upcomingLiveSession
 ) {
 
     public static StudentLearningSummary empty() {
@@ -26,7 +26,7 @@ public record StudentLearningSummary(
     }
 
     /** 대시보드가 강조하는 다음 라이브 세션. FE {@code DashboardLiveSession}과 형태를 맞춘다. */
-    public record TodayLiveSession(
+    public record UpcomingLiveSession(
             UUID sessionId,
             UUID lessonId,
             String lessonTitle,

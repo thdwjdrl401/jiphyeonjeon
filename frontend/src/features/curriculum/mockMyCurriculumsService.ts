@@ -1,8 +1,8 @@
 import {
   getDemoInstructorCurriculums,
   getDemoStudentLearningSummary,
-  getDemoTodayInstructorLiveSession,
-  getDemoTodayLiveSession,
+  getDemoUpcomingInstructorLiveSession,
+  getDemoUpcomingLiveSession,
 } from '@/features/demo/demoData'
 import type { CurriculumLifecycleStatus } from './types'
 import type { MyCurriculumsService } from './myCurriculumsService.interface'
@@ -45,7 +45,7 @@ export const mockMyCurriculumsService = {
   async getStudentDashboardSummary(userId) {
     return {
       ...getDemoStudentLearningSummary(userId),
-      todayLiveSession: getDemoTodayLiveSession(userId),
+      upcomingLiveSession: getDemoUpcomingLiveSession(userId),
     }
   },
   async getInstructorDashboardSummary(userId) {
@@ -55,7 +55,7 @@ export const mockMyCurriculumsService = {
       publishedCurriculumCount: curriculums.filter((item) => item.lifecycleStatus === 'PUBLISHED').length,
       upcomingLiveCount: curriculums.filter((item) => item.nextSession !== '일정 미정').length,
       totalEnrolleeCount: curriculums.reduce((sum, item) => sum + item.enrolleeCount, 0),
-      todayLiveSession: getDemoTodayInstructorLiveSession(userId),
+      upcomingLiveSession: getDemoUpcomingInstructorLiveSession(userId),
     }
   },
 } satisfies MyCurriculumsService

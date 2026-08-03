@@ -452,19 +452,23 @@ export function findLastRecordedLesson(curriculum: MockCurriculumEntity, enrollm
   return null
 }
 
-export function findNextLiveLesson(curriculums: Array<{ curriculum: MockCurriculumEntity }>, scheduledDate?: Date) {
+/**
+ * 예정/진행 세션 중 `scheduledAt`이 가장 이른 하나(없으면 null).
+ *
+ * <p>"오늘"로 거르지 않는다 — 서버(`CatalogService.nearestLiveSession`)가 날짜 상한 없이
+ * 가장 이른 세션을 주므로 mock도 같은 규칙을 쓴다. 예전에는 당일만 반환해서, 오늘 일정이
+ * 없으면 mock은 null인데 실서버는 다음 주 세션을 주는 식으로 갈렸다.
+ *
+ * <p>서버와 남는 차이 하나: 서버는 시작하지 않은 <b>과거</b> SCHEDULED 세션을 제외하지만
+ * 여기서는 제외하지 않는다. fixture가 절대 날짜라 "지금"과 비교하면 그 날짜가 지나는 순간
+ * mock이 조용히 null이 되기 때문이다(테스트가 날짜에 묶이지 않게 한다).
+ */
+export function findNextLiveLesson(curriculums: Array<{ curriculum: MockCurriculumEntity }>) {
   const openLiveStatuses: CurriculumLiveSessionStatus[] = ['SCHEDULED', 'OPEN', 'LIVE']
   const candidates = curriculums.flatMap(({ curriculum }) =>
     buildMockCurriculumOutline(curriculum).flatMap((section) =>
       section.lessons
         .filter((lesson) => lesson.liveSession && openLiveStatuses.includes(lesson.liveSession.status))
-        .filter((lesson) => {
-          if (!scheduledDate || !lesson.liveSession?.scheduledAt) return !scheduledDate
-          const scheduledAt = new Date(lesson.liveSession.scheduledAt)
-          return scheduledAt.getFullYear() === scheduledDate.getFullYear()
-            && scheduledAt.getMonth() === scheduledDate.getMonth()
-            && scheduledAt.getDate() === scheduledDate.getDate()
-        })
         .map((lesson) => ({ curriculum, sectionId: section.sectionId, lesson, liveSession: lesson.liveSession! })),
     ),
   )
