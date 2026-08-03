@@ -20,7 +20,7 @@ wire protocol을 알지 못한다.
 |---|---|---|---|
 | `openai-realtime` | 16 kHz PCM을 24 kHz로 resample하고 base64 `input_audio_buffer.append` 후 segment마다 `commit` | 같은 `item_id`의 transcription delta/completed/failed event | `OPENAI_API_KEY` Bearer token |
 | `nemotron` | 16 kHz PCM을 NumPy/Transformers adapter로 전달 | local `TextIteratorStreamer` delta | 없음; `ASR_MODEL_ID`의 로컬 checkpoint 사용 가능 |
-| `vllm-whisper` | 공통 VAD segment를 mono PCM16 WAV multipart로 loopback `/v1/audio/transcriptions`에 전달 | provider-authoritative segment final 하나 | 선택적 `VLLM_API_KEY`; 기본 runtime은 loopback 격리 |
+| `vllm-whisper` | 공통 VAD segment를 mono PCM16 WAV multipart로 loopback `/v1/audio/transcriptions`에 전달 | 완성 transcript `TextDelta` 1회 후 provider-authoritative segment final | 선택적 `VLLM_API_KEY`; 기본 runtime은 loopback 격리 |
 | `stub` | process 내부 입력 | deterministic fake event | 없음 |
 
 OpenAI 연결 URL은 `wss://api.openai.com/v1/realtime?intent=transcription`이다. model은 URL query가 아니라
@@ -30,7 +30,8 @@ transcript가 다르면 `SegmentFinal.text`에 provider final을 권위 값으�
 이하 delta 미리보기를 final로 교체한다.
 
 vLLM Whisper는 stream 시작 전 `/v1/models`에서 exact served-model alias를 확인한다. frame delta를
-지원하지 않으므로 `incremental_deltas=False`이며 응답 text를 잘라 가짜 delta로 발행하지 않는다.
+지원하지 않으므로 `incremental_deltas=False`다. 대신 완성된 응답 text 전체를 `TextDelta` 한 번으로
+발행한 뒤 동일 text의 `SegmentFinal`을 발행해 Redis의 delta-before-final 계약을 유지한다.
 
 Nemotron 경로에는 외부 network hop이 없다. prewarmed recognizer와 CUDA model은 job child 하나가
 독점하고, segment inference는 engine의 lock으로 직렬화한다. model generate thread의 결과는 event loop

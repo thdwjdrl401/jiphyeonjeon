@@ -37,7 +37,7 @@ flowchart LR
     V -->|최대 8초 WAV segment| C[vllm-whisper adapter]
     C -->|loopback /v1/audio/transcriptions| R[vLLM model owner GPU 0]
     R -->|text final| C
-    C --> S[SegmentFinal + sessionMs]
+    C --> S[Full TextDelta + SegmentFinal + sessionMs]
     S --> RS[(Redis caption stream)]
 ~~~
 
@@ -54,8 +54,10 @@ provider 설정은 다음 환경변수로만 주입한다.
 - VLLM_WHISPER_REQUEST_TIMEOUT_SECONDS, VLLM_WHISPER_CONNECT_TIMEOUT_SECONDS
 
 adapter는 stream 시작 전에 /v1/models에서 alias의 정확한 일치를 확인한다. 각 공통 VAD segment를
-mono PCM16 WAV multipart로 보내고 language=ko, temperature=0, seed=0으로 요청한다. 응답의
-문자열 text 하나를 권위 있는 SegmentFinal로 내며 가짜 TextDelta를 만들지 않는다.
+mono PCM16 WAV multipart로 보내고 language=ko, temperature=0, seed=0으로 요청한다. 응답은 partial
+streaming이 아니므로 문자열 text 전체를 `TextDelta` 한 번으로 발행한 뒤 같은 text를 권위 있는
+`SegmentFinal`로 낸다. `incremental_deltas=False`는 중간 partial이 없다는 뜻이며 Redis의
+delta-before-final 계약은 그대로 유지한다.
 
 학습 run ID나 checkpoint 절대경로를 agent profile에 넣지 않는다. vLLM supervisor가 Git 밖의
 승격 checkpoint 경로를 읽고 stable alias로 노출한다. runtime artifact는 processor/tokenizer와

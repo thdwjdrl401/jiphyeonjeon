@@ -4,7 +4,13 @@ import httpx
 import pytest
 
 from app.audio.segmentation import SpeechSegment
-from app.stt.engine import EngineCapabilities, EngineCompleted, SegmentFinal, SttStreamContext
+from app.stt.engine import (
+    EngineCapabilities,
+    EngineCompleted,
+    SegmentFinal,
+    SttStreamContext,
+    TextDelta,
+)
 from app.stt.providers.vllm_whisper import (
     VllmWhisperRuntimeConfiguration,
     VllmWhisperStreamingEngine,
@@ -109,6 +115,7 @@ async def test_engine_emits_one_authoritative_final_per_common_vad_segment() -> 
     assert started.stt_session_id.startswith("vllm-whisper:")
     assert engine.capabilities == EngineCapabilities(16_000, 1, False)
     assert events == [
+        TextDelta("여기를 보세요.", 140),
         SegmentFinal("여기를 보세요.", 120, 140, "SILENCE"),
         EngineCompleted(0),
     ]
