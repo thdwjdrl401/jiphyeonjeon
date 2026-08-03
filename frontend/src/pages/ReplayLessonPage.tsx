@@ -8,6 +8,8 @@ import { getLesson } from '@/features/lesson/lessonService'
 import CaptionDock from '@/features/live-session/CaptionDock'
 import LearningSidebar from '@/features/live-session/LearningSidebar'
 import { getLiveLearningPreview, type LearningPanel } from '@/features/live-session/liveLearningPreview'
+import WatchHeatmapStrip from '@/features/live-session/WatchHeatmapStrip'
+import { useWatchTracking } from '@/features/live-session/useWatchTracking'
 import {
   emptyCaptionStreamState,
   reduceCaptionStream,
@@ -16,6 +18,7 @@ import {
 import {
   getAiAnswerHistory,
   getCaptions,
+  getWatchHeatmap,
   getChatMessages,
   getLectureNotes,
 } from '@/features/live-session/liveSessionService'
@@ -85,6 +88,17 @@ export default function ReplayLessonPage() {
     queryKey: ['replay-ai-answers', sessionId],
     queryFn: () => getAiAnswerHistory(sessionId),
     enabled: Boolean(sessionId),
+  })
+  /*
+   * 많이 다시 본 구간(ADR-0063). 강사는 세지 않는다 — 검수하며 되감은 것이 학생 재시청으로 잡히면
+   * 그래프가 오염된다. 보기는 강사도 본다(그러라고 만든 것이다).
+   */
+  const durationMs = playback.playback?.durationMs ?? null
+  useWatchTracking(lessonId, positionMs, !isInstructor && Boolean(lessonId))
+  const heatmapQuery = useQuery({
+    queryKey: ['watch-heatmap', lessonId, durationMs],
+    queryFn: () => getWatchHeatmap(lessonId, durationMs),
+    enabled: Boolean(lessonId),
   })
   /*
    * 저장된 자막 이벤트를 라이브와 같은 누적기로 접는다. 다시보기라고 다른 규칙으로 접으면
@@ -177,6 +191,11 @@ export default function ReplayLessonPage() {
               onSessionTimeChange={setPositionMs}
             />
           </Suspense>
+
+          <WatchHeatmapStrip
+            durationMs={durationMs}
+            heatmap={heatmapQuery.data ?? null}
+          />
 
           {/* 라이브 당시 저장된 자막이다. "교정"은 후처리가 붙은 뒤의 이름이라 아직 쓰지 않는다. */}
           <CaptionDock captions={captions} currentSessionMs={positionMs} label="자막" onSeek={seekSession} onSelectTerm={openGlossaryTerm} />

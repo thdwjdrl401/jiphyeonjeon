@@ -8,6 +8,8 @@ import { useAuth } from '@/features/auth/AuthContext'
 import { getLesson } from '@/features/lesson/lessonService'
 import { getLearningContext } from '@/features/learning/learningService'
 import BookmarkStrip from '@/features/live-session/BookmarkStrip'
+import WatchHeatmapStrip from '@/features/live-session/WatchHeatmapStrip'
+import { useWatchTracking } from '@/features/live-session/useWatchTracking'
 import { mergeLectureNote } from '@/features/live-session/lectureNoteMerge'
 import CaptionDock from '@/features/live-session/CaptionDock'
 import {
@@ -26,6 +28,7 @@ import {
   getAiAnswerHistory,
   getLectureNotes,
   getLiveSession,
+  getWatchHeatmap,
   saveBookmark,
   sendChatMessage,
   subscribeCaptions,
@@ -215,6 +218,17 @@ export default function LiveClassroomPage() {
     queryKey: ['ai-answers', sessionId],
     queryFn: () => getAiAnswerHistory(sessionId),
     enabled: Boolean(sessionId),
+  })
+  /*
+   * 많이 다시 본 구간(ADR-0063). 수강생만 센다 — 강사 화면에는 재생바가 없고(LiveKit 송출 미리보기),
+   * 강사 재생이 섞이면 그래프가 오염된다.
+   */
+  const watchDurationMs = playback.playback?.durationMs ?? null
+  useWatchTracking(lesson?.lessonId ?? '', positionMs, !isInstructor && Boolean(lesson?.lessonId))
+  const heatmapQuery = useQuery({
+    queryKey: ['watch-heatmap', lesson?.lessonId, watchDurationMs],
+    queryFn: () => getWatchHeatmap(lesson!.lessonId, watchDurationMs),
+    enabled: !isInstructor && Boolean(lesson?.lessonId),
   })
   const noteQuery = useQuery({
     queryKey: ['lecture-notes', sessionId],
@@ -500,6 +514,13 @@ export default function LiveClassroomPage() {
             자막은 수강생 화면에만 둔다. 강사는 자기가 말한 것을 다시 읽을 이유가 없고, 자막 독이
             차지하는 높이만큼 송출 미리보기가 눌려 실제로 나가는 프레임을 작게 보게 된다.
           */}
+          {!isInstructor && (
+            <WatchHeatmapStrip
+              durationMs={watchDurationMs}
+              heatmap={heatmapQuery.data ?? null}
+            />
+          )}
+
           {!isInstructor && (
             <BookmarkStrip
               bookmarks={learningQuery.data?.bookmarks ?? []}

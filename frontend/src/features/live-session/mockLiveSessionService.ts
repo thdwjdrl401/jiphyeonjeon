@@ -292,6 +292,20 @@ export const mockLiveSessionService = {
       },
     ]
   },
+  async getMyWatchBuckets() {
+    return { 0: 1, 1: 1, 2: 3, 3: 1 }
+  },
+  async reportWatchBuckets() {
+    // 목은 저장하지 않는다 — 화면이 전송 실패로 흔들리지 않게 조용히 성공한다.
+  },
+  async getWatchHeatmap() {
+    // 서버와 같은 모양. 2.4가 가장 많이 다시 본 구간이다.
+    return {
+      bucketSizeMs: 10000,
+      points: [1, 1, 1.2, 2.4, 1.8, 1, 1, 1.1, 1, 1],
+      viewers: 5,
+    }
+  },
   async getLectureNotes() {
     // 목도 서버와 같은 모양을 돌려준다 — 목이 다르면 실서버에서만 깨지는 화면이 된다.
     return {
