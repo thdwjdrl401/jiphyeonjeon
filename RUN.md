@@ -39,6 +39,18 @@ npm run install:all             # 루트(concurrently) + frontend
 - WSL에서 `Permission denied: ./gradlew` → `chmod +x backend/gradlew` 한 번.
 - **인프라(docker compose)가 먼저 떠 있어야** 백엔드가 PG/Redis에 붙는다.
 
+녹화강의 batch STT(ADR-0011)는 기본 개발 실행에 포함하지 않는다. `.env`에 `GMS_API_KEY`를 넣고
+백엔드를 `RECORDED_STT_ENABLED=true`로 실행한 뒤 별도 프로필을 켠다. 두 STT HMAC 값은 `.env`의
+`RECORDED_STT_SOURCE_SECRET`·`RECORDED_STT_CALLBACK_SECRET`을 Spring과 worker가 함께 읽는다.
+
+```bash
+docker compose --profile recorded-stt up -d --build recorded-stt-worker
+docker compose logs -f recorded-stt-worker
+```
+
+이 worker는 `ingestion.transcribe`만 소비하며 FFmpeg와 GMS key를 가진다. `media-worker`의 HLS 변환과
+PPTX `ai-worker`는 별도 프로세스·queue로 계속 동작한다.
+
 ### 방법 B. VSCode 실행 버튼
 1. `Extension Pack for Java` 설치(추천 팝업).
 2. **실행 및 디버그** 패널 → **`Spring Boot (Backend)`**(= `com.liveclass.LiveClassApplication`) ▶ → 백엔드 8080.

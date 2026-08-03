@@ -105,6 +105,28 @@ services:
       minio-init:
         condition: service_completed_successfully
 
+  # 선택 실행: docker compose --profile recorded-stt up -d recorded-stt-worker
+  # host에서 실행 중인 Spring과 Spring이 localhost로 서명한 MinIO URL을 함께 사용한다.
+  recorded-stt-worker:
+    profiles: ["recorded-stt"]
+    build: ./ai/ai-worker
+    container_name: liveclass-recorded-stt-worker
+    restart: unless-stopped
+    network_mode: host
+    entrypoint: ["python", "-m", "app.recorded_stt.main"]
+    environment:
+      RECORDED_STT_INSTANCE_ID: recorded-stt-local-1
+      RECORDED_STT_MANAGEMENT_HOST: 127.0.0.1
+      RECORDED_STT_MANAGEMENT_PORT: "8012"
+      RECORDED_STT_RABBITMQ_URL: amqp://${RABBITMQ_USER:-liveclass}:${RABBITMQ_PASSWORD:-liveclass}@localhost:5672/
+      RECORDED_STT_SPRING_INTERNAL_BASE_URL: http://localhost:8080
+      RECORDED_STT_SOURCE_HMAC_SECRET: ${RECORDED_STT_SOURCE_SECRET:-dev-recorded-stt-source-secret}
+      RECORDED_STT_CALLBACK_HMAC_SECRET: ${RECORDED_STT_CALLBACK_SECRET:-dev-recorded-stt-callback-secret}
+      RECORDED_STT_GMS_API_KEY: ${GMS_API_KEY:?GMS_API_KEY 필요}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
 volumes:
   pgdata:
   redisdata:
