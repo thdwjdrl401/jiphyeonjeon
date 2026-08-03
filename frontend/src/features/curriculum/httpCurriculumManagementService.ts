@@ -1,3 +1,4 @@
+import axios from 'axios'
 import { apiClient } from '@/shared/api/client'
 import { uploadAsset } from '@/shared/api/uploadAsset'
 import type {
@@ -18,6 +19,7 @@ interface ApiLessonResponse {
   lessonId: string
   title: string
   status: string
+  deliveryType: 'LIVE' | 'RECORDED'
 }
 
 interface ApiCurriculumMaterial {
@@ -25,6 +27,28 @@ interface ApiCurriculumMaterial {
   fileName: string
   fileSize: number
   embeddingStatus?: string
+}
+
+interface RecordedLessonCreated {
+  lessonId: string
+  recordedVideoId: string
+  deliveryType: 'RECORDED'
+  processingStatus: 'AWAITING_UPLOAD'
+}
+
+interface RecordedUploadTicket {
+  assetId: string
+  uploadUrl: string
+  method: string
+  headers: Record<string, string>
+  expiresAt: string
+}
+
+interface RecordedProcessingAccepted {
+  lessonId: string
+  recordedVideoId: string
+  jobId: string
+  status: 'QUEUED'
 }
 
 /** API 자료 응답을 화면 모델로. embeddingStatus·file은 목록/표시에 쓰지 않으므로 옮기지 않는다. */
@@ -180,5 +204,45 @@ export const httpCurriculumManagementService = {
   },
   async deleteSection(sectionId) {
     await apiClient.delete(`/instructor/sections/${sectionId}`)
+  },
+  async uploadRecordedLesson(request) {
+    const { data: recorded } = await apiClient.post<RecordedLessonCreated>(
+      `/instructor/sections/${request.sectionId}/recorded-lessons`,
+      {
+        clientRequestId: request.clientRequestId,
+        title: request.title,
+        description: request.description,
+      },
+    )
+
+    const contentType = request.videoFile.type || 'video/mp4'
+    const { data: ticket } = await apiClient.post<RecordedUploadTicket>(
+      `/instructor/recorded-lessons/${recorded.lessonId}/video/upload-requests`,
+      {
+        fileName: request.videoFile.name,
+        contentType,
+        fileSize: request.videoFile.size,
+      },
+    )
+
+    // 대용량 MP4는 앱 API·세션 쿠키·CSRF 인터셉터를 거치지 않고 스토리지에 직접 PUT한다.
+    await axios.request({
+      url: ticket.uploadUrl,
+      method: ticket.method,
+      headers: ticket.headers,
+      data: request.videoFile,
+    })
+
+    const { data: accepted } = await apiClient.post<RecordedProcessingAccepted>(
+      `/instructor/recorded-lessons/${recorded.lessonId}/video/complete`,
+      { assetId: ticket.assetId },
+    )
+
+    return {
+      lessonId: accepted.lessonId,
+      recordedVideoId: accepted.recordedVideoId,
+      jobId: accepted.jobId,
+      processingStatus: accepted.status,
+    }
   },
 } satisfies CurriculumManagementService

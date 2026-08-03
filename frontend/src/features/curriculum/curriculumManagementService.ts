@@ -5,6 +5,7 @@ import type {
   CreateCurriculumRequest,
   CurriculumManagementService,
   SaveCurriculumManagementRequest,
+  UploadRecordedLessonRequest,
 } from './curriculumManagementService.interface'
 
 const curriculumManagementService = selectDataSource<CurriculumManagementService>(
@@ -21,6 +22,7 @@ export const publishCurriculum = (curriculumId: string) => curriculumManagementS
 export const deleteCurriculum = (curriculumId: string) => curriculumManagementService.deleteCurriculum(curriculumId)
 export const deleteLesson = (lessonId: string) => curriculumManagementService.deleteLesson(lessonId)
 export const deleteSection = (sectionId: string) => curriculumManagementService.deleteSection(sectionId)
+export const uploadRecordedLesson = (request: UploadRecordedLessonRequest) => curriculumManagementService.uploadRecordedLesson(request)
 
 export type {
   CreateCurriculumRequest,
@@ -29,4 +31,6 @@ export type {
   CurriculumManagementService,
   InstructorCurriculumResponse,
   SaveCurriculumManagementRequest,
+  UploadRecordedLessonRequest,
+  UploadRecordedLessonResult,
 } from './curriculumManagementService.interface'

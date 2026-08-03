@@ -19,6 +19,10 @@ const savedStructures = new Map<
   Awaited<ReturnType<CurriculumManagementService['getCurriculumManagementStructure']>>
 >()
 
+export function resetMockCurriculumManagement() {
+  savedStructures.clear()
+}
+
 /**
  * "저장"된 자료로 정규화한다(HTTP 구현과 같은 계약) — File을 떼고, 새로 선택한(File 보유) 자료에는
  * 안정적인 persisted id를 부여한다. 그래야 저장 후 화면이 같은 파일을 다시 올리지 않는다.
@@ -91,6 +95,7 @@ export const mockCurriculumManagementService = {
         lessonId: lesson.lessonId,
         title: lesson.title,
         status: lesson.status,
+        deliveryType: 'LIVE' as const,
       })),
     }))
   },
@@ -150,6 +155,48 @@ export const mockCurriculumManagementService = {
     deleteMockSection(sectionId)
     for (const [key, structure] of savedStructures) {
       savedStructures.set(key, structure.filter((section) => section.sectionId !== sectionId))
+    }
+  },
+  async uploadRecordedLesson(request) {
+    const curriculum = getMockCurriculum(request.curriculumId)
+    if (!curriculum) throw new ApiError('커리큘럼을 찾을 수 없습니다.', 404, 'CURRICULUM_NOT_FOUND')
+
+    const currentStructure = savedStructures.get(request.curriculumId)
+      ?? buildMockCurriculumOutline(curriculum).map((section) => ({
+        sectionId: section.sectionId,
+        title: section.title,
+        description: section.description ?? '',
+        order: section.order,
+        lessons: section.lessons.map((lesson) => ({
+          lessonId: lesson.lessonId,
+          title: lesson.title,
+          status: lesson.status,
+          deliveryType: 'LIVE' as const,
+        })),
+      }))
+    if (!currentStructure.some((section) => section.sectionId === request.sectionId)) {
+      throw new ApiError('섹션을 찾을 수 없습니다.', 404, 'SECTION_NOT_FOUND')
+    }
+
+    const lessonId = `lesson-recorded-${Date.now()}`
+    savedStructures.set(request.curriculumId, currentStructure.map((section) =>
+      section.sectionId === request.sectionId
+        ? {
+            ...section,
+            lessons: [...section.lessons, {
+              lessonId,
+              title: request.title,
+              status: 'PUBLISHED',
+              deliveryType: 'RECORDED' as const,
+            }],
+          }
+        : section))
+
+    return {
+      lessonId,
+      recordedVideoId: `recorded-${lessonId}`,
+      jobId: `job-${lessonId}`,
+      processingStatus: 'QUEUED' as const,
     }
   },
 } satisfies CurriculumManagementService
