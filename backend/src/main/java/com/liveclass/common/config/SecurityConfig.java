@@ -46,6 +46,9 @@ public class SecurityConfig {
                         // AI 워커 콜백·자료 URL 발급 — 로그인 세션 아니라 HMAC 서명으로 인증한다(AiCallbackVerifier). ADR-0036.
                         .requestMatchers(HttpMethod.POST, "/api/internal/ai/callbacks").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/internal/ai/materials/download-url").permitAll()
+                        // 녹화강의 batch STT worker — 별도 HMAC secret으로 모든 메서드를 검증한다(ADR-0011).
+                        .requestMatchers("/api/internal/ai/recorded-stt-jobs/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/internal/ai/recorded-stt-callbacks").permitAll()
                         // 녹화강의 media-worker — 로그인 세션 대신 용도별 HMAC 서명을 검증한다(ADR-0008).
                         .requestMatchers(HttpMethod.POST, "/api/internal/media/**").permitAll()
                         // 판서 문서 조회 — Egress(헤드리스 Chrome)는 세션 쿠키가 없고 LiveKit 토큰만

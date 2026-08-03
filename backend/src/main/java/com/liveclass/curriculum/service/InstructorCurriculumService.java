@@ -497,6 +497,12 @@ public class InstructorCurriculumService {
         return recordedVideoManagement.retry(lessonId);
     }
 
+    @Transactional
+    public RecordedProcessingView retryRecordedCaptions(UUID instructorId, UUID lessonId) {
+        requireOwnedRecordedLesson(instructorId, lessonId);
+        return recordedVideoManagement.retryCaptions(lessonId);
+    }
+
     private LessonView requireOwnedRecordedLesson(UUID instructorId, UUID lessonId) {
         LessonView lesson = requireOwnedLesson(instructorId, lessonId);
         if (!"RECORDED".equals(lesson.deliveryType())) {

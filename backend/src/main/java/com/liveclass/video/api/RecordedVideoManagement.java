@@ -18,4 +18,6 @@ public interface RecordedVideoManagement {
     RecordedProcessingView processing(UUID lessonId);
 
     RecordedProcessingView retry(UUID lessonId);
+
+    RecordedProcessingView retryCaptions(UUID lessonId);
 }

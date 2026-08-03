@@ -9,7 +9,7 @@
 > [ADR-0032 학생 HLS 단일 재생](../songjeongki/0032-media-playback-hls-only.md) ·
 > [공유 계약](../../CONTRACT.md) · [AI 통신 계약](../../ai/CONTRACT.md)
 
-- **상태**: 채택 — 설계 확정, 구현 전
+- **상태**: 채택 — MVP 구현 완료(학생 자막 조회·편집·게시 UI는 후속 범위)
 - **일자**: 2026-08-03
 - **적용 범위**: 강사가 업로드한 `RECORDED` 레슨의 원본 MP4 보존, 녹화강의 업로드 완료 뒤
   배치 STT 작업 생성·발행, 음성 추출·분할, GMS `whisper-1` 호출, 시간 구간 자막 저장, 처리 상태와 재시도
@@ -522,8 +522,9 @@ globalEndMs   = chunk.sourceStartMs + round(segment.endSeconds * 1000)
 
 - `0 <= startMs < endMs <= sourceDurationMs + tolerance`
 - 최종 segment는 `(startMs, endMs, chunkIndex, localSegmentIndex)` 안정 순서로 정렬한다.
-- overlap 구간에서 정규화한 텍스트가 같거나 높은 유사도로 겹치면 하나만 남긴다.
-- 중복 후보 중 더 긴 문맥을 가진 segment를 우선하되 원본 응답은 진단 metadata로 추적 가능해야 한다.
+- 1차 구현은 청크의 선두 overlap에 midpoint가 속한 segment를 버리고 앞 청크에 소유권을 주는
+  결정적 규칙으로 중복을 제거한다. 재시작 후에도 이전 자막 원문 없이 같은 결과를 만들기 위해서다.
+- 텍스트 정규화·유사도와 더 긴 문맥 비교는 실제 중복률을 측정한 뒤 후속 정확도 개선으로 적용한다.
 - 청크 사이 공백은 허용하지만 시간이 역행하거나 두 자막이 비정상적으로 장시간 겹치면 계약 위반으로
   해당 청크를 재처리한다.
 - player currentTime과 자막 `startMs`는 모두 업로드 source 0ms 기준이다. HLS segment 번호나 wall clock을

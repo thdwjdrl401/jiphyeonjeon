@@ -15,9 +15,16 @@ import com.liveclass.video.api.RecordedVideoManagement;
 import com.liveclass.video.api.RecordedVideoNotFoundException;
 import com.liveclass.video.domain.MediaTranscodeJob;
 import com.liveclass.video.domain.MediaTranscodeJobStatus;
+import com.liveclass.video.domain.RecordedCaptionPublicationStatus;
+import com.liveclass.video.domain.RecordedCaptionStatus;
+import com.liveclass.video.domain.RecordedCaptionTrack;
+import com.liveclass.video.domain.RecordedSttJob;
+import com.liveclass.video.domain.RecordedSttJobStatus;
 import com.liveclass.video.domain.RecordedVideo;
 import com.liveclass.video.domain.RecordedVideoStatus;
 import com.liveclass.video.repository.MediaTranscodeJobRepository;
+import com.liveclass.video.repository.RecordedCaptionTrackRepository;
+import com.liveclass.video.repository.RecordedSttJobRepository;
 import com.liveclass.video.repository.RecordedVideoRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -45,17 +52,26 @@ public class RecordedVideoService implements RecordedVideoManagement {
     private final AssetUploadManagement assetUploadManagement;
     private final AssetDirectory assetDirectory;
     private final boolean enabled;
+    private final boolean sttEnabled;
+    private final RecordedCaptionTrackRepository captionTrackRepository;
+    private final RecordedSttJobRepository sttJobRepository;
 
     public RecordedVideoService(RecordedVideoRepository recordedVideoRepository,
                                 MediaTranscodeJobRepository jobRepository,
                                 AssetUploadManagement assetUploadManagement,
                                 AssetDirectory assetDirectory,
-                                @Value("${recorded.video.enabled:true}") boolean enabled) {
+                                RecordedCaptionTrackRepository captionTrackRepository,
+                                RecordedSttJobRepository sttJobRepository,
+                                @Value("${recorded.video.enabled:true}") boolean enabled,
+                                @Value("${recorded.stt.enabled:false}") boolean sttEnabled) {
         this.recordedVideoRepository = recordedVideoRepository;
         this.jobRepository = jobRepository;
         this.assetUploadManagement = assetUploadManagement;
         this.assetDirectory = assetDirectory;
         this.enabled = enabled;
+        this.captionTrackRepository = captionTrackRepository;
+        this.sttJobRepository = sttJobRepository;
+        this.sttEnabled = sttEnabled;
     }
 
     @Override
@@ -144,6 +160,9 @@ public class RecordedVideoService implements RecordedVideoManagement {
         video.setStatus(RecordedVideoStatus.QUEUED);
         video.setFailureCode(null);
         MediaTranscodeJob job = createJob(video, 1);
+        if (sttEnabled) {
+            createInitialSttJob(video);
+        }
         return toProcessing(video, job.getId());
     }
 
@@ -182,6 +201,47 @@ public class RecordedVideoService implements RecordedVideoManagement {
         return toProcessing(video, job.getId());
     }
 
+    @Override
+    @Transactional
+    public RecordedProcessingView retryCaptions(UUID lessonId) {
+        requireEnabled();
+        if (!sttEnabled) {
+            throw new RecordedVideoDisabledException("녹화강의 자막 생성 기능이 비활성화되어 있습니다.");
+        }
+        RecordedVideo video = requireByLesson(lessonId);
+        RecordedCaptionTrack track = captionTrackRepository.findByRecordedVideoId(video.getId())
+                .orElseThrow(() -> new RecordedVideoConflictException(
+                        "RECORDED_CAPTION_RETRY_CONFLICT", "다시 처리할 자막 트랙이 없습니다."));
+        if (track.getStatus() != RecordedCaptionStatus.FAILED
+                && track.getStatus() != RecordedCaptionStatus.EMPTY) {
+            throw new RecordedVideoConflictException(
+                    "RECORDED_CAPTION_RETRY_CONFLICT", "실패했거나 비어 있는 자막만 다시 처리할 수 있습니다.");
+        }
+        AssetRef source = assetDirectory.find(video.getSourceAssetId()).orElseThrow(() ->
+                new RecordedVideoConflictException(
+                        "RECORDED_VIDEO_SOURCE_NOT_READY", "다시 처리할 원본 MP4가 없습니다."));
+        if (!"RECORDED_VIDEO_SOURCE".equals(source.kind()) || !"UPLOADED".equals(source.status())) {
+            throw new RecordedVideoConflictException(
+                    "RECORDED_VIDEO_SOURCE_NOT_READY", "원본 MP4를 다시 업로드해야 합니다.");
+        }
+        int nextAttempt = sttJobRepository.findTopByRecordedVideoIdOrderByAttemptNoDesc(video.getId())
+                .map(job -> job.getAttemptNo() + 1)
+                .orElse(1);
+        track.setStatus(RecordedCaptionStatus.PENDING);
+        track.setPublicationStatus(RecordedCaptionPublicationStatus.NOT_AVAILABLE);
+        track.setActiveJobId(null);
+        track.setModel(null);
+        track.setDurationMs(null);
+        track.setSegmentCount(0);
+        track.setFailureCode(null);
+        track.setStartedAt(null);
+        track.setReadyAt(null);
+        createSttJob(video, nextAttempt);
+        UUID mediaJobId = jobRepository.findTopByRecordedVideoIdOrderByAttemptNoDesc(video.getId())
+                .map(MediaTranscodeJob::getId).orElse(null);
+        return toProcessing(video, mediaJobId);
+    }
+
     private MediaTranscodeJob createJob(RecordedVideo video, int attemptNo) {
         MediaTranscodeJob job = new MediaTranscodeJob();
         job.setRecordedVideoId(video.getId());
@@ -191,6 +251,32 @@ public class RecordedVideoService implements RecordedVideoManagement {
         job.setPublishAttemptCount(0);
         job.setNextPublishAt(OffsetDateTime.now());
         return jobRepository.save(job);
+    }
+
+    private void createInitialSttJob(RecordedVideo video) {
+        RecordedCaptionTrack track = new RecordedCaptionTrack();
+        track.setRecordedVideoId(video.getId());
+        track.setStatus(RecordedCaptionStatus.PENDING);
+        track.setPublicationStatus(RecordedCaptionPublicationStatus.NOT_AVAILABLE);
+        track.setLanguage("ko");
+        track.setSegmentCount(0);
+        captionTrackRepository.save(track);
+        createSttJob(video, 1);
+    }
+
+    private RecordedSttJob createSttJob(RecordedVideo video, int attemptNo) {
+        RecordedSttJob job = new RecordedSttJob();
+        job.setRecordedVideoId(video.getId());
+        job.setSourceAssetId(video.getSourceAssetId());
+        job.setAttemptNo(attemptNo);
+        job.setStatus(RecordedSttJobStatus.PENDING);
+        job.setIdempotencyKey("recorded-stt:%s:attempt:%d".formatted(video.getId(), attemptNo));
+        job.setPublishAttemptCount(0);
+        job.setProcessedChunkCount(0);
+        job.setModel("whisper-1");
+        job.setLanguage("ko");
+        job.setNextPublishAt(OffsetDateTime.now());
+        return sttJobRepository.save(job);
     }
 
     private Optional<MediaTranscodeJob> findCurrentJob(RecordedVideo video) {
@@ -216,8 +302,15 @@ public class RecordedVideoService implements RecordedVideoManagement {
     }
 
     private RecordedProcessingView toProcessing(RecordedVideo video, UUID jobId) {
+        Optional<RecordedCaptionTrack> track = captionTrackRepository.findByRecordedVideoId(video.getId());
+        Optional<RecordedSttJob> sttJob = sttJobRepository.findTopByRecordedVideoIdOrderByAttemptNoDesc(video.getId());
         return new RecordedProcessingView(
                 video.getLessonId(), video.getId(), jobId, video.getStatus().name(),
-                video.getFailureCode(), video.getDurationMs(), video.getSizeBytes(), video.getReadyAt());
+                video.getFailureCode(), video.getDurationMs(), video.getSizeBytes(), video.getReadyAt(),
+                track.map(value -> value.getStatus().name()).orElse("NOT_REQUESTED"),
+                track.map(RecordedCaptionTrack::getFailureCode).orElse(null),
+                sttJob.map(RecordedSttJob::getProcessedChunkCount).orElse(0),
+                sttJob.map(RecordedSttJob::getTotalChunkCount).orElse(null),
+                track.map(RecordedCaptionTrack::getReadyAt).orElse(null));
     }
 }

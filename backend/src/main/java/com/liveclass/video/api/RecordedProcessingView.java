@@ -11,6 +11,11 @@ public record RecordedProcessingView(
         String failureCode,
         Long durationMs,
         Long sizeBytes,
-        OffsetDateTime readyAt
+        OffsetDateTime readyAt,
+        String captionStatus,
+        String captionFailureCode,
+        Integer captionProcessedChunks,
+        Integer captionTotalChunks,
+        OffsetDateTime captionReadyAt
 ) {
 }

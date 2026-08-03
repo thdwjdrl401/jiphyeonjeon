@@ -76,6 +76,13 @@ public class InstructorRecordedLessonController {
         return service.retryRecordedVideoProcessing(currentUserId(authentication), lessonId);
     }
 
+    @Operation(summary = "실패했거나 비어 있는 녹화강의 자막 재생성")
+    @PostMapping("/api/instructor/recorded-lessons/{lessonId}/captions/retry")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public RecordedProcessingView retryCaptions(@PathVariable UUID lessonId, Authentication authentication) {
+        return service.retryRecordedCaptions(currentUserId(authentication), lessonId);
+    }
+
     private UUID currentUserId(Authentication authentication) {
         return UUID.fromString(authentication.getName());
     }

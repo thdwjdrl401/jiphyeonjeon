@@ -171,6 +171,14 @@ recorded:
     dispatch:
       fixed-delay-ms: ${RECORDED_VIDEO_DISPATCH_DELAY_MS:3000}
       initial-delay-ms: ${RECORDED_VIDEO_DISPATCH_INITIAL_DELAY_MS:15000}
+  stt:
+    # ADR-0011. Spring과 recorded-stt-worker 양쪽이 준비된 환경에서만 명시적으로 켠다.
+    enabled: ${RECORDED_STT_ENABLED:false}
+    source-secret: ${RECORDED_STT_SOURCE_SECRET:dev-recorded-stt-source-secret}
+    callback-secret: ${RECORDED_STT_CALLBACK_SECRET:dev-recorded-stt-callback-secret}
+    dispatch:
+      fixed-delay-ms: ${RECORDED_STT_DISPATCH_DELAY_MS:3000}
+      initial-delay-ms: ${RECORDED_STT_DISPATCH_INITIAL_DELAY_MS:15000}
 
 asset:
   storage:
