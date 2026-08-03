@@ -942,6 +942,76 @@ th { color: var(--ink-500); font-size: .67rem; }
 .speaker-confirm p { margin: 0; font-size: .72rem; font-weight: 600; }
 .speaker-confirm > div { display: flex; gap: 7px; }
 .button.is-disabled { pointer-events: none; opacity: .45; }
+
+/* 학생 입장 전 점검 — 직접 확인을 중심에 두고 자동 상태·입장 정보를 한 화면에 묶는다. */
+.workspace-content > .workspace-page.student-prejoin-page { width: min(100%, 980px); }
+.workspace-page.student-prejoin-page { gap: 12px; }
+.student-prejoin-page .workspace-page-header { min-height: 68px; align-items: center; padding-bottom: 4px; }
+.student-prejoin__layout { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(300px, .65fr); align-items: stretch; gap: 12px; }
+.student-prejoin__layout > .workspace-panel { height: 100%; padding: 18px; }
+.student-prejoin__layout .workspace-panel__header { align-items: center; gap: 10px; margin-bottom: 13px; padding-bottom: 11px; }
+.student-prejoin__layout .workspace-panel__header > div { min-width: 0; }
+.student-prejoin__layout .workspace-panel__header h2 { margin-bottom: 2px; font-size: 1rem; }
+.student-prejoin__layout .workspace-panel__header p { font-size: .68rem; line-height: 1.45; word-break: keep-all; }
+.student-prejoin__layout .workspace-panel__header > .status-pill { flex: 0 0 auto; white-space: nowrap; }
+
+.student-prejoin__speaker-panel .speaker-check { gap: 12px; border: 0; border-radius: 0; padding: 0; background: transparent; }
+.student-prejoin__speaker-panel .speaker-check.is-pass { padding: 11px; border: 1px solid #cceee4; background: var(--green-50); }
+.student-prejoin__speaker-panel .speaker-check__row { gap: 10px; }
+.student-prejoin__speaker-panel .speaker-check__row > span { width: 32px; height: 32px; border-radius: 0; }
+.student-prejoin__speaker-panel .speaker-check__row small { line-height: 1.45; word-break: keep-all; }
+.student-prejoin__speaker-panel .speaker-channels { gap: 6px; }
+.student-prejoin__speaker-panel .speaker-channels li { min-height: 36px; padding: 8px 6px; border-radius: 0; }
+.student-prejoin__speaker-panel .speaker-check > .button { min-height: 36px; justify-self: start; }
+.student-prejoin__speaker-panel .speaker-confirm { border-radius: 0; }
+
+.student-prejoin__identity-list { gap: 0; }
+.student-prejoin__identity-list > div { min-height: 47px; padding: 8px 0; }
+.student-prejoin__identity-list > div:last-child { padding-bottom: 8px; }
+.student-prejoin__identity-list dt { flex: 0 0 auto; font-size: .68rem; }
+.student-prejoin__identity-list dd { min-width: 0; font-size: .74rem; }
+.student-prejoin__identity-list dd small { display: block; margin-top: 2px; color: var(--ink-500); font-size: .57rem; font-weight: 500; line-height: 1.35; word-break: keep-all; }
+.student-prejoin__identity-list .identity-nickname-input { width: min(100%, 172px); min-height: 34px; border-radius: 0; padding: 6px 8px; font-size: .74rem; }
+.student-prejoin__auto-checks { margin-top: 8px; padding-top: 11px; border-top: 1px solid var(--border-soft); }
+.student-prejoin__auto-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 7px; }
+.student-prejoin__auto-heading strong { color: var(--ink-900); font-size: .7rem; }
+.student-prejoin__auto-heading small { color: var(--ink-500); font-size: .56rem; white-space: nowrap; }
+.student-prejoin__auto-checks ul { display: grid; gap: 5px; margin: 0; padding: 0; list-style: none; }
+.student-prejoin__auto-checks li { display: grid; min-width: 0; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; min-height: 44px; padding: 6px 8px; border: 1px solid var(--border-soft); background: var(--paper-light); }
+.student-prejoin__auto-checks li > span { display: grid; width: 26px; height: 26px; place-items: center; background: var(--ink-100); color: var(--ink-500); font-size: .62rem; font-weight: 700; }
+.student-prejoin__auto-checks li > div { display: flex; min-width: 0; flex-direction: column; }
+.student-prejoin__auto-checks li strong { color: var(--ink-900); font-size: .66rem; }
+.student-prejoin__auto-checks li small { overflow: hidden; color: var(--ink-500); font-size: .55rem; text-overflow: ellipsis; white-space: nowrap; }
+.student-prejoin__auto-checks li b { color: var(--blue-600); font-size: .58rem; white-space: nowrap; }
+.student-prejoin__auto-checks li.is-pass { border-color: #cceee4; background: var(--green-50); }
+.student-prejoin__auto-checks li.is-pass > span { background: var(--green-700); color: #fff; }
+.student-prejoin__auto-checks li.is-pass b { color: var(--green-700); }
+
+.student-prejoin__actions.sticky-form-actions { bottom: 10px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; justify-content: initial; gap: 12px; padding: 8px 10px; border-radius: 0; }
+.student-prejoin__actions > .button { min-width: 112px; min-height: 38px; padding-inline: 14px; font-size: .72rem; }
+.student-prejoin__entry-state { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.student-prejoin__entry-state strong { color: var(--ink-900); font-size: .7rem; }
+.student-prejoin__entry-state small { overflow: hidden; color: var(--ink-500); font-size: .6rem; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 900px) {
+  .student-prejoin__layout { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 620px) {
+  .student-prejoin-page .workspace-page-header { align-items: flex-start; }
+  .student-prejoin__layout > .workspace-panel { padding: 14px; }
+  .student-prejoin__speaker-panel .speaker-check__row { grid-template-columns: auto minmax(0, 1fr); }
+  .student-prejoin__speaker-panel .speaker-check__row > b { grid-column: 2; }
+  .student-prejoin__speaker-panel .speaker-confirm { align-items: stretch; flex-direction: column; }
+  .student-prejoin__speaker-panel .speaker-confirm > div,
+  .student-prejoin__speaker-panel .speaker-confirm .button { width: 100%; }
+  .student-prejoin__actions.sticky-form-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .student-prejoin__entry-state { grid-column: 1 / -1; grid-row: 1; }
+  .student-prejoin__actions > .button { width: 100%; min-width: 0; }
+  .student-prejoin__actions > .button:first-child { grid-column: 1; grid-row: 2; }
+  .student-prejoin__actions > .button:last-child { grid-column: 2; grid-row: 2; }
+}
+
 .camera-preview { display: grid; min-height: 250px; place-items: center; border-radius: 15px; background: radial-gradient(circle at 50% 35%, #3b4968, #151e34); color: #fff; }
 .camera-avatar { display: grid; width: 82px; height: 82px; place-items: center; border-radius: 50%; background: var(--blue-600); font-size: 1.7rem; font-weight: 700; }
 .camera-preview span { align-self: start; color: rgba(255,255,255,.65); font-size: .68rem; }
