@@ -584,10 +584,9 @@ Markdown은 `핵심 내용`이라는 단일 section 대신 실제로 존재하�
 
 입력은 수학 수식·풀이, 역사 인과, 기술 비교, 과학 실험 절차, 인문 논증, 반복·미완성 STT,
 언어 규칙·예외, 통계 해석의 8개 고정 샘플로 구성했다. 각 샘플은 실제 누적 갱신과 같은 4개 window로
-나눴으며 입력 정본은 `ai/ai-api/scripts/lecture_note_structure_samples.json`, 실행 도구는
-`ai/ai-api/scripts/compare_lecture_note_structures.py`다. 두 후보는 같은 `gpt-4.1`, temperature 0 조건에서
-생성했다. 호출·재시도·상태 전이·중복 제거·Markdown 안전 처리는 공통 실험 엔진을 사용하고, 공통 prompt
-template에서 타입 이름과 설명만 다르게 구성했다. 후보 이름을 숨기고 샘플마다 제시 순서를 교차한 평가로
+나눴다. 두 후보는 같은 `gpt-4.1`, temperature 0 조건에서 생성했다. 호출·재시도·상태 전이·중복 제거·
+Markdown 안전 처리는 공통 실험 엔진을 사용하고, 공통 prompt template에서 타입 이름과 설명만 다르게
+구성했다. 후보 이름을 숨기고 샘플마다 제시 순서를 교차한 평가로
 정확성·누락·중복·구조·가독성·topic 경계를 각각 5점 척도로 비교했다.
 
 | 항목 | A 상세 6타입 | C 최소 4타입 |
@@ -616,16 +615,31 @@ C는 A보다 평균 점수와 latency가 소폭 나았지만 선호 샘플 수�
 `~니다/~한다/~해요` 같은 명확한 문장체 종결만 거부하는 휴리스틱으로 완화하고, prompt에는
 `~함/~있음`과 명사구를 모두 예시로 든다. `캐나다`, `사이다`처럼 `다`로 끝나는 명사구는 허용한다.
 
-C는 다음 prototype 후보로 유지하지만 이번 결과만으로 채택하지 않는다. 같은 모델이 생성과 평가를 담당한
-샘플당 1회 결과이고 30분 실제 강의가 아니며 A와 C 어느 쪽도 지배적이지 않다. wire contract와 runtime
-enum을 변경하지 않고 runtime은 A를 유지한다. 다음 비교에서는 타입 수를 그대로 두고 topic당 정보 밀도와
-필수 예시·예외 보존 규칙을 먼저 조정한 뒤, 동일 샘플 반복 평가와 실제 강의 검증으로 타입을 확정한다.
+A와 C 어느 쪽도 지배적이지 않지만 C는 item 수를 줄이지 못했고 일부 예시·예외를 누락했다. 따라서 이미
+정보 보존 경계를 검증한 A를 runtime 기준으로 채택한다. 선택하지 않은 C schema와 비교 전용 실행 코드는
+결정 후 제거하며 wire contract는 변경하지 않는다. 실험 결과는 이 ADR과 브랜치의 비교 커밋에 보존한다.
+다음 품질 개선에서는 타입 수를 다시 바꾸기보다 topic당 정보 밀도와 필수 예시·예외 보존 규칙을 먼저
+조정한다.
 
-비교 실행 명령은 다음과 같다.
+### 8. A안 runtime 연결
 
-```bash
-uv run --frozen python -m scripts.compare_lecture_note_structures --summary-only
-```
+ai-api의 live 모델 port를 기존 `topicTitle + keyPoints` 결과에서 A안의 활성 topic 전체 snapshot으로
+전환한다. GMS는 `IGNORE|UPDATE_CURRENT|START_NEW`와 6타입 item을 structured output으로 반환하고,
+application reducer가 현재 draft의 전이·12개 용량·기존 item 보존을 검증한다. schema 또는 전이 검증 실패는
+같은 호출 경계에서 한 번만 재작성한다.
+
+세션 checkpoint에는 Spring에 발행한 append note와 별도로 역할 기반 draft 전체를 저장한다. 재시작 후에는
+복원한 draft를 다음 GMS 요청에 다시 사용한다. 새 draft 필드가 없는 기존 checkpoint는 마지막 topic을
+`ACTIVE`, 앞선 topic을 `FINALIZED`로 승격하고 기존 key point를 `FACT` item으로 보존한다. 종료 정제도
+append event에 실린 최대 3개 요점이 아니라 draft의 모든 item을 입력으로 사용한다.
+
+기존 `lecture.note.chunk.appended` 계약은 유지한다. `UPDATE_CURRENT`에서 새로 추가되거나 내용이 변경된
+item만 최대 3개 `keyPoints`와 `markdownFragment`로 변환하고, overview만 바뀌면 event와
+`chunkSequence`를 만들지 않는다. 세 개를 넘는 item은 live event에서 생략될 수 있지만 checkpoint와 종료
+정제에서는 보존한다. 이 제한을 없애려면 Spring 소비 계약의 replace/patch 의미가 먼저 합의돼야 한다.
+
+역할 기반 topic 전체 응답이 512 token을 넘는 실제 사례가 확인됐으므로 ai-api와 EC2 Compose의 live 출력
+상한을 4,096 token으로 맞춘다. FE·Spring 코드, Redis event field, 상태코드는 변경하지 않는다.
 
 ## MVP에서 하지 않는 것
 

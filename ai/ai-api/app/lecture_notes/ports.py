@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import Protocol
 
 from app.lecture_notes.models import (
+    LectureNoteDraftModelRequest,
+    LectureNoteDraftUpdateResult,
     LectureNoteEvent,
     LectureNoteModelRequest,
     LectureNoteModelResult,
@@ -14,6 +16,13 @@ from app.lecture_notes.recovery import LectureNoteSessionCheckpoint
 
 class LectureNoteModel(Protocol):
     async def generate(self, request: LectureNoteModelRequest) -> LectureNoteModelResult: ...
+
+
+class LectureNoteDraftModel(Protocol):
+    async def generate_draft(
+        self,
+        request: LectureNoteDraftModelRequest,
+    ) -> LectureNoteDraftUpdateResult: ...
 
 
 class LectureNoteRefinementModel(Protocol):

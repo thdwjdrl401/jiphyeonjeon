@@ -110,7 +110,7 @@ class LectureNoteDraftItem(BaseModel):
     @field_validator("content")
     @classmethod
     def validate_content(cls, value: str) -> str:
-        return _validate_nominal_note_style(_validate_single_line(value, "item content"))
+        return _validate_single_line(value, "item content")
 
     @model_validator(mode="after")
     def validate_definition_label(self) -> LectureNoteDraftItem:
@@ -137,6 +137,12 @@ class LectureNoteDraftTopicContent(BaseModel):
     @classmethod
     def validate_overview(cls, value: str) -> str:
         return _validate_nominal_note_style(_validate_single_line(value, "topic overview"))
+
+    @model_validator(mode="after")
+    def validate_item_note_style(self) -> LectureNoteDraftTopicContent:
+        for item in self.items:
+            _validate_nominal_note_style(item.content)
+        return self
 
 
 class LectureNoteDraftUpdateResult(BaseModel):
@@ -171,6 +177,16 @@ class LectureNoteModelRequest:
     current_topic_title: str | None
     current_key_points: tuple[str, ...]
     previous_topic_title: str | None
+    previous_context: str
+    text: str
+
+
+@dataclass(frozen=True, slots=True)
+class LectureNoteDraftModelRequest:
+    session_id: str
+    lesson_id: str
+    stt_session_id: str
+    note: LectureNoteDraft
     previous_context: str
     text: str
 
@@ -303,9 +319,10 @@ class LectureNoteDraftTopic:
         if self.revision <= 0:
             raise ValueError("topic revision must be positive")
         _validate_single_line(self.title, "title")
-        _validate_nominal_note_style(_validate_single_line(self.overview, "overview"))
-        if not 2 <= len(self.title) <= 80:
-            raise ValueError("title length must be between 2 and 80")
+        _validate_single_line(self.overview, "overview")
+        # 신규 모델 응답은 2자 이상이지만, 1자 제목을 허용하던 구 checkpoint는 보존한다.
+        if not 1 <= len(self.title) <= 80:
+            raise ValueError("title length must be between 1 and 80")
         if not 1 <= len(self.overview) <= 2_000:
             raise ValueError("overview length must be between 1 and 2000")
         if not 1 <= len(self.items) <= 12:

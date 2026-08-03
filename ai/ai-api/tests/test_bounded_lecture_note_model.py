@@ -8,6 +8,13 @@ from app.adapters import BoundedLectureNoteModel
 from app.lecture_notes import (
     LectureNote,
     LectureNoteDecisionAction,
+    LectureNoteDraft,
+    LectureNoteDraftItem,
+    LectureNoteDraftItemType,
+    LectureNoteDraftModelRequest,
+    LectureNoteDraftTopicContent,
+    LectureNoteDraftUpdateAction,
+    LectureNoteDraftUpdateResult,
     LectureNoteModelRequest,
     LectureNoteModelResult,
     LectureNoteRefinementRequest,
@@ -37,6 +44,34 @@ def _refinement_request() -> LectureNoteRefinementRequest:
         note=LectureNote(
             topics=(LectureNoteTopic("topic-1", "주제", ("요점",)),),
             chunk_sequence=1,
+        ),
+    )
+
+
+def _draft_request() -> LectureNoteDraftModelRequest:
+    return LectureNoteDraftModelRequest(
+        session_id="11111111-1111-4111-8111-111111111111",
+        lesson_id="22222222-2222-4222-8222-222222222222",
+        stt_session_id="attempt-1",
+        note=LectureNoteDraft(),
+        previous_context="",
+        text="미분계수 설명",
+    )
+
+
+def _draft_result() -> LectureNoteDraftUpdateResult:
+    return LectureNoteDraftUpdateResult(
+        action=LectureNoteDraftUpdateAction.START_NEW,
+        newTopic=LectureNoteDraftTopicContent(
+            topicTitle="미분계수",
+            overview="한 점에서 정의한 순간 변화율.",
+            items=(
+                LectureNoteDraftItem(
+                    type=LectureNoteDraftItemType.DEFINITION,
+                    label="미분계수",
+                    content="한 점에서 정의한 순간 변화율.",
+                ),
+            ),
         ),
     )
 
@@ -85,6 +120,16 @@ class BlockingDelegate:
         finally:
             self.live_active -= 1
 
+    async def generate_draft(self, request):
+        self.live_active += 1
+        self.max_active = max(self.max_active, self.live_active + self.refinement_active)
+        self.order.append(f"draft:{request.text}")
+        try:
+            await self.release_live.wait()
+            return _draft_result()
+        finally:
+            self.live_active -= 1
+
     async def refine(self, request):
         self.refinement_active += 1
         self.max_refinement_active = max(
@@ -111,8 +156,7 @@ def test_global_concurrency_is_bounded() -> None:
         delegate = BlockingDelegate()
         model = BoundedLectureNoteModel(delegate, max_concurrency=4)
         tasks = [
-            asyncio.create_task(model.generate(_live_request(str(index))))
-            for index in range(12)
+            asyncio.create_task(model.generate(_live_request(str(index)))) for index in range(12)
         ]
 
         await _wait_until(lambda: delegate.live_active == 4)
@@ -129,6 +173,22 @@ def test_global_concurrency_is_bounded() -> None:
     asyncio.run(scenario())
 
 
+def test_draft_generation_uses_live_concurrency_gate() -> None:
+    async def scenario() -> None:
+        delegate = BlockingDelegate()
+        model = BoundedLectureNoteModel(delegate, max_concurrency=1)
+        task = asyncio.create_task(model.generate_draft(_draft_request()))
+
+        await _wait_until(lambda: delegate.live_active == 1)
+        delegate.release_live.set()
+
+        assert await task == _draft_result()
+        assert delegate.order == ["draft:미분계수 설명"]
+        assert model.metrics_snapshot()["live_admissions_total"] == 1
+
+    asyncio.run(scenario())
+
+
 def test_refinement_has_its_own_concurrency_cap() -> None:
     async def scenario() -> None:
         delegate = BlockingDelegate()
@@ -137,10 +197,7 @@ def test_refinement_has_its_own_concurrency_cap() -> None:
             max_concurrency=4,
             refinement_max_concurrency=1,
         )
-        tasks = [
-            asyncio.create_task(model.refine(_refinement_request()))
-            for _ in range(3)
-        ]
+        tasks = [asyncio.create_task(model.refine(_refinement_request())) for _ in range(3)]
 
         await _wait_until(lambda: delegate.refinement_active == 1)
         assert model.metrics_snapshot()["queued_refinement"] == 2
@@ -271,9 +328,7 @@ def test_retryable_error_stops_at_max_attempts() -> None:
         async def fake_sleep(delay: float) -> None:
             sleeps.append(delay)
 
-        delegate = FlakyDelegate(
-            [_status_error(RateLimitError, 429) for _ in range(3)]
-        )
+        delegate = FlakyDelegate([_status_error(RateLimitError, 429) for _ in range(3)])
         model = BoundedLectureNoteModel(
             delegate,
             max_attempts=3,

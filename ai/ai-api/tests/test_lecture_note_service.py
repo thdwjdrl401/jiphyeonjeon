@@ -1,12 +1,17 @@
 import asyncio
 from datetime import UTC, datetime
+import json
 
 from app.captions import CaptionCompleted, CaptionDelta
 from app.lecture_notes import (
     LectureNoteCaptureCompleted,
     LectureNoteChunkAppended,
-    LectureNoteDecisionAction,
-    LectureNoteModelResult,
+    LectureNoteDraft,
+    LectureNoteDraftItem,
+    LectureNoteDraftItemType,
+    LectureNoteDraftTopicContent,
+    LectureNoteDraftUpdateAction,
+    LectureNoteDraftUpdateResult,
     LectureNotePipeline,
     LectureNoteRefinedSnapshot,
     LectureNoteRefinementResult,
@@ -26,13 +31,19 @@ class ImmediateModel:
     def __init__(self) -> None:
         self.requests = []
 
-    async def generate(self, request):
+    async def generate_draft(self, request):
         self.requests.append(request)
-        return LectureNoteModelResult(
-            action=LectureNoteDecisionAction.APPEND,
-            topicTitle="주제",
-            keyPoints=(request.text,),
-        )
+        return _draft_result(request)
+
+
+class SequencedModel:
+    def __init__(self, *results: LectureNoteDraftUpdateResult) -> None:
+        self.results = results
+        self.requests = []
+
+    async def generate_draft(self, request):
+        self.requests.append(request)
+        return self.results[len(self.requests) - 1]
 
 
 class BlockingModel(ImmediateModel):
@@ -41,15 +52,11 @@ class BlockingModel(ImmediateModel):
         self.started = asyncio.Event()
         self.release = asyncio.Event()
 
-    async def generate(self, request):
+    async def generate_draft(self, request):
         self.requests.append(request)
         self.started.set()
         await self.release.wait()
-        return LectureNoteModelResult(
-            action=LectureNoteDecisionAction.APPEND,
-            topicTitle="주제",
-            keyPoints=(request.text,),
-        )
+        return _draft_result(request)
 
 
 class RefiningModel(ImmediateModel):
@@ -76,6 +83,33 @@ class RefiningModel(ImmediateModel):
 class FailingRefiningModel(ImmediateModel):
     async def refine(self, request):
         raise RuntimeError("refinement failed")
+
+
+def _draft_result(request) -> LectureNoteDraftUpdateResult:
+    source = request.text.strip().rstrip(".!?。？！")
+    item = LectureNoteDraftItem(
+        type=LectureNoteDraftItemType.FACT,
+        label=f"요점 {request.note.update_sequence + 1}",
+        content=f"{source} 관련 내용임.",
+    )
+    if not request.note.topics:
+        return LectureNoteDraftUpdateResult(
+            action=LectureNoteDraftUpdateAction.START_NEW,
+            newTopic=LectureNoteDraftTopicContent(
+                topicTitle="주제",
+                overview="강의 내용을 누적한 주제임.",
+                items=(item,),
+            ),
+        )
+    current = request.note.topics[-1]
+    return LectureNoteDraftUpdateResult(
+        action=LectureNoteDraftUpdateAction.UPDATE_CURRENT,
+        currentTopic=LectureNoteDraftTopicContent(
+            topicTitle=current.title,
+            overview=current.overview,
+            items=(*current.items, item),
+        ),
+    )
 
 
 class InMemoryStore:
@@ -193,8 +227,14 @@ def test_same_session_runs_one_model_call_and_coalesces_pending_windows() -> Non
 
         assert [request.text for request in model.requests] == ["하나", " 둘 셋"]
         assert [event.chunkSequence for event in store.events] == ["1", "2"]
-        assert store.events[0].markdownFragment == "## 주제\n\n- 하나"
-        assert store.events[1].markdownFragment == "- 둘 셋"
+        assert store.events[0].markdownFragment == "## 주제\n\n- 요점 1: 하나 관련 내용임."
+        assert store.events[1].markdownFragment == "- 요점 2: 둘 셋 관련 내용임."
+        checkpoint = store.checkpoints[SESSION_ID]
+        assert checkpoint.draft.update_sequence == 2
+        assert [item.type for item in checkpoint.draft.topics[0].items] == [
+            LectureNoteDraftItemType.FACT,
+            LectureNoteDraftItemType.FACT,
+        ]
 
     asyncio.run(scenario())
 
@@ -224,7 +264,7 @@ def test_partial_caption_is_restored_before_next_delta() -> None:
 
 def test_in_flight_window_is_reprocessed_after_restart() -> None:
     class FailingModel:
-        async def generate(self, request):
+        async def generate_draft(self, request):
             raise RuntimeError("process stopped during model call")
 
     async def scenario() -> None:
@@ -242,6 +282,215 @@ def test_in_flight_window_is_reprocessed_after_restart() -> None:
 
         assert [request.text for request in restored_model.requests] == ["복구할 내용"]
         assert len(store.events) == 1
+
+    asyncio.run(scenario())
+
+
+def test_legacy_checkpoint_note_is_promoted_to_detailed_draft_on_restore() -> None:
+    class LegacyContinuationModel:
+        def __init__(self) -> None:
+            self.requests = []
+
+        async def generate_draft(self, request):
+            self.requests.append(request)
+            current = request.note.topics[-1]
+            return LectureNoteDraftUpdateResult(
+                action=LectureNoteDraftUpdateAction.UPDATE_CURRENT,
+                currentTopic=LectureNoteDraftTopicContent(
+                    topicTitle="빛의 성질",
+                    overview=current.overview,
+                    items=(
+                        *current.items,
+                        LectureNoteDraftItem(
+                            type=LectureNoteDraftItemType.FACT,
+                            content="후속 성질을 설명함.",
+                        ),
+                    ),
+                ),
+            )
+
+    async def scenario() -> None:
+        store = InMemoryStore()
+        first_service, first_pipeline = _components(ImmediateModel(), store)
+
+        await first_pipeline.ingest(_delta(1, "빛"))
+        await first_service.drain()
+        legacy_points = [f"빛의 성질 {index}임." for index in range(1, 14)]
+        legacy_payload = store.checkpoints[SESSION_ID].model_dump(mode="json")
+        legacy_payload.pop("draft")
+        legacy_payload["note"]["topics"][0]["title"] = "빛"
+        legacy_payload["note"]["topics"][0]["key_points"] = legacy_points
+        legacy = LectureNoteSessionCheckpoint.model_validate_json(
+            json.dumps(legacy_payload, ensure_ascii=False)
+        )
+        assert legacy.draft == LectureNoteDraft()
+        store.checkpoints[SESSION_ID] = legacy
+
+        restored_model = LegacyContinuationModel()
+        restored_service, restored_pipeline = _components(restored_model, store)
+        await restored_pipeline.restore()
+        await restored_pipeline.ingest(_delta(2, " 후속 요점"))
+        await restored_service.drain()
+
+        restored_draft = restored_model.requests[0].note
+        assert restored_draft.update_sequence == 1
+        assert [topic.status.value for topic in restored_draft.topics] == [
+            "FINALIZED",
+            "ACTIVE",
+        ]
+        assert [len(topic.items) for topic in restored_draft.topics] == [12, 1]
+        assert [item.content for topic in restored_draft.topics for item in topic.items] == (
+            legacy_points
+        )
+        assert all(item.label is None for topic in restored_draft.topics for item in topic.items)
+        assert {topic.title for topic in restored_draft.topics} == {"빛"}
+        assert {topic.overview for topic in restored_draft.topics} == {"빛"}
+        assert [event.chunkSequence for event in store.events] == ["1", "2"]
+
+    asyncio.run(scenario())
+
+
+def test_second_start_new_is_published_without_losing_previous_topic() -> None:
+    first_item = LectureNoteDraftItem(
+        type=LectureNoteDraftItemType.FACT,
+        label="첫 요점",
+        content="첫 주제의 내용임.",
+    )
+    first_topic = LectureNoteDraftTopicContent(
+        topicTitle="첫 주제",
+        overview="첫 주제를 설명함.",
+        items=(first_item,),
+    )
+    second_topic = LectureNoteDraftTopicContent(
+        topicTitle="둘째 주제",
+        overview="둘째 주제를 설명함.",
+        items=(
+            LectureNoteDraftItem(
+                type=LectureNoteDraftItemType.FACT,
+                label="둘째 요점",
+                content="둘째 주제의 내용임.",
+            ),
+        ),
+    )
+
+    async def scenario() -> None:
+        model = SequencedModel(
+            LectureNoteDraftUpdateResult(
+                action=LectureNoteDraftUpdateAction.START_NEW,
+                newTopic=first_topic,
+            ),
+            LectureNoteDraftUpdateResult(
+                action=LectureNoteDraftUpdateAction.START_NEW,
+                currentTopic=first_topic,
+                newTopic=second_topic,
+            ),
+        )
+        store = InMemoryStore()
+        service, pipeline = _components(model, store)
+
+        await pipeline.ingest(_delta(1, "첫 주제"))
+        await service.drain()
+        await pipeline.ingest(_delta(2, " 둘째 주제"))
+        await service.drain()
+
+        assert [event.topicAction.value for event in store.events] == [
+            "START_NEW",
+            "START_NEW",
+        ]
+        assert [topic.title for topic in store.checkpoints[SESSION_ID].note.topics] == [
+            "첫 주제",
+            "둘째 주제",
+        ]
+        assert [topic.status.value for topic in store.checkpoints[SESSION_ID].draft.topics] == [
+            "FINALIZED",
+            "ACTIVE",
+        ]
+
+    asyncio.run(scenario())
+
+
+def test_changed_item_content_is_published_as_continue() -> None:
+    initial_item = LectureNoteDraftItem(
+        type=LectureNoteDraftItemType.FACT,
+        label="정의",
+        content="처음 설명임.",
+    )
+    changed_item = initial_item.model_copy(update={"content": "다듬은 설명임."})
+
+    async def scenario() -> None:
+        model = SequencedModel(
+            LectureNoteDraftUpdateResult(
+                action=LectureNoteDraftUpdateAction.START_NEW,
+                newTopic=LectureNoteDraftTopicContent(
+                    topicTitle="내용 변경",
+                    overview="내용 변경을 확인함.",
+                    items=(initial_item,),
+                ),
+            ),
+            LectureNoteDraftUpdateResult(
+                action=LectureNoteDraftUpdateAction.UPDATE_CURRENT,
+                currentTopic=LectureNoteDraftTopicContent(
+                    topicTitle="내용 변경",
+                    overview="내용 변경을 확인함.",
+                    items=(changed_item,),
+                ),
+            ),
+        )
+        store = InMemoryStore()
+        service, pipeline = _components(model, store)
+
+        await pipeline.ingest(_delta(1, "처음 설명"))
+        await service.drain()
+        await pipeline.ingest(_delta(2, " 표현 수정"))
+        await service.drain()
+
+        assert store.events[1].topicAction.value == "CONTINUE"
+        assert store.events[1].keyPoints == ("정의: 다듬은 설명임.",)
+        assert store.events[1].chunkSequence == "2"
+
+    asyncio.run(scenario())
+
+
+def test_title_and_overview_only_update_checkpoint_without_live_event() -> None:
+    item = LectureNoteDraftItem(
+        type=LectureNoteDraftItemType.FACT,
+        label="정의",
+        content="같은 설명임.",
+    )
+
+    async def scenario() -> None:
+        model = SequencedModel(
+            LectureNoteDraftUpdateResult(
+                action=LectureNoteDraftUpdateAction.START_NEW,
+                newTopic=LectureNoteDraftTopicContent(
+                    topicTitle="초기 주제",
+                    overview="초기 설명임.",
+                    items=(item,),
+                ),
+            ),
+            LectureNoteDraftUpdateResult(
+                action=LectureNoteDraftUpdateAction.UPDATE_CURRENT,
+                currentTopic=LectureNoteDraftTopicContent(
+                    topicTitle="확장된 주제",
+                    overview="표현만 다시 정리함.",
+                    items=(item,),
+                ),
+            ),
+        )
+        store = InMemoryStore()
+        service, pipeline = _components(model, store)
+
+        await pipeline.ingest(_delta(1, "초기 설명"))
+        await service.drain()
+        await pipeline.ingest(_delta(2, " 표현 정리"))
+        await service.drain()
+
+        checkpoint = store.checkpoints[SESSION_ID]
+        assert len(store.events) == 1
+        assert checkpoint.note.chunk_sequence == 1
+        assert checkpoint.draft.update_sequence == 2
+        assert checkpoint.draft.topics[0].title == "확장된 주제"
+        assert checkpoint.draft.topics[0].revision == 2
 
     asyncio.run(scenario())
 
@@ -274,8 +523,8 @@ def test_outbox_reuses_same_event_without_second_model_call() -> None:
 
 def test_ignore_completes_operation_without_event_or_chunk_sequence() -> None:
     class IgnoreModel:
-        async def generate(self, request):
-            return LectureNoteModelResult(action=LectureNoteDecisionAction.IGNORE)
+        async def generate_draft(self, request):
+            return LectureNoteDraftUpdateResult(action=LectureNoteDraftUpdateAction.IGNORE)
 
     async def scenario() -> None:
         store = InMemoryStore()
@@ -415,6 +664,49 @@ def test_completion_publishes_refined_snapshot_after_live_events() -> None:
     asyncio.run(scenario())
 
 
+def test_refinement_receives_all_draft_items_not_only_live_event_points() -> None:
+    class WideDraftModel(RefiningModel):
+        async def generate_draft(self, request):
+            self.requests.append(request)
+            items = tuple(
+                LectureNoteDraftItem(
+                    type=LectureNoteDraftItemType.FACT,
+                    label=f"세부 {index}",
+                    content=f"{'가' * 240} {index}번 내용임.",
+                )
+                for index in range(1, 5)
+            )
+            return LectureNoteDraftUpdateResult(
+                action=LectureNoteDraftUpdateAction.START_NEW,
+                newTopic=LectureNoteDraftTopicContent(
+                    topicTitle="상세 주제",
+                    overview="여러 세부 내용을 포함한 주제임.",
+                    items=items,
+                ),
+            )
+
+    async def scenario() -> None:
+        model = WideDraftModel()
+        store = InMemoryStore()
+        service, pipeline = _components(model, store, refinement_model=model)
+
+        await pipeline.ingest(_delta(1, "상세 내용"))
+        await service.drain()
+
+        live_event = store.events[0]
+        assert isinstance(live_event, LectureNoteChunkAppended)
+        assert len(live_event.keyPoints) == 3
+        assert len(store.checkpoints[SESSION_ID].draft.topics[0].items) == 4
+
+        await pipeline.ingest(_completion(1))
+        await service.drain()
+
+        refinement_note = model.refinement_requests[0].note
+        assert len(refinement_note.topics[0].key_points) == 4
+
+    asyncio.run(scenario())
+
+
 def test_completion_ack_is_reconciled_after_owned_pending_drain() -> None:
     async def scenario() -> None:
         store = InMemoryStore()
@@ -511,8 +803,8 @@ def test_lost_refined_commit_response_is_reconciled_without_duplicate_snapshot()
 
 def test_empty_draft_skips_refinement_and_snapshot() -> None:
     class IgnoreModel:
-        async def generate(self, request):
-            return LectureNoteModelResult(action=LectureNoteDecisionAction.IGNORE)
+        async def generate_draft(self, request):
+            return LectureNoteDraftUpdateResult(action=LectureNoteDraftUpdateAction.IGNORE)
 
         async def refine(self, request):
             raise AssertionError("empty draft must not call refinement")

@@ -294,6 +294,12 @@ def test_topic_content_rejects_polite_style_and_definition_without_label() -> No
     with pytest.raises(ValidationError):
         _content("현재 주제", "현재 설명해요.")
     with pytest.raises(ValidationError):
+        _content(
+            "현재 주제",
+            "현재 설명임.",
+            _item(LectureNoteDraftItemType.FACT, "요점도 설명합니다."),
+        )
+    with pytest.raises(ValidationError):
         _item(LectureNoteDraftItemType.DEFINITION, "ACK의 정의임.")
 
     quoted_source = _content(

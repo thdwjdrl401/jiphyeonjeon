@@ -128,8 +128,8 @@ def validate_draft_update(
         raise ValueError("non-empty lecture note draft must end with an active topic")
     if result.currentTopic is None:
         raise ValueError("existing active topic requires currentTopic")
-    existing_identities = {_draft_item_identity(item) for item in active.items}
-    updated_identities = {_draft_item_identity(item) for item in result.currentTopic.items}
+    existing_identities = {draft_item_identity(item) for item in active.items}
+    updated_identities = {draft_item_identity(item) for item in result.currentTopic.items}
     if not existing_identities.issubset(updated_identities):
         raise ValueError("active topic update must preserve all existing items")
 
@@ -238,7 +238,8 @@ def _unique_draft_items(
     return tuple(unique)
 
 
-def _draft_item_identity(item: LectureNoteDraftItem) -> tuple[LectureNoteDraftItemType, str]:
+def draft_item_identity(item: LectureNoteDraftItem) -> tuple[LectureNoteDraftItemType, str]:
+    """reducer 보존 검증과 live 변경 감지가 공유하는 item 식별자다."""
     identity = item.label if item.label is not None else item.content
     return item.type, _normalize_for_comparison(identity)
 

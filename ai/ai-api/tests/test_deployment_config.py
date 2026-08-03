@@ -41,7 +41,7 @@ def test_prod_and_dev_compose_share_operational_shape() -> None:
 def test_lecture_note_policy_uses_compose_defaults() -> None:
     expected_defaults = {
         "AI_API_LECTURE_NOTE_MODEL": "",
-        "AI_API_LECTURE_NOTE_MAX_OUTPUT_TOKENS": "512",
+        "AI_API_LECTURE_NOTE_MAX_OUTPUT_TOKENS": "4096",
         "AI_API_LECTURE_NOTE_MAX_PROMPT_CHARS": "20000",
         "AI_API_LECTURE_NOTE_TIMEOUT_SECONDS": "30",
         "AI_API_LECTURE_NOTE_MIN_WINDOW_MS": "15000",
