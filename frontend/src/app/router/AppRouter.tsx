@@ -30,6 +30,7 @@ import PasswordResetRequestPage from '@/pages/PasswordResetRequestPage'
 import ProfilePage from '@/pages/ProfilePage'
 import ReplayLessonPage from '@/pages/ReplayLessonPage'
 import RecordedLessonUploadPage from '@/pages/RecordedLessonUploadPage'
+import RecordedLessonDetailPage from '@/pages/RecordedLessonDetailPage'
 import SignupPage from '@/pages/SignupPage'
 import StudentPrejoinPage from '@/pages/StudentPrejoinPage'
 import WelcomePage from '@/pages/WelcomePage'
@@ -92,6 +93,7 @@ export default function AppRouter() {
             <Route path="curriculums/new" element={<CurriculumFormPage />} />
             <Route path="curriculums/:curriculumId/manage" element={<CurriculumManagePage />} />
             <Route path="curriculums/:curriculumId/sections/:sectionId/recorded-lessons/new" element={<RecordedLessonUploadPage />} />
+            <Route path="curriculums/:curriculumId/sections/:sectionId/recorded-lessons/:lessonId" element={<RecordedLessonDetailPage />} />
             <Route path="curriculums/:curriculumId/sections/:sectionId/lessons/new" element={<LessonFormPage />} />
             <Route path="curriculums/:curriculumId/sections/:sectionId/lessons/:lessonId" element={<LessonDetailPage />} />
             <Route path="curriculums/:curriculumId/sections/:sectionId/lessons/:lessonId/edit" element={<LessonFormPage />} />

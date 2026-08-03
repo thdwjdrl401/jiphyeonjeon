@@ -216,6 +216,65 @@ class RecordedLessonUploadContractTest {
     }
 
     @Test
+    void failed_processing_can_be_retried_but_active_processing_cannot() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String sectionId = createSection(instructor);
+        MvcResult created = write(post("/api/instructor/sections/" + sectionId + "/recorded-lessons"), instructor,
+                "{\"clientRequestId\":\"%s\",\"title\":\"재시도 강의\"}".formatted(UUID.randomUUID()))
+                .andExpect(status().isCreated()).andReturn();
+        String lessonId = json(created).get("lessonId").asString();
+        MvcResult ticket = write(post("/api/instructor/recorded-lessons/" + lessonId + "/video/upload-requests"),
+                instructor, "{\"fileName\":\"retry.mp4\",\"contentType\":\"video/mp4\",\"fileSize\":12}")
+                .andExpect(status().isCreated()).andReturn();
+        MvcResult accepted = write(post("/api/instructor/recorded-lessons/" + lessonId + "/video/complete"),
+                instructor, "{\"assetId\":\"" + json(ticket).get("assetId").asString() + "\"}")
+                .andExpect(status().isAccepted()).andReturn();
+        UUID recordedVideoId = UUID.fromString(json(accepted).get("recordedVideoId").asString());
+
+        // 처리 중 작업은 중복 attempt를 만들지 않는다.
+        write(post("/api/instructor/recorded-lessons/" + lessonId + "/processing/retry"), instructor, null)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("RECORDED_VIDEO_RETRY_CONFLICT"));
+
+        var video = recordedVideoRepository.findById(recordedVideoId).orElseThrow();
+        var firstJob = jobRepository.findTopByRecordedVideoIdOrderByAttemptNoDesc(recordedVideoId).orElseThrow();
+        video.setStatus(RecordedVideoStatus.FAILED);
+        video.setFailureCode("FFMPEG_FAILED");
+        firstJob.setStatus(MediaTranscodeJobStatus.FAILED);
+        firstJob.setFinishedAt(OffsetDateTime.now());
+        firstJob.setLastError("FFMPEG_FAILED");
+        recordedVideoRepository.saveAndFlush(video);
+        jobRepository.saveAndFlush(firstJob);
+
+        MvcResult retried = write(post("/api/instructor/recorded-lessons/" + lessonId + "/processing/retry"),
+                instructor, null)
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.status").value("QUEUED"))
+                .andExpect(jsonPath("$.failureCode").isEmpty())
+                .andReturn();
+
+        UUID retryJobId = UUID.fromString(json(retried).get("jobId").asString());
+        assertThat(retryJobId).isNotEqualTo(firstJob.getId());
+        assertThat(jobRepository.findById(retryJobId).orElseThrow().getAttemptNo()).isEqualTo(2);
+        assertThat(recordedVideoRepository.findById(recordedVideoId).orElseThrow().getStatus())
+                .isEqualTo(RecordedVideoStatus.QUEUED);
+    }
+
+    @Test
+    void another_instructor_cannot_retry_failed_processing() throws Exception {
+        Cookie[] owner = loginAs("INSTRUCTOR");
+        String sectionId = createSection(owner);
+        MvcResult created = write(post("/api/instructor/sections/" + sectionId + "/recorded-lessons"), owner,
+                "{\"clientRequestId\":\"%s\",\"title\":\"소유권 재시도\"}".formatted(UUID.randomUUID()))
+                .andExpect(status().isCreated()).andReturn();
+        String lessonId = json(created).get("lessonId").asString();
+
+        Cookie[] intruder = loginAs("INSTRUCTOR");
+        write(post("/api/instructor/recorded-lessons/" + lessonId + "/processing/retry"), intruder, null)
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void signed_worker_callback_verifies_hls_and_opens_recorded_playback_idempotently() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String sectionId = createSection(instructor);

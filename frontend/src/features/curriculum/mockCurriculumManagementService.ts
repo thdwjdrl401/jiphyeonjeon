@@ -19,8 +19,33 @@ const savedStructures = new Map<
   Awaited<ReturnType<CurriculumManagementService['getCurriculumManagementStructure']>>
 >()
 
+export interface MockRecordedLessonContext {
+  lessonId: string
+  title: string
+  description: string
+  curriculumId: string
+  curriculumTitle: string
+  sectionId: string
+  sectionTitle: string
+  materials: Array<{
+    id: string
+    name: string
+    size: string
+    status: string
+    embeddingStatus: 'READY'
+    keyTermStatus: 'READY'
+  }>
+}
+
+const recordedLessons = new Map<string, MockRecordedLessonContext>()
+
+export function getMockRecordedLesson(lessonId: string) {
+  return recordedLessons.get(lessonId) ?? null
+}
+
 export function resetMockCurriculumManagement() {
   savedStructures.clear()
+  recordedLessons.clear()
 }
 
 /**
@@ -144,6 +169,7 @@ export const mockCurriculumManagementService = {
     */
     publishLiveCanceled(lessonId)
     deleteMockLesson(lessonId)
+    recordedLessons.delete(lessonId)
     for (const [key, structure] of savedStructures) {
       savedStructures.set(key, structure.map((section) => ({
         ...section,
@@ -179,6 +205,26 @@ export const mockCurriculumManagementService = {
     }
 
     const lessonId = `lesson-recorded-${Date.now()}`
+    const section = currentStructure.find((item) => item.sectionId === request.sectionId)!
+    recordedLessons.set(lessonId, {
+      lessonId,
+      title: request.title,
+      description: request.description,
+      curriculumId: curriculum.curriculumId,
+      curriculumTitle: curriculum.title,
+      sectionId: section.sectionId,
+      sectionTitle: section.title,
+      materials: request.materials.map((file) => ({
+        id: `mock-material-${file.name}-${file.size}`,
+        name: file.name,
+        size: file.size < 1024 * 1024
+          ? `${Math.max(1, Math.round(file.size / 1024))} KB`
+          : `${(file.size / 1024 / 1024).toFixed(1)} MB`,
+        status: 'READY',
+        embeddingStatus: 'READY',
+        keyTermStatus: 'READY',
+      })),
+    })
     savedStructures.set(request.curriculumId, currentStructure.map((section) =>
       section.sectionId === request.sectionId
         ? {

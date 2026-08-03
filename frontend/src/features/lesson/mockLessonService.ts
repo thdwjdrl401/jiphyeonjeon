@@ -1,4 +1,8 @@
 import { getDemoCurriculumLessonNavigation, getDemoLesson } from '@/features/demo/demoData'
+import {
+  getMockRecordedLesson,
+  mockCurriculumManagementService,
+} from '@/features/curriculum/mockCurriculumManagementService'
 import { findMockLesson } from '@/features/demo/mockDatabase'
 import {
   publishLessonCreated,
@@ -56,9 +60,40 @@ function publishLessonSaveNotifications(request: SaveLessonRequest, lessonId: st
 
 export const mockLessonService = {
   async getLesson(request) {
+    const recorded = getMockRecordedLesson(request.lessonId)
+    if (recorded) {
+      return {
+        ...recorded,
+        status: 'PUBLISHED' as const,
+        deliveryType: 'RECORDED' as const,
+        liveSession: null,
+        replayStatus: 'NOT_READY' as const,
+        learning: null,
+      }
+    }
     return getDemoLesson(request.lessonId, request.userId)
   },
-  async getCurriculumLessonNavigation(curriculumId) {
+  async getCurriculumLessonNavigation(curriculumId, role) {
+    if (role === 'INSTRUCTOR') {
+      const [curriculum, sections] = await Promise.all([
+        mockCurriculumManagementService.getInstructorCurriculum(curriculumId),
+        mockCurriculumManagementService.getCurriculumManagementStructure(curriculumId),
+      ])
+      return {
+        curriculumId,
+        title: curriculum.title,
+        sections: sections.map((section) => ({
+          sectionId: section.sectionId,
+          title: section.title,
+          lessons: section.lessons.map((lesson, index) => ({
+            lessonId: lesson.lessonId,
+            title: lesson.title,
+            order: index + 1,
+            deliveryType: lesson.deliveryType ?? 'LIVE',
+          })),
+        })),
+      }
+    }
     return getDemoCurriculumLessonNavigation(curriculumId)
   },
   async saveLesson(request) {

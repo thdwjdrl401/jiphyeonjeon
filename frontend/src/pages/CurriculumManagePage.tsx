@@ -653,6 +653,9 @@ function CurriculumManageEditor({
                         const isDragging = draggedLesson?.lessonId === lesson.lessonId
                         const isDropBefore = lessonDropTarget?.sectionId === section.sectionId
                           && lessonDropTarget.lessonIndex === lessonIndex
+                        const detailPath = lesson.deliveryType === 'RECORDED'
+                          ? instructorPaths.recordedLesson(curriculumId, section.sectionId, lesson.lessonId)
+                          : instructorPaths.lesson(curriculumId, section.sectionId, lesson.lessonId)
                         return (
                           <li
                             className={`${isDragging ? 'is-dragging' : ''}${isDropBefore ? ' is-drop-before' : ''}`.trim() || undefined}
@@ -675,7 +678,7 @@ function CurriculumManageEditor({
                                 수정 화면 안으로 옮겼다. */}
                             <div className="lesson-actions">
                               <div className="row-actions">
-                                <Link to={instructorPaths.lesson(curriculumId, section.sectionId, lesson.lessonId)}>상세</Link>
+                                <Link to={detailPath}>상세</Link>
                                 <Link to={instructorPaths.editLesson(curriculumId, section.sectionId, lesson.lessonId)}>수정</Link>
                               </div>
                             </div>

@@ -50,6 +50,7 @@ export function getDemoCurriculumLessonNavigation(curriculumId: string) {
         lessonId: lesson.lessonId,
         title: lesson.title,
         order: lesson.order,
+        deliveryType: 'LIVE' as const,
       })),
     })),
   }
@@ -95,6 +96,7 @@ export function getDemoLesson(lessonId: string, userId?: string) {
       ? demoLesson.description
       : `${context.lesson.title}의 핵심 개념과 실습 내용을 학습합니다.`,
     status: context.lesson.status,
+    deliveryType: 'LIVE' as const,
     sectionId: context.section.sectionId,
     sectionTitle: context.section.title,
     curriculumId: context.curriculum.curriculumId,

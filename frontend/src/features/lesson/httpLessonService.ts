@@ -18,6 +18,7 @@ interface ApiLessonView {
   title: string
   description: string
   status: LessonStatus
+  deliveryType?: 'LIVE' | 'RECORDED'
   materials?: ApiLessonMaterial[]
   // 강사 레슨 조회(/instructor/lessons/{id})만 함께 준다. 공개 카탈로그는
   // PUBLISHED 커리큘럼만 보이므로 강사 저작 읽기는 강사 권한 축을 쓴다(BE ADR).
@@ -71,6 +72,7 @@ interface ApiCurriculumDetail {
       lessonId: string
       title: string
       status: LessonStatus
+      deliveryType?: 'LIVE' | 'RECORDED'
       liveSession?: {
         sessionId: string
         liveSessionStatus?: CurriculumLiveSessionStatus
@@ -111,6 +113,7 @@ async function getInstructorLesson(request: {
     title: lesson.title,
     description: lesson.description,
     status: lesson.status,
+    deliveryType: lesson.deliveryType ?? 'LIVE',
     sectionId: lesson.sectionId,
     sectionTitle,
     curriculumId: request.curriculumId ?? '',
@@ -165,6 +168,7 @@ export const httpLessonService = {
       title: lesson.title,
       description: lesson.description,
       status: lesson.status,
+      deliveryType: lesson.deliveryType ?? 'LIVE',
       sectionId: lesson.sectionId,
       sectionTitle,
       curriculumId: request.curriculumId ?? '',
@@ -189,7 +193,12 @@ export const httpLessonService = {
         return {
           sectionId: section.sectionId,
           title: section.title,
-          lessons: lessons.map((lesson, index) => ({ lessonId: lesson.lessonId, title: lesson.title, order: index + 1 })),
+          lessons: lessons.map((lesson, index) => ({
+            lessonId: lesson.lessonId,
+            title: lesson.title,
+            order: index + 1,
+            deliveryType: lesson.deliveryType ?? 'LIVE',
+          })),
         }
       }))
       return { curriculumId: curriculum.curriculumId, title: curriculum.title, sections: sectionsWithLessons }
@@ -206,6 +215,7 @@ export const httpLessonService = {
           lessonId: lesson.lessonId,
           title: lesson.title,
           order: index + 1,
+          deliveryType: lesson.deliveryType ?? 'LIVE',
         })),
       })),
     }
