@@ -245,7 +245,7 @@ public class InstructorCurriculumService {
      * <p>섹션·레슨·자료·라이브 세션은 DDL의 ON DELETE CASCADE가 함께 지운다(V1__init_core.sql).
      * 카운터 트리거는 이미 사라진 부모 행을 UPDATE하려다 0건으로 무시되므로 별도 처리가 필요 없다.
      *
-     * <p><b>녹화만 예외다.</b> {@code video_asset.lesson_id}는 일부러 NO ACTION으로 남겨 뒀다(ADR-0064) —
+     * <p><b>녹화만 예외다.</b> {@code video_asset.lesson_id}는 일부러 NO ACTION으로 남겨 뒀다(ADR-0067) —
      * 행만 CASCADE로 지우면 스토리지에 파일이 조용히 고아로 남기 때문이다. 그래서 레슨 삭제와 똑같이
      * 정리 포트를 거친다. 안 거치면 여기서 FK에 막힌다.
      */

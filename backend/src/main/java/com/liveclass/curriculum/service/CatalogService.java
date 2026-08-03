@@ -117,9 +117,16 @@ public class CatalogService {
 
     @Transactional(readOnly = true)
     public CatalogDetail detail(UUID curriculumId, CatalogViewer viewer) {
-        // PUBLISHED가 아니면 존재를 드러내지 않고 404로 통일한다.
-        Curriculum curriculum = curriculumRepository
-                .findByIdAndLifecycleStatus(curriculumId, CurriculumLifecycleStatus.PUBLISHED)
+        // PUBLISHED가 아니면 존재를 드러내지 않고 404로 통일한다 — 단 소유 강사는 예외다.
+        //
+        // 이 상세는 강사도 본다. 관리 화면의 "커리큘럼 상세" 버튼이 여기로 오고, 강사는 공개 전에
+        // 자기 커리큘럼이 수강생에게 어떻게 보이는지 확인해야 한다. 소유자까지 404로 막으면 초안
+        // 커리큘럼은 만든 사람조차 미리 볼 수 없다 — 실제로 그 상태였다.
+        //
+        // 남에게는 그대로 404다. 403으로 돌려주면 "여기 뭔가 있다"는 사실이 드러난다.
+        Curriculum curriculum = curriculumRepository.findById(curriculumId)
+                .filter(found -> found.getLifecycleStatus() == CurriculumLifecycleStatus.PUBLISHED
+                        || isOwner(found, viewer))
                 .orElseThrow(() -> new CurriculumNotFoundException("커리큘럼을 찾을 수 없습니다."));
 
         EnrollmentView enrollment = viewer.isGuest()
@@ -271,8 +278,8 @@ public class CatalogService {
      * 공개 목차: 섹션 순서대로 그 섹션의 레슨 전부를 노출한다.
      *
      * <p>레슨 상태로 거르지 않는다 — 레슨에는 초안이 없고 공개 여부는 커리큘럼 lifecycleStatus만으로
-     * 결정된다(ADR-0005). 이 메서드에 도달했다는 것은 이미 커리큘럼이 PUBLISHED라는 뜻이므로
-     * (호출자가 findByIdAndLifecycleStatus로 걸렀다) 그 안의 레슨은 모두 공개 대상이다.
+     * 결정된다(ADR-0005). 호출자가 이미 "PUBLISHED이거나 소유 강사"만 통과시켰으므로, 여기 오는
+     * 커리큘럼의 레슨은 볼 자격이 있는 사람에게만 보인다.
      */
     private List<CatalogOutlineSection> buildOutline(List<Section> sections, String relationship) {
         if (sections.isEmpty()) {
@@ -366,11 +373,19 @@ public class CatalogService {
      * 보는 사람과 커리큘럼의 관계, 그리고 그 관계에서 허용되는 행동.
      * 거절·철회·취소된 수강은 "신청한 적 없음"과 같게 다뤄 다시 신청할 수 있게 둔다.
      */
+    /**
+     * 이 커리큘럼을 만든 강사인가. 공개 전 상세를 볼 수 있는지와 관계(OWNER_INSTRUCTOR) 판정이
+     * 같은 규칙을 쓰도록 한 곳에 둔다 — 갈라지면 "볼 수는 있는데 관리 버튼은 없는" 화면이 나온다.
+     */
+    private boolean isOwner(Curriculum curriculum, CatalogViewer viewer) {
+        return !viewer.isGuest() && curriculum.getInstructorId().equals(viewer.userId());
+    }
+
     private CatalogViewerContext viewerContext(Curriculum curriculum, CatalogViewer viewer, EnrollmentView enrollment) {
         if (viewer.isGuest()) {
             return CatalogViewerContext.of("GUEST", List.of("LOGIN_TO_ENROLL"));
         }
-        if (curriculum.getInstructorId().equals(viewer.userId())) {
+        if (isOwner(curriculum, viewer)) {
             return CatalogViewerContext.of("OWNER_INSTRUCTOR", List.of("MANAGE_CURRICULUM", "EDIT_LESSON"));
         }
         if (viewer.instructor()) {
