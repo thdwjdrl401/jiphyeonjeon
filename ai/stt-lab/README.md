@@ -174,6 +174,21 @@ uv run --frozen stt-lab-vllm \
 
 smoke가 통과하면 dev에서 동시성을 올린다. test는 설정을 확정한 뒤 최종 한 번만 실행한다.
 
+Transformers in-process와 vLLM serving을 모델 선택 근거로 비교할 때는 아래처럼 통합 replay에
+둘 다 넣어 동일한 운영 VAD segment plan을 강제한다. API key가 있으면
+`STT_LAB_VLLM_API_KEY` 환경변수로만 주입하며 report에는 저장하지 않는다.
+
+```bash
+uv run --frozen stt-lab-replay \
+  --manifest /home/liveclass/ai/datasets/aihub-korean-lecture/v1/manifests/dev.jsonl \
+  --candidate whisper-transformers=whisper@/home/liveclass/ai/models/whisper-large-v3 \
+  --candidate whisper-vllm=vllm@liveclass-whisper-large-v3 \
+  --vllm-base-url http://127.0.0.1:18083/v1 \
+  --mode paced \
+  --workers 1 \
+  --output results/whisper-serving-vad-dev-c1.json
+```
+
 ```bash
 uv run --frozen stt-lab-vllm \
   --manifest /home/liveclass/ai/datasets/aihub-korean-lecture/v1/manifests/dev.jsonl \

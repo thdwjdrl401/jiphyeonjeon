@@ -33,6 +33,7 @@ from stt_lab.replay import (
 )
 from stt_lab.replay_backends import ReplayBackendSlot, build_backend_slot
 from stt_lab.reporting import write_replay_artifacts
+from stt_lab.vllm_replay import VllmBackendSlot
 
 _SAFE_CANDIDATE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 SlotBuilder = Callable[[str, str, str, str, str], ReplayBackendSlot]
@@ -73,6 +74,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             language=args.language,
             device=args.device,
             precision=args.precision,
+            slot_builder=lambda backend, model_id, language, device, precision: _cli_slot_builder(
+                backend,
+                model_id,
+                language,
+                device,
+                precision,
+                args=args,
+            ),
         )
     )
     report.update(
@@ -85,6 +94,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             "split": args.split,
             "cudaVisibleDevices": args.cuda_visible_devices,
             "pythonVersion": platform.python_version(),
+            "vllmBaseUrl": args.vllm_base_url
+            if any(candidate.backend == "vllm" for candidate in candidates)
+            else None,
         }
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -195,8 +207,8 @@ async def _evaluate_candidate(
     load_started = perf_counter()
     try:
         for slot in slots:
-            await asyncio.to_thread(slot.load)
             loaded_slots.append(slot)
+            await asyncio.to_thread(slot.load)
         load_ms = (perf_counter() - load_started) * 1_000
         _reset_cuda_peak()
         indexed_results: list[tuple[int, dict[str, Any]]] = []
@@ -379,8 +391,8 @@ def _parse_candidate(value: str) -> CandidateSpec:
         raise argparse.ArgumentTypeError("candidate must use NAME=BACKEND@MODEL format") from exc
     if not _SAFE_CANDIDATE_NAME.fullmatch(name):
         raise argparse.ArgumentTypeError("candidate name is not safe")
-    if backend not in {"nemotron", "whisper"}:
-        raise argparse.ArgumentTypeError("candidate backend must be nemotron or whisper")
+    if backend not in {"nemotron", "whisper", "vllm"}:
+        raise argparse.ArgumentTypeError("candidate backend must be nemotron, whisper, or vllm")
     if not model_id.strip():
         raise argparse.ArgumentTypeError("candidate model must not be blank")
     return CandidateSpec(name=name, backend=backend, model_id=model_id)
@@ -408,8 +420,35 @@ def _default_slot_builder(
     )
 
 
+def _cli_slot_builder(
+    backend: str,
+    model_id: str,
+    language: str,
+    device: str,
+    precision: str,
+    *,
+    args: argparse.Namespace,
+) -> ReplayBackendSlot:
+    if backend == "vllm":
+        return VllmBackendSlot(
+            model_id,
+            base_url=args.vllm_base_url,
+            api_key=os.environ.get(args.vllm_api_key_env),
+            precision=precision,
+            timeout_seconds=args.vllm_timeout_seconds,
+        )
+    return _default_slot_builder(backend, model_id, language, device, precision)
+
+
 def _positive_int(value: str) -> int:
     parsed = int(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("value must be positive")
+    return parsed
+
+
+def _positive_float(value: str) -> float:
+    parsed = float(value)
     if parsed <= 0:
         raise argparse.ArgumentTypeError("value must be positive")
     return parsed
@@ -466,7 +505,7 @@ def _parser() -> argparse.ArgumentParser:
         "--candidate",
         action="append",
         required=True,
-        help="repeat NAME=BACKEND@MODEL; backend is nemotron or whisper",
+        help="repeat NAME=BACKEND@MODEL; backend is nemotron, whisper, or vllm",
     )
     parser.add_argument("--mode", choices=("accuracy", "paced"), default="accuracy")
     parser.add_argument("--workers", type=_positive_int, default=1)
@@ -483,6 +522,9 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--limit", type=_positive_int)
     parser.add_argument("--output", type=Path, default=Path("results/replay-latest.json"))
     parser.add_argument("--artifact-dir", type=Path)
+    parser.add_argument("--vllm-base-url", default="http://127.0.0.1:18083/v1")
+    parser.add_argument("--vllm-api-key-env", default="STT_LAB_VLLM_API_KEY")
+    parser.add_argument("--vllm-timeout-seconds", type=_positive_float, default=120.0)
     return parser
 
 
