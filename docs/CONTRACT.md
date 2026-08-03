@@ -134,21 +134,25 @@ GET /api/instructor/live-sessions/{sessionId}/processing
 - 소유 강사는 200, 비소유 사용자·수강생은 403 `LIVE_SESSION_FORBIDDEN`, 없는 세션은
   404 `LIVE_SESSION_NOT_FOUND`다. 조회는 매번 LiveKit·MinIO를 호출하지 않고 DB 상태만 반환한다.
 
-### 2-4. 알림 센터 — **서버 미구현** (FE 완료, BE 착수 전)
+### 2-4. 알림 센터 — **조회 4개 구현됨, 발행·재판정은 남음**
 
-알림 도메인은 아직 서버에 없다. `backend/src/main/java/com/liveclass` 아래에 알림 패키지·테이블·
-엔드포인트가 없고, 알림을 만들어야 할 사건(수강 판정·강의 게시·Egress 완료)에도 발행 지점이 없다.
-FE는 타입·Interface·Mock·화면·이동 규칙을 모두 구현했고 HTTP 어댑터는 501 `API_NOT_IMPLEMENTED`를
-던진다([ADR-0012](decisions/seominkyeong/0012-notification-center-two-status-axes.md)).
-아래는 **FE가 소비할 준비가 된 형태**이며, 서버 구현 시 이 규격을 그대로 채우면 화면 변경이 없다.
+FE는 타입·Interface·Mock·화면·이동 규칙을 모두 구현했다
+([ADR-0012](decisions/seominkyeong/0012-notification-center-two-status-axes.md)).
+서버는 **읽기 경로 네 개**(목록·배지·개별 읽음·모두 읽음)를 구현했고
+([ADR-0073](decisions/songjeongki/0073-notification-fanout-architecture.md)),
+HTTP 어댑터도 그 넷은 실제 호출로 배선됐다.
 
-| 목적 | Method·URL | 응답 | 권한 |
-|---|---|---|---|
-| 배지 개수 | `GET /api/me/notifications/summary` | `{ unreadCount, actionRequiredCount }` | 로그인 필요(401) |
-| 목록 | `GET /api/me/notifications?scope=ALL\|ACTION_REQUIRED&readState=UNREAD\|READ&page=&size=` | 아래 페이지 응답 | 본인 것만 |
-| 개별 읽음 | `POST /api/me/notifications/{id}/read` | 갱신된 알림 1건 | 남의 알림은 **404**(403 아님) |
-| 모두 읽음 | `POST /api/me/notifications/read-all` | `{ unreadCount: 0, actionRequiredCount }` | 본인 것만 |
-| 클릭 대상 재판정 | `GET /api/me/notifications/{id}/target` | `AVAILABLE` + 상태 또는 `GONE` + 이유 | 본인 것만 |
+**아직 없는 것 둘.** (1) 알림을 만드는 **발행 지점**이 없다 — 수강 판정·강의 게시·Egress 완료 어디에도
+발행이 붙지 않아 테이블은 비어 있다. (2) `GET /{id}/target`(대상 재판정)은 다른 모듈 넷을 읽어야
+하는데 클릭할 알림 자체가 없어 미뤘고, 어댑터는 그 하나만 501 `API_NOT_IMPLEMENTED`를 던진다.
+
+| 목적 | Method·URL | 응답 | 권한 | 상태 |
+|---|---|---|---|---|
+| 배지 개수 | `GET /api/me/notifications/summary` | `{ unreadCount, actionRequiredCount }` | 로그인 필요(401) | 구현됨 |
+| 목록 | `GET /api/me/notifications?scope=ALL\|ACTION_REQUIRED&readState=UNREAD\|READ&page=&size=` | 아래 페이지 응답 | 본인 것만 | 구현됨 |
+| 개별 읽음 | `POST /api/me/notifications/{id}/read` | 갱신된 알림 1건 | 남의 알림은 **404**(403 아님) | 구현됨 |
+| 모두 읽음 | `POST /api/me/notifications/read-all` | `{ unreadCount: 0, actionRequiredCount }` | 본인 것만 | 구현됨 |
+| 클릭 대상 재판정 | `GET /api/me/notifications/{id}/target` | `AVAILABLE` + 상태 또는 `GONE` + 이유 | 본인 것만 | **미구현(501)** |
 
 ```json
 {
@@ -208,7 +212,8 @@ FE는 타입·Interface·Mock·화면·이동 규칙을 모두 구현했고 HTTP
 - **수신자 판정**: 수강 신청 알림은 해당 커리큘럼의 실제 담당 강사에게만, 라이브·강의·자료·다시보기
   알림은 `EnrollmentStatus=ACTIVE`인 학생에게만. 강사 계정이라는 이유만으로 남의 커리큘럼 알림을
   받지 않는다. `PENDING`·`REJECTED`·`REVOKED`·`CANCELLED`는 수신 대상이 아니다.
-- **BE 후속 작업**: (1) 알림 테이블(멱등 키 unique 제약 포함)과 위 5개 엔드포인트,
+- **BE 후속 작업**: ~~(1) 알림 테이블(멱등 키 unique 제약 포함)과 조회 4개 엔드포인트~~ — 완료
+  (`V23__notification.sql`의 `dedupe_key` UNIQUE + `NotificationController`),
   (2) 수강 판정·강의 저장·자료 게시·Egress 완료·다시보기 게시 지점의 알림 발행,
   (3) `LIVE_STARTING_SOON`·오늘의 라이브 일정 알림을 만드는 예약 작업(현재 `@Scheduled`는
   `LiveStartReconciler`·`AssetReaper`·`OutboxRelay`에만 있어 알림용 잡이 없다),
