@@ -437,7 +437,83 @@ BE 계약 테스트 **73건**(11개 파일). 검증 대상은 [ADR-0073 §검증
 
 ---
 
-## 11. 작업 이력
+## 11. 독립 저장소로 떼어내기
+
+이 서브시스템은 **독립 포트폴리오 프로젝트로 분리하는 것이 최종 목표**다. 지금은 그 준비 상태를
+기록만 해 둔다 — 실제 분리는 아직 하지 않았다.
+
+### 11-1. 지금 얼마나 떼어내기 좋은가 (실측)
+
+| 지표 | 값 |
+|---|---|
+| 알림 모듈 파일 | 46개 |
+| 그중 **다른 모듈을 참조하지 않는 파일** | **37개 (80%)** |
+| 결합이 있는 파일 | 9개 |
+| **다른 모듈이 알림을 참조하는 곳** | **0개 — 의존이 한 방향으로만 흐른다** |
+| 알림이 SQL로 직접 읽는 남의 테이블 | `core.enrollment` **하나** |
+
+역참조가 0인 것이 가장 중요하다. 알림을 통째로 들어내도 **나머지 모듈은 컴파일된다.**
+`ModularityTests`가 이 방향을 계속 지켜 준다.
+
+### 11-2. 잘라야 할 이음매 아홉 군데
+
+```
+service/EnrollmentNotificationListener   aiintegration, enrollment
+service/LiveNotificationListener         aiintegration, live
+service/LiveStartingSoonScheduler        aiintegration, live
+service/MaterialNotificationListener     aiintegration, lesson
+service/RecordingNotificationListener    aiintegration, video
+service/NotificationFanoutWorker         auth, lesson, live
+service/NotificationScheduleService      live
+service/NotificationTargetService        curriculum, enrollment, lesson, live, video
+web/NotificationExceptionHandler         common
+```
+
+성격이 셋뿐이다.
+
+1. **들어오는 사건**(리스너 넷) — `EnrollmentDecidedEvent` 같은 도메인 이벤트. 독립 저장소에서는
+   "채널에 사건이 났다" 하나로 줄어든다.
+2. **나가는 조회**(`UserDirectory`·`LessonDirectory`·`LiveSessionDirectory`·`CurriculumDirectory`·
+   `ReplayDirectory`) — 전부 포트 인터페이스라 **구현만 갈아끼우면 된다.**
+3. **아웃박스**(`aiintegration.api.OutboxPublisher`) — §11-3.
+
+**핵심 파일은 이음매에 없다.** `NotificationFanoutRepository`(집합 삽입과 커서),
+`NotificationInsertRepository`, 예약 표, 푸시, 실시간, 읽기 API는 다른 모듈을 전혀 모른다 —
+포트폴리오에서 보여 줄 부분이 그대로 옮겨진다.
+
+### 11-3. 정직하게 걸리는 것 둘
+
+**아웃박스가 `aiintegration` 모듈에 산다.** 원래 AI 배치 잡 발행용으로 만들어졌고, 알림이 그것을
+일반화해서 함께 쓴다(§4-1). 팀 프로젝트에서는 두 벌을 두지 않는 것이 옳지만, **집 자체가 잘못
+있다** — 아웃박스는 범용 패턴이라 `common`이나 별도 모듈이 맞다. 독립 저장소에서는 자연스럽게
+제자리를 찾는다.
+
+**팬아웃 SQL이 `core.enrollment`를 직접 조인한다.** 이건 **의도한 경계 위반**이다 — 포트로 명단을
+받아 오면 그 순간 "명단이 앱을 통과하지 않는다"는 이 설계의 전제가 무너진다(§2-1). 집합 삽입은
+SQL 안에서 끝나야 의미가 있다.
+
+> 포트폴리오에서는 이 지점을 **감추지 말고 설명하는 편이 낫다.** "모듈 경계를 지키려다 성능
+> 전제를 깨는 것과, 한 군데를 열고 그 이유를 문서화하는 것" 중 후자를 골랐다는 것이 판단이다.
+
+### 11-4. 독립 저장소에서 무엇으로 증명할 것인가
+
+| 방법 | 무엇을 보여 주나 |
+|---|---|
+| **부하 테스트 하니스** | 수강생 N명을 시드하고 팬아웃 전체 시간·조각별 지연을 잰다. §5의 "100만 행 32.7초"를 **누구나 재현**할 수 있게 만든다 |
+| **계약 테스트 이식** | 73건 중 알림 핵심을 옮긴다. §6의 "테스트가 잡은 버그"가 실제로 잡히는 것을 보여 준다 — 변이를 넣으면 그 테스트만 빨개진다 |
+| **`docker compose` 한 방 실행** | Postgres·RabbitMQ까지 띄워 `docker compose up` 하나로 돈다. 보는 사람이 직접 돌려 볼 수 있다 |
+
+데모 UI는 우선순위를 낮췄다. 이 프로젝트가 보여 주려는 것은 **명단을 앱에 올리지 않는 팬아웃과
+전달 층 분리**이지 화면이 아니다.
+
+### 11-5. 남은 판단
+
+- 자체 도메인을 무엇으로 할지 — 지금 구조를 그대로 옮기면 `커리큘럼 → 채널`, `수강생 → 구독자`가
+  자연스럽다. 도메인이 얇을수록 알림 쪽이 도드라진다.
+- 팀 저장소와의 관계 — 복사본으로 갈라질지, 팀 쪽이 이 라이브러리를 쓰게 될지. **갈라지면
+  두 벌을 유지하게 되므로** 시작 전에 정해야 한다.
+
+## 12. 작업 이력
 
 | MR | 내용 |
 |---|---|
