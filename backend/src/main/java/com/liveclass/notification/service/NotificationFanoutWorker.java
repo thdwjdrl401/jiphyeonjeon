@@ -5,6 +5,7 @@ import com.liveclass.lesson.api.LessonDirectory;
 import com.liveclass.live.api.LiveSessionDirectory;
 import com.liveclass.auth.api.UserView;
 import com.liveclass.notification.api.NewNotification;
+import com.liveclass.notification.api.NotificationLeadTimes;
 import com.liveclass.notification.api.NotificationTypes;
 import com.liveclass.notification.config.NotificationMessagingConfig;
 import com.liveclass.notification.domain.NotificationStatus;
@@ -211,7 +212,17 @@ public class NotificationFanoutWorker {
         String message = NotificationCopy.wideMessage(command.type(), command.curriculumTitle(), subject,
                 command.previousStartsAt(), command.nextStartsAt());
 
-        NotificationFanoutRepository.Slice slice = fanoutRepository.insertForActiveStudents(
+        NotificationFanoutRepository.Slice slice = NotificationTypes.LIVE_STARTING_SOON.equals(command.type())
+                ? fanoutRepository.insertForStartingSoon(
+                        command.curriculumId(), command.lessonId(), command.afterUserId(), limit,
+                        command.leadMinutes() == null
+                                ? NotificationLeadTimes.DEFAULT_MINUTES : command.leadMinutes(),
+                        NotificationLeadTimes.DEFAULT_MINUTES,
+                        command.type(), NotificationStatus.INFO, NotificationTypes.severityOf(command.type()),
+                        title, message, wideTargetsJson(command),
+                        command.type() + ':' + command.curriculumId(),
+                        dedupePrefix(command), command.nextStartsAt())
+                : fanoutRepository.insertForActiveStudents(
                 command.curriculumId(), command.afterUserId(), limit,
                 command.type(), NotificationStatus.INFO, NotificationTypes.severityOf(command.type()),
                 title, message, wideTargetsJson(command),
@@ -246,6 +257,15 @@ public class NotificationFanoutWorker {
                         ? command.videoAssetId().toString()
                         : String.valueOf(command.liveSessionId());
         if (NotificationTypes.LIVE_SCHEDULE_CHANGED.equals(command.type())) {
+            long at = command.nextStartsAt() == null ? 0L : command.nextStartsAt().toInstant().toEpochMilli();
+            return command.type() + ':' + subject + ':' + at + ':';
+        }
+        /*
+         * 곧 시작 알림은 회차(시작 시각)마다 새 알림이다. 리드타임은 키에 넣지 않는다 — 한 사람은
+         * 어차피 자기 리드타임 하나에만 걸리고, 넣으면 일정이 바뀌었을 때 옛 리드타임 행과 새 행이
+         * 서로 다른 키가 되어 같은 회차 알림이 두 번 뜬다.
+         */
+        if (NotificationTypes.LIVE_STARTING_SOON.equals(command.type())) {
             long at = command.nextStartsAt() == null ? 0L : command.nextStartsAt().toInstant().toEpochMilli();
             return command.type() + ':' + subject + ':' + at + ':';
         }

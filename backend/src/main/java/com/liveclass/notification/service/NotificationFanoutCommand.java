@@ -42,6 +42,8 @@ public record NotificationFanoutCommand(
         Integer sliceLimit,
         UUID liveSessionId,
         UUID videoAssetId,
+        /** 곧 시작 알림에만. 이 값을 고른 사람에게만 나간다. */
+        Integer leadMinutes,
         /** 일정 변경의 "언제에서". 변경 알림에만 값이 있다. */
         OffsetDateTime previousStartsAt,
         /** 예정·변경의 새 시각. 취소에는 없다. */
@@ -53,7 +55,7 @@ public record NotificationFanoutCommand(
                                                    String curriculumTitle, UUID instructorId,
                                                    UUID studentId, OffsetDateTime occurredAt) {
         return new NotificationFanoutCommand(type, enrollmentId, curriculumId, curriculumTitle,
-                instructorId, studentId, null, null, null, occurredAt, null, null, null, null, null, null);
+                instructorId, studentId, null, null, null, occurredAt, null, null, null, null, null, null, null);
     }
 
     /** 넓은 팬아웃의 <b>첫</b> 조각. 커서는 비어 있고 워커가 이어 간다. */
@@ -64,7 +66,7 @@ public record NotificationFanoutCommand(
         return new NotificationFanoutCommand(
                 com.liveclass.notification.api.NotificationTypes.MATERIAL_PUBLISHED,
                 null, curriculumId, curriculumTitle, null, null,
-                lessonId, materialId, fileName, occurredAt, null, sliceLimit, null, null, null, null);
+                lessonId, materialId, fileName, occurredAt, null, sliceLimit, null, null, null, null, null);
     }
 
     /**
@@ -75,9 +77,18 @@ public record NotificationFanoutCommand(
                                                      UUID liveSessionId, OffsetDateTime previousStartsAt,
                                                      OffsetDateTime nextStartsAt, OffsetDateTime occurredAt,
                                                      int sliceLimit) {
+        return forLiveSchedule(type, curriculumId, lessonId, liveSessionId, previousStartsAt,
+                nextStartsAt, occurredAt, sliceLimit, null);
+    }
+
+    /** 곧 시작 알림. 예약 행의 리드타임을 실어 보내면 워커가 그 값을 고른 사람만 고른다. */
+    static NotificationFanoutCommand forLiveSchedule(String type, UUID curriculumId, UUID lessonId,
+                                                     UUID liveSessionId, OffsetDateTime previousStartsAt,
+                                                     OffsetDateTime nextStartsAt, OffsetDateTime occurredAt,
+                                                     int sliceLimit, Integer leadMinutes) {
         return new NotificationFanoutCommand(type, null, curriculumId, null, null, null,
                 lessonId, null, null, occurredAt, null, sliceLimit,
-                liveSessionId, null, previousStartsAt, nextStartsAt);
+                liveSessionId, null, leadMinutes, previousStartsAt, nextStartsAt);
     }
 
     /**
@@ -89,20 +100,21 @@ public record NotificationFanoutCommand(
                                                   int sliceLimit) {
         return new NotificationFanoutCommand(type, null, null, null, null, null,
                 lessonId, null, null, occurredAt, null, sliceLimit,
-                liveSessionId, videoAssetId, null, null);
+                liveSessionId, videoAssetId, null, null, null);
     }
 
     /** 라이브 세션에서 알아낸 커리큘럼·강사를 채워 넣는다. */
     NotificationFanoutCommand withSession(UUID sessionCurriculumId, UUID sessionInstructorId) {
         return new NotificationFanoutCommand(type, enrollmentId, sessionCurriculumId, curriculumTitle,
                 sessionInstructorId, studentId, lessonId, materialId, subjectName, occurredAt,
-                afterUserId, sliceLimit, liveSessionId, videoAssetId, previousStartsAt, nextStartsAt);
+                afterUserId, sliceLimit, liveSessionId, videoAssetId, leadMinutes,
+                previousStartsAt, nextStartsAt);
     }
 
     /** 다음 조각. 사건은 그대로 두고 커서만 옮긴다. */
     NotificationFanoutCommand nextSlice(UUID lastUserId) {
         return new NotificationFanoutCommand(type, enrollmentId, curriculumId, curriculumTitle,
                 instructorId, studentId, lessonId, materialId, subjectName, occurredAt,
-                lastUserId, sliceLimit, liveSessionId, videoAssetId, previousStartsAt, nextStartsAt);
+                lastUserId, sliceLimit, liveSessionId, videoAssetId, leadMinutes, previousStartsAt, nextStartsAt);
     }
 }

@@ -87,7 +87,8 @@ public class LiveStartingSoonScheduler {
 
         NotificationFanoutCommand command = NotificationFanoutCommand.forLiveSchedule(
                 NotificationTypes.LIVE_STARTING_SOON, curriculumId, session.lessonId(),
-                schedule.getLiveSessionId(), null, schedule.getStartsAt(), now, sliceLimit);
+                schedule.getLiveSessionId(), null, schedule.getStartsAt(), now, sliceLimit,
+                schedule.getLeadMinutes());
 
         outboxPublisher.enqueue(
                 NotificationMessagingConfig.FANOUT_QUEUE,
@@ -96,7 +97,9 @@ public class LiveStartingSoonScheduler {
                 "NOTIFICATION_FANOUT_REQUESTED",
                 JSON.writeValueAsString(command),
                 // 시작 시각이 키에 들어간다 — 일정이 바뀌면 새 회차이므로 다시 알려야 한다.
+                // 리드타임이 키에 들어간다 — 같은 세션의 5분 전과 30분 전은 다른 발화다.
                 "notif:LIVE_STARTING_SOON:" + schedule.getLiveSessionId()
+                        + ':' + schedule.getLeadMinutes()
                         + ':' + schedule.getStartsAt().toInstant().toEpochMilli(),
                 null);
         log.info("곧 시작 알림 예약 발화 session={} startsAt={}",
