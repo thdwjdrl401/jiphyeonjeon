@@ -1483,6 +1483,15 @@ body {
 .summary-block-list section > strong { color: #bcbcb7; }
 .summary-block-list section p,
 .summary-block-list section li { color: #c7c7c2; }
+/* 강의 노트 Markdown — 잉크 모드 값. learning.css의 밝은 값이 그대로 남으면 안 보인다. */
+.note-markdown { color: #c7c7c2; }
+.note-markdown :is(h1, h2, h3) { border-top-color: #333; color: #f5f5f2; }
+.note-markdown strong { color: #f2f2ef; }
+.note-markdown li::marker { color: #8c8c87; }
+.note-markdown :is(code, pre) { background: #222; color: #e6e6e1; }
+.note-markdown blockquote { border-left-color: #444; color: #a6a6a1; }
+.note-markdown :is(th, td) { border-color: #333; }
+.note-markdown__loading { color: #8c8c87; }
 .summary-concept { background: #111; }
 .summary-concept b { color: #eee; }
 .summary-emphasis { border-color: var(--seal); background: #282322; }
