@@ -60,7 +60,12 @@ describe('CurriculumDetailPage', () => {
     expect(screen.queryByRole('heading', { name: '담당 커리큘럼 관리' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '담당 강사' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '커리큘럼 강의 자료' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '로그인 후 수강하기' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: '로그인하기' })).toBeInTheDocument()
+    expect(screen.getByText('라이브 예정')).toBeInTheDocument()
+    expect(document.querySelectorAll('a.curriculum-lesson__detail-area')).toHaveLength(0)
+    expect(document.querySelectorAll('.curriculum-lesson__detail-area--disabled').length).toBeGreaterThan(0)
+    expect(screen.queryByText('수강 승인 후 이용')).not.toBeInTheDocument()
   })
 
   it('첫 섹션만 펼친 뒤 전체 목차를 한 번에 펼치거나 접을 수 있다', async () => {
@@ -119,25 +124,40 @@ describe('CurriculumDetailPage', () => {
 
     expect(await screen.findByRole('button', { name: '수강 신청하기' })).toBeInTheDocument()
     expect(screen.queryByText('학습 진행률')).not.toBeInTheDocument()
+    expect(document.querySelectorAll('a.curriculum-lesson__detail-area')).toHaveLength(0)
+    expect(document.querySelectorAll('.curriculum-lesson__detail-area--disabled').length).toBeGreaterThan(0)
   })
 
-  it('학생 목차에서는 상태 태그를 숨기고 모든 강의 버튼을 강의 상세로 통일한다', async () => {
+  it('미수강 학생의 수강 신청 카드는 강의 자료 카드 디자인으로 소개 위에 표시된다', async () => {
+    await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
+    renderDetail('/curriculums/cur-typescript')
+
+    const enrollmentHeading = await screen.findByRole('heading', { name: '수강 신청' })
+    const enrollmentCard = enrollmentHeading.closest('section')
+    const overviewCard = screen.getByRole('heading', { name: '커리큘럼 소개' }).closest('section')
+
+    expect(enrollmentCard).toHaveClass('curriculum-materials', 'enrollment-actions')
+    expect(within(enrollmentCard!).getByRole('button', { name: '수강 신청하기' })).toBeInTheDocument()
+    expect(enrollmentCard?.nextElementSibling).toBe(overviewCard)
+  })
+
+  it('수강생 목차는 담당 강사와 같은 행 링크와 라이브 상태 태그를 사용한다', async () => {
+    const user = userEvent.setup()
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
     renderDetail('/curriculums/cur-spring-live')
 
-    const lessonTitle = await screen.findByRole('link', { name: '1. 오리엔테이션과 개발 환경' })
-    expect(lessonTitle).toHaveAttribute(
+    const lessonRow = await screen.findByRole('link', { name: '1. 오리엔테이션과 개발 환경 강의 상세' })
+    expect(lessonRow).toHaveAttribute(
       'href',
       '/student/curriculums/cur-spring-live/sections/sec-foundation/lessons/les-orientation',
     )
+    await user.click(screen.getByRole('button', { name: '모두 펼치기' }))
     expect(screen.queryByText('게시됨')).not.toBeInTheDocument()
     expect(screen.queryByText('완료')).not.toBeInTheDocument()
-    const detailLinks = screen.getAllByRole('link', { name: '강의 상세' })
-    expect(detailLinks.length).toBeGreaterThan(0)
-    expect(detailLinks[0]).toHaveAttribute(
-      'href',
-      '/student/curriculums/cur-spring-live/sections/sec-foundation/lessons/les-orientation',
-    )
+    expect(screen.getAllByText('라이브 예정').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('LIVE').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('link', { name: '강의 수정' })).not.toBeInTheDocument()
+    expect(screen.queryByText('강의 상세')).not.toBeInTheDocument()
   })
 
   it('지난 강의도 커리큘럼 목차에서는 강의 상세로 연결된다', async () => {
@@ -145,7 +165,7 @@ describe('CurriculumDetailPage', () => {
     renderDetail('/curriculums/cur-spring-live')
 
     await screen.findByText('학습 진행률')
-    const detailLinks = screen.getAllByRole('link', { name: '강의 상세' })
+    const detailLinks = screen.getAllByRole('link', { name: /강의 상세$/ })
     expect(detailLinks.length).toBeGreaterThan(0)
     for (const link of detailLinks) {
       expect(link).toHaveAttribute('href', expect.stringMatching(/^\/student\/curriculums\/.+\/sections\/.+\/lessons\/.+$/))
@@ -158,7 +178,7 @@ describe('CurriculumDetailPage', () => {
     renderDetail('/curriculums/cur-spring-live')
 
     await user.click(await screen.findByRole('button', { name: '모두 펼치기' }))
-    const nextUpLink = await screen.findByRole('link', { name: /^7\. 7강\. 학습 주제 7$/ })
+    const nextUpLink = await screen.findByRole('link', { name: /^7\. 7강\. 학습 주제 7 강의 상세$/ })
     expect(nextUpLink).toHaveAttribute(
       'href',
       '/student/curriculums/cur-spring-live/sections/cur-spring-live-section-3/lessons/cur-spring-live-lesson-7',
@@ -288,9 +308,13 @@ describe('CurriculumDetailPage', () => {
     const enrollButton = await screen.findByRole('button', { name: '수강 신청하기' })
     await user.click(enrollButton)
 
-    expect(await screen.findByText('승인 대기 중이에요')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '수강 신청 취소' })).toBeInTheDocument()
-    expect(screen.getByText('승인 대기')).toBeInTheDocument()
+    const pendingHeading = await screen.findByRole('heading', { name: '승인 대기 중이에요' })
+    const pendingCard = pendingHeading.closest('section')
+    const overviewCard = screen.getByRole('heading', { name: '커리큘럼 소개' }).closest('section')
+
+    expect(pendingCard).toHaveClass('curriculum-materials', 'enrollment-pending-notice')
+    expect(within(pendingCard!).getByRole('button', { name: '수강 신청 취소' })).toBeInTheDocument()
+    expect(pendingCard?.nextElementSibling).toBe(overviewCard)
   })
 
   it('즉시 수강 커리큘럼은 신청 직후 수강 중 상태로 갱신된다', async () => {
@@ -311,9 +335,8 @@ describe('CurriculumDetailPage', () => {
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
     renderDetail('/curriculums/cur-sql')
 
-    // 승인 대기 상태: 상단 상태 배지 옆의 취소 버튼이 동작한다
+    // 승인 대기 카드의 취소 버튼이 동작한다
     expect(await screen.findByText('승인 대기 중이에요')).toBeInTheDocument()
-    expect(screen.getByText('승인 대기')).toBeInTheDocument()
     const cancelButton = screen.getByRole('button', { name: '수강 신청 취소' })
     await user.click(cancelButton)
 

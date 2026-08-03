@@ -346,13 +346,18 @@ describe('커리큘럼 작업 화면', () => {
     const editLink = await screen.findByRole('link', { name: '강의 수정' })
 
     expect(editLink).toHaveClass('button--primary')
-    expect(screen.getByRole('heading', { name: '강의 준비 상태' })).toBeInTheDocument()
-    expect(screen.getByText('자료 작업')).toBeInTheDocument()
-    expect(screen.getByText('완료')).toBeInTheDocument()
+    const lessonInfo = screen.getByRole('heading', { name: '강의 정보' }).closest('section')
+    expect(lessonInfo).not.toBeNull()
+    expect(within(lessonInfo!).getByText('인증 필터와 세션의 흐름을 실제 요청을 따라가며 이해합니다.')).toBeInTheDocument()
+    expect(within(editLink.closest('header')!).queryByText('인증 필터와 세션의 흐름을 실제 요청을 따라가며 이해합니다.')).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '강의 준비 상태' })).not.toBeInTheDocument()
+    const readiness = screen.getByRole('list', { name: '강의 준비 상태' })
+    expect(within(readiness).getByText('자료 작업')).toBeInTheDocument()
+    expect(within(readiness).getByText('완료')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '라이브 일정' })).toBeInTheDocument()
     expect(screen.getByText('오후 7:00')).toBeInTheDocument()
     expect(screen.getByText('오후 6:50부터')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '사전 점검' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: '사전 점검 시작' })).toHaveAttribute(
       'href',
       '/instructor/live-sessions/ses-security-live/preflight',
     )

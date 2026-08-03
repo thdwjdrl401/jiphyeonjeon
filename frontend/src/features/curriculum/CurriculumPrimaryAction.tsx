@@ -1,37 +1,13 @@
-import { Link } from 'react-router-dom'
 import type { PrimaryAction } from '@/features/curriculum-detail/primaryAction'
 
 interface CurriculumPrimaryActionProps {
   action: PrimaryAction
-  onEnroll: () => void
-  isEnrolling: boolean
   onCancel: () => void
   isCancelling: boolean
 }
 
-export default function CurriculumPrimaryAction({ action, onEnroll, isEnrolling, onCancel, isCancelling }: CurriculumPrimaryActionProps) {
+export default function CurriculumPrimaryAction({ action, onCancel, isCancelling }: CurriculumPrimaryActionProps) {
   if (!action) return null
-
-  if (action.kind === 'link') {
-    return (
-      <Link className="button button--primary button--large curriculum-primary-action" to={action.to}>
-        {action.label}
-      </Link>
-    )
-  }
-
-  if (action.kind === 'enroll') {
-    return (
-      <button
-        className="button button--primary button--large curriculum-primary-action"
-        type="button"
-        onClick={onEnroll}
-        disabled={isEnrolling}
-      >
-        {isEnrolling ? <><span className="spinner spinner--light" aria-hidden="true" /> 신청 중</> : action.label}
-      </button>
-    )
-  }
 
   if (action.kind === 'enrollmentStatus') {
     return (

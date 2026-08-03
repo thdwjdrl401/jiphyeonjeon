@@ -395,7 +395,7 @@ describe('전체 페이지 라우트', () => {
 
     expect(await screen.findByRole('heading', { name: '라이브 강의' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '준비 상태' })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '입장 점검' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: '입장 점검 시작' })).toHaveAttribute(
       'href',
       '/student/live-sessions/ses-security-live/prejoin',
     )
@@ -450,7 +450,7 @@ describe('전체 페이지 라우트', () => {
       await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
       renderAt('/student/curriculums/cur-spring-live/sections/sec-foundation/lessons/les-service-layer')
 
-      await user.click(await screen.findByRole('button', { name: '입장 점검' }))
+      await user.click(await screen.findByRole('button', { name: '입장 점검 시작' }))
       expect(screen.getByText('강의 시간이 아닙니다.')).toBeInTheDocument()
     } finally {
       vi.useRealTimers()

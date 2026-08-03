@@ -48,13 +48,12 @@ function makeDetail(overrides: Partial<CurriculumDetailResponse['viewerContext']
 }
 
 describe('resolvePrimaryAction', () => {
-  it('승인 대기 상태에서는 상태 배지와 신청 취소 액션을 반환한다', () => {
+  it('승인 대기 상태의 액션은 사이드바 카드에서 처리한다', () => {
     const withCancel = makeDetail({ relationship: 'PENDING_ENROLLMENT', allowedActions: ['CANCEL_ENROLLMENT'] })
     const withoutCancel = makeDetail({ relationship: 'PENDING_ENROLLMENT', allowedActions: [] })
 
-    const expected = { kind: 'enrollmentStatus', label: '승인 대기', cancelLabel: '수강 신청 취소' }
-    expect(resolvePrimaryAction(withCancel, '/curriculums/cur-test')).toEqual(expected)
-    expect(resolvePrimaryAction(withoutCancel, '/curriculums/cur-test')).toEqual(expected)
+    expect(resolvePrimaryAction(withCancel)).toBeNull()
+    expect(resolvePrimaryAction(withoutCancel)).toBeNull()
   })
 
   it('수강생에게 학습 기록과 무관하게 수강 상태와 취소 액션을 반환한다', () => {
@@ -64,10 +63,22 @@ describe('resolvePrimaryAction', () => {
       progress: { completedLessonCount: 0, totalLessonCount: 1, progressPercent: 0, lastLearning: null },
     })
 
-    expect(resolvePrimaryAction(detail, '/curriculums/cur-test')).toEqual({
+    expect(resolvePrimaryAction(detail)).toEqual({
       kind: 'enrollmentStatus',
       label: '수강 중',
       cancelLabel: '수강 취소',
     })
+  })
+
+  it('비로그인 사용자에게는 상단 기본 액션을 표시하지 않는다', () => {
+    const detail = makeDetail({ relationship: 'GUEST', allowedActions: [] })
+
+    expect(resolvePrimaryAction(detail)).toBeNull()
+  })
+
+  it('미수강 학생의 수강 신청 액션은 사이드바 카드에서 처리한다', () => {
+    const detail = makeDetail({ relationship: 'UNENROLLED_STUDENT', allowedActions: ['ENROLL'] })
+
+    expect(resolvePrimaryAction(detail)).toBeNull()
   })
 })

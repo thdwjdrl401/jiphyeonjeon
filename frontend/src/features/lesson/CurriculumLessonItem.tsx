@@ -39,44 +39,35 @@ export default function CurriculumLessonItem({ lesson, relationship, curriculumI
   const activity = resolveActivity(lesson)
   const isInstructorView = relationship === 'OWNER_INSTRUCTOR'
   const editPath = instructorPaths.editLesson(curriculumId, sectionId, lesson.lessonId)
+  const unavailableReason = (lesson.access.reasonCode && reasonLabel[lesson.access.reasonCode]) ?? '이용할 수 없어요'
 
   const lessonMain = (
     <div className="curriculum-lesson__main">
-      {canOpen && !isInstructorView
-        ? <Link className="curriculum-lesson__title" to={detailPath}>{lesson.order}. {lesson.title}</Link>
-        : <strong className="curriculum-lesson__title">{lesson.order}. {lesson.title}</strong>}
+      <strong className="curriculum-lesson__title">{lesson.order}. {lesson.title}</strong>
       {/* 일정이 잡힌 라이브와 실제 방송 중인 라이브만 표시한다. 종료 상태에는 태그를 남기지 않는다. */}
-      {isInstructorView && canOpen && activity && <div className="curriculum-lesson__states">
+      {activity && <div className="curriculum-lesson__states">
         <span className={`curriculum-lifecycle-badge curriculum-lesson__state curriculum-lesson__state--${activity.tone}`}>{activity.statusLabel}</span>
       </div>}
     </div>
   )
 
   return (
-    <li className={`curriculum-lesson${canOpen ? '' : ' curriculum-lesson--locked'}`}>
-      {isInstructorView && canOpen
-        ? (
-            <Link
-              className="curriculum-lesson__detail-area"
-              to={detailPath}
-              aria-label={`${lesson.order}. ${lesson.title} 강의 상세`}
-            >
-              {lessonMain}
-            </Link>
-          )
-        : lessonMain}
-
-      {!canOpen ? (
-        <div className="curriculum-lesson__locked-action">
-          <svg className="curriculum-lesson__lock" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
-          <span className="curriculum-lesson__reason">{(lesson.access.reasonCode && reasonLabel[lesson.access.reasonCode]) ?? '이용할 수 없어요'}</span>
-        </div>
-      ) : (
-        <Link className="curriculum-lesson__action" to={isInstructorView ? editPath : detailPath}>
-          {isInstructorView ? '강의 수정' : '강의 상세'}
-          {!isInstructorView && <span aria-hidden="true"> →</span>}
+    <li className="curriculum-lesson">
+      {canOpen ? (
+        <Link
+          className="curriculum-lesson__detail-area"
+          to={detailPath}
+          aria-label={`${lesson.order}. ${lesson.title} 강의 상세`}
+        >
+          {lessonMain}
         </Link>
+      ) : (
+        <div className="curriculum-lesson__detail-area curriculum-lesson__detail-area--disabled" aria-disabled="true" title={unavailableReason}>
+          {lessonMain}
+        </div>
       )}
+
+      {isInstructorView && canOpen && <Link className="curriculum-lesson__action" to={editPath}>강의 수정</Link>}
     </li>
   )
 }
