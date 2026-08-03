@@ -196,7 +196,9 @@ function CurriculumManageEditor({
   const [draggedLesson, setDraggedLesson] = useState<DraggedLesson | null>(null)
   const [lessonDropTarget, setLessonDropTarget] = useState<LessonDropTarget | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [isStructureTabsDocked, setIsStructureTabsDocked] = useState(false)
   const navigate = useNavigate()
+  const manageTabsOriginRef = useRef<HTMLDivElement>(null)
 
   const queryClient = useQueryClient()
   const structureVersionRef = useRef(structureVersion)
@@ -290,6 +292,49 @@ function CurriculumManageEditor({
     const timer = window.setTimeout(() => void flushSave(), 1000)
     return () => window.clearTimeout(timer)
   }, [currentSignature, flushSave])
+
+  /*
+    구성 탭의 원래 탭 자리가 헤더 아래에서도 완전히 보이지 않게 된 뒤에만 우측 게시 열로
+    탭을 옮긴다. 원래 자리 래퍼는 높이를 유지하므로 도킹 전환 때 본문이 튀지 않는다.
+    단일 열이 되는 화면에서는 우측 도킹의 의미가 없으므로 기존 탭 위치를 유지한다.
+  */
+  useEffect(() => {
+    const origin = manageTabsOriginRef.current
+    if (tab !== 'structure'
+      || !origin
+      || typeof window.matchMedia !== 'function'
+      || typeof IntersectionObserver === 'undefined') {
+      setIsStructureTabsDocked(false)
+      return
+    }
+
+    const desktopQuery = window.matchMedia('(min-width: 961px)')
+    let observer: IntersectionObserver | null = null
+    const syncObserver = () => {
+      observer?.disconnect()
+      observer = null
+      if (!desktopQuery.matches) {
+        setIsStructureTabsDocked(false)
+        return
+      }
+
+      observer = new IntersectionObserver(([entry]) => {
+        setIsStructureTabsDocked(!entry.isIntersecting)
+      }, {
+        // 전역 헤더 아래(기존 sticky top)까지 탭이 사라진 시점을 기준으로 전환한다.
+        rootMargin: '-82px 0px 0px 0px',
+        threshold: 0,
+      })
+      observer.observe(origin)
+    }
+
+    syncObserver()
+    desktopQuery.addEventListener('change', syncObserver)
+    return () => {
+      observer?.disconnect()
+      desktopQuery.removeEventListener('change', syncObserver)
+    }
+  }, [tab])
 
   const updateCurriculumInfo = (field: CurriculumInfoField, value: string) => {
     setCurriculumInfo((current) => ({ ...current, [field]: value }))
@@ -521,6 +566,17 @@ function CurriculumManageEditor({
   const publishReadiness = evaluatePublishReadiness(sections.length, totalLessonCount)
   // 공개 여부는 커리큘럼 상태만으로 결정된다(ADR-0005).
   const isPubliclyVisible = storedCurriculum.lifecycleStatus === 'PUBLISHED'
+  const showDockedManageTabs = tab === 'structure' && isStructureTabsDocked
+  const manageTabs = (
+    <Tabs
+      className="workspace-tabs curriculum-manage__tabs"
+      idPrefix={MANAGE_TAB_PREFIX}
+      label="커리큘럼 관리"
+      items={MANAGE_TABS}
+      value={tab}
+      onChange={onTabChange}
+    />
+  )
 
   return (
     <div className="workspace-page curriculum-manage-page">
@@ -537,14 +593,9 @@ function CurriculumManageEditor({
           <div><span>전체 강의</span><strong>{totalLessonCount}</strong></div>
           <div><span>수강생</span><strong>{storedCurriculum.enrolleeCount ?? '--'}</strong></div>
         </div>
-        <Tabs
-          className="workspace-tabs curriculum-manage__tabs"
-          idPrefix={MANAGE_TAB_PREFIX}
-          label="커리큘럼 관리"
-          items={MANAGE_TABS}
-          value={tab}
-          onChange={onTabChange}
-        />
+        <div className="curriculum-manage__tabs-origin" ref={manageTabsOriginRef}>
+          {!showDockedManageTabs && manageTabs}
+        </div>
       </div>
 
       {/* 구성 편집 중에도 공개 조건과 게시 동작을 확인할 수 있도록 게시 카드를 나란히 둔다. */}
@@ -630,7 +681,12 @@ function CurriculumManageEditor({
               <button className="structure-add-section" type="button" onClick={addSection}>+ 섹션 추가</button>
             </Panel>
 
-            <aside className="curriculum-manage__publish-column" aria-label="커리큘럼 게시 관리">
+            <aside className={`curriculum-manage__publish-column${showDockedManageTabs ? ' curriculum-manage__publish-column--tabs-docked' : ''}`} aria-label="커리큘럼 게시 관리">
+              {showDockedManageTabs && (
+                <div className="curriculum-manage__tabs-dock">
+                  {manageTabs}
+                </div>
+              )}
               <CurriculumPublishPanel
                 isNewDraft={isNewDraft}
                 lifecycleView={lifecycleView}
