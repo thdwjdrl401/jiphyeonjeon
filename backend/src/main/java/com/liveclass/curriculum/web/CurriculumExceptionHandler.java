@@ -6,6 +6,7 @@ import com.liveclass.curriculum.service.CurriculumStateConflictException;
 import com.liveclass.curriculum.service.LessonAccessDeniedException;
 import com.liveclass.curriculum.service.LessonNotFoundException;
 import com.liveclass.curriculum.service.NotCurriculumOwnerException;
+import com.liveclass.curriculum.service.PublishedStructureRequiredException;
 import com.liveclass.curriculum.service.SectionNotEmptyException;
 import com.liveclass.curriculum.service.SectionNotFoundException;
 import com.liveclass.curriculum.service.StructureInvalidException;
@@ -103,6 +104,16 @@ public class CurriculumExceptionHandler {
     public ResponseEntity<ErrorResponse> handleNotOwner(NotCurriculumOwnerException e) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(ErrorResponse.of("CURRICULUM_FORBIDDEN", e.getMessage()));
+    }
+
+    /*
+     * 게시된 커리큘럼을 빈 상태로 만드는 삭제. 요청 자체는 올바르지만 지금 상태와 충돌하므로 409다
+     * (SECTION_NOT_EMPTY와 같은 성격).
+     */
+    @ExceptionHandler(PublishedStructureRequiredException.class)
+    public ResponseEntity<ErrorResponse> handlePublishedStructureRequired(PublishedStructureRequiredException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ErrorResponse.of("PUBLISHED_STRUCTURE_REQUIRED", e.getMessage()));
     }
 
     @ExceptionHandler(SectionNotEmptyException.class)

@@ -180,8 +180,8 @@ class LessonMaterialContractTest {
                 .andExpect(status().isCreated()).andReturn()).get("curriculumId").asString();
         String sectionId = json(write(post("/api/instructor/curriculums/" + curriculumId + "/sections"), instructor,
                 "{\"title\":\"1주차\"}").andExpect(status().isCreated()).andReturn()).get("sectionId").asString();
-        String lessonId = json(write(post("/api/instructor/sections/" + sectionId + "/lessons"), instructor,
-                "{\"title\":\"1강\"}").andExpect(status().isCreated()).andReturn()).get("lessonId").asString();
+        write(post("/api/instructor/sections/" + sectionId + "/lessons"), instructor,
+                "{\"title\":\"1강\"}").andExpect(status().isCreated());
         // 게시 선행 조건(ADR-0006): 섹션·강의가 각각 1개 이상 있어야 발행된다.
         String seedSectionId = json(write(post("/api/instructor/curriculums/" + curriculumId + "/sections"), instructor,
                 "{\"title\":\"게시용 섹션\"}").andExpect(status().isCreated()).andReturn()).get("sectionId").asString();
@@ -189,8 +189,13 @@ class LessonMaterialContractTest {
                 "{\"title\":\"게시용 강의\"}").andExpect(status().isCreated());
         write(post("/api/instructor/curriculums/" + curriculumId + "/publish"), instructor, null).andExpect(status().isOk());
 
+        /*
+         * 여기서 보는 것은 <b>가시성 게이트</b>다. 커리큘럼 상세의 materials는 커리큘럼-레벨 자료만
+         * 담으므로(레슨 자료는 레슨 상세가 준다) 커리큘럼에 붙인다 — 레슨에 붙이면 게이트와 무관하게
+         * 늘 0이라 이 테스트가 아무것도 지키지 못한다.
+         */
         String assetId = uploadedMaterialAsset(instructor);
-        write(post("/api/instructor/lessons/" + lessonId + "/materials"), instructor, """
+        write(post("/api/instructor/curriculums/" + curriculumId + "/materials"), instructor, """
                 {"assetId":"%s"}
                 """.formatted(assetId))
                 .andExpect(status().isCreated());

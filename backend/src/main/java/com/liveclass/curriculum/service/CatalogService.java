@@ -149,22 +149,24 @@ public class CatalogService {
                 ? null
                 : assetDirectory.resolveUrl(curriculum.getThumbnailAssetId()).orElse(null);
 
-        // 목차 레슨들의 활성 자료를 모아 커리큘럼 단위 materials로 평탄화한다(N+1 회피, ADR-0035).
-        // 게스트·미수강자에게는 노출하지 않는다 — progress와 같은 게이트(ENROLLED만)에 OWNER_INSTRUCTOR를
-        // 더한 것(강사 자신은 항상 자기 자료를 볼 수 있어야 함). outline은 이미 PUBLISHED 레슨만 담고 있어
-        // (buildOutline) 자료도 자연히 공개된 레슨 것만이다.
-        // 커리큘럼-레벨 자료(ADR-0042)를 먼저, 그 뒤에 목차 레슨들의 자료를 잇는다 — "커리큘럼 공통"이
-        // 위에 오도록. 게이트는 동일(ENROLLED 또는 OWNER_INSTRUCTOR).
+        /*
+         * <b>커리큘럼-레벨 자료만</b> 담는다(ADR-0042). 레슨 자료는 여기 오지 않는다.
+         *
+         * <p>예전에는 목차 레슨들의 자료까지 이어 붙여 한 배열로 내려보냈다. 그런데 이 목록을 그리는
+         * 화면은 스스로 "전체 강의에서 공통으로 사용하는 자료입니다"라고 말하고 있어, <b>약속한 것과
+         * 주는 것이 달랐다.</b> 응답에 커리큘럼 것인지 레슨 것인지 구분할 필드도 없어 화면이 갈라
+         * 낼 수도 없었다.
+         *
+         * <p>레슨 자료는 레슨 상세가 이미 준다({@code LessonDetailResponse.materials}) — 거기서
+         * 그 레슨의 것으로 보이는 편이 맞고, 여기 섞으면 어느 강의 자료인지 알 수 없는 목록이 된다.
+         *
+         * <p>게스트·미수강자에게는 노출하지 않는다 — progress와 같은 게이트(ENROLLED만)에
+         * OWNER_INSTRUCTOR를 더한 것(강사 자신은 항상 자기 자료를 볼 수 있어야 함).
+         */
         List<MaterialView> materials = List.of();
         String relationship = viewerContext.relationship();
         if ("ENROLLED".equals(relationship) || "OWNER_INSTRUCTOR".equals(relationship)) {
-            List<UUID> outlineLessonIds = outline.stream().flatMap(s -> s.lessons().stream())
-                    .map(CatalogOutlineLesson::lessonId).toList();
-            List<MaterialView> lessonMaterials = lessonMaterialManagement.findActiveByLessons(outlineLessonIds)
-                    .values().stream().flatMap(List::stream).toList();
-            materials = java.util.stream.Stream.concat(
-                    curriculumMaterialManagement.findActiveByCurriculum(curriculumId).stream(),
-                    lessonMaterials.stream()).toList();
+            materials = curriculumMaterialManagement.findActiveByCurriculum(curriculumId);
         }
 
         return new CatalogDetail(

@@ -115,11 +115,6 @@ class StructureReorderContractTest {
                 "{\"title\":\"게시용 강의\"}").andExpect(status().isCreated()).andReturn()).get("lessonId").asString();
         write(post("/api/instructor/curriculums/" + curriculumId + "/publish"), auth, null)
                 .andExpect(status().isOk());
-        // 발행 조건만 채우려고 만든 것이라 지운다 — 이 테스트가 세는 강의·목차 인덱스를 원래대로 둔다.
-        write(delete("/api/instructor/lessons/" + seedLessonId), auth, null)
-                .andExpect(status().isNoContent());
-        write(delete("/api/instructor/sections/" + seedSectionId), auth, null)
-                .andExpect(status().isNoContent());
 
         syncWithDatabase();
         mockMvc.perform(get("/api/curriculums/" + curriculumId))
@@ -127,8 +122,11 @@ class StructureReorderContractTest {
                 .andExpect(jsonPath("$.outline[0].sectionId").value(sectionA));
 
         int baseVersion = structureVersion(auth, curriculumId);
+        // 재정렬은 커리큘럼의 <b>모든</b> 섹션을 받는다. 시드 섹션은 지울 수 없으므로(게시된 커리큘럼은
+        // 섹션·강의를 1개 이상 유지한다) 여기에도 함께 넣고, 순서상 맨 뒤에 둔다.
         write(put(orderUrl(curriculumId)), auth,
-                orderBody(baseVersion, sectionEntry(sectionB, b1), sectionEntry(sectionA, a1)))
+                orderBody(baseVersion, sectionEntry(sectionB, b1), sectionEntry(sectionA, a1),
+                        sectionEntry(seedSectionId, seedLessonId)))
                 .andExpect(status().isOk());
 
         syncWithDatabase();

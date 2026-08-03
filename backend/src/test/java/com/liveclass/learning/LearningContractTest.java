@@ -175,8 +175,9 @@ class LearningContractTest {
     void catalog_progress_is_no_longer_always_null() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
+        // 게시용 시드 강의가 하나 있으므로(게시된 커리큘럼은 강의를 1개 이상 유지한다) 하나만 더한다.
+        // 그래야 "2강 중 1강 완료 = 50%"라는 이 테스트의 계산이 그대로 성립한다.
         String l1 = addLesson(instructor, cid, "1강");
-        addLesson(instructor, cid, "2강");
         Cookie[] student = loginAs("STUDENT");
         approveEnrollment(instructor, student, cid);
 
@@ -202,8 +203,9 @@ class LearningContractTest {
     void learning_summary_aggregates_enrolled_progress() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
+        // 게시용 시드 강의가 하나 있으므로(게시된 커리큘럼은 강의를 1개 이상 유지한다) 하나만 더한다.
+        // 그래야 "2강 중 1강 완료 = 50%"라는 이 테스트의 계산이 그대로 성립한다.
         String l1 = addLesson(instructor, cid, "1강");
-        addLesson(instructor, cid, "2강");
         Cookie[] student = loginAs("STUDENT");
         approveEnrollment(instructor, student, cid);
 
@@ -250,11 +252,6 @@ class LearningContractTest {
         String seedLessonId = json(write(post("/api/instructor/sections/" + seedSectionId + "/lessons"), instructor,
                 "{\"title\":\"게시용 강의\"}").andExpect(status().isCreated()).andReturn()).get("lessonId").asString();
         write(post("/api/instructor/curriculums/" + cid + "/publish"), instructor, null).andExpect(status().isOk());
-        // 발행 조건만 채우려고 만든 것이라 지운다 — 이 테스트가 세는 강의·목차 인덱스를 원래대로 둔다.
-        write(delete("/api/instructor/lessons/" + seedLessonId), instructor, null)
-                .andExpect(status().isNoContent());
-        write(delete("/api/instructor/sections/" + seedSectionId), instructor, null)
-                .andExpect(status().isNoContent());
         return cid;
     }
 
