@@ -13,7 +13,7 @@ interface NotificationListProps {
 
 /**
  * 알림 목록. 드롭다운(최근 몇 건)과 알림 페이지(전체·필터)가 같은 컴포넌트를 공유한다 — 목록을 두 벌
- * 만들면 읽음 강조·확인 필요 배지 같은 규칙이 한쪽에만 반영되는 일이 생긴다.
+ * 만들면 읽음 강조·처리 대기 배지 같은 규칙이 한쪽에만 반영되는 일이 생긴다.
  */
 export default function NotificationList({
   items,

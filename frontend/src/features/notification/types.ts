@@ -29,7 +29,7 @@ export type NotificationReadStatus = 'UNREAD' | 'READ'
 
 /**
  * 업무 처리 축. 읽음과 <b>합치지 않는다</b> — 강사가 수강 신청 알림을 읽어도 승인·거절을 하지
- * 않았으면 그 일은 남아 있고, 하나로 뭉개면 "확인 필요" 목록을 만들 수 없다.
+ * 않았으면 그 일은 남아 있고, 하나로 뭉개면 "처리 대기" 목록을 만들 수 없다.
  */
 export type NotificationActionStatus = 'INFO' | 'ACTION_REQUIRED' | 'COMPLETED' | 'EXPIRED'
 
@@ -88,15 +88,24 @@ export interface NotificationItem {
  * 무엇을 볼지 — <b>업무 처리 축</b>의 필터.
  *
  * <p>읽음 여부와 <b>같은 축에 두지 않는다</b>. 둘을 하나의 enum(`ALL|UNREAD|ACTION_REQUIRED`)으로
- * 묶으면 "확인이 필요한 것 중 아직 안 읽은 것"을 물어볼 수 없다 — 서로 다른 질문이기 때문이다.
- * 그래서 이 축과 `unreadOnly`를 나눠 받고, 둘은 AND로 조합된다.
+ * 묶으면 "처리 대기 중 아직 안 읽은 것"을 물어볼 수 없다 — 서로 다른 질문이기 때문이다.
+ * 그래서 이 축과 `readState`를 나눠 받고, 둘은 AND로 조합된다.
  */
 export type NotificationScope = 'ALL' | 'ACTION_REQUIRED'
 
+/**
+ * 어떻게 볼지 — <b>읽음 축</b>의 필터. 생략하면 읽음 여부를 가리지 않는다.
+ *
+ * <p>불린(`unreadOnly`)이 아니라 enum인 이유: 화면이 `읽지 않음`·`읽음`을 <b>나란한 탭</b>으로 나눠서
+ * "읽은 것만" 보는 상태가 따로 있다. 불린으로는 그 상태를 표현할 수 없다(false는 "안 가림"이지
+ * "읽은 것만"이 아니다).
+ */
+export type NotificationReadFilter = 'UNREAD' | 'READ'
+
 export interface NotificationListQuery {
   scope?: NotificationScope
-  /** 어떻게 볼지 — 읽음 축의 필터. `scope`와 조합된다(확인 필요 + 읽지 않음만). */
-  unreadOnly?: boolean
+  /** `scope`와 AND로 조합된다(처리 대기 + 읽지 않음). */
+  readState?: NotificationReadFilter
   page?: number
   size?: number
 }

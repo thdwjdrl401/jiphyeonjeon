@@ -145,7 +145,7 @@ FE는 타입·Interface·Mock·화면·이동 규칙을 모두 구현했고 HTTP
 | 목적 | Method·URL | 응답 | 권한 |
 |---|---|---|---|
 | 배지 개수 | `GET /api/me/notifications/summary` | `{ unreadCount, actionRequiredCount }` | 로그인 필요(401) |
-| 목록 | `GET /api/me/notifications?scope=ALL\|ACTION_REQUIRED&unreadOnly=true&page=&size=` | 아래 페이지 응답 | 본인 것만 |
+| 목록 | `GET /api/me/notifications?scope=ALL\|ACTION_REQUIRED&readState=UNREAD\|READ&page=&size=` | 아래 페이지 응답 | 본인 것만 |
 | 개별 읽음 | `POST /api/me/notifications/{id}/read` | 갱신된 알림 1건 | 남의 알림은 **404**(403 아님) |
 | 모두 읽음 | `POST /api/me/notifications/read-all` | `{ unreadCount: 0, actionRequiredCount }` | 본인 것만 |
 | 클릭 대상 재판정 | `GET /api/me/notifications/{id}/target` | `AVAILABLE` + 상태 또는 `GONE` + 이유 | 본인 것만 |
@@ -189,11 +189,12 @@ FE는 타입·Interface·Mock·화면·이동 규칙을 모두 구현했고 HTTP
   `MATERIAL_PUBLISHED`·`RECORDING_READY`·`RECORDING_FAILED`·`VOD_PUBLISHED`. 임의 문자열 금지.
 - **프론트 라우트 URL을 담지 않는다.** 목적지는 `type` + `targets`의 리소스 id + 클릭 시점의 리소스
   상태로 FE(`notificationRouting`)가 계산한다. 응답에 `link`·`url`·`screen`이 들어오면 계약 위반이다.
-- **필터는 두 축을 따로 받고 AND로 겹친다.** `scope`(업무 처리 축)와 `unreadOnly`(읽음 축)를
-  `filter=ALL|UNREAD|ACTION_REQUIRED` 같은 하나의 enum으로 묶지 않는다 — 묶으면 "확인이 필요한 것 중
-  아직 안 읽은 것"을 물어볼 수 없다. 둘 다 생략하면 전체다. 화면에서도 이 두 축은 탭과 체크박스로
-  나뉘어 있다(`처리 필요`가 탭 형제로 있던 구조에서 바뀜).
-- **개수는 필터와 무관한 전체 기준**이다. `unreadOnly=true`로 걸러도 `unreadCount`는 전체 미읽음 수다.
+- **필터는 두 축을 따로 받고 AND로 겹친다.** `scope`(업무 처리 축)와 `readState`(읽음 축)를
+  `filter=ALL|UNREAD|ACTION_REQUIRED` 같은 하나의 enum으로 묶지 않는다 — 묶으면 "처리 대기 중 아직
+  안 읽은 것"을 물어볼 수 없다. 각각 생략하면 그 축으로 가리지 않는다. `readState`가 불린이 아닌
+  이유는 화면이 `읽지 않음`·`읽음`을 나란한 탭으로 나눠 "읽은 것만" 보는 상태가 따로 있기 때문이다.
+  화면에서 `scope`는 1차 탭, `readState`는 2차 탭이다.
+- **개수는 필터와 무관한 전체 기준**이다. `readState=UNREAD`로 걸러도 `unreadCount`는 전체 미읽음 수다.
 - **중복 방지는 서버 책임.** `(type, recipientId, 관련 리소스 id)` 멱등 키로 같은 사건이 재시도돼도
   (Egress webhook 재전송 등) 한 건만 남긴다. 이 키는 응답에 노출하지 않는다. `groupKey`는 향후
   묶음 표시("수강 신청 3건")를 위한 값이며 지금은 FE가 표시에 쓰지 않는다.

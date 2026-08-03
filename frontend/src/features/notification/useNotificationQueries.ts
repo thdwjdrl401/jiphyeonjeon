@@ -1,14 +1,14 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { getNotificationSummary, getNotifications } from './notificationService'
-import type { NotificationScope } from './types'
+import type { NotificationReadFilter, NotificationScope } from './types'
 
 export const notificationQueryKeys = {
   all: ['notifications'] as const,
   summary: ['notifications', 'summary'] as const,
   recent: (size: number) => ['notifications', 'recent', size] as const,
-  // 두 필터 축이 각각 키에 들어간다 — 하나로 합치면 "확인 필요 + 읽지 않음만"이 다른 조합의 캐시를 덮는다.
-  list: (scope: NotificationScope, unreadOnly: boolean, size: number) =>
-    ['notifications', 'list', scope, unreadOnly, size] as const,
+  // 두 필터 축이 각각 키에 들어간다 — 하나로 합치면 "처리 대기 + 읽지 않음"이 다른 조합의 캐시를 덮는다.
+  list: (scope: NotificationScope, readState: NotificationReadFilter, size: number) =>
+    ['notifications', 'list', scope, readState, size] as const,
 }
 
 /** 드롭다운이 여는 순간 목록을 받으면 늦다. 종은 개수만 미리 들고 있는다. */
@@ -48,18 +48,18 @@ export function useRecentNotificationsQuery(size: number, enabled: boolean) {
 /**
  * 알림 페이지 목록. `더 보기`로 페이지를 이어 붙인다 — 목록 전체를 한 번에 불러오지 않는다.
  *
- * <p>`scope`(무엇을 볼지)와 `unreadOnly`(어떻게 볼지)를 따로 받는다. 화면에서도 탭과 체크박스로
+ * <p>`scope`(무엇을 볼지)와 `readState`(어떻게 볼지)를 따로 받는다. 화면에서도 1차·2차 탭으로
  * 나뉘어 있어 서로 조합된다.
  */
 export function useNotificationListQuery(
   scope: NotificationScope,
-  unreadOnly: boolean,
+  readState: NotificationReadFilter,
   size: number,
   enabled: boolean,
 ) {
   return useInfiniteQuery({
-    queryKey: notificationQueryKeys.list(scope, unreadOnly, size),
-    queryFn: ({ pageParam }) => getNotifications({ scope, unreadOnly, page: pageParam, size }),
+    queryKey: notificationQueryKeys.list(scope, readState, size),
+    queryFn: ({ pageParam }) => getNotifications({ scope, readState, page: pageParam, size }),
     initialPageParam: 0,
     getNextPageParam: (lastPage) => (lastPage.hasNext ? lastPage.page + 1 : undefined),
     enabled,

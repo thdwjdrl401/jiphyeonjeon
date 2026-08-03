@@ -86,7 +86,7 @@ const requiresActiveEnrollment: ReadonlySet<NotificationType> = new Set<Notifica
 ])
 
 function gone(record: MockNotificationRecord, reasonCode: NotificationGoneReason): NotificationTargetResolution {
-  // 다시 열릴 수 없는 알림이므로 처리 축을 EXPIRED로 내린다 — 목록에서 "확인 필요"로 계속 남지 않게.
+  // 다시 열릴 수 없는 알림이므로 처리 축을 EXPIRED로 내린다 — 목록에서 "처리 대기"로 계속 남지 않게.
   setMockNotificationActionStatus(record.notificationId, 'EXPIRED', new Date().toISOString())
   return { status: 'GONE', reasonCode }
 }
@@ -149,10 +149,10 @@ export const mockNotificationService = {
     await wait()
     const user = requireUser()
     const all = listMockNotifications(user.userId)
-    // 두 축을 AND로 겹친다 — "확인 필요한 것 중 아직 안 읽은 것"이 표현돼야 한다.
+    // 두 축을 AND로 겹친다 — "처리 대기 중 아직 안 읽은 것"이 표현돼야 한다.
     const filtered = all.filter((record) => {
       if (query.scope === 'ACTION_REQUIRED' && record.actionStatus !== 'ACTION_REQUIRED') return false
-      if (query.unreadOnly && record.readStatus !== 'UNREAD') return false
+      if (query.readState && record.readStatus !== query.readState) return false
       return true
     })
 

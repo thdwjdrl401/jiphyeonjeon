@@ -145,7 +145,7 @@ export function publishEnrollmentRequested(enrollmentId: string, createdAt = now
 }
 
 /**
- * 강사가 승인·거절했다 → 학생에게 결과 알림 + 강사의 "확인 필요" 알림을 처리 완료로 내린다.
+ * 강사가 승인·거절했다 → 학생에게 결과 알림 + 강사의 "처리 대기" 알림을 처리 완료로 내린다.
  *
  * <p>읽음 처리와 <b>따로</b> 움직인다: 강사가 알림을 읽기만 했을 때는 여기까지 오지 않으므로
  * `ACTION_REQUIRED`가 유지된다.
@@ -183,7 +183,7 @@ export function publishEnrollmentDecided(
 }
 
 /**
- * 학생이 신청을 스스로 취소했다 → 강사의 "확인 필요" 알림을 더 처리할 수 없는 상태로 내린다.
+ * 학생이 신청을 스스로 취소했다 → 강사의 "처리 대기" 알림을 더 처리할 수 없는 상태로 내린다.
  * 새 알림을 만들지 않는다: 취소는 강사가 처리해야 할 일이 아니라 사라진 일이다.
  */
 export function expireEnrollmentRequest(enrollmentId: string, at = now()) {

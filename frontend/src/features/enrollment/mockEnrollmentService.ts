@@ -126,7 +126,7 @@ export const mockEnrollmentService = {
     const enrollment = putMockEnrollment(user.userId, curriculumId, status, requestedAt)
     /*
       승인이 필요한 신청만 강사에게 알린다. 즉시 수강 확정(IMMEDIATE)에는 강사가 처리할 일이 없어
-      "확인 필요" 알림을 만들면 아무 것도 할 수 없는 항목이 남는다.
+      "처리 대기" 알림을 만들면 아무 것도 할 수 없는 항목이 남는다.
     */
     if (enrollment.status === 'PENDING') {
       publishEnrollmentRequested(enrollment.enrollmentId, requestedAt)
@@ -146,7 +146,7 @@ export const mockEnrollmentService = {
       'CANCELLED',
       enrollment.decidedAt,
     )
-    // 강사에게 남아 있던 "확인 필요"를 만료시킨다 — 처리할 수 없게 된 일이 목록에 계속 남지 않게.
+    // 강사에게 남아 있던 "처리 대기"를 만료시킨다 — 처리할 수 없게 된 일이 목록에 계속 남지 않게.
     expireEnrollmentRequest(enrollment.enrollmentId)
     return toEnrollResult(cancelled!)
   },
@@ -199,7 +199,7 @@ export const mockEnrollmentService = {
     }
     const now = new Date().toISOString()
     const approved = toEnrollResult(setMockEnrollmentStatus(enrollmentId, 'ACTIVE', now, now)!)
-    // 학생에게 승인 결과를 알리고, 강사의 "확인 필요" 알림을 처리 완료로 내린다.
+    // 학생에게 승인 결과를 알리고, 강사의 "처리 대기" 알림을 처리 완료로 내린다.
     publishEnrollmentDecided(enrollmentId, 'APPROVED', now)
     return approved
   },

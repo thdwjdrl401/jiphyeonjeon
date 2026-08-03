@@ -217,106 +217,100 @@
 
 /*
   ── 알림 페이지 ──────────────────────────────────────────────
-  머리말의 개수 표시. 카드(metric-card)가 아니라 작은 글자 묶음이다 — 두 숫자를 보여 주려고
-  112px 높이 카드를 두 개 쓰면 목록이 화면 아래로 밀려서, 정작 읽으려던 알림이 안 보인다.
-*/
-.notification-counts {
-  display: flex;
-  align-items: baseline;
-  gap: 18px;
-  margin: 0;
-}
-
-.notification-counts > div {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-}
-
-.notification-counts dt {
-  color: var(--ink-500);
-  font-size: 0.74rem;
-}
-
-.notification-counts dd {
-  margin: 0;
-  color: var(--ink-950);
-  font-size: 1.15rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
-
-/* 무엇을 볼지(탭) → 어떻게 볼지(읽음 필터) → 목록에 하는 행동(모두 읽음) 순으로 좁아진다. */
-.notification-toolbar {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 12px;
-  padding-bottom: 11px;
-  border-bottom: 1px solid var(--ink-100);
-}
-
-.notification-toolbar__actions {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-/*
-  탭을 목록 폭 전체로 늘리지 않는다(workspace-tabs는 flex:1로 늘린다). 항목이 둘뿐이라
-  늘리면 글자 사이가 비어 두 탭이 서로 다른 화면처럼 멀어 보인다.
+  필터가 두 층이다. 1차(무엇을 볼지)는 채운 탭, 2차(어떻게 볼지)는 밑줄 탭으로 서식을 달리해
+  높이가 아니라 <b>모양</b>으로 위계를 보여 준다 — 같은 모양이면 형제로 읽힌다.
 */
 .notification-tabs {
   display: inline-flex;
   gap: 2px;
-  padding: 3px;
-  border: 1px solid var(--ink-100);
-  border-radius: 9px;
-  background: var(--white);
 }
 
 .notification-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   border: 0;
-  border-radius: 6px;
   background: transparent;
-  padding: 5px 13px;
   color: var(--ink-500);
-  font-size: 0.76rem;
   font-weight: 700;
   cursor: pointer;
-  transition: background 140ms ease, color 140ms ease;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
 }
 
 .notification-tabs button:hover {
   color: var(--ink-800);
 }
 
-.notification-tabs button.is-active {
+/* 탭 이름 뒤 건수. 지금 선택된 탭에서는 반전돼 배경 위에서도 읽힌다. */
+.tab-count {
+  min-width: 18px;
+  border-radius: 999px;
+  background: var(--ink-100);
+  padding: 1px 6px;
+  color: var(--ink-700);
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* 1차 — 채운 탭. */
+.notification-tabs--scope {
+  padding: 3px;
+  border: 1px solid var(--ink-100);
+  border-radius: 9px;
+  background: var(--white);
+}
+
+.notification-tabs--scope button {
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 0.78rem;
+}
+
+.notification-tabs--scope button.is-active {
   background: var(--ink-950);
   color: #fff;
 }
 
-.notification-unread-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--ink-600);
+.notification-tabs--scope button.is-active .tab-count {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+
+/* 2차 — 밑줄 탭. 1차보다 작고 테두리가 없어 안쪽 층으로 읽힌다. */
+.notification-tabs--read button {
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 4px 2px 6px;
   font-size: 0.76rem;
-  cursor: pointer;
-  user-select: none;
 }
 
-.notification-unread-toggle input {
-  width: 14px;
-  height: 14px;
-  margin: 0;
-  accent-color: var(--seal);
-  cursor: pointer;
+.notification-tabs--read {
+  gap: 14px;
 }
 
-.notification-unread-toggle:hover {
-  color: var(--ink-900);
+.notification-tabs--read button.is-active {
+  border-bottom-color: var(--seal);
+  color: var(--ink-950);
+}
+
+.notification-tabs--read button.is-active .tab-count {
+  background: var(--red-50);
+  color: var(--seal);
+}
+
+/* 읽음 축과 `모두 읽음`이 같은 줄에 온다 — 그 버튼이 바꾸는 것이 이 축이다. */
+.notification-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--ink-100);
+}
+
+.notification-tabs--scope + .notification-toolbar {
+  margin-top: 14px;
 }
 
 /* 목록이 카드 안쪽 폭을 그대로 쓴다(드롭다운보다 여백을 조금 넓게). */

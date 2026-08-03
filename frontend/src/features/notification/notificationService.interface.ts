@@ -13,7 +13,7 @@ export interface NotificationService {
    * 알림 목록. 페이지네이션이 <b>필수</b>다 — 전체를 한 번에 받으면 오래 쓴 계정에서 응답이
    * 무한히 자란다. 드롭다운은 `size`를 작게(5) 주고, 알림 페이지는 더 크게 준다.
    *
-   * <p>필터는 `scope`(업무 처리 축)와 `unreadOnly`(읽음 축) <b>두 개</b>이며 AND로 겹친다.
+   * <p>필터는 `scope`(업무 처리 축)와 `readState`(읽음 축) <b>두 개</b>이며 AND로 겹친다.
    * 하나의 enum으로 묶지 않는 이유는 `NotificationScope` 주석에 있다.
    */
   getNotifications: (query?: NotificationListQuery) => Promise<NotificationListResponse>

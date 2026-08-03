@@ -147,7 +147,7 @@ describe('수강 신청 알림', () => {
     expect(rejected?.title).toBe('수강 신청이 승인되지 않았습니다.')
   })
 
-  it('학생이 신청을 취소하면 강사의 확인 필요 알림이 만료된다', async () => {
+  it('학생이 신청을 취소하면 강사의 처리 대기 알림이 만료된다', async () => {
     await loginAsStudent()
     await reapplyToOwnedCurriculum()
     await cancelEnrollment(OWNED_CURRICULUM)
@@ -155,7 +155,7 @@ describe('수강 신청 알림', () => {
     await loginAsInstructor()
     const requested = find(await listNotifications(), 'ENROLLMENT_REQUESTED', OWNED_ENROLLMENT)
 
-    // 처리할 수 없게 된 일은 "확인 필요"에서 빠져야 한다.
+    // 처리할 수 없게 된 일은 "처리 대기"에서 빠져야 한다.
     expect(requested?.actionStatus).toBe('EXPIRED')
   })
 })

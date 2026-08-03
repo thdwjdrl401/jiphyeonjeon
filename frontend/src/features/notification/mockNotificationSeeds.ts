@@ -29,7 +29,7 @@ import {
  * seed가 우회하지 않으므로, 수강 상태를 바꾸면 알림도 같이 바뀐다.
  */
 function seedInstructorNotifications() {
-  // 처리 대기 중인 수강 신청(usr-student-02 → cur-spring-live). 읽지 않음 + 확인 필요.
+  // 처리 대기 중인 수강 신청(usr-student-02 → cur-spring-live). 읽지 않음 + 처리 대기.
   publishEnrollmentRequested('enr-spring-pending-02', '2026-07-21T09:31:00+09:00')
 
   /*
@@ -72,6 +72,12 @@ function seedStudentNotifications() {
     .filter((record) => record.recipientId === MOCK_STUDENT_ID)
     .forEach((record) => markMockNotificationRead(record.notificationId, '2026-07-24T21:00:00+09:00'))
   publishVodPublished('cur-react-system-lesson-1', '2026-07-26T18:00:00+09:00')
+  /*
+    읽지 않은 알림이 한 페이지(8건)를 넘게 둔다 — 기본 탭이 `읽지 않음`이라, 여기서 한 페이지를
+    채우지 못하면 `더 보기`가 데모에서 한 번도 나타나지 않아 페이지네이션을 눈으로 볼 수 없다.
+  */
+  publishVodPublished('cur-react-system-lesson-7', '2026-07-26T09:00:00+09:00')
+  publishMaterialPublished('cur-data-story-lesson-3', 'mat-data-story-03', '2026-07-27T09:00:00+09:00')
 
   // 일정 변경(변경 전·후를 함께 보여 준다) + 오늘 시작하는 라이브.
   publishLiveScheduleChanged(

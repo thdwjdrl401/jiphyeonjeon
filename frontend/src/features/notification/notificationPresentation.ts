@@ -23,17 +23,24 @@ export type NotificationBadgeTone = 'neutral' | 'success' | 'warning' | 'danger'
 
 /**
  * 처리 축의 표시. `INFO`는 배지를 내지 않는다 — 안내성 알림이 대부분이라 전부에 배지를 붙이면
- * 정작 확인이 필요한 줄이 묻힌다.
+ * 정작 내가 처리해야 할 줄이 묻힌다.
+ *
+ * <p>`처리 대기 → 처리 완료`로 <b>짝을 맞춘 이름</b>을 쓴다. 한때 `확인 필요 / 처리 완료`였는데 같은
+ * 축의 두 값이 서로 다른 낱말("확인"·"처리")을 쓰면 같은 축인지 읽히지 않았다. "대기"는 승인·검수처럼
+ * 내 행동을 기다리는 상태를 뜻하고, 그 행동을 하면 "완료"로 넘어간다.
  */
 export const ACTION_STATUS_BADGE: Record<
   NotificationActionStatus,
   { label: string; tone: NotificationBadgeTone } | null
 > = {
   INFO: null,
-  ACTION_REQUIRED: { label: '확인 필요', tone: 'warning' },
+  ACTION_REQUIRED: { label: '처리 대기', tone: 'warning' },
   COMPLETED: { label: '처리 완료', tone: 'success' },
   EXPIRED: { label: '만료됨', tone: 'neutral' },
 }
+
+/** 처리 대기 알림을 모아 보는 탭·필터의 이름. 배지와 같은 낱말을 쓴다. */
+export const ACTION_REQUIRED_LABEL = ACTION_STATUS_BADGE.ACTION_REQUIRED!.label
 
 export function severityBadgeTone(severity: NotificationSeverity): NotificationBadgeTone | null {
   if (severity === 'ERROR') return 'danger'

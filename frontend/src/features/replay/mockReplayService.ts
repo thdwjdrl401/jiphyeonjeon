@@ -13,7 +13,7 @@ export const mockReplayService = {
   async saveReplayReview(lessonId, transcript) {
     replayReviews.set(lessonId, { transcript, published: false })
     /*
-      검수 초안 저장은 "강사가 녹화본을 확인했다"는 증거다 — 녹화 알림의 확인 필요 상태를 여기서
+      검수 초안 저장은 "강사가 녹화본을 확인했다"는 증거다 — 녹화 알림의 처리 대기 상태를 여기서
       내린다. 알림을 눌러 화면을 연 것만으로는 내리지 않는다(그건 읽음일 뿐이다).
     */
     completeRecordingReview(lessonId)
