@@ -149,6 +149,28 @@ label 없이 운영 VAD로 WAV를 잘라 전체 transcript를 붙이지 않는�
 manifest hash·seed·학습 설정·loss만 기록하고 원본 음성·transcript·secret은 복사하지 않는다.
 
 
+Whisper 학습 pipeline 자체는 아래 opt-in dry-run으로 검증한다. 이 명령은 train batch 2개,
+dev batch 1개를 사용해 optimizer step→save→새 Python process에서 optimizer/model reload와 다음
+step→저장 checkpoint의 운영 VAD golden replay까지 모두 성공해야 종료한다. 실행 전에 GPU 0의
+운영 realtime-agent/BGE 점유와 여유 메모리를 확인한다.
+
+```bash
+uv run --frozen stt-lab-whisper-dry-run run \
+  --train-manifest /home/liveclass/ai/datasets/aihub-korean-lecture/v1/manifests/train.jsonl \
+  --dev-manifest /home/liveclass/ai/datasets/aihub-korean-lecture/v1/manifests/dev.jsonl \
+  --golden-manifest /home/liveclass/ai/datasets/aihub-korean-lecture/v1/manifests/golden.jsonl \
+  --model /home/liveclass/ai/models/whisper-large-v3 \
+  --artifact-root /home/liveclass/ai/checkpoints \
+  --run-id whisper-large-v3-dry-run-001 \
+  --batch-size 2 \
+  --cuda-visible-devices 0
+```
+
+이 실행은 품질 향상 증거가 아니라 pipeline 실행 가능성만 증명한다. Nemotron은 현재 추론용
+Transformers adapter만 있어 학습 recipe가 연결되지 않았으므로 Whisper dry-run 성공을 Nemotron
+학습 완료로 간주하지 않는다.
+
+
 ## vLLM Whisper 서빙 실험
 
 vLLM은 realtime-agent 환경과 섞지 않고 별도 venv에 설치한다. sudo는 필요 없다. 현재

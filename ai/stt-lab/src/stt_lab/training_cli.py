@@ -11,7 +11,18 @@ from stt_lab.training import dataset_pair_summary, load_training_pair
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     pair = load_training_pair(args.train_manifest, args.dev_manifest)
-    report = {"schemaVersion": 1, "status": "ready", **dataset_pair_summary(pair)}
+    report = {
+        "schemaVersion": 1,
+        "status": "ready",
+        "providers": {
+            "whisper": {"status": "DRY_RUN_IMPLEMENTED"},
+            "nemotron": {
+                "status": "TRAINING_UNSUPPORTED",
+                "reason": "no verified training recipe is connected to the runtime adapter",
+            },
+        },
+        **dataset_pair_summary(pair),
+    }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
         json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
