@@ -88,6 +88,44 @@ uv run --frozen stt-lab \
 peak CUDA memory를 보존한다. GPU 전체 사용량과 12-stream 동시성은 후속 replay
 benchmark에서 별도로 측정한다.
 
+## 운영 VAD 기반 통합 replay
+
+모델 선택에는 whole-WAV 명령 대신 제품 `realtime-agent`의 20 ms 입력·`VadSegmenter`·
+`SegmentedStreamingEngine`을 그대로 통과하는 통합 replay를 사용한다. 각 후보가 만든
+segment plan hash가 다르면 실행이 실패하므로 Nemotron과 Whisper가 동일한 음성 경계를
+소비했는지 결과에서 검증할 수 있다.
+
+먼저 대기 없이 dev 정확도를 비교한다.
+
+```bash
+uv run --frozen stt-lab-replay \
+  --manifest /home/liveclass/ai/datasets/aihub-korean-lecture/v1/manifests/dev.jsonl \
+  --candidate nemotron-base=nemotron@/home/liveclass/ai/models/nemotron-3.5-asr-streaming-0.6b \
+  --candidate whisper-base=whisper@/home/liveclass/ai/models/whisper-large-v3 \
+  --mode accuracy \
+  --workers 1 \
+  --output results/replay-dev-c1.json
+```
+
+실시간 지연은 같은 manifest를 실제 audio clock에 맞춰 공급한다. `--workers`는 독립 stream과
+동일한 수의 model slot을 만든다. 현재 in-process topology의 1/4/12 동시성 비교에 사용하되,
+GPU 메모리를 확인하며 한 단계씩 올린다.
+
+```bash
+uv run --frozen stt-lab-replay \
+  --manifest /home/liveclass/ai/datasets/aihub-korean-lecture/v1/manifests/dev.jsonl \
+  --candidate nemotron-base=nemotron@/home/liveclass/ai/models/nemotron-3.5-asr-streaming-0.6b \
+  --mode paced \
+  --workers 1 \
+  --output results/replay-paced-dev-c1.json
+```
+
+결과에는 candidate capability(`INCREMENTAL` 또는 `SEGMENT_FINAL_ONLY`), 공통 VAD segment
+plan과 hash, authoritative final 기반 CER, segment별 VAD-ready→first/final 지연, paced
+speech-start/end 지연, RTF와 peak CUDA memory가 기록된다. `test` split은 설정을 모두 고정한
+뒤 `--allow-test`를 명시해야만 실행된다.
+
+
 ## vLLM Whisper 서빙 실험
 
 vLLM은 realtime-agent 환경과 섞지 않고 별도 venv에 설치한다. sudo는 필요 없다. 현재
