@@ -72,6 +72,44 @@ class CatalogViewerContextContractTest {
     }
 
     /**
+     * 공개 전(DRAFT) 커리큘럼도 <b>만든 강사에게는</b> 상세가 열린다.
+     *
+     * <p>관리 화면의 "커리큘럼 상세" 버튼이 이 경로로 오는데, 소유자까지 404로 막혀 있어서 초안
+     * 커리큘럼은 만든 사람조차 미리 볼 수 없었다. 강사는 공개 전에 수강생 눈에 어떻게 보이는지
+     * 확인해야 한다. 수강 신청은 여전히 불가(UNAVAILABLE)여야 한다 — 볼 수 있는 것과 신청할 수
+     * 있는 것은 다른 축이다.
+     */
+    @Test
+    void owner_instructor_can_open_draft_curriculum_detail() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String cid = createDraftCurriculum(instructor);
+
+        write(get("/api/curriculums/" + cid), instructor, null)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.lifecycleStatus").value("DRAFT"))
+                .andExpect(jsonPath("$.viewerContext.relationship").value("OWNER_INSTRUCTOR"))
+                .andExpect(jsonPath("$.viewerContext.allowedActions[0]").value("MANAGE_CURRICULUM"))
+                .andExpect(jsonPath("$.enrollmentPolicy.status").value("UNAVAILABLE"));
+    }
+
+    /**
+     * 소유자가 아니면 초안은 여전히 <b>404</b>다. 403이면 "여기 뭔가 있다"가 드러나므로, 존재
+     * 자체를 감추는 기존 규칙을 그대로 둔다.
+     */
+    @Test
+    void draft_curriculum_stays_hidden_from_everyone_else() throws Exception {
+        Cookie[] owner = loginAs("INSTRUCTOR");
+        String cid = createDraftCurriculum(owner);
+
+        mockMvc.perform(get("/api/curriculums/" + cid))
+                .andExpect(status().isNotFound());
+        write(get("/api/curriculums/" + cid), loginAs("STUDENT"), null)
+                .andExpect(status().isNotFound());
+        write(get("/api/curriculums/" + cid), loginAs("INSTRUCTOR"), null)
+                .andExpect(status().isNotFound());
+    }
+
+    /**
      * 목차 레슨의 상태 필드명은 {@code status}다 — 관리 응답(LessonView)과 같은 이름.
      *
      * <p>계약으로 한 번 정한 뒤 다른 작업에서 {@code lessonStatus}로 되돌아간 적이 있다. FE 타입·어댑터·
@@ -200,6 +238,12 @@ class CatalogViewerContextContractTest {
     }
 
     // ---- 헬퍼 ----
+
+    /** 발행하지 않은 커리큘럼(lifecycleStatus=DRAFT). 만들기만 하면 DRAFT다. */
+    private String createDraftCurriculum(Cookie[] instructor) throws Exception {
+        return json(write(post("/api/instructor/curriculums"), instructor, "{\"title\":\"초안 강좌\"}")
+                .andExpect(status().isCreated()).andReturn()).get("curriculumId").asString();
+    }
 
     private String createPublishedCurriculum(Cookie[] instructor) throws Exception {
         String cid = json(write(post("/api/instructor/curriculums"), instructor, "{\"title\":\"수강강좌\"}")
