@@ -1,5 +1,6 @@
 package com.liveclass.curriculum.service;
 
+import com.liveclass.aiintegration.api.OutboxDestinations;
 import com.liveclass.aiintegration.api.OutboxPublisher;
 import com.liveclass.asset.api.AssetDirectory;
 import com.liveclass.asset.api.AssetRef;
@@ -507,7 +508,7 @@ public class InstructorCurriculumService {
                     "materialId", materialId.toString(),
                     "lessonId", lessonId.toString(),
                     "contractVersion", 1));
-            outboxPublisher.enqueue("material_asset", materialId.toString(), "MATERIAL_EMBED_DELETE",
+            outboxPublisher.enqueue(OutboxDestinations.INGESTION_EMBED, "material_asset", materialId.toString(), "MATERIAL_EMBED_DELETE",
                     payload, "material:" + materialId + ":embed-delete", null);
         }
     }
@@ -527,7 +528,7 @@ public class InstructorCurriculumService {
                 "fileName", material.fileName() == null ? "" : material.fileName(),
                 "policy", Map.of("embedModel", "bge-m3"),
                 "contractVersion", 1));
-        outboxPublisher.enqueue("material_asset", material.materialId().toString(), "MATERIAL_EMBED_REQUESTED",
+        outboxPublisher.enqueue(OutboxDestinations.INGESTION_EMBED, "material_asset", material.materialId().toString(), "MATERIAL_EMBED_REQUESTED",
                 payload, "material:" + material.materialId() + ":embed", null);
     }
 
@@ -585,7 +586,7 @@ public class InstructorCurriculumService {
                     "materialId", materialId.toString(),
                     "curriculumId", curriculumId.toString(),
                     "contractVersion", 1));
-            outboxPublisher.enqueue("material_asset", materialId.toString(), "MATERIAL_EMBED_DELETE",
+            outboxPublisher.enqueue(OutboxDestinations.INGESTION_EMBED, "material_asset", materialId.toString(), "MATERIAL_EMBED_DELETE",
                     payload, "material:" + materialId + ":embed-delete", null);
         }
     }
@@ -605,7 +606,7 @@ public class InstructorCurriculumService {
                 "fileName", material.fileName() == null ? "" : material.fileName(),
                 "policy", Map.of("embedModel", "bge-m3"),
                 "contractVersion", 1));
-        outboxPublisher.enqueue("material_asset", material.materialId().toString(), "MATERIAL_EMBED_REQUESTED",
+        outboxPublisher.enqueue(OutboxDestinations.INGESTION_EMBED, "material_asset", material.materialId().toString(), "MATERIAL_EMBED_REQUESTED",
                 payload, "material:" + material.materialId() + ":embed", null);
     }
 

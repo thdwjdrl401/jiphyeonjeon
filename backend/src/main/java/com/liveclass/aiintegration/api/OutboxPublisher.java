@@ -10,6 +10,9 @@ public interface OutboxPublisher {
      * outbox_events에 잡 1건을 PENDING으로 기록한다. {@code idempotencyKey}는 UNIQUE라 같은 키를 다시
      * 넣으면 조용히 무시한다(멱등) — 중복 발행 방지가 outbox의 존재 이유다.
      *
+     * @param destination   실려 갈 목적지(큐 이름). {@link OutboxDestinations} 참고 —
+     *                      기본값이 없으므로 <b>반드시</b> 넘겨야 한다. 목적지를 빠뜨린 이벤트가
+     *                      조용히 AI 큐로 흘러가면 엉뚱한 워커가 그 메시지를 받는다.
      * @param aggregateType 발생 애그리거트(예: material_asset)
      * @param aggregateId   애그리거트 id(문자열)
      * @param eventType     이벤트 타입(예: MATERIAL_EMBED_REQUESTED)
@@ -17,6 +20,6 @@ public interface OutboxPublisher {
      * @param idempotencyKey 중복 발행 방지 키(UNIQUE)
      * @param correlationId 서비스 간 추적 id(없으면 null)
      */
-    void enqueue(String aggregateType, String aggregateId, String eventType,
+    void enqueue(String destination, String aggregateType, String aggregateId, String eventType,
                  String payloadJson, String idempotencyKey, String correlationId);
 }
