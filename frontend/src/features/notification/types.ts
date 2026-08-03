@@ -141,6 +141,16 @@ export interface NotificationSignal {
   occurredAt: string
 }
 
+/**
+ * 브라우저가 만든 푸시 구독. `p256dh`·`auth`는 <b>이 브라우저만</b> 페이로드를 열 수 있게 하는
+ * 키다 — 푸시 서비스는 내용을 보지 못한다(RFC 8291).
+ */
+export interface PushSubscriptionInput {
+  endpoint: string
+  p256dh: string
+  auth: string
+}
+
 /** 알림이 가리키는 대상이 사라졌거나 더 이상 열람할 수 없는 이유. */
 export type NotificationGoneReason =
   /** 커리큘럼·강의·녹화본이 삭제됐다. */

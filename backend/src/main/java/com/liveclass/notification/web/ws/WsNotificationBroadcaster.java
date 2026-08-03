@@ -1,5 +1,6 @@
 package com.liveclass.notification.web.ws;
 
+import com.liveclass.notification.push.WebPushSender;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -38,26 +39,41 @@ public class WsNotificationBroadcaster {
 
     private final SimpMessagingTemplate messagingTemplate;
     private final SimpUserRegistry userRegistry;
+    private final WebPushSender pushSender;
 
     public WsNotificationBroadcaster(SimpMessagingTemplate messagingTemplate,
-                                     SimpUserRegistry userRegistry) {
+                                     SimpUserRegistry userRegistry,
+                                     WebPushSender pushSender) {
         this.messagingTemplate = messagingTemplate;
         this.userRegistry = userRegistry;
+        this.pushSender = pushSender;
     }
 
     /** 한 명에게. 좁은 팬아웃(수강 판정·녹화)이 쓴다. */
-    public void announce(UUID recipientId, String notificationType) {
+    public void announce(UUID recipientId, String notificationType, String title, String body) {
         if (recipientId == null) {
             return;
         }
-        announceAll(List.of(recipientId), notificationType);
+        announceAll(List.of(recipientId), notificationType, title, body);
     }
 
-    /** 방금 <b>새로</b> 받은 사람들에게. 중복으로 걸러진 사람은 여기 없다. */
-    public void announceAll(Collection<UUID> recipientIds, String notificationType) {
+    /**
+     * 방금 <b>새로</b> 받은 사람들에게. 중복으로 걸러진 사람은 여기 없다.
+     *
+     * <p>두 층으로 나간다 — <b>STOMP</b>는 탭이 열려 있는 사람에게 즉시, <b>Web Push</b>는 탭을
+     * 닫은 사람에게도. 둘 다 보내는 이유는 어느 쪽이 닿을지 서버가 알 수 없기 때문이다. 탭이 열려
+     * 있으면 둘 다 오지만, 서비스워커가 <b>화면이 떠 있을 때는 시스템 알림을 띄우지 않는</b>다.
+     */
+    public void announceAll(Collection<UUID> recipientIds, String notificationType,
+                            String title, String body) {
         if (recipientIds.isEmpty()) {
             return;
         }
+        /*
+         * 푸시를 먼저 띄운다. 여기서 실패해도 STOMP는 나가야 하고, 반대도 마찬가지다 —
+         * 전달 층 하나가 죽었다고 다른 층까지 멈추면 안 된다.
+         */
+        pushSender.send(recipientIds, title, body, null);
         NotificationSignalPayload payload =
                 new NotificationSignalPayload(notificationType, OffsetDateTime.now());
         int sent = 0;

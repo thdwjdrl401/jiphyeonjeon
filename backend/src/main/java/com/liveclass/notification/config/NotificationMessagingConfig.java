@@ -5,6 +5,8 @@ import org.springframework.amqp.core.QueueBuilder;
 import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.boot.amqp.autoconfigure.SimpleRabbitListenerContainerFactoryConfigurer;
+import com.liveclass.notification.push.WebPushProperties;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -16,6 +18,12 @@ import org.springframework.context.annotation.Configuration;
  * 있는 일(문구 만들기·수신자 조회·대량 삽입)은 전부 여기 건너편에서 한다. 알림 코드의 버그가
  * 수강 승인을 롤백시키면 안 된다.
  */
+/*
+ * VAPID 설정도 여기서 묶는다. 애플리케이션 클래스에 @EnableConfigurationProperties를 달면 루트가
+ * 알림 모듈 <b>내부</b> 타입을 참조하게 되어 모듈 경계 검사가 막는다 — 설정은 그 설정을 쓰는
+ * 모듈이 등록한다.
+ */
+@EnableConfigurationProperties(WebPushProperties.class)
 @Configuration
 public class NotificationMessagingConfig {
 
