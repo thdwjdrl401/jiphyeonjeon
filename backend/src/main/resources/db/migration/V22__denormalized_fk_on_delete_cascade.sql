@@ -1,4 +1,4 @@
--- 비정규화 FK가 부모 삭제를 막는 문제를 없앤다(ADR-0064).
+-- 비정규화 FK가 부모 삭제를 막는 문제를 없앤다(ADR-0067).
 --
 -- chat_message.lesson_id와 live_session.curriculum_id는 둘 다 "편의를 위해 복사해 둔" 열이다.
 -- 진짜 부모는 각각 live_session과 lesson(→section→curriculum)이고, 그 경로는 이미 ON DELETE CASCADE다.
