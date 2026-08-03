@@ -64,10 +64,10 @@ describe('알림 조회와 상태 처리', () => {
     expect(second.items.some((item) => firstIds.has(item.notificationId))).toBe(false)
   })
 
-  it('읽지 않음·처리 필요 필터가 각각 다른 축으로 동작한다', async () => {
+  it('읽음 축과 업무 처리 축이 각각 따로 동작한다', async () => {
     await loginAsInstructor()
-    const unread = await getNotifications({ filter: 'UNREAD', size: 50 })
-    const actionRequired = await getNotifications({ filter: 'ACTION_REQUIRED', size: 50 })
+    const unread = await getNotifications({ unreadOnly: true, size: 50 })
+    const actionRequired = await getNotifications({ scope: 'ACTION_REQUIRED', size: 50 })
 
     expect(unread.items.length).toBeGreaterThan(0)
     expect(unread.items.every((item) => item.readStatus === 'UNREAD')).toBe(true)
@@ -83,10 +83,39 @@ describe('알림 조회와 상태 처리', () => {
     ).toBe(true)
   })
 
+  it('두 축을 함께 주면 겹쳐서 걸러진다', async () => {
+    await loginAsInstructor()
+    /*
+      하나의 enum으로 묶으면 물어볼 수 없는 질문이다 — "확인이 필요한 것 중 아직 안 읽은 것".
+      seed에는 확인 필요이면서 읽은 알림이 없으므로, 하나를 읽어 두고 그 건이 빠지는지로 확인한다.
+    */
+    const before = await getNotifications({ scope: 'ACTION_REQUIRED', unreadOnly: true, size: 50 })
+    expect(before.items.length).toBeGreaterThan(1)
+    await markNotificationAsRead(before.items[0].notificationId)
+
+    const after = await getNotifications({ scope: 'ACTION_REQUIRED', unreadOnly: true, size: 50 })
+    expect(after.items).toHaveLength(before.items.length - 1)
+    expect(after.items.every((item) => item.actionStatus === 'ACTION_REQUIRED')).toBe(true)
+    expect(after.items.every((item) => item.readStatus === 'UNREAD')).toBe(true)
+
+    // 읽음 필터만 끄면 방금 읽은 건이 다시 보인다 — 처리 축은 그대로다.
+    const scopeOnly = await getNotifications({ scope: 'ACTION_REQUIRED', size: 50 })
+    expect(scopeOnly.items).toHaveLength(before.items.length)
+  })
+
+  it('학생에게는 확인 필요 알림이 없다', async () => {
+    // 화면에서 학생에게 '확인 필요' 탭을 내지 않는 근거다 — 항상 0건이다.
+    await loginAsStudent()
+    const actionRequired = await getNotifications({ scope: 'ACTION_REQUIRED', size: 50 })
+
+    expect(actionRequired.items).toHaveLength(0)
+    expect((await getNotificationSummary()).actionRequiredCount).toBe(0)
+  })
+
   it('개수는 필터와 무관하게 전체 기준으로 내려온다', async () => {
     await loginAsInstructor()
     const summary = await getNotificationSummary()
-    const filtered = await getNotifications({ filter: 'ACTION_REQUIRED', size: 1 })
+    const filtered = await getNotifications({ scope: 'ACTION_REQUIRED', unreadOnly: true, size: 1 })
 
     expect(filtered.unreadCount).toBe(summary.unreadCount)
     expect(filtered.actionRequiredCount).toBe(summary.actionRequiredCount)
@@ -94,7 +123,7 @@ describe('알림 조회와 상태 처리', () => {
 
   it('개별 읽음 처리는 멱등이고 처리 상태를 건드리지 않는다', async () => {
     await loginAsInstructor()
-    const target = (await getNotifications({ filter: 'ACTION_REQUIRED', size: 50 })).items[0]
+    const target = (await getNotifications({ scope: 'ACTION_REQUIRED', size: 50 })).items[0]
 
     const first = await markNotificationAsRead(target.notificationId)
     const second = await markNotificationAsRead(target.notificationId)

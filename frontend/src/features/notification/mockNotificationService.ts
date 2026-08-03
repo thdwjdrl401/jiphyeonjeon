@@ -149,9 +149,10 @@ export const mockNotificationService = {
     await wait()
     const user = requireUser()
     const all = listMockNotifications(user.userId)
+    // 두 축을 AND로 겹친다 — "확인 필요한 것 중 아직 안 읽은 것"이 표현돼야 한다.
     const filtered = all.filter((record) => {
-      if (query.filter === 'UNREAD') return record.readStatus === 'UNREAD'
-      if (query.filter === 'ACTION_REQUIRED') return record.actionStatus === 'ACTION_REQUIRED'
+      if (query.scope === 'ACTION_REQUIRED' && record.actionStatus !== 'ACTION_REQUIRED') return false
+      if (query.unreadOnly && record.readStatus !== 'UNREAD') return false
       return true
     })
 

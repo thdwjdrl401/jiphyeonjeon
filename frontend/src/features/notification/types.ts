@@ -84,10 +84,19 @@ export interface NotificationItem {
   scheduleChange: NotificationScheduleChange | null
 }
 
-export type NotificationFilter = 'ALL' | 'UNREAD' | 'ACTION_REQUIRED'
+/**
+ * 무엇을 볼지 — <b>업무 처리 축</b>의 필터.
+ *
+ * <p>읽음 여부와 <b>같은 축에 두지 않는다</b>. 둘을 하나의 enum(`ALL|UNREAD|ACTION_REQUIRED`)으로
+ * 묶으면 "확인이 필요한 것 중 아직 안 읽은 것"을 물어볼 수 없다 — 서로 다른 질문이기 때문이다.
+ * 그래서 이 축과 `unreadOnly`를 나눠 받고, 둘은 AND로 조합된다.
+ */
+export type NotificationScope = 'ALL' | 'ACTION_REQUIRED'
 
 export interface NotificationListQuery {
-  filter?: NotificationFilter
+  scope?: NotificationScope
+  /** 어떻게 볼지 — 읽음 축의 필터. `scope`와 조합된다(확인 필요 + 읽지 않음만). */
+  unreadOnly?: boolean
   page?: number
   size?: number
 }

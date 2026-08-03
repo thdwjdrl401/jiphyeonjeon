@@ -215,8 +215,112 @@
   text-align: center;
 }
 
-/* 알림 페이지에서는 줄이 카드 안쪽 폭을 그대로 쓴다(드롭다운보다 여백을 조금 넓게). */
-.workspace-tabpanel .notification-row > button {
+/*
+  ── 알림 페이지 ──────────────────────────────────────────────
+  머리말의 개수 표시. 카드(metric-card)가 아니라 작은 글자 묶음이다 — 두 숫자를 보여 주려고
+  112px 높이 카드를 두 개 쓰면 목록이 화면 아래로 밀려서, 정작 읽으려던 알림이 안 보인다.
+*/
+.notification-counts {
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+  margin: 0;
+}
+
+.notification-counts > div {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.notification-counts dt {
+  color: var(--ink-500);
+  font-size: 0.74rem;
+}
+
+.notification-counts dd {
+  margin: 0;
+  color: var(--ink-950);
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* 무엇을 볼지(탭) → 어떻게 볼지(읽음 필터) → 목록에 하는 행동(모두 읽음) 순으로 좁아진다. */
+.notification-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 11px;
+  border-bottom: 1px solid var(--ink-100);
+}
+
+.notification-toolbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/*
+  탭을 목록 폭 전체로 늘리지 않는다(workspace-tabs는 flex:1로 늘린다). 항목이 둘뿐이라
+  늘리면 글자 사이가 비어 두 탭이 서로 다른 화면처럼 멀어 보인다.
+*/
+.notification-tabs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--ink-100);
+  border-radius: 9px;
+  background: var(--white);
+}
+
+.notification-tabs button {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  padding: 5px 13px;
+  color: var(--ink-500);
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.notification-tabs button:hover {
+  color: var(--ink-800);
+}
+
+.notification-tabs button.is-active {
+  background: var(--ink-950);
+  color: #fff;
+}
+
+.notification-unread-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-600);
+  font-size: 0.76rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.notification-unread-toggle input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--seal);
+  cursor: pointer;
+}
+
+.notification-unread-toggle:hover {
+  color: var(--ink-900);
+}
+
+/* 목록이 카드 안쪽 폭을 그대로 쓴다(드롭다운보다 여백을 조금 넓게). */
+.notification-panel-body .notification-row > button {
   padding: 14px 4px;
 }
 

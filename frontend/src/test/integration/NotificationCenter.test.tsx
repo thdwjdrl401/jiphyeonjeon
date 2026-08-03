@@ -115,11 +115,58 @@ describe('알림 센터', () => {
     await waitFor(() => expect(bell()).toHaveAccessibleName('알림 (읽지 않음 4건)'))
 
     renderAt('/instructor/notifications')
-    await user.click(await screen.findByRole('tab', { name: '처리 필요' }))
+    await user.click(await screen.findByRole('tab', { name: '확인 필요' }))
     const list = await screen.findByRole('list', { name: '알림 목록' })
 
-    // 읽었어도 승인·거절을 하지 않았으므로 "처리 필요"에 그대로 있어야 한다.
+    // 읽었어도 승인·거절을 하지 않았으므로 "확인 필요"에 그대로 있어야 한다.
     expect(within(list).getByText('새로운 수강 신청이 있습니다.')).toBeInTheDocument()
+  })
+
+  it('머리말에는 개수만 두고 모두 읽음은 목록 도구줄에 둔다', async () => {
+    await loginAsInstructor()
+    renderAt('/instructor/notifications')
+
+    const pageHeader = (await screen.findByRole('heading', { name: '알림', level: 1 })).closest('header')
+    expect(pageHeader).not.toBeNull()
+
+    /*
+      `모두 읽음`이 페이지 제목 옆에 있으면 탭·필터보다 위라서 "화면 전체를 건드린다"고 읽힌다.
+      실제 동작(계정의 모든 알림)과 무관하게, 지금 보고 있는 목록에 대한 행동으로 보여야 한다.
+    */
+    expect(within(pageHeader!).queryByRole('button', { name: '모두 읽음' })).toBeNull()
+    expect(within(pageHeader!).getByText('읽지 않음')).toBeInTheDocument()
+    expect(within(pageHeader!).getByText('확인 필요')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '모두 읽음' })).toBeInTheDocument()
+  })
+
+  it('학생에게는 확인 필요 탭을 내지 않는다', async () => {
+    await loginAsStudent()
+    renderAt('/student/notifications')
+
+    await screen.findByRole('list', { name: '알림 목록' })
+    // 학생은 ACTION_REQUIRED 알림을 받지 않으므로 항상 빈 탭이 된다.
+    expect(screen.queryByRole('tab')).toBeNull()
+    expect(screen.queryByText('확인 필요')).toBeNull()
+    // 읽음 필터는 역할과 무관하게 남는다.
+    expect(screen.getByRole('checkbox', { name: '읽지 않음만' })).toBeInTheDocument()
+  })
+
+  it('두 필터 축이 겹쳐서 동작한다', async () => {
+    const user = userEvent.setup()
+    await loginAsInstructor()
+    renderAt('/instructor/notifications')
+
+    await user.click(await screen.findByRole('tab', { name: '확인 필요' }))
+    await user.click(screen.getByRole('checkbox', { name: '읽지 않음만' }))
+
+    const list = await screen.findByRole('list', { name: '알림 목록' })
+    const rows = within(list).getAllByRole('listitem')
+    // 확인 필요 + 읽지 않음만 = 두 조건을 모두 만족하는 줄만 남는다.
+    expect(rows.length).toBeGreaterThan(0)
+    rows.forEach((row) => {
+      expect(row).toHaveClass('is-unread')
+      expect(within(row).getByText('확인 필요')).toBeInTheDocument()
+    })
   })
 
   it('삭제된 대상 알림을 눌러도 이동하지 않고 안내만 뜬다', async () => {
@@ -164,7 +211,7 @@ describe('알림 센터', () => {
     })
 
     await user.click(screen.getByRole('button', { name: '모두 읽음' }))
-    await user.click(screen.getByRole('tab', { name: '읽지 않음' }))
+    await user.click(screen.getByRole('checkbox', { name: '읽지 않음만' }))
 
     expect(await screen.findByText('읽지 않은 알림이 없습니다.')).toBeInTheDocument()
   })
