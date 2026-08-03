@@ -151,6 +151,25 @@ export interface PushSubscriptionInput {
   auth: string
 }
 
+/**
+ * 곧 시작 알림의 리드타임 설정.
+ *
+ * <p>`source`가 값 자체만큼 중요하다 — 값만 주면 사용자는 <b>자기가 어디를 고쳤는지</b> 알 수 없다.
+ * 강의 화면에서 30분이 보일 때 그게 이 강의만의 설정인지 커리큘럼 설정이 내려온 것인지 구별해야
+ * "이 강의만 다르게" 같은 안내를 할 수 있다.
+ */
+export interface NotificationPreference {
+  enabled: boolean
+  leadMinutes: number
+  source: 'LESSON' | 'CURRICULUM' | 'DEFAULT'
+}
+
+/** 고를 수 있는 리드타임. 자유 입력이 아닌 이유는 서버가 이 값에 맞춰 발화를 미리 예약해 두기 때문이다. */
+export interface NotificationLeadTimes {
+  choices: number[]
+  defaultMinutes: number
+}
+
 /** 알림이 가리키는 대상이 사라졌거나 더 이상 열람할 수 없는 이유. */
 export type NotificationGoneReason =
   /** 커리큘럼·강의·녹화본이 삭제됐다. */

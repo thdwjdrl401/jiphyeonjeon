@@ -27,4 +27,11 @@ export const registerPushSubscription = (
 export const unregisterPushSubscription = (endpoint: string) =>
   notificationService.unregisterPushSubscription(endpoint)
 
+export const getNotificationLeadTimes = () => notificationService.getNotificationLeadTimes()
+export const getNotificationPreference = (curriculumId: string, lessonId?: string) =>
+  notificationService.getNotificationPreference(curriculumId, lessonId)
+export const saveNotificationPreference = (
+  input: Parameters<NotificationService['saveNotificationPreference']>[0],
+) => notificationService.saveNotificationPreference(input)
+
 export type { NotificationService } from './notificationService.interface'

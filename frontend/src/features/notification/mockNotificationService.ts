@@ -204,6 +204,14 @@ export const mockNotificationService = {
   async getPushPublicKey() {
     return null
   },
+  /** 목은 서버 기본값과 같은 선택지를 그대로 흉내 낸다 — 화면이 목에서도 진짜처럼 동작해야 한다. */
+  async getNotificationLeadTimes() {
+    return { choices: [5, 10, 30, 60, 180, 1440], defaultMinutes: 10 }
+  },
+  async getNotificationPreference() {
+    return { enabled: true, leadMinutes: 10, source: 'DEFAULT' as const }
+  },
+  async saveNotificationPreference() {},
   async registerPushSubscription() {},
   async unregisterPushSubscription() {},
 } satisfies NotificationService
