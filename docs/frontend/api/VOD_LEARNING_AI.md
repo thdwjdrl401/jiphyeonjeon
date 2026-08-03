@@ -1,6 +1,6 @@
 # VOD·학습·게시 콘텐츠·AI·퀴즈 API
 
-> 공통 규칙: [API_MAP.md](../API_MAP.md) · 화면 명세: [VOD_LESSON.md](../components/VOD_LESSON.md) · 공유 계약: [CONTRACT.md](../../CONTRACT.md)
+> 공통 규칙: [API_MAP.md](API_MAP.md) · 화면 명세: [VOD_LESSON.md](../components/VOD_LESSON.md) · 공유 계약: [CONTRACT.md](../../CONTRACT.md)
 
 ## 1. 범위
 

@@ -200,7 +200,7 @@ EnrolleeManager
 
 ## 11. 필요한 데이터
 
-실제 필드와 API는 [API_MAP.md](../API_MAP.md)에서 확정한다.
+실제 필드와 API는 [API_MAP.md](../api/API_MAP.md)에서 확정한다.
 
 - 커리큘럼 기본 정보와 운영 상태
 - 현재 사용자의 관리 권한

@@ -1,7 +1,7 @@
 # ADR-0064: 용어집은 AI 원본 위에 강사 수정본을 덮고, 자막 매핑은 화면이 한다
 
 > 관련 결정: [jinwoo/0005 핵심 용어 저장 스키마](../jinwoo/0005-key-term-storage-schema.md) ·
-> [ADR-0043 자막 소비·영속](0043-live-caption-consumer.md) ·
+> [ADR-0043 자막 소비·영속](0043-caption-consumer-persistence.md) ·
 > [공유 계약 §2 자막/용어 · §4 스키마 소유권](../../CONTRACT.md)
 
 - **상태**: 채택 — 구현됨(AI 추출은 기본 꺼짐이라 원본은 아직 비어 있음)

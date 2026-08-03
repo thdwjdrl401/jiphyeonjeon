@@ -19,7 +19,7 @@
 - 페이지는 라우트 상태와 feature를 조합하고, 공통 레이아웃을 다시 구현하지 않는다.
 - 인증 UI는 `features/auth`, 커리큘럼 UI는 `features/curriculum`이 소유한다.
 - 페이지 전용 소개 문구와 섹션 조합은 `pages`가 소유한다.
-- 로그인·회원가입 완료 후 복귀 경로와 실제 API는 [API_MAP.md](../API_MAP.md)에서 정의한다.
+- 로그인·회원가입 완료 후 복귀 경로와 실제 API는 [API_MAP.md](../api/API_MAP.md)에서 정의한다.
 
 ## 3. 웰컴 페이지
 

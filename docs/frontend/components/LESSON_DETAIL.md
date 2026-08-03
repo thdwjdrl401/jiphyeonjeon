@@ -202,7 +202,7 @@ AI 콘텐츠가 일부 준비 중이거나 실패해도 게시된 HLS 재생을 
 
 ## 12. 필요한 데이터와 연결
 
-정확한 필드와 API는 [API_MAP.md](../API_MAP.md)에서 확정한다.
+정확한 필드와 API는 [API_MAP.md](../api/API_MAP.md)에서 확정한다.
 
 - curriculum·section·lesson 기본 정보
 - `status`와 역할별 허용 행동

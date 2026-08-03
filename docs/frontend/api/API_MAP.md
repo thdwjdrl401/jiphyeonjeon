@@ -1,6 +1,6 @@
 # LiveClass AI — Frontend API Map
 
-> 페이지 기준: [PAGES.md](PAGES.md) · 공개 페이지: [PUBLIC_PAGES.md](components/PUBLIC_PAGES.md) · 프로필: [PROFILE.md](components/PROFILE.md) · 공유 계약 정본: [CONTRACT.md](../CONTRACT.md)
+> 페이지 기준: [PAGES.md](../PAGES.md) · 공개 페이지: [PUBLIC_PAGES.md](../components/PUBLIC_PAGES.md) · 프로필: [PROFILE.md](../components/PROFILE.md) · 공유 계약 정본: [CONTRACT.md](../../CONTRACT.md)
 
 ## 1. 문서 목적
 
@@ -27,13 +27,13 @@
 
 | 문서 | 범위 |
 |---|---|
-| [CATALOG.md](api/CATALOG.md) | 웰컴 추천 커리큘럼·공개 목록 |
-| [CURRICULUM_DETAIL.md](api/CURRICULUM_DETAIL.md) | 공개 상세·목차·수강 신청·관계·허용 행동 |
-| [MY_CURRICULUMS.md](api/MY_CURRICULUMS.md) | 강사 운영·학생 학습 대시보드 |
-| [CURRICULUM_MANAGEMENT.md](api/CURRICULUM_MANAGEMENT.md) | 커리큘럼 생성·수정·섹션·순서·수강생 관리 |
-| [LESSON_MANAGEMENT.md](api/LESSON_MANAGEMENT.md) | 레슨 생성·수정·상세·PPTX 자료·AI 준비·게시 |
-| [LIVE.md](api/LIVE.md) | 라이브 세션·LiveKit·WS·SSE·HLS 되감기·채팅·질문 핀 |
-| [VOD_LEARNING_AI.md](api/VOD_LEARNING_AI.md) | VOD·진도·게시 콘텐츠·AI Q&A·퀴즈·강사 검수 |
+| [CATALOG.md](CATALOG.md) | 웰컴 추천 커리큘럼·공개 목록 |
+| [CURRICULUM_DETAIL.md](CURRICULUM_DETAIL.md) | 공개 상세·목차·수강 신청·관계·허용 행동 |
+| [MY_CURRICULUMS.md](MY_CURRICULUMS.md) | 강사 운영·학생 학습 대시보드 |
+| [CURRICULUM_MANAGEMENT.md](CURRICULUM_MANAGEMENT.md) | 커리큘럼 생성·수정·섹션·순서·수강생 관리 |
+| [LESSON_MANAGEMENT.md](LESSON_MANAGEMENT.md) | 레슨 생성·수정·상세·PPTX 자료·AI 준비·게시 |
+| [LIVE.md](LIVE.md) | 라이브 세션·LiveKit·WS·SSE·HLS 되감기·채팅·질문 핀 |
+| [VOD_LEARNING_AI.md](VOD_LEARNING_AI.md) | VOD·진도·게시 콘텐츠·AI Q&A·퀴즈·강사 검수 |
 
 ### 1.3 용어 매핑
 
@@ -537,16 +537,16 @@ PATCH /api/instructor/me/public-profile
 | 회원 탈퇴 | 운영 커리큘럼·예정 라이브·수강·학습 데이터 처리 정책 미확정 |
 | 공개 강사 프로필 조회 | 별도 공개 페이지 도입 여부 미확정 |
 
-학생 학습 요약과 강사 운영 요약은 [내 커리큘럼 API](api/MY_CURRICULUMS.md)에서 정의한다.
+학생 학습 요약과 강사 운영 요약은 [내 커리큘럼 API](MY_CURRICULUMS.md)에서 정의한다.
 
 ## 9. 전체 명세 검토 순서
 
 1. 이 문서의 공통 응답·오류·인증·프로필 계약
-2. [공개 탐색](api/CATALOG.md)과 [커리큘럼 상세·수강](api/CURRICULUM_DETAIL.md)
-3. [내 커리큘럼](api/MY_CURRICULUMS.md)
-4. [커리큘럼 관리](api/CURRICULUM_MANAGEMENT.md)
-5. [레슨·PPTX 자료 관리](api/LESSON_MANAGEMENT.md)
-6. [라이브](api/LIVE.md)
-7. [VOD·학습·AI·퀴즈](api/VOD_LEARNING_AI.md)
+2. [공개 탐색](CATALOG.md)과 [커리큘럼 상세·수강](CURRICULUM_DETAIL.md)
+3. [내 커리큘럼](MY_CURRICULUMS.md)
+4. [커리큘럼 관리](CURRICULUM_MANAGEMENT.md)
+5. [레슨·PPTX 자료 관리](LESSON_MANAGEMENT.md)
+6. [라이브](LIVE.md)
+7. [VOD·학습·AI·퀴즈](VOD_LEARNING_AI.md)
 
 각 상세 문서의 마지막 `백엔드 협의 사항`을 먼저 확정한 뒤, 확정된 URL·필드·상태코드를 `CONTRACT.md`와 FE·BE 계약 테스트에 반영한다.
