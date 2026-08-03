@@ -32,6 +32,31 @@ const tabs: ReadonlyArray<TabItem<LearningPanel>> = [
 
 const LEARNING_TAB_PREFIX = 'learning-sidebar'
 
+/**
+ * 한 번이라도 연 탭을 <b>계속 살려 둔다</b>.
+ *
+ * <p>예전에는 활성 탭만 그렸다(`{panel === 'ai' && <Panel/>}`). 그러면 탭을 옮기는 순간 패널이
+ * 언마운트돼 <b>그 안의 상태가 통째로 사라진다</b> — AI 대화, 진행 중이던 답변 스트림(정리 훅이
+ * abort한다), 채팅 스크롤 위치, 용어집 검색어, 쓰다 만 입력까지. 특히 AI 답변은 방금 받은 것이
+ * 서버 기록 조회에 아직 없어서, 돌아오면 사라진 것처럼 보였다.
+ *
+ * <p>그래서 감추기만 한다(`hidden`) — ARIA tabpanel의 표준 방식이기도 하다.
+ *
+ * <p><b>처음부터 넷 다 그리지는 않는다.</b> 노트 패널은 Markdown 렌더러를 지연 로드하므로,
+ * 열지도 않은 탭 때문에 그 청크를 받게 된다. 연 적 있는 탭만 남긴다.
+ */
+function useVisitedPanels(active: LearningPanel) {
+  const [visited, setVisited] = useState<ReadonlySet<LearningPanel>>(() => new Set([active]))
+  useEffect(() => {
+    setVisited((current) => (current.has(active) ? current : new Set(current).add(active)))
+  }, [active])
+  // 활성 탭은 방금 바뀌었어도 이번 렌더에서 바로 그려야 한다(effect는 렌더 뒤에 돈다).
+  return useCallback(
+    (panel: LearningPanel) => panel === active || visited.has(panel),
+    [active, visited],
+  )
+}
+
 function DiscussionPanel({ messages, composer, notice, panelProps }: { messages: ChatMessageView[]; composer?: ReactNode; notice?: string; panelProps: PanelProps }) {
   const [filter, setFilter] = useState<'all' | 'questions'>('all')
   const [isFollowingLatest, setIsFollowingLatest] = useState(true)
@@ -130,6 +155,13 @@ function GlossaryPanel({ terms, selectedTermId, onSelectedTermChange, panelProps
 }
 
 export default function LearningSidebar(props: LearningSidebarProps) {
+  const isMounted = useVisitedPanels(props.panel)
+  // 활성 탭이 아닌 패널은 감춘다. 지우지 않는다 — 지우면 그 안의 상태가 함께 사라진다.
+  const panelProps = (panel: LearningPanel) => ({
+    ...tabPanelProps(LEARNING_TAB_PREFIX, panel),
+    hidden: props.panel !== panel,
+  })
+
   return (
     <aside className="media-side learning-sidebar">
       {props.windowAction && <div className="learning-sidebar-windowbar">{props.windowAction}</div>}
@@ -141,10 +173,10 @@ export default function LearningSidebar(props: LearningSidebarProps) {
         value={props.panel}
         onChange={props.onPanelChange}
       />
-      {props.panel === 'discussion' && <DiscussionPanel messages={props.messages} composer={props.discussionComposer} notice={props.discussionNotice} panelProps={tabPanelProps(LEARNING_TAB_PREFIX, 'discussion')} />}
-      {props.panel === 'notes' && <LectureNotePanel note={props.lectureNote} live={props.noteContext === 'LIVE'} panelProps={tabPanelProps(LEARNING_TAB_PREFIX, 'notes')} />}
-      {props.panel === 'ai' && <div className="side-panel-content ai-panel" {...tabPanelProps(LEARNING_TAB_PREFIX, 'ai')}>{props.aiContent}</div>}
-      {props.panel === 'glossary' && <GlossaryPanel terms={props.glossaryTerms} selectedTermId={props.selectedTermId} onSelectedTermChange={props.onSelectedTermChange} panelProps={tabPanelProps(LEARNING_TAB_PREFIX, 'glossary')} />}
+      {isMounted('discussion') && <DiscussionPanel messages={props.messages} composer={props.discussionComposer} notice={props.discussionNotice} panelProps={panelProps('discussion')} />}
+      {isMounted('notes') && <LectureNotePanel note={props.lectureNote} live={props.noteContext === 'LIVE'} panelProps={panelProps('notes')} />}
+      {isMounted('ai') && <div className="side-panel-content ai-panel" {...panelProps('ai')}>{props.aiContent}</div>}
+      {isMounted('glossary') && <GlossaryPanel terms={props.glossaryTerms} selectedTermId={props.selectedTermId} onSelectedTermChange={props.onSelectedTermChange} panelProps={panelProps('glossary')} />}
     </aside>
   )
 }
