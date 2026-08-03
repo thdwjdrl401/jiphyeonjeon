@@ -280,30 +280,24 @@
 .learning-tabs { grid-template-columns: repeat(4,minmax(0,1fr)); }
 .learning-tabs button { font-size: .59rem; }
 .side-panel-content { min-height: 0; flex: 1; overflow-y: auto; padding: 13px; }
-.media-page--live .side-panel-content,
-.media-page--live .chat-list,
-.media-page--live .ai-chat-log,
-.detached-sidebar-root .side-panel-content,
-.detached-sidebar-root .chat-list,
-.detached-sidebar-root .ai-chat-log { overscroll-behavior: contain; scrollbar-color: rgba(74,113,79,.4) transparent; scrollbar-width: thin; }
-.media-page--live .side-panel-content::-webkit-scrollbar,
-.media-page--live .chat-list::-webkit-scrollbar,
-.media-page--live .ai-chat-log::-webkit-scrollbar,
-.detached-sidebar-root .side-panel-content::-webkit-scrollbar,
-.detached-sidebar-root .chat-list::-webkit-scrollbar,
-.detached-sidebar-root .ai-chat-log::-webkit-scrollbar { width: 7px; }
-.media-page--live .side-panel-content::-webkit-scrollbar-thumb,
-.media-page--live .chat-list::-webkit-scrollbar-thumb,
-.media-page--live .ai-chat-log::-webkit-scrollbar-thumb,
-.detached-sidebar-root .side-panel-content::-webkit-scrollbar-thumb,
-.detached-sidebar-root .chat-list::-webkit-scrollbar-thumb,
-.detached-sidebar-root .ai-chat-log::-webkit-scrollbar-thumb { border-radius: 99px; background: rgba(74,113,79,.32); }
-.media-page--live .side-panel-content::-webkit-scrollbar-track,
-.media-page--live .chat-list::-webkit-scrollbar-track,
-.media-page--live .ai-chat-log::-webkit-scrollbar-track,
-.detached-sidebar-root .side-panel-content::-webkit-scrollbar-track,
-.detached-sidebar-root .chat-list::-webkit-scrollbar-track,
-.detached-sidebar-root .ai-chat-log::-webkit-scrollbar-track { background: transparent; }
+.media-page--live :is(.side-panel-content, .chat-list, .ai-chat-log),
+.detached-sidebar-root :is(.side-panel-content, .chat-list, .ai-chat-log) { overscroll-behavior: contain; scrollbar-color: transparent transparent; scrollbar-width: thin; }
+.media-page--live .media-side:hover :is(.side-panel-content, .chat-list, .ai-chat-log),
+.detached-sidebar-root .media-side:hover :is(.side-panel-content, .chat-list, .ai-chat-log) { scrollbar-color: rgba(231,231,227,.2) transparent; }
+.media-page--live :is(.side-panel-content, .chat-list, .ai-chat-log)::-webkit-scrollbar,
+.detached-sidebar-root :is(.side-panel-content, .chat-list, .ai-chat-log)::-webkit-scrollbar { width: 3px; height: 3px; background: transparent; }
+.media-page--live :is(.side-panel-content, .chat-list, .ai-chat-log)::-webkit-scrollbar-thumb,
+.detached-sidebar-root :is(.side-panel-content, .chat-list, .ai-chat-log)::-webkit-scrollbar-thumb { border: 0; border-radius: 99px; background: transparent; }
+.media-page--live .media-side:hover :is(.side-panel-content, .chat-list, .ai-chat-log)::-webkit-scrollbar-thumb,
+.detached-sidebar-root .media-side:hover :is(.side-panel-content, .chat-list, .ai-chat-log)::-webkit-scrollbar-thumb { background: rgba(231,231,227,.18); }
+.media-page--live .media-side:hover :is(.side-panel-content, .chat-list, .ai-chat-log)::-webkit-scrollbar-thumb:hover,
+.detached-sidebar-root .media-side:hover :is(.side-panel-content, .chat-list, .ai-chat-log)::-webkit-scrollbar-thumb:hover { background: rgba(231,231,227,.3); }
+.media-page--live :is(.side-panel-content, .chat-list, .ai-chat-log)::-webkit-scrollbar-track,
+.media-page--live :is(.side-panel-content, .chat-list, .ai-chat-log)::-webkit-scrollbar-track-piece,
+.media-page--live :is(.side-panel-content, .chat-list, .ai-chat-log)::-webkit-scrollbar-corner,
+.detached-sidebar-root :is(.side-panel-content, .chat-list, .ai-chat-log)::-webkit-scrollbar-track,
+.detached-sidebar-root :is(.side-panel-content, .chat-list, .ai-chat-log)::-webkit-scrollbar-track-piece,
+.detached-sidebar-root :is(.side-panel-content, .chat-list, .ai-chat-log)::-webkit-scrollbar-corner { background: transparent; }
 .chat-panel { display: flex; padding: 0; overflow: hidden; flex-direction: column; }
 .discussion-panel { display: flex; padding: 0; overflow: hidden; flex-direction: column; }
 .discussion-filter { display: flex; gap: 6px; padding: 10px 11px 4px; }

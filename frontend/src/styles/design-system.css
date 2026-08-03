@@ -1308,6 +1308,32 @@ body {
 .workspace-tabs { padding: 0; border: 0; border-bottom: 1px solid var(--border-medium); background: transparent; }
 .workspace-tabs button { border-radius: 0; padding-block: 13px; }
 .workspace-tabs button.is-active { background: var(--ink-950); color: #fff; box-shadow: none; }
+.curriculum-manage__tabs button {
+  position: relative;
+  transition: color .18s ease, transform .18s ease;
+}
+.curriculum-manage__tabs button::after {
+  position: absolute;
+  bottom: 5px;
+  left: calc(50% - 22px);
+  width: 44px;
+  height: 1px;
+  background: var(--ink-950);
+  content: '';
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-3px);
+  transition: opacity .18s ease, transform .18s ease;
+}
+.curriculum-manage__tabs button:not(.is-active):hover {
+  color: var(--ink-950);
+  transform: translateY(-2px);
+}
+.curriculum-manage__tabs button:not(.is-active):hover::after,
+.curriculum-manage__tabs button:not(.is-active):focus-visible::after {
+  opacity: 1;
+  transform: translateX(0);
+}
 .structure-section > header { background: var(--ink-50); }
 .structure-section li { border-color: var(--border-soft); }
 .camera-preview { border-color: var(--border-medium); border-radius: 0; background: var(--ink-100); color: var(--ink-700); box-shadow: none; }
@@ -1745,3 +1771,42 @@ body {
   vector-effect: non-scaling-stroke; }
 /* 컨트롤이 숨으면 곡선도 함께 사라져야 한다 — 재생바 없이 뜬 그래프는 축이 없는 그래프다. */
 .vds-controls:not([data-visible]) .watch-curve { opacity: 0; }
+
+/*
+ * Chrome에서는 non-auto scrollbar-width/color가 WebKit 세부 규칙보다 우선한다.
+ * 내부 스크롤 요소는 WebKit 렌더링으로 통일해 버튼을 없애고 트랙을 투명하게 유지한다.
+ */
+@supports selector(*::-webkit-scrollbar) {
+  body * {
+    scrollbar-color: auto !important;
+    scrollbar-width: auto !important;
+  }
+
+  body *::-webkit-scrollbar {
+    width: 1.5px !important;
+    height: 1.5px !important;
+    background: transparent !important;
+  }
+
+  body *::-webkit-scrollbar-button {
+    display: none !important;
+    width: 0 !important;
+    min-width: 0 !important;
+    max-width: 0 !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    max-height: 0 !important;
+    border: 0 !important;
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    background: transparent !important;
+  }
+
+  body *::-webkit-scrollbar-track,
+  body *::-webkit-scrollbar-track-piece,
+  body *::-webkit-scrollbar-corner {
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+}

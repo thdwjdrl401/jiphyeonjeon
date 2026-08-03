@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { mockAuthService, resetMockAuth } from '@/features/auth/mockAuthService'
 import { getMockCurriculum } from '@/features/demo/mockDatabase'
+import { getMockEnrollmentsByCurriculum } from '@/features/enrollment/mockEnrollmentStore'
 import { deleteLesson } from '@/features/curriculum/curriculumManagementService'
 import { saveLesson } from '@/features/lesson/lessonService'
 import {
@@ -83,7 +84,11 @@ describe('강의·자료·라이브 일정 알림', () => {
     // 같은 함수가 공개된 커리큘럼에서는 알림을 만든다 — 위 결과가 "아무 것도 안 하는 함수"라서
     // 비어 있는 것이 아니라 게시 여부로 갈린 것임을 같은 테스트에서 확인한다.
     expect(publishedFanout.length).toBeGreaterThan(0)
-    expect(publishedFanout.every((item) => item.recipientId === 'usr-student-01')).toBe(true)
+    const activeStudentIds = getMockEnrollmentsByCurriculum(PUBLISHED_CURRICULUM)
+      .filter((enrollment) => enrollment.status === 'ACTIVE')
+      .map((enrollment) => enrollment.userId)
+      .sort()
+    expect(publishedFanout.map((item) => item.recipientId).sort()).toEqual(activeStudentIds)
   })
 
   it('라이브 시작 시각을 바꾸면 변경 전·후가 담긴 알림이 생긴다', async () => {
