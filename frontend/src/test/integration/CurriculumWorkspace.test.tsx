@@ -563,7 +563,7 @@ describe('커리큘럼 작업 화면', () => {
     expect(pendingSection.getByText('승인 대기')).toBeInTheDocument()
     expect(pendingSection.queryByRole('link', { name: '학습 계속하기' })).not.toBeInTheDocument()
     expect(pendingSection.queryByText(/강의$/)).not.toBeInTheDocument()
-    expect(pendingSection.getByRole('link', { name: '커리큘럼 상세' })).toBeInTheDocument()
+    expect(pendingSection.getByRole('link', { name: '성능을 바꾸는 SQL 튜닝' })).toHaveAttribute('href', '/curriculums/cur-sql')
     expect(pendingSection.getByRole('button', { name: '수강 신청 취소' })).toBeInTheDocument()
   })
 })
