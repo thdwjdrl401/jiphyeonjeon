@@ -80,6 +80,7 @@ def test_full_rag_wiring_builds_registry_and_closes_all_clients() -> None:
 
     assert services.service is not None
     assert asyncio.run(services.registry.snapshot()) == {"active": 0, "completed": 0}
+    assert services.conversation_memory is not None
 
     answer_client = services.answer_model._client
     embedding_client = services.context.embedding._client

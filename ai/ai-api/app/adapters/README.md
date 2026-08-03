@@ -6,6 +6,7 @@ RAG context core가 외부 Redis, PostgreSQL과 BGE runtime을 사용하는 outb
 |---|---|
 | `redis_caption_consumer.py` | 독립 consumer group, owned PEL recovery, handle 후 수동 ACK |
 | `redis_lecture_note_publisher.py` | 강의 노트 추가 조각·수집 완료·정제 snapshot을 결과 Stream에 발행 |
+| `redis_conversation_memory.py` | (userId,sessionId,conversationId) → GMS `response_id` TTL 매핑 (ADR-0010, v1 전용) |
 | `bounded_lecture_note_model.py` | live 우선 GMS 동시성·정제 상한과 429/일시 오류 재시도 경계 |
 | `pgvector_material_retrieval.py` | `ai_app` role로 ACTIVE lesson chunk만 hybrid 검색 |
 | `remote_bge_m3_embedding.py` | 인증된 BGE-M3 query embedding HTTP client |
@@ -24,6 +25,9 @@ RAG context core가 외부 Redis, PostgreSQL과 BGE runtime을 사용하는 outb
 - token, DB URL, 질문 원문과 embedding 값은 로그에 남기지 않는다.
 - GMS prompt에는 질문과 선택된 근거·최소 citation 좌표만 넣고 request/session/material/attempt ID를 제외한다.
 - GMS SDK retry는 0으로 두고 timeout·rate limit·인증·설정 실패를 공개 가능한 고정 code로 바꾼다.
+- `gms_openai_answer.py`는 `response_id_capture`가 주어질 때만 Chat Completions 대신 GMS Responses
+  API(`/responses`, `previous_response_id` 체이닝)를 쓴다 — 그 kwarg가 없는 모든 기존 호출은 원래
+  경로 그대로다(ADR-0010). `userId`/`conversationId`는 provider에 보내지 않고 Redis 조회 키로만 쓴다.
 - 라이브 강의 노트 모델에는 현재 topic·직전 topic·이전 문맥·새 window만 전달한다.
 - 종료 후 정제 모델에는 raw caption이 아닌 현재 구조화 draft topic만 한 번 전달한다.
 - provider delta는 SSE data 제한에 맞춰 최대 10,000자로 다시 자르고 취소 시 provider stream을 닫는다.

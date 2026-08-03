@@ -21,8 +21,9 @@ GMS가 생성한 RAG 답변을 SSE로 전달하며 실시간 자막에서 축적
 | ai-api | PostgreSQL `ai` schema | SQL/pgvector | 활성 강의 자료 검색 |
 | ai-api | GMS OpenAI-compatible API | HTTPS | 근거 기반 답변 생성 |
 
-Spring의 RAG 호출부와 서명 발급기는 아직 구현되지 않았다. 현재 endpoint는
-`AI_INTERNAL_SECRET`이 없으면 `503`으로 닫힌다. 주소·인증·구현 상태의 기준은
+Spring의 RAG 호출부(`RagAnswerHttpClient`)와 서명 발급기(`RagInternalSigner`)는 구현돼 있다
+(`backend/src/main/java/com/liveclass/aiintegration/`). 현재 endpoint는 `AI_INTERNAL_SECRET`이
+없으면 `503`으로 닫힌다. 주소·인증·구현 상태의 기준은
 [`docs/ai/CONTRACT.md`](../../docs/ai/CONTRACT.md)를 따른다.
 
 FastAPI가 자동 생성하는 `/docs`, `/redoc`, `/openapi.json`은 개발 편의 기능이며 서비스 통신 계약이 아니다.
@@ -57,6 +58,9 @@ data: {"requestId":"request-1","text":"RAG는 "}
 event: answer.done
 data: {"requestId":"request-1","sources":[{"type":"PPTX","materialId":"22222222-2222-4222-8222-222222222222","page":4}]}
 ```
+
+v1 요청에 `userId`/`conversationId`(둘 다 optional)를 추가로 실으면 GMS Responses API로 이전 turn을
+이어간다(ADR-0010). Spring이 아직 이 두 필드를 보내지 않으므로 지금은 항상 기존 경로로만 동작한다.
 
 다시보기(Replay) 질문은 별도 경로 `POST /internal/v2/rag/answers:stream`을 쓴다. 시간 필드가
 `contextTimeMs`(STT attempt-local) 대신 `context.questionSessionMs`(세션 상대 ms)이고, Spring이 이미
@@ -134,6 +138,8 @@ uv run --frozen --env-file ../.env python -m app.main
 | `AI_API_REDIS_URL` | 선택 | 자막 Redis 연결, 기본값 `redis://127.0.0.1:6379/0` |
 | `AI_API_INSTANCE_ID` | 운영 권장 | Redis consumer name 충돌 방지. EC2의 ai-api replica마다 고유해야 함 |
 | `AI_API_LECTURE_NOTE_*` | 선택 | 강의 노트 window·모델·Stream 한도 조정 |
+| `AI_API_CONVERSATION_MEMORY_TTL_SECONDS` | 선택 | v1 대화 이어가기 TTL(초), 기본 1,800 — ADR-0010 |
+| `AI_API_CONVERSATION_MEMORY_KEY_PREFIX` | 선택 | 대화 이어가기 Redis key prefix, 기본 `ai:conversation:` |
 | `AI_INTERNAL_SECRET` | RAG 호출 필수 | Spring 요청 HMAC 검증용 공유 secret; GPU에서는 사용하지 않음 |
 
 기본 host와 port는 `AI_API_HOST=127.0.0.1`, `AI_API_PORT=8010`이다. 운영 compose는 같은 Docker

@@ -20,6 +20,7 @@ from openai import (
 
 from app.rag.errors import RagStreamFailure
 from app.rag.models import CaptionSource, PptxSource, RagAnswerRequest, RetrievedEvidence
+from app.rag.ports import ResponseIdCapture
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,18 @@ class GmsOpenAIAnswerModel:
         self,
         request: RagAnswerRequest,
         evidence: Sequence[RetrievedEvidence],
+        *,
+        previous_response_id: str | None = None,
+        response_id_capture: ResponseIdCapture | None = None,
     ) -> AsyncIterator[str]:
+        """response_id_capture is the sole switch (ADR-0010): pass it to chain/continue a
+        conversation via the GMS Responses API, or omit it to keep the original stateless
+        Chat Completions path — used by every caller that doesn't wire conversation memory,
+        so their behavior is byte-for-byte unchanged."""
+        if response_id_capture is not None:
+            return self._stream_answer_via_responses_api(
+                request, evidence, previous_response_id, response_id_capture
+            )
         return self._stream_answer(request, evidence)
 
     async def _stream_answer(
@@ -102,6 +114,52 @@ class GmsOpenAIAnswerModel:
                     continue
                 for start in range(0, len(text), _MAX_DELTA_CHARS):
                     yield text[start : start + _MAX_DELTA_CHARS]
+        except (APITimeoutError, httpx.TimeoutException) as error:
+            raise RagStreamFailure(code="MODEL_TIMEOUT") from error
+        except httpx.TransportError as error:
+            raise RagStreamFailure(code="MODEL_UNAVAILABLE") from error
+        except APIError as error:
+            raise RagStreamFailure(code=_failure_code(error)) from error
+        finally:
+            if stream is not None:
+                await _close_stream_safely(stream)
+
+    async def _stream_answer_via_responses_api(
+        self,
+        request: RagAnswerRequest,
+        evidence: Sequence[RetrievedEvidence],
+        previous_response_id: str | None,
+        response_id_capture: ResponseIdCapture,
+    ) -> AsyncIterator[str]:
+        stream = None
+        try:
+            prompt = _prompt_payload(request, evidence)
+            if len(prompt) > self._max_prompt_chars:
+                raise RagStreamFailure(code="MODEL_CONFIGURATION_ERROR")
+            stream = await self._client.responses.create(
+                model=self._model,
+                input=prompt,
+                instructions=_SYSTEM_PROMPT,
+                previous_response_id=previous_response_id,
+                max_output_tokens=self._max_output_tokens,
+                stream=True,
+            )
+            async for event in stream:
+                event_type = getattr(event, "type", None)
+                if event_type in (
+                    "response.created",
+                    "response.in_progress",
+                    "response.completed",
+                ):
+                    response_id = getattr(getattr(event, "response", None), "id", None)
+                    if response_id:
+                        response_id_capture.value = response_id
+                elif event_type == "response.output_text.delta":
+                    text = getattr(event, "delta", None)
+                    if not text:
+                        continue
+                    for start in range(0, len(text), _MAX_DELTA_CHARS):
+                        yield text[start : start + _MAX_DELTA_CHARS]
         except (APITimeoutError, httpx.TimeoutException) as error:
             raise RagStreamFailure(code="MODEL_TIMEOUT") from error
         except httpx.TransportError as error:

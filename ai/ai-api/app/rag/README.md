@@ -25,6 +25,9 @@ RagAnswerRequest
 | `errors.py` | adapter가 공개 가능한 실패 code만 전달하는 타입 |
 | `replay_service.py` | Replay(v2) request lease, timeout, scope 재검증, excerpt 포함 citation dedup, terminal/error 조율 |
 
+`ports.py`의 `ResponseIdCapture`/`ConversationMemoryPort`는 v1 전용 대화 이어가기(ADR-0010)
+용 타입이며 아래 절 참고.
+
 ## 경계와 불변식
 
 - PPTX evidence는 요청 `curriculumId`와 일치해야 한다(ADR-0007, curriculum 전체 공유). caption
@@ -54,3 +57,14 @@ Replay 질문을 처리한다. 요구사항은 [`ADR-0037`](../../../../docs/dec
   `(materialId,page)` / `(sessionId,startSessionMs,endSessionMs)`이며 `excerpt` 차이는 무시한다.
 - `GmsOpenAIAnswerModelV2`(`app/adapters/gms_openai_answer_v2.py`)도 같은 이유로 v1 어댑터를 복제한
   별도 클래스다 — 모델에는 `excerpt`가 아니라 v1과 동일하게 전체 `content`만 보낸다.
+
+## 대화 이어가기 (v1, ADR-0010)
+
+`RagAnswerRequest`에 optional `userId`/`conversationId`가 있고, 둘 다 있을 때만
+`RagAnswerService`가 `ConversationMemoryPort`(구현체는
+`app/adapters/redis_conversation_memory.py`의 `RedisConversationMemoryStore`)로 이전
+GMS `response_id`를 조회해 `AnswerModel.stream_answer(..., previous_response_id=..., 
+response_id_capture=...)`로 넘긴다. 이 두 kwargs가 없으면 `GmsOpenAIAnswerModel`은 기존 Chat
+Completions 경로를 그대로 타므로, `userId`/`conversationId`를 안 보내는 모든 기존 호출은 동작이
+전혀 안 바뀐다. Redis 조회·저장 실패는 로그만 남기고 답변은 항상 정상 진행한다(fail-open). 자세한
+설계·실측 검증은 [`ADR-0010`](../../../../docs/decisions/jinwoo/0010-gms-responses-api-conversation-memory.md) 참고.

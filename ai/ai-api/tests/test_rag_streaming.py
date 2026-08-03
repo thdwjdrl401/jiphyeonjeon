@@ -410,3 +410,201 @@ async def test_sse_encoder_uses_named_event_and_json_data_only() -> None:
         "text": "한글\n답변",
     }
     assert encoded.endswith("\n\n")
+
+
+# --- Conversation memory (ADR-0010) ----------------------------------------------------------
+# Every test above passes RagAnswerService(retriever, model) with no conversation_memory, and
+# Model.stream_answer(request, evidence) with no kwargs — none of that changes here. These tests
+# only exercise the additive path that activates when both a memory port and userId+
+# conversationId are present.
+
+
+def request_with_memory(
+    request_id: str = "request-1",
+    *,
+    user_id: str = "user-1",
+    conversation_id: str = "conv-1",
+) -> RagAnswerRequest:
+    return request(request_id).model_copy(
+        update={"userId": user_id, "conversationId": conversation_id}
+    )
+
+
+class ConversationMemory:
+    def __init__(
+        self,
+        *,
+        existing_response_id: str | None = None,
+        lookup_error: Exception | None = None,
+        save_error: Exception | None = None,
+    ) -> None:
+        self.existing_response_id = existing_response_id
+        self.lookup_error = lookup_error
+        self.save_error = save_error
+        self.lookup_calls: list[tuple[str, str, str]] = []
+        self.save_calls: list[tuple[str, str, str, str]] = []
+
+    async def get_previous_response_id(self, *, user_id, session_id, conversation_id):
+        self.lookup_calls.append((user_id, session_id, conversation_id))
+        if self.lookup_error is not None:
+            raise self.lookup_error
+        return self.existing_response_id
+
+    async def save_response_id(self, *, user_id, session_id, conversation_id, response_id):
+        self.save_calls.append((user_id, session_id, conversation_id, response_id))
+        if self.save_error is not None:
+            raise self.save_error
+
+
+class MemoryAwareModel:
+    def __init__(self, chunks: Sequence[str] = (), new_response_id: str = "resp-new") -> None:
+        self.chunks = chunks
+        self.new_response_id = new_response_id
+        self.calls: list[tuple[RagAnswerRequest, Sequence[RetrievedEvidence], str | None]] = []
+
+    def stream_answer(
+        self,
+        current_request: RagAnswerRequest,
+        evidence: Sequence[RetrievedEvidence],
+        *,
+        previous_response_id: str | None = None,
+        response_id_capture=None,
+    ) -> AsyncIterator[str]:
+        self.calls.append((current_request, evidence, previous_response_id))
+
+        async def generate() -> AsyncIterator[str]:
+            if response_id_capture is not None:
+                response_id_capture.value = self.new_response_id
+            for chunk in self.chunks:
+                await asyncio.sleep(0)
+                yield chunk
+
+        return generate()
+
+
+@async_test
+async def test_memory_disabled_by_default_calls_model_without_new_kwargs() -> None:
+    """RagAnswerService without conversation_memory must call stream_answer exactly as before —
+    this is the backward-compat guarantee every pre-existing test in this file relies on."""
+
+    class PlainModel:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def stream_answer(self, current_request, evidence):
+            self.calls += 1
+
+            async def generate():
+                yield "답변"
+
+            return generate()
+
+    model = PlainModel()
+    service = RagAnswerService(
+        Retriever(RetrievalResult(sufficient=True, evidence=(pptx_evidence(),))),
+        model,
+    )
+
+    events = await collect(service, request_with_memory())
+
+    assert [event.event for event in events] == ["answer.delta", "answer.done"]
+    assert model.calls == 1
+
+
+@async_test
+async def test_first_turn_looks_up_and_saves_with_no_previous_response_id() -> None:
+    memory = ConversationMemory()
+    model = MemoryAwareModel(["첫 답변"])
+    service = RagAnswerService(
+        Retriever(RetrievalResult(sufficient=True, evidence=(pptx_evidence(),))),
+        model,
+        conversation_memory=memory,
+    )
+
+    events = await collect(service, request_with_memory())
+
+    assert [event.event for event in events] == ["answer.delta", "answer.done"]
+    assert memory.lookup_calls == [("user-1", SESSION_ID, "conv-1")]
+    assert model.calls[0][2] is None  # previous_response_id
+    assert memory.save_calls == [("user-1", SESSION_ID, "conv-1", "resp-new")]
+
+
+@async_test
+async def test_second_turn_chains_onto_the_stored_response_id() -> None:
+    memory = ConversationMemory(existing_response_id="resp-old")
+    model = MemoryAwareModel(["이어진 답변"])
+    service = RagAnswerService(
+        Retriever(RetrievalResult(sufficient=True, evidence=(pptx_evidence(),))),
+        model,
+        conversation_memory=memory,
+    )
+
+    await collect(service, request_with_memory())
+
+    assert model.calls[0][2] == "resp-old"
+
+
+@async_test
+async def test_missing_user_id_or_conversation_id_skips_memory_entirely() -> None:
+    memory = ConversationMemory()
+    model = MemoryAwareModel(["답변"])
+    service = RagAnswerService(
+        Retriever(RetrievalResult(sufficient=True, evidence=(pptx_evidence(),))),
+        model,
+        conversation_memory=memory,
+    )
+
+    await collect(service, request())  # no userId/conversationId set
+
+    assert memory.lookup_calls == []
+    assert memory.save_calls == []
+    assert model.calls[0][2] is None
+
+
+@async_test
+async def test_lookup_failure_is_swallowed_and_answer_still_streams() -> None:
+    memory = ConversationMemory(lookup_error=RuntimeError("redis down"))
+    model = MemoryAwareModel(["답변"])
+    service = RagAnswerService(
+        Retriever(RetrievalResult(sufficient=True, evidence=(pptx_evidence(),))),
+        model,
+        conversation_memory=memory,
+    )
+
+    events = await collect(service, request_with_memory())
+
+    assert [event.event for event in events] == ["answer.delta", "answer.done"]
+    assert model.calls[0][2] is None
+    assert memory.save_calls == [("user-1", SESSION_ID, "conv-1", "resp-new")]
+
+
+@async_test
+async def test_save_failure_is_swallowed_and_answer_done_still_emitted() -> None:
+    memory = ConversationMemory(save_error=RuntimeError("redis down"))
+    model = MemoryAwareModel(["답변"])
+    service = RagAnswerService(
+        Retriever(RetrievalResult(sufficient=True, evidence=(pptx_evidence(),))),
+        model,
+        conversation_memory=memory,
+    )
+
+    events = await collect(service, request_with_memory())
+
+    assert [event.event for event in events] == ["answer.delta", "answer.done"]
+
+
+@async_test
+async def test_insufficient_evidence_skips_memory_lookup_entirely() -> None:
+    memory = ConversationMemory()
+    model = MemoryAwareModel(["호출되면 안 됩니다."])
+    service = RagAnswerService(
+        Retriever(RetrievalResult(sufficient=False)),
+        model,
+        conversation_memory=memory,
+    )
+
+    events = await collect(service, request_with_memory())
+
+    assert [event.event for event in events] == ["answer.insufficient"]
+    assert memory.lookup_calls == []
+    assert model.calls == []
