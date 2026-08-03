@@ -1380,7 +1380,6 @@ body {
 .caption-overlay small { color: rgba(255,255,255,.58); font-size: .7rem; }
 .caption-overlay p { color: #fff; font-size: 1.05rem; line-height: 1.6; }
 .caption-dock,
-.chapter-row,
 .media-side,
 .live-controls,
 .replay-controls,
@@ -1390,7 +1389,6 @@ body {
 .glossary-list > button,
 .quiz-panel > label { border-color: #333; background: #171717; box-shadow: none; }
 .caption-dock > header,
-.chapter-row,
 .learning-sidebar-windowbar,
 .media-tabs,
 .chat-composer { border-color: #333; background: #171717; }
@@ -1443,7 +1441,7 @@ body {
 .chat-list article.is-mine.is-question { background: #282322; }
 .chat-list article.is-mine p { color: #e6e6e1; }
 .chat-list strong { color: #f2f2ef; font-size: .75rem; }
-.chat-list time { color: #777; font-size: .66rem; }
+.chat-list time { color: #9a9a95; font-size: .66rem; }
 .chat-list p { color: #d1d1cc; font-size: .78rem; }
 .chat-list article > small { color: #d87970; font-size: .65rem; }
 .chat-latest-jump { border-color: #333; background: #171717; }
@@ -1452,9 +1450,30 @@ body {
 .ai-evidence-toggle { border-color: #444; background: #222; color: #ddd; }
 .ai-evidence-toggle:hover { border-color: #777; background: #2a2a2a; }
 .ai-evidence .evidence-card { border-color: #333; background: #1e1e1e; }
-.ai-evidence .evidence-card__kind { color: #9c9c98; }
-.ai-evidence .evidence-card__id { color: #7e7e7a; }
+.ai-evidence .evidence-card__kind,
+.ai-evidence .evidence-card__id { color: #9c9c98; }
 .ai-evidence-panel .ai-evidence__note { color: #9c9c98; }
+
+/*
+ * 잉크 모드로 넘어오지 못한 라이트 테마 잔재.
+ *
+ * 이 화면(.lesson-shell)은 어두운데 learning.css의 밝은 값이 그대로 이겨서, 어두운 표면에 어두운
+ * 글자 또는 밝은 표면에 흰 글자가 남아 있었다. 실측 대비 1.05~3.6으로 사실상 안 읽힌다.
+ * 아래 값은 모두 4.5:1(AA) 이상이 되도록 잡았다.
+ */
+/* 자료·참가자 카드는 카드 배경까지 밝게 남아 있어 흰 글자가 그 위에 얹혔다(대비 1.05). */
+.media-side .material-list li,
+.instructor-participant-panel li { border-color: #333; background: #222; }
+.media-side .material-list strong,
+.instructor-participant-panel li strong { color: #f2f2ef; }
+.media-side .material-list li small,
+.instructor-participant-panel li small { color: #a6a6a1; }
+/* 요약 블록의 시각 이동 버튼(대비 1.28). */
+.summary-block-list article > header button { color: #bcbcb7; }
+/* "질문으로 등록"·"익명으로 보내기" 라벨(대비 3.23). */
+.chat-composer label { color: #bdbdb8; }
+/* 용어집 상세의 출처 줄. 한 단계 밝은 표면(#282522) 위라 라이트 값이 겨우 걸쳐 있었다. */
+.glossary-detail > small { color: #a6a6a1; }
 .chat-composer textarea,
 .ai-panel textarea,
 .glossary-search input,
@@ -1701,11 +1720,19 @@ body {
 /* 노트가 아직 없을 때. 가짜 예시 대신 비어 있다고 정직하게 말한다. */
 .summary-empty { margin: .75rem 0 0; font-size: .82rem; line-height: 1.6; color: rgba(255,255,255,.58); }
 
-/* 많이 다시 본 구간 — 재생바 바로 아래 같은 폭의 띠. 플레이어 레이아웃을 건드리지 않는다. */
-.watch-heatmap { border: 1px solid #333; border-radius: .5rem; background: #171717; padding: .4rem .5rem .3rem; }
-.watch-heatmap__bars { display: flex; align-items: flex-end; gap: 1px; height: 34px; }
-.watch-heatmap__bars span { flex: 1 1 0; min-width: 0; border-radius: 1px 1px 0 0;
-  background: rgba(255,255,255,.28); transition: background .12s; }
-.watch-heatmap__bars span:hover, .watch-heatmap__bars span.is-hovered { background: #fff; }
-.watch-heatmap__caption { margin: .3rem 0 0; font-size: .72rem; color: rgba(255,255,255,.58);
-  font-variant-numeric: tabular-nums; }
+/*
+ * 많이 다시 본 구간 — 재생바 <b>위</b>에 겹쳐 그리는 곡선(ADR-0063).
+ *
+ * vidstack의 .vds-time-slider 안에 포털로 들어간다. 슬라이더에 position이 없으면 absolute가
+ * 엉뚱한 조상을 기준으로 잡히므로 여기서 기준점을 만들어 준다. pointer-events는 넘긴다 —
+ * 이동은 재생바가 하고 곡선은 읽기 전용이다(같은 일을 두 곳에서 하지 않는다).
+ */
+.vds-time-slider { position: relative; }
+.watch-curve { position: absolute; right: 0; bottom: 100%; left: 0; height: 34px;
+  margin-bottom: 2px; pointer-events: none; }
+.watch-curve svg { width: 100%; height: 100%; overflow: visible; display: block; }
+.watch-curve__area { fill: rgba(255,255,255,.22); }
+.watch-curve__line { fill: none; stroke: #fff; stroke-width: 2; stroke-linejoin: round;
+  vector-effect: non-scaling-stroke; }
+/* 컨트롤이 숨으면 곡선도 함께 사라져야 한다 — 재생바 없이 뜬 그래프는 축이 없는 그래프다. */
+.vds-controls:not([data-visible]) .watch-curve { opacity: 0; }

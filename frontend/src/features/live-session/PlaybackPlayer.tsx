@@ -27,11 +27,17 @@ interface PlaybackPlayerProps {
   errorMessage: string | null
   seekRequest: PlaybackSeekRequest | null
   lessonTitle: string
-  participantCount: number
+  /** 지금 보고 있는 사람 수. 다시보기에는 그런 것이 없으므로 주지 않으면 표시하지 않는다. */
+  participantCount?: number
   bookmarked: boolean
   onBookmark: () => void
   onRetry: () => void
   onSessionTimeChange: (sessionMs: number) => void
+  /**
+   * 플레이어 루트가 붙거나 떨어질 때 알린다. 재생바 위에 "많이 다시 본 구간" 곡선을 얹으려면
+   * vidstack이 만든 슬라이더 노드가 필요한데, 그 노드는 이 안에만 있다.
+   */
+  onRootChange?: (root: HTMLElement | null) => void
 }
 
 type PlaybackState = 'loading' | 'ready' | 'playing' | 'buffering' | 'error'
@@ -97,6 +103,7 @@ export default function PlaybackPlayer({
   onBookmark,
   onRetry,
   onSessionTimeChange,
+  onRootChange,
 }: PlaybackPlayerProps) {
   const [playbackState, setPlaybackState] = useState<PlaybackState>('loading')
   // 라이브 재생목록이 자라는 대로 갱신되는 전체 길이(초). 위 NO_PROVIDED_DURATION 주석 참고.
@@ -155,7 +162,7 @@ export default function PlaybackPlayer({
   // 중에 이름까지 변하면 보조기술 사용자가 같은 영역을 다시 찾아야 한다. 상태는 헤더의
   // 'LIVE'/'다시보기' 텍스트가 전달한다.
   return (
-    <div aria-label="강의 영상" className="video-stage student-live-stage" role="region">
+    <div aria-label="강의 영상" className="video-stage student-live-stage" ref={onRootChange} role="region">
       {source
         ? (
           // key는 실제 재생 대상이 바뀔 때만 변한다. 폴링 갱신마다 리마운트하면 재생이 끊긴다.
@@ -223,7 +230,7 @@ export default function PlaybackPlayer({
           <StatusBadge tone={statusState === 'error' ? 'danger' : statusState === 'buffering' || statusState === 'loading' ? 'warning' : 'success'}>
             {playbackLabel(statusState)}
           </StatusBadge>
-          <span>{participantCount}명 참여 중</span>
+          {participantCount !== undefined && <span>{participantCount}명 참여 중</span>}
           <button className={bookmarked ? 'is-active' : ''} type="button" onClick={onBookmark}>
             {bookmarked ? '★ 북마크됨' : '☆ 북마크'}
           </button>

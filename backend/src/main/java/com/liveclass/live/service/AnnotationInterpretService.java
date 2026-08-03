@@ -65,19 +65,26 @@ public class AnnotationInterpretService {
               "unreadable":{"type":"boolean"}},
              "required":["definition","confidence","unreadable"]}""";
 
+    /**
+     * 줄 구조를 지키게 한다. 강사가 세 줄로 푼 풀이가 한 줄로 이어져 돌아오면 <b>풀이의 단계가
+     * 사라진다</b> — 수식은 맞는데 "어떻게 저기까지 갔는지"가 없어져 판서로서는 쓸모가 준다.
+     */
     private static final String MATH_PROMPT = """
             이 손글씨 수식을 읽으세요.
 
             - `latex`에는 LaTeX를 담으세요.
+            - <b>여러 줄로 쓰여 있으면 여러 줄 그대로 두세요.</b> 줄 사이는 `\\\\`로 나누고, 한 줄로
+              이어 붙이지 마세요. 등호나 화살표를 세로로 맞춰 쓴 풀이라면 맞춘 위치에 `&`를 넣으세요.
             - `plain`에는 그것을 <b>유니코드로 옮긴 것</b>을 담으세요. 예: `y = ax² + bx + c`.
               `^`, `_`, `\\frac` 같은 LaTeX 문법을 쓰지 말고 `²`, `√`, `∫`, `≤`, `π` 같은 글자를 쓰세요.
+              여기서도 줄 나눔은 줄바꿈 문자로 유지하세요.
             - 읽을 수 없으면 unreadable을 true로 두세요. 추측하지 마세요.
             """;
 
     private static final String MATH_TOOL = """
             {"type":"object","properties":{
-              "latex":{"type":"string","description":"수식만. 앞뒤 설명이나 $ 구분자를 넣지 않는다."},
-              "plain":{"type":"string","description":"판서에 글자로 넣을 유니코드 수식. LaTeX 문법을 쓰지 않는다."},
+              "latex":{"type":"string","description":"수식만. 앞뒤 설명이나 $ 구분자를 넣지 않는다. 여러 줄이면 \\\\\\\\로 줄을 나누고 정렬 위치는 &로 표시한다."},
+              "plain":{"type":"string","description":"판서에 글자로 넣을 유니코드 수식. LaTeX 문법을 쓰지 않는다. 여러 줄이면 줄바꿈을 유지한다."},
               "confidence":{"type":"number","minimum":0,"maximum":1},
               "unreadable":{"type":"boolean"}},
              "required":["latex","plain","confidence","unreadable"]}""";

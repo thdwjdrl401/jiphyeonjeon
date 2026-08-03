@@ -548,7 +548,9 @@ describe('커리큘럼 작업 화면', () => {
     const withdrawDialog = await screen.findByRole('dialog', { name: '회원 탈퇴' })
     await user.click(within(withdrawDialog).getByRole('checkbox', { name: /위 안내 사항을 모두 확인하였으며/ }))
     await user.click(within(withdrawDialog).getByRole('button', { name: '탈퇴하기' }))
-    await waitFor(() => expect(window.location.pathname).toBe('/login'))
+
+    // 탈퇴하면 랜딩페이지다(ADR-0068). 규칙 자체는 guestRedirect.test.tsx가 고정한다.
+    await waitFor(() => expect(window.location.pathname).toBe('/'))
     expect(await screen.findByRole('link', { name: '로그인' })).toBeInTheDocument()
   })
 

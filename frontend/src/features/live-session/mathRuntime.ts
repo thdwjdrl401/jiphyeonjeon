@@ -61,6 +61,30 @@ function toPixels(value: string | null, exToPx: number): number {
 }
 
 /**
+ * 여러 줄 수식을 MathJax가 실제로 여러 줄로 그리게 감싼다.
+ *
+ * <p>MathJax는 <b>최상위의 {@code \\\\}를 줄바꿈으로 보지 않는다.</b> 줄을 나누려면 그럴 수 있는
+ * 환경 안에 있어야 한다. 그래서 강사가 세 줄로 푼 풀이가 한 줄로 이어져 그려졌다.
+ *
+ * <p>이미 환경이 있으면(`\begin{...}`) 손대지 않는다 — 그 안의 {@code \\\\}는 이미 제 뜻대로 동작하고,
+ * 밖에서 한 번 더 감싸면 정렬이 깨진다.
+ *
+ * <p>정렬 기호(`&`)가 있으면 `aligned`를, 없으면 `\displaylines`를 쓴다. `aligned`는 `&` 자리를
+ * 세로로 맞춰 주는데(강사가 등호를 맞춰 쓴 풀이가 그렇다), `&`가 없으면 전부 왼쪽으로 몰려
+ * 가운데 정렬을 기대한 줄들이 어긋난다.
+ */
+export function wrapMultiline(latex: string): string {
+  const trimmed = latex.trim()
+  if (!trimmed.includes('\\\\')) return trimmed
+  if (/\\begin\{/.test(trimmed)) return trimmed
+  // `\\`로 끝나면 빈 줄이 하나 더 생긴다. 앞뒤 공백까지 걷어야 `{a \\ }` 같은 꼴이 남지 않는다.
+  const body = trimmed.replace(/(\s*\\\\)+\s*$/, '')
+  return /(^|[^\\])&/.test(body)
+    ? `\\begin{aligned}${body}\\end{aligned}`
+    : `\\displaylines{${body}}`
+}
+
+/**
  * LaTeX를 SVG data URI로 렌더한다.
  *
  * <p>색을 <b>명시한다.</b> MathJax는 `currentColor`로 내보내는데, data URI 안에서는 물려받을 색이
@@ -70,7 +94,7 @@ function toPixels(value: string | null, exToPx: number): number {
  */
 export async function renderMathSvg(latex: string, fontSizePx: number): Promise<RenderedMath> {
   const { document, adaptor } = await loadMathJax()
-  const node = document.convert(latex, { display: true })
+  const node = document.convert(wrapMultiline(latex), { display: true })
   let svg = adaptor.innerHTML(node)
 
   // `ex`는 글자 높이의 절반쯤이다. 손글씨 크기에 맞추려면 이 환산이 필요하다.
