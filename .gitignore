@@ -64,3 +64,7 @@ image/
 
 # 개인 학습
 docs/learning/
+
+# 개인 포트폴리오 작업물. 저장소 폴더 안에 두되 커밋하지 않는다 —
+# 팀 산출물이 아니고, 팀에 필요한 기록은 docs/ 와 docs/decisions/ 에 따로 있다.
+portfolio/

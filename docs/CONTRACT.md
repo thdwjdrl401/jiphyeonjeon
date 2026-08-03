@@ -299,8 +299,9 @@ HTTP 어댑터도 그 넷은 실제 호출로 배선됐다.
   (3) `LIVE_STARTING_SOON`·오늘의 라이브 일정 알림을 만드는 예약 작업(현재 `@Scheduled`는
   `LiveStartReconciler`·`AssetReaper`·`OutboxRelay`에만 있어 알림용 잡이 없다),
   (4) 실시간 push(WS/SSE) — 없는 동안 FE는 60초 주기로 `summary`를 폴링한다.
-  작업 분해·삽입 지점·완료 조건은 [NOTIFICATION-BACKEND-HANDOFF.md](NOTIFICATION-BACKEND-HANDOFF.md)에 있다
-  (규격은 이 절이 정본이며 그 문서는 복제하지 않는다).
+  구현이 끝난 뒤의 설계·트레이드오프·트러블슈팅 기록은
+  [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md)에 있다(규격은 이 절이 정본이며 그 문서는
+  복제하지 않는다). 착수 전 인수 문서였던 `NOTIFICATION-BACKEND-HANDOFF.md`는 역할이 끝났다.
 
 ## 3. 내부 계약 (확정 인터페이스)
 
