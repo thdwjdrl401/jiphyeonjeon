@@ -326,8 +326,9 @@
 /*
  * 커버 높이는 폭에 비례시키지 않는다 — 2열이면 카드 폭이 ~570px이라 16:9로 두면 커버만
  * 320px가 되어 세로 총량이 오히려 늘어난다. 고정 높이 띠로 쓴다.
+ * 이 한 줄이 페이지 세로 총량을 정하는 레버다(20건 기준 96px ≈ 2,600px, 128px ≈ 2,920px).
  */
-.my-curriculums-page .dashboard-curriculum-card__cover { min-height: 0; height: 128px; aspect-ratio: auto; }
+.my-curriculums-page .dashboard-curriculum-card__cover { min-height: 0; height: 96px; aspect-ratio: auto; }
 .my-curriculums-page .dashboard-curriculum-card__content {
   align-items: stretch;
   flex-direction: column;
@@ -647,8 +648,8 @@ th { color: var(--ink-500); font-size: .67rem; }
   .enrollment-status-cell { min-width: 0; }
   .dashboard-curriculum-card { grid-template-columns: 1fr; }
   .dashboard-curriculum-card__cover { min-height: 110px; }
-  /* 좁은 화면에서는 커버 띠를 더 낮춘다(카드 폭이 좁아 128px이면 비중이 과하다). */
-  .my-curriculums-page .dashboard-curriculum-card__cover { min-height: 0; height: 104px; }
+  /* 좁은 화면에서는 커버 띠를 더 낮춘다. min-height: 0은 위 110px 최소값을 풀기 위해 필요하다. */
+  .my-curriculums-page .dashboard-curriculum-card__cover { min-height: 0; height: 84px; }
   .lifecycle-actions { align-items: stretch; flex-direction: column; }
   .lifecycle-actions__buttons { flex-wrap: wrap; }
   .lifecycle-actions__buttons .button { flex: 1 1 auto; }
