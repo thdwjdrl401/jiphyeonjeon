@@ -5,8 +5,12 @@ import ProfileAvatar from './ProfileAvatar'
 
 interface ProfileIdentityCardProps {
   user: AuthUser
-  /** "프로필 수정"을 누르면 부른다. 실제 수정 흐름(모달)은 페이지가 소유한다. */
-  onEdit: () => void
+  /**
+   * "프로필 수정"을 누르면 부른다. 실제 수정 흐름(모달)은 페이지가 소유한다.
+   * **없으면 버튼을 그리지 않는다** — 학생 화면은 프로필 수정 카드에서 바로 고치므로 같은 일을
+   * 하는 진입점이 둘일 이유가 없다(ADR-0011).
+   */
+  onEdit?: () => void
   /** 모달을 닫은 뒤 포커스를 되돌리기 위해 페이지가 버튼을 잡는다. */
   editButtonRef?: Ref<HTMLButtonElement>
 }
@@ -18,8 +22,8 @@ interface ProfileIdentityCardProps {
  * **이메일이 두 번 표시**되고, 한 계정의 정보가 두 카드로 흩어져 있었다. 하나로 합쳐 이메일을
  * 한 번만 보여 준다.
  *
- * <p>정보 위계는 익숙한 계정 화면(GitHub·Google 계정)을 따른다 — 이름이 가장 크고, 가입 유형과
- * 이메일은 그 아래 보조 정보로 붙고, 수정 액션은 오른쪽 끝에 둔다.
+ * <p>정보 위계는 익숙한 계정 화면(GitHub·Google 계정)을 따른다 — 이름이 가장 크고, 가입 유형은
+ * 그 옆에 배지로 붙고, 이메일은 아래 줄 보조 정보로 오고, 수정 액션은 오른쪽 끝에 둔다.
  *
  * <p><b>가입 유형과 이메일은 읽기 전용이다.</b> 그래서 입력 필드가 아니라 배지와 텍스트로 낸다 —
  * 테두리 있는 박스에 넣으면 눌러서 고칠 수 있는 것처럼 보인다. 수정 가능한 것은 프로필 이미지와
@@ -28,6 +32,9 @@ interface ProfileIdentityCardProps {
  * <p>레이블을 `dl`의 `dt`로 두고 화면에서는 감춘다: 배지에 "학생"이라고 쓰여 있고 이메일은 형태로
  * 알 수 있어 시각적으로는 레이블이 군더더기지만, 스크린리더에는 "가입 유형"·"가입 이메일"이라는
  * 이름이 필요하다.
+ *
+ * <p>이 카드는 계정 정보만 낸다. 학습·활동 요약 통계는 두지 않는다(ADR-0011) — 진도와 커리큘럼
+ * 현황은 대시보드와 내 커리큘럼이 이미 보여 주고, 여기서 한 번 더 보여 줄 이유가 없다.
  */
 export default function ProfileIdentityCard({
   user, onEdit, editButtonRef,
@@ -40,31 +47,37 @@ export default function ProfileIdentityCard({
         className="user-avatar--large"
       />
       <div className="profile-identity__info">
-        <h2 className="profile-identity__name" id="profile-identity-name">{user.displayName}</h2>
-        <dl className="profile-identity__meta">
-          <div>
+        {/*
+          이름 옆에 가입 유형 배지를 붙이고, 이메일만 아래 줄에 둔다. 배지는 이름을 수식하는 값이라
+          같은 줄에 있는 것이 자연스럽고, 두 줄이면 카드가 아바타 높이 안에 들어온다.
+        */}
+        <div className="profile-identity__headline">
+          <h2 className="profile-identity__name" id="profile-identity-name">{user.displayName}</h2>
+          <dl className="profile-identity__role">
             <dt className="visually-hidden">가입 유형</dt>
+            {/* 색만으로 학생·강사를 가르지 않는다 — 배지 안에 글자로도 들어 있다. */}
             <dd>
-              {/* 색만으로 학생·강사를 가르지 않는다 — 배지 안에 글자로도 들어 있다. */}
               <StatusBadge tone={user.role === 'INSTRUCTOR' ? 'warning' : 'success'}>
                 {USER_ROLE_LABEL[user.role]}
               </StatusBadge>
             </dd>
-          </div>
-          <div>
-            <dt className="visually-hidden">가입 이메일</dt>
-            <dd className="profile-identity__email">{user.email}</dd>
-          </div>
+          </dl>
+        </div>
+        <dl className="profile-identity__meta">
+          <dt className="visually-hidden">가입 이메일</dt>
+          <dd className="profile-identity__email">{user.email}</dd>
         </dl>
       </div>
-      <button
-        ref={editButtonRef}
-        className="button button--primary button--small profile-identity__action"
-        type="button"
-        onClick={onEdit}
-      >
-        프로필 수정
-      </button>
+      {onEdit && (
+        <button
+          ref={editButtonRef}
+          className="button button--primary button--small profile-identity__action"
+          type="button"
+          onClick={onEdit}
+        >
+          프로필 수정
+        </button>
+      )}
     </section>
   )
 }

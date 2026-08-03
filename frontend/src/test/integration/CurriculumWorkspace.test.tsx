@@ -487,23 +487,29 @@ describe('커리큘럼 작업 화면', () => {
     expect(screen.queryByRole('link', { name: '운영 커리큘럼' })).not.toBeInTheDocument()
   })
 
-  it('프로필 수정 모달에서 이미지와 닉네임을 함께 변경한다', async () => {
+  /**
+   * 학생은 "프로필 수정" 카드에서 **모달 없이** 이미지와 닉네임을 함께 바꾼다(ADR-0011).
+   * 강사의 모달 흐름은 ProfilePage.test.tsx가 본다 — 여기서는 목 서비스까지 실제로 저장되는지 본다.
+   */
+  it('학생 프로필 수정 카드에서 이미지와 닉네임을 함께 변경한다', async () => {
     const user = userEvent.setup()
     await renderAsStudent('/student/profile')
-    await user.click(await screen.findByRole('button', { name: '프로필 수정' }))
 
-    const dialog = screen.getByRole('dialog', { name: '프로필 수정' })
-    const displayName = within(dialog).getByDisplayValue('김학생')
+    const panel = (await screen.findByRole('heading', { name: '프로필 수정' })).closest('section')!
+    const displayName = within(panel).getByDisplayValue('김학생')
     await user.clear(displayName)
     await user.type(displayName, '김라이브')
 
     const image = new File(['profile-image'], 'profile.png', { type: 'image/png' })
-    await user.upload(within(dialog).getByLabelText('프로필 이미지 선택'), image)
-    await user.click(within(dialog).getByRole('button', { name: '변경사항 저장' }))
+    await user.upload(within(panel).getByLabelText('프로필 이미지 선택'), image)
+    await user.click(within(panel).getByRole('button', { name: '변경사항 저장' }))
 
     expect(await screen.findByText('기본 프로필이 변경되었습니다.')).toBeInTheDocument()
-    expect(screen.queryByRole('dialog', { name: '프로필 수정' })).not.toBeInTheDocument()
-    expect(screen.getByRole('img', { name: '김라이브 프로필 이미지' }).querySelector('img')).not.toBeNull()
+    // 상단 프로필 카드의 아바타가 바뀐 이미지·이름으로 갱신된다.
+    const identityCard = screen.getByRole('region', { name: '김라이브' })
+    expect(within(identityCard).getByRole('img', { name: '김라이브 프로필 이미지' }).querySelector('img')).not.toBeNull()
+    // 저장한 뒤에는 바뀐 것이 없으므로 다시 저장할 수 없다.
+    expect(within(panel).getByRole('button', { name: '변경사항 저장' })).toBeDisabled()
   })
 
   it('목 프로필 서비스로 비밀번호를 변경하고 회원 탈퇴한다', async () => {
@@ -517,8 +523,11 @@ describe('커리큘럼 작업 화면', () => {
     await user.click(screen.getByRole('button', { name: '비밀번호 변경' }))
     expect(await screen.findByText('비밀번호가 변경되었습니다.')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('checkbox', { name: /위 안내 사항을 모두 확인하였으며/ }))
+    // 탈퇴는 카드의 진입 버튼 → 모달(안내·동의) → "탈퇴하기" 순서다(ADR-0011).
     await user.click(screen.getByRole('button', { name: '회원 탈퇴' }))
+    const withdrawDialog = await screen.findByRole('dialog', { name: '회원 탈퇴' })
+    await user.click(within(withdrawDialog).getByRole('checkbox', { name: /위 안내 사항을 모두 확인하였으며/ }))
+    await user.click(within(withdrawDialog).getByRole('button', { name: '탈퇴하기' }))
     await waitFor(() => expect(window.location.pathname).toBe('/login'))
     expect(await screen.findByRole('link', { name: '로그인' })).toBeInTheDocument()
   })
