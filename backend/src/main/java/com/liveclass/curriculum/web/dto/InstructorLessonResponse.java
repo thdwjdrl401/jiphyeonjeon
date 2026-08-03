@@ -24,6 +24,7 @@ public record InstructorLessonResponse(
         String description,
         int order,
         String status,
+        String deliveryType,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt,
         List<CurriculumMaterialResponse> materials,
@@ -50,7 +51,7 @@ public record InstructorLessonResponse(
     public static InstructorLessonResponse from(InstructorLessonDetail detail) {
         LessonView l = detail.lesson();
         return new InstructorLessonResponse(
-                l.lessonId(), l.sectionId(), l.title(), l.description(), l.order(), l.status(),
+                l.lessonId(), l.sectionId(), l.title(), l.description(), l.order(), l.status(), l.deliveryType(),
                 l.createdAt(), l.updatedAt(),
                 detail.materials().stream().map(CurriculumMaterialResponse::from).toList(),
                 LiveSession.from(detail.liveSession()));

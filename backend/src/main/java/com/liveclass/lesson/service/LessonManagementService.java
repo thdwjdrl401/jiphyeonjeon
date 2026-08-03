@@ -5,6 +5,7 @@ import com.liveclass.lesson.api.LessonNotFoundException;
 import com.liveclass.lesson.api.LessonPlacement;
 import com.liveclass.lesson.api.LessonView;
 import com.liveclass.lesson.domain.Lesson;
+import com.liveclass.lesson.domain.LessonDeliveryType;
 import com.liveclass.lesson.domain.LessonStatus;
 import com.liveclass.lesson.repository.LessonRepository;
 import org.springframework.stereotype.Service;
@@ -34,10 +35,21 @@ public class LessonManagementService implements LessonManagement {
     @Override
     @Transactional
     public LessonView create(UUID sectionId, String title, String description) {
+        return create(sectionId, title, description, LessonDeliveryType.LIVE);
+    }
+
+    @Override
+    @Transactional
+    public LessonView createRecorded(UUID sectionId, String title, String description) {
+        return create(sectionId, title, description, LessonDeliveryType.RECORDED);
+    }
+
+    private LessonView create(UUID sectionId, String title, String description, LessonDeliveryType deliveryType) {
         Lesson lesson = new Lesson();
         lesson.setSectionId(sectionId);
         lesson.setTitle(title);
         lesson.setDescription(description);
+        lesson.setDeliveryType(deliveryType);
         // 만들어지는 순간 게시 상태다 — 레슨에 초안이 없다(ADR-0005). 외부 공개 여부는
         // 커리큘럼 lifecycleStatus가 결정하므로, 비공개 커리큘럼의 레슨은 여기서 PUBLISHED여도
         // 카탈로그에 노출되지 않는다.
@@ -132,6 +144,7 @@ public class LessonManagementService implements LessonManagement {
                 lesson.getDescription(),
                 lesson.getOrderIndex(),
                 lesson.getStatus().name(),
+                lesson.getDeliveryType().name(),
                 lesson.getCreatedAt(),
                 lesson.getUpdatedAt());
     }
