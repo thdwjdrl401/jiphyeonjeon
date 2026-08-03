@@ -1,35 +1,56 @@
+import { apiClient } from '@/shared/api/client'
 import { notImplemented } from '@/shared/api/notImplemented'
 import type { NotificationService } from './notificationService.interface'
+import type {
+  NotificationItem,
+  NotificationListQuery,
+  NotificationListResponse,
+  NotificationSummary,
+} from './types'
 
 /**
  * 알림 HTTP 어댑터.
  *
- * <p><b>서버에 알림 도메인이 아직 없다.</b> `backend/src/main/java/com/liveclass` 아래에 알림 패키지·
- * 테이블·엔드포인트가 없고, 알림을 만들어야 할 사건(수강 판정·강의 게시·Egress 완료)에도 발행 지점이
- * 없다. 그래서 여기서는 <b>성공을 흉내 내지 않는다</b> — 없는 경로를 호출해 404를 받으면 화면이 그것을
- * 서버 장애와 구별할 수 없고, 임의 응답을 만들어 두면 "됐다"고 착각한 채 배포된다.
+ * <p>서버 응답의 필드 이름이 화면 타입과 그대로 같아서 <b>변환하지 않는다</b>. 이름을 맞춰 둔 것은
+ * 우연이 아니라 계약(`docs/CONTRACT.md §2-4`)을 그렇게 정한 결과이고, 중간에 매핑 층을 두면 서버가
+ * 필드를 하나 바꿨을 때 타입 검사가 아니라 런타임에서 티가 난다.
  *
- * <p>`notImplemented`는 501 `API_NOT_IMPLEMENTED`를 던진다. 헤더 종·알림 페이지는 이 code를 보고
- * "준비 중"으로 안내하고 다른 화면을 막지 않는다.
- *
- * <p>필요한 서버 작업은 `docs/CONTRACT.md §2-4`에 Method·URL·DTO·상태코드·권한 규칙으로 적어 두었다.
- * 서버가 생기면 아래 각 줄을 `apiClient` 호출과 응답 매핑으로 바꾸면 되고, Interface·화면·Mock은
- * 그대로다.
+ * <p><b>`resolveTarget`만 아직 501이다.</b> 대상 재판정은 다른 모듈 넷(커리큘럼·강의·라이브·수강)을
+ * 읽어야 하는데, 알림을 만드는 발행 지점이 아직 없어서 <b>누를 알림 자체가 없다</b>. 없는 경로를
+ * 호출해 404를 받으면 화면이 그것을 서버 장애와 구별할 수 없으므로, 성공을 흉내 내는 대신
+ * 501 `API_NOT_IMPLEMENTED`를 그대로 둔다.
  */
 export const httpNotificationService = {
   async getSummary() {
-    return notImplemented('GET /me/notifications/summary')
+    const { data } = await apiClient.get<NotificationSummary>('/me/notifications/summary')
+    return data
   },
-  async getNotifications() {
-    return notImplemented('GET /me/notifications')
+  async getNotifications(query?: NotificationListQuery) {
+    const { data } = await apiClient.get<NotificationListResponse>('/me/notifications', {
+      /*
+       * undefined인 키는 axios가 아예 빼고 보낸다. 그래서 "가리지 않음"을 빈 문자열이 아니라
+       * 파라미터 부재로 표현할 수 있고, 서버도 그것을 null로 받는다.
+       */
+      params: {
+        scope: query?.scope,
+        readState: query?.readState,
+        page: query?.page,
+        size: query?.size,
+      },
+    })
+    return data
   },
-  async markAsRead(notificationId) {
-    return notImplemented(`POST /me/notifications/${notificationId}/read`)
+  async markAsRead(notificationId: string) {
+    const { data } = await apiClient.post<NotificationItem>(
+      `/me/notifications/${notificationId}/read`,
+    )
+    return data
   },
   async markAllAsRead() {
-    return notImplemented('POST /me/notifications/read-all')
+    const { data } = await apiClient.post<NotificationSummary>('/me/notifications/read-all')
+    return data
   },
-  async resolveTarget(notificationId) {
+  async resolveTarget(notificationId: string) {
     return notImplemented(`GET /me/notifications/${notificationId}/target`)
   },
 } satisfies NotificationService
