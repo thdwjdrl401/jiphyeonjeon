@@ -166,6 +166,18 @@ services:
       # 기본 false가 되고, 자료를 연결해도 임베딩 잡이 발행되지 않는다. 그때도 자료 상태는
       # READY로 남아(무회귀 동작) "준비됐는데 AI가 근거를 못 찾는" 상태가 조용히 생긴다.
       MATERIAL_EMBEDDING_ENABLED: ${MATERIAL_EMBEDDING_ENABLED:-false}
+      # Web Push VAPID 키쌍(ADR-0073 §9). **벤더 계정 등록이 필요 없다** — 키는 우리가 만들고
+      # 브라우저 푸시 서비스는 서명으로 "같은 서버가 보냈다"만 확인한다.
+      #
+      # 이 줄이 없으면 .env.prod에 값을 넣어도 컨테이너로 전달되지 않는다. MATERIAL_EMBEDDING_ENABLED가
+      # 정확히 그렇게 조용히 꺼져 있던 적이 있다(위 참조). 기본값을 비워 두므로 키가 없으면 푸시만
+      # 꺼진 채로 동작하고 알림함·STOMP는 그대로다 — 키 하나로 알림 전체가 멈추지 않는다.
+      #
+      # 키를 바꾸면 **기존 구독이 전부 무효**가 된다(브라우저가 옛 공개키로 만든 구독이라).
+      # 그때는 push_subscription을 비우고 사용자가 다시 켜야 한다.
+      NOTIFICATION_WEB_PUSH_PUBLIC_KEY: ${NOTIFICATION_WEB_PUSH_PUBLIC_KEY:-}
+      NOTIFICATION_WEB_PUSH_PRIVATE_KEY: ${NOTIFICATION_WEB_PUSH_PRIVATE_KEY:-}
+      NOTIFICATION_WEB_PUSH_SUBJECT: ${NOTIFICATION_WEB_PUSH_SUBJECT:-mailto:liveclass@jiphyeonjeon.thdwjdrl.com}
       # AI 질의응답 SSE 프록시(ADR-0047). ai-api는 별도 compose(docker-compose.ai-prod.yml)지만 같은
       # liveclass_default 네트워크라 서비스명으로 닿는다. 시크릿은 ai-api의 AI_INTERNAL_SECRET과
       # **같은 값**이어야 한다 — 다르면 서명 검증에서 401이라 답변이 아예 시작되지 않는다.
