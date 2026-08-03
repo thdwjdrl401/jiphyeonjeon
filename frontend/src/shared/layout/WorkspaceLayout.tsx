@@ -1,6 +1,7 @@
 import { matchPath, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { getProfilePath, instructorPaths, studentPaths } from '@/app/router/paths'
+import { isProfileAreaActive } from '@/app/router/navigation'
+import { getNotificationsPath, getProfilePath, instructorPaths, studentPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
 import CurriculumLessonNavigation from '@/features/lesson/CurriculumLessonNavigation'
 import { getLiveSession } from '@/features/live-session/liveSessionService'
@@ -60,6 +61,11 @@ export default function WorkspaceLayout() {
   const isInstructor = user?.role === 'INSTRUCTOR'
   const curriculumPath = isInstructor ? instructorPaths.curriculums : studentPaths.curriculums
   const profilePath = user ? getProfilePath(user.role) : studentPaths.profile
+  /*
+    알림 진입점은 내 프로필 화면에서만 사이드바에 낸다 — 헤더 종이 모든 화면의 상시 진입점이라
+    사이드바까지 항상 같은 자리를 쓰면 같은 목적지가 두 번 상주한다. 계정 관련 화면에서만 보조로 둔다.
+  */
+  const showNotificationsLink = Boolean(user) && isProfileAreaActive(pathname)
   const lessonContext = user?.role === 'STUDENT'
     ? getStudentLessonContext(pathname)
     : user?.role === 'INSTRUCTOR'
@@ -102,6 +108,11 @@ export default function WorkspaceLayout() {
             <NavLink to={curriculumPath}>내 커리큘럼</NavLink>
             <NavLink to={profilePath}>내 프로필</NavLink>
           </nav>
+          {showNotificationsLink && user && (
+            <nav className="workspace-sidebar__footer-nav" aria-label="알림">
+              <NavLink to={getNotificationsPath(user.role)}>전체 알림</NavLink>
+            </nav>
+          )}
           <div className="workspace-sidebar__tip"><strong>LiveClass AI</strong><p>라이브 준비부터 다시보기 학습까지 한 흐름으로 관리하세요.</p></div>
         </aside>}
         <main className="workspace-content" id="workspace-content" tabIndex={-1}><Outlet /></main>
