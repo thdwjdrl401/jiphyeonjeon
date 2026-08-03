@@ -14,6 +14,9 @@ def test_uses_loopback_defaults() -> None:
     assert settings.bge_base_url is None
     assert settings.gms_api_key is None
     assert settings.lecture_note_model is None
+    assert settings.lecture_note_gms_max_concurrency == 4
+    assert settings.lecture_note_gms_refinement_max_concurrency == 1
+    assert settings.lecture_note_gms_max_attempts == 3
     assert settings.rag_request_max_active == 256
 
 
@@ -50,6 +53,14 @@ def test_load_settings_reads_prefixed_environment(monkeypatch) -> None:
         {"lecture_note_model": " gpt-4.1"},
         {"lecture_note_min_window_ms": 30_000, "lecture_note_target_window_ms": 20_000},
         {"lecture_note_min_chars": 500, "lecture_note_max_chars": 400},
+        {
+            "lecture_note_gms_max_concurrency": 1,
+            "lecture_note_gms_refinement_max_concurrency": 2,
+        },
+        {
+            "lecture_note_gms_retry_base_seconds": 2,
+            "lecture_note_gms_retry_max_seconds": 1,
+        },
         {"rag_retrieval_timeout_seconds": 8.0},
         {"rag_model_timeout_seconds": 55.0},
         {"caption_shutdown_timeout_seconds": 1.0},
