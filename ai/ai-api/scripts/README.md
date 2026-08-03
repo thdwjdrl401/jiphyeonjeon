@@ -31,3 +31,18 @@ uv run --frozen --env-file ../.env python -m scripts.smoke_lecture_note_refineme
 ```
 
 2026-07-30 실제 GMS 호출에서 두 ACK topic을 하나로 합친 유효 `topics` JSON 응답을 확인했다.
+
+## 활성 topic 갱신 A/B
+
+약 2,000자의 같은 강의문을 7개 window로 나눠 현재 bullet append 방식과 역할 기반 활성 topic 갱신
+prototype에 순서대로 입력한다. 활성 topic은 `overview`와 typed items를 명사형 서술로 생성하며 Pydantic
+structured output으로 검증한다. 기본 설정은 `ai/.env`에서 읽는다.
+
+```bash
+uv run --frozen python -m scripts.compare_active_topic_notes
+```
+
+한쪽 pipeline만 다시 실행할 때는 `--pipeline v1` 또는 `--pipeline v2`를 사용한다.
+
+입력은 `lecture_note_active_topic_sample.json`이며 실제 결과와 후속 판단은
+[ADR-0034](../../../docs/decisions/canola/0034-near-realtime-accumulative-lecture-notes.md)에 기록한다.
