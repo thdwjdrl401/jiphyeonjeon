@@ -53,6 +53,41 @@ def test_readiness_requires_every_model_worker_and_livekit_registration(tmp_path
     state.close()
 
 
+def test_external_provider_probe_can_revoke_model_readiness(tmp_path: Path) -> None:
+    state = SttReadinessState("vllm-whisper", 1, str(tmp_path / "markers"))
+    runtime_ready = True
+    state.set_stt_provider_probe(lambda: runtime_ready)
+    state.process_marker.mark_current_process_ready()
+    state.mark_worker_started()
+    state.mark_livekit_connected()
+
+    assert state.readiness_payload()["status"] == "ready"
+
+    runtime_ready = False
+
+    payload = state.readiness_payload()
+    assert payload["modelsReady"] is False
+    assert payload["readyProcessCount"] == 1
+    assert payload["status"] == "notReady"
+    state.close()
+
+
+def test_provider_probe_failure_is_reported_as_not_ready(tmp_path: Path) -> None:
+    state = SttReadinessState("vllm-whisper", 1, str(tmp_path / "markers"))
+    state.process_marker.mark_current_process_ready()
+    state.mark_worker_started()
+    state.mark_livekit_connected()
+
+    def fail() -> bool:
+        raise OSError("runtime unavailable")
+
+    state.set_stt_provider_probe(fail)
+
+    assert state.readiness_payload()["modelsReady"] is False
+    assert state.readiness_payload()["status"] == "notReady"
+    state.close()
+
+
 def test_stale_or_malformed_process_markers_do_not_report_ready(tmp_path: Path) -> None:
     marker_directory = tmp_path / "markers"
     state = SttReadinessState("nemotron", 1, str(marker_directory))

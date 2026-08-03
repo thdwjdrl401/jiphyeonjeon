@@ -95,6 +95,48 @@ model checkpoint는 release에 복사하지 않는다.
 GitLab `deploy-realtime-agent` job도 같은 helper를 현재 사용자로 호출한다. active 강의의 drain은
 지원하지 않으므로 배포 시 두 worker job이 끊길 수 있다.
 
+### 3.1 Whisper Large V3 기본 모델로 수동 전환
+
+첫 vLLM 적용 대상은 이미 내려받은 `openai/whisper-large-v3` 기본 모델이다. merge와 일반 CD는
+기존 Nemotron prod profile을 유지하므로 아래 명시적 절차에서만 바뀐다. 이 전환으로 serving wiring과
+LiveKit canary를 검증할 수 있지만, fine-tuning 성능 승격 증거를 대신하지 않는다. GPU 1은 사용하지 않는다.
+
+~~~sh
+cd /home/liveclass/liveclass
+ai/realtime-agent/deploy/install.sh /opt/tljh/user/bin/uv
+~/.local/bin/liveclass-whisper-vllm-bootstrap
+
+# `<user>`를 실제 사용자로 바꾸고 기본 모델 경로와 alias를 확인한다.
+~/.local/bin/liveclass-realtime-agent-supervisor stop-agent-prod
+~/.local/bin/liveclass-whisper-vllm-supervisor start
+~/.local/bin/liveclass-whisper-vllm-supervisor status
+
+cp -p ~/.config/liveclass/realtime-agent.env ~/.config/liveclass/realtime-agent-nemotron.env
+cp ~/.config/liveclass/realtime-agent-vllm.env.example ~/.config/liveclass/realtime-agent.env
+chmod 600 ~/.config/liveclass/realtime-agent.env
+~/.local/bin/liveclass-realtime-agent-supervisor restart-agent-prod
+curl --fail http://127.0.0.1:8081/health/ready
+~~~
+
+agent의 VLLM_WHISPER_MODEL과 runtime의 WHISPER_VLLM_SERVED_MODEL_NAME은 정확히 같아야 한다.
+vLLM은 127.0.0.1:18083에만 bind하며 별도 GPU/EC2 inbound나 SSH tunnel을 추가하지 않는다.
+첫 cap은 GPU memory utilization 0.08, runtime max-num-seqs 1, agent active/idle 1/1이다.
+학습 모델이 ADR-0040 gate를 통과하면 runtime의 model path만 merged checkpoint로 교체한다.
+
+전환 실패 시 prod agent를 먼저 중지하고 vLLM을 중지한 뒤 저장한 Nemotron env를 복원한다.
+
+~~~sh
+~/.local/bin/liveclass-realtime-agent-supervisor stop-agent-prod
+~/.local/bin/liveclass-whisper-vllm-supervisor stop
+cp ~/.config/liveclass/realtime-agent-nemotron.env ~/.config/liveclass/realtime-agent.env
+chmod 600 ~/.config/liveclass/realtime-agent.env
+~/.local/bin/liveclass-realtime-agent-supervisor restart-agent-prod
+~~~
+
+실제 완료 조건은 GPU :8081과 EC2 :18081 readiness뿐 아니라 LiveKit canary의 caption final·sequence
+회귀 0이다. 자세한 선택 근거와 rollback gate는
+[ADR-0042](../../../docs/decisions/canola/0042-whisper-vllm-runtime-adapter.md)를 따른다.
+
 ## 4. 연결 구조와 상태 확인
 
 ```mermaid

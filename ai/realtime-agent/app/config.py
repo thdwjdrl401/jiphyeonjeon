@@ -114,6 +114,11 @@ class Settings:
     openai_realtime_delay: str = "low"
     nemotron_model_id: str = "nvidia/nemotron-3.5-asr-streaming-0.6b"
     asr_language: str = "ko-KR"
+    vllm_whisper_base_url: str = "http://127.0.0.1:18083/v1"
+    vllm_whisper_model: str = ""
+    vllm_api_key: str = field(default="", repr=False)
+    vllm_whisper_request_timeout_seconds: float = 20.0
+    vllm_whisper_connect_timeout_seconds: float = 2.0
 
     def livekit_connection(self) -> LiveKitConnectionSettings:
         return LiveKitConnectionSettings(
@@ -177,6 +182,15 @@ class Settings:
             openai_realtime_delay=values.get("OPENAI_REALTIME_TRANSCRIPTION_DELAY", "low"),
             nemotron_model_id=values.get("ASR_MODEL_ID", "nvidia/nemotron-3.5-asr-streaming-0.6b"),
             asr_language=values.get("ASR_LANGUAGE", "ko-KR"),
+            vllm_whisper_base_url=values.get("VLLM_WHISPER_BASE_URL", "http://127.0.0.1:18083/v1"),
+            vllm_whisper_model=values.get("VLLM_WHISPER_MODEL", ""),
+            vllm_api_key=values.get("VLLM_API_KEY", ""),
+            vllm_whisper_request_timeout_seconds=_parse_float(
+                values, "VLLM_WHISPER_REQUEST_TIMEOUT_SECONDS", 20.0
+            ),
+            vllm_whisper_connect_timeout_seconds=_parse_float(
+                values, "VLLM_WHISPER_CONNECT_TIMEOUT_SECONDS", 2.0
+            ),
         )
 
     def validate_agent_server(self) -> None:
@@ -241,6 +255,14 @@ class Settings:
                 "SPRING_STATUS_CALLBACK_TIMEOUT_SECONDS",
                 self.spring_status_callback_timeout_seconds,
             ),
+            (
+                "VLLM_WHISPER_REQUEST_TIMEOUT_SECONDS",
+                self.vllm_whisper_request_timeout_seconds,
+            ),
+            (
+                "VLLM_WHISPER_CONNECT_TIMEOUT_SECONDS",
+                self.vllm_whisper_connect_timeout_seconds,
+            ),
         )
         for name, value in timeout_settings:
             if isinstance(value, bool) or not isinstance(value, int | float):
@@ -294,6 +316,11 @@ class Settings:
 
         if not self.asr_language.strip() or len(self.asr_language) > 32:
             raise RuntimeError("ASR_LANGUAGE must contain 1-32 characters")
+        if self.vllm_whisper_connect_timeout_seconds > self.vllm_whisper_request_timeout_seconds:
+            raise RuntimeError(
+                "VLLM_WHISPER_CONNECT_TIMEOUT_SECONDS must not exceed "
+                "VLLM_WHISPER_REQUEST_TIMEOUT_SECONDS"
+            )
 
         if not self.spring_status_callback_enabled:
             return

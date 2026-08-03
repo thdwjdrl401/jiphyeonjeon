@@ -3,8 +3,8 @@
 ## 1. 이 서비스가 하는 일
 
 `realtime-agent`는 GPU에서 실행되는 LiveKit Agents worker다. 강사 microphone을 받아 streaming STT로
-변환하고 application Redis에 실시간 자막을 발행한다. STT provider는 로컬 Nemotron 또는 OpenAI Realtime을
-선택할 수 있다.
+변환하고 application Redis에 실시간 자막을 발행한다. STT provider는 로컬 Nemotron,
+GPU0 loopback vLLM Whisper 또는 OpenAI Realtime을 선택할 수 있다.
 
 FastAPI 서비스가 아니며 작업을 받는 POST endpoint도 없다. LiveKit `AgentServer`가 outbound WebSocket으로
 등록한 뒤 named dispatch를 통해 room job을 받는다.
@@ -19,7 +19,7 @@ FastAPI 서비스가 아니며 작업을 받는 POST endpoint도 없다. LiveKit
 | Spring | LiveKit AgentDispatch | Server API | agent name과 session metadata 전달 | 양쪽 구현, readiness 우회 |
 | LiveKit | realtime-agent | persistent Worker WebSocket | 등록·load·job 배정 | 구현됨 |
 | 강사 브라우저 → LiveKit → job | instructor microphone | WebRTC | STT audio 입력 | 구현됨 |
-| job | Nemotron 또는 OpenAI Realtime | local CUDA 또는 WSS | transcript 생성 | 구현됨 |
+| job | Nemotron, vLLM Whisper 또는 OpenAI Realtime | local CUDA, loopback HTTP 또는 WSS | transcript 생성 | 구현됨 |
 | realtime-agent | Redis `ai:captions:live` | Redis Stream `XADD` | 자막 started·delta·segment.final·완료 event | producer·consumer 구현 |
 | realtime-agent | Redis `agent:session:{sessionId}` | Redis lease | 중복 job 방지 | 구현됨 |
 | realtime-agent | Spring callback URL | HTTP, HMAC | job lifecycle 상태 전달 | 기본 비활성, Java 미구현 |
@@ -74,7 +74,7 @@ occurredAt=2026-07-29T04:00:01.250Z
 Spring → LiveKit named dispatch
              ↓
 Frontend microphone → LiveKit Room → realtime-agent job
-                                      → Nemotron CUDA / OpenAI WSS
+                                      → Nemotron CUDA / vLLM loopback HTTP / OpenAI WSS
                                       → Redis caption.stream.started
                                       → Redis caption.delta
                                       → Redis caption.segment.final
@@ -100,12 +100,14 @@ GPU 배포에서는 `deploy/env/realtime-agent-common.env.example`의 공통 Liv
 | 환경변수 | 필요 조건 | 용도 |
 |---|---|---|
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | 실행 필수 | LiveKit Worker 등록 |
-| `STT_ENGINE_PROVIDER` | 실행 필수 | `nemotron`, `openai-realtime`, `stub` |
+| `STT_ENGINE_PROVIDER` | 실행 필수 | `nemotron`, `vllm-whisper`, `openai-realtime`, `stub` |
 | `REDIS_URL` | 운영 필수, 개발 기본 `redis://localhost:6379/0` | application Redis |
 | `STT_AGENT_NAME` | 선택 | 기본 `liveclass-realtime-stt-dev` |
 | `STT_HEALTH_HOST`, `STT_HEALTH_PORT` | 선택 | host는 `127.0.0.1` 고정, port는 기본 `8081`이며 `1~65535` 허용 |
 | `OPENAI_API_KEY` | OpenAI provider 필수 | OpenAI Realtime WSS 인증 |
 | `ASR_MODEL_ID` | Nemotron provider | model ID 또는 로컬 경로 |
+| `VLLM_WHISPER_BASE_URL`, `VLLM_WHISPER_MODEL` | vLLM provider 필수 | loopback `/v1` endpoint와 served-model alias |
+| `VLLM_API_KEY` | vLLM provider 선택 | 별도 인증 runtime의 Bearer token; 기본 loopback runtime은 비움 |
 | `LIVEKIT_TURN_URL`, `LIVEKIT_TURN_SECRET` | TURN 강제 시 | TURN/TCP 연결 |
 | `SPRING_STATUS_CALLBACK_ENABLED` | 선택, 기본 `false` | Spring lifecycle callback 활성화 |
 | `SPRING_STATUS_CALLBACK_URL`, `AI_CALLBACK_SECRET` | callback 활성 시 필수 | URL과 32-byte 이상 HMAC secret |
@@ -114,10 +116,11 @@ GPU 배포에서는 `deploy/env/realtime-agent-common.env.example`의 공통 Liv
 realtime-agent의 `AI_CALLBACK_SECRET`도 lifecycle callback을 명시적으로 켠 경우에만 필요하다.
 
 GPU 운영에서는 prod/dev 두 process가 같은 호스트와 LiveKit/TURN tunnel을 공유하되 agent name, Redis와
-health port를 분리한다. prod는 GPU0 Nemotron, Redis `6390`, health `8081→18081`, active/idle
+health port를 분리한다. 기본 prod는 GPU0 Nemotron, Redis `6390`, health `8081→18081`, active/idle
 `12/12`이고 dev는 OpenAI Realtime API, Redis `4000`, health `8082→18082`, active/idle `1/1`이다.
 realtime control과 TURN은 서로 다른 SSH connection이며 별도 BGE supervisor가 세 번째 connection으로
-`18020→8020` reverse forward를 유지한다.
+`18020→8020` reverse forward를 유지한다. 검증된 Whisper checkpoint 전환 시 prod만
+`vllm-whisper` active/idle `1/1` profile로 바꾸며 절차는 [ADR-0042](../../docs/decisions/canola/0042-whisper-vllm-runtime-adapter.md)를 따른다.
 
 ## 6. 상태 확인
 

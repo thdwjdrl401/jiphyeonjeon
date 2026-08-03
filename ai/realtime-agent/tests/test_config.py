@@ -30,6 +30,45 @@ def test_uses_application_redis_without_assuming_livekit_redis_port() -> None:
     assert settings.num_idle_processes is None
     assert settings.health_host == "127.0.0.1"
     assert settings.health_port == 8081
+    assert settings.vllm_whisper_base_url == "http://127.0.0.1:18083/v1"
+    assert settings.vllm_whisper_model == ""
+    assert settings.vllm_whisper_request_timeout_seconds == 20
+    assert settings.vllm_whisper_connect_timeout_seconds == 2
+
+
+def test_parses_vllm_whisper_runtime_settings_without_exposing_token() -> None:
+    settings = Settings.from_env(
+        {
+            **BASE_ENV,
+            "STT_ENGINE_PROVIDER": "vllm-whisper",
+            "VLLM_WHISPER_BASE_URL": "http://127.0.0.1:19083/v1",
+            "VLLM_WHISPER_MODEL": "liveclass-whisper-large-v3",
+            "VLLM_API_KEY": "runtime-secret",
+            "VLLM_WHISPER_REQUEST_TIMEOUT_SECONDS": "30",
+            "VLLM_WHISPER_CONNECT_TIMEOUT_SECONDS": "3",
+        }
+    )
+
+    settings.validate_agent_server()
+
+    assert settings.vllm_whisper_base_url == "http://127.0.0.1:19083/v1"
+    assert settings.vllm_whisper_model == "liveclass-whisper-large-v3"
+    assert settings.vllm_whisper_request_timeout_seconds == 30
+    assert settings.vllm_whisper_connect_timeout_seconds == 3
+    assert "runtime-secret" not in repr(settings)
+
+
+def test_rejects_vllm_connect_timeout_larger_than_request_timeout() -> None:
+    settings = Settings.from_env(
+        {
+            **BASE_ENV,
+            "VLLM_WHISPER_REQUEST_TIMEOUT_SECONDS": "2",
+            "VLLM_WHISPER_CONNECT_TIMEOUT_SECONDS": "3",
+        }
+    )
+
+    with pytest.raises(RuntimeError, match="must not exceed"):
+        settings.validate_agent_server()
 
 
 def test_accepts_explicit_loopback_health_port() -> None:

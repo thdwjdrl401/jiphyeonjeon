@@ -26,6 +26,10 @@ install -m 0755 "$SCRIPT_DIR/bin/liveclass-realtime-agent-deploy" \
     "$BIN_DIR/liveclass-realtime-agent-deploy"
 install -m 0755 "$SCRIPT_DIR/bin/liveclass-realtime-agent-supervisor" \
     "$BIN_DIR/liveclass-realtime-agent-supervisor"
+install -m 0755 "$SCRIPT_DIR/bin/liveclass-whisper-vllm-bootstrap" \
+    "$BIN_DIR/liveclass-whisper-vllm-bootstrap"
+install -m 0755 "$SCRIPT_DIR/bin/liveclass-whisper-vllm-supervisor" \
+    "$BIN_DIR/liveclass-whisper-vllm-supervisor"
 install -m 0755 "$SCRIPT_DIR/bin/liveclass-gitlab-runner-user" \
     "$BIN_DIR/liveclass-gitlab-runner-user"
 install -m 0755 "$UV_SOURCE" "$BIN_DIR/uv"
@@ -46,6 +50,12 @@ if [ ! -e "$CONFIG_DIR/realtime-agent-dev.env" ]; then
     install -m 0600 "$SCRIPT_DIR/env/realtime-agent-dev.env.example" \
         "$CONFIG_DIR/realtime-agent-dev.env"
 fi
+if [ ! -e "$CONFIG_DIR/whisper-vllm.env" ]; then
+    install -m 0600 "$SCRIPT_DIR/env/whisper-vllm.env.example" \
+        "$CONFIG_DIR/whisper-vllm.env"
+fi
+install -m 0600 "$SCRIPT_DIR/env/realtime-agent-vllm.env.example" \
+    "$CONFIG_DIR/realtime-agent-vllm.env.example"
 if [ ! -e "$CONFIG_DIR/realtime-agent-tunnels.env" ]; then
     install -m 0600 "$SCRIPT_DIR/env/realtime-agent-tunnels.env.example" \
         "$CONFIG_DIR/realtime-agent-tunnels.env"
@@ -53,4 +63,5 @@ fi
 
 echo "rootless runtime installed under $USER_PREFIX"
 echo "edit $CONFIG_DIR/realtime-agent-common.env, realtime-agent.env, realtime-agent-dev.env, and realtime-agent-tunnels.env before the first deployment"
+echo "Whisper switch templates: $CONFIG_DIR/whisper-vllm.env and realtime-agent-vllm.env.example"
 echo "install and register GitLab Runner, then run: $BIN_DIR/liveclass-gitlab-runner-user start"

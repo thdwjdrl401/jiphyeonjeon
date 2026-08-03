@@ -29,7 +29,8 @@ flowchart TD
 
 `AgentServer` parent는 provider catalog와 worker load만 소유하고 CUDA model을 만들지 않는다. Nemotron
 resource는 각 child의 `setup_fnc`에서 미리 만들고 `process.userdata`를 통해 정확히 한 engine으로
-이전한다. OpenAI와 stub은 process resource 없이 같은 job 조립 경로를 사용한다.
+이전한다. vLLM Whisper child resource는 CUDA model이 아니라 loopback runtime 설정이며 exact model
+alias probe가 성공한 뒤 이전한다. OpenAI와 stub은 process resource 없이 같은 job 조립 경로를 사용한다.
 
 ## 외부 통신 경계
 
@@ -38,6 +39,7 @@ resource는 각 child의 `setup_fnc`에서 미리 만들고 `process.userdata`�
 - `RedisSessionLease`·`RedisCaptionPublisher` → application Redis: lease Lua와 자막 started/delta/final/completed `XADD`
 - `SpringStatusCallback` → Spring: 선택적인 HTTP(S) HMAC callback
 - `OpenAiRealtimeStreamingEngine` → OpenAI: provider가 선택된 경우에만 outbound WebSocket
+- `VllmWhisperStreamingEngine` → GPU0 vLLM: provider가 선택된 경우에만 loopback HTTP
 
 `main.py`는 위 통신을 조립하지만 payload를 새로 정의하지 않는다. 세부 wire format은 각 하위 README와
 [`../CONTRACT.md`](../CONTRACT.md)가 소유한다.

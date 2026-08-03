@@ -7,6 +7,7 @@ import pytest
 from app.config import Settings
 from app.stt import catalog
 from app.stt.providers.nemotron import NemotronStreamingEngine
+from app.stt.providers.vllm_whisper import VllmWhisperStreamingEngine
 
 BASE_SETTINGS = Settings(
     livekit_url="wss://livekit.example",
@@ -58,6 +59,78 @@ def test_external_api_profile_keeps_generic_pool_defaults() -> None:
     assert pool.num_idle_processes == 1
     assert pool.initialize_process_timeout_seconds == 10
     assert pool.job_memory_warn_mb == 1000
+
+
+def test_vllm_whisper_profile_starts_conservatively_and_caps_capacity() -> None:
+    configured = settings(
+        stt_provider="vllm-whisper",
+        vllm_whisper_model="liveclass-whisper-large-v3",
+    )
+    registry = catalog.build_stt_provider_registry(configured)
+
+    pool = registry.resolve_worker_pool(
+        "vllm-whisper",
+        max_active_jobs=None,
+        num_idle_processes=None,
+    )
+
+    assert pool.max_active_jobs == 1
+    assert pool.num_idle_processes == 1
+    assert pool.initialize_process_timeout_seconds == 30
+    with pytest.raises(RuntimeError, match="at most 1 for vllm-whisper"):
+        registry.resolve_worker_pool(
+            "vllm-whisper",
+            max_active_jobs=2,
+            num_idle_processes=1,
+        )
+
+
+async def test_vllm_whisper_prewarm_probes_runtime_and_transfers_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    probed: list[object] = []
+    monkeypatch.setattr(
+        catalog,
+        "probe_vllm_whisper_runtime",
+        lambda configuration: probed.append(configuration),
+    )
+    configured = settings(
+        stt_provider="vllm-whisper",
+        vllm_whisper_model="liveclass-whisper-large-v3",
+        vllm_api_key="secret",
+    )
+    registry = catalog.build_stt_provider_registry(configured)
+    userdata: dict[str, object] = {}
+
+    registry.prewarm("vllm-whisper", userdata)
+    engine = registry.create("vllm-whisper", process_userdata=userdata)
+
+    assert len(probed) == 1
+    assert isinstance(engine, VllmWhisperStreamingEngine)
+    assert userdata == {}
+    await engine.close()
+
+
+def test_vllm_readiness_probe_tracks_the_external_model_owner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    checked: list[object] = []
+    monkeypatch.setattr(
+        catalog,
+        "vllm_whisper_runtime_is_ready",
+        lambda configuration: checked.append(configuration) or True,
+    )
+    configured = settings(
+        stt_provider="vllm-whisper",
+        vllm_whisper_model="liveclass-whisper-large-v3",
+    )
+
+    probe = catalog.build_stt_provider_readiness_probe(configured)
+
+    assert probe is not None
+    assert probe() is True
+    assert len(checked) == 1
+    assert catalog.build_stt_provider_readiness_probe(settings()) is None
 
 
 def test_selected_api_provider_validates_its_own_credentials() -> None:
