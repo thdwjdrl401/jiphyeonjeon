@@ -1012,6 +1012,79 @@ th { color: var(--ink-500); font-size: .67rem; }
   .student-prejoin__actions > .button:last-child { grid-column: 2; grid-row: 2; }
 }
 
+/* 강사 사전 점검 — 실제 장치를 중심에 두고 품질과 서버 조건을 한 화면에서 확인한다. */
+.workspace-content > .workspace-page.instructor-preflight-page { width: min(100%, 1120px); }
+.workspace-page.instructor-preflight-page { gap: 14px; }
+.instructor-preflight-page .workspace-page-header { min-height: 68px; align-items: center; padding-bottom: 4px; }
+.instructor-preflight__layout { display: grid; grid-template-columns: minmax(0, 1.22fr) minmax(400px, .78fr); align-items: stretch; gap: 14px; }
+.instructor-preflight__layout .workspace-panel { padding: 20px; }
+.instructor-preflight__layout .workspace-panel__header { align-items: center; gap: 12px; margin-bottom: 16px; padding-bottom: 13px; }
+.instructor-preflight__layout .workspace-panel__header > div { min-width: 0; }
+.instructor-preflight__layout .workspace-panel__header h2 { margin-bottom: 3px; font-size: 1.05rem; font-weight: 400; letter-spacing: -.025em; }
+.instructor-preflight__layout .workspace-panel__header p { color: var(--ink-600); font-size: .74rem; line-height: 1.5; word-break: keep-all; }
+.instructor-preflight__layout .workspace-panel__header > .status-pill { flex: 0 0 auto; }
+
+.instructor-preflight__device-panel { display: flex; min-height: 0; flex-direction: column; }
+.instructor-preflight__device-panel .camera-preview { flex: 1; min-height: 300px; border-radius: 0; }
+.instructor-preflight__device-panel .camera-preview::before { border-radius: 0; }
+.instructor-preflight__camera-empty { position: relative; z-index: 1; display: flex; max-width: 360px; align-items: center; flex-direction: column; padding: 28px; text-align: center; }
+.instructor-preflight__camera-icon { display: grid; width: 58px; height: 58px; align-self: center !important; place-items: center; margin-bottom: 14px; border: 1px solid var(--border-medium); border-radius: 50%; background: rgba(255, 252, 243, .8); color: var(--ink-800) !important; }
+.instructor-preflight__camera-icon svg { width: 27px; height: 27px; }
+.instructor-preflight__camera-empty strong { color: var(--ink-950); font-family: var(--font-display); font-size: 1.05rem; font-weight: 400; letter-spacing: -.02em; }
+.instructor-preflight__camera-empty p { margin: 7px 0 0; color: var(--ink-700); font-size: .78rem; line-height: 1.6; word-break: keep-all; }
+.instructor-preflight__device-panel .media-control-row { gap: 8px; margin-top: 10px; }
+.instructor-preflight__device-panel .media-toggle { min-height: 42px; gap: 8px; padding: 8px 16px; font-size: .78rem; }
+.instructor-preflight__device-panel .media-toggle svg { width: 17px; height: 17px; flex: 0 0 auto; }
+.instructor-preflight__device-panel .media-toggle.is-on { border-color: var(--ink-950); background: var(--ink-950); color: var(--paper-pure); }
+.instructor-preflight__device-panel .media-toggle.is-on:hover:not(:disabled) { border-color: #000; background: #000; color: #fff; }
+.instructor-preflight__device-panel > .inline-notice { margin-top: 8px; padding: 9px 11px; font-size: .7rem; line-height: 1.5; }
+
+.instructor-preflight__side-column { display: grid; min-width: 0; align-content: start; gap: 14px; }
+.instructor-preflight__quality-panel .quality-group { margin-bottom: 10px; }
+.instructor-preflight__quality-panel .quality-group:last-of-type { margin-bottom: 10px; }
+.instructor-preflight__quality-panel .quality-group legend { margin-bottom: 6px; color: var(--ink-700); font-size: .64rem; letter-spacing: .08em; }
+.instructor-preflight__quality-panel .quality-options { gap: 5px; }
+.instructor-preflight__quality-panel .quality-option { min-width: 0; min-height: 58px; place-content: center; gap: 3px; border-color: var(--border-medium); border-radius: 6px; padding: 8px 7px; background: transparent; text-align: center; transition: border-color .18s ease, background .18s ease, transform .18s ease; }
+.instructor-preflight__quality-panel .quality-option:hover { border-color: var(--ink-950); background: var(--paper-pure); transform: translateY(-1px); }
+.instructor-preflight__quality-panel .quality-option.is-selected { border-color: var(--ink-950); background: var(--ink-50); box-shadow: inset 0 -2px var(--ink-950); }
+.instructor-preflight__quality-panel .quality-option__label { color: var(--ink-950); font-size: .72rem; font-weight: 700; }
+.instructor-preflight__quality-panel .quality-option__rate { overflow: hidden; color: var(--ink-600); font-size: .58rem; text-overflow: ellipsis; white-space: nowrap; }
+.instructor-preflight__quality-panel .quality-option__hint { display: none; }
+.instructor-preflight__quality-panel .inline-notice,
+.instructor-preflight__readiness-panel .inline-notice { padding: 9px 10px; font-size: .68rem; line-height: 1.5; }
+
+.instructor-preflight__readiness-panel .readiness-list li { min-height: 44px; gap: 10px; padding: 8px 0; color: var(--ink-900); font-size: .74rem; }
+.instructor-preflight__readiness-panel .readiness-list li > span { min-width: 0; }
+.instructor-preflight__readiness-panel .readiness-list li small { margin-top: 1px; color: var(--ink-600); font-size: .61rem; letter-spacing: 0; }
+.instructor-preflight__readiness-panel .inline-notice { margin-top: 8px; }
+
+.instructor-preflight__feedback { display: grid; gap: 6px; }
+.instructor-preflight__feedback .inline-notice { padding: 9px 11px; font-size: .7rem; }
+.instructor-preflight__actions.sticky-form-actions { bottom: 10px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; justify-content: initial; gap: 12px; padding: 11px 12px; border-color: var(--ink-950); background: var(--ink-950); box-shadow: 0 12px 30px rgba(36, 35, 32, .18); }
+.instructor-preflight__start-icon { display: grid; width: 36px; height: 36px; place-items: center; border: 1px solid rgba(255, 255, 255, .32); border-radius: 50%; color: var(--paper-pure); font-size: .82rem; font-weight: 800; letter-spacing: -.08em; }
+.instructor-preflight__actions.is-ready .instructor-preflight__start-icon { border-color: var(--paper-pure); background: var(--paper-pure); color: var(--ink-950); }
+.instructor-preflight__actions.is-error .instructor-preflight__start-icon { border-color: rgba(255, 255, 255, .7); color: #fff; }
+.instructor-preflight__start-state { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.instructor-preflight__start-state strong { color: var(--paper-pure); font-size: .82rem; font-weight: 700; }
+.instructor-preflight__start-state small { overflow: hidden; color: rgba(247, 246, 243, .7); font-size: .68rem; text-overflow: ellipsis; white-space: nowrap; }
+.instructor-preflight__actions > .button { min-width: 146px; border-color: var(--paper-pure); background: var(--paper-pure); color: var(--ink-950); }
+.instructor-preflight__actions > .button:hover:not(:disabled) { border-color: #fff; background: #fff; color: #000; }
+
+@media (max-width: 960px) {
+  .instructor-preflight__layout { grid-template-columns: 1fr; }
+  .instructor-preflight__device-panel .camera-preview { min-height: 0; }
+}
+
+@media (max-width: 620px) {
+  .instructor-preflight__layout .workspace-panel { padding: 16px; }
+  .instructor-preflight__layout .workspace-panel__header { align-items: flex-start; }
+  .instructor-preflight__quality-panel .quality-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .instructor-preflight__quality-panel .quality-option { padding-inline: 5px; }
+  .instructor-preflight__quality-panel .quality-option__rate { display: none; }
+  .instructor-preflight__actions.sticky-form-actions { grid-template-columns: auto minmax(0, 1fr); border-radius: 14px; }
+  .instructor-preflight__actions > .button { width: 100%; grid-column: 1 / -1; }
+}
+
 .camera-preview { display: grid; min-height: 250px; place-items: center; border-radius: 15px; background: radial-gradient(circle at 50% 35%, #3b4968, #151e34); color: #fff; }
 .camera-avatar { display: grid; width: 82px; height: 82px; place-items: center; border-radius: 50%; background: var(--blue-600); font-size: 1.7rem; font-weight: 700; }
 .camera-preview span { align-self: start; color: rgba(255,255,255,.65); font-size: .68rem; }

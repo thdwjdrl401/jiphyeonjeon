@@ -109,72 +109,16 @@ export default function InstructorPreflightPage() {
   if (sessionQuery.isError || !session) return <PageState title="라이브 세션을 불러오지 못했습니다" />
 
   return (
-    <div className="workspace-page">
-      <PageHeader
-        title="라이브 시작 전 최종 점검"
-        description={`${session.lessonTitle} · 실제 마이크 송출과 서버 확인을 통과해야 시작할 수 있습니다.`}
-        action={<StatusBadge tone={ready ? 'success' : starting ? 'warning' : 'warning'}>{ready ? '시작 가능' : starting ? '시작 준비 중' : '점검 필요'}</StatusBadge>}
-      />
+    <div className="workspace-page instructor-preflight-page">
+      <PageHeader title="라이브 시작 전 최종 점검" />
 
-      <Panel
-        title="송출 품질"
-        description="여기서 올린 화질이 수강생이 보는 화질의 상한입니다. 서버에서는 더 좋게 만들 수 없습니다."
-      >
-        <fieldset className="quality-group" disabled={!publisher.canControl || publisher.applyingQuality}>
-          <legend>카메라</legend>
-          <div className="quality-options">
-            {CAMERA_QUALITIES.map((option) => (
-              <label
-                key={option.id}
-                className={`quality-option${publisher.quality.camera === option.id ? ' is-selected' : ''}`}
-              >
-                <input
-                  type="radio"
-                  name="camera-quality"
-                  value={option.id}
-                  checked={publisher.quality.camera === option.id}
-                  onChange={() => publisher.changeQuality({ camera: option.id })}
-                />
-                <span className="quality-option__label">{option.label}</span>
-                <span className="quality-option__rate">업로드 {megabits(option.preset)} Mbps</span>
-                <span className="quality-option__hint">{option.hint}</span>
-              </label>
-            ))}
-          </div>
-        </fieldset>
-
-        <fieldset className="quality-group" disabled={!publisher.canControl || publisher.applyingQuality}>
-          <legend>화면 공유</legend>
-          <div className="quality-options">
-            {SCREEN_QUALITIES.map((option) => (
-              <label
-                key={option.id}
-                className={`quality-option${publisher.quality.screenShare === option.id ? ' is-selected' : ''}`}
-              >
-                <input
-                  type="radio"
-                  name="screen-quality"
-                  value={option.id}
-                  checked={publisher.quality.screenShare === option.id}
-                  onChange={() => publisher.changeQuality({ screenShare: option.id })}
-                />
-                <span className="quality-option__label">{option.label}</span>
-                <span className="quality-option__rate">업로드 {megabits(option.preset)} Mbps</span>
-                <span className="quality-option__hint">{option.hint}</span>
-              </label>
-            ))}
-          </div>
-        </fieldset>
-
-        <InlineNotice tone="info">
-          {publisher.applyingQuality
-            ? '새 화질로 다시 송출하는 중입니다.'
-            : '선택은 이 브라우저에 저장되어 다음 강의에도 그대로 적용됩니다. 화면이 끊기면 한 단계 낮춰 보세요.'}
-        </InlineNotice>
-      </Panel>
-
-      <div className="preflight-grid">
-        <Panel title="실제 송출 장치" description="이 연결과 트랙은 LIVE 전환 뒤 강의실에서도 그대로 사용합니다.">
+      <div className="instructor-preflight__layout">
+        <Panel
+          className="instructor-preflight__device-panel"
+          title="실제 송출 장치"
+          description={`${session.lessonTitle} · LIVE 전환 후에도 현재 장치를 그대로 사용합니다.`}
+          action={<StatusBadge tone={localPublisherReady ? 'success' : 'warning'}>{connectionLabel(publisher.connectionState)}</StatusBadge>}
+        >
           <div className={`camera-preview${cameraTrack ? ' camera-preview--active' : ''}`}>
             {cameraTrack ? (
               <>
@@ -187,34 +131,57 @@ export default function InstructorPreflightPage() {
                 <span className="camera-preview__status">카메라 미리보기 송출 중</span>
               </>
             ) : (
-              <>
-                <div className="camera-avatar">이</div>
-                <span>
-                  {publisher.connectionState === 'mock'
-                    ? 'Mock 모드에서는 실제 카메라 화면을 표시하지 않습니다'
-                    : publisher.cameraEnabled
-                      ? '카메라 미리보기를 준비하는 중입니다'
-                      : '카메라는 선택 사항입니다'}
+              <div className="instructor-preflight__camera-empty">
+                <span className="instructor-preflight__camera-icon" aria-hidden="true">
+                  <svg fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.7" viewBox="0 0 24 24">
+                    <rect height="12" rx="2" width="13" x="3" y="6" />
+                    <path d="m16 10 5-3v10l-5-3z" />
+                    {!publisher.cameraEnabled && <path d="M3 3 21 21" />}
+                  </svg>
                 </span>
-              </>
+                <strong>
+                  {publisher.connectionState === 'mock'
+                    ? '카메라 미리보기 없음'
+                    : publisher.cameraEnabled
+                      ? '카메라 연결 중'
+                      : '카메라 미리보기 꺼짐'}
+                </strong>
+                <p>
+                  {publisher.connectionState === 'mock'
+                    ? 'Mock 모드에서는 실제 카메라 화면을 표시하지 않습니다.'
+                    : publisher.cameraEnabled
+                      ? '카메라 트랙을 준비하고 있습니다. 잠시만 기다려 주세요.'
+                      : '카메라는 선택 사항입니다. 필요하면 아래 버튼으로 켤 수 있어요.'}
+                </p>
+              </div>
             )}
           </div>
           <div className="media-control-row">
             <button
-              className={`media-toggle${publisher.cameraEnabled ? ' is-on' : ''}`}
+              className={`button button--soft button--small media-toggle${publisher.cameraEnabled ? ' is-on' : ''}`}
               disabled={!publisher.canControl || Boolean(publisher.pendingControl)}
               type="button"
+              aria-pressed={publisher.cameraEnabled}
               onClick={publisher.toggleCamera}
             >
-              카메라 {publisher.cameraEnabled ? '켜짐' : '켜기'}
+              <svg aria-hidden="true" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24">
+                <rect height="12" rx="2" width="13" x="3" y="6" />
+                <path d="m16 10 5-3v10l-5-3z" />
+              </svg>
+              <span>카메라 {publisher.cameraEnabled ? '켜짐' : '켜기'}</span>
             </button>
             <button
-              className={`media-toggle${publisher.microphoneEnabled ? ' is-on' : ''}`}
+              className={`button button--soft button--small media-toggle${publisher.microphoneEnabled ? ' is-on' : ''}`}
               disabled={!publisher.canControl || Boolean(publisher.pendingControl)}
               type="button"
+              aria-pressed={publisher.microphoneEnabled}
               onClick={publisher.toggleMicrophone}
             >
-              마이크 {publisher.microphoneEnabled ? '송출 중' : '켜기'}
+              <svg aria-hidden="true" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" viewBox="0 0 24 24">
+                <rect height="10" rx="3" width="6" x="9" y="3" />
+                <path d="M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8" />
+              </svg>
+              <span>마이크 {publisher.microphoneEnabled ? '송출 중' : '켜기'}</span>
             </button>
           </div>
           {publisher.errorMessage && (
@@ -225,55 +192,133 @@ export default function InstructorPreflightPage() {
           )}
         </Panel>
 
-        <Panel title="서버 시작 조건" description="브라우저 표시가 아니라 LiveKit 서버에서 participant와 track을 다시 조회합니다.">
-          <ul className="readiness-list">
-            <li>
-              <span>LiveKit 연결<small>ROOM_CONNECTION</small></span>
-              <StatusBadge tone={localPublisherReady ? 'success' : 'warning'}>{connectionLabel(publisher.connectionState)}</StatusBadge>
-            </li>
-            <li>
-              <span>강사 participant<small>INSTRUCTOR_PRESENT</small></span>
-              <StatusBadge tone={readinessQuery.data?.instructorPresent ? 'success' : 'warning'}>
-                {readinessQuery.data?.instructorPresent ? '확인됨' : '대기'}
-              </StatusBadge>
-            </li>
-            <li>
-              <span>마이크 track<small>MICROPHONE_PUBLISHED</small></span>
-              <StatusBadge tone={readinessQuery.data?.microphonePublished && !readinessQuery.data?.microphoneMuted ? 'success' : 'warning'}>
-                {readinessQuery.data?.microphonePublished
-                  ? readinessQuery.data.microphoneMuted ? '음소거됨' : `${readinessQuery.data.instructorMicrophoneTrackCount}개 송출`
-                  : '대기'}
-              </StatusBadge>
-            </li>
-            <li>
-              <span>다른 마이크 publisher<small>UNEXPECTED_PUBLISHER</small></span>
-              <StatusBadge tone={readinessQuery.data?.unexpectedMicrophonePublishers === 0 ? 'success' : 'warning'}>
-                {readinessQuery.data ? `${readinessQuery.data.unexpectedMicrophonePublishers}명` : '대기'}
-              </StatusBadge>
-            </li>
-          </ul>
-          <InlineNotice tone={serverCheckTone}>{serverCheckMessage}</InlineNotice>
-        </Panel>
+        <div className="instructor-preflight__side-column">
+          <Panel
+            className="instructor-preflight__quality-panel"
+            title="송출 품질"
+            description="수강생에게 전달할 최대 화질을 설정합니다."
+            action={publisher.applyingQuality ? <StatusBadge tone="warning">적용 중</StatusBadge> : undefined}
+          >
+            <fieldset className="quality-group" disabled={!publisher.canControl || publisher.applyingQuality}>
+              <legend>카메라</legend>
+              <div className="quality-options">
+                {CAMERA_QUALITIES.map((option) => (
+                  <label
+                    key={option.id}
+                    className={`quality-option${publisher.quality.camera === option.id ? ' is-selected' : ''}`}
+                  >
+                    <input
+                      type="radio"
+                      name="camera-quality"
+                      value={option.id}
+                      checked={publisher.quality.camera === option.id}
+                      onChange={() => publisher.changeQuality({ camera: option.id })}
+                    />
+                    <span className="quality-option__label">{option.label}</span>
+                    <span className="quality-option__rate">업로드 {megabits(option.preset)} Mbps</span>
+                    <span className="quality-option__hint">{option.hint}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+
+            <fieldset className="quality-group" disabled={!publisher.canControl || publisher.applyingQuality}>
+              <legend>화면 공유</legend>
+              <div className="quality-options">
+                {SCREEN_QUALITIES.map((option) => (
+                  <label
+                    key={option.id}
+                    className={`quality-option${publisher.quality.screenShare === option.id ? ' is-selected' : ''}`}
+                  >
+                    <input
+                      type="radio"
+                      name="screen-quality"
+                      value={option.id}
+                      checked={publisher.quality.screenShare === option.id}
+                      onChange={() => publisher.changeQuality({ screenShare: option.id })}
+                    />
+                    <span className="quality-option__label">{option.label}</span>
+                    <span className="quality-option__rate">업로드 {megabits(option.preset)} Mbps</span>
+                    <span className="quality-option__hint">{option.hint}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+
+            <InlineNotice tone="info">
+              {publisher.applyingQuality
+                ? '새 화질로 다시 송출하는 중입니다.'
+                : '선택한 품질은 이 브라우저의 다음 강의에도 적용됩니다.'}
+            </InlineNotice>
+          </Panel>
+
+          <Panel
+            className="instructor-preflight__readiness-panel"
+            title="서버 시작 조건"
+            description="강사 연결과 마이크 트랙을 서버 기준으로 자동 확인합니다."
+            action={<StatusBadge tone={serverReady ? 'success' : serverCheckTone === 'danger' ? 'danger' : 'warning'}>{serverReady ? '확인 완료' : '점검 중'}</StatusBadge>}
+          >
+            <ul className="readiness-list">
+              <li>
+                <span>LiveKit 연결<small>송출 방 연결 상태</small></span>
+                <StatusBadge tone={localPublisherReady ? 'success' : 'warning'}>{connectionLabel(publisher.connectionState)}</StatusBadge>
+              </li>
+              <li>
+                <span>강사 연결<small>강사 입장 확인</small></span>
+                <StatusBadge tone={readinessQuery.data?.instructorPresent ? 'success' : 'warning'}>
+                  {readinessQuery.data?.instructorPresent ? '확인됨' : '대기'}
+                </StatusBadge>
+              </li>
+              <li>
+                <span>마이크 송출<small>음성 트랙 상태</small></span>
+                <StatusBadge tone={readinessQuery.data?.microphonePublished && !readinessQuery.data?.microphoneMuted ? 'success' : 'warning'}>
+                  {readinessQuery.data?.microphonePublished
+                    ? readinessQuery.data.microphoneMuted ? '음소거됨' : `${readinessQuery.data.instructorMicrophoneTrackCount}개 송출`
+                    : '대기'}
+                </StatusBadge>
+              </li>
+              <li>
+                <span>중복 송출<small>다른 마이크 연결 감지</small></span>
+                <StatusBadge tone={readinessQuery.data?.unexpectedMicrophonePublishers === 0 ? 'success' : 'warning'}>
+                  {readinessQuery.data ? `${readinessQuery.data.unexpectedMicrophonePublishers}명` : '대기'}
+                </StatusBadge>
+              </li>
+            </ul>
+            <InlineNotice tone={serverCheckTone}>{serverCheckMessage}</InlineNotice>
+          </Panel>
+        </div>
       </div>
 
-      <InlineNotice tone={ready ? 'success' : starting ? 'warning' : 'warning'}>
-        {ready
-          ? '실제 마이크 송출이 확인되었습니다. 시작 요청 뒤 Egress 준비와 강사 연결 재검증을 진행합니다.'
-          : starting
-            ? `STARTING · ${startStatusQuery.data?.step ?? 'ACCEPTED'} — 이 화면을 닫거나 마이크를 끄지 마세요.`
-            : '마이크를 publish하고 서버 점검이 완료될 때까지 기다려 주세요.'}
-      </InlineNotice>
-      {startStatusQuery.isError && <InlineNotice tone="danger">시작 상태를 확인하지 못했습니다. 자동으로 다시 확인해 주세요.</InlineNotice>}
-      {startFailure && (
-        <InlineNotice tone="danger">
-          {startFailure.failureMessage ?? '라이브 시작 준비에 실패했습니다.'}
-          {startFailure.failureCode ? ` (${startFailure.failureCode})` : ''}
-        </InlineNotice>
+      {(startStatusQuery.isError || startFailure) && (
+        <div className="instructor-preflight__feedback">
+          {startStatusQuery.isError && <InlineNotice tone="danger">시작 상태를 확인하지 못했습니다. 자동으로 다시 확인해 주세요.</InlineNotice>}
+          {startFailure && (
+            <InlineNotice tone="danger">
+              {startFailure.failureMessage ?? '라이브 시작 준비에 실패했습니다.'}
+              {startFailure.failureCode ? ` (${startFailure.failureCode})` : ''}
+            </InlineNotice>
+          )}
+        </div>
       )}
-      <div className="sticky-form-actions">
+      <div className={`sticky-form-actions instructor-preflight__actions${ready ? ' is-ready' : startFailure ? ' is-error' : ''}`}>
+        <span className="instructor-preflight__start-icon" aria-hidden="true">
+          {ready ? '✓' : startFailure ? '!' : starting ? '···' : '•'}
+        </span>
+        <div className="instructor-preflight__start-state" role="status" aria-live="polite">
+          <strong>{ready ? '라이브 시작 준비 완료' : starting ? '라이브 시작 준비 중' : startFailure ? '라이브 시작 실패' : '필수 점검 진행 중'}</strong>
+          <small>
+            {ready
+              ? '실제 마이크 송출과 서버 조건을 모두 확인했습니다.'
+              : starting
+                ? `STARTING · ${startStatusQuery.data?.step ?? 'ACCEPTED'} — 마이크를 끄지 마세요.`
+                : startFailure
+                  ? '문제를 확인한 뒤 다시 시작해 주세요.'
+                  : '마이크를 켜고 서버 점검이 완료될 때까지 기다려 주세요.'}
+          </small>
+        </div>
         <button
           disabled={!ready || startMutation.isPending}
-          className={`button button--primary button--large${ready ? '' : ' is-disabled'}`}
+          className={`button button--primary${ready ? '' : ' is-disabled'}`}
           type="button"
           onClick={() => startMutation.mutate()}
         >
