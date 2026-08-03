@@ -306,6 +306,16 @@ export interface WatchHeatmap {
   viewers: number
 }
 
+/** 강의 용어집 한 줄. AI가 자료에서 뽑은 것을 강사 수정본이 덮어쓴 결과다. */
+export interface GlossaryTerm {
+  /** 용어 이름 그대로. 자막에서 이 문자열을 찾아 링크를 건다. */
+  termId: string
+  term: string
+  definition: string
+  /** MATERIAL(AI가 자료에서 뽑음) · INSTRUCTOR(강사가 고치거나 더함) */
+  source: 'MATERIAL' | 'INSTRUCTOR'
+}
+
 export interface QuestionHighlight {
   at: string
   count: number
@@ -405,6 +415,7 @@ export interface LiveSessionService {
   saveBookmark: (lessonId: string, sessionMs: number) => Promise<void>
   getAiAnswerHistory: (sessionId: string) => Promise<AiAnswerHistoryItem[]>
   /** 내가 이미 쌓은 칸별 재생 횟수. 새로고침 뒤 이어서 세려면 필요하다. */
+  getGlossary: (lessonId: string) => Promise<GlossaryTerm[]>
   getMyWatchBuckets: (lessonId: string) => Promise<Record<number, number>>
   reportWatchBuckets: (lessonId: string, counts: Record<number, number>) => Promise<void>
   getWatchHeatmap: (lessonId: string, durationMs: number | null) => Promise<WatchHeatmap>

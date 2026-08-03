@@ -70,6 +70,7 @@ export type {
   ChatMessageView,
   AiAnswerHistoryItem,
   LectureNoteTopic,
+  GlossaryTerm,
   LectureNoteView,
   WatchHeatmap,
   LiveSessionService,
@@ -101,3 +102,5 @@ export const reportWatchBuckets = (lessonId: string, counts: Record<number, numb
   liveSessionService.reportWatchBuckets(lessonId, counts)
 export const getWatchHeatmap = (lessonId: string, durationMs: number | null) =>
   liveSessionService.getWatchHeatmap(lessonId, durationMs)
+
+export const getGlossary = (lessonId: string) => liveSessionService.getGlossary(lessonId)

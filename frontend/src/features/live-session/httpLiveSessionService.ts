@@ -24,6 +24,7 @@ import type {
   LectureNoteTopic,
   AiAnswerHistoryItem,
   WatchHeatmap,
+  GlossaryTerm,
 } from './liveSessionService.interface'
 
 interface ApiLiveSessionView {
@@ -853,6 +854,10 @@ export const httpLiveSessionService = {
     const { data } = await apiClient.get<AiAnswerHistoryItem[]>(
       `/live-sessions/${sessionId}/ai/answers`)
     return data
+  },
+  async getGlossary(lessonId) {
+    const { data } = await apiClient.get<GlossaryTerm[]>(`/lessons/${lessonId}/glossary`)
+    return data ?? []
   },
   async getMyWatchBuckets(lessonId) {
     const { data } = await apiClient.get<Record<number, number>>(

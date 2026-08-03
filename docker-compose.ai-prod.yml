@@ -72,6 +72,12 @@ services:
       AI_WORKER_SPRING_HMAC_SECRET: ${AI_CALLBACK_SECRET:?AI_CALLBACK_SECRET 필요 — Spring이 이미 쓰는 기존 값}
       AI_WORKER_BGE_RUNTIME_URL: http://host.docker.internal:18080/internal/bge
       AI_WORKER_BGE_INTERNAL_TOKEN: ${BGE_RUNTIME_INTERNAL_TOKEN:?BGE_RUNTIME_INTERNAL_TOKEN 필요 — GPU 쪽과 동일 값}
+      # PPTX 핵심 용어 추출(MR !228). 이 줄이 없으면 .env에 값을 넣어도 컨테이너로 전달되지 않는다 —
+      # MATERIAL_EMBEDDING_ENABLED·LECTURE_NOTE_CONSUMER_ENABLED가 정확히 그렇게 조용히 꺼져 있던 적이 있다.
+      # 켜려면 GMS 키가 반드시 있어야 한다(없으면 워커가 기동에 실패한다 — config.py의 검증).
+      # GMS_API_KEY는 .env.prod에 이미 있다(ai-api가 필수로 쓰는 값과 같다).
+      AI_WORKER_KEY_TERM_EXTRACTION_ENABLED: ${AI_WORKER_KEY_TERM_EXTRACTION_ENABLED:-false}
+      AI_WORKER_GMS_API_KEY: ${GMS_API_KEY:-}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8011/readyz', timeout=2)"]
       interval: 15s
