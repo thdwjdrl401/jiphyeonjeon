@@ -19,25 +19,32 @@ final class NotificationCopy {
             case NotificationTypes.ENROLLMENT_REQUESTED -> "새 수강 신청";
             case NotificationTypes.ENROLLMENT_APPROVED -> "수강 신청이 승인되었습니다";
             case NotificationTypes.ENROLLMENT_REJECTED -> "수강 신청이 거절되었습니다";
+            case NotificationTypes.MATERIAL_PUBLISHED -> "새 강의 자료";
             default -> throw new IllegalArgumentException("문구가 정의되지 않은 알림 종류입니다: " + type);
         };
     }
 
     /**
-     * @param studentName 신청한 학생 이름. 강사에게 가는 알림에만 쓰인다 — 학생 본인에게 자기
-     *                    이름을 되돌려 줄 이유가 없다. 조회에 실패하면 {@code null}이 오고, 그때는
-     *                    이름 없는 문장으로 떨어진다(알림이 안 가는 것보다 낫다).
+     * @param subject 문구에 들어갈 대상 이름. 수강 알림에서는 <b>신청한 학생</b>, 자료 알림에서는
+     *                <b>자료 파일명</b>이다 — 자리는 같고 의미가 다르다.
+     *
+     *                <p>학생 이름은 강사에게 가는 알림에만 실린다(본인에게 자기 이름을 되돌려 줄
+     *                이유가 없다). {@code null}이면 이름 없는 문장으로 떨어진다 — 이름을 못 찾았다고
+     *                알림을 통째로 거르는 것보다 낫다.
      */
-    static String message(String type, String curriculumTitle, String studentName) {
+    static String message(String type, String curriculumTitle, String subject) {
         return switch (type) {
-            case NotificationTypes.ENROLLMENT_REQUESTED -> studentName == null
+            case NotificationTypes.ENROLLMENT_REQUESTED -> subject == null
                     ? "«%s» 수강 신청이 들어왔습니다. 승인 또는 거절해 주세요.".formatted(curriculumTitle)
                     : "%s 님이 «%s» 수강을 신청했습니다. 승인 또는 거절해 주세요."
-                            .formatted(studentName, curriculumTitle);
+                            .formatted(subject, curriculumTitle);
             case NotificationTypes.ENROLLMENT_APPROVED ->
                     "«%s» 수강이 승인되었습니다. 지금부터 강의를 들을 수 있습니다.".formatted(curriculumTitle);
             case NotificationTypes.ENROLLMENT_REJECTED ->
                     "«%s» 수강 신청이 거절되었습니다.".formatted(curriculumTitle);
+            case NotificationTypes.MATERIAL_PUBLISHED -> subject == null || subject.isBlank()
+                    ? "«%s»에 새 자료가 올라왔습니다.".formatted(curriculumTitle)
+                    : "«%s»에 새 자료 «%s»가 올라왔습니다.".formatted(curriculumTitle, subject);
             default -> throw new IllegalArgumentException("문구가 정의되지 않은 알림 종류입니다: " + type);
         };
     }

@@ -38,7 +38,7 @@ public class EnrollmentNotificationListener {
 
     @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
     public void onRequested(EnrollmentRequestedEvent event) {
-        enqueue(new NotificationFanoutCommand(
+        enqueue(NotificationFanoutCommand.forEnrollment(
                 NotificationTypes.ENROLLMENT_REQUESTED,
                 event.enrollmentId(), event.curriculumId(), event.curriculumTitle(),
                 event.instructorId(), event.studentId(), event.occurredAt()));
@@ -46,7 +46,7 @@ public class EnrollmentNotificationListener {
 
     @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
     public void onDecided(EnrollmentDecidedEvent event) {
-        enqueue(new NotificationFanoutCommand(
+        enqueue(NotificationFanoutCommand.forEnrollment(
                 event.approved() ? NotificationTypes.ENROLLMENT_APPROVED : NotificationTypes.ENROLLMENT_REJECTED,
                 event.enrollmentId(), event.curriculumId(), event.curriculumTitle(),
                 event.instructorId(), event.studentId(), event.occurredAt()));

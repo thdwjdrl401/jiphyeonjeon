@@ -134,7 +134,7 @@ GET /api/instructor/live-sessions/{sessionId}/processing
 - 소유 강사는 200, 비소유 사용자·수강생은 403 `LIVE_SESSION_FORBIDDEN`, 없는 세션은
   404 `LIVE_SESSION_NOT_FOUND`다. 조회는 매번 LiveKit·MinIO를 호출하지 않고 DB 상태만 반환한다.
 
-### 2-4. 알림 센터 — **조회 4개·수강 알림 발행 구현됨, 나머지 발행·재판정은 남음**
+### 2-4. 알림 센터 — **조회 4개·수강/자료 알림 발행 구현됨, 나머지 발행·재판정은 남음**
 
 FE는 타입·Interface·Mock·화면·이동 규칙을 모두 구현했다
 ([ADR-0012](decisions/seominkyeong/0012-notification-center-two-status-axes.md)).
@@ -147,7 +147,11 @@ HTTP 어댑터도 그 넷은 실제 호출로 배선됐다.
 경로는 **도메인 이벤트 → 아웃박스(같은 트랜잭션) → `notification.fanout` 큐 → 워커 → 알림 행**이다.
 즉시 수강(IMMEDIATE)에는 알림이 없다 — 강사가 처리할 일이 없기 때문이다.
 
-**아직 없는 것 둘.** (1) 나머지 **발행 지점**(강의·자료 게시, 라이브 일정, Egress 완료, 다시보기 게시).
+**자료 게시는 넓은 팬아웃이다.** 강사가 자료를 붙이면 그 커리큘럼의 **수강 중(ACTIVE) 학생 전원**에게
+`MATERIAL_PUBLISHED`가 간다. 수신자 명단은 앱을 통과하지 않는다 — 조건은 SQL이 걸고, 워커가 커서로
+조각을 잘라 자기 다음 조각을 큐에 넣는다(ADR-0073 §5). 임베딩 스위치와 무관하게 발행된다.
+
+**아직 없는 것 둘.** (1) 나머지 **발행 지점**(라이브 일정, Egress 완료, 다시보기 게시).
 (2) `GET /{id}/target`(대상 재판정)은 다른 모듈 넷을 읽어야 해서 뒤로 미뤘고, 어댑터는 그 하나만
 501 `API_NOT_IMPLEMENTED`를 던진다.
 
@@ -220,7 +224,8 @@ HTTP 어댑터도 그 넷은 실제 호출로 배선됐다.
 - **BE 후속 작업**: ~~(1) 알림 테이블(멱등 키 unique 제약 포함)과 조회 4개 엔드포인트~~ — 완료
   (`V23__notification.sql`의 `dedupe_key` UNIQUE + `NotificationController`),
   (2) ~~수강 판정~~ 완료(`CurriculumEnrollmentService` → `EnrollmentRequestedEvent`·`EnrollmentDecidedEvent`).
-  강의 저장·자료 게시·Egress 완료·다시보기 게시 지점의 알림 발행은 남음,
+  ~~자료 게시~~ 완료(`InstructorCurriculumService` → `CurriculumMaterialPublishedEvent`, 넓은 팬아웃).
+  라이브 일정·Egress 완료·다시보기 게시 지점의 알림 발행은 남음,
   (3) `LIVE_STARTING_SOON`·오늘의 라이브 일정 알림을 만드는 예약 작업(현재 `@Scheduled`는
   `LiveStartReconciler`·`AssetReaper`·`OutboxRelay`에만 있어 알림용 잡이 없다),
   (4) 실시간 push(WS/SSE) — 없는 동안 FE는 60초 주기로 `summary`를 폴링한다.

@@ -17,6 +17,7 @@ import com.liveclass.lesson.api.LessonDirectory;
 import com.liveclass.lesson.api.LessonManagement;
 import com.liveclass.lesson.api.LessonMaterialManagement;
 import com.liveclass.lesson.api.LessonPlacement;
+import com.liveclass.lesson.api.CurriculumMaterialPublishedEvent;
 import com.liveclass.lesson.api.LessonView;
 import com.liveclass.lesson.api.MaterialView;
 import com.liveclass.live.api.LiveSessionDirectory;
@@ -25,6 +26,7 @@ import com.liveclass.live.api.LiveSessionView;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -63,6 +65,7 @@ public class InstructorCurriculumService {
     private final OutboxPublisher outboxPublisher;
     /** 강의 삭제 시 녹화(자산 행 + 산출물)를 함께 정리하는 video 모듈 포트. */
     private final LessonRecordingCleanup lessonRecordingCleanup;
+    private final ApplicationEventPublisher eventPublisher;
     private final boolean embeddingEnabled;
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
 
@@ -77,6 +80,7 @@ public class InstructorCurriculumService {
                                        AssetDirectory assetDirectory,
                                        OutboxPublisher outboxPublisher,
                                        LessonRecordingCleanup lessonRecordingCleanup,
+                                       ApplicationEventPublisher eventPublisher,
                                        @Value("${material.embedding.enabled:false}") boolean embeddingEnabled) {
         this.curriculumRepository = curriculumRepository;
         this.sectionRepository = sectionRepository;
@@ -89,7 +93,16 @@ public class InstructorCurriculumService {
         this.assetDirectory = assetDirectory;
         this.outboxPublisher = outboxPublisher;
         this.lessonRecordingCleanup = lessonRecordingCleanup;
+        this.eventPublisher = eventPublisher;
         this.embeddingEnabled = embeddingEnabled;
+    }
+
+    /**
+     * 알림 문구에 넣을 커리큘럼 제목. 사건에 제목을 실어 보내면 워커가 커리큘럼 모듈을 조회하지
+     * 않아도 되고, 나중에 제목이 바뀌어도 알림은 <b>그때 제목</b>으로 남는다(ADR-0073 §7).
+     */
+    private String curriculumTitleOf(UUID curriculumId) {
+        return curriculumRepository.findById(curriculumId).map(Curriculum::getTitle).orElse("");
     }
 
     @Transactional
@@ -488,11 +501,19 @@ public class InstructorCurriculumService {
                 lessonId, assetId, material.materialId());
         // 임베딩 파이프라인이 켜져 있으면 PENDING으로 두고 잡을 outbox에 싣는다(같은 트랜잭션 = 신뢰성, ADR-0036).
         // 꺼져 있으면(기본) 연결만 하고 상태는 READY 유지 — 파이프라인 미배선 단계의 무회귀.
+        UUID curriculumId = requireOwnedSection(instructorId, lesson.sectionId()).getCurriculumId();
         if (embeddingEnabled) {
-            UUID curriculumId = requireOwnedSection(instructorId, lesson.sectionId()).getCurriculumId();
             lessonMaterialManagement.updateEmbeddingStatus(material.materialId(), "PENDING");
             enqueueEmbedJob(curriculumId, lessonId, material);
         }
+        /*
+         * 알림은 임베딩 스위치와 무관하다 — 자료가 붙은 것은 학생에게 알릴 일이고, 그 자료를 AI가
+         * 읽는지는 별개다. 수신자는 여기서 세지 않는다(ADR-0073 §5): 몇 명인지 알려면 COUNT(*)를
+         * 돌려야 하고 그 값은 워커가 실제로 훑을 때쯤 이미 낡는다.
+         */
+        eventPublisher.publishEvent(new CurriculumMaterialPublishedEvent(
+                curriculumId, curriculumTitleOf(curriculumId), lessonId,
+                material.materialId(), material.fileName(), OffsetDateTime.now()));
         return material;
     }
 
@@ -571,6 +592,10 @@ public class InstructorCurriculumService {
             curriculumMaterialManagement.updateEmbeddingStatus(material.materialId(), "PENDING");
             enqueueCurriculumEmbedJob(curriculumId, material);
         }
+        // 레슨이 없는 커리큘럼 전체 자료다. lessonId를 비워 보내면 화면이 커리큘럼으로 보낸다.
+        eventPublisher.publishEvent(new CurriculumMaterialPublishedEvent(
+                curriculumId, curriculumTitleOf(curriculumId), null,
+                material.materialId(), material.fileName(), OffsetDateTime.now()));
         return material;
     }
 
