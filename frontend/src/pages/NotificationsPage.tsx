@@ -45,8 +45,9 @@ function emptyMessage(scope: NotificationScope, readState: NotificationReadFilte
  * <p>필터가 두 층이다. 1차 탭은 <b>무엇을 볼지</b>(전체 · 처리 대기), 2차 탭은 <b>어떻게 볼지</b>
  * (읽지 않음 · 읽음)이며 둘은 조합된다. 서로 다른 축을 한 줄에 늘어놓지 않는 이유는 ADR-0012에 있다.
  *
- * <p>1차 탭은 강사에게만 낸다 — `ACTION_REQUIRED`가 붙는 알림(수강 신청, 녹화 완료·실패)이 전부
- * 강사용이라 학생에게는 언제나 0건이다. 빈 탭을 남겨 두면 학생이 매번 확인하게 된다.
+ * <p>1차 탭 줄은 두 역할에 모두 있지만 <b>항목이 다르다.</b> `처리 대기`는 강사만 받는다 —
+ * `ACTION_REQUIRED`가 붙는 알림(수강 신청, 녹화 완료·실패)이 전부 강사용이라 학생에게는 언제나
+ * 0건이고, 빈 탭을 남겨 두면 학생이 매번 확인하게 된다. 학생 화면에는 `전체` 한 칸만 남는다.
  */
 export default function NotificationsPage() {
   const { user } = useAuth()
@@ -67,11 +68,17 @@ export default function NotificationsPage() {
   /*
     건수는 탭 위에 붙인다. 머리말에 따로 숫자를 세워 두면 같은 수가 화면에 두 번 나오고, 그 숫자를
     누를 수는 없어서 "어디로 가야 그것만 볼 수 있나"를 다시 찾게 된다. 탭에 붙으면 숫자가 곧 이동 수단이다.
+
+    학생에게도 `전체` 한 칸만 남겨 이 줄을 그린다. 항목이 하나라 고를 것은 없지만, 두 역할이 같은
+    화면 구조를 갖게 해서 "지금 보고 있는 것이 전체 알림"이라는 기준선을 준다 — 이 줄이 없으면
+    학생 화면에서는 `읽지 않음`이 최상위 분류처럼 보인다.
   */
-  const scopeTabs: ReadonlyArray<TabItem<NotificationScope>> = [
-    { id: 'ALL', label: '전체' },
-    { id: 'ACTION_REQUIRED', label: ACTION_REQUIRED_LABEL, count: counts?.actionRequiredCount },
-  ]
+  const scopeTabs: ReadonlyArray<TabItem<NotificationScope>> = isInstructor
+    ? [
+        { id: 'ALL', label: '전체' },
+        { id: 'ACTION_REQUIRED', label: ACTION_REQUIRED_LABEL, count: counts?.actionRequiredCount },
+      ]
+    : [{ id: 'ALL', label: '전체' }]
   const readTabs = READ_TABS.map((tab) =>
     tab.id === 'UNREAD' ? { ...tab, count: unreadCount } : tab,
   )
@@ -84,16 +91,14 @@ export default function NotificationsPage() {
       />
 
       <Panel>
-        {isInstructor && (
-          <Tabs
-            className="notification-tabs notification-tabs--scope"
-            idPrefix={SCOPE_TAB_PREFIX}
-            label="알림 종류"
-            items={scopeTabs}
-            value={scope}
-            onChange={setScope}
-          />
-        )}
+        <Tabs
+          className="notification-tabs notification-tabs--scope"
+          idPrefix={SCOPE_TAB_PREFIX}
+          label="알림 종류"
+          items={scopeTabs}
+          value={scope}
+          onChange={setScope}
+        />
 
         {/*
           읽음 축과 `모두 읽음`을 같은 줄에 둔다 — 그 버튼이 바꾸는 것이 바로 이 축이다.

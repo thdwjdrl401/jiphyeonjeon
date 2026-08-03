@@ -147,17 +147,30 @@ describe('알림 센터', () => {
     expect(screen.getByRole('tab', { name: /처리 대기\s*3/ })).toBeInTheDocument()
   })
 
-  it('학생에게는 처리 대기 탭을 내지 않고 읽음 축만 남긴다', async () => {
+  it('학생 화면도 전체 탭으로 시작하지만 처리 대기 탭은 없다', async () => {
     await loginAsStudent()
     renderAt('/student/notifications')
 
     await screen.findByRole('list', { name: '알림 목록' })
-    // 학생은 ACTION_REQUIRED 알림을 받지 않으므로 항상 빈 탭이 된다.
+
+    /*
+      1차 탭 줄은 강사 화면과 같은 자리에 있어야 한다 — 없으면 학생 화면에서는 `읽지 않음`이
+      최상위 분류처럼 보인다. 다만 학생은 ACTION_REQUIRED 알림을 받지 않으므로 그 탭은 없다.
+    */
+    expect(screen.getByRole('tab', { name: '전체', selected: true })).toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: /처리 대기/ })).toBeNull()
-    expect(screen.queryByRole('tab', { name: '전체' })).toBeNull()
+
     // 읽음 축은 역할과 무관하게 남는다.
     expect(screen.getByRole('tab', { name: /읽지 않음/, selected: true })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '읽음' })).toBeInTheDocument()
+  })
+
+  it('강사 화면에는 전체와 처리 대기가 함께 있다', async () => {
+    await loginAsInstructor()
+    renderAt('/instructor/notifications')
+
+    expect(await screen.findByRole('tab', { name: '전체', selected: true })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /처리 대기/ })).toBeInTheDocument()
   })
 
   it('읽지 않음 탭이 먼저 열려 있다', async () => {
