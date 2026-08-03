@@ -1,0 +1,102 @@
+import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+
+const getNotificationLeadTimes = vi.fn()
+const getNotificationPreference = vi.fn()
+const saveNotificationPreference = vi.fn()
+vi.mock('@/features/notification/notificationService', () => ({
+  getNotificationLeadTimes: () => getNotificationLeadTimes(),
+  getNotificationPreference: (c: string, l?: string) => getNotificationPreference(c, l),
+  saveNotificationPreference: (i: unknown) => saveNotificationPreference(i),
+}))
+
+import { LiveReminderSetting } from '@/features/notification/LiveReminderSetting'
+
+/**
+ * 라이브 곧 시작 알림 설정.
+ *
+ * <p>지키려는 것은 셋이다 — <b>이 설정이 다른 알림과 무관하다는 것을 밝히는가</b>, <b>값이 어디서
+ * 왔는지 알려 주는가</b>, <b>1440분을 사람이 읽는 단위로 보여 주는가</b>.
+ *
+ * <p>두 번째가 중요하다. 강의 화면에서 30분이 보일 때 그게 이 강의만의 설정인지 커리큘럼에서
+ * 내려온 것인지 모르면, 사용자는 자기가 무엇을 바꾸는지 알 수 없다.
+ */
+describe('라이브 시작 알림 설정', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    getNotificationLeadTimes.mockResolvedValue({ choices: [5, 10, 30, 60, 180, 1440], defaultMinutes: 10 })
+  })
+
+  function renderSetting(props: { curriculumId: string; lessonId?: string }) {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    return render(
+      <QueryClientProvider client={client}>
+        <LiveReminderSetting {...props} />
+      </QueryClientProvider>,
+    )
+  }
+
+  it('다른 알림은 이 설정과 무관하다는 것을 밝힌다', async () => {
+    getNotificationPreference.mockResolvedValue({ enabled: true, leadMinutes: 10, source: 'DEFAULT' })
+
+    renderSetting({ curriculumId: 'cur_1' })
+
+    expect(await screen.findByText(/다른 알림은 이 설정과/)).toBeInTheDocument()
+  })
+
+  /** 1440분을 "1440분"이라고 보여 주지 않는다. */
+  it('리드타임을 사람이 읽는 단위로 보여 준다', async () => {
+    getNotificationPreference.mockResolvedValue({ enabled: true, leadMinutes: 10, source: 'DEFAULT' })
+
+    renderSetting({ curriculumId: 'cur_1' })
+
+    expect(await screen.findByRole('option', { name: '1일 전' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: '3시간 전' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: '5분 전' })).toBeInTheDocument()
+  })
+
+  it('강의 설정이 커리큘럼에서 내려온 것인지 알려 준다', async () => {
+    getNotificationPreference.mockResolvedValue({ enabled: true, leadMinutes: 30, source: 'CURRICULUM' })
+
+    renderSetting({ curriculumId: 'cur_1', lessonId: 'les_1' })
+
+    expect(await screen.findByText(/커리큘럼 설정을 따르고 있습니다/)).toBeInTheDocument()
+  })
+
+  it('이 강의만 다르게 설정된 경우를 구별해 알려 준다', async () => {
+    getNotificationPreference.mockResolvedValue({ enabled: true, leadMinutes: 5, source: 'LESSON' })
+
+    renderSetting({ curriculumId: 'cur_1', lessonId: 'les_1' })
+
+    expect(await screen.findByText(/이 강의만 다르게 설정되어 있습니다/)).toBeInTheDocument()
+  })
+
+  it('리드타임을 고르면 강의 범위로 저장한다', async () => {
+    getNotificationPreference.mockResolvedValue({ enabled: true, leadMinutes: 10, source: 'CURRICULUM' })
+    saveNotificationPreference.mockResolvedValue(undefined)
+    renderSetting({ curriculumId: 'cur_1', lessonId: 'les_1' })
+    const select = await screen.findByRole('combobox')
+
+    await userEvent.selectOptions(select, '30')
+
+    await waitFor(() =>
+      expect(saveNotificationPreference).toHaveBeenCalledWith({
+        curriculumId: 'cur_1',
+        lessonId: 'les_1',
+        enabled: true,
+        leadMinutes: 30,
+      }),
+    )
+  })
+
+  /** 꺼 두면 리드타임을 고를 이유가 없다 — 고를 수 있게 두면 무엇이 적용되는지 헷갈린다. */
+  it('꺼 두면 리드타임 선택을 막는다', async () => {
+    getNotificationPreference.mockResolvedValue({ enabled: false, leadMinutes: 10, source: 'CURRICULUM' })
+
+    renderSetting({ curriculumId: 'cur_1' })
+
+    expect(await screen.findByRole('combobox')).toBeDisabled()
+  })
+})

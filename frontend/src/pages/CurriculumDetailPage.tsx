@@ -14,6 +14,7 @@ import { resolvePrimaryAction } from '@/features/curriculum-detail/primaryAction
 import { useCurriculumDetail } from '@/features/curriculum-detail/useCurriculumDetail'
 import CurriculumProgress from '@/features/enrollment/CurriculumProgress'
 import { useCancelEnrollmentMutation, useEnrollMutation } from '@/features/enrollment/useEnrollmentMutations'
+import { LiveReminderSetting } from '@/features/notification/LiveReminderSetting'
 import { ApiError } from '@/shared/api/client'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
@@ -109,6 +110,12 @@ export default function CurriculumDetailPage() {
             {detail.viewerContext.relationship === 'ENROLLED' && detail.viewerContext.progress && (
               <CurriculumProgress progress={detail.viewerContext.progress} />
             )}
+
+            {/*
+              수강 중이거나 소유 강사일 때만 보인다. 신청도 안 한 사람에게 "라이브 알림 설정"을
+              보여 주면 받을 수도 없는 알림을 설정하게 된다.
+            */}
+            {canViewCurriculumMaterials && <LiveReminderSetting curriculumId={detail.curriculumId} />}
 
             {hasPriorityRelationPanel && relationPanel}
 

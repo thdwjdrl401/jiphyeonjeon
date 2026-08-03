@@ -342,3 +342,46 @@
     width: auto;
   }
 }
+
+/*
+ * 라이브 시작 알림 설정(ADR-0073 4단계).
+ *
+ * 커리큘럼 상세와 강의 상세 두 곳에 같은 컴포넌트가 들어간다 — 폭이 다른 자리라 고정 폭을 주지
+ * 않고 담기는 칸을 따른다.
+ */
+.live-reminder-setting {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.live-reminder-setting h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.live-reminder-setting__hint,
+.live-reminder-setting__source {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.live-reminder-setting__toggle,
+.live-reminder-setting__lead {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* 라벨 글자와 셀렉트가 붙지 않게. 셀렉트는 남는 폭을 먹지 않는다 — 선택지가 짧다. */
+.live-reminder-setting__lead select {
+  min-width: 8rem;
+}
+
+.live-reminder-setting__error {
+  margin: 0;
+  color: var(--danger, #b3261e);
+  font-size: 0.875rem;
+}

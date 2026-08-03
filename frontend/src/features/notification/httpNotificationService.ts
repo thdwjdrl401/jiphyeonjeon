@@ -1,10 +1,12 @@
 import { Client } from '@stomp/stompjs'
 import { apiClient } from '@/shared/api/client'
-import type { NotificationService } from './notificationService.interface'
+import type { NotificationService, SavePreferenceInput } from './notificationService.interface'
 import type {
   NotificationItem,
   NotificationListQuery,
   NotificationListResponse,
+  NotificationLeadTimes,
+  NotificationPreference,
   NotificationSignal,
   PushSubscriptionInput,
   NotificationSummary,
@@ -55,6 +57,22 @@ export const httpNotificationService = {
   async markAllAsRead() {
     const { data } = await apiClient.post<NotificationSummary>('/me/notifications/read-all')
     return data
+  },
+  async getNotificationLeadTimes() {
+    const { data } = await apiClient.get<NotificationLeadTimes>(
+      '/me/notification-preferences/lead-times',
+    )
+    return data
+  },
+  async getNotificationPreference(curriculumId: string, lessonId?: string) {
+    const { data } = await apiClient.get<NotificationPreference>('/me/notification-preferences', {
+      // lessonId가 없으면 키를 빼고 보낸다 — 커리큘럼 전체 설정을 묻는다는 뜻이다.
+      params: { curriculumId, lessonId },
+    })
+    return data
+  },
+  async saveNotificationPreference(input: SavePreferenceInput) {
+    await apiClient.put('/me/notification-preferences', input)
   },
   async getPushPublicKey() {
     const { data } = await apiClient.get<{ publicKey: string | null }>(

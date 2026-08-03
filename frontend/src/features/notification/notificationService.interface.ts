@@ -3,6 +3,8 @@ import type {
   NotificationListQuery,
   NotificationListResponse,
   NotificationSummary,
+  NotificationLeadTimes,
+  NotificationPreference,
   NotificationSignal,
   PushSubscriptionInput,
   NotificationTargetResolution,
@@ -40,4 +42,16 @@ export interface NotificationService {
   /** 브라우저가 만든 구독을 서버에 등록한다. 멱등이다. */
   registerPushSubscription: (subscription: PushSubscriptionInput) => Promise<void>
   unregisterPushSubscription: (endpoint: string) => Promise<void>
+  getNotificationLeadTimes: () => Promise<NotificationLeadTimes>
+  /** 지금 이 강의(또는 커리큘럼 전체)에 적용되는 값과 그 값이 어디서 왔는지. */
+  getNotificationPreference: (curriculumId: string, lessonId?: string) => Promise<NotificationPreference>
+  /** `lessonId`를 주면 그 강의만 덮어쓰고, 없으면 커리큘럼 전체에 적용한다. */
+  saveNotificationPreference: (input: SavePreferenceInput) => Promise<void>
+}
+
+export interface SavePreferenceInput {
+  curriculumId: string
+  lessonId?: string
+  enabled: boolean
+  leadMinutes: number
 }
