@@ -105,7 +105,7 @@ export default function GlobalHeader() {
                   onClick={closeMenu}
                 >
                   <ProfileAvatar displayName={user.displayName} imageUrl={user.profileImageUrl} decorative />
-                  <span>
+                  <span className="user-chip__text">
                     <strong>{user.displayName}</strong>
                     <small>{USER_ROLE_LABEL[user.role]}</small>
                   </span>
