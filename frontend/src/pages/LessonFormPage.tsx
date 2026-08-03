@@ -49,6 +49,7 @@ export default function LessonFormPage() {
     || currentLesson?.replayStatus === 'PUBLISHED'
   const canEditLiveSchedule = !isEdit || !(liveHasEnded || replayIsPreparingOrAvailable)
   const lessonDetailPath = instructorPaths.lesson(curriculumId, sectionId, lessonId ?? '')
+  const curriculumReturnPath = isEdit ? publicPaths.curriculum(curriculumId) : instructorPaths.curriculumManage(curriculumId)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [materials, setMaterials] = useState<SelectedMaterial[]>([])
@@ -183,7 +184,7 @@ export default function LessonFormPage() {
       <PageHeader
         title={isEdit ? '강의 수정' : '새 강의 만들기'}
         description={`${curriculum?.title ?? ''} · ${isEdit ? currentLesson?.sectionTitle ?? '' : '선택한 섹션'}`}
-        action={<Link className="button button--soft" to={publicPaths.curriculum(curriculumId)}>커리큘럼 상세로 돌아가기</Link>}
+        action={<Link className="button button--soft" to={curriculumReturnPath}>{isEdit ? '커리큘럼 상세로 돌아가기' : '커리큘럼 관리로 돌아가기'}</Link>}
       />
       <form className="workspace-form lesson-form" onSubmit={save}>
         <div className="lesson-form__top-grid">
@@ -255,7 +256,7 @@ export default function LessonFormPage() {
         )}
 
         <div className="sticky-form-actions lesson-form__actions">
-          <Link className="button button--ghost" to={isEdit ? lessonDetailPath : publicPaths.curriculum(curriculumId)}>취소</Link>
+          <Link className="button button--ghost" to={isEdit ? lessonDetailPath : curriculumReturnPath}>취소</Link>
           <button className="button button--primary button--large" type="submit" disabled={submitting || !title.trim() || (canEditLiveSchedule && !scheduledAt)}>{submitting ? '저장 중…' : isEdit ? '강의 수정 저장' : '강의 생성 저장'}</button>
         </div>
       </form>
