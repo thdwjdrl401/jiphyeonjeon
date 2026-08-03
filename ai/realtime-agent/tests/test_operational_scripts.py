@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -492,14 +495,71 @@ def test_vllm_examples_keep_gpu0_loopback_and_conservative_capacity() -> None:
     assert "WHISPER_VLLM_HOST=127.0.0.1" in runtime
     assert "WHISPER_VLLM_MAX_NUM_SEQS=1" in runtime
     assert "WHISPER_VLLM_GPU_MEMORY_UTILIZATION=0.08" in runtime
+    assert "WHISPER_VLLM_MAX_NUM_BATCHED_TOKENS=2048" in runtime
     assert "WHISPER_VLLM_MODEL_PATH=/home/<user>/ai/models/whisper-large-v3" in runtime
     assert "WHISPER_VLLM_SERVED_MODEL_NAME=liveclass-whisper-large-v3" in runtime
     assert "GPU 0" in supervisor
     assert '--host "$WHISPER_VLLM_HOST"' in supervisor
+    assert "--max-num-batched-tokens" in supervisor
     assert "/v1/models" in supervisor
     assert "vllm[audio]==" in bootstrap
     assert "sudo" not in supervisor
     assert "sudo" not in bootstrap
+
+
+def test_vllm_supervisor_health_executes_embedded_probe(tmp_path: Path) -> None:
+    class ModelsHandler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            if self.path != "/v1/models":
+                self.send_response(404)
+                self.end_headers()
+                return
+            body = b'{"data":[{"id":"liveclass-whisper-large-v3"}]}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, _format: str, *_args: object) -> None:
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), ModelsHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    venv_bin = tmp_path / "venv" / "bin"
+    venv_bin.mkdir(parents=True)
+    (venv_bin / "python").symlink_to(sys.executable)
+    runtime_env = tmp_path / "whisper-vllm.env"
+    runtime_env.write_text(
+        "\n".join(
+            [
+                f"WHISPER_VLLM_VENV={venv_bin.parent}",
+                "WHISPER_VLLM_HOST=127.0.0.1",
+                f"WHISPER_VLLM_PORT={server.server_address[1]}",
+                "WHISPER_VLLM_SERVED_MODEL_NAME=liveclass-whisper-large-v3",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    try:
+        result = subprocess.run(
+            [str(VLLM_SUPERVISOR_SCRIPT), "health"],
+            check=False,
+            capture_output=True,
+            text=True,
+            env={
+                **os.environ,
+                "LIVECLASS_WHISPER_VLLM_ENV": str(runtime_env),
+            },
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_rootless_supervisor_keeps_tunnel_and_dual_agents_under_tmux() -> None:

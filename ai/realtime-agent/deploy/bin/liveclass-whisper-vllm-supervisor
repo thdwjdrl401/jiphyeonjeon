@@ -54,8 +54,9 @@ validate_runtime_env() {
     fi
     if [ "${WHISPER_VLLM_DTYPE:-}" != "bfloat16" ] || \
         [ "${WHISPER_VLLM_GPU_MEMORY_UTILIZATION:-}" != "0.08" ] || \
+        [ "${WHISPER_VLLM_MAX_NUM_BATCHED_TOKENS:-}" != "2048" ] || \
         [ "${WHISPER_VLLM_MAX_NUM_SEQS:-}" != "1" ]; then
-        echo "Whisper vLLM runtime profile must use bfloat16, memory 0.08, max sequences 1" >&2
+        echo "Whisper vLLM runtime profile must use bfloat16, memory 0.08, batched tokens 2048, max sequences 1" >&2
         exit 1
     fi
     if [ ! -x "$WHISPER_VLLM_VENV/bin/vllm" ]; then
@@ -75,10 +76,9 @@ import json
 import os
 import urllib.request
 
-url = (
-    f"http://{os.environ[\"WHISPER_VLLM_HOST\"]}:"
-    f"{os.environ[\"WHISPER_VLLM_PORT\"]}/v1/models"
-)
+host = os.environ["WHISPER_VLLM_HOST"]
+port = os.environ["WHISPER_VLLM_PORT"]
+url = "http://{}:{}/v1/models".format(host, port)
 opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 with opener.open(url, timeout=2) as response:
     payload = json.load(response)
@@ -103,6 +103,7 @@ run_runtime() {
             --served-model-name "$WHISPER_VLLM_SERVED_MODEL_NAME" \
             --dtype "${WHISPER_VLLM_DTYPE:-bfloat16}" \
             --gpu-memory-utilization "${WHISPER_VLLM_GPU_MEMORY_UTILIZATION:-0.08}" \
+            --max-num-batched-tokens "${WHISPER_VLLM_MAX_NUM_BATCHED_TOKENS:-2048}" \
             --max-num-seqs "${WHISPER_VLLM_MAX_NUM_SEQS:-1}"
         runtime_status=$?
         set -e

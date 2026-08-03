@@ -120,7 +120,8 @@ curl --fail http://127.0.0.1:8081/health/ready
 
 agent의 VLLM_WHISPER_MODEL과 runtime의 WHISPER_VLLM_SERVED_MODEL_NAME은 정확히 같아야 한다.
 vLLM은 127.0.0.1:18083에만 bind하며 별도 GPU/EC2 inbound나 SSH tunnel을 추가하지 않는다.
-첫 cap은 GPU memory utilization 0.08, runtime max-num-seqs 1, agent active/idle 1/1이다.
+첫 cap은 GPU memory utilization 0.08, max-num-batched-tokens 2048,
+runtime max-num-seqs 1, agent active/idle 1/1이다.
 학습 모델이 ADR-0040 gate를 통과하면 runtime의 model path만 merged checkpoint로 교체한다.
 
 전환 실패 시 prod agent를 먼저 중지하고 vLLM을 중지한 뒤 저장한 Nemotron env를 복원한다.

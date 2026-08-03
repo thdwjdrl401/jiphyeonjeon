@@ -88,7 +88,8 @@ liveclass-whisper-vllm-supervisor는 tmux에서 runtime을 재기동하고 /v1/m
 - 서버 bind는 127.0.0.1만 허용한다.
 - 모델과 processor artifact는 Git 밖에 두며 env에는 경로만 둔다.
 - 기존 BGE와 GPU 0을 공유하므로 첫 운영값은 GPU memory utilization 0.08,
-  max-num-seqs=1, agent active/idle 1/1이다.
+  max-num-batched-tokens=2048, max-num-seqs=1, agent active/idle 1/1이다.
+  Whisper audio item의 encoder budget 1500보다 작은 자동값 448은 vLLM 시작을 실패시키므로 허용하지 않는다.
 - vLLM runtime과 기존 Nemotron process를 동시에 GPU에 상주시키지 않는다.
 - vLLM version, dtype, memory utilization과 concurrency 변경은 같은 checkpoint의 ADR-0039 report로
   다시 검증한다.
