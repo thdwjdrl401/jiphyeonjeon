@@ -28,12 +28,14 @@ npm run install:all             # 루트(concurrently) + frontend
 ## 3. 실행
 
 ### 방법 A. 터미널 (루트에서 동시)
-| 환경 | 개발 모드(FE+BE 동시) | 백엔드만 빌드 |
+| 환경 | 개발 모드 | 백엔드만 빌드 |
 | ---- | ---- | ---- |
 | **WSL** (권장) | `npm run dev:wsl` | `npm run build:wsl` |
 | Windows | `npm run dev` | `npm run build` |
 
-- `dev`/`dev:wsl` = 프론트 Vite(8083, HMR) + 백엔드 `bootRun`(8080, DevTools 핫리로드) 동시.
+- `dev` = 프론트 Vite(8083, HMR) + 백엔드 `bootRun`(8080, DevTools 핫리로드) 동시.
+- `dev:wsl` = 프론트 + 백엔드 + 컴파일 감시 + `media-worker` 동시. 워커는 `media` 프로필로 빌드·실행되고 로그는 `[MEDIA]`로 표시된다.
+- `dev:wsl`을 `Ctrl+C`로 종료하면 `media-worker`도 함께 멈추고, PostgreSQL·Redis·MinIO·RabbitMQ 인프라 컨테이너는 계속 실행된다.
 - WSL에서 `Permission denied: ./gradlew` → `chmod +x backend/gradlew` 한 번.
 - **인프라(docker compose)가 먼저 떠 있어야** 백엔드가 PG/Redis에 붙는다.
 
