@@ -12,8 +12,9 @@
 
 ## 컨트롤 플레인 책임 (LiveClass AI)
 - 인증·유저·**강좌·커리큘럼·강의(course→section→lesson) CRUD**·수강·진도·자료(material) 관리.
-- **AI 배치 잡 발행**: PPTX 파싱·chunk·embed·후보(·2-pass 교정)을 RabbitMQ로. **outbox + idempotency**로 유실·중복 방지, AI callback 멱등 처리([CONTRACT §3-1/3-2](../docs/CONTRACT.md#3-내부-계약-확정-인터페이스)). (라이브 STT는 realtime-agent→Redis Streams, 배치 아님. 트랜스코드 없음)
-- **LiveKit 토큰 발급 + Egress(녹화) 제어** · **다시보기 재생 URL**(`GET /lessons/{id}/playback`, 인증 seam). 영상 업로드 없음(자료 PPTX만).
+- **AI 배치 잡 발행**: PPTX 파싱·chunk·embed·후보(·2-pass 교정)을 RabbitMQ로. **outbox + idempotency**로 유실·중복 방지, AI callback 멱등 처리([CONTRACT §3-1/3-2](../docs/CONTRACT.md#3-내부-계약-확정-인터페이스)). (라이브 STT는 realtime-agent→Redis Streams, 배치 아님.)
+- **LiveKit 토큰 발급 + Egress(라이브 녹화) 제어** · **다시보기 재생 URL**(`GET /lessons/{id}/playback`, 인증 seam).
+- **업로드 녹화강의 제어**: 전용 API로 MP4 presigned 업로드를 접수하고 `media.transcode` 잡을 발행하며, media-worker callback을 멱등 처리해 전용 HLS 재생 URL을 연다([ADR-0008](../docs/decisions/choinhoo/0008-recorded-lesson-upload-and-hls-transcoding.md)).
 - **Redis Streams 소비**: AI가 푸시한 자막·용어·근거를 소비 → Postgres 영속 + WebSocket 전달.
 - **채팅·자막 WebSocket** 소유(강의/세션별 채널).
 - **AI 프론트도어**(RAG SSE 중계·Q&A): 인증·정책·비용 검증 후 ai-api 호출, 응답을 **요청자에게만** 라우팅.
