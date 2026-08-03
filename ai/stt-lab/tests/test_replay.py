@@ -129,7 +129,7 @@ def test_accuracy_replay_uses_product_vad_segments_for_final_only_backend() -> N
     plan = execution.segment_plan[0]
     assert (plan.start_ms, plan.end_ms, plan.boundary_reason) == (20, 60, "SILENCE")
     assert plan.pcm_sha256 == hashlib.sha256(audio.samples.tobytes()).hexdigest()
-    assert [event.kind for event in execution.events] == ["segmentFinal", "completed"]
+    assert [event.kind for event in execution.events] == ["textDelta", "segmentFinal", "completed"]
     assert transcriber.seen_audio[0].duration_ms == 100
 
 

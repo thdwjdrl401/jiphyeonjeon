@@ -5,7 +5,7 @@ import asyncio
 import httpx
 import pytest
 from app.audio.segmentation import SpeechSegment
-from app.stt.engine import AudioChunk, EngineCompleted, SegmentFinal, SttStreamContext
+from app.stt.engine import AudioChunk, EngineCompleted, SegmentFinal, SttStreamContext, TextDelta
 
 from stt_lab.vllm_replay import VllmBackendSlot
 
@@ -55,6 +55,7 @@ def test_vllm_slot_consumes_product_segment_and_emits_final_only() -> None:
 
     assert slot.metadata.output_mode == "SEGMENT_FINAL_ONLY"
     assert events == [
+        TextDelta("서버 최종 결과", 20),
         SegmentFinal("서버 최종 결과", 0, 20, "STREAM_END"),
         EngineCompleted(20),
     ]

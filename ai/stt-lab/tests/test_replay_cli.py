@@ -170,7 +170,10 @@ def test_candidate_parser_requires_explicit_backend_and_model() -> None:
     assert _parse_candidate("server=vllm@liveclass-whisper-large-v3") == CandidateSpec(
         "server", "vllm", "liveclass-whisper-large-v3"
     )
+    assert _parse_candidate("qwen=qwen-vllm-streaming@Qwen/Qwen3-ASR-1.7B") == CandidateSpec(
+        "qwen", "qwen-vllm-streaming", "Qwen/Qwen3-ASR-1.7B"
+    )
     with pytest.raises(argparse.ArgumentTypeError, match="NAME=BACKEND@MODEL"):
         _parse_candidate("whisper-large-v3")
-    with pytest.raises(argparse.ArgumentTypeError, match="nemotron, whisper, or vllm"):
+    with pytest.raises(argparse.ArgumentTypeError, match="qwen-vllm-streaming"):
         _parse_candidate("base=unknown@model")

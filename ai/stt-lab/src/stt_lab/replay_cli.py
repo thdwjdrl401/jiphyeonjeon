@@ -22,6 +22,10 @@ from app.stt.providers.segmented import SpeechSegmenter
 from stt_lab.audio import read_pcm16_mono_wav
 from stt_lab.contracts import EvaluationClip, load_manifest
 from stt_lab.metrics import evaluate_transcript
+from stt_lab.qwen_vllm_streaming import (
+    QwenVllmStreamingBackendSlot,
+    QwenVllmStreamingConfiguration,
+)
 from stt_lab.replay import (
     EngineEventObservation,
     RecordingSegmenter,
@@ -96,6 +100,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             "pythonVersion": platform.python_version(),
             "vllmBaseUrl": args.vllm_base_url
             if any(candidate.backend == "vllm" for candidate in candidates)
+            else None,
+            "qwenStreamingBaseUrl": args.qwen_streaming_base_url
+            if any(candidate.backend == "qwen-vllm-streaming" for candidate in candidates)
             else None,
         }
     )
@@ -396,8 +403,10 @@ def _parse_candidate(value: str) -> CandidateSpec:
         raise argparse.ArgumentTypeError("candidate must use NAME=BACKEND@MODEL format") from exc
     if not _SAFE_CANDIDATE_NAME.fullmatch(name):
         raise argparse.ArgumentTypeError("candidate name is not safe")
-    if backend not in {"nemotron", "whisper", "vllm"}:
-        raise argparse.ArgumentTypeError("candidate backend must be nemotron, whisper, or vllm")
+    if backend not in {"nemotron", "qwen-vllm-streaming", "whisper", "vllm"}:
+        raise argparse.ArgumentTypeError(
+            "candidate backend must be nemotron, qwen-vllm-streaming, whisper, or vllm"
+        )
     if not model_id.strip():
         raise argparse.ArgumentTypeError("candidate model must not be blank")
     return CandidateSpec(name=name, backend=backend, model_id=model_id)
@@ -441,6 +450,16 @@ def _cli_slot_builder(
             api_key=os.environ.get(args.vllm_api_key_env),
             precision=precision,
             timeout_seconds=args.vllm_timeout_seconds,
+        )
+    if backend == "qwen-vllm-streaming":
+        return QwenVllmStreamingBackendSlot(
+            model_id,
+            configuration=QwenVllmStreamingConfiguration(
+                base_url=args.qwen_streaming_base_url,
+                chunk_ms=args.qwen_streaming_chunk_ms,
+                timeout_seconds=args.qwen_streaming_timeout_seconds,
+            ),
+            precision=precision,
         )
     return _default_slot_builder(backend, model_id, language, device, precision)
 
@@ -510,7 +529,9 @@ def _parser() -> argparse.ArgumentParser:
         "--candidate",
         action="append",
         required=True,
-        help="repeat NAME=BACKEND@MODEL; backend is nemotron, whisper, or vllm",
+        help=(
+            "repeat NAME=BACKEND@MODEL; backend is nemotron, qwen-vllm-streaming, whisper, or vllm"
+        ),
     )
     parser.add_argument("--mode", choices=("accuracy", "paced"), default="accuracy")
     parser.add_argument("--workers", type=_positive_int, default=1)
@@ -530,6 +551,9 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--vllm-base-url", default="http://127.0.0.1:18083/v1")
     parser.add_argument("--vllm-api-key-env", default="STT_LAB_VLLM_API_KEY")
     parser.add_argument("--vllm-timeout-seconds", type=_positive_float, default=120.0)
+    parser.add_argument("--qwen-streaming-base-url", default="http://127.0.0.1:18084")
+    parser.add_argument("--qwen-streaming-chunk-ms", type=_positive_int, default=500)
+    parser.add_argument("--qwen-streaming-timeout-seconds", type=_positive_float, default=120.0)
     return parser
 
 

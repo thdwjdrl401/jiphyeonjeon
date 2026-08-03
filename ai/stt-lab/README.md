@@ -133,6 +133,41 @@ speech-start/end 지연, RTF와 peak CUDA memory가 기록된다. `test` split�
 `summary.json`, `comparison.csv`, `report.md`를 생성한다. 경로를 고정하려면
 `--artifact-dir`을 사용한다. 기존 artifact 디렉터리는 덮어쓰지 않는다.
 
+## Qwen3-ASR vLLM 스트리밍 평가
+
+Qwen은 제품 환경과 분리한 `qwen-asr==0.0.6`·`vllm==0.14.0` 전용 venv에서 실행한다.
+공식 streaming demo는 운영 서버가 아니라 후보 평가용이며 GPU 0과 loopback bind만 허용한다.
+
+```bash
+CUDA_VISIBLE_DEVICES=0 \
+  /home/liveclass/.local/share/liveclass/qwen3-asr-vllm/vllm-0.14.0-cu128/bin/qwen-asr-demo-streaming \
+  --asr-model-path /home/liveclass/ai/models/qwen3-asr-1.7b \
+  --gpu-memory-utilization 0.15 \
+  --host 127.0.0.1 \
+  --port 18084 \
+  --unfixed-chunk-num 2 \
+  --unfixed-token-num 5 \
+  --chunk-size-sec 1.0
+```
+
+기존 기준선과 같은 502 clips·904 VAD segments를 평가한다.
+
+```bash
+uv run --frozen stt-lab-replay \
+  --manifest /home/liveclass/ai/datasets/aihub-korean-lecture/v1/manifests/dev-benchmark-502.jsonl \
+  --candidate qwen3-asr-1.7b=qwen-vllm-streaming@Qwen/Qwen3-ASR-1.7B \
+  --qwen-streaming-base-url http://127.0.0.1:18084 \
+  --qwen-streaming-chunk-ms 500 \
+  --mode accuracy \
+  --workers 1 \
+  --output results/replay-dev-benchmark-502-qwen3-asr-1.7b.json
+```
+
+이 backend는 제품 VAD가 segment를 확정한 뒤 해당 segment를 Qwen streaming API의
+`start/chunk/finish`로 재생한다. 따라서 CER·VAD-ready 이후 서버 지연 비교에는 사용할 수 있지만,
+발화 시작과 동시에 audio를 전송하는 end-to-end streaming 지연을 증명하지 않는다. 외부 vLLM이
+GPU를 소유하므로 replay report의 CUDA peak는 0이며 서버 process VRAM은 `nvidia-smi`로 별도 기록한다.
+
 
 ## 학습 사전검증
 

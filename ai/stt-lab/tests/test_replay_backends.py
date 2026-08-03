@@ -5,7 +5,7 @@ import asyncio
 import numpy as np
 import pytest
 from app.audio.segmentation import SpeechSegment
-from app.stt.engine import AudioChunk, EngineCompleted, SegmentFinal, SttStreamContext
+from app.stt.engine import AudioChunk, EngineCompleted, SegmentFinal, SttStreamContext, TextDelta
 
 from stt_lab.audio import PcmAudio
 from stt_lab.replay_backends import FinalOnlySegmentedEngine, build_backend_slot
@@ -38,7 +38,7 @@ class RecordingTranscriber:
         return None
 
 
-def test_final_only_adapter_uses_product_segmented_lifecycle_without_fake_delta() -> None:
+def test_final_only_adapter_emits_contract_delta_before_authoritative_final() -> None:
     transcriber = RecordingTranscriber()
     engine = FinalOnlySegmentedEngine(
         provider="whisper",
@@ -58,6 +58,7 @@ def test_final_only_adapter_uses_product_segmented_lifecycle_without_fake_delta(
 
     assert engine.capabilities.incremental_deltas is False
     assert events == [
+        TextDelta("최종 결과", 20),
         SegmentFinal("최종 결과", 0, 20, "STREAM_END"),
         EngineCompleted(20),
     ]
