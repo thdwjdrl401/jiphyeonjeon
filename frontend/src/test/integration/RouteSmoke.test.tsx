@@ -69,6 +69,7 @@ describe('전체 페이지 라우트', () => {
     ['/instructor/curriculums', '내 커리큘럼'],
     ['/instructor/curriculums/new', '새 커리큘럼 만들기'],
     ['/instructor/curriculums/cur-spring-live/manage', '라이브로 완성하는 Spring Boot'],
+    ['/instructor/curriculums/cur-spring-live/sections/sec-security/recorded-lessons/new', '녹화강의 업로드'],
     ['/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/new', '새 강의 만들기'],
     ['/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/les-security/edit', '강의 수정'],
     ['/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/les-security', 'Spring Security 시작하기'],
