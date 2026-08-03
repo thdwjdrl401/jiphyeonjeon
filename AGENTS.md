@@ -97,6 +97,21 @@ Codex는 별도 명령 어댑터 없이 위 문서 흐름을 기준으로 판단
 - **MR**: [MR 템플릿](.gitlab/merge_request_templates/merge_request_template.md)의 하네스 체크리스트를 채운다.
 - 공유 계약 파일(`AGENTS.md`, `docs/CONTRACT.md`)은 [CODEOWNERS](CODEOWNERS)에 따라 리드 승인이 필요하다.
 
+### 번호를 새로 집을 때 (마이그레이션·ADR)
+
+브랜치 두 개가 각자 **같은 번호**를 집으면 git은 파일명이 달라 조용히 병합하고, 그 결과 Flyway가
+기동을 거부해 **운영이 내려간다**(2026-07-31·2026-08-03 실제 발생). ADR은 기동을 막지는 않지만
+`ADR-NNNN` 참조가 어디를 가리키는지 알 수 없게 만든다.
+
+- 새 번호를 집기 전에 **`master`와 열린 MR을 함께** 확인한다. 로컬 파일 목록만 보면 놓친다.
+- CI `check-collisions`가 대상 브랜치와 대조해 막는다. 로컬 확인은 `bash scripts/check-version-collisions.sh`.
+- 충돌이 났으면 **이미 적용·머지된 쪽은 그대로 두고 내 번호만** 올린다. 운영에 적용된 마이그레이션
+  번호를 바꾸면 `flyway_schema_history`와 어긋나 더 크게 깨진다.
+- ADR 번호는 **저자 폴더별**이라 폴더가 다르면 같은 번호여도 충돌이 아니다.
+- 검사가 통과한 뒤 머지 전에 `master`가 움직이면 검사는 그 변화를 보지 못한다. 그래서 프로젝트
+  Merge method가 **반선형 이력**이며, `master`가 앞서 있으면 **rebase 후 재검사**를 거쳐야 머지된다
+  ([ADR-0069](docs/decisions/songjeongki/0069-number-collisions-close-the-merge-window.md)).
+
 ---
 
 ## 6. 강제(자물쇠)는 도구 중립 레이어에 있다
