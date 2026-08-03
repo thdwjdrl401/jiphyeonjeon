@@ -30,6 +30,10 @@ function formatHourMinute(date: Date) {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
 }
 
+function isSameDay(a: Date, b: Date) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+}
+
 /**
  * 카드 메타의 일정 표기. `toLocaleString('ko-KR')`은 "2026. 8. 3. 오후 2:00:00"처럼 길어서
  * 좁은 칸을 혼자 여러 줄로 밀어낸다. 같은 해면 "08.03 14:00", 해가 다르면 "26.08.03 14:00".
@@ -147,6 +151,7 @@ export default function MyCurriculumsPage() {
   const upcomingLiveDate = upcomingLive?.scheduledAt ? new Date(upcomingLive.scheduledAt) : null
   const upcomingLiveDateLabel = upcomingLiveDate ? formatMonthDay(upcomingLiveDate) : '--.--'
   const upcomingLiveTimeLabel = upcomingLiveDate ? formatHourMinute(upcomingLiveDate) : '--:--'
+  const upcomingLiveIsToday = upcomingLiveDate ? isSameDay(upcomingLiveDate, new Date()) : false
   const upcomingLiveActionPath = upcomingLive
     ? isInstructor
       ? instructorPaths.preflight(upcomingLive.sessionId)
@@ -160,7 +165,7 @@ export default function MyCurriculumsPage() {
 
   return (
     <div className="workspace-page my-curriculums-page">
-      <PageHeader title="내 커리큘럼" description={isInstructor ? '운영 상태와 오늘의 라이브 강의를 한눈에 확인하세요.' : undefined} />
+      <PageHeader title="내 커리큘럼" description={isInstructor ? '운영 상태와 다가오는 라이브 강의를 한눈에 확인하세요.' : undefined} />
 
       {listError && <InlineNotice tone="danger">커리큘럼 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.</InlineNotice>}
       {!listError && summaryError && (
@@ -176,11 +181,22 @@ export default function MyCurriculumsPage() {
       </div>
 
       {/*
-        라이브가 있는 날은 강조 패널을 그대로 쓴다. 없는 날은 "없어요" 한 줄에 패널 한 장
-        (제목·설명·본문)을 쓰지 않고 한 줄 띠로 줄인다 — 대부분의 날이 이 상태다.
+        서버의 `todayLiveSession`은 이름과 달리 "오늘"로 걸러 오지 않는다 —
+        CatalogService.nearestLiveSession()이 예정/진행 세션 중 scheduledAt이 가장 이른 하나를
+        고를 뿐이라, 오늘 예정이 없으면 내일·다음 주 세션이 그대로 올라온다. 그래서 제목을
+        "오늘의 라이브 강의"로 못 박지 않고, 실제로 받은 날짜를 보고 정한다.
+
+        라이브가 있으면 강조 패널을 그대로 쓴다. 없으면 "없어요" 한 줄에 패널 한 장
+        (제목·설명·본문)을 쓰지 않고 한 줄 띠로 줄인다.
       */}
       {upcomingLive && upcomingLiveActionPath ? (
-        <Panel className="highlight-panel" title="오늘의 라이브 강의" description="오늘 예정된 라이브 강의만 표시합니다.">
+        <Panel
+          className="highlight-panel"
+          title={upcomingLiveIsToday ? '오늘의 라이브 강의' : '다음 라이브 강의'}
+          description={upcomingLiveIsToday
+            ? '오늘 예정된 라이브 강의입니다.'
+            : '오늘은 예정된 강의가 없어 가장 이른 다음 강의를 보여 줍니다.'}
+        >
           <div className="next-action-card">
             <div className="next-action-card__date"><strong>{upcomingLiveDateLabel}</strong><span>{upcomingLiveTimeLabel}</span></div>
             <div>
@@ -192,7 +208,7 @@ export default function MyCurriculumsPage() {
           </div>
         </Panel>
       ) : (
-        <p className="today-live-empty"><b>오늘의 라이브</b><span>오늘 예정된 라이브 강의가 없어요.</span></p>
+        <p className="today-live-empty"><b>다음 라이브</b><span>예정된 라이브 강의가 없어요.</span></p>
       )}
 
       <Panel title={isInstructor ? '운영 중인 커리큘럼' : '나의 학습 목록'} action={<div className="compact-controls">{isInstructor && <Link className="button button--primary" to={instructorPaths.newCurriculum}>새 커리큘럼</Link>}<input aria-label="내 커리큘럼 검색" placeholder="제목 검색" value={search} onChange={(event) => { setSearch(event.target.value); setPage(0) }} /><select aria-label="상태 필터" value={status} onChange={(event) => { setStatus(event.target.value); setPage(0) }}><option value="">전체 상태</option>{isInstructor ? <><option value="PUBLISHED">공개 중</option><option value="DRAFT">준비 중</option><option value="ARCHIVED">보관됨</option></> : <><option value="ACTIVE">학습 중</option></>}</select></div>}>
