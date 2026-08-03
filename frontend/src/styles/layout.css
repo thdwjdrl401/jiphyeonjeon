@@ -162,15 +162,10 @@
   object-fit: cover;
 }
 
-/*
- * 이름과 가입 유형을 한 줄에 두고 사이를 띄운다. `:last-child`로 잡지 않는다 —
- * 링크 목적지를 읽어 주는 .visually-hidden span이 마지막 자식이라, 위치로 잡으면
- * 규칙이 엉뚱한 요소로 옮겨가 이름과 유형이 간격 없이 붙는다.
- */
+/* 이름과 가입 유형은 이전처럼 위아래로 배치한다. */
 .user-chip__text {
   display: flex;
-  align-items: baseline;
-  gap: 7px;
+  flex-direction: column;
   line-height: 1.25;
 }
 

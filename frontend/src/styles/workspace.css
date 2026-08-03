@@ -35,8 +35,8 @@
 .curriculum-danger-zone strong { color: var(--ink-900); font-size: .84rem; }
 .curriculum-danger-zone p { margin: 4px 0 0; color: var(--ink-500); font-size: .72rem; }
 .workspace-page--narrow { width: min(100%, 840px); margin-inline: auto; }
-.workspace-page-header { display: flex; min-height: 105px; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 8px 2px 4px; }
-.workspace-page-header h1 { margin: 7px 0 5px; color: var(--ink-950); font-size: clamp(1.8rem, 3vw, 2.45rem); letter-spacing: -.055em; line-height: 1.15; }
+.workspace-page-header { display: flex; min-height: 82px; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 4px 2px 8px; }
+.workspace-page-header h1 { margin: 7px 0 5px; color: var(--ink-950); font-size: clamp(2rem, 3.2vw, 2.8rem); letter-spacing: -.055em; line-height: 1.15; }
 .workspace-page-header p { max-width: 680px; margin: 0; color: var(--ink-600); font-size: .88rem; }
 .workspace-page-header__action { flex: 0 0 auto; }
 .header-action-group, .card-actions, .form-actions { display: flex; align-items: center; gap: 9px; }
@@ -115,10 +115,6 @@
 /* 강의 생성·수정 공통 폼 — 입력 밀도를 높이되 다른 워크스페이스 화면에는 영향을 주지 않는다. */
 .workspace-content > .workspace-page.lesson-form-page { width: min(100%, 1120px); }
 .workspace-page.lesson-form-page { gap: 12px; }
-.lesson-form-page > .workspace-page-header { min-height: 82px; padding: 4px 0 8px; }
-.lesson-form-page > .workspace-page-header::before { top: 5px; width: 8px; height: 8px; }
-.lesson-form-page > .workspace-page-header h1 { margin-block: 4px 3px; font-size: clamp(2rem, 3.2vw, 2.8rem); }
-.lesson-form-page > .workspace-page-header p { font-size: .8rem; }
 .lesson-form { gap: 12px; }
 .lesson-form__top-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(320px, .75fr); grid-template-rows: auto 1fr; align-items: stretch; gap: 12px; }
 .lesson-form__top-grid > .workspace-panel:only-child { grid-column: 1 / -1; grid-row: auto; }
@@ -186,9 +182,6 @@
 }
 
 @media (max-width: 700px) {
-  .lesson-form-page > .workspace-page-header { min-height: auto; align-items: flex-start; flex-direction: column; gap: 10px; padding-top: 30px; }
-  .lesson-form-page > .workspace-page-header .workspace-page-header__action,
-  .lesson-form-page > .workspace-page-header .workspace-page-header__action .button { width: 100%; }
   .lesson-form-page .workspace-panel { padding: 14px; }
   .lesson-form__embedded-heading { align-items: flex-start; flex-wrap: wrap; }
   .lesson-form__actions.sticky-form-actions { bottom: 6px; }
@@ -199,10 +192,6 @@
 .lesson-detail-page > .breadcrumbs { min-width: 0; flex-wrap: nowrap; overflow: hidden; white-space: nowrap; }
 .lesson-detail-page > .breadcrumbs > * { flex: 0 0 auto; }
 .lesson-detail-page > .breadcrumbs > strong { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; }
-.lesson-detail-page > .workspace-page-header { min-height: 82px; padding: 4px 0 8px; }
-.lesson-detail-page > .workspace-page-header::before { top: 5px; width: 8px; height: 8px; }
-.lesson-detail-page > .workspace-page-header h1 { margin-block: 4px 3px; font-size: clamp(2rem, 3.2vw, 2.8rem); }
-.lesson-detail-page > .workspace-page-header p { display: -webkit-box; max-width: 760px; overflow: hidden; font-size: .8rem; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .lesson-detail-grid { display: grid; min-height: 0; flex: 1; grid-template-columns: minmax(0, 1.7fr) minmax(280px, .8fr); grid-template-rows: auto minmax(300px, 1fr); align-items: stretch; gap: 12px; }
 .lesson-detail-grid > .workspace-panel { padding: 22px; }
 .lesson-detail-grid .workspace-panel__header { align-items: flex-start; flex-direction: row; gap: 12px; margin-bottom: 14px; padding-bottom: 11px; }
@@ -267,7 +256,6 @@
 
 @media (max-width: 700px) {
   .lesson-detail-page > .breadcrumbs { display: none; }
-  .lesson-detail-page > .workspace-page-header { min-height: auto; padding-top: 30px; }
   .lesson-detail__info-content { grid-template-columns: 1fr; gap: 12px; }
   .lesson-detail__context { padding: 12px 0 0; border-top: 1px solid var(--ink-100); border-left: 0; }
   .lesson-live-summary { grid-template-columns: auto minmax(0, 1fr); gap: 12px; }
@@ -313,11 +301,6 @@
  * 파일 순서와 무관하게 이긴다 — 다른 워크스페이스 화면의 여백 리듬은 건드리지 않는다.
  */
 .workspace-page.profile-page { gap: 12px; }
-/*
- * 페이지 제목. 큰 헤더(min-height 105px + 장식 막대)를 쓰지 않고 눈썹 라벨로 낸다 — 아래 카드가
- * 이름·가입 유형·이메일로 같은 말을 하고 있어, 제목이 세로를 차지할 이유가 없다.
- */
-.profile-page__eyebrow { margin: 2px 0 0 2px; color: var(--ink-500); font-size: .88rem; font-weight: 700; letter-spacing: .12em; line-height: 1.2; }
 /*
  * 카드를 세로로만 쌓으면 폭 1000px 넘는 화면에서 오른쪽 절반이 통째로 빈다. 두 열로 늘어놓아
  * 같은 정보를 절반 높이에 담는다.
@@ -445,18 +428,62 @@
  */
 .workspace-content:has(.my-curriculums-page) { padding-bottom: 40px; }
 .workspace-page.my-curriculums-page { gap: 16px; }
-/*
- * 제목 크기는 다른 워크스페이스 화면(예: "새 커리큘럼 만들기")과 같게 기본값을 그대로 쓴다.
- * 줄이는 건 min-height가 잡아 두던 여유와 위아래 padding뿐이다.
- * 제목 왼쪽 위의 붉은 seal(::before)은 절대 위치라 제목을 따라오지 않는다 — 원래는
- * align-items: flex-end가 큰 제목을 아래로 밀어 자리가 났지만, min-height를 풀면 제목이
- * 올라와 seal과 겹친다. padding-top으로 seal이 앉을 자리를 명시적으로 남긴다.
- */
-.my-curriculums-page .workspace-page-header { min-height: auto; padding: 26px 2px 8px; }
-.my-curriculums-page .workspace-page-header::before { top: 6px; }
-.my-curriculums-page .workspace-page-header h1 { margin: 0; }
+.my-curriculums-page__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 300px);
+  align-items: start;
+  gap: 20px;
+}
+.my-curriculums-page__main { display: grid; min-width: 0; gap: 16px; }
+.my-curriculums-page__sidebar {
+  position: sticky;
+  top: calc(71px + 24px);
+  display: grid;
+  min-width: 0;
+  gap: 16px;
+}
+.my-curriculums-page__sidebar .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.my-curriculums-page__sidebar .next-action-card {
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 12px;
+}
+.my-curriculums-page__sidebar .next-action-card__date { min-width: 64px; padding: 10px 8px; }
+.my-curriculums-page__sidebar .next-action-card > .button { grid-column: 1 / -1; width: 100%; }
 .my-curriculums-page .workspace-panel { padding: 20px 22px; }
 .my-curriculums-page .workspace-panel__header { margin-bottom: 14px; padding-bottom: 12px; }
+.my-curriculums-page__list-panel > .workspace-panel__header { align-items: center; }
+.my-curriculums-page__list-panel > .workspace-panel__header h2 { margin-bottom: 0; }
+.my-curriculums-page .pagination { gap: 8px; margin-top: 14px; }
+.my-curriculums-page .pagination button {
+  position: relative;
+  isolation: isolate;
+  width: 39px;
+  height: 39px;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--ink-600);
+}
+.my-curriculums-page .pagination button:hover:not(:disabled) { border-color: transparent; color: var(--ink-950); }
+.my-curriculums-page .pagination button.is-current {
+  border-color: transparent;
+  background: transparent;
+  color: var(--paper-pure);
+}
+.my-curriculums-page .pagination button.is-current::before {
+  position: absolute;
+  z-index: -1;
+  top: 50%;
+  left: 50%;
+  width: 48px;
+  height: 24px;
+  transform: translate(-50%, -50%);
+  background: url('../assets/images/pagination-ink-stroke.png') center / 100% 100% no-repeat;
+  content: '';
+  pointer-events: none;
+}
 /*
  * 라이브가 없는 날의 한 줄 띠(있는 날은 highlight-panel을 그대로 쓴다).
  * 패널이 아니라 한 줄이므로 강조 테두리(--ink-950) 대신 일반 테두리를 쓴다.
@@ -479,79 +506,41 @@
 .my-curriculums-page .metric-card { min-height: 92px; padding: 16px 18px; }
 .my-curriculums-page .metric-card strong { margin-top: 6px; font-size: 1.7rem; }
 
-/*
- * 카드는 세로형(커버 위, 내용 아래)이고 넓은 화면에서 2열로 깐다.
- * 가로형 카드를 그대로 2열로 쪼개면 열 폭이 반이 되어 메타가 다시 접히지만(F-1안),
- * 세로형은 좁아진 열 폭을 온전히 써서 그 문제가 없다.
- * auto-fill이라 폭이 줄면 미디어쿼리 없이 1열로 내려간다(2열 최소 폭 400px).
- */
+/* 페이지네이션이 한 번에 네 장만 렌더링하므로 목록 내부 스크롤은 두지 않는다. */
 .my-curriculums-page .dashboard-curriculum-list {
-  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  grid-template-columns: 1fr;
+  grid-auto-rows: 96px;
   gap: 8px;
 }
-.my-curriculums-page .dashboard-curriculum-card { grid-template-columns: 1fr; }
-/*
- * 커버 높이는 폭에 비례시키지 않는다 — 2열이면 카드 폭이 ~570px이라 16:9로 두면 커버만
- * 320px가 되어 세로 총량이 오히려 늘어난다. 고정 높이 띠로 쓴다.
- * 이 한 줄이 페이지 세로 총량을 정하는 레버다(20건 기준 96px ≈ 2,600px, 128px ≈ 2,920px).
- */
-.my-curriculums-page .dashboard-curriculum-card__cover { min-height: 0; height: 96px; aspect-ratio: auto; }
+.my-curriculums-page .dashboard-curriculum-card { grid-template-columns: 132px minmax(0, 1fr); }
+.my-curriculums-page .dashboard-curriculum-card__cover {
+  position: relative;
+  min-height: 96px;
+  aspect-ratio: auto;
+}
+.my-curriculums-page .dashboard-curriculum-card__cover img {
+  position: absolute;
+  inset: 0;
+  object-position: center;
+}
 .my-curriculums-page .dashboard-curriculum-card__content {
-  align-items: stretch;
-  flex-direction: column;
-  justify-content: flex-start;
-  gap: 9px;
-  padding: 13px 15px 14px;
-}
-.my-curriculums-page .dashboard-curriculum-card h3 { margin: 4px 0 3px; }
-/*
- * 하단 줄(진행률·메타 + 액션). margin-top: auto라 요약 길이가 달라도 카드 바닥에 붙는다 —
- * 같은 행의 카드는 그리드가 높이를 맞추므로 하단 줄이 서로 정렬된다.
- */
-.my-curriculums-page .dashboard-curriculum-card__foot {
-  display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex-direction: row;
   justify-content: space-between;
-  gap: 9px 12px;
-  margin-top: auto;
+  gap: 14px;
+  padding: 14px 16px;
 }
-/* 세로형에서는 진행률·메타가 카드 폭을 온전히 쓴다(가로형의 170px·210px 고정폭이 필요 없다). */
-.my-curriculums-page .dashboard-curriculum-card__foot .dashboard-progress { width: auto; flex: 1 1 140px; }
-.my-curriculums-page .dashboard-curriculum-card__foot .dashboard-meta { flex: 1 1 auto; }
-
-/*
- * 요약은 두 줄로 자른다 — max-width: 430px로 묶여 있어 좌우 여유가 있는데도 접히고,
- * 줄 수 제한이 없어 요약 길이에 따라 카드 높이가 들쭉날쭉했다. 전문은 title 속성에 남긴다.
- */
-.my-curriculums-page .dashboard-curriculum-card__summary {
+.my-curriculums-page .dashboard-curriculum-card__content > :first-child { min-width: 0; flex: 1 1 240px; }
+.my-curriculums-page .dashboard-curriculum-card__content > .dashboard-progress { width: 150px; flex: 0 1 150px; }
+.my-curriculums-page .dashboard-curriculum-card__content > .dashboard-meta { flex: 0 0 auto; white-space: nowrap; }
+.my-curriculums-page .dashboard-curriculum-card h3 {
   display: -webkit-box;
   overflow: hidden;
-  max-width: none;
+  margin: 4px 0 3px;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
-  line-height: 1.5;
   word-break: keep-all;
 }
-
-/*
- * 메타는 항목(span)마다 끊고 구분점은 앞 항목의 ::after로 그린다. 210px 고정폭에 긴 한
- * 문자열을 넣어 4~5줄로 깨지던 것을 남은 폭을 써서 1~2줄로 만든다. 구분점을 뒤 항목의
- * ::before로 두면 그 항목이 줄바꿈될 때 '·'가 줄 맨앞에 홀로 남으므로 앞 항목에 붙인다.
- */
-.dashboard-meta.dashboard-meta--split {
-  display: flex;
-  flex: 1 1 auto;
-  flex-wrap: wrap;
-  gap: 2px 6px;
-  max-width: none;
-  margin: 0;
-  color: var(--ink-500);
-  font-size: .72rem;
-  word-break: keep-all;
-}
-.dashboard-meta--split > span { white-space: nowrap; }
-.dashboard-meta--split > span:not(:last-child)::after { margin-left: 6px; color: var(--ink-300); content: '·'; }
 .workspace-tabs { display: flex; gap: 6px; padding: 5px; border: 1px solid var(--ink-100); border-radius: 12px; background: #fff; }
 .workspace-tabs button { flex: 1; border: 0; border-radius: 8px; padding: 9px 14px; background: transparent; color: var(--ink-500); font-size: .78rem; font-weight: 700; }
 .workspace-tabs button.is-active { background: var(--blue-600); color: #fff; }
@@ -768,6 +757,15 @@ th { color: var(--ink-500); font-size: .67rem; }
 .processing-steps strong { font-size: .77rem; }
 .processing-steps small { color: var(--ink-500); font-size: .64rem; }
 
+@media (max-width: 1280px) {
+  .my-curriculums-page__layout { grid-template-columns: 1fr; }
+  .my-curriculums-page__sidebar {
+    position: static;
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 1fr);
+    align-items: start;
+  }
+}
+
 @media (max-width: 1080px) {
   .workspace-frame { grid-template-columns: 190px minmax(0,1fr); gap: 22px; }
   .metric-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
@@ -790,6 +788,17 @@ th { color: var(--ink-500); font-size: .67rem; }
   .next-action-card, .session-summary, .replay-summary { grid-template-columns: auto minmax(0,1fr); }
   .next-action-card > .button, .session-summary > .card-actions, .replay-summary > .button { grid-column: 1 / -1; }
 }
+
+@media (max-width: 720px) {
+  .my-curriculums-page__sidebar { grid-template-columns: 1fr; }
+  .my-curriculums-page .dashboard-curriculum-list { grid-auto-rows: auto; }
+  .my-curriculums-page .dashboard-curriculum-card { grid-template-columns: 1fr; }
+  .my-curriculums-page .dashboard-curriculum-card__cover { min-height: 0; height: 96px; aspect-ratio: auto; }
+  .my-curriculums-page .dashboard-curriculum-card__content { align-items: stretch; flex-direction: column; }
+  .my-curriculums-page .dashboard-curriculum-card__content > .dashboard-progress,
+  .my-curriculums-page .dashboard-curriculum-card__content > .dashboard-meta { width: 100%; flex-basis: auto; }
+}
+
 @media (max-width: 620px) {
   .workspace-page-header { align-items: flex-start; flex-direction: column; }
   .workspace-page-header__action, .workspace-page-header__action > .button { width: 100%; }
@@ -807,6 +816,7 @@ th { color: var(--ink-500); font-size: .67rem; }
   .curriculum-image-field > p, .curriculum-image-field > small { grid-column: 1; margin-top: 0; }
   .workspace-panel { padding: 19px; }
   .workspace-panel__header { align-items: stretch; flex-direction: column; }
+  .my-curriculums-page__list-panel > .workspace-panel__header { align-items: stretch; }
   .compact-controls { flex-direction: column; }
   .compact-controls input, .compact-controls select { width: 100%; }
   /* 모바일은 2열 그리드 — 가로 스크롤보다 이 화면의 카드 목록 규칙에 맞는다. */
@@ -930,17 +940,16 @@ th { color: var(--ink-500); font-size: .67rem; }
 
 .workspace-page-header {
   position: relative;
-  min-height: 118px;
 }
 
 .workspace-page-header::before {
   position: absolute;
-  top: 18px;
+  top: 5px;
   left: 2px;
-  width: 42px;
-  height: 3px;
-  border-radius: 99px;
-  background: linear-gradient(90deg, var(--orange-500), var(--red-600));
+  width: 8px;
+  height: 8px;
+  border-radius: 0;
+  background: var(--seal);
   content: '';
 }
 
@@ -1164,10 +1173,9 @@ th { color: var(--ink-500); font-size: .67rem; }
 
 @media (max-width: 820px) {
   .workspace-frame { padding-top: 24px; }
-  .workspace-page-header::before { top: 9px; }
 }
 
 @media (max-width: 620px) {
-  .workspace-page-header { min-height: auto; padding-top: 30px; }
+  .workspace-page-header { min-height: auto; gap: 10px; padding-top: 30px; }
   .workspace-panel { border-radius: 15px; }
 }
