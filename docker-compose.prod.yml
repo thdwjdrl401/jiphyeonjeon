@@ -189,6 +189,10 @@ services:
       RECORDED_VIDEO_ENABLED: ${RECORDED_VIDEO_ENABLED:-true}
       MEDIA_SOURCE_SECRET: ${MEDIA_SOURCE_SECRET:?MEDIA_SOURCE_SECRET 필요}
       MEDIA_CALLBACK_SECRET: ${MEDIA_CALLBACK_SECRET:?MEDIA_CALLBACK_SECRET 필요}
+      RECORDED_STT_ENABLED: ${RECORDED_STT_ENABLED:-false}
+      # feature off인 기존 배포를 깨지 않는다. 실제로 켤 때는 .env.prod의 강한 별도 키가 필수다.
+      RECORDED_STT_SOURCE_SECRET: ${RECORDED_STT_SOURCE_SECRET:-disabled-recorded-stt-source-secret}
+      RECORDED_STT_CALLBACK_SECRET: ${RECORDED_STT_CALLBACK_SECRET:-disabled-recorded-stt-callback-secret}
       # 자료 임베딩 스위치. 이 줄이 없으면 .env.prod에 값을 넣어도 컨테이너로 전달되지 않아
       # 기본 false가 되고, 자료를 연결해도 임베딩 잡이 발행되지 않는다. 그때도 자료 상태는
       # READY로 남아(무회귀 동작) "준비됐는데 AI가 근거를 못 찾는" 상태가 조용히 생긴다.
