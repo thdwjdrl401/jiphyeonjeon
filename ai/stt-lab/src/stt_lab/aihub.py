@@ -320,6 +320,9 @@ def _evaluation_record(sample: AihubSample, split: str) -> dict[str, Any]:
         "split": split,
         "terms": [],
         "consent": "AI-Hub-license",
+        "lectureId": sample.lecture_id,
+        "category": sample.category,
+        "durationMs": sample.duration_ms,
     }
     if sample.sha256 is not None:
         record["sha256"] = sample.sha256

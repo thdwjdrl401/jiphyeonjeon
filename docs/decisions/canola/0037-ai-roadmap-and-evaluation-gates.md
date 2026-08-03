@@ -232,6 +232,8 @@ VOD citation seek를 소유한다.
 - [STT 12-room 동시성·배치](0026-realtime-stt-concurrency-and-batching.md)
 - [GPU 공유 runtime 후보](0027-realtime-stt-shared-gpu-runtime.md)
 - [provider profile·warm pool](0028-stt-provider-execution-profile-and-warm-pool.md)
+- [운영 VAD 기반 STT 통합 실험](0039-production-vad-stt-experiment-runner.md)
+- [STT fine-tuning dry-run·승격](0040-stt-fine-tuning-dry-run-and-promotion.md)
 - [AI 통신 계약](../../ai/CONTRACT.md)
 - [Excalidraw 판서 계약](../songjeongki/0051-instructor-annotation-excalidraw.md)
 - [AI Hub 한국어 강의 음성](https://www.aihub.or.kr/aihubdata/data/view.do?aihubDataSe=data&currMenu=115&dataSetSn=115&topMenu=100)

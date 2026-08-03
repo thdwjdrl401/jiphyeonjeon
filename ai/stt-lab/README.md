@@ -88,6 +88,89 @@ uv run --frozen stt-lab \
 peak CUDA memory를 보존한다. GPU 전체 사용량과 12-stream 동시성은 후속 replay
 benchmark에서 별도로 측정한다.
 
+## 운영 VAD 기반 통합 replay
+
+모델 선택에는 whole-WAV 명령 대신 제품 `realtime-agent`의 20 ms 입력·`VadSegmenter`·
+`SegmentedStreamingEngine`을 그대로 통과하는 통합 replay를 사용한다. 각 후보가 만든
+segment plan hash가 다르면 실행이 실패하므로 Nemotron과 Whisper가 동일한 음성 경계를
+소비했는지 결과에서 검증할 수 있다.
+
+먼저 대기 없이 dev 정확도를 비교한다.
+
+```bash
+uv run --frozen stt-lab-replay \
+  --manifest /home/liveclass/ai/datasets/aihub-korean-lecture/v1/manifests/dev.jsonl \
+  --candidate nemotron-base=nemotron@/home/liveclass/ai/models/nemotron-3.5-asr-streaming-0.6b \
+  --candidate whisper-base=whisper@/home/liveclass/ai/models/whisper-large-v3 \
+  --mode accuracy \
+  --workers 1 \
+  --output results/replay-dev-c1.json
+```
+
+실시간 지연은 같은 manifest를 실제 audio clock에 맞춰 공급한다. `--workers`는 독립 stream과
+동일한 수의 model slot을 만든다. 현재 in-process topology의 1/4/12 동시성 비교에 사용하되,
+GPU 메모리를 확인하며 한 단계씩 올린다.
+
+```bash
+uv run --frozen stt-lab-replay \
+  --manifest /home/liveclass/ai/datasets/aihub-korean-lecture/v1/manifests/dev.jsonl \
+  --candidate nemotron-base=nemotron@/home/liveclass/ai/models/nemotron-3.5-asr-streaming-0.6b \
+  --mode paced \
+  --workers 1 \
+  --output results/replay-paced-dev-c1.json
+```
+
+결과에는 candidate capability(`INCREMENTAL` 또는 `SEGMENT_FINAL_ONLY`), 공통 VAD segment
+plan과 hash, authoritative final 기반 CER, segment별 VAD-ready→first/final 지연, paced
+speech-start/end 지연, RTF와 peak CUDA memory가 기록된다. `test` split은 설정을 모두 고정한
+뒤 `--allow-test`를 명시해야만 실행된다.
+
+`--output results/replay-dev-c1.json`을 지정하면 monolithic 정본과 함께 기본적으로
+`results/replay-dev-c1-artifacts/`에 `run.json`, `segment-plan.jsonl`, `samples.jsonl`,
+`summary.json`, `comparison.csv`, `report.md`를 생성한다. 경로를 고정하려면
+`--artifact-dir`을 사용한다. 기존 artifact 디렉터리는 덮어쓰지 않는다.
+
+
+## 학습 사전검증
+
+AI Hub manifest 생성 시 학습 누수 검사용 `lectureId`, `category`, `durationMs`도 함께 보존한다.
+실제 학습 전에 train/dev manifest만 허용되는지, 화자·강의 교집합이 0인지, 음성과 metadata가
+완전한지 먼저 검사한다. `test` 또는 `golden` sample이 섞이면 실패한다.
+
+```bash
+uv run --frozen stt-lab-training \
+  --train-manifest /home/liveclass/ai/datasets/aihub-korean-lecture/v1/manifests/train.jsonl \
+  --dev-manifest /home/liveclass/ai/datasets/aihub-korean-lecture/v1/manifests/dev.jsonl \
+  --output results/training-preflight.json
+```
+
+학습 batch는 원본 utterance WAV와 그 전체 transcript를 그대로 사용한다. 정렬된 sub-segment
+label 없이 운영 VAD로 WAV를 잘라 전체 transcript를 붙이지 않는다. checkpoint artifact에는
+manifest hash·seed·학습 설정·loss만 기록하고 원본 음성·transcript·secret은 복사하지 않는다.
+
+
+Whisper 학습 pipeline 자체는 아래 opt-in dry-run으로 검증한다. 이 명령은 train batch 2개,
+dev batch 1개를 사용해 optimizer step→save→새 Python process에서 optimizer/model reload와 다음
+step→저장 checkpoint의 운영 VAD golden replay까지 모두 성공해야 종료한다. 실행 전에 GPU 0의
+운영 realtime-agent/BGE 점유와 여유 메모리를 확인한다.
+
+```bash
+uv run --frozen stt-lab-whisper-dry-run run \
+  --train-manifest /home/liveclass/ai/datasets/aihub-korean-lecture/v1/manifests/train.jsonl \
+  --dev-manifest /home/liveclass/ai/datasets/aihub-korean-lecture/v1/manifests/dev.jsonl \
+  --golden-manifest /home/liveclass/ai/datasets/aihub-korean-lecture/v1/manifests/golden.jsonl \
+  --model /home/liveclass/ai/models/whisper-large-v3 \
+  --artifact-root /home/liveclass/ai/checkpoints \
+  --run-id whisper-large-v3-dry-run-001 \
+  --batch-size 2 \
+  --cuda-visible-devices 0
+```
+
+이 실행은 품질 향상 증거가 아니라 pipeline 실행 가능성만 증명한다. Nemotron은 현재 추론용
+Transformers adapter만 있어 학습 recipe가 연결되지 않았으므로 Whisper dry-run 성공을 Nemotron
+학습 완료로 간주하지 않는다.
+
+
 ## vLLM Whisper 서빙 실험
 
 vLLM은 realtime-agent 환경과 섞지 않고 별도 venv에 설치한다. sudo는 필요 없다. 현재
@@ -112,6 +195,21 @@ uv run --frozen stt-lab-vllm \
 ```
 
 smoke가 통과하면 dev에서 동시성을 올린다. test는 설정을 확정한 뒤 최종 한 번만 실행한다.
+
+Transformers in-process와 vLLM serving을 모델 선택 근거로 비교할 때는 아래처럼 통합 replay에
+둘 다 넣어 동일한 운영 VAD segment plan을 강제한다. API key가 있으면
+`STT_LAB_VLLM_API_KEY` 환경변수로만 주입하며 report에는 저장하지 않는다.
+
+```bash
+uv run --frozen stt-lab-replay \
+  --manifest /home/liveclass/ai/datasets/aihub-korean-lecture/v1/manifests/dev.jsonl \
+  --candidate whisper-transformers=whisper@/home/liveclass/ai/models/whisper-large-v3 \
+  --candidate whisper-vllm=vllm@liveclass-whisper-large-v3 \
+  --vllm-base-url http://127.0.0.1:18083/v1 \
+  --mode paced \
+  --workers 1 \
+  --output results/whisper-serving-vad-dev-c1.json
+```
 
 ```bash
 uv run --frozen stt-lab-vllm \
