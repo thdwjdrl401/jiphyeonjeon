@@ -2,6 +2,8 @@ package com.liveclass.video.web;
 
 import com.liveclass.common.web.ErrorResponse;
 import com.liveclass.video.api.PlaybackAccessException;
+import com.liveclass.video.api.RecordedVideoConflictException;
+import com.liveclass.video.api.RecordedVideoNotFoundException;
 import com.liveclass.video.service.PlaybackStorageUnavailableException;
 import com.liveclass.video.service.RecordingStartingException;
 import com.liveclass.video.service.ReplayForbiddenException;
@@ -22,7 +24,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * 먼저 잡아 500으로 바꾸지 않도록 이 컨트롤러에 한정하고 우선순위를 높인다.
  */
 @Order(Ordered.LOWEST_PRECEDENCE - 100)
-@RestControllerAdvice(assignableTypes = ReplayPlaybackController.class)
+@RestControllerAdvice(assignableTypes = {ReplayPlaybackController.class, RecordedPlaybackController.class})
 public class ReplayExceptionHandler {
 
     /** 접근 판정 실패 → 404(레슨 은닉)/403(미수강). 학습 게이트(ENROLLMENT_REQUIRED)와 같은 코드로 FE가 같은 분기. */
@@ -40,6 +42,18 @@ public class ReplayExceptionHandler {
     public ResponseEntity<ErrorResponse> handleNotFound(ReplayNotFoundException e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ErrorResponse.of("REPLAY_NOT_FOUND", e.getMessage()));
+    }
+
+    @ExceptionHandler(RecordedVideoNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleRecordedNotFound(RecordedVideoNotFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ErrorResponse.of("RECORDED_VIDEO_NOT_FOUND", e.getMessage()));
+    }
+
+    @ExceptionHandler(RecordedVideoConflictException.class)
+    public ResponseEntity<ErrorResponse> handleRecordedConflict(RecordedVideoConflictException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ErrorResponse.of(e.code(), e.getMessage()));
     }
 
     @ExceptionHandler(ReplayNotReadyException.class)
