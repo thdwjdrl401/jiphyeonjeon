@@ -1,10 +1,13 @@
 package com.liveclass.learning.web;
 
 import com.liveclass.learning.service.LearningService;
+import com.liveclass.learning.service.LessonGlossaryService;
 import com.liveclass.learning.service.WatchHeatmapService;
 import com.liveclass.learning.web.dto.BookmarkRequest;
 import com.liveclass.learning.web.dto.LearningContextResponse;
 import com.liveclass.learning.web.dto.ProgressUpdateRequest;
+import com.liveclass.learning.web.dto.GlossaryTermResponse;
+import com.liveclass.learning.web.dto.GlossaryTermUpsertRequest;
 import com.liveclass.learning.web.dto.WatchBucketReportRequest;
 import com.liveclass.learning.web.dto.WatchHeatmapResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -21,6 +24,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -33,10 +37,13 @@ public class LearningController {
 
     private final LearningService learningService;
     private final WatchHeatmapService watchHeatmapService;
+    private final LessonGlossaryService glossaryService;
 
-    public LearningController(LearningService learningService, WatchHeatmapService watchHeatmapService) {
+    public LearningController(LearningService learningService, WatchHeatmapService watchHeatmapService,
+                              LessonGlossaryService glossaryService) {
         this.learningService = learningService;
         this.watchHeatmapService = watchHeatmapService;
+        this.glossaryService = glossaryService;
     }
 
     @Operation(summary = "학습 컨텍스트 조회",
@@ -109,5 +116,26 @@ public class LearningController {
     private static boolean isInstructor(Authentication authentication) {
         return authentication.getAuthorities().stream()
                 .anyMatch(a -> "ROLE_INSTRUCTOR".equals(a.getAuthority()));
+    }
+
+    @Operation(summary = "강의 용어집 조회",
+            description = "AI가 자료에서 뽑은 용어(ai.material_key_term)를 강사 수정본이 덮어쓴 최종 목록. "
+                    + "자막 매핑은 서버가 하지 않는다 — 화면이 이 목록으로 도착한 자막에서 직접 찾는다.")
+    @GetMapping("/api/lessons/{lessonId}/glossary")
+    public List<GlossaryTermResponse> glossary(@PathVariable UUID lessonId, Authentication authentication) {
+        return glossaryService.glossary(UUID.fromString(authentication.getName()), lessonId).stream()
+                .map(GlossaryTermResponse::from)
+                .toList();
+    }
+
+    @Operation(summary = "용어 수정·추가(강사)",
+            description = "ai 원본에 있는 용어면 정의를 덮고, 없으면 새 용어로 더한다. 같은 용어를 다시 보내면 덮어쓴다(멱등). "
+                    + "원본은 건드리지 않는다 — ai 스키마는 읽기만 한다.")
+    @PutMapping("/api/instructor/lessons/{lessonId}/glossary")
+    public GlossaryTermResponse upsertGlossaryTerm(@PathVariable UUID lessonId,
+                                                   @Valid @RequestBody GlossaryTermUpsertRequest request,
+                                                   Authentication authentication) {
+        return GlossaryTermResponse.from(glossaryService.upsert(
+                UUID.fromString(authentication.getName()), lessonId, request.term(), request.definition()));
     }
 }

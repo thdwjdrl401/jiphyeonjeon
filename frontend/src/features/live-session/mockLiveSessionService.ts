@@ -292,6 +292,22 @@ export const mockLiveSessionService = {
       },
     ]
   },
+  async getGlossary() {
+    return [
+      {
+        termId: 'SecurityContext',
+        term: 'SecurityContext',
+        definition: '현재 요청에서 인증된 사용자와 권한 정보를 보관하는 컨테이너입니다.',
+        source: 'MATERIAL' as const,
+      },
+      {
+        termId: 'SecurityFilterChain',
+        term: 'SecurityFilterChain',
+        definition: '요청에 순서대로 적용할 보안 필터 묶음입니다.',
+        source: 'INSTRUCTOR' as const,
+      },
+    ]
+  },
   async getMyWatchBuckets() {
     return { 0: 1, 1: 1, 2: 3, 3: 1 }
   },
