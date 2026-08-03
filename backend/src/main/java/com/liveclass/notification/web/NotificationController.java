@@ -3,9 +3,11 @@ package com.liveclass.notification.web;
 import com.liveclass.notification.domain.Notification;
 import com.liveclass.notification.service.NotificationPage;
 import com.liveclass.notification.service.NotificationService;
+import com.liveclass.notification.service.NotificationTargetService;
 import com.liveclass.notification.web.dto.NotificationPageResponse;
 import com.liveclass.notification.web.dto.NotificationResponse;
 import com.liveclass.notification.web.dto.NotificationSummaryResponse;
+import com.liveclass.notification.web.dto.NotificationTargetResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Max;
@@ -30,8 +32,8 @@ import java.util.UUID;
  * 남의 알림은 조회되지도 갱신되지도 않는다 — 그대로 404다. 403을 주면 "그 알림이 존재한다"는
  * 사실이 새기 때문에 계약이 404를 요구한다.
  *
- * <p>{@code GET /{id}/target}(대상 재판정)은 2단계다. 다섯 경로 중 그것만 다른 모듈 넷을 읽어야
- * 하는데, 지금은 발행 지점이 없어 클릭할 알림 자체가 없다.
+ * <p>{@code GET /{id}/target}(대상 재판정)만 다른 모듈 넷을 읽는다 — 커리큘럼·강의·라이브·다시보기.
+ * 그래서 알림이 실제로 쌓이기 시작한 뒤에 붙였다.
  */
 @Tag(name = "알림", description = "내 알림 목록·배지·읽음 처리. 본인 것만 보인다.")
 @RestController
@@ -42,9 +44,12 @@ public class NotificationController {
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private final NotificationService notificationService;
+    private final NotificationTargetService notificationTargetService;
 
-    public NotificationController(NotificationService notificationService) {
+    public NotificationController(NotificationService notificationService,
+                                  NotificationTargetService notificationTargetService) {
         this.notificationService = notificationService;
+        this.notificationTargetService = notificationTargetService;
     }
 
     @Operation(summary = "내 알림 목록",
@@ -93,6 +98,15 @@ public class NotificationController {
     public NotificationSummaryResponse markAllRead(Authentication authentication) {
         UUID userId = UUID.fromString(authentication.getName());
         return NotificationSummaryResponse.from(notificationService.markAllRead(userId));
+    }
+
+    @Operation(summary = "클릭 대상 재판정",
+            description = "만들 때가 아니라 누를 때 다시 판정한다. 대상이 사라져도 200에 GONE을 준다 — "
+                    + "404로 주면 화면이 '삭제된 강의입니다'와 '잠시 후 다시 시도해 주세요'를 구별하지 못한다.")
+    @GetMapping("/api/me/notifications/{notificationId}/target")
+    public NotificationTargetResponse target(@PathVariable UUID notificationId, Authentication authentication) {
+        UUID userId = UUID.fromString(authentication.getName());
+        return NotificationTargetResponse.from(notificationTargetService.resolve(userId, notificationId));
     }
 
     private static NotificationResponse toResponse(Notification notification) {
