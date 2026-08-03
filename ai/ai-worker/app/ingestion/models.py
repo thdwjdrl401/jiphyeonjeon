@@ -53,6 +53,39 @@ class KeyTerm:
             raise ValueError("definition must not be empty")
 
 
+KeyTermResultStatus = Literal[
+    "NOT_REQUESTED",
+    "PENDING",
+    "READY",
+    "EMPTY",
+    "FAILED",
+]
+
+
+@dataclass(frozen=True, slots=True)
+class KeyTermExtractionResult:
+    """Durable result of the optional PPTX key-term branch (ADR-0010)."""
+
+    status: KeyTermResultStatus
+    terms: tuple[KeyTerm, ...] = ()
+    failure_code: str | None = None
+    truncated: bool = False
+
+    def __post_init__(self) -> None:
+        if self.status == "READY" and not self.terms:
+            raise ValueError("READY key-term result must contain at least one term")
+        if self.status != "READY" and self.terms:
+            raise ValueError("only READY key-term result may contain terms")
+        if self.status == "FAILED" and not self.failure_code:
+            raise ValueError("FAILED key-term result requires failure_code")
+        if self.status != "FAILED" and self.failure_code is not None:
+            raise ValueError("only FAILED key-term result may contain failure_code")
+
+    @property
+    def count(self) -> int:
+        return len(self.terms)
+
+
 @dataclass(frozen=True, slots=True)
 class MaterialChunk:
     chunk_index: int

@@ -9,11 +9,17 @@
 
 ## 구조와 흐름
 
-현재 최초 revision은 `0001_rag_index_storage.py`다.
+현재 revision chain은 `0001_rag_index_storage.py` → `0002_material_key_terms.py` →
+`0003_annotation_highlight.py` → `0004_annotation_text_unbounded.py` →
+`0005_material_key_term_result.py`다.
 
 ## 파일 구성
 
-해당 revision이 pgvector, table, constraint, HNSW/FTS index와 runtime grant를 정의한다.
+- `0001`: pgvector, material version, chunk/embedding, HNSW/FTS index와 runtime grant
+- `0002`: material version별 핵심 용어·정의
+- `0003`: 강조 판서 검색 색인
+- `0004`: 강조 판서 설명 text 길이 제한 제거
+- `0005`: 핵심 용어 terminal 상태·개수·절단·실패 코드
 
 ## 경계와 불변식
 

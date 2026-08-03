@@ -9,6 +9,7 @@ import com.liveclass.lesson.api.MaterialAssetInvalidException;
 import com.liveclass.lesson.api.MaterialView;
 import com.liveclass.lesson.domain.MaterialAsset;
 import com.liveclass.lesson.domain.MaterialEmbeddingStatus;
+import com.liveclass.lesson.domain.MaterialKeyTermStatus;
 import com.liveclass.lesson.domain.MaterialStatus;
 import com.liveclass.lesson.repository.MaterialAssetRepository;
 import org.slf4j.Logger;
@@ -59,6 +60,7 @@ public class LessonMaterialService implements LessonMaterialManagement {
         material.setStatus(MaterialStatus.ACTIVE);
         // 임베딩 파이프라인 미배선 단계 — 일단 READY. 파이프라인(outbox+콜백) 얹을 때 PENDING+발행으로 전환(ADR-0036).
         material.setEmbeddingStatus(MaterialEmbeddingStatus.READY);
+        material.setKeyTermStatus(MaterialKeyTermStatus.NOT_REQUESTED);
         MaterialAsset saved;
         try {
             // saveAndFlush로 여기서 즉시 제약을 때려 잡는다 — save()만 쓰면 flush가 트랜잭션 끝까지
@@ -104,6 +106,23 @@ public class LessonMaterialService implements LessonMaterialManagement {
                 .ifPresent(m -> {
                     m.setEmbeddingStatus(target);
                     log.info(Audit.MARKER, "자료 임베딩 상태 갱신 materialId={} status={}", materialId, target);
+                });
+    }
+
+    @Override
+    @Transactional
+    public void updateKeyTermStatus(UUID materialId, String keyTermStatus) {
+        MaterialKeyTermStatus target = MaterialKeyTermStatus.valueOf(keyTermStatus);
+        materialAssetRepository.findById(materialId)
+                .ifPresent(m -> {
+                    MaterialKeyTermStatus current = m.getKeyTermStatus();
+                    if (current != null && !current.canTransitionTo(target)) {
+                        log.warn("자료 핵심 용어 terminal 상태 전이 무시 materialId={} current={} target={}",
+                                materialId, current, target);
+                        return;
+                    }
+                    m.setKeyTermStatus(target);
+                    log.info(Audit.MARKER, "자료 핵심 용어 상태 갱신 materialId={} status={}", materialId, target);
                 });
     }
 
@@ -154,6 +173,7 @@ public class LessonMaterialService implements LessonMaterialManagement {
                 fileName,
                 fileSize,
                 material.getStatus().name(),
-                material.getEmbeddingStatus() == null ? null : material.getEmbeddingStatus().name());
+                material.getEmbeddingStatus() == null ? null : material.getEmbeddingStatus().name(),
+                material.getKeyTermStatus() == null ? null : material.getKeyTermStatus().name());
     }
 }

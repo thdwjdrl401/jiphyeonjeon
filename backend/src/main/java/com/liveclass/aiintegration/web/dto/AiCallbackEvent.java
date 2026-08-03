@@ -13,6 +13,23 @@ public record AiCallbackEvent(
         /** 강조 캡처 색인 결과일 때 온다(ADR-0074). 자료와 별개 축이라 필드를 나눈다. */
         String highlightId,
         String lessonId,
-        String status
+        String status,
+        Outputs outputs
 ) {
+
+    /** ADR-0010 v2 결과 메타데이터. 실제 용어 원문은 ai.material_key_term이 소유한다. */
+    public record Outputs(
+            Long materialVersionId,
+            Integer chunkCount,
+            KeyTermResult keyTermResult
+    ) {
+    }
+
+    public record KeyTermResult(
+            String status,
+            Integer count,
+            Boolean truncated,
+            String failureCode
+    ) {
+    }
 }

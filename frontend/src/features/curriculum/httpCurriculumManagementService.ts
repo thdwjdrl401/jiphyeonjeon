@@ -27,6 +27,7 @@ interface ApiCurriculumMaterial {
   fileName: string
   fileSize: number
   embeddingStatus?: string
+  keyTermStatus?: string
 }
 
 interface RecordedLessonCreated {
@@ -51,9 +52,15 @@ interface RecordedProcessingAccepted {
   status: 'QUEUED'
 }
 
-/** API 자료 응답을 화면 모델로. embeddingStatus·file은 목록/표시에 쓰지 않으므로 옮기지 않는다. */
+/** API 자료 응답을 화면 모델로. 파일 원본은 없지만 두 AI 처리 상태는 상세 표시에 유지한다. */
 function toCurriculumMaterial(material: ApiCurriculumMaterial): CurriculumMaterial {
-  return { materialId: material.materialId, fileName: material.fileName, fileSize: material.fileSize }
+  return {
+    materialId: material.materialId,
+    fileName: material.fileName,
+    fileSize: material.fileSize,
+    embeddingStatus: (material.embeddingStatus ?? 'READY') as CurriculumMaterial['embeddingStatus'],
+    keyTermStatus: (material.keyTermStatus ?? 'NOT_REQUESTED') as CurriculumMaterial['keyTermStatus'],
+  }
 }
 
 /** 서버에 저장된 커리큘럼 자료 목록(persisted, File 없음). 저장 후 로컬 상태 교체·삭제 diff의 기준. */

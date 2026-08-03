@@ -96,6 +96,8 @@ export interface CurriculumMaterial {
   materialId: string
   fileName: string
   fileSize: number
+  embeddingStatus?: 'PENDING' | 'PROCESSING' | 'READY' | 'FAILED'
+  keyTermStatus?: 'NOT_REQUESTED' | 'PENDING' | 'PROCESSING' | 'READY' | 'EMPTY' | 'FAILED'
   /**
    * 아직 서버에 올리지 않은 새 자료의 원본 파일(ADR-0042). 폼에서 선택한 순간에만 채워지고,
    * 저장 시 presigned 업로드→attach로 서버에 반영된 뒤에는 없는(persisted) 자료가 된다.

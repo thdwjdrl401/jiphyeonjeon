@@ -11,7 +11,8 @@ public record CurriculumMaterialResponse(
         String materialId,
         String fileName,
         long fileSize,
-        String embeddingStatus
+        String embeddingStatus,
+        String keyTermStatus
 ) {
 
     public static CurriculumMaterialResponse from(MaterialView view) {
@@ -19,6 +20,7 @@ public record CurriculumMaterialResponse(
                 view.materialId().toString(),
                 view.fileName(),
                 view.fileSize(),
-                view.embeddingStatus());
+                view.embeddingStatus(),
+                view.keyTermStatus());
     }
 }

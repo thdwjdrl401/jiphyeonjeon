@@ -19,7 +19,7 @@ from app.domain import (
     ExistingIndexVersion,
     StagedMaterial,
 )
-from app.ingestion import KeyTerm
+from app.ingestion import KeyTerm, KeyTermExtractionResult
 
 
 MODEL_REVISION = "5617a9f61b028005a4858fdac845db406aefb181"
@@ -102,14 +102,36 @@ class FakeIndexStorage:
 
 
 class FakeKeyTermStorage:
-    def __init__(self, *, error: BaseException | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        error: BaseException | None = None,
+        error_statuses: frozenset[str] | None = None,
+    ) -> None:
         self.error = error
+        self.error_statuses = error_statuses
         self.calls: list[tuple[int, tuple[KeyTerm, ...]]] = []
+        self.results: dict[int, KeyTermExtractionResult] = {}
 
     async def store(self, version_id: int, key_terms: Sequence[KeyTerm]) -> None:
         self.calls.append((version_id, tuple(key_terms)))
         if self.error is not None:
             raise self.error
+
+    async def store_result(
+        self,
+        version_id: int,
+        result: KeyTermExtractionResult,
+    ) -> None:
+        self.calls.append((version_id, result.terms))
+        if self.error is not None and (
+            self.error_statuses is None or result.status in self.error_statuses
+        ):
+            raise self.error
+        self.results[version_id] = result
+
+    async def load_result(self, version_id: int) -> KeyTermExtractionResult | None:
+        return self.results.get(version_id)
 
 
 class FakeKeyTermExtractor:
@@ -419,11 +441,13 @@ async def test_retry_after_success_recovers_cached_key_terms_same_instance() -> 
     embedding_model = FakeEmbeddingModel()
     key_term_extractor = FakeKeyTermExtractor(terms=(KeyTerm(term="용어", definition="정의"),))
     index_storage = FakeIndexStorage(version_id=73)
+    key_term_storage = FakeKeyTermStorage()
     indexer = IndexPptxMaterial(
         asset_store,
         embedding_model,
         index_storage,
         key_term_extractor=key_term_extractor,
+        key_term_storage=key_term_storage,
     )
 
     first_result = await indexer.execute(staged_material)
@@ -440,20 +464,26 @@ async def test_retry_after_success_recovers_cached_key_terms_same_instance() -> 
     assert len(key_term_extractor.calls) == 1
 
 
-async def test_retry_after_process_restart_loses_cached_key_terms() -> None:
+async def test_retry_after_process_restart_recovers_key_terms_from_storage() -> None:
     staged_material = material()
     index_storage = FakeIndexStorage(existing=ExistingIndexVersion(73, activation_required=False))
+    key_term_storage = FakeKeyTermStorage()
+    key_term_storage.results[73] = KeyTermExtractionResult(
+        status="READY",
+        terms=(KeyTerm(term="용어", definition="정의"),),
+    )
     fresh_indexer = IndexPptxMaterial(
         FakeAssetStore(b"must not be read"),
         FakeEmbeddingModel(),
         index_storage,
         key_term_extractor=FakeKeyTermExtractor(),
+        key_term_storage=key_term_storage,
     )
 
     result = await fresh_indexer.execute(staged_material)
 
     assert result.version_id == 73
-    assert result.key_terms == ()
+    assert result.key_terms == (KeyTerm(term="용어", definition="정의"),)
 
 
 async def test_no_extractor_configured_never_touches_key_term_extraction() -> None:
@@ -510,13 +540,16 @@ async def test_no_key_terms_never_calls_storage() -> None:
     assert key_term_storage.calls == []
 
 
-async def test_key_term_storage_failure_never_blocks_indexing_or_callback_result() -> None:
+async def test_key_term_row_failure_is_persisted_as_failed_without_blocking_embedding() -> None:
     staged_material = material()
     asset_store = FakeAssetStore(presentation_bytes(("index me",)))
     embedding_model = FakeEmbeddingModel()
     index_storage = FakeIndexStorage(version_id=73)
     key_term_extractor = FakeKeyTermExtractor(terms=(KeyTerm(term="용어", definition="정의"),))
-    key_term_storage = FakeKeyTermStorage(error=RuntimeError("db unavailable"))
+    key_term_storage = FakeKeyTermStorage(
+        error=RuntimeError("invalid key-term row"),
+        error_statuses=frozenset({"READY"}),
+    )
 
     result = await IndexPptxMaterial(
         asset_store,
@@ -527,11 +560,34 @@ async def test_key_term_storage_failure_never_blocks_indexing_or_callback_result
     ).execute(staged_material)
 
     assert result.version_id == 73
-    assert result.key_terms == (KeyTerm(term="용어", definition="정의"),)
-    assert len(key_term_storage.calls) == 1
+    assert result.key_terms == ()
+    assert result.key_term_result.status == "FAILED"
+    assert result.key_term_result.failure_code == "KEY_TERM_STORAGE_FAILED"
+    assert len(key_term_storage.calls) == 2
+    assert key_term_storage.results[73].status == "FAILED"
+    assert index_storage.activated == [(staged_material, 73)]
 
 
-async def test_retry_short_circuit_also_retries_storing_cached_key_terms() -> None:
+async def test_key_term_result_metadata_outage_retries_before_activation() -> None:
+    staged_material = material()
+    index_storage = FakeIndexStorage(version_id=73)
+    key_term_storage = FakeKeyTermStorage(error=RuntimeError("db unavailable"))
+
+    with pytest.raises(RuntimeError, match="db unavailable"):
+        await IndexPptxMaterial(
+            FakeAssetStore(presentation_bytes(("index me",))),
+            FakeEmbeddingModel(),
+            index_storage,
+            key_term_extractor=FakeKeyTermExtractor(
+                terms=(KeyTerm(term="용어", definition="정의"),)
+            ),
+            key_term_storage=key_term_storage,
+        ).execute(staged_material)
+
+    assert index_storage.activated == []
+
+
+async def test_retry_short_circuit_reads_durable_key_term_result_without_rewriting() -> None:
     staged_material = material()
     key_term_extractor = FakeKeyTermExtractor(terms=(KeyTerm(term="용어", definition="정의"),))
     index_storage = FakeIndexStorage(version_id=73)
@@ -548,15 +604,11 @@ async def test_retry_short_circuit_also_retries_storing_cached_key_terms() -> No
     assert first_result.key_terms == (KeyTerm(term="용어", definition="정의"),)
     assert len(key_term_storage.calls) == 1
 
-    # Simulate a RabbitMQ redelivery after success: execute() takes the idempotent
-    # short-circuit and never re-extracts, but the cached key_terms should still be
-    # retried against storage in case the first attempt's store() failed.
+    # Simulate a RabbitMQ redelivery after success: execute() reads the durable result and
+    # does not re-extract or rewrite terms.
     index_storage.existing = ExistingIndexVersion(73, activation_required=False)
     retried_result = await indexer.execute(staged_material)
 
     assert retried_result.version_id == 73
     assert retried_result.key_terms == (KeyTerm(term="용어", definition="정의"),)
-    assert key_term_storage.calls == [
-        (73, (KeyTerm(term="용어", definition="정의"),)),
-        (73, (KeyTerm(term="용어", definition="정의"),)),
-    ]
+    assert key_term_storage.calls == [(73, (KeyTerm(term="용어", definition="정의"),))]

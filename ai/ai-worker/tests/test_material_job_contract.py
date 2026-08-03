@@ -46,7 +46,21 @@ def test_parses_documented_pptx_embed_envelope_with_camel_case_only() -> None:
     assert job.curriculum_id == UUID(CURRICULUM_ID)
     assert job.file_name == "강의자료.pptx"
     assert job.policy.embed_model == "bge-m3"
+    assert job.policy.extract_key_terms is None
     assert job.contract_version == 1
+
+
+def test_parses_v2_pptx_embed_envelope_with_explicit_key_term_policy() -> None:
+    payload = _embed_payload(
+        policy={"embedModel": "bge-m3", "extractKeyTerms": True},
+        contractVersion=2,
+    )
+
+    job = parse_material_job(_body(payload))
+
+    assert isinstance(job, PptxEmbedJob)
+    assert job.policy.extract_key_terms is True
+    assert job.contract_version == 2
 
 
 def test_parses_documented_delete_envelope_without_inventing_scope() -> None:
@@ -70,6 +84,7 @@ def test_parses_documented_delete_envelope_without_inventing_scope() -> None:
     "payload",
     [
         _embed_payload(contractVersion=2),
+        _embed_payload(policy={"embedModel": "bge-m3", "extractKeyTerms": True}),
         _embed_payload(policy={"embedModel": "other"}),
         _embed_payload(materialId="not-a-uuid"),
         _embed_payload(unexpected=True),

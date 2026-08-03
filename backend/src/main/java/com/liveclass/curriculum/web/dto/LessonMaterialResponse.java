@@ -12,7 +12,9 @@ public record LessonMaterialResponse(
         String materialId,
         String assetId,
         String fileName,
-        String status
+        String status,
+        String embeddingStatus,
+        String keyTermStatus
 ) {
 
     public static LessonMaterialResponse from(MaterialView view) {
@@ -20,6 +22,8 @@ public record LessonMaterialResponse(
                 view.materialId().toString(),
                 view.assetId().toString(),
                 view.fileName(),
-                view.status());
+                view.status(),
+                view.embeddingStatus(),
+                view.keyTermStatus());
     }
 }

@@ -6,6 +6,8 @@ export interface LessonMaterialView {
   name: string
   size: string
   status: string
+  embeddingStatus?: 'PENDING' | 'PROCESSING' | 'READY' | 'FAILED'
+  keyTermStatus?: 'NOT_REQUESTED' | 'PENDING' | 'PROCESSING' | 'READY' | 'EMPTY' | 'FAILED'
 }
 
 export interface LessonDetailView {

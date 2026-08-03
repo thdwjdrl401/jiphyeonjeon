@@ -9,6 +9,7 @@ interface ApiLessonMaterial {
   fileName: string
   fileSize: number
   embeddingStatus?: string   // PENDING/PROCESSING/READY/FAILED (ADR-0036). 없으면 READY로 간주.
+  keyTermStatus?: string
 }
 
 interface ApiLessonView {
@@ -48,11 +49,15 @@ function formatFileSize(fileSize: number) {
 // 서버 자료 응답은 {materialId, fileName, fileSize}뿐이라 status가 없다. 화면(LessonDetailPage)은
 // material.status로 준비 여부를 표시하므로, 이미 연결된 자료는 READY로 채운다.
 function toMaterialView(material: ApiLessonMaterial): LessonMaterialView {
+  const embeddingStatus = material.embeddingStatus ?? 'READY'
+  const keyTermStatus = material.keyTermStatus ?? 'NOT_REQUESTED'
   return {
     id: material.materialId,
     name: material.fileName,
     size: formatFileSize(material.fileSize),
-    status: material.embeddingStatus ?? 'READY',   // 임베딩 상태를 그대로 노출(ADR-0036)
+    status: embeddingStatus,
+    embeddingStatus: embeddingStatus as LessonMaterialView['embeddingStatus'],
+    keyTermStatus: keyTermStatus as LessonMaterialView['keyTermStatus'],
   }
 }
 

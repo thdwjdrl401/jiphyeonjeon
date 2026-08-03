@@ -17,6 +17,7 @@ from app.domain import (
 from app.ingestion import (
     DEFAULT_CHUNK_MAX_CHARS,
     KeyTerm,
+    KeyTermExtractionResult,
     MaterialChunk,
     ParsedPresentation,
     PptxValidationLimits,
@@ -34,13 +35,19 @@ from app.ports import (
 
 logger = logging.getLogger(__name__)
 
-_KEY_TERM_CACHE_MAX_ENTRIES = 1_000
-
-
 @dataclass(frozen=True, slots=True)
 class MaterialIndexResult:
     version_id: int
-    key_terms: tuple[KeyTerm, ...] = field(default=())
+    key_term_result: KeyTermExtractionResult = field(
+        default_factory=lambda: KeyTermExtractionResult(status="NOT_REQUESTED")
+    )
+    chunk_count: int | None = None
+
+    @property
+    def key_terms(self) -> tuple[KeyTerm, ...]:
+        """Compatibility view for the existing combined callback contract."""
+
+        return self.key_term_result.terms
 
 
 class IndexPptxMaterial:
@@ -65,56 +72,58 @@ class IndexPptxMaterial:
         self._chunk_strategy = chunk_strategy(chunk_max_chars)
         self._key_term_extractor = key_term_extractor
         self._key_term_storage = key_term_storage
-        # Best-effort retry safety net for the combined callback (ADR-0004 option C): if the
-        # single terminal callback fails and the job redelivers, execute()'s idempotent
-        # short-circuit below never re-extracts, so a same-process retry recovers key_terms
-        # from here instead of silently dropping them. A process restart still loses it.
-        self._key_term_cache: dict[str, tuple[KeyTerm, ...]] = {}
-
-    async def execute(self, material: StagedMaterial) -> MaterialIndexResult:
+    async def execute(
+        self,
+        material: StagedMaterial,
+        *,
+        extract_key_terms: bool | None = None,
+    ) -> MaterialIndexResult:
         self._validate_contract(material)
+        requested = self._key_term_extractor is not None if extract_key_terms is None else extract_key_terms
         existing = await self._index_storage.find_existing(material)
         if existing is not None:
+            stored_result = await self._load_key_term_result(existing.version_id)
+            needs_key_term_resume = requested and (
+                stored_result is None or stored_result.status in {"NOT_REQUESTED", "PENDING"}
+            )
+            if needs_key_term_resume:
+                presentation, _ = await self._read_parse_and_chunk(material)
+                key_term_result = await self._extract_key_terms(presentation, requested=True)
+                key_term_result = await self._persist_key_term_result(
+                    existing.version_id, key_term_result
+                )
+            else:
+                key_term_result = stored_result or KeyTermExtractionResult(
+                    status="NOT_REQUESTED"
+                )
             if existing.activation_required:
                 await self._index_storage.activate(material, existing.version_id)
-            cached_key_terms = self._key_term_cache.get(material.job_id, ())
-            if cached_key_terms and self._key_term_storage is not None:
-                await _safe_store_key_terms(
-                    self._key_term_storage, existing.version_id, cached_key_terms
-                )
-            return MaterialIndexResult(version_id=existing.version_id, key_terms=cached_key_terms)
+            return MaterialIndexResult(
+                version_id=existing.version_id,
+                key_term_result=key_term_result,
+            )
 
-        source = await self._asset_store.read_pptx(
-            material.source_bucket,
-            material.source_object_key,
-        )
-        presentation, chunks = await asyncio.to_thread(
-            _parse_and_chunk,
-            source,
-            self._validation_limits,
-            self._chunk_max_chars,
-        )
+        presentation, chunks = await self._read_parse_and_chunk(material)
         if not chunks:
             raise EmptyPptxContentError("PPTX contains no supported indexable text")
 
-        if self._key_term_extractor is None:
+        if not requested:
             raw_embeddings = await self._embedding_model.embed(
                 tuple(chunk.text for chunk in chunks)
             )
-            key_terms: tuple[KeyTerm, ...] = ()
+            key_term_result = KeyTermExtractionResult(status="NOT_REQUESTED")
         else:
-            raw_embeddings, key_terms = await asyncio.gather(
+            raw_embeddings, key_term_result = await asyncio.gather(
                 self._embedding_model.embed(tuple(chunk.text for chunk in chunks)),
-                _safe_extract_key_terms(self._key_term_extractor, presentation),
+                self._extract_key_terms(presentation, requested=True),
             )
-        if key_terms:
-            self._remember_key_terms(material.job_id, key_terms)
+        if key_term_result.status == "READY":
             logger.info(
                 "extracted PPTX key terms",
                 extra={
                     "event": "material.key_terms_extracted",
                     "material_id": str(material.material_id),
-                    "key_term_count": len(key_terms),
+                    "key_term_count": key_term_result.count,
                 },
             )
 
@@ -127,10 +136,13 @@ class IndexPptxMaterial:
 
         records = _chunk_records(chunks, embeddings)
         version_id = await self._index_storage.stage(material, records)
+        key_term_result = await self._persist_key_term_result(version_id, key_term_result)
         await self._index_storage.activate(material, version_id)
-        if key_terms and self._key_term_storage is not None:
-            await _safe_store_key_terms(self._key_term_storage, version_id, key_terms)
-        return MaterialIndexResult(version_id=version_id, key_terms=key_terms)
+        return MaterialIndexResult(
+            version_id=version_id,
+            key_term_result=key_term_result,
+            chunk_count=len(records),
+        )
 
     async def find_existing(self, material: StagedMaterial) -> ExistingIndexVersion | None:
         """Return a resumable/completed DB result before source or GPU work."""
@@ -138,14 +150,122 @@ class IndexPptxMaterial:
         self._validate_contract(material)
         return await self._index_storage.find_existing(material)
 
-    def _remember_key_terms(self, job_id: str, key_terms: tuple[KeyTerm, ...]) -> None:
-        if (
-            job_id not in self._key_term_cache
-            and len(self._key_term_cache) >= _KEY_TERM_CACHE_MAX_ENTRIES
-        ):
-            oldest_job_id = next(iter(self._key_term_cache))
-            del self._key_term_cache[oldest_job_id]
-        self._key_term_cache[job_id] = key_terms
+    async def _read_parse_and_chunk(
+        self,
+        material: StagedMaterial,
+    ) -> tuple[ParsedPresentation, tuple[MaterialChunk, ...]]:
+        source = await self._asset_store.read_pptx(
+            material.source_bucket,
+            material.source_object_key,
+        )
+        presentation, chunks = await asyncio.to_thread(
+            _parse_and_chunk,
+            source,
+            self._validation_limits,
+            self._chunk_max_chars,
+        )
+        if not chunks:
+            raise EmptyPptxContentError("PPTX contains no supported indexable text")
+        return presentation, chunks
+
+    async def _extract_key_terms(
+        self,
+        presentation: ParsedPresentation,
+        *,
+        requested: bool,
+    ) -> KeyTermExtractionResult:
+        if not requested:
+            return KeyTermExtractionResult(status="NOT_REQUESTED")
+        if self._key_term_extractor is None:
+            logger.warning(
+                "PPTX key term extraction was requested without a configured extractor",
+                extra={
+                    "event": "material.key_term_extraction_failed",
+                    "failure_code": "KEY_TERM_EXTRACTOR_UNAVAILABLE",
+                },
+            )
+            return KeyTermExtractionResult(
+                status="FAILED",
+                failure_code="KEY_TERM_EXTRACTOR_UNAVAILABLE",
+            )
+        presentation_text = _presentation_text(presentation)
+        prompt_limit = getattr(self._key_term_extractor, "max_prompt_chars", None)
+        truncated = isinstance(prompt_limit, int) and len(presentation_text) > prompt_limit
+        try:
+            terms = _deduplicate_key_terms(
+                tuple(await self._key_term_extractor.extract(presentation_text))
+            )
+        except Exception:
+            logger.warning(
+                "PPTX key term extraction failed; continuing without key terms",
+                extra={
+                    "event": "material.key_term_extraction_failed",
+                    "failure_code": "KEY_TERM_EXTRACTION_FAILED",
+                },
+                exc_info=True,
+            )
+            return KeyTermExtractionResult(
+                status="FAILED",
+                failure_code="KEY_TERM_EXTRACTION_FAILED",
+                truncated=truncated,
+            )
+        if not terms:
+            return KeyTermExtractionResult(status="EMPTY", truncated=truncated)
+        return KeyTermExtractionResult(status="READY", terms=terms, truncated=truncated)
+
+    async def _persist_key_term_result(
+        self,
+        version_id: int,
+        result: KeyTermExtractionResult,
+    ) -> KeyTermExtractionResult:
+        if result.status == "NOT_REQUESTED":
+            return result
+        if self._key_term_storage is None:
+            return result
+        try:
+            store_result = getattr(self._key_term_storage, "store_result", None)
+            if store_result is not None:
+                await store_result(version_id, result)
+            elif result.status == "READY":
+                await self._key_term_storage.store(version_id, result.terms)
+            return result
+        except Exception:
+            logger.warning(
+                "storing PPTX key term result failed; continuing with embedding",
+                extra={
+                    "event": "material.key_term_storage_failed",
+                    "failure_code": "KEY_TERM_STORAGE_FAILED",
+                },
+                exc_info=True,
+            )
+            failed = KeyTermExtractionResult(
+                status="FAILED",
+                failure_code="KEY_TERM_STORAGE_FAILED",
+                truncated=result.truncated,
+            )
+            try:
+                store_result = getattr(self._key_term_storage, "store_result", None)
+                if store_result is not None:
+                    await store_result(version_id, failed)
+            except Exception as failure_persistence_error:
+                logger.warning(
+                    "persisting the key term failure result also failed; retrying the job",
+                    extra={"event": "material.key_term_result_persistence_failed"},
+                    exc_info=True,
+                )
+                raise failure_persistence_error
+            return failed
+
+    async def _load_key_term_result(
+        self,
+        version_id: int,
+    ) -> KeyTermExtractionResult | None:
+        if self._key_term_storage is None:
+            return None
+        load_result = getattr(self._key_term_storage, "load_result", None)
+        if load_result is None:
+            return None
+        return await load_result(version_id)
 
     def _validate_contract(self, material: StagedMaterial) -> None:
         if material.chunk_strategy != self._chunk_strategy:
@@ -173,40 +293,6 @@ def _parse_and_chunk(
     return presentation, chunks
 
 
-async def _safe_extract_key_terms(
-    extractor: KeyTermExtractor,
-    presentation: ParsedPresentation,
-) -> tuple[KeyTerm, ...]:
-    """Extraction is additive: any failure is logged and swallowed, never blocking indexing."""
-
-    try:
-        return tuple(await extractor.extract(_presentation_text(presentation)))
-    except Exception:
-        logger.warning(
-            "PPTX key term extraction failed; continuing without key terms",
-            extra={"event": "material.key_term_extraction_failed"},
-            exc_info=True,
-        )
-        return ()
-
-
-async def _safe_store_key_terms(
-    storage: KeyTermStorage,
-    version_id: int,
-    key_terms: tuple[KeyTerm, ...],
-) -> None:
-    """Storage is additive: any failure is logged and swallowed, never blocking the callback."""
-
-    try:
-        await storage.store(version_id, key_terms)
-    except Exception:
-        logger.warning(
-            "storing PPTX key terms failed; continuing without persisted key terms",
-            extra={"event": "material.key_term_storage_failed"},
-            exc_info=True,
-        )
-
-
 def _presentation_text(presentation: ParsedPresentation) -> str:
     lines: list[str] = []
     current_page: int | None = None
@@ -216,6 +302,17 @@ def _presentation_text(presentation: ParsedPresentation) -> str:
             current_page = block.page
         lines.append(block.text)
     return "\n".join(lines)
+
+
+def _deduplicate_key_terms(key_terms: tuple[KeyTerm, ...]) -> tuple[KeyTerm, ...]:
+    deduplicated: dict[str, KeyTerm] = {}
+    for key_term in key_terms:
+        normalized = KeyTerm(
+            term=key_term.term.strip(),
+            definition=key_term.definition.strip(),
+        )
+        deduplicated[normalized.term] = normalized
+    return tuple(deduplicated.values())
 
 
 def _chunk_records(

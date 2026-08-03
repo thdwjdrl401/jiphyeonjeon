@@ -72,6 +72,9 @@ services:
       AI_WORKER_SPRING_HMAC_SECRET: ${AI_CALLBACK_SECRET:?AI_CALLBACK_SECRET 필요 — Spring이 이미 쓰는 기존 값}
       AI_WORKER_BGE_RUNTIME_URL: http://host.docker.internal:18080/internal/bge
       AI_WORKER_BGE_INTERNAL_TOKEN: ${BGE_RUNTIME_INTERNAL_TOKEN:?BGE_RUNTIME_INTERNAL_TOKEN 필요 — GPU 쪽과 동일 값}
+      # ADR-0010 PPTX 핵심 용어 추출. v2 작업이 요청하므로 켤 때 GMS 키도 함께 주입한다.
+      AI_WORKER_KEY_TERM_EXTRACTION_ENABLED: ${AI_WORKER_KEY_TERM_EXTRACTION_ENABLED:-false}
+      AI_WORKER_GMS_API_KEY: ${GMS_API_KEY:-}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8011/readyz', timeout=2)"]
       interval: 15s

@@ -103,7 +103,7 @@ describe('레슨 자료 API 계약', () => {
     expect(postSpy).not.toHaveBeenCalled()
   })
 
-  it('getLesson은 서버 materials를 뷰로 매핑한다 (materialId→id, fileName→name, fileSize→size)', async () => {
+  it('getLesson은 서버 materials와 두 AI 처리 상태를 뷰로 매핑한다', async () => {
     vi.spyOn(apiClient, 'get').mockResolvedValue({
       data: {
         lessonId: 'les-1',
@@ -118,7 +118,14 @@ describe('레슨 자료 API 계약', () => {
     const view = await httpLessonService.getLesson({ lessonId: 'les-1', role: 'INSTRUCTOR' })
 
     expect(view.materials).toEqual([
-      { id: 'mat-1', name: 'slides.pptx', size: '3.4 MB', status: 'READY' },
+      {
+        id: 'mat-1',
+        name: 'slides.pptx',
+        size: '3.4 MB',
+        status: 'READY',
+        embeddingStatus: 'READY',
+        keyTermStatus: 'NOT_REQUESTED',
+      },
     ])
   })
 

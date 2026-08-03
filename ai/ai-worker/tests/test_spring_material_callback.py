@@ -17,6 +17,8 @@ from app.adapters.spring_material_callback import (
 )
 from app.contracts import (
     KeyTermPayload,
+    KeyTermResultPayload,
+    MaterialCallbackOutputs,
     MaterialCallbackEvent,
     material_callback_event_id,
 )
@@ -144,6 +146,49 @@ def test_key_terms_field_is_omitted_when_not_provided() -> None:
     event = _event()
 
     assert "keyTerms" not in json.loads(event.raw_body())
+
+
+def test_ready_event_serializes_v2_key_term_result_metadata() -> None:
+    event = _event(
+        outputs=MaterialCallbackOutputs(
+            materialVersionId=41,
+            chunkCount=7,
+            keyTermResult=KeyTermResultPayload(
+                status="EMPTY",
+                count=0,
+                truncated=False,
+            ),
+        )
+    )
+
+    assert json.loads(event.raw_body())["outputs"] == {
+        "materialVersionId": 41,
+        "chunkCount": 7,
+        "keyTermResult": {
+            "status": "EMPTY",
+            "count": 0,
+            "truncated": False,
+        },
+    }
+
+
+def test_failed_embedding_event_can_report_requested_key_term_failure() -> None:
+    event = _event(
+        eventId=str(material_callback_event_id(JOB_ID, "MATERIAL_EMBED_FAILED")),
+        eventType="MATERIAL_EMBED_FAILED",
+        status="FAILED",
+        outputs={
+            "keyTermResult": {
+                "status": "FAILED",
+                "count": 0,
+                "failureCode": "MATERIAL_PIPELINE_FAILED",
+            }
+        },
+    )
+
+    assert event.outputs is not None
+    assert event.outputs.material_version_id is None
+    assert event.outputs.key_term_result.failure_code == "MATERIAL_PIPELINE_FAILED"
 
 
 @pytest.mark.parametrize("event_type", ["MATERIAL_EMBEDDING", "MATERIAL_EMBED_FAILED"])

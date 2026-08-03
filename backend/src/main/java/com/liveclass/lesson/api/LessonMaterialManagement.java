@@ -34,6 +34,11 @@ public interface LessonMaterialManagement {
     void updateEmbeddingStatus(UUID materialId, String embeddingStatus);
 
     /**
+     * 핵심 용어 추출 상태를 갱신한다(ADR-0010). 임베딩 상태와 독립된 상태축이며 없는 materialId는 무시한다.
+     */
+    void updateKeyTermStatus(UUID materialId, String keyTermStatus);
+
+    /**
      * 여러 레슨의 활성 자료를 한 번에 조회한다(N+1 방지). 커리큘럼 상세처럼 목차 전체의 자료를
      * 채울 때 쓴다. 자료가 없는 레슨은 맵에 담기지 않는다.
      */

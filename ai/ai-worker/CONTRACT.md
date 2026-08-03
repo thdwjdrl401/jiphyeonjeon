@@ -25,15 +25,17 @@ Alembic revision `0001_rag_index_storage`가 아래 테이블을 소유한다.
 - `ai.material_key_term`: 자료 버전별 추출 용어와 정의 (revision `0002_material_key_terms`)
 - `ai.annotation_highlight`: 강조 판서의 해석 텍스트·임베딩·타임라인 앵커 (revision
   `0003_annotation_highlight`)
+- `ai.material_version.key_term_*`: 추출 결과 상태·개수·절단·실패 코드
+  (revision `0005_material_key_term_result`)
 
 `material_key_term`은 `(material_version_id, term)`을 기본키로 사용한다. Java는
-`ai.material_version.state = 'ACTIVE'`인 자료 버전과 조인해 최신 자료의 용어만 읽는다(읽기 API는
-아직 없다). 재임베딩으로 기존 버전이 교체되거나 자료 버전이 삭제되면 FK cascade로 해당 용어도
+`ai.material_version.state = 'ACTIVE'`인 자료 버전과 조인해 최신 자료의 용어만 읽는다. 재임베딩으로
+기존 버전이 교체되거나 자료 버전이 삭제되면 FK cascade로 해당 용어도
 함께 정리된다.
 
-ai-worker는 `IndexPptxMaterial.execute()`가 stage/activate를 마친 뒤 추출된 용어를 이 테이블에
-upsert한다(`(material_version_id, term)` 충돌 시 `definition`만 갱신). 이 저장은 best-effort다 —
-실패해도 로그만 남기고 Spring 콜백 전송이나 job 자체를 막지 않는다([ADR-0005](../../docs/decisions/jinwoo/0005-key-term-storage-schema.md)).
+ai-worker는 새 version을 stage한 뒤 용어와 결과 메타데이터를 한 트랜잭션으로 저장하고 version을
+activate한다. 용어 저장 실패는 임베딩 활성화를 막지 않지만 결과를 `FAILED`로 보고한다. callback 재시도는
+in-memory cache가 아니라 이 영속 결과를 다시 읽는다([ADR-0010](../../docs/decisions/choinhoo/0010-recorded-lesson-pptx-embedding-and-key-term-extraction.md)).
 
 `annotation_highlight`은 자료 색인 테이블과 FK로 연결되지 않는 독립 색인이다. 스냅샷 1건이 곧 색인
 단위이므로 chunk/embedding 분리 없이 `text`·`embedding`을 같은 행에 둔다. `highlight_id`가 멱등 키이고
@@ -221,6 +223,23 @@ body는 UTF-8 JSON이며 모든 field는 camelCase다. adapter DTO는 알 수 �
 }
 ```
 
+`PPTX_EMBED` version 2는 핵심 용어 요청 의도를 명시한다.
+
+```json
+{
+  "taskType": "PPTX_EMBED",
+  "materialId": "uuid",
+  "assetId": "uuid",
+  "lessonId": "uuid",
+  "curriculumId": "uuid",
+  "fileName": "강의자료.pptx",
+  "policy": { "embedModel": "bge-m3", "extractKeyTerms": true },
+  "contractVersion": 2
+}
+```
+
+v1은 `extractKeyTerms`를 포함하면 거부하며 worker 환경 기본값을 따른다. v2는 이 필드가 없으면 거부한다.
+
 `EMBED_DELETE` version 1:
 
 ```json
@@ -380,25 +399,20 @@ Content-Type: application/json
 - adapter(`GmsKeyTermExtractor`)는 API 오류·응답 계약 위반을 모두 `KeyTermExtractionError`로만
   표면화한다. 원문, API key, 원본 응답 body를 로그에 남기지 않는다. adapter 자체는 재시도하지 않는다.
 
-### 10.3 application 계층의 실패 격리와 재시도 캐시
+### 10.3 application 계층의 실패 격리와 영속 재시도
 
-- `IndexPptxMaterial.execute()`는 `key_term_extractor`가 설정된 경우에만 embedding과
-  `asyncio.gather`로 동시에 추출을 시도한다. 추출 예외는 전부 잡아서 경고 로그만 남기고 빈 결과로
-  대체한다 — **핵심 용어 추출 실패는 8절의 embedding/stage/activate 흐름을 절대 막지 않는다.**
-- `execute()`는 추출된 용어를 DB에 저장하지 않고 `MaterialIndexResult(version_id, key_terms)`로
-  호출자에게 반환한다. 다만 추출에 성공하면([ADR-0004](../../docs/decisions/jinwoo/0004-key-term-callback-delivery-timing.md))
-  `IndexPptxMaterial` 인스턴스 자신의 in-memory 캐시(`job_id -> key_terms`, 최대 1,000개, 초과 시
-  가장 오래된 항목 제거)에도 적어둔다.
-- `find_existing` 단축 경로(9.6의 idempotent 재시도 처리)를 탈 때는 이 캐시에서 `job_id`로 조회해
-  `key_terms`를 채운다. 캐시에 없으면(다른 프로세스 인스턴스, 또는 worker 재시작 이후) 빈 tuple을
-  반환한다 — 이건 in-memory 캐시의 알려진 한계이며, RabbitMQ의 유한 재시도 창(9.6, 최대 300초
-  backoff) 안에서 같은 프로세스가 살아있는 한 캐시가 채워져 있을 확률이 높다는 전제에 기댄다.
+- `IndexPptxMaterial.execute()`는 v2 `extractKeyTerms=true` 또는 v1 worker 기본값이 켜졌을 때
+  embedding과 용어 추출을 `asyncio.gather`로 병렬 수행한다.
+- 추출 결과는 `READY|EMPTY|FAILED`, 미요청은 `NOT_REQUESTED`로 구분한다. 추출·저장 실패는
+  embedding/stage/activate 흐름을 막지 않는다.
+- 결과 용어와 상태·개수·절단 여부·안정된 실패 코드를 material version에 영속한다.
+- `find_existing` 단축 경로는 이 DB 결과를 읽어 callback을 재구성한다. 저장 전에 중단된 version은
+  원본 PPTX를 다시 읽어 용어 분기만 재실행하며 BGE 임베딩은 반복하지 않는다.
 
-### 10.4 Spring 전달 — `MATERIAL_EMBEDDED`에 `keyTerms` 포함
+### 10.4 Spring 전달 — `MATERIAL_EMBEDDED.outputs.keyTermResult`
 
-핵심 용어는 별도 eventType이 아니라 **기존 9.5의 `MATERIAL_EMBEDDED`(READY) callback 하나에 실어서**
-전달한다. `consumers/material_job.py`의 `MaterialJobHandler`는 `execute()` 결과의 `key_terms`가
-비어있지 않으면 그대로 담아 **한 번만** 보낸다.
+핵심 용어 결과는 별도 eventType이 아니라 기존 `MATERIAL_EMBEDDED` callback의 `outputs`로 전달한다.
+용어 원문은 `ai.material_key_term`이 SSOT이며 기존 `keyTerms`는 과도기 호환 필드다.
 
 ```http
 POST /api/internal/ai/callbacks HTTP/1.1
@@ -412,22 +426,27 @@ Content-Type: application/json
   "materialId": "uuid",
   "lessonId": "uuid",
   "status": "READY",
+  "outputs": {
+    "materialVersionId": 41,
+    "chunkCount": 7,
+    "keyTermResult": {
+      "status": "READY",
+      "count": 1,
+      "truncated": false
+    }
+  },
   "keyTerms": [
     { "term": "지도학습", "definition": "정답(레이블)이 있는 데이터로 모델을 학습시키는 방식" }
   ]
 }
 ```
 
-- `keyTerms`는 `MATERIAL_EMBEDDED`에서만 존재할 수 있는 optional 필드다. `MATERIAL_EMBEDDING`이나
-  `MATERIAL_EMBED_FAILED`에 실려 있으면 계약 위반으로 거부한다. 값이 없으면(추출 비활성이거나 빈
-  결과) 직렬화 시 필드 자체가 생략된다(`exclude_none`) — 이 필드가 생기기 전의 `MATERIAL_EMBEDDED`
-  wire 형태와 완전히 동일하다.
-- 이 callback은 9.5/9.6과 **동일한 필수·재시도 계약**을 따른다. 별도의 best-effort 경로는 없다 —
-  전송이 실패하면 9.6의 규칙대로 job 전체가 재시도되고, 재시도 시 `keyTerms`가 채워지는지는 10.3의
-  in-memory 캐시 히트 여부에 달려 있다.
-- Spring 쪽 실제 처리(`AiCallbackService`에서 `keyTerms` 필드를 받아 저장하는 로직)는 이 문서가 다루는
-  ai-worker 범위 밖이며 아직 구현되지 않았다 — 지금은 알 수 없는 필드로 조용히 무시된다. Java 쪽 계약
-  (`AiCallbackEvent` record에 `keyTerms` 필드 추가 등)은 backend 팀이 별도로 정한다.
+- `keyTermResult.status`는 `NOT_REQUESTED|READY|EMPTY|FAILED`다. `FAILED`에는 `failureCode`가 필수다.
+- 전체 material pipeline이 v2 용어 요청 전에 실패하면 `MATERIAL_EMBED_FAILED`에도 version id 없는
+  `outputs.keyTermResult=FAILED`를 실어 Spring의 두 상태를 함께 종결한다.
+- callback 전송 실패는 9.6 규칙대로 재시도하고 DB에 저장된 결과로 동일 payload를 복구한다.
+- Spring은 `outputs.keyTermResult.status`를 `core.material_asset.key_term_status` projection에 반영하고,
+  실제 용어는 `ai.material_key_term`에서 읽는다.
 
 ## 11. 강조 판서 색인 (ADR-0043)
 
