@@ -12,6 +12,7 @@ dependencies = [
 stt-lab = "stt_lab.cli:main"
 stt-lab-aihub = "stt_lab.aihub:main"
 stt-lab-replay = "stt_lab.replay_cli:main"
+stt-lab-training = "stt_lab.training_cli:main"
 stt-lab-vllm = "stt_lab.vllm_benchmark:main"
 
 [tool.uv.sources]

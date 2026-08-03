@@ -126,6 +126,24 @@ speech-start/end 지연, RTF와 peak CUDA memory가 기록된다. `test` split�
 뒤 `--allow-test`를 명시해야만 실행된다.
 
 
+## 학습 사전검증
+
+AI Hub manifest 생성 시 학습 누수 검사용 `lectureId`, `category`, `durationMs`도 함께 보존한다.
+실제 학습 전에 train/dev manifest만 허용되는지, 화자·강의 교집합이 0인지, 음성과 metadata가
+완전한지 먼저 검사한다. `test` 또는 `golden` sample이 섞이면 실패한다.
+
+```bash
+uv run --frozen stt-lab-training \
+  --train-manifest /home/liveclass/ai/datasets/aihub-korean-lecture/v1/manifests/train.jsonl \
+  --dev-manifest /home/liveclass/ai/datasets/aihub-korean-lecture/v1/manifests/dev.jsonl \
+  --output results/training-preflight.json
+```
+
+학습 batch는 원본 utterance WAV와 그 전체 transcript를 그대로 사용한다. 정렬된 sub-segment
+label 없이 운영 VAD로 WAV를 잘라 전체 transcript를 붙이지 않는다. checkpoint artifact에는
+manifest hash·seed·학습 설정·loss만 기록하고 원본 음성·transcript·secret은 복사하지 않는다.
+
+
 ## vLLM Whisper 서빙 실험
 
 vLLM은 realtime-agent 환경과 섞지 않고 별도 venv에 설치한다. sudo는 필요 없다. 현재

@@ -21,6 +21,9 @@ class EvaluationClip:
     terms: tuple[str, ...]
     consent: str
     sha256: str | None = None
+    lecture_id: str | None = None
+    category: str | None = None
+    duration_ms: int | None = None
 
 
 def load_manifest(path: Path, *, require_audio: bool = True) -> tuple[EvaluationClip, ...]:
@@ -65,6 +68,9 @@ def _parse_clip(value: Any, base_dir: Path, line_number: int) -> EvaluationClip:
         "terms",
         "consent",
         "sha256",
+        "lectureId",
+        "category",
+        "durationMs",
     }
     extra = set(value) - allowed
     if extra:
@@ -91,6 +97,11 @@ def _parse_clip(value: Any, base_dir: Path, line_number: int) -> EvaluationClip:
         not isinstance(sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", sha256)
     ):
         raise ValueError(f"manifest line {line_number} sha256 must be lowercase hex")
+    lecture_id = _optional_text(value, "lectureId", line_number)
+    category = _optional_text(value, "category", line_number)
+    duration_ms = value.get("durationMs")
+    if duration_ms is not None and (not isinstance(duration_ms, int) or duration_ms <= 0):
+        raise ValueError(f"manifest line {line_number} durationMs must be a positive integer")
 
     return EvaluationClip(
         clip_id=clip_id,
@@ -102,11 +113,23 @@ def _parse_clip(value: Any, base_dir: Path, line_number: int) -> EvaluationClip:
         terms=tuple(term.strip() for term in terms_value),
         consent=_required_text(value, "consent", line_number),
         sha256=sha256,
+        lecture_id=lecture_id,
+        category=category,
+        duration_ms=duration_ms,
     )
 
 
 def _required_text(value: dict[str, Any], field: str, line_number: int) -> str:
     field_value = value.get(field)
+    if not isinstance(field_value, str) or not field_value.strip():
+        raise ValueError(f"manifest line {line_number} field {field} must be non-blank")
+    return field_value.strip()
+
+
+def _optional_text(value: dict[str, Any], field: str, line_number: int) -> str | None:
+    field_value = value.get(field)
+    if field_value is None:
+        return None
     if not isinstance(field_value, str) or not field_value.strip():
         raise ValueError(f"manifest line {line_number} field {field} must be non-blank")
     return field_value.strip()

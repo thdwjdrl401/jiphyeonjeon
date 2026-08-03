@@ -92,6 +92,9 @@ def test_prepare_matches_relative_paths_even_when_roots_have_arbitrary_names(
     assert source_records[0]["channels"] == 1
     assert source_records[0]["sampleWidthBytes"] == 2
     assert source_records[0]["audioDurationMs"] == 1_000
+    assert source_records[0]["durationMs"] == 1_000
+    assert source_records[0]["lectureId"] == "C00001"
+    assert source_records[0]["category"] == "eng/comp"
     assert len(source_records[0]["sha256"]) == 64
 
 
