@@ -1,3 +1,4 @@
+from app.adapters.bounded_lecture_note_model import BoundedLectureNoteModel
 from app.adapters.gms_openai_answer import GmsOpenAIAnswerModel
 from app.adapters.gms_openai_lecture_note import GmsOpenAILectureNoteModel
 from app.adapters.hmac_internal_authenticator import HmacInternalRequestAuthenticator
@@ -14,6 +15,7 @@ from app.adapters.redis_lecture_note_publisher import RedisLectureNoteStore
 __all__ = [
     "CAPTION_CONSUMER_GROUP",
     "CAPTION_STREAM_KEY",
+    "BoundedLectureNoteModel",
     "CaptionConsumerState",
     "GmsOpenAIAnswerModel",
     "GmsOpenAILectureNoteModel",

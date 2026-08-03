@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from app.adapters import (
+    BoundedLectureNoteModel,
     CAPTION_CONSUMER_GROUP,
     CaptionConsumerState,
     GmsOpenAIAnswerModel,
@@ -65,7 +66,7 @@ class LectureNoteServices:
     pipeline: LectureNotePipeline
     consumer: RedisCaptionConsumer
     consumer_state: CaptionConsumerState
-    model: GmsOpenAILectureNoteModel
+    model: BoundedLectureNoteModel
     store: RedisLectureNoteStore
 
     async def restore(self) -> None:
@@ -185,7 +186,7 @@ def build_lecture_note_services(settings: Settings) -> LectureNoteServices:
         min_chars=settings.lecture_note_min_chars,
         max_chars=settings.lecture_note_max_chars,
     )
-    model = GmsOpenAILectureNoteModel(
+    gms_model = GmsOpenAILectureNoteModel(
         api_key=settings.gms_api_key.get_secret_value(),
         model=settings.lecture_note_model or settings.gms_model,
         max_output_tokens=settings.lecture_note_max_output_tokens,
@@ -194,6 +195,17 @@ def build_lecture_note_services(settings: Settings) -> LectureNoteServices:
         refinement_max_output_tokens=settings.lecture_note_refinement_max_output_tokens,
         refinement_max_prompt_chars=settings.lecture_note_refinement_max_prompt_chars,
         refinement_timeout_seconds=settings.lecture_note_refinement_timeout_seconds,
+    )
+    model = BoundedLectureNoteModel(
+        gms_model,
+        max_concurrency=settings.lecture_note_gms_max_concurrency,
+        refinement_max_concurrency=(
+            settings.lecture_note_gms_refinement_max_concurrency
+        ),
+        max_consecutive_live=settings.lecture_note_gms_max_consecutive_live,
+        max_attempts=settings.lecture_note_gms_max_attempts,
+        retry_base_seconds=settings.lecture_note_gms_retry_base_seconds,
+        retry_max_seconds=settings.lecture_note_gms_retry_max_seconds,
     )
     store = RedisLectureNoteStore(
         settings.redis_url,

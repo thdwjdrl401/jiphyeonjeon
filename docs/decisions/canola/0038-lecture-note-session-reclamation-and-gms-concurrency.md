@@ -47,9 +47,11 @@ tombstone은 accumulator의 `max_sessions`와 같은 상한을 가진 LRU로 제
 - queue wait, in-flight, pending session 수, 429/5xx, timeout, p50/p95 latency와 호출 비용을 metric으로 남긴다.
 
 `asyncio.Semaphore` 하나는 전체 in-flight 상한을 빠르게 만들 수 있지만 우선순위와 starvation을 표현하지
-못한다. 따라서 첫 구현도 `PriorityQueue + 고정 worker`를 사용한다. live 작업을 높은 우선순위로 두고
-refinement worker 상한 1을 함께 적용한다. 초기 동시성 `4`는 provider quota가 아니라 안전한 시작값이며,
-실제 dev 부하에서 429 비율, queue wait p95와 latency를 보고 조정한다.
+못한다. 첫 구현은 live/refinement 대기열을 분리한 priority-aware admission gate를 GMS adapter 앞에 둔다.
+호출 task 자체가 worker 역할을 하므로 별도 background worker lifecycle은 만들지 않는다. live를 먼저
+admit하되 연속 live 8개 뒤에는 대기 중인 refinement를 admit하고 refinement in-flight 상한 1을 함께
+적용한다. 초기 동시성 `4`는 provider quota가 아니라 안전한 시작값이며, 실제 dev 부하에서 429 비율,
+queue wait p95와 latency를 보고 조정한다.
 
 429와 일시적 5xx는 `Retry-After`를 우선하고 지수 backoff + jitter로 최대 3회 재시도한다. 인증 오류,
 payload validation 오류와 prompt 상한 위반은 재시도하지 않는다. 재시도 후에도 실패한 작업은 현재
