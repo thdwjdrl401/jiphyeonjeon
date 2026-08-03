@@ -208,6 +208,8 @@ FE는 타입·Interface·Mock·화면·이동 규칙을 모두 구현했고 HTTP
   (3) `LIVE_STARTING_SOON`·오늘의 라이브 일정 알림을 만드는 예약 작업(현재 `@Scheduled`는
   `LiveStartReconciler`·`AssetReaper`·`OutboxRelay`에만 있어 알림용 잡이 없다),
   (4) 실시간 push(WS/SSE) — 없는 동안 FE는 60초 주기로 `summary`를 폴링한다.
+  작업 분해·삽입 지점·완료 조건은 [NOTIFICATION-BACKEND-HANDOFF.md](NOTIFICATION-BACKEND-HANDOFF.md)에 있다
+  (규격은 이 절이 정본이며 그 문서는 복제하지 않는다).
 
 ## 3. 내부 계약 (확정 인터페이스)
 

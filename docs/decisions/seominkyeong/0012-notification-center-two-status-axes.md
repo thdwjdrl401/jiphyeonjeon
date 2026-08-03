@@ -98,7 +98,9 @@
   삭제 → 일정 취소), `mockLiveSessionService`(녹화 READY), `mockReplayService`(검수 저장·다시보기 게시).
   화면 코드는 발행 함수를 직접 부르지 않는다.
 - **BE·계약**: [CONTRACT §2-4](../../CONTRACT.md) 신설(미구현 명시). 서버 후속 작업은 그 절 마지막
-  항목에 정리했다 — 테이블·5개 엔드포인트·발행 지점·예약 작업·push 채널.
+  항목에 정리했고, 작업 분해·삽입 지점(클래스·메서드)·완료 조건은
+  [NOTIFICATION-BACKEND-HANDOFF.md](../../NOTIFICATION-BACKEND-HANDOFF.md)에 인수 문서로 두었다.
+  규격은 CONTRACT가 정본이며 인수 문서는 그것을 복제하지 않고 가리킨다.
 - **테스트**: `test/features/notification/` 6개 파일 46개(수강 신청 수신자·상태 전이·중복 방지,
   강의·자료·일정, 녹화·다시보기, 조회·필터·페이지네이션·권한·대상 재판정, HTTP 미구현 고정, 이동 규칙),
   `test/integration/NotificationCenter.test.tsx` 8개, `ScrollReset.test.tsx`에 hash 이동 1개 추가.
