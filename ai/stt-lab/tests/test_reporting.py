@@ -19,6 +19,8 @@ def _report() -> dict[str, object]:
         "reference": "정답",
         "hypothesis": "정답",
         "normalizedCer": 0.0,
+        "literalNormalizedCer": 0.25,
+        "referenceAlternativeCount": 1,
         "realTimeFactor": 0.1,
         "segmentPlanSha256": "b" * 64,
         "segmentPlan": [
@@ -60,6 +62,7 @@ def _report() -> dict[str, object]:
                     "clipCount": 1,
                     "segmentCount": 1,
                     "meanNormalizedCer": 0.0,
+                    "meanLiteralNormalizedCer": 0.25,
                     "meanRealTimeFactor": 0.1,
                     "p50SpeechEndToFinalMs": 50.0,
                     "p95SpeechEndToFinalMs": 50.0,
@@ -102,6 +105,7 @@ def test_replay_report_writes_all_machine_and_human_artifacts(tmp_path: Path) ->
     with (artifact_dir / "comparison.csv").open(encoding="utf-8", newline="") as source:
         rows = list(csv.DictReader(source))
     assert rows[0]["meanNormalizedCer"] == "0.0"
+    assert rows[0]["meanLiteralNormalizedCer"] == "0.25"
     markdown = (artifact_dir / "report.md").read_text(encoding="utf-8")
     assert "COMPARABLE" in markdown
     assert "운영 무결성 gate: **PASS**" in markdown

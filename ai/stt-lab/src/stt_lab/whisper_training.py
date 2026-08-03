@@ -225,6 +225,7 @@ class TransformersWhisperBackend:
         self._require_loaded()
         self._model.save_pretrained(writer.checkpoint_dir, safe_serialization=True)
         self._processor.save_pretrained(writer.processor_dir)
+        self._processor.save_pretrained(writer.checkpoint_dir)
         self._torch.save(
             self._optimizer.state_dict(),
             writer.run_dir / "optimizer-state.pt",
@@ -256,7 +257,7 @@ class TransformersWhisperBackend:
             audio_values,
             sampling_rate=16_000,
             return_tensors="pt",
-            padding=True,
+            padding="max_length",
             return_attention_mask=True,
         )
         tokens = self._processor.tokenizer(

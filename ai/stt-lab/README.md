@@ -13,7 +13,8 @@
 
 입력은 압축하지 않은 mono PCM16 WAV, 16 kHz여야 한다. manifest는 UTF-8 JSONL이며
 필수 필드는 `id`, `audioPath`, `reference`, `language`, `speakerId`, `split`, `consent`다.
-`terms`와 파일 무결성 검증용 `sha256`은 선택 필드다.
+AI Hub 변환 manifest는 원본 이중 전사를 `reference`에 보존하고 철자 전사를
+`trainingReference`에 저장한다. `terms`와 파일 무결성 검증용 `sha256`은 선택 필드다.
 
 ```json
 {"id":"golden-ko-tech-001","audioPath":"../data/golden-ko-tech-001.wav","reference":"정답 원문","language":"ko-KR","speakerId":"speaker-001","split":"golden","terms":["LiveKit","WebRTC"],"consent":"internal-evaluation"}
@@ -85,8 +86,10 @@ uv run --frozen stt-lab \
 ```
 
 결과 JSON은 clip별 원문·가설·CER·용어/숫자 정확도·지연·RTF와 평가 프로세스의
-peak CUDA memory를 보존한다. GPU 전체 사용량과 12-stream 동시성은 후속 replay
-benchmark에서 별도로 측정한다.
+peak CUDA memory를 보존한다. AI Hub `(철자 전사)/(발음 전사)`는 위치별 두 표기와
+그 혼합 출력을 모두 정답으로 인정한다. `normalizedCer`는 이 다중 정답 기준이고,
+`literalNormalizedCer`는 원본 괄호 표기를 문자 그대로 비교한 감사용 지표다. GPU 전체
+사용량과 12-stream 동시성은 후속 replay benchmark에서 별도로 측정한다.
 
 ## 운영 VAD 기반 통합 replay
 
@@ -144,8 +147,9 @@ uv run --frozen stt-lab-training \
   --output results/training-preflight.json
 ```
 
-학습 batch는 원본 utterance WAV와 그 전체 transcript를 그대로 사용한다. 정렬된 sub-segment
-label 없이 운영 VAD로 WAV를 잘라 전체 transcript를 붙이지 않는다. checkpoint artifact에는
+학습 batch는 원본 utterance WAV와 철자 전사 `trainingReference`를 사용한다. 예를 들어
+`(software)/(소프트웨어)`를 괄호 표기 그대로 학습시키지 않고 `software`를 target으로 삼는다.
+정렬된 sub-segment label 없이 운영 VAD로 WAV를 잘라 전체 transcript를 붙이지 않는다. checkpoint artifact에는
 manifest hash·seed·학습 설정·loss만 기록하고 원본 음성·transcript·secret은 복사하지 않는다.
 
 

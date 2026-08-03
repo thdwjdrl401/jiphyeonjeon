@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from stt_lab.contracts import EvaluationClip, load_manifest
+from stt_lab.transcriptions import canonical_transcription
 
 _SAFE_RUN_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _SECRET_KEYS = frozenset({"secret", "password", "token", "api_key", "apikey"})
@@ -160,7 +161,7 @@ def _training_example(clip: EvaluationClip) -> TrainingExample:
     return TrainingExample(
         example_id=clip.clip_id,
         audio_path=clip.audio_path,
-        transcript=clip.reference,
+        transcript=clip.training_reference or canonical_transcription(clip.reference),
         language=clip.language,
         speaker_id=clip.speaker_id,
         lecture_id=clip.lecture_id,

@@ -39,6 +39,7 @@ def _write_manifest(
                 "id": f"{split}-{index}",
                 "audioPath": str(audio_path),
                 "reference": f"강의 음성 {index}",
+                "trainingReference": f"written transcript {index}",
                 "language": "ko-KR",
                 "speakerId": speaker_id,
                 "lectureId": f"{lecture_prefix}-{index}",
@@ -77,6 +78,7 @@ def test_training_pair_accepts_only_disjoint_train_and_dev(tmp_path: Path) -> No
     assert len(pair.dev.examples) == 2
     assert pair.train.manifest_sha256 != pair.dev.manifest_sha256
     assert all(example.lecture_id.startswith("train-lecture") for example in pair.train.examples)
+    assert pair.train.examples[0].transcript.startswith("written transcript")
 
 
 def test_training_manifest_fails_closed_for_test_split(tmp_path: Path) -> None:

@@ -52,8 +52,21 @@ def test_manifest_resolves_relative_audio_and_reads_pcm_contract(tmp_path: Path)
 
     assert loaded[0].audio_path == audio_path
     assert loaded[0].terms == ("LiveKit",)
+    assert loaded[0].training_reference is None
     assert audio.sample_rate == 16_000
     assert audio.duration_ms == 1_000
+
+
+def test_manifest_loads_optional_training_reference(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "manifest.jsonl"
+    clip = _clip()
+    clip["reference"] = "(software)/(소프트웨어)를 확인합니다."
+    clip["trainingReference"] = "software를 확인합니다."
+    _write_manifest(manifest_path, clip)
+
+    loaded = load_manifest(manifest_path, require_audio=False)
+
+    assert loaded[0].training_reference == "software를 확인합니다."
 
 
 def test_manifest_rejects_duplicate_ids(tmp_path: Path) -> None:
