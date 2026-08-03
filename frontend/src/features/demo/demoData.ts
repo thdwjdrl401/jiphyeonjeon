@@ -259,19 +259,16 @@ export function getDemoUpcomingLiveSession(userId: string) {
   return findNextLiveLesson(curriculums)
 }
 
-export function getDemoTodayLiveSession(userId: string, today = new Date()) {
-  const curriculums = getMockEnrollments(userId)
-    .filter((enrollment) => enrollment.status === 'ACTIVE')
-    .map((enrollment) => ({ curriculum: getMockCurriculum(enrollment.curriculumId)! }))
-    .filter((entry) => entry.curriculum)
-  return findNextLiveLesson(curriculums, today)
-}
-
-export function getDemoTodayInstructorLiveSession(userId: string, today = new Date()) {
+/**
+ * 강사 대시보드의 다음 라이브. 학생용 `getDemoUpcomingLiveSession`과 같은 규칙이다 —
+ * "오늘"로 거르지 않고 예정/진행 세션 중 `scheduledAt`이 가장 이른 하나를 돌려준다.
+ * 서버(`CatalogService.nearestLiveSession`)와 같은 규칙을 쓰기 위한 것이다.
+ */
+export function getDemoUpcomingInstructorLiveSession(userId: string) {
   const curriculums = mockCurriculumEntities
     .filter((curriculum) => curriculum.instructor.instructorId === userId)
     .map((curriculum) => ({ curriculum }))
-  return findNextLiveLesson(curriculums, today)
+  return findNextLiveLesson(curriculums)
 }
 
 export function getDemoStudentLearningSummary(userId: string) {

@@ -9,14 +9,14 @@ package com.liveclass.curriculum.service;
  * @param publishedCurriculumCount 공개(PUBLISHED) 커리큘럼 수
  * @param upcomingLiveCount        예정/진행 라이브가 걸린 커리큘럼 수(커리큘럼당 다음 세션 1개 기준)
  * @param totalEnrolleeCount       내 커리큘럼 전반의 ACTIVE 수강생 합
- * @param todayLiveSession         가장 가까운 예정/진행 라이브(없으면 null) — 학생 요약과 같은 형태를 재사용
+ * @param upcomingLiveSession      가장 가까운 예정/진행 라이브(없으면 null) — 학생 요약과 같은 형태를 재사용
  */
 public record InstructorDashboardSummary(
         int totalCurriculumCount,
         int publishedCurriculumCount,
         int upcomingLiveCount,
         long totalEnrolleeCount,
-        StudentLearningSummary.TodayLiveSession todayLiveSession
+        StudentLearningSummary.UpcomingLiveSession upcomingLiveSession
 ) {
     public static InstructorDashboardSummary empty() {
         return new InstructorDashboardSummary(0, 0, 0, 0L, null);

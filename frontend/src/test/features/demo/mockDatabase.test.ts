@@ -8,9 +8,14 @@ import {
   getDemoInstructorCurriculums,
   getDemoPendingStudentCurriculums,
   getDemoStudentCurriculums,
-  getDemoTodayInstructorLiveSession,
+  getDemoUpcomingInstructorLiveSession,
 } from '@/features/demo/demoData'
-import { deleteMockCurriculum, getMockCurriculum } from '@/features/demo/mockDatabase'
+import {
+  buildMockCurriculumOutline,
+  deleteMockCurriculum,
+  getMockCurriculum,
+  mockCurriculumEntities,
+} from '@/features/demo/mockDatabase'
 
 describe('통합 mock 데이터베이스', () => {
   beforeEach(() => {
@@ -105,21 +110,32 @@ describe('통합 mock 데이터베이스', () => {
     expect(getMockCurriculum('cur-architecture')?.lifecycleStatus).toBe('DRAFT')
   })
 
-  it('강사 대시보드 라이브는 당일 일정만 반환한다', async () => {
+  /*
+    서버는 "오늘"로 거르지 않고 예정/진행 세션 중 가장 이른 하나를 준다
+    (CatalogService.nearestLiveSession). mock도 같은 규칙이어야 한다 — 예전에는 당일만
+    반환해서, 오늘 일정이 없으면 mock은 null인데 실서버는 다음 세션을 주는 식으로 갈렸다.
+    날짜를 인자로 받지 않으므로 "지금"이 언제든 결과가 같다.
+  */
+  it('강사 대시보드 라이브는 당일로 거르지 않고 가장 이른 예정 세션을 반환한다', async () => {
     const instructor = await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
 
-    const todayLive = getDemoTodayInstructorLiveSession(
-      instructor.userId,
-      new Date('2026-08-03T12:00:00+09:00'),
-    )
-    const anotherDayLive = getDemoTodayInstructorLiveSession(
-      instructor.userId,
-      new Date('2026-08-04T12:00:00+09:00'),
-    )
+    const upcoming = getDemoUpcomingInstructorLiveSession(instructor.userId)
 
-    expect(todayLive?.curriculumId).toBe('cur-spring-live')
-    expect(todayLive?.sectionId).toBeTruthy()
-    expect(todayLive?.lessonId).toBeTruthy()
-    expect(anotherDayLive).toBeNull()
+    expect(upcoming?.curriculumId).toBe('cur-spring-live')
+    expect(upcoming?.sectionId).toBeTruthy()
+    expect(upcoming?.lessonId).toBeTruthy()
+    expect(upcoming?.scheduledAt).toBeTruthy()
+
+    // 이 강사의 모든 예정/진행 세션 중 가장 이른 것이어야 한다.
+    const allScheduledAt = mockCurriculumEntities
+      .filter((curriculum) => curriculum.instructor.instructorId === instructor.userId)
+      .flatMap((curriculum) => buildMockCurriculumOutline(curriculum))
+      .flatMap((section) => section.lessons)
+      .filter((lesson) => lesson.liveSession && ['SCHEDULED', 'OPEN', 'LIVE'].includes(lesson.liveSession.status))
+      .map((lesson) => lesson.liveSession!.scheduledAt)
+      .filter((scheduledAt): scheduledAt is string => Boolean(scheduledAt))
+    expect(allScheduledAt.length).toBeGreaterThan(1)
+    const earliest = allScheduledAt.reduce((a, b) => (new Date(a) <= new Date(b) ? a : b))
+    expect(upcoming?.scheduledAt).toBe(earliest)
   })
 })

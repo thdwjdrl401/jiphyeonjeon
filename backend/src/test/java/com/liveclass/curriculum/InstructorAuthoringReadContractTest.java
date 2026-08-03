@@ -90,7 +90,7 @@ class InstructorAuthoringReadContractTest {
         String sectionId = createSection(instructor, published);
         String lessonId = createLesson(instructor, sectionId, "1강");
         /*
-         * <b>고정 날짜를 쓰지 않는다.</b> `upcomingLiveCount`와 `todayLiveSession`은 "앞으로 있을"
+         * <b>고정 날짜를 쓰지 않는다.</b> `upcomingLiveCount`와 `upcomingLiveSession`은 "앞으로 있을"
          * 라이브를 세므로, 박아 둔 시각이 지나가는 순간 테스트가 저절로 깨진다 — 실제로
          * 2026-08-01이 지나며 master가 빨개졌다. 코드가 바뀌지 않았는데 날짜만으로 깨지는 테스트는
          * 신호가 아니라 소음이다.
@@ -107,9 +107,9 @@ class InstructorAuthoringReadContractTest {
                 .andExpect(jsonPath("$.publishedCurriculumCount").value(1))
                 .andExpect(jsonPath("$.upcomingLiveCount").value(1))
                 .andExpect(jsonPath("$.totalEnrolleeCount").value(1))
-                .andExpect(jsonPath("$.todayLiveSession.sessionId").exists())
-                .andExpect(jsonPath("$.todayLiveSession.lessonTitle").value("1강"))
-                .andExpect(jsonPath("$.todayLiveSession.curriculumTitle").exists());
+                .andExpect(jsonPath("$.upcomingLiveSession.sessionId").exists())
+                .andExpect(jsonPath("$.upcomingLiveSession.lessonTitle").value("1강"))
+                .andExpect(jsonPath("$.upcomingLiveSession.curriculumTitle").exists());
     }
 
     @Test
@@ -118,7 +118,7 @@ class InstructorAuthoringReadContractTest {
         write(get("/api/instructor/dashboard-summary"), instructor, null)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalCurriculumCount").value(0))
-                .andExpect(jsonPath("$.todayLiveSession").doesNotExist());
+                .andExpect(jsonPath("$.upcomingLiveSession").doesNotExist());
     }
 
     @Test

@@ -13,7 +13,7 @@ public record StudentLearningSummaryResponse(
         int completedCurriculumCount,
         int averageProgress,
         int completedLessonCount,
-        TodayLiveSessionResponse todayLiveSession
+        UpcomingLiveSessionResponse upcomingLiveSession
 ) {
 
     public static StudentLearningSummaryResponse from(StudentLearningSummary s) {
@@ -22,11 +22,11 @@ public record StudentLearningSummaryResponse(
                 s.completedCurriculumCount(),
                 s.averageProgress(),
                 s.completedLessonCount(),
-                s.todayLiveSession() == null ? null : TodayLiveSessionResponse.from(s.todayLiveSession()));
+                s.upcomingLiveSession() == null ? null : UpcomingLiveSessionResponse.from(s.upcomingLiveSession()));
     }
 
     @Schema(description = "대시보드가 강조하는 다음 라이브 세션")
-    public record TodayLiveSessionResponse(
+    public record UpcomingLiveSessionResponse(
             UUID sessionId,
             UUID lessonId,
             String lessonTitle,
@@ -37,8 +37,8 @@ public record StudentLearningSummaryResponse(
             String liveSessionStatus,
             Long durationMs
     ) {
-        static TodayLiveSessionResponse from(StudentLearningSummary.TodayLiveSession t) {
-            return new TodayLiveSessionResponse(
+        static UpcomingLiveSessionResponse from(StudentLearningSummary.UpcomingLiveSession t) {
+            return new UpcomingLiveSessionResponse(
                     t.sessionId(), t.lessonId(), t.lessonTitle(),
                     t.curriculumId(), t.curriculumTitle(), t.sectionId(),
                     t.scheduledAt(), t.liveSessionStatus(), t.durationMs());

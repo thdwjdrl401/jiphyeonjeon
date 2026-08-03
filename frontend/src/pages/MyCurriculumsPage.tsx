@@ -110,8 +110,8 @@ export default function MyCurriculumsPage() {
     return matchesSearch && matchesStatus
   })
   const upcomingLive = isInstructor
-    ? instructorSummaryQuery.data?.todayLiveSession
-    : studentSummaryQuery.data?.todayLiveSession
+    ? instructorSummaryQuery.data?.upcomingLiveSession
+    : studentSummaryQuery.data?.upcomingLiveSession
   const upcomingLiveDate = upcomingLive?.scheduledAt ? new Date(upcomingLive.scheduledAt) : null
   const upcomingLiveDateLabel = upcomingLiveDate
     ? `${String(upcomingLiveDate.getMonth() + 1).padStart(2, '0')}.${String(upcomingLiveDate.getDate()).padStart(2, '0')}`

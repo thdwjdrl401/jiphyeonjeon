@@ -458,12 +458,12 @@ public class CatalogService {
     }
 
     /** 수강 커리큘럼들 중 가장 이른 예정/진행 라이브 하나를 대시보드용으로 조립한다(없으면 null). */
-    private StudentLearningSummary.TodayLiveSession nearestLiveSession(List<UUID> curriculumIds) {
+    private StudentLearningSummary.UpcomingLiveSession nearestLiveSession(List<UUID> curriculumIds) {
         return nearestLiveSession(liveSessionDirectory.nextScheduledByCurriculum(curriculumIds));
     }
 
     /** 이미 조회한 "커리큘럼별 다음 세션" 맵에서 가장 이른 하나를 조립한다(중복 조회 회피). */
-    private StudentLearningSummary.TodayLiveSession nearestLiveSession(Map<UUID, LiveSessionView> nextByCurriculum) {
+    private StudentLearningSummary.UpcomingLiveSession nearestLiveSession(Map<UUID, LiveSessionView> nextByCurriculum) {
         Map.Entry<UUID, LiveSessionView> nearest = nextByCurriculum
                 .entrySet().stream()
                 .filter(e -> e.getValue() != null && e.getValue().scheduledAt() != null)
@@ -477,7 +477,7 @@ public class CatalogService {
         String curriculumTitle = curriculumRepository.findById(curriculumId)
                 .map(Curriculum::getTitle).orElse(null);
         String lessonTitle = lessonDirectory.findTitles(List.of(session.lessonId())).get(session.lessonId());
-        return new StudentLearningSummary.TodayLiveSession(
+        return new StudentLearningSummary.UpcomingLiveSession(
                 session.sessionId(), session.lessonId(), lessonTitle,
                 curriculumId, curriculumTitle, null,
                 session.scheduledAt(), session.liveSessionStatus(), null);
