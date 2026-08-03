@@ -106,6 +106,109 @@ flowchart LR
 ## 녹화강의 업로드 정상 처리 흐름
 
 ```mermaid
+sequenceDiagram
+    actor I as 강사
+    participant FE as 강사 FE
+    participant B as Spring recorded API
+    participant AST as Spring asset 포트
+    participant DB as PostgreSQL
+    participant S3 as MinIO/S3
+    participant D as Spring Dispatcher
+    participant MQ as RabbitMQ<br/>media.transcode
+    participant W as media-worker
+    actor S as 수강생
+
+    I->>FE: MP4와 강의 정보 제출
+    FE->>B: POST /api/instructor/sections/{sectionId}/recorded-lessons
+    B->>DB: 강사 소유권 확인<br/>lesson + recorded_video(AWAITING_UPLOAD) 생성
+    DB-->>B: lessonId·recordedVideoId commit
+    B-->>FE: HTTP 201<br/>processingStatus=AWAITING_UPLOAD
+
+    FE->>B: POST /api/instructor/recorded-lessons/{lessonId}/video/upload-requests
+    B->>AST: RECORDED_VIDEO_SOURCE 생성·업로드 URL 요청
+    AST->>DB: source asset 생성
+    DB-->>AST: assetId
+    AST->>AST: object key·presigned PUT URL 생성
+    AST-->>B: assetId·uploadUrl·서명 헤더
+    B->>DB: recorded_video.sourceAssetId 연결
+    DB-->>B: upload ticket 상태 commit
+    B-->>FE: HTTP 201 upload ticket
+
+    FE->>S3: presigned PUT으로 MP4 직접 업로드
+    S3-->>FE: 업로드 완료
+    FE->>B: POST /api/instructor/recorded-lessons/{lessonId}/video/complete<br/>{assetId}
+    B->>AST: source asset 완료·연결 검증
+    AST->>S3: HEAD 원본 MP4
+    S3-->>AST: 크기·content-type
+    AST->>DB: source asset: PENDING → UPLOADED
+    AST-->>B: source asset=UPLOADED
+    B->>DB: recorded_video: AWAITING_UPLOAD → QUEUED<br/>transcode job=PENDING 생성
+    DB-->>B: source·video·job atomic commit
+    B-->>FE: HTTP 202<br/>processingStatus=QUEUED
+
+    par 강사 상세 화면의 처리 상태 폴링
+        loop READY 확인 전까지 3초 간격
+            FE->>B: GET /api/instructor/recorded-lessons/{lessonId}/processing
+            B->>DB: recorded_video snapshot 조회
+            DB-->>B: 현재 processing status
+            B-->>FE: HTTP 200<br/>QUEUED 또는 TRANSCODING 또는 VERIFYING 또는 READY
+        end
+        FE->>FE: READY 확인 후 폴링 중단·플레이어 활성화
+    and durable 비동기 HLS 변환
+        D->>DB: PENDING job 선점<br/>FOR UPDATE SKIP LOCKED
+        DB-->>D: job·source·output prefix
+        D->>MQ: jobId 기반 멱등 작업 발행
+        MQ-->>D: publish confirm
+        D->>DB: job: PENDING → DISPATCHED
+
+        MQ->>W: media.transcode 작업 전달
+        W->>B: RUNNING callback<br/>HMAC 서명
+        B->>DB: job: DISPATCHED → RUNNING<br/>video: QUEUED → TRANSCODING
+        DB-->>B: 상태 commit
+        B-->>W: HTTP 200 callback 처리 완료
+
+        W->>B: POST /api/internal/media/transcode-jobs/{jobId}/source-url<br/>HMAC 서명
+        B->>DB: job·recorded video·source 연결 검증
+        DB-->>B: 유효한 source asset
+        B->>AST: 단명 presigned GET URL 요청
+        AST-->>B: sourceUrl
+        B-->>W: HTTP 200 sourceUrl
+
+        W->>S3: presigned GET으로 원본 MP4 다운로드
+        S3-->>W: MP4 stream
+        W->>W: ffprobe 검증<br/>FFmpeg remux 또는 transcode
+        W->>S3: HLS segment 업로드
+        W->>S3: index.m3u8 마지막 업로드<br/>#EXT-X-ENDLIST 포함
+
+        W->>B: SUCCEEDED callback<br/>HLS key·duration·size·segmentCount
+        B->>DB: callback inbox 멱등 확인<br/>video: TRANSCODING → VERIFYING
+        B->>S3: manifest 읽기·첫 segment HEAD
+        S3-->>B: VOD manifest·segment 존재
+        B->>DB: job: RUNNING → SUCCEEDED<br/>video: VERIFYING → READY<br/>재생 메타데이터 저장
+        DB-->>B: READY atomic commit
+        B-->>W: HTTP 200 callback 처리 완료
+        W->>MQ: media.transcode message ACK
+    end
+
+    Note over FE,S: READY 커밋 뒤 소유 강사와<br/>활성 수강생에게 재생 허용
+    S->>B: GET /api/lessons/{lessonId}/recorded-playback
+    B->>DB: 수강 권한·커리큘럼 공개·READY gate 조회
+    DB-->>B: 접근 허용·재생 메타데이터
+    B-->>S: HTTP 200 HLS source metadata
+    S->>B: GET /api/lessons/{lessonId}/recorded-playback/manifest
+    B->>DB: playback 권한·READY gate 재확인
+    DB-->>B: 접근 허용·manifest key
+    B->>S3: VOD manifest 읽기
+    S3-->>B: index.m3u8
+    B->>B: 상대 URI 검증·segment URL presign
+    B-->>S: HTTP 200 rewritten manifest
+    S->>S3: presigned URL로 HLS segment 직접 요청
+    S3-->>S: 미디어 segment
+```
+
+같은 정상 경로를 처리 단계 중심으로 압축하면 아래와 같다.
+
+```mermaid
 flowchart TD
   A["1. 강사 · React<br/>MP4와 강의 정보 입력"]
   B["2. Spring recorded API<br/>녹화강의 생성 요청"]
