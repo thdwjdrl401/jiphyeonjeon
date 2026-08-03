@@ -1,6 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
-import { Link, NavLink, useNavigate } from 'react-router-dom'
-import { adminPaths, getRoleHomePath, instructorPaths, publicPaths, studentPaths } from '@/app/router/paths'
+import { useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import {
+  adminNavigationItem,
+  isNavigationItemActive,
+  isProfileAreaActive,
+  navigationItemsByRole,
+  type NavigationItem,
+} from '@/app/router/navigation'
+import { getProfilePath, publicPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
 import { USER_ROLE_LABEL } from '@/features/auth/types'
 import ProfileAvatar from '@/features/profile/ProfileAvatar'
@@ -8,41 +15,21 @@ import BrandLink from './BrandLink'
 
 export default function GlobalHeader() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
-  const [isMyMenuOpen, setIsMyMenuOpen] = useState(false)
-  const [isProfileOpen, setIsProfileOpen] = useState(false)
   const [logoutError, setLogoutError] = useState('')
   const [isLoggingOut, setIsLoggingOut] = useState(false)
-  const profileMenuRef = useRef<HTMLDivElement>(null)
   const { user, status, logout } = useAuth()
+  const { pathname } = useLocation()
   const navigate = useNavigate()
-  const workspaceHome = user ? getRoleHomePath(user.role) : publicPaths.home
-  const profilePath = user?.role === 'INSTRUCTOR' ? instructorPaths.profile : studentPaths.profile
 
-  const closeMenu = () => {
-    setIsMenuOpen(false)
-    setIsMyMenuOpen(false)
-    setIsProfileOpen(false)
-  }
+  /**
+   * 역할 메뉴는 로그인 상태가 확정된 뒤에만 낸다. status가 'loading'인 동안 학생 메뉴를
+   * 먼저 그려 두면 강사 계정에서 잘못된 메뉴가 한 번 스쳐 보인다 — 그때는 공개 메뉴만 낸다.
+   */
+  const navigationItems: NavigationItem[] = user
+    ? [...navigationItemsByRole[user.role], ...(user.isAdmin ? [adminNavigationItem] : [])]
+    : [navigationItemsByRole.STUDENT[0]]
 
-  useEffect(() => {
-    if (!isProfileOpen) return
-
-    const closeOnOutsideClick = (event: MouseEvent) => {
-      if (event.target instanceof Node && !profileMenuRef.current?.contains(event.target)) {
-        setIsProfileOpen(false)
-      }
-    }
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setIsProfileOpen(false)
-    }
-
-    document.addEventListener('mousedown', closeOnOutsideClick)
-    document.addEventListener('keydown', closeOnEscape)
-    return () => {
-      document.removeEventListener('mousedown', closeOnOutsideClick)
-      document.removeEventListener('keydown', closeOnEscape)
-    }
-  }, [isProfileOpen])
+  const closeMenu = () => setIsMenuOpen(false)
 
   const handleLogout = async () => {
     setIsLoggingOut(true)
@@ -80,48 +67,25 @@ export default function GlobalHeader() {
           className={`header-navigation${isMenuOpen ? ' is-open' : ''}`}
           id="global-navigation"
         >
+          {/*
+            데스크톱·모바일이 같은 목록을 쓴다(모바일은 CSS가 세로로 펼친다) —
+            역할별 메뉴가 두 곳에서 갈리지 않게 마크업을 하나만 둔다.
+          */}
           <nav className="primary-navigation" aria-label="주요 메뉴">
-            <NavLink
-              to={publicPaths.curriculums}
-              onClick={closeMenu}
-              className={({ isActive }) => (isActive ? 'is-active' : undefined)}
-            >
-              커리큘럼 탐색
-            </NavLink>
-            {user && (
-              <div
-                className={`header-my-menu${isMyMenuOpen ? ' is-open' : ''}`}
-                onMouseEnter={() => setIsMyMenuOpen(true)}
-                onMouseLeave={() => setIsMyMenuOpen(false)}
-                onFocusCapture={() => setIsMyMenuOpen(true)}
-                onBlurCapture={(event) => {
-                  if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) {
-                    setIsMyMenuOpen(false)
-                  }
-                }}
-              >
-                <button
-                  className="header-my-menu__trigger"
-                  type="button"
-                  aria-expanded={isMyMenuOpen}
-                  aria-controls="my-page-menu"
-                  onClick={() => setIsMyMenuOpen((current) => !current)}
+            {navigationItems.map((item) => {
+              const isActive = isNavigationItemActive(item, pathname)
+              return (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  className={isActive ? 'is-active' : undefined}
+                  aria-current={isActive ? 'page' : undefined}
+                  onClick={closeMenu}
                 >
-                  마이페이지
-                </button>
-                <div className="header-my-menu__items" id="my-page-menu">
-                  <Link to={workspaceHome} onClick={closeMenu}>내 커리큘럼</Link>
-                  <Link to={profilePath} onClick={closeMenu}>내 프로필</Link>
-                  {/* 운영 콘솔은 권한이 있는 계정에만 보인다. 없으면 존재 자체를 노출하지 않는다. */}
-                  {user?.isAdmin && <Link to={adminPaths.overview} onClick={closeMenu}>운영 콘솔</Link>}
-                </div>
-              </div>
-            )}
-            {user?.role === 'INSTRUCTOR' && (
-              <Link to={instructorPaths.newCurriculum} onClick={closeMenu}>
-                커리큘럼 만들기
-              </Link>
-            )}
+                  {item.label}
+                </Link>
+              )
+            })}
           </nav>
 
           <div className="header-actions">
@@ -129,29 +93,24 @@ export default function GlobalHeader() {
               <span className="header-auth-loading" aria-label="로그인 상태 확인 중" />
             ) : user ? (
               <>
-                <div className="profile-popover-anchor" ref={profileMenuRef}>
-                  <button
-                    className="user-chip"
-                    type="button"
-                    aria-expanded={isProfileOpen}
-                    aria-controls="profile-summary-popover"
-                    onClick={() => setIsProfileOpen((current) => !current)}
-                  >
-                    <ProfileAvatar displayName={user.displayName} imageUrl={user.profileImageUrl} decorative />
-                    <span>
-                      <strong>{user.displayName}</strong>
-                      <small>{USER_ROLE_LABEL[user.role]}</small>
-                    </span>
-                  </button>
-                  {isProfileOpen && (
-                    <div className="profile-summary-popover" id="profile-summary-popover" role="dialog" aria-label="기본 정보">
-                      <ProfileAvatar displayName={user.displayName} imageUrl={user.profileImageUrl} decorative />
-                      <strong>{user.displayName}</strong>
-                      <small>{USER_ROLE_LABEL[user.role]}</small>
-                      <p>{user.email}</p>
-                    </div>
-                  )}
-                </div>
+                {/*
+                  프로필 영역 전체가 "내 프로필"로 가는 링크다. 이미지만 누를 수 있으면
+                  이름·역할을 눌러 본 사람은 아무 일도 일어나지 않는다고 읽는다.
+                  아바타는 decorative라 이름을 읽어 주지 못하므로 목적지를 숨은 텍스트로 붙인다.
+                */}
+                <Link
+                  className={`user-chip${isProfileAreaActive(pathname) ? ' is-active' : ''}`}
+                  to={getProfilePath(user.role)}
+                  aria-current={isProfileAreaActive(pathname) ? 'page' : undefined}
+                  onClick={closeMenu}
+                >
+                  <ProfileAvatar displayName={user.displayName} imageUrl={user.profileImageUrl} decorative />
+                  <span className="user-chip__text">
+                    <strong>{user.displayName}</strong>
+                    <small>{USER_ROLE_LABEL[user.role]}</small>
+                  </span>
+                  <span className="visually-hidden">내 프로필</span>
+                </Link>
                 <button
                   className="button button--ghost button--small"
                   type="button"
