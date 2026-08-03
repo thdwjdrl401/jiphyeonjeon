@@ -330,8 +330,15 @@ describe('커리큘럼 작업 화면', () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/les-security/edit')
     const scheduledAt = await screen.findByLabelText(/예정 시작 시각/)
+    const breadcrumbs = screen.getByRole('navigation', { name: '강의 경로' })
 
     expect(scheduledAt).toHaveValue('2026-08-03T19:00')
+    expect(within(breadcrumbs).getByRole('link', { name: 'Spring Security 시작하기' })).toHaveAttribute(
+      'href',
+      '/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/les-security',
+    )
+    expect(within(breadcrumbs).queryByText('강의 수정')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '강의 수정' }).closest('header')?.querySelector('p')).toBeNull()
     await user.clear(scheduledAt)
     await user.type(scheduledAt, '2026-08-04T20:30')
     await user.click(screen.getByRole('button', { name: '강의 수정 저장' }))
@@ -354,8 +361,10 @@ describe('커리큘럼 작업 화면', () => {
   it('강사 강의 상세에 라이브 일정과 준비 상태를 통합한다', async () => {
     await renderAsInstructor('/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/les-security')
     const editLink = await screen.findByRole('link', { name: '강의 수정' })
+    const breadcrumbs = screen.getByRole('navigation', { name: '강의 경로' })
 
     expect(editLink).toHaveClass('button--primary')
+    expect(within(breadcrumbs).getByText('Spring Security 시작하기')).toHaveAttribute('aria-current', 'page')
     const lessonInfo = screen.getByRole('heading', { name: '강의 정보' }).closest('section')
     expect(lessonInfo).not.toBeNull()
     expect(within(lessonInfo!).getByText('인증 필터와 세션의 흐름을 실제 요청을 따라가며 이해합니다.')).toBeInTheDocument()

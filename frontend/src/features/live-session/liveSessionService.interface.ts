@@ -7,6 +7,7 @@ export interface LiveSessionView {
   curriculumId: string
   curriculumTitle: string
   sectionId: string
+  sectionTitle: string
   status: CurriculumLiveSessionStatus
   scheduledAt: string | null
   entryOpensAt: string | null

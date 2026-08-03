@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { studentPaths } from '@/app/router/paths'
+import { publicPaths, studentPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
+import LessonBreadcrumbs from '@/features/lesson/LessonBreadcrumbs'
 import { isLiveEntryOpen } from '@/features/live-session/liveEntry'
 import { getLiveSession } from '@/features/live-session/liveSessionService'
 import {
@@ -91,6 +92,15 @@ export default function StudentPrejoinPage() {
   }
   return (
     <div className="workspace-page student-prejoin-page">
+      <LessonBreadcrumbs
+        curriculumPath={session.curriculumId ? publicPaths.curriculum(session.curriculumId) : undefined}
+        curriculumTitle={session.curriculumTitle}
+        lessonPath={session.curriculumId && session.sectionId
+          ? studentPaths.lesson(session.curriculumId, session.sectionId, session.lessonId)
+          : undefined}
+        lessonTitle={session.lessonTitle}
+        sectionTitle={session.sectionTitle}
+      />
       <PageHeader title="입장 전 점검" />
 
       <div className="student-prejoin__layout">

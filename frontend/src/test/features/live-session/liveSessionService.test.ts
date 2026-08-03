@@ -15,6 +15,7 @@ const SESSION_RESPONSE = {
 const LESSON_CONTEXT_RESPONSE = {
   lessonId: 'les-1',
   sectionId: 'sec-1',
+  sectionTitle: '보안과 인증',
   curriculumId: 'cur-1',
   curriculumTitle: '라이브로 완성하는 Spring Boot',
   title: 'Spring Security 시작하기',
@@ -53,6 +54,7 @@ describe('라이브 세션 HTTP 서비스 계약', () => {
       curriculumId: 'cur-1',
       curriculumTitle: '라이브로 완성하는 Spring Boot',
       sectionId: 'sec-1',
+      sectionTitle: '보안과 인증',
     })
     expect(get).toHaveBeenNthCalledWith(1, '/live-sessions/ses-live-1')
     // 역할을 가리지 않고 공개 레슨 조회 하나만 쓴다. 강사 전용 경로를 타지 않으므로
