@@ -81,6 +81,8 @@ export interface UploadRecordedLessonRequest {
   title: string
   description: string
   videoFile: File
+  /** 녹화강의 생성 뒤 같은 레슨 자료 API로 연결할 PPTX 원본. */
+  materials: File[]
 }
 
 export interface UploadRecordedLessonResult {

@@ -275,6 +275,13 @@ describe('커리큘럼 작업 화면', () => {
     expect(screen.getByText('보안-기초.mp4')).toBeInTheDocument()
     expect(screen.getByText('선택 완료')).toBeInTheDocument()
 
+    const material = new File(['presentation'], '보안-기초.pptx', {
+      type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    })
+    await user.upload(screen.getByLabelText('녹화강의 자료 파일'), material)
+    expect(screen.getByText('보안-기초.pptx')).toBeInTheDocument()
+    expect(screen.getByText('업로드 대기')).toBeInTheDocument()
+
     const submit = screen.getByRole('button', { name: '녹화강의 업로드' })
     expect(submit).toBeDisabled()
     await user.type(screen.getByLabelText(/강의 제목/), '녹화로 배우는 보안 기초')

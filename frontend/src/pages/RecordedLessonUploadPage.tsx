@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type DragEvent, type FormEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { instructorPaths } from '@/app/router/paths'
@@ -17,6 +17,15 @@ import PageState from '@/shared/ui/PageState'
 import { useToast } from '@/shared/ui/Toast'
 import { InlineNotice, PageHeader, Panel, StatusBadge } from '@/shared/ui/WorkspaceUi'
 
+interface SelectedMaterial {
+  id: string
+  name: string
+  size: string
+  file: File
+}
+
+const MAX_MATERIAL_BYTES = 50 * 1024 * 1024
+
 export default function RecordedLessonUploadPage() {
   const { curriculumId = '', sectionId = '' } = useParams()
   const navigate = useNavigate()
@@ -26,6 +35,8 @@ export default function RecordedLessonUploadPage() {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [videoFile, setVideoFile] = useState<File | null>(null)
+  const [materials, setMaterials] = useState<SelectedMaterial[]>([])
+  const [materialDragActive, setMaterialDragActive] = useState(false)
   const [fileError, setFileError] = useState<string | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -63,6 +74,40 @@ export default function RecordedLessonUploadPage() {
     setSubmitError(null)
   }
 
+  const addMaterialFiles = (incomingFiles: File[]) => {
+    const pptxFiles = incomingFiles.filter((file) => (
+      file.name.toLowerCase().endsWith('.pptx') && file.size <= MAX_MATERIAL_BYTES
+    ))
+    if (incomingFiles.some((file) => !file.name.toLowerCase().endsWith('.pptx'))) {
+      toast.error('PPTX 파일만 강의 자료로 등록할 수 있습니다.')
+    } else if (incomingFiles.some((file) => file.size > MAX_MATERIAL_BYTES)) {
+      toast.error('PPTX 강의 자료는 파일당 50MB까지 등록할 수 있습니다.')
+    }
+    setMaterials((current) => {
+      const currentIds = new Set(current.map((material) => material.id))
+      const additions = pptxFiles
+        .map((file) => ({
+          id: `${file.name}-${file.lastModified}-${file.size}`,
+          name: file.name,
+          size: formatRecordedLessonFileSize(file.size),
+          file,
+        }))
+        .filter((material) => !currentIds.has(material.id))
+      return [...current, ...additions]
+    })
+  }
+
+  const selectMaterials = (event: ChangeEvent<HTMLInputElement>) => {
+    addMaterialFiles(Array.from(event.target.files ?? []))
+    event.target.value = ''
+  }
+
+  const dropMaterialFiles = (event: DragEvent<HTMLLabelElement>) => {
+    event.preventDefault()
+    setMaterialDragActive(false)
+    addMaterialFiles(Array.from(event.dataTransfer.files))
+  }
+
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     if (submitting || !title.trim() || !videoFile) return
@@ -76,6 +121,7 @@ export default function RecordedLessonUploadPage() {
         title: title.trim(),
         description: description.trim(),
         videoFile,
+        materials: materials.map((material) => material.file),
       })
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['curriculum-management', curriculumId] }),
@@ -83,8 +129,10 @@ export default function RecordedLessonUploadPage() {
       ])
       toast.success('녹화강의를 업로드했습니다. 영상 처리가 완료되면 재생할 수 있습니다.')
       navigate(instructorPaths.curriculumManage(curriculumId), { replace: true })
-    } catch {
-      setSubmitError('녹화강의를 업로드하지 못했습니다. 같은 화면에서 다시 시도하면 기존 강의를 이어서 업로드합니다.')
+    } catch (error) {
+      setSubmitError(error instanceof Error && error.message
+        ? error.message
+        : '녹화강의를 업로드하지 못했습니다. 같은 화면에서 다시 시도하면 기존 강의를 이어서 업로드합니다.')
     } finally {
       setSubmitting(false)
     }
@@ -96,6 +144,8 @@ export default function RecordedLessonUploadPage() {
     setTitle('')
     setDescription('')
     setVideoFile(null)
+    setMaterials([])
+    setMaterialDragActive(false)
     setFileError(null)
     setSubmitError(null)
   }, [curriculumId, sectionId])
@@ -158,6 +208,46 @@ export default function RecordedLessonUploadPage() {
           )}
 
           <InlineNotice tone="info">업로드가 끝난 영상은 재생용 HLS 변환과 검증을 거친 뒤 재생할 수 있습니다.</InlineNotice>
+        </Panel>
+
+        <Panel title="강의 자료" description="녹화강의와 함께 수강생에게 제공할 PPTX 자료를 등록합니다.">
+          <label
+            className={`material-dropzone lesson-form__dropzone${materialDragActive ? ' is-drag-active' : ''}`}
+            onDragEnter={(event) => { event.preventDefault(); setMaterialDragActive(true) }}
+            onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy' }}
+            onDragLeave={() => setMaterialDragActive(false)}
+            onDrop={dropMaterialFiles}
+          >
+            <input
+              aria-label="녹화강의 자료 파일"
+              type="file"
+              accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+              multiple
+              onChange={selectMaterials}
+            />
+            <span className="lesson-form__pptx-icon" aria-hidden="true"><span>PPTX</span></span>
+            <span className="lesson-form__dropzone-copy">
+              <strong>PPTX 파일을 드래그하거나 클릭해 선택</strong>
+              <small>여러 파일을 등록할 수 있으며 자료 없이도 업로드할 수 있습니다.</small>
+            </span>
+          </label>
+          {materials.length > 0 && (
+            <ul className="material-list lesson-form__material-list">
+              {materials.map((material) => (
+                <li key={material.id}>
+                  <span className="file-icon">PPTX</span>
+                  <div><strong>{material.name}</strong><small>{material.size}</small></div>
+                  <StatusBadge tone="warning">업로드 대기</StatusBadge>
+                  <button
+                    type="button"
+                    aria-label={`${material.name} 제거`}
+                    onClick={() => setMaterials((current) => current.filter((item) => item.id !== material.id))}
+                  >×</button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <InlineNotice tone="info">첨부한 자료는 녹화 영상과 같은 강의에 연결되며, 수강생이 강의 상세에서 확인할 수 있습니다.</InlineNotice>
         </Panel>
 
         {submitError && <InlineNotice tone="danger">{submitError}</InlineNotice>}

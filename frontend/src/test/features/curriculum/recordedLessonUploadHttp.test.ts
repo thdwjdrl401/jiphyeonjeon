@@ -4,15 +4,21 @@ import { httpCurriculumManagementService } from '@/features/curriculum/httpCurri
 import { apiClient } from '@/shared/api/client'
 
 vi.mock('@/shared/config/runtime', () => ({ isMockApiEnabled: false, isTestMode: false }))
+vi.mock('@/shared/api/uploadAsset', () => ({
+  uploadAsset: vi.fn(async () => ({ assetId: 'material-asset-1', kind: 'MATERIAL', status: 'UPLOADED' })),
+}))
 
 describe('녹화강의 HTTP 업로드 계약', () => {
   afterEach(() => vi.restoreAllMocks())
 
-  it('녹화강의 생성, presigned PUT, 완료 접수를 순서대로 수행한다', async () => {
+  it('녹화강의 생성 뒤 PPTX 자료를 연결하고 영상 presigned PUT·완료 접수를 수행한다', async () => {
     const post = vi.spyOn(apiClient, 'post')
       .mockResolvedValueOnce({ data: {
         lessonId: 'lesson-1', recordedVideoId: 'recorded-1',
         deliveryType: 'RECORDED', processingStatus: 'AWAITING_UPLOAD',
+      } } as never)
+      .mockResolvedValueOnce({ data: {
+        materialId: 'material-1', assetId: 'material-asset-1', fileName: 'deck.pptx', status: 'ACTIVE',
       } } as never)
       .mockResolvedValueOnce({ data: {
         assetId: 'asset-1', uploadUrl: 'https://storage/upload', method: 'PUT',
@@ -23,6 +29,9 @@ describe('녹화강의 HTTP 업로드 계약', () => {
       } } as never)
     const storagePut = vi.spyOn(axios, 'request').mockResolvedValue({ data: undefined } as never)
     const file = new File(['mp4-bytes'], 'lecture.mp4', { type: 'video/mp4' })
+    const material = new File(['pptx-bytes'], 'deck.pptx', {
+      type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    })
 
     await expect(httpCurriculumManagementService.uploadRecordedLesson({
       clientRequestId: 'client-request-1',
@@ -31,6 +40,7 @@ describe('녹화강의 HTTP 업로드 계약', () => {
       title: '녹화강의',
       description: '설명',
       videoFile: file,
+      materials: [material],
     })).resolves.toEqual({
       lessonId: 'lesson-1', recordedVideoId: 'recorded-1', jobId: 'job-1', processingStatus: 'QUEUED',
     })
@@ -39,6 +49,7 @@ describe('녹화강의 HTTP 업로드 계약', () => {
       ['/instructor/sections/section-1/recorded-lessons', {
         clientRequestId: 'client-request-1', title: '녹화강의', description: '설명',
       }],
+      ['/instructor/lessons/lesson-1/materials', { assetId: 'material-asset-1' }],
       ['/instructor/recorded-lessons/lesson-1/video/upload-requests', {
         fileName: 'lecture.mp4', contentType: 'video/mp4', fileSize: file.size,
       }],

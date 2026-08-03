@@ -215,6 +215,18 @@ export const httpCurriculumManagementService = {
       },
     )
 
+    // 녹화강의도 일반 레슨이므로 라이브 강의와 같은 자료 API를 사용한다. 영상 업로드보다 먼저
+    // 연결해, 자료 실패 시 recorded video가 AWAITING_UPLOAD에 머물고 같은 멱등키로 재시도할 수 있게 한다.
+    for (const file of request.materials) {
+      try {
+        const asset = await uploadAsset(file, 'MATERIAL')
+        await apiClient.post(`/instructor/lessons/${recorded.lessonId}/materials`, { assetId: asset.assetId })
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error)
+        throw new Error(`녹화강의는 생성됐지만 자료 "${file.name}" 업로드·연결에 실패했습니다. 같은 화면에서 다시 시도해 주세요. (${reason})`)
+      }
+    }
+
     const contentType = request.videoFile.type || 'video/mp4'
     const { data: ticket } = await apiClient.post<RecordedUploadTicket>(
       `/instructor/recorded-lessons/${recorded.lessonId}/video/upload-requests`,
