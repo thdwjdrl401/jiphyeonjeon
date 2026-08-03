@@ -195,7 +195,6 @@ export default function ReplayLessonPage() {
           <WatchHeatmapStrip
             durationMs={durationMs}
             heatmap={heatmapQuery.data ?? null}
-            onSeek={seekSession}
           />
 
           {/* 라이브 당시 저장된 자막이다. "교정"은 후처리가 붙은 뒤의 이름이라 아직 쓰지 않는다. */}

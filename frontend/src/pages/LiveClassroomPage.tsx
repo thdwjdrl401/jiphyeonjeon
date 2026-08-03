@@ -518,7 +518,6 @@ export default function LiveClassroomPage() {
             <WatchHeatmapStrip
               durationMs={watchDurationMs}
               heatmap={heatmapQuery.data ?? null}
-              onSeek={seekSession}
             />
           )}
 
