@@ -34,6 +34,7 @@ describe('레슨 자료 API 계약', () => {
 
     const postSpy = vi.spyOn(apiClient, 'post')
       .mockResolvedValueOnce({ data: created } as never)
+      .mockResolvedValueOnce({ data: { sessionId: 'ses-9', liveSessionStatus: 'SCHEDULED' } } as never)
       .mockResolvedValueOnce({ data: ticket } as never)
       .mockResolvedValueOnce({ data: { assetId: ticket.assetId, kind: 'MATERIAL', status: 'UPLOADED' } } as never)
       .mockResolvedValueOnce({ data: { materialId: 'mat-1', assetId: ticket.assetId, fileName: '자료.pptx', status: 'READY' } } as never)
@@ -43,13 +44,19 @@ describe('레슨 자료 API 계약', () => {
       sectionId: 'sec-1',
       title: '새 강의',
       description: '설명',
+      scheduledAt: '2026-08-04T11:30:00.000Z',
       materials: [file],
     })).resolves.toEqual(created)
 
     expect(postSpy).toHaveBeenNthCalledWith(1, '/instructor/sections/sec-1/lessons', {
       title: '새 강의', description: '설명',
     })
-    expect(postSpy).toHaveBeenNthCalledWith(2, '/assets/upload-requests', {
+    expect(postSpy).toHaveBeenNthCalledWith(2, `/instructor/lessons/${created.lessonId}/live-sessions`, {
+      scheduledAt: '2026-08-04T11:30:00.000Z',
+      entryWindowMinutes: undefined,
+      expectedDurationMinutes: undefined,
+    })
+    expect(postSpy).toHaveBeenNthCalledWith(3, '/assets/upload-requests', {
       kind: 'MATERIAL',
       fileName: '자료.pptx',
       contentType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
@@ -61,8 +68,8 @@ describe('레슨 자료 API 계약', () => {
       headers: ticket.headers,
       data: file,
     })
-    expect(postSpy).toHaveBeenNthCalledWith(3, `/assets/${ticket.assetId}/complete`)
-    expect(postSpy).toHaveBeenNthCalledWith(4, `/instructor/lessons/${created.lessonId}/materials`, {
+    expect(postSpy).toHaveBeenNthCalledWith(4, `/assets/${ticket.assetId}/complete`)
+    expect(postSpy).toHaveBeenNthCalledWith(5, `/instructor/lessons/${created.lessonId}/materials`, {
       assetId: ticket.assetId,
     })
   })
@@ -71,14 +78,29 @@ describe('레슨 자료 API 계약', () => {
     const created = { lessonId: 'les-9', sectionId: 'sec-1', title: '새 강의', description: '설명', status: 'PUBLISHED' }
     vi.spyOn(apiClient, 'post')
       .mockResolvedValueOnce({ data: created } as never)
+      .mockResolvedValueOnce({ data: { sessionId: 'ses-9', liveSessionStatus: 'SCHEDULED' } } as never)
       .mockRejectedValueOnce(new Error('발급 실패'))
 
     await expect(httpLessonService.saveLesson({
       sectionId: 'sec-1',
       title: '새 강의',
       description: '설명',
+      scheduledAt: '2026-08-04T11:30:00.000Z',
       materials: [new File(['x'], '깨진.pptx')],
     })).rejects.toThrow(/레슨은 저장됐지만 자료 "깨진\.pptx"/)
+  })
+
+  it('예정 시작 시각이 없으면 레슨 생성 요청 전에 차단한다', async () => {
+    const postSpy = vi.spyOn(apiClient, 'post')
+
+    await expect(httpLessonService.saveLesson({
+      sectionId: 'sec-1',
+      title: '일정 없는 강의',
+      description: '설명',
+      materials: [],
+    })).rejects.toThrow('라이브 예정 시작 시각을 입력해야 합니다.')
+
+    expect(postSpy).not.toHaveBeenCalled()
   })
 
   it('getLesson은 서버 materials를 뷰로 매핑한다 (materialId→id, fileName→name, fileSize→size)', async () => {

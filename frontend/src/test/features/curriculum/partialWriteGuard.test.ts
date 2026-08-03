@@ -148,12 +148,18 @@ describe('커리큘럼 저장 계약', () => {
       sectionId: 'sec-1',
       title: '새 강의',
       description: '설명',
+      scheduledAt: '2026-08-04T11:30:00.000Z',
       materials: [],
     })).resolves.toEqual(created)
 
     expect(post).toHaveBeenCalledWith('/instructor/sections/sec-1/lessons', {
       title: '새 강의', description: '설명',
     })
-    expect(post).toHaveBeenCalledTimes(1)
+    expect(post).toHaveBeenCalledWith('/instructor/lessons/les-9/live-sessions', {
+      scheduledAt: '2026-08-04T11:30:00.000Z',
+      entryWindowMinutes: undefined,
+      expectedDurationMinutes: undefined,
+    })
+    expect(post).toHaveBeenCalledTimes(2)
   })
 })

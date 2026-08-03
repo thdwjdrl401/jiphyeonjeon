@@ -298,7 +298,22 @@ describe('커리큘럼 작업 화면', () => {
     expect(submit).toBeEnabled()
 
     await user.click(submit)
-    expect(await screen.findByText('강의 정보와 라이브 일정 초안이 저장되었습니다.')).toBeInTheDocument()
+    expect(await screen.findByText('강의 정보와 라이브 일정이 저장되었습니다.')).toBeInTheDocument()
+  })
+
+  it('새 강의 폼의 자료 영역에 PPTX 파일을 드롭해 추가한다', async () => {
+    await renderAsInstructor('/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/new')
+    const dropzoneCopy = await screen.findByText('PPTX 파일을 드래그하거나 클릭해 선택')
+    const dropzone = dropzoneCopy.closest('label')
+    const material = new File(['pptx'], 'security-live.pptx', {
+      type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    })
+
+    expect(dropzone).not.toBeNull()
+    fireEvent.drop(dropzone!, { dataTransfer: { files: [material] } })
+
+    expect(await screen.findByText('security-live.pptx')).toBeInTheDocument()
+    expect(screen.getByText('1개 · 준비 필요')).toBeInTheDocument()
   })
 
   it('강의 수정 폼에서 기존 라이브 일정을 불러와 수정한다', async () => {
@@ -310,7 +325,7 @@ describe('커리큘럼 작업 화면', () => {
     await user.clear(scheduledAt)
     await user.type(scheduledAt, '2026-08-04T20:30')
     await user.click(screen.getByRole('button', { name: '강의 수정 저장' }))
-    expect(await screen.findByText('강의 정보와 라이브 일정 초안이 저장되었습니다.')).toBeInTheDocument()
+    expect(await screen.findByText('강의 정보와 라이브 일정이 저장되었습니다.')).toBeInTheDocument()
   })
 
   it.each([

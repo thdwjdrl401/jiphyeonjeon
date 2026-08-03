@@ -177,24 +177,35 @@ describe('CurriculumDetailPage', () => {
     expect(screen.queryByRole('link', { name: '이어보기' })).not.toBeInTheDocument()
   })
 
-  it('담당 강사 목차는 강의 버튼과 라이브 상태 태그만 둔다', async () => {
+  it('담당 강사 목차는 행 영역을 상세로 연결하고 우측에 강의 수정 버튼을 둔다', async () => {
     const user = userEvent.setup()
     await mockAuthService.login({ email: 'instructor01@example.com', password: 'password1' })
     renderDetail('/curriculums/cur-spring-live')
 
     await user.click(await screen.findByRole('button', { name: '모두 펼치기' }))
-    const detailLinks = await screen.findAllByRole('link', { name: '강의 상세' })
-    expect(detailLinks.length).toBeGreaterThan(0)
-    for (const link of detailLinks) {
-      expect(link).toHaveAttribute('href', expect.stringMatching(/^\/instructor\/curriculums\/.+\/sections\/.+\/lessons\/.+$/))
+    const editLinks = await screen.findAllByRole('link', { name: '강의 수정' })
+    expect(editLinks.length).toBeGreaterThan(0)
+    for (const link of editLinks) {
+      expect(link).toHaveAttribute('href', expect.stringMatching(/^\/instructor\/curriculums\/.+\/sections\/.+\/lessons\/.+\/edit$/))
     }
-    // 게시 상태 배지는 없다 — 레슨 상태가 PUBLISHED 하나뿐이라 알려줄 것이 없다(ADR-0005).
+    const detailAreas = document.querySelectorAll<HTMLAnchorElement>('.curriculum-lesson__detail-area')
+    expect(detailAreas.length).toBe(editLinks.length)
+    for (const link of detailAreas) {
+      expect(link).toHaveAttribute('href', expect.stringMatching(/^\/instructor\/curriculums\/.+\/sections\/.+\/lessons\/[^/]+$/))
+    }
+    expect(screen.queryByText('강의 상세')).not.toBeInTheDocument()
+    // 일정이 잡힌 라이브와 실제 방송 중인 라이브만 태그를 표시한다.
     expect(screen.queryByText('게시됨')).not.toBeInTheDocument()
     expect(screen.queryByText('준비 중')).not.toBeInTheDocument()
-    expect(screen.getAllByText('라이브 일정 준비 중').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('라이브 예정').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('다시보기 준비 중').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('다시보기 가능').length).toBeGreaterThan(0)
+    const scheduledTags = screen.getAllByText('라이브 예정')
+    const liveTags = screen.getAllByText('LIVE')
+    expect(scheduledTags.length).toBeGreaterThan(0)
+    expect(liveTags.length).toBeGreaterThan(0)
+    expect(scheduledTags[0]).toHaveClass('curriculum-lifecycle-badge', 'curriculum-lesson__state--scheduled')
+    expect(liveTags[0]).toHaveClass('curriculum-lifecycle-badge', 'curriculum-lesson__state--live')
+    expect(screen.queryByText('라이브 일정 준비 중')).not.toBeInTheDocument()
+    expect(screen.queryByText('다시보기 준비 중')).not.toBeInTheDocument()
+    expect(screen.queryByText('다시보기 가능')).not.toBeInTheDocument()
     expect(screen.queryByText('입장 가능')).not.toBeInTheDocument()
     expect(screen.queryByText('라이브 진행 중')).not.toBeInTheDocument()
   })

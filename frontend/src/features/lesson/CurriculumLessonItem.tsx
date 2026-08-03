@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { instructorPaths } from '@/app/router/paths'
 import type { CurriculumRelationship } from '@/features/curriculum/types'
 import { resolveLessonPath } from './lessonRouting'
 import type { CurriculumOutlineLesson } from './types'
@@ -12,26 +13,23 @@ interface CurriculumLessonItemProps {
 
 interface LessonActivity {
   statusLabel: string
-  tone: 'default' | 'scheduled' | 'replay'
+  tone: 'scheduled' | 'live'
 }
 
 const reasonLabel: Record<string, string> = {
   ENROLLMENT_REQUIRED: '수강 승인 후 이용',
 }
 
-function resolveActivity(lesson: CurriculumOutlineLesson): LessonActivity {
+function resolveActivity(lesson: CurriculumOutlineLesson): LessonActivity | null {
   const liveStatus = lesson.liveSession?.status
 
-  if (lesson.replayStatus === 'PUBLISHED') {
-    return { statusLabel: '다시보기 가능', tone: 'replay' }
+  if (liveStatus === 'LIVE') {
+    return { statusLabel: 'LIVE', tone: 'live' }
   }
-  if (liveStatus === 'ENDING' || liveStatus === 'ENDED' || lesson.replayStatus === 'DRAFT' || lesson.replayStatus === 'READY_FOR_REVIEW') {
-    return { statusLabel: '다시보기 준비 중', tone: 'scheduled' }
-  }
-  if (liveStatus && !['DRAFT', 'CANCELLED', 'FAILED'].includes(liveStatus)) {
+  if (liveStatus === 'SCHEDULED' || liveStatus === 'OPEN' || liveStatus === 'STARTING') {
     return { statusLabel: '라이브 예정', tone: 'scheduled' }
   }
-  return { statusLabel: '라이브 일정 준비 중', tone: 'default' }
+  return null
 }
 
 export default function CurriculumLessonItem({ lesson, relationship, curriculumId, sectionId }: CurriculumLessonItemProps) {
@@ -39,18 +37,34 @@ export default function CurriculumLessonItem({ lesson, relationship, curriculumI
   const role = relationship === 'OWNER_INSTRUCTOR' ? 'INSTRUCTOR' : 'STUDENT'
   const detailPath = resolveLessonPath({ curriculumId, sectionId, lessonId: lesson.lessonId, destination: 'LESSON_DETAIL', role })
   const activity = resolveActivity(lesson)
-  const isStudentView = relationship !== 'OWNER_INSTRUCTOR'
+  const isInstructorView = relationship === 'OWNER_INSTRUCTOR'
+  const editPath = instructorPaths.editLesson(curriculumId, sectionId, lesson.lessonId)
+
+  const lessonMain = (
+    <div className="curriculum-lesson__main">
+      {canOpen && !isInstructorView
+        ? <Link className="curriculum-lesson__title" to={detailPath}>{lesson.order}. {lesson.title}</Link>
+        : <strong className="curriculum-lesson__title">{lesson.order}. {lesson.title}</strong>}
+      {/* 일정이 잡힌 라이브와 실제 방송 중인 라이브만 표시한다. 종료 상태에는 태그를 남기지 않는다. */}
+      {isInstructorView && canOpen && activity && <div className="curriculum-lesson__states">
+        <span className={`curriculum-lifecycle-badge curriculum-lesson__state curriculum-lesson__state--${activity.tone}`}>{activity.statusLabel}</span>
+      </div>}
+    </div>
+  )
 
   return (
     <li className={`curriculum-lesson${canOpen ? '' : ' curriculum-lesson--locked'}`}>
-      <div className="curriculum-lesson__main">
-        {canOpen ? <Link className="curriculum-lesson__title" to={detailPath}>{lesson.order}. {lesson.title}</Link> : <strong className="curriculum-lesson__title">{lesson.order}. {lesson.title}</strong>}
-        {/* 게시 상태 배지는 없다 — 레슨 상태가 PUBLISHED 하나뿐이라 알려줄 것이 없다(ADR-0005).
-            라이브·다시보기 진행 배지는 실제로 변하는 정보라 남긴다. */}
-        {!isStudentView && canOpen && <div className="curriculum-lesson__states">
-          <span className={`curriculum-lesson__state curriculum-lesson__state--${activity.tone}`}>{activity.statusLabel}</span>
-        </div>}
-      </div>
+      {isInstructorView && canOpen
+        ? (
+            <Link
+              className="curriculum-lesson__detail-area"
+              to={detailPath}
+              aria-label={`${lesson.order}. ${lesson.title} 강의 상세`}
+            >
+              {lessonMain}
+            </Link>
+          )
+        : lessonMain}
 
       {!canOpen ? (
         <div className="curriculum-lesson__locked-action">
@@ -58,7 +72,10 @@ export default function CurriculumLessonItem({ lesson, relationship, curriculumI
           <span className="curriculum-lesson__reason">{(lesson.access.reasonCode && reasonLabel[lesson.access.reasonCode]) ?? '이용할 수 없어요'}</span>
         </div>
       ) : (
-        <Link className="curriculum-lesson__action" to={detailPath}>강의 상세<span aria-hidden="true"> →</span></Link>
+        <Link className="curriculum-lesson__action" to={isInstructorView ? editPath : detailPath}>
+          {isInstructorView ? '강의 수정' : '강의 상세'}
+          {!isInstructorView && <span aria-hidden="true"> →</span>}
+        </Link>
       )}
     </li>
   )
