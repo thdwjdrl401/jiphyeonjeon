@@ -30,8 +30,15 @@ import static org.mockito.Mockito.verify;
 @Transactional
 class OutboxRelayTest {
 
-    /** 알림 팬아웃 큐. 이 테스트는 목적지가 <b>데이터</b>라는 것만 확인하므로 문자열로 충분하다. */
-    private static final String OTHER_DESTINATION = "notification.fanout";
+    /**
+     * 두 번째 목적지. <b>실제 큐 이름을 쓰지 않는다</b> — 알림 계약 테스트들은 커밋을 해야 해서
+     * ({@code BEFORE_COMMIT} 발행을 검증하려면 롤백할 수 없다) 아웃박스 행을 남기고, 그 행이
+     * {@code notification.fanout}으로 가 있으면 이 테스트의 발행 횟수·배치 상한 단언에 섞인다.
+     *
+     * <p>이 테스트가 보려는 것은 <b>목적지가 데이터인가</b>이지 특정 큐가 아니므로, 아무도 쓰지
+     * 않는 이름을 쓴다.
+     */
+    private static final String OTHER_DESTINATION = "test.relay.other";
 
     @Autowired private OutboxRelay relay;
     @Autowired private OutboxPublisher publisher;

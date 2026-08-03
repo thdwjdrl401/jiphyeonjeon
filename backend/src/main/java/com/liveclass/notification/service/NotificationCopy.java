@@ -37,6 +37,7 @@ final class NotificationCopy {
             case NotificationTypes.LIVE_SCHEDULED -> "라이브 일정이 잡혔습니다";
             case NotificationTypes.LIVE_SCHEDULE_CHANGED -> "라이브 일정이 변경되었습니다";
             case NotificationTypes.LIVE_CANCELED -> "라이브가 취소되었습니다";
+            case NotificationTypes.LIVE_STARTING_SOON -> "라이브가 곧 시작합니다";
             case NotificationTypes.RECORDING_READY -> "녹화가 준비되었습니다";
             case NotificationTypes.RECORDING_FAILED -> "녹화에 실패했습니다";
             case NotificationTypes.VOD_PUBLISHED -> "다시보기가 공개되었습니다";
@@ -87,6 +88,8 @@ final class NotificationCopy {
                     ? "%s 라이브 일정이 %s로 변경되었습니다.".formatted(lessonLabel(subject), when(nextStartsAt))
                     : "%s 라이브가 %s에서 %s로 변경되었습니다."
                             .formatted(lessonLabel(subject), when(previousStartsAt), when(nextStartsAt));
+            case NotificationTypes.LIVE_STARTING_SOON ->
+                    "%s 라이브가 %s에 시작합니다.".formatted(lessonLabel(subject), when(nextStartsAt));
             case NotificationTypes.VOD_PUBLISHED -> "%s 다시보기가 공개되었습니다. 지금부터 볼 수 있습니다."
                     .formatted(lessonLabel(subject));
             case NotificationTypes.LIVE_CANCELED -> previousStartsAt == null

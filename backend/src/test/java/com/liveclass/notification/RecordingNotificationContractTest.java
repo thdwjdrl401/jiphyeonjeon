@@ -7,6 +7,7 @@ import com.liveclass.notification.service.NotificationFanoutWorker;
 import com.liveclass.video.api.RecordingFailedEvent;
 import com.liveclass.video.api.RecordingReadyEvent;
 import com.liveclass.video.api.ReplayPublishedEvent;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -135,6 +136,17 @@ class RecordingNotificationContractTest {
         worker.handle(onlyPayloadFor(assetId).toString());   // 던지지 않는다
 
         assertThat(notificationsFor(f.curriculumId)).isEmpty();
+    }
+
+    /**
+     * 이 테스트는 커밋한다({@code BEFORE_COMMIT} 발행을 검증하려면 롤백할 수 없다). 남긴 아웃박스
+     * 행은 <b>다른 테스트의 단언에 섞이므로</b> 직접 치운다 — 릴레이 테스트가 발행 횟수와 배치
+     * 상한을 세기 때문이다.
+     */
+    @AfterEach
+    void cleanUpCommittedRows() {
+        jdbc.update("DELETE FROM core.outbox_events WHERE destination = ?",
+                NotificationMessagingConfig.FANOUT_QUEUE);
     }
 
     // ---- helpers ----
