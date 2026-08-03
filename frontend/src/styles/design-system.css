@@ -1672,3 +1672,13 @@ body {
 
 /* 노트가 아직 없을 때. 가짜 예시 대신 비어 있다고 정직하게 말한다. */
 .summary-empty { margin: .75rem 0 0; font-size: .82rem; line-height: 1.6; color: rgba(255,255,255,.58); }
+
+/* 많이 다시 본 구간 — 재생바 바로 아래 같은 폭의 띠. 플레이어 레이아웃을 건드리지 않는다. */
+.watch-heatmap { border: 1px solid #333; border-radius: .5rem; background: #171717; padding: .4rem .5rem .3rem; }
+.watch-heatmap__bars { display: flex; align-items: flex-end; gap: 1px; height: 34px; }
+.watch-heatmap__bars button { flex: 1 1 0; min-width: 0; padding: 0; border: 0; border-radius: 1px 1px 0 0;
+  background: rgba(255,255,255,.28); cursor: pointer; transition: background .12s; }
+.watch-heatmap__bars button:hover, .watch-heatmap__bars button.is-hovered { background: #fff; }
+.watch-heatmap__bars button:disabled { cursor: default; }
+.watch-heatmap__caption { margin: .3rem 0 0; font-size: .72rem; color: rgba(255,255,255,.58);
+  font-variant-numeric: tabular-nums; }

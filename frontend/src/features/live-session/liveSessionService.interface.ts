@@ -296,6 +296,16 @@ export interface AiAnswerHistoryItem {
   askedAt: string
 }
 
+/** 재생바 아래 그래프(ADR-0063). 절대 횟수가 아니라 도달자 수로 나눈 강도다. */
+export interface WatchHeatmap {
+  /** 저장 칸 길이(ms). 점 하나가 몇 초인지 계산할 때 쓴다. */
+  bucketSizeMs: number
+  /** 0.0 이상. 1.0이면 도달한 사람이 평균 한 번, 2.0이면 두 번 봤다. 최대 100점. */
+  points: number[]
+  /** 가장 많은 사람이 도달한 칸의 인원. */
+  viewers: number
+}
+
 export interface QuestionHighlight {
   at: string
   count: number
@@ -394,6 +404,10 @@ export interface LiveSessionService {
   askLiveAi: (sessionId: string, question: string, options: AiAnswerStreamOptions) => Promise<void>
   saveBookmark: (lessonId: string, sessionMs: number) => Promise<void>
   getAiAnswerHistory: (sessionId: string) => Promise<AiAnswerHistoryItem[]>
+  /** 내가 이미 쌓은 칸별 재생 횟수. 새로고침 뒤 이어서 세려면 필요하다. */
+  getMyWatchBuckets: (lessonId: string) => Promise<Record<number, number>>
+  reportWatchBuckets: (lessonId: string, counts: Record<number, number>) => Promise<void>
+  getWatchHeatmap: (lessonId: string, durationMs: number | null) => Promise<WatchHeatmap>
   getLectureNotes: (sessionId: string) => Promise<LectureNoteView>
   subscribeLectureNotes: (
     sessionId: string,
