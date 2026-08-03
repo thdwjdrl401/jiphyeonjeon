@@ -86,17 +86,19 @@ function PendingCurriculumCard({ item }: { item: StudentCurriculumItem }) {
           <h3>{item.title}</h3>
           <p className="dashboard-curriculum-card__summary" title={item.summary}>{item.summary}</p>
         </div>
-        <p className="dashboard-meta">{item.instructor} 강사 · 승인 후 학습 가능</p>
-        <div className="card-actions">
-          <Link className="button button--soft" to={publicPaths.curriculum(item.curriculumId)}>커리큘럼 상세</Link>
-          <button
-            className="button button--ghost"
-            type="button"
-            disabled={cancelMutation.isPending}
-            onClick={() => cancelMutation.mutate()}
-          >
-            {cancelMutation.isPending ? '취소 중' : '수강 신청 취소'}
-          </button>
+        <div className="dashboard-curriculum-card__foot">
+          <p className="dashboard-meta">{item.instructor} 강사 · 승인 후 학습 가능</p>
+          <div className="card-actions">
+            <Link className="button button--soft" to={publicPaths.curriculum(item.curriculumId)}>커리큘럼 상세</Link>
+            <button
+              className="button button--ghost"
+              type="button"
+              disabled={cancelMutation.isPending}
+              onClick={() => cancelMutation.mutate()}
+            >
+              {cancelMutation.isPending ? '취소 중' : '수강 신청 취소'}
+            </button>
+          </div>
         </div>
       </div>
     </article>
@@ -222,10 +224,13 @@ export default function MyCurriculumsPage() {
               */}
               <div className="dashboard-curriculum-card__content">
                 <div><StatusBadge tone={item.lifecycleStatus === 'PUBLISHED' ? 'success' : item.lifecycleStatus === 'ARCHIVED' ? 'neutral' : 'warning'}>{item.lifecycleStatus === 'PUBLISHED' ? '공개 중' : item.lifecycleStatus === 'ARCHIVED' ? '보관됨' : '준비 중'}</StatusBadge><h3><Link className="stretched-link" to={publicPaths.curriculum(item.curriculumId)}>{item.title}</Link></h3><p className="dashboard-curriculum-card__summary" title={item.summary}>{item.summary}</p></div>
-                {'progress' in item
-                  ? <div className="dashboard-progress"><span><strong>{item.progress}%</strong> · {item.completedLessonCount}/{item.lessonCount} 강의</span><i><b style={{ width: `${item.progress}%` }} /></i></div>
-                  : <div className="dashboard-meta dashboard-meta--split">{instructorMetaItems(item).map((meta) => <span key={meta}>{meta}</span>)}</div>}
-                {isInstructor && <div className="card-actions"><Link className="button button--soft" to={instructorPaths.curriculumManage(item.curriculumId)}>관리</Link></div>}
+                <div className="dashboard-curriculum-card__foot">
+                  {/* 학생 카드는 자기 진행률(퍼센트·완료 강의 수·막대)을, 강사 카드는 운영 메타를 낸다. */}
+                  {'progress' in item
+                    ? <div className="dashboard-progress"><span><strong>{item.progress}%</strong> · {item.completedLessonCount}/{item.lessonCount} 강의</span><i><b style={{ width: `${item.progress}%` }} /></i></div>
+                    : <div className="dashboard-meta dashboard-meta--split">{instructorMetaItems(item).map((meta) => <span key={meta}>{meta}</span>)}</div>}
+                  {isInstructor && <div className="card-actions"><Link className="button button--soft" to={instructorPaths.curriculumManage(item.curriculumId)}>관리</Link></div>}
+                </div>
               </div>
             </article>
           ))}

@@ -313,15 +313,44 @@
 .my-curriculums-page .metric-card strong { margin-top: 6px; font-size: 1.7rem; }
 
 /*
- * 카드 높이를 커버가 아니라 내용이 정하게 되돌린다. __cover의 min-height: 165px가 실제
- * 콘텐츠 높이(~110px)보다 커서 카드마다 55px씩 빈 공간을 만들고 있었다. min-height를 풀면
- * 그리드 행 높이는 콘텐츠가 정하고, aspect-ratio는 콘텐츠가 아주 짧을 때의 최소 높이만 잡는다.
+ * 카드는 세로형(커버 위, 내용 아래)이고 넓은 화면에서 2열로 깐다.
+ * 가로형 카드를 그대로 2열로 쪼개면 열 폭이 반이 되어 메타가 다시 접히지만(F-1안),
+ * 세로형은 좁아진 열 폭을 온전히 써서 그 문제가 없다.
+ * auto-fill이라 폭이 줄면 미디어쿼리 없이 1열로 내려간다(2열 최소 폭 400px).
  */
-.my-curriculums-page .dashboard-curriculum-list { gap: 8px; }
-.my-curriculums-page .dashboard-curriculum-card { grid-template-columns: 132px minmax(0, 1fr); }
-.my-curriculums-page .dashboard-curriculum-card__cover { min-height: 0; aspect-ratio: 16 / 9; }
-.my-curriculums-page .dashboard-curriculum-card__content { gap: 14px; padding: 14px 16px; }
+.my-curriculums-page .dashboard-curriculum-list {
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+  gap: 8px;
+}
+.my-curriculums-page .dashboard-curriculum-card { grid-template-columns: 1fr; }
+/*
+ * 커버 높이는 폭에 비례시키지 않는다 — 2열이면 카드 폭이 ~570px이라 16:9로 두면 커버만
+ * 320px가 되어 세로 총량이 오히려 늘어난다. 고정 높이 띠로 쓴다.
+ */
+.my-curriculums-page .dashboard-curriculum-card__cover { min-height: 0; height: 128px; aspect-ratio: auto; }
+.my-curriculums-page .dashboard-curriculum-card__content {
+  align-items: stretch;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 9px;
+  padding: 13px 15px 14px;
+}
 .my-curriculums-page .dashboard-curriculum-card h3 { margin: 4px 0 3px; }
+/*
+ * 하단 줄(진행률·메타 + 액션). margin-top: auto라 요약 길이가 달라도 카드 바닥에 붙는다 —
+ * 같은 행의 카드는 그리드가 높이를 맞추므로 하단 줄이 서로 정렬된다.
+ */
+.my-curriculums-page .dashboard-curriculum-card__foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 9px 12px;
+  margin-top: auto;
+}
+/* 세로형에서는 진행률·메타가 카드 폭을 온전히 쓴다(가로형의 170px·210px 고정폭이 필요 없다). */
+.my-curriculums-page .dashboard-curriculum-card__foot .dashboard-progress { width: auto; flex: 1 1 140px; }
+.my-curriculums-page .dashboard-curriculum-card__foot .dashboard-meta { flex: 1 1 auto; }
 
 /*
  * 요약은 두 줄로 자른다 — max-width: 430px로 묶여 있어 좌우 여유가 있는데도 접히고,
@@ -618,8 +647,8 @@ th { color: var(--ink-500); font-size: .67rem; }
   .enrollment-status-cell { min-width: 0; }
   .dashboard-curriculum-card { grid-template-columns: 1fr; }
   .dashboard-curriculum-card__cover { min-height: 110px; }
-  /* 한 칸으로 쌓이면 커버가 카드 폭 전체를 쓴다 — 16:9를 그대로 두면 오히려 커지므로 되돌린다. */
-  .my-curriculums-page .dashboard-curriculum-card__cover { min-height: 96px; aspect-ratio: auto; }
+  /* 좁은 화면에서는 커버 띠를 더 낮춘다(카드 폭이 좁아 128px이면 비중이 과하다). */
+  .my-curriculums-page .dashboard-curriculum-card__cover { min-height: 0; height: 104px; }
   .lifecycle-actions { align-items: stretch; flex-direction: column; }
   .lifecycle-actions__buttons { flex-wrap: wrap; }
   .lifecycle-actions__buttons .button { flex: 1 1 auto; }
