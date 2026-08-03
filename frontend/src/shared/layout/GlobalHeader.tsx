@@ -3,7 +3,6 @@ import { Link, useLocation } from 'react-router-dom'
 import {
   adminNavigationItem,
   isNavigationItemActive,
-  isProfileAreaActive,
   navigationItemsByRole,
   type NavigationItem,
 } from '@/app/router/navigation'
@@ -105,9 +104,8 @@ export default function GlobalHeader() {
                   아바타는 decorative라 이름을 읽어 주지 못하므로 목적지를 숨은 텍스트로 붙인다.
                 */}
                 <Link
-                  className={`user-chip${isProfileAreaActive(pathname) ? ' is-active' : ''}`}
+                  className="user-chip"
                   to={getProfilePath(user.role)}
-                  aria-current={isProfileAreaActive(pathname) ? 'page' : undefined}
                   onClick={closeMenu}
                 >
                   <ProfileAvatar displayName={user.displayName} imageUrl={user.profileImageUrl} decorative />
