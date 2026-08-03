@@ -156,7 +156,11 @@ export default function InstructorEnrollmentRoster({ curriculumId }: { curriculu
       {query.data.totalPages > 1 && (
         <div className="pagination">
           <button type="button" disabled={page === 0} onClick={() => setPage((value) => value - 1)}>이전</button>
-          <span>{page + 1} / {query.data.totalPages}</span>
+          <span className="pagination__status">
+            <span className="pagination__number is-current" aria-current="page" aria-label={`${page + 1}페이지`}>{page + 1}</span>
+            <span aria-hidden="true">/</span>
+            <span aria-label={`전체 ${query.data.totalPages}페이지`}>{query.data.totalPages}</span>
+          </span>
           <button type="button" disabled={!query.data.hasNext} onClick={() => setPage((value) => value + 1)}>다음</button>
         </div>
       )}

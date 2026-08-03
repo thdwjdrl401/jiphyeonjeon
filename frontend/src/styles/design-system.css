@@ -158,20 +158,35 @@ body {
   padding: 12px 15px;
   color: var(--ink-600);
   font-size: .82rem;
+  transition: color .18s ease, transform .18s ease;
 }
 
 .primary-navigation a:hover,
+.primary-navigation a:focus-visible,
 .primary-navigation a.is-active {
   background: transparent;
   color: var(--ink-950);
 }
 
-.primary-navigation a.is-active::after {
+.primary-navigation a::after {
+  position: absolute;
   right: 15px;
   bottom: 6px;
   left: 15px;
   height: 1px;
   background: var(--ink-950);
+  content: '';
+  opacity: 0;
+  transform: translateX(-3px);
+  transition: opacity .18s ease, transform .18s ease;
+}
+.primary-navigation a:not(.is-active):not([aria-current='page']):hover { transform: translateY(-2px); }
+.primary-navigation a:not(.is-active):not([aria-current='page']):hover::after,
+.primary-navigation a:not(.is-active):not([aria-current='page']):focus-visible::after,
+.primary-navigation a.is-active::after,
+.primary-navigation a[aria-current='page']::after {
+  opacity: 1;
+  transform: translateX(0);
 }
 
 .user-chip { border-radius: 999px; }
@@ -1042,6 +1057,7 @@ body {
   font-size: .68rem;
   font-weight: 500;
   letter-spacing: .09em;
+  transition: color .18s ease, transform .18s ease;
 }
 .workspace-sidebar:not(.workspace-sidebar--lesson) nav a::after {
   position: absolute;
@@ -1052,16 +1068,27 @@ body {
   background: var(--ink-950);
   content: '';
   opacity: 0;
+  transform: translateX(-3px);
+  transition: opacity .18s ease, transform .18s ease;
 }
 .workspace-sidebar:not(.workspace-sidebar--lesson) nav a:hover,
+.workspace-sidebar:not(.workspace-sidebar--lesson) nav a:focus-visible,
 .workspace-sidebar:not(.workspace-sidebar--lesson) nav a.active,
 .workspace-sidebar:not(.workspace-sidebar--lesson) nav a[aria-current='page'] {
   background: transparent;
   color: var(--ink-950);
   box-shadow: none;
 }
+.workspace-sidebar:not(.workspace-sidebar--lesson) nav a:not(.active):not([aria-current='page']):hover {
+  transform: translateY(-2px);
+}
+.workspace-sidebar:not(.workspace-sidebar--lesson) nav a:not(.active):not([aria-current='page']):hover::after,
+.workspace-sidebar:not(.workspace-sidebar--lesson) nav a:not(.active):not([aria-current='page']):focus-visible::after,
 .workspace-sidebar:not(.workspace-sidebar--lesson) nav a.active::after,
-.workspace-sidebar:not(.workspace-sidebar--lesson) nav a[aria-current='page']::after { opacity: 1; }
+.workspace-sidebar:not(.workspace-sidebar--lesson) nav a[aria-current='page']::after {
+  opacity: 1;
+  transform: translateX(0);
+}
 .workspace-sidebar__tip {
   margin: auto 0 0;
   padding: 20px 0 0;
@@ -1128,6 +1155,7 @@ body {
   padding: 9px 0 17px;
   background: transparent;
   color: var(--ink-600);
+  transition: color .18s ease, transform .18s ease;
 }
 .workspace-sidebar--lesson .lesson-navigation__lessons a::after {
   position: absolute;
@@ -1138,6 +1166,8 @@ body {
   background: var(--ink-950);
   content: '';
   opacity: 0;
+  transform: translateX(-3px);
+  transition: opacity .18s ease, transform .18s ease;
 }
 .lesson-navigation__lessons a > span {
   display: block;
@@ -1148,23 +1178,33 @@ body {
   color: var(--ink-400);
   font-size: .56rem;
   letter-spacing: .08em;
+  transition: color .18s ease;
 }
 .lesson-navigation__lessons a > strong { font-size: .71rem; font-weight: 500; line-height: 1.5; }
 .workspace-sidebar--lesson .lesson-navigation__lessons a:hover,
+.workspace-sidebar--lesson .lesson-navigation__lessons a:focus-visible,
 .workspace-sidebar--lesson .lesson-navigation__lessons a.is-current {
   background: transparent;
   color: var(--ink-950);
   box-shadow: none;
 }
-.workspace-sidebar--lesson .lesson-navigation__lessons a.is-current::after { opacity: 1; }
+.workspace-sidebar--lesson .lesson-navigation__lessons a:not(.is-current):hover { transform: translateY(-2px); }
+.workspace-sidebar--lesson .lesson-navigation__lessons a:not(.is-current):hover::after,
+.workspace-sidebar--lesson .lesson-navigation__lessons a:not(.is-current):focus-visible::after,
+.workspace-sidebar--lesson .lesson-navigation__lessons a.is-current::after {
+  opacity: 1;
+  transform: translateX(0);
+}
+.lesson-navigation__lessons a:hover > span,
+.lesson-navigation__lessons a:focus-visible > span,
 .lesson-navigation__lessons a.is-current > span { background: transparent; color: var(--ink-950); }
 .workspace-sidebar__state { margin: 0; color: var(--ink-500); font-size: .68rem; line-height: 1.6; }
 .workspace-content { min-width: 0; padding: 49px clamp(34px,5vw,76px) 112px; }
 .workspace-page { gap: 26px; }
 .workspace-content > .workspace-page { width: min(100%, 1160px); margin-inline: auto; }
-.workspace-page-header { min-height: 124px; padding: 20px 0 12px; }
-.workspace-page-header::before { top: 14px; width: 10px; height: 10px; border-radius: 0; background: var(--seal); }
-.workspace-page-header h1 { font-size: clamp(2.35rem, 4vw, 4rem); font-weight: 400; letter-spacing: -.04em; }
+.workspace-page-header { min-height: 82px; padding: 4px 0 8px; }
+.workspace-page-header::before { top: 5px; width: 8px; height: 8px; border-radius: 0; background: var(--seal); }
+.workspace-page-header h1 { font-weight: 400; letter-spacing: -.04em; }
 .workspace-page-header p { font-size: .9rem; }
 
 .workspace-panel,
@@ -1187,7 +1227,6 @@ body {
 .workspace-panel__header p { font-size: .8rem; }
 .highlight-panel { border-color: var(--ink-950); background: var(--ink-50); }
 .metric-grid { gap: 0; border-top: 1px solid var(--border-medium); border-left: 1px solid var(--border-medium); }
-.profile-page__eyebrow { color: var(--ink-600); font-weight: 500; }
 /* 카드 안에서 비밀번호 변경과 회원 탈퇴를 가르는 선을 다른 카드 경계와 같은 색으로 맞춘다. */
 .withdraw-trigger { border-color: var(--border-medium); }
 /* 카드 소제목은 패널 제목과 같은 굵기 규칙을 따른다(이 테마는 굵게 쓰지 않는다). */
@@ -1461,7 +1500,7 @@ body {
 
 @media (max-width: 920px) {
   .header-navigation { background: var(--paper-pure); }
-  .primary-navigation a.is-active::after { top: 10px; right: auto; bottom: 10px; left: 0; width: 2px; height: auto; }
+  .primary-navigation a::after { top: 10px; right: auto; bottom: 10px; left: 0; width: 2px; height: auto; }
   .welcome-discovery { min-height: auto; }
   .welcome-discovery__grid { grid-template-columns: 1fr; gap: 36px; }
   .learning-flow {
@@ -1581,7 +1620,7 @@ body {
 }
 
 @media (max-width: 620px) {
-  .workspace-page-header { min-height: auto; padding-top: 42px; }
+  .workspace-page-header { min-height: auto; padding-top: 30px; }
   .workspace-panel { padding: 22px; }
   .curriculum-period-fields__inputs { grid-template-columns: 1fr; }
   .metric-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }

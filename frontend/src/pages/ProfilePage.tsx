@@ -9,7 +9,7 @@ import ProfileIdentityCard from '@/features/profile/ProfileIdentityCard'
 import { profileService } from '@/features/profile/profileService'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import { useToast } from '@/shared/ui/Toast'
-import { InlineNotice, Panel } from '@/shared/ui/WorkspaceUi'
+import { InlineNotice, PageHeader, Panel } from '@/shared/ui/WorkspaceUi'
 
 export default function ProfilePage() {
   usePageTitle('내 프로필')
@@ -65,11 +65,7 @@ export default function ProfilePage() {
 
   return (
     <div className="workspace-page profile-page">
-      {/*
-        제목을 큰 페이지 헤더로 두지 않는다 — 바로 아래 카드가 이름·가입 유형·이메일로 같은 말을
-        하고, 사이드바에서도 "마이페이지"가 켜져 있다. 자리만 잡는 눈썹 라벨로 줄인다.
-      */}
-      <h1 className="profile-page__eyebrow">내 프로필</h1>
+      <PageHeader title="내 프로필" />
 
       {/*
         수정 버튼(→ 모달)은 강사에게만 준다. 학생은 왼쪽 열의 프로필 수정 카드에서 닉네임·이미지를
