@@ -192,7 +192,8 @@ class NotificationWideFanoutContractTest {
                 "새 강의 자료", "«테스트»에 새 자료가 올라왔습니다.",
                 "{\"curriculumId\":\"" + curriculumId + "\"}",
                 NotificationTypes.MATERIAL_PUBLISHED + ':' + curriculumId,
-                NotificationTypes.MATERIAL_PUBLISHED + ":mat-" + curriculumId + ':');
+                NotificationTypes.MATERIAL_PUBLISHED + ":mat-" + curriculumId + ':',
+                null, null);   // 일정 두 칸은 라이브 알림 전용이다
     }
 
     /**

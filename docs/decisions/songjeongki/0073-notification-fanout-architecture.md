@@ -5,7 +5,8 @@
 > [공유 계약 §2-4 알림 센터](../../CONTRACT.md)
 
 - **상태**: 채택 — 3단계까지 구현됨(조회 5경로·표·FE 배선 / 수강 판정·자료 게시 발행 / 아웃박스·큐·
-  워커 / 커서 슬라이싱 / 대상 재판정). 남은 발행 지점과 발화 예정 표·STOMP·Web Push는 아직이다.
+  워커 / 커서 슬라이싱 / 대상 재판정 / 라이브 일정 3종). 남은 발행 지점(Egress·다시보기)과
+  발화 예정 표·STOMP·Web Push는 아직이다.
 - **일자**: 2026-08-03
 - **적용 범위**: `core.notification`, `notification` 모듈, `OutboxRelay` 확장,
   `notification.fanout` 큐, 발화 예정 표, Web Push
@@ -242,6 +243,8 @@ WHERE id=? AND recipient_id=? AND read_status='UNREAD'
 - (3단계) `NotificationWideFanoutContractTest` — 조건에 맞는 사람에게만, 조각을 이어 갈 때 건너뜀·겹침
   없음, **전부 중복인 조각에서도 체인이 이어짐**(더 있는지는 삽입 수가 아니라 훑은 수가 답한다),
   워커가 자기 다음 조각을 넣고 명단이 끝나면 멈춤.
+- (3단계) `LiveScheduleNotificationContractTest` — 시각 없는 초안·입장창만 수정·같은 시각 재저장·
+  멱등 취소에는 알림이 없고, **두 번째 일정 변경이 첫 번째에 묻히지 않는다**(중복 키에 새 시각).
 - (3단계) `NotificationTargetContractTest` — 사라진 대상이 200 GONE, 삭제·권한 상실·만료가 구별됨,
   거절 알림이 게시 커리큘럼으로 열림, GONE이 처리 축만 내리고 읽음 축은 두는 것, 남의 알림 404.
 - 팬아웃 비용은 실측한다: 10만 행 집합 삽입 828ms / 행 단위 루프 1,521ms / 100만 행 32.7초·423MB.

@@ -4,6 +4,7 @@ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 /**
@@ -57,10 +58,12 @@ public class NotificationFanoutRepository {
             ), inserted AS (
                 INSERT INTO core.notification (
                     id, recipient_id, type, read_status, action_status, severity,
-                    title, message, targets, group_key, dedupe_key)
+                    title, message, targets, group_key, dedupe_key,
+                    previous_starts_at, next_starts_at)
                 SELECT gen_random_uuid(), s.user_id, :type, 'UNREAD', :actionStatus, :severity,
                        :title, :message, CAST(:targets AS jsonb), :groupKey,
-                       :dedupePrefix || s.user_id
+                       :dedupePrefix || s.user_id,
+                       CAST(:previousStartsAt AS timestamptz), CAST(:nextStartsAt AS timestamptz)
                 FROM slice s
                 ON CONFLICT (dedupe_key) DO NOTHING
                 RETURNING 1
@@ -83,11 +86,13 @@ public class NotificationFanoutRepository {
      *
      * @param afterUserId 커서. {@code null}이면 처음부터.
      * @param dedupePrefix 수신자 id를 이어 붙이기 <b>전까지</b>의 중복 제거 키. 뒤에 user_id가 붙는다.
+     * @param previousStartsAt 일정 변경 알림에만 값이 있다. 나머지는 {@code null}.
      */
     public Slice insertForActiveStudents(UUID curriculumId, UUID afterUserId, int sliceLimit,
                                          String type, String actionStatus, String severity,
                                          String title, String message, String targetsJson,
-                                         String groupKey, String dedupePrefix) {
+                                         String groupKey, String dedupePrefix,
+                                         OffsetDateTime previousStartsAt, OffsetDateTime nextStartsAt) {
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("curriculumId", curriculumId.toString())
                 .addValue("afterUserId", afterUserId == null ? null : afterUserId.toString())
@@ -99,7 +104,13 @@ public class NotificationFanoutRepository {
                 .addValue("message", message)
                 .addValue("targets", targetsJson)
                 .addValue("groupKey", groupKey)
-                .addValue("dedupePrefix", dedupePrefix);
+                .addValue("dedupePrefix", dedupePrefix)
+                /*
+                 * 일정 변경 알림의 "언제에서 언제로". 문자열로 넘기고 SQL에서 캐스팅한다 —
+                 * null일 때 JDBC가 타입을 못 정해 "could not determine data type"으로 터지기 때문이다.
+                 */
+                .addValue("previousStartsAt", previousStartsAt == null ? null : previousStartsAt.toString())
+                .addValue("nextStartsAt", nextStartsAt == null ? null : nextStartsAt.toString());
         return jdbc.queryForObject(INSERT_SLICE, params, (rs, i) -> new Slice(
                 rs.getInt("scanned"), rs.getInt("inserted"), rs.getObject("last_user_id", UUID.class)));
     }

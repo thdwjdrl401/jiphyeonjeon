@@ -1,6 +1,7 @@
 package com.liveclass.notification.service;
 
 import com.liveclass.auth.api.UserDirectory;
+import com.liveclass.lesson.api.LessonDirectory;
 import com.liveclass.auth.api.UserView;
 import com.liveclass.notification.api.NewNotification;
 import com.liveclass.notification.api.NotificationTypes;
@@ -17,6 +18,8 @@ import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;
 
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -43,18 +46,33 @@ public class NotificationFanoutWorker {
     private static final JsonMapper JSON = JsonMapper.builder().build();
     private static final int DEFAULT_SLICE = 1000;
 
+    /**
+     * 커리큘럼의 수강 중 학생 전원에게 가는 종류들. 나머지는 받는 사람이 한 명으로 정해져 있다.
+     *
+     * <p>이 집합이 곧 수신자 규칙이다 — 메시지가 조건을 실어 나르지 않으므로, 규칙을 고치면
+     * 큐에 떠 있는 옛 메시지도 새 규칙으로 돈다(ADR-0073 §5).
+     */
+    private static final Set<String> WIDE_TYPES = Set.of(
+            NotificationTypes.MATERIAL_PUBLISHED,
+            NotificationTypes.LIVE_SCHEDULED,
+            NotificationTypes.LIVE_SCHEDULE_CHANGED,
+            NotificationTypes.LIVE_CANCELED);
+
     private final NotificationInsertRepository insertRepository;
     private final NotificationFanoutRepository fanoutRepository;
     private final UserDirectory userDirectory;
+    private final LessonDirectory lessonDirectory;
     private final RabbitTemplate rabbitTemplate;
 
     public NotificationFanoutWorker(NotificationInsertRepository insertRepository,
                                     NotificationFanoutRepository fanoutRepository,
                                     UserDirectory userDirectory,
+                                    LessonDirectory lessonDirectory,
                                     RabbitTemplate rabbitTemplate) {
         this.insertRepository = insertRepository;
         this.fanoutRepository = fanoutRepository;
         this.userDirectory = userDirectory;
+        this.lessonDirectory = lessonDirectory;
         this.rabbitTemplate = rabbitTemplate;
     }
 
@@ -67,7 +85,7 @@ public class NotificationFanoutWorker {
             // 계약에 없는 종류다. 재시도해도 같으므로 DLQ로 보낸다.
             throw new IllegalArgumentException("알 수 없는 알림 종류입니다: " + command.type());
         }
-        if (NotificationTypes.MATERIAL_PUBLISHED.equals(command.type())) {
+        if (WIDE_TYPES.contains(command.type())) {
             fanOutToCurriculumStudents(command);
             return;
         }
@@ -92,18 +110,27 @@ public class NotificationFanoutWorker {
      */
     private void fanOutToCurriculumStudents(NotificationFanoutCommand command) {
         int limit = command.sliceLimit() == null ? DEFAULT_SLICE : command.sliceLimit();
+        /*
+         * 대상 이름은 종류마다 출처가 다르다 — 자료 알림은 메시지가 파일명을 싣고 오고, 라이브
+         * 알림은 여기서 레슨 제목을 찾는다. 라이브 세션은 제목을 갖지 않고 레슨이 갖는데, 그것을
+         * 발행 시점에 조회하면 업무 트랜잭션이 그만큼 길어진다(ADR-0073 §3).
+         */
+        String subject = command.subjectName() != null ? command.subjectName() : lessonTitleOf(command.lessonId());
         String title = NotificationCopy.title(command.type());
-        String message = NotificationCopy.message(command.type(), command.curriculumTitle(), command.subjectName());
+        String message = NotificationCopy.wideMessage(command.type(), command.curriculumTitle(), subject,
+                command.previousStartsAt(), command.nextStartsAt());
 
         NotificationFanoutRepository.Slice slice = fanoutRepository.insertForActiveStudents(
                 command.curriculumId(), command.afterUserId(), limit,
                 command.type(), NotificationStatus.INFO, NotificationTypes.severityOf(command.type()),
-                title, message, materialTargetsJson(command),
+                title, message, wideTargetsJson(command),
                 command.type() + ':' + command.curriculumId(),
-                command.type() + ':' + command.materialId() + ':');
+                dedupePrefix(command),
+                command.previousStartsAt(), command.nextStartsAt());
 
-        log.info("자료 알림 조각 curriculum={} 커서={} 훑음={} 삽입={}",
-                command.curriculumId(), command.afterUserId(), slice.scanned(), slice.inserted());
+        log.info("넓은 팬아웃 조각 type={} curriculum={} 커서={} 훑음={} 삽입={}",
+                command.type(), command.curriculumId(), command.afterUserId(),
+                slice.scanned(), slice.inserted());
 
         if (slice.mayHaveMore(limit)) {
             rabbitTemplate.convertAndSend(NotificationMessagingConfig.FANOUT_QUEUE,
@@ -112,14 +139,41 @@ public class NotificationFanoutWorker {
     }
 
     /**
-     * 자료 알림의 중복 제거 키는 {@code {type}:{materialId}:{userId}}다. 자료 연결은 되살아나는 사건이
-     * 아니라 새 자료마다 새 id가 생기므로, 수강 알림과 달리 시각을 넣을 필요가 없다.
+     * 중복 제거 키의 앞부분(뒤에 수신자 id가 붙는다).
+     *
+     * <p><b>일정 변경만 시각이 들어간다.</b> 같은 세션의 두 번째 변경이 첫 번째에 묻히면 학생은
+     * 옛 시각을 그대로 믿는다. 나머지는 사건마다 새 id가 생기므로 시각이 필요 없다 — 자료는 새
+     * materialId, 예정·취소는 세션당 한 번이다.
      */
-    private static String materialTargetsJson(NotificationFanoutCommand command) {
+    private static String dedupePrefix(NotificationFanoutCommand command) {
+        String subject = command.materialId() != null
+                ? command.materialId().toString()
+                : String.valueOf(command.liveSessionId());
+        if (NotificationTypes.LIVE_SCHEDULE_CHANGED.equals(command.type())) {
+            long at = command.nextStartsAt() == null ? 0L : command.nextStartsAt().toInstant().toEpochMilli();
+            return command.type() + ':' + subject + ':' + at + ':';
+        }
+        return command.type() + ':' + subject + ':';
+    }
+
+    private String lessonTitleOf(UUID lessonId) {
+        if (lessonId == null) {
+            return null;
+        }
+        return lessonDirectory.findTitles(List.of(lessonId)).get(lessonId);
+    }
+
+    /** 넓은 팬아웃의 대상 리소스들. 종류에 따라 자료·라이브 중 있는 것만 담는다. */
+    private static String wideTargetsJson(NotificationFanoutCommand command) {
         ObjectNode targets = JSON.createObjectNode();
         targets.put("curriculumId", String.valueOf(command.curriculumId()));
-        targets.put("materialId", String.valueOf(command.materialId()));
-        // 레슨 자료면 레슨으로, 커리큘럼 전체 자료면 커리큘럼으로 보낸다.
+        if (command.materialId() != null) {
+            targets.put("materialId", command.materialId().toString());
+        }
+        if (command.liveSessionId() != null) {
+            targets.put("liveSessionId", command.liveSessionId().toString());
+        }
+        // 레슨 자료·라이브면 레슨으로, 커리큘럼 전체 자료면 커리큘럼으로 보낸다.
         if (command.lessonId() != null) {
             targets.put("lessonId", command.lessonId().toString());
         }
