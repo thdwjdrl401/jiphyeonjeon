@@ -84,6 +84,8 @@ def _evaluate_clip(runner: Any, clip: EvaluationClip) -> dict[str, Any]:
         "hypothesis": transcription.text,
         "rawCer": metrics.raw_cer,
         "normalizedCer": metrics.normalized_cer,
+        "literalNormalizedCer": metrics.literal_normalized_cer,
+        "referenceAlternativeCount": metrics.reference_alternative_count,
         "termRecall": metrics.term_recall,
         "numberExactMatch": metrics.number_exact_match,
         "firstDeltaMs": transcription.first_delta_ms,
@@ -99,6 +101,9 @@ def _summarize(results: Sequence[dict[str, Any]]) -> dict[str, Any]:
         "clipCount": len(results),
         "durationMs": sum(result["durationMs"] for result in results),
         "meanNormalizedCer": statistics.fmean(result["normalizedCer"] for result in results),
+        "meanLiteralNormalizedCer": statistics.fmean(
+            result["literalNormalizedCer"] for result in results
+        ),
         "p50TotalMs": _percentile([result["totalMs"] for result in results], 0.50),
         "p95TotalMs": _percentile([result["totalMs"] for result in results], 0.95),
         "meanRealTimeFactor": statistics.fmean(result["realTimeFactor"] for result in results),

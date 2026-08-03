@@ -11,7 +11,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from stt_lab.transcriptions import canonical_transcription, transcription_alternative_count
+
 _SPLIT_RATIOS = {"train": 0.8, "dev": 0.1, "test": 0.1}
+_MIN_HOLDOUT_SPEAKERS = 8
 
 
 @dataclass(frozen=True)
@@ -149,6 +152,9 @@ def prepare_aihub_dataset(
         "wavFiles": len(wav_by_key),
         "matchedFiles": len(matched_keys),
         "validSamples": len(samples),
+        "dualTranscriptionSampleCount": sum(
+            transcription_alternative_count(sample.reference) > 0 for sample in samples
+        ),
         "missingWavCount": len(missing_wav),
         "missingJsonCount": len(missing_json),
         "missingWavExamples": missing_wav[:100],
@@ -240,12 +246,55 @@ def assign_group_disjoint_splits(
         component_split[component.key] = split
         current[split] += component.duration_ms
 
+    _ensure_holdout_speaker_minimum(components, component_split)
+
     assignments: dict[str, str] = {}
     for component in components:
         split = component_split[component.key]
         for sample in component.samples:
             assignments[sample.clip_id] = split
     return assignments
+
+
+def _ensure_holdout_speaker_minimum(
+    components: Sequence[SplitComponent],
+    component_split: dict[str, str],
+) -> None:
+    all_speakers = {sample.speaker_id for component in components for sample in component.samples}
+    minimum = min(_MIN_HOLDOUT_SPEAKERS, len(all_speakers) // len(_SPLIT_RATIOS))
+    if minimum == 0:
+        return
+
+    def speakers_for(split: str) -> set[str]:
+        return {
+            sample.speaker_id
+            for component in components
+            if component_split[component.key] == split
+            for sample in component.samples
+        }
+
+    for holdout in ("dev", "test"):
+        speakers = speakers_for(holdout)
+        while len(speakers) < minimum:
+            candidates = [
+                component
+                for component in components
+                if component_split[component.key] == "train"
+                and any(sample.speaker_id not in speakers for sample in component.samples)
+            ]
+            if not candidates:
+                break
+            selected = min(
+                candidates,
+                key=lambda component: (
+                    component.duration_ms
+                    / len({sample.speaker_id for sample in component.samples} - speakers),
+                    component.duration_ms,
+                    component.key,
+                ),
+            )
+            component_split[selected.key] = holdout
+            speakers.update(sample.speaker_id for sample in selected.samples)
 
 
 def _parse_sample(
@@ -262,11 +311,16 @@ def _parse_sample(
     speaker = _mapping(value, "05_speakerinfo")
     transcription = _mapping(value, "06_transcription")
 
+    dataset_category = _text(dataset, "5_category")
     source_path = _text(dataset, "3_src_path")
     expected_key = Path(source_path).with_suffix("").as_posix()
     if expected_key.startswith("source/"):
         expected_key = expected_key.removeprefix("source/")
-    if expected_key != key:
+    expected_keys = {expected_key}
+    category_prefix = f"{dataset_category}/"
+    if expected_key.startswith(category_prefix):
+        expected_keys.add(expected_key.removeprefix(category_prefix))
+    if key not in expected_keys:
         raise ValueError(f"annotation source path mismatch: {expected_key} != {key}")
 
     clip_id = key.replace("/", ".")
@@ -277,7 +331,7 @@ def _parse_sample(
     category = "/".join(
         part
         for part in (
-            _text(dataset, "5_category"),
+            dataset_category,
             _text(lecture, "3_major_category"),
         )
         if part
@@ -303,7 +357,10 @@ def _parse_sample(
 def _files_by_relative_stem(root: Path, suffix: str) -> dict[str, Path]:
     files: dict[str, Path] = {}
     for path in sorted(root.rglob(f"*{suffix}")):
-        key = path.relative_to(root).with_suffix("").as_posix()
+        relative_path = path.relative_to(root)
+        if any(part.startswith(".") for part in relative_path.parts):
+            continue
+        key = relative_path.with_suffix("").as_posix()
         if key in files:
             raise ValueError(f"duplicate relative key: {key}")
         files[key] = path
@@ -315,6 +372,7 @@ def _evaluation_record(sample: AihubSample, split: str) -> dict[str, Any]:
         "id": sample.clip_id,
         "audioPath": str(sample.audio_path),
         "reference": sample.reference,
+        "trainingReference": canonical_transcription(sample.reference),
         "language": "ko-KR",
         "speakerId": sample.speaker_id,
         "split": split,

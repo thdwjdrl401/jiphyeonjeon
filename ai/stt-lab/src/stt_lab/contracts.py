@@ -24,6 +24,7 @@ class EvaluationClip:
     lecture_id: str | None = None
     category: str | None = None
     duration_ms: int | None = None
+    training_reference: str | None = None
 
 
 def load_manifest(path: Path, *, require_audio: bool = True) -> tuple[EvaluationClip, ...]:
@@ -62,6 +63,7 @@ def _parse_clip(value: Any, base_dir: Path, line_number: int) -> EvaluationClip:
         "id",
         "audioPath",
         "reference",
+        "trainingReference",
         "language",
         "speakerId",
         "split",
@@ -107,6 +109,7 @@ def _parse_clip(value: Any, base_dir: Path, line_number: int) -> EvaluationClip:
         clip_id=clip_id,
         audio_path=audio_path,
         reference=_required_text(value, "reference", line_number),
+        training_reference=_optional_text(value, "trainingReference", line_number),
         language=_required_text(value, "language", line_number),
         speaker_id=_required_text(value, "speakerId", line_number),
         split=split,

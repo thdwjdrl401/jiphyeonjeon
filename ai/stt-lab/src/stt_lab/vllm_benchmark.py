@@ -88,6 +88,8 @@ class VllmTranscriptionClient:
                 metrics={
                     "rawCer": transcript_metrics.raw_cer,
                     "normalizedCer": transcript_metrics.normalized_cer,
+                    "literalNormalizedCer": transcript_metrics.literal_normalized_cer,
+                    "referenceAlternativeCount": transcript_metrics.reference_alternative_count,
                     "termRecall": transcript_metrics.term_recall,
                     "numberExactMatch": transcript_metrics.number_exact_match,
                 },
@@ -195,6 +197,11 @@ def _run_concurrency(
     normalized_cer = [
         float(result.metrics["normalizedCer"]) for result in successes if result.metrics is not None
     ]
+    literal_normalized_cer = [
+        float(result.metrics["literalNormalizedCer"])
+        for result in successes
+        if result.metrics is not None
+    ]
 
     summary = {
         "concurrency": concurrency,
@@ -210,6 +217,9 @@ def _run_concurrency(
         "p95RequestMs": _percentile(request_times, 0.95),
         "p99RequestMs": _percentile(request_times, 0.99),
         "meanNormalizedCer": statistics.fmean(normalized_cer) if normalized_cer else None,
+        "meanLiteralNormalizedCer": (
+            statistics.fmean(literal_normalized_cer) if literal_normalized_cer else None
+        ),
     }
     return {
         "summary": summary,

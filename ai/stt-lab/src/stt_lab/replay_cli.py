@@ -284,6 +284,8 @@ async def _evaluate_clip(
         "hypothesis": execution.transcript,
         "rawCer": transcript_metrics.raw_cer,
         "normalizedCer": transcript_metrics.normalized_cer,
+        "literalNormalizedCer": transcript_metrics.literal_normalized_cer,
+        "referenceAlternativeCount": transcript_metrics.reference_alternative_count,
         "termRecall": transcript_metrics.term_recall,
         "numberExactMatch": transcript_metrics.number_exact_match,
         "wallMs": execution.wall_ms,
@@ -358,6 +360,9 @@ def _summarize(clips: Sequence[dict[str, Any]]) -> dict[str, Any]:
         "segmentCount": sum(len(clip["segments"]) for clip in clips),
         "sourceDurationMs": sum(clip["sourceDurationMs"] for clip in clips),
         "meanNormalizedCer": statistics.fmean(clip["normalizedCer"] for clip in clips),
+        "meanLiteralNormalizedCer": statistics.fmean(
+            clip["literalNormalizedCer"] for clip in clips
+        ),
         "meanRealTimeFactor": statistics.fmean(clip["realTimeFactor"] for clip in clips),
         "p50SpeechEndToFinalMs": _percentile(final_latencies, 0.50),
         "p95SpeechEndToFinalMs": _percentile(final_latencies, 0.95),

@@ -126,6 +126,7 @@ def _write_comparison_csv(
         "clipCount",
         "segmentCount",
         "meanNormalizedCer",
+        "meanLiteralNormalizedCer",
         "meanRealTimeFactor",
         "p50SpeechEndToFinalMs",
         "p95SpeechEndToFinalMs",
@@ -161,8 +162,8 @@ def _write_report_markdown(
         f"- mode/workers: `{_markdown(report.get('mode'))}` / `{_markdown(report.get('workers'))}`",
         f"- manifest SHA-256: `{_markdown(report.get('manifestSha256'))}`",
         "",
-        "| candidate | backend | model | output | normalized CER | RTF | p95 final ms | missing | warnings |",
-        "|---|---|---|---|---:|---:|---:|---:|---:|",
+        "| candidate | backend | model | output | multi-ref CER | literal CER | RTF | p95 final ms | missing | warnings |",
+        "|---|---|---|---|---:|---:|---:|---:|---:|---:|",
     ]
     for candidate in candidates:
         candidate_summary = _mapping(candidate.get("summary"), "candidate summary")
@@ -175,6 +176,7 @@ def _write_report_markdown(
                     _markdown(candidate.get("modelId")),
                     _markdown(_candidate_output_mode(report, str(candidate["name"]))),
                     _number(candidate_summary.get("meanNormalizedCer")),
+                    _number(candidate_summary.get("meanLiteralNormalizedCer")),
                     _number(candidate_summary.get("meanRealTimeFactor")),
                     _number(candidate_summary.get("p95SpeechEndToFinalMs")),
                     _number(candidate_summary.get("missingFinalCount")),
