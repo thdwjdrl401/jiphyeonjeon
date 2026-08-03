@@ -58,6 +58,8 @@ GMS adapter 앞의 process-local admission gate는 전체 호출 4개, refinemen
 작업을 우선한다. 연속 live 8개 뒤에는 대기 중인 refinement를 받아 starvation을 막는다. 429·408·409,
 일시적 5xx와 연결/timeout 오류만 최대 3회 재시도하며 backoff 중에는 slot을 반납한다. 조정값은
 `AI_API_LECTURE_NOTE_GMS_*` 환경변수로 주입한다. 여러 ai-api replica에서 공유되는 분산 상한은 아니다.
+운영 확인에는 `BoundedLectureNoteModel.metrics_snapshot()`의 `in_flight`, `queued_live`,
+`queued_refinement`, `wait_ms_p50/p95`, `retries_total`, `failures_total`을 사용한다.
 
 모델의 내부 action은 `IGNORE|APPEND|START_NEW`다. `IGNORE`는 operation만 완료하고 출력 event와
 `chunkSequence`를 만들지 않는다. `APPEND`는 wire의 `CONTINUE`로 변환하며, Unicode·연속 공백·끝
