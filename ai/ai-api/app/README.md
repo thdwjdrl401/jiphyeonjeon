@@ -18,10 +18,15 @@ Spring 전용 `ai-api`의 실행 골격과 RAG application core다.
 ## 구조와 흐름
 
 ```text
-[RAG]
+[RAG v1 - live]
 caption evidence: Redis caption Stream -> ai-rag-live-v1 -> captions/store.py
 material evidence: BGE runtime -> pgvector ACTIVE chunks
 request: Spring -> api/rag.py -> rag/service.py -> CombinedEvidenceRetriever -> GMS AnswerModel -> SSE
+
+[RAG v2 - replay]
+caption evidence: Spring이 요청 body에 실어 보낸 세션-ms 확정 자막 (재조회 없음)
+material evidence: BGE runtime -> pgvector ACTIVE chunks (v1과 동일 경로)
+request: Spring -> api/rag.py -> rag/replay_service.py -> ReplayEvidenceRetriever -> GmsOpenAIAnswerModelV2 -> SSE
 
 [강의 노트]
 같은 Redis caption Stream -> ai-live-notes-mvp-v1 -> lecture_notes pipeline
@@ -35,6 +40,7 @@ capture completed -> structured draft refinement -> refined snapshot
 | `GET /readyz` | lifespan 중 `200 {"status":"ready","service":"ai-api"}` |
 | `GET /readyz` | 시작 전·종료 후 `503 {"status":"not_ready","service":"ai-api"}` |
 | `POST /internal/v1/rag/answers:stream` | 인증·Accept·body 검증 후 named SSE stream |
+| `POST /internal/v2/rag/answers:stream` | Replay 질문. 같은 검증 후 excerpt 포함 named SSE stream |
 
 ## 파일 구성
 
@@ -44,7 +50,7 @@ capture completed -> structured draft refinement -> refined snapshot
 | `config.py` | process·Redis·DB·BGE·retrieval 설정 검증 |
 | `runtime.py` | process readiness와 caption consumer task 시작·종료 |
 | `logging_config.py` | 공통 context 기반 JSON 로그 |
-| `wiring.py` | context·GMS·registry·RAG service 조립과 close 경계 |
+| `wiring.py` | context·GMS·registry·RAG service 조립과 close 경계 (v1 `build_rag_services` + Replay `build_replay_rag_services`) |
 | [`adapters/`](adapters/README.md) | Redis consumer, pgvector search, remote BGE client |
 | [`api/`](api/README.md) | 내부 인증 seam과 FastAPI RAG adapter |
 | [`captions/`](captions/README.md) | current producer 계약 parser와 attempt-aware bounded store |

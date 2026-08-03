@@ -10,6 +10,7 @@ from app.adapters import (
     CAPTION_CONSUMER_GROUP,
     CaptionConsumerState,
     GmsOpenAIAnswerModel,
+    GmsOpenAIAnswerModelV2,
     GmsOpenAILectureNoteModel,
     PgvectorActiveMaterialRepository,
     RedisCaptionConsumer,
@@ -23,7 +24,13 @@ from app.lecture_notes import (
     LectureNoteService,
     LectureNoteWindowAccumulator,
 )
-from app.rag import CombinedEvidenceRetriever, InMemoryRequestRegistry, RagAnswerService
+from app.rag import (
+    CombinedEvidenceRetriever,
+    InMemoryRequestRegistry,
+    RagAnswerService,
+    ReplayAnswerService,
+    ReplayEvidenceRetriever,
+)
 from app.retrieval import ActiveMaterialRetrievalService
 
 LECTURE_NOTE_CONSUMER_GROUP = "ai-live-notes-mvp-v1"
@@ -161,6 +168,84 @@ def build_rag_context_services(settings: Settings) -> RagContextServices:
         engine=engine,
         embedding=embedding,
         retriever=retriever,
+    )
+
+
+@dataclass(slots=True)
+class ReplayServices:
+    """Replay (v2) counterpart of RagServices. Owns its own DB engine/embedding client rather
+    than sharing RagContextServices' — Replay doesn't consume captions, so it has no Redis
+    consumer to coordinate shutdown with, and keeping the two independent avoids coupling their
+    lifecycles together for no benefit."""
+
+    service: ReplayAnswerService
+    engine: AsyncEngine
+    embedding: RemoteBgeM3QueryEmbedding
+    retriever: ReplayEvidenceRetriever
+    answer_model: GmsOpenAIAnswerModelV2
+    registry: InMemoryRequestRegistry
+
+    async def close(self) -> None:
+        try:
+            await self.answer_model.aclose()
+        finally:
+            try:
+                await self.embedding.aclose()
+            finally:
+                await self.engine.dispose()
+
+
+def build_replay_rag_services(settings: Settings) -> ReplayServices:
+    if settings.database_url is None:
+        raise ValueError("AI_API_DATABASE_URL is required to build Replay RAG services")
+    if settings.bge_base_url is None or settings.bge_token is None:
+        raise ValueError("AI_API_BGE_BASE_URL and AI_API_BGE_TOKEN are required")
+    if settings.gms_api_key is None:
+        raise ValueError("AI_API_GMS_API_KEY is required to build Replay RAG services")
+
+    engine = create_async_engine(settings.database_url, pool_pre_ping=True)
+    embedding = RemoteBgeM3QueryEmbedding(
+        base_url=settings.bge_base_url,
+        token=settings.bge_token.get_secret_value(),
+        model=settings.bge_model,
+        revision=settings.bge_revision,
+        timeout_seconds=settings.bge_timeout_seconds,
+    )
+    materials = ActiveMaterialRetrievalService(
+        embedding,
+        PgvectorActiveMaterialRepository(engine, runtime_role=settings.database_role),
+    )
+    retriever = ReplayEvidenceRetriever(
+        materials,
+        material_top_k=settings.material_top_k,
+        material_vector_threshold=settings.material_vector_threshold,
+        material_lexical_threshold=settings.material_lexical_threshold,
+    )
+    answer_model = GmsOpenAIAnswerModelV2(
+        api_key=settings.gms_api_key.get_secret_value(),
+        model=settings.gms_model,
+        max_output_tokens=settings.gms_max_output_tokens,
+        max_prompt_chars=settings.gms_max_prompt_chars,
+        timeout_seconds=settings.gms_timeout_seconds,
+    )
+    registry = InMemoryRequestRegistry(
+        max_active=settings.rag_request_max_active,
+        max_completed=settings.rag_request_max_completed,
+    )
+    service = ReplayAnswerService(
+        retriever,
+        answer_model,
+        registry,
+        retrieval_timeout_seconds=settings.rag_retrieval_timeout_seconds,
+        model_timeout_seconds=settings.rag_model_timeout_seconds,
+    )
+    return ReplayServices(
+        service=service,
+        engine=engine,
+        embedding=embedding,
+        retriever=retriever,
+        answer_model=answer_model,
+        registry=registry,
     )
 
 

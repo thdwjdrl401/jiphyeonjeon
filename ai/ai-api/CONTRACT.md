@@ -158,7 +158,25 @@ same-process bounded retry, multi-replica session owner는 아직 보장하지 �
 - FastAPI lifespan은 caption consumer 하나를 시작·drain하고 GMS/BGE client와 DB engine을 닫는다.
 - `/readyz`는 외부 dependency health가 아니라 application lifespan 준비 상태만 나타낸다.
 
-## 8. 후속 미확정 사항
+## 8. Replay(v2) 내부 HTTP 경계
+
+ADR-0037([`docs/decisions/canola/0037-replay-ai-caption-context-contract.md`](../../docs/decisions/canola/0037-replay-ai-caption-context-contract.md))과
+[ADR-0008(구현 설계, jinwoo)](../../docs/decisions/jinwoo/0008-replay-rag-answer-v2-endpoint.md)에 따라
+다시보기(Replay) 질문 전용 `POST /internal/v2/rag/answers:stream`을 별도 경로로 추가했다. 위 §1~§7의
+v1 endpoint(`/internal/v1/rag/answers:stream`)는 이 절 때문에 요청·응답·시간 의미가 전혀 바뀌지 않는다.
+
+- 인증: v1과 동일한 `X-Internal-Signature` HMAC 검증(같은 `AI_INTERNAL_SECRET`, 같은 신선도 규칙)을 재사용한다.
+- 요청 body는 `contextTimeMs` 대신 `context: {mode:"REPLAY", questionSessionMs, captions[]}`를 쓴다.
+  `captions[]`는 Spring이 이미 세션 시간으로 변환한 확정 자막이며, ai-api는 caption을 다시 조회하지 않는다.
+- material(PPTX) 검색은 v1과 동일한 pgvector 경로·threshold·`curriculumId` 스코프를 그대로 재사용한다.
+- caption evidence는 `captions[]`를 하나로 병합해 **CAPTION source 최대 1개**만 만든다(ADR-0037).
+- `answer.done.sources`는 v1과 달리 각 source에 원문 그대로의 plain-text `excerpt`(최대 300자)를 포함한다.
+  CAPTION source는 `sttSessionId`를 포함하지 않는다(v1 `CaptionSource`와 다른 점).
+- source 중복 제거는 `(materialId,page)` / `(sessionId,startSessionMs,endSessionMs)` 키로만 판단하고
+  `excerpt` 차이는 dedup에 영향을 주지 않는다.
+- SSE event 종류·상태코드·에러 코드 체계는 v1과 동일하다.
+
+## 9. 후속 미확정 사항
 
 - Spring→AI 단명 토큰의 algorithm, issuer, audience, scope, clock skew
 - Java session/HLS clock과 realtime-agent `streamElapsedMs`의 변환 기준점

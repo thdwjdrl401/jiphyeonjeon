@@ -20,9 +20,10 @@ RagAnswerRequest
 | `ports.py` | 근거 검색·답변 모델 port |
 | `service.py` | request lease, timeout, scope 재검증, citation, terminal/error 조율 |
 | `registry.py` | active/recent requestId의 bounded process-local registry |
-| `retrieval.py` | material hit와 최신 caption attempt를 evidence로 결합 |
+| `retrieval.py` | material hit와 최신 caption attempt를 evidence로 결합(`CombinedEvidenceRetriever`); Replay는 요청에 실린 caption을 재조회 없이 병합(`ReplayEvidenceRetriever`) |
 | `sse.py` | named event와 JSON data framing, iterator cleanup |
 | `errors.py` | adapter가 공개 가능한 실패 code만 전달하는 타입 |
+| `replay_service.py` | Replay(v2) request lease, timeout, scope 재검증, excerpt 포함 citation dedup, terminal/error 조율 |
 
 ## 경계와 불변식
 
@@ -38,8 +39,18 @@ RagAnswerRequest
 - GMS streaming과 context consumer lifecycle은 연결했지만 Spring 인증이 채택되기 전 production API는 닫혀 있다.
 - multi-replica registry와 재연결 replay 정책은 후속 범위다.
 
-## 다시보기 RAG 요구사항
+## 다시보기 RAG (v2)
 
-다시보기 질문에 필요한 endpoint, 세션-ms 자막 문맥, material Top K와 source excerpt 요구사항은
-[`ADR-0037`](../../../../docs/decisions/canola/0037-replay-ai-caption-context-contract.md)에 정리돼 있다.
-아직 runtime route와 계약에는 반영되지 않았으며 구현 방법은 AI 오너가 결정한다.
+`POST /internal/v2/rag/answers:stream`(`api/rag.py`의 `create_rag_router_v2`)은 v1과 별도 경로로
+Replay 질문을 처리한다. 요구사항은 [`ADR-0037`](../../../../docs/decisions/canola/0037-replay-ai-caption-context-contract.md),
+구현 설계는 [`ADR-0008`](../../../../docs/decisions/jinwoo/0008-replay-rag-answer-v2-endpoint.md)에 있다.
+
+- `ReplayEvidenceRetriever`는 PPTX Top K는 v1과 동일한 `MaterialRetrievalPort`로 검색하고, caption은
+  요청의 `context.captions[]`를 재조회 없이 하나로 병합해 CAPTION source 최대 1개만 만든다.
+- `ReplayAnswerService`(`replay_service.py`)는 v1 `RagAnswerService`의 timeout·registry·SSE 골격을
+  import로 재사용하되, v1 타입에 고정된 evidence-scope 검증과 citation dedup만 v2 타입으로 새로 만든다
+  — v1 `service.py`는 이 작업으로 한 줄도 바뀌지 않는다(이유는 ADR-0008 "구현 중 조정" 참고).
+- `answer.done.sources`에는 v1에 없는 plain-text `excerpt`(최대 300자, 원문 그대로)가 붙는다. dedup 키는
+  `(materialId,page)` / `(sessionId,startSessionMs,endSessionMs)`이며 `excerpt` 차이는 무시한다.
+- `GmsOpenAIAnswerModelV2`(`app/adapters/gms_openai_answer_v2.py`)도 같은 이유로 v1 어댑터를 복제한
+  별도 클래스다 — 모델에는 `excerpt`가 아니라 v1과 동일하게 전체 `content`만 보낸다.

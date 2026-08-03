@@ -12,7 +12,8 @@ GMS가 생성한 RAG 답변을 SSE로 전달하며 실시간 자막에서 축적
 
 | 호출자 | 대상 | 통신 | 용도 |
 |---|---|---|---|
-| Spring | `POST /internal/v1/rag/answers:stream` | HTTP + SSE, HMAC | RAG 질문과 답변 스트림 |
+| Spring | `POST /internal/v1/rag/answers:stream` | HTTP + SSE, HMAC | RAG 질문과 답변 스트림(Live) |
+| Spring | `POST /internal/v2/rag/answers:stream` | HTTP + SSE, HMAC | RAG 질문과 답변 스트림(다시보기, ADR-0037) |
 | 운영 환경 | `GET /healthz`, `GET /readyz` | HTTP | 프로세스 생존·lifespan 준비 확인 |
 | realtime-agent → Redis → ai-api | `ai:captions:live` | Redis Stream consumer group | 실시간 자막 입력·처리 후 ACK |
 | ai-api → Redis | `ai:lecture-notes:mvp` | Redis Stream | 강의 노트 추가 조각·수집 완료·정제 snapshot event |
@@ -55,6 +56,36 @@ data: {"requestId":"request-1","text":"RAG는 "}
 
 event: answer.done
 data: {"requestId":"request-1","sources":[{"type":"PPTX","materialId":"22222222-2222-4222-8222-222222222222","page":4}]}
+```
+
+다시보기(Replay) 질문은 별도 경로 `POST /internal/v2/rag/answers:stream`을 쓴다. 시간 필드가
+`contextTimeMs`(STT attempt-local) 대신 `context.questionSessionMs`(세션 상대 ms)이고, Spring이 이미
+계산한 확정 자막을 `context.captions[]`로 함께 보낸다.
+
+```json
+{
+  "requestId": "request-1",
+  "lessonId": "22222222-2222-4222-8222-222222222222",
+  "curriculumId": "55555555-5555-4555-8555-555555555555",
+  "sessionId": "11111111-1111-4111-8111-111111111111",
+  "question": "여기서 말한 consumer group이 뭐야?",
+  "context": {
+    "mode": "REPLAY",
+    "questionSessionMs": 735000,
+    "captions": [
+      {"sttSessionId": "stt-attempt-2", "segmentIndex": 42, "startSessionMs": 711200, "endSessionMs": 716800, "text": "컨슈머 그룹은 여러 소비자가 메시지를 분담해서 처리하도록 합니다."}
+    ]
+  },
+  "issuedAtMs": 1785450000000
+}
+```
+
+응답 `answer.done.sources`는 v1과 달리 원문 그대로의 `excerpt`(최대 300자)를 포함하고, CAPTION source는
+`sttSessionId` 없이 `sessionId`/`startSessionMs`/`endSessionMs`만 담는다.
+
+```text
+event: answer.done
+data: {"requestId":"request-1","sources":[{"type":"CAPTION","sessionId":"11111111-1111-4111-8111-111111111111","startSessionMs":711200,"endSessionMs":716800,"excerpt":"컨슈머 그룹은 여러 소비자가 메시지를 분담해서 처리하도록 합니다."}]}
 ```
 
 전체 요청 필드, SSE event, 상태코드는 [`CONTRACT.md`](CONTRACT.md)에서 확인한다.
