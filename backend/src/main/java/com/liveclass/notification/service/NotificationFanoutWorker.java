@@ -58,6 +58,7 @@ public class NotificationFanoutWorker {
             NotificationTypes.LIVE_SCHEDULED,
             NotificationTypes.LIVE_SCHEDULE_CHANGED,
             NotificationTypes.LIVE_CANCELED,
+            NotificationTypes.LIVE_STARTING_SOON,
             NotificationTypes.VOD_PUBLISHED);
 
     /** 담당 강사 한 명에게 가는 종류들. 학생에게 보내면 할 수 있는 일이 없는데 불안만 준다. */
