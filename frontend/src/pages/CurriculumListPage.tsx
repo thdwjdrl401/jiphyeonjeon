@@ -142,7 +142,7 @@ export default function CurriculumListPage() {
                   <button type="button" disabled={page === 0} onClick={() => updateParams({ page: page - 1 === 0 ? null : String(page - 1) })} aria-label="이전 페이지">←</button>
                   {firstVisible > 0 && <span className="pagination-ellipsis" aria-hidden="true">…</span>}
                   {pageWindow.map((index) => (
-                    <button className={index === page ? 'is-current' : undefined} type="button" key={index} aria-current={index === page ? 'page' : undefined} onClick={() => updateParams({ page: index === 0 ? null : String(index) })}>{index + 1}</button>
+                    <button className={`pagination__number${index === page ? ' is-current' : ''}`} type="button" key={index} aria-current={index === page ? 'page' : undefined} onClick={() => updateParams({ page: index === 0 ? null : String(index) })}>{index + 1}</button>
                   ))}
                   {lastVisible < data.totalPages - 1 && <span className="pagination-ellipsis" aria-hidden="true">…</span>}
                   <button type="button" disabled={!data.hasNext} onClick={() => updateParams({ page: String(page + 1) })} aria-label="다음 페이지">→</button>

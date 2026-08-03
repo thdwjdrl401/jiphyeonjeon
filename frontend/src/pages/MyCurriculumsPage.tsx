@@ -66,7 +66,7 @@ function CurriculumPagination({
     <div className="pagination" role="navigation" aria-label={label}>
       {pageNumbers.map((pageNumber) => (
         <button
-          className={pageNumber === page ? 'is-current' : undefined}
+          className={`pagination__number${pageNumber === page ? ' is-current' : ''}`}
           type="button"
           aria-current={pageNumber === page ? 'page' : undefined}
           aria-label={`${pageNumber + 1}페이지`}

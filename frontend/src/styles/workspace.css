@@ -454,36 +454,6 @@
 .my-curriculums-page__list-panel > .workspace-panel__header { align-items: center; }
 .my-curriculums-page__list-panel > .workspace-panel__header h2 { margin-bottom: 0; }
 .my-curriculums-page .pagination { gap: 8px; margin-top: 14px; }
-.my-curriculums-page .pagination button {
-  position: relative;
-  isolation: isolate;
-  width: 39px;
-  height: 39px;
-  border: 0;
-  border-radius: 0;
-  padding: 0;
-  background: transparent;
-  box-shadow: none;
-  color: var(--ink-600);
-}
-.my-curriculums-page .pagination button:hover:not(:disabled) { border-color: transparent; color: var(--ink-950); }
-.my-curriculums-page .pagination button.is-current {
-  border-color: transparent;
-  background: transparent;
-  color: var(--paper-pure);
-}
-.my-curriculums-page .pagination button.is-current::before {
-  position: absolute;
-  z-index: -1;
-  top: 50%;
-  left: 50%;
-  width: 48px;
-  height: 24px;
-  transform: translate(-50%, -50%);
-  background: url('../assets/images/pagination-ink-stroke.png') center / 100% 100% no-repeat;
-  content: '';
-  pointer-events: none;
-}
 /*
  * 라이브가 없는 날의 한 줄 띠(있는 날은 highlight-panel을 그대로 쓴다).
  * 패널이 아니라 한 줄이므로 강조 테두리(--ink-950) 대신 일반 테두리를 쓴다.
