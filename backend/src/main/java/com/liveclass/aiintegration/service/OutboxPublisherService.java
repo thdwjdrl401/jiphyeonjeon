@@ -25,7 +25,7 @@ public class OutboxPublisherService implements OutboxPublisher {
 
     @Override
     @Transactional
-    public void enqueue(String aggregateType, String aggregateId, String eventType,
+    public void enqueue(String destination, String aggregateType, String aggregateId, String eventType,
                         String payloadJson, String idempotencyKey, String correlationId) {
         // 멱등: 같은 idempotencyKey가 이미 있으면(같은 자료 재요청 등) 새로 넣지 않는다.
         if (outboxEventRepository.existsByIdempotencyKey(idempotencyKey)) {
@@ -33,6 +33,7 @@ public class OutboxPublisherService implements OutboxPublisher {
             return;
         }
         OutboxEvent event = new OutboxEvent();
+        event.setDestination(destination);
         event.setAggregateType(aggregateType);
         event.setAggregateId(aggregateId);
         event.setEventType(eventType);
@@ -49,6 +50,7 @@ public class OutboxPublisherService implements OutboxPublisher {
             log.debug("outbox 동시 중복 무시 idempotencyKey={}", idempotencyKey);
             return;
         }
-        log.info("outbox 적재 type={} aggId={} idempotencyKey={}", eventType, aggregateId, idempotencyKey);
+        log.info("outbox 적재 dest={} type={} aggId={} idempotencyKey={}",
+                destination, eventType, aggregateId, idempotencyKey);
     }
 }

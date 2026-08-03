@@ -34,6 +34,9 @@ public class OutboxEvent {
 
     private String eventType;
 
+    /** 릴레이가 이 값을 라우팅 키로 써서 큐를 고른다. 코드에 박혀 있던 것을 데이터로 옮겼다(ADR-0073 §4). */
+    private String destination;
+
     @JdbcTypeCode(SqlTypes.JSON)
     private String payloadJson;
 
