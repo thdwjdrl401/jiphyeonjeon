@@ -171,9 +171,9 @@ class CatalogPolicyAndReplayContractTest {
         // (녹화 시작이 DRAFT를 세팅하는 것은 RecordingLifecycleTest가 실제 경로로 검증한다).
         write(get("/api/curriculums/" + cid), instructor, null)
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.outline[0].lessons[0].replayStatus").value("DRAFT"))
+                .andExpect(jsonPath("$.outline[1].lessons[0].replayStatus").value("DRAFT"))
                 // 재생 길이는 녹화 완료 webhook이 채우는 값이라 이 시점엔 아직 없다.
-                .andExpect(jsonPath("$.outline[0].lessons[0].durationMs").doesNotExist());
+                .andExpect(jsonPath("$.outline[1].lessons[0].durationMs").doesNotExist());
     }
 
     @Test
@@ -186,8 +186,8 @@ class CatalogPolicyAndReplayContractTest {
         // 라이브가 끝난 뒤 게시된 녹화가 있으면 강의를 열었을 때 다시보기로 간다.
         write(get("/api/curriculums/" + cid), instructor, null)
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.outline[0].lessons[0].replayStatus").value("PUBLISHED"))
-                .andExpect(jsonPath("$.outline[0].lessons[0].access.destination").value("VOD"));
+                .andExpect(jsonPath("$.outline[1].lessons[0].replayStatus").value("PUBLISHED"))
+                .andExpect(jsonPath("$.outline[1].lessons[0].access.destination").value("VOD"));
     }
 
     // ---- 헬퍼 ----
@@ -243,11 +243,8 @@ class CatalogPolicyAndReplayContractTest {
         String seedLessonId = json(write(post("/api/instructor/sections/" + seedSectionId + "/lessons"), instructor,
                 "{\"title\":\"게시용 강의\"}").andExpect(status().isCreated()).andReturn()).get("lessonId").asString();
         write(post("/api/instructor/curriculums/" + cid + "/publish"), instructor, null).andExpect(status().isOk());
-        // 발행 조건만 채우려고 만든 것이라 지운다 — 이 테스트가 세는 강의·목차 인덱스를 원래대로 둔다.
-        write(delete("/api/instructor/lessons/" + seedLessonId), instructor, null)
-                .andExpect(status().isNoContent());
-        write(delete("/api/instructor/sections/" + seedSectionId), instructor, null)
-                .andExpect(status().isNoContent());
+        // 시드는 지우지 않는다 — 게시된 커리큘럼은 섹션·강의를 1개 이상 유지해야 한다.
+        // 그래서 outline[0]은 시드 섹션이고, 테스트가 더한 강의는 outline[1]부터다.
         return cid;
     }
 

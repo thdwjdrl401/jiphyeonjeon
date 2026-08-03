@@ -216,6 +216,44 @@ public class InstructorCurriculumService {
      * 낡은 캐시를 들고 있는 경우가 남기 때문이다. 카운터 컬럼(section_count·lesson_count) 대신 실제
      * 행을 세는 이유는 게시가 되돌릴 수 없는 노출이라 트리거 드리프트에 기대지 않는 편이 낫다.
      */
+    /**
+     * 게시된 커리큘럼이 <b>지운 뒤에도</b> 게시 조건을 만족하는지 본다.
+     *
+     * <p>게시에는 섹션 1개·강의 1개가 필요한데(아래 {@link #requirePublishableStructure}), 게시
+     * <b>뒤에</b> 그것을 지우는 것은 아무도 막지 않고 있었다. 섹션 하나에 강의 하나만 둔 커리큘럼에서
+     * 그 강의를 지우면 <b>목차가 빈 커리큘럼이 카탈로그에 그대로 남는다</b> — 게시 조건을 우회한
+     * 것과 같고, 수강생에게는 들을 것이 없는 커리큘럼이 보인다.
+     *
+     * <p>DRAFT는 막지 않는다. 아직 아무에게도 보이지 않으므로 마음대로 비워도 된다 — 다시 게시할 때
+     * 조건을 확인한다.
+     *
+     * <p>지울 대상을 <b>미리 빼고</b> 센다. 삭제 뒤에 세면 이미 늦고, 트랜잭션을 되돌리는 것보다
+     * 시작 전에 거절하는 편이 안전하다.
+     *
+     * @param excludedLessonId  지울 강의(없으면 null)
+     * @param excludedSectionId 지울 섹션(없으면 null)
+     */
+    private void requireStaysPublishable(UUID curriculumId, UUID excludedLessonId, UUID excludedSectionId) {
+        Curriculum curriculum = curriculumRepository.findById(curriculumId)
+                .orElseThrow(() -> new CurriculumNotFoundException("커리큘럼을 찾을 수 없습니다."));
+        if (curriculum.getLifecycleStatus() != CurriculumLifecycleStatus.PUBLISHED) {
+            return;
+        }
+
+        List<Section> sections = sectionRepository.findByCurriculumIdOrderByOrderIndexAsc(curriculumId).stream()
+                .filter(section -> !section.getId().equals(excludedSectionId))
+                .toList();
+        if (sections.isEmpty()) {
+            throw PublishedStructureRequiredException.lastSection();
+        }
+
+        boolean hasLesson = lessonDirectory.findBySections(sections.stream().map(Section::getId).toList()).stream()
+                .anyMatch(lesson -> !lesson.lessonId().equals(excludedLessonId));
+        if (!hasLesson) {
+            throw PublishedStructureRequiredException.lastLesson();
+        }
+    }
+
     private void requirePublishableStructure(UUID curriculumId) {
         List<Section> sections = sectionRepository.findByCurriculumIdOrderByOrderIndexAsc(curriculumId);
         boolean hasSection = !sections.isEmpty();
@@ -363,6 +401,7 @@ public class InstructorCurriculumService {
         if (lessonDirectory.countInSection(sectionId) > 0) {
             throw new SectionNotEmptyException("레슨이 있는 섹션은 삭제할 수 없습니다.");
         }
+        requireStaysPublishable(section.getCurriculumId(), null, sectionId);
 
         UUID curriculumId = section.getCurriculumId();
         sectionRepository.delete(section);
@@ -425,11 +464,12 @@ public class InstructorCurriculumService {
     @Transactional
     public void deleteLesson(UUID instructorId, UUID lessonId) {
         LessonView lesson = requireOwnedLesson(instructorId, lessonId);
+        Section owningSection = requireOwnedSection(instructorId, lesson.sectionId());
+        requireStaysPublishable(owningSection.getCurriculumId(), lessonId, null);
         int removedRecordings = lessonRecordingCleanup.deleteByLesson(lessonId);
         lessonManagement.delete(lessonId);
         // lesson_count는 트리거가 −1. 구조 변경이므로 structure_version만 올린다.
-        Section section = requireOwnedSection(instructorId, lesson.sectionId());
-        curriculumRepository.bumpStructureVersion(section.getCurriculumId());
+        curriculumRepository.bumpStructureVersion(owningSection.getCurriculumId());
         log.info(Audit.MARKER, "레슨 삭제 sectionId={} lessonId={} 녹화자산={}",
                 lesson.sectionId(), lessonId, removedRecordings);
     }

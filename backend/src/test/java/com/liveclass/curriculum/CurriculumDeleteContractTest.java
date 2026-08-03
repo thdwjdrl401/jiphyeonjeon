@@ -77,11 +77,6 @@ class CurriculumDeleteContractTest {
         String seedLessonId = json(write(post("/api/instructor/sections/" + seedSectionId + "/lessons"), auth,
                 "{\"title\":\"게시용 강의\"}").andExpect(status().isCreated()).andReturn()).get("lessonId").asString();
         write(post("/api/instructor/curriculums/" + id + "/publish"), auth, null).andExpect(status().isOk());
-        // 발행 조건만 채우려고 만든 것이라 지운다 — 이 테스트가 세는 강의·목차 인덱스를 원래대로 둔다.
-        write(delete("/api/instructor/lessons/" + seedLessonId), auth, null)
-                .andExpect(status().isNoContent());
-        write(delete("/api/instructor/sections/" + seedSectionId), auth, null)
-                .andExpect(status().isNoContent());
 
         write(delete("/api/instructor/curriculums/" + id), auth, null)
                 .andExpect(status().isConflict())
