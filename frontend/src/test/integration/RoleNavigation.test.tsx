@@ -194,12 +194,13 @@ describe('역할별 상단 네비게이션', () => {
       await waitFor(() => expect(menuLabels()).toEqual(['커리큘럼 탐색']))
     })
 
-    it('프로필 화면에서는 프로필 영역이 현재 위치로 표시된다', async () => {
+    it('프로필 화면에서도 프로필 영역을 현재 위치로 강조하지 않는다', async () => {
       await loginAsStudent()
       renderAt('/student/profile')
 
       const profileLink = await waitFor(() => headerProfileLink())
-      expect(profileLink).toHaveAttribute('aria-current', 'page')
+      expect(profileLink).not.toHaveAttribute('aria-current')
+      expect(profileLink).not.toHaveClass('is-active')
       // 프로필은 역할 메뉴 축이 아니므로 메뉴 쪽은 아무것도 켜지지 않는다.
       expect(activeMenuLabels()).toEqual([])
     })
