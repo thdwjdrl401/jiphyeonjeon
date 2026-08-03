@@ -31,6 +31,11 @@ class RagAnswerRequest(_ContractModel):
     question: Question
     contextTimeMs: int = Field(ge=0)
     issuedAtMs: int = Field(ge=0)
+    # Optional and additive (ADR-0010): Spring does not send these yet. Both must be present
+    # for conversation memory to activate — omit either and this request behaves exactly as
+    # before (no previous_response_id lookup, no response id saved).
+    userId: Identifier | None = None
+    conversationId: Identifier | None = None
 
 
 class PptxSource(_ContractModel):

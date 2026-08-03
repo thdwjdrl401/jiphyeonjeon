@@ -22,6 +22,8 @@ Spring 전용 `ai-api`의 실행 골격과 RAG application core다.
 caption evidence: Redis caption Stream -> ai-rag-live-v1 -> captions/store.py
 material evidence: BGE runtime -> pgvector ACTIVE chunks
 request: Spring -> api/rag.py -> rag/service.py -> CombinedEvidenceRetriever -> GMS AnswerModel -> SSE
+conversation memory (optional, userId+conversationId 있을 때만, ADR-0010):
+  rag/service.py -> RedisConversationMemoryStore(get/save response_id) -> GMS Responses API 체이닝
 
 [RAG v2 - replay]
 caption evidence: Spring이 요청 body에 실어 보낸 세션-ms 확정 자막 (재조회 없음)

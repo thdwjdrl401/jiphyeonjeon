@@ -22,7 +22,14 @@ from app.rag.models import (
     RetrievalResult,
     RetrievalResultV2,
 )
-from app.rag.ports import AnswerModel, AnswerModelV2, EvidenceRetriever, EvidenceRetrieverV2
+from app.rag.ports import (
+    AnswerModel,
+    AnswerModelV2,
+    ConversationMemoryPort,
+    EvidenceRetriever,
+    EvidenceRetrieverV2,
+    ResponseIdCapture,
+)
 from app.rag.registry import (
     DuplicateRequestError,
     InMemoryRequestRegistry,
@@ -56,6 +63,7 @@ __all__ = [
     "CaptionSource",
     "CaptionSourceV2",
     "CombinedEvidenceRetriever",
+    "ConversationMemoryPort",
     "DuplicateRequestError",
     "EvidenceRetriever",
     "EvidenceRetrieverV2",
@@ -72,6 +80,7 @@ __all__ = [
     "ReplayEvidenceRetriever",
     "RequestRegistry",
     "RequestRegistryFullError",
+    "ResponseIdCapture",
     "RetrievedEvidence",
     "RetrievedEvidenceV2",
     "RetrievalResult",

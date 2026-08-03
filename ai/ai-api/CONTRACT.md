@@ -152,11 +152,36 @@ same-process bounded retry, multi-replica session owner는 아직 보장하지 �
   `requestId/sessionId/materialId/sttSessionId`는 provider에 보내지 않는다.
 - system prompt는 question/evidence 안의 지시를 신뢰하지 않고 제공된 강의 근거만 사용하도록 고정한다.
   이전 대화 turn이 이어져도(같은 사용자·같은 세션) 사실 근거는 이번 evidence만 쓰도록 명시한다 —
-  아직 turn을 실제로 이어붙이는 기능(response id 저장·재사용)은 미구현이며 system prompt만 대비해뒀다.
+  turn을 실제로 이어붙이는 기능은 §7-1을 따른다.
 - prompt 문자 수와 output token 수를 설정 상한으로 제한하고 provider delta는 최대 10,000자로 나눈다.
 - GMS timeout·rate limit·연결·인증·설정 실패는 secret과 provider body를 제외한 `MODEL_*` code로 변환한다.
 - FastAPI lifespan은 caption consumer 하나를 시작·drain하고 GMS/BGE client와 DB engine을 닫는다.
 - `/readyz`는 외부 dependency health가 아니라 application lifespan 준비 상태만 나타낸다.
+
+## 7-1. 대화 이어가기 (GMS Responses API, ADR-0010)
+
+v1 `/internal/v1/rag/answers:stream` 요청 body는 `userId`, `conversationId`(둘 다 optional, 미지정
+시 기존과 완전히 동일하게 동작)를 추가로 받는다. **Spring은 아직 이 두 필드를 보내지 않는다** — 이
+절은 ai-api가 두 필드를 받았을 때 무엇을 하는지 설명하며, 언제 Spring이 보내기 시작할지는 별도
+합의 대상이다.
+
+- 두 필드가 모두 있는 요청만 대화 기억이 활성화된다. 하나라도 없으면 §7의 기존 Chat Completions
+  경로를 그대로 타서 동작이 전혀 바뀌지 않는다.
+- 활성화되면 ai-api가 Redis(`AI_API_REDIS_URL`, key prefix `AI_API_CONVERSATION_MEMORY_KEY_PREFIX`
+  기본 `ai:conversation:`)에서 `{userId}:{sessionId}:{conversationId}` 키로 직전 GMS
+  `previous_response_id`를 조회한 뒤, GMS **Responses API**(`POST /responses`, Chat Completions가
+  아님)를 `previous_response_id`와 함께 호출한다. 응답이 끝나면 새 `response_id`를 같은 키로 저장한다
+  (TTL `AI_API_CONVERSATION_MEMORY_TTL_SECONDS` 기본 1,800초, 매 turn 갱신 — TTL 만료가 "대화 종료"
+  판정이다).
+- `userId`/`conversationId`는 **provider(GMS)에 절대 보내지 않는다** — Redis 조회 키로만 쓰고, GMS에는
+  조회로 찾은 `response_id`(provider가 발급한 값)만 전달한다. §7의 "내부 ID를 provider에 보내지
+  않는다" 원칙과 동일하다.
+- Redis 조회·저장 실패는 대화 이어가기만 건너뛰고 답변 스트림 자체는 항상 정상 진행한다(fail-open).
+- 적용 범위는 v1(Live)뿐이다. v2(Replay)는 ADR-0037이 "서버 대화 기억"을 명시적으로 범위 밖에
+  뒀으므로 이 기능이 없다.
+- 실제 GMS Responses API 스트리밍 이벤트 형태(`response.created`/`response.output_text.delta`/
+  `response.completed`)는 2026-08-03 실측 검증됨 — 자세한 내용은
+  [ADR-0010](../../docs/decisions/jinwoo/0010-gms-responses-api-conversation-memory.md) 참고.
 
 ## 8. Replay(v2) 내부 HTTP 경계
 

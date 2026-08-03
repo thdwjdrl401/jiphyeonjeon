@@ -13,6 +13,7 @@ from app.adapters import (
     GmsOpenAILectureNoteModel,
     PgvectorActiveMaterialRepository,
     RedisCaptionConsumer,
+    RedisConversationMemoryStore,
     RedisLectureNoteStore,
     RemoteBgeM3QueryEmbedding,
 )
@@ -57,12 +58,16 @@ class RagServices:
     context: RagContextServices
     answer_model: GmsOpenAIAnswerModel
     registry: InMemoryRequestRegistry
+    conversation_memory: RedisConversationMemoryStore
 
     async def close(self) -> None:
         try:
             await self.answer_model.aclose()
         finally:
-            await self.context.close()
+            try:
+                await self.conversation_memory.aclose()
+            finally:
+                await self.context.close()
 
 
 @dataclass(slots=True)
@@ -335,16 +340,25 @@ def build_rag_services(settings: Settings) -> RagServices:
         max_active=settings.rag_request_max_active,
         max_completed=settings.rag_request_max_completed,
     )
+    conversation_memory = RedisConversationMemoryStore(
+        settings.redis_url,
+        key_prefix=settings.conversation_memory_key_prefix,
+        ttl_seconds=settings.conversation_memory_ttl_seconds,
+        socket_connect_timeout_seconds=settings.redis_connect_timeout_seconds,
+        socket_timeout_seconds=settings.redis_socket_timeout_seconds,
+    )
     service = RagAnswerService(
         context.retriever,
         answer_model,
         registry,
         retrieval_timeout_seconds=settings.rag_retrieval_timeout_seconds,
         model_timeout_seconds=settings.rag_model_timeout_seconds,
+        conversation_memory=conversation_memory,
     )
     return RagServices(
         service=service,
         context=context,
         answer_model=answer_model,
         registry=registry,
+        conversation_memory=conversation_memory,
     )

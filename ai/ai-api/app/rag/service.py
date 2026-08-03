@@ -21,7 +21,7 @@ from app.rag.models import (
     RagAnswerRequest,
     RetrievedEvidence,
 )
-from app.rag.ports import AnswerModel, EvidenceRetriever
+from app.rag.ports import AnswerModel, ConversationMemoryPort, EvidenceRetriever, ResponseIdCapture
 from app.rag.registry import InMemoryRequestRegistry, RequestLease, RequestRegistry
 
 logger = logging.getLogger(__name__)
@@ -54,6 +54,7 @@ class RagAnswerService:
         *,
         retrieval_timeout_seconds: float = 5.0,
         model_timeout_seconds: float = 60.0,
+        conversation_memory: ConversationMemoryPort | None = None,
     ) -> None:
         if retrieval_timeout_seconds <= 0 or model_timeout_seconds <= 0:
             raise ValueError("RAG timeouts must be positive")
@@ -62,6 +63,7 @@ class RagAnswerService:
         self._registry = registry or InMemoryRequestRegistry()
         self._retrieval_timeout_seconds = retrieval_timeout_seconds
         self._model_timeout_seconds = model_timeout_seconds
+        self._conversation_memory = conversation_memory
 
     async def open(self, request: RagAnswerRequest) -> AnswerEventStream:
         """Reserve requestId before the HTTP adapter commits SSE headers."""
@@ -88,7 +90,23 @@ class RagAnswerService:
                 return
 
             sources = _unique_sources(result.evidence)
-            deltas = self._model.stream_answer(request, result.evidence)
+
+            capture: ResponseIdCapture | None = None
+            memory_key = _conversation_memory_key(request)
+            if self._conversation_memory is not None and memory_key is not None:
+                capture = ResponseIdCapture()
+                previous_response_id = await self._safe_lookup_previous_response_id(
+                    request, memory_key
+                )
+                deltas = self._model.stream_answer(
+                    request,
+                    result.evidence,
+                    previous_response_id=previous_response_id,
+                    response_id_capture=capture,
+                )
+            else:
+                deltas = self._model.stream_answer(request, result.evidence)
+
             try:
                 try:
                     async with asyncio.timeout(self._model_timeout_seconds):
@@ -102,6 +120,9 @@ class RagAnswerService:
                     raise RagStreamFailure(code="MODEL_TIMEOUT") from error
             finally:
                 await _close_iterator(deltas)
+
+            if capture is not None and memory_key is not None and capture.value is not None:
+                await self._safe_save_response_id(request, memory_key, capture.value)
 
             yield AnswerDone(data=AnswerDoneData(requestId=request.requestId, sources=sources))
         except asyncio.CancelledError:
@@ -141,6 +162,59 @@ class RagAnswerService:
                 message=GENERIC_ERROR_MESSAGE,
                 retryable=True,
             )
+
+    async def _safe_lookup_previous_response_id(
+        self,
+        request: RagAnswerRequest,
+        memory_key: tuple[str, str, str],
+    ) -> str | None:
+        """Conversation memory is best-effort (ADR-0010): a lookup failure must not block the
+        answer, it just means this turn is treated as the start of a new conversation."""
+        user_id, session_id, conversation_id = memory_key
+        try:
+            return await self._conversation_memory.get_previous_response_id(
+                user_id=user_id, session_id=session_id, conversation_id=conversation_id
+            )
+        except Exception as error:
+            logger.warning(
+                "conversation memory lookup failed; continuing without previous turn",
+                extra={
+                    "event": "rag.conversation_memory_lookup_failed",
+                    "request_id": request.requestId,
+                    "error_code": type(error).__name__,
+                },
+            )
+            return None
+
+    async def _safe_save_response_id(
+        self,
+        request: RagAnswerRequest,
+        memory_key: tuple[str, str, str],
+        response_id: str,
+    ) -> None:
+        user_id, session_id, conversation_id = memory_key
+        try:
+            await self._conversation_memory.save_response_id(
+                user_id=user_id,
+                session_id=session_id,
+                conversation_id=conversation_id,
+                response_id=response_id,
+            )
+        except Exception as error:
+            logger.warning(
+                "conversation memory save failed; next turn will not be linked",
+                extra={
+                    "event": "rag.conversation_memory_save_failed",
+                    "request_id": request.requestId,
+                    "error_code": type(error).__name__,
+                },
+            )
+
+
+def _conversation_memory_key(request: RagAnswerRequest) -> tuple[str, str, str] | None:
+    if request.userId is None or request.conversationId is None:
+        return None
+    return (request.userId, request.sessionId, request.conversationId)
 
 
 class AnswerEventStream(AsyncIterator[AnswerEvent]):

@@ -89,6 +89,11 @@ class Settings(BaseSettings):
     caption_evidence_max_items: int = Field(default=32, ge=1, le=1_000)
     caption_evidence_max_chars: int = Field(default=20_000, ge=1, le=50_000)
 
+    conversation_memory_ttl_seconds: int = Field(default=1_800, ge=60, le=86_400)
+    conversation_memory_key_prefix: str = Field(
+        default="ai:conversation:", min_length=1, max_length=128
+    )
+
     @field_validator("ai_internal_secret", mode="before")
     @classmethod
     def validate_ai_internal_secret(cls, value: object) -> object:

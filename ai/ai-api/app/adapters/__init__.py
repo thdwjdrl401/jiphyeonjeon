@@ -10,6 +10,7 @@ from app.adapters.redis_caption_consumer import (
     CaptionConsumerState,
     RedisCaptionConsumer,
 )
+from app.adapters.redis_conversation_memory import RedisConversationMemoryStore
 from app.adapters.redis_lecture_note_publisher import RedisLectureNoteStore
 
 __all__ = [
@@ -23,5 +24,6 @@ __all__ = [
     "PgvectorActiveMaterialRepository",
     "RemoteBgeM3QueryEmbedding",
     "RedisCaptionConsumer",
+    "RedisConversationMemoryStore",
     "RedisLectureNoteStore",
 ]
