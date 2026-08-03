@@ -30,10 +30,11 @@ type CurriculumApiDetailResponse = Omit<
   viewerContext?: CurriculumDetailResponse['viewerContext']
 }
 
-function normalizeLesson(lesson: CurriculumApiOutlineLesson): CurriculumOutlineLesson {
+function normalizeLesson(lesson: CurriculumApiOutlineLesson, index: number): CurriculumOutlineLesson {
   const liveSessionStatus = lesson.liveSession?.liveSessionStatus ?? lesson.liveSession?.status
   return {
     ...lesson,
+    order: index + 1,
     scheduledAt: lesson.scheduledAt ?? null,
     durationMs: lesson.durationMs ?? null,
     liveSession: lesson.liveSession && liveSessionStatus
@@ -61,8 +62,14 @@ export const httpCurriculumDetailService = {
         closesAt: null,
       },
       materials: data.materials ?? [],
-      outline: data.outline.map((section) => ({
+      // 서버의 order는 저장용 orderIndex(0부터)다 — 화면 번호는 1부터라 경계에서 한 번만 맞춘다.
+      // 관리 화면(httpCurriculumManagementService)·mock·강의 네비도 이미 1-based라 여기만 어긋나 있었다.
+      // orderIndex 값에 +1 하지 않고 배열 위치로 다시 매기는 이유: 서버가 섹션·레슨을 orderIndex
+      // 오름차순으로 주므로(findByCurriculumIdOrderByOrderIndexAsc·findBySectionIdInOrderByOrderIndexAsc)
+      // 위치만으로 순서가 정확하고, 삭제로 orderIndex에 구멍이 나도 번호가 건너뛰지 않는다.
+      outline: data.outline.map((section, sectionIndex) => ({
         ...section,
+        order: sectionIndex + 1,
         lessons: section.lessons.map(normalizeLesson),
       })),
       viewerContext: data.viewerContext ?? createFallbackViewerContext(viewer),
