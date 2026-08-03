@@ -32,6 +32,7 @@ from stt_lab.replay import (
     run_engine_replay,
 )
 from stt_lab.replay_backends import ReplayBackendSlot, build_backend_slot
+from stt_lab.reporting import write_replay_artifacts
 
 _SAFE_CANDIDATE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 SlotBuilder = Callable[[str, str, str, str, str], ReplayBackendSlot]
@@ -91,11 +92,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         json.dumps(report, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+    artifact_dir = args.artifact_dir or args.output.parent / f"{args.output.stem}-artifacts"
+    write_replay_artifacts(report, artifact_dir)
     print(
         json.dumps(
             {
                 "mode": args.mode,
                 "workers": args.workers,
+                "artifactDir": str(artifact_dir.resolve()),
                 "candidates": {
                     candidate["name"]: candidate["summary"] for candidate in report["candidates"]
                 },
@@ -478,6 +482,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--allow-test", action="store_true")
     parser.add_argument("--limit", type=_positive_int)
     parser.add_argument("--output", type=Path, default=Path("results/replay-latest.json"))
+    parser.add_argument("--artifact-dir", type=Path)
     return parser
 
 

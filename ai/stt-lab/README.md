@@ -125,6 +125,11 @@ plan과 hash, authoritative final 기반 CER, segment별 VAD-ready→first/final
 speech-start/end 지연, RTF와 peak CUDA memory가 기록된다. `test` split은 설정을 모두 고정한
 뒤 `--allow-test`를 명시해야만 실행된다.
 
+`--output results/replay-dev-c1.json`을 지정하면 monolithic 정본과 함께 기본적으로
+`results/replay-dev-c1-artifacts/`에 `run.json`, `segment-plan.jsonl`, `samples.jsonl`,
+`summary.json`, `comparison.csv`, `report.md`를 생성한다. 경로를 고정하려면
+`--artifact-dir`을 사용한다. 기존 artifact 디렉터리는 덮어쓰지 않는다.
+
 
 ## 학습 사전검증
 
