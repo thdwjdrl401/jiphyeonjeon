@@ -171,8 +171,22 @@ export default function LiveClassroomPage() {
   // AI 질의응답은 뮤테이션이 아니라 SSE 스트림이다(ADR-0047) — 응답 하나가 아니라 델타가 여러 번 온다.
   // 세션 스코프라 lessonId가 아니라 sessionId를 넘긴다(서버가 lessonId를 세션에서 조회해 채운다).
   const askAi = useCallback<AskAiAnswer>(
-    (question, options) => askLiveAi(sessionId, question, options),
-    [sessionId],
+    async (question, options) => {
+      try {
+        await askLiveAi(sessionId, question, options)
+      } finally {
+        /*
+         * 답변이 끝나면 <b>서버 기록을 다시 읽는다.</b> 서버는 스트리밍하는 동안 답변을 남기는데
+         * (ADR-0062), 화면의 기록 조회는 그대로라 방금 받은 답변만 이 컴포넌트 안에 있었다.
+         * 그러면 다른 경로로 대화가 복원될 때(강사의 분리 패널 등) 방금 것이 빠진 채로 보인다.
+         *
+         * 실패해도 읽는다 — 받은 데까지 남는 것이 계약이다. 이미 화면에 있는 대화를 덮지는
+         * 않는다(`restore`는 대화가 비어 있을 때만 적용된다).
+         */
+        void queryClient.invalidateQueries({ queryKey: ['ai-answers', sessionId] })
+      }
+    },
+    [queryClient, sessionId],
   )
   /*
    * 찍은 북마크를 다시 보여주기 위한 조회. 저장만 하고 돌아올 길이 없으면 그 버튼은 아무것도 하지
