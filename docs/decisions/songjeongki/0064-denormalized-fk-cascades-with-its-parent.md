@@ -3,7 +3,7 @@
 > 관련 결정: [ADR-0033 학습 진도 배선](0033-learning-progress-wiring.md) ·
 > [공유 계약](../../CONTRACT.md)
 
-- **상태**: 채택 — 구현됨(`V21__denormalized_fk_on_delete_cascade.sql`)
+- **상태**: 채택 — 구현됨(`V22__denormalized_fk_on_delete_cascade.sql`)
 - **일자**: 2026-08-03
 - **적용 범위**: `core.chat_message.lesson_id`, `core.live_session.curriculum_id`,
   `core.video_asset.lesson_id`, `InstructorCurriculumService#delete`
@@ -80,7 +80,7 @@ ALTER TABLE core.live_session  ... FOREIGN KEY (curriculum_id) ... ON DELETE CAS
 ## 결과
 
 - 라이브를 한 강의가 지워진다. 커리큘럼 삭제도 라이브 세션·녹화가 있어도 지워지고, 파일까지 정리된다.
-- 계약 테스트가 **채팅이 있는 상태**를 재현한다. V21을 빼면 두 테스트가 정확히 그 두 제약으로 실패한다 —
+- 계약 테스트가 **채팅이 있는 상태**를 재현한다. V22를 빼면 두 테스트가 정확히 그 두 제약으로 실패한다 —
   회귀를 잡는다는 뜻이다.
 - 채팅은 강의와 함께 사라진다. 강의를 지우면 그 대화도 지운다는 뜻이고, 삭제 확인 문구가 이미
   "라이브 일정·자료·채팅이 함께 사라집니다"로 그렇게 안내하고 있다.
