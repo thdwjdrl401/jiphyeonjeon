@@ -17,6 +17,7 @@ import com.liveclass.enrollment.api.EnrollmentNotFoundException;
 import com.liveclass.enrollment.api.EnrollmentStateConflictException;
 import com.liveclass.lesson.api.MaterialAlreadyAttachedException;
 import com.liveclass.lesson.api.MaterialAssetInvalidException;
+import com.liveclass.video.api.RecordedVideoConflictException;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -30,6 +31,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @Order(Ordered.LOWEST_PRECEDENCE - 100)
 @RestControllerAdvice(assignableTypes = {
         InstructorCurriculumController.class, InstructorLessonController.class,
+        InstructorRecordedLessonController.class,
         InstructorLiveSessionController.class, CatalogController.class,
         StudentEnrollmentController.class, InstructorEnrollmentController.class,
         StudentLessonController.class})
@@ -127,6 +129,13 @@ public class CurriculumExceptionHandler {
     public ResponseEntity<ErrorResponse> handleStateConflict(CurriculumStateConflictException e) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ErrorResponse.of("CURRICULUM_STATE_CONFLICT", e.getMessage()));
+    }
+
+    /** 변환 중인 녹화강의 삭제처럼 video 모듈이 판정한 안정 충돌 코드를 그대로 전달한다. */
+    @ExceptionHandler(RecordedVideoConflictException.class)
+    public ResponseEntity<ErrorResponse> handleRecordedVideoConflict(RecordedVideoConflictException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ErrorResponse.of(e.code(), e.getMessage()));
     }
 
     /**

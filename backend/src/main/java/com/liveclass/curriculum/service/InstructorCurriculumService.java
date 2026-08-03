@@ -6,6 +6,12 @@ import com.liveclass.asset.api.AssetDirectory;
 import com.liveclass.asset.api.AssetRef;
 import com.liveclass.curriculum.domain.Curriculum;
 import com.liveclass.video.api.LessonRecordingCleanup;
+import com.liveclass.video.api.RecordedLessonView;
+import com.liveclass.video.api.RecordedProcessingView;
+import com.liveclass.video.api.RecordedUploadTicket;
+import com.liveclass.video.api.RecordedVideoConflictException;
+import com.liveclass.video.api.RecordedVideoManagement;
+import com.liveclass.video.api.RecordedVideoNotFoundException;
 import com.liveclass.curriculum.domain.CurriculumLifecycleStatus;
 import com.liveclass.curriculum.domain.EnrollmentType;
 import com.liveclass.curriculum.domain.Section;
@@ -40,6 +46,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -66,6 +73,7 @@ public class InstructorCurriculumService {
     /** 강의 삭제 시 녹화(자산 행 + 산출물)를 함께 정리하는 video 모듈 포트. */
     private final LessonRecordingCleanup lessonRecordingCleanup;
     private final ApplicationEventPublisher eventPublisher;
+    private final RecordedVideoManagement recordedVideoManagement;
     private final boolean embeddingEnabled;
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
 
@@ -81,6 +89,7 @@ public class InstructorCurriculumService {
                                        OutboxPublisher outboxPublisher,
                                        LessonRecordingCleanup lessonRecordingCleanup,
                                        ApplicationEventPublisher eventPublisher,
+                                       RecordedVideoManagement recordedVideoManagement,
                                        @Value("${material.embedding.enabled:false}") boolean embeddingEnabled) {
         this.curriculumRepository = curriculumRepository;
         this.sectionRepository = sectionRepository;
@@ -94,6 +103,7 @@ public class InstructorCurriculumService {
         this.outboxPublisher = outboxPublisher;
         this.lessonRecordingCleanup = lessonRecordingCleanup;
         this.eventPublisher = eventPublisher;
+        this.recordedVideoManagement = recordedVideoManagement;
         this.embeddingEnabled = embeddingEnabled;
     }
 
@@ -437,6 +447,64 @@ public class InstructorCurriculumService {
         return lesson;
     }
 
+    /** 녹화강의 레슨과 recorded_video를 같은 트랜잭션에서 만든다. */
+    @Transactional
+    public RecordedLessonView createRecordedLesson(UUID instructorId, UUID sectionId, UUID clientRequestId,
+                                                   String title, String description) {
+        Section section = requireOwnedSection(instructorId, sectionId);
+        Optional<RecordedLessonView> existing = recordedVideoManagement.findByClientRequestId(clientRequestId);
+        if (existing.isPresent()) {
+            LessonView lesson = lessonManagement.findById(existing.get().lessonId())
+                    .orElseThrow(() -> new RecordedVideoNotFoundException("멱등키에 연결된 강의를 찾을 수 없습니다."));
+            if (!sectionId.equals(lesson.sectionId()) || !title.equals(lesson.title())) {
+                throw new RecordedVideoConflictException(
+                        "RECORDED_LESSON_IDEMPOTENCY_CONFLICT", "같은 clientRequestId가 다른 강의 생성에 사용됐습니다.");
+            }
+            return existing.get();
+        }
+
+        LessonView lesson = lessonManagement.createRecorded(sectionId, title, description);
+        RecordedLessonView recorded = recordedVideoManagement.register(lesson.lessonId(), clientRequestId);
+        curriculumRepository.bumpStructureVersion(section.getCurriculumId());
+        log.info(Audit.MARKER, "녹화강의 생성 sectionId={} lessonId={} recordedVideoId={}",
+                sectionId, lesson.lessonId(), recorded.recordedVideoId());
+        return recorded;
+    }
+
+    @Transactional
+    public RecordedUploadTicket issueRecordedVideoUpload(UUID instructorId, UUID lessonId,
+                                                         String fileName, String contentType, long fileSize) {
+        requireOwnedRecordedLesson(instructorId, lessonId);
+        return recordedVideoManagement.issueUpload(
+                lessonId, instructorId, fileName, contentType, fileSize);
+    }
+
+    @Transactional
+    public RecordedProcessingView completeRecordedVideoUpload(UUID instructorId, UUID lessonId, UUID assetId) {
+        requireOwnedRecordedLesson(instructorId, lessonId);
+        return recordedVideoManagement.completeUpload(lessonId, assetId, instructorId);
+    }
+
+    @Transactional(readOnly = true)
+    public RecordedProcessingView getRecordedVideoProcessing(UUID instructorId, UUID lessonId) {
+        requireOwnedRecordedLesson(instructorId, lessonId);
+        return recordedVideoManagement.processing(lessonId);
+    }
+
+    @Transactional
+    public RecordedProcessingView retryRecordedVideoProcessing(UUID instructorId, UUID lessonId) {
+        requireOwnedRecordedLesson(instructorId, lessonId);
+        return recordedVideoManagement.retry(lessonId);
+    }
+
+    private LessonView requireOwnedRecordedLesson(UUID instructorId, UUID lessonId) {
+        LessonView lesson = requireOwnedLesson(instructorId, lessonId);
+        if (!"RECORDED".equals(lesson.deliveryType())) {
+            throw new RecordedVideoNotFoundException("녹화강의가 아닙니다.");
+        }
+        return lesson;
+    }
+
     @Transactional(readOnly = true)
     public List<LessonView> listLessons(UUID instructorId, UUID sectionId) {
         requireOwnedSection(instructorId, sectionId);
@@ -742,6 +810,9 @@ public class InstructorCurriculumService {
     @Transactional
     public LiveSessionView createLiveSession(UUID instructorId, UUID lessonId, java.time.OffsetDateTime scheduledAt) {
         LessonView lesson = requireOwnedLesson(instructorId, lessonId);
+        if (!"LIVE".equals(lesson.deliveryType())) {
+            throw new CurriculumStateConflictException("녹화강의에는 라이브 세션을 만들 수 없습니다.");
+        }
         // 세션에 소속 커리큘럼을 실어 접근 게이팅에 쓴다(session→enrollment 사이클 회피).
         UUID curriculumId = requireOwnedSection(instructorId, lesson.sectionId()).getCurriculumId();
         // 레슨당 세션 1개(DDL UNIQUE). 이미 있으면 상태 충돌로 막는다.
