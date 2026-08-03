@@ -23,6 +23,8 @@ import type {
   LectureNoteView,
   LectureNoteTopic,
   AiAnswerHistoryItem,
+  WatchHeatmap,
+  GlossaryTerm,
 } from './liveSessionService.interface'
 
 interface ApiLiveSessionView {
@@ -851,6 +853,24 @@ export const httpLiveSessionService = {
   async getAiAnswerHistory(sessionId) {
     const { data } = await apiClient.get<AiAnswerHistoryItem[]>(
       `/live-sessions/${sessionId}/ai/answers`)
+    return data
+  },
+  async getGlossary(lessonId) {
+    const { data } = await apiClient.get<GlossaryTerm[]>(`/lessons/${lessonId}/glossary`)
+    return data ?? []
+  },
+  async getMyWatchBuckets(lessonId) {
+    const { data } = await apiClient.get<Record<number, number>>(
+      `/lessons/${lessonId}/watch-buckets/me`)
+    return data ?? {}
+  },
+  async reportWatchBuckets(lessonId, counts) {
+    // 누적 절대값이라 재전송이 횟수를 부풀리지 않는다(ADR-0063).
+    await apiClient.put(`/lessons/${lessonId}/watch-buckets`, { bucketSizeMs: 10000, counts })
+  },
+  async getWatchHeatmap(lessonId, durationMs) {
+    const query = durationMs && durationMs > 0 ? `?durationMs=${Math.round(durationMs)}` : ''
+    const { data } = await apiClient.get<WatchHeatmap>(`/lessons/${lessonId}/watch-heatmap${query}`)
     return data
   },
   async getLectureNotes(sessionId) {

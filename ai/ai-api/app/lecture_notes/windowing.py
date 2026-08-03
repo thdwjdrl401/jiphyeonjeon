@@ -32,6 +32,8 @@ class WindowMetrics:
     event_dedupe_evicted_total: int = 0
     retired_attempt_evicted_total: int = 0
     session_evicted_total: int = 0
+    session_released_total: int = 0
+    completed_tombstone_evicted_total: int = 0
 
 
 @dataclass(slots=True)
@@ -107,6 +109,7 @@ class LectureNoteWindowAccumulator:
         self._max_event_ids = max_event_ids
         self._max_retired_attempts = max_retired_attempts_per_session
         self._sessions: OrderedDict[str, _SessionBuffer] = OrderedDict()
+        self._completed_sessions: OrderedDict[str, None] = OrderedDict()
         self._seen_event_ids: OrderedDict[str, str] = OrderedDict()
         self._metrics = WindowMetrics()
 
@@ -116,6 +119,14 @@ class LectureNoteWindowAccumulator:
             self._metrics.duplicate_event_total += 1
             return WindowIngestResult()
         self._remember_event(entry.eventId, entry.sessionId)
+
+        if entry.sessionId in self._completed_sessions:
+            self._completed_sessions.move_to_end(entry.sessionId)
+            if isinstance(entry, CaptionCompleted):
+                self._metrics.duplicate_completion_total += 1
+            else:
+                self._metrics.after_completion_total += 1
+            return WindowIngestResult()
 
         session = self._sessions.get(entry.sessionId)
         if session is None:
@@ -179,10 +190,32 @@ class LectureNoteWindowAccumulator:
         }
         snapshot.update(
             tracked_sessions=len(self._sessions),
+            completed_session_tombstones=len(self._completed_sessions),
             tracked_event_ids=len(self._seen_event_ids),
             active_sessions=sum(not session.completed for session in self._sessions.values()),
         )
         return snapshot
+
+    def is_completed(self, session_id: str) -> bool:
+        session = self._sessions.get(session_id)
+        return bool(
+            (session is not None and session.completed)
+            or session_id in self._completed_sessions
+        )
+
+    def remove_session(self, session_id: str) -> None:
+        """전체 완료 상태를 해제하고 bounded tombstone만 유지한다."""
+
+        session = self._sessions.get(session_id)
+        if session is not None and not session.completed:
+            raise ValueError("active lecture note session cannot be removed")
+        self._sessions.pop(session_id, None)
+        self._completed_sessions[session_id] = None
+        self._completed_sessions.move_to_end(session_id)
+        self._metrics.session_released_total += 1
+        while len(self._completed_sessions) > self._max_sessions:
+            self._completed_sessions.popitem(last=False)
+            self._metrics.completed_tombstone_evicted_total += 1
 
     def export_session(self, session_id: str) -> WindowAccumulatorCheckpoint | None:
         """재시작에 필요한 한 세션의 자막 누적 상태만 복사한다."""
@@ -213,6 +246,7 @@ class LectureNoteWindowAccumulator:
 
     def restore_session(self, checkpoint: WindowAccumulatorCheckpoint) -> None:
         """검증된 checkpoint로 한 세션을 덮어써 replay 중복 경계를 복원한다."""
+        self._completed_sessions.pop(checkpoint.sessionId, None)
         attempt = checkpoint.current
         self._sessions[checkpoint.sessionId] = _SessionBuffer(
             lesson_id=checkpoint.lessonId,

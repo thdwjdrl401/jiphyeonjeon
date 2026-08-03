@@ -39,13 +39,15 @@ class FakeProcessor:
         self.num_mel_frames_per_audio_chunk = 2
         self.tokenizer = object()
         self.calls = 0
+        self.audio_lengths: list[int] = []
         self.lookahead_tokens: int | None = None
 
     def set_num_lookahead_tokens(self, value: int) -> None:
         self.lookahead_tokens = value
 
-    def __call__(self, _audio: np.ndarray, **kwargs: object) -> FakeBatch:
+    def __call__(self, audio: np.ndarray, **kwargs: object) -> FakeBatch:
         self.calls += 1
+        self.audio_lengths.append(audio.shape[0])
         assert kwargs["sampling_rate"] == 16_000
         assert kwargs["language"] == "ko-KR"
         return FakeBatch(np.zeros((1, 4, 3), dtype=np.float32))
@@ -168,6 +170,40 @@ def test_transformers_adapter_overrides_batch_input_features_once(
 
     assert result == ["강의 시작"]
     assert processor.calls == 2
+    assert model.generate_calls == 1
+
+
+def test_short_audio_is_padded_to_the_required_first_chunk(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class ShortAudioModel(FakeModel):
+        def generate(self, **kwargs: object) -> None:
+            self.generate_calls += 1
+            feature_chunks = list(kwargs["input_features"])  # type: ignore[arg-type]
+            assert len(feature_chunks) == 1
+            streamer = kwargs["streamer"]
+            assert isinstance(streamer, FakeStreamer)
+            streamer.on_finalized_text("짧은 발화", stream_end=True)
+
+    monkeypatch.setitem(
+        sys.modules,
+        "transformers",
+        SimpleNamespace(
+            StoppingCriteriaList=FakeStoppingCriteriaList,
+            TextIteratorStreamer=FakeStreamer,
+        ),
+    )
+    processor = FakeProcessor()
+    model = ShortAudioModel()
+    adapter = NemotronStreamingASR("model", "ko-KR")
+    adapter._processor = processor
+    adapter._model = model
+
+    result = list(adapter.transcribe_stream(np.zeros(100, dtype=np.int16), 16_000))
+
+    assert result == ["짧은 발화"]
+    assert processor.calls == 1
+    assert processor.audio_lengths == [processor.num_samples_first_audio_chunk]
     assert model.generate_calls == 1
 
 

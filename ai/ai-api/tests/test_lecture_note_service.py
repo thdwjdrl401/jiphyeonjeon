@@ -17,6 +17,7 @@ from app.lecture_notes import (
 from app.lecture_notes.recovery import LectureNoteSessionCheckpoint
 
 SESSION_ID = "11111111-1111-4111-8111-111111111111"
+OTHER_SESSION_ID = "33333333-3333-4333-8333-333333333333"
 LESSON_ID = "22222222-2222-4222-8222-222222222222"
 OCCURRED_AT = datetime(2026, 7, 29, 12, 0, tzinfo=UTC)
 
@@ -121,12 +122,18 @@ def _copy_checkpoint(checkpoint) -> LectureNoteSessionCheckpoint:
     return LectureNoteSessionCheckpoint.model_validate_json(checkpoint.model_dump_json())
 
 
-def _delta(sequence: int, text: str, *, elapsed_ms: int | None = None) -> CaptionDelta:
+def _delta(
+    sequence: int,
+    text: str,
+    *,
+    elapsed_ms: int | None = None,
+    session_id: str = SESSION_ID,
+) -> CaptionDelta:
     return CaptionDelta(
         contractVersion="1",
         type="caption.delta",
-        eventId=f"delta-{sequence}",
-        sessionId=SESSION_ID,
+        eventId=f"delta-{session_id}-{sequence}",
+        sessionId=session_id,
         lessonId=LESSON_ID,
         sttSessionId="attempt-1",
         sequence=str(sequence),
@@ -136,12 +143,16 @@ def _delta(sequence: int, text: str, *, elapsed_ms: int | None = None) -> Captio
     )
 
 
-def _completion(last_sequence: int) -> CaptionCompleted:
+def _completion(
+    last_sequence: int,
+    *,
+    session_id: str = SESSION_ID,
+) -> CaptionCompleted:
     return CaptionCompleted(
         contractVersion="1",
         type="caption.stream.completed",
-        eventId="completed-1",
-        sessionId=SESSION_ID,
+        eventId=f"completed-{session_id}",
+        sessionId=session_id,
         lessonId=LESSON_ID,
         sttSessionId="attempt-1",
         lastSequence=str(last_sequence),
@@ -319,11 +330,46 @@ def test_completion_is_deactivated_only_after_note_commit_and_caption_ack() -> N
         assert isinstance(store.events[1], LectureNoteCaptureCompleted)
         assert store.events[1].lastChunkSequence == "1"
         assert store.deactivated == [SESSION_ID]
+        assert service.metrics_snapshot()["tracked_sessions"] == 0
 
+        await pipeline.ingest(_delta(2, " 종료 뒤 늦은 자막"))
         await pipeline.ingest(completion)
         await pipeline.after_ack(completion)
         await service.drain()
         assert len(store.events) == 2
+        assert model.requests[-1].text == "마지막 내용"
+        assert service.metrics_snapshot()["tracked_sessions"] == 0
+
+    asyncio.run(scenario())
+
+
+def test_completion_releases_only_the_target_session() -> None:
+    async def scenario() -> None:
+        model = ImmediateModel()
+        store = InMemoryStore()
+        service, pipeline = _components(model, store)
+        first_completion = _completion(1)
+        other_completion = _completion(1, session_id=OTHER_SESSION_ID)
+
+        await pipeline.ingest(_delta(1, "첫 세션", session_id=SESSION_ID))
+        await pipeline.ingest(_delta(1, "둘째 세션", session_id=OTHER_SESSION_ID))
+        await service.drain()
+        assert service.metrics_snapshot()["tracked_sessions"] == 2
+
+        await pipeline.ingest(first_completion)
+        await pipeline.after_ack(first_completion)
+        await service.drain()
+
+        assert service.metrics_snapshot()["tracked_sessions"] == 1
+        assert store.deactivated == [SESSION_ID]
+        assert OTHER_SESSION_ID in store.checkpoints
+
+        await pipeline.ingest(other_completion)
+        await pipeline.after_ack(other_completion)
+        await service.drain()
+
+        assert service.metrics_snapshot()["tracked_sessions"] == 0
+        assert store.deactivated == [SESSION_ID, OTHER_SESSION_ID]
 
     asyncio.run(scenario())
 
@@ -364,6 +410,7 @@ def test_completion_publishes_refined_snapshot_after_live_events() -> None:
         await pipeline.after_ack(completion)
 
         assert store.deactivated == [SESSION_ID]
+        assert service.metrics_snapshot()["tracked_sessions"] == 0
 
     asyncio.run(scenario())
 

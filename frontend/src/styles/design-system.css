@@ -153,8 +153,7 @@ body {
 .header-navigation { gap: 30px; }
 .primary-navigation { gap: 0; }
 
-.primary-navigation a,
-.header-my-menu__trigger {
+.primary-navigation a {
   border-radius: 0;
   padding: 12px 15px;
   color: var(--ink-600);
@@ -162,9 +161,7 @@ body {
 }
 
 .primary-navigation a:hover,
-.primary-navigation a.is-active,
-.header-my-menu__trigger:hover,
-.header-my-menu.is-open .header-my-menu__trigger {
+.primary-navigation a.is-active {
   background: transparent;
   color: var(--ink-950);
 }
@@ -177,16 +174,9 @@ body {
   background: var(--ink-950);
 }
 
-.header-my-menu__items,
-.profile-summary-popover {
-  border: 1px solid var(--border-medium);
-  border-radius: 8px;
-  background: var(--paper-light);
-  box-shadow: var(--shadow-md);
-}
-
 .user-chip { border-radius: 999px; }
-.user-chip:hover { background: var(--ink-100); }
+.user-chip:hover,
+.user-chip.is-active { background: var(--ink-100); }
 .user-avatar { border-radius: 50%; background: var(--ink-100); color: var(--ink-900); }
 .menu-toggle { border: 1px solid var(--border-medium); border-radius: 50%; background: transparent; }
 
@@ -1197,12 +1187,11 @@ body {
 .workspace-panel__header p { font-size: .8rem; }
 .highlight-panel { border-color: var(--ink-950); background: var(--ink-50); }
 .metric-grid { gap: 0; border-top: 1px solid var(--border-medium); border-left: 1px solid var(--border-medium); }
-/* 통계 행의 칸 사이 선과 배경을 디자인 시스템 색으로 맞춘다(구분선은 1px gap + 배경색으로 낸다). */
-.profile-stats { background: var(--border-medium); }
-.profile-stats > div { background: var(--paper-light); }
-/* 계정 보안 카드 안의 구분선·소제목을 다른 카드와 같은 색·굵기로 맞춘다. */
-.settings-section { border-top-color: var(--border-medium); }
-.settings-section h3 { font-weight: 400; letter-spacing: -.02em; }
+.profile-page__eyebrow { color: var(--ink-600); font-weight: 500; }
+/* 카드 안에서 비밀번호 변경과 회원 탈퇴를 가르는 선을 다른 카드 경계와 같은 색으로 맞춘다. */
+.withdraw-trigger { border-color: var(--border-medium); }
+/* 카드 소제목은 패널 제목과 같은 굵기 규칙을 따른다(이 테마는 굵게 쓰지 않는다). */
+.settings-block > h3, .withdraw-trigger h3 { font-weight: 400; }
 .withdraw-panel__notice { border-radius: 0; background: var(--ink-50); }
 .metric-card { min-height: 140px; border-top: 0; border-left: 0; padding: 24px; }
 .metric-card::before { display: none; }
@@ -1473,7 +1462,6 @@ body {
 @media (max-width: 920px) {
   .header-navigation { background: var(--paper-pure); }
   .primary-navigation a.is-active::after { top: 10px; right: auto; bottom: 10px; left: 0; width: 2px; height: auto; }
-  .profile-summary-popover { background: var(--paper-light); }
   .welcome-discovery { min-height: auto; }
   .welcome-discovery__grid { grid-template-columns: 1fr; gap: 36px; }
   .learning-flow {
@@ -1673,3 +1661,12 @@ body {
 
 /* 노트가 아직 없을 때. 가짜 예시 대신 비어 있다고 정직하게 말한다. */
 .summary-empty { margin: .75rem 0 0; font-size: .82rem; line-height: 1.6; color: rgba(255,255,255,.58); }
+
+/* 많이 다시 본 구간 — 재생바 바로 아래 같은 폭의 띠. 플레이어 레이아웃을 건드리지 않는다. */
+.watch-heatmap { border: 1px solid #333; border-radius: .5rem; background: #171717; padding: .4rem .5rem .3rem; }
+.watch-heatmap__bars { display: flex; align-items: flex-end; gap: 1px; height: 34px; }
+.watch-heatmap__bars span { flex: 1 1 0; min-width: 0; border-radius: 1px 1px 0 0;
+  background: rgba(255,255,255,.28); transition: background .12s; }
+.watch-heatmap__bars span:hover, .watch-heatmap__bars span.is-hovered { background: #fff; }
+.watch-heatmap__caption { margin: .3rem 0 0; font-size: .72rem; color: rgba(255,255,255,.58);
+  font-variant-numeric: tabular-nums; }

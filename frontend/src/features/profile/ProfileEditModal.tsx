@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useEffect, useRef } from 'react'
 import type { AuthUser } from '@/features/auth/types'
-import { getProfileImageValidationError } from './profileService'
-import ProfileAvatar from './ProfileAvatar'
+import BasicProfileFields from './BasicProfileFields'
+import { useBasicProfileDraft } from './useBasicProfileDraft'
 
 interface ProfileEditModalProps {
   user: AuthUser
@@ -9,13 +9,20 @@ interface ProfileEditModalProps {
   onSave: (displayName: string, file: File | null) => Promise<void>
 }
 
+/**
+ * 강사의 닉네임·프로필 이미지 수정 모달.
+ *
+ * <p>강사만 이 모달을 쓴다(ADR-0011) — 강사 화면의 왼쪽 카드는 강사 공개 프로필(소개·전문 분야)이
+ * 차지하고 있어 닉네임·이미지를 놓을 자리가 없다. 학생은 같은 필드를 화면 안 프로필 수정 카드에서
+ * 바로 고친다(`ProfileEditPanel`).
+ *
+ * <p>상태·검증은 `useBasicProfileDraft`가, 필드는 `BasicProfileFields`가 갖는다. 이 파일은 모달
+ * 크롬만 갖는다 — 배경, `role="dialog"`, Esc, 바깥 스크롤 잠금, 저장 중 닫기 차단.
+ */
 export default function ProfileEditModal({ user, onClose, onSave }: ProfileEditModalProps) {
   const closeButtonRef = useRef<HTMLButtonElement>(null)
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [previewUrl, setPreviewUrl] = useState<string | null>(user.profileImageUrl)
-  const [displayName, setDisplayName] = useState(user.displayName)
-  const [error, setError] = useState('')
-  const [isSaving, setIsSaving] = useState(false)
+  const draft = useBasicProfileDraft({ user, onSave, onSaved: onClose })
+  const { isSaving } = draft
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow
@@ -31,47 +38,6 @@ export default function ProfileEditModal({ user, onClose, onSave }: ProfileEditM
       document.removeEventListener('keydown', closeOnEscape)
     }
   }, [isSaving, onClose])
-
-  const selectImage = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-
-    const validationError = getProfileImageValidationError(file)
-    if (validationError) {
-      setSelectedFile(null)
-      setError(validationError)
-      event.target.value = ''
-      return
-    }
-
-    setSelectedFile(file)
-    setError('')
-    const reader = new FileReader()
-    reader.addEventListener('load', () => setPreviewUrl(String(reader.result)))
-    reader.addEventListener('error', () => setError('이미지 미리보기를 만들지 못했습니다.'))
-    reader.readAsDataURL(file)
-  }
-
-  const save = async (event: FormEvent) => {
-    event.preventDefault()
-    const trimmedDisplayName = displayName.trim()
-    if ((!selectedFile && trimmedDisplayName === user.displayName) || isSaving) return
-    if (!trimmedDisplayName || trimmedDisplayName.length > 100) {
-      setError('닉네임은 1자 이상 100자 이하로 입력해 주세요.')
-      return
-    }
-
-    setIsSaving(true)
-    setError('')
-    try {
-      await onSave(trimmedDisplayName, selectedFile)
-      onClose()
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : '프로필 이미지를 변경하지 못했습니다.')
-    } finally {
-      setIsSaving(false)
-    }
-  }
 
   return (
     <div
@@ -105,46 +71,12 @@ export default function ProfileEditModal({ user, onClose, onSave }: ProfileEditM
           </button>
         </header>
 
-        <form className="workspace-form" onSubmit={save}>
-          <div className="profile-image-editor">
-            <ProfileAvatar displayName={user.displayName} imageUrl={previewUrl} className="user-avatar--large" />
-            <div>
-              <strong>프로필 이미지</strong>
-              <p>JPG, PNG, WEBP · 최대 5MB</p>
-              <label className="button button--soft button--small" htmlFor="profile-image-input">이미지 선택</label>
-              <input
-                id="profile-image-input"
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                aria-label="프로필 이미지 선택"
-                disabled={isSaving}
-                onChange={selectImage}
-              />
-              {selectedFile && <small>{selectedFile.name}</small>}
-            </div>
-          </div>
-
-          <label>
-            <span>닉네임</span>
-            <input
-              value={displayName}
-              maxLength={100}
-              aria-describedby="display-name-help"
-              disabled={isSaving}
-              onChange={(event) => setDisplayName(event.target.value)}
-            />
-            <small id="display-name-help">1자 이상 100자 이하로 입력해 주세요.</small>
-          </label>
-
-          {error && <p className="profile-modal__error" role="alert">{error}</p>}
+        <form className="workspace-form" onSubmit={draft.submit}>
+          <BasicProfileFields user={user} draft={draft} idPrefix="profile-modal" />
 
           <div className="form-actions profile-modal__actions">
             <button className="button button--ghost" type="button" disabled={isSaving} onClick={onClose}>취소</button>
-            <button
-              className="button button--primary"
-              type="submit"
-              disabled={(!selectedFile && displayName.trim() === user.displayName) || isSaving}
-            >
+            <button className="button button--primary" type="submit" disabled={!draft.isDirty || isSaving}>
               {isSaving ? '저장 중' : '변경사항 저장'}
             </button>
           </div>

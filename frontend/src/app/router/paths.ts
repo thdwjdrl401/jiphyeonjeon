@@ -59,3 +59,11 @@ export const adminPaths = {
 export function getRoleHomePath(role: UserRole) {
   return role === 'INSTRUCTOR' ? instructorPaths.curriculums : studentPaths.curriculums
 }
+
+/**
+ * 본인 프로필("내 프로필") 경로. 역할마다 트리가 갈려서 경로도 갈리는데, 헤더·사이드바가
+ * 각자 삼항식을 두면 한쪽만 고쳐지는 일이 생긴다 — 판별은 여기 한 곳에서만 한다.
+ */
+export function getProfilePath(role: UserRole) {
+  return role === 'INSTRUCTOR' ? instructorPaths.profile : studentPaths.profile
+}

@@ -74,6 +74,20 @@ describe('통합 프로필 카드', () => {
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
   })
 
+  it('이름 옆에 가입 유형 배지를, 그 아래 줄에 이메일을 둔다', () => {
+    renderCard(instructor)
+
+    const name = screen.getByRole('heading', { name: instructor.displayName })
+    const info = name.closest('.profile-identity__info')!
+    const rowOf = (element: HTMLElement) =>
+      Array.from(info.children).findIndex((child) => child.contains(element))
+
+    // 이름과 배지는 같은 줄(0), 이메일은 그 아래 줄(1).
+    expect(rowOf(name)).toBe(0)
+    expect(rowOf(screen.getByText('강사'))).toBe(0)
+    expect(rowOf(screen.getByText(instructor.email))).toBe(1)
+  })
+
   it('색만으로 학생·강사를 구분하지 않는다', () => {
     const { unmount } = renderCard(student)
     // 배지 안에 글자가 들어 있어야 색을 못 보는 환경에서도 구분된다.

@@ -69,6 +69,12 @@ class Settings(BaseSettings):
         le=500_000,
     )
     lecture_note_refinement_timeout_seconds: float = Field(default=55.0, gt=0, le=120)
+    lecture_note_gms_max_concurrency: int = Field(default=4, ge=1, le=64)
+    lecture_note_gms_refinement_max_concurrency: int = Field(default=1, ge=1, le=64)
+    lecture_note_gms_max_consecutive_live: int = Field(default=8, ge=1, le=1_000)
+    lecture_note_gms_max_attempts: int = Field(default=3, ge=1, le=10)
+    lecture_note_gms_retry_base_seconds: float = Field(default=0.5, gt=0, le=60)
+    lecture_note_gms_retry_max_seconds: float = Field(default=5.0, gt=0, le=300)
     lecture_note_min_window_ms: int = Field(default=15_000, ge=1_000, le=120_000)
     lecture_note_target_window_ms: int = Field(default=25_000, ge=1_000, le=120_000)
     lecture_note_max_window_ms: int = Field(default=40_000, ge=1_000, le=120_000)
@@ -199,6 +205,13 @@ class Settings(BaseSettings):
             raise ValueError("lecture note time bounds must be ordered")
         if self.lecture_note_min_chars > self.lecture_note_max_chars:
             raise ValueError("lecture note character bounds must be ordered")
+        if (
+            self.lecture_note_gms_refinement_max_concurrency
+            > self.lecture_note_gms_max_concurrency
+        ):
+            raise ValueError("lecture note refinement concurrency must not exceed total")
+        if self.lecture_note_gms_retry_base_seconds > self.lecture_note_gms_retry_max_seconds:
+            raise ValueError("lecture note GMS retry delays must be ordered")
         return self
 
 

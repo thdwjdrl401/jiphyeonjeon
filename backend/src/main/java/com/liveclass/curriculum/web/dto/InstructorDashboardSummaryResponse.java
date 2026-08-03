@@ -10,7 +10,7 @@ public record InstructorDashboardSummaryResponse(
         int publishedCurriculumCount,
         int upcomingLiveCount,
         long totalEnrolleeCount,
-        StudentLearningSummaryResponse.TodayLiveSessionResponse todayLiveSession
+        StudentLearningSummaryResponse.UpcomingLiveSessionResponse upcomingLiveSession
 ) {
     public static InstructorDashboardSummaryResponse from(InstructorDashboardSummary s) {
         return new InstructorDashboardSummaryResponse(
@@ -18,7 +18,7 @@ public record InstructorDashboardSummaryResponse(
                 s.publishedCurriculumCount(),
                 s.upcomingLiveCount(),
                 s.totalEnrolleeCount(),
-                s.todayLiveSession() == null ? null
-                        : StudentLearningSummaryResponse.TodayLiveSessionResponse.from(s.todayLiveSession()));
+                s.upcomingLiveSession() == null ? null
+                        : StudentLearningSummaryResponse.UpcomingLiveSessionResponse.from(s.upcomingLiveSession()));
     }
 }

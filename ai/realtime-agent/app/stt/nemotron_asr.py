@@ -98,8 +98,12 @@ class NemotronStreamingASR:
             raise ValueError("Nemotron adapter expects normalized 16 kHz PCM")
 
         audio = pcm_int16.astype(np.float32) / 32768.0
+        first_sample_count = processor.num_samples_first_audio_chunk
+        first_audio = audio[:first_sample_count]
+        if first_audio.shape[0] < first_sample_count:
+            first_audio = np.pad(first_audio, (0, first_sample_count - first_audio.shape[0]))
         first = processor(
-            audio[: processor.num_samples_first_audio_chunk],
+            first_audio,
             sampling_rate=input_sample_rate,
             is_streaming=True,
             is_first_audio_chunk=True,

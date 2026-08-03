@@ -7,8 +7,6 @@ import CurriculumPrimaryAction from './CurriculumPrimaryAction'
 interface CurriculumHeroProps {
   detail: CurriculumDetailResponse
   primaryAction: PrimaryAction
-  onEnroll: () => void
-  isEnrolling: boolean
   onCancel: () => void
   isCancelling: boolean
 }
@@ -19,7 +17,7 @@ const lifecycleLabel: Record<string, string> = {
   CLOSED: '운영 종료',
 }
 
-export default function CurriculumHero({ detail, primaryAction, onEnroll, isEnrolling, onCancel, isCancelling }: CurriculumHeroProps) {
+export default function CurriculumHero({ detail, primaryAction, onCancel, isCancelling }: CurriculumHeroProps) {
   return (
     <section className="curriculum-hero">
       <div className="curriculum-hero__grid">
@@ -33,7 +31,7 @@ export default function CurriculumHero({ detail, primaryAction, onEnroll, isEnro
           sectionCount={detail.outline.length}
           lessonCount={detail.outline.reduce((sum, section) => sum + section.lessons.length, 0)}
         />
-        <CurriculumPrimaryAction action={primaryAction} onEnroll={onEnroll} isEnrolling={isEnrolling} onCancel={onCancel} isCancelling={isCancelling} />
+        <CurriculumPrimaryAction action={primaryAction} onCancel={onCancel} isCancelling={isCancelling} />
       </div>
     </section>
   )

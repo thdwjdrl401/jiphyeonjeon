@@ -70,7 +70,9 @@ export type {
   ChatMessageView,
   AiAnswerHistoryItem,
   LectureNoteTopic,
+  GlossaryTerm,
   LectureNoteView,
+  WatchHeatmap,
   LiveSessionService,
   LiveSessionStateEvent,
   LiveSessionView,
@@ -94,3 +96,11 @@ export const subscribeLectureNotes = (
 ) => liveSessionService.subscribeLectureNotes(sessionId, onNote, onConnectionChange)
 
 export const getAiAnswerHistory = (sessionId: string) => liveSessionService.getAiAnswerHistory(sessionId)
+
+export const getMyWatchBuckets = (lessonId: string) => liveSessionService.getMyWatchBuckets(lessonId)
+export const reportWatchBuckets = (lessonId: string, counts: Record<number, number>) =>
+  liveSessionService.reportWatchBuckets(lessonId, counts)
+export const getWatchHeatmap = (lessonId: string, durationMs: number | null) =>
+  liveSessionService.getWatchHeatmap(lessonId, durationMs)
+
+export const getGlossary = (lessonId: string) => liveSessionService.getGlossary(lessonId)

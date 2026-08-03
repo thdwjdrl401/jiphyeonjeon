@@ -69,6 +69,8 @@ def test_lecture_note_wiring_uses_independent_group_and_stable_identity() -> Non
     assert services.consumer.group_name == "ai-live-notes-mvp-v1"
     assert services.consumer.consumer_name == "ai-api-test-1:live-notes-mvp"
     assert services.consumer.stream_key == "ai:test:captions"
+    assert services.model.metrics_snapshot()["max_concurrency"] == 4
+    assert services.model.metrics_snapshot()["refinement_max_concurrency"] == 1
 
     asyncio.run(services.close())
 

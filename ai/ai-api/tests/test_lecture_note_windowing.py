@@ -279,3 +279,53 @@ def test_completion_without_buffer_emits_no_window() -> None:
     assert _windows(accumulator, _completed(0, 0, event_id="other-completion")) == ()
     assert accumulator.metrics_snapshot()["completed_total"] == 1
     assert accumulator.metrics_snapshot()["duplicate_completion_total"] == 1
+
+
+def test_remove_completed_session_releases_buffer_and_rejects_late_delta() -> None:
+    accumulator = LectureNoteWindowAccumulator(max_sessions=2)
+    _windows(accumulator, _delta(1, 1_000, "완료 전 내용"))
+    _windows(accumulator, _completed(1, 2_000))
+
+    accumulator.remove_session(SESSION_ID)
+    late = _windows(
+        accumulator,
+        _delta(2, 3_000, " 종료 뒤 내용", event_id="late-after-release"),
+    )
+
+    assert late == ()
+    assert accumulator.is_completed(SESSION_ID) is True
+    metrics = accumulator.metrics_snapshot()
+    assert metrics["tracked_sessions"] == 0
+    assert metrics["completed_session_tombstones"] == 1
+    assert metrics["session_released_total"] == 1
+    assert metrics["after_completion_total"] == 1
+
+
+def test_remove_active_session_is_rejected() -> None:
+    accumulator = LectureNoteWindowAccumulator()
+    _windows(accumulator, _delta(1, 1_000, "진행 중"))
+
+    with pytest.raises(ValueError, match="active lecture note session"):
+        accumulator.remove_session(SESSION_ID)
+
+
+def test_completed_session_tombstones_are_bounded() -> None:
+    accumulator = LectureNoteWindowAccumulator(max_sessions=1)
+    _windows(accumulator, _completed(0, 0))
+    accumulator.remove_session(SESSION_ID)
+    _windows(
+        accumulator,
+        _completed(
+            0,
+            0,
+            session_id=OTHER_SESSION_ID,
+            event_id="other-session-completed",
+        ),
+    )
+    accumulator.remove_session(OTHER_SESSION_ID)
+
+    metrics = accumulator.metrics_snapshot()
+    assert metrics["completed_session_tombstones"] == 1
+    assert metrics["completed_tombstone_evicted_total"] == 1
+    assert accumulator.is_completed(SESSION_ID) is False
+    assert accumulator.is_completed(OTHER_SESSION_ID) is True

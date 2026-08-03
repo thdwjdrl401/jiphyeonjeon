@@ -296,6 +296,26 @@ export interface AiAnswerHistoryItem {
   askedAt: string
 }
 
+/** 재생바 아래 그래프(ADR-0063). 절대 횟수가 아니라 도달자 수로 나눈 강도다. */
+export interface WatchHeatmap {
+  /** 저장 칸 길이(ms). 점 하나가 몇 초인지 계산할 때 쓴다. */
+  bucketSizeMs: number
+  /** 0.0 이상. 1.0이면 도달한 사람이 평균 한 번, 2.0이면 두 번 봤다. 최대 100점. */
+  points: number[]
+  /** 가장 많은 사람이 도달한 칸의 인원. */
+  viewers: number
+}
+
+/** 강의 용어집 한 줄. AI가 자료에서 뽑은 것을 강사 수정본이 덮어쓴 결과다. */
+export interface GlossaryTerm {
+  /** 용어 이름 그대로. 자막에서 이 문자열을 찾아 링크를 건다. */
+  termId: string
+  term: string
+  definition: string
+  /** MATERIAL(AI가 자료에서 뽑음) · INSTRUCTOR(강사가 고치거나 더함) */
+  source: 'MATERIAL' | 'INSTRUCTOR'
+}
+
 export interface QuestionHighlight {
   at: string
   count: number
@@ -394,6 +414,11 @@ export interface LiveSessionService {
   askLiveAi: (sessionId: string, question: string, options: AiAnswerStreamOptions) => Promise<void>
   saveBookmark: (lessonId: string, sessionMs: number) => Promise<void>
   getAiAnswerHistory: (sessionId: string) => Promise<AiAnswerHistoryItem[]>
+  /** 내가 이미 쌓은 칸별 재생 횟수. 새로고침 뒤 이어서 세려면 필요하다. */
+  getGlossary: (lessonId: string) => Promise<GlossaryTerm[]>
+  getMyWatchBuckets: (lessonId: string) => Promise<Record<number, number>>
+  reportWatchBuckets: (lessonId: string, counts: Record<number, number>) => Promise<void>
+  getWatchHeatmap: (lessonId: string, durationMs: number | null) => Promise<WatchHeatmap>
   getLectureNotes: (sessionId: string) => Promise<LectureNoteView>
   subscribeLectureNotes: (
     sessionId: string,

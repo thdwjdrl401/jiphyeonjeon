@@ -298,7 +298,22 @@ describe('커리큘럼 작업 화면', () => {
     expect(submit).toBeEnabled()
 
     await user.click(submit)
-    expect(await screen.findByText('강의 정보와 라이브 일정 초안이 저장되었습니다.')).toBeInTheDocument()
+    expect(await screen.findByText('강의 정보와 라이브 일정이 저장되었습니다.')).toBeInTheDocument()
+  })
+
+  it('새 강의 폼의 자료 영역에 PPTX 파일을 드롭해 추가한다', async () => {
+    await renderAsInstructor('/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/new')
+    const dropzoneCopy = await screen.findByText('PPTX 파일을 드래그하거나 클릭해 선택')
+    const dropzone = dropzoneCopy.closest('label')
+    const material = new File(['pptx'], 'security-live.pptx', {
+      type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    })
+
+    expect(dropzone).not.toBeNull()
+    fireEvent.drop(dropzone!, { dataTransfer: { files: [material] } })
+
+    expect(await screen.findByText('security-live.pptx')).toBeInTheDocument()
+    expect(screen.getByText('1개 · 준비 필요')).toBeInTheDocument()
   })
 
   it('강의 수정 폼에서 기존 라이브 일정을 불러와 수정한다', async () => {
@@ -310,7 +325,7 @@ describe('커리큘럼 작업 화면', () => {
     await user.clear(scheduledAt)
     await user.type(scheduledAt, '2026-08-04T20:30')
     await user.click(screen.getByRole('button', { name: '강의 수정 저장' }))
-    expect(await screen.findByText('강의 정보와 라이브 일정 초안이 저장되었습니다.')).toBeInTheDocument()
+    expect(await screen.findByText('강의 정보와 라이브 일정이 저장되었습니다.')).toBeInTheDocument()
   })
 
   it.each([
@@ -331,13 +346,18 @@ describe('커리큘럼 작업 화면', () => {
     const editLink = await screen.findByRole('link', { name: '강의 수정' })
 
     expect(editLink).toHaveClass('button--primary')
-    expect(screen.getByRole('heading', { name: '강의 준비 상태' })).toBeInTheDocument()
-    expect(screen.getByText('자료 작업')).toBeInTheDocument()
-    expect(screen.getByText('완료')).toBeInTheDocument()
+    const lessonInfo = screen.getByRole('heading', { name: '강의 정보' }).closest('section')
+    expect(lessonInfo).not.toBeNull()
+    expect(within(lessonInfo!).getByText('인증 필터와 세션의 흐름을 실제 요청을 따라가며 이해합니다.')).toBeInTheDocument()
+    expect(within(editLink.closest('header')!).queryByText('인증 필터와 세션의 흐름을 실제 요청을 따라가며 이해합니다.')).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '강의 준비 상태' })).not.toBeInTheDocument()
+    const readiness = screen.getByRole('list', { name: '강의 준비 상태' })
+    expect(within(readiness).getByText('자료 작업')).toBeInTheDocument()
+    expect(within(readiness).getByText('완료')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '라이브 일정' })).toBeInTheDocument()
     expect(screen.getByText('오후 7:00')).toBeInTheDocument()
     expect(screen.getByText('오후 6:50부터')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '사전 점검' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: '사전 점검 시작' })).toHaveAttribute(
       'href',
       '/instructor/live-sessions/ses-security-live/preflight',
     )
@@ -487,23 +507,29 @@ describe('커리큘럼 작업 화면', () => {
     expect(screen.queryByRole('link', { name: '운영 커리큘럼' })).not.toBeInTheDocument()
   })
 
-  it('프로필 수정 모달에서 이미지와 닉네임을 함께 변경한다', async () => {
+  /**
+   * 학생은 "프로필 수정" 카드에서 **모달 없이** 이미지와 닉네임을 함께 바꾼다(ADR-0011).
+   * 강사의 모달 흐름은 ProfilePage.test.tsx가 본다 — 여기서는 목 서비스까지 실제로 저장되는지 본다.
+   */
+  it('학생 프로필 수정 카드에서 이미지와 닉네임을 함께 변경한다', async () => {
     const user = userEvent.setup()
     await renderAsStudent('/student/profile')
-    await user.click(await screen.findByRole('button', { name: '프로필 수정' }))
 
-    const dialog = screen.getByRole('dialog', { name: '프로필 수정' })
-    const displayName = within(dialog).getByDisplayValue('김학생')
+    const panel = (await screen.findByRole('heading', { name: '프로필 수정' })).closest('section')!
+    const displayName = within(panel).getByDisplayValue('김학생')
     await user.clear(displayName)
     await user.type(displayName, '김라이브')
 
     const image = new File(['profile-image'], 'profile.png', { type: 'image/png' })
-    await user.upload(within(dialog).getByLabelText('프로필 이미지 선택'), image)
-    await user.click(within(dialog).getByRole('button', { name: '변경사항 저장' }))
+    await user.upload(within(panel).getByLabelText('프로필 이미지 선택'), image)
+    await user.click(within(panel).getByRole('button', { name: '변경사항 저장' }))
 
     expect(await screen.findByText('기본 프로필이 변경되었습니다.')).toBeInTheDocument()
-    expect(screen.queryByRole('dialog', { name: '프로필 수정' })).not.toBeInTheDocument()
-    expect(screen.getByRole('img', { name: '김라이브 프로필 이미지' }).querySelector('img')).not.toBeNull()
+    // 상단 프로필 카드의 아바타가 바뀐 이미지·이름으로 갱신된다.
+    const identityCard = screen.getByRole('region', { name: '김라이브' })
+    expect(within(identityCard).getByRole('img', { name: '김라이브 프로필 이미지' }).querySelector('img')).not.toBeNull()
+    // 저장한 뒤에는 바뀐 것이 없으므로 다시 저장할 수 없다.
+    expect(within(panel).getByRole('button', { name: '변경사항 저장' })).toBeDisabled()
   })
 
   it('목 프로필 서비스로 비밀번호를 변경하고 회원 탈퇴한다', async () => {
@@ -517,8 +543,11 @@ describe('커리큘럼 작업 화면', () => {
     await user.click(screen.getByRole('button', { name: '비밀번호 변경' }))
     expect(await screen.findByText('비밀번호가 변경되었습니다.')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('checkbox', { name: /위 안내 사항을 모두 확인하였으며/ }))
+    // 탈퇴는 카드의 진입 버튼 → 모달(안내·동의) → "탈퇴하기" 순서다(ADR-0011).
     await user.click(screen.getByRole('button', { name: '회원 탈퇴' }))
+    const withdrawDialog = await screen.findByRole('dialog', { name: '회원 탈퇴' })
+    await user.click(within(withdrawDialog).getByRole('checkbox', { name: /위 안내 사항을 모두 확인하였으며/ }))
+    await user.click(within(withdrawDialog).getByRole('button', { name: '탈퇴하기' }))
     await waitFor(() => expect(window.location.pathname).toBe('/login'))
     expect(await screen.findByRole('link', { name: '로그인' })).toBeInTheDocument()
   })

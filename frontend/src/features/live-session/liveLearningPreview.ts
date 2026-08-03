@@ -81,49 +81,11 @@ const summaryBlocks: LiveSummaryBlock[] = [
   },
 ]
 
-const glossaryTerms: GlossaryTermView[] = [
-  {
-    termId: 'term-security-context',
-    term: 'SecurityContext',
-    description: '현재 실행 중인 요청에서 인증된 사용자와 권한 정보인 Authentication을 보관하는 컨테이너입니다.',
-    source: 'INSTRUCTOR',
-    sourceLabel: '강사 등록',
-    aliases: ['보안 컨텍스트'],
-    occurrenceCount: 8,
-  },
-  {
-    termId: 'term-security-filter-chain',
-    term: 'SecurityFilterChain',
-    description: 'HTTP 요청에 적용되는 Spring Security 필터의 순서와 적용 조건을 정의합니다.',
-    source: 'MATERIAL',
-    sourceLabel: '강의 자료에서 추출',
-    aliases: ['보안 필터 체인'],
-    occurrenceCount: 6,
-  },
-  {
-    termId: 'term-redis',
-    term: 'Redis',
-    description: '세션과 캐시처럼 빠르게 접근해야 하는 데이터를 메모리 중심으로 저장하는 데이터 저장소입니다.',
-    source: 'INSTRUCTOR',
-    sourceLabel: '강사 등록',
-    aliases: ['Redis Session'],
-    occurrenceCount: 11,
-  },
-  {
-    termId: 'term-csrf',
-    term: 'CSRF',
-    description: '로그인된 사용자의 권한을 악용해 의도하지 않은 상태 변경 요청을 보내는 공격과 그 방어 기법입니다.',
-    source: 'MATERIAL',
-    sourceLabel: '강의 자료에서 추출',
-    aliases: ['Cross-Site Request Forgery'],
-    occurrenceCount: 5,
-  },
-]
 
 /**
  * API·WS 계약 확정 전 라이브 학습 UI를 검증하기 위한 preview 데이터 경계다.
  * 실제 연결 단계에서는 이 함수 호출만 Query/실시간 store 입력으로 교체한다.
  */
 export function getLiveLearningPreview() {
-  return { summaryBlocks, glossaryTerms }
+  return { summaryBlocks }
 }

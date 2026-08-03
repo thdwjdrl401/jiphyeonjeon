@@ -65,7 +65,7 @@ describe('LiveClass AI 공개 페이지', () => {
     expect(screen.getByText('비밀번호를 입력해 주세요.')).toBeInTheDocument()
   })
 
-  it('로그인 후 커리큘럼 탐색으로 이동하고 프로필 기본 정보를 팝오버로 표시한다', async () => {
+  it('로그인 후 커리큘럼 탐색으로 이동하고 헤더에 학생 메뉴와 프로필 링크를 낸다', async () => {
     const user = userEvent.setup()
     renderAt('/login')
     const form = await screen.findByRole('form', { name: '로그인' })
@@ -78,17 +78,13 @@ describe('LiveClass AI 공개 페이지', () => {
     expect(window.location.pathname).toBe('/curriculums')
     expect(localStorage.getItem('accessToken')).toBeNull()
 
-    await user.click(screen.getByRole('button', { name: /김학생/ }))
-    const profileSummary = screen.getByRole('dialog', { name: '기본 정보' })
-    expect(within(profileSummary).getByText('student01@example.com')).toBeInTheDocument()
-    expect(window.location.pathname).toBe('/curriculums')
+    // 역할 메뉴는 헤더에 바로 펼쳐져 있다(예전 "마이페이지" 드롭다운을 거치지 않는다).
+    const navigation = screen.getByRole('navigation', { name: '주요 메뉴' })
+    expect(within(navigation).getByRole('link', { name: '내 커리큘럼' })).toHaveAttribute('href', '/student/curriculums')
 
-    await user.click(screen.getByRole('heading', { name: '전체 커리큘럼' }))
-    expect(screen.queryByRole('dialog', { name: '기본 정보' })).not.toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: '마이페이지' }))
-    expect(screen.getByRole('link', { name: '내 커리큘럼' })).toHaveAttribute('href', '/student/curriculums')
-    expect(screen.getByRole('link', { name: '내 프로필' })).toHaveAttribute('href', '/student/profile')
+    // 프로필 영역 전체가 내 프로필로 가는 링크다.
+    await user.click(screen.getByRole('link', { name: /김학생/ }))
+    expect(window.location.pathname).toBe('/student/profile')
   })
 
   it('회원가입에서 역할·중복 확인을 거쳐 로그인으로 이동한다', async () => {

@@ -1,6 +1,6 @@
 import { matchPath, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { instructorPaths, studentPaths } from '@/app/router/paths'
+import { getProfilePath, instructorPaths, studentPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
 import CurriculumLessonNavigation from '@/features/lesson/CurriculumLessonNavigation'
 import { getLiveSession } from '@/features/live-session/liveSessionService'
@@ -59,7 +59,7 @@ export default function WorkspaceLayout() {
   const { pathname } = useLocation()
   const isInstructor = user?.role === 'INSTRUCTOR'
   const curriculumPath = isInstructor ? instructorPaths.curriculums : studentPaths.curriculums
-  const profilePath = isInstructor ? instructorPaths.profile : studentPaths.profile
+  const profilePath = user ? getProfilePath(user.role) : studentPaths.profile
   const lessonContext = user?.role === 'STUDENT'
     ? getStudentLessonContext(pathname)
     : user?.role === 'INSTRUCTOR'

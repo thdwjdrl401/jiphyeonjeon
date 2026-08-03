@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent as ReactDragEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { instructorPaths, publicPaths } from '@/app/router/paths'
 import CurriculumAssetsFields from '@/features/curriculum/CurriculumAssetsFields'
 import CurriculumPublishPanel from '@/features/curriculum/CurriculumPublishPanel'
@@ -101,6 +101,14 @@ export default function CurriculumManagePage() {
 
   if (!curriculumId) return <PageState title="커리큘럼을 찾을 수 없습니다" />
   if (managementQuery.isPending) return <PageState title="커리큘럼을 불러오는 중입니다" />
+  /*
+    RequireRoleRoute는 "강사인가"만 본다 — 남의 커리큘럼인지는 서버만 안다. 소유자가 아니면
+    서버가 403 CURRICULUM_FORBIDDEN을 주는데(NotCurriculumOwnerException), 이걸 일반 오류로
+    묶으면 "잠시 후 다시 시도해 주세요"가 떠서 권한 문제를 일시 장애처럼 읽게 된다.
+  */
+  if (managementQuery.error instanceof ApiError && managementQuery.error.code === 'CURRICULUM_FORBIDDEN') {
+    return <Navigate to={publicPaths.forbidden('ownership')} replace />
+  }
   if (managementQuery.isError) return <PageState title="커리큘럼을 불러오지 못했습니다" description="잠시 후 다시 시도해 주세요." />
 
   // 서버 구조(섹션·강의 수)가 바뀌면 에디터를 새 데이터로 다시 seeding한다 — 강의 추가 후

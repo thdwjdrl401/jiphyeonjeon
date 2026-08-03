@@ -8,7 +8,10 @@ import { useAuth } from '@/features/auth/AuthContext'
 import { getLesson } from '@/features/lesson/lessonService'
 import { getLearningContext } from '@/features/learning/learningService'
 import BookmarkStrip from '@/features/live-session/BookmarkStrip'
+import WatchHeatmapStrip from '@/features/live-session/WatchHeatmapStrip'
+import { useWatchTracking } from '@/features/live-session/useWatchTracking'
 import { mergeLectureNote } from '@/features/live-session/lectureNoteMerge'
+import { attachGlossary } from '@/features/live-session/glossaryView'
 import CaptionDock from '@/features/live-session/CaptionDock'
 import {
   emptyCaptionStreamState,
@@ -24,8 +27,10 @@ import {
   getCaptions,
   getChatMessages,
   getAiAnswerHistory,
+  getGlossary,
   getLectureNotes,
   getLiveSession,
+  getWatchHeatmap,
   saveBookmark,
   sendChatMessage,
   subscribeCaptions,
@@ -45,7 +50,7 @@ import { usePlayback } from '@/features/live-session/usePlayback'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
 
-const { summaryBlocks, glossaryTerms } = getLiveLearningPreview()
+const { summaryBlocks } = getLiveLearningPreview()
 const InstructorLiveKitStage = lazy(() => import('@/features/live-session/InstructorLiveKitStage'))
 const PlaybackPlayer = lazy(() => import('@/features/live-session/PlaybackPlayer'))
 
@@ -216,6 +221,26 @@ export default function LiveClassroomPage() {
     queryFn: () => getAiAnswerHistory(sessionId),
     enabled: Boolean(sessionId),
   })
+  /*
+   * 많이 다시 본 구간(ADR-0063). 수강생만 센다 — 강사 화면에는 재생바가 없고(LiveKit 송출 미리보기),
+   * 강사 재생이 섞이면 그래프가 오염된다.
+   */
+  const watchDurationMs = playback.playback?.durationMs ?? null
+  useWatchTracking(lesson?.lessonId ?? '', positionMs, !isInstructor && Boolean(lesson?.lessonId))
+  const heatmapQuery = useQuery({
+    queryKey: ['watch-heatmap', lesson?.lessonId, watchDurationMs],
+    queryFn: () => getWatchHeatmap(lesson!.lessonId, watchDurationMs),
+    enabled: !isInstructor && Boolean(lesson?.lessonId),
+  })
+  /*
+   * 용어집(ADR-0064). 강의 시작 전에 한 번 받아 두고, 도착하는 자막에서 화면이 직접 찾는다 —
+   * 서버가 자막마다 매핑해 주면 왕복이 생기고 강사가 용어를 고쳤을 때 이미 그린 자막을 다시 계산해야 한다.
+   */
+  const glossaryQuery = useQuery({
+    queryKey: ['glossary', lesson?.lessonId],
+    queryFn: () => getGlossary(lesson!.lessonId),
+    enabled: Boolean(lesson?.lessonId),
+  })
   const noteQuery = useQuery({
     queryKey: ['lecture-notes', sessionId],
     queryFn: () => getLectureNotes(sessionId),
@@ -337,6 +362,8 @@ export default function LiveClassroomPage() {
   // 자막은 수강생 화면에만 있다. HLS 위치(positionMs)까지 도달한 위치 동기화 자막만 노출하고,
   // 앞선 자막은 누적기(버퍼)에 두었다가 위치가 닿으면 드러낸다(ADR-0045).
   const visibleCaptions = selectVisibleCaptions(captions, { isInstructor, positionMs })
+  // 자막에 용어 링크를 걸고, 그 김에 용어별 등장 횟수도 센다(어차피 한 번 훑는다).
+  const glossary = attachGlossary(visibleCaptions, glossaryQuery.data ?? [])
 
   const discussionComposer = canUseConversation ? (
     <form className="chat-composer" onSubmit={sendMessage}>
@@ -405,7 +432,7 @@ export default function LiveClassroomPage() {
       onSelectedTermChange={setSelectedTermId}
       summaryBlocks={summaryBlocks}
       lectureNote={note}
-      glossaryTerms={glossaryTerms}
+      glossaryTerms={glossary.terms}
       messages={messages}
       discussionComposer={discussionComposer}
       discussionNotice={chatConnectionNotice}
@@ -501,6 +528,13 @@ export default function LiveClassroomPage() {
             차지하는 높이만큼 송출 미리보기가 눌려 실제로 나가는 프레임을 작게 보게 된다.
           */}
           {!isInstructor && (
+            <WatchHeatmapStrip
+              durationMs={watchDurationMs}
+              heatmap={heatmapQuery.data ?? null}
+            />
+          )}
+
+          {!isInstructor && (
             <BookmarkStrip
               bookmarks={learningQuery.data?.bookmarks ?? []}
               canSeek={!hasEnded}
@@ -510,7 +544,7 @@ export default function LiveClassroomPage() {
 
           {!isInstructor && (
             <CaptionDock
-              captions={visibleCaptions}
+              captions={glossary.captions}
               currentSessionMs={positionMs}
               label="실시간 자막"
               note={captionNote}

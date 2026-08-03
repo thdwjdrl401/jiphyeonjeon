@@ -234,7 +234,8 @@ describe('전체 페이지 라우트', () => {
     // 용어는 자막이 아니라 핵심 용어 탭으로 확인한다.
     await user.click(screen.getByRole('tab', { name: '핵심 용어' }))
     expect(screen.getByRole('tab', { name: '핵심 용어' })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByText(/현재 실행 중인 요청에서 인증된 사용자/)).toBeInTheDocument()
+    // 하드코딩 예시가 아니라 서버 용어집(ai 원본 + 강사 수정)이 온다.
+    expect(await screen.findByText(/현재 요청에서 인증된 사용자와 권한 정보를 보관/)).toBeInTheDocument()
   })
 
   it('강사는 STARTING 동안 preflight에 머물고 LIVE가 된 뒤 같은 세션 classroom으로 이동한다', async () => {
@@ -394,7 +395,7 @@ describe('전체 페이지 라우트', () => {
 
     expect(await screen.findByRole('heading', { name: '라이브 강의' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '준비 상태' })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: '입장 점검' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: '입장 점검 시작' })).toHaveAttribute(
       'href',
       '/student/live-sessions/ses-security-live/prejoin',
     )
@@ -449,7 +450,7 @@ describe('전체 페이지 라우트', () => {
       await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
       renderAt('/student/curriculums/cur-spring-live/sections/sec-foundation/lessons/les-service-layer')
 
-      await user.click(await screen.findByRole('button', { name: '입장 점검' }))
+      await user.click(await screen.findByRole('button', { name: '입장 점검 시작' }))
       expect(screen.getByText('강의 시간이 아닙니다.')).toBeInTheDocument()
     } finally {
       vi.useRealTimers()

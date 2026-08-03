@@ -63,11 +63,11 @@ export interface InstructorDashboardSummary {
   publishedCurriculumCount: number
   upcomingLiveCount: number
   totalEnrolleeCount: number | null
-  todayLiveSession: DashboardLiveSession | null
+  upcomingLiveSession: DashboardLiveSession | null
 }
 
 export interface StudentDashboardSummary extends StudentLearningSummary {
-  todayLiveSession: DashboardLiveSession | null
+  upcomingLiveSession: DashboardLiveSession | null
 }
 
 export interface MyCurriculumsService {

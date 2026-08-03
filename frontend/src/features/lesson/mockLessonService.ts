@@ -9,6 +9,9 @@ export const mockLessonService = {
     return getDemoCurriculumLessonNavigation(curriculumId)
   },
   async saveLesson(request) {
+    if (!request.lessonId && !request.scheduledAt) {
+      throw new Error('강의를 생성하려면 라이브 예정 시작 시각을 입력해야 합니다.')
+    }
     return {
       lessonId: request.lessonId ?? `lesson-mock-${Date.now()}`,
       sectionId: request.sectionId,
