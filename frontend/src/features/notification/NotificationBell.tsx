@@ -6,6 +6,7 @@ import { isNotImplemented } from '@/shared/api/notImplemented'
 import NotificationList from './NotificationList'
 import { useNotificationActivation } from './useNotificationActivation'
 import { useMarkAllNotificationsReadMutation } from './useNotificationMutations'
+import { useNotificationRealtime } from './useNotificationRealtime'
 import { useNotificationSummaryQuery, useRecentNotificationsQuery } from './useNotificationQueries'
 
 /** 드롭다운은 "최근"만 보여 준다. 전체 이력·필터는 알림 페이지가 맡는다. */
@@ -32,6 +33,8 @@ export default function NotificationBell() {
   const [isOpen, setIsOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const summaryQuery = useNotificationSummaryQuery(Boolean(user))
+  // 종은 로그인해 있는 동안 항상 떠 있다 — 실시간 구독을 걸 자리가 여기다.
+  useNotificationRealtime(Boolean(user))
   const recentQuery = useRecentNotificationsQuery(RECENT_SIZE, Boolean(user) && isOpen)
   const markAllAsRead = useMarkAllNotificationsReadMutation()
   const { activate, activatingId } = useNotificationActivation()

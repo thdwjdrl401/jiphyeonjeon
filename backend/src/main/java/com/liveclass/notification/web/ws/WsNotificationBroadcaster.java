@@ -1,0 +1,84 @@
+package com.liveclass.notification.web.ws;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.messaging.simp.user.SimpUserRegistry;
+import org.springframework.stereotype.Component;
+
+import java.time.OffsetDateTime;
+import java.util.Collection;
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * 새 알림을 <b>지금 접속해 있는</b> 사람에게 즉시 알린다(ADR-0073 5단계).
+ *
+ * <p>목적지는 {@code /user/queue/notifications}다. Spring이 이 목적지를 <b>세션의 Principal로</b>
+ * 해석하므로 남의 알림을 구독할 방법이 없다 — 토픽처럼 구독 인가 목록을 늘리지 않아도 된다.
+ *
+ * <p><b>내용을 싣지 않는다.</b> 신호만 보내고 화면이 목록·개수를 다시 읽는다. 이유는 둘이다.
+ * <ol>
+ *   <li>넓은 팬아웃은 <b>집합 삽입</b>이라 앱에 행 데이터가 없다. 내용을 실으려면 방금 넣은 행을
+ *       도로 읽어야 하고, 그러면 팬아웃 한 조각마다 조회가 하나 더 붙는다.</li>
+ *   <li>알림 모양이 두 곳(REST 응답·WS 페이로드)에 생기면 한쪽만 고치는 어긋남이 자란다.</li>
+ * </ol>
+ * 값은 화면이 조회를 한 번 더 하는 것인데, 그건 어차피 알림함을 열 때 하는 일이다.
+ *
+ * <p><b>접속한 사람에게만 보낸다.</b> 안 보내도 브로커가 버리지만, 100만 명 팬아웃에서 그 호출을
+ * 100만 번 하는 것과 접속자 수만큼 하는 것은 다르다.
+ */
+@Component
+public class WsNotificationBroadcaster {
+
+    private static final Logger log = LoggerFactory.getLogger(WsNotificationBroadcaster.class);
+
+    /** 화면이 구독하는 목적지. {@code /user} 접두사는 Spring이 붙인다. */
+    public static final String DESTINATION = "/queue/notifications";
+
+    private final SimpMessagingTemplate messagingTemplate;
+    private final SimpUserRegistry userRegistry;
+
+    public WsNotificationBroadcaster(SimpMessagingTemplate messagingTemplate,
+                                     SimpUserRegistry userRegistry) {
+        this.messagingTemplate = messagingTemplate;
+        this.userRegistry = userRegistry;
+    }
+
+    /** 한 명에게. 좁은 팬아웃(수강 판정·녹화)이 쓴다. */
+    public void announce(UUID recipientId, String notificationType) {
+        if (recipientId == null) {
+            return;
+        }
+        announceAll(List.of(recipientId), notificationType);
+    }
+
+    /** 방금 <b>새로</b> 받은 사람들에게. 중복으로 걸러진 사람은 여기 없다. */
+    public void announceAll(Collection<UUID> recipientIds, String notificationType) {
+        if (recipientIds.isEmpty()) {
+            return;
+        }
+        NotificationSignalPayload payload =
+                new NotificationSignalPayload(notificationType, OffsetDateTime.now());
+        int sent = 0;
+        for (UUID recipientId : recipientIds) {
+            String user = recipientId.toString();
+            if (userRegistry.getUser(user) == null) {
+                continue;   // 접속해 있지 않다 — 알림함에 쌓여 있다가 다음에 열 때 보인다.
+            }
+            /*
+             * 한 사람에게 실패해도 나머지는 보낸다. 실시간 전달은 <b>거들 뿐</b>이고 알림 자체는
+             * 이미 저장돼 있다 — 여기서 예외를 올리면 워커가 조각 전체를 재시도한다.
+             */
+            try {
+                messagingTemplate.convertAndSendToUser(user, DESTINATION, payload);
+                sent++;
+            } catch (RuntimeException e) {
+                log.warn("실시간 알림 전송 실패 recipient={}: {}", recipientId, e.getMessage());
+            }
+        }
+        if (sent > 0) {
+            log.debug("실시간 알림 전송 type={} 접속자={}/{}", notificationType, sent, recipientIds.size());
+        }
+    }
+}

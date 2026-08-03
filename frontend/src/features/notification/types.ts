@@ -131,6 +131,16 @@ export interface NotificationSummary {
   actionRequiredCount: number
 }
 
+/**
+ * 실시간 알림 신호. <b>내용이 아니라 "왔다"는 사실만</b> 온다 — 이걸 받으면 목록과 개수를 다시
+ * 읽는다. 알림 한 건의 모양이 REST 응답과 WS 페이로드 두 곳에 생기면 한쪽만 고치는 어긋남이
+ * 자라기 때문이다.
+ */
+export interface NotificationSignal {
+  notificationType: NotificationType
+  occurredAt: string
+}
+
 /** 알림이 가리키는 대상이 사라졌거나 더 이상 열람할 수 없는 이유. */
 export type NotificationGoneReason =
   /** 커리큘럼·강의·녹화본이 삭제됐다. */

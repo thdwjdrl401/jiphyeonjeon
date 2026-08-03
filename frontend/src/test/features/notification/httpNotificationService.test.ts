@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { Client } from '@stomp/stompjs'
 import { apiClient } from '@/shared/api/client'
+
+vi.mock('@stomp/stompjs', () => ({ Client: vi.fn() }))
 
 vi.mock('@/shared/config/runtime', () => ({
   isMockApiEnabled: false,
@@ -126,6 +129,47 @@ describe('알림 HTTP 서비스 계약', () => {
       unreadCount: 0,
       actionRequiredCount: 2,
     })
+  })
+
+  /*
+   * `/user` 접두사가 핵심이다. 서버가 이 목적지를 **내 세션의 주체로** 해석하므로 남의 알림을
+   * 구독할 방법이 없고, 사용자 id를 목적지에 담을 일도 없다.
+   */
+  it('실시간 알림을 개인 목적지로 구독하고 해제할 수 있다', () => {
+    const subscribe = vi.fn()
+    const deactivate = vi.fn().mockResolvedValue(undefined)
+    const activate = vi.fn()
+    let onConnect: (() => void) | undefined
+    vi.mocked(Client).mockImplementation(function (this: Record<string, unknown>) {
+      Object.defineProperty(this, 'onConnect', {
+        set: (fn: () => void) => {
+          onConnect = fn
+        },
+        configurable: true,
+      })
+      this.subscribe = subscribe
+      this.activate = activate
+      this.deactivate = deactivate
+      return this as never
+    } as never)
+
+    const signals: unknown[] = []
+    const unsubscribe = httpNotificationService.subscribeNotifications((s) => signals.push(s))
+
+    expect(activate).toHaveBeenCalled()
+    onConnect?.()
+    expect(subscribe).toHaveBeenCalledWith('/user/queue/notifications', expect.any(Function))
+
+    const handler = subscribe.mock.calls[0][1] as (frame: { body: string }) => void
+    handler({ body: JSON.stringify({ notificationType: 'MATERIAL_PUBLISHED', occurredAt: 'now' }) })
+    expect(signals).toEqual([{ notificationType: 'MATERIAL_PUBLISHED', occurredAt: 'now' }])
+
+    // 프레임 하나가 깨져도 구독은 살아 있어야 한다 — 다음 알림은 받아야 한다.
+    handler({ body: 'not json' })
+    expect(signals).toHaveLength(1)
+
+    unsubscribe()
+    expect(deactivate).toHaveBeenCalled()
   })
 
   it('대상 재판정을 알림 경로로 조회한다', async () => {
