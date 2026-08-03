@@ -39,7 +39,12 @@ public record NotificationFanoutCommand(
         String subjectName,
         OffsetDateTime occurredAt,
         UUID afterUserId,
-        Integer sliceLimit
+        Integer sliceLimit,
+        UUID liveSessionId,
+        /** 일정 변경의 "언제에서". 변경 알림에만 값이 있다. */
+        OffsetDateTime previousStartsAt,
+        /** 예정·변경의 새 시각. 취소에는 없다. */
+        OffsetDateTime nextStartsAt
 ) {
 
     /** 좁은 팬아웃(수신자가 정해진 사건). 커서 두 칸은 쓰지 않는다. */
@@ -47,7 +52,7 @@ public record NotificationFanoutCommand(
                                                    String curriculumTitle, UUID instructorId,
                                                    UUID studentId, OffsetDateTime occurredAt) {
         return new NotificationFanoutCommand(type, enrollmentId, curriculumId, curriculumTitle,
-                instructorId, studentId, null, null, null, occurredAt, null, null);
+                instructorId, studentId, null, null, null, occurredAt, null, null, null, null, null);
     }
 
     /** 넓은 팬아웃의 <b>첫</b> 조각. 커서는 비어 있고 워커가 이어 간다. */
@@ -58,13 +63,26 @@ public record NotificationFanoutCommand(
         return new NotificationFanoutCommand(
                 com.liveclass.notification.api.NotificationTypes.MATERIAL_PUBLISHED,
                 null, curriculumId, curriculumTitle, null, null,
-                lessonId, materialId, fileName, occurredAt, null, sliceLimit);
+                lessonId, materialId, fileName, occurredAt, null, sliceLimit, null, null, null);
+    }
+
+    /**
+     * 라이브 일정 알림의 <b>첫</b> 조각. 강의 제목({@code subjectName})은 워커가 채운다 — 라이브
+     * 세션은 제목을 갖지 않고 레슨이 갖는데, 그것을 발행 시점에 조회하면 업무 트랜잭션이 길어진다.
+     */
+    static NotificationFanoutCommand forLiveSchedule(String type, UUID curriculumId, UUID lessonId,
+                                                     UUID liveSessionId, OffsetDateTime previousStartsAt,
+                                                     OffsetDateTime nextStartsAt, OffsetDateTime occurredAt,
+                                                     int sliceLimit) {
+        return new NotificationFanoutCommand(type, null, curriculumId, null, null, null,
+                lessonId, null, null, occurredAt, null, sliceLimit,
+                liveSessionId, previousStartsAt, nextStartsAt);
     }
 
     /** 다음 조각. 사건은 그대로 두고 커서만 옮긴다. */
     NotificationFanoutCommand nextSlice(UUID lastUserId) {
         return new NotificationFanoutCommand(type, enrollmentId, curriculumId, curriculumTitle,
                 instructorId, studentId, lessonId, materialId, subjectName, occurredAt,
-                lastUserId, sliceLimit);
+                lastUserId, sliceLimit, liveSessionId, previousStartsAt, nextStartsAt);
     }
 }

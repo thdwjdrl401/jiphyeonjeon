@@ -1,6 +1,7 @@
 package com.liveclass.live.service;
 
 import com.liveclass.live.api.LiveSessionDirectory;
+import com.liveclass.live.api.LiveScheduleEvent;
 import com.liveclass.live.api.LiveSessionManagement;
 import com.liveclass.live.api.LiveSessionView;
 import com.liveclass.live.domain.LiveSession;
@@ -8,10 +9,12 @@ import com.liveclass.live.domain.LiveSessionStatus;
 import com.liveclass.live.repository.LiveSessionRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -43,10 +46,13 @@ public class LiveSessionService implements LiveSessionManagement, LiveSessionDir
 
     private final LiveSessionRepository liveSessionRepository;
     private final LiveRoomControl roomControl;
+    private final ApplicationEventPublisher eventPublisher;
 
-    public LiveSessionService(LiveSessionRepository liveSessionRepository, LiveRoomControl roomControl) {
+    public LiveSessionService(LiveSessionRepository liveSessionRepository, LiveRoomControl roomControl,
+                              ApplicationEventPublisher eventPublisher) {
         this.liveSessionRepository = liveSessionRepository;
         this.roomControl = roomControl;
+        this.eventPublisher = eventPublisher;
     }
 
     /** 세션 ID로 결정론적 방 이름(토큰과 동일 규칙). 시작 오케스트레이터·preflight도 같은 규칙을 쓴다. */
@@ -69,7 +75,15 @@ public class LiveSessionService implements LiveSessionManagement, LiveSessionDir
         session.setChatEnabled(true);
         session.setAiQnaEnabled(true);
         // version은 @Version이라 Hibernate가 관리한다(수동 초기화 불필요).
-        return toView(liveSessionRepository.save(session));
+        LiveSession saved = liveSessionRepository.save(session);
+        /*
+         * 시각이 있을 때만 알린다. 시각 없이 만든 초안(DRAFT)에는 알릴 일정이 자체가 없고,
+         * 알리면 학생이 "언제인지 모를 라이브"를 통보받는다.
+         */
+        if (scheduledAt != null) {
+            publish(LiveScheduleEvent.Kind.SCHEDULED, saved, null, scheduledAt);
+        }
+        return toView(saved);
     }
 
     @Override
@@ -138,6 +152,10 @@ public class LiveSessionService implements LiveSessionManagement, LiveSessionDir
                                           Integer expectedDurationMinutes) {
         LiveSession s = requireOwned(sessionId, requesterId);
         requireNotStarted(s, "시작된 세션은 일정을 수정할 수 없습니다.");
+        OffsetDateTime previous = s.getScheduledAt();
+        // 시각이 **실제로** 달라졌을 때만 사건이다. 같은 값으로 다시 저장한 것이나 입장창·예상
+        // 시간만 고친 것은 학생에게 알릴 일이 아니다.
+        boolean rescheduled = scheduledAt != null && !sameMoment(previous, scheduledAt);
         if (scheduledAt != null) {
             s.setScheduledAt(scheduledAt);
         }
@@ -147,6 +165,9 @@ public class LiveSessionService implements LiveSessionManagement, LiveSessionDir
         if (expectedDurationMinutes != null) {
             s.setExpectedDurationMinutes(expectedDurationMinutes);
         }
+        if (rescheduled) {
+            publish(LiveScheduleEvent.Kind.RESCHEDULED, s, previous, scheduledAt);
+        }
         return toView(s);
     }
 
@@ -154,12 +175,47 @@ public class LiveSessionService implements LiveSessionManagement, LiveSessionDir
     @Transactional
     public LiveSessionView cancel(UUID sessionId, UUID requesterId) {
         LiveSession s = requireOwned(sessionId, requesterId);
+        boolean canceledNow = false;
         switch (s.getStatus()) {
             case CANCELLED -> { /* 멱등 */ }
-            case DRAFT, SCHEDULED, OPEN -> s.setStatus(LiveSessionStatus.CANCELLED);
+            case DRAFT, SCHEDULED, OPEN -> {
+                s.setStatus(LiveSessionStatus.CANCELLED);
+                canceledNow = true;
+            }
             default -> throw new LiveSessionStateConflictException("이미 시작·종료된 세션은 취소할 수 없습니다.");
         }
+        // 멱등 호출에는 사건이 없다 — 두 번 눌렀다고 학생이 취소 알림을 두 번 받으면 안 된다.
+        if (canceledNow) {
+            publish(LiveScheduleEvent.Kind.CANCELED, s, s.getScheduledAt(), null);
+        }
         return toView(s);
+    }
+
+    /**
+     * 같은 순간인가. <b>{@code equals}를 쓰면 안 된다</b> — 두 가지가 걸린다.
+     *
+     * <ol>
+     *   <li>{@code OffsetDateTime.equals}는 오프셋까지 비교한다. 같은 순간이라도
+     *       {@code +09:00}과 {@code Z} 표기가 다르면 다른 값이다.</li>
+     *   <li>Postgres {@code timestamptz}는 <b>마이크로초까지만</b> 저장한다. 저장했다 읽으면
+     *       나노초가 잘려, 방금 넘긴 값과 DB에서 온 값이 미세하게 어긋난다.</li>
+     * </ol>
+     *
+     * <p>둘 중 하나라도 걸리면 강사가 <b>같은 시각을 다시 저장했을 뿐인데</b> 수강생 전원에게
+     * "일정이 변경되었습니다"가 나간다. 일정의 실제 단위는 분이므로 밀리초로 끊어 비교한다.
+     */
+    private static boolean sameMoment(OffsetDateTime a, OffsetDateTime b) {
+        if (a == null || b == null) {
+            return a == b;
+        }
+        return a.toInstant().truncatedTo(ChronoUnit.MILLIS)
+                .equals(b.toInstant().truncatedTo(ChronoUnit.MILLIS));
+    }
+
+    private void publish(LiveScheduleEvent.Kind kind, LiveSession session,
+                         OffsetDateTime previousStartsAt, OffsetDateTime nextStartsAt) {
+        eventPublisher.publishEvent(new LiveScheduleEvent(kind, session.getId(), session.getLessonId(),
+                session.getCurriculumId(), previousStartsAt, nextStartsAt, OffsetDateTime.now()));
     }
 
     /** 아직 시작 전(DRAFT/SCHEDULED/OPEN)이 아니면 상태 충돌. */

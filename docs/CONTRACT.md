@@ -157,7 +157,11 @@ HTTP 어댑터도 그 넷은 실제 호출로 배선됐다.
 자기 자신 때문에 막힌다). `GONE`이면 그 알림의 처리 축을 `EXPIRED`로 내린다 — 갈 곳 없는 항목이
 처리 대기 목록에 영원히 남지 않게.
 
-**아직 없는 것.** 나머지 **발행 지점**(라이브 일정, Egress 완료, 다시보기 게시)과 실시간 push.
+**라이브 일정 세 종류도 넓은 팬아웃이다.** 일정이 잡히면 `LIVE_SCHEDULED`, 시각이 **실제로**
+바뀌면 `LIVE_SCHEDULE_CHANGED`(변경 전·후를 함께 저장), 취소되면 `LIVE_CANCELED`가 수강 중 학생
+전원에게 간다. 시각 없는 초안·입장창만 수정·같은 시각 재저장·멱등 취소에는 **알림이 없다**.
+
+**아직 없는 것.** Egress 완료·다시보기 게시 발행 지점과 실시간 push.
 FE 어댑터는 이제 501을 던지지 않는다.
 
 | 목적 | Method·URL | 응답 | 권한 | 상태 |
@@ -230,7 +234,8 @@ FE 어댑터는 이제 501을 던지지 않는다.
   (`V23__notification.sql`의 `dedupe_key` UNIQUE + `NotificationController`),
   (2) ~~수강 판정~~ 완료(`CurriculumEnrollmentService` → `EnrollmentRequestedEvent`·`EnrollmentDecidedEvent`).
   ~~자료 게시~~ 완료(`InstructorCurriculumService` → `CurriculumMaterialPublishedEvent`, 넓은 팬아웃).
-  라이브 일정·Egress 완료·다시보기 게시 지점의 알림 발행은 남음, ~~`/target`~~ 완료,
+  ~~라이브 일정~~ 완료(`LiveSessionService` → `LiveScheduleEvent`).
+  Egress 완료·다시보기 게시 지점의 알림 발행은 남음, ~~`/target`~~ 완료,
   (3) `LIVE_STARTING_SOON`·오늘의 라이브 일정 알림을 만드는 예약 작업(현재 `@Scheduled`는
   `LiveStartReconciler`·`AssetReaper`·`OutboxRelay`에만 있어 알림용 잡이 없다),
   (4) 실시간 push(WS/SSE) — 없는 동안 FE는 60초 주기로 `summary`를 폴링한다.
