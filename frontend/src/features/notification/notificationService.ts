@@ -20,4 +20,11 @@ export const resolveNotificationTarget = (notificationId: string) =>
 export const subscribeNotifications = (onSignal: Parameters<NotificationService['subscribeNotifications']>[0]) =>
   notificationService.subscribeNotifications(onSignal)
 
+export const getPushPublicKey = () => notificationService.getPushPublicKey()
+export const registerPushSubscription = (
+  subscription: Parameters<NotificationService['registerPushSubscription']>[0],
+) => notificationService.registerPushSubscription(subscription)
+export const unregisterPushSubscription = (endpoint: string) =>
+  notificationService.unregisterPushSubscription(endpoint)
+
 export type { NotificationService } from './notificationService.interface'

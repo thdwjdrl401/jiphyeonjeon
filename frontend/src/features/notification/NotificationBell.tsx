@@ -6,6 +6,7 @@ import { isNotImplemented } from '@/shared/api/notImplemented'
 import NotificationList from './NotificationList'
 import { useNotificationActivation } from './useNotificationActivation'
 import { useMarkAllNotificationsReadMutation } from './useNotificationMutations'
+import { usePushSubscription } from './usePushSubscription'
 import { useNotificationRealtime } from './useNotificationRealtime'
 import { useNotificationSummaryQuery, useRecentNotificationsQuery } from './useNotificationQueries'
 
@@ -35,6 +36,7 @@ export default function NotificationBell() {
   const summaryQuery = useNotificationSummaryQuery(Boolean(user))
   // 종은 로그인해 있는 동안 항상 떠 있다 — 실시간 구독을 걸 자리가 여기다.
   useNotificationRealtime(Boolean(user))
+  const push = usePushSubscription(Boolean(user))
   const recentQuery = useRecentNotificationsQuery(RECENT_SIZE, Boolean(user) && isOpen)
   const markAllAsRead = useMarkAllNotificationsReadMutation()
   const { activate, activatingId } = useNotificationActivation()
@@ -129,6 +131,25 @@ export default function NotificationBell() {
 
           <footer className="notification-dropdown__footer">
             <Link to={notificationsPath} onClick={() => setIsOpen(false)}>전체 알림 보기</Link>
+            {/*
+              브라우저 알림 스위치는 켤 수 있을 때만 보인다. 지원하지 않는 브라우저나 서버에 키가
+              없는 환경에서 눌러도 아무 일이 없는 스위치를 보여 주지 않는다.
+            */}
+            {push.state === 'off' && (
+              <button className="text-button" type="button" onClick={() => void push.enable()}>
+                브라우저 알림 켜기
+              </button>
+            )}
+            {push.state === 'on' && (
+              <button className="text-button" type="button" onClick={() => void push.disable()}>
+                브라우저 알림 끄기
+              </button>
+            )}
+            {push.state === 'denied' && (
+              <span className="notification-dropdown__hint">
+                브라우저에서 알림이 차단되어 있습니다.
+              </span>
+            )}
           </footer>
         </div>
       )}

@@ -6,6 +6,7 @@ import type {
   NotificationListQuery,
   NotificationListResponse,
   NotificationSignal,
+  PushSubscriptionInput,
   NotificationSummary,
   NotificationTargetResolution,
 } from './types'
@@ -54,6 +55,19 @@ export const httpNotificationService = {
   async markAllAsRead() {
     const { data } = await apiClient.post<NotificationSummary>('/me/notifications/read-all')
     return data
+  },
+  async getPushPublicKey() {
+    const { data } = await apiClient.get<{ publicKey: string | null }>(
+      '/me/push-subscriptions/public-key',
+    )
+    return data.publicKey
+  },
+  async registerPushSubscription(subscription: PushSubscriptionInput) {
+    await apiClient.post('/me/push-subscriptions', subscription)
+  },
+  async unregisterPushSubscription(endpoint: string) {
+    // 본문이 있는 DELETE다 — 엔드포인트는 URL에 담기엔 길고, 경로에 넣으면 인코딩이 지저분해진다.
+    await apiClient.delete('/me/push-subscriptions', { data: { endpoint } })
   },
   subscribeNotifications(onSignal: (signal: NotificationSignal) => void) {
     let active = true

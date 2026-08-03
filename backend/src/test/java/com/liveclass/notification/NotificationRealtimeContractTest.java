@@ -66,7 +66,7 @@ class NotificationRealtimeContractTest {
         UUID recipient = UUID.randomUUID();
         connect(recipient);
 
-        broadcaster.announce(recipient, NotificationTypes.ENROLLMENT_APPROVED);
+        broadcaster.announce(recipient, NotificationTypes.ENROLLMENT_APPROVED, "제목", "내용");
 
         ArgumentCaptor<Object> body = ArgumentCaptor.forClass(Object.class);
         verify(messagingTemplate).convertAndSendToUser(
@@ -82,7 +82,7 @@ class NotificationRealtimeContractTest {
      */
     @Test
     void an_offline_user_is_skipped_entirely() {
-        broadcaster.announce(UUID.randomUUID(), NotificationTypes.MATERIAL_PUBLISHED);
+        broadcaster.announce(UUID.randomUUID(), NotificationTypes.MATERIAL_PUBLISHED, "제목", "내용");
 
         verify(messagingTemplate, never()).convertAndSendToUser(any(), any(), any(Object.class));
     }
@@ -97,7 +97,7 @@ class NotificationRealtimeContractTest {
                 .when(messagingTemplate)
                 .convertAndSendToUser(eq(failing.toString()), any(), any(Object.class));
 
-        broadcaster.announceAll(List.of(failing, healthy), NotificationTypes.VOD_PUBLISHED);
+        broadcaster.announceAll(List.of(failing, healthy), NotificationTypes.VOD_PUBLISHED, "제목", "내용");
 
         verify(messagingTemplate).convertAndSendToUser(eq(healthy.toString()), any(), any(Object.class));
     }

@@ -4,6 +4,7 @@ import type {
   NotificationListResponse,
   NotificationSummary,
   NotificationSignal,
+  PushSubscriptionInput,
   NotificationTargetResolution,
 } from './types'
 
@@ -34,4 +35,9 @@ export interface NotificationService {
    * @returns 구독 해제 함수
    */
   subscribeNotifications: (onSignal: (signal: NotificationSignal) => void) => () => void
+  /** 브라우저 구독에 필요한 VAPID 공개키. 서버에 키가 없으면 null이고, 그때 화면은 푸시 UI를 숨긴다. */
+  getPushPublicKey: () => Promise<string | null>
+  /** 브라우저가 만든 구독을 서버에 등록한다. 멱등이다. */
+  registerPushSubscription: (subscription: PushSubscriptionInput) => Promise<void>
+  unregisterPushSubscription: (endpoint: string) => Promise<void>
 }

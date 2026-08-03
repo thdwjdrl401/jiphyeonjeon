@@ -200,4 +200,10 @@ export const mockNotificationService = {
   subscribeNotifications() {
     return () => {}
   },
+  /** 목에는 푸시가 없다. 공개키를 null로 주면 화면이 알아서 푸시 UI를 숨긴다. */
+  async getPushPublicKey() {
+    return null
+  },
+  async registerPushSubscription() {},
+  async unregisterPushSubscription() {},
 } satisfies NotificationService

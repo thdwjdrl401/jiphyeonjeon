@@ -115,9 +115,11 @@ public class NotificationFanoutWorker {
                 logMissingContext(filled, "강사");
                 return;
             }
-            int sent = insertRepository.insert(buildForInstructor(filled));
+            NewNotification forInstructor = buildForInstructor(filled);
+            int sent = insertRepository.insert(forInstructor);
             if (sent > 0) {
-                broadcaster.announce(filled.instructorId(), filled.type());
+                broadcaster.announce(filled.instructorId(), filled.type(),
+                        forInstructor.title(), forInstructor.message());
             }
             log.info("녹화 알림 type={} asset={} 삽입={}", filled.type(), filled.videoAssetId(), sent);
             return;
@@ -126,7 +128,8 @@ public class NotificationFanoutWorker {
         int inserted = insertRepository.insert(notification);
         // 새로 넣었을 때만 알린다. 재배달로 중복이면 화면에 두 번 뜰 이유가 없다.
         if (inserted > 0) {
-            broadcaster.announce(notification.recipientId(), command.type());
+            broadcaster.announce(notification.recipientId(), command.type(),
+                    notification.title(), notification.message());
         }
         log.info("알림 팬아웃 type={} enrollment={} 삽입={}", command.type(), command.enrollmentId(), inserted);
     }
@@ -216,7 +219,8 @@ public class NotificationFanoutWorker {
                 dedupePrefix(command),
                 command.previousStartsAt(), command.nextStartsAt());
 
-        broadcaster.announceAll(slice.insertedRecipients(), command.type());
+        // 문구는 조각 전체가 같다 — 넓은 팬아웃은 사람 이름을 넣지 않는다.
+        broadcaster.announceAll(slice.insertedRecipients(), command.type(), title, message);
 
         log.info("넓은 팬아웃 조각 type={} curriculum={} 커서={} 훑음={} 삽입={}",
                 command.type(), command.curriculumId(), command.afterUserId(),
