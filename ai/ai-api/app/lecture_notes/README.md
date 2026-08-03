@@ -85,6 +85,18 @@ uv run --frozen --env-file ../.env python -m scripts.evaluate_lecture_note_promp
 이 결과에서 실제 `START_NEW` 과분할이 확인될 때만 한 window topic 전환 확인을 추가한다. 현재는 라이브
 지연을 늘리는 전환 보류를 구현하지 않았다.
 
+정보 타입 수는 수학·역사·기술·과학·인문·노이즈 STT·언어·통계의 고정 8개 샘플로 상세 6타입과 최소
+4타입을 비교한다. 기본 실행은 두 결과를 후보 이름 없이 평가하며 `--skip-judge`, `--sample-id`,
+`--include-markdown`, `--summary-only`로 범위와 출력량을 조절할 수 있다.
+
+```bash
+uv run --frozen python -m scripts.compare_lecture_note_structures
+```
+
+현재 1회 결과는 상세 6타입 4승, 최소 4타입 3승, 1무로 어느 쪽도 지배적이지 않았다. 최소 타입은 평균
+점수가 소폭 높았지만 item 수를 줄이지 못했으므로 runtime enum은 상세 6타입을 유지하고 Redis 계약은
+변경하지 않는다. 비교 결과와 확정 조건은 [ADR-0034](../../../../docs/decisions/canola/0034-near-realtime-accumulative-lecture-notes.md)를 따른다.
+
 ## 현재 비범위
 
 - Spring·Frontend가 소비하는 API/DTO와 DB 영속화

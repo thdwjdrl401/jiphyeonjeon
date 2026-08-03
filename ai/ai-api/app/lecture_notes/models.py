@@ -60,7 +60,9 @@ class LectureNoteDraftItemType(StrEnum):
 InlineText = Annotated[str, Field(min_length=1, max_length=300)]
 TopicOverview = Annotated[str, Field(min_length=1, max_length=2_000)]
 _SENTENCE_BOUNDARY = re.compile(r"[.!?。？！]+[\"'’”」』)]*(?:\s+|$)")
-_NOMINAL_SENTENCE_END = re.compile(r"(?:함|됨|임|음|필요|가능|중요|주의|권장)$")
+_PROSE_SENTENCE_END = re.compile(
+    r"(?:니다|해요|돼요|예요|이에요|한다|된다|했다|였다|있다|없다|같다|아니다)$"
+)
 
 
 class LectureNoteModelResult(BaseModel):
@@ -336,11 +338,12 @@ def _validate_single_line(value: str, field_name: str) -> str:
 
 
 def uses_nominal_note_style(value: str) -> bool:
+    # 자연스러운 명사구를 허용하기 위한 휴리스틱이며 완전한 한국어 품사 판별은 아님.
     sentences = tuple(
         sentence.strip() for sentence in _SENTENCE_BOUNDARY.split(value.strip()) if sentence.strip()
     )
     return bool(sentences) and all(
-        _NOMINAL_SENTENCE_END.search(sentence) is not None for sentence in sentences
+        _PROSE_SENTENCE_END.search(sentence) is None for sentence in sentences
     )
 
 

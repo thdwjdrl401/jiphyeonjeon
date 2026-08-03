@@ -290,7 +290,9 @@ def test_topic_content_rejects_polite_style_and_definition_without_label() -> No
     with pytest.raises(ValidationError):
         _content("현재 주제", "현재 설명입니다.")
     with pytest.raises(ValidationError):
-        _content("현재 주제", "현재 설명이다.")
+        _content("현재 주제", "현재 내용을 설명한다.")
+    with pytest.raises(ValidationError):
+        _content("현재 주제", "현재 설명해요.")
     with pytest.raises(ValidationError):
         _item(LectureNoteDraftItemType.DEFINITION, "ACK의 정의임.")
 
@@ -303,6 +305,12 @@ def test_topic_content_rejects_polite_style_and_definition_without_label() -> No
         ),
     )
     assert quoted_source.items[0].content.endswith("가능함.")
+
+    noun_phrase = _content(
+        "미분계수",
+        "북아메리카의 국가인 캐나다. 탄산음료인 사이다.",
+    )
+    assert noun_phrase.overview.endswith("사이다.")
 
 
 @pytest.mark.parametrize(
