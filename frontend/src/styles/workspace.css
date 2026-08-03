@@ -703,8 +703,6 @@ th { color: var(--ink-500); font-size: .67rem; }
 .curriculum-manage-page .header-action-group .button { min-height: 36px; padding-inline: 13px; font-size: .72rem; }
 .curriculum-manage-page .autosave-status { font-size: .64rem; white-space: nowrap; }
 .curriculum-manage__toolbar {
-  position: sticky;
-  top: 82px;
   z-index: 12;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(320px, .68fr);
@@ -721,9 +719,11 @@ th { color: var(--ink-500); font-size: .67rem; }
 .curriculum-manage__summary span:not(.status-pill) { overflow: hidden; color: var(--ink-500); font-size: .61rem; text-overflow: ellipsis; white-space: nowrap; }
 .curriculum-manage__summary strong { color: var(--ink-950); font-family: var(--font-display); font-size: .92rem; font-weight: 500; }
 .curriculum-manage__summary .status-pill { min-height: 22px; padding: 2px 7px; font-size: .57rem; }
+.curriculum-manage__tabs-origin { display: grid; min-width: 0; min-height: 44px; }
+.curriculum-manage__tabs-origin .curriculum-manage__tabs { width: 100%; }
 .curriculum-manage__tabs.workspace-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border: 1px solid var(--border-soft); background: transparent; }
-.curriculum-manage__toolbar .curriculum-manage__tabs button { min-height: 42px; padding: 7px 10px; border-left: 1px solid var(--border-soft); font-size: .7rem; }
-.curriculum-manage__toolbar .curriculum-manage__tabs button:first-child { border-left: 0; }
+.curriculum-manage-page .curriculum-manage__tabs button { min-height: 42px; padding: 7px 10px; border-left: 1px solid var(--border-soft); font-size: .7rem; }
+.curriculum-manage-page .curriculum-manage__tabs button:first-child { border-left: 0; }
 .curriculum-manage-page .workspace-tabpanel { gap: 12px; }
 .curriculum-manage-page .workspace-panel { padding: 18px; }
 .curriculum-manage-page .workspace-panel__header { gap: 12px; margin-bottom: 14px; padding-bottom: 11px; }
@@ -765,6 +765,9 @@ th { color: var(--ink-500); font-size: .67rem; }
 .curriculum-manage-page .structure-section li.lesson-drop-empty { min-height: 40px; border-radius: 0; font-size: .64rem; }
 .curriculum-manage-page .structure-add-section { margin-top: 8px; padding: 9px; font-size: .7rem; }
 .curriculum-manage__publish-column { position: sticky; top: 146px; min-width: 0; }
+.curriculum-manage__publish-column--tabs-docked { top: 82px; display: grid; gap: 8px; }
+.curriculum-manage__tabs-dock { width: 100%; padding: 6px; border: 1px solid var(--border-medium); background: rgba(251, 251, 248, .94); backdrop-filter: blur(12px); }
+.curriculum-manage__tabs-dock .curriculum-manage__tabs { width: 100%; }
 .curriculum-manage__publish-column .workspace-panel { padding: 16px; }
 .curriculum-manage__publish-column .workspace-panel__header { margin-bottom: 11px; padding-bottom: 9px; }
 .curriculum-manage__publish-column .inline-notice { padding: 8px 9px; font-size: .63rem; line-height: 1.45; }
