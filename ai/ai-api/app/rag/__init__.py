@@ -2,50 +2,80 @@ from app.rag.errors import RagStreamFailure
 from app.rag.models import (
     AnswerDelta,
     AnswerDone,
+    AnswerDoneV2,
     AnswerError,
     AnswerEvent,
+    AnswerEventV2,
     AnswerInsufficient,
     AnswerSource,
+    AnswerSourceV2,
+    CaptionContextItem,
     CaptionSource,
+    CaptionSourceV2,
     PptxSource,
+    PptxSourceV2,
     RagAnswerRequest,
+    RagAnswerRequestV2,
+    ReplayContext,
     RetrievedEvidence,
+    RetrievedEvidenceV2,
     RetrievalResult,
+    RetrievalResultV2,
 )
-from app.rag.ports import AnswerModel, EvidenceRetriever
+from app.rag.ports import AnswerModel, AnswerModelV2, EvidenceRetriever, EvidenceRetrieverV2
 from app.rag.registry import (
     DuplicateRequestError,
     InMemoryRequestRegistry,
     RequestRegistry,
     RequestRegistryFullError,
 )
-from app.rag.retrieval import CaptionContextPort, CombinedEvidenceRetriever, MaterialRetrievalPort
+from app.rag.replay_service import ReplayAnswerService
+from app.rag.retrieval import (
+    CaptionContextPort,
+    CombinedEvidenceRetriever,
+    MaterialRetrievalPort,
+    ReplayEvidenceRetriever,
+)
 from app.rag.service import RagAnswerService
 from app.rag.sse import encode_sse_event, encode_sse_stream
 
 __all__ = [
     "AnswerDelta",
     "AnswerDone",
+    "AnswerDoneV2",
     "AnswerError",
     "AnswerEvent",
+    "AnswerEventV2",
     "AnswerInsufficient",
     "AnswerModel",
+    "AnswerModelV2",
     "AnswerSource",
+    "AnswerSourceV2",
+    "CaptionContextItem",
     "CaptionContextPort",
     "CaptionSource",
+    "CaptionSourceV2",
     "CombinedEvidenceRetriever",
     "DuplicateRequestError",
     "EvidenceRetriever",
+    "EvidenceRetrieverV2",
     "InMemoryRequestRegistry",
     "MaterialRetrievalPort",
     "PptxSource",
+    "PptxSourceV2",
     "RagAnswerRequest",
+    "RagAnswerRequestV2",
     "RagAnswerService",
     "RagStreamFailure",
+    "ReplayAnswerService",
+    "ReplayContext",
+    "ReplayEvidenceRetriever",
     "RequestRegistry",
     "RequestRegistryFullError",
     "RetrievedEvidence",
+    "RetrievedEvidenceV2",
     "RetrievalResult",
+    "RetrievalResultV2",
     "encode_sse_event",
     "encode_sse_stream",
 ]

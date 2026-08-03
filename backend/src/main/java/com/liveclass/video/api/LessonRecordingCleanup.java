@@ -1,5 +1,6 @@
 package com.liveclass.video.api;
 
+import java.util.Collection;
 import java.util.UUID;
 
 /**
@@ -23,4 +24,14 @@ public interface LessonRecordingCleanup {
      * @return 지운 자산(행) 수
      */
     int deleteByLesson(UUID lessonId);
+
+    /**
+     * 여러 레슨의 녹화를 한 번에 정리한다. 커리큘럼을 통째로 지울 때 쓴다 — 레슨마다 부르면
+     * 레슨 수만큼 질의가 나간다.
+     *
+     * <p>{@link #deleteByLesson}과 같은 규칙이다: 행은 트랜잭션 안에서, 산출물은 커밋 뒤에.
+     *
+     * @return 지운 자산(행) 수
+     */
+    int deleteByLessons(Collection<UUID> lessonIds);
 }

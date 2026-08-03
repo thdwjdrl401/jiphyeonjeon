@@ -12,8 +12,11 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * 강의 삭제에 딸린 녹화 정리(포트 {@link LessonRecordingCleanup} 구현).
@@ -49,20 +52,34 @@ public class LessonRecordingCleanupService implements LessonRecordingCleanup {
     @Override
     @Transactional
     public int deleteByLesson(UUID lessonId) {
-        List<VideoAsset> assets = repository.findByLessonIdIn(List.of(lessonId));
+        return deleteByLessons(List.of(lessonId));
+    }
+
+    @Override
+    @Transactional
+    public int deleteByLessons(Collection<UUID> lessonIds) {
+        if (lessonIds.isEmpty()) {
+            return 0;
+        }
+        List<VideoAsset> assets = repository.findByLessonIdIn(lessonIds);
         if (assets.isEmpty()) {
             return 0;
         }
         // 산출물 경로는 세션 단위다(RecordingObjectKeys). 행을 지우기 전에 모아 둔다 — 지운 뒤에는 알 수 없다.
-        List<String> prefixes = assets.stream()
-                .map(VideoAsset::getLiveSessionId)
-                .filter(java.util.Objects::nonNull)
-                .map(RecordingObjectKeys::objectPrefix)
-                .toList();
+        // 레슨별로 묶는 건 로그 때문이다. 정리에 실패한 파일이 어느 강의 것인지 안 남으면 손으로 못 찾는다.
+        Map<UUID, List<String>> prefixesByLesson = assets.stream()
+                .filter(asset -> asset.getLiveSessionId() != null)
+                .collect(Collectors.groupingBy(
+                        VideoAsset::getLessonId,
+                        Collectors.mapping(
+                                asset -> RecordingObjectKeys.objectPrefix(asset.getLiveSessionId()),
+                                Collectors.toList())));
         repository.deleteAll(assets);
-        events.publishEvent(new RecordingObjectsOrphaned(lessonId, prefixes));
-        log.info("강의 삭제에 따른 녹화 자산 제거 lessonId={} assets={} prefixes={}",
-                lessonId, assets.size(), prefixes.size());
+        prefixesByLesson.forEach((lessonId, prefixes) ->
+                events.publishEvent(new RecordingObjectsOrphaned(lessonId, prefixes)));
+        log.info("삭제에 따른 녹화 자산 제거 lessons={} assets={} prefixes={}",
+                lessonIds.size(), assets.size(),
+                prefixesByLesson.values().stream().mapToInt(List::size).sum());
         return assets.size();
     }
 

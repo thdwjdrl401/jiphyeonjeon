@@ -1,0 +1,1 @@
+"""LiveClass STT evaluation harness."""

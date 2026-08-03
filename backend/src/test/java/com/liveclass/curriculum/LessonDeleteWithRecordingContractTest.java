@@ -1,5 +1,7 @@
 package com.liveclass.curriculum;
 
+import com.liveclass.live.domain.ChatMessage;
+import com.liveclass.live.repository.ChatMessageRepository;
 import com.liveclass.video.domain.ReplayStatus;
 import com.liveclass.video.domain.VideoAsset;
 import com.liveclass.video.domain.VideoAssetStatus;
@@ -30,6 +32,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -53,6 +56,9 @@ class LessonDeleteWithRecordingContractTest {
 
     @Autowired
     private VideoAssetRepository videoAssetRepository;
+
+    @Autowired
+    private ChatMessageRepository chatMessageRepository;
 
     /**
      * 실제 MinIO를 부르지 않게 막는다. 파일 삭제는 커밋 뒤에 일어나므로 이 테스트에서 실제로 호출된다.
@@ -96,6 +102,54 @@ class LessonDeleteWithRecordingContractTest {
         verify(recordingStorage).deletePrefix(anyString(), eq("sessions/" + sessionId));
     }
 
+    /**
+     * 실제로 라이브를 한 강의는 채팅이 남는다. {@code chat_message}도 {@code lesson}을 NO ACTION FK로
+     * 참조하므로 video_asset과 <b>똑같은 이유로</b> 삭제를 막는다 — "다시보기 준비 중" 강의가 안 지워진
+     * 실제 증상이 이것이다. 녹화만 seed하는 위 테스트는 이걸 못 잡는다.
+     */
+    @Test
+    void deleting_a_lesson_that_had_chat_succeeds() throws Exception {
+        auth = loginAs("INSTRUCTOR");
+        String curriculumId = createCurriculum(auth);
+        String sectionId = createSection(auth, curriculumId);
+        String lessonId = createLesson(auth, sectionId);
+        String sessionId = createLiveSession(auth, lessonId);
+
+        seedRecording(UUID.fromString(lessonId), UUID.fromString(sessionId));
+        seedChatMessage(UUID.fromString(lessonId), UUID.fromString(sessionId), currentUserId(auth));
+        when(recordingStorage.deletePrefix(anyString(), anyString())).thenReturn(0L);
+
+        write(delete("/api/instructor/lessons/" + lessonId), auth, null)
+                .andExpect(status().isNoContent());
+    }
+
+    /**
+     * 같은 결함이 커리큘럼에도 있었다. {@code live_session.curriculum_id}는 접근 게이팅용 비정규화
+     * 열인데 NO ACTION이라, 라이브 일정을 한 번이라도 잡은 초안 커리큘럼이 지워지지 않았다.
+     *
+     * <p>녹화까지 함께 둔다. 자산 행은 CASCADE로 지워지지 않으므로(일부러 NO ACTION), 커리큘럼 삭제도
+     * 레슨 삭제와 같은 정리 포트를 거쳐야 한다 — 안 거치면 여기서 막히고, FK를 풀면 파일이 고아가 된다.
+     */
+    @Test
+    void deleting_a_draft_curriculum_that_has_a_live_session_succeeds() throws Exception {
+        auth = loginAs("INSTRUCTOR");
+        String curriculumId = createCurriculum(auth);
+        String sectionId = createSection(auth, curriculumId);
+        String lessonId = createLesson(auth, sectionId);
+        String sessionId = createLiveSession(auth, lessonId);
+        UUID assetId = seedRecording(UUID.fromString(lessonId), UUID.fromString(sessionId));
+        seedChatMessage(UUID.fromString(lessonId), UUID.fromString(sessionId), currentUserId(auth));
+        when(recordingStorage.deletePrefix(anyString(), anyString())).thenReturn(2L);
+
+        write(delete("/api/instructor/curriculums/" + curriculumId), auth, null)
+                .andExpect(status().isNoContent());
+        createdCurricula.remove(curriculumId);
+
+        assertThat(videoAssetRepository.findById(assetId))
+                .as("커리큘럼을 지우면 그 아래 녹화 자산도 남지 않는다").isEmpty();
+        verify(recordingStorage).deletePrefix(anyString(), eq("sessions/" + sessionId));
+    }
+
     @Test
     void deleting_a_lesson_without_a_recording_still_works() throws Exception {
         auth = loginAs("INSTRUCTOR");
@@ -105,6 +159,26 @@ class LessonDeleteWithRecordingContractTest {
 
         write(delete("/api/instructor/lessons/" + lessonId), auth, null)
                 .andExpect(status().isNoContent());
+    }
+
+    private void seedChatMessage(UUID lessonId, UUID sessionId, UUID senderId) {
+        ChatMessage message = new ChatMessage();
+        message.setLiveSessionId(sessionId);
+        message.setLessonId(lessonId);
+        message.setUserId(senderId);
+        message.setAnonymous(false);
+        message.setSenderName("테스터");
+        message.setSessionMs(1_000L);
+        message.setText("삭제 계약 검증용 메시지");
+        message.setQuestion(false);
+        message.setClientMessageId(UUID.randomUUID().toString());
+        chatMessageRepository.saveAndFlush(message);
+    }
+
+    private UUID currentUserId(Cookie[] cookies) throws Exception {
+        MvcResult result = mockMvc.perform(get("/api/auth/me").cookie(cookies))
+                .andExpect(status().isOk()).andReturn();
+        return UUID.fromString(json(result).get("userId").asString());
     }
 
     private UUID seedRecording(UUID lessonId, UUID sessionId) {

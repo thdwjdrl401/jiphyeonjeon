@@ -1,5 +1,6 @@
 from app.adapters.bounded_lecture_note_model import BoundedLectureNoteModel
 from app.adapters.gms_openai_answer import GmsOpenAIAnswerModel
+from app.adapters.gms_openai_answer_v2 import GmsOpenAIAnswerModelV2
 from app.adapters.gms_openai_lecture_note import GmsOpenAILectureNoteModel
 from app.adapters.hmac_internal_authenticator import HmacInternalRequestAuthenticator
 from app.adapters.pgvector_material_retrieval import PgvectorActiveMaterialRepository
@@ -18,6 +19,7 @@ __all__ = [
     "BoundedLectureNoteModel",
     "CaptionConsumerState",
     "GmsOpenAIAnswerModel",
+    "GmsOpenAIAnswerModelV2",
     "GmsOpenAILectureNoteModel",
     "HmacInternalRequestAuthenticator",
     "PgvectorActiveMaterialRepository",

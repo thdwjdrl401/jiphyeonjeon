@@ -8,6 +8,9 @@ import { getLesson } from '@/features/lesson/lessonService'
 import CaptionDock from '@/features/live-session/CaptionDock'
 import LearningSidebar from '@/features/live-session/LearningSidebar'
 import { getLiveLearningPreview, type LearningPanel } from '@/features/live-session/liveLearningPreview'
+import WatchHeatmapStrip from '@/features/live-session/WatchHeatmapStrip'
+import { attachGlossary } from '@/features/live-session/glossaryView'
+import { useWatchTracking } from '@/features/live-session/useWatchTracking'
 import {
   emptyCaptionStreamState,
   reduceCaptionStream,
@@ -16,6 +19,8 @@ import {
 import {
   getAiAnswerHistory,
   getCaptions,
+  getGlossary,
+  getWatchHeatmap,
   getChatMessages,
   getLectureNotes,
 } from '@/features/live-session/liveSessionService'
@@ -30,7 +35,7 @@ import { useToast } from '@/shared/ui/Toast'
 import PageState from '@/shared/ui/PageState'
 import { StatusBadge } from '@/shared/ui/WorkspaceUi'
 
-const { summaryBlocks, glossaryTerms } = getLiveLearningPreview()
+const { summaryBlocks } = getLiveLearningPreview()
 const reviewDraft = 'SecurityContext는 인증이 완료된 현재 요청의 인증 주체를 보관합니다.'
 const PlaybackPlayer = lazy(() => import('@/features/live-session/PlaybackPlayer'))
 
@@ -87,6 +92,23 @@ export default function ReplayLessonPage() {
     enabled: Boolean(sessionId),
   })
   /*
+   * 많이 다시 본 구간(ADR-0063). 강사는 세지 않는다 — 검수하며 되감은 것이 학생 재시청으로 잡히면
+   * 그래프가 오염된다. 보기는 강사도 본다(그러라고 만든 것이다).
+   */
+  const durationMs = playback.playback?.durationMs ?? null
+  useWatchTracking(lessonId, positionMs, !isInstructor && Boolean(lessonId))
+  // 용어집(ADR-0064). 라이브와 같은 규칙으로 자막에 링크를 건다 — 두 화면이 다르면 안 된다.
+  const glossaryQuery = useQuery({
+    queryKey: ['glossary', lessonId],
+    queryFn: () => getGlossary(lessonId),
+    enabled: Boolean(lessonId),
+  })
+  const heatmapQuery = useQuery({
+    queryKey: ['watch-heatmap', lessonId, durationMs],
+    queryFn: () => getWatchHeatmap(lessonId, durationMs),
+    enabled: Boolean(lessonId),
+  })
+  /*
    * 저장된 자막 이벤트를 라이브와 같은 누적기로 접는다. 다시보기라고 다른 규칙으로 접으면
    * 같은 강의가 두 화면에서 다르게 보인다.
    */
@@ -97,6 +119,7 @@ export default function ReplayLessonPage() {
     return selectCaptionViews(state)
   }, [captionsQuery.data])
   const messages = messagesQuery.data ?? []
+  const glossary = attachGlossary(captions, glossaryQuery.data ?? [])
   // 검수 저장·게시는 방금 누른 행동의 결과다 — 화면에 남기지 않고 토스트로 알린다.
   // (게시 여부 자체는 위 툴바 배지가 계속 보여 준다.)
   const saveReviewMutation = useMutation({
@@ -178,8 +201,13 @@ export default function ReplayLessonPage() {
             />
           </Suspense>
 
+          <WatchHeatmapStrip
+            durationMs={durationMs}
+            heatmap={heatmapQuery.data ?? null}
+          />
+
           {/* 라이브 당시 저장된 자막이다. "교정"은 후처리가 붙은 뒤의 이름이라 아직 쓰지 않는다. */}
-          <CaptionDock captions={captions} currentSessionMs={positionMs} label="자막" onSeek={seekSession} onSelectTerm={openGlossaryTerm} />
+          <CaptionDock captions={glossary.captions} currentSessionMs={positionMs} label="자막" onSeek={seekSession} onSelectTerm={openGlossaryTerm} />
 
           <div className="chapter-row"><button type="button" onClick={() => seekSession(0)}><span>00:00</span>인증 흐름</button><button type="button" onClick={() => seekSession(1_880_000)}><span>31:20</span>세션 저장소</button><button type="button" onClick={() => seekSession(3_700_000)}><span>1:01:40</span>CSRF 실습</button></div>
         </section>
@@ -193,7 +221,7 @@ export default function ReplayLessonPage() {
           onSelectedTermChange={setSelectedTermId}
           summaryBlocks={summaryBlocks}
           lectureNote={noteQuery.data ?? null}
-          glossaryTerms={glossaryTerms}
+          glossaryTerms={glossary.terms}
           messages={messages}
           discussionNotice="라이브 당시 채팅을 읽기 전용으로 표시합니다. 질문 필터로 질문만 모아볼 수 있습니다."
           aiContent={aiContent}

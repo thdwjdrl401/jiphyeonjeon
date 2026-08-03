@@ -7,6 +7,7 @@ import { getInstructorCurriculum } from '@/features/curriculum/curriculumManagem
 import { deleteLesson } from '@/features/curriculum/curriculumManagementService'
 import { deleteLessonMaterial, getLesson, prepareLessonAi, saveLesson } from '@/features/lesson/lessonService'
 import { invalidateAfterLessonWrite } from '@/features/lesson/lessonQueryCache'
+import { ApiError } from '@/shared/api/client'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
 import { useToast } from '@/shared/ui/Toast'
@@ -77,8 +78,12 @@ export default function LessonFormPage() {
       await invalidateAfterLessonWrite(queryClient, curriculumId)
       toast.success('강의를 삭제했습니다.')
       navigate(instructorPaths.curriculumManage(curriculumId))
-    } catch {
-      toast.error('강의를 삭제하지 못했습니다.')
+    } catch (error) {
+      // 서버가 사유를 담아 주면 그대로 보여 준다(수강 상태 변경과 같은 규칙). 사유를 버리면 강사는
+      // "왜 안 되는지"를 알 수 없고, 실제로 FK에 막혀 영영 안 지워지던 강의가 그렇게 방치됐다.
+      toast.error(error instanceof ApiError && error.message
+        ? error.message
+        : '강의를 삭제하지 못했습니다.')
     } finally {
       setDeleting(false)
     }
