@@ -428,3 +428,72 @@ Content-Type: application/json
 - Spring 쪽 실제 처리(`AiCallbackService`에서 `keyTerms` 필드를 받아 저장하는 로직)는 이 문서가 다루는
   ai-worker 범위 밖이며 아직 구현되지 않았다 — 지금은 알 수 없는 필드로 조용히 무시된다. Java 쪽 계약
   (`AiCallbackEvent` record에 `keyTerms` 필드 추가 등)은 backend 팀이 별도로 정한다.
+
+## 11. 강조 판서 스냅샷 색인 (ADR-0043)
+
+이 절은 9절 자료 임베딩과 **같은 큐·같은 HMAC·같은 callback endpoint**를 쓰는 두 번째 잡 계열이다.
+공유 wire 정본은 루트 `docs/CONTRACT.md` §3-1/§3-2이며, 여기서는 Python 적용 규칙만 정한다.
+요청 배경은 [ADR-0074](../../docs/decisions/songjeongki/0074-annotation-highlight-evidence-contract.md),
+설계 결정은 [ADR-0043](../../docs/decisions/canola/0043-annotation-timeline-evidence-mvp.md)을 따른다.
+
+### 11.1 잡 envelope
+
+`ANNOTATION_EMBED` version 1:
+
+```json
+{
+  "taskType": "ANNOTATION_EMBED",
+  "snapshotId": "uuid",
+  "assetId": "uuid",
+  "sessionId": "uuid",
+  "lessonId": "uuid",
+  "curriculumId": "uuid",
+  "sessionMs": 725300,
+  "capturedAt": "2026-08-04T13:20:05+09:00",
+  "interpretedText": "B+ tree 노드 분할 조건",
+  "policy": { "embedModel": "bge-m3" },
+  "contractVersion": 1
+}
+```
+
+`ANNOTATION_EMBED_DELETE` version 1:
+
+```json
+{ "taskType": "ANNOTATION_EMBED_DELETE", "snapshotId": "uuid", "contractVersion": 1 }
+```
+
+- 두 잡은 `PptxEmbedJob`·`EmbedDeleteJob`과 같은 `taskType` discriminator union에 속하며 같은
+  `parse_material_job`이 파싱한다. 알 수 없는 field와 지원하지 않는 `contractVersion`은 fail-closed다.
+- `snapshotId`가 멱등 키다. 같은 값의 재발행은 기존 색인을 교체한다.
+- `curriculumId`는 검색 스코프, `sessionMs`는 다시보기 타임라인 앵커다. `sessionMs`는 0 이상이어야 한다.
+- `capturedAt`은 offset이 있는 timestamp여야 한다. naive 값은 실제 타임라인에 놓을 수 없어 거부한다.
+- `interpretedText`는 생략 가능하고 2,000자를 넘을 수 없다. 상한은 `ai.annotation_snapshot.text`와
+  같은 값이며, 저장할 수 없는 텍스트를 조용히 자르지 않고 거부해 DLQ에 보존한다.
+- delete envelope는 `snapshotId`만 받는다. 삭제에 lesson/curriculum scope를 요구하지 않으므로
+  자료 삭제(§9.6)와 달리 self-lookup resolver가 필요 없다.
+
+### 11.2 이미지 획득
+
+`assetId`로 §9.3과 **같은** `POST /api/internal/ai/materials/download-url`을 호출해 갓 서명된
+presigned GET을 받는다. 판서 전용 경로를 새로 만들지 않는다. 허용 media type과 크기 상한만 자료와
+다르다 — PNG, 최대 4 MiB이며 긴 변 1,568px을 넘으면 거부하지 않고 워커가 다운스케일한다.
+
+### 11.3 결과 callback
+
+`POST /api/internal/ai/callbacks`에 §9.2의 HMAC으로 보낸다.
+
+```json
+{
+  "eventId": "uuid",
+  "eventType": "ANNOTATION_EMBEDDED",
+  "jobId": "ANNOTATION_EMBED:<snapshotId>",
+  "snapshotId": "uuid",
+  "status": "READY"
+}
+```
+
+- body에 `materialId`·`lessonId`가 없다. Spring은 `snapshotId`만으로 스냅샷 상태를 확정한다.
+- `eventId`는 `(jobId, eventType)`에서 결정적으로 파생하므로 같은 결과의 HTTP 재시도가 같은 값을 쓴다.
+- `ANNOTATION_EMBEDDING`(PROCESSING)은 계약에 존재하지만 §9.5와 같은 이유로 발신하지 않는다 —
+  응답 유실 뒤의 늦은 PROCESSING이 READY/FAILED를 되돌리는 것을 막는다.
+- Spring은 이 eventType들을 아직 매핑하지 않아 현재는 inbox에만 남는다.
