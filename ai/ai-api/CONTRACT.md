@@ -74,6 +74,14 @@ data: {"requestId":"request-1","text":"RAG는 "}
 {"type":"CAPTION","sessionId":"33333333-3333-4333-8333-333333333333","sttSessionId":"stt-attempt-2","startMs":55000,"endMs":59000}
 ```
 
+```json
+{"type":"ANNOTATION","snapshotId":"eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee","sessionId":"33333333-3333-4333-8333-333333333333","sessionMs":725300,"excerpt":"B+ tree 노드 분할 조건"}
+```
+
+`ANNOTATION`은 강사 강조 판서 스냅샷 근거다([ADR-0043](../../docs/decisions/canola/0043-annotation-timeline-evidence-mvp.md)).
+`sessionMs`는 다시보기 타임라인 앵커이며 client가 그 시점으로 이동하는 데 쓴다. 스냅샷에는 page가 없으므로
+`PPTX`로 표현하지 않는다. 중복 제거 키는 `snapshotId`다. v1에서 `excerpt`는 다른 v1 source와 같이 optional이다.
+
 한 stream은 `answer.delta` 0개 이상 뒤 `answer.done|answer.insufficient|answer.error` 중 정확히 하나로 끝난다.
 client disconnect/cancellation 때는 terminal event 생성을 강제하지 않고 내부 iterator까지 취소를 전파한다.
 
@@ -197,8 +205,9 @@ v1 endpoint(`/internal/v1/rag/answers:stream`)는 이 절 때문에 요청·응�
 - caption evidence는 `captions[]`를 하나로 병합해 **CAPTION source 최대 1개**만 만든다(ADR-0037).
 - `answer.done.sources`는 v1과 달리 각 source에 원문 그대로의 plain-text `excerpt`(최대 300자)를 포함한다.
   CAPTION source는 `sttSessionId`를 포함하지 않는다(v1 `CaptionSource`와 다른 점).
-- source 중복 제거는 `(materialId,page)` / `(sessionId,startSessionMs,endSessionMs)` 키로만 판단하고
-  `excerpt` 차이는 dedup에 영향을 주지 않는다.
+- source 중복 제거는 `(materialId,page)` / `(sessionId,startSessionMs,endSessionMs)` / `snapshotId` 키로만
+  판단하고 `excerpt` 차이는 dedup에 영향을 주지 않는다.
+- `ANNOTATION` source는 v1과 같은 필드를 쓰되 `excerpt`가 **필수**다(다른 v2 source와 동일).
 - SSE event 종류·상태코드·에러 코드 체계는 v1과 동일하다.
 
 ## 9. 후속 미확정 사항

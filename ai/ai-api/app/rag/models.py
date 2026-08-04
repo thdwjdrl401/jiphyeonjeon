@@ -60,7 +60,24 @@ class CaptionSource(_ContractModel):
         return self
 
 
-AnswerSource = Annotated[PptxSource | CaptionSource, Field(discriminator="type")]
+class AnnotationSource(_ContractModel):
+    """An instructor highlight snapshot used as evidence (ADR-0043 §6).
+
+    sessionMs anchors the snapshot on the replay timeline so the client can seek to the moment
+    the instructor highlighted it. Distinct from PptxSource because a snapshot has no page and
+    claiming one would misreport where the answer came from.
+    """
+
+    type: Literal["ANNOTATION"] = "ANNOTATION"
+    snapshotId: UUID
+    sessionId: SessionId
+    sessionMs: int = Field(ge=0)
+    excerpt: str | None = Field(default=None, max_length=1000)
+
+
+AnswerSource = Annotated[
+    PptxSource | CaptionSource | AnnotationSource, Field(discriminator="type")
+]
 
 
 class AnswerDeltaData(_ContractModel):
@@ -111,8 +128,9 @@ AnswerEvent = AnswerDelta | AnswerDone | AnswerInsufficient | AnswerError
 class RetrievedEvidence(BaseModel):
     """Prompt-ready excerpt with the scope key its source can prove.
 
-    curriculum_id is the PptxSource scope key (materials are shared curriculum-wide,
-    ADR-0007) and is None for CaptionSource, which stays lesson_id/sessionId-scoped.
+    curriculum_id is the scope key for PptxSource (materials are shared curriculum-wide,
+    ADR-0007) and AnnotationSource (indexed on the same axis, ADR-0043 §4). It is None for
+    CaptionSource, which stays lesson_id/sessionId-scoped.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=False)
@@ -216,7 +234,20 @@ class CaptionSourceV2(_ContractModel):
         return self
 
 
-AnswerSourceV2 = Annotated[PptxSourceV2 | CaptionSourceV2, Field(discriminator="type")]
+class AnnotationSourceV2(_ContractModel):
+    """Replay annotation source. Same shape as v1 but excerpt is mandatory, like every other
+    v2 source — replay answers must always show the user what they were grounded in."""
+
+    type: Literal["ANNOTATION"] = "ANNOTATION"
+    snapshotId: UUID
+    sessionId: SessionId
+    sessionMs: int = Field(ge=0)
+    excerpt: str = Field(min_length=1, max_length=300)
+
+
+AnswerSourceV2 = Annotated[
+    PptxSourceV2 | CaptionSourceV2 | AnnotationSourceV2, Field(discriminator="type")
+]
 
 
 class AnswerDoneDataV2(_ContractModel):
