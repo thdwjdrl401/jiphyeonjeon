@@ -52,7 +52,11 @@ class RecordedSttSettings(BaseSettings):
     def validate_rabbitmq_url(cls, value: SecretStr) -> SecretStr:
         revealed = value.get_secret_value()
         parsed = urlsplit(revealed)
-        if revealed != revealed.strip() or parsed.scheme not in {"amqp", "amqps"} or not parsed.hostname:
+        if (
+            revealed != revealed.strip()
+            or parsed.scheme not in {"amqp", "amqps"}
+            or not parsed.hostname
+        ):
             raise ValueError("rabbitmq_url must be an unpadded AMQP URL")
         return value
 

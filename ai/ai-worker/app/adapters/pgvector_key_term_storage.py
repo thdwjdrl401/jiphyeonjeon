@@ -144,7 +144,9 @@ class PgvectorKeyTermRepository:
                     ).all()
                 )
                 if len(terms) != int(row["key_term_count"]):
-                    raise ValueError("stored key-term count does not match material version metadata")
+                    raise ValueError(
+                        "stored key-term count does not match material version metadata"
+                    )
             return KeyTermExtractionResult(
                 status=row["key_term_status"],
                 terms=terms,

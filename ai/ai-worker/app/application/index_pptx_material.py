@@ -35,6 +35,7 @@ from app.ports import (
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass(frozen=True, slots=True)
 class MaterialIndexResult:
     version_id: int
@@ -72,6 +73,7 @@ class IndexPptxMaterial:
         self._chunk_strategy = chunk_strategy(chunk_max_chars)
         self._key_term_extractor = key_term_extractor
         self._key_term_storage = key_term_storage
+
     async def execute(
         self,
         material: StagedMaterial,
@@ -79,7 +81,9 @@ class IndexPptxMaterial:
         extract_key_terms: bool | None = None,
     ) -> MaterialIndexResult:
         self._validate_contract(material)
-        requested = self._key_term_extractor is not None if extract_key_terms is None else extract_key_terms
+        requested = (
+            self._key_term_extractor is not None if extract_key_terms is None else extract_key_terms
+        )
         existing = await self._index_storage.find_existing(material)
         if existing is not None:
             stored_result = await self._load_key_term_result(existing.version_id)
@@ -93,9 +97,7 @@ class IndexPptxMaterial:
                     existing.version_id, key_term_result
                 )
             else:
-                key_term_result = stored_result or KeyTermExtractionResult(
-                    status="NOT_REQUESTED"
-                )
+                key_term_result = stored_result or KeyTermExtractionResult(status="NOT_REQUESTED")
             if existing.activation_required:
                 await self._index_storage.activate(material, existing.version_id)
             return MaterialIndexResult(

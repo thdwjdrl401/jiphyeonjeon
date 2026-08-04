@@ -64,7 +64,9 @@ class FfmpegRecordedAudioProcessor:
             duration_ms = round(float(payload["format"]["duration"]) * 1000)
             has_audio = any(stream.get("codec_type") == "audio" for stream in payload["streams"])
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
-            raise RecordedAudioError("ffprobe response was invalid", code="SOURCE_NOT_READY") from exc
+            raise RecordedAudioError(
+                "ffprobe response was invalid", code="SOURCE_NOT_READY"
+            ) from exc
         if duration_ms <= 0:
             raise RecordedAudioError("recorded source duration is invalid", code="SOURCE_NOT_READY")
         if duration_ms > self._source_max_duration_ms:
@@ -103,7 +105,9 @@ class FfmpegRecordedAudioProcessor:
         if not destination.is_file() or destination.stat().st_size == 0:
             raise RecordedAudioError("FFmpeg produced no audio", code="AUDIO_EXTRACTION_FAILED")
 
-    async def chunks(self, audio: Path, directory: Path, duration_ms: int) -> tuple[AudioChunk, ...]:
+    async def chunks(
+        self, audio: Path, directory: Path, duration_ms: int
+    ) -> tuple[AudioChunk, ...]:
         spans: list[tuple[int, int]] = []
         start_ms = 0
         while start_ms < duration_ms:
@@ -145,7 +149,9 @@ class FfmpegRecordedAudioProcessor:
             )
             size = chunk_path.stat().st_size if chunk_path.is_file() else 0
             if size == 0:
-                raise RecordedAudioError("FFmpeg produced an empty chunk", code="AUDIO_EXTRACTION_FAILED")
+                raise RecordedAudioError(
+                    "FFmpeg produced an empty chunk", code="AUDIO_EXTRACTION_FAILED"
+                )
             if size > self._chunk_max_bytes:
                 chunk_path.unlink(missing_ok=True)
                 if end_ms - start_ms <= 60_000:

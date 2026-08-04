@@ -6,7 +6,9 @@ import pytest
 from app.recorded_stt.gms_whisper import GmsWhisperClient, WhisperTranscriptionError
 
 
-async def test_calls_gms_whisper_verbose_json_without_logging_or_returning_raw_payload(tmp_path) -> None:
+async def test_calls_gms_whisper_verbose_json_without_logging_or_returning_raw_payload(
+    tmp_path,
+) -> None:
     chunk = tmp_path / "chunk.mp3"
     chunk.write_bytes(b"fake-mp3")
 
@@ -14,11 +16,11 @@ async def test_calls_gms_whisper_verbose_json_without_logging_or_returning_raw_p
         assert request.url.path.endswith("/audio/transcriptions")
         assert request.headers["Authorization"] == "Bearer secret-key"
         body = await request.aread()
-        assert b'whisper-1' in body
-        assert b'verbose_json' in body
+        assert b"whisper-1" in body
+        assert b"verbose_json" in body
         # GMS rejects OpenAI's array-style timestamp_granularities[] field with HTTP 500.
         # whisper-1 verbose_json already returns segment-level start/end timestamps.
-        assert b'timestamp_granularities' not in body
+        assert b"timestamp_granularities" not in body
         return httpx.Response(
             200,
             json={
@@ -51,7 +53,9 @@ async def test_calls_gms_whisper_verbose_json_without_logging_or_returning_raw_p
 async def test_maps_gms_400_to_permanent_model_unavailable(tmp_path) -> None:
     chunk = tmp_path / "chunk.mp3"
     chunk.write_bytes(b"fake-mp3")
-    transport = httpx.MockTransport(lambda _request: httpx.Response(400, json={"error": "no model"}))
+    transport = httpx.MockTransport(
+        lambda _request: httpx.Response(400, json={"error": "no model"})
+    )
     async with httpx.AsyncClient(base_url="https://gms.invalid/v1", transport=transport) as http:
         client = GmsWhisperClient(
             http,

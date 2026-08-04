@@ -82,7 +82,9 @@ async def test_transient_failure_republishes_with_a_bounded_retry_header() -> No
     incoming.ack.assert_awaited_once_with()
 
 
-async def test_exhausted_message_is_requeued_if_terminal_callback_is_temporarily_unavailable() -> None:
+async def test_exhausted_message_is_requeued_if_terminal_callback_is_temporarily_unavailable() -> (
+    None
+):
     handler = _handler(RuntimeError("temporary"))
     handler.report_retry_exhausted.side_effect = RuntimeError("Spring unavailable")
     consumer, exchange = _consumer(handler)
