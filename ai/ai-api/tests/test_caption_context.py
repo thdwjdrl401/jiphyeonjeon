@@ -1,13 +1,13 @@
 import json
 from collections.abc import Callable
-from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
 from app.captions import CaptionContextStore, IngestOutcome, parse_caption_entry
+from conftest import AI_ROOT
 
-FIXTURES_DIR = Path(__file__).parents[2] / "realtime-agent" / "contracts" / "fixtures"
+FIXTURES_DIR = AI_ROOT / "realtime-agent" / "contracts" / "fixtures"
 SESSION_ID = "11111111-1111-4111-8111-111111111111"
 LESSON_ID = "22222222-2222-4222-8222-222222222222"
 OTHER_LESSON_ID = "33333333-3333-4333-8333-333333333333"

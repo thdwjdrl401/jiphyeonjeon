@@ -3,7 +3,6 @@ import json
 import os
 from collections import deque
 from collections.abc import Callable
-from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -16,8 +15,9 @@ from app.adapters.redis_caption_consumer import (
     RedisCaptionConsumer,
 )
 from app.captions import CaptionContextStore, parse_caption_entry
+from conftest import AI_ROOT
 
-FIXTURES_DIR = Path(__file__).parents[2] / "realtime-agent" / "contracts" / "fixtures"
+FIXTURES_DIR = AI_ROOT / "realtime-agent" / "contracts" / "fixtures"
 SESSION_ID = "11111111-1111-4111-8111-111111111111"
 DEFAULT_TEST_REDIS_URL = "redis://127.0.0.1:6379/15"
 
