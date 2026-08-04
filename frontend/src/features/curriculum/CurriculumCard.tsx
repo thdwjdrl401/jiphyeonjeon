@@ -31,11 +31,12 @@ export default function CurriculumCard({ curriculum, compact = false }: Curricul
         </div>
 
         <div className="curriculum-card__body">
+          {/* 강사명은 ellipsis로, 제목은 두 줄로 잘린다 — title로 전체를 확인할 수 있게 둔다. */}
           <div className="curriculum-card__meta">
-            <span>{curriculum.instructor.displayName} 강사</span>
+            <span title={`${curriculum.instructor.displayName} 강사`}>{curriculum.instructor.displayName} 강사</span>
             <span>{period}</span>
           </div>
-          <h3>{curriculum.title}</h3>
+          <h3 title={curriculum.title}>{curriculum.title}</h3>
 
           {progress ? (
             <div className="curriculum-progress">

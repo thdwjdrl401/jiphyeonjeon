@@ -710,17 +710,33 @@ body {
   gap: 26px 14px;
 }
 
+/*
+ * 카드 경계는 `내 커리큘럼`의 dashboard-curriculum-card와 같은 값을 쓴다
+ * (--border-medium 실선 + --paper-light 표면 + radius 0 + 그림자 없음).
+ * 예전에는 border: 0 / background: transparent 라서 카드 하나가 어디서 시작하고
+ * 끝나는지 알 수 없었다. 새 시각 언어를 만드는 것이 아니라 같은 목록끼리 값을 맞춘다.
+ */
 .curriculum-card {
   position: relative;
   height: 100%;
   overflow: hidden;
-  border: 0;
+  border: 1px solid var(--border-medium);
   border-radius: 0;
-  background: transparent;
+  background: var(--paper-light);
   box-shadow: none;
+  transition: border-color .18s ease, transform .18s ease;
 }
 
-.curriculum-card:hover { border-color: transparent; box-shadow: none; transform: none; }
+/*
+ * 눌러서 상세로 가는 카드다 — 예전에는 hover에 아무 반응이 없어 클릭 가능한지 알 수 없었다.
+ * 그림자는 쓰지 않고(이 테마의 카드·패널은 모두 box-shadow: none) 외곽선이 한 단 진해지는
+ * 것과 1px 들림으로만 알린다. 교육 플랫폼의 차분한 톤을 유지하기 위한 최소 신호다.
+ */
+.curriculum-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: none;
+  transform: translateY(-1px);
+}
 
 .curriculum-card__link {
   display: flex;
@@ -729,23 +745,35 @@ body {
   color: inherit;
 }
 
-.curriculum-card__link:focus-visible {
+/* 포커스 링은 링크가 아니라 카드 경계를 감싼다 — 키보드로 훑을 때의 단위가 카드이기 때문이다. */
+.curriculum-card:has(.curriculum-card__link:focus-visible) {
   outline: 2px solid var(--ink-950);
-  outline-offset: 4px;
+  outline-offset: 2px;
 }
 
+.curriculum-card__link:focus-visible { outline: 0; }
+
+/*
+ * 표지는 카드 안의 한 구역이므로 자기 테두리를 갖지 않는다 — 카드 외곽선과 겹쳐 이중선이
+ * 됐다. 아래쪽 구분선 하나만 남겨 본문과 가른다. 높이(138px)는 그대로 둔다.
+ */
 .curriculum-cover {
   height: 138px;
   flex: 0 0 auto;
   overflow: hidden;
-  border: 1px solid var(--border-soft);
+  border: 0;
+  border-bottom: 1px solid var(--border-soft);
   background: var(--ink-100);
 }
 
 .curriculum-cover img { transition: transform .35s ease; }
 .curriculum-card:hover .curriculum-cover img { transform: scale(1.025); }
-.curriculum-card__body { display: flex; min-height: 132px; flex: 1; flex-direction: column; padding: 12px 0 0; }
-.curriculum-card__meta { gap: 8px; font-size: .65rem; }
+/* 외곽선이 생겼으므로 좌우 여백을 준다 — 13px은 5열 실측 폭(244.8px)에서 본문 216.8px을
+   남겨 제목이 한 줄 12자로 지금과 같이 들어가는 값이다. */
+.curriculum-card__body { display: flex; min-height: 132px; flex: 1; flex-direction: column; padding: 13px 13px 12px; }
+/* 10.4px 작은 글씨였는데 --ink-500은 이 배경에서 2.97:1이라 사실상 안 읽혔다.
+   --ink-muted는 밝은 화면의 작은 글씨용으로 이미 정의된 토큰이다(6.06:1). */
+.curriculum-card__meta { gap: 8px; color: var(--ink-muted); font-size: .65rem; }
 .curriculum-card__meta span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .curriculum-card__meta span:last-child { flex: 0 0 auto; }
 .curriculum-card h3 {
@@ -769,19 +797,25 @@ body {
   line-height: 1.5;
 }
 .curriculum-card .curriculum-progress { margin: 3px 0 10px; }
-.curriculum-card__footer { margin-top: auto; padding-top: 8px; border-color: var(--border-medium); font-size: .65rem; }
-.curriculum-card__arrow { flex: 0 0 auto; color: var(--ink-800); font-size: .88rem; }
+/* 카드 안의 구분선은 외곽선(--border-medium)보다 약하다 — 구분 강도의 차이가
+   "카드 경계"와 "카드 안 구획"의 위계를 만든다. */
+.curriculum-card__footer { margin-top: auto; padding-top: 8px; border-color: var(--border-soft); color: var(--ink-muted); font-size: .65rem; }
+.curriculum-card__arrow { flex: 0 0 auto; color: var(--ink-700); font-size: .88rem; transition: color .18s ease, transform .18s ease; }
+.curriculum-card:hover .curriculum-card__arrow { color: var(--ink-950); transform: translate(1px, -1px); }
 
+/* 로딩 뼈대는 카드와 같은 경계·여백을 가져야 한다 — 아니면 로딩에서 완료로 넘어갈 때 1px씩 밀린다. */
 .curriculum-skeleton {
   padding-bottom: 18px;
-  border: 0;
+  border: 1px solid var(--border-medium);
   border-radius: 0;
-  background: transparent;
+  background: var(--paper-light);
 }
 
 .skeleton-block { background: linear-gradient(90deg, var(--ink-100), var(--paper-pure), var(--ink-100)); background-size: 200% 100%; }
 .skeleton-cover { height: 138px; }
-.skeleton-line { margin-inline: 0; }
+/* 좌우 여백만 본문(13px)에 맞춘다. width는 --short/--title/--medium 변형이 줄 길이를
+   다르게 주는 값이므로 건드리지 않는다. */
+.skeleton-line { margin-inline: 13px; }
 
 .catalog-page { background: var(--paper); }
 .catalog-hero { min-height: 190px; border-bottom: 1px solid var(--border-medium); background: var(--paper-pure); }
