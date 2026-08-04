@@ -42,6 +42,29 @@ services:
       timeout: 5s
       retries: 5
 
+  # 운영 RabbitMQ 관리 UI TLS 종단 — https://…:8991 → rabbitmq:15672.
+  #
+  # **왜 필요한가.** 큐가 비었는지, DLQ에 무엇이 쌓였는지는 컨테이너에 들어가 rabbitmqctl을 쳐야만
+  # 보였다. 실제로 강조 색인 잡이 DLQ로 반려된 것을 그렇게 알아냈는데, 반려 사유는 그 방법으로
+  # 볼 수 없다 — UI가 있으면 메시지 본문까지 바로 확인된다.
+  #
+  # **dev(8990)와 포트를 나눈다.** 같은 포트면 어느 스택의 큐를 보고 있는지 알 수 없고, DLQ를
+  # 들여다볼 때 그 혼동이 그대로 오판이 된다.
+  #
+  # 인증서는 앱 스택 certbot이 발급/갱신하는 공유 볼륨을 읽기전용으로 쓴다(livekit·dev UI와 동일).
+  rabbitmq-ui-tls:
+    image: nginx:alpine
+    container_name: liveclass-rabbitmq-ui-tls-prod
+    restart: unless-stopped
+    ports:
+      - "8991:8991"      # https (SG 개방 필요)
+    volumes:
+      - ./infra/nginx/rabbitmq-ui-prod.conf:/etc/nginx/conf.d/default.conf:ro
+      - certbot-etc:/etc/letsencrypt:ro
+    depends_on: [rabbitmq]
+    # 6h마다 reload → 갱신 인증서 반영 (livekit nginx·dev UI와 동일)
+    command: /bin/sh -c "while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g 'daemon off;'"
+
   minio:                                   # 에셋(썸네일·프로필·강의자료) presigned 업로드용 S3 호환 스토리지 (ADR-0023)
     image: minio/minio:RELEASE.2025-09-07T16-13-09Z   # LiveKit 스택과 동일 태그 고정
     container_name: liveclass-minio-prod
