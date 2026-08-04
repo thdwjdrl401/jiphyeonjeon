@@ -2,8 +2,7 @@ from app.domain.annotation_models import (
     MAX_ANNOTATION_TEXT_CHARS,
     AnnotationIngestionError,
     AnnotationRecord,
-    AnnotationSnapshot,
-    AnnotationTextOrigin,
+    AnnotationHighlight,
 )
 from app.domain.errors import (
     EmbeddingContractError,
@@ -28,8 +27,7 @@ __all__ = [
     "MAX_ANNOTATION_TEXT_CHARS",
     "AnnotationIngestionError",
     "AnnotationRecord",
-    "AnnotationSnapshot",
-    "AnnotationTextOrigin",
+    "AnnotationHighlight",
     "ChunkRecord",
     "EmbeddingContractError",
     "EmptyPptxContentError",

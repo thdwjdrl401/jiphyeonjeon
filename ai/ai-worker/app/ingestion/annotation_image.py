@@ -21,6 +21,10 @@ MAX_ANNOTATION_IMAGE_PIXELS = 50_000_000
 def downscale_annotation_image(image: bytes) -> bytes:
     """Shrink an oversized PNG crop to the long-edge budget, preserving aspect ratio.
 
+    **Parked alongside `GmsAnnotationReader`** — the worker no longer receives highlight
+    images (ADR-0074), so nothing calls this today. See that adapter's docstring for why it
+    is kept and what re-wiring needs.
+
     Returns the original bytes untouched when it already fits — re-encoding a compliant image
     would only cost quality and time.
     """

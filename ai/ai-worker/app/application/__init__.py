@@ -1,6 +1,6 @@
-from app.application.delete_annotation_snapshot import DeleteAnnotationSnapshot
+from app.application.delete_annotation_highlight import DeleteAnnotationHighlight
 from app.application.delete_material_index import DeleteMaterialIndex, MaterialDeleteResult
-from app.application.index_annotation_snapshot import IndexAnnotationSnapshot
+from app.application.index_annotation_highlight import IndexAnnotationHighlight
 from app.application.index_pptx_material import IndexPptxMaterial, MaterialIndexResult
 from app.application.map_material_job import (
     MATERIAL_VERSION_V1,
@@ -16,9 +16,9 @@ from app.application.map_material_job import (
 __all__ = [
     "MATERIAL_VERSION_V1",
     "SPRING_ASSET_SOURCE",
-    "DeleteAnnotationSnapshot",
+    "DeleteAnnotationHighlight",
     "DeleteMaterialIndex",
-    "IndexAnnotationSnapshot",
+    "IndexAnnotationHighlight",
     "IndexPptxMaterial",
     "MaterialDeleteResult",
     "MaterialIndexResult",

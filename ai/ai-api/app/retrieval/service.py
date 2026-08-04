@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from typing import Protocol
 from uuid import UUID
 
-from app.retrieval.models import AnnotationSnapshotHit, MaterialChunkHit, SessionTimeCutoff
+from app.retrieval.models import AnnotationHighlightHit, MaterialChunkHit, SessionTimeCutoff
 
 EMBEDDING_DIMENSIONS = 1024
 MAX_TOP_K = 50
@@ -69,7 +69,7 @@ class AnnotationSearchPort(Protocol):
         query_embedding: Sequence[float],
         top_k: int,
         cutoff: SessionTimeCutoff | None,
-    ) -> tuple[AnnotationSnapshotHit, ...]: ...
+    ) -> tuple[AnnotationHighlightHit, ...]: ...
 
     async def recent_annotations(
         self,
@@ -77,7 +77,7 @@ class AnnotationSearchPort(Protocol):
         session_id: UUID,
         limit: int,
         cutoff: SessionTimeCutoff | None,
-    ) -> tuple[AnnotationSnapshotHit, ...]: ...
+    ) -> tuple[AnnotationHighlightHit, ...]: ...
 
 
 class AnnotationRetrievalService:
@@ -86,7 +86,7 @@ class AnnotationRetrievalService:
     `retrieve` answers "what did the instructor highlight about X" by similarity. `recent`
     answers "what did the instructor just highlight" by time, ignoring similarity entirely —
     a time deixis like "아까" has no meaning in embedding space, so no amount of semantic
-    search finds it. Callers combine both and de-duplicate on snapshot_id.
+    search finds it. Callers combine both and de-duplicate on highlight_id.
     """
 
     def __init__(
@@ -104,7 +104,7 @@ class AnnotationRetrievalService:
         query_text: str,
         top_k: int = 2,
         cutoff: SessionTimeCutoff | None = None,
-    ) -> tuple[AnnotationSnapshotHit, ...]:
+    ) -> tuple[AnnotationHighlightHit, ...]:
         if not isinstance(curriculum_id, UUID):
             raise TypeError("curriculum_id must be a UUID")
         normalized_query = query_text.strip()
@@ -128,7 +128,7 @@ class AnnotationRetrievalService:
         session_id: UUID,
         limit: int = 5,
         cutoff: SessionTimeCutoff | None = None,
-    ) -> tuple[AnnotationSnapshotHit, ...]:
+    ) -> tuple[AnnotationHighlightHit, ...]:
         if not isinstance(session_id, UUID):
             raise TypeError("session_id must be a UUID")
         if not 1 <= limit <= MAX_ANNOTATION_WINDOW:

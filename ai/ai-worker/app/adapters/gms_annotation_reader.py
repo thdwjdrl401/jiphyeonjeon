@@ -24,12 +24,17 @@ class AnnotationReadError(RuntimeError):
 
 
 class GmsAnnotationReader:
-    """Turn one highlight snapshot image into indexable text via the GMS gateway.
+    """Turn one highlight crop into indexable text via the GMS gateway.
 
-    Only used when Spring sent no interpretation of its own: re-reading an image Spring has
-    already interpreted would split what the instructor sees from what the answer cites
-    (ADR-0043 §3). Unlike key term extraction, a failure here is terminal for the job — the
-    text is the deliverable, not an optional enrichment.
+    **Parked — nothing wires this today.** ADR-0074 settled that Spring reads the highlight
+    with its own vision model and sends `text` on the job, so the worker never receives an
+    image. The adapter is kept because that decision is explicitly reversible: ADR-0074 says
+    Spring retains the original image precisely so AI can re-read it later ("AI가 '현재
+    상태로는' 안 읽는다고 했으니 나중에 바뀔 수 있고, 우리가 모델을 바꿔 다시 읽을 수도 있다").
+
+    To re-wire: add `assetId` back to `AnnotationEmbedJob`, restore the `AnnotationImageStore`
+    and `AnnotationReader` ports on `IndexAnnotationHighlight`, and configure a vision model.
+    Its tests still run, so the code cannot rot silently while parked.
     """
 
     def __init__(

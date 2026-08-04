@@ -20,7 +20,7 @@ from app.rag.models import (
     RetrievalResult,
     RetrievalResultV2,
 )
-from app.retrieval import AnnotationSnapshotHit, MaterialChunkHit, SessionTimeCutoff
+from app.retrieval import AnnotationHighlightHit, MaterialChunkHit, SessionTimeCutoff
 
 
 class MaterialRetrievalPort(Protocol):
@@ -41,7 +41,7 @@ class AnnotationRetrievalPort(Protocol):
         query_text: str,
         top_k: int,
         cutoff: SessionTimeCutoff | None,
-    ) -> tuple[AnnotationSnapshotHit, ...]: ...
+    ) -> tuple[AnnotationHighlightHit, ...]: ...
 
     async def recent(
         self,
@@ -49,7 +49,7 @@ class AnnotationRetrievalPort(Protocol):
         session_id: UUID,
         limit: int,
         cutoff: SessionTimeCutoff | None,
-    ) -> tuple[AnnotationSnapshotHit, ...]: ...
+    ) -> tuple[AnnotationHighlightHit, ...]: ...
 
 
 class CaptionContextPort(Protocol):
@@ -65,7 +65,7 @@ async def _gather_annotation_hits(
     top_k: int,
     window_size: int,
     cutoff: SessionTimeCutoff | None,
-) -> tuple[AnnotationSnapshotHit, ...]:
+) -> tuple[AnnotationHighlightHit, ...]:
     """Two reads, one merged list (ADR-0043 §5).
 
     Similarity answers "what did the instructor highlight about X"; the recent window answers
@@ -84,15 +84,15 @@ async def _gather_annotation_hits(
 
 
 def _dedupe_by_snapshot(
-    *groups: Iterable[AnnotationSnapshotHit],
-) -> tuple[AnnotationSnapshotHit, ...]:
+    *groups: Iterable[AnnotationHighlightHit],
+) -> tuple[AnnotationHighlightHit, ...]:
     seen: set[UUID] = set()
-    merged: list[AnnotationSnapshotHit] = []
+    merged: list[AnnotationHighlightHit] = []
     for group in groups:
         for hit in group:
-            if hit.snapshot_id in seen:
+            if hit.highlight_id in seen:
                 continue
-            seen.add(hit.snapshot_id)
+            seen.add(hit.highlight_id)
             merged.append(hit)
     return tuple(merged)
 
@@ -171,7 +171,7 @@ class CombinedEvidenceRetriever:
                 curriculum_id=hit.curriculum_id,
                 content=hit.text,
                 source=AnnotationSource(
-                    snapshotId=hit.snapshot_id,
+                    highlightId=hit.highlight_id,
                     sessionId=str(hit.session_id),
                     sessionMs=hit.session_ms,
                     excerpt=_truncate(hit.text, self._excerpt_max_chars),
@@ -189,7 +189,7 @@ class CombinedEvidenceRetriever:
 
     async def _search(
         self, request: RagAnswerRequest
-    ) -> tuple[Sequence[MaterialChunkHit], Sequence[AnnotationSnapshotHit]]:
+    ) -> tuple[Sequence[MaterialChunkHit], Sequence[AnnotationHighlightHit]]:
         material_search = self._materials.retrieve(
             curriculum_id=request.curriculumId,
             query_text=request.question,
@@ -320,7 +320,7 @@ class ReplayEvidenceRetriever:
                 curriculum_id=hit.curriculum_id,
                 content=hit.text,
                 source=AnnotationSourceV2(
-                    snapshotId=hit.snapshot_id,
+                    highlightId=hit.highlight_id,
                     sessionId=str(hit.session_id),
                     sessionMs=hit.session_ms,
                     excerpt=_truncate(hit.text, self._excerpt_max_chars),
@@ -337,7 +337,7 @@ class ReplayEvidenceRetriever:
 
     async def _search(
         self, request: RagAnswerRequestV2
-    ) -> tuple[Sequence[MaterialChunkHit], Sequence[AnnotationSnapshotHit]]:
+    ) -> tuple[Sequence[MaterialChunkHit], Sequence[AnnotationHighlightHit]]:
         material_search = self._materials.retrieve(
             curriculum_id=request.curriculumId,
             query_text=request.question,

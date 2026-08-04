@@ -140,7 +140,7 @@ def migrate_database(integration_database: IntegrationDatabase) -> None:
         command.upgrade(config, "head")
         with sync_engine.connect() as connection:
             assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
-                "0003_annotation_snapshot"
+                "0003_annotation_highlight"
             )
 
         command.downgrade(config, "base")
@@ -199,7 +199,7 @@ async def database_engine(
                 text(
                     """
                     TRUNCATE ai.chunk_embedding, ai.document_chunk, ai.material_version,
-                             ai.model_run, ai.job_run, ai.annotation_snapshot
+                             ai.model_run, ai.job_run, ai.annotation_highlight
                     RESTART IDENTITY CASCADE
                     """
                 )
@@ -930,22 +930,19 @@ async def test_resolve_active_scope_then_delete_job_removes_the_material(
 
 def _annotation(
     *,
-    snapshot_id: UUID,
+    highlight_id: UUID,
     text_value: str = "B+ tree 노드 분할 조건",
     session_ms: int = 725_300,
     first: float = 1.0,
-    text_origin: str = "SPRING",
 ) -> AnnotationRecord:
     return AnnotationRecord(
-        snapshot_id=snapshot_id,
-        asset_id=UUID("dddddddd-dddd-4ddd-8ddd-dddddddddddd"),
+        highlight_id=highlight_id,
         curriculum_id=CURRICULUM_ID,
         lesson_id=LESSON_ID,
         session_id=UUID("cccccccc-cccc-4ccc-8ccc-cccccccccccc"),
         session_ms=session_ms,
         captured_at=datetime(2026, 8, 4, 4, 20, 5, tzinfo=timezone.utc),
         text=text_value,
-        text_origin=text_origin,  # type: ignore[arg-type]
         embedding=tuple([first] + [0.0] * (BGE_M3_DIMENSIONS - 1)),
     )
 
@@ -953,11 +950,11 @@ def _annotation(
 ANNOTATION_SNAPSHOT_ID = UUID("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee")
 
 
-async def test_annotation_snapshot_is_stored_as_one_searchable_row(
+async def test_annotation_highlight_is_stored_as_one_searchable_row(
     annotation_repository: PgvectorAnnotationIndexRepository,
     database_engine: AsyncEngine,
 ) -> None:
-    await annotation_repository.upsert(_annotation(snapshot_id=ANNOTATION_SNAPSHOT_ID))
+    await annotation_repository.upsert(_annotation(highlight_id=ANNOTATION_SNAPSHOT_ID))
 
     async with database_engine.connect() as connection:
         row = (
@@ -965,13 +962,13 @@ async def test_annotation_snapshot_is_stored_as_one_searchable_row(
                 await connection.execute(
                     text(
                         """
-                    SELECT session_ms, text, text_origin, state,
+                    SELECT session_ms, text, state,
                            search_vector IS NOT NULL AS indexed
-                    FROM ai.annotation_snapshot
-                    WHERE snapshot_id = :snapshot_id
+                    FROM ai.annotation_highlight
+                    WHERE highlight_id = :highlight_id
                     """
                     ),
-                    {"snapshot_id": str(ANNOTATION_SNAPSHOT_ID)},
+                    {"highlight_id": str(ANNOTATION_SNAPSHOT_ID)},
                 )
             )
             .mappings()
@@ -980,25 +977,23 @@ async def test_annotation_snapshot_is_stored_as_one_searchable_row(
 
     assert row["session_ms"] == 725_300
     assert row["text"] == "B+ tree 노드 분할 조건"
-    assert row["text_origin"] == "SPRING"
     assert row["state"] == "ACTIVE"
     assert row["indexed"] is True
 
 
-async def test_reindexing_the_same_snapshot_replaces_it_instead_of_duplicating(
+async def test_reindexing_the_same_highlight_replaces_it_instead_of_duplicating(
     annotation_repository: PgvectorAnnotationIndexRepository,
     database_engine: AsyncEngine,
 ) -> None:
-    """snapshot_id is the idempotency key: a redelivered job must not double the evidence."""
+    """highlight_id is the idempotency key: a redelivered job must not double the evidence."""
     await annotation_repository.upsert(
-        _annotation(snapshot_id=ANNOTATION_SNAPSHOT_ID, text_value="처음 해석")
+        _annotation(highlight_id=ANNOTATION_SNAPSHOT_ID, text_value="처음 해석")
     )
     await annotation_repository.upsert(
         _annotation(
-            snapshot_id=ANNOTATION_SNAPSHOT_ID,
+            highlight_id=ANNOTATION_SNAPSHOT_ID,
             text_value="다시 읽은 해석",
             session_ms=800_000,
-            text_origin="MODEL",
         )
     )
 
@@ -1007,10 +1002,10 @@ async def test_reindexing_the_same_snapshot_replaces_it_instead_of_duplicating(
             (
                 await connection.execute(
                     text(
-                        "SELECT text, session_ms, text_origin FROM ai.annotation_snapshot "
-                        "WHERE snapshot_id = :snapshot_id"
+                        "SELECT text, session_ms FROM ai.annotation_highlight "
+                        "WHERE highlight_id = :highlight_id"
                     ),
-                    {"snapshot_id": str(ANNOTATION_SNAPSHOT_ID)},
+                    {"highlight_id": str(ANNOTATION_SNAPSHOT_ID)},
                 )
             )
             .mappings()
@@ -1020,22 +1015,21 @@ async def test_reindexing_the_same_snapshot_replaces_it_instead_of_duplicating(
     assert len(rows) == 1
     assert rows[0]["text"] == "다시 읽은 해석"
     assert rows[0]["session_ms"] == 800_000
-    assert rows[0]["text_origin"] == "MODEL"
 
 
-async def test_withdrawing_a_snapshot_is_idempotent_and_keeps_the_row(
+async def test_withdrawing_a_highlight_is_idempotent_and_keeps_the_row(
     annotation_repository: PgvectorAnnotationIndexRepository,
     database_engine: AsyncEngine,
 ) -> None:
-    await annotation_repository.upsert(_annotation(snapshot_id=ANNOTATION_SNAPSHOT_ID))
+    await annotation_repository.upsert(_annotation(highlight_id=ANNOTATION_SNAPSHOT_ID))
 
     await annotation_repository.mark_deleted(ANNOTATION_SNAPSHOT_ID)
     await annotation_repository.mark_deleted(ANNOTATION_SNAPSHOT_ID)
 
     async with database_engine.connect() as connection:
         state = await connection.scalar(
-            text("SELECT state FROM ai.annotation_snapshot WHERE snapshot_id = :snapshot_id"),
-            {"snapshot_id": str(ANNOTATION_SNAPSHOT_ID)},
+            text("SELECT state FROM ai.annotation_highlight WHERE highlight_id = :highlight_id"),
+            {"highlight_id": str(ANNOTATION_SNAPSHOT_ID)},
         )
     assert state == "DELETED"
 
@@ -1046,20 +1040,20 @@ async def test_withdrawing_a_snapshot_that_was_never_indexed_succeeds(
     await annotation_repository.mark_deleted(UUID("ffffffff-ffff-4fff-8fff-ffffffffffff"))
 
 
-async def test_reindexing_a_withdrawn_snapshot_brings_it_back(
+async def test_reindexing_a_withdrawn_highlight_brings_it_back(
     annotation_repository: PgvectorAnnotationIndexRepository,
     database_engine: AsyncEngine,
 ) -> None:
     """The instructor putting a highlight back must not need a new snapshot id."""
-    await annotation_repository.upsert(_annotation(snapshot_id=ANNOTATION_SNAPSHOT_ID))
+    await annotation_repository.upsert(_annotation(highlight_id=ANNOTATION_SNAPSHOT_ID))
     await annotation_repository.mark_deleted(ANNOTATION_SNAPSHOT_ID)
 
-    await annotation_repository.upsert(_annotation(snapshot_id=ANNOTATION_SNAPSHOT_ID))
+    await annotation_repository.upsert(_annotation(highlight_id=ANNOTATION_SNAPSHOT_ID))
 
     async with database_engine.connect() as connection:
         state = await connection.scalar(
-            text("SELECT state FROM ai.annotation_snapshot WHERE snapshot_id = :snapshot_id"),
-            {"snapshot_id": str(ANNOTATION_SNAPSHOT_ID)},
+            text("SELECT state FROM ai.annotation_highlight WHERE highlight_id = :highlight_id"),
+            {"highlight_id": str(ANNOTATION_SNAPSHOT_ID)},
         )
     assert state == "ACTIVE"
 
@@ -1076,7 +1070,7 @@ async def test_rejects_an_embedding_that_cannot_be_ranked(
     annotation_repository: PgvectorAnnotationIndexRepository,
     embedding: tuple[float, ...],
 ) -> None:
-    record = replace(_annotation(snapshot_id=ANNOTATION_SNAPSHOT_ID), embedding=embedding)
+    record = replace(_annotation(highlight_id=ANNOTATION_SNAPSHOT_ID), embedding=embedding)
 
     with pytest.raises(AnnotationIngestionError):
         await annotation_repository.upsert(record)

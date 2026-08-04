@@ -2,56 +2,53 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal
 from uuid import UUID
 
 from app.domain.errors import MaterialIngestionError
 
-AnnotationTextOrigin = Literal["SPRING", "MODEL"]
-
-# Mirrors ai.annotation_snapshot.text (ADR-0043 §1).
+# Mirrors ai.annotation_highlight.text.
 MAX_ANNOTATION_TEXT_CHARS = 2_000
 
 
 class AnnotationIngestionError(MaterialIngestionError):
-    """The annotation snapshot could not be turned into indexable evidence."""
+    """The annotation highlight could not be turned into indexable evidence."""
 
 
 @dataclass(frozen=True, slots=True)
-class AnnotationSnapshot:
+class AnnotationHighlight:
     """One highlight the instructor confirmed, on its way to the evidence index.
 
-    Carries no image: the worker fetches that at processing time from `asset_id` so a job that
-    waits in the queue or retries never holds an expired URL (ADR-0043 §2).
+    Carries no image. Spring reads the crop with its own vision model and sends the resulting
+    text (ADR-0074 결정 1), so the worker's job is embedding and storage — the description
+    itself arrives already made and is indexed unverified.
     """
 
-    snapshot_id: UUID
-    asset_id: UUID
-    curriculum_id: UUID
-    lesson_id: UUID
-    session_id: UUID
-    session_ms: int
-    captured_at: datetime
-    interpreted_text: str | None
-
-    def __post_init__(self) -> None:
-        if self.session_ms < 0:
-            raise AnnotationIngestionError("annotation session_ms must not be negative")
-        if self.captured_at.tzinfo is None:
-            raise AnnotationIngestionError("annotation captured_at must carry an offset")
-
-
-@dataclass(frozen=True, slots=True)
-class AnnotationRecord:
-    """The row an indexed snapshot becomes."""
-
-    snapshot_id: UUID
-    asset_id: UUID
+    highlight_id: UUID
     curriculum_id: UUID
     lesson_id: UUID
     session_id: UUID
     session_ms: int
     captured_at: datetime
     text: str
-    text_origin: AnnotationTextOrigin
+
+    def __post_init__(self) -> None:
+        if self.session_ms < 0:
+            raise AnnotationIngestionError("annotation session_ms must not be negative")
+        if self.captured_at.tzinfo is None:
+            raise AnnotationIngestionError("annotation captured_at must carry an offset")
+        if not self.text.strip():
+            raise AnnotationIngestionError("annotation text must not be blank")
+
+
+@dataclass(frozen=True, slots=True)
+class AnnotationRecord:
+    """The row an indexed highlight becomes."""
+
+    highlight_id: UUID
+    curriculum_id: UUID
+    lesson_id: UUID
+    session_id: UUID
+    session_ms: int
+    captured_at: datetime
+    text: str
     embedding: tuple[float, ...]

@@ -69,7 +69,7 @@ class AnnotationSource(_ContractModel):
     """
 
     type: Literal["ANNOTATION"] = "ANNOTATION"
-    snapshotId: UUID
+    highlightId: UUID
     sessionId: SessionId
     sessionMs: int = Field(ge=0)
     excerpt: str | None = Field(default=None, max_length=1000)
@@ -239,7 +239,7 @@ class AnnotationSourceV2(_ContractModel):
     v2 source — replay answers must always show the user what they were grounded in."""
 
     type: Literal["ANNOTATION"] = "ANNOTATION"
-    snapshotId: UUID
+    highlightId: UUID
     sessionId: SessionId
     sessionMs: int = Field(ge=0)
     excerpt: str = Field(min_length=1, max_length=300)

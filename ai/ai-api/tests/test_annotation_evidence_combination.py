@@ -15,7 +15,7 @@ from app.rag import (
     RagAnswerRequestV2,
     ReplayEvidenceRetriever,
 )
-from app.retrieval import AnnotationSnapshotHit, MaterialChunkHit, SessionTimeCutoff
+from app.retrieval import AnnotationHighlightHit, MaterialChunkHit, SessionTimeCutoff
 
 
 LESSON_ID = UUID("11111111-1111-4111-8111-111111111111")
@@ -42,10 +42,10 @@ def _material_hit(text: str = "자료 근거") -> MaterialChunkHit:
 
 
 def _annotation_hit(
-    snapshot_id: UUID, *, text: str = "B+ tree 노드 분할 조건", session_ms: int = 725_300
-) -> AnnotationSnapshotHit:
-    return AnnotationSnapshotHit(
-        snapshot_id=snapshot_id,
+    highlight_id: UUID, *, text: str = "B+ tree 노드 분할 조건", session_ms: int = 725_300
+) -> AnnotationHighlightHit:
+    return AnnotationHighlightHit(
+        highlight_id=highlight_id,
         curriculum_id=CURRICULUM_ID,
         lesson_id=LESSON_ID,
         session_id=UUID(SESSION_ID),
@@ -65,8 +65,8 @@ class Materials:
 class Annotations:
     def __init__(
         self,
-        searched: tuple[AnnotationSnapshotHit, ...] = (),
-        window: tuple[AnnotationSnapshotHit, ...] = (),
+        searched: tuple[AnnotationHighlightHit, ...] = (),
+        window: tuple[AnnotationHighlightHit, ...] = (),
     ) -> None:
         self.searched = searched
         self.window = window
@@ -132,8 +132,8 @@ def _replay_request(question_session_ms: int = 735_000) -> RagAnswerRequestV2:
 def test_live_answers_a_time_question_from_the_recent_window_alone() -> None:
     """No material matched and similarity found nothing — the window is what makes
     "아까 강조하신 게" answerable at all."""
-    snapshot_id = uuid4()
-    annotations = Annotations(searched=(), window=(_annotation_hit(snapshot_id),))
+    highlight_id = uuid4()
+    annotations = Annotations(searched=(), window=(_annotation_hit(highlight_id),))
     retriever = CombinedEvidenceRetriever(Materials(), Captions(), annotations=annotations)
 
     result = asyncio.run(retriever.retrieve(_live_request()))
@@ -141,7 +141,7 @@ def test_live_answers_a_time_question_from_the_recent_window_alone() -> None:
     assert result.sufficient is True
     source = result.evidence[0].source
     assert isinstance(source, AnnotationSource)
-    assert source.snapshotId == snapshot_id
+    assert source.highlightId == highlight_id
     assert source.sessionMs == 725_300
     assert source.excerpt == "B+ tree 노드 분할 조건"
 
@@ -158,9 +158,9 @@ def test_live_merges_annotation_evidence_after_material_evidence() -> None:
 
 
 def test_a_snapshot_found_by_both_reads_is_cited_once() -> None:
-    snapshot_id = uuid4()
+    highlight_id = uuid4()
     annotations = Annotations(
-        searched=(_annotation_hit(snapshot_id),), window=(_annotation_hit(snapshot_id),)
+        searched=(_annotation_hit(highlight_id),), window=(_annotation_hit(highlight_id),)
     )
     retriever = CombinedEvidenceRetriever(Materials(), Captions(), annotations=annotations)
 
@@ -194,15 +194,15 @@ def test_replay_passes_the_question_moment_as_the_cutoff_to_both_reads() -> None
 
 
 def test_replay_annotation_source_carries_a_mandatory_excerpt() -> None:
-    snapshot_id = uuid4()
-    annotations = Annotations(window=(_annotation_hit(snapshot_id),))
+    highlight_id = uuid4()
+    annotations = Annotations(window=(_annotation_hit(highlight_id),))
     retriever = ReplayEvidenceRetriever(Materials(), annotations=annotations)
 
     result = asyncio.run(retriever.retrieve(_replay_request()))
 
     source = result.evidence[0].source
     assert isinstance(source, AnnotationSourceV2)
-    assert source.snapshotId == snapshot_id
+    assert source.highlightId == highlight_id
     assert source.excerpt == "B+ tree 노드 분할 조건"
 
 

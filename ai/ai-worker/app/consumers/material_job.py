@@ -71,23 +71,23 @@ class MaterialJobHandler:
         await self._handle_embed(job)
 
     async def _handle_annotation_embed(self, job: AnnotationEmbedJob) -> None:
-        use_case = self._runtime.index_annotation_snapshot
+        use_case = self._runtime.index_annotation_highlight
         if use_case is None:
             raise PermanentMaterialJobError(_ANNOTATION_DISABLED)
 
-        job_id = annotation_embed_job_id(job.snapshot_id)
+        job_id = annotation_embed_job_id(job.highlight_id)
         try:
             await use_case.execute(map_annotation_embed_job(job))
         except Exception as exc:
             if _is_retryable(exc):
                 raise
             await self._send_annotation_terminal(
-                job.snapshot_id, job_id, "ANNOTATION_EMBED_FAILED", "FAILED"
+                job.highlight_id, job_id, "ANNOTATION_EMBED_FAILED", "FAILED"
             )
             raise PermanentMaterialJobError("annotation indexing failed permanently") from exc
 
         await self._send_annotation_terminal(
-            job.snapshot_id, job_id, "ANNOTATION_EMBEDDED", "READY"
+            job.highlight_id, job_id, "ANNOTATION_EMBEDDED", "READY"
         )
 
     async def _handle_annotation_delete(self, job: AnnotationEmbedDeleteJob) -> None:
@@ -99,12 +99,12 @@ class MaterialJobHandler:
         is the operational signal until the owners agree on a delete eventType.
         """
 
-        use_case = self._runtime.delete_annotation_snapshot
+        use_case = self._runtime.delete_annotation_highlight
         if use_case is None:
             raise PermanentMaterialJobError(_ANNOTATION_DISABLED)
 
         try:
-            await use_case.execute(job.snapshot_id)
+            await use_case.execute(job.highlight_id)
         except Exception as exc:
             if _is_retryable(exc):
                 raise
@@ -147,11 +147,11 @@ class MaterialJobHandler:
         if isinstance(job, AnnotationEmbedDeleteJob):
             return
         if isinstance(job, AnnotationEmbedJob):
-            if self._runtime.index_annotation_snapshot is None:
+            if self._runtime.index_annotation_highlight is None:
                 return
             await self._send_annotation_terminal(
-                job.snapshot_id,
-                annotation_embed_job_id(job.snapshot_id),
+                job.highlight_id,
+                annotation_embed_job_id(job.highlight_id),
                 "ANNOTATION_EMBED_FAILED",
                 "FAILED",
             )
@@ -172,7 +172,7 @@ class MaterialJobHandler:
 
     async def _send_annotation_terminal(
         self,
-        snapshot_id: UUID,
+        highlight_id: UUID,
         job_id: str,
         event_type: AnnotationCallbackType,
         status: AnnotationCallbackStatus,
@@ -181,7 +181,7 @@ class MaterialJobHandler:
             eventId=annotation_callback_event_id(job_id, event_type),
             eventType=event_type,
             jobId=job_id,
-            snapshotId=snapshot_id,
+            highlightId=highlight_id,
             status=status,
         )
         try:

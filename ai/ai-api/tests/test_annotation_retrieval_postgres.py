@@ -31,13 +31,13 @@ async def _create_schema(engine: AsyncEngine, runtime_role: str) -> None:
     async with engine.begin() as connection:
         await connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await connection.execute(text("CREATE SCHEMA IF NOT EXISTS ai"))
-        await connection.execute(text("DROP TABLE IF EXISTS ai.annotation_snapshot"))
+        await connection.execute(text("DROP TABLE IF EXISTS ai.annotation_highlight"))
         await connection.execute(
             text(
                 """
-                CREATE TABLE ai.annotation_snapshot (
+                CREATE TABLE ai.annotation_highlight (
                   id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-                  snapshot_id uuid NOT NULL UNIQUE,
+                  highlight_id uuid NOT NULL UNIQUE,
                   asset_id uuid NOT NULL,
                   curriculum_id uuid NOT NULL,
                   lesson_id uuid NOT NULL,
@@ -62,7 +62,7 @@ async def _create_schema(engine: AsyncEngine, runtime_role: str) -> None:
 async def _insert_snapshot(
     engine: AsyncEngine,
     *,
-    snapshot_id,
+    highlight_id,
     curriculum_id,
     lesson_id,
     session_id,
@@ -72,7 +72,7 @@ async def _insert_snapshot(
     state: str = "ACTIVE",
 ) -> None:
     values: Mapping[str, object] = {
-        "snapshot_id": str(snapshot_id),
+        "highlight_id": str(highlight_id),
         "asset_id": str(uuid4()),
         "curriculum_id": str(curriculum_id),
         "lesson_id": str(lesson_id),
@@ -86,11 +86,11 @@ async def _insert_snapshot(
         await connection.execute(
             text(
                 """
-                INSERT INTO ai.annotation_snapshot (
-                  snapshot_id, asset_id, curriculum_id, lesson_id, session_id,
+                INSERT INTO ai.annotation_highlight (
+                  highlight_id, asset_id, curriculum_id, lesson_id, session_id,
                   session_ms, text, text_origin, embedding, state
                 ) VALUES (
-                  CAST(:snapshot_id AS uuid), CAST(:asset_id AS uuid),
+                  CAST(:highlight_id AS uuid), CAST(:asset_id AS uuid),
                   CAST(:curriculum_id AS uuid), CAST(:lesson_id AS uuid),
                   CAST(:session_id AS uuid), :session_ms, :content, 'SPRING',
                   CAST(:embedding AS vector), :state
@@ -117,7 +117,7 @@ def test_search_is_curriculum_scoped_and_hides_deleted_snapshots(
             await _create_schema(engine, integration_database.runtime_role)
             await _insert_snapshot(
                 engine,
-                snapshot_id=wanted,
+                highlight_id=wanted,
                 curriculum_id=curriculum_id,
                 lesson_id=lesson_id,
                 session_id=session_id,
@@ -128,7 +128,7 @@ def test_search_is_curriculum_scoped_and_hides_deleted_snapshots(
             # Un-indexed by the instructor: must never come back as evidence.
             await _insert_snapshot(
                 engine,
-                snapshot_id=deleted,
+                highlight_id=deleted,
                 curriculum_id=curriculum_id,
                 lesson_id=lesson_id,
                 session_id=session_id,
@@ -140,7 +140,7 @@ def test_search_is_curriculum_scoped_and_hides_deleted_snapshots(
             # Another curriculum's highlight must not leak across the scope boundary.
             await _insert_snapshot(
                 engine,
-                snapshot_id=foreign,
+                highlight_id=foreign,
                 curriculum_id=other_curriculum_id,
                 lesson_id=uuid4(),
                 session_id=uuid4(),
@@ -159,7 +159,7 @@ def test_search_is_curriculum_scoped_and_hides_deleted_snapshots(
                 curriculum_id=curriculum_id, query_text="highlight", top_k=10
             )
 
-            assert [hit.snapshot_id for hit in hits] == [wanted]
+            assert [hit.highlight_id for hit in hits] == [wanted]
             assert hits[0].session_ms == 1_000
             assert hits[0].score is not None
         finally:
@@ -187,7 +187,7 @@ def test_replay_cutoff_hides_only_the_asker_session_future(
             await _create_schema(engine, integration_database.runtime_role)
             await _insert_snapshot(
                 engine,
-                snapshot_id=past,
+                highlight_id=past,
                 curriculum_id=curriculum_id,
                 lesson_id=lesson_id,
                 session_id=session_id,
@@ -197,7 +197,7 @@ def test_replay_cutoff_hides_only_the_asker_session_future(
             )
             await _insert_snapshot(
                 engine,
-                snapshot_id=future,
+                highlight_id=future,
                 curriculum_id=curriculum_id,
                 lesson_id=lesson_id,
                 session_id=session_id,
@@ -207,7 +207,7 @@ def test_replay_cutoff_hides_only_the_asker_session_future(
             )
             await _insert_snapshot(
                 engine,
-                snapshot_id=other_session,
+                highlight_id=other_session,
                 curriculum_id=curriculum_id,
                 lesson_id=lesson_id,
                 session_id=earlier_session_id,
@@ -231,8 +231,8 @@ def test_replay_cutoff_hides_only_the_asker_session_future(
                 curriculum_id=curriculum_id, query_text="highlight", top_k=10
             )
 
-            assert set(hit.snapshot_id for hit in limited) == {past, other_session}
-            assert set(hit.snapshot_id for hit in unlimited) == {past, future, other_session}
+            assert set(hit.highlight_id for hit in limited) == {past, other_session}
+            assert set(hit.highlight_id for hit in unlimited) == {past, future, other_session}
         finally:
             await engine.dispose()
 
@@ -253,10 +253,10 @@ def test_recent_window_returns_newest_first_regardless_of_similarity(
         oldest, middle, newest = uuid4(), uuid4(), uuid4()
         try:
             await _create_schema(engine, integration_database.runtime_role)
-            for snapshot_id, session_ms in ((oldest, 100), (middle, 200), (newest, 300)):
+            for highlight_id, session_ms in ((oldest, 100), (middle, 200), (newest, 300)):
                 await _insert_snapshot(
                     engine,
-                    snapshot_id=snapshot_id,
+                    highlight_id=highlight_id,
                     curriculum_id=curriculum_id,
                     lesson_id=lesson_id,
                     session_id=session_id,
@@ -274,7 +274,7 @@ def test_recent_window_returns_newest_first_regardless_of_similarity(
             )
             window = await service.recent(session_id=session_id, limit=2)
 
-            assert [hit.snapshot_id for hit in window] == [newest, middle]
+            assert [hit.highlight_id for hit in window] == [newest, middle]
             assert window[0].score is None
             assert window[0].text == "완전히 다른 내용"
         finally:
@@ -297,7 +297,7 @@ def test_recent_window_respects_the_replay_cutoff_and_session_boundary(
             await _create_schema(engine, integration_database.runtime_role)
             await _insert_snapshot(
                 engine,
-                snapshot_id=past,
+                highlight_id=past,
                 curriculum_id=curriculum_id,
                 lesson_id=lesson_id,
                 session_id=session_id,
@@ -307,7 +307,7 @@ def test_recent_window_respects_the_replay_cutoff_and_session_boundary(
             )
             await _insert_snapshot(
                 engine,
-                snapshot_id=future,
+                highlight_id=future,
                 curriculum_id=curriculum_id,
                 lesson_id=lesson_id,
                 session_id=session_id,
@@ -317,7 +317,7 @@ def test_recent_window_respects_the_replay_cutoff_and_session_boundary(
             )
             await _insert_snapshot(
                 engine,
-                snapshot_id=removed,
+                highlight_id=removed,
                 curriculum_id=curriculum_id,
                 lesson_id=lesson_id,
                 session_id=session_id,
@@ -328,7 +328,7 @@ def test_recent_window_respects_the_replay_cutoff_and_session_boundary(
             )
             await _insert_snapshot(
                 engine,
-                snapshot_id=foreign,
+                highlight_id=foreign,
                 curriculum_id=curriculum_id,
                 lesson_id=lesson_id,
                 session_id=other_session_id,
@@ -349,7 +349,7 @@ def test_recent_window_respects_the_replay_cutoff_and_session_boundary(
                 cutoff=SessionTimeCutoff(session_id=session_id, max_session_ms=735_000),
             )
 
-            assert [hit.snapshot_id for hit in window] == [past]
+            assert [hit.highlight_id for hit in window] == [past]
         finally:
             await engine.dispose()
 

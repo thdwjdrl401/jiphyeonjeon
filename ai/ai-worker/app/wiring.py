@@ -9,7 +9,6 @@ from pydantic import SecretStr
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-from app.adapters.gms_annotation_reader import GmsAnnotationReader
 from app.adapters.gms_key_term_extractor import GmsKeyTermExtractor
 from app.adapters.pgvector_annotation_index import PgvectorAnnotationIndexRepository
 from app.adapters.pgvector_index import PgvectorIndexRepository
@@ -20,13 +19,12 @@ from app.adapters.spring_hmac import SpringHmacSigner
 from app.adapters.spring_material_asset_store import SpringPresignedPptxAssetStore
 from app.adapters.spring_material_callback import SpringMaterialCallbackClient
 from app.application import (
-    DeleteAnnotationSnapshot,
+    DeleteAnnotationHighlight,
     DeleteMaterialIndex,
-    IndexAnnotationSnapshot,
+    IndexAnnotationHighlight,
     IndexPptxMaterial,
     map_pptx_embed_job,
 )
-from app.domain import MAX_ANNOTATION_TEXT_CHARS
 from app.config import Settings
 from app.consumers import MaterialJobHandler
 from app.contracts import PptxEmbedJob
@@ -55,11 +53,10 @@ class PptxIngestionRuntime:
     _database_engine: AsyncEngine
     _bge_readiness_timeout_seconds: float
     # Both stay None while AI_WORKER_ANNOTATION_INGESTION_ENABLED is off; the handler routes
-    # annotation jobs to the DLQ rather than pretending to index them (ADR-0043 §2).
-    index_annotation_snapshot: IndexAnnotationSnapshot | None = None
-    delete_annotation_snapshot: DeleteAnnotationSnapshot | None = None
+    # annotation jobs to the DLQ rather than pretending to index them (ADR-0074).
+    index_annotation_highlight: IndexAnnotationHighlight | None = None
+    delete_annotation_highlight: DeleteAnnotationHighlight | None = None
     _key_term_extractor: GmsKeyTermExtractor | None = None
-    _annotation_reader: GmsAnnotationReader | None = None
     _bge_readiness_failure: str | None = None
     _closed: bool = False
 
@@ -138,11 +135,7 @@ class PptxIngestionRuntime:
                     if self._key_term_extractor is not None:
                         await self._key_term_extractor.aclose()
                 finally:
-                    try:
-                        if self._annotation_reader is not None:
-                            await self._annotation_reader.aclose()
-                    finally:
-                        await self._database_engine.dispose()
+                    await self._database_engine.dispose()
 
 
 def build_pptx_ingestion_runtime(settings: Settings) -> PptxIngestionRuntime:
@@ -196,26 +189,15 @@ def build_pptx_ingestion_runtime(settings: Settings) -> PptxIngestionRuntime:
             max_prompt_chars=settings.gms_max_prompt_chars,
             timeout_seconds=settings.gms_timeout_seconds,
         )
-    annotation_reader: GmsAnnotationReader | None = None
-    index_annotation_snapshot: IndexAnnotationSnapshot | None = None
-    delete_annotation_snapshot: DeleteAnnotationSnapshot | None = None
+    # No model client here: Spring reads the highlight crop and sends the text, so indexing is
+    # embed + store (ADR-0074 결정 1). GmsAnnotationReader stays in the tree, parked, for the
+    # day that decision is revisited.
+    index_annotation_highlight: IndexAnnotationHighlight | None = None
+    delete_annotation_highlight: DeleteAnnotationHighlight | None = None
     if settings.annotation_ingestion_enabled:
-        annotation_gms_api_key = _required_secret(settings.gms_api_key, "AI_WORKER_GMS_API_KEY")
-        annotation_reader = GmsAnnotationReader(
-            api_key=annotation_gms_api_key,
-            model=settings.annotation_model or settings.gms_model,
-            max_output_tokens=settings.gms_max_output_tokens,
-            max_text_chars=MAX_ANNOTATION_TEXT_CHARS,
-            timeout_seconds=settings.gms_timeout_seconds,
-        )
         annotation_index = PgvectorAnnotationIndexRepository(database_engine)
-        index_annotation_snapshot = IndexAnnotationSnapshot(
-            asset_store,
-            embedding_model,
-            annotation_index,
-            reader=annotation_reader,
-        )
-        delete_annotation_snapshot = DeleteAnnotationSnapshot(annotation_index)
+        index_annotation_highlight = IndexAnnotationHighlight(embedding_model, annotation_index)
+        delete_annotation_highlight = DeleteAnnotationHighlight(annotation_index)
 
     index_storage = PgvectorIndexRepository(database_engine)
     index_pptx_material = IndexPptxMaterial(
@@ -244,10 +226,9 @@ def build_pptx_ingestion_runtime(settings: Settings) -> PptxIngestionRuntime:
         _embedding_client=embedding_client,
         _database_engine=database_engine,
         _bge_readiness_timeout_seconds=settings.bge_readiness_timeout_seconds,
-        index_annotation_snapshot=index_annotation_snapshot,
-        delete_annotation_snapshot=delete_annotation_snapshot,
+        index_annotation_highlight=index_annotation_highlight,
+        delete_annotation_highlight=delete_annotation_highlight,
         _key_term_extractor=key_term_extractor,
-        _annotation_reader=annotation_reader,
     )
 
 

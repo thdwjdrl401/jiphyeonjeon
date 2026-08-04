@@ -111,8 +111,8 @@ def test_key_term_storage_upgrade_rejects_unsafe_runtime_role_before_executing_s
     assert statements == []
 
 
-def test_annotation_snapshot_stores_timeline_anchored_evidence(monkeypatch) -> None:
-    migration = importlib.import_module("migrations.versions.0003_annotation_snapshot")
+def test_annotation_highlight_stores_timeline_anchored_evidence(monkeypatch) -> None:
+    migration = importlib.import_module("migrations.versions.0003_annotation_highlight")
     monkeypatch.delenv("AI_WORKER_DATABASE_ROLE", raising=False)
     statements = []
     monkeypatch.setattr(migration.op, "execute", statements.append)
@@ -120,32 +120,31 @@ def test_annotation_snapshot_stores_timeline_anchored_evidence(monkeypatch) -> N
     migration.upgrade()
     ddl = "\n".join(str(statement) for statement in statements)
 
-    assert "CREATE TABLE ai.annotation_snapshot" in ddl
-    # snapshotId is the ADR-0043 idempotency key: re-published jobs must replace, not duplicate.
-    assert "snapshot_id uuid NOT NULL UNIQUE" in ddl
+    assert "CREATE TABLE ai.annotation_highlight" in ddl
+    # highlightId is the ADR-0043 idempotency key: re-published jobs must replace, not duplicate.
+    assert "highlight_id uuid NOT NULL UNIQUE" in ddl
     # curriculum_id is the search scope axis, session_id/session_ms the replay anchor.
     assert "curriculum_id uuid NOT NULL" in ddl
     assert "session_id uuid NOT NULL" in ddl
     assert "session_ms bigint NOT NULL CHECK (session_ms >= 0)" in ddl
-    assert "text_origin varchar(16) NOT NULL CHECK (text_origin IN ('SPRING', 'MODEL'))" in ddl
     assert "state varchar(16) NOT NULL CHECK (state IN ('ACTIVE', 'DELETED'))" in ddl
     # Same embedding contract as material chunks so both can be ranked together.
     assert "embedding vector(1024) NOT NULL" in ddl
     assert "embedding vector_cosine_ops" in ddl
     # search_vector is generated, never written by the app, so it cannot drift from text.
     assert "GENERATED ALWAYS AS (to_tsvector('simple', text)) STORED" in ddl
-    assert "ix_annotation_snapshot_scope" in ddl
-    assert "ix_annotation_snapshot_timeline" in ddl
-    assert "ix_annotation_snapshot_fts" in ddl
+    assert "ix_annotation_highlight_scope" in ddl
+    assert "ix_annotation_highlight_timeline" in ddl
+    assert "ix_annotation_highlight_fts" in ddl
     assert "GRANT SELECT, INSERT, UPDATE, DELETE" in ddl
     assert "ON ALL TABLES" not in ddl
     assert "ALTER DEFAULT PRIVILEGES" not in ddl
-    assert migration.revision == "0003_annotation_snapshot"
+    assert migration.revision == "0003_annotation_highlight"
     assert migration.down_revision == "0002_material_key_terms"
 
 
-def test_annotation_snapshot_downgrade_drops_only_its_own_table(monkeypatch) -> None:
-    migration = importlib.import_module("migrations.versions.0003_annotation_snapshot")
+def test_annotation_highlight_downgrade_drops_only_its_own_table(monkeypatch) -> None:
+    migration = importlib.import_module("migrations.versions.0003_annotation_highlight")
     monkeypatch.delenv("AI_WORKER_DATABASE_ROLE", raising=False)
     statements = []
     monkeypatch.setattr(migration.op, "execute", statements.append)
@@ -153,16 +152,16 @@ def test_annotation_snapshot_downgrade_drops_only_its_own_table(monkeypatch) -> 
     migration.downgrade()
     ddl = "\n".join(str(statement) for statement in statements)
 
-    assert "DROP TABLE IF EXISTS ai.annotation_snapshot" in ddl
+    assert "DROP TABLE IF EXISTS ai.annotation_highlight" in ddl
     assert "DROP SCHEMA" not in ddl
     assert "DROP EXTENSION" not in ddl
     assert "material_version" not in ddl
 
 
-def test_annotation_snapshot_upgrade_rejects_unsafe_runtime_role_before_executing_sql(
+def test_annotation_highlight_upgrade_rejects_unsafe_runtime_role_before_executing_sql(
     monkeypatch,
 ) -> None:
-    migration = importlib.import_module("migrations.versions.0003_annotation_snapshot")
+    migration = importlib.import_module("migrations.versions.0003_annotation_highlight")
     statements = []
     monkeypatch.setattr(migration.op, "execute", statements.append)
     monkeypatch.setenv("AI_WORKER_DATABASE_ROLE", "ai_app; RESET ROLE")

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from app.contracts import AnnotationEmbedJob, EmbedDeleteJob, PptxEmbedJob
-from app.domain import BGE_M3_MODEL, AnnotationSnapshot, MaterialScope, StagedMaterial
+from app.domain import BGE_M3_MODEL, AnnotationHighlight, MaterialScope, StagedMaterial
 from app.ingestion import chunk_strategy
 
 
@@ -9,27 +9,26 @@ SPRING_ASSET_SOURCE = "spring-asset"
 MATERIAL_VERSION_V1 = 1
 
 
-def annotation_embed_job_id(snapshot_id: object) -> str:
-    return f"ANNOTATION_EMBED:{snapshot_id}"
+def annotation_embed_job_id(highlight_id: object) -> str:
+    return f"ANNOTATION_EMBED:{highlight_id}"
 
 
-def annotation_delete_job_id(snapshot_id: object) -> str:
-    return f"ANNOTATION_EMBED_DELETE:{snapshot_id}"
+def annotation_delete_job_id(highlight_id: object) -> str:
+    return f"ANNOTATION_EMBED_DELETE:{highlight_id}"
 
 
-def map_annotation_embed_job(job: AnnotationEmbedJob) -> AnnotationSnapshot:
-    """Annotation snapshots need no tenant, chunk strategy or model revision: one snapshot is
-    one indexed unit, so nothing about staging or versioning applies (ADR-0043 §1)."""
+def map_annotation_embed_job(job: AnnotationEmbedJob) -> AnnotationHighlight:
+    """Highlights need no tenant, chunk strategy or model revision: one highlight is one
+    indexed unit, so nothing about staging or versioning applies."""
 
-    return AnnotationSnapshot(
-        snapshot_id=job.snapshot_id,
-        asset_id=job.asset_id,
+    return AnnotationHighlight(
+        highlight_id=job.highlight_id,
         curriculum_id=job.curriculum_id,
         lesson_id=job.lesson_id,
         session_id=job.session_id,
         session_ms=job.session_ms,
         captured_at=job.captured_at,
-        interpreted_text=job.interpreted_text,
+        text=job.text,
     )
 
 

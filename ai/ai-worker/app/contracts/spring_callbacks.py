@@ -72,12 +72,12 @@ class MaterialCallbackEvent(BaseModel):
 
 
 class AnnotationCallbackEvent(BaseModel):
-    """Result of one annotation snapshot job (ADR-0043 §2, ADR-0074 요청 1).
+    """Result of one annotation highlight job (ADR-0074 결정 1).
 
     Same endpoint, HMAC and eventId idempotency as the material callback, but keyed by
-    `snapshotId` — Spring settles snapshot state from that alone, so nothing else is echoed
-    back. Like MATERIAL_EMBEDDING, the PROCESSING type exists in the contract but the worker
-    only sends terminal events (see CONTRACT.md §11.3).
+    `highlightId` — Spring settles `core.annotation_highlight.index_status` from that alone,
+    so nothing else is echoed back. Like MATERIAL_EMBEDDING, the PROCESSING type exists in the
+    contract but the worker only sends terminal events (see CONTRACT.md §11.3).
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -85,7 +85,7 @@ class AnnotationCallbackEvent(BaseModel):
     event_id: UUID = Field(alias="eventId")
     event_type: AnnotationCallbackType = Field(alias="eventType")
     job_id: str = Field(alias="jobId", min_length=1, max_length=128)
-    snapshot_id: UUID = Field(alias="snapshotId")
+    highlight_id: UUID = Field(alias="highlightId")
     status: AnnotationCallbackStatus
 
     @model_validator(mode="after")

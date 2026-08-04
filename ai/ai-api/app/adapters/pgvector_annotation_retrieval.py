@@ -9,7 +9,7 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from app.retrieval.models import AnnotationSnapshotHit, SessionTimeCutoff
+from app.retrieval.models import AnnotationHighlightHit, SessionTimeCutoff
 from app.retrieval.service import EMBEDDING_DIMENSIONS, MAX_ANNOTATION_WINDOW, MAX_TOP_K
 
 _DATABASE_ROLE = re.compile(r"^[a-z_][a-z0-9_]{0,62}$")
@@ -28,7 +28,7 @@ _CUTOFF_PREDICATE = """
 ANNOTATION_HYBRID_SQL = f"""
 WITH scoped AS (
   SELECT
-    snapshot_id,
+    highlight_id,
     curriculum_id,
     lesson_id,
     session_id,
@@ -36,14 +36,14 @@ WITH scoped AS (
     text,
     search_vector,
     embedding
-  FROM ai.annotation_snapshot
+  FROM ai.annotation_highlight
   WHERE curriculum_id = CAST(:curriculum_id AS uuid)
     AND state = 'ACTIVE'
     {_CUTOFF_PREDICATE}
 ),
 scored AS (
   SELECT
-    snapshot_id,
+    highlight_id,
     curriculum_id,
     lesson_id,
     session_id,
@@ -57,18 +57,18 @@ ranked AS (
   SELECT
     *,
     ROW_NUMBER() OVER (
-      ORDER BY vector_score DESC, session_id ASC, session_ms ASC, snapshot_id ASC
+      ORDER BY vector_score DESC, session_id ASC, session_ms ASC, highlight_id ASC
     ) AS vector_rank,
     CASE
       WHEN lexical_score > 0 THEN ROW_NUMBER() OVER (
         ORDER BY CASE WHEN lexical_score > 0 THEN lexical_score END DESC NULLS LAST,
-                 session_id ASC, session_ms ASC, snapshot_id ASC
+                 session_id ASC, session_ms ASC, highlight_id ASC
       )
     END AS lexical_rank
   FROM scored
 )
 SELECT
-  snapshot_id,
+  highlight_id,
   curriculum_id,
   lesson_id,
   session_id,
@@ -87,7 +87,7 @@ ORDER BY
   lexical_rank ASC NULLS LAST,
   session_id ASC,
   session_ms ASC,
-  snapshot_id ASC
+  highlight_id ASC
 LIMIT :top_k
 """
 
@@ -95,17 +95,17 @@ LIMIT :top_k
 # highlight" read (ADR-0043 §5-1).
 RECENT_ANNOTATION_SQL = f"""
 SELECT
-  snapshot_id,
+  highlight_id,
   curriculum_id,
   lesson_id,
   session_id,
   session_ms,
   text
-FROM ai.annotation_snapshot
+FROM ai.annotation_highlight
 WHERE session_id = CAST(:session_id AS uuid)
   AND state = 'ACTIVE'
   {_CUTOFF_PREDICATE}
-ORDER BY session_ms DESC, snapshot_id DESC
+ORDER BY session_ms DESC, highlight_id DESC
 LIMIT :limit
 """
 
@@ -127,7 +127,7 @@ class PgvectorAnnotationRepository:
         query_embedding: Sequence[float],
         top_k: int,
         cutoff: SessionTimeCutoff | None = None,
-    ) -> tuple[AnnotationSnapshotHit, ...]:
+    ) -> tuple[AnnotationHighlightHit, ...]:
         if not isinstance(curriculum_id, UUID):
             raise TypeError("curriculum_id must be a UUID")
         normalized_query = query_text.strip()
@@ -152,7 +152,7 @@ class PgvectorAnnotationRepository:
         session_id: UUID,
         limit: int,
         cutoff: SessionTimeCutoff | None = None,
-    ) -> tuple[AnnotationSnapshotHit, ...]:
+    ) -> tuple[AnnotationHighlightHit, ...]:
         if not isinstance(session_id, UUID):
             raise TypeError("session_id must be a UUID")
         if not 1 <= limit <= MAX_ANNOTATION_WINDOW:
@@ -188,9 +188,9 @@ def _cutoff_parameters(cutoff: SessionTimeCutoff | None) -> dict[str, object]:
     }
 
 
-def _row_to_hit(row: Mapping[str, Any], *, scored: bool) -> AnnotationSnapshotHit:
-    return AnnotationSnapshotHit(
-        snapshot_id=_uuid_value(row["snapshot_id"], "snapshot_id"),
+def _row_to_hit(row: Mapping[str, Any], *, scored: bool) -> AnnotationHighlightHit:
+    return AnnotationHighlightHit(
+        highlight_id=_uuid_value(row["highlight_id"], "highlight_id"),
         curriculum_id=_uuid_value(row["curriculum_id"], "curriculum_id"),
         lesson_id=_uuid_value(row["lesson_id"], "lesson_id"),
         session_id=_uuid_value(row["session_id"], "session_id"),

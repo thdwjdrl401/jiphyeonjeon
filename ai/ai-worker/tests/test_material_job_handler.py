@@ -109,8 +109,8 @@ class AnnotationDeleter:
         self.error = error
         self.executed = []
 
-    async def execute(self, snapshot_id) -> None:
-        self.executed.append(snapshot_id)
+    async def execute(self, highlight_id) -> None:
+        self.executed.append(highlight_id)
         if self.error is not None:
             raise self.error
 
@@ -129,8 +129,8 @@ class Runtime:
         self.delete_material_index = deleter or Deleter()
         self.callback_client = SimpleNamespace(send=callback)
         # None mirrors the switch being off (ADR-0043 §2).
-        self.index_annotation_snapshot = annotation_indexer
-        self.delete_annotation_snapshot = annotation_deleter
+        self.index_annotation_highlight = annotation_indexer
+        self.delete_annotation_highlight = annotation_deleter
 
     def material_for(self, job):
         return map_pptx_embed_job(
@@ -306,14 +306,13 @@ SNAPSHOT_ID = "550e8400-e29b-41d4-a716-446655440010"
 def annotation_embed_body(**overrides: object) -> bytes:
     payload: dict[str, object] = {
         "taskType": "ANNOTATION_EMBED",
-        "snapshotId": SNAPSHOT_ID,
-        "assetId": "550e8400-e29b-41d4-a716-446655440011",
+        "highlightId": SNAPSHOT_ID,
         "sessionId": "550e8400-e29b-41d4-a716-446655440012",
         "lessonId": "550e8400-e29b-41d4-a716-446655440013",
         "curriculumId": "550e8400-e29b-41d4-a716-446655440014",
         "sessionMs": 725_300,
         "capturedAt": "2026-08-04T13:20:05+09:00",
-        "interpretedText": "B+ tree 노드 분할 조건",
+        "text": "B+ tree 노드 분할 조건",
         "policy": {"embedModel": "bge-m3"},
         "contractVersion": 1,
         **overrides,
@@ -325,7 +324,7 @@ def annotation_delete_body() -> bytes:
     return json.dumps(
         {
             "taskType": "ANNOTATION_EMBED_DELETE",
-            "snapshotId": SNAPSHOT_ID,
+            "highlightId": SNAPSHOT_ID,
             "contractVersion": 1,
         },
         separators=(",", ":"),
@@ -346,7 +345,7 @@ def _annotation_runtime(
     )
 
 
-async def test_annotation_embed_indexes_then_sends_ready_with_snapshot_identity() -> None:
+async def test_annotation_embed_indexes_then_sends_ready_with_highlight_identity() -> None:
     callback = AsyncMock()
     annotation_indexer = AnnotationIndexer()
 
@@ -359,7 +358,7 @@ async def test_annotation_embed_indexes_then_sends_ready_with_snapshot_identity(
     assert event.event_type == "ANNOTATION_EMBEDDED"
     assert event.status == "READY"
     assert event.job_id == f"ANNOTATION_EMBED:{SNAPSHOT_ID}"
-    assert str(event.snapshot_id) == SNAPSHOT_ID
+    assert str(event.highlight_id) == SNAPSHOT_ID
 
 
 async def test_annotation_embed_does_not_disturb_the_material_path() -> None:
@@ -436,7 +435,7 @@ async def test_retry_exhaustion_reports_failure_for_an_annotation_embed() -> Non
 
     event = callback.await_args.args[0]
     assert event.event_type == "ANNOTATION_EMBED_FAILED"
-    assert str(event.snapshot_id) == SNAPSHOT_ID
+    assert str(event.highlight_id) == SNAPSHOT_ID
 
 
 async def test_retry_exhaustion_stays_silent_for_an_annotation_delete() -> None:

@@ -21,14 +21,14 @@ class MaterialChunkHit:
 
 
 @dataclass(frozen=True, slots=True)
-class AnnotationSnapshotHit:
+class AnnotationHighlightHit:
     """One instructor highlight snapshot indexed as evidence (ADR-0043 §1).
 
     Scores are None for recent-window results, which are selected by time rather than
     similarity (ADR-0043 §5) and therefore have nothing to rank.
     """
 
-    snapshot_id: UUID
+    highlight_id: UUID
     curriculum_id: UUID
     lesson_id: UUID
     session_id: UUID

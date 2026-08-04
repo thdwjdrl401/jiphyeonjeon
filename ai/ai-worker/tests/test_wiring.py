@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from httpx import ConnectError, Request
-from pydantic import ValidationError
 
 from app import wiring
 from app.config import Settings
@@ -371,110 +370,42 @@ def test_enabled_worker_wires_consumer_handler_readiness_and_cleanup(monkeypatch
 
 def test_annotation_ingestion_disabled_leaves_both_use_cases_unbuilt(monkeypatch) -> None:
     """Off means the handler has nothing to route to, so jobs land in the DLQ instead of
-    being acked away (ADR-0043 §2)."""
+    being acked away (ADR-0074)."""
     monkeypatch.setattr(wiring, "AsyncClient", FakeHttpClient)
     monkeypatch.setattr(wiring, "create_async_engine", lambda *_args, **_kwargs: FakeEngine())
     monkeypatch.setattr(wiring, "IndexPptxMaterial", lambda *_args, **_kwargs: object())
 
     runtime = wiring.build_pptx_ingestion_runtime(_settings())
 
-    assert runtime.index_annotation_snapshot is None
-    assert runtime.delete_annotation_snapshot is None
-    assert runtime._annotation_reader is None
+    assert runtime.index_annotation_highlight is None
+    assert runtime.delete_annotation_highlight is None
 
 
-def test_annotation_ingestion_enabled_wires_reader_index_and_delete(monkeypatch) -> None:
-    captured: dict[str, object] = {}
-    reader = SimpleNamespace(name="annotation-reader")
-
-    def fake_reader(**kwargs: object) -> object:
-        captured["reader"] = kwargs
-        return reader
-
+def test_annotation_ingestion_enabled_needs_no_model_client(monkeypatch) -> None:
+    """Spring reads the highlight crop and sends the text (ADR-0074 결정 1), so indexing is
+    embed + store. Requiring a GMS key here would block a deployment that never calls one."""
+    engine = FakeEngine()
     monkeypatch.setattr(wiring, "AsyncClient", FakeHttpClient)
-    monkeypatch.setattr(wiring, "create_async_engine", lambda *_args, **_kwargs: FakeEngine())
+    monkeypatch.setattr(wiring, "create_async_engine", lambda *_args, **_kwargs: engine)
     monkeypatch.setattr(wiring, "IndexPptxMaterial", lambda *_args, **_kwargs: object())
-    monkeypatch.setattr(wiring, "GmsAnnotationReader", fake_reader)
 
-    runtime = wiring.build_pptx_ingestion_runtime(
-        _settings(annotation_ingestion_enabled=True, gms_api_key="x" * 32)
-    )
+    runtime = wiring.build_pptx_ingestion_runtime(_settings(annotation_ingestion_enabled=True))
 
-    assert captured["reader"] == {
-        "api_key": "x" * 32,
-        # Falls back to gms_model while no OCR-specific model is configured.
-        "model": "gpt-4.1",
-        "max_output_tokens": 1_024,
-        # Capped at what ai.annotation_snapshot.text accepts, not the PPTX prompt budget.
-        "max_text_chars": 2_000,
-        "timeout_seconds": 55.0,
-    }
-    assert runtime.index_annotation_snapshot is not None
-    assert runtime.delete_annotation_snapshot is not None
-    assert runtime._annotation_reader is reader
+    assert runtime.index_annotation_highlight is not None
+    assert runtime.delete_annotation_highlight is not None
 
 
-def test_annotation_ingestion_requires_a_model_key(monkeypatch) -> None:
-    """Spring may send snapshots with no interpretation, and those can only be indexed by
-    reading the image — so the key is demanded at startup, not per job."""
-    with pytest.raises(ValidationError, match="annotation_ingestion_enabled requires gms_api_key"):
-        _settings(annotation_ingestion_enabled=True)
-
-
-async def test_runtime_closes_the_annotation_reader_when_configured(monkeypatch) -> None:
-    reader = SimpleNamespace(aclose=AsyncMock())
+def test_annotation_index_and_delete_share_one_repository(monkeypatch) -> None:
+    """Both use cases must see the same rows; two repositories would still work but would
+    hide a future divergence in runtime_role or engine."""
+    engine = FakeEngine()
     monkeypatch.setattr(wiring, "AsyncClient", FakeHttpClient)
-    monkeypatch.setattr(wiring, "create_async_engine", lambda *_args, **_kwargs: FakeEngine())
+    monkeypatch.setattr(wiring, "create_async_engine", lambda *_args, **_kwargs: engine)
     monkeypatch.setattr(wiring, "IndexPptxMaterial", lambda *_args, **_kwargs: object())
-    monkeypatch.setattr(wiring, "GmsAnnotationReader", lambda **_kwargs: reader)
 
-    runtime = wiring.build_pptx_ingestion_runtime(
-        _settings(annotation_ingestion_enabled=True, gms_api_key="x" * 32)
+    runtime = wiring.build_pptx_ingestion_runtime(_settings(annotation_ingestion_enabled=True))
+
+    assert (
+        runtime.index_annotation_highlight._index_storage
+        is runtime.delete_annotation_highlight._index_storage
     )
-    await runtime.aclose()
-
-    reader.aclose.assert_awaited_once()
-
-
-def test_ocr_uses_its_own_model_when_configured(monkeypatch) -> None:
-    """Reading a highlight image needs a vision model; PPTX key term extraction does not, so
-    the two must not be forced onto one value."""
-    captured: dict[str, object] = {}
-
-    monkeypatch.setattr(wiring, "AsyncClient", FakeHttpClient)
-    monkeypatch.setattr(wiring, "create_async_engine", lambda *_args, **_kwargs: FakeEngine())
-    monkeypatch.setattr(wiring, "IndexPptxMaterial", lambda *_args, **_kwargs: object())
-    monkeypatch.setattr(
-        wiring,
-        "GmsKeyTermExtractor",
-        lambda **kwargs: captured.setdefault("key_term", kwargs) and object(),
-    )
-    monkeypatch.setattr(
-        wiring,
-        "GmsAnnotationReader",
-        lambda **kwargs: captured.setdefault("reader", kwargs) and object(),
-    )
-
-    wiring.build_pptx_ingestion_runtime(
-        _settings(
-            annotation_ingestion_enabled=True,
-            key_term_extraction_enabled=True,
-            gms_api_key="x" * 32,
-            gms_model="gpt-4.1",
-            annotation_model="gpt-4o",
-        )
-    )
-
-    assert captured["key_term"]["model"] == "gpt-4.1"
-    assert captured["reader"]["model"] == "gpt-4o"
-
-
-@pytest.mark.parametrize("blank", ["", "   "])
-def test_a_declared_but_empty_ocr_model_falls_back_instead_of_failing(blank: str) -> None:
-    """An env file that lists the key with no value must not stop the worker from starting."""
-    assert _settings(annotation_model=blank).annotation_model is None
-
-
-def test_ocr_model_rejects_padding() -> None:
-    with pytest.raises(ValidationError, match="annotation_model"):
-        _settings(annotation_model=" gpt-4o ")

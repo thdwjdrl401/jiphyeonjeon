@@ -54,7 +54,7 @@ def _live_evidence(session_ms: int = 725_300) -> RetrievedEvidence:
         curriculum_id=CURRICULUM_ID,
         content="B+ tree 노드 분할 조건",
         source=AnnotationSource(
-            snapshotId=uuid4(), sessionId=SESSION_ID, sessionMs=session_ms
+            highlightId=uuid4(), sessionId=SESSION_ID, sessionMs=session_ms
         ),
     )
 
@@ -107,7 +107,7 @@ def test_replay_prompt_gives_the_model_both_ends_of_the_comparison() -> None:
         curriculum_id=CURRICULUM_ID,
         content="B+ tree 노드 분할 조건",
         source=AnnotationSourceV2(
-            snapshotId=uuid4(),
+            highlightId=uuid4(),
             sessionId=SESSION_ID,
             sessionMs=725_300,
             excerpt="B+ tree 노드 분할 조건",
@@ -120,7 +120,7 @@ def test_replay_prompt_gives_the_model_both_ends_of_the_comparison() -> None:
     assert payload["evidence"][0]["source"]["highlightedAt"] == "12:05"
 
 
-def test_prompts_do_not_leak_snapshot_identifiers_to_the_model() -> None:
+def test_prompts_do_not_leak_highlight_identifiers_to_the_model() -> None:
     """The model cites nothing itself — the server attaches sources — so an opaque UUID would
     only be tokens spent on noise."""
     live = _prompt_payload(_live_request(), [_live_evidence()])
@@ -131,7 +131,7 @@ def test_prompts_do_not_leak_snapshot_identifiers_to_the_model() -> None:
                 lesson_id=LESSON_ID,
                 content="근거",
                 source=AnnotationSourceV2(
-                    snapshotId=uuid4(),
+                    highlightId=uuid4(),
                     sessionId=SESSION_ID,
                     sessionMs=1,
                     excerpt="근거",
@@ -140,8 +140,8 @@ def test_prompts_do_not_leak_snapshot_identifiers_to_the_model() -> None:
         ],
     )
 
-    assert "snapshotId" not in live
-    assert "snapshotId" not in replay
+    assert "highlightId" not in live
+    assert "highlightId" not in replay
 
 
 def test_material_evidence_rendering_is_unchanged_alongside_annotations() -> None:

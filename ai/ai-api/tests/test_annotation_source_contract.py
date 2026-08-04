@@ -28,9 +28,9 @@ SNAPSHOT_ID = UUID("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee")
 SESSION_ID = "11111111-1111-4111-8111-111111111111"
 
 
-def test_v1_annotation_source_carries_snapshot_identity_and_timeline_anchor() -> None:
+def test_v1_annotation_source_carries_highlight_identity_and_timeline_anchor() -> None:
     source = AnnotationSource(
-        snapshotId=SNAPSHOT_ID,
+        highlightId=SNAPSHOT_ID,
         sessionId=SESSION_ID,
         sessionMs=725_300,
         excerpt="B+ tree 노드 분할 조건",
@@ -40,7 +40,7 @@ def test_v1_annotation_source_carries_snapshot_identity_and_timeline_anchor() ->
 
     assert body == {
         "type": "ANNOTATION",
-        "snapshotId": str(SNAPSHOT_ID),
+        "highlightId": str(SNAPSHOT_ID),
         "sessionId": SESSION_ID,
         "sessionMs": 725_300,
         "excerpt": "B+ tree 노드 분할 조건",
@@ -51,7 +51,7 @@ def test_v1_annotation_source_carries_snapshot_identity_and_timeline_anchor() ->
 
 
 def test_v1_annotation_excerpt_stays_optional_like_other_v1_sources() -> None:
-    source = AnnotationSource(snapshotId=SNAPSHOT_ID, sessionId=SESSION_ID, sessionMs=0)
+    source = AnnotationSource(highlightId=SNAPSHOT_ID, sessionId=SESSION_ID, sessionMs=0)
 
     assert source.excerpt is None
 
@@ -59,17 +59,17 @@ def test_v1_annotation_excerpt_stays_optional_like_other_v1_sources() -> None:
 def test_v2_annotation_source_requires_an_excerpt() -> None:
     """Replay answers must always show the user what they were grounded in."""
     with pytest.raises(ValidationError):
-        AnnotationSourceV2(snapshotId=SNAPSHOT_ID, sessionId=SESSION_ID, sessionMs=725_300)
+        AnnotationSourceV2(highlightId=SNAPSHOT_ID, sessionId=SESSION_ID, sessionMs=725_300)
 
 
 def test_v2_annotation_excerpt_is_capped_at_300_characters() -> None:
     AnnotationSourceV2(
-        snapshotId=SNAPSHOT_ID, sessionId=SESSION_ID, sessionMs=1, excerpt="가" * 300
+        highlightId=SNAPSHOT_ID, sessionId=SESSION_ID, sessionMs=1, excerpt="가" * 300
     )
 
     with pytest.raises(ValidationError):
         AnnotationSourceV2(
-            snapshotId=SNAPSHOT_ID, sessionId=SESSION_ID, sessionMs=1, excerpt="가" * 301
+            highlightId=SNAPSHOT_ID, sessionId=SESSION_ID, sessionMs=1, excerpt="가" * 301
         )
 
 
@@ -77,7 +77,7 @@ def test_v2_annotation_excerpt_is_capped_at_300_characters() -> None:
 def test_annotation_source_rejects_negative_session_ms(source_type: type) -> None:
     with pytest.raises(ValidationError):
         source_type(
-            snapshotId=SNAPSHOT_ID, sessionId=SESSION_ID, sessionMs=-1, excerpt="근거"
+            highlightId=SNAPSHOT_ID, sessionId=SESSION_ID, sessionMs=-1, excerpt="근거"
         )
 
 
@@ -85,7 +85,7 @@ def test_annotation_source_rejects_negative_session_ms(source_type: type) -> Non
 def test_annotation_source_rejects_unknown_fields(source_type: type) -> None:
     with pytest.raises(ValidationError):
         source_type(
-            snapshotId=SNAPSHOT_ID,
+            highlightId=SNAPSHOT_ID,
             sessionId=SESSION_ID,
             sessionMs=1,
             excerpt="근거",
@@ -96,7 +96,7 @@ def test_annotation_source_rejects_unknown_fields(source_type: type) -> None:
 def test_annotation_is_discriminated_from_pptx_and_caption_in_both_unions() -> None:
     payload = {
         "type": "ANNOTATION",
-        "snapshotId": str(SNAPSHOT_ID),
+        "highlightId": str(SNAPSHOT_ID),
         "sessionId": SESSION_ID,
         "sessionMs": 725_300,
         "excerpt": "근거",
@@ -114,7 +114,7 @@ def test_answer_done_streams_annotation_alongside_material_sources() -> None:
             requestId="request-1",
             sources=(
                 AnnotationSourceV2(
-                    snapshotId=SNAPSHOT_ID,
+                    highlightId=SNAPSHOT_ID,
                     sessionId=SESSION_ID,
                     sessionMs=725_300,
                     excerpt="강조 근거",
@@ -136,7 +136,7 @@ def test_v1_answer_done_accepts_annotation_sources() -> None:
             requestId="request-1",
             sources=(
                 AnnotationSource(
-                    snapshotId=SNAPSHOT_ID, sessionId=SESSION_ID, sessionMs=725_300
+                    highlightId=SNAPSHOT_ID, sessionId=SESSION_ID, sessionMs=725_300
                 ),
             ),
         )

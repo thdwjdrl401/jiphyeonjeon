@@ -83,9 +83,6 @@ class Settings(BaseSettings):
     annotation_image_max_bytes: int = Field(default=4 * 1024 * 1024, gt=0)
     gms_api_key: SecretStr | None = Field(default=None, min_length=1)
     gms_model: str = Field(default="gpt-4.1", min_length=1, max_length=128)
-    # Reading a highlight image needs a vision model; extracting key terms from PPTX text does
-    # not. Unset falls back to gms_model so nothing changes for deployments that do not care.
-    annotation_model: str | None = Field(default=None, min_length=1, max_length=128)
     gms_max_output_tokens: int = Field(default=1_024, ge=1, le=8_192)
     gms_max_prompt_chars: int = Field(default=100_000, ge=1_000, le=1_000_000)
     gms_timeout_seconds: float = Field(default=55.0, gt=0, le=120)
@@ -154,31 +151,10 @@ class Settings(BaseSettings):
             raise ValueError("gms_model must not contain surrounding whitespace")
         return value
 
-    @field_validator("annotation_model", mode="before")
-    @classmethod
-    def validate_annotation_model(cls, value: object) -> object:
-        # Blank means "not configured" rather than an empty model name, so an env file that
-        # declares the key without a value still falls back instead of failing to start.
-        if isinstance(value, str):
-            if not value.strip():
-                return None
-            if value != value.strip():
-                raise ValueError("annotation_model must not contain surrounding whitespace")
-        return value
-
     @model_validator(mode="after")
     def validate_key_term_extraction(self) -> Self:
         if self.key_term_extraction_enabled and self.gms_api_key is None:
             raise ValueError("key_term_extraction_enabled requires gms_api_key")
-        return self
-
-    @model_validator(mode="after")
-    def validate_annotation_ingestion(self) -> Self:
-        # Spring may send snapshots with no interpretation of its own, and those can only be
-        # indexed by reading the image — so the model key is required up front rather than
-        # letting individual jobs fail at runtime (ADR-0043 §3).
-        if self.annotation_ingestion_enabled and self.gms_api_key is None:
-            raise ValueError("annotation_ingestion_enabled requires gms_api_key")
         return self
 
 

@@ -3,9 +3,9 @@
 > 📍 하네스 개요: [../../harness/README.md](../../harness/README.md) · 판단 정책:
 > [../../harness/POLICY.md](../../harness/POLICY.md) · 공유 계약: [../../CONTRACT.md](../../CONTRACT.md)
 
-- **상태**: 승인 — AI 슬라이스(W1~W5·A1~A4) 구현 완료, E1(E2E)은 Spring outbox 대기
+- **상태**: 개정 — songjeongki/ADR-0074 채택본에 맞춰 §2·§3을 수정함. AI 슬라이스 구현 완료, E1(E2E)은 Spring outbox 대기
 - **일자**: 2026-08-04
-- **적용 범위**: `ai-worker`(색인), `ai-api`(검색·근거), `ai.annotation_snapshot`(신규 스키마)
+- **적용 범위**: `ai-worker`(색인), `ai-api`(검색·근거), `ai.annotation_highlight`(신규 스키마)
 - **관련**:
   [songjeongki/ADR-0074](../songjeongki/0074-annotation-highlight-evidence-contract.md)(강조 판서 근거 계약 요청 — 이 문서가 그 응답),
   [ADR-0042](0042-replay-ai-caption-context-contract.md)(다시보기 자막 근거 계약),
@@ -31,6 +31,24 @@ ADR-0074는 강사가 강조 툴로 표시한 순간의 합성 이미지를 AI�
 
 시간이 짧으므로 MVP로 자른다. 이 문서는 저장 스키마, 잡 수용, 검색 결합, "아까" 해석 방식을
 결정하고 ADR-0074의 열린 질문 4개에 답한다.
+
+## 개정 기록 (2026-08-04)
+
+이 문서의 최초 판은 "Spring이 해석을 못 주면 워커가 이미지를 읽는다"를 전제했다. 같은 날
+[ADR-0074가 채택본으로 확정](../songjeongki/0074-annotation-highlight-evidence-contract.md)되며
+**Spring이 vision 모델로 읽고 텍스트만 보내는 것으로 경계가 바뀌었다.** 그쪽 근거가 더 강하다 —
+GMS 키 보호·포트 분리·본문 한도 우회가 이미 Spring에 풀려 있어 AI가 다시 만들 이유가 없다.
+
+바뀐 것: 멱등 키 `snapshotId`→`highlightId`, `interpretedText`(선택)→`text`(필수 본체), `assetId`와
+이미지 다운로드·다운스케일 경로 제거, 테이블 `ai.annotation_snapshot`→`ai.annotation_highlight`.
+워커는 이제 텍스트를 **검증 없이** 색인하며 강사 확인이 유일한 게이트다.
+
+바뀌지 않은 것: 이 문서의 핵심인 §4 검색 결합, §5 recent window와 시각 프롬프트, §6 근거 표현.
+"아까 강조하신 게"를 푸는 방식은 그대로다.
+
+OCR 어댑터(`gms_annotation_reader.py`)와 다운스케일(`annotation_image.py`)은 **삭제하지 않고 트리에
+남겨 뒀다.** ADR-0074가 원본 이미지를 계속 보관하는 이유와 같다 — 이 결정은 되돌릴 수 있다. 현재
+호출자가 없다는 사실은 두 파일 docstring과 worker CONTRACT §11.2에 명시했다.
 
 ## 결정
 

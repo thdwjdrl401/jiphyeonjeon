@@ -16,18 +16,10 @@ class MaterialAssetStore(Protocol):
     async def read_pptx(self, bucket: str, object_key: str) -> bytes: ...
 
 
-class AnnotationImageStore(Protocol):
-    async def read_annotation_image(self, asset_id: UUID) -> bytes: ...
-
-
-class AnnotationReader(Protocol):
-    async def read(self, image: bytes) -> str: ...
-
-
 class AnnotationIndexStorage(Protocol):
     async def upsert(self, record: AnnotationRecord) -> None: ...
 
-    async def mark_deleted(self, snapshot_id: UUID) -> None: ...
+    async def mark_deleted(self, highlight_id: UUID) -> None: ...
 
 
 class TextEmbeddingModel(Protocol):
