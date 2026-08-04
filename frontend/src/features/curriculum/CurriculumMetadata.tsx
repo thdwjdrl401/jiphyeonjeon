@@ -1,7 +1,8 @@
-import type { CurriculumDetailPeriod } from './types'
+import InstructorProfileDisclosure from './InstructorProfileDisclosure'
+import type { CurriculumDetailPeriod, CurriculumInstructorProfile } from './types'
 
 interface CurriculumMetadataProps {
-  instructorName: string
+  instructor: CurriculumInstructorProfile
   period: CurriculumDetailPeriod | null
   sectionCount: number
   lessonCount: number
@@ -14,7 +15,7 @@ const dateFormatter = new Intl.DateTimeFormat('ko-KR', {
 })
 
 export default function CurriculumMetadata({
-  instructorName,
+  instructor,
   period,
   sectionCount,
   lessonCount,
@@ -27,7 +28,7 @@ export default function CurriculumMetadata({
     <dl className="curriculum-metadata">
       <div>
         <dt>강사</dt>
-        <dd>{instructorName}</dd>
+        <dd><InstructorProfileDisclosure instructor={instructor} /></dd>
       </div>
       <div>
         <dt>기간</dt>

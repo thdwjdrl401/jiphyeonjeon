@@ -74,12 +74,14 @@ describe('CurriculumDetailPage', () => {
     renderDetail('/curriculums/cur-spring-live')
 
     const expandAllButton = await screen.findByRole('button', { name: '모두 펼치기' })
-    expect(screen.getAllByRole('button', { expanded: false }).length).toBeGreaterThan(0)
+    // 히어로에도 접힌 토글(강사 정보)이 있어 목차 영역으로 좁혀서 센다.
+    const outline = within(screen.getByRole('region', { name: '커리큘럼 목차' }))
+    expect(outline.getAllByRole('button', { expanded: false }).length).toBeGreaterThan(0)
 
     await user.click(expandAllButton)
 
     expect(screen.getByRole('button', { name: '모두 접기' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { expanded: false })).not.toBeInTheDocument()
+    expect(outline.queryByRole('button', { expanded: false })).not.toBeInTheDocument()
   })
 
   it('비로그인 사용자가 로그인 CTA를 누르면 returnTo를 보존한 채 로그인으로 이동한다', async () => {

@@ -1,4 +1,8 @@
-import type { CurriculumDetailResponse, CurriculumOutlineSection } from '@/features/curriculum/types'
+import type {
+  CurriculumDetailResponse,
+  CurriculumInstructorProfile,
+  CurriculumOutlineSection,
+} from '@/features/curriculum/types'
 import { createFallbackViewerContext } from '@/features/curriculum/viewerContext'
 import type { CurriculumLiveSessionStatus, CurriculumOutlineLesson } from '@/features/lesson/types'
 import { apiClient } from '@/shared/api/client'
@@ -22,9 +26,15 @@ type CurriculumApiOutlineSection = Omit<CurriculumOutlineSection, 'lessons'> & {
 
 type CurriculumApiDetailResponse = Omit<
   CurriculumDetailResponse,
-  'enrollmentPolicy' | 'materials' | 'outline' | 'viewerContext'
+  'enrollmentPolicy' | 'instructor' | 'materials' | 'outline' | 'viewerContext'
 > & {
   enrollmentPolicy?: CurriculumDetailResponse['enrollmentPolicy']
+  // 강사가 프로필을 아직 안 채웠으면 서버가 bio를 null로 준다
+  // (InstructorDirectoryService.toView — 프로필 행이 없으면 null).
+  instructor: Omit<CurriculumInstructorProfile, 'bio' | 'expertise'> & {
+    bio?: string | null
+    expertise?: string[] | null
+  }
   materials?: CurriculumDetailResponse['materials']
   outline: CurriculumApiOutlineSection[]
   viewerContext?: CurriculumDetailResponse['viewerContext']
@@ -60,6 +70,12 @@ export const httpCurriculumDetailService = {
         status: 'UNAVAILABLE',
         opensAt: null,
         closesAt: null,
+      },
+      // 화면 모델은 bio를 string으로 약속한다 — mock 구현체와 같은 모양이 되게 경계에서 채운다.
+      instructor: {
+        ...data.instructor,
+        bio: data.instructor.bio ?? '',
+        expertise: data.instructor.expertise ?? [],
       },
       materials: data.materials ?? [],
       // 서버의 order는 저장용 orderIndex(0부터)다 — 화면 번호는 1부터라 경계에서 한 번만 맞춘다.
