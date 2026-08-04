@@ -49,8 +49,7 @@ class CandidateSpec:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    if args.cuda_visible_devices != "0":
-        raise ValueError("this host permits STT experiments on GPU 0 only")
+    _validate_cuda_visible_devices(args.cuda_visible_devices)
     if args.split == "test" and not args.allow_test:
         raise ValueError("test evaluation requires explicit --allow-test")
 
@@ -396,8 +395,10 @@ def _parse_candidate(value: str) -> CandidateSpec:
         raise argparse.ArgumentTypeError("candidate must use NAME=BACKEND@MODEL format") from exc
     if not _SAFE_CANDIDATE_NAME.fullmatch(name):
         raise argparse.ArgumentTypeError("candidate name is not safe")
-    if backend not in {"nemotron", "whisper", "vllm"}:
-        raise argparse.ArgumentTypeError("candidate backend must be nemotron, whisper, or vllm")
+    if backend not in {"nemotron", "nemotron-nemo", "whisper", "vllm"}:
+        raise argparse.ArgumentTypeError(
+            "candidate backend must be nemotron, nemotron-nemo, whisper, or vllm"
+        )
     if not model_id.strip():
         raise argparse.ArgumentTypeError("candidate model must not be blank")
     return CandidateSpec(name=name, backend=backend, model_id=model_id)
@@ -407,6 +408,11 @@ def _require_unique_candidate_names(candidates: Sequence[CandidateSpec]) -> None
     names = [candidate.name for candidate in candidates]
     if len(set(names)) != len(names):
         raise ValueError("candidate names must be unique")
+
+
+def _validate_cuda_visible_devices(value: str) -> None:
+    if not re.fullmatch(r"\d+", value):
+        raise ValueError("STT replay must select exactly one CUDA device index")
 
 
 def _default_slot_builder(
@@ -510,7 +516,10 @@ def _parser() -> argparse.ArgumentParser:
         "--candidate",
         action="append",
         required=True,
-        help="repeat NAME=BACKEND@MODEL; backend is nemotron, whisper, or vllm",
+        help=(
+            "repeat NAME=BACKEND@MODEL; backend is nemotron, nemotron-nemo, "
+            "whisper, or vllm"
+        ),
     )
     parser.add_argument("--mode", choices=("accuracy", "paced"), default="accuracy")
     parser.add_argument("--workers", type=_positive_int, default=1)
