@@ -1326,6 +1326,10 @@ describe('액션 링 펼침·접힘', () => {
 describe('강조 툴 캡처 발동', () => {
   beforeEach(() => {
     excalidrawProps = {}
+    // 모듈 상태다. 앞선 테스트가 켜 두면 API가 늦게 도착해 타이머 시점에 아직 없고, 표식이 붙지
+    // 않아 이 describe가 통째로 플레이키해진다. 명시적으로 되돌린다.
+    lateApi = false
+    sceneElements = []
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
   })
   afterEach(() => {
@@ -1411,6 +1415,8 @@ describe('강조 툴 캡처 발동', () => {
 describe('강조 툴 표식 부착', () => {
   beforeEach(() => {
     excalidrawProps = {}
+    lateApi = false
+    sceneElements = []
     updateScene.mockClear()
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
   })
@@ -1424,23 +1430,60 @@ describe('강조 툴 표식 부착', () => {
       <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} onHighlightSettled={settled as never} />,
     )
     await vi.waitFor(() => expect(excalidrawProps.onChange).toBeTypeOf('function'))
+    // 마운트 직후의 시딩(화이트보드·복원)이 updateScene을 부른다. 그 기록까지 세면 "그리는 동안
+    // 씬을 건드리지 않는다"가 거짓으로 실패한다.
+    await vi.advanceTimersByTimeAsync(0)
+    updateScene.mockClear()
     return { ...view, settled }
   }
 
+  /**
+   * 씬에 들어간 것 중 <b>표식이 붙은</b> 요소들.
+   *
+   * <p>updateScene 호출 수로 세지 않는다 — 마운트 시딩·프레임 매핑 등 다른 이유로도 불려서
+   * 그 수를 세면 이 테스트가 관계없는 변경에 흔들린다. 여기서 확인하려는 것은 하나다:
+   * <b>표식이 붙은 요소가 씬에 들어갔는가.</b>
+   */
   function taggedElements() {
-    const scene = updateScene.mock.calls
-      .map(([arg]) => arg as { elements?: Array<Record<string, unknown>> })
-      .filter((arg) => Array.isArray(arg.elements))
-      .at(-1)
-    return scene?.elements ?? []
+    return updateScene.mock.calls
+      .flatMap(([arg]) => (arg as { elements?: Array<Record<string, unknown>> }).elements ?? [])
+      .filter((element) =>
+        (element.customData as Record<string, unknown> | undefined)?.liveclassHighlight === true)
   }
 
-  it('강조를 켜고 그리면 그 획에 표식이 붙는다', async () => {
+  /**
+   * <b>그리는 도중에 씬을 갈아끼우면 획이 죽는다.</b> freedraw는 점이 늘 때마다 onChange를 부르는데,
+   * 첫 점에서 updateScene으로 덮으면 진행 중인 획이 그 시점으로 되돌아가 <b>찍은 점 하나만 남는다</b>.
+   * 실제로 그렇게 그려졌다. 그래서 표식은 그리기가 멎은 뒤에만 붙인다.
+   */
+  it('완성된 획으로 표식을 붙인다 — 중간 스냅샷으로 덮으면 획이 죽는다', async () => {
+    const { getByRole } = await mountWithTool()
+    fireEvent.click(getByRole('button', { name: /강조/ }))
+
+    const onChange = excalidrawProps.onChange as (elements: unknown[]) => void
+    // 획 하나가 자라는 동안 onChange가 여러 번 불린다. 마지막이 완성된 획이다.
+    onChange([{ id: 'stroke-1', version: 1, type: 'freedraw', x: 10, y: 10, width: 5, height: 5 }])
+    onChange([{ id: 'stroke-1', version: 2, type: 'freedraw', x: 10, y: 10, width: 40, height: 30 }])
+    onChange([{ id: 'stroke-1', version: 3, type: 'freedraw', x: 10, y: 10, width: 80, height: 60 }])
+    await vi.advanceTimersByTimeAsync(1000)
+
+    const tagged = taggedElements()
+    expect(tagged).toHaveLength(1)
+    /*
+     * version 1(첫 점)으로 씬을 덮으면 진행 중인 획이 그 시점으로 되돌아가 <b>찍은 점 하나만
+     * 남는다</b>. 실제로 그렇게 그려졌고, 그 망가진 문서가 그대로 수강생에게도 나갔다.
+     */
+    expect(tagged[0].version).toBe(3)
+    expect(tagged[0].width).toBe(80)
+  })
+
+  it('그리기가 멎은 뒤에 표식이 붙는다', async () => {
     const { getByRole } = await mountWithTool()
     fireEvent.click(getByRole('button', { name: /강조/ }))
 
     const onChange = excalidrawProps.onChange as (elements: unknown[]) => void
     onChange([{ id: 'stroke-1', version: 1, type: 'freedraw', x: 10, y: 10, width: 5, height: 5 }])
+    await vi.advanceTimersByTimeAsync(1000)
 
     const tagged = taggedElements()
     expect(tagged).toHaveLength(1)
@@ -1451,6 +1494,7 @@ describe('강조 툴 표식 부착', () => {
     await mountWithTool()
     const onChange = excalidrawProps.onChange as (elements: unknown[]) => void
     onChange([{ id: 'stroke-1', version: 1, type: 'freedraw', x: 10, y: 10, width: 5, height: 5 }])
+    await vi.advanceTimersByTimeAsync(1500)
 
     expect(taggedElements()).toHaveLength(0)
   })
@@ -1466,30 +1510,32 @@ describe('강조 툴 표식 부착', () => {
 
     const plain = { id: 'stroke-1', version: 1, type: 'freedraw', x: 10, y: 10, width: 5, height: 5 }
     onChange([plain])
+    await vi.advanceTimersByTimeAsync(1000)
     const afterFirst = updateScene.mock.calls.length
 
     // updateScene이 유발한 재진입: 이제 표식이 붙은 채로 다시 들어온다.
     onChange([{ ...plain, version: 2, customData: { liveclassHighlight: true } }])
+    await vi.advanceTimersByTimeAsync(1000)
     // 표식 없는 같은 요소가 다시 와도(경합) 재부착하지 않는다.
     onChange([{ ...plain, version: 3 }])
+    await vi.advanceTimersByTimeAsync(1000)
 
     expect(updateScene.mock.calls.length).toBe(afterFirst)
   })
 
-  it('표식이 붙은 뒤 1초가 지나면 캡처가 발동한다 — 전체 경로', async () => {
+  /** 표식 부착과 알림이 한 번에 일어난다 — 재진입한 onChange를 기다리지 않는다. */
+  it('멎고 1초 뒤 표식과 캡처 발동이 함께 일어난다 — 전체 경로', async () => {
     const { getByRole, settled } = await mountWithTool()
     fireEvent.click(getByRole('button', { name: /강조/ }))
     const onChange = excalidrawProps.onChange as (elements: unknown[]) => void
 
-    const plain = { id: 'stroke-1', version: 1, type: 'freedraw', x: 10, y: 10, width: 5, height: 5 }
-    onChange([plain])
-    // 부착 직후에는 발동하지 않는다 — 표식 없는 중간 상태에서 멈춘다.
-    await vi.advanceTimersByTimeAsync(1500)
+    onChange([{ id: 'stroke-1', version: 1, type: 'freedraw', x: 10, y: 10, width: 5, height: 5 }])
     expect(settled).not.toHaveBeenCalled()
 
-    // 재진입: 표식이 붙은 요소가 도착하면 그때부터 디바운스가 시작된다.
-    onChange([{ ...plain, version: 2, customData: { liveclassHighlight: true } }])
     await vi.advanceTimersByTimeAsync(1000)
     expect(settled).toHaveBeenCalledTimes(1)
+    // 알림에 실린 요소에 표식이 이미 있다 — 캡처가 그것으로 크롭 범위를 잡는다.
+    const notified = settled.mock.calls[0][0] as Array<Record<string, unknown>>
+    expect(notified[0].customData).toMatchObject({ liveclassHighlight: true })
   })
 })

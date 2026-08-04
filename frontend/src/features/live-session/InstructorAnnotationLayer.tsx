@@ -351,8 +351,6 @@ export default function InstructorAnnotationLayer({
   const onHighlightSettledRef = useRef(onHighlightSettled)
   onHighlightSettledRef.current = onHighlightSettled
 
-  /** 지금까지 본 강조 요소 id. 새 획이 늘었는지 판단하는 근거다. */
-  const knownHighlightsRef = useRef<Set<string>>(new Set())
   const highlightTimerRef = useRef<number | null>(null)
 
   /**
@@ -365,60 +363,55 @@ export default function InstructorAnnotationLayer({
    * <p>지운 것은 세지 않는다 — 지우개로 강조를 지우는 것은 취소이지 새 캡처가 아니다.
    */
   /**
-   * 강조 모드에서 새로 그린 요소에 표식을 붙인다(ADR-0074).
+   * 강조 획을 다 그린 뒤(1초) 표식을 붙이고 알린다(ADR-0074).
    *
-   * <p><b>왜 필요한가.</b> Excalidraw에는 "새 요소에 customData를 기본으로 붙여라"는 API가 없다.
-   * 색과 투명도만 바꿔서는 강조 획이 일반 판서와 구별되지 않고, 그러면 캡처가 영영 발동하지 않는다.
+   * <p><b>그리는 도중에 붙이면 안 된다.</b> 표식은 {@code updateScene}으로 씬을 갈아끼워야 하는데,
+   * freedraw는 점이 늘 때마다 {@code onChange}를 부른다. 첫 점에서 씬을 덮으면 진행 중인 획이 그
+   * 시점으로 되돌아가 <b>찍은 점 하나만 남는다</b> — 그리고 그 망가진 문서가 그대로 op로 나가
+   * 수강생도 똑같이 점 하나만 본다. 실제로 그렇게 배포됐다.
    *
-   * <p>붙인 뒤에는 이 요소가 <b>일반 판서와 같은 op 경로</b>로 나간다 — 표식까지 포함해 수강생·Egress·
-   * 복원에 그대로 전달되므로, 나중에 다시보기에서도 무엇이 강조였는지 알 수 있다.
-   *
-   * @returns 표식을 붙였는가. 붙였으면 이번 onChange의 나머지 처리는 건너뛴다(곧 다시 불린다).
+   * <p>그래서 "그리기가 멎었는가"를 먼저 판단하고, 그 뒤에 표식과 알림을 <b>한 번에</b> 처리한다.
+   * 붙인 결과를 로컬에서 만들어 그대로 넘기므로 재진입한 onChange를 기다리지 않는다.
    */
-  const tagNewHighlights = useCallback((elements: readonly AnnotationElement[]): boolean => {
-    if (!highlightModeRef.current) return false
-    const api = apiRef.current
-    if (!api) return false
-
-    const targets = elements.filter((element) =>
-      element.id !== WHITEBOARD_ELEMENT_ID
-      && !taggedRef.current.has(element.id)
-      && !isHighlightElement(element))
-    if (targets.length === 0) return false
-
-    const ids = new Set(targets.map((element) => element.id))
-    // updateScene보다 <b>먼저</b> 기록한다. 뒤에 하면 재진입한 onChange가 같은 요소를 다시 잡는다.
-    for (const id of ids) taggedRef.current.add(id)
-
-    /*
-     * 되돌리기 스택에 올리지 않는다(captureUpdate 미지정 = 기본). 표식은 강사가 한 편집이 아니라
-     * 우리가 붙인 꼬리표라, 여기에 되돌리기 지점이 생기면 Ctrl+Z 한 번이 획을 지우는 대신
-     * 표식만 떼어낸다 — 강사에게는 아무 일도 안 일어난 것처럼 보인다.
-     */
-    api.updateScene({
-      elements: elements.map((element) => ids.has(element.id)
-        ? {
-          ...element,
-          customData: { ...(element.customData as object ?? {}), [HIGHLIGHT_CUSTOM_DATA_KEY]: true },
-        }
-        : element),
-    })
-    return true
-  }, [])
-
   const detectHighlightSettled = useCallback((elements: readonly AnnotationElement[]) => {
+    if (!highlightModeRef.current && !elements.some(isHighlightElement)) return
     const notify = onHighlightSettledRef.current
     if (!notify) return
-    const present = new Set(elements.filter(isHighlightElement).map((element) => element.id))
-    const added = [...present].some((id) => !knownHighlightsRef.current.has(id))
-    knownHighlightsRef.current = present
-    if (!added) return
 
     if (highlightTimerRef.current !== null) window.clearTimeout(highlightTimerRef.current)
     highlightTimerRef.current = window.setTimeout(() => {
       highlightTimerRef.current = null
-      // 타이머가 도는 사이 강사가 지웠을 수 있다. 그때 캡처하면 없는 강조를 근거로 남긴다.
       const latest = elementsRef.current
+      const api = apiRef.current
+
+      // 강조 모드에서 새로 그린 것 = 아직 표식이 없는 요소. 그리기가 멎은 지금이 붙일 때다.
+      const targets = highlightModeRef.current && api
+        ? latest.filter((element) => element.id !== WHITEBOARD_ELEMENT_ID
+          && !taggedRef.current.has(element.id)
+          && !isHighlightElement(element))
+        : []
+
+      if (targets.length > 0 && api) {
+        const ids = new Set(targets.map((element) => element.id))
+        for (const id of ids) taggedRef.current.add(id)
+        const tagged = latest.map((element) => ids.has(element.id)
+          ? {
+            ...element,
+            customData: { ...(element.customData as object ?? {}), [HIGHLIGHT_CUSTOM_DATA_KEY]: true },
+          }
+          : element)
+        /*
+         * 되돌리기 스택에 올리지 않는다(captureUpdate 미지정 = 기본). 표식은 강사가 한 편집이 아니라
+         * 우리가 붙인 꼬리표라, 여기에 되돌리기 지점이 생기면 Ctrl+Z 한 번이 획을 지우는 대신
+         * 표식만 떼어낸다 — 강사에게는 아무 일도 안 일어난 것처럼 보인다.
+         */
+        api.updateScene({ elements: tagged })
+        elementsRef.current = tagged
+        notify(tagged)
+        return
+      }
+
+      // 표식이 이미 있는 강조(복원·재진입)만 있을 때. 새로 붙일 것이 없으면 그대로 알린다.
       if (latest.some(isHighlightElement)) notify(latest)
     }, HIGHLIGHT_SETTLE_MS)
   }, [])
@@ -457,9 +450,6 @@ export default function InstructorAnnotationLayer({
     elementsRef.current = elements.filter((element) => element.isDeleted !== true)
     if (files) filesRef.current = files
     setHasElements(elementsRef.current.some((element) => element.id !== WHITEBOARD_ELEMENT_ID))
-    if (tagNewHighlights(elementsRef.current)) return
-    // 표식을 붙였으면 곧 onChange가 다시 불린다. 표식 없는 중간 상태로 op를 내보내면 수강생 쪽
-    // 문서에는 강조 표식이 빠진 사본이 남는다.
     detectHighlightSettled(elementsRef.current)
 
     /*
@@ -515,7 +505,7 @@ export default function InstructorAnnotationLayer({
     // 같은 값이면 state를 건드리지 않는다 — onChange는 포인터가 움직일 때도 불린다.
     setSelectedIds((current) =>
       current.length === picked.length && current.every((id, i) => id === picked[i]) ? current : picked)
-  }, [applyFrameMapping, detectHighlightSettled, onPublish, onSaveSnapshot, onWhiteboardPresence, tagNewHighlights])
+  }, [applyFrameMapping, detectHighlightSettled, onPublish, onSaveSnapshot, onWhiteboardPresence])
 
   /**
    * 저장돼 있던 판서를 에디터에 되돌린다(ADR-0051). 새로고침해도 강사 화면이 수강생 화면과 같아야
