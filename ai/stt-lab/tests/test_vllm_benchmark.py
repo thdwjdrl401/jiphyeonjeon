@@ -22,6 +22,10 @@ def _clip(path: Path) -> EvaluationClip:
         clip_id="clip-1",
         audio_path=path,
         reference="정답 자막",
+        training_reference="정답 자막",
+        lecture_id="lecture-1",
+        category="eng/comp",
+        duration_ms=1_000,
         language="ko-KR",
         speaker_id="speaker-1",
         split="dev",
@@ -69,6 +73,7 @@ def test_vllm_client_uses_v1_transcription_endpoint_and_measures_results(
     assert benchmark["summary"]["failureCount"] == 0
     assert benchmark["summary"]["uniqueClipCount"] == 1
     assert benchmark["summary"]["meanNormalizedCer"] == 0
+    assert benchmark["summary"]["meanLiteralNormalizedCer"] == 0
 
 
 def test_vllm_benchmark_records_http_failures(tmp_path: Path) -> None:

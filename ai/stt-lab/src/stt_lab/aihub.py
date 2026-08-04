@@ -11,6 +11,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from stt_lab.metrics import (
+    has_unresolved_dual_transcription,
+    orthographic_training_reference,
+)
+
 _SPLIT_RATIOS = {"train": 0.8, "dev": 0.1, "test": 0.1}
 
 
@@ -144,6 +149,14 @@ def prepare_aihub_dataset(
     audit = {
         "schemaVersion": 1,
         "jsonRoot": str(json_root),
+        "dualTranscriptionSampleCount": sum(
+            orthographic_training_reference(sample.reference) != sample.reference
+            for sample in samples
+        ),
+        "invalidTrainingReferenceCount": sum(
+            has_unresolved_dual_transcription(orthographic_training_reference(sample.reference))
+            for sample in samples
+        ),
         "wavRoot": str(wav_root),
         "jsonFiles": len(json_by_key),
         "wavFiles": len(wav_by_key),
@@ -315,8 +328,12 @@ def _evaluation_record(sample: AihubSample, split: str) -> dict[str, Any]:
         "id": sample.clip_id,
         "audioPath": str(sample.audio_path),
         "reference": sample.reference,
+        "trainingReference": orthographic_training_reference(sample.reference),
         "language": "ko-KR",
         "speakerId": sample.speaker_id,
+        "lectureId": sample.lecture_id,
+        "category": sample.category,
+        "durationMs": sample.duration_ms,
         "split": split,
         "terms": [],
         "consent": "AI-Hub-license",

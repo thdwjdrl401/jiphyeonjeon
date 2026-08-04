@@ -124,7 +124,24 @@ split은 clip 랜덤 분할이 아니라 `(speakerId, lectureId)` group 단위 8
 실행하며, `E6`, 12-stream 30분 soak, prod 12 + dev 1 + BGE 혼합 부하는 후속 실험으로
 남긴다. 한 번의 하루 실험으로 fine-tuned 모델의 운영 승격을 선언하지 않는다.
 
-#### 2.3. vLLM 서빙 판단
+#### 2.3. 이중 전사 학습·채점 규칙
+
+AI Hub의 `(software)/(소프트웨어)` 표기는 철자 전사와 발음 전사를 함께 제공한다.
+학습 target은 왼쪽 철자 전사를 선택한 `trainingReference`로 고정한다. 평가는 괄호 쌍마다
+두 표기를 독립적인 정답으로 취급하므로 `system과 에이피아이`처럼 한 문장 안에서 영문과
+한글 표기가 섞여도 정답이다.
+
+주 지표 `normalizedCer`는 모든 조합을 전개하지 않고 각 괄호 쌍에서 Levenshtein 상태를
+병합해 최저 편집 거리를 계산한다. CER 분모는 비교 안정성을 위해 철자형
+`trainingReference` 길이로 고정한다. 원본 괄호 표기 전체를 문자 그대로 정규화한 기존
+점수는 감사·정제 회귀 확인용 `literalNormalizedCer`로 별도 보존한다. `rawCer`도 원문
+비교 지표로 유지한다. manifest의 `trainingReference`는 과거 정제 로직의 결과를 그대로
+신뢰하지 않고 원본 `reference`에서 다시 생성한다. 괄호가 닫히지 않아 철자형 target을
+안전하게 복원할 수 없는 sample은 추정 보정하지 않고 학습 대상에서 격리하며 그 수를
+`excludedInvalidReference`로 남긴다. 원본 annotation과 manifest는 감사 가능하도록
+수정하지 않는다.
+
+#### 2.4. vLLM 서빙 판단
 
 vLLM 도입 효과는 모델 정확도와 분리해 판단한다. 기대하는 이점은 model residency,
 동시 요청 scheduling/batching, 표준화된 OpenAI-compatible transcription API, 프로세스별

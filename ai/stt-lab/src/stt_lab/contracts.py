@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from stt_lab.metrics import orthographic_training_reference
+
 _SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _VALID_SPLITS = frozenset({"train", "dev", "test", "golden"})
 
@@ -13,6 +15,10 @@ _VALID_SPLITS = frozenset({"train", "dev", "test", "golden"})
 @dataclass(frozen=True)
 class EvaluationClip:
     clip_id: str
+    training_reference: str
+    lecture_id: str | None
+    category: str | None
+    duration_ms: int | None
     audio_path: Path
     reference: str
     language: str
@@ -65,6 +71,10 @@ def _parse_clip(value: Any, base_dir: Path, line_number: int) -> EvaluationClip:
         "terms",
         "consent",
         "sha256",
+        "trainingReference",
+        "lectureId",
+        "category",
+        "durationMs",
     }
     extra = set(value) - allowed
     if extra:
@@ -92,10 +102,30 @@ def _parse_clip(value: Any, base_dir: Path, line_number: int) -> EvaluationClip:
     ):
         raise ValueError(f"manifest line {line_number} sha256 must be lowercase hex")
 
+    reference = _required_text(value, "reference", line_number)
+    manifest_training_reference = value.get("trainingReference")
+    if manifest_training_reference is not None and (
+        not isinstance(manifest_training_reference, str) or not manifest_training_reference.strip()
+    ):
+        raise ValueError(f"manifest line {line_number} field trainingReference must be non-blank")
+    derived_training_reference = orthographic_training_reference(reference)
+    training_reference = (
+        derived_training_reference
+        if derived_training_reference != reference
+        else manifest_training_reference or reference
+    )
+    duration_ms = value.get("durationMs")
+    if duration_ms is not None and (not isinstance(duration_ms, int) or duration_ms <= 0):
+        raise ValueError(f"manifest line {line_number} durationMs must be a positive integer")
+
     return EvaluationClip(
         clip_id=clip_id,
         audio_path=audio_path,
-        reference=_required_text(value, "reference", line_number),
+        reference=reference,
+        training_reference=training_reference.strip(),
+        lecture_id=_optional_text(value, "lectureId", line_number),
+        category=_optional_text(value, "category", line_number),
+        duration_ms=duration_ms,
         language=_required_text(value, "language", line_number),
         speaker_id=_required_text(value, "speakerId", line_number),
         split=split,
@@ -107,6 +137,15 @@ def _parse_clip(value: Any, base_dir: Path, line_number: int) -> EvaluationClip:
 
 def _required_text(value: dict[str, Any], field: str, line_number: int) -> str:
     field_value = value.get(field)
+    if not isinstance(field_value, str) or not field_value.strip():
+        raise ValueError(f"manifest line {line_number} field {field} must be non-blank")
+    return field_value.strip()
+
+
+def _optional_text(value: dict[str, Any], field: str, line_number: int) -> str | None:
+    field_value = value.get(field)
+    if field_value is None:
+        return None
     if not isinstance(field_value, str) or not field_value.strip():
         raise ValueError(f"manifest line {line_number} field {field} must be non-blank")
     return field_value.strip()

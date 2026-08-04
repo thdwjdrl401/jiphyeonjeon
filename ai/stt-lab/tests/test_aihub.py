@@ -66,6 +66,7 @@ def test_prepare_matches_relative_paths_even_when_roots_have_arbitrary_names(
         key=key,
         speaker_id="S00001",
         lecture_id="C00001",
+        text="(software)/(소프트웨어)를 사용합니다.",
     )
     _write_wav(audio)
 
@@ -85,6 +86,8 @@ def test_prepare_matches_relative_paths_even_when_roots_have_arbitrary_names(
         .read_text(encoding="utf-8")
         .splitlines()
     ]
+    audit = json.loads((tmp_path / "output/reports/audit.json").read_text(encoding="utf-8"))
+    assert audit["invalidTrainingReferenceCount"] == 0
     assert source_records[0]["speakerId"] == "S00001"
     assert source_records[0]["lectureId"] == "C00001"
     assert source_records[0]["audioPath"] == str(audio.resolve())
@@ -93,6 +96,10 @@ def test_prepare_matches_relative_paths_even_when_roots_have_arbitrary_names(
     assert source_records[0]["sampleWidthBytes"] == 2
     assert source_records[0]["audioDurationMs"] == 1_000
     assert len(source_records[0]["sha256"]) == 64
+    assert source_records[0]["trainingReference"] == "software를 사용합니다."
+    assert source_records[0]["lectureId"] == "C00001"
+    assert source_records[0]["category"] == "eng/comp"
+    assert source_records[0]["durationMs"] == 1_000
 
 
 def test_split_keeps_connected_speakers_and_lectures_together() -> None:
