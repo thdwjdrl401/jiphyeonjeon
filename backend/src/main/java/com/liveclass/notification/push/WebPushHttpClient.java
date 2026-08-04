@@ -59,9 +59,10 @@ public class WebPushHttpClient {
      * <p>본문은 이미 암호화돼 있고 헤더에 VAPID 서명·`Content-Encoding`·`TTL`이 들어 있다.
      * 우리가 하는 일은 <b>옮겨 담아 보내는 것</b>뿐이라, 여기서 헤더를 만들거나 고치지 않는다.
      *
-     * <p>응답 본문은 버린다 — 푸시 서비스는 상태 코드로만 말한다.
+     * <p>응답 본문은 버린다 — 푸시 서비스는 상태 코드로만 말한다. 다만 {@code Retry-After}는 읽는다.
+     * 429는 "지금 말고 이따가"라는 뜻이고, 언제가 이따인지는 <b>상대가 정한다</b>.
      */
-    public CompletableFuture<Integer> send(HttpPost prepared) {
+    public CompletableFuture<Response> send(HttpPost prepared) {
         HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(URI.create(prepared.getURI().toString()))
                 .timeout(requestTimeout)
@@ -77,7 +78,48 @@ public class WebPushHttpClient {
             builder.header(header.getName(), header.getValue());
         }
         return client.sendAsync(builder.build(), HttpResponse.BodyHandlers.discarding())
-                .thenApply(HttpResponse::statusCode);
+                .thenApply(response -> new Response(response.statusCode(), retryAfterOf(response)));
+    }
+
+    /**
+     * 한 번의 응답. {@code retryAfter}는 상대가 알려 줬을 때만 있다.
+     *
+     * <p>{@code status < 0}은 응답을 못 받았다는 뜻이다(오류·타임아웃).
+     */
+    public record Response(int status, Duration retryAfter) {
+
+        public static Response failed() {
+            return new Response(-1, null);
+        }
+    }
+
+    /**
+     * {@code Retry-After}를 읽는다. RFC 9110이 <b>두 형식</b>을 허용한다 — 초, 또는 HTTP 날짜.
+     * 푸시 서비스마다 다른 쪽을 쓰므로 둘 다 읽는다.
+     *
+     * <p>못 읽으면 {@code null}을 준다. 그러면 부르는 쪽이 자기 백오프를 쓴다 — 헤더 하나 때문에
+     * 재시도 자체를 포기할 이유는 없다.
+     */
+    private static Duration retryAfterOf(HttpResponse<?> response) {
+        String value = response.headers().firstValue("retry-after").orElse(null);
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String trimmed = value.trim();
+        try {
+            return Duration.ofSeconds(Long.parseLong(trimmed));
+        } catch (NumberFormatException notSeconds) {
+            try {
+                Duration until = Duration.between(java.time.Instant.now(),
+                        java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME
+                                .parse(trimmed, java.time.OffsetDateTime::from).toInstant());
+                // 이미 지난 시각이면 기다릴 것이 없다.
+                return until.isNegative() ? Duration.ZERO : until;
+            } catch (RuntimeException notDate) {
+                log.debug("Retry-After를 읽지 못했습니다: {}", trimmed);
+                return null;
+            }
+        }
     }
 
     /** JDK가 직접 관리하는 헤더. 우리가 실으면 요청 생성이 거부된다. */

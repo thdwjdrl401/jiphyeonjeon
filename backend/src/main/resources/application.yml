@@ -275,6 +275,11 @@ notification:
     max-in-flight: ${NOTIFICATION_WEB_PUSH_MAX_IN_FLIGHT:200}
     connect-timeout-ms: ${NOTIFICATION_WEB_PUSH_CONNECT_TIMEOUT_MS:5000}
     request-timeout-ms: ${NOTIFICATION_WEB_PUSH_REQUEST_TIMEOUT_MS:10000}
-    # 조각 하나를 기다리는 상한. 넘으면 끝난 것만 반영하고 나머지는 버린다 — 재시도하면
-    # 이미 받은 사람에게 두 번 울린다(Web Push에는 중복 제거가 없다).
+    # 조각 하나 전체(재시도 포함)의 상한. 넘으면 끝난 것만 반영하고 나머지는 버린다 — 조각 하나가
+    # 큐 소비자를 오래 붙잡을수록 뒤에 선 다른 알림이 그만큼 늦는다.
     batch-timeout-ms: ${NOTIFICATION_WEB_PUSH_BATCH_TIMEOUT_MS:60000}
+    # 재시도는 **기기 단위**다. 실패한 기기만 다시 보내므로 이미 받은 기기가 두 번 울지 않는다.
+    # 조각 단위로는 할 수 없다 — 그건 메시지 재배달이고, 중복 제거가 수신자 명단을 비워 버린다.
+    max-attempts: ${NOTIFICATION_WEB_PUSH_MAX_ATTEMPTS:3}
+    # 지수 백오프의 첫 간격. 상대가 Retry-After를 주면 그 값이 이긴다.
+    retry-backoff-ms: ${NOTIFICATION_WEB_PUSH_RETRY_BACKOFF_MS:500}
