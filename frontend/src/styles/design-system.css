@@ -845,23 +845,82 @@ body {
   box-shadow: none;
 }
 
+/*
+ * 검색·정렬 입력.
+ *
+ * 예전에는 둘 다 border: 0 / background: transparent 라서 도구줄 위의 글자와 구별되지 않았다.
+ * 테두리는 --ink-500을 쓴다 — 기존 토큰 중 비텍스트 최소 대비 3:1에 닿는 유일한 값이다
+ * (--ink-400 2.24:1, --border-strong 2.51:1, --ink-200 1.36:1은 모두 미달).
+ * 높이 42px과 radius 0은 그대로 둔다.
+ */
 .search-field {
   height: 42px;
-  border: 0;
+  border: 1px solid var(--ink-500);
   border-radius: 0;
-  padding-inline: 0 12px;
-  background: transparent;
+  padding-inline: 12px;
+  background: var(--white);
 }
 
-.search-field:focus-within { border-color: transparent; background: transparent; box-shadow: none; }
-.search-field svg { width: 17px; stroke: var(--ink-950); }
+/*
+ * 포커스 표시 복구. 예전에는 여기서 border·background·box-shadow를 모두 지우고 있었고,
+ * pages.css의 `.search-field input { outline: 0 }`(특이도 0,1,1)가 전역 :focus-visible(0,1,0)까지
+ * 이겨서 키보드로 들어와도 아무 표시가 없었다(WCAG 2.4.7 위반).
+ * 링은 입력이 아니라 필드 껍데기에 걸어 "이 칸에 있다"를 보여 준다. 값은 전역 :focus-visible과 같다.
+ */
+.search-field:focus-within {
+  border-color: var(--ink-950);
+  background: var(--white);
+  box-shadow: none;
+  outline: 2px solid var(--ink-950);
+  outline-offset: 2px;
+}
+
+/* 돋보기가 --ink-950이라 placeholder보다 진했다 — 라벨이 내용보다 강하지 않게 낮춘다. */
+.search-field svg { width: 17px; stroke: var(--ink-600); }
+.search-field:focus-within svg { stroke: var(--ink-950); }
 .search-field input { font-size: .85rem; }
-.sort-field select { height: 42px; margin-block: 0; border: 0; border-left: 1px solid var(--border-medium); border-radius: 0; background: transparent; }
+/* 브라우저 기본 placeholder(2.3~3.7:1 추정)에 맡기지 않고 명시한다. opacity는 Firefox 기본값 해제. */
+.search-field input::placeholder { color: var(--ink-muted); opacity: 1; }
+
+/* 검색어 지우기(×). 글리프만 있어 터치 타겟이 ~19px였다 — 24px을 확보하고 상태를 준다. */
+.search-field > button {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-700);
+  font-size: 1.05rem;
+  line-height: 1;
+}
+.search-field > button:hover { background: var(--ink-100); color: var(--ink-950); }
+.search-field > button:focus-visible { outline: 2px solid var(--ink-950); outline-offset: 1px; }
+
+/* 정렬 select도 같은 입력 규칙을 따른다. 예전의 border-left는 검색창과의 구분선 역할이었는데,
+   이제 각자 자기 테두리를 가지므로 필요 없다. */
+.sort-field select {
+  height: 42px;
+  margin-block: 0;
+  border: 1px solid var(--ink-500);
+  border-radius: 0;
+  background: var(--white);
+}
+.sort-field select:focus-visible {
+  border-color: var(--ink-950);
+  outline: 2px solid var(--ink-950);
+  outline-offset: 2px;
+}
 .catalog-summary { min-height: 0; align-items: center; gap: 10px; padding: 0 14px 0 0; border-right: 1px solid var(--border-medium); }
 .catalog-summary > div { display: flex; min-width: 0; align-items: baseline; gap: 8px; }
 .catalog-summary h2 { overflow: hidden; margin: 0; font-size: 1rem; text-overflow: ellipsis; white-space: nowrap; }
-.catalog-summary p { flex: 0 0 auto; font-size: .7rem; white-space: nowrap; }
-.catalog-summary .reset-button { flex: 0 0 auto; margin-left: auto; font-size: .68rem; }
+/* 도구줄의 작은 글씨 3곳(개수·초기화·업데이트 안내)이 --ink-500으로 2.97:1이었다.
+   커리큘럼 카드의 메타와 같은 결함이라 같은 처방(--ink-muted, 5.69:1)을 쓴다. */
+.catalog-summary p { flex: 0 0 auto; color: var(--ink-muted); font-size: .7rem; white-space: nowrap; }
+.catalog-summary .reset-button { flex: 0 0 auto; margin-left: auto; color: var(--ink-muted); font-size: .68rem; }
+.catalog-updating { color: var(--ink-muted); }
 .catalog-controls + .curriculum-grid,
 .catalog-controls + .page-state { margin-top: 22px; }
 .pagination button { border-radius: 50%; background: transparent; }
@@ -1702,7 +1761,8 @@ body {
   .catalog-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; padding-top: 0; }
   .catalog-summary { grid-column: 1 / -1; min-height: 42px; padding-right: 0; border-right: 0; border-bottom: 1px solid var(--border-medium); }
   .sort-field { grid-column: auto; grid-row: auto; border-top: 0; }
-  .sort-field select { width: auto; border-left: 1px solid var(--border-medium); }
+  /* 좁은 폭에서도 사방 테두리를 유지한다 — 한 변만 남으면 입력란으로 보이지 않는다. */
+  .sort-field select { width: auto; border: 1px solid var(--ink-500); }
   .curriculum-hero { padding: 24px 20px; }
   .curriculum-identity h1 { font-size: clamp(2rem, 10vw, 2.8rem); }
 }
@@ -1750,7 +1810,7 @@ body {
   .catalog-summary,
   .search-field,
   .sort-field { grid-column: 1; }
-  .sort-field select { width: 100%; border-top: 1px solid var(--border-medium); border-left: 0; }
+  .sort-field select { width: 100%; border: 1px solid var(--ink-500); }
   .curriculum-grid { grid-template-columns: 1fr; }
   .curriculum-cover,
   .skeleton-cover { height: 188px; }
