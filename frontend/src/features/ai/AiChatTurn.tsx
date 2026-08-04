@@ -6,6 +6,8 @@ interface AiChatTurnProps {
   turn: AiConversationTurn
   /** 실패한 턴을 같은 질문으로 다시 보낸다. */
   onRetry?: (turnId: string) => void
+  /** 세션-ms 자막 근거를 눌렀을 때 영상을 옮긴다(다시보기 전용, ADR-0075). */
+  onSeek?: (sessionMs: number) => void
 }
 
 /**
@@ -15,7 +17,7 @@ interface AiChatTurnProps {
  * 바뀐 턴만 새 객체로 갈아 주므로(`aiConversation.applyToTurn`) 지난 턴들은 이 비교에서 걸러진다.
  * 그래서 props는 턴 객체와 **안정 콜백** 하나로만 유지한다.
  */
-function AiChatTurn({ turn, onRetry }: AiChatTurnProps) {
+function AiChatTurn({ turn, onRetry, onSeek }: AiChatTurnProps) {
   const isStreaming = turn.status === 'streaming'
   const isError = turn.status === 'error'
 
@@ -41,7 +43,7 @@ function AiChatTurn({ turn, onRetry }: AiChatTurnProps) {
             {turn.notice}
           </p>
         )}
-        <AiEvidenceList sources={turn.sources} />
+        <AiEvidenceList onSeek={onSeek} sources={turn.sources} />
         {isError && turn.retryable && onRetry && (
           <div className="ai-answer__actions">
             <button className="button button--soft button--small" type="button" onClick={() => onRetry(turn.id)}>

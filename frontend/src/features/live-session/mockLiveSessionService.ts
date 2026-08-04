@@ -283,6 +283,58 @@ export const mockLiveSessionService = {
       },
     })
   },
+  // 다시보기 질문(ADR-0075). 라이브와 이벤트 흐름이 같고, 근거가 **질문한 시점 주변**이라는 것만
+  // 다르다 — 목도 받은 재생 위치를 근거 시각에 반영해 "여기서 말한 내용"이 도는지 눈으로 보게 한다.
+  async askReplayAi(_lessonId, question, playbackSessionMs, { onEvent, signal }) {
+    const requestId = `req-mock-replay-${Date.now()}`
+    const chunks = [
+      '방금 지점에서 설명한 내용은 ',
+      '인증 상태를 요청 사이에 유지하는 세션과, ',
+      '현재 요청의 인증 주체를 담는 SecurityContext의 차이입니다.',
+    ]
+
+    for (const text of chunks) {
+      await new Promise((resolve) => setTimeout(resolve, 120))
+      if (signal?.aborted) return
+      onEvent({ type: 'answer.delta', payload: { requestId, text } })
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 120))
+    if (signal?.aborted) return
+
+    if (question.includes('점심')) {
+      onEvent({
+        type: 'answer.insufficient',
+        payload: { requestId, message: '이 질문에 답할 근거를 강의 자료와 발화에서 찾지 못했습니다.' },
+      })
+      return
+    }
+
+    onEvent({
+      type: 'answer.done',
+      payload: {
+        requestId,
+        sources: [
+          {
+            type: 'PPTX',
+            materialId: 'mat-session-and-csrf',
+            page: 12,
+            excerpt: '세션과 CSRF\n쿠키 세션은 브라우저가 자동으로 실어 보낸다.',
+          },
+          {
+            type: 'CAPTION',
+            sessionId: 'ses-replay-mock',
+            sttSessionId: 'replay:ses-replay-mock',
+            // v2 근거는 플레이어와 같은 축이다(라이브 v1의 attempt-local과 다르다) — 눌러서 이동한다.
+            startMs: Math.max(0, playbackSessionMs - 12_000),
+            endMs: playbackSessionMs,
+            excerpt: '세션은 인증 상태를 여러 요청에 걸쳐 유지합니다.',
+            timeAxis: 'PLAYBACK',
+          },
+        ],
+      },
+    })
+  },
   async saveBookmark(lessonId, sessionMs) {
     const bookmarks = bookmarksByLesson.get(lessonId) ?? []
     bookmarksByLesson.set(lessonId, [...bookmarks, sessionMs])

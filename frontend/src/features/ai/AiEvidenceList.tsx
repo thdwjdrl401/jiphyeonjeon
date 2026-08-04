@@ -24,12 +24,20 @@ function Excerpt({ text }: { text?: string }) {
  * 보여 주는 뜻이 없다. 발췌문은 계약상 **선택 필드**라 옛 답변에는 없을 수 있고, 그때는 쪽수·시각만
  * 남긴다(UUID를 되살리지 않는다).
  *
- * 근거는 여전히 **표시 전용**이다. `CAPTION` 근거의 `startMs`/`endMs`는 STT attempt-local 축이라
- * 영상 위치(세션-ms)와 다른 축이고, 이 값으로 seek을 걸면 엉뚱한 지점으로 간다 —
- * 눌러서 이동하는 기능은 시간 앵커 공유 계약이 선 뒤다(ADR-0043·0045·0047 §9).
- * 그래서 항목은 button이 아니라 li로 두고, 왜 못 가는지를 **펼친 목록 아래에 한 번만** 밝힌다.
+ * 자막 근거의 **이동 가능 여부는 시간축이 정한다**(`timeAxis`).
+ * - `PLAYBACK` — 플레이어와 같은 축이다(Replay v2: 업로드 녹화강의·라이브 다시보기 모두). `onSeek`이
+ *   있으면 눌러서 그 지점으로 옮길 수 있다.
+ * - 미지정 — 라이브(v1)의 STT attempt-local 축이라 누르면 엉뚱한 지점으로 간다. 표시만 하고 왜 못
+ *   가는지 목록 아래에 한 번 밝힌다.
  */
-export default function AiEvidenceList({ sources }: { sources: AiAnswerSource[] }) {
+export default function AiEvidenceList({
+  sources,
+  onSeek,
+}: {
+  sources: AiAnswerSource[]
+  /** 세션-ms 근거를 눌렀을 때 영상을 옮긴다. 없으면 모든 근거가 표시 전용이다. */
+  onSeek?: (sessionMs: number) => void
+}) {
   const [isExpanded, setExpanded] = useState(false)
   const panelId = useId()
   // 근거 없는 턴에는 토글도 두지 않는다 — 눌러도 빈 목록만 나오는 버튼은 잡음이다.
@@ -64,7 +72,15 @@ export default function AiEvidenceList({ sources }: { sources: AiAnswerSource[] 
             )
             : (
               <li className="evidence-card" key={`caption-${source.sttSessionId}-${source.startMs}-${source.endMs}`}>
-                <strong>{formatStreamElapsed(source.startMs)}–{formatStreamElapsed(source.endMs)}</strong>
+                {/* 플레이어와 같은 축(timeAxis=PLAYBACK)일 때만 이동을 준다. STT 스트림 축은 눌러도
+                    엉뚱한 지점으로 가므로 예전처럼 표시만 한다. */}
+                {source.timeAxis === 'PLAYBACK' && onSeek
+                  ? (
+                    <button className="evidence-card__seek" onClick={() => onSeek(source.startMs)} type="button">
+                      {formatStreamElapsed(source.startMs)}–{formatStreamElapsed(source.endMs)}
+                    </button>
+                  )
+                  : <strong>{formatStreamElapsed(source.startMs)}–{formatStreamElapsed(source.endMs)}</strong>}
                 <span className="evidence-card__kind">강의 발화</span>
                 <Excerpt text={source.excerpt} />
               </li>

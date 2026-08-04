@@ -29,7 +29,7 @@ const openAiPanel = async (user: ReturnType<typeof userEvent.setup>) => {
  * AI 질의응답이 화면에 실제로 붙어 있는지(AI-QUESTION-01).
  *
  * 여기서 확인하는 건 두 가지다 — (1) 라이브 패널이 **세션 스코프**로 질문을 보내고 스트리밍 답변과
- * 근거를 그린다, (2) 다시보기는 아직 열 수 없는 이유를 화면이 먼저 밝힌다(예전에는 눌러도 무반응이었다).
+ * 근거를 그린다, (2) 다시보기 패널이 **레슨 스코프 + 재생 위치**로 질문한다(ADR-0075).
  */
 describe('AI 질의응답 화면 연결', () => {
   beforeEach(() => {
@@ -71,16 +71,30 @@ describe('AI 질의응답 화면 연결', () => {
     expect(screen.getByText('12:08–12:41')).toBeVisible()
   })
 
-  it('다시보기 AI 탭은 새 질문을 잠그되 라이브 때 물어본 것은 보여준다', async () => {
+  it('다시보기 AI 탭은 레슨 스코프로 질문하고 재생 위치를 함께 보낸다', async () => {
+    const askReplayAi = vi.spyOn(mockLiveSessionService, 'askReplayAi')
     const user = userEvent.setup()
     await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
     renderAt('/instructor/lessons/les-security/replay')
 
     await openAiPanel(user)
+    await user.type(
+      screen.getByRole('textbox', { name: 'AI에게 할 질문' }),
+      '여기서 말한 세션이 뭔가요?{Enter}',
+    )
 
-    // 예전에는 "아직 지원하지 않습니다"로 끝났다. 이제 라이브 때 물어본 기록은 그대로 남는다.
-    expect(screen.getAllByText(/다시보기에서는 새 질문을 보낼 수 없습니다/).length).toBeGreaterThan(0)
-    expect(screen.getByRole('textbox', { name: 'AI에게 할 질문' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: '전송' })).toBeDisabled()
+    /*
+     * 라이브와 스코프가 다르다 — 경로는 레슨이고 세션·커리큘럼은 서버가 재생 자산에서 찾는다.
+     * 세 번째 인자는 질문을 누른 순간의 **세션 상대** 재생 위치다(ADR-0075): 이게 없으면 서버가
+     * 어느 대목을 물었는지 몰라 근거 자막을 고를 수 없다.
+     */
+    expect(askReplayAi).toHaveBeenCalledWith(
+      'les-security',
+      '여기서 말한 세션이 뭔가요?',
+      expect.any(Number),
+      expect.objectContaining({ onEvent: expect.any(Function), signal: expect.any(AbortSignal) }),
+    )
+
+    expect(await screen.findByText(/SecurityContext의 차이입니다\./)).toBeInTheDocument()
   })
 })

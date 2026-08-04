@@ -1,5 +1,6 @@
 package com.liveclass.video.service;
 
+import com.liveclass.aiintegration.api.RagAnswerRelay;
 import com.liveclass.aiintegration.api.ReplayRagAnswerCommand;
 import com.liveclass.aiintegration.api.ReplayRagAnswerStreaming;
 import com.liveclass.video.api.LessonPlaybackAccess;
@@ -59,23 +60,19 @@ class RecordedAiAnswerServiceTest {
         when(tracks.findByRecordedVideoId(videoId)).thenReturn(java.util.Optional.of(track));
         when(segments.findContextSegments(trackId, jobId, 25_000L, 55_000L))
                 .thenReturn(List.of(segment(50_000L, 54_000L, "질문 직전 자막")));
-        RecordedAiAnswerService service = new RecordedAiAnswerService(videos, tracks, segments, access, streaming);
+        RecordedAiAnswerService service = new RecordedAiAnswerService(videos, tracks, segments, access, streaming, mock(RagAnswerRelay.class));
 
-        try {
-            ReplayRagAnswerCommand command = service.prepare(userId, lessonId, "질문", 55_000L);
+        ReplayRagAnswerCommand command = service.prepare(userId, lessonId, "질문", 55_000L);
 
-            assertThat(command.lessonId()).isEqualTo(lessonId);
-            assertThat(command.curriculumId()).isEqualTo(curriculumId);
-            assertThat(command.sessionId()).isEqualTo(videoId);
-            assertThat(command.questionSessionMs()).isEqualTo(55_000L);
-            assertThat(command.captions()).singleElement().satisfies(caption -> {
-                assertThat(caption.sttSessionId()).isEqualTo(jobId.toString());
-                assertThat(caption.startSessionMs()).isEqualTo(50_000L);
-                assertThat(caption.endSessionMs()).isEqualTo(54_000L);
-            });
-        } finally {
-            service.shutdown();
-        }
+        assertThat(command.lessonId()).isEqualTo(lessonId);
+        assertThat(command.curriculumId()).isEqualTo(curriculumId);
+        assertThat(command.sessionId()).isEqualTo(videoId);
+        assertThat(command.questionSessionMs()).isEqualTo(55_000L);
+        assertThat(command.captions()).singleElement().satisfies(caption -> {
+            assertThat(caption.sttSessionId()).isEqualTo(jobId.toString());
+            assertThat(caption.startSessionMs()).isEqualTo(50_000L);
+            assertThat(caption.endSessionMs()).isEqualTo(54_000L);
+        });
     }
 
     @Test

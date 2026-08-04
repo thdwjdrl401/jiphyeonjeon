@@ -123,7 +123,14 @@ public class ReplayPlaybackService {
         }
     }
 
-    private PlaybackContext requirePlaybackContext(UUID userId, UUID lessonId) {
+    /**
+     * 재생 인가 + "어느 세션인가"를 한 번에 정한다.
+     *
+     * <p>패키지 밖으로 열지 않되 같은 패키지의 {@link ReplayAiAnswerService}는 쓴다 — 다시보기 AI의
+     * 접근 조건은 "재생할 수 있으면 물어볼 수 있다"로 재생과 <b>완전히 같아야</b> 하므로(ADR-0042),
+     * 게이트를 복제하지 않고 이 메서드를 공유한다.
+     */
+    PlaybackContext requirePlaybackContext(UUID userId, UUID lessonId) {
         PlaybackAccessGrant grant = playbackAccess.resolve(userId, lessonId);
         VideoAsset asset = videoAssetRepository.findByLessonId(lessonId)
                 .orElseThrow(() -> new ReplayNotFoundException("이 레슨에는 녹화 자산이 없습니다."));
@@ -199,14 +206,14 @@ public class ReplayPlaybackService {
         return PlaybackPhase.UNAVAILABLE;
     }
 
-    private enum PlaybackPhase {
+    enum PlaybackPhase {
         STARTING,
         LIVE,
         REPLAY,
         UNAVAILABLE
     }
 
-    private record PlaybackContext(
+    record PlaybackContext(
             VideoAsset asset,
             LiveSessionView session,
             PlaybackPhase phase

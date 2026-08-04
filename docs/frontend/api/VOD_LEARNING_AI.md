@@ -349,10 +349,11 @@ GET /api/lessons/{lessonId}/ai/questions?page=0&size=20
 
 ### 8.2 새 질문
 
-> ⚠️ **아직 미구현이며 runtime 계약에는 반영되지 않았다.** 시간 앵커와 최종 요청안은
-> [ADR-0037](../../decisions/canola/0042-replay-ai-caption-context-contract.md)에 한 번에 정리한다. 구현 방법은
-> FE·Spring·AI 각 오너가 합의해 결정한다. FE의 `askReplayAi(...)`는 실제 계약이 구현될 때까지 501 스텁을
-> 유지한다.
+> ✅ **구현됐다** — `POST /api/lessons/{lessonId}/ai/answers/stream`, body는 `{question, playbackSessionMs}`.
+> 계약 정본은 [LIVE.md §10.1](LIVE.md)이고 결정은 [canola ADR-0042](../../decisions/canola/0042-replay-ai-caption-context-contract.md)(요구)와
+> [songjeongki ADR-0075](../../decisions/songjeongki/0075-replay-ai-answer-sse-proxy.md)(Spring 중계·FE 배선)다.
+> FE 진입점은 `replayService`가 아니라 `liveSessionService.askReplayAi(...)`다 — 답변이 라이브 질문과
+> 같은 표에 쌓이고 기록 조회도 세션 경로를 공유하기 때문이다.
 
 게시본 version이 질문 도중 바뀌더라도 질문 시작 시점 version으로 응답을 완료한다(version 노출 방법은
 현재 이벤트 계약에 없어 후속 결정 대상이다).

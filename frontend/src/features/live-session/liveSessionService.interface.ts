@@ -172,9 +172,11 @@ export type CaptionStreamEvent =
 export type AiAnswerSource =
   | { type: 'PPTX'; materialId: string; page: number; excerpt?: string }
   /**
+   * 라이브(v1) 자막 근거.
+   *
    * ⚠️ `startMs`/`endMs`는 STT **attempt-local `streamElapsedMs`** 축이다(자막 델타와 같은 축).
    * 영상 위치(`sessionMs`)와 **다른 축**이라 이 값으로 seek을 걸면 엉뚱한 지점으로 간다 —
-   * 시간 앵커 공유 계약이 서기 전까지는 표시만 한다(ADR-0043·0045·0047 §9).
+   * 표시만 한다(ADR-0043·0045·0047).
    */
   | {
       type: 'CAPTION'
@@ -429,6 +431,26 @@ export interface LiveSessionService {
    *                 `contextTimeMs`·`requestId`·`lessonId`는 서버가 채운다(클라가 보내지 않는다).
    */
   askLiveAi: (sessionId: string, question: string, options: AiAnswerStreamOptions) => Promise<void>
+  /**
+   * 다시보기 AI 질의응답(`POST /lessons/{lessonId}/ai/answers/stream`, ADR-0075).
+   *
+   * **레슨 스코프**다 — 세션이 아니다. 재생 자산이 세션 하나에서 나오므로 서버가 자산에서
+   * `sessionId`·`curriculumId`를 조회한다. 클라가 세션을 고를 수 있으면 수강하지 않은 강의의 근거를
+   * 열람할 여지가 생긴다.
+   *
+   * 이벤트·오류·취소 계약은 {@link LiveSessionService.askLiveAi}와 **같다**. 답변 기록도 같은 표에
+   * 쌓여 `getAiAnswerHistory(sessionId)`로 함께 읽힌다.
+   *
+   * @param playbackSessionMs 질문을 누른 순간의 **세션 상대** 재생 위치. 플레이어 시각이 아니라
+   *                          `toSessionMs(mediaTime, source.availableFromMs)` 결과를 넘긴다 —
+   *                          미디어 시각을 그대로 보내면 근거 자막이 통째로 어긋난다.
+   */
+  askReplayAi: (
+    lessonId: string,
+    question: string,
+    playbackSessionMs: number,
+    options: AiAnswerStreamOptions,
+  ) => Promise<void>
   saveBookmark: (lessonId: string, sessionMs: number) => Promise<void>
   getAiAnswerHistory: (sessionId: string) => Promise<AiAnswerHistoryItem[]>
   /** 내가 이미 쌓은 칸별 재생 횟수. 새로고침 뒤 이어서 세려면 필요하다. */

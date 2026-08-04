@@ -5,13 +5,10 @@ import type { ReplayService } from './replayService.interface'
 /**
  * 다시보기 HTTP 어댑터.
  *
- * 영상 게시 API는 CP4에서 구현됐고, 게시본 자막·채팅·AI·퀴즈·검수 저장은 CP3~CP5 범위라
- * 아직 명시적인 미구현 오류를 유지한다.
+ * 영상 게시 API는 CP4에서, 다시보기 AI 질문은 ADR-0075로 구현됐다(후자는 liveSessionService 소유).
+ * 검수 저장·퀴즈는 아직 서버 경로가 없어 명시적인 미구현 오류를 유지한다.
  */
 export const httpReplayService = {
-  async askReplayAi(lessonId) {
-    return notImplemented(`POST /lessons/${lessonId}/ai/questions:stream`)
-  },
   async saveReplayReview(lessonId) {
     return notImplemented(`PUT /instructor/lessons/${lessonId}/replay-review`)
   },
