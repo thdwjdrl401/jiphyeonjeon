@@ -170,3 +170,32 @@ def test_annotation_highlight_upgrade_rejects_unsafe_runtime_role_before_executi
         migration.upgrade()
 
     assert statements == []
+
+
+def test_annotation_text_length_cap_is_dropped(monkeypatch) -> None:
+    """Nothing upstream enforces a length: Spring stores the vision output in an unbounded
+    column, so rejecting here only sent the job to the DLQ with no callback."""
+    migration = importlib.import_module("migrations.versions.0004_annotation_text_unbounded")
+    monkeypatch.delenv("AI_WORKER_DATABASE_ROLE", raising=False)
+    statements = []
+    monkeypatch.setattr(migration.op, "execute", statements.append)
+
+    migration.upgrade()
+    ddl = "\n".join(str(statement) for statement in statements)
+
+    assert "ALTER TABLE ai.annotation_highlight ALTER COLUMN text TYPE text" in ddl
+    assert "varchar" not in ddl
+    assert migration.revision == "0004_annotation_text_unbounded"
+    assert migration.down_revision == "0003_annotation_highlight"
+
+
+def test_annotation_text_downgrade_trims_before_narrowing(monkeypatch) -> None:
+    """Rows longer than the old cap would block the narrowing, so the trim has to come first."""
+    migration = importlib.import_module("migrations.versions.0004_annotation_text_unbounded")
+    statements = []
+    monkeypatch.setattr(migration.op, "execute", statements.append)
+
+    migration.downgrade()
+    ddl = "\n".join(str(statement) for statement in statements)
+
+    assert ddl.index("UPDATE ai.annotation_highlight") < ddl.index("ALTER COLUMN text TYPE varchar")

@@ -14,7 +14,6 @@ from app.contracts import (
     annotation_callback_event_id,
     parse_material_job,
 )
-from app.contracts.material_jobs import MAX_ANNOTATION_TEXT_CHARS
 
 
 HIGHLIGHT_ID = "550e8400-e29b-41d4-a716-446655440010"
@@ -123,8 +122,6 @@ def test_annotation_jobs_share_the_queue_without_disturbing_material_jobs() -> N
         _embed_payload(sessionMs=-1),
         # A naive timestamp cannot be placed on a real timeline.
         _embed_payload(capturedAt="2026-08-04T13:20:05"),
-        # Text we cannot store must not be silently truncated.
-        _embed_payload(text="가" * (MAX_ANNOTATION_TEXT_CHARS + 1)),
         _embed_payload(unexpected=True),
         {**_embed_payload(), "highlight_id": HIGHLIGHT_ID},
         _delete_payload(contractVersion=2),

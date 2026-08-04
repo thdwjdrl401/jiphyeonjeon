@@ -14,7 +14,7 @@ from app.application import (
 )
 from app.contracts import AnnotationEmbedJob
 from app.domain import (
-    MAX_ANNOTATION_TEXT_CHARS,
+    MAX_ANNOTATION_EMBED_CHARS,
     AnnotationHighlight,
     AnnotationIngestionError,
     AnnotationRecord,
@@ -95,12 +95,16 @@ async def test_preserves_the_timeline_anchor_and_scope_on_the_stored_record() ->
     assert len(record.embedding) == 1024
 
 
-async def test_truncates_text_to_what_storage_accepts() -> None:
-    use_case, _ = _use_case()
+async def test_stores_the_whole_description_but_embeds_only_what_the_model_accepts() -> None:
+    """Clipping the stored text would drop content the instructor confirmed; clipping neither
+    would fail the job on a limit that belongs to bge-m3, not to the evidence."""
+    model = EmbeddingModel()
+    use_case, _ = _use_case(model)
 
     record = await use_case.execute(_highlight(text="가" * 5_000))
 
-    assert len(record.text) == MAX_ANNOTATION_TEXT_CHARS
+    assert len(record.text) == 5_000
+    assert len(model.texts[0][0]) == MAX_ANNOTATION_EMBED_CHARS
 
 
 async def test_embeds_exactly_the_text_it_stores() -> None:

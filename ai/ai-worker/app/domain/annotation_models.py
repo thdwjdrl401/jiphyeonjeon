@@ -6,8 +6,10 @@ from uuid import UUID
 
 from app.domain.errors import MaterialIngestionError
 
-# Mirrors ai.annotation_highlight.text.
-MAX_ANNOTATION_TEXT_CHARS = 2_000
+# What bge-m3 accepts in one text (both the worker's client and bge-runtime reject beyond it).
+# Storage is unbounded — only the *embedding input* is clipped, so an unusually long
+# description is still stored and shown in full rather than failing the job.
+MAX_ANNOTATION_EMBED_CHARS = 4_000
 
 
 class AnnotationIngestionError(MaterialIngestionError):
