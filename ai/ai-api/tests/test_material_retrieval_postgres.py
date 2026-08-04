@@ -20,9 +20,14 @@ def _vector(first: float, second: float = 0.0) -> str:
 
 
 async def _create_schema(engine: AsyncEngine, runtime_role: str) -> None:
+    # The integration database is session-scoped and shared with the other Postgres test
+    # modules, so setup is idempotent and drops only the tables this module owns.
     async with engine.begin() as connection:
-        await connection.execute(text("CREATE EXTENSION vector"))
-        await connection.execute(text("CREATE SCHEMA ai"))
+        await connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        await connection.execute(text("CREATE SCHEMA IF NOT EXISTS ai"))
+        await connection.execute(text("DROP TABLE IF EXISTS ai.chunk_embedding"))
+        await connection.execute(text("DROP TABLE IF EXISTS ai.document_chunk"))
+        await connection.execute(text("DROP TABLE IF EXISTS ai.material_version"))
         await connection.execute(
             text(
                 """
