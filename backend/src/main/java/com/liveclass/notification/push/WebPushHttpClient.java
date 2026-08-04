@@ -31,12 +31,20 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * <p><b>연결을 여러 개 연다.</b> JDK 클라이언트는 오리진당 연결을 <b>하나만</b> 유지하고 거기에
  * 다중화하는데, 연결 하나에 열 수 있는 동시 스트림 수는 서버가 정한다 — <b>실측으로 FCM·Mozilla
- * 모두 {@code MAX_CONCURRENT_STREAMS=100}을 광고한다</b>. 그래서 클라이언트가 하나면 동시 요청이
- * 100에서 막히고, 그 이상은 JDK 내부 큐에서 줄을 선다(상한을 올려도 펜딩 객체만 쌓인다).
+ * 모두 {@code MAX_CONCURRENT_STREAMS=100}을 광고한다</b>.
  *
- * <p>연결을 더 열려면 <b>클라이언트 인스턴스를 더 만드는 수밖에 없다</b>. 그래서 여기서 풀을 든다.
- * 개수는 짐작하지 않고 {@code 동시 상한 ÷ 연결당 스트림}으로 <b>정한다</b> — 그래야 동시 상한을
- * 올렸을 때 연결이 따라 늘고, 숫자 두 개가 서로 어긋나지 않는다.
+ * <p><b>넘으면 줄을 서는 것이 아니라 터진다.</b> JDK는 스트림을 예약하지 못하면 그 자리에서
+ * {@code IOException("too many concurrent streams")}를 던진다({@code Http2Connection.reserveStream}).
+ * 10만 건 부하에서 실제로 1,700건 넘게 터진 뒤에야 알았다 — 2천 건 실행은 동시 피크가 상한에
+ * 닿지 않아 이 상황에 도달하지 못한다.
+ *
+ * <p>그래서 두 가지를 지킨다.
+ * <ol>
+ *   <li><b>연결마다 몫을 따로 센다.</b> 전체 상한만 두고 순번으로 나눠 주면, 완료 시점이 달라
+ *       한쪽에 쏠린 순간 그 연결이 자기 상한을 넘는다. 매번 <b>가장 한가한 연결</b>을 고른다.</li>
+ *   <li><b>여유를 남긴다.</b> 광고값을 100% 쓰도록 계산하면 여유가 0이고, 서버는 SETTINGS를
+ *       다시 보내 <b>상한을 도중에 낮출 수도</b> 있다.</li>
+ * </ol>
  *
  * <p><b>HTTP/2는 선호일 뿐 전제가 아니다.</b> RFC 8030은 애플리케이션 서버 → 푸시 서비스 구간에
  * HTTP/1.1을 허용한다("Many of the exchanges can be completed using HTTP/1.1: … Requesting Push
@@ -51,9 +59,20 @@ public class WebPushHttpClient {
     /** 실측값(2026-08-04). FCM·Mozilla가 연결 직후 SETTINGS로 광고하는 값이다. */
     public static final int OBSERVED_STREAMS_PER_CONNECTION = 100;
 
-    private final List<HttpClient> clients;
-    private final AtomicInteger next = new AtomicInteger();
+    /**
+     * 광고값 중 실제로 쓸 비율. 나머지는 여유로 둔다.
+     *
+     * <p>100%로 계산하면 순간적인 쏠림이나 서버의 상한 하향에 바로 터진다 — 그리고 그 실패는
+     * <b>재시도로 이어져 부하를 더 만든다</b>.
+     */
+    private static final double USABLE_STREAM_RATIO = 0.8;
+
+    private final List<Connection> connections;
     private final Duration requestTimeout;
+
+    /** 연결 하나와 그 연결이 지금 물고 있는 스트림 수. */
+    private record Connection(HttpClient client, AtomicInteger inFlight) {
+    }
 
     public WebPushHttpClient(Duration connectTimeout, Duration requestTimeout) {
         this(connectTimeout, requestTimeout, 1);
@@ -61,9 +80,9 @@ public class WebPushHttpClient {
 
     public WebPushHttpClient(Duration connectTimeout, Duration requestTimeout, int connections) {
         this.requestTimeout = requestTimeout;
-        List<HttpClient> pool = new ArrayList<>(Math.max(1, connections));
+        List<Connection> pool = new ArrayList<>(Math.max(1, connections));
         for (int i = 0; i < Math.max(1, connections); i++) {
-            pool.add(HttpClient.newBuilder()
+            pool.add(new Connection(HttpClient.newBuilder()
                     /*
                      * h2를 **선호**한다. 상대가 못 하면 ALPN 협상에서 1.1로 내려간다.
                      * h2로 붙으면 이 클라이언트가 여는 연결 하나에 여러 요청이 겹친다.
@@ -71,11 +90,12 @@ public class WebPushHttpClient {
                     .version(HttpClient.Version.HTTP_2)
                     .connectTimeout(connectTimeout)
                     .followRedirects(HttpClient.Redirect.NEVER)
-                    .build());
+                    .build(), new AtomicInteger()));
         }
-        this.clients = List.copyOf(pool);
-        log.info("웹 푸시 HTTP 클라이언트 {}개 (연결당 스트림 상한 실측 {})",
-                this.clients.size(), OBSERVED_STREAMS_PER_CONNECTION);
+        this.connections = List.copyOf(pool);
+        log.info("웹 푸시 HTTP 연결 {}개 (연결당 스트림 실측 {}, 그중 {}%만 쓴다)",
+                this.connections.size(), OBSERVED_STREAMS_PER_CONNECTION,
+                Math.round(USABLE_STREAM_RATIO * 100));
     }
 
     /**
@@ -85,22 +105,40 @@ public class WebPushHttpClient {
      * 사라져 상한이 조용히 100으로 깎인다.
      */
     public static int connectionsFor(int maxInFlight, int streamsPerConnection) {
-        int streams = streamsPerConnection > 0 ? streamsPerConnection : OBSERVED_STREAMS_PER_CONNECTION;
-        return Math.max(1, (maxInFlight + streams - 1) / streams);
+        int advertised = streamsPerConnection > 0
+                ? streamsPerConnection : OBSERVED_STREAMS_PER_CONNECTION;
+        int usable = Math.max(1, (int) (advertised * USABLE_STREAM_RATIO));
+        return Math.max(1, (maxInFlight + usable - 1) / usable);
     }
 
     /**
-     * 다음 요청을 실을 연결. <b>돌아가며</b> 고른다.
+     * 요청을 실을 연결. <b>가장 한가한 것</b>을 고른다.
      *
-     * <p>구독 id로 해싱하지 않는 이유는, 어느 기기가 어느 연결로 가든 상관없고 <b>고르게 퍼지는
-     * 것만</b> 중요하기 때문이다. 해시는 치우칠 수 있지만 순번은 그럴 수 없다.
+     * <p>순번으로 돌리면 <b>배정만</b> 고르고 <b>물고 있는 수</b>는 안 고르다 — 완료 시점이 제각각이라
+     * 한쪽에 쌓이고, 그 연결이 자기 스트림 상한을 넘으면 그 요청들이 통째로 실패한다.
      */
-    private HttpClient nextClient() {
-        return clients.get(Math.floorMod(next.getAndIncrement(), clients.size()));
+    private Connection leastBusy() {
+        Connection chosen = connections.get(0);
+        for (Connection candidate : connections) {
+            if (candidate.inFlight().get() < chosen.inFlight().get()) {
+                chosen = candidate;
+            }
+        }
+        return chosen;
     }
 
     int connectionCount() {
-        return clients.size();
+        return connections.size();
+    }
+
+    /**
+     * 연결마다 지금 물고 있는 스트림 수. <b>테스트가 쏠림을 보는 창</b>이다.
+     *
+     * <p>서버 쪽 포트 수로는 확인할 수 없다 — 로컬 테스트 서버는 h2가 아니라 HTTP/1.1이고,
+     * 그러면 JDK가 <b>동시 요청마다 연결을 따로 연다</b>. 우리 풀 크기와 무관한 숫자가 나온다.
+     */
+    public List<Integer> inFlightPerConnection() {
+        return connections.stream().map(connection -> connection.inFlight().get()).toList();
     }
 
     /**
@@ -127,7 +165,11 @@ public class WebPushHttpClient {
             }
             builder.header(header.getName(), header.getValue());
         }
-        return nextClient().sendAsync(builder.build(), HttpResponse.BodyHandlers.discarding())
+        Connection connection = leastBusy();
+        connection.inFlight().incrementAndGet();
+        return connection.client()
+                .sendAsync(builder.build(), HttpResponse.BodyHandlers.discarding())
+                .whenComplete((ignored, ignoredError) -> connection.inFlight().decrementAndGet())
                 .thenApply(response -> new Response(response.statusCode(), retryAfterOf(response)));
     }
 
@@ -190,7 +232,7 @@ public class WebPushHttpClient {
 
     public void close() {
         // JDK 21의 HttpClient는 close()가 없다(가상 스레드 executor는 GC가 회수한다).
-        log.debug("웹 푸시 HTTP 클라이언트 {}개 종료 요청 — JDK 클라이언트는 명시적 해제가 없다",
-                clients.size());
+        log.debug("웹 푸시 HTTP 연결 {}개 종료 요청 — JDK 클라이언트는 명시적 해제가 없다",
+                connections.size());
     }
 }
