@@ -795,40 +795,59 @@
   box-shadow: 0 12px 28px rgba(13, 61, 48, .24);
 }
 
-/* 강조 툴·캡처 확인(ADR-0074). 판서 위에 얹히므로 합성 캔버스 기준 절대 배치다. */
+/* 강조 툴·캡처 확인(ADR-0074).
+ *
+ * 판서 위에 얹히는 요소는 <b>아래에 무엇이 깔릴지 모른다</b> — 밝은 슬라이드일 수도, 어두운 코드
+ * 에디터일 수도, 영상일 수도 있다. 그래서 이 화면의 다른 오버레이(.annotation-math-edit)와 같은
+ * 어두운 글래스를 쓴다. 흰 배경 + 상속 글자색으로 두면 배경에 따라 글자가 사라진다 — 실제로
+ * 그렇게 안 보였다(디자인 토큰 var(--color-surface)가 이 프로젝트에 없어 #fff로 떨어졌다). */
 .annotation-highlight-entry {
   position: absolute;
-  right: 12px;
-  bottom: 56px;
-  z-index: 6;
-  padding: 6px 12px;
-  border: 1px solid var(--color-border, #d0d5dd);
+  z-index: 7;
+  right: 16px;
+  /* 오른쪽 아래 16px은 .annotation-interpret-failure가 쓴다(해석 실패 알림). 한 줄 위로 올린다 —
+   * 그 알림은 일시적이지만 이 버튼은 계속 떠 있어서, 겹치면 실패 사유가 가려진다. */
+  bottom: 60px;
+  padding: 8px 14px;
+  border: 1px solid rgba(255, 252, 243, .22);
   border-radius: 999px;
-  background: var(--color-surface, #fff);
-  font-size: 13px;
+  background: rgba(28, 22, 13, .92);
+  color: #fdf8ee;
+  font-size: .74rem;
+  font-weight: 700;
   cursor: pointer;
 }
 
+/* 켜져 있는 동안은 강조 획과 같은 색으로 알린다 — 지금 어떤 펜인지 버튼만 보고 알 수 있어야 한다. */
 .annotation-highlight-entry--on {
-  border-color: #f59f00;
-  background: #fff4e0;
-  font-weight: 600;
+  border-color: rgba(245, 159, 0, .85);
+  background: rgba(245, 159, 0, .92);
+  color: #1c160d;
 }
 
 .annotation-highlight-prompt {
   position: absolute;
+  z-index: 8;
+  /* 가운데 아래 16px은 수식 편집(.annotation-math-edit·-editor)이 쓴다. 강조를 그린 직후에
+   * 수식이 선택돼 있을 수 있어 자리를 나눈다. */
+  bottom: 64px;
   left: 50%;
-  bottom: 24px;
-  z-index: 7;
-  transform: translateX(-50%);
   display: flex;
-  gap: 12px;
   align-items: center;
-  padding: 10px 16px;
+  gap: 12px;
+  transform: translateX(-50%);
+  padding: 10px 14px;
+  border: 1px solid rgba(255, 252, 243, .2);
   border-radius: 12px;
-  background: rgba(20, 22, 26, 0.92);
-  color: #fff;
-  font-size: 14px;
+  background: rgba(28, 22, 13, .97);
+  color: #fdf8ee;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, .45);
+}
+
+.annotation-highlight-prompt p {
+  margin: 0;
+  font-size: .78rem;
+  font-weight: 600;
 }
 
 .annotation-highlight-prompt__actions {
@@ -836,16 +855,37 @@
   gap: 8px;
 }
 
+/* 이 안의 버튼은 공용 .button 토큰을 쓰지 않는다 — 밝은 표면을 전제한 색이라 이 글래스 위에서
+ * 대비가 무너진다. 여기서만 쓰는 작은 버튼으로 둔다. */
+.annotation-highlight-prompt__actions button {
+  padding: 6px 12px;
+  border: 1px solid rgba(255, 252, 243, .24);
+  border-radius: 8px;
+  background: transparent;
+  color: #fdf8ee;
+  font-size: .72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.annotation-highlight-prompt__actions button.button--primary {
+  border-color: rgba(245, 159, 0, .9);
+  background: #f59f00;
+  color: #1c160d;
+}
+
 .annotation-highlight-status {
   position: absolute;
-  left: 50%;
-  bottom: 24px;
   z-index: 7;
+  bottom: 64px;
+  left: 50%;
   transform: translateX(-50%);
   margin: 0;
   padding: 8px 14px;
+  border: 1px solid rgba(255, 252, 243, .22);
   border-radius: 999px;
-  background: rgba(20, 22, 26, 0.82);
-  color: #fff;
-  font-size: 13px;
+  background: rgba(28, 22, 13, .92);
+  color: #fdf8ee;
+  font-size: .74rem;
+  font-weight: 700;
 }
