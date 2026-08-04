@@ -1,20 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  getNotificationLeadTimes,
-  getNotificationPreference,
-  saveNotificationPreference,
-} from './notificationService'
+import { getNotificationLeadTimes, saveNotificationPreference } from './notificationService'
+import { notificationQueryKeys, useNotificationPreferenceQuery } from './useNotificationQueries'
 
 interface LiveReminderSettingProps {
   curriculumId: string
-  /** 주면 <b>이 강의만</b> 덮어쓴다. 없으면 커리큘럼 전체 설정이다. */
+  /** 주면 이 강의만 덮어쓰고, 없으면 커리큘럼 전체 설정을 바꾼다. */
   lessonId?: string
 }
 
 /**
- * 라이브 <b>곧 시작</b> 알림의 리드타임 설정. <b>내용만 그린다</b> — 제목과 패널 껍데기는 호출자가
- * 준다. 커리큘럼 상세는 형제들과 같은 {@code <section>} + {@code <h2>}를, 강의 상세는 {@code Panel}을
- * 쓰는데, 컴포넌트가 껍데기를 들고 있으면 한쪽에서 반드시 이중으로 겹친다.
+ * 라이브 <b>곧 시작</b> 알림의 리드타임 설정 내용. 제목과 팝오버 껍데기는
+ * {@code LiveReminderPopover}가 맡는다.
  *
  * <p>이 설정이 다른 알림에는 영향을 주지 않는다는 것을 화면에서 밝힌다 — "알림 설정"이라고만 쓰면
  * 수강 승인·자료 게시까지 꺼지는 것으로 읽힌다. 그 둘은 사건이 일어난 순간의 통보라 리드타임이라는
@@ -25,18 +21,13 @@ interface LiveReminderSettingProps {
  */
 export function LiveReminderSetting({ curriculumId, lessonId }: LiveReminderSettingProps) {
   const queryClient = useQueryClient()
-  const queryKey = ['notification-preference', curriculumId, lessonId ?? null] as const
-
   const leadTimesQuery = useQuery({
     queryKey: ['notification-lead-times'],
     queryFn: getNotificationLeadTimes,
     // 선택지는 배포 사이에 바뀌지 않는다. 화면을 옮길 때마다 다시 물을 이유가 없다.
     staleTime: Infinity,
   })
-  const preferenceQuery = useQuery({
-    queryKey,
-    queryFn: () => getNotificationPreference(curriculumId, lessonId),
-  })
+  const preferenceQuery = useNotificationPreferenceQuery(curriculumId, lessonId)
 
   const save = useMutation({
     mutationFn: saveNotificationPreference,
@@ -45,7 +36,7 @@ export function LiveReminderSetting({ curriculumId, lessonId }: LiveReminderSett
        * 커리큘럼 설정을 바꾸면 그 아래 강의들의 "적용값"도 달라질 수 있다(덮어쓰지 않은 강의는
        * 커리큘럼 값을 물려받는다). 그래서 이 한 건이 아니라 설정 전체를 무효화한다.
        */
-      queryClient.invalidateQueries({ queryKey: ['notification-preference'] })
+      queryClient.invalidateQueries({ queryKey: notificationQueryKeys.preferences })
     },
   })
 
@@ -114,7 +105,9 @@ export function LiveReminderSetting({ curriculumId, lessonId }: LiveReminderSett
         <p className="live-reminder-setting__source">
           {overridden
             ? '이 강의만 다르게 설정되어 있습니다.'
-            : '커리큘럼 설정을 따르고 있습니다. 바꾸면 이 강의에만 적용됩니다.'}
+            : preference.source === 'CURRICULUM'
+              ? '커리큘럼 설정을 따르고 있습니다. 바꾸면 이 강의에만 적용됩니다.'
+              : '기본 설정을 따르고 있습니다. 바꾸면 이 강의에만 적용됩니다.'}
         </p>
       )}
 

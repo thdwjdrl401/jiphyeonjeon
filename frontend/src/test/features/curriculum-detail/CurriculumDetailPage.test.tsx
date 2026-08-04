@@ -60,6 +60,7 @@ describe('CurriculumDetailPage', () => {
     expect(screen.queryByRole('heading', { name: '담당 커리큘럼 관리' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '담당 강사' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '커리큘럼 강의 자료' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '라이브 시작 알림 설정' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: '로그인 후 수강하기' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: '로그인하기' })).toBeInTheDocument()
     expect(screen.getByText('라이브 예정')).toBeInTheDocument()
@@ -113,6 +114,32 @@ describe('CurriculumDetailPage', () => {
     expect(screen.queryByText('Spring Boot 커리큘럼 가이드.pptx')).not.toBeInTheDocument()
     expect(screen.getByText('수강 중')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '수강 취소' })).toBeInTheDocument()
+  })
+
+  it('수강생은 공개 상태 왼쪽 알림 버튼에서 커리큘럼 알림 설정을 연다', async () => {
+    const user = userEvent.setup()
+    await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
+    renderDetail('/curriculums/cur-spring-live')
+
+    const trigger = await screen.findByRole('button', { name: '라이브 시작 알림 설정' })
+    const triggerContainer = trigger.closest('.live-reminder-popover')
+    expect(triggerContainer?.nextElementSibling).toHaveClass('curriculum-lifecycle-badge')
+    expect(screen.queryByRole('dialog', { name: '라이브 시작 알림' })).not.toBeInTheDocument()
+
+    await user.click(trigger)
+
+    const dialog = screen.getByRole('dialog', { name: '라이브 시작 알림' })
+    const checkbox = await within(dialog).findByRole('checkbox', { name: '미리 알림 받기' })
+    expect(checkbox).toBeChecked()
+    expect(within(dialog).getByRole('combobox')).toHaveValue('10')
+
+    await user.click(checkbox)
+    await waitFor(() => expect(trigger).toHaveAccessibleName('라이브 시작 알림 설정 (꺼짐)'))
+    expect(trigger.querySelector('.live-reminder-popover__slash')).toBeInTheDocument()
+
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: '라이브 시작 알림' })).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
   })
 
   it('수강 중인 커리큘럼을 취소하면 미수강 상태로 갱신한다', async () => {

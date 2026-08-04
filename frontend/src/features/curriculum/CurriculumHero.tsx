@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import type { CurriculumDetailResponse } from './types'
 import type { PrimaryAction } from '@/features/curriculum-detail/primaryAction'
 import CurriculumIdentity from './CurriculumIdentity'
@@ -9,6 +10,7 @@ interface CurriculumHeroProps {
   primaryAction: PrimaryAction
   onCancel: () => void
   isCancelling: boolean
+  reminderControl?: ReactNode
 }
 
 const lifecycleLabel: Record<string, string> = {
@@ -17,14 +19,23 @@ const lifecycleLabel: Record<string, string> = {
   CLOSED: '운영 종료',
 }
 
-export default function CurriculumHero({ detail, primaryAction, onCancel, isCancelling }: CurriculumHeroProps) {
+export default function CurriculumHero({
+  detail,
+  primaryAction,
+  onCancel,
+  isCancelling,
+  reminderControl,
+}: CurriculumHeroProps) {
   return (
     <section className="curriculum-hero">
       <div className="curriculum-hero__grid">
         <CurriculumIdentity title={detail.title} summary={detail.summary} />
-        <span className="curriculum-lifecycle-badge">
-          {lifecycleLabel[detail.lifecycleStatus] ?? detail.lifecycleStatus}
-        </span>
+        <div className="curriculum-hero__status">
+          {reminderControl}
+          <span className="curriculum-lifecycle-badge">
+            {lifecycleLabel[detail.lifecycleStatus] ?? detail.lifecycleStatus}
+          </span>
+        </div>
         <CurriculumMetadata
           instructorName={detail.instructor.displayName}
           period={detail.period}

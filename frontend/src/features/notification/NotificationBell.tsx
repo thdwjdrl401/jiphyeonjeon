@@ -36,7 +36,12 @@ export default function NotificationBell() {
   const summaryQuery = useNotificationSummaryQuery(Boolean(user))
   // 종은 로그인해 있는 동안 항상 떠 있다 — 실시간 구독을 걸 자리가 여기다.
   useNotificationRealtime(Boolean(user))
-  const push = usePushSubscription(Boolean(user))
+  /*
+   * 브라우저 알림 켜기·끄기 UI는 여기 없다(전체 알림 페이지가 전담한다) — 그래도 훅은 그대로
+   * 부른다. 종이 로그인 중 항상 떠 있다는 성질을 빌려, 화면을 옮길 때마다 이 브라우저 구독의
+   * 서버 쪽 소유자를 지금 로그인한 사람 앞으로 맞춰 두는 부수효과만 계속 태운다.
+   */
+  usePushSubscription(Boolean(user))
   const recentQuery = useRecentNotificationsQuery(RECENT_SIZE, Boolean(user) && isOpen)
   const markAllAsRead = useMarkAllNotificationsReadMutation()
   const { activate, activatingId } = useNotificationActivation()
@@ -130,31 +135,11 @@ export default function NotificationBell() {
           )}
 
           <footer className="notification-dropdown__footer">
+            {/*
+              브라우저 알림 켜기·끄기·차단 안내는 여기 두지 않는다. 상태 관리는 전체 알림
+              페이지의 "이 브라우저에서 알림 받기" 카드가 전담한다 — 팝업은 목록으로만 이어 준다.
+            */}
             <Link to={notificationsPath} onClick={() => setIsOpen(false)}>전체 알림 보기</Link>
-            {/*
-              브라우저 알림 스위치는 켤 수 있을 때만 보인다. 지원하지 않는 브라우저나 서버에 키가
-              없는 환경에서 눌러도 아무 일이 없는 스위치를 보여 주지 않는다.
-            */}
-            {push.state === 'off' && (
-              <button className="text-button" type="button" onClick={() => void push.enable()}>
-                브라우저 알림 켜기
-              </button>
-            )}
-            {push.state === 'on' && (
-              <button className="text-button" type="button" onClick={() => void push.disable()}>
-                브라우저 알림 끄기
-              </button>
-            )}
-            {/*
-              한 번 거절되면 사이트가 다시 물을 수 없다 — 브라우저가 그렇게 정한 것이다.
-              그래서 "차단되어 있습니다"로 끝내면 빠져나갈 길이 없다. 어디서 되돌리는지 적는다.
-            */}
-            {push.state === 'denied' && (
-              <p className="notification-dropdown__hint">
-                브라우저에서 알림을 차단해 두셨습니다.
-                주소창 왼쪽 자물쇠 → 알림을 «허용»으로 바꾸면 켤 수 있습니다.
-              </p>
-            )}
           </footer>
         </div>
       )}

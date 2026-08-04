@@ -20,8 +20,7 @@ import { LiveReminderSetting } from '@/features/notification/LiveReminderSetting
  * <p>지키려는 것은 셋이다 — <b>이 설정이 다른 알림과 무관하다는 것을 밝히는가</b>, <b>값이 어디서
  * 왔는지 알려 주는가</b>, <b>1440분을 사람이 읽는 단위로 보여 주는가</b>.
  *
- * <p>두 번째가 중요하다. 강의 화면에서 30분이 보일 때 그게 이 강의만의 설정인지 커리큘럼에서
- * 내려온 것인지 모르면, 사용자는 자기가 무엇을 바꾸는지 알 수 없다.
+ * <p>강의 팝오버에서는 값이 이 강의만의 설정인지 커리큘럼·기본값에서 내려온 것인지 구별해야 한다.
  */
 describe('라이브 시작 알림 설정', () => {
   beforeEach(() => {
@@ -38,12 +37,14 @@ describe('라이브 시작 알림 설정', () => {
     )
   }
 
-  it('다른 알림은 이 설정과 무관하다는 것을 밝힌다', async () => {
+  it('미설정 기본값은 알림 켜짐과 10분 전이고 다른 알림과 무관함을 밝힌다', async () => {
     getNotificationPreference.mockResolvedValue({ enabled: true, leadMinutes: 10, source: 'DEFAULT' })
 
     renderSetting({ curriculumId: 'cur_1' })
 
     expect(await screen.findByText(/다른 알림은 이 설정과/)).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: '미리 알림 받기' })).toBeChecked()
+    expect(screen.getByRole('combobox')).toHaveValue('10')
   })
 
   /** 1440분을 "1440분"이라고 보여 주지 않는다. */
@@ -63,6 +64,14 @@ describe('라이브 시작 알림 설정', () => {
     renderSetting({ curriculumId: 'cur_1', lessonId: 'les_1' })
 
     expect(await screen.findByText(/커리큘럼 설정을 따르고 있습니다/)).toBeInTheDocument()
+  })
+
+  it('강의 설정이 기본값에서 내려온 것인지 알려 준다', async () => {
+    getNotificationPreference.mockResolvedValue({ enabled: true, leadMinutes: 10, source: 'DEFAULT' })
+
+    renderSetting({ curriculumId: 'cur_1', lessonId: 'les_1' })
+
+    expect(await screen.findByText(/기본 설정을 따르고 있습니다/)).toBeInTheDocument()
   })
 
   it('이 강의만 다르게 설정된 경우를 구별해 알려 준다', async () => {

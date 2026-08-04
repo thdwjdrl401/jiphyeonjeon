@@ -374,6 +374,11 @@ describe('커리큘럼 작업 화면', () => {
     expect(within(readiness).getByText('자료 작업')).toBeInTheDocument()
     expect(within(readiness).getByText('완료')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '라이브 일정' })).toBeInTheDocument()
+    const reminderTrigger = within(lessonInfo!).getByRole('button', { name: '라이브 시작 알림 설정' })
+    expect(reminderTrigger.closest('.workspace-panel__header')).not.toBeNull()
+    await userEvent.click(reminderTrigger)
+    const reminderDialog = screen.getByRole('dialog', { name: '이 강의 라이브 시작 알림' })
+    expect(await within(reminderDialog).findByText(/기본 설정을 따르고 있습니다/)).toBeInTheDocument()
     expect(screen.getByText('오후 7:00')).toBeInTheDocument()
     expect(screen.getByText('오후 6:50부터')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '사전 점검 시작' })).toHaveAttribute(

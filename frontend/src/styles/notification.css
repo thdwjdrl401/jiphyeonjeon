@@ -365,9 +365,91 @@
 /*
  * 라이브 시작 알림 설정(ADR-0073 4단계).
  *
- * 커리큘럼 상세와 강의 상세 두 곳에 같은 컴포넌트가 들어간다 — 폭이 다른 자리라 고정 폭을 주지
- * 않고 담기는 칸을 따른다.
+ * 커리큘럼 상세 상태 영역과 강의 정보 카드에서 같은 팝오버를 사용한다.
  */
+.live-reminder-popover {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.live-reminder-popover--hero {
+  display: contents;
+}
+
+.live-reminder-popover__trigger,
+.live-reminder-popover__close {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--border-medium);
+  border-radius: 0;
+  background: var(--paper-pure);
+  color: var(--ink-800);
+  cursor: pointer;
+}
+
+.live-reminder-popover__trigger {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+
+.live-reminder-popover__trigger.is-disabled:not([aria-expanded='true']) {
+  background: var(--surface-muted);
+  color: var(--ink-500);
+}
+
+.live-reminder-popover__trigger:hover,
+.live-reminder-popover__trigger[aria-expanded='true'],
+.live-reminder-popover__close:hover {
+  border-color: var(--ink-950);
+  background: var(--ink-950);
+  color: var(--paper-pure);
+}
+
+.live-reminder-popover__trigger:focus-visible,
+.live-reminder-popover__close:focus-visible,
+.live-reminder-popover__panel:focus-visible {
+  outline: 2px solid var(--ink-950);
+  outline-offset: 2px;
+}
+
+.live-reminder-popover__panel {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 10px);
+  right: 0;
+  width: min(340px, calc(100vw - 80px));
+  border: 1px solid var(--ink-950);
+  padding: 18px;
+  background: var(--paper-pure);
+  box-shadow: var(--shadow-lg);
+}
+
+.live-reminder-popover__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--border-soft);
+  padding-bottom: 12px;
+}
+
+.live-reminder-popover__header h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.live-reminder-popover__close {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
 .live-reminder-setting {
   display: flex;
   flex-direction: column;
@@ -403,4 +485,186 @@
   margin: 0;
   color: var(--danger, #b3261e);
   font-size: 0.875rem;
+}
+
+/*
+ * 로그인 후 대시보드에서 한 번 보여 주는 사이트 자체 브라우저 알림 안내.
+ * 다섯 조건이 모두 맞을 때만 마운트되므로(BrowserPushPrompt) 여기서는 눈에 띄되 과하지
+ * 않은 정도로만 강조한다 — 경고가 아니라 제안이다.
+ */
+.browser-push-prompt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+  border: 1px solid var(--blue-100);
+  border-radius: 14px;
+  background: var(--blue-50);
+  padding: 14px 18px;
+}
+
+.browser-push-prompt__message {
+  margin: 0;
+  color: var(--blue-700);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.browser-push-prompt__actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+/*
+ * 전체 알림 페이지 헤더 우측의 압축 토글. 페이지 헤더와 같은 줄(`workspace-page-header`가
+ * `align-items: flex-end`)에 올라가므로 헤더 높이를 넘지 않게 작게 둔다.
+ */
+.browser-notification-toggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+
+/* working(변경 중)과 unavailable(미지원) 둘 다 여기로 온다 — 후자가 더 오래 머무는 상태라 커서는 그 쪽 의미를 따른다. */
+.browser-notification-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.browser-notification-toggle__label {
+  color: var(--ink-600);
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* 반으로 나뉜 직사각형. 슬라이딩 손잡이가 아니라 <b>선택된 절반이 색을 채우는</b> 방식이라 두 칸이 항상 같이 보인다 — 지금 상태와 반대쪽으로 뭐가 되는지가 한눈에 같이 보인다. */
+.browser-notification-toggle__segments {
+  display: inline-flex;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border: 1px solid var(--border-medium);
+}
+
+.browser-notification-toggle__segment {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  padding: 3px 8px;
+  background: var(--paper-pure);
+  color: var(--ink-400);
+  font-size: 0.68rem;
+  font-weight: 700;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.browser-notification-toggle__segment--off {
+  border-right: 1px solid var(--border-medium);
+}
+
+/* 꺼짐이 선택 상태(기본값) — 왼쪽 칸을 회색으로 채운다. */
+.browser-notification-toggle[aria-checked='false'] .browser-notification-toggle__segment--off {
+  background: var(--ink-200);
+  color: var(--ink-800);
+}
+
+/* 켜짐이 선택 상태 — 오른쪽 칸을 헤더 배지와 같은 색으로 채운다. */
+.browser-notification-toggle[aria-checked='true'] .browser-notification-toggle__segment--on {
+  background: var(--seal);
+  color: #fff;
+}
+
+/*
+ * 차단됨은 스크립트로 되물을 수 없어 스위치를 두지 않는다. 문구 옆 정보 아이콘을 누르면
+ * 되돌리는 방법을 안내하는 팝오버가 열린다 — live-reminder-popover와 같은 열기·닫기 규칙
+ * (바깥 클릭·Escape로 닫힘, 포커스 이동)을 그대로 따른다.
+ */
+.browser-notification-toggle--blocked {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.browser-notification-toggle__blocked-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--ink-400);
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.browser-notification-toggle__blocked-trigger:hover,
+.browser-notification-toggle__blocked-trigger[aria-expanded='true'] {
+  color: var(--ink-800);
+}
+
+.browser-notification-toggle__blocked-panel {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 10px);
+  right: 0;
+  width: min(280px, calc(100vw - 40px));
+  border: 1px solid var(--ink-950);
+  padding: 14px;
+  background: var(--paper-pure);
+  box-shadow: var(--shadow-lg);
+}
+
+.browser-notification-toggle__blocked-panel header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.browser-notification-toggle__blocked-panel h2 {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.browser-notification-toggle__blocked-panel p {
+  margin: 0;
+  color: var(--ink-600);
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+.browser-notification-toggle__blocked-close {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-600);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.browser-notification-toggle__blocked-close:hover {
+  color: var(--ink-950);
+}
+
+.browser-notification-toggle__blocked-trigger:focus-visible,
+.browser-notification-toggle__blocked-close:focus-visible,
+.browser-notification-toggle__blocked-panel:focus-visible {
+  outline: 2px solid var(--ink-950);
+  outline-offset: 2px;
 }
