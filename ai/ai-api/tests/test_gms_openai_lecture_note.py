@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 from pydantic import ValidationError
 
-from app.adapters.gms_openai_lecture_note import GmsOpenAILectureNoteModel
+from app.adapters.gms_openai_lecture_note import GmsOpenAILectureNoteModel, is_reasoning_model
 from app.lecture_notes import (
     LectureNote,
     LectureNoteDecisionAction,
@@ -443,3 +443,102 @@ def test_reasoning_model_swaps_temperature_for_effort() -> None:
 def test_blank_reasoning_effort_is_rejected_rather_than_sent_empty() -> None:
     with pytest.raises(ValueError, match="reasoning_effort"):
         _note_model(FakeClient("{}"), reasoning_effort="   ")
+
+
+def _refinement_request() -> LectureNoteRefinementRequest:
+    return LectureNoteRefinementRequest(
+        session_id="11111111-1111-4111-8111-111111111111",
+        lesson_id="22222222-2222-4222-8222-222222222222",
+        note=LectureNote(
+            topics=(
+                LectureNoteTopic(
+                    topic_id="topic-1",
+                    title="Refresh Token",
+                    key_points=("재발급에 사용한다.",),
+                ),
+            )
+        ),
+    )
+
+
+def _sampling_used(client) -> dict:
+    return {
+        key: value
+        for key, value in client.chat.completions.calls[0].items()
+        if key in {"temperature", "reasoning_effort"}
+    }
+
+
+def _note_model_for(model: str, client, **overrides) -> GmsOpenAILectureNoteModel:
+    settings: dict[str, object] = {
+        "api_key": "test-key",
+        "model": model,
+        "max_output_tokens": 4_096,
+        "max_prompt_chars": 20_000,
+        "timeout_seconds": 30,
+        "client": client,
+        **overrides,
+    }
+    return GmsOpenAILectureNoteModel(**settings)
+
+
+def test_non_reasoning_model_ignores_a_stale_reasoning_effort() -> None:
+    """The live outage: compose left AI_API_LECTURE_NOTE_MODEL empty so the model fell back to
+    gpt-4.1, while the effort setting kept its own default — and gpt-4.1 400s on
+    reasoning_effort. Deriving from the model makes the leftover setting harmless."""
+
+    async def run() -> dict:
+        client = FakeClient(json.dumps({"action": "IGNORE", "topicTitle": None, "keyPoints": []}))
+        await _note_model_for("gpt-4.1", client, reasoning_effort="minimal").generate(_request())
+        return _sampling_used(client)
+
+    assert asyncio.run(run()) == {"temperature": 0}
+
+
+def test_reasoning_model_sends_effort_and_never_temperature() -> None:
+    async def run() -> dict:
+        client = FakeClient(json.dumps({"action": "IGNORE", "topicTitle": None, "keyPoints": []}))
+        await _note_model_for("gpt-5-nano", client, reasoning_effort="minimal").generate(_request())
+        return _sampling_used(client)
+
+    assert asyncio.run(run()) == {"reasoning_effort": "minimal"}
+
+
+def test_reasoning_model_without_an_effort_sends_neither_knob() -> None:
+    async def run() -> dict:
+        client = FakeClient(json.dumps({"action": "IGNORE", "topicTitle": None, "keyPoints": []}))
+        await _note_model_for("gpt-5-nano", client, reasoning_effort=None).generate(_request())
+        return _sampling_used(client)
+
+    assert asyncio.run(run()) == {}
+
+
+def test_refinement_uses_the_same_derivation_as_live_generation() -> None:
+    """All three call sites share the decision; a fix that only covered `generate` would leave
+    the end-of-lecture refinement 400ing, which is where the failure was first noticed."""
+
+    async def run() -> dict:
+        client = FakeClient(
+            json.dumps({"topics": [{"topicTitle": "Refresh Token", "keyPoints": ["재발급"]}]})
+        )
+        await _note_model_for("gpt-4.1", client, reasoning_effort="minimal").refine(
+            _refinement_request()
+        )
+        return _sampling_used(client)
+
+    assert asyncio.run(run()) == {"temperature": 0}
+
+
+@pytest.mark.parametrize(
+    ("model", "reasoning"),
+    [
+        ("gpt-5-nano", True),
+        ("GPT-5-Mini", True),
+        ("o3-mini", True),
+        ("gpt-4.1", False),
+        ("gpt-4o", False),
+        ("  gpt-5-nano  ", True),
+    ],
+)
+def test_reasoning_model_detection(model: str, reasoning: bool) -> None:
+    assert is_reasoning_model(model) is reasoning

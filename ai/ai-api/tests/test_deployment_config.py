@@ -42,12 +42,16 @@ def test_prod_and_dev_compose_share_operational_shape() -> None:
     prod_note_keys = set(re.findall(r"(?m)^      (AI_API_LECTURE_NOTE_[A-Z0-9_]+):", prod))
     dev_note_keys = set(re.findall(r"(?m)^      (AI_API_LECTURE_NOTE_[A-Z0-9_]+):", dev))
     assert prod_note_keys == dev_note_keys
-    assert len(prod_note_keys) == 10
+    assert len(prod_note_keys) == 11
 
 
 def test_lecture_note_policy_uses_compose_defaults() -> None:
     expected_defaults = {
-        "AI_API_LECTURE_NOTE_MODEL": "",
+        # 비워 두면 앱이 AI_API_GMS_MODEL로 폴백해 gpt-4.1이 된다. 강의 노트는 gpt-5-nano가
+        # 기본이므로 compose가 명시한다 — 이 값이 비어 있던 것이 reasoning_effort와 짝이
+        # 깨져 전 호출이 400을 받은 원인이었다.
+        "AI_API_LECTURE_NOTE_MODEL": "gpt-5-nano",
+        "AI_API_LECTURE_NOTE_REASONING_EFFORT": "minimal",
         "AI_API_LECTURE_NOTE_MAX_OUTPUT_TOKENS": "4096",
         "AI_API_LECTURE_NOTE_MAX_PROMPT_CHARS": "20000",
         "AI_API_LECTURE_NOTE_TIMEOUT_SECONDS": "30",
