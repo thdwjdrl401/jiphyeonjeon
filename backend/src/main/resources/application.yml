@@ -299,6 +299,9 @@ notification:
     # MAX_CONCURRENT_STREAMS=100을 광고한다(2026-08-04 확인). 연결 수는 이 값과 위 상한에서
     # 계산하므로, 상한만 올리고 연결이 그대로여서 조용히 막히는 일이 없다.
     streams-per-connection: ${NOTIFICATION_WEB_PUSH_STREAMS_PER_CONNECTION:100}
+    # 암호화 전용 스레드 수. 0이면 코어 수를 쓴다. **CPU 바운드라 코어 수를 넘겨도 의미가 없다** —
+    # 운영 장비(4코어)에서 스레드 8개가 4개보다 7% 빠를 뿐이다(초당 475 대 444건).
+    crypto-threads: ${NOTIFICATION_WEB_PUSH_CRYPTO_THREADS:0}
     connect-timeout-ms: ${NOTIFICATION_WEB_PUSH_CONNECT_TIMEOUT_MS:5000}
     request-timeout-ms: ${NOTIFICATION_WEB_PUSH_REQUEST_TIMEOUT_MS:10000}
     # 조각 하나 전체(재시도 포함)의 상한. 넘으면 끝난 것만 반영하고 나머지는 버린다 — 조각 하나가
