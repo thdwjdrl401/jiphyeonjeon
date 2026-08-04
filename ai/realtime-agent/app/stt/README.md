@@ -6,7 +6,7 @@
 
 ## 구조와 흐름
 
-room job은 공통 engine 인터페이스만 사용한다. catalog가 `stub`, `openai-realtime`, `nemotron`, `vllm-whisper`의 engine
+room job은 공통 engine 인터페이스만 사용한다. catalog가 `stub`, `openai-realtime`, `nemotron`, `nemotron-nemo`, `vllm-whisper`의 engine
 factory와 실행 profile을 등록하고, registry가 선택한 구현과 선택적인 prewarmed process resource를
 조립한다. 필요하면 audio segmentation을 provider adapter 앞에 둔다.
 
@@ -17,6 +17,7 @@ Room job
             ├─ stub             (process 내부, 외부 통신 없음)
             ├─ openai-realtime  (outbound WebSocket)
             ├─ nemotron         (job child가 소유한 local GPU model)
+            ├─ nemotron-nemo    (GPU0 loopback tuned .nemo model owner)
             └─ vllm-whisper     (GPU0 loopback vLLM model owner)
 ```
 
@@ -30,6 +31,7 @@ provider 이름이나 model별 protocol을 알지 못한다.
 | `stub` | 1 / 1 | 없음 | process 내부 fake delta |
 | `openai-realtime` | 1 / 1 | 없음 | OpenAI Realtime outbound WSS; 실제 동시 수는 API quota에 맞춰 운영자가 제한 |
 | `nemotron` | 12 / 12 | child마다 model 1개, 최대 120초 | 로컬 CUDA; 외부 model API 없음 |
+| `nemotron-nemo` | 1 / 1 | `/v1/models` exact alias probe, 최대 30초 | loopback HTTP; 별도 NeMo process가 tuned `.nemo` 한 벌 소유 |
 | `vllm-whisper` | 1 / 1 | `/v1/models` exact alias probe, 최대 30초 | loopback HTTP; vLLM process가 GPU model 한 벌 소유 |
 
 1. parent가 catalog를 만들고 profile만 읽어 `AgentServer` pool을 설정한다.
@@ -49,6 +51,7 @@ runtime은 [ADR-0027](../../../../docs/decisions/canola/0027-realtime-stt-shared
 - `catalog.py`: provider별 설정 검증, factory와 worker 실행 profile 등록
 - `registry.py`: provider 선택, worker pool 해석과 process resource 소유권 이전
 - `nemotron_asr.py`: 로컬 Nemotron ASR 실행 경계
+- `providers/nemotron_nemo.py`: tuned `.nemo` model owner용 final-only loopback adapter
 - `providers/vllm_whisper.py`: loopback OpenAI-compatible Whisper transcription adapter
 - `providers/`: provider별 adapter
 
