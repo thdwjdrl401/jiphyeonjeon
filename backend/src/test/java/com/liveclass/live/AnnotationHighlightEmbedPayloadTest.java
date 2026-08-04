@@ -151,6 +151,22 @@ class AnnotationHighlightEmbedPayloadTest {
                 anyString(), anyString(), any());
     }
 
+    /**
+     * 변경이 <b>실제로 저장돼야</b> 한다.
+     *
+     * <p>이 메서드는 같은 빈의 스케줄러가 부르므로 프록시를 거치지 않는다 — {@code @Transactional}이
+     * 적용되지 않아 엔티티가 detached였고, 더티 체킹이 안 돌아 attemptCount가 저장되지 않았다.
+     * 운영에서 <b>매번 "시도=1"로 15초마다 영원히 재시도</b>하는 것으로 드러났다(GMS 401 상황).
+     */
+    @Test
+    void 실패_상태를_실제로_저장한다() {
+        when(describer.describe(anyString())).thenThrow(new AnnotationInterpretException("게이트웨이 오류"));
+
+        worker.describeOne(highlight.getId());
+
+        verify(repository).save(highlight);
+    }
+
     @Test
     void 재시도를_다_쓰면_내린다() {
         when(describer.describe(anyString())).thenThrow(new AnnotationInterpretException("계속 실패"));

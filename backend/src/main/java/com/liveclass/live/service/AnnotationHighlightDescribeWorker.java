@@ -90,10 +90,17 @@ public class AnnotationHighlightDescribeWorker {
     }
 
     /**
-     * 한 건을 처리한다. <b>건마다 트랜잭션을 따로 연다</b> — 하나가 실패해도 앞서 성공한 것이
-     * 되돌아가지 않고, 모델 호출을 기다리는 동안 트랜잭션이 열려 있지도 않다.
+     * 한 건을 처리한다.
+     *
+     * <p><b>변경을 명시적으로 저장한다.</b> 이 메서드는 같은 빈의 {@link #describePending()}이 부르므로
+     * 프록시를 거치지 않는다 — {@code @Transactional}을 붙여도 적용되지 않는다(Spring 자기호출).
+     * 그래서 엔티티가 detached였고 더티 체킹이 돌지 않아 attemptCount·nextAttemptAt이 저장되지 않았다.
+     * 운영에서 <b>매번 "시도=1"로 15초마다 영원히 재시도</b>하는 것으로 드러났다.
+     *
+     * <p>트랜잭션을 프록시로 되살리는 대신 저장을 명시한다 — 모델 호출을 기다리는 동안 트랜잭션을
+     * 열어 두지 않는 편이 낫다. 다만 색인 잡 적재는 텍스트 저장과 함께여야 하므로
+     * {@link #saveAndEnqueue}에서 한 트랜잭션으로 묶는다.
      */
-    @Transactional
     public void describeOne(java.util.UUID highlightId) {
         AnnotationHighlight highlight = repository.findById(highlightId).orElse(null);
         if (highlight == null || !AnnotationHighlightService.STATUS_PENDING.equals(highlight.getIndexStatus())) {
@@ -103,6 +110,7 @@ public class AnnotationHighlightDescribeWorker {
         if (imageUrl == null) {
             // 에셋이 없는 것은 다시 시도해도 같다. 바로 내린다.
             fail(highlight, "이미지를 찾을 수 없습니다");
+            repository.save(highlight);
             return;
         }
         try {
@@ -110,6 +118,7 @@ public class AnnotationHighlightDescribeWorker {
             if (text == null) {
                 // 모델이 정상 동작했고 화면을 알아볼 수 없었을 뿐이다. 다시 불러도 같으므로 내린다.
                 fail(highlight, "화면을 알아보지 못했습니다");
+                repository.save(highlight);
                 return;
             }
             highlight.setInterpretedText(text);
@@ -121,12 +130,20 @@ public class AnnotationHighlightDescribeWorker {
              * PROCESSING은 "보냈고 색인 결과를 기다린다"는 뜻이다. READY는 AI 콜백이 확정한다 —
              * 여기서 READY로 두면 강사에게 색인되지 않은 것을 준비됐다고 말하게 된다.
              */
-            enqueueEmbed(highlight);
-            highlight.setIndexStatus(AnnotationHighlightService.STATUS_PROCESSING);
+            saveAndEnqueue(highlight);
             log.info("강조 설명 완료·색인 요청 highlightId={} 길이={}", highlight.getId(), text.length());
         } catch (RuntimeException e) {
             retryOrFail(highlight, e.getMessage());
+            repository.save(highlight);
         }
+    }
+
+    /** 텍스트 저장과 색인 잡 적재를 한 트랜잭션으로 묶는다(ADR-0036). 둘이 갈라지면 안 된다. */
+    @Transactional
+    public void saveAndEnqueue(AnnotationHighlight highlight) {
+        highlight.setIndexStatus(AnnotationHighlightService.STATUS_PROCESSING);
+        repository.save(highlight);
+        enqueueEmbed(highlight);
     }
 
     /**
