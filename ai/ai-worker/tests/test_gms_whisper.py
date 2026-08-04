@@ -16,6 +16,9 @@ async def test_calls_gms_whisper_verbose_json_without_logging_or_returning_raw_p
         body = await request.aread()
         assert b'whisper-1' in body
         assert b'verbose_json' in body
+        # GMS rejects OpenAI's array-style timestamp_granularities[] field with HTTP 500.
+        # whisper-1 verbose_json already returns segment-level start/end timestamps.
+        assert b'timestamp_granularities' not in body
         return httpx.Response(
             200,
             json={
@@ -40,6 +43,8 @@ async def test_calls_gms_whisper_verbose_json_without_logging_or_returning_raw_p
         ).transcribe(Path(chunk))
 
     assert result.duration == 3.6
+    assert result.segments[0].start == 0.1
+    assert result.segments[0].end == 2.5
     assert result.segments[0].text == "테스트"
 
 

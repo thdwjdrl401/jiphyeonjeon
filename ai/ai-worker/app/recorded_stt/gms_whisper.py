@@ -68,7 +68,6 @@ class GmsWhisperClient:
             "model": self._model,
             "language": self._language,
             "response_format": "verbose_json",
-            "timestamp_granularities[]": "segment",
         }
         if prompt:
             data["prompt"] = prompt[:1000]
