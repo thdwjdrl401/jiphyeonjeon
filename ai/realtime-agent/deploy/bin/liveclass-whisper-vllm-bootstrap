@@ -7,9 +7,10 @@ if ! command -v uv >/dev/null 2>&1; then
 fi
 
 DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
-VLLM_VERSION="${WHISPER_VLLM_VERSION:-0.11.2}"
+VLLM_VERSION="${WHISPER_VLLM_VERSION:-0.14.0}"
+QWEN_ASR_VERSION="${QWEN_ASR_VERSION:-0.0.6}"
 TORCH_BACKEND="${WHISPER_VLLM_TORCH_BACKEND:-cu128}"
-VLLM_VENV="${WHISPER_VLLM_VENV:-$DATA_HOME/liveclass/whisper-vllm/vllm-$VLLM_VERSION-$TORCH_BACKEND}"
+VLLM_VENV="${WHISPER_VLLM_VENV:-$DATA_HOME/liveclass/qwen3-asr-vllm/vllm-$VLLM_VERSION-$TORCH_BACKEND}"
 
 mkdir -p "$(dirname "$VLLM_VENV")"
 if [ ! -x "$VLLM_VENV/bin/python" ]; then
@@ -18,7 +19,7 @@ fi
 
 uv pip install \
     --python "$VLLM_VENV/bin/python" \
-    "vllm[audio]==$VLLM_VERSION" \
+    "qwen-asr[vllm]==$QWEN_ASR_VERSION" \
     --torch-backend="$TORCH_BACKEND"
 
-"$VLLM_VENV/bin/python" -c "import vllm; print(vllm.__version__)"
+"$VLLM_VENV/bin/python" -c "import qwen_asr, vllm; print(vllm.__version__)"

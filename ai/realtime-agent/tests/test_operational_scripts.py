@@ -490,19 +490,21 @@ def test_vllm_examples_keep_gpu0_loopback_and_conservative_capacity() -> None:
     assert "STT_MAX_ACTIVE_JOBS=1" in agent
     assert "STT_NUM_IDLE_PROCESSES=1" in agent
     assert "VLLM_WHISPER_BASE_URL=http://127.0.0.1:18083/v1" in agent
-    assert "VLLM_WHISPER_MODEL=liveclass-whisper-large-v3" in agent
+    assert "VLLM_WHISPER_MODEL=liveclass-qwen3-asr-1.7b" in agent
     assert "CUDA_VISIBLE_DEVICES=0" in runtime
     assert "WHISPER_VLLM_HOST=127.0.0.1" in runtime
+    assert "WHISPER_VLLM_SERVE_COMMAND=qwen-asr-serve" in runtime
+    assert "qwen-asr-serve" in supervisor
     assert "WHISPER_VLLM_MAX_NUM_SEQS=1" in runtime
-    assert "WHISPER_VLLM_GPU_MEMORY_UTILIZATION=0.08" in runtime
+    assert "WHISPER_VLLM_GPU_MEMORY_UTILIZATION=0.10" in runtime
     assert "WHISPER_VLLM_MAX_NUM_BATCHED_TOKENS=2048" in runtime
-    assert "WHISPER_VLLM_MODEL_PATH=/home/<user>/ai/models/whisper-large-v3" in runtime
-    assert "WHISPER_VLLM_SERVED_MODEL_NAME=liveclass-whisper-large-v3" in runtime
+    assert "WHISPER_VLLM_MODEL_PATH=/home/<user>/ai/models/qwen3-asr-1.7b" in runtime
+    assert "WHISPER_VLLM_SERVED_MODEL_NAME=liveclass-qwen3-asr-1.7b" in runtime
     assert "GPU 0" in supervisor
     assert '--host "$WHISPER_VLLM_HOST"' in supervisor
     assert "--max-num-batched-tokens" in supervisor
     assert "/v1/models" in supervisor
-    assert "vllm[audio]==" in bootstrap
+    assert "qwen-asr[vllm]==" in bootstrap
     assert "sudo" not in supervisor
     assert "sudo" not in bootstrap
 
@@ -514,7 +516,7 @@ def test_vllm_supervisor_health_executes_embedded_probe(tmp_path: Path) -> None:
                 self.send_response(404)
                 self.end_headers()
                 return
-            body = b'{"data":[{"id":"liveclass-whisper-large-v3"}]}'
+            body = b'{"data":[{"id":"liveclass-qwen3-asr-1.7b"}]}'
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
@@ -537,7 +539,7 @@ def test_vllm_supervisor_health_executes_embedded_probe(tmp_path: Path) -> None:
                 f"WHISPER_VLLM_VENV={venv_bin.parent}",
                 "WHISPER_VLLM_HOST=127.0.0.1",
                 f"WHISPER_VLLM_PORT={server.server_address[1]}",
-                "WHISPER_VLLM_SERVED_MODEL_NAME=liveclass-whisper-large-v3",
+                "WHISPER_VLLM_SERVED_MODEL_NAME=liveclass-qwen3-asr-1.7b",
             ]
         )
         + "\n",

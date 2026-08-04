@@ -95,9 +95,9 @@ model checkpoint는 release에 복사하지 않는다.
 GitLab `deploy-realtime-agent` job도 같은 helper를 현재 사용자로 호출한다. active 강의의 drain은
 지원하지 않으므로 배포 시 두 worker job이 끊길 수 있다.
 
-### 3.1 Whisper Large V3 기본 모델로 수동 전환
+### 3.1 Qwen3-ASR 1.7B 기본 모델로 수동 전환
 
-첫 vLLM 적용 대상은 이미 내려받은 `openai/whisper-large-v3` 기본 모델이다. merge와 일반 CD는
+첫 vLLM 적용 대상은 이미 내려받은 `Qwen/Qwen3-ASR-1.7B` 기본 모델이다. merge와 일반 CD는
 기존 Nemotron prod profile을 유지하므로 아래 명시적 절차에서만 바뀐다. 이 전환으로 serving wiring과
 LiveKit canary를 검증할 수 있지만, fine-tuning 성능 승격 증거를 대신하지 않는다. GPU 1은 사용하지 않는다.
 
@@ -120,7 +120,7 @@ curl --fail http://127.0.0.1:8081/health/ready
 
 agent의 VLLM_WHISPER_MODEL과 runtime의 WHISPER_VLLM_SERVED_MODEL_NAME은 정확히 같아야 한다.
 vLLM은 127.0.0.1:18083에만 bind하며 별도 GPU/EC2 inbound나 SSH tunnel을 추가하지 않는다.
-첫 cap은 GPU memory utilization 0.08, max-num-batched-tokens 2048,
+첫 cap은 GPU memory utilization 0.10, max-num-batched-tokens 2048,
 runtime max-num-seqs 1, agent active/idle 1/1이다.
 학습 모델이 ADR-0040 gate를 통과하면 runtime의 model path만 merged checkpoint로 교체한다.
 

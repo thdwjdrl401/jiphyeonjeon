@@ -99,7 +99,7 @@ async def test_engine_emits_one_authoritative_final_per_common_vad_segment() -> 
         assert b'name="language"' in body
         assert b"ko" in body
         assert b"RIFF" in body
-        return httpx.Response(200, json={"text": "  여기를 보세요.  "})
+        return httpx.Response(200, json={"text": "language Korean<asr_text>여기를 보세요."})
 
     engine = VllmWhisperStreamingEngine(
         configuration(),

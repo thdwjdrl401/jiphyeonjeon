@@ -80,6 +80,36 @@ Qwen 0.6B engine은 19,010 MiB, 1.7B engine은 23,138 MiB를 점유했다. 이�
 많았다. 그러나 현재 운영 gate는 모든 VAD segment의 final을 요구하므로 이를 정상으로 면제하지
 않는다.
 
+### missing final 원인 진단
+
+공식 SFT collator는 prefix와 target을 합칠 때 `tokenizer.eos_token`을 target 뒤에 추가하고,
+prefix와 padding만 `-100`으로 masking한다. 따라서 EOS도 loss 대상이다. Qwen3-ASR는
+Whisper처럼 autoregressive decoder가 finite utterance의 생성을 EOS로 닫지만, 이 EOS를
+VAD endpoint detector로 사용해야 한다는 뜻은 아니다.
+
+공식 `ASRStreamingState`는 “single utterance” 상태다. 새 audio chunk가 준비될 때마다 stream
+시작부터 누적된 audio를 다시 decode하고, 마지막 일부 token을 rollback한 뒤 안정 prefix를
+유지한다. `finish_streaming_transcribe`는 1초보다 짧게 남은 buffer도 decode한다. 즉 현재
+missing final은 tail flush가 호출되지 않은 문제가 아니라, 독립 utterance가 된 짧은 tail에서
+모델이 곧바로 EOS를 선택해 빈 text를 반환한 현상이다.
+
+실패한 10개 segment를 같은 1.7B·공식 `start/chunk/finish` API로 다시 실행했다.
+
+| 입력 조건 | non-empty final |
+|---|---:|
+| 400~740 ms tail 단독 | 0/10 |
+| tail + 왼쪽 문맥 1초 | 8/10 |
+| 직전 VAD segment 시작부터 tail까지 | 9/10 |
+
+tail 단독 조건은 중간 text도 0/10이었다. 평균 WebRTC VAD voiced-frame 비율은 0.7503이지만
+평균 RMS는 -54.632 dBFS로 매우 작았고, 2건은 voiced-frame 비율도 0이었다. 마지막 1건은 직전
+segment 문맥을 붙여도 빈 결과라 VAD false positive 또는 비언어 음성으로 판단한다.
+
+따라서 주원인은 **EOS 학습 누락이 아니라 provider와 VAD의 session 경계 불일치**다. 8초
+`MAX_DURATION` 뒤 400~740 ms 잔여음을 새 Qwen utterance로 만들고, silence 경계의 짧고 약한
+음성도 무조건 독립 provider final로 요구했다. fine-tuning으로 이런 조각에 text를 강제하면
+무음·비언어 음성 hallucination을 늘릴 수 있으므로 학습 데이터 보강만으로 해결하지 않는다.
+
 참고로 후보 탐색 중 전체 dev 4,444 clips·8,117 segments도 Qwen 0.6B로 추가 실행했다. multi-ref
 CER 20.8009%, mean RTF 0.03399, missing final 73이었지만 다른 후보의 같은 전체-dev 결과가 없으므로
 모델 선택 표에는 사용하지 않는다.
@@ -102,11 +132,31 @@ JSONL의 `audio`와 `text`를 입력으로 받고, Korean target은
 `language Korean<asr_text>{transcript}` 형식을 사용한다. 현재 AI Hub manifest의 원본 utterance
 WAV와 철자 전사 `trainingReference`를 이 형식으로 export한다.
 
-- train/dev는 기존 speaker·lecture disjoint split을 그대로 사용한다.
+- 기존 train만 화자-강의 연결 컴포넌트 단위로 SFT train/internal-eval로 다시 나눈다.
+- 기존 dev·고정 502 benchmark·test·golden은 학습과 hyperparameter 선택에서 보호한다.
 - 정렬된 label이 없으므로 운영 VAD segment에 전체 문장 label을 붙여 학습하지 않는다.
-- test와 golden은 학습·튜닝에 사용하지 않는다.
 - 첫 pilot은 BF16 full SFT로 고정하고 LoRA와 hyperparameter sweep을 동시에 진행하지 않는다.
 - checkpoint는 processor/tokenizer/config/weight를 함께 저장해 standalone load가 가능해야 한다.
+
+#### 실제 학습 입력과 GPU smoke
+
+seed 37 export는 원본 train 31,296 clips·76.567시간을 다음처럼 나눴다. 컴포넌트 제약 때문에
+요청한 10%와 정확히 같지는 않지만, 무작위 clip 분할로 화자·강의가 새는 것보다 격리를 우선한다.
+
+| 구분 | clips | 시간 | 화자 | 강의 | JSONL SHA-256 |
+|---|---:|---:|---:|---:|---|
+| SFT train | 28,026 | 67.844h | 57 | 77 | `599c4fe40bcd4c6a8a7be457ca9b6de0d35f4fe34c9d5c0533301c7e9fe729d9` |
+| internal eval | 3,270 | 8.723h | 7 | 9 | `6fb74c20df7bd6b3356cee156af6e9698243bbffc26db538139ca3976f77520b` |
+
+기존 dev·502 benchmark·test·golden과 clip ID, audio path, speaker ID, lecture ID뿐 아니라 실제
+WAV content SHA-256도 전부 교집합 0이다. export target에는 EOS를 넣지 않고, official collator가
+EOS를 한 번만 추가한다.
+
+rootless 전용 venv(`qwen-asr==0.0.6`, `datasets==4.0.0`, PyTorch 2.11.0+cu128)와 GPU 0
+제약 runner를 만들었다. 2 train samples·1 eval sample·1 optimizer step BF16 full SFT smoke는
+loss 1.7545로 끝났고, inferable `checkpoint-1`, optimizer state, standalone `final/`,
+processor/tokenizer/config와 `eosSupervised=true` provenance 저장을 확인했다. 이는 학습 pipeline
+실행 증거이며 정확도 개선 증거는 아니다.
 
 최신 vLLM의 offline Qwen3-ASR 경로는 LoRA를 지원하지만 realtime architecture의 LoRA 지원은
 공식 표에서 확인되지 않았다. 따라서 첫 realtime 승격 경로는 full checkpoint다. 이후 LoRA를
@@ -117,10 +167,14 @@ WAV와 철자 전사 `trainingReference`를 이 형식으로 export한다.
 Qwen3-ASR streaming은 공식 `qwen-asr` package의 vLLM backend로 검증한다. realtime-agent와
 모델 process를 분리하고 GPU 0, loopback bind, 명시적 model path를 강제한다.
 
-현재 사용한 `qwen-asr-demo-streaming`은 Flask development server이므로 운영 runtime으로
-승격하지 않는다. 후속 구현은 같은 `Qwen3ASRModel.LLM` engine을 production HTTP server와
-supervisor, `/healthz`, `/readyz`, request timeout, bounded session 수로 감싼다. 1.7B
-fine-tuned checkpoint가 그 runtime에서 load되고 동일 502 replay를 통과해야 provider 교체가 가능하다.
+`qwen-asr-demo-streaming` Flask server는 운영에 사용하지 않는다. 운영 runtime은 Qwen architecture를
+등록하는 `qwen-asr-serve`와 vLLM 0.14.0을 loopback에서 사용하고 `/v1/models`로 readiness를
+확인한다. fine-tuned checkpoint는 동일 runtime에서 load되고 replay gate를 통과한 뒤 승격한다.
+
+운영 adapter는 공통 VAD가 확정한 최대 8초 WAV segment를 OpenAI 호환
+`/v1/audio/transcriptions`에 전송한다. 이는 Qwen 전용 realtime WebSocket이 아니므로 segment 간
+provider context는 유지되지 않는다. missing-final과 문맥 품질이 운영 gate를 통과하지 못하면 후속으로
+Qwen streaming session adapter와 overlap·text de-duplication을 도입한다.
 
 ### 4. fine-tuned checkpoint 승격 gate를 고정한다
 
@@ -131,6 +185,21 @@ fine-tuned checkpoint가 그 runtime에서 load되고 동일 502 replay를 통�
 - 설정 고정 후 test split 최종 1회
 - LiveKit audio → Qwen runtime → Redis caption canary 통과
 
+## 2026-08-04 운영 스위칭 결정
+
+사용자 승인으로 GPU 0에서 dev는 Nemotron 1 process, prod는 Qwen3-ASR 1.7B base vLLM
+runtime 1 process로 운영 canary를 시작한다. 실패한 full-SFT final은 모든 weight가 non-finite라
+승격하지 않고 `Qwen/Qwen3-ASR-1.7B` base checkpoint만 사용한다.
+
+Qwen3-ASR vLLM 0.14.0은 기존 adapter와 같은 `POST /v1/audio/transcriptions`를 지원하므로
+별도 provider를 복제하지 않는다. runtime은 모델 architecture를 등록하는 `qwen-asr-serve`로 띄우고,
+기존 segmented VAD·Redis caption 계약을 재사용한다. 실제 응답의
+`language Korean<asr_text>` envelope는 adapter 경계에서 제거한다.
+
+운영 smoke에서 `/v1/models` exact alias, AI Hub eval WAV transcription, prod/dev health readiness를
+검증했다. GPU 0 점유는 Qwen 약 14.1 GiB, Nemotron 약 3.0 GiB였다. 이 canary는 앞서 정한
+품질·동시성 승격 gate를 폐기하지 않으며, fine-tuned checkpoint는 gate 통과 후 별도로 승격한다.
+
 ## 대안
 
 | 대안 | 판단 |
@@ -138,7 +207,7 @@ fine-tuned checkpoint가 그 runtime에서 load되고 동일 502 replay를 통�
 | Qwen3-ASR 0.6B fine-tuning | 더 작고 빠르지만 base CER가 1.7B보다 상대 18.38% 높아 fallback |
 | Whisper Large V3 fine-tuning 유지 | missing final 0 장점이 있으나 base CER가 1.7B보다 높아 비교 후보로 유지 |
 | ForcedAligner를 ASR 후보로 평가 | transcript가 필요한 정렬 모델이므로 기각 |
-| Qwen 1.7B를 base 결과만으로 즉시 운영 전환 | missing final과 운영 부하 gate 미통과로 기각 |
+| Qwen 1.7B base를 영구 승격 | 전체 gate 전에는 기각하고 1-slot 운영 canary만 채택 |
 | Qwen 1.7B full SFT 후 같은 vLLM/VAD gate 재평가 | 정확도와 학습·서빙 호환성을 함께 검증해 채택 |
 
 ## 영향과 검증
@@ -151,5 +220,8 @@ fine-tuned checkpoint가 그 runtime에서 load되고 동일 502 replay를 통�
 - 재현 artifact:
   - `/home/liveclass/ai/experiments/qwen3-asr-benchmark/replay-dev-benchmark-502-qwen3-asr-0.6b-artifacts/`
   - `/home/liveclass/ai/experiments/qwen3-asr-benchmark/replay-dev-benchmark-502-qwen3-asr-1.7b-artifacts/`
+  - `/home/liveclass/ai/experiments/qwen3-asr-benchmark/missing-final-qwen3-asr-1.7b-context-diagnostic.json`
+  - `/home/liveclass/ai/training-data/qwen3-asr-1.7b-v1-seed37/provenance.json`
+  - `/home/liveclass/ai/checkpoints/qwen3-asr-1.7b-smoke-seed37/`
 - 실행 당시 report의 `codeSha`는 작업 branch의 부모 `adc5a24`이고 Qwen adapter 변경은
   이 ADR과 같은 commit에 포함된다. 재현 시에는 merge된 commit을 기준으로 사용한다.

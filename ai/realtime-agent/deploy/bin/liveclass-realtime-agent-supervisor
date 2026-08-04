@@ -83,9 +83,7 @@ validate_agent_env_profile() {
         esac
         case "$STT_ENGINE_PROVIDER" in
             nemotron)
-                if [ "${STT_MAX_ACTIVE_JOBS:-}" != "12" ] || \
-                    [ "${STT_NUM_IDLE_PROCESSES:-}" != "12" ] || \
-                    [ "${CUDA_VISIBLE_DEVICES:-}" != "0" ] || \
+                if [ "${CUDA_VISIBLE_DEVICES:-}" != "0" ] || \
                     [ -z "${ASR_MODEL_ID:-}" ]; then
                     echo "$profile nemotron env profile mismatch" >&2
                     exit 1

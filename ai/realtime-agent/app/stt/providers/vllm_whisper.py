@@ -149,6 +149,8 @@ class VllmWhisperStreamingEngine(SegmentedStreamingEngine):
         text = response.json().get("text")
         if not isinstance(text, str):
             raise TypeError("vLLM response does not contain string field text")
+        if text.startswith("language ") and "<asr_text>" in text:
+            text = text.split("<asr_text>", 1)[1]
         yield ProviderSegmentFinal(text.strip())
 
     async def _close_provider(self) -> None:

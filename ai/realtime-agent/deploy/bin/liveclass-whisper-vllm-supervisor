@@ -34,6 +34,14 @@ validate_runtime_env() {
     : "${WHISPER_VLLM_MODEL_PATH:?WHISPER_VLLM_MODEL_PATH is required}"
     : "${WHISPER_VLLM_SERVED_MODEL_NAME:?WHISPER_VLLM_SERVED_MODEL_NAME is required}"
     : "${WHISPER_VLLM_PORT:?WHISPER_VLLM_PORT is required}"
+    case "${WHISPER_VLLM_SERVE_COMMAND:-vllm}" in
+        vllm|qwen-asr-serve)
+            ;;
+        *)
+            echo "WHISPER_VLLM_SERVE_COMMAND must be vllm or qwen-asr-serve" >&2
+            exit 1
+            ;;
+    esac
     if [ "${CUDA_VISIBLE_DEVICES:-}" != "0" ]; then
         echo "Whisper vLLM runtime is restricted to GPU 0" >&2
         exit 1
@@ -53,14 +61,14 @@ validate_runtime_env() {
         exit 1
     fi
     if [ "${WHISPER_VLLM_DTYPE:-}" != "bfloat16" ] || \
-        [ "${WHISPER_VLLM_GPU_MEMORY_UTILIZATION:-}" != "0.08" ] || \
+        { [ "${WHISPER_VLLM_GPU_MEMORY_UTILIZATION:-}" != "0.08" ] && [ "${WHISPER_VLLM_GPU_MEMORY_UTILIZATION:-}" != "0.10" ]; } || \
         [ "${WHISPER_VLLM_MAX_NUM_BATCHED_TOKENS:-}" != "2048" ] || \
         [ "${WHISPER_VLLM_MAX_NUM_SEQS:-}" != "1" ]; then
-        echo "Whisper vLLM runtime profile must use bfloat16, memory 0.08, batched tokens 2048, max sequences 1" >&2
+        echo "Whisper vLLM runtime profile must use bfloat16, memory 0.08 or 0.10, batched tokens 2048, max sequences 1" >&2
         exit 1
     fi
-    if [ ! -x "$WHISPER_VLLM_VENV/bin/vllm" ]; then
-        echo "vLLM is not installed: $WHISPER_VLLM_VENV" >&2
+    if [ ! -x "$WHISPER_VLLM_VENV/bin/${WHISPER_VLLM_SERVE_COMMAND:-vllm}" ]; then
+        echo "vLLM serve command is not installed: $WHISPER_VLLM_VENV/bin/${WHISPER_VLLM_SERVE_COMMAND:-vllm}" >&2
         exit 1
     fi
     if [ ! -d "$WHISPER_VLLM_MODEL_PATH" ]; then
@@ -97,7 +105,7 @@ run_runtime() {
     export CUDA_VISIBLE_DEVICES=0
     while :; do
         set +e
-        "$WHISPER_VLLM_VENV/bin/vllm" serve "$WHISPER_VLLM_MODEL_PATH" \
+        "$WHISPER_VLLM_VENV/bin/${WHISPER_VLLM_SERVE_COMMAND:-vllm}" "$WHISPER_VLLM_MODEL_PATH" \
             --host "$WHISPER_VLLM_HOST" \
             --port "$WHISPER_VLLM_PORT" \
             --served-model-name "$WHISPER_VLLM_SERVED_MODEL_NAME" \
