@@ -170,9 +170,79 @@ uv run --frozen stt-lab-whisper-dry-run run \
   --cuda-visible-devices 0
 ```
 
-이 실행은 품질 향상 증거가 아니라 pipeline 실행 가능성만 증명한다. Nemotron은 현재 추론용
-Transformers adapter만 있어 학습 recipe가 연결되지 않았으므로 Whisper dry-run 성공을 Nemotron
-학습 완료로 간주하지 않는다.
+이 실행은 품질 향상 증거가 아니라 pipeline 실행 가능성만 증명한다.
+
+### Nemotron 3.5 ASR full fine-tuning
+
+Nemotron은 Hugging Face 변환본의 tokenizer가 아니라 학습할 `.nemo` 안의 SentencePiece를 정본으로
+사용한다. 준비 명령은 checkpoint의 모델 클래스, 16 kHz, encoder 24 layers, subsampling 8,
+10 ms feature stride, `ko-KR` prompt ID 14와 tokenizer hash를 먼저 검사한다. 원본 manifest와 WAV는
+수정하지 않고 새 출력 디렉터리에 NeMo/Lhotse JSONL만 만든다.
+
+```bash
+uv run --frozen stt-lab-nemotron-prepare \
+  --train-manifest /home/liveclass/ai/datasets/aihub-korean-lecture/v1/manifests/train.jsonl \
+  --dev-manifest /home/liveclass/ai/datasets/aihub-korean-lecture/v1/manifests/dev.jsonl \
+  --nemo-model /home/liveclass/ai/models/nemotron-3.5-asr-streaming-0.6b/nemotron-3.5-asr-streaming-0.6b.nemo \
+  --output-dir /home/liveclass/ai/training/nemotron-3.5-full-20260803/manifests-nemo-spm-v1
+```
+
+출력 row는 다음 필드만 학습에 사용한다.
+
+```json
+{"id":"arch.C00000.U00000","audio_filepath":"/absolute/path.wav","duration":4.27,"text":"철자 전사","lang":"ko-KR","target_lang":"ko-KR","prompt_mode":"langID","sampling_rate":16000}
+```
+
+- 20초를 넘는 clip, `.nemo` tokenizer의 unknown token이 있는 전사, token 수가 근사 encoder frame
+  수를 넘는 비정상 pair는 제외 이유만 `excluded.jsonl`에 남긴다.
+- `test`와 `golden` 인자는 존재하지 않는다. 잘못된 split을 train/dev 인자에 넣어도 기존 split guard가
+  실패시킨다.
+- `preparation-report.json`에는 source manifest, `.nemo`, tokenizer SHA-256과 선택/제외 개수를 남긴다.
+- `trainingReference`의 철자 전사를 target으로 사용하고 원본 괄호 이중 전사는 학습하지 않는다.
+
+학습 runtime은 운영 venv와 분리한다. 현재 검증 조합은 NeMo commit
+`fc6a475f3d8b8fc0c8743d3107c5e933ecd5b99d`, PyTorch `2.11.0+cu128`, NeMo
+`3.1.0+fc6a475f3`, numba `0.65.0`, llvmlite `0.47.0`, numba-cuda `0.30.0`이다.
+NeMo 자체 lock과 다른 numba 조합은 RNNT loss compile 오류를 낼 수 있다.
+
+```bash
+TRAIN_ROOT=/home/liveclass/ai/training/nemotron-3.5-full-20260803
+
+uv venv --python /opt/tljh/user/bin/python3 "$TRAIN_ROOT/.venv"
+uv pip install --python "$TRAIN_ROOT/.venv/bin/python" \
+  --index https://download.pytorch.org/whl/cu128 torch==2.11.0
+uv pip install --python "$TRAIN_ROOT/.venv/bin/python" \
+  "$TRAIN_ROOT/vendor/NeMo[asr]" \
+  numba==0.65.0 llvmlite==0.47.0 'numba-cuda[cu12]==0.30.0'
+```
+
+본 학습은 `config/nemotron_full_finetune.yaml`을 사용한다. 기본값은 full parameter 637M, BF16,
+AdamW, learning rate `1e-4`, 200초 dynamic batch, 6,000 step, 2,000 step마다 dev 검증이다.
+현재 파생 train은 Lhotse sampler 기준 1회에 약 1,948 batch이므로 약 3.08회 순회한다.
+background bucketing은 짧은 fixed-step run 종료 시 thread가 남는 것을 막기 위해 끈다.
+global-step 간격을 epoch 길이와 독립시키기 위해 `check_val_every_n_epoch: null`을 함께 고정한다.
+
+```bash
+CUDA_VISIBLE_DEVICES=1 "$TRAIN_ROOT/.venv/bin/python" \
+  "$TRAIN_ROOT/vendor/NeMo/examples/asr/speech_to_text_finetune.py" \
+  --config-path="$PWD/config" \
+  --config-name=nemotron_full_finetune \
+  init_from_nemo_model=/home/liveclass/ai/models/nemotron-3.5-asr-streaming-0.6b/nemotron-3.5-asr-streaming-0.6b.nemo \
+  model.train_ds.manifest_filepath="$TRAIN_ROOT/manifests-nemo-spm-v1/train.nemo.jsonl" \
+  model.validation_ds.manifest_filepath="$TRAIN_ROOT/manifests-nemo-spm-v1/dev.nemo.jsonl" \
+  exp_manager.exp_dir="$TRAIN_ROOT/runs-spm-v1"
+```
+
+2-step smoke에서 dev batch, `ko-KR` prompt, RNNT loss, backward, optimizer step과 정상 종료를 먼저
+확인한다. 이어 1-step train/validation smoke로 `val_wer`, `.ckpt`, `.nemo` 저장까지 확인한 뒤 full
+run을 시작한다. full checkpoint를 고르는 평가는 dev만 사용하고, 설정을 모두 고정하기 전에는 기존
+test/golden/benchmark를 실행하거나 수정하지 않는다.
+
+2026-08-03 H200 NVL 1장 실측에서 6,000 steps는 checkpoint 저장을 포함해 29분 24초 걸렸다.
+전체 dev WER는 2,000/4,000/6,000 step에서 각각 `0.37213`, `0.36103`, `0.35542`였고 마지막
+checkpoint가 최적이었다. 이 값은 학습 중 checkpoint 선택용 dev WER이며 기존 고정 평가의 CER나
+test 결과가 아니다. 실행 증거와 artifact hash는
+[ADR-0042](../../docs/decisions/canola/0042-nemotron-full-finetuning-input-and-runtime.md)에 고정한다.
 
 
 ## vLLM Whisper 서빙 실험
