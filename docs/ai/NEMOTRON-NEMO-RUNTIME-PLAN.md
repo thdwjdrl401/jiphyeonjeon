@@ -97,7 +97,7 @@ CUDA_VISIBLE_DEVICES=0
 1. 단위 테스트: 설정, loopback 제한, model alias, WAV request, 완성 문장 단일 final.
 2. runtime fake-model 테스트: live/ready/models/transcriptions 상태코드.
 3. shell 문법과 env profile 테스트.
-4. tuned `.nemo` SHA-256이 ADR-0043의
+4. tuned `.nemo` SHA-256이 ADR-0046의
    `4cf5368cbb9d57a48ee0b5afbb3790deedd4612963a095b2db30d3f7f57c79fa`와 일치하는지 확인.
 5. GPU 0 runtime load와 기존 AI Hub WAV 1건 smoke.
 6. prod agent를 `nemotron-nemo`로 재시작하고 `/health/ready` 200 확인.
