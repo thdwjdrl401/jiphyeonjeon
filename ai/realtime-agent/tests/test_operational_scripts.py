@@ -21,6 +21,7 @@ DEPLOY_SCRIPT = DEPLOY_DIR / "bin" / "liveclass-realtime-agent-deploy"
 SUPERVISOR_SCRIPT = DEPLOY_DIR / "bin" / "liveclass-realtime-agent-supervisor"
 VLLM_BOOTSTRAP_SCRIPT = DEPLOY_DIR / "bin" / "liveclass-whisper-vllm-bootstrap"
 VLLM_SUPERVISOR_SCRIPT = DEPLOY_DIR / "bin" / "liveclass-whisper-vllm-supervisor"
+NEMO_SUPERVISOR_SCRIPT = DEPLOY_DIR / "bin" / "liveclass-nemotron-nemo-supervisor"
 RUNNER_CONTROL_SCRIPT = DEPLOY_DIR / "bin" / "liveclass-gitlab-runner-user"
 INSTALL_SCRIPT = DEPLOY_DIR / "install.sh"
 RUNNER_INSTALL_SCRIPT = DEPLOY_DIR / "install-gitlab-runner-user.sh"
@@ -31,6 +32,8 @@ PROD_AGENT_ENV_EXAMPLE = DEPLOY_DIR / "env" / "realtime-agent.env.example"
 DEV_AGENT_ENV_EXAMPLE = DEPLOY_DIR / "env" / "realtime-agent-dev.env.example"
 VLLM_AGENT_ENV_EXAMPLE = DEPLOY_DIR / "env" / "realtime-agent-vllm.env.example"
 VLLM_RUNTIME_ENV_EXAMPLE = DEPLOY_DIR / "env" / "whisper-vllm.env.example"
+NEMO_AGENT_ENV_EXAMPLE = DEPLOY_DIR / "env" / "realtime-agent-nemo.env.example"
+NEMO_RUNTIME_ENV_EXAMPLE = DEPLOY_DIR / "env" / "nemotron-nemo.env.example"
 
 
 def test_probe_settings_redact_credentials_from_repr() -> None:
@@ -509,6 +512,25 @@ def test_vllm_examples_keep_gpu0_loopback_and_conservative_capacity() -> None:
     assert "sudo" not in bootstrap
 
 
+def test_nemotron_nemo_examples_use_tuned_checkpoint_and_loopback() -> None:
+    agent = NEMO_AGENT_ENV_EXAMPLE.read_text(encoding="utf-8")
+    runtime = NEMO_RUNTIME_ENV_EXAMPLE.read_text(encoding="utf-8")
+    supervisor = NEMO_SUPERVISOR_SCRIPT.read_text(encoding="utf-8")
+
+    assert "STT_ENGINE_PROVIDER=nemotron-nemo" in agent
+    assert "STT_MAX_ACTIVE_JOBS=1" in agent
+    assert "STT_NUM_IDLE_PROCESSES=1" in agent
+    assert "NEMO_RUNTIME_BASE_URL=http://127.0.0.1:18084/v1" in agent
+    assert "NEMO_RUNTIME_MODEL=liveclass-nemotron-3.5-tuned" in agent
+    assert "CUDA_VISIBLE_DEVICES=0" in runtime
+    assert "NEMO_RUNTIME_HOST=127.0.0.1" in runtime
+    assert "NEMO_RUNTIME_PORT=18084" in runtime
+    assert "LiveClass-Nemotron-3.5-ASR-Full-Finetune.nemo" in runtime
+    assert "nemotron_nemo_server.py" in supervisor
+    assert "/v1/models" in supervisor
+    assert "sudo" not in supervisor
+
+
 def test_vllm_supervisor_health_executes_embedded_probe(tmp_path: Path) -> None:
     class ModelsHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
@@ -592,6 +614,11 @@ def test_rootless_supervisor_keeps_tunnel_and_dual_agents_under_tmux() -> None:
     assert "realtime-agent-vllm.env.example" in installer
     assert "liveclass-whisper-vllm-supervisor" in installer
     assert "liveclass-whisper-vllm-bootstrap" in installer
+    assert "nemotron-nemo)" in supervisor
+    assert "NEMO_RUNTIME_BASE_URL" in supervisor
+    assert "liveclass-nemotron-nemo-supervisor" in installer
+    assert "nemotron-nemo.env.example" in installer
+    assert "realtime-agent-nemo.env.example" in installer
     assert "systemctl" not in supervisor
     assert "sudo" not in supervisor
     assert "systemctl" not in installer
@@ -733,7 +760,9 @@ def test_deploy_helper_builds_before_switch_and_keeps_rollback_path() -> None:
     cuda_smoke_position = script.index("assert torch.cuda.is_available()")
     switch_position = script.index('mv -Tf "$NEXT_LINK" "$CURRENT_LINK"')
     unlock_position = script.index("flock -u 9")
-    health_position = script.index("--retry 75")
+    model_runtime_position = script.index('"$NEMO_SUPERVISOR" restart')
+    agent_restart_position = script.index('"$SUPERVISOR" restart-agent')
+    health_position = script.index("for health_url")
     process_gate_position = script.index('"$SUPERVISOR" status-agent')
     command_refresh_position = script.index("refresh_runtime_command")
 
@@ -742,6 +771,8 @@ def test_deploy_helper_builds_before_switch_and_keeps_rollback_path() -> None:
         < cuda_smoke_position
         < switch_position
         < unlock_position
+        < model_runtime_position
+        < agent_restart_position
         < process_gate_position
         < health_position
         < command_refresh_position

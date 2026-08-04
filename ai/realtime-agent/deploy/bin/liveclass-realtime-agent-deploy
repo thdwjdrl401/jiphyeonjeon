@@ -36,8 +36,10 @@ PROD_HEALTH_URL="${LIVECLASS_PROD_HEALTH_URL:-http://127.0.0.1:8081/health/ready
 DEV_HEALTH_URL="${LIVECLASS_DEV_HEALTH_URL:-http://127.0.0.1:8082/health/ready}"
 USER_PREFIX="${LIVECLASS_USER_PREFIX:-$HOME/.local}"
 BIN_DIR="$USER_PREFIX/bin"
+CONFIG_DIR="${LIVECLASS_CONFIG_DIR:-$HOME/.config/liveclass}"
+PROD_AGENT_ENV="${LIVECLASS_PROD_AGENT_ENV:-$CONFIG_DIR/realtime-agent.env}"
 
-for command_name in curl flock install nvidia-smi readlink rsync tmux; do
+for command_name in curl flock grep install nvidia-smi readlink rsync tmux; do
     if ! command -v "$command_name" >/dev/null 2>&1; then
         echo "required command is missing: $command_name" >&2
         exit 1
@@ -110,6 +112,19 @@ if ! "$SUPERVISOR" start-tunnel; then
     rollback
     exit 1
 fi
+if [ -r "$PROD_AGENT_ENV" ] && grep -q "^STT_ENGINE_PROVIDER=nemotron-nemo$" "$PROD_AGENT_ENV"; then
+    NEMO_SUPERVISOR="$CURRENT_LINK/deploy/bin/liveclass-nemotron-nemo-supervisor"
+    if ! "$NEMO_SUPERVISOR" restart; then
+        rollback
+        exit 1
+    fi
+    if ! curl --fail --silent --show-error \
+        --retry 75 --retry-delay 2 --retry-all-errors --max-time 5 \
+        http://127.0.0.1:18084/health/ready >/dev/null; then
+        rollback
+        exit 1
+    fi
+fi
 if ! "$SUPERVISOR" restart-agent; then
     rollback
     exit 1
@@ -143,6 +158,8 @@ refresh_runtime_command "$CURRENT_LINK/deploy/bin/liveclass-realtime-agent-super
     liveclass-realtime-agent-supervisor
 refresh_runtime_command "$CURRENT_LINK/deploy/bin/liveclass-whisper-vllm-bootstrap" \
     liveclass-whisper-vllm-bootstrap
+refresh_runtime_command "$CURRENT_LINK/deploy/bin/liveclass-nemotron-nemo-supervisor" \
+    liveclass-nemotron-nemo-supervisor
 refresh_runtime_command "$CURRENT_LINK/deploy/bin/liveclass-whisper-vllm-supervisor" \
     liveclass-whisper-vllm-supervisor
 refresh_runtime_command "$CURRENT_LINK/deploy/bin/liveclass-realtime-agent-deploy" \

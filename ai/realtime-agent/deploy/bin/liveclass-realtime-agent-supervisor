@@ -49,7 +49,9 @@ load_agent_env() {
         OPENAI_API_KEY OPENAI_REALTIME_TRANSCRIPTION_MODEL \
         OPENAI_REALTIME_TRANSCRIPTION_DELAY VLLM_WHISPER_BASE_URL \
         VLLM_WHISPER_MODEL VLLM_API_KEY VLLM_WHISPER_REQUEST_TIMEOUT_SECONDS \
-        VLLM_WHISPER_CONNECT_TIMEOUT_SECONDS
+        VLLM_WHISPER_CONNECT_TIMEOUT_SECONDS \
+        NEMO_RUNTIME_BASE_URL NEMO_RUNTIME_MODEL NEMO_RUNTIME_REQUEST_TIMEOUT_SECONDS \
+        NEMO_RUNTIME_CONNECT_TIMEOUT_SECONDS
     load_env "$COMMON_AGENT_ENV"
     load_env "$1"
 }
@@ -96,6 +98,17 @@ validate_agent_env_profile() {
                     [ -z "${OPENAI_REALTIME_TRANSCRIPTION_MODEL:-}" ] || \
                     [ -z "${OPENAI_REALTIME_TRANSCRIPTION_DELAY:-}" ]; then
                     echo "$profile openai-realtime env profile mismatch" >&2
+                    exit 1
+                fi
+                ;;
+            nemotron-nemo)
+                if [ "${STT_MAX_ACTIVE_JOBS:-}" != "1" ] || \
+                    [ "${STT_NUM_IDLE_PROCESSES:-}" != "1" ] || \
+                    [ -z "${NEMO_RUNTIME_BASE_URL:-}" ] || \
+                    [ -z "${NEMO_RUNTIME_MODEL:-}" ] || \
+                    [ -z "${NEMO_RUNTIME_REQUEST_TIMEOUT_SECONDS:-}" ] || \
+                    [ -z "${NEMO_RUNTIME_CONNECT_TIMEOUT_SECONDS:-}" ]; then
+                    echo "$profile nemotron-nemo env profile mismatch" >&2
                     exit 1
                 fi
                 ;;
