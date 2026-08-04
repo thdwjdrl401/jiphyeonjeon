@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import io
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 import pytest
+from PIL import Image
 
 from app.application import (
     DeleteAnnotationSnapshot,
@@ -41,8 +43,8 @@ def _snapshot(**overrides: object) -> AnnotationSnapshot:
 
 
 class ImageStore:
-    def __init__(self, image: bytes = b"png-bytes") -> None:
-        self.image = image
+    def __init__(self, image: bytes | None = None) -> None:
+        self.image = _png(800, 600) if image is None else image
         self.reads: list[UUID] = []
 
     async def read_annotation_image(self, asset_id: UUID) -> bytes:
@@ -55,12 +57,20 @@ class Reader:
         self.text = text
         self.error = error
         self.calls = 0
+        self.images: list[bytes] = []
 
     async def read(self, image: bytes) -> str:
         self.calls += 1
+        self.images.append(image)
         if self.error is not None:
             raise self.error
         return self.text
+
+
+def _png(width: int, height: int) -> bytes:
+    buffer = io.BytesIO()
+    Image.new("RGB", (width, height), color=(10, 20, 30)).save(buffer, format="PNG")
+    return buffer.getvalue()
 
 
 class EmbeddingModel:
@@ -123,7 +133,7 @@ async def test_trusts_the_interpretation_spring_already_has() -> None:
 async def test_reads_the_image_only_when_spring_sent_no_interpretation(
     interpreted_text: str | None,
 ) -> None:
-    image_store = ImageStore(b"snapshot-png")
+    image_store = ImageStore()
     reader = Reader("모델이 읽은 텍스트")
     use_case, storage = _use_case(image_store=image_store, reader=reader)
     snapshot = _snapshot(interpreted_text=interpreted_text)
@@ -134,6 +144,28 @@ async def test_reads_the_image_only_when_spring_sent_no_interpretation(
     assert record.text_origin == "MODEL"
     assert reader.calls == 1
     assert image_store.reads == [snapshot.asset_id]
+
+
+async def test_oversized_crops_reach_the_model_already_downscaled() -> None:
+    """Vision billing is per tile, so the long edge is capped before the call (ADR-0043 §7)."""
+    image_store = ImageStore(_png(3_136, 1_568))
+    reader = Reader()
+    use_case, _ = _use_case(image_store=image_store, reader=reader)
+
+    await use_case.execute(_snapshot(interpreted_text=None))
+
+    with Image.open(io.BytesIO(reader.images[0])) as sent:
+        assert sent.size == (1_568, 784)
+
+
+async def test_a_crop_within_budget_reaches_the_model_untouched() -> None:
+    original = _png(800, 600)
+    reader = Reader()
+    use_case, _ = _use_case(image_store=ImageStore(original), reader=reader)
+
+    await use_case.execute(_snapshot(interpreted_text=None))
+
+    assert reader.images[0] is original
 
 
 async def test_preserves_the_timeline_anchor_and_scope_on_the_stored_record() -> None:

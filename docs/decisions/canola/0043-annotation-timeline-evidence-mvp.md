@@ -172,9 +172,13 @@ v1·v2 `answer.done.sources` union에 additive로 추가한다. 기존 member는
 
 ### 7. 이미지 입력 상한 (0074 열린 질문 4의 답)
 
-- PNG, **최대 4MB** — 워커가 다운로드 시 Content-Length·실수신 바이트로 강제.
-- 권장 해상도: 긴 변 1,568px 이하(vision 모델 토큰 효율 기준). 초과 시 거부하지 않고
-  워커가 다운스케일한다.
+- PNG, **최대 4MB** — 워커가 다운로드 시 Content-Length와 실수신 바이트 양쪽으로 강제한다
+  (Content-Length가 없거나 거짓이어도 무한 읽기가 되지 않는다).
+- 긴 변 **1,568px** 초과분은 거부하지 않고 워커가 종횡비를 유지해 축소한 뒤 모델에 보낸다.
+  강사가 이미 확인한 근거를 비용 때문에 버리지 않으면서 vision tile 과금을 제한한다.
+  이미 한도 안이면 재인코딩하지 않고 원본 bytes를 그대로 쓴다.
+- 디코드·축소는 동기 CPU 작업이라 event loop 밖(`asyncio.to_thread`)에서 실행하고,
+  5천만 픽셀을 넘는 입력은 decompression bomb으로 보고 거부한다.
 
 ## MVP에서 하지 않는 것
 

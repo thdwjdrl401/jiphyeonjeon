@@ -476,7 +476,13 @@ Content-Type: application/json
 
 `assetId`로 §9.3과 **같은** `POST /api/internal/ai/materials/download-url`을 호출해 갓 서명된
 presigned GET을 받는다. 판서 전용 경로를 새로 만들지 않는다. 허용 media type과 크기 상한만 자료와
-다르다 — PNG, 최대 4 MiB이며 긴 변 1,568px을 넘으면 거부하지 않고 워커가 다운스케일한다.
+다르다 — `image/png`(또는 `application/octet-stream`), 최대 4 MiB다. 상한은 `Content-Length`와
+실수신 bytes 양쪽에서 강제하므로 header가 없거나 거짓이어도 무한 읽기가 되지 않는다.
+
+긴 변이 1,568px을 넘으면 거부하지 않고 종횡비를 유지해 축소한 뒤 모델에 보낸다. 강사가 이미 확인한
+근거를 비용 때문에 버리지 않으면서 vision tile 과금을 제한하기 위해서다. 한도 안의 이미지는
+재인코딩하지 않고 원본 bytes를 그대로 전달한다. 디코드·축소는 `asyncio.to_thread`에서 실행하며
+5천만 픽셀을 넘는 입력은 decompression bomb으로 거부한다.
 
 ### 11.3 결과 callback
 

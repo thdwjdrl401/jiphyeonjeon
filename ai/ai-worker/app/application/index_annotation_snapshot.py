@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from app.domain import (
@@ -11,6 +12,7 @@ from app.domain import (
     AnnotationTextOrigin,
     EmbeddingContractError,
 )
+from app.ingestion import downscale_annotation_image
 from app.ports import (
     AnnotationImageStore,
     AnnotationIndexStorage,
@@ -82,6 +84,9 @@ class IndexAnnotationSnapshot:
                 "annotation snapshot has no interpretedText and no reader is configured"
             )
         image = await self._image_store.read_annotation_image(snapshot.asset_id)
+        # Pillow decode/resize is synchronous CPU work; keep it off the event loop so one
+        # oversized crop cannot stall the worker's other I/O.
+        image = await asyncio.to_thread(downscale_annotation_image, image)
         text = (await self._reader.read(image)).strip()
         if not text:
             raise AnnotationIngestionError("annotation image produced no text")
