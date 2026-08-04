@@ -6,7 +6,12 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from app.captions import CaptionCompleted
-from app.lecture_notes.models import LectureNote, LectureNoteEvent, LectureNoteWindow
+from app.lecture_notes.models import (
+    LectureNote,
+    LectureNoteDraft,
+    LectureNoteEvent,
+    LectureNoteWindow,
+)
 
 
 class _CheckpointModel(BaseModel):
@@ -44,6 +49,8 @@ class LectureNoteSessionCheckpoint(_CheckpointModel):
     lessonId: str
     accumulator: WindowAccumulatorCheckpoint
     note: LectureNote = LectureNote()
+    # version 1의 optional 필드로 추가해 구 JSON은 기본값으로 읽고 service에서 승격한다.
+    draft: LectureNoteDraft = LectureNoteDraft()
     pending: LectureNoteWorkCheckpoint | None = None
     inFlight: LectureNoteWorkCheckpoint | None = None
     outbox: LectureNoteEvent | None = None

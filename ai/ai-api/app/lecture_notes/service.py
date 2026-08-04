@@ -11,17 +11,25 @@ from app.lecture_notes.models import (
     LectureNote,
     LectureNoteCaptureCompleted,
     LectureNoteChunkAppended,
+    LectureNoteDecisionAction,
+    LectureNoteDraft,
+    LectureNoteDraftItem,
+    LectureNoteDraftItemType,
+    LectureNoteDraftModelRequest,
+    LectureNoteDraftTopic,
     LectureNoteEvent,
-    LectureNoteModelRequest,
+    LectureNoteModelResult,
     LectureNoteRefinedSnapshot,
     LectureNoteRefinedTopic,
     LectureNoteRefinementRequest,
     LectureNoteRefinementResult,
+    LectureNoteTopic,
+    LectureNoteTopicStatus,
     LectureNoteWindow,
     TopicAction,
 )
 from app.lecture_notes.ports import (
-    LectureNoteModel,
+    LectureNoteDraftModel,
     LectureNoteRefinementModel,
     LectureNoteStateStore,
 )
@@ -30,13 +38,18 @@ from app.lecture_notes.recovery import (
     LectureNoteWorkCheckpoint,
 )
 from app.lecture_notes.reducer import (
+    apply_draft_update,
     apply_model_result,
+    draft_item_identity,
     render_markdown_fragment,
     render_refined_markdown,
 )
 from app.lecture_notes.windowing import LectureNoteWindowAccumulator
 
 logger = logging.getLogger(__name__)
+
+_MAX_DRAFT_ITEMS_PER_TOPIC = 12
+_MAX_LIVE_KEY_POINTS = 3
 
 
 @dataclass(slots=True)
@@ -81,7 +94,10 @@ class _PendingBatch:
 @dataclass(slots=True)
 class _SessionState:
     lesson_id: str
+    # 기존 Redis append 계약에 이미 발행한 projection이다.
     note: LectureNote = field(default_factory=LectureNote)
+    # 다음 모델 호출과 종료 정제에 사용하는 전체 구조화 원본이다.
+    draft: LectureNoteDraft = field(default_factory=LectureNoteDraft)
     pending: _PendingBatch | None = None
     in_flight: _PendingBatch | None = None
     outbox: LectureNoteEvent | None = None
@@ -99,7 +115,7 @@ class LectureNoteService:
 
     def __init__(
         self,
-        model: LectureNoteModel,
+        model: LectureNoteDraftModel,
         store: LectureNoteStateStore,
         accumulator: LectureNoteWindowAccumulator,
         *,
@@ -153,6 +169,7 @@ class LectureNoteService:
             state = _SessionState(
                 lesson_id=checkpoint.lessonId,
                 note=checkpoint.note,
+                draft=_restore_draft(checkpoint.note, checkpoint.draft),
                 pending=_restore_work(checkpoint.pending),
                 in_flight=_restore_work(checkpoint.inFlight),
                 outbox=checkpoint.outbox,
@@ -287,10 +304,10 @@ class LectureNoteService:
         batch: _PendingBatch,
     ) -> bool:
         if batch.windows:
-            request = _model_request(state.note, batch.windows)
+            request = _draft_model_request(state.draft, batch.windows)
             self._metrics.model_calls_total += 1
             try:
-                result = await self._model.generate(request)
+                result = await self._model.generate_draft(request)
             except Exception as exc:
                 self._metrics.model_failures_total += 1
                 logger.warning(
@@ -306,8 +323,18 @@ class LectureNoteService:
             async with state.lock:
                 if state.in_flight is None or state.in_flight.operation_id != batch.operation_id:
                     return True
+                previous_draft = state.draft
+                updated_draft = apply_draft_update(previous_draft, result)
+                delta_result = _draft_delta_result(previous_draft, updated_draft)
+                state.draft = updated_draft
+                if delta_result is None:
+                    state.in_flight.windows.clear()
+                    if state.in_flight.completion is None:
+                        state.in_flight = None
+                    await self._save_checkpoint(session_id, state)
+                    return True
                 previous_note = state.note
-                updated_note = apply_model_result(previous_note, result)
+                updated_note = apply_model_result(previous_note, delta_result)
                 if updated_note == previous_note:
                     state.in_flight.windows.clear()
                     if state.in_flight.completion is None:
@@ -335,7 +362,7 @@ class LectureNoteService:
             return await self._commit_outbox(session_id, state)
 
     async def _process_refinement(self, session_id: str, state: _SessionState) -> bool:
-        if self._refinement_model is None or not state.note.topics:
+        if self._refinement_model is None or (not state.draft.topics and not state.note.topics):
             async with state.lock:
                 state.refinement_pending = False
                 state.refined = True
@@ -346,11 +373,16 @@ class LectureNoteService:
 
         self._metrics.refinement_calls_total += 1
         try:
+            refinement_note = (
+                _draft_to_legacy_note(state.draft, state.note.chunk_sequence)
+                if state.draft.topics
+                else state.note
+            )
             result = await self._refinement_model.refine(
                 LectureNoteRefinementRequest(
                     session_id=session_id,
                     lesson_id=state.lesson_id,
-                    note=state.note,
+                    note=refinement_note,
                 )
             )
         except Exception as exc:
@@ -430,6 +462,7 @@ class LectureNoteService:
             )
 
         state.note = final_state.note
+        state.draft = final_state.draft
         state.pending = final_state.pending
         state.in_flight = final_state.in_flight
         state.outbox = None
@@ -463,6 +496,7 @@ class LectureNoteService:
             lessonId=state.lesson_id,
             accumulator=accumulator,
             note=state.note,
+            draft=state.draft,
             pending=state.pending.to_checkpoint() if state.pending else None,
             inFlight=state.in_flight.to_checkpoint() if state.in_flight else None,
             outbox=state.outbox,
@@ -524,6 +558,48 @@ def _restore_work(checkpoint: LectureNoteWorkCheckpoint | None) -> _PendingBatch
     return None if checkpoint is None else _PendingBatch.from_checkpoint(checkpoint)
 
 
+def _restore_draft(note: LectureNote, draft: LectureNoteDraft) -> LectureNoteDraft:
+    if draft.topics or not note.topics:
+        return draft
+    topics: list[LectureNoteDraftTopic] = []
+    for topic_index, topic in enumerate(note.topics):
+        # 구 topic의 모든 요점을 보존하되 새 draft의 topic당 12개 상한에 맞춰 나눈다.
+        point_groups = tuple(
+            topic.key_points[start : start + _MAX_DRAFT_ITEMS_PER_TOPIC]
+            for start in range(0, len(topic.key_points), _MAX_DRAFT_ITEMS_PER_TOPIC)
+        )
+        for group_index, points in enumerate(point_groups, start=1):
+            is_last = topic_index == len(note.topics) - 1 and group_index == len(point_groups)
+            topics.append(
+                LectureNoteDraftTopic(
+                    topic_id=_legacy_topic_id(topic.topic_id, group_index),
+                    revision=1,
+                    status=(
+                        LectureNoteTopicStatus.ACTIVE
+                        if is_last
+                        else LectureNoteTopicStatus.FINALIZED
+                    ),
+                    title=topic.title,
+                    overview=topic.title,
+                    items=tuple(
+                        LectureNoteDraftItem(
+                            type=LectureNoteDraftItemType.FACT,
+                            content=point,
+                        )
+                        for point in points
+                    ),
+                )
+            )
+    return LectureNoteDraft(topics=tuple(topics), update_sequence=note.chunk_sequence)
+
+
+def _legacy_topic_id(topic_id: str, group_index: int) -> str:
+    if group_index == 1:
+        return topic_id
+    suffix = f"-part-{group_index}"
+    return f"{topic_id[: 128 - len(suffix)]}{suffix}"
+
+
 def _state_after_commit(
     state: _SessionState,
     event: LectureNoteEvent,
@@ -554,6 +630,7 @@ def _state_after_commit(
     return _SessionState(
         lesson_id=state.lesson_id,
         note=state.note,
+        draft=state.draft,
         pending=state.pending,
         in_flight=in_flight,
         outbox=None,
@@ -581,22 +658,83 @@ def _checkpoint_contains_event(
     )
 
 
-def _model_request(
-    note: LectureNote,
+def _draft_model_request(
+    draft: LectureNoteDraft,
     windows: list[LectureNoteWindow],
-) -> LectureNoteModelRequest:
-    current = note.topics[-1] if note.topics else None
-    previous = note.topics[-2] if len(note.topics) >= 2 else None
+) -> LectureNoteDraftModelRequest:
     latest = windows[-1]
-    return LectureNoteModelRequest(
+    return LectureNoteDraftModelRequest(
         session_id=latest.session_id,
         lesson_id=latest.lesson_id,
         stt_session_id=latest.stt_session_id,
-        current_topic_title=current.title if current is not None else None,
-        current_key_points=current.key_points if current is not None else (),
-        previous_topic_title=previous.title if previous is not None else None,
+        note=draft,
         previous_context=windows[0].previous_context,
         text="".join(window.text for window in windows),
+    )
+
+
+def _draft_delta_result(
+    previous: LectureNoteDraft,
+    updated: LectureNoteDraft,
+) -> LectureNoteModelResult | None:
+    if previous == updated:
+        return None
+    topic = updated.topics[-1]
+    starts_new_topic = len(updated.topics) > len(previous.topics)
+    if starts_new_topic:
+        changed_items = topic.items
+    else:
+        previous_items = {draft_item_identity(item): item for item in previous.topics[-1].items}
+        changed_items = tuple(
+            item for item in topic.items if previous_items.get(draft_item_identity(item)) != item
+        )
+    key_points = _pack_draft_items(changed_items)
+    if not key_points:
+        return None
+    return LectureNoteModelResult(
+        action=(
+            LectureNoteDecisionAction.START_NEW
+            if starts_new_topic
+            else LectureNoteDecisionAction.APPEND
+        ),
+        topicTitle=topic.title,
+        keyPoints=key_points,
+    )
+
+
+def _pack_draft_items(items: tuple[LectureNoteDraftItem, ...]) -> tuple[str, ...]:
+    packed: list[str] = []
+    for item in items:
+        text = _draft_item_text(item)
+        combined = f"{packed[-1]} · {text}" if packed else text
+        if packed and len(combined) <= 300:
+            packed[-1] = combined
+        elif len(packed) < _MAX_LIVE_KEY_POINTS:
+            packed.append(text)
+        else:
+            # append 계약의 상한만 적용하며 나머지 item은 draft와 종료 정제에 남는다.
+            break
+    return tuple(packed)
+
+
+def _draft_item_text(item: LectureNoteDraftItem) -> str:
+    if item.label is None:
+        return item.content
+    labeled = f"{item.label}: {item.content}"
+    return labeled if len(labeled) <= 300 else item.content
+
+
+def _draft_to_legacy_note(draft: LectureNoteDraft, chunk_sequence: int) -> LectureNote:
+    return LectureNote(
+        topics=tuple(
+            LectureNoteTopic(
+                topic_id=topic.topic_id,
+                title=topic.title,
+                key_points=tuple(_draft_item_text(item) for item in topic.items),
+            )
+            for topic in draft.topics
+        ),
+        chunk_sequence=chunk_sequence,
     )
 
 

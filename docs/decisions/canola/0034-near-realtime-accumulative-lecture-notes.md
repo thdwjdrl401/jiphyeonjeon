@@ -303,6 +303,344 @@ smoke에서 두 ACK topic을 하나로 합친 유효 구조화 JSON 응답을 �
 `refinementPending` 또는 outbox를 유지하고 ai-api 재시작 때 이어서 처리한다. 따라서 재시작 없는
 same-process retry, 최대 시도 횟수와 backoff, 장기 실패 세션 정리는 이번 단계에서 보장하지 않는다.
 
+## 2026-08-03 실험 결과에 따른 활성 topic 갱신 전환
+
+> **상태**: 후속 구현 방향 채택, 순수 domain prototype 반영, wire 계약 반영 전. 이 절의 contract v2가
+> 구현되기 전까지 실제 wire는 위의 `lecture.note.chunk.appended` contract v1을 유지한다.
+
+실제 출력에서는 15~40초 window마다 최대 3개의 짧은 `keyPoints`를 만들고 이를 append-only bullet로
+렌더링하면서, 설명이 짧게 끊기고 bullet 수만 계속 늘어나는 문제가 확인됐다. 종료 후 정제도 이미 bullet로
+압축된 `draftTopics`만 받으므로 설명의 흐름과 사실 사이 관계를 충분히 복원하지 못한다. window를 단순히
+길게 늘리면 첫 노트와 갱신 지연만 커지고, append-only 출력이라는 원인은 남는다.
+
+따라서 caption window는 topic 판단과 새 정보 수집 단위로 유지하되, 사용자에게 보이는 노트의 갱신 단위는
+**현재 활성 topic 전체**로 바꾼다. 라이브 중에는 전체 강의 노트를 매 호출마다 재생성하지 않고 현재 topic만
+수정한다. 새 topic이 시작될 때는 같은 모델 호출에서 직전 topic을 한 번 정리해 확정하고 새 활성 topic을
+만든다.
+
+```text
+caption window
+  → IGNORE: 상태와 event 변경 없음
+  → UPDATE_CURRENT: 현재 ACTIVE topic 내용 교체
+  → START_NEW: 현재 topic 정리·FINALIZED + 새 ACTIVE topic 생성
+  → capture completed: 마지막 ACTIVE topic 확정 + 종료 후 전체 정제
+```
+
+### 1. 모델 호출과 비용 경계
+
+모델 입력에는 전체 강의 원문이나 확정된 전체 topic 목록을 넣지 않는다. 다음 세 부분만 사용한다.
+
+- 현재 `ACTIVE` topic의 제한된 구조화 내용: title, overview, typed items
+- 직전 window의 마지막 1~2문장 문맥
+- 이번에 새로 들어온 caption window 묶음
+
+현재 topic의 `overview`와 `items`가 누적 지식의 working memory 역할을 한다. 모델은 기존 사실을 보존하면서
+새 window의 설명을 반영해 현재 topic 전체를 다시 작성한다. prompt 크기는 topic 하나의 구조화 내용으로
+제한하며, 이미 `FINALIZED`된 과거 topic과 전체 raw caption은 다시 보내지 않는다.
+
+정상 응답 기준 한 pending batch당 GMS 호출은 한 번이다. `START_NEW`에서도 이전 topic 정리 호출과 새 topic
+생성 호출을 분리하지 않고 한 응답으로 함께 받는다. schema validation 실패의 bounded retry는 허용하되 별도
+호출로 계측한다. 전체 노트 재생성, 확정 topic의 라이브 재검토, 전체 강의 원문 재전송은 하지 않는다.
+
+### 2. 모델 결과와 topic 상태
+
+내부 판단은 append 의미가 모호해지지 않도록 `IGNORE|UPDATE_CURRENT|START_NEW`로 바꾼다. 모델은 ID, revision,
+status를 정하지 않고 topic 내용만 반환하며, 이 세 값은 application service가 관리한다.
+
+```json
+{
+  "action": "START_NEW",
+  "currentTopic": {
+    "topicTitle": "Redis Consumer Group",
+    "overview": "Consumer Group은 여러 소비자가 하나의 Stream을 나누어 처리하도록 함. 처리 완료 여부는 ACK를 기준으로 추적함.",
+    "items": [
+      {
+        "type": "DEFINITION",
+        "label": "ACK",
+        "content": "상태 저장과 결과 발행까지 완료됐음을 확인하는 신호임"
+      },
+      {
+        "type": "MECHANISM",
+        "label": "메시지 분배",
+        "content": "각 메시지는 그룹 안의 한 소비자에게 전달됨"
+      }
+    ]
+  },
+  "newTopic": {
+    "topicTitle": "Pending 메시지 복구",
+    "overview": "ACK되지 않은 메시지는 Pending 상태로 남아 재처리 대상이 됨.",
+    "items": [
+      {
+        "type": "FACT",
+        "label": "Pending 상태",
+        "content": "ACK되지 않은 메시지가 Pending 목록에 남음"
+      }
+    ]
+  }
+}
+```
+
+결과 제약은 다음과 같다.
+
+- `IGNORE`: `currentTopic=null`, `newTopic=null`
+- `UPDATE_CURRENT`: 갱신한 현재 topic 전체를 `currentTopic`에 반환하고 `newTopic=null`
+- `START_NEW`: 기존 topic이 있으면 정리한 전체 내용을 `currentTopic`에, 새 topic 초안을 `newTopic`에 반환
+- 첫 topic 생성: `START_NEW`와 `currentTopic=null`을 사용
+- `topicTitle`: 2~80자 단일 행 명사구
+- `overview`: 기존 사실과 새 window를 연결한 2~4문장, 최대 2,000자
+- `items`: 중요도를 선별하지 않고 모든 비중복 정보를 역할별로 저장하며 topic당 1~12개, 각 content 최대 300자
+- item type: `DEFINITION|FACT|MECHANISM|PROCEDURE|EXAMPLE|CAUTION`
+- item label: `DEFINITION`은 필수이고 나머지는 필요할 때 사용하며, runtime 보존 검증의 임시 identity로 활용
+- `overview`와 item `content`: `~습니다/~합니다/~입니다`체를 금지하고 `~함/~됨/~있음/~필요` 형태의
+  간결한 명사형 서술을 사용
+- 기존 item은 같은 사실을 합치는 경우 외에는 삭제하지 않는다. 최대 12개 제한과 기존 identity 보존을 함께
+  적용하므로 12개가 찬 topic에는 새 identity를 추가할 수 없고 `START_NEW` 재작성을 요구한다. 동일 identity를
+  유지하는 제목·overview·content 정리는 허용한다.
+
+application state의 topic은 다음 의미를 가진다.
+
+```text
+topicId          세션 안에서 변하지 않는 식별자
+topicRevision    같은 topic 내용이 교체될 때마다 1 증가
+status           ACTIVE | FINALIZED
+title            현재 제목
+overview         설명 흐름을 가진 표시용 본문
+items            type·label·content로 분류한 비중복 강의 정보의 의미상 정본
+```
+
+세션에는 `ACTIVE` topic을 최대 하나만 둔다. `UPDATE_CURRENT`는 같은 `topicId`의 revision을 올리고,
+`START_NEW`는 현재 topic을 `FINALIZED`로 바꾼 뒤 새 `topicId`, revision 1의 `ACTIVE` topic을 만든다.
+`FINALIZED`된 topic은 라이브 중 다시 열지 않으며, 잘못된 merge/split은 종료 후 refined snapshot에서만
+교정한다.
+
+### 3. Redis 결과는 변경 topic 묶음 upsert로 발행한다
+
+contract v1의 `lecture.note.chunk.appended`와 `markdownFragment`는 과거 내용을 교체할 수 없으므로 목표 UX를
+표현하지 못한다. 후속 contract v2에서는 한 모델 호출로 변경된 topic 1~2개를 하나의 event에 담는
+`lecture.note.draft.updated`를 사용한다.
+
+```json
+{
+  "contractVersion": "2",
+  "type": "lecture.note.draft.updated",
+  "eventId": "evt-...",
+  "sessionId": "...",
+  "lessonId": "...",
+  "sttSessionId": "...",
+  "updateSequence": "4",
+  "latestSttSequence": "128",
+  "topics": [
+    {
+      "topicId": "topic-1",
+      "topicRevision": "3",
+      "status": "FINALIZED",
+      "topicTitle": "Redis Consumer Group",
+      "overview": "Consumer Group은 여러 소비자가 하나의 Stream을 나누어 처리하도록 함.",
+      "items": [
+        {
+          "type": "DEFINITION",
+          "label": "ACK",
+          "content": "상태 저장과 결과 발행까지 완료됐음을 확인하는 신호임"
+        }
+      ]
+    },
+    {
+      "topicId": "topic-2",
+      "topicRevision": "1",
+      "status": "ACTIVE",
+      "topicTitle": "Pending 메시지 복구",
+      "overview": "ACK되지 않은 메시지는 Pending 상태로 남음.",
+      "items": [
+        {
+          "type": "FACT",
+          "label": "Pending 상태",
+          "content": "ACK되지 않은 메시지가 Pending 목록에 남음"
+        }
+      ]
+    }
+  ],
+  "occurredAt": "2026-08-03T12:00:30+09:00"
+}
+```
+
+`UPDATE_CURRENT` event에는 같은 topic의 새 snapshot 하나를, `START_NEW` event에는 확정된 이전 topic과 새
+활성 topic 두 개를 순서대로 담는다. Backend는 `eventId`로 event 중복을 제거하고, 저장된
+`topicRevision`보다 큰 snapshot만 topic 단위로 교체한다. 한 event에 전환 결과를 함께 넣어 이전 topic만
+확정되고 새 topic은 보이지 않는 중간 상태를 만들지 않는다.
+
+Markdown은 모델이 직접 만들지 않고 구조화 topic에서 결정론적으로 렌더링한다.
+
+```md
+## Redis Consumer Group
+
+Consumer Group은 여러 소비자가 하나의 Stream을 나누어 처리하도록 함. 처리 완료 여부는 ACK를 기준으로
+추적함.
+
+### 개념
+
+- **ACK** — 상태 저장과 결과 발행까지 완료됐음을 확인하는 신호임
+```
+
+renderer는 존재하는 item type만 `개념/사실/동작 원리/처리 순서/예시/주의사항` section으로 만든다. live read
+model은 topic upsert로 갱신하고,
+종료 후 `lecture.note.refined.snapshot`은 전체 topic을 교체하는 기존 역할을 유지한다. contract v2의 정확한
+field 제한·ACK·순서 규칙은 producer 구현과 함께 `docs/CONTRACT.md` 및 Spring DTO에 동반 반영한다.
+
+### 4. checkpoint와 구현 순서
+
+기존 pending, in-flight, outbox 복구 경계는 유지하되 checkpoint의 note를 새 topic 구조로 바꾼다. outbox에는
+재전송해도 같은 `eventId`, `updateSequence`, topic revision과 payload가 유지되는
+`lecture.note.draft.updated` 전체를 저장한다.
+
+구현은 다음 순서로 제한한다.
+
+1. 순수 topic model·reducer·Markdown renderer를 `overview`, typed items, revision, status 기반으로 변경한다.
+2. GMS prompt v3와 응답 validation을 추가하고 고정 강의 샘플로 기존 방식과 A/B 평가한다.
+3. checkpoint migration과 `lecture.note.draft.updated` outbox·Redis publisher를 구현한다.
+4. 공유 계약과 Spring consumer/read model을 함께 변경한다.
+5. Frontend에서 같은 `topicId`가 갱신되는 모습과 topic 전환을 확인한다.
+
+첫 A/B 평가는 topic 분리 action 정확도뿐 아니라 다음을 기록한다.
+
+- topic당 평균 overview 길이와 item 수·type 분포
+- 기존 사실 보존과 새 사실 반영 여부
+- overview와 items의 의미 중복
+- `START_NEW`에서 이전 topic의 문장 완결성과 새 topic 오염 여부
+- 호출당 입력·출력 token, latency, 세션 전체 호출 횟수
+
+### 5. 2,081자 고정 강의문 1차 A/B 결과
+
+2026-08-03에 `gpt-4.1`, temperature 0, 동일한 7개 caption window로 현재 append 방식과 활성 topic 갱신
+prototype을 실제 호출했다. 입력 정본은 `ai/ai-api/scripts/lecture_note_active_topic_sample.json`이며 비교
+도구는 `ai/ai-api/scripts/compare_active_topic_notes.py`다.
+
+| 항목 | contract v1 append | 활성 topic prototype |
+|---|---:|---:|
+| window | 7 | 7 |
+| 실제 GMS request | 7 | 11 |
+| schema 재작성 request | 0 | 4 |
+| 최종 topic | 4 | 2 |
+| 최종 bullet | 21 | 10 |
+| 전체 latency | 11,659ms | 28,488ms |
+
+활성 topic 결과는 제목·설명 문단·소수 핵심 요점 구조로 읽기 쉬워졌고 bullet 나열을 줄였다. 반면 Stream,
+Consumer Group, ACK, checkpoint, 증분 event 계약을 하나의 넓은 topic으로 합치는 미분할이 발생했고, topic을
+거듭 교체하는 과정에서 ACK와 checkpoint의 일부 세부 내용이 최종 snapshot에서 사라졌다. 또한 모델이 최대
+5개인 `keyPoints`를 최대 9개까지 반환해 7개 window 중 4개에서 한 번의 schema 재작성이 필요했다.
+
+따라서 활성 topic 갱신 방향은 유지하되 GMS adapter와 runtime wire 전 다음 두 경계를 먼저 보강한다.
+
+- 1차 prototype에서는 새 발화가 독립된 이름을 가지거나 `summary·keyPoints` 제한 안에서 기존 사실을
+  보존할 수 없으면
+  `START_NEW`를 선택하도록 topic 용량 경계를 prompt에 추가한다.
+- 기존 사실 삭제 금지를 명시하고, 가능한 structured schema 지원 여부를 확인한다. 지원되지 않으면 schema
+  validation 실패에 한해 bounded retry하며 최초 위반과 추가 request를 metric으로 남긴다.
+
+이 한 샘플만으로 prompt를 확정하지 않는다. topic 미분할과 기존 사실 유실을 고정 평가 항목으로 추가한 뒤
+서로 다른 강의 샘플에서 재확인한다.
+
+### 6. 역할 기반 items와 명사형 문체 2차 A/B 결과
+
+1차 결과의 주관적인 `keyPoints` 선별과 최대 5개 제한을 제거하고 `overview`와 역할 기반 `items`로 같은
+강의문을 다시 평가했다. GMS의 Pydantic structured output을 사용해 JSON 중첩·enum·개수 제약을 생성 단계에서
+강제했으며, `overview`와 `content`의 모든 문장은 `~함/~됨/~임/~음/~필요` 계열 명사형 종결인지
+validation에서 확인했다.
+
+| 항목 | contract v1 append | 역할 기반 활성 topic |
+|---|---:|---:|
+| window | 7 | 7 |
+| 실제 GMS request | 7 | 8 |
+| schema 재작성 request | 0 | 0 |
+| semantic 재작성 request | 0 | 1 |
+| 최종 topic | 4 | 4 |
+| 최종 정보 항목 | bullet 21 | typed item 33 |
+| 전체 latency | 10,131ms | 34,491ms |
+| 명사형 문체 위반 | 측정 안 함 | 0 |
+
+typed item 33개는 `DEFINITION 2`, `FACT 13`, `MECHANISM 5`, `PROCEDURE 5`, `EXAMPLE 2`,
+`CAUTION 6`으로 분류됐다. Stream 기본, Consumer Group·ACK, checkpoint·증분 발행, 노트 품질 관리가
+각각 독립 topic으로 나뉘었고, 1차에서 사라졌던 ACK 경계와 checkpoint 세부 정보도 최종 결과에 남았다.
+Markdown은 `핵심 내용`이라는 단일 section 대신 실제로 존재하는 정보 역할의 section만 렌더링했다.
+
+세 번째 topic이 12개 item으로 찬 뒤에도 모델이 `UPDATE_CURRENT`를 선택한 첫 결과에서는 마지막 content가
+제한 길이에 맞춰 중간에서 잘렸다. 이를 prompt 권고만으로 두지 않고 application validation에서 거부한 뒤
+한 번 재작성하자 네 번째 topic이 생성되고 정보가 온전히 분리됐다. 기존 item 보존은 MVP에서
+`type + label` identity로 검사하며, label이 없는 item만 정규화 content를 사용한다. 안정적인 `itemId`와
+항목별 patch는 실제 runtime 결과에서 label 변경 문제가 확인될 때 도입한다.
+
+따라서 역할 기반 구조, 명사형 문체, structured output, 12개 capacity guard를 다음 runtime prototype의
+기준으로 채택한다. 다만 append 방식보다 latency가 약 3배이고 출력량이 커졌으므로 여러 강의 샘플에서 정보
+중복과 비용을 다시 측정한 뒤 wire contract를 확정한다.
+
+이번 전환에서 매 호출 전체 노트 재생성, 확정 topic의 라이브 재작성, raw caption 전체 보관·재입력,
+라이브 자동 merge/split, 별도 vector 검색은 구현하지 않는다.
+
+### 7. 정보 타입 수 3차 A/C 비교
+
+역할 6개를 미리 정한 구조가 Redis 예시에 과적합됐는지 확인하기 위해 상세 타입 A와 최소 타입 C를 비교했다.
+
+- A: `DEFINITION|FACT|MECHANISM|PROCEDURE|EXAMPLE|CAUTION`
+- C: `CONCEPT|EXPLANATION|EXAMPLE|CAUTION`
+
+입력은 수학 수식·풀이, 역사 인과, 기술 비교, 과학 실험 절차, 인문 논증, 반복·미완성 STT,
+언어 규칙·예외, 통계 해석의 8개 고정 샘플로 구성했다. 각 샘플은 실제 누적 갱신과 같은 4개 window로
+나눴다. 두 후보는 같은 `gpt-4.1`, temperature 0 조건에서 생성했다. 호출·재시도·상태 전이·중복 제거·
+Markdown 안전 처리는 공통 실험 엔진을 사용하고, 공통 prompt template에서 타입 이름과 설명만 다르게
+구성했다. 후보 이름을 숨기고 샘플마다 제시 순서를 교차한 평가로
+정확성·누락·중복·구조·가독성·topic 경계를 각각 5점 척도로 비교했다.
+
+| 항목 | A 상세 6타입 | C 최소 4타입 |
+|---|---:|---:|
+| 선호 샘플 | 4/8 | 3/8 |
+| 동점 | 1/8 | 1/8 |
+| 평균 평가 합계 | 27.88/30 | 28.62/30 |
+| 평균 topic 수 | 2.12 | 2.25 |
+| 평균 item 수 | 15.38 | 15.75 |
+| 평균 latency | 14,965.25ms | 13,926.62ms |
+| 기존 item 유실 | 0 | 0 |
+| 전체 재작성 request | 0 | 0 |
+
+A는 수학, 역사 인과, TCP·UDP 비교, 언어 규칙 샘플에서 선호됐다. 정의·동작 원리·예시·주의사항처럼
+역할이 분명한 정보를 빠짐없이 찾고 구분하는 데 유리했다. 특히 언어 샘플에서 C는 완료·결과 용법의 예시와
+`just` 위치를 빠뜨렸다. C는 과학 실험, 인문 논증, 통계 해석에서 선호됐고, 역할이 겹치는 설명을 덜
+인위적으로 분류했다. 반복·미완성 STT 샘플은 두 후보 모두 반복과 운영 안내를 제외하고 실제 주제 전환을
+보존해 동점이었다.
+
+C는 A보다 평균 점수와 latency가 소폭 나았지만 선호 샘플 수는 적었고, 평균 item 수는 오히려 0.37개
+많았다. 따라서 타입 수를 줄이는 것만으로 bullet 과다나 정보 선택 문제가 해결되지는 않는다. 타입 수보다
+같은 설명을 몇 개의 학습 단위로 합칠지, 예시·예외를 언제 반드시 보존할지가 다음 품질 실험의 핵심이다.
+
+실험 중 `~함/~됨/~임`처럼 열거한 종결만 허용하는 검증은 `함수의 순간 변화율` 같은 자연스러운 명사구도
+거부해 출력 문체를 특정 예시에 맞추는 문제가 확인됐다. 따라서 note 문체 검증은 허용 어미 목록이 아니라
+`~니다/~한다/~해요` 같은 명확한 문장체 종결만 거부하는 휴리스틱으로 완화하고, prompt에는
+`~함/~있음`과 명사구를 모두 예시로 든다. `캐나다`, `사이다`처럼 `다`로 끝나는 명사구는 허용한다.
+
+A와 C 어느 쪽도 지배적이지 않지만 C는 item 수를 줄이지 못했고 일부 예시·예외를 누락했다. 따라서 이미
+정보 보존 경계를 검증한 A를 runtime 기준으로 채택한다. 선택하지 않은 C schema와 비교 전용 실행 코드는
+결정 후 제거하며 wire contract는 변경하지 않는다. 실험 결과는 이 ADR과 브랜치의 비교 커밋에 보존한다.
+다음 품질 개선에서는 타입 수를 다시 바꾸기보다 topic당 정보 밀도와 필수 예시·예외 보존 규칙을 먼저
+조정한다.
+
+### 8. A안 runtime 연결
+
+ai-api의 live 모델 port를 기존 `topicTitle + keyPoints` 결과에서 A안의 활성 topic 전체 snapshot으로
+전환한다. GMS는 `IGNORE|UPDATE_CURRENT|START_NEW`와 6타입 item을 structured output으로 반환하고,
+application reducer가 현재 draft의 전이·12개 용량·기존 item 보존을 검증한다. schema 또는 전이 검증 실패는
+같은 호출 경계에서 한 번만 재작성한다.
+
+세션 checkpoint에는 Spring에 발행한 append note와 별도로 역할 기반 draft 전체를 저장한다. 재시작 후에는
+복원한 draft를 다음 GMS 요청에 다시 사용한다. 새 draft 필드가 없는 기존 checkpoint는 마지막 topic을
+`ACTIVE`, 앞선 topic을 `FINALIZED`로 승격하고 기존 key point를 `FACT` item으로 보존한다. 종료 정제도
+append event에 실린 최대 3개 요점이 아니라 draft의 모든 item을 입력으로 사용한다.
+
+기존 `lecture.note.chunk.appended` 계약은 유지한다. `UPDATE_CURRENT`에서 새로 추가되거나 내용이 변경된
+item만 최대 3개 `keyPoints`와 `markdownFragment`로 변환하고, overview만 바뀌면 event와
+`chunkSequence`를 만들지 않는다. 세 개를 넘는 item은 live event에서 생략될 수 있지만 checkpoint와 종료
+정제에서는 보존한다. 이 제한을 없애려면 Spring 소비 계약의 replace/patch 의미가 먼저 합의돼야 한다.
+
+역할 기반 topic 전체 응답이 512 token을 넘는 실제 사례가 확인됐으므로 ai-api와 EC2 Compose의 live 출력
+상한을 4,096 token으로 맞춘다. FE·Spring 코드, Redis event field, 상태코드는 변경하지 않는다.
+
 ## MVP에서 하지 않는 것
 
 - `caption.segment.final` 신규 계약

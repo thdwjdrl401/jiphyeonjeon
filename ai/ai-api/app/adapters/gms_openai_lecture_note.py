@@ -6,14 +6,19 @@ import time
 from typing import Literal
 
 from openai import AsyncOpenAI
+from pydantic import ValidationError
 
 from app.adapters.gms_openai_answer import GMS_OPENAI_BASE_URL
 from app.lecture_notes import (
+    LectureNoteDraftModelRequest,
+    LectureNoteDraftUpdateResult,
     LectureNoteModelRequest,
     LectureNoteModelResult,
     LectureNoteRefinementRequest,
     LectureNoteRefinementResult,
 )
+from app.lecture_notes.prompts import ACTIVE_TOPIC_SYSTEM_PROMPT
+from app.lecture_notes.reducer import validate_draft_update
 
 logger = logging.getLogger(__name__)
 
@@ -89,20 +94,19 @@ class GmsOpenAILectureNoteModel:
             else refinement_max_output_tokens
         )
         self._refinement_max_prompt_chars = (
-            max_prompt_chars
-            if refinement_max_prompt_chars is None
-            else refinement_max_prompt_chars
+            max_prompt_chars if refinement_max_prompt_chars is None else refinement_max_prompt_chars
         )
         self._refinement_timeout_seconds = (
-            timeout_seconds
-            if refinement_timeout_seconds is None
-            else refinement_timeout_seconds
+            timeout_seconds if refinement_timeout_seconds is None else refinement_timeout_seconds
         )
-        if min(
-            self._refinement_max_output_tokens,
-            self._refinement_max_prompt_chars,
-            self._refinement_timeout_seconds,
-        ) <= 0:
+        if (
+            min(
+                self._refinement_max_output_tokens,
+                self._refinement_max_prompt_chars,
+                self._refinement_timeout_seconds,
+            )
+            <= 0
+        ):
             raise ValueError("GMS lecture note refinement limits must be positive")
         self._owns_client = client is None
         self._client = client or AsyncOpenAI(
@@ -143,6 +147,81 @@ class GmsOpenAILectureNoteModel:
         if not content:
             raise ValueError("lecture note model returned empty content")
         return LectureNoteModelResult.model_validate_json(content)
+
+    async def generate_draft(
+        self,
+        request: LectureNoteDraftModelRequest,
+    ) -> LectureNoteDraftUpdateResult:
+        prompt = _draft_prompt_payload(request)
+        if len(prompt) > self._max_prompt_chars:
+            raise ValueError("lecture note draft prompt exceeds configured character limit")
+        messages = [
+            {"role": "system", "content": ACTIVE_TOPIC_SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ]
+        started_at = time.perf_counter()
+        repair_kind: Literal["schema", "semantic"] | None = None
+        # schema와 상태 전이 오류를 합쳐 재작성은 최대 한 번만 허용한다.
+        for attempt in range(2):
+            try:
+                response = await self._client.beta.chat.completions.parse(
+                    model=self._model,
+                    messages=messages,
+                    max_tokens=self._max_output_tokens,
+                    response_format=LectureNoteDraftUpdateResult,
+                    temperature=0,
+                )
+            except ValidationError:
+                if attempt == 1:
+                    raise
+                repair_kind = "schema"
+                messages.append({"role": "user", "content": _DRAFT_SCHEMA_REPAIR_PROMPT})
+                continue
+            if not response.choices:
+                raise ValueError("lecture note draft model returned no choices")
+            message = response.choices[0].message
+            content = message.content or ""
+            result = message.parsed
+            if result is None:
+                try:
+                    if not content:
+                        raise ValueError("lecture note draft model returned empty content")
+                    result = LectureNoteDraftUpdateResult.model_validate_json(content)
+                except (ValidationError, ValueError):
+                    if attempt == 1:
+                        raise
+                    repair_kind = "schema"
+                    if content:
+                        messages.append({"role": "assistant", "content": content})
+                    messages.append({"role": "user", "content": _DRAFT_SCHEMA_REPAIR_PROMPT})
+                    continue
+            try:
+                validate_draft_update(request.note, result)
+            except ValueError:
+                if attempt == 1:
+                    raise
+                repair_kind = "semantic"
+                if not content:
+                    content = result.model_dump_json()
+                messages.extend(
+                    (
+                        {"role": "assistant", "content": content},
+                        {"role": "user", "content": _draft_semantic_repair_prompt(request)},
+                    )
+                )
+                continue
+            latency_ms = round((time.perf_counter() - started_at) * 1_000)
+            logger.info(
+                "역할 기반 강의 노트 모델 호출 완료",
+                extra={
+                    "event": "lecture_note.draft_model_completed",
+                    "session_id": request.session_id,
+                    "latency_ms": latency_ms,
+                    "repair_kind": repair_kind,
+                },
+            )
+            return result
+        raise AssertionError("unreachable")
 
     async def refine(
         self,
@@ -198,6 +277,58 @@ def _prompt_payload(request: LectureNoteModelRequest) -> str:
         },
         ensure_ascii=False,
         separators=(",", ":"),
+    )
+
+
+_DRAFT_SCHEMA_REPAIR_PROMPT = (
+    "직전 응답이 JSON schema validation에 실패했습니다. overview와 모든 content를 "
+    "`~니다/~다/~해요`가 아닌 `~함/~있음` 또는 명사구 형태의 노트체로 고치고, "
+    "지정된 필드와 enum만 사용해 JSON object 하나를 다시 반환하세요."
+)
+
+
+def _draft_prompt_payload(request: LectureNoteDraftModelRequest) -> str:
+    active = request.note.topics[-1] if request.note.topics else None
+    return json.dumps(
+        {
+            "finalizedTopicTitles": [
+                topic.title for topic in request.note.topics if topic.status.value == "FINALIZED"
+            ][-3:],
+            "currentTopic": None
+            if active is None
+            else {
+                "topicTitle": active.title,
+                "overview": active.overview,
+                "items": [item.model_dump(mode="json") for item in active.items],
+            },
+            "previousContext": request.previous_context,
+            "lectureText": request.text,
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+
+
+def _draft_semantic_repair_prompt(request: LectureNoteDraftModelRequest) -> str:
+    active = request.note.topics[-1] if request.note.topics else None
+    if active is None:
+        state_rule = (
+            "현재 노트가 비어 있으므로 action=START_NEW, currentTopic=null로 두고 "
+            "새 내용을 newTopic에 넣으세요. "
+        )
+    elif len(active.items) >= 12:
+        state_rule = (
+            "현재 topic의 기존 item type과 label, 사실을 currentTopic에 유지하고 "
+            "action=START_NEW로 새 내용을 newTopic에 넣으세요. "
+        )
+    else:
+        state_rule = "기존 currentTopic의 모든 item type과 label, 사실을 유지하세요. "
+    return (
+        "직전 JSON이 현재 draft의 전이·보존 계약을 위반했습니다. 사실을 추가하거나 삭제하지 말고 "
+        "items를 최대 12개로 유지하며 action별 null 규칙을 지키세요. "
+        f"{state_rule}"
+        "overview와 content는 `~니다/~다/~해요`가 아닌 `~함/~있음` 또는 명사구 형태의 "
+        "노트체로 고쳐 JSON object 하나만 다시 반환하세요."
     )
 
 

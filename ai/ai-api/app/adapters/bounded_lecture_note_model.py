@@ -13,6 +13,8 @@ from typing import Literal, Protocol
 from openai import APIConnectionError, APIStatusError, APITimeoutError
 
 from app.lecture_notes import (
+    LectureNoteDraftModelRequest,
+    LectureNoteDraftUpdateResult,
     LectureNoteModelRequest,
     LectureNoteModelResult,
     LectureNoteRefinementRequest,
@@ -27,6 +29,11 @@ _RETRYABLE_STATUS_CODES = frozenset({408, 409, 429, 500, 502, 503, 504})
 
 class _LectureNoteDelegate(Protocol):
     async def generate(self, request: LectureNoteModelRequest) -> LectureNoteModelResult: ...
+
+    async def generate_draft(
+        self,
+        request: LectureNoteDraftModelRequest,
+    ) -> LectureNoteDraftUpdateResult: ...
 
     async def refine(
         self,
@@ -185,9 +192,7 @@ class _PriorityConcurrencyGate:
             "live_admissions_total": self._metrics.live_admissions_total,
             "refinement_admissions_total": self._metrics.refinement_admissions_total,
             "max_in_flight_observed": self._metrics.max_in_flight_observed,
-            "max_refinement_in_flight_observed": (
-                self._metrics.max_refinement_in_flight_observed
-            ),
+            "max_refinement_in_flight_observed": (self._metrics.max_refinement_in_flight_observed),
             "wait_ms_total": self._metrics.wait_ms_total,
             "wait_ms_max": self._metrics.wait_ms_max,
             "wait_ms_p50": _percentile(wait_samples, 0.50),
@@ -233,6 +238,15 @@ class BoundedLectureNoteModel:
 
     async def generate(self, request: LectureNoteModelRequest) -> LectureNoteModelResult:
         return await self._call_with_retry("live", lambda: self._delegate.generate(request))
+
+    async def generate_draft(
+        self,
+        request: LectureNoteDraftModelRequest,
+    ) -> LectureNoteDraftUpdateResult:
+        return await self._call_with_retry(
+            "live",
+            lambda: self._delegate.generate_draft(request),
+        )
 
     async def refine(
         self,

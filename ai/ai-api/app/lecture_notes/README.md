@@ -26,7 +26,7 @@ caption은 session checkpoint 저장 뒤 ACK하고, 모델 결과는 outbox 저�
 
 재시작 상태는 다음 두 key가 소유한다.
 
-- `ai:lecture-notes:mvp:state:{sessionId}`: partial text, note, 순번, pending/in-flight, outbox
+- `ai:lecture-notes:mvp:state:{sessionId}`: partial text, 역할 기반 draft, 발행 note, 순번, pending/in-flight, outbox
 - `ai:lecture-notes:mvp:active-sessions`: 시작 시 복원할 session ID 색인
 
 현재 [EC2 Compose](../../../../docker-compose.ai-prod.yml)는 ai-api 단일 replica를 전제로 한다. transaction은
@@ -45,9 +45,15 @@ AI는 live 중 내부 topic 상태를 모델 문맥과 중복 제거에 사용�
 구조화 요점만 발행한다. capture 완료 뒤 현재 구조화 draft만 한 번 정제해 별도 전체 snapshot을 발행한다.
 Spring consumer·DB·REST·WebSocket은 아직 미구현이다.
 
+내부 draft는 A안 6타입 `DEFINITION|FACT|MECHANISM|PROCEDURE|EXAMPLE|CAUTION`을 사용한다. GMS는
+현재 활성 topic 전체 snapshot을 반환하고 ai-api는 이를 checkpoint에 저장해 다음 window에 다시 전달한다.
+Redis의 기존 append 계약은 바꾸지 않으며 새로 추가·변경된 item을 최대 3개 요점으로 묶어 발행한다.
+라이브 event에 싣지 못한 item도 draft에는 남고 종료 정제 입력에는 전체가 포함된다.
+
 정제 모델 호출이나 결과 발행이 실패하면 `refinementPending` 또는 outbox checkpoint를 유지한다. 현재
-프로세스 안에서 자동 재시도하지 않고 ai-api 재시작 때 이어서 처리하며, bounded retry·backoff·최종 실패
-상태는 후속 범위다.
+일시적인 GMS 연결·상태 오류는 bounded retry하고 draft schema·전이 위반은 한 번 재작성한다. 그래도
+실패하거나 결과 발행이 실패하면 checkpoint를 유지해 ai-api 재시작 때 이어서 처리한다. 최종 실패 상태와
+실패 window 자동 복구는 후속 범위다.
 
 refined snapshot 발행과 caption completion ACK가 모두 끝나면 Redis checkpoint와 Python의 전체 세션
 상태를 해제한다. 같은 `sessionId`의 늦은 caption으로 세션이 다시 살아나지 않도록 accumulator에는 크기가
@@ -61,9 +67,10 @@ GMS adapter 앞의 process-local admission gate는 전체 호출 4개, refinemen
 운영 확인에는 `BoundedLectureNoteModel.metrics_snapshot()`의 `in_flight`, `queued_live`,
 `queued_refinement`, `wait_ms_p50/p95`, `retries_total`, `failures_total`을 사용한다.
 
-모델의 내부 action은 `IGNORE|APPEND|START_NEW`다. `IGNORE`는 operation만 완료하고 출력 event와
-`chunkSequence`를 만들지 않는다. `APPEND`는 wire의 `CONTINUE`로 변환하며, Unicode·연속 공백·끝
-문장부호·영문 대소문자까지만 정규화해 중복 요점을 거른다.
+모델의 내부 action은 `IGNORE|UPDATE_CURRENT|START_NEW`다. `IGNORE`는 operation만 완료하고 출력
+event와 `chunkSequence`를 만들지 않는다. `UPDATE_CURRENT`는 활성 topic snapshot을 교체한 뒤 새로
+추가·변경된 item이 있을 때만 wire의 `CONTINUE`로 변환한다. `START_NEW`는 이전 topic을 확정하고 새 활성
+topic을 만들며 wire의 `START_NEW`로 변환한다.
 
 Redis에 접속한 뒤 다음 값으로 생성 여부와 갱신 상태를 확인한다.
 
@@ -85,10 +92,16 @@ uv run --frozen --env-file ../.env python -m scripts.evaluate_lecture_note_promp
 이 결과에서 실제 `START_NEW` 과분할이 확인될 때만 한 window topic 전환 확인을 추가한다. 현재는 라이브
 지연을 늘리는 전환 보류를 구현하지 않았다.
 
+정보 타입 수는 수학·역사·기술·과학·인문·노이즈 STT·언어·통계의 고정 8개 샘플로 상세 6타입과 최소
+4타입을 비교했다. 상세 6타입이 4승, 최소 4타입이 3승, 1무였고 최소 타입은 item 수를 줄이지 못하면서
+예시·예외 누락이 확인됐다. 따라서 A안 상세 6타입만 runtime에 남기고 비교용 C안 구현은 제거했다.
+Redis 계약은 변경하지 않는다. 비교 결과와 확정 조건은
+[ADR-0034](../../../../docs/decisions/canola/0034-near-realtime-accumulative-lecture-notes.md)를 따른다.
+
 ## 현재 비범위
 
 - Spring·Frontend가 소비하는 API/DTO와 DB 영속화
 - Redis 자체 장애 내구성, multi-replica session owner, 다른 consumer의 pending claim
-- LLM bounded retry·최종 실패 상태와 VOD 기반 최종 교정·강사 검수
+- LLM 최종 실패 상태·실패 window 복구와 VOD 기반 최종 교정·강사 검수
 
 전체 비범위와 다음 완료 조건은 [ADR-0034의 MVP 범위와 검증](../../../../docs/decisions/canola/0034-near-realtime-accumulative-lecture-notes.md#mvp에서-하지-않는-것)을 따른다.
