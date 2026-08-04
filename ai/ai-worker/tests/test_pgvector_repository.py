@@ -2,6 +2,7 @@ import asyncio
 import os
 from collections.abc import AsyncIterator
 from dataclasses import replace
+from datetime import datetime, timezone
 from uuid import UUID
 
 import pytest
@@ -11,11 +12,19 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
+from app.adapters.pgvector_annotation_index import PgvectorAnnotationIndexRepository
 from app.adapters.pgvector_index import PgvectorIndexRepository
 from app.adapters.pgvector_key_term_storage import PgvectorKeyTermRepository
 from app.config import load_settings
 from app.database_urls import parse_async_database_url, parse_migration_database_url
-from app.domain import BGE_M3_DIMENSIONS, ChunkRecord, StagedMaterial, StaleMaterialVersionError
+from app.domain import (
+    BGE_M3_DIMENSIONS,
+    AnnotationIngestionError,
+    AnnotationRecord,
+    ChunkRecord,
+    StagedMaterial,
+    StaleMaterialVersionError,
+)
 from app.ingestion import KeyTerm
 from conftest import IntegrationDatabase
 
@@ -190,7 +199,7 @@ async def database_engine(
                 text(
                     """
                     TRUNCATE ai.chunk_embedding, ai.document_chunk, ai.material_version,
-                             ai.model_run, ai.job_run
+                             ai.model_run, ai.job_run, ai.annotation_snapshot
                     RESTART IDENTITY CASCADE
                     """
                 )
@@ -217,6 +226,17 @@ def key_term_repository(
     integration_database: IntegrationDatabase,
 ) -> PgvectorKeyTermRepository:
     return PgvectorKeyTermRepository(
+        database_engine,
+        runtime_role=integration_database.runtime_role,
+    )
+
+
+@pytest.fixture
+def annotation_repository(
+    database_engine: AsyncEngine,
+    integration_database: IntegrationDatabase,
+) -> PgvectorAnnotationIndexRepository:
+    return PgvectorAnnotationIndexRepository(
         database_engine,
         runtime_role=integration_database.runtime_role,
     )
@@ -906,3 +926,157 @@ async def test_resolve_active_scope_then_delete_job_removes_the_material(
     async with database_engine.connect() as connection:
         remaining = await connection.scalar(text("SELECT count(*) FROM ai.material_version"))
     assert remaining == 0
+
+
+def _annotation(
+    *,
+    snapshot_id: UUID,
+    text_value: str = "B+ tree 노드 분할 조건",
+    session_ms: int = 725_300,
+    first: float = 1.0,
+    text_origin: str = "SPRING",
+) -> AnnotationRecord:
+    return AnnotationRecord(
+        snapshot_id=snapshot_id,
+        asset_id=UUID("dddddddd-dddd-4ddd-8ddd-dddddddddddd"),
+        curriculum_id=CURRICULUM_ID,
+        lesson_id=LESSON_ID,
+        session_id=UUID("cccccccc-cccc-4ccc-8ccc-cccccccccccc"),
+        session_ms=session_ms,
+        captured_at=datetime(2026, 8, 4, 4, 20, 5, tzinfo=timezone.utc),
+        text=text_value,
+        text_origin=text_origin,  # type: ignore[arg-type]
+        embedding=tuple([first] + [0.0] * (BGE_M3_DIMENSIONS - 1)),
+    )
+
+
+ANNOTATION_SNAPSHOT_ID = UUID("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee")
+
+
+async def test_annotation_snapshot_is_stored_as_one_searchable_row(
+    annotation_repository: PgvectorAnnotationIndexRepository,
+    database_engine: AsyncEngine,
+) -> None:
+    await annotation_repository.upsert(_annotation(snapshot_id=ANNOTATION_SNAPSHOT_ID))
+
+    async with database_engine.connect() as connection:
+        row = (
+            (
+                await connection.execute(
+                    text(
+                        """
+                    SELECT session_ms, text, text_origin, state,
+                           search_vector IS NOT NULL AS indexed
+                    FROM ai.annotation_snapshot
+                    WHERE snapshot_id = :snapshot_id
+                    """
+                    ),
+                    {"snapshot_id": str(ANNOTATION_SNAPSHOT_ID)},
+                )
+            )
+            .mappings()
+            .one()
+        )
+
+    assert row["session_ms"] == 725_300
+    assert row["text"] == "B+ tree 노드 분할 조건"
+    assert row["text_origin"] == "SPRING"
+    assert row["state"] == "ACTIVE"
+    assert row["indexed"] is True
+
+
+async def test_reindexing_the_same_snapshot_replaces_it_instead_of_duplicating(
+    annotation_repository: PgvectorAnnotationIndexRepository,
+    database_engine: AsyncEngine,
+) -> None:
+    """snapshot_id is the idempotency key: a redelivered job must not double the evidence."""
+    await annotation_repository.upsert(
+        _annotation(snapshot_id=ANNOTATION_SNAPSHOT_ID, text_value="처음 해석")
+    )
+    await annotation_repository.upsert(
+        _annotation(
+            snapshot_id=ANNOTATION_SNAPSHOT_ID,
+            text_value="다시 읽은 해석",
+            session_ms=800_000,
+            text_origin="MODEL",
+        )
+    )
+
+    async with database_engine.connect() as connection:
+        rows = (
+            (
+                await connection.execute(
+                    text(
+                        "SELECT text, session_ms, text_origin FROM ai.annotation_snapshot "
+                        "WHERE snapshot_id = :snapshot_id"
+                    ),
+                    {"snapshot_id": str(ANNOTATION_SNAPSHOT_ID)},
+                )
+            )
+            .mappings()
+            .all()
+        )
+
+    assert len(rows) == 1
+    assert rows[0]["text"] == "다시 읽은 해석"
+    assert rows[0]["session_ms"] == 800_000
+    assert rows[0]["text_origin"] == "MODEL"
+
+
+async def test_withdrawing_a_snapshot_is_idempotent_and_keeps_the_row(
+    annotation_repository: PgvectorAnnotationIndexRepository,
+    database_engine: AsyncEngine,
+) -> None:
+    await annotation_repository.upsert(_annotation(snapshot_id=ANNOTATION_SNAPSHOT_ID))
+
+    await annotation_repository.mark_deleted(ANNOTATION_SNAPSHOT_ID)
+    await annotation_repository.mark_deleted(ANNOTATION_SNAPSHOT_ID)
+
+    async with database_engine.connect() as connection:
+        state = await connection.scalar(
+            text("SELECT state FROM ai.annotation_snapshot WHERE snapshot_id = :snapshot_id"),
+            {"snapshot_id": str(ANNOTATION_SNAPSHOT_ID)},
+        )
+    assert state == "DELETED"
+
+
+async def test_withdrawing_a_snapshot_that_was_never_indexed_succeeds(
+    annotation_repository: PgvectorAnnotationIndexRepository,
+) -> None:
+    await annotation_repository.mark_deleted(UUID("ffffffff-ffff-4fff-8fff-ffffffffffff"))
+
+
+async def test_reindexing_a_withdrawn_snapshot_brings_it_back(
+    annotation_repository: PgvectorAnnotationIndexRepository,
+    database_engine: AsyncEngine,
+) -> None:
+    """The instructor putting a highlight back must not need a new snapshot id."""
+    await annotation_repository.upsert(_annotation(snapshot_id=ANNOTATION_SNAPSHOT_ID))
+    await annotation_repository.mark_deleted(ANNOTATION_SNAPSHOT_ID)
+
+    await annotation_repository.upsert(_annotation(snapshot_id=ANNOTATION_SNAPSHOT_ID))
+
+    async with database_engine.connect() as connection:
+        state = await connection.scalar(
+            text("SELECT state FROM ai.annotation_snapshot WHERE snapshot_id = :snapshot_id"),
+            {"snapshot_id": str(ANNOTATION_SNAPSHOT_ID)},
+        )
+    assert state == "ACTIVE"
+
+
+@pytest.mark.parametrize(
+    "embedding",
+    [
+        tuple([1.0] * (BGE_M3_DIMENSIONS - 1)),
+        tuple([0.0] * BGE_M3_DIMENSIONS),
+        tuple([float("nan")] + [0.0] * (BGE_M3_DIMENSIONS - 1)),
+    ],
+)
+async def test_rejects_an_embedding_that_cannot_be_ranked(
+    annotation_repository: PgvectorAnnotationIndexRepository,
+    embedding: tuple[float, ...],
+) -> None:
+    record = replace(_annotation(snapshot_id=ANNOTATION_SNAPSHOT_ID), embedding=embedding)
+
+    with pytest.raises(AnnotationIngestionError):
+        await annotation_repository.upsert(record)

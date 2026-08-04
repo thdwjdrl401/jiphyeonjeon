@@ -18,6 +18,10 @@ _PPTX_MEDIA_TYPES = frozenset(
         "application/octet-stream",
     }
 )
+# Annotation snapshots go through the same endpoint but are PNG crops, not decks
+# (ADR-0043 §11.2).
+_ANNOTATION_MEDIA_TYPES = frozenset({"image/png", "application/octet-stream"})
+DEFAULT_ANNOTATION_IMAGE_MAX_BYTES = 4 * 1024 * 1024
 
 
 class SpringMaterialSourceError(RuntimeError):
@@ -42,7 +46,11 @@ class _DownloadUrlResponse(BaseModel):
 
 
 class SpringPresignedPptxAssetStore:
-    """Issue one signed capability URL and immediately stream its bounded PPTX bytes."""
+    """Issue one signed capability URL and immediately stream its bounded asset bytes.
+
+    Serves both PPTX decks and annotation snapshot images: ADR-0043 §11.2 reuses this endpoint
+    rather than opening a second one, so only the media types and byte ceiling differ.
+    """
 
     def __init__(
         self,
@@ -50,11 +58,14 @@ class SpringPresignedPptxAssetStore:
         signer: SpringHmacSigner,
         *,
         source_max_bytes: int,
+        annotation_image_max_bytes: int = DEFAULT_ANNOTATION_IMAGE_MAX_BYTES,
         issue_timeout_seconds: float = 5.0,
         download_timeout_seconds: float = 30.0,
     ) -> None:
         if source_max_bytes <= 0:
             raise ValueError("source_max_bytes must be positive")
+        if annotation_image_max_bytes <= 0:
+            raise ValueError("annotation_image_max_bytes must be positive")
         if not 0 < issue_timeout_seconds <= 120:
             raise ValueError("issue_timeout_seconds must be between 0 and 120")
         if not 0 < download_timeout_seconds <= 600:
@@ -62,18 +73,46 @@ class SpringPresignedPptxAssetStore:
         self._client = client
         self._signer = signer
         self._source_max_bytes = source_max_bytes
+        self._annotation_image_max_bytes = annotation_image_max_bytes
         self._issue_timeout_seconds = issue_timeout_seconds
         self._download_timeout_seconds = download_timeout_seconds
 
     async def read_pptx(self, bucket: str, object_key: str) -> bytes:
         asset_id = _parse_source_reference(bucket, object_key)
+        return await self._read_asset(
+            asset_id,
+            media_types=_PPTX_MEDIA_TYPES,
+            max_bytes=self._source_max_bytes,
+            what="PPTX source",
+        )
+
+    async def read_annotation_image(self, asset_id: UUID) -> bytes:
+        if not isinstance(asset_id, UUID):
+            raise MaterialIngestionError("annotation image identity must be a UUID")
+        return await self._read_asset(
+            asset_id,
+            media_types=_ANNOTATION_MEDIA_TYPES,
+            max_bytes=self._annotation_image_max_bytes,
+            what="annotation image",
+        )
+
+    async def _read_asset(
+        self,
+        asset_id: UUID,
+        *,
+        media_types: frozenset[str],
+        max_bytes: int,
+        what: str,
+    ) -> bytes:
         body = json.dumps(
             {"assetId": str(asset_id)},
             ensure_ascii=False,
             separators=(",", ":"),
         ).encode("utf-8")
         download_url = await self._issue_download_url(body)
-        return await self._download(download_url)
+        return await self._download(
+            download_url, media_types=media_types, max_bytes=max_bytes, what=what
+        )
 
     async def _issue_download_url(self, body: bytes) -> httpx.URL:
         try:
@@ -103,7 +142,14 @@ class SpringPresignedPptxAssetStore:
             ) from exc
         return _validated_download_url(payload.url)
 
-    async def _download(self, download_url: httpx.URL) -> bytes:
+    async def _download(
+        self,
+        download_url: httpx.URL,
+        *,
+        media_types: frozenset[str],
+        max_bytes: int,
+        what: str,
+    ) -> bytes:
         try:
             async with self._client.stream(
                 "GET",
@@ -113,16 +159,18 @@ class SpringPresignedPptxAssetStore:
             ) as response:
                 if response.status_code != httpx.codes.OK:
                     _raise_download_status(response.status_code)
-                declared_size = _declared_size(response.headers.get("Content-Length"))
-                if declared_size is not None and declared_size > self._source_max_bytes:
-                    raise PptxLimitExceededError("PPTX source exceeds the source byte limit")
-                _validate_media_type(response.headers.get("Content-Type"))
+                declared_size = _declared_size(response.headers.get("Content-Length"), what)
+                if declared_size is not None and declared_size > max_bytes:
+                    raise PptxLimitExceededError(f"{what} exceeds the source byte limit")
+                _validate_media_type(response.headers.get("Content-Type"), media_types, what)
 
                 source = bytearray()
                 async for chunk in response.aiter_bytes():
                     source.extend(chunk)
-                    if len(source) > self._source_max_bytes:
-                        raise PptxLimitExceededError("PPTX source exceeds the source byte limit")
+                    # Enforced on received bytes too: a missing or lying Content-Length must
+                    # not become an unbounded read.
+                    if len(source) > max_bytes:
+                        raise PptxLimitExceededError(f"{what} exceeds the source byte limit")
         except (SpringMaterialSourceError, MaterialIngestionError):
             raise
         except httpx.HTTPError as exc:
@@ -132,9 +180,9 @@ class SpringPresignedPptxAssetStore:
             ) from exc
 
         if not source:
-            raise MaterialIngestionError("PPTX source is empty")
+            raise MaterialIngestionError(f"{what} is empty")
         if declared_size is not None and len(source) != declared_size:
-            raise MaterialIngestionError("PPTX source download size does not match Content-Length")
+            raise MaterialIngestionError(f"{what} download size does not match Content-Length")
         return bytes(source)
 
 
@@ -166,22 +214,22 @@ def _validated_download_url(value: str) -> httpx.URL:
     return url
 
 
-def _declared_size(value: str | None) -> int | None:
+def _declared_size(value: str | None, what: str) -> int | None:
     if value is None:
         return None
     try:
         size = int(value)
     except ValueError as exc:
-        raise MaterialIngestionError("PPTX source has invalid Content-Length") from exc
+        raise MaterialIngestionError(f"{what} has invalid Content-Length") from exc
     if size < 0:
-        raise MaterialIngestionError("PPTX source has invalid Content-Length")
+        raise MaterialIngestionError(f"{what} has invalid Content-Length")
     return size
 
 
-def _validate_media_type(value: str | None) -> None:
+def _validate_media_type(value: str | None, media_types: frozenset[str], what: str) -> None:
     media_type = (value or "").partition(";")[0].strip().lower()
-    if media_type not in _PPTX_MEDIA_TYPES:
-        raise MaterialIngestionError("PPTX source has an unsupported content type")
+    if media_type not in media_types:
+        raise MaterialIngestionError(f"{what} has an unsupported content type")
 
 
 def _raise_issue_status(status_code: int) -> None:
