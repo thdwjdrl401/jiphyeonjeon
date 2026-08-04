@@ -23,6 +23,7 @@ public record CatalogLessonDetail(
         String description,
         int order,
         String status,
+        String deliveryType,
         List<MaterialView> materials
 ) {
 }

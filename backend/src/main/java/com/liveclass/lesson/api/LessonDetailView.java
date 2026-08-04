@@ -16,6 +16,7 @@ public record LessonDetailView(
         String title,
         String description,
         int order,
-        String status
+        String status,
+        String deliveryType
 ) {
 }

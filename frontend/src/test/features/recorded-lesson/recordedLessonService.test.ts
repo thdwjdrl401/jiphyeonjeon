@@ -21,6 +21,13 @@ describe('녹화강의 상세 HTTP 계약', () => {
         durationMs: null,
         sizeBytes: null,
         readyAt: null,
+        captionStatus: 'PROCESSING',
+        captionFailureCode: null,
+        captionProcessedChunks: 1,
+        captionTotalChunks: 4,
+        captionReadyAt: null,
+        recordedPublicationStatus: 'DRAFT',
+        publishedAt: null,
       },
     } as never)
 
@@ -43,6 +50,13 @@ describe('녹화강의 상세 HTTP 계약', () => {
         durationMs: null,
         sizeBytes: null,
         readyAt: null,
+        captionStatus: 'READY',
+        captionFailureCode: null,
+        captionProcessedChunks: 4,
+        captionTotalChunks: 4,
+        captionReadyAt: '2026-08-04T00:00:00Z',
+        recordedPublicationStatus: 'DRAFT',
+        publishedAt: null,
       },
     } as never)
 
@@ -59,10 +73,24 @@ describe('녹화강의 상세 HTTP 계약', () => {
         lessonId: 'les-recorded',
         recordedVideoId: 'video-1',
         durationMs: 60_000,
+        recordedPublicationStatus: 'PUBLISHED',
         source: {
           url: '/api/lessons/les-recorded/recorded-playback/manifest',
           availableFromMs: 0,
           availableToMs: 60_000,
+        },
+        captions: {
+          status: 'AVAILABLE',
+          tracks: [{
+            trackId: 'track-1',
+            language: 'ko',
+            label: '한국어',
+            kind: 'subtitles',
+            format: 'WEBVTT',
+            url: '/api/lessons/les-recorded/recorded-playback/captions/track-1.vtt?v=1',
+            version: 1,
+            default: true,
+          }],
         },
       },
     } as never)
@@ -70,6 +98,7 @@ describe('녹화강의 상세 HTTP 계약', () => {
     await expect(httpRecordedLessonService.getPlayback('les-recorded')).resolves.toMatchObject({
       durationMs: 60_000,
       source: { availableFromMs: 0, availableToMs: 60_000 },
+      captions: { status: 'AVAILABLE', tracks: [{ format: 'WEBVTT' }] },
     })
     expect(get).toHaveBeenCalledWith('/lessons/les-recorded/recorded-playback')
     expect(get).not.toHaveBeenCalledWith('/lessons/les-recorded/playback')

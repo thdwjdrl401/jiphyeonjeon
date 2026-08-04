@@ -12,7 +12,7 @@ export function useRecordedProcessing(lessonId: string, enabled = true) {
     queryKey: recordedLessonQueryKeys.processing(lessonId),
     queryFn: () => getRecordedProcessing(lessonId),
     enabled: Boolean(lessonId) && enabled,
-    refetchInterval: (query) => recordedProcessingPollInterval(query.state.data?.status),
+    refetchInterval: (query) => recordedProcessingPollInterval(query.state.data),
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   })

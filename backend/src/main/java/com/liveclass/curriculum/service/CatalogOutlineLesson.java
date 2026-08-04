@@ -16,10 +16,12 @@ public record CatalogOutlineLesson(
         String title,
         int order,
         String status,
+        String deliveryType,
         OffsetDateTime scheduledAt,
         Long durationMs,
         CatalogLiveSession liveSession,
         String replayStatus,
+        String recordedPublicationStatus,
         CatalogLessonAccess access,
         CatalogLessonLearning learning
 ) {

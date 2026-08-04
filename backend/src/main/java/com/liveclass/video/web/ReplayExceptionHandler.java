@@ -4,6 +4,7 @@ import com.liveclass.common.web.ErrorResponse;
 import com.liveclass.video.api.PlaybackAccessException;
 import com.liveclass.video.api.RecordedVideoConflictException;
 import com.liveclass.video.api.RecordedVideoNotFoundException;
+import com.liveclass.video.api.RecordedCaptionNotFoundException;
 import com.liveclass.video.service.PlaybackStorageUnavailableException;
 import com.liveclass.video.service.RecordingStartingException;
 import com.liveclass.video.service.ReplayForbiddenException;
@@ -48,6 +49,12 @@ public class ReplayExceptionHandler {
     public ResponseEntity<ErrorResponse> handleRecordedNotFound(RecordedVideoNotFoundException e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ErrorResponse.of("RECORDED_VIDEO_NOT_FOUND", e.getMessage()));
+    }
+
+    @ExceptionHandler(RecordedCaptionNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleRecordedCaptionNotFound(RecordedCaptionNotFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ErrorResponse.of("RECORDED_CAPTION_NOT_FOUND", e.getMessage()));
     }
 
     @ExceptionHandler(RecordedVideoConflictException.class)

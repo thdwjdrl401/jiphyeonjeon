@@ -1,6 +1,9 @@
 package com.liveclass.curriculum;
 
 import com.liveclass.support.TestSchedules;
+import com.liveclass.video.domain.RecordedPublicationStatus;
+import com.liveclass.video.domain.RecordedVideoStatus;
+import com.liveclass.video.repository.RecordedVideoRepository;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,6 +21,7 @@ import tools.jackson.databind.json.JsonMapper;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.time.OffsetDateTime;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -38,6 +42,9 @@ class CatalogViewerContextContractTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private RecordedVideoRepository recordedVideoRepository;
 
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
 
@@ -235,6 +242,51 @@ class CatalogViewerContextContractTest {
                 .andExpect(jsonPath("$[0].curriculum.title").value("수강강좌"))
                 .andExpect(jsonPath("$[0].curriculum.instructor.displayName").exists())
                 .andExpect(jsonPath("$[0].curriculum.viewerContext.relationship").value("ENROLLED"));
+    }
+
+    @Test
+    void recorded_lesson_is_hidden_until_its_delivery_is_published() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String cid = createPublishedCurriculum(instructor);
+        String sectionId = json(write(post("/api/instructor/curriculums/" + cid + "/sections"), instructor,
+                "{\"title\":\"녹화 섹션\"}").andExpect(status().isCreated()).andReturn())
+                .get("sectionId").asString();
+        MvcResult created = write(post("/api/instructor/sections/" + sectionId + "/recorded-lessons"),
+                instructor, "{\"clientRequestId\":\"%s\",\"title\":\"완성 후 공개 강의\"}"
+                        .formatted(UUID.randomUUID()))
+                .andExpect(status().isCreated()).andReturn();
+        String lessonId = json(created).get("lessonId").asString();
+        UUID recordedVideoId = UUID.fromString(json(created).get("recordedVideoId").asString());
+        Cookie[] student = loginAs("STUDENT");
+        approveEnrollment(instructor, student, cid);
+
+        write(get("/api/curriculums/" + cid), student, null)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.outline[0].lessons").isEmpty());
+        write(get("/api/lessons/" + lessonId), student, null)
+                .andExpect(status().isNotFound());
+
+        var video = recordedVideoRepository.findById(recordedVideoId).orElseThrow();
+        video.setStatus(RecordedVideoStatus.READY);
+        video.setPublicationStatus(RecordedPublicationStatus.PUBLISHED);
+        video.setOutputBucket("recordings");
+        video.setHlsManifestKey("recorded/" + recordedVideoId + "/index.m3u8");
+        video.setDurationMs(60_000L);
+        video.setSizeBytes(1_000L);
+        video.setSegmentCount(10);
+        video.setReadyAt(OffsetDateTime.now());
+        video.setPublishedAt(OffsetDateTime.now());
+        recordedVideoRepository.saveAndFlush(video);
+
+        write(get("/api/curriculums/" + cid), student, null)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.outline[0].lessons[0].lessonId").value(lessonId))
+                .andExpect(jsonPath("$.outline[0].lessons[0].deliveryType").value("RECORDED"))
+                .andExpect(jsonPath("$.outline[0].lessons[0].recordedPublicationStatus").value("PUBLISHED"))
+                .andExpect(jsonPath("$.outline[0].lessons[0].access.destination").value("RECORDED_VOD"));
+        write(get("/api/lessons/" + lessonId), student, null)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.deliveryType").value("RECORDED"));
     }
 
     // ---- 헬퍼 ----

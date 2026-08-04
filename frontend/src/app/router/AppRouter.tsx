@@ -31,6 +31,7 @@ import ProfilePage from '@/pages/ProfilePage'
 import ReplayLessonPage from '@/pages/ReplayLessonPage'
 import RecordedLessonUploadPage from '@/pages/RecordedLessonUploadPage'
 import RecordedLessonDetailPage from '@/pages/RecordedLessonDetailPage'
+import RecordedLessonPlaybackPage from '@/pages/RecordedLessonPlaybackPage'
 import SignupPage from '@/pages/SignupPage'
 import StudentPrejoinPage from '@/pages/StudentPrejoinPage'
 import WelcomePage from '@/pages/WelcomePage'
@@ -75,6 +76,7 @@ export default function AppRouter() {
               <Route path="live-sessions/:sessionId/classroom" element={<LiveClassroomPage />} />
             </Route>
             <Route path="lessons/:lessonId/replay" element={<ReplayLessonPage />} />
+            <Route path="lessons/:lessonId/recorded" element={<RecordedLessonPlaybackPage />} />
           </Route>
         </Route>
         {/* 운영 콘솔. 가입 역할과 다른 축이라 별도 트리다 — 화면만 막고, 데이터는 서버가 ROLE_ADMIN으로 막는다. */}

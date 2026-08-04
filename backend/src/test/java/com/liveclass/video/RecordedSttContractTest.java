@@ -4,8 +4,12 @@ import com.liveclass.asset.service.AssetStorage;
 import com.liveclass.video.domain.RecordedCaptionPublicationStatus;
 import com.liveclass.video.domain.RecordedCaptionStatus;
 import com.liveclass.video.domain.RecordedSttJobStatus;
+import com.liveclass.video.domain.RecordedPublicationStatus;
+import com.liveclass.video.domain.RecordedVideoStatus;
 import com.liveclass.video.repository.RecordedCaptionTrackRepository;
 import com.liveclass.video.repository.RecordedSttJobRepository;
+import com.liveclass.video.repository.RecordedVideoRepository;
+import com.liveclass.video.service.RecordedPublicationService;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -58,6 +62,10 @@ class RecordedSttContractTest {
     private RecordedCaptionTrackRepository trackRepository;
     @Autowired
     private RecordedSttJobRepository jobRepository;
+    @Autowired
+    private RecordedVideoRepository videoRepository;
+    @Autowired
+    private RecordedPublicationService publicationService;
 
     @MockitoBean
     private AssetStorage assetStorage;
@@ -76,7 +84,7 @@ class RecordedSttContractTest {
     }
 
     @Test
-    void upload_creates_independent_stt_job_and_chunk_callbacks_activate_only_a_draft() throws Exception {
+    void stt_first_remains_draft_until_hls_is_ready_then_publishes_idempotently() throws Exception {
         Cookie[] instructor = loginAsInstructor();
         String sectionId = createSection(instructor);
         MvcResult created = write(post("/api/instructor/sections/" + sectionId + "/recorded-lessons"),
@@ -148,6 +156,15 @@ class RecordedSttContractTest {
                 .andExpect(jsonPath("$.captionStatus").value("READY"))
                 .andExpect(jsonPath("$.captionProcessedChunks").value(1))
                 .andExpect(jsonPath("$.captionTotalChunks").value(1));
+
+        markVideoReady(recordedVideoId);
+        assertThat(publicationService.tryAutoPublish(recordedVideoId)).isTrue();
+        OffsetDateTime firstPublishedAt = videoRepository.findById(recordedVideoId).orElseThrow().getPublishedAt();
+        assertThat(publicationService.tryAutoPublish(recordedVideoId)).isTrue();
+        assertThat(videoRepository.findById(recordedVideoId).orElseThrow().getPublishedAt())
+                .isEqualTo(firstPublishedAt);
+        assertThat(trackRepository.findByRecordedVideoId(recordedVideoId).orElseThrow().getPublicationStatus())
+                .isEqualTo(RecordedCaptionPublicationStatus.PUBLISHED);
     }
 
     @Test
@@ -193,6 +210,130 @@ class RecordedSttContractTest {
         assertThat(secondJob.getStatus()).isEqualTo(RecordedSttJobStatus.PENDING);
         assertThat(trackRepository.findByRecordedVideoId(recordedVideoId).orElseThrow().getStatus())
                 .isEqualTo(RecordedCaptionStatus.PENDING);
+    }
+
+    @Test
+    void hls_ready_then_stt_success_atomically_publishes_playback_with_webvtt() throws Exception {
+        Cookie[] instructor = loginAsInstructor();
+        UUID[] ids = createUploadedRecordedLesson(instructor, "자동 게시 자막 강의");
+        UUID lessonId = ids[0];
+        UUID recordedVideoId = ids[1];
+        var sttJob = jobRepository.findTopByRecordedVideoIdOrderByAttemptNoDesc(recordedVideoId).orElseThrow();
+
+        markVideoReady(recordedVideoId);
+        mockMvc.perform(get("/api/lessons/" + lessonId + "/recorded-playback").cookie(instructor))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("RECORDED_VIDEO_NOT_PUBLISHED"));
+        UUID pendingTrackId = trackRepository.findByRecordedVideoId(recordedVideoId).orElseThrow().getId();
+        mockMvc.perform(get("/api/lessons/" + lessonId + "/recorded-playback/captions/"
+                        + pendingTrackId + ".vtt").cookie(instructor))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("RECORDED_VIDEO_NOT_PUBLISHED"));
+
+        String chunk = """
+                {"eventId":"publish-chunk","sourceStartMs":0,"sourceEndMs":6000,
+                 "sourceSha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                 "model":"whisper-1","language":"ko","segments":[
+                   {"localSegmentIndex":0,"startMs":1250,"endMs":5880,
+                    "text":"오늘은 스프링 시큐리티를 살펴보겠습니다."}
+                 ]}
+                """.strip();
+        signedPut(sttJob.getId(), 0, chunk).andExpect(status().isNoContent());
+        String succeeded = terminal(sttJob.getId(), recordedVideoId, "publish-terminal", 1, 1);
+        signedTerminal(succeeded).andExpect(status().isNoContent());
+        signedTerminal(succeeded).andExpect(status().isNoContent());
+
+        var video = videoRepository.findById(recordedVideoId).orElseThrow();
+        var track = trackRepository.findByRecordedVideoId(recordedVideoId).orElseThrow();
+        assertThat(video.getPublicationStatus()).isEqualTo(RecordedPublicationStatus.PUBLISHED);
+        assertThat(video.getPublishedAt()).isNotNull();
+        assertThat(track.getPublicationStatus()).isEqualTo(RecordedCaptionPublicationStatus.PUBLISHED);
+        assertThat(track.getPublishedAt()).isEqualTo(video.getPublishedAt());
+
+        mockMvc.perform(get("/api/instructor/recorded-lessons/" + lessonId + "/processing")
+                        .cookie(instructor))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.recordedPublicationStatus").value("PUBLISHED"))
+                .andExpect(jsonPath("$.publishedAt").exists());
+
+        mockMvc.perform(get("/api/lessons/" + lessonId + "/recorded-playback").cookie(instructor))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.recordedPublicationStatus").value("PUBLISHED"))
+                .andExpect(jsonPath("$.captions.status").value("AVAILABLE"))
+                .andExpect(jsonPath("$.captions.tracks[0].trackId").value(track.getId().toString()))
+                .andExpect(jsonPath("$.captions.tracks[0].format").value("WEBVTT"))
+                .andExpect(jsonPath("$.captions.tracks[0].default").value(true));
+
+        mockMvc.perform(get("/api/lessons/" + lessonId + "/recorded-playback/captions/"
+                        + track.getId() + ".vtt").cookie(instructor))
+                .andExpect(status().isOk())
+                .andExpect(result -> assertThat(result.getResponse().getContentType()).startsWith("text/vtt"))
+                .andExpect(result -> assertThat(result.getResponse().getContentAsString())
+                        .contains("WEBVTT", "00:00:01.250 --> 00:00:05.880", "스프링 시큐리티"));
+    }
+
+    @Test
+    void empty_caption_is_a_normal_terminal_and_publishes_hls_without_tracks() throws Exception {
+        Cookie[] instructor = loginAsInstructor();
+        UUID[] ids = createUploadedRecordedLesson(instructor, "무발화 강의");
+        UUID lessonId = ids[0];
+        UUID recordedVideoId = ids[1];
+        var sttJob = jobRepository.findTopByRecordedVideoIdOrderByAttemptNoDesc(recordedVideoId).orElseThrow();
+        markVideoReady(recordedVideoId);
+
+        String emptyChunk = """
+                {"eventId":"empty-chunk","sourceStartMs":0,"sourceEndMs":6000,
+                 "sourceSha256":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                 "model":"whisper-1","language":"ko","segments":[]}
+                """.strip();
+        signedPut(sttJob.getId(), 0, emptyChunk).andExpect(status().isNoContent());
+        signedTerminal(terminal(sttJob.getId(), recordedVideoId, "empty-terminal", 1, 0))
+                .andExpect(status().isNoContent());
+
+        var track = trackRepository.findByRecordedVideoId(recordedVideoId).orElseThrow();
+        assertThat(track.getStatus()).isEqualTo(RecordedCaptionStatus.EMPTY);
+        assertThat(videoRepository.findById(recordedVideoId).orElseThrow().getPublicationStatus())
+                .isEqualTo(RecordedPublicationStatus.PUBLISHED);
+
+        mockMvc.perform(get("/api/lessons/" + lessonId + "/recorded-playback").cookie(instructor))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.captions.status").value("EMPTY"))
+                .andExpect(jsonPath("$.captions.tracks").isEmpty());
+        write(post("/api/instructor/recorded-lessons/" + lessonId + "/captions/retry"), instructor, null)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("RECORDED_CAPTION_RETRY_CONFLICT"));
+    }
+
+    private UUID[] createUploadedRecordedLesson(Cookie[] instructor, String title) throws Exception {
+        String sectionId = createSection(instructor);
+        MvcResult created = write(post("/api/instructor/sections/" + sectionId + "/recorded-lessons"),
+                instructor, "{\"clientRequestId\":\"%s\",\"title\":\"%s\"}"
+                        .formatted(UUID.randomUUID(), title))
+                .andExpect(status().isCreated()).andReturn();
+        UUID lessonId = UUID.fromString(json(created).get("lessonId").asString());
+        MvcResult ticket = write(post("/api/instructor/recorded-lessons/" + lessonId
+                        + "/video/upload-requests"), instructor,
+                "{\"fileName\":\"publish.mp4\",\"contentType\":\"video/mp4\",\"fileSize\":12}")
+                .andExpect(status().isCreated()).andReturn();
+        MvcResult accepted = write(post("/api/instructor/recorded-lessons/" + lessonId + "/video/complete"),
+                instructor, "{\"assetId\":\"" + json(ticket).get("assetId").asString() + "\"}")
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.recordedPublicationStatus").value("DRAFT"))
+                .andReturn();
+        return new UUID[]{lessonId, UUID.fromString(json(accepted).get("recordedVideoId").asString())};
+    }
+
+    private void markVideoReady(UUID recordedVideoId) {
+        var video = videoRepository.findById(recordedVideoId).orElseThrow();
+        video.setStatus(RecordedVideoStatus.READY);
+        video.setOutputBucket("recordings");
+        video.setHlsManifestKey("recorded/" + recordedVideoId + "/index.m3u8");
+        video.setDurationMs(6_000L);
+        video.setSizeBytes(100L);
+        video.setSegmentCount(1);
+        video.setFailureCode(null);
+        video.setReadyAt(OffsetDateTime.now());
+        videoRepository.saveAndFlush(video);
     }
 
     private String terminal(UUID jobId, UUID videoId, String eventId, int chunks, int segments) {

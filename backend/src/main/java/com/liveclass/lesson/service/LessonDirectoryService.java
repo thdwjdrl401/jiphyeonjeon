@@ -69,7 +69,8 @@ public class LessonDirectoryService implements LessonDirectory {
                 lesson.getTitle(),
                 lesson.getDescription(),
                 lesson.getOrderIndex(),
-                lesson.getStatus().name());
+                lesson.getStatus().name(),
+                lesson.getDeliveryType().name());
     }
 
     private LessonOutlineView toView(Lesson lesson) {
@@ -78,6 +79,7 @@ public class LessonDirectoryService implements LessonDirectory {
                 lesson.getSectionId(),
                 lesson.getTitle(),
                 lesson.getOrderIndex(),
-                lesson.getStatus().name());
+                lesson.getStatus().name(),
+                lesson.getDeliveryType().name());
     }
 }

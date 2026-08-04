@@ -15,11 +15,40 @@ interface LessonPathParams {
   destination: LessonAccessDestination | null
   sessionId?: string | null
   role: UserRole
+  deliveryType?: 'LIVE' | 'RECORDED'
 }
 
-export function resolveLessonPath({ curriculumId, sectionId, lessonId, destination, sessionId, role }: LessonPathParams) {
+interface InstructorLessonEditPathParams {
+  curriculumId: string
+  sectionId: string
+  lessonId: string
+  deliveryType?: 'LIVE' | 'RECORDED'
+}
+
+export function resolveInstructorLessonEditPath({
+  curriculumId,
+  sectionId,
+  lessonId,
+  deliveryType = 'LIVE',
+}: InstructorLessonEditPathParams) {
+  return deliveryType === 'RECORDED'
+    ? instructorPaths.editRecordedLesson(curriculumId, sectionId, lessonId)
+    : instructorPaths.editLesson(curriculumId, sectionId, lessonId)
+}
+
+export function resolveLessonPath({
+  curriculumId,
+  sectionId,
+  lessonId,
+  destination,
+  sessionId,
+  role,
+  deliveryType = 'LIVE',
+}: LessonPathParams) {
   const lessonPath = role === 'INSTRUCTOR'
-    ? instructorPaths.lesson(curriculumId, sectionId, lessonId)
+    ? deliveryType === 'RECORDED'
+      ? instructorPaths.recordedLesson(curriculumId, sectionId, lessonId)
+      : instructorPaths.lesson(curriculumId, sectionId, lessonId)
     : studentPaths.lesson(curriculumId, sectionId, lessonId)
 
   switch (destination) {
@@ -31,6 +60,10 @@ export function resolveLessonPath({ curriculumId, sectionId, lessonId, destinati
         : lessonPath
     case 'VOD':
       return role === 'INSTRUCTOR' ? instructorPaths.replay(lessonId) : studentPaths.replay(lessonId)
+    case 'RECORDED_VOD':
+      return role === 'INSTRUCTOR'
+        ? instructorPaths.recordedLesson(curriculumId, sectionId, lessonId)
+        : studentPaths.recorded(lessonId)
     case 'LESSON_DETAIL':
     default:
       return lessonPath

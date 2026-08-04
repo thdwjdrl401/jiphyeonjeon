@@ -4,6 +4,7 @@ import {
   isHLSProvider,
   MediaPlayer,
   MediaProvider,
+  Track,
   type MediaPlayerInstance,
   type MediaProviderAdapter,
 } from '@vidstack/react'
@@ -18,6 +19,16 @@ export interface HlsMediaSeekRequest {
   sequence: number
 }
 
+export interface HlsCaptionTrack {
+  trackId: string
+  src: string
+  kind: 'subtitles' | 'captions'
+  label: string
+  language: string
+  default: boolean
+  version: number
+}
+
 interface HlsMediaPlayerProps {
   sourceUrl: string
   title: string
@@ -26,6 +37,7 @@ interface HlsMediaPlayerProps {
   reloadToken: number
   seekRequest?: HlsMediaSeekRequest | null
   autoPlay?: boolean
+  captionTracks?: HlsCaptionTrack[]
   className?: string
   onStateChange: (state: HlsMediaState) => void
   onTimeChange?: (mediaTimeMs: number) => void
@@ -40,6 +52,7 @@ export default function HlsMediaPlayer({
   reloadToken,
   seekRequest = null,
   autoPlay = false,
+  captionTracks = [],
   className = 'student-live-player',
   onStateChange,
   onTimeChange,
@@ -103,7 +116,20 @@ export default function HlsMediaPlayer({
       onTimeUpdate={(detail) => onTimeChange?.(Math.max(0, Math.round(detail.currentTime * 1000)))}
       onWaiting={() => onStateChange('buffering')}
     >
-      <MediaProvider />
+      <MediaProvider>
+        {captionTracks.map((track) => (
+          <Track
+            key={`${track.trackId}-${track.version}`}
+            id={track.trackId}
+            src={track.src}
+            type="vtt"
+            kind={track.kind}
+            label={track.label}
+            lang={track.language}
+            default={track.default}
+          />
+        ))}
+      </MediaProvider>
       <DefaultVideoLayout icons={defaultLayoutIcons} />
     </MediaPlayer>
   )

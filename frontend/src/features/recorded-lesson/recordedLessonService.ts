@@ -12,6 +12,8 @@ export const getRecordedProcessing = (lessonId: string) =>
   recordedLessonService.getProcessing(lessonId)
 export const retryRecordedProcessing = (lessonId: string) =>
   recordedLessonService.retryProcessing(lessonId)
+export const retryRecordedCaptions = (lessonId: string) =>
+  recordedLessonService.retryCaptions(lessonId)
 export const getRecordedPlayback = (lessonId: string) =>
   recordedLessonService.getPlayback(lessonId)
 
@@ -19,5 +21,7 @@ export type {
   RecordedLessonService,
   RecordedPlaybackView,
   RecordedProcessingStatus,
+  RecordedCaptionStatus,
+  RecordedPublicationStatus,
   RecordedProcessingView,
 } from './recordedLessonService.interface'

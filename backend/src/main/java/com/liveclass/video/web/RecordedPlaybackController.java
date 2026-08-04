@@ -13,12 +13,14 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
+import java.nio.charset.StandardCharsets;
 
 @Tag(name = "녹화강의 재생", description = "업로드 녹화강의의 HLS 재생 정보와 manifest를 제공한다.")
 @RestController
 public class RecordedPlaybackController {
 
     private static final MediaType HLS_MEDIA_TYPE = MediaType.valueOf("application/vnd.apple.mpegurl");
+    private static final MediaType WEBVTT_MEDIA_TYPE = new MediaType("text", "vtt", StandardCharsets.UTF_8);
 
     private final RecordedPlaybackService service;
 
@@ -39,6 +41,17 @@ public class RecordedPlaybackController {
                 .contentType(HLS_MEDIA_TYPE)
                 .cacheControl(CacheControl.noStore())
                 .body(service.manifest(currentUserId(authentication), lessonId));
+    }
+
+    @Operation(summary = "게시된 녹화강의 WebVTT 자막")
+    @GetMapping("/api/lessons/{lessonId}/recorded-playback/captions/{trackId}.vtt")
+    public ResponseEntity<String> captions(@PathVariable UUID lessonId,
+                                           @PathVariable UUID trackId,
+                                           Authentication authentication) {
+        return ResponseEntity.ok()
+                .contentType(WEBVTT_MEDIA_TYPE)
+                .cacheControl(CacheControl.noStore())
+                .body(service.captionWebVtt(currentUserId(authentication), lessonId, trackId));
     }
 
     private UUID currentUserId(Authentication authentication) {

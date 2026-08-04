@@ -10,6 +10,7 @@ import {
 import {
   mockRecordedLessonService,
   resetMockRecordedLessons,
+  setMockRecordedCaptionProcessing,
   setMockRecordedProcessing,
 } from '@/features/recorded-lesson/mockRecordedLessonService'
 import type { RecordedProcessingStatus } from '@/features/recorded-lesson/recordedLessonService.interface'
@@ -74,7 +75,7 @@ describe('녹화강의 상세 화면', () => {
     await renderAsInstructor(recorded.path)
 
     expect(await screen.findByRole('heading', { name: `상세 테스트 녹화강의 ${status}`, level: 1 })).toBeInTheDocument()
-    expect(await screen.findByText(status)).toBeInTheDocument()
+    expect(await screen.findByText(`HLS ${status}`)).toBeInTheDocument()
     expect((await screen.findByText(stage)).closest('li')).toHaveAttribute('aria-current', 'step')
     expect(getPlayback).not.toHaveBeenCalled()
     expect(screen.queryByTestId('mock-hls-player')).not.toBeInTheDocument()
@@ -88,7 +89,7 @@ describe('녹화강의 상세 화면', () => {
       `/api/lessons/${recorded.lessonId}/recorded-playback/manifest`,
     )
     expect(screen.getByText('1시간 0분 0초')).toBeInTheDocument()
-    expect(screen.getByText('READY')).toBeInTheDocument()
+    expect(screen.getByText('PUBLISHED')).toBeInTheDocument()
   })
 
   it('FAILED 원인과 코드를 표시하고 재시도 성공 뒤 QUEUED polling 상태로 돌아간다', async () => {
@@ -101,9 +102,27 @@ describe('녹화강의 상세 화면', () => {
     await user.click(screen.getByRole('button', { name: '다시 처리' }))
 
     await waitFor(() => {
-      expect(screen.getByText('QUEUED')).toBeInTheDocument()
+      expect(screen.getByText('HLS QUEUED')).toBeInTheDocument()
       expect(screen.getByText('변환 대기').closest('li')).toHaveAttribute('aria-current', 'step')
     })
     expect(screen.getByText('영상 처리를 다시 시작했습니다.')).toBeInTheDocument()
+  })
+
+  it('HLS가 준비됐어도 자막 실패면 플레이어를 열지 않고 자막만 재시도한다', async () => {
+    const user = userEvent.setup()
+    const recorded = await createRecordedLesson('READY')
+    setMockRecordedCaptionProcessing(recorded.lessonId, 'FAILED', 'STT_PROVIDER_UNAVAILABLE')
+    const getPlayback = vi.spyOn(mockRecordedLessonService, 'getPlayback')
+    await renderAsInstructor(recorded.path)
+
+    expect(await screen.findByText('자막 생성 서비스에 일시적인 문제가 있습니다.')).toBeInTheDocument()
+    expect(screen.queryByTestId('mock-hls-player')).not.toBeInTheDocument()
+    expect(getPlayback).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: '자막 다시 처리' }))
+    await waitFor(() => {
+      expect(screen.getByText('자막 PENDING')).toBeInTheDocument()
+      expect(screen.getByText('HLS READY')).toBeInTheDocument()
+    })
   })
 })

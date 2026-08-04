@@ -408,9 +408,11 @@ export function buildMockCurriculumOutline(curriculum: MockCurriculumEntity): Cu
         // curriculum.lifecycleStatus가 막는다(ADR-0005). 실제 서버와 같은 모델을 지켜야
         // mock 검증이 정책 문제를 가리지 않는다.
         status: 'PUBLISHED',
+        deliveryType: 'LIVE',
         scheduledAt: availability.liveSession?.scheduledAt ?? null,
         durationMs: 3_600_000,
         ...availability,
+        recordedPublicationStatus: null,
         access: { allowed: false, destination: null, reasonCode: 'ENROLLMENT_REQUIRED' },
         learning: null,
       }

@@ -1,6 +1,11 @@
 export type LessonStatus = 'PUBLISHED'
 
-export type LessonAccessDestination = 'LESSON_DETAIL' | 'LIVE_SESSION' | 'LIVE_CLASSROOM' | 'VOD'
+export type LessonAccessDestination =
+  | 'LESSON_DETAIL'
+  | 'LIVE_SESSION'
+  | 'LIVE_CLASSROOM'
+  | 'VOD'
+  | 'RECORDED_VOD'
 
 export type LessonAccessReasonCode = 'ENROLLMENT_REQUIRED'
 
@@ -44,10 +49,12 @@ export interface CurriculumOutlineLesson {
   title: string
   order: number
   status: LessonStatus
+  deliveryType: 'LIVE' | 'RECORDED'
   scheduledAt: string | null
   durationMs: number | null
   liveSession: CurriculumLessonLiveSession | null
   replayStatus: CurriculumReplayStatus
+  recordedPublicationStatus: 'DRAFT' | 'PUBLISHED' | null
   access: LessonAccess
   learning: LessonLearning | null
 }
