@@ -36,6 +36,7 @@ class WebPushHttpClientTest {
     private volatile String lastAuthorization;
     private volatile String lastBody;
     private volatile int responseStatus = 201;
+    private volatile String retryAfter;
 
     @BeforeEach
     void startServer() throws Exception {
@@ -46,6 +47,9 @@ class WebPushHttpClientTest {
             remotePorts.add(String.valueOf(exchange.getRemoteAddress().getPort()));
             lastAuthorization = exchange.getRequestHeaders().getFirst("Authorization");
             lastBody = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            if (retryAfter != null) {
+                exchange.getResponseHeaders().add("Retry-After", retryAfter);
+            }
             exchange.sendResponseHeaders(responseStatus, -1);
             exchange.close();
         });
@@ -76,9 +80,9 @@ class WebPushHttpClientTest {
     void it_sends_the_prepared_request_untouched() throws Exception {
         var client = new WebPushHttpClient(Duration.ofSeconds(2), Duration.ofSeconds(5));
 
-        int status = client.send(prepared("암호화된-본문")).get();
+        var response = client.send(prepared("암호화된-본문")).get();
 
-        assertThat(status).isEqualTo(201);
+        assertThat(response.status()).isEqualTo(201);
         assertThat(lastAuthorization)
                 .as("VAPID 서명을 우리가 만들거나 고치지 않는다")
                 .isEqualTo("vapid t=fake-jwt, k=fake-key");
@@ -109,19 +113,43 @@ class WebPushHttpClientTest {
         responseStatus = 410;
         var client = new WebPushHttpClient(Duration.ofSeconds(2), Duration.ofSeconds(5));
 
-        assertThat(client.send(prepared("x")).get()).isEqualTo(410);
+        assertThat(client.send(prepared("x")).get().status()).isEqualTo(410);
+    }
+
+    /**
+     * {@code Retry-After}를 읽는다. RFC 9110이 <b>초와 HTTP 날짜</b> 두 형식을 허용하고 푸시
+     * 서비스마다 다른 쪽을 쓰므로, 하나만 읽으면 그 서비스에서 재시도가 조용히 죽는다.
+     */
+    @Test
+    void it_reads_retry_after_in_both_shapes() throws Exception {
+        var client = new WebPushHttpClient(Duration.ofSeconds(2), Duration.ofSeconds(5));
+        responseStatus = 429;
+
+        retryAfter = "30";
+        assertThat(client.send(prepared("x")).get().retryAfter()).isEqualTo(Duration.ofSeconds(30));
+
+        retryAfter = java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME.format(
+                java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC).plusSeconds(30));
+        assertThat(client.send(prepared("x")).get().retryAfter())
+                .as("날짜 형식도 남은 시간으로 환산한다")
+                .isBetween(Duration.ofSeconds(20), Duration.ofSeconds(31));
+
+        // 헤더가 없으면 null이다 — 부르는 쪽이 자기 백오프를 쓴다.
+        responseStatus = 201;
+        retryAfter = null;
+        assertThat(client.send(prepared("x")).get().retryAfter()).isNull();
     }
 
     @Test
     void it_sends_many_requests_concurrently() throws Exception {
         var client = new WebPushHttpClient(Duration.ofSeconds(2), Duration.ofSeconds(5));
 
-        List<CompletableFuture<Integer>> futures = java.util.stream.IntStream.range(0, 50)
+        List<CompletableFuture<WebPushHttpClient.Response>> futures = java.util.stream.IntStream.range(0, 50)
                 .mapToObj(i -> client.send(prepared("본문" + i)))
                 .toList();
         CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).get();
 
         assertThat(requests.get()).isEqualTo(50);
-        assertThat(futures).allSatisfy(f -> assertThat(f.get()).isEqualTo(201));
+        assertThat(futures).allSatisfy(f -> assertThat(f.get().status()).isEqualTo(201));
     }
 }
