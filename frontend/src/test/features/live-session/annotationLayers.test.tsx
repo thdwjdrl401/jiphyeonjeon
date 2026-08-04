@@ -1,5 +1,5 @@
 import type React from 'react'
-import { render, waitFor } from '@testing-library/react'
+import { fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Room } from 'livekit-client'
 import { RoomEvent } from 'livekit-client'
@@ -1398,5 +1398,98 @@ describe('강조 툴 캡처 발동', () => {
     await vi.advanceTimersByTimeAsync(1500)
 
     expect(settled).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * 강조 툴이 실제로 표식을 붙이는가(ADR-0074).
+ *
+ * <p>앞의 발동 테스트는 `customData`를 <b>직접 넣어 준</b> 요소로 검증한다. 그래서 "표식을 아무도
+ * 붙이지 않는" 구멍을 잡지 못했다 — 실제로 강조 툴로 그려도 요소는 일반 freedraw와 구별되지 않아
+ * 캡처가 영영 발동하지 않았다. 여기서는 <b>버튼을 누르고 평범한 획을 그리는</b> 경로를 그대로 탄다.
+ */
+describe('강조 툴 표식 부착', () => {
+  beforeEach(() => {
+    excalidrawProps = {}
+    updateScene.mockClear()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.clearAllMocks()
+  })
+
+  async function mountWithTool(settled = vi.fn()) {
+    const view = render(
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} onHighlightSettled={settled as never} />,
+    )
+    await vi.waitFor(() => expect(excalidrawProps.onChange).toBeTypeOf('function'))
+    return { ...view, settled }
+  }
+
+  function taggedElements() {
+    const scene = updateScene.mock.calls
+      .map(([arg]) => arg as { elements?: Array<Record<string, unknown>> })
+      .filter((arg) => Array.isArray(arg.elements))
+      .at(-1)
+    return scene?.elements ?? []
+  }
+
+  it('강조를 켜고 그리면 그 획에 표식이 붙는다', async () => {
+    const { getByRole } = await mountWithTool()
+    fireEvent.click(getByRole('button', { name: /강조/ }))
+
+    const onChange = excalidrawProps.onChange as (elements: unknown[]) => void
+    onChange([{ id: 'stroke-1', version: 1, type: 'freedraw', x: 10, y: 10, width: 5, height: 5 }])
+
+    const tagged = taggedElements()
+    expect(tagged).toHaveLength(1)
+    expect(tagged[0].customData).toMatchObject({ liveclassHighlight: true })
+  })
+
+  it('강조를 켜지 않았으면 표식을 붙이지 않는다', async () => {
+    await mountWithTool()
+    const onChange = excalidrawProps.onChange as (elements: unknown[]) => void
+    onChange([{ id: 'stroke-1', version: 1, type: 'freedraw', x: 10, y: 10, width: 5, height: 5 }])
+
+    expect(taggedElements()).toHaveLength(0)
+  })
+
+  /**
+   * `updateScene`이 다시 `onChange`를 부른다. 같은 요소를 또 건드리면 그 자리에서 앱이 죽는다
+   * ("Maximum update depth exceeded"). 이미 붙인 것은 다시 건드리지 않아야 한다.
+   */
+  it('표식을 붙인 요소를 다시 건드리지 않는다 — 무한 루프 방지', async () => {
+    const { getByRole } = await mountWithTool()
+    fireEvent.click(getByRole('button', { name: /강조/ }))
+    const onChange = excalidrawProps.onChange as (elements: unknown[]) => void
+
+    const plain = { id: 'stroke-1', version: 1, type: 'freedraw', x: 10, y: 10, width: 5, height: 5 }
+    onChange([plain])
+    const afterFirst = updateScene.mock.calls.length
+
+    // updateScene이 유발한 재진입: 이제 표식이 붙은 채로 다시 들어온다.
+    onChange([{ ...plain, version: 2, customData: { liveclassHighlight: true } }])
+    // 표식 없는 같은 요소가 다시 와도(경합) 재부착하지 않는다.
+    onChange([{ ...plain, version: 3 }])
+
+    expect(updateScene.mock.calls.length).toBe(afterFirst)
+  })
+
+  it('표식이 붙은 뒤 1초가 지나면 캡처가 발동한다 — 전체 경로', async () => {
+    const { getByRole, settled } = await mountWithTool()
+    fireEvent.click(getByRole('button', { name: /강조/ }))
+    const onChange = excalidrawProps.onChange as (elements: unknown[]) => void
+
+    const plain = { id: 'stroke-1', version: 1, type: 'freedraw', x: 10, y: 10, width: 5, height: 5 }
+    onChange([plain])
+    // 부착 직후에는 발동하지 않는다 — 표식 없는 중간 상태에서 멈춘다.
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(settled).not.toHaveBeenCalled()
+
+    // 재진입: 표식이 붙은 요소가 도착하면 그때부터 디바운스가 시작된다.
+    onChange([{ ...plain, version: 2, customData: { liveclassHighlight: true } }])
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(settled).toHaveBeenCalledTimes(1)
   })
 })

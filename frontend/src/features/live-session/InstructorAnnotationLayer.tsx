@@ -15,6 +15,7 @@ import {
 } from './annotation'
 import AnnotationActionRing, { type AnnotationAction } from './AnnotationActionRing'
 import {
+  HIGHLIGHT_CUSTOM_DATA_KEY,
   HIGHLIGHT_OPACITY,
   HIGHLIGHT_STROKE_COLOR,
   isHighlightElement,
@@ -331,6 +332,18 @@ export default function InstructorAnnotationLayer({
    */
   const [highlightMode, setHighlightMode] = useState(false)
 
+  /** 콜백 안에서 읽기 위한 사본. state로 읽으면 handleChange가 모드마다 다시 만들어진다. */
+  const highlightModeRef = useRef(false)
+
+  /**
+   * 이미 표식을 붙인 요소 id. <b>무한 루프를 막는 유일한 장치다.</b>
+   *
+   * <p>표식을 붙이려면 {@code updateScene}을 불러야 하고, 그러면 Excalidraw가 다시 {@code onChange}를
+   * 부른다. 그때 같은 요소를 또 건드리면 그 자리에서 앱이 죽는다 — 이 파일에 이미 같은 사고가
+   * 기록돼 있다("Maximum update depth exceeded"). 그래서 <b>updateScene을 부르기 전에</b> 여기 넣는다.
+   */
+  const taggedRef = useRef<Set<string>>(new Set())
+
   /**
    * 콜백을 ref로도 들고 있는다. 디바운스 타이머가 도는 동안 부모가 새 함수를 넘겨도 옛 참조를
    * 부르지 않기 위해서다 — 그리고 이 값이 바뀔 때마다 감지 함수를 다시 만들지 않아도 된다.
@@ -351,6 +364,48 @@ export default function InstructorAnnotationLayer({
    *
    * <p>지운 것은 세지 않는다 — 지우개로 강조를 지우는 것은 취소이지 새 캡처가 아니다.
    */
+  /**
+   * 강조 모드에서 새로 그린 요소에 표식을 붙인다(ADR-0074).
+   *
+   * <p><b>왜 필요한가.</b> Excalidraw에는 "새 요소에 customData를 기본으로 붙여라"는 API가 없다.
+   * 색과 투명도만 바꿔서는 강조 획이 일반 판서와 구별되지 않고, 그러면 캡처가 영영 발동하지 않는다.
+   *
+   * <p>붙인 뒤에는 이 요소가 <b>일반 판서와 같은 op 경로</b>로 나간다 — 표식까지 포함해 수강생·Egress·
+   * 복원에 그대로 전달되므로, 나중에 다시보기에서도 무엇이 강조였는지 알 수 있다.
+   *
+   * @returns 표식을 붙였는가. 붙였으면 이번 onChange의 나머지 처리는 건너뛴다(곧 다시 불린다).
+   */
+  const tagNewHighlights = useCallback((elements: readonly AnnotationElement[]): boolean => {
+    if (!highlightModeRef.current) return false
+    const api = apiRef.current
+    if (!api) return false
+
+    const targets = elements.filter((element) =>
+      element.id !== WHITEBOARD_ELEMENT_ID
+      && !taggedRef.current.has(element.id)
+      && !isHighlightElement(element))
+    if (targets.length === 0) return false
+
+    const ids = new Set(targets.map((element) => element.id))
+    // updateScene보다 <b>먼저</b> 기록한다. 뒤에 하면 재진입한 onChange가 같은 요소를 다시 잡는다.
+    for (const id of ids) taggedRef.current.add(id)
+
+    /*
+     * 되돌리기 스택에 올리지 않는다(captureUpdate 미지정 = 기본). 표식은 강사가 한 편집이 아니라
+     * 우리가 붙인 꼬리표라, 여기에 되돌리기 지점이 생기면 Ctrl+Z 한 번이 획을 지우는 대신
+     * 표식만 떼어낸다 — 강사에게는 아무 일도 안 일어난 것처럼 보인다.
+     */
+    api.updateScene({
+      elements: elements.map((element) => ids.has(element.id)
+        ? {
+          ...element,
+          customData: { ...(element.customData as object ?? {}), [HIGHLIGHT_CUSTOM_DATA_KEY]: true },
+        }
+        : element),
+    })
+    return true
+  }, [])
+
   const detectHighlightSettled = useCallback((elements: readonly AnnotationElement[]) => {
     const notify = onHighlightSettledRef.current
     if (!notify) return
@@ -373,6 +428,7 @@ export default function InstructorAnnotationLayer({
     if (!api) return
     const next = !highlightMode
     setHighlightMode(next)
+    highlightModeRef.current = next
     api.updateScene({
       appState: next
         ? {
@@ -401,6 +457,9 @@ export default function InstructorAnnotationLayer({
     elementsRef.current = elements.filter((element) => element.isDeleted !== true)
     if (files) filesRef.current = files
     setHasElements(elementsRef.current.some((element) => element.id !== WHITEBOARD_ELEMENT_ID))
+    if (tagNewHighlights(elementsRef.current)) return
+    // 표식을 붙였으면 곧 onChange가 다시 불린다. 표식 없는 중간 상태로 op를 내보내면 수강생 쪽
+    // 문서에는 강조 표식이 빠진 사본이 남는다.
     detectHighlightSettled(elementsRef.current)
 
     /*
@@ -456,7 +515,7 @@ export default function InstructorAnnotationLayer({
     // 같은 값이면 state를 건드리지 않는다 — onChange는 포인터가 움직일 때도 불린다.
     setSelectedIds((current) =>
       current.length === picked.length && current.every((id, i) => id === picked[i]) ? current : picked)
-  }, [applyFrameMapping, detectHighlightSettled, onPublish, onSaveSnapshot, onWhiteboardPresence])
+  }, [applyFrameMapping, detectHighlightSettled, onPublish, onSaveSnapshot, onWhiteboardPresence, tagNewHighlights])
 
   /**
    * 저장돼 있던 판서를 에디터에 되돌린다(ADR-0051). 새로고침해도 강사 화면이 수강생 화면과 같아야
