@@ -61,14 +61,41 @@ raw HTML, 이미지, 외부 링크를 만들지 말며 tool을 사용하지 마�
 """
 
 
+# Reasoning models reject `temperature`; everything else rejects `reasoning_effort`. Sending
+# the wrong one is a 400, so which to send is derived from the model rather than configured
+# separately — a deployment that overrides only the model name cannot desync the pair.
+#
+# This is exactly how the live failure happened: docker-compose pins
+# AI_API_LECTURE_NOTE_MODEL to an empty default, so the model fell back to gpt-4.1 while the
+# effort setting kept its own default of "minimal", and every note call 400ed.
+_REASONING_MODEL_PREFIXES = ("gpt-5", "o1", "o3", "o4")
+
+
+def is_reasoning_model(model: str) -> bool:
+    return model.strip().lower().startswith(_REASONING_MODEL_PREFIXES)
+
+
+def _sampling_options_for(model: str, reasoning_effort: str | None) -> dict[str, object]:
+    """Pick the sampling knob the model actually accepts.
+
+    `reasoning_effort` is ignored — not an error — on a non-reasoning model. Erroring would
+    make switching models a two-file change again, which is the coupling this removes.
+    """
+
+    if not is_reasoning_model(model):
+        return {"temperature": 0}
+    return {"reasoning_effort": reasoning_effort} if reasoning_effort else {}
+
+
 class GmsOpenAILectureNoteModel:
     """GMS OpenAI-compatible JSON 응답을 강의 노트 모델 결과로 검증한다.
 
     reasoning 계열 모델(gpt-5-*)과 비-reasoning 모델(gpt-4.1)은 받는 파라미터가 다르다.
     reasoning 모델은 `temperature`를 거부하고 `reasoning_effort`를 받으며, 비-reasoning 모델은
     정반대다. 실측(2026-08-04, GMS): 어느 쪽이든 상대 파라미터를 보내면 400이다.
-    `reasoning_effort`를 설정하면 reasoning 모델로 간주해 `temperature`를 빼고, 비워두면
-    기존대로 `temperature=0`을 보낸다.
+
+    그래서 **모델 이름에서 자동으로 고른다**. 설정으로 나눠 두면 배포가 모델만 바꿨을 때 짝이
+    깨지는데, 실제로 그렇게 깨져서 강의 노트 호출이 전부 400을 받았다.
     """
 
     def __init__(
@@ -119,11 +146,7 @@ class GmsOpenAILectureNoteModel:
         if reasoning_effort is not None and not reasoning_effort.strip():
             raise ValueError("reasoning_effort must be a non-empty value or None")
         self._reasoning_effort = reasoning_effort
-        # Mutually exclusive by the gateway's own rules, so build it once here rather than
-        # branching at each of the three call sites.
-        self._sampling_options: dict[str, object] = (
-            {"reasoning_effort": reasoning_effort} if reasoning_effort else {"temperature": 0}
-        )
+        self._sampling_options = _sampling_options_for(model, reasoning_effort)
         self._owns_client = client is None
         self._client = client or AsyncOpenAI(
             api_key=api_key,

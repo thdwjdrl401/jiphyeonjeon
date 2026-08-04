@@ -61,8 +61,9 @@ class Settings(BaseSettings):
     # Live note generation runs while the lecture is still going. gpt-5-nano at minimal effort
     # measured 1.9s/189 output tokens against gpt-4.1's 3.1s/124 — but without the effort cap
     # the same call was 19.2s/3299 tokens, which would fall behind the caption window.
-    # The two settings are a pair: changing the model to a non-reasoning one means clearing
-    # AI_API_LECTURE_NOTE_REASONING_EFFORT, or the gateway rejects the call with 400.
+    # These are no longer a pair to keep in sync: the adapter derives which sampling knob to
+    # send from the model name, so `reasoning_effort` is simply ignored on a non-reasoning
+    # model instead of 400ing the call.
     lecture_note_model: str | None = Field(default="gpt-5-nano", min_length=1, max_length=128)
     lecture_note_reasoning_effort: str | None = Field(
         default="minimal", min_length=1, max_length=32
