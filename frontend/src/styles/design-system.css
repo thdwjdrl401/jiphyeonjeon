@@ -832,47 +832,70 @@ body {
 .catalog-hero p { color: var(--ink-600); font-size: .76rem; line-height: 1.5; }
 .catalog-content { padding-block: 22px 90px; }
 
+/*
+ * 검색·정렬 도구줄.
+ *
+ * 예전에는 배경이 transparent에 위아래 줄만 있어서 페이지 위에 떠 있는 글자 덩어리로 보였고,
+ * 어디까지가 조작하는 영역인지 알 수 없었다. 하나의 면으로 묶어 결과 목록과 분리한다.
+ *
+ * 면 색으로는 분리가 안 된다 — 이 팔레트의 종이 톤은 서로 1.1:1 언저리라서
+ * (paper-pure vs paper 1.08:1) 채워 봐야 배경과 구별되지 않는다. 그래서 이 테마의 다른
+ * 패널들과 같이 <b>선</b>이 구분을 맡는다.
+ *
+ * 선은 아래 결과 카드(.curriculum-card)와 같은 값을 쓴다 — 같은 화면의 경계끼리 굵기·색을
+ * 맞춰 새 시각 언어를 만들지 않는다. 도구줄을 --ink-950으로 더 앞세워 봤지만 차분한 톤에서
+ * 너무 강했다. 대신 면을 --paper-pure로 한 톤 들어올려(카드는 --paper-light) 선이 감싼
+ * 안쪽이 한 덩어리로 보이게 거든다.
+ */
 .catalog-controls {
   grid-template-columns: minmax(190px, .62fr) minmax(300px, 1.38fr) auto;
   gap: 14px;
   min-height: 52px;
-  padding: 5px 0;
-  border: 0;
-  border-top: 1px solid var(--border-medium);
-  border-bottom: 1px solid var(--ink-950);
+  padding: 9px 14px;
+  border: 1px solid var(--border-medium);
   border-radius: 0;
-  background: transparent;
+  background: var(--paper-pure);
   box-shadow: none;
 }
 
 /*
  * 검색창.
  *
- * 예전에는 border: 0 / background: transparent 라서 도구줄 위의 글자와 구별되지 않았다.
- * 테두리로 가두지 않고 <b>면 색만으로</b> 구분한다 — 종이 배경보다 한 톤 밝은 --paper-pure로
- * 들어올려 "쓸 수 있는 칸"임을 낸다. 높이 42px과 radius 0은 그대로 둔다.
+ * 도구줄이 --paper-pure 면을 갖게 되면서 예전의 "--paper-pure로 들어올린다"가 뒤집혔다 —
+ * 같은 색이면 칸이 도구줄에 녹아 사라진다. 방향을 반대로 잡아 한 톤 <b>내려</b> 파인 칸으로
+ * 두고(--surface-muted), 가장자리는 --border-strong으로 그어 어디부터 쓰는 칸인지 낸다.
+ * 면 대비만으로는 1.13:1이라 여기서도 선이 실제 일을 한다(테두리 2.76:1).
+ * 높이 42px과 radius 0은 그대로 둔다.
  *
- * 정렬 select는 면을 칠하지 않는다(아래) — 도구줄에서 실제로 타이핑하는 칸은 여기 하나뿐이고,
- * 둘 다 칠하면 무엇이 입력이고 무엇이 선택인지 다시 뭉갠다.
+ * 정렬 select는 면을 칠하지도 파지도 않는다(아래) — 도구줄에서 실제로 타이핑하는 칸은
+ * 여기 하나뿐이고, 둘 다 칠하면 무엇이 입력이고 무엇이 선택인지 다시 뭉갠다.
  */
 .search-field {
   height: 42px;
-  border: 0;
+  border: 1px solid var(--border-strong);
   border-radius: 0;
   padding-inline: 12px;
-  background: var(--paper-pure);
+  background: var(--surface-muted);
 }
 
 /*
- * 포커스 표시 복구. 예전에는 여기서 border·background·box-shadow를 모두 지우고 있었고,
- * pages.css의 `.search-field input { outline: 0 }`(특이도 0,1,1)가 전역 :focus-visible(0,1,0)까지
- * 이겨서 키보드로 들어와도 아무 표시가 없었다(WCAG 2.4.7 위반).
- * 링은 입력이 아니라 필드 껍데기에 걸어 "이 칸에 있다"를 보여 준다. 값은 전역 :focus-visible과 같다.
+ * 포커스 표시. 칸 <b>바깥</b>에는 아무것도 덧대지 않는다.
+ *
+ * 예전에는 `outline: 2px; outline-offset: 2px`이라 칸 둘레에 링이 떠서 도구줄 안에서 유독
+ * 두꺼워 보였다. :has(input:focus-visible)로 옮겨 키보드일 때만 남기려 해도 소용없다 —
+ * 텍스트 입력은 마우스로 눌러도 :focus-visible에 매칭된다(키보드 입력을 받는 요소라
+ * 브라우저가 항상 참으로 친다). 그래서 링을 없애는 대신 <b>안쪽</b>으로 넣는다.
+ *
+ * 표시를 통째로 지우지는 않는다. pages.css의 `.search-field input { outline: 0 }`
+ * (특이도 0,1,1)이 전역 :focus-visible(0,1,0)을 이겨서, 여기서 손을 떼면 키보드 사용자에게
+ * 표시가 아예 사라진다(WCAG 2.4.7 위반 — 예전에 그 상태였고 고쳐 둔 것이다).
+ * 1px 테두리 + 1px inset = 안쪽으로 2px 둘레. 칸 크기도 도구줄 배치도 그대로다.
+ * 비포커스 대비 5.26:1로 상태 변화가 분명하다(2.4.11 요구 3:1).
  */
 .search-field:focus-within {
-  box-shadow: none;
-  outline: 2px solid var(--ink-950);
-  outline-offset: 2px;
+  border-color: var(--ink-950);
+  box-shadow: inset 0 0 0 1px var(--ink-950);
+  outline: 0;
 }
 
 /* 돋보기가 --ink-950이라 placeholder보다 진했다 — 라벨이 내용보다 강하지 않게 낮춘다. */
@@ -1773,7 +1796,8 @@ body {
   .curation-card--1 .curation-card__body > p { display: none; }
   .curated-curriculums__state { min-height: 330px; }
   .catalog-content { padding-top: 16px; }
-  .catalog-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; padding-top: 0; }
+  /* 면을 가진 패널이 됐으므로 위쪽 여백을 지우지 않는다 — 안쪽 여백이 사방으로 같아야 한다. */
+  .catalog-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; padding: 9px 12px; }
   .catalog-summary { grid-column: 1 / -1; min-height: 42px; padding-right: 0; border-right: 0; border-bottom: 1px solid var(--border-medium); }
   .sort-field { grid-column: auto; grid-row: auto; border-top: 0; }
   .sort-field select { width: auto; border-left: 1px solid var(--border-medium); }
@@ -1820,7 +1844,7 @@ body {
   .curation-card--1 h3 { margin: 8px 22px 5px 0; font-size: .92rem; }
   .curation-card__arrow { top: 12px; right: 12px; }
   .curation-card__meta span:last-child { display: none; }
-  .catalog-controls { display: grid; grid-template-columns: 1fr; gap: 4px; }
+  .catalog-controls { display: grid; grid-template-columns: 1fr; gap: 6px; padding: 8px 10px; }
   .catalog-summary,
   .search-field,
   .sort-field { grid-column: 1; }
