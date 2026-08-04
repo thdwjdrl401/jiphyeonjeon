@@ -31,6 +31,7 @@ export type {
   CurriculumManagementService,
   InstructorCurriculumResponse,
   SaveCurriculumManagementRequest,
+  SaveCurriculumManagementResult,
   UploadRecordedLessonRequest,
   UploadRecordedLessonResult,
 } from './curriculumManagementService.interface'

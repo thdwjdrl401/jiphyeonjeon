@@ -513,8 +513,7 @@ describe('커리큘럼 작업 화면', () => {
     expect(screen.getByLabelText('대표 이미지 등록')).toBeInTheDocument()
   })
 
-  // 커리큘럼-레벨 자료 편집은 로컬 스테이징이다 — 연결 API가 없어 서버에 반영하지 않는다(ADR-0030).
-  // 구조/정보는 자동 저장되지만 자료만 바꾼 것으로는 저장이 돌지 않으므로, 여기선 로컬 표시만 확인한다.
+  // 자료도 자동 저장 지문에 들어간다(ADR-0042) — 고르는 즉시 목록에 뜨고, 디바운스 뒤 저장된다.
   it('관리 화면에서 커리큘럼 자료를 추가하면 목록에 표시된다', async () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
@@ -525,6 +524,42 @@ describe('커리큘럼 작업 화면', () => {
 
     await user.upload(screen.getByLabelText('커리큘럼 강의 자료 등록'), material)
     expect(screen.getByText('instructor-common-guide.pptx')).toBeInTheDocument()
+  })
+
+  /*
+    자동 저장이 끝난 뒤 화면을 떠났다 돌아오면, 방금 저장한 자료 목록이 그대로 보여야 한다.
+
+    저장 결과를 쿼리 캐시에 반영하지 않으면 staleTime(30초) 안에 다시 들어올 때 저장 전 캐시가
+    그려진다 — 올린 자료가 사라져 보이고, 지운 자료가 되살아나 보이다가 30초가 지나서야 맞게
+    나왔다. 로컬 state는 화면을 떠나는 순간 사라지므로 이 왕복이 아니면 잡히지 않는다.
+  */
+  it('자료를 자동 저장한 뒤 화면을 떠났다 돌아와도 최신 목록이 보인다', async () => {
+    const user = userEvent.setup()
+    await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
+    await user.click(await screen.findByRole('tab', { name: '기본 정보' }))
+    const material = new File(['presentation'], 'cache-sync-guide.pptx', {
+      type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    })
+    await user.upload(screen.getByLabelText('커리큘럼 강의 자료 등록'), material)
+    await waitFor(() => expect(screen.getByText('자동 저장됨')).toBeInTheDocument())
+
+    // 커리큘럼 상세로 나갔다가 관리로 되돌아온다 — 실제 동선이고, 같은 QueryClient를 공유한다.
+    await user.click(screen.getByRole('link', { name: '커리큘럼 상세' }))
+    await user.click(await screen.findByRole('button', { name: '관리하기' }))
+    await user.click(await screen.findByRole('tab', { name: '기본 정보' }))
+
+    expect(await screen.findByText('cache-sync-guide.pptx')).toBeInTheDocument()
+
+    // 삭제도 같은 문제의 반대 방향이었다 — 지운 자료가 되돌아왔을 때 되살아나 보였다.
+    await user.click(screen.getByRole('button', { name: 'cache-sync-guide.pptx 제거' }))
+    await waitFor(() => expect(screen.getByText('자동 저장됨')).toBeInTheDocument())
+
+    await user.click(screen.getByRole('link', { name: '커리큘럼 상세' }))
+    await user.click(await screen.findByRole('button', { name: '관리하기' }))
+    await user.click(await screen.findByRole('tab', { name: '기본 정보' }))
+
+    expect(await screen.findByRole('heading', { name: '커리큘럼 강의 자료' })).toBeInTheDocument()
+    expect(screen.queryByText('cache-sync-guide.pptx')).not.toBeInTheDocument()
   })
 
   it('내 커리큘럼 카드에서 제목 첫 글자 대신 대표 이미지를 표시한다', async () => {

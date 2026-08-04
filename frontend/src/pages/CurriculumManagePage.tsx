@@ -19,6 +19,7 @@ import {
   saveCurriculumManagement,
   type CurriculumManagementSection,
   type InstructorCurriculumResponse,
+  type SaveCurriculumManagementResult,
 } from '@/features/curriculum/curriculumManagementService'
 import { evaluatePublishReadiness } from '@/features/curriculum/publishPreconditions'
 import type { CurriculumMaterial } from '@/features/curriculum/types'
@@ -224,6 +225,38 @@ function CurriculumManageEditor({
   }), [curriculumInfo, sections, materials])
 
 
+  /**
+   * 저장 결과를 이 화면을 그리는 쿼리 캐시에 반영한다.
+   *
+   * <p>여기가 없으면 <b>저장은 됐는데 화면만 옛것</b>이 된다. 저장 결과는 로컬 state에만 들어가고,
+   * 다른 페이지로 나가면 그 state가 사라진 뒤 캐시(staleTime 30초)로 다시 그려지기 때문이다 —
+   * 올린 자료가 사라져 보이고, 지운 자료가 되살아나 보이다가 30초가 지나서야 맞게 나왔다.
+   *
+   * <p><b>섹션은 캐시에 쓰지 않고 stale 표시만 한다.</b> 새 섹션이 실제 id를 받으면 재seed key가
+   * 바뀌므로(위 CurriculumManagePage 참조) 지금 캐시에 쓰면 편집 중인 에디터가 리마운트돼 방금
+   * 입력한 글자와 저장 배지가 날아간다. 다음 진입에서 서버를 다시 읽게만 해 두면 충분하다.
+   */
+  const syncCacheAfterSave = useCallback((result: SaveCurriculumManagementResult) => {
+    queryClient.setQueryData<{ curriculum: InstructorCurriculumResponse; sections: CurriculumManagementSection[] }>(
+      ['curriculum-management', curriculumId],
+      (current) => current && {
+        ...current,
+        curriculum: {
+          ...current.curriculum,
+          ...curriculumInfo,
+          materials: result.materials,
+          structureVersion: result.structureVersion,
+        },
+      },
+    )
+    // refetchType: 'none' — 지금 도는 refetch는 리마운트를 부른다. 다음 진입에서 받게만 한다.
+    queryClient.invalidateQueries({ queryKey: ['curriculum-management', curriculumId], refetchType: 'none' })
+    // 제목·자료는 이 화면 밖에서도 보인다(내 커리큘럼 카드, 공개 상세). 편집 중에는 그 쿼리들이
+    // 비활성이라 stale 표시만 되고 요청은 나가지 않는다.
+    queryClient.invalidateQueries({ queryKey: ['my-curriculums'] })
+    queryClient.invalidateQueries({ queryKey: ['curriculums'] })
+  }, [curriculumId, curriculumInfo, queryClient])
+
   // 구조·기본정보·자료 자동저장(ADR-0042). 자료 추가/삭제도 지문에 반영돼 자동저장이 돈다 —
   // saveCurriculumManagement가 새 자료 업로드·연결과 사라진 자료 삭제를 함께 처리한다.
   /** 저장에 성공했으면(또는 저장할 게 없으면) true. 게시는 이 값이 false면 중단한다. */
@@ -261,6 +294,7 @@ function CurriculumManageEditor({
       setStructureVersion(result.structureVersion)
       savedSignatureRef.current = signature
       setAutosave('saved')
+      syncCacheAfterSave(result)
       // 사이드바 등 다른 화면이 최신 구조를 읽도록.
       queryClient.invalidateQueries({ queryKey: ['curriculum-lesson-navigation', curriculumId] })
       return true
@@ -281,7 +315,7 @@ function CurriculumManageEditor({
         void flushSave()
       }
     }
-  }, [curriculumId, curriculumInfo, sections, materials, currentSignature, queryClient])
+  }, [curriculumId, curriculumInfo, sections, materials, currentSignature, queryClient, syncCacheAfterSave])
 
   // 변경 후 디바운스 자동저장. 첫 렌더에서는 현재 상태를 "저장됨"으로 기록만 하고 저장하지 않는다.
   useEffect(() => {
