@@ -515,6 +515,11 @@ presigned GET을 받는다. 판서 전용 경로를 새로 만들지 않는다. 
 Spring이 `interpretedText` 없이 보낸 스냅샷은 이미지를 읽어야만 색인할 수 있으므로 잡마다 실패하게
 두지 않고 기동 시점에 요구한다.
 
+OCR 모델은 `AI_WORKER_ANNOTATION_MODEL`로 따로 지정한다. 강조 이미지를 읽으려면 vision 모델이
+필요하지만 §10의 핵심 용어 추출은 PPTX 텍스트만 다루므로 두 용도를 한 값에 묶지 않는다. 비어 있으면
+`AI_WORKER_GMS_MODEL`로 폴백하므로 구분이 필요 없는 배포는 아무것도 설정하지 않아도 된다. API key와
+timeout은 두 용도가 공유한다.
+
 꺼진 상태에서 annotation 잡이 도착하면 영구 실패로 처리해 `ingestion.embed.dlq`에 보존한다. ACK도
 requeue도 하지 않는 제3의 보존은 RabbitMQ에 없고 requeue는 재전달 루프를 만든다. 스위치를 켠 뒤
 DLQ를 재발행하면 그대로 처리되므로 배포 순서가 어긋나도 잡이 유실되지 않는다.

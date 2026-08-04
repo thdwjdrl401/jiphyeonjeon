@@ -203,7 +203,7 @@ def build_pptx_ingestion_runtime(settings: Settings) -> PptxIngestionRuntime:
         annotation_gms_api_key = _required_secret(settings.gms_api_key, "AI_WORKER_GMS_API_KEY")
         annotation_reader = GmsAnnotationReader(
             api_key=annotation_gms_api_key,
-            model=settings.gms_model,
+            model=settings.annotation_model or settings.gms_model,
             max_output_tokens=settings.gms_max_output_tokens,
             max_text_chars=MAX_ANNOTATION_TEXT_CHARS,
             timeout_seconds=settings.gms_timeout_seconds,

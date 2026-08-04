@@ -122,8 +122,11 @@ uv run --frozen python -m app.main
 | `AI_WORKER_SPRING_INTERNAL_BASE_URL` | 선택 | 기본 `http://127.0.0.1:8080` |
 | `AI_WORKER_BGE_RUNTIME_URL` | 선택 | 로컬 `:8020`, EC2 host `:18020`, 운영 container `:18080/internal/bge` |
 | `AI_WORKER_KEY_TERM_EXTRACTION_ENABLED` | 선택, 기본 `false` | PPTX 핵심 용어 추출 활성화 |
-| `AI_WORKER_GMS_API_KEY` | 핵심 용어 추출 활성화 시 필수 | GMS(OpenAI 호환) API key |
-| `AI_WORKER_GMS_MODEL` | 선택 | 기본 `gpt-4.1` |
+| `AI_WORKER_ANNOTATION_INGESTION_ENABLED` | 선택, 기본 `false` | 강조 판서 스냅샷 색인 활성화 |
+| `AI_WORKER_GMS_API_KEY` | 위 둘 중 하나라도 켜면 필수 | GMS(OpenAI 호환) API key |
+| `AI_WORKER_GMS_MODEL` | 선택 | 기본 `gpt-4.1`. 핵심 용어 추출용 텍스트 모델 |
+| `AI_WORKER_ANNOTATION_MODEL` | 선택 | 강조 판서 OCR 전용 **vision** 모델. 비우면 `AI_WORKER_GMS_MODEL`을 쓴다 |
+| `AI_WORKER_ANNOTATION_IMAGE_MAX_BYTES` | 선택 | 기본 4 MiB |
 
 운영에서는 root [`.env.ai-prod.example`](../../.env.ai-prod.example)의 `AI_CALLBACK_SECRET`을
 container의 `AI_WORKER_SPRING_HMAC_SECRET`으로, `BGE_RUNTIME_INTERNAL_TOKEN`을

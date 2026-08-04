@@ -83,6 +83,9 @@ class Settings(BaseSettings):
     annotation_image_max_bytes: int = Field(default=4 * 1024 * 1024, gt=0)
     gms_api_key: SecretStr | None = Field(default=None, min_length=1)
     gms_model: str = Field(default="gpt-4.1", min_length=1, max_length=128)
+    # Reading a highlight image needs a vision model; extracting key terms from PPTX text does
+    # not. Unset falls back to gms_model so nothing changes for deployments that do not care.
+    annotation_model: str | None = Field(default=None, min_length=1, max_length=128)
     gms_max_output_tokens: int = Field(default=1_024, ge=1, le=8_192)
     gms_max_prompt_chars: int = Field(default=100_000, ge=1_000, le=1_000_000)
     gms_timeout_seconds: float = Field(default=55.0, gt=0, le=120)
@@ -149,6 +152,18 @@ class Settings(BaseSettings):
     def validate_gms_model(cls, value: str) -> str:
         if value != value.strip():
             raise ValueError("gms_model must not contain surrounding whitespace")
+        return value
+
+    @field_validator("annotation_model", mode="before")
+    @classmethod
+    def validate_annotation_model(cls, value: object) -> object:
+        # Blank means "not configured" rather than an empty model name, so an env file that
+        # declares the key without a value still falls back instead of failing to start.
+        if isinstance(value, str):
+            if not value.strip():
+                return None
+            if value != value.strip():
+                raise ValueError("annotation_model must not contain surrounding whitespace")
         return value
 
     @model_validator(mode="after")

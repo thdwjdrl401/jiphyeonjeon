@@ -402,6 +402,7 @@ def test_annotation_ingestion_enabled_wires_reader_index_and_delete(monkeypatch)
 
     assert captured["reader"] == {
         "api_key": "x" * 32,
+        # Falls back to gms_model while no OCR-specific model is configured.
         "model": "gpt-4.1",
         "max_output_tokens": 1_024,
         # Capped at what ai.annotation_snapshot.text accepts, not the PPTX prompt budget.
@@ -433,3 +434,47 @@ async def test_runtime_closes_the_annotation_reader_when_configured(monkeypatch)
     await runtime.aclose()
 
     reader.aclose.assert_awaited_once()
+
+
+def test_ocr_uses_its_own_model_when_configured(monkeypatch) -> None:
+    """Reading a highlight image needs a vision model; PPTX key term extraction does not, so
+    the two must not be forced onto one value."""
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(wiring, "AsyncClient", FakeHttpClient)
+    monkeypatch.setattr(wiring, "create_async_engine", lambda *_args, **_kwargs: FakeEngine())
+    monkeypatch.setattr(wiring, "IndexPptxMaterial", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(
+        wiring,
+        "GmsKeyTermExtractor",
+        lambda **kwargs: captured.setdefault("key_term", kwargs) and object(),
+    )
+    monkeypatch.setattr(
+        wiring,
+        "GmsAnnotationReader",
+        lambda **kwargs: captured.setdefault("reader", kwargs) and object(),
+    )
+
+    wiring.build_pptx_ingestion_runtime(
+        _settings(
+            annotation_ingestion_enabled=True,
+            key_term_extraction_enabled=True,
+            gms_api_key="x" * 32,
+            gms_model="gpt-4.1",
+            annotation_model="gpt-4o",
+        )
+    )
+
+    assert captured["key_term"]["model"] == "gpt-4.1"
+    assert captured["reader"]["model"] == "gpt-4o"
+
+
+@pytest.mark.parametrize("blank", ["", "   "])
+def test_a_declared_but_empty_ocr_model_falls_back_instead_of_failing(blank: str) -> None:
+    """An env file that lists the key with no value must not stop the worker from starting."""
+    assert _settings(annotation_model=blank).annotation_model is None
+
+
+def test_ocr_model_rejects_padding() -> None:
+    with pytest.raises(ValidationError, match="annotation_model"):
+        _settings(annotation_model=" gpt-4o ")
