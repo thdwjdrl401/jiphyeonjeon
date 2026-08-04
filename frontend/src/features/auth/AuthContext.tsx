@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, type PropsWithChildren } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { releasePushSubscription } from '@/features/notification/releasePushSubscription'
 import { authService } from './authService'
 import { profileService } from '@/features/profile/profileService'
 import type {
@@ -72,6 +73,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
       return updatedUser
     },
     async logout() {
+      /*
+       * 세션이 살아 있을 때 먼저 끊는다 — 로그아웃 뒤에는 서버가 나를 모르므로 지울 수 없다.
+       * 공용 PC에서 다음 사람에게 이전 계정의 알림이 뜨는 것을 막는다.
+       */
+      await releasePushSubscription()
       await authService.logout()
       queryClient.removeQueries({
         predicate: ({ queryKey }) => queryKey[0] !== 'auth',
