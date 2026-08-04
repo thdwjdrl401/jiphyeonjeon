@@ -13,11 +13,19 @@
 
 입력은 압축하지 않은 mono PCM16 WAV, 16 kHz여야 한다. manifest는 UTF-8 JSONL이며
 필수 필드는 `id`, `audioPath`, `reference`, `language`, `speakerId`, `split`, `consent`다.
-`terms`와 파일 무결성 검증용 `sha256`은 선택 필드다.
+학습 manifest는 철자형 정답인 `trainingReference`와 `lectureId`, `category`, `durationMs`도
+가진다. `terms`와 파일 무결성 검증용 `sha256`은 선택 필드다.
 
 ```json
-{"id":"golden-ko-tech-001","audioPath":"../data/golden-ko-tech-001.wav","reference":"정답 원문","language":"ko-KR","speakerId":"speaker-001","split":"golden","terms":["LiveKit","WebRTC"],"consent":"internal-evaluation"}
+{"id":"train-ko-tech-001","audioPath":"/data/train-ko-tech-001.wav","reference":"(software)/(소프트웨어)를 사용합니다.","trainingReference":"software를 사용합니다.","language":"ko-KR","speakerId":"speaker-001","lectureId":"lecture-001","category":"eng/comp","durationMs":3200,"split":"train","terms":[],"consent":"AI-Hub-license"}
 ```
+
+`normalizedCer`는 괄호 쌍의 철자·발음 표기를 각각 정답으로 인정한다. 한 문장 안에서 두
+표기가 섞여도 허용한다. 학습 target은 `trainingReference`만 사용하며, 원래 괄호 문자열을
+문자 그대로 정규화한 CER는 감사 지표 `literalNormalizedCer`로 함께 남긴다. 로더는 원본
+`reference`에서 철자형 target을 다시 만들어 기존 manifest의 괄호 정제 오류를 교정한다.
+닫히지 않은 이중 전사처럼 안전하게 복원할 수 없는 sample은 임의 추정하지 않고 학습
+selection에서 제외하며 `excludedInvalidReference`에 기록한다.
 
 ## AI Hub 데이터 준비
 
@@ -87,6 +95,59 @@ uv run --frozen stt-lab \
 결과 JSON은 clip별 원문·가설·CER·용어/숫자 정확도·지연·RTF와 평가 프로세스의
 peak CUDA memory를 보존한다. GPU 전체 사용량과 12-stream 동시성은 후속 replay
 benchmark에서 별도로 측정한다.
+
+## Whisper large-v3 LoRA pilot
+
+LoRA는 `/home/liveclass/ai/models/whisper-large-v3`의 고정 base checkpoint 위에 학습한다.
+기본 pilot은 speaker·lecture·category를 round-robin으로 섞은 train 5시간, 30초 이하 clip,
+rank 8, BF16, 1 epoch다. test와 golden은 학습·설정 선택에 사용하지 않는다.
+
+먼저 GPU를 사용하지 않는 selection dry-run을 수행한다.
+
+```bash
+uv run --frozen stt-lab-train-lora \
+  --base-model /home/liveclass/ai/models/whisper-large-v3 \
+  --train-manifest /home/liveclass/ai/datasets/aihub-korean-lecture/v1/manifests/train.jsonl \
+  --eval-manifest /home/liveclass/ai/datasets/aihub-korean-lecture/v1/manifests/dev.jsonl \
+  --output-dir /home/liveclass/ai/checkpoints/whisper-large-v3-lora/pilot-v1 \
+  --dry-run
+```
+
+실제 학습 전에는 같은 GPU 0을 쓰는 realtime-agent와 BGE를 maintenance window에서 내린다.
+상주 모델과 동시에 메모리에 들어가더라도 compute contention 때문에 라이브 p95를 보장할 수
+없다. 두 clip·한 update로 adapter 저장 경로를 먼저 검증한다.
+
+```bash
+uv run --frozen stt-lab-train-lora \
+  --base-model /home/liveclass/ai/models/whisper-large-v3 \
+  --train-manifest /home/liveclass/ai/datasets/aihub-korean-lecture/v1/manifests/train.jsonl \
+  --eval-manifest /home/liveclass/ai/datasets/aihub-korean-lecture/v1/manifests/dev.jsonl \
+  --output-dir /home/liveclass/ai/checkpoints/whisper-large-v3-lora/smoke-v1 \
+  --max-train-clips 2 \
+  --eval-limit 2 \
+  --batch-size 1 \
+  --gradient-accumulation-steps 1 \
+  --max-steps 1
+```
+
+smoke가 통과하면 `--max-train-clips`, `--max-steps`를 제거해 기본 5시간 pilot을 실행한다.
+각 epoch checkpoint와 최종 adapter, config·dataset hash·GPU peak가 output directory에
+보존된다. 기존 artifact가 있는 directory는 덮어쓰지 않는다.
+
+학습 후 동일 dev manifest를 base와 adapter에 각각 실행한다. 모델 선택은
+`normalizedCer`를 사용하고 `literalNormalizedCer`는 정제 감사에만 사용한다.
+
+```bash
+uv run --frozen stt-lab \
+  --manifest /home/liveclass/ai/datasets/aihub-korean-lecture/v1/manifests/dev.jsonl \
+  --split dev --limit 502 \
+  --backend whisper \
+  --model /home/liveclass/ai/models/whisper-large-v3 \
+  --adapter /home/liveclass/ai/checkpoints/whisper-large-v3-lora/pilot-v1/adapter-final \
+  --precision bfloat16 \
+  --cuda-visible-devices 0 \
+  --output results/whisper-large-v3-lora-dev-502.json
+```
 
 ## vLLM Whisper 서빙 실험
 

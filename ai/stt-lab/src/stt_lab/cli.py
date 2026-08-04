@@ -37,6 +37,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         args.model,
         device=args.device,
         precision=args.precision,
+        adapter_id=str(args.adapter.resolve()) if args.adapter is not None else None,
     )
     load_started = perf_counter()
     runner.load()
@@ -73,7 +74,12 @@ def _evaluate_clip(runner: Any, clip: EvaluationClip) -> dict[str, Any]:
     audio = read_pcm16_mono_wav(clip.audio_path, expected_sha256=clip.sha256)
     _reset_cuda_peak()
     transcription = runner.transcribe(audio, clip.language)
-    metrics = evaluate_transcript(clip.reference, transcription.text, clip.terms)
+    metrics = evaluate_transcript(
+        clip.reference,
+        transcription.text,
+        clip.terms,
+        training_reference=clip.training_reference,
+    )
     return {
         "id": clip.clip_id,
         "split": clip.split,
@@ -81,9 +87,11 @@ def _evaluate_clip(runner: Any, clip: EvaluationClip) -> dict[str, Any]:
         "audioSha256": audio.sha256,
         "durationMs": audio.duration_ms,
         "reference": clip.reference,
+        "trainingReference": clip.training_reference,
         "hypothesis": transcription.text,
         "rawCer": metrics.raw_cer,
         "normalizedCer": metrics.normalized_cer,
+        "literalNormalizedCer": metrics.literal_normalized_cer,
         "termRecall": metrics.term_recall,
         "numberExactMatch": metrics.number_exact_match,
         "firstDeltaMs": transcription.first_delta_ms,
@@ -99,6 +107,9 @@ def _summarize(results: Sequence[dict[str, Any]]) -> dict[str, Any]:
         "clipCount": len(results),
         "durationMs": sum(result["durationMs"] for result in results),
         "meanNormalizedCer": statistics.fmean(result["normalizedCer"] for result in results),
+        "meanLiteralNormalizedCer": statistics.fmean(
+            result["literalNormalizedCer"] for result in results
+        ),
         "p50TotalMs": _percentile([result["totalMs"] for result in results], 0.50),
         "p95TotalMs": _percentile([result["totalMs"] for result in results], 0.95),
         "meanRealTimeFactor": statistics.fmean(result["realTimeFactor"] for result in results),
@@ -151,6 +162,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--backend", choices=("nemotron", "whisper"), default="nemotron")
     parser.add_argument("--model")
+    parser.add_argument("--adapter", type=Path)
     parser.add_argument("--device", default="cuda:0")
     parser.add_argument(
         "--precision",
