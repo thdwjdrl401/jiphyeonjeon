@@ -849,16 +849,16 @@ body {
  * 검색·정렬 입력.
  *
  * 예전에는 둘 다 border: 0 / background: transparent 라서 도구줄 위의 글자와 구별되지 않았다.
- * 테두리는 --ink-500을 쓴다 — 기존 토큰 중 비텍스트 최소 대비 3:1에 닿는 유일한 값이다
- * (--ink-400 2.24:1, --border-strong 2.51:1, --ink-200 1.36:1은 모두 미달).
+ * 테두리로 가두지 않고 <b>면 색만으로</b> 구분한다 — 종이 배경보다 한 단 어두운 --ink-200으로
+ * 눌러 쓰는 칸처럼 내려앉게 두고, 포커스에서 밝아지며 활성 상태를 낸다.
  * 높이 42px과 radius 0은 그대로 둔다.
  */
 .search-field {
   height: 42px;
-  border: 1px solid var(--ink-500);
+  border: 0;
   border-radius: 0;
   padding-inline: 12px;
-  background: var(--white);
+  background: var(--ink-200);
 }
 
 /*
@@ -868,7 +868,6 @@ body {
  * 링은 입력이 아니라 필드 껍데기에 걸어 "이 칸에 있다"를 보여 준다. 값은 전역 :focus-visible과 같다.
  */
 .search-field:focus-within {
-  border-color: var(--ink-950);
   background: var(--white);
   box-shadow: none;
   outline: 2px solid var(--ink-950);
@@ -896,20 +895,21 @@ body {
   font-size: 1.05rem;
   line-height: 1;
 }
-.search-field > button:hover { background: var(--ink-100); color: var(--ink-950); }
+/* hover도 면을 덧칠하지 않고 색만 진해진다 — 필드 면이 이미 색으로 구분되어 있다. */
+.search-field > button:hover { color: var(--ink-950); }
 .search-field > button:focus-visible { outline: 2px solid var(--ink-950); outline-offset: 1px; }
 
-/* 정렬 select도 같은 입력 규칙을 따른다. 예전의 border-left는 검색창과의 구분선 역할이었는데,
-   이제 각자 자기 테두리를 가지므로 필요 없다. */
+/* 정렬 select도 같은 규칙을 따른다. 예전의 border-left는 검색창과의 구분선 역할이었는데,
+   이제 두 칸이 각자 면 색을 가지므로 필요 없다. */
 .sort-field select {
   height: 42px;
   margin-block: 0;
-  border: 1px solid var(--ink-500);
+  border: 0;
   border-radius: 0;
-  background: var(--white);
+  background: var(--ink-200);
 }
 .sort-field select:focus-visible {
-  border-color: var(--ink-950);
+  background: var(--white);
   outline: 2px solid var(--ink-950);
   outline-offset: 2px;
 }
@@ -1761,8 +1761,8 @@ body {
   .catalog-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; padding-top: 0; }
   .catalog-summary { grid-column: 1 / -1; min-height: 42px; padding-right: 0; border-right: 0; border-bottom: 1px solid var(--border-medium); }
   .sort-field { grid-column: auto; grid-row: auto; border-top: 0; }
-  /* 좁은 폭에서도 사방 테두리를 유지한다 — 한 변만 남으면 입력란으로 보이지 않는다. */
-  .sort-field select { width: auto; border: 1px solid var(--ink-500); }
+  /* 좁은 폭에서도 면 색으로만 구분한다 — 예전에는 여기서 border-left만 살아나 한 변이 남았다. */
+  .sort-field select { width: auto; border: 0; }
   .curriculum-hero { padding: 24px 20px; }
   .curriculum-identity h1 { font-size: clamp(2rem, 10vw, 2.8rem); }
 }
@@ -1810,7 +1810,7 @@ body {
   .catalog-summary,
   .search-field,
   .sort-field { grid-column: 1; }
-  .sort-field select { width: 100%; border: 1px solid var(--ink-500); }
+  .sort-field select { width: 100%; border: 0; }
   .curriculum-grid { grid-template-columns: 1fr; }
   .curriculum-cover,
   .skeleton-cover { height: 188px; }
