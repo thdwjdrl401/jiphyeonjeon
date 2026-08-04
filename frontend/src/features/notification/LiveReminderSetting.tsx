@@ -12,7 +12,9 @@ interface LiveReminderSettingProps {
 }
 
 /**
- * 라이브 <b>곧 시작</b> 알림의 리드타임 설정.
+ * 라이브 <b>곧 시작</b> 알림의 리드타임 설정. <b>내용만 그린다</b> — 제목과 패널 껍데기는 호출자가
+ * 준다. 커리큘럼 상세는 형제들과 같은 {@code <section>} + {@code <h2>}를, 강의 상세는 {@code Panel}을
+ * 쓰는데, 컴포넌트가 껍데기를 들고 있으면 한쪽에서 반드시 이중으로 겹친다.
  *
  * <p>이 설정이 다른 알림에는 영향을 주지 않는다는 것을 화면에서 밝힌다 — "알림 설정"이라고만 쓰면
  * 수강 승인·자료 게시까지 꺼지는 것으로 읽힌다. 그 둘은 사건이 일어난 순간의 통보라 리드타임이라는
@@ -59,8 +61,7 @@ export function LiveReminderSetting({ curriculumId, lessonId }: LiveReminderSett
   const overridden = lessonId != null && preference.source === 'LESSON'
 
   return (
-    <section className="live-reminder-setting">
-      <h3>라이브 시작 알림</h3>
+    <div className="live-reminder-setting">
       <p className="live-reminder-setting__hint">
         라이브가 시작하기 전에 미리 알려 드립니다. 수강 승인·자료 등록 같은 다른 알림은 이 설정과
         무관하게 그대로 옵니다.
@@ -122,7 +123,7 @@ export function LiveReminderSetting({ curriculumId, lessonId }: LiveReminderSett
           설정을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.
         </p>
       )}
-    </section>
+    </div>
   )
 }
 

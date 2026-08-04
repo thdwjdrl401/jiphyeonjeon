@@ -136,7 +136,9 @@ class LiveStartingSoonContractTest {
          */
         payloads.forEach(p -> worker.handle(p.toString()));
         assertThat(recipientsOf(f.curriculumId, "LIVE_STARTING_SOON"))
-                .containsExactlyInAnyOrderElementsOf(f.studentIds);
+                .as("수강생 전원 + 담당 강사(강사는 수강 등록돼 있지 않아 따로 넣는다)")
+                .containsExactlyInAnyOrderElementsOf(
+                        java.util.stream.Stream.concat(f.studentIds.stream(), java.util.stream.Stream.of(f.instructorId)).toList());
     }
 
     /**
@@ -173,6 +175,40 @@ class LiveStartingSoonContractTest {
     void cleanUpCommittedRows() {
         jdbc.update("DELETE FROM core.outbox_events WHERE destination = ?",
                 NotificationMessagingConfig.FANOUT_QUEUE);
+    }
+
+    /**
+     * <b>강사도 받아야 한다.</b> 팬아웃 SQL은 {@code core.enrollment}만 훑는데 강사는 자기
+     * 커리큘럼에 수강 등록돼 있지 않아 그 집합에 없다 — 운영에서 수강생 넷은 받고 강사만 못 받는
+     * 일이 실제로 있었다(2026-08-04, 세션 5ce856ea).
+     */
+    @Test
+    void the_instructor_is_reminded_too_even_though_they_are_not_enrolled() {
+        Fixture f = fixture(2);
+        UUID sessionId = liveSessionManagement
+                .create(f.lessonId, f.curriculumId, f.instructorId, OffsetDateTime.now().plusMinutes(9))
+                .sessionId();
+
+        scheduler.fireDue();
+        fanoutPayloadsFor(sessionId, "LIVE_STARTING_SOON").forEach(p -> worker.handle(p.toString()));
+
+        assertThat(recipientsOf(f.curriculumId, "LIVE_STARTING_SOON"))
+                .as("수강생 전원 + 강사")
+                .contains(f.instructorId)
+                .containsAll(f.studentIds);
+    }
+
+    /** 나머지 라이브 알림은 강사가 방금 자기가 한 일이라 보내지 않는다. */
+    @Test
+    void the_instructor_is_not_told_about_their_own_scheduling() {
+        Fixture f = fixture(1);
+        UUID sessionId = liveSessionManagement
+                .create(f.lessonId, f.curriculumId, f.instructorId, OffsetDateTime.now().plusHours(2))
+                .sessionId();
+
+        fanoutPayloadsFor(sessionId, "LIVE_SCHEDULED").forEach(p -> worker.handle(p.toString()));
+
+        assertThat(recipientsOf(f.curriculumId, "LIVE_SCHEDULED")).doesNotContain(f.instructorId);
     }
 
     // ---- helpers ----

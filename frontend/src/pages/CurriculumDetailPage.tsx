@@ -115,7 +115,12 @@ export default function CurriculumDetailPage() {
               수강 중이거나 소유 강사일 때만 보인다. 신청도 안 한 사람에게 "라이브 알림 설정"을
               보여 주면 받을 수도 없는 알림을 설정하게 된다.
             */}
-            {canViewCurriculumMaterials && <LiveReminderSetting curriculumId={detail.curriculumId} />}
+            {canViewCurriculumMaterials && (
+              <section className="curriculum-reminder-panel" aria-labelledby="curriculum-reminder-heading">
+                <h2 id="curriculum-reminder-heading">라이브 시작 알림</h2>
+                <LiveReminderSetting curriculumId={detail.curriculumId} />
+              </section>
+            )}
 
             {hasPriorityRelationPanel && relationPanel}
 

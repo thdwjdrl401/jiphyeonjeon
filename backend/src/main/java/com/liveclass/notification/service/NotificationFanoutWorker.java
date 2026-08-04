@@ -75,6 +75,7 @@ public class NotificationFanoutWorker {
     private final LiveSessionDirectory liveSessionDirectory;
     private final RabbitTemplate rabbitTemplate;
     private final WsNotificationBroadcaster broadcaster;
+    private final NotificationPreferenceService preferenceService;
 
     public NotificationFanoutWorker(NotificationInsertRepository insertRepository,
                                     NotificationFanoutRepository fanoutRepository,
@@ -82,7 +83,8 @@ public class NotificationFanoutWorker {
                                     LessonDirectory lessonDirectory,
                                     LiveSessionDirectory liveSessionDirectory,
                                     RabbitTemplate rabbitTemplate,
-                                    WsNotificationBroadcaster broadcaster) {
+                                    WsNotificationBroadcaster broadcaster,
+                                    NotificationPreferenceService preferenceService) {
         this.insertRepository = insertRepository;
         this.fanoutRepository = fanoutRepository;
         this.userDirectory = userDirectory;
@@ -90,6 +92,7 @@ public class NotificationFanoutWorker {
         this.liveSessionDirectory = liveSessionDirectory;
         this.rabbitTemplate = rabbitTemplate;
         this.broadcaster = broadcaster;
+        this.preferenceService = preferenceService;
     }
 
     @RabbitListener(queues = NotificationMessagingConfig.FANOUT_QUEUE,
@@ -106,6 +109,16 @@ public class NotificationFanoutWorker {
             if (filled.curriculumId() == null) {
                 logMissingContext(filled, "커리큘럼");
                 return;
+            }
+            /*
+             * 강사도 곧 시작 알림을 받아야 한다. 팬아웃 SQL은 core.enrollment만 훑는데 <b>강사는
+             * 자기 커리큘럼에 수강 등록돼 있지 않아</b> 그 집합에 없다 — 운영에서 수강생 넷은
+             * 받고 강사만 못 받는 일이 실제로 있었다.
+             *
+             * 나머지 라이브 알림(예정·변경·취소)은 강사가 <b>방금 자기가 한 일</b>이라 보내지 않는다.
+             */
+            if (NotificationTypes.LIVE_STARTING_SOON.equals(filled.type())) {
+                notifyInstructorOfStartingSoon(filled);
             }
             fanOutToCurriculumStudents(filled);
             return;
@@ -183,6 +196,43 @@ public class NotificationFanoutWorker {
                 JSON.writeValueAsString(targets),
                 command.type() + ':' + command.liveSessionId(),
                 command.type() + ':' + command.instructorId() + ':' + command.videoAssetId());
+    }
+
+    /**
+     * 곧 시작 알림을 담당 강사에게. <b>첫 조각에서만</b> 넣는다 — 뒤 조각에서도 부르면 중복 키가
+     * 막아 주긴 하지만 조각 수만큼 헛일이 된다.
+     *
+     * <p>리드타임 판정은 수강생과 <b>같은 규칙</b>이다(강의 → 커리큘럼 → 기본값). 강사만 다른
+     * 규칙을 쓰면 설정 화면이 보여 주는 값과 실제로 오는 시각이 어긋난다.
+     */
+    private void notifyInstructorOfStartingSoon(NotificationFanoutCommand command) {
+        if (command.afterUserId() != null || command.instructorId() == null) {
+            return;
+        }
+        int lead = command.leadMinutes() == null ? NotificationLeadTimes.DEFAULT_MINUTES : command.leadMinutes();
+        var effective = preferenceService.effective(
+                command.instructorId(), command.curriculumId(), command.lessonId());
+        if (!effective.enabled() || effective.leadMinutes() != lead) {
+            return;
+        }
+        String subject = lessonTitleOf(command.lessonId());
+        int inserted = insertRepository.insert(NewNotification.of(
+                command.instructorId(),
+                command.type(),
+                NotificationStatus.INFO,
+                NotificationTypes.severityOf(command.type()),
+                NotificationCopy.title(command.type()),
+                NotificationCopy.wideMessage(command.type(), command.curriculumTitle(), subject,
+                        null, command.nextStartsAt()),
+                wideTargetsJson(command),
+                command.type() + ':' + command.curriculumId(),
+                dedupePrefix(command) + command.instructorId()));
+        if (inserted > 0) {
+            broadcaster.announce(command.instructorId(), command.type(),
+                    NotificationCopy.title(command.type()),
+                    NotificationCopy.wideMessage(command.type(), command.curriculumTitle(), subject,
+                            null, command.nextStartsAt()));
+        }
     }
 
     // ---- 넓은 팬아웃 ----
