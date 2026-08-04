@@ -179,6 +179,62 @@ class NotificationTargetContractTest {
         target(otherUser, id).andExpect(status().isNotFound());
     }
 
+    /**
+     * <b>이미 처리한 신청은 눌렀을 때 처리 대기에서 내려온다.</b>
+     *
+     * <p>정리의 정규 경로는 승인·거절 사건을 받은 워커다. 이건 그 경로가 어긋났을 때의 자가 복구라,
+     * 여기서는 사건 없이 수강 상태만 ACTIVE로 두고 확인한다 — 운영에 이미 그런 알림이 쌓여 있다.
+     *
+     * <p><b>갈 곳은 막지 않는다.</b> 승인된 신청도 수강생 목록에서 확인할 이유가 있다.
+     */
+    @Test
+    void clicking_an_already_handled_request_settles_it_but_still_opens() throws Exception {
+        UUID instructor = seedUser("INSTRUCTOR");
+        UUID student = seedUser("STUDENT");
+        UUID curriculum = seedCurriculum(instructor, "PUBLISHED");
+        UUID enrollment = seedEnrollment(curriculum, student, "ACTIVE");
+        UUID id = seedNotification(instructor, NotificationTypes.ENROLLMENT_REQUESTED, ACTION_REQUIRED,
+                "{\"curriculumId\":\"%s\",\"enrollmentId\":\"%s\"}".formatted(curriculum, enrollment));
+
+        target(instructor, id)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("AVAILABLE"));
+
+        org.assertj.core.api.Assertions.assertThat(actionStatusOf(id))
+                .as("강사가 이미 승인한 신청이다")
+                .isEqualTo("COMPLETED");
+    }
+
+    /** 학생이 물러 수강 행이 CANCELLED면 <b>완료가 아니라 만료</b>다. 강사는 한 일이 없다. */
+    @Test
+    void clicking_a_withdrawn_request_expires_it_instead_of_completing_it() throws Exception {
+        UUID instructor = seedUser("INSTRUCTOR");
+        UUID student = seedUser("STUDENT");
+        UUID curriculum = seedCurriculum(instructor, "PUBLISHED");
+        UUID enrollment = seedEnrollment(curriculum, student, "CANCELLED");
+        UUID id = seedNotification(instructor, NotificationTypes.ENROLLMENT_REQUESTED, ACTION_REQUIRED,
+                "{\"curriculumId\":\"%s\",\"enrollmentId\":\"%s\"}".formatted(curriculum, enrollment));
+
+        target(instructor, id).andExpect(jsonPath("$.status").value("AVAILABLE"));
+
+        org.assertj.core.api.Assertions.assertThat(actionStatusOf(id)).isEqualTo("EXPIRED");
+    }
+
+    /** 아직 대기 중인 신청은 눌러도 그대로 남는다 — 강사가 처리해야 할 일이 사라지면 안 된다. */
+    @Test
+    void clicking_a_still_pending_request_leaves_it_on_the_list() throws Exception {
+        UUID instructor = seedUser("INSTRUCTOR");
+        UUID student = seedUser("STUDENT");
+        UUID curriculum = seedCurriculum(instructor, "PUBLISHED");
+        UUID enrollment = seedEnrollment(curriculum, student, "PENDING");
+        UUID id = seedNotification(instructor, NotificationTypes.ENROLLMENT_REQUESTED, ACTION_REQUIRED,
+                "{\"curriculumId\":\"%s\",\"enrollmentId\":\"%s\"}".formatted(curriculum, enrollment));
+
+        target(instructor, id).andExpect(jsonPath("$.status").value("AVAILABLE"));
+
+        org.assertj.core.api.Assertions.assertThat(actionStatusOf(id)).isEqualTo("ACTION_REQUIRED");
+    }
+
     /** 저장된 targets가 깨져 있어도 500이 아니다 — 대상이 없는 것과 같이 본다. */
     @Test
     void a_broken_targets_payload_is_gone_not_a_server_error() throws Exception {
@@ -238,11 +294,24 @@ class NotificationTargetContractTest {
         return id;
     }
 
-    private void seedEnrollment(UUID curriculumId, UUID userId, String status) {
+    private UUID seedEnrollment(UUID curriculumId, UUID userId, String status) {
+        UUID id = UUID.randomUUID();
         jdbc.update("""
                 INSERT INTO core.enrollment (id, curriculum_id, user_id, status, requested_at)
                 VALUES (?, ?, ?, ?, now())
-                """, UUID.randomUUID(), curriculumId, userId, status);
+                """, id, curriculumId, userId, status);
+        return id;
+    }
+
+    /**
+     * 플러시를 강제하고 처리 축을 읽는다. 테스트와 요청이 같은 트랜잭션이라 엔티티는 더티 상태로만
+     * 남아 있고, JdbcTemplate은 영속성 컨텍스트를 우회해 읽는다 — flush 없이는 UPDATE가 실제로
+     * 나가는지가 아니라 "아직 안 나갔다"를 보게 된다.
+     */
+    private String actionStatusOf(UUID notificationId) {
+        entityManager.flush();
+        return jdbc.queryForObject(
+                "SELECT action_status FROM core.notification WHERE id = ?", String.class, notificationId);
     }
 
     private ResultActions write(MockHttpServletRequestBuilder builder, Cookie[] authCookies, String body)

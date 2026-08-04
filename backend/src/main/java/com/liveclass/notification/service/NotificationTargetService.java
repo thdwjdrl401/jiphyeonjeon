@@ -3,11 +3,14 @@ package com.liveclass.notification.service;
 import com.liveclass.curriculum.api.CurriculumDirectory;
 import com.liveclass.curriculum.api.CurriculumView;
 import com.liveclass.enrollment.api.EnrollmentDirectory;
+import com.liveclass.enrollment.api.EnrollmentStatus;
+import com.liveclass.enrollment.api.EnrollmentView;
 import com.liveclass.lesson.api.LessonDetailView;
 import com.liveclass.lesson.api.LessonDirectory;
 import com.liveclass.live.api.LiveSessionDirectory;
 import com.liveclass.live.api.LiveSessionView;
 import com.liveclass.notification.domain.Notification;
+import com.liveclass.notification.api.NotificationTypes;
 import com.liveclass.notification.domain.NotificationStatus;
 import com.liveclass.notification.repository.NotificationRepository;
 import com.liveclass.video.api.ReplayDirectory;
@@ -19,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -86,7 +90,45 @@ public class NotificationTargetService {
             log.info("알림 대상 소멸 id={} type={} 이유={}",
                     notificationId, notification.getType(), gone.reasonCode());
         }
+        settleIfAlreadyHandled(notification);
         return resolution;
+    }
+
+    /**
+     * 이미 처리된 수강 신청 알림을 <b>누르는 순간</b> 닫는다.
+     *
+     * <p>정리의 정규 경로는 사건이 일어날 때 워커가 하는 것이다. 이것은 그 경로가 어떤 이유로든
+     * 어긋났을 때를 위한 자가 복구다 — 그런 알림은 눌러 봐야 승인 대기 신청자가 없어 강사가 스스로
+     * 내릴 방법이 없고, 처리 대기 배지에 영영 남는다. 운영에서 실제로 그렇게 됐다.
+     *
+     * <p><b>갈 곳은 그대로 열어 둔다.</b> 승인된 신청도 수강생 목록에서 확인할 이유가 있으므로
+     * {@code Gone}으로 바꾸지 않는다 — 여기서 닫는 것은 처리 축뿐이다.
+     */
+    private void settleIfAlreadyHandled(Notification notification) {
+        if (!NotificationTypes.ENROLLMENT_REQUESTED.equals(notification.getType())
+                || !NotificationStatus.ACTION_REQUIRED.equals(notification.getActionStatus())) {
+            return;
+        }
+        UUID enrollmentId = uuid(readTargets(notification.getTargets()), "enrollmentId");
+        if (enrollmentId == null) {
+            return;
+        }
+        Optional<EnrollmentStatus> status = enrollmentDirectory.findById(enrollmentId)
+                .map(EnrollmentView::status);
+        if (status.filter(EnrollmentStatus.PENDING::equals).isPresent()) {
+            return;   // 아직 강사가 처리할 일이 남아 있다.
+        }
+        /*
+         * 강사가 실제로 처리한 것(승인·거절)만 완료다. 학생이 물러서(취소·수강 행 삭제) 처리할 일
+         * 자체가 사라진 것은 만료다 — 하지도 않은 일을 했다고 기록하지 않는다.
+         */
+        boolean handled = status.filter(s -> s == EnrollmentStatus.ACTIVE || s == EnrollmentStatus.REJECTED)
+                .isPresent();
+        notification.setActionStatus(handled
+                ? NotificationStatus.COMPLETED : NotificationStatus.EXPIRED);
+        notification.setCompletedAt(OffsetDateTime.now());
+        log.info("처리된 수강 신청 알림을 열람 시점에 정리 id={} enrollment={} 상태={}",
+                notification.getId(), enrollmentId, notification.getActionStatus());
     }
 
     private NotificationTargetResolution judge(UUID viewerId, Notification notification) {

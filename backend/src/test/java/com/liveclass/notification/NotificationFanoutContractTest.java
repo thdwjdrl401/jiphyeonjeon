@@ -28,6 +28,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -170,6 +171,94 @@ class NotificationFanoutContractTest {
     }
 
     /**
+     * <b>강사가 승인하면 그 신청은 처리 대기에서 내려와야 한다.</b>
+     *
+     * <p>이것이 없어서 운영에서 배지는 "처리 대기 1"인데 눌러 들어가면 승인 대기 신청자가 없었다.
+     * 강사가 스스로 내릴 방법도 없다 — 눌러도 아무 일이 일어나지 않으므로.
+     */
+    @Test
+    void approving_takes_the_request_off_the_instructors_pending_list() throws Exception {
+        Fixture f = approvalRequiredCurriculum();
+        String enrollmentId = apply(f);
+        runWorkerForLatest(f, "ENROLLMENT_REQUESTED");
+        decide(f, enrollmentId, "approve");
+        runWorkerForLatest(f, "ENROLLMENT_APPROVED");
+
+        assertThat(requestRowOf(f).actionStatus)
+                .as("강사가 처리했으니 완료다")
+                .isEqualTo("COMPLETED");
+    }
+
+    @Test
+    void rejecting_takes_it_off_the_list_too() throws Exception {
+        Fixture f = approvalRequiredCurriculum();
+        String enrollmentId = apply(f);
+        runWorkerForLatest(f, "ENROLLMENT_REQUESTED");
+        decide(f, enrollmentId, "reject");
+        runWorkerForLatest(f, "ENROLLMENT_REJECTED");
+
+        assertThat(requestRowOf(f).actionStatus).isEqualTo("COMPLETED");
+    }
+
+    /**
+     * 학생이 스스로 물러도 내려와야 한다. 다만 <b>완료가 아니라 만료</b>다 — 강사는 아무것도 하지
+     * 않았고 이제 할 수도 없다. 하지도 않은 일을 했다고 기록하지 않는다.
+     */
+    @Test
+    void a_student_withdrawing_expires_the_instructors_pending_item() throws Exception {
+        Fixture f = approvalRequiredCurriculum();
+        apply(f);
+        runWorkerForLatest(f, "ENROLLMENT_REQUESTED");
+        cancel(f);
+        worker.handle(payloadFor(f, "ENROLLMENT_CANCELED"));
+
+        assertThat(requestRowOf(f).actionStatus)
+                .as("처리한 것이 아니라 처리할 일이 사라졌다")
+                .isEqualTo("EXPIRED");
+    }
+
+    /** 취소 신호는 알림을 만들지 않는다 — 강사가 할 수 있는 일이 없는 소식이다. */
+    @Test
+    void withdrawing_creates_no_new_notification() throws Exception {
+        Fixture f = approvalRequiredCurriculum();
+        apply(f);
+        runWorkerForLatest(f, "ENROLLMENT_REQUESTED");
+        cancel(f);
+        worker.handle(payloadFor(f, "ENROLLMENT_CANCELED"));
+
+        assertThat(notificationsFor(f.curriculumId))
+                .as("신청 알림 한 건뿐이다")
+                .hasSize(1);
+    }
+
+    /**
+     * <b>늦게 도착한 결정 메시지가 새 신청을 덮어서는 안 된다.</b>
+     *
+     * <p>재신청은 같은 수강 행을 되살리므로(EnrollmentService.apply) enrollmentId만으로는 첫 신청과
+     * 재신청을 구분할 수 없다. 메시지가 재배달돼 거절 통보가 뒤늦게 한 번 더 오면, enrollmentId로만
+     * 닫는 구현은 <b>강사가 아직 처리하지 않은</b> 새 신청까지 완료로 만들어 버린다.
+     */
+    @Test
+    void a_redelivered_decision_leaves_a_fresh_request_pending() throws Exception {
+        Fixture f = approvalRequiredCurriculum();
+        String enrollmentId = apply(f);
+        runWorkerForLatest(f, "ENROLLMENT_REQUESTED");
+        decide(f, enrollmentId, "reject");
+        String rejection = payloadFor(f, "ENROLLMENT_REJECTED");
+        worker.handle(rejection);
+
+        apply(f);   // 거절당한 학생이 다시 신청했다.
+        for (OutboxEvent event : fanoutEventsFor(f.curriculumId)) {
+            worker.handle(event.getPayloadJson());
+        }
+        worker.handle(rejection);   // 옛 거절 메시지가 한 번 더 배달됐다.
+
+        assertThat(pendingRequestCountOf(f))
+                .as("재신청은 강사가 아직 처리하지 않았다")
+                .isEqualTo(1);
+    }
+
+    /**
      * 계약에 없는 종류는 <b>재시도해도 같다</b>. 던져서 DLQ로 보낸다 — 큐에 되돌리면 그 메시지가
      * 영원히 같은 자리를 돌며 워커를 붙잡는다.
      */
@@ -246,14 +335,39 @@ class NotificationFanoutContractTest {
                 f.instructor, null).andExpect(status().isOk());
     }
 
+    private void cancel(Fixture f) throws Exception {
+        write(delete("/api/curriculums/" + f.curriculumId + "/enrollments/me"), f.student, null)
+                .andExpect(status().isOk());
+    }
+
     private Row runWorkerForLatest(Fixture f, String type) {
-        OutboxEvent event = fanoutEventsFor(f.curriculumId).stream()
-                .filter(e -> e.getPayloadJson().contains("\"" + type + "\""))
-                .findFirst().orElseThrow(() -> new AssertionError(type + " 팬아웃 요청이 없다"));
-        worker.handle(event.getPayloadJson());
+        worker.handle(payloadFor(f, type));
         return notificationsFor(f.curriculumId).stream()
                 .filter(r -> type.equals(r.type))
                 .findFirst().orElseThrow(() -> new AssertionError(type + " 알림이 없다"));
+    }
+
+    private String payloadFor(Fixture f, String type) {
+        return fanoutEventsFor(f.curriculumId).stream()
+                .map(OutboxEvent::getPayloadJson)
+                .filter(payload -> payload.contains("\"" + type + "\""))
+                .findFirst().orElseThrow(() -> new AssertionError(type + " 팬아웃 요청이 없다"));
+    }
+
+    /** 강사에게 간 신청 알림 한 건. 재신청 시나리오가 아닌 테스트에서만 쓴다. */
+    private Row requestRowOf(Fixture f) {
+        List<Row> rows = notificationsFor(f.curriculumId).stream()
+                .filter(r -> "ENROLLMENT_REQUESTED".equals(r.type))
+                .toList();
+        assertThat(rows).hasSize(1);
+        return rows.getFirst();
+    }
+
+    private long pendingRequestCountOf(Fixture f) {
+        return notificationsFor(f.curriculumId).stream()
+                .filter(r -> "ENROLLMENT_REQUESTED".equals(r.type))
+                .filter(r -> "ACTION_REQUIRED".equals(r.actionStatus))
+                .count();
     }
 
     private OutboxEvent onlyFanoutEventFor(String curriculumId) {

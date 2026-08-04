@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.OffsetDateTime;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -63,6 +64,35 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
              WHERE n.recipientId = :recipientId AND n.readStatus = 'UNREAD'
             """)
     int markAllRead(@Param("recipientId") UUID recipientId);
+
+    /**
+     * 수강 신청 알림의 <b>처리 축을 닫는다</b>. 승인·거절이면 {@code COMPLETED}, 학생이 스스로
+     * 취소해 처리할 일 자체가 사라졌으면 {@code EXPIRED}로 부른다.
+     *
+     * <p>이 갱신이 없어서 강사의 "처리 대기" 배지가 승인 뒤에도 줄지 않았다. 눌러 봐야 그 자리에
+     * 승인 대기 신청자가 없으니 강사가 내릴 방법도 없었다 — {@code COMPLETED}는 상수로만 있고
+     * 아무도 쓰지 않는 값이었다.
+     *
+     * <p><b>수신자를 조건에 넣지 않는다.</b> 사용자 요청이 아니라 워커가 사건을 처리하며 부르는
+     * 갱신이라 인가 주체가 없고, 한 수강 신청의 대기 알림은 담당 강사의 것뿐이다.
+     *
+     * <p>같은 수강 행이 재신청으로 되살아나면 대기 알림이 여러 건일 수 있어 <b>여러 행을 갱신한다</b>.
+     * 되살아난 뒤의 <b>새</b> 대기 알림까지 닫아 버리지 않게 막는 것은 부르는 쪽의 수강 상태
+     * 확인이다 — 시각으로 자르지 않는 이유는 팬아웃이 밀리면 알림 생성 시각이 결정 시각보다
+     * 늦을 수 있기 때문이다.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = """
+            UPDATE core.notification
+               SET action_status = :status,
+                   completed_at = :settledAt
+             WHERE type = 'ENROLLMENT_REQUESTED'
+               AND action_status = 'ACTION_REQUIRED'
+               AND targets ->> 'enrollmentId' = :enrollmentId
+            """, nativeQuery = true)
+    int settleEnrollmentRequests(@Param("enrollmentId") String enrollmentId,
+                                 @Param("status") String status,
+                                 @Param("settledAt") OffsetDateTime settledAt);
 
     Optional<Notification> findByIdAndRecipientId(UUID id, UUID recipientId);
 

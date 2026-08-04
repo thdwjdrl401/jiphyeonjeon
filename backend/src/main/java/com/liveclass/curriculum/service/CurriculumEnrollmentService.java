@@ -6,6 +6,7 @@ import com.liveclass.curriculum.domain.EnrollmentType;
 import com.liveclass.auth.api.UserContact;
 import com.liveclass.auth.api.UserDirectory;
 import com.liveclass.curriculum.repository.CurriculumRepository;
+import com.liveclass.enrollment.api.EnrollmentCanceledEvent;
 import com.liveclass.enrollment.api.EnrollmentDecidedEvent;
 import com.liveclass.enrollment.api.EnrollmentDirectory;
 import com.liveclass.enrollment.api.EnrollmentManagement;
@@ -88,10 +89,19 @@ public class CurriculumEnrollmentService {
         return applied;
     }
 
-    /** 학생 본인 신청/수강 취소. */
+    /**
+     * 학생 본인 신청/수강 취소.
+     *
+     * <p>사건을 내는 이유는 알림을 <b>만들기</b> 위해서가 아니라 <b>정리</b>하기 위해서다. 강사에게
+     * 나가 있던 "수강 신청이 들어왔습니다"는 이제 승인할 수도 거절할 수도 없는데, 그대로 두면
+     * 처리 대기 목록에 영영 남는다(EnrollmentCanceledEvent).
+     */
     @Transactional
     public EnrollmentView cancel(UUID curriculumId, UUID studentId) {
-        return enrollmentManagement.cancel(curriculumId, studentId);
+        EnrollmentView canceled = enrollmentManagement.cancel(curriculumId, studentId);
+        eventPublisher.publishEvent(new EnrollmentCanceledEvent(
+                canceled.id(), curriculumId, studentId, OffsetDateTime.now()));
+        return canceled;
     }
 
     /**

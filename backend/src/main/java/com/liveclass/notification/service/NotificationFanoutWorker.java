@@ -1,6 +1,8 @@
 package com.liveclass.notification.service;
 
 import com.liveclass.auth.api.UserDirectory;
+import com.liveclass.enrollment.api.EnrollmentDirectory;
+import com.liveclass.enrollment.api.EnrollmentStatus;
 import com.liveclass.lesson.api.LessonDirectory;
 import com.liveclass.live.api.LiveSessionDirectory;
 import com.liveclass.auth.api.UserView;
@@ -11,6 +13,7 @@ import com.liveclass.notification.config.NotificationMessagingConfig;
 import com.liveclass.notification.domain.NotificationStatus;
 import com.liveclass.notification.repository.NotificationFanoutRepository;
 import com.liveclass.notification.repository.NotificationInsertRepository;
+import com.liveclass.notification.repository.NotificationRepository;
 import com.liveclass.notification.web.ws.WsNotificationBroadcaster;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -70,26 +74,32 @@ public class NotificationFanoutWorker {
 
     private final NotificationInsertRepository insertRepository;
     private final NotificationFanoutRepository fanoutRepository;
+    private final NotificationRepository notificationRepository;
     private final UserDirectory userDirectory;
     private final LessonDirectory lessonDirectory;
     private final LiveSessionDirectory liveSessionDirectory;
+    private final EnrollmentDirectory enrollmentDirectory;
     private final RabbitTemplate rabbitTemplate;
     private final WsNotificationBroadcaster broadcaster;
     private final NotificationPreferenceService preferenceService;
 
     public NotificationFanoutWorker(NotificationInsertRepository insertRepository,
                                     NotificationFanoutRepository fanoutRepository,
+                                    NotificationRepository notificationRepository,
                                     UserDirectory userDirectory,
                                     LessonDirectory lessonDirectory,
                                     LiveSessionDirectory liveSessionDirectory,
+                                    EnrollmentDirectory enrollmentDirectory,
                                     RabbitTemplate rabbitTemplate,
                                     WsNotificationBroadcaster broadcaster,
                                     NotificationPreferenceService preferenceService) {
         this.insertRepository = insertRepository;
         this.fanoutRepository = fanoutRepository;
+        this.notificationRepository = notificationRepository;
         this.userDirectory = userDirectory;
         this.lessonDirectory = lessonDirectory;
         this.liveSessionDirectory = liveSessionDirectory;
+        this.enrollmentDirectory = enrollmentDirectory;
         this.rabbitTemplate = rabbitTemplate;
         this.broadcaster = broadcaster;
         this.preferenceService = preferenceService;
@@ -100,6 +110,14 @@ public class NotificationFanoutWorker {
     @Transactional
     public void handle(String payload) {
         NotificationFanoutCommand command = JSON.readValue(payload, NotificationFanoutCommand.class);
+        /*
+         * 정리 신호는 알림 종류가 아니라 "이미 보낸 알림을 닫아라"다. 종류 검사보다 **먼저** 가려낸다 —
+         * SEVERITY에 없어 isKnown이 false이므로, 그대로 두면 알 수 없는 종류로 DLQ에 간다.
+         */
+        if (NotificationTypes.ENROLLMENT_CANCELED.equals(command.type())) {
+            settleEnrollmentRequests(command, NotificationStatus.EXPIRED);
+            return;
+        }
         if (!NotificationTypes.isKnown(command.type())) {
             // 계약에 없는 종류다. 재시도해도 같으므로 DLQ로 보낸다.
             throw new IllegalArgumentException("알 수 없는 알림 종류입니다: " + command.type());
@@ -146,6 +164,44 @@ public class NotificationFanoutWorker {
                     notification.title(), notification.message());
         }
         log.info("알림 팬아웃 type={} enrollment={} 삽입={}", command.type(), command.enrollmentId(), inserted);
+
+        /*
+         * 강사가 처리했으니 그 신청의 대기 알림을 닫는다. 학생에게 결과를 보내는 것과 **같은
+         * 사건**이므로 같은 트랜잭션에서 함께 처리한다 — 갈라지면 결과는 갔는데 강사의 처리 대기는
+         * 남는, 지금 운영에서 벌어지고 있는 상태가 된다.
+         */
+        if (NotificationTypes.ENROLLMENT_APPROVED.equals(command.type())
+                || NotificationTypes.ENROLLMENT_REJECTED.equals(command.type())) {
+            settleEnrollmentRequests(command, NotificationStatus.COMPLETED);
+        }
+    }
+
+    /**
+     * 그 수강 신청에 걸려 있던 강사의 대기 알림을 닫는다.
+     *
+     * <p><b>지금 수강 상태를 먼저 본다.</b> 메시지는 재배달될 수 있는데, 늦게 도착한 결정 메시지가
+     * 그 사이 학생이 <b>다시 신청해</b> 새로 생긴 대기 알림까지 닫아 버리면 강사는 처리해야 할 일을
+     * 보지 못한다. 거절된 학생의 재신청은 같은 수강 행을 되살리므로(EnrollmentService.apply)
+     * enrollmentId만으로는 두 신청을 구분할 수 없다.
+     *
+     * <p>수강 행이 아예 없으면(커리큘럼 삭제로 함께 지워졌다) 기다릴 일도 없으므로 그대로 닫는다.
+     */
+    private void settleEnrollmentRequests(NotificationFanoutCommand command, String status) {
+        if (command.enrollmentId() == null) {
+            return;
+        }
+        boolean pendingAgain = enrollmentDirectory.findById(command.enrollmentId())
+                .map(view -> view.status() == EnrollmentStatus.PENDING)
+                .orElse(false);
+        if (pendingAgain) {
+            log.info("수강 신청이 다시 대기 중이라 알림을 닫지 않음 enrollment={}", command.enrollmentId());
+            return;
+        }
+        OffsetDateTime settledAt = command.occurredAt() == null ? OffsetDateTime.now() : command.occurredAt();
+        int settled = notificationRepository.settleEnrollmentRequests(
+                command.enrollmentId().toString(), status, settledAt);
+        log.info("수강 신청 알림 처리 축 정리 enrollment={} 상태={} 갱신={}",
+                command.enrollmentId(), status, settled);
     }
 
     /**
