@@ -92,16 +92,45 @@ class Deleter:
         return self.pending
 
 
+class AnnotationIndexer:
+    def __init__(self, error: Exception | None = None) -> None:
+        self.error = error
+        self.executed = []
+
+    async def execute(self, snapshot):
+        self.executed.append(snapshot)
+        if self.error is not None:
+            raise self.error
+        return snapshot
+
+
+class AnnotationDeleter:
+    def __init__(self, error: Exception | None = None) -> None:
+        self.error = error
+        self.executed = []
+
+    async def execute(self, snapshot_id) -> None:
+        self.executed.append(snapshot_id)
+        if self.error is not None:
+            raise self.error
+
+
 class Runtime:
     def __init__(
         self,
         indexer: Indexer,
         callback: AsyncMock,
         deleter: Deleter | None = None,
+        *,
+        annotation_indexer: AnnotationIndexer | None = None,
+        annotation_deleter: AnnotationDeleter | None = None,
     ) -> None:
         self.index_pptx_material = indexer
         self.delete_material_index = deleter or Deleter()
         self.callback_client = SimpleNamespace(send=callback)
+        # None mirrors the switch being off (ADR-0043 §2).
+        self.index_annotation_snapshot = annotation_indexer
+        self.delete_annotation_snapshot = annotation_deleter
 
     def material_for(self, job):
         return map_pptx_embed_job(
@@ -269,3 +298,162 @@ async def test_retry_exhaustion_never_marks_a_completed_job_failed(existing) -> 
     else:
         event = callback.await_args.args[0]
         assert event.event_type == "MATERIAL_EMBED_FAILED"
+
+
+SNAPSHOT_ID = "550e8400-e29b-41d4-a716-446655440010"
+
+
+def annotation_embed_body(**overrides: object) -> bytes:
+    payload: dict[str, object] = {
+        "taskType": "ANNOTATION_EMBED",
+        "snapshotId": SNAPSHOT_ID,
+        "assetId": "550e8400-e29b-41d4-a716-446655440011",
+        "sessionId": "550e8400-e29b-41d4-a716-446655440012",
+        "lessonId": "550e8400-e29b-41d4-a716-446655440013",
+        "curriculumId": "550e8400-e29b-41d4-a716-446655440014",
+        "sessionMs": 725_300,
+        "capturedAt": "2026-08-04T13:20:05+09:00",
+        "interpretedText": "B+ tree 노드 분할 조건",
+        "policy": {"embedModel": "bge-m3"},
+        "contractVersion": 1,
+        **overrides,
+    }
+    return json.dumps(payload, separators=(",", ":")).encode()
+
+
+def annotation_delete_body() -> bytes:
+    return json.dumps(
+        {
+            "taskType": "ANNOTATION_EMBED_DELETE",
+            "snapshotId": SNAPSHOT_ID,
+            "contractVersion": 1,
+        },
+        separators=(",", ":"),
+    ).encode()
+
+
+def _annotation_runtime(
+    callback: AsyncMock,
+    *,
+    annotation_indexer: AnnotationIndexer | None = None,
+    annotation_deleter: AnnotationDeleter | None = None,
+) -> Runtime:
+    return Runtime(
+        Indexer(),
+        callback,
+        annotation_indexer=annotation_indexer or AnnotationIndexer(),
+        annotation_deleter=annotation_deleter or AnnotationDeleter(),
+    )
+
+
+async def test_annotation_embed_indexes_then_sends_ready_with_snapshot_identity() -> None:
+    callback = AsyncMock()
+    annotation_indexer = AnnotationIndexer()
+
+    await MaterialJobHandler(
+        _annotation_runtime(callback, annotation_indexer=annotation_indexer)
+    ).handle(annotation_embed_body())
+
+    assert len(annotation_indexer.executed) == 1
+    event = callback.await_args.args[0]
+    assert event.event_type == "ANNOTATION_EMBEDDED"
+    assert event.status == "READY"
+    assert event.job_id == f"ANNOTATION_EMBED:{SNAPSHOT_ID}"
+    assert str(event.snapshot_id) == SNAPSHOT_ID
+
+
+async def test_annotation_embed_does_not_disturb_the_material_path() -> None:
+    """Both families share one queue; routing must key off taskType alone."""
+    callback = AsyncMock()
+    indexer = Indexer()
+    runtime = Runtime(indexer, callback, annotation_indexer=AnnotationIndexer())
+
+    await MaterialJobHandler(runtime).handle(annotation_embed_body())
+
+    assert indexer.executed == []
+
+
+async def test_annotation_embed_permanent_failure_reports_failed_then_stops_retrying() -> None:
+    callback = AsyncMock()
+    annotation_indexer = AnnotationIndexer(error=MaterialIngestionError("bad image"))
+
+    with pytest.raises(PermanentMaterialJobError):
+        await MaterialJobHandler(
+            _annotation_runtime(callback, annotation_indexer=annotation_indexer)
+        ).handle(annotation_embed_body())
+
+    event = callback.await_args.args[0]
+    assert event.event_type == "ANNOTATION_EMBED_FAILED"
+    assert event.status == "FAILED"
+
+
+async def test_annotation_embed_transient_failure_retries_without_a_callback() -> None:
+    callback = AsyncMock()
+    annotation_indexer = AnnotationIndexer(error=RemoteEmbeddingError("bge down", retryable=True))
+
+    with pytest.raises(RemoteEmbeddingError):
+        await MaterialJobHandler(
+            _annotation_runtime(callback, annotation_indexer=annotation_indexer)
+        ).handle(annotation_embed_body())
+
+    assert callback.await_count == 0
+
+
+async def test_annotation_delete_withdraws_without_claiming_the_snapshot_is_indexed() -> None:
+    """There is no ANNOTATION_DELETED eventType, and READY would say the opposite of the
+    truth — so a withdrawal reports nothing back."""
+    callback = AsyncMock()
+    annotation_deleter = AnnotationDeleter()
+
+    await MaterialJobHandler(
+        _annotation_runtime(callback, annotation_deleter=annotation_deleter)
+    ).handle(annotation_delete_body())
+
+    assert len(annotation_deleter.executed) == 1
+    assert str(annotation_deleter.executed[0]) == SNAPSHOT_ID
+    assert callback.await_count == 0
+
+
+@pytest.mark.parametrize("body_factory", [annotation_embed_body, annotation_delete_body])
+async def test_annotation_jobs_go_to_the_dlq_while_the_switch_is_off(body_factory) -> None:
+    """Preserved rather than acked away: turning the switch on and re-publishing recovers
+    them, so a deployment-order mismatch loses nothing."""
+    callback = AsyncMock()
+    runtime = Runtime(Indexer(), callback)
+
+    with pytest.raises(PermanentMaterialJobError, match="annotation ingestion is disabled"):
+        await MaterialJobHandler(runtime).handle(body_factory())
+
+    assert callback.await_count == 0
+
+
+async def test_retry_exhaustion_reports_failure_for_an_annotation_embed() -> None:
+    callback = AsyncMock()
+
+    await MaterialJobHandler(_annotation_runtime(callback)).report_retry_exhausted(
+        annotation_embed_body()
+    )
+
+    event = callback.await_args.args[0]
+    assert event.event_type == "ANNOTATION_EMBED_FAILED"
+    assert str(event.snapshot_id) == SNAPSHOT_ID
+
+
+async def test_retry_exhaustion_stays_silent_for_an_annotation_delete() -> None:
+    callback = AsyncMock()
+
+    await MaterialJobHandler(_annotation_runtime(callback)).report_retry_exhausted(
+        annotation_delete_body()
+    )
+
+    assert callback.await_count == 0
+
+
+async def test_retry_exhaustion_stays_silent_while_the_switch_is_off() -> None:
+    callback = AsyncMock()
+
+    await MaterialJobHandler(Runtime(Indexer(), callback)).report_retry_exhausted(
+        annotation_embed_body()
+    )
+
+    assert callback.await_count == 0

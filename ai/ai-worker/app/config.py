@@ -79,6 +79,8 @@ class Settings(BaseSettings):
     chunk_max_chars: int = Field(default=1_200, ge=100, le=10_000)
 
     key_term_extraction_enabled: bool = False
+    annotation_ingestion_enabled: bool = False
+    annotation_image_max_bytes: int = Field(default=4 * 1024 * 1024, gt=0)
     gms_api_key: SecretStr | None = Field(default=None, min_length=1)
     gms_model: str = Field(default="gpt-4.1", min_length=1, max_length=128)
     gms_max_output_tokens: int = Field(default=1_024, ge=1, le=8_192)
@@ -153,6 +155,15 @@ class Settings(BaseSettings):
     def validate_key_term_extraction(self) -> Self:
         if self.key_term_extraction_enabled and self.gms_api_key is None:
             raise ValueError("key_term_extraction_enabled requires gms_api_key")
+        return self
+
+    @model_validator(mode="after")
+    def validate_annotation_ingestion(self) -> Self:
+        # Spring may send snapshots with no interpretation of its own, and those can only be
+        # indexed by reading the image — so the model key is required up front rather than
+        # letting individual jobs fail at runtime (ADR-0043 §3).
+        if self.annotation_ingestion_enabled and self.gms_api_key is None:
+            raise ValueError("annotation_ingestion_enabled requires gms_api_key")
         return self
 
 

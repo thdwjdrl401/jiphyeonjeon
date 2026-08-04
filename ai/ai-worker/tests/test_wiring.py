@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from httpx import ConnectError, Request
+from pydantic import ValidationError
 
 from app import wiring
 from app.config import Settings
@@ -114,6 +115,7 @@ def test_builds_spring_bge_pgvector_and_use_case_with_shared_dependencies(monkey
     assert signer is callback_signer
     assert source_options == {
         "source_max_bytes": 50 * 1024 * 1024,
+        "annotation_image_max_bytes": 4 * 1024 * 1024,
         "issue_timeout_seconds": 5.0,
         "download_timeout_seconds": 30.0,
     }
@@ -365,3 +367,69 @@ def test_enabled_worker_wires_consumer_handler_readiness_and_cleanup(monkeypatch
     captured["options"]["on_ready"](True)
     assert state.ready is True
     assert runtime._runner is consumer
+
+
+def test_annotation_ingestion_disabled_leaves_both_use_cases_unbuilt(monkeypatch) -> None:
+    """Off means the handler has nothing to route to, so jobs land in the DLQ instead of
+    being acked away (ADR-0043 §2)."""
+    monkeypatch.setattr(wiring, "AsyncClient", FakeHttpClient)
+    monkeypatch.setattr(wiring, "create_async_engine", lambda *_args, **_kwargs: FakeEngine())
+    monkeypatch.setattr(wiring, "IndexPptxMaterial", lambda *_args, **_kwargs: object())
+
+    runtime = wiring.build_pptx_ingestion_runtime(_settings())
+
+    assert runtime.index_annotation_snapshot is None
+    assert runtime.delete_annotation_snapshot is None
+    assert runtime._annotation_reader is None
+
+
+def test_annotation_ingestion_enabled_wires_reader_index_and_delete(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+    reader = SimpleNamespace(name="annotation-reader")
+
+    def fake_reader(**kwargs: object) -> object:
+        captured["reader"] = kwargs
+        return reader
+
+    monkeypatch.setattr(wiring, "AsyncClient", FakeHttpClient)
+    monkeypatch.setattr(wiring, "create_async_engine", lambda *_args, **_kwargs: FakeEngine())
+    monkeypatch.setattr(wiring, "IndexPptxMaterial", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(wiring, "GmsAnnotationReader", fake_reader)
+
+    runtime = wiring.build_pptx_ingestion_runtime(
+        _settings(annotation_ingestion_enabled=True, gms_api_key="x" * 32)
+    )
+
+    assert captured["reader"] == {
+        "api_key": "x" * 32,
+        "model": "gpt-4.1",
+        "max_output_tokens": 1_024,
+        # Capped at what ai.annotation_snapshot.text accepts, not the PPTX prompt budget.
+        "max_text_chars": 2_000,
+        "timeout_seconds": 55.0,
+    }
+    assert runtime.index_annotation_snapshot is not None
+    assert runtime.delete_annotation_snapshot is not None
+    assert runtime._annotation_reader is reader
+
+
+def test_annotation_ingestion_requires_a_model_key(monkeypatch) -> None:
+    """Spring may send snapshots with no interpretation, and those can only be indexed by
+    reading the image — so the key is demanded at startup, not per job."""
+    with pytest.raises(ValidationError, match="annotation_ingestion_enabled requires gms_api_key"):
+        _settings(annotation_ingestion_enabled=True)
+
+
+async def test_runtime_closes_the_annotation_reader_when_configured(monkeypatch) -> None:
+    reader = SimpleNamespace(aclose=AsyncMock())
+    monkeypatch.setattr(wiring, "AsyncClient", FakeHttpClient)
+    monkeypatch.setattr(wiring, "create_async_engine", lambda *_args, **_kwargs: FakeEngine())
+    monkeypatch.setattr(wiring, "IndexPptxMaterial", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(wiring, "GmsAnnotationReader", lambda **_kwargs: reader)
+
+    runtime = wiring.build_pptx_ingestion_runtime(
+        _settings(annotation_ingestion_enabled=True, gms_api_key="x" * 32)
+    )
+    await runtime.aclose()
+
+    reader.aclose.assert_awaited_once()

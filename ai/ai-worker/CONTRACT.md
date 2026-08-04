@@ -503,3 +503,18 @@ presigned GET을 받는다. 판서 전용 경로를 새로 만들지 않는다. 
 - `ANNOTATION_EMBEDDING`(PROCESSING)은 계약에 존재하지만 §9.5와 같은 이유로 발신하지 않는다 —
   응답 유실 뒤의 늦은 PROCESSING이 READY/FAILED를 되돌리는 것을 막는다.
 - Spring은 이 eventType들을 아직 매핑하지 않아 현재는 inbox에만 남는다.
+- **`ANNOTATION_EMBED_DELETE`는 callback을 보내지 않는다.** ADR-0074가 정의한 eventType 3종은 모두
+  색인용이고 `ANNOTATION_DELETED`에 해당하는 값이 없다. `ANNOTATION_EMBEDDED/READY`를 쓰면 삭제된
+  스냅샷을 "색인됨"으로 알리게 되므로 사실과 반대다. 성공은 무응답이고 영구 실패는 DLQ가 운영
+  신호다. 삭제 결과를 Spring이 확인해야 한다면 오너 합의로 eventType을 추가한 뒤 배선한다.
+
+### 11.4 기능 스위치
+
+`AI_WORKER_ANNOTATION_INGESTION_ENABLED`(기본 `false`)가 켜졌을 때만 색인·삭제 use case가 조립된다.
+`AI_WORKER_MATERIAL_INGESTION_ENABLED`와 독립이며, 켜려면 `AI_WORKER_GMS_API_KEY`가 필요하다 —
+Spring이 `interpretedText` 없이 보낸 스냅샷은 이미지를 읽어야만 색인할 수 있으므로 잡마다 실패하게
+두지 않고 기동 시점에 요구한다.
+
+꺼진 상태에서 annotation 잡이 도착하면 영구 실패로 처리해 `ingestion.embed.dlq`에 보존한다. ACK도
+requeue도 하지 않는 제3의 보존은 RabbitMQ에 없고 requeue는 재전달 루프를 만든다. 스위치를 켠 뒤
+DLQ를 재발행하면 그대로 처리되므로 배포 순서가 어긋나도 잡이 유실되지 않는다.
