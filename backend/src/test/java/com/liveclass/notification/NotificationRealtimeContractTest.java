@@ -46,6 +46,7 @@ class NotificationRealtimeContractTest {
     @Autowired private WsNotificationBroadcaster broadcaster;
     @Autowired private NotificationFanoutRepository fanoutRepository;
     @Autowired private JdbcTemplate jdbc;
+    @Autowired private org.springframework.transaction.PlatformTransactionManager transactionManager;
 
     @MockitoBean private SimpMessagingTemplate messagingTemplate;
     @MockitoBean private SimpUserRegistry userRegistry;
@@ -66,7 +67,7 @@ class NotificationRealtimeContractTest {
         UUID recipient = UUID.randomUUID();
         connect(recipient);
 
-        broadcaster.announce(recipient, NotificationTypes.ENROLLMENT_APPROVED, "제목", "내용");
+        committed(() -> broadcaster.announce(recipient, NotificationTypes.ENROLLMENT_APPROVED, "제목", "내용"));
 
         ArgumentCaptor<Object> body = ArgumentCaptor.forClass(Object.class);
         verify(messagingTemplate).convertAndSendToUser(
@@ -82,7 +83,7 @@ class NotificationRealtimeContractTest {
      */
     @Test
     void an_offline_user_is_skipped_entirely() {
-        broadcaster.announce(UUID.randomUUID(), NotificationTypes.MATERIAL_PUBLISHED, "제목", "내용");
+        committed(() -> broadcaster.announce(UUID.randomUUID(), NotificationTypes.MATERIAL_PUBLISHED, "제목", "내용"));
 
         verify(messagingTemplate, never()).convertAndSendToUser(any(), any(), any(Object.class));
     }
@@ -97,7 +98,7 @@ class NotificationRealtimeContractTest {
                 .when(messagingTemplate)
                 .convertAndSendToUser(eq(failing.toString()), any(), any(Object.class));
 
-        broadcaster.announceAll(List.of(failing, healthy), NotificationTypes.VOD_PUBLISHED, "제목", "내용");
+        committed(() -> broadcaster.announceAll(List.of(failing, healthy), NotificationTypes.VOD_PUBLISHED, "제목", "내용"));
 
         verify(messagingTemplate).convertAndSendToUser(eq(healthy.toString()), any(), any(Object.class));
     }
@@ -119,7 +120,60 @@ class NotificationRealtimeContractTest {
                 .isEmpty();
     }
 
+    /**
+     * <b>커밋 전에는 보내지 않는다.</b> 알림을 넣은 트랜잭션 안에서 신호를 보내면, 화면이 그
+     * 신호를 받고 목록을 다시 읽을 때 그 행이 아직 커밋되지 않아 옛 데이터가 온다 — 신호는 갔는데
+     * 배지가 그대로이고 새로고침해야 보인다(운영에서 실제로 그랬다).
+     */
+    @Test
+    void nothing_is_sent_until_the_transaction_commits() {
+        UUID recipient = UUID.randomUUID();
+        connect(recipient);
+
+        /*
+         * 이 테스트 클래스는 @Transactional이라 바깥 트랜잭션이 롤백된다. 그 안에서 부르면
+         * afterCommit이 영영 오지 않으므로, **실제로 커밋되는** 트랜잭션을 따로 연다.
+         */
+        var committing = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+        committing.setPropagationBehavior(
+                org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        committing.executeWithoutResult(status -> {
+            broadcaster.announce(recipient, NotificationTypes.ENROLLMENT_APPROVED, "제목", "내용");
+            verify(messagingTemplate, never())
+                    .convertAndSendToUser(any(), any(), any(Object.class));
+        });
+
+        verify(messagingTemplate)
+                .convertAndSendToUser(eq(recipient.toString()), eq("/queue/notifications"), any(Object.class));
+    }
+
+    /**
+     * 트랜잭션 밖에서 부르면 기다릴 커밋이 없으므로 곧바로 보낸다. 이 클래스는 @Transactional이라
+     * 여기서는 <b>바깥 트랜잭션이 살아 있고</b>, 그것이 롤백되므로 신호가 나가지 않아야 한다 —
+     * 없는 알림을 알리지 않는다는 뜻이다.
+     */
+    @Test
+    void inside_a_rolling_back_transaction_nothing_is_sent() {
+        UUID recipient = UUID.randomUUID();
+        connect(recipient);
+
+        broadcaster.announce(recipient, NotificationTypes.MATERIAL_PUBLISHED, "제목", "내용");
+
+        verify(messagingTemplate, never()).convertAndSendToUser(any(), any(), any(Object.class));
+    }
+
     // ---- helpers ----
+
+    /**
+     * 전송은 <b>커밋된 뒤에</b> 일어난다. 이 클래스는 {@code @Transactional}이라 테스트 트랜잭션이
+     * 롤백되므로, 운영과 같은 조건(워커 트랜잭션이 커밋되는 상황)을 만들어 준다.
+     */
+    private void committed(Runnable action) {
+        var tx = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+        tx.setPropagationBehavior(
+                org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        tx.executeWithoutResult(status -> action.run());
+    }
 
     private void connect(UUID userId) {
         when(userRegistry.getUser(userId.toString())).thenReturn(mock(SimpUser.class));

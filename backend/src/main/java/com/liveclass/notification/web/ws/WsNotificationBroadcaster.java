@@ -6,6 +6,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.messaging.simp.user.SimpUserRegistry;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.OffsetDateTime;
 import java.util.Collection;
@@ -69,6 +71,33 @@ public class WsNotificationBroadcaster {
         if (recipientIds.isEmpty()) {
             return;
         }
+        afterCommit(() -> deliver(recipientIds, notificationType, title, body));
+    }
+
+    /**
+     * <b>커밋된 뒤에 보낸다.</b> 알림을 넣은 트랜잭션 안에서 신호를 보내면, 화면이 그 신호를 받고
+     * 목록을 다시 읽을 때 <b>그 행이 아직 커밋되지 않아</b> 옛 데이터가 온다 — 신호는 갔는데
+     * 배지가 그대로이고, 60초 폴링이나 새로고침에서야 보인다(운영에서 실제로 그랬다).
+     *
+     * <p>푸시도 함께 미룬다. 트랜잭션이 롤백되면 <b>없는 알림에 대한 푸시</b>를 보낸 셈이 된다.
+     *
+     * <p>트랜잭션 밖에서 부르면 곧바로 보낸다 — 기다릴 커밋이 없다.
+     */
+    private void afterCommit(Runnable send) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            send.run();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                send.run();
+            }
+        });
+    }
+
+    private void deliver(Collection<UUID> recipientIds, String notificationType,
+                         String title, String body) {
         /*
          * 푸시를 먼저 띄운다. 여기서 실패해도 STOMP는 나가야 하고, 반대도 마찬가지다 —
          * 전달 층 하나가 죽었다고 다른 층까지 멈추면 안 된다.
