@@ -4,6 +4,10 @@ import { getMockEnrollment } from '@/features/enrollment/mockEnrollmentStore'
 import { ApiError } from '@/shared/api/client'
 import type { NotificationService } from './notificationService.interface'
 import {
+  getMockNotificationPreference,
+  saveMockNotificationPreference,
+} from './mockNotificationPreferenceStore'
+import {
   findMockNotification,
   listMockNotifications,
   markAllMockNotificationsRead,
@@ -208,10 +212,14 @@ export const mockNotificationService = {
   async getNotificationLeadTimes() {
     return { choices: [5, 10, 30, 60, 180, 1440], defaultMinutes: 10 }
   },
-  async getNotificationPreference() {
-    return { enabled: true, leadMinutes: 10, source: 'DEFAULT' as const }
+  async getNotificationPreference(curriculumId, lessonId) {
+    const user = requireUser()
+    return getMockNotificationPreference(user.userId, curriculumId, lessonId)
   },
-  async saveNotificationPreference() {},
+  async saveNotificationPreference(input) {
+    const user = requireUser()
+    saveMockNotificationPreference(user.userId, input)
+  },
   async registerPushSubscription() {},
   async unregisterPushSubscription() {},
 } satisfies NotificationService

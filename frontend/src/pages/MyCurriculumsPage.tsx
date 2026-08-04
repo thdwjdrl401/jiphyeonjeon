@@ -12,6 +12,7 @@ import {
 import type { StudentCurriculumItem } from '@/features/enrollment/types'
 import { useCancelEnrollmentMutation } from '@/features/enrollment/useEnrollmentMutations'
 import { useMyEnrollmentsQuery } from '@/features/enrollment/useEnrollmentQueries'
+import BrowserPushPrompt from '@/features/notification/BrowserPushPrompt'
 import { isNotImplemented } from '@/shared/api/notImplemented'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import { InlineNotice, MetricCard, PageHeader, Panel, StatusBadge } from '@/shared/ui/WorkspaceUi'
@@ -189,6 +190,10 @@ export default function MyCurriculumsPage() {
   // 페이지 전체에 오류 배너가 뜬다. 요약은 위쪽 지표 자리에서만 안내한다.
   const listError = isInstructor ? instructorListQuery.error : studentListQuery.error
   const summaryError = isInstructor ? instructorSummaryQuery.error : studentSummaryQuery.error
+  // 수강 중이거나 운영 중인 강의가 하나도 없으면 받을 알림 자체가 없다 — 그런 사람에게 안내를 띄우지 않는다.
+  const hasNotifiableCurriculums = isInstructor
+    ? (instructorSummaryQuery.data?.totalCurriculumCount ?? instructorCurriculums.length) > 0
+    : (studentSummaryQuery.data?.inProgressCurriculumCount ?? studentCurriculums.length) > 0
 
   return (
     <div className="workspace-page my-curriculums-page">
@@ -202,6 +207,8 @@ export default function MyCurriculumsPage() {
             : '학습 요약을 불러오지 못했습니다. 아래 목록은 정상입니다.'}
         </InlineNotice>
       )}
+
+      <BrowserPushPrompt eligible={hasNotifiableCurriculums} />
 
       <div className="my-curriculums-page__layout">
         <div className="my-curriculums-page__main">

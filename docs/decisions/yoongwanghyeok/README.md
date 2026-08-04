@@ -42,6 +42,7 @@
 | [0019](0019-unified-learning-sidebar-and-caption-dock-preview.md) | UI 목업 기준 채택 | 라이브·다시보기 공통 4탭과 자막 도크 |
 | [0020](0020-student-live-dvr-playback-api.md) | 채택 | 학생 라이브 DVR 재생 API 경계와 입장 안내 |
 | [0021](0021-modern-ink-monotone-curation-ui.md) | 채택 | 감도높은모던수묵화모노톤큐레이션 UI와 Paper/Ink 화면 모드 |
+| [0022](0022-browser-push-permission-ux-policy.md) | 채택 | 사전 안내 후 동의로만 여는 브라우저 알림 권한 요청, 전체 알림 페이지 영구 설정 |
 
 ## 이슈와 트러블슈팅
 

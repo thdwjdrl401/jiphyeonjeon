@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '@/features/auth/AuthContext'
+import BrowserNotificationToggle from '@/features/notification/BrowserNotificationToggle'
 import NotificationList from '@/features/notification/NotificationList'
 import { ACTION_REQUIRED_LABEL } from '@/features/notification/notificationPresentation'
 import type { NotificationReadFilter, NotificationScope } from '@/features/notification/types'
@@ -88,6 +89,7 @@ export default function NotificationsPage() {
       <PageHeader
         title="알림"
         description="수강 신청, 라이브 일정, 강의 공개와 녹화 처리 결과를 모아서 확인합니다."
+        action={<BrowserNotificationToggle />}
       />
 
       <Panel>

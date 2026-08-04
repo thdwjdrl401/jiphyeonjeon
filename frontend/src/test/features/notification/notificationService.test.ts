@@ -4,10 +4,12 @@ import { cancelEnrollment } from '@/features/enrollment/enrollmentService'
 import { deleteLesson } from '@/features/curriculum/curriculumManagementService'
 import {
   getNotificationSummary,
+  getNotificationPreference,
   getNotifications,
   markAllNotificationsAsRead,
   markNotificationAsRead,
   resolveNotificationTarget,
+  saveNotificationPreference,
 } from '@/features/notification/notificationService'
 import { ApiError } from '@/shared/api/client'
 
@@ -26,6 +28,34 @@ describe('알림 조회와 상태 처리', () => {
 
   it('로그인하지 않으면 알림을 조회할 수 없다', async () => {
     await expect(getNotifications()).rejects.toMatchObject({ status: 401 })
+  })
+
+  it('미설정 알림은 10분 전 켜짐이고 강의별 덮어쓰기를 저장한다', async () => {
+    await loginAsStudent()
+
+    await expect(getNotificationPreference('cur-spring-live')).resolves.toEqual({
+      enabled: true,
+      leadMinutes: 10,
+      source: 'DEFAULT',
+    })
+
+    await saveNotificationPreference({
+      curriculumId: 'cur-spring-live',
+      lessonId: 'les-security',
+      enabled: false,
+      leadMinutes: 10,
+    })
+
+    await expect(getNotificationPreference('cur-spring-live', 'les-security')).resolves.toEqual({
+      enabled: false,
+      leadMinutes: 10,
+      source: 'LESSON',
+    })
+    await expect(getNotificationPreference('cur-spring-live')).resolves.toEqual({
+      enabled: true,
+      leadMinutes: 10,
+      source: 'DEFAULT',
+    })
   })
 
   it('내 알림만 조회된다', async () => {

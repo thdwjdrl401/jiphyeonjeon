@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { instructorPaths, publicPaths, studentPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
-import { LiveReminderSetting } from '@/features/notification/LiveReminderSetting'
+import LiveReminderPopover from '@/features/notification/LiveReminderPopover'
 import { LESSON_MATERIALS_ANCHOR } from '@/features/lesson/lessonRouting'
 import { getLesson } from '@/features/lesson/lessonService'
 import LessonBreadcrumbs from '@/features/lesson/LessonBreadcrumbs'
@@ -81,7 +81,11 @@ export default function LessonDetailPage() {
         action={isInstructor ? <div className="header-action-group"><Link className="button button--primary" to={editLessonPath}>강의 수정</Link></div> : undefined}
       />
       <div className="lesson-detail-grid">
-        <Panel className="lesson-detail__info" title="강의 정보">
+        <Panel
+          className="lesson-detail__info"
+          title="강의 정보"
+          action={<LiveReminderPopover curriculumId={curriculumId} lessonId={lessonId} placement="panel" />}
+        >
           <div className="lesson-detail__info-content">
             <div className="lesson-detail__description">
               <span>강의 설명</span>
@@ -92,14 +96,6 @@ export default function LessonDetailPage() {
               <div><dt>섹션</dt><dd>{lesson.sectionTitle}</dd></div>
             </dl>
           </div>
-        </Panel>
-
-        {/*
-          강의별 덮어쓰기. 커리큘럼 설정을 그대로 쓰는 사람에게도 보여 준다 — 그래야 "이 강의만
-          다르게"가 가능하다는 것을 알 수 있다.
-        */}
-        <Panel className="lesson-detail__reminder" title="라이브 시작 알림">
-          <LiveReminderSetting curriculumId={curriculumId} lessonId={lessonId} />
         </Panel>
 
         {!showReplay ? (

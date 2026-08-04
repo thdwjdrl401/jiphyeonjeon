@@ -1,6 +1,7 @@
 import { ApiError } from '@/shared/api/client'
 import { MOCK_INSTRUCTOR_ID, MOCK_STUDENT_ID, resetMockDatabase } from '@/features/demo/mockDatabase'
 import { resetMockLiveSessions } from '@/features/live-session/mockLiveSessionService'
+import { clearMockNotificationPreferences } from '@/features/notification/mockNotificationPreferenceStore'
 import { resetMockNotificationStore } from '@/features/notification/mockNotificationSeeds'
 import type {
   AuthUser,
@@ -35,6 +36,7 @@ export function resetMockAuth() {
   resetMockLiveSessions()
   // 알림 seed는 수강 상태·목차에서 파생되므로 데모 DB를 되돌린 <b>뒤에</b> 다시 심는다.
   resetMockNotificationStore()
+  clearMockNotificationPreferences()
   reservedEmails.clear()
   initialReservedEmails.forEach((email) => reservedEmails.add(email))
   issuedResetTokens.clear()

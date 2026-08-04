@@ -10,7 +10,7 @@
 
 .curriculum-hero {
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid var(--border-medium);
   border-radius: var(--radius-xl);
   padding: 30px 32px;
@@ -26,6 +26,7 @@
   right: 0;
   left: 0;
   height: 4px;
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
   background: var(--dancheong-band);
   content: '';
 }
@@ -65,13 +66,20 @@
   overflow-wrap: anywhere;
 }
 
+.curriculum-hero__status {
+  position: relative;
+  display: inline-flex;
+  grid-area: status;
+  align-items: center;
+  justify-self: end;
+  gap: 8px;
+}
+
 .curriculum-lifecycle-badge {
   position: static;
   display: inline-flex;
-  grid-area: status;
   min-height: 28px;
   align-items: center;
-  justify-self: end;
   border: 1px solid var(--seal);
   border-radius: 0;
   padding: 5px 10px;
@@ -232,8 +240,6 @@
 .curriculum-overview,
 .curriculum-materials,
 .curriculum-progress-panel,
-/* 알림 설정도 형제 패널과 같은 껍데기를 쓴다 — 여기 없으면 패널들 사이에 맨 내용이 떠 보인다. */
-.curriculum-reminder-panel,
 .curriculum-outline {
   border: 1px solid var(--border-medium);
   border-radius: var(--radius-lg);
@@ -854,7 +860,7 @@ a.curriculum-lesson__detail-area:focus-visible {
     gap: 16px;
   }
 
-  .curriculum-lifecycle-badge {
+  .curriculum-hero__status {
     justify-self: end;
   }
 

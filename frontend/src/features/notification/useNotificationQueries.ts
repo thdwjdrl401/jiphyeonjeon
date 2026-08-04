@@ -1,14 +1,29 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
-import { getNotificationSummary, getNotifications } from './notificationService'
+import {
+  getNotificationPreference,
+  getNotificationSummary,
+  getNotifications,
+} from './notificationService'
 import type { NotificationReadFilter, NotificationScope } from './types'
 
 export const notificationQueryKeys = {
   all: ['notifications'] as const,
+  preferences: ['notification-preference'] as const,
   summary: ['notifications', 'summary'] as const,
   recent: (size: number) => ['notifications', 'recent', size] as const,
   // 두 필터 축이 각각 키에 들어간다 — 하나로 합치면 "처리 대기 + 읽지 않음"이 다른 조합의 캐시를 덮는다.
   list: (scope: NotificationScope, readState: NotificationReadFilter, size: number) =>
     ['notifications', 'list', scope, readState, size] as const,
+  preference: (curriculumId: string, lessonId?: string) =>
+    [...notificationQueryKeys.preferences, curriculumId, lessonId ?? null] as const,
+}
+
+/** 팝오버 아이콘과 설정 내용이 같은 적용값을 공유한다. */
+export function useNotificationPreferenceQuery(curriculumId: string, lessonId?: string) {
+  return useQuery({
+    queryKey: notificationQueryKeys.preference(curriculumId, lessonId),
+    queryFn: () => getNotificationPreference(curriculumId, lessonId),
+  })
 }
 
 /** 드롭다운이 여는 순간 목록을 받으면 늦다. 종은 개수만 미리 들고 있는다. */
