@@ -32,6 +32,10 @@ public class AnnotationHighlightService {
 
     /** 아직 AI로 보내지 않은 상태. 색인 연결(3단계)이 붙으면 여기서 출발한다. */
     public static final String STATUS_PENDING = "PENDING";
+    /** 설명이 붙어 색인 대기 중. */
+    public static final String STATUS_READY = "READY";
+    /** 읽지 못했거나 모델 호출이 실패했다. 빈 근거를 색인하지 않기 위해 여기서 멈춘다. */
+    public static final String STATUS_FAILED = "FAILED";
 
     private static final String KIND_ANNOTATION_SNAPSHOT = "ANNOTATION_SNAPSHOT";
     private static final String STATUS_UPLOADED = "UPLOADED";
