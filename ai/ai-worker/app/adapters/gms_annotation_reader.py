@@ -76,7 +76,7 @@ class GmsAnnotationReader:
                         "content": [{"type": "image_url", "image_url": {"url": data_uri}}],
                     },
                 ],
-                max_tokens=self._max_output_tokens,
+                max_completion_tokens=self._max_output_tokens,
             )
         except APIError as error:
             raise AnnotationReadError("GMS annotation image request failed") from error

@@ -289,6 +289,7 @@ def build_lecture_note_services(settings: Settings) -> LectureNoteServices:
         max_output_tokens=settings.lecture_note_max_output_tokens,
         max_prompt_chars=settings.lecture_note_max_prompt_chars,
         timeout_seconds=settings.lecture_note_timeout_seconds,
+        reasoning_effort=settings.lecture_note_reasoning_effort,
         refinement_max_output_tokens=settings.lecture_note_refinement_max_output_tokens,
         refinement_max_prompt_chars=settings.lecture_note_refinement_max_prompt_chars,
         refinement_timeout_seconds=settings.lecture_note_refinement_timeout_seconds,

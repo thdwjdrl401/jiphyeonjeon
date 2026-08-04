@@ -53,7 +53,7 @@ async def test_reads_image_into_plain_text() -> None:
 
     assert result == "B+ tree 노드 분할 조건"
     assert completions.calls[0]["model"] == "gpt-4.1"
-    assert completions.calls[0]["max_tokens"] == 1_024
+    assert completions.calls[0]["max_completion_tokens"] == 1_024
 
 
 async def test_sends_the_image_inline_rather_than_as_a_storage_url() -> None:

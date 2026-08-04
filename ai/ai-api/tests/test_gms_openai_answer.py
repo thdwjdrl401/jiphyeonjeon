@@ -134,7 +134,7 @@ def test_streams_text_only_and_sends_minimized_grounded_prompt() -> None:
     assert stream.closed is True
     call = completions.calls[0]
     assert call["model"] == "gpt-4.1"
-    assert call["max_tokens"] == 1_024
+    assert call["max_completion_tokens"] == 1_024
     assert call["stream"] is True
     messages = call["messages"]
     assert messages[0]["role"] == "system"

@@ -58,7 +58,15 @@ class Settings(BaseSettings):
     gms_max_prompt_chars: int = Field(default=100_000, ge=1_000, le=1_000_000)
     gms_timeout_seconds: float = Field(default=55.0, gt=0, le=120)
 
-    lecture_note_model: str | None = Field(default=None, min_length=1, max_length=128)
+    # Live note generation runs while the lecture is still going. gpt-5-nano at minimal effort
+    # measured 1.9s/189 output tokens against gpt-4.1's 3.1s/124 — but without the effort cap
+    # the same call was 19.2s/3299 tokens, which would fall behind the caption window.
+    # The two settings are a pair: changing the model to a non-reasoning one means clearing
+    # AI_API_LECTURE_NOTE_REASONING_EFFORT, or the gateway rejects the call with 400.
+    lecture_note_model: str | None = Field(default="gpt-5-nano", min_length=1, max_length=128)
+    lecture_note_reasoning_effort: str | None = Field(
+        default="minimal", min_length=1, max_length=32
+    )
     lecture_note_max_output_tokens: int = Field(default=4_096, ge=1, le=4_096)
     lecture_note_max_prompt_chars: int = Field(default=20_000, ge=1_000, le=200_000)
     lecture_note_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
@@ -141,6 +149,20 @@ class Settings(BaseSettings):
                 return None
             if value != value.strip():
                 raise ValueError("lecture_note_model must not contain surrounding whitespace")
+        return value
+
+    @field_validator("lecture_note_reasoning_effort", mode="before")
+    @classmethod
+    def validate_lecture_note_reasoning_effort(cls, value: object) -> object:
+        # Blank clears it, which is how a deployment switches the note model to a
+        # non-reasoning one without editing code.
+        if isinstance(value, str):
+            if not value.strip():
+                return None
+            if value != value.strip():
+                raise ValueError(
+                    "lecture_note_reasoning_effort must not contain surrounding whitespace"
+                )
         return value
 
     @field_validator("database_role")

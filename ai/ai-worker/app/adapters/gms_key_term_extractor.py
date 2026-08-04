@@ -96,7 +96,7 @@ class GmsKeyTermExtractor:
                     {"role": "system", "content": _SYSTEM_PROMPT},
                     {"role": "user", "content": prompt},
                 ],
-                max_tokens=self._max_output_tokens,
+                max_completion_tokens=self._max_output_tokens,
                 response_format={"type": "json_schema", "json_schema": _KEY_TERMS_JSON_SCHEMA},
             )
         except APIError as error:

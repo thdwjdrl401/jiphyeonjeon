@@ -136,7 +136,7 @@ class GmsOpenAIAnswerModel:
                     {"role": "system", "content": _SYSTEM_PROMPT},
                     {"role": "user", "content": prompt},
                 ],
-                max_tokens=self._max_output_tokens,
+                max_completion_tokens=self._max_output_tokens,
                 stream=True,
             )
             async for chunk in stream:

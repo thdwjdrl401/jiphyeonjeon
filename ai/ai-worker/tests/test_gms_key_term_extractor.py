@@ -54,7 +54,7 @@ async def test_extracts_terms_from_structured_json_response() -> None:
 
     assert result == (KeyTerm(term="지도학습", definition="정답이 있는 데이터로 학습"),)
     assert completions.calls[0]["model"] == "gpt-4.1"
-    assert completions.calls[0]["max_tokens"] == 1_024
+    assert completions.calls[0]["max_completion_tokens"] == 1_024
     assert completions.calls[0]["response_format"]["type"] == "json_schema"
 
 
