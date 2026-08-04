@@ -26,4 +26,20 @@ describe('lesson query cache invalidation', () => {
     expect(queryClient.getQueryState(navigationKey)?.isInvalidated).toBe(true)
     expect(queryClient.getQueryState(unrelatedManagementKey)?.isInvalidated).toBe(false)
   })
+
+  it('lessonId가 있으면 녹화강의 상세와 수정 폼 캐시도 함께 무효화한다', async () => {
+    const queryClient = new QueryClient()
+    const recordedDetailKey = ['recorded-lesson', 'les-1', 'cur-1', 'sec-1'] as const
+    const lessonFormKey = ['instructor-lesson-form', 'les-1'] as const
+    const unrelatedRecordedKey = ['recorded-lesson', 'les-2', 'cur-1', 'sec-1'] as const
+    queryClient.setQueryData(recordedDetailKey, { title: '수정 전' })
+    queryClient.setQueryData(lessonFormKey, { title: '수정 전' })
+    queryClient.setQueryData(unrelatedRecordedKey, { title: '다른 강의' })
+
+    await invalidateAfterLessonWrite(queryClient, 'cur-1', 'les-1')
+
+    expect(queryClient.getQueryState(recordedDetailKey)?.isInvalidated).toBe(true)
+    expect(queryClient.getQueryState(lessonFormKey)?.isInvalidated).toBe(true)
+    expect(queryClient.getQueryState(unrelatedRecordedKey)?.isInvalidated).toBe(false)
+  })
 })

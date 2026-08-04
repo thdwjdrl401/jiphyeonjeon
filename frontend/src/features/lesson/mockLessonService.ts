@@ -1,7 +1,9 @@
 import { getDemoCurriculumLessonNavigation, getDemoLesson } from '@/features/demo/demoData'
 import {
+  deleteMockRecordedLessonMaterial,
   getMockRecordedLesson,
   mockCurriculumManagementService,
+  updateMockRecordedLesson,
 } from '@/features/curriculum/mockCurriculumManagementService'
 import { findMockLesson } from '@/features/demo/mockDatabase'
 import {
@@ -101,17 +103,31 @@ export const mockLessonService = {
       throw new Error('강의를 생성하려면 라이브 예정 시작 시각을 입력해야 합니다.')
     }
     const lessonId = request.lessonId ?? `lesson-mock-${Date.now()}`
-    publishLessonSaveNotifications(request, lessonId)
-    return {
+    const isRecordedLesson = request.lessonId
+      ? getMockRecordedLesson(request.lessonId) !== null
+      : false
+    if (!isRecordedLesson) {
+      publishLessonSaveNotifications(request, lessonId)
+    }
+    const result = {
       lessonId,
       sectionId: request.sectionId,
       title: request.title,
       description: request.description,
       status: 'PUBLISHED' as const,
     }
+    if (request.lessonId && isRecordedLesson) {
+      updateMockRecordedLesson(request.lessonId, {
+        title: request.title,
+        description: request.description,
+        materials: request.materials,
+      })
+    }
+    return result
   },
-  async deleteLessonMaterial() {
-    // mock: 서버 없음 — 호출자가 로컬 목록에서 제거한다.
+  async deleteLessonMaterial(lessonId, materialId) {
+    // 녹화강의 편집은 상세 화면과 같은 mock 원본을 읽으므로 삭제도 원본에 반영한다.
+    deleteMockRecordedLessonMaterial(lessonId, materialId)
   },
   async prepareLessonAi() {
     if (import.meta.env.MODE === 'test') return

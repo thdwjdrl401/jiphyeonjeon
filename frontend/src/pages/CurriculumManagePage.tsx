@@ -23,6 +23,7 @@ import {
 import { evaluatePublishReadiness } from '@/features/curriculum/publishPreconditions'
 import type { CurriculumMaterial } from '@/features/curriculum/types'
 import InstructorEnrollmentRoster from '@/features/enrollment/InstructorEnrollmentRoster'
+import { resolveInstructorLessonEditPath } from '@/features/lesson/lessonRouting'
 import { ApiError } from '@/shared/api/client'
 import { isNotImplemented } from '@/shared/api/notImplemented'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
@@ -656,6 +657,12 @@ function CurriculumManageEditor({
                         const detailPath = lesson.deliveryType === 'RECORDED'
                           ? instructorPaths.recordedLesson(curriculumId, section.sectionId, lesson.lessonId)
                           : instructorPaths.lesson(curriculumId, section.sectionId, lesson.lessonId)
+                        const editPath = resolveInstructorLessonEditPath({
+                          curriculumId,
+                          sectionId: section.sectionId,
+                          lessonId: lesson.lessonId,
+                          deliveryType: lesson.deliveryType,
+                        })
                         return (
                           <li
                             className={`${isDragging ? 'is-dragging' : ''}${isDropBefore ? ' is-drop-before' : ''}`.trim() || undefined}
@@ -679,7 +686,7 @@ function CurriculumManageEditor({
                             <div className="lesson-actions">
                               <div className="row-actions">
                                 <Link to={detailPath}>상세</Link>
-                                <Link to={instructorPaths.editLesson(curriculumId, section.sectionId, lesson.lessonId)}>수정</Link>
+                                <Link to={editPath}>수정</Link>
                               </div>
                             </div>
                           </li>

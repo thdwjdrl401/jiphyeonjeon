@@ -1,5 +1,5 @@
 import { useEffect, useState, type ChangeEvent, type DragEvent, type FormEvent } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { instructorPaths, publicPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
@@ -179,6 +179,9 @@ export default function LessonFormPage() {
   if (!curriculumId || !sectionId) return <PageState title="잘못된 강의 경로입니다" />
   if (curriculumQuery.isPending || (isEdit && lessonQuery.isPending)) return <PageState title="강의 정보를 불러오는 중입니다" />
   if (curriculumQuery.isError || (isEdit && (lessonQuery.isError || !currentLesson))) return <PageState title="강의 정보를 불러오지 못했습니다" />
+  if (isEdit && currentLesson?.deliveryType === 'RECORDED') {
+    return <Navigate to={instructorPaths.editRecordedLesson(curriculumId, sectionId, currentLesson.lessonId)} replace />
+  }
 
   return (
     <div className="workspace-page workspace-page--narrow lesson-form-page">

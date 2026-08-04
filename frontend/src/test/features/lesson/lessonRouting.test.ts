@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveLessonPath } from '@/features/lesson/lessonRouting'
+import { resolveInstructorLessonEditPath, resolveLessonPath } from '@/features/lesson/lessonRouting'
 
 const studentBase = {
   role: 'STUDENT' as const,
@@ -58,5 +58,17 @@ describe('resolveLessonPath', () => {
     expect(resolveLessonPath({ ...studentBase, destination: 'LIVE_SESSION' })).toBe(
       '/student/curriculums/cur-1/sections/sec-1/lessons/les-1',
     )
+  })
+})
+
+describe('resolveInstructorLessonEditPath', () => {
+  it('라이브와 녹화강의 수정 경로를 deliveryType으로 분리한다', () => {
+    expect(resolveInstructorLessonEditPath({
+      curriculumId: 'cur-1', sectionId: 'sec-1', lessonId: 'les-live', deliveryType: 'LIVE',
+    })).toBe('/instructor/curriculums/cur-1/sections/sec-1/lessons/les-live/edit')
+
+    expect(resolveInstructorLessonEditPath({
+      curriculumId: 'cur-1', sectionId: 'sec-1', lessonId: 'les-recorded', deliveryType: 'RECORDED',
+    })).toBe('/instructor/curriculums/cur-1/sections/sec-1/recorded-lessons/les-recorded/edit')
   })
 })

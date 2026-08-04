@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom'
-import { instructorPaths } from '@/app/router/paths'
 import type { CurriculumRelationship } from '@/features/curriculum/types'
-import { resolveLessonPath } from './lessonRouting'
+import { resolveInstructorLessonEditPath, resolveLessonPath } from './lessonRouting'
 import type { CurriculumOutlineLesson } from './types'
 
 interface CurriculumLessonItemProps {
@@ -47,7 +46,12 @@ export default function CurriculumLessonItem({ lesson, relationship, curriculumI
   })
   const activity = resolveActivity(lesson)
   const isInstructorView = relationship === 'OWNER_INSTRUCTOR'
-  const editPath = instructorPaths.editLesson(curriculumId, sectionId, lesson.lessonId)
+  const editPath = resolveInstructorLessonEditPath({
+    curriculumId,
+    sectionId,
+    lessonId: lesson.lessonId,
+    deliveryType: lesson.deliveryType,
+  })
   const unavailableReason = (lesson.access.reasonCode && reasonLabel[lesson.access.reasonCode]) ?? '이용할 수 없어요'
 
   const lessonMain = (

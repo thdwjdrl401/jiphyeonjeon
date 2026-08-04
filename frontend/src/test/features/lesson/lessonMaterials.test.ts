@@ -103,6 +103,28 @@ describe('레슨 자료 API 계약', () => {
     expect(postSpy).not.toHaveBeenCalled()
   })
 
+  it('기존 녹화강의 수정은 기본 정보만 PATCH하고 라이브 세션을 만들지 않는다', async () => {
+    const updated = {
+      lessonId: 'les-recorded', sectionId: 'sec-1', title: '수정한 녹화강의', description: '새 설명',
+      status: 'PUBLISHED', deliveryType: 'RECORDED',
+    }
+    const patch = vi.spyOn(apiClient, 'patch').mockResolvedValue({ data: updated } as never)
+    const post = vi.spyOn(apiClient, 'post')
+
+    await expect(httpLessonService.saveLesson({
+      sectionId: 'sec-1',
+      lessonId: 'les-recorded',
+      title: '수정한 녹화강의',
+      description: '새 설명',
+      materials: [],
+    })).resolves.toEqual(updated)
+
+    expect(patch).toHaveBeenCalledWith('/instructor/lessons/les-recorded', {
+      title: '수정한 녹화강의', description: '새 설명',
+    })
+    expect(post).not.toHaveBeenCalled()
+  })
+
   it('getLesson은 서버 materials와 두 AI 처리 상태를 뷰로 매핑한다', async () => {
     vi.spyOn(apiClient, 'get').mockResolvedValue({
       data: {

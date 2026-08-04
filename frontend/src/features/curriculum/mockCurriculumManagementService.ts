@@ -43,6 +43,48 @@ export function getMockRecordedLesson(lessonId: string) {
   return recordedLessons.get(lessonId) ?? null
 }
 
+export function updateMockRecordedLesson(
+  lessonId: string,
+  update: { title: string; description: string; materials: File[] },
+) {
+  const lesson = recordedLessons.get(lessonId)
+  if (!lesson) return false
+
+  lesson.title = update.title
+  lesson.description = update.description
+  const existingMaterialIds = new Set(lesson.materials.map((material) => material.id))
+  lesson.materials.push(...update.materials
+    .map((file) => ({
+      id: `mock-material-${file.name}-${file.size}`,
+      name: file.name,
+      size: file.size < 1024 * 1024
+        ? `${Math.max(1, Math.round(file.size / 1024))} KB`
+        : `${(file.size / 1024 / 1024).toFixed(1)} MB`,
+      status: 'READY',
+      embeddingStatus: 'READY' as const,
+      keyTermStatus: 'READY' as const,
+    }))
+    .filter((material) => !existingMaterialIds.has(material.id)))
+
+  const structure = savedStructures.get(lesson.curriculumId)
+  if (structure) {
+    savedStructures.set(lesson.curriculumId, structure.map((section) => ({
+      ...section,
+      lessons: section.lessons.map((item) => item.lessonId === lessonId
+        ? { ...item, title: update.title }
+        : item),
+    })))
+  }
+  return true
+}
+
+export function deleteMockRecordedLessonMaterial(lessonId: string, materialId: string) {
+  const lesson = recordedLessons.get(lessonId)
+  if (!lesson) return false
+  lesson.materials = lesson.materials.filter((material) => material.id !== materialId)
+  return true
+}
+
 export function resetMockCurriculumManagement() {
   savedStructures.clear()
   recordedLessons.clear()

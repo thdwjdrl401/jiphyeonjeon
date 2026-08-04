@@ -170,7 +170,13 @@ export default function RecordedLessonDetailPage() {
       <PageHeader
         title={lesson.title}
         description={lesson.description || '등록된 강의 설명이 없습니다.'}
-        action={<div className="header-action-group"><StatusBadge>녹화강의</StatusBadge><Link className="button button--soft" to={managePath}>구성으로 돌아가기</Link></div>}
+        action={(
+          <div className="header-action-group">
+            <StatusBadge>녹화강의</StatusBadge>
+            <Link className="button button--primary" to={instructorPaths.editRecordedLesson(curriculumId, sectionId, lessonId)}>녹화강의 수정</Link>
+            <Link className="button button--soft" to={managePath}>구성으로 돌아가기</Link>
+          </div>
+        )}
       />
 
       <div className="recorded-lesson-detail-grid">
