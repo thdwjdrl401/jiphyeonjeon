@@ -32,15 +32,15 @@
 | Front-end | React 19 + TypeScript, TanStack Query 5, Vite | ✅ | [0002](decisions/songjeongki/0002-react-typescript-frontend.md) |
 | 컨트롤/데이터 | Spring Boot 4.1 + Java 21, JPA, Security, **Spring Modulith 2.1** | ✅ | [0006](decisions/songjeongki/0006-backend-spring-plus-python-ai.md)·[0009](decisions/songjeongki/0009-java21-spring-boot-3.md) |
 | 인증 | HttpOnly 쿠키 + Redis 세션(엣지) · 미디어=LiveKit JWT | ✅ | [0014](decisions/songjeongki/0014-auth-redis-session-cookie.md) |
-| DB | PostgreSQL 16 + pgvector, `core`/`ai` 스키마 분리 | 🟡 `core`만 존재 | [0005](decisions/songjeongki/0005-db-postgres-pgvector.md)·[0017](decisions/songjeongki/0017-schema-ownership-core-ai.md) |
+| DB | PostgreSQL 16 + pgvector, `core`/`ai` 스키마 분리 | ✅ 둘 다 존재(운영 확인) | [0005](decisions/songjeongki/0005-db-postgres-pgvector.md)·[0017](decisions/songjeongki/0017-schema-ownership-core-ai.md) |
 | 캐시·세션 | Redis 7 | ✅ | [0014](decisions/songjeongki/0014-auth-redis-session-cookie.md) |
 | 실시간 채널 | STOMP over WebSocket | ✅ | [0019](decisions/songjeongki/0019-ws-realtime-chat-stomp.md) |
 | 오브젝트 스토리지 | MinIO(S3 호환) + presigned direct upload | ✅ | [0023](decisions/songjeongki/0023-asset-presigned-upload.md) |
-| 미디어 | LiveKit self-host(SFU) + Egress(녹화→HLS) | 🟡 서버 상시가동·토큰·Egress 제어·라이브 엣지/되감기·VOD 재생 API ✅ / FE HLS 플레이어 ⬜ | [0004](decisions/songjeongki/0004-media-livekit-selfhost.md)·[0020](decisions/songjeongki/0020-egress-recording-lifecycle.md)·[0039](decisions/songjeongki/0039-replay-playback-api.md)·[choinhoo/0001](decisions/choinhoo/0001-live-replay-playback-api.md) |
-| 라이브 STT | realtime-agent (Python, LiveKit Agents) | ⬜ CP2 | [0011](decisions/songjeongki/0011-ai-three-services.md)·[0013](decisions/songjeongki/0013-unified-streaming-stt.md) |
-| RAG API | ai-api (FastAPI, SSE) | ⬜ CP3 | [0011](decisions/songjeongki/0011-ai-three-services.md) |
-| 배치 파이프라인 | ai-worker + RabbitMQ | ⬜ CP3 | [0011](decisions/songjeongki/0011-ai-three-services.md)·[0012](decisions/songjeongki/0012-hybrid-queue.md) |
-| STT/임베딩/LLM | **외부 API** (model gateway 경유) | ⬜ CP2·CP3 | [0011](decisions/songjeongki/0011-ai-three-services.md) |
+| 미디어 | LiveKit self-host(SFU) + Egress(녹화→HLS) | ✅ 서버·토큰·Egress·라이브 엣지/되감기·VOD 재생·FE 플레이어 | [0004](decisions/songjeongki/0004-media-livekit-selfhost.md)·[0020](decisions/songjeongki/0020-egress-recording-lifecycle.md)·[0039](decisions/songjeongki/0039-replay-playback-api.md)·[choinhoo/0001](decisions/choinhoo/0001-live-replay-playback-api.md) |
+| 라이브 STT | realtime-agent (Python, LiveKit Agents) | ✅ GPU 호스트에서 상시 가동 | [0011](decisions/songjeongki/0011-ai-three-services.md)·[0013](decisions/songjeongki/0013-unified-streaming-stt.md) |
+| RAG API | ai-api (FastAPI, SSE) | ✅ 운영 가동 | [0011](decisions/songjeongki/0011-ai-three-services.md) |
+| 배치 파이프라인 | ai-worker + RabbitMQ | ✅ 운영 가동 | [0011](decisions/songjeongki/0011-ai-three-services.md)·[0012](decisions/songjeongki/0012-hybrid-queue.md) |
+| STT/임베딩/LLM | STT·임베딩은 **자체 GPU**(Whisper·bge-m3), LLM은 게이트웨이 경유 | ✅ | [0011](decisions/songjeongki/0011-ai-three-services.md) |
 | 관측성 | Micrometer Tracing(Brave) + Prometheus 레지스트리 | ✅ 배선 / 익스포터 ⬜ | — |
 
 > **배포 형태**: 모듈러 모놀리스(Spring 단일 배포) + 폴리글랏 모노레포.
@@ -138,8 +138,9 @@ flowchart TB
   LES["lesson<br/>레슨·자료"]
   AST["asset<br/>presigned 업로드"]
   AUTH["auth<br/>계정·세션·프로필"]
-  LRN["learning<br/>진도·북마크"]
-  AIX["aiintegration<br/>outbox·inbox"]
+  LRN["learning<br/>진도·학습 접근"]
+  AIX["aiintegration<br/>outbox 릴레이·RAG 프록시"]
+  NOT["notification<br/>알림 팬아웃·실시간·Web Push"]
   CMN["common<br/>예외·로깅·설정"]
 
   CUR --> LES
@@ -147,37 +148,54 @@ flowchart TB
   CUR --> VID
   CUR --> AUTH
   CUR --> AST
-  LIV --> LES
+  CUR --> LRN
+  CUR --> AIX
   LIV --> ENR
   LIV --> AUTH
+  LIV --> AIX
+  LIV --> AST
   VID --> LIV
-  VID --> LES
   LES --> AST
-  ENR --> AUTH
+  AIX --> LES
+  AIX --> AST
+  NOT --> CUR
+  NOT --> ENR
+  NOT --> LES
+  NOT --> LIV
+  NOT --> VID
+  NOT --> AUTH
+  NOT --> AIX
 
-  class CUR,ENR,LIV,VID,LES,AST,AUTH,CMN built
-  class LRN,AIX stub
+  class CUR,ENR,LIV,VID,LES,AST,AUTH,LRN,AIX,NOT,CMN built
 ```
+
+**`notification`은 아무도 참조하지 않는다.** 화살표가 전부 나가기만 한다 — 통째로 들어내도 나머지
+모듈은 컴파일된다. 알림처럼 나중에 붙는 기능이 다른 모듈을 오염시키지 않았다는 증거이고,
+`ModularityTests`가 이 방향을 계속 지킨다.
 
 **규칙**
 - 모듈 간 접근은 **`<module>.api` 패키지(`@NamedInterface("api")`)로만.** 남의 `domain`·`repository`를 직접 부를 수 없다.
 - 포트는 읽기/쓰기로 나눈다 — `XxxDirectory`(조회) / `XxxManagement`(변경). 경계를 넘는 값은 전부 record DTO.
 - **순환 금지.** `ModularityTests`가 CI에서 검증하므로 위반은 리뷰가 아니라 **빌드 실패**로 잡힌다.
-- 포트는 **필요한 모듈만** 만든다. 10개 모듈 중 `.api`를 가진 건 6개(`auth`·`lesson`·`enrollment`·`live`·`video`·`asset`)이고, `curriculum`은 유입 참조가 0이라 포트가 없다.
+- 포트는 **필요해질 때** 만든다. 지금은 `common`을 뺀 **10개 모듈 전부** `.api`를 갖는다 —
+  `curriculum`이 마지막이었고, 알림이 "이 커리큘럼이 아직 있는가"를 물어야 해서 생겼다
+  ([ADR-0073](decisions/songjeongki/0073-notification-fanout-architecture.md)).
 
 **이 게이트가 실제로 잡은 것**
 - `video → live.config` 결합 — 아무도 의도하지 않은 결합이 드러나 `live/api/LiveKitServerAccess` seam으로 정리
 - `CatalogService`가 web DTO를 알던 계층 역전 — 서비스 레벨 record + web `from()` 팩토리로 분리
 - `live → curriculum` 순환 차단 → `live_session.curriculum_id` 비정규화(V2). 제약이 없었으면 리포지토리를 그냥 주입했을 것이고, 결과적으로 **조인 없이 수강 게이팅되는 더 빠른 구조**가 됐다
 
-**스캐폴딩 상태 2개**(⬜, [ADR-0024](decisions/songjeongki/0024-orphan-module-scaffolding.md)) — 엔티티·DDL만 있고 배선 없음.
-`learning`은 학생 진도 기능과, `aiintegration`은 CP3 AI 파이프라인과 함께 배선한다.
+**한때 스캐폴딩이던 둘은 배선이 끝났다**([ADR-0024](decisions/songjeongki/0024-orphan-module-scaffolding.md)).
+`learning`은 진도·학습 접근 판정으로, `aiintegration`은 outbox 릴레이와 RAG 프록시로 실제 경로에 들어갔다.
+아웃박스는 원래 AI 배치 잡 발행용이었는데 알림이 일반화해 함께 쓴다 — 목적지가 코드가 아니라
+**데이터**가 되면서 두 종류의 잡이 한 릴레이를 지나간다.
 
 ---
 
 ## 6. 데이터플로우
 
-### 6-1. 라이브 강의 🟡 (강사 발행·Egress·토큰 ✅ / 학생 HLS 시청 ⬜ 재생 API · 자막 ⬜ CP2)
+### 6-1. 라이브 강의 ✅
 
 ```mermaid
 sequenceDiagram
@@ -196,7 +214,7 @@ sequenceDiagram
   S->>SP: 라이브 재생 요청 (수강 확인)
   SP-->>S: live.m3u8 URL (라이브 엣지)
   S->>OBJ: HLS 재생 (라이브 엣지 — WebRTC 구독 아님, ADR-0032)
-  Note over T,S: CP1 — 강사 발행·Egress·토큰 ✅ / 학생 HLS 재생은 재생 API(⬜)
+  Note over T,S: 발행·Egress·토큰·학생 시청·자막까지 운영에서 동작한다
   LK-->>AG: 강사 오디오 (방당 1회)
   AG-->>AG: 스트리밍 STT (VAD, partial/final)
   AG-->>RD: caption 스트림
@@ -207,7 +225,7 @@ sequenceDiagram
 
 > **학생은 LiveKit 방에 참가하지 않는다**(HLS 단일 시청, [0032](decisions/songjeongki/0032-media-playback-hls-only.md)) — 참가자 목록 유출 자체가 없다. 예전엔 이를 막으려 `(sessionId, userId)` 해시 identity를 썼고, 가명화는 이제 채팅 계층에서 이어진다.
 
-### 6-2. RAG 질문 ⬜ CP3
+### 6-2. RAG 질문 ✅
 
 ```mermaid
 sequenceDiagram
@@ -229,7 +247,7 @@ sequenceDiagram
 
 **핵심 안전장치**: 근거가 없으면 답을 지어내지 않고 `INSUFFICIENT_EVIDENCE`를 반환한다. 모든 답변에 citation을 붙인다.
 
-### 6-3. RAG ingestion ⬜ CP3
+### 6-3. RAG ingestion ✅
 
 ```mermaid
 flowchart LR
@@ -245,12 +263,12 @@ flowchart LR
 잡은 **idempotency key + outbox**로 유실·중복을 막고, 실패는 **DLQ**로 보낸다.
 Python은 `core`에 직접 쓰지 않는다 — 결과는 큐 이벤트로 돌아오고 Spring이 기록한다([ADR-0017](decisions/songjeongki/0017-schema-ownership-core-ai.md)).
 
-### 6-4. 녹화 → 다시보기 🟡 (녹화·재생 API ✅ / 플레이어·자막 연동 ⬜ CP4)
+### 6-4. 녹화 → 다시보기 ✅
 
 ```mermaid
 flowchart LR
   L["라이브 세션"] -->|"✅ Egress 제어"| EG["녹화 → HLS → MinIO"]
-  L -->|"⬜ CP2·CP3"| DB["자막·용어·근거 영속"]
+  L --> DB["자막·용어·근거 영속"]
   EG -->|"✅ VideoAsset 상태 추적"| VA["STARTING→…→READY"]
   VA -->|"✅ READY+PUBLISHED 자동 확정"| PUB["영상 다시보기 자동 게시"]
   PUB -->|"✅ 재생 API"| RP["다시보기 플레이어"]
@@ -260,7 +278,8 @@ flowchart LR
 
 **지금 되는 것**: 세션 시작·종료 이벤트로 Egress를 제어하고, `VideoAsset`이 녹화 수명주기를 추적하며, 카탈로그가 "다시보기 있음"을 표시한다. **재생 metadata API**(`GET /lessons/{id}/playback`)가 source와 시간축을 반환하고, **manifest API**(`GET .../playback/manifest`)가 권한을 재검증한 뒤 세그먼트 URI를 presigned로 재작성한다([ADR-0039](decisions/songjeongki/0039-replay-playback-api.md), [ADR-0001](decisions/choinhoo/0001-live-replay-playback-api.md)). 라이브 중에는 **델타 재생목록**(`CAN-SKIP-UNTIL` 광고 → `_HLS_skip=YES` → `EXT-X-SKIP`)으로 갱신 크기를 잡는다 — 진행 바는 강의 전체를 유지하면서 폴링 비용만 줄인다. **수동 게시·철회 API**(`POST .../replay-review/publish`, `POST .../replay-review/withdraw`)도 구현되어 있으며, 수동 게이트는 기존 미게시 자산과 철회 후 재게시를 위해 유지한다.
 **구현된 종료·자동 게시 흐름([ADR-0007](decisions/choinhoo/0007-recording-ready-auto-publish-and-processing-polling.md))**: 종료 API는 `ENDING` 선커밋 → Room 삭제 → `VideoAsset FINALIZING` 선커밋 → 실패 허용 `StopEgress` 안전장치 → `ENDED` 순서로 끝난다. LiveKit `egress_ended(EGRESS_COMPLETE)` webhook이 manifest를 검증하면 같은 DB 트랜잭션에서 `VideoAsset READY + ReplayStatus PUBLISHED`를 확정한다. 강사 FE는 종료 성공 뒤 처리 화면에서 DB snapshot API를 2초 간격(30초 뒤 5초)으로 폴링하고, `READY + PUBLISHED`에서 replay 화면으로 자동 이동한다. 이 완료 알림 용도로 새 WebSocket은 추가하지 않는다.
-**남은 것**: 실제 Egress 출력으로 델타 병합 e2e 검증, Egress 지연 실측, 자막·용어·RAG 재생(CP2·CP3 산출물 의존), 검수 데이터 저장([0039](decisions/songjeongki/0039-replay-playback-api.md) §5 범위 제외 근거).
+**남은 것**: Egress 지연 실측, 검수 데이터 저장([0039](decisions/songjeongki/0039-replay-playback-api.md) §5 범위 제외 근거).
+자막·용어·RAG 재생은 배선이 끝났다.
 
 다시보기는 라이브 때 만든 산출물을 **그대로 재생**한다. 지평선 뒤라 이미 교정이 끝난 상태이고, 세션 상대 ms 좌표로 HLS와 자막을 자동 정렬한다.
 
@@ -277,13 +296,13 @@ flowchart LR
 | 계정 | `app_user` · `instructor_profile` | ✅ |
 | 강좌 | `curriculum` → `section` → `lesson` | ✅ |
 | 라이브 | `live_session` | ✅ |
-| 수강·학습 | `enrollment` · `learning_progress` · `bookmark` | 🟡 `enrollment`만 배선 |
-| 자산 | `asset`(범용) ← `material_asset`(레슨 자료) · `video_asset`(녹화 HLS) | 🟡 `material_asset` 미배선 |
+| 수강·학습 | `enrollment` · `learning_progress` · `bookmark` | ✅ 전부 배선 |
+| 자산 | `asset`(범용) ← `material_asset`(레슨 자료) · `video_asset`(녹화 HLS) | ✅ 전부 배선 |
 | 채팅 | `chat_message` | ✅ |
-| 통합 | `outbox_events` · `external_event_inbox` | ⬜ 스키마만 |
-| AI 게시본 | 자막 · 용어 · 챕터 · 퀴즈 | ⬜ CP2+ |
+| 통합 | `outbox_events`(목적지별 릴레이) · `external_event_inbox` | ✅ 배선 |
+| AI 게시본 | 자막 · 용어 · 강의 노트 | ✅ / 챕터·퀴즈 ⬜ |
 
-### `ai` — Python 단독 쓰기 ⬜ CP2/CP3에 Alembic이 생성
+### `ai` — Python 단독 쓰기 ✅ (Alembic: `ai/ai-worker/migrations`, 운영에 표 6개)
 
 `document_chunk` · `chunk_embedding`(RAG 인덱스) · `job_run` · `model_run`(실행 메타) — **이 4개뿐**이다.
 
@@ -438,8 +457,10 @@ HLS 재생목록은 **"지금 존재하는 세그먼트 전체 목록"** 이고,
 
 **미검증**: 실제 Egress 출력으로 델타 병합을 확인하지 않았다. LiveKit이 라이브 중 내는 `index.m3u8`의 태그 구성(`EXT-X-VERSION` 값, PDT 주기)에 따라 조정이 필요할 수 있다.
 
-### 9-11. 🟡 `ai` 스키마와 Alembic이 아직 없다
-T0에 만들기로 했으나 미이행. `core`만 존재한다. 리스크는 낮지만 CP2 착수 시 **DB 롤(`core_app`/`ai_app`) 분리와 함께** 세워야 원칙 2가 실제로 강제된다.
+### 9-11. ✅ `ai` 스키마와 Alembic — 세워졌다
+`ai/ai-worker/migrations`가 Alembic으로 관리하고, 운영 `ai` 스키마에 표 6개가 있다.
+**남은 것은 DB 롤 분리**(`core_app`/`ai_app`)다 — 지금은 스키마만 나뉘어 있고 계정이 같아,
+원칙 2("스키마 소유권")가 관례로만 지켜진다.
 
 ### 9-12. 🟡 남은 프론트 임시 API 경로를 계약화해야 한다
 FE는 **오퍼레이션 단위 하이브리드 라우팅**을 쓴다 — 각 호출에 `apiImplemented` 플래그가 붙어 구현된 API는 실 HTTP로, 미구현은 목으로 간다([ADR-0027](decisions/songjeongki/0027-frontend-incremental-api-cutover.md)). 현재 인증·커리큘럼·레슨·라이브 세션에서 **28개 오퍼레이션이 실 연동**됐다(세션 시작/종료·토큰·참가자·채팅 포함).
@@ -457,18 +478,27 @@ FE는 **오퍼레이션 단위 하이브리드 라우팅**을 쓴다 — 각 호
 
 ## 10. 구현 현황 요약
 
-| CP | 범위 | 백엔드 | 프론트 | AI |
-|---|---|---|---|---|
-| **T0** | 인프라·스캐폴딩 | ✅ compose·CI·Flyway·EC2 배포 | ✅ Vite·라우팅 | ⬜ Alembic·`ai` 스키마 |
-| **CP0** | 인증 + 강좌 골격 | ✅ 로그인·커리큘럼·섹션·레슨·수강·카탈로그 | ✅ 화면 + 실 API 연동 | — |
-| **CP1** ★ | 라이브 미디어 | ✅ LiveKit 토큰·채팅 WS·세션 수명주기 | 🟡 세션·채팅 API 연동 ✅ / 미디어 클라이언트 ⬜ | — |
-| **CP2** | 라이브 자막 | ⬜ | ⬜ | ⬜ realtime-agent |
-| **CP3** ★ | 용어·근거 RAG | ⬜ (선행: §9-2) | ⬜ | ⬜ ai-api·ai-worker |
-| **CP4** | 녹화·다시보기 | 🟡 Egress 제어·`VideoAsset`·재생 API·자동/수동 게시·processing 조회 ✅ / 검수 데이터 저장 ⬜ | 🟡 종료 뒤 처리 화면·폴링·replay 자동 이동·실제 게시 상태 연결 ✅ / 자막·용어·RAG 재생 ⬜ | — |
-| **CP5** | 퀴즈 | ⬜ | ⬜ | ⬜ |
+> 이 표는 **코드베이스를 직접 훑어** 맞춘 것이다(2026-08-04). 예전 표가 자막·RAG를 미구현으로
+> 적어 둔 채 오래 방치돼, 실제로 돌아가는 기능을 "안 했다"고 말하고 있었다.
 
-**지금 위치**: CP0 백엔드 완료, CP1 백엔드 완료, **CP1 데모까지 남은 건 FE 미디어 연동**.
-자세한 착수 순서·역할 배분은 [CP-ROADMAP.md](CP-ROADMAP.md).
+| CP | 범위 | 상태 | 근거 |
+|---|---|---|---|
+| **T0** | 인프라·배포 | ✅ | compose·CI·Flyway(V1~V29)·EC2 자동 배포(master 머지 → `docker compose up --wait`) |
+| **CP0** | 인증 + 강좌 골격 | ✅ | 로그인·커리큘럼·섹션·레슨·수강·카탈로그. FE 실 API 연동 |
+| **CP1** | 라이브 미디어 | ✅ | LiveKit 자체 호스팅, 토큰·방 제어·Egress, 채팅 WS, 세션 수명주기. FE 미디어 클라이언트 포함 |
+| **CP2** | 라이브 자막 | ✅ | realtime-agent(GPU 호스트) → Redis Streams → 소비자 → WS. 세그먼트 앵커·위치 동기화 |
+| **CP3** | 용어·근거 RAG | ✅ | ai-api·ai-worker·bge-runtime. 자료 임베딩, 근거 기반 Q&A(SSE), 용어집, 대화 메모리 |
+| **CP4** | 녹화·다시보기 | ✅ | Egress → HLS, 자동/수동 게시, 재생 API, 많이 본 구간 히트맵 |
+| **CP5** | 퀴즈 | ⬜ | 서버에 도메인 없음. FE 어댑터가 501을 던진다 |
+| **(추가)** | 판서 | ✅ | Excalidraw 판서 + **AI 의미 해석**(좌표 동기화가 아님) |
+| **(추가)** | 강의 노트 | ✅ | 발화 누적 기반 마크다운 노트 생성·정제 |
+| **(추가)** | 알림 센터 | ✅ | 12종 중 11종 발행, 조회 5경로, STOMP 실시간 + Web Push |
+
+**로드맵 밖에서 자란 것이 셋**이다(판서·강의 노트·알림). CP 번호는 착수 순서였을 뿐이고, 실제
+제품은 그 위에 얹혔다 — 표를 CP만으로 읽으면 지금 서비스를 알 수 없다.
+
+**퀴즈만 남았다.** `POST /lessons/{id}/quizzes/answers`가 FE 어댑터에 501로 박혀 있고 서버에는
+도메인이 없다(의도된 미구현 — 없는 경로를 호출해 404를 받으면 화면이 서버 장애와 구별하지 못한다).
 
 ---
 
