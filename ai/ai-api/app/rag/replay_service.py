@@ -7,6 +7,7 @@ from collections.abc import AsyncIterator, Sequence
 from app.rag.errors import RagStreamFailure
 from app.rag.models import (
     AnswerDelta,
+    AnnotationSourceV2,
     AnswerDeltaData,
     AnswerDoneDataV2,
     AnswerDoneV2,
@@ -149,6 +150,13 @@ def _validate_evidence_scope_v2(
             # legitimately differ from the requesting lesson, so curriculum_id is the proof.
             if item.curriculum_id != request.curriculumId:
                 raise _EvidenceScopeViolation
+        elif isinstance(item.source, AnnotationSourceV2):
+            # Highlights are indexed and searched on the same curriculum axis as materials
+            # (ADR-0043 §4). A hit from another session of this curriculum is a legitimate
+            # semantic-search result, so sessionId is deliberately not compared — the replay
+            # question-time cutoff already ran inside retrieval.
+            if item.curriculum_id != request.curriculumId:
+                raise _EvidenceScopeViolation
         elif isinstance(item.source, CaptionSourceV2):
             if item.lesson_id != request.lessonId or item.source.sessionId != request.sessionId:
                 raise _EvidenceScopeViolation
@@ -170,6 +178,10 @@ def _unique_sources_v2(evidence: Sequence[RetrievedEvidenceV2]) -> tuple[AnswerS
         source = item.source
         if isinstance(source, PptxSourceV2):
             key = ("PPTX", source.materialId, source.page)
+        elif isinstance(source, AnnotationSourceV2):
+            # highlightId is the snapshot's identity (ADR-0043 §6); excerpt stays out of the
+            # key like every other branch here.
+            key = ("ANNOTATION", source.highlightId)
         else:
             key = ("CAPTION", source.sessionId, source.startSessionMs, source.endSessionMs)
         if key in seen:

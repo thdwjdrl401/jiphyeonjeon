@@ -8,6 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.rag import (
+    AnnotationSource,
     AnswerError,
     CaptionSource,
     DuplicateRequestError,
@@ -671,3 +672,79 @@ async def test_no_evidence_still_runs_memory_lookup_and_calls_model() -> None:
     assert memory.lookup_calls == [("user-1", SESSION_ID, "conv-1")]
     assert model.calls == [(request_with_memory(), (), None)]
     assert events[-1].data.sources == ()
+
+
+HIGHLIGHT_ID = UUID("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee")
+
+
+def annotation_evidence(
+    *,
+    curriculum_id: UUID = CURRICULUM_ID,
+    session_id: str = SESSION_ID,
+) -> RetrievedEvidence:
+    return RetrievedEvidence(
+        lesson_id=LESSON_ID,
+        curriculum_id=curriculum_id,
+        content="강조된 판서 근거",
+        source=AnnotationSource(highlightId=HIGHLIGHT_ID, sessionId=session_id, sessionMs=725_300),
+    )
+
+
+@async_test
+async def test_annotation_evidence_in_scope_reaches_the_model_and_the_sources() -> None:
+    """Regression for the gap that shipped with the annotation retriever: the retriever
+    produced AnnotationSource evidence but _validate_evidence_scope only knew PPTX/CAPTION,
+    so its closed-union else treated every highlight as a scope violation — turning the
+    feature on would have killed each answer its search actually helped."""
+
+    model = Model(["강조 기반 답변"])
+    service = RagAnswerService(
+        Retriever(RetrievalResult(sufficient=True, evidence=(annotation_evidence(),))),
+        model,
+    )
+
+    events = await collect(service, request())
+
+    assert [event.event for event in events] == ["answer.delta", "answer.done"]
+    assert events[-1].data.sources == (
+        AnnotationSource(highlightId=HIGHLIGHT_ID, sessionId=SESSION_ID, sessionMs=725_300),
+    )
+    assert len(model.calls) == 1
+
+
+@async_test
+async def test_annotation_evidence_from_another_session_is_accepted() -> None:
+    """Highlights are searched curriculum-wide (ADR-0043 §4): a hit from an earlier session of
+    the same curriculum is a legitimate semantic-search result, unlike captions."""
+
+    other_session = "55555555-5555-4555-8555-555555555555"
+    service = RagAnswerService(
+        Retriever(
+            RetrievalResult(
+                sufficient=True, evidence=(annotation_evidence(session_id=other_session),)
+            )
+        ),
+        Model(["과거 세션 강조 기반 답변"]),
+    )
+
+    events = await collect(service, request())
+
+    assert [event.event for event in events] == ["answer.delta", "answer.done"]
+
+
+@async_test
+async def test_annotation_evidence_from_another_curriculum_is_rejected() -> None:
+    service = RagAnswerService(
+        Retriever(
+            RetrievalResult(
+                sufficient=True,
+                evidence=(annotation_evidence(curriculum_id=OTHER_CURRICULUM_ID),),
+            )
+        ),
+        Model(["유출 답변"]),
+    )
+
+    events = await collect(service, request())
+
+    assert [event.event for event in events] == ["answer.error"]
+    assert events[0].data.code == "EVIDENCE_SCOPE_VIOLATION"
