@@ -1,4 +1,4 @@
-# ADR-0045: Nemotron은 `.nemo` 정본 tokenizer와 train/dev 파생 manifest로 full fine-tuning한다
+# ADR-0047: Nemotron은 `.nemo` 정본 tokenizer와 train/dev 파생 manifest로 full fine-tuning한다
 
 - **상태**: 채택
 - **일자**: 2026-08-03

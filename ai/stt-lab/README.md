@@ -143,7 +143,7 @@ checkpoint를 같은 NeMo Prompt-RNNT offline decoder로 비교할 때만 `nemot
 이 backend는 운영 VAD가 닫은 segment를 `ko-KR`, FP32로 전사하는 final-only 품질 gate다. native
 cache-aware streaming 지연이나 배포 adapter 동작을 증명하지 않는다.
 
-일반 STT Lab venv에 NeMo를 섞지 않고 ADR-0045의 고정 학습 runtime을 사용한다. 해당 runtime에는
+일반 STT Lab venv에 NeMo를 섞지 않고 ADR-0047의 고정 학습 runtime을 사용한다. 해당 runtime에는
 운영 VAD lock과 같은 `webrtcvad-wheels==2.0.14`가 필요하다. GPU 번호는 인자만 나중에 넘기지 말고
 아래처럼 프로세스 환경에도 먼저 주입한다.
 
@@ -167,7 +167,7 @@ PYTHONPATH=/home/liveclass/liveclass/ai/stt-lab/src:/home/liveclass/liveclass/ai
 2026-08-04 고정 dev 502 clips/904 segments 결과에서 tuned Nemotron은 base 대비 multi-reference
 CER를 20.05%에서 16.73%로 낮췄다. Whisper Large V3는 16.12%였고, empty final segment는
 base/tuned/Whisper가 각각 74/39/0이었다. 따라서 학습 효과는 확인했지만 운영 승격은 보류한다.
-전체 판단과 artifact hash는 [ADR-0046](../../docs/decisions/canola/0046-nemotron-finetuned-checkpoint-benchmark.md)에
+전체 판단과 artifact hash는 [ADR-0048](../../docs/decisions/canola/0048-nemotron-finetuned-checkpoint-benchmark.md)에
 고정한다.
 
 ## 학습 사전검증
@@ -278,7 +278,7 @@ test/golden/benchmark를 실행하거나 수정하지 않는다.
 전체 dev WER는 2,000/4,000/6,000 step에서 각각 `0.37213`, `0.36103`, `0.35542`였고 마지막
 checkpoint가 최적이었다. 이 값은 학습 중 checkpoint 선택용 dev WER이며 기존 고정 평가의 CER나
 test 결과가 아니다. 실행 증거와 artifact hash는
-[ADR-0045](../../docs/decisions/canola/0045-nemotron-full-finetuning-input-and-runtime.md)에 고정한다.
+[ADR-0047](../../docs/decisions/canola/0047-nemotron-full-finetuning-input-and-runtime.md)에 고정한다.
 
 
 ## vLLM Whisper 서빙 실험
