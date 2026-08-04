@@ -185,7 +185,7 @@ v1 `/internal/v1/rag/answers:stream` 요청 body는 `userId`, `conversationId`(�
 
 ## 8. Replay(v2) 내부 HTTP 경계
 
-ADR-0037([`docs/decisions/canola/0037-replay-ai-caption-context-contract.md`](../../docs/decisions/canola/0037-replay-ai-caption-context-contract.md))과
+ADR-0037([`docs/decisions/canola/0042-replay-ai-caption-context-contract.md`](../../docs/decisions/canola/0042-replay-ai-caption-context-contract.md))과
 [ADR-0008(구현 설계, jinwoo)](../../docs/decisions/jinwoo/0008-replay-rag-answer-v2-endpoint.md)에 따라
 다시보기(Replay) 질문 전용 `POST /internal/v2/rag/answers:stream`을 별도 경로로 추가했다. 위 §1~§7의
 v1 endpoint(`/internal/v1/rag/answers:stream`)는 이 절 때문에 요청·응답·시간 의미가 전혀 바뀌지 않는다.

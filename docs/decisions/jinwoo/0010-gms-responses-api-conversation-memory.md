@@ -2,7 +2,7 @@
 
 - **상태**: 구현됨(AI 쪽만; Spring이 아직 `userId`/`conversationId`를 안 보내 실사용은 비활성 상태)
 - **일자**: 2026-08-03
-- **관련**: [ADR-0037(canola)](../canola/0037-replay-ai-caption-context-contract.md) §"이번 요청에서
+- **관련**: [ADR-0037(canola)](../canola/0042-replay-ai-caption-context-contract.md) §"이번 요청에서
   제외"(개인 질문 이력·서버 대화 기억), [ADR-0049(songjeongki)](../songjeongki/0049-fe-ai-chat-conversation-ux.md)
   §"남은 이슈"(AI Q&A 이력 API 없음), `ai/ai-api/CONTRACT.md` §7, `ai/ai-api/app/adapters/gms_openai_answer.py`
 

@@ -2,7 +2,7 @@
 
 - **상태**: 제안
 - **일자**: 2026-08-03
-- **관련**: [ADR-0037(canola, 요구사항)](../canola/0037-replay-ai-caption-context-contract.md),
+- **관련**: [ADR-0037(canola, 요구사항)](../canola/0042-replay-ai-caption-context-contract.md),
   [ADR-0008(jinwoo, 구현 설계)](0008-replay-rag-answer-v2-endpoint.md),
   `docs/harness/POLICY.md`, `docs/CONTRACT.md` §3-9, `ai/ai-api/CONTRACT.md` §8
 

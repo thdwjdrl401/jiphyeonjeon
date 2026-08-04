@@ -2,7 +2,7 @@
 
 - **상태**: 제안
 - **일자**: 2026-08-03
-- **관련**: [ADR-0037(요구사항, canola)](../canola/0037-replay-ai-caption-context-contract.md),
+- **관련**: [ADR-0037(요구사항, canola)](../canola/0042-replay-ai-caption-context-contract.md),
   [ADR-0007](0007-curriculum-scoped-rag-material-sharing.md)(curriculum 스코프 자료 검색),
   `ai/ai-api/app/rag/models.py`, `ai/ai-api/app/rag/service.py`,
   `ai/ai-api/app/rag/retrieval.py`, `ai/ai-api/app/rag/ports.py`, `ai/ai-api/app/api/rag.py`

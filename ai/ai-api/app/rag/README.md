@@ -45,7 +45,7 @@ RagAnswerRequest
 ## 다시보기 RAG (v2)
 
 `POST /internal/v2/rag/answers:stream`(`api/rag.py`의 `create_rag_router_v2`)은 v1과 별도 경로로
-Replay 질문을 처리한다. 요구사항은 [`ADR-0037`](../../../../docs/decisions/canola/0037-replay-ai-caption-context-contract.md),
+Replay 질문을 처리한다. 요구사항은 [`ADR-0037`](../../../../docs/decisions/canola/0042-replay-ai-caption-context-contract.md),
 구현 설계는 [`ADR-0008`](../../../../docs/decisions/jinwoo/0008-replay-rag-answer-v2-endpoint.md)에 있다.
 
 - `ReplayEvidenceRetriever`는 PPTX Top K는 v1과 동일한 `MaterialRetrievalPort`로 검색하고, caption은
