@@ -710,17 +710,33 @@ body {
   gap: 26px 14px;
 }
 
+/*
+ * 카드 경계는 `내 커리큘럼`의 dashboard-curriculum-card와 같은 값을 쓴다
+ * (--border-medium 실선 + --paper-light 표면 + radius 0 + 그림자 없음).
+ * 예전에는 border: 0 / background: transparent 라서 카드 하나가 어디서 시작하고
+ * 끝나는지 알 수 없었다. 새 시각 언어를 만드는 것이 아니라 같은 목록끼리 값을 맞춘다.
+ */
 .curriculum-card {
   position: relative;
   height: 100%;
   overflow: hidden;
-  border: 0;
+  border: 1px solid var(--border-medium);
   border-radius: 0;
-  background: transparent;
+  background: var(--paper-light);
   box-shadow: none;
+  transition: border-color .18s ease, transform .18s ease;
 }
 
-.curriculum-card:hover { border-color: transparent; box-shadow: none; transform: none; }
+/*
+ * 눌러서 상세로 가는 카드다 — 예전에는 hover에 아무 반응이 없어 클릭 가능한지 알 수 없었다.
+ * 그림자는 쓰지 않고(이 테마의 카드·패널은 모두 box-shadow: none) 외곽선이 한 단 진해지는
+ * 것과 1px 들림으로만 알린다. 교육 플랫폼의 차분한 톤을 유지하기 위한 최소 신호다.
+ */
+.curriculum-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: none;
+  transform: translateY(-1px);
+}
 
 .curriculum-card__link {
   display: flex;
@@ -729,23 +745,35 @@ body {
   color: inherit;
 }
 
-.curriculum-card__link:focus-visible {
+/* 포커스 링은 링크가 아니라 카드 경계를 감싼다 — 키보드로 훑을 때의 단위가 카드이기 때문이다. */
+.curriculum-card:has(.curriculum-card__link:focus-visible) {
   outline: 2px solid var(--ink-950);
-  outline-offset: 4px;
+  outline-offset: 2px;
 }
 
+.curriculum-card__link:focus-visible { outline: 0; }
+
+/*
+ * 표지는 카드 안의 한 구역이므로 자기 테두리를 갖지 않는다 — 카드 외곽선과 겹쳐 이중선이
+ * 됐다. 아래쪽 구분선 하나만 남겨 본문과 가른다. 높이(138px)는 그대로 둔다.
+ */
 .curriculum-cover {
   height: 138px;
   flex: 0 0 auto;
   overflow: hidden;
-  border: 1px solid var(--border-soft);
+  border: 0;
+  border-bottom: 1px solid var(--border-soft);
   background: var(--ink-100);
 }
 
 .curriculum-cover img { transition: transform .35s ease; }
 .curriculum-card:hover .curriculum-cover img { transform: scale(1.025); }
-.curriculum-card__body { display: flex; min-height: 132px; flex: 1; flex-direction: column; padding: 12px 0 0; }
-.curriculum-card__meta { gap: 8px; font-size: .65rem; }
+/* 외곽선이 생겼으므로 좌우 여백을 준다 — 13px은 5열 실측 폭(244.8px)에서 본문 216.8px을
+   남겨 제목이 한 줄 12자로 지금과 같이 들어가는 값이다. */
+.curriculum-card__body { display: flex; min-height: 132px; flex: 1; flex-direction: column; padding: 13px 13px 12px; }
+/* 10.4px 작은 글씨였는데 --ink-500은 이 배경에서 2.97:1이라 사실상 안 읽혔다.
+   --ink-muted는 밝은 화면의 작은 글씨용으로 이미 정의된 토큰이다(6.06:1). */
+.curriculum-card__meta { gap: 8px; color: var(--ink-muted); font-size: .65rem; }
 .curriculum-card__meta span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .curriculum-card__meta span:last-child { flex: 0 0 auto; }
 .curriculum-card h3 {
@@ -769,19 +797,25 @@ body {
   line-height: 1.5;
 }
 .curriculum-card .curriculum-progress { margin: 3px 0 10px; }
-.curriculum-card__footer { margin-top: auto; padding-top: 8px; border-color: var(--border-medium); font-size: .65rem; }
-.curriculum-card__arrow { flex: 0 0 auto; color: var(--ink-800); font-size: .88rem; }
+/* 카드 안의 구분선은 외곽선(--border-medium)보다 약하다 — 구분 강도의 차이가
+   "카드 경계"와 "카드 안 구획"의 위계를 만든다. */
+.curriculum-card__footer { margin-top: auto; padding-top: 8px; border-color: var(--border-soft); color: var(--ink-muted); font-size: .65rem; }
+.curriculum-card__arrow { flex: 0 0 auto; color: var(--ink-700); font-size: .88rem; transition: color .18s ease, transform .18s ease; }
+.curriculum-card:hover .curriculum-card__arrow { color: var(--ink-950); transform: translate(1px, -1px); }
 
+/* 로딩 뼈대는 카드와 같은 경계·여백을 가져야 한다 — 아니면 로딩에서 완료로 넘어갈 때 1px씩 밀린다. */
 .curriculum-skeleton {
   padding-bottom: 18px;
-  border: 0;
+  border: 1px solid var(--border-medium);
   border-radius: 0;
-  background: transparent;
+  background: var(--paper-light);
 }
 
 .skeleton-block { background: linear-gradient(90deg, var(--ink-100), var(--paper-pure), var(--ink-100)); background-size: 200% 100%; }
 .skeleton-cover { height: 138px; }
-.skeleton-line { margin-inline: 0; }
+/* 좌우 여백만 본문(13px)에 맞춘다. width는 --short/--title/--medium 변형이 줄 길이를
+   다르게 주는 값이므로 건드리지 않는다. */
+.skeleton-line { margin-inline: 13px; }
 
 .catalog-page { background: var(--paper); }
 .catalog-hero { min-height: 190px; border-bottom: 1px solid var(--border-medium); background: var(--paper-pure); }
@@ -811,26 +845,100 @@ body {
   box-shadow: none;
 }
 
+/*
+ * 검색창.
+ *
+ * 예전에는 border: 0 / background: transparent 라서 도구줄 위의 글자와 구별되지 않았다.
+ * 테두리로 가두지 않고 <b>면 색만으로</b> 구분한다 — 종이 배경보다 한 톤 밝은 --paper-pure로
+ * 들어올려 "쓸 수 있는 칸"임을 낸다. 높이 42px과 radius 0은 그대로 둔다.
+ *
+ * 정렬 select는 면을 칠하지 않는다(아래) — 도구줄에서 실제로 타이핑하는 칸은 여기 하나뿐이고,
+ * 둘 다 칠하면 무엇이 입력이고 무엇이 선택인지 다시 뭉갠다.
+ */
 .search-field {
   height: 42px;
   border: 0;
   border-radius: 0;
-  padding-inline: 0 12px;
-  background: transparent;
+  padding-inline: 12px;
+  background: var(--paper-pure);
 }
 
-.search-field:focus-within { border-color: transparent; background: transparent; box-shadow: none; }
-.search-field svg { width: 17px; stroke: var(--ink-950); }
+/*
+ * 포커스 표시 복구. 예전에는 여기서 border·background·box-shadow를 모두 지우고 있었고,
+ * pages.css의 `.search-field input { outline: 0 }`(특이도 0,1,1)가 전역 :focus-visible(0,1,0)까지
+ * 이겨서 키보드로 들어와도 아무 표시가 없었다(WCAG 2.4.7 위반).
+ * 링은 입력이 아니라 필드 껍데기에 걸어 "이 칸에 있다"를 보여 준다. 값은 전역 :focus-visible과 같다.
+ */
+.search-field:focus-within {
+  box-shadow: none;
+  outline: 2px solid var(--ink-950);
+  outline-offset: 2px;
+}
+
+/* 돋보기가 --ink-950이라 placeholder보다 진했다 — 라벨이 내용보다 강하지 않게 낮춘다. */
+.search-field svg { width: 17px; stroke: var(--ink-600); }
+.search-field:focus-within svg { stroke: var(--ink-950); }
 .search-field input { font-size: .85rem; }
-.sort-field select { height: 42px; margin-block: 0; border: 0; border-left: 1px solid var(--border-medium); border-radius: 0; background: transparent; }
+/* 브라우저 기본 placeholder(2.3~3.7:1 추정)에 맡기지 않고 명시한다. opacity는 Firefox 기본값 해제. */
+.search-field input::placeholder { color: var(--ink-muted); opacity: 1; }
+
+/* 검색어 지우기(×). 글리프만 있어 터치 타겟이 ~19px였다 — 24px을 확보하고 상태를 준다. */
+.search-field > button {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-700);
+  font-size: 1.05rem;
+  line-height: 1;
+}
+/* hover도 면을 덧칠하지 않고 색만 진해진다 — 필드 면이 이미 색으로 구분되어 있다. */
+.search-field > button:hover { color: var(--ink-950); }
+.search-field > button:focus-visible { outline: 2px solid var(--ink-950); outline-offset: 1px; }
+
+/*
+ * 정렬 select는 면을 칠하지 않는다 — 원래의 투명 배경과 좌측 구분선을 그대로 둔다.
+ * 값을 고르는 칸이고 타이핑하는 곳이 아니므로 검색창과 같은 무게를 줄 필요가 없다.
+ * 여기서 더한 것은 포커스 링 하나뿐이다(이전에는 1px 좌측선 색 변화가 전부였다).
+ */
+.sort-field select {
+  height: 42px;
+  margin-block: 0;
+  border: 0;
+  border-left: 1px solid var(--border-medium);
+  border-radius: 0;
+  background: transparent;
+}
+.sort-field select:focus-visible {
+  outline: 2px solid var(--ink-950);
+  outline-offset: 2px;
+}
 .catalog-summary { min-height: 0; align-items: center; gap: 10px; padding: 0 14px 0 0; border-right: 1px solid var(--border-medium); }
 .catalog-summary > div { display: flex; min-width: 0; align-items: baseline; gap: 8px; }
 .catalog-summary h2 { overflow: hidden; margin: 0; font-size: 1rem; text-overflow: ellipsis; white-space: nowrap; }
-.catalog-summary p { flex: 0 0 auto; font-size: .7rem; white-space: nowrap; }
-.catalog-summary .reset-button { flex: 0 0 auto; margin-left: auto; font-size: .68rem; }
+/* 도구줄의 작은 글씨 3곳(개수·초기화·업데이트 안내)이 --ink-500으로 2.97:1이었다.
+   커리큘럼 카드의 메타와 같은 결함이라 같은 처방(--ink-muted, 5.69:1)을 쓴다. */
+.catalog-summary p { flex: 0 0 auto; color: var(--ink-muted); font-size: .7rem; white-space: nowrap; }
+.catalog-summary .reset-button { flex: 0 0 auto; margin-left: auto; color: var(--ink-muted); font-size: .68rem; }
+.catalog-updating { color: var(--ink-muted); }
 .catalog-controls + .curriculum-grid,
 .catalog-controls + .page-state { margin-top: 22px; }
-.pagination button { border-radius: 50%; background: transparent; }
+/*
+ * 화살표 버튼(←→). 원형 + 테두리로 숫자 버튼과 역할을 가른다.
+ * 테두리를 --ink-200(1.26:1)에서 --ink-400(2.07:1)으로 올린다 — 컨트롤 경계가 보이지 않아
+ * 원이 거기 있는지 알 수 없었다. 3:1(--ink-500 2.97:1)까지 올리지 않은 것은 톤 때문이다.
+ *
+ * 숫자 버튼에는 걸리지 않는다 — `.pagination .pagination__number`(특이도 0,2,0)의 border: 0이
+ * 이 규칙(0,1,1)을 이기므로 숫자는 그대로 테두리 없는 텍스트로 남는다.
+ */
+.pagination button { border-color: var(--ink-400); border-radius: 50%; background: transparent; }
+/* 말줌임(…)이 --ink-500으로 2.97:1이었다 — 커리큘럼 카드·검색 도구줄과 같은 처방을 쓴다.
+   이 셀렉터는 커리큘럼 탐색에만 있지만 .pagination 자체는 내 커리큘럼·수강생 명단과 공유한다. */
+.pagination-ellipsis { color: var(--ink-muted); }
 
 /* Authentication */
 .auth-page {
