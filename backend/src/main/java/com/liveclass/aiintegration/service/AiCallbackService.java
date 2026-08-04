@@ -5,7 +5,9 @@ import com.liveclass.aiintegration.domain.ExternalEventInboxId;
 import com.liveclass.aiintegration.domain.InboxStatus;
 import com.liveclass.aiintegration.repository.ExternalEventInboxRepository;
 import com.liveclass.aiintegration.web.dto.AiCallbackEvent;
+import com.liveclass.aiintegration.api.AnnotationIndexResult;
 import com.liveclass.lesson.api.LessonMaterialManagement;
+import org.springframework.context.ApplicationEventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -27,11 +29,14 @@ public class AiCallbackService {
 
     private final ExternalEventInboxRepository inboxRepository;
     private final LessonMaterialManagement lessonMaterialManagement;
+    private final ApplicationEventPublisher events;
 
     public AiCallbackService(ExternalEventInboxRepository inboxRepository,
-                             LessonMaterialManagement lessonMaterialManagement) {
+                             LessonMaterialManagement lessonMaterialManagement,
+                             ApplicationEventPublisher events) {
         this.inboxRepository = inboxRepository;
         this.lessonMaterialManagement = lessonMaterialManagement;
+        this.events = events;
     }
 
     @Transactional
@@ -57,9 +62,28 @@ public class AiCallbackService {
         }
 
         applyEmbeddingStatus(event);
+        applyAnnotationHighlightStatus(event);
         inbox.setStatus(InboxStatus.PROCESSED);
         inbox.setProcessedAt(OffsetDateTime.now());
         log.info("AI 콜백 처리 eventType={} materialId={}", event.eventType(), event.materialId());
+    }
+
+    /**
+     * eventType → 강조 캡처 색인 상태(ADR-0074).
+     *
+     * <p>자료와 별개 축이다. 강조는 {@code materialId}가 없고 {@code highlightId}로 온다 — 같은
+     * 필드에 밀어 넣으면 자료 상태를 엉뚱하게 덮어쓴다.
+     */
+    private void applyAnnotationHighlightStatus(AiCallbackEvent event) {
+        String status = switch (event.eventType() == null ? "" : event.eventType()) {
+            case "ANNOTATION_EMBEDDED" -> "READY";
+            case "ANNOTATION_EMBED_FAILED" -> "FAILED";
+            case "ANNOTATION_EMBEDDING" -> "PROCESSING";
+            default -> null;
+        };
+        if (status != null && event.highlightId() != null) {
+            events.publishEvent(new AnnotationIndexResult(UUID.fromString(event.highlightId()), status));
+        }
     }
 
     /** eventType → 자료 임베딩 상태. 모르는 eventType은 inbox에만 남기고 무시(확장 여지). */

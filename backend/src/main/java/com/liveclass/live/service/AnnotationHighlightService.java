@@ -1,6 +1,8 @@
 package com.liveclass.live.service;
 
 import com.liveclass.asset.api.AssetDirectory;
+import com.liveclass.aiintegration.api.AnnotationIndexResult;
+import org.springframework.context.event.EventListener;
 import com.liveclass.asset.api.AssetRef;
 import com.liveclass.live.domain.AnnotationHighlight;
 import com.liveclass.live.domain.LiveSession;
@@ -32,7 +34,9 @@ public class AnnotationHighlightService {
 
     /** 아직 AI로 보내지 않은 상태. 색인 연결(3단계)이 붙으면 여기서 출발한다. */
     public static final String STATUS_PENDING = "PENDING";
-    /** 설명이 붙어 색인 대기 중. */
+    /** 텍스트를 만들어 AI에 보냈고 색인 결과를 기다린다. READY는 콜백이 확정한다. */
+    public static final String STATUS_PROCESSING = "PROCESSING";
+    /** AI 콜백으로 색인이 확정됐다. */
     public static final String STATUS_READY = "READY";
     /** 읽지 못했거나 모델 호출이 실패했다. 빈 근거를 색인하지 않기 위해 여기서 멈춘다. */
     public static final String STATUS_FAILED = "FAILED";
@@ -84,6 +88,21 @@ public class AnnotationHighlightService {
         log.info("강조 스냅샷 저장 sessionId={} highlightId={} sessionMs={}",
                 sessionId, saved.getId(), saved.getSessionMs());
         return saved;
+    }
+
+    /**
+     * AI 콜백이 색인 결과를 확정한다(ADR-0074).
+     *
+     * <p>없는 캡처면 조용히 지나간다 — 강사가 그 사이 근거에서 뺐을 수 있고, 그때 콜백이 실패로
+     * 올라가면 AI 쪽이 무의미한 재시도를 한다.
+     */
+    @EventListener
+    @Transactional
+    public void onIndexResult(AnnotationIndexResult result) {
+        highlightRepository.findById(result.highlightId()).ifPresent(highlight -> {
+            highlight.setIndexStatus(result.status());
+            log.info("강조 색인 상태 확정 highlightId={} status={}", result.highlightId(), result.status());
+        });
     }
 
     /** 강조 내역(강사용). 뺀 것은 담지 않는다. */

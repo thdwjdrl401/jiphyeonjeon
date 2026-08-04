@@ -52,6 +52,15 @@ public class AnnotationHighlight {
     /** AI 색인 상태. PENDING은 아직 안 보냄, 나머지는 콜백이 확정한다. */
     private String indexStatus;
 
+    /** 비전 설명 시도 횟수. 상한을 넘으면 FAILED로 내린다. */
+    private int attemptCount;
+
+    /** 이 시각 이후에 다시 시도한다(지수 백오프). null이면 즉시 대상. */
+    private OffsetDateTime nextAttemptAt;
+
+    /** 마지막 실패 사유. 왜 근거가 안 붙었는지 사람이 확인할 유일한 흔적이다. */
+    private String lastError;
+
     /** 강사가 "이 근거 빼기"로 내린 시각(소프트 삭제). */
     private OffsetDateTime removedAt;
 
