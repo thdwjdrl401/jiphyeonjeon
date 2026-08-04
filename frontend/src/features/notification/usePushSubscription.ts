@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { PUSH_WORKER_URL } from './releasePushSubscription'
 import {
   getPushPublicKey,
   registerPushSubscription,
@@ -30,7 +31,7 @@ interface PushSubscriptionControls {
   disable: () => Promise<void>
 }
 
-const WORKER_URL = '/push-worker.js'
+
 
 export function usePushSubscription(enabled: boolean): PushSubscriptionControls {
   const [state, setState] = useState<PushState>('unavailable')
@@ -51,7 +52,7 @@ export function usePushSubscription(enabled: boolean): PushSubscriptionControls 
         setState('denied')
         return
       }
-      const registration = await navigator.serviceWorker.getRegistration(WORKER_URL)
+      const registration = await navigator.serviceWorker.getRegistration(PUSH_WORKER_URL)
       const existing = await registration?.pushManager.getSubscription()
       if (!active) return
       if (existing) {
@@ -87,7 +88,7 @@ export function usePushSubscription(enabled: boolean): PushSubscriptionControls 
         setState(permission === 'denied' ? 'denied' : 'off')
         return
       }
-      const registration = await navigator.serviceWorker.register(WORKER_URL)
+      const registration = await navigator.serviceWorker.register(PUSH_WORKER_URL)
       const subscription = await registration.pushManager.subscribe({
         // 표준이 요구한다. false면 브라우저가 구독을 거부한다 — 사용자에게 보이지 않는 푸시를 막는 규칙이다.
         userVisibleOnly: true,
@@ -104,7 +105,7 @@ export function usePushSubscription(enabled: boolean): PushSubscriptionControls 
     if (!isSupported()) return
     setState('working')
     try {
-      const registration = await navigator.serviceWorker.getRegistration(WORKER_URL)
+      const registration = await navigator.serviceWorker.getRegistration(PUSH_WORKER_URL)
       const subscription = await registration?.pushManager.getSubscription()
       if (subscription) {
         /*
