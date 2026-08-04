@@ -1,13 +1,8 @@
 package com.liveclass.notification.push;
 
-import org.apache.http.Header;
-import org.apache.http.client.methods.HttpPost;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -25,9 +20,6 @@ import java.util.concurrent.atomic.AtomicInteger;
  * (바이트코드 확인). 요청마다 연결 풀·I/O 리액터를 새로 세우고 TLS 핸드셰이크를 다시 하므로
  * 연결 재사용이 아예 없고, 순진하게 병렬화하면 <b>클라이언트 수만큼 셀렉터 스레드가 뜬다</b>.
  *
- * <p>그래서 라이브러리는 <b>암호화기로만</b> 쓴다 — `preparePost`가 RFC 8291 암호화와 RFC 8292
- * VAPID 서명을 끝낸 요청을 돌려주므로, 그것을 JDK 클라이언트가 이해하는 형태로 옮겨 <b>하나의
- * 클라이언트</b>로 실행한다.
  *
  * <p><b>연결을 여러 개 연다.</b> JDK 클라이언트는 오리진당 연결을 <b>하나만</b> 유지하고 거기에
  * 다중화하는데, 연결 하나에 열 수 있는 동시 스트림 수는 서버가 정한다 — <b>실측으로 FCM·Mozilla
@@ -150,21 +142,20 @@ public class WebPushHttpClient {
      * <p>응답 본문은 버린다 — 푸시 서비스는 상태 코드로만 말한다. 다만 {@code Retry-After}는 읽는다.
      * 429는 "지금 말고 이따가"라는 뜻이고, 언제가 이따인지는 <b>상대가 정한다</b>.
      */
-    public CompletableFuture<Response> send(HttpPost prepared) {
+    public CompletableFuture<Response> send(WebPushRequest prepared) {
         HttpRequest.Builder builder = HttpRequest.newBuilder()
-                .uri(URI.create(prepared.getURI().toString()))
+                .uri(prepared.endpoint())
                 .timeout(requestTimeout)
-                .POST(bodyOf(prepared));
-        for (Header header : prepared.getAllHeaders()) {
+                .POST(HttpRequest.BodyPublishers.ofByteArray(prepared.body()));
+        prepared.headers().forEach((name, value) -> {
             /*
              * JDK 클라이언트는 Content-Length·Host 같은 헤더를 스스로 관리하며, 넣으려 하면
-             * IllegalArgumentException을 던진다. 라이브러리가 붙인 값을 그대로 흘리면 터진다.
+             * IllegalArgumentException을 던진다.
              */
-            if (RESTRICTED_HEADERS.contains(header.getName().toLowerCase())) {
-                continue;
+            if (!RESTRICTED_HEADERS.contains(name.toLowerCase())) {
+                builder.header(name, value);
             }
-            builder.header(header.getName(), header.getValue());
-        }
+        });
         Connection connection = leastBusy();
         connection.inFlight().incrementAndGet();
         return connection.client()
@@ -217,18 +208,6 @@ public class WebPushHttpClient {
     /** JDK가 직접 관리하는 헤더. 우리가 실으면 요청 생성이 거부된다. */
     private static final java.util.Set<String> RESTRICTED_HEADERS =
             java.util.Set.of("content-length", "host", "connection", "upgrade", "expect");
-
-    private static HttpRequest.BodyPublisher bodyOf(HttpPost prepared) {
-        if (prepared.getEntity() == null) {
-            return HttpRequest.BodyPublishers.noBody();
-        }
-        try (InputStream in = prepared.getEntity().getContent()) {
-            return HttpRequest.BodyPublishers.ofByteArray(in.readAllBytes());
-        } catch (IOException e) {
-            // 암호화된 본문을 읽지 못하는 건 우리 쪽 문제다. 보낼 것이 없으니 빈 본문으로 두지 않는다.
-            throw new IllegalStateException("푸시 본문을 읽지 못했습니다.", e);
-        }
-    }
 
     public void close() {
         // JDK 21의 HttpClient는 close()가 없다(가상 스레드 executor는 GC가 회수한다).

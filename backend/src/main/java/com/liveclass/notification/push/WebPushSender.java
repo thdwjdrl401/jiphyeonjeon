@@ -1,7 +1,5 @@
 package com.liveclass.notification.push;
 
-import nl.martijndwars.webpush.Notification;
-import nl.martijndwars.webpush.PushService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -10,8 +8,6 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import java.security.GeneralSecurityException;
-import java.security.Security;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -110,7 +106,7 @@ public class WebPushSender {
     }
 
     private final PushSubscriptionRepository repository;
-    private final PushService pushService;
+    private final WebPushRequestFactory requests;
     private final WebPushHttpClient httpClient;
     private final Semaphore inFlight;
     /**
@@ -144,7 +140,7 @@ public class WebPushSender {
                          @Value("${notification.web-push.streams-per-connection:100}") int streamsPerConnection,
                          @Value("${notification.web-push.crypto-threads:0}") int cryptoThreads) {
         this.repository = repository;
-        this.pushService = createPushService(properties);
+        this.requests = properties.isConfigured() ? new WebPushRequestFactory(properties) : null;
         /*
          * 연결 수를 짐작하지 않고 동시 상한에서 **계산한다**. 연결 하나가 소화하는 동시 스트림은
          * 서버가 정하고(실측 100), 그보다 많이 보내려면 연결이 더 있어야 한다 — 두 숫자를 따로
@@ -172,22 +168,8 @@ public class WebPushSender {
         this.writeTx.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
-    private static PushService createPushService(WebPushProperties properties) {
-        if (!properties.isConfigured()) {
-            return null;
-        }
-        // 라이브러리가 요구하는 암호 제공자. 이미 등록돼 있으면 무해하게 무시된다.
-        Security.addProvider(new org.bouncycastle.jce.provider.BouncyCastleProvider());
-        try {
-            return new PushService(properties.publicKey(), properties.privateKey(), properties.subject());
-        } catch (GeneralSecurityException e) {
-            // 키가 있는데 형식이 틀렸다면 기동 시점에 알아야 한다 — 조용히 꺼지면 배포 후에야 안다.
-            throw new IllegalStateException("VAPID 키 형식이 올바르지 않습니다.", e);
-        }
-    }
-
     public boolean isEnabled() {
-        return pushService != null;
+        return requests != null;
     }
 
     /**
@@ -357,7 +339,7 @@ public class WebPushSender {
             Thread.currentThread().interrupt();
             return CompletableFuture.completedFuture(new Outcome(subscription, -1, null));
         }
-        // 암호화(RFC 8291)와 VAPID 서명(RFC 8292)은 라이브러리가 한다. 우리는 실어 보내기만.
+        // 암호화(RFC 8291)와 VAPID 서명(RFC 8292)은 WebPushCrypto가 한다.
         return CompletableFuture
                 .supplyAsync(() -> encrypt(subscription, payload), cryptoPool)
                 /*
@@ -383,12 +365,9 @@ public class WebPushSender {
      * 암호화 풀에서 도는 부분. 검사 예외를 비검사로 감싼다 — 어차피 {@code handle}이 받아서
      * 그 기기 하나의 실패로 처리하고, 나머지 기기는 계속 간다.
      */
-    private org.apache.http.client.methods.HttpPost encrypt(PushSubscription subscription, byte[] payload) {
+    private WebPushRequest encrypt(PushSubscription subscription, byte[] payload) {
         try {
-            return pushService.preparePost(new Notification(
-                            subscription.getEndpoint(), subscription.getP256dh(),
-                            subscription.getAuth(), payload),
-                    nl.martijndwars.webpush.Encoding.AES128GCM);
+            return requests.create(subscription, payload);
         } catch (Exception e) {
             // 여기 오는 건 그 구독의 키가 깨졌다는 뜻이다.
             throw new IllegalStateException("푸시 요청 생성 실패 id=" + subscription.getId(), e);
