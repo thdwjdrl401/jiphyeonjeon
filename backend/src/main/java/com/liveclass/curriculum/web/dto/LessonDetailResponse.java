@@ -22,6 +22,8 @@ public record LessonDetailResponse(
         int order,
         @Schema(description = "PUBLISHED — 값은 하나다. 레슨에는 초안이 없고 공개 여부는 커리큘럼이 결정한다(ADR-0005).")
         String status,
+        @Schema(description = "LIVE 또는 RECORDED")
+        String deliveryType,
         @Schema(description = "레슨 강의 자료(PPTX).")
         List<CurriculumMaterialResponse> materials
 ) {
@@ -37,6 +39,7 @@ public record LessonDetailResponse(
                 detail.description(),
                 detail.order(),
                 detail.status(),
+                detail.deliveryType(),
                 detail.materials().stream().map(CurriculumMaterialResponse::from).toList());
     }
 }

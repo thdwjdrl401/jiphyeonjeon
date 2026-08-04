@@ -55,6 +55,8 @@ function normalizeLesson(lesson: CurriculumApiOutlineLesson, index: number): Cur
         }
       : null,
     replayStatus: lesson.replayStatus ?? 'NOT_READY',
+    deliveryType: lesson.deliveryType ?? 'LIVE',
+    recordedPublicationStatus: lesson.recordedPublicationStatus ?? null,
     access: lesson.access ?? { allowed: false, destination: null, reasonCode: 'ENROLLMENT_REQUIRED' },
     learning: lesson.learning ?? null,
   }

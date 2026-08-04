@@ -27,23 +27,19 @@ consumer는 `AI_WORKER_MATERIAL_INGESTION_ENABLED=true`일 때만 연결된다. 
 계약에 필드를 추가하지 않는다. 지울 게 이미 없으면(중복 요청 등) 성공으로 처리하는 멱등 동작이다.
 전체 주소·인증·구현 상태는 [`docs/ai/CONTRACT.md`](../../docs/ai/CONTRACT.md)를 따른다.
 
-핵심 용어 추출은 `AI_WORKER_KEY_TERM_EXTRACTION_ENABLED=true`일 때만 임베딩과 동시에 실행되고,
-기본값(`false`)에서는 기존 청킹·임베딩·저장 흐름에 영향을 주지 않는다. 추출 실패는 자료 처리
-전체를 실패시키지 않고 로그만 남긴 뒤 계속 진행한다(용어 없이 정상 처리).
+핵심 용어 추출은 v2 작업의 `policy.extractKeyTerms=true` 또는 v1 작업의
+`AI_WORKER_KEY_TERM_EXTRACTION_ENABLED=true`일 때 임베딩과 동시에 실행된다. 추출 실패는 자료 처리
+전체를 실패시키지 않지만 `keyTermResult=FAILED`로 명시해 정상 0건(`EMPTY`)과 구분한다.
 
-추출된 용어는 두 경로로 나간다. 하나는 기존 `MATERIAL_EMBEDDED`(READY) callback에 `keyTerms`를
-실어서 **한 번에** 보내는 것이고([ADR-0004](../../docs/decisions/jinwoo/0004-key-term-callback-delivery-timing.md)),
-다른 하나는 ai-worker가 소유하는 `ai.material_key_term` 테이블에 자료 버전 단위로 영속 저장하는
-것이다([ADR-0005](../../docs/decisions/jinwoo/0005-key-term-storage-schema.md)). callback은 기존
-READY callback과 동일하게 실패 시 job이 재시도된다(별도의 best-effort 경로 없음). 재시도 때 용어가
-조용히 사라지지 않도록 `IndexPptxMaterial`이 추출된 용어를 같은 프로세스 안에서 잠깐 in-memory로
-기억해뒀다가 재시도 시 callback과 DB 저장 양쪽에 다시 채워 넣는다(프로세스가 재시작되면 이 보호는
-사라진다). DB 저장은 best-effort이며 실패해도 로그만 남기고 callback 전송이나 job 자체를 막지
-않는다. Java는 `ai.material_key_term`을 아직 읽지 않는다 — 읽기 API·권한 부여는 별도 작업이다.
-설계 배경은
+추출된 용어는 ai-worker가 소유하는 `ai.material_key_term`에 자료 버전 단위로 저장하고, 같은
+material version에 상태·개수·절단 여부·실패 코드를 함께 영속화한다. callback에는 원문 목록 대신
+`outputs.keyTermResult`를 보내 Spring의 `keyTermStatus` projection을 갱신한다. callback 유실이나
+worker 재시작 뒤에도 DB 결과로 같은 terminal callback을 재구성한다. Java의 기존 glossary 조회는
+활성 material version의 `ai.material_key_term`을 읽는다. 설계 배경은
 [ADR-0003](../../docs/decisions/jinwoo/0003-pptx-key-term-extraction-approach.md),
 [ADR-0004](../../docs/decisions/jinwoo/0004-key-term-callback-delivery-timing.md),
-[ADR-0005](../../docs/decisions/jinwoo/0005-key-term-storage-schema.md)를 따른다.
+[ADR-0005](../../docs/decisions/jinwoo/0005-key-term-storage-schema.md)와
+[ADR-0010](../../docs/decisions/choinhoo/0010-recorded-lesson-pptx-embedding-and-key-term-extraction.md)을 따른다.
 
 ## 3. 통신 예시
 
@@ -57,14 +53,13 @@ Spring이 `ingestion.embed`에 보내는 대표 작업은 다음과 같다.
   "lessonId": "33333333-3333-4333-8333-333333333333",
   "curriculumId": "44444444-4444-4444-8444-444444444444",
   "fileName": "강의자료.pptx",
-  "policy": {"embedModel": "bge-m3"},
-  "contractVersion": 1
+  "policy": {"embedModel": "bge-m3", "extractKeyTerms": true},
+  "contractVersion": 2
 }
 ```
 
-저장 완료 후 worker는 JSON 원문을 HMAC-SHA256으로 서명해 Spring에 결과를 보낸다. 핵심 용어 추출이
-켜져 있고 용어가 하나라도 나왔으면 같은 callback에 `keyTerms`가 함께 실린다(꺼져 있거나 결과가
-없으면 이 필드 자체가 생략된다).
+저장 완료 후 worker는 JSON 원문을 HMAC-SHA256으로 서명해 Spring에 결과를 보낸다. v2 callback은
+임베딩 결과와 용어 결과 상태를 독립적으로 전달한다.
 
 ```http
 POST /api/internal/ai/callbacks HTTP/1.1
@@ -78,9 +73,11 @@ X-Signature: <base64-hmac-signature>
   "materialId": "11111111-1111-4111-8111-111111111111",
   "lessonId": "33333333-3333-4333-8333-333333333333",
   "status": "READY",
-  "keyTerms": [
-    {"term": "지도학습", "definition": "정답(레이블)이 있는 데이터로 모델을 학습시키는 방식"}
-  ]
+  "outputs": {
+    "materialVersionId": 321,
+    "chunkCount": 42,
+    "keyTermResult": {"status": "READY", "count": 18, "truncated": false}
+  }
 }
 ```
 

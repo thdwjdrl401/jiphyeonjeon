@@ -1,8 +1,13 @@
 package com.liveclass.video.service;
 
+import com.liveclass.asset.api.AssetUploadManagement;
 import com.liveclass.video.api.LessonRecordingCleanup;
+import com.liveclass.video.api.RecordedVideoConflictException;
 import com.liveclass.video.config.EgressProperties;
+import com.liveclass.video.domain.RecordedVideo;
+import com.liveclass.video.domain.RecordedVideoStatus;
 import com.liveclass.video.domain.VideoAsset;
+import com.liveclass.video.repository.RecordedVideoRepository;
 import com.liveclass.video.repository.VideoAssetRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -35,15 +41,21 @@ public class LessonRecordingCleanupService implements LessonRecordingCleanup {
     private static final Logger log = LoggerFactory.getLogger(LessonRecordingCleanupService.class);
 
     private final VideoAssetRepository repository;
+    private final RecordedVideoRepository recordedVideoRepository;
+    private final AssetUploadManagement assetUploadManagement;
     private final RecordingStorage storage;
     private final EgressProperties egress;
     private final ApplicationEventPublisher events;
 
     public LessonRecordingCleanupService(VideoAssetRepository repository,
+                                         RecordedVideoRepository recordedVideoRepository,
+                                         AssetUploadManagement assetUploadManagement,
                                          RecordingStorage storage,
                                          EgressProperties egress,
                                          ApplicationEventPublisher events) {
         this.repository = repository;
+        this.recordedVideoRepository = recordedVideoRepository;
+        this.assetUploadManagement = assetUploadManagement;
         this.storage = storage;
         this.egress = egress;
         this.events = events;
@@ -62,7 +74,16 @@ public class LessonRecordingCleanupService implements LessonRecordingCleanup {
             return 0;
         }
         List<VideoAsset> assets = repository.findByLessonIdIn(lessonIds);
-        if (assets.isEmpty()) {
+        List<RecordedVideo> recordedVideos = recordedVideoRepository.findByLessonIdIn(lessonIds);
+        recordedVideos.stream()
+                .filter(recorded -> isProcessing(recorded.getStatus()))
+                .findFirst()
+                .ifPresent(recorded -> {
+                    throw new RecordedVideoConflictException(
+                            "RECORDED_VIDEO_DELETE_WHILE_PROCESSING",
+                            "영상 변환이 진행 중인 녹화강의는 삭제할 수 없습니다. 처리가 끝난 뒤 다시 시도해 주세요.");
+                });
+        if (assets.isEmpty() && recordedVideos.isEmpty()) {
             return 0;
         }
         // 산출물 경로는 세션 단위다(RecordingObjectKeys). 행을 지우기 전에 모아 둔다 — 지운 뒤에는 알 수 없다.
@@ -73,14 +94,37 @@ public class LessonRecordingCleanupService implements LessonRecordingCleanup {
                         VideoAsset::getLessonId,
                         Collectors.mapping(
                                 asset -> RecordingObjectKeys.objectPrefix(asset.getLiveSessionId()),
-                                Collectors.toList())));
+                                Collectors.toCollection(ArrayList::new))));
+        recordedVideos.stream()
+                .filter(recorded -> recorded.getHlsManifestKey() != null)
+                .forEach(recorded -> prefixesByLesson
+                        .computeIfAbsent(recorded.getLessonId(), ignored -> new ArrayList<>())
+                        .add("recorded/" + recorded.getId()));
+
         repository.deleteAll(assets);
+        if (!recordedVideos.isEmpty()) {
+            List<UUID> sourceAssetIds = recordedVideos.stream()
+                    .map(RecordedVideo::getSourceAssetId)
+                    .filter(java.util.Objects::nonNull)
+                    .toList();
+            // source_asset FK보다 먼저 recorded_video를 지운다. job은 DB CASCADE로 함께 사라진다.
+            recordedVideoRepository.deleteAll(recordedVideos);
+            recordedVideoRepository.flush();
+            sourceAssetIds.forEach(assetUploadManagement::deleteRecordedVideoSource);
+        }
         prefixesByLesson.forEach((lessonId, prefixes) ->
                 events.publishEvent(new RecordingObjectsOrphaned(lessonId, prefixes)));
+        int removed = assets.size() + recordedVideos.size();
         log.info("삭제에 따른 녹화 자산 제거 lessons={} assets={} prefixes={}",
-                lessonIds.size(), assets.size(),
+                lessonIds.size(), removed,
                 prefixesByLesson.values().stream().mapToInt(List::size).sum());
-        return assets.size();
+        return removed;
+    }
+
+    private boolean isProcessing(RecordedVideoStatus status) {
+        return status == RecordedVideoStatus.QUEUED
+                || status == RecordedVideoStatus.TRANSCODING
+                || status == RecordedVideoStatus.VERIFYING;
     }
 
     /** 커밋 뒤에만 실제 파일을 지운다 — 롤백됐다면 이 리스너는 아예 돌지 않는다. */

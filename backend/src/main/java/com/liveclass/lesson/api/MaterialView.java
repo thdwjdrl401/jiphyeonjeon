@@ -13,6 +13,7 @@ public record MaterialView(
         String fileName,
         long fileSize,
         String status,
-        String embeddingStatus
+        String embeddingStatus,
+        String keyTermStatus
 ) {
 }

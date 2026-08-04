@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom'
-import { instructorPaths } from '@/app/router/paths'
 import type { CurriculumRelationship } from '@/features/curriculum/types'
-import { resolveLessonPath } from './lessonRouting'
+import { resolveInstructorLessonEditPath, resolveLessonPath } from './lessonRouting'
 import type { CurriculumOutlineLesson } from './types'
 
 interface CurriculumLessonItemProps {
@@ -35,10 +34,24 @@ function resolveActivity(lesson: CurriculumOutlineLesson): LessonActivity | null
 export default function CurriculumLessonItem({ lesson, relationship, curriculumId, sectionId }: CurriculumLessonItemProps) {
   const canOpen = lesson.access.allowed
   const role = relationship === 'OWNER_INSTRUCTOR' ? 'INSTRUCTOR' : 'STUDENT'
-  const detailPath = resolveLessonPath({ curriculumId, sectionId, lessonId: lesson.lessonId, destination: 'LESSON_DETAIL', role })
+  const detailPath = resolveLessonPath({
+    curriculumId,
+    sectionId,
+    lessonId: lesson.lessonId,
+    // 기존 목차는 라이브·다시보기도 먼저 강의 상세를 연다. ADR-0012의 업로드 녹화강의만
+    // 완성 패키지 재생 화면으로 직접 이동한다.
+    destination: lesson.access.destination === 'RECORDED_VOD' ? 'RECORDED_VOD' : 'LESSON_DETAIL',
+    role,
+    deliveryType: lesson.deliveryType,
+  })
   const activity = resolveActivity(lesson)
   const isInstructorView = relationship === 'OWNER_INSTRUCTOR'
-  const editPath = instructorPaths.editLesson(curriculumId, sectionId, lesson.lessonId)
+  const editPath = resolveInstructorLessonEditPath({
+    curriculumId,
+    sectionId,
+    lessonId: lesson.lessonId,
+    deliveryType: lesson.deliveryType,
+  })
   const unavailableReason = (lesson.access.reasonCode && reasonLabel[lesson.access.reasonCode]) ?? '이용할 수 없어요'
 
   const lessonMain = (

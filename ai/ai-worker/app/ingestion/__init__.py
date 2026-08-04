@@ -8,7 +8,14 @@ from app.ingestion.chunker import (
     chunk_presentation,
     chunk_strategy,
 )
-from app.ingestion.models import ContentBlock, KeyTerm, MaterialChunk, ParsedPresentation
+from app.ingestion.models import (
+    ContentBlock,
+    KeyTerm,
+    KeyTermExtractionResult,
+    KeyTermResultStatus,
+    MaterialChunk,
+    ParsedPresentation,
+)
 from app.ingestion.pptx_parser import PptxValidationLimits, parse_pptx
 
 __all__ = [
@@ -17,6 +24,8 @@ __all__ = [
     "MAX_ANNOTATION_IMAGE_EDGE_PX",
     "ContentBlock",
     "KeyTerm",
+    "KeyTermExtractionResult",
+    "KeyTermResultStatus",
     "MaterialChunk",
     "ParsedPresentation",
     "PptxValidationLimits",

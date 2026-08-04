@@ -80,6 +80,8 @@ class CurriculumMaterialContractTest {
                 .andExpect(jsonPath("$.assetId").value(assetId))
                 .andExpect(jsonPath("$.fileName").value("deck.pptx"))
                 .andExpect(jsonPath("$.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.embeddingStatus").value("READY"))
+                .andExpect(jsonPath("$.keyTermStatus").value("NOT_REQUESTED"))
                 .andExpect(jsonPath("$.material_id").doesNotExist());
     }
 
@@ -158,7 +160,8 @@ class CurriculumMaterialContractTest {
                 .andExpect(jsonPath("$.materials.length()").value(1))
                 .andExpect(jsonPath("$.materials[0].fileName").value("deck.pptx"))
                 .andExpect(jsonPath("$.materials[0].materialId").exists())
-                .andExpect(jsonPath("$.materials[0].embeddingStatus").value("READY"));
+                .andExpect(jsonPath("$.materials[0].embeddingStatus").value("READY"))
+                .andExpect(jsonPath("$.materials[0].keyTermStatus").value("NOT_REQUESTED"));
     }
 
     @Test

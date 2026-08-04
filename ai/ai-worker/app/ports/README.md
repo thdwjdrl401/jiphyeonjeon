@@ -9,7 +9,8 @@ PPTX ingestion core가 외부 구현을 호출하는 protocol 경계다.
 - `IndexStorage.find_existing/stage/activate` — 색인, `resolve_active_scope/delete_job` — 삭제
   (`resolve_active_scope`는 materialId만으로 curriculum_id·현재 버전을 self-lookup한다, ADR-0006)
 - `KeyTermExtractor.extract` — PPTX 전체 텍스트에서 `KeyTerm`(용어+정의) 목록 추출(선택 기능)
-- `KeyTermStorage.store` — 추출된 용어를 자료 버전에 upsert(선택 기능)
+- `KeyTermStorage.store_result/load_result` — 용어와 `READY|EMPTY|FAILED` 결과를 자료 버전에
+  영속하고 재배달 시 복구한다(`store`는 v1 호환용)
 
 ## 구조와 흐름
 

@@ -25,7 +25,7 @@ from app.domain import (
     StagedMaterial,
     StaleMaterialVersionError,
 )
-from app.ingestion import KeyTerm
+from app.ingestion import KeyTerm, KeyTermExtractionResult
 from conftest import IntegrationDatabase
 
 
@@ -140,7 +140,7 @@ def migrate_database(integration_database: IntegrationDatabase) -> None:
         command.upgrade(config, "head")
         with sync_engine.connect() as connection:
             assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
-                "0004_annotation_text_unbounded"
+                "0005_material_key_term_result"
             )
 
         command.downgrade(config, "base")
@@ -849,6 +849,51 @@ async def test_key_terms_are_stored_and_upserted_for_a_material_version(
         )
     assert updated_definition == "갱신된 정의"
     assert remaining_count == 2
+
+
+async def test_key_term_result_metadata_and_terms_round_trip_durably(
+    repository: PgvectorIndexRepository,
+    key_term_repository: PgvectorKeyTermRepository,
+) -> None:
+    material = _material(1)
+    version_id = await repository.stage(material, [_chunk(0.1)])
+    result = KeyTermExtractionResult(
+        status="READY",
+        terms=(KeyTerm(term="지도학습", definition="정답 데이터로 학습하는 방식"),),
+        truncated=True,
+    )
+
+    await key_term_repository.store_result(version_id, result)
+
+    assert await key_term_repository.load_result(version_id) == result
+
+
+async def test_empty_and_failed_key_term_results_remain_distinguishable(
+    repository: PgvectorIndexRepository,
+    key_term_repository: PgvectorKeyTermRepository,
+) -> None:
+    empty_material = _material(1, tenant_id="key-term-empty")
+    empty_version = await repository.stage(empty_material, [_chunk(0.1)])
+    await key_term_repository.store_result(
+        empty_version,
+        KeyTermExtractionResult(status="EMPTY"),
+    )
+
+    failed_material = _material(1, tenant_id="key-term-failed")
+    failed_version = await repository.stage(failed_material, [_chunk(0.1)])
+    await key_term_repository.store_result(
+        failed_version,
+        KeyTermExtractionResult(
+            status="FAILED",
+            failure_code="KEY_TERM_EXTRACTION_FAILED",
+        ),
+    )
+
+    empty = await key_term_repository.load_result(empty_version)
+    failed = await key_term_repository.load_result(failed_version)
+    assert empty is not None and empty.status == "EMPTY"
+    assert failed is not None and failed.status == "FAILED"
+    assert failed.failure_code == "KEY_TERM_EXTRACTION_FAILED"
 
 
 async def test_key_terms_cascade_delete_with_their_material_version(

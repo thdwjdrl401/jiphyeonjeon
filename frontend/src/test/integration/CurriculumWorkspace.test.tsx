@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '@/App'
 import { mockAuthService, resetMockAuth } from '@/features/auth/mockAuthService'
+import { resetMockCurriculumManagement } from '@/features/curriculum/mockCurriculumManagementService'
 import { buildMockCurriculumOutline, getMockCurriculum, publishMockCurriculum } from '@/features/demo/mockDatabase'
 
 async function renderAsInstructor(path: string) {
@@ -20,6 +21,7 @@ async function renderAsStudent(path: string) {
 describe('커리큘럼 작업 화면', () => {
   beforeEach(() => {
     resetMockAuth()
+    resetMockCurriculumManagement()
     window.history.replaceState({}, '', '/')
   })
 
@@ -213,24 +215,84 @@ describe('커리큘럼 작업 화면', () => {
     expect(description).toHaveValue('수정된 섹션 설명입니다.')
   })
 
-  it('섹션을 추가하면 자동 저장 전까지 "강의 추가"를 막고, 저장되면 링크로 연다', async () => {
+  it('섹션을 추가하면 자동 저장 전까지 두 강의 추가 방식을 막고, 저장되면 링크로 연다', async () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
     await screen.findByLabelText('섹션 1 이름')
     await user.click(screen.getByRole('button', { name: /섹션 추가/ }))
 
-    // 방금 추가한(아직 임시 id) 섹션의 "강의 추가"는 비활성 버튼이어야 한다 — 존재하지 않는 섹션
-    // URL로 못 들어가게(#3). 클릭 가능한 링크가 아니라 disabled 버튼으로 렌더된다.
-    const addLessonButtons = screen.getAllByRole('button', { name: '강의 추가' })
-    expect(addLessonButtons.some((button) => button.hasAttribute('disabled'))).toBe(true)
+    // 방금 추가한(아직 임시 id) 섹션의 두 버튼은 모두 비활성이어야 한다 — 존재하지 않는 섹션
+    // URL로 못 들어가게 한다. 클릭 가능한 링크가 아니라 disabled 버튼으로 렌더된다.
+    expect(screen.getAllByRole('button', { name: '녹화강의 업로드' }).some((button) => button.hasAttribute('disabled'))).toBe(true)
+    expect(screen.getAllByRole('button', { name: '라이브 강의 추가' }).some((button) => button.hasAttribute('disabled'))).toBe(true)
 
     // 디바운스 자동 저장이 새 섹션에 실제 id를 부여하면 "강의 추가"가 링크로 바뀐다.
     await waitFor(() => {
       expect(screen.getByText('자동 저장됨')).toBeInTheDocument()
     })
     await waitFor(() => {
-      expect(screen.queryByRole('button', { name: '강의 추가' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: '녹화강의 업로드' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: '라이브 강의 추가' })).not.toBeInTheDocument()
     })
+  })
+
+  it('섹션 아래에 녹화강의 업로드와 라이브 강의 추가를 순서대로 제공한다', async () => {
+    await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
+
+    const section = (await screen.findByLabelText('섹션 1 이름')).closest('article')!
+    const recorded = within(section).getByRole('link', { name: '녹화강의 업로드' })
+    const live = within(section).getByRole('link', { name: '라이브 강의 추가' })
+
+    expect(recorded).toHaveAttribute(
+      'href',
+      '/instructor/curriculums/cur-spring-live/sections/sec-foundation/recorded-lessons/new',
+    )
+    expect(live).toHaveAttribute(
+      'href',
+      '/instructor/curriculums/cur-spring-live/sections/sec-foundation/lessons/new',
+    )
+    expect(recorded.compareDocumentPosition(live) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('녹화강의 업로드 화면에서 MP4를 검증하고 업로드 흐름을 완료한다', async () => {
+    // 실제 파일 선택 이벤트를 유지하되, 브라우저가 accept와 맞지 않는 파일도 넘겨준 상황까지
+    // 검증할 수 있도록 테스트에서만 accept 필터를 해제한다.
+    const user = userEvent.setup({ applyAccept: false })
+    await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
+    await user.click((await screen.findAllByRole('link', { name: '녹화강의 업로드' }))[0])
+
+    expect(await screen.findByRole('heading', { name: '녹화강의 업로드', level: 1 })).toBeInTheDocument()
+    expect(window.location.pathname).toBe(
+      '/instructor/curriculums/cur-spring-live/sections/sec-foundation/recorded-lessons/new',
+    )
+
+    const videoInput = screen.getByLabelText('MP4 영상 파일')
+    await user.upload(videoInput, new File(['video'], '잘못된-영상.mov', { type: 'video/quicktime' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('MP4 형식의 영상 파일만 선택할 수 있습니다.')
+
+    const video = new File(['recorded-video'], '보안-기초.mp4', { type: 'video/mp4' })
+    await user.upload(videoInput, video)
+    expect(screen.getByText('보안-기초.mp4')).toBeInTheDocument()
+    expect(screen.getByText('선택 완료')).toBeInTheDocument()
+
+    const material = new File(['presentation'], '보안-기초.pptx', {
+      type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    })
+    await user.upload(screen.getByLabelText('녹화강의 자료 파일'), material)
+    expect(screen.getByText('보안-기초.pptx')).toBeInTheDocument()
+    expect(screen.getByText('업로드 대기')).toBeInTheDocument()
+
+    const submit = screen.getByRole('button', { name: '녹화강의 업로드' })
+    expect(submit).toBeDisabled()
+    await user.type(screen.getByLabelText(/강의 제목/), '녹화로 배우는 보안 기초')
+    expect(submit).toBeEnabled()
+    await user.click(submit)
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe('/instructor/curriculums/cur-spring-live/manage')
+      expect(screen.getByText('녹화로 배우는 보안 기초')).toBeInTheDocument()
+    })
+    expect(screen.getByText('녹화강의를 업로드했습니다. 영상 처리가 완료되면 재생할 수 있습니다.')).toBeInTheDocument()
   })
 
   it('새 강의를 저장하면 구성 화면으로 돌아가 중복 생성을 막는다', async () => {

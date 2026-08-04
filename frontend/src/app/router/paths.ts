@@ -56,6 +56,7 @@ export const studentPaths = {
   prejoin: (sessionId: string) => `/student/live-sessions/${sessionId}/prejoin`,
   classroom: (sessionId: string) => `/student/live-sessions/${sessionId}/classroom`,
   replay: (lessonId: string) => `/student/lessons/${lessonId}/replay`,
+  recorded: (lessonId: string) => `/student/lessons/${lessonId}/recorded`,
 }
 
 export const instructorPaths = {
@@ -74,6 +75,12 @@ export const instructorPaths = {
     `/instructor/curriculums/${curriculumId}/sections/${sectionId}/lessons/${lessonId}`,
   newLesson: (curriculumId: string, sectionId: string) =>
     `/instructor/curriculums/${curriculumId}/sections/${sectionId}/lessons/new`,
+  newRecordedLesson: (curriculumId: string, sectionId: string) =>
+    `/instructor/curriculums/${curriculumId}/sections/${sectionId}/recorded-lessons/new`,
+  recordedLesson: (curriculumId: string, sectionId: string, lessonId: string) =>
+    `/instructor/curriculums/${curriculumId}/sections/${sectionId}/recorded-lessons/${lessonId}`,
+  editRecordedLesson: (curriculumId: string, sectionId: string, lessonId: string) =>
+    `/instructor/curriculums/${curriculumId}/sections/${sectionId}/recorded-lessons/${lessonId}/edit`,
   editLesson: (curriculumId: string, sectionId: string, lessonId: string) =>
     `/instructor/curriculums/${curriculumId}/sections/${sectionId}/lessons/${lessonId}/edit`,
   preflight: (sessionId: string) => `/instructor/live-sessions/${sessionId}/preflight`,

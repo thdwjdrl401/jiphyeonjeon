@@ -49,12 +49,12 @@ public class LessonPlaybackAccessImpl implements LessonPlaybackAccess {
         Curriculum curriculum = curriculumRepository.findById(section.getCurriculumId()).orElseThrow(this::notFound);
 
         if (userId.equals(curriculum.getInstructorId())) {
-            return new PlaybackAccessGrant(true);   // 소유 강사 — 공개 전에도 검수 목적으로 본다.
+            return new PlaybackAccessGrant(true, curriculum.getId());   // 소유 강사 — 공개 전에도 검수 목적으로 본다.
         }
         // 레슨 상태로는 막지 않는다 — 레슨에 초안이 없고 공개 여부는 커리큘럼이 결정한다(ADR-0005).
         // 비공개 커리큘럼은 애초에 수강이 성립하지 않으므로 아래 수강 게이트가 그대로 막아 준다.
         if (enrollmentDirectory.isActive(curriculum.getId(), userId)) {
-            return new PlaybackAccessGrant(false);  // 활성 수강생 — 게시본만(게이트는 video).
+            return new PlaybackAccessGrant(false, curriculum.getId());  // 활성 수강생 — 게시본만(게이트는 video).
         }
         // 존재는 공개 목차로 이미 드러나므로 숨길 것이 없다 — 미수강은 403.
         throw new PlaybackAccessException(

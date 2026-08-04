@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
 from typing import TYPE_CHECKING
 from uuid import UUID
 
@@ -10,6 +9,7 @@ from app.adapters.remote_bge_embedding import RemoteEmbeddingError
 from app.adapters.spring_material_asset_store import SpringMaterialSourceError
 from app.adapters.spring_material_callback import SpringCallbackError
 from app.application import (
+    MaterialIndexResult,
     annotation_embed_job_id,
     embed_delete_job_id,
     map_annotation_embed_job,
@@ -22,6 +22,8 @@ from app.contracts import (
     AnnotationEmbedJob,
     EmbedDeleteJob,
     KeyTermPayload,
+    KeyTermResultPayload,
+    MaterialCallbackOutputs,
     MaterialCallbackEvent,
     MaterialCallbackStatus,
     MaterialCallbackType,
@@ -31,7 +33,6 @@ from app.contracts import (
     parse_material_job,
 )
 from app.domain import MaterialIngestionError, StaleMaterialVersionError
-from app.ingestion import KeyTerm
 
 if TYPE_CHECKING:
     from app.wiring import PptxIngestionRuntime
@@ -113,15 +114,30 @@ class MaterialJobHandler:
     async def _handle_embed(self, job: PptxEmbedJob) -> None:
         material = self._runtime.material_for(job)
         try:
-            result = await self._runtime.index_pptx_material.execute(material)
+            result = await self._runtime.index_pptx_material.execute(
+                material,
+                extract_key_terms=job.policy.extract_key_terms,
+            )
         except Exception as exc:
             if _is_retryable(exc):
                 raise
-            await self._send_terminal(job, material.job_id, "MATERIAL_EMBED_FAILED", "FAILED")
+            await self._send_terminal(
+                job,
+                material.job_id,
+                "MATERIAL_EMBED_FAILED",
+                "FAILED",
+                key_term_requested=(
+                    job.policy.extract_key_terms if job.contract_version == 2 else None
+                ),
+            )
             raise PermanentMaterialJobError("material ingestion failed permanently") from exc
 
         await self._send_terminal(
-            job, material.job_id, "MATERIAL_EMBEDDED", "READY", key_terms=result.key_terms
+            job,
+            material.job_id,
+            "MATERIAL_EMBEDDED",
+            "READY",
+            result=result,
         )
 
     async def _handle_delete(self, job: EmbedDeleteJob) -> None:
@@ -168,7 +184,15 @@ class MaterialJobHandler:
         existing = await self._runtime.index_pptx_material.find_existing(material)
         if existing is not None and not existing.activation_required:
             return
-        await self._send_terminal(job, material.job_id, "MATERIAL_EMBED_FAILED", "FAILED")
+        await self._send_terminal(
+            job,
+            material.job_id,
+            "MATERIAL_EMBED_FAILED",
+            "FAILED",
+            key_term_requested=(
+                job.policy.extract_key_terms if job.contract_version == 2 else None
+            ),
+        )
 
     async def _send_annotation_terminal(
         self,
@@ -197,7 +221,8 @@ class MaterialJobHandler:
         job_id: str,
         event_type: MaterialCallbackType,
         status: MaterialCallbackStatus,
-        key_terms: Sequence[KeyTerm] = (),
+        result: MaterialIndexResult | None = None,
+        key_term_requested: bool | None = None,
     ) -> None:
         payload: dict[str, object] = {
             "eventId": material_callback_event_id(job_id, event_type),
@@ -207,10 +232,31 @@ class MaterialJobHandler:
             "lessonId": job.lesson_id,
             "status": status,
         }
-        if key_terms:
+        if result is not None and result.key_terms:
             payload["keyTerms"] = [
-                KeyTermPayload(term=term.term, definition=term.definition) for term in key_terms
+                KeyTermPayload(term=term.term, definition=term.definition)
+                for term in result.key_terms
             ]
+        if result is not None and isinstance(job, PptxEmbedJob) and job.contract_version == 2:
+            key_term_result = result.key_term_result
+            payload["outputs"] = MaterialCallbackOutputs(
+                materialVersionId=result.version_id,
+                chunkCount=result.chunk_count,
+                keyTermResult=KeyTermResultPayload(
+                    status=key_term_result.status,
+                    count=key_term_result.count,
+                    truncated=key_term_result.truncated,
+                    failureCode=key_term_result.failure_code,
+                ),
+            )
+        elif key_term_requested is not None:
+            payload["outputs"] = MaterialCallbackOutputs(
+                keyTermResult=KeyTermResultPayload(
+                    status="FAILED" if key_term_requested else "NOT_REQUESTED",
+                    count=0,
+                    failureCode=("MATERIAL_PIPELINE_FAILED" if key_term_requested else None),
+                )
+            )
         event = MaterialCallbackEvent.model_validate(payload)
         try:
             await self._runtime.callback_client.send(event)

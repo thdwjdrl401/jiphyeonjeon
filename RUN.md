@@ -9,17 +9,17 @@
 | ---- | ---- | ---- |
 | **JDK** | Java **21** (LTS) | Spring Boot 4.1 ([ADR-0009](./docs/decisions/songjeongki/0009-java21-spring-boot-3.md)). Gradle 8.14+/9.x는 wrapper가 자동 |
 | **Node.js** | 20+ / npm | 프론트(Vite). **WSL에서 개발하면 WSL 안에 설치** (`brew install node` 등) |
-| **Docker** | Engine + compose | 인프라(Postgres+pgvector·Redis) |
+| **Docker** | Engine + compose | 인프라·녹화강의 worker |
 | **VSCode 확장** | `Extension Pack for Java` · `ESLint` | 추천 팝업(`.vscode/extensions.json`) |
 
 > ⚠️ **WSL 개발**: 레포를 WSL ext4에 두고 작업하면 `java`·`node`가 WSL 안에 있어야 한다(Windows쪽만 있으면 안 잡히거나 느림). JDK는 `JAVA_HOME`(예: brew는 `.../opt/openjdk@21/libexec`)을 PATH에 등록.
 
 ## 2. 최초 셋업
 ```bash
-# 인프라 (PG+pgvector, Redis) — 최초 기동 시 core/ai 스키마 자동 생성
+# 로컬 의존 서비스·worker — .env에 GMS_API_KEY를 설정한 뒤 실행
 cp .env.example .env
 docker compose up -d
-docker compose ps               # postgres·redis·minio healthy 확인
+docker compose ps               # postgres·redis·minio·rabbitmq·두 worker 확인
 
 # 의존성
 npm run install:all             # 루트(concurrently) + frontend
@@ -28,14 +28,38 @@ npm run install:all             # 루트(concurrently) + frontend
 ## 3. 실행
 
 ### 방법 A. 터미널 (루트에서 동시)
-| 환경 | 개발 모드(FE+BE 동시) | 백엔드만 빌드 |
+| 환경 | 개발 모드 | 백엔드만 빌드 |
 | ---- | ---- | ---- |
 | **WSL** (권장) | `npm run dev:wsl` | `npm run build:wsl` |
 | Windows | `npm run dev` | `npm run build` |
 
-- `dev`/`dev:wsl` = 프론트 Vite(8083, HMR) + 백엔드 `bootRun`(8080, DevTools 핫리로드) 동시.
+- `dev` = 프론트 Vite(8083, HMR) + 백엔드 `bootRun`(8080, DevTools 핫리로드) 동시.
+- `dev:wsl` = 루트 `.env` 자동 로드 + 프론트 + 백엔드 + 컴파일 감시를 동시 실행한다.
+- `dev:wsl`을 `Ctrl+C`로 종료해도 `docker compose up -d`로 시작한 인프라와 worker는 계속 실행된다.
 - WSL에서 `Permission denied: ./gradlew` → `chmod +x backend/gradlew` 한 번.
 - **인프라(docker compose)가 먼저 떠 있어야** 백엔드가 PG/Redis에 붙는다.
+
+녹화강의 HLS 변환과 batch STT worker(ADR-0008·0011)는 기본 Compose 실행에 포함한다.
+`.env`에 `RECORDED_STT_ENABLED=true`와 `GMS_API_KEY`를 설정한 뒤 `docker compose up -d`를 실행한다.
+`dev:wsl`은 같은 `.env`를 export해 Spring에 전달한다. 두 STT HMAC 값은 `.env`의 `RECORDED_STT_SOURCE_SECRET`·
+`RECORDED_STT_CALLBACK_SECRET`을 Spring과 worker가 함께 읽는다.
+
+```bash
+docker compose up -d
+docker compose logs -f media-worker recorded-stt-worker
+```
+
+worker 코드를 바꾼 뒤 이미지를 다시 만들려면 다음을 실행한다.
+
+```bash
+docker compose up -d --build media-worker recorded-stt-worker
+docker compose logs -f recorded-stt-worker
+```
+
+전체 로컬 의존 서비스와 worker를 멈추려면 `docker compose down`을 실행한다.
+
+이 worker는 `ingestion.transcribe`만 소비하며 FFmpeg와 GMS key를 가진다. `media-worker`의 HLS 변환과
+PPTX `ai-worker`는 별도 프로세스·queue로 계속 동작한다.
 
 ### 방법 B. VSCode 실행 버튼
 1. `Extension Pack for Java` 설치(추천 팝업).
@@ -55,11 +79,19 @@ docker compose -f docker-compose.prod.yml -f docker-compose.expose.yml --env-fil
 
 **2) 로컬에서 remote 프로필로 실행**:
 ```bash
-cp .env.remote.example .env.remote      # POSTGRES_PASSWORD·EC2_REDIS_PASSWORD 채우기 (EC2 값과 일치)
+cp .env.remote.example .env.remote      # 인프라 시크릿과 AI_INTERNAL_SECRET을 EC2 dev 값으로 채우기
 npm run dev:remote:wsl                   # FE + BE(remote) 동시
 # 또는 VSCode: "Spring Boot (Backend · EC2 infra)" / "Full Stack (BE · EC2 infra + FE)"
 ```
-- 안전장치: remote는 **EC2 스키마를 마이그레이션하지 않는다**(`flyway.enabled=false`). 스키마가 뒤처져 `validate`가 실패하면 EC2 재배포 신호.
+- 녹화강의·라이브 AI 질문은 remote 프로필에서 기본적으로 EC2 dev ai-api
+  (`http://jiphyeonjeon.thdwjdrl.com:18010`)를 호출한다. 주소를 바꿀 때만 `AI_API_BASE_URL`을 덮어쓴다.
+- `.env.remote`의 `AI_INTERNAL_SECRET`은 EC2 `/etc/liveclass/.env.ai-dev`의 같은 값이어야 한다.
+  누락하면 잘못된 로컬 기본 시크릿으로 401을 반복하지 않고 백엔드가 기동 단계에서 실패한다.
+- 학생 핵심용어는 별도 프론트 설정 없이 remote PostgreSQL의 활성
+  `ai.material_version`·`ai.material_key_term`을 `GET /api/lessons/{lessonId}/glossary`로 읽는다.
+- remote는 공유 EC2 dev DB에 대해 Flyway를 실행한다. 실행 전 최신 master로 rebase하고
+  `bash scripts/check-version-collisions.sh`를 통과시켜야 한다. 이미 배포된 master 마이그레이션 번호는
+  바꾸지 않고, 브랜치 마이그레이션만 다음 빈 번호로 이동한다.
 - **범위 밖(현재)**: 에셋 스토리지(MinIO)는 remote 전환에 포함되지 않는다 — datasource·Redis(STT 핵심 경로)만 전환. STT consumer(CP2) 착수 시 **consumer group을 개발자별로 분리**할 것(같은 그룹이면 EC2 백엔드와 메시지를 뺏는다, ADR-0022 유보).
 
 ## 4. 포트

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveLessonPath } from '@/features/lesson/lessonRouting'
+import { resolveInstructorLessonEditPath, resolveLessonPath } from '@/features/lesson/lessonRouting'
 
 const studentBase = {
   role: 'STUDENT' as const,
@@ -28,6 +28,14 @@ describe('resolveLessonPath', () => {
     expect(resolveLessonPath({ ...studentBase, destination: 'VOD' })).toBe('/student/lessons/les-1/replay')
   })
 
+  it('학생 업로드 녹화강의는 게시된 녹화강의 전용 경로로 이동한다', () => {
+    expect(resolveLessonPath({
+      ...studentBase,
+      destination: 'RECORDED_VOD',
+      deliveryType: 'RECORDED',
+    })).toBe('/student/lessons/les-1/recorded')
+  })
+
   it('강사 경로에는 instructor 역할 접두사를 사용한다', () => {
     expect(resolveLessonPath({ ...studentBase, role: 'INSTRUCTOR', destination: 'LESSON_DETAIL' })).toBe(
       '/instructor/curriculums/cur-1/sections/sec-1/lessons/les-1',
@@ -38,11 +46,29 @@ describe('resolveLessonPath', () => {
     expect(resolveLessonPath({ ...studentBase, role: 'INSTRUCTOR', destination: 'VOD' })).toBe(
       '/instructor/lessons/les-1/replay',
     )
+    expect(resolveLessonPath({
+      ...studentBase,
+      role: 'INSTRUCTOR',
+      destination: 'RECORDED_VOD',
+      deliveryType: 'RECORDED',
+    })).toBe('/instructor/curriculums/cur-1/sections/sec-1/recorded-lessons/les-1')
   })
 
   it('라이브 목적지에 sessionId가 없으면 역할별 강의 상세 경로로 대체한다', () => {
     expect(resolveLessonPath({ ...studentBase, destination: 'LIVE_SESSION' })).toBe(
       '/student/curriculums/cur-1/sections/sec-1/lessons/les-1',
     )
+  })
+})
+
+describe('resolveInstructorLessonEditPath', () => {
+  it('라이브와 녹화강의 수정 경로를 deliveryType으로 분리한다', () => {
+    expect(resolveInstructorLessonEditPath({
+      curriculumId: 'cur-1', sectionId: 'sec-1', lessonId: 'les-live', deliveryType: 'LIVE',
+    })).toBe('/instructor/curriculums/cur-1/sections/sec-1/lessons/les-live/edit')
+
+    expect(resolveInstructorLessonEditPath({
+      curriculumId: 'cur-1', sectionId: 'sec-1', lessonId: 'les-recorded', deliveryType: 'RECORDED',
+    })).toBe('/instructor/curriculums/cur-1/sections/sec-1/recorded-lessons/les-recorded/edit')
   })
 })

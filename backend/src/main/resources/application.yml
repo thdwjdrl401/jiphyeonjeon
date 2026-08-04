@@ -162,6 +162,28 @@ video:
     # 비우면 내부 주소로 서명 — 로컬에서 vite(:8083) 프록시를 쓰면 http://localhost:8083을 넣는다.
     public-endpoint: ${VIDEO_PLAYBACK_PUBLIC_ENDPOINT:}
 
+recorded:
+  video:
+    # 업로드 녹화강의 기능 스위치. worker·RabbitMQ·MinIO를 배포하지 않은 환경은 false로 닫는다.
+    enabled: ${RECORDED_VIDEO_ENABLED:true}
+    source-secret: ${MEDIA_SOURCE_SECRET:dev-media-source-secret}
+    callback-secret: ${MEDIA_CALLBACK_SECRET:dev-media-callback-secret}
+    dispatch:
+      fixed-delay-ms: ${RECORDED_VIDEO_DISPATCH_DELAY_MS:3000}
+      initial-delay-ms: ${RECORDED_VIDEO_DISPATCH_INITIAL_DELAY_MS:15000}
+  stt:
+    # ADR-0011. Spring과 recorded-stt-worker 양쪽이 준비된 환경에서만 명시적으로 켠다.
+    enabled: ${RECORDED_STT_ENABLED:false}
+    source-secret: ${RECORDED_STT_SOURCE_SECRET:dev-recorded-stt-source-secret}
+    callback-secret: ${RECORDED_STT_CALLBACK_SECRET:dev-recorded-stt-callback-secret}
+    dispatch:
+      fixed-delay-ms: ${RECORDED_STT_DISPATCH_DELAY_MS:3000}
+      initial-delay-ms: ${RECORDED_STT_DISPATCH_INITIAL_DELAY_MS:15000}
+  publication:
+    # 두 callback 커밋 경계에서 게시 평가가 누락된 READY+READY|EMPTY+DRAFT 조합의 복구 주기.
+    reconcile-delay-ms: ${RECORDED_PUBLICATION_RECONCILE_DELAY_MS:60000}
+    reconcile-initial-delay-ms: ${RECORDED_PUBLICATION_RECONCILE_INITIAL_DELAY_MS:60000}
+
 asset:
   storage:
     # 에셋(썸네일·프로필 이미지) presigned 업로드용 S3 호환 스토리지. 로컬은 MinIO.

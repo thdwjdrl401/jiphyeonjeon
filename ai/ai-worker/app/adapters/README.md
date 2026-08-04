@@ -13,7 +13,8 @@ adapter를 둔다.
 - Spring HMAC으로 단명 다운로드 URL과 완료 callback을 주고받는다.
 - BGE-M3 HTTP 입력 순서를 보존하고 RabbitMQ ACK/retry/DLQ를 관리한다.
 - GMS(OpenAI 호환) structured output으로 PPTX 텍스트에서 핵심 용어+정의를 추출한다(선택 기능).
-- 추출된 핵심 용어를 자료 버전에 종속해 `ai.material_key_term`에 upsert한다(ADR-0005, 선택 기능).
+- 추출된 핵심 용어와 결과 상태·개수·절단·실패 코드를 자료 버전에 종속해 원자적으로 저장한다
+  (ADR-0005, ADR-0010).
 
 ## 구조와 흐름
 

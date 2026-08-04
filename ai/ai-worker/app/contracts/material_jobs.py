@@ -31,6 +31,7 @@ class _WireModel(BaseModel):
 
 class EmbedPolicy(_WireModel):
     embed_model: Literal["bge-m3"] = Field(alias="embedModel")
+    extract_key_terms: bool | None = Field(default=None, alias="extractKeyTerms")
 
 
 class PptxEmbedJob(_WireModel):
@@ -41,7 +42,15 @@ class PptxEmbedJob(_WireModel):
     curriculum_id: UUID = Field(alias="curriculumId")
     file_name: str = Field(alias="fileName", max_length=1_024)
     policy: EmbedPolicy
-    contract_version: Literal[1] = Field(alias="contractVersion")
+    contract_version: Literal[1, 2] = Field(alias="contractVersion")
+
+    @model_validator(mode="after")
+    def validate_policy_matches_contract_version(self) -> PptxEmbedJob:
+        if self.contract_version == 1 and self.policy.extract_key_terms is not None:
+            raise ValueError("v1 PPTX_EMBED must use the worker key-term default")
+        if self.contract_version == 2 and self.policy.extract_key_terms is None:
+            raise ValueError("v2 PPTX_EMBED requires policy.extractKeyTerms")
+        return self
 
 
 class EmbedDeleteJob(_WireModel):

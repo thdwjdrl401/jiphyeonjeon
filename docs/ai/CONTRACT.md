@@ -113,7 +113,7 @@ X-Internal-Signature: base64(HMAC-SHA256(AI_INTERNAL_SECRET, rawBody))
 Content-Type: application/json
 ```
 
-요청은 `requestId`, `lessonId`, `sessionId`, `question`, `contextTimeMs`, `issuedAtMs`를 포함한다.
+요청은 `requestId`, `lessonId`, `curriculumId`, `sessionId`, `question`, `contextTimeMs`, `issuedAtMs`를 포함한다.
 응답은 `answer.delta` 0개 이상과 `answer.done|answer.insufficient|answer.error` terminal 하나로 끝난다.
 
 ai-api route·HMAC verifier와 **Spring signer·browser-facing SSE proxy가 모두 구현됐다**
@@ -123,6 +123,13 @@ Spring은 `POST /api/live-sessions/{sessionId}/ai/answers/stream`으로 브라�
 `contextTimeMs`는 `core.live_caption`의 해당 세션 **최신 행 raw `stream_elapsed_ms`**(없으면 0)로 채워
 §3-4가 금지한 세션-ms 변환 없이 규격을 만족한다. `AI_INTERNAL_SECRET`이 없으면 ai-api는 503으로
 fail-closed한다. 상세 계약은 [`ai-api/CONTRACT.md`](../../ai/ai-api/CONTRACT.md)를 따른다.
+
+업로드 녹화강의는 같은 인증·SSE를 쓰는 `POST /internal/v2/rag/answers:stream`을 호출한다. Spring이
+공개 요청의 `lessonId`로 `curriculumId`·`recordedVideoId`와 게시 자막을 조회하고, 내부 wire의
+`sessionId`에는 `recordedVideoId`, `context.mode`에는 `REPLAY`를 넣는다. ai-api는 이 값을 라이브 DB
+조회에 사용하지 않고 전달된 caption source 범위로만 사용한다. 구현·제약은
+[ADR-0015](../decisions/choinhoo/0015-recorded-lesson-replay-v2-rag-adapter.md), 정확한 wire는 공유 계약
+[§3-9 Replay v2](../CONTRACT.md#replay-v2--업로드-녹화강의adr-0015)를 따른다.
 
 ### 4.2 Spring→ai-worker 자료 작업
 
@@ -381,7 +388,7 @@ Spring realtime-agent health proxy client는 아직 없다. 따라서 prod `/int
 
 | 경계 | 상태 |
 |---|---|
-| Spring→ai-api RAG SSE | **양쪽 구현**. AI route/HMAC verifier 배선 완료(서명 없는 호출은 503이 아니라 401), Spring signer + 브라우저 SSE 프록시 `POST /api/live-sessions/{sessionId}/ai/answers/stream` 구현(ADR-0047, 공유 계약 §3-9). 운영은 backend·ai-api가 같은 `AI_INTERNAL_SECRET`을 받아야 동작 |
+| Spring→ai-api RAG SSE | **v1·Replay v2 양쪽 구현**. AI route/HMAC verifier, Spring signer와 브라우저 SSE 프록시를 구현했다. 라이브는 `POST /api/live-sessions/{sessionId}/ai/answers/stream`, 업로드 녹화강의는 `POST /api/lessons/{lessonId}/ai/answers/stream` → 내부 v2 `sessionId=recordedVideoId`다(ADR-0047·ADR-0015, 공유 계약 §3-9). 운영은 backend·ai-api가 같은 `AI_INTERNAL_SECRET`을 받아야 동작 |
 | Spring→RabbitMQ→ai-worker | 양쪽 구현, Spring producer·worker 앱 기본 비활성, AI 운영 compose는 worker만 활성 |
 | ai-worker→Spring download URL/callback | 양쪽 구현 |
 | ai-worker/ai-api→BGE | runtime/client/reverse tunnel/운영 container proxy 배선 구현 |

@@ -6,6 +6,12 @@ import com.liveclass.asset.api.AssetDirectory;
 import com.liveclass.asset.api.AssetRef;
 import com.liveclass.curriculum.domain.Curriculum;
 import com.liveclass.video.api.LessonRecordingCleanup;
+import com.liveclass.video.api.RecordedLessonView;
+import com.liveclass.video.api.RecordedProcessingView;
+import com.liveclass.video.api.RecordedUploadTicket;
+import com.liveclass.video.api.RecordedVideoConflictException;
+import com.liveclass.video.api.RecordedVideoManagement;
+import com.liveclass.video.api.RecordedVideoNotFoundException;
 import com.liveclass.curriculum.domain.CurriculumLifecycleStatus;
 import com.liveclass.curriculum.domain.EnrollmentType;
 import com.liveclass.curriculum.domain.Section;
@@ -40,6 +46,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -66,6 +73,7 @@ public class InstructorCurriculumService {
     /** 강의 삭제 시 녹화(자산 행 + 산출물)를 함께 정리하는 video 모듈 포트. */
     private final LessonRecordingCleanup lessonRecordingCleanup;
     private final ApplicationEventPublisher eventPublisher;
+    private final RecordedVideoManagement recordedVideoManagement;
     private final boolean embeddingEnabled;
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
 
@@ -81,6 +89,7 @@ public class InstructorCurriculumService {
                                        OutboxPublisher outboxPublisher,
                                        LessonRecordingCleanup lessonRecordingCleanup,
                                        ApplicationEventPublisher eventPublisher,
+                                       RecordedVideoManagement recordedVideoManagement,
                                        @Value("${material.embedding.enabled:false}") boolean embeddingEnabled) {
         this.curriculumRepository = curriculumRepository;
         this.sectionRepository = sectionRepository;
@@ -94,6 +103,7 @@ public class InstructorCurriculumService {
         this.outboxPublisher = outboxPublisher;
         this.lessonRecordingCleanup = lessonRecordingCleanup;
         this.eventPublisher = eventPublisher;
+        this.recordedVideoManagement = recordedVideoManagement;
         this.embeddingEnabled = embeddingEnabled;
     }
 
@@ -437,6 +447,70 @@ public class InstructorCurriculumService {
         return lesson;
     }
 
+    /** 녹화강의 레슨과 recorded_video를 같은 트랜잭션에서 만든다. */
+    @Transactional
+    public RecordedLessonView createRecordedLesson(UUID instructorId, UUID sectionId, UUID clientRequestId,
+                                                   String title, String description) {
+        Section section = requireOwnedSection(instructorId, sectionId);
+        Optional<RecordedLessonView> existing = recordedVideoManagement.findByClientRequestId(clientRequestId);
+        if (existing.isPresent()) {
+            LessonView lesson = lessonManagement.findById(existing.get().lessonId())
+                    .orElseThrow(() -> new RecordedVideoNotFoundException("멱등키에 연결된 강의를 찾을 수 없습니다."));
+            if (!sectionId.equals(lesson.sectionId()) || !title.equals(lesson.title())) {
+                throw new RecordedVideoConflictException(
+                        "RECORDED_LESSON_IDEMPOTENCY_CONFLICT", "같은 clientRequestId가 다른 강의 생성에 사용됐습니다.");
+            }
+            return existing.get();
+        }
+
+        LessonView lesson = lessonManagement.createRecorded(sectionId, title, description);
+        RecordedLessonView recorded = recordedVideoManagement.register(lesson.lessonId(), clientRequestId);
+        curriculumRepository.bumpStructureVersion(section.getCurriculumId());
+        log.info(Audit.MARKER, "녹화강의 생성 sectionId={} lessonId={} recordedVideoId={}",
+                sectionId, lesson.lessonId(), recorded.recordedVideoId());
+        return recorded;
+    }
+
+    @Transactional
+    public RecordedUploadTicket issueRecordedVideoUpload(UUID instructorId, UUID lessonId,
+                                                         String fileName, String contentType, long fileSize) {
+        requireOwnedRecordedLesson(instructorId, lessonId);
+        return recordedVideoManagement.issueUpload(
+                lessonId, instructorId, fileName, contentType, fileSize);
+    }
+
+    @Transactional
+    public RecordedProcessingView completeRecordedVideoUpload(UUID instructorId, UUID lessonId, UUID assetId) {
+        requireOwnedRecordedLesson(instructorId, lessonId);
+        return recordedVideoManagement.completeUpload(lessonId, assetId, instructorId);
+    }
+
+    @Transactional(readOnly = true)
+    public RecordedProcessingView getRecordedVideoProcessing(UUID instructorId, UUID lessonId) {
+        requireOwnedRecordedLesson(instructorId, lessonId);
+        return recordedVideoManagement.processing(lessonId);
+    }
+
+    @Transactional
+    public RecordedProcessingView retryRecordedVideoProcessing(UUID instructorId, UUID lessonId) {
+        requireOwnedRecordedLesson(instructorId, lessonId);
+        return recordedVideoManagement.retry(lessonId);
+    }
+
+    @Transactional
+    public RecordedProcessingView retryRecordedCaptions(UUID instructorId, UUID lessonId) {
+        requireOwnedRecordedLesson(instructorId, lessonId);
+        return recordedVideoManagement.retryCaptions(lessonId);
+    }
+
+    private LessonView requireOwnedRecordedLesson(UUID instructorId, UUID lessonId) {
+        LessonView lesson = requireOwnedLesson(instructorId, lessonId);
+        if (!"RECORDED".equals(lesson.deliveryType())) {
+            throw new RecordedVideoNotFoundException("녹화강의가 아닙니다.");
+        }
+        return lesson;
+    }
+
     @Transactional(readOnly = true)
     public List<LessonView> listLessons(UUID instructorId, UUID sectionId) {
         requireOwnedSection(instructorId, sectionId);
@@ -491,7 +565,8 @@ public class InstructorCurriculumService {
     /**
      * 레슨에 자료(PPTX) 에셋을 연결한다(ADR-0035). 소유권(레슨→섹션→커리큘럼)은 여기서 확인하고,
      * 에셋 유효성 검증과 연결 저장은 lesson 모듈 포트가 한다. 에셋 업로더 검증에 쓰라고 instructorId를
-     * 넘긴다(레슨 소유권과 별개로 자기 에셋만 붙일 수 있게). AI 잡 발행은 이번 범위 밖(CP3).
+     * 넘긴다(레슨 소유권과 별개로 자기 에셋만 붙일 수 있게). 파이프라인이 켜져 있으면 ADR-0010의
+     * 임베딩·핵심 용어 v2 잡을 같은 트랜잭션의 outbox에 기록한다.
      */
     @Transactional
     public MaterialView attachMaterial(UUID instructorId, UUID lessonId, UUID assetId) {
@@ -504,6 +579,8 @@ public class InstructorCurriculumService {
         UUID curriculumId = requireOwnedSection(instructorId, lesson.sectionId()).getCurriculumId();
         if (embeddingEnabled) {
             lessonMaterialManagement.updateEmbeddingStatus(material.materialId(), "PENDING");
+            lessonMaterialManagement.updateKeyTermStatus(material.materialId(), "PENDING");
+            material = withProcessingPending(material);
             enqueueEmbedJob(curriculumId, lessonId, material);
         }
         /*
@@ -547,8 +624,8 @@ public class InstructorCurriculumService {
                 "lessonId", lessonId.toString(),
                 "curriculumId", curriculumId.toString(),
                 "fileName", material.fileName() == null ? "" : material.fileName(),
-                "policy", Map.of("embedModel", "bge-m3"),
-                "contractVersion", 1));
+                "policy", Map.of("embedModel", "bge-m3", "extractKeyTerms", true),
+                "contractVersion", 2));
         outboxPublisher.enqueue(OutboxDestinations.INGESTION_EMBED, "material_asset", material.materialId().toString(), "MATERIAL_EMBED_REQUESTED",
                 payload, "material:" + material.materialId() + ":embed", null);
     }
@@ -579,8 +656,8 @@ public class InstructorCurriculumService {
 
     /**
      * 커리큘럼에 자료(PPTX) 에셋을 연결한다(ADR-0042). 소유권은 여기서 확인하고, 에셋 유효성 검증과
-     * 연결 저장은 lesson 포트가 한다. 임베딩 파이프라인이 켜져 있으면(기본 꺼짐) 레슨과 동일하게 PENDING으로
-     * 두고 잡을 outbox에 싣는다 — 다만 scope=CURRICULUM이라 lessonId 없이 curriculumId만 싣는다.
+     * 연결 저장은 lesson 포트가 한다. 임베딩 파이프라인이 켜져 있으면(기본 꺼짐) embedding만 PENDING으로
+     * 두고 v1 잡을 outbox에 싣는다. curriculum scope의 용어 추출은 후속 배선이므로 NOT_REQUESTED를 유지한다.
      */
     @Transactional
     public MaterialView attachCurriculumMaterial(UUID instructorId, UUID curriculumId, UUID assetId) {
@@ -590,6 +667,7 @@ public class InstructorCurriculumService {
                 curriculumId, assetId, material.materialId());
         if (embeddingEnabled) {
             curriculumMaterialManagement.updateEmbeddingStatus(material.materialId(), "PENDING");
+            material = withEmbeddingPending(material);
             enqueueCurriculumEmbedJob(curriculumId, material);
         }
         // 레슨이 없는 커리큘럼 전체 자료다. lessonId를 비워 보내면 화면이 커리큘럼으로 보낸다.
@@ -619,7 +697,8 @@ public class InstructorCurriculumService {
     /**
      * 커리큘럼 자료 임베딩 잡을 outbox에 싣는다(ADR-0042). 레슨 잡({@link #enqueueEmbedJob})과 같은 taskType·
      * 모델·주문형 URL(assetId) 방식이지만, 레슨이 없으므로 {@code lessonId} 대신 {@code scope=CURRICULUM}을
-     * 싣는다. 워커는 scope로 RAG 적재 범위(커리큘럼 전체)를 판별한다(CONTRACT §3-1 evolution, 후속 AI 배선).
+     * 싣는다. 현재 worker의 curriculum scope 배선은 후속 범위이므로 v1 계약을 유지하고 용어 추출은
+     * 요청하지 않는다(CONTRACT §3-1 evolution).
      */
     private void enqueueCurriculumEmbedJob(UUID curriculumId, MaterialView material) {
         String payload = jsonMapper.writeValueAsString(Map.of(
@@ -633,6 +712,30 @@ public class InstructorCurriculumService {
                 "contractVersion", 1));
         outboxPublisher.enqueue(OutboxDestinations.INGESTION_EMBED, "material_asset", material.materialId().toString(), "MATERIAL_EMBED_REQUESTED",
                 payload, "material:" + material.materialId() + ":embed", null);
+    }
+
+    /** attach 응답도 DB에 방금 반영한 비동기 처리 상태와 같게 유지한다. */
+    private MaterialView withProcessingPending(MaterialView material) {
+        return new MaterialView(
+                material.materialId(),
+                material.assetId(),
+                material.fileName(),
+                material.fileSize(),
+                material.status(),
+                "PENDING",
+                "PENDING");
+    }
+
+    /** curriculum scope는 v1 embedding만 요청하므로 용어 상태를 NOT_REQUESTED로 유지한다. */
+    private MaterialView withEmbeddingPending(MaterialView material) {
+        return new MaterialView(
+                material.materialId(),
+                material.assetId(),
+                material.fileName(),
+                material.fileSize(),
+                material.status(),
+                "PENDING",
+                material.keyTermStatus());
     }
 
     /**
@@ -742,6 +845,9 @@ public class InstructorCurriculumService {
     @Transactional
     public LiveSessionView createLiveSession(UUID instructorId, UUID lessonId, java.time.OffsetDateTime scheduledAt) {
         LessonView lesson = requireOwnedLesson(instructorId, lessonId);
+        if (!"LIVE".equals(lesson.deliveryType())) {
+            throw new CurriculumStateConflictException("녹화강의에는 라이브 세션을 만들 수 없습니다.");
+        }
         // 세션에 소속 커리큘럼을 실어 접근 게이팅에 쓴다(session→enrollment 사이클 회피).
         UUID curriculumId = requireOwnedSection(instructorId, lesson.sectionId()).getCurriculumId();
         // 레슨당 세션 1개(DDL UNIQUE). 이미 있으면 상태 충돌로 막는다.

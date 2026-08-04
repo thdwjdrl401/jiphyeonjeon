@@ -1,3 +1,4 @@
+import axios from 'axios'
 import { apiClient } from '@/shared/api/client'
 import { uploadAsset } from '@/shared/api/uploadAsset'
 import type {
@@ -18,6 +19,7 @@ interface ApiLessonResponse {
   lessonId: string
   title: string
   status: string
+  deliveryType: 'LIVE' | 'RECORDED'
 }
 
 interface ApiCurriculumMaterial {
@@ -25,11 +27,40 @@ interface ApiCurriculumMaterial {
   fileName: string
   fileSize: number
   embeddingStatus?: string
+  keyTermStatus?: string
 }
 
-/** API 자료 응답을 화면 모델로. embeddingStatus·file은 목록/표시에 쓰지 않으므로 옮기지 않는다. */
+interface RecordedLessonCreated {
+  lessonId: string
+  recordedVideoId: string
+  deliveryType: 'RECORDED'
+  processingStatus: 'AWAITING_UPLOAD'
+}
+
+interface RecordedUploadTicket {
+  assetId: string
+  uploadUrl: string
+  method: string
+  headers: Record<string, string>
+  expiresAt: string
+}
+
+interface RecordedProcessingAccepted {
+  lessonId: string
+  recordedVideoId: string
+  jobId: string
+  status: 'QUEUED'
+}
+
+/** API 자료 응답을 화면 모델로. 파일 원본은 없지만 두 AI 처리 상태는 상세 표시에 유지한다. */
 function toCurriculumMaterial(material: ApiCurriculumMaterial): CurriculumMaterial {
-  return { materialId: material.materialId, fileName: material.fileName, fileSize: material.fileSize }
+  return {
+    materialId: material.materialId,
+    fileName: material.fileName,
+    fileSize: material.fileSize,
+    embeddingStatus: (material.embeddingStatus ?? 'READY') as CurriculumMaterial['embeddingStatus'],
+    keyTermStatus: (material.keyTermStatus ?? 'NOT_REQUESTED') as CurriculumMaterial['keyTermStatus'],
+  }
 }
 
 /** 서버에 저장된 커리큘럼 자료 목록(persisted, File 없음). 저장 후 로컬 상태 교체·삭제 diff의 기준. */
@@ -180,5 +211,57 @@ export const httpCurriculumManagementService = {
   },
   async deleteSection(sectionId) {
     await apiClient.delete(`/instructor/sections/${sectionId}`)
+  },
+  async uploadRecordedLesson(request) {
+    const { data: recorded } = await apiClient.post<RecordedLessonCreated>(
+      `/instructor/sections/${request.sectionId}/recorded-lessons`,
+      {
+        clientRequestId: request.clientRequestId,
+        title: request.title,
+        description: request.description,
+      },
+    )
+
+    // 녹화강의도 일반 레슨이므로 라이브 강의와 같은 자료 API를 사용한다. 영상 업로드보다 먼저
+    // 연결해, 자료 실패 시 recorded video가 AWAITING_UPLOAD에 머물고 같은 멱등키로 재시도할 수 있게 한다.
+    for (const file of request.materials) {
+      try {
+        const asset = await uploadAsset(file, 'MATERIAL')
+        await apiClient.post(`/instructor/lessons/${recorded.lessonId}/materials`, { assetId: asset.assetId })
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error)
+        throw new Error(`녹화강의는 생성됐지만 자료 "${file.name}" 업로드·연결에 실패했습니다. 같은 화면에서 다시 시도해 주세요. (${reason})`)
+      }
+    }
+
+    const contentType = request.videoFile.type || 'video/mp4'
+    const { data: ticket } = await apiClient.post<RecordedUploadTicket>(
+      `/instructor/recorded-lessons/${recorded.lessonId}/video/upload-requests`,
+      {
+        fileName: request.videoFile.name,
+        contentType,
+        fileSize: request.videoFile.size,
+      },
+    )
+
+    // 대용량 MP4는 앱 API·세션 쿠키·CSRF 인터셉터를 거치지 않고 스토리지에 직접 PUT한다.
+    await axios.request({
+      url: ticket.uploadUrl,
+      method: ticket.method,
+      headers: ticket.headers,
+      data: request.videoFile,
+    })
+
+    const { data: accepted } = await apiClient.post<RecordedProcessingAccepted>(
+      `/instructor/recorded-lessons/${recorded.lessonId}/video/complete`,
+      { assetId: ticket.assetId },
+    )
+
+    return {
+      lessonId: accepted.lessonId,
+      recordedVideoId: accepted.recordedVideoId,
+      jobId: accepted.jobId,
+      processingStatus: accepted.status,
+    }
   },
 } satisfies CurriculumManagementService

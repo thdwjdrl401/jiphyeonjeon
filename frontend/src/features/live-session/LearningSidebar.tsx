@@ -21,6 +21,8 @@ interface LearningSidebarProps {
   aiContent: ReactNode
   noteContext: 'LIVE' | 'REPLAY'
   windowAction?: ReactNode
+  /** 화면이 지원하는 패널만 노출한다. 생략하면 라이브·다시보기의 기존 네 탭을 모두 유지한다. */
+  availablePanels?: readonly LearningPanel[]
 }
 
 const tabs: ReadonlyArray<TabItem<LearningPanel>> = [
@@ -156,6 +158,10 @@ function GlossaryPanel({ terms, selectedTermId, onSelectedTermChange, panelProps
 
 export default function LearningSidebar(props: LearningSidebarProps) {
   const isMounted = useVisitedPanels(props.panel)
+  const visibleTabs = props.availablePanels
+    ? tabs.filter((tab) => props.availablePanels?.includes(tab.id))
+    : tabs
+  const isAvailable = (panel: LearningPanel) => visibleTabs.some((tab) => tab.id === panel)
   // 활성 탭이 아닌 패널은 감춘다. 지우지 않는다 — 지우면 그 안의 상태가 함께 사라진다.
   const panelProps = (panel: LearningPanel) => ({
     ...tabPanelProps(LEARNING_TAB_PREFIX, panel),
@@ -169,14 +175,14 @@ export default function LearningSidebar(props: LearningSidebarProps) {
         className="media-tabs learning-tabs"
         idPrefix={LEARNING_TAB_PREFIX}
         label="학습 사이드바"
-        items={tabs}
+        items={visibleTabs}
         value={props.panel}
         onChange={props.onPanelChange}
       />
-      {isMounted('discussion') && <DiscussionPanel messages={props.messages} composer={props.discussionComposer} notice={props.discussionNotice} panelProps={panelProps('discussion')} />}
-      {isMounted('notes') && <LectureNotePanel note={props.lectureNote} live={props.noteContext === 'LIVE'} panelProps={panelProps('notes')} />}
-      {isMounted('ai') && <div className="side-panel-content ai-panel" {...panelProps('ai')}>{props.aiContent}</div>}
-      {isMounted('glossary') && <GlossaryPanel terms={props.glossaryTerms} selectedTermId={props.selectedTermId} onSelectedTermChange={props.onSelectedTermChange} panelProps={panelProps('glossary')} />}
+      {isAvailable('discussion') && isMounted('discussion') && <DiscussionPanel messages={props.messages} composer={props.discussionComposer} notice={props.discussionNotice} panelProps={panelProps('discussion')} />}
+      {isAvailable('notes') && isMounted('notes') && <LectureNotePanel note={props.lectureNote} live={props.noteContext === 'LIVE'} panelProps={panelProps('notes')} />}
+      {isAvailable('ai') && isMounted('ai') && <div className="side-panel-content ai-panel" {...panelProps('ai')}>{props.aiContent}</div>}
+      {isAvailable('glossary') && isMounted('glossary') && <GlossaryPanel terms={props.glossaryTerms} selectedTermId={props.selectedTermId} onSelectedTermChange={props.onSelectedTermChange} panelProps={panelProps('glossary')} />}
     </aside>
   )
 }

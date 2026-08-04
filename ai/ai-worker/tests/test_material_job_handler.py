@@ -10,13 +10,16 @@ from app.adapters.spring_material_callback import SpringCallbackError
 from app.application import MaterialDeleteResult, MaterialIndexResult, map_pptx_embed_job
 from app.consumers import MaterialJobHandler, PermanentMaterialJobError
 from app.domain import ExistingIndexVersion, MaterialIngestionError
-from app.ingestion import KeyTerm
+from app.ingestion import KeyTerm, KeyTermExtractionResult
 
 
 MODEL_REVISION = "5617a9f61b028005a4858fdac845db406aefb181"
 
 
-def embed_body() -> bytes:
+def embed_body(*, contract_version: int = 1, extract_key_terms: bool | None = None) -> bytes:
+    policy: dict[str, object] = {"embedModel": "bge-m3"}
+    if extract_key_terms is not None:
+        policy["extractKeyTerms"] = extract_key_terms
     return json.dumps(
         {
             "taskType": "PPTX_EMBED",
@@ -25,8 +28,8 @@ def embed_body() -> bytes:
             "lessonId": "550e8400-e29b-41d4-a716-446655440002",
             "curriculumId": "550e8400-e29b-41d4-a716-446655440003",
             "fileName": "deck.pptx",
-            "policy": {"embedModel": "bge-m3"},
-            "contractVersion": 1,
+            "policy": policy,
+            "contractVersion": contract_version,
         },
         separators=(",", ":"),
     ).encode()
@@ -57,11 +60,18 @@ class Indexer:
         self.executed = []
         self.lookups = []
 
-    async def execute(self, material) -> MaterialIndexResult:
+    async def execute(self, material, *, extract_key_terms=None) -> MaterialIndexResult:
         self.executed.append(material)
         if self.error is not None:
             raise self.error
-        return MaterialIndexResult(version_id=41, key_terms=tuple(self.key_terms))
+        key_terms = tuple(self.key_terms)
+        if key_terms:
+            key_term_result = KeyTermExtractionResult(status="READY", terms=key_terms)
+        elif extract_key_terms is True:
+            key_term_result = KeyTermExtractionResult(status="EMPTY")
+        else:
+            key_term_result = KeyTermExtractionResult(status="NOT_REQUESTED")
+        return MaterialIndexResult(version_id=41, key_term_result=key_term_result, chunk_count=7)
 
     async def find_existing(self, material) -> ExistingIndexVersion | None:
         self.lookups.append(material)
@@ -153,6 +163,7 @@ async def test_success_indexes_then_sends_only_ready_callback() -> None:
     assert event.event_type == "MATERIAL_EMBEDDED"
     assert event.status == "READY"
     assert event.job_id == "PPTX_EMBED:550e8400-e29b-41d4-a716-446655440000"
+    assert event.outputs is None
 
 
 async def test_success_with_key_terms_sends_a_single_combined_callback() -> None:
@@ -166,6 +177,35 @@ async def test_success_with_key_terms_sends_a_single_combined_callback() -> None
     assert event.event_type == "MATERIAL_EMBEDDED"
     assert event.status == "READY"
     assert [(term.term, term.definition) for term in event.key_terms] == [("용어", "정의")]
+    assert event.outputs is None
+
+
+async def test_v2_success_reports_durable_key_term_result_metadata() -> None:
+    callback = AsyncMock()
+    handler = MaterialJobHandler(Runtime(Indexer(key_terms=[]), callback))
+
+    await handler.handle(embed_body(contract_version=2, extract_key_terms=True))
+
+    event = callback.await_args.args[0]
+    assert event.outputs is not None
+    assert event.outputs.material_version_id == 41
+    assert event.outputs.chunk_count == 7
+    assert event.outputs.key_term_result.status == "EMPTY"
+    assert event.outputs.key_term_result.count == 0
+
+
+async def test_v2_permanent_failure_reports_key_term_failure_separately() -> None:
+    callback = AsyncMock()
+    handler = MaterialJobHandler(Runtime(Indexer(MaterialIngestionError("unsafe PPTX")), callback))
+
+    with pytest.raises(PermanentMaterialJobError):
+        await handler.handle(embed_body(contract_version=2, extract_key_terms=True))
+
+    event = callback.await_args.args[0]
+    assert event.event_type == "MATERIAL_EMBED_FAILED"
+    assert event.outputs is not None
+    assert event.outputs.key_term_result.status == "FAILED"
+    assert event.outputs.key_term_result.failure_code == "MATERIAL_PIPELINE_FAILED"
 
 
 async def test_combined_callback_failure_retries_the_whole_job_like_before() -> None:

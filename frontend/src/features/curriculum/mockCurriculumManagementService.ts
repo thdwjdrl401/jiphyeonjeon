@@ -19,6 +19,77 @@ const savedStructures = new Map<
   Awaited<ReturnType<CurriculumManagementService['getCurriculumManagementStructure']>>
 >()
 
+export interface MockRecordedLessonContext {
+  lessonId: string
+  title: string
+  description: string
+  curriculumId: string
+  curriculumTitle: string
+  sectionId: string
+  sectionTitle: string
+  materials: Array<{
+    id: string
+    name: string
+    size: string
+    status: string
+    embeddingStatus: 'READY'
+    keyTermStatus: 'READY'
+  }>
+}
+
+const recordedLessons = new Map<string, MockRecordedLessonContext>()
+
+export function getMockRecordedLesson(lessonId: string) {
+  return recordedLessons.get(lessonId) ?? null
+}
+
+export function updateMockRecordedLesson(
+  lessonId: string,
+  update: { title: string; description: string; materials: File[] },
+) {
+  const lesson = recordedLessons.get(lessonId)
+  if (!lesson) return false
+
+  lesson.title = update.title
+  lesson.description = update.description
+  const existingMaterialIds = new Set(lesson.materials.map((material) => material.id))
+  lesson.materials.push(...update.materials
+    .map((file) => ({
+      id: `mock-material-${file.name}-${file.size}`,
+      name: file.name,
+      size: file.size < 1024 * 1024
+        ? `${Math.max(1, Math.round(file.size / 1024))} KB`
+        : `${(file.size / 1024 / 1024).toFixed(1)} MB`,
+      status: 'READY',
+      embeddingStatus: 'READY' as const,
+      keyTermStatus: 'READY' as const,
+    }))
+    .filter((material) => !existingMaterialIds.has(material.id)))
+
+  const structure = savedStructures.get(lesson.curriculumId)
+  if (structure) {
+    savedStructures.set(lesson.curriculumId, structure.map((section) => ({
+      ...section,
+      lessons: section.lessons.map((item) => item.lessonId === lessonId
+        ? { ...item, title: update.title }
+        : item),
+    })))
+  }
+  return true
+}
+
+export function deleteMockRecordedLessonMaterial(lessonId: string, materialId: string) {
+  const lesson = recordedLessons.get(lessonId)
+  if (!lesson) return false
+  lesson.materials = lesson.materials.filter((material) => material.id !== materialId)
+  return true
+}
+
+export function resetMockCurriculumManagement() {
+  savedStructures.clear()
+  recordedLessons.clear()
+}
+
 /**
  * "저장"된 자료로 정규화한다(HTTP 구현과 같은 계약) — File을 떼고, 새로 선택한(File 보유) 자료에는
  * 안정적인 persisted id를 부여한다. 그래야 저장 후 화면이 같은 파일을 다시 올리지 않는다.
@@ -91,6 +162,7 @@ export const mockCurriculumManagementService = {
         lessonId: lesson.lessonId,
         title: lesson.title,
         status: lesson.status,
+        deliveryType: 'LIVE' as const,
       })),
     }))
   },
@@ -139,6 +211,7 @@ export const mockCurriculumManagementService = {
     */
     publishLiveCanceled(lessonId)
     deleteMockLesson(lessonId)
+    recordedLessons.delete(lessonId)
     for (const [key, structure] of savedStructures) {
       savedStructures.set(key, structure.map((section) => ({
         ...section,
@@ -150,6 +223,68 @@ export const mockCurriculumManagementService = {
     deleteMockSection(sectionId)
     for (const [key, structure] of savedStructures) {
       savedStructures.set(key, structure.filter((section) => section.sectionId !== sectionId))
+    }
+  },
+  async uploadRecordedLesson(request) {
+    const curriculum = getMockCurriculum(request.curriculumId)
+    if (!curriculum) throw new ApiError('커리큘럼을 찾을 수 없습니다.', 404, 'CURRICULUM_NOT_FOUND')
+
+    const currentStructure = savedStructures.get(request.curriculumId)
+      ?? buildMockCurriculumOutline(curriculum).map((section) => ({
+        sectionId: section.sectionId,
+        title: section.title,
+        description: section.description ?? '',
+        order: section.order,
+        lessons: section.lessons.map((lesson) => ({
+          lessonId: lesson.lessonId,
+          title: lesson.title,
+          status: lesson.status,
+          deliveryType: 'LIVE' as const,
+        })),
+      }))
+    if (!currentStructure.some((section) => section.sectionId === request.sectionId)) {
+      throw new ApiError('섹션을 찾을 수 없습니다.', 404, 'SECTION_NOT_FOUND')
+    }
+
+    const lessonId = `lesson-recorded-${Date.now()}`
+    const section = currentStructure.find((item) => item.sectionId === request.sectionId)!
+    recordedLessons.set(lessonId, {
+      lessonId,
+      title: request.title,
+      description: request.description,
+      curriculumId: curriculum.curriculumId,
+      curriculumTitle: curriculum.title,
+      sectionId: section.sectionId,
+      sectionTitle: section.title,
+      materials: request.materials.map((file) => ({
+        id: `mock-material-${file.name}-${file.size}`,
+        name: file.name,
+        size: file.size < 1024 * 1024
+          ? `${Math.max(1, Math.round(file.size / 1024))} KB`
+          : `${(file.size / 1024 / 1024).toFixed(1)} MB`,
+        status: 'READY',
+        embeddingStatus: 'READY',
+        keyTermStatus: 'READY',
+      })),
+    })
+    savedStructures.set(request.curriculumId, currentStructure.map((section) =>
+      section.sectionId === request.sectionId
+        ? {
+            ...section,
+            lessons: [...section.lessons, {
+              lessonId,
+              title: request.title,
+              status: 'PUBLISHED',
+              deliveryType: 'RECORDED' as const,
+            }],
+          }
+        : section))
+
+    return {
+      lessonId,
+      recordedVideoId: `recorded-${lessonId}`,
+      jobId: `job-${lessonId}`,
+      processingStatus: 'QUEUED' as const,
     }
   },
 } satisfies CurriculumManagementService

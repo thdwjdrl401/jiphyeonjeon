@@ -84,6 +84,10 @@ class GmsKeyTermExtractor:
             max_retries=0,
         )
 
+    @property
+    def max_prompt_chars(self) -> int:
+        return self._max_prompt_chars
+
     async def extract(self, text: str) -> Sequence[KeyTerm]:
         if not text or not text.strip():
             return ()

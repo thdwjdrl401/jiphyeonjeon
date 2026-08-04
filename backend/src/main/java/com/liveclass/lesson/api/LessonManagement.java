@@ -14,6 +14,9 @@ public interface LessonManagement {
     /** 섹션 맨 뒤에 레슨을 만든다. 만들어지는 순간 게시 상태다(ADR-0005). */
     LessonView create(UUID sectionId, String title, String description);
 
+    /** 섹션 맨 뒤에 업로드 녹화강의용 레슨을 만든다(ADR-0008). */
+    LessonView createRecorded(UUID sectionId, String title, String description);
+
     /** 넘어온 필드만 부분 수정. */
     LessonView update(UUID lessonId, String title, String description);
 

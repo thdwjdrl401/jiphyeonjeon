@@ -7,11 +7,10 @@
 - 설정·signal·관리 FastAPI server와 runtime readiness를 관리한다.
 - PPTX index use case, port, pgvector 저장 구현을 제공한다.
 - Spring이 선언한 `ingestion.embed`를 passive lookup하고 완료 callback 뒤 ACK한다.
-- `AI_WORKER_KEY_TERM_EXTRACTION_ENABLED=true`일 때 GMS로 PPTX 핵심 용어+정의를 임베딩과 동시에
-  추출한다(기본 off, 실패해도 기존 인덱싱을 막지 않음).
-- 추출된 용어는 기존 `MATERIAL_EMBEDDED` Spring 콜백에 `keyTerms`로 실어 한 번에 전달하는 동시에,
-  `ai.material_key_term`에도 best-effort로 저장한다(ADR-0005). 재시도 시 콜백 용어가 사라지지
-  않도록 job_id 기준 in-memory 캐시로 잠깐 기억해둔다(ADR-0004).
+- v2 `extractKeyTerms=true` 또는 v1 feature flag 요청 시 GMS로 PPTX 핵심 용어+정의를 임베딩과
+  동시에 추출한다. 실패는 별도 `keyTermResult=FAILED`로 보고하고 기존 인덱싱은 계속한다.
+- 용어와 `READY|EMPTY|FAILED` 결과를 material version에 영속화하고, 재배달 시 DB 결과로 callback을
+  재구성한다. Spring callback에는 원문 복사 대신 상태·개수·절단 여부를 전달한다(ADR-0010).
 - `EMBED_DELETE`는 payload에 없는 curriculum_id를 materialId로 self-lookup한 뒤 삭제한다(ADR-0006).
   지울 게 없으면 성공(멱등)으로 끝낸다.
 

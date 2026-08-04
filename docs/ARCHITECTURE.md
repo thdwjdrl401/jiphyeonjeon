@@ -18,10 +18,9 @@
 ## 1. 제품 한 줄
 
 **실시간 라이브 강의 플랫폼** — 강사가 WebRTC로 라이브 강의를 하고, 실시간 **자막·용어·자료 근거 RAG**를 제공한다.
-지난 강의는 **녹화 다시보기**로, 교정된 자막·용어·RAG를 전부 제공한다.
-
-**영상 업로드는 없다.** 콘텐츠는 전부 라이브와 그 녹화에서 나오고, 업로드는 강의자료(PPTX)뿐이다.
-([ADR-0003](decisions/songjeongki/0003-greenfield-redesign.md) 제로베이스 재설계 · [ADR-0010](decisions/songjeongki/0010-self-host-vod.md) VOD=녹화 산출물)
+지난 라이브는 **녹화 다시보기**로 제공하고, 강사가 올린 MP4도 별도 **녹화강의**로 제공한다.
+두 영상은 학생에게 HLS로 재생되며 라이브 생명주기와 업로드 변환 생명주기는 분리한다.
+([ADR-0010](decisions/songjeongki/0010-self-host-vod.md) 라이브 VOD · [ADR-0008](decisions/choinhoo/0008-recorded-lesson-upload-and-hls-transcoding.md) 업로드 녹화강의)
 
 ---
 
@@ -36,7 +35,7 @@
 | 캐시·세션 | Redis 7 | ✅ | [0014](decisions/songjeongki/0014-auth-redis-session-cookie.md) |
 | 실시간 채널 | STOMP over WebSocket | ✅ | [0019](decisions/songjeongki/0019-ws-realtime-chat-stomp.md) |
 | 오브젝트 스토리지 | MinIO(S3 호환) + presigned direct upload | ✅ | [0023](decisions/songjeongki/0023-asset-presigned-upload.md) |
-| 미디어 | LiveKit self-host(SFU) + Egress(녹화→HLS) | ✅ 서버·토큰·Egress·라이브 엣지/되감기·VOD 재생·FE 플레이어 | [0004](decisions/songjeongki/0004-media-livekit-selfhost.md)·[0020](decisions/songjeongki/0020-egress-recording-lifecycle.md)·[0039](decisions/songjeongki/0039-replay-playback-api.md)·[choinhoo/0001](decisions/choinhoo/0001-live-replay-playback-api.md) |
+| 미디어 | LiveKit self-host(SFU) + Egress(라이브→HLS) + media-worker(업로드 MP4→HLS) | ✅ 서버·토큰·Egress·라이브 엣지/되감기·VOD 재생·FE 플레이어·녹화강의 UI/API/worker | [0004](decisions/songjeongki/0004-media-livekit-selfhost.md)·[0020](decisions/songjeongki/0020-egress-recording-lifecycle.md)·[0039](decisions/songjeongki/0039-replay-playback-api.md)·[choinhoo/0001](decisions/choinhoo/0001-live-replay-playback-api.md)·[choinhoo/0008](decisions/choinhoo/0008-recorded-lesson-upload-and-hls-transcoding.md) |
 | 라이브 STT | realtime-agent (Python, LiveKit Agents) | ✅ GPU 호스트에서 상시 가동 | [0011](decisions/songjeongki/0011-ai-three-services.md)·[0013](decisions/songjeongki/0013-unified-streaming-stt.md) |
 | RAG API | ai-api (FastAPI, SSE) | ✅ 운영 가동 | [0011](decisions/songjeongki/0011-ai-three-services.md) |
 | 배치 파이프라인 | ai-worker + RabbitMQ | ✅ 운영 가동 | [0011](decisions/songjeongki/0011-ai-three-services.md)·[0012](decisions/songjeongki/0012-hybrid-queue.md) |
@@ -53,7 +52,7 @@
 1. **React는 Spring으로만** 업무·AI 요청을 보낸다. Python AI는 외부에 노출되지 않는다 — 권한·정책·비용을 Spring이 검증한다.
 2. **`core`(Spring) / `ai`(Python) 스키마 공동수정 금지.** 한 클러스터, 스키마·계정·마이그레이션 도구 분리. 소유 기준은 **write-owner**([ADR-0017](decisions/songjeongki/0017-schema-ownership-core-ai.md)).
 3. **긴 작업은 큐 잡으로**, HTTP 요청 안에서 처리하지 않는다. Redis는 durable 큐로 쓰지 않는다(cache/session/fast-path 전용).
-4. **미디어 바이트는 Spring/Python을 통과하지 않는다.** 강사 발행은 WebRTC로 LiveKit 직결, 학생 시청(라이브·다시보기)은 HLS로 스토리지 직결([ADR-0032](decisions/songjeongki/0032-media-playback-hls-only.md)), 자료 업로드는 presigned로 클라이언트→스토리지 직접 PUT.
+4. **미디어 바이트는 Spring과 AI API의 HTTP 요청을 통과하지 않는다.** 강사 발행은 WebRTC로 LiveKit 직결, 학생 시청(라이브·다시보기·녹화강의)은 HLS로 스토리지 직결([ADR-0032](decisions/songjeongki/0032-media-playback-hls-only.md)). PPTX와 녹화강의 MP4는 presigned URL로 클라이언트→스토리지 직접 PUT하고, media-worker만 변환 작업에서 스토리지의 MP4를 읽어 HLS를 쓴다.
 5. **AI 결과는 후보다.** 원본은 보존하고, 강사 수정·게시본을 학생에게 노출한다.
    - **예외 — 라이브 자막.** 실시간 자막은 검수 없이 즉시 나간다(그게 실시간의 본질). 검수는 사후에 게시본을 교정하는 형태이고, 승인 게이트는 두지 않는다([ADR-0017](decisions/songjeongki/0017-schema-ownership-core-ai.md)).
 6. **AI 장애가 코어를 막지 않는다.** 라이브 영상·채팅·수강·다시보기는 AI와 무관하게 살아 있어야 한다(degraded). LiveKit/Egress 미디어 경로는 AI와 격리한다.
@@ -74,7 +73,7 @@ flowchart LR
     SP["core-api<br/>인증·커리큘럼·수강·라이브·채팅·자산<br/>LiveKit 토큰 · Egress 제어 · AI 게이트웨이"]
     PG[("PostgreSQL 16 + pgvector<br/>core / ai 스키마")]
     RD[("Redis 7<br/>session·cache · STT 스트림")]
-    MQ[["RabbitMQ<br/>ingestion 배치"]]
+    MQ[["RabbitMQ<br/>ingestion · media.transcode"]]
   end
 
   subgraph AI["Intelligence — Python"]
@@ -84,15 +83,16 @@ flowchart LR
     GW["model gateway → STT/embed/LLM"]
   end
 
-  subgraph MEDIA["미디어 — LiveKit self-host"]
+  subgraph MEDIA["미디어 — LiveKit + 업로드 변환"]
     LK["LiveKit SFU"]
     EG["Egress 녹화 → HLS"]
+    MW["media-worker<br/>ffprobe · FFmpeg"]
     OBJ[("MinIO / S3")]
   end
 
   FE -->|"REST · WS(STOMP)"| SP
   FE -->|"WebRTC 발행(강사)"| LK
-  FE -->|"presigned PUT (자료)"| OBJ
+  FE -->|"presigned PUT (자료 · MP4)"| OBJ
   FE -.->|"HLS 재생"| OBJ
   SP -->|"토큰 · Egress 제어"| LK
   SP --- PG
@@ -100,6 +100,7 @@ flowchart LR
   SP -.->|"잡 발행 (outbox)"| MQ
   SP -.->|"internal 검증된 scope"| API
   MQ -.-> WK
+  MQ --> MW
   WK -.->|"완료 이벤트"| MQ
   MQ -.->|"inbox 멱등 수신"| SP
   LK -.->|"강사 오디오"| AG
@@ -107,18 +108,21 @@ flowchart LR
   RD -.->|"consume → core 영속"| SP
   LK -->|"녹화"| EG
   EG --> OBJ
+  OBJ -->|"MP4 source GET"| MW
+  MW -->|"업로드 MP4 → HLS"| OBJ
   API -.-> PG
   API -.-> GW
   WK -.-> GW
   WK -.-> PG
 
-  class FE,SP,PG,RD,LK,EG,OBJ built
-  class MQ,AG,API,WK,GW planned
+  class FE,SP,PG,RD,MQ,LK,EG,OBJ built
+  class MW partial
+  class AG,API,WK,GW planned
 ```
 
 **실선 = 구현됨, 점선 = 설계(CP2~CP4).**
-초록 박스 7개가 지금 동작하고, 회색 점선 5개가 앞으로 붙는다.
-미디어·자료 바이트가 Spring을 통과하지 않는다는 원칙 4가 화살표에 그대로 드러난다 — `FE→OBJ`, `FE→LK`, `EG→OBJ`는 모두 Spring을 우회한다.
+녹화강의 경로는 코드가 배선됐고 실제 MinIO·RabbitMQ·FFmpeg 통합 검증이 남아 부분 구현으로 표시한다.
+미디어·자료 바이트가 Spring을 통과하지 않는다는 원칙 4가 화살표에 그대로 드러난다 — `FE→OBJ`, `FE→LK`, `EG→OBJ`, `MW→OBJ`는 모두 Spring을 우회한다.
 
 ---
 
@@ -283,6 +287,27 @@ flowchart LR
 
 다시보기는 라이브 때 만든 산출물을 **그대로 재생**한다. 지평선 뒤라 이미 교정이 끝난 상태이고, 세션 상대 ms 좌표로 HLS와 자막을 자동 정렬한다.
 
+### 6-5. 업로드 녹화강의 🟡 (UI·API·worker ✅ / 운영 E2E·학습 플레이어 연결 ⬜)
+
+```mermaid
+flowchart LR
+  FE["강사 업로드 화면"] -->|"녹화강의 생성·티켓 발급"| API["Spring recorded API"]
+  API -->|"presigned PUT URL"| FE
+  FE -->|"MP4 직접 PUT"| OBJ[("MinIO / S3")]
+  API -->|"job commit"| DB[("recorded_video<br/>media_transcode_job")]
+  DB -->|"dispatcher"| MQ[["media.transcode"]]
+  MQ --> WK["media-worker<br/>ffprobe · FFmpeg"]
+  WK -->|"HLS segment 후 manifest"| OBJ
+  WK -->|"서명 callback"| API
+  API -->|"manifest·segment 검증 후 READY"| PLAY["녹화강의 HLS 재생 API"]
+```
+
+`lesson.delivery_type`은 `LIVE|RECORDED`이고 생성 후 바뀌지 않는다. 녹화강의는
+`recorded_video`와 시도별 `media_transcode_job`을 사용하며 기존 `live_session`, `video_asset`,
+LiveKit webhook을 건드리지 않는다. React는 생성→원본 티켓→스토리지 PUT→완료 접수 순서로 호출한다.
+Spring은 접수 트랜잭션과 분리된 dispatcher로 durable queue에 발행하며, worker callback을 기존
+`external_event_inbox`로 멱등 처리한다. 최종 manifest와 첫 segment가 확인된 뒤에만 `READY`가 된다.
+
 ---
 
 ## 7. 도메인 모델
@@ -297,7 +322,7 @@ flowchart LR
 | 강좌 | `curriculum` → `section` → `lesson` | ✅ |
 | 라이브 | `live_session` | ✅ |
 | 수강·학습 | `enrollment` · `learning_progress` · `bookmark` | ✅ 전부 배선 |
-| 자산 | `asset`(범용) ← `material_asset`(레슨 자료) · `video_asset`(녹화 HLS) | ✅ 전부 배선 |
+| 자산 | `asset`(범용) ← `material_asset`(레슨 자료) · `video_asset`(라이브 녹화 HLS) · `recorded_video`/`media_transcode_job`(업로드 MP4·HLS) | ✅ 전부 배선 |
 | 채팅 | `chat_message` | ✅ |
 | 통합 | `outbox_events`(목적지별 릴레이) · `external_event_inbox` | ✅ 배선 |
 | AI 게시본 | 자막 · 용어 · 강의 노트 | ✅ / 챕터·퀴즈 ⬜ |
@@ -315,7 +340,7 @@ flowchart LR
 - **FK는 스키마 안에서만.** 스키마를 넘는 참조는 물리 FK 없이 논리 `_ref` 컬럼 + 앱 검증.
 - **PK는 UUID/BIGINT 하이브리드**([ADR-0018](decisions/songjeongki/0018-pk-strategy-uuid-bigint-hybrid.md)) — 외부 노출은 UUID, 대량 append-only는 BIGINT.
 - **시간축은 세션 상대 ms** — 자막·HLS·다시보기 정렬의 공통 좌표.
-- **마이그레이션 주체**: `core` = Flyway(Spring, 현재 V1~V4), `ai` = Alembic(Python). 상대 스키마 수정 금지.
+- **마이그레이션 주체**: `core` = Flyway(Spring, 현재 V1~V20), `ai` = Alembic(Python). 상대 스키마 수정 금지.
 - **보류**: org/멀티테넌트 · roles 테이블 · audit_logs · learning_events · question_clusters.
 
 ---

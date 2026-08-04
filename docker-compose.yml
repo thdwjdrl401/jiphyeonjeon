@@ -1,4 +1,4 @@
-# 로컬 개발 backbone — postgres·redis·minio(에셋)·rabbitmq(임베딩 잡 큐)까지 포함.
+# 로컬 개발 backbone — postgres·redis·minio·rabbitmq와 녹화강의 worker를 포함.
 # nginx·미디어(LiveKit/Egress)는 별도 스택으로 운영 (TEAM-KICKOFF §4).
 # 사용: cp .env.example .env  →  docker compose up -d
 name: liveclass          # compose 프로젝트명 고정 = 볼륨/이미지 접두사. 디렉토리명(cp/liveclass 등)과 무관하게 liveclass_* 로 통일.
@@ -80,6 +80,50 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # 기본 실행: docker compose up -d
+  # 로컬 backend가 localhost로 서명한 source URL을 그대로 읽어야 하므로 host network를 사용한다.
+  media-worker:
+    build: ./media-worker
+    container_name: liveclass-media-worker
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      MEDIA_RABBITMQ_URL: amqp://${RABBITMQ_USER:-liveclass}:${RABBITMQ_PASSWORD:-liveclass}@localhost:5672/
+      MEDIA_BACKEND_URL: http://localhost:8080
+      MEDIA_SOURCE_SECRET: ${MEDIA_SOURCE_SECRET:-dev-media-source-secret}
+      MEDIA_CALLBACK_SECRET: ${MEDIA_CALLBACK_SECRET:-dev-media-callback-secret}
+      MEDIA_OUTPUT_ENDPOINT: http://localhost:9000
+      MEDIA_OUTPUT_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MEDIA_OUTPUT_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MEDIA_OUTPUT_BUCKET: recordings
+      MEDIA_OUTPUT_REGION: us-east-1
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+
+  # 기본 실행: docker compose up -d
+  # host에서 실행 중인 Spring과 Spring이 localhost로 서명한 MinIO URL을 함께 사용한다.
+  recorded-stt-worker:
+    build: ./ai/ai-worker
+    container_name: liveclass-recorded-stt-worker
+    restart: unless-stopped
+    network_mode: host
+    entrypoint: ["python", "-m", "app.recorded_stt.main"]
+    environment:
+      RECORDED_STT_INSTANCE_ID: recorded-stt-local-1
+      RECORDED_STT_MANAGEMENT_HOST: 127.0.0.1
+      RECORDED_STT_MANAGEMENT_PORT: "8012"
+      RECORDED_STT_RABBITMQ_URL: amqp://${RABBITMQ_USER:-liveclass}:${RABBITMQ_PASSWORD:-liveclass}@localhost:5672/
+      RECORDED_STT_SPRING_INTERNAL_BASE_URL: http://localhost:8080
+      RECORDED_STT_SOURCE_HMAC_SECRET: ${RECORDED_STT_SOURCE_SECRET:-dev-recorded-stt-source-secret}
+      RECORDED_STT_CALLBACK_HMAC_SECRET: ${RECORDED_STT_CALLBACK_SECRET:-dev-recorded-stt-callback-secret}
+      RECORDED_STT_GMS_API_KEY: ${GMS_API_KEY:?GMS_API_KEY 필요}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
 
 volumes:
   pgdata:

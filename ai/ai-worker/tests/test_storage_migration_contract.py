@@ -199,3 +199,33 @@ def test_annotation_text_downgrade_trims_before_narrowing(monkeypatch) -> None:
     ddl = "\n".join(str(statement) for statement in statements)
 
     assert ddl.index("UPDATE ai.annotation_highlight") < ddl.index("ALTER COLUMN text TYPE varchar")
+
+
+def test_key_term_result_status_is_persisted_on_material_version(monkeypatch) -> None:
+    migration = importlib.import_module("migrations.versions.0005_material_key_term_result")
+    statements = []
+    monkeypatch.setattr(migration.op, "execute", statements.append)
+
+    migration.upgrade()
+    ddl = "\n".join(str(statement) for statement in statements)
+
+    assert "ALTER TABLE ai.material_version" in ddl
+    assert "key_term_status" in ddl
+    assert "key_term_count" in ddl
+    assert "key_term_truncated" in ddl
+    assert "key_term_failure_code" in ddl
+    assert "ck_material_version_key_term_result" in ddl
+    assert migration.revision == "0005_material_key_term_result"
+    assert migration.down_revision == "0004_annotation_text_unbounded"
+
+
+def test_key_term_result_status_downgrade_removes_only_added_columns(monkeypatch) -> None:
+    migration = importlib.import_module("migrations.versions.0005_material_key_term_result")
+    statements = []
+    monkeypatch.setattr(migration.op, "execute", statements.append)
+
+    migration.downgrade()
+    ddl = "\n".join(str(statement) for statement in statements)
+
+    assert "DROP COLUMN IF EXISTS key_term_status" in ddl
+    assert "DROP TABLE" not in ddl

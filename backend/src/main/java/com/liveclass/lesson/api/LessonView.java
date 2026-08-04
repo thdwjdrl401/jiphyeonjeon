@@ -12,6 +12,7 @@ public record LessonView(
         String description,
         int order,
         String status,
+        String deliveryType,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt
 ) {

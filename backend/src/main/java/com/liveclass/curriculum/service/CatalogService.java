@@ -24,6 +24,8 @@ import com.liveclass.live.api.LiveSessionDirectory;
 import com.liveclass.live.api.LiveSessionView;
 import com.liveclass.video.api.ReplayDirectory;
 import com.liveclass.video.api.ReplayView;
+import com.liveclass.video.api.RecordedDeliveryView;
+import com.liveclass.video.api.RecordedVideoDirectory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -67,6 +69,7 @@ public class CatalogService {
     private final EnrollmentDirectory enrollmentDirectory;
     private final LiveSessionDirectory liveSessionDirectory;
     private final ReplayDirectory replayDirectory;
+    private final RecordedVideoDirectory recordedVideoDirectory;
     private final LearningDirectory learningDirectory;
 
     public CatalogService(CurriculumRepository curriculumRepository,
@@ -79,6 +82,7 @@ public class CatalogService {
                           EnrollmentDirectory enrollmentDirectory,
                           LiveSessionDirectory liveSessionDirectory,
                           ReplayDirectory replayDirectory,
+                          RecordedVideoDirectory recordedVideoDirectory,
                           LearningDirectory learningDirectory) {
         this.curriculumRepository = curriculumRepository;
         this.sectionRepository = sectionRepository;
@@ -90,6 +94,7 @@ public class CatalogService {
         this.enrollmentDirectory = enrollmentDirectory;
         this.liveSessionDirectory = liveSessionDirectory;
         this.replayDirectory = replayDirectory;
+        this.recordedVideoDirectory = recordedVideoDirectory;
         this.learningDirectory = learningDirectory;
     }
 
@@ -217,6 +222,13 @@ public class CatalogService {
         if (!"OWNER_INSTRUCTOR".equals(relationship) && !"ENROLLED".equals(relationship)) {
             throw new LessonAccessDeniedException("이 강의를 수강해야 열 수 있습니다.");
         }
+        if ("RECORDED".equals(lesson.deliveryType())
+                && !"OWNER_INSTRUCTOR".equals(relationship)
+                && recordedVideoDirectory.findByLesson(lessonId)
+                        .filter(delivery -> "PUBLISHED".equals(delivery.publicationStatus()))
+                        .isEmpty()) {
+            throw new LessonNotFoundException("레슨을 찾을 수 없습니다.");
+        }
 
         return new CatalogLessonDetail(
                 lesson.lessonId(),
@@ -228,6 +240,7 @@ public class CatalogService {
                 lesson.description(),
                 lesson.order(),
                 lesson.status(),
+                lesson.deliveryType(),
                 lessonMaterialManagement.findActiveByLesson(lesson.lessonId()));
     }
 
@@ -277,11 +290,11 @@ public class CatalogService {
     }
 
     /**
-     * 공개 목차: 섹션 순서대로 그 섹션의 레슨 전부를 노출한다.
+     * 공개 목차: 섹션 순서대로 레슨을 노출하되 학생에게는 아직 게시되지 않은 업로드 녹화강의를 숨긴다.
      *
-     * <p>레슨 상태로 거르지 않는다 — 레슨에는 초안이 없고 공개 여부는 커리큘럼 lifecycleStatus만으로
-     * 결정된다(ADR-0005). 호출자가 이미 "PUBLISHED이거나 소유 강사"만 통과시켰으므로, 여기 오는
-     * 커리큘럼의 레슨은 볼 자격이 있는 사람에게만 보인다.
+     * <p>lesson 상태로는 거르지 않는다 — 레슨에는 초안이 없고 공개 여부는 커리큘럼 lifecycleStatus가
+     * 소유한다(ADR-0005). 단, RECORDED delivery는 별도 재생 패키지 게시 게이트(ADR-0012)를 통과해야
+     * 학생이 열 수 있으며 소유 강사의 관리 목차에는 처리 중인 항목도 유지한다.
      */
     private List<CatalogOutlineSection> buildOutline(List<Section> sections, String relationship) {
         if (sections.isEmpty()) {
@@ -302,6 +315,8 @@ public class CatalogService {
         // 병합 함수를 둬서 혹시 모를 중복에 첫 건을 택한다.
         Map<UUID, ReplayView> replays = replayDirectory.findByLessons(lessonIds).stream()
                 .collect(Collectors.toMap(ReplayView::lessonId, view -> view, (first, second) -> first));
+        Map<UUID, RecordedDeliveryView> recordedDeliveries = recordedVideoDirectory.findByLessons(lessonIds).stream()
+                .collect(Collectors.toMap(RecordedDeliveryView::lessonId, view -> view, (first, second) -> first));
 
         return sections.stream().map(section -> new CatalogOutlineSection(
                 section.getId(),
@@ -309,7 +324,9 @@ public class CatalogService {
                 section.getDescription(),
                 section.getOrderIndex(),
                 lessonsBySection.getOrDefault(section.getId(), List.of()).stream()
-                        .map(l -> toOutlineLesson(l, liveSessions.get(l.lessonId()), replays.get(l.lessonId()), relationship))
+                        .filter(lesson -> exposeInOutline(lesson, recordedDeliveries.get(lesson.lessonId()), relationship))
+                        .map(l -> toOutlineLesson(l, liveSessions.get(l.lessonId()), replays.get(l.lessonId()),
+                                recordedDeliveries.get(l.lessonId()), relationship))
                         .toList()
         )).toList();
     }
@@ -317,6 +334,7 @@ public class CatalogService {
     private CatalogOutlineLesson toOutlineLesson(LessonOutlineView lesson,
                                                  LiveSessionView session,
                                                  ReplayView replay,
+                                                 RecordedDeliveryView recordedDelivery,
                                                  String relationship) {
         CatalogLiveSession liveSession = session == null
                 ? null
@@ -325,20 +343,35 @@ public class CatalogService {
         // 레슨은 DRAFT로 잡힌다). 게시 검수 흐름이 아직 없어 PUBLISHED에는 도달하지 않는다.
         String replayStatus = replay == null ? "NOT_READY" : replay.replayStatus();
         // 재생 길이는 녹화 완료 webhook이 채운다 — 그 경로 전까지는 녹화가 있어도 null이다.
-        Long durationMs = replay == null ? null : replay.durationMs();
+        Long durationMs = "RECORDED".equals(lesson.deliveryType())
+                ? recordedDelivery == null ? null : recordedDelivery.durationMs()
+                : replay == null ? null : replay.durationMs();
+        String recordedPublicationStatus = recordedDelivery == null ? null : recordedDelivery.publicationStatus();
 
         return new CatalogOutlineLesson(
                 lesson.lessonId(),
                 lesson.title(),
                 lesson.order(),
                 lesson.status(),
+                lesson.deliveryType(),
                 liveSession == null ? null : liveSession.scheduledAt(),
                 durationMs,
                 liveSession,
                 replayStatus,
-                lessonAccess(liveSession, replayStatus, relationship),
+                recordedPublicationStatus,
+                lessonAccess(lesson.deliveryType(), liveSession, replayStatus,
+                        recordedPublicationStatus, relationship),
                 null
         );
+    }
+
+    private boolean exposeInOutline(LessonOutlineView lesson,
+                                    RecordedDeliveryView recordedDelivery,
+                                    String relationship) {
+        if (!"RECORDED".equals(lesson.deliveryType()) || "OWNER_INSTRUCTOR".equals(relationship)) {
+            return true;
+        }
+        return recordedDelivery != null && "PUBLISHED".equals(recordedDelivery.publicationStatus());
     }
 
     /**
@@ -346,12 +379,19 @@ public class CatalogService {
      * 판정 축은 <b>관계 하나</b>다 — 레슨 상태로는 막지 않는다(ADR-0005). 커리큘럼이 공개됐다면
      * 그 안의 레슨은 수강생에게 전부 열린다.
      */
-    private CatalogLessonAccess lessonAccess(CatalogLiveSession liveSession,
+    private CatalogLessonAccess lessonAccess(String deliveryType,
+                                             CatalogLiveSession liveSession,
                                              String replayStatus,
+                                             String recordedPublicationStatus,
                                              String relationship) {
         boolean canOpen = "OWNER_INSTRUCTOR".equals(relationship) || "ENROLLED".equals(relationship);
         if (!canOpen) {
             return CatalogLessonAccess.blocked("ENROLLMENT_REQUIRED");
+        }
+        if ("RECORDED".equals(deliveryType)) {
+            return CatalogLessonAccess.open("PUBLISHED".equals(recordedPublicationStatus)
+                    ? "RECORDED_VOD"
+                    : "LESSON_DETAIL");
         }
         return CatalogLessonAccess.open(destination(liveSession, replayStatus));
     }
@@ -526,8 +566,22 @@ public class CatalogService {
                 .collect(Collectors.toMap(Section::getId, Section::getCurriculumId));
         List<UUID> sectionIds = sections.stream().map(Section::getId).toList();
 
+        List<LessonOutlineView> lessons = lessonDirectory.findBySections(sectionIds);
+        List<UUID> recordedLessonIds = lessons.stream()
+                .filter(lesson -> "RECORDED".equals(lesson.deliveryType()))
+                .map(LessonOutlineView::lessonId)
+                .toList();
+        Set<UUID> publishedRecordedLessonIds = recordedVideoDirectory.findByLessons(recordedLessonIds).stream()
+                .filter(delivery -> "PUBLISHED".equals(delivery.publicationStatus()))
+                .map(RecordedDeliveryView::lessonId)
+                .collect(Collectors.toSet());
+
         Map<UUID, List<UUID>> lessonsByCurriculum = new HashMap<>();
-        for (LessonOutlineView lesson : lessonDirectory.findBySections(sectionIds)) {
+        for (LessonOutlineView lesson : lessons) {
+            if ("RECORDED".equals(lesson.deliveryType())
+                    && !publishedRecordedLessonIds.contains(lesson.lessonId())) {
+                continue;
+            }
             UUID curriculumId = sectionToCurriculum.get(lesson.sectionId());
             if (curriculumId != null) {
                 lessonsByCurriculum.computeIfAbsent(curriculumId, k -> new ArrayList<>()).add(lesson.lessonId());

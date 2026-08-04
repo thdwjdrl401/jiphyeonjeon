@@ -19,6 +19,8 @@ public record OutlineLesson(
         // FE는 status만 읽으므로 이름이 어긋나면 목차의 상태 배지·진입 버튼이 조용히 죽는다.
         @Schema(description = "PUBLISHED — 값은 하나다(ADR-0005). 공개 목차에 담기려면 커리큘럼이 공개돼야 한다.")
         String status,
+        @Schema(description = "LIVE 또는 RECORDED")
+        String deliveryType,
         @Schema(description = "라이브 예정 시각. 세션이 없으면 null.")
         OffsetDateTime scheduledAt,
         @Schema(description = "재생 길이(ms). 녹화 완료 webhook이 채우는 값이라 그 경로 전까지는 null.")
@@ -26,6 +28,8 @@ public record OutlineLesson(
         OutlineLessonLiveSession liveSession,
         @Schema(description = "NOT_READY(녹화 없음)·DRAFT·READY_FOR_REVIEW·PUBLISHED·WITHDRAWN. 게시 검수 흐름 전까지 PUBLISHED에는 도달하지 않는다.")
         String replayStatus,
+        @Schema(description = "업로드 녹화강의 재생 패키지 상태. LIVE 레슨이면 null.")
+        String recordedPublicationStatus,
         LessonAccessResponse access,
         @Schema(description = "내 학습 상태. learning 패키지가 배선되지 않아 항상 null(ADR-0024).")
         LearningResponse learning
@@ -40,10 +44,12 @@ public record OutlineLesson(
                 lesson.title(),
                 lesson.order(),
                 lesson.status(),
+                lesson.deliveryType(),
                 lesson.scheduledAt(),
                 lesson.durationMs(),
                 OutlineLessonLiveSession.from(lesson.liveSession()),
                 lesson.replayStatus(),
+                lesson.recordedPublicationStatus(),
                 LessonAccessResponse.from(lesson.access()),
                 toLearning(lesson.learning()));
     }

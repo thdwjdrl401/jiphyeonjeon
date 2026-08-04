@@ -2,6 +2,7 @@ package com.liveclass.asset.service;
 
 import com.liveclass.asset.api.AssetDirectory;
 import com.liveclass.asset.api.AssetRef;
+import com.liveclass.asset.api.AssetUploadManagement;
 import com.liveclass.asset.config.AssetStorageProperties;
 import com.liveclass.asset.domain.Asset;
 import com.liveclass.asset.domain.AssetKind;
@@ -10,8 +11,11 @@ import com.liveclass.asset.repository.AssetRepository;
 import com.liveclass.common.logging.Audit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.time.Duration;
 import java.util.Collection;
@@ -28,7 +32,7 @@ import java.util.UUID;
  * 다른 모듈에는 AssetDirectory 포트로만 노출한다 — asset은 curriculum/auth를 모른다(uploadedBy는 bare UUID).
  */
 @Service
-public class AssetService implements AssetDirectory {
+public class AssetService implements AssetDirectory, AssetUploadManagement {
 
     private static final Logger log = LoggerFactory.getLogger(AssetService.class);
 
@@ -45,14 +49,21 @@ public class AssetService implements AssetDirectory {
     /** 자료 업로드 최대 크기 50 MiB(ADR-0035). */
     private static final long MAX_MATERIAL_SIZE_BYTES = 50L * 1024 * 1024;
 
+    /** 녹화강의 원본은 MP4만, 최대 5 GiB(운영 설정 세분화 전 ADR-0008 기본값). */
+    private static final String RECORDED_VIDEO_CONTENT_TYPE = "video/mp4";
+    private static final long MAX_RECORDED_VIDEO_SIZE_BYTES = 5L * 1024 * 1024 * 1024;
+
     private final AssetRepository assetRepository;
     private final AssetStorage storage;
     private final AssetStorageProperties props;
+    private final ApplicationEventPublisher events;
 
-    public AssetService(AssetRepository assetRepository, AssetStorage storage, AssetStorageProperties props) {
+    public AssetService(AssetRepository assetRepository, AssetStorage storage, AssetStorageProperties props,
+                        ApplicationEventPublisher events) {
         this.assetRepository = assetRepository;
         this.storage = storage;
         this.props = props;
+        this.events = events;
     }
 
     /**
@@ -116,14 +127,21 @@ public class AssetService implements AssetDirectory {
         AssetStorage.StoredObject head = storage.head(asset.getObjectKey())
                 .orElseThrow(() -> new AssetStateConflictException("업로드가 확인되지 않았습니다."));
         boolean isMaterial = asset.getKind() == AssetKind.MATERIAL;
-        long maxSize = isMaterial ? MAX_MATERIAL_SIZE_BYTES : MAX_IMAGE_SIZE_BYTES;
+        boolean isRecordedVideo = asset.getKind() == AssetKind.RECORDED_VIDEO_SOURCE;
+        long maxSize = isRecordedVideo
+                ? MAX_RECORDED_VIDEO_SIZE_BYTES
+                : isMaterial ? MAX_MATERIAL_SIZE_BYTES : MAX_IMAGE_SIZE_BYTES;
         if (head.contentLength() > maxSize) {
             throw new AssetValidationException("업로드 파일이 최대 크기를 초과했습니다.");
         }
         // MATERIAL은 신뢰 경계가 스토리지가 보고하는 content-type뿐이라(magic bytes 검증은 CP3
         // ingestion 파서에서) null을 통과시키지 않는다(fail closed) — 이미지는 헤더 부재가 흔해
         // 기존처럼 null 통과를 유지한다.
-        if (isMaterial) {
+        if (isRecordedVideo) {
+            if (head.contentType() == null || !RECORDED_VIDEO_CONTENT_TYPE.equals(head.contentType())) {
+                throw new AssetValidationException("허용되지 않는 녹화강의 형식입니다(MP4만).");
+            }
+        } else if (isMaterial) {
             if (head.contentType() == null || !MATERIAL_CONTENT_TYPE.equals(head.contentType())) {
                 throw new AssetValidationException("허용되지 않는 파일 형식입니다: " + head.contentType());
             }
@@ -140,6 +158,83 @@ public class AssetService implements AssetDirectory {
     }
 
     // ── AssetDirectory 포트 ──
+
+    // ── AssetUploadManagement 포트 ──
+
+    @Override
+    @Transactional
+    public AssetUploadManagement.UploadTicket createRecordedVideoSource(
+            String fileName, String contentType, long fileSize, UUID uploaderId) {
+        AssetUploadTicket ticket = createUploadRequest(
+                AssetKind.RECORDED_VIDEO_SOURCE, fileName, contentType, fileSize, uploaderId);
+        return new AssetUploadManagement.UploadTicket(
+                ticket.assetId(), ticket.uploadUrl(), ticket.method(), ticket.headers(), ticket.expiresAt());
+    }
+
+    @Override
+    @Transactional
+    public AssetRef completeRecordedVideoSource(UUID assetId, UUID requesterId) {
+        Asset asset = requireRecordedVideoSource(assetId);
+        complete(asset.getId(), requesterId);
+        return toRef(asset);
+    }
+
+    @Override
+    @Transactional
+    public void abandonPendingRecordedVideoSource(UUID assetId, UUID requesterId) {
+        Asset asset = requireRecordedVideoSource(assetId);
+        if (asset.getUploadedBy() == null || !asset.getUploadedBy().equals(requesterId)) {
+            throw new AssetForbiddenException("이 에셋의 업로더가 아닙니다.");
+        }
+        if (asset.getStatus() == AssetStatus.PENDING) {
+            asset.setStatus(AssetStatus.FAILED);
+        }
+    }
+
+    @Override
+    @Transactional
+    public void deleteRecordedVideoSource(UUID assetId) {
+        if (assetId == null) {
+            return;
+        }
+        Asset asset = requireRecordedVideoSource(assetId);
+        String objectKey = asset.getObjectKey();
+        assetRepository.delete(asset);
+        events.publishEvent(new RecordedVideoSourceOrphaned(assetId, objectKey));
+    }
+
+    /** DB 롤백 뒤 원본만 사라지는 일을 막기 위해 실제 객체는 커밋된 뒤에만 지운다. */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void deleteRecordedVideoSourceObject(RecordedVideoSourceOrphaned event) {
+        try {
+            storage.delete(event.objectKey());
+            log.info("녹화강의 원본 객체 삭제 assetId={} objectKey={}", event.assetId(), event.objectKey());
+        } catch (RuntimeException e) {
+            log.warn("녹화강의 원본 객체 삭제 실패 — objectKey={} assetId={} 사유={}",
+                    event.objectKey(), event.assetId(), e.getMessage());
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<String> resolveRecordedVideoSourceUrl(UUID assetId) {
+        return assetRepository.findById(assetId)
+                .filter(asset -> asset.getKind() == AssetKind.RECORDED_VIDEO_SOURCE)
+                .filter(asset -> asset.getStatus() == AssetStatus.UPLOADED)
+                .map(this::presignDownload);
+    }
+
+    private Asset requireRecordedVideoSource(UUID assetId) {
+        Asset asset = assetRepository.findById(assetId)
+                .orElseThrow(() -> new AssetNotFoundException("에셋을 찾을 수 없습니다."));
+        if (asset.getKind() != AssetKind.RECORDED_VIDEO_SOURCE) {
+            throw new AssetValidationException("녹화강의 원본 에셋이 아닙니다.");
+        }
+        return asset;
+    }
+
+    private record RecordedVideoSourceOrphaned(UUID assetId, String objectKey) {
+    }
 
     @Override
     @Transactional(readOnly = true)
@@ -204,7 +299,12 @@ public class AssetService implements AssetDirectory {
      */
     private void validateUploadRequest(AssetKind kind, String contentType, long fileSize) {
         long maxSize;
-        if (kind == AssetKind.MATERIAL) {
+        if (kind == AssetKind.RECORDED_VIDEO_SOURCE) {
+            if (contentType == null || !RECORDED_VIDEO_CONTENT_TYPE.equals(contentType)) {
+                throw new AssetValidationException("허용되지 않는 녹화강의 형식입니다(MP4만).");
+            }
+            maxSize = MAX_RECORDED_VIDEO_SIZE_BYTES;
+        } else if (kind == AssetKind.MATERIAL) {
             if (contentType == null || !MATERIAL_CONTENT_TYPE.equals(contentType)) {
                 throw new AssetValidationException("허용되지 않는 자료 형식입니다(PPTX만).");
             }

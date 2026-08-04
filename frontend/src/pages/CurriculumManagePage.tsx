@@ -23,6 +23,7 @@ import {
 import { evaluatePublishReadiness } from '@/features/curriculum/publishPreconditions'
 import type { CurriculumMaterial } from '@/features/curriculum/types'
 import InstructorEnrollmentRoster from '@/features/enrollment/InstructorEnrollmentRoster'
+import { resolveInstructorLessonEditPath } from '@/features/lesson/lessonRouting'
 import { ApiError } from '@/shared/api/client'
 import { isNotImplemented } from '@/shared/api/notImplemented'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
@@ -604,7 +605,7 @@ function CurriculumManageEditor({
           <div className="curriculum-manage__structure-layout">
             <Panel className="curriculum-manage__structure-panel" title="섹션과 강의" description="강의를 드래그해 순서를 바꾸거나 다른 섹션으로 옮길 수 있습니다.">
               {/* 섹션마다 반복하지 않고 여기 한 번만 안내한다(삭제 제약 포함). */}
-              <InlineNotice tone="info">새 섹션은 자동 저장된 뒤 강의를 추가할 수 있어요. 강의가 있는 섹션은 비우거나 강의를 옮긴 뒤 삭제해 주세요.</InlineNotice>
+              <InlineNotice tone="info">새 섹션은 자동 저장된 뒤 라이브 강의를 만들거나 녹화강의를 업로드할 수 있어요. 강의가 있는 섹션은 비우거나 강의를 옮긴 뒤 삭제해 주세요.</InlineNotice>
               <div className="structure-list">
                 {sections.map((section, sectionIndex) => (
                   <article className={`structure-section${lessonDropTarget?.sectionId === section.sectionId ? ' is-lesson-drop-target' : ''}`} key={section.sectionId}>
@@ -626,8 +627,14 @@ function CurriculumManageEditor({
                           </button>
                         </div>
                         {section.sectionId.startsWith('sec-new-')
-                          ? <button className="button button--soft button--small" type="button" disabled title="새 섹션이 자동 저장된 뒤에 강의를 추가할 수 있어요.">강의 추가</button>
-                          : <Link className="button button--soft button--small" to={instructorPaths.newLesson(curriculumId, section.sectionId)}>강의 추가</Link>}
+                          ? <>
+                              <button className="button button--soft button--small" type="button" disabled title="새 섹션이 자동 저장된 뒤에 녹화강의를 업로드할 수 있어요.">녹화강의 업로드</button>
+                              <button className="button button--primary button--small" type="button" disabled title="새 섹션이 자동 저장된 뒤에 라이브 강의를 추가할 수 있어요.">라이브 강의 추가</button>
+                            </>
+                          : <>
+                              <Link className="button button--soft button--small" to={instructorPaths.newRecordedLesson(curriculumId, section.sectionId)}>녹화강의 업로드</Link>
+                              <Link className="button button--primary button--small" to={instructorPaths.newLesson(curriculumId, section.sectionId)}>라이브 강의 추가</Link>
+                            </>}
                         <button
                           className="button button--soft button--small"
                           type="button"
@@ -647,6 +654,15 @@ function CurriculumManageEditor({
                         const isDragging = draggedLesson?.lessonId === lesson.lessonId
                         const isDropBefore = lessonDropTarget?.sectionId === section.sectionId
                           && lessonDropTarget.lessonIndex === lessonIndex
+                        const detailPath = lesson.deliveryType === 'RECORDED'
+                          ? instructorPaths.recordedLesson(curriculumId, section.sectionId, lesson.lessonId)
+                          : instructorPaths.lesson(curriculumId, section.sectionId, lesson.lessonId)
+                        const editPath = resolveInstructorLessonEditPath({
+                          curriculumId,
+                          sectionId: section.sectionId,
+                          lessonId: lesson.lessonId,
+                          deliveryType: lesson.deliveryType,
+                        })
                         return (
                           <li
                             className={`${isDragging ? 'is-dragging' : ''}${isDropBefore ? ' is-drop-before' : ''}`.trim() || undefined}
@@ -660,14 +676,17 @@ function CurriculumManageEditor({
                           >
                             <span className="lesson-drag-handle" aria-hidden="true">⋮⋮</span>
                             <span className="lesson-order">{lessonIndex + 1}</span>
-                            <div className="lesson-info"><strong>{lesson.title}</strong></div>
+                            <div className="lesson-info">
+                              <strong>{lesson.title}</strong>
+                              {lesson.deliveryType === 'RECORDED' && <StatusBadge>녹화강의</StatusBadge>}
+                            </div>
                             {/* 상태 배지는 없다 — 레슨 상태가 PUBLISHED 하나뿐이라 표시할 것이 없다(ADR-0005).
                                 삭제도 여기 두지 않는다: 목록에서 한 번의 실수로 강의가 사라지던 자리라
                                 수정 화면 안으로 옮겼다. */}
                             <div className="lesson-actions">
                               <div className="row-actions">
-                                <Link to={instructorPaths.lesson(curriculumId, section.sectionId, lesson.lessonId)}>상세</Link>
-                                <Link to={instructorPaths.editLesson(curriculumId, section.sectionId, lesson.lessonId)}>수정</Link>
+                                <Link to={detailPath}>상세</Link>
+                                <Link to={editPath}>수정</Link>
                               </div>
                             </div>
                           </li>

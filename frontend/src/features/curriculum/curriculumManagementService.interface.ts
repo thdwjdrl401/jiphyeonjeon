@@ -41,6 +41,8 @@ export interface CurriculumManagementLesson {
   lessonId: string
   title: string
   status: string
+  /** 구버전 mock 데이터는 없을 수 있어 optional이며, HTTP 응답은 항상 LIVE|RECORDED를 준다. */
+  deliveryType?: 'LIVE' | 'RECORDED'
 }
 
 export interface CurriculumManagementSection {
@@ -71,6 +73,26 @@ export interface SaveCurriculumManagementResult {
   materials: CurriculumMaterial[]
 }
 
+export interface UploadRecordedLessonRequest {
+  /** 같은 화면에서 업로드를 재시도해도 레슨이 중복 생성되지 않게 유지하는 멱등키. */
+  clientRequestId: string
+  curriculumId: string
+  sectionId: string
+  title: string
+  description: string
+  videoFile: File
+  /** 녹화강의 생성 뒤 같은 레슨 자료 API로 연결할 PPTX 원본. */
+  materials: File[]
+}
+
+export interface UploadRecordedLessonResult {
+  lessonId: string
+  recordedVideoId: string
+  jobId: string
+  /** 원본 업로드 뒤 재생본을 준비하는 비동기 상태. */
+  processingStatus: 'QUEUED'
+}
+
 export interface CurriculumManagementService {
   uploadCurriculumThumbnail: (file: File) => Promise<string | null>
   createCurriculum: (request: CreateCurriculumRequest) => Promise<CreateCurriculumResponse>
@@ -82,4 +104,5 @@ export interface CurriculumManagementService {
   deleteCurriculum: (curriculumId: string) => Promise<void>
   deleteLesson: (lessonId: string) => Promise<void>
   deleteSection: (sectionId: string) => Promise<void>
+  uploadRecordedLesson: (request: UploadRecordedLessonRequest) => Promise<UploadRecordedLessonResult>
 }

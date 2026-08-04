@@ -18,7 +18,7 @@
 #   cp .env.ai-dev.example .env.ai-dev   # 값 채우기 (.env.ai-dev는 커밋 금지)
 #   docker compose -f docker-compose.ai-dev.yml \
 #     --env-file .env.dev --env-file .env.ai-dev \
-#     up -d --build ai-worker ai-api
+#     --profile recorded-stt up -d --build ai-worker recorded-stt-worker ai-api
 name: liveclass-ai-dev
 networks:
   default:
@@ -72,8 +72,42 @@ services:
       AI_WORKER_SPRING_HMAC_SECRET: ${AI_CALLBACK_SECRET:?AI_CALLBACK_SECRET 필요 — Spring이 이미 쓰는 기존 값}
       AI_WORKER_BGE_RUNTIME_URL: http://host.docker.internal:18080/internal/bge
       AI_WORKER_BGE_INTERNAL_TOKEN: ${BGE_RUNTIME_INTERNAL_TOKEN:?BGE_RUNTIME_INTERNAL_TOKEN 필요 — GPU 쪽과 동일 값}
+      # ADR-0010 PPTX 핵심 용어 추출. v2 작업이 요청하므로 켤 때 GMS 키도 함께 주입한다.
+      AI_WORKER_KEY_TERM_EXTRACTION_ENABLED: ${AI_WORKER_KEY_TERM_EXTRACTION_ENABLED:-false}
+      AI_WORKER_GMS_API_KEY: ${GMS_API_KEY:-}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8011/readyz', timeout=2)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ADR-0011: 긴 파일 전사는 PPTX worker와 queue/prefetch/process를 공유하지 않는다.
+  recorded-stt-worker:
+    profiles: ["recorded-stt"]
+    build: ./ai/ai-worker
+    container_name: liveclass-recorded-stt-worker-dev
+    restart: unless-stopped
+    entrypoint: ["python", "-m", "app.recorded_stt.main"]
+    ports:
+      - "127.0.0.1:${RECORDED_STT_MANAGEMENT_HOST_PORT:-18012}:8012"
+    stop_grace_period: 60s
+    environment:
+      RECORDED_STT_ENVIRONMENT: staging
+      RECORDED_STT_INSTANCE_ID: ${RECORDED_STT_INSTANCE_ID:-recorded-stt-dev-1}
+      RECORDED_STT_MANAGEMENT_HOST: 0.0.0.0
+      RECORDED_STT_MANAGEMENT_PORT: "8012"
+      RECORDED_STT_RABBITMQ_URL: amqp://${RABBITMQ_USER:?RABBITMQ_USER 필요}:${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD 필요}@rabbitmq:5672/
+      RECORDED_STT_SPRING_INTERNAL_BASE_URL: ${RECORDED_STT_SPRING_INTERNAL_BASE_URL:?RECORDED_STT_SPRING_INTERNAL_BASE_URL 필요}
+      RECORDED_STT_SOURCE_HMAC_SECRET: ${RECORDED_STT_SOURCE_SECRET:?RECORDED_STT_SOURCE_SECRET 필요}
+      RECORDED_STT_CALLBACK_HMAC_SECRET: ${RECORDED_STT_CALLBACK_SECRET:?RECORDED_STT_CALLBACK_SECRET 필요}
+      RECORDED_STT_GMS_API_KEY: ${GMS_API_KEY:?GMS_API_KEY 필요}
+      RECORDED_STT_MODEL: whisper-1
+      RECORDED_STT_LANGUAGE: ko
+      RECORDED_STT_CHUNK_SECONDS: "900"
+      RECORDED_STT_CHUNK_OVERLAP_MS: "1000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8012/readyz', timeout=2)"]
       interval: 15s
       timeout: 5s
       retries: 5

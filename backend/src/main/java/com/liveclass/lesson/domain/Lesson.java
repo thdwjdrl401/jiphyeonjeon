@@ -38,6 +38,9 @@ public class Lesson {
     @Enumerated(EnumType.STRING)
     private LessonStatus status;
 
+    @Enumerated(EnumType.STRING)
+    private LessonDeliveryType deliveryType;
+
     private OffsetDateTime aiReadyAt;
 
     private OffsetDateTime publishedAt;

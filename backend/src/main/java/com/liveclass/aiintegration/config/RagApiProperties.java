@@ -37,6 +37,11 @@ public record RagApiProperties(
         return URI.create(apiBaseUrl + "/internal/v1/rag/answers:stream");
     }
 
+    /** 과거 VOD 자막을 Spring이 body에 실어 보내는 Replay v2 endpoint. */
+    public URI replayAnswersStreamUri() {
+        return URI.create(apiBaseUrl + "/internal/v2/rag/answers:stream");
+    }
+
     private static boolean hasText(String s) {
         return s != null && !s.isBlank();
     }

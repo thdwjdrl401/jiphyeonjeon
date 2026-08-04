@@ -29,6 +29,10 @@ import PasswordResetConfirmPage from '@/pages/PasswordResetConfirmPage'
 import PasswordResetRequestPage from '@/pages/PasswordResetRequestPage'
 import ProfilePage from '@/pages/ProfilePage'
 import ReplayLessonPage from '@/pages/ReplayLessonPage'
+import RecordedLessonEditPage from '@/pages/RecordedLessonEditPage'
+import RecordedLessonUploadPage from '@/pages/RecordedLessonUploadPage'
+import RecordedLessonDetailPage from '@/pages/RecordedLessonDetailPage'
+import RecordedLessonPlaybackPage from '@/pages/RecordedLessonPlaybackPage'
 import SignupPage from '@/pages/SignupPage'
 import StudentPrejoinPage from '@/pages/StudentPrejoinPage'
 import WelcomePage from '@/pages/WelcomePage'
@@ -73,6 +77,7 @@ export default function AppRouter() {
               <Route path="live-sessions/:sessionId/classroom" element={<LiveClassroomPage />} />
             </Route>
             <Route path="lessons/:lessonId/replay" element={<ReplayLessonPage />} />
+            <Route path="lessons/:lessonId/recorded" element={<RecordedLessonPlaybackPage />} />
           </Route>
         </Route>
         {/* 운영 콘솔. 가입 역할과 다른 축이라 별도 트리다 — 화면만 막고, 데이터는 서버가 ROLE_ADMIN으로 막는다. */}
@@ -90,6 +95,9 @@ export default function AppRouter() {
             <Route path="curriculums" element={<MyCurriculumsPage />} />
             <Route path="curriculums/new" element={<CurriculumFormPage />} />
             <Route path="curriculums/:curriculumId/manage" element={<CurriculumManagePage />} />
+            <Route path="curriculums/:curriculumId/sections/:sectionId/recorded-lessons/new" element={<RecordedLessonUploadPage />} />
+            <Route path="curriculums/:curriculumId/sections/:sectionId/recorded-lessons/:lessonId/edit" element={<RecordedLessonEditPage />} />
+            <Route path="curriculums/:curriculumId/sections/:sectionId/recorded-lessons/:lessonId" element={<RecordedLessonDetailPage />} />
             <Route path="curriculums/:curriculumId/sections/:sectionId/lessons/new" element={<LessonFormPage />} />
             <Route path="curriculums/:curriculumId/sections/:sectionId/lessons/:lessonId" element={<LessonDetailPage />} />
             <Route path="curriculums/:curriculumId/sections/:sectionId/lessons/:lessonId/edit" element={<LessonFormPage />} />

@@ -34,4 +34,7 @@ public interface CurriculumMaterialManagement {
      * 무관하다. {@code embeddingStatus}는 {@code MaterialEmbeddingStatus} 이름. 없는 materialId면 무시.
      */
     void updateEmbeddingStatus(UUID materialId, String embeddingStatus);
+
+    /** 핵심 용어 추출 상태를 갱신한다(ADR-0010). 없는 materialId는 무시한다. */
+    void updateKeyTermStatus(UUID materialId, String keyTermStatus);
 }

@@ -1,15 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
-import HLS from 'hls.js'
-import {
-  isHLSProvider,
-  MediaPlayer,
-  MediaProvider,
-  type MediaPlayerInstance,
-  type MediaProviderAdapter,
-} from '@vidstack/react'
-import { DefaultVideoLayout, defaultLayoutIcons } from '@vidstack/react/player/layouts/default'
-import '@vidstack/react/player/styles/default/theme.css'
-import '@vidstack/react/player/styles/default/layouts/video.css'
+import { useMemo, useState } from 'react'
+import HlsMediaPlayer, {
+  type HlsMediaSeekRequest,
+  type HlsMediaState,
+} from '@/features/media/HlsMediaPlayer'
 import { StatusBadge } from '@/shared/ui/WorkspaceUi'
 import { isLiveStatus } from './liveSessionService'
 import type { PlaybackView } from './liveSessionService.interface'
@@ -40,34 +33,7 @@ interface PlaybackPlayerProps {
   onRootChange?: (root: HTMLElement | null) => void
 }
 
-type PlaybackState = 'loading' | 'ready' | 'playing' | 'buffering' | 'error'
-
-/**
- * 라이브 엣지에서 몇 세그먼트 뒤에서 재생할지(hls.js 기본 3).
- *
- * 낮출수록 지연이 줄지만 네트워크가 흔들릴 때 버퍼링이 잦아진다. 2가 타협점 —
- * 1은 화면공유처럼 비트레이트가 튀는 구간에서 끊길 여지가 커진다.
- */
-const LIVE_SYNC_SEGMENTS = 2
-
-/**
- * vidstack에 duration을 주지 않으면 라이브 되감기가 영구히 잠긴다.
- *
- * vidstack의 seek 허용 조건은 `duration >= liveDVRWindow`인데, 두 값이 이렇게 정해진다:
- *
- *   liveDVRWindow = max(inferredLiveDVRWindow, 60)   inferred는 재생목록 전체 길이 T
- *   seekableEnd   = liveSyncPosition                 = T − (liveSyncDurationCount × 세그먼트)
- *   seekableStart = max(0, seekableEnd − liveDVRWindow) = 0
- *   duration      = seekableEnd − seekableStart      = T − 2
- *
- * 즉 `T − 2 >= T`를 요구한다 — **항상 거짓**이다. 벌어진 폭은 라이브 엣지 오프셋이라
- * 정의상 절대 좁혀지지 않는다. `streamType="live:dvr"`을 줘도 seek이 잠기는 진짜 이유다.
- *
- * duration을 명시하면 `seekableEnd = providedDuration = T`가 되어
- * seekableStart = 0, duration = T = liveDVRWindow → 조건이 성립하고 막대가 강의 전체를 덮는다.
- * (검증: @vidstack/react 1.12 dev 청크의 seekableStart/seekableEnd/canSeek 파생식)
- */
-const NO_PROVIDED_DURATION = -1
+type PlaybackState = HlsMediaState
 
 /**
  * 미디어 시각 ↔ 세션 시각 변환.
@@ -106,50 +72,15 @@ export default function PlaybackPlayer({
   onRootChange,
 }: PlaybackPlayerProps) {
   const [playbackState, setPlaybackState] = useState<PlaybackState>('loading')
-  // 라이브 재생목록이 자라는 대로 갱신되는 전체 길이(초). 위 NO_PROVIDED_DURATION 주석 참고.
-  const [liveDuration, setLiveDuration] = useState(NO_PROVIDED_DURATION)
-  const playerRef = useRef<MediaPlayerInstance>(null)
   const source = playback?.source ?? null
   const isLive = playback ? isLiveStatus(playback.liveSessionStatus) : true
-
-  useEffect(() => setPlaybackState('loading'), [source?.url, reloadToken])
-  // 재생 대상이 바뀌면 이전 스트림의 길이를 물려주지 않는다.
-  useEffect(() => setLiveDuration(NO_PROVIDED_DURATION), [source?.url, reloadToken])
-
-  // 이미 반영한 seek 요청의 sequence. 같은 요청을 두 번 적용하지 않기 위한 것이다.
-  const appliedSeekSequence = useRef(-1)
-  useEffect(() => {
-    if (!source || !seekRequest || !playerRef.current) return
-    // `source`는 재생 metadata 폴링마다 **새 객체**로 온다(usePlayback refetchInterval). 이 effect가
-    // source 동일성으로 재실행되면 지난 seek 요청을 폴링 주기마다 다시 적용해, 재생 중인 영상이 계속
-    // 그 위치로 되돌아간다. sequence로 "새 요청일 때만" 적용한다 — sequence가 있는 이유가 이것이다.
-    // (source가 아직 없어 못 옮긴 요청은 적용 표시를 남기지 않아, 준비되면 그때 한 번 반영된다.)
-    if (appliedSeekSequence.current === seekRequest.sequence) return
-    appliedSeekSequence.current = seekRequest.sequence
-    playerRef.current.currentTime = toMediaTimeSeconds(seekRequest.sessionMs, source.availableFromMs)
-  }, [source, seekRequest])
-
-  const handleProviderChange = (provider: MediaProviderAdapter | null) => {
-    if (!isHLSProvider(provider)) return
-    provider.library = HLS
-    provider.config = {
-      // hls.js 기본값은 라이브 엣지에서 3세그먼트 뒤부터 재생한다(안전 버퍼). 세그먼트 단위라
-      // 세그먼트가 2초면 그것만으로 6초가 붙는다. 강의는 단방향 방송이라 버퍼를 조금 줄여도
-      // 체감 손해가 적다 — 실측 총 지연 ~10초 중 이 값이 가장 큰 몫이었다.
-      liveSyncDurationCount: LIVE_SYNC_SEGMENTS,
-      // 기본값 1은 "따라잡기 금지"라, 한 번 버퍼링으로 밀리면 그 지연이 영구히 남는다.
-      // 5% 빠르게 재생해 조용히 엣지로 복귀시킨다(체감되지 않는 수준).
-      maxLiveSyncPlaybackRate: 1.05,
+  const mediaSeekRequest = useMemo<HlsMediaSeekRequest | null>(() => {
+    if (!source || !seekRequest) return null
+    return {
+      mediaTimeSeconds: toMediaTimeSeconds(seekRequest.sessionMs, source.availableFromMs),
+      sequence: seekRequest.sequence,
     }
-    // 다시보기(ENDLIST 있음)는 vidstack이 스스로 길이를 알아 손댈 필요가 없다.
-    if (!isLive) return
-    provider.onInstance((instance) => {
-      instance.on(HLS.Events.LEVEL_UPDATED, (_event, data) => {
-        const total = data.details.totalduration
-        if (total > 0) setLiveDuration(total)
-      })
-    })
-  }
+  }, [seekRequest, source])
 
   const retryPlayback = () => {
     setPlaybackState('loading')
@@ -166,26 +97,19 @@ export default function PlaybackPlayer({
       {source
         ? (
           // key는 실제 재생 대상이 바뀔 때만 변한다. 폴링 갱신마다 리마운트하면 재생이 끊긴다.
-          <MediaPlayer
-            key={`${playback?.sessionId}-${source.url}-${reloadToken}`}
-            ref={playerRef}
-            autoPlay
-            className="student-live-player"
-            duration={liveDuration}
-            playsInline
-            src={{ src: source.url, type: 'application/vnd.apple.mpegurl' }}
-            streamType={isLive ? 'live:dvr' : 'on-demand'}
+          <HlsMediaPlayer
+            sourceUrl={source.url}
             title={lessonTitle}
-            onCanPlay={() => setPlaybackState('ready')}
-            onError={() => setPlaybackState('error')}
-            onPlaying={() => setPlaybackState('playing')}
-            onProviderChange={handleProviderChange}
-            onTimeUpdate={(detail) => onSessionTimeChange(toSessionMs(detail.currentTime, source.availableFromMs))}
-            onWaiting={() => setPlaybackState('buffering')}
-          >
-            <MediaProvider />
-            <DefaultVideoLayout icons={defaultLayoutIcons} />
-          </MediaPlayer>
+            streamType={isLive ? 'live:dvr' : 'on-demand'}
+            durationMs={playback?.durationMs ?? null}
+            reloadToken={reloadToken}
+            seekRequest={mediaSeekRequest}
+            autoPlay
+            onStateChange={setPlaybackState}
+            onTimeChange={(mediaTimeMs) => onSessionTimeChange(
+              toSessionMs(mediaTimeMs / 1000, source.availableFromMs),
+            )}
+          />
         )
         : (
           // source가 null인 건 오류가 아니라 대기다 — 녹화 시작 직후 첫 세그먼트가 아직 안 올라온 것.

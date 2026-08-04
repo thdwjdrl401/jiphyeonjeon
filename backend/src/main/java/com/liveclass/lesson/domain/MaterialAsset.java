@@ -42,6 +42,10 @@ public class MaterialAsset {
     @Enumerated(EnumType.STRING)
     private MaterialEmbeddingStatus embeddingStatus;
 
+    // 핵심 용어 추출 상태(ADR-0010). 임베딩이 READY여도 용어는 EMPTY/FAILED일 수 있다.
+    @Enumerated(EnumType.STRING)
+    private MaterialKeyTermStatus keyTermStatus;
+
     @CreationTimestamp
     private OffsetDateTime createdAt;
 

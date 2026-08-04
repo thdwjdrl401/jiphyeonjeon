@@ -6,6 +6,8 @@ export interface LessonMaterialView {
   name: string
   size: string
   status: string
+  embeddingStatus?: 'PENDING' | 'PROCESSING' | 'READY' | 'FAILED'
+  keyTermStatus?: 'NOT_REQUESTED' | 'PENDING' | 'PROCESSING' | 'READY' | 'EMPTY' | 'FAILED'
 }
 
 export interface LessonDetailView {
@@ -13,6 +15,7 @@ export interface LessonDetailView {
   title: string
   description: string
   status: LessonStatus
+  deliveryType: 'LIVE' | 'RECORDED'
   sectionId: string
   sectionTitle: string
   curriculumId: string
@@ -33,7 +36,12 @@ export interface LessonNavigationView {
   sections: Array<{
     sectionId: string
     title: string
-    lessons: Array<{ lessonId: string; title: string; order: number }>
+    lessons: Array<{
+      lessonId: string
+      title: string
+      order: number
+      deliveryType: 'LIVE' | 'RECORDED'
+    }>
   }>
 }
 

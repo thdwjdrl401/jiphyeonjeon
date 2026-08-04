@@ -12,6 +12,7 @@ public record LessonOutlineView(
         UUID sectionId,
         String title,
         int order,
-        String status
+        String status,
+        String deliveryType
 ) {
 }

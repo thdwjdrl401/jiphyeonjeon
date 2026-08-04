@@ -37,6 +37,7 @@ function getInstructorLessonContext(pathname: string): LessonNavigationContext |
   }
 
   const lessonMatch = matchPath('/instructor/curriculums/:curriculumId/sections/:sectionId/lessons/:lessonId/edit', pathname)
+    ?? matchPath('/instructor/curriculums/:curriculumId/sections/:sectionId/recorded-lessons/:lessonId', pathname)
     ?? matchPath('/instructor/curriculums/:curriculumId/sections/:sectionId/lessons/:lessonId', pathname)
   if (lessonMatch?.params.curriculumId && lessonMatch.params.lessonId) {
     return {

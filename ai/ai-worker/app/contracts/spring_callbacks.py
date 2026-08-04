@@ -22,6 +22,9 @@ _STATUS_BY_EVENT: dict[str, str] = {
     "MATERIAL_DELETE_FAILED": "FAILED",
 }
 _KEY_TERMS_EVENT_TYPE: MaterialCallbackType = "MATERIAL_EMBEDDED"
+_OUTPUT_EVENT_TYPES: frozenset[MaterialCallbackType] = frozenset(
+    {"MATERIAL_EMBEDDED", "MATERIAL_EMBED_FAILED"}
+)
 _CALLBACK_EVENT_NAMESPACE = UUID("9bdc3985-1818-4c55-b084-2eaa0de6b050")
 
 AnnotationCallbackType = Literal[
@@ -44,6 +47,38 @@ class KeyTermPayload(BaseModel):
     definition: str = Field(min_length=1)
 
 
+KeyTermResultStatus = Literal["NOT_REQUESTED", "READY", "EMPTY", "FAILED"]
+
+
+class KeyTermResultPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    status: KeyTermResultStatus
+    count: int = Field(ge=0)
+    truncated: bool = False
+    failure_code: str | None = Field(default=None, alias="failureCode", max_length=128)
+
+    @model_validator(mode="after")
+    def validate_result_shape(self) -> Self:
+        if self.status == "READY" and self.count < 1:
+            raise ValueError("READY key-term result requires a positive count")
+        if self.status != "READY" and self.count != 0:
+            raise ValueError("only READY key-term result may have a positive count")
+        if self.status == "FAILED" and self.failure_code is None:
+            raise ValueError("FAILED key-term result requires failureCode")
+        if self.status != "FAILED" and self.failure_code is not None:
+            raise ValueError("only FAILED key-term result may have failureCode")
+        return self
+
+
+class MaterialCallbackOutputs(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    material_version_id: int | None = Field(default=None, alias="materialVersionId", ge=1)
+    chunk_count: int | None = Field(default=None, alias="chunkCount", ge=0)
+    key_term_result: KeyTermResultPayload = Field(alias="keyTermResult")
+
+
 class MaterialCallbackEvent(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -54,6 +89,7 @@ class MaterialCallbackEvent(BaseModel):
     lesson_id: UUID = Field(alias="lessonId")
     status: MaterialCallbackStatus
     key_terms: tuple[KeyTermPayload, ...] | None = Field(default=None, alias="keyTerms")
+    outputs: MaterialCallbackOutputs | None = None
 
     @model_validator(mode="after")
     def validate_status_matches_event(self) -> Self:
@@ -65,6 +101,12 @@ class MaterialCallbackEvent(BaseModel):
     def validate_key_terms_scoped_to_its_event_type(self) -> Self:
         if self.key_terms is not None and self.event_type != _KEY_TERMS_EVENT_TYPE:
             raise ValueError(f"keyTerms may only be present on {_KEY_TERMS_EVENT_TYPE}")
+        return self
+
+    @model_validator(mode="after")
+    def validate_outputs_scoped_to_embedding_success(self) -> Self:
+        if self.outputs is not None and self.event_type not in _OUTPUT_EVENT_TYPES:
+            raise ValueError("outputs may only be present on embedding terminal events")
         return self
 
     def raw_body(self) -> bytes:

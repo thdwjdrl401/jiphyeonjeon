@@ -9,6 +9,7 @@ import com.liveclass.lesson.api.MaterialAssetInvalidException;
 import com.liveclass.lesson.api.MaterialView;
 import com.liveclass.lesson.domain.MaterialAsset;
 import com.liveclass.lesson.domain.MaterialEmbeddingStatus;
+import com.liveclass.lesson.domain.MaterialKeyTermStatus;
 import com.liveclass.lesson.domain.MaterialStatus;
 import com.liveclass.lesson.repository.MaterialAssetRepository;
 import org.slf4j.Logger;
@@ -56,6 +57,7 @@ public class CurriculumMaterialService implements CurriculumMaterialManagement {
         material.setStatus(MaterialStatus.ACTIVE);
         // 임베딩은 서비스(curriculum)가 파이프라인 켜짐 시 PENDING으로 전환·발행한다. 기본은 READY(무회귀).
         material.setEmbeddingStatus(MaterialEmbeddingStatus.READY);
+        material.setKeyTermStatus(MaterialKeyTermStatus.NOT_REQUESTED);
         MaterialAsset saved;
         try {
             saved = materialAssetRepository.saveAndFlush(material);
@@ -101,6 +103,24 @@ public class CurriculumMaterialService implements CurriculumMaterialManagement {
                 });
     }
 
+    @Override
+    @Transactional
+    public void updateKeyTermStatus(UUID materialId, String keyTermStatus) {
+        MaterialKeyTermStatus target = MaterialKeyTermStatus.valueOf(keyTermStatus);
+        materialAssetRepository.findById(materialId)
+                .ifPresent(m -> {
+                    MaterialKeyTermStatus current = m.getKeyTermStatus();
+                    if (current != null && !current.canTransitionTo(target)) {
+                        log.warn("커리큘럼 자료 핵심 용어 terminal 상태 전이 무시 materialId={} current={} target={}",
+                                materialId, current, target);
+                        return;
+                    }
+                    m.setKeyTermStatus(target);
+                    log.info(Audit.MARKER, "커리큘럼 자료 핵심 용어 상태 갱신 materialId={} status={}",
+                            materialId, target);
+                });
+    }
+
     /** 에셋이 존재하고 kind=MATERIAL, 업로드 완료(UPLOADED), 요청자가 업로더인지 검증한다(레슨과 동일 규칙). */
     private AssetRef requireValidMaterialAsset(UUID assetId, UUID requesterId) {
         AssetRef ref = assetDirectory.find(assetId)
@@ -130,6 +150,7 @@ public class CurriculumMaterialService implements CurriculumMaterialManagement {
                 fileName,
                 fileSize,
                 material.getStatus().name(),
-                material.getEmbeddingStatus() == null ? null : material.getEmbeddingStatus().name());
+                material.getEmbeddingStatus() == null ? null : material.getEmbeddingStatus().name(),
+                material.getKeyTermStatus() == null ? null : material.getKeyTermStatus().name());
     }
 }

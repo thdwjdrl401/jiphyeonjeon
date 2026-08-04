@@ -95,7 +95,27 @@ public class AiCallbackService {
             default -> null;
         };
         if (embeddingStatus != null && event.materialId() != null) {
-            lessonMaterialManagement.updateEmbeddingStatus(UUID.fromString(event.materialId()), embeddingStatus);
+            UUID materialId = UUID.fromString(event.materialId());
+            lessonMaterialManagement.updateEmbeddingStatus(materialId, embeddingStatus);
+            applyKeyTermStatus(event, materialId);
+        }
+    }
+
+    /**
+     * v2 callback의 용어 결과 projection. outputs가 없는 v1 callback은 기존 행의 상태를 건드리지 않는다.
+     */
+    private void applyKeyTermStatus(AiCallbackEvent event, UUID materialId) {
+        if (event.outputs() == null || event.outputs().keyTermResult() == null) {
+            return;
+        }
+        String status = event.outputs().keyTermResult().status();
+        if (status == null) {
+            return;
+        }
+        switch (status) {
+            case "NOT_REQUESTED", "READY", "EMPTY", "FAILED" ->
+                    lessonMaterialManagement.updateKeyTermStatus(materialId, status);
+            default -> throw new IllegalArgumentException("지원하지 않는 keyTermResult.status입니다: " + status);
         }
     }
 }

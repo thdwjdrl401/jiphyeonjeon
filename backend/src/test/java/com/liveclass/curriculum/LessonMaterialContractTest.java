@@ -1,6 +1,7 @@
 package com.liveclass.curriculum;
 
 import com.liveclass.asset.service.AssetStorage;
+import com.liveclass.lesson.api.LessonMaterialManagement;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -53,6 +54,9 @@ class LessonMaterialContractTest {
     @Autowired
     private MockMvc mockMvc;
 
+    @Autowired
+    private LessonMaterialManagement lessonMaterialManagement;
+
     @MockitoBean
     private AssetStorage storage;
 
@@ -84,6 +88,8 @@ class LessonMaterialContractTest {
                 .andExpect(jsonPath("$.assetId").value(assetId))
                 .andExpect(jsonPath("$.fileName").value("deck.pptx"))
                 .andExpect(jsonPath("$.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.embeddingStatus").value("READY"))
+                .andExpect(jsonPath("$.keyTermStatus").value("NOT_REQUESTED"))
                 .andExpect(jsonPath("$.material_id").doesNotExist());
     }
 
@@ -253,7 +259,8 @@ class LessonMaterialContractTest {
                 .andExpect(jsonPath("$.materials.length()").value(1))
                 .andExpect(jsonPath("$.materials[0].fileName").value("deck.pptx"))
                 .andExpect(jsonPath("$.materials[0].materialId").exists())
-                .andExpect(jsonPath("$.materials[0].embeddingStatus").value("READY"));   // ADR-0036 상태 필드
+                .andExpect(jsonPath("$.materials[0].embeddingStatus").value("READY"))
+                .andExpect(jsonPath("$.materials[0].keyTermStatus").value("NOT_REQUESTED"));
     }
 
     @Test
@@ -317,7 +324,8 @@ class LessonMaterialContractTest {
                         .contentType(MediaType.APPLICATION_JSON).content(body).header("X-Signature", signCallback(body)))
                 .andExpect(status().isNoContent());
         mockMvc.perform(get("/api/instructor/lessons/" + lessonId).cookie(auth))
-                .andExpect(jsonPath("$.materials[0].embeddingStatus").value("FAILED"));
+                .andExpect(jsonPath("$.materials[0].embeddingStatus").value("FAILED"))
+                .andExpect(jsonPath("$.materials[0].keyTermStatus").value("NOT_REQUESTED"));
 
         // 같은 eventId 재수신(이번엔 EMBEDDED) → 멱등 무시, 상태는 그대로 FAILED.
         String dup = """
@@ -328,6 +336,59 @@ class LessonMaterialContractTest {
                 .andExpect(status().isNoContent());
         mockMvc.perform(get("/api/instructor/lessons/" + lessonId).cookie(auth))
                 .andExpect(jsonPath("$.materials[0].embeddingStatus").value("FAILED"));
+    }
+
+    @Test
+    void ai_v2_callback_updates_embedding_and_key_term_status_independently() throws Exception {
+        Cookie[] auth = loginAs("INSTRUCTOR");
+        String lessonId = createLesson(auth);
+        String assetId = uploadedMaterialAsset(auth);
+        String materialId = json(write(post("/api/instructor/lessons/" + lessonId + "/materials"), auth, """
+                {"assetId":"%s"}
+                """.formatted(assetId)).andExpect(status().isCreated()).andReturn()).get("materialId").asString();
+        lessonMaterialManagement.updateEmbeddingStatus(UUID.fromString(materialId), "PENDING");
+        lessonMaterialManagement.updateKeyTermStatus(UUID.fromString(materialId), "PENDING");
+
+        // 임베딩은 정상이어도 GMS/용어 저장은 실패할 수 있다(ADR-0010 두 상태축).
+        String body = """
+                {
+                  "eventId":"%s",
+                  "eventType":"MATERIAL_EMBEDDED",
+                  "jobId":"PPTX_EMBED:%s",
+                  "materialId":"%s",
+                  "lessonId":"%s",
+                  "status":"READY",
+                  "outputs":{
+                    "materialVersionId":41,
+                    "chunkCount":12,
+                    "keyTermResult":{
+                      "status":"FAILED",
+                      "count":0,
+                      "truncated":false,
+                      "failureCode":"KEY_TERM_EXTRACTION_FAILED"
+                    }
+                  }
+                }
+                """.formatted(UUID.randomUUID(), materialId, materialId, lessonId);
+        mockMvc.perform(post("/api/internal/ai/callbacks")
+                        .contentType(MediaType.APPLICATION_JSON).content(body).header("X-Signature", signCallback(body)))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/instructor/lessons/" + lessonId).cookie(auth))
+                .andExpect(jsonPath("$.materials[0].embeddingStatus").value("READY"))
+                .andExpect(jsonPath("$.materials[0].keyTermStatus").value("FAILED"));
+
+        // 다른 eventId의 지연 terminal 결과가 와도 먼저 확정된 용어 상태를 되돌리지 않는다.
+        String delayed = body
+                .replaceFirst("\"eventId\":\"[^\"]+\"", "\"eventId\":\"" + UUID.randomUUID() + "\"")
+                .replace("\"status\":\"FAILED\"", "\"status\":\"EMPTY\"")
+                .replace(",\n                      \"failureCode\":\"KEY_TERM_EXTRACTION_FAILED\"", "");
+        mockMvc.perform(post("/api/internal/ai/callbacks")
+                        .contentType(MediaType.APPLICATION_JSON).content(delayed)
+                        .header("X-Signature", signCallback(delayed)))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get("/api/instructor/lessons/" + lessonId).cookie(auth))
+                .andExpect(jsonPath("$.materials[0].keyTermStatus").value("FAILED"));
     }
 
     @Test

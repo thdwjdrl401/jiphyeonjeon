@@ -48,8 +48,12 @@ export default function CurriculumLessonNavigation({ curriculumId, activeLessonI
               {section.lessons.map((lesson) => {
                 const isCurrent = lesson.lessonId === activeLessonId
                 const lessonPath = role === 'INSTRUCTOR'
-                  ? instructorPaths.lesson(curriculum.curriculumId, section.sectionId, lesson.lessonId)
-                  : studentPaths.lesson(curriculum.curriculumId, section.sectionId, lesson.lessonId)
+                  ? lesson.deliveryType === 'RECORDED'
+                    ? instructorPaths.recordedLesson(curriculum.curriculumId, section.sectionId, lesson.lessonId)
+                    : instructorPaths.lesson(curriculum.curriculumId, section.sectionId, lesson.lessonId)
+                  : lesson.deliveryType === 'RECORDED'
+                    ? studentPaths.recorded(lesson.lessonId)
+                    : studentPaths.lesson(curriculum.curriculumId, section.sectionId, lesson.lessonId)
                 return (
                   <li key={lesson.lessonId}>
                     <Link

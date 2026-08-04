@@ -1,4 +1,10 @@
 import { getDemoCurriculumLessonNavigation, getDemoLesson } from '@/features/demo/demoData'
+import {
+  deleteMockRecordedLessonMaterial,
+  getMockRecordedLesson,
+  mockCurriculumManagementService,
+  updateMockRecordedLesson,
+} from '@/features/curriculum/mockCurriculumManagementService'
 import { findMockLesson } from '@/features/demo/mockDatabase'
 import {
   publishLessonCreated,
@@ -56,9 +62,40 @@ function publishLessonSaveNotifications(request: SaveLessonRequest, lessonId: st
 
 export const mockLessonService = {
   async getLesson(request) {
+    const recorded = getMockRecordedLesson(request.lessonId)
+    if (recorded) {
+      return {
+        ...recorded,
+        status: 'PUBLISHED' as const,
+        deliveryType: 'RECORDED' as const,
+        liveSession: null,
+        replayStatus: 'NOT_READY' as const,
+        learning: null,
+      }
+    }
     return getDemoLesson(request.lessonId, request.userId)
   },
-  async getCurriculumLessonNavigation(curriculumId) {
+  async getCurriculumLessonNavigation(curriculumId, role) {
+    if (role === 'INSTRUCTOR') {
+      const [curriculum, sections] = await Promise.all([
+        mockCurriculumManagementService.getInstructorCurriculum(curriculumId),
+        mockCurriculumManagementService.getCurriculumManagementStructure(curriculumId),
+      ])
+      return {
+        curriculumId,
+        title: curriculum.title,
+        sections: sections.map((section) => ({
+          sectionId: section.sectionId,
+          title: section.title,
+          lessons: section.lessons.map((lesson, index) => ({
+            lessonId: lesson.lessonId,
+            title: lesson.title,
+            order: index + 1,
+            deliveryType: lesson.deliveryType ?? 'LIVE',
+          })),
+        })),
+      }
+    }
     return getDemoCurriculumLessonNavigation(curriculumId)
   },
   async saveLesson(request) {
@@ -66,17 +103,31 @@ export const mockLessonService = {
       throw new Error('강의를 생성하려면 라이브 예정 시작 시각을 입력해야 합니다.')
     }
     const lessonId = request.lessonId ?? `lesson-mock-${Date.now()}`
-    publishLessonSaveNotifications(request, lessonId)
-    return {
+    const isRecordedLesson = request.lessonId
+      ? getMockRecordedLesson(request.lessonId) !== null
+      : false
+    if (!isRecordedLesson) {
+      publishLessonSaveNotifications(request, lessonId)
+    }
+    const result = {
       lessonId,
       sectionId: request.sectionId,
       title: request.title,
       description: request.description,
       status: 'PUBLISHED' as const,
     }
+    if (request.lessonId && isRecordedLesson) {
+      updateMockRecordedLesson(request.lessonId, {
+        title: request.title,
+        description: request.description,
+        materials: request.materials,
+      })
+    }
+    return result
   },
-  async deleteLessonMaterial() {
-    // mock: 서버 없음 — 호출자가 로컬 목록에서 제거한다.
+  async deleteLessonMaterial(lessonId, materialId) {
+    // 녹화강의 편집은 상세 화면과 같은 mock 원본을 읽으므로 삭제도 원본에 반영한다.
+    deleteMockRecordedLessonMaterial(lessonId, materialId)
   },
   async prepareLessonAi() {
     if (import.meta.env.MODE === 'test') return

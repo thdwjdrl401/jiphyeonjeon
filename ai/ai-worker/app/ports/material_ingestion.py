@@ -9,7 +9,7 @@ from app.domain import (
     MaterialScope,
     StagedMaterial,
 )
-from app.ingestion.models import KeyTerm
+from app.ingestion.models import KeyTerm, KeyTermExtractionResult
 
 
 class MaterialAssetStore(Protocol):
@@ -55,3 +55,7 @@ class IndexStorage(Protocol):
 
 class KeyTermStorage(Protocol):
     async def store(self, version_id: int, key_terms: Sequence[KeyTerm]) -> None: ...
+
+    async def store_result(self, version_id: int, result: KeyTermExtractionResult) -> None: ...
+
+    async def load_result(self, version_id: int) -> KeyTermExtractionResult | None: ...
