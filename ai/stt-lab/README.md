@@ -168,6 +168,70 @@ uv run --frozen stt-lab-replay \
 발화 시작과 동시에 audio를 전송하는 end-to-end streaming 지연을 증명하지 않는다. 외부 vLLM이
 GPU를 소유하므로 replay report의 CUDA peak는 0이며 서버 process VRAM은 `nvidia-smi`로 별도 기록한다.
 
+## Qwen3-ASR 학습
+
+Qwen 학습은 고정 dev benchmark를 학습 중 보지 않는다. 기존 `train.jsonl`만
+화자-강의 연결 컴포넌트 단위로 다시 나눠 SFT train/internal-eval을 만들고, dev·고정 502
+benchmark·test·golden과 clip ID, 경로, 화자, 강의, 실제 WAV SHA-256 교집합이 모두 0인지
+검증한다. 원본 utterance WAV를 운영 VAD로 다시 자르지 않는다.
+
+```bash
+uv run --frozen stt-lab-qwen-training \
+  --source-manifest /home/liveclass/ai/datasets/aihub-korean-lecture/v1/manifests/train.jsonl \
+  --protected-manifest /home/liveclass/ai/datasets/aihub-korean-lecture/v1/manifests/dev.jsonl \
+  --protected-manifest /home/liveclass/ai/datasets/aihub-korean-lecture/v1/manifests/dev-benchmark-502.jsonl \
+  --protected-manifest /home/liveclass/ai/datasets/aihub-korean-lecture/v1/manifests/test.jsonl \
+  --protected-manifest /home/liveclass/ai/datasets/aihub-korean-lecture/v1/manifests/golden.jsonl \
+  --output-dir /home/liveclass/ai/training-data/qwen3-asr-1.7b-v1-seed37 \
+  --eval-ratio 0.10 \
+  --seed 37 \
+  --verify-audio-content
+```
+
+export된 `text`는 `language Korean<asr_text>{철자 전사}`이고 EOS 문자를 직접 넣지 않는다.
+공식 Qwen collator가 target 뒤에 tokenizer EOS를 붙이고 prefix·padding만 loss에서 가리므로
+EOS는 supervised label에 포함된다.
+
+학습 환경은 serving venv와 분리해 sudo 없이 설치한다. 실행 script는 물리 GPU 0만 허용한다.
+
+```bash
+./scripts/bootstrap_qwen_training.sh
+
+./scripts/run_qwen3_asr_sft.sh \
+  --model-path /home/liveclass/ai/models/qwen3-asr-1.7b \
+  --train-file /home/liveclass/ai/training-data/qwen3-asr-1.7b-v1-seed37/train.jsonl \
+  --eval-file /home/liveclass/ai/training-data/qwen3-asr-1.7b-v1-seed37/eval.jsonl \
+  --output-dir /home/liveclass/ai/checkpoints/qwen3-asr-1.7b-full-seed37 \
+  --batch-size 1 \
+  --grad-acc 16 \
+  --epochs 1
+```
+
+중단된 실행은 같은 인자에 `--resume-latest`를 추가한다. 첫 GPU 검증은 전체 학습으로
+오인하지 않도록 sample과 step을 모두 제한한다.
+
+```bash
+./scripts/run_qwen3_asr_sft.sh \
+  --model-path /home/liveclass/ai/models/qwen3-asr-1.7b \
+  --train-file /home/liveclass/ai/training-data/qwen3-asr-1.7b-v1-seed37/train.jsonl \
+  --eval-file /home/liveclass/ai/training-data/qwen3-asr-1.7b-v1-seed37/eval.jsonl \
+  --output-dir /home/liveclass/ai/checkpoints/qwen3-asr-1.7b-smoke-seed37 \
+  --batch-size 1 \
+  --grad-acc 1 \
+  --max-steps 1 \
+  --max-train-samples 2 \
+  --max-eval-samples 1 \
+  --save-steps 1 \
+  --num-workers 0
+```
+
+Qwen 공식 streaming은 한 utterance의 누적 audio를 매 chunk마다 다시 decode하고 불안정한
+마지막 token을 rollback하는 방식이다. 따라서 긴 강의 전체를 한 session으로 유지하지 않고
+VAD silence에서 flush/reset한다. 반대로 8초 caption 경계만으로 provider session을 초기화하면
+짧은 tail이 문맥 없이 남으므로, 운영 adapter에서는 caption publish 경계와 Qwen utterance
+경계를 분리해야 한다.
+
+
 
 ## 학습 사전검증
 
