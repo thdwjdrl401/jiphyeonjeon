@@ -37,6 +37,10 @@ class WebPushHttpClientTest {
     private volatile String lastBody;
     private volatile int responseStatus = 201;
     private volatile String retryAfter;
+    private volatile long responseDelayMs = 0;
+    /** 클라이언트 포트별로 동시에 물고 있던 최대 요청 수 — 연결당 쏠림이 여기서 보인다. */
+    private final java.util.Map<String, AtomicInteger> peakPerPort = new ConcurrentHashMap<>();
+    private final java.util.Map<String, AtomicInteger> nowPerPort = new ConcurrentHashMap<>();
 
     @BeforeEach
     void startServer() throws Exception {
@@ -44,7 +48,19 @@ class WebPushHttpClientTest {
         server.createContext("/push", exchange -> {
             requests.incrementAndGet();
             // 연결 재사용 여부는 클라이언트 쪽 포트로 본다 — 재사용하면 같은 포트가 다시 온다.
-            remotePorts.add(String.valueOf(exchange.getRemoteAddress().getPort()));
+            String port = String.valueOf(exchange.getRemoteAddress().getPort());
+            remotePorts.add(port);
+            int now = nowPerPort.computeIfAbsent(port, k -> new AtomicInteger()).incrementAndGet();
+            peakPerPort.computeIfAbsent(port, k -> new AtomicInteger())
+                    .accumulateAndGet(now, Math::max);
+            if (responseDelayMs > 0) {
+                try {
+                    Thread.sleep(responseDelayMs);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+            nowPerPort.get(port).decrementAndGet();
             lastAuthorization = exchange.getRequestHeaders().getFirst("Authorization");
             lastBody = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
             if (retryAfter != null) {
@@ -53,7 +69,7 @@ class WebPushHttpClientTest {
             exchange.sendResponseHeaders(responseStatus, -1);
             exchange.close();
         });
-        server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(8));
+        server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
         server.start();
     }
 
@@ -141,35 +157,71 @@ class WebPushHttpClientTest {
     }
 
     /**
-     * <b>연결을 여러 개 연다.</b> JDK 클라이언트 하나는 오리진당 연결을 하나만 유지하고, 연결 하나에
-     * 열 수 있는 동시 스트림은 서버가 정한다(FCM·Mozilla 실측 100). 그 위로 가려면 클라이언트를
-     * 더 만드는 수밖에 없다.
-     *
-     * <p>연결 수는 서버 쪽 포트로 센다 — 클라이언트가 넷이면 포트도 넷이어야 한다.
+     * <b>한가할 때는 연결을 늘리지 않는다.</b> 앞 요청이 끝난 뒤 보내면 물고 있는 것이 없으므로
+     * 늘 같은 연결이 뽑힌다 — 연결을 더 여는 것은 <b>동시에 보낼 때만</b> 의미가 있다.
      */
     @Test
-    void it_opens_one_connection_per_pooled_client() throws Exception {
+    void it_reuses_one_connection_when_requests_do_not_overlap() throws Exception {
         var pooled = new WebPushHttpClient(Duration.ofSeconds(2), Duration.ofSeconds(5), 4);
 
-        // 풀 크기의 배수만큼 보내면 모든 클라이언트가 한 번씩 쓰인다.
         for (int i = 0; i < 8; i++) {
             pooled.send(prepared("본문" + i)).get();
         }
 
+        assertThat(pooled.inFlightPerConnection())
+                .as("끝난 뒤에는 어느 연결도 물고 있는 것이 없어야 한다")
+                .allSatisfy(count -> assertThat(count).isZero());
         assertThat(remotePorts)
-                .as("클라이언트 하나당 연결 하나 — 풀이 안 돌면 포트가 하나뿐이다")
-                .hasSize(4);
+                .as("겹치지 않으면 연결 하나로 충분하다")
+                .hasSize(1);
     }
 
-    /** 연결 수는 짐작이 아니라 계산이다. 올림이 아니면 상한이 조용히 깎인다. */
+    /**
+     * 연결 수는 짐작이 아니라 계산이고, <b>광고값을 다 쓰지 않는다</b>.
+     *
+     * <p>JDK는 연결의 스트림 상한을 넘으면 줄을 세우지 않고 {@code IOException("too many
+     * concurrent streams")}를 던진다. 그래서 100%로 계산하면 순간적인 쏠림이나 서버의 상한 하향에
+     * 바로 터지고, 그 실패가 재시도를 불러 부하를 더 만든다 — 10만 건 부하에서 실제로 그랬다.
+     */
     @Test
-    void it_derives_the_connection_count_from_the_in_flight_limit() {
-        assertThat(WebPushHttpClient.connectionsFor(200, 100)).isEqualTo(2);
-        assertThat(WebPushHttpClient.connectionsFor(100, 100)).isEqualTo(1);
-        assertThat(WebPushHttpClient.connectionsFor(101, 100))
-                .as("101이면 두 번째 연결이 필요하다 — 내림하면 그 1건이 영영 못 나간다")
+    void it_leaves_headroom_below_the_advertised_stream_limit() {
+        assertThat(WebPushHttpClient.connectionsFor(200, 100))
+                .as("광고값 100을 다 쓰면 2개지만, 여유를 남기면 3개다")
+                .isEqualTo(3);
+        assertThat(WebPushHttpClient.connectionsFor(80, 100)).isEqualTo(1);
+        assertThat(WebPushHttpClient.connectionsFor(81, 100))
+                .as("한 연결이 감당할 몫을 넘으면 다음 연결이 필요하다")
                 .isEqualTo(2);
         assertThat(WebPushHttpClient.connectionsFor(1, 100)).isEqualTo(1);
+    }
+
+    /**
+     * <b>가장 한가한 연결을 고른다.</b> 순번으로 돌리면 배정만 고르고 물고 있는 수는 안 고르다 —
+     * 완료 시점이 제각각이라 한쪽에 쌓이고, 그 연결이 스트림 상한을 넘으면 통째로 실패한다.
+     *
+     * <p>느린 응답으로 요청을 붙잡아 두고 보면, 연결마다 물고 있는 수가 고르게 퍼져야 한다.
+     */
+    @Test
+    void it_spreads_in_flight_requests_evenly_across_connections() throws Exception {
+        int connections = 4;
+        int requests = 40;
+        responseDelayMs = 300;
+        var pooled = new WebPushHttpClient(Duration.ofSeconds(2), Duration.ofSeconds(10), connections);
+
+        List<CompletableFuture<WebPushHttpClient.Response>> futures =
+                java.util.stream.IntStream.range(0, requests)
+                        .mapToObj(i -> pooled.send(prepared("본문" + i)))
+                        .toList();
+
+        // 전부 서버에 붙잡혀 있는 동안 들여다본다 — 끝난 뒤에는 전부 0이라 볼 것이 없다.
+        Thread.sleep(150);
+        List<Integer> inFlight = pooled.inFlightPerConnection();
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).get();
+
+        assertThat(inFlight)
+                .as("연결마다 몫이 고르지 않으면 몰린 쪽이 자기 스트림 상한을 넘어 통째로 실패한다")
+                .allSatisfy(count -> assertThat(count).isBetween(
+                        requests / connections - 2, requests / connections + 2));
     }
 
     @Test
