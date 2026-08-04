@@ -1,4 +1,5 @@
 -- ADR-0011: 업로드 녹화강의의 batch STT 상태와 draft 자막을 core가 소유한다.
+-- V31의 core.recorded_video를 전제로 한다.
 
 CREATE TABLE core.recorded_stt_job (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

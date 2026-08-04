@@ -1,9 +1,14 @@
 -- ADR-0008: 업로드 녹화강의(MP4 -> HLS)를 기존 라이브 스키마와 분리해 추가한다.
+-- 최신 master가 V30을 사용하므로 녹화강의 마이그레이션은 V31부터 시작한다.
+-- 일부 dev DB에는 번호 충돌 전의 동일 DDL이 과거 V23으로 적용되어 있다. IF NOT EXISTS와
+-- trigger 재생성은 그 스키마를 보존한 채 현재 Flyway 이력으로 승계하기 위한 호환 경로다.
 -- 모든 기존 lesson은 LIVE로 유지되며 video_asset/live_session의 기존 컬럼과 상태는 바꾸지 않는다.
 
 ALTER TABLE core.lesson
-  ADD COLUMN delivery_type varchar(20) NOT NULL DEFAULT 'LIVE';
+  ADD COLUMN IF NOT EXISTS delivery_type varchar(20) NOT NULL DEFAULT 'LIVE';
 
+ALTER TABLE core.lesson
+  DROP CONSTRAINT IF EXISTS lesson_delivery_type_check;
 ALTER TABLE core.lesson
   ADD CONSTRAINT lesson_delivery_type_check
   CHECK (delivery_type IN ('LIVE', 'RECORDED'));
@@ -11,7 +16,7 @@ ALTER TABLE core.lesson
 COMMENT ON COLUMN core.lesson.delivery_type IS
   '강의 전달 방식. LIVE=실시간 강의, RECORDED=MP4 업로드 녹화강의. 생성 후 변경 불가.';
 
-ALTER TABLE core.asset DROP CONSTRAINT asset_kind_check;
+ALTER TABLE core.asset DROP CONSTRAINT IF EXISTS asset_kind_check;
 ALTER TABLE core.asset
   ADD CONSTRAINT asset_kind_check
   CHECK (kind IN ('PROFILE_IMAGE', 'THUMBNAIL', 'MATERIAL', 'RECORDED_VIDEO_SOURCE', 'ANNOTATION_SNAPSHOT'));
@@ -19,7 +24,7 @@ ALTER TABLE core.asset
 COMMENT ON COLUMN core.asset.kind IS
   '파일 용도. PROFILE_IMAGE/THUMBNAIL/MATERIAL/RECORDED_VIDEO_SOURCE/ANNOTATION_SNAPSHOT.';
 
-CREATE TABLE core.recorded_video (
+CREATE TABLE IF NOT EXISTS core.recorded_video (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   lesson_id uuid NOT NULL UNIQUE REFERENCES core.lesson(id) ON DELETE CASCADE,
   client_request_id uuid NOT NULL UNIQUE,
@@ -47,7 +52,7 @@ CREATE TABLE core.recorded_video (
   UNIQUE (output_bucket, hls_manifest_key)
 );
 
-CREATE TABLE core.media_transcode_job (
+CREATE TABLE IF NOT EXISTS core.media_transcode_job (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   recorded_video_id uuid NOT NULL REFERENCES core.recorded_video(id) ON DELETE CASCADE,
   attempt_no integer NOT NULL CHECK (attempt_no > 0),
@@ -65,11 +70,11 @@ CREATE TABLE core.media_transcode_job (
   UNIQUE (recorded_video_id, attempt_no)
 );
 
-CREATE UNIQUE INDEX uq_media_transcode_active_job
+CREATE UNIQUE INDEX IF NOT EXISTS uq_media_transcode_active_job
   ON core.media_transcode_job (recorded_video_id)
   WHERE status IN ('PENDING', 'DISPATCHED', 'RUNNING');
 
-CREATE INDEX ix_media_transcode_dispatch
+CREATE INDEX IF NOT EXISTS ix_media_transcode_dispatch
   ON core.media_transcode_job (status, next_publish_at);
 
 COMMENT ON TABLE core.recorded_video IS
@@ -89,6 +94,7 @@ BEGIN
 END;
 $$;
 
+DROP TRIGGER IF EXISTS trg_lesson_delivery_type_immutable ON core.lesson;
 CREATE TRIGGER trg_lesson_delivery_type_immutable
 BEFORE UPDATE OF delivery_type ON core.lesson
 FOR EACH ROW EXECUTE FUNCTION core.reject_lesson_delivery_type_change();
@@ -108,6 +114,7 @@ BEGIN
 END;
 $$;
 
+DROP TRIGGER IF EXISTS trg_recorded_video_lesson_type ON core.recorded_video;
 CREATE TRIGGER trg_recorded_video_lesson_type
 BEFORE INSERT OR UPDATE OF lesson_id ON core.recorded_video
 FOR EACH ROW EXECUTE FUNCTION core.require_recorded_lesson_type();
@@ -126,6 +133,7 @@ BEGIN
 END;
 $$;
 
+DROP TRIGGER IF EXISTS trg_live_session_lesson_type ON core.live_session;
 CREATE TRIGGER trg_live_session_lesson_type
 BEFORE INSERT OR UPDATE OF lesson_id ON core.live_session
 FOR EACH ROW EXECUTE FUNCTION core.require_live_lesson_type();

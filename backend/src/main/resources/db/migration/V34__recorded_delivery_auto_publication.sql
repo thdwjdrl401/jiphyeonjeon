@@ -1,4 +1,5 @@
 -- ADR-0012: 업로드 녹화강의는 HLS와 batch STT가 모두 끝난 뒤 하나의 재생 패키지로 게시한다.
+-- V33의 녹화강의 STT·자막 테이블을 전제로 게시 상태를 추가한다.
 
 ALTER TABLE core.recorded_video
   ADD COLUMN publication_status varchar(20) NOT NULL DEFAULT 'DRAFT'

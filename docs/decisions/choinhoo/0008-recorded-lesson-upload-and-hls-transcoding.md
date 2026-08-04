@@ -785,6 +785,18 @@ X-Signature: <HMAC-SHA256 base64>
 송출·Egress·다시보기는 녹화강의 worker 장애와 무관하게 계속 동작해야 한다. 새 테이블·컬럼은 즉시
 DROP하지 않고 다음 배포까지 보존한다.
 
+### 최신 master 합류 시 마이그레이션 승계
+
+master의 판서 설명 재시도 마이그레이션이 `V30`을 먼저 사용하므로, 이미 공유 이력에 들어갈 수 있는
+master 파일의 번호는 바꾸지 않는다. 녹화강의 계열은 상대 순서를 유지해 `V31` 업로드 기반 → `V32`
+핵심용어 상태 → `V33` batch STT → `V34` 자동 게시로 이동한다.
+
+일부 dev DB에는 번호 충돌 전의 녹화강의 업로드 DDL이 과거 `V23`으로 적용되어 있다. 해당 DB의
+`recorded_video`·`media_transcode_job`과 기존 데이터를 삭제하지 않도록 `V31`은 같은 구조의 존재를
+허용하고 constraint·trigger를 현재 정의로 다시 맞춘다. 이는 임의의 부분 스키마를 묵인하는 범용
+idempotency가 아니라, 이미 확인된 과거 V23 스키마를 현재 선형 Flyway 이력으로 승계하는 한시적
+호환 경로다.
+
 ## 테스트 게이트
 
 ### DB·도메인
@@ -831,7 +843,7 @@ DROP하지 않고 다음 배포까지 보존한다.
 - `docs/CP-ROADMAP.md`: 녹화강의 upload/transcode 마일스톤 추가
 - 프론트 data-source HTTP 구현
 
-구현 위치는 Spring `lesson`·`asset`·`curriculum`·`video` 모듈, Flyway `V20`, React 녹화강의
+구현 위치는 Spring `lesson`·`asset`·`curriculum`·`video` 모듈, Flyway `V31`, React 녹화강의
 업로드 화면, `media-worker/`, 로컬·운영 Compose다. 실제 MinIO/RabbitMQ/FFmpeg를 모두 띄운 운영형
 E2E와 장애 복구 실측은 배포 환경 검증 항목으로 남는다.
 
