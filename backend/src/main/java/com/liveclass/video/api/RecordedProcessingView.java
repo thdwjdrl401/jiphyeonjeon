@@ -16,6 +16,8 @@ public record RecordedProcessingView(
         String captionFailureCode,
         Integer captionProcessedChunks,
         Integer captionTotalChunks,
-        OffsetDateTime captionReadyAt
+        OffsetDateTime captionReadyAt,
+        String recordedPublicationStatus,
+        OffsetDateTime publishedAt
 ) {
 }

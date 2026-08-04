@@ -34,6 +34,7 @@ public class MediaTranscodeInternalService {
     private final HlsManifestProcessor manifestProcessor;
     private final EgressProperties egressProperties;
     private final MediaCallbackInbox callbackInbox;
+    private final RecordedPublicationService publicationService;
 
     public MediaTranscodeInternalService(MediaTranscodeJobRepository jobRepository,
                                          RecordedVideoRepository recordedVideoRepository,
@@ -42,7 +43,8 @@ public class MediaTranscodeInternalService {
                                          RecordingStorage recordingStorage,
                                          HlsManifestProcessor manifestProcessor,
                                          EgressProperties egressProperties,
-                                         MediaCallbackInbox callbackInbox) {
+                                         MediaCallbackInbox callbackInbox,
+                                         RecordedPublicationService publicationService) {
         this.jobRepository = jobRepository;
         this.recordedVideoRepository = recordedVideoRepository;
         this.assetUploadManagement = assetUploadManagement;
@@ -51,6 +53,7 @@ public class MediaTranscodeInternalService {
         this.manifestProcessor = manifestProcessor;
         this.egressProperties = egressProperties;
         this.callbackInbox = callbackInbox;
+        this.publicationService = publicationService;
     }
 
     @Transactional(readOnly = true)
@@ -81,8 +84,9 @@ public class MediaTranscodeInternalService {
             return;
         }
 
+        // media/STT terminal callback 모두 recorded_video를 먼저 잠가 lock 순서를 통일한다.
+        RecordedVideo video = requireVideoForUpdate(event.recordedVideoId());
         MediaTranscodeJob job = requireJob(event.jobId());
-        RecordedVideo video = requireVideo(event.recordedVideoId());
         if (!job.getRecordedVideoId().equals(video.getId())) {
             throw new MediaTranscodeCallbackInvalidException("job과 recordedVideo가 일치하지 않습니다.");
         }
@@ -91,6 +95,9 @@ public class MediaTranscodeInternalService {
         if (job.getStatus() == MediaTranscodeJobStatus.SUCCEEDED
                 || job.getStatus() == MediaTranscodeJobStatus.FAILED) {
             callbackInbox.markProcessed(event.eventId());
+            if (job.getStatus() == MediaTranscodeJobStatus.SUCCEEDED) {
+                publicationService.tryAutoPublish(video.getId());
+            }
             return;
         }
 
@@ -101,6 +108,9 @@ public class MediaTranscodeInternalService {
             default -> throw new MediaTranscodeCallbackInvalidException("지원하지 않는 callback 상태입니다.");
         }
         callbackInbox.markProcessed(event.eventId());
+        if (job.getStatus() == MediaTranscodeJobStatus.SUCCEEDED) {
+            publicationService.tryAutoPublish(video.getId());
+        }
     }
 
     private void markRunning(MediaTranscodeJob job, RecordedVideo video) {
@@ -190,6 +200,11 @@ public class MediaTranscodeInternalService {
 
     private RecordedVideo requireVideo(UUID recordedVideoId) {
         return recordedVideoRepository.findById(recordedVideoId)
+                .orElseThrow(() -> new MediaTranscodeCallbackInvalidException("녹화강의 영상을 찾을 수 없습니다."));
+    }
+
+    private RecordedVideo requireVideoForUpdate(UUID recordedVideoId) {
+        return recordedVideoRepository.findByIdForUpdate(recordedVideoId)
                 .orElseThrow(() -> new MediaTranscodeCallbackInvalidException("녹화강의 영상을 찾을 수 없습니다."));
     }
 }

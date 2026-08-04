@@ -37,6 +37,9 @@ public class RecordedVideo {
     @Enumerated(EnumType.STRING)
     private RecordedVideoStatus status;
 
+    @Enumerated(EnumType.STRING)
+    private RecordedPublicationStatus publicationStatus;
+
     private String outputBucket;
 
     private String hlsManifestKey;
@@ -50,6 +53,8 @@ public class RecordedVideo {
     private String failureCode;
 
     private OffsetDateTime readyAt;
+
+    private OffsetDateTime publishedAt;
 
     @Version
     private long version;

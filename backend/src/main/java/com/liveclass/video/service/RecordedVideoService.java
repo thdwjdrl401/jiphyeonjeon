@@ -4,6 +4,7 @@ import com.liveclass.asset.api.AssetDirectory;
 import com.liveclass.asset.api.AssetRef;
 import com.liveclass.asset.api.AssetUploadException;
 import com.liveclass.asset.api.AssetUploadManagement;
+import com.liveclass.video.api.RecordedDeliveryView;
 import com.liveclass.video.api.RecordedLessonView;
 import com.liveclass.video.api.RecordedProcessingView;
 import com.liveclass.video.api.RecordedUploadTicket;
@@ -12,12 +13,14 @@ import com.liveclass.video.api.RecordedVideoDisabledException;
 import com.liveclass.video.api.RecordedVideoForbiddenException;
 import com.liveclass.video.api.RecordedVideoInvalidException;
 import com.liveclass.video.api.RecordedVideoManagement;
+import com.liveclass.video.api.RecordedVideoDirectory;
 import com.liveclass.video.api.RecordedVideoNotFoundException;
 import com.liveclass.video.domain.MediaTranscodeJob;
 import com.liveclass.video.domain.MediaTranscodeJobStatus;
 import com.liveclass.video.domain.RecordedCaptionPublicationStatus;
 import com.liveclass.video.domain.RecordedCaptionStatus;
 import com.liveclass.video.domain.RecordedCaptionTrack;
+import com.liveclass.video.domain.RecordedPublicationStatus;
 import com.liveclass.video.domain.RecordedSttJob;
 import com.liveclass.video.domain.RecordedSttJobStatus;
 import com.liveclass.video.domain.RecordedVideo;
@@ -31,6 +34,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -40,7 +44,7 @@ import java.util.UUID;
  * 검증하고, 이 서비스는 lessonId 이하의 미디어 불변식만 다룬다.
  */
 @Service
-public class RecordedVideoService implements RecordedVideoManagement {
+public class RecordedVideoService implements RecordedVideoManagement, RecordedVideoDirectory {
 
     private static final List<MediaTranscodeJobStatus> ACTIVE_JOB_STATUSES = List.of(
             MediaTranscodeJobStatus.PENDING,
@@ -92,6 +96,7 @@ public class RecordedVideoService implements RecordedVideoManagement {
         video.setLessonId(lessonId);
         video.setClientRequestId(clientRequestId);
         video.setStatus(RecordedVideoStatus.AWAITING_UPLOAD);
+        video.setPublicationStatus(RecordedPublicationStatus.DRAFT);
         return toLessonView(recordedVideoRepository.save(video));
     }
 
@@ -100,6 +105,7 @@ public class RecordedVideoService implements RecordedVideoManagement {
     public RecordedUploadTicket issueUpload(UUID lessonId, UUID uploaderId,
                                             String fileName, String contentType, long fileSize) {
         requireEnabled();
+        requireSttEnabled();
         RecordedVideo video = requireByLesson(lessonId);
         if (video.getStatus() != RecordedVideoStatus.AWAITING_UPLOAD) {
             throw new RecordedVideoConflictException(
@@ -129,6 +135,7 @@ public class RecordedVideoService implements RecordedVideoManagement {
     @Transactional
     public RecordedProcessingView completeUpload(UUID lessonId, UUID assetId, UUID requesterId) {
         requireEnabled();
+        requireSttEnabled();
         RecordedVideo video = requireByLesson(lessonId);
         if (!assetId.equals(video.getSourceAssetId())) {
             throw new RecordedVideoConflictException(
@@ -160,9 +167,7 @@ public class RecordedVideoService implements RecordedVideoManagement {
         video.setStatus(RecordedVideoStatus.QUEUED);
         video.setFailureCode(null);
         MediaTranscodeJob job = createJob(video, 1);
-        if (sttEnabled) {
-            createInitialSttJob(video);
-        }
+        createInitialSttJob(video);
         return toProcessing(video, job.getId());
     }
 
@@ -212,10 +217,10 @@ public class RecordedVideoService implements RecordedVideoManagement {
         RecordedCaptionTrack track = captionTrackRepository.findByRecordedVideoId(video.getId())
                 .orElseThrow(() -> new RecordedVideoConflictException(
                         "RECORDED_CAPTION_RETRY_CONFLICT", "다시 처리할 자막 트랙이 없습니다."));
-        if (track.getStatus() != RecordedCaptionStatus.FAILED
-                && track.getStatus() != RecordedCaptionStatus.EMPTY) {
+        if (video.getPublicationStatus() == RecordedPublicationStatus.PUBLISHED
+                || track.getStatus() != RecordedCaptionStatus.FAILED) {
             throw new RecordedVideoConflictException(
-                    "RECORDED_CAPTION_RETRY_CONFLICT", "실패했거나 비어 있는 자막만 다시 처리할 수 있습니다.");
+                    "RECORDED_CAPTION_RETRY_CONFLICT", "게시 전 실패한 자막만 다시 처리할 수 있습니다.");
         }
         AssetRef source = assetDirectory.find(video.getSourceAssetId()).orElseThrow(() ->
                 new RecordedVideoConflictException(
@@ -296,6 +301,30 @@ public class RecordedVideoService implements RecordedVideoManagement {
         }
     }
 
+    private void requireSttEnabled() {
+        if (!sttEnabled) {
+            throw new RecordedVideoDisabledException(
+                    "RECORDED_STT_REQUIRED", "녹화강의 자막 생성 기능을 사용할 수 없습니다.");
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<RecordedDeliveryView> findByLessons(Collection<UUID> lessonIds) {
+        if (lessonIds.isEmpty()) {
+            return List.of();
+        }
+        return recordedVideoRepository.findByLessonIdIn(lessonIds).stream()
+                .map(this::toDeliveryView)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<RecordedDeliveryView> findByLesson(UUID lessonId) {
+        return recordedVideoRepository.findByLessonId(lessonId).map(this::toDeliveryView);
+    }
+
     private RecordedLessonView toLessonView(RecordedVideo video) {
         return new RecordedLessonView(
                 video.getLessonId(), video.getId(), video.getClientRequestId(), video.getStatus().name());
@@ -311,6 +340,12 @@ public class RecordedVideoService implements RecordedVideoManagement {
                 track.map(RecordedCaptionTrack::getFailureCode).orElse(null),
                 sttJob.map(RecordedSttJob::getProcessedChunkCount).orElse(0),
                 sttJob.map(RecordedSttJob::getTotalChunkCount).orElse(null),
-                track.map(RecordedCaptionTrack::getReadyAt).orElse(null));
+                track.map(RecordedCaptionTrack::getReadyAt).orElse(null),
+                video.getPublicationStatus().name(), video.getPublishedAt());
+    }
+
+    private RecordedDeliveryView toDeliveryView(RecordedVideo video) {
+        return new RecordedDeliveryView(
+                video.getLessonId(), video.getPublicationStatus().name(), video.getDurationMs());
     }
 }

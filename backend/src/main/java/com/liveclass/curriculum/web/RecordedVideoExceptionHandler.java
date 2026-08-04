@@ -38,7 +38,7 @@ public class RecordedVideoExceptionHandler {
     @ExceptionHandler(RecordedVideoDisabledException.class)
     public ResponseEntity<ErrorResponse> handleDisabled(RecordedVideoDisabledException e) {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                .body(ErrorResponse.of("RECORDED_VIDEO_DISABLED", e.getMessage()));
+                .body(ErrorResponse.of(e.code(), e.getMessage()));
     }
 
     @ExceptionHandler(RecordedVideoForbiddenException.class)

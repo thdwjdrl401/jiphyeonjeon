@@ -47,6 +47,7 @@ public class RecordedSttInternalService {
     private final RecordedCaptionSegmentRepository segmentRepository;
     private final AssetDirectory assetDirectory;
     private final RecordedSttCallbackInbox callbackInbox;
+    private final RecordedPublicationService publicationService;
 
     public RecordedSttInternalService(RecordedSttJobRepository jobRepository,
                                       RecordedVideoRepository videoRepository,
@@ -54,7 +55,8 @@ public class RecordedSttInternalService {
                                       RecordedSttChunkRepository chunkRepository,
                                       RecordedCaptionSegmentRepository segmentRepository,
                                       AssetDirectory assetDirectory,
-                                      RecordedSttCallbackInbox callbackInbox) {
+                                      RecordedSttCallbackInbox callbackInbox,
+                                      RecordedPublicationService publicationService) {
         this.jobRepository = jobRepository;
         this.videoRepository = videoRepository;
         this.trackRepository = trackRepository;
@@ -62,6 +64,7 @@ public class RecordedSttInternalService {
         this.segmentRepository = segmentRepository;
         this.assetDirectory = assetDirectory;
         this.callbackInbox = callbackInbox;
+        this.publicationService = publicationService;
     }
 
     @Transactional(readOnly = true)
@@ -163,13 +166,17 @@ public class RecordedSttInternalService {
                 event.jobId().toString(), rawJson)) {
             return;
         }
+        // media/STT terminal callback 모두 recorded_video를 먼저 잠가 교차 완료의 deadlock을 피한다.
+        RecordedVideo video = requireVideoForUpdate(event.recordedVideoId());
         RecordedSttJob job = requireJob(event.jobId());
-        RecordedVideo video = requireVideo(event.recordedVideoId());
         if (!job.getRecordedVideoId().equals(video.getId())) {
             throw invalid("RECORDED_STT_CALLBACK_INVALID", "job과 recordedVideo가 일치하지 않습니다.");
         }
         if (isTerminal(job.getStatus())) {
             callbackInbox.markProcessed(event.eventId());
+            if (job.getStatus() == RecordedSttJobStatus.SUCCEEDED) {
+                publicationService.tryAutoPublish(video.getId());
+            }
             return;
         }
         RecordedCaptionTrack track = requireTrack(video.getId());
@@ -179,6 +186,9 @@ public class RecordedSttInternalService {
             default -> throw invalid("RECORDED_STT_CALLBACK_INVALID", "지원하지 않는 terminal 상태입니다.");
         }
         callbackInbox.markProcessed(event.eventId());
+        if (job.getStatus() == RecordedSttJobStatus.SUCCEEDED) {
+            publicationService.tryAutoPublish(video.getId());
+        }
     }
 
     private void markSucceeded(RecordedSttJob job, RecordedCaptionTrack track,
@@ -296,6 +306,11 @@ public class RecordedSttInternalService {
 
     private RecordedVideo requireVideo(UUID videoId) {
         return videoRepository.findById(videoId).orElseThrow(() ->
+                invalid("RECORDED_STT_VIDEO_NOT_FOUND", "녹화강의 영상을 찾을 수 없습니다."));
+    }
+
+    private RecordedVideo requireVideoForUpdate(UUID videoId) {
+        return videoRepository.findByIdForUpdate(videoId).orElseThrow(() ->
                 invalid("RECORDED_STT_VIDEO_NOT_FOUND", "녹화강의 영상을 찾을 수 없습니다."));
     }
 

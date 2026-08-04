@@ -46,7 +46,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /** ADR-0008의 새 URL·camelCase·201/202·소유권·job commit 경계를 고정한다. */
-@SpringBootTest
+@SpringBootTest(properties = "recorded.stt.enabled=true")
 @AutoConfigureMockMvc
 @Transactional
 class RecordedLessonUploadContractTest {
@@ -335,13 +335,17 @@ class RecordedLessonUploadContractTest {
                 .isEqualTo(MediaTranscodeJobStatus.SUCCEEDED);
 
         mockMvc.perform(get("/api/lessons/" + lessonId + "/recorded-playback").cookie(instructor))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.recordedVideoId").value(recordedVideoId.toString()))
-                .andExpect(jsonPath("$.durationMs").value(6000));
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("RECORDED_VIDEO_NOT_PUBLISHED"));
         mockMvc.perform(get("/api/lessons/" + lessonId + "/recorded-playback/manifest").cookie(instructor))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("RECORDED_VIDEO_NOT_PUBLISHED"));
+        mockMvc.perform(get("/api/instructor/recorded-lessons/" + lessonId + "/processing").cookie(instructor))
                 .andExpect(status().isOk())
-                .andExpect(result -> assertThat(result.getResponse().getContentAsString())
-                        .contains("https://storage.example/segment.ts"));
+                .andExpect(jsonPath("$.status").value("READY"))
+                .andExpect(jsonPath("$.captionStatus").value("PENDING"))
+                .andExpect(jsonPath("$.recordedPublicationStatus").value("DRAFT"))
+                .andExpect(jsonPath("$.publishedAt").doesNotExist());
     }
 
     private String createSection(Cookie[] auth) throws Exception {

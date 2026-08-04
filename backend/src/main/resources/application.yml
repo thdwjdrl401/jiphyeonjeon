@@ -179,6 +179,10 @@ recorded:
     dispatch:
       fixed-delay-ms: ${RECORDED_STT_DISPATCH_DELAY_MS:3000}
       initial-delay-ms: ${RECORDED_STT_DISPATCH_INITIAL_DELAY_MS:15000}
+  publication:
+    # 두 callback 커밋 경계에서 게시 평가가 누락된 READY+READY|EMPTY+DRAFT 조합의 복구 주기.
+    reconcile-delay-ms: ${RECORDED_PUBLICATION_RECONCILE_DELAY_MS:60000}
+    reconcile-initial-delay-ms: ${RECORDED_PUBLICATION_RECONCILE_INITIAL_DELAY_MS:60000}
 
 asset:
   storage:
