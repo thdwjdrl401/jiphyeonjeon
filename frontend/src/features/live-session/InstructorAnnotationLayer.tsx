@@ -15,6 +15,12 @@ import {
 } from './annotation'
 import AnnotationActionRing, { type AnnotationAction } from './AnnotationActionRing'
 import {
+  HIGHLIGHT_CUSTOM_DATA_KEY,
+  HIGHLIGHT_OPACITY,
+  HIGHLIGHT_STROKE_COLOR,
+  isHighlightElement,
+} from './annotationHighlight'
+import {
   interpretAnnotation,
   latexFontSize,
   placeAtSelection,
@@ -30,6 +36,12 @@ import { mathFileEntry, renderMathSvg } from './mathRuntime'
  * 먹색(#1e1e1e)은 후자에서 사실상 보이지 않는다. 빨강은 둘 다에서 읽힌다.
  */
 const DEFAULT_STROKE_COLOR = '#e03131'
+
+/**
+ * 강조 획을 그린 뒤 캡처까지 기다리는 시간(ADR-0074). 강사가 동그라미와 밑줄을 잇달아 그어도
+ * 한 건으로 묶이도록, 그리기가 <b>멎은 뒤</b>를 기준으로 한다.
+ */
+const HIGHLIGHT_SETTLE_MS = 1000
 
 /**
  * 우리가 쓰는 Excalidraw 명령형 API만 좁게 선언한다. 패키지의 내부 타입 경로는 버전마다 움직이는데,
@@ -61,6 +73,15 @@ interface ExcalidrawApi {
 interface InstructorAnnotationLayerProps {
   /** 판서 해석 요청에 쓴다(§3-6e). 브라우저가 모델 게이트웨이를 직접 부르지 않는다. */
   sessionId: string
+  /**
+   * 강조 획을 다 그린 뒤(1초) 부른다(ADR-0074). 인자는 그 시점의 판서 전체다.
+   *
+   * <p><b>여기서 캡처하지 않는다.</b> 합성에는 영상 프레임이 필요한데 그것은 이 레이어가 아니라
+   * 스테이지가 갖고 있다. 이 레이어는 "언제 무엇이 강조됐는지"만 알린다.
+   *
+   * <p>주지 않으면 강조 툴 자체가 뜨지 않는다 — 캡처할 곳이 없는데 버튼만 있으면 안 된다.
+   */
+  onHighlightSettled?: (elements: readonly AnnotationElement[]) => void
   /** 판서를 켜 둔 동안만 mount한다. 껐을 때 무거운 에디터를 붙여 둘 이유가 없다. */
   active: boolean
   /** 판서 변경을 데이터 채널로 내보낸다. */
@@ -159,6 +180,7 @@ const INTERPRET_IMAGE_MAX_EDGE = 2000
 export default function InstructorAnnotationLayer({
   sessionId,
   active,
+  onHighlightSettled,
   onPublish,
   onPublishState,
   onWhiteboardPresence,
@@ -304,6 +326,124 @@ export default function InstructorAnnotationLayer({
    */
   const [hasElements, setHasElements] = useState(false)
 
+  /**
+   * 강조 툴이 켜져 있는지(ADR-0074). Excalidraw의 활성 툴을 그대로 읽지 않고 우리가 들고 있는다 —
+   * 강사가 지우개나 선택으로 잠시 바꿔도 "강조 모드였다"는 의도는 유지돼야 하기 때문이다.
+   */
+  const [highlightMode, setHighlightMode] = useState(false)
+
+  /** 콜백 안에서 읽기 위한 사본. state로 읽으면 handleChange가 모드마다 다시 만들어진다. */
+  const highlightModeRef = useRef(false)
+
+  /**
+   * 이미 표식을 붙인 요소 id. <b>무한 루프를 막는 유일한 장치다.</b>
+   *
+   * <p>표식을 붙이려면 {@code updateScene}을 불러야 하고, 그러면 Excalidraw가 다시 {@code onChange}를
+   * 부른다. 그때 같은 요소를 또 건드리면 그 자리에서 앱이 죽는다 — 이 파일에 이미 같은 사고가
+   * 기록돼 있다("Maximum update depth exceeded"). 그래서 <b>updateScene을 부르기 전에</b> 여기 넣는다.
+   */
+  const taggedRef = useRef<Set<string>>(new Set())
+
+  /**
+   * 콜백을 ref로도 들고 있는다. 디바운스 타이머가 도는 동안 부모가 새 함수를 넘겨도 옛 참조를
+   * 부르지 않기 위해서다 — 그리고 이 값이 바뀔 때마다 감지 함수를 다시 만들지 않아도 된다.
+   */
+  const onHighlightSettledRef = useRef(onHighlightSettled)
+  onHighlightSettledRef.current = onHighlightSettled
+
+  /** 지금까지 본 강조 요소 id. 새 획이 늘었는지 판단하는 근거다. */
+  const knownHighlightsRef = useRef<Set<string>>(new Set())
+  const highlightTimerRef = useRef<number | null>(null)
+
+  /**
+   * 강조 획이 늘었으면 <b>그리기가 멎은 뒤</b> 한 번만 알린다(ADR-0074).
+   *
+   * <p><b>왜 디바운스인가.</b> `onChange`는 포인터가 움직일 때마다 불린다. 획 하나를 긋는 동안
+   * 수십 번 불리는데, 매번 캡처하면 같은 강조로 이미지가 수십 장 쌓이고 비전 모델도 그만큼 불린다.
+   * 강사가 여러 획으로 하나를 표시하는 경우(동그라미 + 밑줄)도 한 건으로 묶여야 한다.
+   *
+   * <p>지운 것은 세지 않는다 — 지우개로 강조를 지우는 것은 취소이지 새 캡처가 아니다.
+   */
+  /**
+   * 강조 모드에서 새로 그린 요소에 표식을 붙인다(ADR-0074).
+   *
+   * <p><b>왜 필요한가.</b> Excalidraw에는 "새 요소에 customData를 기본으로 붙여라"는 API가 없다.
+   * 색과 투명도만 바꿔서는 강조 획이 일반 판서와 구별되지 않고, 그러면 캡처가 영영 발동하지 않는다.
+   *
+   * <p>붙인 뒤에는 이 요소가 <b>일반 판서와 같은 op 경로</b>로 나간다 — 표식까지 포함해 수강생·Egress·
+   * 복원에 그대로 전달되므로, 나중에 다시보기에서도 무엇이 강조였는지 알 수 있다.
+   *
+   * @returns 표식을 붙였는가. 붙였으면 이번 onChange의 나머지 처리는 건너뛴다(곧 다시 불린다).
+   */
+  const tagNewHighlights = useCallback((elements: readonly AnnotationElement[]): boolean => {
+    if (!highlightModeRef.current) return false
+    const api = apiRef.current
+    if (!api) return false
+
+    const targets = elements.filter((element) =>
+      element.id !== WHITEBOARD_ELEMENT_ID
+      && !taggedRef.current.has(element.id)
+      && !isHighlightElement(element))
+    if (targets.length === 0) return false
+
+    const ids = new Set(targets.map((element) => element.id))
+    // updateScene보다 <b>먼저</b> 기록한다. 뒤에 하면 재진입한 onChange가 같은 요소를 다시 잡는다.
+    for (const id of ids) taggedRef.current.add(id)
+
+    /*
+     * 되돌리기 스택에 올리지 않는다(captureUpdate 미지정 = 기본). 표식은 강사가 한 편집이 아니라
+     * 우리가 붙인 꼬리표라, 여기에 되돌리기 지점이 생기면 Ctrl+Z 한 번이 획을 지우는 대신
+     * 표식만 떼어낸다 — 강사에게는 아무 일도 안 일어난 것처럼 보인다.
+     */
+    api.updateScene({
+      elements: elements.map((element) => ids.has(element.id)
+        ? {
+          ...element,
+          customData: { ...(element.customData as object ?? {}), [HIGHLIGHT_CUSTOM_DATA_KEY]: true },
+        }
+        : element),
+    })
+    return true
+  }, [])
+
+  const detectHighlightSettled = useCallback((elements: readonly AnnotationElement[]) => {
+    const notify = onHighlightSettledRef.current
+    if (!notify) return
+    const present = new Set(elements.filter(isHighlightElement).map((element) => element.id))
+    const added = [...present].some((id) => !knownHighlightsRef.current.has(id))
+    knownHighlightsRef.current = present
+    if (!added) return
+
+    if (highlightTimerRef.current !== null) window.clearTimeout(highlightTimerRef.current)
+    highlightTimerRef.current = window.setTimeout(() => {
+      highlightTimerRef.current = null
+      // 타이머가 도는 사이 강사가 지웠을 수 있다. 그때 캡처하면 없는 강조를 근거로 남긴다.
+      const latest = elementsRef.current
+      if (latest.some(isHighlightElement)) notify(latest)
+    }, HIGHLIGHT_SETTLE_MS)
+  }, [])
+
+  const toggleHighlightTool = useCallback(() => {
+    const api = apiRef.current
+    if (!api) return
+    const next = !highlightMode
+    setHighlightMode(next)
+    highlightModeRef.current = next
+    api.updateScene({
+      appState: next
+        ? {
+          activeTool: { type: 'freedraw', locked: true, lastActiveTool: null, customType: null },
+          currentItemStrokeColor: HIGHLIGHT_STROKE_COLOR,
+          currentItemOpacity: HIGHLIGHT_OPACITY,
+        }
+        : {
+          activeTool: { type: 'freedraw', locked: true, lastActiveTool: null, customType: null },
+          currentItemStrokeColor: DEFAULT_STROKE_COLOR,
+          currentItemOpacity: 100,
+        },
+    })
+  }, [highlightMode])
+
   const handleChange = useCallback((
     elements: readonly AnnotationElement[],
     appState?: { selectedElementIds?: Record<string, boolean> },
@@ -317,6 +457,10 @@ export default function InstructorAnnotationLayer({
     elementsRef.current = elements.filter((element) => element.isDeleted !== true)
     if (files) filesRef.current = files
     setHasElements(elementsRef.current.some((element) => element.id !== WHITEBOARD_ELEMENT_ID))
+    if (tagNewHighlights(elementsRef.current)) return
+    // 표식을 붙였으면 곧 onChange가 다시 불린다. 표식 없는 중간 상태로 op를 내보내면 수강생 쪽
+    // 문서에는 강조 표식이 빠진 사본이 남는다.
+    detectHighlightSettled(elementsRef.current)
 
     /*
      * 문서에 판이 있는지 알린다. 버튼은 이 값을 따른다(ADR-0056).
@@ -371,7 +515,7 @@ export default function InstructorAnnotationLayer({
     // 같은 값이면 state를 건드리지 않는다 — onChange는 포인터가 움직일 때도 불린다.
     setSelectedIds((current) =>
       current.length === picked.length && current.every((id, i) => id === picked[i]) ? current : picked)
-  }, [applyFrameMapping, onPublish, onSaveSnapshot, onWhiteboardPresence])
+  }, [applyFrameMapping, detectHighlightSettled, onPublish, onSaveSnapshot, onWhiteboardPresence, tagNewHighlights])
 
   /**
    * 저장돼 있던 판서를 에디터에 되돌린다(ADR-0051). 새로고침해도 강사 화면이 수강생 화면과 같아야
@@ -984,6 +1128,25 @@ export default function InstructorAnnotationLayer({
       {!ringOpen && hasElements && (
         <button type="button" className="annotation-interpret-entry" onClick={startPicking}>
           <span aria-hidden="true">✨</span> AI로 정리
+        </button>
+      )}
+
+      {/*
+        강조 툴(ADR-0074). "AI로 정리"와 하는 일이 다르다 — 정리는 판서를 <b>바꾸고</b>, 강조는 그
+        순간의 화면을 <b>근거로 남긴다</b>. 그래서 진입점을 따로 둔다.
+
+        진짜 커스텀 툴 타입을 만들지 않는다. freedraw에 전용 색·투명도를 얹고 customData로 표식만
+        붙인다 — 그래야 이 획이 일반 판서와 <b>같은 op 경로</b>를 타서 수강생 화면·Egress 녹화·다시보기에
+        그대로 나가고, 지우개로도 지워진다. customType으로 새 툴을 만들면 그 경로를 전부 따로 배선해야 한다.
+      */}
+      {onHighlightSettled && (
+        <button
+          type="button"
+          className={`annotation-highlight-entry${highlightMode ? ' annotation-highlight-entry--on' : ''}`}
+          aria-pressed={highlightMode}
+          onClick={toggleHighlightTool}
+        >
+          <span aria-hidden="true">🖍</span> {highlightMode ? '강조 끄기' : '강조'}
         </button>
       )}
 

@@ -5,7 +5,7 @@ import { apiClient } from './client'
  * 서버가 현재 업로드를 허용하는 종류.
  * 강의 자료(MATERIAL)는 PPTX MIME만·50MiB 상한으로 강사에게 열렸다.
  */
-export type AssetKind = 'PROFILE_IMAGE' | 'THUMBNAIL' | 'MATERIAL'
+export type AssetKind = 'PROFILE_IMAGE' | 'THUMBNAIL' | 'MATERIAL' | 'ANNOTATION_SNAPSHOT'
 
 interface UploadTicket {
   assetId: string

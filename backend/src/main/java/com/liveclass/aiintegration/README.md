@@ -36,7 +36,7 @@ AI worker의 ACK/retry/DLQ·저장 경계는
 ## 다시보기 RAG 요구사항
 
 다시보기 영실이는 아직 구현되지 않았다. 필요한 공개/내부 endpoint와 시간·근거 데이터는
-[`ADR-0037`](../../../../../../../docs/decisions/canola/0037-replay-ai-caption-context-contract.md)에 정리돼
+[`ADR-0037`](../../../../../../../docs/decisions/canola/0042-replay-ai-caption-context-contract.md)에 정리돼
 있으며, 내부 구현 방법은 Spring·AI 오너가 합의해 결정한다.
 
 ## 검증

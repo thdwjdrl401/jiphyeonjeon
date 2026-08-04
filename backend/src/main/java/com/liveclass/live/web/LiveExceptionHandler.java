@@ -3,6 +3,7 @@ package com.liveclass.live.web;
 import com.liveclass.aiintegration.api.RagAnswerUpstreamException;
 import com.liveclass.common.web.ErrorResponse;
 import com.liveclass.common.web.ErrorResponses;
+import com.liveclass.live.service.AnnotationHighlightValidationException;
 import com.liveclass.live.service.AnnotationInterpretException;
 import com.liveclass.live.service.LiveRoomControlException;
 import com.liveclass.live.service.LiveSessionForbiddenException;
@@ -18,7 +19,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 /** live 도메인 실패 → CONTRACT §2 상태코드 매핑. */
 @Order(Ordered.LOWEST_PRECEDENCE - 100)
 @RestControllerAdvice(assignableTypes = {LiveSessionController.class, ChatController.class, CaptionController.class,
-        LiveAiAnswerController.class, AnnotationController.class, AnnotationInterpretController.class})
+        LiveAiAnswerController.class, AnnotationController.class, AnnotationInterpretController.class,
+        AnnotationHighlightController.class})
 public class LiveExceptionHandler {
 
     /**
@@ -34,6 +36,13 @@ public class LiveExceptionHandler {
     public ResponseEntity<ErrorResponse> handleInterpret(AnnotationInterpretException e) {
         return ErrorResponses.of(HttpStatus.BAD_GATEWAY,
                 ErrorResponse.of("ANNOTATION_INTERPRET_FAILED", e.getMessage()));
+    }
+
+    /** 스냅샷으로 붙일 수 없는 에셋(없음·남의 것·다른 종류·업로드 미완). 강사 입력 문제라 400이다. */
+    @ExceptionHandler(AnnotationHighlightValidationException.class)
+    public ResponseEntity<ErrorResponse> handleHighlightValidation(AnnotationHighlightValidationException e) {
+        return ErrorResponses.of(HttpStatus.BAD_REQUEST,
+                ErrorResponse.of("ANNOTATION_HIGHLIGHT_INVALID", e.getMessage()));
     }
 
     @ExceptionHandler(LiveSessionNotFoundException.class)

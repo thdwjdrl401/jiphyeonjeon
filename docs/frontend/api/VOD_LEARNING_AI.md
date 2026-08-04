@@ -43,7 +43,7 @@
 | `CHAT-REPLAY-01` | `GET` | `/api/live-sessions/{sessionId}/messages` | 저장 채팅 리플레이 | **구현됨(세션 키잉)**. 리플레이 페이지는 `lessonId` 기준이므로 lesson→session 해석 필요(설계 후속) |
 | `AI-HISTORY-01` | `GET` | `/api/lessons/{lessonId}/ai/questions` | 본인 AI Q&A 기록 | **제안** |
 | `AI-QUESTION-01` | `POST/SSE` | `/api/live-sessions/{sessionId}/ai/answers/stream` | 현재 시점 개인 AI 질문 | **라이브만 구현됨**([ADR-0047](../../decisions/songjeongki/0047-live-ai-answer-sse-proxy.md)) — VOD/다시보기는 미구현 |
-| `AI-QUESTION-REPLAY-01` | `POST/SSE` | `/api/lessons/{lessonId}/ai/answers/stream` | 재생 위치 주변 자막 기반 개인 AI 질문 | **요구사항 제안**([ADR-0037](../../decisions/canola/0037-replay-ai-caption-context-contract.md)) |
+| `AI-QUESTION-REPLAY-01` | `POST/SSE` | `/api/lessons/{lessonId}/ai/answers/stream` | 재생 위치 주변 자막 기반 개인 AI 질문 | **요구사항 제안**([ADR-0037](../../decisions/canola/0042-replay-ai-caption-context-contract.md)) |
 
 ### 2.3 퀴즈
 
@@ -350,7 +350,7 @@ GET /api/lessons/{lessonId}/ai/questions?page=0&size=20
 ### 8.2 새 질문
 
 > ⚠️ **아직 미구현이며 runtime 계약에는 반영되지 않았다.** 시간 앵커와 최종 요청안은
-> [ADR-0037](../../decisions/canola/0037-replay-ai-caption-context-contract.md)에 한 번에 정리한다. 구현 방법은
+> [ADR-0037](../../decisions/canola/0042-replay-ai-caption-context-contract.md)에 한 번에 정리한다. 구현 방법은
 > FE·Spring·AI 각 오너가 합의해 결정한다. FE의 `askReplayAi(...)`는 실제 계약이 구현될 때까지 501 스텁을
 > 유지한다.
 
