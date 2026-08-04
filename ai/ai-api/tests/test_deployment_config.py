@@ -86,3 +86,23 @@ def test_compose_host_ports_are_explicit_and_do_not_collide() -> None:
     assert "AI_WORKER_MANAGEMENT_HOST_PORT=8011" in prod_env
     assert "AI_API_HOST_PORT=18010" in dev_env
     assert "AI_WORKER_MANAGEMENT_HOST_PORT=18011" in dev_env
+
+
+def test_annotation_switches_reach_both_containers() -> None:
+    """A switch that exists only in the env example silently stays off: compose must map it
+    into the container's environment or setting it does nothing. That exact failure shipped
+    once — the switches were documented in .env.ai-prod.example but never wired here."""
+
+    prod = AI_PROD_COMPOSE.read_text(encoding="utf-8")
+    dev = AI_DEV_COMPOSE.read_text(encoding="utf-8")
+
+    for compose in (prod, dev):
+        assert (
+            "AI_WORKER_ANNOTATION_INGESTION_ENABLED: "
+            "${AI_WORKER_ANNOTATION_INGESTION_ENABLED:-false}"
+        ) in compose
+        assert (
+            "AI_API_ANNOTATION_EVIDENCE_ENABLED: ${AI_API_ANNOTATION_EVIDENCE_ENABLED:-false}"
+        ) in compose
+        assert "AI_API_ANNOTATION_TOP_K" in compose
+        assert "AI_API_ANNOTATION_WINDOW_SIZE" in compose

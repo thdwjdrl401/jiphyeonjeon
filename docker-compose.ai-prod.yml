@@ -78,6 +78,9 @@ services:
       # GMS_API_KEY는 .env.prod에 이미 있다(ai-api가 필수로 쓰는 값과 같다).
       AI_WORKER_KEY_TERM_EXTRACTION_ENABLED: ${AI_WORKER_KEY_TERM_EXTRACTION_ENABLED:-false}
       AI_WORKER_GMS_API_KEY: ${GMS_API_KEY:-}
+      # 강조 판서 색인(ADR-0074·ADR-0043). Spring이 보낸 텍스트를 임베딩·저장만 하므로 GMS 키가 필요 없다.
+      # env에만 넣고 이 매핑을 빼먹으면 컨테이너까지 전달되지 않아 조용히 꺼진 채 돈다 — 위 경고와 같은 함정.
+      AI_WORKER_ANNOTATION_INGESTION_ENABLED: ${AI_WORKER_ANNOTATION_INGESTION_ENABLED:-false}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8011/readyz', timeout=2)"]
       interval: 15s
@@ -142,6 +145,11 @@ services:
       AI_API_BGE_TOKEN: ${BGE_RUNTIME_INTERNAL_TOKEN:?BGE_RUNTIME_INTERNAL_TOKEN 필요 — GPU 쪽과 동일 값}
       AI_API_GMS_API_KEY: ${GMS_API_KEY:?GMS_API_KEY 필요}
       # 비워 두면 앱이 AI_API_GMS_MODEL로 폴백한다. 강의 노트는 gpt-5-nano가 기본이므로 명시한다.
+      # 강조 판서를 RAG 근거로 검색(ADR-0043). 꺼져 있으면 두 RAG 경로가 기능 이전과 완전히 동일하다.
+      # ai.annotation_highlight 테이블(alembic 0003)이 적용된 뒤에만 켠다 — 없으면 검색 에러가 전파돼 모든 답변이 죽는다.
+      AI_API_ANNOTATION_EVIDENCE_ENABLED: ${AI_API_ANNOTATION_EVIDENCE_ENABLED:-false}
+      AI_API_ANNOTATION_TOP_K: ${AI_API_ANNOTATION_TOP_K:-2}
+      AI_API_ANNOTATION_WINDOW_SIZE: ${AI_API_ANNOTATION_WINDOW_SIZE:-5}
       AI_API_LECTURE_NOTE_MODEL: ${AI_API_LECTURE_NOTE_MODEL:-gpt-5-nano}
       # reasoning 모델일 때만 적용된다. 비-reasoning 모델로 바꿔도 무시되므로 안전하다.
       AI_API_LECTURE_NOTE_REASONING_EFFORT: ${AI_API_LECTURE_NOTE_REASONING_EFFORT:-minimal}
