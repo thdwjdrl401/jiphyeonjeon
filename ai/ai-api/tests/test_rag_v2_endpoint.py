@@ -153,13 +153,21 @@ def test_v2_endpoint_streams_contract_events_with_excerpt_sources() -> None:
     assert response.headers["x-accel-buffering"] == "no"
     assert _events(response.text) == [
         ("answer.delta", {"requestId": "request-1", "text": "컨슈머 그룹은 "}),
-        ("answer.delta", {"requestId": "request-1", "text": "여러 소비자가 나눠 처리하는 단위입니다."}),
+        (
+            "answer.delta",
+            {"requestId": "request-1", "text": "여러 소비자가 나눠 처리하는 단위입니다."},
+        ),
         (
             "answer.done",
             {
                 "requestId": "request-1",
                 "sources": [
-                    {"type": "PPTX", "materialId": str(MATERIAL_ID), "page": 12, "excerpt": "PPTX 근거"},
+                    {
+                        "type": "PPTX",
+                        "materialId": str(MATERIAL_ID),
+                        "page": 12,
+                        "excerpt": "PPTX 근거",
+                    },
                     {
                         "type": "CAPTION",
                         "sessionId": SESSION_ID,
@@ -291,7 +299,13 @@ def test_v2_endpoint_accepts_real_hmac_signed_request() -> None:
 
 def test_v1_and_v2_endpoints_are_wired_independently() -> None:
     """Regression guard: v1 stays reachable and unaffected when only replay_rag_service is wired."""
-    from app.rag import PptxSource, RagAnswerRequest, RagAnswerService, RetrievedEvidence, RetrievalResult
+    from app.rag import (
+        PptxSource,
+        RagAnswerRequest,
+        RagAnswerService,
+        RetrievedEvidence,
+        RetrievalResult,
+    )
 
     class V1Retriever:
         async def retrieve(self, request: RagAnswerRequest) -> RetrievalResult:

@@ -1,4 +1,5 @@
 from app.ports.material_ingestion import (
+    AnnotationIndexStorage,
     IndexStorage,
     KeyTermExtractor,
     KeyTermStorage,
@@ -7,6 +8,7 @@ from app.ports.material_ingestion import (
 )
 
 __all__ = [
+    "AnnotationIndexStorage",
     "IndexStorage",
     "KeyTermExtractor",
     "KeyTermStorage",

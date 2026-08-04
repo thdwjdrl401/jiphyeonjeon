@@ -74,6 +74,35 @@ data: {"requestId":"request-1","text":"RAG는 "}
 {"type":"CAPTION","sessionId":"33333333-3333-4333-8333-333333333333","sttSessionId":"stt-attempt-2","startMs":55000,"endMs":59000}
 ```
 
+```json
+{"type":"ANNOTATION","highlightId":"eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee","sessionId":"33333333-3333-4333-8333-333333333333","sessionMs":725300,"excerpt":"B+ tree 노드 분할 조건"}
+```
+
+`ANNOTATION`은 강사 강조 판서 근거다([ADR-0043](../../docs/decisions/canola/0043-annotation-timeline-evidence-mvp.md)).
+`sessionMs`는 다시보기 타임라인 앵커이며 client가 그 시점으로 이동하는 데 쓴다. 스냅샷에는 page가 없으므로
+`PPTX`로 표현하지 않는다. 중복 제거 키는 `highlightId`다. v1에서 `excerpt`는 다른 v1 source와 같이 optional이다.
+
+annotation 근거는 `AI_API_ANNOTATION_EVIDENCE_ENABLED`(기본 `false`)일 때만 검색한다. 꺼져 있으면 두 RAG
+경로가 이 기능이 생기기 전과 완전히 동일하게 동작한다. 켜지면 자료 검색과 **병렬로** 두 종류를 읽는다.
+
+| 읽기 | 기준 | 기본값 |
+|---|---|---|
+| 의미 검색 | 자료와 같은 RRF hybrid, `curriculumId` 스코프 | `AI_API_ANNOTATION_TOP_K` = 2 |
+| recent window | 유사도 무관, 같은 `sessionId`의 최근 `sessionMs` 순 | `AI_API_ANNOTATION_WINDOW_SIZE` = 5 |
+
+window가 별도로 필요한 이유는 "아까 강조하신 게 뭐였지" 같은 시간 지시어가 임베딩 공간에 방향을 갖지
+않기 때문이다. 의미 검색만으로는 어떤 임계값을 써도 걸리지 않는다. 두 읽기 결과는 `highlightId`로 중복
+제거하며 window가 앞선다. 근거 순서는 자료 → 판서 → 자막이고, 판서만 있어도 `sufficient`다.
+
+시점 필터는 다시보기에만 적용한다. v2는 질문자 자신의 세션에서 `sessionMs <= questionSessionMs`인
+스냅샷만 쓰고 다른 세션은 전부 허용한다(이미 끝난 강의라 전체가 과거다). v1은 필터가 없다 — 색인된
+스냅샷은 정의상 질문 이전이고, `contextTimeMs`는 STT attempt-local이라 `sessionMs`와 비교할 수 없다.
+
+모델 프롬프트에는 annotation 근거마다 `highlightedAt`(`mm:ss`, 한 시간 초과 시 `h:mm:ss`)과 원본
+`sessionMs`가 들어간다. v2는 질문 시점을 `askedAt`으로 함께 주고 v1은 주지 않는다 — attempt-local
+시간을 세션 시각처럼 제시하면 모델이 서로 다른 타임라인을 비교하게 된다. `highlightId`는 프롬프트에
+넣지 않는다(출처는 서버가 붙인다). 이 필드들은 SSE wire 계약이 아니라 모델 입력이다.
+
 한 stream은 `answer.delta` 0개 이상 뒤 `answer.done|answer.insufficient|answer.error` 중 정확히 하나로 끝난다.
 client disconnect/cancellation 때는 terminal event 생성을 강제하지 않고 내부 iterator까지 취소를 전파한다.
 
@@ -197,8 +226,9 @@ v1 endpoint(`/internal/v1/rag/answers:stream`)는 이 절 때문에 요청·응�
 - caption evidence는 `captions[]`를 하나로 병합해 **CAPTION source 최대 1개**만 만든다(ADR-0037).
 - `answer.done.sources`는 v1과 달리 각 source에 원문 그대로의 plain-text `excerpt`(최대 300자)를 포함한다.
   CAPTION source는 `sttSessionId`를 포함하지 않는다(v1 `CaptionSource`와 다른 점).
-- source 중복 제거는 `(materialId,page)` / `(sessionId,startSessionMs,endSessionMs)` 키로만 판단하고
-  `excerpt` 차이는 dedup에 영향을 주지 않는다.
+- source 중복 제거는 `(materialId,page)` / `(sessionId,startSessionMs,endSessionMs)` / `highlightId` 키로만
+  판단하고 `excerpt` 차이는 dedup에 영향을 주지 않는다.
+- `ANNOTATION` source는 v1과 같은 필드를 쓰되 `excerpt`가 **필수**다(다른 v2 source와 동일).
 - SSE event 종류·상태코드·에러 코드 체계는 v1과 동일하다.
 
 ## 9. 후속 미확정 사항

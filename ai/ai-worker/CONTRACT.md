@@ -23,6 +23,8 @@ Alembic revision `0001_rag_index_storage`가 아래 테이블을 소유한다.
 - `ai.document_chunk`: 슬라이드 chunk와 FTS vector
 - `ai.chunk_embedding`: 정규화된 `vector(1024)`
 - `ai.material_key_term`: 자료 버전별 추출 용어와 정의 (revision `0002_material_key_terms`)
+- `ai.annotation_highlight`: 강조 판서의 해석 텍스트·임베딩·타임라인 앵커 (revision
+  `0003_annotation_highlight`)
 
 `material_key_term`은 `(material_version_id, term)`을 기본키로 사용한다. Java는
 `ai.material_version.state = 'ACTIVE'`인 자료 버전과 조인해 최신 자료의 용어만 읽는다(읽기 API는
@@ -32,6 +34,11 @@ Alembic revision `0001_rag_index_storage`가 아래 테이블을 소유한다.
 ai-worker는 `IndexPptxMaterial.execute()`가 stage/activate를 마친 뒤 추출된 용어를 이 테이블에
 upsert한다(`(material_version_id, term)` 충돌 시 `definition`만 갱신). 이 저장은 best-effort다 —
 실패해도 로그만 남기고 Spring 콜백 전송이나 job 자체를 막지 않는다([ADR-0005](../../docs/decisions/jinwoo/0005-key-term-storage-schema.md)).
+
+`annotation_highlight`은 자료 색인 테이블과 FK로 연결되지 않는 독립 색인이다. 스냅샷 1건이 곧 색인
+단위이므로 chunk/embedding 분리 없이 `text`·`embedding`을 같은 행에 둔다. `highlight_id`가 멱등 키이고
+`search_vector`는 `document_chunk`와 같은 생성 컬럼이라 `text`와 어긋날 수 없다. 삭제는 행 제거가 아니라
+`state='DELETED'` 전환이다([ADR-0043](../../docs/decisions/canola/0043-annotation-timeline-evidence-mvp.md)).
 
 `ai` schema 자체와 `vector` extension은 공유 인프라가 미리 만들 수 있다. 따라서 downgrade는 위 테이블만
 역순으로 제거하고 schema, extension, role은 제거하지 않는다.
@@ -421,3 +428,93 @@ Content-Type: application/json
 - Spring 쪽 실제 처리(`AiCallbackService`에서 `keyTerms` 필드를 받아 저장하는 로직)는 이 문서가 다루는
   ai-worker 범위 밖이며 아직 구현되지 않았다 — 지금은 알 수 없는 필드로 조용히 무시된다. Java 쪽 계약
   (`AiCallbackEvent` record에 `keyTerms` 필드 추가 등)은 backend 팀이 별도로 정한다.
+
+## 11. 강조 판서 색인 (ADR-0043)
+
+이 절은 9절 자료 임베딩과 **같은 큐·같은 HMAC·같은 callback endpoint**를 쓰는 두 번째 잡 계열이다.
+공유 wire 정본은 루트 `docs/CONTRACT.md` §3-1/§3-2이며, 여기서는 Python 적용 규칙만 정한다.
+요청 배경은 [ADR-0074](../../docs/decisions/songjeongki/0074-annotation-highlight-evidence-contract.md),
+설계 결정은 [ADR-0043](../../docs/decisions/canola/0043-annotation-timeline-evidence-mvp.md)을 따른다.
+
+### 11.1 잡 envelope
+
+`ANNOTATION_EMBED` version 1:
+
+```json
+{
+  "taskType": "ANNOTATION_EMBED",
+  "highlightId": "uuid",
+  "sessionId": "uuid",
+  "lessonId": "uuid",
+  "curriculumId": "uuid",
+  "sessionMs": 725300,
+  "capturedAt": "2026-08-04T13:20:05+09:00",
+  "text": "B+ tree 노드 분할 조건",
+  "policy": { "embedModel": "bge-m3" },
+  "contractVersion": 1
+}
+```
+
+`ANNOTATION_EMBED_DELETE` version 1:
+
+```json
+{ "taskType": "ANNOTATION_EMBED_DELETE", "highlightId": "uuid", "contractVersion": 1 }
+```
+
+- 두 잡은 `PptxEmbedJob`·`EmbedDeleteJob`과 같은 `taskType` discriminator union에 속하며 같은
+  `parse_material_job`이 파싱한다. 알 수 없는 field와 지원하지 않는 `contractVersion`은 fail-closed다.
+- `highlightId`가 멱등 키다. 같은 값의 재발행은 기존 색인을 교체한다.
+- `curriculumId`는 검색 스코프, `sessionMs`는 다시보기 타임라인 앵커다. `sessionMs`는 0 이상이어야 한다.
+- `capturedAt`은 offset이 있는 timestamp여야 한다. naive 값은 실제 타임라인에 놓을 수 없어 거부한다.
+- **`text`가 본체이며 필수**다. Spring이 강조 크롭을 자기 vision 모델로 읽어 만든 값이고 워커는
+  그대로 색인한다. 2,000자를 넘거나 공백뿐이면 거부해 DLQ에 보존한다 — 저장할 수 없는 텍스트를
+  조용히 자르거나, 아무것도 매칭되지 않는 빈 근거를 색인하지 않기 위해서다.
+- **`assetId`는 없다.** 이미지는 AI로 넘어오지 않는다(ADR-0074 결정 1).
+- delete envelope는 `highlightId`만 받는다. 삭제에 lesson/curriculum scope를 요구하지 않으므로
+  자료 삭제(§9.6)와 달리 self-lookup resolver가 필요 없다.
+
+### 11.2 이미지를 받지 않는다
+
+ADR-0074 결정 1에 따라 강조 이미지는 Spring이 소유하고 읽는다. 워커는 presigned URL을 발급받지도,
+vision 모델을 부르지도 않는다. 그 대신 **검증 없이 텍스트를 신뢰**하며, 강사 확인 단계가 색인으로
+들어가는 유일한 게이트다.
+
+같은 결정이 뒤집힐 수 있다는 전제로 두 모듈을 트리에 남겨 뒀다 — `adapters/gms_annotation_reader.py`와
+`ingestion/annotation_image.py`다. **현재 어디서도 호출하지 않는다.** ADR-0074도 "AI가 '현재
+상태로는' 안 읽는다고 했으니 나중에 바뀔 수 있다"며 Spring이 원본 이미지를 계속 보관한다고 명시한다.
+다시 켜려면 `AnnotationEmbedJob`에 `assetId`를 되살리고, 포트 두 개(`AnnotationImageStore`,
+`AnnotationReader`)와 vision 모델 설정을 복원한다. 테스트는 계속 돌기 때문에 잠긴 채로 썩지 않는다.
+
+### 11.3 결과 callback
+
+`POST /api/internal/ai/callbacks`에 §9.2의 HMAC으로 보낸다.
+
+```json
+{
+  "eventId": "uuid",
+  "eventType": "ANNOTATION_EMBEDDED",
+  "jobId": "ANNOTATION_EMBED:<highlightId>",
+  "highlightId": "uuid",
+  "status": "READY"
+}
+```
+
+- body에 `materialId`·`lessonId`가 없다. Spring은 `highlightId`만으로 스냅샷 상태를 확정한다.
+- `eventId`는 `(jobId, eventType)`에서 결정적으로 파생하므로 같은 결과의 HTTP 재시도가 같은 값을 쓴다.
+- `ANNOTATION_EMBEDDING`(PROCESSING)은 계약에 존재하지만 §9.5와 같은 이유로 발신하지 않는다 —
+  응답 유실 뒤의 늦은 PROCESSING이 READY/FAILED를 되돌리는 것을 막는다.
+- Spring은 이 eventType들을 아직 매핑하지 않아 현재는 inbox에만 남는다.
+- **`ANNOTATION_EMBED_DELETE`는 callback을 보내지 않는다.** ADR-0074가 정의한 eventType 3종은 모두
+  색인용이고 `ANNOTATION_DELETED`에 해당하는 값이 없다. `ANNOTATION_EMBEDDED/READY`를 쓰면 삭제된
+  스냅샷을 "색인됨"으로 알리게 되므로 사실과 반대다. 성공은 무응답이고 영구 실패는 DLQ가 운영
+  신호다. 삭제 결과를 Spring이 확인해야 한다면 오너 합의로 eventType을 추가한 뒤 배선한다.
+
+### 11.4 기능 스위치
+
+`AI_WORKER_ANNOTATION_INGESTION_ENABLED`(기본 `false`)가 켜졌을 때만 색인·삭제 use case가 조립된다.
+`AI_WORKER_MATERIAL_INGESTION_ENABLED`와 독립이며 **모델 key를 요구하지 않는다** — 이 경로는 임베딩과
+저장뿐이라 GMS를 부르지 않는다.
+
+꺼진 상태에서 annotation 잡이 도착하면 영구 실패로 처리해 `ingestion.embed.dlq`에 보존한다. ACK도
+requeue도 하지 않는 제3의 보존은 RabbitMQ에 없고 requeue는 재전달 루프를 만든다. 스위치를 켠 뒤
+DLQ를 재발행하면 그대로 처리되므로 배포 순서가 어긋나도 잡이 유실되지 않는다.

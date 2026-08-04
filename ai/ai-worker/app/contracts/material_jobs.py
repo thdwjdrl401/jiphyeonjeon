@@ -1,13 +1,22 @@
+"""Wire contracts for every job Spring publishes to the shared `ingestion.embed` queue.
+
+PPTX material jobs and annotation highlight jobs (ADR-0074) travel the same queue and are
+discriminated by `taskType`, so one parser owns the whole union.
+"""
+
 from __future__ import annotations
 
 from collections.abc import Mapping
 from typing import Annotated, Literal, TypeAlias
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
 
 MAX_MATERIAL_JOB_BYTES = 64 * 1024
+# Matches ai.annotation_highlight.text. Spring reads the image and sends the text, so a value
+# we cannot store is rejected fail-closed rather than silently truncated — the DLQ keeps it.
+MAX_ANNOTATION_TEXT_CHARS = 2_000
 
 
 class _WireModel(BaseModel):
@@ -45,8 +54,51 @@ class EmbedDeleteJob(_WireModel):
     contract_version: Literal[1] = Field(alias="contractVersion")
 
 
+class AnnotationEmbedJob(_WireModel):
+    """One instructor highlight to index as timeline-anchored evidence (ADR-0074 결정 1).
+
+    `text` is the body: Spring reads the highlight crop with its own vision model and sends the
+    result. No image and no `assetId` reach the worker — the read already happened, and doing
+    it twice would split what the instructor confirmed on screen from what the answer cites.
+
+    The worker therefore indexes this text unverified. The instructor confirmation step on the
+    Spring side is the only gate protecting the evidence index.
+    """
+
+    task_type: Literal["ANNOTATION_EMBED"] = Field(alias="taskType")
+    highlight_id: UUID = Field(alias="highlightId")
+    session_id: UUID = Field(alias="sessionId")
+    lesson_id: UUID = Field(alias="lessonId")
+    curriculum_id: UUID = Field(alias="curriculumId")
+    session_ms: int = Field(alias="sessionMs", ge=0)
+    captured_at: AwareDatetime = Field(alias="capturedAt")
+    text: str = Field(min_length=1, max_length=MAX_ANNOTATION_TEXT_CHARS)
+    policy: EmbedPolicy
+    contract_version: Literal[1] = Field(alias="contractVersion")
+
+    @model_validator(mode="after")
+    def reject_blank_text(self) -> AnnotationEmbedJob:
+        # A blank description would sit in the index matching nothing. Better to DLQ it than
+        # to let Spring believe the highlight became searchable evidence.
+        if not self.text.strip():
+            raise ValueError("annotation text must not be blank")
+        return self
+
+
+class AnnotationEmbedDeleteJob(_WireModel):
+    """Remove one highlight from the evidence index (ADR-0074 결정 2).
+
+    Unrelated to erasing the stroke: a highlight capture records a moment, so its lifetime is
+    decoupled from the annotation element it came from.
+    """
+
+    task_type: Literal["ANNOTATION_EMBED_DELETE"] = Field(alias="taskType")
+    highlight_id: UUID = Field(alias="highlightId")
+    contract_version: Literal[1] = Field(alias="contractVersion")
+
+
 MaterialJob: TypeAlias = Annotated[
-    PptxEmbedJob | EmbedDeleteJob,
+    PptxEmbedJob | EmbedDeleteJob | AnnotationEmbedJob | AnnotationEmbedDeleteJob,
     Field(discriminator="task_type"),
 ]
 _MATERIAL_JOB_ADAPTER = TypeAdapter(MaterialJob)

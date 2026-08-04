@@ -380,7 +380,7 @@ def test_refinement_uses_structured_draft_without_raw_caption() -> None:
 
         assert result.topics[0].topicTitle == "Token 갱신"
         call = client.chat.completions.calls[0]
-        assert call["max_tokens"] == 4_096
+        assert call["max_completion_tokens"] == 4_096
         assert call["timeout"] == 55
         prompt = json.loads(call["messages"][1]["content"])
         assert prompt == {
@@ -394,3 +394,52 @@ def test_refinement_uses_structured_draft_without_raw_caption() -> None:
         assert "lectureText" not in prompt
 
     asyncio.run(scenario())
+
+
+def _note_model(client, **overrides) -> GmsOpenAILectureNoteModel:
+    settings: dict[str, object] = {
+        "api_key": "test-key",
+        "model": "gpt-test",
+        "max_output_tokens": 4_096,
+        "max_prompt_chars": 20_000,
+        "timeout_seconds": 30,
+        "client": client,
+        **overrides,
+    }
+    return GmsOpenAILectureNoteModel(**settings)
+
+
+def test_non_reasoning_model_keeps_deterministic_temperature() -> None:
+    """gpt-4.1 rejects reasoning_effort, so the original temperature=0 path must survive."""
+
+    async def run() -> dict:
+        client = FakeClient(json.dumps({"action": "IGNORE", "topicTitle": None, "keyPoints": []}))
+        await _note_model(client).generate(_request())
+        return client.chat.completions.calls[0]
+
+    call = asyncio.run(run())
+
+    assert call["temperature"] == 0
+    assert "reasoning_effort" not in call
+
+
+def test_reasoning_model_swaps_temperature_for_effort() -> None:
+    """gpt-5 models reject temperature and need the effort cap, or one caption window costs
+    19s instead of 2s (measured against GMS, 2026-08-04)."""
+
+    async def run() -> dict:
+        client = FakeClient(json.dumps({"action": "IGNORE", "topicTitle": None, "keyPoints": []}))
+        await _note_model(client, model="gpt-5-nano", reasoning_effort="minimal").generate(
+            _request()
+        )
+        return client.chat.completions.calls[0]
+
+    call = asyncio.run(run())
+
+    assert call["reasoning_effort"] == "minimal"
+    assert "temperature" not in call
+
+
+def test_blank_reasoning_effort_is_rejected_rather_than_sent_empty() -> None:
+    with pytest.raises(ValueError, match="reasoning_effort"):
+        _note_model(FakeClient("{}"), reasoning_effort="   ")

@@ -138,6 +138,8 @@ uv run --frozen --env-file ../.env python -m app.main
 | `AI_API_REDIS_URL` | 선택 | 자막 Redis 연결, 기본값 `redis://127.0.0.1:6379/0` |
 | `AI_API_INSTANCE_ID` | 운영 권장 | Redis consumer name 충돌 방지. EC2의 ai-api replica마다 고유해야 함 |
 | `AI_API_LECTURE_NOTE_*` | 선택 | 강의 노트 window·모델·Stream 한도 조정 |
+| `AI_API_LECTURE_NOTE_MODEL` | 선택 | 기본 `gpt-5-nano`. 비우면 `AI_API_GMS_MODEL` 사용 |
+| `AI_API_LECTURE_NOTE_REASONING_EFFORT` | 선택 | 기본 `minimal`. **모델과 짝**이며 비-reasoning 모델(gpt-4.1 등)로 바꾸면 반드시 비워야 한다 |
 | `AI_API_CONVERSATION_MEMORY_TTL_SECONDS` | 선택 | v1 대화 이어가기 TTL(초), 기본 1,800 — ADR-0010 |
 | `AI_API_CONVERSATION_MEMORY_KEY_PREFIX` | 선택 | 대화 이어가기 Redis key prefix, 기본 `ai:conversation:` |
 | `AI_INTERNAL_SECRET` | RAG 호출 필수 | Spring 요청 HMAC 검증용 공유 secret; GPU에서는 사용하지 않음 |

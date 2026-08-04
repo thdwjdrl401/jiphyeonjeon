@@ -40,9 +40,7 @@ def test_rejects_invalid_construction_arguments() -> None:
     with pytest.raises(ValueError):
         RedisConversationMemoryStore("redis://127.0.0.1:6379/0", ttl_seconds=0)
     with pytest.raises(ValueError):
-        RedisConversationMemoryStore(
-            "redis://127.0.0.1:6379/0", socket_connect_timeout_seconds=0
-        )
+        RedisConversationMemoryStore("redis://127.0.0.1:6379/0", socket_connect_timeout_seconds=0)
 
 
 def test_lookup_before_any_save_returns_none() -> None:
@@ -50,9 +48,7 @@ def test_lookup_before_any_save_returns_none() -> None:
     store = _store(client)
 
     result = asyncio.run(
-        store.get_previous_response_id(
-            user_id="u1", session_id="s1", conversation_id="conv-abc"
-        )
+        store.get_previous_response_id(user_id="u1", session_id="s1", conversation_id="conv-abc")
     )
 
     assert result is None
@@ -68,9 +64,7 @@ def test_save_then_lookup_round_trips_the_response_id() -> None:
         )
     )
     result = asyncio.run(
-        store.get_previous_response_id(
-            user_id="u1", session_id="s1", conversation_id="conv-abc"
-        )
+        store.get_previous_response_id(user_id="u1", session_id="s1", conversation_id="conv-abc")
     )
 
     assert result == "resp_1"
@@ -90,19 +84,13 @@ def test_key_is_scoped_by_all_three_parts() -> None:
     )
 
     other_user = asyncio.run(
-        store.get_previous_response_id(
-            user_id="u2", session_id="s1", conversation_id="conv-abc"
-        )
+        store.get_previous_response_id(user_id="u2", session_id="s1", conversation_id="conv-abc")
     )
     other_session = asyncio.run(
-        store.get_previous_response_id(
-            user_id="u1", session_id="s2", conversation_id="conv-abc"
-        )
+        store.get_previous_response_id(user_id="u1", session_id="s2", conversation_id="conv-abc")
     )
     other_conversation = asyncio.run(
-        store.get_previous_response_id(
-            user_id="u1", session_id="s1", conversation_id="conv-xyz"
-        )
+        store.get_previous_response_id(user_id="u1", session_id="s1", conversation_id="conv-xyz")
     )
 
     assert other_user is None

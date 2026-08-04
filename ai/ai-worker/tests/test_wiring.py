@@ -114,6 +114,7 @@ def test_builds_spring_bge_pgvector_and_use_case_with_shared_dependencies(monkey
     assert signer is callback_signer
     assert source_options == {
         "source_max_bytes": 50 * 1024 * 1024,
+        "annotation_image_max_bytes": 4 * 1024 * 1024,
         "issue_timeout_seconds": 5.0,
         "download_timeout_seconds": 30.0,
     }
@@ -365,3 +366,46 @@ def test_enabled_worker_wires_consumer_handler_readiness_and_cleanup(monkeypatch
     captured["options"]["on_ready"](True)
     assert state.ready is True
     assert runtime._runner is consumer
+
+
+def test_annotation_ingestion_disabled_leaves_both_use_cases_unbuilt(monkeypatch) -> None:
+    """Off means the handler has nothing to route to, so jobs land in the DLQ instead of
+    being acked away (ADR-0074)."""
+    monkeypatch.setattr(wiring, "AsyncClient", FakeHttpClient)
+    monkeypatch.setattr(wiring, "create_async_engine", lambda *_args, **_kwargs: FakeEngine())
+    monkeypatch.setattr(wiring, "IndexPptxMaterial", lambda *_args, **_kwargs: object())
+
+    runtime = wiring.build_pptx_ingestion_runtime(_settings())
+
+    assert runtime.index_annotation_highlight is None
+    assert runtime.delete_annotation_highlight is None
+
+
+def test_annotation_ingestion_enabled_needs_no_model_client(monkeypatch) -> None:
+    """Spring reads the highlight crop and sends the text (ADR-0074 결정 1), so indexing is
+    embed + store. Requiring a GMS key here would block a deployment that never calls one."""
+    engine = FakeEngine()
+    monkeypatch.setattr(wiring, "AsyncClient", FakeHttpClient)
+    monkeypatch.setattr(wiring, "create_async_engine", lambda *_args, **_kwargs: engine)
+    monkeypatch.setattr(wiring, "IndexPptxMaterial", lambda *_args, **_kwargs: object())
+
+    runtime = wiring.build_pptx_ingestion_runtime(_settings(annotation_ingestion_enabled=True))
+
+    assert runtime.index_annotation_highlight is not None
+    assert runtime.delete_annotation_highlight is not None
+
+
+def test_annotation_index_and_delete_share_one_repository(monkeypatch) -> None:
+    """Both use cases must see the same rows; two repositories would still work but would
+    hide a future divergence in runtime_role or engine."""
+    engine = FakeEngine()
+    monkeypatch.setattr(wiring, "AsyncClient", FakeHttpClient)
+    monkeypatch.setattr(wiring, "create_async_engine", lambda *_args, **_kwargs: engine)
+    monkeypatch.setattr(wiring, "IndexPptxMaterial", lambda *_args, **_kwargs: object())
+
+    runtime = wiring.build_pptx_ingestion_runtime(_settings(annotation_ingestion_enabled=True))
+
+    assert (
+        runtime.index_annotation_highlight._index_storage
+        is runtime.delete_annotation_highlight._index_storage
+    )

@@ -59,9 +59,19 @@ flowchart LR
 | dev realtime-agent | GPU `127.0.0.1:8082` | EC2 `127.0.0.1:18082` | `GET /` | 개발 smoke | 없음, loopback 전제 | 호환용 plain `OK` |
 
 EC2 compose의 `0.0.0.0` bind는 Docker network와 port forwarding을 위한 **컨테이너 내부 bind**다.
-host publish는 항상 `127.0.0.1`로 제한하므로 public interface에는 열리지 않는다. prod/dev를 동시에
-띄울 수 있도록 container port `8010/8011`은 같게 유지하고 host port만 `8010/8011`과 `18010/18011`로 나눈다.
-상세 근거는 [ADR-0036](../decisions/canola/0036-ai-compose-and-realtime-env-profiles.md)을 따른다.
+prod/dev를 동시에 띄울 수 있도록 container port `8010/8011`은 같게 유지하고 host port만 `8010/8011`과
+`18010/18011`로 나눈다. 상세 근거는
+[ADR-0036](../decisions/canola/0036-ai-compose-and-realtime-env-profiles.md)을 따른다.
+
+host publish는 **dev ai-api 하나만 예외**로 열려 있다.
+
+| 서비스 | prod host publish | dev host publish |
+|---|---|---|
+| ai-api | `127.0.0.1:8010` | `0.0.0.0:18010` — 로컬 backend가 remote 프로필로 SSH 터널 없이 붙기 위한 의도적 노출. security group의 팀 IP와 `AI_INTERNAL_SECRET` HMAC이 게이트다 |
+| ai-worker 관리 | `127.0.0.1:8011` | `127.0.0.1:18011` |
+
+dev ai-api 노출은 dev-infra의 pg·redis·rabbitmq·minio와 같은 방식이며 prod에는 적용하지 않는다.
+`docker-compose.ai-dev.yml`의 주석과 `ai/ai-api/tests/test_deployment_config.py`가 이 비대칭을 고정한다.
 
 realtime-agent는 FastAPI가 아니다. Python `ThreadingHTTPServer`가 prod loopback `:8081`, dev
 loopback `:8082`의 service health를 제공하고 LiveKit Agents SDK의 자체 HTTP server는 각 process의

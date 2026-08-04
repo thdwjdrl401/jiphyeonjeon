@@ -9,7 +9,13 @@ from openai import APITimeoutError, RateLimitError
 
 from app.adapters.gms_openai_answer import GMS_OPENAI_BASE_URL
 from app.adapters.gms_openai_answer_v2 import GmsOpenAIAnswerModelV2
-from app.rag import CaptionSourceV2, PptxSourceV2, RagAnswerRequestV2, RagStreamFailure, ReplayContext
+from app.rag import (
+    CaptionSourceV2,
+    PptxSourceV2,
+    RagAnswerRequestV2,
+    RagStreamFailure,
+    ReplayContext,
+)
 from app.rag.models import RetrievedEvidenceV2
 from app.rag.ports import GroundedCapture
 
@@ -37,7 +43,9 @@ def _evidence() -> tuple[RetrievedEvidenceV2, ...]:
             lesson_id=LESSON_ID,
             curriculum_id=CURRICULUM_ID,
             content="슬라이드의 컨슈머 그룹 설명",
-            source=PptxSourceV2(materialId=MATERIAL_ID, page=12, excerpt="슬라이드의 컨슈머 그룹 설명"),
+            source=PptxSourceV2(
+                materialId=MATERIAL_ID, page=12, excerpt="슬라이드의 컨슈머 그룹 설명"
+            ),
         ),
         RetrievedEvidenceV2(
             lesson_id=LESSON_ID,
@@ -118,6 +126,9 @@ def test_streams_text_and_sends_v2_source_coordinates_not_excerpt() -> None:
     payload = json.loads(completions.calls[0]["messages"][1]["content"])
     assert payload == {
         "question": "여기서 말한 consumer group이 뭐야?",
+        # The moment the question was asked, so the model can resolve "아까" against each
+        # annotation's highlightedAt (ADR-0043 §5-2).
+        "askedAt": "12:15",
         "evidence": [
             {
                 "source": {"type": "PPTX", "page": 12},
@@ -212,8 +223,7 @@ def test_empty_evidence_still_reaches_the_model_as_general_knowledge_fallback() 
 
     async def run() -> list[str]:
         return [
-            chunk
-            async for chunk in model.stream_answer(_request(), (), grounded_capture=capture)
+            chunk async for chunk in model.stream_answer(_request(), (), grounded_capture=capture)
         ]
 
     chunks = asyncio.run(run())

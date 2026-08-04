@@ -79,6 +79,8 @@ class Settings(BaseSettings):
     chunk_max_chars: int = Field(default=1_200, ge=100, le=10_000)
 
     key_term_extraction_enabled: bool = False
+    annotation_ingestion_enabled: bool = False
+    annotation_image_max_bytes: int = Field(default=4 * 1024 * 1024, gt=0)
     gms_api_key: SecretStr | None = Field(default=None, min_length=1)
     gms_model: str = Field(default="gpt-4.1", min_length=1, max_length=128)
     gms_max_output_tokens: int = Field(default=1_024, ge=1, le=8_192)

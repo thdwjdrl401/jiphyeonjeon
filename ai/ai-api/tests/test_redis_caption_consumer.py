@@ -221,9 +221,7 @@ def test_async_checkpoint_finishes_before_ack_and_post_ack_hook() -> None:
             after_ack=after_ack,
             client_factory=lambda: fake,
         )
-        messages = [
-            ["ai:captions:live", [["1-0", _fixture("caption-delta.valid.json")]]]
-        ]
+        messages = [["ai:captions:live", [["1-0", _fixture("caption-delta.valid.json")]]]]
 
         await consumer._process_messages(fake, messages)
 

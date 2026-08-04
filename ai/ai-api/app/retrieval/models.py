@@ -18,3 +18,34 @@ class MaterialChunkHit:
     vector_score: float
     lexical_score: float
     score: float
+
+
+@dataclass(frozen=True, slots=True)
+class AnnotationHighlightHit:
+    """One instructor highlight snapshot indexed as evidence (ADR-0043 §1).
+
+    Scores are None for recent-window results, which are selected by time rather than
+    similarity (ADR-0043 §5) and therefore have nothing to rank.
+    """
+
+    highlight_id: UUID
+    curriculum_id: UUID
+    lesson_id: UUID
+    session_id: UUID
+    session_ms: int
+    text: str
+    vector_score: float | None = None
+    lexical_score: float | None = None
+    score: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SessionTimeCutoff:
+    """Hides snapshots the asker could not have seen yet (ADR-0043 §4).
+
+    Applies to one session only: snapshots from other (already finished) sessions are wholly
+    in the past. Live answering passes no cutoff — an indexed snapshot is past by definition.
+    """
+
+    session_id: UUID
+    max_session_ms: int

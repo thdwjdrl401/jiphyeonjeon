@@ -3,7 +3,7 @@ from __future__ import annotations
 import httpx
 
 from app.adapters.spring_hmac import SpringHmacSigner
-from app.contracts import MaterialCallbackEvent
+from app.contracts import AnnotationCallbackEvent, MaterialCallbackEvent
 
 
 _CALLBACK_PATH = "/api/internal/ai/callbacks"
@@ -38,7 +38,9 @@ class SpringMaterialCallbackClient:
         self._signer = signer
         self._timeout_seconds = timeout_seconds
 
-    async def send(self, event: MaterialCallbackEvent) -> None:
+    async def send(self, event: MaterialCallbackEvent | AnnotationCallbackEvent) -> None:
+        # Both event families share this endpoint, HMAC and eventId idempotency; only their
+        # body shape differs (ADR-0043 §11.3).
         body = event.raw_body()
         try:
             response = await self._client.post(

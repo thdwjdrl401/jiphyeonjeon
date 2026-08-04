@@ -88,8 +88,15 @@ class Materials:
 def test_combines_pptx_top_k_with_single_merged_caption_source() -> None:
     materials = Materials((_hit(),))
     captions = (
-        _caption_item(segment_index=41, start_ms=706_000, end_ms=711_000, text="토픽에는 여러 파티션이 있고 "),
-        _caption_item(segment_index=42, start_ms=711_200, end_ms=716_800, text="컨슈머 그룹은 여러 소비자가 메시지를 분담해서 처리하도록 합니다."),
+        _caption_item(
+            segment_index=41, start_ms=706_000, end_ms=711_000, text="토픽에는 여러 파티션이 있고 "
+        ),
+        _caption_item(
+            segment_index=42,
+            start_ms=711_200,
+            end_ms=716_800,
+            text="컨슈머 그룹은 여러 소비자가 메시지를 분담해서 처리하도록 합니다.",
+        ),
     )
     retriever = ReplayEvidenceRetriever(materials, material_top_k=3)
 
@@ -163,10 +170,14 @@ def test_scope_is_preserved_for_final_service_revalidation() -> None:
     retriever = ReplayEvidenceRetriever(materials)
 
     result = asyncio.run(
-        retriever.retrieve(RagAnswerRequestV2.model_validate({
-            **_request(captions=captions).model_dump(mode="json"),
-            "lessonId": str(OTHER_LESSON_ID),
-        }))
+        retriever.retrieve(
+            RagAnswerRequestV2.model_validate(
+                {
+                    **_request(captions=captions).model_dump(mode="json"),
+                    "lessonId": str(OTHER_LESSON_ID),
+                }
+            )
+        )
     )
 
     pptx_evidence, caption_evidence = result.evidence

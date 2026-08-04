@@ -153,7 +153,9 @@ def test_contract_rejects_unknown_request_field_and_reversed_caption_range() -> 
         )
 
 
-def _caption_item(*, text: str, index: int = 1, start_ms: int = 0, end_ms: int = 1_000) -> CaptionContextItem:
+def _caption_item(
+    *, text: str, index: int = 1, start_ms: int = 0, end_ms: int = 1_000
+) -> CaptionContextItem:
     return CaptionContextItem(
         sttSessionId="stt-attempt-1",
         segmentIndex=index,

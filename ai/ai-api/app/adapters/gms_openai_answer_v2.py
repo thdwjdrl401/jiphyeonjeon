@@ -24,7 +24,13 @@ from app.adapters.gms_openai_answer import (
     _strip_grounding_tag,
 )
 from app.rag.errors import RagStreamFailure
-from app.rag.models import CaptionSourceV2, PptxSourceV2, RagAnswerRequestV2, RetrievedEvidenceV2
+from app.rag.models import (
+    AnnotationSourceV2,
+    CaptionSourceV2,
+    PptxSourceV2,
+    RagAnswerRequestV2,
+    RetrievedEvidenceV2,
+)
 from app.rag.ports import GroundedCapture
 
 logger = logging.getLogger(__name__)
@@ -94,7 +100,7 @@ class GmsOpenAIAnswerModelV2:
                     {"role": "system", "content": _SYSTEM_PROMPT},
                     {"role": "user", "content": prompt},
                 ],
-                max_tokens=self._max_output_tokens,
+                max_completion_tokens=self._max_output_tokens,
                 stream=True,
             )
             async for chunk in stream:
@@ -134,14 +140,36 @@ def _prompt_payload_v2(
                 "startSessionMs": item.source.startSessionMs,
                 "endSessionMs": item.source.endSessionMs,
             }
+        elif isinstance(item.source, AnnotationSourceV2):
+            # The clock face is what lets the model resolve "아까" by comparing it against
+            # askedAt below, instead of guessing from raw milliseconds (ADR-0043 §5-2).
+            source = {
+                "type": "ANNOTATION",
+                "highlightedAt": _clock(item.source.sessionMs),
+                "sessionMs": item.source.sessionMs,
+            }
         else:  # pragma: no cover - AnswerSourceV2 is a closed discriminated union
             raise TypeError("unsupported evidence source")
         items.append({"source": source, "content": item.content})
     return json.dumps(
-        {"question": request.question, "evidence": items},
+        {
+            "question": request.question,
+            "askedAt": _clock(request.context.questionSessionMs),
+            "evidence": items,
+        },
         ensure_ascii=False,
         separators=(",", ":"),
     )
+
+
+def _clock(session_ms: int) -> str:
+    """Session-relative milliseconds as mm:ss, or h:mm:ss once past an hour."""
+
+    total_minutes, seconds = divmod(max(0, session_ms) // 1_000, 60)
+    hours, minutes = divmod(total_minutes, 60)
+    if hours:
+        return f"{hours}:{minutes:02d}:{seconds:02d}"
+    return f"{minutes:02d}:{seconds:02d}"
 
 
 def _failure_code(error: APIError) -> str:

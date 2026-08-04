@@ -1,5 +1,7 @@
 from app.rag.errors import RagStreamFailure
 from app.rag.models import (
+    AnnotationSource,
+    AnnotationSourceV2,
     AnswerDelta,
     AnswerDone,
     AnswerDoneV2,
@@ -47,6 +49,8 @@ from app.rag.service import RagAnswerService
 from app.rag.sse import encode_sse_event, encode_sse_stream
 
 __all__ = [
+    "AnnotationSource",
+    "AnnotationSourceV2",
     "AnswerDelta",
     "AnswerDone",
     "AnswerDoneV2",

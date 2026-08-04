@@ -199,8 +199,7 @@ class LectureNoteWindowAccumulator:
     def is_completed(self, session_id: str) -> bool:
         session = self._sessions.get(session_id)
         return bool(
-            (session is not None and session.completed)
-            or session_id in self._completed_sessions
+            (session is not None and session.completed) or session_id in self._completed_sessions
         )
 
     def remove_session(self, session_id: str) -> None:

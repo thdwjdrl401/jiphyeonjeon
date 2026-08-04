@@ -2,12 +2,24 @@ from collections.abc import Sequence
 from typing import Protocol
 from uuid import UUID
 
-from app.domain import ChunkRecord, ExistingIndexVersion, MaterialScope, StagedMaterial
+from app.domain import (
+    AnnotationRecord,
+    ChunkRecord,
+    ExistingIndexVersion,
+    MaterialScope,
+    StagedMaterial,
+)
 from app.ingestion.models import KeyTerm
 
 
 class MaterialAssetStore(Protocol):
     async def read_pptx(self, bucket: str, object_key: str) -> bytes: ...
+
+
+class AnnotationIndexStorage(Protocol):
+    async def upsert(self, record: AnnotationRecord) -> None: ...
+
+    async def mark_deleted(self, highlight_id: UUID) -> None: ...
 
 
 class TextEmbeddingModel(Protocol):

@@ -125,9 +125,7 @@ class RedisLectureNoteStore:
         raw_checkpoint = await self._client.get(self._state_key(session_id))
         if raw_checkpoint is None:
             return None
-        return LectureNoteSessionCheckpoint.model_validate_json(
-            _decode_text(raw_checkpoint)
-        )
+        return LectureNoteSessionCheckpoint.model_validate_json(_decode_text(raw_checkpoint))
 
     async def deactivate(self, session_id: str) -> None:
         pipeline = self._client.pipeline(transaction=True)

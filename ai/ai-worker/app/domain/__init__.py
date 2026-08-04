@@ -1,3 +1,9 @@
+from app.domain.annotation_models import (
+    MAX_ANNOTATION_TEXT_CHARS,
+    AnnotationIngestionError,
+    AnnotationRecord,
+    AnnotationHighlight,
+)
 from app.domain.errors import (
     EmbeddingContractError,
     EmptyPptxContentError,
@@ -18,6 +24,10 @@ from app.domain.index_models import (
 __all__ = [
     "BGE_M3_DIMENSIONS",
     "BGE_M3_MODEL",
+    "MAX_ANNOTATION_TEXT_CHARS",
+    "AnnotationIngestionError",
+    "AnnotationRecord",
+    "AnnotationHighlight",
     "ChunkRecord",
     "EmbeddingContractError",
     "EmptyPptxContentError",

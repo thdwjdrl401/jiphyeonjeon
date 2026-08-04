@@ -62,7 +62,14 @@ raw HTML, 이미지, 외부 링크를 만들지 말며 tool을 사용하지 마�
 
 
 class GmsOpenAILectureNoteModel:
-    """GMS OpenAI-compatible JSON 응답을 강의 노트 모델 결과로 검증한다."""
+    """GMS OpenAI-compatible JSON 응답을 강의 노트 모델 결과로 검증한다.
+
+    reasoning 계열 모델(gpt-5-*)과 비-reasoning 모델(gpt-4.1)은 받는 파라미터가 다르다.
+    reasoning 모델은 `temperature`를 거부하고 `reasoning_effort`를 받으며, 비-reasoning 모델은
+    정반대다. 실측(2026-08-04, GMS): 어느 쪽이든 상대 파라미터를 보내면 400이다.
+    `reasoning_effort`를 설정하면 reasoning 모델로 간주해 `temperature`를 빼고, 비워두면
+    기존대로 `temperature=0`을 보낸다.
+    """
 
     def __init__(
         self,
@@ -73,6 +80,7 @@ class GmsOpenAILectureNoteModel:
         max_prompt_chars: int,
         timeout_seconds: float,
         prompt_version: Literal["v1", "v2"] = "v2",
+        reasoning_effort: str | None = None,
         refinement_max_output_tokens: int | None = None,
         refinement_max_prompt_chars: int | None = None,
         refinement_timeout_seconds: float | None = None,
@@ -108,6 +116,14 @@ class GmsOpenAILectureNoteModel:
             <= 0
         ):
             raise ValueError("GMS lecture note refinement limits must be positive")
+        if reasoning_effort is not None and not reasoning_effort.strip():
+            raise ValueError("reasoning_effort must be a non-empty value or None")
+        self._reasoning_effort = reasoning_effort
+        # Mutually exclusive by the gateway's own rules, so build it once here rather than
+        # branching at each of the three call sites.
+        self._sampling_options: dict[str, object] = (
+            {"reasoning_effort": reasoning_effort} if reasoning_effort else {"temperature": 0}
+        )
         self._owns_client = client is None
         self._client = client or AsyncOpenAI(
             api_key=api_key,
@@ -127,9 +143,9 @@ class GmsOpenAILectureNoteModel:
                 {"role": "system", "content": self._system_prompt},
                 {"role": "user", "content": prompt},
             ],
-            max_tokens=self._max_output_tokens,
+            max_completion_tokens=self._max_output_tokens,
             response_format={"type": "json_object"},
-            temperature=0,
+            **self._sampling_options,
             stream=False,
         )
         latency_ms = round((time.perf_counter() - started_at) * 1_000)
@@ -167,9 +183,9 @@ class GmsOpenAILectureNoteModel:
                 response = await self._client.beta.chat.completions.parse(
                     model=self._model,
                     messages=messages,
-                    max_tokens=self._max_output_tokens,
+                    max_completion_tokens=self._max_output_tokens,
                     response_format=LectureNoteDraftUpdateResult,
-                    temperature=0,
+                    **self._sampling_options,
                 )
             except ValidationError:
                 if attempt == 1:
@@ -237,9 +253,9 @@ class GmsOpenAILectureNoteModel:
                 {"role": "system", "content": _REFINEMENT_SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
-            max_tokens=self._refinement_max_output_tokens,
+            max_completion_tokens=self._refinement_max_output_tokens,
             response_format={"type": "json_object"},
-            temperature=0,
+            **self._sampling_options,
             timeout=self._refinement_timeout_seconds,
             stream=False,
         )
