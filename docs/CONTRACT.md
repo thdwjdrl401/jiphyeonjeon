@@ -285,6 +285,10 @@ HTTP 어댑터도 그 넷은 실제 호출로 배선됐다.
   `actionStatus`(`INFO|ACTION_REQUIRED|COMPLETED|EXPIRED`)는 "처리했는가"다. 읽음 처리는 처리 축을
   **절대** 건드리지 않는다 — 강사가 수강 신청 알림을 읽어도 승인·거절 전까지 `ACTION_REQUIRED`다.
   §2-2의 두 상태축 원칙과 같은 이유다.
+- **처리 축은 사용자가 아니라 서버가 닫는다.** 강사가 승인·거절하면 그 신청 알림은 `COMPLETED`,
+  학생이 스스로 물러 처리할 일 자체가 사라지면 `EXPIRED`가 된다([ADR-0076](decisions/songjeongki/0076-enrollment-notification-action-axis-settlement.md)).
+  둘을 구분하는 이유는 강사가 **하지 않은 일을 했다고 기록하지 않기** 위해서다. 알림을 "처리 완료로
+  바꾸는" API는 없다 — 처리 여부는 알림이 아니라 그 대상의 상태가 정한다.
 - **`type`은 12개 고정 union**: `ENROLLMENT_REQUESTED`·`ENROLLMENT_APPROVED`·`ENROLLMENT_REJECTED`·
   `LIVE_SCHEDULED`·`LIVE_STARTING_SOON`·`LIVE_SCHEDULE_CHANGED`·`LIVE_CANCELED`·`LESSON_PUBLISHED`·
   `MATERIAL_PUBLISHED`·`RECORDING_READY`·`RECORDING_FAILED`·`VOD_PUBLISHED`. 임의 문자열 금지.

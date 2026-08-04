@@ -33,6 +33,15 @@ public final class NotificationTypes {
     public static final String RECORDING_FAILED = "RECORDING_FAILED";
     public static final String VOD_PUBLISHED = "VOD_PUBLISHED";
 
+    /**
+     * 알림을 <b>만들지 않는</b> 정리 신호. 학생이 신청을 물렀으니 강사에게 나가 있던 대기 알림을
+     * 만료시키라는 뜻이다.
+     *
+     * <p>그래서 아래 중요도 표에 없고 {@link #isKnown}도 false다 — 이 값으로 알림 행이 만들어지면
+     * 문구도 중요도도 없는 빈 알림이 뜬다. 워커는 종류 검사보다 <b>먼저</b> 이 신호를 가려낸다.
+     */
+    public static final String ENROLLMENT_CANCELED = "ENROLLMENT_CANCELED";
+
     private static final Map<String, String> SEVERITY = Map.ofEntries(
             Map.entry(ENROLLMENT_REQUESTED, NORMAL),
             Map.entry(ENROLLMENT_APPROVED, NORMAL),

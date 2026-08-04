@@ -1,6 +1,7 @@
 package com.liveclass.notification.service;
 
 import com.liveclass.aiintegration.api.OutboxPublisher;
+import com.liveclass.enrollment.api.EnrollmentCanceledEvent;
 import com.liveclass.enrollment.api.EnrollmentDecidedEvent;
 import com.liveclass.enrollment.api.EnrollmentRequestedEvent;
 import com.liveclass.notification.api.NotificationTypes;
@@ -50,6 +51,18 @@ public class EnrollmentNotificationListener {
                 event.approved() ? NotificationTypes.ENROLLMENT_APPROVED : NotificationTypes.ENROLLMENT_REJECTED,
                 event.enrollmentId(), event.curriculumId(), event.curriculumTitle(),
                 event.instructorId(), event.studentId(), event.occurredAt()));
+    }
+
+    /**
+     * 학생이 신청을 물렀다. <b>새 알림을 만들라는 것이 아니라</b> 강사에게 나가 있던 대기 알림을
+     * 만료시키라는 신호다 — 처리할 수 없게 된 일이 처리 대기 목록에 남지 않게.
+     */
+    @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
+    public void onCanceled(EnrollmentCanceledEvent event) {
+        enqueue(NotificationFanoutCommand.forEnrollment(
+                NotificationTypes.ENROLLMENT_CANCELED,
+                event.enrollmentId(), event.curriculumId(), null,
+                null, event.studentId(), event.occurredAt()));
     }
 
     private void enqueue(NotificationFanoutCommand command) {
