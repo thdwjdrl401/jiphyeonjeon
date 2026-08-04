@@ -1316,3 +1316,87 @@ describe('액션 링 펼침·접힘', () => {
     restore.mockRestore()
   })
 })
+
+/**
+ * 강조 툴 캡처 발동(ADR-0074).
+ *
+ * <p>여기서 고정하는 것: <b>그리는 동안이 아니라 멎은 뒤</b> 한 번만 알린다. `onChange`는 포인터가
+ * 움직일 때마다 불리므로, 매번 캡처하면 같은 강조로 이미지가 수십 장 쌓이고 비전 모델도 그만큼 불린다.
+ */
+describe('강조 툴 캡처 발동', () => {
+  beforeEach(() => {
+    excalidrawProps = {}
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.clearAllMocks()
+  })
+
+  function highlight(id: string, version: number) {
+    return { id, version, type: 'freedraw', x: 100, y: 100, width: 50, height: 50,
+      customData: { liveclassHighlight: true } }
+  }
+
+  async function mount(onHighlightSettled: (elements: readonly unknown[]) => void) {
+    const view = render(
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} onHighlightSettled={onHighlightSettled as never} />,
+    )
+    await vi.waitFor(() => expect(excalidrawProps.onChange).toBeTypeOf('function'))
+    return view
+  }
+
+  it('그리는 동안에는 부르지 않고, 멎고 1초 뒤에 한 번 부른다', async () => {
+    const settled = vi.fn()
+    await mount(settled)
+    const onChange = excalidrawProps.onChange as (elements: unknown[]) => void
+
+    // 획 하나를 긋는 동안 onChange가 여러 번 불린다.
+    onChange([highlight('h1', 1)])
+    onChange([highlight('h1', 2)])
+    onChange([highlight('h1', 3)])
+    expect(settled).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(settled).toHaveBeenCalledTimes(1)
+  })
+
+  it('동그라미 뒤에 밑줄을 이어 그으면 한 건으로 묶인다', async () => {
+    const settled = vi.fn()
+    await mount(settled)
+    const onChange = excalidrawProps.onChange as (elements: unknown[]) => void
+
+    onChange([highlight('h1', 1)])
+    await vi.advanceTimersByTimeAsync(600)
+    onChange([highlight('h1', 1), highlight('h2', 1)])
+    await vi.advanceTimersByTimeAsync(600)
+    expect(settled).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(400)
+    expect(settled).toHaveBeenCalledTimes(1)
+  })
+
+  it('일반 판서만 그리면 발동하지 않는다', async () => {
+    const settled = vi.fn()
+    await mount(settled)
+    const onChange = excalidrawProps.onChange as (elements: unknown[]) => void
+
+    onChange([element('normal', 1)])
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(settled).not.toHaveBeenCalled()
+  })
+
+  /** 타이머가 도는 사이 지웠으면 없는 강조를 근거로 남기게 된다. */
+  it('기다리는 동안 강조를 지우면 캡처하지 않는다', async () => {
+    const settled = vi.fn()
+    await mount(settled)
+    const onChange = excalidrawProps.onChange as (elements: unknown[]) => void
+
+    onChange([highlight('h1', 1)])
+    await vi.advanceTimersByTimeAsync(500)
+    onChange([{ ...highlight('h1', 2), isDeleted: true }])
+    await vi.advanceTimersByTimeAsync(1500)
+
+    expect(settled).not.toHaveBeenCalled()
+  })
+})
