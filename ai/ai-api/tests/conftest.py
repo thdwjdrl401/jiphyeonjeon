@@ -2,6 +2,7 @@ import asyncio
 from collections.abc import Iterator
 from dataclasses import dataclass
 import os
+from pathlib import Path
 import re
 from uuid import uuid4
 
@@ -9,6 +10,25 @@ import asyncpg
 import pytest
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.exc import ArgumentError
+
+
+def _repo_root() -> Path:
+    """Where the monorepo starts, for the few tests that guard cross-service files.
+
+    CI copies only `ai/ai-api` into the build container, so walking up from `__file__`
+    lands outside the filesystem and raises. `LIVECLASS_REPO_ROOT` lets the job mount the
+    repository and point at it instead of those tests being skipped — a deployment-config
+    guard that never runs is the same as not having one.
+    """
+
+    override = os.getenv("LIVECLASS_REPO_ROOT")
+    if override:
+        return Path(override)
+    return Path(__file__).resolve().parents[3]
+
+
+REPO_ROOT = _repo_root()
+AI_ROOT = REPO_ROOT / "ai"
 
 DEFAULT_TEST_ADMIN_URL = "postgresql+asyncpg://liveclass:liveclass@127.0.0.1:5432/postgres"
 _SAFE_DATABASE_NAME = re.compile(r"^[a-z0-9_]+_test$")

@@ -1,8 +1,7 @@
 import re
-from pathlib import Path
 
+from conftest import REPO_ROOT as ROOT
 
-ROOT = Path(__file__).resolve().parents[3]
 AI_PROD_COMPOSE = ROOT / "docker-compose.ai-prod.yml"
 AI_DEV_COMPOSE = ROOT / "docker-compose.ai-dev.yml"
 AI_PROD_ENV_EXAMPLE = ROOT / ".env.ai-prod.example"
