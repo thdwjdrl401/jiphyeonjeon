@@ -20,11 +20,15 @@ self.addEventListener('push', (event) => {
     (async () => {
       const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
       /*
-       * 화면이 떠 있고 사용자가 보고 있으면 시스템 알림을 띄우지 않는다 — 같은 알림이 STOMP로도
-       * 가서 알림함이 이미 갱신된다. 두 층이 각자 닿는 대신 겹치는 구간만 여기서 정리한다.
+       * <b>지금 이 창을 보고 있을 때만</b> 시스템 알림을 건너뛴다. 그때는 같은 알림이 STOMP로도
+       * 가서 알림함이 바로 갱신되므로 두 번 알릴 이유가 없다.
+       *
+       * 예전에는 `visibilityState === 'visible'`로 봤는데 그게 너무 넓었다. 창이 다른 앱 뒤에
+       * 떠 있기만 해도 'visible'이라, <b>딴 일 하는 중에는 알림이 하나도 안 왔다</b> — 푸시를
+       * 쓰는 이유가 정확히 그 상황인데도. 활성 창이 아니면 무조건 띄운다.
        */
-      const visible = clients.some((client) => client.visibilityState === 'visible')
-      if (visible) return
+      const focused = clients.some((client) => client.focused)
+      if (focused) return
 
       await self.registration.showNotification(payload.title ?? '새 알림', {
         body: payload.body ?? '',
