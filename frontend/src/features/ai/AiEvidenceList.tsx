@@ -1,6 +1,15 @@
 import { useId, useState } from 'react'
 import type { AiAnswerSource } from '@/features/live-session/liveSessionService'
-import { formatStreamElapsed, shortenSourceId } from './aiAnswer'
+import { formatStreamElapsed } from './aiAnswer'
+
+/**
+ * 발췌문 한 조각. 사이드바가 좁아 길면 잘리므로, 전문은 툴팁으로 남긴다.
+ * 값이 없으면 <b>아무것도 그리지 않는다</b> — 빈 줄이 카드 높이만 늘린다.
+ */
+function Excerpt({ text }: { text?: string }) {
+  if (!text) return null
+  return <p className="evidence-card__excerpt" title={text}>{text}</p>
+}
 
 /**
  * AI 답변의 근거 목록(LIVE.md §10.1 `sources`).
@@ -9,6 +18,11 @@ import { formatStreamElapsed, shortenSourceId } from './aiAnswer'
  * 답변 본문만큼 자리를 먹어, 스크롤이 근거로 채워진다 — 일반 챗 UI의 인용 표시처럼 `근거 n`
  * 한 줄만 두고 필요할 때 펼친다(ADR-0049 §8). 펼침 상태는 이 컴포넌트의 로컬 상태라 **턴별로 독립**이고,
  * 대화가 길어져도 기본값은 전부 접힘이다.
+ *
+ * 항목의 본문은 서버가 함께 보내 주는 **발췌문**이다. 예전에는 이 자리에 `materialId`를 줄여
+ * 붙였는데, UUID는 읽는 사람에게 아무 의미가 없다 — 무엇을 근거로 답했는지 알 수 없으면 근거를
+ * 보여 주는 뜻이 없다. 발췌문은 계약상 **선택 필드**라 옛 답변에는 없을 수 있고, 그때는 쪽수·시각만
+ * 남긴다(UUID를 되살리지 않는다).
  *
  * 근거는 여전히 **표시 전용**이다. `CAPTION` 근거의 `startMs`/`endMs`는 STT attempt-local 축이라
  * 영상 위치(세션-ms)와 다른 축이고, 이 값으로 seek을 걸면 엉뚱한 지점으로 간다 —
@@ -43,19 +57,14 @@ export default function AiEvidenceList({ sources }: { sources: AiAnswerSource[] 
               <li className="evidence-card" key={`pptx-${source.materialId}-${source.page}`}>
                 <strong>{source.page}쪽</strong>
                 <span className="evidence-card__kind">강의 자료</span>
-                {/* 계약에 자료 제목이 없어 UUID뿐이다 — 쪽수를 앞세우고 ID는 줄여 꼬리에 붙인다. */}
-                <span className="evidence-card__id" title={source.materialId}>
-                  {shortenSourceId(source.materialId)}
-                </span>
+                <Excerpt text={source.excerpt} />
               </li>
             )
             : (
               <li className="evidence-card" key={`caption-${source.sttSessionId}-${source.startMs}-${source.endMs}`}>
                 <strong>{formatStreamElapsed(source.startMs)}–{formatStreamElapsed(source.endMs)}</strong>
                 <span className="evidence-card__kind">강의 발화</span>
-                <span className="evidence-card__id" title={source.sttSessionId}>
-                  {shortenSourceId(source.sttSessionId)}
-                </span>
+                <Excerpt text={source.excerpt} />
               </li>
             ))}
         </ul>

@@ -501,12 +501,26 @@ const AI_ANSWER_EVENT_TYPES = new Set(['answer.delta', 'answer.done', 'answer.in
  * 근거 종류를 늘리면 우리가 모르는 항목이 섞여 올 수 있는데(ADR-0047 §2), 그리는 법을 모르는 것을
  * 그리려다 화면이 깨지는 것보다 낫다. 답변 본문은 그대로 보인다.
  */
+/**
+ * 근거 발췌문. 계약상 <b>선택</b>이라 없을 수 있고(옛 답변), 빈 문자열은 없는 것과 같이 본다 —
+ * 화면이 빈 칸을 그릴 이유가 없다.
+ */
+function readExcerpt(raw: unknown): string | undefined {
+  const text = typeof raw === 'string' ? raw.trim() : ''
+  return text.length > 0 ? text : undefined
+}
+
 function normalizeAiAnswerSources(raw: unknown): AiAnswerSource[] {
   if (!Array.isArray(raw)) return []
   return raw.flatMap((item): AiAnswerSource[] => {
     const source = item as Record<string, unknown>
     if (source?.type === 'PPTX') {
-      return [{ type: 'PPTX', materialId: String(source.materialId ?? ''), page: Number(source.page ?? 0) }]
+      return [{
+        type: 'PPTX',
+        materialId: String(source.materialId ?? ''),
+        page: Number(source.page ?? 0),
+        excerpt: readExcerpt(source.excerpt),
+      }]
     }
     if (source?.type === 'CAPTION') {
       return [{
@@ -515,6 +529,7 @@ function normalizeAiAnswerSources(raw: unknown): AiAnswerSource[] {
         sttSessionId: String(source.sttSessionId ?? ''),
         startMs: Number(source.startMs ?? 0),
         endMs: Number(source.endMs ?? 0),
+        excerpt: readExcerpt(source.excerpt),
       }]
     }
     return []

@@ -162,14 +162,21 @@ export type CaptionStreamEvent =
  * 프록시가 ai-api 스키마를 **변환 없이** 릴레이하므로 FE도 원본 좌표를 그대로 받는다.
  * 최초 등장 순서가 보존되고 중복은 서버가 제거한다.
  */
+/**
+ * AI 답변이 근거로 삼은 자료 한 조각.
+ *
+ * <p>`excerpt`가 <b>사람이 읽을 유일한 값</b>이다. materialId·sttSessionId는 UUID라 화면에
+ * 보여 줄 것이 못 되고, 서버는 처음부터 발췌문을 함께 보내 왔다(계약상 선택 필드라 옛 답변에는
+ * 없을 수 있다).
+ */
 export type AiAnswerSource =
-  | { type: 'PPTX'; materialId: string; page: number }
+  | { type: 'PPTX'; materialId: string; page: number; excerpt?: string }
   /**
    * ⚠️ `startMs`/`endMs`는 STT **attempt-local `streamElapsedMs`** 축이다(자막 델타와 같은 축).
    * 영상 위치(`sessionMs`)와 **다른 축**이라 이 값으로 seek을 걸면 엉뚱한 지점으로 간다 —
    * 시간 앵커 공유 계약이 서기 전까지는 표시만 한다(ADR-0043·0045·0047 §9).
    */
-  | { type: 'CAPTION'; sessionId: string; sttSessionId: string; startMs: number; endMs: number }
+  | { type: 'CAPTION'; sessionId: string; sttSessionId: string; startMs: number; endMs: number; excerpt?: string }
 
 /**
  * AI 답변 SSE 이벤트. 한 스트림 = `answer.delta` 0개 이상 + terminal(`done`|`insufficient`|`error`) 정확히 하나.

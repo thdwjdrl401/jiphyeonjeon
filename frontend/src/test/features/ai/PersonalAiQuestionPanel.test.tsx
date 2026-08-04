@@ -154,8 +154,15 @@ describe('개인 AI 질문 패널 — 대화형 UX', () => {
       payload: {
         requestId: 'r1',
         sources: [
-          { type: 'PPTX', materialId: 'mat-csrf', page: 12 },
-          { type: 'CAPTION', sessionId: 'ses-1', sttSessionId: 'stt-2', startMs: 728_000, endMs: 761_000 },
+          { type: 'PPTX', materialId: 'mat-csrf', page: 12, excerpt: '세션과 CSRF 요약' },
+          {
+            type: 'CAPTION',
+            sessionId: 'ses-1',
+            sttSessionId: 'stt-2',
+            startMs: 728_000,
+            endMs: 761_000,
+            excerpt: '토큰을 왜 따로 두는지 설명',
+          },
         ],
       },
     })
@@ -170,7 +177,9 @@ describe('개인 AI 질문 패널 — 대화형 UX', () => {
 
     expect(evidenceToggle).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByText('12쪽')).toBeVisible()
-    expect(screen.getByTitle('mat-csrf')).toBeVisible()
+    // UUID가 아니라 서버가 보낸 발췌문이 보인다.
+    expect(screen.getByText('세션과 CSRF 요약')).toBeVisible()
+    expect(screen.queryByText('mat-csrf')).not.toBeInTheDocument()
     expect(screen.getByText('12:08–12:41')).toBeVisible()
     expect(screen.getByText(/영상 위치와 다를 수 있어 이동을 제공하지 않습니다/)).toBeVisible()
     // 근거는 표시 전용이다 — 누르면 엉뚱한 지점으로 가므로 버튼으로 만들지 않는다.
