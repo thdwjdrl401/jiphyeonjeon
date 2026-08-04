@@ -35,6 +35,12 @@ class AnnotationInterpretContractTest {
             this.answer = answer;
         }
 
+        /** 해석은 저장된 이미지가 아니라 강사가 방금 고른 선택에서 온다 — URL 경로를 쓰지 않는다. */
+        @Override
+        public String callToolWithImageUrl(String prompt, String imageUrl, String toolName, String toolParameters) {
+            throw new AssertionError("판서 해석은 데이터 URI 경로를 쓴다");
+        }
+
         @Override
         public String callTool(String prompt, String imageDataUri, String toolName, String toolParameters) {
             prompts.add(prompt);

@@ -63,6 +63,14 @@ class GmsAnnotationVisionModel implements AnnotationVisionModel {
         }
     }
 
+    @Override
+    public String callToolWithImageUrl(String prompt, String imageUrl, String toolName, String toolParameters) {
+        if (!properties.enabled()) {
+            throw new AnnotationInterpretException("판서 해석이 설정되지 않았습니다(GMS 키 없음).");
+        }
+        return callWithImageUrl(prompt, imageUrl, toolName, toolParameters);
+    }
+
     private String imageUrl(String token) {
         return properties.imageBaseUrl() + "/api/annotation-interpret-images/" + token;
     }
