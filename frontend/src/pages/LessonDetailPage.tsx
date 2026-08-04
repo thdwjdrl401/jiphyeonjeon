@@ -98,7 +98,7 @@ export default function LessonDetailPage() {
           강의별 덮어쓰기. 커리큘럼 설정을 그대로 쓰는 사람에게도 보여 준다 — 그래야 "이 강의만
           다르게"가 가능하다는 것을 알 수 있다.
         */}
-        <Panel className="lesson-detail__reminder" title="알림">
+        <Panel className="lesson-detail__reminder" title="라이브 시작 알림">
           <LiveReminderSetting curriculumId={curriculumId} lessonId={lessonId} />
         </Panel>
 

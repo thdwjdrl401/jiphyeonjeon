@@ -145,10 +145,15 @@ export default function NotificationBell() {
                 브라우저 알림 끄기
               </button>
             )}
+            {/*
+              한 번 거절되면 사이트가 다시 물을 수 없다 — 브라우저가 그렇게 정한 것이다.
+              그래서 "차단되어 있습니다"로 끝내면 빠져나갈 길이 없다. 어디서 되돌리는지 적는다.
+            */}
             {push.state === 'denied' && (
-              <span className="notification-dropdown__hint">
-                브라우저에서 알림이 차단되어 있습니다.
-              </span>
+              <p className="notification-dropdown__hint">
+                브라우저에서 알림을 차단해 두셨습니다.
+                주소창 왼쪽 자물쇠 → 알림을 «허용»으로 바꾸면 켤 수 있습니다.
+              </p>
             )}
           </footer>
         </div>

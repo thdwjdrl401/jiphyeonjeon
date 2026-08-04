@@ -81,9 +81,28 @@
   font-size: 0.88rem;
 }
 
+/*
+ * 푸터에 링크 하나만 있던 자리에 푸시 스위치가 들어왔다. 가로로 늘어놓으면 글자 크기가 다른
+ * 요소 둘(링크 .8rem / text-button .7rem)이 가운데에서 맞붙어 버린다 — 세로로 쌓고 간격을 준다.
+ */
 .notification-dropdown__footer {
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
+  gap: 6px;
   border-top: 1px solid var(--ink-100);
+}
+
+/* 권한이 막혀 손쓸 수 없을 때의 안내. 눌러도 되는 것처럼 보이면 안 되므로 버튼과 색을 나눈다. */
+.notification-dropdown__hint {
+  /* <p>의 기본 여백이 살아 있으면 위에서 준 gap과 겹쳐 간격이 또 어긋난다. */
+  margin: 0;
+  color: var(--ink-muted);
+  /* 링크(0.8rem)보다 작게 두되, 더 줄이면 안내문이 안 읽힌다. */
+  font-size: 0.72rem;
+  line-height: 1.5;
+  text-align: center;
+  /* 폭을 따로 제한하지 않는다 — 푸터 패딩이 이미 여백을 잡고, 좁히면 네 줄로 찢어진다. */
 }
 
 .notification-dropdown__footer a {

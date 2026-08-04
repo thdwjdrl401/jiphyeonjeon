@@ -232,6 +232,8 @@
 .curriculum-overview,
 .curriculum-materials,
 .curriculum-progress-panel,
+/* 알림 설정도 형제 패널과 같은 껍데기를 쓴다 — 여기 없으면 패널들 사이에 맨 내용이 떠 보인다. */
+.curriculum-reminder-panel,
 .curriculum-outline {
   border: 1px solid var(--border-medium);
   border-radius: var(--radius-lg);
