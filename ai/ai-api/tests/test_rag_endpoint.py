@@ -75,8 +75,13 @@ class Model:
         self,
         request: RagAnswerRequest,
         evidence: Sequence[RetrievedEvidence],
+        *,
+        grounded_capture=None,
+        **_ignored,
     ) -> AsyncIterator[str]:
         self.calls += 1
+        if grounded_capture is not None:
+            grounded_capture.value = True
 
         async def generate() -> AsyncIterator[str]:
             yield "설명한 개념은 "

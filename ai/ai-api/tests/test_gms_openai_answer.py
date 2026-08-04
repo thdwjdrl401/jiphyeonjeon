@@ -19,6 +19,7 @@ import app.adapters.gms_openai_answer as adapter_module
 from app.adapters.gms_openai_answer import GMS_OPENAI_BASE_URL, GmsOpenAIAnswerModel
 from app.rag import CaptionSource, PptxSource, RagAnswerRequest, RagStreamFailure
 from app.rag.models import RetrievedEvidence
+from app.rag.ports import GroundedCapture
 
 LESSON_ID = UUID("11111111-1111-4111-8111-111111111111")
 CURRICULUM_ID = UUID("55555555-5555-4555-8555-555555555555")
@@ -157,6 +158,106 @@ def test_streams_text_only_and_sends_minimized_grounded_prompt() -> None:
     assert str(MATERIAL_ID) not in serialized
     assert SESSION_ID not in serialized
     assert "provider-attempt-private" not in serialized
+
+
+def test_empty_evidence_still_reaches_the_model_as_general_knowledge_fallback() -> None:
+    stream = FakeStream([_chunk("[GENERAL]\n일반 지식으로 답합니다.")])
+    completions = FakeCompletions(stream=stream)
+    model = _model(FakeClient(completions))
+    capture = GroundedCapture()
+
+    async def run() -> list[str]:
+        return [
+            chunk
+            async for chunk in model.stream_answer(_request(), (), grounded_capture=capture)
+        ]
+
+    chunks = asyncio.run(run())
+
+    assert chunks == ["일반 지식으로 답합니다."]
+    assert capture.value is False
+    payload = json.loads(completions.calls[0]["messages"][1]["content"])
+    assert payload["evidence"] == []
+
+
+def test_grounded_tag_is_stripped_and_capture_set_true() -> None:
+    stream = FakeStream([_chunk("[GROUNDED]\n"), _chunk("근거 기반 답변"), _chunk("입니다.")])
+    completions = FakeCompletions(stream=stream)
+    model = _model(FakeClient(completions))
+    capture = GroundedCapture()
+
+    async def run() -> list[str]:
+        return [
+            chunk
+            async for chunk in model.stream_answer(
+                _request(), _evidence(), grounded_capture=capture
+            )
+        ]
+
+    chunks = asyncio.run(run())
+
+    assert "".join(chunks) == "근거 기반 답변입니다."
+    assert "[GROUNDED]" not in "".join(chunks)
+    assert capture.value is True
+
+
+def test_general_tag_is_stripped_and_capture_set_false() -> None:
+    stream = FakeStream([_chunk("[GENERAL]\n수업과 관련된 질문을 해주세요.")])
+    completions = FakeCompletions(stream=stream)
+    model = _model(FakeClient(completions))
+    capture = GroundedCapture()
+
+    async def run() -> list[str]:
+        return [
+            chunk
+            async for chunk in model.stream_answer(
+                _request(), _evidence(), grounded_capture=capture
+            )
+        ]
+
+    chunks = asyncio.run(run())
+
+    assert "".join(chunks) == "수업과 관련된 질문을 해주세요."
+    assert capture.value is False
+
+
+def test_missing_grounded_capture_leaves_raw_stream_unchanged() -> None:
+    """Backward compat: callers that don't pass grounded_capture (or fakes without a tag) see
+    the model's raw text untouched — no buffering, no stripping."""
+
+    stream = FakeStream([_chunk("[GENERAL]\n태그를 신경 안 쓰는 호출자")])
+    completions = FakeCompletions(stream=stream)
+    model = _model(FakeClient(completions))
+
+    async def run() -> list[str]:
+        return [chunk async for chunk in model.stream_answer(_request(), _evidence())]
+
+    chunks = asyncio.run(run())
+
+    assert "".join(chunks) == "[GENERAL]\n태그를 신경 안 쓰는 호출자"
+
+
+def test_malformed_tag_line_falls_back_to_ungrounded_and_flushes_buffer() -> None:
+    """If the model never emits a recognizable newline-terminated tag within the buffer limit,
+    treat it as ungrounded (no sources) rather than hanging forever."""
+
+    stream = FakeStream([_chunk("이 모델은 태그 형식을 완전히 무시하고 바로 답변을 시작합니다")])
+    completions = FakeCompletions(stream=stream)
+    model = _model(FakeClient(completions))
+    capture = GroundedCapture()
+
+    async def run() -> list[str]:
+        return [
+            chunk
+            async for chunk in model.stream_answer(
+                _request(), _evidence(), grounded_capture=capture
+            )
+        ]
+
+    chunks = asyncio.run(run())
+
+    assert "".join(chunks) == "이 모델은 태그 형식을 완전히 무시하고 바로 답변을 시작합니다"
+    assert capture.value is False
 
 
 def test_prompt_limit_fails_before_provider_call() -> None:

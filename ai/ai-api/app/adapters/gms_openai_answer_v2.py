@@ -21,9 +21,11 @@ from app.adapters.gms_openai_answer import (
     GMS_OPENAI_BASE_URL,
     _SYSTEM_PROMPT,
     _close_stream_safely,
+    _strip_grounding_tag,
 )
 from app.rag.errors import RagStreamFailure
 from app.rag.models import CaptionSourceV2, PptxSourceV2, RagAnswerRequestV2, RetrievedEvidenceV2
+from app.rag.ports import GroundedCapture
 
 logger = logging.getLogger(__name__)
 
@@ -71,8 +73,10 @@ class GmsOpenAIAnswerModelV2:
         self,
         request: RagAnswerRequestV2,
         evidence: Sequence[RetrievedEvidenceV2],
+        *,
+        grounded_capture: GroundedCapture | None = None,
     ) -> AsyncIterator[str]:
-        return self._stream_answer(request, evidence)
+        return _strip_grounding_tag(self._stream_answer(request, evidence), grounded_capture)
 
     async def _stream_answer(
         self,
@@ -120,8 +124,6 @@ def _prompt_payload_v2(
     request: RagAnswerRequestV2,
     evidence: Sequence[RetrievedEvidenceV2],
 ) -> str:
-    if not evidence:
-        raise RagStreamFailure(code="MODEL_CONFIGURATION_ERROR")
     items: list[dict[str, object]] = []
     for item in evidence:
         if isinstance(item.source, PptxSourceV2):

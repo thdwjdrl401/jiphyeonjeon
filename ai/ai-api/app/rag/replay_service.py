@@ -11,19 +11,16 @@ from app.rag.models import (
     AnswerDoneDataV2,
     AnswerDoneV2,
     AnswerEventV2,
-    AnswerInsufficient,
-    AnswerInsufficientData,
     AnswerSourceV2,
     CaptionSourceV2,
     PptxSourceV2,
     RagAnswerRequestV2,
     RetrievedEvidenceV2,
 )
-from app.rag.ports import AnswerModelV2, EvidenceRetrieverV2
+from app.rag.ports import AnswerModelV2, EvidenceRetrieverV2, GroundedCapture
 from app.rag.registry import InMemoryRequestRegistry, RequestRegistry
 from app.rag.service import (
     GENERIC_ERROR_MESSAGE,
-    INSUFFICIENT_MESSAGE,
     AnswerEventStream,
     _close_iterator,
     _error_event,
@@ -82,17 +79,11 @@ class ReplayAnswerService:
                 raise RagStreamFailure(code="RETRIEVAL_TIMEOUT") from error
 
             _validate_evidence_scope_v2(request, result.evidence)
-            if not result.sufficient:
-                yield AnswerInsufficient(
-                    data=AnswerInsufficientData(
-                        requestId=request.requestId,
-                        message=INSUFFICIENT_MESSAGE,
-                    )
-                )
-                return
 
-            sources = _unique_sources_v2(result.evidence)
-            deltas = self._model.stream_answer(request, result.evidence)
+            grounded_capture = GroundedCapture()
+            deltas = self._model.stream_answer(
+                request, result.evidence, grounded_capture=grounded_capture
+            )
             try:
                 try:
                     async with asyncio.timeout(self._model_timeout_seconds):
@@ -107,6 +98,7 @@ class ReplayAnswerService:
             finally:
                 await _close_iterator(deltas)
 
+            sources = _unique_sources_v2(result.evidence) if grounded_capture.value else ()
             yield AnswerDoneV2(data=AnswerDoneDataV2(requestId=request.requestId, sources=sources))
         except asyncio.CancelledError:
             raise

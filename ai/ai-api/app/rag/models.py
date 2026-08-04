@@ -75,7 +75,7 @@ class AnswerDelta(_ContractModel):
 
 class AnswerDoneData(_ContractModel):
     requestId: Identifier
-    sources: tuple[AnswerSource, ...] = Field(min_length=1)
+    sources: tuple[AnswerSource, ...] = Field(default=())
 
 
 class AnswerDone(_ContractModel):
@@ -221,7 +221,7 @@ AnswerSourceV2 = Annotated[PptxSourceV2 | CaptionSourceV2, Field(discriminator="
 
 class AnswerDoneDataV2(_ContractModel):
     requestId: Identifier
-    sources: tuple[AnswerSourceV2, ...] = Field(min_length=1)
+    sources: tuple[AnswerSourceV2, ...] = Field(default=())
 
 
 class AnswerDoneV2(_ContractModel):

@@ -25,6 +25,16 @@ class ResponseIdCapture:
         self.value: str | None = None
 
 
+class GroundedCapture:
+    """Mutable single-slot box an AnswerModel writes whether it actually used retrieved
+    evidence into while streaming. Callers must create one fresh instance per request — AnswerModel
+    implementations are long-lived singletons shared across concurrent requests, so this must
+    never be stored as instance state on the model itself."""
+
+    def __init__(self) -> None:
+        self.value: bool | None = None
+
+
 class ConversationMemoryPort(Protocol):
     async def get_previous_response_id(
         self, *, user_id: str, session_id: str, conversation_id: str
@@ -43,6 +53,7 @@ class AnswerModel(Protocol):
         *,
         previous_response_id: str | None = None,
         response_id_capture: ResponseIdCapture | None = None,
+        grounded_capture: GroundedCapture | None = None,
     ) -> AsyncIterator[str]: ...
 
 
@@ -55,4 +66,6 @@ class AnswerModelV2(Protocol):
         self,
         request: RagAnswerRequestV2,
         evidence: Sequence[RetrievedEvidenceV2],
+        *,
+        grounded_capture: GroundedCapture | None = None,
     ) -> AsyncIterator[str]: ...

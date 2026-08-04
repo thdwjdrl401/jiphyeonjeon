@@ -13,20 +13,23 @@ from app.rag.models import (
     AnswerError,
     AnswerErrorData,
     AnswerEvent,
-    AnswerInsufficient,
-    AnswerInsufficientData,
     AnswerSource,
     CaptionSource,
     PptxSource,
     RagAnswerRequest,
     RetrievedEvidence,
 )
-from app.rag.ports import AnswerModel, ConversationMemoryPort, EvidenceRetriever, ResponseIdCapture
+from app.rag.ports import (
+    AnswerModel,
+    ConversationMemoryPort,
+    EvidenceRetriever,
+    GroundedCapture,
+    ResponseIdCapture,
+)
 from app.rag.registry import InMemoryRequestRegistry, RequestLease, RequestRegistry
 
 logger = logging.getLogger(__name__)
 
-INSUFFICIENT_MESSAGE = "강의에서 답변 근거를 찾지 못했습니다."
 GENERIC_ERROR_MESSAGE = "답변을 생성하지 못했습니다. 잠시 후 다시 시도해 주세요."
 _FAILURE_CATALOG = {
     "RETRIEVAL_TIMEOUT": ("강의 근거 검색 시간이 초과되었습니다.", True),
@@ -80,17 +83,8 @@ class RagAnswerService:
                 raise RagStreamFailure(code="RETRIEVAL_TIMEOUT") from error
 
             _validate_evidence_scope(request, result.evidence)
-            if not result.sufficient:
-                yield AnswerInsufficient(
-                    data=AnswerInsufficientData(
-                        requestId=request.requestId,
-                        message=INSUFFICIENT_MESSAGE,
-                    )
-                )
-                return
 
-            sources = _unique_sources(result.evidence)
-
+            grounded_capture = GroundedCapture()
             capture: ResponseIdCapture | None = None
             memory_key = _conversation_memory_key(request)
             if self._conversation_memory is not None and memory_key is not None:
@@ -103,9 +97,12 @@ class RagAnswerService:
                     result.evidence,
                     previous_response_id=previous_response_id,
                     response_id_capture=capture,
+                    grounded_capture=grounded_capture,
                 )
             else:
-                deltas = self._model.stream_answer(request, result.evidence)
+                deltas = self._model.stream_answer(
+                    request, result.evidence, grounded_capture=grounded_capture
+                )
 
             try:
                 try:
@@ -124,6 +121,7 @@ class RagAnswerService:
             if capture is not None and memory_key is not None and capture.value is not None:
                 await self._safe_save_response_id(request, memory_key, capture.value)
 
+            sources = _unique_sources(result.evidence) if grounded_capture.value else ()
             yield AnswerDone(data=AnswerDoneData(requestId=request.requestId, sources=sources))
         except asyncio.CancelledError:
             raise

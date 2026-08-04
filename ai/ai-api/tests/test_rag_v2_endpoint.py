@@ -75,8 +75,13 @@ class Model:
         self,
         request: RagAnswerRequestV2,
         evidence: Sequence[RetrievedEvidenceV2],
+        *,
+        grounded_capture=None,
+        **_ignored,
     ) -> AsyncIterator[str]:
         self.calls += 1
+        if grounded_capture is not None:
+            grounded_capture.value = True
 
         async def generate() -> AsyncIterator[str]:
             yield "컨슈머 그룹은 "
@@ -303,7 +308,10 @@ def test_v1_and_v2_endpoints_are_wired_independently() -> None:
             )
 
     class V1Model:
-        def stream_answer(self, request, evidence):
+        def stream_answer(self, request, evidence, *, grounded_capture=None, **_ignored):
+            if grounded_capture is not None:
+                grounded_capture.value = True
+
             async def generate():
                 yield "v1 답변"
 
