@@ -128,10 +128,15 @@ export function getDemoLiveSession(sessionId: string) {
   }
 }
 
+/**
+ * `sessionMs`는 아래 자막 데모와 <b>같은 축</b>에 맞춘다 — 다시보기에서 재생 위치까지의 채팅만
+ * 드러나는 동작을 목 모드에서도 볼 수 있어야 한다. 축이 없으면 "판단할 수 없으니 보인다"로 떨어져
+ * 그 동작이 데모에서 통째로 사라진다.
+ */
 export const demoMessages = [
-  { id: 'msg-1', alias: '수강생-14A2', text: '세션과 JWT를 함께 쓰는 경우도 있나요?', time: '10:14', question: true },
-  { id: 'msg-2', alias: '수강생-09C1', text: '필터 순서가 왜 중요한지 이해됐어요.', time: '10:16', question: false },
-  { id: 'msg-3', alias: '이도현 강사', text: '좋은 질문이에요. 다음 예제에서 바로 비교해 볼게요.', time: '10:17', question: false },
+  { id: 'msg-1', alias: '수강생-14A2', text: '세션과 JWT를 함께 쓰는 경우도 있나요?', time: '10:14', question: true, sessionMs: 731_000 },
+  { id: 'msg-2', alias: '수강생-09C1', text: '필터 순서가 왜 중요한지 이해됐어요.', time: '10:16', question: false, sessionMs: 902_000 },
+  { id: 'msg-3', alias: '이도현 강사', text: '좋은 질문이에요. 다음 예제에서 바로 비교해 볼게요.', time: '10:17', question: false, sessionMs: 1_884_000 },
 ]
 
 export const demoLiveCaptions = [

@@ -269,19 +269,24 @@ export function selectCaptionViews(state: CaptionStreamState): CaptionView[] {
 }
 
 /**
- * 뷰어 모드에 따라 CaptionDock에 넘길 자막을 고른다(ADR-0045).
- * - 강사(라이브, 플레이어 위치 미구동): 실시간 append 그대로 전부 노출한다.
- * - 학생(HLS/replay, 플레이어 위치 존재): 위치 동기화 자막(synced)은 `positionMs`(+lead)까지만 노출한다 —
- *   앞선 자막은 이미 버퍼에 와 있고 위치가 도달하면 드러난다. 위치 축이 아닌 fallback 자막(synced=false)은
- *   판단할 수 없어 그대로 보인다.
+ * CaptionDock에 넘길 자막을 고른다(ADR-0045).
+ *
+ * <p>기준은 <b>역할이 아니라 재생 위치가 있느냐</b>다. 위치가 있으면 위치 동기화 자막(synced)은
+ * 거기까지만 노출한다 — 앞선 자막은 이미 버퍼에 와 있고 위치가 도달하면 드러난다. 위치 축이 아닌
+ * fallback 자막(synced=false)은 판단할 수 없어 그대로 보인다.
+ *
+ * <p><b>{@code positionMs}가 null이면 전부 노출한다.</b> 라이브 강사 화면처럼 플레이어가 없어
+ * 위치를 구할 수 없는 자리다. 한때 이 자리에 {@code isInstructor}가 있었는데, 다시보기에서는
+ * 강사도 플레이어를 쓰므로 역할로 판단하면 강사만 미래 자막이 다 보인다 — 물어야 할 것은 처음부터
+ * "위치를 아는가"였다.
  */
 export function selectVisibleCaptions(
   captions: CaptionView[],
-  options: { isInstructor: boolean; positionMs: number },
+  positionMs: number | null,
 ): CaptionView[] {
-  if (options.isInstructor) return captions
+  if (positionMs == null) return captions
   // startMs는 발화보다 STT 방출 지연만큼 늦으므로, 그 지연을 더한 지점까지 노출해야 말이 들리는 순간에 뜬다.
-  const ceiling = options.positionMs + CAPTION_STT_LAG_MS
+  const ceiling = positionMs + CAPTION_STT_LAG_MS
   return captions.filter((caption) => !caption.synced || caption.startMs <= ceiling)
 }
 

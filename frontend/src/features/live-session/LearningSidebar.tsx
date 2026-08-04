@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Tabs, { tabPanelProps, type TabItem } from '@/shared/ui/Tabs'
 import LectureNotePanel from './LectureNotePanel'
+import { selectVisibleMessages } from './replayTimeline'
 import type { ChatMessageView, LectureNoteView } from './liveSessionService.interface'
 import type { GlossaryTermView, LearningPanel } from './liveLearningPreview'
 
@@ -16,6 +17,11 @@ interface LearningSidebarProps {
   lectureNote: LectureNoteView | null
   glossaryTerms: GlossaryTermView[]
   messages: ChatMessageView[]
+  /**
+   * 재생 위치(세션 상대 ms). 주면 그 지점까지 올라온 채팅만 보인다 — 다시보기에서 미래의 질문이
+   * 먼저 떠 있지 않게 한다. 라이브처럼 지금이 곧 최신인 화면은 생략한다.
+   */
+  revealThroughMs?: number | null
   discussionComposer?: ReactNode
   discussionNotice?: string
   aiContent: ReactNode
@@ -59,14 +65,25 @@ function useVisitedPanels(active: LearningPanel) {
   )
 }
 
-function DiscussionPanel({ messages, composer, notice, panelProps }: { messages: ChatMessageView[]; composer?: ReactNode; notice?: string; panelProps: PanelProps }) {
+function DiscussionPanel({ messages, revealThroughMs, composer, notice, panelProps }: { messages: ChatMessageView[]; revealThroughMs?: number | null; composer?: ReactNode; notice?: string; panelProps: PanelProps }) {
   const [filter, setFilter] = useState<'all' | 'questions'>('all')
   const [isFollowingLatest, setIsFollowingLatest] = useState(true)
   const chatListRef = useRef<HTMLDivElement>(null)
-  const visibleMessages = useMemo(
-    () => filter === 'questions' ? messages.filter((message) => message.question) : messages,
-    [filter, messages],
+  /*
+   * 재생 위치까지 올라온 것만 남긴 뒤 질문 필터를 건다. 순서가 중요하다 — 질문을 먼저 거르면
+   * 개수 배지가 아직 오지 않은 질문까지 세어, 목록에 셋뿐인데 "질문 12"가 뜬다.
+   */
+  const revealed = useMemo(
+    () => selectVisibleMessages(messages, revealThroughMs ?? null),
+    [messages, revealThroughMs],
   )
+  const questionCount = useMemo(() => revealed.filter((message) => message.question).length, [revealed])
+  const visibleMessages = useMemo(
+    () => filter === 'questions' ? revealed.filter((message) => message.question) : revealed,
+    [filter, revealed],
+  )
+  /** 위치로 자른 결과가 빈 것과, 애초에 채팅이 없던 것은 다른 상황이다. 문구를 나눈다. */
+  const isTrimmedEmpty = revealed.length === 0 && messages.length > 0
 
   const scrollToLatest = useCallback(() => {
     const chatList = chatListRef.current
@@ -94,8 +111,8 @@ function DiscussionPanel({ messages, composer, notice, panelProps }: { messages:
   return (
     <div className="side-panel-content discussion-panel" {...panelProps}>
       <div className="discussion-filter" aria-label="채팅 필터">
-        <button className={filter === 'all' ? 'is-active' : ''} type="button" onClick={() => changeFilter('all')}>전체 {messages.length}</button>
-        <button className={filter === 'questions' ? 'is-active' : ''} type="button" onClick={() => changeFilter('questions')}>질문 {messages.filter((message) => message.question).length}</button>
+        <button className={filter === 'all' ? 'is-active' : ''} type="button" onClick={() => changeFilter('all')}>전체 {revealed.length}</button>
+        <button className={filter === 'questions' ? 'is-active' : ''} type="button" onClick={() => changeFilter('questions')}>질문 {questionCount}</button>
       </div>
       <div className="chat-list" ref={chatListRef} onScroll={handleChatScroll}>
         {visibleMessages.length > 0
@@ -115,7 +132,13 @@ function DiscussionPanel({ messages, composer, notice, panelProps }: { messages:
                 {item.question && <small>질문으로 등록됨</small>}
               </article>
             ))
-          : <p className="panel-empty">등록된 질문이 없습니다.</p>}
+          : (
+            <p className="panel-empty">
+              {isTrimmedEmpty
+                ? '이 지점까지 올라온 채팅이 없습니다. 재생하면 그때의 대화가 여기에 쌓입니다.'
+                : filter === 'questions' ? '등록된 질문이 없습니다.' : '등록된 채팅이 없습니다.'}
+            </p>
+          )}
       </div>
       {!isFollowingLatest && (
         <div className="chat-latest-jump">
@@ -179,7 +202,7 @@ export default function LearningSidebar(props: LearningSidebarProps) {
         value={props.panel}
         onChange={props.onPanelChange}
       />
-      {isAvailable('discussion') && isMounted('discussion') && <DiscussionPanel messages={props.messages} composer={props.discussionComposer} notice={props.discussionNotice} panelProps={panelProps('discussion')} />}
+      {isAvailable('discussion') && isMounted('discussion') && <DiscussionPanel messages={props.messages} revealThroughMs={props.revealThroughMs} composer={props.discussionComposer} notice={props.discussionNotice} panelProps={panelProps('discussion')} />}
       {isAvailable('notes') && isMounted('notes') && <LectureNotePanel note={props.lectureNote} live={props.noteContext === 'LIVE'} panelProps={panelProps('notes')} />}
       {isAvailable('ai') && isMounted('ai') && <div className="side-panel-content ai-panel" {...panelProps('ai')}>{props.aiContent}</div>}
       {isAvailable('glossary') && isMounted('glossary') && <GlossaryPanel terms={props.glossaryTerms} selectedTermId={props.selectedTermId} onSelectedTermChange={props.onSelectedTermChange} panelProps={panelProps('glossary')} />}
