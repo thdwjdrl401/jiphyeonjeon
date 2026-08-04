@@ -91,6 +91,17 @@ export const httpCurriculumManagementService = {
     const asset = await uploadAsset(file, 'THUMBNAIL')
     return asset.assetId
   },
+  /**
+   * 대표 이미지 교체(ADR-0076). 기본 정보 PATCH에 thumbnailAssetId만 실어 보낸다 — 나머지 필드는
+   * null(=변경 안 함)이라 자동 저장이 방금 보낸 제목·소개를 되돌리지 않는다.
+   */
+  async updateCurriculumThumbnail(request) {
+    const { data } = await apiClient.patch<InstructorCurriculumResponse>(
+      `/instructor/curriculums/${request.curriculumId}`,
+      { thumbnailAssetId: request.thumbnailAssetId },
+    )
+    return { ...data, materials: data.materials ?? [], enrolleeCount: data.enrolleeCount ?? null }
+  },
   async createCurriculum(request) {
     const { data } = await apiClient.post<{ curriculumId: string }>('/instructor/curriculums', {
       title: request.title,

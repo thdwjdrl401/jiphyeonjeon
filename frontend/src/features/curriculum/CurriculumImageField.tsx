@@ -14,12 +14,27 @@ interface CurriculumImageFieldProps {
   /** 미리보기에 쓸 URL. 새로 고른 이미지의 data URL이거나, 이미 저장된 이미지의 서버 URL. */
   previewUrl: string | null
   onChange: (selection: CurriculumImageSelection | null) => void
+  /**
+   * 삭제를 지금 할 수 없는 이유. 주면 삭제 버튼을 <b>비활성으로 보여 주고</b> 이유를 붙인다.
+   *
+   * <p>이미 저장된 대표 이미지를 비우는 서버 계약이 아직 없다(PATCH의 thumbnailAssetId는
+   * null=변경 안 함). 버튼을 아예 감추면 "삭제할 수 있나?"를 화면에서 알 수 없고, 그대로 두면
+   * 눌러도 아무 일이 없는 거짓 동작이 된다 — 자리는 두고 이유를 말한다(ADR-0076).
+   */
+  removeDisabledReason?: string
 }
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024
 
-export default function CurriculumImageField({ id, previewUrl, onChange }: CurriculumImageFieldProps) {
+export default function CurriculumImageField({
+  id,
+  previewUrl,
+  onChange,
+  removeDisabledReason,
+}: CurriculumImageFieldProps) {
   const [error, setError] = useState('')
+  // 삭제 버튼은 이미지가 없어도 자리를 지킨다 — 등록 옆에 있어야 무엇을 할 수 있는 자리인지 읽힌다.
+  const removeReason = removeDisabledReason ?? (previewUrl ? undefined : '삭제할 대표 이미지가 없습니다.')
 
   const selectImage = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -56,7 +71,13 @@ export default function CurriculumImageField({ id, previewUrl, onChange }: Curri
       </label>
       <div className="curriculum-image-field__actions">
         <input id={id} aria-label="대표 이미지 등록" type="file" accept="image/jpeg,image/png,image/webp" onChange={selectImage} />
-        {previewUrl && <button className="button button--ghost" type="button" onClick={() => { setError(''); onChange(null) }}>이미지 삭제</button>}
+        <button
+          className="button button--ghost"
+          type="button"
+          disabled={Boolean(removeReason)}
+          title={removeReason}
+          onClick={() => { setError(''); onChange(null) }}
+        >이미지 삭제</button>
       </div>
       <p>JPG, PNG, WebP · 최대 5MB · 목록과 상세 카드에 사용됩니다.</p>
       {error && <small role="alert">{error}</small>}

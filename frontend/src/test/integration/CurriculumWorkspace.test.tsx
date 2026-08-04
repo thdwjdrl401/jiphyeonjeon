@@ -513,6 +513,60 @@ describe('커리큘럼 작업 화면', () => {
     expect(screen.getByLabelText('대표 이미지 등록')).toBeInTheDocument()
   })
 
+  /*
+    대표 이미지는 고른 즉시 저장된다(ADR-0076). 예전에는 고른 파일을 버리고 미리보기만 바꿔서,
+    화면은 "자동 저장됩니다"라고 말하는데 다시 들어오면 옛 이미지로 돌아가 있었다.
+  */
+  it('대표 이미지를 고르면 즉시 저장되고 화면을 떠났다 돌아와도 유지된다', async () => {
+    const user = userEvent.setup()
+    await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
+    await user.click(await screen.findByRole('tab', { name: '기본 정보' }))
+    const image = new File(['image-bytes'], 'cover.png', { type: 'image/png' })
+
+    await user.upload(screen.getByLabelText('대표 이미지 등록'), image)
+    await waitFor(() => expect(screen.getByText('자동 저장됨')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByAltText('대표 이미지 미리보기')).toHaveAttribute(
+      'src', expect.stringContaining('data:image/png'),
+    ))
+
+    await user.click(screen.getByRole('link', { name: '커리큘럼 상세' }))
+    await user.click(await screen.findByRole('button', { name: '관리하기' }))
+    await user.click(await screen.findByRole('tab', { name: '기본 정보' }))
+
+    expect(await screen.findByAltText('대표 이미지 미리보기')).toHaveAttribute(
+      'src', expect.stringContaining('data:image/png'),
+    )
+  })
+
+  // 삭제 계약(서버에서 이미지를 비우는 길)이 아직 없다 — 자리는 두고 이유를 말한다(ADR-0076).
+  it('관리 화면의 대표 이미지 삭제 버튼은 자리를 지키되 준비 중임을 알린다', async () => {
+    const user = userEvent.setup()
+    await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
+    await user.click(await screen.findByRole('tab', { name: '기본 정보' }))
+
+    const removeButton = await screen.findByRole('button', { name: '이미지 삭제' })
+    expect(removeButton).toBeDisabled()
+    expect(removeButton).toHaveAttribute('title', expect.stringContaining('준비 중'))
+  })
+
+  it('커리큘럼 만들기에서는 고른 대표 이미지를 삭제 버튼으로 취소할 수 있다', async () => {
+    const user = userEvent.setup()
+    await renderAsInstructor('/instructor/curriculums/new')
+
+    // 아직 고른 이미지가 없어도 삭제 버튼은 등록 옆에 있다(비활성 + 이유).
+    const removeButton = await screen.findByRole('button', { name: '이미지 삭제' })
+    expect(removeButton).toBeDisabled()
+
+    const image = new File(['image-bytes'], 'cover.png', { type: 'image/png' })
+    await user.upload(screen.getByLabelText('대표 이미지 등록'), image)
+    expect(await screen.findByAltText('대표 이미지 미리보기')).toBeInTheDocument()
+
+    // 저장 전이라 서버에 아무것도 없다 — 여기서는 삭제가 실제로 동작한다.
+    await user.click(screen.getByRole('button', { name: '이미지 삭제' }))
+    expect(screen.queryByAltText('대표 이미지 미리보기')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '이미지 삭제' })).toBeDisabled()
+  })
+
   // 자료도 자동 저장 지문에 들어간다(ADR-0042) — 고르는 즉시 목록에 뜨고, 디바운스 뒤 저장된다.
   it('관리 화면에서 커리큘럼 자료를 추가하면 목록에 표시된다', async () => {
     const user = userEvent.setup()

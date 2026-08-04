@@ -321,6 +321,14 @@ export function updateMockCurriculumMaterials(curriculumId: string, materials: C
   return curriculum
 }
 
+/** 대표 이미지 교체(ADR-0076). 목에는 에셋 스토리지가 없어 화면이 만든 미리보기 URL을 그대로 둔다. */
+export function updateMockCurriculumThumbnail(curriculumId: string, thumbnailUrl: string | null) {
+  const curriculum = getMockCurriculum(curriculumId)
+  if (!curriculum) return null
+  curriculum.thumbnailUrl = thumbnailUrl
+  return curriculum
+}
+
 export function resolveMockRelationship(user: AuthUser | null, curriculum: MockCurriculumEntity): CurriculumRelationship {
   if (!user) return 'GUEST'
   if (user.role === 'INSTRUCTOR') {

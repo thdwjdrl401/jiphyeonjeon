@@ -5,6 +5,7 @@ import type {
   CreateCurriculumRequest,
   CurriculumManagementService,
   SaveCurriculumManagementRequest,
+  UpdateCurriculumThumbnailRequest,
   UploadRecordedLessonRequest,
 } from './curriculumManagementService.interface'
 
@@ -14,6 +15,8 @@ const curriculumManagementService = selectDataSource<CurriculumManagementService
 )
 
 export const uploadCurriculumThumbnail = (file: File) => curriculumManagementService.uploadCurriculumThumbnail(file)
+export const updateCurriculumThumbnail = (request: UpdateCurriculumThumbnailRequest) =>
+  curriculumManagementService.updateCurriculumThumbnail(request)
 export const createCurriculum = (request: CreateCurriculumRequest) => curriculumManagementService.createCurriculum(request)
 export const getInstructorCurriculum = (curriculumId: string) => curriculumManagementService.getInstructorCurriculum(curriculumId)
 export const getCurriculumManagementStructure = (curriculumId: string) => curriculumManagementService.getCurriculumManagementStructure(curriculumId)
@@ -32,6 +35,7 @@ export type {
   InstructorCurriculumResponse,
   SaveCurriculumManagementRequest,
   SaveCurriculumManagementResult,
+  UpdateCurriculumThumbnailRequest,
   UploadRecordedLessonRequest,
   UploadRecordedLessonResult,
 } from './curriculumManagementService.interface'
