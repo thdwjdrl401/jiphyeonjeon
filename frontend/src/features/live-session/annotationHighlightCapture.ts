@@ -16,6 +16,19 @@ import { loadExcalidraw } from './excalidrawRuntime'
 /** 출력 이미지의 긴 변 상한. 근거로 읽힐 만큼은 크고, 에셋 한도(5MiB)에는 한참 못 미치게. */
 export const HIGHLIGHT_IMAGE_MAX_EDGE = 1600
 
+/**
+ * 출력 포맷과 품질.
+ *
+ * <p><b>PNG를 쓰지 않는다.</b> 이 이미지는 영상 프레임을 자른 것이라 사진에 가깝고, PNG는 사진에
+ * 최악의 선택이다(무손실 압축이라 몇 배 커진다). 그리고 이 바이트는 <b>강사의 업링크로 나간다</b> —
+ * 라이브 송출과 같은 회선이라 크기가 그대로 영상 품질과 경쟁한다.
+ *
+ * <p>품질 0.85는 글자가 읽히는 선에서 잡은 값이다. 근거 이미지의 목적이 "모델이 읽는 것"이라
+ * 사람 눈보다 글자 가독성이 기준이다.
+ */
+export const HIGHLIGHT_IMAGE_TYPE = 'image/webp'
+export const HIGHLIGHT_IMAGE_QUALITY = 0.85
+
 export interface CaptureSource {
   /** 합성할 영상. LiveKit 로컬 트랙이라 캔버스가 오염되지 않아 `toBlob`이 된다. */
   video: HTMLVideoElement
@@ -55,7 +68,7 @@ export async function captureHighlightImage(source: CaptureSource): Promise<Blob
 
   await drawAnnotations(context, elements, rect, canvas)
 
-  return await toPngBlob(canvas)
+  return await toImageBlob(canvas)
 }
 
 /**
@@ -103,8 +116,9 @@ function outputScale(videoRect: CropRect): number {
   return longest > HIGHLIGHT_IMAGE_MAX_EDGE ? HIGHLIGHT_IMAGE_MAX_EDGE / longest : 1
 }
 
-function toPngBlob(canvas: HTMLCanvasElement): Promise<Blob | null> {
-  return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'))
+function toImageBlob(canvas: HTMLCanvasElement): Promise<Blob | null> {
+  return new Promise((resolve) =>
+    canvas.toBlob(resolve, HIGHLIGHT_IMAGE_TYPE, HIGHLIGHT_IMAGE_QUALITY))
 }
 
 /** 논리 프레임 전체를 덮는 크롭. 강조 없이 화면 전체를 잡아야 할 때의 기준값이다. */

@@ -4,6 +4,7 @@ import CameraOverlayControl from './CameraOverlayControl'
 import InstructorAnnotationLayer from './InstructorAnnotationLayer'
 import InstructorLocalTrackVideo from './InstructorLocalTrackVideo'
 import PublishQualityPanel from './PublishQualityPanel'
+import { useAnnotationHighlightCapture } from './useAnnotationHighlightCapture'
 import { useInstructorLiveKit, type InstructorLiveKitConnectionState } from './useInstructorLiveKit'
 
 interface InstructorLiveKitStageProps {
@@ -153,6 +154,18 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
   const screenShareTrack = publisher.screenShareEnabled ? publisher.screenShareTrack : undefined
   const cameraTrack = publisher.cameraEnabled ? publisher.cameraTrack : undefined
   const mainTrack = screenShareTrack ?? cameraTrack
+
+  /**
+   * 합성 화면의 video element. 강조 캡처가 이 프레임을 잘라 쓴다(ADR-0074).
+   *
+   * <p>화면공유가 있으면 그쪽, 없으면 카메라다 — {@code mainTrack}이 이미 그 규칙이라 따로 고르지
+   * 않는다. 강조 대상은 대개 슬라이드이고, 카메라를 잡으면 강사 얼굴이 근거로 색인된다.
+   */
+  const mainVideoRef = useRef<HTMLVideoElement | null>(null)
+  const highlightCapture = useAnnotationHighlightCapture({
+    sessionId,
+    resolveVideo: () => mainVideoRef.current,
+  })
   const showCameraPictureInPicture = Boolean(screenShareTrack && cameraTrack)
   const canRetry = publisher.connectionState === 'error' || publisher.connectionState === 'disconnected'
 
@@ -193,6 +206,7 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
                 mirrored={!screenShareTrack}
                 label={screenShareTrack ? '공유 화면 미리보기' : '카메라 미리보기'}
                 track={mainTrack}
+                elementRef={mainVideoRef}
               />
             )
             : <div className="instructor-media-empty"><span aria-hidden="true">◉</span><strong>{emptyPreviewMessage(publisher.connectionState, publisher.cameraEnabled)}</strong></div>}
@@ -231,7 +245,34 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
             onPublishState={publisher.publishAnnotationState}
             restoredElements={publisher.restoredAnnotation?.elements ?? null}
             restoredFiles={publisher.restoredAnnotation?.files ?? null}
+            onHighlightSettled={highlightCapture.onHighlightSettled}
           />
+
+          {/*
+            강조 캡처 확인(ADR-0074). <b>묻고 나서 자른다</b> — 캡처는 export·인코딩을 연달아 돌려
+            강사 화면이 잠깐 멎으므로, 강사가 누른 순간에만 그 멈춤이 생기게 한다.
+
+            그리고 AI가 이 텍스트를 검증 없이 신뢰하기로 했으므로, 이 확인이 잘못된 근거를 막는
+            유일한 게이트다.
+          */}
+          {highlightCapture.prompt && (
+            <div className="annotation-highlight-prompt" role="dialog" aria-label="강조 근거 저장 확인">
+              <p>{highlightCapture.prompt.message}</p>
+              <div className="annotation-highlight-prompt__actions">
+                <button type="button" className="button button--soft"
+                  onClick={highlightCapture.prompt.dismiss}>안 남김</button>
+                <button type="button" className="button button--primary"
+                  onClick={highlightCapture.prompt.confirm}>남기기</button>
+              </div>
+            </div>
+          )}
+          {highlightCapture.status === 'capturing' && (
+            <p className="annotation-highlight-status" role="status">강조를 저장하는 중…</p>
+          )}
+          {highlightCapture.notice && highlightCapture.status !== 'capturing' && (
+            <p className="annotation-highlight-status" role="status"
+              onClick={highlightCapture.dismissNotice}>{highlightCapture.notice}</p>
+          )}
         </div>
       </div>
 

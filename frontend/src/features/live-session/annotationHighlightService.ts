@@ -31,7 +31,10 @@ export async function captureAnnotationHighlight(
   image: Blob,
   interpretedText?: string,
 ): Promise<AnnotationHighlightView> {
-  const file = new File([image], `highlight-${Date.now()}.png`, { type: 'image/png' })
+  // 확장자·MIME을 캡처가 만든 것에 맞춘다. 하드코딩하면 포맷을 바꿀 때 조용히 어긋난다.
+  const extension = image.type === 'image/webp' ? 'webp' : image.type === 'image/jpeg' ? 'jpg' : 'png'
+  const file = new File([image], `highlight-${Date.now()}.${extension}`,
+    { type: image.type || 'image/webp' })
   const asset = await uploadAsset(file, 'ANNOTATION_SNAPSHOT')
   const { data } = await apiClient.post<AnnotationHighlightView>(
     `/live-sessions/${sessionId}/annotation/highlights`,
