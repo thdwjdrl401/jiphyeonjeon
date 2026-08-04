@@ -269,3 +269,12 @@ notification:
     private-key: ${NOTIFICATION_WEB_PUSH_PRIVATE_KEY:}
     # 푸시 서비스가 문제 생겼을 때 연락할 곳. mailto: 또는 https: URL.
     subject: ${NOTIFICATION_WEB_PUSH_SUBJECT:mailto:liveclass@example.com}
+    # 동시 발송 상한. Web Push에는 배치가 없어 기기 수만큼 HTTPS를 쳐야 하고, 안 묶으면 조각
+    # 하나가 기기 수천 대일 때 요청이 한꺼번에 나가 푸시 서비스가 429로 막는다.
+    # 실측으로 올릴 값이다 — 올리기 전에 429 비율을 봐야 한다.
+    max-in-flight: ${NOTIFICATION_WEB_PUSH_MAX_IN_FLIGHT:200}
+    connect-timeout-ms: ${NOTIFICATION_WEB_PUSH_CONNECT_TIMEOUT_MS:5000}
+    request-timeout-ms: ${NOTIFICATION_WEB_PUSH_REQUEST_TIMEOUT_MS:10000}
+    # 조각 하나를 기다리는 상한. 넘으면 끝난 것만 반영하고 나머지는 버린다 — 재시도하면
+    # 이미 받은 사람에게 두 번 울린다(Web Push에는 중복 제거가 없다).
+    batch-timeout-ms: ${NOTIFICATION_WEB_PUSH_BATCH_TIMEOUT_MS:60000}
