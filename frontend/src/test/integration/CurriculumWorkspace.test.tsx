@@ -565,6 +565,28 @@ describe('커리큘럼 작업 화면', () => {
     await user.click(screen.getByRole('button', { name: '이미지 삭제' }))
     expect(screen.queryByAltText('대표 이미지 미리보기')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '이미지 삭제' })).toBeDisabled()
+
+    // 지운 뒤 같은 파일을 다시 고를 수 있어야 한다 — input.value를 비우지 않으면 브라우저가
+    // "같은 값"으로 보고 change를 쏘지 않아 재등록이 막힌다.
+    await user.upload(screen.getByLabelText('대표 이미지 등록'), image)
+    expect(await screen.findByAltText('대표 이미지 미리보기')).toBeInTheDocument()
+  })
+
+  // 등록 경로가 미리보기 클릭뿐이면 무엇을 눌러야 하는지 화면에서 안 읽힌다 — 버튼으로 세운다.
+  it('대표 이미지 등록 버튼은 이미지 유무에 따라 등록·변경으로 바뀐다', async () => {
+    const user = userEvent.setup()
+    await renderAsInstructor('/instructor/curriculums/new')
+    await screen.findByRole('heading', { name: '새 커리큘럼 만들기', level: 1 })
+
+    expect(screen.getByText('이미지 등록')).toBeInTheDocument()
+    expect(screen.queryByText('이미지 변경')).not.toBeInTheDocument()
+
+    const image = new File(['image-bytes'], 'cover.png', { type: 'image/png' })
+    await user.upload(screen.getByLabelText('대표 이미지 등록'), image)
+    expect(await screen.findByAltText('대표 이미지 미리보기')).toBeInTheDocument()
+
+    expect(screen.getByText('이미지 변경')).toBeInTheDocument()
+    expect(screen.queryByText('이미지 등록')).not.toBeInTheDocument()
   })
 
   // 자료도 자동 저장 지문에 들어간다(ADR-0042) — 고르는 즉시 목록에 뜨고, 디바운스 뒤 저장된다.
