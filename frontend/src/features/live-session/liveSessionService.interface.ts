@@ -176,7 +176,16 @@ export type AiAnswerSource =
    * 영상 위치(`sessionMs`)와 **다른 축**이라 이 값으로 seek을 걸면 엉뚱한 지점으로 간다 —
    * 시간 앵커 공유 계약이 서기 전까지는 표시만 한다(ADR-0043·0045·0047 §9).
    */
-  | { type: 'CAPTION'; sessionId: string; sttSessionId: string; startMs: number; endMs: number; excerpt?: string }
+  | {
+      type: 'CAPTION'
+      sessionId: string
+      sttSessionId: string
+      startMs: number
+      endMs: number
+      excerpt?: string
+      /** Replay v2 녹화강의 근거는 플레이어와 동일한 MP4 시간축이고, 미지정(v1)은 STT 스트림 축이다. */
+      timeAxis?: 'STT_STREAM' | 'PLAYBACK'
+    }
 
 /**
  * AI 답변 SSE 이벤트. 한 스트림 = `answer.delta` 0개 이상 + terminal(`done`|`insufficient`|`error`) 정확히 하나.

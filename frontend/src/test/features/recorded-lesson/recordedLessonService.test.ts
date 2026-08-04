@@ -1,13 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { apiClient } from '@/shared/api/client'
 
-vi.mock('@/shared/config/runtime', () => ({ isMockApiEnabled: false, isTestMode: false }))
+vi.mock('@/shared/config/runtime', () => ({
+  isMockApiEnabled: false,
+  isTestMode: false,
+  isNetworkBlocked: false,
+}))
 
 import { httpRecordedLessonService } from '@/features/recorded-lesson/httpRecordedLessonService'
 
 describe('녹화강의 상세 HTTP 계약', () => {
   afterEach(() => {
     vi.restoreAllMocks()
+    vi.unstubAllGlobals()
   })
 
   it('강사 처리 상태를 전용 endpoint에서 읽어 화면 모델로 옮긴다', async () => {
@@ -102,5 +107,65 @@ describe('녹화강의 상세 HTTP 계약', () => {
     })
     expect(get).toHaveBeenCalledWith('/lessons/les-recorded/recorded-playback')
     expect(get).not.toHaveBeenCalledWith('/lessons/les-recorded/playback')
+  })
+
+  it('구조화 자막은 녹화강의 전용 caption endpoint에서 읽는다', async () => {
+    const get = vi.spyOn(apiClient, 'get').mockResolvedValue({
+      data: [{ segmentId: 11, startMs: 3_000, endMs: 7_000, text: '  자막 본문  ' }],
+    } as never)
+
+    await expect(httpRecordedLessonService.getCaptionSegments('les-recorded')).resolves.toEqual([
+      { segmentId: 11, startMs: 3_000, endMs: 7_000, text: '자막 본문' },
+    ])
+    expect(get).toHaveBeenCalledWith('/lessons/les-recorded/recorded-playback/captions')
+  })
+
+  it('AI 질문은 lessonId 경로와 question·playbackMs만 보내고 Replay v2 SSE를 화면 모델로 옮긴다', async () => {
+    vi.spyOn(apiClient, 'get').mockResolvedValue({
+      data: { token: 'csrf-token', headerName: 'X-CSRF-TOKEN' },
+    } as never)
+    const responseBody = [
+      'event: answer.delta',
+      'data: {"requestId":"req-1","text":"설명"}',
+      '',
+      'event: answer.done',
+      'data: {"requestId":"req-1","sources":[{"type":"CAPTION","sessionId":"video-1","startSessionMs":12000,"endSessionMs":18000,"excerpt":"근거 자막"}]}',
+      '',
+    ].join('\n')
+    const fetchMock = vi.fn().mockResolvedValue(new Response(responseBody, {
+      status: 200,
+      headers: { 'Content-Type': 'text/event-stream' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const events: Array<{ type: string; payload: unknown }> = []
+
+    await httpRecordedLessonService.askAi('les-recorded', '이 부분은 뭐야?', 15_000, {
+      onEvent: (event) => events.push(event),
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/lessons/les-recorded/ai/answers/stream', expect.objectContaining({
+      method: 'POST',
+      credentials: 'include',
+      headers: expect.objectContaining({ 'X-CSRF-TOKEN': 'csrf-token' }),
+      body: JSON.stringify({ question: '이 부분은 뭐야?', playbackMs: 15_000 }),
+    }))
+    expect(events).toEqual([
+      { type: 'answer.delta', payload: { requestId: 'req-1', text: '설명' } },
+      {
+        type: 'answer.done',
+        payload: {
+          requestId: 'req-1',
+          sources: [{
+            type: 'CAPTION',
+            sessionId: 'video-1',
+            sttSessionId: 'recorded:video-1',
+            startMs: 12_000,
+            endMs: 18_000,
+            excerpt: '근거 자막',
+            timeAxis: 'PLAYBACK',
+          }],
+        },
+      },
+    ])
   })
 })

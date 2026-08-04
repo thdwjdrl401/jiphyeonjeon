@@ -1,3 +1,5 @@
+import type { AiAnswerStreamOptions } from '@/features/live-session/liveSessionService.interface'
+
 export type RecordedProcessingStatus =
   | 'AWAITING_UPLOAD'
   | 'QUEUED'
@@ -61,9 +63,23 @@ export interface RecordedPlaybackView {
   }
 }
 
+export interface RecordedCaptionSegmentView {
+  segmentId: number
+  startMs: number
+  endMs: number
+  text: string
+}
+
 export interface RecordedLessonService {
   getProcessing: (lessonId: string) => Promise<RecordedProcessingView>
   retryProcessing: (lessonId: string) => Promise<RecordedProcessingView>
   retryCaptions: (lessonId: string) => Promise<RecordedProcessingView>
   getPlayback: (lessonId: string) => Promise<RecordedPlaybackView>
+  getCaptionSegments: (lessonId: string) => Promise<RecordedCaptionSegmentView[]>
+  askAi: (
+    lessonId: string,
+    question: string,
+    playbackMs: number,
+    options: AiAnswerStreamOptions,
+  ) => Promise<void>
 }

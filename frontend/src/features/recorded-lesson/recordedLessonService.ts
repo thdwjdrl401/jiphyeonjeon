@@ -16,6 +16,14 @@ export const retryRecordedCaptions = (lessonId: string) =>
   recordedLessonService.retryCaptions(lessonId)
 export const getRecordedPlayback = (lessonId: string) =>
   recordedLessonService.getPlayback(lessonId)
+export const getRecordedCaptionSegments = (lessonId: string) =>
+  recordedLessonService.getCaptionSegments(lessonId)
+export const askRecordedAi = (
+  lessonId: string,
+  question: string,
+  playbackMs: number,
+  options: Parameters<RecordedLessonService['askAi']>[3],
+) => recordedLessonService.askAi(lessonId, question, playbackMs, options)
 
 export type {
   RecordedLessonService,
@@ -24,4 +32,5 @@ export type {
   RecordedCaptionStatus,
   RecordedPublicationStatus,
   RecordedProcessingView,
+  RecordedCaptionSegmentView,
 } from './recordedLessonService.interface'

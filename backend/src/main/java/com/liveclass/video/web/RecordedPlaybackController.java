@@ -2,6 +2,7 @@ package com.liveclass.video.web;
 
 import com.liveclass.video.service.RecordedPlaybackService;
 import com.liveclass.video.web.dto.RecordedPlaybackResponse;
+import com.liveclass.video.web.dto.RecordedCaptionSegmentResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.CacheControl;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
+import java.util.List;
 import java.nio.charset.StandardCharsets;
 
 @Tag(name = "녹화강의 재생", description = "업로드 녹화강의의 HLS 재생 정보와 manifest를 제공한다.")
@@ -52,6 +54,14 @@ public class RecordedPlaybackController {
                 .contentType(WEBVTT_MEDIA_TYPE)
                 .cacheControl(CacheControl.noStore())
                 .body(service.captionWebVtt(currentUserId(authentication), lessonId, trackId));
+    }
+
+    @Operation(summary = "게시된 녹화강의 구조화 자막",
+            description = "공통 자막 UI와 Replay v2 시간 이동에 사용할 원본 MP4 기준 밀리초 구간을 반환한다.")
+    @GetMapping("/api/lessons/{lessonId}/recorded-playback/captions")
+    public List<RecordedCaptionSegmentResponse> captionSegments(@PathVariable UUID lessonId,
+                                                                 Authentication authentication) {
+        return service.captionSegments(currentUserId(authentication), lessonId);
     }
 
     private UUID currentUserId(Authentication authentication) {

@@ -154,4 +154,18 @@ export const mockRecordedLessonService = {
           },
     }
   },
+  async getCaptionSegments(lessonId) {
+    const processing = processingStates.get(lessonId) ?? defaultProcessing(lessonId)
+    if (processing.captionStatus === 'EMPTY') return []
+    return [
+      { segmentId: 1, startMs: 0, endMs: 7_000, text: '오늘은 벡터 검색의 기본 원리를 알아봅니다.' },
+      { segmentId: 2, startMs: 7_000, endMs: 15_000, text: '임베딩은 문장의 의미를 숫자 벡터로 표현합니다.' },
+    ]
+  },
+  async askAi(_lessonId, _question, _playbackMs, { onEvent, signal }) {
+    if (signal?.aborted) return
+    const requestId = `recorded-ai-${Date.now()}`
+    onEvent({ type: 'answer.delta', payload: { requestId, text: '현재 재생 구간의 자막과 강의 자료를 기준으로 설명할게요.' } })
+    onEvent({ type: 'answer.done', payload: { requestId, sources: [] } })
+  },
 } satisfies RecordedLessonService

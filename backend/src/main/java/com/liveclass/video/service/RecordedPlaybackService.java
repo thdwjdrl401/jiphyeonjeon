@@ -16,6 +16,7 @@ import com.liveclass.video.repository.RecordedCaptionSegmentRepository;
 import com.liveclass.video.repository.RecordedCaptionTrackRepository;
 import com.liveclass.video.repository.RecordedVideoRepository;
 import com.liveclass.video.web.dto.RecordedPlaybackResponse;
+import com.liveclass.video.web.dto.RecordedCaptionSegmentResponse;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -123,6 +124,30 @@ public class RecordedPlaybackService {
         }
         meterRegistry.counter("recorded.caption.vtt.request", "result", "success").increment();
         return vtt.toString();
+    }
+
+    /** HLS 플레이어 아래 공통 CaptionDock에 표시할 게시 자막의 구조화된 시간 구간. */
+    @Transactional(readOnly = true)
+    public List<RecordedCaptionSegmentResponse> captionSegments(UUID userId, UUID lessonId) {
+        playbackAccess.resolve(userId, lessonId);
+        RecordedVideo video = requirePublished(lessonId);
+        RecordedCaptionTrack track = trackRepository.findByRecordedVideoId(video.getId()).orElse(null);
+        if (track == null || track.getStatus() == RecordedCaptionStatus.EMPTY) {
+            return List.of();
+        }
+        if (track.getStatus() != RecordedCaptionStatus.READY
+                || track.getPublicationStatus() != RecordedCaptionPublicationStatus.PUBLISHED
+                || track.getActiveJobId() == null) {
+            throw new RecordedVideoConflictException(
+                    "RECORDED_CAPTION_NOT_READY", "녹화강의 자막이 게시되지 않았습니다.");
+        }
+        List<RecordedCaptionSegment> segments = segmentRepository
+                .findByTrackIdAndJobIdOrderByStartMsAscLocalSegmentIndexAsc(track.getId(), track.getActiveJobId());
+        if (segments.size() != track.getSegmentCount()) {
+            throw new RecordedVideoConflictException(
+                    "RECORDED_CAPTION_NOT_READY", "게시된 자막 구간이 완전하지 않습니다.");
+        }
+        return segments.stream().map(RecordedCaptionSegmentResponse::from).toList();
     }
 
     private RecordedPlaybackResponse.Captions captions(RecordedVideo video, UUID lessonId) {

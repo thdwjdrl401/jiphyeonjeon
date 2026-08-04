@@ -270,6 +270,13 @@ class RecordedSttContractTest {
                 .andExpect(result -> assertThat(result.getResponse().getContentType()).startsWith("text/vtt"))
                 .andExpect(result -> assertThat(result.getResponse().getContentAsString())
                         .contains("WEBVTT", "00:00:01.250 --> 00:00:05.880", "스프링 시큐리티"));
+
+        mockMvc.perform(get("/api/lessons/" + lessonId + "/recorded-playback/captions")
+                        .cookie(instructor))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].startMs").value(1_250))
+                .andExpect(jsonPath("$[0].endMs").value(5_880))
+                .andExpect(jsonPath("$[0].text").value("오늘은 스프링 시큐리티를 살펴보겠습니다."));
     }
 
     @Test

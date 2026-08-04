@@ -34,7 +34,9 @@ export default function AiEvidenceList({ sources }: { sources: AiAnswerSource[] 
   const panelId = useId()
   // 근거 없는 턴에는 토글도 두지 않는다 — 눌러도 빈 목록만 나오는 버튼은 잡음이다.
   if (sources.length === 0) return null
-  const hasCaptionSource = sources.some((source) => source.type === 'CAPTION')
+  const hasApproximateCaptionSource = sources.some(
+    (source) => source.type === 'CAPTION' && source.timeAxis !== 'PLAYBACK',
+  )
 
   return (
     <div className="ai-evidence-block">
@@ -68,7 +70,7 @@ export default function AiEvidenceList({ sources }: { sources: AiAnswerSource[] 
               </li>
             ))}
         </ul>
-        {hasCaptionSource && (
+        {hasApproximateCaptionSource && (
           <small className="ai-evidence__note">
             발화 근거의 시각은 STT 스트림 기준이라 영상 위치와 다를 수 있어 이동을 제공하지 않습니다.
           </small>
