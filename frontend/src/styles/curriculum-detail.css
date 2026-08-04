@@ -109,6 +109,101 @@
   color: var(--ink-900);
 }
 
+.instructor-profile {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.instructor-profile__trigger {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border-medium);
+  border-radius: 0;
+  padding: 0;
+  background: var(--paper-pure);
+  color: var(--ink-800);
+  cursor: pointer;
+}
+
+.instructor-profile__trigger:hover,
+.instructor-profile__trigger[aria-expanded='true'] {
+  border-color: var(--ink-950);
+  background: var(--ink-950);
+  color: var(--paper-pure);
+}
+
+.instructor-profile__trigger:focus-visible {
+  outline: 2px solid var(--ink-950);
+  outline-offset: 2px;
+}
+
+/* 메타데이터 칸은 좁지만 소개 문장은 길다 — 패널만 칸 밖으로 넓힌다.
+   너비를 고정해야 소개 문장이 그 폭에서 줄바꿈된다(max-content는 한 줄로 뻗는다). */
+.instructor-profile__panel {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 8px);
+  left: 0;
+  display: grid;
+  width: min(320px, calc(100vw - 80px));
+  gap: 14px;
+  border: 1px solid var(--ink-950);
+  padding: 14px 16px;
+  background: var(--paper-pure);
+  box-shadow: var(--shadow-lg);
+  font-weight: 400;
+}
+
+/* display를 지정한 패널이라 UA의 `[hidden]`만으로는 안 감춰진다(learning.css의 탭 패널과 같은 함정). */
+.instructor-profile__panel[hidden] {
+  display: none;
+}
+
+.instructor-profile__section h3 {
+  margin: 0 0 6px;
+  color: var(--ink-500);
+  font-size: .72rem;
+  font-weight: 600;
+  letter-spacing: .02em;
+}
+
+.instructor-profile__bio {
+  margin: 0;
+  color: var(--ink-700);
+  font-size: .85rem;
+  line-height: 1.6;
+  text-wrap: pretty;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  /* 강사가 소개에 넣은 줄바꿈을 그대로 살리되, 긴 줄은 패널 폭에서 접는다. */
+  white-space: pre-wrap;
+}
+
+.instructor-profile__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.instructor-profile__tags li {
+  max-width: 100%;
+  border: 1px solid var(--border-medium);
+  padding: 3px 8px;
+  color: var(--ink-800);
+  font-size: .72rem;
+  line-height: 1.4;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
 .curriculum-primary-action {
   grid-area: action;
   justify-self: end;

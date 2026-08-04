@@ -37,7 +37,7 @@ export default function CurriculumHero({
           </span>
         </div>
         <CurriculumMetadata
-          instructorName={detail.instructor.displayName}
+          instructor={detail.instructor}
           period={detail.period}
           sectionCount={detail.outline.length}
           lessonCount={detail.outline.reduce((sum, section) => sum + section.lessons.length, 0)}

@@ -124,11 +124,11 @@ describe('커리큘럼 API 계약', () => {
         thumbnailUrl: null,
         lifecycleStatus: 'PUBLISHED',
         period: null,
+        // 프로필을 안 채운 강사는 서버가 bio를 null로 준다(InstructorDirectoryService.toView).
         instructor: {
           instructorId: 'usr_instructor',
           displayName: '강사',
-          bio: '',
-          expertise: [],
+          bio: null,
         },
         outline: [
           {
@@ -163,6 +163,13 @@ describe('커리큘럼 API 계약', () => {
       allowedActions: ['VIEW_DETAIL'],
     })
     expect(detail.materials).toEqual([])
+    // 화면 모델은 bio를 string으로 약속한다 — null이 그대로 새면 강사 정보 드롭다운이 던져 상세가 빈 화면이 된다.
+    expect(detail.instructor).toEqual({
+      instructorId: 'usr_instructor',
+      displayName: '강사',
+      bio: '',
+      expertise: [],
+    })
     expect(detail.outline[0].lessons[0].access.allowed).toBe(false)
     expect(detail.outline[0].lessons[0].status).toBe('PUBLISHED')
     expect(detail.outline[0].lessons[0].liveSession).toEqual({
