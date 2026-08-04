@@ -467,8 +467,11 @@ Content-Type: application/json
 - `curriculumId`는 검색 스코프, `sessionMs`는 다시보기 타임라인 앵커다. `sessionMs`는 0 이상이어야 한다.
 - `capturedAt`은 offset이 있는 timestamp여야 한다. naive 값은 실제 타임라인에 놓을 수 없어 거부한다.
 - **`text`가 본체이며 필수**다. Spring이 강조 크롭을 자기 vision 모델로 읽어 만든 값이고 워커는
-  그대로 색인한다. 2,000자를 넘거나 공백뿐이면 거부해 DLQ에 보존한다 — 저장할 수 없는 텍스트를
-  조용히 자르거나, 아무것도 매칭되지 않는 빈 근거를 색인하지 않기 위해서다.
+  그대로 색인한다. 공백뿐이면 거부한다 — 아무것도 매칭되지 않는 빈 근거를 만들지 않기 위해서다.
+- **`text`에는 길이 상한이 없다.** Spring이 vision 출력을 무제한 `text` 컬럼에 담으므로 여기서
+  거부하면 콜백 없이 DLQ로 가고 강사는 PROCESSING에 멈춘다. 64 KiB 봉투가 실질 한계다. 저장은
+  무제한이고 **임베딩 입력만** bge-m3 계약(4,000자)에 맞춰 자른다 — 강사가 확인한 내용을 잃지 않고,
+  모델의 한계로 근거 자체를 실패시키지도 않는다(revision `0004`).
 - **`assetId`는 없다.** 이미지는 AI로 넘어오지 않는다(ADR-0074 결정 1).
 - delete envelope는 `highlightId`만 받는다. 삭제에 lesson/curriculum scope를 요구하지 않으므로
   자료 삭제(§9.6)와 달리 self-lookup resolver가 필요 없다.

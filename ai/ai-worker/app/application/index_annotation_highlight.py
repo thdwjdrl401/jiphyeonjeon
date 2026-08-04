@@ -4,7 +4,7 @@ import logging
 
 from app.domain import (
     BGE_M3_DIMENSIONS,
-    MAX_ANNOTATION_TEXT_CHARS,
+    MAX_ANNOTATION_EMBED_CHARS,
     AnnotationHighlight,
     AnnotationRecord,
     EmbeddingContractError,
@@ -33,8 +33,11 @@ class IndexAnnotationHighlight:
 
     async def execute(self, highlight: AnnotationHighlight) -> AnnotationRecord:
         self._validate_contract()
-        text = highlight.text.strip()[:MAX_ANNOTATION_TEXT_CHARS]
-        embedding = await self._embed(text)
+        text = highlight.text.strip()
+        # Store the whole description but embed only what bge-m3 accepts. Clipping the stored
+        # text instead would drop content the instructor confirmed; clipping neither would
+        # fail the job on a limit that belongs to the model, not to the evidence.
+        embedding = await self._embed(text[:MAX_ANNOTATION_EMBED_CHARS])
         record = AnnotationRecord(
             highlight_id=highlight.highlight_id,
             curriculum_id=highlight.curriculum_id,

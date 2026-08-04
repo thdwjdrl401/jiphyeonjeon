@@ -14,9 +14,6 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, TypeAdapter, m
 
 
 MAX_MATERIAL_JOB_BYTES = 64 * 1024
-# Matches ai.annotation_highlight.text. Spring reads the image and sends the text, so a value
-# we cannot store is rejected fail-closed rather than silently truncated — the DLQ keeps it.
-MAX_ANNOTATION_TEXT_CHARS = 2_000
 
 
 class _WireModel(BaseModel):
@@ -72,7 +69,10 @@ class AnnotationEmbedJob(_WireModel):
     curriculum_id: UUID = Field(alias="curriculumId")
     session_ms: int = Field(alias="sessionMs", ge=0)
     captured_at: AwareDatetime = Field(alias="capturedAt")
-    text: str = Field(min_length=1, max_length=MAX_ANNOTATION_TEXT_CHARS)
+    # No length cap. Nothing upstream enforces one — Spring stores the vision output in an
+    # unbounded `text` column — and rejecting here sent the job to the DLQ with no callback,
+    # so the instructor waited on PROCESSING forever. The 64 KiB envelope is the real bound.
+    text: str = Field(min_length=1)
     policy: EmbedPolicy
     contract_version: Literal[1] = Field(alias="contractVersion")
 

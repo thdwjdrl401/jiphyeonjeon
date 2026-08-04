@@ -1,5 +1,5 @@
 from app.domain.annotation_models import (
-    MAX_ANNOTATION_TEXT_CHARS,
+    MAX_ANNOTATION_EMBED_CHARS,
     AnnotationIngestionError,
     AnnotationRecord,
     AnnotationHighlight,
@@ -24,7 +24,7 @@ from app.domain.index_models import (
 __all__ = [
     "BGE_M3_DIMENSIONS",
     "BGE_M3_MODEL",
-    "MAX_ANNOTATION_TEXT_CHARS",
+    "MAX_ANNOTATION_EMBED_CHARS",
     "AnnotationIngestionError",
     "AnnotationRecord",
     "AnnotationHighlight",
