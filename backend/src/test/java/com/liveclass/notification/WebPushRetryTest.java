@@ -39,6 +39,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -354,6 +355,51 @@ class WebPushRetryTest {
                 .isGreaterThan(1);
     }
 
+    /**
+     * <b>암호화가 코어에 흩어지는가.</b> {@code preparePost}는 순수 CPU 작업이고(운영 장비 실측
+     * 건당 7.79ms), 한 스레드에서 순서대로 하면 그게 곧 발송 속도의 천장이 된다.
+     *
+     * <p>절대 시간으로 재면 장비마다 달라지므로 <b>같은 일을 스레드 1개와 코어 수만큼으로 두 번
+     * 재서 견준다</b>. 응답은 즉시 주게 두어 HTTP가 아니라 CPU만 보이게 한다.
+     */
+    @Test
+    void it_spreads_encryption_across_threads() {
+        int cores = Runtime.getRuntime().availableProcessors();
+        assumeTrue(cores >= 2, "코어가 하나면 병렬화로 빨라질 수 없다");
+
+        int devices = 120;
+        PushSubscription[] subscriptions = new PushSubscription[devices];
+        for (int i = 0; i < devices; i++) {
+            subscriptions[i] = subscription("d" + i);
+            script("d" + i, 201);
+        }
+        given(subscriptions);
+        List<UUID> recipients = recipients(subscriptions);
+
+        /*
+         * **예열이 필요하다.** 첫 실행이 JIT 컴파일을 떠안으므로, 그냥 두 번 재면 "두 번째가
+         * 빠르다"를 재게 된다 — 스레드를 하나로 묶어도 통과하는 테스트가 된다(실제로 그랬다).
+         */
+        sender(1, 60_000, devices, cores).send(recipients, "제목", "본문", null);
+        received.clear();
+
+        // 병렬을 **먼저** 잰다. 남은 순서 효과가 있다면 병렬에 불리하게 작용하도록.
+        long parallel = timed(() -> sender(1, 60_000, devices, cores).send(recipients, "제목", "본문", null));
+        received.clear();
+        long serial = timed(() -> sender(1, 60_000, devices, 1).send(recipients, "제목", "본문", null));
+
+        assertThat(parallel)
+                .as("코어 %d개에 흩었는데 한 스레드와 같으면 풀을 안 타는 것이다 (직렬 %dms, 병렬 %dms)",
+                        cores, serial, parallel)
+                .isLessThan((long) (serial * 0.75));
+    }
+
+    private static long timed(Runnable work) {
+        long startedAt = System.nanoTime();
+        work.run();
+        return (System.nanoTime() - startedAt) / 1_000_000;
+    }
+
     // ---- 도구 ----
 
     private WebPushSender sender(int maxAttempts, long batchTimeoutMs) {
@@ -361,10 +407,14 @@ class WebPushRetryTest {
     }
 
     private WebPushSender sender(int maxAttempts, long batchTimeoutMs, int maxInFlight) {
+        return sender(maxAttempts, batchTimeoutMs, maxInFlight, 0);
+    }
+
+    private WebPushSender sender(int maxAttempts, long batchTimeoutMs, int maxInFlight, int cryptoThreads) {
         return new WebPushSender(repository, properties, new NoOpTransactionManager(),
                 maxInFlight, 2_000, 5_000, batchTimeoutMs, maxAttempts, 10,
                 // 로컬 서버는 h2가 아니라 스트림 상한이 의미 없다 — 연결 하나로 붙게 둔다.
-                Integer.MAX_VALUE);
+                Integer.MAX_VALUE, cryptoThreads);
     }
 
     private void given(PushSubscription... subscriptions) {
