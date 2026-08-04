@@ -1342,7 +1342,14 @@ describe('강조 툴 캡처 발동', () => {
       customData: { liveclassHighlight: true } }
   }
 
+  /** 강조 툴로 막 그린 획 — 표식은 아직 없다. 붙이는 것은 레이어의 일이다. */
+  function plainStroke(id: string, version: number) {
+    return { id, version, type: 'freedraw', x: 100, y: 100, width: 50, height: 50 }
+  }
+
   async function mount(onHighlightSettled: (elements: readonly unknown[]) => void) {
+    lateApi = false
+    sceneElements = []
     const view = render(
       <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} onHighlightSettled={onHighlightSettled as never} />,
     )
@@ -1352,13 +1359,14 @@ describe('강조 툴 캡처 발동', () => {
 
   it('그리는 동안에는 부르지 않고, 멎고 1초 뒤에 한 번 부른다', async () => {
     const settled = vi.fn()
-    await mount(settled)
+    const { getByRole } = await mount(settled)
+    fireEvent.click(getByRole('button', { name: /강조/ }))
     const onChange = excalidrawProps.onChange as (elements: unknown[]) => void
 
     // 획 하나를 긋는 동안 onChange가 여러 번 불린다.
-    onChange([highlight('h1', 1)])
-    onChange([highlight('h1', 2)])
-    onChange([highlight('h1', 3)])
+    onChange([plainStroke('h1', 1)])
+    onChange([plainStroke('h1', 2)])
+    onChange([plainStroke('h1', 3)])
     expect(settled).not.toHaveBeenCalled()
 
     await vi.advanceTimersByTimeAsync(1000)
@@ -1367,12 +1375,13 @@ describe('강조 툴 캡처 발동', () => {
 
   it('동그라미 뒤에 밑줄을 이어 그으면 한 건으로 묶인다', async () => {
     const settled = vi.fn()
-    await mount(settled)
+    const { getByRole } = await mount(settled)
+    fireEvent.click(getByRole('button', { name: /강조/ }))
     const onChange = excalidrawProps.onChange as (elements: unknown[]) => void
 
-    onChange([highlight('h1', 1)])
+    onChange([plainStroke('h1', 1)])
     await vi.advanceTimersByTimeAsync(600)
-    onChange([highlight('h1', 1), highlight('h2', 1)])
+    onChange([plainStroke('h1', 1), plainStroke('h2', 1)])
     await vi.advanceTimersByTimeAsync(600)
     expect(settled).not.toHaveBeenCalled()
 
@@ -1488,6 +1497,30 @@ describe('강조 툴 표식 부착', () => {
     const tagged = taggedElements()
     expect(tagged).toHaveLength(1)
     expect(tagged[0].customData).toMatchObject({ liveclassHighlight: true })
+  })
+
+  /**
+   * 강조는 한 번 그리면 문서에 계속 남는다. "표식이 있으면 알린다"로 두면 그 뒤 모든 정지마다
+   * 확인 창이 다시 뜬다 — 이미 물어본 강조를 무한히 다시 묻는 셈이다. 실제로 그렇게 동작했다.
+   */
+  it('한 번 물어본 강조는 다시 묻지 않는다', async () => {
+    const { getByRole, settled } = await mountWithTool()
+    fireEvent.click(getByRole('button', { name: /강조/ }))
+    const onChange = excalidrawProps.onChange as (elements: unknown[]) => void
+
+    const stroke = { id: 'stroke-1', version: 1, type: 'freedraw', x: 10, y: 10, width: 80, height: 60 }
+    onChange([stroke])
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(settled).toHaveBeenCalledTimes(1)
+
+    // 표식 붙은 강조는 문서에 남는다. 그 뒤 정지가 반복돼도 같은 강조를 다시 묻지 않는다.
+    const tagged = { ...stroke, version: 2, customData: { liveclassHighlight: true } }
+    onChange([tagged])
+    await vi.advanceTimersByTimeAsync(1000)
+    onChange([{ ...tagged, version: 3 }])
+    await vi.advanceTimersByTimeAsync(1000)
+
+    expect(settled).toHaveBeenCalledTimes(1)
   })
 
   it('강조를 켜지 않았으면 표식을 붙이지 않는다', async () => {

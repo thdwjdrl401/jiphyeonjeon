@@ -9,6 +9,9 @@ public record AiCallbackEvent(
         String eventType,
         String jobId,
         String materialId,
+
+        /** 강조 캡처 색인 결과일 때 온다(ADR-0074). 자료와 별개 축이라 필드를 나눈다. */
+        String highlightId,
         String lessonId,
         String status
 ) {

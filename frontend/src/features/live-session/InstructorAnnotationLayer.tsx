@@ -408,11 +408,13 @@ export default function InstructorAnnotationLayer({
         api.updateScene({ elements: tagged })
         elementsRef.current = tagged
         notify(tagged)
-        return
       }
 
-      // 표식이 이미 있는 강조(복원·재진입)만 있을 때. 새로 붙일 것이 없으면 그대로 알린다.
-      if (latest.some(isHighlightElement)) notify(latest)
+      /*
+       * 새로 붙인 것이 없으면 <b>묻지 않는다.</b> 예전에는 "표식이 있으면 알린다"로 두었는데, 강조는
+       * 한 번 그리면 문서에 계속 남으므로 그 뒤 모든 정지마다 확인 창이 다시 떴다. 이미 물어본 강조를
+       * 무한히 다시 묻는 셈이었다 — 복원된 강조도 그렸던 세션에서 이미 처리됐다.
+       */
     }, HIGHLIGHT_SETTLE_MS)
   }, [])
 
