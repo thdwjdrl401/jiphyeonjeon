@@ -4,16 +4,53 @@ import userEvent from '@testing-library/user-event'
 import AiEvidenceList from '@/features/ai/AiEvidenceList'
 import type { AiAnswerSource } from '@/features/live-session/liveSessionService'
 
-const PPTX: AiAnswerSource = { type: 'PPTX', materialId: 'mat-csrf', page: 12 }
+const PPTX: AiAnswerSource = {
+  type: 'PPTX',
+  materialId: 'mat-csrf',
+  page: 12,
+  excerpt: '세션과 CSRF\n쿠키 세션은 브라우저가 자동으로 실어 보낸다.',
+}
 const CAPTION: AiAnswerSource = {
   type: 'CAPTION',
   sessionId: 'ses-1',
   sttSessionId: 'stt-2',
   startMs: 728_000,
   endMs: 761_000,
+  excerpt: '여기서 CSRF 토큰을 왜 따로 두는지 설명드리겠습니다.',
 }
 
 const toggle = () => screen.getByRole('button', { name: /근거/ })
+
+/**
+ * 근거는 <b>무엇을 근거로 답했는지</b>를 보여 주려고 있다. 예전에는 이 자리에 materialId를 줄여
+ * 붙였는데, UUID는 읽는 사람에게 아무 의미가 없어 근거를 보여 주는 뜻 자체가 없었다.
+ */
+describe('AI 근거 목록 — 발췌문', () => {
+  it('UUID가 아니라 서버가 보낸 발췌문을 보여 준다', async () => {
+    render(<AiEvidenceList sources={[PPTX]} />)
+    await userEvent.click(toggle())
+
+    expect(screen.getByText(/쿠키 세션은 브라우저가 자동으로/)).toBeInTheDocument()
+    expect(screen.queryByText(/mat-csrf/)).not.toBeInTheDocument()
+  })
+
+  it('발화 근거도 발췌문을 보여 준다', async () => {
+    render(<AiEvidenceList sources={[CAPTION]} />)
+    await userEvent.click(toggle())
+
+    expect(screen.getByText(/CSRF 토큰을 왜 따로 두는지/)).toBeInTheDocument()
+    expect(screen.queryByText(/stt-2/)).not.toBeInTheDocument()
+  })
+
+  /** 계약상 선택 필드라 옛 답변에는 없다. 그때 UUID를 되살리지 않는다 — 쪽수만 남긴다. */
+  it('발췌문이 없으면 쪽수만 남기고 UUID를 되살리지 않는다', async () => {
+    render(<AiEvidenceList sources={[{ type: 'PPTX', materialId: 'mat-csrf', page: 12 }]} />)
+    await userEvent.click(toggle())
+
+    expect(screen.getByText('12쪽')).toBeInTheDocument()
+    expect(screen.queryByText(/mat-csrf/)).not.toBeInTheDocument()
+  })
+})
 
 /**
  * 근거 표시의 접힘/펼침(ADR-0049 §8).
@@ -110,17 +147,17 @@ describe('AI 근거 목록 — 접힘/펼침', () => {
     expect(screen.queryByText(/이동을 제공하지 않습니다/)).not.toBeInTheDocument()
   })
 
-  it('제목 없는 UUID는 줄여 붙이고 전체 값은 title에 남긴다', async () => {
+  it('UUID는 화면에 내보내지 않고 쪽수를 앞세운다', async () => {
     const user = userEvent.setup()
     const materialId = '3f2a1b4c-9d8e-4f70-a1b2-c3d4e5f60718'
-    render(<AiEvidenceList sources={[{ type: 'PPTX', materialId, page: 4 }]} />)
+    render(<AiEvidenceList sources={[{ type: 'PPTX', materialId, page: 4, excerpt: '본문 발췌' }]} />)
 
     await user.click(toggle())
 
-    // 계약에 자료 제목이 없어 UUID뿐이다 — 36자를 그대로 흘리면 370px에서 한 줄이 깨진다.
-    expect(screen.queryByText(materialId)).not.toBeInTheDocument()
-    expect(screen.getByTitle(materialId)).toHaveTextContent('3f2a1b4c…')
-    // 사람이 먼저 읽어야 하는 건 쪽수다.
+    // UUID는 읽는 사람에게 의미가 없다 — 줄여서도 내보내지 않는다.
+    expect(screen.queryByText(new RegExp(materialId.slice(0, 8)))).not.toBeInTheDocument()
+    // 사람이 먼저 읽어야 하는 건 쪽수이고, 그다음이 발췌문이다.
     expect(screen.getByRole('listitem')).toHaveTextContent(/^4쪽/)
+    expect(screen.getByText('본문 발췌')).toBeInTheDocument()
   })
 })

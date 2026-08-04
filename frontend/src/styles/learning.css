@@ -366,11 +366,32 @@
 .ai-evidence-panel { animation: ai-evidence-reveal .16s ease-out; }
 @keyframes ai-evidence-reveal { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
 .ai-evidence { display: grid; gap: 5px; margin: 7px 0 0; padding: 0; list-style: none; }
-/* 펼친 목록은 한 항목 = 한 줄이다. 자료 UUID는 축약해 넣지만, 그래도 넘치면 줄 안에서 감싼다. */
+/*
+ * 펼친 목록의 한 항목은 **머리 한 줄 + 발췌문**이다. 머리(쪽수·시각·종류)는 가로로 붙고 발췌문은
+ * 그 아래 줄을 통째로 쓴다 — 발췌문이 길어 머리와 같은 줄에 두면 쪽수가 밀려 안 보인다.
+ */
 .ai-evidence .evidence-card { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 7px; margin-top: 0; padding: 5px 8px; border-radius: 8px; }
 .ai-evidence .evidence-card > strong { display: inline; margin-top: 0; font-size: .64rem; }
 .ai-evidence .evidence-card__kind { flex: 0 0 auto; color: var(--ink-600); font-size: .55rem; }
 .ai-evidence .evidence-card__id { min-width: 0; color: var(--ink-500); font-size: .54rem; overflow-wrap: anywhere; }
+/*
+ * 발췌문은 줄 전체를 차지한다(flex-basis 100%). 최대 1000자까지 올 수 있어 세 줄에서 자르고,
+ * 전문은 title 툴팁에 남긴다 — 카드 하나가 답변보다 길어지면 근거가 대화를 밀어낸다.
+ */
+.ai-evidence .evidence-card__excerpt {
+  flex: 1 0 100%;
+  margin: 2px 0 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  color: var(--ink-700);
+  font-size: .58rem;
+  line-height: 1.55;
+  white-space: pre-line;   /* 발췌문에 줄바꿈이 들어 있다(자료 제목 + 본문). */
+  overflow-wrap: anywhere;
+}
 .ai-evidence__note { display: block; margin-top: 6px; line-height: 1.5; }
 .ai-evidence-panel .ai-evidence__note { color: var(--ink-600); font-size: .55rem; }
 /* 대화형 AI 패널: 이력은 스크롤 영역에 쌓고 입력창은 아래에 고정한다(채팅 패널과 같은 골격). */

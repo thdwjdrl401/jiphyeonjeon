@@ -271,7 +271,12 @@ export const mockLiveSessionService = {
       payload: {
         requestId,
         sources: [
-          { type: 'PPTX', materialId: 'mat-session-and-csrf', page: 12 },
+          {
+            type: 'PPTX',
+            materialId: 'mat-session-and-csrf',
+            page: 12,
+            excerpt: '세션과 CSRF\n쿠키 세션은 브라우저가 자동으로 실어 보내므로, 위조 요청도 인증을 통과한다.\n그래서 상태를 바꾸는 요청에는 CSRF 토큰을 함께 요구한다.',
+          },
           // CAPTION의 시각은 STT attempt-local 축이다(세션-ms 아님) — 목도 같은 축으로 준다.
           { type: 'CAPTION', sessionId, sttSessionId: 'stt-mock-1', startMs: 728_000, endMs: 761_000 },
         ],

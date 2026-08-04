@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { emptyAiAnswerState, formatStreamElapsed, reduceAiAnswer, shortenSourceId, type AiAnswerState } from '@/features/ai/aiAnswer'
+import { emptyAiAnswerState, formatStreamElapsed, reduceAiAnswer, type AiAnswerState } from '@/features/ai/aiAnswer'
 import { ApiError } from '@/shared/api/client'
 
 const asking = (question = '질문') => reduceAiAnswer(emptyAiAnswerState, { kind: 'ask', question })
@@ -133,11 +133,3 @@ describe('근거 자막 시각 라벨', () => {
   })
 })
 
-describe('근거 식별자 꼬리표', () => {
-  it('UUID는 앞 8자만 남기고, 짧은 식별자는 그대로 둔다', () => {
-    // 계약에 자료 제목이 없어 UUID뿐이다 — 36자를 370px 패널에 그대로 흘리면 한 줄이 깨진다.
-    expect(shortenSourceId('3f2a1b4c-9d8e-4f70-a1b2-c3d4e5f60718')).toBe('3f2a1b4c…')
-    expect(shortenSourceId('mat-csrf')).toBe('mat-csrf')
-    expect(shortenSourceId('')).toBe('')
-  })
-})
