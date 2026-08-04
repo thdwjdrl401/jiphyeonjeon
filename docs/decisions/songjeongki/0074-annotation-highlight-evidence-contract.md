@@ -62,10 +62,11 @@ AI 파트 답변(MR !350): *"현재 상태로는 해당 이미지를 ai 서버�
 {
   "taskType": "ANNOTATION_EMBED",
   "highlightId": "uuid",
+  "sessionId": "uuid",
   "lessonId": "uuid",
   "curriculumId": "uuid",
   "sessionMs": 725300,
-  "capturedAt": "2026-08-04T13:20:05+09:00",
+  "capturedAt": "2026-08-04T13:20:05.123+09:00",
   "text": "…",
   "policy": { "embedModel": "bge-m3" },
   "contractVersion": 1
@@ -74,7 +75,10 @@ AI 파트 답변(MR !350): *"현재 상태로는 해당 이미지를 ai 서버�
 
 - **`text`가 본체다.** 우리가 GMS 비전 모델로 강조 크롭을 읽어 만든다. AI는 이것을 그대로 색인한다.
 - **`curriculumId`가 검색 스코프**다. 자료와 같은 축이라 한 커리큘럼 안에서 함께 검색된다.
+- **`sessionId`가 세션을 특정한다.** `lessonId`만으로는 같은 강의의 여러 라이브를 구분할 수 없고,
+  `sessionMs`가 어느 세션의 축인지도 이 값이 정한다.
 - **`sessionMs`는 다시보기 타임라인 앵커**다. 근거를 누르면 그 시점으로 이동하는 데 쓴다.
+- **`capturedAt`은 오프셋을 포함한 ISO-8601**이다(`+09:00`). 수신 측이 그대로 파싱할 수 있어야 한다.
 
 큐·봉투·콜백은 기존 자료 임베딩과 같다(ADR-0036). 콜백은 `ANNOTATION_EMBEDDING` /
 `ANNOTATION_EMBEDDED` / `ANNOTATION_EMBED_FAILED`이며 `highlightId`를 그대로 돌려받아 상태를 확정한다.
