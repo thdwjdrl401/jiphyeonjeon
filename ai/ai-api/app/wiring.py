@@ -13,6 +13,7 @@ from app.adapters import (
     GmsOpenAIAnswerModelV2,
     GmsOpenAILectureNoteModel,
     PgvectorActiveMaterialRepository,
+    PgvectorAnnotationRepository,
     RedisCaptionConsumer,
     RedisConversationMemoryStore,
     RedisLectureNoteStore,
@@ -32,7 +33,7 @@ from app.rag import (
     ReplayAnswerService,
     ReplayEvidenceRetriever,
 )
-from app.retrieval import ActiveMaterialRetrievalService
+from app.retrieval import ActiveMaterialRetrievalService, AnnotationRetrievalService
 
 LECTURE_NOTE_CONSUMER_GROUP = "ai-live-notes-mvp-v1"
 
@@ -160,6 +161,9 @@ def build_rag_context_services(settings: Settings) -> RagContextServices:
     retriever = CombinedEvidenceRetriever(
         materials,
         store,
+        annotations=_build_annotation_retrieval(settings, engine, embedding),
+        annotation_top_k=settings.annotation_top_k,
+        annotation_window_size=settings.annotation_window_size,
         material_top_k=settings.material_top_k,
         material_vector_threshold=settings.material_vector_threshold,
         material_lexical_threshold=settings.material_lexical_threshold,
@@ -222,6 +226,9 @@ def build_replay_rag_services(settings: Settings) -> ReplayServices:
     )
     retriever = ReplayEvidenceRetriever(
         materials,
+        annotations=_build_annotation_retrieval(settings, engine, embedding),
+        annotation_top_k=settings.annotation_top_k,
+        annotation_window_size=settings.annotation_window_size,
         material_top_k=settings.material_top_k,
         material_vector_threshold=settings.material_vector_threshold,
         material_lexical_threshold=settings.material_lexical_threshold,
@@ -336,6 +343,26 @@ def build_lecture_note_services(settings: Settings) -> LectureNoteServices:
         consumer_state=consumer_state,
         model=model,
         store=store,
+    )
+
+
+def _build_annotation_retrieval(
+    settings: Settings,
+    engine: AsyncEngine,
+    embedding: RemoteBgeM3QueryEmbedding,
+) -> AnnotationRetrievalService | None:
+    """None while the switch is off, which leaves both RAG paths exactly as they were.
+
+    Reuses the caller's engine and query embedding client: annotation snapshots live in the
+    same database and are embedded by the same model as material chunks, so a second
+    connection pool would buy nothing (ADR-0043 §4).
+    """
+
+    if not settings.annotation_evidence_enabled:
+        return None
+    return AnnotationRetrievalService(
+        embedding,
+        PgvectorAnnotationRepository(engine, runtime_role=settings.database_role),
     )
 
 

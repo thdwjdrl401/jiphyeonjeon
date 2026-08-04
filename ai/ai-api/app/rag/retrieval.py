@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import asyncio
+from collections.abc import Iterable, Sequence
 from typing import Protocol
 from uuid import UUID
 
 from app.captions import CaptionContextResult
 from app.rag.models import (
+    AnnotationSource,
+    AnnotationSourceV2,
     CaptionSource,
     CaptionSourceV2,
     PptxSource,
@@ -16,7 +20,7 @@ from app.rag.models import (
     RetrievalResult,
     RetrievalResultV2,
 )
-from app.retrieval import MaterialChunkHit
+from app.retrieval import AnnotationSnapshotHit, MaterialChunkHit, SessionTimeCutoff
 
 
 class MaterialRetrievalPort(Protocol):
@@ -29,8 +33,68 @@ class MaterialRetrievalPort(Protocol):
     ) -> tuple[MaterialChunkHit, ...]: ...
 
 
+class AnnotationRetrievalPort(Protocol):
+    async def retrieve(
+        self,
+        *,
+        curriculum_id: UUID,
+        query_text: str,
+        top_k: int,
+        cutoff: SessionTimeCutoff | None,
+    ) -> tuple[AnnotationSnapshotHit, ...]: ...
+
+    async def recent(
+        self,
+        *,
+        session_id: UUID,
+        limit: int,
+        cutoff: SessionTimeCutoff | None,
+    ) -> tuple[AnnotationSnapshotHit, ...]: ...
+
+
 class CaptionContextPort(Protocol):
     def query(self, session_id: str, context_time_ms: int) -> CaptionContextResult: ...
+
+
+async def _gather_annotation_hits(
+    annotations: AnnotationRetrievalPort,
+    *,
+    curriculum_id: UUID,
+    session_id: UUID,
+    question: str,
+    top_k: int,
+    window_size: int,
+    cutoff: SessionTimeCutoff | None,
+) -> tuple[AnnotationSnapshotHit, ...]:
+    """Two reads, one merged list (ADR-0043 §5).
+
+    Similarity answers "what did the instructor highlight about X"; the recent window answers
+    "what did the instructor just highlight", which no amount of semantic search can find
+    because a time deixis like "아까" has no direction in embedding space. The window comes
+    first so the most recent highlights survive when both return the same snapshot.
+    """
+
+    searched, window = await asyncio.gather(
+        annotations.retrieve(
+            curriculum_id=curriculum_id, query_text=question, top_k=top_k, cutoff=cutoff
+        ),
+        annotations.recent(session_id=session_id, limit=window_size, cutoff=cutoff),
+    )
+    return _dedupe_by_snapshot(window, searched)
+
+
+def _dedupe_by_snapshot(
+    *groups: Iterable[AnnotationSnapshotHit],
+) -> tuple[AnnotationSnapshotHit, ...]:
+    seen: set[UUID] = set()
+    merged: list[AnnotationSnapshotHit] = []
+    for group in groups:
+        for hit in group:
+            if hit.snapshot_id in seen:
+                continue
+            seen.add(hit.snapshot_id)
+            merged.append(hit)
+    return tuple(merged)
 
 
 class CombinedEvidenceRetriever:
@@ -41,6 +105,9 @@ class CombinedEvidenceRetriever:
         materials: MaterialRetrievalPort,
         captions: CaptionContextPort,
         *,
+        annotations: AnnotationRetrievalPort | None = None,
+        annotation_top_k: int = 2,
+        annotation_window_size: int = 5,
         material_top_k: int = 3,
         material_vector_threshold: float = 0.25,
         material_lexical_threshold: float = 0.0,
@@ -48,6 +115,10 @@ class CombinedEvidenceRetriever:
         caption_max_chars: int = 20_000,
         excerpt_max_chars: int = 300,
     ) -> None:
+        if not 1 <= annotation_top_k <= 50:
+            raise ValueError("annotation_top_k must be between 1 and 50")
+        if not 1 <= annotation_window_size <= 50:
+            raise ValueError("annotation_window_size must be between 1 and 50")
         if not 1 <= material_top_k <= 50:
             raise ValueError("material_top_k must be between 1 and 50")
         if not 0 <= material_vector_threshold <= 1:
@@ -62,6 +133,9 @@ class CombinedEvidenceRetriever:
             raise ValueError("excerpt_max_chars must be positive")
         self._materials = materials
         self._captions = captions
+        self._annotations = annotations
+        self._annotation_top_k = annotation_top_k
+        self._annotation_window_size = annotation_window_size
         self._material_top_k = material_top_k
         self._material_vector_threshold = material_vector_threshold
         self._material_lexical_threshold = material_lexical_threshold
@@ -70,11 +144,9 @@ class CombinedEvidenceRetriever:
         self._excerpt_max_chars = excerpt_max_chars
 
     async def retrieve(self, request: RagAnswerRequest) -> RetrievalResult:
-        material_hits = await self._materials.retrieve(
-            curriculum_id=request.curriculumId,
-            query_text=request.question,
-            top_k=self._material_top_k,
-        )
+        # Live needs no time cutoff: a snapshot only exists in the index once its job ran, so
+        # anything found is already in the asker's past (ADR-0043 §4).
+        material_hits, annotation_hits = await self._search(request)
         evidence = [
             RetrievedEvidence(
                 lesson_id=hit.lesson_id,
@@ -93,12 +165,50 @@ class CombinedEvidenceRetriever:
             )
         ]
 
+        evidence.extend(
+            RetrievedEvidence(
+                lesson_id=hit.lesson_id,
+                curriculum_id=hit.curriculum_id,
+                content=hit.text,
+                source=AnnotationSource(
+                    snapshotId=hit.snapshot_id,
+                    sessionId=str(hit.session_id),
+                    sessionMs=hit.session_ms,
+                    excerpt=_truncate(hit.text, self._excerpt_max_chars),
+                ),
+            )
+            for hit in annotation_hits
+        )
+
         context = self._captions.query(request.sessionId, request.contextTimeMs)
         caption_evidence = self._build_caption_evidence(context)
         if caption_evidence is not None:
             evidence.append(caption_evidence)
 
         return RetrievalResult(sufficient=bool(evidence), evidence=tuple(evidence))
+
+    async def _search(
+        self, request: RagAnswerRequest
+    ) -> tuple[Sequence[MaterialChunkHit], Sequence[AnnotationSnapshotHit]]:
+        material_search = self._materials.retrieve(
+            curriculum_id=request.curriculumId,
+            query_text=request.question,
+            top_k=self._material_top_k,
+        )
+        if self._annotations is None:
+            return await material_search, ()
+        return await asyncio.gather(
+            material_search,
+            _gather_annotation_hits(
+                self._annotations,
+                curriculum_id=request.curriculumId,
+                session_id=UUID(request.sessionId),
+                question=request.question,
+                top_k=self._annotation_top_k,
+                window_size=self._annotation_window_size,
+                cutoff=None,
+            ),
+        )
 
     def _build_caption_evidence(
         self,
@@ -155,11 +265,18 @@ class ReplayEvidenceRetriever:
         self,
         materials: MaterialRetrievalPort,
         *,
+        annotations: AnnotationRetrievalPort | None = None,
+        annotation_top_k: int = 2,
+        annotation_window_size: int = 5,
         material_top_k: int = 3,
         material_vector_threshold: float = 0.25,
         material_lexical_threshold: float = 0.0,
         excerpt_max_chars: int = 300,
     ) -> None:
+        if not 1 <= annotation_top_k <= 50:
+            raise ValueError("annotation_top_k must be between 1 and 50")
+        if not 1 <= annotation_window_size <= 50:
+            raise ValueError("annotation_window_size must be between 1 and 50")
         if not 1 <= material_top_k <= 50:
             raise ValueError("material_top_k must be between 1 and 50")
         if not 0 <= material_vector_threshold <= 1:
@@ -169,17 +286,16 @@ class ReplayEvidenceRetriever:
         if excerpt_max_chars <= 0:
             raise ValueError("excerpt_max_chars must be positive")
         self._materials = materials
+        self._annotations = annotations
+        self._annotation_top_k = annotation_top_k
+        self._annotation_window_size = annotation_window_size
         self._material_top_k = material_top_k
         self._material_vector_threshold = material_vector_threshold
         self._material_lexical_threshold = material_lexical_threshold
         self._excerpt_max_chars = excerpt_max_chars
 
     async def retrieve(self, request: RagAnswerRequestV2) -> RetrievalResultV2:
-        material_hits = await self._materials.retrieve(
-            curriculum_id=request.curriculumId,
-            query_text=request.question,
-            top_k=self._material_top_k,
-        )
+        material_hits, annotation_hits = await self._search(request)
         evidence = [
             RetrievedEvidenceV2(
                 lesson_id=hit.lesson_id,
@@ -198,11 +314,55 @@ class ReplayEvidenceRetriever:
             )
         ]
 
+        evidence.extend(
+            RetrievedEvidenceV2(
+                lesson_id=hit.lesson_id,
+                curriculum_id=hit.curriculum_id,
+                content=hit.text,
+                source=AnnotationSourceV2(
+                    snapshotId=hit.snapshot_id,
+                    sessionId=str(hit.session_id),
+                    sessionMs=hit.session_ms,
+                    excerpt=_truncate(hit.text, self._excerpt_max_chars),
+                ),
+            )
+            for hit in annotation_hits
+        )
+
         caption_evidence = self._build_caption_evidence(request)
         if caption_evidence is not None:
             evidence.append(caption_evidence)
 
         return RetrievalResultV2(sufficient=bool(evidence), evidence=tuple(evidence))
+
+    async def _search(
+        self, request: RagAnswerRequestV2
+    ) -> tuple[Sequence[MaterialChunkHit], Sequence[AnnotationSnapshotHit]]:
+        material_search = self._materials.retrieve(
+            curriculum_id=request.curriculumId,
+            query_text=request.question,
+            top_k=self._material_top_k,
+        )
+        if self._annotations is None:
+            return await material_search, ()
+        # A highlight made after the question was asked cannot be evidence for it, but only
+        # within this session — other sessions already finished (ADR-0043 §4).
+        session_id = UUID(request.sessionId)
+        return await asyncio.gather(
+            material_search,
+            _gather_annotation_hits(
+                self._annotations,
+                curriculum_id=request.curriculumId,
+                session_id=session_id,
+                question=request.question,
+                top_k=self._annotation_top_k,
+                window_size=self._annotation_window_size,
+                cutoff=SessionTimeCutoff(
+                    session_id=session_id,
+                    max_session_ms=request.context.questionSessionMs,
+                ),
+            ),
+        )
 
     def _build_caption_evidence(self, request: RagAnswerRequestV2) -> RetrievedEvidenceV2 | None:
         items = request.context.captions

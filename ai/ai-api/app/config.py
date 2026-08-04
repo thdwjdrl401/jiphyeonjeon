@@ -95,6 +95,12 @@ class Settings(BaseSettings):
     caption_evidence_max_items: int = Field(default=32, ge=1, le=1_000)
     caption_evidence_max_chars: int = Field(default=20_000, ge=1, le=50_000)
 
+    # Instructor highlight snapshots as evidence (ADR-0043). Disabled leaves both RAG paths
+    # exactly as they were — no annotation search, no annotation sources.
+    annotation_evidence_enabled: bool = False
+    annotation_top_k: int = Field(default=2, ge=1, le=50)
+    annotation_window_size: int = Field(default=5, ge=1, le=50)
+
     conversation_memory_ttl_seconds: int = Field(default=1_800, ge=60, le=86_400)
     conversation_memory_key_prefix: str = Field(
         default="ai:conversation:", min_length=1, max_length=128

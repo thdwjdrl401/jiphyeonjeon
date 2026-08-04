@@ -82,6 +82,22 @@ data: {"requestId":"request-1","text":"RAG는 "}
 `sessionMs`는 다시보기 타임라인 앵커이며 client가 그 시점으로 이동하는 데 쓴다. 스냅샷에는 page가 없으므로
 `PPTX`로 표현하지 않는다. 중복 제거 키는 `snapshotId`다. v1에서 `excerpt`는 다른 v1 source와 같이 optional이다.
 
+annotation 근거는 `AI_API_ANNOTATION_EVIDENCE_ENABLED`(기본 `false`)일 때만 검색한다. 꺼져 있으면 두 RAG
+경로가 이 기능이 생기기 전과 완전히 동일하게 동작한다. 켜지면 자료 검색과 **병렬로** 두 종류를 읽는다.
+
+| 읽기 | 기준 | 기본값 |
+|---|---|---|
+| 의미 검색 | 자료와 같은 RRF hybrid, `curriculumId` 스코프 | `AI_API_ANNOTATION_TOP_K` = 2 |
+| recent window | 유사도 무관, 같은 `sessionId`의 최근 `sessionMs` 순 | `AI_API_ANNOTATION_WINDOW_SIZE` = 5 |
+
+window가 별도로 필요한 이유는 "아까 강조하신 게 뭐였지" 같은 시간 지시어가 임베딩 공간에 방향을 갖지
+않기 때문이다. 의미 검색만으로는 어떤 임계값을 써도 걸리지 않는다. 두 읽기 결과는 `snapshotId`로 중복
+제거하며 window가 앞선다. 근거 순서는 자료 → 판서 → 자막이고, 판서만 있어도 `sufficient`다.
+
+시점 필터는 다시보기에만 적용한다. v2는 질문자 자신의 세션에서 `sessionMs <= questionSessionMs`인
+스냅샷만 쓰고 다른 세션은 전부 허용한다(이미 끝난 강의라 전체가 과거다). v1은 필터가 없다 — 색인된
+스냅샷은 정의상 질문 이전이고, `contextTimeMs`는 STT attempt-local이라 `sessionMs`와 비교할 수 없다.
+
 한 stream은 `answer.delta` 0개 이상 뒤 `answer.done|answer.insufficient|answer.error` 중 정확히 하나로 끝난다.
 client disconnect/cancellation 때는 terminal event 생성을 강제하지 않고 내부 iterator까지 취소를 전파한다.
 
