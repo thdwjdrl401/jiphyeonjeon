@@ -9,7 +9,9 @@
 - 모델 선택은 speaker-disjoint holdout(최소 100 clip·60분·8명)으로 결정한다.
 - golden/test 음성과 정답은 학습 데이터에 넣지 않는다.
 - 음성 원본·결과·checkpoint는 Git에 넣지 않는다(`data/`, `results/`, `checkpoints/`).
-- 모든 GPU 실행은 현재 허용된 GPU 0만 보이도록 기본 설정한다.
+- 한 benchmark 프로세스에는 물리 GPU 하나만 보이게 한다. 여러 GPU가 있는 서버에서는
+  `CUDA_VISIBLE_DEVICES`를 Python 시작 전에 지정하고 CLI의 `--cuda-visible-devices`와 같은 값으로
+  고정한다.
 
 입력은 압축하지 않은 mono PCM16 WAV, 16 kHz여야 한다. manifest는 UTF-8 JSONL이며
 필수 필드는 `id`, `audioPath`, `reference`, `language`, `speakerId`, `split`, `consent`다.
@@ -133,6 +135,40 @@ speech-start/end 지연, RTF와 peak CUDA memory가 기록된다. `test` split�
 `summary.json`, `comparison.csv`, `report.md`를 생성한다. 경로를 고정하려면
 `--artifact-dir`을 사용한다. 기존 artifact 디렉터리는 덮어쓰지 않는다.
 
+
+### fine-tuned `.nemo` checkpoint 품질 gate
+
+학습 결과인 `.nemo`는 Transformers 기반 `nemotron` backend에 넘기지 않는다. base와 tuned
+checkpoint를 같은 NeMo Prompt-RNNT offline decoder로 비교할 때만 `nemotron-nemo`를 사용한다.
+이 backend는 운영 VAD가 닫은 segment를 `ko-KR`, FP32로 전사하는 final-only 품질 gate다. native
+cache-aware streaming 지연이나 배포 adapter 동작을 증명하지 않는다.
+
+일반 STT Lab venv에 NeMo를 섞지 않고 ADR-0042의 고정 학습 runtime을 사용한다. 해당 runtime에는
+운영 VAD lock과 같은 `webrtcvad-wheels==2.0.14`가 필요하다. GPU 번호는 인자만 나중에 넘기지 말고
+아래처럼 프로세스 환경에도 먼저 주입한다.
+
+```bash
+NEMO_TRAIN_ROOT=/home/liveclass/ai/training/nemotron-3.5-full-20260803
+
+CUDA_VISIBLE_DEVICES=1 \
+PYTHONPATH=/home/liveclass/liveclass/ai/stt-lab/src:/home/liveclass/liveclass/ai/realtime-agent \
+"$NEMO_TRAIN_ROOT/.venv/bin/python" -m stt_lab.replay_cli \
+  --manifest /home/liveclass/ai/datasets/aihub-korean-lecture/v1/manifests/dev-benchmark-502.jsonl \
+  --candidate nemotron-base-nemo=nemotron-nemo@/home/liveclass/ai/models/nemotron-3.5-asr-streaming-0.6b/nemotron-3.5-asr-streaming-0.6b.nemo \
+  --candidate nemotron-tuned-nemo=nemotron-nemo@"$NEMO_TRAIN_ROOT/runs-spm-v2/LiveClass-Nemotron-3.5-ASR-Full-Finetune/2026-08-03_18-13-18/checkpoints/LiveClass-Nemotron-3.5-ASR-Full-Finetune.nemo" \
+  --candidate whisper-large-v3=whisper@/home/liveclass/ai/models/whisper-large-v3 \
+  --mode accuracy \
+  --workers 1 \
+  --precision bfloat16 \
+  --cuda-visible-devices 1 \
+  --output /home/liveclass/ai/experiments/stt-20260804-nemotron-full/replay-dev-benchmark-502-c1.json
+```
+
+2026-08-04 고정 dev 502 clips/904 segments 결과에서 tuned Nemotron은 base 대비 multi-reference
+CER를 20.05%에서 16.73%로 낮췄다. Whisper Large V3는 16.12%였고, empty final segment는
+base/tuned/Whisper가 각각 74/39/0이었다. 따라서 학습 효과는 확인했지만 운영 승격은 보류한다.
+전체 판단과 artifact hash는 [ADR-0043](../../docs/decisions/canola/0043-nemotron-finetuned-checkpoint-benchmark.md)에
+고정한다.
 
 ## 학습 사전검증
 
