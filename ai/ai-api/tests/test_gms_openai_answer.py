@@ -168,8 +168,7 @@ def test_empty_evidence_still_reaches_the_model_as_general_knowledge_fallback() 
 
     async def run() -> list[str]:
         return [
-            chunk
-            async for chunk in model.stream_answer(_request(), (), grounded_capture=capture)
+            chunk async for chunk in model.stream_answer(_request(), (), grounded_capture=capture)
         ]
 
     chunks = asyncio.run(run())
@@ -519,7 +518,9 @@ def test_responses_api_forwards_previous_response_id_for_chaining() -> None:
     from app.rag import ResponseIdCapture
 
     responses = FakeResponsesEndpoint(
-        stream=FakeResponsesStream([_created("resp_2"), _delta("이어진 답변"), _completed("resp_2")])
+        stream=FakeResponsesStream(
+            [_created("resp_2"), _delta("이어진 답변"), _completed("resp_2")]
+        )
     )
     model = _model(FakeResponsesAwareClient(responses))
     capture = ResponseIdCapture()

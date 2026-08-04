@@ -61,9 +61,7 @@ def test_parses_documented_annotation_embed_envelope_with_camel_case_only() -> N
     assert job.lesson_id == UUID(LESSON_ID)
     assert job.curriculum_id == UUID(CURRICULUM_ID)
     assert job.session_ms == 725300
-    assert job.captured_at == datetime(
-        2026, 8, 4, 13, 20, 5, tzinfo=timezone(timedelta(hours=9))
-    )
+    assert job.captured_at == datetime(2026, 8, 4, 13, 20, 5, tzinfo=timezone(timedelta(hours=9)))
     assert job.text == "B+ tree 노드 분할 조건"
     assert job.policy.embed_model == "bge-m3"
     assert job.contract_version == 1
@@ -88,9 +86,7 @@ def test_rejects_an_annotation_embed_missing_its_text() -> None:
 def test_rejects_an_image_reference_the_worker_no_longer_accepts() -> None:
     """ADR-0074 결정 1: the image never reaches AI, so `assetId` is not part of the envelope."""
     with pytest.raises(ValidationError):
-        parse_material_job(
-            _body(_embed_payload(assetId="550e8400-e29b-41d4-a716-446655440011"))
-        )
+        parse_material_job(_body(_embed_payload(assetId="550e8400-e29b-41d4-a716-446655440011")))
 
 
 def test_parses_documented_annotation_delete_envelope() -> None:

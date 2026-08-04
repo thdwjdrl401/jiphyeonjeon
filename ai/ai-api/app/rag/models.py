@@ -75,9 +75,7 @@ class AnnotationSource(_ContractModel):
     excerpt: str | None = Field(default=None, max_length=1000)
 
 
-AnswerSource = Annotated[
-    PptxSource | CaptionSource | AnnotationSource, Field(discriminator="type")
-]
+AnswerSource = Annotated[PptxSource | CaptionSource | AnnotationSource, Field(discriminator="type")]
 
 
 class AnswerDeltaData(_ContractModel):

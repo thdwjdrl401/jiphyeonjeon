@@ -53,9 +53,7 @@ def _live_evidence(session_ms: int = 725_300) -> RetrievedEvidence:
         lesson_id=LESSON_ID,
         curriculum_id=CURRICULUM_ID,
         content="B+ tree 노드 분할 조건",
-        source=AnnotationSource(
-            highlightId=uuid4(), sessionId=SESSION_ID, sessionMs=session_ms
-        ),
+        source=AnnotationSource(highlightId=uuid4(), sessionId=SESSION_ID, sessionMs=session_ms),
     )
 
 

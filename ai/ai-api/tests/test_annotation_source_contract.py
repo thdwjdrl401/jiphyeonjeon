@@ -76,9 +76,7 @@ def test_v2_annotation_excerpt_is_capped_at_300_characters() -> None:
 @pytest.mark.parametrize("source_type", [AnnotationSource, AnnotationSourceV2])
 def test_annotation_source_rejects_negative_session_ms(source_type: type) -> None:
     with pytest.raises(ValidationError):
-        source_type(
-            highlightId=SNAPSHOT_ID, sessionId=SESSION_ID, sessionMs=-1, excerpt="근거"
-        )
+        source_type(highlightId=SNAPSHOT_ID, sessionId=SESSION_ID, sessionMs=-1, excerpt="근거")
 
 
 @pytest.mark.parametrize("source_type", [AnnotationSource, AnnotationSourceV2])
@@ -103,9 +101,7 @@ def test_annotation_is_discriminated_from_pptx_and_caption_in_both_unions() -> N
     }
 
     assert isinstance(TypeAdapter(AnswerSource).validate_python(payload), AnnotationSource)
-    assert isinstance(
-        TypeAdapter(AnswerSourceV2).validate_python(payload), AnnotationSourceV2
-    )
+    assert isinstance(TypeAdapter(AnswerSourceV2).validate_python(payload), AnnotationSourceV2)
 
 
 def test_answer_done_streams_annotation_alongside_material_sources() -> None:
@@ -135,9 +131,7 @@ def test_v1_answer_done_accepts_annotation_sources() -> None:
         data=AnswerDoneData(
             requestId="request-1",
             sources=(
-                AnnotationSource(
-                    highlightId=SNAPSHOT_ID, sessionId=SESSION_ID, sessionMs=725_300
-                ),
+                AnnotationSource(highlightId=SNAPSHOT_ID, sessionId=SESSION_ID, sessionMs=725_300),
             ),
         )
     )

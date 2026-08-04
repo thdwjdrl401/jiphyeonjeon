@@ -297,9 +297,7 @@ def build_lecture_note_services(settings: Settings) -> LectureNoteServices:
     model = BoundedLectureNoteModel(
         gms_model,
         max_concurrency=settings.lecture_note_gms_max_concurrency,
-        refinement_max_concurrency=(
-            settings.lecture_note_gms_refinement_max_concurrency
-        ),
+        refinement_max_concurrency=(settings.lecture_note_gms_refinement_max_concurrency),
         max_consecutive_live=settings.lecture_note_gms_max_consecutive_live,
         max_attempts=settings.lecture_note_gms_max_attempts,
         retry_base_seconds=settings.lecture_note_gms_retry_base_seconds,
