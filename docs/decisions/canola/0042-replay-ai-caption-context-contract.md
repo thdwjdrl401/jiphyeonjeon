@@ -1,4 +1,4 @@
-# ADR-0037: 다시보기 영실이에 필요한 시간·근거 계약 요청
+# ADR-0042: 다시보기 영실이에 필요한 시간·근거 계약 요청
 
 > 📍 하네스 개요: [../../harness/README.md](../../harness/README.md) · 판단 정책:
 > [../../harness/POLICY.md](../../harness/POLICY.md) · 공유 계약: [../../CONTRACT.md](../../CONTRACT.md)
