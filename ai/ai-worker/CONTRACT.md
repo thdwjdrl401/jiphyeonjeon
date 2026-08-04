@@ -23,6 +23,8 @@ Alembic revision `0001_rag_index_storage`가 아래 테이블을 소유한다.
 - `ai.document_chunk`: 슬라이드 chunk와 FTS vector
 - `ai.chunk_embedding`: 정규화된 `vector(1024)`
 - `ai.material_key_term`: 자료 버전별 추출 용어와 정의 (revision `0002_material_key_terms`)
+- `ai.annotation_snapshot`: 강조 판서 스냅샷의 해석 텍스트·임베딩·타임라인 앵커 (revision
+  `0003_annotation_snapshot`)
 
 `material_key_term`은 `(material_version_id, term)`을 기본키로 사용한다. Java는
 `ai.material_version.state = 'ACTIVE'`인 자료 버전과 조인해 최신 자료의 용어만 읽는다(읽기 API는
@@ -32,6 +34,11 @@ Alembic revision `0001_rag_index_storage`가 아래 테이블을 소유한다.
 ai-worker는 `IndexPptxMaterial.execute()`가 stage/activate를 마친 뒤 추출된 용어를 이 테이블에
 upsert한다(`(material_version_id, term)` 충돌 시 `definition`만 갱신). 이 저장은 best-effort다 —
 실패해도 로그만 남기고 Spring 콜백 전송이나 job 자체를 막지 않는다([ADR-0005](../../docs/decisions/jinwoo/0005-key-term-storage-schema.md)).
+
+`annotation_snapshot`은 자료 색인 테이블과 FK로 연결되지 않는 독립 색인이다. 스냅샷 1건이 곧 색인
+단위이므로 chunk/embedding 분리 없이 `text`·`embedding`을 같은 행에 둔다. `snapshot_id`가 멱등 키이고
+`search_vector`는 `document_chunk`와 같은 생성 컬럼이라 `text`와 어긋날 수 없다. 삭제는 행 제거가 아니라
+`state='DELETED'` 전환이다([ADR-0043](../../docs/decisions/canola/0043-annotation-timeline-evidence-mvp.md)).
 
 `ai` schema 자체와 `vector` extension은 공유 인프라가 미리 만들 수 있다. 따라서 downgrade는 위 테이블만
 역순으로 제거하고 schema, extension, role은 제거하지 않는다.

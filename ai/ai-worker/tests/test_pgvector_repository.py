@@ -131,7 +131,7 @@ def migrate_database(integration_database: IntegrationDatabase) -> None:
         command.upgrade(config, "head")
         with sync_engine.connect() as connection:
             assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
-                "0002_material_key_terms"
+                "0003_annotation_snapshot"
             )
 
         command.downgrade(config, "base")
