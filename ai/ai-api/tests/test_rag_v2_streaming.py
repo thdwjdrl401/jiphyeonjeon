@@ -97,17 +97,29 @@ class Retriever:
 
 
 class Model:
-    def __init__(self, chunks: Sequence[str] = (), error: Exception | None = None):
+    def __init__(
+        self,
+        chunks: Sequence[str] = (),
+        error: Exception | None = None,
+        *,
+        grounded: bool = True,
+    ):
         self.chunks = chunks
         self.error = error
+        self.grounded = grounded
         self.calls: list[tuple[RagAnswerRequestV2, Sequence[RetrievedEvidenceV2]]] = []
 
     def stream_answer(
         self,
         current_request: RagAnswerRequestV2,
         evidence: Sequence[RetrievedEvidenceV2],
+        *,
+        grounded_capture=None,
+        **_ignored,
     ) -> AsyncIterator[str]:
         self.calls.append((current_request, evidence))
+        if grounded_capture is not None:
+            grounded_capture.value = self.grounded
 
         async def generate() -> AsyncIterator[str]:
             for chunk in self.chunks:
@@ -246,16 +258,57 @@ async def test_duplicate_pptx_with_different_excerpt_still_dedups_by_identity() 
 
 
 @async_test
-async def test_insufficient_evidence_is_terminal_and_skips_model() -> None:
-    model = Model(["호출되면 안 됩니다."])
+async def test_no_evidence_still_calls_model_with_empty_sources() -> None:
+    """No PPTX/caption evidence found must not short-circuit before the model — the model may
+    still answer from general knowledge, but with nothing to cite, sources stays empty."""
+
+    model = Model(["일반 지식 답변"])
 
     events = await collect(
         ReplayAnswerService(Retriever(RetrievalResultV2(sufficient=False)), model),
         request(),
     )
 
-    assert [event.event for event in events] == ["answer.insufficient"]
-    assert model.calls == []
+    assert [event.event for event in events] == ["answer.delta", "answer.done"]
+    assert model.calls == [(request(), ())]
+    assert events[-1].data.sources == ()
+
+
+@async_test
+async def test_empty_sources_serializes_as_json_array_not_null_or_omitted() -> None:
+    """ADR-0037's answer.done.sources was previously guaranteed non-empty (min_length=1); this
+    relaxation must still produce a valid `"sources":[]` on the wire, not `null` or a missing
+    key."""
+
+    events = await collect(
+        ReplayAnswerService(Retriever(RetrievalResultV2(sufficient=False)), Model(["답변"])),
+        request(),
+    )
+
+    encoded = encode_sse_event(events[-1]).decode()
+    lines = encoded.splitlines()
+    assert lines[0] == "event: answer.done"
+    payload = json.loads(lines[1].removeprefix("data: "))
+    assert payload["sources"] == []
+
+
+@async_test
+async def test_general_tag_hides_sources_even_when_evidence_was_retrieved() -> None:
+    """Evidence being retrieved doesn't mean the model actually used it — GroundedCapture, not
+    evidence presence, decides sources."""
+
+    evidence = (pptx_evidence(), caption_evidence())
+    model = Model(["관련 없는 일반 답변"], grounded=False)
+
+    events = await collect(
+        ReplayAnswerService(
+            Retriever(RetrievalResultV2(sufficient=True, evidence=evidence)), model
+        ),
+        request(),
+    )
+
+    assert [event.event for event in events] == ["answer.delta", "answer.done"]
+    assert events[-1].data.sources == ()
 
 
 @pytest.mark.parametrize(
@@ -330,7 +383,7 @@ async def test_registry_rejects_active_recent_and_capacity_before_streaming() ->
     with pytest.raises(RequestRegistryFullError):
         await service.open(request("request-2"))
 
-    assert [event.event async for event in first] == ["answer.insufficient"]
+    assert [event.event async for event in first] == ["answer.done"]
     assert await registry.snapshot() == {"active": 0, "completed": 1}
 
 
@@ -340,7 +393,7 @@ async def test_consumer_cancellation_reaches_model_and_closes_stream() -> None:
     cancelled = asyncio.Event()
 
     class BlockingModel:
-        def stream_answer(self, current_request, evidence):
+        def stream_answer(self, current_request, evidence, **_ignored):
             async def generate():
                 started.set()
                 try:

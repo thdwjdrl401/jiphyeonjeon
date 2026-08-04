@@ -11,6 +11,7 @@ from app.adapters.gms_openai_answer import GMS_OPENAI_BASE_URL
 from app.adapters.gms_openai_answer_v2 import GmsOpenAIAnswerModelV2
 from app.rag import CaptionSourceV2, PptxSourceV2, RagAnswerRequestV2, RagStreamFailure, ReplayContext
 from app.rag.models import RetrievedEvidenceV2
+from app.rag.ports import GroundedCapture
 
 LESSON_ID = UUID("11111111-1111-4111-8111-111111111111")
 CURRICULUM_ID = UUID("55555555-5555-4555-8555-555555555555")
@@ -181,3 +182,43 @@ def test_rate_limit_maps_to_retryable_code() -> None:
         assert captured.value.code == "MODEL_RATE_LIMITED"
 
     asyncio.run(run())
+
+
+def test_grounded_tag_is_stripped_and_capture_set_true() -> None:
+    stream = FakeStream([_chunk("[GROUNDED]\n"), _chunk("컨슈머 그룹 답변")])
+    completions = FakeCompletions(stream=stream)
+    model = _model(FakeClient(completions))
+    capture = GroundedCapture()
+
+    async def run() -> list[str]:
+        return [
+            chunk
+            async for chunk in model.stream_answer(
+                _request(), _evidence(), grounded_capture=capture
+            )
+        ]
+
+    chunks = asyncio.run(run())
+
+    assert "".join(chunks) == "컨슈머 그룹 답변"
+    assert capture.value is True
+
+
+def test_empty_evidence_still_reaches_the_model_as_general_knowledge_fallback() -> None:
+    stream = FakeStream([_chunk("[GENERAL]\n일반 지식으로 답합니다.")])
+    completions = FakeCompletions(stream=stream)
+    model = _model(FakeClient(completions))
+    capture = GroundedCapture()
+
+    async def run() -> list[str]:
+        return [
+            chunk
+            async for chunk in model.stream_answer(_request(), (), grounded_capture=capture)
+        ]
+
+    chunks = asyncio.run(run())
+
+    assert "".join(chunks) == "일반 지식으로 답합니다."
+    assert capture.value is False
+    payload = json.loads(completions.calls[0]["messages"][1]["content"])
+    assert payload["evidence"] == []

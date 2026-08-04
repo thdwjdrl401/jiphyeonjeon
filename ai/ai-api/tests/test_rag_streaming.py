@@ -95,17 +95,29 @@ class Retriever:
 
 
 class Model:
-    def __init__(self, chunks: Sequence[str] = (), error: Exception | None = None):
+    def __init__(
+        self,
+        chunks: Sequence[str] = (),
+        error: Exception | None = None,
+        *,
+        grounded: bool = True,
+    ):
         self.chunks = chunks
         self.error = error
+        self.grounded = grounded
         self.calls: list[tuple[RagAnswerRequest, Sequence[RetrievedEvidence]]] = []
 
     def stream_answer(
         self,
         current_request: RagAnswerRequest,
         evidence: Sequence[RetrievedEvidence],
+        *,
+        grounded_capture=None,
+        **_ignored,
     ) -> AsyncIterator[str]:
         self.calls.append((current_request, evidence))
+        if grounded_capture is not None:
+            grounded_capture.value = self.grounded
 
         async def generate() -> AsyncIterator[str]:
             for chunk in self.chunks:
@@ -165,16 +177,56 @@ async def test_grounded_answer_emits_deltas_then_one_done(
 
 
 @async_test
-async def test_insufficient_evidence_is_terminal_and_skips_model() -> None:
-    model = Model(["호출되면 안 됩니다."])
+async def test_no_evidence_still_calls_model_with_empty_sources() -> None:
+    """No PPTX/caption evidence found must not short-circuit before the model — the model may
+    still answer from general knowledge, but with nothing to cite, sources stays empty."""
+
+    model = Model(["일반 지식 답변"])
 
     events = await collect(
         RagAnswerService(Retriever(RetrievalResult(sufficient=False)), model),
         request(),
     )
 
-    assert [event.event for event in events] == ["answer.insufficient"]
-    assert model.calls == []
+    assert [event.event for event in events] == ["answer.delta", "answer.done"]
+    assert model.calls == [(request(), ())]
+    assert events[-1].data.sources == ()
+
+
+@async_test
+async def test_empty_sources_serializes_as_json_array_not_null_or_omitted() -> None:
+    """CONTRACT.md's answer.done.sources was previously guaranteed non-empty (min_length=1);
+    this relaxation must still produce a valid `"sources":[]` on the wire, not `null` or a
+    missing key, so Spring's SSE relay and FE's parser see the same shape they already handle
+    (FE's sse.test.ts already covers an empty sources array)."""
+
+    events = await collect(
+        RagAnswerService(Retriever(RetrievalResult(sufficient=False)), Model(["답변"])),
+        request(),
+    )
+
+    encoded = encode_sse_event(events[-1]).decode()
+    lines = encoded.splitlines()
+    assert lines[0] == "event: answer.done"
+    payload = json.loads(lines[1].removeprefix("data: "))
+    assert payload["sources"] == []
+
+
+@async_test
+async def test_general_tag_hides_sources_even_when_evidence_was_retrieved() -> None:
+    """Evidence being retrieved (e.g. caption context near the question timestamp) doesn't mean
+    the model actually used it — GroundedCapture, not evidence presence, decides sources."""
+
+    evidence = (pptx_evidence(), caption_evidence())
+    model = Model(["관련 없는 일반 답변"], grounded=False)
+
+    events = await collect(
+        RagAnswerService(Retriever(RetrievalResult(sufficient=True, evidence=evidence)), model),
+        request(),
+    )
+
+    assert [event.event for event in events] == ["answer.delta", "answer.done"]
+    assert events[-1].data.sources == ()
 
 
 @pytest.mark.parametrize(
@@ -248,7 +300,7 @@ async def test_retrieval_timeout_skips_model_and_emits_terminal_error() -> None:
 @async_test
 async def test_model_timeout_closes_generation_with_terminal_error() -> None:
     class BlockingModel:
-        def stream_answer(self, current_request, evidence):
+        def stream_answer(self, current_request, evidence, **_ignored):
             async def generate():
                 await asyncio.Event().wait()
                 yield "unreachable"
@@ -318,7 +370,7 @@ async def test_registry_rejects_active_recent_and_capacity_before_streaming() ->
     with pytest.raises(RequestRegistryFullError):
         await service.open(request("request-2"))
 
-    assert [event.event async for event in first] == ["answer.insufficient"]
+    assert [event.event async for event in first] == ["answer.done"]
     assert await registry.snapshot() == {"active": 0, "completed": 1}
     with pytest.raises(DuplicateRequestError):
         await service.open(request("request-1"))
@@ -334,7 +386,7 @@ async def test_consumer_cancellation_reaches_model_and_closes_stream() -> None:
     cancelled = asyncio.Event()
 
     class BlockingModel:
-        def stream_answer(self, current_request, evidence):
+        def stream_answer(self, current_request, evidence, **_ignored):
             async def generate():
                 started.set()
                 try:
@@ -469,12 +521,15 @@ class MemoryAwareModel:
         *,
         previous_response_id: str | None = None,
         response_id_capture=None,
+        grounded_capture=None,
     ) -> AsyncIterator[str]:
         self.calls.append((current_request, evidence, previous_response_id))
 
         async def generate() -> AsyncIterator[str]:
             if response_id_capture is not None:
                 response_id_capture.value = self.new_response_id
+            if grounded_capture is not None:
+                grounded_capture.value = True
             for chunk in self.chunks:
                 await asyncio.sleep(0)
                 yield chunk
@@ -483,16 +538,20 @@ class MemoryAwareModel:
 
 
 @async_test
-async def test_memory_disabled_by_default_calls_model_without_new_kwargs() -> None:
-    """RagAnswerService without conversation_memory must call stream_answer exactly as before —
-    this is the backward-compat guarantee every pre-existing test in this file relies on."""
+async def test_memory_disabled_by_default_calls_model_without_memory_kwargs() -> None:
+    """RagAnswerService without conversation_memory must not pass memory-only kwargs
+    (previous_response_id/response_id_capture) — this is the backward-compat guarantee every
+    pre-existing test in this file relies on. grounded_capture is unconditional (not memory-
+    specific) and is always passed."""
 
     class PlainModel:
         def __init__(self) -> None:
             self.calls = 0
 
-        def stream_answer(self, current_request, evidence):
+        def stream_answer(self, current_request, evidence, *, grounded_capture=None):
             self.calls += 1
+            if grounded_capture is not None:
+                grounded_capture.value = True
 
             async def generate():
                 yield "답변"
@@ -594,9 +653,12 @@ async def test_save_failure_is_swallowed_and_answer_done_still_emitted() -> None
 
 
 @async_test
-async def test_insufficient_evidence_skips_memory_lookup_entirely() -> None:
+async def test_no_evidence_still_runs_memory_lookup_and_calls_model() -> None:
+    """No PPTX/caption evidence must not skip conversation memory either — a returning user
+    asking a general-knowledge question should still get the conversation chained."""
+
     memory = ConversationMemory()
-    model = MemoryAwareModel(["호출되면 안 됩니다."])
+    model = MemoryAwareModel(["일반 지식 답변"])
     service = RagAnswerService(
         Retriever(RetrievalResult(sufficient=False)),
         model,
@@ -605,6 +667,7 @@ async def test_insufficient_evidence_skips_memory_lookup_entirely() -> None:
 
     events = await collect(service, request_with_memory())
 
-    assert [event.event for event in events] == ["answer.insufficient"]
-    assert memory.lookup_calls == []
-    assert model.calls == []
+    assert [event.event for event in events] == ["answer.delta", "answer.done"]
+    assert memory.lookup_calls == [("user-1", SESSION_ID, "conv-1")]
+    assert model.calls == [(request_with_memory(), (), None)]
+    assert events[-1].data.sources == ()
