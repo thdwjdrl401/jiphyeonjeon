@@ -33,11 +33,13 @@
 AI worker의 ACK/retry/DLQ·저장 경계는
 [`ai/ai-worker/README.md`](../../../../../../../ai/ai-worker/README.md)에 있다.
 
-## 다시보기 RAG 요구사항
+## 업로드 녹화강의 Replay RAG
 
-다시보기 영실이는 아직 구현되지 않았다. 필요한 공개/내부 endpoint와 시간·근거 데이터는
-[`ADR-0037`](../../../../../../../docs/decisions/canola/0042-replay-ai-caption-context-contract.md)에 정리돼
-있으며, 내부 구현 방법은 Spring·AI 오너가 합의해 결정한다.
+업로드 녹화강의 질문은 구현됐다([ADR-0015](../../../../../../../docs/decisions/choinhoo/0015-recorded-lesson-replay-v2-rag-adapter.md)).
+브라우저가 `lessonId + question + playbackMs`를 보내면 video 서비스가 권한·게시 상태를 확인하고
+`recordedVideoId`·`curriculumId`·게시 자막을 조회한다. 이 값을 ai-api Replay v2에
+`sessionId=recordedVideoId`, `context.mode=REPLAY`로 보내며 ai-api v2 wire 자체는 바꾸지 않는다.
+라이브 종료 다시보기의 새 질문 지원은 이 구현과 별도다.
 
 ## 검증
 

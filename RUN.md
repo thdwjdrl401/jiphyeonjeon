@@ -79,11 +79,19 @@ docker compose -f docker-compose.prod.yml -f docker-compose.expose.yml --env-fil
 
 **2) 로컬에서 remote 프로필로 실행**:
 ```bash
-cp .env.remote.example .env.remote      # POSTGRES_PASSWORD·EC2_REDIS_PASSWORD 채우기 (EC2 값과 일치)
+cp .env.remote.example .env.remote      # 인프라 시크릿과 AI_INTERNAL_SECRET을 EC2 dev 값으로 채우기
 npm run dev:remote:wsl                   # FE + BE(remote) 동시
 # 또는 VSCode: "Spring Boot (Backend · EC2 infra)" / "Full Stack (BE · EC2 infra + FE)"
 ```
-- 안전장치: remote는 **EC2 스키마를 마이그레이션하지 않는다**(`flyway.enabled=false`). 스키마가 뒤처져 `validate`가 실패하면 EC2 재배포 신호.
+- 녹화강의·라이브 AI 질문은 remote 프로필에서 기본적으로 EC2 dev ai-api
+  (`http://jiphyeonjeon.thdwjdrl.com:18010`)를 호출한다. 주소를 바꿀 때만 `AI_API_BASE_URL`을 덮어쓴다.
+- `.env.remote`의 `AI_INTERNAL_SECRET`은 EC2 `/etc/liveclass/.env.ai-dev`의 같은 값이어야 한다.
+  누락하면 잘못된 로컬 기본 시크릿으로 401을 반복하지 않고 백엔드가 기동 단계에서 실패한다.
+- 학생 핵심용어는 별도 프론트 설정 없이 remote PostgreSQL의 활성
+  `ai.material_version`·`ai.material_key_term`을 `GET /api/lessons/{lessonId}/glossary`로 읽는다.
+- remote는 공유 EC2 dev DB에 대해 Flyway를 실행한다. 실행 전 최신 master로 rebase하고
+  `bash scripts/check-version-collisions.sh`를 통과시켜야 한다. 이미 배포된 master 마이그레이션 번호는
+  바꾸지 않고, 브랜치 마이그레이션만 다음 빈 번호로 이동한다.
 - **범위 밖(현재)**: 에셋 스토리지(MinIO)는 remote 전환에 포함되지 않는다 — datasource·Redis(STT 핵심 경로)만 전환. STT consumer(CP2) 착수 시 **consumer group을 개발자별로 분리**할 것(같은 그룹이면 EC2 백엔드와 메시지를 뺏는다, ADR-0022 유보).
 
 ## 4. 포트

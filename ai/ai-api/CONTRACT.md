@@ -230,6 +230,9 @@ v1 endpoint(`/internal/v1/rag/answers:stream`)는 이 절 때문에 요청·응�
   판단하고 `excerpt` 차이는 dedup에 영향을 주지 않는다.
 - `ANNOTATION` source는 v1과 같은 필드를 쓰되 `excerpt`가 **필수**다(다른 v2 source와 동일).
 - SSE event 종류·상태코드·에러 코드 체계는 v1과 동일하다.
+- 업로드 녹화강의 Spring caller는 기존 v2 wire를 그대로 사용하고 `sessionId` 슬롯에 서버가 조회한
+  `recordedVideoId`를 넣는다([ADR-0015](../../docs/decisions/choinhoo/0015-recorded-lesson-replay-v2-rag-adapter.md)).
+  ai-api가 이 필드로 외부 live session을 조회하지 않으므로 v2 코드·스키마 변경은 없다.
 
 ## 9. 후속 미확정 사항
 

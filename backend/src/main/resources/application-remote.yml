@@ -58,6 +58,13 @@ spring:
 liveclass:
   caption:
     group-instance-suffix: ${CAPTION_CONSUMER_GROUP_SUFFIX:dev}
+  ai:
+    # 로컬 JVM은 compose 내부 DNS 이름(ai-api)을 해석할 수 없다. remote 프로필에서는 EC2 dev
+    # ai-api의 host publish 포트를 기본값으로 사용하고, 필요하면 .env.remote에서 덮어쓴다.
+    api-base-url: ${AI_API_BASE_URL:http://jiphyeonjeon.thdwjdrl.com:18010}
+    # ai-api가 검증하는 HMAC 공유 시크릿이다. application.yml의 로컬 개발 기본값으로 조용히
+    # 떨어지면 모든 질문이 401→502가 되므로 기본값 없는 placeholder로 누락을 기동 시점에 차단한다.
+    internal-secret: ${AI_INTERNAL_SECRET}
 
 # 에셋 스토리지(썸네일·프로필 presigned) → EC2 dev MinIO. IP+http로 브라우저 HSTS 우회.
 # secret은 .env.remote로 주입(EC2 /etc/liveclass/.env.dev 의 MINIO_ROOT_PASSWORD 와 일치).

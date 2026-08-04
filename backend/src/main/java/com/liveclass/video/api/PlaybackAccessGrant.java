@@ -1,10 +1,13 @@
 package com.liveclass.video.api;
 
+import java.util.UUID;
+
 /**
- * {@link LessonPlaybackAccess#resolve} 결과. 소유 강사인지(owner)만 담는다 — 게시·자산 상태 게이트는
- * video 서비스가 이 값(owner 여부)에 따라 다르게 적용한다.
+ * {@link LessonPlaybackAccess#resolve} 결과. 접근 주체와 레슨에서 확정한 커리큘럼 범위를 함께 담는다.
  *
- * @param owner 소유 강사면 true(검수 목적으로 미게시·비READY 제약이 완화된다), 활성 수강생이면 false
+ * @param owner 소유 강사면 true, 활성 수강생이면 false
+ * @param curriculumId 서버가 레슨→섹션으로 확정한 커리큘럼. RAG 자료 검색 범위처럼 재생 권한과 같은
+ *                     신뢰 경계에서 필요한 후속 처리가 사용한다.
  */
-public record PlaybackAccessGrant(boolean owner) {
+public record PlaybackAccessGrant(boolean owner, UUID curriculumId) {
 }
