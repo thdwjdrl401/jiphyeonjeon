@@ -137,7 +137,12 @@ def _row_to_hit(row: Mapping[str, Any]) -> MaterialChunkHit:
     return MaterialChunkHit(
         chunk_id=int(row["chunk_id"]),
         material_version_id=int(row["material_version_id"]),
-        lesson_id=_uuid_value(row["lesson_id"], "lesson_id"),
+        # NULL for curriculum-scoped materials (docs/ai/CONTRACT.md §9), which belong to the
+        # whole curriculum. Search already scopes by curriculum_id, so these rows are meant to
+        # come back — treating the NULL as corruption would hide them instead.
+        lesson_id=(
+            None if row["lesson_id"] is None else _uuid_value(row["lesson_id"], "lesson_id")
+        ),
         curriculum_id=_uuid_value(row["curriculum_id"], "curriculum_id"),
         material_id=_uuid_value(row["material_id"], "material_id"),
         material_version=int(row["material_version"]),

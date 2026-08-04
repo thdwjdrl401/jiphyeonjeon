@@ -46,16 +46,22 @@ class ChunkRecord:
 
 @dataclass(frozen=True, slots=True)
 class MaterialScope:
-    """The (tenant_id, material_id) identity's invariant scope and current version."""
+    """The (tenant_id, material_id) identity's invariant scope and current version.
+
+    lesson_id is None for curriculum-scoped materials, which belong to the whole curriculum
+    and have no lesson (docs/ai/CONTRACT.md §9). The scope stays invariant either way — a
+    material cannot later move between the two.
+    """
 
     curriculum_id: UUID
-    lesson_id: UUID
+    lesson_id: UUID | None
     material_version: int
 
     def __post_init__(self) -> None:
-        for field in ("curriculum_id", "lesson_id"):
-            if not isinstance(getattr(self, field), UUID):
-                raise ValueError(f"{field} must be a UUID")
+        if not isinstance(self.curriculum_id, UUID):
+            raise ValueError("curriculum_id must be a UUID")
+        if self.lesson_id is not None and not isinstance(self.lesson_id, UUID):
+            raise ValueError("lesson_id must be a UUID or None")
         if self.material_version < 1:
             raise ValueError("material_version must be positive")
 
@@ -76,7 +82,8 @@ class StagedMaterial:
     idempotency_key: str
     tenant_id: str
     curriculum_id: UUID
-    lesson_id: UUID
+    # None for curriculum-scoped materials (docs/ai/CONTRACT.md §9).
+    lesson_id: UUID | None
     material_id: UUID
     material_version: int
     source_bucket: str
@@ -97,9 +104,11 @@ class StagedMaterial:
             "chunk_strategy",
         ):
             _require_text(getattr(self, field), field)
-        for field in ("curriculum_id", "lesson_id", "material_id"):
+        for field in ("curriculum_id", "material_id"):
             if not isinstance(getattr(self, field), UUID):
                 raise ValueError(f"{field} must be a UUID")
+        if self.lesson_id is not None and not isinstance(self.lesson_id, UUID):
+            raise ValueError("lesson_id must be a UUID or None")
         if self.material_version < 1:
             raise ValueError("material_version must be positive")
         if self.model_name != BGE_M3_MODEL:

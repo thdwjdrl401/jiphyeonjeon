@@ -140,7 +140,7 @@ def migrate_database(integration_database: IntegrationDatabase) -> None:
         command.upgrade(config, "head")
         with sync_engine.connect() as connection:
             assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
-                "0005_material_key_term_result"
+                "0006_curriculum_scope_materials"
             )
 
         command.downgrade(config, "base")
@@ -1119,3 +1119,101 @@ async def test_rejects_an_embedding_that_cannot_be_ranked(
 
     with pytest.raises(AnnotationIngestionError):
         await annotation_repository.upsert(record)
+
+
+def _curriculum_material(version: int, *, tenant_id: str = "tenant-test") -> StagedMaterial:
+    """A curriculum-scoped material: same identity shape, no lesson."""
+    return replace(_material(version, tenant_id=tenant_id), lesson_id=None)
+
+
+async def test_curriculum_scoped_material_completes_the_whole_index_cycle(
+    repository: PgvectorIndexRepository,
+    database_engine: AsyncEngine,
+) -> None:
+    material = _curriculum_material(1)
+
+    version_id = await repository.stage(material, [_chunk(0.1)])
+    await repository.activate(material, version_id)
+
+    async with database_engine.connect() as connection:
+        row = (
+            (
+                await connection.execute(
+                    text(
+                        "SELECT lesson_id, curriculum_id, state FROM ai.material_version "
+                        "WHERE id = :version_id"
+                    ),
+                    {"version_id": version_id},
+                )
+            )
+            .mappings()
+            .one()
+        )
+    assert row["lesson_id"] is None
+    assert row["curriculum_id"] == CURRICULUM_ID
+    assert row["state"] == "ACTIVE"
+
+    scope = await repository.resolve_active_scope("tenant-test", MATERIAL_ID)
+    assert scope is not None
+    assert scope.lesson_id is None
+    assert scope.curriculum_id == CURRICULUM_ID
+
+
+async def test_curriculum_scoped_activate_is_idempotent(
+    repository: PgvectorIndexRepository,
+) -> None:
+    """NULL lesson_id must not break the identity re-check, which compares in Python."""
+    material = _curriculum_material(1)
+    version_id = await repository.stage(material, [_chunk(0.1)])
+
+    await repository.activate(material, version_id)
+    await repository.activate(material, version_id)
+
+
+async def test_a_lesson_material_cannot_become_curriculum_scoped(
+    repository: PgvectorIndexRepository,
+) -> None:
+    """The scope guard uses IS DISTINCT FROM, not <>. With plain <>, `NULL <> lesson` is NULL
+    rather than true, so this move would slip through and silently widen a lesson material to
+    the whole curriculum (CONTRACT §1: a material identity's scope is invariant)."""
+    lesson_material = _material(1)
+    await repository.activate(
+        lesson_material, await repository.stage(lesson_material, [_chunk(0.1)])
+    )
+
+    with pytest.raises(ValueError, match="cannot move to another curriculum or lesson"):
+        await repository.stage(_curriculum_material(2), [_chunk(0.2)])
+
+
+async def test_a_curriculum_material_cannot_become_lesson_scoped(
+    repository: PgvectorIndexRepository,
+) -> None:
+    """The mirror direction: NULL on the stored side instead of the incoming side."""
+    curriculum_material = _curriculum_material(1)
+    await repository.activate(
+        curriculum_material, await repository.stage(curriculum_material, [_chunk(0.1)])
+    )
+
+    with pytest.raises(ValueError, match="cannot move to another curriculum or lesson"):
+        await repository.stage(_material(2), [_chunk(0.2)])
+
+
+async def test_curriculum_scoped_delete_removes_the_material(
+    repository: PgvectorIndexRepository,
+    database_engine: AsyncEngine,
+) -> None:
+    material = _curriculum_material(1)
+    await repository.activate(material, await repository.stage(material, [_chunk(0.1)]))
+
+    scope = await repository.resolve_active_scope("tenant-test", MATERIAL_ID)
+    assert scope is not None
+    deleted = replace(
+        _curriculum_material(scope.material_version),
+        job_id="job-delete-curriculum",
+        idempotency_key="material-delete-curriculum",
+    )
+    assert await repository.delete_job(deleted) == 1
+
+    async with database_engine.connect() as connection:
+        remaining = await connection.scalar(text("SELECT count(*) FROM ai.material_version"))
+    assert remaining == 0

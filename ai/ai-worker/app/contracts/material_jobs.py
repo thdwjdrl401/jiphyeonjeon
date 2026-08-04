@@ -34,11 +34,33 @@ class EmbedPolicy(_WireModel):
     extract_key_terms: bool | None = Field(default=None, alias="extractKeyTerms")
 
 
+# Materials attach at two levels (docs/ai/CONTRACT.md §9). Spring omits `scope` entirely on
+# lesson jobs — "LESSON" is accepted for symmetry but never actually sent today.
+MaterialScopeName = Literal["CURRICULUM", "LESSON"]
+
+
+def _validate_scope_pair(scope: MaterialScopeName | None, lesson_id: UUID | None) -> None:
+    """A job's scope and its lesson must agree, in both directions.
+
+    Curriculum materials have no lesson, so a lessonId alongside CURRICULUM is a contradiction
+    rather than extra information. And a lesson job that lost its lessonId would silently
+    become curriculum-wide — indexing it for the whole curriculum instead of one lesson — so
+    the absent case has to fail too.
+    """
+
+    if scope == "CURRICULUM":
+        if lesson_id is not None:
+            raise ValueError("curriculum-scoped jobs must not carry lessonId")
+    elif lesson_id is None:
+        raise ValueError("lesson-scoped jobs require lessonId")
+
+
 class PptxEmbedJob(_WireModel):
     task_type: Literal["PPTX_EMBED"] = Field(alias="taskType")
+    scope: MaterialScopeName | None = None
     material_id: UUID = Field(alias="materialId")
     asset_id: UUID = Field(alias="assetId")
-    lesson_id: UUID = Field(alias="lessonId")
+    lesson_id: UUID | None = Field(default=None, alias="lessonId")
     curriculum_id: UUID = Field(alias="curriculumId")
     file_name: str = Field(alias="fileName", max_length=1_024)
     policy: EmbedPolicy
@@ -52,12 +74,30 @@ class PptxEmbedJob(_WireModel):
             raise ValueError("v2 PPTX_EMBED requires policy.extractKeyTerms")
         return self
 
+    @model_validator(mode="after")
+    def validate_scope_pair(self) -> PptxEmbedJob:
+        _validate_scope_pair(self.scope, self.lesson_id)
+        return self
+
 
 class EmbedDeleteJob(_WireModel):
+    """Delete envelopes are asymmetric by scope and both shapes must be accepted as-is.
+
+    The lesson one carries `lessonId` and no `curriculumId`; the curriculum one is the exact
+    opposite. Rejecting either sends real Spring traffic to the DLQ.
+    """
+
     task_type: Literal["EMBED_DELETE"] = Field(alias="taskType")
+    scope: MaterialScopeName | None = None
     material_id: UUID = Field(alias="materialId")
-    lesson_id: UUID = Field(alias="lessonId")
+    lesson_id: UUID | None = Field(default=None, alias="lessonId")
+    curriculum_id: UUID | None = Field(default=None, alias="curriculumId")
     contract_version: Literal[1] = Field(alias="contractVersion")
+
+    @model_validator(mode="after")
+    def validate_scope_pair(self) -> EmbedDeleteJob:
+        _validate_scope_pair(self.scope, self.lesson_id)
+        return self
 
 
 class AnnotationEmbedJob(_WireModel):

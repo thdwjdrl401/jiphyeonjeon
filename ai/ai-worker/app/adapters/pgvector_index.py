@@ -662,18 +662,28 @@ async def _assert_material_scope(connection, material: StagedMaterial) -> None:
     scope_mismatch = await connection.scalar(
         text(
             """
+            -- IS DISTINCT FROM, not <>: a curriculum-scoped material has lesson_id NULL, and
+            -- `NULL <> x` is NULL rather than true, so plain <> would silently pass a material
+            -- moving between lesson and curriculum scope — the one thing this guard exists to
+            -- stop (CONTRACT §1: a material identity's scope is invariant).
             SELECT EXISTS (
               SELECT 1
               FROM ai.material_version
               WHERE tenant_id = :tenant_id
                 AND material_id = :material_id
-                AND (curriculum_id <> :curriculum_id OR lesson_id <> :lesson_id)
+                AND (
+                  curriculum_id IS DISTINCT FROM :curriculum_id
+                  OR lesson_id IS DISTINCT FROM :lesson_id
+                )
               UNION ALL
               SELECT 1
               FROM ai.job_run
               WHERE tenant_id = :tenant_id
                 AND material_id = :material_id
-                AND (curriculum_id <> :curriculum_id OR lesson_id <> :lesson_id)
+                AND (
+                  curriculum_id IS DISTINCT FROM :curriculum_id
+                  OR lesson_id IS DISTINCT FROM :lesson_id
+                )
             )
             """
         ),

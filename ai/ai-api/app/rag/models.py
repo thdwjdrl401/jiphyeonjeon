@@ -133,7 +133,7 @@ class RetrievedEvidence(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=False)
 
-    lesson_id: UUID
+    lesson_id: UUID | None
     curriculum_id: UUID | None = None
     content: str = Field(min_length=1, max_length=50_000)
     source: AnswerSource
@@ -266,7 +266,7 @@ class RetrievedEvidenceV2(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=False)
 
-    lesson_id: UUID
+    lesson_id: UUID | None
     curriculum_id: UUID | None = None
     content: str = Field(min_length=1, max_length=50_000)
     source: AnswerSourceV2

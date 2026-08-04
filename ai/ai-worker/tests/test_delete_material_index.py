@@ -1,8 +1,10 @@
 from uuid import UUID
 
+import pytest
+
 from app.application import DeleteMaterialIndex
 from app.contracts import EmbedDeleteJob
-from app.domain import MaterialScope, StagedMaterial
+from app.domain import MaterialIngestionError, MaterialScope, StagedMaterial
 
 MATERIAL_ID = UUID("550e8400-e29b-41d4-a716-446655440000")
 LESSON_ID = UUID("550e8400-e29b-41d4-a716-446655440002")
@@ -89,3 +91,63 @@ async def test_has_pending_data_reflects_whether_scope_resolves() -> None:
 
     assert await with_data.has_pending_data(job()) is True
     assert await without_data.has_pending_data(job()) is False
+
+
+def curriculum_job() -> EmbedDeleteJob:
+    return EmbedDeleteJob(
+        taskType="EMBED_DELETE",
+        scope="CURRICULUM",
+        materialId=MATERIAL_ID,
+        curriculumId=CURRICULUM_ID,
+        contractVersion=1,
+    )
+
+
+async def test_curriculum_scoped_delete_resolves_and_removes() -> None:
+    storage = FakeIndexStorage(
+        scope=MaterialScope(curriculum_id=CURRICULUM_ID, lesson_id=None, material_version=2)
+    )
+
+    result = await deleter(storage).execute(curriculum_job())
+
+    assert result.deleted is True
+    assert storage.deleted[0].lesson_id is None
+    assert storage.deleted[0].curriculum_id == CURRICULUM_ID
+
+
+async def test_delete_refuses_when_the_envelope_disagrees_with_storage() -> None:
+    """Spring sends curriculumId on curriculum deletes. If it names a different curriculum
+    than what is stored, the two sides disagree about which material this is — deleting anyway
+    would remove evidence the caller never meant to touch."""
+    other_curriculum = UUID("550e8400-e29b-41d4-a716-4466554400ff")
+    storage = FakeIndexStorage(
+        scope=MaterialScope(curriculum_id=other_curriculum, lesson_id=None, material_version=1)
+    )
+
+    with pytest.raises(MaterialIngestionError, match="curriculumId does not match"):
+        await deleter(storage).execute(curriculum_job())
+
+    assert storage.deleted == []
+
+
+async def test_curriculum_delete_refuses_a_lesson_scoped_material() -> None:
+    storage = FakeIndexStorage(
+        scope=MaterialScope(curriculum_id=CURRICULUM_ID, lesson_id=LESSON_ID, material_version=1)
+    )
+
+    with pytest.raises(MaterialIngestionError, match="targets a lesson-scoped material"):
+        await deleter(storage).execute(curriculum_job())
+
+    assert storage.deleted == []
+
+
+async def test_lesson_delete_refuses_a_mismatched_lesson() -> None:
+    other_lesson = UUID("550e8400-e29b-41d4-a716-4466554400ee")
+    storage = FakeIndexStorage(
+        scope=MaterialScope(curriculum_id=CURRICULUM_ID, lesson_id=other_lesson, material_version=1)
+    )
+
+    with pytest.raises(MaterialIngestionError, match="lessonId does not match"):
+        await deleter(storage).execute(job())
+
+    assert storage.deleted == []

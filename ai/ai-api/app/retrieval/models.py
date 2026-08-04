@@ -8,7 +8,8 @@ class MaterialChunkHit:
 
     chunk_id: int
     material_version_id: int
-    lesson_id: UUID
+    # None for curriculum-scoped materials, which have no lesson (docs/ai/CONTRACT.md §9).
+    lesson_id: UUID | None
     curriculum_id: UUID
     material_id: UUID
     material_version: int
