@@ -86,6 +86,8 @@ class AnnotationHighlightEmbedPayloadTest {
         JsonNode body = jsonMapper.readTree(payload.getValue());
         assertThat(body.get("taskType").asString()).isEqualTo("ANNOTATION_EMBED");
         assertThat(body.get("highlightId").asString()).isEqualTo(highlight.getId().toString());
+        // 같은 강의의 여러 라이브를 구분한다. sessionMs가 어느 세션의 축인지도 이 값이 정한다.
+        assertThat(body.get("sessionId").asString()).isEqualTo(highlight.getLiveSessionId().toString());
         assertThat(body.get("lessonId").asString()).isEqualTo(highlight.getLessonId().toString());
         // 검색 스코프. 자료와 같은 축이라 한 커리큘럼 안에서 함께 검색된다.
         assertThat(body.get("curriculumId").asString()).isEqualTo(highlight.getCurriculumId().toString());
@@ -93,6 +95,9 @@ class AnnotationHighlightEmbedPayloadTest {
         assertThat(body.get("sessionMs").asLong()).isEqualTo(725_300L);
         assertThat(body.get("text").asString()).isEqualTo("이진 탐색의 시간복잡도는 O(log n)");
         assertThat(body.get("contractVersion").asInt()).isEqualTo(1);
+        // 오프셋을 포함한 ISO-8601. 수신 측이 시각을 그대로 파싱할 수 있어야 한다.
+        assertThat(java.time.OffsetDateTime.parse(body.get("capturedAt").asString()))
+                .isEqualTo(highlight.getCreatedAt());
     }
 
     /** AI가 이미지를 받지 않기로 했다. assetId나 URL이 새어 들어가면 계약 위반이다. */

@@ -16,6 +16,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 
@@ -158,10 +159,15 @@ public class AnnotationHighlightDescribeWorker {
         String payload = jsonMapper.writeValueAsString(Map.of(
                 "taskType", "ANNOTATION_EMBED",
                 "highlightId", highlight.getId().toString(),
+                // 세션 식별자. lessonId만으로는 같은 강의의 여러 라이브를 구분할 수 없다 —
+                // 다시보기 앵커(sessionMs)가 어느 세션의 축인지도 이 값이 정한다.
+                "sessionId", highlight.getLiveSessionId().toString(),
                 "lessonId", highlight.getLessonId().toString(),
                 "curriculumId", highlight.getCurriculumId().toString(),
                 "sessionMs", highlight.getSessionMs() == null ? 0L : highlight.getSessionMs(),
-                "capturedAt", highlight.getCreatedAt().toString(),
+                // 오프셋을 포함한 ISO-8601. toString()은 나노초 자릿수가 값마다 달라져 수신 측
+                // 파서가 흔들릴 수 있다 — 형식을 명시해 고정한다.
+                "capturedAt", highlight.getCreatedAt().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
                 "text", highlight.getInterpretedText(),
                 "policy", Map.of("embedModel", "bge-m3"),
                 "contractVersion", 1));
