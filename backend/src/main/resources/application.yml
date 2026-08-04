@@ -295,6 +295,10 @@ notification:
     # 하나가 기기 수천 대일 때 요청이 한꺼번에 나가 푸시 서비스가 429로 막는다.
     # 실측으로 올릴 값이다 — 올리기 전에 429 비율을 봐야 한다.
     max-in-flight: ${NOTIFICATION_WEB_PUSH_MAX_IN_FLIGHT:200}
+    # 연결 하나가 소화하는 동시 요청 수. **실측값이다** — FCM·Mozilla 모두 연결 직후 SETTINGS로
+    # MAX_CONCURRENT_STREAMS=100을 광고한다(2026-08-04 확인). 연결 수는 이 값과 위 상한에서
+    # 계산하므로, 상한만 올리고 연결이 그대로여서 조용히 막히는 일이 없다.
+    streams-per-connection: ${NOTIFICATION_WEB_PUSH_STREAMS_PER_CONNECTION:100}
     connect-timeout-ms: ${NOTIFICATION_WEB_PUSH_CONNECT_TIMEOUT_MS:5000}
     request-timeout-ms: ${NOTIFICATION_WEB_PUSH_REQUEST_TIMEOUT_MS:10000}
     # 조각 하나 전체(재시도 포함)의 상한. 넘으면 끝난 것만 반영하고 나머지는 버린다 — 조각 하나가

@@ -114,11 +114,18 @@ public class WebPushSender {
                          @Value("${notification.web-push.request-timeout-ms:10000}") long requestTimeoutMs,
                          @Value("${notification.web-push.batch-timeout-ms:60000}") long batchTimeoutMs,
                          @Value("${notification.web-push.max-attempts:3}") int maxAttempts,
-                         @Value("${notification.web-push.retry-backoff-ms:500}") long retryBackoffMs) {
+                         @Value("${notification.web-push.retry-backoff-ms:500}") long retryBackoffMs,
+                         @Value("${notification.web-push.streams-per-connection:100}") int streamsPerConnection) {
         this.repository = repository;
         this.pushService = createPushService(properties);
+        /*
+         * 연결 수를 짐작하지 않고 동시 상한에서 **계산한다**. 연결 하나가 소화하는 동시 스트림은
+         * 서버가 정하고(실측 100), 그보다 많이 보내려면 연결이 더 있어야 한다 — 두 숫자를 따로
+         * 두면 상한만 올리고 연결은 그대로여서 조용히 100에서 막힌다.
+         */
+        int connections = WebPushHttpClient.connectionsFor(maxInFlight, streamsPerConnection);
         this.httpClient = new WebPushHttpClient(
-                Duration.ofMillis(connectTimeoutMs), Duration.ofMillis(requestTimeoutMs));
+                Duration.ofMillis(connectTimeoutMs), Duration.ofMillis(requestTimeoutMs), connections);
         this.inFlight = new Semaphore(maxInFlight);
         this.batchTimeout = Duration.ofMillis(batchTimeoutMs);
         this.maxAttempts = Math.max(1, maxAttempts);

@@ -140,6 +140,38 @@ class WebPushHttpClientTest {
         assertThat(client.send(prepared("x")).get().retryAfter()).isNull();
     }
 
+    /**
+     * <b>연결을 여러 개 연다.</b> JDK 클라이언트 하나는 오리진당 연결을 하나만 유지하고, 연결 하나에
+     * 열 수 있는 동시 스트림은 서버가 정한다(FCM·Mozilla 실측 100). 그 위로 가려면 클라이언트를
+     * 더 만드는 수밖에 없다.
+     *
+     * <p>연결 수는 서버 쪽 포트로 센다 — 클라이언트가 넷이면 포트도 넷이어야 한다.
+     */
+    @Test
+    void it_opens_one_connection_per_pooled_client() throws Exception {
+        var pooled = new WebPushHttpClient(Duration.ofSeconds(2), Duration.ofSeconds(5), 4);
+
+        // 풀 크기의 배수만큼 보내면 모든 클라이언트가 한 번씩 쓰인다.
+        for (int i = 0; i < 8; i++) {
+            pooled.send(prepared("본문" + i)).get();
+        }
+
+        assertThat(remotePorts)
+                .as("클라이언트 하나당 연결 하나 — 풀이 안 돌면 포트가 하나뿐이다")
+                .hasSize(4);
+    }
+
+    /** 연결 수는 짐작이 아니라 계산이다. 올림이 아니면 상한이 조용히 깎인다. */
+    @Test
+    void it_derives_the_connection_count_from_the_in_flight_limit() {
+        assertThat(WebPushHttpClient.connectionsFor(200, 100)).isEqualTo(2);
+        assertThat(WebPushHttpClient.connectionsFor(100, 100)).isEqualTo(1);
+        assertThat(WebPushHttpClient.connectionsFor(101, 100))
+                .as("101이면 두 번째 연결이 필요하다 — 내림하면 그 1건이 영영 못 나간다")
+                .isEqualTo(2);
+        assertThat(WebPushHttpClient.connectionsFor(1, 100)).isEqualTo(1);
+    }
+
     @Test
     void it_sends_many_requests_concurrently() throws Exception {
         var client = new WebPushHttpClient(Duration.ofSeconds(2), Duration.ofSeconds(5));
