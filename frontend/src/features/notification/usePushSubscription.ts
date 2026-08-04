@@ -54,6 +54,17 @@ export function usePushSubscription(enabled: boolean): PushSubscriptionControls 
       const registration = await navigator.serviceWorker.getRegistration(WORKER_URL)
       const existing = await registration?.pushManager.getSubscription()
       if (!active) return
+      if (existing) {
+        /*
+         * 브라우저 구독이 남아 있어도 **서버 쪽 주인이 나일 보장이 없다.** 같은 브라우저에서
+         * 로그아웃하고 다른 계정으로 들어오면 구독은 그대로인데 서버 행은 이전 사용자 것이라,
+         * 화면은 "켜짐"으로 보이는데 푸시는 그 사람에게 간다(운영에서 실제로 그랬다).
+         *
+         * 등록은 멱등이고 서버가 같은 엔드포인트면 주인을 옮기므로, 볼 때마다 맞춰 둔다.
+         */
+        await registerPushSubscription(readKeys(existing)).catch(() => undefined)
+        if (!active) return
+      }
       setState(existing ? 'on' : 'off')
     })()
 
