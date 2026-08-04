@@ -5,11 +5,7 @@ import com.liveclass.notification.push.PushSubscriptionRepository;
 import com.liveclass.notification.push.WebPushProperties;
 import com.liveclass.notification.push.WebPushSender;
 import com.sun.net.httpserver.HttpServer;
-import nl.martijndwars.webpush.Encoding;
-import nl.martijndwars.webpush.Notification;
-import nl.martijndwars.webpush.PushService;
 import nl.martijndwars.webpush.Utils;
-import org.apache.http.client.methods.HttpPost;
 import org.bouncycastle.jce.interfaces.ECPrivateKey;
 import org.bouncycastle.jce.interfaces.ECPublicKey;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
@@ -227,56 +223,39 @@ class WebPushRetryTest {
     }
 
     /**
-     * <b>라이브러리가 만든 요청이 하나도 안 빠지고 나가는가.</b>
+     * <b>우리가 만든 요청이 하나도 안 빠지고 나가는가.</b>
      *
-     * <p>이 층에서 우리가 하는 일은 Apache {@code HttpPost}를 JDK {@code HttpRequest}로 옮겨 담는
-     * 것뿐인데, 옮기다 헤더 하나를 흘리면 <b>푸시 서비스가 거절하거나 브라우저가 복호화에 실패한다</b>.
-     * 그런데 로컬 서버는 복호화를 하지 않으므로, 다른 테스트는 헤더가 빠져도 그냥 통과한다.
-     *
-     * <p>그래서 <b>보내기 전의 요청과 받은 요청을 직접 견준다</b>. JDK가 스스로 관리하는 헤더
-     * ({@code Content-Length} 등)만 예외이고, 나머지는 값까지 같아야 한다.
+     * <p>이 층에서 하는 일은 {@code WebPushRequest}를 JDK {@code HttpRequest}로 옮겨 담는 것뿐인데,
+     * 옮기다 헤더 하나를 흘리면 <b>푸시 서비스가 거절하거나 기기가 복호화에 실패한다</b>. 그런데
+     * 로컬 서버는 복호화를 하지 않으므로 다른 테스트는 헤더가 빠져도 그냥 통과한다.
      */
     @Test
-    void every_header_the_library_set_arrives_intact() throws Exception {
+    void every_header_we_set_arrives_intact() throws Exception {
         PushSubscription a = subscription("a");
         script("a", 201);
 
-        // 발송기가 안에서 쓰는 것과 같은 방식으로 요청을 만든다.
-        PushService pushService = new PushService(
-                properties.publicKey(), properties.privateKey(), properties.subject());
-        HttpPost prepared = pushService.preparePost(
-                new Notification(a.getEndpoint(), a.getP256dh(), a.getAuth(),
-                        "본문".getBytes(java.nio.charset.StandardCharsets.UTF_8)),
-                Encoding.AES128GCM);
-        int preparedLength = prepared.getEntity().getContent().readAllBytes().length;
-
-        /*
-         * 발송기가 아니라 **클라이언트를 직접** 부른다. 여기서 보려는 것은 옮겨 담기 한 단계뿐이고,
-         * 발송기를 거치면 본문이 발송기가 만든 JSON이라 위에서 잰 길이와 견줄 수 없다.
-         */
+        var prepared = com.liveclass.notification.push.WebPushTestAccess.create(
+                properties, a, "본문".getBytes(java.nio.charset.StandardCharsets.UTF_8));
         new com.liveclass.notification.push.WebPushHttpClient(
-                Duration.ofSeconds(2), Duration.ofSeconds(5)).send(prepared).get();
+                Duration.ofSeconds(2), Duration.ofSeconds(5))
+                .send(new com.liveclass.notification.push.WebPushRequest(
+                        java.net.URI.create(a.getEndpoint()), prepared.headers(), prepared.body()))
+                .get();
 
-        for (org.apache.http.Header header : prepared.getAllHeaders()) {
-            if (JDK_MANAGED.contains(header.getName().toLowerCase())) {
+        for (var entry : prepared.headers().entrySet()) {
+            if (JDK_MANAGED.contains(entry.getKey().toLowerCase())) {
                 continue;
             }
-            assertThat(headerReceived(header.getName()))
-                    .as("%s 헤더가 옮겨 담는 과정에서 사라졌다", header.getName())
-                    .isNotNull();
+            assertThat(headerReceived(entry.getKey()))
+                    .as("%s 헤더가 옮겨 담는 과정에서 사라졌다", entry.getKey())
+                    .isEqualTo(entry.getValue());
         }
         assertThat(headerReceived("Authorization"))
                 .as("VAPID 서명이 없으면 푸시 서비스가 거절한다")
                 .startsWith("vapid");
-        assertThat(headerReceived("Content-Encoding"))
-                .as("암호화 방식을 못 알려 주면 브라우저가 복호화하지 못한다")
-                .isEqualTo("aes128gcm");
-        assertThat(headerReceived("TTL"))
-                .as("TTL이 없으면 RFC 8030상 요청이 유효하지 않다")
-                .isNotNull();
         assertThat(lastBodyLength.get())
                 .as("암호문이 한 바이트라도 달라지면 복호화가 깨진다")
-                .isEqualTo(preparedLength);
+                .isEqualTo(prepared.body().length);
     }
 
     /** JDK 클라이언트가 직접 채우는 헤더. 우리가 옮기지 않는 것이 맞다. */

@@ -2,8 +2,6 @@ package com.liveclass.notification;
 
 import com.liveclass.notification.push.WebPushHttpClient;
 import com.sun.net.httpserver.HttpServer;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.entity.ByteArrayEntity;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,6 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class WebPushHttpClientTest {
 
     private HttpServer server;
+    private String endpoint;
     private final AtomicInteger requests = new AtomicInteger();
     private final Set<String> remotePorts = ConcurrentHashMap.newKeySet();
     private volatile String lastAuthorization;
@@ -71,6 +70,7 @@ class WebPushHttpClientTest {
         });
         server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
         server.start();
+        endpoint = "http://127.0.0.1:" + server.getAddress().getPort() + "/push";
     }
 
     @AfterEach
@@ -82,14 +82,15 @@ class WebPushHttpClientTest {
         return "http://127.0.0.1:" + server.getAddress().getPort() + "/push";
     }
 
-    private HttpPost prepared(String body) {
-        HttpPost post = new HttpPost(url());
-        // 라이브러리가 붙이는 것과 같은 모양 — VAPID 서명과 암호화 헤더.
-        post.setHeader("Authorization", "vapid t=fake-jwt, k=fake-key");
-        post.setHeader("Content-Encoding", "aes128gcm");
-        post.setHeader("TTL", "2419200");
-        post.setEntity(new ByteArrayEntity(body.getBytes(StandardCharsets.UTF_8)));
-        return post;
+    /** 암호화가 끝난 상태의 요청. 이 테스트가 보는 것은 <b>전송</b>뿐이다. */
+    private com.liveclass.notification.push.WebPushRequest prepared(String body) {
+        return new com.liveclass.notification.push.WebPushRequest(
+                java.net.URI.create(endpoint),
+                new java.util.LinkedHashMap<>(java.util.Map.of(
+                        "Authorization", "vapid t=fake-jwt, k=fake-key",
+                        "Content-Encoding", "aes128gcm",
+                        "TTL", "2419200")),
+                body.getBytes(StandardCharsets.UTF_8));
     }
 
     @Test
