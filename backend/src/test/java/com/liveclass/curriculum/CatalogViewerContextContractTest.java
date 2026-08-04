@@ -262,7 +262,7 @@ class CatalogViewerContextContractTest {
 
         write(get("/api/curriculums/" + cid), student, null)
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.outline[0].lessons").isEmpty());
+                .andExpect(jsonPath("$.outline[1].lessons").isEmpty());
         write(get("/api/lessons/" + lessonId), student, null)
                 .andExpect(status().isNotFound());
 
@@ -280,10 +280,10 @@ class CatalogViewerContextContractTest {
 
         write(get("/api/curriculums/" + cid), student, null)
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.outline[0].lessons[0].lessonId").value(lessonId))
-                .andExpect(jsonPath("$.outline[0].lessons[0].deliveryType").value("RECORDED"))
-                .andExpect(jsonPath("$.outline[0].lessons[0].recordedPublicationStatus").value("PUBLISHED"))
-                .andExpect(jsonPath("$.outline[0].lessons[0].access.destination").value("RECORDED_VOD"));
+                .andExpect(jsonPath("$.outline[1].lessons[0].lessonId").value(lessonId))
+                .andExpect(jsonPath("$.outline[1].lessons[0].deliveryType").value("RECORDED"))
+                .andExpect(jsonPath("$.outline[1].lessons[0].recordedPublicationStatus").value("PUBLISHED"))
+                .andExpect(jsonPath("$.outline[1].lessons[0].access.destination").value("RECORDED_VOD"));
         write(get("/api/lessons/" + lessonId), student, null)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.deliveryType").value("RECORDED"));

@@ -1,5 +1,6 @@
 package com.liveclass.curriculum;
 
+import com.liveclass.aiintegration.api.OutboxDestinations;
 import com.liveclass.aiintegration.api.OutboxPublisher;
 import com.liveclass.asset.api.AssetDirectory;
 import com.liveclass.curriculum.domain.Curriculum;
@@ -19,6 +20,7 @@ import com.liveclass.video.api.LessonRecordingCleanup;
 import com.liveclass.video.api.RecordedVideoManagement;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.context.ApplicationEventPublisher;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -78,6 +80,7 @@ class InstructorCurriculumMaterialEmbeddingContractTest {
                 mock(AssetDirectory.class),
                 outbox,
                 mock(LessonRecordingCleanup.class),
+                mock(ApplicationEventPublisher.class),
                 mock(RecordedVideoManagement.class),
                 true);
 
@@ -90,6 +93,7 @@ class InstructorCurriculumMaterialEmbeddingContractTest {
 
         ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
         verify(outbox).enqueue(
+                eq(OutboxDestinations.INGESTION_EMBED),
                 eq("material_asset"),
                 eq(materialId.toString()),
                 eq("MATERIAL_EMBED_REQUESTED"),
