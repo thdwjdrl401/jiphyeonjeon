@@ -8,6 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.rag import (
+    AnnotationSourceV2,
     AnswerError,
     CaptionContextItem,
     CaptionSourceV2,
@@ -443,3 +444,104 @@ async def test_sse_encoder_uses_named_event_and_json_data_only() -> None:
         "text": "한글\n답변",
     }
     assert encoded.endswith("\n\n")
+
+
+HIGHLIGHT_ID = UUID("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee")
+
+
+def annotation_evidence(
+    *,
+    curriculum_id: UUID = CURRICULUM_ID,
+    session_id: str = SESSION_ID,
+    excerpt: str = "강조된 판서 근거",
+) -> RetrievedEvidenceV2:
+    return RetrievedEvidenceV2(
+        lesson_id=LESSON_ID,
+        curriculum_id=curriculum_id,
+        content="강조된 판서 근거",
+        source=AnnotationSourceV2(
+            highlightId=HIGHLIGHT_ID, sessionId=session_id, sessionMs=725_300, excerpt=excerpt
+        ),
+    )
+
+
+@async_test
+async def test_annotation_evidence_in_scope_reaches_the_model_and_the_sources() -> None:
+    """Regression: the closed-union else in _validate_evidence_scope_v2 treated every
+    AnnotationSourceV2 as a scope violation, and _unique_sources_v2's CAPTION fallback would
+    have crashed on it right after — grounding on a highlight killed the whole answer."""
+
+    service = ReplayAnswerService(
+        Retriever(RetrievalResultV2(sufficient=True, evidence=(annotation_evidence(),))),
+        Model(["강조 기반 답변"]),
+    )
+
+    events = await collect(service, request())
+
+    assert [event.event for event in events] == ["answer.delta", "answer.done"]
+    assert events[-1].data.sources == (
+        AnnotationSourceV2(
+            highlightId=HIGHLIGHT_ID,
+            sessionId=SESSION_ID,
+            sessionMs=725_300,
+            excerpt="강조된 판서 근거",
+        ),
+    )
+
+
+@async_test
+async def test_annotation_sources_dedupe_on_highlight_id_not_excerpt() -> None:
+    """Same identity with drifting excerpt must still collapse to one source, matching the
+    (materialId,page)/(sessionId,ms) philosophy of the other v2 branches."""
+
+    evidence = (
+        annotation_evidence(excerpt="첫 발췌"),
+        annotation_evidence(excerpt="살짝 다른 발췌"),
+    )
+    service = ReplayAnswerService(
+        Retriever(RetrievalResultV2(sufficient=True, evidence=evidence)),
+        Model(["강조 기반 답변"]),
+    )
+
+    events = await collect(service, request())
+
+    assert [event.event for event in events] == ["answer.delta", "answer.done"]
+    assert len(events[-1].data.sources) == 1
+
+
+@async_test
+async def test_annotation_evidence_from_another_session_is_accepted() -> None:
+    """Curriculum-wide search (ADR-0043 §4): highlights from earlier sessions are legitimate;
+    the replay question-time cutoff already ran inside retrieval."""
+
+    service = ReplayAnswerService(
+        Retriever(
+            RetrievalResultV2(
+                sufficient=True,
+                evidence=(annotation_evidence(session_id="55555555-5555-4555-8555-555555555555"),),
+            )
+        ),
+        Model(["과거 세션 강조 기반 답변"]),
+    )
+
+    events = await collect(service, request())
+
+    assert [event.event for event in events] == ["answer.delta", "answer.done"]
+
+
+@async_test
+async def test_annotation_evidence_from_another_curriculum_is_rejected() -> None:
+    service = ReplayAnswerService(
+        Retriever(
+            RetrievalResultV2(
+                sufficient=True,
+                evidence=(annotation_evidence(curriculum_id=OTHER_CURRICULUM_ID),),
+            )
+        ),
+        Model(["유출 답변"]),
+    )
+
+    events = await collect(service, request())
+
+    assert [event.event for event in events] == ["answer.error"]
+    assert events[0].data.code == "EVIDENCE_SCOPE_VIOLATION"

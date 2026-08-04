@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator, Sequence
 
 from app.rag.errors import RagStreamFailure
 from app.rag.models import (
+    AnnotationSource,
     AnswerDelta,
     AnswerDeltaData,
     AnswerDone,
@@ -261,6 +262,12 @@ def _validate_evidence_scope(
         if isinstance(item.source, PptxSource):
             # PPTX materials are shared curriculum-wide (ADR-0007): a hit's lesson_id may
             # legitimately differ from the requesting lesson, so curriculum_id is the proof.
+            if item.curriculum_id != request.curriculumId:
+                raise _EvidenceScopeViolation
+        elif isinstance(item.source, AnnotationSource):
+            # Highlights are indexed and searched on the same curriculum axis as materials
+            # (ADR-0043 §4). A hit from another session of this curriculum is a legitimate
+            # semantic-search result, so sessionId is deliberately not compared.
             if item.curriculum_id != request.curriculumId:
                 raise _EvidenceScopeViolation
         elif isinstance(item.source, CaptionSource):
