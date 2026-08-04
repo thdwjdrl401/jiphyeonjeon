@@ -1,4 +1,4 @@
-# 로컬 개발 backbone — postgres·redis·minio(에셋)·rabbitmq(임베딩 잡 큐)까지 포함.
+# 로컬 개발 backbone — postgres·redis·minio·rabbitmq와 녹화강의 worker를 포함.
 # nginx·미디어(LiveKit/Egress)는 별도 스택으로 운영 (TEAM-KICKOFF §4).
 # 사용: cp .env.example .env  →  docker compose up -d
 name: liveclass          # compose 프로젝트명 고정 = 볼륨/이미지 접두사. 디렉토리명(cp/liveclass 등)과 무관하게 liveclass_* 로 통일.
@@ -81,10 +81,9 @@ services:
       timeout: 5s
       retries: 5
 
-  # 선택 실행: docker compose --profile media up -d media-worker
+  # 기본 실행: docker compose up -d
   # 로컬 backend가 localhost로 서명한 source URL을 그대로 읽어야 하므로 host network를 사용한다.
   media-worker:
-    profiles: ["media"]
     build: ./media-worker
     container_name: liveclass-media-worker
     restart: unless-stopped
@@ -105,10 +104,9 @@ services:
       minio-init:
         condition: service_completed_successfully
 
-  # 선택 실행: docker compose --profile recorded-stt up -d recorded-stt-worker
+  # 기본 실행: docker compose up -d
   # host에서 실행 중인 Spring과 Spring이 localhost로 서명한 MinIO URL을 함께 사용한다.
   recorded-stt-worker:
-    profiles: ["recorded-stt"]
     build: ./ai/ai-worker
     container_name: liveclass-recorded-stt-worker
     restart: unless-stopped

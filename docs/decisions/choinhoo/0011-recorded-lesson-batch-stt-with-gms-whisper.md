@@ -412,7 +412,8 @@ queue는 durable `ingestion.transcribe`, DLQ는 `ingestion.transcribe.dlq`로 �
 
 batch STT 구현은 `media-worker`나 `realtime-agent`에 넣지 않는다. `ai-worker`의 GMS client, HMAC,
 RabbitMQ 운영 패턴은 재사용할 수 있지만, 실행 프로세스와 queue는 분리한다. 권장 배치는 같은 AI
-codebase/image에서 `recorded-stt` profile로 실행하는 별도 `recorded-stt-worker` container다.
+codebase/image에서 실행하는 별도 `recorded-stt-worker` container다. 로컬 Compose의 기본 기동 범위는
+[ADR-0014](0014-local-compose-starts-recorded-workers.md)에서 결정한다.
 
 이 분리는 긴 전사 요청이 PPTX 임베딩 consumer의 prefetch 슬롯이나 HLS 변환 슬롯을 점유하지 않게 한다.
 STT 프로세스에만 FFmpeg와 GMS key를 주입하고, media worker에는 GMS 권한을 주지 않는다.

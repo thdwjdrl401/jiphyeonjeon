@@ -57,7 +57,7 @@ npm start              # WSL: npm start:wsl
 ```
 
 - **빌드·테스트 상세**는 [backend/AGENTS.md](backend/AGENTS.md)·[frontend/AGENTS.md](frontend/AGENTS.md) 참고.
-- **인프라(Postgres·Redis·RabbitMQ·MinIO·nginx)** 는 T0에서 docker-compose로 구성한다([CP-ROADMAP](docs/CP-ROADMAP.md)).
+- **로컬 의존 서비스(Postgres·Redis·RabbitMQ·MinIO·녹화강의 worker)** 는 루트 Docker Compose로 함께 기동한다([RUN](RUN.md)).
 - **미디어 플레인(LiveKit·Egress·TURN)** 은 Egress가 Linux 전용·WebRTC가 공인 IP를 요구하므로 **공유 원격 호스트**에 올리고 앱은 URL로 접속한다([0004](docs/decisions/songjeongki/0004-media-livekit-selfhost.md)).
 
 ## 4. 주요 포트

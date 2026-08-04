@@ -9,17 +9,17 @@
 | ---- | ---- | ---- |
 | **JDK** | Java **21** (LTS) | Spring Boot 4.1 ([ADR-0009](./docs/decisions/songjeongki/0009-java21-spring-boot-3.md)). Gradle 8.14+/9.x는 wrapper가 자동 |
 | **Node.js** | 20+ / npm | 프론트(Vite). **WSL에서 개발하면 WSL 안에 설치** (`brew install node` 등) |
-| **Docker** | Engine + compose | 인프라(Postgres+pgvector·Redis) |
+| **Docker** | Engine + compose | 인프라·녹화강의 worker |
 | **VSCode 확장** | `Extension Pack for Java` · `ESLint` | 추천 팝업(`.vscode/extensions.json`) |
 
 > ⚠️ **WSL 개발**: 레포를 WSL ext4에 두고 작업하면 `java`·`node`가 WSL 안에 있어야 한다(Windows쪽만 있으면 안 잡히거나 느림). JDK는 `JAVA_HOME`(예: brew는 `.../opt/openjdk@21/libexec`)을 PATH에 등록.
 
 ## 2. 최초 셋업
 ```bash
-# 인프라 (PG+pgvector, Redis) — 최초 기동 시 core/ai 스키마 자동 생성
+# 로컬 의존 서비스·worker — .env에 GMS_API_KEY를 설정한 뒤 실행
 cp .env.example .env
 docker compose up -d
-docker compose ps               # postgres·redis·minio healthy 확인
+docker compose ps               # postgres·redis·minio·rabbitmq·두 worker 확인
 
 # 의존성
 npm run install:all             # 루트(concurrently) + frontend
@@ -34,19 +34,29 @@ npm run install:all             # 루트(concurrently) + frontend
 | Windows | `npm run dev` | `npm run build` |
 
 - `dev` = 프론트 Vite(8083, HMR) + 백엔드 `bootRun`(8080, DevTools 핫리로드) 동시.
-- `dev:wsl` = 프론트 + 백엔드 + 컴파일 감시 + `media-worker` 동시. 워커는 `media` 프로필로 빌드·실행되고 로그는 `[MEDIA]`로 표시된다.
-- `dev:wsl`을 `Ctrl+C`로 종료하면 `media-worker`도 함께 멈추고, PostgreSQL·Redis·MinIO·RabbitMQ 인프라 컨테이너는 계속 실행된다.
+- `dev:wsl` = 루트 `.env` 자동 로드 + 프론트 + 백엔드 + 컴파일 감시를 동시 실행한다.
+- `dev:wsl`을 `Ctrl+C`로 종료해도 `docker compose up -d`로 시작한 인프라와 worker는 계속 실행된다.
 - WSL에서 `Permission denied: ./gradlew` → `chmod +x backend/gradlew` 한 번.
 - **인프라(docker compose)가 먼저 떠 있어야** 백엔드가 PG/Redis에 붙는다.
 
-녹화강의 batch STT(ADR-0011)는 기본 개발 실행에 포함하지 않는다. `.env`에 `GMS_API_KEY`를 넣고
-백엔드를 `RECORDED_STT_ENABLED=true`로 실행한 뒤 별도 프로필을 켠다. 두 STT HMAC 값은 `.env`의
-`RECORDED_STT_SOURCE_SECRET`·`RECORDED_STT_CALLBACK_SECRET`을 Spring과 worker가 함께 읽는다.
+녹화강의 HLS 변환과 batch STT worker(ADR-0008·0011)는 기본 Compose 실행에 포함한다.
+`.env`에 `RECORDED_STT_ENABLED=true`와 `GMS_API_KEY`를 설정한 뒤 `docker compose up -d`를 실행한다.
+`dev:wsl`은 같은 `.env`를 export해 Spring에 전달한다. 두 STT HMAC 값은 `.env`의 `RECORDED_STT_SOURCE_SECRET`·
+`RECORDED_STT_CALLBACK_SECRET`을 Spring과 worker가 함께 읽는다.
 
 ```bash
-docker compose --profile recorded-stt up -d --build recorded-stt-worker
+docker compose up -d
+docker compose logs -f media-worker recorded-stt-worker
+```
+
+worker 코드를 바꾼 뒤 이미지를 다시 만들려면 다음을 실행한다.
+
+```bash
+docker compose up -d --build media-worker recorded-stt-worker
 docker compose logs -f recorded-stt-worker
 ```
+
+전체 로컬 의존 서비스와 worker를 멈추려면 `docker compose down`을 실행한다.
 
 이 worker는 `ingestion.transcribe`만 소비하며 FFmpeg와 GMS key를 가진다. `media-worker`의 HLS 변환과
 PPTX `ai-worker`는 별도 프로세스·queue로 계속 동작한다.
