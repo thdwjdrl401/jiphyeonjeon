@@ -1,4 +1,4 @@
-# ADR-0044: Qwen3-ASR 1.7B를 한국어 강의 fine-tuning 1순위 후보로 선택한다
+# ADR-0046: Qwen3-ASR 1.7B를 한국어 강의 fine-tuning 1순위 후보로 선택한다
 
 - **상태**: 채택
 - **일자**: 2026-08-03
@@ -6,7 +6,7 @@
   [ADR-0039](0039-production-vad-stt-experiment-runner.md),
   [ADR-0040](0040-stt-fine-tuning-dry-run-and-promotion.md),
   [ADR-0041](0041-aihub-dual-transcription-evaluation.md),
-  [ADR-0042](0042-whisper-vllm-runtime-adapter.md)
+  [ADR-0044](0044-whisper-vllm-runtime-adapter.md)
 
 ## 맥락
 

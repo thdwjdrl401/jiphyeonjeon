@@ -1,4 +1,4 @@
-# ADR-0042: Whisper 운영 추론은 loopback vLLM model owner와 provider adapter로 전환한다
+# ADR-0044: Whisper 운영 추론은 loopback vLLM model owner와 provider adapter로 전환한다
 
 - **상태**: 채택
 - **일자**: 2026-08-03

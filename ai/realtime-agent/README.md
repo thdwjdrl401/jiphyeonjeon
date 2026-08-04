@@ -122,7 +122,7 @@ health port를 분리한다. 기본 prod는 GPU0 Nemotron, Redis `6390`, health 
 `12/12`이고 dev는 OpenAI Realtime API, Redis `4000`, health `8082→18082`, active/idle `1/1`이다.
 realtime control과 TURN은 서로 다른 SSH connection이며 별도 BGE supervisor가 세 번째 connection으로
 `18020→8020` reverse forward를 유지한다. 검증된 Whisper checkpoint 전환 시 prod만
-`vllm-whisper` active/idle `1/1` profile로 바꾸며 절차는 [ADR-0042](../../docs/decisions/canola/0042-whisper-vllm-runtime-adapter.md)를 따른다.
+`vllm-whisper` active/idle `1/1` profile로 바꾸며 절차는 [ADR-0044](../../docs/decisions/canola/0044-whisper-vllm-runtime-adapter.md)를 따른다.
 
 ## 6. 상태 확인
 

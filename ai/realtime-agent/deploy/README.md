@@ -136,7 +136,7 @@ chmod 600 ~/.config/liveclass/realtime-agent.env
 
 실제 완료 조건은 GPU :8081과 EC2 :18081 readiness뿐 아니라 LiveKit canary의 caption final·sequence
 회귀 0이다. 자세한 선택 근거와 rollback gate는
-[ADR-0042](../../../docs/decisions/canola/0042-whisper-vllm-runtime-adapter.md)를 따른다.
+[ADR-0044](../../../docs/decisions/canola/0044-whisper-vllm-runtime-adapter.md)를 따른다.
 
 ## 4. 연결 구조와 상태 확인
 
