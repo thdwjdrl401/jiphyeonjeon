@@ -5,7 +5,11 @@ import com.liveclass.notification.push.PushSubscriptionRepository;
 import com.liveclass.notification.push.WebPushProperties;
 import com.liveclass.notification.push.WebPushSender;
 import com.sun.net.httpserver.HttpServer;
+import nl.martijndwars.webpush.Encoding;
+import nl.martijndwars.webpush.Notification;
+import nl.martijndwars.webpush.PushService;
 import nl.martijndwars.webpush.Utils;
+import org.apache.http.client.methods.HttpPost;
 import org.bouncycastle.jce.interfaces.ECPrivateKey;
 import org.bouncycastle.jce.interfaces.ECPublicKey;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
@@ -19,6 +23,7 @@ import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.SimpleTransactionStatus;
 
 import java.net.InetSocketAddress;
+import java.time.Duration;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.SecureRandom;
@@ -64,7 +69,14 @@ class WebPushRetryTest {
     /** 기기 이름 → 실제로 받은 요청 수. <b>여기서 중복 발송이 드러난다.</b> */
     private final Map<String, AtomicInteger> received = new ConcurrentHashMap<>();
     private volatile String retryAfterHeader;
+    /** 마지막 요청이 들고 온 헤더. 옮겨 담는 과정에서 빠진 것이 없는지 여기서 본다. */
+    private final Map<String, String> lastHeaders = new ConcurrentHashMap<>();
+    private final AtomicInteger lastBodyLength = new AtomicInteger(-1);
     private volatile int lastStatus = 500;
+    /** 응답을 늦추는 시간. 병렬인지 순차인지는 느린 응답에서만 드러난다. */
+    private volatile long serverDelayMs = 0;
+    private final AtomicInteger concurrentNow = new AtomicInteger();
+    private final AtomicInteger concurrentPeak = new AtomicInteger();
 
     private PushSubscriptionRepository repository;
     private WebPushProperties properties;
@@ -76,7 +88,18 @@ class WebPushRetryTest {
         server.createContext("/push", exchange -> {
             String device = exchange.getRequestURI().getPath().substring("/push/".length());
             received.computeIfAbsent(device, k -> new AtomicInteger()).incrementAndGet();
-            exchange.getRequestBody().readAllBytes();
+            exchange.getRequestHeaders().forEach((name, values) -> lastHeaders.put(name, values.get(0)));
+            lastBodyLength.set(exchange.getRequestBody().readAllBytes().length);
+            int now = concurrentNow.incrementAndGet();
+            concurrentPeak.accumulateAndGet(now, Math::max);
+            if (serverDelayMs > 0) {
+                try {
+                    Thread.sleep(serverDelayMs);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+            concurrentNow.decrementAndGet();
             Integer status = scriptedStatuses.getOrDefault(device, new ConcurrentLinkedQueue<>()).poll();
             int answer = status == null ? lastStatus : status;
             if (answer == 429 && retryAfterHeader != null) {
@@ -85,7 +108,7 @@ class WebPushRetryTest {
             exchange.sendResponseHeaders(answer, -1);
             exchange.close();
         });
-        server.setExecutor(java.util.concurrent.Executors.newFixedThreadPool(8));
+        server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
         server.start();
         baseUrl = "http://127.0.0.1:" + server.getAddress().getPort() + "/push/";
 
@@ -202,11 +225,144 @@ class WebPushRetryTest {
         verify(repository, never()).deleteAll(any());
     }
 
+    /**
+     * <b>라이브러리가 만든 요청이 하나도 안 빠지고 나가는가.</b>
+     *
+     * <p>이 층에서 우리가 하는 일은 Apache {@code HttpPost}를 JDK {@code HttpRequest}로 옮겨 담는
+     * 것뿐인데, 옮기다 헤더 하나를 흘리면 <b>푸시 서비스가 거절하거나 브라우저가 복호화에 실패한다</b>.
+     * 그런데 로컬 서버는 복호화를 하지 않으므로, 다른 테스트는 헤더가 빠져도 그냥 통과한다.
+     *
+     * <p>그래서 <b>보내기 전의 요청과 받은 요청을 직접 견준다</b>. JDK가 스스로 관리하는 헤더
+     * ({@code Content-Length} 등)만 예외이고, 나머지는 값까지 같아야 한다.
+     */
+    @Test
+    void every_header_the_library_set_arrives_intact() throws Exception {
+        PushSubscription a = subscription("a");
+        script("a", 201);
+
+        // 발송기가 안에서 쓰는 것과 같은 방식으로 요청을 만든다.
+        PushService pushService = new PushService(
+                properties.publicKey(), properties.privateKey(), properties.subject());
+        HttpPost prepared = pushService.preparePost(
+                new Notification(a.getEndpoint(), a.getP256dh(), a.getAuth(),
+                        "본문".getBytes(java.nio.charset.StandardCharsets.UTF_8)),
+                Encoding.AES128GCM);
+        int preparedLength = prepared.getEntity().getContent().readAllBytes().length;
+
+        /*
+         * 발송기가 아니라 **클라이언트를 직접** 부른다. 여기서 보려는 것은 옮겨 담기 한 단계뿐이고,
+         * 발송기를 거치면 본문이 발송기가 만든 JSON이라 위에서 잰 길이와 견줄 수 없다.
+         */
+        new com.liveclass.notification.push.WebPushHttpClient(
+                Duration.ofSeconds(2), Duration.ofSeconds(5)).send(prepared).get();
+
+        for (org.apache.http.Header header : prepared.getAllHeaders()) {
+            if (JDK_MANAGED.contains(header.getName().toLowerCase())) {
+                continue;
+            }
+            assertThat(headerReceived(header.getName()))
+                    .as("%s 헤더가 옮겨 담는 과정에서 사라졌다", header.getName())
+                    .isNotNull();
+        }
+        assertThat(headerReceived("Authorization"))
+                .as("VAPID 서명이 없으면 푸시 서비스가 거절한다")
+                .startsWith("vapid");
+        assertThat(headerReceived("Content-Encoding"))
+                .as("암호화 방식을 못 알려 주면 브라우저가 복호화하지 못한다")
+                .isEqualTo("aes128gcm");
+        assertThat(headerReceived("TTL"))
+                .as("TTL이 없으면 RFC 8030상 요청이 유효하지 않다")
+                .isNotNull();
+        assertThat(lastBodyLength.get())
+                .as("암호문이 한 바이트라도 달라지면 복호화가 깨진다")
+                .isEqualTo(preparedLength);
+    }
+
+    /** JDK 클라이언트가 직접 채우는 헤더. 우리가 옮기지 않는 것이 맞다. */
+    private static final java.util.Set<String> JDK_MANAGED =
+            java.util.Set.of("content-length", "host", "connection", "upgrade", "expect");
+
+    private String headerReceived(String name) {
+        return lastHeaders.entrySet().stream()
+                .filter(entry -> entry.getKey().equalsIgnoreCase(name))
+                .map(Map.Entry::getValue)
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * <b>기기들을 겹쳐서 친다.</b> Web Push에는 배치가 없어 기기 수만큼 HTTPS를 쳐야 하므로,
+     * 순차로 돌면 기기 수 × 왕복이 그대로 조각의 소요 시간이 된다.
+     *
+     * <p>시간만 재면 "빨랐다"까지밖에 못 말하므로 <b>서버가 동시 접속 수를 직접 센다</b>.
+     */
+    @Test
+    void it_sends_to_devices_concurrently_instead_of_one_at_a_time() {
+        int devices = 60;
+        serverDelayMs = 100;
+        PushSubscription[] subscriptions = new PushSubscription[devices];
+        for (int i = 0; i < devices; i++) {
+            subscriptions[i] = subscription("d" + i);
+            script("d" + i, 201);
+        }
+        given(subscriptions);
+
+        long startedAt = System.nanoTime();
+        sender(1, 30_000, devices).send(recipients(subscriptions), "제목", "본문", null);
+        long elapsedMs = (System.nanoTime() - startedAt) / 1_000_000;
+
+        /*
+         * 기기 수만큼 겹치지는 않는다 — 제출 루프가 기기마다 **암호화를 직렬로** 하기 때문이다
+         * (preparePost는 ECDH + AES-GCM + JWT 서명이라 공짜가 아니다). 그래서 동시 접속의 천장은
+         * "응답 지연 ÷ 암호화 시간"쯤에서 정해진다. 여기서 보려는 것은 그 천장이 아니라
+         * **1이 아니라는 것**이다.
+         */
+        assertThat(concurrentPeak.get())
+                .as("순차로 보내면 동시 접속이 1을 넘지 않는다")
+                .isGreaterThan(10);
+        assertThat(elapsedMs)
+                .as("순차라면 %dms가 걸린다", devices * serverDelayMs)
+                .isLessThan(devices * serverDelayMs / 4);
+        for (int i = 0; i < devices; i++) {
+            assertThat(count("d" + i)).isEqualTo(1);
+        }
+    }
+
+    /**
+     * <b>동시 상한은 진짜 상한이다.</b> 안 묶으면 조각 하나가 기기 수천 대일 때 요청이 한꺼번에 나가
+     * 푸시 서비스가 429로 막고, 그동안 펜딩 객체가 메모리에 쌓인다.
+     */
+    @Test
+    void it_never_exceeds_the_configured_in_flight_limit() {
+        int devices = 60;
+        int limit = 8;
+        serverDelayMs = 50;
+        PushSubscription[] subscriptions = new PushSubscription[devices];
+        for (int i = 0; i < devices; i++) {
+            subscriptions[i] = subscription("d" + i);
+            script("d" + i, 201);
+        }
+        given(subscriptions);
+
+        sender(1, 30_000, limit).send(recipients(subscriptions), "제목", "본문", null);
+
+        assertThat(concurrentPeak.get())
+                .as("상한을 넘으면 세마포어가 일을 하지 않는 것이다")
+                .isLessThanOrEqualTo(limit);
+        assertThat(concurrentPeak.get())
+                .as("그렇다고 1이면 병렬이 아니다")
+                .isGreaterThan(1);
+    }
+
     // ---- 도구 ----
 
     private WebPushSender sender(int maxAttempts, long batchTimeoutMs) {
+        return sender(maxAttempts, batchTimeoutMs, 10);
+    }
+
+    private WebPushSender sender(int maxAttempts, long batchTimeoutMs, int maxInFlight) {
         return new WebPushSender(repository, properties, new NoOpTransactionManager(),
-                10, 2_000, 5_000, batchTimeoutMs, maxAttempts, 10);
+                maxInFlight, 2_000, 5_000, batchTimeoutMs, maxAttempts, 10);
     }
 
     private void given(PushSubscription... subscriptions) {

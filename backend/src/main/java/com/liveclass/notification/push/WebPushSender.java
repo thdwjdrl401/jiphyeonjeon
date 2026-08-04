@@ -165,7 +165,33 @@ public class WebPushSender {
         byte[] payload = PushPayload.json(title, body, url)
                 .getBytes(java.nio.charset.StandardCharsets.UTF_8);
 
-        applyOutcomes(dispatchWithRetries(subscriptions, payload));
+        long startedAt = System.nanoTime();
+        List<Outcome> outcomes = dispatchWithRetries(subscriptions, payload);
+        applyOutcomes(outcomes);
+        logBatch(subscriptions.size(), outcomes, (System.nanoTime() - startedAt) / 1_000_000);
+    }
+
+    /**
+     * <b>INFO로 남긴다.</b> 이 층은 운영에서만 진짜로 동작하고(로컬엔 VAPID 키가 없다), 결과가
+     * 안 보이면 "푸시가 안 왔다"는 신고가 들어왔을 때 <b>보낸 적이 있는지조차</b> 알 수 없다.
+     *
+     * <p>걸린 시간을 함께 남긴다 — 이 조각이 큐 소비자를 붙잡고 있던 시간이 그대로 이 값이다.
+     */
+    private void logBatch(int devices, List<Outcome> outcomes, long elapsedMs) {
+        int delivered = 0;
+        int expired = 0;
+        int failed = 0;
+        for (Outcome outcome : outcomes) {
+            switch (verdictOf(outcome.status())) {
+                case DELIVERED -> delivered++;
+                case EXPIRED -> expired++;
+                case RETRY, REJECTED -> failed++;
+            }
+        }
+        // 응답을 못 받고 마감에 걸린 것까지 세야 "몇 대에 보내려 했는지"와 맞는다.
+        int abandoned = devices - outcomes.size();
+        log.info("푸시 배치 기기={} 성공={} 만료정리={} 실패={} 미완={} {}ms",
+                devices, delivered, expired, failed, abandoned, elapsedMs);
     }
 
     private List<PushSubscription> loadSubscriptions(Collection<UUID> recipientIds) {
@@ -342,7 +368,6 @@ public class WebPushSender {
         if (!delivered.isEmpty()) {
             repository.saveAll(delivered);
         }
-        log.debug("푸시 배치 완료 성공={} 정리={} 전체={}", delivered.size(), dead.size(), outcomes.size());
     }
 
     /**
