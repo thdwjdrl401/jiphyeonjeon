@@ -362,7 +362,9 @@ class WebPushRetryTest {
 
     private WebPushSender sender(int maxAttempts, long batchTimeoutMs, int maxInFlight) {
         return new WebPushSender(repository, properties, new NoOpTransactionManager(),
-                maxInFlight, 2_000, 5_000, batchTimeoutMs, maxAttempts, 10);
+                maxInFlight, 2_000, 5_000, batchTimeoutMs, maxAttempts, 10,
+                // 로컬 서버는 h2가 아니라 스트림 상한이 의미 없다 — 연결 하나로 붙게 둔다.
+                Integer.MAX_VALUE);
     }
 
     private void given(PushSubscription... subscriptions) {
