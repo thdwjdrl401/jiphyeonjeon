@@ -158,7 +158,9 @@ describe('녹화강의 상세 HTTP 계약', () => {
           sources: [{
             type: 'CAPTION',
             sessionId: 'video-1',
-            sttSessionId: 'recorded:video-1',
+            // v2는 sttSessionId를 주지 않는다 — 카드 key용 합성값이라 두 갈래(녹화강의·라이브 다시보기)가
+            // 같은 리더를 쓰면서 중립 접두사로 바뀌었다(ADR-0075).
+            sttSessionId: 'replay:video-1',
             startMs: 12_000,
             endMs: 18_000,
             excerpt: '근거 자막',

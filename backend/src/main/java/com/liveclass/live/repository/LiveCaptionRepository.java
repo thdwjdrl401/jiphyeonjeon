@@ -36,4 +36,15 @@ public interface LiveCaptionRepository extends JpaRepository<LiveCaption, Long> 
      */
     Optional<LiveCaption> findFirstBySessionIdAndEventTypeInOrderByOccurredAtDescIdDesc(
             UUID sessionId, Collection<String> eventTypes);
+
+    /**
+     * 세션의 특정 type 행을 적재 순서대로 전부 가져온다. 다시보기 AI가 확정 발화
+     * ({@code caption.segment.final})와 시간 앵커({@code caption.stream.started})를 읽을 때 쓴다.
+     *
+     * <p>세션 하나치를 통째로 읽는다 — 2시간 강의라도 확정 발화는 1~2천 행 수준이고
+     * {@code ix_live_caption_session}이 그대로 듣는다. 질문 시점으로 SQL에서 좁히지 <b>않는</b> 이유는
+     * 좁힐 좌표가 행 자체에 없기 때문이다: 세션 ms는 attempt 앵커를 적용해야 나오고, 그 앵커는
+     * 다른 type의 행에 들어 있다.
+     */
+    List<LiveCaption> findBySessionIdAndEventTypeOrderByIdAsc(UUID sessionId, String eventType);
 }

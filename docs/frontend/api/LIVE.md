@@ -584,12 +584,30 @@ FE 소비 구현(**배선 완료**): 프레임 파싱은 `shared/api/sse.ts`(`cr
 CSRF 토큰은 공용 axios와 같은 캐시를 쓴다(`resolveCsrfHeader`). 스트림이 terminal 없이 끝나면 FE가
 재시도 가능한 오류로 접는다 — 연결 자체가 죽으면 `answer.error`조차 오지 못하기 때문이다.
 
+#### 다시보기(replay) AI 질문 — 구현됨(ADR-0075)
+
+```http
+POST /api/lessons/{lessonId}/ai/answers/stream
+Accept: text/event-stream
+
+{ "question": "여기서 말한 컨슈머 그룹이 뭐야?", "playbackSessionMs": 735000 }
+```
+
+`liveSessionService.askReplayAi(lessonId, question, playbackSessionMs, options)`가 소유한다 — 스트림
+읽기·이벤트·오류·취소는 `askLiveAi`와 **같은 코드**를 쓰고 경로와 body만 다르다. 스코프가 세션이 아니라
+**레슨**인 이유는 재생 자산이 세션 하나에서 나오기 때문이다(서버가 `sessionId`·`curriculumId`를 자산에서
+찾는다).
+
+- `playbackSessionMs`는 플레이어 시각이 아니라 **세션 상대 시간**이다. 화면은 플레이어가
+  `toSessionMs(mediaTime, source.availableFromMs)`로 준 `positionMs`를 그대로 넘긴다 — 미디어 시각을
+  보내면 근거 자막이 통째로 어긋난다. 질문을 누른 순간의 값이라 그 뒤 재생·탐색해도 바뀌지 않는다.
+- `answer.done.sources`의 자막 근거는 **세션-ms 축**(`startSessionMs`/`endSessionMs`)이라 눌러서 이동할
+  수 있다. 라이브(v1)의 `startMs`/`endMs`는 attempt-local 축이라 여전히 표시 전용이고, `AiEvidenceList`가
+  두 모양을 필드로 구분한다.
+- 답변 기록은 라이브와 같은 표에 쌓여 `getAiAnswerHistory(sessionId)`로 함께 읽힌다.
+
 #### 아직 없는 것
 
-- **다시보기(replay) AI 질문**: `askReplayAi(...)`는 여전히 501 스텁이다. ai-api가 `sessionId`를 필수로
-  받고 시간 좌표가 attempt-local이라, 다시보기의 세션-ms를 역변환할 **시간 앵커 계약이 서기 전에는**
-  열 수 없다(ADR-0047 §9). 다시보기 화면은 이 스텁을 호출하지 않고 `PersonalAiQuestionPanel`이
-  미지원 안내를 먼저 띄우고 입력을 잠근다 — 501이 조용히 삼켜져 눌러도 무반응이던 상태를 없앴다.
 - `AI-HISTORY-01`(질문 기록), `AI-TERM-01`(용어 설명), 강사용 question-pins는 미구현.
   패널은 챗 UX라 **여러 턴을 이력으로 쌓지만**, 그 이력은 `features/ai/aiConversation.ts`의 클라이언트
   메모리뿐이다(ADR-0049) — 새로고침·패널 언마운트면 사라지고 화면도 그 한계를 입력창 옆에서 밝힌다.

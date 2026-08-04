@@ -1,8 +1,8 @@
-import { lazy, Suspense, useMemo, useState, type CSSProperties } from 'react'
+import { lazy, Suspense, useCallback, useMemo, useState, type CSSProperties } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { instructorPaths, studentPaths } from '@/app/router/paths'
-import PersonalAiQuestionPanel from '@/features/ai/PersonalAiQuestionPanel'
+import PersonalAiQuestionPanel, { type AskAiAnswer } from '@/features/ai/PersonalAiQuestionPanel'
 import { useAuth } from '@/features/auth/AuthContext'
 import { getLearningContext } from '@/features/learning/learningService'
 import { getLesson } from '@/features/lesson/lessonService'
@@ -19,6 +19,7 @@ import {
   selectCaptionViews,
 } from '@/features/live-session/captionAdapter'
 import {
+  askReplayAi,
   getAiAnswerHistory,
   getCaptions,
   getGlossary,
@@ -178,6 +179,26 @@ export default function ReplayLessonPage() {
     setSeekRequest((current) => ({ sessionMs, sequence: (current?.sequence ?? 0) + 1 }))
   }
 
+  /*
+   * 다시보기 AI 질의응답(ADR-0075). 라이브와 달리 **재생 위치를 함께** 보낸다 — 서버가 그 지점
+   * 주변의 확정 자막을 근거로 고른다.
+   *
+   * 보내는 값은 질문을 누른 순간의 positionMs다(플레이어가 availableFromMs를 반영해 준 세션-ms).
+   * 질문 뒤에 계속 재생하거나 다른 곳으로 옮겨도 이미 보낸 요청의 기준 시점은 바뀌지 않는다.
+   */
+  const askAi = useCallback<AskAiAnswer>(
+    async (question, options) => {
+      try {
+        await askReplayAi(lessonId, question, positionMs, options)
+      } finally {
+        // 서버가 스트리밍 중에 답변을 남기므로(ADR-0062) 끝나면 기록을 다시 읽는다. 실패해도 읽는다 —
+        // 받은 데까지 남는 것이 계약이다.
+        void queryClient.invalidateQueries({ queryKey: ['replay-ai-answers', sessionId] })
+      }
+    },
+    [lessonId, positionMs, queryClient, sessionId],
+  )
+
   // 게시본 자막·채팅은 아직 서버 경로가 없다(CP3~CP5). 진입 게이트에 넣으면 레슨을
   // 정상으로 불러왔는데도 화면이 통째로 막힌다 — 필수는 레슨 하나뿐이다.
   if (!lessonId) return <PageState title="잘못된 다시보기 경로입니다" />
@@ -190,13 +211,13 @@ export default function ReplayLessonPage() {
     || replayStatus === 'READY_FOR_REVIEW'
     || replayStatus === 'WITHDRAWN'
 
-  // 다시보기 AI는 서버에 경로가 없다 — ai-api가 sessionId를 필수로 받고 근거 시각이 attempt-local이라,
-  // 다시보기의 세션-ms를 되돌릴 시간 앵커 계약이 서기 전에는 열 수 없다(ADR-0047 §9). 예전에는 질문을
-  // 눌러도 501이 조용히 삼켜져 아무 반응이 없었다 — 지금은 왜 못 쓰는지 패널이 먼저 밝힌다.
   const aiContent = (
     <PersonalAiQuestionPanel
+      ask={askAi}
       history={aiHistoryQuery.data}
-      unavailableNotice="다시보기에서는 새 질문을 보낼 수 없습니다. 라이브 중에 물어본 내용은 아래에 그대로 남아 있습니다."
+      placeholder="이 지점에서 궁금한 점을 질문하세요. (Enter 전송 · Shift+Enter 줄바꿈)"
+      emptyDescription="강의 자료와 지금 보고 있는 지점 주변의 발화를 근거로 답변합니다."
+      onSeekEvidence={seekSession}
     />
   )
 

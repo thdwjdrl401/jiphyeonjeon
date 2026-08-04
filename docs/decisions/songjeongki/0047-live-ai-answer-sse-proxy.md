@@ -133,6 +133,13 @@ SSE 클라이언트는 `Accept: text/event-stream`을 보낸다. 이 상태에�
 
 ### 9. 이번 범위는 **라이브 전용**이다 — 다시보기 AI는 후속
 
+> ⚠️ **이 절은 [ADR-0075](0075-replay-ai-answer-sse-proxy.md)가 대체했다(2026-08-04). 다시보기 AI는 열려 있다.**
+> 아래 두 이유는 더 이상 유효하지 않다 — 세션은 `VideoAsset.liveSessionId`가 정해 주고(고를 규칙이 필요
+> 없다), 시간축은 [ADR-0052](0052-caption-segment-anchor-consumption.md)의 `audioStartedAt` 앵커로 풀린다.
+> 게다가 [canola ADR-0042](../canola/0042-replay-ai-caption-context-contract.md)가 변환 방향을 뒤집어
+> (Spring이 세션 시간으로 변환해 보내고 ai-api는 재조회하지 않는다) 역변환 자체가 사라졌다.
+> **아래는 당시 판단의 기록으로만 남긴다.**
+
 FE에 `askReplayAi(lessonId, question, sessionMs)`(501 스텁)가 있지만 이번에 열지 않는다.
 
 - ai-api는 `sessionId`를 **필수**로 받고 자막 evidence를 그 세션 범위로 검증한다. 다시보기는 "그 레슨의
@@ -158,7 +165,7 @@ FE에 `askReplayAi(lessonId, question, sessionMs)`(501 스텁)가 있지만 이�
 - 릴레이 요청 하나당 virtual thread + 소켓 하나가 스트림 동안 유지된다. 한도·요금 정책(사용자당 동시 질문 수)은
   아직 없다 — ai-api의 process-local active 한도(503)에 기대는 상태다. 후속 결정 대상.
 - 스트림 재연결·이어받기가 없다. 끊기면 새 `requestId`로 다시 질문한다(ai-api도 replay 멱등키가 아니라고 못박음).
-- 다시보기 AI는 여전히 막혀 있다(위 §9).
+- ~~다시보기 AI는 여전히 막혀 있다(위 §9).~~ → [ADR-0075](0075-replay-ai-answer-sse-proxy.md)로 열렸다.
 
 ## 계약 테스트
 
@@ -184,5 +191,5 @@ FE에 `askReplayAi(lessonId, question, sessionMs)`(501 스텁)가 있지만 이�
    이미 있는 값을 그대로 참조한다.
 2. **FE 배선**: `httpLiveSessionService.ts`의 501 스텁을 이 엔드포인트로 교체(요청·이벤트 형식은
    [`docs/frontend/api/LIVE.md` §10.1](../../frontend/api/LIVE.md)).
-3. **다시보기 AI**: 시간 앵커 공유 계약 이후(§9).
+3. ~~**다시보기 AI**: 시간 앵커 공유 계약 이후(§9).~~ → 완료([ADR-0075](0075-replay-ai-answer-sse-proxy.md)).
 4. **비용·한도 정책**: 사용자/세션당 동시 질문 제한, 질문 로깅·강사 집계(FE 명세의 question-pins)는 후속.

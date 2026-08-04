@@ -1,7 +1,8 @@
 package com.liveclass.video.service;
 
+import com.liveclass.aiintegration.api.RagAnswerObserver;
+import com.liveclass.aiintegration.api.RagAnswerRelay;
 import com.liveclass.aiintegration.api.RagAnswerStreamHandle;
-import com.liveclass.aiintegration.api.RagSseEvent;
 import com.liveclass.aiintegration.api.ReplayRagAnswerCommand;
 import com.liveclass.aiintegration.api.ReplayRagAnswerStreaming;
 import com.liveclass.video.api.LessonPlaybackAccess;
@@ -18,23 +19,16 @@ import com.liveclass.video.domain.RecordedVideoStatus;
 import com.liveclass.video.repository.RecordedCaptionSegmentRepository;
 import com.liveclass.video.repository.RecordedCaptionTrackRepository;
 import com.liveclass.video.repository.RecordedVideoRepository;
-import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /** 게시된 녹화강의 질문을 ai-api Replay v2 계약으로 조립하고 SSE를 중계한다(ADR-0015). */
 @Service
@@ -43,7 +37,6 @@ public class RecordedAiAnswerService {
     static final long CAPTION_WINDOW_MS = 30_000L;
     static final int MAX_CAPTION_SEGMENTS = 20;
     static final int MAX_CAPTION_CHARS = 6_000;
-    private static final String ERROR_EVENT = "answer.error";
     private static final Logger log = LoggerFactory.getLogger(RecordedAiAnswerService.class);
 
     private final RecordedVideoRepository videoRepository;
@@ -51,20 +44,20 @@ public class RecordedAiAnswerService {
     private final RecordedCaptionSegmentRepository segmentRepository;
     private final LessonPlaybackAccess playbackAccess;
     private final ReplayRagAnswerStreaming replayRagAnswerStreaming;
-    private final long streamTimeoutMs;
-    private final ExecutorService relayExecutor = Executors.newVirtualThreadPerTaskExecutor();
+    private final RagAnswerRelay ragAnswerRelay;
 
     public RecordedAiAnswerService(RecordedVideoRepository videoRepository,
                                    RecordedCaptionTrackRepository trackRepository,
                                    RecordedCaptionSegmentRepository segmentRepository,
                                    LessonPlaybackAccess playbackAccess,
-                                   ReplayRagAnswerStreaming replayRagAnswerStreaming) {
+                                   ReplayRagAnswerStreaming replayRagAnswerStreaming,
+                                   RagAnswerRelay ragAnswerRelay) {
         this.videoRepository = videoRepository;
         this.trackRepository = trackRepository;
         this.segmentRepository = segmentRepository;
         this.playbackAccess = playbackAccess;
         this.replayRagAnswerStreaming = replayRagAnswerStreaming;
-        this.streamTimeoutMs = replayRagAnswerStreaming.streamTimeout().toMillis();
+        this.ragAnswerRelay = ragAnswerRelay;
     }
 
     /** 브라우저가 보내지 않은 식별자와 자막 문맥을 모두 서버의 게시 자산에서 채운다. */
@@ -144,67 +137,15 @@ public class RecordedAiAnswerService {
         return replayRagAnswerStreaming.open(command);
     }
 
+    /**
+     * 브라우저로 잇는다. 중계 규칙(이벤트 무변환·terminal 정확히 하나·취소 시 업스트림 닫기)은 라이브·
+     * 다시보기와 완전히 같아 공용 릴레이에 맡긴다(ADR-0075) — 예전에는 같은 펌프가 여기에도 복제돼 있었다.
+     *
+     * <p>답변을 기록하지 않는다({@link RagAnswerObserver#NONE}) — 녹화강의에는 질문을 묶어 둘 라이브
+     * 세션이 없다. 기록은 LIVE 갈래만 남긴다.
+     */
     public SseEmitter relay(ReplayRagAnswerCommand command, RagAnswerStreamHandle handle) {
-        SseEmitter emitter = new SseEmitter(streamTimeoutMs);
-        emitter.onCompletion(handle::close);
-        emitter.onTimeout(() -> {
-            handle.close();
-            emitter.complete();
-        });
-        emitter.onError(error -> handle.close());
-        relayExecutor.execute(() -> pump(command, handle, emitter));
-        return emitter;
-    }
-
-    private void pump(ReplayRagAnswerCommand command, RagAnswerStreamHandle handle, SseEmitter emitter) {
-        AtomicBoolean sawTerminal = new AtomicBoolean(false);
-        try {
-            handle.forEachEvent(event -> {
-                if (event.isTerminal()) {
-                    sawTerminal.set(true);
-                }
-                write(emitter, event);
-            });
-            if (!sawTerminal.get()) {
-                write(emitter, proxyError(command.requestId(), "PROXY_STREAM_INCOMPLETE",
-                        "AI 응답이 끝나기 전에 연결이 끊겼습니다. 다시 시도해 주세요."));
-            }
-            emitter.complete();
-        } catch (IOException | UncheckedIOException e) {
-            log.warn("녹화강의 RAG SSE 릴레이 중단 requestId={} reason={}", command.requestId(), e.toString());
-            if (!sawTerminal.get()) {
-                try {
-                    write(emitter, proxyError(command.requestId(), "PROXY_UPSTREAM_FAILED",
-                            "AI 응답 중계가 실패했습니다. 다시 시도해 주세요."));
-                } catch (RuntimeException ignored) {
-                    // 브라우저가 이미 연결을 끊은 경우다.
-                }
-            }
-            emitter.complete();
-        } catch (RuntimeException e) {
-            log.warn("녹화강의 RAG SSE 릴레이 실패 requestId={} reason={}", command.requestId(), e.toString());
-            emitter.completeWithError(e);
-        } finally {
-            handle.close();
-        }
-    }
-
-    private void write(SseEmitter emitter, RagSseEvent event) {
-        try {
-            SseEmitter.SseEventBuilder builder = SseEmitter.event();
-            if (event.name() != null) {
-                builder = builder.name(event.name());
-            }
-            emitter.send(builder.data(event.data(), MediaType.TEXT_PLAIN));
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-    }
-
-    private RagSseEvent proxyError(String requestId, String code, String message) {
-        String data = "{\"requestId\":\"%s\",\"code\":\"%s\",\"message\":\"%s\",\"retryable\":true}"
-                .formatted(requestId, code, message);
-        return new RagSseEvent(ERROR_EVENT, data);
+        return ragAnswerRelay.relay(command.requestId(), handle, RagAnswerObserver.NONE);
     }
 
     private void requirePublished(RecordedVideo video) {
@@ -221,11 +162,6 @@ public class RecordedAiAnswerService {
 
     private static String normalize(String text) {
         return text == null ? "" : text.replace("\u0000", "").strip();
-    }
-
-    @PreDestroy
-    void shutdown() {
-        relayExecutor.shutdownNow();
     }
 
     private record CaptionValue(long startMs, long endMs, String text) {

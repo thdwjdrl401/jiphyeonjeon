@@ -28,7 +28,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  */
 @Order(Ordered.LOWEST_PRECEDENCE - 100)
 @RestControllerAdvice(assignableTypes = {
-        ReplayPlaybackController.class, RecordedPlaybackController.class, RecordedAiAnswerController.class})
+        ReplayPlaybackController.class, RecordedPlaybackController.class, LessonAiAnswerController.class})
 public class ReplayExceptionHandler {
 
     /** Replay v2 시작 실패. 상류 401을 그대로 보내 브라우저가 로그아웃으로 오해하지 않게 한다. */
@@ -51,76 +51,76 @@ public class ReplayExceptionHandler {
     @ExceptionHandler(PlaybackAccessException.class)
     public ResponseEntity<ErrorResponse> handleAccess(PlaybackAccessException e) {
         if (e.reason() == PlaybackAccessException.Reason.NOT_FOUND) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(ErrorResponse.of("LESSON_NOT_FOUND", e.getMessage()));
+            return ErrorResponses.of(HttpStatus.NOT_FOUND,
+                    ErrorResponse.of("LESSON_NOT_FOUND", e.getMessage()));
         }
-        return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(ErrorResponse.of("ENROLLMENT_REQUIRED", e.getMessage()));
+        return ErrorResponses.of(HttpStatus.FORBIDDEN,
+                ErrorResponse.of("ENROLLMENT_REQUIRED", e.getMessage()));
     }
 
     @ExceptionHandler(ReplayNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleNotFound(ReplayNotFoundException e) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ErrorResponse.of("REPLAY_NOT_FOUND", e.getMessage()));
+        return ErrorResponses.of(HttpStatus.NOT_FOUND,
+                ErrorResponse.of("REPLAY_NOT_FOUND", e.getMessage()));
     }
 
     @ExceptionHandler(RecordedVideoNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleRecordedNotFound(RecordedVideoNotFoundException e) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ErrorResponse.of("RECORDED_VIDEO_NOT_FOUND", e.getMessage()));
+        return ErrorResponses.of(HttpStatus.NOT_FOUND,
+                ErrorResponse.of("RECORDED_VIDEO_NOT_FOUND", e.getMessage()));
     }
 
     @ExceptionHandler(RecordedCaptionNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleRecordedCaptionNotFound(RecordedCaptionNotFoundException e) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ErrorResponse.of("RECORDED_CAPTION_NOT_FOUND", e.getMessage()));
+        return ErrorResponses.of(HttpStatus.NOT_FOUND,
+                ErrorResponse.of("RECORDED_CAPTION_NOT_FOUND", e.getMessage()));
     }
 
     @ExceptionHandler(RecordedVideoConflictException.class)
     public ResponseEntity<ErrorResponse> handleRecordedConflict(RecordedVideoConflictException e) {
-        return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(ErrorResponse.of(e.code(), e.getMessage()));
+        return ErrorResponses.of(HttpStatus.CONFLICT,
+                ErrorResponse.of(e.code(), e.getMessage()));
     }
 
     @ExceptionHandler(ReplayNotReadyException.class)
     public ResponseEntity<ErrorResponse> handleNotReady(ReplayNotReadyException e) {
-        return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(ErrorResponse.of("REPLAY_NOT_READY", e.getMessage()));
+        return ErrorResponses.of(HttpStatus.CONFLICT,
+                ErrorResponse.of("REPLAY_NOT_READY", e.getMessage()));
     }
 
     @ExceptionHandler(ReplayPublishConflictException.class)
     public ResponseEntity<ErrorResponse> handlePublishConflict(ReplayPublishConflictException e) {
-        return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(ErrorResponse.of("REPLAY_PUBLISH_CONFLICT", e.getMessage()));
+        return ErrorResponses.of(HttpStatus.CONFLICT,
+                ErrorResponse.of("REPLAY_PUBLISH_CONFLICT", e.getMessage()));
     }
 
     @ExceptionHandler(ReplayForbiddenException.class)
     public ResponseEntity<ErrorResponse> handleForbidden(ReplayForbiddenException e) {
-        return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(ErrorResponse.of("REPLAY_FORBIDDEN", e.getMessage()));
+        return ErrorResponses.of(HttpStatus.FORBIDDEN,
+                ErrorResponse.of("REPLAY_FORBIDDEN", e.getMessage()));
     }
 
     @ExceptionHandler(RecordingStartingException.class)
     public ResponseEntity<ErrorResponse> handleRecordingStarting(RecordingStartingException e) {
-        return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(ErrorResponse.of("RECORDING_STARTING", e.getMessage()));
+        return ErrorResponses.of(HttpStatus.CONFLICT,
+                ErrorResponse.of("RECORDING_STARTING", e.getMessage()));
     }
 
     @ExceptionHandler(ReplayWithdrawWhileLiveException.class)
     public ResponseEntity<ErrorResponse> handleWithdrawWhileLive(ReplayWithdrawWhileLiveException e) {
-        return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(ErrorResponse.of("REPLAY_WITHDRAW_WHILE_LIVE", e.getMessage()));
+        return ErrorResponses.of(HttpStatus.CONFLICT,
+                ErrorResponse.of("REPLAY_WITHDRAW_WHILE_LIVE", e.getMessage()));
     }
 
     @ExceptionHandler(ReplayManifestInvalidException.class)
     public ResponseEntity<ErrorResponse> handleInvalidManifest(ReplayManifestInvalidException e) {
-        return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(ErrorResponse.of("REPLAY_NOT_READY", e.getMessage()));
+        return ErrorResponses.of(HttpStatus.CONFLICT,
+                ErrorResponse.of("REPLAY_NOT_READY", e.getMessage()));
     }
 
     @ExceptionHandler(PlaybackStorageUnavailableException.class)
     public ResponseEntity<ErrorResponse> handleStorageUnavailable(PlaybackStorageUnavailableException e) {
-        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                .body(ErrorResponse.of("PLAYBACK_STORAGE_UNAVAILABLE", e.getMessage()));
+        return ErrorResponses.of(HttpStatus.SERVICE_UNAVAILABLE,
+                ErrorResponse.of("PLAYBACK_STORAGE_UNAVAILABLE", e.getMessage()));
     }
 }

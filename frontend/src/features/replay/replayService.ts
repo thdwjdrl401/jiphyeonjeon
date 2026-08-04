@@ -5,7 +5,6 @@ import type { ReplayService } from './replayService.interface'
 
 const replayService = selectDataSource<ReplayService>(mockReplayService, httpReplayService)
 
-export const askReplayAi = (lessonId: string, question: string, sessionMs: number) => replayService.askReplayAi(lessonId, question, sessionMs)
 export const saveReplayReview = (lessonId: string, transcript: string) => replayService.saveReplayReview(lessonId, transcript)
 export const publishReplayReview = (lessonId: string) => replayService.publishReplayReview(lessonId)
 export const submitReplayQuiz = (lessonId: string, answer: string) => replayService.submitReplayQuiz(lessonId, answer)

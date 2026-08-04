@@ -1,7 +1,9 @@
 package com.liveclass.live.service;
 
 import com.liveclass.aiintegration.api.RagAnswerCommand;
+import com.liveclass.aiintegration.api.RagAnswerObserver;
 import com.liveclass.aiintegration.api.RagSseEvent;
+import com.liveclass.live.api.AiAnswerJournal;
 import com.liveclass.live.domain.LiveAiAnswer;
 import com.liveclass.live.repository.LiveAiAnswerRepository;
 import org.slf4j.Logger;
@@ -24,7 +26,7 @@ import java.util.UUID;
  * (ADR-0047), 저장하려면 텍스트를 꺼내야 한다. 파싱을 이 클래스에 가둬 릴레이 경로는 그대로 둔다.
  */
 @Service
-public class LiveAiAnswerRecorder {
+public class LiveAiAnswerRecorder implements AiAnswerJournal {
 
     private static final Logger log = LoggerFactory.getLogger(LiveAiAnswerRecorder.class);
 
@@ -38,29 +40,46 @@ public class LiveAiAnswerRecorder {
         this.repository = repository;
     }
 
-    /** 한 스트림의 기록을 시작한다. 호출자는 프레임마다 {@link Recording#observe}를 부르고 끝나면 {@link Recording#save}. */
+    /** 한 스트림의 기록을 시작한다. 호출자는 프레임마다 {@link Recording#observe}를 부르고 끝나면 {@link Recording#finish}. */
     public Recording start(RagAnswerCommand command, UUID userId) {
-        return new Recording(command, userId);
+        return new Recording(command.requestId(), command.sessionId(), command.lessonId(),
+                userId, command.question());
+    }
+
+    /**
+     * 다시보기(video 모듈)용 진입점. v1 command에 묶이지 않도록 값으로 받는다 — v2 요청은 모양이
+     * 달라 {@link RagAnswerCommand}를 만들 수 없다.
+     */
+    @Override
+    public Recording start(String requestId, UUID sessionId, UUID lessonId, UUID userId, String question) {
+        return new Recording(requestId, sessionId, lessonId, userId, question);
     }
 
     /**
      * 스트림 하나의 누적. 릴레이 스레드 하나만 만지므로 동기화하지 않는다.
      */
-    public final class Recording {
+    public final class Recording implements RagAnswerObserver {
 
-        private final RagAnswerCommand command;
+        private final String requestId;
+        private final UUID sessionId;
+        private final UUID lessonId;
         private final UUID userId;
+        private final String question;
         private final StringBuilder answer = new StringBuilder();
         private String status;
         private String sources = "[]";
         private String failureCode;
 
-        private Recording(RagAnswerCommand command, UUID userId) {
-            this.command = command;
+        private Recording(String requestId, UUID sessionId, UUID lessonId, UUID userId, String question) {
+            this.requestId = requestId;
+            this.sessionId = sessionId;
+            this.lessonId = lessonId;
             this.userId = userId;
+            this.question = question;
         }
 
         /** 프레임 하나를 받아 적는다. 실패해도 중계를 막지 않는다. */
+        @Override
         public void observe(RagSseEvent event) {
             try {
                 switch (event.name()) {
@@ -77,7 +96,7 @@ public class LiveAiAnswerRecorder {
                     default -> { /* 모르는 이벤트는 기록하지 않는다 — 중계는 그대로 나간다 */ }
                 }
             } catch (RuntimeException e) {
-                log.debug("AI 답변 기록 중 프레임 해석 실패 requestId={}: {}", command.requestId(), e.toString());
+                log.debug("AI 답변 기록 중 프레임 해석 실패 requestId={}: {}", requestId, e.toString());
             }
         }
 
@@ -87,18 +106,19 @@ public class LiveAiAnswerRecorder {
          * <p>terminal을 못 본 채 끊긴 경우도 남긴다 — 그때까지 받은 답변이 사라지면 사용자는 화면을
          * 새로고침했다는 이유만으로 읽던 것을 잃는다.
          */
+        @Override
         @Transactional
-        public void save() {
+        public void finish() {
             try {
-                if (repository.existsByRequestId(command.requestId())) {
+                if (repository.existsByRequestId(requestId)) {
                     return;   // 같은 스트림을 두 번 저장하지 않는다
                 }
                 LiveAiAnswer row = new LiveAiAnswer();
-                row.setRequestId(command.requestId());
-                row.setSessionId(command.sessionId());
-                row.setLessonId(command.lessonId());
+                row.setRequestId(requestId);
+                row.setSessionId(sessionId);
+                row.setLessonId(lessonId);
                 row.setUserId(userId);
-                row.setQuestion(command.question());
+                row.setQuestion(question);
                 row.setAnswer(answer.toString());
                 row.setSources(sources);
                 row.setStatus(status == null ? "ERROR" : status);
@@ -107,7 +127,7 @@ public class LiveAiAnswerRecorder {
                 repository.save(row);
             } catch (RuntimeException e) {
                 // 기록 실패가 답변을 망치면 안 된다. 이미 브라우저는 답을 다 받았다.
-                log.warn("AI 답변 기록 실패(무시) requestId={}: {}", command.requestId(), e.toString());
+                log.warn("AI 답변 기록 실패(무시) requestId={}: {}", requestId, e.toString());
             }
         }
 

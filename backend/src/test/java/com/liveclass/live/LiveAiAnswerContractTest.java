@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.MockMvcPrint;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -42,6 +43,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -62,9 +64,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *   <li>인가: 비참가자 403, 없는 세션 404</li>
  *   <li>에러 매핑: 503→503·409→409·401→502(401을 그대로 흘리지 않음)</li>
  * </ul>
+ *
+ * <p><b>{@code print = NONE}인 이유</b>: SSE 응답은 컨트롤러가 반환한 뒤에도 릴레이 스레드가 계속 쓴다.
+ * Boot 기본 출력 핸들러는 매 요청마다 응답 헤더를 읽는데, 그 사이 헤더가 바뀌면 스트림 복사가 깨져
+ * {@code "End size 1 is less than fixed size 2"}로 무작위 실패한다(전체 실행에서 실제로 재현됐다).
  */
 @SpringBootTest
-@AutoConfigureMockMvc
+@AutoConfigureMockMvc(print = MockMvcPrint.NONE)
 @Transactional
 class LiveAiAnswerContractTest {
 
@@ -85,6 +91,11 @@ class LiveAiAnswerContractTest {
     @BeforeAll
     static void startAiApi() throws IOException {
         aiApi = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        /*
+         * 기본 executor는 교환을 한 스레드에서 차례로 처리한다. SSE 응답은 프레임을 다 쓸 때까지
+         * 핸들러가 살아 있으므로, 앞 요청이 끝나기 전에 온 요청이 밀려 다음 테스트가 타임아웃한다.
+         */
+        aiApi.setExecutor(Executors.newCachedThreadPool());
         aiApi.createContext("/", exchange -> {
             byte[] body = exchange.getRequestBody().readAllBytes();
             Map<String, String> headers = Map.of(

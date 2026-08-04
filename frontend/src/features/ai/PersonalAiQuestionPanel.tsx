@@ -25,7 +25,7 @@ export type AskAiAnswer = (question: string, options: AiAnswerStreamOptions) => 
 interface PersonalAiQuestionPanelProps {
   /**
    * 질문 한 건을 보내고 SSE 이벤트를 흘리는 함수. **없으면 미지원 모드**로 그린다 —
-   * 다시보기 AI가 그 경우다(ai-api가 sessionId 필수 + 시간 축이 달라 아직 열 수 없다, ADR-0047 §9).
+   * 라이브에서 대화가 닫힌 상태(종료 뒤 정책 등)가 그 경우다.
    */
   ask?: AskAiAnswer
   /** 미지원 모드에서 왜 쓸 수 없는지. `ask`가 없을 때만 쓰인다. */
@@ -36,9 +36,14 @@ interface PersonalAiQuestionPanelProps {
   /**
    * 서버에 남은 내 질문 기록. 새로고침·재접속 뒤 대화를 되살린다.
    *
-   * 없으면(다시보기 등 기록 경로가 없는 화면) 예전처럼 이 컴포넌트가 사는 동안만 남는다.
+   * 없으면(기록 경로가 없는 화면) 예전처럼 이 컴포넌트가 사는 동안만 남는다.
    */
   history?: AiAnswerHistoryItem[]
+  /**
+   * 세션-ms 자막 근거를 눌렀을 때 영상을 옮긴다(다시보기, ADR-0075). 라이브는 넘기지 않는다 —
+   * 라이브 근거는 attempt-local 축이라 이동할 좌표가 아니다.
+   */
+  onSeekEvidence?: (sessionMs: number) => void
 }
 
 const DEFAULT_UNAVAILABLE_NOTICE = '이 화면에서는 AI 질문을 아직 지원하지 않습니다.'
@@ -93,6 +98,7 @@ export default function PersonalAiQuestionPanel({
   placeholder = DEFAULT_PLACEHOLDER,
   emptyDescription = '강의 자료와 현재까지의 발화를 근거로 답변합니다.',
   history,
+  onSeekEvidence,
 }: PersonalAiQuestionPanelProps) {
   const [conversation, dispatch] = useReducer(reduceAiConversation, emptyAiConversationState)
   const [question, setQuestion] = useState('')
@@ -212,7 +218,7 @@ export default function PersonalAiQuestionPanel({
       <div className="ai-chat-log" ref={logRef} onScroll={handleLogScroll}>
         {hasTurns
           ? conversation.turns.map((turn) => (
-              <AiChatTurn key={turn.id} turn={turn} onRetry={isAvailable ? retryTurn : undefined} />
+              <AiChatTurn key={turn.id} turn={turn} onRetry={isAvailable ? retryTurn : undefined} onSeek={onSeekEvidence} />
             ))
           : (
             <>

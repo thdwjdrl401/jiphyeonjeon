@@ -1,12 +1,14 @@
 import { Client, type IMessage } from '@stomp/stompjs'
 import type { CurriculumLiveSessionStatus } from '@/features/lesson/types'
 import { ApiError, apiClient, invalidateCsrfToken, resolveCsrfHeader } from '@/shared/api/client'
+import { streamLessonAiAnswer } from '@/features/ai/lessonAiAnswerStream'
 import { notImplemented } from '@/shared/api/notImplemented'
 import { createSseDecoder, type SseFrame } from '@/shared/api/sse'
 import { isNetworkBlocked } from '@/shared/config/runtime'
 import type {
   AiAnswerSource,
   AiAnswerStreamEvent,
+  AiAnswerStreamOptions,
   CaptionSegmentFinalPayload,
   CaptionStreamEvent,
   ChatMessageView,
@@ -591,6 +593,81 @@ async function toStreamStartError(response: Response) {
   )
 }
 
+/**
+ * AI 답변 SSE 한 건을 읽는다. 라이브(ADR-0047)와 다시보기(ADR-0075)가 공유한다 — 경로와 body만
+ * 다르고 이벤트·오류·취소 계약은 완전히 같다.
+ *
+ * `EventSource`는 GET만 지원하는데 이건 POST라 fetch + ReadableStream으로 SSE를 직접 읽는다.
+ * 쿠키 세션이라 `credentials: 'include'`, 상태변경 요청이라 CSRF 헤더가 필요하다(ADR-0014) —
+ * axios 인터셉터를 타지 않으므로 직접 붙인다.
+ *
+ * 경로가 `/stream`으로 끝나는 것은 계약이다. 운영 nginx는 `location ~ ^/api/.+/stream$`에만
+ * proxy_buffering off를 적용해서, 다른 접미사면 토큰이 뭉쳐 스트리밍이 깨진다(운영에서만 드러난다).
+ */
+async function streamAiAnswer(
+  url: string,
+  body: Record<string, unknown>,
+  { onEvent, signal }: AiAnswerStreamOptions,
+) {
+  if (isNetworkBlocked) {
+    throw new ApiError(
+      '테스트에서는 실제 네트워크 요청을 보낼 수 없습니다.',
+      undefined,
+      'MOCK_API_NETWORK_REQUEST_BLOCKED',
+    )
+  }
+
+  let response: Response
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      signal,
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
+        ...(await resolveCsrfHeader()),
+      },
+      body: JSON.stringify(body),
+    })
+  } catch (error) {
+    if (isAbort(error, signal)) return
+    throw new ApiError('AI 답변 요청을 보내지 못했습니다.', undefined, 'AI_ANSWER_NETWORK_FAILED')
+  }
+
+  if (!response.ok) throw await toStreamStartError(response)
+  if (!response.body) {
+    throw new ApiError('AI 답변 스트림을 읽을 수 없습니다.', response.status, 'AI_ANSWER_STREAM_UNREADABLE')
+  }
+
+  const decoder = createSseDecoder()
+  const text = new TextDecoder()
+  const reader = response.body.getReader()
+  const emit = (frames: SseFrame[]) => {
+    for (const frame of frames) {
+      const event = toAiAnswerEvent(frame)
+      if (event) onEvent(event)
+    }
+  }
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      emit(decoder.push(text.decode(value, { stream: true })))
+    }
+    // 스트림이 개행 없이 끝나도 마지막 프레임을 흘리지 않는다.
+    emit(decoder.flush())
+  } catch (error) {
+    // 취소는 사용자가 방금 한 행동이다 — 오류로 올리면 화면이 재시도 버튼을 띄운다.
+    if (isAbort(error, signal)) return
+    throw new ApiError('AI 답변 스트림이 끊겼습니다.', undefined, 'AI_ANSWER_STREAM_FAILED')
+  } finally {
+    // 중단됐다면 남은 바디를 버려 서버 쪽 릴레이(=ai-api 연결)까지 정리되게 한다.
+    void reader.cancel().catch(() => undefined)
+  }
+}
+
 export const httpLiveSessionService = {
   async getLiveSession(sessionId) {
     const { data } = await apiClient.get<ApiLiveSessionView>(`/live-sessions/${sessionId}`)
@@ -805,66 +882,20 @@ export const httpLiveSessionService = {
   //
   // 경로가 `/stream`으로 끝나는 것은 계약이다. 운영 nginx는 `location ~ ^/api/.+/stream$`에만
   // proxy_buffering off를 적용해서, 다른 접미사면 토큰이 뭉쳐 스트리밍이 깨진다(운영에서만 드러난다).
-  async askLiveAi(sessionId, question, { onEvent, signal }) {
-    if (isNetworkBlocked) {
-      throw new ApiError(
-        '테스트에서는 실제 네트워크 요청을 보낼 수 없습니다.',
-        undefined,
-        'MOCK_API_NETWORK_REQUEST_BLOCKED',
-      )
-    }
-
-    let response: Response
-    try {
-      response = await fetch(`/api/live-sessions/${sessionId}/ai/answers/stream`, {
-        method: 'POST',
-        credentials: 'include',
-        signal,
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'text/event-stream',
-          ...(await resolveCsrfHeader()),
-        },
-        // body는 question 하나뿐이다. lessonId·contextTimeMs·requestId를 보내면 서버가 무시하는 게
-        // 아니라, 클라 값을 신뢰하는 설계 자체를 막아 둔 것이다(ADR-0047 §1b·§5).
-        body: JSON.stringify({ question }),
-      })
-    } catch (error) {
-      if (isAbort(error, signal)) return
-      throw new ApiError('AI 답변 요청을 보내지 못했습니다.', undefined, 'AI_ANSWER_NETWORK_FAILED')
-    }
-
-    if (!response.ok) throw await toStreamStartError(response)
-    if (!response.body) {
-      throw new ApiError('AI 답변 스트림을 읽을 수 없습니다.', response.status, 'AI_ANSWER_STREAM_UNREADABLE')
-    }
-
-    const decoder = createSseDecoder()
-    const text = new TextDecoder()
-    const reader = response.body.getReader()
-    const emit = (frames: SseFrame[]) => {
-      for (const frame of frames) {
-        const event = toAiAnswerEvent(frame)
-        if (event) onEvent(event)
-      }
-    }
-
-    try {
-      for (;;) {
-        const { done, value } = await reader.read()
-        if (done) break
-        emit(decoder.push(text.decode(value, { stream: true })))
-      }
-      // 스트림이 개행 없이 끝나도 마지막 프레임을 흘리지 않는다.
-      emit(decoder.flush())
-    } catch (error) {
-      // 취소는 사용자가 방금 한 행동이다 — 오류로 올리면 화면이 재시도 버튼을 띄운다.
-      if (isAbort(error, signal)) return
-      throw new ApiError('AI 답변 스트림이 끊겼습니다.', undefined, 'AI_ANSWER_STREAM_FAILED')
-    } finally {
-      // 중단됐다면 남은 바디를 버려 서버 쪽 릴레이(=ai-api 연결)까지 정리되게 한다.
-      void reader.cancel().catch(() => undefined)
-    }
+  async askLiveAi(sessionId, question, options) {
+    // body는 question 하나뿐이다. lessonId·contextTimeMs·requestId를 보내면 서버가 무시하는 게
+    // 아니라, 클라 값을 신뢰하는 설계 자체를 막아 둔 것이다(ADR-0047 §1b·§5).
+    await streamAiAnswer(`/api/live-sessions/${sessionId}/ai/answers/stream`, { question }, options)
+  },
+  /*
+   * 다시보기 AI 질의응답(ADR-0075). 업로드 녹화강의와 **같은 endpoint**라 리더도 공유한다.
+   *
+   * playbackSessionMs는 플레이어 시각이 아니라 세션 상대 시간이다 — 호출자가
+   * toSessionMs(mediaTime, source.availableFromMs)로 변환한 값을 넘긴다. 미디어 시각을 그대로
+   * 보내면 근거 자막이 통째로 어긋난다.
+   */
+  async askReplayAi(lessonId, question, playbackSessionMs, options) {
+    await streamLessonAiAnswer(lessonId, question, playbackSessionMs, options)
   },
   async saveBookmark(lessonId, sessionMs) {
     await apiClient.post(`/lessons/${lessonId}/bookmarks`, { sessionMs })
