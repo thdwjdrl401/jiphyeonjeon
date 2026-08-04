@@ -87,7 +87,9 @@ GPU model 준비가 필요하다.
 ai-api·realtime-agent 로컬 설정은 [`ai/.env.example`](.env.example)을 `ai/.env`로 복사한다. EC2
 ai-api·ai-worker는 prod [env](../.env.ai-prod.example)·[compose](../docker-compose.ai-prod.yml)와
 dev [env](../.env.ai-dev.example)·[compose](../docker-compose.ai-dev.yml)를 같은 서비스 구조로 유지한다.
-host 관리 포트는 외부에 열지 않고 prod `127.0.0.1:8010/8011`, dev `127.0.0.1:18010/18011`로 분리한다.
+host 포트는 prod `127.0.0.1:8010/8011`, dev `18010/18011`로 분리한다. dev ai-api(`18010`)만 로컬
+backend가 SSH 터널 없이 붙도록 의도적으로 host 전체 인터페이스에 게시하며 security group과 HMAC이
+게이트다. 나머지 셋은 loopback 전용이다([계약 §3](../docs/ai/CONTRACT.md#3-ai-프로세스-제공-http-endpoint)).
 
 | 값 | 사용하는 경계 | GPU 사용 |
 |---|---|---|

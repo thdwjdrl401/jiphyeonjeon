@@ -28,9 +28,17 @@ def test_prod_and_dev_compose_share_operational_shape() -> None:
         assert "AI_WORKER_MANAGEMENT_HOST_PORT" in compose
         assert "AI_API_HOST_PORT" in compose
         assert compose.count("stop_grace_period: 45s") == 2
+        # The worker management port is loopback-only in both stacks: nothing outside the
+        # host has a reason to reach it.
         assert "127.0.0.1:${AI_WORKER_MANAGEMENT_HOST_PORT" in compose
-        assert "127.0.0.1:${AI_API_HOST_PORT" in compose
         assert re.search(r"(?m)^    deploy:\n      replicas: 1$", compose)
+
+    # ai-api is the one deliberate asymmetry (57af7152): prod stays loopback, dev publishes on
+    # all interfaces so a laptop backend on the remote profile can reach EC2 without an SSH
+    # tunnel. dev is gated by the security group and the same HMAC as prod.
+    assert "127.0.0.1:${AI_API_HOST_PORT" in prod
+    assert '- "${AI_API_HOST_PORT' in dev
+    assert "127.0.0.1:${AI_API_HOST_PORT" not in dev
 
     prod_note_keys = set(re.findall(r"(?m)^      (AI_API_LECTURE_NOTE_[A-Z0-9_]+):", prod))
     dev_note_keys = set(re.findall(r"(?m)^      (AI_API_LECTURE_NOTE_[A-Z0-9_]+):", dev))

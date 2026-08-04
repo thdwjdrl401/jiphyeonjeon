@@ -56,9 +56,14 @@ async def test_accepts_valid_signature_within_freshness_window() -> None:
 
 
 @async_test
-async def test_accepts_request_at_freshness_window_boundary() -> None:
+async def test_accepts_request_at_freshness_window_boundary(monkeypatch) -> None:
     authenticator = HmacInternalRequestAuthenticator(SECRET, freshness_window_ms=60_000)
-    body = _body(_now_ms() - 60_000)
+    issued_at_ms = _now_ms() - 60_000
+    # Freeze the clock at exactly the boundary. Against a live clock any millisecond spent
+    # between building the body and verifying it makes the age 60_001ms, so this test would
+    # quietly assert the rejection case instead — and fail whenever the machine is slow.
+    monkeypatch.setattr(time, "time", lambda: (issued_at_ms + 60_000) / 1000)
+    body = _body(issued_at_ms)
 
     await authenticator.authenticate(body, _sign(SECRET, body))
 

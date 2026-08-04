@@ -5,7 +5,7 @@ from app import main
 from app.config import Settings
 from app.main import create_app
 from app.runtime import RuntimeState
-from app.rag import RagAnswerService, RetrievalResult
+from app.rag import RagAnswerService, ReplayAnswerService, RetrievalResult, RetrievalResultV2
 
 
 def test_health_and_readiness_follow_application_lifecycle() -> None:
@@ -36,11 +36,15 @@ def test_run_preserves_structured_logging(monkeypatch) -> None:
     captured: dict[str, object] = {}
     settings = Settings()
     rag_services = _fake_rag_services()
+    replay_services = _fake_replay_services()
     lecture_note_services = _fake_lecture_note_services()
 
     monkeypatch.setattr(main, "load_settings", lambda: settings)
     monkeypatch.setattr(main, "configure_logging", lambda *_: None)
     monkeypatch.setattr(main, "build_rag_services", lambda _: rag_services)
+    # run() builds three service graphs; every one of them must be faked or the real builder
+    # reaches for a database and this unit test stops being a unit test.
+    monkeypatch.setattr(main, "build_replay_rag_services", lambda _: replay_services)
     monkeypatch.setattr(main, "build_lecture_note_services", lambda _: lecture_note_services)
 
     def fake_uvicorn_run(_app, **kwargs) -> None:
@@ -123,6 +127,30 @@ def _fake_rag_services():
                 consumer=Consumer(),
                 consumer_state=ConsumerState(),
             )
+            self.closed = False
+
+        async def close(self) -> None:
+            self.closed = True
+
+    return Resources()
+
+
+def _fake_replay_services():
+    class Retriever:
+        async def retrieve(self, request):
+            return RetrievalResultV2(sufficient=False)
+
+    class Model:
+        def stream_answer(self, request, evidence):
+            async def generate():
+                if False:
+                    yield "unreachable"
+
+            return generate()
+
+    class Resources:
+        def __init__(self) -> None:
+            self.service = ReplayAnswerService(Retriever(), Model())
             self.closed = False
 
         async def close(self) -> None:
