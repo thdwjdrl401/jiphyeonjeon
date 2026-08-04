@@ -391,7 +391,8 @@ export default function LiveClassroomPage() {
 
   // 자막은 수강생 화면에만 있다. HLS 위치(positionMs)까지 도달한 위치 동기화 자막만 노출하고,
   // 앞선 자막은 누적기(버퍼)에 두었다가 위치가 닿으면 드러낸다(ADR-0045).
-  const visibleCaptions = selectVisibleCaptions(captions, { isInstructor, positionMs })
+  // 강사 화면에는 플레이어가 없어 위치를 구할 수 없다 — null을 넘겨 실시간 append 그대로 둔다.
+  const visibleCaptions = selectVisibleCaptions(captions, isInstructor ? null : positionMs)
   // 자막에 용어 링크를 걸고, 그 김에 용어별 등장 횟수도 센다(어차피 한 번 훑는다).
   const glossary = attachGlossary(visibleCaptions, glossaryQuery.data ?? [])
 

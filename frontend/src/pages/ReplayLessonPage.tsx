@@ -17,6 +17,7 @@ import {
   emptyCaptionStreamState,
   reduceCaptionStream,
   selectCaptionViews,
+  selectVisibleCaptions,
 } from '@/features/live-session/captionAdapter'
 import {
   askReplayAi,
@@ -154,7 +155,19 @@ export default function ReplayLessonPage() {
     return selectCaptionViews(state)
   }, [captionsQuery.data])
   const messages = messagesQuery.data ?? []
-  const glossary = attachGlossary(captions, glossaryQuery.data ?? [])
+  /*
+   * 재생 위치까지만 보여 준다(라이브 화면과 같은 규칙, ADR-0045).
+   *
+   * 이 화면은 세션 전체를 한 번에 불러오므로, 그대로 그리면 0:00에서 <b>강의 끝 무렵 자막과
+   * 질문이 이미 떠 있다</b>. 무엇에 대한 이야기인지 알 수 없는 목록이고, 라이브를 겪은 사람이
+   * 다시 볼 때 기대하는 모양도 아니다.
+   *
+   * <b>역할로 가르지 않는다.</b> 라이브에서는 강사에게 플레이어가 없어 위치를 몰랐지만, 여기서는
+   * 강사도 같은 플레이어를 쓴다 — 강사 검수 화면이 수강생이 볼 화면과 달라지면 검수가 성립하지
+   * 않는다.
+   */
+  const visibleCaptions = useMemo(() => selectVisibleCaptions(captions, positionMs), [captions, positionMs])
+  const glossary = attachGlossary(visibleCaptions, glossaryQuery.data ?? [])
   // 게시는 방금 누른 행동의 결과다 — 화면에 남기지 않고 토스트로 알린다.
   // (게시 여부 자체는 위 툴바 배지가 계속 보여 준다.)
   const publishMutation = useMutation({
@@ -283,6 +296,7 @@ export default function ReplayLessonPage() {
           lectureNote={noteQuery.data ?? null}
           glossaryTerms={glossary.terms}
           messages={messages}
+          revealThroughMs={positionMs}
           discussionNotice="라이브 당시 채팅을 읽기 전용으로 표시합니다. 질문 필터로 질문만 모아볼 수 있습니다."
           aiContent={aiContent}
           noteContext="REPLAY"

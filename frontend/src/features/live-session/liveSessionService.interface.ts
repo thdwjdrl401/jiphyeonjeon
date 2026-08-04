@@ -31,6 +31,16 @@ export interface ChatMessageView {
   alias: string
   text: string
   time: string
+  /**
+   * 서버가 확정한 세션 상대 시각(ms). 영상 위치(`positionMs`)와 <b>같은 축</b>이라, 다시보기에서
+   * "지금 재생 위치까지 올라온 채팅"을 고르는 기준이 된다.
+   *
+   * <p>`time`이 있는데도 이 값이 따로 필요한 이유는, `time`이 벽시계를 사람이 읽을 문자열로 바꾼
+   * 값이라 되감기와 맞출 좌표가 아니기 때문이다.
+   *
+   * <p>서버가 아직 확정하지 않은 낙관적 항목에는 없다.
+   */
+  sessionMs?: number | null
   question?: boolean
   /** 요청자 본인이 보낸 메시지(REST `mine` 또는 내 clientMessageId 에코). 우측 정렬용. */
   mine?: boolean

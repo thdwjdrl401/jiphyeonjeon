@@ -248,31 +248,31 @@ describe('확정 세그먼트 경계 (caption.segment.final)', () => {
   })
 })
 
-describe('뷰어별 자막 노출 선택 (selectVisibleCaptions)', () => {
+describe('재생 위치 기준 자막 노출 선택 (selectVisibleCaptions)', () => {
   const captions: CaptionView[] = [
     captionView({ startMs: 1_000, synced: true }),
     captionView({ startMs: 5_000, synced: true }),
     captionView({ startMs: 20_000, synced: true }),
   ]
 
-  it('강사는 위치와 무관하게 전부 노출한다(실시간 append)', () => {
-    const visible = selectVisibleCaptions(captions, { isInstructor: true, positionMs: 0 })
+  it('재생 위치를 모르는 화면(라이브 강사)은 전부 노출한다(실시간 append)', () => {
+    const visible = selectVisibleCaptions(captions, null)
     expect(visible).toHaveLength(3)
   })
 
-  it('학생은 재생 위치까지의 자막만 노출하고 앞선 자막은 감춘다', () => {
+  it('재생 위치까지의 자막만 노출하고 앞선 자막은 감춘다', () => {
     // positionMs=5_000, STT 지연 보정 1_500 → 6_500 이하만. 20_000은 아직 앞서 있어 감춘다.
-    const visible = selectVisibleCaptions(captions, { isInstructor: false, positionMs: 5_000 })
+    const visible = selectVisibleCaptions(captions, 5_000)
     expect(visible.map((caption) => caption.startMs)).toEqual([1_000, 5_000])
   })
 
-  it('학생 화면에서 위치 축이 아닌 fallback 자막(synced=false)은 위치를 앞서도 그대로 노출한다', () => {
+  it('위치 축이 아닌 fallback 자막(synced=false)은 위치를 앞서도 그대로 노출한다', () => {
     // 위치=0. synced 자막(20_000)은 위치를 앞서 감춰지지만, 위치 축이 아닌 fallback은 판단 불가라 노출된다.
     const mixed: CaptionView[] = [
       captionView({ startMs: 20_000, synced: true }),
       captionView({ startMs: 20_000, synced: false }),
     ]
-    const visible = selectVisibleCaptions(mixed, { isInstructor: false, positionMs: 0 })
+    const visible = selectVisibleCaptions(mixed, 0)
     expect(visible.map((caption) => caption.synced)).toEqual([false])
   })
 })
@@ -296,7 +296,7 @@ describe('자막 시각 클릭 seek 보정 (captionSeekMs)', () => {
     // seek 목표로 이동한 직후 그 줄이 사라지면 안 된다 — 두 곳이 같은 보정값이라 경계에 정확히 걸린다.
     const clicked = captionView({ startMs: 42_000, synced: true })
     const positionMs = captionSeekMs(clicked)
-    expect(selectVisibleCaptions([clicked], { isInstructor: false, positionMs })).toEqual([clicked])
+    expect(selectVisibleCaptions([clicked], positionMs)).toEqual([clicked])
   })
 })
 

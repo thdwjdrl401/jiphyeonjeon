@@ -46,6 +46,8 @@ interface ApiChatMessage {
   alias: string
   text: string
   createdAt?: string
+  /** 세션 상대 시각(ms). REST·WS 양쪽이 준다 — 다시보기에서 영상 위치와 맞추는 좌표다. */
+  sessionMs?: number | null
   isQuestion: boolean
   /**
    * 요청자 본인이 보낸 메시지 여부. REST(전송 응답·복구 조회)에만 있고 WS 브로드캐스트 payload에는 없다 —
@@ -350,6 +352,11 @@ function normalizeMessage(message: ApiChatMessage): ChatMessageView {
     alias: message.alias,
     text: message.text,
     time: message.createdAt ? new Date(message.createdAt).toLocaleTimeString('ko-KR') : '-',
+    /*
+     * 벽시계 문자열(time)과 <b>따로</b> 싣는다. 다시보기가 되감기와 맞추려면 사람이 읽을 시각이
+     * 아니라 세션 축 좌표가 있어야 한다 — 한때 여기서 버려서 채팅만 시간 동기화를 못 했다.
+     */
+    sessionMs: message.sessionMs ?? null,
     question: message.isQuestion,
     // WS 에코엔 mine이 없다 — 그때는 화면이 자기 clientMessageId 대조로 채운다(undefined를 false로 굳히지 않는다).
     mine: message.mine,
