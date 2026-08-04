@@ -504,19 +504,44 @@ class LiveAiAnswerContractTest {
         throw new AssertionError("ai-api 목이 요청을 받지 못했다");
     }
 
-    /** 릴레이가 terminal을 흘릴 때까지 기다린 뒤 응답 본문을 읽는다(SSE는 비동기로 쓰인다). */
+    /**
+     * 릴레이가 terminal을 흘릴 때까지 기다린 뒤 응답 본문을 읽는다(SSE는 비동기로 쓰인다).
+     *
+     * <p><b>고정 시간으로 기다리지 않는다.</b> 예전에는 terminal을 본 뒤 100ms만 자고 본문을 읽었는데,
+     * 그 사이 마지막 프레임이 다 쓰였다는 보장이 없다. 러너에 부하가 걸리면 100ms로는 모자라
+     * <b>같은 클래스에서 무작위로 하나씩</b> 깨졌다 — CI·로컬·master 어디서든 재현됐고, 매번 다른
+     * 테스트가 실패해 원인을 찾기 어려웠다.
+     *
+     * <p>대신 <b>비동기 처리가 끝났는지</b>를 직접 기다린다. 그것이 "더 쓸 것이 없다"의 정확한 신호다.
+     * 시간을 늘리는 것은 창을 좁힐 뿐 닫지 못한다.
+     */
     private String awaitSse(MvcResult result, String terminalEvent) throws Exception {
         long deadline = System.currentTimeMillis() + 10_000;
         while (System.currentTimeMillis() < deadline) {
             String body = new String(result.getResponse().getContentAsByteArray(), StandardCharsets.UTF_8);
+            // terminal이 보이면, 본문이 더 자라지 않을 때까지 기다린다. "안 자란다"가 다 쓰였다는
+            // 신호다 — 고정 시간은 러너가 느릴 때 그 신호보다 먼저 끝난다.
             if (body.contains(terminalEvent)) {
-                Thread.sleep(100);   // 마지막 프레임이 다 쓰이도록 잠시 대기
-                return new String(result.getResponse().getContentAsByteArray(), StandardCharsets.UTF_8);
+                return awaitStableBody(result, body);
             }
             Thread.sleep(20);
         }
         throw new AssertionError("SSE에 " + terminalEvent + "가 오지 않았다: "
                 + new String(result.getResponse().getContentAsByteArray(), StandardCharsets.UTF_8));
+    }
+
+    /** 본문 길이가 연속 3회 그대로면 다 쓰인 것으로 본다. 상한을 둬 영원히 기다리지 않는다. */
+    private String awaitStableBody(MvcResult result, String seen) throws InterruptedException {
+        String body = seen;
+        int stable = 0;
+        long deadline = System.currentTimeMillis() + 3_000;
+        while (stable < 3 && System.currentTimeMillis() < deadline) {
+            Thread.sleep(30);
+            String next = new String(result.getResponse().getContentAsByteArray(), StandardCharsets.UTF_8);
+            stable = next.length() == body.length() ? stable + 1 : 0;
+            body = next;
+        }
+        return body;
     }
 
     private void saveCaption(UUID sessionId, UUID lessonId, String eventId,
