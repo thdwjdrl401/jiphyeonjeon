@@ -118,6 +118,9 @@ def test_streams_text_and_sends_v2_source_coordinates_not_excerpt() -> None:
     payload = json.loads(completions.calls[0]["messages"][1]["content"])
     assert payload == {
         "question": "여기서 말한 consumer group이 뭐야?",
+        # The moment the question was asked, so the model can resolve "아까" against each
+        # annotation's highlightedAt (ADR-0043 §5-2).
+        "askedAt": "12:15",
         "evidence": [
             {
                 "source": {"type": "PPTX", "page": 12},

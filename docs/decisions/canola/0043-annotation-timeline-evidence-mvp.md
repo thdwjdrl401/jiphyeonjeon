@@ -136,9 +136,13 @@ ai-api에 `AnnotationSearchPort`를 추가하고 기존 `CombinedEvidenceRetriev
    **유사도와 무관하게** 항상 문맥에 포함한다. 라이브는 `session_ms` 내림차순 최근 N개,
    다시보기는 `questionSessionMs` 이전 최근 N개. 자막 rolling window와 같은 취급이며,
    벡터 검색(§4)과는 별개 경로다.
-2. **시각을 프롬프트에 명시**: 문맥에 넣는 모든 annotation 근거에 세션 시각을
-   `[강조 mm:ss]` 형태로 붙이고, 다시보기는 질문 시점(`questionSessionMs`)도 함께 준다.
-   모델이 "아까"를 시각 비교로 해석하고, citation 규칙은 기존과 동일하게 적용된다.
+2. **시각을 프롬프트에 명시**: annotation 근거마다 `highlightedAt`을 `mm:ss`(한 시간을 넘으면
+   `h:mm:ss`)로 붙인다. 다시보기는 질문 시점도 같은 형식의 `askedAt`으로 함께 주어 모델이
+   "아까"를 두 시각의 비교로 해석하게 한다. 라이브에는 `askedAt`을 넣지 않는다 —
+   `contextTimeMs`는 STT attempt-local이라 세션 시각과 다른 축이고, 나란히 두면 모델이 서로
+   다른 타임라인을 비교하게 된다. 라이브에서는 window의 정렬 자체가 최신순 신호다.
+   `snapshotId`는 프롬프트에 넣지 않는다. 출처는 서버가 붙이므로 모델에게는 토큰 낭비다.
+   system prompt에 시점 질문 해석 규칙을 명시하고, citation 규칙은 기존과 동일하다.
 
 이 분담으로: "아까 강조하신 게 뭐였지"(시간 질의)는 window가 보장하고, "X에 대해 강조했던 거
 뭐였지"(의미 질의)는 벡터 검색이 보장한다. 두 경로에서 같은 스냅샷이 나오면 `snapshotId`로

@@ -98,6 +98,11 @@ window가 별도로 필요한 이유는 "아까 강조하신 게 뭐였지" 같�
 스냅샷만 쓰고 다른 세션은 전부 허용한다(이미 끝난 강의라 전체가 과거다). v1은 필터가 없다 — 색인된
 스냅샷은 정의상 질문 이전이고, `contextTimeMs`는 STT attempt-local이라 `sessionMs`와 비교할 수 없다.
 
+모델 프롬프트에는 annotation 근거마다 `highlightedAt`(`mm:ss`, 한 시간 초과 시 `h:mm:ss`)과 원본
+`sessionMs`가 들어간다. v2는 질문 시점을 `askedAt`으로 함께 주고 v1은 주지 않는다 — attempt-local
+시간을 세션 시각처럼 제시하면 모델이 서로 다른 타임라인을 비교하게 된다. `snapshotId`는 프롬프트에
+넣지 않는다(출처는 서버가 붙인다). 이 필드들은 SSE wire 계약이 아니라 모델 입력이다.
+
 한 stream은 `answer.delta` 0개 이상 뒤 `answer.done|answer.insufficient|answer.error` 중 정확히 하나로 끝난다.
 client disconnect/cancellation 때는 terminal event 생성을 강제하지 않고 내부 iterator까지 취소를 전파한다.
 
