@@ -34,6 +34,14 @@ self.addEventListener('push', (event) => {
         body: payload.body ?? '',
         // 같은 태그는 덮어쓴다. 자료 열 개를 한꺼번에 올려도 알림이 열 개 쌓이지 않는다.
         tag: 'liveclass-notification',
+        /*
+         * <b>덮어쓸 때도 알린다.</b> 이게 없으면(기본값 false) 앞 알림이 알림 센터에 남아 있는
+         * 동안 오는 다음 알림은 <b>소리도 팝업도 없이 내용만 조용히 바뀐다</b> — 첫 알림만 보이고
+         * 그 뒤로는 아무것도 안 오는 것처럼 보인다. 운영에서 실제로 그랬다.
+         *
+         * 표준상 renotify는 tag가 있어야 쓸 수 있다. 우리는 태그를 고정으로 쓰므로 짝이 맞다.
+         */
+        renotify: true,
         data: { url: payload.url ?? '/notifications' },
       })
     })(),
