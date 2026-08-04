@@ -1,4 +1,4 @@
-# ADR-0043: fine-tuned Nemotron은 고정 운영 VAD dev gate에서 개선됐지만 운영 승격은 보류한다
+# ADR-0046: fine-tuned Nemotron은 고정 운영 VAD dev gate에서 개선됐지만 운영 승격은 보류한다
 
 - **상태**: 채택
 - **일자**: 2026-08-04
@@ -6,11 +6,11 @@
   [ADR-0039](0039-production-vad-stt-experiment-runner.md),
   [ADR-0040](0040-stt-fine-tuning-dry-run-and-promotion.md),
   [ADR-0041](0041-aihub-dual-transcription-evaluation.md),
-  [ADR-0042](0042-nemotron-full-finetuning-input-and-runtime.md)
+  [ADR-0045](0045-nemotron-full-finetuning-input-and-runtime.md)
 
 ## 맥락
 
-ADR-0042의 6,000-step full fine-tuning 결과는 `.nemo` archive다. 기존 제품 Nemotron replay
+ADR-0045의 6,000-step full fine-tuning 결과는 `.nemo` archive다. 기존 제품 Nemotron replay
 backend는 Hugging Face Transformers directory를 읽는 incremental adapter이므로 `.nemo`를 같은
 경로에 넣을 수 없다. tuned checkpoint만 다른 decoder로 평가하고 ADR-0041의 HF incremental base와
 직접 비교하면 fine-tuning 효과와 runtime 차이를 분리할 수 없다.
