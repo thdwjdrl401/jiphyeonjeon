@@ -3,7 +3,7 @@
 > 📍 하네스 개요: [../../harness/README.md](../../harness/README.md) · 판단 정책:
 > [../../harness/POLICY.md](../../harness/POLICY.md) · 공유 계약: [../../CONTRACT.md](../../CONTRACT.md)
 
-- **상태**: 제안 — AI 구현 착수 기준
+- **상태**: 승인 — AI 슬라이스(W1~W5·A1~A4) 구현 완료, E1(E2E)은 Spring outbox 대기
 - **일자**: 2026-08-04
 - **적용 범위**: `ai-worker`(색인), `ai-api`(검색·근거), `ai.annotation_snapshot`(신규 스키마)
 - **관련**:
@@ -219,6 +219,21 @@ E1만 Spring outbox 이후 가능하다.
 
 각 슬라이스의 공통 검증은 해당 서비스에서
 `uv run --frozen pytest -q -p no:cacheprovider` · `uv run --frozen ruff check app tests`다.
+
+### 진행 상태 (2026-08-04)
+
+W1~W5·A1~A4는 구현·검증 완료다(ai-worker 409 passed, ai-api 377 passed, 양쪽 ruff 통과).
+남은 것은 **E1뿐이며 Spring outbox 구현에 막혀 있다.** 구현하며 계획에서 달라진 점:
+
+- 스위치가 꺼진 annotation 잡은 DLQ에 보존한다. "ACK도 requeue도 하지 않는 보존"은 RabbitMQ에
+  없고 requeue는 재전달 루프를 만든다. 스위치를 켠 뒤 DLQ 재발행으로 회수하므로 유실은 없다.
+- `ANNOTATION_EMBED_DELETE`는 callback을 보내지 않는다. ADR-0074가 정의한 eventType 3종이 모두
+  색인용이라 삭제 성공을 알릴 값이 없고, `ANNOTATION_EMBEDDED/READY`를 재사용하면 삭제된
+  스냅샷을 "색인됨"으로 알리게 된다. **삭제 결과 확인이 필요하면 오너 합의로 eventType을 먼저
+  추가해야 한다 — Spring 오너에게 전달할 열린 항목이다.**
+- 라이브 프롬프트에는 `askedAt`을 넣지 않는다(§5-2 참조).
+- ai-api는 `AI_API_ANNOTATION_EVIDENCE_ENABLED`, ai-worker는
+  `AI_WORKER_ANNOTATION_INGESTION_ENABLED`로 각각 독립 제어하며 둘 다 기본 off다.
 
 **권장 진행 순서(1인 기준)**: W1 → W2(+D1) → A2(+D1) → A1 → W3 → W4 → W5 → A3 → A4 → E1.
 스키마와 wire를 먼저 확정해야 Spring 오너가 outbox를 병행 착수할 수 있고, A2까지 나가면 FE
