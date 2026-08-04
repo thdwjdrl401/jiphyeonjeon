@@ -8,6 +8,7 @@ vi.mock('@/shared/api/uploadAsset', () => ({
   uploadAsset: vi.fn(async () => ({ assetId: 'asset-9', kind: 'MATERIAL', status: 'UPLOADED' })),
 }))
 
+import { CurriculumMaterialSyncError } from '@/features/curriculum/curriculumMaterialSyncError'
 import { httpCurriculumManagementService } from '@/features/curriculum/httpCurriculumManagementService'
 import { httpLessonService } from '@/features/lesson/httpLessonService'
 
@@ -105,6 +106,82 @@ describe('커리큘럼 저장 계약', () => {
     expect(del).toHaveBeenCalledTimes(1)
     // 새로 올린 자료가 없으니 자료 attach(POST /materials)는 없다.
     expect(post).not.toHaveBeenCalledWith('/instructor/curriculums/cur-1/materials', expect.anything())
+  })
+
+  /*
+    붙이기를 먼저, 지우기를 마지막에 한다(ADR-0077). 반대 순서에서는 삭제 직후 중단되면 기존 자료만
+    사라지고 새 자료는 없는 상태로 멈췄고, 소프트 삭제라 화면에서 되돌릴 수도 없었다.
+  */
+  it('자료는 붙인 뒤에 지운다 — 방금 붙인 자료를 삭제 대상으로 오인하지 않는다', async () => {
+    const calls: string[] = []
+    vi.spyOn(apiClient, 'patch').mockResolvedValue({ data: {} } as never)
+    vi.spyOn(apiClient, 'post').mockImplementation(async (url: string) => {
+      calls.push(`POST ${url}`)
+      // 새로 붙은 자료에 실제 materialId를 준다(서버 계약).
+      return { data: { materialId: 'mat-new', fileName: 'new.pptx', fileSize: 30 } } as never
+    })
+    vi.spyOn(apiClient, 'put').mockResolvedValue({ data: { structureVersion: 4 } } as never)
+    vi.spyOn(apiClient, 'get').mockImplementation(async () => {
+      // attach 이후의 조회에는 방금 붙인 자료가 함께 들어온다 — 이것을 지우면 안 된다.
+      const materials = calls.some((call) => call.endsWith('/materials'))
+        ? [{ materialId: 'mat-2', fileName: 'drop.pptx', fileSize: 20 }, { materialId: 'mat-new', fileName: 'new.pptx', fileSize: 30 }]
+        : [{ materialId: 'mat-2', fileName: 'drop.pptx', fileSize: 20 }]
+      return { data: { materials } } as never
+    })
+    vi.spyOn(apiClient, 'delete').mockImplementation(async (url: string) => {
+      calls.push(`DELETE ${url}`)
+      return { data: {} } as never
+    })
+
+    const file = new File(['deck'], 'new.pptx', {
+      type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    })
+    await httpCurriculumManagementService.saveCurriculumManagement({
+      curriculumId: 'cur-1',
+      info: { title: '제목', summary: '요약', description: '설명' },
+      sections,
+      // mat-2를 빼고 새 파일을 추가한다 — 한 저장에 삭제와 추가가 함께 있는 경우.
+      materials: [{ materialId: 'tmp-1', fileName: 'new.pptx', fileSize: file.size, file }],
+      structureVersion: 3,
+    })
+
+    const materialCalls = calls.filter((call) => call.includes('/materials'))
+    expect(materialCalls).toEqual([
+      'POST /instructor/curriculums/cur-1/materials',
+      'DELETE /instructor/curriculums/cur-1/materials/mat-2',
+    ])
+  })
+
+  it('자료 연결이 실패하면 삭제하지 않고, 그때까지 붙은 서버 목록을 오류에 실어 올린다', async () => {
+    vi.spyOn(apiClient, 'patch').mockResolvedValue({ data: {} } as never)
+    vi.spyOn(apiClient, 'post').mockRejectedValue(new Error('스토리지 연결 실패'))
+    vi.spyOn(apiClient, 'put').mockResolvedValue({ data: { structureVersion: 4 } } as never)
+    vi.spyOn(apiClient, 'get').mockResolvedValue({
+      data: { materials: [{ materialId: 'mat-1', fileName: 'kept.pptx', fileSize: 10 }] },
+    } as never)
+    const del = vi.spyOn(apiClient, 'delete').mockResolvedValue({ data: {} } as never)
+
+    const file = new File(['deck'], 'fail.pptx', {
+      type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    })
+    const save = httpCurriculumManagementService.saveCurriculumManagement({
+      curriculumId: 'cur-1',
+      info: { title: '제목', summary: '요약', description: '설명' },
+      sections,
+      materials: [{ materialId: 'tmp-1', fileName: 'fail.pptx', fileSize: file.size, file }],
+      structureVersion: 3,
+    })
+
+    await expect(save).rejects.toBeInstanceOf(CurriculumMaterialSyncError)
+    await save.catch((error: unknown) => {
+      if (!(error instanceof CurriculumMaterialSyncError)) throw error
+      expect(error.message).toContain('fail.pptx')
+      // 무엇이 남았는지만 본다(toMatchObject) — 서버 응답에 없던 embeddingStatus·keyTermStatus를
+      // 서비스가 기본값으로 채우므로, 전체 형태를 박아 두면 상태 필드가 늘 때마다 여기가 깨진다.
+      expect(error.persistedMaterials).toMatchObject([{ materialId: 'mat-1', fileName: 'kept.pptx', fileSize: 10 }])
+    })
+    // 실패한 저장이 목록을 줄이면 무엇을 잃었는지 알 수 없다 — 삭제는 하지 않는다.
+    expect(del).not.toHaveBeenCalled()
   })
 
   it('새 섹션이 있어도 순서 PUT을 스킵하지 않고, 실제 id·최신 버전으로 전체 순서를 저장한다', async () => {

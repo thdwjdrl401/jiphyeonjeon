@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { apiClient } from '@/shared/api/client'
 import { uploadAsset } from '@/shared/api/uploadAsset'
+import { CurriculumMaterialSyncError } from './curriculumMaterialSyncError'
 import type {
   CurriculumManagementSection,
   CurriculumManagementService,
@@ -72,18 +73,30 @@ async function fetchCurriculumMaterials(curriculumId: string): Promise<Curriculu
 /**
  * 새로 선택한 자료(File 보유)를 presigned 업로드→attach로 커리큘럼에 연결한다(ADR-0042, 레슨과 동일 흐름).
  * 이미 저장된(File 없는) 자료는 건너뛴다. 어느 파일에서 멈췄는지 알려 부분 실패를 호출자가 알 수 있게 한다.
+ *
+ * <p>이번에 만든 materialId를 돌려준다 — 뒤따르는 "사라진 자료 삭제"가 <b>방금 붙인 자료를 지우지
+ * 않으려면</b> 그 id를 알아야 한다(ADR-0077, 아래 saveCurriculumManagement 참조).
  */
-async function attachNewCurriculumMaterials(curriculumId: string, materials: CurriculumMaterial[]): Promise<void> {
+async function attachNewCurriculumMaterials(
+  curriculumId: string,
+  materials: CurriculumMaterial[],
+): Promise<Set<string>> {
+  const attachedIds = new Set<string>()
   for (const material of materials) {
     if (!material.file) continue
     try {
       const asset = await uploadAsset(material.file, 'MATERIAL')
-      await apiClient.post(`/instructor/curriculums/${curriculumId}/materials`, { assetId: asset.assetId })
+      const { data } = await apiClient.post<ApiCurriculumMaterial>(
+        `/instructor/curriculums/${curriculumId}/materials`,
+        { assetId: asset.assetId },
+      )
+      if (data?.materialId) attachedIds.add(data.materialId)
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
       throw new Error(`자료 "${material.fileName}" 업로드·연결에 실패했습니다. 이 자료만 다시 추가해 주세요. (${reason})`)
     }
   }
+  return attachedIds
 }
 
 export const httpCurriculumManagementService = {
@@ -194,15 +207,28 @@ export const httpCurriculumManagementService = {
       },
     )
 
-    // 커리큘럼-레벨 자료 동기화(ADR-0042). 구조가 저장된 뒤에 반영한다 — 자료는 개별 attach/detach라
-    // 부분 실패해도 구조는 이미 일관되게 저장돼 있다(레슨 자료 흐름과 같은 정책). 서버의 현재 자료를
-    // 기준으로, 사라진 persisted 자료는 삭제하고 새로 선택한(File 보유) 자료는 업로드·연결한다.
+    /*
+      커리큘럼-레벨 자료 동기화(ADR-0042). 구조가 저장된 뒤에 반영한다 — 자료는 개별 attach/detach라
+      부분 실패해도 구조는 이미 일관되게 저장돼 있다(레슨 자료 흐름과 같은 정책).
+
+      <b>붙이기를 먼저, 지우기를 마지막에 한다</b>(ADR-0077). 반대 순서였을 때, 자료를 하나 지우고
+      하나 추가한 저장이 삭제 직후 끊기면 <b>기존 자료만 사라지고 새 자료는 없는</b> 상태로 멈췄다 —
+      소프트 삭제라 화면에서 되돌릴 방법도 없다. 이 순서에서는 중단돼도 기존 자료가 살아남고,
+      사용자가 다시 저장하면 같은 목표 상태로 수렴한다.
+    */
+    const attachedIds = await attachNewCurriculumMaterials(request.curriculumId, request.materials)
+      .catch(async (error: unknown) => {
+        // 부분 성공을 버리지 않는다 — 여기까지 붙은 자료를 실어 올려 화면이 대기 항목을 정리하게 한다.
+        // 삭제는 하지 않고 멈춘다: 실패한 저장이 목록을 줄이면 사용자가 잃은 것을 알 수 없다.
+        throw new CurriculumMaterialSyncError(error, await fetchCurriculumMaterials(request.curriculumId))
+      })
+
     const serverMaterials = await fetchCurriculumMaterials(request.curriculumId)
     const keptIds = new Set(request.materials.filter((m) => !m.file).map((m) => m.materialId))
-    for (const stale of serverMaterials.filter((m) => !keptIds.has(m.materialId))) {
+    // 방금 붙인 자료는 keptIds에 없다(요청 시점엔 임시 id였다) — id로 걸러 내지 않으면 붙이자마자 지운다.
+    for (const stale of serverMaterials.filter((m) => !keptIds.has(m.materialId) && !attachedIds.has(m.materialId))) {
       await apiClient.delete(`/instructor/curriculums/${request.curriculumId}/materials/${stale.materialId}`)
     }
-    await attachNewCurriculumMaterials(request.curriculumId, request.materials)
 
     return {
       structureVersion: order.structureVersion,

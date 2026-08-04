@@ -23,6 +23,8 @@ import {
   type InstructorCurriculumResponse,
   type SaveCurriculumManagementResult,
 } from '@/features/curriculum/curriculumManagementService'
+import { CurriculumMaterialSyncError } from '@/features/curriculum/curriculumMaterialSyncError'
+import { mergeCurriculumMaterials } from '@/features/curriculum/materialMerge'
 import { evaluatePublishReadiness } from '@/features/curriculum/publishPreconditions'
 import type { CurriculumMaterial } from '@/features/curriculum/types'
 import InstructorEnrollmentRoster from '@/features/enrollment/InstructorEnrollmentRoster'
@@ -300,9 +302,10 @@ function CurriculumManageEditor({
             ? { ...section, sectionId: result.sectionIdMap[section.sectionId] }
             : section))
       }
-      // 저장된 자료(실제 materialId, File 없음)로 교체 — 임시 자료를 다음 저장에서 다시 올리지 않게 한다.
-      // 지문이 fileName:fileSize라 이 교체는 재저장을 유발하지 않는다.
-      setMaterials(result.materials)
+      // 저장된 자료(실제 materialId, File 없음)로 맞추되, 저장이 도는 동안 새로 고른 파일은 남긴다
+      // (ADR-0077). 통째로 덮으면 그 선택이 조용히 사라졌다. 지문이 fileName:fileSize라 서버 자료로의
+      // 교체 자체는 재저장을 유발하지 않고, 남은 대기 항목만 다음 디바운스에서 저장된다.
+      setMaterials((current) => mergeCurriculumMaterials(result.materials, current))
       setStructureVersion(result.structureVersion)
       savedSignatureRef.current = signature
       setAutosave('saved')
@@ -316,6 +319,17 @@ function CurriculumManageEditor({
         setSaveError('구조가 다른 곳에서 변경되었습니다. 새로고침한 뒤 다시 시도해 주세요.')
       } else if (isNotImplemented(error)) {
         setSaveError('아직 준비 중인 항목이 포함돼 저장하지 못했습니다.')
+      } else if (error instanceof CurriculumMaterialSyncError) {
+        /*
+          자료가 일부만 붙은 채로 실패했다 — 붙은 것은 서버 목록에 있으므로 그 목록으로 맞추고 실패한
+          파일만 대기로 남긴다(ADR-0077). 이 정리를 하지 않으면 다음 저장이 이미 붙은 자료를 지우고
+          새 에셋으로 다시 올려(고아 파일) 같은 일을 반복한다.
+
+          목록이 서버 기준으로 돌아가므로 이번에 지우려던 자료는 다시 보일 수 있다. 그게 실제 서버
+          상태다 — 실패한 저장이 목록을 줄여 놓으면 무엇을 잃었는지 알 수 없다.
+        */
+        setMaterials((current) => mergeCurriculumMaterials(error.persistedMaterials, current))
+        setSaveError(`${error.message} 자료 목록은 서버 상태로 맞췄습니다.`)
       } else {
         setSaveError('변경 내용을 자동 저장하지 못했습니다.')
       }
