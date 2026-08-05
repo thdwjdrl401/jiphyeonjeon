@@ -10,6 +10,7 @@ const users: ReadonlyArray<{
   profilePath: string
   notificationsPath: string
   workspaceLabel: string
+  curriculumLabel: string
 }> = [
   {
     user: {
@@ -24,6 +25,7 @@ const users: ReadonlyArray<{
     profilePath: '/instructor/profile',
     notificationsPath: '/instructor/notifications',
     workspaceLabel: '강사 워크스페이스',
+    curriculumLabel: '커리큘럼 관리',
   },
   {
     user: {
@@ -38,6 +40,7 @@ const users: ReadonlyArray<{
     profilePath: '/student/profile',
     notificationsPath: '/student/notifications',
     workspaceLabel: '학생 워크스페이스',
+    curriculumLabel: '내 커리큘럼',
   },
 ]
 
@@ -48,6 +51,7 @@ describe('WorkspaceSidebar', () => {
     profilePath,
     notificationsPath,
     workspaceLabel,
+    curriculumLabel,
   }) => {
     render(
       <MemoryRouter>
@@ -58,7 +62,7 @@ describe('WorkspaceSidebar', () => {
     const sidebar = screen.getByRole('complementary', { name: '작업 메뉴' })
     expect(within(sidebar).getByText(user.displayName)).toBeInTheDocument()
     expect(within(sidebar).getByText(workspaceLabel)).toBeInTheDocument()
-    expect(within(sidebar).getByRole('link', { name: '내 커리큘럼' })).toHaveAttribute('href', curriculumPath)
+    expect(within(sidebar).getByRole('link', { name: curriculumLabel })).toHaveAttribute('href', curriculumPath)
     expect(within(sidebar).getByRole('link', { name: '내 프로필' })).toHaveAttribute('href', profilePath)
     expect(within(sidebar).getByRole('link', { name: '전체 알림' })).toHaveAttribute('href', notificationsPath)
   })

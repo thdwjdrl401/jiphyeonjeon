@@ -102,6 +102,10 @@ describe('녹화 처리 화면 이동', () => {
       'href',
       '/instructor/lessons/les-1/replay',
     )
+    expect(screen.getByRole('link', { name: '커리큘럼 관리' })).toHaveAttribute(
+      'href',
+      '/instructor/curriculums',
+    )
   })
 
   it('FAILED에서는 failureCode를 표시하고 이동하지 않는다', async () => {

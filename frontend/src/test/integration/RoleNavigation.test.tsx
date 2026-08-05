@@ -68,6 +68,8 @@ describe('역할별 상단 네비게이션', () => {
       await waitFor(() => expect(menuLabels()).toEqual([
         '커리큘럼 탐색', '커리큘럼 관리', '커리큘럼 만들기', '운영 콘솔',
       ]))
+      expect(screen.getByRole('heading', { name: '커리큘럼 관리', level: 1 })).toBeInTheDocument()
+      await waitFor(() => expect(document.title).toBe('커리큘럼 관리 | LiveClass AI'))
     })
 
     it('각 메뉴가 강사용 경로를 가리킨다', async () => {
@@ -112,27 +114,29 @@ describe('역할별 상단 네비게이션', () => {
   })
 
   describe('학생', () => {
-    it('탐색·커리큘럼 관리만 내고 커리큘럼 만들기는 내지 않는다', async () => {
+    it('탐색·내 커리큘럼만 내고 커리큘럼 만들기는 내지 않는다', async () => {
       await loginAsStudent()
       renderAt('/student/curriculums')
 
-      await waitFor(() => expect(menuLabels()).toEqual(['커리큘럼 탐색', '커리큘럼 관리']))
+      await waitFor(() => expect(menuLabels()).toEqual(['커리큘럼 탐색', '내 커리큘럼']))
+      expect(screen.getByRole('heading', { name: '내 커리큘럼', level: 1 })).toBeInTheDocument()
+      await waitFor(() => expect(document.title).toBe('내 커리큘럼 | LiveClass AI'))
       expect(within(headerNav()).queryByRole('link', { name: '커리큘럼 만들기' })).not.toBeInTheDocument()
     })
 
-    it('커리큘럼 관리가 학생 학습 목록을 가리킨다', async () => {
+    it('내 커리큘럼이 학생 학습 목록을 가리킨다', async () => {
       await loginAsStudent()
       renderAt('/student/curriculums')
 
       const nav = await waitFor(() => headerNav())
-      expect(within(nav).getByRole('link', { name: '커리큘럼 관리' })).toHaveAttribute('href', '/student/curriculums')
+      expect(within(nav).getByRole('link', { name: '내 커리큘럼' })).toHaveAttribute('href', '/student/curriculums')
     })
 
-    it('강의 학습 화면에서도 커리큘럼 관리가 활성이다', async () => {
+    it('강의 학습 화면에서도 내 커리큘럼이 활성이다', async () => {
       await loginAsStudent()
       renderAt('/student/curriculums/cur-spring-live/sections/sec-security/lessons/les-security')
 
-      await waitFor(() => expect(activeMenuLabels()).toEqual(['커리큘럼 관리']))
+      await waitFor(() => expect(activeMenuLabels()).toEqual(['내 커리큘럼']))
     })
 
     it('프로필 영역을 누르면 학생 내 프로필로 간다', async () => {

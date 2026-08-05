@@ -16,6 +16,7 @@ export default function ForbiddenPage() {
   const { user } = useAuth()
   const reason = params.get('reason') as keyof typeof reasonCopy | null
   const [title, description] = reasonCopy[reason ?? 'ownership'] ?? reasonCopy.ownership
+  const curriculumLabel = user?.role === 'INSTRUCTOR' ? '커리큘럼 관리' : '내 커리큘럼'
   usePageTitle('접근할 수 없음')
-  return <div className="system-page"><header><BrandLink /></header><main><div className="system-code system-code--forbidden" aria-hidden="true">403</div><span className="eyebrow">ACCESS RESTRICTED</span><h1>{title}</h1><p>{description}<br />권한 정보는 서버에서 다시 확인됩니다.</p><div className="system-actions"><Link className="button button--primary button--large" to={user ? getRoleHomePath(user.role) : publicPaths.login}>{user ? '내 커리큘럼' : '로그인'}</Link><Link className="button button--soft button--large" to={publicPaths.curriculums}>커리큘럼 탐색</Link></div></main></div>
+  return <div className="system-page"><header><BrandLink /></header><main><div className="system-code system-code--forbidden" aria-hidden="true">403</div><span className="eyebrow">ACCESS RESTRICTED</span><h1>{title}</h1><p>{description}<br />권한 정보는 서버에서 다시 확인됩니다.</p><div className="system-actions"><Link className="button button--primary button--large" to={user ? getRoleHomePath(user.role) : publicPaths.login}>{user ? curriculumLabel : '로그인'}</Link><Link className="button button--soft button--large" to={publicPaths.curriculums}>커리큘럼 탐색</Link></div></main></div>
 }

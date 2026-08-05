@@ -36,9 +36,9 @@ export const navigationItemsByRole: Record<UserRole, NavigationItem[]> = {
   STUDENT: [
     exploreCurriculums,
     {
-      label: '커리큘럼 관리',
+      label: '내 커리큘럼',
       to: studentPaths.curriculums,
-      // 학습 목록·강의 학습·라이브 입장 전 점검까지 모두 "커리큘럼 관리" 축이다.
+      // 학습 목록·강의 학습·라이브 입장 전 점검까지 모두 "내 커리큘럼" 축이다.
       activePatterns: [studentPaths.curriculums, '/student/live-sessions', '/student/lessons'],
     },
   ],

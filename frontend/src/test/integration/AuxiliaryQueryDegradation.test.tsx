@@ -67,7 +67,7 @@ describe('부가 조회 실패 시 화면 유지', () => {
 
     renderAt('/instructor/curriculums')
 
-    expect(await screen.findByRole('heading', { name: '내 커리큘럼', level: 1 })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '커리큘럼 관리', level: 1 })).toBeInTheDocument()
     expect(await screen.findByText(/학습 요약은 아직 준비 중입니다/, undefined, AFTER_RETRY)).toBeInTheDocument()
     // 목록은 멀쩡하다 — 요약 하나 때문에 목록까지 막히면 안 된다.
     expect(await screen.findByText('라이브로 완성하는 Spring Boot')).toBeInTheDocument()

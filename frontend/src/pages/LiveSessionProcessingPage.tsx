@@ -169,7 +169,7 @@ export default function LiveSessionProcessingPage() {
       )}
 
       <div className="sticky-form-actions">
-        <Link className="button button--ghost" to={instructorPaths.curriculums}>내 커리큘럼</Link>
+        <Link className="button button--ghost" to={instructorPaths.curriculums}>커리큘럼 관리</Link>
         {asset?.status === 'READY' && asset.replayStatus !== 'PUBLISHED'
           ? <Link className="button button--primary button--large" to={instructorPaths.replay(session.lessonId)}>VOD 미리보기·검수</Link>
           : !ready && <span aria-disabled className="button button--primary button--large is-disabled">VOD 미리보기·검수</span>}

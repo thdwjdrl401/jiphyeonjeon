@@ -7,8 +7,9 @@ interface WorkspaceSidebarProps {
   user: AuthUser | null
 }
 
-/** 마이페이지와 내 커리큘럼에서 공통으로 사용하는 워크스페이스 탐색 사이드바. */
+/** 마이페이지와 역할별 커리큘럼 목록에서 공통으로 사용하는 워크스페이스 탐색 사이드바. */
 export default function WorkspaceSidebar({ user }: WorkspaceSidebarProps) {
+  const curriculumLabel = user?.role === 'INSTRUCTOR' ? '커리큘럼 관리' : '내 커리큘럼'
   const curriculumPath = user?.role === 'INSTRUCTOR'
     ? instructorPaths.curriculums
     : studentPaths.curriculums
@@ -38,7 +39,7 @@ export default function WorkspaceSidebar({ user }: WorkspaceSidebarProps) {
       </div>
       <nav>
         <span className="workspace-sidebar__nav-label" aria-hidden="true">ARCHIVE</span>
-        <NavLink to={curriculumPath}>내 커리큘럼</NavLink>
+        <NavLink to={curriculumPath}>{curriculumLabel}</NavLink>
         <NavLink to={profilePath}>내 프로필</NavLink>
         <NavLink to={notificationsPath}>전체 알림</NavLink>
       </nav>
