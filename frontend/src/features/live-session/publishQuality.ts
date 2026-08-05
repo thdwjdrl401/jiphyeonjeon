@@ -1,4 +1,4 @@
-import { ScreenSharePresets, VideoPreset, VideoPresets } from 'livekit-client'
+import { ScreenSharePresets, VideoPresets, type VideoPreset } from 'livekit-client'
 
 /**
  * 강사가 라이브 시작 전에 고르는 송출 품질.
@@ -29,6 +29,26 @@ interface QualityOption<T extends string> {
   preset: VideoPreset
 }
 
+/**
+ * 해상도·프레임률은 그대로 두고 비트레이트만 올린 프리셋을 만든다.
+ *
+ * <p>SDK의 `new VideoPreset(...)`을 쓰지 않는다. 그러면 `livekit-client`의 <b>런타임 export</b>에
+ * 기대게 되어, 이 모듈을 간접적으로 불러오는 테스트가 전부 목에 `VideoPreset`을 추가해야 한다.
+ * 실제로 그렇게 만들었다가 판서 e2e 테스트 5건이 "No VideoPreset export is defined on the
+ * livekit-client mock"으로 깨졌다.
+ *
+ * <p>우리가 쓰는 것은 `resolution`과 `encoding` 두 값뿐이라 평범한 객체로 충분하고, 기존 목들도
+ * 이미 프리셋을 같은 모양으로 흉내내고 있다.
+ */
+function customPreset(width: number, height: number, maxBitrate: number, maxFramerate: number): VideoPreset {
+  return {
+    width,
+    height,
+    encoding: { maxBitrate, maxFramerate, priority: 'medium' },
+    resolution: { width, height, frameRate: maxFramerate },
+  }
+}
+
 /** 업링크 목표 비트레이트(Mbps). 프리셋의 maxBitrate에서 파생해 라벨에 쓴다. */
 export function megabits(preset: VideoPreset) {
   return Math.round((preset.encoding.maxBitrate / 100_000)) / 10
@@ -45,7 +65,7 @@ export function megabits(preset: VideoPreset) {
  * 5,000kbps로 올려 프레임당 167kbit을 준다. 인물 영상은 화면공유보다 압축이 잘 들어 화면공유용
  * 8,000kbps까지는 필요 없다.
  */
-const CAMERA_FHD_MAX = new VideoPreset(1920, 1080, 5_000_000, 30, 'medium')
+const CAMERA_FHD_MAX = customPreset(1920, 1080, 5_000_000, 30)
 
 export const CAMERA_QUALITIES: QualityOption<CameraQualityId>[] = [
   {
@@ -81,7 +101,7 @@ export const CAMERA_QUALITIES: QualityOption<CameraQualityId>[] = [
  * 해상도·프레임률은 그대로다. 늘어나는 것은 **강사 PC의 업링크 부담**뿐이라, 감당이 안 되는
  * 강사는 아래 낮은 선택지로 내리면 된다.
  */
-const SCREEN_TEXT_MAX = new VideoPreset(1920, 1080, 8_000_000, 30, 'medium')
+const SCREEN_TEXT_MAX = customPreset(1920, 1080, 8_000_000, 30)
 
 export const SCREEN_QUALITIES: QualityOption<ScreenQualityId>[] = [
   {
