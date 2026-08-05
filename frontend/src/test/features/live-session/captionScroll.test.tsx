@@ -1,4 +1,4 @@
-import { fireEvent, render } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import CaptionDock from '@/features/live-session/CaptionDock'
 import type { CaptionView } from '@/features/live-session/liveSessionService'
@@ -106,6 +106,46 @@ describe('자막 스크롤 추종', () => {
     addCaption(6)
 
     expect(box.scrollTop).toBe(600)
+  })
+
+  it('내용이 같아도 매번 새 배열이면(호출부의 filter/map 재생성) 스크롤을 붙잡지 않는다', () => {
+    // LiveClassroomPage는 positionMs가 바뀔 때마다 selectVisibleCaptions·attachGlossary를 다시
+    // 돌리는데, 내용이 같아도 매번 새 배열을 만든다(.filter/.map). 위로 올려 둔 상태에서 "내용은
+    // 그대로인 새 배열"이 계속 들어와도 바닥으로 되돌아가면 안 된다 — 실제로는 새 자막이 아니다.
+    box.scrollTop = 100 // 바닥에서 250px 위 — 지난 자막을 읽는 중이다
+    fireEvent.scroll(box)
+
+    const sameContentNewArray = Array.from({ length: 5 }, (_, i) => line(i))
+    rerender(
+      <CaptionDock
+        captions={sameContentNewArray}
+        currentSessionMs={0}
+        label="실시간 자막"
+        onSeek={() => {}}
+        onSelectTerm={() => {}}
+      />,
+    )
+
+    expect(box.scrollTop).toBe(100)
+  })
+
+  it('위로 올리면 "최근 자막으로 이동" 버튼이 뜨고, 누르면 바닥으로 돌아가 다시 따라간다', () => {
+    expect(screen.queryByRole('button', { name: '↓ 최근 자막으로 이동' })).toBeNull()
+
+    box.scrollTop = 100
+    fireEvent.scroll(box)
+    const jumpButton = screen.getByRole('button', { name: '↓ 최근 자막으로 이동' })
+
+    fakeScrollBox(box, { scrollHeight: 700, clientHeight: 150 })
+    fireEvent.click(jumpButton)
+
+    expect(box.scrollTop).toBe(700)
+    expect(screen.queryByRole('button', { name: '↓ 최근 자막으로 이동' })).toBeNull()
+
+    // 되살아난 추종은 새 자막에도 다시 바닥을 따라간다.
+    fakeScrollBox(box, { scrollHeight: 800, clientHeight: 150 })
+    addCaption(7)
+    expect(box.scrollTop).toBe(800)
   })
 })
 

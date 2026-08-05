@@ -104,6 +104,9 @@ export default function HlsMediaPlayer({
       ref={playerRef}
       autoPlay={autoPlay}
       className={className}
+      // 재생 정보 헤더(.student-live-status)의 숨김 지연(600ms, learning.css)과 맞춘다 —
+      // 기본값(2000ms)이면 진행 바가 헤더보다 훨씬 오래 남아 둘이 따로 노는 것처럼 보인다.
+      controlsDelay={600}
       duration={providedDuration}
       playsInline
       src={{ src: sourceUrl, type: 'application/vnd.apple.mpegurl' }}
