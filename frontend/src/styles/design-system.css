@@ -1547,8 +1547,10 @@ body {
 .quiz-panel > label { border-color: #333; background: #171717; box-shadow: none; }
 .caption-dock > header,
 .learning-sidebar-windowbar,
-.media-tabs,
-.chat-composer { border-color: #333; background: #171717; }
+.media-tabs { border-color: #333; background: #171717; }
+/* 메시지 목록과 같은 배경(#171717)이면 어디까지가 입력 영역인지 경계가 안 보인다 —
+   한 단계 밝혀 뜨게 한다. */
+.chat-composer { border-color: #333; background: #1c1c1c; }
 .caption-dock > header strong,
 .media-side strong,
 .learning-panel-heading strong,
@@ -1590,12 +1592,15 @@ body {
 .discussion-notice,
 .media-side .inline-notice { border-color: #3b3b3b; background: #222; color: #c8c8c3; }
 .panel-empty { color: #8e8e89; }
-.chat-list article { border-radius: 4px; background: #222; }
-.chat-list article.is-question { border-left-color: var(--seal); background: #282322; }
-/* 내 메시지 구분색. 라이트의 --blue-50은 어두운 표면에서 튀므로 ink 전용 값을 준다.
+/* 말풍선끼리 배경(#171717)에서 겨우 분리되던 4px 반경 대신, 다른 카드류와 같은 10px + 옅은 테두리로
+   또렷하게 뜨게 한다. */
+.chat-list article { border: 1px solid #2b2b2b; border-radius: 10px; background: #1f1f1f; }
+.chat-list article.is-question { border-left: 2px solid var(--seal); background: #282322; }
+/* 내 메시지 구분색. 원래 --blue-50 자리에 녹색(#1d2a25)이 들어가 있었는데, 이 화면 어디에도
+   초록을 쓰는 곳이 없어 튄다 — seal 계열의 따뜻한 톤으로 맞춘다.
    is-question은 내 메시지에서도 주황 계열을 유지한다(질문 표시가 정렬보다 중요하다). */
-.chat-list article.is-mine { background: #1d2a25; }
-.chat-list article.is-mine.is-question { background: #282322; }
+.chat-list article.is-mine { border-color: #3a332c; background: #262019; }
+.chat-list article.is-mine.is-question { border-left-color: var(--seal); background: #282322; }
 .chat-list article.is-mine p { color: #e6e6e1; }
 .chat-list strong { color: #f2f2ef; font-size: .75rem; }
 .chat-list time { color: #9a9a95; font-size: .66rem; }
@@ -1629,6 +1634,8 @@ body {
 .summary-block-list article > header button { color: #bcbcb7; }
 /* "질문으로 등록"·"익명으로 보내기" 라벨(대비 3.23). */
 .chat-composer label { color: #bdbdb8; }
+/* 체크박스는 accent-color를 안 주면 OS 테마색(예: 초록)을 그대로 따른다 — seal로 고정한다. */
+.chat-composer input[type="checkbox"] { accent-color: var(--seal); }
 /* 용어집 상세의 출처 줄. 한 단계 밝은 표면(#282522) 위라 라이트 값이 겨우 걸쳐 있었다. */
 .glossary-detail > small { color: #a6a6a1; }
 .chat-composer textarea,
@@ -1636,6 +1643,10 @@ body {
 .glossary-search input,
 .panel-search input,
 .review-editor textarea { border-color: #3b3b3b; background: #111; color: #eee; box-shadow: none; }
+/* 포커스 표시가 --blue-500(모노톤 alias, 사실상 회색)이라 어디에 입력 중인지 눈에 안 띄었다 —
+   실제 강조색(seal)로 링을 준다. */
+.chat-composer textarea:focus,
+.ai-panel textarea:focus { border-color: var(--seal); box-shadow: 0 0 0 2px rgba(182,59,50,.3); }
 .summary-block-list > article.is-current { border-color: #777; background: #222; box-shadow: inset 2px 0 #fff; }
 .summary-block-list section > strong { color: #bcbcb7; }
 .summary-block-list section p,

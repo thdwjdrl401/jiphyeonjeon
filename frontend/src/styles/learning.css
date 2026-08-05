@@ -289,9 +289,10 @@
 .caption-dock__empty { display: grid; height: 100%; place-items: center; margin: 0; color: var(--ink-500); font-size: .62rem; }
 .caption-dock__sentences article { display: grid; grid-template-columns: 52px minmax(0,1fr); align-items: start; gap: 8px; border-radius: 8px; padding: 7px; transition: background .15s ease; }
 .caption-dock__sentences article.is-current { background: var(--blue-50); }
-.caption-dock__sentences article > :is(button,time) { border: 0; padding: 2px 0; background: transparent; color: var(--blue-600); font-size: .6rem; text-align: left; }
+.caption-dock__sentences article > :is(button,time) { border: 0; padding: 2px 0; background: transparent; color: var(--blue-600); font-size: .6rem; text-align: left; transition: transform .12s ease, color .12s ease; }
 .caption-dock__sentences article > time { color: var(--ink-500); }
-.caption-dock__sentences article > button:hover { color: var(--blue-700); text-decoration: underline; }
+/* 밑줄 색을 글자색과 다르게 둔다(--seal) — 파란 글자에 파란 밑줄은 겹쳐 보여 눈에 잘 안 띈다. */
+.caption-dock__sentences article > button:hover { color: var(--blue-700); text-decoration: underline; text-decoration-color: var(--seal); text-decoration-thickness: 2px; text-underline-offset: 3px; transform: translateY(-1px); }
 .caption-dock__sentences p { margin: 0; color: var(--ink-700); font-size: .68rem; line-height: 1.65; }
 .caption-term { display: inline; margin: 0 1px; border: 0; border-radius: 4px; padding: 1px 3px; background: #f3ddab; color: #7a4e0f; font: inherit; font-weight: 700; cursor: pointer; }
 .caption-term:hover, .caption-term:focus-visible { outline: 1px solid rgba(201,134,26,.5); background: #f0cd9a; }

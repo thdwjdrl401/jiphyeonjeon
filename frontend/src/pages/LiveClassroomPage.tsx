@@ -130,7 +130,7 @@ export default function LiveClassroomPage() {
   })
   const captionPane = useResizablePane({
     storageKey: 'liveclass.live.captionHeight',
-    defaultSize: 152, min: 96, max: 420, axis: 'block', direction: -1,
+    defaultSize: 96, min: 96, max: 420, axis: 'block', direction: -1,
     label: '자막 높이 조절',
   })
   const [studentSeekRequest, setStudentSeekRequest] = useState<PlaybackSeekRequest | null>(null)
