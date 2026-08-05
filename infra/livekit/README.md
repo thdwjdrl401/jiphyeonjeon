@@ -102,6 +102,12 @@ docker run --rm --network host --entrypoint /bin/sh minio/mc:RELEASE.2025-08-13T
 
 **사양**: Egress(Chrome) 때문에 **4 vCPU / 4GB 이상** 권장. 라이브만이면 더 작아도 됨.
 
+> **4 vCPU로는 녹화 1건이 한계다.** EC2 실측에서 room-composite 한 건이 여유 CPU를 4.0 → ~1.0으로
+> 떨어뜨렸고(egress 자체 로그 `high cpu usage`), 두 번째 요청은 여유가 모자라 받지 못한다.
+> 앱 스택과 같은 호스트면 남은 1코어를 backend·postgres·rabbit·AI worker가 나눠 쓰게 된다.
+> 녹화만 별도 호스트로 떼는 방법은 [`remote-egress/`](remote-egress/README.md) — 앱 코드 변경 없이
+> Egress 노드만 옮긴다.
+
 **MinIO 주의**: 커뮤니티 에디션이 유지보수 모드(2025-10 이후 Docker Hub 이미지 동결). PoC는 태그 고정으로 OK, EC2는 실 S3라 무관.
 
 ## 7. 앱(Spring) 연동 지점 (CP1/CP4)

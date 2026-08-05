@@ -1,0 +1,14 @@
+# EC2의 루프백 전용 서비스(Redis·MinIO)를 이 호스트로 당겨오는 SSH 터널.
+#
+# 왜 컨테이너인가: systemd --user 유닛은 linger를 켜야 로그아웃 후에도 살아남는데
+# 그건 sudo가 필요하다. 도커는 restart 정책으로 재시작·재부팅 복구를 이미 해주고,
+# 이 호스트의 나머지도 전부 도커라 운영 방식이 하나로 모인다.
+FROM alpine:3.20
+
+# netcat은 compose healthcheck가 포워딩된 포트를 확인하는 데 쓴다.
+RUN apk add --no-cache openssh-client netcat-openbsd
+
+COPY tunnel-entrypoint.sh /usr/local/bin/tunnel
+RUN chmod +x /usr/local/bin/tunnel
+
+ENTRYPOINT ["/usr/local/bin/tunnel"]

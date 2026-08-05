@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import type { AnnotationElement } from './annotation'
-import { highlightCropRect } from './annotationHighlight'
+import { hasHighlight } from './annotationHighlight'
 import { captureHighlightImage } from './annotationHighlightCapture'
 import { checkHighlightLimit, type HighlightLimitState } from './annotationHighlightLimit'
 import { captureAnnotationHighlight } from './annotationHighlightService'
@@ -41,9 +41,8 @@ export function useAnnotationHighlightCapture({ sessionId, resolveVideo, onCaptu
   const busyRef = useRef(false)
 
   const run = useCallback(async (elements: readonly AnnotationElement[]) => {
-    const rect = highlightCropRect(elements)
     const video = resolveVideo()
-    if (!rect || !video) {
+    if (!hasHighlight(elements) || !video) {
       // 강조가 없거나 화면이 없으면 남길 것이 없다. 강사에게 알릴 실패가 아니다.
       setStatus('idle')
       return
@@ -51,7 +50,7 @@ export function useAnnotationHighlightCapture({ sessionId, resolveVideo, onCaptu
     busyRef.current = true
     setStatus('capturing')
     try {
-      const image = await captureHighlightImage({ video, elements, rect })
+      const image = await captureHighlightImage({ video, elements })
       if (!image) {
         setStatus('failed')
         setNotice('화면을 아직 읽을 수 없어 강조를 남기지 못했습니다.')
