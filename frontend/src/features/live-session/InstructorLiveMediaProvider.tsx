@@ -170,11 +170,32 @@ function describeConnectionError(error: unknown) {
  * 트랙을 올릴 때마다 품질을 명시한다. Room 생성 시의 publishDefaults만 믿으면, 강사가 도중에
  * 품질을 바꾼 뒤 카메라를 껐다 켰을 때 옛 기본값으로 되돌아간다.
  */
+/**
+ * 대역이 모자랄 때 무엇을 포기할지.
+ *
+ * <p>지정하지 않으면 브라우저 기본값이 트랙 종류로 갈린다 — 카메라는 `maintain-framerate`라
+ * <b>해상도를 먼저 버린다</b>. 그런데 학생은 카메라를 직접 구독하지 않고 Egress 합성본을
+ * 보므로(ADR-0032), 해상도가 떨어지면 <b>Egress가 그걸 1080p 캔버스로 확대해 인코딩한다</b>.
+ * 사이멀캐스트를 껐던 이유(640x360을 3배 확대해 내보내고 있었다)와 같은 결과다.
+ *
+ * <p><b>우리는 프레임률을 버리는 쪽이 이득이다.</b> Egress가 어차피 15fps로 내보내므로 카메라가
+ * 30에서 15로 깎여도 결과물에서 잃는 것이 없다. 반면 해상도 저하는 그대로 흐려짐이 된다.
+ *
+ * <p>강사는 이 저하를 알아챌 수 없다는 점이 중요하다 — 미리보기는 인코딩 전 로컬 원본이라
+ * 업링크가 모자라도 강사 화면은 멀쩡하다. 강사가 눈치채고 화질을 낮춰 주기를 기대할 수 없으므로,
+ * 깎일 때 덜 아픈 쪽으로 깎이도록 미리 정해 둔다.
+ */
+const DEGRADE_KEEPING_RESOLUTION = 'maintain-resolution' as const
+
 function cameraPublishArgs(quality: PublishQuality) {
   const preset = cameraPreset(quality)
   return {
     capture: { resolution: preset.resolution },
-    publish: { videoEncoding: preset.encoding, simulcast: false },
+    publish: {
+      videoEncoding: preset.encoding,
+      simulcast: false,
+      degradationPreference: DEGRADE_KEEPING_RESOLUTION,
+    },
   } as const
 }
 
@@ -182,7 +203,14 @@ function screenPublishArgs(quality: PublishQuality) {
   const preset = screenPreset(quality)
   return {
     capture: { resolution: preset.resolution },
-    publish: { videoEncoding: preset.encoding, simulcast: false },
+    publish: {
+      videoEncoding: preset.encoding,
+      simulcast: false,
+      // 화면공유는 브라우저 기본값이 이미 maintain-resolution이지만 명시한다. 기본값에 기대면
+      // 트랙 종류 판정이 달라지는 순간(브라우저·SDK 갱신) 조용히 바뀌는데, 바뀌어도 강사는
+      // 알 수 없다. 코드·슬라이드에서 해상도 저하는 곧 글자 판독 실패다.
+      degradationPreference: DEGRADE_KEEPING_RESOLUTION,
+    },
   } as const
 }
 
@@ -323,8 +351,12 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
         // 웹캠이 1080p를 못 내면 ideal 제약이라 720p로 협상된다.
         videoEncoding: cameraPreset(qualityRef.current).encoding,
         // 화면공유는 코드·슬라이드 텍스트라 비트레이트가 판독성을 좌우한다. 기본 h1080fps15(2.5Mbps)는
-        // 스크롤 구간에서 글자가 뭉갠다. 30fps 프리셋은 같은 1080p에 5Mbps다.
+        // 스크롤 구간에서 글자가 뭉갠다. 우리 프리셋은 같은 1080p30에 8Mbps다(publishQuality.ts).
         screenShareEncoding: screenPreset(qualityRef.current).encoding,
+        // 대역이 모자랄 때 해상도가 아니라 프레임률을 버린다. 카메라 기본값은 반대(maintain-framerate)라
+        // 반드시 명시해야 한다 — 해상도가 떨어지면 Egress가 확대해 인코딩하고, 강사는 로컬 원본을
+        // 보고 있어 알아채지 못한다. 자세한 근거는 cameraPublishArgs 위 주석.
+        degradationPreference: DEGRADE_KEEPING_RESOLUTION,
       },
     })
     roomRef.current = room
