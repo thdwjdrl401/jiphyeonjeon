@@ -523,6 +523,10 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
     void republish()
   }, [state.connectionState, syncLocalState])
 
+  /** 아직 보내지 않은 최신 배치와, 그것을 보낼 프레임. 레이저와 같은 장치다. */
+  const overlayPendingRef = useRef<CameraOverlay | null>(null)
+  const overlayFrameRef = useRef(0)
+
   /**
    * 카메라 배치를 강사 participant metadata에 쓴다. Egress 템플릿이 이 값을 읽어 합성하므로
    * 강사가 미리보기에서 옮긴 자리가 그대로 수강생 녹화가 된다.
@@ -530,7 +534,39 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
    * <p>화면은 즉시 갱신하고 metadata 전송은 뒤따르게 한다 — 드래그 중에 서버 왕복을 기다리면
    * 화면이 손가락을 따라오지 못한다. 전송이 실패해도 미리보기는 그대로 두고, 다음 조작 때
    * 최신 값이 다시 나간다(마지막 값이 이긴다).
+   *
+   * <p><b>발행은 프레임당 한 번으로 묶는다</b>(레이저와 같은 이유·같은 방식,
+   * {@link InstructorAnnotationLayer}). 예전에는 `pointermove`마다 그대로 보냈는데, 그러면 두 가지가
+   * 생긴다.
+   *
+   * <ol>
+   *   <li>드래그 내내 트랙 publish·재연결과 <b>같은 시그널 채널</b>을 초당 수십 건으로 점유한다.</li>
+   *   <li>livekit-client는 서버가 <b>자기가 보낸 문자열과 똑같은 값</b>을 되돌려줄 때만 resolve하고
+   *       5초 동안 50ms 간격으로 폴링한다. 중간값은 곧바로 다음 값에 덮이므로 <b>구조적으로 절대
+   *       resolve되지 않고</b>, 드래그 한 번이 timeout 수십 개를 만든다. 실제로 운영 콘솔에서
+   *       그 경고가 진짜 오류(백엔드 다운)를 밀어냈다.</li>
+   * </ol>
+   *
+   * <p><b>마지막 값은 반드시 나간다.</b> 매 호출이 최신 값을 `pending`에 덮어쓰고, 프레임이 이미
+   * 잡혀 있으면 그것을 기다린다 — 프레임이 지난 뒤에 온 호출은 새 프레임을 잡는다. 그래서 어느
+   * 시점에 손을 떼도 마지막 배치가 한 프레임 안에 발행된다. 이걸 leading-edge throttle로 만들면
+   * 마지막 값이 버려져 <b>합성 화면이 중간 위치에서 멈춘다</b>.
    */
+  const flushCameraOverlay = useCallback(() => {
+    overlayFrameRef.current = 0
+    const merged = overlayPendingRef.current
+    overlayPendingRef.current = null
+    const room = roomRef.current
+    // 프레임을 기다리는 사이 끊겼을 수 있다. 재연결하면 그쪽에서 현재 배치를 다시 낸다.
+    if (!merged || !room || room.state !== 'connected') return
+    const participant = room.localParticipant
+    void participant
+      .setMetadata(withCameraOverlay(participant.metadata, merged))
+      .catch((error) => {
+        console.warn('카메라 배치를 합성 화면에 전달하지 못했습니다', error)
+      })
+  }, [])
+
   const moveCameraOverlay = useCallback((next: Partial<CameraOverlay>) => {
     const merged = clampOverlay({ ...overlayRef.current, ...next })
     overlayRef.current = merged
@@ -538,13 +574,16 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
 
     const room = roomRef.current
     if (!room || state.connectionState !== 'connected') return
-    const participant = room.localParticipant
-    void participant
-      .setMetadata(withCameraOverlay(participant.metadata, merged))
-      .catch((error) => {
-        console.warn('카메라 배치를 합성 화면에 전달하지 못했습니다', error)
-      })
-  }, [state.connectionState])
+    overlayPendingRef.current = merged
+    if (overlayFrameRef.current === 0) {
+      overlayFrameRef.current = requestAnimationFrame(flushCameraOverlay)
+    }
+  }, [flushCameraOverlay, state.connectionState])
+
+  // 떠날 때 잡아 둔 프레임을 놓아준다. 남겨 두면 언마운트된 뒤에 발행이 돈다.
+  useEffect(() => () => {
+    if (overlayFrameRef.current !== 0) cancelAnimationFrame(overlayFrameRef.current)
+  }, [])
 
   /**
    * 판서 변경을 데이터 채널로 보낸다.

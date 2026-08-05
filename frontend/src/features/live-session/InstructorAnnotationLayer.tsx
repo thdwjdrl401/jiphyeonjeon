@@ -235,13 +235,30 @@ export default function InstructorAnnotationLayer({
   const hostRef = useRef<HTMLDivElement>(null)
   const apiRef = useRef<ExcalidrawApi | null>(null)
 
-  const applyFrameMapping = useCallback(() => {
+  /**
+   * 마지막으로 잰 zoom.
+   *
+   * <p><b>왜 캐시하는가.</b> {@link applyFrameMapping}은 `onChange`마다 불리는데(획을 긋는 동안
+   * 초당 수십 번) `getBoundingClientRect`는 그때마다 <b>동기 레이아웃을 강제한다</b>. 크기는 컨테이너가
+   * 바뀔 때만 달라지고 그건 아래 `ResizeObserver`가 이미 잡고 있으므로, 그리는 경로에서 다시 잴
+   * 이유가 없다.
+   *
+   * <p>드리프트 방어는 그대로다 — 값을 비교해 되돌리는 일은 여전히 매번 한다. 캐시한 것은 <b>측정</b>
+   * 하나뿐이다.
+   */
+  const frameZoomRef = useRef(0)
+
+  const measureFrame = useCallback(() => {
     const host = hostRef.current
-    const api = apiRef.current
-    if (!host || !api) return
+    if (!host) return
     const rect = host.getBoundingClientRect()
-    const zoom = annotationStageScale({ width: rect.width, height: rect.height })
-    if (zoom <= 0) return
+    frameZoomRef.current = annotationStageScale({ width: rect.width, height: rect.height })
+  }, [])
+
+  const applyFrameMapping = useCallback(() => {
+    const api = apiRef.current
+    const zoom = frameZoomRef.current
+    if (!api || zoom <= 0) return
     const state = api.getAppState()
     if (state.zoom?.value === zoom && state.scrollX === 0 && state.scrollY === 0) return
     api.updateScene({ appState: { zoom: { value: zoom }, scrollX: 0, scrollY: 0 } })
@@ -272,17 +289,20 @@ export default function InstructorAnnotationLayer({
   // mount가 끝난 뒤에 프레임 매핑을 건다. handleApi 안에서 부르면 무시된다(위 참조).
   useEffect(() => {
     if (!apiReady) return
+    measureFrame()
     applyFrameMapping()
-  }, [apiReady, applyFrameMapping])
+  }, [apiReady, applyFrameMapping, measureFrame])
 
   useEffect(() => {
     const host = hostRef.current
     if (!active || !host) return undefined
-    applyFrameMapping()
-    const observer = new ResizeObserver(applyFrameMapping)
+    // 크기를 다시 재는 자리는 여기뿐이다. 그리는 경로(onChange)는 잰 값을 쓰기만 한다.
+    const remeasure = () => { measureFrame(); applyFrameMapping() }
+    remeasure()
+    const observer = new ResizeObserver(remeasure)
     observer.observe(host)
     return () => { observer.disconnect() }
-  }, [active, applyFrameMapping])
+  }, [active, applyFrameMapping, measureFrame])
 
 
   useEffect(() => {
