@@ -12,10 +12,27 @@ import type { LectureNoteView } from '@/features/live-session/liveSessionService
  * <p>여기서 함께 지키는 것은 <b>계약이 금지한 것을 실제로 막는가</b>이다(공유 계약 §3-4a —
  * raw HTML·image·외부 link 불가). 렌더러를 바꿔 끼우다 이게 풀리면 노트가 곧 공격면이 된다.
  */
+/**
+ * 패널이 이제 주제별(topics[].keyPoints)로 그린다 — `markdown`은 그중 어떤 문법을 허용·차단하는지
+ * 검증할 원본 텍스트일 뿐이라, 여기서 같은 문자열로부터 topics를 함께 뽑아 둘이 어긋나지 않게 한다
+ * (그러지 않으면 이 파일의 markdown만 다양하게 바꾸는 픽스처가, 실제로 그려지는 topics와
+ * 따로 놀아 문법 검증이 무의미해진다).
+ */
+function deriveTopics(markdown: string): LectureNoteView['topics'] {
+  const keyPoints = markdown
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith('- '))
+    .map((line) => line.slice(2))
+  if (keyPoints.length === 0) return []
+  const title = markdown.match(/^##\s+(.+)$/m)?.[1] ?? '주제'
+  return [{ topicId: 't1', title, keyPoints }]
+}
+
 function note(markdown: string, extra: Partial<LectureNoteView> = {}): LectureNoteView {
   return {
     coveredThroughSequence: 12,
-    topics: [{ topicId: 't1', title: '주제', keyPoints: ['요점'] }],
+    topics: deriveTopics(markdown),
     markdown,
     status: 'CAPTURING',
     updatedAt: '2026-08-03T10:00:00Z',
@@ -31,7 +48,9 @@ describe('강의 노트 Markdown', () => {
   it('제목과 목록을 문법이 아니라 구조로 그린다', async () => {
     renderNote('## 인증 흐름\n\n- 필터 체인을 먼저 통과한다\n- 결과는 컨텍스트에 담긴다')
 
-    expect(await screen.findByRole('heading', { name: '인증 흐름' })).toBeInTheDocument()
+    // 제목(topics[].title)은 즉시 그려진다 — 목록(keyPoints)만 지연 로드되는 렌더러를 탄다.
+    expect(screen.getByRole('heading', { name: '인증 흐름' })).toBeInTheDocument()
+    await screen.findAllByRole('listitem')
     const items = screen.getAllByRole('listitem')
     expect(items.map((li) => li.textContent)).toEqual([
       '필터 체인을 먼저 통과한다',

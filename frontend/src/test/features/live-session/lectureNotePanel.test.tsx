@@ -32,9 +32,9 @@ describe('AI 실시간 강의 노트 패널', () => {
   it('서버가 준 노트를 그대로 그린다', async () => {
     render(<LectureNotePanel live note={note()} />)
 
-    // 렌더러는 지연 로드된다(번들 분리) — 그려질 때까지 기다린다.
-    expect(await screen.findByRole('heading', { name: '필터 체인' })).toBeInTheDocument()
-    expect(screen.getByText('순서가 결과를 바꾼다')).toBeInTheDocument()
+    // 제목(topics[].title)은 즉시 그려진다 — 본문(keyPoints)만 지연 로드되는 렌더러를 탄다.
+    expect(screen.getByRole('heading', { name: '필터 체인' })).toBeInTheDocument()
+    expect(await screen.findByText('순서가 결과를 바꾼다')).toBeInTheDocument()
     expect(screen.getByText('1개 주제')).toBeInTheDocument()
   })
 

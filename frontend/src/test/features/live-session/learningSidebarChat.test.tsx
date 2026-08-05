@@ -55,4 +55,26 @@ describe('라이브 채팅 스크롤 추적', () => {
     ]))
     expect(chatList.scrollTop).toBe(650)
   })
+
+  it('과거 채팅을 읽는 중에도 내가 막 보낸 메시지는 바닥으로 붙는다', () => {
+    const { container, rerender } = render(sidebar(initialMessages))
+    const chatList = container.querySelector('.chat-list') as HTMLDivElement
+    Object.defineProperties(chatList, {
+      clientHeight: { configurable: true, value: 100 },
+      scrollHeight: { configurable: true, value: 500, writable: true },
+      scrollTop: { configurable: true, value: 120, writable: true },
+    })
+    fireEvent.scroll(chatList)
+    expect(screen.getByRole('button', { name: '↓ 최근 채팅으로 이동' })).toBeInTheDocument()
+
+    // 남이 보낸 메시지는(위 테스트처럼) 자리를 지킨다. 내가 보낸 메시지는 다르다 — 전송은
+    // "지금 여기를 보여 달라"는 명시적 요청이라, 읽던 자리와 무관하게 바닥으로 붙는다.
+    Object.defineProperty(chatList, 'scrollHeight', { configurable: true, value: 560, writable: true })
+    rerender(sidebar([
+      ...initialMessages,
+      { id: 'msg-mine', alias: '', text: '제가 방금 보낸 메시지', time: '10:04', mine: true },
+    ]))
+    expect(chatList.scrollTop).toBe(560)
+    expect(screen.queryByRole('button', { name: '↓ 최근 채팅으로 이동' })).not.toBeInTheDocument()
+  })
 })

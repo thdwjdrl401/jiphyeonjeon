@@ -65,10 +65,15 @@ function useVisitedPanels(active: LearningPanel) {
   )
 }
 
+/** 하단에서 이만큼 안쪽이면 "읽는 중"으로 보고 강제로 끌어내리지 않는다(AI 질문 패널과 같은 값). */
+const CHAT_FOLLOW_THRESHOLD_PX = 48
+
 function DiscussionPanel({ messages, revealThroughMs, composer, notice, panelProps }: { messages: ChatMessageView[]; revealThroughMs?: number | null; composer?: ReactNode; notice?: string; panelProps: PanelProps }) {
   const [filter, setFilter] = useState<'all' | 'questions'>('all')
   const [isFollowingLatest, setIsFollowingLatest] = useState(true)
   const chatListRef = useRef<HTMLDivElement>(null)
+  // 직전 렌더가 남긴 스크롤 높이(아래 layout effect에서 "이 갱신 전에 바닥에 있었는가"를 재는 기준).
+  const previousScrollHeightRef = useRef(0)
   /*
    * 재생 위치까지 올라온 것만 남긴 뒤 질문 필터를 건다. 순서가 중요하다 — 질문을 먼저 거르면
    * 개수 배지가 아직 오지 않은 질문까지 세어, 목록에 셋뿐인데 "질문 12"가 뜬다.
@@ -94,19 +99,42 @@ function DiscussionPanel({ messages, revealThroughMs, composer, notice, panelPro
 
   const changeFilter = (nextFilter: 'all' | 'questions') => {
     setFilter(nextFilter)
-    setIsFollowingLatest(true)
+    // 필터를 바꾼 직후 목록이 통째로 달라지므로, 지금 스크롤 위치와 무관하게 새 목록의 바닥을 보여준다.
+    scrollToLatest()
   }
 
   const handleChatScroll = () => {
     const chatList = chatListRef.current
     if (!chatList) return
     const distanceFromBottom = chatList.scrollHeight - chatList.scrollTop - chatList.clientHeight
-    setIsFollowingLatest(distanceFromBottom <= 48)
+    setIsFollowingLatest(distanceFromBottom <= CHAT_FOLLOW_THRESHOLD_PX)
+    // 실제 스크롤이 있었던 순간의 높이로도 기준을 맞춰 둔다 — 마운트 이후 한 번도 새 메시지가
+    // 오지 않은 채로 시간이 지나면(레이아웃이 바뀌는 등) 아래 effect의 기준이 낡을 수 있다.
+    previousScrollHeightRef.current = chatList.scrollHeight
   }
 
+  /*
+   * 새 메시지를 따라 하단으로 붙는다. 위로 올려 읽는 중이면 건드리지 않는다 — 단, 그 판정을
+   * isFollowingLatest(state) 대신 DOM의 실제 scrollTop으로 직접 잰다(AI 질문 패널과 같은 이유 —
+   * 'scroll' 이벤트 지연으로 인한 경합을 피한다).
+   *
+   * 예외가 하나 있다: 목록의 마지막 메시지가 <b>내가 막 보낸 것</b>이면 지금 스크롤 위치와
+   * 무관하게 바닥으로 붙는다 — 전송은 "지금 여기를 보여 달라"는 명시적 요청이다(위로 올려 지난
+   * 대화를 읽던 중이었어도, 방금 내가 보낸 말풍선은 보여야 한다).
+   */
   useLayoutEffect(() => {
-    if (isFollowingLatest) scrollToLatest()
-  }, [isFollowingLatest, scrollToLatest, visibleMessages.length])
+    const chatList = chatListRef.current
+    if (!chatList) return
+    const lastMessage = visibleMessages[visibleMessages.length - 1]
+    const wasAtBottom = chatList.scrollTop + chatList.clientHeight >= previousScrollHeightRef.current - CHAT_FOLLOW_THRESHOLD_PX
+    if (wasAtBottom || lastMessage?.mine) {
+      chatList.scrollTop = chatList.scrollHeight
+      // scrollTop을 코드로 옮기는 것만으로는 'scroll' 이벤트가 (제때) 오지 않는다 — 버튼 표시가
+      // 이 스크롤과 어긋나지 않도록 상태도 바로 맞춘다.
+      setIsFollowingLatest(true)
+    }
+    previousScrollHeightRef.current = chatList.scrollHeight
+  }, [visibleMessages])
 
   return (
     <div className="side-panel-content discussion-panel" {...panelProps}>
@@ -114,37 +142,39 @@ function DiscussionPanel({ messages, revealThroughMs, composer, notice, panelPro
         <button className={filter === 'all' ? 'is-active' : ''} type="button" onClick={() => changeFilter('all')}>전체 {revealed.length}</button>
         <button className={filter === 'questions' ? 'is-active' : ''} type="button" onClick={() => changeFilter('questions')}>질문 {questionCount}</button>
       </div>
-      <div className="chat-list" ref={chatListRef} onScroll={handleChatScroll}>
-        {visibleMessages.length > 0
-          ? visibleMessages.map((item) => (
-              <article
-                className={[item.question ? 'is-question' : '', item.mine ? 'is-mine' : '']
-                  .filter(Boolean).join(' ')}
-                key={item.id}
-              >
-                {/* 내 메시지엔 이름을 쓰지 않는다 — 우측 정렬 자체가 "내 것"이라는 표시다.
-                    시각은 서버가 확정한 뒤에만 있다(낙관적 항목은 빈 문자열). */}
-                <header>
-                  {!item.mine && <strong>{item.alias}</strong>}
-                  {item.time && <time>{item.time}</time>}
-                </header>
-                <p>{item.text}</p>
-                {item.question && <small>질문으로 등록됨</small>}
-              </article>
-            ))
-          : (
-            <p className="panel-empty">
-              {isTrimmedEmpty
-                ? '이 지점까지 올라온 채팅이 없습니다. 재생하면 그때의 대화가 여기에 쌓입니다.'
-                : filter === 'questions' ? '등록된 질문이 없습니다.' : '등록된 채팅이 없습니다.'}
-            </p>
-          )}
-      </div>
-      {!isFollowingLatest && (
-        <div className="chat-latest-jump">
-          <button type="button" onClick={scrollToLatest}>↓ 최근 채팅으로 이동</button>
+      <div className="scroll-pane">
+        <div className="chat-list" ref={chatListRef} onScroll={handleChatScroll}>
+          {visibleMessages.length > 0
+            ? visibleMessages.map((item) => (
+                <article
+                  className={[item.question ? 'is-question' : '', item.mine ? 'is-mine' : '']
+                    .filter(Boolean).join(' ')}
+                  key={item.id}
+                >
+                  {/* 내 메시지엔 이름을 쓰지 않는다 — 우측 정렬 자체가 "내 것"이라는 표시다.
+                      시각은 서버가 확정한 뒤에만 있다(낙관적 항목은 빈 문자열). */}
+                  <header>
+                    {!item.mine && <strong>{item.alias}</strong>}
+                    {item.time && <time>{item.time}</time>}
+                  </header>
+                  <p>{item.text}</p>
+                  {item.question && <small>질문으로 등록됨</small>}
+                </article>
+              ))
+            : (
+              <p className="panel-empty">
+                {isTrimmedEmpty
+                  ? '이 지점까지 올라온 채팅이 없습니다. 재생하면 그때의 대화가 여기에 쌓입니다.'
+                  : filter === 'questions' ? '등록된 질문이 없습니다.' : '등록된 채팅이 없습니다.'}
+              </p>
+            )}
         </div>
-      )}
+        {!isFollowingLatest && (
+          <div className="latest-jump">
+            <button type="button" onClick={scrollToLatest}>↓ 최근 채팅으로 이동</button>
+          </div>
+        )}
+      </div>
       {notice && <p className="discussion-notice">{notice}</p>}
       {composer}
     </div>

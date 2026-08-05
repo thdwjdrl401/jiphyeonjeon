@@ -1574,8 +1574,9 @@ body {
 .caption-dock__sentences { scrollbar-color: rgba(231,231,227,.32) transparent; }
 .caption-dock__sentences::-webkit-scrollbar-thumb { background: rgba(231,231,227,.3) !important; }
 .caption-dock__sentences::-webkit-scrollbar-thumb:hover { background: rgba(231,231,227,.48) !important; }
-.caption-dock__jump button { border-color: #444; background: #222; color: #eee; }
-.caption-dock__jump button:hover { border-color: #777; background: #2a2a2a; }
+/* 자막 독·채팅·AI 이력·강의 노트가 함께 쓰는 "최근으로 이동" 알약(learning.css .latest-jump). */
+.latest-jump button { border-color: #444; background: #222; color: #eee; }
+.latest-jump button:hover { border-color: #777; background: #2a2a2a; }
 .caption-term { background: #38332f; color: #f0c8c3; }
 .media-side { min-height: calc(100vh - 154px); border-radius: 8px; background: #171717; color: #e7e7e3; box-shadow: none; backdrop-filter: none; }
 .learning-sidebar-windowbar__status { color: #a6a6a1; }
@@ -1614,8 +1615,6 @@ body {
 .chat-list time { color: #9a9a95; font-size: .66rem; }
 .chat-list p { color: #d1d1cc; font-size: .78rem; }
 .chat-list article > small { color: #d87970; font-size: .65rem; }
-.chat-latest-jump { border-color: #333; background: #171717; }
-.chat-latest-jump button { border-color: #444; background: #222; color: #eee; }
 /* 접힌 근거 토글은 답변 말풍선(#171717) 위에 얹히므로 한 단계 밝은 표면으로 떼어 놓는다. */
 .ai-evidence-toggle { border-color: #444; background: #222; color: #ddd; }
 .ai-evidence-toggle:hover { border-color: #777; background: #2a2a2a; }
@@ -1668,6 +1667,12 @@ body {
 .note-markdown blockquote { border-left-color: #444; color: #a6a6a1; }
 .note-markdown :is(th, td) { border-color: #333; }
 .note-markdown__loading { color: #8c8c87; }
+.lecture-note-topic { border-color: #2b2b2b; background: #1f1f1f; }
+.lecture-note-topic > summary h3 { color: #f2f2ef; }
+.lecture-note-topic > summary:hover h3 { color: #fff; }
+.lecture-note-topic > summary::after { border-top-color: #8c8c87; }
+.lecture-note-toolbar button { border-color: #3a3a3a; color: #aaa; }
+.lecture-note-toolbar button:hover { border-color: #666; background: #222; color: #eee; }
 .summary-concept { background: #111; }
 .summary-concept b { color: #eee; }
 .summary-emphasis { border-color: var(--seal); background: #282322; }
