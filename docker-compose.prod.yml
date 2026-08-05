@@ -285,6 +285,11 @@ services:
     depends_on:
       - backend
       - minio
+    # LiveKit은 이 스택이 아니라 미디어 스택(network_mode: host)에 있다. /livekit 프록시가 호스트로
+    # 나가야 닿으므로 게이트웨이를 이름으로 심는다 — 브리지 IP(172.18.0.1)를 박아 두면 네트워크를
+    # 다시 만들 때 대역이 바뀌어 조용히 502가 된다(ADR-0078).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       default:
         # backend가 ASSET_STORAGE_ENDPOINT(공개 도메인)로 MinIO에 붙을 때 내부에서 이 nginx로 해석되게 한다

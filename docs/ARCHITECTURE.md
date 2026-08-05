@@ -365,7 +365,7 @@ flowchart TB
 
   subgraph MED["미디어 스택 — infra/livekit (network_mode: host)"]
     NGL["nginx-livekit :7443 WSS"]
-    LKC["livekit :7880 · UDP 7882"]
+    LKC["livekit :7880 · UDP 3478"]
     EGC["egress"]
     MIO[("minio")]
     RDL[("redis (미디어 전용)")]
@@ -374,7 +374,7 @@ flowchart TB
   NET -->|":80 → 301"| NGX
   NET -->|":443"| NGX
   NET -->|":7443 시그널링"| NGL
-  NET -->|":7882/udp 미디어"| LKC
+  NET -->|":3478/udp 미디어"| LKC
   NGX --> BE
   BE --- PGC
   BE --- RDC

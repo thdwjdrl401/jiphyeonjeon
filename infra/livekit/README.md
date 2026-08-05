@@ -9,14 +9,15 @@
 ```
 [학생/강사 브라우저]                          [미디어 서버 1대 (Linux)]
    │  WSS 시그널링   ──443──> nginx(TLS) ──7880──> LiveKit SFU
-   │  WebRTC 미디어  ──7882/udp (직결, nginx 우회)──> LiveKit
+   │  WebRTC 미디어  ──3478/udp (직결, nginx 우회)──> LiveKit
                                                      │  (녹화 시)
                               Redis <──통신──> Egress(headless Chrome)
                                                      │  MP4
                                                   MinIO / S3
 ```
 - **시그널링(WSS)**: `wss://<LIVEKIT_DOMAIN>` → nginx가 TLS 종료 → LiveKit `7880`(평문).
-- **미디어(WebRTC UDP)**: nginx 우회, 라우터/보안그룹이 `7882/udp`를 서버로 직접 전달.
+- **미디어(WebRTC UDP)**: nginx 우회, 라우터/보안그룹이 `3478/udp`를 서버로 직접 전달.
+  7882가 아닌 이유는 ADR-0078 — 학교/사내망이 7000~7999를 통째로 막는다.
 - **녹화(Egress)**: LiveKit↔Egress는 **Redis**로 통신. Egress가 헤드리스 Chrome으로 방을 합성 → MP4 → **MinIO**(PoC) / S3(EC2).
 - 파일: [`docker-compose.yml`](docker-compose.yml) · [`livekit.yaml`](livekit.yaml) · [`egress.yaml`](egress.yaml) · [`request.json`](request.json)(MP4 스모크) · [`request-hls.json`](request-hls.json)(HLS·near-live, 제품용) · [`nginx-livekit.conf`](nginx-livekit.conf)
 - **녹화 출력 2종**: `request.json`=단일 MP4(검증 쉬움) / `request-hls.json`=HLS 세그먼트(`segment_duration` 조절, `live_playlist_name`으로 near-live). 제품 다시보기는 **HLS**([ADR-0010](../../docs/decisions/songjeongki/0010-self-host-vod.md)). **EC2에서 HLS 파이프라인 검증 완료(2026-07-17)**: room-composite egress → 2초 `.ts` 세그먼트 + `index.m3u8`(VOD, EVENT)·`live.m3u8`(near-live) → MinIO `recordings/` 업로드 확인.
@@ -34,7 +35,7 @@
 
 ## 3. 셋업 순서
 1. **DNS**: `<LIVEKIT_DOMAIN>` A레코드 → 서버 공인 IP.
-2. **포트 개방**: 443·80·7880·7881/tcp + **7882/udp**(미디어) → 서버. (라우터 포워딩 or EC2 보안그룹)
+2. **포트 개방**: 443·80·7880·7881/tcp + **3478/udp**(미디어) → 서버. (라우터 포워딩 or EC2 보안그룹)
 3. **nginx**: `nginx-livekit.conf`의 ①②③ 반영 + 인증서 지정 → `sudo nginx -t && sudo systemctl reload nginx`. 확인: `curl -sI https://<LIVEKIT_DOMAIN>` → 200.
 4. **시크릿 생성**: `openssl rand -base64 32` → livekit.yaml·egress.yaml에 동일 반영.
 5. **기동**: `docker compose up -d` → `docker compose ps`로 4개(livekit·redis·egress·minio) 확인.
@@ -87,7 +88,7 @@ docker run --rm --network host --entrypoint /bin/sh minio/mc:RELEASE.2025-08-13T
 | 항목 | 개인서버(PoC) | EC2 |
 |---|---|---|
 | 스토리지 sink | MinIO(compose) | **실 AWS S3** — `request.json`의 `s3`에서 `endpoint`·`force_path_style` 제거, 실 `bucket`·`region`(ap-northeast-2)·IAM 키 |
-| 포트 개방 | 라우터 포워딩 | **보안그룹 인바운드** (443·80·7880·7881/tcp, 7882/udp) |
+| 포트 개방 | 라우터 포워딩 | **보안그룹 인바운드** (443·80·7880·7881/tcp, 3478/udp) |
 | 공인 IP | 홈 NAT 뒤 | EC2 퍼블릭 IP 직접 |
 | 헤어핀 | 문제됨(#2·#4) | 덜함(퍼블릭 IP 직접) — 그래도 co-located egress 위해 `advertise_internal_ip` 유지 권장 |
 | MinIO | 필요 | 제거(S3 사용) |
@@ -96,7 +97,8 @@ docker run --rm --network host --entrypoint /bin/sh minio/mc:RELEASE.2025-08-13T
 **EC2 실배포 확정 구성 (ADR-0015 연계)**: 앱(`jiphyeonjeon.thdwjdrl.com`)이 이미 443을 점유하고 단일 도메인·DNS 콘솔 권한이 없으므로, 미디어 시그널링은 **별도 TLS 포트**로 분리한다.
 - 이 compose에 **`nginx-livekit` 서비스**(`nginx-livekit-prod.conf`, `network_mode: host`) 추가 → `wss://jiphyeonjeon.thdwjdrl.com:7443` 종단 후 livekit 7880으로 프록시. (앱 nginx에 스니펫을 합치지 않고 미디어 스택이 독립 운영.)
 - **인증서 공유**: 앱 스택(`docker-compose.prod.yml`)의 certbot이 발급한 볼륨 `liveclass_certbot_etc`를 `external`로 읽기전용 마운트. → **앱 스택을 먼저 기동**해 cert가 있어야 미디어 nginx가 뜬다. 갱신은 앱 certbot이, 미디어 nginx는 6h마다 reload.
-- **보안그룹**: `7443/tcp`(시그널) + `7882/udp`(미디어) + `7881/tcp`(fallback). `7880`은 미노출(내부).
+- **보안그룹**: `3478/udp`(미디어) + `7443/tcp`(시그널, 되는 망용 지름길) + `7881/tcp`(fallback).
+  `7880`은 미노출(내부). 브라우저 시그널링의 정본 경로는 앱 nginx의 `443 /livekit`이다(ADR-0078).
 - **클라이언트 접속 URL**: `wss://jiphyeonjeon.thdwjdrl.com:7443`.
 - **기동**: `docker compose -f infra/livekit/docker-compose.yml up -d` (앱 스택·인증서 준비 후).
 
