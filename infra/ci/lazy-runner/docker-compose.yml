@@ -27,3 +27,14 @@ services:
     # 호스트 네트워크 — 잡이 --network host로 형제 컨테이너를 띄우고 localhost로 붙는다
     # (Testcontainers가 게시한 포트는 호스트에 열린다).
     network_mode: host
+    # **잡을 root로 돌린다.** 공식 이미지 기본값은 `--user=gitlab-runner`(uid 999)인데, 그 사용자는
+    # 호스트 소유(uid 1000)인 builds_dir에 쓰지 못해 체크아웃부터 실패한다.
+    #
+    # uid를 맞추는 대신 root로 가는 이유: 우리 잡은 `docker run`으로 빌드 도구를 띄우고 그
+    # 컨테이너들이 워크스페이스에 **root 소유 산출물**을 남긴다. 러너가 비-root면 다음 잡의
+    # git clean이 그걸 못 지워 "Permission denied"로 죽는다 — EC2 러너에서 실제로 겪은 실패다.
+    # 러너와 잡 컨테이너의 사용자를 root로 맞추면 그 불일치가 사라진다.
+    #
+    # 보안상 추가되는 위험은 없다. 이 컨테이너는 이미 docker.sock을 들고 있어 호스트 root와
+    # 동등한 권한을 갖는다.
+    command: ["run", "--user=root", "--working-directory=/home/lazy/ci-builds"]
