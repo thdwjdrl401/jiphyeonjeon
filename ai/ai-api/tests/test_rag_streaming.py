@@ -468,8 +468,8 @@ async def test_sse_encoder_uses_named_event_and_json_data_only() -> None:
 # --- Conversation memory (ADR-0010) ----------------------------------------------------------
 # Every test above passes RagAnswerService(retriever, model) with no conversation_memory, and
 # Model.stream_answer(request, evidence) with no kwargs — none of that changes here. These tests
-# only exercise the additive path that activates when both a memory port and userId+
-# conversationId are present.
+# only exercise the additive path that activates when a memory port and userId are present
+# (conversationId optionally narrows the conversation scope — ADR-0046).
 
 
 def request_with_memory(
@@ -605,7 +605,9 @@ async def test_second_turn_chains_onto_the_stored_response_id() -> None:
 
 
 @async_test
-async def test_missing_user_id_or_conversation_id_skips_memory_entirely() -> None:
+async def test_missing_user_id_skips_memory_entirely() -> None:
+    """sessionId만으로는 사용자를 구분할 수 없으므로(수강생 전원이 공유) userId 없는 요청은
+    대화 기억을 절대 활성화하면 안 된다 — 다른 학생의 대화가 이어지는 사고를 막는 가드."""
     memory = ConversationMemory()
     model = MemoryAwareModel(["답변"])
     service = RagAnswerService(
@@ -619,6 +621,41 @@ async def test_missing_user_id_or_conversation_id_skips_memory_entirely() -> Non
     assert memory.lookup_calls == []
     assert memory.save_calls == []
     assert model.calls[0][2] is None
+
+
+@async_test
+async def test_user_id_alone_activates_session_scoped_memory() -> None:
+    """userId만 오면 대화 범위가 라이브 세션이 된다(ADR-0046): Redis 키의 conversationId
+    자리는 고정값 'session'으로 채워져 같은 사용자·세션의 turn들이 하나로 이어진다."""
+    memory = ConversationMemory()
+    model = MemoryAwareModel(["답변"])
+    service = RagAnswerService(
+        Retriever(RetrievalResult(sufficient=True, evidence=(pptx_evidence(),))),
+        model,
+        conversation_memory=memory,
+    )
+
+    await collect(service, request().model_copy(update={"userId": "user-1"}))
+
+    assert memory.lookup_calls == [("user-1", SESSION_ID, "session")]
+    assert memory.save_calls == [("user-1", SESSION_ID, "session", "resp-new")]
+
+
+@async_test
+async def test_explicit_conversation_id_overrides_the_session_scope() -> None:
+    """conversationId를 보내면 기본 세션 범위 대신 그 값이 대화 범위가 된다 — FE가 나중에
+    대화를 더 잘게 나눌 때 ai-api 무변경으로 동작해야 하는 확장 지점."""
+    memory = ConversationMemory()
+    model = MemoryAwareModel(["답변"])
+    service = RagAnswerService(
+        Retriever(RetrievalResult(sufficient=True, evidence=(pptx_evidence(),))),
+        model,
+        conversation_memory=memory,
+    )
+
+    await collect(service, request_with_memory(conversation_id="conv-42"))
+
+    assert memory.lookup_calls == [("user-1", SESSION_ID, "conv-42")]
 
 
 @async_test
