@@ -1145,6 +1145,12 @@ th { color: var(--ink-500); font-size: .67rem; }
 .student-prejoin__entry-state { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
 .student-prejoin__entry-state strong { color: var(--ink-900); font-size: .7rem; }
 .student-prejoin__entry-state small { overflow: hidden; color: var(--ink-500); font-size: .6rem; text-overflow: ellipsis; white-space: nowrap; }
+.live-entry-dialog-backdrop { position: fixed; z-index: 1000; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(12,18,34,.56); backdrop-filter: blur(6px); }
+.live-entry-dialog { width: min(100%, 430px); padding: 26px; border: 1px solid rgba(255,255,255,.8); background: #fff; box-shadow: 0 24px 80px rgba(15,24,48,.28); }
+.live-entry-dialog h2 { margin: 7px 0 8px; color: var(--ink-950); font-size: 1.25rem; letter-spacing: -.04em; }
+.live-entry-dialog p { margin: 0; color: var(--ink-600); font-size: .76rem; line-height: 1.65; word-break: keep-all; }
+.live-entry-dialog__actions { display: flex; justify-content: flex-end; margin-top: 22px; }
+.live-entry-dialog__actions .button { min-width: 92px; }
 
 @media (max-width: 900px) {
   .student-prejoin__layout { grid-template-columns: 1fr; }
