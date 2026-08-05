@@ -312,6 +312,72 @@ describe('강사 판서 레이어', () => {
   })
 
   /**
+   * 휠 차단이 <b>패널 스크롤까지</b> 막고 있었다.
+   *
+   * <p>판서는 영상 위에 정확히 겹쳐야 해서 캔버스를 밀거나 확대하는 휠은 막는다. 처음에는 "스크롤
+   * 가능한 곳이면 preventDefault를 생략해 브라우저 기본 동작에 맡긴다"였는데, 그래도 휠이 먹지
+   * 않았다 — Excalidraw가 다른 목적으로 window에 붙이는 캡처 단계 리스너 등, 우리 짐작 밖의 경로에서
+   * 이미 막힐 수 있는 구조였다. 그래서 기본 동작에 기대지 않고 <b>scrollTop을 직접 옮긴다.</b>
+   */
+  it('넘쳐서 스크롤되는 패널 안에서 굴리면 그 요소를 직접 스크롤한다', async () => {
+    const { findByTestId, container } = render(
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
+    )
+    await findByTestId('excalidraw-editor')
+    const host = container.querySelector('.instructor-annotation-layer') as HTMLElement
+
+    // 클래스가 아니라 "넘치고 + overflow-y가 auto"라는 성질로 판단한다. jsdom은 레이아웃을 계산하지
+    // 않으므로 두 값을 직접 세운다.
+    const panel = document.createElement('div')
+    panel.style.overflowY = 'auto'
+    Object.defineProperty(panel, 'scrollHeight', { value: 400 })
+    Object.defineProperty(panel, 'clientHeight', { value: 200 })
+    host.appendChild(panel)
+
+    const inPanel = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 40 })
+    panel.dispatchEvent(inPanel)
+
+    // preventDefault는 항상 부른다 — 대신 우리가 그만큼 scrollTop을 옮겨서 눈에는 스크롤된 것과 같다.
+    expect(inPanel.defaultPrevented).toBe(true)
+    expect(panel.scrollTop).toBe(40)
+  })
+
+  /** 넘치지 않으면 스크롤할 것이 없다 — 그때는 캔버스 휠과 똑같이 막고 아무것도 옮기지 않는다. */
+  it('넘치지 않는 패널 안에서는 그대로 막고 옮기지 않는다', async () => {
+    const { findByTestId, container } = render(
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
+    )
+    await findByTestId('excalidraw-editor')
+    const host = container.querySelector('.instructor-annotation-layer') as HTMLElement
+
+    const panel = document.createElement('div')
+    panel.style.overflowY = 'auto'
+    Object.defineProperty(panel, 'scrollHeight', { value: 200 })
+    Object.defineProperty(panel, 'clientHeight', { value: 200 })
+    host.appendChild(panel)
+
+    const inPanel = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 40 })
+    panel.dispatchEvent(inPanel)
+
+    expect(inPanel.defaultPrevented).toBe(true)
+    expect(panel.scrollTop).toBe(0)
+  })
+
+  /** 캔버스 위 휠은 계속 막는다 — 밀리거나 확대되면 판서가 영상 위에서 어긋난다. */
+  it('캔버스 위에서 굴린 휠은 그대로 막는다', async () => {
+    const { findByTestId, container } = render(
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
+    )
+    await findByTestId('excalidraw-editor')
+    const host = container.querySelector('.instructor-annotation-layer') as HTMLElement
+
+    const onCanvas = new WheelEvent('wheel', { bubbles: true, cancelable: true })
+    host.dispatchEvent(onCanvas)
+
+    expect(onCanvas.defaultPrevented).toBe(true)
+  })
+
+  /**
    * 메뉴를 직접 조립하는 이유는 기본 메뉴에 강의 판서와 무관하거나 위험한 항목이 섞여 있기 때문이다.
    * 파일 열기는 판서를 통째로 덮어쓰고, 내보내기·이미지 저장은 "수강생에게 보이는 것"과 무관한데
    * 그렇게 오해되기 쉽다. 다시 새어 들어오지 않게 고정한다.

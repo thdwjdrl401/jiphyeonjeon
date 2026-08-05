@@ -185,6 +185,24 @@ const OPS_PER_SNAPSHOT = 100
  */
 const INTERPRET_IMAGE_MAX_EDGE = 2000
 
+/**
+ * 이 지점에서 위로 올라가며 <b>실제로 스크롤되는 요소</b>를 찾는다(호스트 전까지). 없으면 null.
+ *
+ * <p>클래스 이름으로 UI를 골라내지 않는다. 그러면 Excalidraw가 클래스를 바꾸거나 새 패널이 생길 때마다
+ * 목록을 따라가야 하고, 빠뜨리면 증상이 "그 패널만 스크롤이 안 된다"로 조용히 나타난다. "넘치는 내용을
+ * 스크롤로 보여주는 요소"라는 <b>성질</b>로 판단하면 그런 목록이 필요 없다.
+ *
+ * <p>캔버스는 걸리지 않는다 — `overflow: hidden`이라 조건을 만족하지 않는다.
+ */
+function closestScrollable(target: Element | null, bound: Element): HTMLElement | null {
+  for (let node = target; node && node !== bound; node = node.parentElement) {
+    if (node.scrollHeight <= node.clientHeight) continue
+    const overflowY = window.getComputedStyle(node).overflowY
+    if ((overflowY === 'auto' || overflowY === 'scroll') && node instanceof HTMLElement) return node
+  }
+  return null
+}
+
 export default function InstructorAnnotationLayer({
   sessionId,
   active,
@@ -998,7 +1016,24 @@ export default function InstructorAnnotationLayer({
   useEffect(() => {
     const host = hostRef.current
     if (!active || !host) return undefined
-    const block = (event: WheelEvent) => { event.preventDefault() }
+    const block = (event: WheelEvent) => {
+      /*
+       * <b>스크롤되는 UI 안에서는 우리가 직접 스크롤을 수행한다.</b> 처음에는 "그런 요소가 있으면
+       * preventDefault를 생략해 브라우저 기본 스크롤에 맡긴다"였는데, 그래도 휠이 먹지 않았다 —
+       * Excalidraw가 텍스트 편집 중 정리용으로 window에 캡처 단계 wheel 리스너를 붙이는 등, 우리
+       * 짐작 밖의 경로에서 이미 막힐 수 있는 구조였다. 기본 동작에 기대지 않고 `scrollTop`을 직접
+       * 옮기면 그 경로가 무엇이든 상관없이 항상 스크롤된다.
+       *
+       * 스크롤할 것이 없으면(속성 패널이 아니라 캔버스 위) 그대로 막는다 — 캔버스를 밀거나 확대하면
+       * 판서가 영상 위에서 어긋난다.
+       */
+      const scrollable = closestScrollable(event.target as Element | null, host)
+      if (scrollable) {
+        scrollable.scrollTop += event.deltaY
+        scrollable.scrollLeft += event.deltaX
+      }
+      event.preventDefault()
+    }
     host.addEventListener('wheel', block, { passive: false })
     return () => { host.removeEventListener('wheel', block) }
   }, [active])
