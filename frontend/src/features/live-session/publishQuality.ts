@@ -1,4 +1,4 @@
-import { ScreenSharePresets, VideoPresets, type VideoPreset } from 'livekit-client'
+import { ScreenSharePresets, VideoPreset, VideoPresets } from 'livekit-client'
 
 /**
  * 강사가 라이브 시작 전에 고르는 송출 품질.
@@ -10,6 +10,10 @@ import { ScreenSharePresets, VideoPresets, type VideoPreset } from 'livekit-clie
  *
  * 그래서 이 선택은 "취향"이 아니라 학생이 보게 될 화질을 직접 정하는 값이다. 기본값은 가장 좋은
  * 화질이고, 강사 PC나 업링크가 감당하지 못할 때 낮추는 용도로 쓴다.
+ *
+ * 최고 화질 두 선택지는 LiveKit 프리셋을 그대로 쓰지 않고 비트레이트만 올린 값을 쓴다. 프리셋의
+ * 기본값이 우리 용도(코드·슬라이드가 대부분인 1080p 화면)에는 부족해 글자 가장자리가 뭉갰다.
+ * **최고 화질을 둘 다 고르면 업링크가 최대 13Mbps 필요하다**(화면 8 + 카메라 5).
  *
  * 사이멀캐스트는 여기서 고르게 하지 않는다 — 구독자가 Egress 하나뿐이라 항상 꺼야 하는 구조적
  * 선택이지 사용자 취향이 아니다.
@@ -30,12 +34,25 @@ export function megabits(preset: VideoPreset) {
   return Math.round((preset.encoding.maxBitrate / 100_000)) / 10
 }
 
+/**
+ * 카메라 최고 화질 프리셋.
+ *
+ * LiveKit의 `VideoPresets.h1080`은 **3,000kbps 고정**이라 1080p 30fps에서 프레임당 100kbit뿐이다.
+ * 화면공유를 곁들일 때는 카메라가 25% 오버레이라 티가 안 나지만, **화면공유 없이 카메라만 켜면
+ * 카메라가 합성 캔버스를 통째로 채우므로**(`EgressStagePage`의 `cameraIsStage`) 그대로 학생이
+ * 보는 화질이 된다.
+ *
+ * 5,000kbps로 올려 프레임당 167kbit을 준다. 인물 영상은 화면공유보다 압축이 잘 들어 화면공유용
+ * 8,000kbps까지는 필요 없다.
+ */
+const CAMERA_FHD_MAX = new VideoPreset(1920, 1080, 5_000_000, 30, 'medium')
+
 export const CAMERA_QUALITIES: QualityOption<CameraQualityId>[] = [
   {
     id: 'fhd',
     label: '1080p',
     hint: '가장 선명합니다. 카메라만 켜고 진행하는 강의에 권장합니다.',
-    preset: VideoPresets.h1080,
+    preset: CAMERA_FHD_MAX,
   },
   {
     id: 'hd',
@@ -51,12 +68,27 @@ export const CAMERA_QUALITIES: QualityOption<CameraQualityId>[] = [
   },
 ]
 
+/**
+ * 화면공유 최고 화질 프리셋.
+ *
+ * LiveKit의 `ScreenSharePresets.h1080fps30`은 **5,000kbps 고정**이라 프레임당 167kbit뿐이다.
+ * 코드·슬라이드처럼 가는 획이 많은 화면은 이 예산에서 글자 가장자리가 먼저 뭉갠다.
+ *
+ * 8,000kbps로 올리면 프레임당 267kbit이 된다. **여기가 학생이 보게 될 화질의 상한이다** —
+ * Egress에 도착하지 않은 디테일은 서버에서 복구할 수 없으므로, 화질을 올리려면 반드시 이
+ * 값부터 올려야 한다(Egress 비트레이트만 올리는 것은 효과가 없다).
+ *
+ * 해상도·프레임률은 그대로다. 늘어나는 것은 **강사 PC의 업링크 부담**뿐이라, 감당이 안 되는
+ * 강사는 아래 낮은 선택지로 내리면 된다.
+ */
+const SCREEN_TEXT_MAX = new VideoPreset(1920, 1080, 8_000_000, 30, 'medium')
+
 export const SCREEN_QUALITIES: QualityOption<ScreenQualityId>[] = [
   {
     id: 'text',
     label: '1080p · 30fps',
-    hint: '코드·슬라이드 글자 판독을 우선합니다.',
-    preset: ScreenSharePresets.h1080fps30,
+    hint: '코드·슬라이드 글자 판독을 우선합니다. 업로드가 가장 넓어야 합니다.',
+    preset: SCREEN_TEXT_MAX,
   },
   {
     id: 'motion',
