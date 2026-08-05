@@ -183,7 +183,7 @@ class LiveAiAnswerContractTest {
      * {@code ai/ai-api/app/rag/models.py::RagAnswerRequest}이고, 그쪽이 바뀌면 여기도 같이 고쳐야 한다.
      */
     @Test
-    void request_body_has_only_the_seven_contract_fields() throws Exception {
+    void request_body_has_only_the_eight_contract_fields() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String[] created = createStartedSession(instructor);
         String sessionId = created[0];
@@ -194,7 +194,7 @@ class LiveAiAnswerContractTest {
 
         JsonNode body = jsonMapper.readTree(new String(awaitRequest().rawBody(), StandardCharsets.UTF_8));
         // ai-api는 extra="forbid" — 필드가 하나라도 늘면 400이고, 필수가 빠져도 400이다.
-        assertThat(body.size()).isEqualTo(7);
+        assertThat(body.size()).isEqualTo(8);
         assertThat(body.has("requestId")).isTrue();
         assertThat(body.has("lessonId")).isTrue();
         // 자료 검색 범위(ADR-0042). 이게 빠져 라이브 AI 질문이 이틀 동안 죽어 있었다.
@@ -202,6 +202,8 @@ class LiveAiAnswerContractTest {
         assertThat(body.has("sessionId")).isTrue();
         assertThat(body.has("question")).isTrue();
         assertThat(body.has("contextTimeMs")).isTrue();
+        // 대화 기억의 키(jinwoo/ADR-0010). 없으면 매 질문이 처음처럼 다뤄진다.
+        assertThat(body.has("userId")).isTrue();
         assertThat(body.has("issuedAtMs")).isTrue();
 
         // 소문자 canonical UUID. sessionId는 경로 값과 같고 lessonId는 서버가 세션에서 조회한 값.
@@ -220,6 +222,40 @@ class LiveAiAnswerContractTest {
         assertThat(body.get("requestId").asString()).isNotBlank().hasSizeLessThanOrEqualTo(128);
         // 신선도: 전송 직전 시각이어야 한다(수신과 60초 이상 차이나거나 5초 초과 미래면 ai-api가 401).
         assertThat(body.get("issuedAtMs").asLong()).isBetween(before, after);
+        // userId는 소문자 canonical이어야 한다 — 형식이 흔들리면 Redis 키가 갈려 대화가 끊긴다.
+        String userIdField = body.get("userId").asString();
+        assertThat(userIdField).isEqualTo(UUID.fromString(userIdField).toString());
+    }
+
+    /**
+     * {@code userId}는 <b>인증에서 나온 질문자</b>다(jinwoo/ADR-0010).
+     *
+     * <p>ai-api가 이 값으로 대화 기억을 찾으므로, 요청 body에서 받거나 세션 공용 값으로 두면 <b>남의
+     * 대화 맥락</b>을 읽게 된다. 같은 사람은 물어볼 때마다 같은 값이어야 이어지고(그래야 "그럼 그건?"이
+     * 통한다), 다른 사람이면 달라야 한다.
+     */
+    @Test
+    void user_id_is_the_authenticated_asker_and_differs_per_user() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String[] created = createStartedSession(instructor);
+        String sessionId = created[0];
+        Cookie[] student = loginAs("STUDENT");
+        enrollActive(created[1], student, instructor);
+
+        ask(sessionId, instructor, "첫 질문").andExpect(status().isOk());
+        String firstAsk = userIdOf(awaitRequest());
+        ask(sessionId, instructor, "이어지는 질문").andExpect(status().isOk());
+        String secondAsk = userIdOf(awaitRequest());
+        ask(sessionId, student, "학생 질문").andExpect(status().isOk());
+        String studentAsk = userIdOf(awaitRequest());
+
+        assertThat(firstAsk).isEqualTo(secondAsk);
+        assertThat(studentAsk).isNotEqualTo(firstAsk);
+    }
+
+    private String userIdOf(CapturedRequest request) throws Exception {
+        return jsonMapper.readTree(new String(request.rawBody(), StandardCharsets.UTF_8))
+                .get("userId").asString();
     }
 
     @Test

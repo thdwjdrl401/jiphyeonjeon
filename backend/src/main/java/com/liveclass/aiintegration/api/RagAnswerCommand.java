@@ -17,6 +17,11 @@ import java.util.UUID;
  * @param sessionId    라이브 세션. wire에는 소문자 canonical UUID.
  * @param question     1~4,000자. <b>임의 trim 금지</b> — 사용자가 보낸 그대로 전달한다.
  * @param contextTimeMs 0 이상. 최신 STT attempt-local {@code streamElapsedMs} 좌표(세션 ms 아님).
+ * @param userId       질문한 사람. ai-api가 <b>대화 기억의 키</b>로만 쓴다(jinwoo/ADR-0010) — 이 값이
+ *                     있으면 같은 사용자의 같은 세션에서 직전 답변을 이어받아 "그럼 그건?" 같은 후속
+ *                     질문이 통한다. 없으면 매 질문이 처음처럼 다뤄진다. <b>인증에서 나온 값만</b>
+ *                     넣는다(클라 입력 금지) — 남의 id를 보내면 남의 대화 맥락을 읽게 된다.
+ *                     provider(GMS)로는 나가지 않는다(ai-api CONTRACT §7-1).
  */
 public record RagAnswerCommand(
         String requestId,
@@ -24,6 +29,7 @@ public record RagAnswerCommand(
         UUID curriculumId,
         UUID sessionId,
         String question,
-        long contextTimeMs
+        long contextTimeMs,
+        UUID userId
 ) {
 }

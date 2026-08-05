@@ -701,20 +701,21 @@ Accept: text/event-stream
 Content-Type: application/json
 X-Internal-Signature: base64(HMAC-SHA256(AI_INTERNAL_SECRET, rawBody))
 
-{"requestId":"...","lessonId":"...","curriculumId":"...","sessionId":"...","question":"...","contextTimeMs":0,"issuedAtMs":1785120000000}
+{"requestId":"...","lessonId":"...","curriculumId":"...","sessionId":"...","question":"...","contextTimeMs":0,"userId":"...","issuedAtMs":1785120000000}
 ```
 
-**본문 필드는 이 7개가 전부다 — 더도 덜도 안 된다.** ai-api의 요청 모델이 `extra="forbid"`라 필드를 늘리면 거부되고, 필수 필드가 빠져도 거부된다. 그리고 그 거부는 422가 아니라 **400**으로 온다(ai-api가 `RequestValidationError`를 400으로 매핑). 실제로 `curriculumId`가 빠져 라이브 AI 질문이 이틀 동안 전부 400으로 죽었다(2026-07-30~08-01) — 양쪽이 각자 테스트를 통과하며 계약만 갈라졌고, **운영에서 질문을 눌러야만** 드러났다. 그래서 Spring 쪽에 이 필드 집합을 고정하는 계약 테스트를 둔다(`RagAnswerWireContractTest`), ai-api 쪽 정본은 `app/rag/models.py::RagAnswerRequest`다.
+**본문 필드는 이 8개가 전부다 — 더도 덜도 안 된다.** ai-api의 요청 모델이 `extra="forbid"`라 필드를 늘리면 거부되고, 필수 필드가 빠져도 거부된다. 그리고 그 거부는 422가 아니라 **400**으로 온다(ai-api가 `RequestValidationError`를 400으로 매핑). 실제로 `curriculumId`가 빠져 라이브 AI 질문이 이틀 동안 전부 400으로 죽었다(2026-07-30~08-01) — 양쪽이 각자 테스트를 통과하며 계약만 갈라졌고, **운영에서 질문을 눌러야만** 드러났다. 그래서 Spring 쪽에 이 필드 집합을 고정하는 계약 테스트를 둔다(`LiveAiAnswerContractTest.request_body_has_only_the_eight_contract_fields`), ai-api 쪽 정본은 `app/rag/models.py::RagAnswerRequest`다.
 
 - `lessonId`·`curriculumId`·`sessionId`는 **서버가 세션에서 조회한 값**이다(클라 입력 신뢰 금지). 소문자 canonical UUID 문자열.
 - `curriculumId`는 ai-api의 **자료 검색 범위**다 — PPTX 검색이 레슨이 아니라 커리큘럼 단위이고([ADR-0042](decisions/songjeongki/0042-curriculum-material-attach-and-embedding-scope.md)), 근거의 커리큘럼이 다르면 버린다.
+- `userId`는 **질문한 사람**이며 ai-api가 대화 기억의 키로만 쓴다([jinwoo/ADR-0010](decisions/jinwoo/0010-gms-responses-api-conversation-memory.md)) — 있으면 같은 사용자의 같은 세션에서 직전 답변을 이어받아 후속 질문이 통하고, 없으면(`null` 허용) 매 질문이 처음처럼 다뤄진다. **인증에서 나온 값만** 넣는다(요청 body에서 받지 않는다) — 클라가 정할 수 있으면 남의 대화 맥락을 읽게 된다. provider(GMS)로는 나가지 않는다.
 - `issuedAtMs`는 **전송 직전**에 찍는다. 수신 시각과 60초 이상 차이나면 401이므로 명령을 만든 시각을 쓰면 안 된다.
 - `question`은 사용자가 보낸 그대로 — 임의 trim·정규화 금지.
 
 인증은 [ADR-0023 §9](decisions/canola/0023-spring-to-ai-rag-jwt-contract.md)의 **HMAC 공유 시크릿**이다(RS256 JWT는 phase-2 로드맵). 시크릿은 `AI_INTERNAL_SECRET`으로 **콜백용 `AI_CALLBACK_SECRET`과 다른 값**이다([ai/CONTRACT.md §3.2](ai/CONTRACT.md)). Spring 구현은 [ADR-0047](decisions/songjeongki/0047-live-ai-answer-sse-proxy.md), ai-api 상세 검증 규칙은 [`ai/ai-api/CONTRACT.md`](../ai/ai-api/CONTRACT.md)가 소유한다.
 
 - **서명 대상은 요청 원시 body 전체**다. Spring은 body를 **한 번만** 직렬화해 그 바이트로 서명하고 **같은 바이트를 전송**한다 — 재직렬화하면 서명이 깨져 401이다.
-- body는 **정확히 위 6필드**다(ai-api가 `extra="forbid"`라 하나만 늘어도 400). `requestId` 1~128자·재사용 시 409, `lessonId`·`sessionId`는 **소문자 canonical UUID**, `question` 1~4,000자·**임의 trim 금지**, `contextTimeMs`는 0 이상의 **최신 STT attempt-local `streamElapsedMs` 좌표**(세션-ms 아님), `issuedAtMs`는 UTC epoch ms로 수신 시각과 60초 이상 차이나거나 5초 초과 미래면 401.
+- body는 **정확히 위 8필드**다(ai-api가 `extra="forbid"`라 하나만 늘어도 400). `requestId` 1~128자·재사용 시 409, `lessonId`·`sessionId`는 **소문자 canonical UUID**, `question` 1~4,000자·**임의 trim 금지**, `contextTimeMs`는 0 이상의 **최신 STT attempt-local `streamElapsedMs` 좌표**(세션-ms 아님), `issuedAtMs`는 UTC epoch ms로 수신 시각과 60초 이상 차이나거나 5초 초과 미래면 401.
 - **`contextTimeMs`는 `core.live_caption`의 해당 세션 최신 행 raw `stream_elapsed_ms`로 채운다**(자막이 없으면 0). §3-4가 금지한 `streamElapsedMs→세션ms` 변환을 하지 않으므로 앵커 없이 규격을 만족한다. §3-6의 근사 `sessionMs`(표시용, ADR-0045)는 여기 쓰지 않는다.
 - SSE 이벤트는 `answer.delta` 0개 이상 + `answer.done|answer.insufficient|answer.error` 정확히 하나다. `answer.done.sources` 항목은 `{"type":"PPTX","materialId":uuid,"page":int}` 또는 `{"type":"CAPTION","sessionId":uuid,"sttSessionId":str,"startMs":int,"endMs":int}`이며 최초 evidence 순서를 보존·중복 제거한다.
 - ai-api 상태코드: 200·400(body 위반)·401(인증 거부)·406(Accept 없음)·409(requestId 재사용)·503(RAG service 미배선 또는 process-local active 한도 초과). SSE 헤더가 시작된 뒤의 실패는 상태를 바꾸지 않고 `answer.error`다.

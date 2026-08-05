@@ -56,10 +56,12 @@ public class LiveAiAnswerService {
      *   <li>{@code requestId} — 서버 생성. 클라가 재사용하면 ai-api가 409를 내므로 충돌을 원천 차단한다.</li>
      *   <li>{@code contextTimeMs} — 해당 세션 <b>최신 자막 행의 raw {@code streamElapsedMs}</b>. 자막이
      *       없으면 0. 세션-ms로 변환하지 않으므로 attempt 앵커 문제가 생기지 않는다.</li>
+     *   <li>{@code askedBy} — <b>인증에서 나온 값</b>을 컨트롤러가 넘긴다(요청 body에서 받지 않는다).
+     *       ai-api가 대화 기억의 키로 쓰므로, 클라가 정할 수 있으면 남의 대화 맥락을 읽게 된다.</li>
      * </ul>
      */
     @Transactional(readOnly = true)
-    public RagAnswerCommand prepare(UUID sessionId, String question) {
+    public RagAnswerCommand prepare(UUID sessionId, String question, UUID askedBy) {
         LiveSession session = liveSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new LiveSessionNotFoundException("라이브 세션을 찾을 수 없습니다."));
         // 종료된 세션도 저장된 전체 자막을 근거로 후속 질문할 수 있다.
@@ -75,7 +77,8 @@ public class LiveAiAnswerService {
                 session.getCurriculumId(),
                 sessionId,
                 question,
-                contextTimeMs);
+                contextTimeMs,
+                askedBy);
     }
 
     /**

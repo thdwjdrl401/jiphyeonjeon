@@ -55,7 +55,9 @@ public class LiveAiAnswerController {
         // 접근 게이트: 소유 강사이거나 활성 수강생만(없으면 404, 미수강 403). 자막·채팅과 같은 규칙.
         UUID askedBy = UUID.fromString(authentication.getName());
         accessGuard.requireCanAccess(sessionId, askedBy);
-        RagAnswerCommand command = liveAiAnswerService.prepare(sessionId, request.question());
+        // askedBy는 인증에서만 나온다 — ai-api가 이 값으로 대화 기억을 찾으므로(jinwoo/ADR-0010)
+        // 클라가 정할 수 있으면 남의 대화 맥락을 읽게 된다.
+        RagAnswerCommand command = liveAiAnswerService.prepare(sessionId, request.question(), askedBy);
         // 업스트림 헤더를 받을 때까지 여기서 블로킹한다 — 시작 실패는 SSE가 아직 안 열렸으므로
         // 평범한 JSON 오류(503/409/502)로 나간다(LiveExceptionHandler).
         RagAnswerStreamHandle handle = liveAiAnswerService.open(command);
