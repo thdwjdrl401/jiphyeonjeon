@@ -85,7 +85,7 @@ export default function NotificationsPage() {
   )
 
   return (
-    <div className="workspace-page">
+    <div className="workspace-page notifications-page">
       <PageHeader
         title="알림"
         description="수강 신청, 라이브 일정, 강의 공개와 녹화 처리 결과를 모아서 확인합니다."
@@ -103,8 +103,10 @@ export default function NotificationsPage() {
         />
 
         {/*
-          읽음 축과 `모두 읽음`을 같은 줄에 둔다 — 그 버튼이 바꾸는 것이 바로 이 축이다.
+          읽지 않음 축과 `모두 읽음`을 같은 줄에 둔다 — 그 버튼이 바꾸는 것이 바로 이 축이다.
           1차 탭 옆에 두면 탭보다 위여서 "다른 탭까지 건드린다"고 읽힌다(ADR-0012).
+          읽음 탭에는 바꿀 읽지 않은 알림이 없으므로 버튼을 숨긴다. 다만 자리까지 없애면 툴바 높이가
+          줄어 탭과 아래 목록이 위아래로 흔들리므로, 보이지 않는 자리만 유지한다.
         */}
         <div className="notification-toolbar">
           <Tabs
@@ -116,9 +118,11 @@ export default function NotificationsPage() {
             onChange={setReadState}
           />
           <button
-            className="button button--soft button--small"
+            className={`button button--soft button--small notification-toolbar__mark-all${readState === 'READ' ? ' notification-toolbar__mark-all--hidden' : ''}`}
             type="button"
-            disabled={markAllAsRead.isPending || unreadCount === 0}
+            aria-hidden={readState === 'READ' || undefined}
+            tabIndex={readState === 'READ' ? -1 : undefined}
+            disabled={readState === 'READ' || markAllAsRead.isPending || unreadCount === 0}
             onClick={() => markAllAsRead.mutate()}
           >
             모두 읽음
