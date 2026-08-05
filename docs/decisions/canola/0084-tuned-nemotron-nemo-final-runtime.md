@@ -1,8 +1,8 @@
-# ADR-0047: fine-tuned Nemotron `.nemo`를 final-only model owner로 운영한다
+# ADR-0084: fine-tuned Nemotron `.nemo`를 final-only model owner로 운영한다
 
 - **상태**: 채택
 - **일자**: 2026-08-04
-- **관련**: [ADR-0043](0043-realtime-caption-display-text-normalization.md), [개발 계획](../../ai/NEMOTRON-NEMO-RUNTIME-PLAN.md)
+- **관련**: [ADR-0082](0082-realtime-caption-display-text-normalization.md), [개발 계획](../../ai/NEMOTRON-NEMO-RUNTIME-PLAN.md)
 
 ## 결정 요약
 
