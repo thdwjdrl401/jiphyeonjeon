@@ -34,9 +34,17 @@ export interface NotificationService {
    * 읽는다. 서버가 그렇게 보내는 이유는 넓은 팬아웃이 집합 삽입이라 행 데이터가 앱에 없기
    * 때문이고, 알림 모양이 REST와 WS 두 곳에 생기는 것도 피한다.
    *
+   * <p><b>연결 수립도 알린다.</b> 끊긴 동안 온 알림은 신호가 오지 않으므로, 다시 붙는 순간이
+   * 그 공백을 메울 유일한 지점이다. 브로커(SimpleBroker)는 재전송을 하지 않는다.
+   *
+   * @param onSignal    새 알림 신호(내용 없음)
+   * @param onConnected 구독이 살아난 시점. 최초 연결과 재연결에 <b>매번</b> 불린다.
    * @returns 구독 해제 함수
    */
-  subscribeNotifications: (onSignal: (signal: NotificationSignal) => void) => () => void
+  subscribeNotifications: (
+    onSignal: (signal: NotificationSignal) => void,
+    onConnected?: () => void,
+  ) => () => void
   /** 브라우저 구독에 필요한 VAPID 공개키. 서버에 키가 없으면 null이고, 그때 화면은 푸시 UI를 숨긴다. */
   getPushPublicKey: () => Promise<string | null>
   /** 브라우저가 만든 구독을 서버에 등록한다. 멱등이다. */

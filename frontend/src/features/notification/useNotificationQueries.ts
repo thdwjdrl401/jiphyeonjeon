@@ -26,15 +26,20 @@ export function useNotificationPreferenceQuery(curriculumId: string, lessonId?: 
   })
 }
 
-/** 드롭다운이 여는 순간 목록을 받으면 늦다. 종은 개수만 미리 들고 있는다. */
-const SUMMARY_REFETCH_MS = 60_000
-
 /**
- * 헤더 배지용 개수.
+ * 헤더 배지용 개수. 드롭다운이 여는 순간 목록을 받으면 늦으므로 개수만 미리 들고 있는다.
  *
- * <p>폴링이다 — 서버가 아직 알림 push(WS/SSE) 채널을 갖고 있지 않다. 주기를 1분으로 둔 이유는
- * 알림이 "지금 당장" 필요한 정보가 아니고(급한 것은 화면 안 토스트가 맡는다), 짧게 잡으면 로그인한
- * 모든 탭이 서버를 두드리기 때문이다. push가 생기면 이 폴링을 지우고 구독으로 바꾼다.
+ * <p><b>폴링하지 않는다.</b> 예전에는 60초 주기로 돌았다 — 서버에 push 채널이 없던 때 만든 것이고,
+ * `useNotificationRealtime`이 STOMP 구독을 붙인 뒤에도 "재연결 공백" 때문에 남겨 뒀다. 그 공백은
+ * 다시 붙는 순간 한 번 다시 읽으면 메워지고, 그것은 이제 그 훅이 한다.
+ *
+ * <p>남겨 두면 안 되는 이유가 있었다. 이 종은 헤더에 있어서 <b>로그인한 모든 사용자의 모든 화면</b>
+ * 에서 마운트되고, TanStack의 폴링은 탭이 보이는 동안 계속 돈다(`refetchIntervalInBackground` 기본
+ * false = 문서가 hidden일 때만 멈춘다). 60초마다 나가는 요청은 Spring Session의 lastAccessedTime을
+ * 매번 갱신하므로 30분짜리 유휴 만료 창을 서른 번 되돌린다 — 자리를 비워도 세션이 안 끊겼다.
+ *
+ * <p>이제 갱신 시점은 셋이다: 마운트, 창 복귀(TanStack 기본 `refetchOnWindowFocus`), 그리고 신호·
+ * 재연결에 의한 무효화. 셋 다 <b>사용자가 실제로 거기 있을 때</b>만 일어난다.
  *
  * <p>재시도하지 않는다: 서버에 알림 API가 아직 없어(501) 실패가 정상 경로다. 재시도는 그 실패를
  * 세 배로 늘리기만 한다.
@@ -45,8 +50,11 @@ export function useNotificationSummaryQuery(enabled: boolean) {
     queryFn: getNotificationSummary,
     enabled,
     retry: false,
-    refetchInterval: enabled ? SUMMARY_REFETCH_MS : false,
-    staleTime: 30_000,
+    /*
+     * 창 복귀 refetch가 이 값에 막히지 않을 만큼 짧아야 한다. 폴링이 있을 때는 60초마다 어차피
+     * 새로 받아서 이 값이 의미가 적었지만, 이제는 복귀가 주된 갱신 경로 중 하나다.
+     */
+    staleTime: 10_000,
   })
 }
 

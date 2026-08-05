@@ -172,6 +172,41 @@ describe('알림 HTTP 서비스 계약', () => {
     expect(deactivate).toHaveBeenCalled()
   })
 
+  /**
+   * 끊긴 동안 온 알림은 신호가 오지 않는다 — 브로커(SimpleBroker)가 재전송을 하지 않기 때문이다.
+   * 다시 붙는 순간이 그 공백을 메울 유일한 지점이라, 폴링을 지운 뒤로는 이 콜백이 그 역할을 한다.
+   *
+   * <p>순서가 중요하다: 구독을 <b>건 뒤에</b> 알려야 다시 읽는 동안 도착한 알림이 구독으로 잡힌다.
+   * 먼저 알리면 그 사이에 온 알림이 어느 쪽에도 걸리지 않는다.
+   */
+  it('연결될 때마다 구독을 건 뒤에 알린다 — 재연결 공백을 메우는 지점이다', () => {
+    const order: string[] = []
+    const subscribe = vi.fn(() => { order.push('subscribed') })
+    let onConnect: (() => void) | undefined
+    vi.mocked(Client).mockImplementation(function (this: Record<string, unknown>) {
+      Object.defineProperty(this, 'onConnect', {
+        set: (fn: () => void) => { onConnect = fn },
+        configurable: true,
+      })
+      this.subscribe = subscribe
+      this.activate = vi.fn()
+      this.deactivate = vi.fn().mockResolvedValue(undefined)
+      return this as never
+    } as never)
+
+    httpNotificationService.subscribeNotifications(
+      () => {},
+      () => order.push('connected'),
+    )
+
+    onConnect?.()
+    expect(order).toEqual(['subscribed', 'connected'])
+
+    // 재연결마다 다시 불린다 — 한 번만 불리면 두 번째 끊김의 공백이 남는다.
+    onConnect?.()
+    expect(order).toEqual(['subscribed', 'connected', 'subscribed', 'connected'])
+  })
+
   it('대상 재판정을 알림 경로로 조회한다', async () => {
     const getSpy = vi.spyOn(apiClient, 'get').mockResolvedValue({
       data: { status: 'AVAILABLE', state: { curriculumId: 'cur_1', lessonId: null }, reasonCode: null },

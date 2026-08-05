@@ -87,7 +87,7 @@ export const httpNotificationService = {
     // 본문이 있는 DELETE다 — 엔드포인트는 URL에 담기엔 길고, 경로에 넣으면 인코딩이 지저분해진다.
     await apiClient.delete('/me/push-subscriptions', { data: { endpoint } })
   },
-  subscribeNotifications(onSignal: (signal: NotificationSignal) => void) {
+  subscribeNotifications(onSignal: (signal: NotificationSignal) => void, onConnected?: () => void) {
     let active = true
     const client = new Client({
       brokerURL: brokerUrl(),
@@ -110,6 +110,14 @@ export const httpNotificationService = {
           // 프레임 하나가 깨져도 구독은 살려 둔다 — 다음 알림은 받아야 한다.
         }
       })
+      /*
+       * 구독을 건 **뒤에** 알린다. 이 순서라야 "다시 읽는 동안 온 알림"이 구독으로 잡힌다 —
+       * 먼저 알리면 다시 읽기와 구독 사이에 도착한 알림이 어느 쪽에도 안 걸린다.
+       *
+       * 최초 연결에도 불린다. 그 한 번은 화면이 이미 목록을 읽은 직후라 대개 헛일이지만,
+       * "붙었으면 맞춘다"는 규칙이 하나뿐이어야 재연결 경로가 따로 놀지 않는다.
+       */
+      onConnected?.()
     }
 
     client.activate()
