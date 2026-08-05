@@ -38,8 +38,9 @@ public class CaptionController {
                     + "각 항목은 WS 델타/종료 payload와 같은 필드이며 근사 sessionMs를 포함한다.")
     @GetMapping("/api/live-sessions/{sessionId}/captions")
     public List<CaptionReloadItem> captions(@PathVariable UUID sessionId, Authentication authentication) {
-        // 접근 게이트: 소유 강사이거나 활성 수강생만(없으면 404, 미수강 403). 세션 조회·채팅과 같은 규칙.
-        accessGuard.requireCanAccess(sessionId, UUID.fromString(authentication.getName()));
+        // 접근 게이트: 소유 강사이거나 활성 수강생만(없으면 404, 미수강 403). 채팅 기록과 같은 규칙이며
+        // 수강생에게는 시작 전 409다 — 자막은 강사의 발화에서 나오므로 시작 전에는 있을 수가 없다.
+        accessGuard.requireCanReadContent(sessionId, UUID.fromString(authentication.getName()));
         return liveCaptionService.reload(sessionId);
     }
 }

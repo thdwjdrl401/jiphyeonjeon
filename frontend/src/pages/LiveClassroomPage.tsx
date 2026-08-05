@@ -96,14 +96,27 @@ export default function LiveClassroomPage() {
     queryFn: () => getLesson({ lessonId: sessionQuery.data!.lessonId, role: user?.role, userId: user?.userId }),
     enabled: Boolean(sessionQuery.data?.lessonId),
   })
-  const chatQuery = useQuery({ queryKey: ['live-chat', sessionId], queryFn: () => getChatMessages(sessionId), enabled: Boolean(sessionId) })
+  const session = sessionQuery.data
+  const lesson = lessonQuery.data
+  /*
+   * 강의 <b>내용</b>(자막·노트·채팅 기록·AI 기록)을 읽어도 되는가.
+   *
+   * <p>서버가 같은 판정을 한다(`LiveAccessGuard.requireCanReadContent`) — 수강생이 시작 전에 물으면
+   * 409다. 여기서 막는 것은 그 409를 안 만나기 위해서가 아니라 <b>없는 것을 묻지 않기 위해서</b>다.
+   * 이 넷은 전부 강의가 시작된 뒤에 생긴다.
+   *
+   * <p>세션을 <b>받은 뒤에</b> 판단한다. 상태를 모르는 채로 먼저 쏘면 시작 전 세션에 한 번씩 헛물을
+   * 켠다. 이 조회들은 복원용이라 한 왕복 늦어도 첫 화면이 밀리지 않는다.
+   *
+   * <p>강사는 상태와 무관하다 — 서버도 소유 강사는 통과시킨다.
+   */
+  const canReadContent = Boolean(session) && (isInstructor || !isPrestartStatus(session?.status))
+  const chatQuery = useQuery({ queryKey: ['live-chat', sessionId], queryFn: () => getChatMessages(sessionId), enabled: Boolean(sessionId) && canReadContent })
   // 저장된 자막 리로드(CAPTION-01, ADR-0045). 마운트 시 세션-ms 순 자막을 받아 WS 누적기에 시드해
   // 새로고침·재연결 뒤 이전 자막을 복원한다. 실패해도 진입 게이트를 막지 않는다(자막 없이도 미디어·채팅은 산다).
   // 강사는 자막 독을 그리지 않는다(아래 렌더 참고). 자막을 쓰는 곳이 없으므로 리로드도 하지 않는다 —
   // 송출 중인 브라우저에서 쓰지도 않을 자막을 받아 두는 것은 그대로 낭비다.
-  const captionReloadQuery = useQuery({ queryKey: ['live-captions', sessionId], queryFn: () => getCaptions(sessionId), enabled: Boolean(sessionId) && !isInstructor })
-  const session = sessionQuery.data
-  const lesson = lessonQuery.data
+  const captionReloadQuery = useQuery({ queryKey: ['live-captions', sessionId], queryFn: () => getCaptions(sessionId), enabled: Boolean(sessionId) && !isInstructor && canReadContent })
   // 라이브 송출이 끝나도 이 세션의 후속 토론·복습 질문은 이어 간다. 자막 seek와 미디어 상태는
   // hasEnded로 별도 잠그므로 대화 가능 상태와 섞지 않는다.
   const canUseConversation = session?.status === 'LIVE'
@@ -284,7 +297,7 @@ export default function LiveClassroomPage() {
   const aiHistoryQuery = useQuery({
     queryKey: ['ai-answers', sessionId],
     queryFn: () => getAiAnswerHistory(sessionId),
-    enabled: Boolean(sessionId),
+    enabled: Boolean(sessionId) && canReadContent,
   })
   /*
    * 많이 다시 본 구간(ADR-0063). 수강생만 센다 — 강사 화면에는 재생바가 없고(LiveKit 송출 미리보기),
@@ -320,7 +333,7 @@ export default function LiveClassroomPage() {
   const noteQuery = useQuery({
     queryKey: ['lecture-notes', sessionId],
     queryFn: () => getLectureNotes(sessionId),
-    enabled: Boolean(sessionId),
+    enabled: Boolean(sessionId) && canReadContent,
   })
   const [liveNote, setLiveNote] = useState<LectureNoteView | null>(null)
   useEffect(() => {

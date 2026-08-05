@@ -543,6 +543,14 @@ Spring 수신 endpoint를 구현하고 `SPRING_STATUS_CALLBACK_URL`로 주입하
   FE는 이 이벤트를 세션 상태 전이와 **섞지 않는다**
   (`liveSessionStatus`를 건드리지 않는다). 단일 인스턴스 전제이며(SimpleBroker와 동일 전제, ADR-0019)
   다중 인스턴스에서는 외부 relay 전환과 함께 공유 저장소로 옮겨야 한다.
+- **시작 전 내용 조회는 수강생에게 409다**([ADR-0084](decisions/songjeongki/0084-live-classroom-waits-in-place.md)).
+  자막(`/captions`)·강의 노트(`/notes`)·채팅 기록(`/messages`)·AI 기록(`/ai/answers`)·판서(`/annotation`)는 모두
+  강의가 시작된 뒤에 생기므로, 시작한 적 없는 세션(`DRAFT`·`SCHEDULED`·`OPEN`·`STARTING`)에 물으면
+  409 `LIVE_SESSION_STATE_CONFLICT`다. 허용 상태 집합은 채팅·AI **전송**과 같다(`LIVE`·`ENDING`·`ENDED`) —
+  종료 뒤 복습이 이 경로를 타므로 "지금 라이브인가"가 아니라 **"시작한 적 있는가"**로 판정한다.
+  **세 곳은 제외다**: ① `GET /live-sessions/{id}`와 상태 토픽 구독(기다리는 화면이 이 둘로 시작을 알아챈다),
+  ② Egress의 판서 조회(LiveKit 토큰 경로 — Gate A~C가 `STARTING` 중에 가져간다), ③ 소유 강사(상태 무관,
+  새로고침 뒤 판서 복원 경로다).
 - 채팅 시간은 **세션 상대 ms**(`sessionMs`)다. **자막의 `streamElapsedMs`는 §3-4의 raw attempt-local ms를 그대로 노출**한다(변환 금지) — 세션 상대 ms 변환·앵커는 후속 공유 계약이며 그 전까지 FE는 raw 값으로 취급한다(ADR-0043). **추가로 자막 payload에 근사 `sessionMs`(Long, nullable)를 함께 싣는다**: `max(0, occurredAt − session.clockOriginAt)`로 서버가 읽기 시 계산하는 **근사 세션-ms**로, 학생이 HLS 영상 위치에 자막을 맞추는 **표시용**이다([ADR-0045](decisions/songjeongki/0045-live-caption-position-sync-approx-session-ms.md)). 이는 `streamElapsedMs` 변환이 아니라 occurredAt 기반의 별도 근사 축이며(streamElapsedMs는 raw 그대로 유지), §3-4의 "streamElapsedMs→세션ms 변환 금지"에 대한 **의도적 편차**다 — 오차 ~1~2s(STT 지연+시계 스큐)는 HLS 지연(수초~수십초)보다 작다. clockOriginAt이 없으면 null. 앵커 기반 정밀화는 후속.
 
 ### 3-6b. 강사 FE → Egress 합성 화면 판서 (LiveKit 데이터 채널) — FE 양쪽 구현됨

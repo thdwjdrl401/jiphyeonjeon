@@ -11,9 +11,15 @@ import type { CurriculumLiveSessionStatus } from '@/features/lesson/types'
  *
  * <p>`OPEN`은 이름과 달리 "문 열림"이 아니라 <b>시작하다 실패해 되돌아온</b> 상태다
  * (`LiveStartTransitions`가 실패 시 여기로 돌린다). 시작 전인 것은 마찬가지라 같이 묶는다.
+ *
+ * <p>`CANCELLED`·`FAILED`는 여기 없다. 그쪽은 <b>기다려도 시작되지 않는다</b> — 같은 "곧 시작합니다"를
+ * 보여 주면 거짓말이 된다. 지금은 그 둘이 강의실 앞(prejoin)에서 걸러진다.
+ *
+ * <p>서버의 같은 판정은 `LiveInteractionGuard.hasStarted`의 여집합이다 — 그쪽은 시작한 적 있는
+ * 세 상태(LIVE·ENDING·ENDED)를 적는다.
  */
 export function isPrestartStatus(status: CurriculumLiveSessionStatus | undefined): boolean {
-  return status === 'SCHEDULED' || status === 'OPEN' || status === 'STARTING'
+  return status === 'DRAFT' || status === 'SCHEDULED' || status === 'OPEN' || status === 'STARTING'
 }
 
 /** 영상 자리의 제목. 잠긴 자리마다 같은 말을 쓰도록 한곳에 둔다. */

@@ -96,7 +96,7 @@ public class LiveSessionController {
     @GetMapping("/api/live-sessions/{sessionId}/notes")
     public LiveLectureNoteResponse notes(@PathVariable UUID sessionId, Authentication authentication) {
         // 자막·채팅과 같은 게이트. 노트는 자막에서 파생된 것이라 자막을 볼 수 있는 사람이 볼 수 있다.
-        accessGuard.requireCanAccess(sessionId, UUID.fromString(authentication.getName()));
+        accessGuard.requireCanReadContent(sessionId, UUID.fromString(authentication.getName()));
         return LiveLectureNoteResponse.from(lectureNoteService.find(sessionId));
     }
 
