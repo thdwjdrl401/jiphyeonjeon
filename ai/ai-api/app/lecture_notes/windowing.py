@@ -73,11 +73,14 @@ class LectureNoteWindowAccumulator:
     def __init__(
         self,
         *,
-        min_window_ms: int = 15_000,
-        target_window_ms: int = 25_000,
-        max_window_ms: int = 40_000,
-        min_chars: int = 80,
-        max_chars: int = 400,
+        # 창은 담화가 완결되는 크기여야 모델이 주제 경계를 판단할 수 있다. 상한 90초는
+        # 임의값이 아니라 스키마 제약이다 — 한 호출은 newTopic을 하나만 표현할 수 있어,
+        # 창이 길어져 주제 전환이 두 번 들어오면 한쪽이 조용히 유실된다.
+        min_window_ms: int = 45_000,
+        target_window_ms: int = 60_000,
+        max_window_ms: int = 90_000,
+        min_chars: int = 200,
+        max_chars: int = 1_500,
         max_sessions: int = 1_000,
         max_event_ids: int = 10_000,
         max_retired_attempts_per_session: int = 16,

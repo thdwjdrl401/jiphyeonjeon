@@ -196,7 +196,14 @@ def _completion(
     )
 
 
-def _components(model, store, *, min_chars: int = 1, refinement_model=None):
+def _components(
+    model,
+    store,
+    *,
+    min_chars: int = 1,
+    refinement_model=None,
+    max_deferred_chars: int = 4_000,
+):
     accumulator = LectureNoteWindowAccumulator(
         min_window_ms=1,
         target_window_ms=1,
@@ -208,6 +215,7 @@ def _components(model, store, *, min_chars: int = 1, refinement_model=None):
         store,
         accumulator,
         refinement_model=refinement_model,
+        max_deferred_chars=max_deferred_chars,
     )
     return service, LectureNotePipeline(accumulator, service)
 
@@ -539,6 +547,121 @@ def test_ignore_completes_operation_without_event_or_chunk_sequence() -> None:
         assert checkpoint.outbox is None
         assert checkpoint.note.chunk_sequence == 0
         assert store.events == []
+
+    asyncio.run(scenario())
+
+
+def test_ignored_caption_is_carried_into_the_next_model_call() -> None:
+    """IGNORE는 '버린다'가 아니라 '아직 판단할 수 없다'이다. 미완결 발화를 흘려보내면 뒷부분만
+    앞부분 없이 다음 창에 도착해 조용히 유실된다."""
+
+    class IgnoreThenAcceptModel:
+        def __init__(self) -> None:
+            self.texts: list[str] = []
+
+        async def generate_draft(self, request):
+            self.texts.append(request.text)
+            if len(self.texts) == 1:
+                return LectureNoteDraftUpdateResult(action=LectureNoteDraftUpdateAction.IGNORE)
+            return _draft_result(request)
+
+    async def scenario() -> None:
+        model = IgnoreThenAcceptModel()
+        service, pipeline = _components(model, InMemoryStore())
+
+        await pipeline.ingest(_delta(1, "이제 미분이라는 것을"))
+        await service.drain()
+        await pipeline.ingest(_delta(2, " 살펴보겠습니다."))
+        await service.drain()
+
+        assert model.texts == ["이제 미분이라는 것을", "이제 미분이라는 것을 살펴보겠습니다."]
+
+    asyncio.run(scenario())
+
+
+def test_accepted_caption_clears_the_carried_over_text() -> None:
+    """소비된 이월분을 비우지 않으면 같은 자막이 매 호출마다 따라다니며 중복 판단을 유발한다."""
+
+    class IgnoreOnceModel:
+        def __init__(self) -> None:
+            self.texts: list[str] = []
+
+        async def generate_draft(self, request):
+            self.texts.append(request.text)
+            if len(self.texts) == 1:
+                return LectureNoteDraftUpdateResult(action=LectureNoteDraftUpdateAction.IGNORE)
+            return _draft_result(request)
+
+    async def scenario() -> None:
+        model = IgnoreOnceModel()
+        service, pipeline = _components(model, InMemoryStore())
+
+        for sequence, text in enumerate(("가", "나", "다"), start=1):
+            await pipeline.ingest(_delta(sequence, text))
+            await service.drain()
+
+        assert model.texts == ["가", "가나", "다"]
+
+    asyncio.run(scenario())
+
+
+def test_carried_over_text_is_bounded_and_keeps_the_most_recent_speech() -> None:
+    """계속 IGNORE되는 세션에서 이월분이 무한히 자라면 프롬프트 예산을 잠식한다. 자를 때는
+    완결에 가까운 최근 발화를 남긴다."""
+
+    class AlwaysIgnoreModel:
+        def __init__(self) -> None:
+            self.texts: list[str] = []
+
+        async def generate_draft(self, request):
+            self.texts.append(request.text)
+            return LectureNoteDraftUpdateResult(action=LectureNoteDraftUpdateAction.IGNORE)
+
+    async def scenario() -> None:
+        model = AlwaysIgnoreModel()
+        store = InMemoryStore()
+        service, pipeline = _components(model, store, max_deferred_chars=5)
+
+        await pipeline.ingest(_delta(1, "가나다라마바사"))
+        await service.drain()
+        # 자르는 대상은 이월분뿐이다. 새 window는 언제나 온전히 모델에 들어간다.
+        assert store.checkpoints[SESSION_ID].deferredText == "다라마바사"
+
+        await pipeline.ingest(_delta(2, "아자"))
+        await service.drain()
+
+        assert model.texts[1] == "다라마바사아자"
+        assert store.checkpoints[SESSION_ID].deferredText == "마바사아자"
+
+    asyncio.run(scenario())
+
+
+def test_restored_session_resumes_with_the_carried_over_text() -> None:
+    """이월분이 checkpoint에 없으면 재시작 한 번에 미완결 발화가 사라진다."""
+
+    class AlwaysIgnoreModel:
+        def __init__(self) -> None:
+            self.texts: list[str] = []
+
+        async def generate_draft(self, request):
+            self.texts.append(request.text)
+            return LectureNoteDraftUpdateResult(action=LectureNoteDraftUpdateAction.IGNORE)
+
+    async def scenario() -> None:
+        store = InMemoryStore()
+        service, pipeline = _components(AlwaysIgnoreModel(), store)
+
+        await pipeline.ingest(_delta(1, "끊긴 발화"))
+        await service.drain()
+        assert store.checkpoints[SESSION_ID].deferredText == "끊긴 발화"
+
+        restored_model = AlwaysIgnoreModel()
+        restored_service, restored_pipeline = _components(restored_model, store)
+        await restored_service.restore()
+        await restored_pipeline.ingest(_delta(2, "의 나머지"))
+        await restored_service.drain()
+
+        assert restored_model.texts[-1] == "끊긴 발화의 나머지"
 
     asyncio.run(scenario())
 

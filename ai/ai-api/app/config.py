@@ -61,10 +61,15 @@ class Settings(BaseSettings):
     # Live note generation runs while the lecture is still going. gpt-5-nano at minimal effort
     # measured 1.9s/189 output tokens against gpt-4.1's 3.1s/124 — but without the effort cap
     # the same call was 19.2s/3299 tokens, which would fall behind the caption window.
+    #
+    # nano is nonetheless not viable here (실측 2026-08-05, 동일 fixture·실제 어댑터):
+    # 활성 topic의 item을 글자 그대로 복사하지 못해 보존 검증을 1/3만 통과했다. effort를 low로
+    # 올려도 1/3, 프롬프트를 고쳐도 1/3이었고 mini와 gpt-4.1은 3/3이었다. 보존 실패는 재작성 한 번
+    # 뒤 window 전체 실패로 이어져 같은 batch를 다시 호출하므로, 싼 모델이 오히려 호출 수를 늘린다.
     # These are no longer a pair to keep in sync: the adapter derives which sampling knob to
     # send from the model name, so `reasoning_effort` is simply ignored on a non-reasoning
     # model instead of 400ing the call.
-    lecture_note_model: str | None = Field(default="gpt-5-nano", min_length=1, max_length=128)
+    lecture_note_model: str | None = Field(default="gpt-5-mini", min_length=1, max_length=128)
     lecture_note_reasoning_effort: str | None = Field(
         default="minimal", min_length=1, max_length=32
     )
@@ -84,11 +89,11 @@ class Settings(BaseSettings):
     lecture_note_gms_max_attempts: int = Field(default=3, ge=1, le=10)
     lecture_note_gms_retry_base_seconds: float = Field(default=0.5, gt=0, le=60)
     lecture_note_gms_retry_max_seconds: float = Field(default=5.0, gt=0, le=300)
-    lecture_note_min_window_ms: int = Field(default=15_000, ge=1_000, le=120_000)
-    lecture_note_target_window_ms: int = Field(default=25_000, ge=1_000, le=120_000)
-    lecture_note_max_window_ms: int = Field(default=40_000, ge=1_000, le=120_000)
-    lecture_note_min_chars: int = Field(default=80, ge=1, le=10_000)
-    lecture_note_max_chars: int = Field(default=400, ge=1, le=20_000)
+    lecture_note_min_window_ms: int = Field(default=45_000, ge=1_000, le=120_000)
+    lecture_note_target_window_ms: int = Field(default=60_000, ge=1_000, le=120_000)
+    lecture_note_max_window_ms: int = Field(default=90_000, ge=1_000, le=120_000)
+    lecture_note_min_chars: int = Field(default=200, ge=1, le=10_000)
+    lecture_note_max_chars: int = Field(default=1_500, ge=1, le=20_000)
     lecture_note_stream_maxlen: int = Field(default=10_000, ge=100, le=1_000_000)
 
     rag_retrieval_timeout_seconds: float = Field(default=10.0, gt=0, le=120)

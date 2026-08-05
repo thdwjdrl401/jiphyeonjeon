@@ -54,6 +54,9 @@ class LectureNoteSessionCheckpoint(_CheckpointModel):
     pending: LectureNoteWorkCheckpoint | None = None
     inFlight: LectureNoteWorkCheckpoint | None = None
     outbox: LectureNoteEvent | None = None
+    # 모델이 IGNORE한 window의 자막. 미완결 발화라 버리지 않고 다음 호출 앞에 다시 붙인다.
+    # version 1의 optional 필드라 구 JSON은 빈 문자열로 읽힌다.
+    deferredText: str = ""
     completed: bool = False
     completionAcked: bool = False
     refinementPending: bool = False
