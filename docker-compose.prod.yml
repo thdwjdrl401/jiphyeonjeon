@@ -175,8 +175,14 @@ services:
       # API는 미디어 스택의 nginx(:7443, host 네트워크)를 탄다 — LiveKit 평문 7880은 ufw가
       # 막고 있고, 컨트롤 호출은 소량이라 기존 TLS 엣지를 재사용하는 편이 방화벽 구멍보다 낫다.
       # extra_hosts로 도메인을 호스트에 직결시켜야 7443에 닿는다(아래 참조).
-      LIVEKIT_URL: wss://jiphyeonjeon.thdwjdrl.com:7443
-      LIVEKIT_API_URL: https://jiphyeonjeon.thdwjdrl.com:7443
+      # 브라우저 주소는 443의 /livekit 경로다(ADR-0078). 7443을 쓰면 7000~7999 대역을 막는
+      # 학교·사내망에서 시그널링부터 붙지 않아 강의 입장이 통째로 실패한다. 443은 HTTPS라
+      # 어디서나 열려 있고, 앱 nginx가 /livekit을 LiveKit 7880으로 넘긴다.
+      LIVEKIT_URL: ${LIVEKIT_URL:-wss://jiphyeonjeon.thdwjdrl.com/livekit}
+      # API 주소는 그대로 7443이다. 막힌 것은 브라우저가 있는 망이지 서버가 아니다 — 백엔드는
+      # EC2 안에서 나가므로 7443이 멀쩡하고, 바꿀 이유가 없는 것을 함께 바꾸면 문제가 생겼을 때
+      # 어느 쪽 때문인지 못 가린다.
+      LIVEKIT_API_URL: ${LIVEKIT_API_URL:-https://jiphyeonjeon.thdwjdrl.com:7443}
       # dev worker(liveclass-realtime-stt-dev)와 분리해 prod 캡션이 dev Redis로 섞이지 않게 한다.
       LIVEKIT_CONTROL_TIMEOUT: ${LIVEKIT_CONTROL_TIMEOUT:-10s}
       LIVEKIT_AGENT_NAME: liveclass-realtime-stt-prod
