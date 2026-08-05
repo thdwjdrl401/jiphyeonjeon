@@ -51,7 +51,12 @@ public sealed interface NotificationTargetResolution {
             UUID studentId,
             String liveSessionStatus,
             OffsetDateTime scheduledAt,
-            String replayStatus
+            String replayStatus,
+            /**
+             * LIVE·RECORDED. 업로드 강의는 상세 화면이 따로 있어서, 이 값이 없으면 화면이 라이브
+             * 강의 경로로만 보낸다. 레슨을 가리키지 않는 알림에서는 {@code null}이다.
+             */
+            String deliveryType
     ) {
     }
 }

@@ -24,6 +24,12 @@ enum NotificationAccessRule {
         return switch (type) {
             case NotificationTypes.ENROLLMENT_REQUESTED -> INSTRUCTOR_OWNER;
             /*
+             * 녹화 알림은 강사 한 명에게만 간다(NotificationFanoutWorker.INSTRUCTOR_TYPES). 기본값인
+             * "수강 중이어야 한다"에 맡기면 받는 사람 본인이 막힌다 — 강사는 자기 커리큘럼에 수강
+             * 등록돼 있지 않다.
+             */
+            case NotificationTypes.RECORDING_READY, NotificationTypes.RECORDING_FAILED -> INSTRUCTOR_OWNER;
+            /*
              * 거절 알림만 카탈로그 규칙이다. 학생은 그 커리큘럼 소개 화면으로 가고, 정책이 허락하면
              * 거기서 다시 신청할 수 있다 — 알림이 막다른 길이 되지 않는다.
              */

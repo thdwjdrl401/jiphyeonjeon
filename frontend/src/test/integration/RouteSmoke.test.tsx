@@ -196,6 +196,29 @@ describe('전체 페이지 라우트', () => {
     expect(await screen.findByRole('heading', { name: '요청한 페이지를 찾을 수 없어요' })).toBeInTheDocument()
   })
 
+  /*
+    브라우저 푸시가 여는 자리다. 서비스워커는 로그인 세션도 역할도 모르므로 역할 없는 `/notifications`로
+    열고, 앱이 그 사람의 알림함으로 넘긴다. 이 라우트가 없으면 푸시 클릭이 `*`에 걸려 404가 떴다 —
+    알림을 눌렀는데 "페이지를 찾을 수 없어요"가 뜨는 것은 알림이 깨진 것과 구별되지 않는다.
+  */
+  it('푸시 알림이 여는 역할 없는 알림함 경로를 학생 알림함으로 넘긴다', async () => {
+    await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
+    renderAt('/notifications')
+    await waitFor(() => expect(window.location.pathname).toBe('/student/notifications'))
+  })
+
+  it('강사가 푸시 알림을 누르면 강사 알림함으로 간다', async () => {
+    await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
+    renderAt('/notifications')
+    await waitFor(() => expect(window.location.pathname).toBe('/instructor/notifications'))
+  })
+
+  it('로그인하지 않은 채 푸시 알림을 누르면 로그인 뒤 알림함으로 돌아오게 한다', async () => {
+    renderAt('/notifications')
+    await waitFor(() => expect(window.location.pathname).toBe('/login'))
+    expect(new URLSearchParams(window.location.search).get('returnTo')).toBe('/notifications')
+  })
+
   it('학생 입장 전 점검 화면을 연다', async () => {
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
     renderAt('/student/live-sessions/ses-security-live/prejoin')

@@ -15,6 +15,7 @@ function state(overrides: Partial<NotificationTargetState> = {}): NotificationTa
     liveSessionStatus: null,
     scheduledAt: null,
     replayStatus: null,
+    deliveryType: 'LIVE',
     ...overrides,
   }
 }
@@ -50,6 +51,33 @@ describe('알림 클릭 목적지', () => {
   it('자료 알림은 강의 상세의 자료 영역을 가리킨다', () => {
     expect(resolveNotificationRoute('MATERIAL_PUBLISHED', state(), 'STUDENT', NOW))
       .toBe('/student/curriculums/cur-1/sections/sec-1/lessons/les-1#lesson-materials')
+  })
+
+  it('업로드 강의 알림은 강사를 업로드 강의 화면으로 보낸다', () => {
+    /*
+      업로드 강의는 강사에게 별도 화면이 있다(처리 단계·게시가 거기 있다). 라이브 경로로 보내면
+      그 강의에 없는 것(라이브 일정·라이브 편집 링크)을 전제한 화면이 열린다.
+      학생은 전달 방식과 무관하게 같은 상세 화면을 쓴다 — `resolveLessonPath`와 같은 규칙이다.
+    */
+    const recorded = state({ deliveryType: 'RECORDED' })
+
+    expect(resolveNotificationRoute('MATERIAL_PUBLISHED', recorded, 'INSTRUCTOR', NOW))
+      .toBe('/instructor/curriculums/cur-1/sections/sec-1/recorded-lessons/les-1#lesson-materials')
+    expect(resolveNotificationRoute('MATERIAL_PUBLISHED', recorded, 'STUDENT', NOW))
+      .toBe('/student/curriculums/cur-1/sections/sec-1/lessons/les-1#lesson-materials')
+  })
+
+  it('커리큘럼 전체 자료 알림은 커리큘럼 상세로 간다', () => {
+    /*
+      서버는 커리큘럼 자료를 lessonId 없이 보낸다(InstructorCurriculumService.attachCurriculumMaterial).
+      레슨 경로만 만들면 이 알림은 목적지가 없어 이동 자체가 막힌다 — 자료는 커리큘럼 상세에 있다.
+    */
+    const curriculumWide = state({ lessonId: null, sectionId: null })
+
+    expect(resolveNotificationRoute('MATERIAL_PUBLISHED', curriculumWide, 'STUDENT', NOW))
+      .toBe('/curriculums/cur-1')
+    expect(resolveNotificationRoute('MATERIAL_PUBLISHED', curriculumWide, 'INSTRUCTOR', NOW))
+      .toBe('/curriculums/cur-1')
   })
 
   it('라이브 입장 시간이 아니면 일정 안내 화면으로 간다', () => {
