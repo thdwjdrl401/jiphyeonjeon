@@ -17,8 +17,10 @@ export const markNotificationAsRead = (notificationId: string) =>
 export const markAllNotificationsAsRead = () => notificationService.markAllAsRead()
 export const resolveNotificationTarget = (notificationId: string) =>
   notificationService.resolveTarget(notificationId)
-export const subscribeNotifications = (onSignal: Parameters<NotificationService['subscribeNotifications']>[0]) =>
-  notificationService.subscribeNotifications(onSignal)
+export const subscribeNotifications = (
+  onSignal: Parameters<NotificationService['subscribeNotifications']>[0],
+  onConnected?: Parameters<NotificationService['subscribeNotifications']>[1],
+) => notificationService.subscribeNotifications(onSignal, onConnected)
 
 export const getPushPublicKey = () => notificationService.getPushPublicKey()
 export const registerPushSubscription = (

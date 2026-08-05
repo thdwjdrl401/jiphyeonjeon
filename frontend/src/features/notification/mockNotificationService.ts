@@ -19,6 +19,7 @@ import type {
   NotificationGoneReason,
   NotificationItem,
   NotificationListResponse,
+  NotificationSignal,
   NotificationTargetResolution,
   NotificationType,
 } from './types'
@@ -220,10 +221,17 @@ export const mockNotificationService = {
     return resolveMockTarget(record)
   },
   /**
-   * 목에는 실시간 채널이 없다. 브로커에 붙지 않고 <b>아무것도 하지 않는 해제 함수</b>를 준다 —
-   * 화면은 폴링으로도 동작하므로 목 모드에서 알림이 늦게 뜰 뿐 깨지지 않는다.
+   * 목에는 브로커가 없다. 붙을 곳이 없으므로 신호는 영영 오지 않는다.
+   *
+   * <p><b>연결됐다는 사실만 한 번 알린다.</b> 실서비스에서 이 콜백이 재연결 공백을 메우는데,
+   * 목이 그것을 아예 부르지 않으면 화면의 "붙으면 맞춘다" 경로가 목 모드에서 죽은 코드가 된다 —
+   * 목으로 개발하는 동안 그 경로가 깨져도 모른다.
+   *
+   * <p>목 모드에서 알림이 갱신되는 시점은 이제 <b>마운트·창 복귀·직접 무효화</b>다. 폴링이
+   * 있을 때보다 늦게 뜨지만 깨지지는 않는다(목의 알림은 같은 탭의 내 행동으로만 생긴다).
    */
-  subscribeNotifications() {
+  subscribeNotifications(_onSignal: (signal: NotificationSignal) => void, onConnected?: () => void) {
+    onConnected?.()
     return () => {}
   },
   /** 목에는 푸시가 없다. 공개키를 null로 주면 화면이 알아서 푸시 UI를 숨긴다. */
