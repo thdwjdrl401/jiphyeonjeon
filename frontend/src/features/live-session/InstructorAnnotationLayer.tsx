@@ -68,6 +68,14 @@ interface ExcalidrawApi {
    * 이미지 요소만 남아 그림이 보이지 않는다.
    */
   addFiles: (files: readonly { id: string; mimeType: string; dataURL: string; created: number }[]) => void
+  /**
+   * 컨테이너의 화면상 위치를 다시 재게 한다.
+   *
+   * <p>Excalidraw는 컨테이너의 `left`/`top`을 <b>캐시해 두고</b> 포인터를 scene 좌표로 옮길 때 쓴다
+   * (`sceneX = (clientX - offsetLeft) / zoom - scrollX`). 그 캐시는 자기 컨테이너의 <b>크기</b>가 바뀔 때만
+   * 갱신되므로, 크기는 그대로인 채 자리만 움직이면 옛 값이 남아 그리는 자리와 그려지는 자리가 어긋난다.
+   */
+  refresh: () => void
 }
 
 interface InstructorAnnotationLayerProps {
@@ -177,6 +185,24 @@ const OPS_PER_SNAPSHOT = 100
  */
 const INTERPRET_IMAGE_MAX_EDGE = 2000
 
+/**
+ * 이 지점에서 위로 올라가며 <b>실제로 스크롤되는 요소</b>를 찾는다(호스트 전까지). 없으면 null.
+ *
+ * <p>클래스 이름으로 UI를 골라내지 않는다. 그러면 Excalidraw가 클래스를 바꾸거나 새 패널이 생길 때마다
+ * 목록을 따라가야 하고, 빠뜨리면 증상이 "그 패널만 스크롤이 안 된다"로 조용히 나타난다. "넘치는 내용을
+ * 스크롤로 보여주는 요소"라는 <b>성질</b>로 판단하면 그런 목록이 필요 없다.
+ *
+ * <p>캔버스는 걸리지 않는다 — `overflow: hidden`이라 조건을 만족하지 않는다.
+ */
+function closestScrollable(target: Element | null, bound: Element): HTMLElement | null {
+  for (let node = target; node && node !== bound; node = node.parentElement) {
+    if (node.scrollHeight <= node.clientHeight) continue
+    const overflowY = window.getComputedStyle(node).overflowY
+    if ((overflowY === 'auto' || overflowY === 'scroll') && node instanceof HTMLElement) return node
+  }
+  return null
+}
+
 export default function InstructorAnnotationLayer({
   sessionId,
   active,
@@ -247,11 +273,31 @@ export default function InstructorAnnotationLayer({
    * 하나뿐이다.
    */
   const frameZoomRef = useRef(0)
+  /** 마지막으로 Excalidraw에 반영한 캔버스의 화면상 좌상단. 크기 변화 없는 <b>이동</b>을 잡는 기준이다. */
+  const hostOriginRef = useRef<{ left: number; top: number } | null>(null)
 
   const measureFrame = useCallback(() => {
     const host = hostRef.current
     if (!host) return
     const rect = host.getBoundingClientRect()
+    /*
+     * <b>움직이기만 해도 다시 재게 한다.</b> Excalidraw는 컨테이너의 left/top을 캐시해 포인터를 scene
+     * 좌표로 옮기는데, 그 캐시를 자기 ResizeObserver로만 갱신한다 — 즉 <b>크기가 바뀔 때만</b> 갱신된다.
+     *
+     * 이 캔버스는 크기가 그대로인 채 움직인다. 16:9 프레임(.instructor-media-canvas)이 미리보기 영역
+     * 가운데 놓이는데(place-items: center), 영역이 16:9보다 가로로 길면 프레임 크기는 높이에 묶여
+     * 고정되고 남는 폭만큼 좌우로 재배치된다. 사이드 패널을 접어 강의 화면이 넓어지는 순간이 정확히
+     * 그 경우다 — 프레임은 같은 크기로 오른쪽으로 밀리고, 크기가 안 바뀌었으니 Excalidraw는 옛 left를
+     * 그대로 들고 있다. 그 차이만큼 그리는 자리와 그려지는 자리가 어긋난다(zoom은 멀쩡하다).
+     *
+     * <p>측정은 이 함수(ResizeObserver 경로)에서만 한다 — `applyFrameMapping`은 이제 `getBoundingClientRect`를
+     * 부르지 않으므로(위 성능 최적화), 위치 추적도 여기서 해야 사이드 패널 접힘을 놓치지 않는다.
+     */
+    const origin = hostOriginRef.current
+    if (!origin || origin.left !== rect.left || origin.top !== rect.top) {
+      hostOriginRef.current = { left: rect.left, top: rect.top }
+      apiRef.current?.refresh()
+    }
     frameZoomRef.current = annotationStageScale({ width: rect.width, height: rect.height })
   }, [])
 
@@ -301,6 +347,14 @@ export default function InstructorAnnotationLayer({
     remeasure()
     const observer = new ResizeObserver(remeasure)
     observer.observe(host)
+    /*
+     * 캔버스를 담고 있는 미리보기 영역도 함께 본다. <b>호스트만 보면 놓치는 경우가 있다</b> —
+     * 사이드 패널을 접으면 이 영역만 넓어지고, 높이에 묶인 16:9 캔버스는 크기 그대로 가운데로 다시
+     * 놓인다. 크기가 안 바뀌니 호스트의 ResizeObserver는 울리지 않고(Excalidraw 내부 것도 마찬가지다),
+     * 그 사이 캔버스는 옆으로 밀려 있다. 넓어지는 쪽을 봐야 그 이동을 제때 알 수 있다.
+     */
+    const frame = host.closest('.instructor-media-preview')
+    if (frame && frame !== host) observer.observe(frame)
     return () => { observer.disconnect() }
   }, [active, applyFrameMapping, measureFrame])
 
@@ -468,6 +522,40 @@ export default function InstructorAnnotationLayer({
         },
     })
   }, [highlightMode])
+
+  /**
+   * 판서를 한 번에 비운다.
+   *
+   * <p><b>Excalidraw 기본 `ClearCanvas`를 쓰지 않는 이유가 여기 있다.</b> 그 액션은 요소만 지우는 게
+   * 아니라 appState를 통째로 `getDefaultAppState()`로 되돌린다(보존하는 것은 theme·penMode·activeTool
+   * 등 소수뿐이다). 되돌아가는 값에 `viewBackgroundColor`가 섞여 있어서, 누르는 순간 캔버스가
+   * 기본 흰색(#ffffff)으로 칠해지고 <b>아래에 깔린 카메라·화면공유를 덮는다</b>. 판서를 지우려다
+   * 영상을 잃는 셈이고, 같은 문서를 렌더하는 Egress도 같은 흰 판을 녹화한다.
+   *
+   * <p>그래서 요소만 비우고 appState는 건드리지 않는다. 배경만 한 번 더 못박는다 — "이 레이어는
+   * 투명해야 한다"는 선언이 지금은 마운트 시 `initialData`에만 있어서, 지우기 경로가 그 유일한
+   * 선언에서 멀어지면 같은 사고가 조용히 돌아온다.
+   *
+   * <p>획 색·도구는 그대로 둔다. 강조 모드(ADR-0074)처럼 지우기와 무관한 상태를 여기서 되돌리면
+   * 모드는 켜져 있는데 색만 기본으로 돌아가 둘이 갈린다.
+   *
+   * <p>수강생·녹화까지 비워지는 것은 기존 경로가 맡는다: 빈 씬 → `onChange` → diff가 `delete` op를
+   * 만든다. 여기서 직접 publish하지 않는다 — 두 경로가 생기면 revision이 어긋난다(§3-6b).
+   */
+  const clearAnnotations = useCallback(async () => {
+    const api = apiRef.current
+    if (!api) return
+    const { CaptureUpdateAction } = await loadExcalidraw()
+    // 지운 요소의 강조 표식도 잊는다. 남겨 두면 같은 id가 다시 쓰일 때 "이미 물어본 강조"로 잡혀
+    // 새로 그린 강조가 캡처되지 않는다.
+    taggedRef.current.clear()
+    api.updateScene({
+      elements: [],
+      appState: { viewBackgroundColor: 'transparent' },
+      // 되돌리기 스택에 올린다. 확인 창을 띄우지 않으므로 Ctrl+Z가 유일한 되돌림이다.
+      captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+    })
+  }, [])
 
   const handleChange = useCallback((
     elements: readonly AnnotationElement[],
@@ -928,7 +1016,24 @@ export default function InstructorAnnotationLayer({
   useEffect(() => {
     const host = hostRef.current
     if (!active || !host) return undefined
-    const block = (event: WheelEvent) => { event.preventDefault() }
+    const block = (event: WheelEvent) => {
+      /*
+       * <b>스크롤되는 UI 안에서는 우리가 직접 스크롤을 수행한다.</b> 처음에는 "그런 요소가 있으면
+       * preventDefault를 생략해 브라우저 기본 스크롤에 맡긴다"였는데, 그래도 휠이 먹지 않았다 —
+       * Excalidraw가 텍스트 편집 중 정리용으로 window에 캡처 단계 wheel 리스너를 붙이는 등, 우리
+       * 짐작 밖의 경로에서 이미 막힐 수 있는 구조였다. 기본 동작에 기대지 않고 `scrollTop`을 직접
+       * 옮기면 그 경로가 무엇이든 상관없이 항상 스크롤된다.
+       *
+       * 스크롤할 것이 없으면(속성 패널이 아니라 캔버스 위) 그대로 막는다 — 캔버스를 밀거나 확대하면
+       * 판서가 영상 위에서 어긋난다.
+       */
+      const scrollable = closestScrollable(event.target as Element | null, host)
+      if (scrollable) {
+        scrollable.scrollTop += event.deltaY
+        scrollable.scrollLeft += event.deltaX
+      }
+      event.preventDefault()
+    }
     host.addEventListener('wheel', block, { passive: false })
     return () => { host.removeEventListener('wheel', block) }
   }, [active])
@@ -1137,8 +1242,14 @@ export default function InstructorAnnotationLayer({
         <MainMenu>
           {/* 어두운 자료 위에서는 밝은 획이, 밝은 슬라이드에서는 어두운 획이 읽힌다. */}
           <MainMenu.DefaultItems.ToggleTheme />
-          {/* 판서를 한 번에 비운다. 지우개로 하나씩 지우는 것보다 빠르다. */}
-          <MainMenu.DefaultItems.ClearCanvas />
+          {/*
+            판서를 한 번에 비운다. 지우개로 하나씩 지우는 것보다 빠르다.
+
+            기본 `ClearCanvas` 대신 우리 것을 넣는다 — 기본 항목은 배경색까지 되돌려 영상을 흰 판으로
+            덮는다(이유는 `clearAnnotations` 참고). 이름도 하는 일에 맞춘다: 캔버스 설정은 그대로고
+            지워지는 것은 판서뿐이다.
+          */}
+          <MainMenu.Item onSelect={clearAnnotations}>판서 초기화</MainMenu.Item>
           <MainMenu.Separator />
           <MainMenu.DefaultItems.Help />
         </MainMenu>

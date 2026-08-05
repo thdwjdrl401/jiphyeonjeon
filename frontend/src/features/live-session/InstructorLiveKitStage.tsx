@@ -299,6 +299,19 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
             <button aria-pressed={publisher.cameraEnabled} className={publisher.cameraEnabled ? 'is-active' : ''} disabled={!publisher.canControl || Boolean(publisher.pendingControl)} type="button" onClick={publisher.toggleCamera}>카메라 {publisher.cameraEnabled ? '켜짐' : '꺼짐'}</button>
             <button aria-pressed={publisher.screenShareEnabled} className={publisher.screenShareEnabled ? 'is-active' : ''} disabled={!publisher.canControl || Boolean(publisher.pendingControl)} type="button" onClick={publisher.toggleScreenShare}>{publisher.screenShareEnabled ? '화면 공유 중' : '화면 공유'}</button>
             {/*
+              송출 화질. 구현은 처음부터 있었지만 이걸 여는 버튼이 없어 강사가 쓸 수 없었다 —
+              업로드가 좁거나 노트북이 버거울 때 낮출 수단이 화면에 있어야 한다.
+            */}
+            <button
+              aria-pressed={qualityPanel}
+              className={qualityPanel ? 'is-active' : ''}
+              disabled={!publisher.canControl}
+              type="button"
+              onClick={() => setQualityPanel((current) => !current)}
+            >
+              화질 설정
+            </button>
+            {/*
               카메라 자체를 끄지 않고 합성 화면에서만 내린다. 강사는 계속 자기 카메라를 보면서
               수강생 화면에는 자료만 띄울 수 있다 — 자료에 집중시키고 싶은 구간에서 쓴다.
             */}
@@ -343,19 +356,6 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
                 화이트보드 {whiteboard ? '켜짐' : '꺼짐'}
               </button>
             )}
-            {/*
-              송출 화질. 구현은 처음부터 있었지만 이걸 여는 버튼이 없어 강사가 쓸 수 없었다 —
-              업로드가 좁거나 노트북이 버거울 때 낮출 수단이 화면에 있어야 한다.
-            */}
-            <button
-              aria-pressed={qualityPanel}
-              className={qualityPanel ? 'is-active' : ''}
-              disabled={!publisher.canControl}
-              type="button"
-              onClick={() => setQualityPanel((current) => !current)}
-            >
-              화질 {qualityPanel ? '펼침' : '접힘'}
-            </button>
             {showCameraPictureInPicture && (
               <button
                 aria-pressed={publisher.cameraOverlay.visible}
