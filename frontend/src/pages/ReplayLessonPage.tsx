@@ -1,11 +1,12 @@
 import { lazy, Suspense, useCallback, useMemo, useState, type CSSProperties } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { instructorPaths, studentPaths } from '@/app/router/paths'
+import { getRoleHomePath } from '@/app/router/paths'
 import PersonalAiQuestionPanel, { type AskAiAnswer } from '@/features/ai/PersonalAiQuestionPanel'
 import { useAuth } from '@/features/auth/AuthContext'
 import { getLearningContext } from '@/features/learning/learningService'
 import { getLesson } from '@/features/lesson/lessonService'
+import { resolveLessonPath } from '@/features/lesson/lessonRouting'
 import BookmarkStrip from '@/features/live-session/BookmarkStrip'
 import CaptionDock from '@/features/live-session/CaptionDock'
 import LearningSidebar from '@/features/live-session/LearningSidebar'
@@ -34,11 +35,15 @@ import { usePlayback } from '@/features/live-session/usePlayback'
 import { useResizablePane } from '@/features/live-session/useResizablePane'
 import { publishReplayReview } from '@/features/replay/replayService'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
+import { isMockApiEnabled, isTestMode } from '@/shared/config/runtime'
 import { useToast } from '@/shared/ui/Toast'
 import PageState from '@/shared/ui/PageState'
 import { StatusBadge } from '@/shared/ui/WorkspaceUi'
 
 const PlaybackPlayer = lazy(() => import('@/features/live-session/PlaybackPlayer'))
+const DevLivePanel = lazy(() => import('@/features/live-session/DevLivePanel'))
+/** mock API가 실제로 응답을 만들어 줄 때만 의미가 있다 — HTTP 모드에선 패널이 아무것도 못 흔든다. */
+const showDevLivePanel = import.meta.env.DEV && isMockApiEnabled && !isTestMode
 
 export default function ReplayLessonPage() {
   const { lessonId = '' } = useParams()
@@ -50,10 +55,22 @@ export default function ReplayLessonPage() {
     enabled: Boolean(lessonId),
   })
   const lesson = lessonQuery.data
+  /*
+   * 강사·업로드 녹화강의(deliveryType RECORDED)는 상세 화면 경로 자체가 다르다
+   * (recorded-lessons/:lessonId, 라이브 lessons/:lessonId가 아니다). 여기서 그 구분을 안 하고
+   * 늘 lessons/:lessonId로 보내면, 다시보기 중인 강의가 실은 녹화강의로 등록돼 있을 때
+   * "강의 상세"가 존재하지 않는 경로로 가 404가 난다 — 그 구분을 아는 canonical 헬퍼
+   * (CurriculumLessonItem이 쓰는 것과 같다)에 맡긴다.
+   */
   const lessonPath = lesson
-    ? isInstructor
-      ? instructorPaths.lesson(lesson.curriculumId, lesson.sectionId, lesson.lessonId)
-      : studentPaths.lesson(lesson.curriculumId, lesson.sectionId, lesson.lessonId)
+    ? resolveLessonPath({
+      curriculumId: lesson.curriculumId,
+      sectionId: lesson.sectionId,
+      lessonId: lesson.lessonId,
+      destination: 'LESSON_DETAIL',
+      role: isInstructor ? 'INSTRUCTOR' : 'STUDENT',
+      deliveryType: lesson.deliveryType,
+    })
     : '#'
   const [panel, setPanel] = useState<LearningPanel>('discussion')
   const [selectedTermId, setSelectedTermId] = useState<string | null>(null)
@@ -62,6 +79,13 @@ export default function ReplayLessonPage() {
   const [bookmarked, setBookmarked] = useState(false)
   // 재생바 위에 재시청 곡선을 얹으려면 플레이어 루트가 필요하다(WatchHeatmapCurve).
   const [playerRoot, setPlayerRoot] = useState<HTMLElement | null>(null)
+  /*
+   * PersonalAiQuestionPanel은 history를 "한 번만" 되살린다 — 이미 턴이 있으면 이후 restore는
+   * 무시한다. 그래서 DevLivePanel이 AI 기록을 추가·초기화해도 이 패널은 반영하지 않는다.
+   * 개발 도구가 값을 바꿀 때만 이 값을 올려 key로 꽂아 그 순간만 컴포넌트를 새로 마운트시킨다
+   * (LiveClassroomPage와 같은 요령).
+   */
+  const [aiHistoryDevVersion, setAiHistoryDevVersion] = useState(0)
   // 라이브와 같은 조절 규칙. 저장 키만 화면별로 나눈다 — 다시보기는 자막을 더 크게 보는 편이 흔하다.
   const sidebarPane = useResizablePane({
     storageKey: 'liveclass.replay.sidebarWidth',
@@ -228,8 +252,53 @@ export default function ReplayLessonPage() {
     || replayStatus === 'READY_FOR_REVIEW'
     || replayStatus === 'WITHDRAWN'
 
+  /*
+   * 예전에 페이지 위쪽 네비바(LessonLayout)가 담당하던 "돌아가기" 링크. 다시보기는 그 네비바를
+   * 없애고(LessonLayout 참고) 이 링크를 재생 정보 헤더 안에 담는다 — 라이브 강의실과 같은 요령.
+   */
+  const backLink = user && (
+    <Link className="playback-header-back" to={getRoleHomePath(user.role)}>
+      ← {isInstructor ? '커리큘럼 관리' : '내 커리큘럼'}
+    </Link>
+  )
+
+  /*
+   * 예전에 `.media-page__title`·`.review-toolbar`가 나눠 담던 것들을 재생 정보 헤더 하나로
+   * 모은다. 강사는 검수 중임을 알리는 배지와 게시 여부·공개 버튼을, 학생은 진행률을 본다 —
+   * 둘 다 "강의 상세"로 돌아가는 링크는 공유한다. 설명 문장(게시 여부의 부연)은 title 속성으로
+   * 옮겼다 — 늘 펼쳐 보여주면 배지 두어 개만으로 끝날 자리가 문장 두 개만큼 길어진다.
+   */
+  const headerExtra = (
+    <>
+      {isInstructor && (
+        <>
+          <StatusBadge tone="warning">강사 검수 모드</StatusBadge>
+          <StatusBadge
+            tone={published ? 'success' : 'warning'}
+            title={published ? '영상 다시보기가 수강생에게 공개되어 있습니다.' : '기존 미게시 또는 철회된 다시보기입니다.'}
+          >
+            {published ? '게시 완료' : '강사 미리보기'}
+          </StatusBadge>
+          {canPublishManually && (
+            <button
+              className="button button--primary button--small"
+              type="button"
+              disabled={publishMutation.isPending}
+              onClick={() => publishMutation.mutate()}
+            >
+              다시보기 공개
+            </button>
+          )}
+        </>
+      )}
+      {!isInstructor && progressPercent !== null && <span>학습 진행률 {progressPercent}%</span>}
+      <Link className="playback-header-back" to={lessonPath}>강의 상세</Link>
+    </>
+  )
+
   const aiContent = (
     <PersonalAiQuestionPanel
+      key={showDevLivePanel ? aiHistoryDevVersion : undefined}
       ask={askAi}
       history={aiHistoryQuery.data}
       placeholder="이 지점에서 궁금한 점을 질문하세요. (Enter 전송 · Shift+Enter 줄바꿈)"
@@ -240,20 +309,6 @@ export default function ReplayLessonPage() {
 
   return (
     <div className={`media-page media-page--live replay-page${isInstructor ? ' media-page--instructor' : ''}`}>
-      <header className="media-page__title">
-        <div><StatusBadge tone="success">REPLAY</StatusBadge><h1>{lesson.title}</h1><small>강의 {lesson.title}</small></div>
-        <div className="media-page__status">
-          {/* 진행률은 서버가 주는 값이 있을 때만 적는다. 예전에는 "42%"가 고정으로 박혀 있어
-              누구에게나 같은 숫자가 보였다 — 틀린 숫자는 없는 것만 못하다. */}
-          {isInstructor
-            ? <><StatusBadge tone="warning">강사 검수 모드</StatusBadge><span>VIDEO {playback.playback ? `READY · ${replayStatus}` : '상태 확인 중'}</span></>
-            : progressPercent !== null && <span>학습 진행률 {progressPercent}%</span>}
-          <Link className="button button--soft button--small" to={lessonPath}>강의 상세</Link>
-        </div>
-      </header>
-
-      {isInstructor && <div className="review-toolbar"><div><StatusBadge tone={published ? 'success' : 'warning'}>{published ? '게시 완료' : '강사 미리보기'}</StatusBadge><strong>{published ? '영상 다시보기가 수강생에게 공개되어 있습니다.' : '기존 미게시 또는 철회된 다시보기입니다.'}</strong></div><div>{canPublishManually && <button className="button button--primary button--small" type="button" disabled={publishMutation.isPending} onClick={() => publishMutation.mutate()}>다시보기 공개</button>}</div></div>}
-
       <div
         className={`media-layout${sidebarPane.collapsed ? ' is-sidebar-collapsed' : ''}`}
         style={{ '--sidebar-width': `${sidebarPane.size}px` } as CSSProperties}
@@ -261,8 +316,10 @@ export default function ReplayLessonPage() {
         <section className="media-primary">
           <Suspense fallback={<div className="video-stage replay-video" role="status">플레이어를 불러오는 중입니다.</div>}>
             <PlaybackPlayer
+              backLink={backLink}
               bookmarked={bookmarked}
               errorMessage={playback.errorMessage}
+              headerExtra={headerExtra}
               lessonTitle={lesson.title}
               loading={playback.loading}
               playback={playback.playback}
@@ -306,6 +363,16 @@ export default function ReplayLessonPage() {
           noteContext="REPLAY"
         />
       </div>
+      {showDevLivePanel && Boolean(sessionId) && (
+        <Suspense fallback={null}>
+          <DevLivePanel
+            variant="replay"
+            sessionId={sessionId}
+            lessonId={lessonId}
+            onAiHistoryChanged={() => setAiHistoryDevVersion((version) => version + 1)}
+          />
+        </Suspense>
+      )}
     </div>
   )
 }

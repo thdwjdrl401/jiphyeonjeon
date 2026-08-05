@@ -36,6 +36,11 @@ interface PlaybackPlayerProps {
    * 그 네비바를 없애고 이 재생 정보 헤더가 대신 담는다 — 없으면 자리를 비워 둔다.
    */
   backLink?: ReactNode
+  /**
+   * 화면마다 다른, 재생 상태 배지 옆에 덧붙일 것들(다시보기의 검수·게시 배지, 진행률, 강의 상세
+   * 링크 등). 이 컴포넌트가 그 도메인 개념을 알 필요는 없으므로 내용은 호출부가 만들어 온다.
+   */
+  headerExtra?: ReactNode
 }
 
 type PlaybackState = HlsMediaState
@@ -76,6 +81,7 @@ export default function PlaybackPlayer({
   onSessionTimeChange,
   onRootChange,
   backLink,
+  headerExtra,
 }: PlaybackPlayerProps) {
   const [playbackState, setPlaybackState] = useState<PlaybackState>('loading')
   const source = playback?.source ?? null
@@ -165,6 +171,7 @@ export default function PlaybackPlayer({
           <button className={bookmarked ? 'is-active' : ''} type="button" onClick={onBookmark}>
             {bookmarked ? '★ 북마크됨' : '☆ 북마크'}
           </button>
+          {headerExtra}
         </div>
       </header>
     </div>

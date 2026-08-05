@@ -9,7 +9,11 @@ import * as liveSessionService from '@/features/live-session/liveSessionService'
 // vidstack/hls.js는 jsdom에서 재생 경로를 세울 수 없다. 이 파일이 확인하는 것은 재생 자체가 아니라
 // "부가 조회가 실패해도 화면이 열리는가"이므로 플레이어는 영역만 남기고 대체한다.
 vi.mock('@/features/live-session/PlaybackPlayer', () => ({
-  default: () => <div aria-label="강의 영상" role="region" />,
+  default: ({ lessonTitle }: { lessonTitle?: string }) => (
+    <div aria-label="강의 영상" role="region">
+      {lessonTitle && <h1>{lessonTitle}</h1>}
+    </div>
+  ),
 }))
 
 /**
