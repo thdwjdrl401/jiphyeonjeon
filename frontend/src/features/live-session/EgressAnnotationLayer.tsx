@@ -6,10 +6,12 @@ import {
   applyAnnotationOp,
   decodeAnnotationOp,
   emptyAnnotationDocument,
-  visibleAnnotationElements,
   type AnnotationDocument,
+  type AnnotationElement,
 } from './annotation'
 import { AnnotationOpBuffer, applyPulledDocument, pullAnnotationDocument } from './annotationPull'
+import { planAnnotationRender } from './annotationRenderPlan'
+import { createRenderStats, type RenderStats } from './annotationRenderStats'
 import EgressLaserTrail from './EgressLaserTrail'
 import { loadExcalidraw } from './excalidrawRuntime'
 
@@ -56,8 +58,15 @@ export default function EgressAnnotationLayer({ room, livekitToken }: EgressAnno
    * 도착하면 state는 아직 이전 값이라, 그것을 기준으로 적용하면 앞의 op가 사라진다.
    */
   const documentRef = useRef<AnnotationDocument>(document)
+  /**
+   * 지금 문서가 만들어진 시각. 렌더가 끝난 뒤 여기서 빼면 <b>op 도착 → 화면 커밋</b> 지연이 된다.
+   *
+   * <p>렌더 중에 새 op가 오면 이 값이 갱신되므로, 재는 것은 "화면에 올라간 그 문서가 언제 생겼나"다.
+   */
+  const arrivedAtRef = useRef(0)
   const commit = useCallback((next: AnnotationDocument) => {
     documentRef.current = next
+    arrivedAtRef.current = performance.now()
     setDocument(next)
   }, [])
 
@@ -137,54 +146,131 @@ export default function EgressAnnotationLayer({ room, livekitToken }: EgressAnno
   }, [commit, livekitToken, room])
 
   /**
-   * 문서 하나를 캔버스로 그려 얹는다.
+   * 아래 겹으로 그려 둔 요소. 다음 op에서 이걸 그대로 쓸 수 있는지 판단하는 근거다
+   * ({@link planAnnotationRender}). 화면에 실제로 붙어 있는 것과 <b>반드시</b> 같아야 하므로
+   * 캔버스를 붙인 뒤에만 갱신한다.
+   */
+  const settledElementsRef = useRef<AnnotationElement[] | null>(null)
+  const settledCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const activeCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  /**
+   * 렌더 실측(집계). 두 겹으로 나눈 효과는 <b>요소가 쌓여도 지연이 평평한가</b>로만 확인되고,
+   * 그건 실제 강의에서만 나온다 — 로컬로는 헤드리스 Chrome의 인코딩 경합을 만들 수 없다.
+   */
+  const statsRef = useRef<RenderStats>(createRenderStats())
+
+  /**
+   * 캔버스를 제자리에 끼운다.
+   *
+   * <p><b>`replaceChildren`을 쓰지 않는다.</b> 아래 겹은 대부분의 op에서 그대로인데, 자식 목록을
+   * 통째로 다시 세우면 바뀌지 않은 캔버스까지 DOM에서 뗐다 붙이게 된다 — 헤드리스 Chrome이
+   * 1080p30을 인코딩하는 중에 굳이 만들 일이 아니다. 바뀐 것만 바꿔 끼운다.
+   */
+  const mount = useCallback((
+    ref: { current: HTMLCanvasElement | null },
+    next: HTMLCanvasElement | null,
+    position: 'bottom' | 'top',
+  ) => {
+    const host = hostRef.current
+    if (!host) return
+    const current = ref.current
+    if (current === next) return
+    if (next === null) {
+      current?.remove()
+    } else if (current) {
+      host.replaceChild(next, current)
+    } else if (position === 'bottom') {
+      host.prepend(next)
+    } else {
+      host.append(next)
+    }
+    ref.current = next
+  }, [])
+
+  /**
+   * 문서를 <b>두 겹</b>으로 그려 얹는다.
+   *
+   * <p>지금 긋고 있는 획 하나만 위에 얹고, 나머지는 바뀔 때만 다시 그린다. 예전에는 op 하나마다
+   * 문서 전체를 export했는데, 그 비용이 획 50개에 32.5ms·200개에 55.1ms(ADR-0051 실측)라 op 도착
+   * 간격 33.6ms를 넘어섰다 — 강의가 길어질수록 수강생 화면이 더 뒤처졌다.
+   *
+   * <p>나누는 자리는 {@link planAnnotationRender}가 정한다. 그 함수가 z-order를 보장하므로 여기서는
+   * 순서를 따지지 않는다 — <b>아래 겹을 먼저, 위 겹을 나중에</b> 붙이기만 하면 된다.
    *
    * <p>Excalidraw 청크는 <b>첫 판서 op가 도착할 때</b> 내려온다 — 판서를 쓰지 않는 강의에서
    * Egress가 +309KB를 지불할 이유가 없다.
    */
-  const renderOnce = useCallback(async (current: AnnotationDocument) => {
-    const elements = visibleAnnotationElements(current)
+  const renderOnce = useCallback(async (current: AnnotationDocument, arrivedAt: number) => {
     const host = hostRef.current
     if (!host) return
 
-    if (elements.length === 0) {
-      host.replaceChildren()
+    const plan = planAnnotationRender(settledElementsRef.current, current)
+    if (plan.active === null) {
+      // 문서가 비었다. 두 겹 다 뗀다 — 남겨 두면 clear가 먹지 않은 것처럼 보인다.
+      mount(activeCanvasRef, null, 'top')
+      mount(settledCanvasRef, null, 'bottom')
+      settledElementsRef.current = null
       return
     }
 
     try {
       const { exportToCanvas, getCommonBounds } = await loadExcalidraw()
 
-      // 오프셋을 export와 같은 근거(실제 geometry)로 읽는다. 선언된 x/y/width/height를 쓰면
-      // freedraw의 points가 그 bbox를 넘어갈 때 어긋난다.
-      const bounds = getCommonBounds(elements as never) as readonly [number, number, number, number]
-      const canvas = await exportToCanvas({
-        elements: elements as never,
-        appState: { exportBackground: false },
-        /*
-         * 이미지 요소는 데이터를 담지 않고 `fileId`로 가리키기만 한다. 여기에 파일을 넘기지 않으면
-         * 수식(ADR-0054)이 <b>빈 자리로</b> 합성된다 — 강사 화면에는 보이는데 수강생과 녹화에는
-         * 없는, 이 프로젝트에서 반복해 겪은 그 어긋남이다.
-         */
-        files: current.files as never,
-        exportPadding: 0,
-        // scale 1은 확대가 아니라 "내용 크기 그대로"를 뜻한다. 캔버스가 내용만큼만 생겨
-        // 늘 1920x1080을 할당하는 것보다 싸다.
-        getDimensions: (width: number, height: number) => ({ width, height, scale: 1 }),
-      })
+      const draw = async (elements: readonly AnnotationElement[]) => {
+        // 오프셋을 export와 같은 근거(실제 geometry)로 읽는다. 선언된 x/y/width/height를 쓰면
+        // freedraw의 points가 그 bbox를 넘어갈 때 어긋난다.
+        const bounds = getCommonBounds(elements as never) as readonly [number, number, number, number]
+        const canvas = await exportToCanvas({
+          elements: elements as never,
+          appState: { exportBackground: false },
+          /*
+           * 이미지 요소는 데이터를 담지 않고 `fileId`로 가리키기만 한다. 여기에 파일을 넘기지 않으면
+           * 수식(ADR-0054)이 <b>빈 자리로</b> 합성된다 — 강사 화면에는 보이는데 수강생과 녹화에는
+           * 없는, 이 프로젝트에서 반복해 겪은 그 어긋남이다.
+           *
+           * 두 겹 모두 문서의 파일 전부를 받는다. 겹마다 걸러 넘기면 어느 겹에 얹혔느냐에 따라
+           * 수식이 사라진다.
+           */
+          files: current.files as never,
+          exportPadding: 0,
+          // scale 1은 확대가 아니라 "내용 크기 그대로"를 뜻한다. 캔버스가 내용만큼만 생겨
+          // 늘 1920x1080을 할당하는 것보다 싸다.
+          getDimensions: (width: number, height: number) => ({ width, height, scale: 1 }),
+        })
 
-      const placement = annotationPlacement(bounds, canvas)
-      canvas.style.position = 'absolute'
-      canvas.style.left = `${placement.x * 100}%`
-      canvas.style.top = `${placement.y * 100}%`
-      canvas.style.width = `${placement.w * 100}%`
-      canvas.style.height = `${placement.h * 100}%`
-      host.replaceChildren(canvas)
+        // 겹마다 자기 바운딩 박스로 자리를 잡는다. 두 겹의 원점이 서로 달라도 각자 프레임 기준
+        // 비율로 얹히므로 겹쳐 놓은 결과는 한 장으로 그린 것과 같다.
+        const placement = annotationPlacement(bounds, canvas)
+        canvas.style.position = 'absolute'
+        canvas.style.left = `${placement.x * 100}%`
+        canvas.style.top = `${placement.y * 100}%`
+        canvas.style.width = `${placement.w * 100}%`
+        canvas.style.height = `${placement.h * 100}%`
+        return canvas
+      }
+
+      const startedAt = performance.now()
+      if (plan.redrawSettled) {
+        const canvas = plan.settled.length > 0 ? await draw(plan.settled) : null
+        mount(settledCanvasRef, canvas, 'bottom')
+        // 붙인 뒤에 기록한다. 위에서 던졌다면 화면은 옛 그림 그대로이고, 이 값도 그대로여야 한다.
+        settledElementsRef.current = plan.settled
+      }
+      mount(activeCanvasRef, await draw([plan.active]), 'top')
+
+      // 실측은 <b>성공한 렌더만</b> 센다. 실패한 것을 섞으면 중간에 끊긴 시간이 지연으로 잡혀
+      // 숫자가 실제보다 나빠 보인다.
+      statsRef.current.record({
+        elements: plan.settled.length + 1,
+        settledRedrawn: plan.redrawSettled,
+        exportMs: performance.now() - startedAt,
+        lagMs: performance.now() - arrivedAt,
+      })
     } catch (error) {
       // 판서를 잃는 것과 녹화가 끊기는 것은 비교할 수 없다. 이전 화면을 그대로 두고 넘어간다.
       console.error('판서를 합성 화면에 렌더하지 못했습니다', error)
     }
-  }, [])
+  }, [mount])
 
   const latestRef = useRef(document)
   const busyRef = useRef(false)
@@ -216,7 +302,9 @@ export default function EgressAnnotationLayer({ room, livekitToken }: EgressAnno
       try {
         while (dirtyRef.current && !disposedRef.current) {
           dirtyRef.current = false
-          await renderOnce(latestRef.current)
+          // 지금 그리기로 한 문서가 언제 생겼는지를 먼저 붙잡는다. 그리는 사이 새 op가 오면
+          // ref가 갱신되므로, 나중에 읽으면 남의 시각으로 재게 된다.
+          await renderOnce(latestRef.current, arrivedAtRef.current)
         }
       } finally {
         busyRef.current = false

@@ -154,6 +154,14 @@ type ApiOp = ReturnType<typeof toApiOp>
 interface QueuedOp {
   api: ApiOp
   key: string
+  /**
+   * 이 op를 JSON으로 실었을 때의 크기(byte).
+   *
+   * <p><b>넣을 때 한 번만 잰다.</b> 예전에는 묶음을 자를 때마다 대기열 전체를 다시 인코딩했다 —
+   * 1.5초마다 도는 flush가 아직 못 보낸 op를 매번 다시 직렬화하는 셈이라, 저장이 밀릴수록 그리는
+   * 스레드에서 하는 일이 늘었다. 크기는 내용이 정해지는 순간 정해지므로 다시 잴 이유가 없다.
+   */
+  bytes: number
 }
 
 /**
@@ -179,7 +187,7 @@ function takeBatch(queue: QueuedOp[], limit: number): { batch: QueuedOp[]; rest:
   const batch: QueuedOp[] = []
   let bytes = 2   // 배열 괄호
   for (const item of queue) {
-    const size = opBytes(item.api) + 1
+    const size = item.bytes + 1
     if (batch.length > 0 && bytes + size > limit) break
     batch.push(item)
     bytes += size
@@ -306,7 +314,9 @@ export function createAnnotationOpSink(sessionId: string, options: SinkOptions =
       const key = coalesceKey(op)
       const last = queue[queue.length - 1]
       if (key !== '' && last && last.key === key) {
-        queue[queue.length - 1] = { key, api: { ...api, occurredAt: last.api.occurredAt } }
+        // 합치면 내용이 달라진다. 크기도 그 자리에서 다시 잰다.
+        const merged = { ...api, occurredAt: last.api.occurredAt }
+        queue[queue.length - 1] = { key, api: merged, bytes: opBytes(merged) }
         return
       }
       if (queue.length >= MAX_PENDING) {
@@ -316,7 +326,7 @@ export function createAnnotationOpSink(sessionId: string, options: SinkOptions =
         }
         queue.shift()
       }
-      queue.push({ api, key })
+      queue.push({ api, key, bytes: opBytes(api) })
     },
     flush: (unloading = false) => { void drain(unloading) },
     /**

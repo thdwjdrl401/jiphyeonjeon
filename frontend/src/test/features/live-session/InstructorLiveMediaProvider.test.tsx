@@ -24,7 +24,7 @@ const liveKit = vi.hoisted(() => {
     publishData: vi.fn<(payload: Uint8Array, options?: { topic?: string }) => Promise<void>>(
       async () => {},
     ),
-    setMetadata: vi.fn(async () => {}),
+    setMetadata: vi.fn<(metadata: string) => Promise<void>>(async () => {}),
     metadata: undefined as string | undefined,
   }
   const room = {
@@ -187,24 +187,24 @@ describe('InstructorLiveMediaProvider', () => {
    * 판서 영속화(ADR-0051). 강사가 새로고침하면 두 가지가 어긋난다 — 강사 화면만 비고, op 번호가
    * 1로 돌아간다. 저장된 문서를 불러와 <b>스냅샷으로</b> 다시 내보내는 것이 둘 다 푼다.
    */
-  describe('저장된 판서 복원', () => {
-    function renderProvider() {
-      return render(
-        <MemoryRouter initialEntries={['/instructor/live-sessions/session-1/preflight']}>
-          <Routes>
-            <Route
-              path="/instructor/live-sessions/:sessionId/preflight"
-              element={(
-                <InstructorLiveMediaProvider>
-                  <ProviderStateProbe />
-                </InstructorLiveMediaProvider>
-              )}
-            />
-          </Routes>
-        </MemoryRouter>,
-      )
-    }
+  function renderProvider() {
+    return render(
+      <MemoryRouter initialEntries={['/instructor/live-sessions/session-1/preflight']}>
+        <Routes>
+          <Route
+            path="/instructor/live-sessions/:sessionId/preflight"
+            element={(
+              <InstructorLiveMediaProvider>
+                <ProviderStateProbe />
+              </InstructorLiveMediaProvider>
+            )}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+  }
 
+  describe('저장된 판서 복원', () => {
     /**
      * `clear`나 `upsert`로는 안 된다 — 그것들은 revision 검사를 받아 Egress가 버린다. 스냅샷만
      * 검사를 건너뛰므로 복구 경로가 될 수 있다.
@@ -298,5 +298,88 @@ describe('InstructorLiveMediaProvider', () => {
     })
 
     /** 복원 스냅샷도 기록에 남긴다 — 다음 복원이 이 지점부터 접으면 되므로 갈수록 빨라진다. */
+  })
+  /**
+   * 카메라 배치 발행(레이저와 같은 프레임 배치).
+   *
+   * <p>예전에는 `pointermove`마다 그대로 `setMetadata`를 불렀다. livekit-client는 서버가 <b>자기가
+   * 보낸 문자열과 똑같은 값</b>을 되돌려줄 때만 resolve하고 5초 동안 50ms 간격으로 폴링하므로,
+   * 드래그 중간값은 <b>구조적으로 절대 resolve되지 않고</b> 전부 timeout으로 떨어졌다. 그 경고가
+   * 운영 콘솔에서 진짜 오류를 밀어냈다.
+   */
+  describe('카메라 배치 발행', () => {
+    /** 프레임 하나를 실제로 흘려보낸다. rAF 뒤에 붙은 마이크로태스크까지 비운다. */
+    const nextFrame = () => new Promise((resolve) => {
+      requestAnimationFrame(() => { setTimeout(resolve, 0) })
+    })
+
+    const publishedOverlays = () => liveKit.localParticipant.setMetadata.mock.calls
+      .map(([metadata]) => (JSON.parse(metadata) as {
+        cameraOverlay: { x: number; y: number; w: number; visible: boolean }
+      }).cameraOverlay)
+
+    async function connected() {
+      const view = renderProvider()
+      await waitFor(() => { expect(view.getByRole('status')).toHaveTextContent('connected') })
+      liveKit.localParticipant.setMetadata.mockClear()
+      return view
+    }
+
+    it('드래그 중 여러 번 옮겨도 프레임당 한 번만 발행한다', async () => {
+      await connected()
+
+      publisherRef!.moveCameraOverlay({ x: 0.1 })
+      publisherRef!.moveCameraOverlay({ x: 0.2 })
+      publisherRef!.moveCameraOverlay({ x: 0.3 })
+      // 아직 프레임이 오지 않았다 — 중간값은 시그널 채널로 나가지 않는다.
+      expect(liveKit.localParticipant.setMetadata).not.toHaveBeenCalled()
+
+      await nextFrame()
+      expect(liveKit.localParticipant.setMetadata).toHaveBeenCalledTimes(1)
+      expect(publishedOverlays()[0].x).toBeCloseTo(0.3)
+    })
+
+    /**
+     * <b>이 파일에서 가장 중요한 단언이다.</b> 마지막 값이 버려지면 강사가 손을 뗀 자리와 합성
+     * 화면의 카메라 자리가 갈린다 — 그리고 그 어긋남은 <b>강사 화면에서는 보이지 않는다</b>.
+     */
+    it('손을 뗀 마지막 값은 반드시 나간다', async () => {
+      await connected()
+
+      publisherRef!.moveCameraOverlay({ x: 0.1 })
+      await nextFrame()
+      // 프레임이 지난 뒤에 온 마지막 조작. 새 프레임을 잡아 이것도 내보내야 한다.
+      publisherRef!.moveCameraOverlay({ x: 0.42 })
+      await nextFrame()
+
+      expect(publishedOverlays().at(-1)!.x).toBeCloseTo(0.42)
+    })
+
+    /**
+     * 미리보기는 발행 결과를 기다리지 않는다. 실패했다고 되돌리면 강사가 옮긴 자리가 손 밑에서
+     * 튀어 돌아간다 — 배치는 마지막 값이 이기므로 다음 조작이 알아서 맞춘다.
+     */
+    it('발행이 실패해도 미리보기는 되돌리지 않는다', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+      await connected()
+      liveKit.localParticipant.setMetadata.mockRejectedValueOnce(new Error('timed out'))
+
+      publisherRef!.moveCameraOverlay({ x: 0.2 })
+      await nextFrame()
+
+      await waitFor(() => { expect(warn).toHaveBeenCalled() })
+      await waitFor(() => { expect(publisherRef!.cameraOverlay.x).toBeCloseTo(0.2) })
+      warn.mockRestore()
+    })
+
+    /** 한 번짜리 조작(표시 토글)도 프레임 하나 뒤에 그대로 나간다. */
+    it('표시 토글도 발행된다', async () => {
+      await connected()
+
+      publisherRef!.moveCameraOverlay({ visible: false })
+      await nextFrame()
+
+      expect(publishedOverlays().at(-1)!.visible).toBe(false)
+    })
   })
 })

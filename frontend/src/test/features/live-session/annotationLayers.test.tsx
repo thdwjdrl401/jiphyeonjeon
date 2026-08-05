@@ -9,6 +9,7 @@ import {
   ANNOTATION_TOPIC,
   WHITEBOARD_ELEMENT_ID,
   encodeAnnotationOp,
+  whiteboardElement,
   type AnnotationChange,
   type AnnotationOp,
 } from '@/features/live-session/annotation'
@@ -94,6 +95,11 @@ vi.mock('@/features/live-session/excalidrawRuntime', () => ({
       },
     ),
   }),
+}))
+
+const renderStats = vi.hoisted(() => ({ record: vi.fn() }))
+vi.mock('@/features/live-session/annotationRenderStats', () => ({
+  createRenderStats: () => renderStats,
 }))
 
 const { default: InstructorAnnotationLayer } = await import('@/features/live-session/InstructorAnnotationLayer')
@@ -782,12 +788,37 @@ describe('Egress 판서 레이어', () => {
     return { room: room as unknown as Room, receive, handlers }
   }
 
-  function stubCanvas(width: number, height: number) {
+  /**
+   * export 결과 캔버스. <b>호출마다 새 노드를 만든다</b> — 실제 `exportToCanvas`가 그렇고, 같은
+   * 객체를 돌려주면 두 겹으로 나눠 붙일 때 한 노드가 두 자리에 놓일 수 없어 목 때문에 깨진다.
+   *
+   * <p>어떤 요소로 그린 캔버스인지 `data-elements`에 적어 둔다. 화면에 실제로 붙은 것을 z-order대로
+   * 읽으려면(=수강생이 보는 것) 이 표식이 필요하다.
+   */
+  function makeCanvas(width: number, height: number, elements: readonly { id: string }[]) {
     const canvas = document.createElement('canvas')
     canvas.width = width
     canvas.height = height
-    exportToCanvas.mockResolvedValue(canvas)
+    canvas.dataset.elements = elements.map((e) => e.id).join(',')
     return canvas
+  }
+
+  function stubCanvas(width: number, height: number) {
+    exportToCanvas.mockImplementation(({ elements }: { elements: { id: string }[] }) =>
+      Promise.resolve(makeCanvas(width, height, elements)))
+    return makeCanvas(width, height, [])
+  }
+
+  /**
+   * 지금 <b>화면에 붙어 있는</b> 요소를 z-order대로.
+   *
+   * <p>export 인자가 아니라 DOM을 읽는다. 두 겹으로 나눠 그리는 지금은 "마지막 export 호출"이
+   * 위 겹 하나뿐이라 그것만 봐서는 화면을 알 수 없고, 애초에 검증해야 할 것은 <b>포갠 결과</b>다.
+   * 겹을 몇 장으로 나누든 이 함수의 답은 같아야 한다.
+   */
+  function drawnIds(container: HTMLElement): string[] {
+    return [...container.querySelectorAll<HTMLCanvasElement>('.egress-stage__annotation canvas')]
+      .flatMap((canvas) => (canvas.dataset.elements ?? '').split(',').filter(Boolean))
   }
 
   afterEach(() => {
@@ -871,15 +902,16 @@ describe('Egress 판서 레이어', () => {
     getCommonBounds.mockReturnValue([0, 0, 100, 100])
 
     // 첫 export를 우리가 붙잡아 둔다 — 그동안 op가 계속 도착하는 상황이다.
-    let releaseFirst: (canvas: HTMLCanvasElement) => void = () => {}
-    const first = new Promise<HTMLCanvasElement>((resolve) => { releaseFirst = resolve })
-    exportToCanvas.mockReturnValueOnce(first)
-    const done = document.createElement('canvas')
-    done.width = 100
-    done.height = 100
-    exportToCanvas.mockResolvedValue(done)
+    let releaseFirst: () => void = () => {}
+    const held = new Promise<void>((resolve) => { releaseFirst = resolve })
+    let call = 0
+    exportToCanvas.mockImplementation(async ({ elements }: { elements: { id: string }[] }) => {
+      call += 1
+      if (call === 1) await held
+      return makeCanvas(100, 100, elements)
+    })
 
-    render(<EgressAnnotationLayer room={room} />)
+    const { container } = render(<EgressAnnotationLayer room={room} />)
 
     receive(encodeAnnotationOp({ type: 'upsert', revision: 1, elements: [element('a', 1)] }), ANNOTATION_TOPIC)
     await waitFor(() => { expect(exportToCanvas).toHaveBeenCalledTimes(1) })
@@ -893,18 +925,135 @@ describe('Egress 판서 레이어', () => {
     }
     expect(exportToCanvas).toHaveBeenCalledTimes(1)   // 아직 첫 렌더가 끝나지 않았다
 
-    const stub = document.createElement('canvas')
-    stub.width = 100
-    stub.height = 100
-    releaseFirst(stub)
+    releaseFirst()
 
-    // 밀려 있던 것을 다 소화하고, 마지막 그림에는 그동안 온 것이 전부 들어 있다.
+    // 밀려 있던 것을 다 소화하고, <b>화면에는</b> 그동안 온 것이 전부 z-order대로 올라와 있다.
+    // 겹을 몇 장으로 나눠 그렸는지는 상관없다 — 포갠 결과만이 수강생이 보는 것이다.
+    await waitFor(() => { expect(drawnIds(container)).toEqual(['a', 'b', 'c', 'd']) })
+    /*
+     * op 하나마다 렌더했다면 네 번 돈다 — 두 겹이므로 export는 1(첫 겹은 아래가 비어 있다)
+     * + 2 + 2 + 2 = 7번이다. 중간 상태를 건너뛰므로 그보다 적어야 한다.
+     *
+     * <b>3이 아니라 7을 기준으로 잡는 이유.</b> 밀린 op가 몇 번의 렌더로 소화되는지는 React가
+     * 상태를 언제 흘리느냐에 달려 있어 부하에 따라 달라진다(2패스일 때 3회, 3패스일 때 5회).
+     * 여기서 고정할 성질은 "몇 패스인가"가 아니라 <b>op마다 돌지는 않는다</b>는 것이다.
+     * 아래 겹 재사용 자체는 '획이 자라는 동안…' 테스트가 정확한 횟수로 못박는다.
+     */
+    expect(exportToCanvas.mock.calls.length).toBeLessThan(7)
+  })
+
+  /**
+   * <b>이 설계가 노리는 유일한 절약이다.</b> 획을 긋는 동안 op는 33.6ms마다 오는데, 그때마다 문서
+   * 전체를 export하면 획 50개에 32.5ms·200개에 55.1ms(ADR-0051 실측)라 도착 속도를 따라가지 못한다.
+   * 아래 겹이 그대로면 다시 그리지 않아야 op당 비용이 요소 하나짜리로 내려간다.
+   */
+  it('획이 자라는 동안 아래 겹은 다시 그리지 않는다', async () => {
+    const { room, receive } = fakeRoom()
+    getCommonBounds.mockReturnValue([0, 0, 100, 100])
+    stubCanvas(100, 100)
+    const { container } = render(<EgressAnnotationLayer room={room} />)
+
+    receive(encodeAnnotationOp({ type: 'upsert', revision: 1, elements: [element('a', 1)] }), ANNOTATION_TOPIC)
+    receive(encodeAnnotationOp({ type: 'upsert', revision: 2, elements: [element('b', 1)] }), ANNOTATION_TOPIC)
+    receive(encodeAnnotationOp({ type: 'upsert', revision: 3, elements: [element('c', 1)] }), ANNOTATION_TOPIC)
+    await waitFor(() => { expect(drawnIds(container)).toEqual(['a', 'b', 'c']) })
+    const settled = exportToCanvas.mock.calls.length
+
+    // c에 점이 늘어난다 — 같은 요소의 version만 오른다.
+    for (const [revision, version] of [[4, 2], [5, 3], [6, 4]] as const) {
+      receive(encodeAnnotationOp({
+        type: 'upsert', revision, elements: [element('c', version)],
+      }), ANNOTATION_TOPIC)
+      await waitFor(() => {
+        expect(exportToCanvas.mock.calls.length).toBe(settled + (revision - 3))
+      })
+    }
+
+    // 갱신 세 번에 export도 정확히 세 번이고, 전부 <b>요소 하나짜리</b>다(위 겹만 그렸다).
+    for (const call of exportToCanvas.mock.calls.slice(settled)) {
+      expect((call[0] as { elements: { id: string }[] }).elements.map((e) => e.id)).toEqual(['c'])
+    }
+    // 화면은 여전히 온전하다.
+    expect(drawnIds(container)).toEqual(['a', 'b', 'c'])
+  })
+
+  /**
+   * 실측 배선. 이 기록이 빠지면 배포해도 아무것도 남지 않아, "요소가 쌓여도 지연이 평평한가"를
+   * 확인할 방법이 사라진다 — 로컬에서는 헤드리스 Chrome의 인코딩 경합을 만들 수 없으므로 이
+   * 로그가 유일한 근거다.
+   */
+  it('렌더할 때마다 실측을 기록한다', async () => {
+    const { room, receive } = fakeRoom()
+    getCommonBounds.mockReturnValue([0, 0, 100, 100])
+    stubCanvas(100, 100)
+    renderStats.record.mockClear()
+    const { container } = render(<EgressAnnotationLayer room={room} />)
+
+    receive(encodeAnnotationOp({ type: 'upsert', revision: 1, elements: [element('a', 1)] }), ANNOTATION_TOPIC)
+    receive(encodeAnnotationOp({ type: 'upsert', revision: 2, elements: [element('b', 1)] }), ANNOTATION_TOPIC)
+    await waitFor(() => { expect(drawnIds(container)).toEqual(['a', 'b']) })
+
+    await waitFor(() => { expect(renderStats.record).toHaveBeenCalled() })
+    const last = renderStats.record.mock.calls.at(-1)![0] as {
+      elements: number; settledRedrawn: boolean; exportMs: number; lagMs: number
+    }
+    // 문서 크기를 함께 남긴다 — 지연이 이 값에 비례해 자라는지가 보려는 전부다.
+    expect(last.elements).toBe(2)
+    expect(typeof last.settledRedrawn).toBe('boolean')
+    expect(last.exportMs).toBeGreaterThanOrEqual(0)
+    expect(last.lagMs).toBeGreaterThanOrEqual(0)
+  })
+
+  /**
+   * <b>화이트보드는 프레임 전체를 덮는 불투명 판이다.</b> 이것이 위 겹으로 올라가면 합성 화면이
+   * 통째로 하얘져 판서도 영상도 가려진다. op 모양만 보면 획을 긋는 것과 구별되지 않으므로
+   * (둘 다 요소 하나짜리 upsert) 문서 순서로 판단해야 한다.
+   */
+  it('화이트보드는 위 겹에 올라가지 않고, 도착해도 아래 겹으로 내려간다', async () => {
+    const { room, receive } = fakeRoom()
+    getCommonBounds.mockReturnValue([0, 0, 100, 100])
+    stubCanvas(100, 100)
+    const { container } = render(<EgressAnnotationLayer room={room} />)
+
+    receive(encodeAnnotationOp({ type: 'upsert', revision: 1, elements: [element('a', 1)] }), ANNOTATION_TOPIC)
+    await waitFor(() => { expect(drawnIds(container)).toEqual(['a']) })
+
+    // 강사가 화이트보드를 켰다. 나중에 도착했지만 z-order는 맨 아래다.
+    receive(encodeAnnotationOp({
+      type: 'upsert', revision: 2, elements: [whiteboardElement()],
+    }), ANNOTATION_TOPIC)
+
+    await waitFor(() => { expect(drawnIds(container)).toEqual([WHITEBOARD_ELEMENT_ID, 'a']) })
+    // 마지막에 그린 위 겹은 판서지 판이 아니다.
+    const last = exportToCanvas.mock.calls.at(-1)![0] as { elements: { id: string }[] }
+    expect(last.elements.map((e) => e.id)).toEqual(['a'])
+  })
+
+  /**
+   * 아래 깔린 요소를 옮기면 요소 하나짜리 upsert가 나온다 — 획을 긋는 것과 op 모양이 같다.
+   * 여기서 아래 겹을 재사용하면 <b>옮기기 전 그림이 남는다</b>.
+   */
+  it('아래 깔린 요소가 바뀌면 아래 겹을 다시 그린다', async () => {
+    const { room, receive } = fakeRoom()
+    getCommonBounds.mockReturnValue([0, 0, 100, 100])
+    stubCanvas(100, 100)
+    const { container } = render(<EgressAnnotationLayer room={room} />)
+
+    receive(encodeAnnotationOp({ type: 'upsert', revision: 1, elements: [element('a', 1)] }), ANNOTATION_TOPIC)
+    receive(encodeAnnotationOp({ type: 'upsert', revision: 2, elements: [element('b', 1)] }), ANNOTATION_TOPIC)
+    await waitFor(() => { expect(drawnIds(container)).toEqual(['a', 'b']) })
+
+    // 강사가 a를 옮겼다(version이 오른다). a는 아래 겹에 있다.
+    receive(encodeAnnotationOp({ type: 'upsert', revision: 3, elements: [element('a', 2)] }), ANNOTATION_TOPIC)
+
     await waitFor(() => {
-      const last = exportToCanvas.mock.calls.at(-1)![0] as { elements: { id: string }[] }
-      expect(last.elements.map((e) => e.id)).toEqual(['a', 'b', 'c', 'd'])
+      const redrawn = exportToCanvas.mock.calls.some((call) => {
+        const elements = (call[0] as { elements: { id: string; version: number }[] }).elements
+        return elements.length === 1 && elements[0].id === 'a' && elements[0].version === 2
+      })
+      expect(redrawn).toBe(true)
     })
-    // op 하나마다 그렸다면 네 번이다. 중간 상태를 건너뛰므로 그보다 적어야 한다.
-    expect(exportToCanvas.mock.calls.length).toBeLessThan(4)
+    expect(drawnIds(container)).toEqual(['a', 'b'])
   })
 
   /**
@@ -945,15 +1094,18 @@ describe('Egress 판서 레이어', () => {
     getCommonBounds.mockReturnValue([0, 0, 100, 100])
     stubCanvas(100, 100)
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
-    render(<EgressAnnotationLayer room={room} />)
+    const { container } = render(<EgressAnnotationLayer room={room} />)
 
     receive(encodeAnnotationOp({ type: 'upsert', revision: 1, elements: [element('a', 1)] }), ANNOTATION_TOPIC)
-    await waitFor(() => { expect(exportToCanvas).toHaveBeenCalledTimes(1) })
+    await waitFor(() => { expect(drawnIds(container)).toEqual(['a']) })
+    const beforeSkip = exportToCanvas.mock.calls.length
 
     // revision 2가 유실된 상황
     receive(encodeAnnotationOp({ type: 'upsert', revision: 3, elements: [element('b', 1)] }), ANNOTATION_TOPIC)
     await new Promise((resolve) => { setTimeout(resolve, 0) })
-    expect(exportToCanvas).toHaveBeenCalledTimes(1)
+    // 버린 op로는 아무것도 다시 그리지 않는다 — 화면도 그대로다.
+    expect(exportToCanvas.mock.calls.length).toBe(beforeSkip)
+    expect(drawnIds(container)).toEqual(['a'])
     expect(warn).toHaveBeenCalled()
 
     receive(encodeAnnotationOp({
@@ -961,9 +1113,7 @@ describe('Egress 판서 레이어', () => {
       revision: 4,
       elements: [element('a', 1), element('b', 1)],
     }), ANNOTATION_TOPIC)
-    await waitFor(() => { expect(exportToCanvas).toHaveBeenCalledTimes(2) })
-    const lastElements = (exportToCanvas.mock.calls[1][0] as { elements: unknown[] }).elements
-    expect(lastElements).toHaveLength(2)
+    await waitFor(() => { expect(drawnIds(container)).toEqual(['a', 'b']) })
 
     warn.mockRestore()
   })
@@ -994,13 +1144,10 @@ describe('Egress 판서 레이어', () => {
       JSON.stringify(storedDocument([element('a', 1), element('b', 1)], 7)), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<EgressAnnotationLayer room={room} livekitToken="lk-token" />)
+    const { container } = render(<EgressAnnotationLayer room={room} livekitToken="lk-token" />)
     receive(encodeAnnotationOp({ type: 'pointer', revision: 9 }), ANNOTATION_TOPIC)
 
-    await waitFor(() => {
-      const last = exportToCanvas.mock.calls.at(-1)![0] as { elements: { id: string }[] }
-      expect(last.elements.map((e) => e.id)).toEqual(['a', 'b'])
-    })
+    await waitFor(() => { expect(drawnIds(container)).toEqual(['a', 'b']) })
 
     // 세션 쿠키가 없으므로 LiveKit 토큰으로 방 참가자임을 증명한다. 방 이름에서 세션을 꺼낸다.
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
@@ -1023,7 +1170,7 @@ describe('Egress 판서 레이어', () => {
     const pending = new Promise<Response>((resolve) => { release = resolve })
     vi.stubGlobal('fetch', vi.fn(() => pending))
 
-    render(<EgressAnnotationLayer room={room} livekitToken="lk-token" />)
+    const { container } = render(<EgressAnnotationLayer room={room} livekitToken="lk-token" />)
     receive(encodeAnnotationOp({ type: 'pointer', revision: 9 }), ANNOTATION_TOPIC)
 
     // 왕복이 도는 동안 강사가 한 획 더 그었다.
@@ -1032,10 +1179,7 @@ describe('Egress 판서 레이어', () => {
 
     release(new Response(JSON.stringify(storedDocument([element('a', 1)], 7)), { status: 200 }))
 
-    await waitFor(() => {
-      const last = exportToCanvas.mock.calls.at(-1)![0] as { elements: { id: string }[] }
-      expect(last.elements.map((e) => e.id)).toEqual(['a', 'c'])
-    })
+    await waitFor(() => { expect(drawnIds(container)).toEqual(['a', 'c']) })
 
     vi.unstubAllGlobals()
   })
@@ -1051,15 +1195,12 @@ describe('Egress 판서 레이어', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 403 })))
 
-    render(<EgressAnnotationLayer room={room} livekitToken="lk-token" />)
+    const { container } = render(<EgressAnnotationLayer room={room} livekitToken="lk-token" />)
     receive(encodeAnnotationOp({ type: 'pointer', revision: 9 }), ANNOTATION_TOPIC)
     await waitFor(() => { expect(warn).toHaveBeenCalled() })
 
     receive(encodeAnnotationOp({ type: 'upsert', revision: 10, elements: [element('c', 1)] }), ANNOTATION_TOPIC)
-    await waitFor(() => {
-      const last = exportToCanvas.mock.calls.at(-1)![0] as { elements: { id: string }[] }
-      expect(last.elements.map((e) => e.id)).toEqual(['c'])
-    })
+    await waitFor(() => { expect(drawnIds(container)).toEqual(['c']) })
 
     warn.mockRestore()
     vi.unstubAllGlobals()
