@@ -1,3 +1,5 @@
+import { todayLocalStart } from '@/shared/lib/localDateTime'
+
 export interface CurriculumPeriodValue {
   startsAt: string
   endsAt: string
@@ -10,27 +12,6 @@ interface CurriculumPeriodFieldsProps {
 }
 
 const DATE_LABEL = new Intl.DateTimeFormat('ko-KR', { dateStyle: 'long' })
-
-/**
- * 종료일 하한선으로 쓰는 "오늘 0시"의 datetime-local 문자열.
- * 0시로 잡아 오늘 안의 시각은 모두 허용하고, 어제까지만 막는다.
- */
-export function todayLocalStart(): string {
-  const now = new Date()
-  const pad = (value: number) => String(value).padStart(2, '0')
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T00:00`
-}
-
-/**
- * 운영 종료일이 오늘보다 이전인지. min 속성은 달력·스테퍼만 막고 직접 입력한 값은 통과하므로
- * 저장 직전에 같은 기준으로 한 번 더 본다. 값이 비었거나 깨졌으면 여기서 판단하지 않는다.
- */
-export function isEndsAtBeforeToday(endsAt: string): boolean {
-  if (!endsAt) return false
-  const parsed = new Date(endsAt)
-  if (Number.isNaN(parsed.getTime())) return false
-  return parsed.getTime() < new Date(todayLocalStart()).getTime()
-}
 
 /** datetime-local 문자열을 사람이 읽는 날짜로. 값이 반쪽이거나 깨졌으면 null. */
 function readableDate(localValue: string): string | null {

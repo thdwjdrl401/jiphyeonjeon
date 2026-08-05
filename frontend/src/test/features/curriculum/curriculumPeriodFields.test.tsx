@@ -1,10 +1,8 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import CurriculumPeriodFields, {
-  isEndsAtBeforeToday,
-  todayLocalStart,
-} from '@/features/curriculum/CurriculumPeriodFields'
+import CurriculumPeriodFields from '@/features/curriculum/CurriculumPeriodFields'
+import { isBeforeToday, todayLocalStart } from '@/shared/lib/localDateTime'
 
 /** 오늘 0시에서 days만큼 옮긴 datetime-local 문자열. 실행 시점 타임존에 기대지 않기 위해 로컬로 만든다. */
 function localStartShiftedByDays(days: number): string {
@@ -67,12 +65,12 @@ describe('CurriculumPeriodFields', () => {
   })
 
   it('오늘 이전 종료일만 과거로 판정하고 오늘 당일은 허용한다', () => {
-    expect(isEndsAtBeforeToday(localStartShiftedByDays(-1))).toBe(true)
-    expect(isEndsAtBeforeToday(todayLocalStart())).toBe(false)
-    expect(isEndsAtBeforeToday(localStartShiftedByDays(1))).toBe(false)
+    expect(isBeforeToday(localStartShiftedByDays(-1))).toBe(true)
+    expect(isBeforeToday(todayLocalStart())).toBe(false)
+    expect(isBeforeToday(localStartShiftedByDays(1))).toBe(false)
     // 비었거나 깨진 값은 다른 검증이 다룬다.
-    expect(isEndsAtBeforeToday('')).toBe(false)
-    expect(isEndsAtBeforeToday('2026-13-99T99:99')).toBe(false)
+    expect(isBeforeToday('')).toBe(false)
+    expect(isBeforeToday('2026-13-99T99:99')).toBe(false)
   })
 
   it('입력한 필드 이름과 값을 그대로 올려보낸다', async () => {
