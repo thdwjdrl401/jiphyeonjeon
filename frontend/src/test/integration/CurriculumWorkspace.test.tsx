@@ -3,10 +3,12 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '@/App'
 import { mockAuthService, resetMockAuth } from '@/features/auth/mockAuthService'
-import { resetMockCurriculumManagement } from '@/features/curriculum/mockCurriculumManagementService'
+import { mockCurriculumManagementService, resetMockCurriculumManagement } from '@/features/curriculum/mockCurriculumManagementService'
 import { buildMockCurriculumOutline, getMockCurriculum, publishMockCurriculum } from '@/features/demo/mockDatabase'
 import * as materialDownloadService from '@/features/material/materialDownloadService'
 import { todayLocalStart } from '@/shared/lib/localDateTime'
+
+const PPTX_MIME = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
 
 /**
  * 오늘에서 days만큼 옮긴 datetime-local 문자열. 고정 날짜를 박으면 그날이 지나는 순간
@@ -570,6 +572,61 @@ describe('커리큘럼 작업 화면', () => {
 
     await user.click(await screen.findByRole('button', { name: 'spring-security-basics.pptx 다운로드' }))
     expect(fetchMaterial).toHaveBeenLastCalledWith(expect.objectContaining({ asInstructor: false }))
+  })
+
+  /*
+   * 저작 화면의 다운로드도 같은 규칙을 따라야 한다. 스토리지 객체 키가 `material/{UUID}`라
+   * (AssetService) presigned URL을 링크로 그냥 열면 확장자도 없는 UUID로 저장된다.
+   */
+  it('강의 수정 화면에서 자료를 원래 파일명으로 내려받는다', async () => {
+    const user = userEvent.setup()
+    const fetchMaterial = vi
+      .spyOn(materialDownloadService, 'fetchMaterial')
+      .mockResolvedValue(new Blob(['bytes']))
+    await renderAsInstructor(
+      '/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/les-security/edit',
+    )
+
+    await user.click(await screen.findByRole('button', { name: 'spring-security-basics.pptx 다운로드' }))
+
+    expect(fetchMaterial).toHaveBeenLastCalledWith({
+      scope: 'LESSON',
+      parentId: 'les-security',
+      materialId: 'mat-security',
+      fileName: 'spring-security-basics.pptx',
+      asInstructor: true,
+    })
+  })
+
+  it('녹화강의 수정 화면에서 자료를 원래 파일명으로 내려받는다', async () => {
+    const user = userEvent.setup()
+    const fetchMaterial = vi
+      .spyOn(materialDownloadService, 'fetchMaterial')
+      .mockResolvedValue(new Blob(['bytes']))
+    // 녹화강의는 fixture에 없다(업로드로만 생긴다). UI 흐름 대신 서비스로 바로 만들어 둔다.
+    const { lessonId } = await mockCurriculumManagementService.uploadRecordedLesson({
+      clientRequestId: 'test-recorded-download',
+      curriculumId: 'cur-spring-live',
+      sectionId: 'sec-foundation',
+      title: '녹화로 배우는 보안 기초',
+      description: '',
+      videoFile: new File(['video'], '보안-기초.mp4', { type: 'video/mp4' }),
+      materials: [new File(['deck'], '보안-기초.pptx', { type: PPTX_MIME })],
+    })
+
+    await renderAsInstructor(
+      `/instructor/curriculums/cur-spring-live/sections/sec-foundation/recorded-lessons/${lessonId}/edit`,
+    )
+
+    await user.click(await screen.findByRole('button', { name: '보안-기초.pptx 다운로드' }))
+
+    expect(fetchMaterial).toHaveBeenLastCalledWith({
+      scope: 'LESSON',
+      parentId: lessonId,
+      materialId: 'mock-material-보안-기초.pptx-4',
+      fileName: '보안-기초.pptx',
+      asInstructor: true,
+    })
   })
 
   it('라이브 일정이 없는 강사 강의 상세는 강의 수정에서 일정을 추가하도록 안내한다', async () => {

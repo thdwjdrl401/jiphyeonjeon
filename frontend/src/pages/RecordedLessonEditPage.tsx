@@ -7,6 +7,7 @@ import { deleteLesson } from '@/features/curriculum/curriculumManagementService'
 import { formatRecordedLessonFileSize } from '@/features/curriculum/recordedLessonUpload'
 import { deleteLessonMaterial, getLesson, saveLesson } from '@/features/lesson/lessonService'
 import { invalidateAfterLessonWrite } from '@/features/lesson/lessonQueryCache'
+import { useMaterialDownload } from '@/features/material/useMaterialDownload'
 import { useRecordedProcessing } from '@/features/recorded-lesson/useRecordedLessonQueries'
 import { ApiError } from '@/shared/api/client'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
@@ -36,6 +37,7 @@ export default function RecordedLessonEditPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const toast = useToast()
+  const { download: downloadMaterial, downloadingMaterialId } = useMaterialDownload()
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [materials, setMaterials] = useState<SelectedMaterial[]>([])
@@ -261,7 +263,7 @@ export default function RecordedLessonEditPage() {
                 <li key={material.id}>
                   <span className="file-icon">PPTX</span>
                   <div><strong>{material.name}</strong><small>{material.size}</small></div>
-                  {!material.file && <a className="button button--soft button--small" href={`/api/instructor/lessons/${lessonId}/materials/${material.id}/download`} download={material.name}>다운로드</a>}
+                  {!material.file && <button className="button button--soft button--small" type="button" disabled={downloadingMaterialId === material.id} aria-label={`${material.name} 다운로드`} onClick={() => void downloadMaterial({ scope: 'LESSON', parentId: lessonId, materialId: material.id, fileName: material.name, asInstructor: true })}>{downloadingMaterialId === material.id ? '받는 중…' : '다운로드'}</button>}
                   <StatusBadge tone={material.file ? 'warning' : 'success'}>{material.file ? '업로드 대기' : '등록됨'}</StatusBadge>
                   <button type="button" aria-label={`${material.name} 제거`} onClick={() => void removeMaterial(material)}>×</button>
                 </li>

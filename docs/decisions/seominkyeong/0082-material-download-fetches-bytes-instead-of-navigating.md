@@ -45,6 +45,29 @@
 - 경로 조립(커리큘럼·레슨 × 수강생·강사, 네 갈래)은 `materialDownloadPath` 한 곳으로 모았다.
   화면마다 문자열을 짜맞추면 어긋나도 링크는 멀쩡해 보이고 눌러야 404가 난다.
 
+### 적용 범위: 자료 다운로드 버튼 전부
+
+**저작(강사) 화면도 예외가 아니다.** 처음에는 수강생 화면만 바꿨는데, 강사가 자기 커리큘럼에서
+자료를 받아도 똑같이 이름이 깨진다는 보고가 이어졌다. 원인이 같다 — 스토리지 객체 키가
+`material/{UUID}`라(`AssetService`: `kind.name().toLowerCase() + "/" + id`) presigned URL의
+마지막 segment가 곧 저장 이름이 되고, **확장자조차 없는 UUID**로 떨어진다.
+
+`download` 속성으로는 못 막는다. 최종 응답이 교차 출처면 무시되고(로컬 MinIO `:9000`), 애초에
+`LessonFormPage`에는 그 속성이 붙어 있지도 않았다. 그래서 **자료 다운로드는 앱 전체에서 링크를
+쓰지 않는다** — 지금은 다음 다섯 자리가 모두 같은 훅을 쓴다.
+
+| 화면 | 컴포넌트 | 스코프 |
+|---|---|---|
+| 커리큘럼 상세(수강생·소유 강사) | `CurriculumMaterials` | CURRICULUM |
+| 커리큘럼 관리 › 공통 자료 | `CurriculumMaterialField` | CURRICULUM |
+| 강의 상세 | `LessonDetailPage` | LESSON |
+| 강의 수정 | `LessonFormPage` | LESSON |
+| 녹화강의 수정 | `RecordedLessonEditPage` | LESSON |
+
+`<a>`를 `<button>`으로 바꾸면서 CSS 한 곳이 걸렸다. `.material-list li > button:not(.text-button)`
+(특정도 0,2,2)는 목록의 `×` 제거 버튼을 노린 규칙인데 `.button--soft`(0,1,0)를 이겨서, 새 다운로드
+버튼의 테두리·배경까지 벗겨 냈다. `:not(.button)`을 더해 제거 버튼만 남겼다.
+
 ### `withCredentials: false`로 보내는 이유
 
 이 요청만 자격증명을 끈다. 무심코 켜 두면 **로컬에서만** 깨지는 함정이 있다.
@@ -79,4 +102,10 @@
 - `src/test/features/material/materialDownload.test.ts` — 네 갈래 경로, 상태별 안내 문구,
   `saveBlob`의 파일명·objectURL 해제 시점, mock 구현체.
 - `CurriculumMaterials.test.tsx` — 자료별 요청 내용, 403 토스트.
-- `CurriculumDetailPage.test.tsx`·`CurriculumWorkspace.test.tsx` — 수강생·강사가 각자 경로로 간다.
+- `CurriculumMaterialField.test.tsx` — 관리 화면 공통 자료의 요청 내용·404 토스트, 저장 전 자료와
+  새 커리큘럼 만들기에는 버튼이 없음.
+- `CurriculumDetailPage.test.tsx`·`CurriculumWorkspace.test.tsx` — 수강생·강사가 각자 경로로 가고,
+  강의 수정·녹화강의 수정 화면이 원래 파일명을 들고 간다.
+
+세 저작 화면 모두 `getByRole('button', ...)`으로 단언한다 — 링크로 되돌아가면 role이 `link`가 되어
+바로 깨지므로, 회귀 방지가 실제로 걸린다.

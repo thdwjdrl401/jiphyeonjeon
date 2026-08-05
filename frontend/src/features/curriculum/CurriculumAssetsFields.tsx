@@ -1,3 +1,4 @@
+import type { MaterialDownloadRequest } from '@/features/material/materialDownloadService'
 import CurriculumImageField, { type CurriculumImageSelection } from './CurriculumImageField'
 import CurriculumMaterialField from './CurriculumMaterialField'
 import type { CurriculumMaterial } from './types'
@@ -9,8 +10,8 @@ interface CurriculumAssetsFieldsProps {
   onThumbnailChange: (selection: CurriculumImageSelection | null) => void
   materials: CurriculumMaterial[]
   onMaterialsChange: (materials: CurriculumMaterial[]) => void
-  /** 저장된 자료의 다운로드 링크(관리 화면). 새 커리큘럼 만들기에서는 아직 저장 전이라 주지 않는다. */
-  materialDownloadHref?: (material: CurriculumMaterial) => string
+  /** 저장된 자료의 다운로드 요청 정보(관리 화면). 새 커리큘럼 만들기에서는 아직 저장 전이라 주지 않는다. */
+  materialDownloadRequest?: (material: CurriculumMaterial) => MaterialDownloadRequest
   /** 대표 이미지 삭제를 지금 할 수 없는 이유(CurriculumImageField 참조). */
   thumbnailRemoveDisabledReason?: string
 }
@@ -26,7 +27,7 @@ export default function CurriculumAssetsFields({
   onThumbnailChange,
   materials,
   onMaterialsChange,
-  materialDownloadHref,
+  materialDownloadRequest,
   thumbnailRemoveDisabledReason,
 }: CurriculumAssetsFieldsProps) {
   return (
@@ -48,7 +49,7 @@ export default function CurriculumAssetsFields({
           id={`${idPrefix}-materials`}
           value={materials}
           onChange={onMaterialsChange}
-          downloadHref={materialDownloadHref}
+          downloadRequest={materialDownloadRequest}
         />
       </section>
     </div>

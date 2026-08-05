@@ -841,8 +841,13 @@ function CurriculumManageEditor({
               id="manage-curriculum-materials"
               value={materials}
               onChange={updateMaterials}
-              downloadHref={(material) =>
-                `/api/instructor/curriculums/${curriculumId}/materials/${material.materialId}/download`}
+              downloadRequest={(material) => ({
+                scope: 'CURRICULUM',
+                parentId: curriculumId,
+                materialId: material.materialId,
+                fileName: material.fileName,
+                asInstructor: true,
+              })}
             />
           </Panel>
         </div>

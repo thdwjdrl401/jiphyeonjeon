@@ -1,4 +1,6 @@
 import { useState, type ChangeEvent, type DragEvent } from 'react'
+import type { MaterialDownloadRequest } from '@/features/material/materialDownloadService'
+import { useMaterialDownload } from '@/features/material/useMaterialDownload'
 import { StatusBadge } from '@/shared/ui/WorkspaceUi'
 import type { CurriculumMaterial } from './types'
 
@@ -6,8 +8,13 @@ interface CurriculumMaterialFieldProps {
   id: string
   value: CurriculumMaterial[]
   onChange: (value: CurriculumMaterial[]) => void
-  /** 이미 저장된(persisted) 자료의 다운로드 링크. 주면 파일이 없는 자료에 다운로드 버튼을 붙인다(관리 화면). */
-  downloadHref?: (material: CurriculumMaterial) => string
+  /**
+   * 이미 저장된(persisted) 자료의 다운로드 요청 정보. 주면 파일이 없는 자료에 다운로드 버튼을 붙인다(관리 화면).
+   *
+   * 링크가 아니라 버튼이다 — 객체 키가 `material/{UUID}`라(AssetService) presigned URL을 그대로 열면
+   * 확장자도 없는 UUID로 저장된다. 바이트를 받아 원래 파일명을 붙인다(ADR-0082).
+   */
+  downloadRequest?: (material: CurriculumMaterial) => MaterialDownloadRequest
 }
 
 const PPTX_MIME = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
@@ -17,9 +24,10 @@ function formatFileSize(fileSize: number) {
   return `${(fileSize / 1024 / 1024).toFixed(1)} MB`
 }
 
-export default function CurriculumMaterialField({ id, value, onChange, downloadHref }: CurriculumMaterialFieldProps) {
+export default function CurriculumMaterialField({ id, value, onChange, downloadRequest }: CurriculumMaterialFieldProps) {
   const [error, setError] = useState('')
   const [dragActive, setDragActive] = useState(false)
+  const { download, downloadingMaterialId } = useMaterialDownload()
 
   const addFiles = (files: File[]) => {
     const validFiles = files.filter((file) => file.type === PPTX_MIME || file.name.toLowerCase().endsWith('.pptx'))
@@ -80,8 +88,16 @@ export default function CurriculumMaterialField({ id, value, onChange, downloadH
             <li key={material.materialId}>
               <span className="file-icon">PPTX</span>
               <div><strong>{material.fileName}</strong><small>{formatFileSize(material.fileSize)}</small></div>
-              {downloadHref && !material.file && (
-                <a className="button button--soft button--small" href={downloadHref(material)} download={material.fileName}>다운로드</a>
+              {downloadRequest && !material.file && (
+                <button
+                  className="button button--soft button--small"
+                  type="button"
+                  disabled={downloadingMaterialId === material.materialId}
+                  aria-label={`${material.fileName} 다운로드`}
+                  onClick={() => void download(downloadRequest(material))}
+                >
+                  {downloadingMaterialId === material.materialId ? '받는 중…' : '다운로드'}
+                </button>
               )}
               <StatusBadge tone={material.file ? 'warning' : 'success'}>{material.file ? '추가 예정' : '등록됨'}</StatusBadge>
               <button

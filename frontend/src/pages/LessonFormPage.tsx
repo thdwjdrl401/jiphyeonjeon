@@ -8,6 +8,7 @@ import { deleteLesson } from '@/features/curriculum/curriculumManagementService'
 import { deleteLessonMaterial, getLesson, prepareLessonAi, saveLesson } from '@/features/lesson/lessonService'
 import LessonBreadcrumbs from '@/features/lesson/LessonBreadcrumbs'
 import { invalidateAfterLessonWrite } from '@/features/lesson/lessonQueryCache'
+import { useMaterialDownload } from '@/features/material/useMaterialDownload'
 import { ApiError } from '@/shared/api/client'
 import { isBeforeToday, todayLocalStart } from '@/shared/lib/localDateTime'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
@@ -30,6 +31,7 @@ export default function LessonFormPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const toast = useToast()
+  const { download: downloadMaterial, downloadingMaterialId } = useMaterialDownload()
   const isEdit = Boolean(lessonId)
   const [deleting, setDeleting] = useState(false)
   const curriculumQuery = useQuery({
@@ -270,7 +272,7 @@ export default function LessonFormPage() {
                 <span className="lesson-form__dropzone-copy"><strong>PPTX 파일을 드래그하거나 클릭해 선택</strong><small>{isEdit ? '한 번에 한 파일 · 기존 자료 유지' : '여러 파일 동시 등록 가능'}</small></span>
               </label>
               {materials.length > 0
-                ? <ul className="material-list lesson-form__material-list">{materials.map((material) => <li key={material.id}><span className="file-icon">PPTX</span><div><strong>{material.name}</strong><small>{material.size}</small></div>{isEdit && !material.file && <a className="button button--soft button--small" href={`/api/instructor/lessons/${lessonId}/materials/${material.id}/download`}>다운로드</a>}<StatusBadge tone={processing || material.file ? 'warning' : 'success'}>{processing ? 'EMBEDDING' : material.file ? '대기' : 'READY'}</StatusBadge><button type="button" aria-label={`${material.name} 제거`} onClick={() => void removeMaterial(material)}>×</button></li>)}</ul>
+                ? <ul className="material-list lesson-form__material-list">{materials.map((material) => <li key={material.id}><span className="file-icon">PPTX</span><div><strong>{material.name}</strong><small>{material.size}</small></div>{isEdit && !material.file && <button className="button button--soft button--small" type="button" disabled={downloadingMaterialId === material.id} aria-label={`${material.name} 다운로드`} onClick={() => void downloadMaterial({ scope: 'LESSON', parentId: lessonId ?? '', materialId: material.id, fileName: material.name, asInstructor: true })}>{downloadingMaterialId === material.id ? '받는 중…' : '다운로드'}</button>}<StatusBadge tone={processing || material.file ? 'warning' : 'success'}>{processing ? 'EMBEDDING' : material.file ? '대기' : 'READY'}</StatusBadge><button type="button" aria-label={`${material.name} 제거`} onClick={() => void removeMaterial(material)}>×</button></li>)}</ul>
                 : null}
               {pendingMaterialCount > 0 && !processing && <p className="lesson-form__ai-warning">선택한 자료는 AI 준비를 완료해야 라이브에서 사용할 수 있습니다.</p>}
             </div>
