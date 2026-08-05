@@ -74,6 +74,7 @@ class SttReadinessState:
         self._worker_started = threading.Event()
         self._livekit_connected = threading.Event()
         self._connection_probe: ConnectionProbe | None = None
+        self._provider_probe: ConnectionProbe | None = None
 
     @property
     def process_marker(self) -> ProcessReadinessMarker:
@@ -88,6 +89,9 @@ class SttReadinessState:
     def set_livekit_connection_probe(self, probe: ConnectionProbe) -> None:
         self._connection_probe = probe
 
+    def set_stt_provider_probe(self, probe: ConnectionProbe) -> None:
+        self._provider_probe = probe
+
     def liveness_payload(self) -> dict[str, object]:
         return {
             "contractVersion": _CONTRACT_VERSION,
@@ -97,7 +101,9 @@ class SttReadinessState:
 
     def readiness_payload(self) -> dict[str, object]:
         ready_process_count = self._ready_process_count()
-        models_ready = ready_process_count >= self._expected_process_count
+        models_ready = (
+            ready_process_count >= self._expected_process_count and self._provider_is_healthy()
+        )
         worker_started = self._worker_started.is_set()
         livekit_connected = self._livekit_connected.is_set() and self._connection_is_healthy()
         ready = models_ready and worker_started and livekit_connected
@@ -132,6 +138,14 @@ class SttReadinessState:
         if self._connection_probe is None:
             return True
         return self._connection_probe()
+
+    def _provider_is_healthy(self) -> bool:
+        if self._provider_probe is None:
+            return True
+        try:
+            return self._provider_probe()
+        except (OSError, RuntimeError, TypeError, ValueError):
+            return False
 
 
 class _HealthRequestHandler(BaseHTTPRequestHandler):

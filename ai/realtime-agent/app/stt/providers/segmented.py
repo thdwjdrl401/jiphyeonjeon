@@ -206,6 +206,8 @@ class SegmentedStreamingEngine(ABC):
                     else "".join(emitted_parts)
                 )
                 if final_text:
+                    if not emitted_parts:
+                        await self._events.put(TextDelta(final_text, item.end_ms))
                     await self._events.put(
                         SegmentFinal(
                             final_text,

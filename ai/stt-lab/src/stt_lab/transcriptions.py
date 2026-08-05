@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 _DUAL_TRANSCRIPTION = re.compile(r"\(([^()]*)\)/\(([^()]*)\)")
 _EXTRA_LEFT_CLOSE = re.compile(r"\(([^()]*)\)\)/\(([^()]*)\)")
-_MISSING_LEFT_OPEN = re.compile(r"(?<![\w(])([A-Za-z][A-Za-z0-9_.+-]*)\)/\(([^()]*)\)")
+_MISSING_LEFT_OPEN = re.compile(r"^([A-Za-z][A-Za-z0-9_.+-]*)\)/\(([^()]*)\)")
 _MISSING_RIGHT_CLOSE = re.compile(r"\(([^()]*)\)/\(([^()\s]+)(?=\s|$)")
 
 

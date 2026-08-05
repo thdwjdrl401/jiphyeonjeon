@@ -141,6 +141,10 @@ refresh_runtime_command() {
 # deployment therefore keeps the previous release commands for rollback.
 refresh_runtime_command "$CURRENT_LINK/deploy/bin/liveclass-realtime-agent-supervisor" \
     liveclass-realtime-agent-supervisor
+refresh_runtime_command "$CURRENT_LINK/deploy/bin/liveclass-whisper-vllm-bootstrap" \
+    liveclass-whisper-vllm-bootstrap
+refresh_runtime_command "$CURRENT_LINK/deploy/bin/liveclass-whisper-vllm-supervisor" \
+    liveclass-whisper-vllm-supervisor
 refresh_runtime_command "$CURRENT_LINK/deploy/bin/liveclass-realtime-agent-deploy" \
     liveclass-realtime-agent-deploy
 

@@ -146,8 +146,9 @@ process target이고 provider 기본값은 12다. Nemotron의 active 설정이 �
 
 별도 Python health server는 host로 `127.0.0.1`만 허용하고 port는 `1~65535` 범위로 설정할 수 있다. 배포 기본은 prod `8081`, dev `8082`다.
 `GET /health/live`는 server가 응답 가능하면 200이다. `GET /health/ready`는 설정된 모든 child의
-provider prewarm, AgentServer 시작과 현재 LiveKit 연결이 확인되면 200 `status=ready`, 아니면
-503 `status=notReady`를 반환한다.
+provider prewarm, 선택된 외부 model owner의 현재 probe, AgentServer 시작과 현재 LiveKit 연결이 확인되면
+200 `status=ready`, 아니면 503 `status=notReady`를 반환한다. 외부 model owner probe는
+`vllm-whisper`에만 적용하며 exact served-model alias가 사라지면 `modelsReady=false`다.
 
 readiness body에는 provider, expected/ready process 수, worker 시작과 LiveKit 연결 여부가 포함된다.
 expected process 수는 active job 수가 아니라 resolved idle process 수다. Redis, session lease, room
@@ -169,6 +170,9 @@ audio, engine queue와 dispatch capacity는 검사하지 않으므로 job별 `ST
 - retention: 모든 `XADD`에 `MAXLEN ~ CAPTION_STREAM_MAXLEN`을 적용하며 기본값은 10,000 엔트리다.
   값은 양의 정수만 허용해 무제한 누적 설정을 막는다. 근사 trimming이므로 실제 길이는 일시적으로
   기준보다 조금 클 수 있고, 이는 바이트 상한이나 Redis 전체 `maxmemory` 설정이 아니다.
+- text normalization: Caption contract 객체를 만들기 전에 provider 공통으로 모든 Unicode dash와
+  `ㅋ`·`ㅎ` 반복 자모, 괄호형 웃음 marker를 단어 경계 공백으로 정규화한다. 빈 delta는 XADD와
+  sequence를 소비하지 않고 발화 전체가 비면 segment.final과 segmentIndex도 만들지 않는다.
 - 모든 정수 필드: 부호 없는 최대 18자리 십진 문자열
 
 `caption.stream.started` fields:

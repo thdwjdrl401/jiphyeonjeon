@@ -17,7 +17,7 @@ flowchart LR
 
         subgraph Job[Room job child process]
             Source[LiveKitInstructorAudioSource]
-            Engine[StreamingSttEngine<br/>Nemotron / OpenAI / stub]
+            Engine[StreamingSttEngine<br/>Nemotron / vLLM Whisper / OpenAI / stub]
             Events[단일 engine event consumer]
             Mapper[CaptionEventMapper]
             Publisher[RedisCaptionPublisher]
@@ -32,6 +32,9 @@ flowchart LR
         Mapper -->|CaptionDelta| Publisher
     end
 
+    VllmRuntime[vLLM Whisper model owner<br/>GPU0 127.0.0.1:18083]:::external
+    Engine -->|provider 선택 시 VAD WAV segment| VllmRuntime
+
     AgentServer -->|persistent authenticated WebSocket| LiveKit
     LiveKit -->|Room microphone track| Source
     Lease -->|SET NX EX / renew / release| Redis[(Application Redis)]
@@ -39,6 +42,8 @@ flowchart LR
     Stream --- Redis
     Stream -->|consumer group ai-rag-live-v1| ApiConsumer[ai-api consumer<br/>구현됨]
     Stream -.->|향후 consumer group| SpringConsumer[Spring consumer<br/>미구현]
+
+    classDef external fill:#fff4dd,stroke:#b26a00
 ```
 
 `realtime-agent`는 FastAPI 애플리케이션이 아니다. LiveKit job은 HTTP endpoint로 받지 않고 agent가

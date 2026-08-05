@@ -100,16 +100,59 @@ async def test_maps_single_consumer_events_to_gapless_sequence_and_completion() 
     assert publisher.completed == [completed]
 
 
-async def test_rejects_empty_text_before_publish_without_consuming_sequence() -> None:
+async def test_skips_empty_text_without_consuming_sequence() -> None:
     publisher = RecordingPublisher()
     sink = mapper(publisher, ["event-1", "event-2"])
 
-    with pytest.raises(ValueError, match="must not be empty"):
-        await sink(TextDelta("", 20))
-    event = await sink.publish_delta(TextDelta(" ", 20))
+    assert await sink.publish_delta(TextDelta("", 20)) is None
+    assert await sink.publish_delta(TextDelta(" ", 20)) is None
+    event = await sink.publish_delta(TextDelta("정상", 20))
 
+    assert event is not None
     assert event.sequence == 1
-    assert event.text == " "
+    assert event.text == "정상"
+
+
+async def test_normalizes_dashes_and_laughter_before_publish() -> None:
+    publisher = RecordingPublisher()
+    sink = mapper(publisher, ["delta-1", "delta-2", "segment-1"])
+
+    await sink(TextDelta("- 강의ㅋ", 20))
+    await sink(TextDelta("ㅋㅋ—내용 (웃음)", 40))
+    await sink(SegmentFinal("- 강의ㅋㅋㅋㅋ—내용 (웃음)", 0, 40, "SILENCE"))
+
+    assert [event.text for event in publisher.deltas] == ["강의", " 내용"]
+    assert [event.sequence for event in publisher.deltas] == [1, 2]
+    assert publisher.segments[0].text == "강의 내용"
+    assert publisher.segments[0].last_sequence == 2
+
+
+async def test_skips_a_segment_that_is_empty_after_normalization() -> None:
+    publisher = RecordingPublisher()
+    sink = mapper(publisher, ["delta-1", "segment-1", "completed-1"])
+
+    await sink(TextDelta("- ㅋㅋㅋㅋ", 20))
+    await sink(SegmentFinal("－ ㅎㅎㅎㅎ (웃음)", 0, 20, "SILENCE"))
+    await sink(TextDelta("정상", 40))
+    await sink(SegmentFinal("정상", 20, 40, "SILENCE"))
+    completed = await sink.publish_completed(EngineCompleted(40))
+
+    assert [event.sequence for event in publisher.deltas] == [1]
+    assert [event.text for event in publisher.deltas] == ["정상"]
+    assert [event.segment_index for event in publisher.segments] == [0]
+    assert completed.last_sequence == 1
+
+
+async def test_synthesizes_delta_when_only_final_survives_normalization() -> None:
+    publisher = RecordingPublisher()
+    sink = mapper(publisher, ["delta-1", "segment-1"])
+
+    await sink(TextDelta("ㅋㅋㅋ", 20))
+    await sink(SegmentFinal("정상 문장", 0, 20, "SILENCE"))
+
+    assert [event.text for event in publisher.deltas] == ["정상 문장"]
+    assert publisher.segments[0].text == "정상 문장"
+    assert publisher.segments[0].last_sequence == 1
 
 
 async def test_fails_closed_on_regressing_stream_clock_but_allows_equal_time() -> None:

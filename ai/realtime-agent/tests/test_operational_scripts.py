@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -16,6 +19,8 @@ TUNNEL_SCRIPT = Path(__file__).parents[1] / "scripts" / "start_ec2_tunnels.sh"
 DEPLOY_DIR = Path(__file__).parents[1] / "deploy"
 DEPLOY_SCRIPT = DEPLOY_DIR / "bin" / "liveclass-realtime-agent-deploy"
 SUPERVISOR_SCRIPT = DEPLOY_DIR / "bin" / "liveclass-realtime-agent-supervisor"
+VLLM_BOOTSTRAP_SCRIPT = DEPLOY_DIR / "bin" / "liveclass-whisper-vllm-bootstrap"
+VLLM_SUPERVISOR_SCRIPT = DEPLOY_DIR / "bin" / "liveclass-whisper-vllm-supervisor"
 RUNNER_CONTROL_SCRIPT = DEPLOY_DIR / "bin" / "liveclass-gitlab-runner-user"
 INSTALL_SCRIPT = DEPLOY_DIR / "install.sh"
 RUNNER_INSTALL_SCRIPT = DEPLOY_DIR / "install-gitlab-runner-user.sh"
@@ -24,6 +29,8 @@ TUNNEL_CONFIGURE_SCRIPT = DEPLOY_DIR / "configure-gpu-ec2-tunnels.sh"
 COMMON_AGENT_ENV_EXAMPLE = DEPLOY_DIR / "env" / "realtime-agent-common.env.example"
 PROD_AGENT_ENV_EXAMPLE = DEPLOY_DIR / "env" / "realtime-agent.env.example"
 DEV_AGENT_ENV_EXAMPLE = DEPLOY_DIR / "env" / "realtime-agent-dev.env.example"
+VLLM_AGENT_ENV_EXAMPLE = DEPLOY_DIR / "env" / "realtime-agent-vllm.env.example"
+VLLM_RUNTIME_ENV_EXAMPLE = DEPLOY_DIR / "env" / "whisper-vllm.env.example"
 
 
 def test_probe_settings_redact_credentials_from_repr() -> None:
@@ -335,6 +342,8 @@ def test_tunnel_requires_distinct_control_paths(tmp_path: Path) -> None:
         TUNNEL_SCRIPT,
         DEPLOY_SCRIPT,
         SUPERVISOR_SCRIPT,
+        VLLM_BOOTSTRAP_SCRIPT,
+        VLLM_SUPERVISOR_SCRIPT,
         RUNNER_CONTROL_SCRIPT,
         INSTALL_SCRIPT,
         RUNNER_INSTALL_SCRIPT,
@@ -471,6 +480,90 @@ def test_dual_environment_examples_isolate_names_redis_health_and_capacity() -> 
     assert "CUDA_VISIBLE_DEVICES=" not in dev
 
 
+def test_vllm_examples_keep_gpu0_loopback_and_conservative_capacity() -> None:
+    agent = VLLM_AGENT_ENV_EXAMPLE.read_text(encoding="utf-8")
+    runtime = VLLM_RUNTIME_ENV_EXAMPLE.read_text(encoding="utf-8")
+    supervisor = VLLM_SUPERVISOR_SCRIPT.read_text(encoding="utf-8")
+    bootstrap = VLLM_BOOTSTRAP_SCRIPT.read_text(encoding="utf-8")
+
+    assert "STT_ENGINE_PROVIDER=vllm-whisper" in agent
+    assert "STT_MAX_ACTIVE_JOBS=1" in agent
+    assert "STT_NUM_IDLE_PROCESSES=1" in agent
+    assert "VLLM_WHISPER_BASE_URL=http://127.0.0.1:18083/v1" in agent
+    assert "VLLM_WHISPER_MODEL=liveclass-qwen3-asr-1.7b" in agent
+    assert "CUDA_VISIBLE_DEVICES=0" in runtime
+    assert "WHISPER_VLLM_HOST=127.0.0.1" in runtime
+    assert "WHISPER_VLLM_SERVE_COMMAND=qwen-asr-serve" in runtime
+    assert "qwen-asr-serve" in supervisor
+    assert "WHISPER_VLLM_MAX_NUM_SEQS=1" in runtime
+    assert "WHISPER_VLLM_GPU_MEMORY_UTILIZATION=0.10" in runtime
+    assert "WHISPER_VLLM_MAX_NUM_BATCHED_TOKENS=2048" in runtime
+    assert "WHISPER_VLLM_MODEL_PATH=/home/<user>/ai/models/qwen3-asr-1.7b" in runtime
+    assert "WHISPER_VLLM_SERVED_MODEL_NAME=liveclass-qwen3-asr-1.7b" in runtime
+    assert "GPU 0" in supervisor
+    assert '--host "$WHISPER_VLLM_HOST"' in supervisor
+    assert "--max-num-batched-tokens" in supervisor
+    assert "/v1/models" in supervisor
+    assert "qwen-asr[vllm]==" in bootstrap
+    assert "sudo" not in supervisor
+    assert "sudo" not in bootstrap
+
+
+def test_vllm_supervisor_health_executes_embedded_probe(tmp_path: Path) -> None:
+    class ModelsHandler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            if self.path != "/v1/models":
+                self.send_response(404)
+                self.end_headers()
+                return
+            body = b'{"data":[{"id":"liveclass-qwen3-asr-1.7b"}]}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, _format: str, *_args: object) -> None:
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), ModelsHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    venv_bin = tmp_path / "venv" / "bin"
+    venv_bin.mkdir(parents=True)
+    (venv_bin / "python").symlink_to(sys.executable)
+    runtime_env = tmp_path / "whisper-vllm.env"
+    runtime_env.write_text(
+        "\n".join(
+            [
+                f"WHISPER_VLLM_VENV={venv_bin.parent}",
+                "WHISPER_VLLM_HOST=127.0.0.1",
+                f"WHISPER_VLLM_PORT={server.server_address[1]}",
+                "WHISPER_VLLM_SERVED_MODEL_NAME=liveclass-qwen3-asr-1.7b",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    try:
+        result = subprocess.run(
+            [str(VLLM_SUPERVISOR_SCRIPT), "health"],
+            check=False,
+            capture_output=True,
+            text=True,
+            env={
+                **os.environ,
+                "LIVECLASS_WHISPER_VLLM_ENV": str(runtime_env),
+            },
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_rootless_supervisor_keeps_tunnel_and_dual_agents_under_tmux() -> None:
     supervisor = SUPERVISOR_SCRIPT.read_text(encoding="utf-8")
     installer = INSTALL_SCRIPT.read_text(encoding="utf-8")
@@ -489,10 +582,16 @@ def test_rootless_supervisor_keeps_tunnel_and_dual_agents_under_tmux() -> None:
     assert "logs-agent-dev)" in supervisor
     assert "restart-agent-prod)" in supervisor
     assert "restart-agent-dev)" in supervisor
+    assert "stop-agent-prod)" in supervisor
+    assert "vllm-whisper)" in supervisor
     assert "LIVEKIT_TUNNEL_HOST" in supervisor
     assert "LD_PRELOAD" in supervisor
     assert "realtime-agent-dev.env.example" in installer
     assert "realtime-agent-common.env.example" in installer
+    assert "whisper-vllm.env.example" in installer
+    assert "realtime-agent-vllm.env.example" in installer
+    assert "liveclass-whisper-vllm-supervisor" in installer
+    assert "liveclass-whisper-vllm-bootstrap" in installer
     assert "systemctl" not in supervisor
     assert "sudo" not in supervisor
     assert "systemctl" not in installer

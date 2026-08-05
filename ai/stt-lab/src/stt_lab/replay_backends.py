@@ -18,7 +18,7 @@ from app.stt.providers.segmented import (
 )
 
 from stt_lab.audio import PcmAudio
-from stt_lab.runners import Transcriber, WhisperTransformersRunner
+from stt_lab.runners import NemotronNemoRunner, Transcriber, WhisperTransformersRunner
 
 OutputMode = Literal["INCREMENTAL", "SEGMENT_FINAL_ONLY"]
 
@@ -127,6 +127,43 @@ class WhisperBackendSlot:
             self._loaded = False
 
 
+class NemotronNemoBackendSlot:
+    """Own one `.nemo` model for an offline checkpoint quality gate."""
+
+    def __init__(self, model_id: str, *, device: str) -> None:
+        self._runner: Transcriber = NemotronNemoRunner(model_id, device=device)
+        self._loaded = False
+
+    @property
+    def metadata(self) -> BackendMetadata:
+        return BackendMetadata(
+            backend="nemotron-nemo",
+            model_id=self._runner.model_id,
+            precision=self._runner.precision,
+            output_mode="SEGMENT_FINAL_ONLY",
+        )
+
+    def load(self) -> None:
+        if self._loaded:
+            raise RuntimeError("Nemotron NeMo backend slot is already loaded")
+        self._runner.load()
+        self._loaded = True
+
+    def create_engine(self, segmenter: SpeechSegmenter) -> StreamingSttEngine:
+        if not self._loaded:
+            raise RuntimeError("Nemotron NeMo backend slot is not loaded")
+        return FinalOnlySegmentedEngine(
+            provider="nemotron-nemo",
+            transcriber=self._runner,
+            segmenter=segmenter,
+        )
+
+    def close(self) -> None:
+        if self._loaded:
+            self._runner.close()
+            self._loaded = False
+
+
 class FinalOnlySegmentedEngine(SegmentedStreamingEngine):
     """Adapt a synchronous segment transcriber to the product segmented lifecycle."""
 
@@ -191,6 +228,8 @@ def build_backend_slot(
 ) -> ReplayBackendSlot:
     if backend == "nemotron":
         return NemotronBackendSlot(model_id, language=language)
+    if backend == "nemotron-nemo":
+        return NemotronNemoBackendSlot(model_id, device=device)
     if backend == "whisper":
         return WhisperBackendSlot(model_id, device=device, precision=precision)
     raise ValueError(f"unsupported replay backend: {backend}")

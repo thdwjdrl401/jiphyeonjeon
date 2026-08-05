@@ -47,7 +47,9 @@ load_agent_env() {
         STT_AGENT_NAME STT_ENGINE_PROVIDER STT_HEALTH_HOST STT_HEALTH_PORT \
         STT_MAX_ACTIVE_JOBS STT_NUM_IDLE_PROCESSES CUDA_VISIBLE_DEVICES ASR_MODEL_ID \
         OPENAI_API_KEY OPENAI_REALTIME_TRANSCRIPTION_MODEL \
-        OPENAI_REALTIME_TRANSCRIPTION_DELAY
+        OPENAI_REALTIME_TRANSCRIPTION_DELAY VLLM_WHISPER_BASE_URL \
+        VLLM_WHISPER_MODEL VLLM_API_KEY VLLM_WHISPER_REQUEST_TIMEOUT_SECONDS \
+        VLLM_WHISPER_CONNECT_TIMEOUT_SECONDS
     load_env "$COMMON_AGENT_ENV"
     load_env "$1"
 }
@@ -58,14 +60,13 @@ validate_agent_env_profile() {
     env_file="$2"
     expected_name="$3"
     expected_health_port="$4"
-    expected_capacity="$5"
     (
         load_agent_env "$env_file"
         if [ "${STT_AGENT_NAME:-}" != "$expected_name" ] || \
             [ "${STT_HEALTH_HOST:-}" != "127.0.0.1" ] || \
             [ "${STT_HEALTH_PORT:-}" != "$expected_health_port" ] || \
-            [ "${STT_MAX_ACTIVE_JOBS:-}" != "$expected_capacity" ] || \
-            [ "${STT_NUM_IDLE_PROCESSES:-}" != "$expected_capacity" ] || \
+            [ -z "${STT_MAX_ACTIVE_JOBS:-}" ] || \
+            [ -z "${STT_NUM_IDLE_PROCESSES:-}" ] || \
             [ -z "${STT_ENGINE_PROVIDER:-}" ]; then
             echo "$profile agent env profile mismatch" >&2
             exit 1
@@ -89,10 +90,23 @@ validate_agent_env_profile() {
                 fi
                 ;;
             openai-realtime)
-                if [ -z "${OPENAI_API_KEY:-}" ] || \
+                if [ "${STT_MAX_ACTIVE_JOBS:-}" != "1" ] || \
+                    [ "${STT_NUM_IDLE_PROCESSES:-}" != "1" ] || \
+                    [ -z "${OPENAI_API_KEY:-}" ] || \
                     [ -z "${OPENAI_REALTIME_TRANSCRIPTION_MODEL:-}" ] || \
                     [ -z "${OPENAI_REALTIME_TRANSCRIPTION_DELAY:-}" ]; then
                     echo "$profile openai-realtime env profile mismatch" >&2
+                    exit 1
+                fi
+                ;;
+            vllm-whisper)
+                if [ "${STT_MAX_ACTIVE_JOBS:-}" != "1" ] || \
+                    [ "${STT_NUM_IDLE_PROCESSES:-}" != "1" ] || \
+                    [ -z "${VLLM_WHISPER_BASE_URL:-}" ] || \
+                    [ -z "${VLLM_WHISPER_MODEL:-}" ] || \
+                    [ -z "${VLLM_WHISPER_REQUEST_TIMEOUT_SECONDS:-}" ] || \
+                    [ -z "${VLLM_WHISPER_CONNECT_TIMEOUT_SECONDS:-}" ]; then
+                    echo "$profile vllm-whisper env profile mismatch" >&2
                     exit 1
                 fi
                 ;;
@@ -138,12 +152,12 @@ start_agent_instance() {
 
 validate_prod_agent() {
     validate_agent_env_profile prod "$PROD_AGENT_ENV" \
-        liveclass-realtime-stt-prod 8081 12
+        liveclass-realtime-stt-prod 8081
 }
 
 validate_dev_agent() {
     validate_agent_env_profile dev "$DEV_AGENT_ENV" \
-        liveclass-realtime-stt-dev 8082 1
+        liveclass-realtime-stt-dev 8082
 }
 
 start_agents() {
@@ -297,6 +311,12 @@ case "$COMMAND" in
     stop-agent)
         stop_agents
         ;;
+    stop-agent-prod)
+        stop_session "$PROD_AGENT_SESSION"
+        ;;
+    stop-agent-dev)
+        stop_session "$DEV_AGENT_SESSION"
+        ;;
     status)
         show_status
         ;;
@@ -317,7 +337,7 @@ case "$COMMAND" in
         tmux capture-pane -p -t "$TUNNEL_SESSION:0.0" -S -200
         ;;
     *)
-        echo "usage: liveclass-realtime-agent-supervisor {start|start-agent|start-tunnel|restart|restart-agent|restart-agent-prod|restart-agent-dev|stop|stop-agent|status|status-agent|logs-agent|logs-agent-prod|logs-agent-dev|logs-tunnel}" >&2
+        echo "usage: liveclass-realtime-agent-supervisor {start|start-agent|start-tunnel|restart|restart-agent|restart-agent-prod|restart-agent-dev|stop|stop-agent|stop-agent-prod|stop-agent-dev|status|status-agent|logs-agent|logs-agent-prod|logs-agent-dev|logs-tunnel}" >&2
         exit 2
         ;;
 esac

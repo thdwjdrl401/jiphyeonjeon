@@ -5,10 +5,14 @@ import asyncio
 import numpy as np
 import pytest
 from app.audio.segmentation import SpeechSegment
-from app.stt.engine import AudioChunk, EngineCompleted, SegmentFinal, SttStreamContext
+from app.stt.engine import AudioChunk, EngineCompleted, SegmentFinal, SttStreamContext, TextDelta
 
 from stt_lab.audio import PcmAudio
-from stt_lab.replay_backends import FinalOnlySegmentedEngine, build_backend_slot
+from stt_lab.replay_backends import (
+    FinalOnlySegmentedEngine,
+    NemotronNemoBackendSlot,
+    build_backend_slot,
+)
 from stt_lab.runners import Transcription
 
 
@@ -38,7 +42,7 @@ class RecordingTranscriber:
         return None
 
 
-def test_final_only_adapter_uses_product_segmented_lifecycle_without_fake_delta() -> None:
+def test_final_only_adapter_emits_contract_delta_before_authoritative_final() -> None:
     transcriber = RecordingTranscriber()
     engine = FinalOnlySegmentedEngine(
         provider="whisper",
@@ -58,6 +62,7 @@ def test_final_only_adapter_uses_product_segmented_lifecycle_without_fake_delta(
 
     assert engine.capabilities.incremental_deltas is False
     assert events == [
+        TextDelta("최종 결과", 20),
         SegmentFinal("최종 결과", 0, 20, "STREAM_END"),
         EngineCompleted(20),
     ]
@@ -74,3 +79,19 @@ def test_backend_factory_rejects_unknown_provider() -> None:
             device="cpu",
             precision="float32",
         )
+
+
+def test_backend_factory_builds_nemo_checkpoint_quality_slot() -> None:
+    slot = build_backend_slot(
+        "nemotron-nemo",
+        "/models/tuned.nemo",
+        language="ko-KR",
+        device="cuda:0",
+        precision="bfloat16",
+    )
+
+    assert isinstance(slot, NemotronNemoBackendSlot)
+    assert slot.metadata.backend == "nemotron-nemo"
+    assert slot.metadata.model_id == "/models/tuned.nemo"
+    assert slot.metadata.precision == "float32"
+    assert slot.metadata.output_mode == "SEGMENT_FINAL_ONLY"

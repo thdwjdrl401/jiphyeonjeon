@@ -16,7 +16,10 @@ from app.jobs.lifecycle import DisabledLifecycleReporter, LifecycleReporter
 from app.jobs.metadata import JobMetadata
 from app.livekit.audio_source import LiveKitInstructorAudioSource
 from app.livekit.rtc_config import build_turn_rtc_config
-from app.stt.catalog import build_stt_provider_registry
+from app.stt.catalog import (
+    build_stt_provider_readiness_probe,
+    build_stt_provider_registry,
+)
 from app.stt.registry import SttEngineRegistry, SttWorkerPoolConfiguration
 
 _LOAD_THRESHOLD = 1.0
@@ -176,6 +179,9 @@ def main() -> None:
         settings.stt_provider,
         worker_pool.num_idle_processes,
     )
+    provider_probe = build_stt_provider_readiness_probe(settings)
+    if provider_probe is not None:
+        readiness_state.set_stt_provider_probe(provider_probe)
     try:
         health_server = SttHealthServer(
             settings.health_host,

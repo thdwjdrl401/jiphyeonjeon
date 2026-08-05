@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from stt_lab.transcriptions import canonical_transcription
+
 _SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _VALID_SPLITS = frozenset({"train", "dev", "test", "golden"})
 
@@ -105,11 +107,21 @@ def _parse_clip(value: Any, base_dir: Path, line_number: int) -> EvaluationClip:
     if duration_ms is not None and (not isinstance(duration_ms, int) or duration_ms <= 0):
         raise ValueError(f"manifest line {line_number} durationMs must be a positive integer")
 
+    reference = _required_text(value, "reference", line_number)
+    provided_training_reference = _optional_text(value, "trainingReference", line_number)
+    if (
+        provided_training_reference is None
+        or provided_training_reference.count("(") != provided_training_reference.count(")")
+        or ")/(" in provided_training_reference
+    ):
+        training_reference = canonical_transcription(reference)
+    else:
+        training_reference = provided_training_reference
     return EvaluationClip(
         clip_id=clip_id,
         audio_path=audio_path,
-        reference=_required_text(value, "reference", line_number),
-        training_reference=_optional_text(value, "trainingReference", line_number),
+        reference=reference,
+        training_reference=training_reference,
         language=_required_text(value, "language", line_number),
         speaker_id=_required_text(value, "speakerId", line_number),
         split=split,
