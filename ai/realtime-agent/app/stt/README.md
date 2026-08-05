@@ -31,7 +31,7 @@ provider 이름이나 model별 protocol을 알지 못한다.
 | `stub` | 1 / 1 | 없음 | process 내부 fake delta |
 | `openai-realtime` | 1 / 1 | 없음 | OpenAI Realtime outbound WSS; 실제 동시 수는 API quota에 맞춰 운영자가 제한 |
 | `nemotron` | 12 / 12 | child마다 model 1개, 최대 120초 | 로컬 CUDA; 외부 model API 없음 |
-| `nemotron-nemo` | 1 / 1 | `/v1/models` exact alias probe, 최대 30초 | loopback HTTP; 별도 NeMo process가 tuned `.nemo` 한 벌 소유 |
+| `nemotron-nemo` | 5 / 5 | `/v1/models` exact alias probe, 최대 30초 | loopback HTTP; 별도 NeMo process가 tuned `.nemo` replica 5개 소유 |
 | `vllm-whisper` | 1 / 1 | `/v1/models` exact alias probe, 최대 30초 | loopback HTTP; vLLM process가 GPU model 한 벌 소유 |
 
 1. parent가 catalog를 만들고 profile만 읽어 `AgentServer` pool을 설정한다.

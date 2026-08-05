@@ -2,13 +2,13 @@
 
 ## 1. 목표
 
-6,000 step full fine-tuning 결과인 Prompt-RNNT `.nemo` archive를 GPU 0에서 한 번 적재하고,
+6,000 step full fine-tuning 결과인 Prompt-RNNT `.nemo` archive를 GPU 0에 5개 replica로 적재하고,
 realtime-agent가 기존 VAD로 확정한 발화 단위 PCM을 전달해 완성 문장 하나를 받는다.
 
 - dev/prod LiveKit worker, VAD, Redis publisher와 caption payload는 변경하지 않는다.
 - Java가 소비하는 `TextDelta.text`에는 한 발화의 완성 문장 전체가 한 번에 들어간다.
 - 동일 문장은 기존 `caption.segment.final`에도 기록된다.
-- native cache-aware streaming, partial token, 다중 runtime replica, 자동 복구는 이번 범위가 아니다.
+- native cache-aware streaming, partial token, 5개 초과 replica, 자동 복구는 이번 범위가 아니다.
 
 ## 2. 현재 흐름과 변경 지점
 
@@ -39,7 +39,7 @@ LiveKit microphone PCM
 ### 별도 NeMo model-owner process
 
 realtime-agent venv에는 NeMo를 섞지 않는다. 학습에서 검증한 고정 NeMo venv가 runtime을 실행한다.
-runtime은 loopback에만 bind하고 모델을 process 시작 시 한 번 복원한다.
+runtime은 loopback에만 bind하고 동일 checkpoint를 process 시작 시 5개 독립 replica로 복원한다.
 
 ```text
 NEMO_RUNTIME_VENV=/home/liveclass/ai/training/nemotron-3.5-full-20260803/.venv
@@ -47,6 +47,7 @@ NEMO_RUNTIME_MODEL_PATH=.../LiveClass-Nemotron-3.5-ASR-Full-Finetune.nemo
 NEMO_RUNTIME_HOST=127.0.0.1
 NEMO_RUNTIME_PORT=18084
 NEMO_RUNTIME_SERVED_MODEL_NAME=liveclass-nemotron-tuned-v1
+NEMO_RUNTIME_REPLICAS=5
 CUDA_VISIBLE_DEVICES=0
 ```
 
@@ -70,24 +71,24 @@ CUDA_VISIBLE_DEVICES=0
 - multipart: `model`, `language=ko-KR`, `file`(mono PCM16 WAV)
 - 성공: `200 {"text":"완성 문장"}`
 - 빈 인식도 정상 응답: `200 {"text":""}`
-- 한 process에서 요청을 직렬 처리한다.
+- 가용 replica를 queue에서 대여해 최대 5개 요청을 동시에 처리한다.
 
 ## 4. 구현 단위
 
 1. `nemo-runtime/`에 표준 라이브러리 HTTP server와 model wrapper를 둔다.
 2. wrapper는 `ASRModel.restore_from()`, `set_inference_prompt("ko-KR")`, language tag 제거,
-   FP32 CUDA inference를 소유한다.
+   각 replica의 FP32 CUDA model과 전용 CUDA stream을 소유한다.
 3. realtime-agent에 loopback URL·model alias·timeout 설정과 `nemotron-nemo` provider를 추가한다.
 4. provider는 기존 `SegmentedStreamingEngine`을 상속하고 WAV multipart 요청 뒤
    `ProviderSegmentFinal` 하나만 반환한다.
 5. 사용자 tmux supervisor와 env example을 추가한다.
-6. prod profile은 `STT_ENGINE_PROVIDER=nemotron-nemo`, active/idle `1/1`만 허용한다.
+6. prod profile은 `STT_ENGINE_PROVIDER=nemotron-nemo`, active/idle 기본 `5/5`, 상한 5와 runtime replica 기본 5를 사용한다.
 
 ## 5. 의도적으로 제외하는 것
 
 - `conformer_stream_step()` 기반 partial streaming
 - WebSocket/session cache protocol
-- request batching과 동시성 2 이상
+- dynamic batching과 동시성 5 초과
 - circuit breaker, 자동 fallback, 무중단 drain
 - `.nemo`에서 Hugging Face로의 비공식 weight 변환
 - Redis/Java/Frontend 변경
@@ -95,7 +96,7 @@ CUDA_VISIBLE_DEVICES=0
 ## 6. 검증 순서
 
 1. 단위 테스트: 설정, loopback 제한, model alias, WAV request, 완성 문장 단일 final.
-2. runtime fake-model 테스트: live/ready/models/transcriptions 상태코드.
+2. runtime fake-model 테스트: live/ready/models/transcriptions 상태코드와 replica 병렬 실행.
 3. shell 문법과 env profile 테스트.
 4. tuned `.nemo` SHA-256이 ADR-0046의
    `4cf5368cbb9d57a48ee0b5afbb3790deedd4612963a095b2db30d3f7f57c79fa`와 일치하는지 확인.
@@ -105,7 +106,7 @@ CUDA_VISIBLE_DEVICES=0
 
 ## 7. 완료 기준
 
-- tuned model runtime과 prod agent가 모두 ready다.
+- tuned model runtime의 replica 5개와 prod agent process 5개가 모두 ready다.
 - VAD segment 한 건당 provider가 완성 text 하나만 반환한다.
 - 기존 Redis contract test가 수정 없이 통과한다.
 - 실제 음성 smoke에서 Redis `text`에 제어 prefix나 token 조각이 아닌 완성 문장이 기록된다.
