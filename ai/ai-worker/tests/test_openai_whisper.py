@@ -16,10 +16,10 @@ async def test_requests_openai_whisper_segment_and_word_timestamps(tmp_path) -> 
         body = await request.aread()
         assert b"whisper-1" in body
         assert b"verbose_json" in body
-        assert b'timestamp_granularities%5B%5D' not in body
-        assert body.count(b'timestamp_granularities[]') == 2
-        assert b'segment' in body
-        assert b'word' in body
+        assert b"timestamp_granularities%5B%5D" not in body
+        assert body.count(b"timestamp_granularities[]") == 2
+        assert b"segment" in body
+        assert b"word" in body
         return httpx.Response(
             200,
             json={
@@ -65,9 +65,7 @@ async def test_preserves_text_only_response_for_timestamp_fallback(tmp_path) -> 
             json={"duration": 3.6, "text": "한 덩어리", "segments": []},
         )
     )
-    async with httpx.AsyncClient(
-        base_url="https://api.openai.com/v1", transport=transport
-    ) as http:
+    async with httpx.AsyncClient(base_url="https://api.openai.com/v1", transport=transport) as http:
         client = OpenAIWhisperClient(
             http,
             api_key="secret-key",
@@ -100,9 +98,7 @@ async def test_preserves_zero_duration_word_for_normalization(tmp_path) -> None:
             },
         )
     )
-    async with httpx.AsyncClient(
-        base_url="https://api.openai.com/v1", transport=transport
-    ) as http:
+    async with httpx.AsyncClient(base_url="https://api.openai.com/v1", transport=transport) as http:
         result = await OpenAIWhisperClient(
             http,
             api_key="secret-key",
@@ -122,9 +118,7 @@ async def test_maps_openai_400_to_permanent_model_unavailable(tmp_path) -> None:
     transport = httpx.MockTransport(
         lambda _request: httpx.Response(400, json={"error": "invalid request"})
     )
-    async with httpx.AsyncClient(
-        base_url="https://api.openai.com/v1", transport=transport
-    ) as http:
+    async with httpx.AsyncClient(base_url="https://api.openai.com/v1", transport=transport) as http:
         client = OpenAIWhisperClient(
             http,
             api_key="secret-key",

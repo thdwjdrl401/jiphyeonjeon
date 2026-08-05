@@ -39,7 +39,9 @@ class CaptionCueAssembler:
                 if index not in covered_word_indexes and self._inside(segment, word)
             )
             covered_word_indexes.update(index for index, _word in indexed_words)
-            cues.extend(self._assemble_segment(segment, tuple(word for _index, word in indexed_words)))
+            cues.extend(
+                self._assemble_segment(segment, tuple(word for _index, word in indexed_words))
+            )
 
         uncovered_words = tuple(
             word

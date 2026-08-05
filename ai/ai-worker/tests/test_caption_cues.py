@@ -63,9 +63,7 @@ def test_uses_provider_segment_text_as_the_primary_caption() -> None:
         WhisperResult(
             duration=5.0,
             text="이 영상은 테스트 영상입니다.",
-            segments=(
-                WhisperSegment(start=1.0, end=4.0, text=" 이 영상은 테스트 영상입니다. "),
-            ),
+            segments=(WhisperSegment(start=1.0, end=4.0, text=" 이 영상은 테스트 영상입니다. "),),
             words=(
                 _word(1.0, 1.4, "이"),
                 _word(1.4, 2.0, "영상은"),
@@ -87,9 +85,7 @@ def test_splits_a_long_segment_with_words_and_preserves_punctuation() -> None:
         WhisperResult(
             duration=4.0,
             text="첫 문장입니다. 다음 문장입니다.",
-            segments=(
-                WhisperSegment(start=0.0, end=3.0, text="첫 문장입니다. 다음 문장입니다."),
-            ),
+            segments=(WhisperSegment(start=0.0, end=3.0, text="첫 문장입니다. 다음 문장입니다."),),
             words=(
                 _word(0.0, 0.4, "첫"),
                 _word(0.5, 1.0, "문장입니다"),
@@ -113,9 +109,7 @@ def test_keeps_a_long_segment_when_word_alignment_fails() -> None:
         WhisperResult(
             duration=8.0,
             text="문장부호를 포함한 긴 자막입니다.",
-            segments=(
-                WhisperSegment(start=0.0, end=7.0, text="문장부호를 포함한 긴 자막입니다."),
-            ),
+            segments=(WhisperSegment(start=0.0, end=7.0, text="문장부호를 포함한 긴 자막입니다."),),
             words=(_word(0.0, 7.0, "일치하지않음"),),
         )
     )

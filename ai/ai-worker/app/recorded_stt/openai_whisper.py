@@ -93,9 +93,7 @@ class OpenAIWhisperClient:
             multipart_fields.append(("prompt", (None, prompt[:1000])))
         try:
             audio = chunk_path.read_bytes()
-            multipart_fields.append(
-                ("file", (chunk_path.name, audio, "audio/mpeg"))
-            )
+            multipart_fields.append(("file", (chunk_path.name, audio, "audio/mpeg")))
             response = await self._client.post(
                 "/audio/transcriptions",
                 files=multipart_fields,
