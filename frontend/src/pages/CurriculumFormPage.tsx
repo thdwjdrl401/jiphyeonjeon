@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { instructorPaths } from '@/app/router/paths'
 import CurriculumAssetsFields from '@/features/curriculum/CurriculumAssetsFields'
 import { type CurriculumImageSelection } from '@/features/curriculum/CurriculumImageField'
-import CurriculumPeriodFields from '@/features/curriculum/CurriculumPeriodFields'
+import CurriculumPeriodFields, { isEndsAtBeforeToday } from '@/features/curriculum/CurriculumPeriodFields'
 import { createCurriculum, uploadCurriculumThumbnail } from '@/features/curriculum/curriculumManagementService'
 import type { CurriculumMaterial } from '@/features/curriculum/types'
 import { ApiError } from '@/shared/api/client'
@@ -36,6 +36,7 @@ export default function CurriculumFormPage() {
     event.preventDefault()
     setError('')
     if (!form.title.trim()) { setError('커리큘럼 제목을 입력해 주세요.'); return }
+    if (isEndsAtBeforeToday(form.endsAt)) { setError('운영 종료일은 오늘보다 이전일 수 없습니다.'); return }
     if (form.startsAt && form.endsAt && form.startsAt >= form.endsAt) { setError('종료일은 시작일보다 뒤여야 합니다.'); return }
     setSubmitting(true)
     try {
