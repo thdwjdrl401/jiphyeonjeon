@@ -22,6 +22,7 @@ SUPERVISOR_SCRIPT = DEPLOY_DIR / "bin" / "liveclass-realtime-agent-supervisor"
 VLLM_BOOTSTRAP_SCRIPT = DEPLOY_DIR / "bin" / "liveclass-whisper-vllm-bootstrap"
 VLLM_SUPERVISOR_SCRIPT = DEPLOY_DIR / "bin" / "liveclass-whisper-vllm-supervisor"
 NEMO_SUPERVISOR_SCRIPT = DEPLOY_DIR / "bin" / "liveclass-nemotron-nemo-supervisor"
+NEMO_RUNTIME_SERVER = DEPLOY_DIR / "runtime" / "nemotron_nemo_server.py"
 RUNNER_CONTROL_SCRIPT = DEPLOY_DIR / "bin" / "liveclass-gitlab-runner-user"
 INSTALL_SCRIPT = DEPLOY_DIR / "install.sh"
 RUNNER_INSTALL_SCRIPT = DEPLOY_DIR / "install-gitlab-runner-user.sh"
@@ -518,13 +519,15 @@ def test_nemotron_nemo_examples_use_tuned_checkpoint_and_loopback() -> None:
     supervisor = NEMO_SUPERVISOR_SCRIPT.read_text(encoding="utf-8")
 
     assert "STT_ENGINE_PROVIDER=nemotron-nemo" in agent
-    assert "STT_MAX_ACTIVE_JOBS=1" in agent
-    assert "STT_NUM_IDLE_PROCESSES=1" in agent
+    assert "STT_MAX_ACTIVE_JOBS=5" in agent
+    assert "STT_NUM_IDLE_PROCESSES=5" in agent
     assert "NEMO_RUNTIME_BASE_URL=http://127.0.0.1:18084/v1" in agent
     assert "NEMO_RUNTIME_MODEL=liveclass-nemotron-3.5-tuned" in agent
     assert "CUDA_VISIBLE_DEVICES=0" in runtime
     assert "NEMO_RUNTIME_HOST=127.0.0.1" in runtime
     assert "NEMO_RUNTIME_PORT=18084" in runtime
+    assert "NEMO_RUNTIME_REPLICAS=5" in runtime
+    assert '--replicas "$NEMO_RUNTIME_REPLICAS"' in supervisor
     assert "LiveClass-Nemotron-3.5-ASR-Full-Finetune.nemo" in runtime
     assert "nemotron_nemo_server.py" in supervisor
     assert "/v1/models" in supervisor
@@ -788,3 +791,40 @@ def test_deploy_helper_builds_before_switch_and_keeps_rollback_path() -> None:
     assert '"$RELEASE_DIR/deploy/bin/liveclass-realtime-agent-supervisor" stop-agent' in script
     assert "liveclass-realtime-agent-supervisor" in script[command_refresh_position:]
     assert "liveclass-realtime-agent-deploy" in script[command_refresh_position:]
+
+
+@pytest.mark.asyncio
+async def test_nemotron_nemo_runtime_pool_runs_replicas_concurrently() -> None:
+    import asyncio
+    import importlib.util
+
+    module_name = "test_nemotron_nemo_runtime"
+    spec = importlib.util.spec_from_file_location(module_name, NEMO_RUNTIME_SERVER)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    try:
+        spec.loader.exec_module(module)
+
+        barrier = threading.Barrier(2)
+
+        class FakeTranscriber:
+            model = object()
+
+            def __init__(self, text: str) -> None:
+                self.text = text
+
+            def transcribe(self, _payload: bytes) -> str:
+                barrier.wait(timeout=2)
+                return self.text
+
+        pool = module.NemoTranscriberPool([FakeTranscriber("first"), FakeTranscriber("second")])
+
+        results = await asyncio.gather(pool.transcribe(b"a"), pool.transcribe(b"b"))
+
+        assert sorted(results) == ["first", "second"]
+        assert pool.replica_count == 2
+        assert pool.ready_replica_count == 2
+    finally:
+        sys.modules.pop(module_name, None)

@@ -29,6 +29,8 @@ _NEMOTRON_JOB_MEMORY_WARN_MB = 2304.0
 _VLLM_WHISPER_MAX_ACTIVE_JOBS = 1
 _VLLM_WHISPER_INITIALIZE_TIMEOUT_SECONDS = 30.0
 _NEMOTRON_NEMO_INITIALIZE_TIMEOUT_SECONDS = 30.0
+_NEMOTRON_NEMO_MAX_ACTIVE_JOBS = 5
+_NEMOTRON_NEMO_DEFAULT_IDLE_PROCESSES = 5
 _OPENAI_REALTIME_DELAYS = frozenset({"minimal", "low", "medium", "high", "xhigh"})
 
 
@@ -87,9 +89,9 @@ def build_stt_provider_registry(settings: Settings) -> SttEngineRegistry:
         "nemotron-nemo",
         lambda: NemotronNemoStreamingEngine(_nemotron_nemo_configuration(settings)),
         execution_profile=SttProviderExecutionProfile(
-            max_active_jobs=1,
-            default_max_active_jobs=1,
-            default_num_idle_processes=1,
+            max_active_jobs=_NEMOTRON_NEMO_MAX_ACTIVE_JOBS,
+            default_max_active_jobs=_NEMOTRON_NEMO_MAX_ACTIVE_JOBS,
+            default_num_idle_processes=_NEMOTRON_NEMO_DEFAULT_IDLE_PROCESSES,
             initialize_process_timeout_seconds=_NEMOTRON_NEMO_INITIALIZE_TIMEOUT_SECONDS,
             job_memory_warn_mb=1000.0,
         ),

@@ -102,8 +102,16 @@ validate_agent_env_profile() {
                 fi
                 ;;
             nemotron-nemo)
-                if [ "${STT_MAX_ACTIVE_JOBS:-}" != "1" ] || \
-                    [ "${STT_NUM_IDLE_PROCESSES:-}" != "1" ] || \
+                case "${STT_MAX_ACTIVE_JOBS:-}:${STT_NUM_IDLE_PROCESSES:-}" in
+                    *[!0-9:]*|:*|*:)
+                        echo "$profile nemotron-nemo env profile mismatch" >&2
+                        exit 1
+                        ;;
+                esac
+                if [ "$STT_MAX_ACTIVE_JOBS" -lt 1 ] || \
+                    [ "$STT_MAX_ACTIVE_JOBS" -gt 5 ] || \
+                    [ "$STT_NUM_IDLE_PROCESSES" -lt 1 ] || \
+                    [ "$STT_NUM_IDLE_PROCESSES" -gt "$STT_MAX_ACTIVE_JOBS" ] || \
                     [ -z "${NEMO_RUNTIME_BASE_URL:-}" ] || \
                     [ -z "${NEMO_RUNTIME_MODEL:-}" ] || \
                     [ -z "${NEMO_RUNTIME_REQUEST_TIMEOUT_SECONDS:-}" ] || \

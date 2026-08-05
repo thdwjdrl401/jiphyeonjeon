@@ -34,6 +34,7 @@ validate_runtime_env() {
     : "${NEMO_RUNTIME_MODEL_PATH:?NEMO_RUNTIME_MODEL_PATH is required}"
     : "${NEMO_RUNTIME_SERVED_MODEL_NAME:?NEMO_RUNTIME_SERVED_MODEL_NAME is required}"
     : "${NEMO_RUNTIME_PORT:?NEMO_RUNTIME_PORT is required}"
+    NEMO_RUNTIME_REPLICAS="${NEMO_RUNTIME_REPLICAS:-1}"
     if [ "${CUDA_VISIBLE_DEVICES:-}" != "0" ]; then
         echo "Nemotron NeMo runtime is restricted to GPU 0" >&2
         exit 1
@@ -50,6 +51,16 @@ validate_runtime_env() {
     esac
     if [ "$NEMO_RUNTIME_PORT" -lt 1 ] || [ "$NEMO_RUNTIME_PORT" -gt 65535 ]; then
         echo "NEMO_RUNTIME_PORT must be between 1 and 65535" >&2
+        exit 1
+    fi
+    case "$NEMO_RUNTIME_REPLICAS" in
+        *[!0-9]*|"")
+            echo "NEMO_RUNTIME_REPLICAS must be numeric" >&2
+            exit 1
+            ;;
+    esac
+    if [ "$NEMO_RUNTIME_REPLICAS" -lt 1 ] || [ "$NEMO_RUNTIME_REPLICAS" -gt 5 ]; then
+        echo "NEMO_RUNTIME_REPLICAS must be between 1 and 5" >&2
         exit 1
     fi
     if [ ! -x "$NEMO_RUNTIME_VENV/bin/python" ]; then
@@ -97,6 +108,7 @@ run_runtime() {
             --served-model "$NEMO_RUNTIME_SERVED_MODEL_NAME" \
             --host "$NEMO_RUNTIME_HOST" \
             --port "$NEMO_RUNTIME_PORT" \
+            --replicas "$NEMO_RUNTIME_REPLICAS" \
             --device cuda
         runtime_status=$?
         set -e
