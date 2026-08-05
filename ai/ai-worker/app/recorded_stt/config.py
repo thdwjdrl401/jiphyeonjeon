@@ -33,13 +33,17 @@ class RecordedSttSettings(BaseSettings):
     source_max_bytes: int = Field(default=5 * 1024 * 1024 * 1024, gt=0)
     source_max_duration_seconds: int = Field(default=6 * 60 * 60, ge=60, le=24 * 60 * 60)
 
-    gms_base_url: str = "https://api.openai.com/v1"
-    gms_api_key: SecretStr
+    openai_base_url: str = "https://api.openai.com/v1"
+    openai_api_key: SecretStr
     model: Literal["whisper-1"] = "whisper-1"
     language: Literal["ko"] = "ko"
     request_timeout_seconds: float = Field(default=180.0, gt=0, le=900)
-    gms_retry_limit: int = Field(default=3, ge=0, le=10)
-    gms_retry_base_delay_seconds: float = Field(default=2.0, ge=0, le=60)
+    openai_retry_limit: int = Field(default=3, ge=0, le=10)
+    openai_retry_base_delay_seconds: float = Field(default=2.0, ge=0, le=60)
+
+    cue_max_duration_ms: int = Field(default=6000, ge=1000, le=15_000)
+    cue_max_chars: int = Field(default=42, ge=10, le=200)
+    cue_pause_break_ms: int = Field(default=500, ge=100, le=5000)
 
     chunk_seconds: int = Field(default=900, ge=60, le=1800)
     chunk_overlap_ms: int = Field(default=1000, ge=0, le=10_000)
@@ -60,7 +64,7 @@ class RecordedSttSettings(BaseSettings):
             raise ValueError("rabbitmq_url must be an unpadded AMQP URL")
         return value
 
-    @field_validator("spring_internal_base_url", "gms_base_url")
+    @field_validator("spring_internal_base_url", "openai_base_url")
     @classmethod
     def validate_http_url(cls, value: str) -> str:
         parsed = urlsplit(value)
@@ -76,7 +80,7 @@ class RecordedSttSettings(BaseSettings):
             raise ValueError("service URL must be a credential-free HTTP URL")
         return value.rstrip("/")
 
-    @field_validator("source_hmac_secret", "callback_hmac_secret", "gms_api_key")
+    @field_validator("source_hmac_secret", "callback_hmac_secret", "openai_api_key")
     @classmethod
     def validate_secret(cls, value: SecretStr) -> SecretStr:
         revealed = value.get_secret_value()
@@ -95,6 +99,8 @@ class RecordedSttSettings(BaseSettings):
     def validate_chunk_policy(self) -> Self:
         if self.chunk_overlap_ms >= self.chunk_seconds * 1000:
             raise ValueError("chunk overlap must be shorter than a chunk")
+        if self.cue_pause_break_ms >= self.cue_max_duration_ms:
+            raise ValueError("cue pause boundary must be shorter than the maximum cue duration")
         return self
 
 

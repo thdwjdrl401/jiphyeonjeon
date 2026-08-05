@@ -12,6 +12,14 @@ _CONTEXT_FIELDS = (
     "material_id",
     "duration_ms",
     "error_code",
+    "error_reason",
+    "segment_count",
+    "word_count",
+    "invalid_segment_count",
+    "zero_duration_word_count",
+    "merged_word_count",
+    "discarded_word_count",
+    "fallback_mode",
 )
 
 _SENSITIVE_HTTP_LOGGERS = ("httpx", "httpcore")

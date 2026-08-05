@@ -10,7 +10,11 @@ def test_json_log_uses_same_allowlisted_context_fields() -> None:
     record.event = "job.failed"
     record.job_id = UUID("12345678-1234-5678-1234-567812345678")
     record.error_code = "TEST_FAILURE"
+    record.error_reason = "TIMESTAMPS_MISSING"
+    record.word_count = 13
+    record.fallback_mode = "SEGMENT_PRIMARY"
     record.password = "must-not-appear"
+    record.transcript = "must-not-appear-either"
 
     rendered = JsonFormatter("ai-worker").format(record)
     payload = json.loads(rendered)
@@ -19,6 +23,9 @@ def test_json_log_uses_same_allowlisted_context_fields() -> None:
     assert payload["event"] == "job.failed"
     assert payload["job_id"] == "12345678-1234-5678-1234-567812345678"
     assert payload["error_code"] == "TEST_FAILURE"
+    assert payload["error_reason"] == "TIMESTAMPS_MISSING"
+    assert payload["word_count"] == 13
+    assert payload["fallback_mode"] == "SEGMENT_PRIMARY"
     assert "must-not-appear" not in rendered
 
 

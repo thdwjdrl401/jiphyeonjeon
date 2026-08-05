@@ -791,8 +791,12 @@ PPTX 검색만 계속한다. ai-api endpoint는 `POST /internal/v2/rag/answers:s
   progress/chunk/callback은 각각 `RECORDED_STT_SOURCE_SECRET`, `RECORDED_STT_CALLBACK_SECRET`으로 raw body를
   HMAC-SHA256 서명한 `X-Signature`를 사용한다.
 - worker는 MP4를 최대 5GiB로 제한해 streaming download하고 FFprobe로 audio stream을 확인한다. FFmpeg로
-  mono 16kHz·64kbps MP3를 추출한 뒤 기본 15분·1초 overlap, hard 24MiB 이하로 나누고 GMS
-  `/audio/transcriptions`의 `whisper-1`, `ko`, `verbose_json`, segment timestamp를 호출한다.
+  mono 16kHz·64kbps MP3를 추출한 뒤 기본 15분·1초 overlap, hard 24MiB 이하로 나누고 OpenAI
+  `/audio/transcriptions`의 `whisper-1`, `ko`, `verbose_json`에 segment·word timestamp를 함께 요청한다.
+  15분은 전송 청크일 뿐 표시 자막 단위가 아니다. worker는 유효한 segment를 기본 cue로 사용하고,
+  6초·42자를 넘는 segment만 word 시간·500ms pause로 나눈다. segment가 없으면 word 기반으로
+  fallback하며, 길이 0인 word는 인접 word에 병합한다. 상세 정규화 정책은
+  [ADR-0017](decisions/choinhoo/0017-recorded-caption-segment-word-normalization.md)을 따른다.
 - `PUT .../{jobId}/chunks/{chunkIndex}` body는
   `{eventId,sourceStartMs,sourceEndMs,sourceSha256,model,language,segments:[{localSegmentIndex,startMs,endMs,text}]}`다.
   시간은 원본 MP4의 0ms 상대축이다. 동일 index+동일 body는 204, 다른 body는 409

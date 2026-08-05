@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,13 +11,19 @@ from app.recorded_stt.contracts import (
     RecordedSttJob,
     parse_recorded_stt_job,
 )
-from app.recorded_stt.gms_whisper import (
-    GmsWhisperClient,
-    WhisperSegment,
+from app.recorded_stt.caption_cues import CaptionCueAssembler
+from app.recorded_stt.media import FfmpegRecordedAudioProcessor, RecordedAudioError
+from app.recorded_stt.openai_whisper import (
+    OpenAIWhisperClient,
     WhisperTranscriptionError,
 )
-from app.recorded_stt.media import FfmpegRecordedAudioProcessor, RecordedAudioError
 from app.recorded_stt.spring_client import RecordedSttSpringClient, RecordedSttSpringError
+from app.recorded_stt.transcription_normalizer import (
+    NormalizedTranscription,
+    normalize_transcription,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class PermanentRecordedSttJobError(RuntimeError):
@@ -26,11 +33,12 @@ class PermanentRecordedSttJobError(RuntimeError):
 @dataclass(slots=True)
 class RecordedSttJobHandler:
     spring: RecordedSttSpringClient
-    whisper: GmsWhisperClient
+    whisper: OpenAIWhisperClient
     media: FfmpegRecordedAudioProcessor
     model: str
     language: str
     overlap_ms: int
+    cue_assembler: CaptionCueAssembler
 
     async def handle(self, body: bytes) -> None:
         try:
@@ -40,6 +48,16 @@ class RecordedSttJobHandler:
         try:
             await self._execute(job)
         except (RecordedSttSpringError, WhisperTranscriptionError, RecordedAudioError) as exc:
+            if isinstance(exc, WhisperTranscriptionError) and exc.reason:
+                logger.warning(
+                    "recorded STT transcription response rejected",
+                    extra={
+                        "event": "recorded_stt.response_rejected",
+                        "job_id": job.job_id,
+                        "error_code": exc.code,
+                        "error_reason": exc.reason,
+                    },
+                )
             if exc.retryable:
                 raise
             await self._report_failed(job, exc.code)
@@ -83,9 +101,25 @@ class RecordedSttJobHandler:
                     segment_count += prior.segment_count
                     continue
 
-                transcription = await self.whisper.transcribe(chunk.path, prompt=prompt_tail)
-                segments = self._global_segments(
-                    transcription.segments,
+                provider_result = await self.whisper.transcribe(chunk.path, prompt=prompt_tail)
+                transcription = normalize_transcription(provider_result)
+                stats = transcription.stats
+                logger.info(
+                    "recorded STT transcription response normalized",
+                    extra={
+                        "event": "recorded_stt.response_normalized",
+                        "job_id": job.job_id,
+                        "segment_count": stats.raw_segment_count,
+                        "word_count": stats.raw_word_count,
+                        "invalid_segment_count": stats.invalid_segment_count,
+                        "zero_duration_word_count": stats.zero_duration_word_count,
+                        "merged_word_count": stats.merged_word_count,
+                        "discarded_word_count": stats.discarded_word_count,
+                        "fallback_mode": stats.fallback_mode,
+                    },
+                )
+                segments = self._global_cues(
+                    transcription,
                     source_start_ms=chunk.source_start_ms,
                     source_end_ms=chunk.source_end_ms,
                     chunk_index=chunk.index,
@@ -101,8 +135,8 @@ class RecordedSttJobHandler:
                 )
                 await self.spring.submit_chunk(job.job_id, chunk.index, result)
                 segment_count += len(segments)
-                if segments:
-                    prompt_tail = segments[-1].text[-500:]
+                if transcription.text.strip():
+                    prompt_tail = transcription.text.strip()[-500:]
 
             await self.spring.send_terminal(
                 event_id=f"stt-terminal-{job.job_id}-succeeded",
@@ -118,40 +152,78 @@ class RecordedSttJobHandler:
                 },
             )
 
-    def _global_segments(
+    def _global_cues(
         self,
-        segments: tuple[WhisperSegment, ...],
+        transcription: NormalizedTranscription,
         *,
         source_start_ms: int,
         source_end_ms: int,
         chunk_index: int,
     ) -> tuple[CaptionSegment, ...]:
+        overlap_end_seconds = self.overlap_ms / 1000 if chunk_index > 0 else 0.0
+        accepted_words = tuple(
+            word
+            for word in transcription.words
+            if (word.start + word.end) / 2 >= overlap_end_seconds
+        )
+        if chunk_index == 0:
+            accepted_segments = transcription.segments
+        elif accepted_words:
+            # A segment crossing the leading overlap may contain text already owned by the prior
+            # chunk. Drop that provider segment and let its accepted words become word-only cues.
+            accepted_segments = tuple(
+                segment
+                for segment in transcription.segments
+                if segment.start >= overlap_end_seconds
+            )
+        else:
+            accepted_segments = tuple(
+                segment
+                for segment in transcription.segments
+                if (segment.start + segment.end) / 2 >= overlap_end_seconds
+            )
+
+        owned = NormalizedTranscription(
+            duration=transcription.duration,
+            text=transcription.text,
+            segments=accepted_segments,
+            words=accepted_words,
+            stats=transcription.stats,
+        )
+        cues = self.cue_assembler.assemble_transcription(owned)
+
         result: list[CaptionSegment] = []
-        leading_overlap_end = source_start_ms + (self.overlap_ms if chunk_index > 0 else 0)
-        for local_index, segment in enumerate(segments):
-            start = source_start_ms + round(segment.start * 1000)
-            end = source_start_ms + round(segment.end * 1000)
-            text = segment.text.strip()
-            if not text:
-                continue
-            if start < source_start_ms or end > source_end_ms + 2_000 or end <= start:
+        previous_end = source_start_ms
+        for cue in cues:
+            start = source_start_ms + round(cue.start_seconds * 1000)
+            end = source_start_ms + round(cue.end_seconds * 1000)
+            if start < source_start_ms or end > source_end_ms + 2_000:
                 raise WhisperTranscriptionError(
-                    "GMS segment exceeds its audio chunk",
+                    "OpenAI caption timestamp exceeds its audio chunk",
                     code="STT_RESPONSE_INVALID",
                     retryable=False,
+                    reason="CUE_TIMESTAMP_OUT_OF_RANGE",
                 )
-            # Overlap ownership is deterministic: the earlier chunk owns a segment whose midpoint
-            # remains inside the next chunk's leading overlap. This also works after process restart,
-            # when only prior checksums/counts (not caption text) are loaded from Spring.
-            if chunk_index > 0 and (start + end) // 2 < leading_overlap_end:
+            start = max(start, previous_end)
+            end = min(end, source_end_ms)
+            text = cue.text.strip()
+            if not text or end <= start:
                 continue
             result.append(
                 CaptionSegment(
-                    local_segment_index=local_index,
+                    local_segment_index=len(result),
                     start_ms=start,
-                    end_ms=min(end, source_end_ms),
+                    end_ms=end,
                     text=text,
                 )
+            )
+            previous_end = end
+        if (accepted_segments or accepted_words) and transcription.text.strip() and not result:
+            raise WhisperTranscriptionError(
+                "OpenAI transcription produced no valid caption cues",
+                code="STT_RESPONSE_INVALID",
+                retryable=False,
+                reason="CUES_EMPTY_AFTER_NORMALIZATION",
             )
         return tuple(result)
 
