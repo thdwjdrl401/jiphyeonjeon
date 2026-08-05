@@ -15,6 +15,7 @@ import { resolvePrimaryAction } from '@/features/curriculum-detail/primaryAction
 import { useCurriculumDetail } from '@/features/curriculum-detail/useCurriculumDetail'
 import CurriculumProgress from '@/features/enrollment/CurriculumProgress'
 import { useCancelEnrollmentMutation, useEnrollMutation } from '@/features/enrollment/useEnrollmentMutations'
+import type { MaterialDownloadRequest } from '@/features/material/materialDownloadService'
 import LiveReminderPopover from '@/features/notification/LiveReminderPopover'
 import { ApiError } from '@/shared/api/client'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
@@ -61,11 +62,14 @@ export default function CurriculumDetailPage() {
   const primaryAction = resolvePrimaryAction(detail)
   const instructorManagement = resolveInstructorManagement(detail)
   const canViewCurriculumMaterials = ['ENROLLED', 'OWNER_INSTRUCTOR'].includes(detail.viewerContext.relationship)
-  // 다운로드 경로는 보는 사람에 따라 다르다 — 소유 강사는 관리용 경로, 수강생은 공개 상세와 같은 경로를 쓴다.
-  const materialDownloadHref = (material: CurriculumMaterial) =>
-    detail.viewerContext.relationship === 'OWNER_INSTRUCTOR'
-      ? `/api/instructor/curriculums/${detail.curriculumId}/materials/${material.materialId}/download`
-      : `/api/curriculums/${detail.curriculumId}/materials/${material.materialId}/download`
+  // 다운로드 경로는 보는 사람에 따라 다르다 — 소유 강사는 관리용 경로, 수강생은 수강 관계로 열리는 경로를 쓴다.
+  const materialDownloadRequest = (material: CurriculumMaterial): MaterialDownloadRequest => ({
+    scope: 'CURRICULUM',
+    parentId: detail.curriculumId,
+    materialId: material.materialId,
+    fileName: material.fileName,
+    asInstructor: detail.viewerContext.relationship === 'OWNER_INSTRUCTOR',
+  })
 
   const handleEnroll = () => enrollMutation.mutate()
   const handleCancel = () => cancelMutation.mutate()
@@ -113,7 +117,7 @@ export default function CurriculumDetailPage() {
             )}
 
             {canViewCurriculumMaterials && (
-              <CurriculumMaterials materials={detail.materials} downloadHref={materialDownloadHref} />
+              <CurriculumMaterials materials={detail.materials} downloadRequest={materialDownloadRequest} />
             )}
 
             {detail.viewerContext.relationship === 'ENROLLED' && detail.viewerContext.progress && (

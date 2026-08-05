@@ -5,6 +5,7 @@ import App from '@/App'
 import { mockAuthService, resetMockAuth } from '@/features/auth/mockAuthService'
 import { resetMockCurriculumManagement } from '@/features/curriculum/mockCurriculumManagementService'
 import { buildMockCurriculumOutline, getMockCurriculum, publishMockCurriculum } from '@/features/demo/mockDatabase'
+import * as materialDownloadService from '@/features/material/materialDownloadService'
 import { todayLocalStart } from '@/shared/lib/localDateTime'
 
 /**
@@ -544,27 +545,31 @@ describe('커리큘럼 작업 화면', () => {
     expect(screen.queryByRole('link', { name: '강의 상세' })).not.toBeInTheDocument()
   })
 
-  // 자료 다운로드는 앱 서버가 presigned URL로 302를 주는 링크다 — 경로가 역할별로 갈린다.
+  // 자료 다운로드는 앱 서버가 presigned URL로 302를 주는 경로다 — 역할별로 갈린다.
   it('강의 상세 자료 다운로드는 강사·수강생이 각자의 경로를 쓴다', async () => {
+    const user = userEvent.setup()
+    const fetchMaterial = vi
+      .spyOn(materialDownloadService, 'fetchMaterial')
+      .mockResolvedValue(new Blob(['bytes']))
     const { unmount } = await renderAsInstructor(
       '/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/les-security',
     )
 
-    const instructorLink = await screen.findByRole('link', { name: 'spring-security-basics.pptx 다운로드' })
-    expect(instructorLink).toHaveAttribute(
-      'href',
-      '/api/instructor/lessons/les-security/materials/mat-security/download',
-    )
-    // presigned URL에는 원본 파일명이 없다 — 저장될 이름을 링크가 들고 있어야 한다.
-    expect(instructorLink).toHaveAttribute('download', 'spring-security-basics.pptx')
+    await user.click(await screen.findByRole('button', { name: 'spring-security-basics.pptx 다운로드' }))
+    // presigned URL에는 원본 파일명이 없다 — 저장될 이름을 요청이 함께 들고 가야 한다.
+    expect(fetchMaterial).toHaveBeenLastCalledWith({
+      scope: 'LESSON',
+      parentId: 'les-security',
+      materialId: 'mat-security',
+      fileName: 'spring-security-basics.pptx',
+      asInstructor: true,
+    })
     unmount()
 
     await renderAsStudent('/student/curriculums/cur-spring-live/sections/sec-security/lessons/les-security')
 
-    expect(await screen.findByRole('link', { name: 'spring-security-basics.pptx 다운로드' })).toHaveAttribute(
-      'href',
-      '/api/lessons/les-security/materials/mat-security/download',
-    )
+    await user.click(await screen.findByRole('button', { name: 'spring-security-basics.pptx 다운로드' }))
+    expect(fetchMaterial).toHaveBeenLastCalledWith(expect.objectContaining({ asInstructor: false }))
   })
 
   it('라이브 일정이 없는 강사 강의 상세는 강의 수정에서 일정을 추가하도록 안내한다', async () => {

@@ -10,6 +10,7 @@ import { ToastProvider } from '@/shared/ui/Toast'
 import CurriculumDetailPage from '@/pages/CurriculumDetailPage'
 import LoginPage from '@/pages/LoginPage'
 import * as enrollmentService from '@/features/enrollment/enrollmentService'
+import * as materialDownloadService from '@/features/material/materialDownloadService'
 import {
   MOCK_ERROR_CURRICULUM_ID,
   resetMockCurriculumDetails,
@@ -118,27 +119,36 @@ describe('CurriculumDetailPage', () => {
     expect(screen.getByRole('button', { name: '수강 취소' })).toBeInTheDocument()
   })
 
-  it('자료 팝업의 다운로드 링크는 수강생과 담당 강사가 각자의 경로를 쓴다', async () => {
+  it('자료 팝업의 다운로드는 수강생과 담당 강사가 각자의 경로를 쓴다', async () => {
     const user = userEvent.setup()
+    const fetchMaterial = vi
+      .spyOn(materialDownloadService, 'fetchMaterial')
+      .mockResolvedValue(new Blob(['bytes']))
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
     const { unmount } = renderDetail('/curriculums/cur-spring-live')
 
     await user.click(await screen.findByRole('button', { name: '자료 목록' }))
-    expect(
-      within(screen.getByRole('dialog')).getByRole('link', { name: 'Spring Boot 커리큘럼 가이드.pptx 다운로드' }),
-    ).toHaveAttribute('href', '/api/curriculums/cur-spring-live/materials/mat-curr-spring-guide/download')
+    await user.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'Spring Boot 커리큘럼 가이드.pptx 다운로드' }),
+    )
+    // 수강생은 수강 관계로 열리는 경로를 쓴다 — 강사 경로는 역할 게이트에서 막힌다.
+    expect(fetchMaterial).toHaveBeenLastCalledWith({
+      scope: 'CURRICULUM',
+      parentId: 'cur-spring-live',
+      materialId: 'mat-curr-spring-guide',
+      fileName: 'Spring Boot 커리큘럼 가이드.pptx',
+      asInstructor: false,
+    })
     unmount()
 
     await mockAuthService.login({ email: 'instructor01@example.com', password: 'password1' })
     renderDetail('/curriculums/cur-spring-live')
 
     await user.click(await screen.findByRole('button', { name: '자료 목록' }))
-    expect(
-      within(screen.getByRole('dialog')).getByRole('link', { name: 'Spring Boot 커리큘럼 가이드.pptx 다운로드' }),
-    ).toHaveAttribute(
-      'href',
-      '/api/instructor/curriculums/cur-spring-live/materials/mat-curr-spring-guide/download',
+    await user.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'Spring Boot 커리큘럼 가이드.pptx 다운로드' }),
     )
+    expect(fetchMaterial).toHaveBeenLastCalledWith(expect.objectContaining({ asInstructor: true }))
   })
 
   it('수강생은 공개 상태 왼쪽 알림 버튼에서 커리큘럼 알림 설정을 연다', async () => {

@@ -346,9 +346,9 @@
 .lesson-detail__materials .material-list { min-height: 0; max-height: none; flex: 1; align-content: start; gap: 7px; margin: 0; padding-right: 3px; overflow-y: auto; }
 .lesson-detail__materials .material-list li { gap: 10px; padding: 10px; border-radius: 0; }
 .lesson-detail__materials .file-icon { width: 36px; height: 40px; flex: 0 0 auto; border-radius: 0; font-size: .51rem; }
-.lesson-detail__materials .text-button { flex: 0 0 auto; font-size: .62rem; }
-/* 다운로드는 링크다(스토리지 presigned URL로 302). 버튼 자리에 그대로 앉게 밑줄만 지운다. */
-.lesson-detail__materials a.text-button { display: inline-flex; align-items: center; text-decoration: none; }
+/* 다운로드는 버튼이다 — 바이트를 받아 파일명을 붙여 저장하고 실패를 토스트로 알린다. */
+.lesson-detail__materials .text-button { display: inline-flex; flex: 0 0 auto; align-items: center; font-size: .62rem; text-decoration: none; }
+.lesson-detail__materials .text-button:disabled { color: var(--ink-500); cursor: default; }
 .lesson-detail__material-empty { display: grid; min-height: 170px; flex: 1; place-items: center; margin: 0; background: var(--ink-50); color: var(--ink-muted); font-size: .72rem; }
 
 @media (max-width: 1000px) {
