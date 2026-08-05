@@ -249,6 +249,12 @@ describe('강사 판서 레이어', () => {
    * <p>그때 <b>zoom은 멀쩡하다</b>(크기가 안 변했으니까). 그래서 기존 프레임 매핑 검사로는 잡히지
    * 않고, 증상은 "그리는 자리와 그려지는 자리가 밀린 만큼 어긋난다"로만 나타난다.
    */
+  /**
+   * 위치 추적은 `measureFrame`(ResizeObserver 경로) 안에만 있다 — 성능 최적화(ADR-0080)로
+   * `getBoundingClientRect`를 `onChange`에서 걷어내면서, 자리를 다시 재는 계기도 그 경로 하나뿐이
+   * 됐다. 그래서 여기서는 `onChange`가 아니라 <b>ResizeObserver 콜백을 직접 불러</b> 흉내낸다 —
+   * 전역 스텁(setup.ts)은 아무 일도 안 하는 no-op라, 실제로 불릴 콜백을 이 테스트가 붙잡아야 한다.
+   */
   it('캔버스가 크기 그대로 옆으로 밀리면 좌표를 다시 재게 한다', async () => {
     let box = { width: 960, height: 540, left: 0, top: 0 }
     const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(() => ({
@@ -257,25 +263,29 @@ describe('강사 판서 레이어', () => {
       toJSON: () => ({}),
     }) as DOMRect)
     drifted = { zoom: { value: 0.5 }, scrollX: 0, scrollY: 0 }
+    let remeasure: ResizeObserverCallback | null = null
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(callback: ResizeObserverCallback) { remeasure = callback }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    })
 
     const { findByTestId } = render(
       <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
-    const onChange = excalidrawProps.onChange as (elements: unknown[]) => void
 
     /*
      * 마운트 시점의 프레임 매핑은 effect에서 도는데 언제 도는지를 이 테스트가 정하지 않는다. 기준을
-     * 직접 세운 뒤 그 다음의 증분만 본다 — 마운트 호출을 `mockClear`로 지우려 들면 지운 뒤에 도는
-     * 경우가 생겨 부하에 따라 결과가 갈린다.
+     * 직접 세운 뒤 그 다음의 증분만 본다.
      */
-    onChange([])
     const settledRefreshes = refresh.mock.calls.length
     updateScene.mockClear()
 
     // 사이드 패널이 접혀 미리보기가 넓어졌다. 높이에 묶인 캔버스는 크기 그대로 오른쪽으로 밀린다.
     box = { ...box, left: 185 }
-    onChange([])
+    remeasure!([], {} as ResizeObserver)
 
     expect(refresh.mock.calls.length).toBeGreaterThan(settledRefreshes)
     // 크기가 그대로라 배율은 다시 쓸 일이 없다 — 이 경로로는 어긋남이 드러나지 않는다는 뜻이다.
@@ -283,32 +293,40 @@ describe('강사 판서 레이어', () => {
 
     drifted = {}
     rect.mockRestore()
+    vi.unstubAllGlobals()
   })
 
-  it('자리가 그대로면 다시 재지 않는다 — onChange마다 부르면 그때마다 setState가 돈다', async () => {
+  it('자리가 그대로면 다시 재지 않는다 — 매번 부르면 그때마다 setState가 돈다', async () => {
     const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
       width: 960, height: 540, x: 0, y: 0, top: 0, left: 0, right: 960, bottom: 540,
       toJSON: () => ({}),
     })
     drifted = { zoom: { value: 0.5 }, scrollX: 0, scrollY: 0 }
+    let remeasure: ResizeObserverCallback | null = null
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(callback: ResizeObserverCallback) { remeasure = callback }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    })
 
     const { findByTestId } = render(
       <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     await findByTestId('excalidraw-editor')
-    const onChange = excalidrawProps.onChange as (elements: unknown[]) => void
 
     // 위와 같은 이유로 기준을 직접 세우고 증분만 본다.
-    onChange([])
     const settledRefreshes = refresh.mock.calls.length
 
-    onChange([])
-    onChange([])
+    // 자리는 그대로인데 관찰 중인 두 요소(호스트·미리보기 영역) 중 하나가 다른 이유로 다시 쟀다.
+    remeasure!([], {} as ResizeObserver)
+    remeasure!([], {} as ResizeObserver)
 
     expect(refresh.mock.calls.length).toBe(settledRefreshes)
 
     drifted = {}
     rect.mockRestore()
+    vi.unstubAllGlobals()
   })
 
   /**
