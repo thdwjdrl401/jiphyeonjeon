@@ -30,6 +30,8 @@ install -m 0755 "$SCRIPT_DIR/bin/liveclass-whisper-vllm-bootstrap" \
     "$BIN_DIR/liveclass-whisper-vllm-bootstrap"
 install -m 0755 "$SCRIPT_DIR/bin/liveclass-whisper-vllm-supervisor" \
     "$BIN_DIR/liveclass-whisper-vllm-supervisor"
+install -m 0755 "$SCRIPT_DIR/bin/liveclass-nemotron-nemo-supervisor" \
+    "$BIN_DIR/liveclass-nemotron-nemo-supervisor"
 install -m 0755 "$SCRIPT_DIR/bin/liveclass-gitlab-runner-user" \
     "$BIN_DIR/liveclass-gitlab-runner-user"
 install -m 0755 "$UV_SOURCE" "$BIN_DIR/uv"
@@ -50,10 +52,16 @@ if [ ! -e "$CONFIG_DIR/realtime-agent-dev.env" ]; then
     install -m 0600 "$SCRIPT_DIR/env/realtime-agent-dev.env.example" \
         "$CONFIG_DIR/realtime-agent-dev.env"
 fi
+if [ ! -e "$CONFIG_DIR/nemotron-nemo.env" ]; then
+    install -m 0600 "$SCRIPT_DIR/env/nemotron-nemo.env.example" \
+        "$CONFIG_DIR/nemotron-nemo.env"
+fi
 if [ ! -e "$CONFIG_DIR/whisper-vllm.env" ]; then
     install -m 0600 "$SCRIPT_DIR/env/whisper-vllm.env.example" \
         "$CONFIG_DIR/whisper-vllm.env"
 fi
+install -m 0600 "$SCRIPT_DIR/env/realtime-agent-nemo.env.example" \
+    "$CONFIG_DIR/realtime-agent-nemo.env.example"
 install -m 0600 "$SCRIPT_DIR/env/realtime-agent-vllm.env.example" \
     "$CONFIG_DIR/realtime-agent-vllm.env.example"
 if [ ! -e "$CONFIG_DIR/realtime-agent-tunnels.env" ]; then

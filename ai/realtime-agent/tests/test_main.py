@@ -294,7 +294,9 @@ def test_unknown_provider_fails_before_agent_server_construction(
 ) -> None:
     monkeypatch.setattr(agent_main, "AgentServer", FakeAgentServer)
 
-    with pytest.raises(ValueError, match="supported: nemotron, openai-realtime, stub"):
+    with pytest.raises(
+        ValueError, match="supported: nemotron, nemotron-nemo, openai-realtime, stub, vllm-whisper"
+    ):
         agent_main.build_agent_server(settings(stt_provider="unknown"))
 
 

@@ -118,8 +118,8 @@ GPU 배포에서는 `deploy/env/realtime-agent-common.env.example`의 공통 Liv
 realtime-agent의 `AI_CALLBACK_SECRET`도 lifecycle callback을 명시적으로 켠 경우에만 필요하다.
 
 GPU 운영에서는 prod/dev 두 process가 같은 호스트와 LiveKit/TURN tunnel을 공유하되 agent name, Redis와
-health port를 분리한다. 기본 prod는 GPU0 Nemotron, Redis `6390`, health `8081→18081`, active/idle
-`12/12`이고 dev는 OpenAI Realtime API, Redis `4000`, health `8082→18082`, active/idle `1/1`이다.
+health port를 분리한다. 기본 prod는 GPU0 tuned Nemotron NeMo, Redis `6390`, health `8081→18081`, active/idle
+`5/5`이고 runtime도 독립 model process 5개를 사용한다. dev는 OpenAI Realtime API, Redis `4000`, health `8082→18082`, active/idle `1/1`이다.
 realtime control과 TURN은 서로 다른 SSH connection이며 별도 BGE supervisor가 세 번째 connection으로
 `18020→8020` reverse forward를 유지한다. 검증된 Whisper checkpoint 전환 시 prod만
 `vllm-whisper` active/idle `1/1` profile로 바꾸며 절차는 [ADR-0044](../../docs/decisions/canola/0044-whisper-vllm-runtime-adapter.md)를 따른다.

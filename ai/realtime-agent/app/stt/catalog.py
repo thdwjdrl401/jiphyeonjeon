@@ -6,6 +6,12 @@ from typing import cast
 from app.config import Settings
 from app.stt.nemotron_asr import NemotronStreamingASR
 from app.stt.providers.nemotron import NemotronRecognizer, NemotronStreamingEngine
+from app.stt.providers.nemotron_nemo import (
+    NemotronNemoRuntimeConfiguration,
+    NemotronNemoStreamingEngine,
+    nemotron_nemo_runtime_is_ready,
+    probe_nemotron_nemo_runtime,
+)
 from app.stt.providers.openai_realtime import OpenAiRealtimeStreamingEngine
 from app.stt.providers.stub import StubStreamingEngine
 from app.stt.providers.vllm_whisper import (
@@ -22,6 +28,9 @@ _NEMOTRON_INITIALIZE_TIMEOUT_SECONDS = 120.0
 _NEMOTRON_JOB_MEMORY_WARN_MB = 2304.0
 _VLLM_WHISPER_MAX_ACTIVE_JOBS = 1
 _VLLM_WHISPER_INITIALIZE_TIMEOUT_SECONDS = 30.0
+_NEMOTRON_NEMO_INITIALIZE_TIMEOUT_SECONDS = 30.0
+_NEMOTRON_NEMO_MAX_ACTIVE_JOBS = 5
+_NEMOTRON_NEMO_DEFAULT_IDLE_PROCESSES = 5
 _OPENAI_REALTIME_DELAYS = frozenset({"minimal", "low", "medium", "high", "xhigh"})
 
 
@@ -76,16 +85,36 @@ def build_stt_provider_registry(settings: Settings) -> SttEngineRegistry:
             cast(VllmWhisperRuntimeConfiguration, resource)
         ),
     )
+    registry.register(
+        "nemotron-nemo",
+        lambda: NemotronNemoStreamingEngine(_nemotron_nemo_configuration(settings)),
+        execution_profile=SttProviderExecutionProfile(
+            max_active_jobs=_NEMOTRON_NEMO_MAX_ACTIVE_JOBS,
+            default_max_active_jobs=_NEMOTRON_NEMO_MAX_ACTIVE_JOBS,
+            default_num_idle_processes=_NEMOTRON_NEMO_DEFAULT_IDLE_PROCESSES,
+            initialize_process_timeout_seconds=_NEMOTRON_NEMO_INITIALIZE_TIMEOUT_SECONDS,
+            job_memory_warn_mb=1000.0,
+        ),
+        validate=lambda: _nemotron_nemo_configuration(settings).validate(),
+        process_resource_factory=lambda: _prewarm_nemotron_nemo(settings),
+        prewarmed_engine_factory=lambda resource: NemotronNemoStreamingEngine(
+            cast(NemotronNemoRuntimeConfiguration, resource)
+        ),
+    )
     return registry
 
 
 def build_stt_provider_readiness_probe(settings: Settings) -> Callable[[], bool] | None:
     """Return a live runtime probe only for providers with an external model owner."""
 
-    if settings.stt_provider.strip().lower() != "vllm-whisper":
-        return None
-    configuration = _vllm_whisper_configuration(settings)
-    return lambda: vllm_whisper_runtime_is_ready(configuration)
+    provider = settings.stt_provider.strip().lower()
+    if provider == "vllm-whisper":
+        configuration = _vllm_whisper_configuration(settings)
+        return lambda: vllm_whisper_runtime_is_ready(configuration)
+    if provider == "nemotron-nemo":
+        configuration = _nemotron_nemo_configuration(settings)
+        return lambda: nemotron_nemo_runtime_is_ready(configuration)
+    return None
 
 
 def _vllm_whisper_configuration(settings: Settings) -> VllmWhisperRuntimeConfiguration:
@@ -101,6 +130,22 @@ def _vllm_whisper_configuration(settings: Settings) -> VllmWhisperRuntimeConfigu
 def _prewarm_vllm_whisper(settings: Settings) -> VllmWhisperRuntimeConfiguration:
     configuration = _vllm_whisper_configuration(settings)
     probe_vllm_whisper_runtime(configuration)
+    return configuration
+
+
+def _nemotron_nemo_configuration(settings: Settings) -> NemotronNemoRuntimeConfiguration:
+    return NemotronNemoRuntimeConfiguration(
+        base_url=settings.nemo_runtime_base_url,
+        model=settings.nemo_runtime_model,
+        api_key="",
+        request_timeout_seconds=settings.nemo_runtime_request_timeout_seconds,
+        connect_timeout_seconds=settings.nemo_runtime_connect_timeout_seconds,
+    )
+
+
+def _prewarm_nemotron_nemo(settings: Settings) -> NemotronNemoRuntimeConfiguration:
+    configuration = _nemotron_nemo_configuration(settings)
+    probe_nemotron_nemo_runtime(configuration)
     return configuration
 
 

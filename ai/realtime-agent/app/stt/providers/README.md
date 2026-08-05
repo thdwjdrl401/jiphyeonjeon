@@ -20,6 +20,7 @@ wire protocol을 알지 못한다.
 |---|---|---|---|
 | `openai-realtime` | 16 kHz PCM을 24 kHz로 resample하고 base64 `input_audio_buffer.append` 후 segment마다 `commit` | 같은 `item_id`의 transcription delta/completed/failed event | `OPENAI_API_KEY` Bearer token |
 | `nemotron` | 16 kHz PCM을 NumPy/Transformers adapter로 전달 | local `TextIteratorStreamer` delta | 없음; `ASR_MODEL_ID`의 로컬 checkpoint 사용 가능 |
+| `nemotron-nemo` | 공통 VAD segment를 mono PCM16 WAV multipart로 loopback NeMo runtime에 전달 | 완성 transcript `TextDelta` 1회 후 동일 text의 segment final | 없음; loopback 격리 |
 | `vllm-whisper` | 공통 VAD segment를 mono PCM16 WAV multipart로 loopback `/v1/audio/transcriptions`에 전달 | 완성 transcript `TextDelta` 1회 후 provider-authoritative segment final | 선택적 `VLLM_API_KEY`; 기본 runtime은 loopback 격리 |
 | `stub` | process 내부 입력 | deterministic fake event | 없음 |
 
@@ -28,6 +29,8 @@ OpenAI 연결 URL은 `wss://api.openai.com/v1/realtime?intent=transcription`이�
 하나를 재사용하고 client VAD가 만든 segment를 순서대로 전송한다. 이미 발행한 realtime delta와 final
 transcript가 다르면 `SegmentFinal.text`에 provider final을 권위 값으로 보낸다. 소비자는 `lastSequence`
 이하 delta 미리보기를 final로 교체한다.
+
+`nemotron-nemo`도 같은 final-only segmented HTTP 경계를 재사용한다. 차이는 model owner가 vLLM이 아니라 NeMo `ASRModel.restore_from()`으로 full fine-tuned `.nemo`를 한 번 적재한다는 점이다. Redis·caption 계층은 이 차이를 알지 못한다.
 
 vLLM Whisper는 stream 시작 전 `/v1/models`에서 exact served-model alias를 확인한다. frame delta를
 지원하지 않으므로 `incremental_deltas=False`다. 대신 완성된 응답 text 전체를 `TextDelta` 한 번으로
@@ -41,6 +44,7 @@ queue로 전달하며 close 시 stop event를 보내 GPU 자원을 해제한다.
 
 - `openai_realtime.py`: `intent=transcription` session을 사용하는 OpenAI Realtime STT 연결
 - `nemotron.py`: 로컬 Nemotron backend adapter
+- `nemotron_nemo.py`: tuned NeMo loopback runtime adapter와 readiness probe
 - `vllm_whisper.py`: loopback vLLM Whisper transcription adapter와 runtime probe
 - `segmented.py`: segment 기반 provider 생명주기
 - `stub.py`: 외부 의존성 없는 개발·테스트 구현
@@ -56,5 +60,5 @@ vLLM Whisper는 paced concurrency 검증 전 active/idle `1/1`을 사용하며 G
 ## 검증
 
 `tests/test_openai_realtime_provider.py`, `tests/test_nemotron_provider.py`,
-`tests/test_vllm_whisper_provider.py`, `tests/test_segmented_provider_lifecycle.py`,
+`tests/test_vllm_whisper_provider.py`, `tests/test_nemotron_nemo_provider.py`, `tests/test_segmented_provider_lifecycle.py`,
 `tests/test_stub_engine.py`에서 provider별 계약을 검증한다.

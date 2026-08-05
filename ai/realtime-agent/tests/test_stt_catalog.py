@@ -42,6 +42,30 @@ def test_nemotron_profile_prewarms_twelve_processes_for_twelve_job_burst() -> No
         )
 
 
+def test_nemotron_nemo_profile_prewarms_five_processes_for_five_job_burst() -> None:
+    configured = settings(
+        stt_provider="nemotron-nemo",
+        nemo_runtime_model="liveclass-nemotron-3.5-tuned",
+    )
+    registry = catalog.build_stt_provider_registry(configured)
+
+    pool = registry.resolve_worker_pool(
+        "nemotron-nemo",
+        max_active_jobs=None,
+        num_idle_processes=None,
+    )
+
+    assert pool.max_active_jobs == 5
+    assert pool.num_idle_processes == 5
+    assert pool.initialize_process_timeout_seconds == 30
+    with pytest.raises(RuntimeError, match="at most 5 for nemotron-nemo"):
+        registry.resolve_worker_pool(
+            "nemotron-nemo",
+            max_active_jobs=6,
+            num_idle_processes=5,
+        )
+
+
 def test_external_api_profile_keeps_generic_pool_defaults() -> None:
     configured = settings(
         stt_provider="openai-realtime",

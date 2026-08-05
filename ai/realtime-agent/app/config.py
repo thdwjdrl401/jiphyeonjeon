@@ -119,6 +119,10 @@ class Settings:
     vllm_api_key: str = field(default="", repr=False)
     vllm_whisper_request_timeout_seconds: float = 20.0
     vllm_whisper_connect_timeout_seconds: float = 2.0
+    nemo_runtime_base_url: str = "http://127.0.0.1:18084/v1"
+    nemo_runtime_model: str = ""
+    nemo_runtime_request_timeout_seconds: float = 20.0
+    nemo_runtime_connect_timeout_seconds: float = 2.0
 
     def livekit_connection(self) -> LiveKitConnectionSettings:
         return LiveKitConnectionSettings(
@@ -190,6 +194,14 @@ class Settings:
             ),
             vllm_whisper_connect_timeout_seconds=_parse_float(
                 values, "VLLM_WHISPER_CONNECT_TIMEOUT_SECONDS", 2.0
+            ),
+            nemo_runtime_base_url=values.get("NEMO_RUNTIME_BASE_URL", "http://127.0.0.1:18084/v1"),
+            nemo_runtime_model=values.get("NEMO_RUNTIME_MODEL", ""),
+            nemo_runtime_request_timeout_seconds=_parse_float(
+                values, "NEMO_RUNTIME_REQUEST_TIMEOUT_SECONDS", 20.0
+            ),
+            nemo_runtime_connect_timeout_seconds=_parse_float(
+                values, "NEMO_RUNTIME_CONNECT_TIMEOUT_SECONDS", 2.0
             ),
         )
 
