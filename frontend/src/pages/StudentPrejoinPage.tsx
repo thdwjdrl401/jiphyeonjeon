@@ -5,6 +5,7 @@ import { publicPaths, studentPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
 import LessonBreadcrumbs from '@/features/lesson/LessonBreadcrumbs'
 import { isLiveEntryOpen } from '@/features/live-session/liveEntry'
+import { isPrestartStatus } from '@/features/live-session/livePrestart'
 import { getLiveSession } from '@/features/live-session/liveSessionService'
 import {
   playSpeakerTest,
@@ -25,15 +26,16 @@ const NICKNAME_SAVE_DEBOUNCE_MS = 500
 type SpeakerStage = 'idle' | 'testing' | 'confirm'
 
 /**
- * 입장 클릭의 결과. `waiting`·`closed`·`error`가 팝업을 띄운다.
+ * 입장 클릭의 결과. `closed`·`error`가 팝업을 띄운다.
  *
- * <p>`waiting`과 `closed`를 나누는 이유: "잠시 후 다시" 안내는 <b>아직 시작 전일 때만</b> 참이다.
- * 강의가 끝났거나 취소된 뒤에도 같은 문구를 띄우면 학생은 오지 않을 시작을 기다리게 된다.
+ * <p><b>시작 전은 막지 않는다</b>(ADR-0084). 예전에는 여기서 "강의가 아직 시작되지 않았습니다" 팝업을
+ * 띄우고 돌려보냈는데, 그러면 학생은 강사가 시작할 때까지 이 버튼을 반복해서 눌러야 한다 — 예정 시각과
+ * 실제 시작 시각은 늘 어긋나므로 그 반복이 기본 동선이 된다. 지금은 들여보내고 <b>강의실 안에서</b>
+ * 기다리게 하며, 시작 신호(`session.started`)를 받으면 화면이 스스로 재생으로 넘어간다.
+ *
+ * <p>`closed`는 남는다. 끝났거나 취소된 강의는 <b>기다려도 열리지 않아</b> 성격이 다르다.
  */
-type EntryStatus = 'idle' | 'checking' | 'waiting' | 'closed' | 'error'
-
-/** 이 상태들은 시작을 기다릴 수 있다. 나머지 비-LIVE 상태는 다시 열리지 않는다. */
-const BEFORE_START_STATUSES = new Set(['DRAFT', 'SCHEDULED', 'OPEN', 'STARTING'])
+type EntryStatus = 'idle' | 'checking' | 'closed' | 'error'
 
 export default function StudentPrejoinPage() {
   const { sessionId = '' } = useParams()
@@ -99,7 +101,7 @@ export default function StudentPrejoinPage() {
   }
   const confirmSpeaker = () => setChecks((current) => ({ ...current, speaker: true }))
 
-  const isEntryDialogOpen = entryStatus === 'waiting' || entryStatus === 'closed' || entryStatus === 'error'
+  const isEntryDialogOpen = entryStatus === 'closed' || entryStatus === 'error'
   const closeEntryDialog = () => {
     setEntryStatus('idle')
     // 팝업을 닫으면 방금 누른 입장 버튼으로 초점을 돌려준다 — 다시 시도하는 자리가 거기다.
@@ -132,14 +134,17 @@ export default function StudentPrejoinPage() {
       // 들어갈 수 있다.
       const latestSession = await getLiveSession(sessionId)
 
-      if (latestSession.status !== 'LIVE') {
-        /*
-         * 막힌 상태는 공유 캐시에 쓰지 않는다. 여기 쓰면 이 화면 위쪽의 입장 게이트
-         * (`isLiveEntryOpen`)가 곧바로 화면 전체를 "강의 시간이 아닙니다"로 갈아치워, 방금 띄운
-         * 팝업과 설명이 사라진다. 게이트는 <b>화면에 들어올 때</b> 판정하는 장치이고, 머무는
-         * 동안의 변화는 이 팝업이 설명한다. 다시 누르면 그때 또 최신 상태를 조회한다.
-         */
-        setEntryStatus(BEFORE_START_STATUSES.has(latestSession.status) ? 'waiting' : 'closed')
+      /*
+       * <b>시작 전은 통과시킨다</b> — 강의실이 대기 상태를 그리고 시작 신호로 스스로 넘어간다(ADR-0084).
+       * 막는 것은 <b>기다려도 열리지 않는</b> 상태(ENDED·CANCELLED·FAILED)뿐이다.
+       *
+       * <p>막힌 상태는 공유 캐시에 쓰지 않는다. 여기 쓰면 이 화면 위쪽의 입장 게이트
+       * (`isLiveEntryOpen`)가 곧바로 화면 전체를 "강의 시간이 아닙니다"로 갈아치워, 방금 띄운
+       * 팝업과 설명이 사라진다. 게이트는 <b>화면에 들어올 때</b> 판정하는 장치이고, 머무는
+       * 동안의 변화는 이 팝업이 설명한다.
+       */
+      if (latestSession.status !== 'LIVE' && !isPrestartStatus(latestSession.status)) {
+        setEntryStatus('closed')
         return
       }
 
@@ -308,18 +313,12 @@ export default function StudentPrejoinPage() {
           >
             <span className="eyebrow">LIVE CLASS</span>
             <h2 id="live-entry-dialog-title">
-              {entryStatus === 'waiting'
-                ? '강의가 아직 시작되지 않았습니다'
-                : entryStatus === 'closed'
-                  ? '입장할 수 없는 강의입니다'
-                  : '강의 상태를 확인하지 못했습니다'}
+              {entryStatus === 'closed' ? '입장할 수 없는 강의입니다' : '강의 상태를 확인하지 못했습니다'}
             </h2>
             <p id="live-entry-dialog-description">
-              {entryStatus === 'waiting'
-                ? '강사가 라이브 강의를 시작하면 입장할 수 있습니다. 잠시 후 다시 시도해 주세요.'
-                : entryStatus === 'closed'
-                  ? '이미 종료되었거나 취소된 강의입니다. 다시보기가 공개되면 강의 상세에서 확인할 수 있어요.'
-                  : '잠시 후 라이브 입장 버튼을 다시 눌러 주세요.'}
+              {entryStatus === 'closed'
+                ? '이미 종료되었거나 취소된 강의입니다. 다시보기가 공개되면 강의 상세에서 확인할 수 있어요.'
+                : '잠시 후 라이브 입장 버튼을 다시 눌러 주세요.'}
             </p>
             <div className="live-entry-dialog__actions">
               <button className="button button--primary" type="button" onClick={closeEntryDialog}>확인</button>
