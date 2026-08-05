@@ -402,7 +402,11 @@ describe('커리큘럼 작업 화면', () => {
     const pendingRow = pendingEmail.closest('tr')
     expect(pendingRow).not.toBeNull()
     expect(within(pendingRow!).getByText('승인 대기')).toBeInTheDocument()
-    await user.click(within(pendingRow!).getByRole('button', { name: '승인' }))
+    const approveButton = within(pendingRow!).getByRole('button', { name: '승인' })
+    const rejectButton = within(pendingRow!).getByRole('button', { name: '거절' })
+    expect(approveButton).toHaveClass('button', 'button--primary', 'enrollment-action-button--approve')
+    expect(rejectButton).toHaveClass('button', 'button--danger', 'enrollment-action-button--reject')
+    await user.click(approveButton)
 
     await waitFor(() => {
       const activeRow = screen.getByText('student02@example.com').closest('tr')
