@@ -96,14 +96,19 @@ export default defineConfig({
     // 하나에만 있어 로컬(UTC 계열)에서는 깨졌다. 하네스에 박아 어디서 돌려도 같게 만든다.
     env: { TZ: 'Asia/Seoul' },
     poolOptions: {
-      // CI 러너는 운영 LiveKit Egress와 같은 4코어 박스다. 기본값(코어 수만큼 fork)이면 녹화가 도는
-      // 동안 프로세스가 몰려 테스트가 무더기로 타임아웃한다(반대로 녹화 품질도 깎는다). CI에서만 조인다.
+      // CI에서만 조인다. 기본값(코어 수만큼 fork)은 러너를 통째로 먹어 같이 도는 잡과 — lazy에서는
+      // 라이브 강의 녹화(Egress)와도 — CPU를 다툰다.
       //
-      // **minForks를 같이 줘야 한다.** 안 주면 기본 최소값이 코어 수에서 파생되어 maxForks(2)를
+      // 4로 정한 근거(8코어 전용 러너 실측, 120파일·1004건):
+      //   forks 2 → 107초    forks 4 → 73초    forks 6 → 64초    forks 8 → 63초
+      // 4를 넘으면 얻는 게 급격히 줄고(코어 포화), 대신 다른 잡과 녹화에 남길 여유가 사라진다.
+      // 2에서 4로 올리는 것만으로 34초를 줄이면서 절반을 남겨 두는 지점이 4다.
+      //
+      // **minForks를 같이 줘야 한다.** 안 주면 기본 최소값이 코어 수에서 파생되어 maxForks를
       // 넘고, tinypool이 "minThreads and maxThreads must not conflict"로 던져 테스트가 한 건도
       // 돌지 않는다. 4코어에서는 우연히 맞아떨어져 드러나지 않았고 8코어 러너에서 터졌다 —
       // 러너 장비가 바뀌면 조용히 깨지는 자리라 두 값을 함께 고정한다.
-      forks: process.env.CI ? { minForks: 1, maxForks: 2 } : {},
+      forks: process.env.CI ? { minForks: 1, maxForks: 4 } : {},
     },
   },
 })
