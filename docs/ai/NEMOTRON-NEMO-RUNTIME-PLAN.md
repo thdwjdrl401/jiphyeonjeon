@@ -124,3 +124,7 @@ STT_NUM_IDLE_PROCESSES=1
 ```
 
 NeMo runtime은 별도로 중지한다. Redis와 Java 설정은 변경하지 않았으므로 추가 롤백은 없다.
+
+## 구현 결과
+
+5-way 확장 결과와 동일-process CUDA Graph 실패, 독립 process 전환 근거는 [ADR-0049](../decisions/canola/0049-tuned-nemotron-nemo-final-runtime.md)의 병렬 확장 검증에 고정한다.

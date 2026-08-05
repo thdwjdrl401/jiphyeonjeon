@@ -140,4 +140,12 @@ NeMo runtime은 별도로 중지한다. Redis와 Java 설정은 변경하지 않
 - GPU 0에서 `.nemo` restore 및 `GET /health/ready`, `GET /v1/models` 200 확인
 - AI Hub `C02763/U00098.wav` 8초 입력: `예방할 수가 있을까요?`, HTTP 200, warm total 0.036581초
 - 기존 Redis publisher와 caption payload는 수정하지 않았고 provider 테스트에서 완성 문장 `TextDelta` 1건과 동일 text의 `SegmentFinal` 1건을 확인
-- realtime-agent 전체 테스트와 ruff gate를 통과해야 병합한다.
+- realtime-agent 전체 `362 passed`, Ruff check·format, shell syntax gate를 통과했다.
+
+## 병렬 확장 검증 (2026-08-05)
+
+- 동일 Python process에서 model 5개를 thread·CUDA stream으로 병렬 호출한 최초 방식은 NeMo RNNT decoder의 CUDA Graph capture가 충돌해 5건 중 4건이 HTTP 500으로 실패했다.
+- model마다 독립 Python process와 CUDA context를 소유하고, 같은 `127.0.0.1:18084`에 `SO_REUSEPORT`로 bind하도록 수정했다.
+- AI Hub `C02763/U00098.wav` 5건 동시 요청은 모두 HTTP 200, 동일 문장 `예방할 수가 있을까요?`를 반환했다. 개별 응답은 0.562~0.619초, 전체 wall time은 0.627초였다.
+- runtime health는 `readyReplicaCount=5/expectedReplicaCount=5`, prod agent health는 `readyProcessCount=5/expectedProcessCount=5`다. dev agent는 기존 `1/1` ready를 유지했다.
+- GPU 0 총 사용량은 22,587 MiB이며 tuned NeMo process 5개는 각각 약 3.1~3.45 GiB를 사용했다.
