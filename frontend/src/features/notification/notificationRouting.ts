@@ -46,6 +46,14 @@ export function resolveNotificationRoute(
       return lessonDetailPath(state, role)
 
     case 'MATERIAL_PUBLISHED': {
+      /*
+        자료는 강의에 붙기도 하고 커리큘럼 전체에 붙기도 한다. 서버는 그 구분을 `lessonId`의 유무로
+        보낸다 — 커리큘럼 자료는 비워서 온다. 레슨 경로만 만들면 커리큘럼 전체 자료 알림은 목적지가
+        없어 "이동할 수 있는 화면이 없습니다"로 끝난다. 그 자료는 커리큘럼 상세에 그대로 있는데도.
+      */
+      if (!state.lessonId) {
+        return state.curriculumId ? publicPaths.curriculum(state.curriculumId) : null
+      }
       // 강의 상세의 자료 영역까지 데려간다(자료 전용 화면·탭이 따로 없다).
       const path = lessonDetailPath(state, role)
       return path ? `${path}#${LESSON_MATERIALS_ANCHOR}` : null
@@ -82,11 +90,22 @@ export function resolveNotificationRoute(
   }
 }
 
+/**
+ * 강의 상세의 목적지.
+ *
+ * <p><b>강사 쪽만 전달 방식으로 갈린다.</b> 업로드 강의는 강사에게 별도 화면(`recorded-lessons/:id`)이
+ * 있고 처리 단계·게시가 거기 있다 — 라이브 경로로 보내면 그 강의에 없는 것(라이브 일정·편집 링크)을
+ * 전제한 화면이 열린다. 학생은 전달 방식과 무관하게 같은 상세 화면을 쓴다(`resolveLessonPath`와 같은
+ * 규칙이다. 그쪽은 목차가, 여기는 알림이 부를 뿐이라 규칙이 갈리면 안 된다).
+ */
 function lessonDetailPath(state: NotificationTargetState, role: UserRole) {
   if (!state.curriculumId || !state.sectionId || !state.lessonId) return null
-  return role === 'INSTRUCTOR'
-    ? instructorPaths.lesson(state.curriculumId, state.sectionId, state.lessonId)
-    : studentPaths.lesson(state.curriculumId, state.sectionId, state.lessonId)
+  if (role !== 'INSTRUCTOR') {
+    return studentPaths.lesson(state.curriculumId, state.sectionId, state.lessonId)
+  }
+  return state.deliveryType === 'RECORDED'
+    ? instructorPaths.recordedLesson(state.curriculumId, state.sectionId, state.lessonId)
+    : instructorPaths.lesson(state.curriculumId, state.sectionId, state.lessonId)
 }
 
 /**

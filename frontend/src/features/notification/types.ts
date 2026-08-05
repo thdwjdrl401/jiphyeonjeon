@@ -194,6 +194,12 @@ export interface NotificationTargetState {
   liveSessionStatus: CurriculumLiveSessionStatus | null
   scheduledAt: string | null
   replayStatus: CurriculumReplayStatus | null
+  /**
+   * 업로드 강의(`RECORDED`)는 상세 화면이 따로 있다(`recorded-lessons/:lessonId`). 이 값이 없으면
+   * 라이브 강의 경로로만 보내게 되어 업로드 강의에 걸린 알림이 엉뚱한 화면으로 간다.
+   * 레슨을 가리키지 않는 알림에서는 `null`이다.
+   */
+  deliveryType: 'LIVE' | 'RECORDED' | null
 }
 
 export type NotificationTargetResolution =

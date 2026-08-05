@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { instructorPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
 import { getLesson } from '@/features/lesson/lessonService'
+import { LESSON_MATERIALS_ANCHOR } from '@/features/lesson/lessonRouting'
 import HlsMediaPlayer, { type HlsMediaState } from '@/features/media/HlsMediaPlayer'
 import {
   RECORDED_PROCESSING_STAGES,
@@ -296,7 +297,9 @@ export default function RecordedLessonDetailPage() {
           </dl>
         </Panel>
 
+        {/* 자료 등록 알림이 이 영역을 직접 가리킨다 — 라이브 강의 상세와 같은 anchor를 쓴다. */}
         <Panel
+          id={LESSON_MATERIALS_ANCHOR}
           className="recorded-lesson-info-panel"
           title="강의 자료 처리"
           description="PPTX 임베딩과 주요 용어 추출은 영상 변환과 독립적으로 처리됩니다."

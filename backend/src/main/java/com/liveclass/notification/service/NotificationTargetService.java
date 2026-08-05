@@ -25,6 +25,7 @@ import tools.jackson.databind.json.JsonMapper;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.liveclass.notification.service.NotificationTargetResolution.Available;
@@ -49,6 +50,19 @@ public class NotificationTargetService {
 
     /** 취소된 라이브는 갈 곳이 남아 있어도 갈 이유가 없다. */
     private static final String LIVE_CANCELLED = "CANCELLED";
+
+    /** 학생이 재생할 수 있는 유일한 다시보기 상태. 나머지(DRAFT·READY_FOR_REVIEW·WITHDRAWN)는 404다. */
+    private static final String REPLAY_PUBLISHED = "PUBLISHED";
+
+    /**
+     * 입장을 안내하던 알림들. <b>이것들만</b> 라이브 취소를 만료로 본다 — 데려갈 입장 화면이 사라졌기
+     * 때문이다. 취소 통보(LIVE_CANCELED)는 여기 없다. 취소를 알리는 알림이 취소를 이유로 닫히면
+     * 정확히 그 알림만 열리지 않는다.
+     */
+    private static final Set<String> ENTRY_TYPES = Set.of(
+            NotificationTypes.LIVE_SCHEDULED,
+            NotificationTypes.LIVE_STARTING_SOON,
+            NotificationTypes.LIVE_SCHEDULE_CHANGED);
 
     private final NotificationRepository repository;
     private final CurriculumDirectory curriculumDirectory;
@@ -157,11 +171,35 @@ public class NotificationTargetService {
             return new Gone(Reason.ACCESS_REVOKED);
         }
 
-        // 4. 때를 놓친 대상인가. 취소된 라이브가 여기 해당한다.
+        /*
+         * 4. 때를 놓친 대상인가.
+         *
+         * 취소를 만료로 보는 것은 **입장을 안내하던 알림뿐**이다. 종류를 가리지 않고 걸면 두 가지가
+         * 깨진다 — 취소 알림 자신이 취소됐다는 이유로 열리지 않고("라이브가 취소되었습니다"를 눌렀는데
+         * "처리 가능 기간이 지났습니다"가 뜬다), 같은 강의에 걸린 자료·강의 게시·다시보기 알림까지
+         * 함께 닫힌다. 라이브가 취소돼도 그 강의와 자료는 그대로 볼 수 있다.
+         */
         Optional<LiveSessionView> session = lesson.map(LessonDetailView::lessonId)
                 .flatMap(this::liveSessionOf);
-        if (session.map(s -> LIVE_CANCELLED.equals(s.liveSessionStatus())).orElse(false)) {
+        if (ENTRY_TYPES.contains(notification.getType())
+                && session.map(s -> LIVE_CANCELLED.equals(s.liveSessionStatus())).orElse(false)) {
             return new Gone(Reason.TARGET_EXPIRED);
+        }
+
+        String replayStatus = lessonId == null ? null : replayStatusOf(lessonId);
+
+        /*
+         * 5. 공개했다가 내린 다시보기인가. "다시보기가 공개되었습니다"를 눌렀는데 그 사이 강사가
+         * 철회했으면 재생 API가 404를 주고 화면에는 "다시보기를 불러오지 못했습니다"만 남는다 —
+         * 서버 장애와 구별되지 않는 문구다. 여기서 미리 판정해 이유를 준다.
+         *
+         * 강사는 막지 않는다. 철회한 다시보기를 다시 게시하는 자리가 바로 그 화면이고, 재생 게이트도
+         * 소유자를 예외로 둔다(ReplayPlaybackService.requirePlaybackContext).
+         */
+        if (NotificationTypes.VOD_PUBLISHED.equals(notification.getType())
+                && !viewerId.equals(curriculum.get().instructorId())
+                && !REPLAY_PUBLISHED.equals(replayStatus)) {
+            return new Gone(Reason.TARGET_DELETED);
         }
 
         return new Available(new State(
@@ -173,18 +211,28 @@ public class NotificationTargetService {
                 studentId,
                 session.map(LiveSessionView::liveSessionStatus).orElse(null),
                 session.map(LiveSessionView::scheduledAt).orElse(null),
-                lessonId == null ? null : replayStatusOf(lessonId)));
+                replayStatus,
+                lesson.map(LessonDetailView::deliveryType).orElse(null)));
     }
 
+    /**
+     * <p><b>담당 강사는 먼저 통과시킨다.</b> 규칙 표는 학생 기준으로 쓰여 있어 기본값이 "수강 중이어야
+     * 한다"인데, 강사는 자기 커리큘럼에 수강 등록돼 있지 않다. 그래서 강사에게만 가는 알림(녹화 완료·
+     * 녹화 실패)과 강사도 함께 받는 알림(곧 시작)이 <b>받는 사람 본인에게서</b> 막혔다 — 눌러도
+     * "더 이상 접근할 수 없는 알림입니다"만 떴다. 종류마다 규칙을 하나씩 늘리는 대신 여기서 한 번
+     * 처리한다: 자기 커리큘럼의 알림에서 그 커리큘럼의 주인이 막힐 이유는 어떤 종류에도 없다.
+     *
+     * <p>남의 커리큘럼 알림은 그대로 막힌다 — 통과하는 것은 <b>그 커리큘럼의</b> 강사뿐이다.
+     */
     private boolean hasAccess(UUID viewerId, String type, CurriculumView curriculum) {
+        if (viewerId.equals(curriculum.instructorId())) {
+            return true;
+        }
         return switch (NotificationAccessRule.of(type)) {
-            case INSTRUCTOR_OWNER -> viewerId.equals(curriculum.instructorId());
+            case INSTRUCTOR_OWNER -> false;
             case ACTIVE_STUDENT -> enrollmentDirectory.isActive(curriculum.curriculumId(), viewerId);
-            /*
-             * 카탈로그 규칙은 게시 여부만 본다. 다만 담당 강사는 자기 커리큘럼이 초안이어도 볼 수
-             * 있으므로 함께 허용한다 — 강사가 자기 알림에서 막히는 것은 말이 되지 않는다.
-             */
-            case PUBLISHED_CATALOG -> curriculum.isPublished() || viewerId.equals(curriculum.instructorId());
+            // 카탈로그 규칙은 게시 여부만 본다.
+            case PUBLISHED_CATALOG -> curriculum.isPublished();
         };
     }
 

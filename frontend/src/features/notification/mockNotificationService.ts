@@ -89,6 +89,16 @@ const requiresActiveEnrollment: ReadonlySet<NotificationType> = new Set<Notifica
   'VOD_PUBLISHED',
 ])
 
+/**
+ * 입장을 안내하던 알림. **이것들만** 라이브 취소를 만료로 본다 — 데려갈 입장 화면이 사라졌기 때문이다.
+ * `LIVE_CANCELED`는 여기 없다: 취소를 알리는 알림이 취소를 이유로 닫히면 그 알림만 열리지 않는다.
+ */
+const entryTypes: ReadonlySet<NotificationType> = new Set<NotificationType>([
+  'LIVE_SCHEDULED',
+  'LIVE_STARTING_SOON',
+  'LIVE_SCHEDULE_CHANGED',
+])
+
 function gone(record: MockNotificationRecord, reasonCode: NotificationGoneReason): NotificationTargetResolution {
   // 다시 열릴 수 없는 알림이므로 처리 축을 EXPIRED로 내린다 — 목록에서 "처리 대기"로 계속 남지 않게.
   setMockNotificationActionStatus(record.notificationId, 'EXPIRED', new Date().toISOString())
@@ -121,9 +131,20 @@ function resolveMockTarget(record: MockNotificationRecord): NotificationTargetRe
     if (enrollment?.status !== 'ACTIVE') return gone(record, 'ACCESS_REVOKED')
   }
 
+  // 취소를 만료로 보는 것은 입장을 안내하던 알림뿐이다 — 취소 통보 자신과 자료·다시보기는 그대로 열린다.
   const liveSession = found?.lesson.liveSession ?? null
-  if (liveSession?.status === 'CANCELLED' && record.type !== 'LIVE_CANCELED') {
+  if (liveSession?.status === 'CANCELLED' && entryTypes.has(record.type)) {
     return gone(record, 'TARGET_EXPIRED')
+  }
+
+  /*
+    공개했다가 내린 다시보기. 학생을 보내면 재생이 404를 내고 서버 장애와 같은 문구가 뜬다.
+    강사는 막지 않는다 — 다시 게시하는 자리가 그 화면이다.
+  */
+  const replayStatus = found?.lesson.replayStatus ?? null
+  const isOwner = curriculum?.instructor.instructorId === user.userId
+  if (record.type === 'VOD_PUBLISHED' && !isOwner && replayStatus !== 'PUBLISHED') {
+    return gone(record, 'TARGET_DELETED')
   }
 
   return {
@@ -137,7 +158,8 @@ function resolveMockTarget(record: MockNotificationRecord): NotificationTargetRe
       studentId: studentId ?? null,
       liveSessionStatus: liveSession?.status ?? null,
       scheduledAt: liveSession?.scheduledAt ?? found?.lesson.scheduledAt ?? null,
-      replayStatus: found?.lesson.replayStatus ?? null,
+      replayStatus,
+      deliveryType: found?.lesson.deliveryType ?? null,
     },
   }
 }

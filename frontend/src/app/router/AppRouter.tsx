@@ -5,6 +5,7 @@ import GuestOnlyRoute from '@/features/auth/GuestOnlyRoute'
 import RequireAdminRoute from '@/features/auth/RequireAdminRoute'
 import RequireRoleRoute from '@/features/auth/RequireRoleRoute'
 import RequireStudentPrejoinRoute from '@/features/live-session/RequireStudentPrejoinRoute'
+import NotificationsRedirect from '@/features/notification/NotificationsRedirect'
 import InstructorLiveMediaProvider from '@/features/live-session/InstructorLiveMediaProvider'
 import CurriculumDetailPage from '@/pages/CurriculumDetailPage'
 import CurriculumFormPage from '@/pages/CurriculumFormPage'
@@ -123,6 +124,12 @@ export default function AppRouter() {
           레이아웃(PublicLayout 등)을 씌우지 않는다 — 헤더나 여백이 그대로 녹화된다.
         */}
         <Route path="egress/stage" element={<EgressStagePage />} />
+        {/*
+          브라우저 푸시가 여는 자리. 서비스워커는 역할을 모르므로 역할 없는 경로로 열고, 여기서
+          그 사람의 알림함으로 넘긴다. 이 라우트가 없으면 푸시 클릭이 `*`에 걸려 404가 뜬다.
+          레이아웃을 씌우지 않는다 — 리다이렉트뿐이라 헤더가 한 번 깜빡일 이유가 없다.
+        */}
+        <Route path="notifications" element={<NotificationsRedirect />} />
         <Route path="forbidden" element={<ForbiddenPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>

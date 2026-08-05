@@ -30,7 +30,9 @@ public record NotificationTargetResponse(
             UUID studentId,
             String liveSessionStatus,
             OffsetDateTime scheduledAt,
-            String replayStatus
+            String replayStatus,
+            @Schema(description = "LIVE 또는 RECORDED. 업로드 강의는 상세 화면이 따로 있다")
+            String deliveryType
     ) {
     }
 
@@ -40,7 +42,8 @@ public record NotificationTargetResponse(
                     "AVAILABLE",
                     new State(a.state().curriculumId(), a.state().sectionId(), a.state().lessonId(),
                             a.state().liveSessionId(), a.state().enrollmentId(), a.state().studentId(),
-                            a.state().liveSessionStatus(), a.state().scheduledAt(), a.state().replayStatus()),
+                            a.state().liveSessionStatus(), a.state().scheduledAt(), a.state().replayStatus(),
+                            a.state().deliveryType()),
                     null);
             case NotificationTargetResolution.Gone g ->
                     new NotificationTargetResponse("GONE", null, g.reasonCode());

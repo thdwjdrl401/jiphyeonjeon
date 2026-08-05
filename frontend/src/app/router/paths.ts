@@ -10,6 +10,16 @@ export const publicPaths = {
     token ? `/password-reset/confirm?token=${encodeURIComponent(token)}` : '/password-reset/confirm',
   curriculums: '/curriculums',
   curriculum: (curriculumId: string) => `/curriculums/${curriculumId}`,
+  /**
+   * 역할 없는 알림함. 실제 화면은 역할별 경로에 있고, 이 경로는 그리로 넘긴다(`NotificationsRedirect`).
+   *
+   * 브라우저 푸시를 클릭할 때 창을 여는 것은 서비스워커인데, 서비스워커는 로그인 세션도 역할도
+   * 모른다. 그래서 푸시 본문에는 역할이 없는 이 경로만 담는다.
+   *
+   * ⚠️ `frontend/public/push-worker.js`가 같은 문자열을 **직접** 갖고 있다. 번들 밖 파일이라 이
+   * 상수를 import할 수 없다 — 여기를 바꾸면 그쪽도 함께 바꿔야 한다.
+   */
+  notifications: '/notifications',
   forbidden: (reason?: 'student' | 'instructor' | 'enrollment' | 'ownership') =>
     reason ? `/forbidden?reason=${reason}` : '/forbidden',
 }

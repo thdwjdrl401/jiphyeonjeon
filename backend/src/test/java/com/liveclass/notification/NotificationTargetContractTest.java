@@ -235,6 +235,163 @@ class NotificationTargetContractTest {
         org.assertj.core.api.Assertions.assertThat(actionStatusOf(id)).isEqualTo("ACTION_REQUIRED");
     }
 
+    /**
+     * <b>녹화 알림은 강사에게만 간다.</b> 그런데 강사는 자기 커리큘럼에 수강 등록돼 있지 않다 —
+     * 접근 판정을 "수강 중이어야 한다"로 두면 받는 사람 본인이 자기 알림에서 막힌다.
+     */
+    @Test
+    void a_recording_notice_opens_for_the_owning_instructor() throws Exception {
+        UUID instructor = seedUser("INSTRUCTOR");
+        UUID curriculum = seedCurriculum(instructor, "PUBLISHED");
+        UUID lesson = seedLesson(curriculum);
+        UUID session = seedLiveSession(curriculum, lesson, instructor, "ENDED");
+        UUID id = seedNotification(instructor, NotificationTypes.RECORDING_READY, INFO,
+                "{\"curriculumId\":\"%s\",\"lessonId\":\"%s\",\"liveSessionId\":\"%s\"}"
+                        .formatted(curriculum, lesson, session));
+
+        target(instructor, id)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("AVAILABLE"))
+                .andExpect(jsonPath("$.state.lessonId").value(lesson.toString()))
+                .andExpect(jsonPath("$.state.liveSessionId").value(session.toString()));
+    }
+
+    /**
+     * <b>취소 알림은 취소됐다는 이유로 막히면 안 된다.</b> 학생이 받는 것은 "라이브가 취소되었습니다"고,
+     * 그 알림의 목적지는 입장 화면이 아니라 일정이 보이는 강의 상세다. 취소를 만료로 보면 취소 알림만
+     * 정확히 열리지 않는다.
+     */
+    @Test
+    void a_cancel_notice_opens_the_lesson_instead_of_expiring() throws Exception {
+        UUID instructor = seedUser("INSTRUCTOR");
+        UUID student = seedUser("STUDENT");
+        UUID curriculum = seedCurriculum(instructor, "PUBLISHED");
+        seedEnrollment(curriculum, student, "ACTIVE");
+        UUID lesson = seedLesson(curriculum);
+        seedLiveSession(curriculum, lesson, instructor, "CANCELLED");
+        UUID id = seedNotification(student, NotificationTypes.LIVE_CANCELED, INFO,
+                "{\"curriculumId\":\"%s\",\"lessonId\":\"%s\"}".formatted(curriculum, lesson));
+
+        target(student, id)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("AVAILABLE"))
+                .andExpect(jsonPath("$.state.sectionId").exists())
+                .andExpect(jsonPath("$.state.lessonId").value(lesson.toString()));
+    }
+
+    /**
+     * 라이브가 취소돼도 그 <b>강의</b>는 남아 있다. 취소 판정을 알림 종류와 무관하게 걸면 같은 강의에
+     * 걸린 자료·강의 게시 알림까지 함께 닫힌다 — 자료는 그대로 볼 수 있는데도.
+     */
+    @Test
+    void a_material_notice_survives_a_cancelled_live_on_the_same_lesson() throws Exception {
+        UUID instructor = seedUser("INSTRUCTOR");
+        UUID student = seedUser("STUDENT");
+        UUID curriculum = seedCurriculum(instructor, "PUBLISHED");
+        seedEnrollment(curriculum, student, "ACTIVE");
+        UUID lesson = seedLesson(curriculum);
+        seedLiveSession(curriculum, lesson, instructor, "CANCELLED");
+        UUID id = seedNotification(student, NotificationTypes.MATERIAL_PUBLISHED, INFO,
+                "{\"curriculumId\":\"%s\",\"lessonId\":\"%s\"}".formatted(curriculum, lesson));
+
+        target(student, id)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("AVAILABLE"));
+    }
+
+    /** 입장을 안내하던 알림은 취소되면 갈 곳이 없다. 여기서만 만료다. */
+    @Test
+    void an_entry_notice_for_a_cancelled_live_is_expired() throws Exception {
+        UUID instructor = seedUser("INSTRUCTOR");
+        UUID student = seedUser("STUDENT");
+        UUID curriculum = seedCurriculum(instructor, "PUBLISHED");
+        seedEnrollment(curriculum, student, "ACTIVE");
+        UUID lesson = seedLesson(curriculum);
+        seedLiveSession(curriculum, lesson, instructor, "CANCELLED");
+        UUID id = seedNotification(student, NotificationTypes.LIVE_STARTING_SOON, INFO,
+                "{\"curriculumId\":\"%s\",\"lessonId\":\"%s\"}".formatted(curriculum, lesson));
+
+        target(student, id)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("GONE"))
+                .andExpect(jsonPath("$.reasonCode").value("TARGET_EXPIRED"));
+    }
+
+    /** 커리큘럼은 남고 <b>강의만</b> 지워진 경우도 삭제다. 커리큘럼만 보면 살아 있는 대상으로 보인다. */
+    @Test
+    void a_deleted_lesson_is_gone_even_when_the_curriculum_survives() throws Exception {
+        UUID instructor = seedUser("INSTRUCTOR");
+        UUID student = seedUser("STUDENT");
+        UUID curriculum = seedCurriculum(instructor, "PUBLISHED");
+        seedEnrollment(curriculum, student, "ACTIVE");
+        UUID lesson = seedLesson(curriculum);
+        UUID id = seedNotification(student, NotificationTypes.MATERIAL_PUBLISHED, INFO,
+                "{\"curriculumId\":\"%s\",\"lessonId\":\"%s\"}".formatted(curriculum, lesson));
+        jdbc.update("DELETE FROM core.lesson WHERE id = ?", lesson);
+
+        target(student, id)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("GONE"))
+                .andExpect(jsonPath("$.reasonCode").value("TARGET_DELETED"));
+    }
+
+    /**
+     * <b>공개했다가 내린 다시보기.</b> 그냥 보내면 재생 API가 404를 주고 화면에는 "다시보기를 불러오지
+     * 못했습니다"만 남는다 — 서버 장애와 구별되지 않는다. 여기서 이유를 준다.
+     */
+    @Test
+    void a_withdrawn_replay_is_gone_for_the_student() throws Exception {
+        UUID instructor = seedUser("INSTRUCTOR");
+        UUID student = seedUser("STUDENT");
+        UUID curriculum = seedCurriculum(instructor, "PUBLISHED");
+        seedEnrollment(curriculum, student, "ACTIVE");
+        UUID lesson = seedLesson(curriculum);
+        UUID session = seedLiveSession(curriculum, lesson, instructor, "ENDED");
+        seedVideoAsset(lesson, session, "WITHDRAWN");
+        UUID id = seedNotification(student, NotificationTypes.VOD_PUBLISHED, INFO,
+                "{\"curriculumId\":\"%s\",\"lessonId\":\"%s\"}".formatted(curriculum, lesson));
+
+        target(student, id)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("GONE"))
+                .andExpect(jsonPath("$.reasonCode").value("TARGET_DELETED"));
+    }
+
+    /** 강사는 막지 않는다 — 철회한 다시보기를 다시 게시하는 자리가 바로 그 화면이다. */
+    @Test
+    void a_withdrawn_replay_still_opens_for_the_owning_instructor() throws Exception {
+        UUID instructor = seedUser("INSTRUCTOR");
+        UUID curriculum = seedCurriculum(instructor, "PUBLISHED");
+        UUID lesson = seedLesson(curriculum);
+        UUID session = seedLiveSession(curriculum, lesson, instructor, "ENDED");
+        seedVideoAsset(lesson, session, "WITHDRAWN");
+        UUID id = seedNotification(instructor, NotificationTypes.VOD_PUBLISHED, INFO,
+                "{\"curriculumId\":\"%s\",\"lessonId\":\"%s\"}".formatted(curriculum, lesson));
+
+        target(instructor, id)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("AVAILABLE"))
+                .andExpect(jsonPath("$.state.replayStatus").value("WITHDRAWN"));
+    }
+
+    /**
+     * <b>업로드 강의는 상세 화면이 따로 있다.</b> 화면이 그것을 알려면 전달 방식이 상태에 실려야 한다 —
+     * 없으면 라이브 강의 경로로만 보내게 된다.
+     */
+    @Test
+    void the_state_carries_the_delivery_type_so_uploaded_lessons_get_their_own_screen() throws Exception {
+        UUID instructor = seedUser("INSTRUCTOR");
+        UUID curriculum = seedCurriculum(instructor, "PUBLISHED");
+        UUID lesson = seedRecordedLesson(curriculum);
+        UUID id = seedNotification(instructor, NotificationTypes.MATERIAL_PUBLISHED, INFO,
+                "{\"curriculumId\":\"%s\",\"lessonId\":\"%s\"}".formatted(curriculum, lesson));
+
+        target(instructor, id)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("AVAILABLE"))
+                .andExpect(jsonPath("$.state.deliveryType").value("RECORDED"));
+    }
+
     /** 저장된 targets가 깨져 있어도 500이 아니다 — 대상이 없는 것과 같이 본다. */
     @Test
     void a_broken_targets_payload_is_gone_not_a_server_error() throws Exception {
@@ -291,6 +448,52 @@ class NotificationTargetContractTest {
                 INSERT INTO core.curriculum (id, instructor_id, title, lifecycle_status)
                 VALUES (?, ?, ?, ?)
                 """, id, instructorId, "재판정 대상", lifecycle);
+        return id;
+    }
+
+    /** 섹션·레슨을 함께 만든다. 알림 목적지는 섹션 id까지 있어야 강의 상세 경로가 만들어진다. */
+    private UUID seedLesson(UUID curriculumId) {
+        UUID sectionId = UUID.randomUUID();
+        jdbc.update("""
+                INSERT INTO core.section (id, curriculum_id, title, order_index)
+                VALUES (?, ?, ?, 1)
+                """, sectionId, curriculumId, "재판정 섹션");
+        UUID lessonId = UUID.randomUUID();
+        jdbc.update("""
+                INSERT INTO core.lesson (id, section_id, title, order_index, status)
+                VALUES (?, ?, ?, 1, 'PUBLISHED')
+                """, lessonId, sectionId, "재판정 강의");
+        return lessonId;
+    }
+
+    /** 업로드 강의. `delivery_type`은 생성 뒤 바꿀 수 없으므로(V31 트리거) 처음부터 RECORDED로 넣는다. */
+    private UUID seedRecordedLesson(UUID curriculumId) {
+        UUID sectionId = UUID.randomUUID();
+        jdbc.update("""
+                INSERT INTO core.section (id, curriculum_id, title, order_index)
+                VALUES (?, ?, ?, 1)
+                """, sectionId, curriculumId, "업로드 섹션");
+        UUID lessonId = UUID.randomUUID();
+        jdbc.update("""
+                INSERT INTO core.lesson (id, section_id, title, order_index, status, delivery_type)
+                VALUES (?, ?, ?, 1, 'PUBLISHED', 'RECORDED')
+                """, lessonId, sectionId, "업로드 강의");
+        return lessonId;
+    }
+
+    private void seedVideoAsset(UUID lessonId, UUID liveSessionId, String replayStatus) {
+        jdbc.update("""
+                INSERT INTO core.video_asset (id, live_session_id, lesson_id, status, replay_status)
+                VALUES (?, ?, ?, 'READY', ?)
+                """, UUID.randomUUID(), liveSessionId, lessonId, replayStatus);
+    }
+
+    private UUID seedLiveSession(UUID curriculumId, UUID lessonId, UUID instructorId, String status) {
+        UUID id = UUID.randomUUID();
+        jdbc.update("""
+                INSERT INTO core.live_session (id, lesson_id, curriculum_id, instructor_id, status, scheduled_at)
+                VALUES (?, ?, ?, ?, ?, now())
+                """, id, lessonId, curriculumId, instructorId, status);
         return id;
     }
 
