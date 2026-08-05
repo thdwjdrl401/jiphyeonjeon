@@ -190,9 +190,9 @@ same-process bounded retry, multi-replica session owner는 아직 보장하지 �
 ## 7-1. 대화 이어가기 (GMS Responses API, ADR-0010)
 
 v1 `/internal/v1/rag/answers:stream` 요청 body는 `userId`, `conversationId`(둘 다 optional, 미지정
-시 기존과 완전히 동일하게 동작)를 추가로 받는다. **Spring은 아직 이 필드들을 보내지 않는다** — 이
-절은 ai-api가 필드를 받았을 때 무엇을 하는지 설명하며, 언제 Spring이 보내기 시작할지는 별도
-합의 대상이다.
+시 기존과 완전히 동일하게 동작)를 추가로 받는다. **Spring은 `userId`를 보낸다**(2026-08-05, 인증된
+질문자) — `conversationId`는 아직 보내지 않으므로 대화 범위는 "그 사용자의 그 라이브 세션"이다.
+FE가 세션 안에서 대화를 더 잘게 나눌 때 `conversationId`를 붙이는 것은 별도 합의 대상이다.
 
 - `userId`가 있는 요청은 대화 기억이 활성화된다(ADR-0046). `conversationId`가 없으면 대화 범위는
   "그 사용자의 그 라이브 세션"이며(키의 conversationId 자리는 고정값 `session`), `conversationId`를

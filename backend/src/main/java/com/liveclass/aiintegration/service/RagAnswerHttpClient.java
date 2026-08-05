@@ -87,8 +87,12 @@ class RagAnswerHttpClient implements RagAnswerStreaming {
     }
 
     /**
-     * ai-api가 {@code extra="forbid"}라 <b>이 7개 필드만</b> 나가야 한다. UUID는 {@code toString()}이
+     * ai-api가 {@code extra="forbid"}라 <b>이 8개 필드만</b> 나가야 한다. UUID는 {@code toString()}이
      * 소문자 canonical이라 그대로 문자열로 싣는다.
+     *
+     * <p>{@code userId}는 <b>없으면 null로 나간다.</b> ai-api에서 optional이라 null이 허용되고, 그때는
+     * 대화 기억 없이 예전과 똑같이 동작한다(fail-open). 빼는 대신 null로 두는 것은 wire 모양을 요청마다
+     * 바꾸지 않기 위해서다 — 필드가 들쭉날쭉하면 서명 대상 바이트도 함께 흔들린다.
      */
     private static Wire wire(RagAnswerCommand command, long issuedAtMs) {
         return new Wire(
@@ -98,6 +102,7 @@ class RagAnswerHttpClient implements RagAnswerStreaming {
                 command.sessionId().toString(),
                 command.question(),
                 command.contextTimeMs(),
+                command.userId() == null ? null : command.userId().toString(),
                 issuedAtMs);
     }
 
@@ -116,6 +121,7 @@ class RagAnswerHttpClient implements RagAnswerStreaming {
             String sessionId,
             String question,
             long contextTimeMs,
+            String userId,
             long issuedAtMs) {
     }
 
