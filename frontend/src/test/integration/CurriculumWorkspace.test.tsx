@@ -405,7 +405,7 @@ describe('커리큘럼 작업 화면', () => {
   })
 
   // 이미 지난 시각으로 시작하는 라이브는 새로 만들 수 없다.
-  it('라이브 예정일을 오늘보다 이전으로 넣으면 이유를 밝힌 문구를 보여주고 만들지 않는다', async () => {
+  it('라이브 예정일을 오늘보다 이전으로 넣으면 토스트로 이유를 알리고 만들지 않는다', async () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/new')
     await user.type(await screen.findByLabelText(/강의 제목/), '지난 날짜 라이브')
@@ -413,7 +413,9 @@ describe('커리큘럼 작업 화면', () => {
 
     await user.click(screen.getByRole('button', { name: '강의 생성 저장' }))
 
-    expect(await screen.findByText('라이브 예정일은 오늘보다 이전일 수 없습니다.')).toBeInTheDocument()
+    // 폼 아래 고정 문구가 아니라 토스트로 나가야 한다 — 알림 영역 안에서 찾는다.
+    const toastRegion = await screen.findByRole('region', { name: '알림' })
+    expect(await within(toastRegion).findByText('라이브 예정일은 오늘보다 이전일 수 없습니다.')).toBeInTheDocument()
     // 저장되지 않았으니 생성 폼에 그대로 머문다.
     expect(screen.getByRole('button', { name: '강의 생성 저장' })).toBeInTheDocument()
     expect(window.location.pathname).toMatch(/\/lessons\/new$/)
