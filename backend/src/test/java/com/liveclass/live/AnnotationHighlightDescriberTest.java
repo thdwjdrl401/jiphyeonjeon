@@ -107,9 +107,29 @@ class AnnotationHighlightDescriberTest {
 
         String prompt = model.prompts.get(0);
         assertThat(prompt).contains("가리키는");
-        assertThat(prompt).contains("그대로 옮기세요");
+        assertThat(prompt).contains("원문 그대로");
         assertThat(prompt).contains("지어내지 마세요");
         assertThat(prompt).doesNotContain("mermaid");
+    }
+
+    /**
+     * <b>OCR 덤프를 막는다</b>(ADR-0079 보강).
+     *
+     * <p>"글자를 그대로 옮기라"고만 했더니 모델이 화면의 글자를 줄바꿈으로 나열했다(운영 실측 190자).
+     * 읽는 쪽은 화면을 볼 수 없어 항목만 늘어놓은 텍스트로는 관계를 알 수 없고, 그런 문장은 근거로
+     * 인용해도 뜻이 서지 않는다. 무엇에 관한 것인지와 구성 요소 사이의 관계를 문장으로 요구한다.
+     */
+    @Test
+    void 프롬프트는_나열이_아니라_관계_있는_서술을_요구한다() {
+        StubModel model = new StubModel("""
+                {"text":"x","readable":true}""");
+        new AnnotationHighlightDescriber(model).describe(IMAGE_URL);
+
+        String prompt = model.prompts.get(0);
+        assertThat(prompt).contains("화면을 보지 못한 사람");
+        assertThat(prompt).contains("첫 문장에서 이 부분이 무엇에 관한 것인지 밝히세요");
+        assertThat(prompt).contains("관계와 함께");
+        assertThat(prompt).contains("글자를 나열하기만 하면 안 됩니다");
     }
 
     /**
