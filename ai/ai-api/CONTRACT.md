@@ -190,12 +190,14 @@ same-process bounded retry, multi-replica session owner는 아직 보장하지 �
 ## 7-1. 대화 이어가기 (GMS Responses API, ADR-0010)
 
 v1 `/internal/v1/rag/answers:stream` 요청 body는 `userId`, `conversationId`(둘 다 optional, 미지정
-시 기존과 완전히 동일하게 동작)를 추가로 받는다. **Spring은 아직 이 두 필드를 보내지 않는다** — 이
-절은 ai-api가 두 필드를 받았을 때 무엇을 하는지 설명하며, 언제 Spring이 보내기 시작할지는 별도
+시 기존과 완전히 동일하게 동작)를 추가로 받는다. **Spring은 아직 이 필드들을 보내지 않는다** — 이
+절은 ai-api가 필드를 받았을 때 무엇을 하는지 설명하며, 언제 Spring이 보내기 시작할지는 별도
 합의 대상이다.
 
-- 두 필드가 모두 있는 요청만 대화 기억이 활성화된다. 하나라도 없으면 §7의 기존 Chat Completions
-  경로를 그대로 타서 동작이 전혀 바뀌지 않는다.
+- `userId`가 있는 요청은 대화 기억이 활성화된다(ADR-0046). `conversationId`가 없으면 대화 범위는
+  "그 사용자의 그 라이브 세션"이며(키의 conversationId 자리는 고정값 `session`), `conversationId`를
+  보내면 그 값이 대화 범위가 된다 — FE가 나중에 세션 내 대화를 더 잘게 나눌 때 쓰는 확장 지점이다.
+  `userId`가 없으면 §7의 기존 Chat Completions 경로를 그대로 타서 동작이 전혀 바뀌지 않는다.
 - 활성화되면 ai-api가 Redis(`AI_API_REDIS_URL`, key prefix `AI_API_CONVERSATION_MEMORY_KEY_PREFIX`
   기본 `ai:conversation:`)에서 `{userId}:{sessionId}:{conversationId}` 키로 직전 GMS
   `previous_response_id`를 조회한 뒤, GMS **Responses API**(`POST /responses`, Chat Completions가

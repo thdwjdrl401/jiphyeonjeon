@@ -31,9 +31,10 @@ class RagAnswerRequest(_ContractModel):
     question: Question
     contextTimeMs: int = Field(ge=0)
     issuedAtMs: int = Field(ge=0)
-    # Optional and additive (ADR-0010): Spring does not send these yet. Both must be present
-    # for conversation memory to activate — omit either and this request behaves exactly as
-    # before (no previous_response_id lookup, no response id saved).
+    # Optional and additive (ADR-0010, ADR-0046): Spring does not send these yet. userId alone
+    # activates conversation memory, scoped to the live session by default; conversationId
+    # narrows that scope when FE later wants finer conversations. Without userId this request
+    # behaves exactly as before (no previous_response_id lookup, no response id saved).
     userId: Identifier | None = None
     conversationId: Identifier | None = None
 

@@ -210,10 +210,21 @@ class RagAnswerService:
             )
 
 
+# conversationId 없이 활성화된 대화의 범위 표지. Redis 키의 세 번째 자리를 채우는 고정값으로,
+# 같은 (userId, sessionId)의 turn들이 하나의 대화로 이어지게 한다.
+_SESSION_SCOPED_CONVERSATION = "session"
+
+
 def _conversation_memory_key(request: RagAnswerRequest) -> tuple[str, str, str] | None:
-    if request.userId is None or request.conversationId is None:
+    """userId만 있으면 대화 기억을 활성화한다(ADR-0046). 대화의 기본 단위는 "그 사용자의 그
+    라이브 세션"이고, conversationId는 나중에 FE가 더 잘게 대화를 나누고 싶을 때 이 기본
+    범위를 덮어쓰는 선택 필드다. 사용자를 구분할 수 없는 요청(userId 없음)은 활성화하지
+    않는다 — sessionId는 수강생 전원이 공유하는 값이라 그것만으로 키를 만들면 다른 학생의
+    대화가 이어진다."""
+    if request.userId is None:
         return None
-    return (request.userId, request.sessionId, request.conversationId)
+    conversation_id = request.conversationId or _SESSION_SCOPED_CONVERSATION
+    return (request.userId, request.sessionId, conversation_id)
 
 
 class AnswerEventStream(AsyncIterator[AnswerEvent]):
