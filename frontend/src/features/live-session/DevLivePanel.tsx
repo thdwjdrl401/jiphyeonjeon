@@ -50,6 +50,18 @@ function writeStoredPosition(position: PanelPosition): void {
   }
 }
 
+/**
+ * 라이브 강의실과 다시보기는 같은 목 데이터 저장소(mockLiveSessionService의 override Map들)를
+ * 쓰지만 그 위에 얹은 React Query 키가 다르다 — 화면마다 조회 훅이 다른 키로 캐싱하기 때문이다.
+ * 어떤 키를 무효화할지·세션 상태를 어떻게 반영할지가 이 한 가지 차이로 갈린다.
+ */
+type Variant = 'live' | 'replay'
+
+const QUERY_KEY_PREFIX: Record<Variant, { chat: string; notes: string; ai: string }> = {
+  live: { chat: 'live-chat', notes: 'lecture-notes', ai: 'ai-answers' },
+  replay: { chat: 'replay-messages', notes: 'replay-notes', ai: 'replay-ai-answers' },
+}
+
 interface Props {
   sessionId: string
   /** 용어집 쿼리 키가 세션이 아니라 레슨 기준이라 따로 받는다. */
@@ -60,6 +72,12 @@ interface Props {
    * 그 컴포넌트를 새로 마운트하도록 알려야 실제로 화면에 반영된다.
    */
   onAiHistoryChanged: () => void
+  /**
+   * 기본은 라이브 강의실. 다시보기(검수 화면 포함)에서 쓰면 `'replay'`를 넘긴다 — 쿼리 키와
+   * 세션 상태 반영 방식만 바뀌고 나머지 조작은 같다. 다시보기는 접속자 수·자막 스트림 개념이
+   * 없어(자막은 REST 스냅샷 고정본이라 이 override로 안 흔들린다) 그 두 구획은 라이브에서만 보인다.
+   */
+  variant?: Variant
 }
 
 /**
@@ -80,8 +98,9 @@ interface Props {
  *
  * `import.meta.env.DEV`가 아니면 렌더링하지 않아 프로덕션 번들에는 남지 않는다.
  */
-export default function DevLivePanel({ sessionId, lessonId, onAiHistoryChanged }: Props) {
+export default function DevLivePanel({ sessionId, lessonId, onAiHistoryChanged, variant = 'live' }: Props) {
   const queryClient = useQueryClient()
+  const keys = QUERY_KEY_PREFIX[variant]
   const [collapsed, setCollapsed] = useState(false)
   const [chatText, setChatText] = useState('')
   const [chatAsOther, setChatAsOther] = useState(true)
@@ -146,7 +165,7 @@ export default function DevLivePanel({ sessionId, lessonId, onAiHistoryChanged }
   const applyAiHistory = async (mutate: () => void) => {
     mutate()
     const data = await getAiAnswerHistory(sessionId)
-    queryClient.setQueryData(['ai-answers', sessionId], data)
+    queryClient.setQueryData([keys.ai, sessionId], data)
     onAiHistoryChanged()
   }
 
@@ -154,8 +173,8 @@ export default function DevLivePanel({ sessionId, lessonId, onAiHistoryChanged }
     devResetChat(sessionId)
     devResetLectureNote(sessionId)
     devResetGlossary(lessonId)
-    void queryClient.invalidateQueries({ queryKey: ['live-chat', sessionId] })
-    void queryClient.invalidateQueries({ queryKey: ['lecture-notes', sessionId] })
+    void queryClient.invalidateQueries({ queryKey: [keys.chat, sessionId] })
+    void queryClient.invalidateQueries({ queryKey: [keys.notes, sessionId] })
     void queryClient.invalidateQueries({ queryKey: ['glossary', lessonId] })
     void applyAiHistory(() => devResetAiHistory(sessionId))
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -163,10 +182,15 @@ export default function DevLivePanel({ sessionId, lessonId, onAiHistoryChanged }
 
   const setStatus = (status: CurriculumLiveSessionStatus) => {
     devSetLiveSessionStatusOverride(sessionId, status)
-    queryClient.setQueryData<LiveSessionView>(
-      ['live-session', sessionId],
-      (cached) => cached ? { ...cached, status } : cached,
-    )
+    if (variant === 'live') {
+      queryClient.setQueryData<LiveSessionView>(
+        ['live-session', sessionId],
+        (cached) => cached ? { ...cached, status } : cached,
+      )
+    } else {
+      // 다시보기엔 이 모양의 캐시가 없다 — getPlayback이 override를 다시 읽도록 무효화만 한다.
+      void queryClient.invalidateQueries({ queryKey: ['playback', lessonId] })
+    }
   }
 
   const sendChat = (text: string) => {
@@ -192,8 +216,8 @@ export default function DevLivePanel({ sessionId, lessonId, onAiHistoryChanged }
   }
 
   const resetEverything = () => {
-    runAndInvalidate(() => devResetChat(sessionId), ['live-chat', sessionId])
-    runAndInvalidate(() => devResetLectureNote(sessionId), ['lecture-notes', sessionId])
+    runAndInvalidate(() => devResetChat(sessionId), [keys.chat, sessionId])
+    runAndInvalidate(() => devResetLectureNote(sessionId), [keys.notes, sessionId])
     runAndInvalidate(() => devResetGlossary(lessonId), ['glossary', lessonId])
     void applyAiHistory(() => devResetAiHistory(sessionId))
   }
@@ -230,23 +254,26 @@ export default function DevLivePanel({ sessionId, lessonId, onAiHistoryChanged }
                 <button key={status} type="button" onClick={() => setStatus(status)}>{status}</button>
               ))}
             </div>
-            <div className="dev-live-panel__row">
-              <input
-                type="number"
-                min={0}
-                value={participantCount}
-                onChange={(event) => setParticipantCount(Number(event.target.value))}
-              />
-              <button type="button" onClick={() => devSetParticipantCount(sessionId, participantCount)}>접속자 수 반영</button>
-            </div>
+            {/* 다시보기는 시청자 수 개념이 없다(PlaybackPlayer에 participantCount를 넘기지 않는다). */}
+            {variant === 'live' && (
+              <div className="dev-live-panel__row">
+                <input
+                  type="number"
+                  min={0}
+                  value={participantCount}
+                  onChange={(event) => setParticipantCount(Number(event.target.value))}
+                />
+                <button type="button" onClick={() => devSetParticipantCount(sessionId, participantCount)}>접속자 수 반영</button>
+              </div>
+            )}
           </section>
 
           <section>
             <strong>채팅·질문</strong>
             <div className="dev-live-panel__row">
-              <button type="button" onClick={() => runAndInvalidate(() => devAppendChatSample(sessionId), ['live-chat', sessionId])}>샘플 데이터 추가</button>
-              <button type="button" onClick={() => appendTimes(10, () => devAppendChatSample(sessionId), ['live-chat', sessionId])}>+10</button>
-              <button type="button" onClick={() => runAndInvalidate(() => devResetChat(sessionId), ['live-chat', sessionId])}>초기화</button>
+              <button type="button" onClick={() => runAndInvalidate(() => devAppendChatSample(sessionId), [keys.chat, sessionId])}>샘플 데이터 추가</button>
+              <button type="button" onClick={() => appendTimes(10, () => devAppendChatSample(sessionId), [keys.chat, sessionId])}>+10</button>
+              <button type="button" onClick={() => runAndInvalidate(() => devResetChat(sessionId), [keys.chat, sessionId])}>초기화</button>
             </div>
             <div className="dev-live-panel__row">
               <label><input type="checkbox" checked={chatAsOther} onChange={(event) => setChatAsOther(event.target.checked)} /> 다른 사람으로</label>
@@ -274,9 +301,9 @@ export default function DevLivePanel({ sessionId, lessonId, onAiHistoryChanged }
           <section>
             <strong>실시간 노트</strong>
             <div className="dev-live-panel__row">
-              <button type="button" onClick={() => runAndInvalidate(() => devAppendLectureNoteSample(sessionId), ['lecture-notes', sessionId])}>샘플 데이터 추가</button>
-              <button type="button" onClick={() => appendTimes(10, () => devAppendLectureNoteSample(sessionId), ['lecture-notes', sessionId])}>+10</button>
-              <button type="button" onClick={() => runAndInvalidate(() => devResetLectureNote(sessionId), ['lecture-notes', sessionId])}>초기화</button>
+              <button type="button" onClick={() => runAndInvalidate(() => devAppendLectureNoteSample(sessionId), [keys.notes, sessionId])}>샘플 데이터 추가</button>
+              <button type="button" onClick={() => appendTimes(10, () => devAppendLectureNoteSample(sessionId), [keys.notes, sessionId])}>+10</button>
+              <button type="button" onClick={() => runAndInvalidate(() => devResetLectureNote(sessionId), [keys.notes, sessionId])}>초기화</button>
             </div>
           </section>
 
@@ -305,26 +332,32 @@ export default function DevLivePanel({ sessionId, lessonId, onAiHistoryChanged }
             </div>
           </section>
 
-          <section>
-            <strong>자막</strong>
-            <div className="dev-live-panel__row">
-              <input
-                value={captionText}
-                placeholder="자막 내용"
-                onChange={(event) => setCaptionText(event.target.value)}
-                onKeyDown={(event) => { if (event.key === 'Enter') sendCaption(captionText) }}
-              />
-              <button type="button" onClick={() => sendCaption(captionText)}>추가</button>
-            </div>
-            <div className="dev-live-panel__row">
-              <button type="button" onClick={() => sendCaption(longSampleText)}>긴 자막 넣기</button>
-            </div>
-            <div className="dev-live-panel__row">
-              {connectionOptions.map((state) => (
-                <button key={state} type="button" onClick={() => devSetCaptionConnectionState(sessionId, state)}>{state}</button>
-              ))}
-            </div>
-          </section>
+          {/*
+            다시보기 자막은 REST 스냅샷(getCaptions)이 고정 데모 데이터를 그대로 돌려준다 — 라이브
+            자막처럼 override 저장소를 거치지 않아 이 패널로는 흔들 수 없다. 그래서 라이브에서만 보인다.
+          */}
+          {variant === 'live' && (
+            <section>
+              <strong>자막</strong>
+              <div className="dev-live-panel__row">
+                <input
+                  value={captionText}
+                  placeholder="자막 내용"
+                  onChange={(event) => setCaptionText(event.target.value)}
+                  onKeyDown={(event) => { if (event.key === 'Enter') sendCaption(captionText) }}
+                />
+                <button type="button" onClick={() => sendCaption(captionText)}>추가</button>
+              </div>
+              <div className="dev-live-panel__row">
+                <button type="button" onClick={() => sendCaption(longSampleText)}>긴 자막 넣기</button>
+              </div>
+              <div className="dev-live-panel__row">
+                {connectionOptions.map((state) => (
+                  <button key={state} type="button" onClick={() => devSetCaptionConnectionState(sessionId, state)}>{state}</button>
+                ))}
+              </div>
+            </section>
+          )}
         </div>
       )}
     </div>

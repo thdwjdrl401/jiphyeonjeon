@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -15,16 +16,25 @@ vi.mock('@/features/live-session/PlaybackPlayer', () => ({
     bookmarked,
     playback,
     onBookmark,
+    lessonTitle,
+    backLink,
+    headerExtra,
   }: {
     bookmarked: boolean
     playback: { sessionId: string } | null
     onBookmark: () => void
+    lessonTitle?: string
+    backLink?: ReactNode
+    headerExtra?: ReactNode
   }) => (
     <div aria-label="강의 영상" role="region">
+      {backLink}
+      {lessonTitle && <h1>{lessonTitle}</h1>}
       {playback && <span>Mock HLS 재생 준비 · {playback.sessionId}</span>}
       <button type="button" onClick={onBookmark}>
         {bookmarked ? '★ 북마크됨' : '☆ 북마크'}
       </button>
+      {headerExtra}
     </div>
   ),
 }))

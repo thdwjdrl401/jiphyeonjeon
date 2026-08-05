@@ -19,8 +19,8 @@ export function Panel({ id, title, description, action, children, className = ''
   )
 }
 
-export function StatusBadge({ children, tone = 'neutral' }: PropsWithChildren<{ tone?: 'neutral' | 'success' | 'warning' | 'danger' | 'live' }>) {
-  return <span className={`status-pill status-pill--${tone}`}>{children}</span>
+export function StatusBadge({ children, tone = 'neutral', title }: PropsWithChildren<{ tone?: 'neutral' | 'success' | 'warning' | 'danger' | 'live'; title?: string }>) {
+  return <span className={`status-pill status-pill--${tone}`} title={title}>{children}</span>
 }
 
 export function MetricCard({ label, value, helper }: { label: string; value: string | number; helper?: string }) {
