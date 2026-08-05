@@ -850,6 +850,14 @@ describe('커리큘럼 작업 화면', () => {
     expect(within(operatingPanel!).queryByRole('link', { name: '관리하기' })).not.toBeInTheDocument()
   })
 
+  it('강사 커리큘럼 상태 필터에 미구현 보관 상태를 노출하지 않는다', async () => {
+    await renderAsInstructor('/instructor/curriculums')
+
+    const statusFilter = await screen.findByRole('combobox', { name: '상태 필터' })
+    expect(within(statusFilter).getAllByRole('option').map((option) => option.textContent))
+      .toEqual(['전체 상태', '공개 중', '준비 중'])
+  })
+
   // 목록은 탐색·진입만 맡는다. 삭제 같은 상태 변경은 관리 화면으로 모았다.
   it('내 커리큘럼 카드에는 관리 버튼만 남기고 삭제 버튼은 두지 않는다', async () => {
     await renderAsInstructor('/instructor/curriculums')
