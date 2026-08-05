@@ -628,17 +628,15 @@
  */
 .structure-section > header {
   display: grid;
-  grid-template-columns: auto minmax(0,1fr) max-content;
+  grid-template-columns: minmax(0,1fr) max-content;
   grid-template-areas:
-    "handle eyebrow actions"
-    "handle fields  fields";
+    "eyebrow actions"
+    "fields  fields";
   align-items: start;
   gap: 9px 13px;
   padding: 16px;
   background: var(--ink-50);
 }
-.drag-handle { align-self: center; color: var(--ink-300); }
-.structure-section > header .drag-handle { grid-area: handle; }
 .structure-section__eyebrow { grid-area: eyebrow; align-self: center; }
 .structure-section header span { color: var(--blue-600); font-size: .62rem; font-weight: 700; letter-spacing: .1em; }
 .structure-section h3 { margin: 2px 0; font-size: .9rem; }
@@ -681,6 +679,8 @@
 .row-actions { display: flex; align-items: center; gap: 9px; color: var(--blue-600); font-size: .68rem; font-weight: 700; }
 .row-actions > a, .row-actions > button { display: inline-flex; min-height: 25px; align-items: center; padding: 0 2px; border: 0; background: transparent; color: inherit; font-size: inherit; font-weight: inherit; line-height: 1; }
 .structure-section li.lesson-drop-empty { display: grid; min-height: 54px; place-items: center; border: 1px dashed var(--ink-200); border-radius: 10px; color: var(--ink-muted); cursor: default; font-size: .7rem; pointer-events: none; }
+/* 목록 끝에 이어 붙이는 자리라 가운데 정렬한다 — 오른쪽에 붙이면 다시 헤더 액션처럼 읽힌다. */
+.structure-section__add-lesson { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; padding: 2px 16px 14px; }
 .lifecycle-actions { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--ink-100); }
 /* 자기 패널을 통째로 차지할 때는 위쪽 구분선이 패널 헤더와 겹쳐 보여 뺀다. */
 .lifecycle-actions--standalone { margin-top: 0; padding-top: 0; border-top: 0; }
@@ -746,10 +746,10 @@ th { color: var(--ink-500); font-size: .67rem; }
 .curriculum-manage__structure-panel > .inline-notice { padding: 8px 10px; font-size: .65rem; line-height: 1.45; }
 .curriculum-manage-page .structure-list { gap: 8px; margin-top: 10px; }
 .curriculum-manage-page .structure-section > header {
-  grid-template-columns: auto minmax(0, 1fr) max-content;
+  grid-template-columns: minmax(0, 1fr) max-content;
   grid-template-areas:
-    "handle eyebrow actions"
-    "handle fields fields";
+    "eyebrow actions"
+    "fields fields";
   gap: 6px 10px;
   padding: 10px 12px;
 }
@@ -760,7 +760,9 @@ th { color: var(--ink-500); font-size: .67rem; }
 .curriculum-manage-page .structure-section__fields textarea { min-height: 38px; height: 38px; padding: 7px 9px; font-size: .7rem; line-height: 1.35; }
 .curriculum-manage-page .structure-section__fields input { font-size: .76rem; }
 .curriculum-manage-page .structure-actions { gap: 4px; }
-.curriculum-manage-page .structure-actions .button { min-height: 30px; padding: 5px 9px; font-size: .64rem; }
+.curriculum-manage-page .structure-actions .button,
+.curriculum-manage-page .structure-section__add-lesson .button { min-height: 30px; padding: 5px 9px; font-size: .64rem; }
+.curriculum-manage-page .structure-section__add-lesson { padding: 0 12px 11px; }
 .curriculum-manage-page .structure-order-actions { display: inline-flex; overflow: hidden; flex: 0 0 auto; border: 1px solid var(--border-medium); background: var(--paper-light); }
 .curriculum-manage-page .structure-order-button.button { width: 30px; height: 30px; min-height: 30px; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--ink-700); transform: none; }
 .curriculum-manage-page .structure-order-button.button + .structure-order-button.button { border-left: 1px solid var(--border-medium); }
@@ -897,11 +899,11 @@ th { color: var(--ink-500); font-size: .67rem; }
   .curriculum-manage__summary > div:nth-child(2) { border-right: 0; }
   .curriculum-manage__summary > div:nth-child(-n + 2) { border-bottom: 1px solid var(--border-soft); }
   .curriculum-manage-page .structure-section > header {
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
-      "handle eyebrow"
-      "handle fields"
-      "actions actions";
+      "eyebrow"
+      "fields"
+      "actions";
   }
   .curriculum-manage-page .structure-section__fields { grid-template-columns: 1fr; }
   .curriculum-manage-page .structure-actions { justify-content: flex-start; }
@@ -1348,11 +1350,11 @@ th { color: var(--ink-500); font-size: .67rem; }
   .dashboard-curriculum-card .card-actions .button { width: 100%; min-width: 0; }
   /* 버튼 묶음이 라벨 옆에 들어갈 폭이 없다 — 입력창 아래 자기 줄로 내린다. */
   .structure-section > header {
-    grid-template-columns: auto minmax(0,1fr);
+    grid-template-columns: minmax(0,1fr);
     grid-template-areas:
-      "handle eyebrow"
-      "handle fields"
-      "actions actions";
+      "eyebrow"
+      "fields"
+      "actions";
   }
   .structure-actions { justify-content: flex-start; }
   .structure-section li { grid-template-columns: auto auto minmax(0,1fr); }
