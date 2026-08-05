@@ -87,6 +87,25 @@ class CatalogContractTest {
     }
 
     @Test
+    void list_title_asc_uses_korean_collation_for_korean_and_english_titles() throws Exception {
+        UUID instructor = seedInstructor("정렬 강사", null, List.of());
+        for (String title : List.of("한글", "React", "나무", "Spring", "다람쥐", "가나다")) {
+            seedCurriculum(instructor, title, CurriculumLifecycleStatus.PUBLISHED);
+        }
+
+        mockMvc.perform(get("/api/curriculums")
+                        .param("sort", "TITLE_ASC")
+                        .param("size", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].title").value("가나다"))
+                .andExpect(jsonPath("$.items[1].title").value("나무"))
+                .andExpect(jsonPath("$.items[2].title").value("다람쥐"))
+                .andExpect(jsonPath("$.items[3].title").value("한글"))
+                .andExpect(jsonPath("$.items[4].title").value("React"))
+                .andExpect(jsonPath("$.items[5].title").value("Spring"));
+    }
+
+    @Test
     void list_rejects_unknown_sort_with_400() throws Exception {
         mockMvc.perform(get("/api/curriculums").param("sort", "NONSENSE"))
                 .andExpect(status().isBadRequest())
