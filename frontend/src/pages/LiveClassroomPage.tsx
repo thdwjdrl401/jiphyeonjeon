@@ -20,6 +20,8 @@ import {
   selectVisibleCaptions,
 } from '@/features/live-session/captionAdapter'
 import LearningSidebar from '@/features/live-session/LearningSidebar'
+import LivePrestartStage from '@/features/live-session/LivePrestartStage'
+import { isPrestartStatus, prestartNotice } from '@/features/live-session/livePrestart'
 import type { LearningPanel } from '@/features/live-session/liveLearningPreview'
 import {
   askLiveAi,
@@ -108,6 +110,20 @@ export default function LiveClassroomPage() {
     || session?.status === 'ENDING'
     || session?.status === 'ENDED'
   const hasEnded = session?.status === 'ENDED'
+  /*
+   * 아직 시작하지 않은 강의에 들어와 있다.
+   *
+   * <p>입장창은 <b>시계가 연다</b>(예정 시각 −N분) — 강사가 여는 것이 아니다. 그래서 강사가 시작을
+   * 누르기 전에도 이 화면에 사람이 있고, 그 상태에도 이름이 필요하다. 재생·채팅·질문이 모두 잠기는데
+   * 왜 잠겼는지는 각 자리에서 따로 말한다(잠금 하나에 안내 하나).
+   *
+   * <p>`STARTING`을 여기 포함하는 이유: 시작 게이트(STT dispatch·Egress·마이크 확인)는 수 초가 걸리고
+   * 그동안 재생할 것이 아직 없다. 다만 기다림의 성격은 다르므로 문구는 아래에서 갈라 쓴다.
+   *
+   * <p>강사는 해당 없다 — LiveKit으로 직접 송출하므로 재생 경로를 타지 않는다.
+   */
+  const isBeforeLive = !isInstructor && isPrestartStatus(session?.status)
+  const isStarting = session?.status === 'STARTING'
   const messages = chatQuery.data ?? []
   // 라이브 자막은 REST 스냅샷이 아니라 WS 델타 스트림으로 구동한다(§3-4 / ADR-0043).
   // 누적기는 ref에 두고, 파생 CaptionView[]만 state로 올려 CaptionDock에 넘긴다.
@@ -153,10 +169,16 @@ export default function LiveClassroomPage() {
   // 라이브는 녹화되고 채팅·자막이 AI 처리된다는 안내를 입장 시 한 번 확인받는다.
   // 상시 배너 대신 진입 모달로 알려 시야를 가리지 않게 한다.
   const [recordingNoticeAck, setRecordingNoticeAck] = useState(false)
-  // 강사는 LiveKit로 직접 송출하므로 재생 경로를 타지 않는다. 학생도 녹화 안내를 확인한 뒤에 붙는다.
+  /*
+   * 강사는 LiveKit로 직접 송출하므로 재생 경로를 타지 않는다. 학생도 녹화 안내를 확인한 뒤에 붙는다.
+   *
+   * <p><b>시작 전에는 아예 조회하지 않는다.</b> 녹화 자산은 시작 시점에 만들어지므로 그 전에 물으면
+   * 없는 것이 당연한데, 화면에는 "시청할 수 있는 영상이 없습니다"라는 <b>오류</b>로 나온다 — 기다리면
+   * 되는 상황을 고장으로 읽히게 한다. 3초마다 실패할 요청을 보내지도 않는다.
+   */
   const playback = usePlayback(
     sessionQuery.data?.lessonId,
-    !isInstructor && (recordingNoticeAck || hasEnded),
+    !isInstructor && !isBeforeLive && (recordingNoticeAck || hasEnded),
   )
   const sendMutation = useMutation({
     mutationFn: (input: SendChatMessageInput) => sendChatMessage(sessionId, input),
@@ -274,7 +296,13 @@ export default function LiveClassroomPage() {
    * 환산된다 — 라이브로 들은 시간이 사라지지는 않는다.
    */
   const watchDurationMs = playback.playback?.durationMs ?? null
-  useWatchTracking(lesson?.lessonId ?? '', positionMs, !isInstructor && Boolean(lesson?.lessonId), watchDurationMs)
+  // 시작 전에는 세지 않는다 — 재생 중인 것이 없는데 위치 0에 시청 한 번이 찍히면 곡선이 오염된다.
+  useWatchTracking(
+    lesson?.lessonId ?? '',
+    positionMs,
+    !isInstructor && !isBeforeLive && Boolean(lesson?.lessonId),
+    watchDurationMs,
+  )
   const heatmapQuery = useQuery({
     queryKey: ['watch-heatmap', lesson?.lessonId, watchDurationMs],
     queryFn: () => getWatchHeatmap(lesson!.lessonId, watchDurationMs),
@@ -436,12 +464,36 @@ export default function LiveClassroomPage() {
         <button className="button button--primary button--small" type="submit">전송</button>
       </div>
     </form>
+  ) : isBeforeLive ? (
+    /*
+     * 시작 전에는 <b>입력창을 지우지 않고 잠근다.</b> 예전에는 통째로 사라져서, 채팅이 원래 없는
+     * 화면인지 지금만 막힌 것인지 구별할 수 없었다 — 잠긴 자리와 그 이유가 같이 보여야 한다.
+     * 이유는 바로 위 `discussionNotice`가 말한다.
+     */
+    <form className="chat-composer" onSubmit={(event) => event.preventDefault()}>
+      <textarea
+        aria-label="채팅 메시지"
+        disabled
+        rows={2}
+        value=""
+        placeholder="강의가 시작되면 채팅을 보낼 수 있습니다."
+        readOnly
+      />
+      <div>
+        <button className="button button--primary button--small" disabled type="submit">전송</button>
+      </div>
+    </form>
   ) : undefined
 
   const aiContent = (
     <PersonalAiQuestionPanel
       key={showDevLivePanel ? aiHistoryDevVersion : undefined}
       ask={canUseConversation ? askAi : undefined}
+      /*
+       * 왜 못 쓰는지 이 패널 안에서 말한다. 값이 없으면 "이 화면에서는 지원하지 않습니다"라는
+       * 기본 문구가 나가는데, 지금은 <b>기다리면 되는</b> 상황이라 뜻이 다르다.
+       */
+      unavailableNotice={isBeforeLive ? prestartNotice(isStarting) : undefined}
       history={aiHistoryQuery.data}
       placeholder="예: SecurityContext와 세션은 어떻게 다른가요? (Enter 전송 · Shift+Enter 줄바꿈)"
       emptyDescription="강의 자료와 지금까지의 발화를 근거로 답변합니다."
@@ -450,7 +502,10 @@ export default function LiveClassroomPage() {
 
   // 자막이 이미 흐르면(누적 라인 존재) 연결 문구로 시야를 어지럽히지 않는다.
   // 아직 한 줄도 없을 때만 연결 상태를 안내한다.
-  const captionNote = hasEnded
+  const captionNote = isBeforeLive
+    // 자막은 강사의 발화에서 나온다 — 시작 전이라 연결과 무관하게 나올 것이 없다.
+    ? '강의가 시작되면 실시간 자막이 여기에 표시됩니다.'
+    : hasEnded
     ? '라이브가 종료되어 자막 시간 이동을 사용할 수 없습니다.'
     : captions.length > 0 || captionConnectionState === 'connected'
       ? undefined
@@ -462,7 +517,13 @@ export default function LiveClassroomPage() {
             ? '실시간 자막 연결에 문제가 생겼습니다. 자동 재연결을 시도합니다.'
             : '실시간 자막 연결이 종료되었습니다.'
 
-  const chatConnectionNotice = chatConnectionState === 'connected'
+  /*
+   * 시작 전이라는 사실이 연결 상태보다 앞선다 — 소켓이 연결 중이라 못 보내는 것이 아니라 강의가
+   * 아직 시작되지 않아 못 보내는 것이다. 연결 문구를 그대로 두면 잘못된 원인을 짚는다.
+   */
+  const chatConnectionNotice = isBeforeLive
+    ? prestartNotice(isStarting)
+    : chatConnectionState === 'connected'
     ? undefined
     : chatConnectionState === 'connecting'
       ? '실시간 채팅을 연결하고 있습니다.'
@@ -566,6 +627,19 @@ export default function LiveClassroomPage() {
                   onRequestEnd={() => setEndRequested(true)}
                 />
               </Suspense>
+            )
+            : isBeforeLive
+            ? (
+              /*
+               * 시작 전에는 플레이어를 <b>띄우지 않는다</b>. 재생할 자산이 아직 없어서 플레이어가
+               * 오류를 그리는데, 기다리면 되는 상황을 고장으로 읽히게 한다. 시작 신호를 받으면
+               * `isBeforeLive`가 풀리면서 이 자리에 플레이어가 들어온다 — 새로고침이 필요 없다.
+               */
+              <LivePrestartStage
+                isStarting={isStarting}
+                lessonTitle={lesson.title}
+                scheduledAt={session.scheduledAt}
+              />
             )
             : (
               <Suspense fallback={<div className="video-stage instructor-livekit-loading" role="status">Vidstack 플레이어를 불러오는 중입니다.</div>}>

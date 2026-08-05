@@ -66,6 +66,26 @@ export interface SendChatMessageInput {
 export type ChatConnectionState = 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'error'
 
 export type LiveSessionStateEvent =
+  /**
+   * 강사가 시작을 눌렀다. 아직 볼 것은 없지만 **기다림의 성격이 바뀐다** — 시작 게이트는 수 초가
+   * 걸리므로, 이 신호가 없으면 그동안 화면이 시작 전과 구분되지 않는다.
+   */
+  | {
+      type: 'session.starting'
+      occurredAt: string
+      payload: { liveSessionStatus: 'STARTING'; endedAt: null }
+    }
+  /**
+   * 라이브가 시작됐다 — 수강생이 실제로 재생할 수 있는 시점이다.
+   *
+   * 입장창은 시계가 열기 때문에(예정 시각 기준) 강사가 시작하기 전에도 강의실에 사람이 있다.
+   * **대기 화면에서 재생 화면으로 넘어가는 유일한 신호가 이것이다** — 없으면 새로고침해야 한다.
+   */
+  | {
+      type: 'session.started'
+      occurredAt: string
+      payload: { liveSessionStatus: 'LIVE'; endedAt: null }
+    }
   | {
       type: 'session.ending'
       occurredAt: string

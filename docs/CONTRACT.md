@@ -523,6 +523,12 @@ Spring 수신 endpoint를 구현하고 `SPRING_STATUS_CALLBACK_URL`로 주입하
   `{coveredThroughSequence, topics, markdown, status, updatedAt}`. **증분이 아니라 늘 전체**이며 조회
   응답과 같은 모양이다. 구독 인가는 자막·채팅과 동일 게이트.
 - **세션 상태 채널** `/topic/live-sessions/{sessionId}/state`([ADR-0003](decisions/choinhoo/0003-simple-live-end-sequential-process.md)):
+  **시작 쪽**은 `session.starting` payload `{liveSessionStatus:"STARTING",endedAt:null}`와
+  `session.started` payload `{liveSessionStatus:"LIVE",endedAt:null}`이다([ADR-0084](decisions/songjeongki/0084-live-classroom-waits-in-place.md)).
+  입장창은 **예정 시각 기준으로 열리므로** 강사가 시작하기 전에도 강의실에 수강생이 있고, `session.started`가
+  그 사람이 새로고침 없이 시작을 아는 **유일한 경로**다. `session.started`의 `occurredAt`은 세션 시계 원점
+  (`startedAt`)이며, `session.starting`은 도메인 시각이 없어 발행 시각을 싣는다(`session.presence`와 같다).
+  **종료 쪽**은
   `session.ending` payload `{liveSessionStatus:"ENDING",endedAt:null}`와
   `session.ended` payload `{liveSessionStatus:"ENDED",endedAt:"..."}`를 각 DB 전이의 **커밋 후** push한다.
   `session.ending`은 종료 진행 상태이고 상호작용을 잠그지 않는다. `session.ended`도 강사 송출·Room

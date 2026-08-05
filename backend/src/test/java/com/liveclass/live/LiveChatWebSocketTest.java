@@ -301,6 +301,79 @@ class LiveChatWebSocketTest {
         stateSession.disconnect();
     }
 
+    /**
+     * 시작 전에 들어와 있던 수강생이 <b>새로고침 없이</b> 시작을 알게 된다.
+     *
+     * <p>입장창은 시계가 여는 것이라(예정 시각 기준) 강사가 시작하기 전에도 강의실에 사람이 있다.
+     * 예전에는 상태 토픽이 ENDING·ENDED만 실어서, 그 사람에게 시작을 알릴 길이 없었다 — 화면은 계속
+     * 시작 전이고 새로고침해야만 재생이 붙었다.
+     *
+     * <p>구독을 <b>시작 전에</b> 걸어 두는 것이 이 테스트의 핵심이다. 이미 LIVE인 세션에 구독하면
+     * 시작 이벤트는 이미 지나간 뒤라 아무것도 증명하지 못한다.
+     */
+    @Test
+    void starting_and_started_reach_a_student_who_joined_before_the_lecture_began() throws Exception {
+        Client instructor = new Client();
+        instructor.signupAndLogin("INSTRUCTOR");
+        String[] ids = instructor.createScheduledSession();
+        String sessionId = ids[1];
+
+        Client student = new Client();
+        student.signupAndLogin("STUDENT");
+        String enrollmentId = student.field(
+                student.post("/api/curriculums/" + ids[2] + "/enrollments", null),
+                "enrollmentId");
+        instructor.post(
+                "/api/instructor/curriculums/" + ids[2] + "/enrollments/" + enrollmentId + "/approve",
+                null);
+
+        // 아직 SCHEDULED다 — 시작 전에도 수강생이 상태 토픽을 구독할 수 있어야 신호를 받는다.
+        BlockingQueue<Map<String, Object>> stateInbox = new LinkedBlockingQueue<>();
+        StompSession stateSession = connect(student);
+        stateSession.subscribe(
+                "/topic/live-sessions/" + sessionId + "/state",
+                frameHandler(stateInbox));
+        Thread.sleep(300);
+
+        instructor.start(sessionId);
+        LiveStartTestSupport.awaitLive(liveSessionRepository, sessionId);
+
+        /*
+         * 접속자 수(session.presence)가 같은 토픽으로 섞여 들어온다. 순서를 기대하지 않고 상태 전이만
+         * 골라 본다 — presence를 상태로 오해하면 화면이 엉뚱하게 바뀐다(그래서 타입이 나뉘어 있다).
+         */
+        Map<String, Object> starting = pollStateEvent(stateInbox, "session.starting");
+        Map<String, Object> started = pollStateEvent(stateInbox, "session.started");
+        assertThat(starting).as("session.starting 수신").isNotNull();
+        assertThat(started).as("session.started 수신").isNotNull();
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> startingPayload = (Map<String, Object>) starting.get("payload");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> startedPayload = (Map<String, Object>) started.get("payload");
+        assertThat(startingPayload.get("liveSessionStatus")).isEqualTo("STARTING");
+        assertThat(startedPayload.get("liveSessionStatus")).isEqualTo("LIVE");
+        // 종료 시각 필드는 시작 신호에 실리지 않는다 — 화면이 종료 배너를 띄우면 안 된다.
+        assertThat(startedPayload.get("endedAt")).isNull();
+        // 봉투 시각은 세션 시계 원점이라 비어 있으면 안 된다.
+        assertThat(started.get("occurredAt")).isNotNull();
+
+        stateSession.disconnect();
+    }
+
+    /** 상태 토픽에서 원하는 타입 하나를 골라 낸다. presence 등 다른 이벤트는 흘려보낸다. */
+    private Map<String, Object> pollStateEvent(BlockingQueue<Map<String, Object>> inbox, String type)
+            throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(20);
+        while (System.nanoTime() < deadline) {
+            Map<String, Object> event = inbox.poll(1, TimeUnit.SECONDS);
+            if (event != null && type.equals(event.get("type"))) {
+                return event;
+            }
+        }
+        return null;
+    }
+
     private StompSession connect(Client client) throws Exception {
         return connect(client, new LinkedBlockingQueue<>());
     }
@@ -369,6 +442,19 @@ class LiveChatWebSocketTest {
 
         /** 강사로 커리큘럼→섹션→레슨→라이브세션 생성·발행·시작. {lessonId, sessionId, curriculumId} 반환. */
         String[] createStartedSession() throws Exception {
+            String[] ids = createScheduledSession();
+            start(ids[1]);
+            LiveStartTestSupport.awaitLive(liveSessionRepository, ids[1]);
+            return ids;
+        }
+
+        /**
+         * 시작 <b>직전까지만</b> 만든다 — 세션은 아직 {@code SCHEDULED}다.
+         *
+         * <p>시작 전에 구독해 두고 시작 신호를 받는 것을 검증하려면 구독 시점에 세션이 시작돼 있으면
+         * 안 된다. 시작 스텁까지 여기서 걸어 두어 {@link #start}가 시작 신호만 남기게 한다.
+         */
+        String[] createScheduledSession() throws Exception {
             String cid = field(post("/api/instructor/curriculums", "{\"title\":\"ws\"}"), "curriculumId");
             String sid = field(post("/api/instructor/curriculums/" + cid + "/sections", "{\"title\":\"s\"}"), "sectionId");
             String lessonId = field(post("/api/instructor/sections/" + sid + "/lessons", "{\"title\":\"l\"}"), "lessonId");
@@ -379,9 +465,11 @@ class LiveChatWebSocketTest {
             LiveStartTestSupport.stubInstructorPublishing(roomControl, sessionId, instructorId);
             LiveStartTestSupport.stubRecordingReady(recordingControl);
             LiveStartTestSupport.stubAgentDispatched(agentDispatchControl);
-            post("/api/live-sessions/" + sessionId + "/start", null);
-            LiveStartTestSupport.awaitLive(liveSessionRepository, sessionId);
             return new String[]{lessonId, sessionId, cid};
+        }
+
+        void start(String sessionId) throws Exception {
+            post("/api/live-sessions/" + sessionId + "/start", null);
         }
 
         HttpResponse<String> get(String path) throws Exception {

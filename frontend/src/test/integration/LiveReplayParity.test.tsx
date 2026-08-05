@@ -6,6 +6,7 @@ import AppRouter from '@/app/router/AppRouter'
 import { AuthProvider } from '@/features/auth/AuthContext'
 import { mockAuthService } from '@/features/auth/mockAuthService'
 import { resetMockDatabase } from '@/features/demo/mockDatabase'
+import { mockLiveSessionService } from '@/features/live-session/mockLiveSessionService'
 import { ToastProvider } from '@/shared/ui/Toast'
 
 /**
@@ -47,9 +48,18 @@ async function loginStudent() {
 }
 
 describe('라이브와 다시보기의 정합', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     resetMockDatabase()
     window.localStorage.clear()
+    /*
+     * 라이브 화면을 다시보기와 비교하려면 세션이 <b>실제로 LIVE여야</b> 한다.
+     *
+     * <p>데모의 이 세션은 기본이 `OPEN`(=시작 전)이라 이제 대기 화면이 그려진다 — 플레이어도 북마크도
+     * 없다. 예전에는 상태와 무관하게 플레이어를 그렸기 때문에 이 차이가 드러나지 않았고, 이 파일은
+     * 시작하지도 않은 강의실을 "라이브 화면"이라고 비교하고 있었다.
+     */
+    await mockLiveSessionService.startLiveSession('ses-security-live')
+    await mockLiveSessionService.getLiveStartStatus('ses-security-live')
   })
 
   it.each([

@@ -26,6 +26,11 @@ const processingPollCounts = new Map<string, number>()
 const stateSubscribers = new Map<string, Set<(event: LiveSessionStateEvent) => void>>()
 const mockLivePlaybackUrl = 'https://files.vidstack.io/sprite-fight/hls/stream.m3u8'
 
+/** 상태 전이를 구독자에게 흘린다. 구독자가 없는 세션도 있으므로 조용히 지나간다. */
+function notifyState(sessionId: string, event: LiveSessionStateEvent) {
+  stateSubscribers.get(sessionId)?.forEach((subscriber) => subscriber(event))
+}
+
 /*
  * 개발용 주입 채널(DevLivePanel 전용). 화면이 실제 WS로 받는 것과 같은 콜백을 붙잡아 뒀다가,
  * 개발자가 패널 버튼을 누르면 그 콜백을 직접 불러 "방금 도착한 메시지/자막"을 흉내 낸다.
@@ -164,11 +169,23 @@ export const mockLiveSessionService = {
     const operationId = liveStartOperations.get(sessionId) ?? `op-${sessionId}`
     liveStartOperations.set(sessionId, operationId)
     liveStatusOverrides.set(sessionId, 'STARTING')
+    // 서버도 STARTING 커밋 후 상태 토픽으로 알린다. 목이 이걸 빠뜨리면 시작 전에 들어와 있던
+    // 수강생 화면이 데모에서만 대기 상태에 머문다.
+    notifyState(sessionId, {
+      type: 'session.starting',
+      occurredAt: new Date().toISOString(),
+      payload: { liveSessionStatus: 'STARTING', endedAt: null },
+    })
     return { operationId, sessionId, status: 'STARTING' as const }
   },
   async getLiveStartStatus(sessionId) {
     const operationId = liveStartOperations.get(sessionId) ?? null
     liveStatusOverrides.set(sessionId, 'LIVE')
+    notifyState(sessionId, {
+      type: 'session.started',
+      occurredAt: new Date().toISOString(),
+      payload: { liveSessionStatus: 'LIVE', endedAt: null },
+    })
     const demo = getDemoLiveSession(sessionId)
     const session = {
       ...demo,
@@ -187,18 +204,18 @@ export const mockLiveSessionService = {
   },
   async endLiveSession(sessionId) {
     liveStatusOverrides.set(sessionId, 'ENDING')
-    stateSubscribers.get(sessionId)?.forEach((subscriber) => subscriber({
+    notifyState(sessionId, {
       type: 'session.ending',
       occurredAt: new Date().toISOString(),
       payload: { liveSessionStatus: 'ENDING', endedAt: null },
-    }))
+    })
     liveStatusOverrides.set(sessionId, 'ENDED')
     const endedAt = new Date().toISOString()
-    stateSubscribers.get(sessionId)?.forEach((subscriber) => subscriber({
+    notifyState(sessionId, {
       type: 'session.ended',
       occurredAt: endedAt,
       payload: { liveSessionStatus: 'ENDED', endedAt },
-    }))
+    })
     return getMockLiveSession(sessionId)
   },
   async getInstructorLiveToken(sessionId) {
