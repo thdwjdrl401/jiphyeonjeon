@@ -36,10 +36,10 @@ LiveKit microphone PCM
 
 ## 3. 선택한 구조
 
-### 별도 NeMo model-owner process
+### 독립 NeMo model-owner process pool
 
 realtime-agent venv에는 NeMo를 섞지 않는다. 학습에서 검증한 고정 NeMo venv가 runtime을 실행한다.
-runtime은 loopback에만 bind하고 동일 checkpoint를 process 시작 시 5개 독립 replica로 복원한다.
+runtime은 loopback에만 bind하고 동일 checkpoint를 5개 독립 process가 각각 복원한다.
 
 ```text
 NEMO_RUNTIME_VENV=/home/liveclass/ai/training/nemotron-3.5-full-20260803/.venv
@@ -71,13 +71,13 @@ CUDA_VISIBLE_DEVICES=0
 - multipart: `model`, `language=ko-KR`, `file`(mono PCM16 WAV)
 - 성공: `200 {"text":"완성 문장"}`
 - 빈 인식도 정상 응답: `200 {"text":""}`
-- 가용 replica를 queue에서 대여해 최대 5개 요청을 동시에 처리한다.
+- Linux `SO_REUSEPORT`가 같은 loopback port의 독립 process 5개에 요청을 분산한다.
 
 ## 4. 구현 단위
 
 1. `nemo-runtime/`에 표준 라이브러리 HTTP server와 model wrapper를 둔다.
 2. wrapper는 `ASRModel.restore_from()`, `set_inference_prompt("ko-KR")`, language tag 제거,
-   각 replica의 FP32 CUDA model과 전용 CUDA stream을 소유한다.
+   각 process가 FP32 CUDA model과 독립 CUDA context를 소유한다.
 3. realtime-agent에 loopback URL·model alias·timeout 설정과 `nemotron-nemo` provider를 추가한다.
 4. provider는 기존 `SegmentedStreamingEngine`을 상속하고 WAV multipart 요청 뒤
    `ProviderSegmentFinal` 하나만 반환한다.
