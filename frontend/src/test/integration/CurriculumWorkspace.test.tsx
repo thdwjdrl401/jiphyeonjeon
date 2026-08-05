@@ -225,14 +225,19 @@ describe('커리큘럼 작업 화면', () => {
     )
 
     fireEvent.change(screen.getByLabelText('운영 종료일'), { target: { value: localDateTimeInDays(-1, '09:00') } })
+    const submit = screen.getByRole('button', { name: '초안 만들기' })
 
-    await user.click(screen.getByRole('button', { name: '초안 만들기' }))
+    // 잘못된 값을 서버로 보낼 수 없게 즉시 잠그고, 날짜를 고치면 다시 저장할 수 있어야 한다.
+    expect(submit).toBeDisabled()
 
-    // 폼 아래 고정 문구가 아니라 토스트로 나가야 한다 — 알림 영역 안에서 찾는다.
+    // 폼 아래 고정 문구가 아니라 입력 시점에 토스트로 나가야 한다 — 알림 영역 안에서 찾는다.
     const toastRegion = await screen.findByRole('region', { name: '알림' })
     expect(await within(toastRegion).findByText('운영 종료일은 오늘보다 이전일 수 없습니다.')).toBeInTheDocument()
     // 초안이 만들어지지 않았으니 생성 폼에 그대로 머문다.
     expect(window.location.pathname).toBe('/instructor/curriculums/new')
+
+    fireEvent.change(screen.getByLabelText('운영 종료일'), { target: { value: localDateTimeInDays(1, '09:00') } })
+    expect(submit).toBeEnabled()
   })
 
   it('관리 화면에서 섹션 이름과 설명을 수정한다', async () => {

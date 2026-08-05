@@ -27,8 +27,16 @@ export default function CurriculumFormPage() {
   const [materials, setMaterials] = useState<CurriculumMaterial[]>([])
   const toast = useToast()
   const [submitting, setSubmitting] = useState(false)
+  const hasPastEndDate = isBeforeToday(form.endsAt)
 
-  const update = (field: keyof typeof form, value: string) => setForm((current) => ({ ...current, [field]: value }))
+  const update = (field: keyof typeof form, value: string) => {
+    // 키보드로 과거 날짜를 직접 넣어도 즉시 이유를 알린다. 같은 과거 날짜를 편집하는 동안에는
+    // 토스트를 반복하지 않고, 유효한 날짜로 고쳤다가 다시 과거로 바꿀 때만 새로 안내한다.
+    if (field === 'endsAt' && isBeforeToday(value) && !hasPastEndDate) {
+      toast.error('운영 종료일은 오늘보다 이전일 수 없습니다.')
+    }
+    setForm((current) => ({ ...current, [field]: value }))
+  }
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -106,7 +114,7 @@ export default function CurriculumFormPage() {
           />
         </Panel>
 
-        <div className="sticky-form-actions curriculum-form__actions"><Link className="button button--ghost" to={instructorPaths.curriculums}>취소</Link><button className="button button--primary button--large" type="submit" disabled={submitting}>{submitting ? '초안 만드는 중' : '초안 만들기'}</button></div>
+        <div className="sticky-form-actions curriculum-form__actions"><Link className="button button--ghost" to={instructorPaths.curriculums}>취소</Link><button className="button button--primary button--large" type="submit" disabled={submitting || hasPastEndDate}>{submitting ? '초안 만드는 중' : '초안 만들기'}</button></div>
       </form>
     </div>
   )
