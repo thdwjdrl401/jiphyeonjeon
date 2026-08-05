@@ -1,0 +1,1694 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>알림 팬아웃 파이프라인 — 데이터가 지나가는 길</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --panel2: #1c2430; --line: #30363d;
+    --fg: #e6edf3; --dim: #8b949e; --dim2: #6e7681;
+    --accent: #58a6ff; --evt: #a1a1aa; --row: #58a6ff; --msg: #bc8cff;
+    --note: #f0b429; --ok: #3fb950; --err: #f85149;
+    --code-bg: #0b0f14;
+  }
+  :root[data-theme="light"] {
+    --bg: #f6f8fa; --panel: #ffffff; --panel2: #f0f3f6; --line: #d0d7de;
+    --fg: #1f2328; --dim: #57606a; --dim2: #6e7781;
+    --accent: #0969da; --evt: #6e7781; --row: #0969da; --msg: #8250df;
+    --note: #9a6700; --ok: #1a7f37; --err: #cf222e;
+    --code-bg: #f6f8fa;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg: #f6f8fa; --panel: #ffffff; --panel2: #f0f3f6; --line: #d0d7de;
+      --fg: #1f2328; --dim: #57606a; --dim2: #6e7781;
+      --accent: #0969da; --evt: #6e7781; --row: #0969da; --msg: #8250df;
+      --note: #9a6700; --ok: #1a7f37; --err: #cf222e;
+      --code-bg: #f6f8fa;
+    }
+  }
+  * { box-sizing: border-box; }
+  /* display를 지정한 요소는 hidden 속성이 먹지 않는다 — 뷰를 바꿀 때 감춰야 할 것들이 있다. */
+  [hidden] { display: none !important; }
+  /*
+   * 스크롤바를 항상 자리잡아 둔다. 없으면 오른쪽 패널 내용이 길어질 때 스크롤바가 생겼다 사라지며
+   * 가로 폭이 흔들리고, 그 순간 커서가 박스를 벗어났다 들어왔다를 반복해 화면이 파르르 떨린다.
+   */
+  html { overflow-y: scroll; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic",
+                 "Noto Sans KR", system-ui, sans-serif;
+    font-size: 14px; line-height: 1.6;
+  }
+  code, pre, .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+
+  header { padding: 22px 26px 16px; border-bottom: 1px solid var(--line); }
+  h1 { margin: 0 0 6px; font-size: 20px; letter-spacing: -.2px; }
+  .sub { color: var(--dim); font-size: 13px; margin: 0; }
+  .sub b { color: var(--fg); font-weight: 600; }
+
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 14px; }
+  .toolbar .spacer { flex: 1 1 auto; }
+  button {
+    background: var(--panel); color: var(--fg); border: 1px solid var(--line);
+    border-radius: 7px; padding: 6px 12px; font-size: 13px; cursor: pointer;
+    font-family: inherit; transition: border-color .12s, background .12s;
+  }
+  button:hover { border-color: var(--accent); }
+  button[aria-pressed="true"], button.on {
+    background: var(--accent); border-color: var(--accent); color: #fff;
+  }
+  :root[data-theme="light"] button[aria-pressed="true"] { color: #fff; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; border-right: 1px solid var(--line); }
+  .seg button:last-child { border-right: 0; }
+
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 0; align-items: start; }
+  @media (max-width: 1160px) { main { grid-template-columns: 1fr; } }
+
+  .stage-wrap { padding: 18px 26px 26px; min-width: 0; }
+  .stage {
+    position: relative; width: 1000px; height: 530px; max-width: 100%;
+    transform-origin: top left;
+  }
+  svg.wires { position: absolute; inset: 0; width: 1000px; height: 530px; overflow: visible; }
+  svg.wires path { fill: none; stroke: var(--line); stroke-width: 1.6; }
+  svg.wires path.lit { stroke: var(--accent); stroke-width: 2.2; }
+  svg.wires path.dimmed { opacity: .22; }
+
+  .box {
+    position: absolute; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 9px 11px; cursor: default;
+    transition: border-color .15s, opacity .2s, transform .15s, box-shadow .15s;
+  }
+  .box .k { font-size: 10.5px; letter-spacing: .06em; color: var(--dim2); text-transform: uppercase;  padding-left:17px; }
+  .box .t { font-size: 13.5px; font-weight: 600; margin-top: 1px; }
+  .box .d { font-size: 11.5px; color: var(--dim); margin-top: 3px; line-height: 1.45; }
+  .box:hover { border-color: var(--accent); }
+  .box.active { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+  /* 시나리오에 없는 박스는 아예 숨긴다 — 같은 자리를 쓰는 대체 박스와 글자가 겹친다. */
+  .box.off { display: none; }
+  .box.clickable { cursor: pointer; }
+  .box { cursor: grab; touch-action: none; }
+  .peek {
+    position: absolute; right: 7px; bottom: 5px;
+    font-size: 10px; color: var(--accent); background: none; border: 0;
+    padding: 2px 4px; border-radius: 4px; cursor: pointer;
+  }
+  .peek:hover { background: color-mix(in srgb, var(--accent) 16%, transparent); border-color: transparent; }
+
+  /* 아이콘 배지 — 서비스 색으로 물들인다. 로고가 아니라 역할을 나타내는 도형이다. */
+  /* 배지는 모서리에 얹는다 — 흐름에 넣으면 글자 폭을 먹어 줄바꿈이 늘어난다. */
+  .ico {
+    position:absolute; top:-11px; left:-11px; width:26px; height:26px; border-radius:8px;
+    display:grid; place-items:center; color:var(--tint);
+    background:var(--panel); border:1px solid color-mix(in srgb, var(--tint) 45%, var(--line));
+    box-shadow:0 0 0 3px var(--bg);
+  }
+  .ico svg { width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:1.7;
+             stroke-linecap:round; stroke-linejoin:round; }
+  .ico.brand svg { width:15px; height:15px; fill:currentColor; stroke:none; }
+  .bd { min-width:0; flex:1 1 auto; }
+
+  .zone {
+    position: absolute; border: 1px dashed var(--line); border-radius: 12px;
+    pointer-events: none; transition: opacity .2s;
+  }
+  .zone span {
+    position: absolute; top: -9px; left: 12px; background: var(--bg);
+    padding: 0 7px; font-size: 11px; color: var(--dim);
+  }
+
+  .packet {
+    position: absolute; width: 15px; height: 15px; border-radius: 50%;
+    margin: -7.5px 0 0 -7.5px; pointer-events: none;
+    background: var(--evt); box-shadow: 0 0 0 4px color-mix(in srgb, var(--evt) 25%, transparent);
+    transition: background .3s, box-shadow .3s;
+  }
+  .ghost {
+    position: absolute; width: 9px; height: 9px; border-radius: 50%;
+    margin: -4.5px 0 0 -4.5px; pointer-events: none; opacity: .34;
+  }
+
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 14px; font-size: 11.5px; color: var(--dim); }
+  .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+
+  .track { margin-top: 14px; }
+  .ticks { display: flex; gap: 3px; }
+  .tick { flex: 1 1 0; height: 6px; border-radius: 3px; background: var(--line); transition: background .15s; }
+  .tick.done { background: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+  .tick.now { background: var(--accent); }
+  .legname { margin-top: 7px; font-size: 12px; color: var(--dim); min-height: 18px; }
+  .legname b { color: var(--fg); font-weight: 600; }
+
+  /* 스크롤해도 데이터 패널이 따라온다 — 그림을 보며 값을 확인하는 화면이라 붙어 있어야 한다. */
+  aside {
+    border-left: 1px solid var(--line); padding: 18px 22px 32px;
+    background: var(--panel);
+    position: sticky; top: 0; align-self: start;
+    /*
+     * height로 고정하면 짧은 내용일 때도 그리드 행이 100vh가 되어 왼쪽에 빈 칸이 생긴다.
+     * 떨림은 위의 html{overflow-y:scroll}이 이미 막으므로(가로 폭이 안 흔들린다) 상한만 둔다.
+     */
+    max-height: 100vh; overflow-y: auto;
+  }
+  @media (max-width: 1160px) {
+    aside { border-left: 0; border-top: 1px solid var(--line); position: static; max-height: none; }
+  }
+  aside h2 { margin: 0 0 2px; font-size: 15px; }
+  .src { font-size: 11px; color: var(--dim2); margin-bottom: 12px; word-break: break-all; }
+  .why {
+    border-left: 2px solid var(--note); padding: 2px 0 2px 10px; margin: 0 0 14px;
+    font-size: 12.5px; color: var(--dim);
+  }
+  .why b { color: var(--fg); font-weight: 600; }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 11px 12px; overflow-x: auto; font-size: 11.5px; line-height: 1.55; margin: 0 0 12px;
+  }
+  .cap { font-size: 11.5px; color: var(--dim2); margin: -6px 0 12px; }
+  .k-str { color: var(--ok); } .k-num { color: var(--msg); }
+  .k-key { color: var(--accent); } .k-kw { color: var(--err); }
+  .k-com { color: var(--dim2); font-style: italic; }
+  table.mini { width: 100%; border-collapse: collapse; font-size: 11.5px; margin: 0 0 12px; }
+  table.mini td { border-bottom: 1px solid var(--line); padding: 4px 6px 4px 0; vertical-align: top; }
+  table.mini td:first-child { color: var(--dim); white-space: nowrap; padding-right: 12px; }
+  .pinned { font-size: 11px; color: var(--dim2); margin-bottom: 10px; }
+  .pinned.hover { color: var(--accent); }
+
+  .peek-main {
+    display: block; width: 100%; margin-top: 16px; text-align: left;
+    padding: 11px 14px; font-size: 13px; color: var(--dim);
+    background: var(--panel); border: 1px dashed var(--line);
+  }
+  .peek-main:hover { color: var(--fg); border-color: var(--accent); border-style: solid; }
+  .peek-main[aria-expanded="true"] { color: var(--fg); border-style: solid; border-color: var(--accent); }
+
+  .drawer { padding: 0 26px 30px; }
+  .drawer[hidden] { display: none; }
+  .drawer-inner { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 16px 18px; }
+  .drawer h3 { margin: 0 0 4px; font-size: 14px; }
+  .drawer .flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; margin: 12px 0 4px; }
+  .step {
+    flex: 1 1 165px; background: var(--panel2); border: 1px solid var(--line);
+    border-radius: 9px; padding: 9px 11px; font-size: 12px; cursor: pointer;
+  }
+  .step:hover { border-color: var(--accent); }
+  .step .n { font-size: 10px; color: var(--dim2); }
+  .step .s { font-weight: 600; font-size: 12.5px; margin-top: 1px; }
+  .step .m { color: var(--dim); font-size: 11.5px; margin-top: 3px; }
+  .arrowdot { align-self: center; color: var(--dim2); }
+
+  /*
+   * 전체 화면 — <b>무대 영역만</b> 띄운다. 툴바·설명 패널이 차지하던 자리까지 그림이 쓴다.
+   * (브라우저가 막는 환경에서는 body.fs로 같은 그림을 만든다.)
+   */
+  .stage-wrap:fullscreen {
+    background:var(--bg); padding:22px 24px;
+    display:flex; flex-direction:column; justify-content:center;
+  }
+  body.fs header h1, body.fs header .sub, body.fs footer,
+  body.fs .drawer, body.fs .peek-main, body.fs aside { display:none; }
+  body.fs main { grid-template-columns:1fr; }
+  body.fs header { padding:10px 20px 8px; }
+  body.fs .toolbar { margin-top:0; }
+  body.fs .stage-wrap { padding:10px 20px 12px; }
+
+  footer { border-top: 1px solid var(--line); padding: 20px 26px 44px; color: var(--dim); font-size: 12.5px; }
+  footer h3 { color: var(--fg); font-size: 13.5px; margin: 18px 0 6px; }
+  footer ol { margin: 0; padding-left: 20px; }
+  footer li { margin-bottom: 7px; }
+  footer b { color: var(--fg); }
+  footer code { background: var(--panel2); padding: 1px 5px; border-radius: 4px; font-size: 11.5px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>알림 팬아웃 파이프라인</h1>
+  <p class="sub">알림 한 건이 <b>어디를 지나 어떻게 생기는지</b>. 박스와 화살표에 커서를 올리면 그 지점에 실제로 흐르는 데이터가 오른쪽에 뜬다 — 전부 코드에서 그대로 가져온 값이다. <b>누르면 그 구간으로 옮겨 가 멈춘다.</b> 박스는 <b>끌어서 옮길 수 있고</b> 선이 따라온다.<br>
+  다른 기능들이 어느 서비스를 지나는지는 <a href="architecture.html" style="color:var(--accent)">전체 아키텍처 문서</a>에 있다.</p>
+
+  <div class="toolbar">
+    <div class="seg" role="group" aria-label="보기">
+      <button data-view="logical" aria-pressed="true">논리 흐름</button>
+      <button data-view="service" aria-pressed="false">서비스 배치</button>
+    </div>
+    <div class="seg" id="scenario-seg" role="group" aria-label="시나리오"></div>
+    <span class="spacer"></span>
+    <button id="prev" title="이전 구간">⏮</button>
+    <button id="play" class="on" title="재생/일시정지">⏸ 일시정지</button>
+    <button id="next" title="다음 구간">⏭</button>
+    <div class="seg" role="group" aria-label="속도">
+      <button data-speed="0.25">0.25x</button>
+      <button data-speed="0.5">0.5x</button>
+      <button data-speed="1" aria-pressed="true">1x</button>
+      <button data-speed="2" title="예전 기본 속도">2x</button>
+    </div>
+    <button id="loop" aria-pressed="true">반복</button>
+    <button id="reset-layout" title="박스를 원래 자리로">배치 초기화</button>
+    <button id="fullscreen" title="전체 화면 (F)">⤢ 전체 화면</button>
+    <button id="theme" title="테마">◐</button>
+  </div>
+</header>
+
+<main>
+  <div class="stage-wrap">
+    <div class="stage" id="stage">
+      <svg class="wires" id="wires" viewBox="0 0 1000 530" aria-hidden="true"></svg>
+      <!-- 영역 테두리와 박스는 JS가 뷰에 맞춰 채운다 -->
+    </div>
+
+    <div class="legend">
+      <span><i style="background:var(--evt)"></i>도메인 이벤트</span>
+      <span><i style="background:var(--row)"></i>아웃박스 행</span>
+      <span><i style="background:var(--msg)"></i>큐 메시지</span>
+      <span><i style="background:var(--ok)"></i>알림 행 · 전달</span>
+    </div>
+
+    <div class="track">
+      <div class="ticks" id="ticks"></div>
+      <div class="legname" id="legname"></div>
+    </div>
+
+    <button id="peek-main" class="peek-main" type="button" aria-expanded="false">
+      ⌄ 팬아웃 워커 안을 열어 본다 — 수신자 규칙 · 집합 삽입 · 커서
+    </button>
+  </div>
+
+  <aside>
+    <div class="pinned" id="pinned">▶ 재생 중 — 지금 구간</div>
+    <h2 id="p-title">—</h2>
+    <div class="src" id="p-src"></div>
+    <div id="p-body"></div>
+  </aside>
+</main>
+
+<div class="drawer" id="drawer" hidden>
+  <div class="drawer-inner">
+    <h3>팬아웃 워커 안 — <span id="drawer-sc">넓은 팬아웃</span></h3>
+    <p class="sub" style="font-size:12.5px">메시지에는 <b>조건이 실리지 않는다.</b> <code>type</code> 하나로 수신자 규칙이 정해지고, 명단은 앱을 통과하지 않는다.</p>
+    <div class="flow" id="drawer-flow"></div>
+  </div>
+</div>
+
+<footer>
+  <h3>이 그림이 기존 문서와 다르게 그려진 곳</h3>
+  <p style="margin:0 0 8px">코드를 다시 읽으며 확인한 것들이다. 그림은 <b>코드를 따랐다.</b></p>
+  <ol>
+    <li><b>STOMP와 Web Push는 분기하지 않는다.</b> "탭이 열렸으면 STOMP, 닫혔으면 Push"로 읽히지만 서버는 <b>둘 다 무조건</b> 보낸다 — <code>WsNotificationBroadcaster.java:105</code>의 <code>pushSender.send(...)</code>에는 조건이 없다. STOMP 쪽에만 있는 접속자 검사(<code>:111</code>)는 라우팅이 아니라 <b>100만 번의 헛 호출을 줄이는 최적화</b>다. 진짜 중복 억제는 브라우저 서비스워커의 <code>client.focused</code>(<code>push-worker.js:30</code>)에 있다.</li>
+    <li><b>푸시에는 딥링크가 없다.</b> 호출부가 <code>url=null</code>을 넘겨(<code>:105</code>) 모든 푸시 클릭이 <code>/notifications</code>로 간다. STOMP 경로의 클릭은 서버에 대상을 재판정해 정확한 화면으로 가는데, 이 비대칭은 문서에 없다.</li>
+    <li><b><code>ENROLLMENT_CANCELED</code>는 알림이 아니다.</b> 팬아웃 큐를 타지만 알림 행을 만들지 않는 <b>정리 신호</b>다 — 대기 중이던 신청 알림의 처리 축을 <code>EXPIRED</code>로 닫고 끝난다(<code>NotificationFanoutWorker.java:117-121</code>). 종류 검사보다 <b>먼저</b> 처리하는 이유는 <code>isKnown</code>이 false라 그대로 두면 DLQ로 가기 때문이다.</li>
+    <li><b><code>LESSON_PUBLISHED</code>는 발행 지점이 없다.</b> 타입 상수와 화면 문구는 있지만 서버가 이 종류를 만들지 않는다 — 레슨에는 초안이 없고 공개 여부는 커리큘럼이 정하기 때문이다.</li>
+    <li><b>조각 크기와 폴링 주기는 <code>application.yml</code>에 없다.</b> <code>notification.fanout.slice-size</code>(1000)와 <code>live-starting-soon.poll-ms</code>(30초)는 <code>@Value</code> 기본값으로만 존재해서, 운영에서 튜닝하려면 키를 먼저 추가해야 한다.</li>
+  </ol>
+
+  <h3>메시지 필드 이름</h3>
+  <p style="margin:0">설계 문서(ADR-0073 §5)의 예시는 <code>limit</code>이지만 코드 정본은 <code>sliceLimit</code>이다(<code>NotificationFanoutCommand.java:41</code>). 이 문서는 코드를 따랐다.</p>
+</footer>
+
+<script>
+(() => {
+'use strict';
+
+/* ── 아이콘 — 역할이 드러나는 최소 도형. 브랜드 로고가 아니다(오프라인 자립을 위해 인라인 SVG). ── */
+const ICONS = {
+  browser: 'M3 5h18v14H3z M3 9h18 M6 7h.01 M8.5 7h.01',
+  proxy:   'M7 5l5 7-5 7 M14 5l5 7-5 7',
+  server:  'M3 4.5h18v6H3z M3 13.5h18v6H3z M6.5 7.5h.01 M6.5 16.5h.01 M16 7.5h3 M16 16.5h3',
+  db:      'M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3z M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6 M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3',
+  bolt:    'M13 2 4 14h7l-1 8 9-12h-7z',
+  queue:   'M3 6.5h13 M3 12h9 M3 17.5h12 M16.5 12h4.5 M19 9.5l2.5 2.5-2.5 2.5',
+  bucket:  'M4.5 7.5h15l-1.4 11.2a2 2 0 0 1-2 1.8H7.9a2 2 0 0 1-2-1.8z M4.5 7.5 5.6 4h12.8l1.1 3.5',
+  signal:  'M12 12h.01 M8.5 8.5a5 5 0 0 0 0 7 M15.5 8.5a5 5 0 0 1 0 7 M5.5 5.5a9 9 0 0 0 0 13 M18.5 5.5a9 9 0 0 1 0 13',
+  record:  'M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16z M12 9.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z',
+  mic:     'M12 3a2.8 2.8 0 0 1 2.8 2.8v6a2.8 2.8 0 0 1-5.6 0v-6A2.8 2.8 0 0 1 12 3z M5.5 11a6.5 6.5 0 0 0 13 0 M12 17.5V21 M9 21h6',
+  chip:    'M7.5 7.5h9v9h-9z M4 10h3.5 M4 14h3.5 M16.5 10H20 M16.5 14H20 M10 4v3.5 M14 4v3.5 M10 16.5V20 M14 16.5V20',
+  braces:  'M9.5 4.5c-2 0-1.6 3.2-1.8 4.2C7.5 10 6.6 10.8 5 11c1.6.2 2.5 1 2.7 2.3.2 1 -.2 4.2 1.8 4.2 M14.5 4.5c2 0 1.6 3.2 1.8 4.2.2 1.3 1.1 2.1 2.7 2.3-1.6.2-2.5 1-2.7 2.3-.2 1 .2 4.2-1.8 4.2',
+  gear:    'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z M19.2 13.4l1.7 1-2 3.4-1.9-.7a7.4 7.4 0 0 1-1.8 1l-.3 2h-4l-.3-2a7.4 7.4 0 0 1-1.8-1l-1.9.7-2-3.4 1.7-1a7.5 7.5 0 0 1 0-2.8l-1.7-1 2-3.4 1.9.7c.5-.4 1.1-.8 1.8-1l.3-2h4l.3 2c.7.2 1.3.6 1.8 1l1.9-.7 2 3.4-1.7 1a7.5 7.5 0 0 1 0 2.8z',
+  cloud:   'M7.2 18.5h9.3a4.2 4.2 0 0 0 .5-8.4 6.2 6.2 0 0 0-11.8 1.9 3.6 3.6 0 0 0 2 6.5z',
+  bell:    'M18.5 16.5h-13l1.7-2.3V10a4.8 4.8 0 0 1 9.6 0v4.2z M10 19.5a2 2 0 0 0 4 0',
+  rows:    'M3 5h18v14H3z M3 9.7h18 M3 14.4h18 M7 7.3h.01',
+  loop:    'M4.5 9.5a8 8 0 0 1 13.5-3 M19.5 14.5a8 8 0 0 1-13.5 3 M18 3v4h-4 M6 21v-4h4',
+  stream:  'M3.5 7.5c4-2.6 8 2.6 17 0 M3.5 13c4-2.6 8 2.6 17 0 M3.5 18.5c4-2.6 8 2.6 17 0',
+  shield:  'M12 3.2 19 6v5.8c0 4.4-2.9 7.4-7 9-4.1-1.6-7-4.6-7-9V6z M9.4 12l1.9 1.9 3.6-3.9',
+  upload:  'M12 16.5V4.5 M8 8.5l4-4 4 4 M4 20h16',
+  spark:   'M12 3.5l1.9 5 5.1 1.9-5.1 1.9-1.9 5-1.9-5L5 10.4l5.1-1.9z M18.5 15.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z',
+  window:  'M3 5h18v14H3z M8 19V5',
+};
+
+/*
+ * 브랜드 아이콘 — simple-icons(CC0-1.0)의 공식 SVG 경로를 그대로 인라인했다.
+ * 상표는 각 소유자의 것이고, 여기서는 서비스를 알아보게 하는 용도로만 쓴다.
+ * 외부 요청 없이 열려야 하므로 파일에 박아 둔다.
+ */
+const BRAND = {
+  browser: { c:'#4285F4', d:'M12 0C8.21 0 4.831 1.757 2.632 4.501l3.953 6.848A5.454 5.454 0 0 1 12 6.545h10.691A12 12 0 0 0 12 0zM1.931 5.47A11.943 11.943 0 0 0 0 12c0 6.012 4.42 10.991 10.189 11.864l3.953-6.847a5.45 5.45 0 0 1-6.865-2.29zm13.342 2.166a5.446 5.446 0 0 1 1.45 7.09l.002.001h-.002l-5.344 9.257c.206.01.413.016.621.016 6.627 0 12-5.373 12-12 0-1.54-.29-3.011-.818-4.364zM12 16.364a4.364 4.364 0 1 1 0-8.728 4.364 4.364 0 0 1 0 8.728Z' },
+  nginx: { c:'#009639', d:'M12 0L1.605 6v12L12 24l10.395-6V6L12 0zm6 16.59c0 .705-.646 1.29-1.529 1.29-.631 0-1.351-.255-1.801-.81l-6-7.141v6.66c0 .721-.57 1.29-1.274 1.29H7.32c-.721 0-1.29-.6-1.29-1.29V7.41c0-.705.63-1.29 1.5-1.29.646 0 1.38.255 1.83.81l5.97 7.141V7.41c0-.721.6-1.29 1.29-1.29h.075c.72 0 1.29.6 1.29 1.29v9.18H18z' },
+  spring: { c:'#6DB33F', d:'m23.693 10.7058-4.73-8.1844c-.4094-.7106-1.4166-1.2942-2.2402-1.2942H7.2725c-.819 0-1.8308.5836-2.2402 1.2942L.307 10.7058c-.4095.7106-.4095 1.873 0 2.5837l4.7252 8.189c.4094.7107 1.4166 1.2943 2.2402 1.2943h9.455c.819 0 1.826-.5836 2.2402-1.2942l4.7252-8.189c.4095-.7107.4095-1.8732 0-2.5838zM10.9763 5.7547c0-.5365.4377-.9742.9742-.9742s.9742.4377.9742.9742v5.8217c0 .5366-.4377.9742-.9742.9742s-.9742-.4376-.9742-.9742zm.9742 12.4294c-3.6427 0-6.6077-2.965-6.6077-6.6077.0047-2.0896.993-4.0521 2.6685-5.304a.8657.8657 0 0 1 1.2142.1788.8657.8657 0 0 1-.1788 1.2143c-2.1602 1.6048-2.612 4.6592-1.0072 6.8194 1.6049 2.1603 4.6593 2.612 6.8195 1.0072 1.2378-.9177 1.9673-2.372 1.9673-3.9157a4.8972 4.8972 0 0 0-1.9861-3.925c-.386-.2824-.466-.8284-.1836-1.2143.2824-.386.8283-.466 1.2143-.1835 1.6895 1.2471 2.6826 3.2238 2.6873 5.3228 0 3.6474-2.965 6.6077-6.6077 6.6077z' },
+  pg: { c:'#4169E1', d:'M23.5594 14.7228a.5269.5269 0 0 0-.0563-.1191c-.139-.2632-.4768-.3418-1.0074-.2321-1.6533.3411-2.2935.1312-2.5256-.0191 1.342-2.0482 2.445-4.522 3.0411-6.8297.2714-1.0507.7982-3.5237.1222-4.7316a1.5641 1.5641 0 0 0-.1509-.235C21.6931.9086 19.8007.0248 17.5099.0005c-1.4947-.0158-2.7705.3461-3.1161.4794a9.449 9.449 0 0 0-.5159-.0816 8.044 8.044 0 0 0-1.3114-.1278c-1.1822-.0184-2.2038.2642-3.0498.8406-.8573-.3211-4.7888-1.645-7.2219.0788C.9359 2.1526.3086 3.8733.4302 6.3043c.0409.818.5069 3.334 1.2423 5.7436.4598 1.5065.9387 2.7019 1.4334 3.582.553.9942 1.1259 1.5933 1.7143 1.7895.4474.1491 1.1327.1441 1.8581-.7279.8012-.9635 1.5903-1.8258 1.9446-2.2069.4351.2355.9064.3625 1.39.3772a.0569.0569 0 0 0 .0004.0041 11.0312 11.0312 0 0 0-.2472.3054c-.3389.4302-.4094.5197-1.5002.7443-.3102.064-1.1344.2339-1.1464.8115-.0025.1224.0329.2309.0919.3268.2269.4231.9216.6097 1.015.6331 1.3345.3335 2.5044.092 3.3714-.6787-.017 2.231.0775 4.4174.3454 5.0874.2212.5529.7618 1.9045 2.4692 1.9043.2505 0 .5263-.0291.8296-.0941 1.7819-.3821 2.5557-1.1696 2.855-2.9059.1503-.8707.4016-2.8753.5388-4.1012.0169-.0703.0357-.1207.057-.1362.0007-.0005.0697-.0471.4272.0307a.3673.3673 0 0 0 .0443.0068l.2539.0223.0149.001c.8468.0384 1.9114-.1426 2.5312-.4308.6438-.2988 1.8057-1.0323 1.5951-1.6698zM2.371 11.8765c-.7435-2.4358-1.1779-4.8851-1.2123-5.5719-.1086-2.1714.4171-3.6829 1.5623-4.4927 1.8367-1.2986 4.8398-.5408 6.108-.13-.0032.0032-.0066.0061-.0098.0094-2.0238 2.044-1.9758 5.536-1.9708 5.7495-.0002.0823.0066.1989.0162.3593.0348.5873.0996 1.6804-.0735 2.9184-.1609 1.1504.1937 2.2764.9728 3.0892.0806.0841.1648.1631.2518.2374-.3468.3714-1.1004 1.1926-1.9025 2.1576-.5677.6825-.9597.5517-1.0886.5087-.3919-.1307-.813-.5871-1.2381-1.3223-.4796-.839-.9635-2.0317-1.4155-3.5126zm6.0072 5.0871c-.1711-.0428-.3271-.1132-.4322-.1772.0889-.0394.2374-.0902.4833-.1409 1.2833-.2641 1.4815-.4506 1.9143-1.0002.0992-.126.2116-.2687.3673-.4426a.3549.3549 0 0 0 .0737-.1298c.1708-.1513.2724-.1099.4369-.0417.156.0646.3078.26.3695.4752.0291.1016.0619.2945-.0452.4444-.9043 1.2658-2.2216 1.2494-3.1676 1.0128zm2.094-3.988-.0525.141c-.133.3566-.2567.6881-.3334 1.003-.6674-.0021-1.3168-.2872-1.8105-.8024-.6279-.6551-.9131-1.5664-.7825-2.5004.1828-1.3079.1153-2.4468.079-3.0586-.005-.0857-.0095-.1607-.0122-.2199.2957-.2621 1.6659-.9962 2.6429-.7724.4459.1022.7176.4057.8305.928.5846 2.7038.0774 3.8307-.3302 4.7363-.084.1866-.1633.3629-.2311.5454zm7.3637 4.5725c-.0169.1768-.0358.376-.0618.5959l-.146.4383a.3547.3547 0 0 0-.0182.1077c-.0059.4747-.054.6489-.115.8693-.0634.2292-.1353.4891-.1794 1.0575-.11 1.4143-.8782 2.2267-2.4172 2.5565-1.5155.3251-1.7843-.4968-2.0212-1.2217a6.5824 6.5824 0 0 0-.0769-.2266c-.2154-.5858-.1911-1.4119-.1574-2.5551.0165-.5612-.0249-1.9013-.3302-2.6462.0044-.2932.0106-.5909.019-.8918a.3529.3529 0 0 0-.0153-.1126 1.4927 1.4927 0 0 0-.0439-.208c-.1226-.4283-.4213-.7866-.7797-.9351-.1424-.059-.4038-.1672-.7178-.0869.067-.276.1831-.5875.309-.9249l.0529-.142c.0595-.16.134-.3257.213-.5012.4265-.9476 1.0106-2.2453.3766-5.1772-.2374-1.0981-1.0304-1.6343-2.2324-1.5098-.7207.0746-1.3799.3654-1.7088.5321a5.6716 5.6716 0 0 0-.1958.1041c.0918-1.1064.4386-3.1741 1.7357-4.4823a4.0306 4.0306 0 0 1 .3033-.276.3532.3532 0 0 0 .1447-.0644c.7524-.5706 1.6945-.8506 2.802-.8325.4091.0067.8017.0339 1.1742.081 1.939.3544 3.2439 1.4468 4.0359 2.3827.8143.9623 1.2552 1.9315 1.4312 2.4543-1.3232-.1346-2.2234.1268-2.6797.779-.9926 1.4189.543 4.1729 1.2811 5.4964.1353.2426.2522.4522.2889.5413.2403.5825.5515.9713.7787 1.2552.0696.087.1372.1714.1885.245-.4008.1155-1.1208.3825-1.0552 1.717-.0123.1563-.0423.4469-.0834.8148-.0461.2077-.0702.4603-.0994.7662zm.8905-1.6211c-.0405-.8316.2691-.9185.5967-1.0105a2.8566 2.8566 0 0 0 .135-.0406 1.202 1.202 0 0 0 .1342.103c.5703.3765 1.5823.4213 3.0068.1344-.2016.1769-.5189.3994-.9533.6011-.4098.1903-1.0957.333-1.7473.3636-.7197.0336-1.0859-.0807-1.1721-.151zm.5695-9.2712c-.0059.3508-.0542.6692-.1054 1.0017-.055.3576-.112.7274-.1264 1.1762-.0142.4368.0404.8909.0932 1.3301.1066.887.216 1.8003-.2075 2.7014a3.5272 3.5272 0 0 1-.1876-.3856c-.0527-.1276-.1669-.3326-.3251-.6162-.6156-1.1041-2.0574-3.6896-1.3193-4.7446.3795-.5427 1.3408-.5661 2.1781-.463zm.2284 7.0137a12.3762 12.3762 0 0 0-.0853-.1074l-.0355-.0444c.7262-1.1995.5842-2.3862.4578-3.4385-.0519-.4318-.1009-.8396-.0885-1.2226.0129-.4061.0666-.7543.1185-1.0911.0639-.415.1288-.8443.1109-1.3505.0134-.0531.0188-.1158.0118-.1902-.0457-.4855-.5999-1.938-1.7294-3.253-.6076-.7073-1.4896-1.4972-2.6889-2.0395.5251-.1066 1.2328-.2035 2.0244-.1859 2.0515.0456 3.6746.8135 4.8242 2.2824a.908.908 0 0 1 .0667.1002c.7231 1.3556-.2762 6.2751-2.9867 10.5405zm-8.8166-6.1162c-.025.1794-.3089.4225-.6211.4225a.5821.5821 0 0 1-.0809-.0056c-.1873-.026-.3765-.144-.5059-.3156-.0458-.0605-.1203-.178-.1055-.2844.0055-.0401.0261-.0985.0925-.1488.1182-.0894.3518-.1226.6096-.0867.3163.0441.6426.1938.6113.4186zm7.9305-.4114c.0111.0792-.049.201-.1531.3102-.0683.0717-.212.1961-.4079.2232a.5456.5456 0 0 1-.075.0052c-.2935 0-.5414-.2344-.5607-.3717-.024-.1765.2641-.3106.5611-.352.297-.0414.6111.0088.6356.1851z' },
+  redis: { c:'#FF4438', d:'M22.71 13.145c-1.66 2.092-3.452 4.483-7.038 4.483-3.203 0-4.397-2.825-4.48-5.12.701 1.484 2.073 2.685 4.214 2.63 4.117-.133 6.94-3.852 6.94-7.239 0-4.05-3.022-6.972-8.268-6.972-3.752 0-8.4 1.428-11.455 3.685C2.59 6.937 3.885 9.958 4.35 9.626c2.648-1.904 4.748-3.13 6.784-3.744C8.12 9.244.886 17.05 0 18.425c.1 1.261 1.66 4.648 2.424 4.648.232 0 .431-.133.664-.365a100.49 100.49 0 0 0 5.54-6.765c.222 3.104 1.748 6.898 6.014 6.898 3.819 0 7.604-2.756 9.33-8.965.2-.764-.73-1.361-1.261-.73zm-4.349-5.013c0 1.959-1.926 2.922-3.685 2.922-.941 0-1.664-.247-2.235-.568 1.051-1.592 2.092-3.225 3.21-4.973 1.972.334 2.71 1.43 2.71 2.619z' },
+  rabbit: { c:'#FF6600', d:'M23.035 9.601h-7.677a.956.956 0 01-.962-.962V.962a.956.956 0 00-.962-.956H10.56a.956.956 0 00-.962.956V8.64a.956.956 0 01-.962.962H5.762a.956.956 0 01-.961-.962V.962A.956.956 0 003.839 0H.959a.956.956 0 00-.956.962v22.076A.956.956 0 00.965 24h22.07a.956.956 0 00.962-.962V10.58a.956.956 0 00-.962-.98zm-3.86 8.152a1.437 1.437 0 01-1.437 1.443h-1.924a1.437 1.437 0 01-1.436-1.443v-1.917a1.437 1.437 0 011.436-1.443h1.924a1.437 1.437 0 011.437 1.443z' },
+  minio: { c:'#C72E49', d:'M13.2072.006c-.6216-.0478-1.2.1943-1.6211.582a2.15 2.15 0 0 0-.0938 3.0352l3.4082 3.5507a3.042 3.042 0 0 1-.664 4.6875l-.463.2383V7.2853a15.4198 15.4198 0 0 0-8.0174 10.4862v.0176l6.5487-3.3281v7.621L13.7794 24V13.6817l.8965-.4629a4.4432 4.4432 0 0 0 1.2207-7.0292l-3.371-3.5254a.7489.7489 0 0 1 .037-1.0547.7522.7522 0 0 1 1.0567.0371l.4668.4863-.006.0059 4.0704 4.2441a.0566.0566 0 0 0 .082 0 .06.06 0 0 0 0-.0703l-3.1406-5.1425-.1484.1425.1484-.1445C14.4945.3926 13.8287.0538 13.2072.006Zm-.9024 9.8652v2.9941l-4.1523 2.1484a13.9787 13.9787 0 0 1 2.7676-3.9277 14.1784 14.1784 0 0 1 1.3847-1.2148z' },
+  livekit: { c:'#12B5CB', d:'M0 0v24h14.4v-4.799h4.8V24H24v-4.8h-4.799v-4.8h-4.8v4.8H4.8V0H0zm14.4 14.4V9.602h4.801V4.8H24V0h-4.8v4.8h-4.8v4.8H9.6v4.8h4.8z' },
+  fastapi: { c:'#009688', d:'M12 .0387C5.3729.0384.0003 5.3931 0 11.9988c-.001 6.6066 5.372 11.9628 12 11.9625 6.628.0003 12.001-5.3559 12-11.9625-.0003-6.6057-5.3729-11.9604-12-11.96m-.829 5.4153h7.55l-7.5805 5.3284h5.1828L5.279 18.5436q2.9466-6.5444 5.892-13.0896' },
+  python: { c:'#3776AB', d:'M14.25.18l.9.2.73.26.59.3.45.32.34.34.25.34.16.33.1.3.04.26.02.2-.01.13V8.5l-.05.63-.13.55-.21.46-.26.38-.3.31-.33.25-.35.19-.35.14-.33.1-.3.07-.26.04-.21.02H8.77l-.69.05-.59.14-.5.22-.41.27-.33.32-.27.35-.2.36-.15.37-.1.35-.07.32-.04.27-.02.21v3.06H3.17l-.21-.03-.28-.07-.32-.12-.35-.18-.36-.26-.36-.36-.35-.46-.32-.59-.28-.73-.21-.88-.14-1.05-.05-1.23.06-1.22.16-1.04.24-.87.32-.71.36-.57.4-.44.42-.33.42-.24.4-.16.36-.1.32-.05.24-.01h.16l.06.01h8.16v-.83H6.18l-.01-2.75-.02-.37.05-.34.11-.31.17-.28.25-.26.31-.23.38-.2.44-.18.51-.15.58-.12.64-.1.71-.06.77-.04.84-.02 1.27.05zm-6.3 1.98l-.23.33-.08.41.08.41.23.34.33.22.41.09.41-.09.33-.22.23-.34.08-.41-.08-.41-.23-.33-.33-.22-.41-.09-.41.09zm13.09 3.95l.28.06.32.12.35.18.36.27.36.35.35.47.32.59.28.73.21.88.14 1.04.05 1.23-.06 1.23-.16 1.04-.24.86-.32.71-.36.57-.4.45-.42.33-.42.24-.4.16-.36.09-.32.05-.24.02-.16-.01h-8.22v.82h5.84l.01 2.76.02.36-.05.34-.11.31-.17.29-.25.25-.31.24-.38.2-.44.17-.51.15-.58.13-.64.09-.71.07-.77.04-.84.01-1.27-.04-1.07-.14-.9-.2-.73-.25-.59-.3-.45-.33-.34-.34-.25-.34-.16-.33-.1-.3-.04-.25-.02-.2.01-.13v-5.34l.05-.64.13-.54.21-.46.26-.38.3-.32.33-.24.35-.2.35-.14.33-.1.3-.06.26-.04.21-.02.13-.01h5.84l.69-.05.59-.14.5-.21.41-.28.33-.32.27-.35.2-.36.15-.36.1-.35.07-.32.04-.28.02-.21V6.07h2.09l.14.01zm-6.47 14.25l-.23.33-.08.41.08.41.23.33.33.23.41.08.41-.08.33-.23.23-.33.08-.41-.08-.41-.23-.33-.33-.23-.41-.08-.41.08z' },
+  nvidia: { c:'#76B900', d:'M8.948 8.798v-1.43a6.7 6.7 0 0 1 .424-.018c3.922-.124 6.493 3.374 6.493 3.374s-2.774 3.851-5.75 3.851c-.398 0-.787-.062-1.158-.185v-4.346c1.528.185 1.837.857 2.747 2.385l2.04-1.714s-1.492-1.952-4-1.952a6.016 6.016 0 0 0-.796.035m0-4.735v2.138l.424-.027c5.45-.185 9.01 4.47 9.01 4.47s-4.08 4.964-8.33 4.964c-.37 0-.733-.035-1.095-.097v1.325c.3.035.61.062.91.062 3.957 0 6.82-2.023 9.593-4.408.459.371 2.34 1.263 2.73 1.652-2.633 2.208-8.772 3.984-12.253 3.984-.335 0-.653-.018-.971-.053v1.864H24V4.063zm0 10.326v1.131c-3.657-.654-4.673-4.46-4.673-4.46s1.758-1.944 4.673-2.262v1.237H8.94c-1.528-.186-2.73 1.245-2.73 1.245s.68 2.412 2.739 3.11M2.456 10.9s2.164-3.197 6.5-3.533V6.201C4.153 6.59 0 10.653 0 10.653s2.35 6.802 8.948 7.42v-1.237c-4.84-.6-6.492-5.936-6.492-5.936z' },
+  firebase: { c:'#DD2C00', d:'M19.455 8.369c-.538-.748-1.778-2.285-3.681-4.569-.826-.991-1.535-1.832-1.884-2.245a146 146 0 0 0-.488-.576l-.207-.245-.113-.133-.022-.032-.01-.005L12.57 0l-.609.488c-1.555 1.246-2.828 2.851-3.681 4.64-.523 1.064-.864 2.105-1.043 3.176-.047.241-.088.489-.121.738-.209-.017-.421-.028-.632-.033-.018-.001-.035-.002-.059-.003a7.46 7.46 0 0 0-2.28.274l-.317.089-.163.286c-.765 1.342-1.198 2.869-1.252 4.416-.07 2.01.477 3.954 1.583 5.625 1.082 1.633 2.61 2.882 4.42 3.611l.236.095.071.025.003-.001a9.59 9.59 0 0 0 2.941.568q.171.006.342.006c1.273 0 2.513-.249 3.69-.742l.008.004.313-.145a9.63 9.63 0 0 0 3.927-3.335c1.01-1.49 1.577-3.234 1.641-5.042.075-2.161-.643-4.304-2.133-6.371m-7.083 6.695c.328 1.244.264 2.44-.191 3.558-1.135-1.12-1.967-2.352-2.475-3.665-.543-1.404-.87-2.74-.974-3.975.48.157.922.366 1.315.622 1.132.737 1.914 1.902 2.325 3.461zm.207 6.022c.482.368.99.712 1.513 1.028-.771.21-1.565.302-2.369.273a8 8 0 0 1-.373-.022c.458-.394.869-.823 1.228-1.279zm1.347-6.431c-.516-1.957-1.527-3.437-3.002-4.398-.647-.421-1.385-.741-2.194-.95.011-.134.026-.268.043-.4.014-.113.03-.216.046-.313.133-.689.332-1.37.589-2.025.099-.25.206-.499.321-.74l.004-.008c.177-.358.376-.719.61-1.105l.092-.152-.003-.001c.544-.851 1.197-1.627 1.942-2.311l.288.341c.672.796 1.304 1.548 1.878 2.237 1.291 1.549 2.966 3.583 3.612 4.48 1.277 1.771 1.893 3.579 1.83 5.375-.049 1.395-.461 2.755-1.195 3.933-.694 1.116-1.661 2.05-2.8 2.708-.636-.318-1.559-.839-2.539-1.599.79-1.575.952-3.28.479-5.072zm-2.575 5.397c-.725.939-1.587 1.55-2.09 1.856-.081-.029-.163-.06-.243-.093l-.065-.026c-1.49-.616-2.747-1.656-3.635-3.01-.907-1.384-1.356-2.993-1.298-4.653.041-1.19.338-2.327.882-3.379.316-.07.638-.114.96-.131l.084-.002c.162-.003.324-.003.478 0 .227.011.454.035.677.07.073 1.513.445 3.145 1.105 4.852.637 1.644 1.694 3.162 3.144 4.515z' },
+};
+
+const ICON_SVG = (k, tint) => {
+  const b = BRAND[k];
+  // 브랜드 아이콘은 면(fill)으로, 역할 아이콘은 선(stroke)으로 그린다.
+  if (b) {
+    return `<span class="ico brand" style="--tint:${b.c}">`
+      + `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${b.d}"/></svg></span>`;
+  }
+  const d = ICONS[k] || ICONS.server;
+  return `<span class="ico" style="--tint:${tint || 'var(--dim)'}">`
+    + `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg></span>`;
+};
+
+/* ────────────────────────────────────────────────────────────────
+   1. 박스 배치 — 좌표는 1000×530 좌표계
+   ──────────────────────────────────────────────────────────────── */
+const LOGICAL_BOXES = {
+  evt:      { x: 20,  y: 40,  w: 176, h: 92, kind: '업무 트랜잭션', title: '사건이 일어난다',
+              desc: '수강 승인 · 자료 게시 · 라이브 일정 · 녹화', ic:'bolt', tint:'#a1a1aa' },
+  sched:    { x: 20,  y: 40,  w: 176, h: 92, kind: 'notification_schedule', title: '발화 예정 표',
+              desc: '세션당 리드타임 6행 · 누구에게 갈지는 모른다', ic:'rows', tint:'#f0b429' },
+  listener: { x: 228, y: 40,  w: 176, h: 92, kind: '@TransactionalEventListener', title: '리스너',
+              desc: 'BEFORE_COMMIT · 하는 일은 아웃박스 한 줄', ic:'spark', tint:'#a1a1aa' },
+  poller:   { x: 228, y: 40,  w: 176, h: 92, kind: 'LiveStartingSoonScheduler', title: '30초 폴링',
+              desc: 'fire_at이 지난 행을 집어 아웃박스로', ic:'loop', tint:'#f0b429' },
+  outbox:   { x: 436, y: 40,  w: 172, h: 92, kind: 'core.outbox_events', title: '아웃박스',
+              desc: '업무 변경과 같은 트랜잭션에서 커밋된다', ic:'rows', tint:'#5c9ded' },
+  relay:    { x: 648, y: 40,  w: 150, h: 92, kind: 'OutboxRelay', title: '릴레이',
+              desc: '5초 주기 · 목적지별 100건', ic:'loop', tint:'#5c9ded' },
+  queue:    { x: 830, y: 40,  w: 152, h: 92, kind: 'RabbitMQ', title: 'notification.fanout',
+              desc: '실패 3회면 DLQ', ic:'rabbit', tint:'#ff8c42' },
+  worker:   { x: 830, y: 208, w: 152, h: 96, kind: '@RabbitListener', title: '팬아웃 워커',
+              desc: 'type으로 수신자 규칙을 고른다', click: true, ic:'gear', tint:'#bc8cff' },
+  db:       { x: 560, y: 208, w: 210, h: 96, kind: 'core.notification', title: '수신자별 한 행',
+              desc: 'dedupe_key UNIQUE가 중복을 막는다', ic:'pg', tint:'#3fb950' },
+  rest:     { x: 560, y: 352, w: 210, h: 62, kind: 'REST', title: '알림함 조회',
+              desc: 'GET /api/me/notifications', ic:'window', tint:'#3fb950' },
+  stomp:    { x: 316, y: 352, w: 200, h: 62, kind: 'STOMP', title: '/user/queue/notifications',
+              desc: '"왔다"는 신호만', ic:'signal', tint:'#3fb950' },
+  push:     { x: 72,  y: 352, w: 200, h: 62, kind: 'Web Push', title: '기기로 직접',
+              desc: '내용을 실어 보낸다', ic:'firebase', tint:'#3fb950' },
+  sw:       { x: 72,  y: 448, w: 444, h: 56, kind: 'push-worker.js', title: '서비스워커 — 여기서 중복을 막는다',
+              desc: 'client.focused면 시스템 알림을 띄우지 않는다', ic:'browser', tint:'#7ea6ff' },
+};
+
+const LOGICAL_WIRES = [
+  { id: 'evt-listener',      from: 'evt',      fs: 'r', to: 'listener', ts: 'l' },
+  { id: 'sched-poller',      from: 'sched',    fs: 'r', to: 'poller',   ts: 'l' },
+  { id: 'listener-outbox',   from: 'listener', fs: 'r', to: 'outbox',   ts: 'l' },
+  { id: 'poller-outbox',     from: 'poller',   fs: 'r', to: 'outbox',   ts: 'l' },
+  { id: 'outbox-relay',      from: 'outbox',   fs: 'r', to: 'relay',    ts: 'l' },
+  { id: 'relay-queue',       from: 'relay',    fs: 'r', to: 'queue',    ts: 'l' },
+  { id: 'queue-worker',      from: 'queue',    fs: 'b', to: 'worker',   ts: 't' },
+  { id: 'worker-db',         from: 'worker',   fs: 'l', to: 'db',       ts: 'r' },
+  { id: 'worker-queue',      from: 'worker',   fs: 'r', to: 'queue',    ts: 'r', arc: 92 },
+  { id: 'db-rest',           from: 'db',       fs: 'b', to: 'rest',     ts: 't' },
+  { id: 'db-stomp',          from: 'db',       fs: 'b', to: 'stomp',    ts: 't', arc: 34 },
+  { id: 'db-push',           from: 'db',       fs: 'b', to: 'push',     ts: 't', arc: 62 },
+  { id: 'push-sw',           from: 'push',     fs: 'b', to: 'sw',       ts: 't' },
+  { id: 'stomp-sw',          from: 'stomp',    fs: 'b', to: 'sw',       ts: 't' },
+];
+
+/* 서비스 배치 뷰 — 같은 알림 한 건이 어느 프로세스를 지나는가 */
+const SERVICE_BOXES = {
+  browser:  { x: 20,  y: 40,  w: 200, h: 104, kind: '클라이언트', title: '브라우저',
+              desc: 'React SPA + 서비스워커(push-worker.js)', ic:'browser', tint:'#7ea6ff' },
+  nginx:    { x: 268, y: 40,  w: 168, h: 104, kind: 'frontend 컨테이너', title: 'nginx',
+              desc: '정적 + /api 프록시 · WebSocket Upgrade 통과', ic:'nginx', tint:'#3fb950' },
+  spring:   { x: 486, y: 40,  w: 210, h: 104, kind: 'backend 컨테이너', title: 'Spring Boot',
+              desc: '알림 모듈 · 릴레이 · 워커 · 브로드캐스터가 한 프로세스', ic:'spring', tint:'#6db33f' },
+  rabbit:   { x: 764, y: 40,  w: 216, h: 104, kind: 'rabbitmq:5672', title: 'RabbitMQ',
+              desc: 'notification.fanout + DLQ', ic:'rabbit', tint:'#ff8c42' },
+  pg:       { x: 486, y: 214, w: 210, h: 108, kind: 'postgres:5432', title: 'PostgreSQL',
+              desc: 'outbox_events · notification · schedule · push_subscription', ic:'pg', tint:'#5c9ded' },
+  redis:    { x: 764, y: 214, w: 216, h: 108, kind: 'redis:6379', title: 'Redis',
+              desc: '세션 — 요청마다 신원을 여기서 확인한다', ic:'redis', tint:'#f0736a' },
+  fcm:      { x: 268, y: 392, w: 216, h: 96, kind: '외부 서비스', title: '푸시 서비스(FCM 등)',
+              desc: '구독 endpoint가 가리키는 곳 · 우리 것이 아니다', ic:'firebase', tint:'#8b949e' },
+};
+
+const SERVICE_WIRES = [
+  { id: 's-browser-nginx',  from: 'browser', fs: 'r', to: 'nginx',   ts: 'l' },
+  { id: 's-nginx-spring',   from: 'nginx',   fs: 'r', to: 'spring',  ts: 'l' },
+  { id: 's-spring-redis',   from: 'spring',  fs: 'r', to: 'redis',   ts: 't', arc: 40 },
+  { id: 's-spring-pg',      from: 'spring',  fs: 'b', to: 'pg',      ts: 't' },
+  { id: 's-spring-rabbit',  from: 'spring',  fs: 'r', to: 'rabbit',  ts: 'l' },
+  { id: 's-rabbit-spring',  from: 'rabbit',  fs: 'b', to: 'spring',  ts: 'r', arc: 54 },
+  { id: 's-spring-fcm',     from: 'spring',  fs: 'b', to: 'fcm',     ts: 'l', arc: -70 },
+  { id: 's-fcm-browser',    from: 'fcm',     fs: 'b', to: 'browser', ts: 'b', arc: 120 },
+  { id: 's-spring-nginx',   from: 'spring',  fs: 'l', to: 'nginx',   ts: 'b', arc: 48 },
+  { id: 's-nginx-browser',  from: 'nginx',   fs: 'b', to: 'browser', ts: 'b', arc: 46 },
+];
+
+/* ────────────────────────────────────────────────────────────────
+   2. 실제 데이터 — 전부 코드에서 가져왔다
+   ──────────────────────────────────────────────────────────────── */
+const P = {};
+
+P['wide.event'] = {
+  title: '도메인 이벤트', src: 'lesson/api/CurriculumMaterialPublishedEvent.java:19',
+  why: '업무 서비스는 알림을 <b>부르지 않는다.</b> 이벤트만 띄우고, 누가 듣는지는 모른다.',
+  blocks: [{ lang: 'java', code:
+`public record CurriculumMaterialPublishedEvent(
+        UUID curriculumId,
+        String curriculumTitle,
+        UUID lessonId,
+        UUID materialId,
+        String fileName,
+        OffsetDateTime occurredAt
+) {}` }],
+};
+
+P['narrow.event'] = {
+  title: '도메인 이벤트', src: 'enrollment/api/EnrollmentRequestedEvent.java:18',
+  why: '수강 신청은 <b>수신자가 처음부터 한 명</b>이다 — 그 커리큘럼의 강사.',
+  blocks: [{ lang: 'java', code:
+`public record EnrollmentRequestedEvent(
+        UUID enrollmentId,
+        UUID curriculumId,
+        String curriculumTitle,
+        UUID instructorId,
+        UUID studentId,
+        OffsetDateTime occurredAt
+) {}` }],
+};
+
+P['timed.schedule'] = {
+  title: '발화 예정 행', src: 'V26__notification_schedule.sql:9 · NotificationScheduleService.java:58',
+  why: '<b>누구에게 갈지는 담지 않는다.</b> 예약 시점에 사람별로 펼치면 그때의 명단이 굳어, 뒤에 수강한 사람은 못 받고 취소한 사람은 받는다.',
+  blocks: [{ lang: 'sql', code:
+`live_session_id  uuid
+lead_minutes     integer      -- 5 · 10 · 30 · 60 · 180 · 1440
+starts_at        timestamptz  -- 밀린 발화 판정용
+fire_at          timestamptz  -- = starts_at - lead_minutes
+fired_at         timestamptz  -- 한 번만 나가게 하는 자물쇠
+UNIQUE (live_session_id, lead_minutes)` }],
+  after: '<p class="cap">일정이 잡히면 <b>선택지 6개 전부</b>를 행으로 만든다. 세션당 6행이지만 <b>수강생 수와는 무관</b>하다 — 아무도 고르지 않은 리드타임의 행은 발화해도 0건을 넣고 끝난다.</p>',
+};
+
+P['timed.poll'] = {
+  title: '폴링 — 시각이 됐다', src: 'LiveStartingSoonScheduler.java:55-104',
+  why: '어떤 경우에도 <b><code>fired_at</code>을 먼저 찍는다.</b> 실패·건너뜀 포함 — 없으면 리드타임 1440분짜리가 같은 삽입을 1,440번 재시도한다.',
+  blocks: [
+    { lang: 'java', code:
+`@Scheduled(fixedDelay = "\${notification.live-starting-soon.poll-ms:30000}",
+           initialDelay = 20000)
+// 한 주기 최대 100건
+findTop100ByFiredAtIsNullAndFireAtLessThanEqualOrderByFireAtAsc(now)` },
+  ],
+  after: '<p class="cap">시작 시각이 <b>이미 지났으면 보내지 않는다</b> — "곧 시작합니다"가 거짓이 되기 때문이다. 행은 끝난 것으로 표시해 매 주기 다시 집지 않는다.</p>',
+};
+
+P['wide.listener'] = {
+  title: '리스너 — 아웃박스 한 줄', src: 'notification/service/MaterialNotificationListener.java:40-53',
+  why: '<b><code>BEFORE_COMMIT</code>인 것이 핵심이다.</b> <code>AFTER_COMMIT</code>이면 커밋과 아웃박스 삽입 사이에 죽었을 때 아웃박스를 쓰는 의미가 사라진다.',
+  blocks: [{ lang: 'java', code:
+`@TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
+public void onMaterialPublished(CurriculumMaterialPublishedEvent event) {
+    NotificationFanoutCommand command = NotificationFanoutCommand.forCurriculumMaterial(
+            event.curriculumId(), event.curriculumTitle(), event.lessonId(),
+            event.materialId(), event.fileName(), event.occurredAt(), sliceLimit);
+
+    outboxPublisher.enqueue(
+            NotificationMessagingConfig.FANOUT_QUEUE,   // destination
+            "material",                                 // aggregate_type
+            event.materialId().toString(),              // aggregate_id
+            "NOTIFICATION_FANOUT_REQUESTED",            // event_type
+            JSON.writeValueAsString(command),           // payload_json
+            "notif:MATERIAL_PUBLISHED:" + event.materialId(),  // idempotency_key
+            null);
+}` }],
+  after: '<p class="cap">문구 생성·이름 조회·대량 삽입은 <b>전부 큐 건너편</b>이다. 업무 트랜잭션이 하는 일은 이 한 줄뿐이다.</p>',
+};
+
+P['narrow.listener'] = {
+  title: '리스너 — 아웃박스 한 줄', src: 'notification/service/EnrollmentNotificationListener.java:40, 69-77',
+  why: '좁은 팬아웃도 <b>같은 길</b>을 쓴다. 수신자가 한 명이라고 지름길을 내면 구조가 둘로 갈린다.',
+  blocks: [{ lang: 'java', code:
+`@TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
+public void onRequested(EnrollmentRequestedEvent event) { ... }
+
+// 멱등키에 사건 시각이 들어간다
+"notif:ENROLLMENT_REQUESTED:{enrollmentId}:{occurredAt.toEpochMilli()}"` }],
+  after: '<p class="cap">수강 사건만 키에 <b>시각</b>이 붙는다. 재신청이 <b>같은 행을 되살리기</b> 때문이다 — 시각이 없으면 두 번째 신청이 첫 번째에 묻혀 강사에게 알림이 가지 않는다.</p>',
+};
+
+P['outbox'] = {
+  title: '아웃박스 행', src: 'V1__init_core.sql:381 · V24__outbox_destination.sql:7',
+  why: '<b>목적지가 데이터다.</b> 릴레이는 이 값을 라우팅 키로 그대로 쓰므로 알림 전용 릴레이를 따로 두지 않는다.',
+  table: [
+    ['aggregate_type', '"material"'],
+    ['aggregate_id', '{materialId}'],
+    ['event_type', '"NOTIFICATION_FANOUT_REQUESTED"'],
+    ['destination', '"notification.fanout"'],
+    ['payload_json', '아래 큐 메시지와 같은 JSON'],
+    ['idempotency_key', '"notif:MATERIAL_PUBLISHED:{materialId}" (UNIQUE)'],
+    ['status', "'PENDING' → 'PUBLISHED' | 'FAILED'"],
+    ['attempt_count / next_attempt_at', '재시도 백오프'],
+  ],
+  after: '<p class="cap">알림 경로에서 <code>correlation_id</code>는 항상 null이다.</p>',
+};
+
+P['relay'] = {
+  title: '릴레이 — 목적지별로 뽑는다', src: 'aiintegration/service/OutboxRelay.java:45-63',
+  why: '예전에는 전체에서 오래된 순 100건을 뽑아, 알림이 쌓이면 <b>방금 올린 자료의 임베딩 잡이 그 뒤에 줄을 섰다</b>(머리 막힘). 목적지별 100건으로 고쳤다.',
+  blocks: [{ lang: 'java', code:
+`// 5초 주기 · 목적지마다 100건씩
+rabbitTemplate.convertAndSend(event.getDestination(), event.getPayloadJson());`}],
+  after: '<p class="cap">릴레이는 payload를 <b>파싱하지 않는다.</b> 문자열 그대로 브로커에 넣는다.</p>',
+};
+
+P['wide.msg'] = {
+  title: '큐 메시지 — 명단이 아니라 커서', src: 'NotificationFanoutCommand.java:29 · NotificationWideFanoutContractTest.java:179',
+  why: '수신자 100만 명을 담으면 uuid 100만 개가 메모리와 큐를 지나간다. 메시지는 <b>"무슨 사건인가 + 어디까지 왔나"</b>만 담는다 — 크기가 수신자 수와 무관하게 일정하다.',
+  blocks: [{ lang: 'json', code:
+`{"type":"MATERIAL_PUBLISHED",
+ "curriculumId":"7c9e…","curriculumTitle":"테스트 커리큘럼",
+ "materialId":"1f4a…","lessonId":null,"subjectName":"자료.pptx",
+ "afterUserId":null,          // 첫 조각
+ "sliceLimit":1000}` }],
+  after: '<p class="cap">record는 17필드지만 <b>사건마다 쓰는 칸이 다르고</b> 없는 값은 null로 나간다. 수신자 조건은 메시지에 싣지 않는다 — 조건을 고쳤을 때 <b>큐에 떠 있는 옛 메시지가 옛 조건으로 돌기</b> 때문이다.</p>',
+};
+
+P['narrow.msg'] = {
+  title: '큐 메시지 — 커서 칸이 빈다', src: 'NotificationFanoutCommand.java:54-59',
+  why: '좁은 팬아웃은 <b>커서 두 칸(<code>afterUserId</code>·<code>sliceLimit</code>)을 쓰지 않는다.</b> 조각낼 것이 없다.',
+  blocks: [{ lang: 'json', code:
+`{"type":"ENROLLMENT_REQUESTED",
+ "enrollmentId":"9b21…","curriculumId":"7c9e…",
+ "curriculumTitle":"React 실시간 클래스",
+ "instructorId":"a0d3…","studentId":"55f1…",
+ "occurredAt":"2026-08-04T09:31:00+09:00",
+ "afterUserId":null,"sliceLimit":null}` }],
+};
+
+P['timed.msg'] = {
+  title: '큐 메시지 — 리드타임이 실린다', src: 'NotificationFanoutCommand.java:44 · LiveStartingSoonScheduler.java:93-104',
+  why: '<code>leadMinutes</code>는 <b>이 조각이 누구 것인지</b>를 정한다 — 그 값을 고른 사람에게만 나간다.',
+  blocks: [{ lang: 'json', code:
+`{"type":"LIVE_STARTING_SOON",
+ "curriculumId":"7c9e…","liveSessionId":"3d77…",
+ "leadMinutes":10,
+ "nextStartsAt":"2026-08-04T14:00:00+09:00",
+ "afterUserId":null,"sliceLimit":1000}` }],
+  after: '<p class="cap">아웃박스 멱등키에는 리드타임이 들어가고(<code>notif:LIVE_STARTING_SOON:{sessionId}:{lead}:{startsAt}</code>), <b>알림 dedupe_key에는 들어가지 않는다</b> — 층이 다르고 목적이 다르다.</p>',
+};
+
+P['wide.sql'] = {
+  title: '집합 삽입 — 명단이 앱을 지나가지 않는다', src: 'notification/repository/NotificationFanoutRepository.java:50-83',
+  why: '<b><code>slice</code>를 CTE로 먼저 고정하는 것이 요점이다.</b> <code>INSERT … RETURNING</code>만으로는 커서를 얻을 수 없다 — <code>ON CONFLICT DO NOTHING</code>이 중복을 건너뛰므로 조각의 마지막 몇 명이 이미 받은 사람이면 RETURNING에 그들이 없고, <b>커서가 뒤로 밀려 그 자리부터 영영 다시 훑는다.</b>',
+  blocks: [{ lang: 'sql', code:
+`WITH slice AS (
+    SELECT e.user_id
+    FROM core.enrollment e
+    WHERE e.curriculum_id = CAST(:curriculumId AS uuid)
+      AND e.status = 'ACTIVE'
+      AND (CAST(:afterUserId AS uuid) IS NULL OR e.user_id > CAST(:afterUserId AS uuid))
+    ORDER BY e.user_id
+    LIMIT :sliceLimit
+), inserted AS (
+    INSERT INTO core.notification (
+        id, recipient_id, type, read_status, action_status, severity,
+        title, message, targets, group_key, dedupe_key,
+        previous_starts_at, next_starts_at)
+    SELECT gen_random_uuid(), s.user_id, :type, 'UNREAD', :actionStatus, :severity,
+           :title, :message, CAST(:targets AS jsonb), :groupKey,
+           :dedupePrefix || s.user_id,
+           CAST(:previousStartsAt AS timestamptz), CAST(:nextStartsAt AS timestamptz)
+    FROM slice s
+    ON CONFLICT (dedupe_key) DO NOTHING
+    RETURNING recipient_id
+)
+SELECT (SELECT count(*) FROM slice)    AS scanned,
+       (SELECT count(*) FROM inserted) AS inserted,
+       (SELECT array_agg(recipient_id) FROM inserted) AS inserted_recipients,
+       (SELECT s.user_id FROM slice s ORDER BY s.user_id DESC LIMIT 1) AS last_user_id` }],
+  after: '<p class="cap"><code>inserted_recipients</code>가 따로 있는 이유는 실시간 전달 때문이다 — <b>새로 받은 사람만</b> 나오므로 재배달로 같은 조각을 다시 처리해도 화면에 알림이 두 번 뜨지 않는다.<br><br>커서를 <code>max(user_id)</code>로 뽑으려다 <code>function max(uuid) does not exist</code>로 터졌다. 조각이 이미 오름차순이라 <b>내림차순 첫 행</b>으로 바꿨다.</p>',
+};
+
+P['timed.sql'] = {
+  title: '곧 시작 전용 조각 — 리드타임이 맞는 사람만', src: 'NotificationFanoutRepository.java:94-128',
+  why: '한 세션에 예약 행이 선택지 수만큼 있고, <b>각 행은 자기 리드타임을 고른 사람에게만</b> 나가야 한다.',
+  blocks: [{ lang: 'sql', code:
+`-- 강의 설정 → 커리큘럼 설정 → 기본값을 COALESCE로 풀고
+-- 그 값이 이 조각의 리드타임과 같은 사람만 고른다
+COALESCE(lesson_pref.lead_minutes,
+         curriculum_pref.lead_minutes,
+         :defaultLeadMinutes) = :leadMinutes` }],
+  after: '<p class="cap">사람마다 서비스를 부르면 <b>수강생 수만큼 왕복</b>이 생긴다. 그래서 판정이 SQL 안에 있다.</p>',
+};
+
+P['narrow.insert'] = {
+  title: '단건 삽입', src: 'notification/repository/NotificationInsertRepository.java:26-36',
+  why: '수신자가 하나라 조각도 커서도 없다. 다만 <b><code>ON CONFLICT DO NOTHING</code>은 같다</b> — 중복은 어느 경로에서든 DB가 막는다.',
+  blocks: [{ lang: 'sql', code:
+`INSERT INTO core.notification (…)
+VALUES (…)
+ON CONFLICT (dedupe_key) DO NOTHING` }],
+  after: '<p class="cap">"넣어 보고 중복 예외를 잡는" 방식은 쓸 수 없다 — <b>실패한 statement가 트랜잭션을 롤백 전용으로 만들어</b>, 예외를 잡아도 커밋에서 다시 터진다.</p>',
+};
+
+P['cursor'] = {
+  title: '커서 — 워커가 자기 다음 조각을 큐에 넣는다', src: 'NotificationFanoutWorker.java:346-350 · NotificationFanoutRepository.java:36-38',
+  why: '몇 조각인지 <b>미리 세지 않는다.</b> 100만 행에 <code>COUNT(*)</code>를 돌릴 일이 없고, 큐 길이가 워커 속도에 맞춰 저절로 조절된다.',
+  blocks: [
+    { lang: 'java', code:
+`if (slice.mayHaveMore(limit)) {
+    rabbitTemplate.convertAndSend(NotificationMessagingConfig.FANOUT_QUEUE,
+            JSON.writeValueAsString(command.nextSlice(slice.lastUserId())));
+}
+
+// mayHaveMore = scanned >= limit && lastUserId != null` },
+  ],
+  after: '<p class="cap"><b><code>inserted</code>가 아니라 <code>scanned</code>로 판단한다.</b> 재배달로 조각이 전부 중복이면 <code>inserted=0</code>이지만 뒤에 수강생이 남아 있을 수 있다 — <code>inserted</code>로 보면 <b>거기서 체인이 끊겨 나머지가 영영 못 받는다.</b><br><br>이 재발행은 <b>아웃박스를 다시 거치지 않는다.</b> 함께 커밋할 업무 변경이 없기 때문이다.</p>',
+};
+
+P['row'] = {
+  title: '알림 행 — 수신자별 한 행', src: 'V23__notification.sql:7-84',
+  why: '반대 방식(사건 1행 + 읽을 때 계산)은 <code>action_status</code>에서 막힌다 — "승인함 / 아직 / 만료"는 사람마다 제각각이고 <b>사용자가 읽어서가 아니라 서버가 바꾼다.</b>',
+  table: [
+    ['recipient_id', 'uuid'],
+    ['type', 'MATERIAL_PUBLISHED · 12종'],
+    ['read_status', "UNREAD | READ"],
+    ['action_status', 'INFO | ACTION_REQUIRED | COMPLETED | EXPIRED'],
+    ['severity', 'NORMAL | HIGH | ERROR'],
+    ['title / message', '저장 시점에 완성된 한국어 문장'],
+    ['targets', 'jsonb — {curriculumId, materialId, …}'],
+    ['dedupe_key', 'UNIQUE · 사건마다 구성이 다르다'],
+    ['created_at', 'clock_timestamp()  ← now()가 아니다'],
+  ],
+  after: `<p class="cap"><b><code>now()</code>는 트랜잭션 시작 시각이다.</b> 그대로 두면 한 트랜잭션에서 만든 알림이 전부 같은 시각을 갖고, <code>ORDER BY created_at DESC</code>가 비결정적이 되어 목록 순서가 흔들린다. 증상이 조용해서 <b>같은 트랜잭션에 두 건이 들어갈 때만</b> 틀린다.</p>
+<p class="cap"><b>dedupe_key 구성</b><br>
+· 수강 신청·판정 &nbsp;<code>{type}:{수신자}:{enrollmentId}:{사건시각}</code><br>
+· 일정 변경 &nbsp;<code>{type}:{sessionId}:{새시각}:{수신자}</code><br>
+· 자료·녹화 &nbsp;<code>{type}:{리소스id}:{수신자}</code><br>
+· 곧 시작 &nbsp;<code>{type}:{sessionId}:{시작시각}:{수신자}</code> — 리드타임은 <b>넣지 않는다</b></p>`,
+};
+
+P['narrow.row'] = {
+  title: '알림 행 — 이 종류만 처리 축이 열린다', src: 'NotificationFanoutWorker.java:411-419',
+  why: '강사에게 가는 <code>ENROLLMENT_REQUESTED</code>만 <code>ACTION_REQUIRED</code>다. 나머지 11종은 전부 <code>INFO</code>.',
+  table: [
+    ['recipient_id', '강사 1명'],
+    ['type', 'ENROLLMENT_REQUESTED'],
+    ['action_status', 'ACTION_REQUIRED  ← 읽어도 안 닫힌다'],
+    ['targets', '{curriculumId, enrollmentId, studentId, actorId}'],
+    ['title', '"새 수강 신청"'],
+    ['message', '"김민수 님이 «React 실시간 클래스» 수강을 신청했습니다. 승인 또는 거절해 주세요."'],
+  ],
+  after: '<p class="cap">강사가 이 알림을 <b>읽어도</b> 승인 전까지 그 일은 남아 있다. 읽음 축과 처리 축을 하나로 뭉개면 "처리 대기" 목록이 성립하지 않는다 — 그래서 읽음 처리는 처리 축을 <b>절대</b> 건드리지 않는다.<br><br>닫는 것은 <b>사건</b>이다: 승인·거절이면 <code>COMPLETED</code>, 학생이 취소하면 <code>EXPIRED</code>.</p>',
+};
+
+P['instructor-branch'] = {
+  title: '강사 1건 — SQL 밖의 별도 가지', src: 'NotificationFanoutWorker.java:138-141, 265-293',
+  why: '팬아웃 SQL은 <code>core.enrollment</code>만 훑는데 <b>강사는 자기 커리큘럼에 수강 등록돼 있지 않다.</b> 그래서 따로 한 건을 넣는다.',
+  blocks: [{ lang: 'java', code:
+`// 첫 조각에서만 (afterUserId != null 이면 return)
+// 그리고 강사 본인의 리드타임 설정이 이 조각과 맞을 때만
+notifyInstructorOfStartingSoon(command);` }],
+};
+
+P['rest'] = {
+  title: 'REST — 알림함', src: 'notification/web/NotificationController.java:58 · docs/CONTRACT.md:276',
+  why: '문구를 <b>완성해 저장</b>했기 때문에 목록 조회가 <b>단일 테이블 읽기</b>다 — 화면이 60초마다 개수를 물어보므로 이게 결정적이다.',
+  blocks: [{ lang: 'json', code:
+`{
+  "items": [{
+    "notificationId": "ntf_0001",
+    "type": "ENROLLMENT_REQUESTED",
+    "readStatus": "UNREAD",
+    "actionStatus": "ACTION_REQUIRED",
+    "severity": "NORMAL",
+    "title": "새로운 수강 신청이 있습니다.",
+    "message": "김민수 님이 'React 실시간 클래스' 수강을 신청했습니다.",
+    "targets": { "curriculumId": "cur_0001", "enrollmentId": "enr_0001",
+                 "studentId": "usr_student_01", "actorId": "usr_student_01" },
+    "groupKey": "ENROLLMENT_REQUESTED:cur_0001",
+    "createdAt": "2026-08-02T09:31:00+09:00",
+    "readAt": null, "completedAt": null, "scheduleChange": null
+  }],
+  "page": 0, "size": 10, "totalElements": 23, "totalPages": 3, "hasNext": true,
+  "unreadCount": 8, "actionRequiredCount": 3
+}` }],
+  after: '<p class="cap">개수 두 개는 <b>필터와 무관하게 전체 기준</b>이다 — 배지는 지금 보고 있는 목록이 아니라 전체를 말해야 한다. 응답에 <code>dedupe_key</code>도 URL도 없다.</p>',
+};
+
+P['stomp'] = {
+  title: 'STOMP — 신호만 보낸다', src: 'web/ws/NotificationSignalPayload.java:11 · WsNotificationBroadcaster.java:106',
+  why: '내용을 싣지 않는 이유가 둘이다. ① 넓은 팬아웃은 집합 삽입이라 <b>앱에 행 데이터가 없다</b> — 실으려면 방금 넣은 행을 도로 읽어야 한다. ② 알림 한 건의 모양이 REST와 WS 두 곳에 생기면 <b>한쪽만 고치는 어긋남</b>이 자란다.',
+  blocks: [{ lang: 'json', code:
+`// 목적지: /user/queue/notifications
+{ "notificationType": "MATERIAL_PUBLISHED",
+  "occurredAt": "2026-08-04T14:20:11.482+09:00" }` }],
+  after: '<p class="cap">목적지를 <code>/user/queue</code>로 잡아 <b>인가 코드를 없앴다</b> — Spring이 <code>/user/…</code>를 세션의 Principal로 해석하므로 남의 알림을 구독할 방법이 구조적으로 없다.<br><br>커밋 <b>후에</b> 보낸다(<code>afterCommit</code>). 트랜잭션 안에서 보내면 화면이 아직 커밋되지 않은 행을 읽으러 온다.</p>',
+};
+
+P['push'] = {
+  title: 'Web Push — 여기엔 내용을 싣는다', src: 'notification/push/PushPayload.java:19 · WsNotificationBroadcaster.java:105',
+  why: '탭이 닫혀 있으면 화면이 목록을 다시 읽을 수 없다. <b>같은 문제에 답이 달라지는 자리</b>다.',
+  blocks: [{ lang: 'json', code:
+`{ "title": "새 강의 자료",
+  "body": "«테스트 커리큘럼»에 새 자료 «자료.pptx»가 올라왔습니다.",
+  "url": "/notifications" }` }],
+  after: '<p class="cap"><b>이 화살표에는 조건이 없다.</b> <code>pushSender.send(recipientIds, title, body, null)</code> — 탭이 열려 있어도 구독 행이 있는 모든 기기로 나간다. STOMP 쪽에만 있는 접속자 검사는 라우팅이 아니라 헛 호출을 줄이는 최적화다.<br><br><code>url</code>이 항상 null로 넘어와 <b>모든 푸시 클릭이 <code>/notifications</code>로</b> 간다 — 딥링크가 없다.</p>',
+};
+
+P['sw'] = {
+  title: '서비스워커 — 진짜 중복 억제는 여기', src: 'frontend/public/push-worker.js:26-46',
+  why: '서버가 둘 다 보내므로 <b>중복을 막는 곳은 브라우저</b>다. 지금 이 창을 보고 있으면 STOMP로 알림함이 이미 갱신되니 시스템 알림을 띄우지 않는다.',
+  blocks: [{ lang: 'js', code:
+`const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+const focused = clients.some((client) => client.focused)
+if (focused) return                       // 시스템 알림을 띄우지 않는다
+
+await self.registration.showNotification(payload.title ?? '새 알림', {
+  body: payload.body ?? '',
+  tag: 'liveclass-notification',          // 같은 태그는 덮어쓴다
+  renotify: true,                         // 덮어쓸 때도 알린다
+  data: { url: payload.url ?? '/notifications' },
+})` }],
+  after: '<p class="cap">예전에는 <code>visibilityState === \'visible\'</code>로 봤는데 그게 너무 넓었다 — 창이 다른 앱 뒤에 떠 있기만 해도 visible이라 <b>딴 일 하는 중에는 알림이 하나도 안 왔다.</b> 푸시를 쓰는 이유가 정확히 그 상황인데도.<br><br><code>renotify</code>가 없으면(기본 false) 앞 알림이 남아 있는 동안 오는 다음 알림은 <b>소리도 팝업도 없이 내용만 조용히 바뀐다.</b> 운영에서 실제로 그랬다.</p>',
+};
+
+P['queue'] = {
+  title: 'RabbitMQ — notification.fanout', src: 'notification/config/NotificationMessagingConfig.java:30-68',
+  why: '재시도 3회 뒤 <b>requeue 없이 DLQ</b>로 보낸다. 같은 메시지가 무한히 도는 것보다 한곳에 모이는 편이 낫다.',
+  table: [
+    ['큐', 'notification.fanout'],
+    ['DLQ', 'notification.fanout.dlq'],
+    ['익스체인지', '기본("") · 라우팅키 = 큐 이름'],
+    ['재시도', '3회 · defaultRequeueRejected=false'],
+  ],
+};
+
+/* ── 서비스 배치 뷰 전용 데이터 ── */
+
+P['svc.request'] = {
+  title: '① 강사가 자료를 올린다', src: 'frontend/nginx/default.conf:65 · docker-compose.prod.yml',
+  why: '알림의 시작은 <b>사용자의 평범한 요청</b>이다. 알림을 만들어 달라는 요청이 따로 있는 게 아니다.',
+  blocks: [{ lang: 'json', code:
+`POST /api/instructor/lessons/{lessonId}/materials
+Cookie: SESSION=…            // HttpOnly 쿠키 세션
+X-XSRF-TOKEN: …              // 상태변경이라 CSRF 필요`}],
+  after: '<p class="cap">nginx가 <code>/api/</code>를 backend로 넘긴다. 같은 블록이 <code>Upgrade</code> 헤더를 통과시켜 <b>STOMP WebSocket도 이 경로로</b> 올라간다.</p>',
+};
+
+P['svc.session'] = {
+  title: '② 세션 확인 — Redis', src: 'docker-compose.prod.yml:138 · ADR-0014',
+  why: '인증 상태가 앱 메모리에 없다. <b>인스턴스를 늘려도 세션이 갈리지 않게</b> Redis에 둔다.',
+  table: [
+    ['주소', 'redis:6379 (컨테이너 내부망)'],
+    ['외부 노출', '127.0.0.1:6390 — loopback만'],
+    ['담는 것', 'Spring Session · STT fast path'],
+    ['알림과의 관계', '알림 데이터는 여기 없다. 요청자 신원만'],
+  ],
+};
+
+P['svc.tx'] = {
+  title: '③ 업무 변경 + 아웃박스를 한 트랜잭션에', src: 'jdbc:postgresql://postgres:5432 · V1__init_core.sql:381',
+  why: '<b>아웃박스가 Postgres에 있는 것이 핵심이다.</b> 업무 행과 메시지가 같은 커밋에 묶여야 "자료는 올라갔는데 알림이 영영 안 옴"이 구조적으로 불가능해진다. 큐에 바로 넣으면 그 보장이 깨진다.',
+  blocks: [{ lang: 'sql', code:
+`BEGIN;
+  INSERT INTO core.curriculum_material (…);      -- 업무
+  INSERT INTO core.outbox_events (                -- 메시지
+      destination, payload_json, idempotency_key, status)
+  VALUES ('notification.fanout', '{…}',
+          'notif:MATERIAL_PUBLISHED:{materialId}', 'PENDING');
+COMMIT;`}],
+  after: '<p class="cap">Spring 응답은 여기서 끝난다. 문구 생성·대량 삽입은 <b>전부 이 요청 밖</b>이다.<br><br>아웃박스가 <b>업무 행과 같은 DB</b>에 있어야 하는 이유가 여기 있다 — 다른 저장소였다면 한 트랜잭션으로 묶을 수 없고, 그러면 "자료는 올라갔는데 알림이 영영 안 옴"이 다시 가능해진다.</p>',
+};
+
+P['svc.relay'] = {
+  title: '④ 릴레이가 집어 브로커로', src: 'aiintegration/service/OutboxRelay.java:45-63 · application.yml:276',
+  why: '<b>같은 Spring 프로세스 안</b>의 스케줄러다. 별도 서비스가 아니다 — 인스턴스를 늘리면 같은 행을 둘이 집을 수 있어 잠금이 필요해지는 자리(§한계).',
+  blocks: [{ lang: 'java', code:
+`// 5초 주기 · 목적지별 100건
+rabbitTemplate.convertAndSend(event.getDestination(), event.getPayloadJson());
+// amqp://rabbitmq:5672 · 기본 익스체인지 · 라우팅키 = 큐 이름`}],
+};
+
+P['svc.queue'] = {
+  title: '⑤ RabbitMQ — 큐 하나, DLQ 하나', src: 'notification/config/NotificationMessagingConfig.java:30-68',
+  table: [
+    ['주소', 'rabbitmq:5672 (AMQP)'],
+    ['큐', 'notification.fanout'],
+    ['DLQ', 'notification.fanout.dlq'],
+    ['재시도', '3회 후 requeue 없이 DLQ'],
+    ['관리 UI', 'rabbitmq:15672 — TLS 종단 8991'],
+    ['같은 브로커의 다른 큐', 'ingestion.embed (AI 자료 임베딩)'],
+  ],
+  after: '<p class="cap">한 브로커를 알림과 AI가 나눠 쓴다. 그래서 릴레이가 <b>목적지별로</b> 100건씩 뽑는다 — 전체에서 뽑으면 알림이 쌓였을 때 임베딩 잡이 뒤에 줄을 선다.</p>',
+};
+
+P['svc.consume'] = {
+  title: '⑥ 워커가 소비 — 같은 프로세스로 되돌아온다', src: 'NotificationFanoutWorker.java:108 · @RabbitListener',
+  why: '발행자와 소비자가 <b>같은 Spring 컨테이너</b>다. 큐를 쓰는 이유는 서비스를 나누려는 게 아니라 <b>업무 요청에서 떼어내고 재시도·조각내기를 얻으려는</b> 것이다.',
+  after: '<p class="cap">떼어낼 준비는 돼 있다 — 알림 모듈 46개 파일 중 37개가 다른 모듈을 참조하지 않고, <b>역참조는 0개</b>다.</p>',
+};
+
+P['svc.insert'] = {
+  title: '⑦ 집합 삽입 · 커서', src: 'NotificationFanoutRepository.java:50-83',
+  why: '수신자 명단이 <b>Spring 프로세스를 지나가지 않는다.</b> 조각을 자르는 것도 넣는 것도 SQL 안에서 끝난다.',
+  blocks: [{ lang: 'sql', code:
+`INSERT INTO core.notification (…)
+SELECT … FROM slice s
+ON CONFLICT (dedupe_key) DO NOTHING
+RETURNING recipient_id     -- 새로 받은 사람만 (실시간 전달용)`}],
+  after: '<p class="cap">10만 행 집합 삽입 <b>828ms</b>. 같은 결과를 행 단위 루프로 만들면 1,521ms이고, 여기에 앱↔DB 왕복이 붙으면 20~60초가 된다.</p>',
+};
+
+P['svc.cursor'] = {
+  title: '⑧ 다음 조각을 브로커로 되돌린다', src: 'NotificationFanoutWorker.java:346-350',
+  why: '워커가 <b>자기 다음 조각</b>을 큐에 넣는다. 몇 조각인지 미리 세지 않으므로 100만 행에 <code>COUNT(*)</code>가 없고, 큐 길이가 워커 속도에 맞춰 조절된다.',
+  after: '<p class="cap">이 재발행은 <b>아웃박스를 거치지 않는다</b>(Postgres를 다시 안 들른다) — 함께 커밋할 업무 변경이 없기 때문이다.</p>',
+};
+
+P['svc.push'] = {
+  title: '⑨ 푸시 — 우리 것이 아닌 서비스로', src: 'notification/push/WebPushSender.java:154-207',
+  why: '기기마다 <b>구독 endpoint가 가리키는 곳</b>이 다르다(Chrome이면 FCM, Firefox면 Mozilla). 우리는 그 주소로 HTTPS POST를 할 뿐이다.',
+  blocks: [{ lang: 'json', code:
+`POST {subscription.endpoint}            // 기기마다 다른 외부 주소
+Authorization: vapid t=<JWT>, k=<공개키>
+Content-Encoding: aes128gcm             // 본문은 암호문
+// 평문은 {title, body, url} 세 필드`}],
+  after: '<p class="cap">암호화는 CPU를 쓰므로 전용 스레드 풀에서 하고, 동시 전송은 <b>세마포어 200</b>으로 묶는다. 404·410이 오면 <b>죽은 구독을 지운다</b>.<br><br>VAPID 키가 없으면 이 화살표만 조용히 꺼지고 알림함·STOMP는 그대로 동작한다.</p>',
+};
+
+P['svc.deliver'] = {
+  title: '⑩ 기기로 — 여기서 창이 켜져 있는지 본다', src: 'frontend/public/push-worker.js:30',
+  why: '탭이 닫혀 있어도 오는 경로다. <b>서버는 열림/닫힘을 모른다</b> — 판단은 브라우저의 서비스워커가 한다.',
+  blocks: [{ lang: 'js', code:
+`const focused = clients.some((client) => client.focused)
+if (focused) return      // STOMP가 이미 알림함을 갱신했다`}],
+};
+
+P['svc.stomp'] = {
+  title: '⑪ STOMP 신호 — nginx를 거쳐 같은 443으로', src: 'httpNotificationService.ts:106 · nginx default.conf:73',
+  why: 'WebSocket도 <code>/api/</code> 블록을 탄다 — <code>Upgrade</code> 헤더를 통과시켜 두었다. 포트를 따로 열지 않는다.',
+  blocks: [{ lang: 'json', code:
+`SUBSCRIBE /user/queue/notifications
+{ "notificationType": "MATERIAL_PUBLISHED", "occurredAt": "…" }`}],
+  after: '<p class="cap">브로커는 Spring 안의 SimpleBroker다. <b>인스턴스를 늘리면 이 신호가 인스턴스 경계를 못 넘는다</b> — 외부 브로커 릴레이로 바꿔야 풀리는 유일한 선행조건이다.</p>',
+};
+
+P['svc.reload'] = {
+  title: '⑫ 화면이 목록을 다시 읽는다', src: 'useNotificationRealtime.ts:15 · useNotificationQueries.ts:30',
+  why: '신호에 내용이 없으므로 화면은 <b>조회를 한 번 더</b> 한다. 그건 어차피 알림함을 열 때 하는 일이다.',
+  blocks: [{ lang: 'js', code:
+`queryClient.invalidateQueries(notificationQueryKeys.all)
+// 60초 폴링도 그대로 산다 — 실시간은 그 사이를 좁힐 뿐`}],
+};
+
+/* ────────────────────────────────────────────────────────────────
+   3. 시나리오 — 다리(leg) 목록이 곧 타임라인
+   ──────────────────────────────────────────────────────────────── */
+const LOGICAL_SCENARIOS = {
+  wide: {
+    label: '넓은 팬아웃 · 자료 게시',
+    boxes: ['evt','listener','outbox','relay','queue','worker','db','rest','stomp','push','sw'],
+    legs: [
+      { wire:'evt-listener',    ms: 900,  color:'evt', name:'자료 게시 → 도메인 이벤트',              p:'wide.event' },
+      { wire:'listener-outbox', ms: 900,  color:'evt', name:'리스너가 아웃박스에 한 줄',              p:'wide.listener' },
+      { wire:'outbox-relay',    ms: 800,  color:'row', name:'릴레이가 5초마다 집는다',                p:'outbox' },
+      { wire:'relay-queue',     ms: 800,  color:'row', name:'브로커로 발행',                          p:'relay' },
+      { wire:'queue-worker',    ms: 750,  color:'msg', name:'조각 ①  afterUserId = null',            p:'wide.msg' },
+      { wire:'worker-db',       ms: 1000, color:'msg', name:'조각 ①  집합 삽입 — 1,000행',           p:'wide.sql' },
+      { wire:'worker-queue',    ms: 900,  color:'msg', name:'scanned ≥ limit → 다음 조각을 큐로',     p:'cursor' },
+      { wire:'queue-worker',    ms: 700,  color:'msg', name:'조각 ②  afterUserId = 3f2a…',           p:'cursor' },
+      { wire:'worker-db',       ms: 900,  color:'msg', name:'조각 ②  집합 삽입 — 1,000행',           p:'wide.sql' },
+      { wire:'worker-queue',    ms: 850,  color:'msg', name:'아직 남았다 → 다음 조각',                p:'cursor' },
+      { wire:'queue-worker',    ms: 700,  color:'msg', name:'조각 ③ … 100만 명까지 이렇게',           p:'cursor' },
+      { wire:'worker-db',       ms: 900,  color:'ok',  name:'마지막 조각 — scanned < limit, 체인 끝', p:'row' },
+      { wire:'db-rest',         ms: 800,  color:'ok',  name:'알림함이 읽는다',                        p:'rest' },
+      { wire:'db-stomp',        ms: 800,  color:'ok',  name:'STOMP — 새로 받은 사람에게만',           p:'stomp' },
+      { wire:'db-push',         ms: 800,  color:'ok',  name:'Web Push — 조건 없이 전원에게',          p:'push' },
+      { wire:'push-sw',         ms: 750,  color:'ok',  name:'서비스워커가 중복을 막는다',              p:'sw' },
+    ],
+  },
+  narrow: {
+    label: '좁은 팬아웃 · 수강 신청',
+    boxes: ['evt','listener','outbox','relay','queue','worker','db','rest','stomp','push','sw'],
+    legs: [
+      { wire:'evt-listener',    ms: 900,  color:'evt', name:'수강 신청 → 도메인 이벤트',        p:'narrow.event' },
+      { wire:'listener-outbox', ms: 900,  color:'evt', name:'리스너가 아웃박스에 한 줄',        p:'narrow.listener' },
+      { wire:'outbox-relay',    ms: 800,  color:'row', name:'릴레이가 5초마다 집는다',          p:'outbox' },
+      { wire:'relay-queue',     ms: 800,  color:'row', name:'브로커로 발행',                    p:'relay' },
+      { wire:'queue-worker',    ms: 800,  color:'msg', name:'커서 칸이 빈 메시지',              p:'narrow.msg' },
+      { wire:'worker-db',       ms: 950,  color:'ok',  name:'단건 삽입 — 강사 1명',             p:'narrow.insert' },
+      { wire:'db-rest',         ms: 800,  color:'ok',  name:'처리 대기로 뜬다',                 p:'narrow.row' },
+      { wire:'db-stomp',        ms: 800,  color:'ok',  name:'STOMP 신호',                       p:'stomp' },
+      { wire:'db-push',         ms: 800,  color:'ok',  name:'Web Push',                         p:'push' },
+      { wire:'push-sw',         ms: 750,  color:'ok',  name:'서비스워커',                        p:'sw' },
+    ],
+  },
+  timed: {
+    label: '시각형 · 곧 시작',
+    boxes: ['sched','poller','outbox','relay','queue','worker','db','rest','stomp','push','sw'],
+    legs: [
+      { wire:'sched-poller',    ms: 950,  color:'evt', name:'fire_at이 지났다 (30초 폴링)',        p:'timed.schedule' },
+      { wire:'poller-outbox',   ms: 900,  color:'evt', name:'fired_at을 먼저 찍고 아웃박스로',     p:'timed.poll' },
+      { wire:'outbox-relay',    ms: 800,  color:'row', name:'릴레이가 집는다',                     p:'outbox' },
+      { wire:'relay-queue',     ms: 800,  color:'row', name:'브로커로 발행',                       p:'relay' },
+      { wire:'queue-worker',    ms: 800,  color:'msg', name:'leadMinutes = 10 인 조각',            p:'timed.msg' },
+      { wire:'worker-db',       ms: 1000, color:'msg', name:'리드타임이 맞는 사람만 — COALESCE',   p:'timed.sql' },
+      { wire:'worker-db',       ms: 800,  color:'msg', name:'강사 1건 — SQL 밖의 별도 가지',       p:'instructor-branch' },
+      { wire:'worker-queue',    ms: 850,  color:'msg', name:'남았으면 다음 조각',                  p:'cursor' },
+      { wire:'queue-worker',    ms: 700,  color:'msg', name:'조각 ②',                              p:'cursor' },
+      { wire:'worker-db',       ms: 900,  color:'ok',  name:'체인 끝',                             p:'row' },
+      { wire:'db-rest',         ms: 800,  color:'ok',  name:'알림함',                              p:'rest' },
+      { wire:'db-stomp',        ms: 800,  color:'ok',  name:'STOMP 신호',                          p:'stomp' },
+      { wire:'db-push',         ms: 800,  color:'ok',  name:'Web Push',                            p:'push' },
+      { wire:'push-sw',         ms: 750,  color:'ok',  name:'서비스워커',                           p:'sw' },
+    ],
+  },
+};
+
+const SERVICE_SCENARIOS = {
+  svc: {
+    label: '자료 게시 한 건이 지나는 프로세스',
+    boxes: ['browser','nginx','spring','rabbit','pg','redis','fcm'],
+    legs: [
+      { wire:'s-browser-nginx', ms: 850,  color:'evt', name:'① 강사가 자료를 올린다 — HTTPS',              p:'svc.request' },
+      { wire:'s-nginx-spring',  ms: 700,  color:'evt', name:'② nginx가 /api를 backend로',                 p:'svc.request' },
+      { wire:'s-spring-redis',  ms: 700,  color:'evt', name:'③ 세션 확인 — redis:6379',                    p:'svc.session' },
+      { wire:'s-spring-pg',     ms: 1000, color:'row', name:'④ 업무 행 + 아웃박스를 한 트랜잭션에',        p:'svc.tx' },
+      { wire:'s-spring-rabbit', ms: 900,  color:'row', name:'⑤ 릴레이가 5초마다 집어 AMQP 발행',           p:'svc.relay' },
+      { wire:'s-rabbit-spring', ms: 850,  color:'msg', name:'⑥ 워커가 소비 — 같은 프로세스로 되돌아온다',  p:'svc.consume' },
+      { wire:'s-spring-pg',     ms: 1000, color:'msg', name:'⑦ 집합 삽입 — 명단은 Spring을 안 지난다',     p:'svc.insert' },
+      { wire:'s-spring-rabbit', ms: 800,  color:'msg', name:'⑧ 다음 조각을 브로커로 (아웃박스 안 거침)',    p:'svc.cursor' },
+      { wire:'s-spring-fcm',    ms: 950,  color:'ok',  name:'⑨ 푸시 — 우리 것이 아닌 서비스로',            p:'svc.push' },
+      { wire:'s-fcm-browser',   ms: 950,  color:'ok',  name:'⑩ 기기로 — 창이 켜져 있으면 서비스워커가 건너뛴다', p:'svc.deliver' },
+      { wire:'s-spring-nginx',  ms: 700,  color:'ok',  name:'⑪ STOMP 신호 — 같은 443, Upgrade로',          p:'svc.stomp' },
+      { wire:'s-nginx-browser', ms: 700,  color:'ok',  name:'⑫ 화면이 목록을 다시 읽는다',                  p:'svc.reload' },
+    ],
+  },
+};
+
+const VIEWS = {
+  logical: {
+    label: '논리 흐름',
+    boxes: LOGICAL_BOXES, wires: LOGICAL_WIRES, scenarios: LOGICAL_SCENARIOS,
+    zones: [
+      { id: 'zone-tx', x: 8, y: 22, w: 612, h: 128, label: '같은 트랜잭션 — 여기까지가 업무 커밋' },
+      { id: 'zone-browser', x: 58, y: 436, w: 472, h: 80, label: '브라우저' },
+    ],
+    drawer: true,
+  },
+  service: {
+    label: '서비스 배치',
+    boxes: SERVICE_BOXES, wires: SERVICE_WIRES, scenarios: SERVICE_SCENARIOS,
+    zones: [
+      { id: 'zone-ec2', x: 252, y: 22, w: 744, h: 316, label: 'EC2 한 대 — 컨테이너들이 같은 도커 네트워크에' },
+      { id: 'zone-ext', x: 252, y: 374, w: 248, h: 132, label: '외부 — 우리가 운영하지 않는다' },
+    ],
+    drawer: false,
+  },
+};
+
+const DRAWER = {
+  wide: [
+    { n:'1', s:'type 검사', m:'isKnown이 false면 던져서 DLQ로', p:'queue' },
+    { n:'2', s:'WIDE_TYPES 인가', m:'자료·예정·변경·취소·곧시작·VOD 6종', p:'wide.msg' },
+    { n:'3', s:'집합 삽입', m:'INSERT … SELECT · ON CONFLICT DO NOTHING', p:'wide.sql' },
+    { n:'4', s:'Slice 결과', m:'scanned · inserted · insertedRecipients · lastUserId', p:'cursor' },
+    { n:'5', s:'다음 조각?', m:'scanned ≥ limit 이면 큐로 되돌린다', p:'cursor' },
+  ],
+  narrow: [
+    { n:'1', s:'ENROLLMENT_CANCELED?', m:'맞으면 처리 축만 닫고 return — 알림을 만들지 않는다', p:'narrow.row' },
+    { n:'2', s:'type 검사', m:'수강 3종은 WIDE도 INSTRUCTOR도 아니다', p:'queue' },
+    { n:'3', s:'수신자 확정', m:'신청은 강사에게 · 판정은 학생에게', p:'narrow.msg' },
+    { n:'4', s:'단건 삽입', m:'커서 없음 · ON CONFLICT는 그대로', p:'narrow.insert' },
+  ],
+  timed: [
+    { n:'1', s:'WIDE_TYPES 인가', m:'LIVE_STARTING_SOON도 넓은 팬아웃', p:'timed.msg' },
+    { n:'2', s:'리드타임 매칭', m:'강의 → 커리큘럼 → 기본값 COALESCE', p:'timed.sql' },
+    { n:'3', s:'강사 별도 가지', m:'첫 조각에서만 · 강사는 수강생이 아니다', p:'instructor-branch' },
+    { n:'4', s:'다음 조각?', m:'커서는 일반 팬아웃과 같다', p:'cursor' },
+  ],
+};
+
+/* ────────────────────────────────────────────────────────────────
+   4. 그리기
+   ──────────────────────────────────────────────────────────────── */
+const stage = document.getElementById('stage');
+const svg = document.getElementById('wires');
+const NS = 'http://www.w3.org/2000/svg';
+let boxEls = {}, pathEls = {}, hitEls = {};
+let stageScale = 1, dragState = null, justDragged = false;
+/* 원래 배치 — 드래그가 좌표를 바꾸므로 되돌릴 값을 미리 떠 둔다. */
+const ORIGIN = Object.fromEntries(Object.entries(VIEWS).map(([k, v]) =>
+  [k, Object.fromEntries(Object.entries(v.boxes).map(([id, b]) => [id, { x: b.x, y: b.y }]))]));
+// 현재 뷰의 배치. applyView가 갈아끼운다.
+let BOXES = LOGICAL_BOXES, WIRES = LOGICAL_WIRES, SCENARIOS = LOGICAL_SCENARIOS;
+let packet, ghosts = [];
+
+function anchor(b, side) {
+  switch (side) {
+    case 'l': return { x: b.x, y: b.y + b.h / 2 };
+    case 'r': return { x: b.x + b.w, y: b.y + b.h / 2 };
+    case 't': return { x: b.x + b.w / 2, y: b.y };
+    case 'b': return { x: b.x + b.w / 2, y: b.y + b.h };
+  }
+}
+
+function wirePath(w) {
+  const a = anchor(BOXES[w.from], w.fs), z = anchor(BOXES[w.to], w.ts);
+  if (w.arc) {
+    const mx = (a.x+z.x)/2, my = (a.y+z.y)/2, dx = z.x-a.x, dy = z.y-a.y;
+    const len = Math.hypot(dx,dy) || 1, nx = -dy/len, ny = dx/len;
+    return `M ${a.x} ${a.y} Q ${mx+nx*w.arc} ${my+ny*w.arc} ${z.x} ${z.y}`;
+  }
+  return `M ${a.x} ${a.y} L ${z.x} ${z.y}`;
+}
+
+/** 박스를 옮기면 그 박스에 닿은 선을 전부 다시 긋는다(보이는 선 + 커서용 두꺼운 선). */
+function redrawWires() {
+  for (const w of WIRES) {
+    const d = wirePath(w);
+    pathEls[w.id].setAttribute('d', d);
+    hitEls[w.id]?.setAttribute('d', d);
+  }
+  place();
+}
+
+/** 뷰 하나를 통째로 다시 그린다 — 박스·영역·배선·데이터 덩어리. */
+function buildStage(view) {
+  BOXES = view.boxes; WIRES = view.wires; SCENARIOS = view.scenarios;
+  stage.querySelectorAll('.box, .zone, .packet, .ghost').forEach(el => el.remove());
+  svg.querySelectorAll('path').forEach(el => el.remove());
+  boxEls = {}; pathEls = {}; hitEls = {}; ghosts = [];
+
+  for (const z of view.zones) {
+    const zi = document.createElement('div');
+    zi.className = 'zone';
+    zi.id = z.id;
+    zi.style.cssText = `left:${z.x}px; top:${z.y}px; width:${z.w}px; height:${z.h}px;`;
+    const sp = document.createElement('span');
+    sp.textContent = z.label;
+    zi.appendChild(sp);
+    stage.appendChild(zi);
+  }
+
+// 박스
+for (const [id, b] of Object.entries(BOXES)) {
+  const el = document.createElement('div');
+  el.className = 'box';
+  el.style.cssText = `left:${b.x}px; top:${b.y}px; width:${b.w}px; min-height:${b.h}px;`;
+  el.innerHTML = ICON_SVG(b.ic, b.tint)
+    + '<div class="bd"><div class="k"></div><div class="t"></div><div class="d"></div></div>';
+  el.querySelector('.k').textContent = b.kind;
+  el.querySelector('.t').textContent = b.title;
+  el.querySelector('.d').textContent = b.desc;
+  if (b.click) {
+    const peek = document.createElement('button');
+    peek.className = 'peek';
+    peek.type = 'button';
+    peek.textContent = '내부 보기';
+    el.appendChild(peek);
+  }
+  el.dataset.box = id;
+  stage.appendChild(el);
+  boxEls[id] = el;
+}
+
+for (const w of WIRES) {
+  const p = document.createElementNS(NS, 'path');
+  p.setAttribute('d', wirePath(w));
+  p.setAttribute('marker-end', 'url(#ah)');
+  p.style.color = 'var(--line)';
+  p.dataset.wire = w.id;
+  svg.appendChild(p);
+  pathEls[w.id] = p;
+}
+
+  packet = document.createElement('div');
+  packet.className = 'packet';
+  stage.appendChild(packet);
+  for (let i = 0; i < 7; i++) {
+    const g = document.createElement('div');
+    g.className = 'ghost';
+    stage.appendChild(g);
+    ghosts.push({ el: g, x: 0, y: 0 });
+  }
+  bindStageHandlers();
+}
+
+// 화살표 촉은 한 번만 정의한다(뷰를 바꿔도 그대로 쓴다).
+const defs = document.createElementNS(NS, 'defs');
+defs.innerHTML =
+  `<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+     <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" stroke="none"/>
+   </marker>`;
+svg.appendChild(defs);
+
+/* ────────────────────────────────────────────────────────────────
+   5. 패널
+   ──────────────────────────────────────────────────────────────── */
+const pTitle = document.getElementById('p-title');
+const pSrc = document.getElementById('p-src');
+const pBody = document.getElementById('p-body');
+const pinned = document.getElementById('pinned');
+
+const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+function highlight(code, lang) {
+  let h = esc(code);
+  h = h.replace(/(\/\/[^\n]*|--[^\n]*)/g, '<span class="k-com">$1</span>');
+  if (lang === 'json') {
+    h = h.replace(/&quot;([^&]*?)&quot;(\s*:)/g, '<span class="k-key">"$1"</span>$2');
+    h = h.replace(/:(\s*)&quot;([^&]*?)&quot;/g, ':$1<span class="k-str">"$2"</span>');
+    h = h.replace(/\b(null|true|false)\b/g, '<span class="k-kw">$1</span>');
+    h = h.replace(/:(\s*)(\d+)/g, ':$1<span class="k-num">$2</span>');
+  } else if (lang === 'sql') {
+    h = h.replace(/\b(WITH|AS|SELECT|FROM|WHERE|AND|OR|ORDER BY|LIMIT|INSERT INTO|VALUES|ON CONFLICT|DO NOTHING|RETURNING|CAST|IS NULL|COALESCE|count|array_agg|gen_random_uuid|UNIQUE|DESC)\b/g,
+      '<span class="k-kw">$1</span>');
+    h = h.replace(/'([^']*)'/g, "<span class=\"k-str\">'$1'</span>");
+    h = h.replace(/(:[a-zA-Z]\w*)/g, '<span class="k-key">$1</span>');
+  } else {
+    h = h.replace(/\b(public|record|void|return|if|final|static|const|await|new|class|import)\b/g, '<span class="k-kw">$1</span>');
+    h = h.replace(/&quot;([^&]*?)&quot;/g, '<span class="k-str">"$1"</span>');
+    h = h.replace(/'([^']*)'/g, "<span class=\"k-str\">'$1'</span>");
+  }
+  return h;
+}
+
+let renderedKey = null;
+function render(key) {
+  const d = P[key];
+  if (!d) return;
+  // 같은 내용을 다시 그리지 않는다 — 매번 innerHTML을 갈아끼우면 패널이 깜빡이고 스크롤도 튄다.
+  if (key === renderedKey) return;
+  renderedKey = key;
+  pTitle.textContent = d.title;
+  pSrc.textContent = d.src;
+  let html = '';
+  if (d.why) html += `<p class="why">${d.why}</p>`;
+  if (d.table) {
+    html += '<table class="mini">';
+    for (const [k, v] of d.table) html += `<tr><td>${esc(k)}</td><td class="mono">${esc(v)}</td></tr>`;
+    html += '</table>';
+  }
+  for (const b of (d.blocks || [])) html += `<pre>${highlight(b.code, b.lang)}</pre>`;
+  if (d.after) html += d.after;
+  pBody.innerHTML = html;
+}
+
+/* ────────────────────────────────────────────────────────────────
+   6. 애니메이션 — rAF가 좌표를 직접 찍는다
+   ──────────────────────────────────────────────────────────────── */
+const state = {
+  viewName: 'logical',
+  scenario: 'wide',
+  leg: 0,
+  t: 0,            // 현재 구간 진행도 0~1
+  playing: true,
+  speed: 1,
+  loop: true,
+  hovering: null,  // 호버 중이면 그 payload key
+};
+
+const legs = () => SCENARIOS[state.scenario].legs;
+const COLORS = { evt: 'var(--evt)', row: 'var(--row)', msg: 'var(--msg)', ok: 'var(--ok)' };
+
+const ticksEl = document.getElementById('ticks');
+const legnameEl = document.getElementById('legname');
+
+function buildTicks() {
+  ticksEl.innerHTML = '';
+  legs().forEach((_, i) => {
+    const t = document.createElement('div');
+    t.className = 'tick';
+    t.title = legs()[i].name;
+    t.addEventListener('click', () => { state.leg = i; state.t = 0; sync(); });
+    t.style.cursor = 'pointer';
+    ticksEl.appendChild(t);
+  });
+}
+
+function applyScenario(name) {
+  state.scenario = name;
+  state.leg = 0; state.t = 0;
+  const sc = SCENARIOS[name];
+  const on = new Set(sc.boxes);
+  for (const [id, el] of Object.entries(boxEls)) el.classList.toggle('off', !on.has(id));
+  const usedWires = new Set(sc.legs.map(l => l.wire));
+  for (const [id, p] of Object.entries(pathEls)) p.classList.toggle('dimmed', !usedWires.has(id));
+  /*
+   * 시각형은 업무 트랜잭션이 아니다 — 사건이 없고 폴링이 자기 트랜잭션에서 아웃박스에 넣는다.
+   * 같은 테두리에 같은 문구를 두면 거짓말이 된다.
+   */
+  const txZone = document.querySelector('#zone-tx span');
+  if (txZone) {
+    txZone.textContent = name === 'timed'
+      ? '폴링 트랜잭션 — 발화 표시와 아웃박스를 함께 커밋'
+      : '같은 트랜잭션 — 여기까지가 업무 커밋';
+  }
+  document.querySelectorAll('[data-scenario]').forEach(b =>
+    b.setAttribute('aria-pressed', String(b.dataset.scenario === name)));
+  if (DRAWER[name]) {
+    document.getElementById('drawer-sc').textContent = sc.label;
+    buildDrawer();
+  }
+  buildTicks();
+  sync();
+}
+
+function buildDrawer() {
+  const flow = document.getElementById('drawer-flow');
+  flow.innerHTML = '';
+  DRAWER[state.scenario].forEach((s, i, arr) => {
+    const el = document.createElement('div');
+    el.className = 'step';
+    el.innerHTML = `<div class="n"></div><div class="s"></div><div class="m"></div>`;
+    el.querySelector('.n').textContent = s.n;
+    el.querySelector('.s').textContent = s.s;
+    el.querySelector('.m').textContent = s.m;
+    el.addEventListener('mouseenter', () => { state.hovering = s.p; render(s.p); markPinned(); });
+    el.addEventListener('mouseleave', () => { state.hovering = null; sync(); });
+    el.addEventListener('click', () => jumpTo(legs().findIndex(l => l.p === s.p)));
+    flow.appendChild(el);
+    if (i < arr.length - 1) {
+      const a = document.createElement('div');
+      a.className = 'arrowdot'; a.textContent = '→';
+      flow.appendChild(a);
+    }
+  });
+}
+
+function markPinned() {
+  if (state.hovering) {
+    pinned.className = 'pinned hover';
+    pinned.textContent = '🔍 커서를 올린 지점';
+  } else {
+    pinned.className = 'pinned';
+    pinned.textContent = state.playing ? '▶ 재생 중 — 지금 구간' : '⏸ 멈춤 — 이 구간에 머문다';
+  }
+}
+
+function sync() {
+  const L = legs()[state.leg];
+  // 트랙
+  [...ticksEl.children].forEach((t, i) => {
+    t.className = 'tick' + (i < state.leg ? ' done' : i === state.leg ? ' now' : '');
+  });
+  legnameEl.innerHTML = `<b>${state.leg + 1}/${legs().length}</b> · ${esc(L.name)}`;
+  // 선·박스 강조
+  for (const p of Object.values(pathEls)) p.classList.remove('lit');
+  const lit = pathEls[L.wire];
+  if (lit) { lit.classList.add('lit'); lit.style.color = 'var(--accent)'; }
+  for (const p of Object.values(pathEls)) if (p !== lit) p.style.color = 'var(--line)';
+  const w = WIRES.find(x => x.id === L.wire);
+  for (const el of Object.values(boxEls)) el.classList.remove('active');
+  if (w) { boxEls[w.from]?.classList.add('active'); boxEls[w.to]?.classList.add('active'); }
+  // 색
+  packet.style.background = COLORS[L.color];
+  packet.style.boxShadow = `0 0 0 4px color-mix(in srgb, ${COLORS[L.color]} 25%, transparent)`;
+  for (const g of ghosts) g.el.style.background = COLORS[L.color];
+  if (!state.hovering) render(L.p);
+  markPinned();
+  place();
+}
+
+function place() {
+  const L = legs()[state.leg];
+  const path = pathEls[L.wire];
+  if (!path) return;
+  const len = path.getTotalLength();
+  const pt = path.getPointAtLength(len * state.t);
+  packet.style.transform = `translate(${pt.x}px, ${pt.y}px)`;
+  // 잔상
+  for (let i = 0; i < ghosts.length; i++) {
+    const back = Math.max(0, state.t - (i + 1) * 0.035);
+    const gp = path.getPointAtLength(len * back);
+    ghosts[i].el.style.transform = `translate(${gp.x}px, ${gp.y}px)`;
+    ghosts[i].el.style.opacity = String(0.30 - i * 0.04);
+  }
+}
+
+/*
+ * 기본 속도를 절반으로. 배수 버튼(0.5~4x)은 이 값을 기준으로 곱해지므로,
+ * 눈으로 따라갈 수 있는 속도가 1x가 되고 빨리 보고 싶으면 2x·4x를 쓴다.
+ */
+const BASE_SPEED = 0.5;
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(now - last, 60);
+  last = now;
+  if (state.playing) {
+    const L = legs()[state.leg];
+    state.t += (dt * state.speed * BASE_SPEED) / L.ms;
+    if (state.t >= 1) {
+      state.t = 0;
+      if (state.leg + 1 < legs().length) { state.leg++; sync(); }
+      else if (state.loop) { state.leg = 0; sync(); }
+      else { state.t = 1; state.playing = false; updatePlayBtn(); sync(); }
+    } else {
+      place();
+    }
+  }
+  requestAnimationFrame(frame);
+}
+
+/* ────────────────────────────────────────────────────────────────
+   7. 조작
+   ──────────────────────────────────────────────────────────────── */
+const playBtn = document.getElementById('play');
+function updatePlayBtn() {
+  playBtn.textContent = state.playing ? '⏸ 일시정지' : '▶ 재생';
+  playBtn.classList.toggle('on', state.playing);
+}
+playBtn.addEventListener('click', () => { state.playing = !state.playing; updatePlayBtn(); markPinned(); });
+document.getElementById('prev').addEventListener('click', () => {
+  if (state.t > 0.12) state.t = 0; else state.leg = (state.leg - 1 + legs().length) % legs().length;
+  state.t = 0; sync();
+});
+document.getElementById('next').addEventListener('click', () => {
+  state.leg = (state.leg + 1) % legs().length; state.t = 0; sync();
+});
+document.querySelectorAll('[data-speed]').forEach(b => b.addEventListener('click', () => {
+  state.speed = parseFloat(b.dataset.speed);
+  document.querySelectorAll('[data-speed]').forEach(x =>
+    x.setAttribute('aria-pressed', String(x === b)));
+}));
+document.getElementById('loop').addEventListener('click', (e) => {
+  state.loop = !state.loop;
+  e.currentTarget.setAttribute('aria-pressed', String(state.loop));
+});
+// 호버 — 박스
+const BOX_PAYLOAD = {
+  evt: () => state.scenario === 'narrow' ? 'narrow.event' : 'wide.event',
+  sched: () => 'timed.schedule',
+  listener: () => state.scenario === 'narrow' ? 'narrow.listener' : 'wide.listener',
+  poller: () => 'timed.poll',
+  outbox: () => 'outbox',
+  relay: () => 'relay',
+  queue: () => 'queue',
+  worker: () => state.scenario === 'narrow' ? 'narrow.insert'
+              : state.scenario === 'timed' ? 'timed.sql' : 'wide.sql',
+  db: () => state.scenario === 'narrow' ? 'narrow.row' : 'row',
+  rest: () => 'rest', stomp: () => 'stomp', push: () => 'push', sw: () => 'sw',
+  // 서비스 배치 뷰
+  browser: () => 'svc.request', nginx: () => 'svc.request', spring: () => 'svc.consume',
+  rabbit: () => 'svc.queue', pg: () => 'svc.tx', redis: () => 'svc.session',
+  fcm: () => 'svc.push',
+};
+/**
+ * 이 박스를 누르면 갈 구간.
+ *
+ * 호버가 보여 주는 것과 <b>같은 데이터</b>를 가진 구간으로 간다 — 눌렀을 때 방금 읽던 내용이
+ * 그대로 남아야 "여기서 멈췄다"가 된다. 그런 구간이 없으면 이 박스로 데이터가 들어오는 구간.
+ */
+function legIndexForBox(id) {
+  const key = BOX_PAYLOAD[id]?.();
+  const list = legs();
+  let i = list.findIndex(l => l.p === key);
+  if (i >= 0) return i;
+  i = list.findIndex(l => WIRES.find(w => w.id === l.wire)?.to === id);
+  if (i >= 0) return i;
+  return list.findIndex(l => WIRES.find(w => w.id === l.wire)?.from === id);
+}
+
+/** 그 구간으로 옮기고 <b>멈춘다.</b> 설명하다 눌렀을 때 화면이 계속 흘러가면 안 된다. */
+function jumpTo(index) {
+  if (index < 0) return;
+  state.leg = index;
+  state.t = 0;
+  state.playing = false;
+  state.hovering = null;
+  updatePlayBtn();
+  sync();
+}
+
+/* ── 배치 바꾸기 — 끌면 옮겨지고 선이 따라온다 ── */
+function dragStart(id, el, e) {
+  if (e.target.closest('.peek') || (e.button != null && e.button !== 0)) return;
+  const b = BOXES[id];
+  dragState = { id, el, sx: e.clientX, sy: e.clientY, ox: b.x, oy: b.y, moved: false };
+  el.style.cursor = 'grabbing';
+}
+function dragMove(e) {
+  if (!dragState) return;
+  // 무대가 축소돼 있으면 커서 이동량도 그만큼 나눠야 손끝과 박스가 붙어 간다.
+  const dx = (e.clientX - dragState.sx) / stageScale;
+  const dy = (e.clientY - dragState.sy) / stageScale;
+  if (!dragState.moved && Math.hypot(dx, dy) < 4) return;   // 손떨림은 클릭으로 둔다
+  dragState.moved = true;
+  const b = BOXES[dragState.id];
+  b.x = Math.round(Math.max(-40, Math.min(960, dragState.ox + dx)));
+  b.y = Math.round(Math.max(-20, Math.min(510, dragState.oy + dy)));
+  dragState.el.style.left = b.x + 'px';
+  dragState.el.style.top = b.y + 'px';
+  redrawWires();
+  e.preventDefault();
+}
+function dragEnd() {
+  if (!dragState) return;
+  dragState.el.style.cursor = '';
+  if (dragState.moved) {
+    justDragged = true;
+    saveLayout();
+    setTimeout(() => { justDragged = false; }, 0);
+  }
+  dragState = null;
+}
+/*
+ * 움직임·놓기는 창에서 듣는다. 박스에 걸면 커서가 조금만 빨라도 박스를 벗어나 이벤트가 끊긴다.
+ * pointer와 mouse를 둘 다 받는 것은 한쪽만 보내는 환경이 있기 때문이다(좌표가 같아 결과도 같다).
+ */
+window.addEventListener('pointermove', dragMove);
+window.addEventListener('mousemove', dragMove);
+window.addEventListener('pointerup', dragEnd);
+window.addEventListener('mouseup', dragEnd);
+window.addEventListener('pointercancel', dragEnd);
+
+const layoutKey = () => `liveclass.pipeline.layout.${state.viewName}`;
+function saveLayout() {
+  try {
+    const pos = Object.fromEntries(Object.entries(BOXES).map(([k, b]) => [k, { x: b.x, y: b.y }]));
+    localStorage.setItem(layoutKey(), JSON.stringify(pos));
+  } catch { /* file://에서 막힐 수 있다 — 저장 못 해도 화면은 그대로 쓴다 */ }
+}
+function loadLayout(view) {
+  try {
+    const raw = localStorage.getItem(layoutKey());
+    if (!raw) return;
+    const pos = JSON.parse(raw);
+    for (const [id, b] of Object.entries(view.boxes)) if (pos[id]) { b.x = pos[id].x; b.y = pos[id].y; }
+  } catch { /* 저장본이 깨졌으면 원래 배치로 */ }
+}
+function resetLayout() {
+  const view = VIEWS[state.viewName];
+  for (const [id, b] of Object.entries(view.boxes)) {
+    const o = ORIGIN[state.viewName][id];
+    if (o) { b.x = o.x; b.y = o.y; }
+  }
+  try { localStorage.removeItem(layoutKey()); } catch { /* 지울 게 없다 */ }
+  applyView(state.viewName);
+}
+
+/** 뷰를 다시 그릴 때마다 새 DOM에 붙인다. */
+function bindStageHandlers() {
+  for (const [id, el] of Object.entries(boxEls)) {
+    el.addEventListener('pointerdown', (e) => dragStart(id, el, e));
+    el.addEventListener('mousedown', (e) => dragStart(id, el, e));
+    el.addEventListener('mouseenter', () => {
+      if (el.classList.contains('off')) return;
+      const key = BOX_PAYLOAD[id]?.();
+      if (!key) return;
+      state.hovering = key; render(key); markPinned();
+    });
+    el.addEventListener('mouseleave', () => { state.hovering = null; sync(); });
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('.peek')) return;   // 내부 펼치기는 따로
+      if (justDragged) return;                 // 방금 끌어다 놓은 것은 클릭이 아니다
+      jumpTo(legIndexForBox(id));
+    });
+  }
+
+  // 화살표는 굵은 투명 히트영역을 덧대야 커서로 잡을 수 있다.
+  for (const w of WIRES) {
+    const hit = document.createElementNS(NS, 'path');
+    hit.setAttribute('d', pathEls[w.id].getAttribute('d'));
+    hit.setAttribute('stroke', 'transparent');
+    hit.setAttribute('stroke-width', '18');
+    hit.setAttribute('fill', 'none');
+    hit.style.cursor = 'pointer';
+    svg.appendChild(hit);
+    hitEls[w.id] = hit;
+    hit.addEventListener('mouseenter', () => {
+      const L = legs().find(l => l.wire === w.id);
+      if (!L) return;
+      state.hovering = L.p; render(L.p); markPinned();
+      pathEls[w.id].classList.add('lit'); pathEls[w.id].style.color = 'var(--accent)';
+    });
+    hit.addEventListener('mouseleave', () => { state.hovering = null; sync(); });
+    hit.addEventListener('click', () => {
+      // 같은 선을 여러 번 지나는 경우(커서 루프)는 첫 번째 통과로 간다.
+      jumpTo(legs().findIndex(l => l.wire === w.id));
+    });
+  }
+
+  const peekBtn = boxEls.worker?.querySelector('.peek');
+  if (peekBtn) {
+    peekBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleDrawer(drawer.hasAttribute('hidden'), true);
+    });
+  }
+}
+
+// 워커 내부 펼치기 — 논리 뷰에만 있다
+const drawer = document.getElementById('drawer');
+const peekMain = document.getElementById('peek-main');
+
+/** 여는 곳이 둘(박스 안 작은 글씨 · 그림 아래 큰 버튼)이라 상태를 한곳에서 맞춘다. */
+function toggleDrawer(open, scroll) {
+  if (open) drawer.removeAttribute('hidden'); else drawer.setAttribute('hidden', '');
+  const peekBtn = boxEls.worker?.querySelector('.peek');
+  if (peekBtn) peekBtn.textContent = open ? '접기' : '내부 보기';
+  peekMain.setAttribute('aria-expanded', String(open));
+  peekMain.textContent = open
+    ? '⌃ 워커 내부 접기'
+    : '⌄ 팬아웃 워커 안을 열어 본다 — 수신자 규칙 · 집합 삽입 · 커서';
+  if (open && scroll) drawer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+peekMain.addEventListener('click', () => toggleDrawer(drawer.hasAttribute('hidden'), false));
+
+/* ── 뷰 전환 ── */
+function applyView(name) {
+  const view = VIEWS[name];
+  state.viewName = name;
+  loadLayout(view);
+  buildStage(view);
+
+  // 시나리오 버튼은 뷰마다 다르다. 하나뿐이면 아예 감춘다.
+  const seg = document.getElementById('scenario-seg');
+  const keys = Object.keys(view.scenarios);
+  seg.innerHTML = '';
+  seg.hidden = keys.length < 2;
+  for (const k of keys) {
+    const b = document.createElement('button');
+    b.dataset.scenario = k;
+    b.textContent = view.scenarios[k].label;
+    b.addEventListener('click', () => applyScenario(k));
+    seg.appendChild(b);
+  }
+
+  // 워커 내부는 논리 뷰에만 있다.
+  toggleDrawer(false, false);
+  peekMain.hidden = !view.drawer;
+
+  document.querySelectorAll('[data-view]').forEach(b =>
+    b.setAttribute('aria-pressed', String(b.dataset.view === name)));
+  applyScenario(keys[0]);
+}
+document.querySelectorAll('[data-view]').forEach(b =>
+  b.addEventListener('click', () => applyView(b.dataset.view)));
+
+// 테마
+document.getElementById('reset-layout').addEventListener('click', resetLayout);
+const themeBtn = document.getElementById('theme');
+themeBtn.addEventListener('click', () => {
+  const cur = document.documentElement.getAttribute('data-theme');
+  const next = cur === 'light' ? 'dark' : cur === 'dark' ? 'light'
+    : (window.matchMedia('(prefers-color-scheme: light)').matches ? 'dark' : 'light');
+  document.documentElement.setAttribute('data-theme', next);
+});
+
+// 키보드
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.code === 'Space') { e.preventDefault(); playBtn.click(); }
+  if (e.code === 'ArrowRight') document.getElementById('next').click();
+  if (e.code === 'ArrowLeft') document.getElementById('prev').click();
+  if (e.key === 'f' || e.key === 'F') toggleFullscreen();
+  // 전체 화면에서는 툴바가 안 보인다 — 숫자키로 시나리오를 바꾼다.
+  if (/^[1-9]$/.test(e.key)) {
+    const keys = Object.keys(VIEWS[state.viewName].scenarios);
+    const target = keys[Number(e.key) - 1];
+    if (target) applyScenario(target);
+  }
+});
+
+// 좁은 화면에서 다이어그램 축소
+function fit() {
+  const wrap = document.querySelector('.stage-wrap');
+  let scale = (wrap.clientWidth - 4) / 1000;
+  if (document.body.classList.contains('fs') || document.fullscreenElement === wrap) {
+    /*
+     * 전체 화면에서는 1배를 넘겨 키운다. 세로도 같이 봐야 아래가 잘리지 않는다 —
+     * 무대 위쪽(툴바)과 아래쪽(진행바)이 차지한 만큼 빼고 남는 높이에 맞춘다.
+     */
+    const track = document.querySelector('.track');
+    const availH = window.innerHeight - wrap.getBoundingClientRect().top
+      - (track ? track.offsetHeight + 40 : 40);
+    scale = Math.min(scale, availH / 530);
+  } else {
+    scale = Math.min(1, scale);
+  }
+  stageScale = scale;
+  stage.style.transform = `scale(${scale})`;
+  stage.style.height = (530 * scale) + 'px';
+  // 무대는 1000px 상자를 확대한 것이라, 남는 가로를 반씩 나눠 가운데로 민다.
+  const room = (wrap.clientWidth - 4) - 1000 * scale;
+  stage.style.marginLeft = (document.fullscreenElement === wrap && room > 0)
+    ? Math.round(room / 2) + 'px' : '';
+}
+
+/* ── 전체 화면 — 발표할 때 그림만 크게 ── */
+const fsBtn = document.getElementById('fullscreen');
+let fsFallback = false;   // 브라우저가 전체 화면을 막았을 때 쓰는 "넓게 보기"
+
+function applyFsClass(on) {
+  document.body.classList.toggle('fs', on);
+  fsBtn.textContent = on ? '⤡ 나가기' : '⤢ 전체 화면';
+  fit();
+}
+
+async function toggleFullscreen() {
+  if (document.fullscreenElement) { await document.exitFullscreen(); return; }
+  if (fsFallback) { fsFallback = false; applyFsClass(false); return; }
+  try {
+    /*
+     * 문서 전체가 아니라 <b>무대 영역만</b> 띄운다 — 툴바가 차지하던 세로까지 그림이 쓴다.
+     * 거부될 뿐 아니라 응답이 영영 안 오는 환경도 있어(일부 내장 창·iframe) 시간 제한을 건다.
+     */
+    await Promise.race([
+      document.querySelector('.stage-wrap').requestFullscreen(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 500)),
+    ]);
+    if (!document.fullscreenElement) throw new Error('not-entered');
+  } catch {
+    fsFallback = true;
+    applyFsClass(true);
+  }
+}
+
+fsBtn.addEventListener('click', toggleFullscreen);
+document.addEventListener('fullscreenchange', () => {
+  fsFallback = false;
+  applyFsClass(Boolean(document.fullscreenElement));
+});
+
+window.addEventListener('resize', fit);
+
+applyView('logical');
+updatePlayBtn();
+fit();
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
