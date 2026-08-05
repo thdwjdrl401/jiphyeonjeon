@@ -6,4 +6,7 @@ export const httpLearningService = {
     const { data } = await apiClient.get<LearningContext>(`/lessons/${lessonId}/learning-context`)
     return data
   },
+  async updateProgress(lessonId, update) {
+    await apiClient.put(`/lessons/${lessonId}/progress`, update)
+  },
 } satisfies LearningService

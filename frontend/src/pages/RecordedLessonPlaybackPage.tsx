@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
 import { studentPaths } from '@/app/router/paths'
 import PersonalAiQuestionPanel from '@/features/ai/PersonalAiQuestionPanel'
+import { useAuth } from '@/features/auth/AuthContext'
 import CaptionDock from '@/features/live-session/CaptionDock'
 import LearningSidebar from '@/features/live-session/LearningSidebar'
 import { normalizeCaption } from '@/features/live-session/captionAdapter'
@@ -10,6 +11,7 @@ import { attachGlossary } from '@/features/live-session/glossaryView'
 import type { LearningPanel } from '@/features/live-session/liveLearningPreview'
 import { getGlossary } from '@/features/live-session/liveSessionService'
 import { useResizablePane } from '@/features/live-session/useResizablePane'
+import { useWatchTracking } from '@/features/live-session/useWatchTracking'
 import HlsMediaPlayer, {
   type HlsMediaSeekRequest,
   type HlsMediaState,
@@ -39,6 +41,8 @@ function stateLabel(state: HlsMediaState) {
 /** 학생 녹화강의: HLS·정확한 후처리 자막과 라이브의 학습 사이드바를 같은 화면에 둔다. */
 export default function RecordedLessonPlaybackPage() {
   const { lessonId = '' } = useParams()
+  const { user } = useAuth()
+  const isInstructor = user?.role === 'INSTRUCTOR'
   const [playerState, setPlayerState] = useState<HlsMediaState>('loading')
   const [reloadToken, setReloadToken] = useState(0)
   const [positionMs, setPositionMs] = useState(0)
@@ -76,6 +80,15 @@ export default function RecordedLessonPlaybackPage() {
     [captionsQuery.data],
   )
   const glossary = attachGlossary(captions, glossaryQuery.data ?? [])
+
+  /*
+   * 시청 구간·학습 진도(ADR-0063·0033). 녹화강의도 커리큘럼 진도의 분모에 들어가므로
+   * (CatalogService의 게시된 RECORDED 레슨), 여기서 세지 않으면 <b>이 강의만 영원히 미완료로
+   * 남아 커리큘럼 진행률을 끌어내린다.</b> 다시보기 화면과 같은 훅·같은 규칙을 쓴다.
+   *
+   * 강사는 세지 않는다 — 검수하며 되감은 것이 학생 재시청으로 잡히면 그래프가 오염된다.
+   */
+  useWatchTracking(lessonId, positionMs, !isInstructor && Boolean(playback), playback?.durationMs ?? null)
 
   const retry = useCallback(() => {
     setPlayerState('loading')
