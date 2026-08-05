@@ -1,3 +1,5 @@
+import { todayLocalStart } from '@/shared/lib/localDateTime'
+
 export interface CurriculumPeriodValue {
   startsAt: string
   endsAt: string
@@ -44,6 +46,7 @@ export default function CurriculumPeriodFields({ idPrefix, value, onChange }: Cu
       <legend>커리큘럼 운영 기간</legend>
       <p className="curriculum-period-fields__hint">
         수강생이 이 커리큘럼으로 학습하는 전체 기간이에요. 수강 신청을 받는 기간이나 개별 강의 공개일과는 별개예요.
+        운영 종료일은 오늘 이후로만 설정할 수 있어요.
       </p>
       <div className="curriculum-period-fields__inputs">
         <label htmlFor={`${idPrefix}-starts-at`}>
@@ -61,6 +64,8 @@ export default function CurriculumPeriodFields({ idPrefix, value, onChange }: Cu
             id={`${idPrefix}-ends-at`}
             type="datetime-local"
             value={value.endsAt}
+            // 이미 지난 날짜로 끝나는 커리큘럼은 만들 수 없다 — 달력에서부터 오늘 이전을 못 고르게 한다.
+            min={todayLocalStart()}
             onChange={(event) => onChange('endsAt', event.target.value)}
           />
         </label>

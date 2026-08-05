@@ -113,9 +113,10 @@ function PendingCurriculumCard({ item }: { item: StudentCurriculumItem }) {
 }
 
 export default function MyCurriculumsPage() {
-  usePageTitle('내 커리큘럼')
   const { user } = useAuth()
   const isInstructor = user?.role === 'INSTRUCTOR'
+  const pageTitle = isInstructor ? '커리큘럼 관리' : '내 커리큘럼'
+  usePageTitle(pageTitle)
   const userId = user?.userId ?? ''
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
@@ -197,7 +198,7 @@ export default function MyCurriculumsPage() {
 
   return (
     <div className="workspace-page my-curriculums-page">
-      <PageHeader title="내 커리큘럼" />
+      <PageHeader title={pageTitle} />
 
       {listError && <InlineNotice tone="danger">커리큘럼 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.</InlineNotice>}
       {!listError && summaryError && (
@@ -212,7 +213,7 @@ export default function MyCurriculumsPage() {
 
       <div className="my-curriculums-page__layout">
         <div className="my-curriculums-page__main">
-          <Panel className="my-curriculums-page__list-panel" title={isInstructor ? '운영 중인 커리큘럼' : '수강 중인 커리큘럼'} action={<div className="compact-controls">{isInstructor && <Link className="button button--primary" to={instructorPaths.newCurriculum}>새 커리큘럼</Link>}<input aria-label="내 커리큘럼 검색" placeholder="제목 검색" value={search} onChange={(event) => { setSearch(event.target.value); setPage(0) }} /><select aria-label="상태 필터" value={status} onChange={(event) => { setStatus(event.target.value); setPage(0) }}><option value="">전체 상태</option>{isInstructor ? <><option value="PUBLISHED">공개 중</option><option value="DRAFT">준비 중</option><option value="ARCHIVED">보관됨</option></> : <><option value="ACTIVE">학습 중</option></>}</select></div>}>
+          <Panel className="my-curriculums-page__list-panel" title={isInstructor ? '운영 중인 커리큘럼' : '수강 중인 커리큘럼'} action={<div className="compact-controls">{isInstructor && <Link className="button button--primary" to={instructorPaths.newCurriculum}>새 커리큘럼</Link>}<input aria-label={`${pageTitle} 검색`} placeholder="제목 검색" value={search} onChange={(event) => { setSearch(event.target.value); setPage(0) }} /><select aria-label="상태 필터" value={status} onChange={(event) => { setStatus(event.target.value); setPage(0) }}><option value="">전체 상태</option>{isInstructor ? <><option value="PUBLISHED">공개 중</option><option value="DRAFT">준비 중</option><option value="ARCHIVED">보관됨</option></> : <><option value="ACTIVE">학습 중</option></>}</select></div>}>
             <div className="dashboard-curriculum-list">
               {displayedCurriculums.map((item) => (
                 <article className="dashboard-curriculum-card" key={item.curriculumId}>

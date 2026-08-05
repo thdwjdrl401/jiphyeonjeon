@@ -261,7 +261,7 @@ export default function RecordedLessonEditPage() {
                 <li key={material.id}>
                   <span className="file-icon">PPTX</span>
                   <div><strong>{material.name}</strong><small>{material.size}</small></div>
-                  {!material.file && <a className="button button--soft button--small" href={`/api/instructor/lessons/${lessonId}/materials/${material.id}/download`}>다운로드</a>}
+                  {!material.file && <a className="button button--soft button--small" href={`/api/instructor/lessons/${lessonId}/materials/${material.id}/download`} download={material.name}>다운로드</a>}
                   <StatusBadge tone={material.file ? 'warning' : 'success'}>{material.file ? '업로드 대기' : '등록됨'}</StatusBadge>
                   <button type="button" aria-label={`${material.name} 제거`} onClick={() => void removeMaterial(material)}>×</button>
                 </li>

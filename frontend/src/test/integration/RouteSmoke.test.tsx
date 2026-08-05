@@ -66,7 +66,7 @@ describe('전체 페이지 라우트', () => {
 
   const instructorRoutes = [
     ['/instructor/profile', '내 프로필'],
-    ['/instructor/curriculums', '내 커리큘럼'],
+    ['/instructor/curriculums', '커리큘럼 관리'],
     ['/instructor/curriculums/new', '새 커리큘럼 만들기'],
     ['/instructor/curriculums/cur-spring-live/manage', '라이브로 완성하는 Spring Boot'],
     ['/instructor/curriculums/cur-spring-live/sections/sec-security/recorded-lessons/new', '녹화강의 업로드'],
@@ -474,12 +474,14 @@ describe('전체 페이지 라우트', () => {
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
     renderAt('/instructor/curriculums/new')
     expect(await screen.findByRole('heading', { name: '강사 전용 기능이에요' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '내 커리큘럼' })).toHaveAttribute('href', '/student/curriculums')
   })
 
   it('강사의 학생 전용 라우트 접근을 상위 라우트에서 차단한다', async () => {
     await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
     renderAt('/student/curriculums')
     expect(await screen.findByRole('heading', { name: '학생 전용 기능이에요' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '커리큘럼 관리' })).toHaveAttribute('href', '/instructor/curriculums')
   })
 
   it('역할 루트는 해당 역할의 내 커리큘럼으로 이동한다', async () => {

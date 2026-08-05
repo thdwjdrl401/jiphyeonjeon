@@ -118,6 +118,29 @@ describe('CurriculumDetailPage', () => {
     expect(screen.getByRole('button', { name: '수강 취소' })).toBeInTheDocument()
   })
 
+  it('자료 팝업의 다운로드 링크는 수강생과 담당 강사가 각자의 경로를 쓴다', async () => {
+    const user = userEvent.setup()
+    await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
+    const { unmount } = renderDetail('/curriculums/cur-spring-live')
+
+    await user.click(await screen.findByRole('button', { name: '자료 목록' }))
+    expect(
+      within(screen.getByRole('dialog')).getByRole('link', { name: 'Spring Boot 커리큘럼 가이드.pptx 다운로드' }),
+    ).toHaveAttribute('href', '/api/curriculums/cur-spring-live/materials/mat-curr-spring-guide/download')
+    unmount()
+
+    await mockAuthService.login({ email: 'instructor01@example.com', password: 'password1' })
+    renderDetail('/curriculums/cur-spring-live')
+
+    await user.click(await screen.findByRole('button', { name: '자료 목록' }))
+    expect(
+      within(screen.getByRole('dialog')).getByRole('link', { name: 'Spring Boot 커리큘럼 가이드.pptx 다운로드' }),
+    ).toHaveAttribute(
+      'href',
+      '/api/instructor/curriculums/cur-spring-live/materials/mat-curr-spring-guide/download',
+    )
+  })
+
   it('수강생은 공개 상태 왼쪽 알림 버튼에서 커리큘럼 알림 설정을 연다', async () => {
     const user = userEvent.setup()
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })

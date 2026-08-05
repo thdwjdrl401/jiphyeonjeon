@@ -183,6 +183,20 @@ describe('알림 센터', () => {
     rows.forEach((row) => expect(row).toHaveClass('is-unread'))
   })
 
+  it('읽음 탭에서는 모두 읽음 버튼을 숨긴다', async () => {
+    const user = userEvent.setup()
+    await loginAsStudent()
+    renderAt('/student/notifications')
+
+    expect((await screen.findByRole('heading', { name: '알림', level: 1 })).closest('.notifications-page')).not.toBeNull()
+    expect(await screen.findByRole('button', { name: '모두 읽음' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: '읽음' }))
+
+    expect(screen.queryByRole('button', { name: '모두 읽음' })).not.toBeInTheDocument()
+    expect(screen.getByText('모두 읽음')).toHaveClass('notification-toolbar__mark-all--hidden')
+  })
+
   it('두 필터 축이 겹쳐서 동작한다', async () => {
     const user = userEvent.setup()
     await loginAsInstructor()

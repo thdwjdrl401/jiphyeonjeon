@@ -5,6 +5,18 @@ import App from '@/App'
 import { mockAuthService, resetMockAuth } from '@/features/auth/mockAuthService'
 import { resetMockCurriculumManagement } from '@/features/curriculum/mockCurriculumManagementService'
 import { buildMockCurriculumOutline, getMockCurriculum, publishMockCurriculum } from '@/features/demo/mockDatabase'
+import { todayLocalStart } from '@/shared/lib/localDateTime'
+
+/**
+ * 오늘에서 days만큼 옮긴 datetime-local 문자열. 고정 날짜를 박으면 그날이 지나는 순간
+ * "과거 일정" 검증에 걸려 테스트가 썩는다(실제로 2026-08-04로 박아 둔 값이 그렇게 됐다).
+ */
+function localDateTimeInDays(days: number, time = '20:30'): string {
+  const date = new Date()
+  date.setDate(date.getDate() + days)
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${time}`
+}
 
 async function renderAsInstructor(path: string) {
   await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
@@ -202,6 +214,27 @@ describe('커리큘럼 작업 화면', () => {
     expect(period?.endsAt).toBe(new Date('2026-10-15T22:00').toISOString())
   })
 
+  // 브라우저 기본 검증이 "유효한 값을 입력하세요" 풍선으로 먼저 가로채면 무엇이 틀렸는지 알 수 없다.
+  // 키보드로 과거 종료일을 직접 넣어도 우리 문구가 나와야 한다.
+  it('운영 종료일을 오늘보다 이전으로 넣으면 토스트로 이유를 알리고 만들지 않는다', async () => {
+    const user = userEvent.setup()
+    await renderAsInstructor('/instructor/curriculums/new')
+    await user.type(
+      await screen.findByPlaceholderText('예: 라이브로 완성하는 Spring Boot'),
+      '지난 날짜로 끝나는 커리큘럼',
+    )
+
+    fireEvent.change(screen.getByLabelText('운영 종료일'), { target: { value: localDateTimeInDays(-1, '09:00') } })
+
+    await user.click(screen.getByRole('button', { name: '초안 만들기' }))
+
+    // 폼 아래 고정 문구가 아니라 토스트로 나가야 한다 — 알림 영역 안에서 찾는다.
+    const toastRegion = await screen.findByRole('region', { name: '알림' })
+    expect(await within(toastRegion).findByText('운영 종료일은 오늘보다 이전일 수 없습니다.')).toBeInTheDocument()
+    // 초안이 만들어지지 않았으니 생성 폼에 그대로 머문다.
+    expect(window.location.pathname).toBe('/instructor/curriculums/new')
+  })
+
   it('관리 화면에서 섹션 이름과 설명을 수정한다', async () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
@@ -299,7 +332,7 @@ describe('커리큘럼 작업 화면', () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/new')
     await user.type(await screen.findByLabelText(/강의 제목/), '중복 방지 강의')
-    await user.type(screen.getByLabelText(/예정 시작 시각/), '2026-08-04T20:30')
+    await user.type(screen.getByLabelText(/예정 시작 시각/), localDateTimeInDays(1))
     await user.click(screen.getByRole('button', { name: '강의 생성 저장' }))
 
     // 생성 성공 후엔 구성(섹션·강의 목록) 화면으로 돌아간다 — 폼을 떠나므로 연타로 매번 새
@@ -366,11 +399,49 @@ describe('커리큘럼 작업 화면', () => {
 
     await user.type(screen.getByLabelText(/강의 제목/), '보안 심화 1강')
     expect(submit).toBeDisabled()   // 일정 미입력 — 여전히 비활성
-    await user.type(scheduledAt, '2026-08-04T20:30')
+    await user.type(scheduledAt, localDateTimeInDays(1))
     expect(submit).toBeEnabled()
 
     await user.click(submit)
     expect(await screen.findByText('강의 정보와 라이브 일정이 저장되었습니다.')).toBeInTheDocument()
+  })
+
+  // 이미 지난 시각으로 시작하는 라이브는 새로 만들 수 없다.
+  it('라이브 예정일을 오늘보다 이전으로 넣으면 토스트로 이유를 알리고 만들지 않는다', async () => {
+    const user = userEvent.setup()
+    await renderAsInstructor('/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/new')
+    await user.type(await screen.findByLabelText(/강의 제목/), '지난 날짜 라이브')
+    fireEvent.change(screen.getByLabelText(/예정 시작 시각/), { target: { value: localDateTimeInDays(-1) } })
+
+    await user.click(screen.getByRole('button', { name: '강의 생성 저장' }))
+
+    // 폼 아래 고정 문구가 아니라 토스트로 나가야 한다 — 알림 영역 안에서 찾는다.
+    const toastRegion = await screen.findByRole('region', { name: '알림' })
+    expect(await within(toastRegion).findByText('라이브 예정일은 오늘보다 이전일 수 없습니다.')).toBeInTheDocument()
+    // 저장되지 않았으니 생성 폼에 그대로 머문다.
+    expect(screen.getByRole('button', { name: '강의 생성 저장' })).toBeInTheDocument()
+    expect(window.location.pathname).toMatch(/\/lessons\/new$/)
+  })
+
+  it('새 강의 폼은 예정 시작 시각에 오늘 하한선을 걸고 오늘 당일은 허용한다', async () => {
+    const user = userEvent.setup()
+    await renderAsInstructor('/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/new')
+
+    expect(await screen.findByLabelText(/예정 시작 시각/)).toHaveAttribute('min', todayLocalStart())
+
+    await user.type(screen.getByLabelText(/강의 제목/), '오늘 시작 라이브')
+    fireEvent.change(screen.getByLabelText(/예정 시작 시각/), { target: { value: localDateTimeInDays(0, '23:30') } })
+    await user.click(screen.getByRole('button', { name: '강의 생성 저장' }))
+
+    expect(await screen.findByText('강의 정보와 라이브 일정이 저장되었습니다.')).toBeInTheDocument()
+  })
+
+  // 수정에는 하한선을 걸지 않는다 — 어제 잡아 둔 라이브의 다른 항목만 고치려던 사람이 막히면 안 된다.
+  it('강의 수정 화면에서는 예정 시작 시각에 하한선을 걸지 않는다', async () => {
+    await renderAsInstructor('/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/les-security/edit')
+
+    const scheduledAt = await screen.findByLabelText(/예정 시작 시각/)
+    expect(scheduledAt).not.toHaveAttribute('min')
   })
 
   it('새 강의 폼의 자료 영역에 PPTX 파일을 드롭해 추가한다', async () => {
@@ -402,7 +473,7 @@ describe('커리큘럼 작업 화면', () => {
     expect(within(breadcrumbs).queryByText('강의 수정')).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '강의 수정' }).closest('header')?.querySelector('p')).toBeNull()
     await user.clear(scheduledAt)
-    await user.type(scheduledAt, '2026-08-04T20:30')
+    await user.type(scheduledAt, localDateTimeInDays(1))
     await user.click(screen.getByRole('button', { name: '강의 수정 저장' }))
     expect(await screen.findByText('강의 정보와 라이브 일정이 저장되었습니다.')).toBeInTheDocument()
   })
@@ -448,6 +519,29 @@ describe('커리큘럼 작업 화면', () => {
       '/instructor/live-sessions/ses-security-live/preflight',
     )
     expect(screen.queryByRole('link', { name: '강의 상세' })).not.toBeInTheDocument()
+  })
+
+  // 자료 다운로드는 앱 서버가 presigned URL로 302를 주는 링크다 — 경로가 역할별로 갈린다.
+  it('강의 상세 자료 다운로드는 강사·수강생이 각자의 경로를 쓴다', async () => {
+    const { unmount } = await renderAsInstructor(
+      '/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/les-security',
+    )
+
+    const instructorLink = await screen.findByRole('link', { name: 'spring-security-basics.pptx 다운로드' })
+    expect(instructorLink).toHaveAttribute(
+      'href',
+      '/api/instructor/lessons/les-security/materials/mat-security/download',
+    )
+    // presigned URL에는 원본 파일명이 없다 — 저장될 이름을 링크가 들고 있어야 한다.
+    expect(instructorLink).toHaveAttribute('download', 'spring-security-basics.pptx')
+    unmount()
+
+    await renderAsStudent('/student/curriculums/cur-spring-live/sections/sec-security/lessons/les-security')
+
+    expect(await screen.findByRole('link', { name: 'spring-security-basics.pptx 다운로드' })).toHaveAttribute(
+      'href',
+      '/api/lessons/les-security/materials/mat-security/download',
+    )
   })
 
   it('라이브 일정이 없는 강사 강의 상세는 강의 수정에서 일정을 추가하도록 안내한다', async () => {

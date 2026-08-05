@@ -6,7 +6,7 @@ import { adminPaths, instructorPaths, publicPaths, studentPaths } from './paths'
  * 상단 네비게이션 항목 하나.
  *
  * `activePatterns`가 `to` 말고 따로 있는 이유: 활성 판정은 링크 목적지보다 넓다. 강사가
- * 커리큘럼 관리·강의 편집·라이브 점검 화면에 있어도 "내 커리큘럼"이 켜져 있어야 하는데,
+ * 커리큘럼 관리·강의 편집·라이브 점검 화면에 있어도 "커리큘럼 관리"가 켜져 있어야 하는데,
  * 그 화면들의 경로는 `to`와 다르다. 경로 완전 일치로 판정하면 하위 화면에서 표시가 꺼진다.
  */
 export interface NavigationItem {
@@ -16,7 +16,7 @@ export interface NavigationItem {
   activePatterns: string[]
   /**
    * 활성에서 뺄 경로들. 더 구체적인 형제 항목이 가진 경로를 적는다 —
-   * `/instructor/curriculums/new`는 "커리큘럼 만들기"의 것이므로 "내 커리큘럼"은 꺼져야 한다.
+   * `/instructor/curriculums/new`는 "커리큘럼 만들기"의 것이므로 "커리큘럼 관리"는 꺼져야 한다.
    */
   inactivePatterns?: string[]
 }
@@ -45,9 +45,9 @@ export const navigationItemsByRole: Record<UserRole, NavigationItem[]> = {
   INSTRUCTOR: [
     exploreCurriculums,
     {
-      label: '내 커리큘럼',
+      label: '커리큘럼 관리',
       to: instructorPaths.curriculums,
-      // 목록·관리·강의 편집·라이브 점검·녹화 처리까지 모두 "내 커리큘럼" 축이다.
+      // 목록·관리·강의 편집·라이브 점검·녹화 처리까지 모두 "커리큘럼 관리" 축이다.
       activePatterns: [instructorPaths.curriculums, '/instructor/live-sessions', '/instructor/lessons'],
       inactivePatterns: [instructorPaths.newCurriculum],
     },
