@@ -13,7 +13,7 @@ from alembic import op
 
 
 revision = "0006_curriculum_scope_materials"
-down_revision = "0004_annotation_text_unbounded"
+down_revision = "0005_material_key_term_result"
 branch_labels = None
 depends_on = None
 

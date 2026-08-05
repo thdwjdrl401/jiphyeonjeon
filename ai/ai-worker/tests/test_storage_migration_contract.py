@@ -200,6 +200,7 @@ def test_annotation_text_downgrade_trims_before_narrowing(monkeypatch) -> None:
 
     assert ddl.index("UPDATE ai.annotation_highlight") < ddl.index("ALTER COLUMN text TYPE varchar")
 
+
 def test_key_term_result_status_is_persisted_on_material_version(monkeypatch) -> None:
     migration = importlib.import_module("migrations.versions.0005_material_key_term_result")
     monkeypatch.delenv("AI_WORKER_DATABASE_ROLE", raising=False)
