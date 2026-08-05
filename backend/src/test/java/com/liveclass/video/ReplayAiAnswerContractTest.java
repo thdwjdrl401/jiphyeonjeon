@@ -23,6 +23,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.MockMvcPrint;
 import org.springframework.http.HttpHeaders;
@@ -42,6 +43,10 @@ import javax.crypto.spec.SecretKeySpec;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Duration;
@@ -52,9 +57,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -86,9 +89,28 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Boot 기본 출력 핸들러는 매 요청마다 응답 헤더를 읽는데, 그 사이 헤더가 바뀌면 스트림 복사가 깨져
  * {@code "End size 1 is less than fixed size 2"}로 무작위 실패한다.
  */
-@SpringBootTest
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc(print = MockMvcPrint.NONE)
 class ReplayAiAnswerContractTest {
+
+    /**
+     * 질의만 <b>우리 앱의 실제 포트</b>로 쏘기 위한 값. <b>ai-api는 그대로 목이다</b> —
+     * 바뀌는 것은 테스트가 우리 앱을 부르는 방법뿐이고, 외부로 나가는 호출은 없다
+     * ({@link #aiApiProperties}가 127.0.0.1 루프백 목을 가리킨다).
+     *
+     * <p>준비 단계(로그인·커리큘럼 생성·게시)는 그대로 MockMvc를 쓴다 — 세션이 Redis에 있어
+     * MockMvc로 받은 쿠키가 실제 포트로 보낸 요청에서도 통한다.
+     *
+     * <p><b>SSE를 MockMvc로 재면 안 된다.</b> {@code SseEmitter}는 {@code complete()}로 끝나는데
+     * MockMvc는 오지 않는 async dispatch를 기다려, 스트리밍 응답마다 기본 타임아웃 10초를 통째로
+     * 쓴다. 계측하면 {@code perform=10201ms}인데 그중 SSE 중계는 <b>92ms</b>였다. 이 클래스의
+     * 질의 11건이 각각 10초를 버려 132초 중 110초가 순수 대기였다.
+     *
+     * <p>실제 포트로 받으면 본문이 스트림 종료와 함께 완결되므로, "다 왔는지" 폴링으로 가늠하던
+     * {@code awaitSse}·{@code awaitStableBody}도 함께 사라졌다.
+     */
+    @LocalServerPort
+    private int port;
 
     private static final String SECRET = "test-ai-internal-secret";
 
@@ -118,24 +140,6 @@ class ReplayAiAnswerContractTest {
     private static final AtomicReference<Responder> responder = new AtomicReference<>();
     private static final AtomicReference<CapturedRequest> captured = new AtomicReference<>();
 
-    /**
-     * <b>업스트림이 응답을 시작해도 되는 시점.</b>
-     *
-     * <p>{@code MockHttpServletResponse}는 스레드 안전하지 않은 테스트 대역이다. MockMvc가 초기
-     * 디스패치를 마치기 전에 릴레이가 스트리밍을 시작하면, 필터 체인을 풀며 헤더를 쓰는
-     * <b>테스트 스레드</b>와 본문을 쓰는 <b>릴레이 스레드</b>가 같은 응답 객체를 동시에 건드려
-     * {@code ConcurrentModificationException}이 난다(HeaderWriterFilter의 헤더 맵에서 터진다).
-     *
-     * <p>이 목은 요청을 받자마자 SSE를 뱉으므로 그 겹침이 실제로 일어난다. <b>빠른 장비일수록 잘
-     * 난다</b> — 8코어 러너에서 재현했고, 4코어 러너에서도 드물게 났다.
-     *
-     * <p>실제 서블릿 컨테이너는 비동기 응답을 안전하게 다루므로 운영 코드의 결함이 아니다.
-     * 그래서 릴레이를 고치는 대신 <b>목이 디스패치가 끝난 뒤에 응답하도록</b> 순서를 확정한다.
-     * 요청 포착({@code captured})은 게이트 앞에서 하므로 "업스트림을 불렀는가"를 보는 단언은
-     * 그대로 유효하다.
-     */
-    private static final AtomicReference<CountDownLatch> dispatchGate =
-            new AtomicReference<>(new CountDownLatch(0));
 
     private interface Responder {
         void respond(HttpExchange exchange) throws IOException;
@@ -161,8 +165,6 @@ class ReplayAiAnswerContractTest {
             captured.set(new CapturedRequest(exchange.getRequestURI().getPath(), headers, body));
             Responder current = responder.get();
             try {
-                // 디스패치가 끝나기 전에 쓰기 시작하면 테스트 스레드와 응답 객체를 다툰다(dispatchGate).
-                awaitDispatch();
                 current.respond(exchange);
             } finally {
                 exchange.close();
@@ -176,17 +178,6 @@ class ReplayAiAnswerContractTest {
         aiApi.stop(0);
     }
 
-    /**
-     * 초기 디스패치가 끝날 때까지 기다린다. 열리지 않아도 계속 진행한다 — 게이트가 잘못되어
-     * 테스트가 통째로 멈추는 것보다, 원래 보려던 단언에서 깨지는 편이 원인을 읽기 쉽다.
-     */
-    private static void awaitDispatch() {
-        try {
-            dispatchGate.get().await(10, TimeUnit.SECONDS);
-        } catch (InterruptedException interrupted) {
-            Thread.currentThread().interrupt();
-        }
-    }
 
     @DynamicPropertySource
     static void aiApiProperties(DynamicPropertyRegistry registry) {
@@ -235,7 +226,7 @@ class ReplayAiAnswerContractTest {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String[] ids = createReadyRecording(instructor);
 
-        ask(ids[0], instructor, "  방금 설명한 개념은?  ", 30_000).andExpect(status().isOk());
+        assertOk(ask(ids[0], instructor, "  방금 설명한 개념은?  ", 30_000));
 
         CapturedRequest request = awaitRequest();
         // v1(/internal/v1/...)로 가면 ai-api가 시간 의미가 다른 요청을 받는다 — 경로가 계약이다.
@@ -251,7 +242,7 @@ class ReplayAiAnswerContractTest {
         String[] ids = createReadyRecording(instructor);
 
         long before = System.currentTimeMillis();
-        ask(ids[0], instructor, "  질문 원문 그대로  ", 735_000).andExpect(status().isOk());
+        assertOk(ask(ids[0], instructor, "  질문 원문 그대로  ", 735_000));
         long after = System.currentTimeMillis();
 
         JsonNode body = jsonMapper.readTree(new String(awaitRequest().rawBody(), StandardCharsets.UTF_8));
@@ -296,7 +287,7 @@ class ReplayAiAnswerContractTest {
         // 질문(세션 25,000ms) 이후에 시작한 발화 — 아직 듣지 않은 말이라 근거가 될 수 없다.
         saveSegment(sessionId, ids[0], "stt-attempt-1", 2, 30_000, 32_000, "다음 주제로 넘어가면");
 
-        ask(ids[0], instructor, "컨슈머 그룹이 뭐야?", 25_000).andExpect(status().isOk());
+        assertOk(ask(ids[0], instructor, "컨슈머 그룹이 뭐야?", 25_000));
 
         JsonNode captions = jsonMapper
                 .readTree(new String(awaitRequest().rawBody(), StandardCharsets.UTF_8))
@@ -323,7 +314,7 @@ class ReplayAiAnswerContractTest {
         // started를 못 받은 attempt. 시각을 지어내느니 근거에서 뺀다(ADR-0042).
         saveSegment(sessionId, ids[0], "stt-attempt-2", 0, 10_000, 12_000, "앵커 없는 발화");
 
-        ask(ids[0], instructor, "질문", 25_000).andExpect(status().isOk());
+        assertOk(ask(ids[0], instructor, "질문", 25_000));
 
         JsonNode captions = jsonMapper
                 .readTree(new String(awaitRequest().rawBody(), StandardCharsets.UTF_8))
@@ -337,7 +328,7 @@ class ReplayAiAnswerContractTest {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String[] ids = createReadyRecording(instructor);
 
-        ask(ids[0], instructor, "자막 없는 강의 질문", 10_000).andExpect(status().isOk());
+        assertOk(ask(ids[0], instructor, "자막 없는 강의 질문", 10_000));
 
         JsonNode captions = jsonMapper
                 .readTree(new String(awaitRequest().rawBody(), StandardCharsets.UTF_8))
@@ -359,10 +350,8 @@ class ReplayAiAnswerContractTest {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String[] ids = createReadyRecording(instructor);
 
-        MvcResult result = ask(ids[0], instructor, "컨슈머 그룹?", 20_000)
-                .andExpect(status().isOk()).andReturn();
-
-        String relayed = awaitSse(result, "answer.done");
+        String relayed = assertOk(ask(ids[0], instructor, "컨슈머 그룹?", 20_000));
+        assertThat(relayed).contains("answer.done");
         assertThat(relayed).contains("event:answer.delta");
         assertThat(relayed).contains("event:answer.done");
         // v2가 새로 주는 excerpt도 해석하지 않고 그대로 흘린다 — FE가 ai-api 스키마를 그대로 읽는다.
@@ -378,10 +367,8 @@ class ReplayAiAnswerContractTest {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String[] ids = createReadyRecording(instructor);
 
-        MvcResult result = ask(ids[0], instructor, "끊기는 질문", 20_000)
-                .andExpect(status().isOk()).andReturn();
-
-        String relayed = awaitSse(result, "answer.error");
+        String relayed = assertOk(ask(ids[0], instructor, "끊기는 질문", 20_000));
+        assertThat(relayed).contains("answer.error");
         assertThat(relayed).contains("PROXY_STREAM_INCOMPLETE");
         assertThat(relayed).contains("\"retryable\":true");
     }
@@ -394,7 +381,7 @@ class ReplayAiAnswerContractTest {
         String[] ids = createReadyRecording(instructor);
 
         // 검수 중인 강사는 게시 전에도 봐야 하고, 볼 수 있으면 물어볼 수 있어야 한다.
-        ask(ids[0], instructor, "게시 전 검수 질문", 20_000).andExpect(status().isOk());
+        assertOk(ask(ids[0], instructor, "게시 전 검수 질문", 20_000));
         assertThat(awaitRequest()).isNotNull();
     }
 
@@ -405,9 +392,7 @@ class ReplayAiAnswerContractTest {
         publish(instructor, ids[0]);
 
         Cookie[] outsider = loginAs("STUDENT");
-        ask(ids[0], outsider, "몰래 질문", 20_000)
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("ENROLLMENT_REQUIRED"));
+        assertFailure(ask(ids[0], outsider, "몰래 질문", 20_000), 403, "ENROLLMENT_REQUIRED");
 
         // 인가 실패 시 업스트림을 부르지 않는다 — 비용도 비용이지만 근거가 새면 안 된다.
         assertThat(captured.get()).isNull();
@@ -422,13 +407,11 @@ class ReplayAiAnswerContractTest {
         // 녹화 완결은 자동 게시까지 간다. 미게시 상태를 보려면 되돌려야 한다(재생 테스트와 같은 방법).
         unpublish(ids[1]);
 
-        ask(ids[0], student, "미게시 다시보기 질문", 20_000)
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("REPLAY_NOT_FOUND"));
+        assertFailure(ask(ids[0], student, "미게시 다시보기 질문", 20_000), 404, "REPLAY_NOT_FOUND");
         assertThat(captured.get()).isNull();
 
         publish(instructor, ids[0]);
-        ask(ids[0], student, "게시 후 질문", 20_000).andExpect(status().isOk());
+        assertOk(ask(ids[0], student, "게시 후 질문", 20_000));
         assertThat(awaitRequest()).isNotNull();
     }
 
@@ -439,16 +422,14 @@ class ReplayAiAnswerContractTest {
         String[] ids = createReadyRecording(instructor);
         approveEnrollment(instructor, student, ids[2]);
 
-        ask(ids[0], student, "수강생 질문", 20_000).andExpect(status().isOk());
+        assertOk(ask(ids[0], student, "수강생 질문", 20_000));
         assertThat(awaitRequest()).isNotNull();
     }
 
     @Test
     void unknown_lesson_is_404() throws Exception {
         Cookie[] student = loginAs("STUDENT");
-        ask(UUID.randomUUID().toString(), student, "없는 레슨", 0)
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("LESSON_NOT_FOUND"));
+        assertFailure(ask(UUID.randomUUID().toString(), student, "없는 레슨", 0), 404, "LESSON_NOT_FOUND");
     }
 
     @Test
@@ -473,9 +454,7 @@ class ReplayAiAnswerContractTest {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String[] ids = createReadyRecording(instructor);
 
-        ask(ids[0], instructor, "", 20_000)
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+        assertFailure(ask(ids[0], instructor, "", 20_000), 400, "VALIDATION_FAILED");
 
         // 재생 위치가 없으면 어느 대목을 물었는지 알 수 없다 — 0으로 때려 넣지 않고 거절한다.
         write(post("/api/lessons/" + ids[0] + "/ai/answers/stream").accept(MediaType.TEXT_EVENT_STREAM),
@@ -497,20 +476,14 @@ class ReplayAiAnswerContractTest {
         String[] ids = createReadyRecording(instructor);
 
         responder.set(exchange -> statusOnly(exchange, 503));
-        ask(ids[0], instructor, "AI 준비됐어?", 20_000)
-                .andExpect(status().isServiceUnavailable())
-                .andExpect(jsonPath("$.code").value("AI_ANSWER_UNAVAILABLE"));
+        assertFailure(ask(ids[0], instructor, "AI 준비됐어?", 20_000), 503, "AI_ANSWER_UNAVAILABLE");
 
         responder.set(exchange -> statusOnly(exchange, 409));
-        ask(ids[0], instructor, "중복 요청", 20_000)
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("AI_ANSWER_REQUEST_CONFLICT"));
+        assertFailure(ask(ids[0], instructor, "중복 요청", 20_000), 409, "AI_ANSWER_REQUEST_CONFLICT");
 
         // 401(서명 거부)은 우리 설정 문제다. 그대로 흘리면 FE가 세션 만료로 오해해 로그아웃한다.
         responder.set(exchange -> statusOnly(exchange, 401));
-        ask(ids[0], instructor, "서명 틀린 요청", 20_000)
-                .andExpect(status().isBadGateway())
-                .andExpect(jsonPath("$.code").value("AI_ANSWER_UPSTREAM_REJECTED"));
+        assertFailure(ask(ids[0], instructor, "서명 틀린 요청", 20_000), 502, "AI_ANSWER_UPSTREAM_REJECTED");
     }
 
     // ---- 헬퍼 ----
@@ -558,32 +531,6 @@ class ReplayAiAnswerContractTest {
         throw new AssertionError("ai-api 목이 요청을 받지 못했다");
     }
 
-    /** 릴레이가 terminal을 흘리고 본문이 더 자라지 않을 때까지 기다린다(고정 대기는 러너 부하에서 깨진다). */
-    private String awaitSse(MvcResult result, String terminalEvent) throws Exception {
-        long deadline = System.currentTimeMillis() + 10_000;
-        while (System.currentTimeMillis() < deadline) {
-            String body = new String(result.getResponse().getContentAsByteArray(), StandardCharsets.UTF_8);
-            if (body.contains(terminalEvent)) {
-                return awaitStableBody(result, body);
-            }
-            Thread.sleep(20);
-        }
-        throw new AssertionError("SSE에 " + terminalEvent + "가 오지 않았다: "
-                + new String(result.getResponse().getContentAsByteArray(), StandardCharsets.UTF_8));
-    }
-
-    private String awaitStableBody(MvcResult result, String seen) throws InterruptedException {
-        String body = seen;
-        int stable = 0;
-        long deadline = System.currentTimeMillis() + 3_000;
-        while (stable < 3 && System.currentTimeMillis() < deadline) {
-            Thread.sleep(30);
-            String next = new String(result.getResponse().getContentAsByteArray(), StandardCharsets.UTF_8);
-            stable = next.length() == body.length() ? stable + 1 : 0;
-            body = next;
-        }
-        return body;
-    }
 
     private OffsetDateTime sessionStart(UUID sessionId) {
         return liveSessionRepository.findById(sessionId).orElseThrow().getStartedAt();
@@ -617,19 +564,68 @@ class ReplayAiAnswerContractTest {
         liveCaptionRepository.saveAndFlush(row);
     }
 
-    private ResultActions ask(String lessonId, Cookie[] auth, String question, long playbackSessionMs)
+    /** 질의 응답. 실제 포트로 받으므로 {@code body}는 스트림이 끝난 뒤의 <b>완결된</b> 본문이다. */
+    private record Answer(int status, String body) {
+    }
+
+    /**
+     * 다시보기 AI 질의를 <b>우리 앱의 실제 포트</b>로 보낸다({@link #port}). ai-api는 목 그대로다.
+     *
+     * <p>세션 쿠키는 MockMvc 로그인에서 받은 것을 그대로 싣는다 — 세션 저장소가 Redis라 두 경로가
+     * 같은 세션을 본다. CSRF는 이 경로에서 새로 받는다(쿠키와 헤더가 한 쌍이어야 한다).
+     */
+    private Answer ask(String lessonId, Cookie[] auth, String question, long playbackSessionMs)
             throws Exception {
         String body = jsonMapper.writeValueAsString(
                 Map.of("question", question, "playbackMs", playbackSessionMs));
-        // 목이 응답을 시작해도 되는 시점을 이 호출이 끝난 뒤로 미룬다(dispatchGate javadoc).
-        CountDownLatch gate = new CountDownLatch(1);
-        dispatchGate.set(gate);
-        try {
-            return write(post("/api/lessons/" + lessonId + "/ai/answers/stream")
-                    .accept(MediaType.TEXT_EVENT_STREAM), auth, body);
-        } finally {
-            gate.countDown();
+
+        HttpClient client = HttpClient.newHttpClient();
+        HttpResponse<String> csrf = client.send(
+                HttpRequest.newBuilder(URI.create(baseUrl() + "/api/auth/csrf")).GET().build(),
+                HttpResponse.BodyHandlers.ofString());
+        JsonNode csrfBody = jsonMapper.readTree(csrf.body());
+
+        StringBuilder cookies = new StringBuilder("XSRF-TOKEN=").append(cookieValue(csrf, "XSRF-TOKEN"));
+        if (auth != null) {
+            for (Cookie cookie : auth) {
+                cookies.append("; ").append(cookie.getName()).append('=').append(cookie.getValue());
+            }
         }
+
+        HttpResponse<String> response = client.send(HttpRequest.newBuilder(
+                        URI.create(baseUrl() + "/api/lessons/" + lessonId + "/ai/answers/stream"))
+                .header("Cookie", cookies.toString())
+                .header(csrfBody.get("headerName").asString(), csrfBody.get("token").asString())
+                .header(HttpHeaders.ACCEPT, MediaType.TEXT_EVENT_STREAM_VALUE)
+                .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
+                .build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        return new Answer(response.statusCode(), response.body());
+    }
+
+    private String baseUrl() {
+        return "http://localhost:" + port;
+    }
+
+    /** Set-Cookie에서 값만 꺼낸다 — 실제 HTTP 응답은 MockMvc의 {@code Cookie} 객체를 주지 않는다. */
+    private static String cookieValue(HttpResponse<?> response, String name) {
+        return response.headers().allValues("set-cookie").stream()
+                .filter(header -> header.startsWith(name + "="))
+                .map(header -> header.substring(name.length() + 1).split(";", 2)[0])
+                .findFirst()
+                .orElseThrow(() -> new AssertionError(name + " 쿠키가 없다"));
+    }
+
+    /** 200을 확인하고 SSE 본문을 돌려준다. */
+    private static String assertOk(Answer answer) {
+        assertThat(answer.status()).as("본문: %s", answer.body()).isEqualTo(200);
+        return answer.body();
+    }
+
+    /** 실패 응답의 상태와 {@code code}를 함께 본다 — 화면이 코드로 분기하므로 둘 다 계약이다. */
+    private void assertFailure(Answer answer, int status, String code) {
+        assertThat(answer.status()).as("본문: %s", answer.body()).isEqualTo(status);
+        assertThat(jsonMapper.readTree(answer.body()).get("code").asString()).isEqualTo(code);
     }
 
     private void publish(Cookie[] instructor, String lessonId) throws Exception {
