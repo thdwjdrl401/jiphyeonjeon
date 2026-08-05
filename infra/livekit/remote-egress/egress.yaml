@@ -1,6 +1,8 @@
 # 원격 Egress 워커 설정 (co-located용 ../egress.yaml과 짝)
 # ⚠️ 템플릿: secret은 서버에서 채우고 커밋 금지.
-log_level: info
+# debug로 둔다. info면 크롬 기동 실패 시 "page load error"라는 결론만 남고 그 앞의 크롬
+# 콘솔·CDP 로그가 통째로 사라져 원인을 못 좁힌다(실제로 한 번 겪었다). co-located 쪽도 debug다.
+log_level: debug
 api_key: <API_KEY>
 api_secret: <API_SECRET>           # EC2 livekit.yaml keys의 secret과 동일해야 한다
 
