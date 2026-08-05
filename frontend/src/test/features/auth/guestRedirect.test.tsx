@@ -1,8 +1,9 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
 import App from '@/App'
 import { mockAuthService, resetMockAuth } from '@/features/auth/mockAuthService'
+import { notifySessionExpired } from '@/shared/api/sessionExpiry'
 
 /**
  * 보호 경로에서 튕겨 나갈 때 <b>어디로 가는가</b>.
@@ -28,6 +29,18 @@ describe('게스트가 보호 경로에서 나갈 때', () => {
 
     await waitFor(() => expect(window.location.pathname).toBe('/login'))
     expect(window.location.search).toBe('?returnTo=%2Fstudent%2Fcurriculums')
+  })
+
+  it('사용 중 세션이 만료되면 로그아웃 상태로 바꾸고 로그인 화면에 보던 자리를 담는다', async () => {
+    await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
+    await renderAt('/student/curriculums')
+    await screen.findByRole('heading', { name: '내 커리큘럼' })
+
+    act(() => notifySessionExpired())
+
+    await waitFor(() => expect(window.location.pathname).toBe('/login'))
+    expect(window.location.search).toBe('?returnTo=%2Fstudent%2Fcurriculums')
+    expect(screen.queryByRole('button', { name: '로그아웃' })).not.toBeInTheDocument()
   })
 
   it('스스로 로그아웃하면 랜딩페이지로 보낸다', async () => {
