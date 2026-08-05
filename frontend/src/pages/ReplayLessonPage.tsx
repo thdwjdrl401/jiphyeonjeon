@@ -106,11 +106,15 @@ export default function ReplayLessonPage() {
     enabled: Boolean(sessionId),
   })
   /*
-   * 많이 다시 본 구간(ADR-0063). 강사는 세지 않는다 — 검수하며 되감은 것이 학생 재시청으로 잡히면
-   * 그래프가 오염된다. 보기는 강사도 본다(그러라고 만든 것이다).
+   * 많이 다시 본 구간(ADR-0063)과 학습 진도(ADR-0033). 강사는 세지 않는다 — 검수하며 되감은 것이
+   * 학생 재시청으로 잡히면 그래프가 오염되고, 강사는 애초에 자기 강의의 수강자가 아니다.
+   * 보기는 강사도 본다(그러라고 만든 것이다).
+   *
+   * durationMs를 넘기는 것이 진도를 켜는 스위치다 — 녹화 완료 webhook이 길이를 채우기 전에는
+   * null이고, 그동안은 칸만 쌓인다. 길이가 들어오면 다음 주기부터 그 칸이 진도로 환산된다.
    */
   const durationMs = playback.playback?.durationMs ?? null
-  useWatchTracking(lessonId, positionMs, !isInstructor && Boolean(lessonId))
+  useWatchTracking(lessonId, positionMs, !isInstructor && Boolean(lessonId), durationMs)
   // 용어집(ADR-0064). 라이브와 같은 규칙으로 자막에 링크를 건다 — 두 화면이 다르면 안 된다.
   const glossaryQuery = useQuery({
     queryKey: ['glossary', lessonId],

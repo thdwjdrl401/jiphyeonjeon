@@ -141,11 +141,20 @@ public class CatalogService {
 
         List<Section> sections = sectionRepository.findByCurriculumIdOrderByOrderIndexAsc(curriculumId);
         List<CatalogOutlineSection> outline = buildOutline(sections, viewerContext.relationship());
-        // 수강자면 목차 레슨들의 내 진도를 집계해 progress를 채운다(비수강자는 null 그대로).
+        /*
+         * 수강자면 목차 레슨들의 내 진도를 <b>한 번 조회해 두 곳에</b> 쓴다(비수강자는 null 그대로).
+         *
+         * <p>커리큘럼 progress는 "몇 강을 끝냈나"만 말하므로, 목차에서 <b>어느</b> 강의를 끝냈는지는
+         * 레슨별 learning이 있어야 보인다. 예전에는 여기서 progress만 채우고 레슨별 learning은
+         * null로 두어, 진행률 막대는 움직이는데 목차의 완료 표시는 늘 비어 있었다. 같은 조회
+         * 결과로 둘 다 채운다 — 쿼리는 늘지 않는다.
+         */
         if ("ENROLLED".equals(viewerContext.relationship())) {
             List<UUID> lessonIds = outline.stream().flatMap(s -> s.lessons().stream())
                     .map(CatalogOutlineLesson::lessonId).toList();
-            viewerContext = viewerContext.withProgress(computeProgress(viewer.userId(), lessonIds));
+            Map<UUID, LearningProgressView> byLesson = findProgressByLesson(viewer.userId(), lessonIds);
+            viewerContext = viewerContext.withProgress(progressFrom(lessonIds, byLesson));
+            outline = withLearning(outline, byLesson);
         }
         CatalogInstructor instructor = loadInstructors(List.of(curriculum.getInstructorId()))
                 .get(curriculum.getInstructorId());
@@ -574,16 +583,35 @@ public class CatalogService {
     }
 
     /**
-     * 한 커리큘럼의 내 진도(단건 조회). 완료 레슨 수 기준 — completedLessonCount / totalLessonCount.
-     * lastLearning은 가장 최근에 갱신한 진도의 레슨·위치.
+     * 내 진도를 레슨별로 한 번에 조회한다(단건 커리큘럼용). 진도 기록이 없는 레슨은 맵에 없다 —
+     * 호출자가 "아직 안 본 강의"로 다룬다.
      */
-    private CatalogProgress computeProgress(UUID userId, List<UUID> lessonIds) {
+    private Map<UUID, LearningProgressView> findProgressByLesson(UUID userId, List<UUID> lessonIds) {
         if (lessonIds.isEmpty()) {
-            return new CatalogProgress(0, 0, 0, null);
+            return Map.of();
         }
-        Map<UUID, LearningProgressView> byLesson = learningDirectory.findProgress(userId, lessonIds).stream()
+        return learningDirectory.findProgress(userId, lessonIds).stream()
                 .collect(Collectors.toMap(LearningProgressView::lessonId, p -> p));
-        return progressFrom(lessonIds, byLesson);
+    }
+
+    /**
+     * 목차 레슨에 내 학습 상태를 얹는다. 진도 기록이 없는 레슨은 <b>null 그대로</b> 둔다 —
+     * "0%"와 "아직 안 본 강의"는 다르고, 화면이 그 둘을 갈라 그릴 수 있어야 한다.
+     */
+    private static List<CatalogOutlineSection> withLearning(List<CatalogOutlineSection> outline,
+                                                            Map<UUID, LearningProgressView> byLesson) {
+        if (byLesson.isEmpty()) {
+            return outline;
+        }
+        return outline.stream()
+                .map(section -> new CatalogOutlineSection(
+                        section.sectionId(), section.title(), section.description(), section.order(),
+                        section.lessons().stream().map(lesson -> {
+                            LearningProgressView mine = byLesson.get(lesson.lessonId());
+                            return mine == null ? lesson : lesson.withLearning(
+                                    new CatalogLessonLearning(mine.completed(), mine.progressPercent()));
+                        }).toList()))
+                .toList();
     }
 
     /**

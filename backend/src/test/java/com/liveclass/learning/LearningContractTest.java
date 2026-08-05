@@ -199,6 +199,54 @@ class LearningContractTest {
                 .andExpect(jsonPath("$[0].curriculum.viewerContext.progress.progressPercent").value(50));
     }
 
+    /**
+     * 목차의 <b>레슨별</b> 학습 상태. 커리큘럼 progress("몇 강 끝냈나")만으로는 목차에서 어느 강의를
+     * 끝냈는지 알 수 없어, 진행률 막대는 움직이는데 완료 표시는 늘 비어 있었다.
+     *
+     * <p>진도 기록이 없는 레슨이 <b>null</b>로 남는 것까지 함께 못박는다 — 0%로 채우면 "안 본 강의"와
+     * "보다 만 강의"가 화면에서 같아진다.
+     */
+    @Test
+    void catalog_outline_lesson_carries_my_learning() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String cid = createPublishedCurriculum(instructor);
+        String l1 = addLesson(instructor, cid, "1강");
+        Cookie[] student = loginAs("STUDENT");
+        approveEnrollment(instructor, student, cid);
+
+        write(put("/api/lessons/" + l1 + "/progress"), student,
+                "{\"progressPercent\":100,\"lastPositionMs\":600000}")
+                .andExpect(status().isNoContent());
+
+        // 시드 강의가 outline[0], 방금 진도를 남긴 1강이 outline[1]이다(addLesson이 섹션을 새로 만든다).
+        write(get("/api/curriculums/" + cid), student, null)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.outline[1].lessons[0].lessonId").value(l1))
+                .andExpect(jsonPath("$.outline[1].lessons[0].learning.completed").value(true))
+                .andExpect(jsonPath("$.outline[1].lessons[0].learning.progressPercent").value(100))
+                // 아직 열어 보지 않은 강의는 null 그대로다.
+                .andExpect(jsonPath("$.outline[0].lessons[0].learning").doesNotExist());
+    }
+
+    /** 남의 진도가 새지 않는다. 목차는 비수강자도 보므로 게이트가 progress와 같아야 한다. */
+    @Test
+    void outline_learning_is_hidden_from_non_enrolled_viewer() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String cid = createPublishedCurriculum(instructor);
+        String l1 = addLesson(instructor, cid, "1강");
+        Cookie[] student = loginAs("STUDENT");
+        approveEnrollment(instructor, student, cid);
+        write(put("/api/lessons/" + l1 + "/progress"), student,
+                "{\"progressPercent\":100,\"lastPositionMs\":600000}")
+                .andExpect(status().isNoContent());
+
+        Cookie[] other = loginAs("STUDENT");
+        write(get("/api/curriculums/" + cid), other, null)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.outline[1].lessons[0].learning").doesNotExist())
+                .andExpect(jsonPath("$.viewerContext.progress").doesNotExist());
+    }
+
     @Test
     void learning_summary_aggregates_enrolled_progress() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");

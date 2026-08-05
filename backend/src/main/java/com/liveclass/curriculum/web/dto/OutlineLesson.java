@@ -31,7 +31,7 @@ public record OutlineLesson(
         @Schema(description = "업로드 녹화강의 재생 패키지 상태. LIVE 레슨이면 null.")
         String recordedPublicationStatus,
         LessonAccessResponse access,
-        @Schema(description = "내 학습 상태. learning 패키지가 배선되지 않아 항상 null(ADR-0024).")
+        @Schema(description = "내 학습 상태(ADR-0033). 활성 수강자에게만 채워지고, 수강자라도 아직 진도 기록이 없는 레슨은 null.")
         LearningResponse learning
 ) {
     @Schema(description = "레슨 학습 상태")

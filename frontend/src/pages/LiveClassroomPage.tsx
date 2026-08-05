@@ -254,9 +254,14 @@ export default function LiveClassroomPage() {
   /*
    * 많이 다시 본 구간(ADR-0063). 수강생만 센다 — 강사 화면에는 재생바가 없고(LiveKit 송출 미리보기),
    * 강사 재생이 섞이면 그래프가 오염된다.
+   *
+   * <b>라이브 중에는 진도가 나가지 않는다.</b> durationMs는 녹화 완료 webhook이 채우는 값이라
+   * 진행 중인 세션에서는 null이고, 전체 칸 수를 모르는 채로 낸 비율은 뜻이 없기 때문이다. 대신
+   * 라이브에서 본 칸은 그대로 서버에 쌓이고, 나중에 다시보기를 열면 그 누적을 물려받아 진도로
+   * 환산된다 — 라이브로 들은 시간이 사라지지는 않는다.
    */
   const watchDurationMs = playback.playback?.durationMs ?? null
-  useWatchTracking(lesson?.lessonId ?? '', positionMs, !isInstructor && Boolean(lesson?.lessonId))
+  useWatchTracking(lesson?.lessonId ?? '', positionMs, !isInstructor && Boolean(lesson?.lessonId), watchDurationMs)
   const heatmapQuery = useQuery({
     queryKey: ['watch-heatmap', lesson?.lessonId, watchDurationMs],
     queryFn: () => getWatchHeatmap(lesson!.lessonId, watchDurationMs),
