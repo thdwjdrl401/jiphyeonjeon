@@ -97,17 +97,16 @@ backend가 SSH 터널 없이 붙도록 의도적으로 host 전체 인터페이�
 | `AI_INTERNAL_SECRET` | Spring→ai-api RAG HMAC | 사용하지 않음 |
 | `AI_CALLBACK_SECRET` | Spring↔ai-worker 자료 HMAC | realtime callback을 켤 때만 별도 선택 사용 |
 | `BGE_RUNTIME_INTERNAL_TOKEN` | EC2 ai-api·ai-worker→GPU bge-runtime Bearer | bge-runtime이 사용 |
-| `GMS_API_KEY` | EC2 ai-api→GMS 답변 모델 | 사용하지 않음 |
+| `GMS_API_KEY` | EC2 ai-api→GMS 답변 모델·ai-worker→GMS 핵심 용어 추출 | 사용하지 않음 |
 | `OPENAI_API_KEY` | recorded-stt-worker→OpenAI `whisper-1` segment·word timestamp | 사용하지 않음 |
 | `AI_WORKER_GMS_API_KEY` | EC2 ai-worker→GMS 핵심 용어 추출(선택, `AI_WORKER_KEY_TERM_EXTRACTION_ENABLED=true`일 때만 필수) | 사용하지 않음 |
 
 운영 compose는 `BGE_RUNTIME_INTERNAL_TOKEN`을 container의 `AI_API_BGE_TOKEN`과
-`AI_WORKER_BGE_INTERNAL_TOKEN`으로, `GMS_API_KEY`를 `AI_API_GMS_API_KEY`로,
+`AI_WORKER_BGE_INTERNAL_TOKEN`으로, `GMS_API_KEY`를 `AI_API_GMS_API_KEY`와
+`AI_WORKER_GMS_API_KEY`로,
 `OPENAI_API_KEY`를 `RECORDED_STT_OPENAI_API_KEY`로 매핑한다.
-`AI_WORKER_GMS_API_KEY`는 아직 `docker-compose.ai-prod.yml`/`.env.ai-prod.example`에 배선되지
-않았다 — 핵심 용어 추출을 운영에서 켜려면 이 매핑을 먼저 추가해야 한다. 필수 환경변수와 tunnel
-실행은 각 서비스 README를, 전체 인프라와 Spring·Frontend 실행 순서는 [RUN.md](../RUN.md)에서
-확인한다.
+필수 환경변수와 tunnel 실행은 각 서비스 README를, 전체 인프라와 Spring·Frontend 실행 순서는
+[RUN.md](../RUN.md)에서 확인한다.
 
 ## 6. 현재 연동 상태
 
@@ -117,7 +116,7 @@ backend가 SSH 터널 없이 붙도록 의도적으로 host 전체 인터페이�
 | Spring→RabbitMQ→ai-worker | `PPTX_EMBED` 양쪽 구현, Spring producer·worker 앱 기본 off, AI 운영 compose는 worker만 on; `EMBED_DELETE` 미구현(DLQ) |
 | ai-worker→Spring download-url·callback | 양쪽 구현 |
 | ai-api·ai-worker→bge-runtime | client·runtime·reverse tunnel·운영 container proxy 배선 구현 |
-| ai-worker→GMS(핵심 용어 추출) | AI 구현·기본 off, 운영 compose(`docker-compose.ai-prod.yml`)에 `AI_WORKER_GMS_API_KEY` 배선 미완료. 추출 결과는 기존 `MATERIAL_EMBEDDED` Spring 콜백에 `keyTerms`를 실어 한 번에 전달하고(AI 구현, [ADR-0004](../docs/decisions/jinwoo/0004-key-term-callback-delivery-timing.md)), 동시에 ai-worker가 소유한 `ai.material_key_term`에도 best-effort로 저장([ADR-0005](../docs/decisions/jinwoo/0005-key-term-storage-schema.md)); Spring 쪽 `keyTerms` 콜백 수신과 `ai.material_key_term` 읽기 API는 둘 다 미구현([ADR-0003](../docs/decisions/jinwoo/0003-pptx-key-term-extraction-approach.md)) |
+| ai-worker→GMS(핵심 용어 추출) | AI 구현·기본 off, dev/prod compose가 `GMS_API_KEY`를 `AI_WORKER_GMS_API_KEY`로 전달한다. 추출 결과는 기존 `MATERIAL_EMBEDDED` Spring 콜백에 `keyTerms`를 실어 한 번에 전달하고(AI 구현, [ADR-0004](../docs/decisions/jinwoo/0004-key-term-callback-delivery-timing.md)), 동시에 ai-worker가 소유한 `ai.material_key_term`에도 best-effort로 저장([ADR-0005](../docs/decisions/jinwoo/0005-key-term-storage-schema.md)); Spring 쪽 `keyTerms` 콜백 수신과 `ai.material_key_term` 읽기 API는 둘 다 미구현([ADR-0003](../docs/decisions/jinwoo/0003-pptx-key-term-extraction-approach.md)) |
 | Spring→LiveKit→realtime-agent | 양쪽 dispatch 구현, job readiness 우회 중 |
 | realtime-agent→Redis caption | producer·ai-api consumer 구현, Spring consumer 미구현 |
 | realtime-agent→Spring lifecycle | AI 구현·기본 off, Spring receiver 미구현 |
