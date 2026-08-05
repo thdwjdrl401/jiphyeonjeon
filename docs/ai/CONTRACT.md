@@ -389,7 +389,7 @@ Spring realtime-agent health proxy client는 아직 없다. 따라서 prod `/int
 | 경계 | 상태 |
 |---|---|
 | Spring→ai-api RAG SSE | **v1·Replay v2 양쪽 구현**. AI route/HMAC verifier, Spring signer와 브라우저 SSE 프록시를 구현했다. 라이브는 `POST /api/live-sessions/{sessionId}/ai/answers/stream`, 업로드 녹화강의는 `POST /api/lessons/{lessonId}/ai/answers/stream` → 내부 v2 `sessionId=recordedVideoId`다(ADR-0047·ADR-0015, 공유 계약 §3-9). 운영은 backend·ai-api가 같은 `AI_INTERNAL_SECRET`을 받아야 동작 |
-| Spring→RabbitMQ→ai-worker | 양쪽 구현, Spring producer·worker 앱 기본 비활성, AI 운영 compose는 worker만 활성 |
+| Spring→RabbitMQ→ai-worker | 양쪽 구현. 레슨·커리큘럼 두 스코프 모두 수용(ADR-0045, alembic `0006`). Spring producer·worker 앱 기본 비활성, AI 운영 compose는 worker만 활성 |
 | ai-worker→Spring download URL/callback | 양쪽 구현 |
 | ai-worker/ai-api→BGE | runtime/client/reverse tunnel/운영 container proxy 배선 구현 |
 | Spring→LiveKit→realtime-agent dispatch | 양쪽 Phase 4a 구현, STT readiness gate 우회 중 |
@@ -410,10 +410,14 @@ Spring realtime-agent health proxy client는 아직 없다. 따라서 prod `/int
 - 서비스 README에는 전체 계약을 복제하지 않고 통신 요약과 이 문서 링크만 둔다.
 - 구현 상태가 바뀌면 구현 MR에서 7절을 함께 갱신한다.
 
-## 9. 제안 변경 — 자료 2단계 스코프(커리큘럼·강의) [AI 오너 구현 대기]
+## 9. 자료 2단계 스코프(커리큘럼·강의) — 양쪽 구현됨
 
-> 상태: **제안(미비준)**. 아래는 Spring 측 요구이며 실제 계약이 되려면 §8 규칙대로 루트
-> [`docs/CONTRACT.md`](../CONTRACT.md)·Java/Python 구현·양측 계약 테스트를 같은 변경에서 갱신해야 한다.
+> 상태: **구현 완료**(2026-08-04). Spring 발행부와 AI 수용부가 모두 배선됐다. 결정 기록은
+> [canola/ADR-0045](../decisions/canola/0045-curriculum-scoped-material-indexing.md)다.
+>
+> 구현이 제안과 다른 점 하나: `ai.material_version`에 `scope` 컬럼을 만들지 않고
+> **`lesson_id IS NULL`을 커리큘럼 종속의 표현으로** 삼았다. 두 값이 어긋날 여지를 없애기
+> 위해서다. 삭제 봉투는 스코프별로 비대칭이다(레슨은 `lessonId`, 커리큘럼은 `curriculumId`).
 
 자료(PPTX)는 두 수준에 종속된다.
 

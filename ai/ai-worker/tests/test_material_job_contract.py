@@ -170,3 +170,91 @@ def test_maps_delete_job_and_resolved_scope_to_deterministic_material_identity()
     assert material.material_id == UUID(MATERIAL_ID)
     assert material.material_version == 3
     assert material.correlation_id == f"material:{MATERIAL_ID}"
+
+
+# The four envelopes Spring actually publishes today, copied from
+# InstructorCurriculumService.java. Lesson and curriculum shapes are deliberately asymmetric:
+# lesson deletes carry lessonId and no curriculumId, curriculum deletes the exact opposite.
+LESSON_EMBED = {
+    "taskType": "PPTX_EMBED",
+    "materialId": MATERIAL_ID,
+    "assetId": ASSET_ID,
+    "lessonId": LESSON_ID,
+    "curriculumId": CURRICULUM_ID,
+    "fileName": "ppt.pptx",
+    "policy": {"embedModel": "bge-m3"},
+    "contractVersion": 1,
+}
+CURRICULUM_EMBED = {
+    "taskType": "PPTX_EMBED",
+    "scope": "CURRICULUM",
+    "materialId": MATERIAL_ID,
+    "assetId": ASSET_ID,
+    "curriculumId": CURRICULUM_ID,
+    "fileName": "ppt.pptx",
+    "policy": {"embedModel": "bge-m3"},
+    "contractVersion": 1,
+}
+LESSON_DELETE = {
+    "taskType": "EMBED_DELETE",
+    "materialId": MATERIAL_ID,
+    "lessonId": LESSON_ID,
+    "contractVersion": 1,
+}
+CURRICULUM_DELETE = {
+    "taskType": "EMBED_DELETE",
+    "scope": "CURRICULUM",
+    "materialId": MATERIAL_ID,
+    "curriculumId": CURRICULUM_ID,
+    "contractVersion": 1,
+}
+
+
+def test_curriculum_scoped_embed_parses_without_a_lesson() -> None:
+    """These piled up in the production DLQ: Spring publishes them, the worker rejected them
+    on both `lessonId: Field required` and `scope: Extra inputs are not permitted`."""
+    job = parse_material_job(_body(CURRICULUM_EMBED))
+
+    assert isinstance(job, PptxEmbedJob)
+    assert job.scope == "CURRICULUM"
+    assert job.lesson_id is None
+    assert job.curriculum_id == UUID(CURRICULUM_ID)
+
+
+def test_curriculum_scoped_delete_parses_with_curriculum_instead_of_lesson() -> None:
+    job = parse_material_job(_body(CURRICULUM_DELETE))
+
+    assert isinstance(job, EmbedDeleteJob)
+    assert job.scope == "CURRICULUM"
+    assert job.lesson_id is None
+    assert job.curriculum_id == UUID(CURRICULUM_ID)
+
+
+def test_lesson_jobs_still_parse_unchanged() -> None:
+    """Lesson envelopes carry no `scope` at all — LESSON is implicit."""
+    embed = parse_material_job(_body(LESSON_EMBED))
+    delete = parse_material_job(_body(LESSON_DELETE))
+
+    assert isinstance(embed, PptxEmbedJob)
+    assert embed.scope is None
+    assert embed.lesson_id == UUID(LESSON_ID)
+    assert isinstance(delete, EmbedDeleteJob)
+    assert delete.lesson_id == UUID(LESSON_ID)
+    assert delete.curriculum_id is None
+
+
+@pytest.mark.parametrize(
+    ("payload", "reason"),
+    [
+        ({**CURRICULUM_EMBED, "lessonId": LESSON_ID}, "curriculum job carrying a lesson"),
+        ({**CURRICULUM_DELETE, "lessonId": LESSON_ID}, "curriculum delete carrying a lesson"),
+        # A lesson job that lost its lessonId would silently index for the whole curriculum.
+        ({k: v for k, v in LESSON_EMBED.items() if k != "lessonId"}, "lesson job without lesson"),
+        ({k: v for k, v in LESSON_DELETE.items() if k != "lessonId"}, "lesson delete without"),
+        ({**CURRICULUM_EMBED, "scope": "SECTION"}, "unknown scope value"),
+        ({**LESSON_EMBED, "scope": "LESSON", "lessonId": None}, "explicit LESSON without lesson"),
+    ],
+)
+def test_rejects_contradictory_scope_and_lesson(payload: dict[str, object], reason: str) -> None:
+    with pytest.raises(ValidationError):
+        parse_material_job(_body(payload))

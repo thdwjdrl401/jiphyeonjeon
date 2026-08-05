@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from app.application.map_material_job import map_embed_delete_job
 from app.contracts import EmbedDeleteJob
+from app.domain import MaterialIngestionError, MaterialScope
 from app.ports import IndexStorage
 
 
@@ -38,6 +39,7 @@ class DeleteMaterialIndex:
         scope = await self._index_storage.resolve_active_scope(self._tenant_id, job.material_id)
         if scope is None:
             return MaterialDeleteResult(deleted=False)
+        _assert_requested_scope_matches(job, scope)
 
         material = map_embed_delete_job(
             job,
@@ -48,3 +50,20 @@ class DeleteMaterialIndex:
         )
         removed_rows = await self._index_storage.delete_job(material)
         return MaterialDeleteResult(deleted=removed_rows > 0)
+
+
+def _assert_requested_scope_matches(job: EmbedDeleteJob, scope: MaterialScope) -> None:
+    """Refuse a delete whose envelope disagrees with what is actually stored.
+
+    The scope in the envelope is not needed to find the rows — ADR-0006 resolves that from
+    material_id — but when Spring does send it, a mismatch means the two sides disagree about
+    which material this is. Deleting on that basis would remove evidence the caller never
+    meant to touch, so the job fails loudly instead.
+    """
+
+    if job.lesson_id is not None and job.lesson_id != scope.lesson_id:
+        raise MaterialIngestionError("delete job lessonId does not match the stored material")
+    if job.curriculum_id is not None and job.curriculum_id != scope.curriculum_id:
+        raise MaterialIngestionError("delete job curriculumId does not match the stored material")
+    if job.scope == "CURRICULUM" and scope.lesson_id is not None:
+        raise MaterialIngestionError("curriculum-scoped delete targets a lesson-scoped material")

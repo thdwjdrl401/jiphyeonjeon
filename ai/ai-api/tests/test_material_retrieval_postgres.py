@@ -33,7 +33,7 @@ async def _create_schema(engine: AsyncEngine, runtime_role: str) -> None:
                 """
                 CREATE TABLE ai.material_version (
                   id bigint PRIMARY KEY,
-                  lesson_id uuid NOT NULL,
+                  lesson_id uuid NULL,
                   curriculum_id uuid NOT NULL,
                   material_id uuid NOT NULL,
                   material_version integer NOT NULL,
@@ -85,7 +85,7 @@ async def _insert_chunk(
 ) -> None:
     values: Mapping[str, object] = {
         "id": row_id,
-        "lesson_id": str(lesson_id),
+        "lesson_id": None if lesson_id is None else str(lesson_id),
         "curriculum_id": str(curriculum_id),
         "material_id": str(material_id),
         "state": state,
@@ -199,6 +199,61 @@ def test_real_postgres_shares_active_chunks_across_lessons_in_the_same_curriculu
 
             assert {hit.material_id for hit in hits} == {active_material_id, sibling_material_id}
             assert all(hit.curriculum_id == curriculum_id for hit in hits)
+        finally:
+            await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_curriculum_scoped_material_with_no_lesson_is_searchable(
+    integration_database: IntegrationDatabase,
+) -> None:
+    """Curriculum materials have lesson_id NULL (docs/ai/CONTRACT.md §9). Search already scopes
+    by curriculum_id alone (ADR-0007), so they must come back — and the row mapper must not
+    treat the NULL as corruption."""
+
+    async def scenario() -> None:
+        engine = create_async_engine(integration_database.database_url)
+        curriculum_id = uuid4()
+        other_curriculum_id = uuid4()
+        curriculum_material_id = uuid4()
+        foreign_material_id = uuid4()
+        try:
+            await _create_schema(engine, integration_database.runtime_role)
+            await _insert_chunk(
+                engine,
+                row_id=1,
+                lesson_id=None,
+                curriculum_id=curriculum_id,
+                material_id=curriculum_material_id,
+                state="ACTIVE",
+                content="target curriculum-wide material",
+                embedding=_vector(1.0),
+            )
+            # A curriculum material of another curriculum must not leak in.
+            await _insert_chunk(
+                engine,
+                row_id=2,
+                lesson_id=None,
+                curriculum_id=other_curriculum_id,
+                material_id=foreign_material_id,
+                state="ACTIVE",
+                content="foreign curriculum-wide material",
+                embedding=_vector(1.0),
+            )
+
+            service = ActiveMaterialRetrievalService(
+                FixedEmbedding(),
+                PgvectorActiveMaterialRepository(
+                    engine, runtime_role=integration_database.runtime_role
+                ),
+            )
+            hits = await service.retrieve(
+                curriculum_id=curriculum_id, query_text="target", top_k=10
+            )
+
+            assert [hit.material_id for hit in hits] == [curriculum_material_id]
+            assert hits[0].lesson_id is None
         finally:
             await engine.dispose()
 

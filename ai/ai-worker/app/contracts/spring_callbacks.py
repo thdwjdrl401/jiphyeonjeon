@@ -86,7 +86,8 @@ class MaterialCallbackEvent(BaseModel):
     event_type: MaterialCallbackType = Field(alias="eventType")
     job_id: str = Field(alias="jobId", min_length=1, max_length=128)
     material_id: UUID = Field(alias="materialId")
-    lesson_id: UUID = Field(alias="lessonId")
+    # None for curriculum-scoped materials; exclude_none drops the key from the wire body.
+    lesson_id: UUID | None = Field(default=None, alias="lessonId")
     status: MaterialCallbackStatus
     key_terms: tuple[KeyTermPayload, ...] | None = Field(default=None, alias="keyTerms")
     outputs: MaterialCallbackOutputs | None = None

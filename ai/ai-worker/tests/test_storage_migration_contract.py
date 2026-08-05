@@ -203,6 +203,7 @@ def test_annotation_text_downgrade_trims_before_narrowing(monkeypatch) -> None:
 
 def test_key_term_result_status_is_persisted_on_material_version(monkeypatch) -> None:
     migration = importlib.import_module("migrations.versions.0005_material_key_term_result")
+    monkeypatch.delenv("AI_WORKER_DATABASE_ROLE", raising=False)
     statements = []
     monkeypatch.setattr(migration.op, "execute", statements.append)
 
@@ -221,6 +222,7 @@ def test_key_term_result_status_is_persisted_on_material_version(monkeypatch) ->
 
 def test_key_term_result_status_downgrade_removes_only_added_columns(monkeypatch) -> None:
     migration = importlib.import_module("migrations.versions.0005_material_key_term_result")
+    monkeypatch.delenv("AI_WORKER_DATABASE_ROLE", raising=False)
     statements = []
     monkeypatch.setattr(migration.op, "execute", statements.append)
 
@@ -229,3 +231,37 @@ def test_key_term_result_status_downgrade_removes_only_added_columns(monkeypatch
 
     assert "DROP COLUMN IF EXISTS key_term_status" in ddl
     assert "DROP TABLE" not in ddl
+
+
+def test_curriculum_scope_drops_lesson_not_null(monkeypatch) -> None:
+    """Curriculum-scoped materials have no lesson, so NOT NULL made every such job fail."""
+    migration = importlib.import_module("migrations.versions.0006_curriculum_scope_materials")
+    monkeypatch.delenv("AI_WORKER_DATABASE_ROLE", raising=False)
+    statements = []
+    monkeypatch.setattr(migration.op, "execute", statements.append)
+
+    migration.upgrade()
+    ddl = "\n".join(str(statement) for statement in statements)
+
+    assert "ALTER TABLE ai.material_version ALTER COLUMN lesson_id DROP NOT NULL" in ddl
+    assert "ALTER TABLE ai.job_run ALTER COLUMN lesson_id DROP NOT NULL" in ddl
+    # Both indexes survive untouched: uq_material_one_active is keyed on (tenant, material)
+    # and ix_material_scope is a btree, which indexes NULLs.
+    assert "INDEX" not in ddl
+    assert migration.revision == "0006_curriculum_scope_materials"
+    # Chains onto 0005, which landed on master while this branch was open — a second head off
+    # 0004 would make alembic refuse to start.
+    assert migration.down_revision == "0005_material_key_term_result"
+
+
+def test_curriculum_scope_downgrade_discards_rows_before_restoring_not_null(monkeypatch) -> None:
+    """Curriculum rows cannot satisfy NOT NULL, so the restore has to delete them first."""
+    migration = importlib.import_module("migrations.versions.0006_curriculum_scope_materials")
+    statements = []
+    monkeypatch.setattr(migration.op, "execute", statements.append)
+
+    migration.downgrade()
+    ddl = "\n".join(str(statement) for statement in statements)
+
+    assert ddl.index("DELETE FROM ai.material_version") < ddl.index("SET NOT NULL")
+    assert ddl.index("DELETE FROM ai.job_run") < ddl.index("SET NOT NULL")

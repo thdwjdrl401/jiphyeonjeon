@@ -10,6 +10,9 @@
 - 외부 도메인 식별자는 `curriculum_id`, `lesson_id`, `material_id`이며 모두 PostgreSQL `uuid`다.
 - 원본 실험 브랜치의 `course_id`와 bigint 식별자는 사용하지 않는다.
 - 저장 identity는 `(tenant_id, material_id)`다. 한 identity의 `curriculum_id`와 `lesson_id`는 불변이다.
+- `lesson_id`는 nullable이다. **NULL이 곧 커리큘럼 종속 자료**이며 별도 scope 컬럼을 두지 않는다
+  ([ADR-0045](../../docs/decisions/canola/0045-curriculum-scoped-material-indexing.md)). 스코프 불변
+  가드는 `IS DISTINCT FROM`으로 비교한다 — `<>`는 NULL이 끼면 조용히 통과시킨다.
 - `material_version`은 1 이상의 단조 증가 정수다.
 - 테이블 내부 PK는 Python 저장소 전용 `bigint identity`이며 외부 계약에 노출하지 않는다.
 
@@ -250,6 +253,31 @@ v1은 `extractKeyTerms`를 포함하면 거부하며 worker 환경 기본값을 
   "contractVersion": 1
 }
 ```
+
+커리큘럼 종속 자료는 레슨이 없어 `lessonId` 대신 `scope`를 싣는다(ADR-0045). `scope`가 없으면 레슨 잡이다.
+
+```json
+{
+  "taskType": "PPTX_EMBED",
+  "scope": "CURRICULUM",
+  "materialId": "uuid",
+  "assetId": "uuid",
+  "curriculumId": "uuid",
+  "fileName": "강의자료.pptx",
+  "policy": { "embedModel": "bge-m3" },
+  "contractVersion": 1
+}
+```
+
+```json
+{ "taskType": "EMBED_DELETE", "scope": "CURRICULUM", "materialId": "uuid", "curriculumId": "uuid", "contractVersion": 1 }
+```
+
+- 삭제 봉투는 스코프별로 **비대칭**이다 — 레슨은 `lessonId`만, 커리큘럼은 `curriculumId`만 싣는다. Spring이
+  실제로 그러므로 그대로 수용한다.
+- `scope`와 `lessonId`는 양방향으로 짝이 강제된다. `CURRICULUM`에 `lessonId`가 있거나, 레슨 잡에
+  `lessonId`가 없으면 fail-closed다 — 후자가 더 위험하다. 조용히 커리큘럼 전체 자료가 되어 한 강의
+  자료가 커리큘럼 모든 질문의 근거로 새는다.
 
 - `fileName`은 빈 문자열일 수 있는 표시·관측용 값이며 source 권한이나 파일 형식 판정에 사용하지 않는다.
 - wire model alias `bge-m3`는 Python 내부의 고정 model `BAAI/bge-m3`로만 매핑한다.
