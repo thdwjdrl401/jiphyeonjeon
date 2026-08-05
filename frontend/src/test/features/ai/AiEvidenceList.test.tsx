@@ -34,12 +34,17 @@ describe('AI 근거 목록 — 발췌문', () => {
     expect(screen.queryByText(/mat-csrf/)).not.toBeInTheDocument()
   })
 
-  it('발화 근거도 발췌문을 보여 준다', async () => {
-    render(<AiEvidenceList sources={[CAPTION]} />)
-    await userEvent.click(toggle())
+  /**
+   * 발화(자막) 근거는 <b>감춘다</b>. 자막은 STT 원문이라 오인식이 그대로 근거로 보이고, 답변이 실제로
+   * 기댄 것보다 목록을 길게 만든다. 서버·AI는 계속 보내고 화면만 감춘다.
+   */
+  it('발화 근거는 발췌문이 있어도 보여 주지 않는다', () => {
+    const { container } = render(<AiEvidenceList sources={[CAPTION]} />)
 
-    expect(screen.getByText(/CSRF 토큰을 왜 따로 두는지/)).toBeInTheDocument()
-    expect(screen.queryByText(/stt-2/)).not.toBeInTheDocument()
+    // 자막뿐이면 보여 줄 근거가 하나도 없는 것과 같다 — 토글도 두지 않는다.
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+    expect(screen.queryByText(/CSRF 토큰을 왜 따로 두는지/)).not.toBeInTheDocument()
+    expect(container).toBeEmptyDOMElement()
   })
 
   /** 계약상 선택 필드라 옛 답변에는 없다. 그때 UUID를 되살리지 않는다 — 쪽수만 남긴다. */
@@ -60,19 +65,30 @@ describe('AI 근거 목록 — 발췌문', () => {
  */
 describe('AI 근거 목록 — 접힘/펼침', () => {
   it('근거가 있어도 기본은 접혀 있고 개수만 알린다', () => {
-    render(<AiEvidenceList sources={[PPTX, CAPTION]} />)
+    render(<AiEvidenceList sources={[PPTX, { ...PPTX, page: 13 }]} />)
 
     expect(toggle()).toHaveTextContent('근거 2')
     expect(toggle()).toHaveAttribute('aria-expanded', 'false')
     // 접힌 상태에서는 목록이 접근성 트리에도, 화면에도 없다.
     expect(screen.queryByRole('list')).not.toBeInTheDocument()
     expect(screen.getByText('12쪽')).not.toBeVisible()
-    expect(screen.getByText(/이동을 제공하지 않습니다/)).not.toBeVisible()
+  })
+
+  /** 감춘 것을 세면 펼쳤을 때 개수와 목록이 어긋난다. */
+  it('개수는 보여 줄 근거만 센다 — 감춘 자막은 빼고 센다', async () => {
+    const user = userEvent.setup()
+    render(<AiEvidenceList sources={[PPTX, CAPTION]} />)
+
+    expect(toggle()).toHaveTextContent('근거 1')
+
+    await user.click(toggle())
+
+    expect(screen.getAllByRole('listitem')).toHaveLength(1)
   })
 
   it('토글을 누르면 펼쳐지고 다시 누르면 접힌다', async () => {
     const user = userEvent.setup()
-    render(<AiEvidenceList sources={[PPTX, CAPTION]} />)
+    render(<AiEvidenceList sources={[PPTX, { ...PPTX, page: 13 }]} />)
 
     await user.click(toggle())
 
@@ -80,7 +96,7 @@ describe('AI 근거 목록 — 접힘/펼침', () => {
     expect(screen.getByRole('list')).toBeVisible()
     expect(screen.getAllByRole('listitem')).toHaveLength(2)
     expect(screen.getByText('12쪽')).toBeVisible()
-    expect(screen.getByText('12:08–12:41')).toBeVisible()
+    expect(screen.getByText('13쪽')).toBeVisible()
 
     await user.click(toggle())
 
@@ -126,16 +142,19 @@ describe('AI 근거 목록 — 접힘/펼침', () => {
     expect(container).toBeEmptyDOMElement()
   })
 
-  it('펼쳐도 발화 근거는 누를 수 없고, 이유는 목록 아래 한 번만 밝힌다', async () => {
+  /**
+   * 자막을 감추면서 <b>이동 불가 안내도 함께 사라진다</b> — 그 안내는 자막 근거를 설명하는 문장이라,
+   * 보여 주지도 않는 것을 두고 변명하면 읽는 사람만 헷갈린다.
+   */
+  it('감춘 자막 때문에 이동 불가 안내가 남지 않는다', async () => {
     const user = userEvent.setup()
-    render(<AiEvidenceList sources={[CAPTION, { ...CAPTION, startMs: 800_000, endMs: 812_000 }]} />)
+    render(<AiEvidenceList sources={[PPTX, CAPTION, { ...CAPTION, startMs: 800_000, endMs: 812_000 }]} />)
 
     await user.click(toggle())
 
-    // startMs는 attempt-local 축이라 seek에 쓰면 엉뚱한 지점으로 간다 — 버튼으로 만들지 않는다.
-    expect(screen.queryByRole('button', { name: /12:08/ })).not.toBeInTheDocument()
-    expect(screen.getAllByRole('listitem')).toHaveLength(2)
-    expect(screen.getAllByText(/이동을 제공하지 않습니다/)).toHaveLength(1)
+    expect(screen.getAllByRole('listitem')).toHaveLength(1)
+    expect(screen.queryByText(/12:08/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/이동을 제공하지 않습니다/)).not.toBeInTheDocument()
   })
 
   it('자료 근거만 있으면 이동 불가 안내를 붙이지 않는다', async () => {

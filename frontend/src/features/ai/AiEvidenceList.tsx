@@ -12,6 +12,18 @@ function Excerpt({ text }: { text?: string }) {
 }
 
 /**
+ * 화면에 내보내지 않을 근거 종류.
+ *
+ * <p>`CAPTION`을 뺀다 — 자막은 STT 원문이라 오인식이 그대로 근거로 보이고, 답변이 실제로 기댄 것보다
+ * 목록을 길게 만든다. 서버·AI는 계속 보내고 **화면만 감춘다**.
+ *
+ * <p><b>거르는 자리는 여기 하나다.</b> 근거는 라이브 SSE·다시보기 SSE·서버 기록 복원 세 경로로 들어오는데
+ * 그 각각에서 걸러 내면 한 곳을 빠뜨렸을 때 어디선가만 다시 보인다. 여기서 거르면 `근거 n` 개수도
+ * 저절로 맞는다 — 감춘 것을 세면 펼쳤을 때 개수와 목록이 어긋난다.
+ */
+const HIDDEN_SOURCE_TYPES: ReadonlySet<AiAnswerSource['type']> = new Set(['CAPTION'])
+
+/**
  * AI 답변의 근거 목록(LIVE.md §10.1 `sources`).
  *
  * **기본은 접혀 있다.** 370px 사이드바에 턴이 쌓이는 구조에서 근거를 항상 펼쳐 두면 카드 한 장이
@@ -29,6 +41,9 @@ function Excerpt({ text }: { text?: string }) {
  *   있으면 눌러서 그 지점으로 옮길 수 있다.
  * - 미지정 — 라이브(v1)의 STT attempt-local 축이라 누르면 엉뚱한 지점으로 간다. 표시만 하고 왜 못
  *   가는지 목록 아래에 한 번 밝힌다.
+ *
+ * **지금은 자막 근거를 보여 주지 않는다**(`HIDDEN_SOURCE_TYPES`). 아래 자막 렌더 분기는 그대로 두어
+ * 되돌릴 때 한 줄이면 되게 한다.
  */
 export default function AiEvidenceList({
   sources,
@@ -40,9 +55,14 @@ export default function AiEvidenceList({
 }) {
   const [isExpanded, setExpanded] = useState(false)
   const panelId = useId()
-  // 근거 없는 턴에는 토글도 두지 않는다 — 눌러도 빈 목록만 나오는 버튼은 잡음이다.
-  if (sources.length === 0) return null
-  const hasApproximateCaptionSource = sources.some(
+  const visible = sources.filter((source) => !HIDDEN_SOURCE_TYPES.has(source.type))
+  /*
+   * 근거 없는 턴에는 토글도 두지 않는다 — 눌러도 빈 목록만 나오는 버튼은 잡음이다.
+   * <b>거른 뒤에 판단한다.</b> 자막만 있던 답변은 이제 근거가 하나도 없는 것과 같아, 원본이 비어
+   * 있는지가 아니라 보여 줄 것이 남았는지를 봐야 한다.
+   */
+  if (visible.length === 0) return null
+  const hasApproximateCaptionSource = visible.some(
     (source) => source.type === 'CAPTION' && source.timeAxis !== 'PLAYBACK',
   )
 
@@ -56,13 +76,13 @@ export default function AiEvidenceList({
         type="button"
       >
         <i aria-hidden="true" />
-        근거 {sources.length}
+        근거 {visible.length}
       </button>
       {/* 접혀도 DOM에 남긴다 — aria-controls가 가리키는 대상이 사라지면 참조가 끊긴다.
           `hidden`이라 접근성 트리·시각 양쪽에서 함께 빠진다. */}
       <div className="ai-evidence-panel" hidden={!isExpanded} id={panelId}>
         <ul className="ai-evidence">
-          {sources.map((source) => source.type === 'PPTX'
+          {visible.map((source) => source.type === 'PPTX'
             ? (
               <li className="evidence-card" key={`pptx-${source.materialId}-${source.page}`}>
                 <strong>{source.page}쪽</strong>

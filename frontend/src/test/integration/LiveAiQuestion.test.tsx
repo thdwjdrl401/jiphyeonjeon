@@ -68,7 +68,8 @@ describe('AI 질의응답 화면 연결', () => {
     await user.click(await screen.findByRole('button', { name: /^근거 \d+$/ }))
     // 하드코딩 문구가 아니라 실제 sources로 그린 근거 항목이다.
     expect(screen.getByText('12쪽')).toBeVisible()
-    expect(screen.getByText('12:08–12:41')).toBeVisible()
+    // 목이 자막 근거도 함께 주지만 화면에는 나오지 않는다(AiEvidenceList가 감춘다).
+    expect(screen.queryByText('12:08–12:41')).not.toBeInTheDocument()
   })
 
   it('다시보기 AI 탭은 레슨 스코프로 질문하고 재생 위치를 함께 보낸다', async () => {

@@ -168,8 +168,11 @@ describe('개인 AI 질문 패널 — 대화형 UX', () => {
     })
     harness.calls[0].finish()
 
-    // 답변 아래에 남는 건 "근거 2" 한 줄이다 — 카드를 항상 펼쳐 두면 패널이 근거로 찬다(ADR-0049 §8).
-    const evidenceToggle = await screen.findByRole('button', { name: '근거 2' })
+    /*
+     * 답변 아래에 남는 건 "근거 n" 한 줄이다 — 카드를 항상 펼쳐 두면 패널이 근거로 찬다(ADR-0049 §8).
+     * 자막 근거는 감추므로(AiEvidenceList) 둘을 받아도 세는 것은 자료 하나뿐이다.
+     */
+    const evidenceToggle = await screen.findByRole('button', { name: '근거 1' })
     expect(evidenceToggle).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByRole('list')).not.toBeInTheDocument()
 
@@ -180,10 +183,10 @@ describe('개인 AI 질문 패널 — 대화형 UX', () => {
     // UUID가 아니라 서버가 보낸 발췌문이 보인다.
     expect(screen.getByText('세션과 CSRF 요약')).toBeVisible()
     expect(screen.queryByText('mat-csrf')).not.toBeInTheDocument()
-    expect(screen.getByText('12:08–12:41')).toBeVisible()
-    expect(screen.getByText(/영상 위치와 다를 수 있어 이동을 제공하지 않습니다/)).toBeVisible()
-    // 근거는 표시 전용이다 — 누르면 엉뚱한 지점으로 가므로 버튼으로 만들지 않는다.
-    expect(screen.queryByRole('button', { name: /12:08/ })).not.toBeInTheDocument()
+    // 자막 근거는 화면에 없다 — 발췌문도, 시각도, 이동 불가 안내도 함께 사라진다.
+    expect(screen.queryByText('토큰을 왜 따로 두는지 설명')).not.toBeInTheDocument()
+    expect(screen.queryByText('12:08–12:41')).not.toBeInTheDocument()
+    expect(screen.queryByText(/이동을 제공하지 않습니다/)).not.toBeInTheDocument()
     // 정상 종료에는 재시도가 없고, 다시 물어볼 수 있는 상태로 돌아온다.
     expect(screen.queryByRole('button', { name: '다시 시도' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '전송' })).toBeInTheDocument()
