@@ -4,11 +4,14 @@ import com.liveclass.curriculum.service.CatalogService;
 import com.liveclass.curriculum.web.dto.LessonDetailResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.net.URI;
 import java.util.UUID;
 
 /**
@@ -36,5 +39,16 @@ public class StudentLessonController {
     public LessonDetailResponse get(@PathVariable UUID lessonId, Authentication authentication) {
         return LessonDetailResponse.from(
                 catalogService.lessonDetail(lessonId, CatalogViewers.of(authentication)));
+    }
+
+    @Operation(summary = "레슨 자료 다운로드(수강생)",
+            description = "활성 수강생에게만 자료의 presigned GET URL로 302 리다이렉트한다.")
+    @GetMapping("/api/lessons/{lessonId}/materials/{materialId}/download")
+    public ResponseEntity<Void> downloadMaterial(@PathVariable UUID lessonId,
+                                                 @PathVariable UUID materialId,
+                                                 Authentication authentication) {
+        String url = catalogService.lessonMaterialDownloadUrl(
+                lessonId, materialId, CatalogViewers.of(authentication));
+        return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(url)).build();
     }
 }

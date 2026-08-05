@@ -206,6 +206,46 @@ class CurriculumMaterialContractTest {
     }
 
     @Test
+    void student_download_requires_active_enrollment() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String curriculumId = createPublishedCurriculum(instructor);
+        String assetId = uploadedMaterialAsset(instructor);
+        String materialId = json(write(post("/api/instructor/curriculums/" + curriculumId + "/materials"),
+                instructor, """
+                {"assetId":"%s"}
+                """.formatted(assetId)).andExpect(status().isCreated()).andReturn()).get("materialId").asString();
+        String downloadPath = "/api/curriculums/" + curriculumId + "/materials/" + materialId + "/download";
+
+        // /api/curriculums/** 공개 조회 규칙보다 다운로드 인증 규칙이 우선해야 한다.
+        mockMvc.perform(get(downloadPath))
+                .andExpect(status().isUnauthorized());
+
+        Cookie[] student = loginAs("STUDENT");
+        mockMvc.perform(get(downloadPath).cookie(student))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ENROLLMENT_REQUIRED"));
+
+        // 승인 전 PENDING 수강도 다운로드 권한이 없다.
+        String enrollmentId = json(write(post("/api/curriculums/" + curriculumId + "/enrollments"), student, null)
+                .andExpect(status().isCreated()).andReturn()).get("enrollmentId").asString();
+        mockMvc.perform(get(downloadPath).cookie(student))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ENROLLMENT_REQUIRED"));
+
+        write(post("/api/instructor/curriculums/" + curriculumId
+                + "/enrollments/" + enrollmentId + "/approve"), instructor, null)
+                .andExpect(status().isOk());
+        mockMvc.perform(get(downloadPath).cookie(student))
+                .andExpect(status().isFound())
+                .andExpect(header().string("Location", "http://fake-minio/download"));
+
+        // ACTIVE 수강생도 이 커리큘럼에 연결되지 않은 materialId는 받을 수 없다.
+        mockMvc.perform(get("/api/curriculums/" + curriculumId + "/materials/"
+                        + UUID.randomUUID() + "/download").cookie(student))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void curriculum_detail_hides_materials_from_guest_but_shows_owner() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String curriculumId = createCurriculum(instructor);
@@ -240,6 +280,19 @@ class CurriculumMaterialContractTest {
         MvcResult curriculum = write(post("/api/instructor/curriculums"), auth, "{\"title\":\"커리큘럼 자료 테스트\"}")
                 .andExpect(status().isCreated()).andReturn();
         return json(curriculum).get("curriculumId").asString();
+    }
+
+    private String createPublishedCurriculum(Cookie[] auth) throws Exception {
+        String curriculumId = createCurriculum(auth);
+        String sectionId = json(write(post("/api/instructor/curriculums/" + curriculumId + "/sections"), auth,
+                "{\"title\":\"게시용 섹션\"}")
+                .andExpect(status().isCreated()).andReturn()).get("sectionId").asString();
+        write(post("/api/instructor/sections/" + sectionId + "/lessons"), auth,
+                "{\"title\":\"게시용 강의\"}")
+                .andExpect(status().isCreated());
+        write(post("/api/instructor/curriculums/" + curriculumId + "/publish"), auth, null)
+                .andExpect(status().isOk());
+        return curriculumId;
     }
 
     private String uploadedMaterialAsset(Cookie[] auth) throws Exception {

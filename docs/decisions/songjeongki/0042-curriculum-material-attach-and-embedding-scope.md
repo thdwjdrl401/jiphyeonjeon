@@ -34,6 +34,14 @@
 
 `material.embedding.enabled`가 켜지면 커리큘럼 자료도 레슨과 동일하게 attach와 같은 트랜잭션에서 outbox에 잡을 싣는다([0036] 신뢰성). 다만 `lessonId`가 없으므로 envelope에 **`scope: "CURRICULUM"`**을 싣고 `curriculumId`만 준다. 레슨 잡은 기존 형태 그대로(`scope` 미포함 = 암묵적 `LESSON`) — extra=forbid인 워커 계약을 깨지 않기 위해 레슨 payload는 바꾸지 않는다. 삭제 잡(`EMBED_DELETE`)도 커리큘럼 스코프는 `scope`+`curriculumId`로 싣는다.
 
+### 4. 수강생 커리큘럼 자료 다운로드(2026-08-05 확장)
+
+`GET /api/curriculums/{curriculumId}/materials/{materialId}/download`를 학생 경로로 추가한다. 공개 카탈로그
+조회의 `permitAll`보다 앞에서 `ROLE_STUDENT`를 요구하고, 서비스는 공개 상세의 viewerContext를 재사용해
+관계가 **ENROLLED(ACTIVE)**인지 다시 확인한다. 승인 대기·미수강 학생은 자료 목록이나 `materialId`를
+알아도 403이며, 통과 후에도 해당 커리큘럼의 활성 자료에서 ID를 다시 찾아 다른 스코프 접근을 404로
+막는다. 강사 다운로드는 기존 `/api/instructor/curriculums/.../download`를 유지한다.
+
 ## 근거
 
 - **표류 최소화**: 커리큘럼 자료도 레슨 자료와 라이프사이클·상태·콜백·다운로드가 같다. 별도 테이블·엔티티·콜백 분기를 만들면 두 벌을 영원히 나란히 유지해야 한다. 스코프 컬럼 하나로 재사용하면 콜백·URL 발급·상태 머신이 공짜로 따라온다.

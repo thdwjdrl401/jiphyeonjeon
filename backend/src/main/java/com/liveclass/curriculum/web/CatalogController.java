@@ -7,12 +7,15 @@ import com.liveclass.curriculum.web.dto.CurriculumDetailResponse;
 import com.liveclass.curriculum.web.dto.PageResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.net.URI;
 import java.util.UUID;
 
 /**
@@ -51,6 +54,17 @@ public class CatalogController {
     @GetMapping("/api/curriculums/{curriculumId}")
     public CurriculumDetailResponse detail(@PathVariable UUID curriculumId, Authentication authentication) {
         return CurriculumDetailResponse.from(catalogService.detail(curriculumId, CatalogViewers.of(authentication)));
+    }
+
+    @Operation(summary = "커리큘럼 자료 다운로드(수강생)",
+            description = "활성 수강생에게만 자료의 presigned GET URL로 302 리다이렉트한다.")
+    @GetMapping("/api/curriculums/{curriculumId}/materials/{materialId}/download")
+    public ResponseEntity<Void> downloadMaterial(@PathVariable UUID curriculumId,
+                                                 @PathVariable UUID materialId,
+                                                 Authentication authentication) {
+        String url = catalogService.curriculumMaterialDownloadUrl(
+                curriculumId, materialId, CatalogViewers.of(authentication));
+        return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(url)).build();
     }
 
 }
