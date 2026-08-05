@@ -336,11 +336,15 @@ export default function InstructorAnnotationLayer({
   const highlightModeRef = useRef(false)
 
   /**
-   * 이미 표식을 붙인 요소 id. <b>무한 루프를 막는 유일한 장치다.</b>
+   * 표식을 붙이지 않을 요소 id. <b>무한 루프를 막는 유일한 장치다.</b>
    *
    * <p>표식을 붙이려면 {@code updateScene}을 불러야 하고, 그러면 Excalidraw가 다시 {@code onChange}를
    * 부른다. 그때 같은 요소를 또 건드리면 그 자리에서 앱이 죽는다 — 이 파일에 이미 같은 사고가
    * 기록돼 있다("Maximum update depth exceeded"). 그래서 <b>updateScene을 부르기 전에</b> 여기 넣는다.
+   *
+   * <p><b>강조 모드를 켤 때 그 시점의 요소를 전부 넣는다</b>(ADR-0079). 예전에는 "표식 없는 요소"를
+   * 곧 "강조 모드에서 새로 그린 것"으로 봤는데, 그러면 모드를 켜기 <b>전에</b> 그린 일반 판서와
+   * 복원된 판서까지 통째로 강조로 둔갑했다. 강조가 아닌 획이 근거로 색인되고, 지우개 의미도 갈린다.
    */
   const taggedRef = useRef<Set<string>>(new Set())
 
@@ -424,6 +428,12 @@ export default function InstructorAnnotationLayer({
     const next = !highlightMode
     setHighlightMode(next)
     highlightModeRef.current = next
+    /*
+     * 켜는 순간의 요소를 전부 제외 목록에 넣는다(ADR-0079). 그래야 "표식 없는 요소"가 "지금부터
+     * 그린 것"과 같아진다 — 이 시딩이 없으면 모드를 켜기 전의 일반 판서가 첫 캡처에서 통째로
+     * 강조가 된다. 끌 때는 건드리지 않는다. 이미 붙은 표식은 그대로 남아야 한다.
+     */
+    if (next) for (const element of elementsRef.current) taggedRef.current.add(element.id)
     api.updateScene({
       appState: next
         ? {
@@ -546,6 +556,11 @@ export default function InstructorAnnotationLayer({
     }
     seededRef.current = true
     elementsRef.current = [...restoredElements]
+    /*
+     * 복원본은 표식 대상이 아니다(ADR-0079). 이전 세션에서 이미 처리된 획이라 지금 강조로 만들면
+     * 그리지도 않은 것이 근거로 색인된다. 강조 모드가 켜진 채 복원이 늦게 도착하는 경우가 실제로 있다.
+     */
+    for (const element of restoredElements) taggedRef.current.add(element.id)
     // 파일을 <b>먼저</b> 넣는다. 요소가 먼저 들어가면 그 사이 렌더에서 가리킬 파일이 없다.
     if (restoredFiles) {
       const list = Object.values(restoredFiles)
