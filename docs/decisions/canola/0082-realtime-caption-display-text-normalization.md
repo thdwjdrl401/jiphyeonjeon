@@ -1,4 +1,4 @@
-# ADR-0045: realtime 자막 표시 텍스트는 application Redis 직전에 한 번 정규화한다
+# ADR-0082: realtime 자막 표시 텍스트는 application Redis 직전에 한 번 정규화한다
 
 - **상태**: 채택
 - **일자**: 2026-08-03
