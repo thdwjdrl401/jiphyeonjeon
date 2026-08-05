@@ -11,6 +11,24 @@ LESSON_ID = "22222222-2222-4222-8222-222222222222"
 OCCURRED_AT = datetime(2026, 7, 29, 12, 0, tzinfo=UTC)
 
 
+def _accumulator(**overrides: int) -> LectureNoteWindowAccumulator:
+    """flush 규칙 자체를 검증하는 파일이라 경계를 여기서 고정한다.
+
+    운영 기본값은 정책이고 이 파일이 검증하는 것은 로직이다. 둘을 묶어 두면 정책을 바꿀 때마다
+    무관한 테스트가 깨진다 — 정책 값은 test_deployment_config가 따로 지킨다.
+    """
+
+    bounds: dict[str, int] = {
+        "min_window_ms": 15_000,
+        "target_window_ms": 25_000,
+        "max_window_ms": 40_000,
+        "min_chars": 80,
+        "max_chars": 400,
+    }
+    bounds.update(overrides)
+    return LectureNoteWindowAccumulator(**bounds)
+
+
 def _delta(
     sequence: int,
     stream_elapsed_ms: int,
@@ -76,13 +94,13 @@ def test_strong_boundary_requires_both_minimum_time_and_characters(
     stream_elapsed_ms: int,
     text: str,
 ) -> None:
-    accumulator = LectureNoteWindowAccumulator()
+    accumulator = _accumulator()
 
     assert _windows(accumulator, _delta(1, stream_elapsed_ms, text)) == ()
 
 
 def test_target_time_flushes_without_strong_boundary_after_minimum_characters() -> None:
-    accumulator = LectureNoteWindowAccumulator()
+    accumulator = _accumulator()
 
     windows = _windows(accumulator, _delta(1, 25_000, "가" * 80))
 
@@ -93,7 +111,7 @@ def test_target_time_flushes_without_strong_boundary_after_minimum_characters() 
 
 @pytest.mark.parametrize("ending", [".", "?", "!", "。", "？", "！", "\n"])
 def test_strong_boundary_flushes_at_minimum_boundary(ending: str) -> None:
-    accumulator = LectureNoteWindowAccumulator()
+    accumulator = _accumulator()
 
     windows = _windows(accumulator, _delta(1, 15_000, "가" * 79 + ending))
 
@@ -114,7 +132,7 @@ def test_forced_threshold_ignores_minimum_window(
     stream_elapsed_ms: int,
     text: str,
 ) -> None:
-    accumulator = LectureNoteWindowAccumulator()
+    accumulator = _accumulator()
 
     windows = _windows(accumulator, _delta(1, stream_elapsed_ms, text))
 
@@ -124,7 +142,7 @@ def test_forced_threshold_ignores_minimum_window(
 
 
 def test_second_window_uses_elapsed_time_since_previous_flush() -> None:
-    accumulator = LectureNoteWindowAccumulator()
+    accumulator = _accumulator()
     _windows(accumulator, _delta(1, 15_000, "가" * 79 + "."))
 
     assert _windows(accumulator, _delta(2, 16_000, "나" * 79 + ".")) == ()
@@ -137,7 +155,7 @@ def test_second_window_uses_elapsed_time_since_previous_flush() -> None:
 
 
 def test_completion_flushes_short_text_and_preserves_delta_whitespace() -> None:
-    accumulator = LectureNoteWindowAccumulator()
+    accumulator = _accumulator()
     _windows(accumulator, _delta(1, 1_000, "첫째"))
     _windows(accumulator, _delta(2, 2_000, " 둘째"))
 
@@ -151,7 +169,7 @@ def test_completion_flushes_short_text_and_preserves_delta_whitespace() -> None:
 
 
 def test_duplicate_event_sequence_and_gap_do_not_duplicate_text() -> None:
-    accumulator = LectureNoteWindowAccumulator()
+    accumulator = _accumulator()
     first = _delta(1, 1_000, "하나")
 
     _windows(accumulator, first)
@@ -169,7 +187,7 @@ def test_duplicate_event_sequence_and_gap_do_not_duplicate_text() -> None:
 
 
 def test_new_attempt_flushes_short_window_and_rejects_late_old_attempt() -> None:
-    accumulator = LectureNoteWindowAccumulator()
+    accumulator = _accumulator()
     _windows(accumulator, _delta(1, 1_000, "이전 시도의 짧은 문장"))
 
     windows = _windows(
@@ -187,7 +205,7 @@ def test_new_attempt_flushes_short_window_and_rejects_late_old_attempt() -> None
 
 
 def test_next_window_receives_only_previous_two_sentences_as_context() -> None:
-    accumulator = LectureNoteWindowAccumulator()
+    accumulator = _accumulator()
     first_text = "가" * 30 + "." + "나" * 48 + "."
     first = _windows(accumulator, _delta(1, 15_000, first_text))
 
@@ -199,7 +217,7 @@ def test_next_window_receives_only_previous_two_sentences_as_context() -> None:
 
 
 def test_sessions_keep_sequence_text_and_context_isolated() -> None:
-    accumulator = LectureNoteWindowAccumulator()
+    accumulator = _accumulator()
     _windows(accumulator, _delta(1, 1_000, "세션 A"))
     _windows(
         accumulator,
@@ -231,7 +249,7 @@ def test_sessions_keep_sequence_text_and_context_isolated() -> None:
 
 
 def test_stream_regression_and_entry_after_completion_do_not_mutate_text() -> None:
-    accumulator = LectureNoteWindowAccumulator()
+    accumulator = _accumulator()
     _windows(accumulator, _delta(1, 2_000, "정상"))
     _windows(accumulator, _delta(2, 1_000, " 역행"))
 
@@ -245,7 +263,7 @@ def test_stream_regression_and_entry_after_completion_do_not_mutate_text() -> No
 
 
 def test_long_lived_state_is_bounded() -> None:
-    accumulator = LectureNoteWindowAccumulator(
+    accumulator = _accumulator(
         max_sessions=1,
         max_event_ids=2,
         max_retired_attempts_per_session=1,
@@ -273,7 +291,7 @@ def test_long_lived_state_is_bounded() -> None:
 
 
 def test_completion_without_buffer_emits_no_window() -> None:
-    accumulator = LectureNoteWindowAccumulator()
+    accumulator = _accumulator()
 
     assert _windows(accumulator, _completed(0, 0)) == ()
     assert _windows(accumulator, _completed(0, 0, event_id="other-completion")) == ()
@@ -282,7 +300,7 @@ def test_completion_without_buffer_emits_no_window() -> None:
 
 
 def test_remove_completed_session_releases_buffer_and_rejects_late_delta() -> None:
-    accumulator = LectureNoteWindowAccumulator(max_sessions=2)
+    accumulator = _accumulator(max_sessions=2)
     _windows(accumulator, _delta(1, 1_000, "완료 전 내용"))
     _windows(accumulator, _completed(1, 2_000))
 
@@ -302,7 +320,7 @@ def test_remove_completed_session_releases_buffer_and_rejects_late_delta() -> No
 
 
 def test_remove_active_session_is_rejected() -> None:
-    accumulator = LectureNoteWindowAccumulator()
+    accumulator = _accumulator()
     _windows(accumulator, _delta(1, 1_000, "진행 중"))
 
     with pytest.raises(ValueError, match="active lecture note session"):
@@ -310,7 +328,7 @@ def test_remove_active_session_is_rejected() -> None:
 
 
 def test_completed_session_tombstones_are_bounded() -> None:
-    accumulator = LectureNoteWindowAccumulator(max_sessions=1)
+    accumulator = _accumulator(max_sessions=1)
     _windows(accumulator, _completed(0, 0))
     accumulator.remove_session(SESSION_ID)
     _windows(

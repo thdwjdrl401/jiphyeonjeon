@@ -357,11 +357,14 @@ def _draft_semantic_repair_prompt(request: LectureNoteDraftModelRequest) -> str:
         )
     elif len(active.items) >= 12:
         state_rule = (
-            "현재 topic의 기존 item type과 label, 사실을 currentTopic에 유지하고 "
+            "현재 topic의 기존 item은 type, label, content를 글자 그대로 복사해 currentTopic에 두고 "
             "action=START_NEW로 새 내용을 newTopic에 넣으세요. "
         )
     else:
-        state_rule = "기존 currentTopic의 모든 item type과 label, 사실을 유지하세요. "
+        state_rule = (
+            "기존 currentTopic의 모든 item을 type, label, content까지 글자 그대로 복사하세요. "
+            "content를 한 글자라도 고쳐 쓰거나 두 item을 합치면 보존 검증이 다시 실패합니다. "
+        )
     return (
         "직전 JSON이 현재 draft의 전이·보존 계약을 위반했습니다. 사실을 추가하거나 삭제하지 말고 "
         "items를 최대 12개로 유지하며 action별 null 규칙을 지키세요. "

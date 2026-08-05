@@ -17,6 +17,7 @@ from app.lecture_notes.models import (
     LectureNoteDraftItemType,
     LectureNoteDraftModelRequest,
     LectureNoteDraftTopic,
+    LectureNoteDraftUpdateAction,
     LectureNoteEvent,
     LectureNoteModelResult,
     LectureNoteRefinedSnapshot,
@@ -101,6 +102,8 @@ class _SessionState:
     pending: _PendingBatch | None = None
     in_flight: _PendingBatch | None = None
     outbox: LectureNoteEvent | None = None
+    # IGNORE된 window의 자막. 미완결 발화를 버리지 않고 다음 호출 입력 앞에 되돌린다.
+    deferred_text: str = ""
     task: asyncio.Task[None] | None = None
     completed: bool = False
     completion_acked: bool = False
@@ -120,11 +123,15 @@ class LectureNoteService:
         accumulator: LectureNoteWindowAccumulator,
         *,
         refinement_model: LectureNoteRefinementModel | None = None,
+        max_deferred_chars: int = 4_000,
     ) -> None:
+        if max_deferred_chars <= 0:
+            raise ValueError("lecture note deferred text bound must be positive")
         self._model = model
         self._refinement_model = refinement_model
         self._store = store
         self._accumulator = accumulator
+        self._max_deferred_chars = max_deferred_chars
         self._sessions: dict[str, _SessionState] = {}
         self._tasks: set[asyncio.Task[None]] = set()
         self._metrics = LectureNoteServiceMetrics()
@@ -173,6 +180,7 @@ class LectureNoteService:
                 pending=_restore_work(checkpoint.pending),
                 in_flight=_restore_work(checkpoint.inFlight),
                 outbox=checkpoint.outbox,
+                deferred_text=checkpoint.deferredText,
                 completed=checkpoint.completed,
                 completion_acked=checkpoint.completionAcked,
                 refinement_pending=checkpoint.refinementPending,
@@ -304,7 +312,7 @@ class LectureNoteService:
         batch: _PendingBatch,
     ) -> bool:
         if batch.windows:
-            request = _draft_model_request(state.draft, batch.windows)
+            request = _draft_model_request(state.draft, batch.windows, state.deferred_text)
             self._metrics.model_calls_total += 1
             try:
                 result = await self._model.generate_draft(request)
@@ -327,6 +335,15 @@ class LectureNoteService:
                 updated_draft = apply_draft_update(previous_draft, result)
                 delta_result = _draft_delta_result(previous_draft, updated_draft)
                 state.draft = updated_draft
+                # IGNORE는 "버린다"가 아니라 "아직 판단할 수 없다"이다. 그 자막을 흘려보내면
+                # 뒷부분만 앞부분 없이 다음 창에 도착하므로, 다음 호출 입력 앞에 되돌린다.
+                # 소비된 경우에만 비워 같은 자막이 무한히 따라다니지 않게 한다.
+                if result.action is LectureNoteDraftUpdateAction.IGNORE:
+                    state.deferred_text = _bounded_deferred_text(
+                        request.text, self._max_deferred_chars
+                    )
+                else:
+                    state.deferred_text = ""
                 if delta_result is None:
                     state.in_flight.windows.clear()
                     if state.in_flight.completion is None:
@@ -500,6 +517,7 @@ class LectureNoteService:
             pending=state.pending.to_checkpoint() if state.pending else None,
             inFlight=state.in_flight.to_checkpoint() if state.in_flight else None,
             outbox=state.outbox,
+            deferredText=state.deferred_text,
             completed=state.completed,
             completionAcked=state.completion_acked,
             refinementPending=state.refinement_pending,
@@ -658,9 +676,22 @@ def _checkpoint_contains_event(
     )
 
 
+def _bounded_deferred_text(text: str, max_chars: int) -> str:
+    """이월 자막은 프롬프트 예산을 갉아먹으므로 최근 쪽을 남기고 자른다.
+
+    앞이 아니라 뒤를 남기는 이유는, 계속 IGNORE되는 상황에서 정작 완결에 가까운 최근 발화가
+    잘려 나가면 이월의 목적이 사라지기 때문이다.
+    """
+
+    if len(text) <= max_chars:
+        return text
+    return text[-max_chars:]
+
+
 def _draft_model_request(
     draft: LectureNoteDraft,
     windows: list[LectureNoteWindow],
+    deferred_text: str = "",
 ) -> LectureNoteDraftModelRequest:
     latest = windows[-1]
     return LectureNoteDraftModelRequest(
@@ -669,7 +700,8 @@ def _draft_model_request(
         stt_session_id=latest.stt_session_id,
         note=draft,
         previous_context=windows[0].previous_context,
-        text="".join(window.text for window in windows),
+        # 앞서 IGNORE된 자막을 앞에 붙여, 미완결이라 미룬 발화가 완결된 뒤 함께 판단되게 한다.
+        text=deferred_text + "".join(window.text for window in windows),
     )
 
 

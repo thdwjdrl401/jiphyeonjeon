@@ -47,19 +47,19 @@ def test_prod_and_dev_compose_share_operational_shape() -> None:
 
 def test_lecture_note_policy_uses_compose_defaults() -> None:
     expected_defaults = {
-        # 비워 두면 앱이 AI_API_GMS_MODEL로 폴백해 gpt-4.1이 된다. 강의 노트는 gpt-5-nano가
+        # 비워 두면 앱이 AI_API_GMS_MODEL로 폴백해 gpt-4.1이 된다. 강의 노트는 gpt-5-mini가
         # 기본이므로 compose가 명시한다 — 이 값이 비어 있던 것이 reasoning_effort와 짝이
-        # 깨져 전 호출이 400을 받은 원인이었다.
-        "AI_API_LECTURE_NOTE_MODEL": "gpt-5-nano",
+        # 깨져 전 호출이 400을 받은 원인이었다. nano는 item 보존 실측이 1/3이라 제외했다.
+        "AI_API_LECTURE_NOTE_MODEL": "gpt-5-mini",
         "AI_API_LECTURE_NOTE_REASONING_EFFORT": "minimal",
         "AI_API_LECTURE_NOTE_MAX_OUTPUT_TOKENS": "4096",
         "AI_API_LECTURE_NOTE_MAX_PROMPT_CHARS": "20000",
         "AI_API_LECTURE_NOTE_TIMEOUT_SECONDS": "30",
-        "AI_API_LECTURE_NOTE_MIN_WINDOW_MS": "15000",
-        "AI_API_LECTURE_NOTE_TARGET_WINDOW_MS": "25000",
-        "AI_API_LECTURE_NOTE_MAX_WINDOW_MS": "40000",
-        "AI_API_LECTURE_NOTE_MIN_CHARS": "80",
-        "AI_API_LECTURE_NOTE_MAX_CHARS": "400",
+        "AI_API_LECTURE_NOTE_MIN_WINDOW_MS": "45000",
+        "AI_API_LECTURE_NOTE_TARGET_WINDOW_MS": "60000",
+        "AI_API_LECTURE_NOTE_MAX_WINDOW_MS": "90000",
+        "AI_API_LECTURE_NOTE_MIN_CHARS": "200",
+        "AI_API_LECTURE_NOTE_MAX_CHARS": "1500",
         "AI_API_LECTURE_NOTE_STREAM_MAXLEN": "10000",
     }
     composes = (

@@ -58,6 +58,9 @@ Redis session checkpoint에 저장한 뒤 ACK한다. ACK는 노트 생성 완료
 공백은 문장 경계로 사용하지 않는다. delta의 leading space를 포함해 text를 순서대로 그대로 붙인다.
 온점도 필수 조건이 아니라 자연스러운 cut 지점을 고르는 보조 조건이다.
 
+> **window·모델 초기값은 [ADR-0081](0081-lecture-note-window-and-draft-model-policy.md)이
+> 대체했다.** 아래 표는 MVP 당시 기록이다.
+
 | 정책 | MVP 초기값 |
 |---|---:|
 | 최소 window | 15초이면서 80자 이상 |

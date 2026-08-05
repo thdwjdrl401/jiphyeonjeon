@@ -13,7 +13,7 @@ def test_uses_loopback_defaults() -> None:
     assert settings.database_url is None
     assert settings.bge_base_url is None
     assert settings.gms_api_key is None
-    assert settings.lecture_note_model == "gpt-5-nano"
+    assert settings.lecture_note_model == "gpt-5-mini"
     assert settings.lecture_note_reasoning_effort == "minimal"
     assert settings.lecture_note_gms_max_concurrency == 4
     assert settings.lecture_note_gms_refinement_max_concurrency == 1
