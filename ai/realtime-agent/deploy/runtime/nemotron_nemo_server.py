@@ -3,9 +3,9 @@ from __future__ import annotations
 import argparse
 import asyncio
 import io
+import socket
 import wave
-from collections.abc import Sequence
-from contextlib import nullcontext
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -19,7 +19,6 @@ class NemoTranscriber:
     device: str = "cuda"
     language: str = "ko-KR"
     model: object | None = None
-    stream: object | None = None
 
     def load(self) -> None:
         import torch
@@ -34,8 +33,6 @@ class NemoTranscriber:
         model.to(device=self.device, dtype=torch.float32)
         model.eval()
         self.model = model
-        if self.device.startswith("cuda"):
-            self.stream = torch.cuda.Stream(device=self.device)
 
     def transcribe(self, wav_payload: bytes) -> str:
         import torch
@@ -43,10 +40,7 @@ class NemoTranscriber:
         if self.model is None:
             raise RuntimeError("model is not ready")
         samples = _decode_pcm16_wav(wav_payload)
-        stream_context = (
-            torch.cuda.stream(self.stream) if self.stream is not None else nullcontext()
-        )
-        with torch.inference_mode(), stream_context:
+        with torch.inference_mode():
             results = self.model.transcribe(
                 audio=samples,
                 batch_size=1,
@@ -54,8 +48,6 @@ class NemoTranscriber:
                 verbose=False,
                 target_lang=self.language,
             )
-        if self.stream is not None:
-            self.stream.synchronize()
         result = results[0]
         return (result.text if hasattr(result, "text") else str(result)).strip()
 
@@ -72,47 +64,29 @@ def _decode_pcm16_wav(payload: bytes) -> np.ndarray:
     return np.frombuffer(pcm, dtype="<i2").astype(np.float32) / 32768.0
 
 
-class NemoTranscriberPool:
-    def __init__(self, transcribers: Sequence[NemoTranscriber]) -> None:
-        if not transcribers:
-            raise ValueError("at least one transcriber replica is required")
-        self._transcribers = tuple(transcribers)
-        self._available: asyncio.Queue[NemoTranscriber] = asyncio.Queue(
-            maxsize=len(self._transcribers)
-        )
-        for transcriber in self._transcribers:
-            self._available.put_nowait(transcriber)
-
-    @property
-    def replica_count(self) -> int:
-        return len(self._transcribers)
-
-    @property
-    def ready_replica_count(self) -> int:
-        return sum(transcriber.model is not None for transcriber in self._transcribers)
-
-    async def transcribe(self, wav_payload: bytes) -> str:
-        transcriber = await self._available.get()
-        try:
-            return await asyncio.to_thread(transcriber.transcribe, wav_payload)
-        finally:
-            self._available.put_nowait(transcriber)
-
-
-def create_app(pool: NemoTranscriberPool, served_model: str) -> web.Application:
+def create_app(
+    transcriber: NemoTranscriber,
+    served_model: str,
+    *,
+    ready_replica_count: Callable[[], int] = lambda: 1,
+    expected_replicas: int = 1,
+) -> web.Application:
     app = web.Application(client_max_size=32 * 1024 * 1024)
+    inference_lock = asyncio.Lock()
 
     async def live(_request: web.Request) -> web.Response:
         return web.json_response({"status": "live"})
 
     async def ready(_request: web.Request) -> web.Response:
-        ready_replicas = pool.ready_replica_count
-        status = 200 if ready_replicas == pool.replica_count else 503
+        ready_replicas = ready_replica_count()
+        status = (
+            200 if transcriber.model is not None and ready_replicas == expected_replicas else 503
+        )
         return web.json_response(
             {
                 "status": "ready" if status == 200 else "notReady",
                 "readyReplicaCount": ready_replicas,
-                "expectedReplicaCount": pool.replica_count,
+                "expectedReplicaCount": expected_replicas,
             },
             status=status,
         )
@@ -133,10 +107,11 @@ def create_app(pool: NemoTranscriberPool, served_model: str) -> web.Application:
             raise web.HTTPBadRequest(text="unknown model")
         if not audio:
             raise web.HTTPBadRequest(text="audio file is required")
-        try:
-            text = await pool.transcribe(audio)
-        except ValueError as exc:
-            raise web.HTTPBadRequest(text=str(exc)) from exc
+        async with inference_lock:
+            try:
+                text = await asyncio.to_thread(transcriber.transcribe, audio)
+            except ValueError as exc:
+                raise web.HTTPBadRequest(text=str(exc)) from exc
         return web.json_response({"text": text})
 
     app.router.add_get("/health/live", live)
@@ -146,6 +121,21 @@ def create_app(pool: NemoTranscriberPool, served_model: str) -> web.Application:
     return app
 
 
+def _bind_server_socket(host: str, port: int, *, reuse_port: bool) -> socket.socket:
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    if reuse_port:
+        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+    server_socket.bind((host, port))
+    server_socket.listen(128)
+    server_socket.setblocking(False)
+    return server_socket
+
+
+def _count_ready_replicas(ready_dir: Path) -> int:
+    return sum(1 for _ in ready_dir.glob("replica-*.ready"))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint", type=Path, required=True)
@@ -153,19 +143,38 @@ def main() -> None:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=18084)
     parser.add_argument("--device", default="cuda")
+    parser.add_argument("--replica-index", type=int, default=1)
     parser.add_argument("--replicas", type=int, default=1)
+    parser.add_argument("--ready-dir", type=Path)
+    parser.add_argument("--reuse-port", action="store_true")
     args = parser.parse_args()
     if args.host != "127.0.0.1":
         raise SystemExit("host must be 127.0.0.1")
-    if not 1 <= args.replicas <= 12:
-        parser.error("--replicas must be between 1 and 12")
-    transcribers = [
-        NemoTranscriber(args.checkpoint, device=args.device) for _ in range(args.replicas)
-    ]
-    for transcriber in transcribers:
+    if not 1 <= args.replicas <= 5:
+        parser.error("--replicas must be between 1 and 5")
+    if not 1 <= args.replica_index <= args.replicas:
+        parser.error("--replica-index must be between 1 and --replicas")
+    if args.replicas > 1 and not args.reuse_port:
+        parser.error("--reuse-port is required when --replicas is greater than 1")
+    ready_dir = args.ready_dir or Path("/tmp/liveclass-nemotron-nemo")
+    ready_dir.mkdir(parents=True, exist_ok=True)
+    ready_file = ready_dir / f"replica-{args.replica_index}.ready"
+    ready_file.unlink(missing_ok=True)
+    server_socket = _bind_server_socket(args.host, args.port, reuse_port=args.reuse_port)
+    transcriber = NemoTranscriber(args.checkpoint, device=args.device)
+    try:
         transcriber.load()
-    pool = NemoTranscriberPool(transcribers)
-    web.run_app(create_app(pool, args.served_model), host=args.host, port=args.port)
+        ready_file.touch()
+        app = create_app(
+            transcriber,
+            args.served_model,
+            ready_replica_count=lambda: _count_ready_replicas(ready_dir),
+            expected_replicas=args.replicas,
+        )
+        web.run_app(app, sock=server_socket)
+    finally:
+        ready_file.unlink(missing_ok=True)
+        server_socket.close()
 
 
 if __name__ == "__main__":

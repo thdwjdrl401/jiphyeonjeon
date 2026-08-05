@@ -7,6 +7,7 @@ RUNTIME_ENV="${LIVECLASS_NEMOTRON_NEMO_ENV:-$CONFIG_DIR/nemotron-nemo.env}"
 SESSION="${LIVECLASS_NEMOTRON_NEMO_SESSION:-liveclass-nemotron-nemo}"
 RESTART_DELAY_SECONDS="${LIVECLASS_RESTART_DELAY_SECONDS:-5}"
 SCRIPT_PATH="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/$(basename "$0")"
+RUNTIME_STATE_DIR="${LIVECLASS_NEMOTRON_NEMO_STATE_DIR:-$HOME/.local/state/liveclass/nemotron-nemo}"
 
 require_file() {
     if [ ! -r "$1" ]; then
@@ -84,6 +85,14 @@ host = os.environ["NEMO_RUNTIME_HOST"]
 port = os.environ["NEMO_RUNTIME_PORT"]
 url = "http://{}:{}/v1/models".format(host, port)
 opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+ready_url = "http://{}:{}/health/ready".format(host, port)
+with opener.open(ready_url, timeout=2) as response:
+    readiness = json.load(response)
+expected_replicas = int(os.environ.get("NEMO_RUNTIME_REPLICAS", "1"))
+if readiness.get("status") != "ready":
+    raise SystemExit("NeMo runtime is not ready")
+if readiness.get("readyReplicaCount") != expected_replicas:
+    raise SystemExit("not all NeMo runtime replicas are ready")
 with opener.open(url, timeout=2) as response:
     payload = json.load(response)
 models = {
@@ -96,25 +105,61 @@ if os.environ["NEMO_RUNTIME_SERVED_MODEL_NAME"] not in models:
 '
 }
 
-run_runtime() {
-    validate_runtime_env
-    export CUDA_VISIBLE_DEVICES=0
-    runtime_server="${NEMO_RUNTIME_SERVER:-$HOME/.local/share/liveclass/realtime-agent/current/deploy/runtime/nemotron_nemo_server.py}"
-    require_file "$runtime_server"
+run_replica() {
+    replica_index="$1"
+    ready_file="$RUNTIME_STATE_DIR/replica-$replica_index.ready"
     while :; do
+        rm -f -- "$ready_file"
         set +e
         "$NEMO_RUNTIME_VENV/bin/python" "$runtime_server" \
             --checkpoint "$NEMO_RUNTIME_MODEL_PATH" \
             --served-model "$NEMO_RUNTIME_SERVED_MODEL_NAME" \
             --host "$NEMO_RUNTIME_HOST" \
             --port "$NEMO_RUNTIME_PORT" \
+            --replica-index "$replica_index" \
             --replicas "$NEMO_RUNTIME_REPLICAS" \
+            --ready-dir "$RUNTIME_STATE_DIR" \
+            --reuse-port \
             --device cuda
         runtime_status=$?
         set -e
-        echo "NeMo runtime exited with status $runtime_status; retrying in ${RESTART_DELAY_SECONDS}s" >&2
+        rm -f -- "$ready_file"
+        echo "NeMo runtime replica $replica_index exited with status $runtime_status; retrying in ${RESTART_DELAY_SECONDS}s" >&2
         sleep "$RESTART_DELAY_SECONDS"
     done
+}
+
+clear_ready_files() {
+    replica_index=1
+    while [ "$replica_index" -le 5 ]; do
+        rm -f -- "$RUNTIME_STATE_DIR/replica-$replica_index.ready"
+        replica_index=$((replica_index + 1))
+    done
+}
+
+run_runtime() {
+    validate_runtime_env
+    export CUDA_VISIBLE_DEVICES=0
+    runtime_server="${NEMO_RUNTIME_SERVER:-$HOME/.local/share/liveclass/realtime-agent/current/deploy/runtime/nemotron_nemo_server.py}"
+    require_file "$runtime_server"
+    install -d -m 0700 "$RUNTIME_STATE_DIR"
+    clear_ready_files
+    replica_pids=""
+    cleanup_replicas() {
+        trap - EXIT HUP INT TERM
+        if [ -n "$replica_pids" ]; then
+            kill $replica_pids 2>/dev/null || true
+        fi
+        clear_ready_files
+    }
+    trap 'cleanup_replicas; exit 0' EXIT HUP INT TERM
+    replica_index=1
+    while [ "$replica_index" -le "$NEMO_RUNTIME_REPLICAS" ]; do
+        run_replica "$replica_index" &
+        replica_pids="$replica_pids $!"
+        replica_index=$((replica_index + 1))
+    done
+    wait
 }
 
 case "$COMMAND" in

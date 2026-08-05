@@ -528,6 +528,9 @@ def test_nemotron_nemo_examples_use_tuned_checkpoint_and_loopback() -> None:
     assert "NEMO_RUNTIME_PORT=18084" in runtime
     assert "NEMO_RUNTIME_REPLICAS=5" in runtime
     assert '--replicas "$NEMO_RUNTIME_REPLICAS"' in supervisor
+    assert '--replica-index "$replica_index"' in supervisor
+    assert "--reuse-port" in supervisor
+    assert "readyReplicaCount" in NEMO_RUNTIME_SERVER.read_text(encoding="utf-8")
     assert "LiveClass-Nemotron-3.5-ASR-Full-Finetune.nemo" in runtime
     assert "nemotron_nemo_server.py" in supervisor
     assert "/v1/models" in supervisor
@@ -793,9 +796,7 @@ def test_deploy_helper_builds_before_switch_and_keeps_rollback_path() -> None:
     assert "liveclass-realtime-agent-deploy" in script[command_refresh_position:]
 
 
-@pytest.mark.asyncio
-async def test_nemotron_nemo_runtime_pool_runs_replicas_concurrently() -> None:
-    import asyncio
+def test_nemotron_nemo_runtime_reuses_port_and_counts_ready_files(tmp_path: Path) -> None:
     import importlib.util
 
     module_name = "test_nemotron_nemo_runtime"
@@ -806,25 +807,16 @@ async def test_nemotron_nemo_runtime_pool_runs_replicas_concurrently() -> None:
     sys.modules[module_name] = module
     try:
         spec.loader.exec_module(module)
+        first = module._bind_server_socket("127.0.0.1", 0, reuse_port=True)
+        port = first.getsockname()[1]
+        second = module._bind_server_socket("127.0.0.1", port, reuse_port=True)
+        try:
+            (tmp_path / "replica-1.ready").touch()
+            (tmp_path / "replica-2.ready").touch()
 
-        barrier = threading.Barrier(2)
-
-        class FakeTranscriber:
-            model = object()
-
-            def __init__(self, text: str) -> None:
-                self.text = text
-
-            def transcribe(self, _payload: bytes) -> str:
-                barrier.wait(timeout=2)
-                return self.text
-
-        pool = module.NemoTranscriberPool([FakeTranscriber("first"), FakeTranscriber("second")])
-
-        results = await asyncio.gather(pool.transcribe(b"a"), pool.transcribe(b"b"))
-
-        assert sorted(results) == ["first", "second"]
-        assert pool.replica_count == 2
-        assert pool.ready_replica_count == 2
+            assert module._count_ready_replicas(tmp_path) == 2
+        finally:
+            second.close()
+            first.close()
     finally:
         sys.modules.pop(module_name, None)
