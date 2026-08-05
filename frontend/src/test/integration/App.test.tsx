@@ -80,7 +80,7 @@ describe('LiveClass AI 공개 페이지', () => {
 
     // 역할 메뉴는 헤더에 바로 펼쳐져 있다(예전 "마이페이지" 드롭다운을 거치지 않는다).
     const navigation = screen.getByRole('navigation', { name: '주요 메뉴' })
-    expect(within(navigation).getByRole('link', { name: '내 커리큘럼' })).toHaveAttribute('href', '/student/curriculums')
+    expect(within(navigation).getByRole('link', { name: '커리큘럼 관리' })).toHaveAttribute('href', '/student/curriculums')
 
     // 프로필 영역 전체가 내 프로필로 가는 링크다.
     await user.click(screen.getByRole('link', { name: /김학생/ }))

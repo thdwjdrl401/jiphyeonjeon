@@ -30,7 +30,7 @@ function headerProfileLink() {
   return within(header).getByRole('link', { name: /내 프로필$/ })
 }
 
-/** 헤더 메뉴의 라벨 목록. 순서까지 본다 — 권장 구성이 탐색 → 내 커리큘럼 → 만들기 순이다. */
+/** 헤더 메뉴의 라벨 목록. 순서까지 본다 — 권장 구성이 탐색 → 커리큘럼 관리 → 만들기 순이다. */
 function menuLabels() {
   return within(headerNav()).getAllByRole('link').map((link) => link.textContent)
 }
@@ -61,12 +61,12 @@ describe('역할별 상단 네비게이션', () => {
       데모 mock은 강사 계정에 isAdmin도 준다(mockAuthService) — 그래서 운영 콘솔이 뒤에 붙는다.
       운영 콘솔은 가입 역할이 아니라 서버 allowlist가 정하는 별도 축이라 역할 메뉴 뒤에 온다.
     */
-    it('탐색·내 커리큘럼·커리큘럼 만들기를 순서대로 내고 운영 권한 메뉴는 뒤에 붙인다', async () => {
+    it('탐색·커리큘럼 관리·커리큘럼 만들기를 순서대로 내고 운영 권한 메뉴는 뒤에 붙인다', async () => {
       await loginAsInstructor()
       renderAt('/instructor/curriculums')
 
       await waitFor(() => expect(menuLabels()).toEqual([
-        '커리큘럼 탐색', '내 커리큘럼', '커리큘럼 만들기', '운영 콘솔',
+        '커리큘럼 탐색', '커리큘럼 관리', '커리큘럼 만들기', '운영 콘솔',
       ]))
     })
 
@@ -76,7 +76,7 @@ describe('역할별 상단 네비게이션', () => {
 
       const nav = await waitFor(() => headerNav())
       expect(within(nav).getByRole('link', { name: '커리큘럼 탐색' })).toHaveAttribute('href', '/curriculums')
-      expect(within(nav).getByRole('link', { name: '내 커리큘럼' })).toHaveAttribute('href', '/instructor/curriculums')
+      expect(within(nav).getByRole('link', { name: '커리큘럼 관리' })).toHaveAttribute('href', '/instructor/curriculums')
       expect(within(nav).getByRole('link', { name: '커리큘럼 만들기' })).toHaveAttribute('href', '/instructor/curriculums/new')
     })
 
@@ -85,18 +85,18 @@ describe('역할별 상단 네비게이션', () => {
       '/instructor/curriculums/cur-spring-live/manage',
       '/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/les-security',
       '/instructor/live-sessions/ses-security-live/preflight',
-    ])('하위 화면 %s에서도 내 커리큘럼이 활성이다', async (path) => {
+    ])('하위 화면 %s에서도 커리큘럼 관리가 활성이다', async (path) => {
       await loginAsInstructor()
       renderAt(path)
 
-      await waitFor(() => expect(activeMenuLabels()).toEqual(['내 커리큘럼']))
+      await waitFor(() => expect(activeMenuLabels()).toEqual(['커리큘럼 관리']))
     })
 
     it('생성 화면에서는 커리큘럼 만들기만 활성이다', async () => {
       await loginAsInstructor()
       renderAt('/instructor/curriculums/new')
 
-      // 경로가 /instructor/curriculums로 시작하지만 "내 커리큘럼"이 함께 켜지면 안 된다.
+      // 경로가 /instructor/curriculums로 시작하지만 "커리큘럼 관리"가 함께 켜지면 안 된다.
       await waitFor(() => expect(activeMenuLabels()).toEqual(['커리큘럼 만들기']))
     })
 
@@ -112,27 +112,27 @@ describe('역할별 상단 네비게이션', () => {
   })
 
   describe('학생', () => {
-    it('탐색·내 커리큘럼만 내고 커리큘럼 만들기는 내지 않는다', async () => {
+    it('탐색·커리큘럼 관리만 내고 커리큘럼 만들기는 내지 않는다', async () => {
       await loginAsStudent()
       renderAt('/student/curriculums')
 
-      await waitFor(() => expect(menuLabels()).toEqual(['커리큘럼 탐색', '내 커리큘럼']))
+      await waitFor(() => expect(menuLabels()).toEqual(['커리큘럼 탐색', '커리큘럼 관리']))
       expect(within(headerNav()).queryByRole('link', { name: '커리큘럼 만들기' })).not.toBeInTheDocument()
     })
 
-    it('내 커리큘럼이 학생 학습 목록을 가리킨다', async () => {
+    it('커리큘럼 관리가 학생 학습 목록을 가리킨다', async () => {
       await loginAsStudent()
       renderAt('/student/curriculums')
 
       const nav = await waitFor(() => headerNav())
-      expect(within(nav).getByRole('link', { name: '내 커리큘럼' })).toHaveAttribute('href', '/student/curriculums')
+      expect(within(nav).getByRole('link', { name: '커리큘럼 관리' })).toHaveAttribute('href', '/student/curriculums')
     })
 
-    it('강의 학습 화면에서도 내 커리큘럼이 활성이다', async () => {
+    it('강의 학습 화면에서도 커리큘럼 관리가 활성이다', async () => {
       await loginAsStudent()
       renderAt('/student/curriculums/cur-spring-live/sections/sec-security/lessons/les-security')
 
-      await waitFor(() => expect(activeMenuLabels()).toEqual(['내 커리큘럼']))
+      await waitFor(() => expect(activeMenuLabels()).toEqual(['커리큘럼 관리']))
     })
 
     it('프로필 영역을 누르면 학생 내 프로필로 간다', async () => {
@@ -216,7 +216,7 @@ describe('역할별 상단 네비게이션', () => {
       expect(explore).toHaveFocus()
 
       await user.tab()
-      expect(within(nav).getByRole('link', { name: '내 커리큘럼' })).toHaveFocus()
+      expect(within(nav).getByRole('link', { name: '커리큘럼 관리' })).toHaveFocus()
       await user.tab()
       expect(within(nav).getByRole('link', { name: '커리큘럼 만들기' })).toHaveFocus()
       await user.tab()
