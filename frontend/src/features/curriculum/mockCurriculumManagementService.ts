@@ -8,10 +8,14 @@ import {
   publishMockCurriculum,
   putMockCurriculum,
   updateMockCurriculumMaterials,
+  updateMockCurriculumThumbnail,
 } from '@/features/demo/mockDatabase'
 import { publishLiveCanceled } from '@/features/notification/mockNotificationEvents'
 import { ApiError } from '@/shared/api/client'
-import type { CurriculumManagementService } from './curriculumManagementService.interface'
+import type {
+  CurriculumManagementService,
+  InstructorCurriculumResponse,
+} from './curriculumManagementService.interface'
 import type { CurriculumMaterial } from './types'
 
 const savedStructures = new Map<
@@ -102,9 +106,38 @@ function persistMockMaterials(materials: CurriculumMaterial[] | undefined): Curr
   }))
 }
 
+/** 강사 커리큘럼 응답 한 건. 여러 메서드가 같은 형태를 돌려주므로 한 곳에서 만든다. */
+function readMockInstructorCurriculum(curriculumId: string): InstructorCurriculumResponse {
+  const curriculum = getMockCurriculum(curriculumId)
+  if (!curriculum) throw new ApiError('커리큘럼을 찾을 수 없습니다.', 404, 'CURRICULUM_NOT_FOUND')
+  return {
+    curriculumId: curriculum.curriculumId,
+    title: curriculum.title,
+    summary: curriculum.summary,
+    description: curriculum.description,
+    thumbnailUrl: curriculum.thumbnailUrl,
+    lifecycleStatus: curriculum.lifecycleStatus,
+    sectionCount: curriculum.sectionCount,
+    lessonCount: curriculum.lessonCount,
+    publishedLessonCount: buildMockCurriculumOutline(curriculum)
+      .flatMap((section) => section.lessons)
+      .filter((lesson) => lesson.status === 'PUBLISHED').length,
+    structureVersion: 0,
+    materials: curriculum.materials,
+    enrolleeCount: curriculum.enrolleeCount,
+  }
+}
+
 export const mockCurriculumManagementService = {
   async uploadCurriculumThumbnail(file) {
     return `mock-thumbnail-${file.name}-${file.size}`
+  },
+  async updateCurriculumThumbnail(request) {
+    // 목에는 에셋 스토리지가 없다 — 화면이 만든 미리보기 URL을 서버가 준 URL처럼 둔다.
+    if (!updateMockCurriculumThumbnail(request.curriculumId, request.thumbnailPreviewUrl)) {
+      throw new ApiError('커리큘럼을 찾을 수 없습니다.', 404, 'CURRICULUM_NOT_FOUND')
+    }
+    return readMockInstructorCurriculum(request.curriculumId)
   },
   async createCurriculum(request) {
     const user = peekMockUser()
@@ -124,24 +157,7 @@ export const mockCurriculumManagementService = {
     return { curriculumId: curriculum.curriculumId, periodSaved: true }
   },
   async getInstructorCurriculum(curriculumId) {
-    const curriculum = getMockCurriculum(curriculumId)
-    if (!curriculum) throw new ApiError('커리큘럼을 찾을 수 없습니다.', 404, 'CURRICULUM_NOT_FOUND')
-    return {
-      curriculumId: curriculum.curriculumId,
-      title: curriculum.title,
-      summary: curriculum.summary,
-      description: curriculum.description,
-      thumbnailUrl: curriculum.thumbnailUrl,
-      lifecycleStatus: curriculum.lifecycleStatus,
-      sectionCount: curriculum.sectionCount,
-      lessonCount: curriculum.lessonCount,
-      publishedLessonCount: buildMockCurriculumOutline(curriculum)
-        .flatMap((section) => section.lessons)
-        .filter((lesson) => lesson.status === 'PUBLISHED').length,
-      structureVersion: 0,
-      materials: curriculum.materials,
-      enrolleeCount: curriculum.enrolleeCount,
-    }
+    return readMockInstructorCurriculum(curriculumId)
   },
   async getCurriculumManagementStructure(curriculumId) {
     const curriculum = getMockCurriculum(curriculumId)

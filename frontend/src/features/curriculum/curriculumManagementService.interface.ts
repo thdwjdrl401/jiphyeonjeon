@@ -53,6 +53,19 @@ export interface CurriculumManagementSection {
   lessons: CurriculumManagementLesson[]
 }
 
+/**
+ * 대표 이미지 교체(ADR-0076). 자동 저장 지문에 태우지 않고 <b>고른 즉시</b> 보낸다 — 파일 선택은
+ * 타이핑처럼 이어지는 입력이 아니라 한 번의 이산적 사건이고, 저장 전후 지문(파일 이름 → 서버 URL)이
+ * 달라 디바운스 경로에 태우면 저장이 한 번 더 도는 것을 막을 방법이 마땅치 않다.
+ */
+export interface UpdateCurriculumThumbnailRequest {
+  curriculumId: string
+  /** 업로드 완료(UPLOADED)한 본인 THUMBNAIL 에셋. 서버가 소유·종류·상태를 검증한다(409). */
+  thumbnailAssetId: string
+  /** 목 구현이 화면에 되돌려 줄 미리보기 URL. HTTP 구현은 서버가 준 URL을 쓰므로 무시한다. */
+  thumbnailPreviewUrl: string | null
+}
+
 export interface SaveCurriculumManagementRequest {
   curriculumId: string
   info: { title: string; summary: string; description: string }
@@ -95,6 +108,8 @@ export interface UploadRecordedLessonResult {
 
 export interface CurriculumManagementService {
   uploadCurriculumThumbnail: (file: File) => Promise<string | null>
+  /** 대표 이미지를 교체한다. 저장 후의 커리큘럼(서버 진실)을 돌려준다. */
+  updateCurriculumThumbnail: (request: UpdateCurriculumThumbnailRequest) => Promise<InstructorCurriculumResponse>
   createCurriculum: (request: CreateCurriculumRequest) => Promise<CreateCurriculumResponse>
   getInstructorCurriculum: (curriculumId: string) => Promise<InstructorCurriculumResponse>
   getCurriculumManagementStructure: (curriculumId: string) => Promise<CurriculumManagementSection[]>

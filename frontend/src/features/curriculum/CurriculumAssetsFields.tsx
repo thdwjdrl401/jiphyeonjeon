@@ -11,6 +11,8 @@ interface CurriculumAssetsFieldsProps {
   onMaterialsChange: (materials: CurriculumMaterial[]) => void
   /** 저장된 자료의 다운로드 링크(관리 화면). 새 커리큘럼 만들기에서는 아직 저장 전이라 주지 않는다. */
   materialDownloadHref?: (material: CurriculumMaterial) => string
+  /** 대표 이미지 삭제를 지금 할 수 없는 이유(CurriculumImageField 참조). */
+  thumbnailRemoveDisabledReason?: string
 }
 
 /**
@@ -25,6 +27,7 @@ export default function CurriculumAssetsFields({
   materials,
   onMaterialsChange,
   materialDownloadHref,
+  thumbnailRemoveDisabledReason,
 }: CurriculumAssetsFieldsProps) {
   return (
     <div className="curriculum-assets-grid">
@@ -35,6 +38,7 @@ export default function CurriculumAssetsFields({
           id={`${idPrefix}-thumbnail`}
           previewUrl={thumbnailPreviewUrl}
           onChange={onThumbnailChange}
+          removeDisabledReason={thumbnailRemoveDisabledReason}
         />
       </section>
       <section className="curriculum-asset-section">

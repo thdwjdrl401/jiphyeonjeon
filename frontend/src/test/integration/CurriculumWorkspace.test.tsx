@@ -513,8 +513,83 @@ describe('커리큘럼 작업 화면', () => {
     expect(screen.getByLabelText('대표 이미지 등록')).toBeInTheDocument()
   })
 
-  // 커리큘럼-레벨 자료 편집은 로컬 스테이징이다 — 연결 API가 없어 서버에 반영하지 않는다(ADR-0030).
-  // 구조/정보는 자동 저장되지만 자료만 바꾼 것으로는 저장이 돌지 않으므로, 여기선 로컬 표시만 확인한다.
+  /*
+    대표 이미지는 고른 즉시 저장된다(ADR-0076). 예전에는 고른 파일을 버리고 미리보기만 바꿔서,
+    화면은 "자동 저장됩니다"라고 말하는데 다시 들어오면 옛 이미지로 돌아가 있었다.
+  */
+  it('대표 이미지를 고르면 즉시 저장되고 화면을 떠났다 돌아와도 유지된다', async () => {
+    const user = userEvent.setup()
+    await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
+    await user.click(await screen.findByRole('tab', { name: '기본 정보' }))
+    const image = new File(['image-bytes'], 'cover.png', { type: 'image/png' })
+
+    await user.upload(screen.getByLabelText('대표 이미지 등록'), image)
+    await waitFor(() => expect(screen.getByText('자동 저장됨')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByAltText('대표 이미지 미리보기')).toHaveAttribute(
+      'src', expect.stringContaining('data:image/png'),
+    ))
+
+    await user.click(screen.getByRole('link', { name: '커리큘럼 상세' }))
+    await user.click(await screen.findByRole('button', { name: '관리하기' }))
+    await user.click(await screen.findByRole('tab', { name: '기본 정보' }))
+
+    expect(await screen.findByAltText('대표 이미지 미리보기')).toHaveAttribute(
+      'src', expect.stringContaining('data:image/png'),
+    )
+  })
+
+  // 삭제 계약(서버에서 이미지를 비우는 길)이 아직 없다 — 자리는 두고 이유를 말한다(ADR-0076).
+  it('관리 화면의 대표 이미지 삭제 버튼은 자리를 지키되 준비 중임을 알린다', async () => {
+    const user = userEvent.setup()
+    await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
+    await user.click(await screen.findByRole('tab', { name: '기본 정보' }))
+
+    const removeButton = await screen.findByRole('button', { name: '이미지 삭제' })
+    expect(removeButton).toBeDisabled()
+    expect(removeButton).toHaveAttribute('title', expect.stringContaining('준비 중'))
+  })
+
+  it('커리큘럼 만들기에서는 고른 대표 이미지를 삭제 버튼으로 취소할 수 있다', async () => {
+    const user = userEvent.setup()
+    await renderAsInstructor('/instructor/curriculums/new')
+
+    // 아직 고른 이미지가 없어도 삭제 버튼은 등록 옆에 있다(비활성 + 이유).
+    const removeButton = await screen.findByRole('button', { name: '이미지 삭제' })
+    expect(removeButton).toBeDisabled()
+
+    const image = new File(['image-bytes'], 'cover.png', { type: 'image/png' })
+    await user.upload(screen.getByLabelText('대표 이미지 등록'), image)
+    expect(await screen.findByAltText('대표 이미지 미리보기')).toBeInTheDocument()
+
+    // 저장 전이라 서버에 아무것도 없다 — 여기서는 삭제가 실제로 동작한다.
+    await user.click(screen.getByRole('button', { name: '이미지 삭제' }))
+    expect(screen.queryByAltText('대표 이미지 미리보기')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '이미지 삭제' })).toBeDisabled()
+
+    // 지운 뒤 같은 파일을 다시 고를 수 있어야 한다 — input.value를 비우지 않으면 브라우저가
+    // "같은 값"으로 보고 change를 쏘지 않아 재등록이 막힌다.
+    await user.upload(screen.getByLabelText('대표 이미지 등록'), image)
+    expect(await screen.findByAltText('대표 이미지 미리보기')).toBeInTheDocument()
+  })
+
+  // 등록 경로가 미리보기 클릭뿐이면 무엇을 눌러야 하는지 화면에서 안 읽힌다 — 버튼으로 세운다.
+  it('대표 이미지 등록 버튼은 이미지 유무에 따라 등록·변경으로 바뀐다', async () => {
+    const user = userEvent.setup()
+    await renderAsInstructor('/instructor/curriculums/new')
+    await screen.findByRole('heading', { name: '새 커리큘럼 만들기', level: 1 })
+
+    expect(screen.getByText('이미지 등록')).toBeInTheDocument()
+    expect(screen.queryByText('이미지 변경')).not.toBeInTheDocument()
+
+    const image = new File(['image-bytes'], 'cover.png', { type: 'image/png' })
+    await user.upload(screen.getByLabelText('대표 이미지 등록'), image)
+    expect(await screen.findByAltText('대표 이미지 미리보기')).toBeInTheDocument()
+
+    expect(screen.getByText('이미지 변경')).toBeInTheDocument()
+    expect(screen.queryByText('이미지 등록')).not.toBeInTheDocument()
+  })
+
+  // 자료도 자동 저장 지문에 들어간다(ADR-0042) — 고르는 즉시 목록에 뜨고, 디바운스 뒤 저장된다.
   it('관리 화면에서 커리큘럼 자료를 추가하면 목록에 표시된다', async () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
@@ -525,6 +600,42 @@ describe('커리큘럼 작업 화면', () => {
 
     await user.upload(screen.getByLabelText('커리큘럼 강의 자료 등록'), material)
     expect(screen.getByText('instructor-common-guide.pptx')).toBeInTheDocument()
+  })
+
+  /*
+    자동 저장이 끝난 뒤 화면을 떠났다 돌아오면, 방금 저장한 자료 목록이 그대로 보여야 한다.
+
+    저장 결과를 쿼리 캐시에 반영하지 않으면 staleTime(30초) 안에 다시 들어올 때 저장 전 캐시가
+    그려진다 — 올린 자료가 사라져 보이고, 지운 자료가 되살아나 보이다가 30초가 지나서야 맞게
+    나왔다. 로컬 state는 화면을 떠나는 순간 사라지므로 이 왕복이 아니면 잡히지 않는다.
+  */
+  it('자료를 자동 저장한 뒤 화면을 떠났다 돌아와도 최신 목록이 보인다', async () => {
+    const user = userEvent.setup()
+    await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
+    await user.click(await screen.findByRole('tab', { name: '기본 정보' }))
+    const material = new File(['presentation'], 'cache-sync-guide.pptx', {
+      type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    })
+    await user.upload(screen.getByLabelText('커리큘럼 강의 자료 등록'), material)
+    await waitFor(() => expect(screen.getByText('자동 저장됨')).toBeInTheDocument())
+
+    // 커리큘럼 상세로 나갔다가 관리로 되돌아온다 — 실제 동선이고, 같은 QueryClient를 공유한다.
+    await user.click(screen.getByRole('link', { name: '커리큘럼 상세' }))
+    await user.click(await screen.findByRole('button', { name: '관리하기' }))
+    await user.click(await screen.findByRole('tab', { name: '기본 정보' }))
+
+    expect(await screen.findByText('cache-sync-guide.pptx')).toBeInTheDocument()
+
+    // 삭제도 같은 문제의 반대 방향이었다 — 지운 자료가 되돌아왔을 때 되살아나 보였다.
+    await user.click(screen.getByRole('button', { name: 'cache-sync-guide.pptx 제거' }))
+    await waitFor(() => expect(screen.getByText('자동 저장됨')).toBeInTheDocument())
+
+    await user.click(screen.getByRole('link', { name: '커리큘럼 상세' }))
+    await user.click(await screen.findByRole('button', { name: '관리하기' }))
+    await user.click(await screen.findByRole('tab', { name: '기본 정보' }))
+
+    expect(await screen.findByRole('heading', { name: '커리큘럼 강의 자료' })).toBeInTheDocument()
+    expect(screen.queryByText('cache-sync-guide.pptx')).not.toBeInTheDocument()
   })
 
   it('내 커리큘럼 카드에서 제목 첫 글자 대신 대표 이미지를 표시한다', async () => {

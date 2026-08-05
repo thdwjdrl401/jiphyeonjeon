@@ -17,9 +17,14 @@ import {
   getInstructorCurriculum,
   publishCurriculum,
   saveCurriculumManagement,
+  updateCurriculumThumbnail,
+  uploadCurriculumThumbnail,
   type CurriculumManagementSection,
   type InstructorCurriculumResponse,
+  type SaveCurriculumManagementResult,
 } from '@/features/curriculum/curriculumManagementService'
+import { CurriculumMaterialSyncError } from '@/features/curriculum/curriculumMaterialSyncError'
+import { mergeCurriculumMaterials } from '@/features/curriculum/materialMerge'
 import { evaluatePublishReadiness } from '@/features/curriculum/publishPreconditions'
 import type { CurriculumMaterial } from '@/features/curriculum/types'
 import InstructorEnrollmentRoster from '@/features/enrollment/InstructorEnrollmentRoster'
@@ -75,6 +80,13 @@ const LIFECYCLE_VIEW: Record<string, { tone: 'warning' | 'success' | 'neutral'; 
   PUBLISHED: { tone: 'success', label: '공개 중', description: '카탈로그에서 검색·수강신청할 수 있습니다.' },
   ARCHIVED: { tone: 'neutral', label: '보관됨', description: '카탈로그에 노출되지 않습니다.' },
 }
+
+/**
+ * 저장된 대표 이미지를 비우는 서버 계약이 아직 없다 — PATCH의 `thumbnailAssetId`는 null을
+ * "변경 안 함"으로 다룬다(InstructorCurriculumService.applyThumbnail). 삭제 버튼은 자리를
+ * 지키되 비활성으로 두고 이유를 말한다(ADR-0076). 계약이 생기면 이 상수를 지우고 연결한다.
+ */
+const THUMBNAIL_REMOVE_PENDING_REASON = '대표 이미지 삭제는 준비 중입니다. 지금은 다른 이미지로 교체할 수 있어요.'
 
 type CurriculumInfoField = 'title' | 'summary' | 'description'
 type SectionInfoField = 'title' | 'description'
@@ -224,6 +236,41 @@ function CurriculumManageEditor({
   }), [curriculumInfo, sections, materials])
 
 
+  /**
+   * 저장 결과를 이 화면을 그리는 쿼리 캐시에 반영한다.
+   *
+   * <p>여기가 없으면 <b>저장은 됐는데 화면만 옛것</b>이 된다. 저장 결과는 로컬 state에만 들어가고,
+   * 다른 페이지로 나가면 그 state가 사라진 뒤 캐시(staleTime 30초)로 다시 그려지기 때문이다 —
+   * 올린 자료가 사라져 보이고, 지운 자료가 되살아나 보이다가 30초가 지나서야 맞게 나왔다.
+   *
+   * <p><b>섹션은 캐시에 쓰지 않고 stale 표시만 한다.</b> 새 섹션이 실제 id를 받으면 재seed key가
+   * 바뀌므로(위 CurriculumManagePage 참조) 지금 캐시에 쓰면 편집 중인 에디터가 리마운트돼 방금
+   * 입력한 글자와 저장 배지가 날아간다. 다음 진입에서 서버를 다시 읽게만 해 두면 충분하다.
+   */
+  const syncCachedCurriculum = useCallback((
+    apply: (current: InstructorCurriculumResponse) => InstructorCurriculumResponse,
+  ) => {
+    queryClient.setQueryData<{ curriculum: InstructorCurriculumResponse; sections: CurriculumManagementSection[] }>(
+      ['curriculum-management', curriculumId],
+      (current) => current && { ...current, curriculum: apply(current.curriculum) },
+    )
+    // refetchType: 'none' — 지금 도는 refetch는 리마운트를 부른다. 다음 진입에서 받게만 한다.
+    queryClient.invalidateQueries({ queryKey: ['curriculum-management', curriculumId], refetchType: 'none' })
+    // 제목·자료·대표 이미지는 이 화면 밖에서도 보인다(내 커리큘럼 카드, 공개 상세). 편집 중에는 그
+    // 쿼리들이 비활성이라 stale 표시만 되고 요청은 나가지 않는다.
+    queryClient.invalidateQueries({ queryKey: ['my-curriculums'] })
+    queryClient.invalidateQueries({ queryKey: ['curriculums'] })
+  }, [curriculumId, queryClient])
+
+  const syncCacheAfterSave = useCallback((result: SaveCurriculumManagementResult) => {
+    syncCachedCurriculum((current) => ({
+      ...current,
+      ...curriculumInfo,
+      materials: result.materials,
+      structureVersion: result.structureVersion,
+    }))
+  }, [curriculumInfo, syncCachedCurriculum])
+
   // 구조·기본정보·자료 자동저장(ADR-0042). 자료 추가/삭제도 지문에 반영돼 자동저장이 돈다 —
   // saveCurriculumManagement가 새 자료 업로드·연결과 사라진 자료 삭제를 함께 처리한다.
   /** 저장에 성공했으면(또는 저장할 게 없으면) true. 게시는 이 값이 false면 중단한다. */
@@ -255,12 +302,14 @@ function CurriculumManageEditor({
             ? { ...section, sectionId: result.sectionIdMap[section.sectionId] }
             : section))
       }
-      // 저장된 자료(실제 materialId, File 없음)로 교체 — 임시 자료를 다음 저장에서 다시 올리지 않게 한다.
-      // 지문이 fileName:fileSize라 이 교체는 재저장을 유발하지 않는다.
-      setMaterials(result.materials)
+      // 저장된 자료(실제 materialId, File 없음)로 맞추되, 저장이 도는 동안 새로 고른 파일은 남긴다
+      // (ADR-0077). 통째로 덮으면 그 선택이 조용히 사라졌다. 지문이 fileName:fileSize라 서버 자료로의
+      // 교체 자체는 재저장을 유발하지 않고, 남은 대기 항목만 다음 디바운스에서 저장된다.
+      setMaterials((current) => mergeCurriculumMaterials(result.materials, current))
       setStructureVersion(result.structureVersion)
       savedSignatureRef.current = signature
       setAutosave('saved')
+      syncCacheAfterSave(result)
       // 사이드바 등 다른 화면이 최신 구조를 읽도록.
       queryClient.invalidateQueries({ queryKey: ['curriculum-lesson-navigation', curriculumId] })
       return true
@@ -270,6 +319,17 @@ function CurriculumManageEditor({
         setSaveError('구조가 다른 곳에서 변경되었습니다. 새로고침한 뒤 다시 시도해 주세요.')
       } else if (isNotImplemented(error)) {
         setSaveError('아직 준비 중인 항목이 포함돼 저장하지 못했습니다.')
+      } else if (error instanceof CurriculumMaterialSyncError) {
+        /*
+          자료가 일부만 붙은 채로 실패했다 — 붙은 것은 서버 목록에 있으므로 그 목록으로 맞추고 실패한
+          파일만 대기로 남긴다(ADR-0077). 이 정리를 하지 않으면 다음 저장이 이미 붙은 자료를 지우고
+          새 에셋으로 다시 올려(고아 파일) 같은 일을 반복한다.
+
+          목록이 서버 기준으로 돌아가므로 이번에 지우려던 자료는 다시 보일 수 있다. 그게 실제 서버
+          상태다 — 실패한 저장이 목록을 줄여 놓으면 무엇을 잃었는지 알 수 없다.
+        */
+        setMaterials((current) => mergeCurriculumMaterials(error.persistedMaterials, current))
+        setSaveError(`${error.message} 자료 목록은 서버 상태로 맞췄습니다.`)
       } else {
         setSaveError('변경 내용을 자동 저장하지 못했습니다.')
       }
@@ -281,7 +341,7 @@ function CurriculumManageEditor({
         void flushSave()
       }
     }
-  }, [curriculumId, curriculumInfo, sections, materials, currentSignature, queryClient])
+  }, [curriculumId, curriculumInfo, sections, materials, currentSignature, queryClient, syncCacheAfterSave])
 
   // 변경 후 디바운스 자동저장. 첫 렌더에서는 현재 상태를 "저장됨"으로 기록만 하고 저장하지 않는다.
   useEffect(() => {
@@ -341,8 +401,43 @@ function CurriculumManageEditor({
     setCurriculumInfo((current) => ({ ...current, [field]: value }))
   }
 
-  const updateThumbnail = (value: string | null) => {
-    setThumbnailUrl(value)
+  /**
+   * 대표 이미지를 교체한다 — <b>고른 즉시 저장</b>한다(ADR-0076).
+   *
+   * <p>디바운스 지문에 태우지 않는 이유는 두 가지다. 파일 선택은 타이핑처럼 이어지는 입력이 아니라
+   * 한 번의 사건이고, 지문이 저장 전(파일 이름·크기)과 후(서버 URL)로 달라져 저장이 한 번 더
+   * 도는 것을 막기 어렵다.
+   *
+   * <p>예전에는 고른 파일을 버리고 미리보기 URL만 로컬 state에 넣었다 — 화면은 "변경 사항이 자동
+   * 저장됩니다"라고 말하는데 이미지는 어디에도 저장되지 않아, 다시 들어오면 옛 이미지로 돌아갔다.
+   */
+  const applyThumbnailSelection = async (selection: CurriculumImageSelection | null) => {
+    // 저장된 이미지를 비우는 서버 계약이 아직 없다 — 삭제 버튼은 비활성이라 여기 닿지 않는다.
+    if (!selection) return
+
+    const previous = thumbnailUrl
+    setThumbnailUrl(selection.previewUrl)   // 업로드를 기다리지 않고 먼저 보여 준다
+    setAutosave('saving')
+    setSaveError('')
+    try {
+      const assetId = await uploadCurriculumThumbnail(selection.file)
+      if (!assetId) throw new Error('THUMBNAIL_ASSET_MISSING')
+      const saved = await updateCurriculumThumbnail({
+        curriculumId,
+        thumbnailAssetId: assetId,
+        thumbnailPreviewUrl: selection.previewUrl,
+      })
+      setThumbnailUrl(saved.thumbnailUrl)
+      setAutosave('saved')
+      syncCachedCurriculum((current) => ({ ...current, thumbnailUrl: saved.thumbnailUrl }))
+    } catch (error) {
+      // 실패했으면 미리보기도 되돌린다 — 새 이미지가 남아 있으면 저장된 것으로 읽힌다.
+      setThumbnailUrl(previous)
+      setAutosave('error')
+      setSaveError(error instanceof ApiError && error.code === 'CURRICULUM_STATE_CONFLICT'
+        ? error.message
+        : '대표 이미지를 저장하지 못했습니다. 다시 시도해 주세요.')
+    }
   }
 
   const updateMaterials = (value: CurriculumMaterial[]) => {
@@ -735,7 +830,8 @@ function CurriculumManageEditor({
               <CurriculumImageField
                 id="manage-curriculum-thumbnail"
                 previewUrl={thumbnailUrl}
-                onChange={(selection: CurriculumImageSelection | null) => updateThumbnail(selection?.previewUrl ?? null)}
+                onChange={(selection: CurriculumImageSelection | null) => void applyThumbnailSelection(selection)}
+                removeDisabledReason={THUMBNAIL_REMOVE_PENDING_REASON}
               />
             </div>
           </Panel>

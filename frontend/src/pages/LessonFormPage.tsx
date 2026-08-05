@@ -99,7 +99,15 @@ export default function LessonFormPage() {
     if (!currentLesson) return
     setTitle(currentLesson.title)
     setDescription(currentLesson.description)
-    setMaterials(currentLesson.materials.map((item) => ({ id: item.id, name: item.name, size: item.size })))
+    /*
+      서버 목록으로 맞추되 아직 저장하지 않은(File 보유) 선택은 남긴다. 저장·자료 삭제가 부르는
+      refetch가 이 자리를 지나가는데(ADR-0076), 통째로 덮으면 사용자가 골라 둔 파일이 조용히
+      사라진다. 저장에 성공한 파일은 save()가 먼저 로컬에서 떼므로 여기서 중복되지 않는다.
+    */
+    setMaterials((current) => [
+      ...currentLesson.materials.map((item) => ({ id: item.id, name: item.name, size: item.size })),
+      ...current.filter((item) => item.file),
+    ])
     setScheduledAt(toDateTimeLocal(currentLesson.liveSession?.scheduledAt))
   }, [currentLesson])
 
@@ -133,6 +141,9 @@ export default function LessonFormPage() {
         toast.error('자료 삭제에 실패했습니다.')
         return
       }
+      // 삭제는 서버에 바로 반영되므로 캐시도 바로 맞춘다 — 안 하면 강의 상세나 폼을 다시 열었을 때
+      // 지운 자료가 30초(staleTime) 동안 남아 보인다.
+      await invalidateAfterLessonWrite(queryClient, curriculumId, lessonId)
     }
     setMaterials((current) => current.filter((item) => item.id !== material.id))
   }
@@ -143,7 +154,7 @@ export default function LessonFormPage() {
     if (!title.trim() || (canEditLiveSchedule && !scheduledAt)) return
     setSubmitting(true)
     try {
-      await saveLesson({
+      const saved = await saveLesson({
         sectionId,
         lessonId,
         title: title.trim(),
@@ -154,7 +165,12 @@ export default function LessonFormPage() {
         expectedDurationMinutes: Number(duration),
         materials: materials.flatMap((material) => material.file ? [material.file] : []),
       })
-      await invalidateAfterLessonWrite(queryClient, curriculumId)
+      // 올린 파일은 이제 서버에 있다 — 로컬의 "업로드 대기" 항목을 떼지 않으면 다시 저장할 때
+      // 같은 자료가 한 번 더 업로드·연결된다. 아래 refetch가 실제 materialId로 채워 준다.
+      setMaterials((current) => current.filter((material) => !material.file))
+      // 저장한 강의 자신도 무효화한다 — 이 폼과 강의 상세가 방금 올린 자료를 바로 보게 한다.
+      // await이 refetch까지 기다리므로, 버튼이 다시 눌릴 수 있게 되는 시점엔 목록이 이미 최신이다.
+      await invalidateAfterLessonWrite(queryClient, curriculumId, saved.lessonId)
       toast.success(canEditLiveSchedule ? '강의 정보와 라이브 일정이 저장되었습니다.' : '강의 정보가 저장되었습니다.')
       // 생성 성공 시엔 구성(섹션·강의 목록) 화면으로 돌아간다. 폼을 떠나므로 연타로 매번 새
       // 레슨이 생기던 것도 막힌다. 저장 토스트는 앱 최상단이라 이동 후에도 그대로 보인다.
