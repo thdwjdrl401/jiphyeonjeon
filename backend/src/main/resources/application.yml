@@ -85,7 +85,10 @@ logging:
     com.liveclass.common: INFO
 
 livekit:
-  url: ${LIVEKIT_URL:wss://jiphyeonjeon.thdwjdrl.com:7443}   # 브라우저 WebRTC 접속 URL (토큰 응답에 실림)
+  # 브라우저 WebRTC 접속 URL (토큰 응답에 실림). 기본값이 443의 /livekit인 이유는 ADR-0078 —
+  # 7000~7999를 막는 망이 있어 :7443으로는 시그널링부터 붙지 않는다. 로컬 개발자도 같은 망에
+  # 있을 수 있으므로 기본값 자체를 안전한 쪽에 둔다.
+  url: ${LIVEKIT_URL:wss://jiphyeonjeon.thdwjdrl.com/livekit}
   # 백엔드가 방 제어·Egress 시작에 쓰는 서버 API URL. 브라우저와 네트워크 위치가 달라 따로 둔다.
   # 비우면 위 url에서 파생(wss→https) — 단일 호스트 개발 환경은 둘이 같다.
   api-url: ${LIVEKIT_API_URL:}
