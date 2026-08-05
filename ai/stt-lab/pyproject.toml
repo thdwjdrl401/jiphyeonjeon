@@ -6,6 +6,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "httpx>=0.28,<1",
     "liveclass-realtime-agent[nemotron]",
+    "peft>=0.19,<0.20",
 ]
 
 [project.scripts]
@@ -16,6 +17,7 @@ stt-lab-training = "stt_lab.training_cli:main"
 stt-lab-whisper-dry-run = "stt_lab.whisper_training_cli:main"
 stt-lab-qwen-training = "stt_lab.qwen_training_cli:main"
 stt-lab-vllm = "stt_lab.vllm_benchmark:main"
+stt-lab-train-lora = "stt_lab.whisper_lora_training:main"
 
 [tool.uv.sources]
 liveclass-realtime-agent = { path = "../realtime-agent", editable = true }

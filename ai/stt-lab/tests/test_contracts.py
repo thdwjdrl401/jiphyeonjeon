@@ -51,8 +51,9 @@ def test_manifest_resolves_relative_audio_and_reads_pcm_contract(tmp_path: Path)
     audio = read_pcm16_mono_wav(loaded[0].audio_path, expected_sha256=loaded[0].sha256)
 
     assert loaded[0].audio_path == audio_path
+    assert loaded[0].training_reference == "라이브킷 연결을 확인합니다."
+    assert loaded[0].duration_ms is None
     assert loaded[0].terms == ("LiveKit",)
-    assert loaded[0].training_reference is None
     assert audio.sample_rate == 16_000
     assert audio.duration_ms == 1_000
 
@@ -84,6 +85,56 @@ def test_manifest_rejects_unknown_fields(tmp_path: Path) -> None:
     _write_manifest(manifest_path, clip)
 
     with pytest.raises(ValueError, match="unknown fields"):
+        load_manifest(manifest_path, require_audio=False)
+
+
+def test_manifest_accepts_refined_training_reference_and_metadata(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "manifest.jsonl"
+    clip = _clip()
+    clip.update(
+        {
+            "reference": "(software)/(소프트웨어)를 사용합니다.",
+            "trainingReference": "software를 사용합니다.",
+            "lectureId": "lecture-1",
+            "category": "eng/comp",
+            "durationMs": 1_000,
+        }
+    )
+    _write_manifest(manifest_path, clip)
+
+    loaded = load_manifest(manifest_path, require_audio=False)
+
+    assert loaded[0].training_reference == "software를 사용합니다."
+    assert loaded[0].lecture_id == "lecture-1"
+    assert loaded[0].category == "eng/comp"
+    assert loaded[0].duration_ms == 1_000
+
+
+def test_manifest_repairs_stale_training_reference_from_source_reference(
+    tmp_path: Path,
+) -> None:
+    manifest_path = tmp_path / "manifest.jsonl"
+    clip = _clip()
+    clip.update(
+        {
+            "reference": "(pull up)/(풀업)을 수행합니다.",
+            "trainingReference": "(pull up을 수행합니다.",
+        }
+    )
+    _write_manifest(manifest_path, clip)
+
+    loaded = load_manifest(manifest_path, require_audio=False)
+
+    assert loaded[0].training_reference == "pull up을 수행합니다."
+
+
+def test_manifest_rejects_non_positive_duration(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "manifest.jsonl"
+    clip = _clip()
+    clip["durationMs"] = 0
+    _write_manifest(manifest_path, clip)
+
+    with pytest.raises(ValueError, match="positive integer"):
         load_manifest(manifest_path, require_audio=False)
 
 

@@ -77,10 +77,18 @@ class NemotronRuntimeRunner:
 class WhisperTransformersRunner:
     """Run an open-weight Whisper checkpoint through Transformers."""
 
-    def __init__(self, model_id: str, *, device: str, precision: str) -> None:
+    def __init__(
+        self,
+        model_id: str,
+        *,
+        device: str,
+        precision: str,
+        adapter_id: str | None,
+    ) -> None:
         self._model_id = model_id
         self._device = device
         self._precision = precision
+        self._adapter_id = adapter_id
         self._processor = None
         self._model = None
 
@@ -104,9 +112,12 @@ class WhisperTransformersRunner:
         self._processor = AutoProcessor.from_pretrained(self._model_id)
         self._model = AutoModelForSpeechSeq2Seq.from_pretrained(
             self._model_id,
-            torch_dtype=dtype,
+            dtype=dtype,
             low_cpu_mem_usage=True,
         ).to(self._device)
+        if self._adapter_id is not None:
+            self._model.load_adapter(self._adapter_id, adapter_name="liveclass")
+            self._model.set_adapter("liveclass")
         self._model.eval()
 
     def transcribe(self, audio: PcmAudio, language: str) -> Transcription:
@@ -154,13 +165,17 @@ def build_runner(
     *,
     device: str,
     precision: str,
+    adapter_id: str | None = None,
 ) -> Transcriber:
     if backend == "nemotron":
+        if adapter_id is not None:
+            raise ValueError("LoRA adapters are only supported by the Whisper backend")
         return NemotronRuntimeRunner(model_id)
     if backend == "whisper":
         return WhisperTransformersRunner(
             model_id,
             device=device,
             precision=precision,
+            adapter_id=adapter_id,
         )
     raise ValueError(f"unsupported backend: {backend}")

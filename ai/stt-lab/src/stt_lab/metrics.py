@@ -31,9 +31,11 @@ def evaluate_transcript(
     reference: str,
     hypothesis: str,
     terms: Sequence[str] = (),
+    *,
+    training_reference: str | None = None,
 ) -> TranscriptMetrics:
     reference_segments = parse_aihub_transcription(reference)
-    written_reference = canonical_transcription(reference)
+    written_reference = training_reference or canonical_transcription(reference)
     normalized_reference = normalize_korean_text(written_reference)
     normalized_hypothesis = normalize_korean_text(hypothesis)
     return TranscriptMetrics(
@@ -68,6 +70,10 @@ def normalize_korean_text(value: str) -> str:
         for character in normalized
     ]
     return " ".join("".join(characters).split())
+
+
+def orthographic_training_reference(value: str) -> str:
+    return canonical_transcription(value)
 
 
 def _error_rate[T](reference: Sequence[T], hypothesis: Sequence[T]) -> float:

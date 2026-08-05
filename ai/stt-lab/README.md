@@ -274,6 +274,59 @@ Transformers adapter만 있어 학습 recipe가 연결되지 않았으므로 Whi
 학습 완료로 간주하지 않는다.
 
 
+## Whisper large-v3 LoRA pilot
+
+LoRA는 `/home/liveclass/ai/models/whisper-large-v3`의 고정 base checkpoint 위에 학습한다.
+기본 pilot은 speaker·lecture·category를 round-robin으로 섞은 train 5시간, 30초 이하 clip,
+rank 8, BF16, 1 epoch다. test와 golden은 학습·설정 선택에 사용하지 않는다.
+
+먼저 GPU를 사용하지 않는 selection dry-run을 수행한다.
+
+```bash
+uv run --frozen stt-lab-train-lora \
+  --base-model /home/liveclass/ai/models/whisper-large-v3 \
+  --train-manifest /home/liveclass/ai/datasets/aihub-korean-lecture/v1/manifests/train.jsonl \
+  --eval-manifest /home/liveclass/ai/datasets/aihub-korean-lecture/v1/manifests/dev.jsonl \
+  --output-dir /home/liveclass/ai/checkpoints/whisper-large-v3-lora/pilot-v1 \
+  --dry-run
+```
+
+실제 학습 전에는 같은 GPU 0을 쓰는 realtime-agent와 BGE를 maintenance window에서 내린다.
+상주 모델과 동시에 메모리에 들어가더라도 compute contention 때문에 라이브 p95를 보장할 수
+없다. 두 clip·한 update로 adapter 저장 경로를 먼저 검증한다.
+
+```bash
+uv run --frozen stt-lab-train-lora \
+  --base-model /home/liveclass/ai/models/whisper-large-v3 \
+  --train-manifest /home/liveclass/ai/datasets/aihub-korean-lecture/v1/manifests/train.jsonl \
+  --eval-manifest /home/liveclass/ai/datasets/aihub-korean-lecture/v1/manifests/dev.jsonl \
+  --output-dir /home/liveclass/ai/checkpoints/whisper-large-v3-lora/smoke-v1 \
+  --max-train-clips 2 \
+  --eval-limit 2 \
+  --batch-size 1 \
+  --gradient-accumulation-steps 1 \
+  --max-steps 1
+```
+
+smoke가 통과하면 `--max-train-clips`, `--max-steps`를 제거해 기본 5시간 pilot을 실행한다.
+각 epoch checkpoint와 최종 adapter, config·dataset hash·GPU peak가 output directory에
+보존된다. 기존 artifact가 있는 directory는 덮어쓰지 않는다.
+
+학습 후 동일 dev manifest를 base와 adapter에 각각 실행한다. 모델 선택은
+`normalizedCer`를 사용하고 `literalNormalizedCer`는 정제 감사에만 사용한다.
+
+```bash
+uv run --frozen stt-lab \
+  --manifest /home/liveclass/ai/datasets/aihub-korean-lecture/v1/manifests/dev.jsonl \
+  --split dev --limit 502 \
+  --backend whisper \
+  --model /home/liveclass/ai/models/whisper-large-v3 \
+  --adapter /home/liveclass/ai/checkpoints/whisper-large-v3-lora/pilot-v1/adapter-final \
+  --precision bfloat16 \
+  --cuda-visible-devices 0 \
+  --output results/whisper-large-v3-lora-dev-502.json
+```
+
 ## vLLM Whisper 서빙 실험
 
 vLLM은 realtime-agent 환경과 섞지 않고 별도 venv에 설치한다. sudo는 필요 없다. 현재
