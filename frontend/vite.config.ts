@@ -98,7 +98,12 @@ export default defineConfig({
     poolOptions: {
       // CI 러너는 운영 LiveKit Egress와 같은 4코어 박스다. 기본값(코어 수만큼 fork)이면 녹화가 도는
       // 동안 프로세스가 몰려 테스트가 무더기로 타임아웃한다(반대로 녹화 품질도 깎는다). CI에서만 조인다.
-      forks: { maxForks: process.env.CI ? 2 : undefined },
+      //
+      // **minForks를 같이 줘야 한다.** 안 주면 기본 최소값이 코어 수에서 파생되어 maxForks(2)를
+      // 넘고, tinypool이 "minThreads and maxThreads must not conflict"로 던져 테스트가 한 건도
+      // 돌지 않는다. 4코어에서는 우연히 맞아떨어져 드러나지 않았고 8코어 러너에서 터졌다 —
+      // 러너 장비가 바뀌면 조용히 깨지는 자리라 두 값을 함께 고정한다.
+      forks: process.env.CI ? { minForks: 1, maxForks: 2 } : {},
     },
   },
 })
