@@ -66,7 +66,6 @@ ADR-0075로 커리큘럼 자료의 "저장은 됐는데 화면만 옛것" 문제
   실패함을 확인했다.
 - 레슨 자료 왕복은 통합 테스트로 잠그지 못한다 — 목 서비스가 레슨 자료를 저장하지 않는다
   (`mockLessonService.saveLesson`은 알림 발행에만 쓴다). 그래서 무효화 계약을 단위 테스트로 고정했다.
-- **백엔드 후속 요청**: 저장된 대표 이미지를 비우는 계약이 필요하다. `PATCH`의 `thumbnailAssetId`는
-  null을 "변경 안 함"으로 쓰고 있어 그대로는 삭제를 표현할 수 없으므로, 명시적 플래그(예:
-  `clearThumbnail: true`) 또는 별도 `DELETE .../thumbnail`가 필요하다. 계약이 오면
-  `THUMBNAIL_REMOVE_PENDING_REASON`을 지우고 버튼을 연결한다.
+- **후속 해소(2026-08-05)**: [ADR-0077](0077-material-integrity-backend-contract-request.md) 요청 5로
+  `DELETE /api/instructor/curriculums/{id}/thumbnail` 계약과 백엔드 구현이 추가됐고, FE도 서비스 호출·
+  실패 복원·캐시 동기화를 연결해 관리 화면 삭제 버튼을 활성화했다.

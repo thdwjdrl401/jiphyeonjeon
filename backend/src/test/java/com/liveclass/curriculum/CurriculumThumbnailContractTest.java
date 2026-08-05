@@ -27,6 +27,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -35,6 +36,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * 커리큘럼 썸네일 연동 계약. 강사가 미리 올린 본인 UPLOADED THUMBNAIL 에셋을 지정하면 관리 뷰·카탈로그
  * 카드/상세에 presigned URL이 해석돼 나오고, 타인 소유·잘못된 종류·미완료 에셋은 거절된다.
+ * 소유 강사는 대표 이미지 연결을 멱등하게 삭제할 수 있다.
  * 스토리지는 모킹(exists=true, presign은 고정 가짜 URL)해 실제 MinIO 없이 돈다.
  */
 @SpringBootTest
@@ -108,6 +110,43 @@ class CurriculumThumbnailContractTest {
     }
 
     @Test
+    void delete_thumbnail_clears_url_and_is_idempotent() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        UUID thumbnailId = uploadedAsset(instructor, "THUMBNAIL");
+        String curriculumId = createCurriculum(instructor, thumbnailId);
+
+        write(delete("/api/instructor/curriculums/" + curriculumId + "/thumbnail"), instructor, null)
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/instructor/curriculums/" + curriculumId).cookie(instructor))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.thumbnailUrl").doesNotExist());
+
+        write(delete("/api/instructor/curriculums/" + curriculumId + "/thumbnail"), instructor, null)
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void delete_thumbnail_by_non_owner_returns_403() throws Exception {
+        Cookie[] owner = loginAs("INSTRUCTOR");
+        String curriculumId = createCurriculum(owner, uploadedAsset(owner, "THUMBNAIL"));
+        Cookie[] intruder = loginAs("INSTRUCTOR");
+
+        write(delete("/api/instructor/curriculums/" + curriculumId + "/thumbnail"), intruder, null)
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CURRICULUM_FORBIDDEN"));
+    }
+
+    @Test
+    void delete_thumbnail_of_missing_curriculum_returns_404() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+
+        write(delete("/api/instructor/curriculums/" + UUID.randomUUID() + "/thumbnail"), instructor, null)
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("CURRICULUM_NOT_FOUND"));
+    }
+
+    @Test
     void create_with_other_users_asset_returns_409() throws Exception {
         Cookie[] owner = loginAs("INSTRUCTOR");
         UUID othersAsset = uploadedAsset(owner, "THUMBNAIL");
@@ -150,6 +189,13 @@ class CurriculumThumbnailContractTest {
         MvcResult r = write(post("/api/instructor/curriculums"), auth, """
                 {"title":"기본 과정"}
                 """).andExpect(status().isCreated()).andReturn();
+        return json(r).get("curriculumId").asString();
+    }
+
+    private String createCurriculum(Cookie[] auth, UUID thumbnailAssetId) throws Exception {
+        MvcResult r = write(post("/api/instructor/curriculums"), auth, """
+                {"title":"대표 이미지 과정","thumbnailAssetId":"%s"}
+                """.formatted(thumbnailAssetId)).andExpect(status().isCreated()).andReturn();
         return json(r).get("curriculumId").asString();
     }
 

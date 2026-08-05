@@ -114,6 +114,14 @@ public class InstructorCurriculumController {
                 request.startsAt(), request.endsAt(), request.thumbnailAssetId()));
     }
 
+    @Operation(summary = "커리큘럼 대표 이미지 삭제",
+            description = "커리큘럼과 대표 이미지의 연결을 해제한다. 이미 대표 이미지가 없어도 성공하며, 업로드된 에셋 자체는 즉시 삭제하지 않는다.")
+    @DeleteMapping("/api/instructor/curriculums/{curriculumId}/thumbnail")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteThumbnail(@PathVariable UUID curriculumId, Authentication authentication) {
+        service.clearThumbnail(currentUserId(authentication), curriculumId);
+    }
+
     @Operation(summary = "커리큘럼 발행", description = "커리큘럼을 공개한다. 공개되는 즉시 카탈로그에 노출된다. 초안(비공개) 상태일 때만 발행할 수 있다.")
     @PostMapping("/api/instructor/curriculums/{curriculumId}/publish")
     public CurriculumResponse publish(@PathVariable UUID curriculumId, Authentication authentication) {
