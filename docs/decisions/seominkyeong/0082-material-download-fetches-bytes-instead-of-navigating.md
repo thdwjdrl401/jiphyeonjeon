@@ -14,8 +14,18 @@
 양쪽 모두다. 원인을 나눠 보면 두 겹이다.
 
 **1) 서버 경로가 없었다.** 수강생용 다운로드 엔드포인트(`GET /curriculums/{id}/materials/{mid}/download`,
-`GET /lessons/{id}/materials/{mid}/download`)는 `feat/be/curriculum-asset-access`에서 신설됐고
-아직 master에 없다. 그전까지 화면은 존재하지 않는 경로를 가리키고 있었다.
+`GET /lessons/{id}/materials/{mid}/download`)는 `feat/be/curriculum-asset-access`에서 신설됐다.
+그전까지 화면은 존재하지 않는 경로를 가리키고 있었다.
+
+> **2026-08-05 갱신** — 위 브랜치가 master에 머지되어 네 경로 모두 존재한다. FE의
+> `materialDownloadPath`가 만드는 경로와 컨트롤러 매핑을 대조해 확인했다.
+>
+> | `materialDownloadPath` (baseURL `/api` 앞에 붙음) | 컨트롤러 |
+> |---|---|
+> | `/curriculums/{id}/materials/{mid}/download` | `CatalogController` |
+> | `/lessons/{id}/materials/{mid}/download` | `StudentLessonController` |
+> | `/instructor/curriculums/{id}/materials/{mid}/download` | `InstructorCurriculumController` |
+> | `/instructor/lessons/{id}/materials/{mid}/download` | `InstructorLessonController` |
 
 **2) 화면이 실패를 삼켰다.** 이쪽이 이 ADR의 대상이다. 다운로드는 `<a href download>` 링크였고,
 그 형태에는 구조적인 문제가 셋 있다.
