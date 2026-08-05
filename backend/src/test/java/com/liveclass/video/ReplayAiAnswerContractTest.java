@@ -52,7 +52,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -116,6 +118,25 @@ class ReplayAiAnswerContractTest {
     private static final AtomicReference<Responder> responder = new AtomicReference<>();
     private static final AtomicReference<CapturedRequest> captured = new AtomicReference<>();
 
+    /**
+     * <b>업스트림이 응답을 시작해도 되는 시점.</b>
+     *
+     * <p>{@code MockHttpServletResponse}는 스레드 안전하지 않은 테스트 대역이다. MockMvc가 초기
+     * 디스패치를 마치기 전에 릴레이가 스트리밍을 시작하면, 필터 체인을 풀며 헤더를 쓰는
+     * <b>테스트 스레드</b>와 본문을 쓰는 <b>릴레이 스레드</b>가 같은 응답 객체를 동시에 건드려
+     * {@code ConcurrentModificationException}이 난다(HeaderWriterFilter의 헤더 맵에서 터진다).
+     *
+     * <p>이 목은 요청을 받자마자 SSE를 뱉으므로 그 겹침이 실제로 일어난다. <b>빠른 장비일수록 잘
+     * 난다</b> — 8코어 러너에서 재현했고, 4코어 러너에서도 드물게 났다.
+     *
+     * <p>실제 서블릿 컨테이너는 비동기 응답을 안전하게 다루므로 운영 코드의 결함이 아니다.
+     * 그래서 릴레이를 고치는 대신 <b>목이 디스패치가 끝난 뒤에 응답하도록</b> 순서를 확정한다.
+     * 요청 포착({@code captured})은 게이트 앞에서 하므로 "업스트림을 불렀는가"를 보는 단언은
+     * 그대로 유효하다.
+     */
+    private static final AtomicReference<CountDownLatch> dispatchGate =
+            new AtomicReference<>(new CountDownLatch(0));
+
     private interface Responder {
         void respond(HttpExchange exchange) throws IOException;
     }
@@ -140,6 +161,8 @@ class ReplayAiAnswerContractTest {
             captured.set(new CapturedRequest(exchange.getRequestURI().getPath(), headers, body));
             Responder current = responder.get();
             try {
+                // 디스패치가 끝나기 전에 쓰기 시작하면 테스트 스레드와 응답 객체를 다툰다(dispatchGate).
+                awaitDispatch();
                 current.respond(exchange);
             } finally {
                 exchange.close();
@@ -151,6 +174,18 @@ class ReplayAiAnswerContractTest {
     @AfterAll
     static void stopAiApi() {
         aiApi.stop(0);
+    }
+
+    /**
+     * 초기 디스패치가 끝날 때까지 기다린다. 열리지 않아도 계속 진행한다 — 게이트가 잘못되어
+     * 테스트가 통째로 멈추는 것보다, 원래 보려던 단언에서 깨지는 편이 원인을 읽기 쉽다.
+     */
+    private static void awaitDispatch() {
+        try {
+            dispatchGate.get().await(10, TimeUnit.SECONDS);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     @DynamicPropertySource
@@ -586,8 +621,15 @@ class ReplayAiAnswerContractTest {
             throws Exception {
         String body = jsonMapper.writeValueAsString(
                 Map.of("question", question, "playbackMs", playbackSessionMs));
-        return write(post("/api/lessons/" + lessonId + "/ai/answers/stream")
-                .accept(MediaType.TEXT_EVENT_STREAM), auth, body);
+        // 목이 응답을 시작해도 되는 시점을 이 호출이 끝난 뒤로 미룬다(dispatchGate javadoc).
+        CountDownLatch gate = new CountDownLatch(1);
+        dispatchGate.set(gate);
+        try {
+            return write(post("/api/lessons/" + lessonId + "/ai/answers/stream")
+                    .accept(MediaType.TEXT_EVENT_STREAM), auth, body);
+        } finally {
+            gate.countDown();
+        }
     }
 
     private void publish(Cookie[] instructor, String lessonId) throws Exception {
