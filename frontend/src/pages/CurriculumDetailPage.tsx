@@ -6,6 +6,7 @@ import CurriculumMaterials from '@/features/curriculum/CurriculumMaterials'
 import CurriculumNotice from '@/features/curriculum/CurriculumNotice'
 import CurriculumOutline from '@/features/curriculum/CurriculumOutline'
 import CurriculumOverview from '@/features/curriculum/CurriculumOverview'
+import type { CurriculumMaterial } from '@/features/curriculum/types'
 import CurriculumDetailSkeleton from '@/features/curriculum-detail/CurriculumDetailSkeleton'
 import CurriculumRelationPanel from '@/features/curriculum-detail/CurriculumRelationPanel'
 import InstructorManagementCard from '@/features/curriculum-detail/InstructorManagementCard'
@@ -60,6 +61,11 @@ export default function CurriculumDetailPage() {
   const primaryAction = resolvePrimaryAction(detail)
   const instructorManagement = resolveInstructorManagement(detail)
   const canViewCurriculumMaterials = ['ENROLLED', 'OWNER_INSTRUCTOR'].includes(detail.viewerContext.relationship)
+  // 다운로드 경로는 보는 사람에 따라 다르다 — 소유 강사는 관리용 경로, 수강생은 공개 상세와 같은 경로를 쓴다.
+  const materialDownloadHref = (material: CurriculumMaterial) =>
+    detail.viewerContext.relationship === 'OWNER_INSTRUCTOR'
+      ? `/api/instructor/curriculums/${detail.curriculumId}/materials/${material.materialId}/download`
+      : `/api/curriculums/${detail.curriculumId}/materials/${material.materialId}/download`
 
   const handleEnroll = () => enrollMutation.mutate()
   const handleCancel = () => cancelMutation.mutate()
@@ -106,8 +112,8 @@ export default function CurriculumDetailPage() {
               <InstructorManagementCard isInstructor={instructorManagement.isInstructor} onManage={handleManage} />
             )}
 
-            {canViewCurriculumMaterials && detail.materials.length > 0 && (
-              <CurriculumMaterials materials={detail.materials} />
+            {canViewCurriculumMaterials && (
+              <CurriculumMaterials materials={detail.materials} downloadHref={materialDownloadHref} />
             )}
 
             {detail.viewerContext.relationship === 'ENROLLED' && detail.viewerContext.progress && (

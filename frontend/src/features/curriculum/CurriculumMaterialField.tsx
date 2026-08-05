@@ -81,7 +81,7 @@ export default function CurriculumMaterialField({ id, value, onChange, downloadH
               <span className="file-icon">PPTX</span>
               <div><strong>{material.fileName}</strong><small>{formatFileSize(material.fileSize)}</small></div>
               {downloadHref && !material.file && (
-                <a className="button button--soft button--small" href={downloadHref(material)}>다운로드</a>
+                <a className="button button--soft button--small" href={downloadHref(material)} download={material.fileName}>다운로드</a>
               )}
               <StatusBadge tone={material.file ? 'warning' : 'success'}>{material.file ? '추가 예정' : '등록됨'}</StatusBadge>
               <button

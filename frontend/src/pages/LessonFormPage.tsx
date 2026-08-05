@@ -213,7 +213,9 @@ export default function LessonFormPage() {
       <PageHeader
         title={isEdit ? '강의 수정' : '새 강의 만들기'}
         description={isEdit ? undefined : `${curriculum?.title ?? ''} · 선택한 섹션`}
-        action={<Link className="button button--soft" to={curriculumReturnPath}>{isEdit ? '커리큘럼 상세로 돌아가기' : '커리큘럼 관리로 돌아가기'}</Link>}
+        action={isEdit
+          ? <Link className="button button--soft" to={lessonDetailPath}>강의 상세로 돌아가기</Link>
+          : <Link className="button button--soft" to={curriculumReturnPath}>커리큘럼 관리로 돌아가기</Link>}
       />
       <form className="workspace-form lesson-form" onSubmit={save}>
         <div className="lesson-form__top-grid">

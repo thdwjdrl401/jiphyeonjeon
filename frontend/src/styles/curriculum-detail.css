@@ -453,8 +453,13 @@
   text-overflow: ellipsis;
 }
 
+/*
+ * 열 폭을 minmax(0, 1fr)로 못 박는다. grid의 기본 auto 트랙은 칸의 min-content를 하한으로 삼아서,
+ * 줄바꿈 없는 긴 파일명이 있으면 행이 모달 밖으로 늘어난다(말줄임도 그래서 안 걸린다).
+ */
 .curriculum-materials ul {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   margin: 14px 0 0;
   padding: 0;
@@ -463,6 +468,7 @@
 
 .curriculum-materials li {
   display: flex;
+  min-width: 0;
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
@@ -474,18 +480,31 @@
 .curriculum-materials li > div {
   display: flex;
   min-width: 0;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 3px;
 }
 
+.curriculum-materials__download {
+  flex: 0 0 auto;
+  min-height: 32px;
+  border-radius: 0;
+  padding-inline: 12px;
+  font-size: .74rem;
+  text-decoration: none;
+}
+
+/*
+ * 파일명은 한 줄만 쓰고 넘치면 말줄임한다 — 두 줄로 흐르면 자료마다 행 높이가 달라져 목록이
+ * 들쭉날쭉해진다. 폭은 행에서 아이콘·다운로드 버튼을 뺀 만큼(대략 3/4)이 그대로 상한이 된다.
+ */
 .curriculum-materials li strong {
-  display: -webkit-box;
+  display: block;
   overflow: hidden;
   font-size: .86rem;
   line-height: 1.35;
-  overflow-wrap: anywhere;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .curriculum-materials li small {
@@ -568,6 +587,15 @@
   overscroll-behavior: contain;
   padding: 20px 24px 24px;
   scrollbar-gutter: stable;
+}
+
+.curriculum-materials-modal__empty {
+  margin: 0;
+  padding: 32px 24px 36px;
+  color: var(--ink-muted);
+  font-size: .86rem;
+  line-height: 1.5;
+  text-align: center;
 }
 
 .curriculum-overview h2,
@@ -996,5 +1024,9 @@ a.curriculum-lesson__detail-area:focus-visible {
 
   .curriculum-materials-modal > ul {
     padding: 16px 20px 24px;
+  }
+
+  .curriculum-materials-modal__empty {
+    padding: 28px 20px 32px;
   }
 }

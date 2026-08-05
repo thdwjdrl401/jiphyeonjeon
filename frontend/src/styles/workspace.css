@@ -166,7 +166,14 @@
 .lesson-form__dropzone-copy { display: grid; min-width: 0; gap: 2px; }
 .lesson-form__dropzone-copy strong { font-size: .72rem; }
 .lesson-form__dropzone-copy small { font-size: .61rem; }
-.lesson-form-page .lesson-form__material-list { display: grid; max-height: 116px; grid-template-columns: 1fr; gap: 4px; margin: 8px 0 0; padding-right: 3px; overflow-y: auto; }
+.lesson-form-page .lesson-form__material-list { display: grid; max-height: 116px; grid-template-columns: minmax(0, 1fr); gap: 4px; margin: 8px 0 0; padding-right: 6px; overflow-y: auto; }
+/*
+ * 전역 규칙(design-system.css)이 모든 내부 스크롤바를 1.5px !important로 깎아 사실상 보이지 않게 한다.
+ * 자료가 넘칠 때 더 있다는 신호가 이 막대뿐이라 여기서만 되살린다 — 같은 !important로 받아쳐야 한다.
+ */
+.lesson-form-page .lesson-form__material-list::-webkit-scrollbar { width: 6px !important; background: transparent !important; }
+.lesson-form-page .lesson-form__material-list::-webkit-scrollbar-thumb { border: 0; border-radius: 99px; background: rgba(47,45,40,.28); }
+.lesson-form-page .lesson-form__material-list::-webkit-scrollbar-thumb:hover { background: rgba(47,45,40,.45); }
 .lesson-form-page .material-list li { min-width: 0; gap: 8px; padding: 7px 9px; border-radius: 0; }
 .lesson-form-page .material-list .file-icon { width: 30px; height: 30px; border-radius: 0; font-size: .48rem; }
 .lesson-form-page .material-list .button { min-height: 30px; padding-inline: 10px; font-size: .66rem; }
@@ -246,7 +253,7 @@
 .curriculum-form__panel--assets .curriculum-material-field__dropzone { display: flex !important; min-height: 112px; justify-content: flex-start; flex-direction: row; gap: 11px; padding: 12px; border-radius: 0; text-align: left; }
 .curriculum-form__panel--assets .lesson-form__dropzone-copy strong { font-size: .72rem; }
 .curriculum-form__panel--assets .lesson-form__dropzone-copy small { font-size: .61rem; line-height: 1.4; }
-.curriculum-form__panel--assets .material-list { display: grid; max-height: 104px; grid-template-columns: 1fr; gap: 4px; margin: 8px 0 0; padding-right: 3px; overflow-y: auto; }
+.curriculum-form__panel--assets .material-list { display: grid; max-height: 104px; grid-template-columns: minmax(0, 1fr); gap: 4px; margin: 8px 0 0; padding-right: 3px; overflow-y: auto; }
 .curriculum-form__panel--assets .material-list li { min-width: 0; gap: 8px; padding: 7px 9px; border-radius: 0; }
 .curriculum-form__panel--assets .material-list .file-icon { width: 30px; height: 30px; border-radius: 0; font-size: .48rem; }
 .curriculum-form__panel--assets .material-list .status-pill { min-height: 22px; padding: 2px 6px; font-size: .57rem; }
@@ -340,6 +347,8 @@
 .lesson-detail__materials .material-list li { gap: 10px; padding: 10px; border-radius: 0; }
 .lesson-detail__materials .file-icon { width: 36px; height: 40px; flex: 0 0 auto; border-radius: 0; font-size: .51rem; }
 .lesson-detail__materials .text-button { flex: 0 0 auto; font-size: .62rem; }
+/* 다운로드는 링크다(스토리지 presigned URL로 302). 버튼 자리에 그대로 앉게 밑줄만 지운다. */
+.lesson-detail__materials a.text-button { display: inline-flex; align-items: center; text-decoration: none; }
 .lesson-detail__material-empty { display: grid; min-height: 170px; flex: 1; place-items: center; margin: 0; background: var(--ink-50); color: var(--ink-muted); font-size: .72rem; }
 
 @media (max-width: 1000px) {
@@ -943,8 +952,13 @@ th { color: var(--ink-500); font-size: .67rem; }
   .recorded-lesson-player [data-media-provider],
   .recorded-lesson-player video { min-height: 300px; }
 }
-.material-list { display: grid; gap: 8px; margin: 16px 0; padding: 0; list-style: none; }
-.material-list li { display: flex; align-items: center; gap: 11px; padding: 11px; border: 1px solid var(--ink-100); border-radius: 11px; }
+/*
+ * 열 폭을 minmax(0, 1fr)로 못 박는다. grid의 기본 auto 트랙(과 `1fr` = minmax(auto, 1fr))은 칸의
+ * min-content를 하한으로 삼아서, 줄바꿈 없는 긴 파일명이 있으면 행이 패널 밖으로 늘어나고
+ * 가로 스크롤이 생긴다 — strong의 말줄임도 그래서 걸리지 않았다.
+ */
+.material-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin: 16px 0; padding: 0; list-style: none; }
+.material-list li { display: flex; min-width: 0; align-items: center; gap: 11px; padding: 11px; border: 1px solid var(--ink-100); border-radius: 11px; }
 .material-list li > div { display: flex; min-width: 0; flex: 1; flex-direction: column; }
 .material-list strong { overflow: hidden; font-size: .73rem; text-overflow: ellipsis; white-space: nowrap; }
 .material-list small { color: var(--ink-500); font-size: .62rem; }
