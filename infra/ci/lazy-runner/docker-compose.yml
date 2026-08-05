@@ -1,0 +1,29 @@
+# 테스트 전용 GitLab 러너 — EC2에서 테스트 부하를 걷어낸다.
+#
+# EC2는 4코어에 운영 스택·녹화·CI가 전부 얹혀 있었다. 실측(최근 잡 400개):
+#   test-frontend  대기 p50 96s · p90 530s · 최대 1,349s
+#   test-backend   실행 최소 4s → 최대 1,050s (253배 편차)
+# 러너가 한 대에 concurrent=1이라 잡이 줄을 서고, 그 줄이 운영 서버 CPU를 두고 다툰다.
+#
+# **테스트만 옮긴다.** build·deploy는 shell executor로 그 호스트에서 제자리 배포하고
+# 시크릿(/etc/liveclass/.env.prod)도 거기에만 있으므로 EC2에 남는다.
+#
+# 기동:
+#   docker compose up -d --build
+name: lazy-runner
+
+services:
+  runner:
+    build: .
+    restart: unless-stopped
+    volumes:
+      - ./config:/etc/gitlab-runner
+      # DooD — 잡이 띄우는 형제 컨테이너(Testcontainers의 Postgres·Redis 등)는 호스트 데몬이 만든다.
+      - /var/run/docker.sock:/var/run/docker.sock
+      # **작업 디렉토리를 호스트와 같은 경로로 맞춘다.** 잡 스크립트가 -v "$CI_PROJECT_DIR:$CI_PROJECT_DIR"
+      # 로 자기 워크스페이스를 형제 컨테이너에 넘기는데, 그 경로는 호스트 데몬이 해석한다. 컨테이너
+      # 안의 경로와 호스트 경로가 다르면 빈 디렉토리가 마운트되어 "소스가 없다"로 죽는다.
+      - /home/lazy/ci-builds:/home/lazy/ci-builds
+    # 호스트 네트워크 — 잡이 --network host로 형제 컨테이너를 띄우고 localhost로 붙는다
+    # (Testcontainers가 게시한 포트는 호스트에 열린다).
+    network_mode: host
