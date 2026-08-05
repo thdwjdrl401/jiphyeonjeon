@@ -3,9 +3,12 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '@/App'
 import { mockAuthService, resetMockAuth } from '@/features/auth/mockAuthService'
-import { resetMockCurriculumManagement } from '@/features/curriculum/mockCurriculumManagementService'
+import { mockCurriculumManagementService, resetMockCurriculumManagement } from '@/features/curriculum/mockCurriculumManagementService'
 import { buildMockCurriculumOutline, getMockCurriculum, publishMockCurriculum } from '@/features/demo/mockDatabase'
+import * as materialDownloadService from '@/features/material/materialDownloadService'
 import { todayLocalStart } from '@/shared/lib/localDateTime'
+
+const PPTX_MIME = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
 
 /**
  * 오늘에서 days만큼 옮긴 datetime-local 문자열. 고정 날짜를 박으면 그날이 지나는 순간
@@ -225,13 +228,36 @@ describe('커리큘럼 작업 화면', () => {
     )
 
     fireEvent.change(screen.getByLabelText('운영 종료일'), { target: { value: localDateTimeInDays(-1, '09:00') } })
+    const submit = screen.getByRole('button', { name: '초안 만들기' })
 
-    await user.click(screen.getByRole('button', { name: '초안 만들기' }))
+    // 잘못된 값을 서버로 보낼 수 없게 즉시 잠그고, 날짜를 고치면 다시 저장할 수 있어야 한다.
+    expect(submit).toBeDisabled()
 
-    // 폼 아래 고정 문구가 아니라 토스트로 나가야 한다 — 알림 영역 안에서 찾는다.
+    // 폼 아래 고정 문구가 아니라 입력 시점에 토스트로 나가야 한다 — 알림 영역 안에서 찾는다.
     const toastRegion = await screen.findByRole('region', { name: '알림' })
     expect(await within(toastRegion).findByText('운영 종료일은 오늘보다 이전일 수 없습니다.')).toBeInTheDocument()
     // 초안이 만들어지지 않았으니 생성 폼에 그대로 머문다.
+    expect(window.location.pathname).toBe('/instructor/curriculums/new')
+
+    fireEvent.change(screen.getByLabelText('운영 종료일'), { target: { value: localDateTimeInDays(1, '09:00') } })
+    expect(submit).toBeEnabled()
+  })
+
+  it('React 상태보다 DOM 날짜 입력이 먼저 바뀌어도 과거 운영 종료일로 만들지 않는다', async () => {
+    const user = userEvent.setup()
+    await renderAsInstructor('/instructor/curriculums/new')
+    await user.type(
+      await screen.findByPlaceholderText('예: 라이브로 완성하는 Spring Boot'),
+      'DOM 검증 커리큘럼',
+    )
+
+    // 일부 브라우저의 datetime-local 키보드 입력처럼 DOM 값이 React change보다 먼저 완성된 상황을 재현한다.
+    const endsAtInput = screen.getByLabelText('운영 종료일') as HTMLInputElement
+    endsAtInput.value = localDateTimeInDays(-1, '09:00')
+    await user.click(screen.getByRole('button', { name: '초안 만들기' }))
+
+    const toastRegion = await screen.findByRole('region', { name: '알림' })
+    expect(await within(toastRegion).findByText('운영 종료일은 오늘보다 이전일 수 없습니다.')).toBeInTheDocument()
     expect(window.location.pathname).toBe('/instructor/curriculums/new')
   })
 
@@ -376,7 +402,11 @@ describe('커리큘럼 작업 화면', () => {
     const pendingRow = pendingEmail.closest('tr')
     expect(pendingRow).not.toBeNull()
     expect(within(pendingRow!).getByText('승인 대기')).toBeInTheDocument()
-    await user.click(within(pendingRow!).getByRole('button', { name: '승인' }))
+    const approveButton = within(pendingRow!).getByRole('button', { name: '승인' })
+    const rejectButton = within(pendingRow!).getByRole('button', { name: '거절' })
+    expect(approveButton).toHaveClass('button', 'button--primary', 'enrollment-action-button--approve')
+    expect(rejectButton).toHaveClass('button', 'button--danger', 'enrollment-action-button--reject')
+    await user.click(approveButton)
 
     await waitFor(() => {
       const activeRow = screen.getByText('student02@example.com').closest('tr')
@@ -521,27 +551,86 @@ describe('커리큘럼 작업 화면', () => {
     expect(screen.queryByRole('link', { name: '강의 상세' })).not.toBeInTheDocument()
   })
 
-  // 자료 다운로드는 앱 서버가 presigned URL로 302를 주는 링크다 — 경로가 역할별로 갈린다.
+  // 자료 다운로드는 앱 서버가 presigned URL로 302를 주는 경로다 — 역할별로 갈린다.
   it('강의 상세 자료 다운로드는 강사·수강생이 각자의 경로를 쓴다', async () => {
+    const user = userEvent.setup()
+    const fetchMaterial = vi
+      .spyOn(materialDownloadService, 'fetchMaterial')
+      .mockResolvedValue(new Blob(['bytes']))
     const { unmount } = await renderAsInstructor(
       '/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/les-security',
     )
 
-    const instructorLink = await screen.findByRole('link', { name: 'spring-security-basics.pptx 다운로드' })
-    expect(instructorLink).toHaveAttribute(
-      'href',
-      '/api/instructor/lessons/les-security/materials/mat-security/download',
-    )
-    // presigned URL에는 원본 파일명이 없다 — 저장될 이름을 링크가 들고 있어야 한다.
-    expect(instructorLink).toHaveAttribute('download', 'spring-security-basics.pptx')
+    await user.click(await screen.findByRole('button', { name: 'spring-security-basics.pptx 다운로드' }))
+    // presigned URL에는 원본 파일명이 없다 — 저장될 이름을 요청이 함께 들고 가야 한다.
+    expect(fetchMaterial).toHaveBeenLastCalledWith({
+      scope: 'LESSON',
+      parentId: 'les-security',
+      materialId: 'mat-security',
+      fileName: 'spring-security-basics.pptx',
+      asInstructor: true,
+    })
     unmount()
 
     await renderAsStudent('/student/curriculums/cur-spring-live/sections/sec-security/lessons/les-security')
 
-    expect(await screen.findByRole('link', { name: 'spring-security-basics.pptx 다운로드' })).toHaveAttribute(
-      'href',
-      '/api/lessons/les-security/materials/mat-security/download',
+    await user.click(await screen.findByRole('button', { name: 'spring-security-basics.pptx 다운로드' }))
+    expect(fetchMaterial).toHaveBeenLastCalledWith(expect.objectContaining({ asInstructor: false }))
+  })
+
+  /*
+   * 저작 화면의 다운로드도 같은 규칙을 따라야 한다. 스토리지 객체 키가 `material/{UUID}`라
+   * (AssetService) presigned URL을 링크로 그냥 열면 확장자도 없는 UUID로 저장된다.
+   */
+  it('강의 수정 화면에서 자료를 원래 파일명으로 내려받는다', async () => {
+    const user = userEvent.setup()
+    const fetchMaterial = vi
+      .spyOn(materialDownloadService, 'fetchMaterial')
+      .mockResolvedValue(new Blob(['bytes']))
+    await renderAsInstructor(
+      '/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/les-security/edit',
     )
+
+    await user.click(await screen.findByRole('button', { name: 'spring-security-basics.pptx 다운로드' }))
+
+    expect(fetchMaterial).toHaveBeenLastCalledWith({
+      scope: 'LESSON',
+      parentId: 'les-security',
+      materialId: 'mat-security',
+      fileName: 'spring-security-basics.pptx',
+      asInstructor: true,
+    })
+  })
+
+  it('녹화강의 수정 화면에서 자료를 원래 파일명으로 내려받는다', async () => {
+    const user = userEvent.setup()
+    const fetchMaterial = vi
+      .spyOn(materialDownloadService, 'fetchMaterial')
+      .mockResolvedValue(new Blob(['bytes']))
+    // 녹화강의는 fixture에 없다(업로드로만 생긴다). UI 흐름 대신 서비스로 바로 만들어 둔다.
+    const { lessonId } = await mockCurriculumManagementService.uploadRecordedLesson({
+      clientRequestId: 'test-recorded-download',
+      curriculumId: 'cur-spring-live',
+      sectionId: 'sec-foundation',
+      title: '녹화로 배우는 보안 기초',
+      description: '',
+      videoFile: new File(['video'], '보안-기초.mp4', { type: 'video/mp4' }),
+      materials: [new File(['deck'], '보안-기초.pptx', { type: PPTX_MIME })],
+    })
+
+    await renderAsInstructor(
+      `/instructor/curriculums/cur-spring-live/sections/sec-foundation/recorded-lessons/${lessonId}/edit`,
+    )
+
+    await user.click(await screen.findByRole('button', { name: '보안-기초.pptx 다운로드' }))
+
+    expect(fetchMaterial).toHaveBeenLastCalledWith({
+      scope: 'LESSON',
+      parentId: lessonId,
+      materialId: 'mock-material-보안-기초.pptx-4',
+      fileName: '보안-기초.pptx',
+      asInstructor: true,
+    })
   })
 
   it('라이브 일정이 없는 강사 강의 상세는 강의 수정에서 일정을 추가하도록 안내한다', async () => {
@@ -759,6 +848,14 @@ describe('커리큘럼 작업 화면', () => {
     }
     expect(within(operatingPanel!).queryByRole('link', { name: '커리큘럼 상세' })).not.toBeInTheDocument()
     expect(within(operatingPanel!).queryByRole('link', { name: '관리하기' })).not.toBeInTheDocument()
+  })
+
+  it('강사 커리큘럼 상태 필터에 미구현 보관 상태를 노출하지 않는다', async () => {
+    await renderAsInstructor('/instructor/curriculums')
+
+    const statusFilter = await screen.findByRole('combobox', { name: '상태 필터' })
+    expect(within(statusFilter).getAllByRole('option').map((option) => option.textContent))
+      .toEqual(['전체 상태', '공개 중', '준비 중'])
   })
 
   // 목록은 탐색·진입만 맡는다. 삭제 같은 상태 변경은 관리 화면으로 모았다.

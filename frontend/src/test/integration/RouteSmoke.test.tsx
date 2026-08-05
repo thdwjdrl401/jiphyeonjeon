@@ -318,7 +318,10 @@ describe('전체 페이지 라우트', () => {
     // 테스트음이 약 5초라(1.55초 차임 × 3구간 + 구간 사이 침묵) 확인 버튼은 그 뒤에 뜬다 —
     // 기본 대기(1초)로는 모자라고, 테스트 전체 제한(5초)도 넘으므로 아래에서 함께 늘렸다.
     await user.click(await screen.findByRole('button', { name: '네, 모두 들려요' }, { timeout: 9_000 }))
-    await user.click(await screen.findByRole('link', { name: '라이브 입장' }))
+    // 점검 화면을 연 뒤 강사가 시작해도, 입장 클릭 시 상태를 다시 조회해 들어간다.
+    await mockLiveSessionService.startLiveSession('ses-security-live')
+    await mockLiveSessionService.getLiveStartStatus('ses-security-live')
+    await user.click(await screen.findByRole('button', { name: '라이브 입장' }))
 
     expect(await screen.findByRole('tab', { name: 'AI 질문' })).toBeInTheDocument()
     expect(await screen.findByRole('region', { name: '강의 영상' })).toBeInTheDocument()
@@ -336,6 +339,60 @@ describe('전체 페이지 라우트', () => {
     // 닿아야 드러나므로(ADR-0045) 여기서는 독의 존재만 확인한다.
     expect(screen.getByRole('region', { name: '실시간 자막' })).toBeInTheDocument()
     // 테스트음(약 5초)을 실제로 기다리는 흐름이라 기본 제한(5초)으로는 끝낼 수 없다.
+  })
+
+  it('강사가 시작하지 않은 강의는 팝업을 보여 주고 입장하지 않는다', async () => {
+    const user = userEvent.setup()
+    await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
+    renderAt('/student/live-sessions/ses-security-live/prejoin')
+
+    await user.click(await screen.findByRole('button', { name: /테스트 시작/ }))
+    await user.click(await screen.findByRole('button', { name: '네, 모두 들려요' }, { timeout: 9_000 }))
+    await user.click(await screen.findByRole('button', { name: '라이브 입장' }))
+
+    const dialog = await screen.findByRole('dialog', { name: '강의가 아직 시작되지 않았습니다' })
+    expect(within(dialog).getByText(/강사가 라이브 강의를 시작하면 입장할 수 있습니다/)).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/student/live-sessions/ses-security-live/prejoin')
+
+    await user.click(within(dialog).getByRole('button', { name: '확인' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    // 닫으면 다시 시도할 자리로 초점이 돌아와야 한다.
+    expect(screen.getByRole('button', { name: '라이브 입장' })).toHaveFocus()
+  })
+
+  it('종료된 강의는 기다리라고 하지 않고 입장할 수 없다고 알린다', async () => {
+    const user = userEvent.setup()
+    await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
+    renderAt('/student/live-sessions/ses-security-live/prejoin')
+
+    await user.click(await screen.findByRole('button', { name: /테스트 시작/ }))
+    await user.click(await screen.findByRole('button', { name: '네, 모두 들려요' }, { timeout: 9_000 }))
+    /*
+      점검을 마친 뒤 강의가 끝난 상황이다. 입장 시점에 다시 조회하므로 이때부터 ENDED가 보인다
+      — 화면 진입 시점의 가드(isLiveEntryOpen)는 이미 통과해 버렸으므로 이 분기가 필요하다.
+    */
+    await mockLiveSessionService.endLiveSession('ses-security-live')
+    await user.click(await screen.findByRole('button', { name: '라이브 입장' }))
+
+    const dialog = await screen.findByRole('dialog', { name: '입장할 수 없는 강의입니다' })
+    expect(within(dialog).getByText(/이미 종료되었거나 취소된 강의입니다/)).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/student/live-sessions/ses-security-live/prejoin')
+  })
+
+  it('입장 안내 팝업은 Escape로도 닫힌다', async () => {
+    const user = userEvent.setup()
+    await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
+    renderAt('/student/live-sessions/ses-security-live/prejoin')
+
+    await user.click(await screen.findByRole('button', { name: /테스트 시작/ }))
+    await user.click(await screen.findByRole('button', { name: '네, 모두 들려요' }, { timeout: 9_000 }))
+    await user.click(await screen.findByRole('button', { name: '라이브 입장' }))
+    await screen.findByRole('dialog', { name: '강의가 아직 시작되지 않았습니다' })
+
+    await user.keyboard('{Escape}')
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '라이브 입장' })).toHaveFocus()
   })
 
   it('ENDED 학생 화면은 종료 문구를 표시하되 채팅·AI 질문을 유지한다', async () => {

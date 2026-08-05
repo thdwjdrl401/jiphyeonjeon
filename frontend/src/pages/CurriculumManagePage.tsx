@@ -706,7 +706,8 @@ function CurriculumManageEditor({
                   <article className={`structure-section${lessonDropTarget?.sectionId === section.sectionId ? ' is-lesson-drop-target' : ''}`} key={section.sectionId}>
                     {/* 라벨·액션이 첫 줄, 입력창은 그 아래 전폭 — 버튼이 입력 폭을 깎지 않도록. */}
                     <header>
-                      <div className="drag-handle" aria-hidden="true">⋮⋮</div>
+                      {/* 섹션에는 드래그 핸들을 두지 않는다 — 섹션 순서는 옆의 ↑↓ 버튼으로만 바꾸고,
+                          잡아 끌 수 없는 자리에 핸들 모양을 두면 되지 않는 조작을 시도하게 만든다. */}
                       <span className="structure-section__eyebrow">SECTION {sectionIndex + 1}</span>
                       <div className="structure-section__fields">
                         <label><small>섹션 이름</small><input aria-label={`섹션 ${sectionIndex + 1} 이름`} maxLength={200} value={section.title} onChange={(event) => updateSection(section.sectionId, 'title', event.target.value)} /></label>
@@ -721,15 +722,6 @@ function CurriculumManageEditor({
                             <svg aria-hidden="true" viewBox="0 0 16 16"><path d="M3.5 6 8 10.5 12.5 6" /></svg>
                           </button>
                         </div>
-                        {section.sectionId.startsWith('sec-new-')
-                          ? <>
-                              <button className="button button--soft button--small" type="button" disabled title="새 섹션이 자동 저장된 뒤에 녹화강의를 업로드할 수 있어요.">녹화강의 업로드</button>
-                              <button className="button button--primary button--small" type="button" disabled title="새 섹션이 자동 저장된 뒤에 라이브 강의를 추가할 수 있어요.">라이브 강의 추가</button>
-                            </>
-                          : <>
-                              <Link className="button button--soft button--small" to={instructorPaths.newRecordedLesson(curriculumId, section.sectionId)}>녹화강의 업로드</Link>
-                              <Link className="button button--primary button--small" to={instructorPaths.newLesson(curriculumId, section.sectionId)}>라이브 강의 추가</Link>
-                            </>}
                         <button
                           className="button button--soft button--small"
                           type="button"
@@ -789,6 +781,23 @@ function CurriculumManageEditor({
                       })}
                       {section.lessons.length === 0 && <li className="lesson-drop-empty" aria-hidden="true">강의를 이 섹션으로 드래그하세요.</li>}
                     </ul>
+                    {/*
+                      강의 추가는 목록 <b>아래 정중앙</b>에 둔다. 헤더 오른쪽에 있을 때는 섹션 자체를
+                      다루는 버튼들(↑↓·섹션 삭제)과 한 줄에 섞여, 이 둘이 "섹션을 조작한다"가 아니라
+                      "이 섹션에 강의를 이어 붙인다"라는 것이 위치로 드러나지 않았다. 마지막 강의(또는
+                      빈 섹션 안내) 바로 밑이면 목록이 어디서 끝나고 무엇이 덧붙는지가 한눈에 읽힌다.
+                    */}
+                    <div className="structure-section__add-lesson">
+                      {section.sectionId.startsWith('sec-new-')
+                        ? <>
+                            <button className="button button--soft button--small" type="button" disabled title="새 섹션이 자동 저장된 뒤에 녹화강의를 업로드할 수 있어요.">녹화강의 업로드</button>
+                            <button className="button button--primary button--small" type="button" disabled title="새 섹션이 자동 저장된 뒤에 라이브 강의를 추가할 수 있어요.">라이브 강의 추가</button>
+                          </>
+                        : <>
+                            <Link className="button button--soft button--small" to={instructorPaths.newRecordedLesson(curriculumId, section.sectionId)}>녹화강의 업로드</Link>
+                            <Link className="button button--primary button--small" to={instructorPaths.newLesson(curriculumId, section.sectionId)}>라이브 강의 추가</Link>
+                          </>}
+                    </div>
                   </article>
                 ))}
               </div>
@@ -841,8 +850,13 @@ function CurriculumManageEditor({
               id="manage-curriculum-materials"
               value={materials}
               onChange={updateMaterials}
-              downloadHref={(material) =>
-                `/api/instructor/curriculums/${curriculumId}/materials/${material.materialId}/download`}
+              downloadRequest={(material) => ({
+                scope: 'CURRICULUM',
+                parentId: curriculumId,
+                materialId: material.materialId,
+                fileName: material.fileName,
+                asInstructor: true,
+              })}
             />
           </Panel>
         </div>

@@ -166,6 +166,43 @@ if (typeof HTMLCanvasElement !== 'undefined') {
   })
 }
 
+/*
+ * jsdom에는 Blob URL 발급이 없다(`URL.createObjectURL`이 아예 정의되지 않는다). 강의 자료
+ * 다운로드가 이 API로 파일을 저장시키므로, 없으면 TypeError가 나며 흐름이 끊긴다. 발급된 URL을
+ * 단언하는 테스트는 스스로 spy를 심는다.
+ */
+if (typeof URL.createObjectURL !== 'function') {
+  let objectUrlSequence = 0
+  Object.defineProperty(URL, 'createObjectURL', {
+    configurable: true,
+    writable: true,
+    value: () => `blob:test/${objectUrlSequence++}`,
+  })
+  Object.defineProperty(URL, 'revokeObjectURL', {
+    configurable: true,
+    writable: true,
+    value: () => {},
+  })
+}
+
+/*
+ * 파일 저장(`saveBlob`)은 blob URL을 건 <a>를 만들어 클릭한다. jsdom에는 다운로드 개념이 없어
+ * `download` 속성을 무시하고 그냥 이동을 시도하다 "Not implemented: navigation"을 스택과 함께
+ * 뱉는다 — 위 scrollTo와 같은 종류의 노이즈이고, 자료 다운로드를 건드리는 테스트마다 쌓인다.
+ * blob URL일 때만 삼키고 나머지 앵커 클릭은 jsdom 기본 동작을 그대로 둔다.
+ */
+if (typeof HTMLAnchorElement !== 'undefined') {
+  const nativeClick = HTMLAnchorElement.prototype.click
+  Object.defineProperty(HTMLAnchorElement.prototype, 'click', {
+    configurable: true,
+    writable: true,
+    value: function click(this: HTMLAnchorElement) {
+      if (this.getAttribute('href')?.startsWith('blob:')) return
+      nativeClick.call(this)
+    },
+  })
+}
+
 /**
  * 테스트가 보는 "지금"을 고정한다.
  *

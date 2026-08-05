@@ -1,6 +1,7 @@
-import { createContext, useContext, useState, type PropsWithChildren } from 'react'
+import { createContext, useContext, useEffect, useState, type PropsWithChildren } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { releasePushSubscription } from '@/features/notification/releasePushSubscription'
+import { subscribeToSessionExpiry } from '@/shared/api/sessionExpiry'
 import { authService } from './authService'
 import { profileService } from '@/features/profile/profileService'
 import type {
@@ -53,6 +54,16 @@ export function AuthProvider({ children }: PropsWithChildren) {
     : user
       ? 'authenticated'
       : 'guest'
+
+  useEffect(() => subscribeToSessionExpiry(() => {
+    // 서버 세션은 이미 끝났으므로 logout API를 다시 호출하지 않는다. 보호 데이터와 사용자만 즉시
+    // 비우면 라우트 가드가 현재 주소를 returnTo로 담아 로그인 화면으로 보낸다.
+    queryClient.removeQueries({
+      predicate: ({ queryKey }) => queryKey[0] !== 'auth',
+    })
+    setGuestReason('never-signed-in')
+    queryClient.setQueryData(authQueryKey, null)
+  }), [queryClient])
 
   const value: AuthContextValue = {
     user,

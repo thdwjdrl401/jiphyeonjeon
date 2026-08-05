@@ -10,6 +10,8 @@ import type { LessonMaterialView } from '@/features/lesson/lessonService.interfa
 import LessonBreadcrumbs from '@/features/lesson/LessonBreadcrumbs'
 import { isLiveEntryOpen } from '@/features/live-session/liveEntry'
 import { getLiveSession } from '@/features/live-session/liveSessionService'
+import type { MaterialDownloadRequest } from '@/features/material/materialDownloadService'
+import { useMaterialDownload } from '@/features/material/useMaterialDownload'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
 import { InlineNotice, PageHeader, Panel, StatusBadge } from '@/shared/ui/WorkspaceUi'
@@ -25,6 +27,7 @@ export default function LessonDetailPage() {
   const { curriculumId = '', sectionId = '', lessonId = '' } = useParams()
   const { user } = useAuth()
   const [entryNotice, setEntryNotice] = useState('')
+  const { download: downloadMaterial, downloadingMaterialId } = useMaterialDownload()
   const isInstructor = user?.role === 'INSTRUCTOR'
   const lessonQuery = useQuery({
     queryKey: ['lesson', lessonId, user?.role, user?.userId, curriculumId, sectionId],
@@ -57,11 +60,14 @@ export default function LessonDetailPage() {
   const canReplay = lesson.replayStatus === 'PUBLISHED'
   const replayProgress = lesson.learning?.progressPercent ?? 0
   const materialWorkInProgress = lesson.materials.some((material) => material.status !== 'READY')
-  // 커리큘럼 자료와 같은 규칙 — 강사는 관리용 경로, 수강생은 공개 경로. 바이트는 스토리지 직결(302).
-  const materialDownloadHref = (material: LessonMaterialView) =>
-    isInstructor
-      ? `/api/instructor/lessons/${lessonId}/materials/${material.id}/download`
-      : `/api/lessons/${lessonId}/materials/${material.id}/download`
+  // 커리큘럼 자료와 같은 규칙 — 강사는 관리용 경로, 수강생은 수강 관계로 열리는 경로.
+  const materialDownloadRequest = (material: LessonMaterialView): MaterialDownloadRequest => ({
+    scope: 'LESSON',
+    parentId: lessonId,
+    materialId: material.id,
+    fileName: material.name,
+    asInstructor: isInstructor,
+  })
   const scheduledDate = liveSession?.scheduledAt ? new Date(liveSession.scheduledAt) : null
   const entryDate = scheduledDate ? new Date(scheduledDate.getTime() - 10 * 60_000) : null
   const liveStatusLabel = liveSession && ['OPEN', 'STARTING', 'LIVE'].includes(liveSession.status) ? '입장 가능' : '예정'
@@ -145,7 +151,7 @@ export default function LessonDetailPage() {
         {/* 자료 전용 화면이 없어 자료 등록 알림이 이 영역을 직접 가리킨다(LESSON_MATERIALS_ANCHOR). */}
         <Panel id={LESSON_MATERIALS_ANCHOR} className="lesson-detail__materials" title="강의 자료" description="수강생에게 공개되는 PPTX 원본입니다." action={<StatusBadge>{lesson.materials.length}개</StatusBadge>}>
           {lesson.materials.length > 0
-            ? <ul className="material-list material-list--compact">{lesson.materials.map((material) => <li key={material.id}><span className="file-icon">PPTX</span><div><strong>{material.name}</strong><small>{material.size}</small></div><a className="text-button" href={materialDownloadHref(material)} download={material.name} aria-label={`${material.name} 다운로드`}>다운로드</a></li>)}</ul>
+            ? <ul className="material-list material-list--compact">{lesson.materials.map((material) => <li key={material.id}><span className="file-icon">PPTX</span><div><strong>{material.name}</strong><small>{material.size}</small></div><button className="text-button" type="button" disabled={downloadingMaterialId === material.id} aria-label={`${material.name} 다운로드`} onClick={() => void downloadMaterial(materialDownloadRequest(material))}>{downloadingMaterialId === material.id ? '받는 중…' : '다운로드'}</button></li>)}</ul>
             : <p className="lesson-detail__material-empty">등록된 강의 자료가 없습니다.</p>}
         </Panel>
       </div>

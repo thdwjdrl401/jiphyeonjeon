@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { publicPaths, studentPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
 import LessonBreadcrumbs from '@/features/lesson/LessonBreadcrumbs'
@@ -24,8 +24,21 @@ const NICKNAME_SAVE_DEBOUNCE_MS = 500
 
 type SpeakerStage = 'idle' | 'testing' | 'confirm'
 
+/**
+ * 입장 클릭의 결과. `waiting`·`closed`·`error`가 팝업을 띄운다.
+ *
+ * <p>`waiting`과 `closed`를 나누는 이유: "잠시 후 다시" 안내는 <b>아직 시작 전일 때만</b> 참이다.
+ * 강의가 끝났거나 취소된 뒤에도 같은 문구를 띄우면 학생은 오지 않을 시작을 기다리게 된다.
+ */
+type EntryStatus = 'idle' | 'checking' | 'waiting' | 'closed' | 'error'
+
+/** 이 상태들은 시작을 기다릴 수 있다. 나머지 비-LIVE 상태는 다시 열리지 않는다. */
+const BEFORE_START_STATUSES = new Set(['DRAFT', 'SCHEDULED', 'OPEN', 'STARTING'])
+
 export default function StudentPrejoinPage() {
   const { sessionId = '' } = useParams()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const sessionQuery = useQuery({ queryKey: ['live-session', sessionId], queryFn: () => getLiveSession(sessionId), enabled: Boolean(sessionId) })
   const session = sessionQuery.data
   const { user, updateDisplayName } = useAuth()
@@ -34,6 +47,9 @@ export default function StudentPrejoinPage() {
   const [testChannel, setTestChannel] = useState<SpeakerTestChannel | null>(null)
   const stopSpeakerTestRef = useRef<(() => void) | null>(null)
   const [nickname, setNickname] = useState(user?.displayName ?? '')
+  const [entryStatus, setEntryStatus] = useState<EntryStatus>('idle')
+  const entryButtonRef = useRef<HTMLButtonElement | null>(null)
+  const entryDialogRef = useRef<HTMLElement | null>(null)
   const ready = Object.values(checks).every(Boolean)
   const autoDone = checks.autoplay && checks.network
   usePageTitle('입장 전 점검')
@@ -82,6 +98,58 @@ export default function StudentPrejoinPage() {
     })
   }
   const confirmSpeaker = () => setChecks((current) => ({ ...current, speaker: true }))
+
+  const isEntryDialogOpen = entryStatus === 'waiting' || entryStatus === 'closed' || entryStatus === 'error'
+  const closeEntryDialog = () => {
+    setEntryStatus('idle')
+    // 팝업을 닫으면 방금 누른 입장 버튼으로 초점을 돌려준다 — 다시 시도하는 자리가 거기다.
+    entryButtonRef.current?.focus()
+  }
+
+  /*
+   * 열리면 팝업 안으로 초점을 넣고 Escape로 닫는다. 이 팝업은 화면 전체를 덮으므로(aria-modal),
+   * 초점을 옮기지 않으면 스크린리더는 뒤쪽 점검 목록을 계속 읽고 키보드 사용자는 보이지 않는
+   * 버튼들 사이를 돌게 된다.
+   */
+  useEffect(() => {
+    if (!isEntryDialogOpen) return
+
+    entryDialogRef.current?.focus()
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      setEntryStatus('idle')
+      entryButtonRef.current?.focus()
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [isEntryDialogOpen])
+
+  const enterLiveClassroom = async () => {
+    setEntryStatus('checking')
+    try {
+      // 점검 화면을 연 뒤에 강사가 시작했을 수 있으므로 입장 순간의 최신 상태를 다시 본다.
+      // 초기 쿼리 캐시만 믿으면 SCHEDULED 상태가 남아 있거나, 반대로 종료된 강의에
+      // 들어갈 수 있다.
+      const latestSession = await getLiveSession(sessionId)
+
+      if (latestSession.status !== 'LIVE') {
+        /*
+         * 막힌 상태는 공유 캐시에 쓰지 않는다. 여기 쓰면 이 화면 위쪽의 입장 게이트
+         * (`isLiveEntryOpen`)가 곧바로 화면 전체를 "강의 시간이 아닙니다"로 갈아치워, 방금 띄운
+         * 팝업과 설명이 사라진다. 게이트는 <b>화면에 들어올 때</b> 판정하는 장치이고, 머무는
+         * 동안의 변화는 이 팝업이 설명한다. 다시 누르면 그때 또 최신 상태를 조회한다.
+         */
+        setEntryStatus(BEFORE_START_STATUSES.has(latestSession.status) ? 'waiting' : 'closed')
+        return
+      }
+
+      // 들어갈 때는 최신 상태를 넘겨 준다 — 강의실이 같은 키를 읽는다.
+      queryClient.setQueryData(['live-session', sessionId], latestSession)
+      navigate(studentPaths.classroom(sessionId), { state: { prejoinSessionId: sessionId } })
+    } catch {
+      setEntryStatus('error')
+    }
+  }
 
   if (!sessionId) return <PageState title="잘못된 라이브 세션 경로입니다" />
   if (sessionQuery.isPending) return <PageState title="라이브 세션을 불러오는 중입니다" />
@@ -213,11 +281,52 @@ export default function StudentPrejoinPage() {
           </small>
         </div>
         {ready ? (
-          <Link className="button button--primary button--large" state={{ prejoinSessionId: sessionId }} to={studentPaths.classroom(sessionId)}>라이브 입장</Link>
+          <button
+            ref={entryButtonRef}
+            className="button button--primary button--large"
+            type="button"
+            disabled={entryStatus === 'checking'}
+            onClick={() => { void enterLiveClassroom() }}
+          >
+            {entryStatus === 'checking' ? '강의 상태 확인 중…' : '라이브 입장'}
+          </button>
         ) : (
           <button className="button button--primary button--large is-disabled" type="button" disabled>라이브 입장</button>
         )}
       </div>
+
+      {isEntryDialogOpen && (
+        <div className="live-entry-dialog-backdrop">
+          <section
+            ref={entryDialogRef}
+            className="live-entry-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="live-entry-dialog-title"
+            aria-describedby="live-entry-dialog-description"
+            tabIndex={-1}
+          >
+            <span className="eyebrow">LIVE CLASS</span>
+            <h2 id="live-entry-dialog-title">
+              {entryStatus === 'waiting'
+                ? '강의가 아직 시작되지 않았습니다'
+                : entryStatus === 'closed'
+                  ? '입장할 수 없는 강의입니다'
+                  : '강의 상태를 확인하지 못했습니다'}
+            </h2>
+            <p id="live-entry-dialog-description">
+              {entryStatus === 'waiting'
+                ? '강사가 라이브 강의를 시작하면 입장할 수 있습니다. 잠시 후 다시 시도해 주세요.'
+                : entryStatus === 'closed'
+                  ? '이미 종료되었거나 취소된 강의입니다. 다시보기가 공개되면 강의 상세에서 확인할 수 있어요.'
+                  : '잠시 후 라이브 입장 버튼을 다시 눌러 주세요.'}
+            </p>
+            <div className="live-entry-dialog__actions">
+              <button className="button button--primary" type="button" onClick={closeEntryDialog}>확인</button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   )
 }

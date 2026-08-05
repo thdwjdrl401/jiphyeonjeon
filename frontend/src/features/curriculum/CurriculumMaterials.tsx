@@ -1,19 +1,20 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import type { MaterialDownloadRequest } from '@/features/material/materialDownloadService'
+import { useMaterialDownload } from '@/features/material/useMaterialDownload'
 import type { CurriculumMaterial } from './types'
 
 interface CurriculumMaterialsProps {
   materials: CurriculumMaterial[]
   /**
-   * 자료 다운로드 링크. 주면 모달 목록의 각 자료에 다운로드 버튼을 붙인다.
+   * 자료 다운로드 요청 정보. 주면 모달 목록의 각 자료에 다운로드 버튼을 붙인다.
    *
-   * 링크에는 `download={fileName}`을 함께 건다 — 서버가 presigned URL로 302를 주는데 그 URL에는
-   * 원본 파일명이 없어서(객체키가 곧 파일명이 된다) 이름을 여기서 되돌려 준다. 다만 이 속성은
-   * 최종 응답이 same-origin일 때만 먹는다(운영은 nginx가 MinIO를 같은 도메인으로 프록시해 유효,
-   * 로컬은 MinIO가 다른 포트라 무시된다). 근본 수정은 서버가 presign에 Content-Disposition을
-   * 실어 주는 것이다.
+   * 링크가 아니라 버튼이다. 서버는 presigned URL로 302를 주는데 그 URL에는 원본 파일명이 없고
+   * (객체 키가 곧 이름) `download` 속성은 교차 출처 응답에서 무시된다. 게다가 링크로 열면
+   * 권한 실패(401·403·404)가 수강생 화면에 전혀 드러나지 않아 "눌러도 아무 일이 없는" 상태가 된다.
+   * 바이트를 받아 온 뒤 이름을 붙여 저장하고 실패는 토스트로 알린다.
    */
-  downloadHref?: (material: CurriculumMaterial) => string
+  downloadRequest?: (material: CurriculumMaterial) => MaterialDownloadRequest
 }
 
 function formatFileSize(fileSize: number) {
@@ -21,8 +22,9 @@ function formatFileSize(fileSize: number) {
   return `${(fileSize / 1024 / 1024).toFixed(1)} MB`
 }
 
-export default function CurriculumMaterials({ materials, downloadHref }: CurriculumMaterialsProps) {
+export default function CurriculumMaterials({ materials, downloadRequest }: CurriculumMaterialsProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const { download, downloadingMaterialId } = useMaterialDownload()
   const triggerRef = useRef<HTMLButtonElement>(null)
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const dialogTitleId = useId()
@@ -111,15 +113,16 @@ export default function CurriculumMaterials({ materials, downloadHref }: Curricu
                   <li key={material.materialId}>
                     <span className="curriculum-materials__icon">PPTX</span>
                     <div><strong>{material.fileName}</strong><small>{formatFileSize(material.fileSize)}</small></div>
-                    {downloadHref && (
-                      <a
+                    {downloadRequest && (
+                      <button
                         className="button button--soft button--small curriculum-materials__download"
-                        href={downloadHref(material)}
-                        download={material.fileName}
+                        type="button"
+                        disabled={downloadingMaterialId === material.materialId}
                         aria-label={`${material.fileName} 다운로드`}
+                        onClick={() => void download(downloadRequest(material))}
                       >
-                        다운로드
-                      </a>
+                        {downloadingMaterialId === material.materialId ? '받는 중…' : '다운로드'}
+                      </button>
                     )}
                   </li>
                 ))}

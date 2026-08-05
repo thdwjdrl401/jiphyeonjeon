@@ -50,9 +50,10 @@ function actionButton(
   pending: boolean,
   run: (enrollmentId: string, action: InstructorEnrollmentAction) => void,
 ) {
+  const toneClass = action === 'approve' ? 'button--primary' : 'button--danger'
   return (
     <button
-      className="text-button"
+      className={`button button--small ${toneClass} enrollment-action-button enrollment-action-button--${action}`}
       type="button"
       disabled={pending}
       onClick={() => run(item.enrollmentId, action)}

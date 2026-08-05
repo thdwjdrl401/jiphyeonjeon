@@ -27,14 +27,28 @@ export default function CurriculumFormPage() {
   const [materials, setMaterials] = useState<CurriculumMaterial[]>([])
   const toast = useToast()
   const [submitting, setSubmitting] = useState(false)
+  const hasPastEndDate = isBeforeToday(form.endsAt)
 
-  const update = (field: keyof typeof form, value: string) => setForm((current) => ({ ...current, [field]: value }))
+  const update = (field: keyof typeof form, value: string) => {
+    // 키보드로 과거 날짜를 직접 넣어도 즉시 이유를 알린다. 같은 과거 날짜를 편집하는 동안에는
+    // 토스트를 반복하지 않고, 유효한 날짜로 고쳤다가 다시 과거로 바꿀 때만 새로 안내한다.
+    if (field === 'endsAt' && isBeforeToday(value) && !hasPastEndDate) {
+      toast.error('운영 종료일은 오늘보다 이전일 수 없습니다.')
+    }
+    setForm((current) => ({ ...current, [field]: value }))
+  }
 
-  const submit = async (event: FormEvent) => {
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    const endsAtInput = event.currentTarget.elements.namedItem('endsAt')
+    const enteredEndsAt = endsAtInput instanceof HTMLInputElement ? endsAtInput.value : form.endsAt
     // 폼 검증 문구도 토스트로 낸다 — 라이브 강의 폼과 안내 방식을 하나로 맞춘다.
     if (!form.title.trim()) { toast.error('커리큘럼 제목을 입력해 주세요.'); return }
-    if (isBeforeToday(form.endsAt)) { toast.error('운영 종료일은 오늘보다 이전일 수 없습니다.'); return }
+    // React 상태 갱신보다 제출이 먼저 들어오는 실제 키보드 입력도 DOM 값과 native 하한 위반으로 다시 막는다.
+    if ((endsAtInput instanceof HTMLInputElement && endsAtInput.validity.rangeUnderflow) || isBeforeToday(enteredEndsAt)) {
+      toast.error('운영 종료일은 오늘보다 이전일 수 없습니다.')
+      return
+    }
     if (form.startsAt && form.endsAt && form.startsAt >= form.endsAt) { toast.error('종료일은 시작일보다 뒤여야 합니다.'); return }
     setSubmitting(true)
     try {
@@ -106,7 +120,7 @@ export default function CurriculumFormPage() {
           />
         </Panel>
 
-        <div className="sticky-form-actions curriculum-form__actions"><Link className="button button--ghost" to={instructorPaths.curriculums}>취소</Link><button className="button button--primary button--large" type="submit" disabled={submitting}>{submitting ? '초안 만드는 중' : '초안 만들기'}</button></div>
+        <div className="sticky-form-actions curriculum-form__actions"><Link className="button button--ghost" to={instructorPaths.curriculums}>취소</Link><button className="button button--primary button--large" type="submit" disabled={submitting || hasPastEndDate}>{submitting ? '초안 만드는 중' : '초안 만들기'}</button></div>
       </form>
     </div>
   )

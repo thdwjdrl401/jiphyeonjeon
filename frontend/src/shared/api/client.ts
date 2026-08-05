@@ -1,5 +1,6 @@
 import axios, { AxiosHeaders, type AxiosError } from 'axios'
 import { isNetworkBlocked } from '@/shared/config/runtime'
+import { notifySessionExpired } from './sessionExpiry'
 
 export interface FieldError {
   field: string
@@ -95,22 +96,26 @@ apiClient.interceptors.request.use(async (config) => {
 
 apiClient.interceptors.response.use(
   (response) => response,
-  (error: AxiosError<ErrorResponse>) => {
-    if (error instanceof ApiError) return Promise.reject(error)
-
-    const response = error.response
-    const payload = response?.data
-
-    if (response?.status === 401) csrf = null
-
-    return Promise.reject(
-      new ApiError(
-        payload?.message ?? '요청을 처리하지 못했습니다.',
-        response?.status,
-        payload?.code,
-        payload?.fieldErrors,
-        payload?.correlationId,
-      ),
-    )
-  },
+  (error: AxiosError<ErrorResponse>) => Promise.reject(toApiError(error)),
 )
+
+/** Axios 오류를 앱 오류로 바꾸며, 401이면 인증 상태가 세션 만료를 처리하도록 알린다. */
+export function toApiError(error: AxiosError<ErrorResponse> | ApiError) {
+  if (error instanceof ApiError) return error
+
+  const response = error.response
+  const payload = response?.data
+
+  if (response?.status === 401) {
+    csrf = null
+    notifySessionExpired()
+  }
+
+  return new ApiError(
+    payload?.message ?? '요청을 처리하지 못했습니다.',
+    response?.status,
+    payload?.code,
+    payload?.fieldErrors,
+    payload?.correlationId,
+  )
+}
