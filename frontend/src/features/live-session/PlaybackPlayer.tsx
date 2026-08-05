@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import HlsMediaPlayer, {
   type HlsMediaSeekRequest,
   type HlsMediaState,
@@ -31,6 +31,11 @@ interface PlaybackPlayerProps {
    * vidstack이 만든 슬라이더 노드가 필요한데, 그 노드는 이 안에만 있다.
    */
   onRootChange?: (root: HTMLElement | null) => void
+  /**
+   * 예전에 페이지 위쪽 네비바가 담당하던 "브랜드·돌아가기" 링크(LessonLayout 참고). 강의실은
+   * 그 네비바를 없애고 이 재생 정보 헤더가 대신 담는다 — 없으면 자리를 비워 둔다.
+   */
+  backLink?: ReactNode
 }
 
 type PlaybackState = HlsMediaState
@@ -70,6 +75,7 @@ export default function PlaybackPlayer({
   onRetry,
   onSessionTimeChange,
   onRootChange,
+  backLink,
 }: PlaybackPlayerProps) {
   const [playbackState, setPlaybackState] = useState<PlaybackState>('loading')
   const source = playback?.source ?? null
@@ -145,6 +151,7 @@ export default function PlaybackPlayer({
 
       <header className="student-live-status" aria-label="재생 정보">
         <div>
+          {backLink}
           {/* 세션이 끝나면 LIVE 표시를 내린다. 플레이어 안의 LIVE 버튼(엣지 복귀)은 vidstack이 담당한다. */}
           {isLive && <span className="live-dot" aria-hidden="true" />}
           <strong>{isLive ? 'LIVE' : '다시보기'}</strong>

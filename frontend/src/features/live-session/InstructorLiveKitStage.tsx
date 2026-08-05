@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { StatusBadge } from '@/shared/ui/WorkspaceUi'
 import CameraOverlayControl from './CameraOverlayControl'
 import InstructorAnnotationLayer from './InstructorAnnotationLayer'
@@ -12,6 +12,11 @@ interface InstructorLiveKitStageProps {
   lessonTitle: string
   participantCount: number
   onRequestEnd: () => void
+  /**
+   * 예전에 페이지 위쪽 네비바가 담당하던 "브랜드·돌아가기" 링크(LessonLayout 참고). 강의실은
+   * 그 네비바를 없애고 이 강의 정보 헤더가 대신 담는다 — 없으면 자리를 비워 둔다.
+   */
+  backLink?: ReactNode
 }
 
 function connectionBadge(state: InstructorLiveKitConnectionState) {
@@ -59,7 +64,7 @@ function writeCachedAnnotating(sessionId: string, visible: boolean): void {
   }
 }
 
-export default function InstructorLiveKitStage({ sessionId, lessonTitle, participantCount, onRequestEnd }: InstructorLiveKitStageProps) {
+export default function InstructorLiveKitStage({ sessionId, lessonTitle, participantCount, onRequestEnd, backLink }: InstructorLiveKitStageProps) {
   const publisher = useInstructorLiveKit()
   /**
    * 판서를 켤지. <b>정본은 서버이고 이것은 그 사본이다</b>(ADR-0056).
@@ -177,7 +182,7 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
     >
       <div className="video-stage__glow" />
       <header className="video-status-overlay" aria-label="라이브 강의 정보">
-        <div className="video-status-overlay__identity"><span className="live-dot" /><strong>LIVE</strong><h1>{lessonTitle}</h1><small>강의 {sessionId}</small></div>
+        <div className="video-status-overlay__identity">{backLink}<span className="live-dot" /><strong>LIVE</strong><h1>{lessonTitle}</h1><small>강의 {sessionId}</small></div>
         <div className="video-status-overlay__status">
           <StatusBadge tone="warning">강사 운영 모드</StatusBadge>
           {connectionBadge(publisher.connectionState)}

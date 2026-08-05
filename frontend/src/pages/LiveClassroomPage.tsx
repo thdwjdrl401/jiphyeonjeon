@@ -1,8 +1,8 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { instructorPaths } from '@/app/router/paths'
+import { getRoleHomePath, instructorPaths } from '@/app/router/paths'
 import PersonalAiQuestionPanel, { type AskAiAnswer } from '@/features/ai/PersonalAiQuestionPanel'
 import { useAuth } from '@/features/auth/AuthContext'
 import { getLesson } from '@/features/lesson/lessonService'
@@ -50,6 +50,11 @@ import { usePlayback } from '@/features/live-session/usePlayback'
 import { useResizablePane } from '@/features/live-session/useResizablePane'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
+import { isMockApiEnabled, isTestMode } from '@/shared/config/runtime'
+
+const DevLivePanel = lazy(() => import('@/features/live-session/DevLivePanel'))
+/** mock API가 실제로 응답을 만들어 줄 때만 의미가 있다 — HTTP 모드에선 패널이 아무것도 못 흔든다. */
+const showDevLivePanel = import.meta.env.DEV && isMockApiEnabled && !isTestMode
 
 const InstructorLiveKitStage = lazy(() => import('@/features/live-session/InstructorLiveKitStage'))
 const PlaybackPlayer = lazy(() => import('@/features/live-session/PlaybackPlayer'))
@@ -120,6 +125,14 @@ export default function LiveClassroomPage() {
   // 재생바 위에 재시청 곡선을 얹으려면 플레이어 루트가 필요하다(WatchHeatmapCurve).
   const [playerRoot, setPlayerRoot] = useState<HTMLElement | null>(null)
   /*
+   * PersonalAiQuestionPanel은 history를 "한 번만" 되살린다 — 이미 턴이 있으면 이후 restore는
+   * 무시한다(진행 중인 실제 대화를 늦게 온 조회가 지우지 않기 위해서다). 그래서 DevLivePanel이
+   * AI 기록을 추가·초기화해도 이 패널은 반영하지 않는다. 개발 도구가 값을 바꿀 때만 이 값을
+   * 올려 key로 꽂아 그 순간만 컴포넌트를 새로 마운트시킨다 — 실제 질문·답변 흐름이 쓰는
+   * invalidateQueries 경로는 건드리지 않는다.
+   */
+  const [aiHistoryDevVersion, setAiHistoryDevVersion] = useState(0)
+  /*
    * 영상·자막·사이드패널의 배분은 사람마다 다르다. 경계를 끌어 정하고, 최소치 아래로 끌면 접힌다.
    * 강사 화면에는 자막 독이 없으므로 세로 손잡이도 두지 않는다.
    */
@@ -130,7 +143,7 @@ export default function LiveClassroomPage() {
   })
   const captionPane = useResizablePane({
     storageKey: 'liveclass.live.captionHeight',
-    defaultSize: 152, min: 96, max: 420, axis: 'block', direction: -1,
+    defaultSize: 96, min: 96, max: 420, axis: 'block', direction: -1,
     label: '자막 높이 조절',
   })
   const [studentSeekRequest, setStudentSeekRequest] = useState<PlaybackSeekRequest | null>(null)
@@ -427,6 +440,7 @@ export default function LiveClassroomPage() {
 
   const aiContent = (
     <PersonalAiQuestionPanel
+      key={showDevLivePanel ? aiHistoryDevVersion : undefined}
       ask={canUseConversation ? askAi : undefined}
       history={aiHistoryQuery.data}
       placeholder="예: SecurityContext와 세션은 어떻게 다른가요? (Enter 전송 · Shift+Enter 줄바꿈)"
@@ -457,6 +471,17 @@ export default function LiveClassroomPage() {
         : chatConnectionState === 'error'
           ? '실시간 채팅 연결에 문제가 생겼습니다. 자동 재연결을 시도합니다.'
           : '실시간 채팅 연결이 종료되었습니다.'
+
+  /*
+   * 예전에 페이지 위쪽 네비바(LessonLayout)가 담당하던 "돌아가기" 링크. 강의실은 그 네비바를
+   * 없애고(LessonLayout 참고) 이 링크를 재생 정보 헤더 안에 담는다 — 강의실을 벗어날 유일한
+   * 길이 사라지면 안 되므로, 네비바가 없어져도 이 버튼은 항상 있어야 한다.
+   */
+  const backLink = user && (
+    <Link className="playback-header-back" to={getRoleHomePath(user.role)}>
+      ← {isInstructor ? '커리큘럼 관리' : '내 커리큘럼'}
+    </Link>
+  )
 
   const sidebar = (
     <LearningSidebar
@@ -534,6 +559,7 @@ export default function LiveClassroomPage() {
             ? (
               <Suspense fallback={<div className="video-stage instructor-livekit-loading" role="status">LiveKit 송출 도구를 불러오는 중입니다.</div>}>
                 <InstructorLiveKitStage
+                  backLink={backLink}
                   lessonTitle={lesson.title}
                   participantCount={session.participants}
                   sessionId={sessionId}
@@ -544,6 +570,7 @@ export default function LiveClassroomPage() {
             : (
               <Suspense fallback={<div className="video-stage instructor-livekit-loading" role="status">Vidstack 플레이어를 불러오는 중입니다.</div>}>
                 <PlaybackPlayer
+                  backLink={backLink}
                   bookmarked={bookmarked}
                   errorMessage={playback.errorMessage}
                   lessonTitle={lesson.title}
@@ -594,6 +621,15 @@ export default function LiveClassroomPage() {
         {(!isInstructor || !sidebarWindow.isDetached) && sidebar}
         {isInstructor && sidebarWindow.portalContainer && createPortal(sidebar, sidebarWindow.portalContainer)}
       </div>
+      {showDevLivePanel && (
+        <Suspense fallback={null}>
+          <DevLivePanel
+            sessionId={sessionId}
+            lessonId={lesson.lessonId}
+            onAiHistoryChanged={() => setAiHistoryDevVersion((version) => version + 1)}
+          />
+        </Suspense>
+      )}
     </div>
   )
 }
