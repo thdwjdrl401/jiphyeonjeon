@@ -132,8 +132,14 @@ livekit:
     # 되고, 같은 비트레이트가 프레임당 두 배로 쓰여 정지 화면의 글자가 오히려 또렷해진다.
     # 움직임이 많은 콘텐츠로 성격이 바뀌면 30으로 올린다.
     framerate: ${EGRESS_FRAMERATE:15}
-    # H264_1080P_30 프리셋과 같은 값 — 프레임률만 바뀌었을 때의 효과를 분리해 보기 위함이다.
-    video-bitrate-kbps: ${EGRESS_VIDEO_BITRATE_KBPS:4500}
+    # 강사 송출(화면공유 8,000kbps·30fps = 프레임당 267kbit)을 재인코딩 손실 없이 담을 값.
+    # 15fps로 내보내므로 8,000kbps는 프레임당 533kbit — 원본의 2배라 2차 손실이 사실상 없다.
+    # 화질 상한은 강사 송출이므로 여기만 올리는 것은 효과가 없다(frontend/publishQuality.ts).
+    #
+    # CPU는 해상도·프레임률이 지배하므로 이 값을 올려도 많이 늘지는 않지만 0도 아니다.
+    # 4,500kbps 시절 녹화 1건이 1.85코어였고 이 값에서의 실측은 아직 없다 — Egress의
+    # room_composite_cpu_cost(기본 4.0)를 낮춰 동시 방 수를 늘리려면 먼저 다시 재야 한다.
+    video-bitrate-kbps: ${EGRESS_VIDEO_BITRATE_KBPS:8000}
     audio-bitrate-kbps: ${EGRESS_AUDIO_BITRATE_KBPS:128}
     audio-frequency: ${EGRESS_AUDIO_FREQUENCY:44100}
     # 합성 화면을 그릴 페이지의 오리진. Egress의 헤드리스 Chrome이 여는 주소라 브라우저 주소와

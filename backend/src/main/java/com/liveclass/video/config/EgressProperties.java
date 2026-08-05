@@ -47,7 +47,24 @@ public record EgressProperties(
          */
         int framerate,
 
-        /** 합성 비디오 비트레이트(kbps). LiveKit H264_1080P_30 프리셋과 같은 값이 기본이다. */
+        /**
+         * 합성 비디오 비트레이트(kbps).
+         *
+         * <p><b>재인코딩이 화질 상한이 되지 않도록</b> 원본보다 넉넉히 잡는다. 강사 송출은
+         * 1080p30 프리셋(5,000kbps)이라 프레임당 167kbit인데, 우리는 15fps로 내보내므로
+         * 8,000kbps면 프레임당 533kbit — 원본의 3배다. 이미 손실된 프레임을 더 여유 있는 예산으로
+         * 다시 인코딩하는 셈이라 2차 손실이 사실상 없다.
+         *
+         * <p>여기서 더 올려도 화질은 안 좋아진다. <b>상한은 강사 송출이다</b> — Egress에 도착하지
+         * 않은 디테일은 어떤 서버 설정으로도 복구되지 않는다(프론트 {@code publishQuality.ts}).
+         *
+         * <p>인코딩 부하의 대부분(움직임 예측·모드 결정)은 해상도와 프레임률이 좌우하므로 이 값을
+         * 올려도 CPU는 <b>많이</b> 늘지 않는다. 다만 <b>0은 아니다</b> — 계수가 늘면 엔트로피
+         * 코딩 비용이 따라 는다. 4,500kbps에서 녹화 1건이 1.85코어였는데(EC2·lazy 양쪽 실측),
+         * 8,000kbps에서의 값은 아직 재지 않았다. Egress의 {@code room_composite_cpu_cost}(방 하나에
+         * 예약하는 코어 수, 기본 4.0)를 낮춰 동시 녹화 방 수를 늘리려면 <b>이 값으로 다시 재고</b>
+         * 정해야 한다.
+         */
         int videoBitrateKbps,
 
         /** 합성 오디오 비트레이트(kbps)와 샘플레이트(Hz). 프리셋 기본값과 동일하게 맞춘다. */
@@ -74,7 +91,7 @@ public record EgressProperties(
     private static final int DEFAULT_WIDTH = 1920;
     private static final int DEFAULT_HEIGHT = 1080;
     private static final int DEFAULT_FRAMERATE = 15;
-    private static final int DEFAULT_VIDEO_BITRATE_KBPS = 4500;
+    private static final int DEFAULT_VIDEO_BITRATE_KBPS = 8000;
     private static final int DEFAULT_AUDIO_BITRATE_KBPS = 128;
     private static final int DEFAULT_AUDIO_FREQUENCY = 44_100;
 

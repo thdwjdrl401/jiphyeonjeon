@@ -21,6 +21,7 @@ import org.springframework.transaction.support.SimpleTransactionStatus;
 import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.security.KeyPair;
+import java.lang.management.ManagementFactory;
 import java.security.KeyPairGenerator;
 import java.security.SecureRandom;
 import java.security.Security;
@@ -346,6 +347,17 @@ class WebPushRetryTest {
         int cores = Runtime.getRuntime().availableProcessors();
         assumeTrue(cores >= 2, "코어가 하나면 병렬화로 빨라질 수 없다");
 
+        /*
+         * **놀고 있는 코어도 이 측정의 전제다.** 속도로 병렬성을 판정하므로, 다른 일이 이미 코어를
+         * 쓰고 있으면 병렬 실행이 코어를 얻지 못해 직렬과 같은 시간이 나온다 — 코드가 멀쩡해도
+         * 실패한다. 실제로 CI 러너에서 그랬다(같은 커밋이 한가할 때 통과, 다른 테스트와 겹쳤을 때
+         * 실패). 전제가 깨진 실행은 실패가 아니라 건너뛰는 것이 맞다.
+         */
+        double load = ManagementFactory.getOperatingSystemMXBean().getSystemLoadAverage();
+        assumeTrue(load < 0 || load < cores * 0.7,
+                () -> "장비가 이미 바쁘면(부하 %.2f / 코어 %d) 병렬이 코어를 얻지 못해 속도로 판정할 수 없다"
+                        .formatted(load, cores));
+
         int devices = 120;
         PushSubscription[] subscriptions = new PushSubscription[devices];
         for (int i = 0; i < devices; i++) {
@@ -368,8 +380,8 @@ class WebPushRetryTest {
         long serial = timed(() -> sender(1, 60_000, devices, 1).send(recipients, "제목", "본문", null));
 
         assertThat(parallel)
-                .as("코어 %d개에 흩었는데 한 스레드와 같으면 풀을 안 타는 것이다 (직렬 %dms, 병렬 %dms)",
-                        cores, serial, parallel)
+                .as("코어 %d개에 흩었는데 한 스레드와 같으면 풀을 안 타는 것이다 (직렬 %dms, 병렬 %dms, 시작 시 부하 %.2f)",
+                        cores, serial, parallel, load)
                 .isLessThan((long) (serial * 0.75));
     }
 
