@@ -307,6 +307,49 @@ class LessonMaterialContractTest {
     }
 
     @Test
+    void student_download_requires_active_enrollment_and_material_scope() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        PublishedLessonFixture fixture = createPublishedLessonFixture(instructor);
+        String assetId = uploadedMaterialAsset(instructor);
+        String materialId = json(write(post("/api/instructor/lessons/" + fixture.lessonId() + "/materials"),
+                instructor, """
+                {"assetId":"%s"}
+                """.formatted(assetId)).andExpect(status().isCreated()).andReturn()).get("materialId").asString();
+        String downloadPath = "/api/lessons/" + fixture.lessonId() + "/materials/" + materialId + "/download";
+
+        // 학생 자료 API는 공개 조회가 아니다. 로그인하지 않으면 서비스 진입 전에 401이다.
+        mockMvc.perform(get(downloadPath))
+                .andExpect(status().isUnauthorized());
+
+        Cookie[] student = loginAs("STUDENT");
+        // 미수강 학생은 자료 id를 알아도 다운로드할 수 없다.
+        mockMvc.perform(get(downloadPath).cookie(student))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ENROLLMENT_REQUIRED"));
+
+        // 승인 대기(PENDING)도 활성 수강이 아니므로 여전히 403이다.
+        String enrollmentId = json(write(post("/api/curriculums/" + fixture.curriculumId() + "/enrollments"),
+                student, null).andExpect(status().isCreated()).andReturn()).get("enrollmentId").asString();
+        mockMvc.perform(get(downloadPath).cookie(student))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ENROLLMENT_REQUIRED"));
+
+        write(post("/api/instructor/curriculums/" + fixture.curriculumId()
+                + "/enrollments/" + enrollmentId + "/approve"), instructor, null)
+                .andExpect(status().isOk());
+
+        // ACTIVE 수강생만 presigned GET URL로 리다이렉트된다.
+        mockMvc.perform(get(downloadPath).cookie(student))
+                .andExpect(status().isFound())
+                .andExpect(header().string("Location", "http://fake-minio/download"));
+
+        // 같은 커리큘럼을 수강 중이어도 자료가 연결되지 않은 다른 레슨 범위로 바꿔 요청할 수 없다.
+        mockMvc.perform(get("/api/lessons/" + fixture.otherLessonId()
+                        + "/materials/" + materialId + "/download").cookie(student))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void ai_callback_updates_embedding_status_and_is_idempotent() throws Exception {
         Cookie[] auth = loginAs("INSTRUCTOR");
         String lessonId = createLesson(auth);
@@ -477,6 +520,27 @@ class LessonMaterialContractTest {
         MvcResult lesson = write(post("/api/instructor/sections/" + sectionId + "/lessons"), auth, "{\"title\":\"1주차\"}")
                 .andExpect(status().isCreated()).andReturn();
         return json(lesson).get("lessonId").asString();
+    }
+
+    private PublishedLessonFixture createPublishedLessonFixture(Cookie[] auth) throws Exception {
+        String curriculumId = json(write(post("/api/instructor/curriculums"), auth,
+                "{\"title\":\"수강생 자료 다운로드\"}")
+                .andExpect(status().isCreated()).andReturn()).get("curriculumId").asString();
+        String sectionId = json(write(post("/api/instructor/curriculums/" + curriculumId + "/sections"), auth,
+                "{\"title\":\"자료 섹션\"}")
+                .andExpect(status().isCreated()).andReturn()).get("sectionId").asString();
+        String lessonId = json(write(post("/api/instructor/sections/" + sectionId + "/lessons"), auth,
+                "{\"title\":\"자료가 있는 레슨\"}")
+                .andExpect(status().isCreated()).andReturn()).get("lessonId").asString();
+        String otherLessonId = json(write(post("/api/instructor/sections/" + sectionId + "/lessons"), auth,
+                "{\"title\":\"다른 레슨\"}")
+                .andExpect(status().isCreated()).andReturn()).get("lessonId").asString();
+        write(post("/api/instructor/curriculums/" + curriculumId + "/publish"), auth, null)
+                .andExpect(status().isOk());
+        return new PublishedLessonFixture(curriculumId, lessonId, otherLessonId);
+    }
+
+    private record PublishedLessonFixture(String curriculumId, String lessonId, String otherLessonId) {
     }
 
     /** PPTX 업로드 요청 → 완료까지 마친 MATERIAL 에셋 id. */

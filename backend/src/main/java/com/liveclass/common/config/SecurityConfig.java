@@ -61,6 +61,11 @@ public class SecurityConfig {
                         // 아니다(ADR-0058). 토큰 자체가 자격이고, 128비트 난수 + 짧은 TTL +
                         // 호출 종료 시 즉시 폐기로 노출 창을 좁힌다.
                         .requestMatchers(HttpMethod.GET, "/api/annotation-interpret-images/*").permitAll()
+                        // 자료 다운로드는 공개 상세(/api/curriculums/**)보다 먼저 학생 역할을 요구한다.
+                        // ACTIVE 수강·부모 범위 검증은 CatalogService가 별도로 수행한다.
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/curriculums/*/materials/*/download",
+                                "/api/lessons/*/materials/*/download").hasRole("STUDENT")
                         // 공개 카탈로그 조회는 비로그인도 가능(GET만).
                         .requestMatchers(HttpMethod.GET, "/api/curriculums", "/api/curriculums/**").permitAll()
                         // 수강 신청·취소는 학생만(강사 계정은 수강 불가 — 계정 분리 정책). 강사 승인 등은 /api/instructor/**.

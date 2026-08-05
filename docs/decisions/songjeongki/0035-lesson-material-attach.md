@@ -57,6 +57,14 @@ FE는 이미 `POST /instructor/lessons/{lessonId}/materials`로 목을 잡아 �
 - **AI 잡 발행**(PPTX_PARSE/EMBED outbox): 연결이 그 입력이 되지만 발행 자체는 CP3.
 - FE의 `PUT /instructor/curriculums/{id}/materials`(커리큘럼 단위)는 커리큘럼-레벨 자료가 없으므로 **계속 501로 둔다** — 레슨 단위 연결만 이번에 배선했다([0030]의 미구현 API 관례).
 
+### 6. 수강생 레슨 자료 다운로드(2026-08-05 확장)
+
+`GET /api/lessons/{lessonId}/materials/{materialId}/download`를 학생 경로로 추가한다. Security에서
+`ROLE_STUDENT`를 요구하고, 서비스는 기존 `lessonDetail()` 접근 판정을 재사용해 **ACTIVE 수강 관계**와
+업로드 녹화강의의 게시 가시성을 확인한다. 판정을 통과한 뒤에도 해당 `lessonId`의 활성 자료 목록에서
+`materialId`를 다시 찾아 다른 레슨 자료의 IDOR를 막는다. 성공은 기존 강사 다운로드와 같은 presigned
+GET **302**, 비로그인 401·미수강/PENDING 403 `ENROLLMENT_REQUIRED`·범위 밖 자료 404다.
+
 ## 근거
 
 - presigned 티켓은 [0023]에서 이미 검증된 경로다. 자료만 multipart로 따로 받으면 바이트가 앱을 통과해 원칙이 깨진다.

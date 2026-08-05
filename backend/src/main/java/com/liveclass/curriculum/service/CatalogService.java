@@ -245,6 +245,39 @@ public class CatalogService {
     }
 
     /**
+     * 수강생 레슨 자료 다운로드 URL. 레슨 상세와 같은 접근 판정을 먼저 통과시킨 뒤, 요청한 자료가
+     * 그 레슨에 활성 상태로 연결돼 있을 때만 presigned URL을 발급한다.
+     */
+    @Transactional(readOnly = true)
+    public String lessonMaterialDownloadUrl(UUID lessonId, UUID materialId, CatalogViewer viewer) {
+        CatalogLessonDetail lesson = lessonDetail(lessonId, viewer);
+        MaterialView material = lesson.materials().stream()
+                .filter(candidate -> candidate.materialId().equals(materialId))
+                .findFirst()
+                .orElseThrow(() -> new LessonNotFoundException("자료를 찾을 수 없습니다."));
+        return assetDirectory.resolveUrl(material.assetId())
+                .orElseThrow(() -> new LessonNotFoundException("자료 URL을 발급할 수 없습니다."));
+    }
+
+    /**
+     * 수강생 커리큘럼 자료 다운로드 URL. 공개 상세를 볼 수 있다는 사실만으로는 부족하며,
+     * ACTIVE 수강 관계(ENROLLED)인지 다시 확인한 뒤 해당 커리큘럼의 활성 자료만 허용한다.
+     */
+    @Transactional(readOnly = true)
+    public String curriculumMaterialDownloadUrl(UUID curriculumId, UUID materialId, CatalogViewer viewer) {
+        CatalogDetail curriculum = detail(curriculumId, viewer);
+        if (!"ENROLLED".equals(curriculum.viewerContext().relationship())) {
+            throw new LessonAccessDeniedException("이 커리큘럼을 수강해야 자료를 다운로드할 수 있습니다.");
+        }
+        MaterialView material = curriculum.materials().stream()
+                .filter(candidate -> candidate.materialId().equals(materialId))
+                .findFirst()
+                .orElseThrow(() -> new CurriculumNotFoundException("자료를 찾을 수 없습니다."));
+        return assetDirectory.resolveUrl(material.assetId())
+                .orElseThrow(() -> new CurriculumNotFoundException("자료 URL을 발급할 수 없습니다."));
+    }
+
+    /**
      * 내 수강 목록. 수강 기록에 커리큘럼 카드를 붙여서 돌려준다.
      *
      * <p>공개(PUBLISHED) 여부로 거르지 않는다 — 수강 중이던 커리큘럼이 보관(ARCHIVED) 처리돼도

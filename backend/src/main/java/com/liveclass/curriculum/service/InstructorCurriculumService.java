@@ -380,6 +380,21 @@ public class InstructorCurriculumService {
         curriculum.setThumbnailAssetId(thumbnailAssetId);
     }
 
+    /**
+     * 대표 이미지 연결 해제. 이미 비어 있어도 같은 최종 상태가 되므로 멱등하다.
+     *
+     * <p>여기서는 curriculum FK만 비운다. 에셋은 다른 커리큘럼·프로필 등이 참조할 수 있고,
+     * 트랜잭션 안에서 스토리지 객체까지 지우면 DB 롤백과 어긋날 수 있으므로 실제 객체 정리는
+     * 참조 없는 UPLOADED 에셋 회수 정책에 맡긴다(ADR-0077 요청 3).
+     */
+    @Transactional
+    public void clearThumbnail(UUID instructorId, UUID curriculumId) {
+        Curriculum curriculum = requireOwned(instructorId, curriculumId);
+        curriculum.setThumbnailAssetId(null);
+        log.info(Audit.MARKER, "커리큘럼 대표 이미지 삭제 curriculumId={} instructorId={}",
+                curriculumId, instructorId);
+    }
+
     @Transactional(readOnly = true)
     public List<Section> listSections(UUID instructorId, UUID curriculumId) {
         requireOwned(instructorId, curriculumId);
