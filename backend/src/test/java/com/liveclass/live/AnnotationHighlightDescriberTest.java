@@ -106,9 +106,29 @@ class AnnotationHighlightDescriberTest {
         new AnnotationHighlightDescriber(model).describe(IMAGE_URL);
 
         String prompt = model.prompts.get(0);
-        assertThat(prompt).contains("가리키는 대상");
+        assertThat(prompt).contains("가리키는");
         assertThat(prompt).contains("그대로 옮기세요");
         assertThat(prompt).contains("지어내지 마세요");
         assertThat(prompt).doesNotContain("mermaid");
+    }
+
+    /**
+     * 자르지 않으므로 <b>색이 유일한 신호</b>다(ADR-0079).
+     *
+     * <p>예전에는 크롭이 "여기를 보라"를 대신했다. 화면 전체를 보내는 지금 색을 말하지 않으면 모델은
+     * 강조를 찾을 방법이 없어 화면 전체를 요약하고, 강사가 표시하지도 않은 내용이 근거로 색인된다.
+     * 그 값은 FE의 {@code HIGHLIGHT_STROKE_COLOR}이고 둘은 함께 움직여야 한다.
+     */
+    @Test
+    void 프롬프트는_강조_색을_알리고_화면_전체_요약을_막는다() {
+        StubModel model = new StubModel("""
+                {"text":"x","readable":true}""");
+        new AnnotationHighlightDescriber(model).describe(IMAGE_URL);
+
+        String prompt = model.prompts.get(0);
+        assertThat(prompt).contains("#f59f00");
+        assertThat(prompt).contains("화면 전체를 요약하지 마세요");
+        // 일반 판서(빨강)를 강조로 오인하면 그리다 만 획이 근거가 된다.
+        assertThat(prompt).contains("빨간색 획은");
     }
 }

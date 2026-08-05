@@ -5,35 +5,35 @@ import {
 } from './annotation'
 
 /**
- * 강조 판서 캡처(ADR-0074).
+ * 강조 판서 캡처(ADR-0074, ADR-0079로 개정).
  *
  * <p>강사가 <b>강조 툴</b>로 화면 일부를 표시하면, 그 순간의 화면(화면공유 우선, 없으면 카메라)과
- * 판서를 합성해 잘라 둔다. 이 이미지가 영실이 근거의 원본이 된다.
+ * 판서를 합성해 남긴다. 이 이미지가 영실이 근거의 원본이 된다.
+ *
+ * <p><b>자르지 않는다(ADR-0079).</b> 예전에는 강조 획 둘레만 잘라 보냈는데, 그러려면 "논리 프레임
+ * 좌표 → 영상 원본 좌표"라는 역변환이 필요했고 그 역변환이 조용히 틀렸다. 운영에서 강조 획이 크롭
+ * 귀퉁이에 잘린 채 박히고 나머지는 엉뚱한 영역인 이미지가 색인됐다(설명 텍스트 2~3자). 프레임 전체를
+ * 보내면 역변환 자체가 없어지고, 모델이 받는 그림이 <b>수강생이 실제로 본 화면</b>과 같아진다.
  *
  * <p><b>강조 표시를 이미지에서 빼지 않는다.</b> 어디가 강조된 부분인지 모델에 알려 주는 신호이기
- * 때문이다. 기존 판서 해석(ADR-0054)은 정반대로 표시를 빼야 한다 — 거기서는 동그라미가 도형으로
- * 오독된다. <b>두 경로는 별개다.</b>
+ * 때문이다 — 자르지 않는 지금은 <b>유일한</b> 신호라 더 그렇다. 기존 판서 해석(ADR-0054)은 정반대로
+ * 표시를 빼야 한다(거기서는 동그라미가 도형으로 오독된다). <b>두 경로는 별개다.</b>
  */
 
 /** 강조 툴로 그린 요소에 붙는 표식. 일반 판서와 구분하는 유일한 근거다. */
 export const HIGHLIGHT_CUSTOM_DATA_KEY = 'liveclassHighlight'
 
 /**
- * 강조 획의 색. 일반 판서와 눈으로 구분돼야 하고, 밝은 슬라이드·어두운 자료 양쪽에서 읽혀야 한다.
- * 반투명이라 아래 내용이 비친다 — 강조는 덮는 것이 아니라 가리키는 것이다.
+ * 강조 획의 색. 일반 판서(빨강 `#e03131`)와 눈으로 구분돼야 하고, 밝은 슬라이드·어두운 자료 양쪽에서
+ * 읽혀야 한다. 반투명이라 아래 내용이 비친다 — 강조는 덮는 것이 아니라 가리키는 것이다.
+ *
+ * <p><b>비전 프롬프트가 이 값을 그대로 말한다.</b> 자르지 않으므로 모델은 색으로만 강조를 찾는다.
+ * 여기를 바꾸면 {@code AnnotationHighlightDescriber}의 프롬프트도 함께 바꿔야 한다.
  */
 export const HIGHLIGHT_STROKE_COLOR = '#f59f00'
 export const HIGHLIGHT_OPACITY = 60
 
-/**
- * 크롭에 두는 여백(논리 프레임 픽셀).
- *
- * <p>강조 획에 딱 맞춰 자르면 <b>가리킨 대상이 잘린다</b> — 강사는 대개 대상을 감싸거나 밑줄을 긋고,
- * 그 대상은 획 바깥에 있다. 넉넉히 두고 자르는 편이 모델이 읽을 것이 많다.
- */
-export const HIGHLIGHT_CROP_PADDING = 96
-
-export interface CropRect {
+export interface FrameRect {
   x: number
   y: number
   width: number
@@ -46,72 +46,36 @@ export function isHighlightElement(element: AnnotationElement): boolean {
   return Boolean(custom && custom[HIGHLIGHT_CUSTOM_DATA_KEY] === true)
 }
 
-/**
- * 강조 요소들을 감싸는 크롭 영역(논리 프레임 좌표).
- *
- * <p>여백을 더한 뒤 <b>프레임 안으로 자른다.</b> 프레임을 넘긴 사각형을 그대로 쓰면 영상에서 없는
- * 영역을 읽게 되고, `drawImage`가 그 부분을 투명으로 채워 이미지 가장자리에 검은 띠가 남는다.
- *
- * @returns 강조 요소가 없으면 null.
- */
-export function highlightCropRect(
-  elements: readonly AnnotationElement[],
-  padding: number = HIGHLIGHT_CROP_PADDING,
-): CropRect | null {
-  const boxes = elements.filter(isHighlightElement).map(elementBox).filter((box): box is CropRect => box !== null)
-  if (boxes.length === 0) return null
-
-  const minX = Math.min(...boxes.map((b) => b.x))
-  const minY = Math.min(...boxes.map((b) => b.y))
-  const maxX = Math.max(...boxes.map((b) => b.x + b.width))
-  const maxY = Math.max(...boxes.map((b) => b.y + b.height))
-
-  const left = clamp(minX - padding, 0, ANNOTATION_FRAME_WIDTH)
-  const top = clamp(minY - padding, 0, ANNOTATION_FRAME_HEIGHT)
-  const right = clamp(maxX + padding, 0, ANNOTATION_FRAME_WIDTH)
-  const bottom = clamp(maxY + padding, 0, ANNOTATION_FRAME_HEIGHT)
-
-  return { x: left, y: top, width: Math.max(1, right - left), height: Math.max(1, bottom - top) }
+/** 남길 강조가 문서에 있는가. 없으면 캡처할 것이 없다. */
+export function hasHighlight(elements: readonly AnnotationElement[]): boolean {
+  return elements.some(isHighlightElement)
 }
 
 /**
- * 논리 프레임(1920×1080) 좌표를 영상의 실제 픽셀 좌표로 옮긴다.
+ * 영상이 논리 프레임(1920×1080) 안에서 실제로 그려지는 자리.
  *
- * <p><b>여기가 이 기능에서 제일 조용히 틀리는 자리다.</b> 판서는 논리 프레임 기준이고 영상은 자기
- * 해상도를 갖는데(720p·1080p·화면공유 해상도 제각각), 둘을 맞추지 않으면 <b>엉뚱한 영역이 잘린다</b>.
- * 그런데 화면에는 아무 표시가 없고, 영실이가 틀린 근거로 답할 때야 드러난다. 그래서 비율로 옮긴다 —
- * `annotationPlacement`가 합성 화면에서 쓰는 것과 같은 규칙이다.
+ * <p><b>늘리지 않고 넣는다(contain).</b> 강사 화면도 Egress 템플릿도 같은 규칙이라(`object-fit:
+ * contain`), 셋이 같은 사각형을 그려야 강사가 본 자리와 수강생이 본 자리와 근거 이미지가 일치한다.
+ * 16:9가 아닌 화면공유에서는 여백이 남는데, 그 여백은 <b>수강생도 검게 본다</b> — 그래서 근거
+ * 이미지도 검게 채운다.
+ *
+ * <p>예전 크롭 경로는 영상이 프레임을 꽉 채운다고 보고 비례 변환했다. 16:9가 아닌 화면공유에서
+ * 강사가 그린 자리와 잘리는 자리가 갈렸고, 화면에는 아무 표시가 없어 영실이가 틀린 근거로 답할 때야
+ * 드러났다. 지금은 그 역변환이 없다 — 이 함수 하나가 정방향으로만 쓰인다.
+ *
+ * @returns 아직 프레임이 없으면(트랙 부착 직후 한두 틱) null.
  */
-export function toVideoRect(rect: CropRect, video: { width: number; height: number }): CropRect {
-  const scaleX = video.width / ANNOTATION_FRAME_WIDTH
-  const scaleY = video.height / ANNOTATION_FRAME_HEIGHT
+export function videoContainRect(video: { width: number; height: number }): FrameRect | null {
+  if (!(video.width > 0) || !(video.height > 0)) return null
+  const scale = Math.min(ANNOTATION_FRAME_WIDTH / video.width, ANNOTATION_FRAME_HEIGHT / video.height)
+  const width = video.width * scale
+  const height = video.height * scale
   return {
-    x: Math.round(rect.x * scaleX),
-    y: Math.round(rect.y * scaleY),
-    width: Math.max(1, Math.round(rect.width * scaleX)),
-    height: Math.max(1, Math.round(rect.height * scaleY)),
+    x: (ANNOTATION_FRAME_WIDTH - width) / 2,
+    y: (ANNOTATION_FRAME_HEIGHT - height) / 2,
+    width,
+    height,
   }
-}
-
-/**
- * 크롭 영역에 걸치는 판서 요소만 남긴다.
- *
- * <p>합성할 때 문서 전체를 렌더하면 크롭 밖 판서까지 그려져 이미지가 어지러워진다. 겹치는 것만
- * 남기되 <b>강조 획은 반드시 포함</b>한다 — 그것이 "여기를 보라"는 신호다.
- */
-export function elementsInCrop(
-  elements: readonly AnnotationElement[],
-  rect: CropRect,
-): AnnotationElement[] {
-  return elements.filter((element) => {
-    if (isHighlightElement(element)) return true
-    const box = elementBox(element)
-    if (!box) return false
-    return box.x < rect.x + rect.width
-      && box.x + box.width > rect.x
-      && box.y < rect.y + rect.height
-      && box.y + box.height > rect.y
-  })
 }
 
 /**
@@ -120,29 +84,4 @@ export function elementsInCrop(
  */
 export function pickCompositeTrack<T>(screenShare: T | undefined, camera: T | undefined): T | null {
   return screenShare ?? camera ?? null
-}
-
-function elementBox(element: AnnotationElement): CropRect | null {
-  const x = numberOf(element.x)
-  const y = numberOf(element.y)
-  const width = numberOf(element.width)
-  const height = numberOf(element.height)
-  if (x === null || y === null) return null
-  // 음수 크기(오른쪽→왼쪽으로 그린 사각형)를 그대로 두면 겹침 판정이 항상 거짓이 된다.
-  const w = width ?? 0
-  const h = height ?? 0
-  return {
-    x: w < 0 ? x + w : x,
-    y: h < 0 ? y + h : y,
-    width: Math.abs(w),
-    height: Math.abs(h),
-  }
-}
-
-function numberOf(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value))
 }

@@ -1,0 +1,74 @@
+# 원격 Egress 워커 — EC2 밖(별도 호스트)에서 녹화를 대신 진다.
+#
+# EC2는 4 vCPU인데 room-composite 녹화 한 건이 그중 ~3코어를 가져간다(egress 자신이 남긴
+# `high cpu usage {cpu:~1.0, requests:1}` — 기동 시 4.0이던 여유 CPU가 1.0으로 떨어진다).
+# 남은 1코어로 backend·postgres·rabbit·AI worker가 다 돌아야 하고, 두 번째 녹화는 여유가
+# 모자라 아예 받지 못한다. 그래서 무거운 쪽만 떼어낸다.
+#
+# **앱 코드는 건드리지 않는다.** 백엔드는 Egress와 직접 말하지 않는다 —
+# 백엔드 → LiveKit API → Redis → 등록된 Egress 노드. LiveKit Egress는 애초에 별도 머신에서
+# 도는 워커 풀로 설계돼 있어서, 이 노드가 EC2의 Redis에 자기를 등록하기만 하면 끝이다.
+#
+# 기동:
+#   docker compose up -d --build
+name: liveclass-egress
+
+services:
+  # Egress가 EC2에서 닿아야 하는 것 다섯 중 셋(합성 템플릿·시그널링 7443·미디어 7882/udp)은
+  # 이미 공개돼 있다. 남은 둘 — Redis 6379와 MinIO 9000 — 은 EC2에서 127.0.0.1 전용이고,
+  # 특히 Redis는 비밀번호가 없다. 그래서 열지 않고 터널로 당겨온다.
+  ec2-tunnel:
+    build:
+      context: .
+      dockerfile: Dockerfile.tunnel
+    restart: unless-stopped
+    # 호스트 네트워크라 포워딩된 포트가 호스트의 127.0.0.1에 뜬다 → 같은 호스트 네트워크로
+    # 도는 egress가 그대로 본다.
+    network_mode: host
+    volumes:
+      - ${TUNNEL_KEY:?TUNNEL_KEY 필요 — 터널 전용 SSH 개인키 경로}:/key:ro
+    # 인자는 전부 따옴표로 감싼다. `ServerAliveInterval=15`나 `127.0.0.1:9000:...`처럼
+    # 숫자·콜론이 섞인 값을 YAML이 스칼라가 아닌 것으로 읽어 compose 검증이 깨진다.
+    command:
+      - "-N"
+      - "-o"
+      - "ExitOnForwardFailure=yes"    # 포워딩이 안 잡히면 조용히 붙어 있지 말고 죽어라 → 재시작
+      - "-o"
+      - "ServerAliveInterval=15"      # 죽은 연결을 15s×3 안에 감지 (기본값은 무한 대기)
+      - "-o"
+      - "ServerAliveCountMax=3"
+      - "-o"
+      - "StrictHostKeyChecking=accept-new"
+      - "-o"
+      - "UserKnownHostsFile=/tmp/known_hosts"
+      # 9000을 EC2와 **같은 번호**로 잡는 게 중요하다. 백엔드가 Egress에 넘기는 업로드 주소가
+      # http://127.0.0.1:9000 이라, 번호를 맞추면 백엔드 설정·재배포가 아예 필요 없다.
+      - "-L"
+      - "127.0.0.1:9000:127.0.0.1:9000"
+      # Redis는 6379를 못 쓴다 — 이 호스트에서 다른 프로젝트가 이미 물고 있다. 16379로 받고
+      # egress.yaml의 redis.address만 그 번호로 맞춘다.
+      - "-L"
+      - "127.0.0.1:16379:127.0.0.1:6379"
+      - "${TUNNEL_TARGET:?TUNNEL_TARGET 필요 — 예: ubuntu@jiphyeonjeon.thdwjdrl.com}"
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 16379 && nc -z 127.0.0.1 9000"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 15s
+
+  egress:
+    image: livekit/egress:v1.13.0
+    restart: unless-stopped
+    network_mode: host
+    cap_add: [SYS_ADMIN]                    # Chromium 샌드박스 (필수)
+    security_opt: ["seccomp=unconfined"]    # Chrome 런치 차단 회피 (README 트러블슈팅 #3)
+    shm_size: "1g"                          # Chrome /dev/shm
+    environment: ["EGRESS_CONFIG_FILE=/out/egress.yaml"]
+    volumes:
+      - ./egress.yaml:/out/egress.yaml:ro   # 실 시크릿은 서버에서 채운다. git엔 템플릿만.
+    # 터널이 먼저 서야 Redis에 등록할 수 있다. 순서만 보는 depends_on으로는 부족해서
+    # 포워딩된 포트가 실제로 열렸는지(healthcheck)까지 기다린다.
+    depends_on:
+      ec2-tunnel:
+        condition: service_healthy
