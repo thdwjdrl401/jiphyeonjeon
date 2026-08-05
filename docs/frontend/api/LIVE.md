@@ -359,10 +359,32 @@ Cookie: session=...
 |---|---|---|
 | `/topic/live-sessions/{sessionId}/captions` | `caption.delta`, `caption.stream.completed` | **구현됨(ADR-0043)** |
 | `/topic/live-sessions/{sessionId}/chat` | `chat.message.created` | **구현됨** |
-| `/topic/live-sessions/{sessionId}/state` | `session.ending`, `session.ended` | **구현됨(ADR-0003)** |
+| `/topic/live-sessions/{sessionId}/state` | `session.starting`, `session.started`, `session.ending`, `session.ended` | **구현됨(ADR-0003·0082)** |
 | `/topic/live-sessions/{sessionId}/presence` | 참가자 수·접속 요약 | 제안 |
 
 구독 인가(참가자만)는 서버 STOMP 인터셉터가 정확 매칭으로 처리한다(와일드카드 구독 차단, ADR-0043) — FE는 토픽만 구독한다.
+
+`session.starting`:
+
+```json
+{
+  "type": "session.starting",
+  "sessionId": "ses_01J...",
+  "occurredAt": "2026-08-01T10:00:02+09:00",
+  "payload": { "liveSessionStatus": "STARTING", "endedAt": null }
+}
+```
+
+`session.started`:
+
+```json
+{
+  "type": "session.started",
+  "sessionId": "ses_01J...",
+  "occurredAt": "2026-08-01T10:00:07+09:00",
+  "payload": { "liveSessionStatus": "LIVE", "endedAt": null }
+}
+```
 
 `session.ending`:
 
@@ -389,6 +411,9 @@ Cookie: session=...
 }
 ```
 
+- `session.starting`: 강사가 시작을 눌렀다. 아직 재생할 것이 없고, 대기 문구만 "시작하는 중"으로 바뀐다
+- `session.started`: **대기 화면에서 재생 화면으로 넘어가는 신호.** 입장창은 예정 시각 기준으로 열리므로
+  시작 전에도 강의실에 학생이 있고, 그 학생이 새로고침 없이 시작을 알 수 있는 유일한 경로다(ADR-0084)
 - `session.ending`: 종료 진행 안내만 표시하며 채팅·AI 질문·자막 시각 이동은 계속 허용
 - `session.ended`: **“라이브가 종료된 강의입니다.”**를 표시하고 채팅·AI 질문·자막 시각 이동 잠금
 - 재연결 직후 `GET /api/live-sessions/{sessionId}`를 다시 조회해 이벤트 유실을 보완

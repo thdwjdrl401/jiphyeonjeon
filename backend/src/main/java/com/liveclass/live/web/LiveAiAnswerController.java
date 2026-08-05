@@ -72,7 +72,8 @@ public class LiveAiAnswerController {
                                                      Authentication authentication) {
         UUID userId = UUID.fromString(authentication.getName());
         // 스트림과 같은 게이트. 세션에 못 들어가는 사람은 자기 기록도 조회하지 않는다.
-        accessGuard.requireCanAccess(sessionId, userId);
+        // 시작 전에는 물어본 적도 없다 — 전송 자체가 LiveInteractionGuard로 막혀 있다.
+        accessGuard.requireCanReadContent(sessionId, userId);
         return liveAiAnswerService.history(sessionId, userId).stream()
                 .map(LiveAiAnswerHistoryResponse::from)
                 .toList();

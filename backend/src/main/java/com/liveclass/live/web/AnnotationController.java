@@ -116,7 +116,15 @@ public class AnnotationController {
          */
         UUID viewer = sessionUser(authentication);
         if (viewer != null) {
-            accessGuard.requireCanAccess(sessionId, viewer);
+            /*
+             * 수강생은 시작한 뒤에만 읽는다 — 판서는 강사가 라이브 중에 그린 것이라 그 전에는 없다.
+             * <b>강사는 상태와 무관하다</b>: 이 조회가 곧 새로고침 뒤 복원 경로라, 막으면 방금 그린
+             * 것을 못 되찾는다.
+             *
+             * 아래 Egress 경로에는 이 상태 조건을 걸지 않는다 — Gate A~C가 LIVE <b>전에</b> 도는 동안
+             * 판서를 가져가므로, 묶으면 녹화 시작이 막힌다.
+             */
+            accessGuard.requireCanReadContent(sessionId, viewer);
         } else {
             roomTokenVerifier.requireRoomParticipant(sessionId, authorization);
         }

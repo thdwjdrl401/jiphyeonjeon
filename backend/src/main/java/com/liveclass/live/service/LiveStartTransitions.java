@@ -241,7 +241,7 @@ public class LiveStartTransitions {
         attempt.setLeaseUntil(null);
 
         eventPublisher.publishEvent(new LiveSessionStartedEvent(
-                event.sessionId(), event.lessonId(), event.roomName(), event.recordingEnabled()));
+                event.sessionId(), event.lessonId(), event.roomName(), event.recordingEnabled(), now));
         log.info("라이브 시작 완료 session={} attempt={}", event.sessionId(), event.attemptId());
     }
 

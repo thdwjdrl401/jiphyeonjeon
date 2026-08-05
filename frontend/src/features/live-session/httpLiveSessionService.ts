@@ -377,6 +377,20 @@ function readChatEnvelope(frame: IMessage, sessionId: string) {
 function readSessionStateEnvelope(frame: IMessage, sessionId: string): LiveSessionStateEvent | null {
   const envelope = JSON.parse(frame.body) as ApiSessionStateEnvelope
   if (envelope.sessionId !== sessionId) return null
+  if (envelope.type === 'session.starting' && envelope.payload.liveSessionStatus === 'STARTING') {
+    return {
+      type: 'session.starting',
+      occurredAt: envelope.occurredAt,
+      payload: { liveSessionStatus: 'STARTING', endedAt: null },
+    }
+  }
+  if (envelope.type === 'session.started' && envelope.payload.liveSessionStatus === 'LIVE') {
+    return {
+      type: 'session.started',
+      occurredAt: envelope.occurredAt,
+      payload: { liveSessionStatus: 'LIVE', endedAt: null },
+    }
+  }
   if (envelope.type === 'session.ending' && envelope.payload.liveSessionStatus === 'ENDING') {
     return {
       type: 'session.ending',

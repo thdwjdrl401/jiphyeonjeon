@@ -87,7 +87,8 @@ public class ChatService {
     @Transactional(readOnly = true)
     public List<ChatMessage> listBySession(UUID sessionId, UUID requesterId, long afterSessionMs, int limit) {
         // 접근 게이트: 소유 강사이거나 활성 수강생만 채팅 이력 조회 가능(전송과 동일 게이트). 세션 없으면 404.
-        accessGuard.requireCanAccess(sessionId, requesterId);
+        // 수강생에게는 시작 전 409다 — 전송이 막혀 있으므로 그때 조회할 이력이 있을 수 없다.
+        accessGuard.requireCanReadContent(sessionId, requesterId);
         int capped = Math.min(Math.max(limit, 1), 200);
         return chatMessageRepository.findByLiveSessionIdAndSessionMsGreaterThanAndDeletedAtIsNullOrderBySessionMsAsc(
                 sessionId, afterSessionMs, Limit.of(capped));

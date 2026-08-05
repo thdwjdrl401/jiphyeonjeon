@@ -341,7 +341,14 @@ describe('전체 페이지 라우트', () => {
     // 테스트음(약 5초)을 실제로 기다리는 흐름이라 기본 제한(5초)으로는 끝낼 수 없다.
   })
 
-  it('강사가 시작하지 않은 강의는 팝업을 보여 주고 입장하지 않는다', async () => {
+  /**
+   * <b>시작 전에도 들어간다</b>(ADR-0084).
+   *
+   * <p>예전에는 여기서 "강의가 아직 시작되지 않았습니다" 팝업을 띄우고 돌려보냈다. 그러면 학생은 강사가
+   * 시작할 때까지 입장 버튼을 반복해 눌러야 하는데, 예정 시각과 실제 시작 시각은 늘 어긋나므로 그 반복이
+   * 기본 동선이 된다. 지금은 들여보내고 <b>강의실 안에서</b> 기다리며, 시작 신호를 받으면 스스로 넘어간다.
+   */
+  it('강사가 아직 시작하지 않아도 강의실까지 들어가 대기한다', async () => {
     const user = userEvent.setup()
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
     renderAt('/student/live-sessions/ses-security-live/prejoin')
@@ -350,14 +357,11 @@ describe('전체 페이지 라우트', () => {
     await user.click(await screen.findByRole('button', { name: '네, 모두 들려요' }, { timeout: 9_000 }))
     await user.click(await screen.findByRole('button', { name: '라이브 입장' }))
 
-    const dialog = await screen.findByRole('dialog', { name: '강의가 아직 시작되지 않았습니다' })
-    expect(within(dialog).getByText(/강사가 라이브 강의를 시작하면 입장할 수 있습니다/)).toBeInTheDocument()
-    expect(window.location.pathname).toBe('/student/live-sessions/ses-security-live/prejoin')
-
-    await user.click(within(dialog).getByRole('button', { name: '확인' }))
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    // 닫으면 다시 시도할 자리로 초점이 돌아와야 한다.
-    expect(screen.getByRole('button', { name: '라이브 입장' })).toHaveFocus()
+    // 막는 팝업이 아니라 강의실이 나와야 한다(녹화 안내 모달이 강의실의 첫 화면이다).
+    expect(await screen.findByRole('button', { name: '확인하고 참여하기' })).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/student/live-sessions/ses-security-live/classroom')
+    // 입장을 막는 팝업은 없어야 한다 — 강의실의 녹화 안내도 dialog라 이름으로 구별한다.
+    expect(screen.queryByRole('dialog', { name: '입장할 수 없는 강의입니다' })).not.toBeInTheDocument()
   })
 
   it('종료된 강의는 기다리라고 하지 않고 입장할 수 없다고 알린다', async () => {
@@ -379,6 +383,7 @@ describe('전체 페이지 라우트', () => {
     expect(window.location.pathname).toBe('/student/live-sessions/ses-security-live/prejoin')
   })
 
+  // 시작 전은 이제 통과하므로(ADR-0084) 팝업이 남는 경로는 <b>끝난 강의</b>뿐이다.
   it('입장 안내 팝업은 Escape로도 닫힌다', async () => {
     const user = userEvent.setup()
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
@@ -386,8 +391,9 @@ describe('전체 페이지 라우트', () => {
 
     await user.click(await screen.findByRole('button', { name: /테스트 시작/ }))
     await user.click(await screen.findByRole('button', { name: '네, 모두 들려요' }, { timeout: 9_000 }))
+    await mockLiveSessionService.endLiveSession('ses-security-live')
     await user.click(await screen.findByRole('button', { name: '라이브 입장' }))
-    await screen.findByRole('dialog', { name: '강의가 아직 시작되지 않았습니다' })
+    await screen.findByRole('dialog', { name: '입장할 수 없는 강의입니다' })
 
     await user.keyboard('{Escape}')
 
