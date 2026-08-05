@@ -5,6 +5,18 @@ import App from '@/App'
 import { mockAuthService, resetMockAuth } from '@/features/auth/mockAuthService'
 import { resetMockCurriculumManagement } from '@/features/curriculum/mockCurriculumManagementService'
 import { buildMockCurriculumOutline, getMockCurriculum, publishMockCurriculum } from '@/features/demo/mockDatabase'
+import { todayLocalStart } from '@/shared/lib/localDateTime'
+
+/**
+ * 오늘에서 days만큼 옮긴 datetime-local 문자열. 고정 날짜를 박으면 그날이 지나는 순간
+ * "과거 일정" 검증에 걸려 테스트가 썩는다(실제로 2026-08-04로 박아 둔 값이 그렇게 됐다).
+ */
+function localDateTimeInDays(days: number, time = '20:30'): string {
+  const date = new Date()
+  date.setDate(date.getDate() + days)
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${time}`
+}
 
 async function renderAsInstructor(path: string) {
   await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
@@ -212,11 +224,7 @@ describe('커리큘럼 작업 화면', () => {
       '지난 날짜로 끝나는 커리큘럼',
     )
 
-    const yesterday = new Date()
-    yesterday.setDate(yesterday.getDate() - 1)
-    const pad = (value: number) => String(value).padStart(2, '0')
-    const pastEndsAt = `${yesterday.getFullYear()}-${pad(yesterday.getMonth() + 1)}-${pad(yesterday.getDate())}T09:00`
-    fireEvent.change(screen.getByLabelText('운영 종료일'), { target: { value: pastEndsAt } })
+    fireEvent.change(screen.getByLabelText('운영 종료일'), { target: { value: localDateTimeInDays(-1, '09:00') } })
 
     await user.click(screen.getByRole('button', { name: '초안 만들기' }))
 
@@ -322,7 +330,7 @@ describe('커리큘럼 작업 화면', () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/new')
     await user.type(await screen.findByLabelText(/강의 제목/), '중복 방지 강의')
-    await user.type(screen.getByLabelText(/예정 시작 시각/), '2026-08-04T20:30')
+    await user.type(screen.getByLabelText(/예정 시작 시각/), localDateTimeInDays(1))
     await user.click(screen.getByRole('button', { name: '강의 생성 저장' }))
 
     // 생성 성공 후엔 구성(섹션·강의 목록) 화면으로 돌아간다 — 폼을 떠나므로 연타로 매번 새
@@ -389,11 +397,47 @@ describe('커리큘럼 작업 화면', () => {
 
     await user.type(screen.getByLabelText(/강의 제목/), '보안 심화 1강')
     expect(submit).toBeDisabled()   // 일정 미입력 — 여전히 비활성
-    await user.type(scheduledAt, '2026-08-04T20:30')
+    await user.type(scheduledAt, localDateTimeInDays(1))
     expect(submit).toBeEnabled()
 
     await user.click(submit)
     expect(await screen.findByText('강의 정보와 라이브 일정이 저장되었습니다.')).toBeInTheDocument()
+  })
+
+  // 이미 지난 시각으로 시작하는 라이브는 새로 만들 수 없다.
+  it('라이브 예정일을 오늘보다 이전으로 넣으면 이유를 밝힌 문구를 보여주고 만들지 않는다', async () => {
+    const user = userEvent.setup()
+    await renderAsInstructor('/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/new')
+    await user.type(await screen.findByLabelText(/강의 제목/), '지난 날짜 라이브')
+    fireEvent.change(screen.getByLabelText(/예정 시작 시각/), { target: { value: localDateTimeInDays(-1) } })
+
+    await user.click(screen.getByRole('button', { name: '강의 생성 저장' }))
+
+    expect(await screen.findByText('라이브 예정일은 오늘보다 이전일 수 없습니다.')).toBeInTheDocument()
+    // 저장되지 않았으니 생성 폼에 그대로 머문다.
+    expect(screen.getByRole('button', { name: '강의 생성 저장' })).toBeInTheDocument()
+    expect(window.location.pathname).toMatch(/\/lessons\/new$/)
+  })
+
+  it('새 강의 폼은 예정 시작 시각에 오늘 하한선을 걸고 오늘 당일은 허용한다', async () => {
+    const user = userEvent.setup()
+    await renderAsInstructor('/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/new')
+
+    expect(await screen.findByLabelText(/예정 시작 시각/)).toHaveAttribute('min', todayLocalStart())
+
+    await user.type(screen.getByLabelText(/강의 제목/), '오늘 시작 라이브')
+    fireEvent.change(screen.getByLabelText(/예정 시작 시각/), { target: { value: localDateTimeInDays(0, '23:30') } })
+    await user.click(screen.getByRole('button', { name: '강의 생성 저장' }))
+
+    expect(await screen.findByText('강의 정보와 라이브 일정이 저장되었습니다.')).toBeInTheDocument()
+  })
+
+  // 수정에는 하한선을 걸지 않는다 — 어제 잡아 둔 라이브의 다른 항목만 고치려던 사람이 막히면 안 된다.
+  it('강의 수정 화면에서는 예정 시작 시각에 하한선을 걸지 않는다', async () => {
+    await renderAsInstructor('/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/les-security/edit')
+
+    const scheduledAt = await screen.findByLabelText(/예정 시작 시각/)
+    expect(scheduledAt).not.toHaveAttribute('min')
   })
 
   it('새 강의 폼의 자료 영역에 PPTX 파일을 드롭해 추가한다', async () => {
@@ -425,7 +469,7 @@ describe('커리큘럼 작업 화면', () => {
     expect(within(breadcrumbs).queryByText('강의 수정')).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '강의 수정' }).closest('header')?.querySelector('p')).toBeNull()
     await user.clear(scheduledAt)
-    await user.type(scheduledAt, '2026-08-04T20:30')
+    await user.type(scheduledAt, localDateTimeInDays(1))
     await user.click(screen.getByRole('button', { name: '강의 수정 저장' }))
     expect(await screen.findByText('강의 정보와 라이브 일정이 저장되었습니다.')).toBeInTheDocument()
   })

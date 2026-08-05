@@ -9,6 +9,7 @@ import { deleteLessonMaterial, getLesson, prepareLessonAi, saveLesson } from '@/
 import LessonBreadcrumbs from '@/features/lesson/LessonBreadcrumbs'
 import { invalidateAfterLessonWrite } from '@/features/lesson/lessonQueryCache'
 import { ApiError } from '@/shared/api/client'
+import { isBeforeToday, todayLocalStart } from '@/shared/lib/localDateTime'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
 import { useToast } from '@/shared/ui/Toast'
@@ -60,6 +61,9 @@ export default function LessonFormPage() {
   const [duration, setDuration] = useState('90')
   const [entryWindow, setEntryWindow] = useState('10')
   const [submitting, setSubmitting] = useState(false)
+  // error는 폼 검증 전용이다(입력을 고치는 동안 남아 있어야 한다).
+  // 저장 실패처럼 한 번 읽고 지나가는 알림은 토스트로 낸다 — CurriculumFormPage와 같은 방식.
+  const [error, setError] = useState('')
   const pendingMaterialCount = materials.filter((material) => material.file).length
   /**
    * 강의 삭제. 관리 화면 목록이 아니라 이 화면에만 둔다 — 목록에서는 행마다 삭제 버튼이 있어
@@ -152,6 +156,22 @@ export default function LessonFormPage() {
     event.preventDefault()
     if (submitting) return   // 연타 방지 — 진행 중이면 무시(중복 생성 차단)
     if (!title.trim() || (canEditLiveSchedule && !scheduledAt)) return
+    setError('')
+    // 이미 지난 시각으로 시작하는 라이브는 새로 만들 수 없다. 수정에서는 막지 않는다 —
+    // 어제 잡아 둔 라이브의 제목만 고치려던 사람까지 저장이 막히면 안 된다.
+    if (canEditLiveSchedule && !isEdit && isBeforeToday(scheduledAt)) {
+      setError('라이브 예정일은 오늘보다 이전일 수 없습니다.')
+      return
+    }
+    // noValidate로 넘어온 몫 — 브라우저가 보던 숫자 범위를 여기서 그대로 본다.
+    if (canEditLiveSchedule && !(Number(duration) >= 10 && Number(duration) <= 480)) {
+      setError('예상 진행 시간은 10분에서 480분 사이여야 합니다.')
+      return
+    }
+    if (canEditLiveSchedule && !(Number(entryWindow) >= 0 && Number(entryWindow) <= 60)) {
+      setError('입장 가능 창은 0분에서 60분 사이여야 합니다.')
+      return
+    }
     setSubmitting(true)
     try {
       const saved = await saveLesson({
@@ -217,7 +237,12 @@ export default function LessonFormPage() {
           ? <Link className="button button--soft" to={lessonDetailPath}>강의 상세로 돌아가기</Link>
           : <Link className="button button--soft" to={curriculumReturnPath}>커리큘럼 관리로 돌아가기</Link>}
       />
-      <form className="workspace-form lesson-form" onSubmit={save}>
+      {/*
+        noValidate — 예정일 min 위반을 브라우저가 "유효한 값을 입력하세요" 풍선으로 먼저 가로채면
+        무엇이 왜 틀렸는지 알 수 없다. 검증은 save가 맡고 문구는 아래 InlineNotice로 낸다.
+        브라우저가 보던 숫자 범위 검사도 save로 함께 옮겼다.
+      */}
+      <form className="workspace-form lesson-form" onSubmit={save} noValidate>
         <div className="lesson-form__top-grid">
           <Panel className="lesson-form__panel lesson-form__panel--basic" title="강의 기본 정보" description="강의 제목과 수강생에게 표시할 설명을 입력합니다.">
             <div className="form-grid">
@@ -257,7 +282,8 @@ export default function LessonFormPage() {
 
           {canEditLiveSchedule && <Panel className="lesson-form__panel lesson-form__panel--schedule" title="라이브 강의 일정" description={isEdit ? '라이브를 진행할 시각과 입장 조건입니다.' : '강의 생성에 필요한 필수 일정입니다.'}>
             <div className="form-grid lesson-form__schedule-grid">
-              <label className="form-field--wide"><span>예정 시작 시각 *</span><input required type="datetime-local" value={scheduledAt} onChange={(event) => { setScheduledAt(event.target.value) }} /></label>
+              {/* 생성에서만 하한선을 건다 — 수정은 이미 지난 일정을 그대로 둔 채 다른 항목만 고칠 수 있어야 한다. */}
+              <label className="form-field--wide"><span>예정 시작 시각 *</span><input required type="datetime-local" value={scheduledAt} min={isEdit ? undefined : todayLocalStart()} onChange={(event) => { setScheduledAt(event.target.value) }} /></label>
               <label><span>예상 진행 시간</span><div className="input-with-unit"><input min="10" max="480" type="number" value={duration} onChange={(event) => { setDuration(event.target.value) }} /><span>분</span></div></label>
               <label><span>입장 가능 창</span><div className="input-with-unit"><input min="0" max="60" type="number" value={entryWindow} onChange={(event) => { setEntryWindow(event.target.value) }} /><span>분 전</span></div></label>
             </div>
@@ -285,6 +311,8 @@ export default function LessonFormPage() {
             )}
           />
         )}
+
+        {error && <InlineNotice tone="danger">{error}</InlineNotice>}
 
         <div className="sticky-form-actions lesson-form__actions">
           <Link className="button button--ghost" to={isEdit ? lessonDetailPath : curriculumReturnPath}>취소</Link>
