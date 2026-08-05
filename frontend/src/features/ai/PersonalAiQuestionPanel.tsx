@@ -109,6 +109,8 @@ export default function PersonalAiQuestionPanel({
   const conversationRef = useRef<AiConversationState>(conversation)
   const logRef = useRef<HTMLDivElement>(null)
   const [isFollowingLatest, setIsFollowingLatest] = useState(true)
+  // 직전 렌더가 남긴 스크롤 높이(아래 layout effect에서 "이 갱신 전에 바닥에 있었는가"를 재는 기준).
+  const previousScrollHeightRef = useRef(0)
 
   /*
    * 기록이 도착하면 대화를 되살린다. 리듀서가 "이미 턴이 있거나 진행 중이면 무시"를 지키므로,
@@ -135,18 +137,38 @@ export default function PersonalAiQuestionPanel({
     }
   }, [isAvailable])
 
-  // 새 턴·새 델타를 따라 하단으로 붙는다. 위로 올려 읽는 중이면(isFollowingLatest=false) 건드리지 않는다.
+  /*
+   * 새 턴·새 델타를 따라 하단으로 붙는다. 위로 올려 읽는 중이면 건드리지 않는다 — 단, "읽는 중"을
+   * isFollowingLatest(state) 대신 DOM의 실제 scrollTop으로 직접 잰다.
+   *
+   * 스트리밍 중에는 델타가 초당 여러 번 도착해 리렌더가 아주 잦다. isFollowingLatest는 'scroll'
+   * 이벤트가 와야 갱신되는데, 사용자가 막 위로 스크롤한 직후 그 이벤트가 미처 처리되기 전에 다음
+   * 델타로 또 리렌더가 오면, 아직 갱신 전인 "따라가는 중(true)"을 보고 강제로 바닥까지 끌어내린다
+   * — 위로 올려도 곧바로 도로 내려가는 것처럼 보인다. DOM의 scrollTop은 이벤트 지연과 무관하게
+   * 항상 지금 값을 주므로, "이 갱신 직전에 바닥에 있었는가"를 직전 렌더의 scrollHeight 기준으로
+   * 직접 재면 이 경합이 생기지 않는다.
+   */
   useLayoutEffect(() => {
-    if (!isFollowingLatest) return
     const log = logRef.current
-    if (log) log.scrollTop = log.scrollHeight
-  }, [conversation, isFollowingLatest])
+    if (!log) return
+    const wasAtBottom = log.scrollTop + log.clientHeight >= previousScrollHeightRef.current - FOLLOW_THRESHOLD_PX
+    if (wasAtBottom) {
+      log.scrollTop = log.scrollHeight
+      // scrollTop을 코드로 옮기는 것만으로는 'scroll' 이벤트가 (제때) 오지 않는다 — 버튼 표시가
+      // 이 스크롤과 어긋나지 않도록 상태도 바로 맞춘다.
+      setIsFollowingLatest(true)
+    }
+    previousScrollHeightRef.current = log.scrollHeight
+  }, [conversation])
 
   const handleLogScroll = () => {
     const log = logRef.current
     if (!log) return
     const distanceFromBottom = log.scrollHeight - log.scrollTop - log.clientHeight
     setIsFollowingLatest(distanceFromBottom <= FOLLOW_THRESHOLD_PX)
+    // 실제 스크롤이 있었던 순간의 높이로도 기준을 맞춰 둔다 — 마운트 이후 한 번도 새 델타가
+    // 오지 않은 채로 시간이 지나면(레이아웃이 바뀌는 등) 아래 effect의 기준이 낡을 수 있다.
+    previousScrollHeightRef.current = log.scrollHeight
   }
 
   const scrollToLatest = () => {
@@ -181,8 +203,10 @@ export default function PersonalAiQuestionPanel({
     const turnId = `ai-turn-${turnSequence.current}`
     dispatch({ kind: 'ask', id: turnId, question: asked })
     // 낙관적 전송: 질문은 위 말풍선으로 갔으니 입력창은 즉시 비운다.
+    // 전송은 "지금 여기를 보여 달라"는 명시적 요청이다 — 위로 올려 지난 대화를 읽던 중이었어도
+    // 방금 보낸 질문은 지금 스크롤 위치와 무관하게 보여준다(채팅 패널의 내 메시지와 같은 규칙).
     setQuestion('')
-    setIsFollowingLatest(true)
+    scrollToLatest()
     void stream(turnId, asked)
   }
 
@@ -215,29 +239,31 @@ export default function PersonalAiQuestionPanel({
 
   return (
     <>
-      <div className="ai-chat-log" ref={logRef} onScroll={handleLogScroll}>
-        {hasTurns
-          ? conversation.turns.map((turn) => (
-              <AiChatTurn key={turn.id} turn={turn} onRetry={isAvailable ? retryTurn : undefined} onSeek={onSeekEvidence} />
-            ))
-          : (
-            <>
-              {/* 빈 상태는 대화가 하나도 없을 때만. 답변이 온 뒤에도 남아 있으면 이력을 밀어낸다. */}
-              <div className="ai-empty">
-                <img className="ai-empty__avatar" src={yeongsilImage} alt="AI 질문 도우미 영실" />
-                <h3>한 번 아뢰어 보거라</h3>
-                <p>{isAvailable ? emptyDescription : notice}</p>
-              </div>
-              {!isAvailable && <InlineNotice tone="warning">{notice}</InlineNotice>}
-            </>
-          )}
-      </div>
-
-      {hasTurns && !isFollowingLatest && (
-        <div className="chat-latest-jump">
-          <button type="button" onClick={scrollToLatest}>↓ 최신 답변으로 이동</button>
+      <div className="scroll-pane">
+        <div className="ai-chat-log" ref={logRef} onScroll={handleLogScroll}>
+          {hasTurns
+            ? conversation.turns.map((turn) => (
+                <AiChatTurn key={turn.id} turn={turn} onRetry={isAvailable ? retryTurn : undefined} onSeek={onSeekEvidence} />
+              ))
+            : (
+              <>
+                {/* 빈 상태는 대화가 하나도 없을 때만. 답변이 온 뒤에도 남아 있으면 이력을 밀어낸다. */}
+                <div className="ai-empty">
+                  <img className="ai-empty__avatar" src={yeongsilImage} alt="AI 질문 도우미 영실" />
+                  <h3>한 번 아뢰어 보거라</h3>
+                  <p>{isAvailable ? emptyDescription : notice}</p>
+                </div>
+                {!isAvailable && <InlineNotice tone="warning">{notice}</InlineNotice>}
+              </>
+            )}
         </div>
-      )}
+
+        {hasTurns && !isFollowingLatest && (
+          <div className="latest-jump">
+            <button type="button" onClick={scrollToLatest}>↓ 최신 답변으로 이동</button>
+          </div>
+        )}
+      </div>
 
       <form className="ai-composer" onSubmit={submitQuestion}>
         <label className="visually-hidden" htmlFor="ai-question-input">AI에게 할 질문</label>

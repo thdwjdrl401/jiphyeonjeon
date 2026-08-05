@@ -142,7 +142,7 @@ export default function CaptionDock({
         // 채팅처럼 한 줄을 차지하지 않는다 — 자막 위에 떠 있는 알약으로 둬서 자막 독 높이가
         // 늘었다 줄었다 하지 않는다(자막 영역이 채팅 목록과 달리 flex:1이 아니라 고정 높이라,
         // 아래 붙이면 그만큼 독 전체가 커져 아래 요소를 밀어낸다).
-        <div className="caption-dock__jump">
+        <div className="latest-jump">
           <button type="button" onClick={scrollToLatest}>↓ 최근 자막으로 이동</button>
         </div>
       )}

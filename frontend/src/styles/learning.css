@@ -325,11 +325,9 @@
 .caption-dock__sentences::-webkit-scrollbar-track-piece,
 .caption-dock__sentences::-webkit-scrollbar-corner { background: transparent !important; }
 .caption-dock__empty { display: grid; height: 100%; place-items: center; margin: 0; color: var(--ink-500); font-size: .62rem; }
-/* 채팅의 "최근으로 이동" 줄과 달리 자막 독은 높이가 고정이라, 줄로 붙이면 그만큼 독 전체가
-   커져 아래 요소를 밀어낸다. 자막 위에 뜨는 알약으로 띄운다. */
-.caption-dock__jump { position: absolute; right: 0; bottom: 8px; left: 0; display: flex; justify-content: center; pointer-events: none; }
-.caption-dock__jump button { border: 1px solid var(--blue-200); border-radius: 99px; padding: 6px 12px; background: var(--white); color: var(--blue-700); font-size: .58rem; font-weight: 700; box-shadow: var(--shadow-md); pointer-events: auto; }
-.caption-dock__jump button:hover { border-color: var(--blue-500); background: var(--blue-100); }
+/* 자막 독은 높이가 고정이라, 아래 줄로 붙이면 그만큼 독 전체가 커져 아래 요소를 밀어낸다.
+   자막 위에 뜨는 알약으로 띄운다(.latest-jump — 채팅·AI 이력·강의 노트와 같은 클래스,
+   .caption-dock 자신이 이미 position:relative라 별도 래퍼 없이 바로 기준이 된다). */
 .caption-dock__sentences article { display: grid; grid-template-columns: 52px minmax(0,1fr); align-items: start; gap: 8px; border-radius: 8px; padding: 7px; transition: background .15s ease; }
 .caption-dock__sentences article.is-current { background: var(--blue-50); }
 .caption-dock__sentences article > :is(button,time) { border: 0; padding: 2px 0; background: transparent; color: var(--blue-600); font-size: .6rem; text-align: left; transition: transform .12s ease; }
@@ -365,33 +363,48 @@
  */
 .media-side [role="tabpanel"][hidden] { display: none; }
 .side-panel-content { min-height: 0; flex: 1; overflow-y: auto; padding: 13px; }
-.media-page--live :is(.side-panel-content, .chat-list, .ai-chat-log),
-.detached-sidebar-root :is(.side-panel-content, .chat-list, .ai-chat-log) { overscroll-behavior: contain; scrollbar-color: transparent transparent; scrollbar-width: thin; }
-.media-page--live .media-side:hover :is(.side-panel-content, .chat-list, .ai-chat-log),
-.detached-sidebar-root .media-side:hover :is(.side-panel-content, .chat-list, .ai-chat-log) { scrollbar-color: rgba(231,231,227,.2) transparent; }
-.media-page--live :is(.side-panel-content, .chat-list, .ai-chat-log)::-webkit-scrollbar,
-.detached-sidebar-root :is(.side-panel-content, .chat-list, .ai-chat-log)::-webkit-scrollbar { width: 3px; height: 3px; background: transparent; }
-.media-page--live :is(.side-panel-content, .chat-list, .ai-chat-log)::-webkit-scrollbar-thumb,
-.detached-sidebar-root :is(.side-panel-content, .chat-list, .ai-chat-log)::-webkit-scrollbar-thumb { border: 0; border-radius: 99px; background: transparent; }
-.media-page--live .media-side:hover :is(.side-panel-content, .chat-list, .ai-chat-log)::-webkit-scrollbar-thumb,
-.detached-sidebar-root .media-side:hover :is(.side-panel-content, .chat-list, .ai-chat-log)::-webkit-scrollbar-thumb { background: rgba(231,231,227,.18); }
-.media-page--live .media-side:hover :is(.side-panel-content, .chat-list, .ai-chat-log)::-webkit-scrollbar-thumb:hover,
-.detached-sidebar-root .media-side:hover :is(.side-panel-content, .chat-list, .ai-chat-log)::-webkit-scrollbar-thumb:hover { background: rgba(231,231,227,.3); }
-.media-page--live :is(.side-panel-content, .chat-list, .ai-chat-log)::-webkit-scrollbar-track,
-.media-page--live :is(.side-panel-content, .chat-list, .ai-chat-log)::-webkit-scrollbar-track-piece,
-.media-page--live :is(.side-panel-content, .chat-list, .ai-chat-log)::-webkit-scrollbar-corner,
-.detached-sidebar-root :is(.side-panel-content, .chat-list, .ai-chat-log)::-webkit-scrollbar-track,
-.detached-sidebar-root :is(.side-panel-content, .chat-list, .ai-chat-log)::-webkit-scrollbar-track-piece,
-.detached-sidebar-root :is(.side-panel-content, .chat-list, .ai-chat-log)::-webkit-scrollbar-corner { background: transparent; }
+.media-page--live :is(.side-panel-content, .chat-list, .ai-chat-log, .lecture-note-list),
+.detached-sidebar-root :is(.side-panel-content, .chat-list, .ai-chat-log, .lecture-note-list) { overscroll-behavior: contain; scrollbar-color: transparent transparent; scrollbar-width: thin; }
+.media-page--live .media-side:hover :is(.side-panel-content, .chat-list, .ai-chat-log, .lecture-note-list),
+.detached-sidebar-root .media-side:hover :is(.side-panel-content, .chat-list, .ai-chat-log, .lecture-note-list) { scrollbar-color: rgba(231,231,227,.2) transparent; }
+/*
+ * ⚠️ `!important`가 필요하다 — design-system.css의 전역 리셋(`body *::-webkit-scrollbar
+ * { width: 1.5px !important; ... }`)이 이미 그 값으로 너비를 고정해 둬서, `!important` 없는
+ * 값은 실제로 적용되지 않는다(자막 독 스크롤바에 남긴 같은 사연 참고). 두께는 자막 독과 맞춘다(6px).
+ */
+.media-page--live :is(.side-panel-content, .chat-list, .ai-chat-log, .lecture-note-list)::-webkit-scrollbar,
+.detached-sidebar-root :is(.side-panel-content, .chat-list, .ai-chat-log, .lecture-note-list)::-webkit-scrollbar { width: 6px !important; height: 6px !important; background: transparent !important; }
+.media-page--live :is(.side-panel-content, .chat-list, .ai-chat-log, .lecture-note-list)::-webkit-scrollbar-thumb,
+.detached-sidebar-root :is(.side-panel-content, .chat-list, .ai-chat-log, .lecture-note-list)::-webkit-scrollbar-thumb { border-radius: 99px !important; background: transparent !important; }
+.media-page--live .media-side:hover :is(.side-panel-content, .chat-list, .ai-chat-log, .lecture-note-list)::-webkit-scrollbar-thumb,
+.detached-sidebar-root .media-side:hover :is(.side-panel-content, .chat-list, .ai-chat-log, .lecture-note-list)::-webkit-scrollbar-thumb { background: rgba(231,231,227,.32) !important; }
+.media-page--live .media-side:hover :is(.side-panel-content, .chat-list, .ai-chat-log, .lecture-note-list)::-webkit-scrollbar-thumb:hover,
+.detached-sidebar-root .media-side:hover :is(.side-panel-content, .chat-list, .ai-chat-log, .lecture-note-list)::-webkit-scrollbar-thumb:hover { background: rgba(231,231,227,.5) !important; }
+.media-page--live :is(.side-panel-content, .chat-list, .ai-chat-log, .lecture-note-list)::-webkit-scrollbar-track,
+.media-page--live :is(.side-panel-content, .chat-list, .ai-chat-log, .lecture-note-list)::-webkit-scrollbar-track-piece,
+.media-page--live :is(.side-panel-content, .chat-list, .ai-chat-log, .lecture-note-list)::-webkit-scrollbar-corner,
+.detached-sidebar-root :is(.side-panel-content, .chat-list, .ai-chat-log, .lecture-note-list)::-webkit-scrollbar-track,
+.detached-sidebar-root :is(.side-panel-content, .chat-list, .ai-chat-log, .lecture-note-list)::-webkit-scrollbar-track-piece,
+.detached-sidebar-root :is(.side-panel-content, .chat-list, .ai-chat-log, .lecture-note-list)::-webkit-scrollbar-corner { background: transparent !important; }
 .chat-panel { display: flex; padding: 0; overflow: hidden; flex-direction: column; }
 .discussion-panel { display: flex; padding: 0; overflow: hidden; flex-direction: column; }
 .discussion-filter { display: flex; gap: 6px; padding: 10px 11px 4px; }
 .discussion-filter button { border: 1px solid var(--ink-100); border-radius: 99px; padding: 6px 10px; background: transparent; color: var(--ink-500); font-size: .58rem; }
 .discussion-filter button.is-active { border-color: var(--blue-200); background: var(--blue-50); color: var(--blue-700); }
-.discussion-panel .chat-list { min-height: 0; flex: 1; }
 .discussion-notice { margin: 0 11px 8px; padding: 9px 10px; border-radius: 8px; background: var(--blue-50); color: var(--blue-700); font-size: .57rem; line-height: 1.5; }
 .panel-empty { padding: 20px 8px; color: var(--ink-500); font-size: .63rem; text-align: center; }
-.chat-list { flex: 1; overflow-y: auto; padding: 12px; }
+/*
+ * 스크롤되는 목록(채팅·AI 이력·강의 노트)과 "최근으로 이동" 알약을 함께 담는 자리.
+ *
+ * 알약을 목록의 형제로 두고 이 래퍼를 기준으로 띄운다 — 목록 자신을 기준으로 두면 알약이
+ * 스크롤 콘텐츠의 일부가 되어 스크롤할 때 같이 흘러가 버린다(자막 독과 달리 채팅·AI 패널은
+ * 목록 아래에 입력창이 더 있어, 패널 전체를 기준으로 두면 알약이 입력창 위에 얹힌다).
+ */
+.scroll-pane { position: relative; min-height: 0; flex: 1; }
+.scroll-pane > .chat-list,
+.scroll-pane > .ai-chat-log,
+.scroll-pane > .lecture-note-list { height: 100%; }
+.chat-list { overflow-y: auto; padding: 12px; }
 .chat-list article { margin-bottom: 11px; padding: 10px; border-radius: 10px; background: var(--ink-50); }
 .chat-list article.is-question { border-left: 2px solid var(--orange-500); background: #f7e6c8; }
 .chat-list header { display: flex; justify-content: space-between; gap: 8px; }
@@ -408,9 +421,11 @@
 /* 내 메시지엔 이름이 없어 header에 시각만 남는다 — 왼쪽에 붙지 않게 우측으로 민다. */
 .chat-list article.is-mine header { justify-content: flex-end; }
 .chat-list article.is-mine p { color: var(--ink-900); }
-.chat-latest-jump { display: flex; flex: 0 0 auto; justify-content: center; padding: 7px 10px; border-top: 1px solid var(--ink-100); background: linear-gradient(180deg, rgba(250,244,231,.7), var(--ink-50)); }
-.chat-latest-jump button { border: 1px solid var(--blue-200); border-radius: 99px; padding: 6px 11px; background: var(--blue-50); color: var(--blue-700); font-size: .58rem; font-weight: 700; }
-.chat-latest-jump button:hover { border-color: var(--blue-500); background: var(--blue-100); }
+/* 채팅·AI 이력·강의 노트가 함께 쓰는 "최근으로 이동" 알약. 한 줄을 차지하지 않고 목록 위에 뜬다
+   (자막 독의 caption-dock__jump와 같은 요령 — CaptionDock 참고). */
+.latest-jump { position: absolute; right: 0; bottom: 8px; left: 0; z-index: 2; display: flex; justify-content: center; pointer-events: none; }
+.latest-jump button { border: 1px solid var(--blue-200); border-radius: 99px; padding: 6px 12px; background: var(--white); color: var(--blue-700); font-size: .58rem; font-weight: 700; box-shadow: var(--shadow-md); pointer-events: auto; }
+.latest-jump button:hover { border-color: var(--blue-500); background: var(--blue-100); }
 .chat-composer { padding: 11px; border-top: 1px solid var(--ink-100); }
 .chat-composer textarea, .ai-panel textarea { width: 100%; resize: none; border: 1px solid var(--ink-200); border-radius: 9px; padding: 10px; outline: 0; background: var(--white); color: var(--ink-900); font-size: .68rem; }
 .chat-composer textarea:focus, .ai-panel textarea:focus { border-color: var(--blue-500); }
@@ -475,7 +490,7 @@
 .ai-evidence__note { display: block; margin-top: 6px; line-height: 1.5; }
 .ai-evidence-panel .ai-evidence__note { color: var(--ink-600); font-size: .55rem; }
 /* 대화형 AI 패널: 이력은 스크롤 영역에 쌓고 입력창은 아래에 고정한다(채팅 패널과 같은 골격). */
-.ai-chat-log { min-height: 0; flex: 1; overflow-y: auto; padding: 12px; }
+.ai-chat-log { overflow-y: auto; padding: 12px; }
 .ai-turn { display: grid; gap: 7px; margin-bottom: 14px; }
 .ai-turn:last-child { margin-bottom: 0; }
 /* 370px 사이드바 기준이라 말풍선은 폭을 스스로 제한하고 긴 코드·URL은 그 안에서 잘린다. */
@@ -494,11 +509,36 @@
 .ai-composer__row { display: flex; align-items: center; justify-content: space-between; gap: 9px; margin-top: 7px; }
 .ai-composer__row small { min-width: 0; color: var(--ink-500); font-size: .55rem; line-height: 1.4; }
 .ai-composer__row .button { flex: 0 0 auto; }
-.learning-panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 9px; margin-bottom: 12px; }
-.learning-panel-heading > div { display: grid; gap: 3px; }
+/* justify-content가 아니라 제목 칸의 flex:1로 오른쪽을 민다 — 제목 하나 + 배지 하나(용어집)든,
+   제목 + (도구 모음 + 배지) 묶음(강의 노트)이든 오른쪽이 그대로 붙어 끝에 모인다. */
+.learning-panel-heading { display: flex; align-items: center; gap: 9px; margin-bottom: 12px; }
+.learning-panel-heading > div:not(.lecture-note-heading__actions) { display: grid; flex: 1; min-width: 0; gap: 3px; }
 .learning-panel-heading strong { color: var(--ink-950); font-size: .72rem; }
 .learning-panel-heading small { color: var(--ink-500); font-size: .56rem; line-height: 1.45; }
-.learning-panel-heading > span { flex: 0 0 auto; border-radius: 99px; padding: 5px 7px; background: var(--blue-50); color: var(--blue-700); font-size: .54rem; }
+.learning-panel-heading span { flex: 0 0 auto; border-radius: 99px; padding: 5px 7px; background: var(--blue-50); color: var(--blue-700); font-size: .54rem; }
+/* 모두 펼치기/접기 버튼과 "N개 주제" 배지를 한 줄에 나란히 묶는다(강의 노트 전용). */
+.lecture-note-heading__actions { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; }
+/*
+ * 강의 노트도 채팅·AI 이력과 같은 골격이다 — 머리글은 고정, 주제 목록만 스크롤한다.
+ * (예전에는 .side-panel-content 하나가 통째로 스크롤됐다 — 머리글까지 함께 흘러가 버리던 것.)
+ */
+.summary-panel { display: flex; padding: 0; overflow: hidden; flex-direction: column; }
+.summary-panel > .learning-panel-heading { margin: 0; padding: 13px 13px 0; }
+.lecture-note-toolbar { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; }
+.lecture-note-toolbar button { border: 1px solid var(--ink-100); border-radius: 99px; padding: 4px 10px; background: transparent; color: var(--ink-600); font-size: .56rem; font-weight: 700; }
+.lecture-note-toolbar button:hover { border-color: var(--blue-200); background: var(--blue-50); color: var(--blue-700); }
+.lecture-note-list { overflow-y: auto; padding: 10px 13px 13px; }
+/* 주제별 접기/펼치기(네이티브 <details> — 여러 개를 동시에 열어 둘 수 있다). */
+.lecture-note-topic { border: 1px solid var(--ink-100); border-radius: 11px; background: var(--ink-50); }
+.lecture-note-topic + .lecture-note-topic { margin-top: 10px; }
+.lecture-note-topic > summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; list-style: none; cursor: pointer; }
+.lecture-note-topic > summary::-webkit-details-marker { display: none; }
+.lecture-note-topic > summary h3 { margin: 0; color: var(--ink-950); font-size: .74rem; letter-spacing: -.01em; }
+.lecture-note-topic > summary:hover h3 { color: var(--blue-700); }
+.lecture-note-topic > summary::after { flex: 0 0 auto; width: 0; height: 0; border-top: 4px solid var(--ink-400); border-right: 3px solid transparent; border-left: 3px solid transparent; content: ''; transition: transform .14s ease; }
+.lecture-note-topic[open] > summary::after { transform: rotate(180deg); }
+.lecture-note-topic > .note-markdown { margin: 0; padding: 0 12px 12px; }
+@media (prefers-reduced-motion: reduce) { .lecture-note-topic > summary::after { transition: none; } }
 .summary-block-list { display: grid; gap: 10px; }
 
 /*
@@ -876,7 +916,10 @@
  * 눈에 띄는 디버그 색을 그대로 쓴다 — 이 화면 어디에도 이런 배색이 없어야 "이건 도구다"가 바로 읽힌다.
  */
 .dev-live-panel { position: fixed; right: 14px; bottom: 14px; z-index: 200; width: 280px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .68rem; }
-.dev-live-panel__toggle { width: 100%; border: 1px solid #ffb020; border-radius: 8px; padding: 8px 10px; background: #201a00; color: #ffcf5c; font: inherit; text-align: left; cursor: pointer; }
+.dev-live-panel__titlebar { display: flex; align-items: stretch; gap: 4px; }
+/* 드래그 손잡이만 포인터를 잡는다 — 접기/펼치기 버튼과 겹치지 않아야 클릭이 드래그로 오해되지 않는다. */
+.dev-live-panel__grip { display: flex; flex: 0 0 auto; align-items: center; padding: 0 7px; border: 1px solid #ffb020; border-radius: 8px; background: #201a00; color: #ffb020; cursor: move; touch-action: none; user-select: none; }
+.dev-live-panel__toggle { flex: 1; min-width: 0; border: 1px solid #ffb020; border-radius: 8px; padding: 8px 10px; background: #201a00; color: #ffcf5c; font: inherit; text-align: left; cursor: pointer; }
 .dev-live-panel__body { max-height: 70vh; margin-top: 6px; overflow-y: auto; border: 1px solid #ffb020; border-radius: 8px; padding: 10px; background: #17130a; color: #f1d9a0; }
 .dev-live-panel__body section + section { margin-top: 12px; padding-top: 10px; border-top: 1px dashed #4a3c1a; }
 .dev-live-panel__body strong { display: block; margin-bottom: 6px; color: #ffcf5c; }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { CurriculumLiveSessionStatus } from '@/features/lesson/types'
 import { getAiAnswerHistory } from './liveSessionService'
@@ -23,6 +23,32 @@ import type { ChatConnectionState, LiveSessionView } from './liveSessionService.
 const statusOptions: CurriculumLiveSessionStatus[] = ['STARTING', 'LIVE', 'ENDING', 'ENDED']
 const connectionOptions: ChatConnectionState[] = ['connected', 'connecting', 'reconnecting', 'error']
 const longSampleText = '이 문장은 말풍선이 길어질 때 줄바꿈·여백·좌우 정렬이 무너지지 않는지 보려고 일부러 길게 씁니다. 자막도 채팅도 실제로는 이 정도 길이가 흔합니다.'
+
+/** 기본 자리(우하단 고정)에서 한 번이라도 끌어 옮기면 그 자리를 기억한다 — 새로고침마다 되돌아오면 매번 다시 옮겨야 한다. */
+const DRAG_POSITION_STORAGE_KEY = 'liveclass.devPanel.position'
+
+interface PanelPosition { left: number; top: number }
+
+function readStoredPosition(): PanelPosition | null {
+  try {
+    const raw = localStorage.getItem(DRAG_POSITION_STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<PanelPosition>
+    if (typeof parsed.left !== 'number' || typeof parsed.top !== 'number') return null
+    return { left: parsed.left, top: parsed.top }
+  } catch {
+    // 프라이빗 모드 등에서 localStorage가 막힐 수 있다. 기억 못 하는 것은 기능 실패가 아니다.
+    return null
+  }
+}
+
+function writeStoredPosition(position: PanelPosition): void {
+  try {
+    localStorage.setItem(DRAG_POSITION_STORAGE_KEY, JSON.stringify(position))
+  } catch {
+    // 저장 실패는 무시한다 — 이번 세션 동안은 그대로 동작한다.
+  }
+}
 
 interface Props {
   sessionId: string
@@ -62,6 +88,53 @@ export default function DevLivePanel({ sessionId, lessonId, onAiHistoryChanged }
   const [chatIsQuestion, setChatIsQuestion] = useState(false)
   const [captionText, setCaptionText] = useState('')
   const [participantCount, setParticipantCount] = useState(12)
+
+  /*
+   * 기본 자리는 CSS(우하단 고정)가 정한다 — position이 null인 동안은 그대로 둔다.
+   * 한 번이라도 끌면 그때부터 이 state의 절대 좌표(left/top)가 이긴다(useResizablePane과 같은 요령:
+   * 픽셀 사이즈를 훅이 넘겨야 스크립트 없이도 레이아웃이 무너지지 않는다).
+   */
+  const panelRef = useRef<HTMLDivElement>(null)
+  const [position, setPosition] = useState<PanelPosition | null>(() => readStoredPosition())
+
+  const handleGripPointerDown = (event: ReactPointerEvent<HTMLSpanElement>) => {
+    const panel = panelRef.current
+    if (!panel) return
+    event.preventDefault()
+    const rect = panel.getBoundingClientRect()
+    const startLeft = rect.left
+    const startTop = rect.top
+    const startX = event.clientX
+    const startY = event.clientY
+    const grip = event.currentTarget
+    // 손잡이에 포인터를 붙잡아 둔다 — 안 하면 빠르게 끌었을 때 커서가 벗어나며 드래그가 끊긴다.
+    grip.setPointerCapture(event.pointerId)
+
+    const move = (moveEvent: PointerEvent) => {
+      const maxLeft = Math.max(0, window.innerWidth - rect.width)
+      const maxTop = Math.max(0, window.innerHeight - rect.height)
+      setPosition({
+        left: Math.min(maxLeft, Math.max(0, startLeft + (moveEvent.clientX - startX))),
+        top: Math.min(maxTop, Math.max(0, startTop + (moveEvent.clientY - startY))),
+      })
+    }
+    const end = () => {
+      grip.removeEventListener('pointermove', move)
+      grip.removeEventListener('pointerup', end)
+      grip.removeEventListener('pointercancel', end)
+      setPosition((current) => {
+        if (current) writeStoredPosition(current)
+        return current
+      })
+    }
+    grip.addEventListener('pointermove', move)
+    grip.addEventListener('pointerup', end)
+    grip.addEventListener('pointercancel', end)
+  }
+
+  const panelStyle: CSSProperties | undefined = position
+    ? { left: `${position.left}px`, top: `${position.top}px`, right: 'auto', bottom: 'auto' }
+    : undefined
 
   /*
    * AI 기록은 invalidateQueries만으로는 화면에 반영되지 않는다(PersonalAiQuestionPanel이 history를
@@ -126,10 +199,21 @@ export default function DevLivePanel({ sessionId, lessonId, onAiHistoryChanged }
   }
 
   return (
-    <div className="dev-live-panel">
-      <button type="button" className="dev-live-panel__toggle" onClick={() => setCollapsed((current) => !current)}>
-        🧪 {collapsed ? '개발 도구 펼치기' : '개발 도구 접기'}
-      </button>
+    <div className="dev-live-panel" ref={panelRef} style={panelStyle}>
+      <div className="dev-live-panel__titlebar">
+        {/* 드래그 전용 손잡이 — 접기/펼치기 버튼과 분리해 클릭이 드래그로 오해되지 않는다. */}
+        <span
+          className="dev-live-panel__grip"
+          aria-hidden="true"
+          title="끌어서 옮기기"
+          onPointerDown={handleGripPointerDown}
+        >
+          ⠿
+        </span>
+        <button type="button" className="dev-live-panel__toggle" onClick={() => setCollapsed((current) => !current)}>
+          🧪 {collapsed ? '개발 도구 펼치기' : '개발 도구 접기'}
+        </button>
+      </div>
       {!collapsed && (
         <div className="dev-live-panel__body">
           <section>
