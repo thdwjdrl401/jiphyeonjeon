@@ -69,7 +69,11 @@ export default function CurriculumFormPage() {
   return (
     <div className="workspace-page curriculum-form-page">
       <PageHeader title="새 커리큘럼 만들기" description="기본 정보와 운영 설정을 입력해 커리큘럼 초안을 만듭니다." />
-      <form className="workspace-form curriculum-form" onSubmit={submit}>
+      {/*
+        noValidate — 종료일 min 위반을 브라우저가 "유효한 값을 입력하세요" 풍선으로 먼저 가로채면
+        무엇이 왜 틀렸는지 알 수 없다. 검증은 아래 submit이 맡고 문구는 InlineNotice로 낸다.
+      */}
+      <form className="workspace-form curriculum-form" onSubmit={submit} noValidate>
         <div className="curriculum-form__top-grid">
           <Panel className="curriculum-form__panel curriculum-form__panel--basic" title="기본 정보" description="제목만 입력해도 초안을 만들 수 있으며 나머지는 나중에 보완할 수 있어요.">
             <div className="form-grid curriculum-form__basic-grid">

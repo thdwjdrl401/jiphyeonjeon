@@ -202,6 +202,29 @@ describe('커리큘럼 작업 화면', () => {
     expect(period?.endsAt).toBe(new Date('2026-10-15T22:00').toISOString())
   })
 
+  // 브라우저 기본 검증이 "유효한 값을 입력하세요" 풍선으로 먼저 가로채면 무엇이 틀렸는지 알 수 없다.
+  // 키보드로 과거 종료일을 직접 넣어도 우리 문구가 나와야 한다.
+  it('운영 종료일을 오늘보다 이전으로 넣으면 이유를 밝힌 문구를 보여주고 만들지 않는다', async () => {
+    const user = userEvent.setup()
+    await renderAsInstructor('/instructor/curriculums/new')
+    await user.type(
+      await screen.findByPlaceholderText('예: 라이브로 완성하는 Spring Boot'),
+      '지난 날짜로 끝나는 커리큘럼',
+    )
+
+    const yesterday = new Date()
+    yesterday.setDate(yesterday.getDate() - 1)
+    const pad = (value: number) => String(value).padStart(2, '0')
+    const pastEndsAt = `${yesterday.getFullYear()}-${pad(yesterday.getMonth() + 1)}-${pad(yesterday.getDate())}T09:00`
+    fireEvent.change(screen.getByLabelText('운영 종료일'), { target: { value: pastEndsAt } })
+
+    await user.click(screen.getByRole('button', { name: '초안 만들기' }))
+
+    expect(await screen.findByText('운영 종료일은 오늘보다 이전일 수 없습니다.')).toBeInTheDocument()
+    // 초안이 만들어지지 않았으니 생성 폼에 그대로 머문다.
+    expect(window.location.pathname).toBe('/instructor/curriculums/new')
+  })
+
   it('관리 화면에서 섹션 이름과 설명을 수정한다', async () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
