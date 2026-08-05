@@ -216,7 +216,7 @@ describe('커리큘럼 작업 화면', () => {
 
   // 브라우저 기본 검증이 "유효한 값을 입력하세요" 풍선으로 먼저 가로채면 무엇이 틀렸는지 알 수 없다.
   // 키보드로 과거 종료일을 직접 넣어도 우리 문구가 나와야 한다.
-  it('운영 종료일을 오늘보다 이전으로 넣으면 이유를 밝힌 문구를 보여주고 만들지 않는다', async () => {
+  it('운영 종료일을 오늘보다 이전으로 넣으면 토스트로 이유를 알리고 만들지 않는다', async () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/new')
     await user.type(
@@ -228,7 +228,9 @@ describe('커리큘럼 작업 화면', () => {
 
     await user.click(screen.getByRole('button', { name: '초안 만들기' }))
 
-    expect(await screen.findByText('운영 종료일은 오늘보다 이전일 수 없습니다.')).toBeInTheDocument()
+    // 폼 아래 고정 문구가 아니라 토스트로 나가야 한다 — 알림 영역 안에서 찾는다.
+    const toastRegion = await screen.findByRole('region', { name: '알림' })
+    expect(await within(toastRegion).findByText('운영 종료일은 오늘보다 이전일 수 없습니다.')).toBeInTheDocument()
     // 초안이 만들어지지 않았으니 생성 폼에 그대로 머문다.
     expect(window.location.pathname).toBe('/instructor/curriculums/new')
   })
