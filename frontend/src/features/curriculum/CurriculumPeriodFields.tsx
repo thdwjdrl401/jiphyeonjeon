@@ -53,6 +53,7 @@ export default function CurriculumPeriodFields({ idPrefix, value, onChange }: Cu
           <span>운영 시작일</span>
           <input
             id={`${idPrefix}-starts-at`}
+            name="startsAt"
             type="datetime-local"
             value={value.startsAt}
             onChange={(event) => onChange('startsAt', event.target.value)}
@@ -62,6 +63,7 @@ export default function CurriculumPeriodFields({ idPrefix, value, onChange }: Cu
           <span>운영 종료일</span>
           <input
             id={`${idPrefix}-ends-at`}
+            name="endsAt"
             type="datetime-local"
             value={value.endsAt}
             // 이미 지난 날짜로 끝나는 커리큘럼은 만들 수 없다 — 달력에서부터 오늘 이전을 못 고르게 한다.

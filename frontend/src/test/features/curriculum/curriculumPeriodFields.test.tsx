@@ -21,6 +21,8 @@ describe('CurriculumPeriodFields', () => {
     expect(screen.getByRole('group', { name: '커리큘럼 운영 기간' })).toBeInTheDocument()
     expect(screen.getByLabelText('운영 시작일')).toBeInTheDocument()
     expect(screen.getByLabelText('운영 종료일')).toBeInTheDocument()
+    expect(screen.getByLabelText('운영 시작일')).toHaveAttribute('name', 'startsAt')
+    expect(screen.getByLabelText('운영 종료일')).toHaveAttribute('name', 'endsAt')
     expect(
       screen.getByText(/수강 신청을 받는 기간이나 개별 강의 공개일과는 별개예요/),
     ).toBeInTheDocument()

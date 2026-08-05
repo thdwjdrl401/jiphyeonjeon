@@ -38,11 +38,17 @@ export default function CurriculumFormPage() {
     setForm((current) => ({ ...current, [field]: value }))
   }
 
-  const submit = async (event: FormEvent) => {
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    const endsAtInput = event.currentTarget.elements.namedItem('endsAt')
+    const enteredEndsAt = endsAtInput instanceof HTMLInputElement ? endsAtInput.value : form.endsAt
     // 폼 검증 문구도 토스트로 낸다 — 라이브 강의 폼과 안내 방식을 하나로 맞춘다.
     if (!form.title.trim()) { toast.error('커리큘럼 제목을 입력해 주세요.'); return }
-    if (isBeforeToday(form.endsAt)) { toast.error('운영 종료일은 오늘보다 이전일 수 없습니다.'); return }
+    // React 상태 갱신보다 제출이 먼저 들어오는 실제 키보드 입력도 DOM 값과 native 하한 위반으로 다시 막는다.
+    if ((endsAtInput instanceof HTMLInputElement && endsAtInput.validity.rangeUnderflow) || isBeforeToday(enteredEndsAt)) {
+      toast.error('운영 종료일은 오늘보다 이전일 수 없습니다.')
+      return
+    }
     if (form.startsAt && form.endsAt && form.startsAt >= form.endsAt) { toast.error('종료일은 시작일보다 뒤여야 합니다.'); return }
     setSubmitting(true)
     try {

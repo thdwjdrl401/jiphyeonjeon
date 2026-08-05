@@ -240,6 +240,24 @@ describe('커리큘럼 작업 화면', () => {
     expect(submit).toBeEnabled()
   })
 
+  it('React 상태보다 DOM 날짜 입력이 먼저 바뀌어도 과거 운영 종료일로 만들지 않는다', async () => {
+    const user = userEvent.setup()
+    await renderAsInstructor('/instructor/curriculums/new')
+    await user.type(
+      await screen.findByPlaceholderText('예: 라이브로 완성하는 Spring Boot'),
+      'DOM 검증 커리큘럼',
+    )
+
+    // 일부 브라우저의 datetime-local 키보드 입력처럼 DOM 값이 React change보다 먼저 완성된 상황을 재현한다.
+    const endsAtInput = screen.getByLabelText('운영 종료일') as HTMLInputElement
+    endsAtInput.value = localDateTimeInDays(-1, '09:00')
+    await user.click(screen.getByRole('button', { name: '초안 만들기' }))
+
+    const toastRegion = await screen.findByRole('region', { name: '알림' })
+    expect(await within(toastRegion).findByText('운영 종료일은 오늘보다 이전일 수 없습니다.')).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/instructor/curriculums/new')
+  })
+
   it('관리 화면에서 섹션 이름과 설명을 수정한다', async () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
