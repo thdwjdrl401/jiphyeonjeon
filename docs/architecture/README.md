@@ -13,6 +13,7 @@
 | `liveclass-architecture.drawio` | 기능 슬라이스 15탭 | 편집 가능한 원본 |
 | `tools/` | 생성 스크립트 | 원본 |
 | `overview.html` | `ARCHITECTURE.md` 를 발표용으로 렌더한 한 페이지 | 스냅샷 |
+| `flows/` | 데이터가 지나는 길을 따라가는 해설 페이지 2장 (기능별 흐름 · 알림 팬아웃) | 스냅샷 |
 
 ## 0. `pitch/` — 기획 발표용
 
@@ -108,6 +109,19 @@ cd docs/architecture/tools && python3 build_slices.py   # → liveclass-architec
 > draw.io에서 손으로 고친 내용이 스크립트 재실행으로 날아가지 않게 하기 위해서다.
 > 최초 생성 이후로는 `liveclass-architecture.drawio`가 원본이고, 스크립트는 참고용이다.
 > 슬라이스를 통째로 다시 뽑고 싶을 때만 쓴다.
+
+## 3. `flows/` — 데이터가 지나는 길
+
+`pitch/`가 "무엇이 있는가"를 보여준다면, 이쪽은 **요청 하나가 실제로 어느 코드를 거쳐 어디에 닿는가**를 따라간다.
+브라우저에서 파일만 열면 되고(빌드·서버 불필요), 두 장은 서로 링크로 이어져 있다.
+
+| 파일 | 내용 |
+|---|---|
+| `architecture.html` | 기능별로 데이터가 지나는 길 — 인증·라이브·자막·자료·Q&A를 경로 단위로 |
+| `pipeline.html` | 알림 팬아웃 파이프라인 한 갈래를 끝까지 — 발행부터 전달까지 |
+
+> 각 단계에 **실제 소스 경로**(`live/service/LiveKitTokenService.java` 등)가 붙어 있다.
+> 코드가 움직이면 여기 표기도 같이 고친다. 설계의 정본은 여전히 `../ARCHITECTURE.md`다.
 
 ## 화살표 규칙
 
