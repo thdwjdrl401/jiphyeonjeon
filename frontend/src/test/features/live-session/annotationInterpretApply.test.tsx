@@ -44,6 +44,7 @@ vi.mock('@/features/live-session/excalidrawRuntime', () => ({
           getSceneElements: () => sceneElements,
           getFiles: () => ({}),
           addFiles: addFiles,
+          refresh: () => {},
         })
       }
       return <div data-testid="excalidraw-editor">{props.children as React.ReactNode}</div>
@@ -56,6 +57,9 @@ vi.mock('@/features/live-session/excalidrawRuntime', () => ({
       ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
       {
         Separator: () => <hr />,
+        Item: ({ children, onSelect }: { children?: React.ReactNode; onSelect?: () => void }) => (
+          <button type="button" onClick={onSelect}>{children}</button>
+        ),
         DefaultItems: {
           ToggleTheme: () => <button type="button">테마</button>,
           ClearCanvas: () => <button type="button">전체 지우기</button>,

@@ -55,6 +55,8 @@ const OPS_PER_SNAPSHOT_FOR_TEST = 100
 const exportToCanvas = vi.fn()
 const getCommonBounds = vi.fn()
 const updateScene = vi.fn()
+/** 컨테이너 위치를 다시 재라는 지시. 캔버스가 크기 그대로 움직였을 때만 불려야 한다. */
+const refresh = vi.fn()
 /** getAppState가 돌려줄 상태. 강사가 캔버스를 밀거나 확대한 상황을 흉내내는 데 쓴다. */
 let drifted: Record<string, unknown> = {}
 /** getSceneElements가 돌려줄 씬. 화이트보드 토글이 기존 요소를 보존하는지 보려면 필요하다. */
@@ -70,7 +72,7 @@ vi.mock('@/features/live-session/excalidrawRuntime', () => ({
       excalidrawProps = props
       // 실제 컴포넌트처럼 마운트 시 명령형 API를 넘겨준다.
       const give = props.excalidrawAPI as ((api: unknown) => void) | undefined
-      const api = { updateScene, getAppState: () => drifted, getSceneElements: () => sceneElements, getFiles: () => ({}), addFiles: () => {} }
+      const api = { updateScene, getAppState: () => drifted, getSceneElements: () => sceneElements, getFiles: () => ({}), addFiles: () => {}, refresh }
       if (give && lateApi) setTimeout(() => give(api), 0)
       else if (give) give(api)
       // 실제 컴포넌트처럼 children(우리가 조립한 MainMenu)을 그린다.
@@ -78,11 +80,16 @@ vi.mock('@/features/live-session/excalidrawRuntime', () => ({
     },
     exportToCanvas,
     getCommonBounds,
+    CaptureUpdateAction: { IMMEDIATELY: 'IMMEDIATELY', NEVER: 'NEVER', EVENTUALLY: 'EVENTUALLY' },
     // 메뉴는 우리가 조립한다. 어떤 항목을 넣었는지 검증할 수 있게 자식을 그대로 렌더한다.
     MainMenu: Object.assign(
       ({ children }: { children?: React.ReactNode }) => <div data-testid="main-menu">{children}</div>,
       {
         Separator: () => <hr />,
+        // 실제 `MainMenu.Item`처럼 `onSelect`로 누름을 알린다 — 우리가 만든 항목의 동작을 눌러서 볼 수 있어야 한다.
+        Item: ({ children, onSelect }: { children?: React.ReactNode; onSelect?: () => void }) => (
+          <button type="button" onClick={onSelect}>{children}</button>
+        ),
         DefaultItems: {
           ToggleTheme: () => <button type="button">테마</button>,
           ClearCanvas: () => <button type="button">전체 지우기</button>,
@@ -231,22 +238,151 @@ describe('강사 판서 레이어', () => {
   })
 
   /**
+   * 캔버스가 <b>크기 그대로 움직였을 때</b>도 좌표를 다시 재게 한다.
+   *
+   * <p>Excalidraw는 컨테이너의 left/top을 캐시해 포인터를 scene 좌표로 옮기는데, 그 캐시는 자기
+   * ResizeObserver가 갱신한다 — 즉 크기가 바뀔 때만 갱신된다. 그런데 이 캔버스는 크기가 그대로인 채
+   * 움직인다: 16:9 프레임이 미리보기 영역 가운데 놓이므로, 영역이 16:9보다 가로로 길면 프레임 크기는
+   * 높이에 묶여 고정되고 남는 폭만큼 좌우로 재배치된다. 우측 사이드 패널을 접어 강의 화면이 넓어지는
+   * 순간이 정확히 그 경우다.
+   *
+   * <p>그때 <b>zoom은 멀쩡하다</b>(크기가 안 변했으니까). 그래서 기존 프레임 매핑 검사로는 잡히지
+   * 않고, 증상은 "그리는 자리와 그려지는 자리가 밀린 만큼 어긋난다"로만 나타난다.
+   */
+  it('캔버스가 크기 그대로 옆으로 밀리면 좌표를 다시 재게 한다', async () => {
+    let box = { width: 960, height: 540, left: 0, top: 0 }
+    const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(() => ({
+      width: box.width, height: box.height, x: box.left, y: box.top, left: box.left, top: box.top,
+      right: box.left + box.width, bottom: box.top + box.height,
+      toJSON: () => ({}),
+    }) as DOMRect)
+    drifted = { zoom: { value: 0.5 }, scrollX: 0, scrollY: 0 }
+
+    const { findByTestId } = render(
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
+    )
+    await findByTestId('excalidraw-editor')
+    const onChange = excalidrawProps.onChange as (elements: unknown[]) => void
+
+    /*
+     * 마운트 시점의 프레임 매핑은 effect에서 도는데 언제 도는지를 이 테스트가 정하지 않는다. 기준을
+     * 직접 세운 뒤 그 다음의 증분만 본다 — 마운트 호출을 `mockClear`로 지우려 들면 지운 뒤에 도는
+     * 경우가 생겨 부하에 따라 결과가 갈린다.
+     */
+    onChange([])
+    const settledRefreshes = refresh.mock.calls.length
+    updateScene.mockClear()
+
+    // 사이드 패널이 접혀 미리보기가 넓어졌다. 높이에 묶인 캔버스는 크기 그대로 오른쪽으로 밀린다.
+    box = { ...box, left: 185 }
+    onChange([])
+
+    expect(refresh.mock.calls.length).toBeGreaterThan(settledRefreshes)
+    // 크기가 그대로라 배율은 다시 쓸 일이 없다 — 이 경로로는 어긋남이 드러나지 않는다는 뜻이다.
+    expect(updateScene).not.toHaveBeenCalled()
+
+    drifted = {}
+    rect.mockRestore()
+  })
+
+  it('자리가 그대로면 다시 재지 않는다 — onChange마다 부르면 그때마다 setState가 돈다', async () => {
+    const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
+      width: 960, height: 540, x: 0, y: 0, top: 0, left: 0, right: 960, bottom: 540,
+      toJSON: () => ({}),
+    })
+    drifted = { zoom: { value: 0.5 }, scrollX: 0, scrollY: 0 }
+
+    const { findByTestId } = render(
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
+    )
+    await findByTestId('excalidraw-editor')
+    const onChange = excalidrawProps.onChange as (elements: unknown[]) => void
+
+    // 위와 같은 이유로 기준을 직접 세우고 증분만 본다.
+    onChange([])
+    const settledRefreshes = refresh.mock.calls.length
+
+    onChange([])
+    onChange([])
+
+    expect(refresh.mock.calls.length).toBe(settledRefreshes)
+
+    drifted = {}
+    rect.mockRestore()
+  })
+
+  /**
    * 메뉴를 직접 조립하는 이유는 기본 메뉴에 강의 판서와 무관하거나 위험한 항목이 섞여 있기 때문이다.
    * 파일 열기는 판서를 통째로 덮어쓰고, 내보내기·이미지 저장은 "수강생에게 보이는 것"과 무관한데
    * 그렇게 오해되기 쉽다. 다시 새어 들어오지 않게 고정한다.
    */
-  it('메뉴에는 다크모드·전체 지우기·도움말만 넣는다', async () => {
+  it('메뉴에는 다크모드·판서 초기화·도움말만 넣는다', async () => {
     const { findByTestId, queryByText } = render(
       <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
     )
     const menu = await findByTestId('main-menu')
 
     expect(menu.textContent).toContain('테마')
-    expect(menu.textContent).toContain('전체 지우기')
+    expect(menu.textContent).toContain('판서 초기화')
     expect(menu.textContent).toContain('도움말')
     for (const forbidden of ['내보내기', '이미지 저장', '열기', '협업']) {
       expect(queryByText(forbidden)).toBeNull()
     }
+    // Excalidraw 기본 지우기는 배경색까지 되돌려 영상을 흰 판으로 덮는다. 다시 새어 들어오면 안 된다.
+    expect(queryByText('전체 지우기')).toBeNull()
+  })
+
+  /**
+   * 지우기가 영상을 덮지 않아야 한다.
+   *
+   * <p>Excalidraw 기본 `ClearCanvas`는 요소와 함께 appState를 `getDefaultAppState()`로 되돌리는데,
+   * 거기에 `viewBackgroundColor`가 들어 있다. 그래서 누르는 순간 투명이던 캔버스가 흰색(#ffffff)이
+   * 되어 아래 카메라·화면공유를 가렸다 — 강사가 판서를 지우려다 영상을 잃었고, 같은 문서를 렌더하는
+   * Egress도 흰 판을 녹화했다.
+   *
+   * <p>고정하는 것은 둘이다: (1) 요소는 비운다, (2) 배경은 투명으로 남는다.
+   */
+  it('판서를 지워도 캔버스는 투명하게 남는다 — 영상을 덮지 않는다', async () => {
+    const { findByText } = render(
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={vi.fn()} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
+    )
+
+    fireEvent.click(await findByText('판서 초기화'))
+
+    await waitFor(() => {
+      expect(updateScene).toHaveBeenCalledWith(expect.objectContaining({ elements: [] }))
+    })
+    const cleared = updateScene.mock.calls
+      .map(([scene]) => scene as { elements?: unknown[]; appState?: Record<string, unknown> })
+      .find((scene) => Array.isArray(scene.elements) && scene.elements.length === 0)
+    expect(cleared?.appState?.viewBackgroundColor).toBe('transparent')
+    // 되돌리기가 유일한 취소 수단이다(확인 창이 없다).
+    expect(cleared).toMatchObject({ captureUpdate: 'IMMEDIATELY' })
+  })
+
+  /**
+   * 지운 것이 수강생·녹화에도 가야 한다. 레이어는 직접 publish하지 않고 빈 씬을 `onChange`로 흘려
+   * 기존 diff 경로가 `delete`를 만들게 한다 — 두 경로가 생기면 revision이 어긋난다(§3-6b).
+   */
+  it('지우기는 delete op로 나간다 — 강사 화면에서만 사라지지 않는다', async () => {
+    const publish = vi.fn()
+    const { findByText } = render(
+      <InstructorAnnotationLayer sessionId="ses-1" active audienceRevision={0} showPropertyPanel={false} whiteboard={false} onLaser={vi.fn()} onPublish={publish} onPublishState={noopState} onWhiteboardPresence={noopPresence} onSaveSnapshot={noopSnapshot} restoredElements={null} restoredFiles={null} />,
+    )
+    const onChange = await waitFor(() => {
+      const handler = excalidrawProps.onChange as ((elements: unknown[]) => void) | undefined
+      if (!handler) throw new Error('onChange 미도착')
+      return handler
+    })
+
+    onChange([element('a', 1), element('b', 1)])
+    publish.mockClear()
+
+    fireEvent.click(await findByText('판서 초기화'))
+    // 실제 Excalidraw는 씬이 바뀌면 onChange를 다시 부른다. 목은 그 되먹임이 없으므로 직접 흘린다.
+    onChange([])
+
+    expect(publish).toHaveBeenCalledWith({ type: 'delete', ids: ['a', 'b'] })
   })
 
   /**

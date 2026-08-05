@@ -52,16 +52,21 @@ vi.mock('@/features/live-session/excalidrawRuntime', () => ({
           },
           getAppState: () => ({}),
           getSceneElements: () => sceneElements,
+          refresh: () => {},
         })
       }
       return <div data-testid="excalidraw-editor">{props.children as React.ReactNode}</div>
     },
     exportToCanvas: vi.fn(),
     getCommonBounds: vi.fn(() => [0, 0, 100, 100]),
+    CaptureUpdateAction: { IMMEDIATELY: 'IMMEDIATELY', NEVER: 'NEVER', EVENTUALLY: 'EVENTUALLY' },
     MainMenu: Object.assign(
       ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
       {
         Separator: () => <hr />,
+        Item: ({ children, onSelect }: { children?: React.ReactNode; onSelect?: () => void }) => (
+          <button type="button" onClick={onSelect}>{children}</button>
+        ),
         DefaultItems: {
           ToggleTheme: () => <button type="button">테마</button>,
           ClearCanvas: () => <button type="button">전체 지우기</button>,

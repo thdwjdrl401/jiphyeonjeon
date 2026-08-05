@@ -354,7 +354,7 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
               type="button"
               onClick={() => setQualityPanel((current) => !current)}
             >
-              화질 {qualityPanel ? '펼침' : '접힘'}
+              화질 설정
             </button>
             {showCameraPictureInPicture && (
               <button
