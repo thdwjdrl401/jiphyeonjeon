@@ -10,8 +10,15 @@ webhook:
   urls:
     - https://jiphyeonjeon.thdwjdrl.com/api/webhooks/livekit   # app nginx가 /api를 backend로 프록시
 rtc:
-  udp_port: 7882                   # 단일 UDP mux (라우터/보안그룹 포워딩 1개)
-  tcp_port: 7881                   # UDP 막힌 클라 fallback
+  # 단일 UDP mux. 7882가 아니라 3478인 이유는 ADR-0078 — 학교/사내망에서 7000~7999 대역이
+  # 통째로 막힌다. 실측(12회 전송, 서버 tcpdump 도착 수):
+  #   3478 12/12 · 19302 12/12 · 50000 13/14 왕복 성공(평균 8~10ms)
+  #   7882 0/12 · 7881 0/12 · 443 0/12 · 123 0/12
+  # 3478은 STUN 표준 포트라 WebRTC를 허용하는 망이라면 열려 있을 가능성이 가장 높다.
+  udp_port: 3478
+  # UDP 막힌 클라 fallback. 이 포트도 막힌 대역이지만 그대로 둔다 — 옮겨 봐야 TCP는 실측하지
+  # 않았고, UDP가 뚫린 이상 이 경로가 그 망의 해법이 아니다. 필요해지면 그때 재고 옮긴다.
+  tcp_port: 7881
   use_external_ip: true            # 공인 IP를 ICE 후보로 광고
   advertise_internal_ip: true      # ★ 내부 IP도 후보로 → co-located egress가 로컬로 붙음 (트러블슈팅 #4)
   skip_external_ip_validation: true # ★ 홈NAT self-ping 실패("context canceled") 우회
@@ -19,4 +26,5 @@ redis:
   address: localhost:6379          # Egress 통신용 (Egress 붙일 때만 필요)
 logging:
   level: info
-# turn: PoC 생략. 회사/학교처럼 UDP 완전 차단 클라까지 커버하려면 내장 TURN(+TLS) 추가.
+# turn: 생략. UDP가 완전히 막힌 망을 만나면 그때 내장 TURN(+TLS)을 붙인다 — 실측한 망은 UDP가
+# 열려 있었으므로(위 참조) TCP 릴레이로 화질을 깎을 이유가 없었다.
