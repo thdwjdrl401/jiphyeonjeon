@@ -81,6 +81,7 @@ GPU model 준비가 필요하다.
 |---|---|
 | ai-api | `python -m app.main` |
 | ai-worker | `python -m app.main` |
+| recorded-stt-worker | `python -m app.recorded_stt.main` |
 | realtime-agent | `python -m app.main start` |
 | bge-runtime | `python -m app.main` |
 
@@ -97,10 +98,12 @@ backend가 SSH 터널 없이 붙도록 의도적으로 host 전체 인터페이�
 | `AI_CALLBACK_SECRET` | Spring↔ai-worker 자료 HMAC | realtime callback을 켤 때만 별도 선택 사용 |
 | `BGE_RUNTIME_INTERNAL_TOKEN` | EC2 ai-api·ai-worker→GPU bge-runtime Bearer | bge-runtime이 사용 |
 | `GMS_API_KEY` | EC2 ai-api→GMS 답변 모델 | 사용하지 않음 |
+| `OPENAI_API_KEY` | recorded-stt-worker→OpenAI `whisper-1` segment·word timestamp | 사용하지 않음 |
 | `AI_WORKER_GMS_API_KEY` | EC2 ai-worker→GMS 핵심 용어 추출(선택, `AI_WORKER_KEY_TERM_EXTRACTION_ENABLED=true`일 때만 필수) | 사용하지 않음 |
 
 운영 compose는 `BGE_RUNTIME_INTERNAL_TOKEN`을 container의 `AI_API_BGE_TOKEN`과
-`AI_WORKER_BGE_INTERNAL_TOKEN`으로, `GMS_API_KEY`를 `AI_API_GMS_API_KEY`로 매핑한다.
+`AI_WORKER_BGE_INTERNAL_TOKEN`으로, `GMS_API_KEY`를 `AI_API_GMS_API_KEY`로,
+`OPENAI_API_KEY`를 `RECORDED_STT_OPENAI_API_KEY`로 매핑한다.
 `AI_WORKER_GMS_API_KEY`는 아직 `docker-compose.ai-prod.yml`/`.env.ai-prod.example`에 배선되지
 않았다 — 핵심 용어 추출을 운영에서 켜려면 이 매핑을 먼저 추가해야 한다. 필수 환경변수와 tunnel
 실행은 각 서비스 README를, 전체 인프라와 Spring·Frontend 실행 순서는 [RUN.md](../RUN.md)에서

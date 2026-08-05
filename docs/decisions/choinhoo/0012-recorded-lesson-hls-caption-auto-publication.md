@@ -2,7 +2,8 @@
 
 > 관련 결정: [ADR-0008 녹화강의 업로드·HLS 변환](0008-recorded-lesson-upload-and-hls-transcoding.md) ·
 > [ADR-0009 녹화강의 처리 상태·HLS 재생](0009-recorded-lesson-detail-polling-and-playback.md) ·
-> [ADR-0011 GMS Whisper 배치 STT](0011-recorded-lesson-batch-stt-with-gms-whisper.md) ·
+> [ADR-0011 OpenAI Whisper 배치 STT](0011-recorded-lesson-batch-stt-with-gms-whisper.md) ·
+> [ADR-0017 자막 segment·word 정규화](0017-recorded-caption-segment-word-normalization.md) ·
 > [ADR-0005 레슨에는 초안 상태가 없다](../seominkyeong/0005-lesson-has-no-draft-state.md) ·
 > [ADR-0032 학생 HLS 단일 재생](../songjeongki/0032-media-playback-hls-only.md) ·
 > [ADR-0017 core/ai 스키마 소유권](../songjeongki/0017-schema-ownership-core-ai.md) ·
@@ -27,7 +28,7 @@
 
 ## 한 줄 결정
 
-강사가 MP4 업로드 완료를 접수하면 Spring은 기존처럼 HLS 변환과 GMS `whisper-1` 배치 STT 작업을
+강사가 MP4 업로드 완료를 접수하면 Spring은 기존처럼 HLS 변환과 OpenAI `whisper-1` 배치 STT 작업을
 동시에 시작한다. 새 업로드 녹화강의는 `publicationStatus=DRAFT`로 두고, Spring이 검증한
 `videoStatus=READY`와 `captionStatus=READY|EMPTY`가 모두 관찰된 시점에만 녹화강의 재생 패키지를
 `PUBLISHED`로 원자적으로 전환한다.
@@ -150,7 +151,7 @@ recordedPublicationStatus      = PUBLISHED
 captionPublicationStatus       = NOT_AVAILABLE
 ```
 
-`EMPTY`는 audio stream은 유효하지만 GMS가 발화 segment를 만들지 않은 정상 terminal이다. 무음 실습,
+`EMPTY`는 audio stream은 유효하지만 OpenAI 응답의 text·segments·words가 모두 비어 있는 정상 terminal이다. 무음 실습,
 화면 시연, 음악만 있는 영상이 영구적으로 게시되지 않는 것을 막기 위해 공개 조건에 포함한다. 학생 playback은
 HLS만 제공하고 caption track은 빈 배열이다.
 
@@ -187,7 +188,7 @@ sequenceDiagram
     participant S3 as MinIO/S3
     participant MW as media-worker
     participant SW as recorded-stt-worker
-    participant GMS as GMS whisper-1
+    participant OPENAI as OpenAI whisper-1
     actor S as 학생
     participant P as Vidstack HLS Player
 
@@ -224,8 +225,8 @@ sequenceDiagram
         S3-->>SW: MP4 bytes
         SW->>SW: audio 추출·15분 청크
         loop 미완료 청크
-            SW->>GMS: whisper-1 verbose_json
-            GMS-->>SW: segment start·end·text
+            SW->>OPENAI: whisper-1 verbose_json·segment/word timestamp
+            OPENAI-->>SW: text·segments·words
             SW->>B: HMAC chunk result
             B->>DB: caption segment 멱등 저장
         end
@@ -323,7 +324,7 @@ HTTP 503
 }
 ```
 
-worker 순간 장애나 GMS 장애는 upload API에서 동기 health check하지 않는다. durable job과 재시도 상태로
+worker 순간 장애나 OpenAI 장애는 upload API에서 동기 health check하지 않는다. durable job과 재시도 상태로
 처리하고, 최종 실패하면 강사 processing 화면에서 복구한다.
 
 ### 4. 재시도
@@ -546,7 +547,7 @@ MP4 0ms 기준으로 저장한 `startMs/endMs`와 업로드 VOD의 `availableFro
 | HLS `FAILED` + 자막 성공 | `DRAFT` | HLS 재시도 | 숨김 |
 | HLS 성공 + 자막 `FAILED` | `DRAFT` | STT 재시도 | 숨김 |
 
-GMS 장기 장애는 새 녹화강의의 학생 공개를 지연시킨다. 이는 이 결정이 의도적으로 선택한 품질 게이트다.
+OpenAI 장기 장애는 새 녹화강의의 학생 공개를 지연시킨다. 이는 이 결정이 의도적으로 선택한 품질 게이트다.
 운영에서 게시 지연이 허용 범위를 넘으면 “자막 없이 예외 게시”를 후속 ADR로 추가할 수 있지만 MVP에는
 조용한 fail-open을 넣지 않는다.
 
@@ -572,7 +573,7 @@ recorded_delivery_stuck_draft_total
 recorded_caption_vtt_request_total{result=success|forbidden|not_found|error}
 ```
 
-로그에는 lesson·recordedVideo·job·track ID와 안정 failure code만 남기고 원문 자막과 GMS key를 남기지 않는다.
+로그에는 lesson·recordedVideo·job·track ID와 안정 failure code만 남기고 원문 자막과 OpenAI key를 남기지 않는다.
 
 ## 기존 데이터와 배포
 

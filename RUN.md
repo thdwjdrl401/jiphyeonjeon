@@ -16,7 +16,7 @@
 
 ## 2. 최초 셋업
 ```bash
-# 로컬 의존 서비스·worker — .env에 GMS_API_KEY를 설정한 뒤 실행
+# 로컬 의존 서비스·worker — .env에 OPENAI_API_KEY를 설정한 뒤 실행
 cp .env.example .env
 docker compose up -d
 docker compose ps               # postgres·redis·minio·rabbitmq·두 worker 확인
@@ -40,7 +40,7 @@ npm run install:all             # 루트(concurrently) + frontend
 - **인프라(docker compose)가 먼저 떠 있어야** 백엔드가 PG/Redis에 붙는다.
 
 녹화강의 HLS 변환과 batch STT worker(ADR-0008·0011)는 기본 Compose 실행에 포함한다.
-`.env`에 `RECORDED_STT_ENABLED=true`와 `GMS_API_KEY`를 설정한 뒤 `docker compose up -d`를 실행한다.
+`.env`에 `RECORDED_STT_ENABLED=true`와 `OPENAI_API_KEY`를 설정한 뒤 `docker compose up -d`를 실행한다.
 `dev:wsl`은 같은 `.env`를 export해 Spring에 전달한다. 두 STT HMAC 값은 `.env`의 `RECORDED_STT_SOURCE_SECRET`·
 `RECORDED_STT_CALLBACK_SECRET`을 Spring과 worker가 함께 읽는다.
 
@@ -58,7 +58,7 @@ docker compose logs -f recorded-stt-worker
 
 전체 로컬 의존 서비스와 worker를 멈추려면 `docker compose down`을 실행한다.
 
-이 worker는 `ingestion.transcribe`만 소비하며 FFmpeg와 GMS key를 가진다. `media-worker`의 HLS 변환과
+이 worker는 `ingestion.transcribe`만 소비하며 FFmpeg와 OpenAI key를 가진다. `media-worker`의 HLS 변환과
 PPTX `ai-worker`는 별도 프로세스·queue로 계속 동작한다.
 
 ### 방법 B. VSCode 실행 버튼

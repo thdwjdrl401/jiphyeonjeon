@@ -1,18 +1,22 @@
-# ADR-0011: 녹화강의 자막은 원본 MP4에서 음성을 추출해 GMS Whisper 배치 작업으로 생성한다
+# ADR-0011: 녹화강의 자막은 OpenAI Whisper 타임스탬프로 발화 cue를 생성한다
 
 > 관련 결정: [ADR-0008 녹화강의 업로드·HLS 변환](0008-recorded-lesson-upload-and-hls-transcoding.md) ·
 > [ADR-0009 녹화강의 상세·처리 상태·재생](0009-recorded-lesson-detail-polling-and-playback.md) ·
 > [ADR-0010 녹화강의 PPTX 임베딩·핵심 용어](0010-recorded-lesson-pptx-embedding-and-key-term-extraction.md) ·
+> [ADR-0017 자막 segment·word 정규화](0017-recorded-caption-segment-word-normalization.md) ·
 > [ADR-0012 RabbitMQ durable 배치](../songjeongki/0012-hybrid-queue.md) ·
 > [ADR-0013 실시간 스트리밍 STT](../songjeongki/0013-unified-streaming-stt.md) ·
 > [ADR-0017 core/ai 스키마 소유권](../songjeongki/0017-schema-ownership-core-ai.md) ·
 > [ADR-0032 학생 HLS 단일 재생](../songjeongki/0032-media-playback-hls-only.md) ·
 > [공유 계약](../../CONTRACT.md) · [AI 통신 계약](../../ai/CONTRACT.md)
 
-- **상태**: 채택 — MVP 구현 완료(학생 자막 조회·편집·게시 UI는 후속 범위)
-- **일자**: 2026-08-03
+> 파일명의 `gms-whisper`는 기존 ADR 링크를 깨지 않기 위한 legacy 이름이며, 현재 결정은 본문의 OpenAI 직접 호출이다.
+
+- **상태**: 채택 — 2026-08-05 provider·cue 분할 개정
+- **일자**: 2026-08-03(최초), 2026-08-05(개정)
 - **적용 범위**: 강사가 업로드한 `RECORDED` 레슨의 원본 MP4 보존, 녹화강의 업로드 완료 뒤
-  배치 STT 작업 생성·발행, 음성 추출·분할, GMS `whisper-1` 호출, 시간 구간 자막 저장, 처리 상태와 재시도
+  배치 STT 작업 생성·발행, 음성 추출·분할, OpenAI `whisper-1` segment·word 타임스탬프 호출,
+  발화 cue 조립, 시간 구간 자막 저장, 처리 상태와 재시도
 - **비적용 범위**: 라이브 중 realtime-agent 스트리밍 STT, LiveKit Egress로 만든 라이브 다시보기의
   2-pass 교정, 강사 자막 편집 UI, 번역 자막, 화자 분리, 자막 기반 챕터·퀴즈 생성
 - **유지**:
@@ -30,7 +34,10 @@ RabbitMQ에서 파일 바이트가 아니라 `sourceAssetId`와 `jobId`만 받�
 presigned GET URL로 같은 비공개 원본 MP4를 읽는다.
 
 `media-worker`는 원본을 HLS 재생 산출물로 만들고, 별도 batch STT worker는 원본 MP4에서 mono 음성을
-추출해 25MB 미만 청크로 나눈 뒤 GMS OpenAI 호환 `/v1/audio/transcriptions`의 `whisper-1`으로 전사한다.
+추출해 25MB 미만 청크로 나눈 뒤 OpenAI `/v1/audio/transcriptions`의 `whisper-1`에
+segment·word timestamp를 함께 요청한다. worker는 segment를 기본 cue로 사용하고, 긴 segment만
+word `start/end`, 500ms 이상 쉬기, 최대 6초·목표 42자 제약으로 나눈다. segment가 없으면 word로
+fallback하고 길이 0인 word는 인접 word에 병합한다([ADR-0017](0017-recorded-caption-segment-word-normalization.md)).
 HLS 세그먼트는 STT 입력으로 다시 조립하지 않는다. worker는 청크별 시간값을 녹화강의 0ms 기준으로
 합쳐 Spring internal API에 멱등 전달하고, Spring만 `core` 자막 테이블을 쓰고 최종 상태를 확정한다.
 
@@ -48,7 +55,7 @@ HLS 세그먼트는 STT 입력으로 다시 조립하지 않는다. worker는 �
 [ADR-0008](0008-recorded-lesson-upload-and-hls-transcoding.md)은 원본 MP4를 HLS 변환 재시도와 후속 batch
 STT 입력을 위해 즉시 삭제하지 않도록 이미 결정했다. 이번 결정은 그 후속 STT 경계를 구체화한다.
 
-### GMS 기술 검증 결과
+### 초기 GMS 기술 검증과 provider 교체 근거
 
 2026-08-03에 프로젝트에 설정된 GMS key를 노출하지 않고 짧은 MP3 fixture로 실제 gateway를
 검증했다.
@@ -62,15 +69,16 @@ STT 입력을 위해 즉시 삭제하지 않도록 이미 결정했다. 이번 �
 | `model=gpt-4o-mini-transcribe` | GMS 400 `Model ... is not available` |
 | `GET .../v1/models` | gateway가 model 없는 요청으로 거부하여 목록 조회 불가 |
 
-따라서 현재 프로젝트 key와 GMS allowlist에서 검증된 파일 전사 모델은 `whisper-1`이다. 모델 허용 목록은
-외부 운영 상태이므로 코드 곳곳에 문자열을 복제하지 않고 환경변수 기본값으로만 둔다. 다른 모델로
-바꾸기 전에는 staging smoke test로 endpoint, response format, timestamp와 quota를 다시 확인한다.
+초기 구현은 이 결과로 GMS `whisper-1` segment를 그대로 자막으로 저장했다. 그러나 GMS가
+OpenAI의 배열 필드인 `timestamp_granularities[]=word`를 거부하고, 연속 발화를 하나의 긴
+segment로 반환하여 표시 자막 구간을 안정적으로 만들 수 없었다. 2026-08-05부터 녹화강의
+STT는 공식 OpenAI API를 직접 호출하고, GMS는 이 경로의 provider가 아니다.
 
 OpenAI 파일 전사 API는 현재 파일당 25MB 제한을 두며, `whisper-1`의 `verbose_json`은 segment/word
 timestamp를 제공한다. 상세한 외부 제약은
-[OpenAI 파일 전사 가이드](https://developers.openai.com/api/docs/guides/speech-to-text/)를 따른다.
-GMS가 OpenAI의 body size, timeout, rate limit과 비용을 그대로 적용한다고 가정하지 않고 운영에서 별도
-측정한다.
+[OpenAI 전사 가이드](https://developers.openai.com/api/docs/guides/transcription#choose-a-specialized-capability)와
+[Audio API 참조](https://developers.openai.com/api/reference/resources/audio/subresources/transcriptions/methods/create)를 따른다.
+OpenAI의 timeout, rate limit, 비용과 단어 timestamp 지연은 staging에서 별도 측정한다.
 
 ## 결정 원칙과 불변식
 
@@ -103,7 +111,7 @@ flowchart TD
   MEDIA["media-worker<br/>ffprobe · FFmpeg"]
   STT["batch STT worker<br/>ffprobe · 음성 추출 · 분할"]
   HLS[("MinIO/S3<br/>HLS manifest + segments")]
-  GMS["GMS OpenAI 호환 API<br/>whisper-1"]
+  OPENAI["OpenAI Audio API<br/>whisper-1 + segment/word timestamps"]
   CORE[("core<br/>STT job · caption segments")]
   PLAYER["공용 HLS player"]
 
@@ -121,8 +129,8 @@ flowchart TD
   MEDIA -->|"MP4 GET"| OBJ
   STT -->|"MP4 GET"| OBJ
   MEDIA -->|"HLS PUT"| HLS
-  STT -->|"음성 청크"| GMS
-  GMS -->|"timestamp segments"| STT
+  STT -->|"음성 청크"| OPENAI
+  OPENAI -->|"word start/end"| STT
   STT -->|"HMAC 청크 결과 · terminal callback"| API
   API --> CORE
   API -->|"권한 확인 · manifest 재작성"| PLAYER
@@ -142,7 +150,7 @@ sequenceDiagram
     participant S3 as MinIO
     participant MW as media-worker
     participant SW as recorded-stt-worker
-    participant GMS as GMS<br/>whisper-1
+    participant OPENAI as OpenAI<br/>whisper-1
 
     I->>FE: 녹화강의 정보·MP4 선택
     FE->>B: POST /instructor/sections/{sectionId}/recorded-lessons
@@ -211,9 +219,9 @@ sequenceDiagram
         B-->>SW: 미완료 청크 범위
 
         loop 미완료 음성 청크마다
-            SW->>GMS: POST /v1/audio/transcriptions<br/>whisper-1·ko·verbose_json
-            GMS-->>SW: text·segment timestamp
-            SW->>SW: chunk timestamp를<br/>녹화강의 전체 0ms 축으로 변환<br/>overlap 중복 제거
+            SW->>OPENAI: POST /v1/audio/transcriptions<br/>whisper-1·ko·verbose_json·segment/word timestamp
+            OPENAI-->>SW: text·segments·words
+            SW->>SW: segment 우선 cue 합성<br/>chunk timestamp를 전체 0ms 축으로 변환<br/>overlap 중복 제거
             SW->>B: PUT /api/internal/ai/recorded-stt-jobs/{jobId}/chunks/{chunkIndex}<br/>HMAC·checksum·segments
             B->>DB: chunk receipt·caption segments<br/>멱등 저장
             DB-->>B: chunk commit
@@ -241,7 +249,7 @@ sequenceDiagram
     DB-->>B: status=READY<br/>captionStatus=READY 또는 EMPTY
     B-->>FE: HTTP 200<br/>영상 재생 가능·자막 처리 완료
 
-    Note over B,DB: videoStatus와 captionStatus는 독립이다.<br/>GMS 실패는 HLS READY를 막지 않고<br/>HLS 실패도 성공한 자막을 폐기하지 않는다.
+    Note over B,DB: videoStatus와 captionStatus는 독립이다.<br/>OpenAI 실패는 HLS READY를 막지 않고<br/>HLS 실패도 성공한 자막을 폐기하지 않는다.
 ```
 
 ## MP4와 HLS를 함께 저장하는 이유
@@ -263,7 +271,7 @@ recorded/{recordedVideoId}/segment-000001.ts
 |---|---|---|---|
 | 원본 MP4 | 재처리 가능한 source of truth | media/STT worker | HLS 실패 재시도, STT 재처리, 향후 ABR·썸네일 재생성 |
 | HLS manifest·segment | 학생 배포·재생본 | 권한 확인된 플레이어 | 라이브·다시보기·녹화강의 공용 HLS UI와 seek 계약 |
-| 임시 음성 청크 | GMS 전송 단위 | STT worker만 | 25MB 제한을 만족하고 timestamp를 병합하기 위한 작업 파일 |
+| 임시 음성 청크 | OpenAI 전송 단위 | STT worker만 | 25MB 제한을 만족하고 timestamp를 병합하기 위한 작업 파일 |
 | 자막 segment | 교육 기능 데이터 | Spring·권한 확인된 사용자 | 검색·검수·동기화 가능한 구조화 결과 |
 
 원본과 HLS를 함께 저장하면 저장량은 늘지만 다음을 얻는다.
@@ -324,7 +332,7 @@ RabbitMQ publish 자체는 HTTP transaction에서 하지 않는다. 두 dispatch
 선점해 publish하고 confirm을 받은 뒤 `DISPATCHED`로 바꾼다. 한 queue 발행 실패가 다른 job row를
 취소하지 않으며 각 dispatcher가 독립 재시도한다.
 
-STT 기능 플래그가 꺼져 있으면 media job만 만들고 `captionStatus=NOT_REQUESTED`를 반환한다. GMS key가
+STT 기능 플래그가 꺼져 있으면 media job만 만들고 `captionStatus=NOT_REQUESTED`를 반환한다. OpenAI key가
 없는 상태에서 기능 플래그를 켠 worker는 시작 단계에서 fail-fast해야 하며 요청마다 늦게 실패해서는
 안 된다.
 
@@ -367,7 +375,7 @@ FAILED ── instructor retry + valid source ──▶ PENDING
 - `captionStatus=READY`는 영상이 아직 변환 중이어도 유지한다.
 - `captionStatus=EMPTY`는 유효한 audio track을 전사했지만 발화 segment가 0건인 정상 terminal이다.
 - audio stream 자체가 없으면 처리할 입력이 없으므로 `FAILED(SOURCE_AUDIO_MISSING)`로 구분한다.
-- GMS 2xx 빈 segment와 source audio 부재를 같은 상태로 축약하지 않는다.
+- OpenAI 2xx의 빈 text·segments·words와 source audio 부재를 같은 상태로 축약하지 않는다.
 - 영상 retry endpoint와 자막 retry endpoint를 공유하지 않는다.
 
 자막만 다시 처리하는 endpoint는 별도로 둔다.
@@ -397,11 +405,11 @@ queue는 durable `ingestion.transcribe`, DLQ는 `ingestion.transcribe.dlq`로 �
 }
 ```
 
-- URL, GMS key, object key, 강사 파일명, MP4 bytes는 message에 넣지 않는다.
+- URL, OpenAI key, object key, 강사 파일명, MP4 bytes는 message에 넣지 않는다.
 - `jobId`는 attempt별 UUID이며 worker idempotency key다.
 - `sourceAssetId`는 Spring이 job·recorded video·asset 연결을 다시 검증하는 논리 참조다.
 - publish는 persistent message와 publisher confirm을 사용한다.
-- worker prefetch는 1로 시작하고 실제 전사 시간·GMS quota를 측정한 뒤 조정한다.
+- worker prefetch는 1로 시작하고 실제 전사 시간·OpenAI quota를 측정한 뒤 조정한다.
 - original message는 terminal callback에 대한 Spring 204를 받은 뒤 ACK한다.
 - transient 실패는 bounded retry 후 DLQ, 계약 위반·지원하지 않는 모델 같은 permanent 실패는 바로
   terminal callback 후 DLQ에 원인을 보존한다.
@@ -410,13 +418,13 @@ queue는 durable `ingestion.transcribe`, DLQ는 `ingestion.transcribe.dlq`로 �
 
 ### 배치 위치
 
-batch STT 구현은 `media-worker`나 `realtime-agent`에 넣지 않는다. `ai-worker`의 GMS client, HMAC,
+batch STT 구현은 `media-worker`나 `realtime-agent`에 넣지 않는다. `ai-worker`의 OpenAI client, HMAC,
 RabbitMQ 운영 패턴은 재사용할 수 있지만, 실행 프로세스와 queue는 분리한다. 권장 배치는 같은 AI
 codebase/image에서 실행하는 별도 `recorded-stt-worker` container다. 로컬 Compose의 기본 기동 범위는
 [ADR-0014](0014-local-compose-starts-recorded-workers.md)에서 결정한다.
 
 이 분리는 긴 전사 요청이 PPTX 임베딩 consumer의 prefetch 슬롯이나 HLS 변환 슬롯을 점유하지 않게 한다.
-STT 프로세스에만 FFmpeg와 GMS key를 주입하고, media worker에는 GMS 권한을 주지 않는다.
+STT 프로세스에만 FFmpeg와 OpenAI key를 주입하고, media worker에는 OpenAI 권한을 주지 않는다.
 
 ### 1. 원본 URL 획득
 
@@ -459,7 +467,7 @@ ffmpeg -i source.mp4 -map 0:a:0 -vn -ac 1 -ar 16000 \
 
 ### 3. 25MB 이하 청크 분할
 
-원본 MP4를 그대로 GMS에 보내지 않는다. MP4는 최대 5GiB지만 외부 file transcription은 25MB
+원본 MP4를 그대로 OpenAI에 보내지 않는다. MP4는 최대 5GiB지만 외부 file transcription은 25MB
 제한이 있으므로 음성만 추출하고 청크를 만든다.
 
 - 기본 청크 길이: 15분
@@ -475,11 +483,11 @@ PPTX에서 준비된 핵심 용어 일부를 다음 요청 prompt로 넘겨 완�
 제한이 있으므로 전체 PPTX나 전체 용어집을 넣지 않고 강의 제목·상위 중요 용어·이전 문장 tail을 bounded
 선택한다.
 
-### 4. GMS Whisper 호출
+### 4. OpenAI Whisper 호출
 
 ```http
 POST https://api.openai.com/v1/audio/transcriptions
-Authorization: Bearer <GMS key>
+Authorization: Bearer <OpenAI key>
 Content-Type: multipart/form-data
 ```
 
@@ -489,6 +497,7 @@ model=whisper-1
 language=ko
 response_format=verbose_json
 timestamp_granularities[]=segment
+timestamp_granularities[]=word
 prompt=<강의 제목 + bounded 핵심 용어 + 이전 청크 tail>
 ```
 
@@ -497,33 +506,39 @@ media worker나 Frontend 환경변수로 복제하지 않는다.
 
 ```text
 RECORDED_STT_ENABLED=false
-RECORDED_STT_GMS_BASE_URL=https://api.openai.com/v1
-RECORDED_STT_GMS_API_KEY=<secret>
+RECORDED_STT_OPENAI_BASE_URL=https://api.openai.com/v1
+RECORDED_STT_OPENAI_API_KEY=<secret>
 RECORDED_STT_MODEL=whisper-1
 RECORDED_STT_LANGUAGE=ko
 RECORDED_STT_CHUNK_SECONDS=900
 RECORDED_STT_CHUNK_OVERLAP_MS=1000
+RECORDED_STT_CUE_MAX_DURATION_MS=6000
+RECORDED_STT_CUE_MAX_CHARS=42
+RECORDED_STT_CUE_PAUSE_BREAK_MS=500
 RECORDED_STT_REQUEST_TIMEOUT_SECONDS=<staging 실측값>
 ```
 
-GMS key와 원문 음성·전사 응답을 로그에 남기지 않는다. 로그에는 job/recorded video ID, 모델, 입력
+OpenAI key와 원문 음성·전사 응답을 로그에 남기지 않는다. 로그에는 job/recorded video ID, 모델, 입력
 duration, chunk index, 요청 지연, retry 횟수, HTTP status class와 안정 error code만 남긴다.
 
 ### 5. 전역 시간축 병합
 
-GMS segment timestamp는 각 청크 시작을 0초로 본다. worker는 다음 식으로 녹화강의 전체 0ms 축으로
-변환한다.
+OpenAI segment·word timestamp는 각 청크 시작을 0초로 본다. worker는 segment를 기본 cue로 쓰고
+긴 segment만 word로 나눈다. 청크 선두 overlap은 word midpoint를 기준으로 이전 청크에 소유권을 주며,
+segment가 없는 응답은 남은 word를 발화 cue로 조립한다. 최종 cue는 녹화강의 전체 0ms 축으로 변환한다.
 
 ```text
-globalStartMs = chunk.sourceStartMs + round(segment.startSeconds * 1000)
-globalEndMs   = chunk.sourceStartMs + round(segment.endSeconds * 1000)
+globalStartMs = chunk.sourceStartMs + round(cue.firstWord.startSeconds * 1000)
+globalEndMs   = chunk.sourceStartMs + round(cue.lastWord.endSeconds * 1000)
 ```
 
 병합 불변식:
 
 - `0 <= startMs < endMs <= sourceDurationMs + tolerance`
-- 최종 segment는 `(startMs, endMs, chunkIndex, localSegmentIndex)` 안정 순서로 정렬한다.
-- 1차 구현은 청크의 선두 overlap에 midpoint가 속한 segment를 버리고 앞 청크에 소유권을 주는
+- 최종 cue는 `(startMs, endMs, chunkIndex, localSegmentIndex)` 안정 순서로 정렬한다.
+- cue는 문장 종결 부호, 단어 사이 500ms 이상 쉬기, 최대 6초, 목표 42자 중 가장 먼저
+  만나는 경계에서 나눈다. 단일 word를 중간에서 잘라 시각을 지어내지 않으므로 42자를 넘는 한 word는 예외로 보존한다.
+- 청크의 선두 overlap에 midpoint가 속한 word를 버리고 앞 청크에 소유권을 주는
   결정적 규칙으로 중복을 제거한다. 재시작 후에도 이전 자막 원문 없이 같은 결과를 만들기 위해서다.
 - 텍스트 정규화·유사도와 더 긴 문맥 비교는 실제 중복률을 측정한 뒤 후속 정확도 개선으로 적용한다.
 - 청크 사이 공백은 허용하지만 시간이 역행하거나 두 자막이 비정상적으로 장시간 겹치면 계약 위반으로
@@ -533,13 +548,13 @@ globalEndMs   = chunk.sourceStartMs + round(segment.endSeconds * 1000)
 
 ## 청크 결과와 terminal callback
 
-6시간 강의의 모든 segment를 마지막 한 번의 거대한 callback transaction으로 보내지 않는다. GMS 청크
+6시간 강의의 모든 segment를 마지막 한 번의 거대한 callback transaction으로 보내지 않는다. OpenAI 청크
 하나가 끝날 때마다 Spring에 멱등 전달하고, terminal callback은 이미 저장된 청크를 활성화하는 신호로만
 사용한다.
 
 ### 1. 진행 상태 조회
 
-worker는 재시작·중복 배달 시 이미 저장된 청크를 다시 GMS에 보내 과금·quota를 중복 소비하지 않도록
+worker는 재시작·중복 배달 시 이미 저장된 청크를 다시 OpenAI에 보내 과금·quota를 중복 소비하지 않도록
 Spring에서 progress를 조회한다.
 
 ```http
@@ -672,7 +687,7 @@ model run과 평가 metadata만 기록할 수 있으며 자막 SSOT를 복제하
 
 기각한다. 브라우저 FFmpeg/WASM은 수 GB 파일을 CPU·메모리·배터리로 처리해야 하며 탭 종료, 절전,
 브라우저별 codec 차이에서 durable retry가 불가능하다. HLS는 수백 개 segment와 manifest-last 업로드를
-원자적으로 관리해야 하므로 클라이언트에 넓은 output prefix 쓰기 권한도 줘야 한다. GMS key를
+원자적으로 관리해야 하므로 클라이언트에 넓은 output prefix 쓰기 권한도 줘야 한다. OpenAI key를
 클라이언트에 배포하면 즉시 유출되어 권한·quota·비용 통제가 불가능하다.
 
 클라이언트의 책임은 사용자가 선택한 원본 MP4를 presigned URL로 직접 업로드하고 완료를 알리는 데서
@@ -690,7 +705,7 @@ RabbitMQ에는 `jobId`와 `sourceAssetId`만 넣고 바이트는 대용량 objec
 ### 3. Spring multipart 요청에서 MP4를 받고 동기 변환·STT한다
 
 기각한다. 대용량 바이트가 Spring connection·임시 디스크를 오래 점유하고 HTTP timeout, 배포·재시작,
-GMS 장애가 사용자 요청과 DB transaction에 결합된다. 현재의 presigned direct upload 원칙과 durable
+OpenAI 장애가 사용자 요청과 DB transaction에 결합된다. 현재의 presigned direct upload 원칙과 durable
 재시도 경계를 모두 잃는다.
 
 Spring은 권한·상태·단기 URL·callback 검증만 소유하고 미디어 바이트를 proxy하지 않는다.
@@ -703,9 +718,9 @@ Spring은 권한·상태·단기 URL·callback 검증만 소유하고 미디어 
 
 원본 MP4가 보존돼 있으므로 STT worker가 그 source에서 audio stream을 한 번 직접 decode한다.
 
-### 5. `media-worker`가 HLS 변환과 GMS STT를 모두 수행한다
+### 5. `media-worker`가 HLS 변환과 OpenAI STT를 모두 수행한다
 
-기각한다. 같은 MP4를 한 번만 다운로드한다는 장점은 있지만 GMS timeout·429·quota가 HLS 변환 slot과
+기각한다. 같은 MP4를 한 번만 다운로드한다는 장점은 있지만 OpenAI timeout·429·quota가 HLS 변환 slot과
 video `READY`를 막는다. media worker에 AI key와 외부 전송 권한까지 주어 책임과 침해 범위가 커진다.
 STT 재시도 때문에 성공한 HLS를 다시 처리하거나 복잡한 부분 재개 상태를 media job에 넣게 된다.
 
@@ -749,10 +764,11 @@ manifest 검증·segment presign·공용 UI를 유지하고, 향후 ABR 확장 �
 | audio stream 없음 | `FAILED(SOURCE_AUDIO_MISSING)` | 영상은 계속 처리·재생 가능 |
 | FFmpeg decode 실패 | `FAILED(AUDIO_EXTRACTION_FAILED)` | source 검수 후 retry |
 | 청크가 24MiB 초과 | 내부 재분할 | 최소 단위도 초과하면 `AUDIO_CHUNK_TOO_LARGE` |
-| GMS timeout·429·5xx | `PROCESSING` | 청크 단위 bounded retry, 소진 시 FAILED |
-| GMS 400 model unavailable | `FAILED(STT_MODEL_UNAVAILABLE)` | 설정·allowlist 수정 전 retry 금지 |
-| GMS 정상 응답, segment 0건 | `EMPTY` | 정상 terminal |
-| 응답 schema·timestamp 위반 | `FAILED(STT_RESPONSE_INVALID)` | raw 응답 로그 없이 진단 metadata 기록 |
+| OpenAI timeout·429·5xx | `PROCESSING` | 청크 단위 bounded retry, 소진 시 FAILED |
+| OpenAI 400 request/model unavailable | `FAILED(STT_MODEL_UNAVAILABLE)` | 설정 수정 전 retry 금지 |
+| OpenAI 정상 응답, text·segments·words 모두 비어 있음 | `EMPTY` | 음성 없음 정상 terminal |
+| text는 있으나 usable segment·word가 없음 | `FAILED(STT_RESPONSE_INVALID)` | 내부 reason `TIMESTAMPS_MISSING` 기록 |
+| 응답 schema·timestamp가 복구 불가능하게 손상 | `FAILED(STT_RESPONSE_INVALID)` | raw 응답 로그 없이 진단 metadata 기록 |
 | 청크 callback 유실 | `PROCESSING` | 같은 event/body 재전송 |
 | terminal callback 전 worker 재시작 | `PROCESSING` | progress 조회 후 미완료 청크부터 재개 |
 | Rabbit 중복 배달 | 상태 불변 | job terminal/progress 확인 후 결과 callback 재구성 |
@@ -763,10 +779,10 @@ manifest 검증·segment presign·공용 UI를 유지하고, 향후 ABR 확장 �
 
 ## 보안과 개인정보 경계
 
-- GMS key는 STT worker secret으로만 주입하고 Frontend, Spring 응답, RabbitMQ, 로그에 넣지 않는다.
-- media worker에는 GMS key를 주지 않는다.
-- 원본 MP4와 임시 음성은 사용자 교육 콘텐츠이며 GMS를 거쳐 외부 provider로 전송된다는 점을 운영
-  정책·이용 고지에서 확인한다. GMS의 보존·학습 사용·quota 정책을 추측하지 않는다.
+- OpenAI key는 STT worker secret으로만 주입하고 Frontend, Spring 응답, RabbitMQ, 로그에 넣지 않는다.
+- media worker에는 OpenAI key를 주지 않는다.
+- 원본 MP4와 임시 음성은 사용자 교육 콘텐츠이며 OpenAI로 전송된다는 점을 운영
+  정책·이용 고지에서 확인한다. OpenAI의 보존·학습 사용·quota 정책은 공식 조건을 따른다.
 - source presigned URL은 job과 source 연결 검증 뒤 짧은 TTL로 발급하고 로그에서 query string을
   redaction한다.
 - source URL 발급, chunk 결과, terminal callback은 용도별 HMAC secret과 timestamp/replay window를
@@ -784,14 +800,14 @@ manifest 검증·segment presign·공용 UI를 유지하고, 향후 ABR 확장 �
 
 - queue depth와 oldest pending age
 - source duration/bytes, extracted audio bytes, chunk count
-- chunk별 GMS latency, HTTP status class, retry 횟수
+- chunk별 OpenAI latency, HTTP status class, retry 횟수
 - audio minute 대비 처리 시간(real-time factor)
 - segment count, EMPTY/FAILED 비율, timestamp contract failure
 - video READY와 caption READY 사이 시간
 - source/HLS 저장량과 원본 보존 비용
-- GMS usage duration과 project quota 소진율
+- OpenAI usage duration과 project quota 소진율
 
-공개 OpenAI 가격을 GMS 실제 과금으로 간주하지 않는다. 운영 가능 여부는 GMS dashboard의 quota와
+운영 가능 여부는 OpenAI project의 quota·과금 한도와
 대표 한국어 기술 강의 bake-off로 확정한다. 최소 평가 세트에는 조용한 강의, 배경 소음, 한영 혼용,
 PPTX 전문 용어, 1시간 이상 영상을 포함하고 CER/WER, 핵심 용어 recall, 자막 시간 오차, 처리 시간을
 기록한다.
@@ -801,11 +817,11 @@ PPTX 전문 용어, 1시간 이상 영상을 포함하고 CER/WER, 핵심 용어
 1. `core` additive migration으로 track/job/chunk/segment를 추가한다.
 2. Spring source URL·progress·chunk·terminal callback과 HMAC 검증을 구현한다.
 3. `ingestion.transcribe` dispatcher와 DLQ를 추가하되 `recorded.stt.enabled=false`로 둔다.
-4. batch STT worker의 download, ffprobe, FFmpeg, chunking, GMS adapter와 resume을 구현한다.
+4. batch STT worker의 download, ffprobe, FFmpeg, chunking, OpenAI adapter와 resume을 구현한다.
 5. processing 응답에 additive caption 필드를 추가하고 FE 상태 UI를 연결한다.
 6. fixture 기반 local integration에서 MP4 upload→HLS와 STT 두 branch를 검증한다.
-7. staging에서 실제 GMS key로 5분·1시간 한국어 강의를 smoke/bake-off한다.
-8. GMS quota, timeout, callback body limit, MinIO bandwidth를 확인한 뒤 기능 플래그를 켠다.
+7. staging에서 회전한 OpenAI key로 5분·1시간 한국어 강의를 smoke/bake-off한다.
+8. OpenAI quota, timeout, callback body limit, MinIO bandwidth를 확인한 뒤 기능 플래그를 켠다.
 9. 자막 검수·게시 정책이 확정되기 전에는 생성 결과를 강사 draft로만 노출한다.
 
 롤백은 STT 기능 플래그를 꺼 새 job 생성을 중단하는 것으로 시작한다. 기존 media job, HLS playback,
@@ -827,15 +843,17 @@ PPTX 전문 용어, 1시간 이상 영상을 포함하고 CER/WER, 핵심 용어
 - 영상 READY와 caption FAILED, 영상 FAILED와 caption READY 조합이 서로 상태를 덮지 않음
 - LIVE lesson에는 recorded STT job을 만들 수 없음
 
-실제 필드와 endpoint를 구현하는 변경에서 `docs/CONTRACT.md`, FE 타입, Spring DTO, Python schema fixture를
-같이 갱신한다. 이 ADR의 예시는 구현 전 목표 계약이며 현재 구현 완료를 뜻하지 않는다.
+실제 필드와 endpoint를 변경하면 `docs/CONTRACT.md`, FE 타입, Spring DTO, Python schema fixture를
+같이 갱신한다. 이번 개정은 Spring↔worker wire를 유지하고 provider 응답 해석과 worker 내부 cue 조립만 바꿘
+Python 계약·핸들러 테스트로 검증한다.
 
 ### worker 테스트
 
 - MP4 audio stream 검증과 `SOURCE_AUDIO_MISSING`
 - mono 16kHz 추출, duration과 source 0ms 정규화
 - 25MB hard limit, 기본 15분·overlap 청크 경계
-- GMS `verbose_json` 정상·빈 결과·timeout·429·5xx·400·schema 위반
+- OpenAI `verbose_json` segment·word timestamp 정상·빈 결과·timeout·429·5xx·400·schema 위반
+- segment 우선·word fallback·0초 word 병합, 문장부호·쉬기·6초·42자 cue 분할
 - 청크 전역 timestamp 변환, overlap dedupe, 역행·범위 초과 거부
 - progress 조회 뒤 완료 청크 skip과 미완료 resume
 - queue 중복 배달·callback 재전송·DLQ 전 terminal 보존
@@ -845,9 +863,9 @@ PPTX 전문 용어, 1시간 이상 영상을 포함하고 CER/WER, 핵심 용어
 
 - 한 MP4 업로드 완료가 media/STT job을 모두 durable commit한다.
 - 두 worker를 동시에 실행해 HLS와 자막이 독립 terminal에 도달한다.
-- HLS failure가 STT 결과를 지우지 않고 GMS failure가 HLS playback을 막지 않는다.
+- HLS failure가 STT 결과를 지우지 않고 OpenAI failure가 HLS playback을 막지 않는다.
 - 실제 player `currentTime`과 자막 segment가 시작·중간·끝에서 허용 오차 안에 맞는다.
-- Spring·worker 재시작, Rabbit 중복, callback 유실 뒤 추가 GMS 과금 없이 resume한다.
+- Spring·worker 재시작, Rabbit 중복, callback 유실 뒤 추가 OpenAI 과금 없이 resume한다.
 - 레슨 삭제 뒤 원본, HLS, caption 데이터와 실패 cleanup이 최종 수렴한다.
 
 ## 결과와 한계
@@ -862,7 +880,7 @@ PPTX 전문 용어, 1시간 이상 영상을 포함하고 CER/WER, 핵심 용어
 병목으로 확인되면 media worker가 검증된 private audio artifact를 한 번 생성하고 STT worker가 읽는
 방식을 후속 ADR로 검토할 수 있지만, 그 전에는 두 파이프라인을 결합하지 않는다.
 
-`whisper-1`의 한국어 전문 용어 정확도와 GMS quota는 설계만으로 보장되지 않는다. PPTX 핵심 용어를
-bounded prompt로 활용하고 대표 강의 bake-off를 통과해야 운영 플래그를 켠다. 자막 생성 이후의 강사
-편집·게시, 학생 player 표시, 용어 강조와 RAG chunking은 이번 결정의 안정된 segment/time contract를
-입력으로 받는 후속 구현이다.
+`whisper-1`의 한국어 전문 용어 정확도와 OpenAI quota는 설계만으로 보장되지 않는다. PPTX 핵심 용어를
+bounded prompt로 활용하고 대표 강의 bake-off를 통과해야 운영 플래그를 켠다. Spring의
+WebVTT 직렬화와 학생 player 표시는 기존 segment/time contract를 그대로 사용한다. 강사 자막 편집·게시 철회와
+용어 강조는 후속 범위다.
