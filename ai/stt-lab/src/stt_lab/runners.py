@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import gc
 from dataclasses import dataclass
+from pathlib import Path
 from time import perf_counter
 from typing import Protocol
 
@@ -72,6 +74,94 @@ class NemotronRuntimeRunner:
         if self._recognizer is not None:
             self._recognizer.close()
             self._recognizer = None
+
+
+class NemotronNemoRunner:
+    """Run a Prompt-RNNT ``.nemo`` checkpoint for checkpoint quality gates.
+
+    This deliberately uses offline final-only decoding. Base and fine-tuned
+    checkpoints pass through this exact runner so their accuracy comparison is
+    not confounded by the Hugging Face streaming adapter.
+    """
+
+    def __init__(self, model_id: str, *, device: str) -> None:
+        self._model_id = model_id
+        self._device = device
+        self._model = None
+
+    @property
+    def model_id(self) -> str:
+        return self._model_id
+
+    @property
+    def precision(self) -> str:
+        # Cache-aware Nemotron inference is validated in FP32. Keeping the
+        # quality gate in FP32 also avoids precision drift between checkpoints.
+        return "float32"
+
+    def load(self) -> None:
+        model_path = Path(self._model_id)
+        if not model_path.is_file() or model_path.suffix != ".nemo":
+            raise ValueError(f"Nemotron NeMo checkpoint does not exist: {model_path}")
+        try:
+            import torch
+            from nemo.collections.asr.models import ASRModel
+        except ImportError as exc:
+            raise RuntimeError(
+                "NeMo dependencies are missing; use the pinned Nemotron training runtime"
+            ) from exc
+
+        model = ASRModel.restore_from(
+            restore_path=str(model_path),
+            map_location="cpu",
+        )
+        if not hasattr(model, "set_inference_prompt"):
+            raise TypeError("checkpoint is not a Prompt-RNNT model")
+        model.set_inference_prompt("ko-KR")
+        if hasattr(model, "decoding") and hasattr(model.decoding, "set_strip_lang_tags"):
+            model.decoding.set_strip_lang_tags(True)
+        model.to(device=self._device, dtype=torch.float32)
+        model.eval()
+        self._model = model
+
+    def transcribe(self, audio: PcmAudio, language: str) -> Transcription:
+        if self._model is None:
+            raise RuntimeError("Nemotron NeMo runner is not loaded")
+        if language != "ko-KR":
+            raise ValueError("the current Nemotron NeMo benchmark expects ko-KR")
+        if audio.sample_rate != 16_000:
+            raise ValueError("the current Nemotron NeMo benchmark expects 16 kHz audio")
+
+        import torch
+
+        float_audio = audio.samples.astype("float32") / 32768.0
+        if self._device.startswith("cuda"):
+            torch.cuda.synchronize()
+        started = perf_counter()
+        with torch.inference_mode():
+            results = self._model.transcribe(
+                audio=float_audio,
+                batch_size=1,
+                num_workers=0,
+                verbose=False,
+                target_lang=language,
+            )
+        if self._device.startswith("cuda"):
+            torch.cuda.synchronize()
+        total_ms = (perf_counter() - started) * 1_000
+        result = results[0]
+        text = result.text if hasattr(result, "text") else str(result)
+        return Transcription(text=text.strip(), first_delta_ms=total_ms, total_ms=total_ms)
+
+    def close(self) -> None:
+        self._model = None
+        gc.collect()
+        try:
+            import torch
+        except ImportError:
+            return
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
 
 class WhisperTransformersRunner:
@@ -171,6 +261,8 @@ def build_runner(
         if adapter_id is not None:
             raise ValueError("LoRA adapters are only supported by the Whisper backend")
         return NemotronRuntimeRunner(model_id)
+    if backend == "nemotron-nemo":
+        return NemotronNemoRunner(model_id, device=device)
     if backend == "whisper":
         return WhisperTransformersRunner(
             model_id,

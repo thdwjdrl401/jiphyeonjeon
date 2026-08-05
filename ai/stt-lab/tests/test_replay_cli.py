@@ -14,7 +14,12 @@ from app.stt.providers.segmented import SpeechSegmenter
 from stt_lab.audio import PcmAudio
 from stt_lab.contracts import EvaluationClip
 from stt_lab.replay_backends import BackendMetadata, FinalOnlySegmentedEngine
-from stt_lab.replay_cli import CandidateSpec, _parse_candidate, evaluate_candidates
+from stt_lab.replay_cli import (
+    CandidateSpec,
+    _parse_candidate,
+    _validate_cuda_visible_devices,
+    evaluate_candidates,
+)
 from stt_lab.runners import Transcription
 
 
@@ -173,7 +178,19 @@ def test_candidate_parser_requires_explicit_backend_and_model() -> None:
     assert _parse_candidate("qwen=qwen-vllm-streaming@Qwen/Qwen3-ASR-1.7B") == CandidateSpec(
         "qwen", "qwen-vllm-streaming", "Qwen/Qwen3-ASR-1.7B"
     )
+    assert _parse_candidate("tuned=nemotron-nemo@/models/tuned.nemo") == CandidateSpec(
+        "tuned", "nemotron-nemo", "/models/tuned.nemo"
+    )
     with pytest.raises(argparse.ArgumentTypeError, match="NAME=BACKEND@MODEL"):
         _parse_candidate("whisper-large-v3")
     with pytest.raises(argparse.ArgumentTypeError, match="qwen-vllm-streaming"):
         _parse_candidate("base=unknown@model")
+
+
+def test_replay_accepts_one_physical_gpu_index_only() -> None:
+    _validate_cuda_visible_devices("0")
+    _validate_cuda_visible_devices("1")
+    with pytest.raises(ValueError, match="exactly one CUDA device"):
+        _validate_cuda_visible_devices("0,1")
+    with pytest.raises(ValueError, match="exactly one CUDA device"):
+        _validate_cuda_visible_devices("gpu1")
