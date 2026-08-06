@@ -490,12 +490,15 @@ class ConversationMemory:
         existing_response_id: str | None = None,
         lookup_error: Exception | None = None,
         save_error: Exception | None = None,
+        delete_error: Exception | None = None,
     ) -> None:
         self.existing_response_id = existing_response_id
         self.lookup_error = lookup_error
         self.save_error = save_error
+        self.delete_error = delete_error
         self.lookup_calls: list[tuple[str, str, str]] = []
         self.save_calls: list[tuple[str, str, str, str]] = []
+        self.delete_calls: list[tuple[str, str, str]] = []
 
     async def get_previous_response_id(self, *, user_id, session_id, conversation_id):
         self.lookup_calls.append((user_id, session_id, conversation_id))
@@ -507,6 +510,11 @@ class ConversationMemory:
         self.save_calls.append((user_id, session_id, conversation_id, response_id))
         if self.save_error is not None:
             raise self.save_error
+
+    async def delete_response_id(self, *, user_id, session_id, conversation_id):
+        self.delete_calls.append((user_id, session_id, conversation_id))
+        if self.delete_error is not None:
+            raise self.delete_error
 
 
 class MemoryAwareModel:
@@ -639,6 +647,160 @@ async def test_user_id_alone_activates_session_scoped_memory() -> None:
 
     assert memory.lookup_calls == [("user-1", SESSION_ID, "session")]
     assert memory.save_calls == [("user-1", SESSION_ID, "session", "resp-new")]
+
+
+class StaleChainModel:
+    """저장된 previous_response_id가 provider에서 죽은 상황: 체이닝을 실은 호출은 401 계열로
+    실패하고, 체이닝 없는 호출은 성공한다 — 실측된 GMS 동작(모르는 previousId → 401)."""
+
+    def __init__(self, *, failure_code: str = "MODEL_AUTH_FAILED") -> None:
+        self.failure_code = failure_code
+        self.calls: list[str | None] = []
+
+    def stream_answer(
+        self,
+        current_request,
+        evidence,
+        *,
+        previous_response_id=None,
+        response_id_capture=None,
+        grounded_capture=None,
+    ):
+        self.calls.append(previous_response_id)
+        chained = previous_response_id is not None
+        failure_code = self.failure_code
+
+        async def generate():
+            if chained:
+                raise RagStreamFailure(code=failure_code)
+            if response_id_capture is not None:
+                response_id_capture.value = "resp-recovered"
+            if grounded_capture is not None:
+                grounded_capture.value = True
+            yield "복구된 답변"
+
+        return generate()
+
+
+@async_test
+async def test_stale_previous_response_id_drops_the_chain_and_retries() -> None:
+    """죽은 체이닝 포인터는 대화 기억의 실패이지 답변의 실패가 아니다: 저장된 id를 지우고
+    체이닝 없이 재시도해 답변을 살리고, 새 response id를 저장해 다음 turn을 복구한다."""
+    memory = ConversationMemory(existing_response_id="resp-dead")
+    model = StaleChainModel()
+    service = RagAnswerService(
+        Retriever(RetrievalResult(sufficient=True, evidence=(pptx_evidence(),))),
+        model,
+        conversation_memory=memory,
+    )
+
+    events = await collect(service, request_with_memory())
+
+    assert [event.event for event in events] == ["answer.delta", "answer.done"]
+    assert model.calls == ["resp-dead", None]
+    assert memory.delete_calls == [("user-1", SESSION_ID, "conv-1")]
+    assert memory.save_calls == [("user-1", SESSION_ID, "conv-1", "resp-recovered")]
+
+
+@async_test
+async def test_genuine_auth_failure_still_surfaces_after_one_retry() -> None:
+    """진짜 키 장애는 체이닝 없이도 실패한다 — 재시도가 오류를 숨기면 안 된다."""
+
+    class AlwaysAuthFailModel:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def stream_answer(self, current_request, evidence, **kwargs):
+            self.calls += 1
+
+            async def generate():
+                raise RagStreamFailure(code="MODEL_AUTH_FAILED")
+                yield  # pragma: no cover
+
+            return generate()
+
+    memory = ConversationMemory(existing_response_id="resp-dead")
+    model = AlwaysAuthFailModel()
+    service = RagAnswerService(
+        Retriever(RetrievalResult(sufficient=True, evidence=(pptx_evidence(),))),
+        model,
+        conversation_memory=memory,
+    )
+
+    events = await collect(service, request_with_memory())
+
+    assert events[-1].event == "answer.error"
+    assert events[-1].data.code == "MODEL_AUTH_FAILED"
+    assert model.calls == 2  # 체이닝 1회 + 무체이닝 재시도 1회, 그 이상은 없음
+
+
+@async_test
+async def test_no_retry_after_the_first_delta_reached_the_client() -> None:
+    """delta가 이미 나갔으면 재시도하지 않는다 — 클라이언트가 본문 일부를 받은 뒤 처음부터
+    다시 스트리밍하면 답변이 중복된다."""
+
+    class FailsMidStreamModel:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def stream_answer(self, current_request, evidence, **kwargs):
+            self.calls += 1
+
+            async def generate():
+                yield "첫 조각"
+                raise RagStreamFailure(code="MODEL_AUTH_FAILED")
+
+            return generate()
+
+    memory = ConversationMemory(existing_response_id="resp-dead")
+    model = FailsMidStreamModel()
+    service = RagAnswerService(
+        Retriever(RetrievalResult(sufficient=True, evidence=(pptx_evidence(),))),
+        model,
+        conversation_memory=memory,
+    )
+
+    events = await collect(service, request_with_memory())
+
+    assert events[-1].event == "answer.error"
+    assert model.calls == 1
+    assert memory.delete_calls == []
+
+
+@async_test
+async def test_session_fallback_keys_memory_without_user_id_when_enabled() -> None:
+    """시연·단일 질문자 환경용 폴백(기본 off): userId 없이도 세션 단위로 대화가 이어진다."""
+    memory = ConversationMemory()
+    model = MemoryAwareModel(["답변"])
+    service = RagAnswerService(
+        Retriever(RetrievalResult(sufficient=True, evidence=(pptx_evidence(),))),
+        model,
+        conversation_memory=memory,
+        session_fallback_enabled=True,
+    )
+
+    await collect(service, request())  # userId 없음
+
+    assert memory.lookup_calls == [("-", SESSION_ID, "session")]
+    assert memory.save_calls == [("-", SESSION_ID, "session", "resp-new")]
+
+
+@async_test
+async def test_session_fallback_defaults_off_preserving_the_privacy_guard() -> None:
+    """기본값에서는 userId 없는 요청이 여전히 대화 기억을 활성화하지 않는다 — sessionId는
+    수강생 전원이 공유하므로 이 가드가 무너지면 학생 간 대화가 섞인다."""
+    memory = ConversationMemory()
+    model = MemoryAwareModel(["답변"])
+    service = RagAnswerService(
+        Retriever(RetrievalResult(sufficient=True, evidence=(pptx_evidence(),))),
+        model,
+        conversation_memory=memory,
+    )
+
+    await collect(service, request())
+
+    assert memory.lookup_calls == []
+    assert memory.save_calls == []
 
 
 @async_test

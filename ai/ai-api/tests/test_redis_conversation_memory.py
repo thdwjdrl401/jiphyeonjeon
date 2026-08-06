@@ -18,6 +18,9 @@ class FakeRedis:
         self.set_calls.append((name, value, ex))
         self.values[name] = value.encode("utf-8")
 
+    async def delete(self, name):
+        self.values.pop(name, None)
+
     async def aclose(self):
         self.closed = True
 
@@ -96,6 +99,32 @@ def test_key_is_scoped_by_all_three_parts() -> None:
     assert other_user is None
     assert other_session is None
     assert other_conversation is None
+
+
+def test_delete_removes_the_stored_response_id() -> None:
+    """죽은 체이닝 포인터를 지우는 복구 경로(ADR-0085): 지운 뒤 조회는 None이어야 다음
+    turn이 첫 turn처럼 시작한다."""
+    client = FakeRedis()
+    store = _store(client)
+
+    async def scenario() -> None:
+        await store.save_response_id(
+            user_id="user-1",
+            session_id="session-1",
+            conversation_id="conv-1",
+            response_id="resp-dead",
+        )
+        await store.delete_response_id(
+            user_id="user-1", session_id="session-1", conversation_id="conv-1"
+        )
+        assert (
+            await store.get_previous_response_id(
+                user_id="user-1", session_id="session-1", conversation_id="conv-1"
+            )
+            is None
+        )
+
+    asyncio.run(scenario())
 
 
 def test_custom_key_prefix_is_applied() -> None:

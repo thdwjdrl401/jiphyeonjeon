@@ -198,6 +198,9 @@ FE가 세션 안에서 대화를 더 잘게 나눌 때 `conversationId`를 붙�
   "그 사용자의 그 라이브 세션"이며(키의 conversationId 자리는 고정값 `session`), `conversationId`를
   보내면 그 값이 대화 범위가 된다 — FE가 나중에 세션 내 대화를 더 잘게 나눌 때 쓰는 확장 지점이다.
   `userId`가 없으면 §7의 기존 Chat Completions 경로를 그대로 타서 동작이 전혀 바뀌지 않는다.
+  단 `AI_API_CONVERSATION_MEMORY_SESSION_FALLBACK_ENABLED=true`(기본 `false`)면 `userId` 없는
+  요청도 `("-", sessionId, "session")` 키로 대화를 잇는다 — 질문자가 한 명뿐인 시연·단일 사용자
+  환경 전용이며, 여러 학생이 질문하는 세션에서 켜면 대화가 섞인다(ADR-0085).
 - 활성화되면 ai-api가 Redis(`AI_API_REDIS_URL`, key prefix `AI_API_CONVERSATION_MEMORY_KEY_PREFIX`
   기본 `ai:conversation:`)에서 `{userId}:{sessionId}:{conversationId}` 키로 직전 GMS
   `previous_response_id`를 조회한 뒤, GMS **Responses API**(`POST /responses`, Chat Completions가
@@ -208,6 +211,9 @@ FE가 세션 안에서 대화를 더 잘게 나눌 때 `conversationId`를 붙�
   조회로 찾은 `response_id`(provider가 발급한 값)만 전달한다. §7의 "내부 ID를 provider에 보내지
   않는다" 원칙과 동일하다.
 - Redis 조회·저장 실패는 대화 이어가기만 건너뛰고 답변 스트림 자체는 항상 정상 진행한다(fail-open).
+- 저장된 `previous_response_id`를 provider가 거부하면(GMS 재시작·키 로테이션 — 실측 401) 그 id를
+  지우고 **체이닝 없이 한 번 재시도**한다(ADR-0085). delta가 나간 뒤에는 재시도하지 않으며, 진짜
+  인증 장애는 재시도도 같은 오류로 죽어 표면화된다. 이벤트: `rag.conversation_chain_dropped`.
 - 적용 범위는 v1(Live)뿐이다. v2(Replay)는 ADR-0037이 "서버 대화 기억"을 명시적으로 범위 밖에
   뒀으므로 이 기능이 없다.
 - 실제 GMS Responses API 스트리밍 이벤트 형태(`response.created`/`response.output_text.delta`/

@@ -152,6 +152,9 @@ services:
       # 강조 판서를 RAG 근거로 검색(ADR-0043). 꺼져 있으면 두 RAG 경로가 기능 이전과 완전히 동일하다.
       # ai.annotation_highlight 테이블(alembic 0003)이 적용된 뒤에만 켠다 — 없으면 검색 에러가 전파돼 모든 답변이 죽는다.
       AI_API_ANNOTATION_EVIDENCE_ENABLED: ${AI_API_ANNOTATION_EVIDENCE_ENABLED:-false}
+      # 시연·단일 질문자 환경용: userId 없는 요청도 세션 단위로 대화를 이음. 여러 학생이
+      # 질문하는 세션에서 켜면 대화가 섞이므로 운영 기본 off (ADR-0083).
+      AI_API_CONVERSATION_MEMORY_SESSION_FALLBACK_ENABLED: ${AI_API_CONVERSATION_MEMORY_SESSION_FALLBACK_ENABLED:-false}
       AI_API_ANNOTATION_TOP_K: ${AI_API_ANNOTATION_TOP_K:-2}
       AI_API_ANNOTATION_WINDOW_SIZE: ${AI_API_ANNOTATION_WINDOW_SIZE:-5}
       AI_API_LECTURE_NOTE_MODEL: ${AI_API_LECTURE_NOTE_MODEL:-gpt-5-mini}
