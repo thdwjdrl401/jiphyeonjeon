@@ -2,9 +2,19 @@
 
 > 📍 공유 계약: [../../CONTRACT.md](../../CONTRACT.md) · 관련 결정: [0032](../songjeongki/0032-media-playback-hls-only.md) · [0039](../songjeongki/0039-replay-playback-api.md)
 
-- **상태**: 채택
+- **상태**: 대체됨 — [songjeongki/0032](../songjeongki/0032-media-playback-hls-only.md)·[0039](../songjeongki/0039-replay-playback-api.md)
 - **일자**: 2026-07-27
-- **관련**: 학생 HLS 단일 재생, LiveKit Egress `live.m3u8`, 세션 시계 자막·북마크 정렬
+- **관련**: 학생 HLS 단일 재생, LiveKit Egress EVENT playlist, 세션 시계 자막·채팅 정렬
+
+> **2026-08-06 대체 관계**: 학생 HLS 단일 재생, 서버 발급 opaque URL, 실제 API 오류의 샘플
+> fallback 금지라는 원칙은 유지된다. 다만 현재 계약은
+> `GET /api/live-sessions/{sessionId}/playback`이 아니라 `GET /api/lessons/{lessonId}/playback`이며,
+> 응답은 `source.url/availableFromMs/availableToMs`, `currentSessionMs`, `sessionOffsetMs`, 재생·세션
+> 상태를 함께 준다. 인증 manifest endpoint가 일반 세그먼트와 `EXT-X-MAP/KEY` URI를 presigned
+> URL로 재작성하고, 같은 endpoint가 라이브 중 EVENT 재생과 종료 후 다시보기를 잇는다. 종료됐다는
+> 이유만으로 무조건 `LIVE_ENDED`를 반환하지 않는다. 북마크 계약은
+> [ADR-0024](0024-remove-bookmark-feature.md)에서 제거됐다. 아래 세션별 endpoint와 DTO는 구현 이력으로만
+> 읽는다.
 
 ## 맥락
 

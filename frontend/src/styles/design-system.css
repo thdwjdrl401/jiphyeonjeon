@@ -1840,6 +1840,7 @@ body {
 .summary-generating { border-color: #444; }
 .glossary-term { color: #eee; }
 .glossary-term[open] { border-color: #777; background: #252525; }
+.glossary-term > summary:hover { background: #232323; }
 .glossary-term > summary > b { color: #aaa; }
 .glossary-term > summary::after { border-top-color: #8c8c87; }
 .glossary-term__body > p { color: #ccc; }

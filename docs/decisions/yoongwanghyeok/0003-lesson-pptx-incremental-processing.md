@@ -1,10 +1,16 @@
 # ADR-0003: 레슨 자료 = PPTX 전용 + 초기 복수·이후 단일 증분 처리
 
-> 레슨 폼: [LESSON_FORM.md](../../frontend/components/LESSON_FORM.md) · API 초안: [LESSON_MANAGEMENT.md](../../frontend/api/LESSON_MANAGEMENT.md) · 관련 팀 ADR: [0021](../songjeongki/0021-lesson-publish-mvp-direct.md)
+> 레슨 폼: [LESSON_FORM.md](../../frontend/components/LESSON_FORM.md) · API 초안: [LESSON_MANAGEMENT.md](../../frontend/api/LESSON_MANAGEMENT.md) · 현행 발행 결정: [seominkyeong/0005](../seominkyeong/0005-lesson-has-no-draft-state.md) · 자료 연결: [songjeongki/0035](../songjeongki/0035-lesson-material-attach.md)
 
-- **상태**: 제품 목표 채택, MVP 적용 시점 조율 필요
+- **상태**: 부분 대체 — PPTX·파일별 연결 원칙은 구현, 레슨 발행 게이트는 폐기
 - **일자**: 2026-07-21
 - **적용 범위**: 레슨 PPTX 자료, AI ingestion, 게시 이후 자료 변경
+
+> **2026-08-06 현행 정합화**: 레슨은 더 이상 `DRAFT`나 별도 발행 상태를 갖지 않고 생성 즉시
+> `PUBLISHED`다([seominkyeong/0005](../seominkyeong/0005-lesson-has-no-draft-state.md)). 따라서 아래
+> 결정 4·11의 “자료/AI 준비를 레슨 게시 게이트로 사용한다”는 부분은 대체됐다. PPTX는 presigned
+> 업로드 뒤 자료를 한 건씩 연결·삭제하는 계약으로 구현됐고, 임베딩과 핵심 용어는 자료별 독립 상태로
+> 추적한다. 자료 준비 여부가 레슨의 `status`를 바꾸지는 않는다.
 
 ## 맥락
 
@@ -48,6 +54,6 @@
 
 - presigned upload, 파일별 검증, 비동기 `operationId`, 재시도·멱등 계약이 필요하다.
 - 동일 파일 판정, 파일 크기, 일부 업로드 실패 처리 정책을 백엔드와 확정해야 한다.
-- [ADR-0021](../songjeongki/0021-lesson-publish-mvp-direct.md)에 따라 현재 CP0 MVP는 AI 준비도를 게시 게이트로 사용하지 않고 `DRAFT↔PUBLISHED`를 직행한다. 이 ADR의 `AI_NOT_READY/READY` 게이트는 CP2/CP3 파이프라인 도입 시 다시 조율한다.
-- `DECISIONS_PENDING.md`에 추가된 커리큘럼 공통 자료 요구는 “자료는 레슨 귀속” 결정과 충돌하므로 별도 범위 결정이 필요하다.
+- [seominkyeong/0005](../seominkyeong/0005-lesson-has-no-draft-state.md)에 따라 레슨 발행·게시취소 endpoint와 AI readiness 발행 게이트는 폐기됐다. 공개 축은 커리큘럼 lifecycle 하나다.
+- 커리큘럼 공통 자료는 [ADR-0011](0011-optional-curriculum-materials.md)과 [songjeongki/0042](../songjeongki/0042-curriculum-material-attach-and-embedding-scope.md)에서 별도 scope로 구현됐다. 남은 과제는 커리큘럼 scope 임베딩 잡을 AI worker가 실제 소비하는 경로다.
 

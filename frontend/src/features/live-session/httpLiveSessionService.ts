@@ -927,6 +927,11 @@ export const httpLiveSessionService = {
     const { data } = await apiClient.get<GlossaryTerm[]>(`/lessons/${lessonId}/glossary`)
     return data ?? []
   },
+  async upsertGlossaryTerm(lessonId, term, definition) {
+    const { data } = await apiClient.put<GlossaryTerm>(
+      `/instructor/lessons/${lessonId}/glossary`, { term, definition })
+    return data
+  },
   async getMyWatchBuckets(lessonId) {
     const { data } = await apiClient.get<Record<number, number>>(
       `/lessons/${lessonId}/watch-buckets/me`)

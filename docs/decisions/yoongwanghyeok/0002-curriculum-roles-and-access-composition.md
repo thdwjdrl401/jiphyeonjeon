@@ -2,7 +2,7 @@
 
 > 페이지 명세: [PAGES.md](../../frontend/PAGES.md) · 상세 컴포넌트: [CURRICULUM_DETAIL.md](../../frontend/components/CURRICULUM_DETAIL.md) · 시스템 페이지: [SYSTEM_PAGES.md](../../frontend/components/SYSTEM_PAGES.md)
 
-- **상태**: 채택
+- **상태**: 채택 — 계층·관계 기반 UI와 `curriculumId` 계약 구현
 - **일자**: 2026-07-21
 - **적용 범위**: 제품 용어, 프론트 라우팅·컴포넌트 조합, 접근 UX
 
@@ -46,6 +46,6 @@
 
 - 공개 목록·상세 응답은 최소 관계 정보와 허용 행동을 제공하는 방향으로 협의한다.
 - 강사 계정이 다른 강사의 커리큘럼을 수강할 수 있는지는 별도 정책으로 남긴다.
-- API 식별자를 `courseId`와 `curriculumId` 중 무엇으로 통일할지는 이 ADR 범위 밖이며 현재 공유 계약과 프론트 초안 사이 조율이 필요하다.
+- API 식별자는 현재 공유 계약과 구현에서 `curriculumId`로 통일됐다. 이 ADR 작성 당시의 `courseId` 후보는 더 이상 협의 항목이 아니다.
 - 관리자, 초대 전용 수강, 역할 전환은 정책을 정의한 뒤 추가한다.
 

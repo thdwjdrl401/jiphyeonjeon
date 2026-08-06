@@ -2,9 +2,16 @@
 
 > 라이브 명세: [LIVE_LESSON.md](../../frontend/components/LIVE_LESSON.md) · VOD 명세: [VOD_LESSON.md](../../frontend/components/VOD_LESSON.md) · 채팅 ADR: [0019](../songjeongki/0019-ws-realtime-chat-stomp.md)
 
-- **상태**: 제품 목표 채택
+- **상태**: 부분 구현 — 질문 채팅·시간 동기화 리플레이 구현, 강사용 집계 후속
 - **일자**: 2026-07-21
 - **적용 범위**: 라이브 채팅, 개인 AI Q&A, 강사 질문 인사이트, VOD 채팅 리플레이
+
+> **2026-08-06 현행 정합화**: 채팅의 `isQuestion`, REST/WS 저장·복구, `sessionMs` 기반 다시보기
+> 필터와 개인 AI 질문 이력은 구현됐다. 채팅 표시 이름은 “항상 가명”이 아니라 메시지마다 학생이
+> 익명을 선택하는 정책으로 [songjeongki/0050](../songjeongki/0050-chat-anonymity-is-sender-choice.md)이
+> 부분 대체했고, 익명 가명 형식은 [ADR-0023](0023-anonymous-chat-alias-is-sequential.md)의
+> `익명1`, `익명2`, …를 따른다. 강사용 질문 핀·집중도 집계 endpoint와 소수 집계 보호 기준은 아직
+> 후속 범위다.
 
 ## 맥락
 

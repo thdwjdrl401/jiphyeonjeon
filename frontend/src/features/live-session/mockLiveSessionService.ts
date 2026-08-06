@@ -87,6 +87,9 @@ const defaultAiHistory: AiAnswerHistoryItem[] = [
   },
 ]
 
+// 용어가 많아졌을 때(스크롤·용어 추가 행 위치 등)를 눈으로 확인할 수 있게 목을 넉넉히 채워 둔다.
+// 처음 두 개(SecurityContext·SecurityFilterChain)의 termId·정의는 여러 통합 테스트가 문자 그대로
+// 단언하므로 값을 바꾸지 않는다 — 새 용어는 뒤에만 더한다.
 const defaultGlossaryTerms: GlossaryTerm[] = [
   {
     termId: 'SecurityContext',
@@ -99,6 +102,66 @@ const defaultGlossaryTerms: GlossaryTerm[] = [
     term: 'SecurityFilterChain',
     definition: '요청에 순서대로 적용할 보안 필터 묶음입니다.',
     source: 'INSTRUCTOR',
+  },
+  {
+    termId: 'AuthenticationManager',
+    term: 'AuthenticationManager',
+    definition: '실제 인증 로직을 위임받아 수행하는 인터페이스입니다.',
+    source: 'MATERIAL',
+  },
+  {
+    termId: 'AccessDecisionManager',
+    term: 'AccessDecisionManager',
+    definition: '인가(권한) 여부를 최종 판단하는 컴포넌트입니다.',
+    source: 'MATERIAL',
+  },
+  {
+    termId: 'CsrfToken',
+    term: 'CsrfToken',
+    definition: '상태 변경 요청이 실제 화면에서 왔는지 검증하는 값입니다.',
+    source: 'INSTRUCTOR',
+  },
+  {
+    termId: 'PasswordEncoder',
+    term: 'PasswordEncoder',
+    definition: '비밀번호를 저장 전 해시로 변환하고, 로그인 시 원문과 비교 검증하는 컴포넌트입니다.',
+    source: 'MATERIAL',
+  },
+  {
+    termId: 'UserDetailsService',
+    term: 'UserDetailsService',
+    definition: '사용자 식별자로 인증에 필요한 사용자 정보를 조회해 오는 인터페이스입니다.',
+    source: 'MATERIAL',
+  },
+  {
+    termId: 'GrantedAuthority',
+    term: 'GrantedAuthority',
+    definition: '인증된 사용자에게 부여된 권한 하나를 나타내는 값입니다.',
+    source: 'MATERIAL',
+  },
+  {
+    termId: 'JwtAuthenticationFilter',
+    term: 'JwtAuthenticationFilter',
+    definition: '요청 헤더의 JWT를 검증해 SecurityContext에 인증 정보를 채워 넣는 커스텀 필터입니다.',
+    source: 'INSTRUCTOR',
+  },
+  {
+    termId: 'RememberMeServices',
+    term: 'RememberMeServices',
+    definition: '세션이 끊긴 뒤에도 쿠키로 사용자를 다시 인증해 주는 자동 로그인 기능입니다.',
+    source: 'MATERIAL',
+  },
+  {
+    termId: 'SessionFixationProtection',
+    term: 'SessionFixationProtection',
+    definition: '로그인 성공 시 세션 ID를 새로 발급해 세션 고정 공격을 막는 정책입니다.',
+    source: 'INSTRUCTOR',
+  },
+  {
+    termId: 'CorsConfigurationSource',
+    term: 'CorsConfigurationSource',
+    definition: '어떤 출처·메서드·헤더의 교차 출처 요청을 허용할지 정의하는 설정입니다.',
+    source: 'MATERIAL',
   },
 ]
 
@@ -458,6 +521,22 @@ export const mockLiveSessionService = {
   },
   async getGlossary(lessonId) {
     return glossaryOverrides.get(lessonId) ?? defaultGlossaryTerms
+  },
+  async upsertGlossaryTerm(lessonId, term, definition) {
+    const trimmedTerm = term.trim()
+    const current = glossaryOverrides.get(lessonId) ?? defaultGlossaryTerms
+    const existingIndex = current.findIndex((entry) => entry.term === trimmedTerm)
+    const updated: GlossaryTerm = {
+      termId: trimmedTerm,
+      term: trimmedTerm,
+      definition: definition.trim(),
+      source: 'INSTRUCTOR',
+    }
+    const next = existingIndex >= 0
+      ? current.map((entry, index) => index === existingIndex ? updated : entry)
+      : [...current, updated]
+    glossaryOverrides.set(lessonId, next)
+    return updated
   },
   async getMyWatchBuckets() {
     return { 0: 1, 1: 1, 2: 3, 3: 1 }

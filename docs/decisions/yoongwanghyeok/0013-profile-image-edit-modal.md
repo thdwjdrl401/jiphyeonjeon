@@ -1,10 +1,17 @@
 # ADR-0013: 프로필 편집 = 페이지 내 모달 + 구현된 이미지 계약만 저장
 
-> 페이지 명세: [PAGES.md](../../frontend/PAGES.md) · 컴포넌트: [PROFILE.md](../../frontend/components/PROFILE.md) · 에셋 결정: [ADR-0023](../songjeongki/0023-asset-presigned-upload.md)
+> 페이지 명세: [PAGES.md](../../frontend/PAGES.md) · 컴포넌트: [PROFILE.md](../../frontend/components/PROFILE.md) · 현행 계정 결정: [songjeongki/0031](../songjeongki/0031-account-profile-security.md) · 에셋 결정: [songjeongki/0023](../songjeongki/0023-asset-presigned-upload.md)
 
-- **상태**: 채택
+- **상태**: 부분 대체 — 이미지 업로드 흐름 유지, 편집 가능 필드·역할별 배치 확장
 - **일자**: 2026-07-22
 - **적용 범위**: 프론트 프로필 수정 UX, 프로필 이미지 업로드, 인증 사용자 캐시
+
+> **2026-08-06 현행 정합화**: [songjeongki/0031](../songjeongki/0031-account-profile-security.md) 이후
+> `displayName`, 강사 소개·전문 분야, 비밀번호 변경, 회원 탈퇴 API가 구현됐다. 강사는 기본 프로필을
+> 모달에서, 학생은 페이지 내 카드에서 표시 이름·이미지를 수정하며 강사 공개 프로필과 계정 설정은
+> 별도 패널을 사용한다. 따라서 아래 “이미지만 저장 가능”과 결정 6은 당시의 가짜 저장 방지 조치로
+> 유효한 이력이지만 현재 기능 범위는 아니다. presigned 이미지 업로드와 인증 캐시 즉시 갱신 원칙은
+> 그대로 유지한다.
 
 ## 맥락
 

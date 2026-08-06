@@ -109,3 +109,5 @@ export const getWatchHeatmap = (lessonId: string, durationMs: number | null) =>
   liveSessionService.getWatchHeatmap(lessonId, durationMs)
 
 export const getGlossary = (lessonId: string) => liveSessionService.getGlossary(lessonId)
+export const upsertGlossaryTerm = (lessonId: string, term: string, definition: string) =>
+  liveSessionService.upsertGlossaryTerm(lessonId, term, definition)

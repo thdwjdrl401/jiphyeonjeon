@@ -1,10 +1,16 @@
 # ADR-0011: 커리큘럼 공통 강의 자료 = 선택 항목 + 관계 기반 노출
 
-> 레슨 자료 결정: [ADR-0003](0003-lesson-pptx-incremental-processing.md) · 미확정 API: [DECISIONS_PENDING.md](../../frontend/DECISIONS_PENDING.md) · 구현 가이드: [IMPLEMENTATION_GUIDE.md](../../frontend/IMPLEMENTATION_GUIDE.md)
+> 레슨 자료 결정: [ADR-0003](0003-lesson-pptx-incremental-processing.md) · 현행 팀 결정: [songjeongki/0042](../songjeongki/0042-curriculum-material-attach-and-embedding-scope.md) · 구현 가이드: [IMPLEMENTATION_GUIDE.md](../../frontend/IMPLEMENTATION_GUIDE.md)
 
-- **상태**: 프론트 UI·fixture 채택, 백엔드 API·AI 처리 정책 미확정
+- **상태**: 채택·FE/BE 구현 — 커리큘럼 scope AI worker 소비는 후속
 - **일자**: 2026-07-21
 - **적용 범위**: 커리큘럼 생성·관리·상세, 공통 강의 자료 권한
+
+> **2026-08-06 현행 정합화**: [songjeongki/0042](../songjeongki/0042-curriculum-material-attach-and-embedding-scope.md)가
+> `material_asset`의 커리큘럼 scope, 연결·삭제·다운로드 API, 상세 `materials`와 관계 기반 노출,
+> FE 생성·관리 저장 흐름을 구현했다. 아래 “백엔드 API·schema 없음”과 결정 10의 “요청 필드 미전송”은
+> 더 이상 현재 상태가 아니다. 다만 AI worker의 기존 PPTX job은 `lessonId`를 필수로 보므로
+> 커리큘럼 scope 임베딩 잡 소비는 아직 후속이다.
 
 ## 맥락
 
@@ -44,9 +50,7 @@
 
 ## 영향·후속
 
-- 업로드·목록·삭제 endpoint, presigned upload, 파일 크기·개수 제한을 확정해야 한다.
-- 자료 목록을 커리큘럼 상세 응답에 포함할지 권한 전용 endpoint로 분리할지 결정해야 한다.
-- 자료 다운로드 URL은 짧은 만료 시간과 서버 권한 재검사를 적용해야 한다.
-- 공통 자료의 레슨 상속, 중복 embedding, 삭제 시 AI 산출물 무효화 범위를 별도 ADR로 확정해야 한다.
-- 백엔드 계약이 확정되면 `CONTRACT.md`, FE·BE 구현과 계약 테스트를 같은 변경에서 갱신한다.
+- 연결·삭제·다운로드와 presigned 업로드, 관계 기반 상세 노출은 `CONTRACT.md` §2 자료 계약으로 확정·구현됐다.
+- 공통 자료는 모든 레슨에 물리 복제하지 않고 커리큘럼 scope를 유지한다. AI 검색 시 레슨 자료와 합성하는 방식과 삭제 영향은 worker 소비 경로에서 계속 검증한다.
+- 후속 계약 변경이 생기면 `CONTRACT.md`, FE·BE·AI 구현과 계약 테스트를 같은 변경에서 갱신한다.
 
