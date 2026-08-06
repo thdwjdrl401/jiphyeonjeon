@@ -556,7 +556,7 @@ public class InstructorCurriculumService {
     }
 
     /**
-     * 강의를 지운다. 세션·자료·북마크·학습기록은 DB가 CASCADE로 함께 지우지만 <b>녹화 자산은 아니다</b> —
+     * 강의를 지운다. 세션·자료·학습기록은 DB가 CASCADE로 함께 지우지만 <b>녹화 자산은 아니다</b> —
      * {@code video_asset}의 FK가 NO ACTION이라, 녹화가 한 번이라도 남은 강의는 삭제가 DB에서 막혔다.
      * 게다가 그 실패가 "구조가 동시에 변경되었습니다. 다시 시도해 주세요"로 올라와, 될 리 없는 일을
      * 재시도하라고 안내하고 있었다.

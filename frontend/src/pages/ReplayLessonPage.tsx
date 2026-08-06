@@ -4,10 +4,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getRoleHomePath } from '@/app/router/paths'
 import PersonalAiQuestionPanel, { type AskAiAnswer } from '@/features/ai/PersonalAiQuestionPanel'
 import { useAuth } from '@/features/auth/AuthContext'
-import { deleteBookmark, getLearningContext } from '@/features/learning/learningService'
+import { getLearningContext } from '@/features/learning/learningService'
 import { getLesson } from '@/features/lesson/lessonService'
 import { resolveLessonPath } from '@/features/lesson/lessonRouting'
-import BookmarkStrip from '@/features/live-session/BookmarkStrip'
 import CaptionDock from '@/features/live-session/CaptionDock'
 import LearningSidebar from '@/features/live-session/LearningSidebar'
 import type { LearningPanel } from '@/features/live-session/liveLearningPreview'
@@ -26,7 +25,6 @@ import {
   getCaptions,
   getGlossary,
   getWatchHeatmap,
-  saveBookmark,
   getChatMessages,
   getLectureNotes,
 } from '@/features/live-session/liveSessionService'
@@ -145,8 +143,8 @@ export default function ReplayLessonPage() {
     enabled: Boolean(lessonId),
   })
   /*
-   * 진도·북마크. 라이브 화면과 <b>같은 조회</b>다 — 다시보기라고 다른 것을 보여줄 이유가 없고,
-   * 라이브에서 찍은 북마크로 되돌아오는 것이 다시보기의 쓸모다. 강사는 자기 강의에 진도가 없다.
+   * 진도. 라이브 화면과 <b>같은 조회</b>다 — 다시보기라고 다른 것을 보여줄 이유가 없다.
+   * 강사는 자기 강의에 진도가 없다.
    */
   const learningQuery = useQuery({
     queryKey: ['learning-context', lessonId],
@@ -154,24 +152,6 @@ export default function ReplayLessonPage() {
     enabled: Boolean(lessonId) && !isInstructor,
   })
   const progressPercent = learningQuery.data?.progress?.progressPercent ?? null
-  /*
-   * 북마크는 <b>저장한다.</b> 예전에는 별표만 토글하고 아무것도 보내지 않아, 눌러도 아래 띠에
-   * 나타나지 않았다. 라이브와 같은 뮤테이션을 쓴다 — 두 화면이 같은 축(세션 상대 ms)이므로
-   * 라이브에서 찍은 것과 다시보기에서 찍은 것이 한 목록에 쌓이는 것이 맞다.
-   */
-  const bookmarkMutation = useMutation({
-    mutationFn: () => saveBookmark(lessonId, positionMs),
-    onSuccess: () => {
-      toast.success('북마크 추가됨')
-      void queryClient.invalidateQueries({ queryKey: ['learning-context', lessonId] })
-    },
-  })
-  const deleteBookmarkMutation = useMutation({
-    mutationFn: (bookmarkId: string) => deleteBookmark(lessonId, bookmarkId),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['learning-context', lessonId] })
-    },
-  })
   const heatmapQuery = useQuery({
     queryKey: ['watch-heatmap', lessonId, durationMs],
     queryFn: () => getWatchHeatmap(lessonId, durationMs),
@@ -329,20 +309,12 @@ export default function ReplayLessonPage() {
               playback={playback.playback}
               reloadToken={playback.reloadToken}
               seekRequest={seekRequest}
-              onBookmark={() => bookmarkMutation.mutate()}
               onRetry={playback.reload}
               onRootChange={setPlayerRoot}
               onSessionTimeChange={setPositionMs}
             />
           </Suspense>
           <WatchHeatmapCurve heatmap={heatmapQuery.data ?? null} playerRoot={playerRoot} />
-
-          <BookmarkStrip
-            bookmarks={learningQuery.data?.bookmarks ?? []}
-            canSeek
-            onDelete={(bookmarkId) => deleteBookmarkMutation.mutate(bookmarkId)}
-            onSeek={seekSession}
-          />
 
           <div {...captionPane.handleProps} />
 

@@ -1890,38 +1890,6 @@ body {
   .curriculum-cover img { transition: none; }
 }
 
-/* 내 북마크 스트립 — 플레이어와 자막 독 사이의 얇은 줄. 자주 보는 것이 아니라 사이드바 탭을 늘리지 않는다.
-   카드는 한 줄을 벗어나지 않는다(overflow-x) — 넘치면 좌우 화살표로 스크롤한다. */
-.bookmark-strip { display: flex; flex-direction: column; gap: .4rem;
-  padding: .5rem .75rem; border: 1px solid #333; border-radius: .5rem; background: #171717; }
-.bookmark-strip__header { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }
-.bookmark-strip__label { font-size: .75rem; color: rgba(255,255,255,.58); white-space: nowrap; }
-.bookmark-strip__delete-toggle { flex: 0 0 auto; border: 1px solid #444; border-radius: .35rem;
-  padding: .18rem .5rem; background: #222; color: #ddd; font-size: .68rem; cursor: pointer; }
-.bookmark-strip__delete-toggle:hover { border-color: #777; background: #2a2a2a; }
-/* 삭제 모드 중임을 확실히 알리는 강조색 — is-question과 같은 seal 계열. */
-.bookmark-strip__delete-toggle[aria-pressed="true"] { border-color: var(--seal); background: var(--seal); color: #fff; }
-.bookmark-strip__carousel { display: flex; align-items: center; gap: .3rem; min-width: 0; }
-.bookmark-strip__nav { flex: 0 0 auto; display: grid; place-items: center; width: 22px; height: 22px;
-  border: 1px solid #444; border-radius: 999px; background: #222; color: #ddd; font-size: .8rem;
-  line-height: 1; cursor: pointer; }
-.bookmark-strip__nav:hover:not(:disabled) { border-color: #777; background: #2a2a2a; }
-.bookmark-strip__nav:disabled { opacity: .35; cursor: default; }
-.bookmark-strip__list { display: flex; flex-wrap: nowrap; gap: .4rem; min-width: 0; margin: 0; padding: 3px 2px;
-  list-style: none; overflow-x: auto; scroll-behavior: smooth; scrollbar-width: none; }
-.bookmark-strip__list::-webkit-scrollbar { display: none; }
-.bookmark-strip__card { position: relative; flex: 0 0 auto; }
-.bookmark-strip__chip { font-variant-numeric: tabular-nums; font-size: .78rem;
-  padding: .18rem .5rem; border-radius: .35rem; }
-button.bookmark-strip__chip { border: 1px solid #444; background: transparent; color: #fff; cursor: pointer; }
-button.bookmark-strip__chip:hover { border-color: #fff; }
-time.bookmark-strip__chip { color: rgba(255,255,255,.58); }
-/* 삭제 배지 — 카드 우측 상단에 얹는 빨간 원 + 흰 X. */
-.bookmark-strip__remove { position: absolute; top: -6px; right: -6px; z-index: 1;
-  display: grid; place-items: center; width: 16px; height: 16px; padding: 0;
-  border: 0; border-radius: 999px; background: var(--red-600); color: #fff; font-size: .62rem;
-  line-height: 1; cursor: pointer; }
-.bookmark-strip__remove:hover { background: color-mix(in srgb, var(--red-600) 85%, black); }
 /* 송출 화질 패널 — 미리보기 아래 접히는 줄. 기본은 닫혀 있어 미리보기를 가리지 않는다. */
 .quality-panel { display: flex; align-items: flex-start; gap: 1rem; flex-wrap: wrap;
   padding: .6rem .75rem; border: 1px solid #333; border-radius: .5rem; background: #171717; }

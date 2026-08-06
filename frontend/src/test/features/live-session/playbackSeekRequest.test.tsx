@@ -80,7 +80,6 @@ function renderPlayer(playback: PlaybackView, seekRequest: PlaybackSeekRequest |
       playback={playback}
       reloadToken={0}
       seekRequest={seekRequest}
-      onBookmark={() => {}}
       onRetry={() => {}}
       onSessionTimeChange={() => {}}
     />

@@ -60,7 +60,6 @@ export const askReplayAi = (
   playbackSessionMs: number,
   options: Parameters<LiveSessionService['askReplayAi']>[3],
 ) => liveSessionService.askReplayAi(lessonId, question, playbackSessionMs, options)
-export const saveBookmark = (lessonId: string, sessionMs: number) => liveSessionService.saveBookmark(lessonId, sessionMs)
 export const getProcessingStatus = (sessionId: string) => liveSessionService.getProcessingStatus(sessionId)
 export const getQuestionHighlights = (sessionId: string) => liveSessionService.getQuestionHighlights(sessionId)
 

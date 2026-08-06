@@ -54,7 +54,7 @@ describe('라이브와 다시보기의 정합', () => {
     /*
      * 라이브 화면을 다시보기와 비교하려면 세션이 <b>실제로 LIVE여야</b> 한다.
      *
-     * <p>데모의 이 세션은 기본이 `OPEN`(=시작 전)이라 이제 대기 화면이 그려진다 — 플레이어도 북마크도
+     * <p>데모의 이 세션은 기본이 `OPEN`(=시작 전)이라 이제 대기 화면이 그려진다 — 플레이어가
      * 없다. 예전에는 상태와 무관하게 플레이어를 그렸기 때문에 이 차이가 드러나지 않았고, 이 파일은
      * 시작하지도 않은 강의실을 "라이브 화면"이라고 비교하고 있었다.
      */
@@ -95,19 +95,6 @@ describe('라이브와 다시보기의 정합', () => {
     // 사이드 패널 폭과 자막 높이 두 축이 모두 조절 가능해야 한다.
     expect(await screen.findByRole('separator', { name: '사이드 패널 너비 조절' })).toBeInTheDocument()
     expect(screen.getByRole('separator', { name: '자막 높이 조절' })).toBeInTheDocument()
-  })
-
-  it.each([
-    ['라이브', LIVE],
-    ['다시보기', REPLAY],
-  ])('%s 화면의 북마크는 눌렀을 때 서버에 저장된다', async (_name, path) => {
-    await loginStudent()
-    renderAt(path)
-
-    // 다시보기 쪽은 예전에 별표만 토글하고 아무것도 보내지 않아, 눌러도 목록에 나타나지 않았다.
-    // 이름은 정확히 맞춘다 — 북마크 스트립에 이미 찍힌 것이 있으면 "북마크 삭제" 토글도 함께 뜬다.
-    const bookmark = await screen.findByRole('button', { name: '북마크 추가' })
-    expect(bookmark).toBeEnabled()
   })
 
   it('두 화면 모두 하드코딩된 목차·진행률을 보이지 않는다', async () => {

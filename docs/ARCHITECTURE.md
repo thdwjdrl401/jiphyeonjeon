@@ -321,7 +321,7 @@ Spring은 접수 트랜잭션과 분리된 dispatcher로 durable queue에 발행
 | 계정 | `app_user` · `instructor_profile` | ✅ |
 | 강좌 | `curriculum` → `section` → `lesson` | ✅ |
 | 라이브 | `live_session` | ✅ |
-| 수강·학습 | `enrollment` · `learning_progress` · `bookmark` | ✅ 전부 배선 |
+| 수강·학습 | `enrollment` · `learning_progress` | ✅ 전부 배선 |
 | 자산 | `asset`(범용) ← `material_asset`(레슨 자료) · `video_asset`(라이브 녹화 HLS) · `recorded_video`/`media_transcode_job`(업로드 MP4·HLS) | ✅ 전부 배선 |
 | 채팅 | `chat_message` | ✅ |
 | 통합 | `outbox_events`(목적지별 릴레이) · `external_event_inbox` | ✅ 배선 |

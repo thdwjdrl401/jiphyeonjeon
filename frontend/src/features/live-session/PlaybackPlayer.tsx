@@ -23,7 +23,6 @@ interface PlaybackPlayerProps {
   lessonTitle: string
   /** 지금 보고 있는 사람 수. 다시보기에는 그런 것이 없으므로 주지 않으면 표시하지 않는다. */
   participantCount?: number
-  onBookmark: () => void
   onRetry: () => void
   onSessionTimeChange: (sessionMs: number) => void
   /**
@@ -75,7 +74,6 @@ export default function PlaybackPlayer({
   seekRequest,
   lessonTitle,
   participantCount,
-  onBookmark,
   onRetry,
   onSessionTimeChange,
   onRootChange,
@@ -188,7 +186,6 @@ export default function PlaybackPlayer({
             {playbackLabel(statusState)}
           </StatusBadge>
           {participantCount !== undefined && <span>{participantCount}명 참여 중</span>}
-          <button type="button" onClick={onBookmark}>북마크 추가</button>
           {headerExtra}
         </div>
       </header>

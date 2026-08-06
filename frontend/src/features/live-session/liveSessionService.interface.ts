@@ -481,7 +481,6 @@ export interface LiveSessionService {
     playbackSessionMs: number,
     options: AiAnswerStreamOptions,
   ) => Promise<void>
-  saveBookmark: (lessonId: string, sessionMs: number) => Promise<void>
   getAiAnswerHistory: (sessionId: string) => Promise<AiAnswerHistoryItem[]>
   /** 내가 이미 쌓은 칸별 재생 횟수. 새로고침 뒤 이어서 세려면 필요하다. */
   getGlossary: (lessonId: string) => Promise<GlossaryTerm[]>

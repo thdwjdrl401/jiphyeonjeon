@@ -1,16 +1,8 @@
 /**
- * 레슨 학습 상태(진도·북마크). 서버 계약: `GET /api/lessons/{lessonId}/learning-context`.
+ * 레슨 학습 상태(진도). 서버 계약: `GET /api/lessons/{lessonId}/learning-context`.
  *
  * 라이브·다시보기 양쪽이 같은 축(세션 상대 ms)을 쓰므로 화면을 가리지 않는다.
  */
-export interface LearningBookmark {
-  /** 삭제 대상을 가리키는 키. 서버 북마크 엔티티의 PK다. */
-  bookmarkId: string
-  /** 세션 시작을 0으로 한 위치. 플레이어 seek과 같은 축이다. */
-  sessionMs: number
-  createdAt: string
-}
-
 export interface LearningProgress {
   progressPercent: number
   lastPositionMs: number
@@ -22,7 +14,6 @@ export interface LearningContext {
   lessonId: string
   /** 아직 학습 기록이 없으면 null(첫 학습). */
   progress: LearningProgress | null
-  bookmarks: LearningBookmark[]
 }
 
 /**
@@ -44,6 +35,4 @@ export interface ProgressUpdate {
 export interface LearningService {
   getLearningContext: (lessonId: string) => Promise<LearningContext>
   updateProgress: (lessonId: string, update: ProgressUpdate) => Promise<void>
-  /** 이미 없거나 남의 것이면 서버가 조용히 무시한다(멱등) — 화면은 항상 성공으로 다룬다. */
-  deleteBookmark: (lessonId: string, bookmarkId: string) => Promise<void>
 }

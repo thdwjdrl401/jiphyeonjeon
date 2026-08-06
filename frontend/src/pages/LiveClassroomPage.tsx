@@ -6,8 +6,6 @@ import { getRoleHomePath, instructorPaths } from '@/app/router/paths'
 import PersonalAiQuestionPanel, { type AskAiAnswer } from '@/features/ai/PersonalAiQuestionPanel'
 import { useAuth } from '@/features/auth/AuthContext'
 import { getLesson } from '@/features/lesson/lessonService'
-import { deleteBookmark, getLearningContext } from '@/features/learning/learningService'
-import BookmarkStrip from '@/features/live-session/BookmarkStrip'
 import WatchHeatmapCurve from '@/features/live-session/WatchHeatmapCurve'
 import { useWatchTracking } from '@/features/live-session/useWatchTracking'
 import { mergeLectureNote } from '@/features/live-session/lectureNoteMerge'
@@ -33,7 +31,6 @@ import {
   getLectureNotes,
   getLiveSession,
   getWatchHeatmap,
-  saveBookmark,
   sendChatMessage,
   subscribeCaptions,
   subscribeChatMessages,
@@ -52,7 +49,6 @@ import { usePlayback } from '@/features/live-session/usePlayback'
 import { useResizablePane } from '@/features/live-session/useResizablePane'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
-import { useToast } from '@/shared/ui/Toast'
 import { isMockApiEnabled, isTestMode } from '@/shared/config/runtime'
 
 const DevLivePanel = lazy(() => import('@/features/live-session/DevLivePanel'))
@@ -89,7 +85,6 @@ export default function LiveClassroomPage() {
   const { sessionId = '' } = useParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const toast = useToast()
   const { user } = useAuth()
   const isInstructor = user?.role === 'INSTRUCTOR'
   const sessionQuery = useQuery({ queryKey: ['live-session', sessionId], queryFn: () => getLiveSession(sessionId), enabled: Boolean(sessionId) })
@@ -237,29 +232,6 @@ export default function LiveClassroomPage() {
     },
     [queryClient, sessionId],
   )
-  /*
-   * 찍은 북마크를 다시 보여주기 위한 조회. 저장만 하고 돌아올 길이 없으면 그 버튼은 아무것도 하지
-   * 않는 것과 같다. 강사는 자기 강의에 북마크를 찍지 않으므로 수강생 화면에서만 읽는다.
-   */
-  const learningQuery = useQuery({
-    queryKey: ['learning-context', lesson?.lessonId],
-    queryFn: () => getLearningContext(lesson!.lessonId),
-    enabled: Boolean(lesson?.lessonId) && !isInstructor,
-  })
-  const bookmarkMutation = useMutation({
-    mutationFn: () => saveBookmark(lesson!.lessonId, positionMs),
-    onSuccess: () => {
-      toast.success('북마크 추가됨')
-      // 방금 찍은 것이 목록에 바로 보여야 한다 — 안 보이면 저장됐는지 알 수 없다.
-      void queryClient.invalidateQueries({ queryKey: ['learning-context', lesson?.lessonId] })
-    },
-  })
-  const deleteBookmarkMutation = useMutation({
-    mutationFn: (bookmarkId: string) => deleteBookmark(lesson!.lessonId, bookmarkId),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['learning-context', lesson?.lessonId] })
-    },
-  })
   const endMutation = useMutation({ mutationFn: () => endLiveSession(sessionId), onSuccess: () => navigate(instructorPaths.processing(sessionId)) })
   useEffect(() => {
     if (!sessionId) return undefined
@@ -662,7 +634,6 @@ export default function LiveClassroomPage() {
                   playback={playback.playback}
                   reloadToken={playback.reloadToken}
                   seekRequest={studentSeekRequest}
-                  onBookmark={() => bookmarkMutation.mutate()}
                   onRetry={playback.reload}
                   onRootChange={setPlayerRoot}
                   onSessionTimeChange={setPositionMs}
@@ -672,21 +643,12 @@ export default function LiveClassroomPage() {
 
           {!isInstructor && <WatchHeatmapCurve heatmap={heatmapQuery.data ?? null} playerRoot={playerRoot} />}
 
+          {!isInstructor && <div {...captionPane.handleProps} />}
+
           {/*
             자막은 수강생 화면에만 둔다. 강사는 자기가 말한 것을 다시 읽을 이유가 없고, 자막 독이
             차지하는 높이만큼 송출 미리보기가 눌려 실제로 나가는 프레임을 작게 보게 된다.
           */}
-          {!isInstructor && (
-            <BookmarkStrip
-              bookmarks={learningQuery.data?.bookmarks ?? []}
-              canSeek={!hasEnded}
-              onDelete={(bookmarkId) => deleteBookmarkMutation.mutate(bookmarkId)}
-              onSeek={seekSession}
-            />
-          )}
-
-          {!isInstructor && <div {...captionPane.handleProps} />}
-
           {!isInstructor && !captionPane.collapsed && (
             <CaptionDock
               captions={glossary.captions}

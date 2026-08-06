@@ -381,7 +381,7 @@ replayStatus      = PUBLISHED
 
 5. `ACTIVE → REVOKED` 시 학습 기록과 기존 재생 URL 처리
 
-   - **권장안:** 진도, 퀴즈 응시, 북마크 같은 학습 기록은 감사와 복구를 위해 보존하고 접근 권한만 즉시 회수한다. 신규 HLS URL, LiveKit token, SSE·학습 요청 발급은 바로 차단한다.
+   - **권장안:** 진도, 퀴즈 응시 같은 학습 기록은 감사와 복구를 위해 보존하고 접근 권한만 즉시 회수한다. 신규 HLS URL, LiveKit token, SSE·학습 요청 발급은 바로 차단한다.
    - 이미 발급된 HLS URL은 짧은 TTL을 기본으로 하고 만료 이후 재발급을 거부한다. 즉시 차단이 반드시 필요한 경우에만 CDN·미디어 게이트의 별도 폐기 기능을 사용하며, 프론트는 `REVOKED` 확인 즉시 재생과 실시간 연결을 종료한다.
 
 6. replay `WITHDRAWN → PUBLISHED` 재게시 허용 여부

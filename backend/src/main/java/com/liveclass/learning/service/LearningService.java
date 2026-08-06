@@ -2,9 +2,7 @@ package com.liveclass.learning.service;
 
 import com.liveclass.common.logging.Audit;
 import com.liveclass.learning.api.LessonLearningAccess;
-import com.liveclass.learning.domain.Bookmark;
 import com.liveclass.learning.domain.LearningProgress;
-import com.liveclass.learning.repository.BookmarkRepository;
 import com.liveclass.learning.repository.LearningProgressRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,11 +10,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
-import java.util.List;
 import java.util.UUID;
 
 /**
- * 학습 진도·북마크. 진도율은 클라이언트가 계산해 보내고 서버는 저장·검증한다(ADR-0033) — VOD
+ * 학습 진도. 진도율은 클라이언트가 계산해 보내고 서버는 저장·검증한다(ADR-0033) — VOD
  * 재생이라 브라우저가 재생 위치를 안다. 서버는 두 가지 방어만 얹는다.
  *
  * <ul>
@@ -34,14 +31,11 @@ public class LearningService {
     private static final int COMPLETION_THRESHOLD_PERCENT = 90;
 
     private final LearningProgressRepository progressRepository;
-    private final BookmarkRepository bookmarkRepository;
     private final LessonLearningAccess access;
 
     public LearningService(LearningProgressRepository progressRepository,
-                           BookmarkRepository bookmarkRepository,
                            LessonLearningAccess access) {
         this.progressRepository = progressRepository;
-        this.bookmarkRepository = bookmarkRepository;
         this.access = access;
     }
 
@@ -84,44 +78,15 @@ public class LearningService {
         return saved;
     }
 
-    /**
-     * 북마크 추가. 같은 위치(user·lesson·sessionMs)가 이미 있으면 그대로 둔다(멱등) — uq 충돌을
-     * 오류로 올리지 않는다.
-     */
-    @Transactional
-    public Bookmark addBookmark(UUID userId, UUID lessonId, long sessionMs) {
-        access.ensureCanLearn(userId, lessonId);
-        // 사전 조회로 중복을 거른다 — uq 충돌을 예외로 받으면 @Transactional이 rollback-only로 오염된다.
-        return bookmarkRepository.findByUserIdAndLessonIdAndSessionMs(userId, lessonId, sessionMs)
-                .orElseGet(() -> {
-                    Bookmark bookmark = new Bookmark();
-                    bookmark.setUserId(userId);
-                    bookmark.setLessonId(lessonId);
-                    bookmark.setSessionMs(sessionMs);
-                    return bookmarkRepository.save(bookmark);
-                });
-    }
-
-    /**
-     * 북마크 삭제. 이미 없거나 남의 북마크(id가 다른 user·lesson 소유)면 조용히 무시한다(멱등) —
-     * 삭제 버튼을 두 번 눌러도, 다른 탭에서 먼저 지워졌어도 오류로 다룰 일이 아니다.
-     */
-    @Transactional
-    public void deleteBookmark(UUID userId, UUID lessonId, UUID bookmarkId) {
-        access.ensureCanLearn(userId, lessonId);
-        bookmarkRepository.deleteByIdAndUserIdAndLessonId(bookmarkId, userId, lessonId);
-    }
-
-    /** 레슨 학습 컨텍스트 — 내 진도(없으면 null)와 북마크 목록. */
+    /** 레슨 학습 컨텍스트 — 내 진도(없으면 null). */
     @Transactional(readOnly = true)
     public LearningContext getLearningContext(UUID userId, UUID lessonId) {
         access.ensureCanLearn(userId, lessonId);
         LearningProgress progress = progressRepository.findByUserIdAndLessonId(userId, lessonId).orElse(null);
-        List<Bookmark> bookmarks = bookmarkRepository.findByUserIdAndLessonIdOrderBySessionMsAsc(userId, lessonId);
-        return new LearningContext(lessonId, progress, bookmarks);
+        return new LearningContext(lessonId, progress);
     }
 
     /** getLearningContext 결과 묶음(웹 계층 DTO 변환용). */
-    public record LearningContext(UUID lessonId, LearningProgress progress, List<Bookmark> bookmarks) {
+    public record LearningContext(UUID lessonId, LearningProgress progress) {
     }
 }

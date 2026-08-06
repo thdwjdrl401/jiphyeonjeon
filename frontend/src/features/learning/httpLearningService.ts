@@ -9,7 +9,4 @@ export const httpLearningService = {
   async updateProgress(lessonId, update) {
     await apiClient.put(`/lessons/${lessonId}/progress`, update)
   },
-  async deleteBookmark(lessonId, bookmarkId) {
-    await apiClient.delete(`/lessons/${lessonId}/bookmarks/${bookmarkId}`)
-  },
 } satisfies LearningService

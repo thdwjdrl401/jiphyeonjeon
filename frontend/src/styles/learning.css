@@ -296,7 +296,7 @@
  * 밖, `.video-stage` 안의 다른 자리에 있다. 클릭한 버튼은 마우스를 치워도 포커스를 그대로 들고
  * 있는 것이 브라우저 기본 동작이라, `.video-stage:focus-within`으로 걸면 전체화면 버튼 하나만
  * 눌러도 그 포커스가 남아 있는 동안 헤더가 계속 떠 있었다(마우스를 빼도 안 사라지는 문제). 헤더
- * 자신의 버튼(돌아가기·북마크)에 포커스가 있을 때만 붙잡아 두면, 키보드로 그 버튼들을 탐색할
+ * 자신의 버튼(돌아가기 등)에 포커스가 있을 때만 붙잡아 두면, 키보드로 그 버튼들을 탐색할
  * 때는 여전히 보이면서 다른 컨트롤을 눌렀을 때는 더 이상 영향받지 않는다.
  */
 .student-live-status.is-visible, .student-live-status:focus-within { opacity: 1; pointer-events: auto; transform: translateY(0); transition-delay: 0s; }

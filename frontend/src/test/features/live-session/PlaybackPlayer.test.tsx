@@ -48,7 +48,6 @@ describe('재생 플레이어', () => {
         playback={null}
         reloadToken={0}
         seekRequest={null}
-        onBookmark={() => undefined}
         onRetry={onRetry}
         onSessionTimeChange={() => undefined}
       />,
@@ -70,7 +69,6 @@ describe('재생 플레이어', () => {
         playback={playbackFixture({ source: null, liveSessionStatus: 'STARTING' })}
         reloadToken={0}
         seekRequest={null}
-        onBookmark={() => undefined}
         onRetry={() => undefined}
         onSessionTimeChange={() => undefined}
       />,
@@ -91,7 +89,6 @@ describe('재생 플레이어', () => {
         playback={playbackFixture({ liveSessionStatus: 'ENDED', durationMs: 600_000 })}
         reloadToken={0}
         seekRequest={null}
-        onBookmark={() => undefined}
         onRetry={() => undefined}
         onSessionTimeChange={() => undefined}
       />,

@@ -68,7 +68,7 @@ public class LessonMaterialService implements LessonMaterialManagement {
             saved = materialAssetRepository.saveAndFlush(material);
         } catch (DataIntegrityViolationException e) {
             // uq_material_active 위반 = 동시 요청이 먼저 커밋한 경우. rollback-only로 오염되기 전에
-            // 도메인 예외로 바꿔 컨트롤러 409로 정상 도달시킨다(0033의 북마크 중복과 같은 이유).
+            // 도메인 예외로 바꿔 컨트롤러 409로 정상 도달시킨다.
             throw new MaterialAlreadyAttachedException("이미 이 레슨에 연결된 자료입니다.");
         }
 

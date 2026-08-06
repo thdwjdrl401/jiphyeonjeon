@@ -14,13 +14,11 @@ import {
 vi.mock('@/features/live-session/PlaybackPlayer', () => ({
   default: ({
     playback,
-    onBookmark,
     lessonTitle,
     backLink,
     headerExtra,
   }: {
     playback: { sessionId: string } | null
-    onBookmark: () => void
     lessonTitle?: string
     backLink?: ReactNode
     headerExtra?: ReactNode
@@ -29,7 +27,6 @@ vi.mock('@/features/live-session/PlaybackPlayer', () => ({
       {backLink}
       {lessonTitle && <h1>{lessonTitle}</h1>}
       {playback && <span>Mock HLS 재생 준비 · {playback.sessionId}</span>}
-      <button type="button" onClick={onBookmark}>북마크 추가</button>
       {headerExtra}
     </div>
   ),
@@ -358,7 +355,6 @@ describe('전체 페이지 라우트', () => {
     expect(screen.getByRole('tab', { name: '실시간 노트' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '핵심 용어' })).toBeInTheDocument()
     expect(window.location.pathname).toBe('/student/live-sessions/ses-security-live/classroom')
-    expect(screen.getByRole('button', { name: '북마크 추가' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '확인하고 참여하기' }))
     expect(await screen.findByText('Mock HLS 재생 준비 · ses-security-live')).toBeInTheDocument()
     expect(screen.queryByText('강사 운영 모드')).not.toBeInTheDocument()

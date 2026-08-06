@@ -31,7 +31,7 @@ const features = [
     key: 'replay',
     number: '04',
     title: '배움이 이어지는 다시보기',
-    description: '자막, 북마크, 퀴즈와 함께 나에게 필요한 구간부터 학습을 이어가요.',
+    description: '자막, 퀴즈와 함께 나에게 필요한 구간부터 학습을 이어가요.',
   },
 ]
 

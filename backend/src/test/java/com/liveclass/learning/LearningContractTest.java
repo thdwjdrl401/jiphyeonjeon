@@ -18,7 +18,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -26,10 +25,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 학습 상태 API 계약 (liveclass-102). 진도·북마크는 수강자만.
+ * 학습 상태 API 계약 (liveclass-102). 진도는 수강자만.
  *
- * <p>핵심: (1) 진도 upsert·90% 완료 sticky·순서역전 방어, (2) 북마크 멱등, (3) 수강 인가(미수강 403),
- * (4) 배선의 최종 목적 — 카탈로그 progress가 더 이상 항상 null이 아니다.
+ * <p>핵심: (1) 진도 upsert·90% 완료 sticky·순서역전 방어, (2) 수강 인가(미수강 403),
+ * (3) 배선의 최종 목적 — 카탈로그 progress가 더 이상 항상 null이 아니다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -52,8 +51,7 @@ class LearningContractTest {
         // 처음엔 진도 없음.
         write(get("/api/lessons/" + lessonId + "/learning-context"), student, null)
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.progress").doesNotExist())
-                .andExpect(jsonPath("$.bookmarks").isArray());
+                .andExpect(jsonPath("$.progress").doesNotExist());
 
         // 40% 저장 → 미완료.
         write(put("/api/lessons/" + lessonId + "/progress"), student,
@@ -113,58 +111,6 @@ class LearningContractTest {
     }
 
     @Test
-    void bookmark_is_idempotent() throws Exception {
-        Cookie[] instructor = loginAs("INSTRUCTOR");
-        String cid = createPublishedCurriculum(instructor);
-        String lessonId = addLesson(instructor, cid, "1강");
-        Cookie[] student = loginAs("STUDENT");
-        approveEnrollment(instructor, student, cid);
-
-        write(post("/api/lessons/" + lessonId + "/bookmarks"), student, "{\"sessionMs\":45000}")
-                .andExpect(status().isCreated());
-        // 같은 위치 다시 → 중복 생성 안 함.
-        write(post("/api/lessons/" + lessonId + "/bookmarks"), student, "{\"sessionMs\":45000}")
-                .andExpect(status().isCreated());
-        write(post("/api/lessons/" + lessonId + "/bookmarks"), student, "{\"sessionMs\":90000}")
-                .andExpect(status().isCreated());
-
-        write(get("/api/lessons/" + lessonId + "/learning-context"), student, null)
-                .andExpect(jsonPath("$.bookmarks.length()").value(2))
-                .andExpect(jsonPath("$.bookmarks[0].sessionMs").value(45000))
-                .andExpect(jsonPath("$.bookmarks[1].sessionMs").value(90000));
-    }
-
-    @Test
-    void bookmark_delete_removes_it_and_is_idempotent() throws Exception {
-        Cookie[] instructor = loginAs("INSTRUCTOR");
-        String cid = createPublishedCurriculum(instructor);
-        String lessonId = addLesson(instructor, cid, "1강");
-        Cookie[] student = loginAs("STUDENT");
-        approveEnrollment(instructor, student, cid);
-
-        write(post("/api/lessons/" + lessonId + "/bookmarks"), student, "{\"sessionMs\":45000}")
-                .andExpect(status().isCreated());
-        write(post("/api/lessons/" + lessonId + "/bookmarks"), student, "{\"sessionMs\":90000}")
-                .andExpect(status().isCreated());
-
-        JsonNode context = json(write(get("/api/lessons/" + lessonId + "/learning-context"), student, null)
-                .andExpect(jsonPath("$.bookmarks.length()").value(2)).andReturn());
-        String firstId = context.get("bookmarks").get(0).get("bookmarkId").asString();
-
-        write(delete("/api/lessons/" + lessonId + "/bookmarks/" + firstId), student, null)
-                .andExpect(status().isNoContent());
-        write(get("/api/lessons/" + lessonId + "/learning-context"), student, null)
-                .andExpect(jsonPath("$.bookmarks.length()").value(1))
-                .andExpect(jsonPath("$.bookmarks[0].sessionMs").value(90000));
-
-        // 이미 지운 것을 다시 지워도, 남의 id를 넣어도 조용히 204다(존재를 드러내지 않는다).
-        write(delete("/api/lessons/" + lessonId + "/bookmarks/" + firstId), student, null)
-                .andExpect(status().isNoContent());
-        write(delete("/api/lessons/" + lessonId + "/bookmarks/" + UUID.randomUUID()), student, null)
-                .andExpect(status().isNoContent());
-    }
-
-    @Test
     void unenrolled_student_cannot_learn() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);
@@ -176,8 +122,6 @@ class LearningContractTest {
                 .andExpect(jsonPath("$.code").value("ENROLLMENT_REQUIRED"));
         write(put("/api/lessons/" + lessonId + "/progress"), student,
                 "{\"progressPercent\":50,\"lastPositionMs\":1000}")
-                .andExpect(status().isForbidden());
-        write(post("/api/lessons/" + lessonId + "/bookmarks"), student, "{\"sessionMs\":1000}")
                 .andExpect(status().isForbidden());
     }
 
