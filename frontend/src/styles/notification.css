@@ -347,6 +347,100 @@ html:has(.notifications-page) {
 }
 
 /*
+  3차 — 종류 칩. 탭이 아니라 칩으로 두어 위 두 줄(탭)보다 아래 층으로 읽히게 한다. 밑줄도 면도
+  쓰지 않고 테두리만 쓰는 이유는, 1차가 면(ink-950)·2차가 밑줄(seal)을 이미 가져갔기 때문이다.
+*/
+.notification-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.notification-category {
+  position: relative;
+  min-height: 28px;
+  border: 1px solid var(--ink-200);
+  border-radius: 999px;
+  /* 오른쪽만 넓다 — 알림이 있는 칩의 점이 들어갈 자리다. 있는·없는 칩의 폭을 같게 두어야 줄이 고르다. */
+  padding: 4px 14px 4px 11px;
+  background: var(--white);
+  color: var(--ink-700);
+  font-family: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: border-color 140ms, color 140ms, background 140ms;
+}
+
+/*
+  받은 알림이 있는 칩에는 오른쪽 위에 점을 찍는다 — 선명함만으로는 "있다"가 훑을 때 잡히지 않는다.
+  건수는 title에 있으니 이 점은 장식이다.
+
+  <p>점은 <b>칩 테두리 선에 걸터앉는다</b>. 안쪽에 넣으면 글자와 같은 면에 있어 읽는 흐름을 끊고,
+  완전히 바깥으로 띄우면 칩과 무관한 표시처럼 보인다. 선 위에 얹으면 "이 칩에 붙은 표시"로 읽힌다.
+
+  <p>칩 줄이 두 줄로 접힐 때 윗줄의 점이 아랫줄 칩을 침범하지 않도록, 칩 줄의 위쪽 여백(margin-top)이
+  점이 솟는 높이보다 넉넉해야 한다.
+*/
+.notification-category:not(.is-empty)::after {
+  position: absolute;
+  top: -3px;
+  right: 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--seal);
+  /*
+    테두리 선이 점 뒤로 지나가지 않게 끊는다. 링 색은 <b>패널 면</b>과 같아야 한다 — 칩 배경이
+    아니라 점이 얹히는 바깥 면이 패널이고, design-system이 그 면을 --paper-light로 정한다.
+  */
+  box-shadow: 0 0 0 2px var(--paper-light);
+  content: '';
+}
+
+.notification-category:hover {
+  border-color: var(--ink-400);
+  color: var(--ink-900);
+}
+
+/* 눌린 칩은 테두리와 글자만 진해진다 — 면을 칠하면 탭과 같은 무게가 되어 층이 뭉갠다. */
+.notification-category.is-active {
+  border-color: var(--ink-950);
+  color: var(--ink-950);
+  font-weight: 500;
+}
+
+/*
+  지금 목록에 없는 종류. 흐리게 두어 "받은 것"과 "안 받은 것"이 한눈에 갈리게 한다.
+
+  <p>막지는 않는다(disabled 아님) — 건수는 지금까지 불러온 목록에서 센 값이라, 다음 페이지에 있는
+  알림이 0건으로 보일 수 있다. 누르면 화면이 다음 페이지를 당겨 확인한다.
+
+  <p>opacity로 통째로 흐리게 하지 않는다. 그러면 테두리까지 사라져 칩 자리가 흔들려 보이고, 눌러서
+  선택했을 때(is-active)의 진한 글자도 함께 죽는다. 색만 낮춘다.
+*/
+.notification-category.is-empty {
+  border-color: var(--ink-100);
+  color: var(--ink-400);
+}
+
+.notification-category.is-empty:hover {
+  border-color: var(--ink-300);
+  color: var(--ink-600);
+}
+
+/* 흐린 칩을 골랐을 때도 "선택됨"은 분명해야 한다 — 비어 있다는 것과 고르지 않았다는 것은 다르다. */
+.notification-category.is-empty.is-active {
+  border-color: var(--ink-700);
+  color: var(--ink-800);
+}
+
+.notification-category:focus-visible {
+  outline: 2px solid var(--ink-950);
+  outline-offset: 1px;
+}
+
+/*
   필터 전환 중 목록이 로딩 문구 한 줄로 바뀌어도 패널 높이를 유지한다. 빈 상태와 짧은 읽음 목록에서도
   카드 하단이 갑자기 위로 접히지 않으며, 실제 내용이 더 길면 자연스럽게 늘어난다.
 */

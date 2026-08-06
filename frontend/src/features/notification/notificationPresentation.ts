@@ -1,3 +1,4 @@
+import type { UserRole } from '@/features/auth/types'
 import type { NotificationActionStatus, NotificationSeverity, NotificationType } from './types'
 
 /**
@@ -17,6 +18,84 @@ export const NOTIFICATION_CATEGORY_LABEL: Record<NotificationType, string> = {
   RECORDING_READY: '녹화',
   RECORDING_FAILED: '녹화 오류',
   VOD_PUBLISHED: '다시보기',
+}
+
+/**
+ * 태그 필터 하나. `types`가 여러 개인 이유는 <b>라벨이 같은 종류를 한 칩으로 묶기</b> 때문이다 —
+ * `수강 신청`은 신청(`ENROLLMENT_REQUESTED`)과 거절(`ENROLLMENT_REJECTED`) 둘을 덮는다. 목록 배지가
+ * 그 둘을 같은 말로 부르는데 칩을 둘로 쪼개면 어느 칩이 어느 배지인지 알 수 없다.
+ */
+export interface NotificationCategoryFilter {
+  label: string
+  types: NotificationType[]
+  /** 지금 불러온 목록에서 이 칩에 해당하는 알림 수. 0이면 화면이 칩을 흐리게 낸다. */
+  count: number
+}
+
+/**
+ * 이 종류를 <b>받는 역할</b>. 서버의 팬아웃·접근 규칙에서 옮겨 온 표다 —
+ * `NotificationFanoutWorker.INSTRUCTOR_TYPES`(녹화 둘은 강사에게만),
+ * `NotificationAccessRule`(수강 판정은 학생), 그리고 mock의 발행 함수(수강 신청은 커리큘럼 소유 강사).
+ *
+ * <p>이 표가 있어야 역할마다 칩 구성이 달라진다. 강사에게 `학습 자료`·`다시보기` 칩을 보여 주면
+ * 받을 일이 없는 종류를 계속 확인하게 되고, 학생에게 `녹화 오류` 칩은 아무 뜻이 없다.
+ *
+ * <p><b>라이브 임박은 양쪽이 받는다.</b> 학생은 수업을 놓치지 않기 위해, 강사는 방송 준비 시간을
+ * 확보하기 위해서다(리드타임 설정도 두 역할에 모두 열려 있다).
+ */
+const NOTIFICATION_AUDIENCE: Record<NotificationType, readonly UserRole[]> = {
+  ENROLLMENT_REQUESTED: ['INSTRUCTOR'],
+  ENROLLMENT_APPROVED: ['STUDENT'],
+  ENROLLMENT_REJECTED: ['STUDENT'],
+  LIVE_SCHEDULED: ['STUDENT'],
+  LIVE_STARTING_SOON: ['STUDENT', 'INSTRUCTOR'],
+  LIVE_SCHEDULE_CHANGED: ['STUDENT'],
+  LIVE_CANCELED: ['STUDENT'],
+  LESSON_PUBLISHED: ['STUDENT'],
+  MATERIAL_PUBLISHED: ['STUDENT'],
+  RECORDING_READY: ['INSTRUCTOR'],
+  RECORDING_FAILED: ['INSTRUCTOR'],
+  VOD_PUBLISHED: ['STUDENT'],
+}
+
+/**
+ * 그 역할이 받는 <b>모든</b> 종류를 칩으로 만든다. 0건인 칩도 남기고 `count: 0`으로 알린다 —
+ * 화면은 그것을 흐리게 그려서, 아직 받은 적 없는 종류까지 "어떤 알림이 오는 화면인가"를 보여 준다.
+ *
+ * <p>`role`을 주지 않으면 모든 종류를 만든다. 역할을 아직 모르는 순간(로그인 정보 로딩)에 칩이
+ * 사라졌다 나타나지 않게 하려는 것이다.
+ *
+ * <p><b>역할 표에 없어도 실제로 받은 종류는 칩으로 만든다.</b> 표는 서버 규칙을 베껸 것이라 언제든
+ * 어긋날 수 있는데, 그때 칩이 없으면 목록에 보이는 알림을 좁힐 방법이 사라진다.
+ *
+ * <p>0건 칩을 눌러도 막지 않는다. 칩 건수는 <b>지금까지 불러온</b> 목록에서 센 값이라 다음 페이지에
+ * 있는 종류는 0으로 보이는데, 막아 버리면 실제로 있는 알림을 고를 수 없다.
+ *
+ * <p>순서는 `NOTIFICATION_CATEGORY_LABEL`의 선언 순서를 따른다. 들어온 알림 순서로 만들면 새 알림이
+ * 올 때마다 칩이 자리를 바꿔, 방금 누르려던 칩이 옮겨 간다.
+ */
+export function buildCategoryFilters(
+  types: readonly NotificationType[],
+  role?: UserRole,
+): NotificationCategoryFilter[] {
+  const counts = new Map<NotificationType, number>()
+  for (const type of types) counts.set(type, (counts.get(type) ?? 0) + 1)
+
+  const byLabel = new Map<string, NotificationCategoryFilter>()
+  for (const type of Object.keys(NOTIFICATION_CATEGORY_LABEL) as NotificationType[]) {
+    const forThisRole = !role || NOTIFICATION_AUDIENCE[type].includes(role)
+    if (!forThisRole && !counts.has(type)) continue
+
+    const label = NOTIFICATION_CATEGORY_LABEL[type]
+    const existing = byLabel.get(label)
+    if (existing) {
+      existing.types.push(type)
+      existing.count += counts.get(type) ?? 0
+    } else {
+      byLabel.set(label, { label, types: [type], count: counts.get(type) ?? 0 })
+    }
+  }
+  return [...byLabel.values()]
 }
 
 export type NotificationBadgeTone = 'neutral' | 'success' | 'warning' | 'danger'

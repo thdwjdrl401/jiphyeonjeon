@@ -115,17 +115,22 @@ describe('알림 센터', () => {
     await waitFor(() => expect(bell()).toHaveAccessibleName('알림 (읽지 않음 4건)'))
 
     renderAt('/instructor/notifications')
-    await user.click(await screen.findByRole('tab', { name: /처리 대기/ }))
     // 방금 읽었으므로 기본 탭(읽지 않음)에는 없고, `읽음` 탭으로 넘어가야 보인다.
-    await user.click(screen.getByRole('tab', { name: '읽음' }))
+    await user.click(await screen.findByRole('tab', { name: '읽음' }))
     const list = await screen.findByRole('list', { name: '알림 목록' })
 
     /*
-      읽었어도 승인·거절을 하지 않았으므로 처리 대기에 그대로 있어야 한다.
+      읽었어도 승인·거절을 하지 않았으므로 처리 대기 배지가 그대로 있어야 한다.
       두 축을 한 값으로 합쳤다면 이 줄은 목록에서 사라졌을 것이다.
+
+      배지는 그 줄 안에서 찾는다 — 읽음 탭에는 처리 대기인 알림이 여럿이라 목록 전체에서 찾으면
+      무엇이 대기인지 가리키지 못한다.
     */
-    expect(within(list).getByText('새로운 수강 신청이 있습니다.')).toBeInTheDocument()
-    expect(within(list).getByText('처리 대기')).toBeInTheDocument()
+    const requestRows = within(list)
+      .getAllByText('새로운 수강 신청이 있습니다.')
+      .map((message) => message.closest('li')!)
+    expect(requestRows.length).toBeGreaterThan(0)
+    expect(requestRows.some((row) => within(row).queryByText('처리 대기') !== null)).toBe(true)
   })
 
   it('머리말에는 숫자를 두지 않고 건수를 탭에 붙인다', async () => {
@@ -142,35 +147,38 @@ describe('알림 센터', () => {
     expect(within(pageHeader!).queryByText('4')).toBeNull()
     expect(within(pageHeader!).queryByRole('button', { name: '모두 읽음' })).toBeNull()
 
-    // 강사 seed: 읽지 않음 5건 · 처리 대기 3건. 건수는 목록 응답과 함께 도착한다.
+    // 강사 seed: 읽지 않음 5건. 건수는 목록 응답과 함께 도착한다.
     expect(await screen.findByRole('tab', { name: /읽지 않음\s*5/ })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: /처리 대기\s*3/ })).toBeInTheDocument()
   })
 
-  it('학생 화면도 전체 탭으로 시작하지만 처리 대기 탭은 없다', async () => {
+  /**
+   * 탭은 <b>읽음 축 하나</b>다. 한때 그 위에 `전체 · 처리 대기` 줄이 더 있었지만, 종류 칩이 들어와
+   * 필터가 세 줄이 되어 무엇이 상위인지 읽히지 않아 걷었다 — 처리 대기는 목록 배지로 남는다.
+   */
+  it('탭은 읽지 않음·읽음 두 칸뿐이다', async () => {
+    await loginAsInstructor()
+    renderAt('/instructor/notifications')
+
+    await screen.findByRole('list', { name: '알림 목록' })
+    const tabs = screen.getAllByRole('tab')
+
+    expect(tabs.map((tab) => tab.textContent?.replace(/\s+/g, ' ').trim())).toEqual([
+      expect.stringContaining('읽지 않음'),
+      '읽음',
+    ])
+    expect(screen.queryByRole('tab', { name: '전체' })).toBeNull()
+    expect(screen.queryByRole('tab', { name: /처리 대기/ })).toBeNull()
+  })
+
+  it('학생도 같은 두 탭을 본다', async () => {
     await loginAsStudent()
     renderAt('/student/notifications')
 
     await screen.findByRole('list', { name: '알림 목록' })
 
-    /*
-      1차 탭 줄은 강사 화면과 같은 자리에 있어야 한다 — 없으면 학생 화면에서는 `읽지 않음`이
-      최상위 분류처럼 보인다. 다만 학생은 ACTION_REQUIRED 알림을 받지 않으므로 그 탭은 없다.
-    */
-    expect(screen.getByRole('tab', { name: '전체', selected: true })).toBeInTheDocument()
-    expect(screen.queryByRole('tab', { name: /처리 대기/ })).toBeNull()
-
-    // 읽음 축은 역할과 무관하게 남는다.
     expect(screen.getByRole('tab', { name: /읽지 않음/, selected: true })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '읽음' })).toBeInTheDocument()
-  })
-
-  it('강사 화면에는 전체와 처리 대기가 함께 있다', async () => {
-    await loginAsInstructor()
-    renderAt('/instructor/notifications')
-
-    expect(await screen.findByRole('tab', { name: '전체', selected: true })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: /처리 대기/ })).toBeInTheDocument()
+    expect(screen.getAllByRole('tab')).toHaveLength(2)
   })
 
   it('읽지 않음 탭이 먼저 열려 있다', async () => {
@@ -197,20 +205,86 @@ describe('알림 센터', () => {
     expect(screen.getByText('모두 읽음')).toHaveClass('notification-toolbar__mark-all--hidden')
   })
 
-  it('두 필터 축이 겹쳐서 동작한다', async () => {
-    const user = userEvent.setup()
+  /**
+   * 종류 칩은 <b>모든</b> 종류를 늘 보여 준다 — 이 화면에 어떤 알림이 오는지 한눈에 알 수 있게.
+   * 지금 목록에 없는 종류는 `is-empty`로 흐리게 두지만, 눌러는 볼 수 있다(다음 페이지에 있을 수 있다).
+   */
+  it('모든 종류 칩을 띄우고 지금 없는 종류는 흐리게 둔다', async () => {
+    await loginAsStudent()
+    renderAt('/student/notifications')
+    await screen.findByRole('list', { name: '알림 목록' })
+
+    const chipGroup = screen.getByRole('group', { name: '알림 종류로 좁히기' })
+    const chips = within(chipGroup).getAllByRole('button')
+    const labels = chips.map((chip) => chip.textContent)
+
+    // 학생이 받는 종류만 있다 — 녹화는 강사 몫이다.
+    expect(labels).toContain('학습 자료')
+    expect(labels).toContain('수강 승인')
+    expect(labels).not.toContain('녹화 오류')
+    // 지금 받은 것과 아직 없는 것이 함께 있어 흐린 칩·선명한 칩이 갈린다.
+    expect(chips.some((chip) => chip.className.includes('is-empty'))).toBe(true)
+    expect(chips.some((chip) => !chip.className.includes('is-empty'))).toBe(true)
+    // 흐린 칩도 막지 않는다 — 지금 0건이어도 다음 페이지에 있을 수 있다.
+    chips.forEach((chip) => expect(chip).toBeEnabled())
+    // 건수는 title로도 알린다 — 선명함과 빨간 점은 색·모양이라 그것만으로는 전달되지 않는다.
+    const filled = chips.find((chip) => !chip.className.includes('is-empty'))!
+    expect(filled).toHaveAttribute('title', expect.stringMatching(/\d+건$/))
+    const empty = chips.find((chip) => chip.className.includes('is-empty'))!
+    expect(empty).toHaveAttribute('title', expect.stringContaining('없습니다'))
+  })
+
+  /** 강사와 학생은 받는 알림이 달라 칩 구성도 다르다. */
+  it('강사 화면에는 강사가 받는 종류만 칩으로 나온다', async () => {
     await loginAsInstructor()
     renderAt('/instructor/notifications')
+    await screen.findByRole('list', { name: '알림 목록' })
 
-    // 1차 = 무엇을 볼지, 2차 = 어떻게 볼지. 둘은 조합된다.
-    await user.click(await screen.findByRole('tab', { name: /처리 대기/ }))
+    const chipGroup = screen.getByRole('group', { name: '알림 종류로 좁히기' })
+    const labels = within(chipGroup).getAllByRole('button').map((chip) => chip.textContent)
 
-    const list = await screen.findByRole('list', { name: '알림 목록' })
-    const rows = within(list).getAllByRole('listitem')
-    expect(rows.length).toBeGreaterThan(0)
-    rows.forEach((row) => {
-      expect(row).toHaveClass('is-unread')
-      expect(within(row).getByText('처리 대기')).toBeInTheDocument()
+    expect(labels).toContain('수강 신청')
+    expect(labels).toContain('녹화')
+    expect(labels).toContain('라이브 임박')
+    // 학생에게만 가는 종류는 강사 화면에 두지 않는다.
+    expect(labels).not.toContain('학습 자료')
+    expect(labels).not.toContain('다시보기')
+  })
+
+  /** 종류 칩과 읽음 탭은 <b>겹쳐서</b> 동작하고, 같은 칩을 다시 누르면 풀린다. */
+  it('종류 칩을 누르면 그 종류만 남고 다시 누르면 풀린다', async () => {
+    const user = userEvent.setup()
+    await loginAsStudent()
+    renderAt('/student/notifications')
+
+    // 목록이 도착하기 전에는 모든 칩이 0건이라 흐리다 — 건수가 찬 뒤에 칩을 읽는다.
+    await screen.findByRole('list', { name: '알림 목록' })
+    const chipGroup = screen.getByRole('group', { name: '알림 종류로 좁히기' })
+    // 지금 알림이 있는 칩을 고른다 — 흐린 칩을 누르면 빈 목록이라 필터 동작을 볼 수 없다.
+    const chips = within(chipGroup).getAllByRole('button').filter((chip) => !chip.className.includes('is-empty'))
+    expect(chips.length).toBeGreaterThan(1)
+
+    const [chip] = chips
+    const chosen = chip.textContent!
+
+    await user.click(chip)
+
+    expect(chip).toHaveAttribute('aria-pressed', 'true')
+    const filtered = within(await screen.findByRole('list', { name: '알림 목록' })).getAllByRole('listitem')
+    // 남은 줄은 모두 고른 종류다 — 목록 배지가 칩과 같은 말을 쓴다.
+    expect(filtered.length).toBeGreaterThan(0)
+    filtered.forEach((row) => expect(within(row).getByText(chosen)).toBeInTheDocument())
+
+    await user.click(chip)
+
+    /*
+      풀면 다른 종류가 다시 섞인다. 건수로 비교하지 않는 이유는 필터를 거는 동안 다음 페이지를
+      자동으로 당겨(AUTO_FETCH_PAGE_LIMIT) 총 개수가 처음보다 늘 수 있기 때문이다.
+    */
+    expect(chip).toHaveAttribute('aria-pressed', 'false')
+    await waitFor(() => {
+      const rows = within(screen.getByRole('list', { name: '알림 목록' })).getAllByRole('listitem')
+      expect(rows.some((row) => within(row).queryByText(chosen) === null)).toBe(true)
     })
   })
 
