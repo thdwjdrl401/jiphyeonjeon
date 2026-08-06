@@ -9,6 +9,8 @@ RAG context core가 외부 Redis, PostgreSQL과 BGE runtime을 사용하는 outb
 | `redis_conversation_memory.py` | (userId,sessionId,conversationId) → GMS `response_id` TTL 매핑 (ADR-0010, v1 전용) |
 | `bounded_lecture_note_model.py` | live 우선 GMS 동시성·정제 상한과 429/일시 오류 재시도 경계 |
 | `pgvector_material_retrieval.py` | `ai_app` role로 ACTIVE lesson chunk만 hybrid 검색 |
+| `pgvector_annotation_retrieval.py` | 강사 판서 snapshot hybrid 검색 (ADR-0043, `AI_API_ANNOTATION_EVIDENCE_ENABLED` 기본 `false`) |
+| `hmac_internal_authenticator.py` | `AI_INTERNAL_SECRET` 기반 Spring 요청 HMAC-SHA256 검증기 |
 | `remote_bge_m3_embedding.py` | 인증된 BGE-M3 query embedding HTTP client |
 | `gms_openai_answer.py` | 고정 GMS gateway의 grounded OpenAI-compatible 답변 stream (v1) |
 | `gms_openai_answer_v2.py` | 같은 GMS gateway를 쓰는 Replay(v2) 답변 stream 어댑터 — v1 코드를 복제해 v1을 안 건드림 |

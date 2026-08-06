@@ -27,7 +27,7 @@ Redis 자막 entry는 다음 camelCase 필드를 사용한다.
   `startStreamElapsedMs`, `endStreamElapsedMs`, `boundaryReason`, `occurredAt`
 - completed: 위 식별 필드와 `type=caption.stream.completed`, `lastSequence`,
   `streamElapsedMs`, `reason=ROOM_DELETED`, `occurredAt`
-started/final field는 AI producer 구현 기준의 변경 중 후보다. 공유 채택 상태와 버전 논의는
+started/final field는 루트 계약에 채택된 확정 wire다(ADR-0052·0053). 소비자별 처리와 버전 상세는
 [`../../CONTRACT.md` 3절](../../CONTRACT.md)을 따른다.
 
 

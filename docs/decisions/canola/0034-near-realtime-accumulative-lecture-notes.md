@@ -184,7 +184,7 @@ Redis field 값은 STT event와 마찬가지로 모두 string으로 싣고, `key
 직렬화한다. AI event에는 `noteVersion`을 싣지 않는다. Backend가 조각을 누적 저장한 횟수가 필요하면
 Backend read model의 `noteVersion`으로 별도 관리한다.
 
-Redis key와 event payload·순서·멱등·ACK 규칙은 [공유 계약 §3-4a](../../CONTRACT.md#3-4a-ai-api--application-redis-실시간-강의-노트-stream--ai-producer-구현-spring-consumer-미구현)로
+Redis key와 event payload·순서·멱등·ACK 규칙은 [공유 계약 §3-4a](../../CONTRACT.md#3-4a-ai-api--application-redis-실시간-강의-노트-stream--ai-producerspring-consumer-구현소비-스위치-lecture_note_consumer_enabled-기본-off)로
 고정한다. Spring과 Frontend 구현은 아직 이 ADR의 범위 밖이다. Backend 연동 시에는 event를 순서대로 누적
 저장하고, REST 재접속 응답은 Backend가 만든 전체 노트를 반환하며, 실시간 WebSocket에는 새 조각만 전달한다.
 Spring은 별도 consumer group을 사용하고 DB 반영 뒤 ACK하며, `eventId` 중복과 이미 반영한

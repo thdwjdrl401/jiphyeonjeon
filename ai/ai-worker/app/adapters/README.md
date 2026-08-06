@@ -25,13 +25,15 @@ RemoteBgeM3EmbeddingModel -> bge-runtime
 GmsKeyTermExtractor -> GMS(OpenAI 호환 게이트웨이)
 IndexStorage -> PgvectorIndexRepository -> PostgreSQL ai schema
 KeyTermStorage -> PgvectorKeyTermRepository -> PostgreSQL ai schema
+AnnotationIndexStorage -> PgvectorAnnotationIndexRepository -> PostgreSQL ai schema
 ```
 
 ## 파일 구성
 
-`pgvector_index.py`, `rabbitmq_material_consumer.py`, `spring_material_*`,
-`remote_bge_embedding.py`, `gms_key_term_extractor.py`, `pgvector_key_term_storage.py`가 외부
-경계를 구현한다.
+`pgvector_index.py`, `rabbitmq_material_consumer.py`, `spring_hmac.py`, `spring_material_*`,
+`remote_bge_embedding.py`, `gms_key_term_extractor.py`, `pgvector_key_term_storage.py`,
+`pgvector_annotation_index.py`가 외부 경계를 구현한다. `gms_annotation_reader.py`는 파킹된
+채로 남아 있고 어떤 배선도 이를 호출하지 않는다(ADR-0074 — Spring이 판서를 읽어 텍스트를 보낸다).
 
 ## 경계와 불변식
 

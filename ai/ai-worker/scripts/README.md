@@ -20,7 +20,7 @@ uv run --frozen python -m scripts.smoke_remote_bge
 성공 출력은 아래 형태다.
 
 ```json
-{"count":2,"dimensions":[1024],"maxNormError":0.0,"model":"BAAI/bge-m3","status":"ok"}
+{"count":2,"dimensions":[1024],"embeddingMs":123.4,"maxNormError":0.0,"model":"BAAI/bge-m3","revision":"5617a9f61b028005a4858fdac845db406aefb181","runtimeUrl":"http://127.0.0.1:18020","status":"ok"}
 ```
 
 이 smoke는 EC2→tunnel→GPU→EC2 요청/응답만 검증한다. Spring·RabbitMQ·pgvector·callback까지 포함하는 최종

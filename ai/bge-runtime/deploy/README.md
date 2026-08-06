@@ -36,8 +36,9 @@ ai/realtime-agent/deploy/configure-gpu-ec2-tunnels.sh \
   --start
 ~~~
 
-supervisor와 deploy helper는 inherited 환경과 무관하게 `CUDA_VISIBLE_DEVICES=0`과
-`BGE_RUNTIME_DEVICE=cuda`를 강제한다. 이 호스트에서는 GPU 1을 사용하지 않는다.
+supervisor는 inherited 환경과 무관하게 `CUDA_VISIBLE_DEVICES=0`과 `BGE_RUNTIME_DEVICE=cuda`를
+강제하고, deploy helper의 GPU smoke도 `CUDA_VISIBLE_DEVICES=0`으로 실행한다. 이 호스트에서는 GPU 1을
+사용하지 않는다.
 
 ## 2. Runner와 pipeline
 

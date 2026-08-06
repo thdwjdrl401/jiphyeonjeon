@@ -3,7 +3,7 @@
 - **상태**: 채택
 - **일자**: 2026-08-03
 - **관련**: [ADR-0025](0025-realtime-agent-spring-handoff-contract.md),
-  [ADR-0037](0037-replay-ai-caption-context-contract.md),
+  [ADR-0042](0042-replay-ai-caption-context-contract.md),
   [ADR-0044](0044-whisper-vllm-runtime-adapter.md)
 
 ## 맥락

@@ -13,7 +13,7 @@ GMS가 생성한 RAG 답변을 SSE로 전달하며 실시간 자막에서 축적
 | 호출자 | 대상 | 통신 | 용도 |
 |---|---|---|---|
 | Spring | `POST /internal/v1/rag/answers:stream` | HTTP + SSE, HMAC | RAG 질문과 답변 스트림(Live) |
-| Spring | `POST /internal/v2/rag/answers:stream` | HTTP + SSE, HMAC | RAG 질문과 답변 스트림(다시보기, ADR-0037) |
+| Spring | `POST /internal/v2/rag/answers:stream` | HTTP + SSE, HMAC | RAG 질문과 답변 스트림(다시보기, ADR-0042) |
 | 운영 환경 | `GET /healthz`, `GET /readyz` | HTTP | 프로세스 생존·lifespan 준비 확인 |
 | realtime-agent → Redis → ai-api | `ai:captions:live` | Redis Stream consumer group | 실시간 자막 입력·처리 후 ACK |
 | ai-api → Redis | `ai:lecture-notes:mvp` | Redis Stream | 강의 노트 추가 조각·수집 완료·정제 snapshot event |
@@ -59,8 +59,9 @@ event: answer.done
 data: {"requestId":"request-1","sources":[{"type":"PPTX","materialId":"22222222-2222-4222-8222-222222222222","page":4}]}
 ```
 
-v1 요청에 `userId`/`conversationId`(둘 다 optional)를 추가로 실으면 GMS Responses API로 이전 turn을
-이어간다(ADR-0010). Spring이 아직 이 두 필드를 보내지 않으므로 지금은 항상 기존 경로로만 동작한다.
+v1 요청에 optional `userId`를 추가로 실으면 GMS Responses API로 이전 turn을 이어간다(ADR-0010).
+대화의 기본 범위는 그 사용자의 라이브 세션이며 optional `conversationId`는 이 범위를 더 좁힐 때만
+쓴다(ADR-0046). Spring이 아직 이 두 필드를 보내지 않으므로 지금은 항상 기존 경로로만 동작한다.
 
 다시보기(Replay) 질문은 별도 경로 `POST /internal/v2/rag/answers:stream`을 쓴다. 시간 필드가
 `contextTimeMs`(STT attempt-local) 대신 `context.questionSessionMs`(세션 상대 ms)이고, Spring이 이미
@@ -115,9 +116,10 @@ RAG consumer와 강의 노트 consumer를 실행한다. 서로 다른 group이�
 강의 노트 live 출력은 `lecture.note.chunk.appended` 추가분과 `lecture.note.capture.completed`를 발행하고,
 종료 후 정제 결과만 `lecture.note.refined.snapshot` 전체본으로 `ai:lecture-notes:mvp`에 발행한다.
 wire 필드·길이·순서·멱등·ACK 규칙의 정본은
-[공유 계약 §3-4a](../../docs/CONTRACT.md#3-4a-ai-api--application-redis-실시간-강의-노트-stream--ai-producer-구현-spring-consumer-미구현)다.
+[공유 계약 §3-4a](../../docs/CONTRACT.md#3-4a-ai-api--application-redis-실시간-강의-노트-stream--ai-producerspring-consumer-구현소비-스위치-lecture_note_consumer_enabled-기본-off)다.
 강의 노트 caption은 Redis session checkpoint 저장 뒤 ACK하며, 결과 event와 다음 checkpoint는 같은 Redis
-transaction으로 확정한다. AI producer는 구현됐지만 Spring consumer·DB·REST·WebSocket은 아직 구현되지 않았다.
+transaction으로 확정한다. Spring consumer·DB·REST·WebSocket과 FE 소비까지 구현됐지만 Spring consumer는
+`LECTURE_NOTE_CONSUMER_ENABLED`(기본 `false`)로 닫혀 있다.
 
 ## 5. 실행과 설정
 
@@ -139,7 +141,7 @@ uv run --frozen --env-file ../.env python -m app.main
 | `AI_API_INSTANCE_ID` | 운영 권장 | Redis consumer name 충돌 방지. EC2의 ai-api replica마다 고유해야 함 |
 | `AI_API_LECTURE_NOTE_*` | 선택 | 강의 노트 window·모델·Stream 한도 조정 |
 | `AI_API_LECTURE_NOTE_MODEL` | 선택 | 기본 `gpt-5-mini`(ADR-0081). 비우면 `AI_API_GMS_MODEL` 사용 |
-| `AI_API_LECTURE_NOTE_REASONING_EFFORT` | 선택 | 기본 `minimal`. **모델과 짝**이며 비-reasoning 모델(gpt-4.1 등)로 바꾸면 반드시 비워야 한다 |
+| `AI_API_LECTURE_NOTE_REASONING_EFFORT` | 선택 | 기본 `minimal`. adapter가 모델 이름으로 sampling knob을 고르므로 비-reasoning 모델(gpt-4.1 등)에서는 이 값이 무시된다 |
 | `AI_API_CONVERSATION_MEMORY_TTL_SECONDS` | 선택 | v1 대화 이어가기 TTL(초), 기본 1,800 — ADR-0010 |
 | `AI_API_CONVERSATION_MEMORY_KEY_PREFIX` | 선택 | 대화 이어가기 Redis key prefix, 기본 `ai:conversation:` |
 | `AI_INTERNAL_SECRET` | RAG 호출 필수 | Spring 요청 HMAC 검증용 공유 secret; GPU에서는 사용하지 않음 |
@@ -160,8 +162,8 @@ backend와 GPU 서비스에는 이 값을 주입하지 않는다.
 사용하지 않으며 application Redis key와 consumer group만 공유한다.
 
 경로 prefix가 있는 BGE URL은 허용하지만 credential, query, fragment와 `..` 경로는 거부한다.
-`AI_INTERNAL_SECRET`은 이름이 바뀐 값이 아니며 Spring↔ai-api 전용이다. 현재 ai-api 검증기는 구현됐지만
-Spring signer·SSE proxy는 아직 구현되지 않았다.
+`AI_INTERNAL_SECRET`은 이름이 바뀐 값이 아니며 Spring↔ai-api 전용이다. ai-api 검증기와 Spring signer
+(`RagInternalSigner`)·SSE proxy(`RagAnswerRelay`)는 모두 구현돼 있다.
 
 ## 6. 상태 확인
 

@@ -10,7 +10,7 @@ LiveKit에서 받은 PCM 오디오를 STT provider가 소비할 수 있는 형�
 
 ## 파일 구성
 
-- `normalizer.py`: sample rate·channel·sample width를 정규화
+- `normalizer.py`: PCM16 입력의 sample rate·channel을 정규화
 - `segmentation.py`: 무음 기준 발화 구간 분할
 
 ## 경계와 불변식

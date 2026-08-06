@@ -138,7 +138,7 @@ payload나 시간축 규칙을 바꾸면 Python·Java 구현과 양쪽 계약 �
 
 ## 5-1. 실시간 강의 노트 Redis 출력 계약
 
-Java와 공유하는 wire 정본은 [`docs/CONTRACT.md` §3-4a](../../docs/CONTRACT.md#3-4a-ai-api--application-redis-실시간-강의-노트-stream--ai-producer-구현-spring-consumer-미구현)다.
+Java와 공유하는 wire 정본은 [`docs/CONTRACT.md` §3-4a](../../docs/CONTRACT.md#3-4a-ai-api--application-redis-실시간-강의-노트-stream--ai-producerspring-consumer-구현소비-스위치-lecture_note_consumer_enabled-기본-off)다.
 ai-api는 application Redis의 `ai:lecture-notes:mvp`에 다음 세 event를 발행한다.
 
 - `lecture.note.chunk.appended`: 새 topic 또는 새 key point와 append 가능한 `markdownFragment`

@@ -40,7 +40,7 @@ uv run --frozen stt-lab-aihub \
   --strict
 ```
 
-압축 해제 스크립트가 `ZIP decompression failed`로 종료되면 아직 업로드 중이므로 기다린다.
+압축 해제 스크립트가 `bsdtar -tf` 무결성 검사에서 실패로 종료되면 아직 업로드 중이므로 기다린다.
 분할 도구는 JSON↔WAV 불일치, 손상된 annotation/WAV, 16 kHz·mono·PCM16이 아닌 음성,
 test 최소 기준을 audit하고 `--strict`에서 실패로 처리한다. `--hash-audio`는 WAV 전체
 SHA-256이 필요할 때만 사용한다.

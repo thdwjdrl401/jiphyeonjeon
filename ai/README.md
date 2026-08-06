@@ -8,6 +8,7 @@ LiveClass AI는 Python 3.12와 `uv`를 사용하며 서비스별 의존성과 lo
 |---|---|---|---|
 | [ai-api](ai-api/README.md) | EC2 `:8010` | RAG 검색·답변 SSE | Spring HTTP |
 | [ai-worker](ai-worker/README.md) | EC2, 관리 `:8011` | PPTX embedding·인덱싱 | RabbitMQ |
+| recorded-stt-worker | EC2, 관리 `:8012` | 업로드 녹화강의 음성→OpenAI `whisper-1` 전사 | RabbitMQ |
 | [realtime-agent](realtime-agent/README.md) | GPU, 관리 `:8081` | LiveKit audio→STT→Redis 자막 | LiveKit dispatch |
 | [bge-runtime](bge-runtime/README.md) | GPU `:8020` | BGE-M3 embedding | 내부 HTTP |
 
@@ -20,12 +21,13 @@ Frontend는 AI 서비스를 직접 호출하지 않는다. 사용자 인증·권
 |---|---|---|---|---|
 | Spring | ai-api | HTTP + SSE, HMAC | RAG 질문 | answer event |
 | Spring | ai-worker | RabbitMQ `ingestion.embed` | 자료 작업 | Spring callback |
+| Spring | recorded-stt-worker | RabbitMQ `ingestion.transcribe` | 녹화강의 STT 작업 | Spring callback |
 | ai-worker | Spring | HTTP, HMAC | download-url 요청·처리 결과 | presigned URL·204 |
 | Spring | realtime-agent | LiveKit explicit AgentDispatch | session metadata | Redis 자막 |
 | Frontend | LiveKit room | WebRTC | 강사 microphone | agent가 Redis에 자막 발행 |
 | ai-api·ai-worker | bge-runtime | HTTP, Bearer | text 목록 | 1024차원 vector |
 | ai-worker | GMS | HTTP, Bearer | PPTX 전체 텍스트 | 핵심 용어+정의(선택 기능, 기본 off) |
-| realtime-agent | application Redis | Redis Stream | caption event | ai-api·향후 Spring 소비 |
+| realtime-agent | application Redis | Redis Stream | caption event | ai-api·Spring 소비 |
 | 운영 환경 | 각 서비스 관리 endpoint | HTTP | health/readiness | 상태 응답 |
 
 endpoint, queue, Redis key, payload, 인증과 상태코드의 기준은
@@ -81,7 +83,7 @@ GPU model 준비가 필요하다.
 |---|---|
 | ai-api | `python -m app.main` |
 | ai-worker | `python -m app.main` |
-| recorded-stt-worker | `python -m app.recorded_stt.main` |
+| recorded-stt-worker | `python -m app.recorded_stt.main` (ai-worker 이미지 공유) |
 | realtime-agent | `python -m app.main start` |
 | bge-runtime | `python -m app.main` |
 
@@ -104,21 +106,22 @@ backend가 SSH 터널 없이 붙도록 의도적으로 host 전체 인터페이�
 운영 compose는 `BGE_RUNTIME_INTERNAL_TOKEN`을 container의 `AI_API_BGE_TOKEN`과
 `AI_WORKER_BGE_INTERNAL_TOKEN`으로, `GMS_API_KEY`를 `AI_API_GMS_API_KEY`와
 `AI_WORKER_GMS_API_KEY`로,
-`OPENAI_API_KEY`를 `RECORDED_STT_OPENAI_API_KEY`로 매핑한다.
-필수 환경변수와 tunnel 실행은 각 서비스 README를, 전체 인프라와 Spring·Frontend 실행 순서는
-[RUN.md](../RUN.md)에서 확인한다.
+`OPENAI_API_KEY`를 `RECORDED_STT_OPENAI_API_KEY`로 매핑한다. 핵심 용어 추출은
+`AI_WORKER_KEY_TERM_EXTRACTION_ENABLED`(기본 `false`)로만 켜고 끄며, 켜면 GMS 키가 없을 때 worker가
+기동에 실패한다. 필수 환경변수와 tunnel 실행은 각 서비스 README를, 전체 인프라와 Spring·Frontend
+실행 순서는 [RUN.md](../RUN.md)에서 확인한다.
 
 ## 6. 현재 연동 상태
 
 | 경계 | 현재 상태 |
 |---|---|
-| Spring→ai-api RAG SSE | AI 구현, Spring signer·proxy 미구현. PPTX 자료 검색은 커리큘럼 전체로 공유됨([ADR-0007](../docs/decisions/jinwoo/0007-curriculum-scoped-rag-material-sharing.md)) — 요청에 `curriculumId` 필수, Spring이 아직 안 보내 계약 위반으로 거부됨 |
-| Spring→RabbitMQ→ai-worker | `PPTX_EMBED` 양쪽 구현, Spring producer·worker 앱 기본 off, AI 운영 compose는 worker만 on; `EMBED_DELETE` 미구현(DLQ) |
+| Spring→ai-api RAG SSE | AI route·HMAC verifier와 Spring signer·브라우저 SSE proxy 양쪽 구현([ADR-0047](../docs/decisions/songjeongki/0047-live-ai-answer-sse-proxy.md)). PPTX 자료 검색은 커리큘럼 전체로 공유됨([ADR-0007](../docs/decisions/jinwoo/0007-curriculum-scoped-rag-material-sharing.md)) — 요청에 `curriculumId` 필수이며 Spring이 세션에서 조회해 보낸다 |
+| Spring→RabbitMQ→ai-worker | `PPTX_EMBED`·`EMBED_DELETE` 양쪽 구현, Spring producer·worker 앱 기본 off, AI 운영 compose는 worker만 on |
 | ai-worker→Spring download-url·callback | 양쪽 구현 |
 | ai-api·ai-worker→bge-runtime | client·runtime·reverse tunnel·운영 container proxy 배선 구현 |
 | ai-worker→GMS(핵심 용어 추출) | AI 구현·기본 off, dev/prod compose가 `GMS_API_KEY`를 `AI_WORKER_GMS_API_KEY`로 전달한다. 추출 결과는 기존 `MATERIAL_EMBEDDED` Spring 콜백에 `keyTerms`를 실어 한 번에 전달하고(AI 구현, [ADR-0004](../docs/decisions/jinwoo/0004-key-term-callback-delivery-timing.md)), 동시에 ai-worker가 소유한 `ai.material_key_term`에도 best-effort로 저장([ADR-0005](../docs/decisions/jinwoo/0005-key-term-storage-schema.md)); Spring 쪽 `keyTerms` 콜백 수신과 `ai.material_key_term` 읽기 API는 둘 다 미구현([ADR-0003](../docs/decisions/jinwoo/0003-pptx-key-term-extraction-approach.md)) |
 | Spring→LiveKit→realtime-agent | 양쪽 dispatch 구현, job readiness 우회 중 |
-| realtime-agent→Redis caption | producer·ai-api consumer 구현, Spring consumer 미구현 |
+| realtime-agent→Redis caption | producer·ai-api consumer·Spring consumer 구현([ADR-0043](../docs/decisions/songjeongki/0043-caption-consumer-persistence.md)) |
 | realtime-agent→Spring lifecycle | AI 구현·기본 off, Spring receiver 미구현 |
 | realtime-agent `/health/live`·`/health/ready` | endpoint·schema·tunnel 구현, Spring client 미구현 |
 

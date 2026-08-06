@@ -13,7 +13,8 @@ fake ASGI body와 encoder/device validator를 사용한다.
 
 ## 파일 구성
 
-`test_api.py`, `test_config.py`, `test_embedding.py`로 구성된다.
+`test_api.py`, `test_config.py`, `test_embedding.py`, `test_operational_scripts.py`,
+`test_reverse_tunnel_script.py`로 구성된다.
 
 ## 경계와 불변식
 

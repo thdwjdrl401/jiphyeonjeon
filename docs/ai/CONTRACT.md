@@ -15,6 +15,7 @@ HTTP endpoint뿐 아니라 RabbitMQ queue, Redis Stream, LiveKit AgentDispatch�
 |---|---|---|
 | [`ai-api`](../../ai/ai-api/README.md) | EC2 | Spring 전용 RAG SSE + 실시간 강의 노트 producer |
 | [`ai-worker`](../../ai/ai-worker/README.md) | EC2 | RabbitMQ 자료 작업 consumer |
+| `recorded-stt-worker` | EC2 | 업로드 녹화강의 음성→OpenAI `whisper-1` 전사 consumer — ai-worker 이미지의 별도 entrypoint(`app.recorded_stt.main`), 관리 `:8012`, queue `ingestion.transcribe`. wire 정본은 [루트 §3-11](../CONTRACT.md), 결정은 [choinhoo/ADR-0011](../decisions/choinhoo/0011-recorded-lesson-batch-stt-with-gms-whisper.md) |
 | [`realtime-agent`](../../ai/realtime-agent/README.md) | GPU | LiveKit audio→STT→Redis caption agent |
 | [`bge-runtime`](../../ai/bge-runtime/README.md) | GPU | BGE-M3 embedding HTTP runtime |
 
@@ -228,7 +229,7 @@ AI producer와 단일 process 재시작 복구는 구현됐고 Spring consumer·
 라이브 중에는 append 조각만 보내고 capture 완료 뒤 정제한 전체 snapshot을 별도 event로 한 번 보낸다.
 Spring은 정상 chunk를 transaction으로 누적한 뒤 ACK하고, refined snapshot은 live draft에 append하지 않고
 별도 read model 전체 교체로 반영해야 한다. payload 제한, Markdown 결합법, gap·terminal·refined 처리는
-[공유 계약 §3-4a](../CONTRACT.md#3-4a-ai-api--application-redis-실시간-강의-노트-stream--ai-producer-구현-spring-consumer-미구현)가 정본이다.
+[공유 계약 §3-4a](../CONTRACT.md#3-4a-ai-api--application-redis-실시간-강의-노트-stream--ai-producerspring-consumer-구현소비-스위치-lecture_note_consumer_enabled-기본-off)가 정본이다.
 
 ### 4.7 realtime-agent→Spring lifecycle
 

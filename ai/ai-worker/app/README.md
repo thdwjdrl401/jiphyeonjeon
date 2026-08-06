@@ -13,6 +13,8 @@
   재구성한다. Spring callback에는 원문 복사 대신 상태·개수·절단 여부를 전달한다(ADR-0010).
 - `EMBED_DELETE`는 payload에 없는 curriculum_id를 materialId로 self-lookup한 뒤 삭제한다(ADR-0006).
   지울 게 없으면 성공(멱등)으로 끝낸다.
+- `AI_WORKER_ANNOTATION_INGESTION_ENABLED=true`면 `ANNOTATION_EMBED`/`ANNOTATION_EMBED_DELETE`도
+  같은 queue에서 처리한다. Spring이 보낸 text를 임베딩·저장만 하며, 꺼져 있으면 DLQ로 보낸다(ADR-0074).
 
 ## 구조와 흐름
 
@@ -20,6 +22,8 @@
 RabbitMQ -> consumers/ -> application/IndexPptxMaterial   -> ingestion/ -> ports/ <- adapters/
                                                             -> (선택) GMS key term 추출 -> ports/ <- adapters/
                         -> application/DeleteMaterialIndex -> ports/ <- adapters/ (self-lookup)
+                        -> application/IndexAnnotationHighlight    -> ports/ <- adapters/
+                        -> application/DeleteAnnotationHighlight   -> ports/ <- adapters/
 python -m app.main -> WorkerRuntime -> RabbitMaterialConsumer + management FastAPI
 ```
 
@@ -29,8 +33,10 @@ RabbitMQ는 HTTP 업무 API가 아니라 비동기 입력 transport다.
 
 ## 파일 구성
 
-`main.py`, `config.py`, `runtime.py`, `management.py`, `database_urls.py`, `logging_config.py`와 아래
-도메인·유스케이스·port·adapter package로 구성된다.
+`main.py`, `config.py`, `runtime.py`, `management.py`, `database_urls.py`, `logging_config.py`와
+`contracts/`(wire 계약), `consumers/`(job handler), `ingestion/`, 아래 도메인·유스케이스·port·adapter
+package로 구성된다. `recorded_stt/`는 같은 tree에 있지만 `python -m app.recorded_stt.main`으로
+따로 뜨는 별도 process이며, `RECORDED_STT_` prefix 설정과 `ingestion.transcribe` queue를 쓴다.
 
 ## 경계와 불변식
 

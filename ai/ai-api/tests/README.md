@@ -22,7 +22,7 @@
 BGE는 `MockTransport`로 HTTP 계약을 확인한다. `test_hmac_internal_authenticator.py`와
 `test_rag_endpoint.py`의 `test_internal_endpoint_accepts_real_hmac_signed_request`는 실제
 `HmacInternalRequestAuthenticator`로 서명 검증까지 통과시키지만(ADR-0023 §9 채택 확정), 이는 실제 GPU
-BGE, GMS와 Spring 서명 발급기 연동 완료를 뜻하지 않는다 — Spring 쪽 발급기는 아직 없다.
+BGE, GMS와 Spring 서명 발급기(`RagInternalSigner`) 연동을 여기서 함께 검증한다는 뜻은 아니다.
 
 ## 파일 구성
 

@@ -1,17 +1,16 @@
 # Realtime agent contract artifacts
 
-이 디렉터리는 realtime-agent의 JSON Schema와 대표 fixture를 보관한다. dispatch와 기존
-delta/completed 등 채택된 경계의 정본은 [`docs/CONTRACT.md`](../../../docs/CONTRACT.md)다. 신규
-started/final schema와 fixture는 AI producer 구현을 검증하는 **변경 중 후보**이며 아직 Spring·ai-api와
-루트 계약에 채택되지 않았다. service health는 AI endpoint와 Python 계약 테스트까지 구현됐고 Java
-consumer는 별도 backend 변경에서 연결한다.
+이 디렉터리는 realtime-agent의 JSON Schema와 대표 fixture를 보관한다. dispatch와 caption 4종
+(delta/completed/started/final) 등 채택된 경계의 정본은 [`docs/CONTRACT.md`](../../../docs/CONTRACT.md)다.
+started/final도 루트 계약에 채택됐고(ADR-0052·0053) Spring consumer가 영속·전달한다. service health는
+AI endpoint와 Python 계약 테스트까지 구현됐고 Java consumer는 별도 backend 변경에서 연결한다.
 
 ## 경계
 
 | Schema | Producer | Transport | Consumer |
 |---|---|---|---|
 | `dispatch-metadata.schema.json` | Spring dispatch adapter | LiveKit job metadata | realtime-agent |
-| `caption-stream-entry.schema.json` | realtime-agent | Redis Stream | 현재 Spring·ai-api는 delta/completed만, started/final은 채택 대기 |
+| `caption-stream-entry.schema.json` | realtime-agent | Redis Stream | Spring은 4종 전부 영속(ADR-0052), ai-api는 delta/completed만 소비(계약상 제외) |
 | `live-agent-status.schema.json` | realtime-agent | 서명된 내부 HTTP | 향후 Spring callback |
 | `realtime-agent-health.schema.json` | realtime-agent | loopback/reverse tunnel HTTP | 향후 Spring consumer |
 

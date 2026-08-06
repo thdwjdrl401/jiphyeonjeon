@@ -1,15 +1,14 @@
-# realtime-agent 상세 계약과 변경 중 후보
+# realtime-agent 상세 계약
 
 이 문서는 realtime-agent의 wire 형식과 AI 런타임 불변식을 Python 테스트로 고정한 상세 계약이다.
 Spring이 생산·소비하는 공유 경계의 정본은 [`docs/CONTRACT.md` §3-3~§3-5·§3-8](../../docs/CONTRACT.md#3-내부-계약-확정-인터페이스)이다.
 
-> **변경 상태:** 3절의 `caption.stream.started`·`caption.segment.final`은 AI producer 구현과 Python
-> schema/fixture 검증까지 완료된 **후보 계약**이다. 루트 계약과 Spring·ai-api consumer에는 아직 채택되지
-> 않았으므로 운영 확정 계약이 아니다. 필드, event type과 `contractVersion`은 양측 합의 과정에서 바뀔 수 있다.
+> **변경 상태:** 3절의 `caption.stream.started`·`caption.segment.final`은 루트 계약에 **채택 완료**됐다
+> (!233 병합, ADR-0052·0053). Spring consumer가 네 type 모두 영속하고 `segment.final`은 WS로 전달한다.
+> ai-api는 계약대로 delta/completed만 소비한다(단일 `streamElapsedMs` 좌표가 없는 type은 RAG 제외).
 
 Spring의 named LiveKit AgentDispatch 생성·재사용·삭제와 exact metadata 저장은 구현됐다. 현재 job별
-assignment/running readiness는 `live.stt.assume-ready=true`로 우회 중이다. Spring Redis caption consumer는
-현재 delta/completed만 처리하고 신규 started/final은 알 수 없는 type으로 폐기한다. live-agent callback
+assignment/running readiness는 `live.stt.assume-ready=true`로 우회 중이다. live-agent callback
 receiver와 realtime-agent health client도 아직 없다.
 
 ## 1. Spring → LiveKit → realtime-agent dispatch metadata
@@ -158,11 +157,11 @@ audio, engine queue와 dispatch capacity는 검사하지 않으므로 job별 `ST
 공유 상태코드와 body는 [`docs/CONTRACT.md` §3-8](../../docs/CONTRACT.md#3-8-gpu-realtime-agent-service-health-http--ai-구현됨-spring-consumer-미구현), JSON 정본은 [health schema](contracts/schemas/realtime-agent-health.schema.json)를 따른다.
 
 
-## 3. realtime-agent → application Redis caption stream — 후보 계약 변경 중
+## 3. realtime-agent → application Redis caption stream
 
-> AI 런타임은 아래 네 이벤트를 발행하도록 구현됐다. 공유 소비 계약은 아직 delta/completed 2종이며,
-> started/final의 채택·버전·롤아웃 순서는 Spring·ai-api 오너와 확정해야 한다. 소비자 반영 전에는 신규
-> 이벤트가 ACK 후 폐기되므로 발화별 렌더링과 정확 시간축은 end-to-end로 활성화되지 않는다.
+> AI 런타임은 아래 네 이벤트를 발행하고, 네 type 모두 루트 계약에 채택됐다(ADR-0052·0053).
+> Spring consumer는 전부 영속하고 `segment.final`을 WS로 전달하며(발화별 렌더링·시간 앵커),
+> ai-api는 delta/completed만 소비한다 — started/final은 단일 좌표가 없어 RAG 대상에서 계약상 제외.
 
 - Redis URL: `REDIS_URL`로 주입한다. dev는 password Redis tunnel `127.0.0.1:4000`, prod는 prod Redis tunnel `127.0.0.1:6390`을 사용한다. LiveKit 내부 Redis나 host `6380`을 전제로 하지 않는다.
 - stream key: `CAPTION_STREAM_KEY`, 기본값 `ai:captions:live`

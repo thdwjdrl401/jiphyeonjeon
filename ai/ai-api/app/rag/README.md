@@ -37,15 +37,15 @@ RagAnswerRequest
 - 충분한 결과는 중복 제거된 citation을 가진 `answer.done`으로 끝난다.
 - timeout과 adapter 오류는 secret·내부 URL을 노출하지 않는 `answer.error`로 끝난다.
 - 소비자 취소는 삼키지 않고 retrieval/model iterator까지 전파한다.
-- Redis caption과 pgvector/BGE retrieval adapter는 구현됐지만 main lifecycle에는 아직 연결하지 않았다.
+- Redis caption과 pgvector/BGE retrieval adapter는 `wiring.py`를 거쳐 main lifecycle에 연결돼 있다.
 - client 취소·오류·terminal 모두 request lease를 recent 상태로 옮겨 같은 ID의 재사용을 막는다.
-- GMS streaming과 context consumer lifecycle은 연결했지만 Spring 인증이 채택되기 전 production API는 닫혀 있다.
+- GMS streaming과 context consumer lifecycle은 연결했고, production API는 `AI_INTERNAL_SECRET`이 없을 때만 닫혀 있다.
 - multi-replica registry와 재연결 replay 정책은 후속 범위다.
 
 ## 다시보기 RAG (v2)
 
 `POST /internal/v2/rag/answers:stream`(`api/rag.py`의 `create_rag_router_v2`)은 v1과 별도 경로로
-Replay 질문을 처리한다. 요구사항은 [`ADR-0037`](../../../../docs/decisions/canola/0042-replay-ai-caption-context-contract.md),
+Replay 질문을 처리한다. 요구사항은 [`ADR-0042`](../../../../docs/decisions/canola/0042-replay-ai-caption-context-contract.md),
 구현 설계는 [`ADR-0008`](../../../../docs/decisions/jinwoo/0008-replay-rag-answer-v2-endpoint.md)에 있다.
 
 - `ReplayEvidenceRetriever`는 PPTX Top K는 v1과 동일한 `MaterialRetrievalPort`로 검색하고, caption은
@@ -60,11 +60,13 @@ Replay 질문을 처리한다. 요구사항은 [`ADR-0037`](../../../../docs/dec
 
 ## 대화 이어가기 (v1, ADR-0010)
 
-`RagAnswerRequest`에 optional `userId`/`conversationId`가 있고, 둘 다 있을 때만
-`RagAnswerService`가 `ConversationMemoryPort`(구현체는
+`RagAnswerRequest`에 optional `userId`/`conversationId`가 있고, `userId`만 있어도
+`RagAnswerService`가 대화 기억을 활성화한다(ADR-0046). `conversationId`가 없으면 그 사용자의
+`sessionId` 범위를 기본 대화로 삼고, 있으면 그 범위를 더 좁힌다. 활성화되면
+`ConversationMemoryPort`(구현체는
 `app/adapters/redis_conversation_memory.py`의 `RedisConversationMemoryStore`)로 이전
 GMS `response_id`를 조회해 `AnswerModel.stream_answer(..., previous_response_id=..., 
 response_id_capture=...)`로 넘긴다. 이 두 kwargs가 없으면 `GmsOpenAIAnswerModel`은 기존 Chat
-Completions 경로를 그대로 타므로, `userId`/`conversationId`를 안 보내는 모든 기존 호출은 동작이
+Completions 경로를 그대로 타므로, `userId`를 안 보내는 모든 기존 호출은 동작이
 전혀 안 바뀐다. Redis 조회·저장 실패는 로그만 남기고 답변은 항상 정상 진행한다(fail-open). 자세한
 설계·실측 검증은 [`ADR-0010`](../../../../docs/decisions/jinwoo/0010-gms-responses-api-conversation-memory.md) 참고.

@@ -55,7 +55,8 @@ BGE_EC2_PORT=18020 \
 
 EC2에서는 `curl http://127.0.0.1:18020/readyz`를 확인하고 host process ai-worker에
 `AI_WORKER_BGE_RUNTIME_URL=http://127.0.0.1:18020`을 주입한다. script는 local BGE가 ready가 아니거나 SSH
-forward 생성에 실패하면 즉시 종료하므로 systemd의 `Restart=always` 같은 supervisor로 관리한다.
+forward 생성에 실패하면 즉시 종료하므로 supervisor가 재기동을 맡는다 — GPU host에는 sudo/systemd가
+없어 실제 감독자는 tmux 기반 [`deploy/bin/liveclass-bge-runtime-supervisor`](../deploy/README.md)다.
 [ADR-0029](../../../docs/decisions/canola/0029-gpu-bge-ec2-ai-worker-connectivity.md)가 통신 방식과 대안을 기록한다.
 
 ## 검증

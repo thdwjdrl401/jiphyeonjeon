@@ -1,7 +1,8 @@
 # `ai-worker/app/application`
 
-PPTX 한 version을 파싱·임베딩·저장·활성화하는 유스케이스(`IndexPptxMaterial`)와, 자료 삭제
-유스케이스(`DeleteMaterialIndex`)를 담는다.
+PPTX 한 version을 파싱·임베딩·저장·활성화하는 유스케이스(`IndexPptxMaterial`), 자료 삭제
+유스케이스(`DeleteMaterialIndex`), 강조 판서 색인·삭제 유스케이스(`IndexAnnotationHighlight`,
+`DeleteAnnotationHighlight`)를 담는다.
 
 ## 역할
 
@@ -12,10 +13,10 @@ PPTX 한 version을 파싱·임베딩·저장·활성화하는 유스케이스(`
   `asyncio.gather`로 동시에 추출한다. v1은 기존 feature flag 동작을 유지한다.
 - 추출·저장 결과를 `READY|EMPTY|FAILED`로 구분해 material version에 영속화한다. 용어 실패는
   embedding/stage/activate를 막지 않지만 terminal callback에 독립 상태로 보고한다.
-- `DeleteMaterialIndex`는 `EMBED_DELETE` job(materialId·lessonId만 있음)을 받아
-  `IndexStorage.resolve_active_scope`로 curriculum_id와 현재 버전을 self-lookup한 뒤 `delete_job`을
-  호출한다(ADR-0006). 조회 결과가 없으면(이미 삭제됐거나 존재한 적 없음) `delete_job`을 호출하지
-  않고 바로 성공(멱등)으로 끝낸다.
+- `DeleteMaterialIndex`는 `EMBED_DELETE` job(레슨 봉투는 lessonId, 커리큘럼 봉투는 curriculumId만
+  실어 오고 scope는 선택 필드)을 받아 `IndexStorage.resolve_active_scope`로 curriculum_id와 현재
+  버전을 self-lookup한 뒤 `delete_job`을 호출한다(ADR-0006). 조회 결과가 없으면(이미 삭제됐거나
+  존재한 적 없음) `delete_job`을 호출하지 않고 바로 성공(멱등)으로 끝낸다.
 
 ## 구조와 흐름
 
@@ -32,8 +33,10 @@ material version에 저장한 결과 메타데이터와 `ai.material_key_term`�
 ## 파일 구성
 
 `index_pptx_material.py`가 `IndexPptxMaterial`·`MaterialIndexResult`, `delete_material_index.py`가
-`DeleteMaterialIndex`·`MaterialDeleteResult`, `map_material_job.py`가 wire job → 내부 identity 변환
-(`map_pptx_embed_job`, `map_embed_delete_job`, `embed_delete_job_id`)을 구현한다.
+`DeleteMaterialIndex`·`MaterialDeleteResult`, `index_annotation_highlight.py`와
+`delete_annotation_highlight.py`가 강조 판서 색인·삭제, `map_material_job.py`가 wire job → 내부
+identity 변환(`map_pptx_embed_job`, `map_embed_delete_job`, `map_annotation_embed_job`,
+`embed_delete_job_id`, `annotation_embed_job_id`, `annotation_delete_job_id`)을 구현한다.
 
 ## 경계와 불변식
 
@@ -46,8 +49,8 @@ material version에 저장한 결과 메타데이터와 `ai.material_key_term`�
   ([ADR-0003](../../../../docs/decisions/jinwoo/0003-pptx-key-term-extraction-approach.md),
   [ADR-0004](../../../../docs/decisions/jinwoo/0004-key-term-callback-delivery-timing.md),
   [ADR-0005](../../../../docs/decisions/jinwoo/0005-key-term-storage-schema.md)).
-- `DeleteMaterialIndex`는 wire의 `lesson_id`를 그대로 `delete_job`에 넘긴다 — 실제 저장된 값과
-  다르면 `delete_job` 내부의 스코프 검증이 이미 거부하므로 별도 검증을 추가하지 않는다
+- `DeleteMaterialIndex`는 wire의 `lesson_id`를 그대로 `delete_job`에 넘기되, 봉투가 실어 온
+  `lessonId`·`curriculumId`·`scope`가 self-lookup한 스코프와 어긋나면 삭제 전에 거부한다
   ([ADR-0006](../../../../docs/decisions/jinwoo/0006-pptx-material-delete-resolution.md)).
 
 ## 검증

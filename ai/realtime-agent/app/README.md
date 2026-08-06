@@ -43,7 +43,7 @@ alias probe가 성공한 뒤 이전한다. OpenAI와 stub은 process resource �
 
 `main.py`는 위 통신을 조립하지만 payload를 새로 정의하지 않는다. 세부 wire format은 각 하위 README와
 [`../CONTRACT.md`](../CONTRACT.md)가 소유한다.
-신규 started/final wire는 AI-side 후보로 구현됐고 공유 계약은 변경 중이다. 채택 상태와 미확정 항목은
+started/final wire는 루트 계약에 채택됐다(ADR-0052·0053). 소비자별 처리와 상세는
 [`../CONTRACT.md` 3절](../CONTRACT.md)을 따른다.
 
 
