@@ -18,8 +18,35 @@ public interface EgressControl {
      */
     String startHlsRecording(String roomName, String objectPrefix);
 
-    /** 녹화 중지. 대상이 이미 없으면(중복 중지 등) 성공으로 간주(멱등). */
-    void stopRecording(String egressId);
+    /**
+     * 녹화 중지. <b>결말을 값으로 돌려준다</b> — 예외는 진짜 통신·서버 오류일 때만 던진다.
+     *
+     * <p>"정지되지 않았다"에는 성격이 다른 두 가지가 섞여 있어 하나로 뭉치면 운영자가 판단할 수 없다.
+     * 이미 끝난 작업에 정지를 건 것은 <b>할 일이 없는 것</b>이고, 소유 노드가 사라진 작업은
+     * <b>이 경로로는 영영 정지되지 않는 것</b>이다. 앞의 것을 오류로 올리면 콘솔이 멀쩡한 조작에
+     * 빨간불을 띄우고, 뒤의 것을 성공으로 접으면 목록에 그대로 남아 운영자가 같은 버튼을 반복해서 누른다.
+     *
+     * @return {@link StopOutcome} — 호출자가 표시·후속 조치를 정한다
+     */
+    StopOutcome stopRecording(String egressId);
+
+    /**
+     * 정지 요청의 결말.
+     *
+     * <p>{@link #ORPHANED}는 LiveKit이 소유 핸들러에게 보낸 RPC에 아무도 대답하지 않은 경우다.
+     * Egress 작업은 그것을 시작한 <b>핸들러 프로세스</b>가 소유하는데, 녹화 도중 egress 컨테이너가
+     * 재시작되면 그 프로세스가 완료 보고 없이 사라진다. LiveKit은 작업을 ACTIVE로 계속 들고 있지만
+     * 정지 요청을 받아 줄 상대가 없다 — 2026-08-05에 두 호스트에서 각각 한 건씩 실제로 생겼다.
+     * LiveKit에 고아 회수 API가 없어 이 상태는 사람이 정리해야 한다.
+     */
+    enum StopOutcome {
+        /** 정지 요청이 받아들여졌다. */
+        STOPPED,
+        /** 이미 끝났거나 LiveKit이 모르는 작업 — 정지할 것이 없다(멱등). */
+        ALREADY_ENDED,
+        /** 소유 노드가 사라져 이 경로로는 정지할 수 없다(유령). 수동 정리가 필요하다. */
+        ORPHANED
+    }
 
     /**
      * Gate B(ADR-0002 §4) — Egress 작업의 현재 상태. LiveKit이 그 작업을 모르면 {@link Optional#empty()}.

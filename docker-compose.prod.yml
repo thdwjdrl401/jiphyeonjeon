@@ -158,6 +158,12 @@ services:
       # 완화 바인딩(LIVECLASS_CAPTION_CONSUMER)은 이 프로젝트 규약이 아니라서 조용히 무시된다.
       CAPTION_CONSUMER_NAME: spring-prod-1
       LECTURE_NOTE_CONSUMER_NAME: spring-notes-prod-1
+      # 유령 Egress 회수 중계(infra/livekit/egress-purger). 호스트 네트워크로 떠 있어 브리지
+      # 게이트웨이로 부른다. ufw가 브리지→호스트를 막으므로 규칙이 하나 필요하다:
+      #   sudo ufw allow from 172.18.0.0/16 to any port 9107 proto tcp comment 'egress-purger'
+      # 시크릿은 중계 쪽(/etc/liveclass/livekit/purger.env)과 같은 값이어야 한다.
+      EGRESS_PURGER_BASE_URL: ${EGRESS_PURGER_BASE_URL:-http://172.18.0.1:9107}
+      EGRESS_PURGE_SECRET: ${EGRESS_PURGE_SECRET:-}
       # HTTPS 뒤 → 세션 쿠키 Secure + 프록시 헤더 신뢰
       SERVER_SERVLET_SESSION_COOKIE_SECURE: "true"
       SERVER_FORWARD_HEADERS_STRATEGY: framework

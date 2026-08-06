@@ -25,9 +25,41 @@ export async function getActiveEgresses(): Promise<ActiveEgress[]> {
   return data
 }
 
-/** 지정 Egress 강제 정지(멱등). */
-export async function stopEgress(egressId: string): Promise<void> {
-  await apiClient.post(`/admin/egress/${egressId}/stop`)
+/**
+ * 정지 요청의 결말. 백엔드 `EgressControl.StopOutcome`과 대응.
+ *
+ * - `STOPPED` 정지 요청이 받아들여졌다
+ * - `ALREADY_ENDED` 이미 끝난 작업이라 할 일이 없었다(멱등)
+ * - `ORPHANED` 소유 노드가 사라져 이 경로로는 정지할 수 없다 — 사람이 정리해야 한다
+ */
+export type StopOutcome = 'STOPPED' | 'ALREADY_ENDED' | 'ORPHANED'
+
+export interface StopEgressResult {
+  outcome: StopOutcome
+}
+
+/** 지정 Egress 강제 정지(멱등). 정지되지 않는 경우도 오류가 아니라 결말로 돌아온다. */
+export async function stopEgress(egressId: string): Promise<StopEgressResult> {
+  const { data } = await apiClient.post<StopEgressResult>(`/admin/egress/${egressId}/stop`)
+  return data
+}
+
+export interface PurgeEgressResult {
+  /** 실제로 기록을 지웠는가. false면 유령이 아니어서 지우지 않은 것이다. */
+  purged: boolean
+  /** 지우기 전에 확인한 정지 결말 — 지우지 않았다면 그 이유가 여기 있다. */
+  outcome: StopOutcome
+}
+
+/**
+ * 유령 Egress 회수 — LiveKit이 정지시킬 수 없는 기록을 걷어낸다.
+ *
+ * 서버가 지우기 전에 유령임을 확인하고, 호스트의 회수 중계도 한 번 더 확인한다.
+ * 그래서 살아 있는 녹화에 잘못 눌러도 지워지지 않는다(`purged: false`로 돌아온다).
+ */
+export async function purgeEgress(egressId: string): Promise<PurgeEgressResult> {
+  const { data } = await apiClient.post<PurgeEgressResult>(`/admin/egress/${egressId}/purge`)
+  return data
 }
 
 /** 녹화 자산 상태 분포 + 가장 오래 멈춘 자산. */

@@ -244,16 +244,46 @@ public class LiveKitEgressControl implements EgressControl {
     }
 
     @Override
-    public void stopRecording(String egressId) {
+    public StopOutcome stopRecording(String egressId) {
         try {
             Response<LivekitEgress.EgressInfo> res = client.stopEgress(egressId).execute();
-            // 이미 없는/끝난 egress(중복 중지 등)는 성공으로 간주해 멱등하게 둔다.
-            if (!res.isSuccessful() && res.code() != 404) {
-                throw new EgressControlException("Egress 중지 실패: HTTP " + res.code());
+            if (res.isSuccessful()) {
+                log.info("Egress 녹화 중지 egressId={}", egressId);
+                return StopOutcome.STOPPED;
             }
-            log.info("Egress 녹화 중지 egressId={}", egressId);
+            StopOutcome outcome = stopOutcomeFor(res.code())
+                    .orElseThrow(() -> new EgressControlException("Egress 중지 실패: HTTP " + res.code()));
+            if (outcome == StopOutcome.ORPHANED) {
+                log.warn("Egress 소유 노드가 응답하지 않음 — 유령으로 판정 egressId={}", egressId);
+            } else {
+                log.info("Egress가 이미 종료 상태여서 정지할 것이 없음 egressId={} http={}", egressId, res.code());
+            }
+            return outcome;
         } catch (IOException e) {
             throw new EgressControlException("Egress 중지 통신 실패: " + egressId, e);
         }
+    }
+
+    /**
+     * StopEgress의 실패 응답 코드를 결말로 옮긴다. 비어 있으면 <b>예상 밖</b>이라는 뜻이고 호출자가 던진다.
+     *
+     * <p>LiveKit(Twirp)의 코드 매핑을 그대로 읽는다.
+     * <ul>
+     *   <li><b>404</b> — LiveKit이 모르는 작업. 이미 사라졌다.</li>
+     *   <li><b>412</b> {@code failed_precondition} — "egress with status EGRESS_FAILED cannot be stopped".
+     *       이미 종료 상태라 정지 대상이 아니다. 404와 같은 사실의 다른 표현이라 함께 멱등하게 접는다.</li>
+     *   <li><b>408</b> {@code deadline_exceeded} — "no response from servers". LiveKit이 소유 핸들러에게
+     *       RPC를 보냈는데 아무도 대답하지 않았다. 그 프로세스가 완료 보고 없이 사라진 것이라
+     *       <b>재시도해도 결과가 같다</b>. 이것만 유령으로 구분한다.</li>
+     * </ul>
+     *
+     * <p>그 밖의 코드는 접지 않는다 — 모르는 실패를 성공으로 접으면 진짜 문제가 조용히 묻힌다.
+     */
+    static Optional<StopOutcome> stopOutcomeFor(int httpCode) {
+        return switch (httpCode) {
+            case 404, 412 -> Optional.of(StopOutcome.ALREADY_ENDED);
+            case 408 -> Optional.of(StopOutcome.ORPHANED);
+            default -> Optional.empty();
+        };
     }
 }
