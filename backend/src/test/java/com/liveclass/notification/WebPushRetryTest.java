@@ -22,6 +22,8 @@ import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.security.KeyPair;
 import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadMXBean;
+import java.lang.management.ThreadInfo;
 import java.security.KeyPairGenerator;
 import java.security.SecureRandom;
 import java.security.Security;
@@ -29,6 +31,7 @@ import java.security.spec.ECGenParameterSpec;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.HashMap;
 import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -339,24 +342,23 @@ class WebPushRetryTest {
      * <b>암호화가 코어에 흩어지는가.</b> {@code preparePost}는 순수 CPU 작업이고(운영 장비 실측
      * 건당 7.79ms), 한 스레드에서 순서대로 하면 그게 곧 발송 속도의 천장이 된다.
      *
-     * <p>절대 시간으로 재면 장비마다 달라지므로 <b>같은 일을 스레드 1개와 코어 수만큼으로 두 번
-     * 재서 견준다</b>. 응답은 즉시 주게 두어 HTTP가 아니라 CPU만 보이게 한다.
+     * <p><b>속도가 아니라 일의 분배를 본다.</b> 예전에는 스레드 1개와 코어 수만큼으로 두 번 재서
+     * 벽시계를 견줬는데, 그 방식은 <b>기계가 한가하다</b>는 전제를 깔고 있었다. 공유 CI 러너에서는
+     * 그 전제가 수시로 깨져 코드가 멀쩡해도 실패했다 — 부하 가드를 달아도 측정 도중에 다른 잡이
+     * 붙으면 그만이었다(2026-08-06까지 이 테스트 하나가 CI를 여러 번 깼다).
+     *
+     * <p>대신 암호화 풀 스레드({@code push-crypto-*})가 각자 쓴 <b>CPU 시간</b>을 본다. 기계가
+     * 바쁘면 전체가 느려질 뿐, 일이 여러 스레드에 나뉘었다는 사실은 그대로 남는다 — 판정이
+     * 이웃 프로세스에 흔들리지 않는다. 한 스레드만 일했다면 그게 곧 직렬이고, 그것이 이 테스트가
+     * 막으려는 것이다.
      */
     @Test
     void it_spreads_encryption_across_threads() {
         int cores = Runtime.getRuntime().availableProcessors();
         assumeTrue(cores >= 2, "코어가 하나면 병렬화로 빨라질 수 없다");
-
-        /*
-         * **놀고 있는 코어도 이 측정의 전제다.** 속도로 병렬성을 판정하므로, 다른 일이 이미 코어를
-         * 쓰고 있으면 병렬 실행이 코어를 얻지 못해 직렬과 같은 시간이 나온다 — 코드가 멀쩡해도
-         * 실패한다. 실제로 CI 러너에서 그랬다(같은 커밋이 한가할 때 통과, 다른 테스트와 겹쳤을 때
-         * 실패). 전제가 깨진 실행은 실패가 아니라 건너뛰는 것이 맞다.
-         */
-        double load = ManagementFactory.getOperatingSystemMXBean().getSystemLoadAverage();
-        assumeTrue(load < 0 || load < cores * 0.7,
-                () -> "장비가 이미 바쁘면(부하 %.2f / 코어 %d) 병렬이 코어를 얻지 못해 속도로 판정할 수 없다"
-                        .formatted(load, cores));
+        ThreadMXBean threads = ManagementFactory.getThreadMXBean();
+        assumeTrue(threads.isThreadCpuTimeSupported() && threads.isThreadCpuTimeEnabled(),
+                "스레드별 CPU 시간을 못 재는 JVM에서는 이 방식으로 판정할 수 없다");
 
         int devices = 120;
         PushSubscription[] subscriptions = new PushSubscription[devices];
@@ -368,28 +370,37 @@ class WebPushRetryTest {
         List<UUID> recipients = recipients(subscriptions);
 
         /*
-         * **예열이 필요하다.** 첫 실행이 JIT 컴파일을 떠안으므로, 그냥 두 번 재면 "두 번째가
-         * 빠르다"를 재게 된다 — 스레드를 하나로 묶어도 통과하는 테스트가 된다(실제로 그랬다).
+         * 이 클래스의 앞선 테스트들이 만든 암호화 스레드가 아직 살아 있다. 그것들이 예전에 쓴
+         * CPU까지 세면 이번 발송이 흩어졌는지와 무관하게 통과하므로, 발송 전후의 **증가분**만 본다.
          */
+        Map<Long, Long> before = cryptoCpuNanos(threads);
         sender(1, 60_000, devices, cores).send(recipients, "제목", "본문", null);
-        received.clear();
+        Map<Long, Long> after = cryptoCpuNanos(threads);
 
-        // 병렬을 **먼저** 잰다. 남은 순서 효과가 있다면 병렬에 불리하게 작용하도록.
-        long parallel = timed(() -> sender(1, 60_000, devices, cores).send(recipients, "제목", "본문", null));
-        received.clear();
-        long serial = timed(() -> sender(1, 60_000, devices, 1).send(recipients, "제목", "본문", null));
+        long floor = Duration.ofMillis(10).toNanos();
+        List<Long> worked = after.entrySet().stream()
+                .filter(entry -> entry.getValue() - before.getOrDefault(entry.getKey(), 0L) > floor)
+                .map(Map.Entry::getKey)
+                .toList();
 
-        assertThat(parallel)
-                .as("코어 %d개에 흩었는데 한 스레드와 같으면 풀을 안 타는 것이다 (직렬 %dms, 병렬 %dms, 시작 시 부하 %.2f)",
-                        cores, serial, parallel, load)
-                .isLessThan((long) (serial * 0.75));
+        assertThat(worked)
+                .as("코어 %d개에 흩었는데 한 스레드만 일했으면 풀을 안 타는 것이다 (일한 스레드 %s)",
+                        cores, worked)
+                .hasSizeGreaterThan(1);
     }
 
-    private static long timed(Runnable work) {
-        long startedAt = System.nanoTime();
-        work.run();
-        return (System.nanoTime() - startedAt) / 1_000_000;
+    /** 살아 있는 암호화 풀 스레드의 누적 CPU 시간(ns). 이름은 {@code WebPushSender}가 붙인다. */
+    private static Map<Long, Long> cryptoCpuNanos(ThreadMXBean threads) {
+        Map<Long, Long> byThread = new HashMap<>();
+        for (long id : threads.getAllThreadIds()) {
+            ThreadInfo info = threads.getThreadInfo(id);
+            if (info == null || !info.getThreadName().startsWith("push-crypto-")) continue;
+            long cpu = threads.getThreadCpuTime(id);
+            if (cpu >= 0) byThread.put(id, cpu);
+        }
+        return byThread;
     }
+
 
     // ---- 도구 ----
 
