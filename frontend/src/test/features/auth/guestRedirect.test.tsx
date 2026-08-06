@@ -49,7 +49,8 @@ describe('게스트가 보호 경로에서 나갈 때', () => {
     await renderAt('/student/curriculums')
     await screen.findByRole('heading', { name: '내 커리큘럼' })
 
-    await user.click(screen.getByRole('button', { name: /메뉴|계정|프로필/ }).closest('button')!)
+    // 로그아웃은 이제 헤더에 바로 떠 있지 않다 — 프로필 드롭다운을 열어야 나온다.
+    await user.click(screen.getByRole('button', { name: /김학생/ }))
     await user.click(await screen.findByRole('button', { name: '로그아웃' }))
 
     // 방금 나온 화면을 returnTo로 다시 권하지 않는다.
@@ -79,7 +80,8 @@ describe('게스트가 보호 경로에서 나갈 때', () => {
     await renderAt('/student/curriculums')
     await screen.findByRole('heading', { name: '내 커리큘럼' })
 
-    await user.click(screen.getByRole('button', { name: /메뉴|계정|프로필/ }).closest('button')!)
+    // 로그아웃은 이제 헤더에 바로 떠 있지 않다 — 프로필 드롭다운을 열어야 나온다.
+    await user.click(screen.getByRole('button', { name: /김학생/ }))
     await user.click(await screen.findByRole('button', { name: '로그아웃' }))
     await waitFor(() => expect(window.location.pathname).toBe('/'))
 

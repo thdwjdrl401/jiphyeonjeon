@@ -36,32 +36,31 @@ export const navigationItemsByRole: Record<UserRole, NavigationItem[]> = {
   STUDENT: [
     exploreCurriculums,
     {
-      label: '내 커리큘럼',
+      label: '마이 페이지',
       to: studentPaths.curriculums,
-      // 학습 목록·강의 학습·라이브 입장 전 점검까지 모두 "내 커리큘럼" 축이다.
+      // 학습 목록·강의 학습·라이브 입장 전 점검까지 모두 "마이 페이지" 축이다.
       activePatterns: [studentPaths.curriculums, '/student/live-sessions', '/student/lessons'],
     },
   ],
   INSTRUCTOR: [
     exploreCurriculums,
     {
-      label: '커리큘럼 관리',
+      label: '마이 페이지',
       to: instructorPaths.curriculums,
-      // 목록·관리·강의 편집·라이브 점검·녹화 처리까지 모두 "커리큘럼 관리" 축이다.
-      activePatterns: [instructorPaths.curriculums, '/instructor/live-sessions', '/instructor/lessons'],
-      inactivePatterns: [instructorPaths.newCurriculum],
-    },
-    {
-      label: '커리큘럼 만들기',
-      to: instructorPaths.newCurriculum,
-      activePatterns: [instructorPaths.newCurriculum],
+      // 목록·만들기·관리·강의 편집·라이브 점검·녹화 처리까지 모두 "마이 페이지" 축이다.
+      activePatterns: [
+        instructorPaths.curriculums,
+        instructorPaths.newCurriculum,
+        '/instructor/live-sessions',
+        '/instructor/lessons',
+      ],
     },
   ],
 }
 
 /**
  * 운영 콘솔. 가입 역할(`role`)이 아니라 서버 allowlist(`isAdmin`)로 갈리는 별도 축이라
- * 역할 표에 넣지 않는다. 메뉴에서 빠지면 URL을 직접 쳐야 하므로 자리는 남겨 둔다.
+ * 역할 표에 넣지 않는다. 상단 텍스트 메뉴가 아니라 프로필 드롭다운 안에서 노출된다.
  */
 export const adminNavigationItem: NavigationItem = {
   label: '운영 콘솔',

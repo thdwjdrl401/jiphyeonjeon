@@ -22,7 +22,7 @@ export default function WorkspaceSidebar({ user }: WorkspaceSidebarProps) {
     <aside className="workspace-sidebar" aria-label="작업 메뉴">
       <div className="workspace-sidebar__masthead" aria-hidden="true">
         <span>MY</span>
-        <strong>CURATION</strong>
+        <strong>PAGE</strong>
       </div>
       <div className="workspace-user">
         {user && (
