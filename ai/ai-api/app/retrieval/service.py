@@ -65,6 +65,7 @@ class AnnotationSearchPort(Protocol):
         self,
         *,
         curriculum_id: UUID,
+        session_id: UUID,
         query_text: str,
         query_embedding: Sequence[float],
         top_k: int,
@@ -101,12 +102,15 @@ class AnnotationRetrievalService:
         self,
         *,
         curriculum_id: UUID,
+        session_id: UUID,
         query_text: str,
         top_k: int = 2,
         cutoff: SessionTimeCutoff | None = None,
     ) -> tuple[AnnotationHighlightHit, ...]:
         if not isinstance(curriculum_id, UUID):
             raise TypeError("curriculum_id must be a UUID")
+        if not isinstance(session_id, UUID):
+            raise TypeError("session_id must be a UUID")
         normalized_query = query_text.strip()
         if not normalized_query:
             raise ValueError("query_text must contain non-whitespace text")
@@ -116,6 +120,7 @@ class AnnotationRetrievalService:
         query_embedding = _normalize_embedding(await self._embedding.embed_query(normalized_query))
         return await self._repository.search_annotations(
             curriculum_id=curriculum_id,
+            session_id=session_id,
             query_text=normalized_query,
             query_embedding=query_embedding,
             top_k=top_k,

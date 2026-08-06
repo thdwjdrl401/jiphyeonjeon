@@ -114,6 +114,8 @@ class Settings(BaseSettings):
     annotation_evidence_enabled: bool = False
     annotation_top_k: int = Field(default=2, ge=1, le=50)
     annotation_window_size: int = Field(default=5, ge=1, le=50)
+    # 유사도 검색 hit에만 적용 — recent-window hit은 시간 기준 선별이라 점수가 없다(ADR-0086).
+    annotation_vector_threshold: float = Field(default=0.6, ge=0, le=1)
 
     conversation_memory_ttl_seconds: int = Field(default=1_800, ge=60, le=86_400)
     conversation_memory_key_prefix: str = Field(

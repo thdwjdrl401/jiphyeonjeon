@@ -87,16 +87,22 @@ annotation 근거는 `AI_API_ANNOTATION_EVIDENCE_ENABLED`(기본 `false`)일 때
 
 | 읽기 | 기준 | 기본값 |
 |---|---|---|
-| 의미 검색 | 자료와 같은 RRF hybrid, `curriculumId` 스코프 | `AI_API_ANNOTATION_TOP_K` = 2 |
+| 의미 검색 | 자료와 같은 RRF hybrid, 질문자의 `sessionId` 스코프 | `AI_API_ANNOTATION_TOP_K` = 2 |
 | recent window | 유사도 무관, 같은 `sessionId`의 최근 `sessionMs` 순 | `AI_API_ANNOTATION_WINDOW_SIZE` = 5 |
+
+의미 검색 hit은 `vector_score >= AI_API_ANNOTATION_VECTOR_THRESHOLD`(기본 `0.6`)를 넘어야 근거가 된다
+([ADR-0086](../../docs/decisions/canola/0086-annotation-search-session-scope-and-threshold.md) —
+원래 `curriculumId` 스코프·허들 없음이었으나, 다른 세션의 무관한 판서가 매 답변에 딸려 들어와 세션
+스코프 + 허들로 좁혔다). recent window hit은 시간 기준 선별이라 점수가 없고 허들을 거치지 않는다.
 
 window가 별도로 필요한 이유는 "아까 강조하신 게 뭐였지" 같은 시간 지시어가 임베딩 공간에 방향을 갖지
 않기 때문이다. 의미 검색만으로는 어떤 임계값을 써도 걸리지 않는다. 두 읽기 결과는 `highlightId`로 중복
 제거하며 window가 앞선다. 근거 순서는 자료 → 판서 → 자막이고, 판서만 있어도 `sufficient`다.
 
 시점 필터는 다시보기에만 적용한다. v2는 질문자 자신의 세션에서 `sessionMs <= questionSessionMs`인
-스냅샷만 쓰고 다른 세션은 전부 허용한다(이미 끝난 강의라 전체가 과거다). v1은 필터가 없다 — 색인된
-스냅샷은 정의상 질문 이전이고, `contextTimeMs`는 STT attempt-local이라 `sessionMs`와 비교할 수 없다.
+스냅샷만 쓴다. v1은 필터가 없다 — 색인된 스냅샷은 정의상 질문 이전이고, `contextTimeMs`는 STT
+attempt-local이라 `sessionMs`와 비교할 수 없다. 두 버전 모두 다른 세션의 판서는 검색되지 않으며,
+스코프 밖 annotation이 근거로 돌아오면 `EVIDENCE_SCOPE_VIOLATION`으로 답변을 거부한다.
 
 모델 프롬프트에는 annotation 근거마다 `highlightedAt`(`mm:ss`, 한 시간 초과 시 `h:mm:ss`)과 원본
 `sessionMs`가 들어간다. v2는 질문 시점을 `askedAt`으로 함께 주고 v1은 주지 않는다 — attempt-local

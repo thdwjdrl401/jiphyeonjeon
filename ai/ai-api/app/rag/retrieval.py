@@ -38,6 +38,7 @@ class AnnotationRetrievalPort(Protocol):
         self,
         *,
         curriculum_id: UUID,
+        session_id: UUID,
         query_text: str,
         top_k: int,
         cutoff: SessionTimeCutoff | None,
@@ -66,7 +67,7 @@ async def _gather_annotation_hits(
     window_size: int,
     cutoff: SessionTimeCutoff | None,
 ) -> tuple[AnnotationHighlightHit, ...]:
-    """Two reads, one merged list (ADR-0043 §5).
+    """Two reads, one merged list (ADR-0043 §5), both scoped to the asker's session (ADR-0086).
 
     Similarity answers "what did the instructor highlight about X"; the recent window answers
     "what did the instructor just highlight", which no amount of semantic search can find
@@ -76,7 +77,11 @@ async def _gather_annotation_hits(
 
     searched, window = await asyncio.gather(
         annotations.retrieve(
-            curriculum_id=curriculum_id, query_text=question, top_k=top_k, cutoff=cutoff
+            curriculum_id=curriculum_id,
+            session_id=session_id,
+            query_text=question,
+            top_k=top_k,
+            cutoff=cutoff,
         ),
         annotations.recent(session_id=session_id, limit=window_size, cutoff=cutoff),
     )
@@ -108,6 +113,7 @@ class CombinedEvidenceRetriever:
         annotations: AnnotationRetrievalPort | None = None,
         annotation_top_k: int = 2,
         annotation_window_size: int = 5,
+        annotation_vector_threshold: float = 0.6,
         material_top_k: int = 3,
         material_vector_threshold: float = 0.25,
         material_lexical_threshold: float = 0.0,
@@ -119,6 +125,8 @@ class CombinedEvidenceRetriever:
             raise ValueError("annotation_top_k must be between 1 and 50")
         if not 1 <= annotation_window_size <= 50:
             raise ValueError("annotation_window_size must be between 1 and 50")
+        if not 0 <= annotation_vector_threshold <= 1:
+            raise ValueError("annotation_vector_threshold must be between zero and one")
         if not 1 <= material_top_k <= 50:
             raise ValueError("material_top_k must be between 1 and 50")
         if not 0 <= material_vector_threshold <= 1:
@@ -136,6 +144,7 @@ class CombinedEvidenceRetriever:
         self._annotations = annotations
         self._annotation_top_k = annotation_top_k
         self._annotation_window_size = annotation_window_size
+        self._annotation_vector_threshold = annotation_vector_threshold
         self._material_top_k = material_top_k
         self._material_vector_threshold = material_vector_threshold
         self._material_lexical_threshold = material_lexical_threshold
@@ -165,6 +174,8 @@ class CombinedEvidenceRetriever:
             )
         ]
 
+        # Recent-window hits are selected by time and carry no score (ADR-0043 §5) — only
+        # similarity-searched hits face the vector threshold (ADR-0086).
         evidence.extend(
             RetrievedEvidence(
                 lesson_id=hit.lesson_id,
@@ -178,6 +189,7 @@ class CombinedEvidenceRetriever:
                 ),
             )
             for hit in annotation_hits
+            if hit.vector_score is None or hit.vector_score >= self._annotation_vector_threshold
         )
 
         context = self._captions.query(request.sessionId, request.contextTimeMs)
@@ -268,6 +280,7 @@ class ReplayEvidenceRetriever:
         annotations: AnnotationRetrievalPort | None = None,
         annotation_top_k: int = 2,
         annotation_window_size: int = 5,
+        annotation_vector_threshold: float = 0.6,
         material_top_k: int = 3,
         material_vector_threshold: float = 0.25,
         material_lexical_threshold: float = 0.0,
@@ -277,6 +290,8 @@ class ReplayEvidenceRetriever:
             raise ValueError("annotation_top_k must be between 1 and 50")
         if not 1 <= annotation_window_size <= 50:
             raise ValueError("annotation_window_size must be between 1 and 50")
+        if not 0 <= annotation_vector_threshold <= 1:
+            raise ValueError("annotation_vector_threshold must be between zero and one")
         if not 1 <= material_top_k <= 50:
             raise ValueError("material_top_k must be between 1 and 50")
         if not 0 <= material_vector_threshold <= 1:
@@ -289,6 +304,7 @@ class ReplayEvidenceRetriever:
         self._annotations = annotations
         self._annotation_top_k = annotation_top_k
         self._annotation_window_size = annotation_window_size
+        self._annotation_vector_threshold = annotation_vector_threshold
         self._material_top_k = material_top_k
         self._material_vector_threshold = material_vector_threshold
         self._material_lexical_threshold = material_lexical_threshold
@@ -314,6 +330,8 @@ class ReplayEvidenceRetriever:
             )
         ]
 
+        # Recent-window hits are selected by time and carry no score (ADR-0043 §5) — only
+        # similarity-searched hits face the vector threshold (ADR-0086).
         evidence.extend(
             RetrievedEvidenceV2(
                 lesson_id=hit.lesson_id,
@@ -327,6 +345,7 @@ class ReplayEvidenceRetriever:
                 ),
             )
             for hit in annotation_hits
+            if hit.vector_score is None or hit.vector_score >= self._annotation_vector_threshold
         )
 
         caption_evidence = self._build_caption_evidence(request)
@@ -345,8 +364,8 @@ class ReplayEvidenceRetriever:
         )
         if self._annotations is None:
             return await material_search, ()
-        # A highlight made after the question was asked cannot be evidence for it, but only
-        # within this session — other sessions already finished (ADR-0043 §4).
+        # A highlight made after the question was asked cannot be evidence for it; search is
+        # session-scoped (ADR-0086), so the cutoff always concerns this session.
         session_id = UUID(request.sessionId)
         return await asyncio.gather(
             material_search,

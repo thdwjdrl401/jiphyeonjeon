@@ -912,9 +912,9 @@ async def test_annotation_evidence_in_scope_reaches_the_model_and_the_sources() 
 
 
 @async_test
-async def test_annotation_evidence_from_another_session_is_accepted() -> None:
-    """Highlights are searched curriculum-wide (ADR-0043 §4): a hit from an earlier session of
-    the same curriculum is a legitimate semantic-search result, unlike captions."""
+async def test_annotation_evidence_from_another_session_is_rejected() -> None:
+    """Highlight search is session-scoped (ADR-0086): a hit from another session — even in the
+    same curriculum — means retrieval is broken, so the guard must refuse to answer with it."""
 
     other_session = "55555555-5555-4555-8555-555555555555"
     service = RagAnswerService(
@@ -928,7 +928,8 @@ async def test_annotation_evidence_from_another_session_is_accepted() -> None:
 
     events = await collect(service, request())
 
-    assert [event.event for event in events] == ["answer.delta", "answer.done"]
+    assert [event.event for event in events] == ["answer.error"]
+    assert events[0].data.code == "EVIDENCE_SCOPE_VIOLATION"
 
 
 @async_test

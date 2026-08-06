@@ -353,10 +353,12 @@ def _validate_evidence_scope(
             if item.curriculum_id != request.curriculumId:
                 raise _EvidenceScopeViolation
         elif isinstance(item.source, AnnotationSource):
-            # Highlights are indexed and searched on the same curriculum axis as materials
-            # (ADR-0043 §4). A hit from another session of this curriculum is a legitimate
-            # semantic-search result, so sessionId is deliberately not compared.
-            if item.curriculum_id != request.curriculumId:
+            # Highlight search is session-scoped (ADR-0086), so a hit from another session —
+            # even one in the same curriculum — is a retrieval bug, not a legitimate result.
+            if (
+                item.curriculum_id != request.curriculumId
+                or item.source.sessionId != request.sessionId
+            ):
                 raise _EvidenceScopeViolation
         elif isinstance(item.source, CaptionSource):
             if item.lesson_id != request.lessonId or item.source.sessionId != request.sessionId:

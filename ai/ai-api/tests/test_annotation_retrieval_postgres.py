@@ -101,18 +101,23 @@ async def _insert_snapshot(
         )
 
 
-def test_search_is_curriculum_scoped_and_hides_deleted_snapshots(
+def test_search_is_session_scoped_and_hides_deleted_snapshots(
     integration_database: IntegrationDatabase,
 ) -> None:
+    """Search must return only the asker's session (ADR-0086): another session of the same
+    curriculum and another curriculum both stay invisible, as do DELETED snapshots."""
+
     async def scenario() -> None:
         engine = create_async_engine(integration_database.database_url)
         curriculum_id = uuid4()
         other_curriculum_id = uuid4()
         lesson_id = uuid4()
         session_id = uuid4()
+        other_session_id = uuid4()
         wanted = uuid4()
         deleted = uuid4()
         foreign = uuid4()
+        sibling_session = uuid4()
         try:
             await _create_schema(engine, integration_database.runtime_role)
             await _insert_snapshot(
@@ -148,6 +153,17 @@ def test_search_is_curriculum_scoped_and_hides_deleted_snapshots(
                 content="foreign highlight",
                 embedding=_vector(1.0),
             )
+            # Same curriculum, different session: the leak that motivated ADR-0086.
+            await _insert_snapshot(
+                engine,
+                highlight_id=sibling_session,
+                curriculum_id=curriculum_id,
+                lesson_id=lesson_id,
+                session_id=other_session_id,
+                session_ms=1_000,
+                content="sibling session highlight",
+                embedding=_vector(1.0),
+            )
 
             service = AnnotationRetrievalService(
                 FixedEmbedding(),
@@ -156,7 +172,10 @@ def test_search_is_curriculum_scoped_and_hides_deleted_snapshots(
                 ),
             )
             hits = await service.retrieve(
-                curriculum_id=curriculum_id, query_text="highlight", top_k=10
+                curriculum_id=curriculum_id,
+                session_id=session_id,
+                query_text="highlight",
+                top_k=10,
             )
 
             assert [hit.highlight_id for hit in hits] == [wanted]
@@ -168,11 +187,11 @@ def test_search_is_curriculum_scoped_and_hides_deleted_snapshots(
     asyncio.run(scenario())
 
 
-def test_replay_cutoff_hides_only_the_asker_session_future(
+def test_replay_cutoff_hides_the_question_future(
     integration_database: IntegrationDatabase,
 ) -> None:
-    """A snapshot made after the question cannot be evidence for it, but a different
-    (already finished) session is wholly in the past and stays searchable."""
+    """A snapshot made after the question cannot be evidence for it. Other sessions never
+    appear at all — search is session-scoped (ADR-0086)."""
 
     async def scenario() -> None:
         engine = create_async_engine(integration_database.database_url)
@@ -225,14 +244,21 @@ def test_replay_cutoff_hides_only_the_asker_session_future(
             cutoff = SessionTimeCutoff(session_id=session_id, max_session_ms=735_000)
 
             limited = await service.retrieve(
-                curriculum_id=curriculum_id, query_text="highlight", top_k=10, cutoff=cutoff
+                curriculum_id=curriculum_id,
+                session_id=session_id,
+                query_text="highlight",
+                top_k=10,
+                cutoff=cutoff,
             )
             unlimited = await service.retrieve(
-                curriculum_id=curriculum_id, query_text="highlight", top_k=10
+                curriculum_id=curriculum_id,
+                session_id=session_id,
+                query_text="highlight",
+                top_k=10,
             )
 
-            assert set(hit.highlight_id for hit in limited) == {past, other_session}
-            assert set(hit.highlight_id for hit in unlimited) == {past, future, other_session}
+            assert set(hit.highlight_id for hit in limited) == {past}
+            assert set(hit.highlight_id for hit in unlimited) == {past, future}
         finally:
             await engine.dispose()
 

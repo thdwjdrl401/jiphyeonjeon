@@ -73,10 +73,11 @@ class Annotations:
         self.search_calls: list[dict] = []
         self.window_calls: list[dict] = []
 
-    async def retrieve(self, *, curriculum_id, query_text, top_k, cutoff):
+    async def retrieve(self, *, curriculum_id, session_id, query_text, top_k, cutoff):
         self.search_calls.append(
             {
                 "curriculum_id": curriculum_id,
+                "session_id": session_id,
                 "query_text": query_text,
                 "top_k": top_k,
                 "cutoff": cutoff,
@@ -182,6 +183,68 @@ def test_live_search_uses_no_time_cutoff() -> None:
     assert annotations.window_calls[0]["session_id"] == UUID(SESSION_ID)
 
 
+def test_both_reads_are_scoped_to_the_asker_session() -> None:
+    """The similarity read must carry the asker's session too (ADR-0086) — before that it
+    searched the whole curriculum and dragged old sessions' highlights into live answers."""
+    annotations = Annotations()
+    retriever = CombinedEvidenceRetriever(Materials(), Captions(), annotations=annotations)
+
+    asyncio.run(retriever.retrieve(_live_request()))
+
+    assert annotations.search_calls[0]["session_id"] == UUID(SESSION_ID)
+    assert annotations.window_calls[0]["session_id"] == UUID(SESSION_ID)
+
+
+def _scored_hit(highlight_id: UUID, vector_score: float) -> AnnotationHighlightHit:
+    return AnnotationHighlightHit(
+        highlight_id=highlight_id,
+        curriculum_id=CURRICULUM_ID,
+        lesson_id=LESSON_ID,
+        session_id=UUID(SESSION_ID),
+        session_ms=725_300,
+        text="B+ tree 노드 분할 조건",
+        vector_score=vector_score,
+        lexical_score=0.0,
+        score=1.0,
+    )
+
+
+def test_searched_hits_below_the_vector_threshold_are_dropped_in_both_paths() -> None:
+    """Without this gate the top-k best-of-nothing hits entered every answer and the same
+    unrelated highlight repeated across questions (ADR-0086)."""
+    relevant, irrelevant = uuid4(), uuid4()
+    searched = (_scored_hit(relevant, 0.85), _scored_hit(irrelevant, 0.31))
+
+    live = CombinedEvidenceRetriever(
+        Materials(), Captions(), annotations=Annotations(searched=searched)
+    )
+    replay = ReplayEvidenceRetriever(Materials(), annotations=Annotations(searched=searched))
+
+    live_ids = [e.source.highlightId for e in asyncio.run(live.retrieve(_live_request())).evidence]
+    replay_ids = [
+        e.source.highlightId for e in asyncio.run(replay.retrieve(_replay_request())).evidence
+    ]
+
+    assert live_ids == [relevant]
+    assert replay_ids == [relevant]
+
+
+def test_recent_window_hits_bypass_the_vector_threshold() -> None:
+    """Window hits are selected by time and carry no score — a threshold of 1.0 must still
+    let them through, or "아까 강조하신 게" questions lose their only evidence."""
+    highlight_id = uuid4()
+    live = CombinedEvidenceRetriever(
+        Materials(),
+        Captions(),
+        annotations=Annotations(window=(_annotation_hit(highlight_id),)),
+        annotation_vector_threshold=1.0,
+    )
+
+    result = asyncio.run(live.retrieve(_live_request()))
+
+    assert [e.source.highlightId for e in result.evidence] == [highlight_id]
+
+
 def test_replay_passes_the_question_moment_as_the_cutoff_to_both_reads() -> None:
     annotations = Annotations()
     retriever = ReplayEvidenceRetriever(Materials(), annotations=annotations)
@@ -244,7 +307,13 @@ def test_without_annotations_wired_both_paths_behave_exactly_as_before(build: st
 
 @pytest.mark.parametrize(
     "overrides",
-    [{"annotation_top_k": 0}, {"annotation_top_k": 51}, {"annotation_window_size": 0}],
+    [
+        {"annotation_top_k": 0},
+        {"annotation_top_k": 51},
+        {"annotation_window_size": 0},
+        {"annotation_vector_threshold": -0.1},
+        {"annotation_vector_threshold": 1.1},
+    ],
 )
 def test_rejects_unusable_annotation_limits(overrides: dict[str, int]) -> None:
     with pytest.raises(ValueError):
