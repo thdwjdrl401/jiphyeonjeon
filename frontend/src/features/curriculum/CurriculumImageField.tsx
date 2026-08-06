@@ -77,16 +77,25 @@ export default function CurriculumImageField({
 
   return (
     <div className="curriculum-image-field">
-      <label className="curriculum-image-preview" htmlFor={id}>
-        {previewUrl ? <img src={previewUrl} alt="대표 이미지 미리보기" /> : <div><span>IMAGE</span><strong>대표 이미지 등록</strong><small>클릭해 이미지 선택 · 16:9 권장</small></div>}
-      </label>
       {/*
-        등록·삭제는 눌러야 하는 것으로 보여야 한다. ghost는 배경·테두리가 모두 투명해 회색 글자만
-        남아 버튼으로 읽히지 않았고, 등록은 버튼이 아예 없어 미리보기 클릭이 유일한 경로였다.
+        등록·변경은 <b>이 미리보기 한 곳</b>에서 한다. 예전에는 옆에 `이미지 등록` 버튼을 따로 두었는데,
+        이 자리가 이미 같은 파일 선택을 열어서 같은 일을 하는 두 곳이 나란히 있었다.
+
+        <p>대신 사진이 들어찬 뒤에도 "여기를 눌러 바꾼다"가 남아야 한다 — 미리보기가 사진으로 덮이면
+        빈 상태의 안내 문구가 사라지므로, 그 자리에 겹쳐서 알린다.
       */}
+      <label className="curriculum-image-preview" htmlFor={id}>
+        {previewUrl
+          ? (
+            <>
+              <img src={previewUrl} alt="대표 이미지 미리보기" />
+              <span className="curriculum-image-preview__change">클릭해 이미지 변경</span>
+            </>
+          )
+          : <div><span>IMAGE</span><strong>대표 이미지 등록</strong><small>클릭해 이미지 선택 · 16:9 권장</small></div>}
+      </label>
       <div className="curriculum-image-field__actions">
         <input ref={inputRef} id={id} aria-label="대표 이미지 등록" type="file" accept="image/jpeg,image/png,image/webp" onChange={selectImage} />
-        <label className="button button--outline" htmlFor={id}>{previewUrl ? '이미지 변경' : '이미지 등록'}</label>
         <button
           className="button button--outline button--danger"
           type="button"

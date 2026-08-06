@@ -844,20 +844,29 @@ describe('커리큘럼 작업 화면', () => {
     expect(await screen.findByAltText('대표 이미지 미리보기')).toBeInTheDocument()
   })
 
-  // 등록 경로가 미리보기 클릭뿐이면 무엇을 눌러야 하는지 화면에서 안 읽힌다 — 버튼으로 세운다.
-  it('대표 이미지 등록 버튼은 이미지 유무에 따라 등록·변경으로 바뀐다', async () => {
+  /**
+   * 등록·변경은 <b>미리보기 한 곳</b>에서 한다. 예전에는 옆에 `이미지 등록` 버튼을 따로 두었지만
+   * 미리보기가 이미 같은 파일 선택을 열어, 같은 일을 하는 두 곳이 나란히 있었다.
+   *
+   * <p>대신 사진이 자리를 덮은 뒤에도 "눌러서 바꾼다"가 남아야 한다 — 빈 상태의 안내가 사진에
+   * 가려지기 때문이다.
+   */
+  it('대표 이미지는 미리보기 한 곳에서 등록하고 바꾼다', async () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/new')
     await screen.findByRole('heading', { name: '새 커리큘럼 만들기', level: 1 })
 
-    expect(screen.getByText('이미지 등록')).toBeInTheDocument()
+    // 미리보기 자리가 안내를 다 하므로 같은 일을 하는 버튼을 옆에 두지 않는다.
+    expect(screen.getByText('클릭해 이미지 선택 · 16:9 권장')).toBeInTheDocument()
+    expect(screen.queryByText('이미지 등록')).not.toBeInTheDocument()
     expect(screen.queryByText('이미지 변경')).not.toBeInTheDocument()
 
     const image = new File(['image-bytes'], 'cover.png', { type: 'image/png' })
     await user.upload(screen.getByLabelText('대표 이미지 등록'), image)
     expect(await screen.findByAltText('대표 이미지 미리보기')).toBeInTheDocument()
 
-    expect(screen.getByText('이미지 변경')).toBeInTheDocument()
+    // 사진이 들어찬 뒤에는 겹친 배지가 그 경로를 알린다.
+    expect(screen.getByText('클릭해 이미지 변경')).toBeInTheDocument()
     expect(screen.queryByText('이미지 등록')).not.toBeInTheDocument()
   })
 
