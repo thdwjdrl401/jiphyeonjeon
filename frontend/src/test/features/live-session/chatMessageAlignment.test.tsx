@@ -54,13 +54,14 @@ describe('채팅 메시지 좌우 정렬', () => {
 
   it('내 메시지에는 alias 대신 내 닉네임을 쓴다', () => {
     render(sidebar([
-      { id: 'm1', alias: '수강생-0473', text: '남의 것', time: '10:00' },
-      { id: 'm2', alias: '수강생-9999', text: '내 것', time: '10:01', mine: true },
+      { id: 'm1', alias: '익명1', text: '남의 것', time: '10:00' },
+      { id: 'm2', alias: '익명9', text: '내 것', time: '10:01', mine: true },
     ]))
 
-    expect(screen.getByText('수강생-0473')).toBeInTheDocument()
-    expect(screen.queryByText('수강생-9999')).not.toBeInTheDocument()
-    expect(screen.getByText('나')).toBeInTheDocument()
+    expect(screen.getByText('익명1')).toBeInTheDocument()
+    expect(screen.queryByText('익명9')).not.toBeInTheDocument()
+    // 아바타 폴백 이니셜("나")과도 겹치므로 이름 자리(strong)로 좁혀 찾는다.
+    expect(screen.getByText('나', { selector: 'strong' })).toBeInTheDocument()
   })
 
   it('낙관적 항목(시각 미확정)은 우측이면서 빈 시각을 그리지 않는다', () => {
@@ -71,15 +72,5 @@ describe('채팅 메시지 좌우 정렬', () => {
     const article = articleOf(container, '보내는 중')
     expect(article.className).toContain('is-mine')
     expect(article.querySelector('time')).toBeNull()
-  })
-
-  it('내 질문 메시지는 is-mine과 is-question을 함께 갖는다', () => {
-    const { container } = render(sidebar([
-      { id: 'm1', alias: '', text: '내 질문', time: '10:02', mine: true, question: true },
-    ]))
-
-    const article = articleOf(container, '내 질문')
-    expect(article.className).toContain('is-mine')
-    expect(article.className).toContain('is-question')
   })
 })

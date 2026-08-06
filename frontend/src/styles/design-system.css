@@ -1636,8 +1636,7 @@ body {
 .video-controls-overlay { border-color: rgba(255,255,255,.16); background: rgba(12,12,12,.82); box-shadow: none; color: #eee; }
 .student-live-status > div:first-child > span:last-child,
 .video-status-overlay__identity h1 { color: #fff; }
-.student-live-status > div:last-child > span:not(.status-badge),
-.video-status-overlay__identity small,
+.student-live-status > div:last-child > span:not(.status-pill),
 .video-status-overlay__status,
 .timeline-row,
 .control-row > span { color: rgba(255,255,255,.54); }
@@ -1660,6 +1659,7 @@ body {
 .summary-block-list > article,
 .glossary-list > button,
 .quiz-panel > label { border-color: #333; background: #171717; box-shadow: none; }
+.ai-turn__avatar { border-color: #333; }
 .caption-dock > header,
 .learning-sidebar-windowbar,
 .media-tabs { border-color: #333; background: #171717; }
@@ -1709,22 +1709,15 @@ body {
   border-color: #fff;
   background: #fff;
 }
-.discussion-filter button { border-color: #3a3a3a; color: #aaa; }
-.discussion-filter button.is-active { border-color: #fff; background: #fff; color: #111; }
 .discussion-notice,
 .media-side .inline-notice { border-color: #3b3b3b; background: #222; color: #c8c8c3; }
 .panel-empty { color: #8e8e89; }
 /* 말풍선끼리 배경(#171717)에서 겨우 분리되던 4px 반경 대신, 다른 카드류와 같은 10px + 옅은 테두리로
    또렷하게 뜨게 한다. */
 .chat-list article { border: 1px solid #2b2b2b; border-radius: 10px; background: #1f1f1f; }
-.chat-list article.is-question { border-left: 2px solid var(--seal); background: #282322; }
-/* 내 메시지도 남의 메시지와 같은 배경을 쓴다 — 정렬(우측)로만 구분한다.
-   is-question은 내 메시지에서도 주황 계열을 유지한다(질문 표시가 정렬보다 중요하다). */
-.chat-list article.is-mine.is-question { border-left-color: var(--seal); background: #282322; }
 .chat-list strong { color: #f2f2ef; font-size: .75rem; }
 .chat-list time { color: #9a9a95; font-size: .66rem; }
 .chat-list p { color: #d1d1cc; font-size: .78rem; }
-.chat-list article > small { color: #d87970; font-size: .65rem; }
 /* 접힌 근거 토글은 답변 말풍선(#171717) 위에 얹히므로 한 단계 밝은 표면으로 떼어 놓는다. */
 .ai-evidence-toggle { border-color: #444; background: #222; color: #ddd; }
 .ai-evidence-toggle:hover { border-color: #777; background: #2a2a2a; }
@@ -1756,10 +1749,11 @@ body {
 .instructor-participant-panel li small { color: #a6a6a1; }
 /* 요약 블록의 시각 이동 버튼(대비 1.28). */
 .summary-block-list article > header button { color: #bcbcb7; }
-/* "질문으로 등록"·"익명으로 보내기" 라벨(대비 3.23). */
-.chat-composer label { color: #bdbdb8; }
-/* 체크박스는 accent-color를 안 주면 OS 테마색(예: 초록)을 그대로 따른다 — seal로 고정한다. */
-.chat-composer input[type="checkbox"] { accent-color: var(--seal); }
+/* 익명 토글 라벨(대비 3.23). */
+.anonymous-toggle { color: #bdbdb8; }
+.anonymous-toggle__track { background: #3a3a3a; }
+.anonymous-toggle.is-on .anonymous-toggle__track { background: var(--seal); }
+.anonymous-toggle__thumb { background: #eee; }
 /* 용어집 상세의 출처 줄. 한 단계 밝은 표면(#282522) 위라 라이트 값이 겨우 걸쳐 있었다. */
 .glossary-detail > small { color: #a6a6a1; }
 .chat-composer textarea,
@@ -1767,10 +1761,12 @@ body {
 .glossary-search input,
 .panel-search input,
 .review-editor textarea { border-color: #3b3b3b; background: #111; color: #eee; box-shadow: none; }
-/* 포커스 표시가 --blue-500(모노톤 alias, 사실상 회색)이라 어디에 입력 중인지 눈에 안 띄었다 —
-   실제 강조색(seal)로 링을 준다. */
+/* 포커스 표시가 --blue-500(모노톤 alias, 사실상 회색)이라 어디에 입력 중인지 눈에 안 띄었다.
+   전에는 seal(빨강)로 링을 줬는데 텍스트 입력창마다 빨간 테두리가 켜져 오류처럼 보였다 —
+   같은 어두운 화면의 다른 포커스 표시(.lesson-shell :focus-visible)와 맞춰 중립 톤으로 바꾼다.
+   테두리 색만 바꾸고 바깥 box-shadow 링은 두지 않는다 — 테두리가 두 겹으로 보이지 않게. */
 .chat-composer textarea:focus,
-.ai-panel textarea:focus { border-color: var(--seal); box-shadow: 0 0 0 2px rgba(182,59,50,.3); }
+.ai-panel textarea:focus { border-color: #8c8c87; box-shadow: none; }
 .summary-block-list > article.is-current { border-color: #777; background: #222; box-shadow: inset 2px 0 #fff; }
 .summary-block-list section > strong { color: #bcbcb7; }
 .summary-block-list section p,

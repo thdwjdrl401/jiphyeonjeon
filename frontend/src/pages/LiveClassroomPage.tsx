@@ -144,7 +144,6 @@ export default function LiveClassroomPage() {
   const [selectedTermId, setSelectedTermId] = useState<string | null>(null)
   const [positionMs, setPositionMs] = useState(0)
   const [message, setMessage] = useState('')
-  const [isQuestion, setIsQuestion] = useState(false)
   // 익명은 기본 꺼짐 — 켰을 때만 세션 한정 가명으로 나간다(ADR-0050). 끄면 본인이 지정한 표시 이름.
   const [anonymous, setAnonymous] = useState(false)
   // 재생바 위에 재시청 곡선을 얹으려면 플레이어 루트가 필요하다(WatchHeatmapCurve).
@@ -378,12 +377,11 @@ export default function LiveClassroomPage() {
     sendMutation.mutate({
       clientMessageId: createClientMessageId(),
       text: message.trim(),
-      // 강사는 질문 등록·익명 둘 다 해당 없다(서버도 강사 익명을 무시한다).
-      question: isInstructor ? false : isQuestion,
+      // 채팅에는 질문 등록 기능이 없다 — 항상 false. 강사는 익명도 해당 없다(서버도 강사 익명을 무시한다).
+      question: false,
       anonymous: isInstructor ? false : anonymous,
     })
     setMessage('')
-    setIsQuestion(false)
   }
 
   const handleMessageKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -437,10 +435,16 @@ export default function LiveClassroomPage() {
       />
       <div>
         {!isInstructor && (
-          <>
-            <label><input type="checkbox" checked={isQuestion} onChange={(event) => setIsQuestion(event.target.checked)} /> 질문</label>
-            <label><input type="checkbox" checked={anonymous} onChange={(event) => setAnonymous(event.target.checked)} /> 익명</label>
-          </>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={anonymous}
+            className={`anonymous-toggle${anonymous ? ' is-on' : ''}`}
+            onClick={() => setAnonymous((current) => !current)}
+          >
+            <span>익명</span>
+            <span className="anonymous-toggle__track"><span className="anonymous-toggle__thumb" /></span>
+          </button>
         )}
         <button className="button button--primary button--small" type="submit" disabled={!message.trim()}>전송</button>
       </div>
@@ -586,13 +590,6 @@ export default function LiveClassroomPage() {
         </div>
       )}
 
-      {isInstructor && endRequested && (
-        <div className="instructor-end-confirm" role="alert">
-          <div><strong>라이브 강의를 종료할까요?</strong><p>학생 연결을 종료하고 녹화·AI 후처리 단계로 이동합니다.</p></div>
-          <div><button className="button button--ghost button--small" type="button" onClick={() => setEndRequested(false)}>계속 진행</button><button className="button button--primary button--small" type="button" disabled={endMutation.isPending} onClick={() => endMutation.mutate()}>종료하고 처리 현황 보기</button></div>
-        </div>
-      )}
-
       <div
         className={`media-layout${isInstructor && sidebarWindow.isDetached ? ' is-sidebar-detached' : ''}${sidebarPane.collapsed ? ' is-sidebar-collapsed' : ''}`}
         style={{ '--sidebar-width': `${sidebarPane.size}px` } as CSSProperties}
@@ -607,6 +604,13 @@ export default function LiveClassroomPage() {
                   participantCount={session.participants}
                   sessionId={sessionId}
                   onRequestEnd={() => setEndRequested(true)}
+                  onDismissEndConfirm={() => setEndRequested(false)}
+                  endConfirm={endRequested && (
+                    <div className="instructor-end-confirm" role="alert">
+                      <div><strong>라이브 강의를 종료할까요?</strong><p>학생 연결을 종료하고 녹화·AI 후처리 단계로 이동합니다.</p></div>
+                      <div><button className="button button--ghost button--small" type="button" onClick={() => setEndRequested(false)}>계속 진행</button><button className="button button--primary button--small" type="button" disabled={endMutation.isPending} onClick={() => endMutation.mutate()}>종료하고 처리 현황 보기</button></div>
+                    </div>
+                  )}
                 />
               </Suspense>
             )

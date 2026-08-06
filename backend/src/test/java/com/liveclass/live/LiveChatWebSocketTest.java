@@ -124,7 +124,7 @@ class LiveChatWebSocketTest {
         assertThat(payload.get("text")).isEqualTo("실시간이다");
         assertThat(payload.get("isQuestion")).isEqualTo(true);
         assertThat(payload.get("clientMessageId")).isEqualTo("ws-1");
-        assertThat((String) payload.get("alias")).startsWith("수강생-");
+        assertThat((String) payload.get("alias")).startsWith("익명");
         // 프라이버시: payload 어디에도 userId·실명이 없어야 한다.
         assertThat(payload).doesNotContainKey("userId");
         assertThat(payload.values()).doesNotContain("테스터");

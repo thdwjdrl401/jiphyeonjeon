@@ -83,7 +83,7 @@ class ChatContractTest {
                 .doesNotContain("userId")
                 .doesNotContain("테스터");
         // 익명을 켠 학생만 가명 형식.
-        org.assertj.core.api.Assertions.assertThat(json(res).get("alias").asString()).startsWith("수강생-");
+        org.assertj.core.api.Assertions.assertThat(json(res).get("alias").asString()).startsWith("익명");
     }
 
     /**
@@ -163,7 +163,7 @@ class ChatContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].text").value("내가 보냄"))
                 .andExpect(jsonPath("$[0].mine").value(true))
-                .andExpect(jsonPath("$[0].alias").value(org.hamcrest.Matchers.startsWith("수강생-")))
+                .andExpect(jsonPath("$[0].alias").value(org.hamcrest.Matchers.startsWith("익명")))
                 .andExpect(jsonPath("$[1].text").value("남이 보냄"))
                 .andExpect(jsonPath("$[1].mine").value(false))
                 .andExpect(jsonPath("$[1].alias").value("테스터"));   // 익명 미선택 → 본인이 지정한 표시 이름

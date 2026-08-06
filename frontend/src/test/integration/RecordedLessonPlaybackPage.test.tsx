@@ -39,7 +39,7 @@ describe('학생 녹화강의 재생 화면', () => {
     )
     expect(screen.getByRole('tab', { name: 'AI 질문' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '핵심 용어' })).toBeInTheDocument()
-    expect(screen.queryByRole('tab', { name: '채팅·질문' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: '채팅' })).not.toBeInTheDocument()
     expect(screen.getByPlaceholderText(/이 강의에서 궁금한 점/)).toBeInTheDocument()
   })
 

@@ -89,7 +89,7 @@ interface Props {
  * 같게 보인다. 노트·용어집처럼 REST 조회 하나뿐인 값은 override를 바꾼 뒤 그 쿼리를 invalidate해
  * 반영한다. AI 기록만 한 단계 더 필요하다(applyAiHistory 참고).
  *
- * <p><b>네 탭(채팅·질문/실시간 노트/AI 질문/핵심 용어)은 이 패널이 마운트되는 순간 비운다.</b>
+ * <p><b>네 탭(채팅/실시간 노트/AI 질문/핵심 용어)은 이 패널이 마운트되는 순간 비운다.</b>
  * 이 mock이 원래 돌려주던 고정 데모 내용이 매번 미리 깔려 있으면, 지금 넣은 것과 원래 있던 것이
  * 섞여 화면이 무엇을 보여주는지 헷갈린다 — 빈 상태에서 시작해 필요한 것만 넣는 편이 검증하기 쉽다.
  * "샘플 데이터 추가"는 누를 때마다 새로 쌓인다(덮어쓰지 않는다) — 스크롤이 생길 만큼 여러 번 눌러도
@@ -104,7 +104,6 @@ export default function DevLivePanel({ sessionId, lessonId, onAiHistoryChanged, 
   const [collapsed, setCollapsed] = useState(false)
   const [chatText, setChatText] = useState('')
   const [chatAsOther, setChatAsOther] = useState(true)
-  const [chatIsQuestion, setChatIsQuestion] = useState(false)
   const [captionText, setCaptionText] = useState('')
   const [participantCount, setParticipantCount] = useState(12)
 
@@ -195,7 +194,7 @@ export default function DevLivePanel({ sessionId, lessonId, onAiHistoryChanged, 
 
   const sendChat = (text: string) => {
     if (!text.trim()) return
-    devPushChatMessage(sessionId, { text: text.trim(), mine: !chatAsOther, question: chatIsQuestion })
+    devPushChatMessage(sessionId, { text: text.trim(), mine: !chatAsOther })
     setChatText('')
   }
 
@@ -269,7 +268,7 @@ export default function DevLivePanel({ sessionId, lessonId, onAiHistoryChanged, 
           </section>
 
           <section>
-            <strong>채팅·질문</strong>
+            <strong>채팅</strong>
             <div className="dev-live-panel__row">
               <button type="button" onClick={() => runAndInvalidate(() => devAppendChatSample(sessionId), [keys.chat, sessionId])}>샘플 데이터 추가</button>
               <button type="button" onClick={() => appendTimes(10, () => devAppendChatSample(sessionId), [keys.chat, sessionId])}>+10</button>
@@ -277,7 +276,6 @@ export default function DevLivePanel({ sessionId, lessonId, onAiHistoryChanged, 
             </div>
             <div className="dev-live-panel__row">
               <label><input type="checkbox" checked={chatAsOther} onChange={(event) => setChatAsOther(event.target.checked)} /> 다른 사람으로</label>
-              <label><input type="checkbox" checked={chatIsQuestion} onChange={(event) => setChatIsQuestion(event.target.checked)} /> 질문</label>
             </div>
             <div className="dev-live-panel__row">
               <input

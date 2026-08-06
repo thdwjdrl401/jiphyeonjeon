@@ -9,7 +9,7 @@ import java.util.UUID;
 /**
  * 채팅 응답. 프라이버시 불변식: <b>내부 userId를 절대 포함하지 않고</b>, 이름은 {@code alias} 한 필드로만
  * 나간다(FE 명세). {@code alias}의 값은 발신자의 선택에 달렸다(ADR-0050) — 익명 전송이면 세션 한정 가명
- * (예: 수강생-0473), 익명을 켜지 않았으면 <b>발신자가 스스로 지정한 표시 이름</b>(displayName)이다.
+ * (예: 익명1, 등장 순번 — ADR-0023), 익명을 켜지 않았으면 <b>발신자가 스스로 지정한 표시 이름</b>(displayName)이다.
  * 서버가 계정의 실명 필드를 꺼내 노출하는 경로는 없다. 강사는 언제나 표시 이름이다(익명 불가).
  */
 @Schema(description = "채팅 메시지")
@@ -24,7 +24,7 @@ public record ChatMessageResponse(
         Long viewingSessionMs,
         String text,
         boolean isQuestion,
-        @Schema(description = "노출 이름. 수강생이 익명 전송을 선택했으면 세션 한정 가명(수강생-0473), "
+        @Schema(description = "노출 이름. 수강생이 익명 전송을 선택했으면 세션 한정 가명(익명1, 등장 순번), "
                 + "선택하지 않았으면 발신자가 스스로 지정한 표시 이름이다. 강사는 항상 표시 이름(익명 불가). "
                 + "userId는 어떤 경우에도 포함하지 않는다.")
         String alias,
