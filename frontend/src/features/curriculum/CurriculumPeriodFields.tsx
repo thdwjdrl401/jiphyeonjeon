@@ -9,6 +9,11 @@ interface CurriculumPeriodFieldsProps {
   idPrefix: string
   value: CurriculumPeriodValue
   onChange: (field: keyof CurriculumPeriodValue, value: string) => void
+  /**
+   * 입력한 기간을 문장으로 되읽어 줄지. 처음 만드는 화면에서는 도움이 되지만, 관리 화면은
+   * 저장된 기간을 확인하러 오는 자리라 같은 날짜를 두 번 보여 줄 이유가 없다.
+   */
+  showPreview?: boolean
 }
 
 const DATE_LABEL = new Intl.DateTimeFormat('ko-KR', { dateStyle: 'long' })
@@ -36,7 +41,12 @@ function readableSpan({ startsAt, endsAt }: CurriculumPeriodValue): string | nul
  * 운영 기간 입력. "모집 기간"·"공개 기간"으로 읽히지 않도록 legend·라벨·보조 설명에서
  * 커리큘럼이 진행되는 기간임을 반복해 못 박고, 입력한 값을 문장으로 되읽어 준다.
  */
-export default function CurriculumPeriodFields({ idPrefix, value, onChange }: CurriculumPeriodFieldsProps) {
+export default function CurriculumPeriodFields({
+  idPrefix,
+  value,
+  onChange,
+  showPreview = true,
+}: CurriculumPeriodFieldsProps) {
   const startLabel = readableDate(value.startsAt)
   const endLabel = readableDate(value.endsAt)
   const span = readableSpan(value)
@@ -72,7 +82,7 @@ export default function CurriculumPeriodFields({ idPrefix, value, onChange }: Cu
           />
         </label>
       </div>
-      {(startLabel ?? endLabel) && (
+      {showPreview && (startLabel ?? endLabel) && (
         <p className="curriculum-period-fields__preview">
           {startLabel ?? '시작일 미정'} <span aria-hidden="true">→</span> {endLabel ?? '종료일 미정'}
           {span && <strong>{span}</strong>}

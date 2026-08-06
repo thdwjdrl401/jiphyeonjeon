@@ -907,6 +907,7 @@ function CurriculumManageEditor({
                 idPrefix="manage-curriculum"
                 value={period}
                 onChange={(field, value) => setPeriod((current) => ({ ...current, [field]: value }))}
+                showPreview={false}
               />
               {periodIssue && (
                 <p className="curriculum-manage__period-issue" role="status">

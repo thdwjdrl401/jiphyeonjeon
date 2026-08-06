@@ -946,6 +946,8 @@ describe('커리큘럼 작업 화면', () => {
     // 서버가 준 ISO를 datetime-local이 그대로 받는 지역 시각으로 되읽는다 — UTC로 자르면 19:00이 10:00이 된다.
     expect(await screen.findByLabelText('운영 시작일')).toHaveValue('2026-08-03T19:00')
     expect(screen.getByLabelText('운영 종료일')).toHaveValue('2026-09-24T21:00')
+    // 입력칸이 곧 답이라 같은 날짜를 문장으로 되읽지 않는다 — 되읽기는 처음 만드는 화면의 몫이다.
+    expect(screen.queryByText(/주 과정$/)).not.toBeInTheDocument()
   })
 
   it('관리 화면에서 운영 기간을 고치면 자동 저장된다', async () => {
