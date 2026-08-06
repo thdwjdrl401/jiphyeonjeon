@@ -29,7 +29,17 @@ services:
     image: redis:7-alpine
     container_name: liveclass-redis-prod
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
+    # maxmemory는 **튜닝값이 아니라 폭주 감지선**이다(ADR-0086). 실측 사용량이 6MB 남짓이고
+    # 스트림은 생산자 쪽에서 MAXLEN 10,000으로 이미 잘려 있다 — 1GB에 닿는다는 것은 정상 동작이
+    # 아니라 고장이다. 조용히 부풀어 호스트를 잡아먹는 대신 시끄럽게 실패하게 둔다.
+    #
+    # **eviction은 켜지 않는다.** 이 인스턴스에는 HTTP 세션(liveclass:session:*)이 함께 사는데,
+    # allkeys-lru는 물론이고 volatile-lru도 세션에 TTL이 있어 지워 간다 — 무작위 로그아웃이 된다.
+    # 인스턴스당 정책은 하나뿐이라 캐시와 세션을 같이 두면 한쪽을 포기해야 하고, 지금은 캐시 용도
+    # 키가 사실상 없으므로 세션 쪽으로 몰아 두는 것이 맞다(분리 조건은 ADR-0086).
+    command:
+      ["redis-server", "--appendonly", "yes",
+       "--maxmemory", "1gb", "--maxmemory-policy", "noeviction"]
     ports:
       # GPU SSH -L 터널 → prod realtime-agent가 prod redis에 캡션 XADD(lease/caption). loopback 전용(외부 노출 아님).
       # requirepass 없음 — loopback + SSH키로 게이팅. 내부 네트워크 소비자(Spring·ai-api)는 redis:6379 그대로.
@@ -136,6 +146,18 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 필요}
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: "6379"
+      # Redis Stream consumer 이름을 **고정**한다(ADR-0086).
+      #
+      # 비워 두면 CaptionStreamProperties가 $HOSTNAME으로 이름을 짓는데, 도커에서 HOSTNAME은
+      # 컨테이너 ID라 배포마다 바뀐다. "안정적이어야 재기동 시 자기 pending을 이어받는다"는 원래
+      # 의도가 실현되지 않고, 그룹 안에 다시는 쓰이지 않는 consumer만 쌓인다 — 실측 193개였다
+      # (배포 횟수만큼). pending이 남은 채로 이름이 바뀌면 그 엔트리는 아무도 이어받지 못한다.
+      #
+      # 백엔드는 단일 인스턴스다. 여러 개로 늘리면 인스턴스마다 다른 값을 줘야 한다.
+      # 이름은 application.yml의 플레이스홀더를 그대로 쓴다(`consumer: ${CAPTION_CONSUMER_NAME:}`).
+      # 완화 바인딩(LIVECLASS_CAPTION_CONSUMER)은 이 프로젝트 규약이 아니라서 조용히 무시된다.
+      CAPTION_CONSUMER_NAME: spring-prod-1
+      LECTURE_NOTE_CONSUMER_NAME: spring-notes-prod-1
       # HTTPS 뒤 → 세션 쿠키 Secure + 프록시 헤더 신뢰
       SERVER_SERVLET_SESSION_COOKIE_SECURE: "true"
       SERVER_FORWARD_HEADERS_STRATEGY: framework
