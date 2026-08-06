@@ -8,7 +8,7 @@ import { getLearningContext } from '@/features/learning/learningService'
 import { getLesson } from '@/features/lesson/lessonService'
 import { resolveLessonPath } from '@/features/lesson/lessonRouting'
 import CaptionDock from '@/features/live-session/CaptionDock'
-import LearningSidebar from '@/features/live-session/LearningSidebar'
+import LearningSidebar, { type GlossaryFocusRequest } from '@/features/live-session/LearningSidebar'
 import type { LearningPanel } from '@/features/live-session/liveLearningPreview'
 import WatchHeatmapCurve from '@/features/live-session/WatchHeatmapCurve'
 import { attachGlossary } from '@/features/live-session/glossaryView'
@@ -72,6 +72,7 @@ export default function ReplayLessonPage() {
     : '#'
   const [panel, setPanel] = useState<LearningPanel>('discussion')
   const [selectedTermId, setSelectedTermId] = useState<string | null>(null)
+  const [glossaryFocusRequest, setGlossaryFocusRequest] = useState<GlossaryFocusRequest | null>(null)
   const [positionMs, setPositionMs] = useState(0)
   const [seekRequest, setSeekRequest] = useState<PlaybackSeekRequest | null>(null)
   // 재생바 위에 재시청 곡선을 얹으려면 플레이어 루트가 필요하다(WatchHeatmapCurve).
@@ -195,6 +196,7 @@ export default function ReplayLessonPage() {
 
   const openGlossaryTerm = (termId: string) => {
     setSelectedTermId(termId)
+    setGlossaryFocusRequest((current) => ({ termId, sequence: (current?.sequence ?? 0) + 1 }))
     setPanel('glossary')
   }
 
@@ -331,6 +333,7 @@ export default function ReplayLessonPage() {
           onPanelChange={setPanel}
           selectedTermId={selectedTermId}
           onSelectedTermChange={setSelectedTermId}
+          glossaryFocusRequest={glossaryFocusRequest}
           lectureNote={noteQuery.data ?? null}
           glossaryTerms={glossary.terms}
           messages={messages}

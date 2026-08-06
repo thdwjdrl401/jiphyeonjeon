@@ -10,11 +10,25 @@ import type { GlossaryTermView, LearningPanel } from './liveLearningPreview'
 /** 패널 래퍼를 새로 만들지 않고 기존 .side-panel-content에 그대로 얹는다(flex·스크롤 구조 유지). */
 type PanelProps = ReturnType<typeof tabPanelProps>
 
+/**
+ * 자막 용어 클릭이 용어집 패널에 "펼치고·스크롤하고·강조하라"고 보내는 명령.
+ *
+ * `termId`만 들고 있으면 같은 용어를 연달아 눌러도 값이 안 바뀌어(React가 같은 값 setState를
+ * 무시한다) 두 번째 클릭이 아무 일도 하지 않는다 — `sequence`를 함께 올려 매번 다른 값이 되게
+ * 한다(자막 seek의 `sequence`와 같은 요령, ReplayLessonPage.seekSession 참고).
+ */
+export interface GlossaryFocusRequest {
+  termId: string
+  sequence: number
+}
+
 interface LearningSidebarProps {
   panel: LearningPanel
   onPanelChange: (panel: LearningPanel) => void
   selectedTermId: string | null
   onSelectedTermChange: (termId: string) => void
+  /** 자막에서 용어를 눌렀을 때만 채워진다 — 용어집 목록에서 직접 펼칠 때는 건드리지 않는다. */
+  glossaryFocusRequest: GlossaryFocusRequest | null
   /** 서버가 준 강의 노트(CONTRACT §3-4a). 아직 없으면 null — 패널이 비었다고 정직하게 말한다. */
   lectureNote: LectureNoteView | null
   glossaryTerms: GlossaryTermView[]
@@ -180,30 +194,130 @@ function DiscussionPanel({ messages, myDisplayName, revealThroughMs, composer, n
   )
 }
 
-function GlossaryPanel({ terms, selectedTermId, onSelectedTermChange, panelProps }: { terms: GlossaryTermView[]; selectedTermId: string | null; onSelectedTermChange: (termId: string) => void; panelProps: PanelProps }) {
+/** 자막 용어를 눌렀을 때, 방금 연 항목을 잠깐 테두리로 강조해 두는 시간(ms). CSS 애니메이션 길이와 맞춘다. */
+const GLOSSARY_FLASH_MS = 2400
+
+/**
+ * 용어 목록. 실시간 노트와 같은 패턴이다 — 용어 하나 = `<details>` 하나, 설명은 그 안에서 펼쳐 본다.
+ * 예전에는 목록 아래 카드 하나에 "지금 고른 용어"만 보여줬는데, 자막에서 용어를 눌러도 그 카드가
+ * 화면 밖에 있으면 뭐가 바뀌었는지 알기 어려웠다 — 이제는 항목 자체가 펼쳐지고, 그 위치로 스크롤한
+ * 뒤 테두리를 잠깐 강조해 "여기다"를 보여준다.
+ */
+function GlossaryPanel({
+  terms,
+  selectedTermId,
+  onSelectedTermChange,
+  focusRequest,
+  panelProps,
+}: {
+  terms: GlossaryTermView[]
+  selectedTermId: string | null
+  onSelectedTermChange: (termId: string) => void
+  focusRequest: GlossaryFocusRequest | null
+  panelProps: PanelProps
+}) {
   const [search, setSearch] = useState('')
-  useEffect(() => setSearch(''), [selectedTermId])
+  const [flashTermId, setFlashTermId] = useState<string | null>(null)
+  useEffect(() => setSearch(''), [selectedTermId, focusRequest])
   const normalizedSearch = search.trim().toLocaleLowerCase()
   const filteredTerms = useMemo(
     () => terms.filter((term) => [term.term, ...term.aliases].some((value) => value.toLocaleLowerCase().includes(normalizedSearch))),
     [normalizedSearch, terms],
   )
-  const selectedTerm = terms.find((term) => term.termId === selectedTermId) ?? filteredTerms[0] ?? null
+
+  /* 열고 닫기는 비제어(uncontrolled)로 둔다(실시간 노트와 같은 이유) — "펼치기" 자체는 리렌더가 필요 없다. */
+  const detailsRefs = useRef(new Map<string, HTMLDetailsElement>())
+  const setDetailsRef = (termId: string) => (el: HTMLDetailsElement | null) => {
+    if (el) detailsRefs.current.set(termId, el)
+    else detailsRefs.current.delete(termId)
+  }
+  const setAllTermsOpen = (open: boolean) => {
+    detailsRefs.current.forEach((el) => { el.open = open })
+  }
+
+  /*
+   * 자막에서 용어를 누르면 focusRequest가 바뀐다(목록에서 직접 펼치는 쪽은 이 값을 건드리지
+   * 않는다 — onToggle 참고). 그 항목을 펼치고, 화면에 보이게 스크롤한 뒤, 테두리를 잠깐 강조한다.
+   *
+   * focusRequest는 `{ termId, sequence }` 쌍이다 — sequence를 매번 올려서, 같은 용어를 연달아
+   * 눌러도(termId만으로는 값이 안 바뀌어 React가 무시했을 상황) 매번 새 값이 되어 다시 실행된다.
+   *
+   * 탭이 이 틱에 막 보이는 상태로 바뀌었을 수 있어(hidden 해제) 레이아웃이 아직 0폭일 수 있다 —
+   * ScrollToTop의 해시 스크롤과 같은 방식으로 몇 프레임 재시도한다.
+   */
+  useEffect(() => {
+    if (!focusRequest) return
+    const element = detailsRefs.current.get(focusRequest.termId)
+    if (!element) return
+    element.open = true
+
+    let attempts = 0
+    let frame = 0
+    const scrollAndFlash = () => {
+      if (element.getClientRects().length === 0) {
+        if (attempts++ < 20) frame = requestAnimationFrame(scrollAndFlash)
+        return
+      }
+      // 목록 맨 위가 아니라 화면(뷰포트) 맨 위에 오게 하면 스크롤 컨테이너 밖까지 밀 수 있어
+      // block: 'start'로 스크롤 조상 기준 맨 위에 맞춘다 — 탭의 가장 위쪽에 온다.
+      element.scrollIntoView({ block: 'start', behavior: 'smooth' })
+      setFlashTermId(focusRequest.termId)
+    }
+    frame = requestAnimationFrame(scrollAndFlash)
+    return () => cancelAnimationFrame(frame)
+  }, [focusRequest])
+
+  // 강조는 한 번 반짝이고 사라진다 — 계속 남아 있으면 "지금 막 도착했다"는 뜻이 무뎌진다.
+  useEffect(() => {
+    if (!flashTermId) return
+    const timeout = setTimeout(() => setFlashTermId(null), GLOSSARY_FLASH_MS)
+    return () => clearTimeout(timeout)
+  }, [flashTermId])
 
   return (
     <div className="side-panel-content glossary-panel" {...panelProps}>
-      <header className="learning-panel-heading"><div><strong>검수된 핵심 용어</strong><small>강의 전에 강사가 확정한 설명입니다.</small></div><span>{terms.length}개</span></header>
+      <header className="learning-panel-heading">
+        <div><strong>검수된 핵심 용어</strong><small>강의 전에 강사가 확정한 설명입니다.</small></div>
+        <div className="lecture-note-heading__actions">
+          {terms.length > 0 && (
+            <div className="lecture-note-toolbar">
+              <button type="button" onClick={() => setAllTermsOpen(true)}>모두 펼치기</button>
+              <button type="button" onClick={() => setAllTermsOpen(false)}>모두 접기</button>
+            </div>
+          )}
+          <span>{terms.length}개</span>
+        </div>
+      </header>
       <label className="glossary-search search-field"><span className="visually-hidden">핵심 용어 검색</span><SearchIcon /><input value={search} placeholder="용어 검색" onChange={(event) => setSearch(event.target.value)} /></label>
-      <div className="glossary-list">
-        {filteredTerms.map((term) => (
-          <button className={selectedTerm?.termId === term.termId ? 'is-active' : ''} type="button" key={term.termId} onClick={() => onSelectedTermChange(term.termId)}>
-            <span><strong>{term.term}</strong><small>{term.sourceLabel}</small></span><b>{term.occurrenceCount}회</b>
-          </button>
-        ))}
+      {/* 검색·버튼 영역은 스크롤과 무관하게 위에 고정한다 — 목록만 이 안에서 흐른다(채팅·강의 노트와 같은 골격). */}
+      <div className="scroll-pane">
+        {filteredTerms.length > 0 ? (
+          <div className="glossary-list">
+            {filteredTerms.map((term) => (
+              <details
+                className={`glossary-term${flashTermId === term.termId ? ' is-flash' : ''}`}
+                key={term.termId}
+                ref={setDetailsRef(term.termId)}
+                onToggle={(event) => {
+                  if (!event.currentTarget.open) return
+                  onSelectedTermChange(term.termId)
+                }}
+              >
+                <summary>
+                  <span><strong>{term.term}</strong><small>{term.sourceLabel}</small></span>
+                  <b>{term.occurrenceCount}회</b>
+                </summary>
+                <div className="glossary-term__body">
+                  <p>{term.description}</p>
+                  {term.aliases.length > 0 && <small>함께 찾는 표현 · {term.aliases.join(', ')}</small>}
+                </div>
+              </details>
+            ))}
+          </div>
+        ) : (
+          <p className="panel-empty">검색 결과가 없습니다.</p>
+        )}
       </div>
-      {selectedTerm
-        ? <article className="glossary-detail"><header><span>{selectedTerm.source === 'INSTRUCTOR' ? '강사 등록' : 'AI 자료 추출 · 강사 검수 완료'}</span><strong>{selectedTerm.term}</strong></header><p>{selectedTerm.description}</p>{selectedTerm.aliases.length > 0 && <small>함께 찾는 표현 · {selectedTerm.aliases.join(', ')}</small>}</article>
-        : <p className="panel-empty">검색 결과가 없습니다.</p>}
     </div>
   )
 }
@@ -234,7 +348,7 @@ export default function LearningSidebar(props: LearningSidebarProps) {
       {isAvailable('discussion') && isMounted('discussion') && <DiscussionPanel messages={props.messages} myDisplayName={props.myDisplayName} revealThroughMs={props.revealThroughMs} composer={props.discussionComposer} notice={props.discussionNotice} panelProps={panelProps('discussion')} />}
       {isAvailable('notes') && isMounted('notes') && <LectureNotePanel note={props.lectureNote} live={props.noteContext === 'LIVE'} panelProps={panelProps('notes')} />}
       {isAvailable('ai') && isMounted('ai') && <div className="side-panel-content ai-panel" {...panelProps('ai')}>{props.aiContent}</div>}
-      {isAvailable('glossary') && isMounted('glossary') && <GlossaryPanel terms={props.glossaryTerms} selectedTermId={props.selectedTermId} onSelectedTermChange={props.onSelectedTermChange} panelProps={panelProps('glossary')} />}
+      {isAvailable('glossary') && isMounted('glossary') && <GlossaryPanel terms={props.glossaryTerms} selectedTermId={props.selectedTermId} onSelectedTermChange={props.onSelectedTermChange} focusRequest={props.glossaryFocusRequest} panelProps={panelProps('glossary')} />}
     </aside>
   )
 }

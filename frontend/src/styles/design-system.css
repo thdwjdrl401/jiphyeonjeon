@@ -961,7 +961,8 @@ body {
   padding-inline: 8px;
 }
 .glossary-search.search-field svg { width: 13px; }
-.glossary-search.search-field input { font-size: .63rem; }
+/* 핵심 용어 패널 전체 글자 크기를 키우는 작업의 일부 — learning.css의 값보다 명시도가 높아 여기서 덮어써야 한다. */
+.glossary-search.search-field input { font-size: .72rem; }
 
 /*
  * 정렬 select는 면을 칠하지 않는다 — 원래의 투명 배경과 좌측 구분선을 그대로 둔다.
@@ -1705,7 +1706,7 @@ body {
 .evidence-card,
 .ai-answer,
 .summary-block-list > article,
-.glossary-list > button,
+.glossary-term,
 .quiz-panel > label { border-color: #333; background: #171717; box-shadow: none; }
 .ai-turn__avatar { border-color: #333; }
 .caption-dock > header,
@@ -1718,15 +1719,14 @@ body {
 .media-side strong,
 .learning-panel-heading strong,
 .summary-block-list h3,
-.glossary-list button strong,
-.glossary-detail header strong,
+.glossary-term > summary strong,
 .ai-empty h3,
 .evidence-card strong,
 .ai-answer strong { color: #f5f5f2; }
 .caption-dock > header span,
 .learning-panel-heading small,
 .summary-block-list article > header small,
-.glossary-list button small,
+.glossary-term > summary small,
 .media-side small { color: #8c8c87; }
 .caption-dock__sentences article.is-current { background: #292929; }
 .caption-dock__sentences article > button { color: #bcbcb7; }
@@ -1803,7 +1803,7 @@ body {
 .anonymous-toggle.is-on .anonymous-toggle__track { background: var(--seal); }
 .anonymous-toggle__thumb { background: #eee; }
 /* 용어집 상세의 출처 줄. 한 단계 밝은 표면(#282522) 위라 라이트 값이 겨우 걸쳐 있었다. */
-.glossary-detail > small { color: #a6a6a1; }
+.glossary-term__body > small { color: #a6a6a1; }
 .chat-composer textarea,
 .ai-panel textarea,
 .glossary-search input,
@@ -1838,12 +1838,13 @@ body {
 .summary-concept b { color: #eee; }
 .summary-emphasis { border-color: var(--seal); background: #282322; }
 .summary-generating { border-color: #444; }
-.glossary-list > button { color: #eee; }
-.glossary-list > button.is-active { border-color: #777; background: #252525; }
-.glossary-list button > b { color: #aaa; }
-.glossary-detail { border-color: #4a4641; background: #282522; }
-.glossary-detail header span { color: #d07a72; }
-.glossary-detail p { color: #ccc; }
+.glossary-term { color: #eee; }
+.glossary-term[open] { border-color: #777; background: #252525; }
+.glossary-term > summary > b { color: #aaa; }
+.glossary-term > summary::after { border-top-color: #8c8c87; }
+.glossary-term__body > p { color: #ccc; }
+/* 애니메이션이 읽는 변수를 덮어쓴다(learning.css 참고) — border-color를 직접 덮어써도 애니메이션에 밀린다. 밝은 파랑을 써야 어두운 배경에서도 도드라진다. */
+.glossary-term.is-flash { --glossary-flash-color: #60a5fa; --glossary-flash-rest: #777; }
 .ai-empty p,
 .ai-answer p { color: #bbb; }
 .ai-empty__avatar { border-color: #333; }
