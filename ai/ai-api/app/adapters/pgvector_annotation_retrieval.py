@@ -15,7 +15,7 @@ from app.retrieval.service import EMBEDDING_DIMENSIONS, MAX_ANNOTATION_WINDOW, M
 _DATABASE_ROLE = re.compile(r"^[a-z_][a-z0-9_]{0,62}$")
 
 # Same reciprocal-rank fusion as ACTIVE_MATERIAL_HYBRID_SQL so annotation and material hits
-# carry comparable scores. Search scope is the asker's own session (ADR-0086 — narrowed from
+# carry comparable scores. Search scope is the asker's own session (ADR-0089 — narrowed from
 # the curriculum-wide scope of ADR-0043 §4 after other sessions' highlights leaked into live
 # answers); curriculum_id stays as defense-in-depth against a session row indexed under the
 # wrong curriculum.
@@ -114,7 +114,7 @@ LIMIT :limit
 
 
 class PgvectorAnnotationRepository:
-    """Search instructor highlight snapshots on the asker's session scope (ADR-0086)."""
+    """Search instructor highlight snapshots on the asker's session scope (ADR-0089)."""
 
     def __init__(self, engine: AsyncEngine, *, runtime_role: str = "ai_app") -> None:
         if not _DATABASE_ROLE.fullmatch(runtime_role):

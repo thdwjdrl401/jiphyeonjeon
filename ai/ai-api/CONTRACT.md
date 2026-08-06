@@ -91,7 +91,7 @@ annotation 근거는 `AI_API_ANNOTATION_EVIDENCE_ENABLED`(기본 `false`)일 때
 | recent window | 유사도 무관, 같은 `sessionId`의 최근 `sessionMs` 순 | `AI_API_ANNOTATION_WINDOW_SIZE` = 5 |
 
 의미 검색 hit은 `vector_score >= AI_API_ANNOTATION_VECTOR_THRESHOLD`(기본 `0.6`)를 넘어야 근거가 된다
-([ADR-0086](../../docs/decisions/canola/0086-annotation-search-session-scope-and-threshold.md) —
+([ADR-0089](../../docs/decisions/canola/0089-annotation-search-session-scope-and-threshold.md) —
 원래 `curriculumId` 스코프·허들 없음이었으나, 다른 세션의 무관한 판서가 매 답변에 딸려 들어와 세션
 스코프 + 허들로 좁혔다). recent window hit은 시간 기준 선별이라 점수가 없고 허들을 거치지 않는다.
 

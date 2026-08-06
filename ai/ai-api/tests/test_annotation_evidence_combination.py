@@ -184,7 +184,7 @@ def test_live_search_uses_no_time_cutoff() -> None:
 
 
 def test_both_reads_are_scoped_to_the_asker_session() -> None:
-    """The similarity read must carry the asker's session too (ADR-0086) — before that it
+    """The similarity read must carry the asker's session too (ADR-0089) — before that it
     searched the whole curriculum and dragged old sessions' highlights into live answers."""
     annotations = Annotations()
     retriever = CombinedEvidenceRetriever(Materials(), Captions(), annotations=annotations)
@@ -211,7 +211,7 @@ def _scored_hit(highlight_id: UUID, vector_score: float) -> AnnotationHighlightH
 
 def test_searched_hits_below_the_vector_threshold_are_dropped_in_both_paths() -> None:
     """Without this gate the top-k best-of-nothing hits entered every answer and the same
-    unrelated highlight repeated across questions (ADR-0086)."""
+    unrelated highlight repeated across questions (ADR-0089)."""
     relevant, irrelevant = uuid4(), uuid4()
     searched = (_scored_hit(relevant, 0.85), _scored_hit(irrelevant, 0.31))
 

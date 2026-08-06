@@ -511,7 +511,7 @@ async def test_annotation_sources_dedupe_on_highlight_id_not_excerpt() -> None:
 
 @async_test
 async def test_annotation_evidence_from_another_session_is_rejected() -> None:
-    """Highlight search is session-scoped (ADR-0086): a hit from another session — even in the
+    """Highlight search is session-scoped (ADR-0089): a hit from another session — even in the
     same curriculum — means retrieval is broken, so the guard must refuse to answer with it."""
 
     service = ReplayAnswerService(

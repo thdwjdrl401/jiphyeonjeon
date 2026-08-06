@@ -67,7 +67,7 @@ async def _gather_annotation_hits(
     window_size: int,
     cutoff: SessionTimeCutoff | None,
 ) -> tuple[AnnotationHighlightHit, ...]:
-    """Two reads, one merged list (ADR-0043 §5), both scoped to the asker's session (ADR-0086).
+    """Two reads, one merged list (ADR-0043 §5), both scoped to the asker's session (ADR-0089).
 
     Similarity answers "what did the instructor highlight about X"; the recent window answers
     "what did the instructor just highlight", which no amount of semantic search can find
@@ -175,7 +175,7 @@ class CombinedEvidenceRetriever:
         ]
 
         # Recent-window hits are selected by time and carry no score (ADR-0043 §5) — only
-        # similarity-searched hits face the vector threshold (ADR-0086).
+        # similarity-searched hits face the vector threshold (ADR-0089).
         evidence.extend(
             RetrievedEvidence(
                 lesson_id=hit.lesson_id,
@@ -331,7 +331,7 @@ class ReplayEvidenceRetriever:
         ]
 
         # Recent-window hits are selected by time and carry no score (ADR-0043 §5) — only
-        # similarity-searched hits face the vector threshold (ADR-0086).
+        # similarity-searched hits face the vector threshold (ADR-0089).
         evidence.extend(
             RetrievedEvidenceV2(
                 lesson_id=hit.lesson_id,
@@ -365,7 +365,7 @@ class ReplayEvidenceRetriever:
         if self._annotations is None:
             return await material_search, ()
         # A highlight made after the question was asked cannot be evidence for it; search is
-        # session-scoped (ADR-0086), so the cutoff always concerns this session.
+        # session-scoped (ADR-0089), so the cutoff always concerns this session.
         session_id = UUID(request.sessionId)
         return await asyncio.gather(
             material_search,

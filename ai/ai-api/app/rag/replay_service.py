@@ -151,7 +151,7 @@ def _validate_evidence_scope_v2(
             if item.curriculum_id != request.curriculumId:
                 raise _EvidenceScopeViolation
         elif isinstance(item.source, AnnotationSourceV2):
-            # Highlight search is session-scoped (ADR-0086), so a hit from another session —
+            # Highlight search is session-scoped (ADR-0089), so a hit from another session —
             # even one in the same curriculum — is a retrieval bug, not a legitimate result.
             if (
                 item.curriculum_id != request.curriculumId

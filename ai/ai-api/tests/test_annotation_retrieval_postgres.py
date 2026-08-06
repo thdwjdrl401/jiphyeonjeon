@@ -104,7 +104,7 @@ async def _insert_snapshot(
 def test_search_is_session_scoped_and_hides_deleted_snapshots(
     integration_database: IntegrationDatabase,
 ) -> None:
-    """Search must return only the asker's session (ADR-0086): another session of the same
+    """Search must return only the asker's session (ADR-0089): another session of the same
     curriculum and another curriculum both stay invisible, as do DELETED snapshots."""
 
     async def scenario() -> None:
@@ -153,7 +153,7 @@ def test_search_is_session_scoped_and_hides_deleted_snapshots(
                 content="foreign highlight",
                 embedding=_vector(1.0),
             )
-            # Same curriculum, different session: the leak that motivated ADR-0086.
+            # Same curriculum, different session: the leak that motivated ADR-0089.
             await _insert_snapshot(
                 engine,
                 highlight_id=sibling_session,
@@ -191,7 +191,7 @@ def test_replay_cutoff_hides_the_question_future(
     integration_database: IntegrationDatabase,
 ) -> None:
     """A snapshot made after the question cannot be evidence for it. Other sessions never
-    appear at all — search is session-scoped (ADR-0086)."""
+    appear at all — search is session-scoped (ADR-0089)."""
 
     async def scenario() -> None:
         engine = create_async_engine(integration_database.database_url)

@@ -157,7 +157,7 @@ services:
       AI_API_CONVERSATION_MEMORY_SESSION_FALLBACK_ENABLED: ${AI_API_CONVERSATION_MEMORY_SESSION_FALLBACK_ENABLED:-false}
       AI_API_ANNOTATION_TOP_K: ${AI_API_ANNOTATION_TOP_K:-2}
       AI_API_ANNOTATION_WINDOW_SIZE: ${AI_API_ANNOTATION_WINDOW_SIZE:-5}
-      # 유사도 검색된 판서 hit의 vector_score 하한(ADR-0086). recent-window hit에는 적용되지 않는다.
+      # 유사도 검색된 판서 hit의 vector_score 하한(ADR-0089). recent-window hit에는 적용되지 않는다.
       AI_API_ANNOTATION_VECTOR_THRESHOLD: ${AI_API_ANNOTATION_VECTOR_THRESHOLD:-0.6}
       AI_API_LECTURE_NOTE_MODEL: ${AI_API_LECTURE_NOTE_MODEL:-gpt-5-mini}
       # reasoning 모델일 때만 적용된다. 비-reasoning 모델로 바꿔도 무시되므로 안전하다.
