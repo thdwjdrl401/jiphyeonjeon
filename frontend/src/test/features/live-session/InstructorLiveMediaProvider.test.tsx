@@ -321,6 +321,16 @@ describe('InstructorLiveMediaProvider', () => {
     async function connected() {
       const view = renderProvider()
       await waitFor(() => { expect(view.getByRole('status')).toHaveTextContent('connected') })
+      /*
+       * <b>지우기 전에 한 프레임을 흘려보낸다.</b> 연결이 붙으면 재연결 복원 발행이 따로 돌고
+       * (강사가 옮겨 둔 자리를 다시 싣는 효과), 화면 텍스트만 보고 바로 mockClear를 하면 그
+       * 발행이 아직 안 나간 상태로 지워질 수 있다. 그러면 뒤늦게 나간 그 한 번이 아래의
+       * "프레임당 한 번" 단언에 섞여 <b>두 번</b>으로 잡힌다.
+       *
+       * 로컬에서는 연결이 즉시 끝나 안 보이지만 CI 러너처럼 부하가 있으면 드러난다 —
+       * 실제로 파이프라인 170350에서 이 단언이 그렇게 깨졌다.
+       */
+      await nextFrame()
       liveKit.localParticipant.setMetadata.mockClear()
       return view
     }
