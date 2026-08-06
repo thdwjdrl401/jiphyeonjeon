@@ -579,7 +579,7 @@ public class CatalogService {
         return new StudentLearningSummary.UpcomingLiveSession(
                 session.sessionId(), session.lessonId(), lessonTitle,
                 curriculumId, curriculumTitle, null,
-                session.scheduledAt(), session.liveSessionStatus(), null);
+                session.scheduledAt(), session.liveSessionStatus(), session.expectedDurationMinutes());
     }
 
     /**

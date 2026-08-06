@@ -520,7 +520,13 @@ export function findNextLiveLesson(curriculums: Array<{ curriculum: MockCurricul
     lessonTitle: next.lesson.title,
     liveSessionStatus: next.liveSession.status,
     scheduledAt: next.liveSession.scheduledAt,
-    durationMs: next.lesson.durationMs,
+    /*
+     * 예상 진행 시간은 목이 들고 있지 않다. 목차 응답(OutlineLessonLiveSession)이 sessionId·
+     * status·scheduledAt 셋만 주기 때문이고, 목의 세션 엔티티도 그 계약을 그대로 따른다.
+     * 여기서 채우려고 공유 타입에 필드를 더하면 서버가 주지도 않는 값을 계약에 새기는 셈이다.
+     * 화면은 값이 없으면 "예상" 자체를 감춘다 — 목에서는 그 경로가 보인다.
+     */
+    expectedDurationMinutes: null,
     sessionId: next.liveSession.sessionId,
   }
 }

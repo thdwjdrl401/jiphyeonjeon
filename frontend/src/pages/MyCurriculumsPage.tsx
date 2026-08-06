@@ -22,11 +22,6 @@ import { InlineNotice, MetricCard, PageHeader, Panel, StatusBadge } from '@/shar
 const CURRICULUM_PAGE_SIZE = 4
 type StudentCurriculumFilter = '' | 'PENDING' | 'IN_PROGRESS' | 'COMPLETED'
 
-function formatLessonMinutes(durationMs?: number | null) {
-  if (!durationMs) return '--'
-  return `${Math.round(durationMs / 60_000)}`
-}
-
 function formatMonthDay(date: Date) {
   return `${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}`
 }
@@ -283,7 +278,7 @@ export default function MyCurriculumsPage() {
                 <div>
                   <StatusBadge tone={['OPEN', 'STARTING', 'LIVE'].includes(upcomingLive.liveSessionStatus) ? 'live' : 'warning'}>{['OPEN', 'STARTING', 'LIVE'].includes(upcomingLive.liveSessionStatus) ? '입장 가능' : '예정'}</StatusBadge>
                   <h3>{upcomingLive.lessonTitle}</h3>
-                  <p>{upcomingLive.curriculumTitle} · 예상 {formatLessonMinutes(upcomingLive.durationMs)}분</p>
+                  <p>{upcomingLive.curriculumTitle}{upcomingLive.expectedDurationMinutes == null ? '' : ` · 예상 ${upcomingLive.expectedDurationMinutes}분`}</p>
                 </div>
                 <Link className="button button--primary" to={upcomingLiveActionPath}>강의 상세</Link>
               </div>
