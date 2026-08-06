@@ -33,7 +33,12 @@ import InstructorEnrollmentRoster from '@/features/enrollment/InstructorEnrollme
 import { resolveInstructorLessonEditPath } from '@/features/lesson/lessonRouting'
 import { ApiError } from '@/shared/api/client'
 import { isNotImplemented } from '@/shared/api/notImplemented'
-import { isBeforeToday, toIsoOrNull, toLocalInputValue } from '@/shared/lib/localDateTime'
+import {
+  isDateBeforeToday,
+  toIsoAtEndOfDayOrNull,
+  toIsoAtStartOfDayOrNull,
+  toLocalDateInputValue,
+} from '@/shared/lib/localDateTime'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
 import Tabs, { tabPanelProps, type TabItem } from '@/shared/ui/Tabs'
@@ -97,8 +102,8 @@ type CurriculumInfoField = 'title' | 'summary' | 'description'
 function describePeriodIssue({ startsAt, endsAt }: CurriculumPeriodValue): string | null {
   if (!startsAt && !endsAt) return null
   if (!startsAt || !endsAt) return '운영 시작일과 종료일을 함께 입력해 주세요. 한쪽만 저장할 수 없어요.'
-  if (isBeforeToday(endsAt)) return '운영 종료일은 오늘보다 이전일 수 없습니다.'
-  if (startsAt >= endsAt) return '운영 종료일은 시작일보다 뒤여야 합니다.'
+  if (isDateBeforeToday(endsAt)) return '운영 종료일은 오늘보다 이전일 수 없습니다.'
+  if (startsAt > endsAt) return '운영 종료일은 시작일보다 빠를 수 없습니다.'
   return null
 }
 type SectionInfoField = 'title' | 'description'
@@ -236,12 +241,12 @@ function CurriculumManageEditor({
     description: routeState?.draft?.description ?? storedCurriculum?.description ?? '',
   })
   /*
-    기간은 datetime-local 입력이 그대로 받는 지역 시각 문자열로 들고 있다가 저장할 때만 ISO로
-    바꾼다 — 서버가 준 ISO를 그대로 input에 넣으면 값이 표시되지 않는다.
+    기간은 date 입력이 받는 지역 날짜 문자열로 들고 있다가 저장할 때 일 경계 ISO로 바꾼다.
+    서버가 준 ISO를 그대로 input에 넣으면 값이 표시되지 않는다.
   */
   const [period, setPeriod] = useState<CurriculumPeriodValue>({
-    startsAt: routeState?.draft?.startsAt ?? toLocalInputValue(storedCurriculum?.startsAt),
-    endsAt: routeState?.draft?.endsAt ?? toLocalInputValue(storedCurriculum?.endsAt),
+    startsAt: toLocalDateInputValue(routeState?.draft?.startsAt ?? storedCurriculum?.startsAt),
+    endsAt: toLocalDateInputValue(routeState?.draft?.endsAt ?? storedCurriculum?.endsAt),
   })
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(routeState?.draft?.thumbnailUrl ?? storedCurriculum?.thumbnailUrl ?? null)
   const [materials, setMaterials] = useState<CurriculumMaterial[]>(routeState?.draft?.materials ?? storedCurriculum.materials)
@@ -296,7 +301,10 @@ function CurriculumManageEditor({
    */
   const periodPatch = useMemo(() => (periodIssue
     ? { startsAt: null, endsAt: null }
-    : { startsAt: toIsoOrNull(period.startsAt), endsAt: toIsoOrNull(period.endsAt) }
+    : {
+        startsAt: toIsoAtStartOfDayOrNull(period.startsAt),
+        endsAt: toIsoAtEndOfDayOrNull(period.endsAt),
+      }
   ), [periodIssue, period.startsAt, period.endsAt])
 
   // 자료는 fileName:fileSize로 지문을 만든다 — 새로 올린 자료의 임시 id·File이 저장 후 실제

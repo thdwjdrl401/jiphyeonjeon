@@ -7,7 +7,11 @@ import CurriculumPeriodFields from '@/features/curriculum/CurriculumPeriodFields
 import { createCurriculum, uploadCurriculumThumbnail } from '@/features/curriculum/curriculumManagementService'
 import type { CurriculumMaterial } from '@/features/curriculum/types'
 import { ApiError } from '@/shared/api/client'
-import { isBeforeToday, toIsoOrNull } from '@/shared/lib/localDateTime'
+import {
+  isDateBeforeToday,
+  toIsoAtEndOfDayOrNull,
+  toIsoAtStartOfDayOrNull,
+} from '@/shared/lib/localDateTime'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import { useToast } from '@/shared/ui/Toast'
 import { InlineNotice, PageHeader, Panel } from '@/shared/ui/WorkspaceUi'
@@ -20,12 +24,12 @@ export default function CurriculumFormPage() {
   const [materials, setMaterials] = useState<CurriculumMaterial[]>([])
   const toast = useToast()
   const [submitting, setSubmitting] = useState(false)
-  const hasPastEndDate = isBeforeToday(form.endsAt)
+  const hasPastEndDate = isDateBeforeToday(form.endsAt)
 
   const update = (field: keyof typeof form, value: string) => {
     // 키보드로 과거 날짜를 직접 넣어도 즉시 이유를 알린다. 같은 과거 날짜를 편집하는 동안에는
     // 토스트를 반복하지 않고, 유효한 날짜로 고쳤다가 다시 과거로 바꿀 때만 새로 안내한다.
-    if (field === 'endsAt' && isBeforeToday(value) && !hasPastEndDate) {
+    if (field === 'endsAt' && isDateBeforeToday(value) && !hasPastEndDate) {
       toast.error('운영 종료일은 오늘보다 이전일 수 없습니다.')
     }
     setForm((current) => ({ ...current, [field]: value }))
@@ -38,11 +42,11 @@ export default function CurriculumFormPage() {
     // 폼 검증 문구도 토스트로 낸다 — 라이브 강의 폼과 안내 방식을 하나로 맞춘다.
     if (!form.title.trim()) { toast.error('커리큘럼 제목을 입력해 주세요.'); return }
     // React 상태 갱신보다 제출이 먼저 들어오는 실제 키보드 입력도 DOM 값과 native 하한 위반으로 다시 막는다.
-    if ((endsAtInput instanceof HTMLInputElement && endsAtInput.validity.rangeUnderflow) || isBeforeToday(enteredEndsAt)) {
+    if ((endsAtInput instanceof HTMLInputElement && endsAtInput.validity.rangeUnderflow) || isDateBeforeToday(enteredEndsAt)) {
       toast.error('운영 종료일은 오늘보다 이전일 수 없습니다.')
       return
     }
-    if (form.startsAt && form.endsAt && form.startsAt >= form.endsAt) { toast.error('종료일은 시작일보다 뒤여야 합니다.'); return }
+    if (form.startsAt && form.endsAt && form.startsAt > form.endsAt) { toast.error('종료일은 시작일보다 빠를 수 없습니다.'); return }
     setSubmitting(true)
     try {
       // 이미지는 저장 시점에 올린다 — 폼을 그만두면 아무것도 남지 않도록.
@@ -54,8 +58,8 @@ export default function CurriculumFormPage() {
         thumbnailAssetId,
         thumbnailPreviewUrl: thumbnail?.previewUrl ?? null,
         materials,
-        startsAt: toIsoOrNull(form.startsAt),
-        endsAt: toIsoOrNull(form.endsAt),
+        startsAt: toIsoAtStartOfDayOrNull(form.startsAt),
+        endsAt: toIsoAtEndOfDayOrNull(form.endsAt),
       })
       // 초안은 만들어졌는데 기간만 못 붙은 경우 — 조용히 넘기면 입력한 기간이 사라진 걸 모른다.
       if (!periodSaved) {

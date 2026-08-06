@@ -6,7 +6,7 @@ import { mockAuthService, resetMockAuth } from '@/features/auth/mockAuthService'
 import { mockCurriculumManagementService, resetMockCurriculumManagement } from '@/features/curriculum/mockCurriculumManagementService'
 import { buildMockCurriculumOutline, getMockCurriculum, publishMockCurriculum } from '@/features/demo/mockDatabase'
 import * as materialDownloadService from '@/features/material/materialDownloadService'
-import { todayLocalStart } from '@/shared/lib/localDateTime'
+import { todayLocalStart, toIsoAtEndOfDayOrNull, toIsoAtStartOfDayOrNull } from '@/shared/lib/localDateTime'
 
 const PPTX_MIME = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
 
@@ -19,6 +19,10 @@ function localDateTimeInDays(days: number, time = '20:30'): string {
   date.setDate(date.getDate() + days)
   const pad = (value: number) => String(value).padStart(2, '0')
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${time}`
+}
+
+function localDateInDays(days: number): string {
+  return localDateTimeInDays(days).slice(0, 10)
 }
 
 async function renderAsInstructor(path: string) {
@@ -257,13 +261,15 @@ describe('커리큘럼 작업 화면', () => {
   // 예전엔 입력만 받고 버렸다. 입력한 운영 기간이 실제로 커리큘럼에 남는지 본다.
   it('새 커리큘럼에 입력한 운영 기간이 저장된다', async () => {
     const user = userEvent.setup()
+    const startsAt = localDateInDays(0)
+    const endsAt = localDateInDays(75)
     await renderAsInstructor('/instructor/curriculums/new')
     await user.type(
       await screen.findByPlaceholderText(/^예: 라이브로 완성하는 Spring Boot/),
       '기간을 넣은 커리큘럼',
     )
-    fireEvent.change(screen.getByLabelText('운영 시작일'), { target: { value: '2026-08-01T10:00' } })
-    fireEvent.change(screen.getByLabelText('운영 종료일'), { target: { value: '2026-10-15T22:00' } })
+    fireEvent.change(screen.getByLabelText('운영 시작일'), { target: { value: startsAt } })
+    fireEvent.change(screen.getByLabelText('운영 종료일'), { target: { value: endsAt } })
     expect(screen.getByText('약 11주 과정')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: '초안 만들기' }))
@@ -271,8 +277,8 @@ describe('커리큘럼 작업 화면', () => {
 
     const curriculumId = window.location.pathname.split('/')[3]
     const period = getMockCurriculum(curriculumId)?.period
-    expect(period?.startsAt).toBe(new Date('2026-08-01T10:00').toISOString())
-    expect(period?.endsAt).toBe(new Date('2026-10-15T22:00').toISOString())
+    expect(period?.startsAt).toBe(toIsoAtStartOfDayOrNull(startsAt))
+    expect(period?.endsAt).toBe(toIsoAtEndOfDayOrNull(endsAt))
   })
 
   // 브라우저 기본 검증이 "유효한 값을 입력하세요" 풍선으로 먼저 가로채면 무엇이 틀렸는지 알 수 없다.
@@ -285,7 +291,7 @@ describe('커리큘럼 작업 화면', () => {
       '지난 날짜로 끝나는 커리큘럼',
     )
 
-    fireEvent.change(screen.getByLabelText('운영 종료일'), { target: { value: localDateTimeInDays(-1, '09:00') } })
+    fireEvent.change(screen.getByLabelText('운영 종료일'), { target: { value: localDateInDays(-1) } })
     const submit = screen.getByRole('button', { name: '초안 만들기' })
 
     // 잘못된 값을 서버로 보낼 수 없게 즉시 잠그고, 날짜를 고치면 다시 저장할 수 있어야 한다.
@@ -297,7 +303,7 @@ describe('커리큘럼 작업 화면', () => {
     // 초안이 만들어지지 않았으니 생성 폼에 그대로 머문다.
     expect(window.location.pathname).toBe('/instructor/curriculums/new')
 
-    fireEvent.change(screen.getByLabelText('운영 종료일'), { target: { value: localDateTimeInDays(1, '09:00') } })
+    fireEvent.change(screen.getByLabelText('운영 종료일'), { target: { value: localDateInDays(1) } })
     expect(submit).toBeEnabled()
   })
 
@@ -309,9 +315,9 @@ describe('커리큘럼 작업 화면', () => {
       'DOM 검증 커리큘럼',
     )
 
-    // 일부 브라우저의 datetime-local 키보드 입력처럼 DOM 값이 React change보다 먼저 완성된 상황을 재현한다.
+    // 일부 브라우저의 date 키보드 입력처럼 DOM 값이 React change보다 먼저 완성된 상황을 재현한다.
     const endsAtInput = screen.getByLabelText('운영 종료일') as HTMLInputElement
-    endsAtInput.value = localDateTimeInDays(-1, '09:00')
+    endsAtInput.value = localDateInDays(-1)
     await user.click(screen.getByRole('button', { name: '초안 만들기' }))
 
     const toastRegion = await screen.findByRole('region', { name: '알림' })
@@ -970,9 +976,9 @@ describe('커리큘럼 작업 화면', () => {
     await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
     await user.click(await screen.findByRole('tab', { name: '기본 정보' }))
 
-    // 서버가 준 ISO를 datetime-local이 그대로 받는 지역 시각으로 되읽는다 — UTC로 자르면 19:00이 10:00이 된다.
-    expect(await screen.findByLabelText('운영 시작일')).toHaveValue('2026-08-03T19:00')
-    expect(screen.getByLabelText('운영 종료일')).toHaveValue('2026-09-24T21:00')
+    // 서버가 준 ISO에서 강사가 정한 지역 날짜만 되읽고 시간은 표시하지 않는다.
+    expect(await screen.findByLabelText('운영 시작일')).toHaveValue('2026-08-03')
+    expect(screen.getByLabelText('운영 종료일')).toHaveValue('2026-09-24')
     // 입력칸이 곧 답이라 같은 날짜를 문장으로 되읽지 않는다 — 되읽기는 처음 만드는 화면의 몫이다.
     expect(screen.queryByText(/주 과정$/)).not.toBeInTheDocument()
   })
@@ -983,11 +989,11 @@ describe('커리큘럼 작업 화면', () => {
     await user.click(await screen.findByRole('tab', { name: '기본 정보' }))
     await screen.findByLabelText('운영 시작일')
 
-    const newEndsAt = localDateTimeInDays(30, '22:00')
+    const newEndsAt = localDateInDays(30)
     fireEvent.change(screen.getByLabelText('운영 종료일'), { target: { value: newEndsAt } })
 
     await waitFor(() => expect(screen.getByText('자동 저장됨')).toBeInTheDocument())
-    expect(getMockCurriculum('cur-spring-live')?.period?.endsAt).toBe(new Date(newEndsAt).toISOString())
+    expect(getMockCurriculum('cur-spring-live')?.period?.endsAt).toBe(toIsoAtEndOfDayOrNull(newEndsAt))
   })
 
   /**

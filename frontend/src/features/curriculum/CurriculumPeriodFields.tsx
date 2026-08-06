@@ -1,4 +1,4 @@
-import { todayLocalStart } from '@/shared/lib/localDateTime'
+import { todayLocalDate } from '@/shared/lib/localDateTime'
 
 export interface CurriculumPeriodValue {
   startsAt: string
@@ -18,21 +18,22 @@ interface CurriculumPeriodFieldsProps {
 
 const DATE_LABEL = new Intl.DateTimeFormat('ko-KR', { dateStyle: 'long' })
 
-/** datetime-local 문자열을 사람이 읽는 날짜로. 값이 반쪽이거나 깨졌으면 null. */
+/** date 문자열을 사람이 읽는 날짜로. 값이 반쪽이거나 깨졌으면 null. */
 function readableDate(localValue: string): string | null {
   if (!localValue) return null
-  const parsed = new Date(localValue)
+  const parsed = new Date(`${localValue}T00:00`)
   return Number.isNaN(parsed.getTime()) ? null : DATE_LABEL.format(parsed)
 }
 
 /** 시작~종료가 몇 주짜리 과정인지. 기간을 입력하고도 감이 안 오는 걸 막는다. */
 function readableSpan({ startsAt, endsAt }: CurriculumPeriodValue): string | null {
   if (!startsAt || !endsAt) return null
-  const start = new Date(startsAt)
-  const end = new Date(endsAt)
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) return null
+  const start = new Date(`${startsAt}T00:00Z`)
+  const end = new Date(`${endsAt}T00:00Z`)
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return null
 
-  const days = Math.ceil((end.getTime() - start.getTime()) / 86_400_000)
+  // 시작일과 종료일을 모두 운영일로 센다. 같은 날짜면 1일 과정이다.
+  const days = Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1
   if (days < 7) return `${days}일 과정`
   return `약 ${Math.round(days / 7)}주 과정`
 }
@@ -64,7 +65,7 @@ export default function CurriculumPeriodFields({
           <input
             id={`${idPrefix}-starts-at`}
             name="startsAt"
-            type="datetime-local"
+            type="date"
             value={value.startsAt}
             onChange={(event) => onChange('startsAt', event.target.value)}
           />
@@ -74,10 +75,10 @@ export default function CurriculumPeriodFields({
           <input
             id={`${idPrefix}-ends-at`}
             name="endsAt"
-            type="datetime-local"
+            type="date"
             value={value.endsAt}
             // 이미 지난 날짜로 끝나는 커리큘럼은 만들 수 없다 — 달력에서부터 오늘 이전을 못 고르게 한다.
-            min={todayLocalStart()}
+            min={todayLocalDate()}
             onChange={(event) => onChange('endsAt', event.target.value)}
           />
         </label>
