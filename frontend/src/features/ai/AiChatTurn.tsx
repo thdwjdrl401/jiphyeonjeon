@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import yeongsilImage from '@/assets/yeongsil.png'
 import AiEvidenceList from './AiEvidenceList'
 import type { AiConversationTurn } from './aiConversation'
 
@@ -27,30 +28,33 @@ function AiChatTurn({ turn, onRetry, onSeek }: AiChatTurnProps) {
         <span className="visually-hidden">내 질문</span>
         <p>{turn.question}</p>
       </div>
-      <div className={`ai-bubble ai-bubble--ai ai-answer${isStreaming ? ' is-streaming' : ''}`}>
-        <span className="visually-hidden">AI 답변</span>
-        {/* 스트리밍 중에는 스크린리더가 조각마다 읽지 않도록 polite로 두고, 끝난 뒤 전문이 남는다.
-            텍스트가 아직 없어도 스트리밍이면 비워 둔 채 먼저 그린다 — live 영역이 뒤늦게 생기면 안 읽힌다. */}
-        {(isStreaming || turn.text.length > 0) && (
-          <p aria-live="polite" aria-busy={isStreaming}>{turn.text}</p>
-        )}
-        {isStreaming && (
-          <small className="ai-answer__pending"><i aria-hidden="true" />답변을 작성하고 있습니다…</small>
-        )}
-        {/* insufficient는 오류가 아니다 — alert로 알리지 않고 안내 톤으로만 남긴다. */}
-        {!isStreaming && turn.notice && (
-          <p className={`ai-answer__notice${isError ? ' is-error' : ''}`} role={isError ? 'alert' : undefined}>
-            {turn.notice}
-          </p>
-        )}
-        <AiEvidenceList onSeek={onSeek} sources={turn.sources} />
-        {isError && turn.retryable && onRetry && (
-          <div className="ai-answer__actions">
-            <button className="button button--soft button--small" type="button" onClick={() => onRetry(turn.id)}>
-              다시 시도
-            </button>
-          </div>
-        )}
+      <div className="ai-turn__answer">
+        <img className="ai-turn__avatar" src={yeongsilImage} alt="" aria-hidden="true" />
+        <div className={`ai-bubble ai-bubble--ai ai-answer${isStreaming ? ' is-streaming' : ''}`}>
+          <span className="visually-hidden">AI 답변</span>
+          {/* 스트리밍 중에는 스크린리더가 조각마다 읽지 않도록 polite로 두고, 끝난 뒤 전문이 남는다.
+              텍스트가 아직 없어도 스트리밍이면 비워 둔 채 먼저 그린다 — live 영역이 뒤늦게 생기면 안 읽힌다. */}
+          {(isStreaming || turn.text.length > 0) && (
+            <p aria-live="polite" aria-busy={isStreaming}>{turn.text}</p>
+          )}
+          {isStreaming && (
+            <small className="ai-answer__pending"><i aria-hidden="true" />답변을 작성하고 있습니다…</small>
+          )}
+          {/* insufficient는 오류가 아니다 — alert로 알리지 않고 안내 톤으로만 남긴다. */}
+          {!isStreaming && turn.notice && (
+            <p className={`ai-answer__notice${isError ? ' is-error' : ''}`} role={isError ? 'alert' : undefined}>
+              {turn.notice}
+            </p>
+          )}
+          <AiEvidenceList onSeek={onSeek} sources={turn.sources} />
+          {isError && turn.retryable && onRetry && (
+            <div className="ai-answer__actions">
+              <button className="button button--soft button--small" type="button" onClick={() => onRetry(turn.id)}>
+                다시 시도
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </article>
   )

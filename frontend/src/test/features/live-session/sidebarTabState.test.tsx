@@ -68,7 +68,7 @@ describe('사이드바 탭을 옮겨도', () => {
     render(<Harness ask={async () => undefined} />)
 
     await user.type(screen.getByRole('textbox', { name: 'AI에게 할 질문' }), '아직 안 보낸 질문')
-    await user.click(tab('채팅·질문'))
+    await user.click(tab('채팅'))
     await user.click(tab('AI 질문'))
 
     expect(screen.getByRole('textbox', { name: 'AI에게 할 질문' })).toHaveValue('아직 안 보낸 질문')

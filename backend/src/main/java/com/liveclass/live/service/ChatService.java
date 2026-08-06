@@ -15,7 +15,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 라이브 채팅 저장·복구(REST). 실시간 전달(WebSocket)은 별도 후속 — 이건 DB 저장/조회 뼈대다.
@@ -30,6 +33,14 @@ public class ChatService {
     private final ApplicationEventPublisher eventPublisher;
     private final LiveAccessGuard accessGuard;
     private final LiveInteractionGuard interactionGuard;
+    /*
+     * 세션별 익명 가명 번호(익명1, 익명2…)와, 그 번호를 실제로 나눠 주는 세션별 카운터.
+     * 단일 인스턴스 전제(SimpleBroker·세션 참여자 수 카운트와 같은 전제, ADR-0019) — 다중 인스턴스로
+     * 가면 공유 저장소(Redis 등)로 옮겨야 한다. ENDED 뒤에도 채팅은 이어지므로(§CONTRACT 채팅) 세션
+     * 종료 시점에 비우지 않는다 — 그러면 같은 학생이 종료 후에 새 번호를 받아 "결정론적"이 깨진다.
+     */
+    private final Map<UUID, Map<UUID, Integer>> anonymousAliasNumbers = new ConcurrentHashMap<>();
+    private final Map<UUID, AtomicInteger> anonymousAliasCounters = new ConcurrentHashMap<>();
 
     public ChatService(ChatMessageRepository chatMessageRepository,
                        LiveSessionRepository liveSessionRepository,
@@ -135,12 +146,14 @@ public class ChatService {
     }
 
     /**
-     * 수강생 가명(익명 전송을 선택했을 때만 쓰인다). 세션+사용자에 결정론적이라 같은 학생이 익명으로
-     * 여러 번 보내면 한 세션 내내 같은 가명을 갖는다.
-     * 순차 "수강생 N"(1,2,3…) 부여는 세션별 카운터가 필요해 후속(정책 확정).
+     * 수강생 가명(익명 전송을 선택했을 때만 쓰인다) — "익명1", "익명2"… 세션 안에서 먼저 익명으로 보낸
+     * 순서대로 번호를 매긴다. 세션+사용자에 결정론적이라 같은 학생이 익명으로 여러 번 보내면 한 세션
+     * 내내 같은 번호를 갖는다(번호는 그 학생이 처음 쓴 순간 한 번만 배정되고 재사용된다).
      */
     private String studentAlias(UUID sessionId, UUID userId) {
-        int code = Math.abs((sessionId.toString() + userId).hashCode()) % 10000;
-        return "수강생-" + String.format("%04d", code);
+        Map<UUID, Integer> assignedInSession = anonymousAliasNumbers.computeIfAbsent(sessionId, id -> new ConcurrentHashMap<>());
+        int number = assignedInSession.computeIfAbsent(userId, id ->
+                anonymousAliasCounters.computeIfAbsent(sessionId, sid -> new AtomicInteger()).incrementAndGet());
+        return "익명" + number;
     }
 }

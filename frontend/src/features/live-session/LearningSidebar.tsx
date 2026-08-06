@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import SearchIcon from '@/shared/ui/SearchIcon'
 import Tabs, { tabPanelProps, type TabItem } from '@/shared/ui/Tabs'
+import ProfileAvatar from '@/features/profile/ProfileAvatar'
 import LectureNotePanel from './LectureNotePanel'
 import { selectVisibleMessages } from './replayTimeline'
 import type { ChatMessageView, LectureNoteView } from './liveSessionService.interface'
@@ -35,13 +36,23 @@ interface LearningSidebarProps {
 }
 
 const tabs: ReadonlyArray<TabItem<LearningPanel>> = [
-  { id: 'discussion', label: '채팅·질문' },
+  { id: 'discussion', label: '채팅' },
   { id: 'notes', label: '실시간 노트' },
   { id: 'ai', label: 'AI 질문' },
   { id: 'glossary', label: '핵심 용어' },
 ]
 
 const LEARNING_TAB_PREFIX = 'learning-sidebar'
+
+/**
+ * 세션 한정 익명 가명(예: 익명1, ADR-0050·ADR-0023)인지. 서버는 userId도 별도 anonymous 플래그도
+ * 보내지 않는다 — alias 하나로만 노출하므로(프라이버시 불변식), 발신자가 익명을 선택했는지는
+ * 서버가 실제로 만드는 이 고정 형식(`익명` + 세션 내 등장 순번, ChatService)으로만 구별할 수 있다.
+ */
+const ANONYMOUS_ALIAS_PATTERN = /^익명\d+$/
+function isAnonymousAlias(alias: string) {
+  return ANONYMOUS_ALIAS_PATTERN.test(alias)
+}
 
 /**
  * 한 번이라도 연 탭을 <b>계속 살려 둔다</b>.
@@ -72,26 +83,17 @@ function useVisitedPanels(active: LearningPanel) {
 const CHAT_FOLLOW_THRESHOLD_PX = 48
 
 function DiscussionPanel({ messages, myDisplayName, revealThroughMs, composer, notice, panelProps }: { messages: ChatMessageView[]; myDisplayName: string; revealThroughMs?: number | null; composer?: ReactNode; notice?: string; panelProps: PanelProps }) {
-  const [filter, setFilter] = useState<'all' | 'questions'>('all')
   const [isFollowingLatest, setIsFollowingLatest] = useState(true)
   const chatListRef = useRef<HTMLDivElement>(null)
   // 직전 렌더가 남긴 스크롤 높이(아래 layout effect에서 "이 갱신 전에 바닥에 있었는가"를 재는 기준).
   const previousScrollHeightRef = useRef(0)
-  /*
-   * 재생 위치까지 올라온 것만 남긴 뒤 질문 필터를 건다. 순서가 중요하다 — 질문을 먼저 거르면
-   * 개수 배지가 아직 오지 않은 질문까지 세어, 목록에 셋뿐인데 "질문 12"가 뜬다.
-   */
-  const revealed = useMemo(
+  // 재생 위치까지 올라온 것만 남긴다 — 다시보기에서 미래의 채팅이 먼저 떠 있지 않게 한다.
+  const visibleMessages = useMemo(
     () => selectVisibleMessages(messages, revealThroughMs ?? null),
     [messages, revealThroughMs],
   )
-  const questionCount = useMemo(() => revealed.filter((message) => message.question).length, [revealed])
-  const visibleMessages = useMemo(
-    () => filter === 'questions' ? revealed.filter((message) => message.question) : revealed,
-    [filter, revealed],
-  )
   /** 위치로 자른 결과가 빈 것과, 애초에 채팅이 없던 것은 다른 상황이다. 문구를 나눈다. */
-  const isTrimmedEmpty = revealed.length === 0 && messages.length > 0
+  const isTrimmedEmpty = visibleMessages.length === 0 && messages.length > 0
 
   const scrollToLatest = useCallback(() => {
     const chatList = chatListRef.current
@@ -99,12 +101,6 @@ function DiscussionPanel({ messages, myDisplayName, revealThroughMs, composer, n
     chatList.scrollTop = chatList.scrollHeight
     setIsFollowingLatest(true)
   }, [])
-
-  const changeFilter = (nextFilter: 'all' | 'questions') => {
-    setFilter(nextFilter)
-    // 필터를 바꾼 직후 목록이 통째로 달라지므로, 지금 스크롤 위치와 무관하게 새 목록의 바닥을 보여준다.
-    scrollToLatest()
-  }
 
   const handleChatScroll = () => {
     const chatList = chatListRef.current
@@ -141,33 +137,34 @@ function DiscussionPanel({ messages, myDisplayName, revealThroughMs, composer, n
 
   return (
     <div className="side-panel-content discussion-panel" {...panelProps}>
-      <div className="discussion-filter" aria-label="채팅 필터">
-        <button className={filter === 'all' ? 'is-active' : ''} type="button" onClick={() => changeFilter('all')}>전체 {revealed.length}</button>
-        <button className={filter === 'questions' ? 'is-active' : ''} type="button" onClick={() => changeFilter('questions')}>질문 {questionCount}</button>
-      </div>
       <div className="scroll-pane">
         <div className="chat-list" ref={chatListRef} onScroll={handleChatScroll}>
           {visibleMessages.length > 0
-            ? visibleMessages.map((item) => (
-                <article
-                  className={[item.question ? 'is-question' : '', item.mine ? 'is-mine' : '']
-                    .filter(Boolean).join(' ')}
-                  key={item.id}
-                >
-                  {/* 시각은 서버가 확정한 뒤에만 있다(낙관적 항목은 빈 문자열). */}
-                  <header>
-                    <strong>{item.mine ? myDisplayName : item.alias}</strong>
-                    {item.time && <time>{item.time}</time>}
-                  </header>
-                  <p>{item.text}</p>
-                  {item.question && <small>질문으로 등록됨</small>}
-                </article>
-              ))
+            ? visibleMessages.map((item) => {
+                const displayName = item.mine ? myDisplayName : item.alias
+                // 익명 가명은 진짜 이름이 아니므로 이니셜 아바타 대신 "?"로 채운다(ProfileAvatar의
+                // 빈 이름 폴백). 내 메시지는 내가 익명으로 보냈어도 항상 내 아바타로 보인다 —
+                // 이름 표시(myDisplayName)와 같은 규칙이다.
+                const avatarName = item.mine || !isAnonymousAlias(item.alias) ? displayName : ''
+                return (
+                  <article className={item.mine ? 'is-mine' : ''} key={item.id}>
+                    {/* 시각은 서버가 확정한 뒤에만 있다(낙관적 항목은 빈 문자열). */}
+                    <header>
+                      <span className="chat-list__author">
+                        <ProfileAvatar className="user-avatar--chat" displayName={avatarName} decorative />
+                        <strong>{displayName}</strong>
+                      </span>
+                      {item.time && <time>{item.time}</time>}
+                    </header>
+                    <p>{item.text}</p>
+                  </article>
+                )
+              })
             : (
               <p className="panel-empty">
                 {isTrimmedEmpty
                   ? '이 지점까지 올라온 채팅이 없습니다. 재생하면 그때의 대화가 여기에 쌓입니다.'
-                  : filter === 'questions' ? '등록된 질문이 없습니다.' : '등록된 채팅이 없습니다.'}
+                  : '등록된 채팅이 없습니다.'}
               </p>
             )}
         </div>

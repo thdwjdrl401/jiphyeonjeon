@@ -70,7 +70,7 @@ describe('라이브와 다시보기의 정합', () => {
     renderAt(path)
 
     const tabs = await screen.findAllByRole('tab')
-    expect(tabs.map((tab) => tab.textContent)).toEqual(['채팅·질문', '실시간 노트', 'AI 질문', '핵심 용어'])
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['채팅', '실시간 노트', 'AI 질문', '핵심 용어'])
   })
 
   it.each([
@@ -125,7 +125,7 @@ describe('라이브와 다시보기의 정합', () => {
     renderAt(REPLAY)
 
     // 여기는 달라야 하는 것이다 — 지난 강의의 채팅은 읽기 전용이다.
-    await screen.findByRole('tab', { name: '채팅·질문' })
+    await screen.findByRole('tab', { name: '채팅' })
     expect(screen.queryByLabelText('채팅 메시지')).not.toBeInTheDocument()
   })
 })

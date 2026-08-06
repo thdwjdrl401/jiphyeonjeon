@@ -28,15 +28,20 @@
 .media-page--instructor { background: radial-gradient(circle at 86% 0,rgba(201,134,26,.07),transparent 26%); }
 /* 화면 높이에 맞춘 세로 flex라, 줄어들면 안 되는 띠들은 스스로 고정해야 한다.
    안 그러면 아래 영역이 늘어날 때 이쪽이 눌려 글자가 잘린다. */
-.media-page--live .instructor-end-confirm,
 .media-page--live .review-toolbar,
 .media-page--live .media-page__title { flex: 0 0 auto; }
 .live-session-state-banner { flex: 0 0 auto; margin-bottom: 13px; padding: 11px 14px; border: 1px solid var(--ink-100); border-radius: 12px; background: var(--blue-50); color: var(--blue-700); font-size: .68rem; }
 .live-session-state-banner.is-ended { border-color: rgba(168,58,36,.24); background: var(--red-50); color: var(--red-700); }
-.instructor-end-confirm { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 13px; padding: 12px 14px; border: 1px solid rgba(168,58,36,.24); border-radius: 12px; background: var(--red-50); }
+/* "강의 종료" 버튼을 누르면 페이지 상단 배너 대신 그 버튼 바로 아래, 미디어 영역 우측에 붙는
+   드롭다운으로 뜬다 — 버튼 자리가 곧 미디어 영역 우측 상단이라 별도 좌표 계산이 필요 없다. */
+.instructor-end-menu { position: relative; }
+.instructor-end-confirm { position: absolute; top: calc(100% + 8px); right: 0; z-index: 20; display: flex; flex-direction: column; gap: 10px; width: max-content; max-width: min(320px, calc(100vw - 28px)); padding: 12px 14px; border: 1px solid rgba(168,58,36,.24); border-radius: 12px; background: var(--red-50); box-shadow: var(--shadow-md); }
 .instructor-end-confirm strong { color: var(--ink-950); font-size: .74rem; }
 .instructor-end-confirm p { margin: 3px 0 0; color: var(--ink-700); font-size: .62rem; }
-.instructor-end-confirm > div:last-child { display: flex; gap: 7px; }
+/* 버튼 두 개가 폭에 밀려 글자만 줄바꿈되던 것을 막는다 — 줄은 늘 하나로 유지하고, 버튼 자체가
+   눌려 찌그러지지 않게 각자 내용 너비를 지킨다. */
+.instructor-end-confirm > div:last-child { display: flex; flex-wrap: nowrap; gap: 7px; }
+.instructor-end-confirm > div:last-child button { flex: 0 0 auto; white-space: nowrap; }
 .recording-consent-overlay { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(43,32,19,.5); backdrop-filter: blur(4px); }
 .recording-consent-modal { width: min(380px,100%); padding: 22px 22px 20px; border: 1px solid var(--ink-100); border-radius: 16px; background: var(--white); box-shadow: var(--shadow-lg); }
 .recording-consent-modal__badge { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 13px; color: var(--red-600); font-size: .62rem; font-weight: 700; letter-spacing: .04em; }
@@ -98,7 +103,10 @@
 .student-live-status > div:last-child { flex-wrap: wrap; justify-content: flex-end; row-gap: 6px; }
 .student-live-status > div:first-child > strong { color: #e0958a; font-size: .62rem; letter-spacing: .1em; }
 .student-live-status > div:first-child > span:last-child { overflow: hidden; color: rgba(255,252,243,.86); font-size: .7rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
-.student-live-status > div:last-child > span:not(.status-badge) { color: rgba(255,252,243,.6); font-size: .59rem; white-space: nowrap; }
+/* "내 커리큘럼" 이동 링크는 DOM상 맨 앞이지만(backLink prop), 세션 제목 오른쪽에 보이도록 시각
+   순서만 맨 뒤로 민다 — title이 여전히 DOM의 마지막 자식이라 위 span:last-child 규칙은 그대로 맞는다. */
+.student-live-status > div:first-child > .playback-header-back { order: 1; }
+.student-live-status > div:last-child > span:not(.status-pill) { color: rgba(255,252,243,.6); font-size: .59rem; white-space: nowrap; }
 .student-live-status button { border: 1px solid rgba(255,252,243,.15); border-radius: 8px; padding: 6px 8px; background: rgba(28,22,13,.62); color: rgba(255,252,243,.75); font-size: .59rem; }
 .student-live-status button:hover, .student-live-status button.is-active { border-color: rgba(140,196,171,.55); background: rgba(35,122,88,.32); color: #e5f5ee; }
 .playback-header-back { display: inline-flex; flex: 0 0 auto; align-items: center; border: 1px solid rgba(255,252,243,.15); border-radius: 8px; padding: 6px 8px; background: rgba(28,22,13,.62); color: rgba(255,252,243,.75); font-size: .59rem; font-weight: 700; text-decoration: none; white-space: nowrap; }
@@ -283,7 +291,6 @@
 .video-status-overlay__identity { display: flex; min-width: 0; align-items: center; gap: 8px; }
 .video-status-overlay__identity > strong { flex: 0 0 auto; color: #e0958a; font-size: .63rem; letter-spacing: .12em; }
 .video-status-overlay__identity h1 { overflow: hidden; margin: 0; color: #fdf8ee; font-size: .92rem; letter-spacing: -.025em; text-overflow: ellipsis; white-space: nowrap; }
-.video-status-overlay__identity small { flex: 0 0 auto; color: rgba(255,252,243,.46); font-size: .56rem; }
 .video-status-overlay__status { display: flex; flex: 0 0 auto; align-items: center; gap: 9px; color: rgba(255,252,243,.65); font-size: .61rem; }
 .video-controls-overlay { position: absolute; z-index: 7; right: 14px; bottom: 14px; left: 14px; padding: 11px 13px; border: 1px solid rgba(255,252,243,.15); border-radius: 12px; background: linear-gradient(180deg,rgba(28,22,13,.72),rgba(28,22,13,.94)); box-shadow: 0 12px 34px rgba(0,0,0,.35); opacity: 0; pointer-events: none; transform: translateY(8px); transition: opacity .18s ease,transform .18s ease; backdrop-filter: blur(12px); }
 /* 강사 LiveKit 미리보기 전용 오버레이(InstructorLiveKitStage) — vidstack이 없으니 그대로 hover 기반. */
@@ -401,9 +408,6 @@
 .detached-sidebar-root :is(.side-panel-content, .chat-list, .ai-chat-log, .lecture-note-list)::-webkit-scrollbar-corner { background: transparent !important; }
 .chat-panel { display: flex; padding: 0; overflow: hidden; flex-direction: column; }
 .discussion-panel { display: flex; padding: 0; overflow: hidden; flex-direction: column; }
-.discussion-filter { display: flex; gap: 6px; padding: 10px 11px 4px; }
-.discussion-filter button { border: 1px solid var(--ink-100); border-radius: 99px; padding: 6px 10px; background: transparent; color: var(--ink-500); font-size: .58rem; }
-.discussion-filter button.is-active { border-color: var(--blue-200); background: var(--blue-50); color: var(--blue-700); }
 .discussion-notice { margin: 0 11px 8px; padding: 9px 10px; border-radius: 8px; background: var(--blue-50); color: var(--blue-700); font-size: .57rem; line-height: 1.5; }
 .panel-empty { padding: 20px 8px; color: var(--ink-500); font-size: .63rem; text-align: center; }
 /*
@@ -419,15 +423,16 @@
 .scroll-pane > .lecture-note-list { height: 100%; }
 .chat-list { overflow-y: auto; padding: 12px; }
 .chat-list article { margin-bottom: 11px; padding: 10px; border-radius: 10px; background: var(--ink-50); }
-.chat-list article.is-question { border-left: 2px solid var(--orange-500); background: #f7e6c8; }
-.chat-list header { display: flex; justify-content: space-between; gap: 8px; }
+.chat-list header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.chat-list__author { display: flex; min-width: 0; align-items: center; gap: 6px; }
+/* 채팅 목록의 작은 아바타. 기본 .user-avatar(34px, WorkspaceSidebar 등)보다 훨씬 작아야 한 줄
+   헤더(이름·시각)에 자연스럽게 낀다. */
+.chat-list .user-avatar--chat { width: 18px; height: 18px; flex: 0 0 18px; font-size: .54rem; }
 .chat-list strong { color: var(--ink-900); font-size: .66rem; }
 .chat-list time { color: var(--ink-500); font-size: .55rem; }
 .chat-list p { margin: 4px 0 0; color: var(--ink-700); font-size: .69rem; line-height: 1.55; overflow-wrap: anywhere; white-space: pre-wrap; }
-.chat-list article > small { color: var(--orange-500); font-size: .55rem; }
 /* 내 메시지는 우측, 남의 메시지는 좌측(강사·수강생 같은 컴포넌트라 자동으로 통일된다).
-   짧은 메시지는 폭이 내용에 맞게 줄어들고, 긴 메시지만 85%에서 잘려 좌우 정렬이 보인다.
-   배경색은 내/외 구분 없이 통일한다 — is-question(주황)만 예외로 남는다. */
+   짧은 메시지는 폭이 내용에 맞게 줄어들고, 긴 메시지만 85%에서 잘려 좌우 정렬이 보인다. */
 .chat-list article { max-width: 85%; width: fit-content; margin-right: auto; }
 .chat-list article.is-mine { margin-right: 0; margin-left: auto; }
 /* 채팅·AI 이력·강의 노트가 함께 쓰는 "최근으로 이동" 알약. 한 줄을 차지하지 않고 목록 위에 뜬다
@@ -435,13 +440,20 @@
 .latest-jump { position: absolute; right: 0; bottom: 8px; left: 0; z-index: 2; display: flex; justify-content: center; pointer-events: none; }
 .latest-jump button { border: 1px solid var(--blue-200); border-radius: 99px; padding: 6px 12px; background: var(--white); color: var(--blue-700); font-size: .58rem; font-weight: 700; box-shadow: var(--shadow-md); pointer-events: auto; }
 .latest-jump button:hover { border-color: var(--blue-500); background: var(--blue-100); }
-/* 체크박스·전송을 입력창 아래가 아니라 오른쪽 세로줄로 둔다 — 입력창은 그만큼 남는 폭 대신
+/* 익명 토글·전송을 입력창 아래가 아니라 오른쪽 세로줄로 둔다 — 입력창은 그만큼 남는 폭 대신
    높이를 벌어(flex stretch) 두 줄 정도로 커진다. */
 .chat-composer { display: flex; align-items: stretch; gap: 10px; padding: 11px; border-top: 1px solid var(--ink-100); }
 .chat-composer textarea, .ai-composer textarea { flex: 1; resize: none; border: 1px solid var(--ink-200); border-radius: 9px; padding: 10px; outline: 0; background: var(--white); color: var(--ink-900); font-size: .68rem; }
 .chat-composer textarea:focus, .ai-composer textarea:focus { border-color: var(--blue-500); }
-.chat-composer > div { display: flex; flex: 0 0 auto; flex-direction: column; justify-content: center; gap: 6px; }
-.chat-composer label { color: var(--ink-600); font-size: .6rem; }
+.chat-composer > div { display: flex; flex: 0 0 auto; flex-direction: column; justify-content: center; align-items: flex-end; gap: 6px; }
+/* 익명 on/off 스위치. 체크박스 대신 트랙+손잡이로 표현한다 — BrowserNotificationToggle과 같은
+   role="switch" 패턴이되, 채팅 입력창 옆에 들어가는 만큼 훨씬 작다. */
+.anonymous-toggle { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; padding: 0; color: var(--ink-600); font-size: .6rem; cursor: pointer; }
+.anonymous-toggle__track { position: relative; width: 26px; height: 15px; border-radius: 99px; background: var(--ink-200); transition: background .15s ease; }
+.anonymous-toggle__thumb { position: absolute; top: 2px; left: 2px; width: 11px; height: 11px; border-radius: 50%; background: var(--white); transition: transform .15s ease; }
+.anonymous-toggle.is-on .anonymous-toggle__track { background: var(--seal); }
+.anonymous-toggle.is-on .anonymous-toggle__thumb { transform: translateX(11px); }
+.anonymous-toggle:focus-visible { outline: 2px solid var(--blue-400); outline-offset: 2px; border-radius: 4px; }
 .caption-list { display: grid; gap: 7px; }
 .caption-list button { display: grid; grid-template-columns: 40px minmax(0,1fr); gap: 8px; border: 0; border-radius: 9px; padding: 9px; background: transparent; color: inherit; text-align: left; }
 .caption-list button:hover, .caption-list button.is-current { background: var(--blue-50); }
@@ -509,6 +521,10 @@
 .ai-bubble > p { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
 .ai-bubble--mine { justify-self: end; max-width: 90%; padding: 9px 11px; border: 1px solid var(--ink-100); border-radius: 12px 12px 4px 12px; background: var(--ink-50); }
 .ai-bubble--mine > p { color: var(--ink-900); font-size: .68rem; line-height: 1.55; }
+/* AI 답변에는 영실이 아바타를 붙인다 — 빈 상태(.ai-empty__avatar)와 같은 이미지, 훨씬 작은 크기. */
+.ai-turn__answer { display: flex; min-width: 0; align-items: flex-start; gap: 8px; }
+.ai-turn__avatar { flex: 0 0 auto; width: 24px; height: 24px; margin-top: 2px; border: 1px solid var(--ink-100); border-radius: 8px; object-fit: cover; }
+.ai-turn__answer > .ai-bubble--ai { flex: 1; }
 .ai-bubble--ai { margin-top: 0; border-radius: 12px 12px 12px 4px; }
 .ai-bubble--ai.is-streaming { border-color: var(--blue-200); }
 .ai-bubble--ai > p { font-size: .68rem; line-height: 1.6; }
@@ -713,7 +729,6 @@
   .video-status-overlay { top: 7px; right: 7px; left: 7px; align-items: flex-start; flex-direction: column; gap: 7px; }
   .video-status-overlay__identity { width: 100%; flex-wrap: wrap; }
   .video-status-overlay__identity h1 { max-width: calc(100% - 80px); }
-  .video-status-overlay__identity small { width: 100%; padding-left: 22px; }
   .video-status-overlay__status { width: 100%; flex-wrap: wrap; }
   .video-controls-overlay { right: 7px; bottom: 7px; left: 7px; }
   .caption-dock > header { align-items: flex-start; flex-direction: column; gap: 3px; }
@@ -729,7 +744,7 @@
   .instructor-media-error { align-items: stretch; flex-direction: column; }
   .review-toolbar { align-items: stretch; flex-direction: column; }
   .review-toolbar > div:last-child { display: grid; grid-template-columns: 1fr 1fr; }
-  .instructor-end-confirm { align-items: stretch; flex-direction: column; }
+  .instructor-end-confirm { right: 7px; max-width: calc(100vw - 14px); }
   .instructor-end-confirm > div:last-child { display: grid; grid-template-columns: 1fr; }
 }
 @media (hover: none) {
@@ -824,8 +839,7 @@
   color: var(--ink-950);
 }
 
-.student-live-status > div:last-child > span:not(.status-badge),
-.video-status-overlay__identity small,
+.student-live-status > div:last-child > span:not(.status-pill),
 .video-status-overlay__status,
 .timeline-row,
 .control-row > span {

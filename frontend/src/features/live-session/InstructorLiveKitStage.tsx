@@ -17,6 +17,13 @@ interface InstructorLiveKitStageProps {
    * 그 네비바를 없애고 이 강의 정보 헤더가 대신 담는다 — 없으면 자리를 비워 둔다.
    */
   backLink?: ReactNode
+  /**
+   * "강의 종료" 버튼 바로 아래 뜨는 확인 드롭다운(실제 종료 여부·뮤테이션은 부모가 쥔다). 버튼과
+   * 함께 상대 위치 컨테이너에 담아, 미디어 영역 우측 상단 그 자리에서 바로 펼쳐지게 한다.
+   */
+  endConfirm?: ReactNode
+  /** 드롭다운이 떠 있는 동안 그 바깥을 누르거나 Escape를 누르면 호출된다. `endConfirm`이 있을 때만 듣는다. */
+  onDismissEndConfirm?: () => void
 }
 
 function connectionBadge(state: InstructorLiveKitConnectionState) {
@@ -64,8 +71,29 @@ function writeCachedAnnotating(sessionId: string, visible: boolean): void {
   }
 }
 
-export default function InstructorLiveKitStage({ sessionId, lessonTitle, participantCount, onRequestEnd, backLink }: InstructorLiveKitStageProps) {
+export default function InstructorLiveKitStage({ sessionId, lessonTitle, participantCount, onRequestEnd, backLink, endConfirm, onDismissEndConfirm }: InstructorLiveKitStageProps) {
   const publisher = useInstructorLiveKit()
+  /*
+   * 종료 확인 드롭다운 바깥을 누르거나 Escape를 누르면 닫는다 — 정보 안내 팝오버
+   * (PersonalAiQuestionPanel) · 알림 스위치(BrowserNotificationToggle)와 같은 요령이다.
+   * `endConfirm`이 있을 때만 듣는다(닫혀 있으면 바깥 클릭까지 가로챌 이유가 없다).
+   */
+  const endMenuRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!endConfirm || !onDismissEndConfirm) return undefined
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!endMenuRef.current?.contains(event.target as Node)) onDismissEndConfirm()
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onDismissEndConfirm()
+    }
+    document.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [endConfirm, onDismissEndConfirm])
   /**
    * 판서를 켤지. <b>정본은 서버이고 이것은 그 사본이다</b>(ADR-0056).
    *
@@ -182,12 +210,15 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
     >
       <div className="video-stage__glow" />
       <header className="video-status-overlay" aria-label="라이브 강의 정보">
-        <div className="video-status-overlay__identity">{backLink}<span className="live-dot" /><strong>LIVE</strong><h1>{lessonTitle}</h1><small>강의 {sessionId}</small></div>
+        <div className="video-status-overlay__identity"><span className="live-dot" /><strong>LIVE</strong><h1>{lessonTitle}</h1>{backLink}</div>
         <div className="video-status-overlay__status">
           <StatusBadge tone="warning">강사 운영 모드</StatusBadge>
           {connectionBadge(publisher.connectionState)}
           <span>{participantCount}명 참여 중</span>
-          <button className="button button--soft button--small" type="button" onClick={onRequestEnd}>강의 종료</button>
+          <div className="instructor-end-menu" ref={endMenuRef}>
+            <button className="button button--soft button--small" type="button" onClick={onRequestEnd}>강의 종료</button>
+            {endConfirm}
+          </div>
         </div>
       </header>
       <div className="instructor-media-preview">

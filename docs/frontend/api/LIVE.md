@@ -510,7 +510,9 @@ GET /api/live-sessions/{sessionId}/messages?afterSessionMs=115000&limit=100
 포함하지 않는다.**
 
 `alias`는 **발신자가 익명을 선택했는지에 따라 달라진다**([ADR-0050](../../decisions/songjeongki/0050-chat-anonymity-is-sender-choice.md)):
-전송 시 `anonymous=true`면 세션 한정 가명(`수강생-0473`), 생략·`false`면 발신자가 스스로 지정한 표시 이름이다.
+전송 시 `anonymous=true`면 세션 한정 가명(`익명1`, 그 세션에서 익명으로 처음 보낸 순서 —
+[ADR-0023](../../decisions/yoongwanghyeok/0023-anonymous-chat-alias-is-sequential.md)), 생략·`false`면
+발신자가 스스로 지정한 표시 이름이다.
 강사는 요청이 `anonymous=true`여도 서버가 무시해 항상 표시 이름이다. 노출되는 것은 사용자가 프로필에 넣은
 표시 이름이며 시스템이 보관한 실명 필드가 아니다.
 

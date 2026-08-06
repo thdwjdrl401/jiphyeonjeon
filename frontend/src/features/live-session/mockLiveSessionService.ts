@@ -230,11 +230,11 @@ export const mockLiveSessionService = {
     return chatOverrides.get(sessionId) ?? demoMessages
   },
   async sendChatMessage(_sessionId, input) {
-    // 익명을 켜면 서버가 세션 한정 가명을 붙인다 — 데모도 같은 모양으로 흉내 낸다(ADR-0050).
+    // 익명을 켜면 서버가 세션 한정 가명을 붙인다 — 데모도 같은 모양으로 흉내 낸다(ADR-0050·ADR-0023).
     return {
       id: `msg_${Date.now()}`,
       clientMessageId: input.clientMessageId,
-      alias: input.anonymous ? '수강생-0473' : '김학생',
+      alias: input.anonymous ? '익명1' : '김학생',
       text: input.text,
       time: '현재',
       question: input.question,
@@ -539,7 +539,7 @@ export const mockLiveSessionService = {
 export function devPushChatMessage(sessionId: string, input: { text: string; alias?: string; mine?: boolean; question?: boolean }) {
   const message: ChatMessageView = {
     id: `msg_dev_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-    alias: input.alias ?? (input.mine ? '김학생' : '수강생-8821'),
+    alias: input.alias ?? (input.mine ? '김학생' : '익명2'),
     text: input.text,
     time: new Date().toLocaleTimeString('ko-KR'),
     question: input.question,
