@@ -544,6 +544,9 @@ describe('전체 페이지 라우트', () => {
     expect(await screen.findByRole('heading', { name: '다시보기' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '라이브 강의' })).not.toBeInTheDocument()
     expect(screen.getByText('진행도')).toBeInTheDocument()
+    const replayProgress = screen.getByRole('progressbar', { name: '다시보기 학습 진행률' })
+    expect(replayProgress).toHaveAttribute('aria-valuenow', '100')
+    expect(replayProgress.firstElementChild).toHaveStyle({ width: '100%' })
     expect(screen.getByRole('link', { name: '다시보기' })).toHaveAttribute(
       'href',
       '/student/lessons/les-orientation/replay',

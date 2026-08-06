@@ -143,7 +143,31 @@ export default function LessonDetailPage() {
           </Panel>
         ) : (
           <Panel className="lesson-detail__primary" title="다시보기" description={isInstructor ? '녹화 영상과 수강생 공개 상태를 확인합니다.' : undefined}>
-            {isInstructor ? <div className="replay-summary lesson-replay-summary"><div><StatusBadge tone="success">VIDEO READY</StatusBadge><StatusBadge tone="warning">REVIEW</StatusBadge><h3>녹화 영상 검수 가능</h3><p>교정 자막과 퀴즈는 검수 중이며 영상은 독립적으로 게시할 수 있습니다.</p></div><Link className="button button--primary" to={replayPath}>미리보기·검수</Link></div> : <div className="student-replay-summary"><div><span>진행도</span><strong>{replayProgress}%</strong></div>{canReplay ? <Link className="button button--primary" to={replayPath}>다시보기</Link> : <span className="replay-pending-label">다시 보기 준비 중</span>}</div>}
+            {isInstructor ? (
+              <div className="replay-summary lesson-replay-summary">
+                <div><StatusBadge tone="success">VIDEO READY</StatusBadge><StatusBadge tone="warning">REVIEW</StatusBadge><h3>녹화 영상 검수 가능</h3><p>교정 자막과 퀴즈는 검수 중이며 영상은 독립적으로 게시할 수 있습니다.</p></div>
+                <Link className="button button--primary" to={replayPath}>미리보기·검수</Link>
+              </div>
+            ) : (
+              <div className="student-replay-summary">
+                <div className="student-replay-progress">
+                  <div className="student-replay-progress__label"><span>진행도</span><strong>{replayProgress}%</strong></div>
+                  <span
+                    className="progress-track student-replay-progress__track"
+                    role="progressbar"
+                    aria-label="다시보기 학습 진행률"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={replayProgress}
+                  >
+                    <span style={{ width: `${replayProgress}%` }} />
+                  </span>
+                </div>
+                {canReplay
+                  ? <Link className="button button--primary" to={replayPath}>다시보기</Link>
+                  : <span className="replay-pending-label">다시 보기 준비 중</span>}
+              </div>
+            )}
             {readinessSummary && <div className="lesson-detail__primary-footer">{readinessSummary}</div>}
           </Panel>
         )}
