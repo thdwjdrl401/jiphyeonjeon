@@ -64,6 +64,8 @@ provider-neutral event는 진행 `TextDelta`, 확정 `SegmentFinal`, warning, co
 하나씩 나가고, 시각은 segment 구간을 문장 길이로 나눈 추정치다([ADR-0086](../../../../docs/decisions/canola/0086-caption-line-is-a-sentence.md)).
 증분 delta를 내는 provider의 문장 final은 `text_already_delivered`로 표시해 caption mapper가 같은
 text를 delta로 다시 만들지 않게 한다.
+streaming provider는 segment 오디오를 끝까지 모델에 넣는다 — 남은 조각이 chunk보다 짧으면 버리지 않고
+채워서 넣는다([ADR-0088](../../../../docs/decisions/canola/0088-nemotron-streaming-tail-chunk.md)).
 finish와 close는 제한된 시간 안에 끝나야 하며 provider 오류를 정상 completion으로 바꾸지 않는다.
 CUDA model은 parent에서 만들거나 fork하지 않고 job child setup에서 load한다. process resource가 필요한
 provider의 실제 job은 prewarm resource 누락 시 cold-load로 우회하지 않는다. vLLM provider는
