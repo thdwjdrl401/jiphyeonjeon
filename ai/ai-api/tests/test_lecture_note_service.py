@@ -529,6 +529,45 @@ def test_outbox_reuses_same_event_without_second_model_call() -> None:
     asyncio.run(scenario())
 
 
+def test_each_changed_item_becomes_its_own_key_point() -> None:
+    """FE는 keyPoint 하나를 한 줄로 그린다. 여러 item을 '·'로 이어 붙이면 화면에서 줄바꿈이
+    사라지므로, item 1개 = keyPoint 1개여야 한다. wire 상한(3개)을 넘는 item은 라이브에서
+    빠지되 draft에 남아 정제본에 포함된다."""
+
+    class FourItemsModel:
+        async def generate_draft(self, request):
+            items = tuple(
+                LectureNoteDraftItem(
+                    type=LectureNoteDraftItemType.FACT,
+                    label=None,
+                    content=f"요점 {n} 내용임",
+                )
+                for n in range(1, 5)
+            )
+            return LectureNoteDraftUpdateResult(
+                action=LectureNoteDraftUpdateAction.START_NEW,
+                newTopic=LectureNoteDraftTopicContent(
+                    topicTitle="주제", overview="네 가지 요점을 담은 주제임.", items=items
+                ),
+            )
+
+    async def scenario() -> None:
+        store = InMemoryStore()
+        service, pipeline = _components(FourItemsModel(), store)
+
+        await pipeline.ingest(_delta(1, "발화"))
+        await service.drain()
+
+        [event] = store.events
+        assert list(event.keyPoints) == ["요점 1 내용임", "요점 2 내용임", "요점 3 내용임"]
+        assert all("·" not in point for point in event.keyPoints)
+        # 4번째 item은 라이브 event에서 빠지지만 draft에는 남는다 (정제본 포함 대상)
+        checkpoint = store.checkpoints[SESSION_ID]
+        assert len(checkpoint.draft.topics[-1].items) == 4
+
+    asyncio.run(scenario())
+
+
 def test_ignore_completes_operation_without_event_or_chunk_sequence() -> None:
     class IgnoreModel:
         async def generate_draft(self, request):

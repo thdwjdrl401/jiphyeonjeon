@@ -735,18 +735,11 @@ def _draft_delta_result(
 
 
 def _pack_draft_items(items: tuple[LectureNoteDraftItem, ...]) -> tuple[str, ...]:
-    packed: list[str] = []
-    for item in items:
-        text = _draft_item_text(item)
-        combined = f"{packed[-1]} · {text}" if packed else text
-        if packed and len(combined) <= 300:
-            packed[-1] = combined
-        elif len(packed) < _MAX_LIVE_KEY_POINTS:
-            packed.append(text)
-        else:
-            # append 계약의 상한만 적용하며 나머지 item은 draft와 종료 정제에 남는다.
-            break
-    return tuple(packed)
+    """item 1개 = keyPoint 1개. FE가 keyPoint 하나를 한 줄로 그리므로, 여러 item을 한
+    문자열에 '·'로 이어 붙이면 화면에서 줄바꿈이 사라진다 — 줄의 단위는 문자열 안이 아니라
+    배열 요소다. wire 상한(keyPoints ≤3, §3-4a)을 넘는 item은 라이브 event에서 빠지지만
+    draft에는 남아 종료 정제본에 전부 포함된다."""
+    return tuple(_draft_item_text(item) for item in items[:_MAX_LIVE_KEY_POINTS])
 
 
 def _draft_item_text(item: LectureNoteDraftItem) -> str:
