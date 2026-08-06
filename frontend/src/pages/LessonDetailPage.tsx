@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { instructorPaths, publicPaths, studentPaths } from '@/app/router/paths'
@@ -10,7 +10,8 @@ import { getLesson } from '@/features/lesson/lessonService'
 import type { LessonMaterialView } from '@/features/lesson/lessonService.interface'
 import LessonBreadcrumbs from '@/features/lesson/LessonBreadcrumbs'
 import { isLiveEntryOpen } from '@/features/live-session/liveEntry'
-import { getLiveSession } from '@/features/live-session/liveSessionService'
+import { getLiveSession, getProcessingStatus } from '@/features/live-session/liveSessionService'
+import { describeReplayBadge, processingPollInterval } from '@/features/live-session/liveSessionProcessing'
 import type { MaterialDownloadRequest } from '@/features/material/materialDownloadService'
 import { useMaterialDownload } from '@/features/material/useMaterialDownload'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
@@ -41,6 +42,30 @@ export default function LessonDetailPage() {
     queryFn: () => getLiveSession(lessonQuery.data!.liveSession!.sessionId),
     enabled: Boolean(lessonQuery.data?.liveSession?.sessionId),
   })
+  /*
+   * 녹화 처리 현황. [ADR-0092]가 종료 동선을 이 화면으로 바꾸면서 "상세가 이미 준비 상태를 보여
+   * 준다"를 전제했는데, 실제로는 "VIDEO READY"가 문자열로 박혀 있었다 — 인코딩 중이든 실패했든
+   * 강사에게는 늘 검수 가능으로 보였고, 눌러 들어가면 재생이 안 됐다.
+   *
+   * <p>폴링은 [ADR-0007] 정책을 그대로 쓴다. READY·FAILED·"녹화 안 함" 중 하나에 닿으면
+   * processingPollInterval이 false를 돌려주어 <b>스스로 멈춘다</b> — 성공만 보고 멈추면 실패한
+   * 녹화가 영원히 서버를 두드린다.
+   */
+  const endedSessionId = lessonQuery.data?.liveSession
+    && (lessonQuery.data.liveSession.status === 'ENDING' || lessonQuery.data.liveSession.status === 'ENDED')
+    ? lessonQuery.data.liveSession.sessionId
+    : undefined
+  const processingMountedAt = useRef(Date.now())
+  const processingQuery = useQuery({
+    queryKey: ['live-session-processing', endedSessionId],
+    queryFn: () => getProcessingStatus(endedSessionId!),
+    enabled: isInstructor && Boolean(endedSessionId),
+    refetchInterval: (query) => processingPollInterval(
+      query.state.data,
+      Date.now() - processingMountedAt.current,
+    ),
+    refetchIntervalInBackground: false,
+  })
   const lesson = lessonQuery.data
   const liveSession = liveSessionQuery.data ?? null
   usePageTitle(lesson?.title ?? '강의 상세')
@@ -58,6 +83,11 @@ export default function LessonDetailPage() {
   const editLessonPath = instructorPaths.editLesson(curriculumId, sectionId, lessonId)
   const replayPath = isInstructor ? instructorPaths.replay(lessonId) : studentPaths.replay(lessonId)
   const showReplay = lesson.liveSession?.status === 'ENDING' || lesson.liveSession?.status === 'ENDED'
+  const processingPath = endedSessionId ? instructorPaths.processing(endedSessionId) : replayPath
+  // 배지는 강사에게만. 수강생은 아래 진행도·"준비 중" 라벨로 이미 필요한 것을 본다.
+  const replayBadge = isInstructor
+    ? describeReplayBadge(processingQuery.data, processingQuery.isPending && Boolean(endedSessionId))
+    : null
   const canEnterLive = lesson.liveSession ? isLiveEntryOpen(lesson.liveSession) : false
   const canReplay = lesson.replayStatus === 'PUBLISHED'
   const replayProgress = lesson.learning?.progressPercent ?? 0
@@ -147,8 +177,22 @@ export default function LessonDetailPage() {
           <Panel className="lesson-detail__primary" title="다시보기" description={isInstructor ? '녹화 영상과 수강생 공개 상태를 확인합니다.' : undefined}>
             {isInstructor ? (
               <div className="replay-summary lesson-replay-summary">
-                <div><StatusBadge tone="success">VIDEO READY</StatusBadge><StatusBadge tone="warning">REVIEW</StatusBadge><h3>녹화 영상 검수 가능</h3><p>교정 자막과 퀴즈는 검수 중이며 영상은 독립적으로 게시할 수 있습니다.</p></div>
-                <Link className="button button--primary" to={replayPath}>미리보기·검수</Link>
+                <div>
+                  {replayBadge && (
+                    <StatusBadge
+                      tone={replayBadge.tone}
+                      busy={replayBadge.busy}
+                      to={replayBadge.goTo === 'processing' ? processingPath
+                        : replayBadge.goTo === 'replay' ? replayPath
+                          : undefined}
+                    >{replayBadge.label}</StatusBadge>
+                  )}
+                  <h3>{replayBadge?.busy ? '녹화를 처리하고 있습니다' : '녹화 영상'}</h3>
+                  <p>{replayBadge?.hint || '이 강의는 녹화하지 않았습니다.'}</p>
+                </div>
+                {/* 아직 볼 것이 없을 때 검수로 보내지 않는다 — 들어가 봐야 재생이 안 된다. */}
+                {replayBadge && !replayBadge.busy && replayBadge.tone !== 'danger'
+                  && <Link className="button button--primary" to={replayPath}>미리보기·검수</Link>}
               </div>
             ) : (
               <div className="student-replay-summary">
