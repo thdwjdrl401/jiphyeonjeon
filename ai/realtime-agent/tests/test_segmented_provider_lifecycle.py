@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import AsyncIterator
+from itertools import pairwise
 
 import pytest
 
@@ -16,7 +17,7 @@ from app.stt.engine import (
     SttStreamContext,
     TextDelta,
 )
-from app.stt.providers.segmented import SegmentedStreamingEngine
+from app.stt.providers.segmented import ProviderSegmentFinal, SegmentedStreamingEngine
 
 
 class FakeSegmenter:
@@ -108,9 +109,9 @@ async def test_segments_are_transcribed_serially_and_finish_completes_stream(
     assert segmenter.finish_calls == 1
     assert events == [
         TextDelta("one", 20),
-        SegmentFinal("one", 0, 20, "SILENCE"),
+        SegmentFinal("one", 0, 20, "SILENCE", text_already_delivered=True),
         TextDelta("two", 60),
-        SegmentFinal("two", 20, 60, "SILENCE"),
+        SegmentFinal("two", 20, 60, "SILENCE", text_already_delivered=True),
         EngineCompleted(80),
     ]
     assert engine.close_calls == 1
@@ -296,7 +297,114 @@ async def test_bounded_event_queue_backpressures_without_dropping_deltas() -> No
     assert [event async for event in engine.events()] == [
         TextDelta("one", 20),
         TextDelta("two", 20),
-        SegmentFinal("onetwo", 0, 20, "SILENCE"),
+        SegmentFinal("onetwo", 0, 20, "SILENCE", text_already_delivered=True),
         EngineCompleted(20),
     ]
     await engine.close()
+
+
+class AuthoritativeSegmentedEngine(SegmentedStreamingEngine):
+    """Provider that returns one authoritative final per segment, like vLLM Whisper."""
+
+    def __init__(self, segmenter: FakeSegmenter, *, outputs: dict[bytes, str]) -> None:
+        super().__init__("authoritative", segmenter=segmenter)
+        self._outputs = outputs
+
+    async def _transcribe(
+        self,
+        segment: SpeechSegment,
+        context: SttStreamContext,
+    ) -> AsyncIterator[ProviderSegmentFinal]:
+        del context
+        yield ProviderSegmentFinal(self._outputs[segment.pcm])
+
+
+async def test_incremental_provider_splits_one_segment_into_one_final_per_sentence() -> None:
+    speech = SpeechSegment(b"speech", 16_000, 0, 1_000)
+    engine = RecordingSegmentedEngine(
+        FakeSegmenter(push_results=[[speech]]),
+        outputs={b"speech": ["첫 문장입니다.", " 두 번째 ", "문장입니다."]},
+    )
+
+    await engine.start_stream(SttStreamContext("stream-1"))
+    await engine.push_audio(chunk(20))
+    await engine.finish()
+    events = [event async for event in engine.events()]
+    await engine.close()
+
+    # The model's own delta chunks must go out untouched — splitting them too would
+    # duplicate the text for delta consumers such as the RAG caption context.
+    assert [event for event in events if isinstance(event, TextDelta)] == [
+        TextDelta("첫 문장입니다.", 1_000),
+        TextDelta(" 두 번째 ", 1_000),
+        TextDelta("문장입니다.", 1_000),
+    ]
+    # The deltas already carried the segment's end time and caption stream time may
+    # never regress, so every sentence ends there and only the start is apportioned.
+    assert [event for event in events if isinstance(event, SegmentFinal)] == [
+        SegmentFinal("첫 문장입니다.", 0, 1_000, "SILENCE", text_already_delivered=True),
+        SegmentFinal("두 번째 문장입니다.", 421, 1_000, "SILENCE", text_already_delivered=True),
+    ]
+
+
+async def test_authoritative_provider_emits_one_delta_and_final_per_sentence() -> None:
+    speech = SpeechSegment(b"speech", 16_000, 100, 1_100, boundary_reason="MAX_DURATION")
+    engine = AuthoritativeSegmentedEngine(
+        FakeSegmenter(push_results=[[speech]]),
+        outputs={b"speech": "첫 문장입니다. 두 번째 문장입니다."},
+    )
+
+    await engine.start_stream(SttStreamContext("stream-1"))
+    await engine.push_audio(chunk(20))
+    await engine.finish()
+    events = [event async for event in engine.events()]
+    await engine.close()
+
+    # Only the sentence that ends the segment carries the segment's own reason, so
+    # MAX_DURATION stays counted once per segment.
+    assert events[:-1] == [
+        TextDelta("첫 문장입니다.", 521),
+        SegmentFinal("첫 문장입니다.", 100, 521, "SILENCE"),
+        TextDelta("두 번째 문장입니다.", 1_100),
+        SegmentFinal("두 번째 문장입니다.", 521, 1_100, "MAX_DURATION"),
+    ]
+
+
+async def test_sentence_spans_stay_ordered_and_end_on_the_segment_end() -> None:
+    speech = SpeechSegment(b"speech", 16_000, 40, 900)
+    engine = AuthoritativeSegmentedEngine(
+        FakeSegmenter(push_results=[[speech]]),
+        outputs={b"speech": "하나. 둘. 셋. 넷."},
+    )
+
+    await engine.start_stream(SttStreamContext("stream-1"))
+    await engine.push_audio(chunk(20))
+    await engine.finish()
+    finals = [event async for event in engine.events() if isinstance(event, SegmentFinal)]
+    await engine.close()
+
+    assert [final.text for final in finals] == ["하나.", "둘.", "셋.", "넷."]
+    assert finals[0].start_stream_elapsed_ms == 40
+    assert finals[-1].end_stream_elapsed_ms == 900
+    for earlier, later in pairwise(finals):
+        assert earlier.end_stream_elapsed_ms == later.start_stream_elapsed_ms
+        assert earlier.start_stream_elapsed_ms <= earlier.end_stream_elapsed_ms
+
+
+async def test_transcript_without_terminal_punctuation_keeps_the_previous_shape() -> None:
+    speech = SpeechSegment(b"speech", 16_000, 0, 1_000)
+    engine = AuthoritativeSegmentedEngine(
+        FakeSegmenter(push_results=[[speech]]),
+        outputs={b"speech": "문장부호 없이 이어지는 자막"},
+    )
+
+    await engine.start_stream(SttStreamContext("stream-1"))
+    await engine.push_audio(chunk(20))
+    await engine.finish()
+    events = [event async for event in engine.events()]
+    await engine.close()
+
+    assert events[:-1] == [
+        TextDelta("문장부호 없이 이어지는 자막", 1_000),
+        SegmentFinal("문장부호 없이 이어지는 자막", 0, 1_000, "SILENCE"),
+    ]

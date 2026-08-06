@@ -471,6 +471,14 @@ Spring realtime-agent health proxy client는 아직 없다. 따라서 prod `/int
 > `caption.delta`/`caption.stream.completed`만이며(WS·리로드·RAG 중계), 두 신규 type의 **FE 세그먼트 렌더
 > (ADR-0044 휴리스틱 제거)·시간 앵커 기반 seek·RAG 앵커 활용은 후속 슬라이스**다. 아래 본문은 최초 제안
 > 기록이다.
+>
+> 갱신(2026-08-06): **`caption.segment.final`의 단위는 VAD 세그먼트가 아니라 문장이다**
+> ([ADR-0086](../decisions/canola/0086-caption-line-is-a-sentence.md)). 한 세그먼트가 여러 문장을 담으면
+> 문장마다 하나씩 발행하고, 세그먼트를 끝낸 마지막 문장만 그 세그먼트의 `boundaryReason`을 갖는다(앞의
+> 문장은 `SILENCE`). 허용값·payload·schema는 그대로이며 Spring·FE 변경은 없다. 문장별
+> `startStreamElapsedMs`·`endStreamElapsedMs`는 세그먼트 구간을 문장 길이로 나눈 **추정치**이고, 증분
+> delta를 내는 provider(Nemotron)에서는 문장들이 세그먼트 끝 시각을 공유한다 — 정확한 문장 시각은
+> provider가 chunk별 오디오 위치를 함께 보고해야 얻는다.
 
 현재 realtime-agent는 `caption.delta`(append-only 증분)와 `caption.stream.completed`(attempt 종료,
 세션당 1회)만 발행한다. **발화/문장 경계 이벤트가 없다.** 결과:

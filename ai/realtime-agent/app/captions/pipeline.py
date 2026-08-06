@@ -133,7 +133,14 @@ class CaptionEventMapper:
             self._last_stream_elapsed_ms = event.end_stream_elapsed_ms
             self._text_normalizer.reset_segment()
             return None
-        if self._sequence <= self._last_final_sequence:
+        # A final normally closes deltas that are already out. When it does not, the
+        # text has to go out as a delta first so delta consumers see it and the
+        # segment can point at a sequence. An engine that split one segment into
+        # several finals already delivered every sentence as a delta, so re-sending
+        # here would duplicate the text for those consumers.
+        closes_pending_deltas = self._sequence > self._last_final_sequence
+        already_delivered = event.text_already_delivered and self._sequence > 0
+        if not closes_pending_deltas and not already_delivered:
             await self._publish_normalized_delta(text, event.end_stream_elapsed_ms)
         segment = CaptionSegmentFinal(
             event_id=self._event_id_factory(),
