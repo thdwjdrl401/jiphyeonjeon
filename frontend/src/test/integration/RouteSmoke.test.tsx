@@ -277,6 +277,30 @@ describe('전체 페이지 라우트', () => {
     expect(await screen.findByText(/현재 요청에서 인증된 사용자와 권한 정보를 보관/)).toBeInTheDocument()
   })
 
+  it('강사가 라이브를 종료하면 녹화 화면 대신 해당 강의 상세로 돌아간다', async () => {
+    const user = userEvent.setup()
+    const sessionId = 'ses-security-live'
+    await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
+    await mockLiveSessionService.startLiveSession(sessionId)
+    await mockLiveSessionService.getLiveStartStatus(sessionId)
+    renderAt(`/instructor/live-sessions/${sessionId}/classroom`)
+
+    await screen.findByRole('banner', { name: '라이브 강의 정보' })
+    await user.click(screen.getByRole('button', { name: '확인하고 참여하기' }))
+    await user.click(screen.getByRole('button', { name: '강의 종료' }))
+
+    const confirmation = screen.getByRole('alert')
+    expect(within(confirmation).getByText(/이 강의의 상세 화면으로 돌아갑니다/)).toBeInTheDocument()
+    await user.click(within(confirmation).getByRole('button', { name: '종료하고 강의 상세로 이동' }))
+
+    await waitFor(() => expect(window.location.pathname).toBe(
+      '/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/les-security',
+    ))
+    expect(window.location.pathname).not.toContain('/processing')
+    expect(window.location.pathname).not.toContain('/replay')
+    expect(await screen.findByRole('heading', { name: 'Spring Security 시작하기', level: 1 })).toBeInTheDocument()
+  })
+
   it('강사는 STARTING 동안 preflight에 머물고 LIVE가 된 뒤 같은 세션 classroom으로 이동한다', async () => {
     const user = userEvent.setup()
     const sessionId = 'ses-security-live'

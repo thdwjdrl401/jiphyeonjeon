@@ -231,7 +231,20 @@ export default function LiveClassroomPage() {
     },
     [queryClient, sessionId],
   )
-  const endMutation = useMutation({ mutationFn: () => endLiveSession(sessionId), onSuccess: () => navigate(instructorPaths.processing(sessionId)) })
+  const endMutation = useMutation({
+    mutationFn: () => endLiveSession(sessionId),
+    onSuccess: (endedSession) => {
+      // 종료 응답이 가진 정본 맥락으로 돌아간다. 녹화 처리는 백그라운드에서 계속되고,
+      // 강사는 강의 상세에서 준비 중/다시보기 가능 상태를 필요할 때 확인한다(ADR-0092).
+      queryClient.setQueryData<LiveSessionView>(['live-session', sessionId], endedSession)
+      void queryClient.invalidateQueries({ queryKey: ['lesson', endedSession.lessonId] })
+      navigate(instructorPaths.lesson(
+        endedSession.curriculumId,
+        endedSession.sectionId,
+        endedSession.lessonId,
+      ), { replace: true })
+    },
+  })
   useEffect(() => {
     if (!sessionId) return undefined
     return subscribeSessionState(
@@ -607,8 +620,8 @@ export default function LiveClassroomPage() {
                   onDismissEndConfirm={() => setEndRequested(false)}
                   endConfirm={endRequested && (
                     <div className="instructor-end-confirm" role="alert">
-                      <div><strong>라이브 강의를 종료할까요?</strong><p>학생 연결을 종료하고 녹화·AI 후처리 단계로 이동합니다.</p></div>
-                      <div><button className="button button--ghost button--small" type="button" onClick={() => setEndRequested(false)}>계속 진행</button><button className="button button--primary button--small" type="button" disabled={endMutation.isPending} onClick={() => endMutation.mutate()}>종료하고 처리 현황 보기</button></div>
+                      <div><strong>라이브 강의를 종료할까요?</strong><p>학생 연결을 종료하고 이 강의의 상세 화면으로 돌아갑니다.</p></div>
+                      <div><button className="button button--ghost button--small" type="button" onClick={() => setEndRequested(false)}>계속 진행</button><button className="button button--primary button--small" type="button" disabled={endMutation.isPending} onClick={() => endMutation.mutate()}>종료하고 강의 상세로 이동</button></div>
                     </div>
                   )}
                 />
