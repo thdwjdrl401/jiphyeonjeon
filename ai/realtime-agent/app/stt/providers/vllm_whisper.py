@@ -104,6 +104,17 @@ def vllm_whisper_runtime_is_ready(
 class VllmWhisperStreamingEngine(SegmentedStreamingEngine):
     """Submit common VAD segments to a loopback vLLM Whisper runtime."""
 
+    # vLLM's Whisper endpoint reports why generation stopped only over its
+    # transcription SSE stream, and that terminal reason is what separates a normal
+    # EOS from a run that hit the token limit. A runtime that answers with one
+    # complete JSON transcript has no such signal and must not be gated on it.
+    _uses_streaming_transcription = True
+
+    # Repetition, compression and output-rate thresholds were calibrated against
+    # Whisper's non-speech hallucinations. Another model has to earn its own
+    # thresholds from its own evaluation before being judged by these.
+    _applies_hallucination_gates = True
+
     def __init__(
         self,
         configuration: VllmWhisperRuntimeConfiguration,
@@ -155,34 +166,12 @@ class VllmWhisperStreamingEngine(SegmentedStreamingEngine):
         segment: SpeechSegment,
         context: SttStreamContext,
     ) -> AsyncIterator[str | ProviderSegmentFinal]:
-        parts: list[str] = []
-        finish_reason: str | None = None
-        async with self._client.stream(
-            "POST",
-            "audio/transcriptions",
-            data={
-                "model": self._configuration.model,
-                "language": context.language.split("-", 1)[0],
-                "response_format": "json",
-                "temperature": "0",
-                "seed": "0",
-                "stream": "true",
-            },
-            files={"file": ("segment.wav", _wav_payload(segment), "audio/wav")},
-        ) as response:
-            response.raise_for_status()
-            async for line in response.aiter_lines():
-                if not line.startswith("data: "):
-                    continue
-                data = line.removeprefix("data: ")
-                if data == "[DONE]":
-                    break
-                content, event_finish_reason = _transcription_stream_event(data)
-                parts.append(content)
-                if event_finish_reason is not None:
-                    finish_reason = event_finish_reason
+        if self._uses_streaming_transcription:
+            text, finish_reason = await self._streamed_transcript(segment, context)
+        else:
+            text, finish_reason = await self._complete_transcript(segment, context)
 
-        text = "".join(parts).strip()
+        text = text.strip()
         if text.startswith("language ") and "<asr_text>" in text:
             text = text.split("<asr_text>", 1)[1]
         text = text.strip()
@@ -193,6 +182,8 @@ class VllmWhisperStreamingEngine(SegmentedStreamingEngine):
             gate = "FINISH_REASON"
         elif not text:
             gate = "EMPTY"
+        elif not self._applies_hallucination_gates:
+            gate = None
         elif _is_pathologically_repetitive(text):
             gate = "REPEATED_SPAN"
         elif compression_ratio > _MAX_COMPRESSION_RATIO:
@@ -235,6 +226,59 @@ class VllmWhisperStreamingEngine(SegmentedStreamingEngine):
             characters_per_second,
         )
         yield ProviderSegmentFinal(text)
+
+    async def _streamed_transcript(
+        self,
+        segment: SpeechSegment,
+        context: SttStreamContext,
+    ) -> tuple[str, str | None]:
+        parts: list[str] = []
+        finish_reason: str | None = None
+        async with self._client.stream(
+            "POST",
+            "audio/transcriptions",
+            data=self._request_data(context) | {"stream": "true"},
+            files={"file": ("segment.wav", _wav_payload(segment), "audio/wav")},
+        ) as response:
+            response.raise_for_status()
+            async for line in response.aiter_lines():
+                if not line.startswith("data: "):
+                    continue
+                data = line.removeprefix("data: ")
+                if data == "[DONE]":
+                    break
+                content, event_finish_reason = _transcription_stream_event(data)
+                parts.append(content)
+                if event_finish_reason is not None:
+                    finish_reason = event_finish_reason
+        return "".join(parts), finish_reason
+
+    async def _complete_transcript(
+        self,
+        segment: SpeechSegment,
+        context: SttStreamContext,
+    ) -> tuple[str, str | None]:
+        """Read one complete transcript. A whole answer is by definition a normal EOS."""
+
+        response = await self._client.post(
+            "audio/transcriptions",
+            data=self._request_data(context),
+            files={"file": ("segment.wav", _wav_payload(segment), "audio/wav")},
+        )
+        response.raise_for_status()
+        text = response.json().get("text")
+        if not isinstance(text, str):
+            raise TypeError("transcription response does not contain string field text")
+        return text, _NORMAL_FINISH_REASON
+
+    def _request_data(self, context: SttStreamContext) -> dict[str, str]:
+        return {
+            "model": self._configuration.model,
+            "language": context.language.split("-", 1)[0],
+            "response_format": "json",
+            "temperature": "0",
+            "seed": "0",
+        }
 
     async def _close_provider(self) -> None:
         await self._client.aclose()

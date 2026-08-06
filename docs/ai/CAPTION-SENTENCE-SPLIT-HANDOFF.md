@@ -38,7 +38,7 @@ FE는 `caption.segment.final` 하나당 한 줄을 렌더한다(`frontend/src/fe
 - VAD 파라미터 변경(문장 경계와 안 맞고 인식 품질을 해친다)
 - Spring·FE 변경, wire 계약(`boundaryReason` 새 값) 변경
 - Nemotron 스트리밍 중 문장 flush(지연 개선) — 후속
-- Nemotron 반복·환각 게이트(ADR-0085는 Whisper 전용 경로다) — 별건
+- Nemotron 반복·환각 게이트(ADR-0087은 Whisper 전용 경로다) — 별건
 
 ## 설계 원칙
 

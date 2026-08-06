@@ -1,4 +1,4 @@
-# ADR-0085: Whisper 자막은 strict VAD와 EOS·반복 gate를 통과해야 확정한다
+# ADR-0087: Whisper 자막은 strict VAD와 EOS·반복 gate를 통과해야 확정한다
 
 - **상태**: 채택
 - **일자**: 2026-08-06
@@ -38,6 +38,12 @@ streaming transcription SSE의 terminal choice는 정상 EOS 종료를 `finish_r
    출력 gate 지표를 기록한다. RMS는 실제 녹음 분포로 임계값을 보정하기 전에는 폐기 조건으로 쓰지 않는다.
 8. 정상 통과한 text만 기존 `TextDelta → SegmentFinal → Redis` 계약으로 전달한다. Redis schema와
    Spring consumer는 변경하지 않는다.
+9. 이 gate들은 **vLLM Whisper adapter 전용**이다. 같은 adapter를 상속하는 `nemotron-nemo`
+   ([ADR-0084](0084-tuned-nemotron-nemo-final-runtime.md))는 token stream이 아니라 완결 transcript를
+   받으므로 종료 사유가 없고, 완결 응답 자체를 정상 EOS로 본다. 반복·압축률·출력밀도 임계값도
+   Whisper 출력으로 보정한 값이라 적용하지 않고 빈 출력 검사만 남긴다. tuned checkpoint의 임계값은
+   자신의 고정 benchmark로 따로 측정한 뒤에 켠다. 두 성질은 adapter의 `_uses_streaming_transcription`·
+   `_applies_hallucination_gates`로 분리한다.
 
 ## 영향
 

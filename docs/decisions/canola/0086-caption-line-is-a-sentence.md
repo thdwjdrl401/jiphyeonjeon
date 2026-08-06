@@ -3,7 +3,7 @@
 - **상태**: 채택
 - **일자**: 2026-08-06
 - **관련**: [ADR-0082](0082-realtime-caption-display-text-normalization.md),
-  [ADR-0085](0085-whisper-silence-and-repetition-guard.md),
+  [ADR-0087](0087-whisper-silence-and-repetition-guard.md),
   [ADR-0043](../songjeongki/0043-caption-consumer-persistence.md),
   [ADR-0052](../songjeongki/0052-caption-segment-anchor-consumption.md),
   [ADR-0053](../songjeongki/0053-caption-segment-delivery-and-render.md)
@@ -21,7 +21,7 @@
 ```
 
 VAD를 더 짧게 잡는 방법은 채택하지 않았다. 사람은 문장 끝에서 쉬지 않으므로 무음 경계와 문장 경계는
-애초에 다르고, segment가 짧아지면 provider가 보는 문맥이 줄어 ADR-0085가 억제한 환각·반복 위험이
+애초에 다르고, segment가 짧아지면 provider가 보는 문맥이 줄어 ADR-0087이 억제한 환각·반복 위험이
 되돌아온다. 소비 측 문장부호 휴리스틱도 채택하지 않았다 — ADR-0053이 그 휴리스틱을 걷어내고 경계를
 producer가 권위 있게 준다는 합의다.
 
