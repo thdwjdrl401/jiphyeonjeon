@@ -2,10 +2,11 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState, type CSSPrope
 import { createPortal } from 'react-dom'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { getRoleHomePath, instructorPaths } from '@/app/router/paths'
+import { instructorPaths } from '@/app/router/paths'
 import PersonalAiQuestionPanel, { type AskAiAnswer } from '@/features/ai/PersonalAiQuestionPanel'
 import { useAuth } from '@/features/auth/AuthContext'
 import { getLesson } from '@/features/lesson/lessonService'
+import { resolveLessonPath } from '@/features/lesson/lessonRouting'
 import WatchHeatmapCurve from '@/features/live-session/WatchHeatmapCurve'
 import { useWatchTracking } from '@/features/live-session/useWatchTracking'
 import { mergeLectureNote } from '@/features/live-session/lectureNoteMerge'
@@ -537,10 +538,23 @@ export default function LiveClassroomPage() {
    * 예전에 페이지 위쪽 네비바(LessonLayout)가 담당하던 "돌아가기" 링크. 강의실은 그 네비바를
    * 없애고(LessonLayout 참고) 이 링크를 재생 정보 헤더 안에 담는다 — 강의실을 벗어날 유일한
    * 길이 사라지면 안 되므로, 네비바가 없어져도 이 버튼은 항상 있어야 한다.
+   *
+   * 커리큘럼 홈이 아니라 이 강의의 상세로 보낸다 — 강의실을 나가면 대개 방금 보던 그 강의로
+   * 돌아가려는 것이지, 커리큘럼 목록 전체로 갈 일은 드물다.
    */
   const backLink = user && (
-    <Link className="playback-header-back" to={getRoleHomePath(user.role)}>
-      ← {isInstructor ? '커리큘럼 관리' : '내 커리큘럼'}
+    <Link
+      className="playback-header-back"
+      to={resolveLessonPath({
+        curriculumId: session.curriculumId,
+        sectionId: session.sectionId,
+        lessonId: session.lessonId,
+        destination: 'LESSON_DETAIL',
+        role: user.role,
+        deliveryType: lesson.deliveryType,
+      })}
+    >
+      강의 상세로 이동
     </Link>
   )
 

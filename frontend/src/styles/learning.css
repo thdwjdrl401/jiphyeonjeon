@@ -495,18 +495,10 @@
 .ai-evidence .evidence-card > strong { display: inline; margin-top: 0; font-size: .73rem; }
 .ai-evidence .evidence-card__kind { flex: 0 0 auto; color: var(--ink-600); font-size: .63rem; }
 .ai-evidence .evidence-card__id { min-width: 0; color: var(--ink-500); font-size: .62rem; overflow-wrap: anywhere; }
-/*
- * 발췌문은 줄 전체를 차지한다(flex-basis 100%). 최대 1000자까지 올 수 있어 세 줄에서 자르고,
- * 전문은 title 툴팁에 남긴다 — 카드 하나가 답변보다 길어지면 근거가 대화를 밀어낸다.
- */
+/* 발췌문은 줄 전체를 차지한다(flex-basis 100%). 길이 제한 없이 전문을 그대로 보여준다. */
 .ai-evidence .evidence-card__excerpt {
   flex: 1 0 100%;
   margin: 2px 0 0;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
-  overflow: hidden;
   color: var(--ink-700);
   font-size: .66rem;
   line-height: 1.55;
@@ -654,7 +646,10 @@
 .glossary-term > summary > span { display: grid; gap: 2px; }
 .glossary-term > summary strong { color: var(--ink-900); font-size: .78rem; }
 .glossary-term > summary small { color: var(--ink-500); font-size: .62rem; }
-.glossary-term > summary:hover strong { color: var(--blue-700); }
+/* 텍스트 색으로 hover를 표시하면 --blue-700이 잉크 모드에서 거의 검정이라 어두운 배경과 구분이
+   안 됐다(잉크 팔레트는 "파랑"이 아니라 무채색 alias). 글자색 대신 행 배경을 살짝 띄워 테마와
+   무관하게 항상 보이게 한다 — [open] 상태와 같은 방식. */
+.glossary-term > summary:hover { background: var(--blue-50); }
 .glossary-term > summary > b { flex: 0 0 auto; color: var(--blue-600); font-size: .62rem; font-weight: 600; }
 .glossary-term > summary::after { flex: 0 0 auto; width: 0; height: 0; border-top: 4px solid var(--ink-400); border-right: 3px solid transparent; border-left: 3px solid transparent; content: ''; transition: transform .14s ease; }
 .glossary-term[open] > summary::after { transform: rotate(180deg); }

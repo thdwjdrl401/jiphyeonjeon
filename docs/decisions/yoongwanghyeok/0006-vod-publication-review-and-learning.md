@@ -7,7 +7,13 @@
 > `videoAssetStatus=READY + replayStatus=PUBLISHED`로 자동 게시한다. 아래 AI 후보·검수본의 수동 게시,
 > 영상과 AI 게시 상태의 분리, 기존·철회 영상의 수동 게시 정책은 유지한다.
 
-- **상태**: 제품 목표 채택
+> **2026-08-06 추가 정합화**: 업로드 녹화강의가 별도 `deliveryType=RECORDED`와 전용 HLS·자막
+> 자동 게시 경로로 추가됐다([choinhoo/0012](../choinhoo/0012-recorded-lesson-hls-caption-auto-publication.md)).
+> 따라서 아래 “VOD는 라이브 Egress 결과만”은 `deliveryType=LIVE` 다시보기에만 적용한다. 북마크
+> 결정 14는 [ADR-0024](0024-remove-bookmark-feature.md)가 대체했다. 자막·용어 기반 학습과 AI 질문은
+> 구현됐지만 통합 검수 초안/버전 게시, 챕터, 퀴즈는 아직 제품 목표다.
+
+- **상태**: 부분 구현·부분 대체
 - **일자**: 2026-07-21
 - **적용 범위**: VOD 공개, AI 콘텐츠 검수, 개인 학습, 퀴즈
 

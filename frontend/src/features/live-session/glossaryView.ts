@@ -15,7 +15,7 @@ export interface GlossaryAttachment {
   terms: GlossaryTermView[]
 }
 
-const SOURCE_LABEL: Record<GlossaryTerm['source'], string> = {
+export const SOURCE_LABEL: Record<GlossaryTerm['source'], string> = {
   MATERIAL: '자료에서 추출',
   INSTRUCTOR: '강사 등록',
 }

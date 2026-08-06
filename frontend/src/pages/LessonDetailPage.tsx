@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { instructorPaths, publicPaths, studentPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
 import LiveReminderPopover from '@/features/notification/LiveReminderPopover'
+import GlossaryReviewModal from '@/features/lesson/GlossaryReviewModal'
 import { LESSON_MATERIALS_ANCHOR } from '@/features/lesson/lessonRouting'
 import { getLesson } from '@/features/lesson/lessonService'
 import type { LessonMaterialView } from '@/features/lesson/lessonService.interface'
@@ -27,6 +28,7 @@ export default function LessonDetailPage() {
   const { curriculumId = '', sectionId = '', lessonId = '' } = useParams()
   const { user } = useAuth()
   const [entryNotice, setEntryNotice] = useState('')
+  const [glossaryReviewOpen, setGlossaryReviewOpen] = useState(false)
   const { download: downloadMaterial, downloadingMaterialId } = useMaterialDownload()
   const isInstructor = user?.role === 'INSTRUCTOR'
   const lessonQuery = useQuery({
@@ -173,12 +175,28 @@ export default function LessonDetailPage() {
         )}
 
         {/* 자료 전용 화면이 없어 자료 등록 알림이 이 영역을 직접 가리킨다(LESSON_MATERIALS_ANCHOR). */}
-        <Panel id={LESSON_MATERIALS_ANCHOR} className="lesson-detail__materials" title="강의 자료" description="수강생에게 공개되는 PPTX 원본입니다." action={<StatusBadge>{lesson.materials.length}개</StatusBadge>}>
+        <Panel
+          id={LESSON_MATERIALS_ANCHOR}
+          className="lesson-detail__materials"
+          title="강의 자료"
+          description="수강생에게 공개되는 PPTX 원본입니다."
+          action={<StatusBadge>{lesson.materials.length}개</StatusBadge>}
+        >
           {lesson.materials.length > 0
             ? <ul className="material-list material-list--compact">{lesson.materials.map((material) => <li key={material.id}><span className="file-icon">PPTX</span><div><strong>{material.name}</strong><small>{material.size}</small></div><button className="text-button" type="button" disabled={downloadingMaterialId === material.id} aria-label={`${material.name} 다운로드`} onClick={() => void downloadMaterial(materialDownloadRequest(material))}>{downloadingMaterialId === material.id ? '받는 중…' : '다운로드'}</button></li>)}</ul>
             : <p className="lesson-detail__material-empty">등록된 강의 자료가 없습니다.</p>}
+          {/* 자료 목록과 별개의 flex 자식이라 목록 스크롤과 무관하게 항상 패널 하단에 고정된다. */}
+          {isInstructor && (
+            <div className="lesson-detail__materials-footer">
+              <button className="text-button" type="button" onClick={() => setGlossaryReviewOpen(true)}>핵심 단어 검수</button>
+            </div>
+          )}
         </Panel>
       </div>
+
+      {glossaryReviewOpen && (
+        <GlossaryReviewModal lessonId={lessonId} lessonTitle={lesson.title} onClose={() => setGlossaryReviewOpen(false)} />
+      )}
     </div>
   )
 }

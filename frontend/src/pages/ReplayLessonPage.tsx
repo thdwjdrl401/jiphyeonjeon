@@ -1,7 +1,6 @@
 import { lazy, Suspense, useCallback, useMemo, useState, type CSSProperties } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { getRoleHomePath } from '@/app/router/paths'
 import PersonalAiQuestionPanel, { type AskAiAnswer } from '@/features/ai/PersonalAiQuestionPanel'
 import { useAuth } from '@/features/auth/AuthContext'
 import { getLearningContext } from '@/features/learning/learningService'
@@ -242,18 +241,22 @@ export default function ReplayLessonPage() {
   /*
    * 예전에 페이지 위쪽 네비바(LessonLayout)가 담당하던 "돌아가기" 링크. 다시보기는 그 네비바를
    * 없애고(LessonLayout 참고) 이 링크를 재생 정보 헤더 안에 담는다 — 라이브 강의실과 같은 요령.
+   *
+   * 커리큘럼 홈이 아니라 이 강의의 상세로 보낸다(lessonPath, 아래 headerExtra와 같은 목적지) —
+   * 다시보기를 나가면 대개 방금 보던 그 강의로 돌아가려는 것이지, 커리큘럼 목록 전체로 갈 일은 드물다.
    */
   const backLink = user && (
-    <Link className="playback-header-back" to={getRoleHomePath(user.role)}>
-      ← {isInstructor ? '커리큘럼 관리' : '내 커리큘럼'}
+    <Link className="playback-header-back" to={lessonPath}>
+      강의 상세로 이동
     </Link>
   )
 
   /*
    * 예전에 `.media-page__title`·`.review-toolbar`가 나눠 담던 것들을 재생 정보 헤더 하나로
-   * 모은다. 강사는 검수 중임을 알리는 배지와 게시 여부·공개 버튼을, 학생은 진행률을 본다 —
-   * 둘 다 "강의 상세"로 돌아가는 링크는 공유한다. 설명 문장(게시 여부의 부연)은 title 속성으로
-   * 옮겼다 — 늘 펼쳐 보여주면 배지 두어 개만으로 끝날 자리가 문장 두 개만큼 길어진다.
+   * 모은다. 강사는 검수 중임을 알리는 배지와 게시 여부·공개 버튼을, 학생은 진행률을 본다.
+   * "강의 상세"로 돌아가는 링크는 backLink(왼쪽) 하나만 둔다 — 여기도 같은 목적지로 하나 더
+   * 두면 같은 헤더 줄에 똑같은 링크가 두 번 보인다. 설명 문장(게시 여부의 부연)은 title
+   * 속성으로 옮겼다 — 늘 펼쳐 보여주면 배지 두어 개만으로 끝날 자리가 문장 두 개만큼 길어진다.
    */
   const headerExtra = (
     <>
@@ -279,7 +282,6 @@ export default function ReplayLessonPage() {
         </>
       )}
       {!isInstructor && progressPercent !== null && <span>학습 진행률 {progressPercent}%</span>}
-      <Link className="playback-header-back" to={lessonPath}>강의 상세</Link>
     </>
   )
 

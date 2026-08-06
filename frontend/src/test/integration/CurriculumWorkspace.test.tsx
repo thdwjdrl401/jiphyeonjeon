@@ -5,6 +5,7 @@ import App from '@/App'
 import { mockAuthService, resetMockAuth } from '@/features/auth/mockAuthService'
 import { mockCurriculumManagementService, resetMockCurriculumManagement } from '@/features/curriculum/mockCurriculumManagementService'
 import { buildMockCurriculumOutline, getMockCurriculum, publishMockCurriculum } from '@/features/demo/mockDatabase'
+import { resetMockLiveSessions } from '@/features/live-session/mockLiveSessionService'
 import * as materialDownloadService from '@/features/material/materialDownloadService'
 import { todayLocalStart, toIsoAtEndOfDayOrNull, toIsoAtStartOfDayOrNull } from '@/shared/lib/localDateTime'
 
@@ -64,6 +65,7 @@ describe('커리큘럼 작업 화면', () => {
   beforeEach(() => {
     resetMockAuth()
     resetMockCurriculumManagement()
+    resetMockLiveSessions()
     window.history.replaceState({}, '', '/')
   })
 
@@ -688,6 +690,58 @@ describe('커리큘럼 작업 화면', () => {
       '/instructor/live-sessions/ses-security-live/preflight',
     )
     expect(screen.queryByRole('link', { name: '강의 상세' })).not.toBeInTheDocument()
+  })
+
+  it('학생 강의 상세에는 핵심 단어 검수 버튼을 두지 않는다', async () => {
+    await renderAsStudent('/student/curriculums/cur-spring-live/sections/sec-security/lessons/les-security')
+    await screen.findByRole('heading', { name: 'Spring Security 시작하기' })
+    expect(screen.queryByRole('button', { name: '핵심 단어 검수' })).not.toBeInTheDocument()
+  })
+
+  it('강사가 강의 상세에서 핵심 용어를 수정하고 새 용어를 추가한다', async () => {
+    const user = userEvent.setup()
+    await renderAsInstructor('/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/les-security')
+
+    await user.click(await screen.findByRole('button', { name: '핵심 단어 검수' }))
+    const dialog = await screen.findByRole('dialog', { name: '핵심 용어 검수' })
+
+    const materialRow = within(dialog).getByText('SecurityContext').closest('li')!
+    expect(within(materialRow).getByText('자료에서 추출')).toBeInTheDocument()
+    const instructorRow = within(dialog).getByText('SecurityFilterChain').closest('li')!
+    expect(within(instructorRow).getByText('강사 등록')).toBeInTheDocument()
+
+    // AI가 뽑은 정의를 강사가 고친다.
+    await user.click(within(materialRow).getByRole('button', { name: '수정' }))
+    const editField = within(materialRow).getByRole('textbox', { name: 'SecurityContext 정의 수정' })
+    await user.clear(editField)
+    await user.type(editField, '강사가 직접 다듬은 정의입니다.')
+    await user.click(within(materialRow).getByRole('button', { name: '저장' }))
+    await waitFor(() => expect(within(materialRow).getByText('강사가 직접 다듬은 정의입니다.')).toBeInTheDocument())
+    // 강사가 고친 뒤에도 출처 배지는 AI 원본 표시를 유지한다 — 배지가 갈리는 것은 서버 응답의 source뿐이다.
+
+    // 빠진 용어를 새로 더한다.
+    await user.type(within(dialog).getByRole('textbox', { name: '추가할 용어' }), 'CsrfToken')
+    await user.type(
+      within(dialog).getByRole('textbox', { name: '추가할 용어의 정의' }),
+      '상태 변경 요청이 실제 화면에서 왔는지 검증하는 값입니다.',
+    )
+    await user.click(within(dialog).getByRole('button', { name: '추가' }))
+    const addedRow = await within(dialog).findByText('CsrfToken')
+    expect(within(addedRow.closest('li')!).getByText('강사 등록')).toBeInTheDocument()
+  })
+
+  it('이미 있는 용어명으로는 추가 대신 목록에서 고치도록 안내한다', async () => {
+    const user = userEvent.setup()
+    await renderAsInstructor('/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/les-security')
+
+    await user.click(await screen.findByRole('button', { name: '핵심 단어 검수' }))
+    const dialog = await screen.findByRole('dialog', { name: '핵심 용어 검수' })
+
+    await user.type(within(dialog).getByRole('textbox', { name: '추가할 용어' }), 'SecurityContext')
+    await user.type(within(dialog).getByRole('textbox', { name: '추가할 용어의 정의' }), '중복 시도')
+
+    expect(await within(dialog).findByText('이미 있는 용어입니다. 목록에서 수정해 주세요.')).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: '추가' })).toBeDisabled()
   })
 
   // 자료 다운로드는 앱 서버가 presigned URL로 302를 주는 경로다 — 역할별로 갈린다.

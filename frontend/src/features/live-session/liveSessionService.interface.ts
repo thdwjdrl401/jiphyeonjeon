@@ -484,6 +484,8 @@ export interface LiveSessionService {
   getAiAnswerHistory: (sessionId: string) => Promise<AiAnswerHistoryItem[]>
   /** 내가 이미 쌓은 칸별 재생 횟수. 새로고침 뒤 이어서 세려면 필요하다. */
   getGlossary: (lessonId: string) => Promise<GlossaryTerm[]>
+  /** 강사가 용어를 고치거나 더한다(라이브 시작 전 검수). 같은 용어를 다시 보내면 덮어쓴다(멱등). */
+  upsertGlossaryTerm: (lessonId: string, term: string, definition: string) => Promise<GlossaryTerm>
   getMyWatchBuckets: (lessonId: string) => Promise<Record<number, number>>
   reportWatchBuckets: (lessonId: string, counts: Record<number, number>) => Promise<void>
   getWatchHeatmap: (lessonId: string, durationMs: number | null) => Promise<WatchHeatmap>

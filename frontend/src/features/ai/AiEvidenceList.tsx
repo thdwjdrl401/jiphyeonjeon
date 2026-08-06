@@ -3,12 +3,12 @@ import type { AiAnswerSource } from '@/features/live-session/liveSessionService'
 import { formatStreamElapsed } from './aiAnswer'
 
 /**
- * 발췌문 한 조각. 사이드바가 좁아 길면 잘리므로, 전문은 툴팁으로 남긴다.
+ * 발췌문 한 조각. 길이 제한 없이 전문을 그대로 보여준다.
  * 값이 없으면 <b>아무것도 그리지 않는다</b> — 빈 줄이 카드 높이만 늘린다.
  */
 function Excerpt({ text }: { text?: string }) {
   if (!text) return null
-  return <p className="evidence-card__excerpt" title={text}>{text}</p>
+  return <p className="evidence-card__excerpt">{text}</p>
 }
 
 /**

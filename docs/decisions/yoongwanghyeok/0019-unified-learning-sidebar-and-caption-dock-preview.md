@@ -2,9 +2,18 @@
 
 > 라이브 컴포넌트: [LIVE_LESSON.md](../../frontend/components/LIVE_LESSON.md) · VOD 컴포넌트: [VOD_LESSON.md](../../frontend/components/VOD_LESSON.md)
 
-- **상태**: UI 목업 기준 채택
+- **상태**: 채택·주요 계약 구현 — 질문 인사이트·검수·퀴즈는 후속
 - **일자**: 2026-07-23
 - **적용 범위**: 학생·강사 라이브 강의실, 학생·강사 다시보기, 자막·구간 요약·핵심 용어 상호작용
+
+> **2026-08-06 현행 정합화**: 라이브와 라이브 Egress 다시보기는 공통 `LearningSidebar`의
+> `채팅 / 실시간 노트 / AI 질문 / 핵심 용어` 네 탭과 `CaptionDock`을 사용한다. 채팅 REST·WS,
+> 자막 복구·WS, 강의 노트 조회·WS, AI SSE·내 이력, 용어집 조회와 자막 포커스가 실제 계약에
+> 연결됐다. 업로드 녹화강의는 라이브 채팅·노트가 없으므로 같은 shell에서 `AI 질문 / 핵심 용어`
+> 두 탭만 노출한다. 결정 7의 서버 `termId`·문자열 범위 제공은
+> [songjeongki/0064](../songjeongki/0064-lesson-glossary-two-layers.md)가 대체해, 현재는 화면이 이미
+> 가진 용어집을 기준으로 자막 문자열을 정규화 매칭한다. 강사용 질문 핀·콘텐츠 검수·퀴즈의 최종
+> 위치와 계약은 아직 후속이다.
 
 ## 맥락
 

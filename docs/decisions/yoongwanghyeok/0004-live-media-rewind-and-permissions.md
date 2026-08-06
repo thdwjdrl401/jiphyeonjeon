@@ -1,10 +1,20 @@
 # ADR-0004: 라이브 미디어 = WebRTC 현재 시점 + Egress HLS 되감기
 
-> 라이브 컴포넌트: [LIVE_LESSON.md](../../frontend/components/LIVE_LESSON.md) · 라이브 API: [LIVE.md](../../frontend/api/LIVE.md) · 미디어 ADR: [0004](../songjeongki/0004-media-livekit-selfhost.md), [0010](../songjeongki/0010-self-host-vod.md), [0020](../songjeongki/0020-egress-recording-lifecycle.md)
+> 라이브 컴포넌트: [LIVE_LESSON.md](../../frontend/components/LIVE_LESSON.md) · 라이브 API: [LIVE.md](../../frontend/api/LIVE.md) · 현행 재생 결정: [0032](../songjeongki/0032-media-playback-hls-only.md), [0039](../songjeongki/0039-replay-playback-api.md)
 
-- **상태**: 제품 목표 채택, Egress DVR 실환경 검증 필요
+- **상태**: 부분 대체 — 강사 송출은 LiveKit, 학생 재생은 HLS 단일 경로로 구현
 - **일자**: 2026-07-21
 - **적용 범위**: live session, LiveKit 권한, 녹화, 라이브 되감기
+
+> **2026-08-06 현행 정합화**: [ADR-0032](../songjeongki/0032-media-playback-hls-only.md)가
+> 수강생의 WebRTC 직접 재생을 폐기했다. 현재 LiveKit은 소유 강사의 송출·Egress·STT 입력에 쓰고,
+> 학생은 라이브 엣지와 되감기를 모두 하나의 HLS EVENT 재생목록으로 본다. 재생 메타데이터도
+> 세션별 `/live-sessions/{sessionId}/playback`이 아니라
+> `GET /api/lessons/{lessonId}/playback`을 사용한다([ADR-0039](../songjeongki/0039-replay-playback-api.md)).
+> 아래 `RTC_LIVE/HLS_RECENT/HLS_DVR` 3모드와 북마크 시간축은 이력으로만 남고, 북마크는
+> [ADR-0024](0024-remove-bookmark-feature.md)에서 제품·계약·스키마 모두 제거했다. 별도 업로드
+> 녹화강의도 `deliveryType=RECORDED` 경로로 추가되어 “VOD는 Egress 결과만” 전제는 라이브 레슨의
+> 다시보기에만 적용된다.
 
 ## 맥락
 
@@ -49,9 +59,9 @@ LiveKit SFU는 현재 발행되는 WebRTC 트랙을 실시간 전달하지만, �
 
 ## 영향·후속
 
-- 녹화 중 전체 DVR playlist가 누적 갱신·재생되는지 LiveKit Egress+MinIO+nginx 실환경 PoC가 필요하다.
-- Egress 시작 지연과 HLS media timestamp를 `sessionMs`로 보정하는 server clock 계약이 필요하다.
+- 녹화 중 EVENT playlist 누적, 인증 manifest 재작성, PDT 기반 `sessionOffsetMs` 계산은 구현됐다. 운영 환경에서는 장시간 세션의 playlist 갱신·세그먼트 URL TTL·pipeline stall을 계속 검증한다.
+- Egress 시작 지연 보정은 첫 PDT와 `live_session.started_at`의 차이를 요청 시 계산하는 계약으로 확정됐다.
 - WebRTC와 HLS를 동시에 전체 다운로드하지 않고, HLS는 되감기 사용 시 로드하는 방향으로 성능 측정한다.
 - 현재 CP0 레슨 발행은 [ADR-0021](../songjeongki/0021-lesson-publish-mvp-direct.md)을 따른다. AI 준비 게이트는 파이프라인 도입 시점에 적용 여부를 다시 확정한다.
-- 현재 실제 Egress 호출과 완료 webhook은 [ADR-0020](../songjeongki/0020-egress-recording-lifecycle.md)의 미검증·후속 항목을 따른다.
+- 실제 Egress 시작·종료와 완료 webhook, 재생 API는 구현됐다. 남은 항목은 실제 인프라에서 긴 세션·중단·재연결을 포함한 운영 검증이다.
 

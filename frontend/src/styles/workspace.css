@@ -376,6 +376,61 @@
 .lesson-detail__materials .text-button { display: inline-flex; flex: 0 0 auto; align-items: center; font-size: .62rem; text-decoration: none; }
 .lesson-detail__materials .text-button:disabled { color: var(--ink-500); cursor: default; }
 .lesson-detail__material-empty { display: grid; min-height: 170px; flex: 1; place-items: center; margin: 0; background: var(--ink-50); color: var(--ink-muted); font-size: .72rem; }
+/* 목록과 별개의 flex 자식(flex: 0 0 auto 기본값)이라 .material-list가 스크롤해도 이 줄은 그대로다. */
+.lesson-detail__materials-footer { display: flex; justify-content: flex-end; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--ink-100); }
+/* 다운로드 텍스트버튼과 같은 .text-button이지만, 여기만 밑줄을 둬 클릭 가능한 링크처럼 보이게 한다. */
+.lesson-detail__materials-footer .text-button { text-decoration: underline; text-underline-offset: 3px; }
+
+/*
+ * 핵심 용어 검수 모달. 크롬(배경·카드·헤더·닫기 버튼)은 .profile-modal을 그대로 재사용하고
+ * (ADR 없음 — 이 코드베이스의 기존 모달 관례, AccountWithdrawModal도 같은 방식) 목록·폼만 얹는다.
+ */
+.glossary-review-modal { width: min(100%, 640px); max-height: 86vh; display: flex; flex-direction: column; overflow: hidden; }
+.glossary-review-list { display: grid; overflow-y: auto; flex: 1; gap: 8px; margin: 0 0 14px; padding: 0 8px 2px 0; list-style: none; scrollbar-width: thin; scrollbar-color: var(--ink-300) transparent; }
+.glossary-review-list::-webkit-scrollbar { width: 7px !important; }
+.glossary-review-list::-webkit-scrollbar-thumb { border-radius: 99px !important; background: var(--ink-300) !important; }
+.glossary-review-list::-webkit-scrollbar-track { background: transparent !important; }
+.glossary-review-row { padding: 11px 13px; border: 1px solid var(--ink-100); border-radius: 12px; background: var(--ink-50); }
+.glossary-review-row__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.glossary-review-row__head strong { color: var(--ink-900); font-size: .84rem; }
+.glossary-review-row__source { flex: 0 0 auto; border-radius: 99px; padding: 2px 9px; font-size: .61rem; font-weight: 700; }
+.glossary-review-row__source--material { background: var(--blue-100); color: var(--blue-700); }
+.glossary-review-row__source--instructor { background: var(--green-50); color: var(--green-700); }
+.glossary-review-row__view { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; }
+.glossary-review-row__view p { margin: 0; color: var(--ink-700); font-size: .76rem; line-height: 1.6; }
+.glossary-review-row__view .text-button { flex: 0 0 auto; font-size: .68rem; transition: transform .12s ease; }
+.glossary-review-row__view .text-button:hover:not(:disabled) { transform: translateY(-2px); }
+.glossary-review-row__edit textarea { width: 100%; border: 1px solid var(--border-medium); border-radius: 8px; padding: 8px 10px; color: var(--ink-900); font: inherit; font-size: .76rem; line-height: 1.6; resize: vertical; }
+.glossary-review-row__edit-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+/* 용어 목록만 스크롤하고(위 .glossary-review-list) 이 폼은 팝업 하단에 고정된다(flex: 0 0 auto).
+   버튼을 입력칸 아래 별도 줄 대신 옆(우측 하단)에 두면서 폼 자체 높이가 줄어, 목록이 flex:1로
+   그만큼 더 차지한다 — 별도 계산 없이 flex 배치만으로 해결된다. */
+.glossary-review-form { flex: 0 0 auto; padding-top: 14px; border-top: 1px solid var(--ink-100); }
+.glossary-review-form__label { display: block; margin-bottom: 8px; color: var(--ink-500); font-size: .66rem; font-weight: 700; }
+.glossary-review-form__row { display: flex; align-items: flex-end; gap: 10px; }
+/* 입력칸 폭은 옆의 버튼만큼 줄어든다(flex:1이 남는 폭만 차지) — 용어·정의 입력칸은 서로 같은 폭. */
+.glossary-review-form__fields { display: grid; min-width: 0; flex: 1; gap: 8px; }
+.glossary-review-form__fields input,
+.glossary-review-form__fields textarea { width: 100%; border: 1px solid var(--border-medium); border-radius: 8px; padding: 8px 10px; color: var(--ink-900); font: inherit; font-size: .76rem; }
+.glossary-review-form__fields textarea { resize: vertical; }
+.glossary-review-form__hint { display: block; margin-top: 6px; color: var(--red-600); font-size: .66rem; }
+.glossary-review-form__submit { flex: 0 0 auto; }
+/* 포커스 표시가 기본 :focus-visible outline(offset 3px)을 그대로 쓰면, 이미 그려 둔 1px 테두리
+   바깥에 또 하나의 테두리가 떠서 이중 테두리로 보인다. 기존 테두리 자리를 그대로 강조색으로
+   덮어써 테두리가 하나만 있는 것처럼 보이게 한다(다른 입력창들과 같은 요령). */
+.glossary-review-row__edit textarea:focus-visible,
+.glossary-review-form__fields input:focus-visible,
+.glossary-review-form__fields textarea:focus-visible { outline: none; border-color: var(--blue-500); }
+/* 전역 스크롤바는 1.5px 투명이라 사실상 안 보인다(design-system.css) — 이 정의 입력칸들은
+   내용이 넘칠 때 스크롤이 생긴다는 것 자체가 중요한 신호라 여기서만 다시 눈에 띄게 한다. */
+.glossary-review-row__edit textarea,
+.glossary-review-form__fields textarea { scrollbar-width: thin; scrollbar-color: var(--ink-300) transparent; }
+.glossary-review-row__edit textarea::-webkit-scrollbar,
+.glossary-review-form__fields textarea::-webkit-scrollbar { width: 7px !important; }
+.glossary-review-row__edit textarea::-webkit-scrollbar-thumb,
+.glossary-review-form__fields textarea::-webkit-scrollbar-thumb { border-radius: 99px !important; background: var(--ink-300) !important; }
+.glossary-review-row__edit textarea::-webkit-scrollbar-track,
+.glossary-review-form__fields textarea::-webkit-scrollbar-track { background: transparent !important; }
 
 @media (max-width: 1000px) {
   .workspace-page.lesson-detail-page { min-height: auto; }

@@ -2,9 +2,15 @@
 
 > 역할 라우팅: [ADR-0009](0009-role-prefixed-routing-and-entry-gates.md) · 통합 mock: [ADR-0010](0010-integrated-mock-domain-state.md) · 상태 전이: [STATE_TRANSITIONS.md](../../STATE_TRANSITIONS.md)
 
-- **상태**: 프론트 UI·라우팅·통합 mock 채택, 실제 라이브 일정 API 미확정
+- **상태**: 채택·실제 API 연동 — 폼은 통합, 저장 endpoint는 순차 호출
 - **일자**: 2026-07-22
 - **적용 범위**: 로그인 후 이동, 공통 내비게이션, 학생·강사 마이페이지, 커리큘럼·레슨 탐색, 라이브 일정 생성·수정·상세 흐름
+
+> **2026-08-06 현행 정합화**: 레슨 폼 안에서 일정을 함께 편집하는 UX는 유지하면서, 실제 저장은
+> 레슨 생성·수정 뒤 `POST /instructor/lessons/{lessonId}/live-sessions` 또는
+> `PATCH /instructor/live-sessions/{sessionId}`를 순차 호출하도록 구현됐다. 즉 하나의 화면 흐름이지
+> 하나의 원자적 요청은 아니다. `GET /instructor/lessons/{id}`의 `liveSession`으로 저작 화면 문맥도
+> 복원한다. 업로드 녹화강의(`deliveryType=RECORDED`)는 라이브 일정 없이 별도 생성 흐름을 사용한다.
 
 ## 맥락
 
@@ -64,7 +70,7 @@
 - API 계약이 확정되면 `CONTRACT.md`, FE·BE 구현과 계약 테스트를 같은 변경에서 갱신한다.
 - 서버는 역할 prefix나 프론트 노출 여부를 권한 경계로 신뢰하지 않고 커리큘럼 소유권·수강 관계·세션 입장 가능 시간을 다시 검사해야 한다.
 
-## 구현·검증
+## 구현·검증(2026-07-22 당시)
 
 - 주요 구현: [AppRouter.tsx](../../../frontend/src/app/router/AppRouter.tsx), [WorkspaceLayout.tsx](../../../frontend/src/shared/layout/WorkspaceLayout.tsx), [LessonFormPage.tsx](../../../frontend/src/pages/LessonFormPage.tsx), [LessonDetailPage.tsx](../../../frontend/src/pages/LessonDetailPage.tsx)
 - 전체 프론트 테스트 `100`개 통과
