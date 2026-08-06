@@ -13,16 +13,12 @@ import {
 
 vi.mock('@/features/live-session/PlaybackPlayer', () => ({
   default: ({
-    bookmarked,
     playback,
-    onBookmark,
     lessonTitle,
     backLink,
     headerExtra,
   }: {
-    bookmarked: boolean
     playback: { sessionId: string } | null
-    onBookmark: () => void
     lessonTitle?: string
     backLink?: ReactNode
     headerExtra?: ReactNode
@@ -31,9 +27,6 @@ vi.mock('@/features/live-session/PlaybackPlayer', () => ({
       {backLink}
       {lessonTitle && <h1>{lessonTitle}</h1>}
       {playback && <span>Mock HLS 재생 준비 · {playback.sessionId}</span>}
-      <button type="button" onClick={onBookmark}>
-        {bookmarked ? '★ 북마크됨' : '☆ 북마크'}
-      </button>
       {headerExtra}
     </div>
   ),
@@ -265,7 +258,7 @@ describe('전체 페이지 라우트', () => {
 
     const chatInput = screen.getByLabelText('채팅 메시지')
     await user.type(chatInput, '첫째 줄')
-    await user.keyboard('{Control>}{Enter}{/Control}')
+    await user.keyboard('{Shift>}{Enter}{/Shift}')
     await user.type(chatInput, '둘째 줄')
     expect(chatInput).toHaveValue('첫째 줄\n둘째 줄')
     await user.keyboard('{Enter}')
@@ -362,7 +355,6 @@ describe('전체 페이지 라우트', () => {
     expect(screen.getByRole('tab', { name: '실시간 노트' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '핵심 용어' })).toBeInTheDocument()
     expect(window.location.pathname).toBe('/student/live-sessions/ses-security-live/classroom')
-    expect(screen.getByRole('button', { name: '☆ 북마크' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '확인하고 참여하기' }))
     expect(await screen.findByText('Mock HLS 재생 준비 · ses-security-live')).toBeInTheDocument()
     expect(screen.queryByText('강사 운영 모드')).not.toBeInTheDocument()

@@ -4,7 +4,7 @@
 
 ## 1. 범위
 
-라이브 Egress HLS 다시보기, 학습 진도, 교정 자막·전문용어·챕터·근거, 시간 동기화 채팅 리플레이, 개인 AI Q&A, 북마크, 퀴즈, 강사 검수·게시와 익명 학습 통계 API를 정의한다.
+라이브 Egress HLS 다시보기, 학습 진도, 교정 자막·전문용어·챕터·근거, 시간 동기화 채팅 리플레이, 개인 AI Q&A, 퀴즈, 강사 검수·게시와 익명 학습 통계 API를 정의한다.
 
 ### 1.1 확정 원칙
 
@@ -30,8 +30,6 @@
 | `VOD-01` | `GET` | `/api/lessons/{lessonId}/learning-context` | VOD 화면 초기 context | URL **확정** |
 | `VOD-02` | `GET` | `/api/lessons/{lessonId}/playback` | 권한 적용 HLS metadata 조회 | **구현됨** |
 | `PROGRESS-01` | `PUT` | `/api/lessons/{lessonId}/progress` | 마지막 위치·유효 시청 구간 저장 | URL **확정** |
-| `BOOKMARK-01` | `GET/POST` | `/api/lessons/{lessonId}/bookmarks` | 내 북마크 조회·생성 | URL 계열 **확정** |
-| `BOOKMARK-02` | `DELETE` | `/api/lessons/{lessonId}/bookmarks/{bookmarkId}` | 내 북마크 삭제 | **제안** |
 
 ### 2.2 게시 콘텐츠·채팅·AI
 
@@ -358,19 +356,9 @@ GET /api/lessons/{lessonId}/ai/questions?page=0&size=20
 게시본 version이 질문 도중 바뀌더라도 질문 시작 시점 version으로 응답을 완료한다(version 노출 방법은
 현재 이벤트 계약에 없어 후속 결정 대상이다).
 
-## 9. 북마크
+## 9. 퀴즈
 
-라이브 문서의 북마크 계약을 그대로 사용한다.
-
-- 라이브에서 만든 북마크도 같은 `lessonId`, `sessionMs`로 조회
-- VOD에서 현재 시점 북마크 추가
-- 목록·타임라인 선택 시 동일 시점 이동
-- 본인 북마크만 조회·삭제
-- 초기 범위에는 메모·색상·분류 없음
-
-## 10. 퀴즈
-
-### 10.1 `QUIZ-01` 현재 게시 퀴즈
+### 9.1 `QUIZ-01` 현재 게시 퀴즈
 
 ```http
 GET /api/lessons/{lessonId}/quizzes
@@ -405,7 +393,7 @@ GET /api/lessons/{lessonId}/quizzes
 
 응시 전 응답에는 정답을 포함하지 않는다.
 
-### 10.2 `QUIZ-02` 응시 제출
+### 9.2 `QUIZ-02` 응시 제출
 
 ```http
 POST /api/quizzes/{quizId}/attempts
@@ -450,9 +438,9 @@ POST /api/quizzes/{quizId}/attempts
 - 새 version 게시 후 기존 attempt를 삭제·재채점하지 않음
 - version 충돌은 `409 QUIZ_VERSION_CHANGED`와 최신 version 제공
 
-## 11. replay 공개·회수
+## 10. replay 공개·회수
 
-### 11.1 게시
+### 10.1 게시
 
 ```http
 POST /api/instructor/lessons/{lessonId}/replay/publish
@@ -469,7 +457,7 @@ POST /api/instructor/lessons/{lessonId}/replay/publish
 }
 ```
 
-### 11.2 회수
+### 10.2 회수
 
 ```http
 POST /api/instructor/lessons/{lessonId}/replay/withdraw
@@ -483,15 +471,15 @@ POST /api/instructor/lessons/{lessonId}/replay/withdraw
 
 신규 수강생 재생 URL 발급을 중단한다. 이미 발급된 URL을 즉시 무효화할지 TTL까지 허용할지는 media gate 정책과 협의한다.
 
-## 12. 강사 콘텐츠 검수·게시
+## 11. 강사 콘텐츠 검수·게시
 
-### 12.1 content type과 상태
+### 11.1 content type과 상태
 
 `contentType`: `TRANSCRIPT`, `GLOSSARY`, `CHAPTERS`, `QUIZ`
 
 영역별 상태 제안: `NOT_READY`, `PROCESSING`, `READY_FOR_REVIEW`, `DRAFT_SAVED`, `PUBLISHED`, `FAILED`
 
-### 12.2 `REVIEW-01` 검수 조회
+### 11.2 `REVIEW-01` 검수 조회
 
 ```http
 GET /api/instructor/lessons/{lessonId}/reviews?contentType=TRANSCRIPT
@@ -523,7 +511,7 @@ GET /api/instructor/lessons/{lessonId}/reviews?contentType=TRANSCRIPT
 
 실제 `content` schema는 content type별 게시 조회 DTO와 같은 구조를 재사용한다. AI 내부 prompt·model credential·raw trace는 노출하지 않는다.
 
-### 12.3 `REVIEW-02` 초안 저장
+### 11.3 `REVIEW-02` 초안 저장
 
 ```http
 PUT /api/instructor/lessons/{lessonId}/reviews/{contentType}/draft
@@ -542,7 +530,7 @@ PUT /api/instructor/lessons/{lessonId}/reviews/{contentType}/draft
 - 기존 게시본은 변경하지 않음
 - 게시본이 바뀐 뒤 오래된 base로 저장하면 명시적 충돌 처리
 
-### 12.4 `REVIEW-03` 게시
+### 11.4 `REVIEW-03` 게시
 
 ```http
 POST /api/instructor/lessons/{lessonId}/reviews/{contentType}/publish
@@ -572,9 +560,9 @@ POST /api/instructor/lessons/{lessonId}/reviews/{contentType}/publish
 
 게시본 되돌리기는 초기 범위에서 제외한다.
 
-## 13. 강사용 익명 질문·학습 통계
+## 12. 강사용 익명 질문·학습 통계
 
-### 13.1 질문 핀
+### 12.1 질문 핀
 
 ```http
 GET /api/instructor/lessons/{lessonId}/question-pins?bucketMs=30000
@@ -588,7 +576,7 @@ GET /api/instructor/lessons/{lessonId}/question-pins?bucketMs=30000
 
 응답은 전체 개수, 구간별 핀, source별 개수를 제공한다. 핀 원문 조회는 질문 text·source·`sessionMs`만 반환하고 userId·실명·가명·개인 AI 답변은 제외한다.
 
-### 13.2 학습 요약
+### 12.2 학습 요약
 
 ```http
 GET /api/instructor/lessons/{lessonId}/learning-summary
@@ -615,7 +603,7 @@ GET /api/instructor/lessons/{lessonId}/learning-summary
 
 초기에는 집계만 제공한다. 개인별 진행·질문·응시 상세는 포함하지 않는다.
 
-## 14. 상태·부분 실패 원칙
+## 13. 상태·부분 실패 원칙
 
 | 상태 조합 | 수강생 처리 |
 |---|---|
@@ -633,7 +621,7 @@ GET /api/instructor/lessons/{lessonId}/learning-summary
 - 진도 저장·AI·퀴즈 오류가 영상 재생을 중단하지 않는다.
 - 인증·수강 권한이 회수되면 재생 URL·SSE·학습 요청을 중단한다.
 
-## 15. 백엔드 협의 사항
+## 14. 백엔드 협의 사항
 
 1. HLS URL TTL·재발급·replay 회수 시 즉시 무효화 정책
 2. 진행률 유효 시청 range·중복 재생·90% 완료 계산 방식

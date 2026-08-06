@@ -918,9 +918,6 @@ export const httpLiveSessionService = {
   async askReplayAi(lessonId, question, playbackSessionMs, options) {
     await streamLessonAiAnswer(lessonId, question, playbackSessionMs, options)
   },
-  async saveBookmark(lessonId, sessionMs) {
-    await apiClient.post(`/lessons/${lessonId}/bookmarks`, { sessionMs })
-  },
   async getAiAnswerHistory(sessionId) {
     const { data } = await apiClient.get<AiAnswerHistoryItem[]>(
       `/live-sessions/${sessionId}/ai/answers`)

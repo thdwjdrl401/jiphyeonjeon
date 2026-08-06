@@ -4,7 +4,7 @@
 
 ## 1. 범위
 
-live session 생성·수정·상세, 수강생 prejoin, 강사 preflight, 시작·입장·종료, LiveKit, 채팅·자막 WebSocket, AI Q&A SSE, 라이브 되감기 HLS, 질문 핀과 북마크 계약을 정의한다.
+live session 생성·수정·상세, 수강생 prejoin, 강사 preflight, 시작·입장·종료, LiveKit, 채팅·자막 WebSocket, AI Q&A SSE, 라이브 되감기 HLS, 질문 핀 계약을 정의한다.
 
 ### 1.1 식별자와 상태
 
@@ -55,8 +55,6 @@ STARTING ─────────→ FAILED
 | `AI-TERM-01` | REST | `POST /api/lessons/{lessonId}/ai/terms:explain` | 전문용어 설명 | URL **확정** |
 | `LIVE-QUESTION-01` | REST | `GET /api/instructor/live-sessions/{sessionId}/question-pins` | 강사용 질문 시점 집계 | **제안** |
 | `LIVE-QUESTION-02` | REST | `GET /api/instructor/live-sessions/{sessionId}/question-pins/{pinId}/questions` | 핀의 익명 질문 원문 | **제안** |
-| `BOOKMARK-01` | REST | `GET/POST /api/lessons/{lessonId}/bookmarks` | 내 북마크 조회·생성 | URL 계열 **확정** |
-| `BOOKMARK-02` | REST | `DELETE /api/lessons/{lessonId}/bookmarks/{bookmarkId}` | 내 북마크 삭제 | **제안** |
 
 ## 3. 세션 생성·수정·상세
 
@@ -290,7 +288,7 @@ classroom 진입 시 다음 순서로 호출한다.
 1. `LIVE-SESSION-03`으로 권한·`LIVE` 상태 확인
 2. **강사만** `LIVE-SESSION-07`로 LiveKit 발행 token 발급 — 학생은 LiveKit에 붙지 않는다(HLS 단일, [ADR-0032](../../decisions/songjeongki/0032-media-playback-hls-only.md))
 3. `LIVE-PLAYBACK-01`로 HLS 재생 정보 조회 — **학생의 라이브 시청 원천**(라이브 엣지)이자 되감기 범위
-4. `CHAT-01`, `CAPTION-01`, `BOOKMARK-01`로 저장 데이터 복원
+4. `CHAT-01`, `CAPTION-01`로 저장 데이터 복원
 5. WebSocket 연결 후 실시간 이벤트 구독
 
 세션 상세가 `LIVE`가 아니면 강사 LiveKit token을 선발급하지 않는다.
@@ -654,32 +652,6 @@ POST /api/lessons/{lessonId}/ai/terms:explain
 
 응답은 짧은 설명과 자료·발화 근거를 반환한다. 근거가 부족하면 정상 응답의 `status=INSUFFICIENT_EVIDENCE` 또는 명시 오류 중 하나로 통일한다.
 
-## 11. 북마크
-
-```http
-POST /api/lessons/{lessonId}/bookmarks
-```
-
-```json
-{
-  "sessionId": "ses_01J...",
-  "sessionMs": 118000
-}
-```
-
-```json
-{
-  "bookmarkId": "bmk_01J...",
-  "lessonId": "les_01J...",
-  "sessionMs": 118000,
-  "createdAt": "2026-08-01T10:02:00+09:00"
-}
-```
-
-- 같은 사용자의 같은 레슨·가까운 시각 중복 정책은 협의 필요
-- `GET`은 라이브와 VOD에서 같은 북마크를 반환
-- `DELETE /bookmarks/{bookmarkId}`는 본인 북마크만 삭제
-
 ## 12. 강사용 질문 핀
 
 ### 12.1 집계
@@ -818,5 +790,4 @@ GET /api/instructor/live-sessions/{sessionId}/processing
 7. recent HLS 유지 범위와 녹화 중 DVR playlist 제공 방식
 8. Egress·STT degraded event와 공개 가능한 failure code
 9. 질문 핀 bucket 크기와 intensity 계산 기준
-10. 북마크 중복 기준
-11. `FAILED` 세션 재시도 또는 새 세션 생성 정책
+10. `FAILED` 세션 재시도 또는 새 세션 생성 정책

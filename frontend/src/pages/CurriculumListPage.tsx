@@ -12,6 +12,7 @@ import PageState from '@/shared/ui/PageState'
 const validSorts = new Set<CurriculumSort>(['LATEST', 'TITLE_ASC'])
 const SEARCH_DEBOUNCE_MS = 300
 const MAX_VISIBLE_PAGES = 5
+const LOADING_ICON_DELAY_MS = 500
 
 function getPageWindow(current: number, total: number, maxVisible: number) {
   if (total <= maxVisible) return Array.from({ length: total }, (_, index) => index)
@@ -33,6 +34,8 @@ export default function CurriculumListPage() {
 
   useEffect(() => setSearchInput(queryText), [queryText])
 
+  const [showLoadingIcon, setShowLoadingIcon] = useState(false)
+
   const curriculumQuery = useCurriculums(
     {
       q: queryText || undefined,
@@ -43,6 +46,16 @@ export default function CurriculumListPage() {
     },
     user ?? undefined,
   )
+
+  const isFetching = curriculumQuery.isFetching
+  useEffect(() => {
+    if (!isFetching) {
+      setShowLoadingIcon(false)
+      return
+    }
+    const timer = window.setTimeout(() => setShowLoadingIcon(true), LOADING_ICON_DELAY_MS)
+    return () => window.clearTimeout(timer)
+  }, [isFetching])
 
   const updateParams = (changes: Record<string, string | null>) => {
     const next = new URLSearchParams(searchParams)
@@ -80,6 +93,11 @@ export default function CurriculumListPage() {
 
   return (
     <div className="catalog-page">
+      {showLoadingIcon && (
+        <div className="catalog-loading-overlay" role="status" aria-label="결과를 업데이트하고 있어요">
+          <span className="spinner" aria-hidden="true" />
+        </div>
+      )}
       <section className="catalog-hero">
         <img className="catalog-hero__art" src={inkLandscapeWide} alt="" aria-hidden="true" decoding="async" fetchPriority="high" />
         <div className="page-container catalog-hero__inner">
@@ -132,7 +150,6 @@ export default function CurriculumListPage() {
             <div className={`curriculum-grid${curriculumQuery.isFetching ? ' is-updating' : ''}`}>
               {data.items.map((curriculum) => <CurriculumCard key={curriculum.curriculumId} curriculum={curriculum} />)}
             </div>
-            {curriculumQuery.isFetching && <span className="catalog-updating" role="status">결과를 업데이트하고 있어요.</span>}
             {data.totalPages > 1 && (() => {
               const pageWindow = getPageWindow(page, data.totalPages, MAX_VISIBLE_PAGES)
               const [firstVisible] = pageWindow

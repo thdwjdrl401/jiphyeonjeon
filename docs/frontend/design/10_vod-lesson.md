@@ -7,7 +7,7 @@
 | `/lessons/:lessonId/replay` | `LessonLayout` | 해당 커리큘럼 강사·수강생 |
 
 ## 목적
-종료된 라이브 레슨의 녹화(HLS)를 재생하며, 교정 자막·채팅 리플레이·PPTX 근거·개인 AI Q&A·북마크·퀴즈를 같은 시간축에서 제공하는 학습 페이지. 강사는 같은 화면에서 AI 결과를 검수·게시한다. 영상 업로드 기능은 없다(녹화 결과만 사용).
+종료된 라이브 레슨의 녹화(HLS)를 재생하며, 교정 자막·채팅 리플레이·PPTX 근거·개인 AI Q&A·퀴즈를 같은 시간축에서 제공하는 학습 페이지. 강사는 같은 화면에서 AI 결과를 검수·게시한다. 영상 업로드 기능은 없다(녹화 결과만 사용).
 
 ## 게시본 개념 (화면에 꼭 반영해야 하는 개념)
 - 강사만 보는 "AI 원본/후보"와 수강생이 보는 "게시본"은 분리되어 있다.
@@ -31,7 +31,6 @@ VodLessonPrimaryContent
 │  └─ PlaybackStateOverlay
 ├─ VodTimeline
 │  ├─ ChapterMarkerLayer
-│  ├─ BookmarkMarkerLayer          수강생
 │  └─ QuestionPinLayer             강사만
 └─ VodCaptionRegion
    ├─ PublishedCaption
@@ -44,7 +43,6 @@ VodLessonSidePanel
 ├─ ChatReplayPanel                 — 시간 동기화 채팅 리플레이(읽기 전용)
 ├─ PersonalAiQuestionPanel
 ├─ LessonMaterialPanel
-├─ BookmarkPanel                   수강생
 └─ QuizPanel                       — 게시된 퀴즈 응시
 
 StudentLearningStatus              수강생 — 마지막 시점·진행률·완료 상태
@@ -76,7 +74,7 @@ LessonStatusRegion
 | 준비 완료 | 공개 중단 | 무관 | 공개 중단 안내, 재생 불가 |
 
 ## 시점 이동 통합
-자막 검색 결과·챕터 선택·AI 답변 근거·PPTX 근거·북마크·퀴즈 연결 구간·강사 질문 핀 — 이 모두가 같은 "플레이어 시점 이동"으로 동작해야 한다(하나의 상호작용 패턴으로 디자인).
+자막 검색 결과·챕터 선택·AI 답변 근거·PPTX 근거·퀴즈 연결 구간·강사 질문 핀 — 이 모두가 같은 "플레이어 시점 이동"으로 동작해야 한다(하나의 상호작용 패턴으로 디자인).
 
 ## 강사 검수 흐름 (화면 내 단계)
 1. 검수 영역 선택(자막/용어/챕터/퀴즈)
@@ -90,7 +88,7 @@ LessonStatusRegion
 - 녹화 자산 준비 중: 이 화면 대신 레슨 상세의 처리 상태로 안내
 - 부분 준비·부분 실패: 준비된 영역만 활성화, 영상 재생은 AI 실패와 무관하게 유지
 - 재생 실패: URL 만료 vs 로딩 실패 구분, 재시도 또는 레슨 상세로 복귀
-- 빈 상태: 채팅 없음 / 북마크 없음(첫 북마크 안내) / 퀴즈 없음·준비 중 / AI Q&A 기록 없음
+- 빈 상태: 채팅 없음 / 퀴즈 없음·준비 중 / AI Q&A 기록 없음
 
 ## 다음 화면
 헤더/타임라인 이동 → 같은 화면 내 시점 이동 · "레슨 상세로" → 07_lesson-detail · 이전/다음 레슨 → 07_lesson-detail(다른 lessonId)

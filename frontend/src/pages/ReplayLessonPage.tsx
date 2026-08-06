@@ -7,7 +7,6 @@ import { useAuth } from '@/features/auth/AuthContext'
 import { getLearningContext } from '@/features/learning/learningService'
 import { getLesson } from '@/features/lesson/lessonService'
 import { resolveLessonPath } from '@/features/lesson/lessonRouting'
-import BookmarkStrip from '@/features/live-session/BookmarkStrip'
 import CaptionDock from '@/features/live-session/CaptionDock'
 import LearningSidebar from '@/features/live-session/LearningSidebar'
 import type { LearningPanel } from '@/features/live-session/liveLearningPreview'
@@ -26,7 +25,6 @@ import {
   getCaptions,
   getGlossary,
   getWatchHeatmap,
-  saveBookmark,
   getChatMessages,
   getLectureNotes,
 } from '@/features/live-session/liveSessionService'
@@ -76,7 +74,6 @@ export default function ReplayLessonPage() {
   const [selectedTermId, setSelectedTermId] = useState<string | null>(null)
   const [positionMs, setPositionMs] = useState(0)
   const [seekRequest, setSeekRequest] = useState<PlaybackSeekRequest | null>(null)
-  const [bookmarked, setBookmarked] = useState(false)
   // 재생바 위에 재시청 곡선을 얹으려면 플레이어 루트가 필요하다(WatchHeatmapCurve).
   const [playerRoot, setPlayerRoot] = useState<HTMLElement | null>(null)
   /*
@@ -146,8 +143,8 @@ export default function ReplayLessonPage() {
     enabled: Boolean(lessonId),
   })
   /*
-   * 진도·북마크. 라이브 화면과 <b>같은 조회</b>다 — 다시보기라고 다른 것을 보여줄 이유가 없고,
-   * 라이브에서 찍은 북마크로 되돌아오는 것이 다시보기의 쓸모다. 강사는 자기 강의에 진도가 없다.
+   * 진도. 라이브 화면과 <b>같은 조회</b>다 — 다시보기라고 다른 것을 보여줄 이유가 없다.
+   * 강사는 자기 강의에 진도가 없다.
    */
   const learningQuery = useQuery({
     queryKey: ['learning-context', lessonId],
@@ -155,18 +152,6 @@ export default function ReplayLessonPage() {
     enabled: Boolean(lessonId) && !isInstructor,
   })
   const progressPercent = learningQuery.data?.progress?.progressPercent ?? null
-  /*
-   * 북마크는 <b>저장한다.</b> 예전에는 별표만 토글하고 아무것도 보내지 않아, 눌러도 아래 띠에
-   * 나타나지 않았다. 라이브와 같은 뮤테이션을 쓴다 — 두 화면이 같은 축(세션 상대 ms)이므로
-   * 라이브에서 찍은 것과 다시보기에서 찍은 것이 한 목록에 쌓이는 것이 맞다.
-   */
-  const bookmarkMutation = useMutation({
-    mutationFn: () => saveBookmark(lessonId, positionMs),
-    onSuccess: () => {
-      setBookmarked(true)
-      void queryClient.invalidateQueries({ queryKey: ['learning-context', lessonId] })
-    },
-  })
   const heatmapQuery = useQuery({
     queryKey: ['watch-heatmap', lessonId, durationMs],
     queryFn: () => getWatchHeatmap(lessonId, durationMs),
@@ -317,7 +302,6 @@ export default function ReplayLessonPage() {
           <Suspense fallback={<div className="video-stage replay-video" role="status">플레이어를 불러오는 중입니다.</div>}>
             <PlaybackPlayer
               backLink={backLink}
-              bookmarked={bookmarked}
               errorMessage={playback.errorMessage}
               headerExtra={headerExtra}
               lessonTitle={lesson.title}
@@ -325,19 +309,12 @@ export default function ReplayLessonPage() {
               playback={playback.playback}
               reloadToken={playback.reloadToken}
               seekRequest={seekRequest}
-              onBookmark={() => bookmarkMutation.mutate()}
               onRetry={playback.reload}
               onRootChange={setPlayerRoot}
               onSessionTimeChange={setPositionMs}
             />
           </Suspense>
           <WatchHeatmapCurve heatmap={heatmapQuery.data ?? null} playerRoot={playerRoot} />
-
-          <BookmarkStrip
-            bookmarks={learningQuery.data?.bookmarks ?? []}
-            canSeek
-            onSeek={seekSession}
-          />
 
           <div {...captionPane.handleProps} />
 
@@ -357,6 +334,7 @@ export default function ReplayLessonPage() {
           lectureNote={noteQuery.data ?? null}
           glossaryTerms={glossary.terms}
           messages={messages}
+          myDisplayName={user?.displayName ?? ''}
           revealThroughMs={positionMs}
           discussionNotice="라이브 당시 채팅을 읽기 전용으로 표시합니다. 질문 필터로 질문만 모아볼 수 있습니다."
           aiContent={aiContent}

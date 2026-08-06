@@ -25,7 +25,7 @@ export const publicPaths = {
 }
 
 /**
- * 커리큘럼 관리 화면의 탭. 탭 선택이 URL에 남아야 알림·북마크·새로고침이 같은 탭을 다시 연다 —
+ * 커리큘럼 관리 화면의 탭. 탭 선택이 URL에 남아야 알림·즐겨찾기·새로고침이 같은 탭을 다시 연다 —
  * 로컬 state에만 두면 "수강생 탭으로 이동"을 링크로 표현할 수 없다.
  */
 export type CurriculumManageTab = 'info' | 'structure' | 'enrollees'

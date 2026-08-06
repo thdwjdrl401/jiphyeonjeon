@@ -943,11 +943,10 @@ body {
 .catalog-summary { min-height: 0; align-items: center; gap: 10px; padding: 0 14px 0 0; border-right: 1px solid var(--border-medium); }
 .catalog-summary > div { display: flex; min-width: 0; align-items: baseline; gap: 8px; }
 .catalog-summary h2 { overflow: hidden; margin: 0; font-size: 1rem; text-overflow: ellipsis; white-space: nowrap; }
-/* 도구줄의 작은 글씨 3곳(개수·초기화·업데이트 안내)이 --ink-500으로 2.97:1이었다.
+/* 도구줄의 작은 글씨 2곳(개수·초기화)이 --ink-500으로 2.97:1이었다.
    커리큘럼 카드의 메타와 같은 결함이라 같은 처방(--ink-muted, 5.69:1)을 쓴다. */
 .catalog-summary p { flex: 0 0 auto; color: var(--ink-muted); font-size: .7rem; white-space: nowrap; }
 .catalog-summary .reset-button { flex: 0 0 auto; margin-left: auto; color: var(--ink-muted); font-size: .68rem; }
-.catalog-updating { color: var(--ink-muted); }
 .catalog-controls + .curriculum-grid,
 .catalog-controls + .page-state { margin-top: 22px; }
 /*
@@ -1551,8 +1550,8 @@ body {
 .learning-sidebar-windowbar,
 .media-tabs { border-color: #333; background: #171717; }
 /* 메시지 목록과 같은 배경(#171717)이면 어디까지가 입력 영역인지 경계가 안 보인다 —
-   한 단계 밝혀 뜨게 한다. */
-.chat-composer { border-color: #333; background: #1c1c1c; }
+   한 단계 밝혀 뜨게 한다. AI 질문 입력창도 채팅 입력창과 같은 표면을 쓴다. */
+.chat-composer, .ai-composer { border-color: #333; background: #1c1c1c; }
 .caption-dock > header strong,
 .media-side strong,
 .learning-panel-heading strong,
@@ -1605,12 +1604,9 @@ body {
    또렷하게 뜨게 한다. */
 .chat-list article { border: 1px solid #2b2b2b; border-radius: 10px; background: #1f1f1f; }
 .chat-list article.is-question { border-left: 2px solid var(--seal); background: #282322; }
-/* 내 메시지 구분색. 원래 --blue-50 자리에 녹색(#1d2a25)이 들어가 있었는데, 이 화면 어디에도
-   초록을 쓰는 곳이 없어 튄다 — seal 계열의 따뜻한 톤으로 맞춘다.
+/* 내 메시지도 남의 메시지와 같은 배경을 쓴다 — 정렬(우측)로만 구분한다.
    is-question은 내 메시지에서도 주황 계열을 유지한다(질문 표시가 정렬보다 중요하다). */
-.chat-list article.is-mine { border-color: #3a332c; background: #262019; }
 .chat-list article.is-mine.is-question { border-left-color: var(--seal); background: #282322; }
-.chat-list article.is-mine p { color: #e6e6e1; }
 .chat-list strong { color: #f2f2ef; font-size: .75rem; }
 .chat-list time { color: #9a9a95; font-size: .66rem; }
 .chat-list p { color: #d1d1cc; font-size: .78rem; }
@@ -1622,6 +1618,13 @@ body {
 .ai-evidence .evidence-card__kind,
 .ai-evidence .evidence-card__id { color: #9c9c98; }
 .ai-evidence-panel .ai-evidence__note { color: #9c9c98; }
+/* 정보 버튼도 근거 토글·최근 이동 알약과 같은 표면(#222 위 #444 테두리)을 쓴다 — 채팅 탭의
+   필터 버튼과 같은 색 계열이라 두 탭을 오가도 톤이 튀지 않는다. */
+.ai-composer__info-button { border-color: #444; background: #222; color: #ddd; }
+.ai-composer__info-button:hover,
+.ai-composer__info-button[aria-expanded="true"] { border-color: #777; background: #2a2a2a; color: #fff; }
+.ai-composer__info-popover { border-color: #333; background: #202020; color: #ccc; box-shadow: none; }
+.ai-composer__notice { color: #9c9c98; }
 
 /*
  * 잉크 모드로 넘어오지 못한 라이트 테마 잔재.
@@ -1685,7 +1688,7 @@ body {
 .glossary-detail p { color: #ccc; }
 .ai-empty p,
 .ai-answer p { color: #bbb; }
-.ai-empty__avatar { border-color: #333; filter: grayscale(1); }
+.ai-empty__avatar { border-color: #333; }
 .review-toolbar { border-color: #444; border-radius: 0; background: #1a1a1a; }
 .review-toolbar strong { color: #ddd; }
 .replay-outline button { color: #ddd; }
@@ -1887,16 +1890,6 @@ body {
   .curriculum-cover img { transition: none; }
 }
 
-/* 내 북마크 스트립 — 플레이어와 자막 독 사이의 얇은 줄. 자주 보는 것이 아니라 사이드바 탭을 늘리지 않는다. */
-.bookmark-strip { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
-  padding: .5rem .75rem; border: 1px solid #333; border-radius: .5rem; background: #171717; }
-.bookmark-strip__label { font-size: .75rem; color: rgba(255,255,255,.58); white-space: nowrap; }
-.bookmark-strip ul { display: flex; gap: .4rem; flex-wrap: wrap; margin: 0; padding: 0; list-style: none; }
-.bookmark-strip button, .bookmark-strip time { font-variant-numeric: tabular-nums; font-size: .78rem;
-  padding: .18rem .5rem; border-radius: .35rem; }
-.bookmark-strip button { border: 1px solid #444; background: transparent; color: #fff; cursor: pointer; }
-.bookmark-strip button:hover { border-color: #fff; }
-.bookmark-strip time { color: rgba(255,255,255,.58); }
 /* 송출 화질 패널 — 미리보기 아래 접히는 줄. 기본은 닫혀 있어 미리보기를 가리지 않는다. */
 .quality-panel { display: flex; align-items: flex-start; gap: 1rem; flex-wrap: wrap;
   padding: .6rem .75rem; border: 1px solid #333; border-radius: .5rem; background: #171717; }

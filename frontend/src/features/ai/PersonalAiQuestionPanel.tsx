@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useReducer,
   useRef,
@@ -102,6 +103,9 @@ export default function PersonalAiQuestionPanel({
 }: PersonalAiQuestionPanelProps) {
   const [conversation, dispatch] = useReducer(reduceAiConversation, emptyAiConversationState)
   const [question, setQuestion] = useState('')
+  const [isInfoOpen, setInfoOpen] = useState(false)
+  const infoPopoverId = useId()
+  const infoRef = useRef<HTMLDivElement>(null)
   // 진행 중인 요청의 중단 핸들. 새 질문·취소·언마운트가 모두 같은 핸들을 끊는다.
   const requestRef = useRef<AbortController | null>(null)
   const turnSequence = useRef(0)
@@ -128,6 +132,15 @@ export default function PersonalAiQuestionPanel({
 
   useEffect(() => { conversationRef.current = conversation }, [conversation])
   useEffect(() => () => requestRef.current?.abort(), [])
+  // 안내 드롭다운 바깥을 누르면 닫는다 — 열려 있을 때만 듣는다.
+  useEffect(() => {
+    if (!isInfoOpen) return
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!infoRef.current?.contains(event.target as Node)) setInfoOpen(false)
+    }
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => document.removeEventListener('pointerdown', handlePointerDown)
+  }, [isInfoOpen])
   useEffect(() => {
     if (isAvailable) return
     requestRef.current?.abort()
@@ -250,7 +263,7 @@ export default function PersonalAiQuestionPanel({
                 {/* 빈 상태는 대화가 하나도 없을 때만. 답변이 온 뒤에도 남아 있으면 이력을 밀어낸다. */}
                 <div className="ai-empty">
                   <img className="ai-empty__avatar" src={yeongsilImage} alt="AI 질문 도우미 영실" />
-                  <h3>한 번 아뢰어 보거라</h3>
+                  <h3>여쭙거라</h3>
                   <p>{isAvailable ? emptyDescription : notice}</p>
                 </div>
                 {!isAvailable && <InlineNotice tone="warning">{notice}</InlineNotice>}
@@ -276,8 +289,23 @@ export default function PersonalAiQuestionPanel({
           onChange={(event) => setQuestion(event.target.value)}
           onKeyDown={handleKeyDown}
         />
-        <div className="ai-composer__row">
-          <small>{isAvailable ? MEMORY_ONLY_NOTE : notice}</small>
+        <div className="ai-composer__side">
+          <div className="ai-composer__info" ref={infoRef}>
+            <button
+              aria-controls={infoPopoverId}
+              aria-expanded={isInfoOpen}
+              className="ai-composer__info-button"
+              onClick={() => setInfoOpen((open) => !open)}
+              type="button"
+            >
+              <span aria-hidden="true">i</span>
+              <span className="visually-hidden">대화 보관 안내</span>
+            </button>
+            {/* 접혀도 DOM에 남긴다 — aria-controls가 가리키는 대상이 사라지면 참조가 끊긴다(근거 토글과 같은 요령). */}
+            <div className="ai-composer__info-popover" hidden={!isInfoOpen} id={infoPopoverId} role="note">
+              {MEMORY_ONLY_NOTE}
+            </div>
+          </div>
           {/* 응답 중에는 전송 자리가 중단으로 바뀐다 — 좁은 패널에서 버튼을 늘리지 않고 겹침도 막는다. */}
           {isStreaming
             ? (
@@ -295,6 +323,7 @@ export default function PersonalAiQuestionPanel({
               </button>
             )}
         </div>
+        {!isAvailable && <small className="ai-composer__notice">{notice}</small>}
       </form>
     </>
   )

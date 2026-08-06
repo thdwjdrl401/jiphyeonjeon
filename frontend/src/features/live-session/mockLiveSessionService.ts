@@ -21,7 +21,6 @@ import type {
 
 const liveStatusOverrides = new Map<string, CurriculumLiveSessionStatus>()
 const liveStartOperations = new Map<string, string>()
-const bookmarksByLesson = new Map<string, number[]>()
 const processingPollCounts = new Map<string, number>()
 const stateSubscribers = new Map<string, Set<(event: LiveSessionStateEvent) => void>>()
 const mockLivePlaybackUrl = 'https://files.vidstack.io/sprite-fight/hls/stream.m3u8'
@@ -115,7 +114,6 @@ const defaultGlossaryTerms: GlossaryTerm[] = [
 export function resetMockLiveSessions() {
   liveStatusOverrides.clear()
   liveStartOperations.clear()
-  bookmarksByLesson.clear()
   processingPollCounts.clear()
   chatSubscribers.clear()
   captionSubscribers.clear()
@@ -453,10 +451,6 @@ export const mockLiveSessionService = {
         ],
       },
     })
-  },
-  async saveBookmark(lessonId, sessionMs) {
-    const bookmarks = bookmarksByLesson.get(lessonId) ?? []
-    bookmarksByLesson.set(lessonId, [...bookmarks, sessionMs])
   },
   async getAiAnswerHistory(sessionId) {
     // 목도 서버와 같은 모양을 돌려준다 — 목이 다르면 실서버에서만 깨지는 화면이 된다.
