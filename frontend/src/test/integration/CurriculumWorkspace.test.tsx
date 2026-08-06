@@ -59,6 +59,64 @@ describe('커리큘럼 작업 화면', () => {
     expect(screen.getByRole('heading', { name: '커리큘럼 게시' })).toBeInTheDocument()
   })
 
+  /**
+   * 요약 툴바의 수강생 수. 서버가 이 값을 주지 않으면 화면이 조용히 `--`로 떨어지므로
+   * (실제로 그 상태였다 — 응답에 필드 자체가 없었다) 실제 숫자가 그려지는지 못박는다.
+   */
+  it('요약 툴바가 수강생 수를 보여 준다', async () => {
+    await renderAsInstructor('/instructor/curriculums/cur-architecture/manage')
+
+    const summary = await screen.findByRole('group', { name: '커리큘럼 관리 요약' })
+    const enrollees = within(summary).getByText('수강생').parentElement!
+    expect(enrollees).toHaveTextContent(String(getMockCurriculum('cur-architecture')!.enrolleeCount))
+    expect(enrollees).not.toHaveTextContent('--')
+  })
+
+  /**
+   * 자동 저장 실패는 <b>토스트로</b> 알린다.
+   *
+   * <p>예전에는 요약 툴바 위에 inline-notice를 끼워 넣었다. 자동 저장은 편집 중(디바운스 1초)에
+   * 도는 것이라, 그 한 줄이 들어올 때마다 <b>글을 쓰는 손 밑에서</b> 화면 전체가 59px 내려갔다.
+   * 실제 브라우저에서 잰 값이다.
+   */
+  it('자동 저장이 실패하면 토스트로 알리고 요약 툴바를 밀어내지 않는다', async () => {
+    vi.spyOn(mockCurriculumManagementService, 'saveCurriculumManagement')
+      .mockRejectedValue(new Error('boom'))
+    await renderAsInstructor('/instructor/curriculums/cur-architecture/manage')
+
+    const summary = await screen.findByRole('group', { name: '커리큘럼 관리 요약' })
+    const before = summary.compareDocumentPosition(document.body)
+
+    const [sectionTitle] = screen.getAllByLabelText(/^섹션 \d+ 이름$/)
+    fireEvent.change(sectionTitle, { target: { value: '이름을 바꾼 섹션' } })
+
+    // 알림 영역(toast-viewport) 안에서 나와야 한다 — 본문 흐름에 끼면 아래가 통째로 밀린다.
+    const viewport = await screen.findByRole('region', { name: '알림' })
+    await waitFor(() => expect(within(viewport).getByText('변경 내용을 자동 저장하지 못했습니다.')).toBeInTheDocument())
+
+    expect(summary.compareDocumentPosition(document.body)).toBe(before)
+    // 헤더의 상태 칩은 그대로 남아 지속 신호 역할을 한다.
+    expect(screen.getByText('저장 실패')).toBeInTheDocument()
+  })
+
+  /** 같은 실패가 이어져도 토스트를 쌓지 않는다 — 서버가 계속 죽어 있으면 편집할 때마다 한 장씩 는다. */
+  it('같은 저장 실패가 반복돼도 토스트를 겹쳐 쌓지 않는다', async () => {
+    vi.spyOn(mockCurriculumManagementService, 'saveCurriculumManagement')
+      .mockRejectedValue(new Error('boom'))
+    await renderAsInstructor('/instructor/curriculums/cur-architecture/manage')
+    await screen.findByRole('group', { name: '커리큘럼 관리 요약' })
+
+    const [sectionTitle] = screen.getAllByLabelText(/^섹션 \d+ 이름$/)
+    fireEvent.change(sectionTitle, { target: { value: '한 번' } })
+    const viewport = await screen.findByRole('region', { name: '알림' })
+    await waitFor(() => expect(within(viewport).getByText('변경 내용을 자동 저장하지 못했습니다.')).toBeInTheDocument())
+
+    fireEvent.change(sectionTitle, { target: { value: '두 번' } })
+    await waitFor(() => expect(
+      within(viewport).getAllByText('변경 내용을 자동 저장하지 못했습니다.'),
+    ).toHaveLength(1))
+  })
+
   it('게시 카드는 기본 정보 탭이 아니라 구성 탭에만 있다', async () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/cur-architecture/manage')

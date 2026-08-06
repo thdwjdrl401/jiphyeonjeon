@@ -1382,6 +1382,21 @@ body {
 .status-pill--danger,
 .status-pill--live { border-color: rgba(182,59,50,.32); background: var(--red-50); color: var(--seal); }
 .inline-notice { border-color: var(--border-medium); border-radius: 0; background: var(--ink-50); color: var(--ink-800); font-size: .8rem; }
+/*
+ * 톤을 다시 세운다. 이 파일이 main.tsx에서 <b>맨 뒤에</b> 로드되므로 위 base 규칙이 workspace.css의
+ * 톤 규칙(.inline-notice--danger 등)을 같은 특이도로 이겨 버렸고, 그 결과 danger·warning·success·info가
+ * 전부 같은 회색으로 나왔다 — 저장 실패가 안내문과 구분되지 않는다.
+ *
+ * <p>[ADR-0021](../../../docs/decisions/yoongwanghyeok/0021-modern-ink-monotone-curation-ui.md) §8이
+ * "의미 있는 상태색은 모노톤 전환 뒤에도 식별 가능해야 한다"고 못박은 지점이다. 색은 새로 만들지 않고
+ * 이 시스템의 먹·인주 팔레트에서 고른다 — 바로 위 .status-pill--* 이 쓰는 것과 같은 값이다.
+ *
+ * <p>warning에 색을 하나 더 만들지 않은 이유: 모노톤 팔레트에 호박색이 없다. 인주색 세로선으로
+ * 주의를 주고 바탕은 중립으로 둔다 — danger(붉은 바탕)와 한눈에 갈린다.
+ */
+.inline-notice--success { border-color: rgba(52,92,75,.35); background: var(--green-50); color: var(--green-700); }
+.inline-notice--warning { border-left: 3px solid var(--seal); background: var(--ink-50); color: var(--ink-800); }
+.inline-notice--danger { border-color: rgba(182,59,50,.32); background: var(--red-50); color: var(--seal); }
 .form-grid input,
 .form-grid textarea,
 .form-grid select,
@@ -1710,6 +1725,17 @@ body {
 /* Toast */
 .toast { border-radius: 4px; background: var(--ink-950); color: #fff; box-shadow: var(--shadow-md); }
 .toast__close { color: rgba(255,255,255,.66); }
+/*
+ * 여기도 같은 문제였다 — 이 base가 toast.css의 톤 규칙을 이겨, 성공 토스트와 실패 토스트가 똑같은
+ * 먹색 상자로 나왔다. 유일하게 살아남은 차이가 1px 테두리 색이라 실질적으로 구분되지 않았다.
+ *
+ * <p>바탕을 밝히지는 않는다(먹색 칩이 이 시스템의 토스트다). 대신 왼쪽에 굵은 인장선을 세우고
+ * 어두운 바탕에서도 읽히는 밝은 톤을 쓴다 — var(--seal) 계열은 먹색 위에서 탁해진다.
+ */
+.toast { border-left-width: 4px; }
+.toast--success { border-left-color: #7fb59c; }
+.toast--warning { border-left-color: #d8a45f; }
+.toast--danger { border-left-color: #e2766c; }
 
 @media (max-width: 1080px) {
   .welcome-hero__grid { grid-template-columns: minmax(330px,.8fr) minmax(440px,1.2fr); gap: 38px; }
