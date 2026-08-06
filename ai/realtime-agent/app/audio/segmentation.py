@@ -42,7 +42,7 @@ class VadSegmenter:
         sample_rate: int = 16_000,
         frame_ms: int = 20,
         pad_ms: int = 200,
-        min_speech_ms: int = 300,
+        min_speech_ms: int = 500,
         max_speech_ms: int = 8_000,
         silence_close_ms: int = 500,
         *,
@@ -175,7 +175,10 @@ class VadSegmenter:
             raise RuntimeError(
                 "webrtcvad is required when no voice activity detector is provided"
             ) from exc
-        return cast(VoiceActivityDetector, module.Vad(2))
+        # Whisper is prone to producing plausible text for non-speech audio.
+        # Use WebRTC VAD's strictest mode so short background noises do not
+        # become transcription requests.
+        return cast(VoiceActivityDetector, module.Vad(3))
 
     @staticmethod
     def _validate_policy(

@@ -132,6 +132,28 @@ def test_short_speech_is_discarded_when_silence_closes_it() -> None:
     assert segmenter.finish() == []
 
 
+def test_default_policy_requires_half_a_second_of_detected_speech() -> None:
+    short_frames = [_frame(100) for _ in range(24)]
+    short = VadSegmenter(
+        pad_ms=0,
+        vad=FakeVad([True] * len(short_frames)),
+    )
+
+    assert short.push(_chunk(*short_frames)) == []
+    assert short.finish() == []
+
+    eligible_frames = [_frame(100) for _ in range(25)]
+    eligible = VadSegmenter(
+        pad_ms=0,
+        vad=FakeVad([True] * len(eligible_frames)),
+    )
+
+    assert eligible.push(_chunk(*eligible_frames)) == []
+    segments = eligible.finish()
+    assert len(segments) == 1
+    assert segments[0].end_ms - segments[0].start_ms == 500
+
+
 def test_segmenter_preserves_normalizer_state_across_source_chunks() -> None:
     samples = [(index % 2_000) - 1_000 for index in range(1_001)]
     pcm = struct.pack("<" + "h" * len(samples), *samples)

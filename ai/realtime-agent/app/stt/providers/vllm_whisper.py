@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import io
+import json
+import logging
 import math
 import wave
 from collections.abc import AsyncIterator
@@ -16,6 +18,14 @@ from app.stt.providers.segmented import (
     SegmentedStreamingEngine,
     SpeechSegmenter,
 )
+
+logger = logging.getLogger(__name__)
+
+_NORMAL_FINISH_REASON = "stop"
+_MIN_REPEATED_COPIES = 4
+_MAX_REPEATED_UNIT_CHARS = 24
+_MIN_REPEATED_SPAN_CHARS = 8
+_MIN_REPEATED_SHARE = 0.6
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,7 +144,10 @@ class VllmWhisperStreamingEngine(SegmentedStreamingEngine):
         segment: SpeechSegment,
         context: SttStreamContext,
     ) -> AsyncIterator[str | ProviderSegmentFinal]:
-        response = await self._client.post(
+        parts: list[str] = []
+        finish_reason: str | None = None
+        async with self._client.stream(
+            "POST",
             "audio/transcriptions",
             data={
                 "model": self._configuration.model,
@@ -142,16 +155,43 @@ class VllmWhisperStreamingEngine(SegmentedStreamingEngine):
                 "response_format": "json",
                 "temperature": "0",
                 "seed": "0",
+                "stream": "true",
             },
             files={"file": ("segment.wav", _wav_payload(segment), "audio/wav")},
-        )
-        response.raise_for_status()
-        text = response.json().get("text")
-        if not isinstance(text, str):
-            raise TypeError("vLLM response does not contain string field text")
+        ) as response:
+            response.raise_for_status()
+            async for line in response.aiter_lines():
+                if not line.startswith("data: "):
+                    continue
+                data = line.removeprefix("data: ")
+                if data == "[DONE]":
+                    break
+                content, event_finish_reason = _transcription_stream_event(data)
+                parts.append(content)
+                if event_finish_reason is not None:
+                    finish_reason = event_finish_reason
+
+        text = "".join(parts).strip()
         if text.startswith("language ") and "<asr_text>" in text:
             text = text.split("<asr_text>", 1)[1]
-        yield ProviderSegmentFinal(text.strip())
+        text = text.strip()
+        if finish_reason != _NORMAL_FINISH_REASON:
+            logger.warning(
+                "suppressed Whisper transcription without EOS completion: "
+                "finish_reason=%s segment_duration_ms=%d",
+                finish_reason,
+                segment.end_ms - segment.start_ms,
+            )
+            return
+        if _is_pathologically_repetitive(text):
+            logger.warning(
+                "suppressed pathologically repetitive Whisper transcription: "
+                "segment_duration_ms=%d output_chars=%d",
+                segment.end_ms - segment.start_ms,
+                len(text),
+            )
+            return
+        yield ProviderSegmentFinal(text)
 
     async def _close_provider(self) -> None:
         await self._client.aclose()
@@ -183,6 +223,53 @@ def _served_model_ids(payload: object) -> set[str]:
         for item in payload["data"]
         if isinstance(item, dict) and isinstance(item.get("id"), str)
     }
+
+
+def _transcription_stream_event(data: str) -> tuple[str, str | None]:
+    payload = json.loads(data)
+    if not isinstance(payload, dict):
+        raise TypeError("vLLM transcription stream event must be an object")
+    choices = payload.get("choices")
+    if not isinstance(choices, list) or len(choices) != 1 or not isinstance(choices[0], dict):
+        raise TypeError("vLLM transcription stream event must contain one choice")
+    choice = choices[0]
+    delta = choice.get("delta")
+    if not isinstance(delta, dict):
+        raise TypeError("vLLM transcription stream choice must contain a delta")
+    content = delta.get("content", "")
+    if not isinstance(content, str):
+        raise TypeError("vLLM transcription stream delta content must be a string")
+    finish_reason = choice.get("finish_reason")
+    if finish_reason is not None and not isinstance(finish_reason, str):
+        raise TypeError("vLLM transcription finish_reason must be a string or null")
+    return content, finish_reason
+
+
+def _is_pathologically_repetitive(text: str) -> bool:
+    compact = " ".join(text.split())
+    text_length = len(compact)
+    if text_length < _MIN_REPEATED_SPAN_CHARS:
+        return False
+
+    maximum_unit = min(_MAX_REPEATED_UNIT_CHARS, text_length // _MIN_REPEATED_COPIES)
+    required_span = max(
+        _MIN_REPEATED_SPAN_CHARS,
+        int(text_length * _MIN_REPEATED_SHARE),
+    )
+    for start in range(text_length):
+        for unit_length in range(1, maximum_unit + 1):
+            unit_end = start + unit_length
+            if unit_end > text_length:
+                break
+            unit = compact[start:unit_end]
+            copies = 1
+            cursor = unit_end
+            while compact.startswith(unit, cursor):
+                copies += 1
+                cursor += unit_length
+            if copies >= _MIN_REPEATED_COPIES and copies * unit_length >= required_span:
+                return True
+    return False
 
 
 def _wav_payload(segment: SpeechSegment) -> bytes:

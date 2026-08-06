@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
 
@@ -16,6 +18,34 @@ from app.stt.providers.vllm_whisper import (
     VllmWhisperStreamingEngine,
     probe_vllm_whisper_runtime,
 )
+
+
+def stream_response(*contents: str, finish_reason: str = "stop") -> str:
+    events = [
+        "data: "
+        + json.dumps(
+            {"choices": [{"delta": {"content": content}}]},
+            ensure_ascii=False,
+        )
+        + "\n\n"
+        for content in contents
+    ]
+    events.append(
+        "data: "
+        + json.dumps(
+            {
+                "choices": [
+                    {
+                        "delta": {"content": ""},
+                        "finish_reason": finish_reason,
+                    }
+                ]
+            }
+        )
+        + "\n\n"
+    )
+    events.append("data: [DONE]\n\n")
+    return "".join(events)
 
 
 class SingleSegmenter:
@@ -98,8 +128,13 @@ async def test_engine_emits_one_authoritative_final_per_common_vad_segment() -> 
         assert b"liveclass-whisper-large-v3" in body
         assert b'name="language"' in body
         assert b"ko" in body
+        assert b'name="stream"' in body
+        assert b"true" in body
         assert b"RIFF" in body
-        return httpx.Response(200, json={"text": "language Korean<asr_text>여기를 보세요."})
+        return httpx.Response(
+            200,
+            text=stream_response("language Korean<asr_text>", "여기를 보세요."),
+        )
 
     engine = VllmWhisperStreamingEngine(
         configuration(),
@@ -123,6 +158,42 @@ async def test_engine_emits_one_authoritative_final_per_common_vad_segment() -> 
         "/v1/models",
         "/v1/audio/transcriptions",
     ]
+
+
+@pytest.mark.parametrize(
+    ("text", "finish_reason"),
+    [
+        ("5 " * 200, "stop"),
+        ("그래서" * 80, "stop"),
+        ("정상으로 시작했지만 끝나지 않은 문장", "length"),
+    ],
+)
+async def test_engine_suppresses_repetition_and_non_eos_completion(
+    text: str,
+    finish_reason: str,
+) -> None:
+    segment = SpeechSegment(b"\x01\x00" * 8_000, 16_000, 0, 500)
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/models"):
+            return httpx.Response(200, json={"data": [{"id": "liveclass-whisper-large-v3"}]})
+        return httpx.Response(
+            200,
+            text=stream_response(text, finish_reason=finish_reason),
+        )
+
+    engine = VllmWhisperStreamingEngine(
+        configuration(),
+        segmenter=SingleSegmenter(segment),
+        transport=httpx.MockTransport(handler),
+    )
+
+    await engine.start_stream(SttStreamContext("stream-1", "ko-KR"))
+    await engine.finish()
+    events = [event async for event in engine.events()]
+    await engine.close()
+
+    assert events == [EngineCompleted(0)]
 
 
 async def test_engine_checks_runtime_before_accepting_a_stream() -> None:
