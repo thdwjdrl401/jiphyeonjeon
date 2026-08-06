@@ -5,7 +5,11 @@ from types import SimpleNamespace
 import pytest
 from pydantic import ValidationError
 
-from app.adapters.gms_openai_lecture_note import GmsOpenAILectureNoteModel, is_reasoning_model
+from app.adapters.gms_openai_lecture_note import (
+    GmsOpenAILectureNoteModel,
+    LectureNoteOutputBudgetError,
+    is_reasoning_model,
+)
 from app.lecture_notes import (
     LectureNote,
     LectureNoteDecisionAction,
@@ -49,8 +53,23 @@ class FakeDraftCompletions:
         outcome = self.outcomes[len(self.calls) - 1]
         if isinstance(outcome, BaseException):
             raise outcome
+        if outcome == "length":
+            # 출력 예산 소진: 추론 토큰이 전부 소비돼 content가 빈 응답 (실사고 payload 형태)
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        finish_reason="length",
+                        message=SimpleNamespace(content="", parsed=None),
+                    )
+                ]
+            )
         return SimpleNamespace(
-            choices=[SimpleNamespace(message=SimpleNamespace(content=None, parsed=outcome))]
+            choices=[
+                SimpleNamespace(
+                    finish_reason="stop",
+                    message=SimpleNamespace(content=None, parsed=outcome),
+                )
+            ]
         )
 
 
@@ -154,6 +173,29 @@ def test_draft_model_retries_schema_failure_once() -> None:
         assert len(client.beta.chat.completions.calls) == 2
         repair = client.beta.chat.completions.calls[1]["messages"][-1]["content"]
         assert "schema validation" in repair
+
+    asyncio.run(scenario())
+
+
+def test_draft_model_fails_fast_when_output_budget_is_exhausted() -> None:
+    """finish_reason=length는 재작성으로 못 고친다 — 같은 예산으로 다시 부르면 같은 자리에서
+    잘린다. 두 번째 호출 없이 즉시 전용 오류로 실패해야 한다(실사고: 예산 512를 추론 토큰이
+    전부 소진해 content가 빈 문자열, 창 자막이 영구 재시도에 갇힘)."""
+
+    async def scenario() -> None:
+        client = FakeDraftClient("length", _draft_result())
+        model = GmsOpenAILectureNoteModel(
+            api_key="test-key",
+            model="gpt-test",
+            max_output_tokens=512,
+            max_prompt_chars=20_000,
+            timeout_seconds=30,
+            client=client,
+        )
+
+        with pytest.raises(LectureNoteOutputBudgetError):
+            await model.generate_draft(_draft_request())
+        assert len(client.beta.chat.completions.calls) == 1
 
     asyncio.run(scenario())
 

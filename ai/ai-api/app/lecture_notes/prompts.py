@@ -21,6 +21,10 @@ action 판단 규칙:
 
 반환 규칙:
 - IGNORE: {{"action":"IGNORE","currentTopic":null,"newTopic":null}}
+- IGNORE는 이번 자막을 반영하지 않겠다는 뜻일 뿐입니다. 서버가 기존 노트를 그대로 보존하므로
+  currentTopic을 null로 반환해도 기존 item은 사라지지 않습니다.
+- UPDATE_CURRENT와 IGNORE 사이에서 판단이 애매하면 IGNORE를 고릅니다 — 버린 자막은 서버가
+  다음 창 앞에 다시 붙여 보여줍니다.
 - 현재 노트가 비어 있고 lectureText에 기록할 강의 내용이 있으면 반드시 START_NEW를 선택합니다.
 - UPDATE_CURRENT: currentTopic에 새 자막까지 반영한 현재 주제 전체 내용을 반환하고 newTopic은 null로 둡니다.
 - START_NEW: 기존 주제가 있으면 currentTopic에 최종 정리한 기존 주제 전체 내용을, newTopic에 새 주제 내용을 반환합니다.
