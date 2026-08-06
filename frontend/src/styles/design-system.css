@@ -1254,24 +1254,11 @@ body {
   font-weight: 400;
   letter-spacing: -.02em;
 }
-.workspace-user small {
-  color: var(--ink-500);
-  font-size: .56rem;
-  font-weight: 500;
-  letter-spacing: .13em;
-}
 .workspace-sidebar:not(.workspace-sidebar--lesson) nav {
   display: flex;
   gap: 0;
   padding: 0;
   flex-direction: column;
-}
-.workspace-sidebar__nav-label {
-  margin-bottom: 15px;
-  color: var(--ink-500);
-  font-size: .58rem;
-  font-weight: 500;
-  letter-spacing: .16em;
 }
 .workspace-sidebar:not(.workspace-sidebar--lesson) nav a {
   position: relative;
@@ -1909,7 +1896,6 @@ body {
     grid-template-columns: repeat(3,minmax(0,1fr));
     column-gap: 24px;
   }
-  .workspace-sidebar__nav-label { grid-column: 1 / -1; }
   .workspace-sidebar__tip { display: none; }
   .workspace-sidebar--lesson { border-right: 0; }
   .workspace-sidebar--lesson .workspace-sidebar__masthead { margin-bottom: 26px; }
