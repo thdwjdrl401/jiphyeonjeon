@@ -33,7 +33,7 @@ describe('LiveClass AI 공개 페이지', () => {
     const user = userEvent.setup()
     renderAt('/curriculums')
 
-    const search = screen.getByPlaceholderText('제목과 소개로 검색')
+    const search = screen.getByPlaceholderText('제목으로 검색')
     await user.type(search, 'WebRTC')
 
     await waitFor(() => expect(window.location.search).toContain('q=WebRTC'))
