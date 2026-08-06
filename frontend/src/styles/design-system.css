@@ -1145,10 +1145,19 @@ body {
 }
 .workspace-sidebar__masthead strong { font: inherit; }
 .workspace-sidebar__masthead--lesson { margin-bottom: 52px; }
+/*
+ * MY PAGE는 두 줄로 쌓지 않고 한 줄로 낸다 — LESSON/INDEX 등 다른 머스트헤드는 그대로 둔다.
+ * 한 줄이라 두 줄일 때보다 세로로 짧아 위쪽이 허전해 보인다 — 위에서 살짝 내려, 예전 두 줄
+ * 블록의 세로 중간쯤에 오도록 한다. 아래 여백은 같은 만큼 줄여 다음 요소 위치는 그대로 둔다.
+ */
+.workspace-sidebar__masthead--inline { flex-direction: row; align-items: baseline; gap: 6px; margin: 22px 0 66px; }
+/* 프로필 요약과 아래 메뉴를 가르는 구분선 — 하단 tip의 border-top과 같은 톤을 써서 사이드바 안에서 같은 규칙으로 읽힌다. */
 .workspace-user {
   display: block;
-  padding: 0 0 30px;
+  margin-bottom: 24px;
+  padding: 0 0 24px;
   border: 0;
+  border-bottom: 1px solid var(--border-soft);
 }
 .workspace-user .user-avatar { display: none; }
 .workspace-user div { gap: 4px; }
