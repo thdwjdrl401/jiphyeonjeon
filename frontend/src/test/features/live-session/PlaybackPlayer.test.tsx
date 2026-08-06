@@ -41,7 +41,6 @@ describe('재생 플레이어', () => {
 
     render(
       <PlaybackPlayer
-        bookmarked={false}
         errorMessage="영상이 아직 준비되지 않았습니다."
         lessonTitle="세션별 라이브"
         loading={false}
@@ -64,7 +63,6 @@ describe('재생 플레이어', () => {
     // Egress 지연은 정상 상태다. 오류로 표시하면 사용자가 기다리지 않고 이탈한다.
     render(
       <PlaybackPlayer
-        bookmarked={false}
         errorMessage={null}
         lessonTitle="세션별 라이브"
         loading={false}
@@ -86,7 +84,6 @@ describe('재생 플레이어', () => {
   it('세션이 끝나면 LIVE 표시를 내린다', () => {
     render(
       <PlaybackPlayer
-        bookmarked={false}
         errorMessage={null}
         lessonTitle="종료된 강의"
         loading={false}

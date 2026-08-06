@@ -136,11 +136,21 @@ describe('개인 AI 질문 패널 — 대화형 UX', () => {
     expect(harness.calls).toHaveLength(2)
   })
 
-  it('이력이 서버에 남지 않는다는 것을 입력창에서 밝힌다', () => {
+  it('이력이 서버에 남지 않는다는 것을 정보 아이콘 드롭다운에서 밝힌다', async () => {
+    const user = userEvent.setup()
     renderPanel({ ask: controllableAsk().ask })
 
+    const infoButton = screen.getByRole('button', { name: '대화 보관 안내' })
+    expect(infoButton).toHaveAttribute('aria-expanded', 'false')
+
     // "저장됨"으로 읽히면 안 된다 — AI-HISTORY-01이 없어 새로고침하면 사라진다.
-    expect(screen.getByText('대화는 이 화면에서만 유지되며 새로고침하면 사라집니다.')).toBeInTheDocument()
+    await user.click(infoButton)
+    expect(infoButton).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByText('대화는 이 화면에서만 유지되며 새로고침하면 사라집니다.')).toBeVisible()
+
+    // 다른 영역을 누르면 닫힌다.
+    await user.click(document.body)
+    expect(infoButton).toHaveAttribute('aria-expanded', 'false')
   })
 
   it('answer.done의 근거는 접힌 토글로 요약되고, 펼치면 표시 전용 목록이 나온다', async () => {

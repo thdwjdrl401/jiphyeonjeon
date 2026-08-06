@@ -18,6 +18,7 @@ function sidebar(messages: ChatMessageView[]) {
       lectureNote={null}
       glossaryTerms={[]}
       messages={messages}
+      myDisplayName="나"
       aiContent={null}
       noteContext="LIVE"
     />
@@ -51,7 +52,7 @@ describe('채팅 메시지 좌우 정렬', () => {
     expect(articleOf(container, 'mine 없음').className).not.toContain('is-mine')
   })
 
-  it('내 메시지에는 이름을 쓰지 않는다 — 우측 정렬이 곧 "내 것" 표시다', () => {
+  it('내 메시지에는 alias 대신 내 닉네임을 쓴다', () => {
     render(sidebar([
       { id: 'm1', alias: '수강생-0473', text: '남의 것', time: '10:00' },
       { id: 'm2', alias: '수강생-9999', text: '내 것', time: '10:01', mine: true },
@@ -59,6 +60,7 @@ describe('채팅 메시지 좌우 정렬', () => {
 
     expect(screen.getByText('수강생-0473')).toBeInTheDocument()
     expect(screen.queryByText('수강생-9999')).not.toBeInTheDocument()
+    expect(screen.getByText('나')).toBeInTheDocument()
   })
 
   it('낙관적 항목(시각 미확정)은 우측이면서 빈 시각을 그리지 않는다', () => {

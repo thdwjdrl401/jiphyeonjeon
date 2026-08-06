@@ -1,5 +1,6 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
 import HlsMediaPlayer, {
+  type HlsMediaControlsHandle,
   type HlsMediaSeekRequest,
   type HlsMediaState,
 } from '@/features/media/HlsMediaPlayer'
@@ -22,7 +23,6 @@ interface PlaybackPlayerProps {
   lessonTitle: string
   /** 지금 보고 있는 사람 수. 다시보기에는 그런 것이 없으므로 주지 않으면 표시하지 않는다. */
   participantCount?: number
-  bookmarked: boolean
   onBookmark: () => void
   onRetry: () => void
   onSessionTimeChange: (sessionMs: number) => void
@@ -75,7 +75,6 @@ export default function PlaybackPlayer({
   seekRequest,
   lessonTitle,
   participantCount,
-  bookmarked,
   onBookmark,
   onRetry,
   onSessionTimeChange,
@@ -84,6 +83,10 @@ export default function PlaybackPlayer({
   headerExtra,
 }: PlaybackPlayerProps) {
   const [playbackState, setPlaybackState] = useState<PlaybackState>('loading')
+  // 재생 정보 헤더를 재생바(vidstack 컨트롤)와 같은 타이밍으로 띄우고 지운다 — 컨트롤이 idle로
+  // 숨을 때 헤더도 같이 숨어야 "동기화"고, 따로 놀면 한쪽만 남아 어색해진다.
+  const [controlsVisible, setControlsVisible] = useState(true)
+  const controlsHandleRef = useRef<HlsMediaControlsHandle | null>(null)
   const source = playback?.source ?? null
   const isLive = playback ? isLiveStatus(playback.liveSessionStatus) : true
   const mediaSeekRequest = useMemo<HlsMediaSeekRequest | null>(() => {
@@ -98,6 +101,16 @@ export default function PlaybackPlayer({
     setPlaybackState('loading')
     onRetry()
   }
+
+  /*
+   * 헤더는 vidstack 컨트롤 밖(형제 요소)에 떠 있어 vidstack이 감시하는 pointermove가 헤더 위에서는
+   * 잡히지 않는다 — 그대로 두면 헤더 위에 마우스를 올려 둔 채 가만히 있어도 재생바만 혼자 사라진다.
+   * 헤더에서 마우스가 움직이면 같은 idle 타이머를 직접 되돌려 둘이 같이 떠 있게 만든다.
+   */
+  const keepControlsAlive = useCallback(() => {
+    controlsHandleRef.current?.show()
+    controlsHandleRef.current?.hide()
+  }, [])
 
   const statusState: PlaybackState = errorMessage ? 'error' : loading ? 'loading' : playbackState
 
@@ -117,6 +130,8 @@ export default function PlaybackPlayer({
             reloadToken={reloadToken}
             seekRequest={mediaSeekRequest}
             autoPlay
+            onControlsHandle={(handle) => { controlsHandleRef.current = handle }}
+            onControlsVisibleChange={setControlsVisible}
             onStateChange={setPlaybackState}
             onTimeChange={(mediaTimeMs) => onSessionTimeChange(
               toSessionMs(mediaTimeMs / 1000, source.availableFromMs),
@@ -155,7 +170,12 @@ export default function PlaybackPlayer({
         </div>
       )}
 
-      <header className="student-live-status" aria-label="재생 정보">
+      <header
+        aria-label="재생 정보"
+        className={`student-live-status${controlsVisible ? ' is-visible' : ''}`}
+        onFocus={keepControlsAlive}
+        onPointerMove={keepControlsAlive}
+      >
         <div>
           {backLink}
           {/* 세션이 끝나면 LIVE 표시를 내린다. 플레이어 안의 LIVE 버튼(엣지 복귀)은 vidstack이 담당한다. */}
@@ -168,9 +188,7 @@ export default function PlaybackPlayer({
             {playbackLabel(statusState)}
           </StatusBadge>
           {participantCount !== undefined && <span>{participantCount}명 참여 중</span>}
-          <button className={bookmarked ? 'is-active' : ''} type="button" onClick={onBookmark}>
-            {bookmarked ? '★ 북마크됨' : '☆ 북마크'}
-          </button>
+          <button type="button" onClick={onBookmark}>북마크 추가</button>
           {headerExtra}
         </div>
       </header>

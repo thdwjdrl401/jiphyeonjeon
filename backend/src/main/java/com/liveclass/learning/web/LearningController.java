@@ -15,6 +15,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -75,6 +76,17 @@ public class LearningController {
                             Authentication authentication) {
         UUID userId = UUID.fromString(authentication.getName());
         learningService.addBookmark(userId, lessonId, request.sessionMs());
+    }
+
+    @Operation(summary = "북마크 삭제",
+            description = "내 북마크 하나를 지운다. 이미 없거나 남의 것이면 조용히 무시한다(멱등).")
+    @DeleteMapping("/api/lessons/{lessonId}/bookmarks/{bookmarkId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteBookmark(@PathVariable UUID lessonId,
+                               @PathVariable UUID bookmarkId,
+                               Authentication authentication) {
+        UUID userId = UUID.fromString(authentication.getName());
+        learningService.deleteBookmark(userId, lessonId, bookmarkId);
     }
 
     @Operation(summary = "구간별 시청 횟수 보고",

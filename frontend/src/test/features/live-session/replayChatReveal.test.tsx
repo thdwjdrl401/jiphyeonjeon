@@ -19,6 +19,7 @@ function sidebar(revealThroughMs: number | null | undefined) {
       lectureNote={null}
       glossaryTerms={[]}
       messages={messages}
+      myDisplayName="나"
       revealThroughMs={revealThroughMs}
       aiContent={null}
       noteContext="REPLAY"

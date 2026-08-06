@@ -1,5 +1,6 @@
 import { demoLiveCaptions, demoMessages, getDemoLiveSession } from '@/features/demo/demoData'
 import { findMockLesson, findMockLiveSession } from '@/features/demo/mockDatabase'
+import { addMockBookmark } from '@/features/learning/mockLearningService'
 import type { CurriculumLiveSessionStatus } from '@/features/lesson/types'
 import {
   publishRecordingReady,
@@ -21,7 +22,6 @@ import type {
 
 const liveStatusOverrides = new Map<string, CurriculumLiveSessionStatus>()
 const liveStartOperations = new Map<string, string>()
-const bookmarksByLesson = new Map<string, number[]>()
 const processingPollCounts = new Map<string, number>()
 const stateSubscribers = new Map<string, Set<(event: LiveSessionStateEvent) => void>>()
 const mockLivePlaybackUrl = 'https://files.vidstack.io/sprite-fight/hls/stream.m3u8'
@@ -115,7 +115,6 @@ const defaultGlossaryTerms: GlossaryTerm[] = [
 export function resetMockLiveSessions() {
   liveStatusOverrides.clear()
   liveStartOperations.clear()
-  bookmarksByLesson.clear()
   processingPollCounts.clear()
   chatSubscribers.clear()
   captionSubscribers.clear()
@@ -455,8 +454,9 @@ export const mockLiveSessionService = {
     })
   },
   async saveBookmark(lessonId, sessionMs) {
-    const bookmarks = bookmarksByLesson.get(lessonId) ?? []
-    bookmarksByLesson.set(lessonId, [...bookmarks, sessionMs])
+    // 실제 서버에서는 추가·조회가 같은 학습 컨텍스트 테이블이다 — 목도 learningService의
+    // 저장소에 직접 써야 방금 찍은 북마크가 목록(BookmarkStrip)에 바로 보인다.
+    addMockBookmark(lessonId, sessionMs)
   },
   async getAiAnswerHistory(sessionId) {
     // 목도 서버와 같은 모양을 돌려준다 — 목이 다르면 실서버에서만 깨지는 화면이 된다.

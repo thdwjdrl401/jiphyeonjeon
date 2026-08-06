@@ -18,6 +18,7 @@ function sidebar(messages: ChatMessageView[]) {
       lectureNote={null}
       glossaryTerms={[]}
       messages={messages}
+      myDisplayName="나"
       aiContent={null}
       noteContext="LIVE"
     />

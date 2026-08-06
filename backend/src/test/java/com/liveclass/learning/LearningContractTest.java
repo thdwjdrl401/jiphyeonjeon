@@ -135,6 +135,36 @@ class LearningContractTest {
     }
 
     @Test
+    void bookmark_delete_removes_it_and_is_idempotent() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String cid = createPublishedCurriculum(instructor);
+        String lessonId = addLesson(instructor, cid, "1강");
+        Cookie[] student = loginAs("STUDENT");
+        approveEnrollment(instructor, student, cid);
+
+        write(post("/api/lessons/" + lessonId + "/bookmarks"), student, "{\"sessionMs\":45000}")
+                .andExpect(status().isCreated());
+        write(post("/api/lessons/" + lessonId + "/bookmarks"), student, "{\"sessionMs\":90000}")
+                .andExpect(status().isCreated());
+
+        JsonNode context = json(write(get("/api/lessons/" + lessonId + "/learning-context"), student, null)
+                .andExpect(jsonPath("$.bookmarks.length()").value(2)).andReturn());
+        String firstId = context.get("bookmarks").get(0).get("bookmarkId").asString();
+
+        write(delete("/api/lessons/" + lessonId + "/bookmarks/" + firstId), student, null)
+                .andExpect(status().isNoContent());
+        write(get("/api/lessons/" + lessonId + "/learning-context"), student, null)
+                .andExpect(jsonPath("$.bookmarks.length()").value(1))
+                .andExpect(jsonPath("$.bookmarks[0].sessionMs").value(90000));
+
+        // 이미 지운 것을 다시 지워도, 남의 id를 넣어도 조용히 204다(존재를 드러내지 않는다).
+        write(delete("/api/lessons/" + lessonId + "/bookmarks/" + firstId), student, null)
+                .andExpect(status().isNoContent());
+        write(delete("/api/lessons/" + lessonId + "/bookmarks/" + UUID.randomUUID()), student, null)
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
     void unenrolled_student_cannot_learn() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String cid = createPublishedCurriculum(instructor);

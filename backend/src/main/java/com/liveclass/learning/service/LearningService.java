@@ -102,6 +102,16 @@ public class LearningService {
                 });
     }
 
+    /**
+     * 북마크 삭제. 이미 없거나 남의 북마크(id가 다른 user·lesson 소유)면 조용히 무시한다(멱등) —
+     * 삭제 버튼을 두 번 눌러도, 다른 탭에서 먼저 지워졌어도 오류로 다룰 일이 아니다.
+     */
+    @Transactional
+    public void deleteBookmark(UUID userId, UUID lessonId, UUID bookmarkId) {
+        access.ensureCanLearn(userId, lessonId);
+        bookmarkRepository.deleteByIdAndUserIdAndLessonId(bookmarkId, userId, lessonId);
+    }
+
     /** 레슨 학습 컨텍스트 — 내 진도(없으면 null)와 북마크 목록. */
     @Transactional(readOnly = true)
     public LearningContext getLearningContext(UUID userId, UUID lessonId) {

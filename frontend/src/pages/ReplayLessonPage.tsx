@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getRoleHomePath } from '@/app/router/paths'
 import PersonalAiQuestionPanel, { type AskAiAnswer } from '@/features/ai/PersonalAiQuestionPanel'
 import { useAuth } from '@/features/auth/AuthContext'
-import { getLearningContext } from '@/features/learning/learningService'
+import { deleteBookmark, getLearningContext } from '@/features/learning/learningService'
 import { getLesson } from '@/features/lesson/lessonService'
 import { resolveLessonPath } from '@/features/lesson/lessonRouting'
 import BookmarkStrip from '@/features/live-session/BookmarkStrip'
@@ -76,7 +76,6 @@ export default function ReplayLessonPage() {
   const [selectedTermId, setSelectedTermId] = useState<string | null>(null)
   const [positionMs, setPositionMs] = useState(0)
   const [seekRequest, setSeekRequest] = useState<PlaybackSeekRequest | null>(null)
-  const [bookmarked, setBookmarked] = useState(false)
   // 재생바 위에 재시청 곡선을 얹으려면 플레이어 루트가 필요하다(WatchHeatmapCurve).
   const [playerRoot, setPlayerRoot] = useState<HTMLElement | null>(null)
   /*
@@ -163,7 +162,13 @@ export default function ReplayLessonPage() {
   const bookmarkMutation = useMutation({
     mutationFn: () => saveBookmark(lessonId, positionMs),
     onSuccess: () => {
-      setBookmarked(true)
+      toast.success('북마크 추가됨')
+      void queryClient.invalidateQueries({ queryKey: ['learning-context', lessonId] })
+    },
+  })
+  const deleteBookmarkMutation = useMutation({
+    mutationFn: (bookmarkId: string) => deleteBookmark(lessonId, bookmarkId),
+    onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['learning-context', lessonId] })
     },
   })
@@ -317,7 +322,6 @@ export default function ReplayLessonPage() {
           <Suspense fallback={<div className="video-stage replay-video" role="status">플레이어를 불러오는 중입니다.</div>}>
             <PlaybackPlayer
               backLink={backLink}
-              bookmarked={bookmarked}
               errorMessage={playback.errorMessage}
               headerExtra={headerExtra}
               lessonTitle={lesson.title}
@@ -336,6 +340,7 @@ export default function ReplayLessonPage() {
           <BookmarkStrip
             bookmarks={learningQuery.data?.bookmarks ?? []}
             canSeek
+            onDelete={(bookmarkId) => deleteBookmarkMutation.mutate(bookmarkId)}
             onSeek={seekSession}
           />
 
@@ -357,6 +362,7 @@ export default function ReplayLessonPage() {
           lectureNote={noteQuery.data ?? null}
           glossaryTerms={glossary.terms}
           messages={messages}
+          myDisplayName={user?.displayName ?? ''}
           revealThroughMs={positionMs}
           discussionNotice="라이브 당시 채팅을 읽기 전용으로 표시합니다. 질문 필터로 질문만 모아볼 수 있습니다."
           aiContent={aiContent}

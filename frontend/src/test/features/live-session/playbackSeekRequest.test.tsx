@@ -73,7 +73,6 @@ function pollingPlayback(): PlaybackView {
 function renderPlayer(playback: PlaybackView, seekRequest: PlaybackSeekRequest | null) {
   return (
     <PlaybackPlayer
-      bookmarked={false}
       errorMessage={null}
       lessonTitle="테스트 강의"
       loading={false}

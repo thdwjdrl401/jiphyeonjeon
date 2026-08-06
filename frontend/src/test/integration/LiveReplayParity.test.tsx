@@ -105,7 +105,8 @@ describe('라이브와 다시보기의 정합', () => {
     renderAt(path)
 
     // 다시보기 쪽은 예전에 별표만 토글하고 아무것도 보내지 않아, 눌러도 목록에 나타나지 않았다.
-    const bookmark = await screen.findByRole('button', { name: /북마크/ })
+    // 이름은 정확히 맞춘다 — 북마크 스트립에 이미 찍힌 것이 있으면 "북마크 삭제" 토글도 함께 뜬다.
+    const bookmark = await screen.findByRole('button', { name: '북마크 추가' })
     expect(bookmark).toBeEnabled()
   })
 

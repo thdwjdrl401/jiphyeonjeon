@@ -32,6 +32,7 @@ function Harness({ ask }: { ask: AskAiAnswer }) {
         { termId: 'SecurityContext', term: 'SecurityContext', description: '설명', source: 'INSTRUCTOR', sourceLabel: '강사 등록', aliases: [], occurrenceCount: 1 },
       ]}
       messages={messages}
+      myDisplayName="나"
       aiContent={<PersonalAiQuestionPanel ask={ask} />}
       noteContext="LIVE"
     />

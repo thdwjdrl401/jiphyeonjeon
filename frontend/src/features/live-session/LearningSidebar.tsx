@@ -17,6 +17,8 @@ interface LearningSidebarProps {
   lectureNote: LectureNoteView | null
   glossaryTerms: GlossaryTermView[]
   messages: ChatMessageView[]
+  /** 내가 보낸 말풍선의 header에 alias 대신 표시할 이름(로그인한 내 닉네임). */
+  myDisplayName: string
   /**
    * 재생 위치(세션 상대 ms). 주면 그 지점까지 올라온 채팅만 보인다 — 다시보기에서 미래의 질문이
    * 먼저 떠 있지 않게 한다. 라이브처럼 지금이 곧 최신인 화면은 생략한다.
@@ -68,7 +70,7 @@ function useVisitedPanels(active: LearningPanel) {
 /** 하단에서 이만큼 안쪽이면 "읽는 중"으로 보고 강제로 끌어내리지 않는다(AI 질문 패널과 같은 값). */
 const CHAT_FOLLOW_THRESHOLD_PX = 48
 
-function DiscussionPanel({ messages, revealThroughMs, composer, notice, panelProps }: { messages: ChatMessageView[]; revealThroughMs?: number | null; composer?: ReactNode; notice?: string; panelProps: PanelProps }) {
+function DiscussionPanel({ messages, myDisplayName, revealThroughMs, composer, notice, panelProps }: { messages: ChatMessageView[]; myDisplayName: string; revealThroughMs?: number | null; composer?: ReactNode; notice?: string; panelProps: PanelProps }) {
   const [filter, setFilter] = useState<'all' | 'questions'>('all')
   const [isFollowingLatest, setIsFollowingLatest] = useState(true)
   const chatListRef = useRef<HTMLDivElement>(null)
@@ -151,10 +153,9 @@ function DiscussionPanel({ messages, revealThroughMs, composer, notice, panelPro
                     .filter(Boolean).join(' ')}
                   key={item.id}
                 >
-                  {/* 내 메시지엔 이름을 쓰지 않는다 — 우측 정렬 자체가 "내 것"이라는 표시다.
-                      시각은 서버가 확정한 뒤에만 있다(낙관적 항목은 빈 문자열). */}
+                  {/* 시각은 서버가 확정한 뒤에만 있다(낙관적 항목은 빈 문자열). */}
                   <header>
-                    {!item.mine && <strong>{item.alias}</strong>}
+                    <strong>{item.mine ? myDisplayName : item.alias}</strong>
                     {item.time && <time>{item.time}</time>}
                   </header>
                   <p>{item.text}</p>
@@ -232,7 +233,7 @@ export default function LearningSidebar(props: LearningSidebarProps) {
         value={props.panel}
         onChange={props.onPanelChange}
       />
-      {isAvailable('discussion') && isMounted('discussion') && <DiscussionPanel messages={props.messages} revealThroughMs={props.revealThroughMs} composer={props.discussionComposer} notice={props.discussionNotice} panelProps={panelProps('discussion')} />}
+      {isAvailable('discussion') && isMounted('discussion') && <DiscussionPanel messages={props.messages} myDisplayName={props.myDisplayName} revealThroughMs={props.revealThroughMs} composer={props.discussionComposer} notice={props.discussionNotice} panelProps={panelProps('discussion')} />}
       {isAvailable('notes') && isMounted('notes') && <LectureNotePanel note={props.lectureNote} live={props.noteContext === 'LIVE'} panelProps={panelProps('notes')} />}
       {isAvailable('ai') && isMounted('ai') && <div className="side-panel-content ai-panel" {...panelProps('ai')}>{props.aiContent}</div>}
       {isAvailable('glossary') && isMounted('glossary') && <GlossaryPanel terms={props.glossaryTerms} selectedTermId={props.selectedTermId} onSelectedTermChange={props.onSelectedTermChange} panelProps={panelProps('glossary')} />}

@@ -211,6 +211,7 @@ export default function RecordedLessonPlaybackPage() {
           lectureNote={null}
           glossaryTerms={glossary.terms}
           messages={[]}
+          myDisplayName={user?.displayName ?? ''}
           aiContent={(
             <PersonalAiQuestionPanel
               ask={ask}

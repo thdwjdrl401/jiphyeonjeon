@@ -6,7 +6,7 @@ import { getRoleHomePath, instructorPaths } from '@/app/router/paths'
 import PersonalAiQuestionPanel, { type AskAiAnswer } from '@/features/ai/PersonalAiQuestionPanel'
 import { useAuth } from '@/features/auth/AuthContext'
 import { getLesson } from '@/features/lesson/lessonService'
-import { getLearningContext } from '@/features/learning/learningService'
+import { deleteBookmark, getLearningContext } from '@/features/learning/learningService'
 import BookmarkStrip from '@/features/live-session/BookmarkStrip'
 import WatchHeatmapCurve from '@/features/live-session/WatchHeatmapCurve'
 import { useWatchTracking } from '@/features/live-session/useWatchTracking'
@@ -52,6 +52,7 @@ import { usePlayback } from '@/features/live-session/usePlayback'
 import { useResizablePane } from '@/features/live-session/useResizablePane'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
+import { useToast } from '@/shared/ui/Toast'
 import { isMockApiEnabled, isTestMode } from '@/shared/config/runtime'
 
 const DevLivePanel = lazy(() => import('@/features/live-session/DevLivePanel'))
@@ -88,6 +89,7 @@ export default function LiveClassroomPage() {
   const { sessionId = '' } = useParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const toast = useToast()
   const { user } = useAuth()
   const isInstructor = user?.role === 'INSTRUCTOR'
   const sessionQuery = useQuery({ queryKey: ['live-session', sessionId], queryFn: () => getLiveSession(sessionId), enabled: Boolean(sessionId) })
@@ -150,7 +152,6 @@ export default function LiveClassroomPage() {
   const [isQuestion, setIsQuestion] = useState(false)
   // 익명은 기본 꺼짐 — 켰을 때만 세션 한정 가명으로 나간다(ADR-0050). 끄면 본인이 지정한 표시 이름.
   const [anonymous, setAnonymous] = useState(false)
-  const [bookmarked, setBookmarked] = useState(false)
   // 재생바 위에 재시청 곡선을 얹으려면 플레이어 루트가 필요하다(WatchHeatmapCurve).
   const [playerRoot, setPlayerRoot] = useState<HTMLElement | null>(null)
   /*
@@ -248,8 +249,14 @@ export default function LiveClassroomPage() {
   const bookmarkMutation = useMutation({
     mutationFn: () => saveBookmark(lesson!.lessonId, positionMs),
     onSuccess: () => {
-      setBookmarked(true)
+      toast.success('북마크 추가됨')
       // 방금 찍은 것이 목록에 바로 보여야 한다 — 안 보이면 저장됐는지 알 수 없다.
+      void queryClient.invalidateQueries({ queryKey: ['learning-context', lesson?.lessonId] })
+    },
+  })
+  const deleteBookmarkMutation = useMutation({
+    mutationFn: (bookmarkId: string) => deleteBookmark(lesson!.lessonId, bookmarkId),
+    onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['learning-context', lesson?.lessonId] })
     },
   })
@@ -409,16 +416,7 @@ export default function LiveClassroomPage() {
 
   const handleMessageKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key !== 'Enter' || event.nativeEvent.isComposing) return
-    if (event.ctrlKey) {
-      event.preventDefault()
-      const textarea = event.currentTarget
-      const selectionStart = textarea.selectionStart
-      const selectionEnd = textarea.selectionEnd
-      const nextCursor = selectionStart + 1
-      setMessage(`${message.slice(0, selectionStart)}\n${message.slice(selectionEnd)}`)
-      Promise.resolve().then(() => textarea.setSelectionRange(nextCursor, nextCursor))
-      return
-    }
+    if (event.shiftKey) return
     event.preventDefault()
     event.currentTarget.form?.requestSubmit()
   }
@@ -461,20 +459,18 @@ export default function LiveClassroomPage() {
         aria-label="채팅 메시지"
         rows={2}
         value={message}
-        placeholder="메시지를 입력하세요 (Enter 전송 · Ctrl+Enter 줄바꿈)"
+        placeholder="메시지를 입력하세요 (Enter 전송 · Shift+Enter 줄바꿈)"
         onChange={(event) => setMessage(event.target.value)}
         onKeyDown={handleMessageKeyDown}
       />
       <div>
-        {!isInstructor
-          ? (
-            <>
-              <label><input type="checkbox" checked={isQuestion} onChange={(event) => setIsQuestion(event.target.checked)} /> 질문으로 등록</label>
-              <label><input type="checkbox" checked={anonymous} onChange={(event) => setAnonymous(event.target.checked)} /> 익명으로 보내기</label>
-            </>
-          )
-          : <span>강사 메시지로 전송됩니다.</span>}
-        <button className="button button--primary button--small" type="submit">전송</button>
+        {!isInstructor && (
+          <>
+            <label><input type="checkbox" checked={isQuestion} onChange={(event) => setIsQuestion(event.target.checked)} /> 질문</label>
+            <label><input type="checkbox" checked={anonymous} onChange={(event) => setAnonymous(event.target.checked)} /> 익명</label>
+          </>
+        )}
+        <button className="button button--primary button--small" type="submit" disabled={!message.trim()}>전송</button>
       </div>
     </form>
   ) : isBeforeLive ? (
@@ -566,6 +562,7 @@ export default function LiveClassroomPage() {
       lectureNote={note}
       glossaryTerms={glossary.terms}
       messages={messages}
+      myDisplayName={user?.displayName ?? ''}
       discussionComposer={discussionComposer}
       discussionNotice={chatConnectionNotice}
       aiContent={aiContent}
@@ -658,7 +655,6 @@ export default function LiveClassroomPage() {
               <Suspense fallback={<div className="video-stage instructor-livekit-loading" role="status">Vidstack 플레이어를 불러오는 중입니다.</div>}>
                 <PlaybackPlayer
                   backLink={backLink}
-                  bookmarked={bookmarked}
                   errorMessage={playback.errorMessage}
                   lessonTitle={lesson.title}
                   loading={playback.loading}
@@ -684,6 +680,7 @@ export default function LiveClassroomPage() {
             <BookmarkStrip
               bookmarks={learningQuery.data?.bookmarks ?? []}
               canSeek={!hasEnded}
+              onDelete={(bookmarkId) => deleteBookmarkMutation.mutate(bookmarkId)}
               onSeek={seekSession}
             />
           )}

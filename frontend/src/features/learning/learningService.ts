@@ -9,3 +9,6 @@ export const getLearningContext = (lessonId: string) => learningService.getLearn
 
 export const updateProgress = (lessonId: string, update: ProgressUpdate) =>
   learningService.updateProgress(lessonId, update)
+
+export const deleteBookmark = (lessonId: string, bookmarkId: string) =>
+  learningService.deleteBookmark(lessonId, bookmarkId)

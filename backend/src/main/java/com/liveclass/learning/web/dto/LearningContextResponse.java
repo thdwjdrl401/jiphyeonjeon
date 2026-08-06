@@ -28,7 +28,7 @@ public record LearningContextResponse(
     }
 
     @Schema(description = "내 북마크")
-    public record Bookmark(long sessionMs, OffsetDateTime createdAt) {
+    public record Bookmark(String bookmarkId, long sessionMs, OffsetDateTime createdAt) {
     }
 
     public static LearningContextResponse from(LearningService.LearningContext ctx) {
@@ -38,7 +38,7 @@ public record LearningContextResponse(
                 ctx.progress().getCompletedAt() != null,
                 ctx.progress().getCompletedAt());
         List<Bookmark> bookmarks = ctx.bookmarks().stream()
-                .map(b -> new Bookmark(b.getSessionMs(), b.getCreatedAt()))
+                .map(b -> new Bookmark(b.getId().toString(), b.getSessionMs(), b.getCreatedAt()))
                 .toList();
         return new LearningContextResponse(ctx.lessonId().toString(), progress, bookmarks);
     }
