@@ -151,14 +151,15 @@ describe('CurriculumDetailPage', () => {
     expect(fetchMaterial).toHaveBeenLastCalledWith(expect.objectContaining({ asInstructor: true }))
   })
 
-  it('수강생은 공개 상태 왼쪽 알림 버튼에서 커리큘럼 알림 설정을 연다', async () => {
+  it('수강생은 상세 상단 알림 버튼에서 커리큘럼 알림 설정을 연다', async () => {
     const user = userEvent.setup()
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
     renderDetail('/curriculums/cur-spring-live')
 
     const trigger = await screen.findByRole('button', { name: '라이브 시작 알림 설정' })
     const triggerContainer = trigger.closest('.live-reminder-popover')
-    expect(triggerContainer?.nextElementSibling).toHaveClass('curriculum-lifecycle-badge')
+    expect(triggerContainer?.parentElement).toHaveClass('curriculum-hero__status')
+    expect(screen.queryByText('공개 중')).not.toBeInTheDocument()
     expect(screen.queryByRole('dialog', { name: '라이브 시작 알림' })).not.toBeInTheDocument()
 
     await user.click(trigger)
