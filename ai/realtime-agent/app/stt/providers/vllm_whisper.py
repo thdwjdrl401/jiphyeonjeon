@@ -4,14 +4,16 @@ import io
 import json
 import logging
 import math
+import unicodedata
 import wave
+import zlib
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from urllib.parse import urlsplit
 
 import httpx
 
-from app.audio.segmentation import SpeechSegment
+from app.audio.segmentation import SpeechSegment, VadSegmenter
 from app.stt.engine import EngineCapabilities, SttStreamContext, SttStreamStarted
 from app.stt.providers.segmented import (
     ProviderSegmentFinal,
@@ -26,6 +28,8 @@ _MIN_REPEATED_COPIES = 4
 _MAX_REPEATED_UNIT_CHARS = 24
 _MIN_REPEATED_SPAN_CHARS = 8
 _MIN_REPEATED_SHARE = 0.6
+_MAX_COMPRESSION_RATIO = 2.4
+_MAX_CHARACTERS_PER_SECOND = 8.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,11 +112,18 @@ class VllmWhisperStreamingEngine(SegmentedStreamingEngine):
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         configuration.validate()
-        super().__init__("vllm-whisper", segmenter=segmenter)
+        whisper_segmenter = segmenter or VadSegmenter(
+            activation_ms=120,
+            min_speech_ms=900,
+            min_speech_ratio=0.5,
+            silence_close_ms=700,
+        )
+        super().__init__("vllm-whisper", segmenter=whisper_segmenter)
         headers = (
             {"Authorization": f"Bearer {configuration.api_key}"} if configuration.api_key else {}
         )
         self._configuration = configuration
+        self._last_final_key: str | None = None
         self._client = httpx.AsyncClient(
             base_url=configuration.base_url.rstrip("/") + "/",
             headers=headers,
@@ -175,22 +186,54 @@ class VllmWhisperStreamingEngine(SegmentedStreamingEngine):
         if text.startswith("language ") and "<asr_text>" in text:
             text = text.split("<asr_text>", 1)[1]
         text = text.strip()
+        compression_ratio = _compression_ratio(text)
+        characters_per_second = _characters_per_second(text, segment)
+        gate = None
         if finish_reason != _NORMAL_FINISH_REASON:
+            gate = "FINISH_REASON"
+        elif not text:
+            gate = "EMPTY"
+        elif _is_pathologically_repetitive(text):
+            gate = "REPEATED_SPAN"
+        elif compression_ratio > _MAX_COMPRESSION_RATIO:
+            gate = "COMPRESSION_RATIO"
+        elif characters_per_second > _MAX_CHARACTERS_PER_SECOND:
+            gate = "OUTPUT_RATE"
+        else:
+            final_key = _final_key(text)
+            if final_key and final_key == self._last_final_key:
+                gate = "CONSECUTIVE_DUPLICATE"
+
+        if gate is not None:
             logger.warning(
-                "suppressed Whisper transcription without EOS completion: "
-                "finish_reason=%s segment_duration_ms=%d",
+                "suppressed Whisper transcription: gate=%s finish_reason=%s "
+                "speech_ms=%d segment_ms=%d speech_ratio=%.4f mean_rms_dbfs=%.2f "
+                "text_len=%d compression_ratio=%.4f characters_per_second=%.4f",
+                gate,
                 finish_reason,
-                segment.end_ms - segment.start_ms,
-            )
-            return
-        if _is_pathologically_repetitive(text):
-            logger.warning(
-                "suppressed pathologically repetitive Whisper transcription: "
-                "segment_duration_ms=%d output_chars=%d",
-                segment.end_ms - segment.start_ms,
+                segment.speech_ms,
+                segment.segment_ms,
+                segment.speech_ratio,
+                segment.mean_rms_dbfs,
                 len(text),
+                compression_ratio,
+                characters_per_second,
             )
             return
+        self._last_final_key = _final_key(text)
+        logger.info(
+            "accepted Whisper transcription: finish_reason=%s speech_ms=%d "
+            "segment_ms=%d speech_ratio=%.4f mean_rms_dbfs=%.2f text_len=%d "
+            "compression_ratio=%.4f characters_per_second=%.4f",
+            finish_reason,
+            segment.speech_ms,
+            segment.segment_ms,
+            segment.speech_ratio,
+            segment.mean_rms_dbfs,
+            len(text),
+            compression_ratio,
+            characters_per_second,
+        )
         yield ProviderSegmentFinal(text)
 
     async def _close_provider(self) -> None:
@@ -270,6 +313,31 @@ def _is_pathologically_repetitive(text: str) -> bool:
             if copies >= _MIN_REPEATED_COPIES and copies * unit_length >= required_span:
                 return True
     return False
+
+
+def _compression_ratio(text: str) -> float:
+    encoded = text.encode("utf-8")
+    if not encoded:
+        return 0.0
+    return len(encoded) / len(zlib.compress(encoded))
+
+
+def _characters_per_second(text: str, segment: SpeechSegment) -> float:
+    audio_duration_ms = max(
+        segment.segment_ms or segment.end_ms - segment.start_ms,
+        1,
+    )
+    character_count = sum(not character.isspace() for character in text)
+    return character_count * 1_000 / audio_duration_ms
+
+
+def _final_key(text: str) -> str:
+    normalized = unicodedata.normalize("NFKC", text).casefold()
+    return "".join(
+        character
+        for character in normalized
+        if not character.isspace() and not unicodedata.category(character).startswith("P")
+    )
 
 
 def _wav_payload(segment: SpeechSegment) -> bytes:

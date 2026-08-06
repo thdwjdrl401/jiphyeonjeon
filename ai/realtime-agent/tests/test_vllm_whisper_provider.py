@@ -59,6 +59,17 @@ class SingleSegmenter:
         return [self._segment]
 
 
+class SequenceSegmenter:
+    def __init__(self, *segments: SpeechSegment) -> None:
+        self._segments = list(segments)
+
+    def push(self, _chunk: object) -> list[SpeechSegment]:
+        return []
+
+    def finish(self) -> list[SpeechSegment]:
+        return self._segments
+
+
 def configuration(**changes: object) -> VllmWhisperRuntimeConfiguration:
     values = {
         "base_url": "http://127.0.0.1:18083/v1",
@@ -115,8 +126,12 @@ async def test_engine_emits_one_authoritative_final_per_common_vad_segment() -> 
         pcm=b"\x01\x00" * 320,
         sample_rate=16_000,
         start_ms=120,
-        end_ms=140,
+        end_ms=2_120,
         boundary_reason="SILENCE",
+        speech_ms=1_800,
+        segment_ms=2_500,
+        speech_ratio=0.72,
+        mean_rms_dbfs=-30.0,
     )
     requests: list[httpx.Request] = []
 
@@ -150,8 +165,8 @@ async def test_engine_emits_one_authoritative_final_per_common_vad_segment() -> 
     assert started.stt_session_id.startswith("vllm-whisper:")
     assert engine.capabilities == EngineCapabilities(16_000, 1, False)
     assert events == [
-        TextDelta("여기를 보세요.", 140),
-        SegmentFinal("여기를 보세요.", 120, 140, "SILENCE"),
+        TextDelta("여기를 보세요.", 2_120),
+        SegmentFinal("여기를 보세요.", 120, 2_120, "SILENCE"),
         EngineCompleted(0),
     ]
     assert [request.url.path for request in requests] == [
@@ -194,6 +209,105 @@ async def test_engine_suppresses_repetition_and_non_eos_completion(
     await engine.close()
 
     assert events == [EngineCompleted(0)]
+
+
+async def test_engine_suppresses_abnormally_dense_output() -> None:
+    segment = SpeechSegment(
+        b"\x01\x00" * 16_000,
+        16_000,
+        0,
+        1_000,
+        segment_ms=1_000,
+    )
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/models"):
+            return httpx.Response(200, json={"data": [{"id": "liveclass-whisper-large-v3"}]})
+        return httpx.Response(200, text=stream_response("가나다라마바사아자차카타파하"))
+
+    engine = VllmWhisperStreamingEngine(
+        configuration(),
+        segmenter=SingleSegmenter(segment),
+        transport=httpx.MockTransport(handler),
+    )
+
+    await engine.start_stream(SttStreamContext("stream-1", "ko-KR"))
+    await engine.finish()
+    events = [event async for event in engine.events()]
+    await engine.close()
+
+    assert events == [EngineCompleted(0)]
+
+
+async def test_engine_suppresses_highly_compressible_output() -> None:
+    segment = SpeechSegment(
+        b"\x01\x00" * 240_000,
+        16_000,
+        0,
+        15_000,
+        segment_ms=15_000,
+    )
+    text = " ".join(
+        f"오늘 강의에서는 데이터베이스 트랜잭션 격리 수준 {index}번을 설명합니다"
+        for index in range(3)
+    )
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/models"):
+            return httpx.Response(200, json={"data": [{"id": "liveclass-whisper-large-v3"}]})
+        return httpx.Response(200, text=stream_response(text))
+
+    engine = VllmWhisperStreamingEngine(
+        configuration(),
+        segmenter=SingleSegmenter(segment),
+        transport=httpx.MockTransport(handler),
+    )
+
+    await engine.start_stream(SttStreamContext("stream-1", "ko-KR"))
+    await engine.finish()
+    events = [event async for event in engine.events()]
+    await engine.close()
+
+    assert events == [EngineCompleted(0)]
+
+
+async def test_engine_suppresses_consecutive_duplicate_finals() -> None:
+    first = SpeechSegment(
+        b"\x01\x00" * 32_000,
+        16_000,
+        0,
+        2_000,
+        segment_ms=2_000,
+    )
+    second = SpeechSegment(
+        b"\x01\x00" * 32_000,
+        16_000,
+        2_500,
+        4_500,
+        segment_ms=2_000,
+    )
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/models"):
+            return httpx.Response(200, json={"data": [{"id": "liveclass-whisper-large-v3"}]})
+        return httpx.Response(200, text=stream_response("감사합니다."))
+
+    engine = VllmWhisperStreamingEngine(
+        configuration(),
+        segmenter=SequenceSegmenter(first, second),
+        transport=httpx.MockTransport(handler),
+    )
+
+    await engine.start_stream(SttStreamContext("stream-1", "ko-KR"))
+    await engine.finish()
+    events = [event async for event in engine.events()]
+    await engine.close()
+
+    assert events == [
+        TextDelta("감사합니다.", 2_000),
+        SegmentFinal("감사합니다.", 0, 2_000, "SILENCE"),
+        EngineCompleted(0),
+    ]
 
 
 async def test_engine_checks_runtime_before_accepting_a_stream() -> None:
