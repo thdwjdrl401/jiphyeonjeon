@@ -1,4 +1,5 @@
 import type { PropsWithChildren, ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 
 export function PageHeader({ title, description, action }: { title: string; description?: ReactNode; action?: ReactNode }) {
   return (
@@ -19,8 +20,28 @@ export function Panel({ id, title, description, action, children, className = ''
   )
 }
 
-export function StatusBadge({ children, tone = 'neutral', title }: PropsWithChildren<{ tone?: 'neutral' | 'success' | 'warning' | 'danger' | 'live'; title?: string }>) {
-  return <span className={`status-pill status-pill--${tone}`} title={title}>{children}</span>
+/**
+ * 상태 알약.
+ *
+ * <p>`to`를 주면 <b>링크로</b> 그린다 — `span`에 onClick만 붙이면 키보드로 못 누르고 스크린리더가
+ * 누를 수 있는 것인 줄 모른다. `busy`는 배지 안에서 원을 돌린다(서버 상태가 아직 움직이는 중).
+ */
+export function StatusBadge({ children, tone = 'neutral', title, to, busy }: PropsWithChildren<{
+  tone?: 'neutral' | 'success' | 'warning' | 'danger' | 'live'
+  title?: string
+  to?: string
+  busy?: boolean
+}>) {
+  const className = `status-pill status-pill--${tone}${to ? ' status-pill--link' : ''}`
+  const content = (
+    <>
+      {busy && <i className="status-pill__spinner" aria-hidden="true" />}
+      {children}
+    </>
+  )
+  return to
+    ? <Link className={className} to={to} title={title}>{content}</Link>
+    : <span className={className} title={title}>{content}</span>
 }
 
 export function MetricCard({ label, value, helper }: { label: string; value: string | number; helper?: string }) {
