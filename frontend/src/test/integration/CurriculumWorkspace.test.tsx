@@ -25,6 +25,29 @@ function localDateInDays(days: number): string {
   return localDateTimeInDays(days).slice(0, 10)
 }
 
+/**
+ * 대표 이미지 자르기는 <b>브라우저에서</b> canvas로 잘라 올린다. jsdom에는 canvas 2d도 이미지
+ * 디코딩도 없어서, 그 두 자리만 세워 준다 — 좌표 계산 자체는 `thumbnailCrop.test.ts`가 본다.
+ */
+function stubCropCanvas() {
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
+    { drawImage: vi.fn() } as unknown as CanvasRenderingContext2D,
+  )
+  vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((callback) => {
+    callback(new Blob(['cropped-bytes'], { type: 'image/jpeg' }))
+  })
+}
+
+/** 자르기 화면의 원본이 로드된 것으로 만든다 — jsdom은 이미지를 실제로 읽지 않아 크기가 0이다. */
+async function loadCropSource(width = 1200, height = 900) {
+  const dialog = await screen.findByRole('dialog', { name: '대표 이미지 자르기' })
+  const image = dialog.querySelector('img.thumbnail-crop__image')!
+  Object.defineProperty(image, 'naturalWidth', { value: width, configurable: true })
+  Object.defineProperty(image, 'naturalHeight', { value: height, configurable: true })
+  fireEvent.load(image)
+  return dialog
+}
+
 async function renderAsInstructor(path: string) {
   await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
   window.history.pushState({}, '', path)
@@ -222,13 +245,47 @@ describe('커리큘럼 작업 화면', () => {
     expect(screen.queryByText('초대 전용')).not.toBeInTheDocument()
   })
 
-  it('새 커리큘럼 대표 이미지를 선택해 미리본다', async () => {
+  /**
+   * 대표 이미지는 고른 즉시 등록되지 않는다 — 16:9로 <b>어디를 보여줄지 정하는 단계</b>를 거친다.
+   * 목록 카드가 16:9라 그 비율로 자르고, 미리보기도 잘린 결과로 바꾼다(화면에서 본 범위와 저장되는
+   * 범위가 달라지지 않게).
+   */
+  it('새 커리큘럼 대표 이미지는 16:9로 자른 뒤 미리본다', async () => {
     const user = userEvent.setup()
+    stubCropCanvas()
     await renderAsInstructor('/instructor/curriculums/new')
     await screen.findByRole('heading', { name: '새 커리큘럼 만들기', level: 1 })
     const file = new File(['image'], 'curriculum.png', { type: 'image/png' })
+
     await user.upload(screen.getByLabelText('대표 이미지 등록'), file)
-    expect(await screen.findByAltText('대표 이미지 미리보기')).toBeInTheDocument()
+
+    // 고르자마자 미리보기로 가지 않는다 — 자르기 화면이 먼저 열린다.
+    const dialog = await loadCropSource()
+    expect(screen.queryByAltText('대표 이미지 미리보기')).not.toBeInTheDocument()
+
+    await user.click(within(dialog).getByRole('button', { name: '이 범위로 등록' }))
+
+    // 잘린 결과는 JPEG로 저장한다 — 미리보기도 그 결과여야 한다.
+    expect(await screen.findByAltText('대표 이미지 미리보기')).toHaveAttribute(
+      'src', expect.stringContaining('data:image/jpeg'),
+    )
+  })
+
+  /** 자르기를 그만두면 <b>고른 파일도 버린다</b> — 자르지 않은 원본이 등록되면 범위를 정한 뜻이 없다. */
+  it('자르기를 취소하면 대표 이미지가 등록되지 않는다', async () => {
+    const user = userEvent.setup()
+    await renderAsInstructor('/instructor/curriculums/new')
+    await screen.findByRole('heading', { name: '새 커리큘럼 만들기', level: 1 })
+
+    await user.upload(
+      screen.getByLabelText('대표 이미지 등록'),
+      new File(['image'], 'curriculum.png', { type: 'image/png' }),
+    )
+    const dialog = await loadCropSource()
+    await user.click(within(dialog).getByRole('button', { name: '취소' }))
+
+    expect(screen.queryByRole('dialog', { name: '대표 이미지 자르기' })).not.toBeInTheDocument()
+    expect(screen.queryByAltText('대표 이미지 미리보기')).not.toBeInTheDocument()
   })
 
   // 초안은 DRAFT라 공개 상세(GET /curriculums/{id}, PUBLISHED-only)로 보내면 404로 튕긴다.
@@ -787,19 +844,25 @@ describe('커리큘럼 작업 화면', () => {
     await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
     await user.click(await screen.findByRole('tab', { name: '기본 정보' }))
     const image = new File(['image-bytes'], 'cover.png', { type: 'image/png' })
+    stubCropCanvas()
 
     await user.upload(screen.getByLabelText('대표 이미지 등록'), image)
+    // 자르기를 마친 뒤에 저장된다 — 고른 즉시가 아니다.
+    const dialog = await loadCropSource()
+    await user.click(within(dialog).getByRole('button', { name: '이 범위로 등록' }))
+
     await waitFor(() => expect(screen.getByText('자동 저장됨')).toBeInTheDocument())
     await waitFor(() => expect(screen.getByAltText('대표 이미지 미리보기')).toHaveAttribute(
-      'src', expect.stringContaining('data:image/png'),
+      'src', expect.stringContaining('data:image/jpeg'),
     ))
 
     await user.click(screen.getByRole('link', { name: '커리큘럼 상세' }))
     await user.click(await screen.findByRole('button', { name: '관리하기' }))
     await user.click(await screen.findByRole('tab', { name: '기본 정보' }))
 
+    // 돌아와서도 방금 자른 그 이미지다 — 원본(png)이 아니라 잘린 결과(jpeg)가 저장돼 있어야 한다.
     expect(await screen.findByAltText('대표 이미지 미리보기')).toHaveAttribute(
-      'src', expect.stringContaining('data:image/png'),
+      'src', expect.stringContaining('data:image/jpeg'),
     )
   })
 
@@ -836,7 +899,9 @@ describe('커리큘럼 작업 화면', () => {
     expect(removeButton).toBeDisabled()
 
     const image = new File(['image-bytes'], 'cover.png', { type: 'image/png' })
+    stubCropCanvas()
     await user.upload(screen.getByLabelText('대표 이미지 등록'), image)
+    await user.click(within(await loadCropSource()).getByRole('button', { name: '이 범위로 등록' }))
     expect(await screen.findByAltText('대표 이미지 미리보기')).toBeInTheDocument()
 
     // 저장 전이라 서버에 아무것도 없다 — 여기서는 삭제가 실제로 동작한다.
@@ -847,6 +912,7 @@ describe('커리큘럼 작업 화면', () => {
     // 지운 뒤 같은 파일을 다시 고를 수 있어야 한다 — input.value를 비우지 않으면 브라우저가
     // "같은 값"으로 보고 change를 쏘지 않아 재등록이 막힌다.
     await user.upload(screen.getByLabelText('대표 이미지 등록'), image)
+    await user.click(within(await loadCropSource()).getByRole('button', { name: '이 범위로 등록' }))
     expect(await screen.findByAltText('대표 이미지 미리보기')).toBeInTheDocument()
   })
 
@@ -868,7 +934,9 @@ describe('커리큘럼 작업 화면', () => {
     expect(screen.queryByText('이미지 변경')).not.toBeInTheDocument()
 
     const image = new File(['image-bytes'], 'cover.png', { type: 'image/png' })
+    stubCropCanvas()
     await user.upload(screen.getByLabelText('대표 이미지 등록'), image)
+    await user.click(within(await loadCropSource()).getByRole('button', { name: '이 범위로 등록' }))
     expect(await screen.findByAltText('대표 이미지 미리보기')).toBeInTheDocument()
 
     // 사진이 들어찬 뒤에는 겹친 배지가 그 경로를 알린다.
