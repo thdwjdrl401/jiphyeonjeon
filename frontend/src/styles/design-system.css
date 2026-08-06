@@ -943,11 +943,10 @@ body {
 .catalog-summary { min-height: 0; align-items: center; gap: 10px; padding: 0 14px 0 0; border-right: 1px solid var(--border-medium); }
 .catalog-summary > div { display: flex; min-width: 0; align-items: baseline; gap: 8px; }
 .catalog-summary h2 { overflow: hidden; margin: 0; font-size: 1rem; text-overflow: ellipsis; white-space: nowrap; }
-/* 도구줄의 작은 글씨 3곳(개수·초기화·업데이트 안내)이 --ink-500으로 2.97:1이었다.
+/* 도구줄의 작은 글씨 2곳(개수·초기화)이 --ink-500으로 2.97:1이었다.
    커리큘럼 카드의 메타와 같은 결함이라 같은 처방(--ink-muted, 5.69:1)을 쓴다. */
 .catalog-summary p { flex: 0 0 auto; color: var(--ink-muted); font-size: .7rem; white-space: nowrap; }
 .catalog-summary .reset-button { flex: 0 0 auto; margin-left: auto; color: var(--ink-muted); font-size: .68rem; }
-.catalog-updating { color: var(--ink-muted); }
 .catalog-controls + .curriculum-grid,
 .catalog-controls + .page-state { margin-top: 22px; }
 /*
