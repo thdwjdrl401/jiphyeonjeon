@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import LectureNotePanel from '@/features/live-session/LectureNotePanel'
 import type { LectureNoteView } from '@/features/live-session/liveSessionService.interface'
 
@@ -27,6 +27,20 @@ function note(overrides: Partial<LectureNoteView> = {}): LectureNoteView {
 function emptyNote(overrides: Partial<LectureNoteView> = {}) {
   return note({ topics: [], markdown: '', ...overrides })
 }
+
+/**
+ * 지연 로드되는 Markdown 렌더러를 <b>미리 데운다.</b>
+ *
+ * <p>{@link NoteMarkdown}은 `react-markdown`·`remark-gfm`을 `React.lazy`로 끌어온다(로그인 화면
+ * 번들에 넣지 않으려고). 테스트에서는 그 첫 import가 Vite 변환까지 포함해 실제로 오래 걸리는데,
+ * 그 비용을 `findBy*` 안에서 치르면 부하가 걸린 러너에서 asyncUtilTimeout(5초)을 넘긴다 —
+ * 2026-08-06 CI에서 9.8초가 걸려 깨졌다. 렌더가 안 된 것이 아니라 못 기다린 것이다.
+ *
+ * <p>여기서 한 번 지불하면 이후 렌더는 모듈 캐시를 타므로, 단언은 다시 "화면이 그리는가"만 본다.
+ */
+beforeAll(async () => {
+  await import('@/features/live-session/NoteMarkdownBody')
+}, 120_000)
 
 describe('AI 실시간 강의 노트 패널', () => {
   it('서버가 준 노트를 그대로 그린다', async () => {
