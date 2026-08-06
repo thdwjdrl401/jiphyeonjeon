@@ -106,3 +106,9 @@ def test_annotation_switches_reach_both_containers() -> None:
         ) in compose
         assert "AI_API_ANNOTATION_TOP_K" in compose
         assert "AI_API_ANNOTATION_WINDOW_SIZE" in compose
+        # 이름이 config 필드(conversation_memory_session_fallback_enabled)와 한 글자라도
+        # 다르면 조용히 꺼진다 — 기본 false 매핑까지 정확히 고정한다.
+        assert (
+            "AI_API_CONVERSATION_MEMORY_SESSION_FALLBACK_ENABLED: "
+            "${AI_API_CONVERSATION_MEMORY_SESSION_FALLBACK_ENABLED:-false}"
+        ) in compose

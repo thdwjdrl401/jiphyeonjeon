@@ -392,6 +392,7 @@ def build_rag_services(settings: Settings) -> RagServices:
         retrieval_timeout_seconds=settings.rag_retrieval_timeout_seconds,
         model_timeout_seconds=settings.rag_model_timeout_seconds,
         conversation_memory=conversation_memory,
+        session_fallback_enabled=settings.conversation_memory_session_fallback_enabled,
     )
     return RagServices(
         service=service,

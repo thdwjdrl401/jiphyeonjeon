@@ -44,6 +44,10 @@ class ConversationMemoryPort(Protocol):
         self, *, user_id: str, session_id: str, conversation_id: str, response_id: str
     ) -> None: ...
 
+    async def delete_response_id(
+        self, *, user_id: str, session_id: str, conversation_id: str
+    ) -> None: ...
+
 
 class AnswerModel(Protocol):
     def stream_answer(

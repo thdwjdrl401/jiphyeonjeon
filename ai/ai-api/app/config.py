@@ -119,6 +119,9 @@ class Settings(BaseSettings):
     conversation_memory_key_prefix: str = Field(
         default="ai:conversation:", min_length=1, max_length=128
     )
+    # userId 없는 요청도 세션 단위로 대화를 잇는 폴백(시연·단일 질문자 환경용). sessionId는
+    # 수강생 전원이 공유하므로 여러 학생이 질문하는 세션에서 켜면 대화가 섞인다 — 기본 off.
+    conversation_memory_session_fallback_enabled: bool = False
 
     @field_validator("ai_internal_secret", mode="before")
     @classmethod

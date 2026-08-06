@@ -75,6 +75,14 @@ class RedisConversationMemoryStore:
             ex=self._ttl_seconds,
         )
 
+    async def delete_response_id(
+        self, *, user_id: str, session_id: str, conversation_id: str
+    ) -> None:
+        """Drop a stored chain pointer. Used when the provider no longer recognizes the stored
+        response id (GMS restart/key rotation) — keeping it would fail every question in the
+        conversation until the TTL expires."""
+        await self._client.delete(self._key(user_id, session_id, conversation_id))
+
     async def aclose(self) -> None:
         if not self._owns_client:
             return
