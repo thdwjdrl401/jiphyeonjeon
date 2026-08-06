@@ -5,20 +5,14 @@ import { adminPaths, instructorPaths, publicPaths, studentPaths } from './paths'
 /**
  * 상단 네비게이션 항목 하나.
  *
- * `activePatterns`가 `to` 말고 따로 있는 이유: 활성 판정은 링크 목적지보다 넓다. 강사가
- * 커리큘럼 관리·강의 편집·라이브 점검 화면에 있어도 "커리큘럼 관리"가 켜져 있어야 하는데,
- * 그 화면들의 경로는 `to`와 다르다. 경로 완전 일치로 판정하면 하위 화면에서 표시가 꺼진다.
+ * `activePatterns`가 `to` 말고 따로 있는 이유: 메뉴가 활성인 화면을 명시적으로 제한한다.
+ * 공개 상세나 강의 편집처럼 어느 메뉴에도 속하지 않는 화면에서는 밑줄을 표시하지 않는다.
  */
 export interface NavigationItem {
   label: string
   to: string
-  /** 이 항목을 활성으로 볼 경로들. 각각 하위 경로까지 포함해 판정한다(`end: false`). */
+  /** 이 항목을 활성으로 볼 경로들. React Router 패턴과 완전히 일치할 때만 활성화한다. */
   activePatterns: string[]
-  /**
-   * 활성에서 뺄 경로들. 더 구체적인 형제 항목이 가진 경로를 적는다 —
-   * `/instructor/curriculums/new`는 "커리큘럼 만들기"의 것이므로 "커리큘럼 관리"는 꺼져야 한다.
-   */
-  inactivePatterns?: string[]
 }
 
 /** 학생·강사가 같이 쓰는 공개 탐색 메뉴. 두 역할 배열에서 같은 정의를 공유한다. */
@@ -38,8 +32,7 @@ export const navigationItemsByRole: Record<UserRole, NavigationItem[]> = {
     {
       label: '마이 페이지',
       to: studentPaths.curriculums,
-      // 학습 목록·강의 학습·라이브 입장 전 점검까지 모두 "마이 페이지" 축이다.
-      activePatterns: [studentPaths.curriculums, '/student/live-sessions', '/student/lessons'],
+      activePatterns: [studentPaths.curriculums, studentPaths.profile, studentPaths.notifications],
     },
   ],
   INSTRUCTOR: [
@@ -47,12 +40,11 @@ export const navigationItemsByRole: Record<UserRole, NavigationItem[]> = {
     {
       label: '마이 페이지',
       to: instructorPaths.curriculums,
-      // 목록·만들기·관리·강의 편집·라이브 점검·녹화 처리까지 모두 "마이 페이지" 축이다.
       activePatterns: [
         instructorPaths.curriculums,
-        instructorPaths.newCurriculum,
-        '/instructor/live-sessions',
-        '/instructor/lessons',
+        '/instructor/curriculums/:curriculumId/manage',
+        instructorPaths.profile,
+        instructorPaths.notifications,
       ],
     },
   ],
@@ -72,8 +64,7 @@ export const adminNavigationItem: NavigationItem = {
 const profilePatterns = [studentPaths.profile, instructorPaths.profile]
 
 export function isNavigationItemActive(item: NavigationItem, pathname: string) {
-  if (item.inactivePatterns?.some((path) => matchPath({ path, end: false }, pathname))) return false
-  return item.activePatterns.some((path) => matchPath({ path, end: false }, pathname))
+  return item.activePatterns.some((path) => matchPath({ path, end: true }, pathname))
 }
 
 export function isProfileAreaActive(pathname: string) {

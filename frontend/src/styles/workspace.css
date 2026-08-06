@@ -413,6 +413,7 @@
  * 세로 flex로 만들고 마지막 줄(액션 행·탈퇴 행)을 카드 바닥으로 내려 그 공간을 쓴다.
  */
 .profile-page__columns { display: grid; min-width: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.profile-page__columns--single { grid-template-columns: minmax(0, 1fr); }
 .profile-page__columns > .workspace-panel { display: flex; flex-direction: column; }
 .profile-page__columns > .workspace-panel > .workspace-form,
 .profile-page__columns > .workspace-panel > .account-settings { flex: 1; }
@@ -424,6 +425,12 @@
 .settings-block > h3, .withdraw-trigger h3 { margin: 0; color: var(--ink-950); font-size: .86rem; letter-spacing: -.02em; }
 /* 카드가 늘어난 만큼 탈퇴 행이 바닥으로 내려가 빈 여백을 없앤다. */
 .profile-page__columns .withdraw-trigger { margin-top: auto; }
+.profile-public-view { display: grid; gap: 16px; }
+.profile-public-view section { display: grid; gap: 7px; }
+.profile-public-view h3 { margin: 0; color: var(--ink-950); font-size: .78rem; }
+.profile-public-view p { margin: 0; color: var(--ink-600); font-size: .76rem; line-height: 1.65; white-space: pre-wrap; }
+.profile-public-view ul { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.profile-public-view li { border: 1px solid var(--border-medium); padding: 4px 9px; background: var(--paper-light); color: var(--ink-800); font-size: .68rem; }
 .profile-page .workspace-panel { padding: 16px 18px; }
 .profile-page .workspace-panel__header { margin-bottom: 12px; padding-bottom: 10px; }
 .profile-page .workspace-panel__header h2 { font-size: 1rem; }
@@ -557,6 +564,8 @@
 .my-curriculums-page .workspace-panel__header { margin-bottom: 14px; padding-bottom: 12px; }
 .my-curriculums-page__list-panel > .workspace-panel__header { align-items: center; }
 .my-curriculums-page__list-panel > .workspace-panel__header h2 { margin-bottom: 0; }
+.my-curriculums-page .compact-controls .search-field,
+.my-curriculums-page .compact-controls select { height: 46px; min-height: 46px; box-sizing: border-box; }
 .my-curriculums-page .pagination { gap: 8px; margin-top: 14px; }
 /*
  * 라이브가 없는 날의 한 줄 띠(있는 날은 highlight-panel을 그대로 쓴다).
@@ -959,12 +968,20 @@ th { color: var(--ink-500); font-size: .67rem; }
 .material-dropzone strong { font-size: .84rem; }
 .material-dropzone small { color: var(--ink-muted); font-size: .68rem; }
 .recorded-video-dropzone .material-dropzone__icon { width: 50px; font-size: .65rem; }
-.recorded-video-selection { display: flex; align-items: center; gap: 12px; margin: 16px 0; padding: 13px; border: 1px solid var(--ink-100); background: #fff; }
-.recorded-video-selection > div { display: flex; min-width: 0; flex: 1; flex-direction: column; }
-.recorded-video-selection strong { overflow: hidden; color: var(--ink-900); font-size: .76rem; text-overflow: ellipsis; white-space: nowrap; }
-.recorded-video-selection small { color: var(--ink-500); font-size: .65rem; }
-.recorded-video-file-icon { background: var(--blue-50); color: var(--blue-700); }
+.recorded-video-preview-card { display: grid; gap: 10px; margin-top: 9px; }
+.recorded-video-preview-picker { position: relative; display: block; overflow: hidden; border: 1px solid var(--border-medium); background: var(--ink-950); cursor: pointer; aspect-ratio: 16 / 9; }
+.recorded-video-preview-picker input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.recorded-video-preview-picker video { display: block; width: 100%; height: 100%; object-fit: cover; }
+.recorded-video-preview-picker__action { position: absolute; right: 10px; bottom: 10px; padding: 7px 10px; background: rgba(0,0,0,.72); color: #fff; font-size: .68rem; font-weight: 700; }
+.recorded-video-preview-title { overflow: hidden; color: var(--ink-900); font-size: .78rem; text-overflow: ellipsis; white-space: nowrap; }
+.recorded-video-preview-card .button { width: 100%; }
 .recorded-upload-error { margin: 10px 0 0; color: var(--red-600); font-size: .72rem; }
+.recorded-upload-summary { display: grid; margin: 0 0 10px; border-top: 1px solid var(--ink-100); }
+.recorded-upload-summary > div { display: grid; min-width: 0; grid-template-columns: 82px minmax(0, 1fr); gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--ink-100); }
+.recorded-upload-summary dt { color: var(--ink-500); font-size: .62rem; }
+.recorded-upload-summary dd { min-width: 0; margin: 0; overflow: hidden; color: var(--ink-900); font-size: .68rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.recorded-upload__video-panel .recorded-video-dropzone { min-height: 150px; border-radius: 0; }
+.recorded-upload__detail-panel .lesson-form__policy-list { margin-bottom: 9px; }
 
 /* 녹화강의 상세 — 처리 snapshot과 READY 미리보기를 한 자리에서 전환한다(ADR-0009). */
 .recorded-lesson-detail-page { gap: 14px; }

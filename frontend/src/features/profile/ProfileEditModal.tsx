@@ -14,7 +14,7 @@ interface ProfileEditModalProps {
  *
  * <p>강사만 이 모달을 쓴다(ADR-0011) — 강사 화면의 왼쪽 카드는 강사 공개 프로필(소개·전문 분야)이
  * 차지하고 있어 닉네임·이미지를 놓을 자리가 없다. 학생은 같은 필드를 화면 안 프로필 수정 카드에서
- * 바로 고친다(`ProfileEditPanel`).
+ * 학생과 강사 모두 프로필 정보는 먼저 읽기 전용으로 보고, 이 모달에서 기본 정보를 고친다.
  *
  * <p>상태·검증은 `useBasicProfileDraft`가, 필드는 `BasicProfileFields`가 갖는다. 이 파일은 모달
  * 크롬만 갖는다 — 배경, `role="dialog"`, Esc, 바깥 스크롤 잠금, 저장 중 닫기 차단.

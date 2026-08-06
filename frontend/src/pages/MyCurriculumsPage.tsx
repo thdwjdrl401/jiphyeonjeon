@@ -20,6 +20,7 @@ import SearchIcon from '@/shared/ui/SearchIcon'
 import { InlineNotice, MetricCard, PageHeader, Panel, StatusBadge } from '@/shared/ui/WorkspaceUi'
 
 const CURRICULUM_PAGE_SIZE = 4
+type StudentCurriculumFilter = '' | 'PENDING' | 'IN_PROGRESS' | 'COMPLETED'
 
 function formatLessonMinutes(durationMs?: number | null) {
   if (!durationMs) return '--'
@@ -53,15 +54,8 @@ function isSameDay(a: Date, b: Date) {
  * <p>보관됨은 학생에게도 그대로 알린다. 강사가 내린 커리큘럼을 "수강 중"이라고 하면 오지 않을 새
  * 강의를 계속 기다리게 된다.
  */
-function CurriculumStatusBadge({
-  lifecycleStatus,
-  isInstructor,
-}: {
-  lifecycleStatus: CurriculumLifecycleStatus
-  isInstructor: boolean
-}) {
+function InstructorCurriculumStatusBadge({ lifecycleStatus }: { lifecycleStatus: CurriculumLifecycleStatus }) {
   if (lifecycleStatus === 'ARCHIVED') return <StatusBadge tone="neutral">보관됨</StatusBadge>
-  if (!isInstructor) return <StatusBadge tone="success">수강 중</StatusBadge>
   return lifecycleStatus === 'PUBLISHED'
     ? <StatusBadge tone="success">공개 중</StatusBadge>
     : <StatusBadge tone="warning">준비 중</StatusBadge>
@@ -105,9 +99,15 @@ function CurriculumPagination({
   )
 }
 
-function PendingCurriculumCard({ item }: { item: StudentCurriculumItem }) {
+function isCompletedCurriculum(item: StudentCurriculumItem) {
+  return item.enrollmentStatus === 'ACTIVE' && item.lessonCount > 0 && item.progress >= 100
+}
+
+function StudentCurriculumCard({ item }: { item: StudentCurriculumItem }) {
   // 취소 성공·실패 알림은 useCancelEnrollmentMutation이 토스트로 낸다.
   const cancelMutation = useCancelEnrollmentMutation(item.curriculumId)
+  const isPending = item.enrollmentStatus === 'PENDING'
+  const isCompleted = isCompletedCurriculum(item)
 
   return (
     <article className="dashboard-curriculum-card">
@@ -118,10 +118,12 @@ function PendingCurriculumCard({ item }: { item: StudentCurriculumItem }) {
       </div>
       <div className="dashboard-curriculum-card__content">
         <div>
-          <StatusBadge tone="warning">승인 대기</StatusBadge>
+          <StatusBadge tone={isPending ? 'warning' : isCompleted ? 'neutral' : 'success'}>
+            {isPending ? '수강 신청 대기 중' : isCompleted ? '학습 완료' : '학습 중'}
+          </StatusBadge>
           <h3><Link className="stretched-link" to={publicPaths.curriculum(item.curriculumId)}>{item.title}</Link></h3>
         </div>
-        <div className="card-actions">
+        {isPending ? <div className="card-actions">
           <button
             className="button button--ghost"
             type="button"
@@ -130,7 +132,7 @@ function PendingCurriculumCard({ item }: { item: StudentCurriculumItem }) {
           >
             {cancelMutation.isPending ? '취소 중' : '수강 신청 취소'}
           </button>
-        </div>
+        </div> : <div className="dashboard-progress"><span><strong>{item.progress}%</strong> · {item.completedLessonCount}/{item.lessonCount} 강의</span><i><b style={{ width: `${item.progress}%` }} /></i></div>}
       </div>
     </article>
   )
@@ -143,9 +145,8 @@ export default function MyCurriculumsPage() {
   usePageTitle(pageTitle)
   const userId = user?.userId ?? ''
   const [search, setSearch] = useState('')
-  const [status, setStatus] = useState('')
+  const [status, setStatus] = useState<StudentCurriculumFilter | CurriculumLifecycleStatus>('')
   const [page, setPage] = useState(0)
-  const [pendingPage, setPendingPage] = useState(0)
   // 목록은 탐색·진입만 맡는다 — 삭제 같은 상태 변경은 관리 화면의 게시 카드에 모아 뒀다.
   const instructorListQuery = useQuery({
     queryKey: ['my-curriculums', 'instructor', userId, search, status, page],
@@ -173,18 +174,20 @@ export default function MyCurriculumsPage() {
   if (!user) return null
 
   const instructorCurriculums = instructorListQuery.data?.items ?? []
-  const studentCurriculums = (studentListQuery.data ?? []).filter((item) => item.enrollmentStatus === 'ACTIVE')
-  const pendingStudentCurriculums = (studentListQuery.data ?? []).filter((item) => item.enrollmentStatus === 'PENDING')
+  const studentCurriculums = (studentListQuery.data ?? []).filter((item) => (
+    item.enrollmentStatus === 'ACTIVE' || item.enrollmentStatus === 'PENDING'
+  ))
   const filteredStudentCurriculums = studentCurriculums.filter((item) => {
     const matchesSearch = !search || item.title.toLocaleLowerCase('ko').includes(search.toLocaleLowerCase('ko'))
-    const matchesStatus = !status || status === 'ACTIVE'
+    const matchesStatus = !status
+      || (status === 'PENDING' && item.enrollmentStatus === 'PENDING')
+      || (status === 'IN_PROGRESS' && item.enrollmentStatus === 'ACTIVE' && !isCompletedCurriculum(item))
+      || (status === 'COMPLETED' && isCompletedCurriculum(item))
     return matchesSearch && matchesStatus
   })
   const studentTotalPages = Math.ceil(filteredStudentCurriculums.length / CURRICULUM_PAGE_SIZE)
   const studentPage = Math.min(page, Math.max(0, studentTotalPages - 1))
-  const displayedCurriculums = isInstructor
-    ? instructorCurriculums
-    : filteredStudentCurriculums.slice(
+  const displayedStudentCurriculums = filteredStudentCurriculums.slice(
       studentPage * CURRICULUM_PAGE_SIZE,
       (studentPage + 1) * CURRICULUM_PAGE_SIZE,
     )
@@ -192,12 +195,6 @@ export default function MyCurriculumsPage() {
     ? instructorListQuery.data?.totalPages ?? 0
     : studentTotalPages
   const primaryPage = isInstructor ? page : studentPage
-  const pendingTotalPages = Math.ceil(pendingStudentCurriculums.length / CURRICULUM_PAGE_SIZE)
-  const visiblePendingPage = Math.min(pendingPage, Math.max(0, pendingTotalPages - 1))
-  const displayedPendingCurriculums = pendingStudentCurriculums.slice(
-    visiblePendingPage * CURRICULUM_PAGE_SIZE,
-    (visiblePendingPage + 1) * CURRICULUM_PAGE_SIZE,
-  )
   const upcomingLive = isInstructor
     ? instructorSummaryQuery.data?.upcomingLiveSession
     : studentSummaryQuery.data?.upcomingLiveSession
@@ -218,7 +215,8 @@ export default function MyCurriculumsPage() {
   // 수강 중이거나 운영 중인 강의가 하나도 없으면 받을 알림 자체가 없다 — 그런 사람에게 안내를 띄우지 않는다.
   const hasNotifiableCurriculums = isInstructor
     ? (instructorSummaryQuery.data?.totalCurriculumCount ?? instructorCurriculums.length) > 0
-    : (studentSummaryQuery.data?.inProgressCurriculumCount ?? studentCurriculums.length) > 0
+    : (studentSummaryQuery.data?.inProgressCurriculumCount
+      ?? studentCurriculums.filter((item) => item.enrollmentStatus === 'ACTIVE').length) > 0
 
   return (
     <div className="workspace-page my-curriculums-page">
@@ -240,9 +238,9 @@ export default function MyCurriculumsPage() {
 
       <div className="my-curriculums-page__layout">
         <div className="my-curriculums-page__main">
-          <Panel className="my-curriculums-page__list-panel" title={isInstructor ? '운영 중인 커리큘럼' : '수강 중인 커리큘럼'} action={<div className="compact-controls"><label className="search-field"><span className="visually-hidden">{pageTitle} 검색</span><SearchIcon /><input placeholder="제목 검색" value={search} onChange={(event) => { setSearch(event.target.value); setPage(0) }} /></label><select aria-label="상태 필터" value={status} onChange={(event) => { setStatus(event.target.value); setPage(0) }}><option value="">전체 상태</option>{isInstructor ? <><option value="PUBLISHED">공개 중</option><option value="DRAFT">준비 중</option></> : <><option value="ACTIVE">수강 중</option></>}</select></div>}>
+          <Panel className="my-curriculums-page__list-panel" title={isInstructor ? '운영 중인 커리큘럼' : '나의 커리큘럼'} action={<div className="compact-controls"><label className="search-field"><span className="visually-hidden">{pageTitle} 검색</span><SearchIcon /><input placeholder="제목 검색" value={search} onChange={(event) => { setSearch(event.target.value); setPage(0) }} /></label><select aria-label="상태 필터" value={status} onChange={(event) => { setStatus(event.target.value as StudentCurriculumFilter | CurriculumLifecycleStatus); setPage(0) }}><option value="">전체 상태</option>{isInstructor ? <><option value="PUBLISHED">공개 중</option><option value="DRAFT">준비 중</option></> : <><option value="PENDING">수강 신청 대기 중</option><option value="IN_PROGRESS">학습 중</option><option value="COMPLETED">학습 완료</option></>}</select></div>}>
             <div className="dashboard-curriculum-list">
-              {displayedCurriculums.map((item) => (
+              {isInstructor ? instructorCurriculums.map((item) => (
                 <article className="dashboard-curriculum-card" key={item.curriculumId}>
                   <div className="dashboard-curriculum-card__cover">{item.thumbnailUrl ? <img src={item.thumbnailUrl} alt={`${item.title} 대표 이미지`} /> : <CurriculumCoverFallback />}</div>
                   {/*
@@ -250,35 +248,20 @@ export default function MyCurriculumsPage() {
                     링크를 중첩하지 않으므로 관리 버튼은 z-index로 위에 떠 그대로 관리 페이지로 간다.
                   */}
                   <div className="dashboard-curriculum-card__content">
-                    <div><CurriculumStatusBadge lifecycleStatus={item.lifecycleStatus} isInstructor={isInstructor} /><h3><Link className="stretched-link" to={publicPaths.curriculum(item.curriculumId)}>{item.title}</Link></h3></div>
-                    {'progress' in item
-                      ? <div className="dashboard-progress"><span><strong>{item.progress}%</strong> · {item.completedLessonCount}/{item.lessonCount} 강의</span><i><b style={{ width: `${item.progress}%` }} /></i></div>
-                      : <p className="dashboard-meta">다음 일정 {item.nextLiveSession?.scheduledAt ? formatScheduleLabel(new Date(item.nextLiveSession.scheduledAt)) : '미정'}</p>}
-                    {isInstructor && <div className="card-actions"><Link className="button button--soft" to={instructorPaths.curriculumManage(item.curriculumId)}>관리</Link></div>}
+                    <div><InstructorCurriculumStatusBadge lifecycleStatus={item.lifecycleStatus} /><h3><Link className="stretched-link" to={publicPaths.curriculum(item.curriculumId)}>{item.title}</Link></h3></div>
+                    <p className="dashboard-meta">다음 일정 {item.nextLiveSession?.scheduledAt ? formatScheduleLabel(new Date(item.nextLiveSession.scheduledAt)) : '미정'}</p>
+                    <div className="card-actions"><Link className="button button--soft" to={instructorPaths.curriculumManage(item.curriculumId)}>관리</Link></div>
                   </div>
                 </article>
-              ))}
+              )) : displayedStudentCurriculums.map((item) => <StudentCurriculumCard key={item.curriculumId} item={item} />)}
             </div>
             <CurriculumPagination
-              label={isInstructor ? '운영 중인 커리큘럼 페이지' : '수강 중인 커리큘럼 페이지'}
+              label={isInstructor ? '운영 중인 커리큘럼 페이지' : '나의 커리큘럼 페이지'}
               page={primaryPage}
               totalPages={primaryTotalPages}
               onPageChange={setPage}
             />
           </Panel>
-
-          {/* 대기 목록은 신청한 학생에게만 주 목록 아래에 표시한다. */}
-          {!isInstructor && pendingStudentCurriculums.length > 0 && (
-            <Panel title="승인 대기 중인 커리큘럼" description="강사가 수강 신청을 승인하면 나의 학습 목록에서 바로 시작할 수 있어요.">
-              <div className="dashboard-curriculum-list">{displayedPendingCurriculums.map((item) => <PendingCurriculumCard key={item.curriculumId} item={item} />)}</div>
-              <CurriculumPagination
-                label="승인 대기 중인 커리큘럼 페이지"
-                page={visiblePendingPage}
-                totalPages={pendingTotalPages}
-                onPageChange={setPendingPage}
-              />
-            </Panel>
-          )}
         </div>
 
         <aside className="my-curriculums-page__sidebar" aria-label="커리큘럼 요약">

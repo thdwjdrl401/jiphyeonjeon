@@ -338,6 +338,10 @@ describe('커리큘럼 작업 화면', () => {
     await screen.findByLabelText('섹션 1 이름')
     await user.click(screen.getByRole('button', { name: /섹션 추가/ }))
 
+    const newDescription = screen.getAllByLabelText(/섹션 \d+ 설명/).at(-1)
+    expect(newDescription).toHaveValue('')
+    expect(newDescription).toHaveAttribute('placeholder', '설명을 입력해 주세요.')
+
     // 방금 추가한(아직 임시 id) 섹션의 두 버튼은 모두 비활성이어야 한다 — 존재하지 않는 섹션
     // URL로 못 들어가게 한다. 클릭 가능한 링크가 아니라 disabled 버튼으로 렌더된다.
     expect(screen.getAllByRole('button', { name: '녹화강의 업로드' }).some((button) => button.hasAttribute('disabled'))).toBe(true)
@@ -389,15 +393,29 @@ describe('커리큘럼 작업 화면', () => {
 
     const video = new File(['recorded-video'], '보안-기초.mp4', { type: 'video/mp4' })
     await user.upload(videoInput, video)
-    expect(screen.getByText('보안-기초.mp4')).toBeInTheDocument()
-    expect(screen.getByText('선택 완료')).toBeInTheDocument()
+    expect(screen.getAllByText('보안-기초.mp4')).toHaveLength(2)
+    expect(screen.getByLabelText('보안-기초.mp4 썸네일')).toHaveAttribute('src', expect.stringMatching(/^blob:/))
+    expect(screen.getByText('다른 영상으로 교체')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '영상 삭제' })).toBeInTheDocument()
+    expect(screen.getByText('필수 영상이 준비되었습니다. 제목과 자료를 마지막으로 확인해 주세요.')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '강의 기본 정보' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '동영상 업로드' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '업로드 세부 확인' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '영상 삭제' }))
+    expect(screen.queryByLabelText('보안-기초.mp4 썸네일')).not.toBeInTheDocument()
+    expect(screen.getByText('MP4 영상 선택')).toBeInTheDocument()
+    expect(screen.getByText('업로드할 MP4 영상을 선택해 주세요.')).toBeInTheDocument()
+    await user.upload(screen.getByLabelText('MP4 영상 파일'), video)
+    expect(screen.getByRole('button', { name: '영상 삭제' })).toBeInTheDocument()
 
     const material = new File(['presentation'], '보안-기초.pptx', {
       type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
     })
     await user.upload(screen.getByLabelText('녹화강의 자료 파일'), material)
     expect(screen.getByText('보안-기초.pptx')).toBeInTheDocument()
-    expect(screen.getByText('업로드 대기')).toBeInTheDocument()
+    expect(screen.getByText('1개 업로드 대기')).toBeInTheDocument()
+    expect(screen.getByText('대기')).toBeInTheDocument()
 
     const submit = screen.getByRole('button', { name: '녹화강의 업로드' })
     expect(submit).toBeDisabled()
@@ -918,7 +936,7 @@ describe('커리큘럼 작업 화면', () => {
       .map((heading) => within(heading).getByRole('link'))
     expect(titleLinks.length).toBeGreaterThan(0)
     for (const titleLink of titleLinks) {
-      expect(titleLink).toHaveAttribute('href', expect.stringMatching(/^\/curriculums\/.+/))
+      expect(titleLink).toHaveAttribute('href', expect.stringMatching(/^\/curriculums\/[^?]+$/))
     }
     expect(within(operatingPanel!).queryByRole('link', { name: '커리큘럼 상세' })).not.toBeInTheDocument()
     expect(within(operatingPanel!).queryByRole('link', { name: '관리하기' })).not.toBeInTheDocument()
@@ -1012,6 +1030,7 @@ describe('커리큘럼 작업 화면', () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/profile')
     expect(await screen.findByRole('heading', { name: '강사 공개 프로필' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '공개 프로필 수정' }))
     const saveButton = await screen.findByRole('button', { name: '공개 프로필 저장' })
     const bio = screen.getByLabelText('강사 소개')
     await user.clear(bio)
@@ -1026,25 +1045,26 @@ describe('커리큘럼 작업 화면', () => {
    * 학생은 "프로필 수정" 카드에서 **모달 없이** 이미지와 닉네임을 함께 바꾼다(ADR-0011).
    * 강사의 모달 흐름은 ProfilePage.test.tsx가 본다 — 여기서는 목 서비스까지 실제로 저장되는지 본다.
    */
-  it('학생 프로필 수정 카드에서 이미지와 닉네임을 함께 변경한다', async () => {
+  it('학생 프로필 수정 모달에서 이미지와 닉네임을 함께 변경한다', async () => {
     const user = userEvent.setup()
     await renderAsStudent('/student/profile')
 
-    const panel = (await screen.findByRole('heading', { name: '프로필 수정' })).closest('section')!
-    const displayName = within(panel).getByDisplayValue('김학생')
+    await user.click(await screen.findByRole('button', { name: '프로필 수정' }))
+    const dialog = await screen.findByRole('dialog', { name: '프로필 수정' })
+    const displayName = within(dialog).getByDisplayValue('김학생')
     await user.clear(displayName)
     await user.type(displayName, '김라이브')
 
     const image = new File(['profile-image'], 'profile.png', { type: 'image/png' })
-    await user.upload(within(panel).getByLabelText('프로필 이미지 선택'), image)
-    await user.click(within(panel).getByRole('button', { name: '변경사항 저장' }))
+    await user.upload(within(dialog).getByLabelText('프로필 이미지 선택'), image)
+    await user.click(within(dialog).getByRole('button', { name: '변경사항 저장' }))
 
     expect(await screen.findByText('기본 프로필이 변경되었습니다.')).toBeInTheDocument()
     // 상단 프로필 카드의 아바타가 바뀐 이미지·이름으로 갱신된다.
     const identityCard = screen.getByRole('region', { name: '김라이브' })
     expect(within(identityCard).getByRole('img', { name: '김라이브 프로필 이미지' }).querySelector('img')).not.toBeNull()
     // 저장한 뒤에는 바뀐 것이 없으므로 다시 저장할 수 없다.
-    expect(within(panel).getByRole('button', { name: '변경사항 저장' })).toBeDisabled()
+    expect(screen.queryByRole('dialog', { name: '프로필 수정' })).not.toBeInTheDocument()
   })
 
   it('목 프로필 서비스로 비밀번호를 변경하고 회원 탈퇴한다', async () => {
@@ -1073,30 +1093,31 @@ describe('커리큘럼 작업 화면', () => {
    * 배지는 보는 사람의 관점을 따른다 — 학생에게 커리큘럼이 "공개 중"인지는 강사의 사정이고, 학생이
    * 확인하려는 것은 자기가 수강 중이라는 사실이다. 상태 필터도 같은 말("수강 중")을 써야 한다.
    */
-  it('학생 내 커리큘럼은 수강 상태를 학생 관점으로 표시한다', async () => {
+  it('학생 내 커리큘럼은 신청 대기·학습 중·학습 완료를 한 목록에서 필터링한다', async () => {
     await renderAsStudent('/student/curriculums')
-    const learningHeading = await screen.findByRole('heading', { name: '수강 중인 커리큘럼' })
+    const learningHeading = await screen.findByRole('heading', { name: '나의 커리큘럼' })
     const learningPanel = learningHeading.closest('section')!
 
-    expect(await within(learningPanel).findByText('수강 중')).toBeInTheDocument()
+    expect(await within(learningPanel).findByText('학습 중')).toBeInTheDocument()
+    expect(within(learningPanel).getAllByText('수강 신청 대기 중')).toHaveLength(2)
     expect(within(learningPanel).queryByText('공개 중')).not.toBeInTheDocument()
     expect(within(within(learningPanel).getByRole('combobox', { name: '상태 필터' })).getAllByRole('option')
       .map((option) => option.textContent))
-      .toEqual(['전체 상태', '수강 중'])
+      .toEqual(['전체 상태', '수강 신청 대기 중', '학습 중', '학습 완료'])
   })
 
-  it('학생 내 커리큘럼에서 승인 대기 목록을 학습 진행 정보 없이 표시한다', async () => {
+  it('학생 내 커리큘럼의 신청 대기 카드는 학습 진행 정보 없이 표시한다', async () => {
     await renderAsStudent('/student/curriculums')
-    const heading = await screen.findByRole('heading', { name: '승인 대기 중인 커리큘럼' })
+    const heading = await screen.findByRole('heading', { name: '나의 커리큘럼' })
     const section = heading.closest('section')
 
     expect(section).not.toBeNull()
     const pendingSection = within(section!)
-    expect(await pendingSection.findByRole('heading', { name: '성능을 바꾸는 SQL 튜닝' })).toBeInTheDocument()
-    expect(pendingSection.getByText('승인 대기')).toBeInTheDocument()
-    expect(pendingSection.queryByRole('link', { name: '학습 계속하기' })).not.toBeInTheDocument()
-    expect(pendingSection.queryByText(/강의$/)).not.toBeInTheDocument()
-    expect(pendingSection.getByRole('link', { name: '성능을 바꾸는 SQL 튜닝' })).toHaveAttribute('href', '/curriculums/cur-sql')
-    expect(pendingSection.getByRole('button', { name: '수강 신청 취소' })).toBeInTheDocument()
+    const pendingCard = (await pendingSection.findByRole('heading', { name: '성능을 바꾸는 SQL 튜닝' })).closest('article')!
+    expect(within(pendingCard).getByText('수강 신청 대기 중')).toBeInTheDocument()
+    expect(within(pendingCard).queryByRole('link', { name: '학습 계속하기' })).not.toBeInTheDocument()
+    expect(within(pendingCard).queryByText(/강의$/)).not.toBeInTheDocument()
+    expect(within(pendingCard).getByRole('link', { name: '성능을 바꾸는 SQL 튜닝' })).toHaveAttribute('href', '/curriculums/cur-sql')
+    expect(within(pendingCard).getByRole('button', { name: '수강 신청 취소' })).toBeInTheDocument()
   })
 })
