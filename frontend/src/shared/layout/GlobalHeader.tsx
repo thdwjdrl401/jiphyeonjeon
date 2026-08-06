@@ -19,6 +19,7 @@ export default function GlobalHeader() {
   const navigationItems: NavigationItem[] = user
     ? navigationItemsByRole[user.role]
     : [navigationItemsByRole.STUDENT[0]]
+  const hasActiveNavigation = navigationItems.some((item) => isNavigationItemActive(item, pathname))
 
   const closeMenu = () => setIsMenuOpen(false)
 
@@ -48,7 +49,7 @@ export default function GlobalHeader() {
             데스크톱·모바일이 같은 목록을 쓴다(모바일은 CSS가 세로로 펼친다) —
             역할별 메뉴가 두 곳에서 갈리지 않게 마크업을 하나만 둔다.
           */}
-          <nav className="primary-navigation" aria-label="주요 메뉴">
+          <nav className={`primary-navigation${hasActiveNavigation ? ' has-active-context' : ''}`} aria-label="주요 메뉴">
             {navigationItems.map((item) => {
               const isActive = isNavigationItemActive(item, pathname)
               return (

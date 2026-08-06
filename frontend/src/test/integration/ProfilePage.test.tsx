@@ -34,7 +34,7 @@ describe('내 프로필 화면', () => {
     renderAt(path)
 
     await screen.findByRole('heading', { name: '내 프로필', level: 1 })
-    // 카드는 이름으로 라벨링된 region이다 — 학생 화면에는 수정 버튼이 없어 버튼으로 잡을 수 없다.
+    // 카드는 이름으로 라벨링된 region이다.
     const card = await screen.findByRole('region', { name: displayName })
 
     // 학생·강사가 같은 컴포넌트를 쓰므로 카드 구조가 같아야 한다.
@@ -48,28 +48,19 @@ describe('내 프로필 화면', () => {
     expect(within(card).queryByRole('textbox')).not.toBeInTheDocument()
   })
 
-  /**
-   * 닉네임·이미지를 고치는 진입점은 역할마다 하나씩이다(ADR-0011). 학생은 왼쪽 열의 "프로필 수정"
-   * 카드에서 바로 고치므로 상단 카드의 "프로필 수정" 버튼이 없고, 강사는 그 자리가 강사 공개
-   * 프로필로 차 있어 모달로 고친다. 둘 다 생기면 같은 일을 하는 진입점이 두 개가 된다.
-   */
-  it('학생에게는 버튼 없이 프로필 수정 카드를, 강사에게는 수정 모달을 준다', async () => {
-    await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
-    const student = renderAt('/student/profile')
+  it.each([
+    ['학생', '/student/profile', 'student01@example.com'],
+    ['강사', '/instructor/profile', 'instructor@liveclass.ai'],
+  ])('%s 프로필은 처음에 읽기 전용이며 수정 버튼을 눌러야 기본 정보 폼을 연다', async (
+    _label, path, email,
+  ) => {
+    const user = userEvent.setup()
+    await mockAuthService.login({ email, password: 'password1' })
+    renderAt(path)
 
-    const studentPanel = (await screen.findByRole('heading', { name: '프로필 수정' })).closest('section')!
-    expect(within(studentPanel).getByLabelText('닉네임')).toBeInTheDocument()
-    expect(within(studentPanel).getByLabelText('프로필 이미지 선택')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '프로필 수정' })).not.toBeInTheDocument()
-    student.unmount()
-
-    resetMockAuth()
-    await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
-    renderAt('/instructor/profile')
-
-    expect(await screen.findByRole('button', { name: '프로필 수정' })).toBeInTheDocument()
-    // 강사 화면의 왼쪽 카드는 강사 공개 프로필이라 닉네임 필드가 화면에 펼쳐져 있지 않다.
     expect(screen.queryByLabelText('닉네임')).not.toBeInTheDocument()
+    await user.click(await screen.findByRole('button', { name: '프로필 수정' }))
+    expect(await screen.findByRole('dialog', { name: '프로필 수정' })).toBeInTheDocument()
   })
 
   it('예전의 분리된 두 카드 제목을 더 이상 쓰지 않는다', async () => {
@@ -81,8 +72,7 @@ describe('내 프로필 화면', () => {
     expect(screen.queryByRole('heading', { name: '기본 프로필' })).not.toBeInTheDocument()
   })
 
-  // 모달은 강사 화면에만 있다(학생은 카드에서 바로 고친다).
-  it('프로필 수정 버튼이 기존 수정 모달로 이어지고, 닫으면 포커스가 돌아온다', async () => {
+  it('프로필 수정 모달을 닫으면 진입 버튼으로 포커스가 돌아온다', async () => {
     const user = userEvent.setup()
     await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
     renderAt('/instructor/profile')
@@ -101,15 +91,15 @@ describe('내 프로필 화면', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: '프로필 수정' })).toHaveFocus())
   })
 
-  it('두 역할 모두 왼쪽 편집 카드 · 오른쪽 계정 설정 두 카드로 구성된다', async () => {
+  it('학생은 계정 설정만, 강사는 읽기 전용 공개 프로필과 계정 설정을 표시한다', async () => {
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
     const student = renderAt('/student/profile')
     /*
       학생의 왼쪽 카드는 닉네임·이미지를 고치는 "프로필 수정"이다. 학생에게는 커리큘럼 상세에
       공개되는 값이 없으므로 "공개 프로필"이라는 이름을 쓰지 않는다.
     */
-    await screen.findByRole('heading', { name: '프로필 수정' })
-    expect(screen.getByRole('heading', { name: '계정 설정' })).toBeInTheDocument()
+    await screen.findByRole('heading', { name: '계정 설정' })
+    expect(screen.queryByRole('heading', { name: '프로필 수정' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '강사 공개 프로필' })).not.toBeInTheDocument()
     student.unmount()
 
@@ -119,8 +109,8 @@ describe('내 프로필 화면', () => {
     // 강사 화면은 두 카드다 — 왼쪽 공개 프로필, 오른쪽 계정 설정.
     await screen.findByRole('heading', { name: '강사 공개 프로필' })
     expect(screen.getByRole('heading', { name: '계정 설정' })).toBeInTheDocument()
-    // 폼은 공개 프로필 조회가 끝난 뒤 그려진다.
-    expect(await screen.findByLabelText('강사 소개')).toBeInTheDocument()
+    expect(screen.queryByLabelText('강사 소개')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '공개 프로필 수정' })).toHaveClass('button--primary')
   })
 
   /**

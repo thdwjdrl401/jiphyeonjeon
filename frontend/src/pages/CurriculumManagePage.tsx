@@ -111,6 +111,11 @@ interface LessonDropTarget {
   lessonIndex: number
 }
 
+function normalizeLegacySectionDescription(description: string) {
+  const legacyValue = description.match(/^설명을 입력해\s*(.*?)\s*주세요\.$/)
+  return legacyValue ? legacyValue[1].trim() : description
+}
+
 export default function CurriculumManagePage() {
   const { curriculumId } = useParams()
   const location = useLocation()
@@ -204,7 +209,24 @@ function CurriculumManageEditor({
   const isNewDraft = storedCurriculum?.lifecycleStatus === 'DRAFT'
   const lifecycleView = LIFECYCLE_VIEW[storedCurriculum.lifecycleStatus]
     ?? { tone: 'neutral' as const, label: storedCurriculum.lifecycleStatus, description: '알 수 없는 상태입니다.' }
-  const [sections, setSections] = useState(initialSections)
+  // 이전 화면이 placeholder 문구를 실제 값으로 저장한 레코드도 빈 설명으로 복구해 보여 준다.
+  // 사용자가 다른 내용을 수정하면 자동 저장 과정에서 빈 문자열로 정리된다.
+  const [sections, setSections] = useState(() => initialSections.map((section) => ({
+    ...section,
+    description: normalizeLegacySectionDescription(section.description),
+  })))
+  useEffect(() => {
+    setSections((current) => {
+      let changed = false
+      const normalized = current.map((section) => {
+        const description = normalizeLegacySectionDescription(section.description)
+        if (description === section.description) return section
+        changed = true
+        return { ...section, description }
+      })
+      return changed ? normalized : current
+    })
+  }, [initialSections])
   // structureVersion을 로컬로 들고 저장 때마다 갱신한다 — 안 그러면 새로고침 없이 연속 저장 시
   // 낡은 baseVersion을 보내 409로 실패한다(order PUT의 낙관적 동시성).
   const [structureVersion, setStructureVersion] = useState(storedCurriculum.structureVersion)
@@ -608,7 +630,7 @@ function CurriculumManageEditor({
       {
         sectionId: `sec-new-${Date.now()}`,
         title: '새 섹션',
-        description: '설명을 입력해 주세요.',
+        description: '',
         order: current.length + 1,
         lessons: [],
       },
@@ -777,7 +799,7 @@ function CurriculumManageEditor({
                       <span className="structure-section__eyebrow">SECTION {sectionIndex + 1}</span>
                       <div className="structure-section__fields">
                         <label><small>섹션 이름</small><input aria-label={`섹션 ${sectionIndex + 1} 이름`} maxLength={200} value={section.title} onChange={(event) => updateSection(section.sectionId, 'title', event.target.value)} /></label>
-                        <label><small>섹션 설명</small><textarea aria-label={`섹션 ${sectionIndex + 1} 설명`} rows={1} value={section.description} onChange={(event) => updateSection(section.sectionId, 'description', event.target.value)} /></label>
+                        <label><small>섹션 설명</small><textarea aria-label={`섹션 ${sectionIndex + 1} 설명`} placeholder="설명을 입력해 주세요." rows={1} value={section.description} onChange={(event) => updateSection(section.sectionId, 'description', event.target.value)} /></label>
                       </div>
                       <div className="structure-actions">
                         <div className="structure-order-actions" aria-label="섹션 순서 변경">

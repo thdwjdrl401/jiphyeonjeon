@@ -7,7 +7,7 @@ import { mockAuthService, resetMockAuth } from '@/features/auth/mockAuthService'
 /**
  * 상단 네비게이션의 역할별 메뉴·활성 표시와, 프로필 드롭다운의 기본정보·이동·로그아웃을 확인한다.
  * 메뉴 정의는 `app/router/navigation.ts` 한 곳에 있으므로, 여기서 검증하는 것은
- * "그 정의가 역할에 맞게 화면에 나오는가"와 "하위 라우트에서도 활성이 유지되는가"다.
+ * "그 정의가 역할에 맞게 화면에 나오는가"와 "정해진 화면에서만 활성이 표시되는가"다.
  */
 
 function renderAt(path: string) {
@@ -81,15 +81,28 @@ describe('역할별 상단 네비게이션', () => {
 
     it.each([
       '/instructor/curriculums',
-      '/instructor/curriculums/new',
       '/instructor/curriculums/cur-spring-live/manage',
-      '/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/les-security',
-      '/instructor/live-sessions/ses-security-live/preflight',
-    ])('하위 화면 %s에서도 마이 페이지가 활성이다', async (path) => {
+      '/instructor/profile',
+      '/instructor/notifications',
+    ])('지정된 화면 %s에서 마이 페이지가 활성이다', async (path) => {
       await loginAsInstructor()
       renderAt(path)
 
       await waitFor(() => expect(activeMenuLabels()).toEqual(['마이 페이지']))
+      expect(headerNav()).toHaveClass('has-active-context')
+    })
+
+    it.each([
+      '/instructor/curriculums/new',
+      '/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/les-security',
+      '/instructor/live-sessions/ses-security-live/preflight',
+      '/curriculums/cur-spring-live',
+    ])('그 밖의 화면 %s에서는 상단 메뉴를 활성화하지 않는다', async (path) => {
+      await loginAsInstructor()
+      renderAt(path)
+
+      await waitFor(() => expect(activeMenuLabels()).toEqual([]))
+      expect(headerNav()).not.toHaveClass('has-active-context')
     })
 
     it('프로필 버튼을 누르면 기본정보와 운영 콘솔 진입점이 담긴 드롭다운이 열린다', async () => {
@@ -135,11 +148,23 @@ describe('역할별 상단 네비게이션', () => {
       expect(within(nav).getByRole('link', { name: '마이 페이지' })).toHaveAttribute('href', '/student/curriculums')
     })
 
-    it('강의 학습 화면에서도 마이 페이지가 활성이다', async () => {
+    it.each([
+      '/student/curriculums',
+      '/student/profile',
+      '/student/notifications',
+    ])('지정된 화면 %s에서 마이 페이지가 활성이다', async (path) => {
+      await loginAsStudent()
+      renderAt(path)
+
+      await waitFor(() => expect(activeMenuLabels()).toEqual(['마이 페이지']))
+    })
+
+    it('강의 학습 화면에서는 상단 메뉴를 활성화하지 않는다', async () => {
       await loginAsStudent()
       renderAt('/student/curriculums/cur-spring-live/sections/sec-security/lessons/les-security')
 
-      await waitFor(() => expect(activeMenuLabels()).toEqual(['마이 페이지']))
+      await waitFor(() => expect(activeMenuLabels()).toEqual([]))
+      expect(headerNav()).not.toHaveClass('has-active-context')
     })
 
     it('프로필 버튼을 누르면 기본정보가 뜨고 운영 콘솔 진입점은 없다', async () => {

@@ -161,12 +161,15 @@ body {
   transition: color .18s ease, transform .18s ease;
 }
 
-.primary-navigation a:hover,
 .primary-navigation a:focus-visible,
 .primary-navigation a.is-active {
   background: transparent;
   color: var(--ink-950);
 }
+
+.primary-navigation a:hover { background: transparent; }
+.primary-navigation:not(.has-active-context) a:hover { color: var(--ink-600); transform: none; }
+.primary-navigation.has-active-context a:hover { color: var(--ink-950); }
 
 .primary-navigation a::after {
   position: absolute;
@@ -180,11 +183,11 @@ body {
   transform: translateX(-3px);
   transition: opacity .18s ease, transform .18s ease;
 }
-.primary-navigation a:not(.is-active):not([aria-current='page']):hover { transform: translateY(-2px); }
-.primary-navigation a:not(.is-active):not([aria-current='page']):hover::after,
-.primary-navigation a:not(.is-active):not([aria-current='page']):focus-visible::after,
-.primary-navigation a.is-active::after,
-.primary-navigation a[aria-current='page']::after {
+.primary-navigation.has-active-context a:not(.is-active):not([aria-current='page']):hover { transform: translateY(-2px); }
+.primary-navigation.has-active-context a:not(.is-active):not([aria-current='page']):hover::after,
+.primary-navigation.has-active-context a:not(.is-active):not([aria-current='page']):focus-visible::after,
+.primary-navigation.has-active-context a.is-active::after,
+.primary-navigation.has-active-context a[aria-current='page']::after {
   opacity: 1;
   transform: translateX(0);
 }
