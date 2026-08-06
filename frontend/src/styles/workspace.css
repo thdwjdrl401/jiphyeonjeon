@@ -803,6 +803,40 @@ th { color: var(--ink-500); font-size: .67rem; }
 .curriculum-manage-page .form-grid input,
 .curriculum-manage-page .form-grid textarea { min-height: 40px; padding: 8px 10px; font-size: .76rem; }
 .curriculum-manage-page .form-grid textarea { min-height: 106px; line-height: 1.5; }
+/*
+  기본 정보 패널 안의 운영 기간. 대표 이미지 블록과 같은 구분선·여백으로 한 패널처럼 읽히게 둔다.
+
+  글자 크기·폰트를 위 form-grid와 같은 값으로 못 박는다. datetime-local 입력은 공용 입력 스타일
+  목록(design-system의 `.form-grid input, .workspace-form input, …`)에 들어 있지 않아서, 두지 않으면
+  브라우저 기본 폰트·크기로 렌더돼 같은 패널 안에서 글씨체가 갈린다.
+
+  선택자에 `.curriculum-period-fields`를 한 번 더 붙이는 것은 명시도 때문이다 — design-system.css가
+  마지막에 로드되므로 같은 명시도로는 그쪽 값(legend .8rem 등)이 이긴다.
+*/
+.curriculum-manage__embedded-period { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-soft); }
+.curriculum-manage__embedded-period .curriculum-period-fields { gap: 8px; }
+.curriculum-manage__embedded-period .curriculum-period-fields > legend { font-size: .76rem; }
+.curriculum-manage__embedded-period .curriculum-period-fields__hint { font-size: .62rem; line-height: 1.4; }
+.curriculum-manage__embedded-period .curriculum-period-fields__inputs { gap: 10px 11px; }
+.curriculum-manage__embedded-period .curriculum-period-fields__inputs label { gap: 4px; }
+.curriculum-manage__embedded-period .curriculum-period-fields__inputs label > span { font-size: .7rem; }
+.curriculum-manage__embedded-period .curriculum-period-fields__inputs input {
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-medium);
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  font-family: inherit;
+  font-size: .76rem;
+}
+.curriculum-manage__embedded-period .curriculum-period-fields__inputs input:focus {
+  border-color: var(--ink-950);
+  box-shadow: 0 0 0 1px var(--ink-950);
+  outline: none;
+}
+.curriculum-manage__period-issue { margin: 6px 0 0; color: var(--red-600); font-size: .66rem; line-height: 1.45; }
 .curriculum-manage__embedded-image { display: grid; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-soft); }
 .curriculum-manage__embedded-image h3 { margin: 0 0 2px; font-size: .76rem; }
 .curriculum-manage__embedded-image > div > p { margin: 0; color: var(--ink-500); font-size: .62rem; line-height: 1.4; }

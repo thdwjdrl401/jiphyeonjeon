@@ -1,4 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useAuth } from '@/features/auth/AuthContext'
+import type { UserRole } from '@/features/auth/types'
 import { getNotificationLeadTimes, saveNotificationPreference } from './notificationService'
 import { notificationQueryKeys, useNotificationPreferenceQuery } from './useNotificationQueries'
 
@@ -12,14 +14,17 @@ interface LiveReminderSettingProps {
  * 라이브 <b>곧 시작</b> 알림의 리드타임 설정 내용. 제목과 팝오버 껍데기는
  * {@code LiveReminderPopover}가 맡는다.
  *
- * <p>이 설정이 다른 알림에는 영향을 주지 않는다는 것을 화면에서 밝힌다 — "알림 설정"이라고만 쓰면
+ * <p>안내 문구는 역할별로 다르다. 이 화면은 강사와 수강생이 함께 쓰는데, 두 사람이 미리 알림을
+ * 켜는 이유가 다르다 — 수강생은 라이브를 놓치지 않기 위해, 강사는 방송 준비 시간을 벌기 위해서다.
+ * 수강생 쪽에는 이 설정이 다른 알림에 영향을 주지 않는다는 것도 밝힌다. "알림 설정"이라고만 쓰면
  * 수강 승인·자료 게시까지 꺼지는 것으로 읽힌다. 그 둘은 사건이 일어난 순간의 통보라 리드타임이라는
- * 개념 자체가 없다.
+ * 개념 자체가 없다. 강사에게는 애초에 받을 일이 없는 알림이라 굳이 꺼내지 않는다.
  *
  * <p>선택지가 고정인 이유도 적는다. 서버가 이 값들에 맞춰 발화를 <b>미리 예약</b>해 두므로 임의
  * 값을 받을 수 없다 — 받으면 그 사람에게만 알림이 영영 오지 않는, 알아채기 어려운 고장이 된다.
  */
 export function LiveReminderSetting({ curriculumId, lessonId }: LiveReminderSettingProps) {
+  const { user } = useAuth()
   const queryClient = useQueryClient()
   const leadTimesQuery = useQuery({
     queryKey: ['notification-lead-times'],
@@ -53,10 +58,7 @@ export function LiveReminderSetting({ curriculumId, lessonId }: LiveReminderSett
 
   return (
     <div className="live-reminder-setting">
-      <p className="live-reminder-setting__hint">
-        라이브가 시작하기 전에 미리 알려 드립니다. 수강 승인·자료 등록 같은 다른 알림은 이 설정과
-        무관하게 그대로 옵니다.
-      </p>
+      <p className="live-reminder-setting__hint">{LIVE_REMINDER_HINT[hintAudience(user?.role)]}</p>
 
       <label className="live-reminder-setting__toggle">
         <input
@@ -118,6 +120,20 @@ export function LiveReminderSetting({ curriculumId, lessonId }: LiveReminderSett
       )}
     </div>
   )
+}
+
+const LIVE_REMINDER_HINT = {
+  INSTRUCTOR: '라이브 시작 전에 미리 알려드립니다. 방송 준비를 놓치지 않도록 원하는 시간에 알림을 받을 수 있습니다.',
+  VIEWER:
+    '라이브가 시작하기 전에 미리 알려 드립니다. 수강 승인·자료 등록 같은 다른 알림은 이 설정과 무관하게 그대로 옵니다.',
+} as const
+
+/**
+ * 강사 문구는 강사에게만 준다. 새 역할이 생기거나 역할을 아직 모를 때(로그인 정보 로딩 중)는
+ * 수강생 문구로 떨어지는데, 이쪽이 더 넓은 설명이라 누가 읽어도 틀리지 않는다.
+ */
+function hintAudience(role: UserRole | undefined): keyof typeof LIVE_REMINDER_HINT {
+  return role === 'INSTRUCTOR' ? 'INSTRUCTOR' : 'VIEWER'
 }
 
 /** 1440분을 "1440분"이라고 보여 주지 않는다 — 사람이 읽는 단위로 바꾼다. */

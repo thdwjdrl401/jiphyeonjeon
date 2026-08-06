@@ -38,14 +38,14 @@ describe('커리큘럼 저장 계약', () => {
 
     const result = await httpCurriculumManagementService.saveCurriculumManagement({
       curriculumId: 'cur-1',
-      info: { title: '제목', summary: '요약', description: '설명' },
+      info: { title: '제목', summary: '요약', description: '설명', startsAt: null, endsAt: null },
       sections,
       materials: [],
       structureVersion: 3,
     })
 
     expect(patch).toHaveBeenCalledWith('/instructor/curriculums/cur-1', {
-      title: '제목', summary: '요약', description: '설명',
+      title: '제목', summary: '요약', description: '설명', startsAt: null, endsAt: null,
     })
     expect(put).toHaveBeenCalledWith('/instructor/curriculums/cur-1/curriculum/order', {
       baseVersion: 3,
@@ -71,7 +71,7 @@ describe('커리큘럼 저장 계약', () => {
     })
     await httpCurriculumManagementService.saveCurriculumManagement({
       curriculumId: 'cur-1',
-      info: { title: '제목', summary: '요약', description: '설명' },
+      info: { title: '제목', summary: '요약', description: '설명', startsAt: null, endsAt: null },
       sections,
       materials: [{ materialId: 'tmp-1', fileName: '자료.pptx', fileSize: file.size, file }],
       structureVersion: 3,
@@ -95,7 +95,7 @@ describe('커리큘럼 저장 계약', () => {
 
     await httpCurriculumManagementService.saveCurriculumManagement({
       curriculumId: 'cur-1',
-      info: { title: '제목', summary: '요약', description: '설명' },
+      info: { title: '제목', summary: '요약', description: '설명', startsAt: null, endsAt: null },
       sections,
       // mat-1만 남기고 mat-2를 뺀다(둘 다 persisted — file 없음).
       materials: [{ materialId: 'mat-1', fileName: 'keep.pptx', fileSize: 10 }],
@@ -138,7 +138,7 @@ describe('커리큘럼 저장 계약', () => {
     })
     await httpCurriculumManagementService.saveCurriculumManagement({
       curriculumId: 'cur-1',
-      info: { title: '제목', summary: '요약', description: '설명' },
+      info: { title: '제목', summary: '요약', description: '설명', startsAt: null, endsAt: null },
       sections,
       // mat-2를 빼고 새 파일을 추가한다 — 한 저장에 삭제와 추가가 함께 있는 경우.
       materials: [{ materialId: 'tmp-1', fileName: 'new.pptx', fileSize: file.size, file }],
@@ -166,7 +166,7 @@ describe('커리큘럼 저장 계약', () => {
     })
     const save = httpCurriculumManagementService.saveCurriculumManagement({
       curriculumId: 'cur-1',
-      info: { title: '제목', summary: '요약', description: '설명' },
+      info: { title: '제목', summary: '요약', description: '설명', startsAt: null, endsAt: null },
       sections,
       materials: [{ materialId: 'tmp-1', fileName: 'fail.pptx', fileSize: file.size, file }],
       structureVersion: 3,
@@ -193,7 +193,7 @@ describe('커리큘럼 저장 계약', () => {
 
     const result = await httpCurriculumManagementService.saveCurriculumManagement({
       curriculumId: 'cur-1',
-      info: { title: '제목', summary: '요약', description: '설명' },
+      info: { title: '제목', summary: '요약', description: '설명', startsAt: null, endsAt: null },
       sections: [
         { sectionId: 'sec-new-123', title: '새 섹션', description: '', order: 1, lessons: [] },
         ...sections,

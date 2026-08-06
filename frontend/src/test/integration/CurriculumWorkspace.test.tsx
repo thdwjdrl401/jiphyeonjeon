@@ -233,7 +233,7 @@ describe('커리큘럼 작업 화면', () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/new')
     await user.type(
-      await screen.findByPlaceholderText('예: 라이브로 완성하는 Spring Boot'),
+      await screen.findByPlaceholderText(/^예: 라이브로 완성하는 Spring Boot/),
       '자료가 있는 새 커리큘럼',
     )
     const material = new File(['presentation'], 'curriculum-guide.pptx', {
@@ -259,7 +259,7 @@ describe('커리큘럼 작업 화면', () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/new')
     await user.type(
-      await screen.findByPlaceholderText('예: 라이브로 완성하는 Spring Boot'),
+      await screen.findByPlaceholderText(/^예: 라이브로 완성하는 Spring Boot/),
       '기간을 넣은 커리큘럼',
     )
     fireEvent.change(screen.getByLabelText('운영 시작일'), { target: { value: '2026-08-01T10:00' } })
@@ -281,7 +281,7 @@ describe('커리큘럼 작업 화면', () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/new')
     await user.type(
-      await screen.findByPlaceholderText('예: 라이브로 완성하는 Spring Boot'),
+      await screen.findByPlaceholderText(/^예: 라이브로 완성하는 Spring Boot/),
       '지난 날짜로 끝나는 커리큘럼',
     )
 
@@ -305,7 +305,7 @@ describe('커리큘럼 작업 화면', () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/new')
     await user.type(
-      await screen.findByPlaceholderText('예: 라이브로 완성하는 Spring Boot'),
+      await screen.findByPlaceholderText(/^예: 라이브로 완성하는 Spring Boot/),
       'DOM 검증 커리큘럼',
     )
 
@@ -932,6 +932,59 @@ describe('커리큘럼 작업 화면', () => {
       .toEqual(['전체 상태', '공개 중', '준비 중'])
   })
 
+  /**
+   * 운영 기간은 관리 화면에서 <b>읽고 고칠 수 있어야</b> 한다. 생성 때 기간을 놓치면(생성 POST가
+   * 기간을 받지 않아 PATCH로 이어 붙인다) 다시 넣을 자리가 없어, 카탈로그 카드가 영구히
+   * "일정 준비 중"에 머물렀다.
+   */
+  it('관리 화면 기본 정보 탭에서 저장된 운영 기간을 읽는다', async () => {
+    const user = userEvent.setup()
+    // cur-spring-live 시드 기간: 2026-08-03T19:00+09:00 ~ 2026-09-24T21:00+09:00 (KST 고정).
+    await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
+    await user.click(await screen.findByRole('tab', { name: '기본 정보' }))
+
+    // 서버가 준 ISO를 datetime-local이 그대로 받는 지역 시각으로 되읽는다 — UTC로 자르면 19:00이 10:00이 된다.
+    expect(await screen.findByLabelText('운영 시작일')).toHaveValue('2026-08-03T19:00')
+    expect(screen.getByLabelText('운영 종료일')).toHaveValue('2026-09-24T21:00')
+    // 입력칸이 곧 답이라 같은 날짜를 문장으로 되읽지 않는다 — 되읽기는 처음 만드는 화면의 몫이다.
+    expect(screen.queryByText(/주 과정$/)).not.toBeInTheDocument()
+  })
+
+  it('관리 화면에서 운영 기간을 고치면 자동 저장된다', async () => {
+    const user = userEvent.setup()
+    await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
+    await user.click(await screen.findByRole('tab', { name: '기본 정보' }))
+    await screen.findByLabelText('운영 시작일')
+
+    const newEndsAt = localDateTimeInDays(30, '22:00')
+    fireEvent.change(screen.getByLabelText('운영 종료일'), { target: { value: newEndsAt } })
+
+    await waitFor(() => expect(screen.getByText('자동 저장됨')).toBeInTheDocument())
+    expect(getMockCurriculum('cur-spring-live')?.period?.endsAt).toBe(new Date(newEndsAt).toISOString())
+  })
+
+  /**
+   * 기간이 반쪽이면 그것만 미루고 <b>나머지 기본 정보는 계속 저장한다</b>. 저장 전체를 막으면
+   * 기간을 고치는 동안 제목·소개 수정이 조용히 사라진다.
+   */
+  it('운영 기간이 반쪽이면 이유를 알리고 기간만 저장을 미룬다', async () => {
+    const user = userEvent.setup()
+    await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
+    await user.click(await screen.findByRole('tab', { name: '기본 정보' }))
+    await screen.findByLabelText('운영 시작일')
+    const before = getMockCurriculum('cur-spring-live')?.period
+
+    fireEvent.change(screen.getByLabelText('운영 시작일'), { target: { value: '' } })
+    const title = screen.getByDisplayValue('라이브로 완성하는 Spring Boot')
+    fireEvent.change(title, { target: { value: '기간을 고치는 중인 커리큘럼' } })
+
+    expect(await screen.findByText(/운영 시작일과 종료일을 함께 입력해 주세요/)).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('자동 저장됨')).toBeInTheDocument())
+    // 제목은 저장됐고, 기간은 건드리지 않았다(PATCH의 null = 변경 안 함).
+    expect(getMockCurriculum('cur-spring-live')?.title).toBe('기간을 고치는 중인 커리큘럼')
+    expect(getMockCurriculum('cur-spring-live')?.period).toEqual(before)
+  })
+
   // 목록은 탐색·진입만 맡는다. 삭제 같은 상태 변경은 관리 화면으로 모았다.
   it('내 커리큘럼 카드에는 관리 버튼만 남기고 삭제 버튼은 두지 않는다', async () => {
     await renderAsInstructor('/instructor/curriculums')
@@ -1014,6 +1067,22 @@ describe('커리큘럼 작업 화면', () => {
     // 탈퇴하면 랜딩페이지다(ADR-0068). 규칙 자체는 guestRedirect.test.tsx가 고정한다.
     await waitFor(() => expect(window.location.pathname).toBe('/'))
     expect(await screen.findByRole('link', { name: '로그인' })).toBeInTheDocument()
+  })
+
+  /**
+   * 배지는 보는 사람의 관점을 따른다 — 학생에게 커리큘럼이 "공개 중"인지는 강사의 사정이고, 학생이
+   * 확인하려는 것은 자기가 수강 중이라는 사실이다. 상태 필터도 같은 말("수강 중")을 써야 한다.
+   */
+  it('학생 내 커리큘럼은 수강 상태를 학생 관점으로 표시한다', async () => {
+    await renderAsStudent('/student/curriculums')
+    const learningHeading = await screen.findByRole('heading', { name: '수강 중인 커리큘럼' })
+    const learningPanel = learningHeading.closest('section')!
+
+    expect(await within(learningPanel).findByText('수강 중')).toBeInTheDocument()
+    expect(within(learningPanel).queryByText('공개 중')).not.toBeInTheDocument()
+    expect(within(within(learningPanel).getByRole('combobox', { name: '상태 필터' })).getAllByRole('option')
+      .map((option) => option.textContent))
+      .toEqual(['전체 상태', '수강 중'])
   })
 
   it('학생 내 커리큘럼에서 승인 대기 목록을 학습 진행 정보 없이 표시한다', async () => {

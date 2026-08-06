@@ -7,17 +7,10 @@ import CurriculumPeriodFields from '@/features/curriculum/CurriculumPeriodFields
 import { createCurriculum, uploadCurriculumThumbnail } from '@/features/curriculum/curriculumManagementService'
 import type { CurriculumMaterial } from '@/features/curriculum/types'
 import { ApiError } from '@/shared/api/client'
-import { isBeforeToday } from '@/shared/lib/localDateTime'
+import { isBeforeToday, toIsoOrNull } from '@/shared/lib/localDateTime'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import { useToast } from '@/shared/ui/Toast'
 import { InlineNotice, PageHeader, Panel } from '@/shared/ui/WorkspaceUi'
-
-/** datetime-local 값("2026-08-01T10:00")을 서버가 받는 오프셋 포함 ISO-8601로. 비어 있으면 null. */
-function toIsoOrNull(localValue: string): string | null {
-  if (!localValue) return null
-  const parsed = new Date(localValue)
-  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString()
-}
 
 export default function CurriculumFormPage() {
   usePageTitle('커리큘럼 만들기')
@@ -89,7 +82,7 @@ export default function CurriculumFormPage() {
         <div className="curriculum-form__top-grid">
           <Panel className="curriculum-form__panel curriculum-form__panel--basic" title="기본 정보" description="제목만 입력해도 초안을 만들 수 있으며 나머지는 나중에 보완할 수 있어요.">
             <div className="form-grid curriculum-form__basic-grid">
-              <label><span>제목 *</span><input value={form.title} maxLength={200} placeholder="예: 라이브로 완성하는 Spring Boot" onChange={(event) => update('title', event.target.value)} /><small>{form.title.length}/200</small></label>
+              <label><span>제목 *</span><input value={form.title} maxLength={200} placeholder="예: 라이브로 완성하는 Spring Boot (20자 안팎 권장)" onChange={(event) => update('title', event.target.value)} /><small>{form.title.length}/200</small></label>
               <label><span>짧은 소개</span><input value={form.summary} maxLength={500} placeholder="목록 카드에 표시할 한 줄 소개" onChange={(event) => update('summary', event.target.value)} /></label>
               <label className="form-field--wide"><span>상세 설명</span><textarea rows={4} value={form.description} placeholder="학습 목표, 진행 방식, 추천 대상을 설명해 주세요." onChange={(event) => update('description', event.target.value)} /></label>
             </div>

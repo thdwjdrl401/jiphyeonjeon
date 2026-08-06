@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import SearchIcon from '@/shared/ui/SearchIcon'
 import Tabs, { tabPanelProps, type TabItem } from '@/shared/ui/Tabs'
 import LectureNotePanel from './LectureNotePanel'
 import { selectVisibleMessages } from './replayTimeline'
@@ -195,7 +196,7 @@ function GlossaryPanel({ terms, selectedTermId, onSelectedTermChange, panelProps
   return (
     <div className="side-panel-content glossary-panel" {...panelProps}>
       <header className="learning-panel-heading"><div><strong>검수된 핵심 용어</strong><small>강의 전에 강사가 확정한 설명입니다.</small></div><span>{terms.length}개</span></header>
-      <label className="glossary-search"><span className="visually-hidden">핵심 용어 검색</span><input value={search} placeholder="용어 검색" onChange={(event) => setSearch(event.target.value)} /></label>
+      <label className="glossary-search search-field"><span className="visually-hidden">핵심 용어 검색</span><SearchIcon /><input value={search} placeholder="용어 검색" onChange={(event) => setSearch(event.target.value)} /></label>
       <div className="glossary-list">
         {filteredTerms.map((term) => (
           <button className={selectedTerm?.termId === term.termId ? 'is-active' : ''} type="button" key={term.termId} onClick={() => onSelectedTermChange(term.termId)}>

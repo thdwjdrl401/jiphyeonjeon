@@ -314,6 +314,29 @@ export function publishMockCurriculum(curriculumId: string) {
   return curriculum
 }
 
+/**
+ * 운영 기간 저장. 서버 PATCH와 같이 <b>null은 "변경 안 함"</b>이다 — 기본 정보 자동 저장이 기간을
+ * 건드리지 않을 때(입력이 비어 있을 때) 이미 저장된 기간을 지우지 않는다.
+ *
+ * <p>화면 모델의 period는 시작·종료가 함께 있을 때만 표현할 수 있어(CurriculumDetailPeriod)
+ * 한쪽만 넘어오면 나머지는 기존 값에서 가져온다. 관리 화면이 "둘 다 입력해야 저장"으로 막으므로
+ * 실제로 반쪽이 들어오는 경로는 없고, 여기서는 값을 잃지 않는 쪽으로만 처리한다.
+ */
+export function updateMockCurriculumPeriod(
+  curriculumId: string,
+  startsAt: string | null,
+  endsAt: string | null,
+) {
+  const curriculum = getMockCurriculum(curriculumId)
+  if (!curriculum) return null
+  if (startsAt === null && endsAt === null) return curriculum
+
+  const nextStartsAt = startsAt ?? curriculum.period?.startsAt ?? null
+  const nextEndsAt = endsAt ?? curriculum.period?.endsAt ?? null
+  curriculum.period = nextStartsAt && nextEndsAt ? { startsAt: nextStartsAt, endsAt: nextEndsAt } : null
+  return curriculum
+}
+
 export function updateMockCurriculumMaterials(curriculumId: string, materials: CurriculumMaterial[]) {
   const curriculum = getMockCurriculum(curriculumId)
   if (!curriculum) return null

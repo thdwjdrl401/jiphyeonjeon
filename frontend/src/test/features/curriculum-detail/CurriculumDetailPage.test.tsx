@@ -70,6 +70,39 @@ describe('CurriculumDetailPage', () => {
     expect(screen.queryByText('수강 승인 후 이용')).not.toBeInTheDocument()
   })
 
+  /**
+   * 히어로의 대표 이미지. <b>있으면 왼쪽 열로 얹고 없으면 열 자체를 만들지 않는다</b> —
+   * 목록 카드와 달리 대체 그림을 깔지 않는다(히어로는 첫 면을 통째로 차지해서, 뜻 없는
+   * 플레이스홀더가 제목·수강 신청보다 먼저 눈에 들어온다).
+   *
+   * <p>이미지는 aria-hidden이라 접근성 쿼리로 잡히지 않는다 — 옆에서 제목·소개가 같은 것을
+   * 말하므로 장식이 맞고, 그래서 이 테스트만 DOM으로 확인한다(목차 링크 검증과 같은 방식).
+   */
+  it('대표 이미지가 있으면 히어로 왼쪽 열에 넣는다', async () => {
+    renderDetail('/curriculums/cur-spring-live')
+    await screen.findByRole('heading', { name: '라이브로 완성하는 Spring Boot' })
+
+    const hero = document.querySelector('.curriculum-hero')!
+    expect(hero).toHaveClass('curriculum-hero--with-cover')
+    const cover = hero.querySelector('.curriculum-hero__cover')!
+    expect(cover.querySelector('img')).toHaveAttribute('src', expect.stringContaining('curriculum-spring'))
+    // 제목 옆에서 같은 말을 두 번 읽히지 않게 장식으로 둔다.
+    expect(cover.querySelector('img')).toHaveAttribute('alt', '')
+    expect(cover).toHaveAttribute('aria-hidden', 'true')
+    // 왼쪽 열이므로 본문보다 앞에 온다 — 사이드바와 붙지 않게 이미지를 왼쪽에 뒀다.
+    expect(cover.nextElementSibling).toHaveClass('curriculum-hero__body')
+  })
+
+  it('대표 이미지가 없으면 이미지 열 없이 지금 화면을 유지한다', async () => {
+    // cur-ai-product는 thumbnailUrl이 null인 시드다.
+    renderDetail('/curriculums/cur-ai-product')
+    await screen.findByRole('heading', { name: 'AI 제품 기획자를 위한 첫걸음' })
+
+    const hero = document.querySelector('.curriculum-hero')!
+    expect(hero).not.toHaveClass('curriculum-hero--with-cover')
+    expect(hero.querySelector('.curriculum-hero__cover')).toBeNull()
+  })
+
   it('첫 섹션만 펼친 뒤 전체 목차를 한 번에 펼치거나 접을 수 있다', async () => {
     const user = userEvent.setup()
     renderDetail('/curriculums/cur-spring-live')
@@ -151,14 +184,15 @@ describe('CurriculumDetailPage', () => {
     expect(fetchMaterial).toHaveBeenLastCalledWith(expect.objectContaining({ asInstructor: true }))
   })
 
-  it('수강생은 공개 상태 왼쪽 알림 버튼에서 커리큘럼 알림 설정을 연다', async () => {
+  it('수강생은 상세 상단 알림 버튼에서 커리큘럼 알림 설정을 연다', async () => {
     const user = userEvent.setup()
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
     renderDetail('/curriculums/cur-spring-live')
 
     const trigger = await screen.findByRole('button', { name: '라이브 시작 알림 설정' })
     const triggerContainer = trigger.closest('.live-reminder-popover')
-    expect(triggerContainer?.nextElementSibling).toHaveClass('curriculum-lifecycle-badge')
+    expect(triggerContainer?.parentElement).toHaveClass('curriculum-hero__status')
+    expect(screen.queryByText('공개 중')).not.toBeInTheDocument()
     expect(screen.queryByRole('dialog', { name: '라이브 시작 알림' })).not.toBeInTheDocument()
 
     await user.click(trigger)

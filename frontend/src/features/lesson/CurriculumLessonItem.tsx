@@ -56,7 +56,11 @@ export default function CurriculumLessonItem({ lesson, relationship, curriculumI
 
   const lessonMain = (
     <div className="curriculum-lesson__main">
-      <strong className="curriculum-lesson__title">{lesson.order}. {lesson.title}</strong>
+      {/*
+        strong이 아니다. 목차에서 강의 제목은 강조가 아니라 섹션 아래 딸린 항목의 이름이고,
+        strong의 기본 굵기(700)가 섹션 제목(600)을 눌러 위계가 거꾸로 보였다.
+      */}
+      <span className="curriculum-lesson__title">{lesson.order}. {lesson.title}</span>
       {/* 일정이 잡힌 라이브와 실제 방송 중인 라이브만 표시한다. 종료 상태에는 태그를 남기지 않는다. */}
       {activity && <div className="curriculum-lesson__states">
         <span className={`curriculum-lifecycle-badge curriculum-lesson__state curriculum-lesson__state--${activity.tone}`}>{activity.statusLabel}</span>
