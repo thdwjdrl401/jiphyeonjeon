@@ -1016,6 +1016,22 @@ describe('커리큘럼 작업 화면', () => {
     expect(await screen.findByRole('link', { name: '로그인' })).toBeInTheDocument()
   })
 
+  /**
+   * 배지는 보는 사람의 관점을 따른다 — 학생에게 커리큘럼이 "공개 중"인지는 강사의 사정이고, 학생이
+   * 확인하려는 것은 자기가 수강 중이라는 사실이다. 상태 필터도 같은 말("수강 중")을 써야 한다.
+   */
+  it('학생 내 커리큘럼은 수강 상태를 학생 관점으로 표시한다', async () => {
+    await renderAsStudent('/student/curriculums')
+    const learningHeading = await screen.findByRole('heading', { name: '수강 중인 커리큘럼' })
+    const learningPanel = learningHeading.closest('section')!
+
+    expect(await within(learningPanel).findByText('수강 중')).toBeInTheDocument()
+    expect(within(learningPanel).queryByText('공개 중')).not.toBeInTheDocument()
+    expect(within(within(learningPanel).getByRole('combobox', { name: '상태 필터' })).getAllByRole('option')
+      .map((option) => option.textContent))
+      .toEqual(['전체 상태', '수강 중'])
+  })
+
   it('학생 내 커리큘럼에서 승인 대기 목록을 학습 진행 정보 없이 표시한다', async () => {
     await renderAsStudent('/student/curriculums')
     const heading = await screen.findByRole('heading', { name: '승인 대기 중인 커리큘럼' })

@@ -9,6 +9,7 @@ import {
   getInstructorDashboardSummary,
   getStudentDashboardSummary,
 } from '@/features/curriculum/myCurriculumsService'
+import type { CurriculumLifecycleStatus } from '@/features/curriculum/types'
 import type { StudentCurriculumItem } from '@/features/enrollment/types'
 import { useCancelEnrollmentMutation } from '@/features/enrollment/useEnrollmentMutations'
 import { useMyEnrollmentsQuery } from '@/features/enrollment/useEnrollmentQueries'
@@ -41,6 +42,28 @@ function formatScheduleLabel(date: Date) {
 
 function isSameDay(a: Date, b: Date) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+}
+
+/**
+ * 카드 배지는 <b>보는 사람의 관점</b>을 따른다. 강사에게 커리큘럼의 공개 상태는 곧 자기 할 일이지만,
+ * 학생에게 "공개 중"은 남의 사정이다 — 학생이 내 커리큘럼에서 확인하려는 상태는 자기가 수강 중이라는
+ * 사실이고, 이 목록 자체가 ACTIVE 수강만 담는다(승인 대기는 아래 별도 목록).
+ *
+ * <p>보관됨은 학생에게도 그대로 알린다. 강사가 내린 커리큘럼을 "수강 중"이라고 하면 오지 않을 새
+ * 강의를 계속 기다리게 된다.
+ */
+function CurriculumStatusBadge({
+  lifecycleStatus,
+  isInstructor,
+}: {
+  lifecycleStatus: CurriculumLifecycleStatus
+  isInstructor: boolean
+}) {
+  if (lifecycleStatus === 'ARCHIVED') return <StatusBadge tone="neutral">보관됨</StatusBadge>
+  if (!isInstructor) return <StatusBadge tone="success">수강 중</StatusBadge>
+  return lifecycleStatus === 'PUBLISHED'
+    ? <StatusBadge tone="success">공개 중</StatusBadge>
+    : <StatusBadge tone="warning">준비 중</StatusBadge>
 }
 
 function CurriculumPagination({
@@ -216,7 +239,8 @@ export default function MyCurriculumsPage() {
 
       <div className="my-curriculums-page__layout">
         <div className="my-curriculums-page__main">
-          <Panel className="my-curriculums-page__list-panel" title={isInstructor ? '운영 중인 커리큘럼' : '수강 중인 커리큘럼'} action={<div className="compact-controls"><input aria-label={`${pageTitle} 검색`} placeholder="제목 검색" value={search} onChange={(event) => { setSearch(event.target.value); setPage(0) }} /><select aria-label="상태 필터" value={status} onChange={(event) => { setStatus(event.target.value); setPage(0) }}><option value="">전체 상태</option>{isInstructor ? <><option value="PUBLISHED">공개 중</option><option value="DRAFT">준비 중</option></> : <><option value="ACTIVE">학습 중</option></>}</select></div>}>
+          <Panel className="my-curriculums-page__list-panel" title={isInstructor ? '운영 중인 커리큘럼' : '수강 중인 커리큘럼'} action={<div className="compact-controls"><input aria-label={`${pageTitle} 검색`} placeholder="제목 검색" value={search} onChange={(event) => { setSearch(event.target.value); setPage(0) }} /><select aria-label="상태 필터" value={status} onChange={(event) => { setStatus(event.target.value); setPage(0) }}><option value="">전체 상태</option>{isInstructor ? <><option value="PUBLISHED">공개 중</option><option value="DRAFT">준비 중</option></> : <><option value="ACTIVE">수강 중</option></>}</select></div>}>
+
             <div className="dashboard-curriculum-list">
               {displayedCurriculums.map((item) => (
                 <article className="dashboard-curriculum-card" key={item.curriculumId}>
@@ -226,7 +250,7 @@ export default function MyCurriculumsPage() {
                     링크를 중첩하지 않으므로 관리 버튼은 z-index로 위에 떠 그대로 관리 페이지로 간다.
                   */}
                   <div className="dashboard-curriculum-card__content">
-                    <div><StatusBadge tone={item.lifecycleStatus === 'PUBLISHED' ? 'success' : item.lifecycleStatus === 'ARCHIVED' ? 'neutral' : 'warning'}>{item.lifecycleStatus === 'PUBLISHED' ? '공개 중' : item.lifecycleStatus === 'ARCHIVED' ? '보관됨' : '준비 중'}</StatusBadge><h3><Link className="stretched-link" to={publicPaths.curriculum(item.curriculumId)}>{item.title}</Link></h3></div>
+                    <div><CurriculumStatusBadge lifecycleStatus={item.lifecycleStatus} isInstructor={isInstructor} /><h3><Link className="stretched-link" to={publicPaths.curriculum(item.curriculumId)}>{item.title}</Link></h3></div>
                     {'progress' in item
                       ? <div className="dashboard-progress"><span><strong>{item.progress}%</strong> · {item.completedLessonCount}/{item.lessonCount} 강의</span><i><b style={{ width: `${item.progress}%` }} /></i></div>
                       : <p className="dashboard-meta">다음 일정 {item.nextLiveSession?.scheduledAt ? formatScheduleLabel(new Date(item.nextLiveSession.scheduledAt)) : '미정'}</p>}
