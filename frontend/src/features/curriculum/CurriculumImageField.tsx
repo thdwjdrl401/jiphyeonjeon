@@ -1,4 +1,5 @@
 import { useRef, useState, type ChangeEvent } from 'react'
+import CurriculumImageCropDialog from './CurriculumImageCropDialog'
 
 /**
  * 고른 이미지. 미리보기는 data URL로 즉시 보여 주고, 실제 업로드는 폼을 저장할 때 원본 파일로 한다 —
@@ -34,6 +35,11 @@ export default function CurriculumImageField({
 }: CurriculumImageFieldProps) {
   const [error, setError] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+  /*
+    고른 파일은 곧바로 등록되지 않는다 — 16:9로 어디를 보여줄지 정하는 단계를 거친다. 원본과
+    읽어 둔 data URL을 함께 들고 있는 이유는, 자르기 화면에서 파일을 다시 읽지 않게 하려는 것이다.
+  */
+  const [pending, setPending] = useState<{ file: File; sourceUrl: string } | null>(null)
   // 삭제 버튼은 이미지가 없어도 자리를 지킨다 — 등록 옆에 있어야 무엇을 할 수 있는 자리인지 읽힌다.
   const removeReason = removeDisabledReason ?? (previewUrl ? undefined : '삭제할 대표 이미지가 없습니다.')
 
@@ -66,13 +72,40 @@ export default function CurriculumImageField({
     reader.onload = () => {
       setError('')
       if (typeof reader.result === 'string') {
-        onChange({ file, previewUrl: reader.result })
+        setPending({ file, sourceUrl: reader.result })
       } else {
         onChange(null)
       }
     }
     reader.onerror = () => setError('이미지를 읽지 못했습니다. 다시 선택해 주세요.')
     reader.readAsDataURL(file)
+  }
+
+  /**
+   * 자르기를 마쳤다. <b>잘린 파일</b>을 등록하고 미리보기도 그것으로 바꾼다 — 미리보기에 원본을
+   * 남기면 화면에서 본 범위와 저장되는 범위가 달라진다.
+   */
+  const confirmCrop = (cropped: File) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      setPending(null)
+      if (typeof reader.result === 'string') {
+        onChange({ file: cropped, previewUrl: reader.result })
+      } else {
+        setError('자른 이미지를 읽지 못했습니다. 다시 선택해 주세요.')
+      }
+    }
+    reader.onerror = () => {
+      setPending(null)
+      setError('자른 이미지를 읽지 못했습니다. 다시 선택해 주세요.')
+    }
+    reader.readAsDataURL(cropped)
+  }
+
+  /** 자르기를 그만뒀다. 고른 파일도 버린다 — 자르지 않은 원본이 등록되면 범위를 정한 뜻이 없다. */
+  const cancelCrop = () => {
+    setPending(null)
+    if (inputRef.current) inputRef.current.value = ''
   }
 
   return (
@@ -104,8 +137,17 @@ export default function CurriculumImageField({
           onClick={clearImage}
         >이미지 삭제</button>
       </div>
-      <p>JPG, PNG, WebP · 최대 5MB · 목록과 상세 카드에 사용됩니다.</p>
+      <p>JPG, PNG, WebP · 최대 5MB · 고른 뒤 16:9로 보여줄 범위를 정합니다.</p>
       {error && <small role="alert">{error}</small>}
+
+      {pending && (
+        <CurriculumImageCropDialog
+          file={pending.file}
+          sourceUrl={pending.sourceUrl}
+          onConfirm={confirmCrop}
+          onCancel={cancelCrop}
+        />
+      )}
     </div>
   )
 }

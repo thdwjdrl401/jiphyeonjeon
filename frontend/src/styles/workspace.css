@@ -488,6 +488,33 @@
 .profile-modal__header h2 { margin: 6px 0 5px; color: var(--ink-950); font-size: 1.45rem; letter-spacing: -.04em; }
 .profile-modal__header p { margin: 0; color: var(--ink-500); font-size: .76rem; }
 .profile-modal__close { display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; border: 0; border-radius: 10px; background: var(--ink-50); color: var(--ink-700); font-size: 1.45rem; line-height: 1; }
+
+/*
+  대표 이미지 자르기. 틀은 16:9이고 그 안에서 원본을 끌어 옮긴다 — 틀 크기는 컴포넌트가 인라인
+  스타일로 정한다(비율 계산이 thumbnailCrop 한 곳에만 있어야 해서, CSS에서 다시 정하지 않는다).
+*/
+.thumbnail-crop-modal { width: min(100%, 560px); }
+.thumbnail-crop__frame {
+  position: relative;
+  overflow: hidden;
+  margin: 0 auto;
+  border: 1px solid var(--border-strong);
+  background: var(--ink-100);
+  /* 끌 수 있는 자리로 보이게 한다. 커서가 기본값이면 클릭만 하는 미리보기로 읽힌다. */
+  cursor: grab;
+  touch-action: none;
+}
+.thumbnail-crop__frame:active { cursor: grabbing; }
+.thumbnail-crop__frame:focus-visible { outline: 2px solid var(--ink-950); outline-offset: 2px; }
+/* 원본은 틀 좌상단을 기준으로 옮긴다 — transform 값은 컴포넌트가 계산한 이동량이다. */
+.thumbnail-crop__image { position: absolute; top: 0; left: 0; max-width: none; user-select: none; }
+.thumbnail-crop__zoom { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
+.thumbnail-crop__zoom > span { color: var(--ink-700); font-size: .78rem; font-weight: 500; }
+.thumbnail-crop__zoom input { flex: 1; }
+.thumbnail-crop__zoom output { min-width: 3.2em; color: var(--ink-600); font-size: .76rem; font-variant-numeric: tabular-nums; text-align: right; }
+.thumbnail-crop__hint { margin: 10px 0 0; color: var(--ink-500); font-size: .72rem; line-height: 1.5; }
+.thumbnail-crop__error { display: block; margin-top: 8px; color: var(--red-600); font-size: .74rem; }
+.thumbnail-crop__actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
 .profile-modal__close:hover:not(:disabled) { background: var(--ink-100); color: var(--ink-950); }
 .profile-modal input[readonly] { background: var(--ink-50); color: var(--ink-600); cursor: not-allowed; }
 .profile-modal__error { margin: -4px 0 0; color: var(--red-600); font-size: .72rem; }
