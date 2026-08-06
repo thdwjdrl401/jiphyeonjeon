@@ -52,7 +52,8 @@ export default function StudentPrejoinPage() {
   const [entryStatus, setEntryStatus] = useState<EntryStatus>('idle')
   const entryButtonRef = useRef<HTMLButtonElement | null>(null)
   const entryDialogRef = useRef<HTMLElement | null>(null)
-  const ready = Object.values(checks).every(Boolean)
+  // 라이브 입장은 자동 점검(재생·네트워크)만으로 연다 — 스피커는 사용자가 직접 확인하는
+  // 항목이라 본인 판단에 맡기고, 못 들었다고 입장 자체를 막지는 않는다.
   const autoDone = checks.autoplay && checks.network
   usePageTitle('입장 전 점검')
 
@@ -276,16 +277,14 @@ export default function StudentPrejoinPage() {
       <div className="sticky-form-actions student-prejoin__actions">
         <Link className="button button--ghost" to={studentPaths.lesson(session.curriculumId, session.sectionId, session.lessonId)}>강의 상세</Link>
         <div className="student-prejoin__entry-state" role="status" aria-live="polite">
-          <strong>{ready ? '입장 준비 완료' : autoDone ? '스피커 확인 필요' : '자동 점검 중'}</strong>
+          <strong>{autoDone ? '입장 준비 완료' : '자동 점검 중'}</strong>
           <small>
-            {ready
-              ? '모든 필수 점검을 완료했습니다.'
-              : autoDone
-                ? '테스트음을 확인하면 입장할 수 있습니다.'
-                : '재생 환경을 확인하고 있습니다.'}
+            {autoDone
+              ? '자동 점검을 완료했습니다. 스피커는 위에서 직접 확인해 주세요.'
+              : '재생 환경을 확인하고 있습니다.'}
           </small>
         </div>
-        {ready ? (
+        {autoDone ? (
           <button
             ref={entryButtonRef}
             className="button button--primary button--large"
