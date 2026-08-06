@@ -27,6 +27,7 @@ function Harness({ ask }: { ask: AskAiAnswer }) {
       onPanelChange={setPanel}
       selectedTermId={null}
       onSelectedTermChange={() => undefined}
+      glossaryFocusRequest={null}
       lectureNote={null}
       glossaryTerms={[
         { termId: 'SecurityContext', term: 'SecurityContext', description: '설명', source: 'INSTRUCTOR', sourceLabel: '강사 등록', aliases: [], occurrenceCount: 1 },

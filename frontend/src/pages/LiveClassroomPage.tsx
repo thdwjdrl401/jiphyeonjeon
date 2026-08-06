@@ -17,7 +17,7 @@ import {
   selectCaptionViews,
   selectVisibleCaptions,
 } from '@/features/live-session/captionAdapter'
-import LearningSidebar from '@/features/live-session/LearningSidebar'
+import LearningSidebar, { type GlossaryFocusRequest } from '@/features/live-session/LearningSidebar'
 import LivePrestartStage from '@/features/live-session/LivePrestartStage'
 import { isPrestartStatus, prestartNotice } from '@/features/live-session/livePrestart'
 import type { LearningPanel } from '@/features/live-session/liveLearningPreview'
@@ -142,6 +142,7 @@ export default function LiveClassroomPage() {
   const [captionConnectionState, setCaptionConnectionState] = useState<ChatConnectionState>('connecting')
   const [panel, setPanel] = useState<LearningPanel>('discussion')
   const [selectedTermId, setSelectedTermId] = useState<string | null>(null)
+  const [glossaryFocusRequest, setGlossaryFocusRequest] = useState<GlossaryFocusRequest | null>(null)
   const [positionMs, setPositionMs] = useState(0)
   const [message, setMessage] = useState('')
   // 익명은 기본 꺼짐 — 켰을 때만 세션 한정 가명으로 나간다(ADR-0050). 끄면 본인이 지정한 표시 이름.
@@ -406,6 +407,7 @@ export default function LiveClassroomPage() {
 
   const openGlossaryTerm = (termId: string) => {
     setSelectedTermId(termId)
+    setGlossaryFocusRequest((current) => ({ termId, sequence: (current?.sequence ?? 0) + 1 }))
     setPanel('glossary')
   }
 
@@ -548,6 +550,7 @@ export default function LiveClassroomPage() {
       onPanelChange={setPanel}
       selectedTermId={selectedTermId}
       onSelectedTermChange={setSelectedTermId}
+      glossaryFocusRequest={glossaryFocusRequest}
       lectureNote={note}
       glossaryTerms={glossary.terms}
       messages={messages}

@@ -15,6 +15,7 @@ function sidebar(messages: ChatMessageView[]) {
       onPanelChange={() => undefined}
       selectedTermId={null}
       onSelectedTermChange={() => undefined}
+      glossaryFocusRequest={null}
       lectureNote={null}
       glossaryTerms={[]}
       messages={messages}

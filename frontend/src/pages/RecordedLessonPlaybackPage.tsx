@@ -5,7 +5,7 @@ import { studentPaths } from '@/app/router/paths'
 import PersonalAiQuestionPanel from '@/features/ai/PersonalAiQuestionPanel'
 import { useAuth } from '@/features/auth/AuthContext'
 import CaptionDock from '@/features/live-session/CaptionDock'
-import LearningSidebar from '@/features/live-session/LearningSidebar'
+import LearningSidebar, { type GlossaryFocusRequest } from '@/features/live-session/LearningSidebar'
 import { normalizeCaption } from '@/features/live-session/captionAdapter'
 import { attachGlossary } from '@/features/live-session/glossaryView'
 import type { LearningPanel } from '@/features/live-session/liveLearningPreview'
@@ -50,6 +50,7 @@ export default function RecordedLessonPlaybackPage() {
   const [seekRequest, setSeekRequest] = useState<HlsMediaSeekRequest | null>(null)
   const [panel, setPanel] = useState<LearningPanel>('ai')
   const [selectedTermId, setSelectedTermId] = useState<string | null>(null)
+  const [glossaryFocusRequest, setGlossaryFocusRequest] = useState<GlossaryFocusRequest | null>(null)
   const playbackQuery = useRecordedPlayback(lessonId, Boolean(lessonId))
   const playback = playbackQuery.data
   const captionsQuery = useRecordedCaptionSegments(lessonId, Boolean(playback))
@@ -120,6 +121,7 @@ export default function RecordedLessonPlaybackPage() {
 
   const openGlossaryTerm = useCallback((termId: string) => {
     setSelectedTermId(termId)
+    setGlossaryFocusRequest((current) => ({ termId, sequence: (current?.sequence ?? 0) + 1 }))
     setPanel('glossary')
   }, [])
 
@@ -208,6 +210,7 @@ export default function RecordedLessonPlaybackPage() {
           onPanelChange={setPanel}
           selectedTermId={selectedTermId}
           onSelectedTermChange={setSelectedTermId}
+          glossaryFocusRequest={glossaryFocusRequest}
           lectureNote={null}
           glossaryTerms={glossary.terms}
           messages={[]}
