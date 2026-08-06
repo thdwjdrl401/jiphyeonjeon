@@ -8,6 +8,56 @@ export function todayLocalStart(): string {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T00:00`
 }
 
+/** date 입력이 그대로 받는 오늘 날짜 문자열. */
+export function todayLocalDate(): string {
+  return todayLocalStart().slice(0, 10)
+}
+
+/** YYYY-MM-DD를 UTC로 오해하지 않고 사용자의 지역 날짜 자정으로 해석한다. */
+function parseLocalDate(localDate: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(localDate)
+  if (!match) return null
+  const [, yearText, monthText, dayText] = match
+  const year = Number(yearText)
+  const month = Number(monthText) - 1
+  const day = Number(dayText)
+  const parsed = new Date(year, month, day)
+  if (parsed.getFullYear() !== year || parsed.getMonth() !== month || parsed.getDate() !== day) return null
+  return parsed
+}
+
+/** date 값의 시작(지역 시각 00:00)을 서버용 ISO-8601로 바꾼다. */
+export function toIsoAtStartOfDayOrNull(localDate: string): string | null {
+  return parseLocalDate(localDate)?.toISOString() ?? null
+}
+
+/** date 값의 끝(지역 시각 23:59:59.999)을 서버용 ISO-8601로 바꾼다. */
+export function toIsoAtEndOfDayOrNull(localDate: string): string | null {
+  const parsed = parseLocalDate(localDate)
+  if (!parsed) return null
+  parsed.setDate(parsed.getDate() + 1)
+  parsed.setMilliseconds(-1)
+  return parsed.toISOString()
+}
+
+/** 서버 ISO-8601 또는 이미 정규화된 date 값을 date 입력용 YYYY-MM-DD로 바꾼다. */
+export function toLocalDateInputValue(value: string | null | undefined): string {
+  if (!value) return ''
+  const localDate = parseLocalDate(value)
+  if (localDate) return value
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return ''
+  const pad = (part: number) => String(part).padStart(2, '0')
+  return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}`
+}
+
+/** date 값이 오늘보다 이전인지. 비었거나 형식이 잘못된 값은 각 폼의 형식 검증에 맡긴다. */
+export function isDateBeforeToday(localDate: string): boolean {
+  const parsed = parseLocalDate(localDate)
+  if (!parsed) return false
+  return localDate < todayLocalDate()
+}
+
 /** datetime-local 값("2026-08-01T10:00")을 서버가 받는 오프셋 포함 ISO-8601로. 비어 있으면 null. */
 export function toIsoOrNull(localValue: string): string | null {
   if (!localValue) return null

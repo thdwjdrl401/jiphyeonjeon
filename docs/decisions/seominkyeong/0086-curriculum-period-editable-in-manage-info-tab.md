@@ -4,7 +4,7 @@
 
 - **상태**: 채택
 - **일자**: 2026-08-06
-- **관련**: Sub Ⅱ · [ADR-0075](0075-autosave-syncs-query-cache.md)(자동 저장 캐시 동기화) · [ADR-0076](0076-thumbnail-instant-save-and-lesson-cache.md)(null = 변경 안 함 계약)
+- **관련**: Sub Ⅱ · [ADR-0075](0075-autosave-syncs-query-cache.md)(자동 저장 캐시 동기화) · [ADR-0076](0076-thumbnail-instant-save-and-lesson-cache.md)(null = 변경 안 함 계약) · [ADR-0091](0091-curriculum-period-date-only-input.md)(날짜 전용 입력)
 
 ## 맥락 (Context)
 
@@ -34,7 +34,7 @@
 | 시작·종료 모두 비었음 | 정상(기간 미정) — null/null을 보내 기존 값을 건드리지 않는다 |
 | 한쪽만 채웠음 | 보류 + 안내 — 카드가 "시작 – 종료" 쌍으로 읽으므로 반쪽은 뜻이 없다 |
 | 종료일이 과거 | 보류 + 안내 — 생성 화면이 거절하는 값을 수정으로 넣을 수 없게 |
-| 종료 ≤ 시작 | 보류 + 안내 |
+| 종료 < 시작 | 보류 + 안내 — 같은 날짜는 1일 과정으로 허용 |
 
 ## 근거 (Rationale)
 
@@ -68,6 +68,6 @@
 - 하네스: **계약 테스트 불필요**(POLICY 🟢). 서버가 이미 주고받는 필드를 화면이 쓰기 시작한 것이고
   필드명·상태코드를 바꾸지 않았다. 대신 통합 테스트로 기간 왕복(조회 → 수정 → 자동 저장)과 반쪽
   입력 보류, 탐색 카드의 날짜 표시를 고정했다.
-- `toIsoOrNull`을 `CurriculumFormPage`에서 `shared/lib/localDateTime.ts`로 옮기고 역변환
-  `toLocalInputValue`를 더했다. **UTC로 자르지 않는다** — `toISOString().slice(0,16)`은 KST 19:00을
-  10:00으로 보여 주어, 저장하지 않았는데도 기간이 바뀐 것으로 읽힌다.
+- 이후 운영 기간의 입력 단위는 날짜로 단순화했다. 날짜와 서버의 ISO 시각 경계를 변환하는 방식은
+  [ADR-0091](0091-curriculum-period-date-only-input.md)을 따른다. 라이브 강의 예정 시각은 기존
+  `datetime-local` 변환을 그대로 사용한다.
