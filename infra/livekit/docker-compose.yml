@@ -66,6 +66,32 @@ services:
     volumes:
       - /srv/liveclass/stt-audio:/audio:ro    # 테스트 미디어(호스트, 195MB — git 밖)
 
+  # 유령 Egress 회수 중계 — 운영 콘솔의 "유령 제거" 버튼이 여기로 온다.
+  #
+  # 왜 별도 서비스인가: LiveKit Redis는 `--bind 127.0.0.1` + host 네트워크라 EC2 로컬에서만 닿는데,
+  # 백엔드는 브리지(liveclass_default)에 있어 경로가 없다. 브리지에 Redis를 열면 인증 없는 제어
+  # 평면이 같은 네트워크의 모든 컨테이너에 열린다 — 남이 egress 작업을 넣을 수도 있는 자리다.
+  # 그래서 Redis는 비공개로 두고 "유령 하나 제거"라는 동사 하나만 인증해 내보낸다.
+  #
+  # 이 서비스를 추가해도 위의 livekit·egress·redis는 재기동되지 않는다(compose가 바뀐 것만 올린다).
+  # 그래서 진행 중 라이브를 끊지 않고 배포할 수 있다.
+  #
+  # 접근 경로: 백엔드(172.18.0.0/16) → 호스트 :9107. ufw가 브리지→호스트를 막으므로 규칙이 하나 필요하다.
+  #   sudo ufw allow from 172.18.0.0/16 to any port 9107 proto tcp comment 'egress-purger'
+  # 외부에는 열지 않는다(EC2 보안그룹에도 없다).
+  egress-purger:
+    build: ./egress-purger
+    restart: unless-stopped
+    network_mode: host                        # Redis(127.0.0.1:6379)·LiveKit API(127.0.0.1:7880)와 같은 netns
+    environment:
+      PURGE_PORT: "9107"
+      # 백엔드와 나눠 갖는 시크릿. 호스트 파일에서 읽어 넣는다(git에 두지 않는다).
+      # 같은 값이 앱 스택의 /etc/liveclass/.env.prod 에도 EGRESS_PURGE_SECRET 으로 있어야 한다.
+      EGRESS_PURGE_SECRET: ${EGRESS_PURGE_SECRET:?EGRESS_PURGE_SECRET 필요 — /etc/liveclass/livekit/purger.env 참고}
+    volumes:
+      # LiveKit API 자격증명. 지우기 전에 StopEgress로 유령임을 스스로 다시 확인하는 데 쓴다.
+      - /etc/liveclass/livekit/egress.yaml:/out/egress.yaml:ro
+
 volumes:
   certbot-etc:                                # 앱 스택(docker-compose.prod.yml)이 생성한 볼륨을 공유
     external: true

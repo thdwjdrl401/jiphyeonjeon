@@ -112,6 +112,47 @@ docker run --rm --network host --entrypoint /bin/sh minio/mc:RELEASE.2025-08-13T
 
 **MinIO 주의**: 커뮤니티 에디션이 유지보수 모드(2025-10 이후 Docker Hub 이미지 동결). PoC는 태그 고정으로 OK, EC2는 실 S3라 무관.
 
+## 6-1. 유령 Egress 회수 중계 (egress-purger)
+
+녹화 도중 egress 컨테이너가 재시작되면 그 작업을 소유한 핸들러가 완료 보고 없이 사라진다. LiveKit은
+작업을 계속 진행 중으로 들고 있지만 `StopEgress`를 받아 줄 상대가 없어 408로 떨어지고, 고아를 회수하는
+API가 없어 운영 콘솔의 정지 버튼으로도 걷히지 않는다(ADR-0088).
+
+`egress-purger`는 그 기록을 지우는 좁은 창구다. **LiveKit Redis는 지금처럼 비공개로 둔다** —
+브리지에 열면 인증 없는 제어 평면이 ai-api·ai-worker와 같은 네트워크에 열린다.
+
+### 배포 (기존 livekit·egress·redis는 재기동되지 않는다)
+
+```bash
+# 1) 시크릿 — 백엔드와 같은 값이어야 한다
+openssl rand -hex 24 | sed 's/^/EGRESS_PURGE_SECRET=/' | sudo tee /etc/liveclass/livekit/purger.env
+sudo chmod 600 /etc/liveclass/livekit/purger.env
+#    같은 값을 /etc/liveclass/.env.prod 에도 EGRESS_PURGE_SECRET= 로 넣는다
+
+# 2) ufw — 브리지→호스트가 막혀 있다(실측). 이 규칙이 없으면 백엔드가 중계에 닿지 못한다.
+sudo ufw allow from 172.18.0.0/16 to any port 9107 proto tcp comment 'egress-purger'
+
+# 3) 기동
+docker compose -f infra/livekit/docker-compose.yml --env-file /etc/liveclass/livekit/purger.env \
+  up -d --build egress-purger
+```
+
+### 확인
+
+```bash
+curl -s http://127.0.0.1:9107/health                 # {"ok": true}
+docker exec liveclass-backend-prod curl -s -o /dev/null -w "%{http_code}\n" \
+  -X POST http://172.18.0.1:9107/purge -d '{}'       # 401 (시크릿 없이 거부)
+```
+
+### 안전 장치
+
+지우기 전에 **중계가 스스로** `StopEgress`를 보내 유령임을 확인한다. 정지가 되는 작업은 소유자가
+있다는 뜻이므로 지우지 않는다(409). 백엔드도 부르기 전에 같은 확인을 한다 — 살아 있는 녹화의 기록을
+지우면 그 녹화가 완료 보고할 곳을 잃기 때문에 판단을 한 곳에만 두지 않는다.
+
+중계가 없거나 고장 났을 때의 수동 경로는 `scripts/purge-orphan-egress.sh`(EC2에서 실행)이다.
+
 ## 7. 앱(Spring) 연동 지점 (CP1/CP4)
 - **LiveKit 토큰 발급**: Spring이 `<API_KEY>`/`<API_SECRET>`로 JWT 서명(방·권한 grant) → FE에 전달.
 - **Egress 제어**: Spring이 강의 시작 시 `StartRoomCompositeEgress`(request.json 형태), 종료 시 `StopEgress`. sink는 요청마다 지정.

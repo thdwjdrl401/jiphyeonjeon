@@ -236,6 +236,16 @@ asset:
     initial-delay: ${ASSET_REAPER_INITIAL_DELAY:PT5M}               # 기동 직후 첫 실행까지 지연
 
 liveclass:
+  egress:
+    # 유령 Egress 회수 중계(infra/livekit/egress-purger). 비워 두면 기능이 꺼지고 콘솔이 그렇게 말한다.
+    #
+    # 왜 중계인가: LiveKit Redis는 EC2 로컬(--bind 127.0.0.1)에만 열려 있어 백엔드 컨테이너에서
+    # 직접 닿지 못한다. 브리지에 그 Redis를 열면 인증 없는 제어 평면이 같은 네트워크의 모든
+    # 컨테이너에 열리므로, "유령 하나 제거"라는 동사 하나만 시크릿으로 인증해 부른다.
+    # 운영 주소는 docker 브리지 게이트웨이(172.18.0.1:9107) — docker-compose.prod.yml의 env로 넣는다.
+    purger:
+      base-url: ${EGRESS_PURGER_BASE_URL:}
+      secret: ${EGRESS_PURGE_SECRET:}
   ws:
     # WebSocket 핸드셰이크 오리진 화이트리스트(CSWSH 방어, ADR-0019). 같은 오리진 배포(nginx)라
     # 운영은 도메인 하나면 충분하고, dev는 Vite(localhost:*)만 허용한다. 콤마 없이 리스트로 override 가능.
