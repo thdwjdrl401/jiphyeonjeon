@@ -86,6 +86,31 @@ class WebPushContractTest {
         assertThat(repository.findByEndpoint(endpoint)).isPresent();
     }
 
+    /**
+     * <b>설정 화면의 켜짐·꺼짐이 여기에 달려 있다.</b>
+     *
+     * <p>브라우저는 로그아웃해도 구독 객체를 그대로 갖고 있다(로그아웃은 서버 행만 지운다). 그래서
+     * 객체가 있다는 사실만으로 "켜짐"을 그리면 푸시가 오지 않는 브라우저가 켜진 것처럼 보인다.
+     * 실제로 오는지는 서버에 이 엔드포인트가 <b>내 것으로</b> 있는가가 정한다.
+     */
+    @Test
+    void a_subscription_is_mine_only_if_the_server_says_so() {
+        UUID me = seedUser();
+        UUID other = seedUser();
+        String mine = "https://push.example/" + UUID.randomUUID();
+        String theirs = "https://push.example/" + UUID.randomUUID();
+        subscriptionService.register(me, mine, "k", "a", "Chrome");
+        subscriptionService.register(other, theirs, "k", "a", "Chrome");
+
+        assertThat(subscriptionService.isRegisteredFor(me, mine)).isTrue();
+        assertThat(subscriptionService.isRegisteredFor(me, theirs))
+                .as("남의 기기다 — 엔드포인트 문자열을 알아도 내 화면이 켜짐으로 보이면 안 된다")
+                .isFalse();
+        assertThat(subscriptionService.isRegisteredFor(me, "https://push.example/never-existed"))
+                .as("로그아웃으로 서버 행이 지워진 브라우저가 이 경우다")
+                .isFalse();
+    }
+
     /** 없는 것을 지워도 성공이다 — 브라우저가 이미 구독을 버린 뒤 해제를 부르는 일이 흔하다. */
     @Test
     void unregistering_something_that_is_gone_is_not_an_error() {

@@ -252,4 +252,11 @@ export const mockNotificationService = {
   },
   async registerPushSubscription() {},
   async unregisterPushSubscription() {},
+  /*
+   * 목에는 VAPID 공개키가 없어(getPushPublicKey → null) 화면이 푸시 UI를 켜지 않으므로 여기까지
+   * 오지 않는다. 그래도 false를 준다 — 혹시 불렸을 때 "켜짐"으로 보이는 쪽이 더 나쁘다.
+   */
+  async isPushSubscriptionRegistered() {
+    return false
+  },
 } satisfies NotificationService

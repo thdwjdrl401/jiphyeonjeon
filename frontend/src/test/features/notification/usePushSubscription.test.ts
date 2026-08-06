@@ -10,10 +10,12 @@ vi.mock('@/shared/config/runtime', () => ({
 const getPushPublicKey = vi.fn()
 const registerPushSubscription = vi.fn()
 const unregisterPushSubscription = vi.fn()
+const isPushSubscriptionRegistered = vi.fn()
 vi.mock('@/features/notification/notificationService', () => ({
   getPushPublicKey: () => getPushPublicKey(),
   registerPushSubscription: (s: unknown) => registerPushSubscription(s),
   unregisterPushSubscription: (e: string) => unregisterPushSubscription(e),
+  isPushSubscriptionRegistered: (e: string) => isPushSubscriptionRegistered(e),
 }))
 
 import { usePushSubscription } from '@/features/notification/usePushSubscription'
@@ -37,13 +39,17 @@ describe('푸시 구독', () => {
     getPushPublicKey.mockResolvedValue('BFakeKey')
     registerPushSubscription.mockResolvedValue(undefined)
     unregisterPushSubscription.mockResolvedValue(undefined)
+    isPushSubscriptionRegistered.mockResolvedValue(false)
   })
 
   afterEach(() => {
     vi.unstubAllGlobals()
   })
 
-  function installBrowserPush(existing: { endpoint: string; unsubscribe: () => unknown } | null) {
+  function installBrowserPush(
+    existing: { endpoint: string; unsubscribe: () => unknown } | null,
+    permission: NotificationPermission = 'default',
+  ) {
     // 재등록 경로가 키를 읽으므로 기존 구독에도 getKey가 있어야 한다.
     const withKeys = existing ? { ...existing, getKey: () => new Uint8Array([1, 2, 3]).buffer } : null
     const subscribe = vi.fn().mockResolvedValue({
@@ -60,7 +66,7 @@ describe('푸시 구독', () => {
       },
     })
     vi.stubGlobal('Notification', {
-      permission: 'default',
+      permission,
       requestPermission: vi.fn().mockResolvedValue('granted'),
     })
     vi.stubGlobal('PushManager', function PushManager() {})
@@ -89,20 +95,46 @@ describe('푸시 구독', () => {
   })
 
   /**
-   * 같은 브라우저에서 계정을 바꾸면 브라우저 구독은 그대로인데 서버 행은 이전 사용자 것이다.
-   * 그대로 두면 화면은 "켜짐"인데 푸시는 그 사람에게 간다 — 운영에서 실제로 그랬다.
+   * <b>브라우저에 구독 객체가 있다는 것만으로는 "켜짐"이 아니다.</b> 그 객체는 로그아웃해도 남고
+   * (로그아웃은 서버 행만 지운다) 다른 계정으로 갈아타도 남는다. 실제로 푸시가 오는지는 서버에
+   * 이 엔드포인트가 내 것으로 있는가가 정한다.
    */
-  it('브라우저 구독이 이미 있으면 지금 로그인한 사람 앞으로 다시 등록한다', async () => {
-    installBrowserPush({ endpoint: 'https://push.example/abc', unsubscribe: vi.fn() })
-    getPushPublicKey.mockResolvedValue('BFakeKey')
-    registerPushSubscription.mockResolvedValue(undefined)
+  it('구독이 서버에 내 것으로 있으면 켜짐이다', async () => {
+    installBrowserPush({ endpoint: 'https://push.example/abc', unsubscribe: vi.fn() }, 'granted')
+    isPushSubscriptionRegistered.mockResolvedValue(true)
 
     const { result } = renderHook(() => usePushSubscription(true))
 
     await waitFor(() => expect(result.current.state).toBe('on'))
-    expect(registerPushSubscription).toHaveBeenCalledWith(
-      expect.objectContaining({ endpoint: 'https://push.example/abc' }),
-    )
+    expect(isPushSubscriptionRegistered).toHaveBeenCalledWith('https://push.example/abc')
+  })
+
+  /**
+   * 이 브라우저에서 켠 적이 없거나 로그아웃으로 서버 행이 지워진 경우다. 구독 객체는 남아 있어도
+   * 푸시는 오지 않으므로 <b>꺼짐</b>이어야 한다 — 다른 브라우저로 접속했는데 켜져 있다고 나오던 것.
+   */
+  it('구독이 남아 있어도 서버에 내 것이 아니면 꺼짐이고, 조용히 다시 등록하지 않는다', async () => {
+    installBrowserPush({ endpoint: 'https://push.example/abc', unsubscribe: vi.fn() }, 'granted')
+    isPushSubscriptionRegistered.mockResolvedValue(false)
+
+    const { result } = renderHook(() => usePushSubscription(true))
+
+    await waitFor(() => expect(result.current.state).toBe('off'))
+    /*
+     * 예전에는 여기서 지금 로그인한 사람 앞으로 옮겨 붙였다. 그러면 사용자가 켠 적 없는 브라우저가
+     * 스스로 켜진다 — 켜는 것은 사용자의 행동이어야 한다.
+     */
+    expect(registerPushSubscription).not.toHaveBeenCalled()
+  })
+
+  /** 권한이 아직 'default'면 구독 자체가 있을 수 없다. 서버에 물어볼 것도 없다. */
+  it('권한을 아직 허용하지 않았으면 서버에 묻지 않고 꺼짐이다', async () => {
+    installBrowserPush({ endpoint: 'https://push.example/abc', unsubscribe: vi.fn() }, 'default')
+
+    const { result } = renderHook(() => usePushSubscription(true))
+
+    await waitFor(() => expect(result.current.state).toBe('off'))
+    expect(isPushSubscriptionRegistered).not.toHaveBeenCalled()
   })
 
   it('켜면 권한을 묻고 서버에 구독을 등록한다', async () => {
@@ -135,8 +167,9 @@ describe('푸시 구독', () => {
     unregisterPushSubscription.mockImplementation(async () => {
       order.push('server')
     })
-    installBrowserPush({ endpoint: 'https://push.example/abc', unsubscribe })
-    getPushPublicKey.mockResolvedValue('BFakeKey')
+    // 켜져 있는 상태 = 권한 허용 + 브라우저 구독 + 서버에 내 것으로 등록됨. 셋이 다 있어야 한다.
+    installBrowserPush({ endpoint: 'https://push.example/abc', unsubscribe }, 'granted')
+    isPushSubscriptionRegistered.mockResolvedValue(true)
     const { result } = renderHook(() => usePushSubscription(true))
     await waitFor(() => expect(result.current.state).toBe('on'))
 
