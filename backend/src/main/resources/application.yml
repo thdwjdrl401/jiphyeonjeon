@@ -253,6 +253,9 @@ liveclass:
       - http://localhost:*
       - https://jiphyeonjeon.thdwjdrl.com
       - https://*.thdwjdrl.com
+      # 정본 도메인. 옛 도메인도 남긴다 — 페이지만 넘기고 WebSocket은 양쪽에서 받기 때문이다
+      # (브라우저 WS는 301을 따라가지 않는다).
+      - https://jiphyeonjeon.thdwjdrl.com
   # 라이브 자막 Redis Stream consumer(ADR-0043, CONTRACT §3-4). 소비 대상은 spring.data.redis가
   # 가리키는 프로필 구동 Redis다(로컬=localhost, remote=EC2 :4000 application Redis). ai-api가
   # ai-rag-live-v1로 이미 소비하므로 Spring은 반드시 별도 그룹을 쓴다.
