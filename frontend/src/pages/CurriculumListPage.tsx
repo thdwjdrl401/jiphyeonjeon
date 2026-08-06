@@ -123,7 +123,7 @@ export default function CurriculumListPage() {
           <label className="search-field">
             <span className="visually-hidden">커리큘럼 검색</span>
             <SearchIcon />
-            <input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="제목과 소개로 검색" />
+            <input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="제목으로 검색" />
             {searchInput && <button type="button" aria-label="검색어 지우기" onClick={() => setSearchInput('')}>×</button>}
           </label>
           <label className="sort-field">
