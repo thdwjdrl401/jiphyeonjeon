@@ -22,7 +22,7 @@ Spring 전용 `ai-api`의 실행 골격과 RAG application core다.
 caption evidence: Redis caption Stream -> ai-rag-live-v1 -> captions/store.py
 material evidence: BGE runtime -> pgvector ACTIVE chunks
 request: Spring -> api/rag.py -> rag/service.py -> CombinedEvidenceRetriever -> GMS AnswerModel -> SSE
-conversation memory (optional, userId+conversationId 있을 때만, ADR-0010):
+conversation memory (optional, userId만 있어도 활성 — conversationId는 범위 축소용, ADR-0010·0046):
   rag/service.py -> RedisConversationMemoryStore(get/save response_id) -> GMS Responses API 체이닝
 
 [RAG v2 - replay]
@@ -63,8 +63,8 @@ capture completed -> structured draft refinement -> refined snapshot
 ## 경계와 불변식
 
 - 브라우저에 직접 노출하지 않는다.
-- 실제 Spring 단명 토큰 검증기는 아직 배선하지 않았다. 고정 secret으로 우회하지 않으며 이 상태에서는
-  context와 GMS가 구성되어도 production endpoint가 `503`으로 닫힌다.
+- Spring 인증은 HMAC 공유 secret 검증기(ADR-0023 §9)로 배선한다. `AI_INTERNAL_SECRET`이 없으면
+  인증기를 만들지 않으며, 이 상태에서는 context와 GMS가 구성되어도 production endpoint가 `503`으로 닫힌다.
 - application Redis 기본 주소는 `6379`이며 LiveKit 내부 Redis나 host `6380`을 전제로 하지 않는다.
 - 인증기나 RAG service가 없으면 요청을 허용하지 않고 `503`으로 닫는다.
 - 근거가 부족하면 모델을 호출하지 않으며, 충분한 답변은 하나 이상의 citation을 포함한다.

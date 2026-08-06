@@ -40,10 +40,12 @@ application Redis 단일 인스턴스를 전제로 하며 Redis 자체 장애 �
 - 종료 후 전체 정제본: `lecture.note.refined.snapshot`
 - 결과 Stream: `ai:lecture-notes:mvp` (`XADD MAXLEN ~`, 기본 10,000개)
 
-Redis event의 정본은 [공유 계약 §3-4a](../../../../docs/CONTRACT.md#3-4a-ai-api--application-redis-실시간-강의-노트-stream--ai-producer-구현-spring-consumer-미구현)다.
+Redis event의 정본은 [공유 계약 §3-4a](../../../../docs/CONTRACT.md#3-4a-ai-api--application-redis-실시간-강의-노트-stream--ai-producerspring-consumer-구현소비-스위치-lecture_note_consumer_enabled-기본-off)다.
 AI는 live 중 내부 topic 상태를 모델 문맥과 중복 제거에 사용하고 Redis에는 새 `markdownFragment`와
 구조화 요점만 발행한다. capture 완료 뒤 현재 구조화 draft만 한 번 정제해 별도 전체 snapshot을 발행한다.
-Spring consumer·DB·REST·WebSocket은 아직 미구현이다.
+Spring consumer(`LectureNoteStreamConsumer`)·DB(`core.live_lecture_note`)·REST
+(`GET /api/live-sessions/{sessionId}/notes`)·WebSocket(`/topic/live-sessions/{sessionId}/notes`)은
+구현됐으나, consumer는 `LECTURE_NOTE_CONSUMER_ENABLED`(기본 `false`)로 꺼져 있다.
 
 내부 draft는 A안 6타입 `DEFINITION|FACT|MECHANISM|PROCEDURE|EXAMPLE|CAUTION`을 사용한다. GMS는
 현재 활성 topic 전체 snapshot을 반환하고 ai-api는 이를 checkpoint에 저장해 다음 window에 다시 전달한다.

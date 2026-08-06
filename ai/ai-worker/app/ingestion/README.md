@@ -17,7 +17,9 @@ bytes -> ZIP/OOXML preflight -> ParsedPresentation -> MaterialChunk[]
 ## 파일 구성
 
 `pptx_parser.py`, `chunker.py`, `models.py`(`ContentBlock`/`MaterialChunk`/`ParsedPresentation`과
-GMS 핵심 용어 추출 결과 모델 `KeyTerm`), 공개 export용 `__init__.py`로 구성된다.
+GMS 핵심 용어 추출 결과 모델 `KeyTerm`/`KeyTermExtractionResult`/`KeyTermResultStatus`),
+`annotation_image.py`(파킹됨 — worker는 ADR-0074 이후 판서 이미지를 받지 않아 호출자가 없다),
+공개 export용 `__init__.py`로 구성된다.
 
 ## 경계와 불변식
 

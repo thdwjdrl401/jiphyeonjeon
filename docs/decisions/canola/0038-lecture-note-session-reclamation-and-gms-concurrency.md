@@ -89,4 +89,4 @@ ai-api가 둘 이상이면 process-local queue만으로 전체 GMS 한도를 보
 ## 참고
 
 - [축적형 강의 노트 MVP](0034-near-realtime-accumulative-lecture-notes.md)
-- [강의 노트 Redis 계약](../../CONTRACT.md#3-4a-ai-api--application-redis-실시간-강의-노트-stream--ai-producer-구현-spring-consumer-미구현)
+- [강의 노트 Redis 계약](../../CONTRACT.md#3-4a-ai-api--application-redis-실시간-강의-노트-stream--ai-producerspring-consumer-구현소비-스위치-lecture_note_consumer_enabled-기본-off)
