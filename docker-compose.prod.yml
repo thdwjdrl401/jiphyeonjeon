@@ -170,7 +170,7 @@ services:
       # 에셋 스토리지(MinIO, 같은 스택). presigned URL을 공개 도메인으로 서명 → 브라우저가 앱 nginx의
       # /liveclass-assets 로 직접 PUT. backend 자신(complete HEAD)도 이 도메인으로 접근하는데,
       # frontend 서비스의 network alias(jiphyeonjeon.thdwjdrl.com)로 내부에서 nginx로 해석돼 hairpin을 피한다.
-      ASSET_STORAGE_ENDPOINT: https://jiphyeonjeon.thdwjdrl.com
+      ASSET_STORAGE_ENDPOINT: ${PUBLIC_BASE_URL:-https://jiphyeonjeon.thdwjdrl.com}
       ASSET_STORAGE_BUCKET: ${ASSET_STORAGE_BUCKET:-liveclass-assets}
       ASSET_STORAGE_REGION: ${ASSET_STORAGE_REGION:-us-east-1}
       ASSET_STORAGE_PATH_STYLE: "true"
@@ -196,7 +196,7 @@ services:
       # /etc/liveclass/.env.prod 에서 한 줄 지우고 백엔드만 재시작하면 즉시 원복된다. 그 파일은
       # 호스트에 있어 배포에 덮이지 않는다. 반대로 compose를 손으로 고치면 다음 배포에 사라진다.
       EGRESS_TEMPLATE_BASE_URL: ${EGRESS_TEMPLATE_BASE_URL:-}
-      VIDEO_PLAYBACK_PUBLIC_ENDPOINT: https://jiphyeonjeon.thdwjdrl.com
+      VIDEO_PLAYBACK_PUBLIC_ENDPOINT: ${PUBLIC_BASE_URL:-https://jiphyeonjeon.thdwjdrl.com}
       # LiveKit — 브라우저 접속 주소와 백엔드 API 주소를 나눈다(같은 서버, 다른 네트워크 위치).
       #   LIVEKIT_URL      브라우저가 WebRTC로 붙는 공개 wss (토큰 응답에 실림)
       #   LIVEKIT_API_URL  백엔드가 방 제어·Egress 시작에 쓰는 주소
@@ -329,6 +329,7 @@ services:
         # backend가 ASSET_STORAGE_ENDPOINT(공개 도메인)로 MinIO에 붙을 때 내부에서 이 nginx로 해석되게 한다
         # (EC2 hairpin NAT 회피). 외부 클라이언트는 여전히 공개 DNS→퍼블릭 IP로 이 nginx에 닿는다.
         aliases:
+          - jiphyeonjeon.thdwjdrl.com
           - jiphyeonjeon.thdwjdrl.com
     # 6h마다 nginx reload → 갱신된 인증서 반영
     command: /bin/sh -c "while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g 'daemon off;'"
