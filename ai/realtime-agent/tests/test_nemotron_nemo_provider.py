@@ -138,3 +138,40 @@ async def test_engine_checks_runtime_before_accepting_a_stream() -> None:
     with pytest.raises(httpx.HTTPStatusError):
         await engine.start_stream(SttStreamContext("stream-1"))
     await engine.close()
+
+
+async def test_engine_reads_one_complete_transcript_without_whisper_output_gates() -> None:
+    """NeMo model owner는 token stream이 아니라 완결 transcript를 준다(ADR-0087).
+
+    Whisper용 EOS·출력밀도 gate를 그대로 적용하면 정상 자막이 통째로 사라진다.
+    """
+
+    segment = SpeechSegment(
+        pcm=b"\x01\x00" * 320,
+        sample_rate=16_000,
+        start_ms=120,
+        end_ms=140,
+        boundary_reason="SILENCE",
+    )
+    bodies: list[bytes] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/models"):
+            return httpx.Response(200, json={"data": [{"id": "liveclass-nemotron-3.5-tuned"}]})
+        bodies.append(await request.aread())
+        return httpx.Response(200, json={"text": "짧은 구간이지만 정상 발화입니다."})
+
+    engine = NemotronNemoStreamingEngine(
+        configuration(),
+        segmenter=SingleSegmenter(segment),
+        transport=httpx.MockTransport(handler),
+    )
+    await engine.start_stream(SttStreamContext("stream-1", "ko-KR"))
+    await engine.finish()
+    events = [event async for event in engine.events()]
+    await engine.close()
+
+    assert b'name="stream"' not in bodies[0]
+    assert [event.text for event in events if isinstance(event, SegmentFinal)] == [
+        "짧은 구간이지만 정상 발화입니다."
+    ]

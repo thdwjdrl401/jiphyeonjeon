@@ -227,3 +227,52 @@ async def test_sequential_attempts_restart_sequence_under_distinct_stt_session_i
         "stt-attempt-2",
         1,
     )
+
+
+async def test_split_finals_do_not_resend_text_the_deltas_already_carried() -> None:
+    publisher = RecordingPublisher()
+    sink = mapper(publisher, [f"event-{index}" for index in range(1, 8)])
+
+    # One VAD segment transcribed by a streaming provider: the model's chunks went out
+    # as deltas, then the engine closed the segment with one final per sentence.
+    await sink(TextDelta("첫 문장입니다.", 1_000))
+    await sink(TextDelta(" 두 번째 문장입니다.", 1_000))
+    await sink(SegmentFinal("첫 문장입니다.", 0, 1_000, "SILENCE", text_already_delivered=True))
+    await sink(
+        SegmentFinal("두 번째 문장입니다.", 421, 1_000, "SILENCE", text_already_delivered=True)
+    )
+
+    assert [event.text for event in publisher.deltas] == ["첫 문장입니다.", " 두 번째 문장입니다."]
+    assert [event.text for event in publisher.segments] == ["첫 문장입니다.", "두 번째 문장입니다."]
+    assert [event.segment_index for event in publisher.segments] == [0, 1]
+    assert [event.last_sequence for event in publisher.segments] == [2, 2]
+
+
+async def test_split_finals_without_delivered_text_publish_one_delta_each() -> None:
+    publisher = RecordingPublisher()
+    sink = mapper(publisher, [f"event-{index}" for index in range(1, 8)])
+
+    # A provider that only returns an authoritative final has no deltas of its own,
+    # so each sentence still has to reach delta consumers.
+    await sink(TextDelta("첫 문장입니다.", 421))
+    await sink(SegmentFinal("첫 문장입니다.", 0, 421, "SILENCE"))
+    await sink(TextDelta("두 번째 문장입니다.", 1_000))
+    await sink(SegmentFinal("두 번째 문장입니다.", 421, 1_000, "MAX_DURATION"))
+
+    assert [event.text for event in publisher.deltas] == ["첫 문장입니다.", "두 번째 문장입니다."]
+    assert [event.sequence for event in publisher.deltas] == [1, 2]
+    assert [event.last_sequence for event in publisher.segments] == [1, 2]
+    assert [event.boundary_reason for event in publisher.segments] == ["SILENCE", "MAX_DURATION"]
+
+
+async def test_delivered_final_still_publishes_a_delta_when_no_delta_survived() -> None:
+    publisher = RecordingPublisher()
+    sink = mapper(publisher, ["delta-1", "segment-1"])
+
+    # Every delta of the segment normalized away, so the segment has no sequence to
+    # point at yet. last_sequence must never be zero.
+    await sink(TextDelta("ㅋㅋㅋ", 20))
+    await sink(SegmentFinal("확정본", 0, 20, "SILENCE", text_already_delivered=True))
+
+    assert [event.text for event in publisher.deltas] == ["확정본"]
+    assert publisher.segments[0].last_sequence == 1

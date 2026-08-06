@@ -74,10 +74,16 @@ class SegmentFinal:
     start_stream_elapsed_ms: int
     end_stream_elapsed_ms: int
     boundary_reason: str
+    # True when this text already left the engine as TextDelta events. The caption
+    # mapper then publishes the final without re-sending the text as a delta, which
+    # would duplicate it for delta consumers when one segment yields several finals.
+    text_already_delivered: bool = False
 
     def __post_init__(self) -> None:
         if not self.text:
             raise ValueError("text must not be empty")
+        if not isinstance(self.text_already_delivered, bool):
+            raise TypeError("text_already_delivered must be a boolean")
         if self.start_stream_elapsed_ms < 0:
             raise ValueError("start_stream_elapsed_ms must not be negative")
         if self.end_stream_elapsed_ms < self.start_stream_elapsed_ms:

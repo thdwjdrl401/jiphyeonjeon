@@ -48,6 +48,7 @@ runtime은 [ADR-0027](../../../../docs/decisions/canola/0027-realtime-stt-shared
 ## 파일 구성
 
 - `engine.py`: audio write·event iteration·finish·close 계약
+- `sentence_boundary.py`: 확정 text를 문장으로 나누는 규칙(과소분할 우선)
 - `catalog.py`: provider별 설정 검증, factory와 worker 실행 profile 등록
 - `registry.py`: provider 선택, worker pool 해석과 process resource 소유권 이전
 - `nemotron_asr.py`: 로컬 Nemotron ASR 실행 경계
@@ -58,7 +59,13 @@ runtime은 [ADR-0027](../../../../docs/decisions/canola/0027-realtime-stt-shared
 ## 경계와 불변식
 
 audio producer와 event consumer는 각각 하나이며 engine event iterator를 여러 곳에서 소비하지 않는다.
-provider-neutral event는 진행 `TextDelta`, VAD 확정 `SegmentFinal`, warning, completed다.
+provider-neutral event는 진행 `TextDelta`, 확정 `SegmentFinal`, warning, completed다.
+`SegmentFinal`의 단위는 VAD segment가 아니라 문장이다 — 한 segment가 여러 문장을 담으면 문장마다
+하나씩 나가고, 시각은 segment 구간을 문장 길이로 나눈 추정치다([ADR-0086](../../../../docs/decisions/canola/0086-caption-line-is-a-sentence.md)).
+증분 delta를 내는 provider의 문장 final은 `text_already_delivered`로 표시해 caption mapper가 같은
+text를 delta로 다시 만들지 않게 한다.
+streaming provider는 segment 오디오를 끝까지 모델에 넣는다 — 남은 조각이 chunk보다 짧으면 버리지 않고
+채워서 넣는다([ADR-0088](../../../../docs/decisions/canola/0088-nemotron-streaming-tail-chunk.md)).
 finish와 close는 제한된 시간 안에 끝나야 하며 provider 오류를 정상 completion으로 바꾸지 않는다.
 CUDA model은 parent에서 만들거나 fork하지 않고 job child setup에서 load한다. process resource가 필요한
 provider의 실제 job은 prewarm resource 누락 시 cold-load로 우회하지 않는다. vLLM provider는

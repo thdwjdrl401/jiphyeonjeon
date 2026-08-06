@@ -40,6 +40,7 @@ class FakeProcessor:
         self.tokenizer = object()
         self.calls = 0
         self.audio_lengths: list[int] = []
+        self.audio_chunks: list[np.ndarray] = []
         self.lookahead_tokens: int | None = None
 
     def set_num_lookahead_tokens(self, value: int) -> None:
@@ -48,6 +49,7 @@ class FakeProcessor:
     def __call__(self, audio: np.ndarray, **kwargs: object) -> FakeBatch:
         self.calls += 1
         self.audio_lengths.append(audio.shape[0])
+        self.audio_chunks.append(np.array(audio))
         assert kwargs["sampling_rate"] == 16_000
         assert kwargs["language"] == "ko-KR"
         return FakeBatch(np.zeros((1, 4, 3), dtype=np.float32))
@@ -99,7 +101,7 @@ class FakeModel:
         assert isinstance(stopping_criteria, list)
         assert not stopping_criteria[0]()  # type: ignore[operator]
         feature_chunks = list(kwargs["input_features"])  # type: ignore[arg-type]
-        assert len(feature_chunks) == 2
+        assert len(feature_chunks) == 3
         streamer = kwargs["streamer"]
         assert isinstance(streamer, FakeStreamer)
         streamer.on_finalized_text("강의 시작", stream_end=True)
@@ -169,7 +171,7 @@ def test_transformers_adapter_overrides_batch_input_features_once(
     )
 
     assert result == ["강의 시작"]
-    assert processor.calls == 2
+    assert processor.calls == 3
     assert model.generate_calls == 1
 
 
@@ -375,3 +377,37 @@ def test_missing_optional_dependencies_raise_actionable_error(
 
     with pytest.raises(RuntimeError, match="uv sync --extra nemotron"):
         NemotronStreamingASR("model", "ko-KR")._ensure_loaded()
+
+
+def test_trailing_partial_chunk_is_padded_and_reaches_the_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """마지막 남은 조각이 한 chunk보다 짧아도 모델에 들어가야 한다.
+
+    버리면 오디오 끝 최대 한 chunk가 통째로 사라져 마지막 단어가 잘린다.
+    """
+
+    monkeypatch.setitem(
+        sys.modules,
+        "transformers",
+        SimpleNamespace(
+            StoppingCriteriaList=FakeStoppingCriteriaList,
+            TextIteratorStreamer=FakeStreamer,
+        ),
+    )
+    processor = FakeProcessor()
+    adapter = NemotronStreamingASR("model", "ko-KR")
+    adapter._processor = processor
+    adapter._model = FakeModel()
+
+    audio = np.zeros(640, dtype=np.int16)
+    audio[-100:] = 3_000  # 마지막 말소리
+    list(adapter.transcribe_stream(audio, 16_000))
+
+    # 모든 chunk는 model이 받는 고정 크기여야 하고, 마지막 chunk가 꼬리를 담아야 한다.
+    assert processor.audio_lengths == [
+        processor.num_samples_first_audio_chunk,
+        processor.num_samples_per_audio_chunk,
+        processor.num_samples_per_audio_chunk,
+    ]
+    assert float(np.abs(processor.audio_chunks[-1]).max()) > 0.0

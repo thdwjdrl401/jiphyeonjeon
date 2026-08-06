@@ -134,6 +134,24 @@ class NemotronStreamingASR:
                 mel_index += processor.num_mel_frames_per_audio_chunk
                 start = mel_index * hop - n_fft // 2
 
+            # What is left is shorter than one chunk, and a partial chunk is not a
+            # chunk the model will accept. Dropping it silently costs the end of the
+            # last word, so pad it out the same way the first chunk is padded.
+            if stop_requested.is_set() or start >= audio.shape[0]:
+                return
+            chunk_samples = processor.num_samples_per_audio_chunk
+            tail = audio[start:]
+            tail = np.pad(tail, (0, chunk_samples - tail.shape[0]))
+            inputs = processor(
+                tail,
+                sampling_rate=input_sample_rate,
+                is_streaming=True,
+                is_first_audio_chunk=False,
+                language=self._language,
+                return_tensors="pt",
+            ).to(model.device, dtype=model.dtype)
+            yield inputs.input_features
+
         streamer = TextIteratorStreamer(
             processor.tokenizer,
             skip_special_tokens=True,

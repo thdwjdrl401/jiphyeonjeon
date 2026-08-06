@@ -33,8 +33,14 @@ transcript가 다르면 `SegmentFinal.text`에 provider final을 권위 값으�
 `nemotron-nemo`도 같은 final-only segmented HTTP 경계를 재사용한다. 차이는 model owner가 vLLM이 아니라 NeMo `ASRModel.restore_from()`으로 full fine-tuned `.nemo`를 한 번 적재한다는 점이다. Redis·caption 계층은 이 차이를 알지 못한다.
 
 vLLM Whisper는 stream 시작 전 `/v1/models`에서 exact served-model alias를 확인한다. frame delta를
-지원하지 않으므로 `incremental_deltas=False`다. 대신 완성된 응답 text 전체를 `TextDelta` 한 번으로
-발행한 뒤 동일 text의 `SegmentFinal`을 발행해 Redis의 delta-before-final 계약을 유지한다.
+지원하지 않으므로 `incremental_deltas=False`다. adapter는 transcription SSE를 내부적으로 끝까지 모아
+`finish_reason=stop`인 EOS 정상 종료만 확정한다. `length` 또는 종료 사유 누락은 폐기하며, 동일
+문자·단어·구절이 출력의 60% 이상을 네 번 이상 차지하는 병적 반복도 폐기한다. 텍스트 자체의 zlib
+압축률이 2.4를 초과하거나 오디오 1초당 공백 제외 문자가 8자를 초과한 출력, 정규화 후 직전 final과 같은
+연속 출력도 폐기한다. 통과한 완성 text는 `TextDelta` 한 번과 동일 text의 `SegmentFinal`로 발행해
+Redis의 delta-before-final 계약을 유지한다. 설치된 vLLM 0.11.2는 Whisper `verbose_json`을 거부하므로
+모델이 계산한 `no_speech_prob`·`avg_logprob`·`compression_ratio`는 사용할 수 없다. 여기서 사용하는
+압축률은 모델 지표가 아니라 확정 후보 text를 UTF-8로 인코딩한 뒤 직접 계산한 값이다.
 
 Nemotron 경로에는 외부 network hop이 없다. prewarmed recognizer와 CUDA model은 job child 하나가
 독점하고, segment inference는 engine의 lock으로 직렬화한다. model generate thread의 결과는 event loop

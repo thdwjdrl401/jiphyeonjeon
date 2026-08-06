@@ -21,6 +21,7 @@ from app.stt.engine import (
     SttStreamStarted,
     TextDelta,
 )
+from app.stt.sentence_boundary import split_sentences
 
 _STOP = object()
 _EVENTS_CLOSED = object()
@@ -206,15 +207,10 @@ class SegmentedStreamingEngine(ABC):
                     else "".join(emitted_parts)
                 )
                 if final_text:
-                    if not emitted_parts:
-                        await self._events.put(TextDelta(final_text, item.end_ms))
-                    await self._events.put(
-                        SegmentFinal(
-                            final_text,
-                            item.start_ms,
-                            item.end_ms,
-                            item.boundary_reason,
-                        )
+                    await self._emit_finals(
+                        item,
+                        final_text,
+                        text_already_delivered=bool(emitted_parts),
                     )
                 logger.debug(
                     "STT segment processed: provider=%s segment_duration_ms=%d "
@@ -231,6 +227,51 @@ class SegmentedStreamingEngine(ABC):
             await self._events.put(EngineWarning("PROVIDER_ERROR", str(exc)))
             await self._events.put(_WorkerFailure(exc))
             raise
+
+    async def _emit_finals(
+        self,
+        item: SpeechSegment,
+        final_text: str,
+        *,
+        text_already_delivered: bool,
+    ) -> None:
+        """Publish one final per sentence so a caption line is a sentence, not a segment.
+
+        A VAD segment closes on silence or the duration cap, never on meaning, so one
+        segment routinely carries several sentences. Consumers render one line per
+        final, hence the split happens here rather than in any single provider.
+
+        Only ``boundary_reason`` values the wire contract accepts may be used, so the
+        sentence that ends the segment keeps the segment's own reason and the earlier
+        ones report ``SILENCE`` — that keeps ``MAX_DURATION`` counted once per segment.
+
+        A streaming provider has already emitted its deltas at the segment's end time,
+        and caption stream time may never regress, so those sentences all end there and
+        only their start is apportioned. Real per-sentence ends need the provider to
+        report which audio each chunk came from.
+        """
+
+        sentences = split_sentences(final_text)
+        if not sentences:
+            return
+        spans = _apportion(sentences, item.start_ms, item.end_ms)
+        end_floor_ms = item.end_ms if text_already_delivered else 0
+        last_index = len(sentences) - 1
+        for index, (sentence, (start_ms, span_end_ms)) in enumerate(
+            zip(sentences, spans, strict=True)
+        ):
+            end_ms = max(span_end_ms, end_floor_ms)
+            if not text_already_delivered:
+                await self._events.put(TextDelta(sentence, end_ms))
+            await self._events.put(
+                SegmentFinal(
+                    sentence,
+                    start_ms,
+                    end_ms,
+                    item.boundary_reason if index == last_index else "SILENCE",
+                    text_already_delivered=text_already_delivered,
+                )
+            )
 
     def _require_active(self) -> None:
         if self._closed:
@@ -254,3 +295,30 @@ class SegmentedStreamingEngine(ABC):
 
     async def _close_provider(self) -> None:
         return None
+
+
+def _apportion(sentences: list[str], start_ms: int, end_ms: int) -> list[tuple[int, int]]:
+    """Share one segment's span across its sentences, proportional to their length.
+
+    The provider gives no per-sentence timing, so the split is an estimate. It stays
+    non-decreasing and the last sentence keeps the segment's own end, because caption
+    events are rejected downstream if their stream time regresses.
+    """
+
+    total_characters = sum(len(sentence) for sentence in sentences)
+    duration_ms = end_ms - start_ms
+    spans: list[tuple[int, int]] = []
+    cursor_ms = start_ms
+    consumed_characters = 0
+    for sentence in sentences[:-1]:
+        consumed_characters += len(sentence)
+        boundary_ms = (
+            start_ms + round(duration_ms * consumed_characters / total_characters)
+            if total_characters
+            else end_ms
+        )
+        boundary_ms = min(max(boundary_ms, cursor_ms), end_ms)
+        spans.append((cursor_ms, boundary_ms))
+        cursor_ms = boundary_ms
+    spans.append((cursor_ms, end_ms))
+    return spans

@@ -499,6 +499,8 @@ def test_vllm_examples_keep_gpu0_loopback_and_conservative_capacity() -> None:
     assert "WHISPER_VLLM_HOST=127.0.0.1" in runtime
     assert "WHISPER_VLLM_SERVE_COMMAND=qwen-asr-serve" in runtime
     assert "qwen-asr-serve" in supervisor
+    assert '"$WHISPER_VLLM_VENV/bin/vllm" serve "$WHISPER_VLLM_MODEL_PATH"' in supervisor
+    assert '"$WHISPER_VLLM_VENV/bin/qwen-asr-serve" "$WHISPER_VLLM_MODEL_PATH"' in supervisor
     assert "WHISPER_VLLM_MAX_NUM_SEQS=1" in runtime
     assert "WHISPER_VLLM_GPU_MEMORY_UTILIZATION=0.10" in runtime
     assert "WHISPER_VLLM_MAX_NUM_BATCHED_TOKENS=2048" in runtime

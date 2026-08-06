@@ -21,7 +21,9 @@ segment.final을 순서대로 처리한다. CaptionTextNormalizer가 provider �
 
 `sequence`는 attempt에서 1부터, `segmentIndex`는 0부터 증가한다. 정규화 결과가 빈 delta나
 segment면 해당 순번을 소비하지 않는다. `audioStartedAt`은 `streamElapsedMs=0`인 첫 frame 시작 UTC다.
-segment.final 본문은 해당 `lastSequence`까지의 delta보다 권위 있다. `ROOM_DELETED`가 아닌 실패에서는
+segment.final 본문은 해당 `lastSequence`까지의 delta보다 권위 있다. 한 segment가 문장별 final 여러 개로
+나뉘어 오면(ADR-0086) 이미 delta로 나간 text는 `text_already_delivered`로 표시돼 다시 delta가 되지
+않는다 — 다만 살아남은 delta가 하나도 없으면 `lastSequence`가 0이 될 수 없으므로 그때는 delta를 만든다. `ROOM_DELETED`가 아닌 실패에서는
 거짓 completed를 발행하지 않는다.
 
 ## 검증
