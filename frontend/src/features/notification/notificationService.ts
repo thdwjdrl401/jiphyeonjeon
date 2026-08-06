@@ -28,6 +28,8 @@ export const registerPushSubscription = (
 ) => notificationService.registerPushSubscription(subscription)
 export const unregisterPushSubscription = (endpoint: string) =>
   notificationService.unregisterPushSubscription(endpoint)
+export const isPushSubscriptionRegistered = (endpoint: string) =>
+  notificationService.isPushSubscriptionRegistered(endpoint)
 
 export const getNotificationLeadTimes = () => notificationService.getNotificationLeadTimes()
 export const getNotificationPreference = (curriculumId: string, lessonId?: string) =>

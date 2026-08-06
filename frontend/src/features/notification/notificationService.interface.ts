@@ -50,6 +50,13 @@ export interface NotificationService {
   /** 브라우저가 만든 구독을 서버에 등록한다. 멱등이다. */
   registerPushSubscription: (subscription: PushSubscriptionInput) => Promise<void>
   unregisterPushSubscription: (endpoint: string) => Promise<void>
+  /**
+   * 이 브라우저가 가진 구독이 <b>내 앞으로 서버에 살아 있는지</b>. 설정 화면의 켜짐·꺼짐이 이 값을 따른다.
+   *
+   * <p>브라우저의 구독 객체만 보고 판정할 수 없다 — 로그아웃은 서버 행만 지우고 그 객체는 브라우저에
+   * 남긴다. 객체만 보면 푸시가 오지 않는 브라우저도 "켜짐"으로 그려진다.
+   */
+  isPushSubscriptionRegistered: (endpoint: string) => Promise<boolean>
   getNotificationLeadTimes: () => Promise<NotificationLeadTimes>
   /** 지금 이 강의(또는 커리큘럼 전체)에 적용되는 값과 그 값이 어디서 왔는지. */
   getNotificationPreference: (curriculumId: string, lessonId?: string) => Promise<NotificationPreference>

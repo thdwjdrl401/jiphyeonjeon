@@ -66,7 +66,30 @@ public class PushSubscriptionController {
         subscriptionService.unregister(UUID.fromString(authentication.getName()), request.endpoint());
     }
 
+    /**
+     * <b>이 브라우저의 구독이 내 앞으로 살아 있는가.</b> 설정 화면의 켜짐·꺼짐이 이 값을 따른다.
+     *
+     * <p>브라우저가 구독 객체를 갖고 있다는 사실만으로는 켜졌다고 할 수 없다 — 그 객체는 로그아웃
+     * 뒤에도, 다른 계정으로 갈아탄 뒤에도 남아 있고, 그때 서버에는 행이 없거나 남의 것이라 푸시가
+     * 오지 않는다. 화면이 "켜짐"이라고 말할 근거는 여기에만 있다.
+     *
+     * <p><b>엔드포인트를 본문으로 받는다.</b> 쿼리스트링에 실으면 기기 식별자가 접근 로그·리퍼러에
+     * 남는다. 조회지만 POST인 이유가 그것이다.
+     */
+    @Operation(summary = "이 구독이 내 것으로 등록돼 있는지",
+            description = "브라우저가 가진 엔드포인트를 보내면 내 앞으로 살아 있는지 알려준다. 설정 화면의 켜짐·꺼짐 판정용.")
+    @PostMapping("/api/me/push-subscriptions/status")
+    public SubscriptionStatusResponse status(@Valid @RequestBody UnregisterRequest request,
+                                             Authentication authentication) {
+        boolean registered = subscriptionService.isRegisteredFor(
+                UUID.fromString(authentication.getName()), request.endpoint());
+        return new SubscriptionStatusResponse(registered);
+    }
+
     public record PublicKeyResponse(String publicKey) {
+    }
+
+    public record SubscriptionStatusResponse(boolean registered) {
     }
 
     public record RegisterRequest(

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { PUSH_WORKER_URL } from './releasePushSubscription'
 import {
   getPushPublicKey,
+  isPushSubscriptionRegistered,
   registerPushSubscription,
   unregisterPushSubscription,
 } from './notificationService'
@@ -52,21 +53,32 @@ export function usePushSubscription(enabled: boolean): PushSubscriptionControls 
         setState('denied')
         return
       }
+      // 권한이 아직 'default'면 이 브라우저는 구독을 가질 수 없다. 서버에 물어볼 것도 없다.
+      if (Notification.permission !== 'granted') {
+        setState('off')
+        return
+      }
       const registration = await navigator.serviceWorker.getRegistration(PUSH_WORKER_URL)
       const existing = await registration?.pushManager.getSubscription()
       if (!active) return
-      if (existing) {
-        /*
-         * 브라우저 구독이 남아 있어도 **서버 쪽 주인이 나일 보장이 없다.** 같은 브라우저에서
-         * 로그아웃하고 다른 계정으로 들어오면 구독은 그대로인데 서버 행은 이전 사용자 것이라,
-         * 화면은 "켜짐"으로 보이는데 푸시는 그 사람에게 간다(운영에서 실제로 그랬다).
-         *
-         * 등록은 멱등이고 서버가 같은 엔드포인트면 주인을 옮기므로, 볼 때마다 맞춰 둔다.
-         */
-        await registerPushSubscription(readKeys(existing)).catch(() => undefined)
-        if (!active) return
+      if (!existing) {
+        setState('off')
+        return
       }
-      setState(existing ? 'on' : 'off')
+      /*
+       * **브라우저에 구독 객체가 있다는 것만으로는 "켜짐"이 아니다.**
+       *
+       * 그 객체는 로그아웃해도 남고(로그아웃은 서버 행만 지운다 — releasePushSubscription), 다른
+       * 계정으로 갈아타도 남는다. 실제로 푸시가 오는지는 **서버에 이 엔드포인트가 내 것으로 있는가**가
+       * 정한다. 객체만 보고 그리면 푸시가 오지 않는 브라우저가 "켜짐"으로 보인다.
+       *
+       * <b>여기서 조용히 재등록하지 않는다.</b> 예전에는 남아 있는 구독을 발견하면 지금 로그인한
+       * 사람 앞으로 옮겨 붙였는데, 그러면 사용자가 켠 적 없는 브라우저가 스스로 켜진다. 켜는 것은
+       * 사용자의 행동이어야 한다 — 권한이 이미 허용돼 있으므로 다시 켤 때 프롬프트도 뜨지 않는다.
+       */
+      const registered = await isPushSubscriptionRegistered(existing.endpoint).catch(() => false)
+      if (!active) return
+      setState(registered ? 'on' : 'off')
     })()
 
     return () => {

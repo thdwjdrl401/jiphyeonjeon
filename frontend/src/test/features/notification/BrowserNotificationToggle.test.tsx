@@ -11,10 +11,12 @@ vi.mock('@/shared/config/runtime', () => ({
 const getPushPublicKey = vi.fn()
 const registerPushSubscription = vi.fn()
 const unregisterPushSubscription = vi.fn()
+const isPushSubscriptionRegistered = vi.fn()
 vi.mock('@/features/notification/notificationService', () => ({
   getPushPublicKey: () => getPushPublicKey(),
   registerPushSubscription: (s: unknown) => registerPushSubscription(s),
   unregisterPushSubscription: (e: string) => unregisterPushSubscription(e),
+  isPushSubscriptionRegistered: (e: string) => isPushSubscriptionRegistered(e),
 }))
 
 import BrowserNotificationToggle from '@/features/notification/BrowserNotificationToggle'
@@ -31,6 +33,7 @@ describe('BrowserNotificationToggle', () => {
     vi.clearAllMocks()
     registerPushSubscription.mockResolvedValue(undefined)
     unregisterPushSubscription.mockResolvedValue(undefined)
+    isPushSubscriptionRegistered.mockResolvedValue(false)
   })
 
   afterEach(() => {
@@ -82,14 +85,30 @@ describe('BrowserNotificationToggle', () => {
     expect(toggle).toHaveAttribute('aria-checked', 'false')
   })
 
-  it('구독이 있으면 켜짐 상태의 스위치를 보여 준다', async () => {
-    stubBrowser({ endpoint: 'https://push.example/abc', unsubscribe: vi.fn() })
+  it('구독이 서버에 내 것으로 있으면 켜짐 상태의 스위치를 보여 준다', async () => {
+    stubBrowser({ endpoint: 'https://push.example/abc', unsubscribe: vi.fn() }, 'granted')
     getPushPublicKey.mockResolvedValue('BFakeKey')
+    isPushSubscriptionRegistered.mockResolvedValue(true)
 
     render(<BrowserNotificationToggle />)
 
     const toggle = await screen.findByRole('switch', { name: '이 브라우저에서 알림 받기' })
     expect(toggle).toHaveAttribute('aria-checked', 'true')
+  })
+
+  /**
+   * 브라우저에 구독 객체가 남아 있어도 서버에 내 것이 아니면 푸시는 오지 않는다. 그때 "켜짐"으로
+   * 그리면 다른 브라우저로 접속했는데 켜져 있다고 나온다 — 실제로 그렇게 보였다.
+   */
+  it('구독이 남아 있어도 서버에 내 것이 아니면 꺼짐으로 보여 준다', async () => {
+    stubBrowser({ endpoint: 'https://push.example/abc', unsubscribe: vi.fn() }, 'granted')
+    getPushPublicKey.mockResolvedValue('BFakeKey')
+    isPushSubscriptionRegistered.mockResolvedValue(false)
+
+    render(<BrowserNotificationToggle />)
+
+    const toggle = await screen.findByRole('switch', { name: '이 브라우저에서 알림 받기' })
+    await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'false'))
   })
 
   it('차단돼 있으면 스위치 대신 문구만 보이고, 안내 팝오버는 닫혀 있다', async () => {
@@ -148,8 +167,9 @@ describe('BrowserNotificationToggle', () => {
   })
 
   it('켜져 있을 때 스위치를 누르면 서버 구독을 해제하고 꺼짐으로 바뀐다', async () => {
-    stubBrowser({ endpoint: 'https://push.example/abc', unsubscribe: vi.fn() })
+    stubBrowser({ endpoint: 'https://push.example/abc', unsubscribe: vi.fn() }, 'granted')
     getPushPublicKey.mockResolvedValue('BFakeKey')
+    isPushSubscriptionRegistered.mockResolvedValue(true)
     const user = userEvent.setup()
 
     render(<BrowserNotificationToggle />)

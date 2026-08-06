@@ -87,6 +87,14 @@ export const httpNotificationService = {
     // 본문이 있는 DELETE다 — 엔드포인트는 URL에 담기엔 길고, 경로에 넣으면 인코딩이 지저분해진다.
     await apiClient.delete('/me/push-subscriptions', { data: { endpoint } })
   },
+  async isPushSubscriptionRegistered(endpoint: string) {
+    // 조회지만 POST다 — 엔드포인트를 쿼리스트링에 실으면 기기 식별자가 접근 로그·리퍼러에 남는다.
+    const { data } = await apiClient.post<{ registered: boolean }>(
+      '/me/push-subscriptions/status',
+      { endpoint },
+    )
+    return data.registered
+  },
   subscribeNotifications(onSignal: (signal: NotificationSignal) => void, onConnected?: () => void) {
     let active = true
     const client = new Client({
