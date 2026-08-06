@@ -1048,6 +1048,52 @@ body {
 .curriculum-detail-page { gap: 24px; padding-block: 32px; }
 .curriculum-hero { border-color: var(--border-medium); border-radius: 0; padding: 30px 32px; background: var(--paper-pure); box-shadow: none; }
 .curriculum-hero::before { display: none; }
+
+/*
+ * 대표 이미지가 있는 히어로: 왼쪽 40%를 이미지가 카드 높이만큼 꽉 채운다(풀블리드).
+ *
+ * <p><b>카드 높이를 늘리지 않는 것</b>이 이 배치를 고른 이유다. 이미지를 위에 배너로 얹으면
+ * 히어로가 150px 이상 길어져 목차가 첫 화면 밖으로 밀린다 — 이 화면은 수강 신청을 결정하는
+ * 자리이고, 목차가 그 결정의 근거다.
+ *
+ * <p>이미지를 <b>왼쪽</b>에 두는 이유: 오른쪽에 두면 히어로 옆 사이드바(수강 신청·강사 관리·
+ * 자료 카드)와 맞닿아 두 덩어리가 한 블록으로 뭉친다.
+ *
+ * <p>대가는 제목 폭이다. 60%로 좁아져 긴 제목이 한 줄 더 내려갈 수 있다. 이때 늘어나는 것은
+ * 히어로 높이지만, 배너 방식이 무조건 150px을 쓰는 것과 달리 제목이 짧으면 대가가 없다.
+ */
+.curriculum-hero--with-cover {
+  display: grid;
+  overflow: hidden;
+  grid-template-columns: 36% minmax(0, 1fr);
+  padding: 0;
+}
+/*
+ * 이미지가 있을 때는 제목을 한 급 낮춘다. <b>카드 높이를 지키기 위한 값이다.</b>
+ *
+ * <p>상세 본문 열은 1440px 화면에서 928px다(1280px 컨테이너 − 사이드바 320px − gap 32px).
+ * 여기서 이미지가 36%를 가져가면 제목이 쓸 수 있는 폭은 530px이고, 원래 크기(51.8px)로는
+ * 지금 커리큘럼 제목 대부분이 두 줄이 되어 카드가 한 줄만큼 길어진다 — 목차가 첫 화면에서
+ * 밀려나므로 이 배치를 고른 이유가 사라진다.
+ *
+ * <p>긴 제목은 여전히 두 줄이 되고 그만큼 카드가 길어진다. 그건 받아들인다 — 제목 길이는
+ * 강사가 정하는 값이라 화면이 억지로 줄일 수 없다. 대신 제목 입력창에서 권장 길이를 알린다
+ * (CurriculumFormPage·CurriculumManagePage의 placeholder).
+ */
+.curriculum-hero--with-cover .curriculum-identity h1 { font-size: clamp(1.55rem, 2.4vw, 2.2rem); }
+/*
+ * 이미지 열은 그리드가 정한 높이를 그대로 쓴다. 컨테이너를 relative로 두고 img를 그 안에
+ * 절대 배치하는 이유는, 높이가 내용(=img)에서 오면 순환이 되어 object-fit이 늘어나지 않기
+ * 때문이다. 텍스트가 길어지면 이미지도 같이 길어진다.
+ */
+.curriculum-hero__cover {
+  position: relative;
+  border-right: 1px solid var(--border-medium);
+  background: var(--paper);
+}
+.curriculum-hero__cover img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; }
+.curriculum-hero--with-cover .curriculum-hero__body { min-width: 0; padding: 30px 32px; }
+
 .curriculum-identity h1 { max-width: 840px; margin: 0 0 6px; font-size: clamp(2rem, 3.6vw, 3.4rem); font-weight: 400; letter-spacing: -.04em; line-height: 1.1; }
 .curriculum-metadata { padding-top: 16px; border-top: 1px solid var(--border-medium); }
 .curriculum-overview,
@@ -1930,7 +1976,16 @@ body {
   .sort-field { grid-column: auto; grid-row: auto; border-top: 0; }
   .sort-field select { width: auto; border-left: 1px solid var(--border-medium); }
   .curriculum-hero { padding: 24px 20px; }
+  /*
+    좁은 화면에서는 36% 열에 제목이 들어갈 폭이 남지 않는다 — 이미지를 위로 올려 한 열로 쌓고,
+    그때는 높이를 직접 정해야 한다(그리드가 정해 주던 높이가 없어진다).
+  */
+  .curriculum-hero--with-cover { grid-template-columns: minmax(0, 1fr); padding: 0; }
+  .curriculum-hero__cover { height: 168px; border-right: 0; border-bottom: 1px solid var(--border-medium); }
+  .curriculum-hero--with-cover .curriculum-hero__body { padding: 24px 20px; }
   .curriculum-identity h1 { font-size: clamp(2rem, 10vw, 2.8rem); }
+  /* 한 열로 쌓이면 제목이 폭을 온전히 쓴다 — 위에서 낮춘 급을 되돌린다. */
+  .curriculum-hero--with-cover .curriculum-identity h1 { font-size: clamp(2rem, 10vw, 2.8rem); }
 }
 
 @media (max-width: 620px) {

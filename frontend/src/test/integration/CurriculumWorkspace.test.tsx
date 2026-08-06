@@ -233,7 +233,7 @@ describe('커리큘럼 작업 화면', () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/new')
     await user.type(
-      await screen.findByPlaceholderText('예: 라이브로 완성하는 Spring Boot'),
+      await screen.findByPlaceholderText(/^예: 라이브로 완성하는 Spring Boot/),
       '자료가 있는 새 커리큘럼',
     )
     const material = new File(['presentation'], 'curriculum-guide.pptx', {
@@ -259,7 +259,7 @@ describe('커리큘럼 작업 화면', () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/new')
     await user.type(
-      await screen.findByPlaceholderText('예: 라이브로 완성하는 Spring Boot'),
+      await screen.findByPlaceholderText(/^예: 라이브로 완성하는 Spring Boot/),
       '기간을 넣은 커리큘럼',
     )
     fireEvent.change(screen.getByLabelText('운영 시작일'), { target: { value: '2026-08-01T10:00' } })
@@ -281,7 +281,7 @@ describe('커리큘럼 작업 화면', () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/new')
     await user.type(
-      await screen.findByPlaceholderText('예: 라이브로 완성하는 Spring Boot'),
+      await screen.findByPlaceholderText(/^예: 라이브로 완성하는 Spring Boot/),
       '지난 날짜로 끝나는 커리큘럼',
     )
 
@@ -305,7 +305,7 @@ describe('커리큘럼 작업 화면', () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/new')
     await user.type(
-      await screen.findByPlaceholderText('예: 라이브로 완성하는 Spring Boot'),
+      await screen.findByPlaceholderText(/^예: 라이브로 완성하는 Spring Boot/),
       'DOM 검증 커리큘럼',
     )
 

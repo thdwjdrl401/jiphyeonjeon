@@ -103,6 +103,9 @@
   color: var(--ink-500);
 }
 
+/* 날짜는 그 안에서 끊기지 않는다 — 줄이 바뀌는 자리는 시작일과 종료일 사이뿐이다. */
+.curriculum-metadata__date { white-space: nowrap; }
+
 .curriculum-metadata dd {
   margin: 4px 0 0;
   font-weight: 600;

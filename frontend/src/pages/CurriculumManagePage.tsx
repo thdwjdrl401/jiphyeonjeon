@@ -896,7 +896,7 @@ function CurriculumManageEditor({
       {tab === 'info' && (
         <div className="workspace-tabpanel curriculum-manage__info-grid" {...tabPanelProps(MANAGE_TAB_PREFIX, 'info')}>
           <Panel className="curriculum-manage__info-panel" title="기본 정보" description="제목과 수강생에게 표시할 소개를 수정합니다.">
-            <div className="form-grid"><label><span>제목</span><input value={curriculumInfo.title} onChange={(event) => updateCurriculumInfo('title', event.target.value)} /></label><label><span>짧은 소개</span><input value={curriculumInfo.summary} onChange={(event) => updateCurriculumInfo('summary', event.target.value)} /></label><label className="form-field--wide"><span>상세 설명</span><textarea rows={4} value={curriculumInfo.description} onChange={(event) => updateCurriculumInfo('description', event.target.value)} /></label></div>
+            <div className="form-grid"><label><span>제목</span><input value={curriculumInfo.title} maxLength={200} placeholder="20자 안팎 권장" onChange={(event) => updateCurriculumInfo('title', event.target.value)} /></label><label><span>짧은 소개</span><input value={curriculumInfo.summary} onChange={(event) => updateCurriculumInfo('summary', event.target.value)} /></label><label className="form-field--wide"><span>상세 설명</span><textarea rows={4} value={curriculumInfo.description} onChange={(event) => updateCurriculumInfo('description', event.target.value)} /></label></div>
             {/*
               운영 기간을 여기 두는 이유: 카탈로그 카드와 상세가 이 값을 "8월 3일 – 9월 24일"로
               읽어 주고, 비어 있으면 "일정 준비 중"에 머문다. 제목·소개와 같은 기본 정보라 같은
