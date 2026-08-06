@@ -1065,9 +1065,13 @@ body {
  * <p>대가는 제목 폭이다. 60%로 좁아져 긴 제목이 한 줄 더 내려갈 수 있다. 이때 늘어나는 것은
  * 히어로 높이지만, 배너 방식이 무조건 150px을 쓰는 것과 달리 제목이 짧으면 대가가 없다.
  */
+/*
+ * overflow를 <b>자르지 않는다</b>. 강사 이름 옆 프로필 팝오버가 히어로 밖으로 나가는데
+ * (.instructor-profile__panel은 absolute·z-index 20), 여기서 hidden을 걸면 그 패널이 카드
+ * 경계에서 잘려 소개가 반쯤 보인다. 이미지 모서리는 아래 __cover가 스스로 자른다.
+ */
 .curriculum-hero--with-cover {
   display: grid;
-  overflow: hidden;
   grid-template-columns: 36% minmax(0, 1fr);
   padding: 0;
 }
@@ -1085,16 +1089,60 @@ body {
  */
 .curriculum-hero--with-cover .curriculum-identity h1 { font-size: clamp(1.55rem, 2.4vw, 2.2rem); }
 /*
- * 이미지 열은 그리드가 정한 높이를 그대로 쓴다. 컨테이너를 relative로 두고 img를 그 안에
- * 절대 배치하는 이유는, 높이가 내용(=img)에서 오면 순환이 되어 object-fit이 늘어나지 않기
- * 때문이다. 텍스트가 길어지면 이미지도 같이 길어진다.
+ * 이미지는 <b>탐색 카드와 같은 16:9</b>다. 강사가 업로드할 때 16:9로 잘라 두는데(ADR-0090),
+ * 이 자리가 다른 비율이면 그 크롭이 여기서 또 잘려 "맞춰 자른 것이 안 맞는" 상태가 된다.
+ *
+ * <p>비율을 폭에서 계산하므로 <b>align-self가 stretch면 안 된다</b> — 열 높이(=텍스트 높이)가
+ * 강제되어 aspect-ratio가 무시된다. center로 두면 제목이 두 줄이 되어 카드가 길어질 때
+ * 이미지가 늘어나는 대신 위아래에 히어로 면이 조금 남는다.
+ *
+ * <p>열 구분선(border-right)을 두지 않는다. 이미지가 열 높이보다 짧을 수 있어, 선을 그으면
+ * 사진이 없는 위아래 구간까지 선만 남는다 — 사진 경계 자체가 구분이 된다.
+ */
+/*
+ * 사진은 열을 <b>꽉 채우고</b>, 오른쪽 끝은 히어로 면으로 녹아 사라진다.
+ *
+ * <p>16:9를 그대로 박아 보니 상자와 사진이 어긋났다 — 카드 높이는 옆 텍스트가 정하는데(ADR-0087)
+ * 16:9 높이는 폭에서 나오니 두 값이 같을 이유가 없고, 남는 자리가 빈 띠로 보였다. 사진을 키워
+ * 채우면서 텍스트를 줄이는 길도 있었지만, 제목을 또 낮추면 히어로의 무게가 사라지고 "긴 제목 →
+ * 카드가 길어짐 → 사진이 더 커져야 함"이 순환한다.
+ *
+ * <p>그래서 채우고 <b>경계를 없앤다</b>. 오른쪽이 면으로 녹으면 어디까지가 사진인지 눈이 찾지
+ * 않으므로, 카드와 잘린 폭이 달라도 "다른 크롭"으로 읽히지 않는다.
+ *
+ * <p><b>왼쪽을 기준으로 자른다</b>(object-position). 표지 사진은 제목·로고가 왼쪽에 오는 경우가
+ * 많고, 오른쪽은 녹아 사라질 자리다.
+ *
+ * <p><b>사진을 absolute로 띄우는 것이 이 규칙의 핵심이다.</b> 흐름 안에 두면 (width:100% +
+ * height:100%인 채로) 부모 높이가 auto라 백분율이 auto로 풀려 <b>사진의 원래 높이가 행 높이를
+ * 정해 버린다</b> — 세로로 긴 사진을 올리면 히어로가 그만큼 길어졌다(실제로 그렇게 보였다).
+ * 띄워 두면 행 높이 계산에 아무것도 보태지 않으므로 <b>높이는 옆 텍스트만이 정한다</b>
+ * (ADR-0087). 어떤 비율의 사진을 올려도 히어로 높이는 같다.
  */
 .curriculum-hero__cover {
   position: relative;
-  border-right: 1px solid var(--border-medium);
-  background: var(--paper);
+  overflow: hidden;
+  align-self: stretch;
 }
-.curriculum-hero__cover img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; }
+.curriculum-hero__cover img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: left center;
+}
+/*
+  사진 → 히어로 면. 열의 58%까지는 손대지 않는다 — 1440px 화면에서 열이 334px이므로 약 194px이
+  선명하게 남고 남은 140px에서 녹는다. 더 일찍 시작하면 사진이 띠처럼 얇아진다.
+*/
+.curriculum-hero__cover::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to right, transparent 58%, var(--paper-pure) 100%);
+  content: '';
+}
 .curriculum-hero--with-cover .curriculum-hero__body { min-width: 0; padding: 30px 32px; }
 
 .curriculum-identity h1 { max-width: 840px; margin: 0 0 6px; font-size: clamp(2rem, 3.6vw, 3.4rem); font-weight: 400; letter-spacing: -.04em; line-height: 1.1; }
@@ -1962,11 +2010,25 @@ body {
   .sort-field select { width: auto; border-left: 1px solid var(--border-medium); }
   .curriculum-hero { padding: 24px 20px; }
   /*
-    좁은 화면에서는 36% 열에 제목이 들어갈 폭이 남지 않는다 — 이미지를 위로 올려 한 열로 쌓고,
-    그때는 높이를 직접 정해야 한다(그리드가 정해 주던 높이가 없어진다).
+    좁은 화면에서는 36% 열에 제목이 들어갈 폭이 남지 않는다 — 이미지를 위로 올려 한 열로 쌓는다.
+
+    <p>쌓이면 사진과 텍스트가 <b>다른 행</b>에 놓이므로 옆 텍스트가 정해 줄 높이가 없다. 사진은
+    absolute로 띄워 둔 상태라(위 __cover img) 여기서 높이를 주지 않으면 상자가 0이 되어 사진이
+    사라진다. 그래서 이 배치에서만 <b>비율을 상자에 건다</b> — 값은 업로드에서 잘라 둔 16:9
+    (ADR-0090)이라 여기서 다시 잘리지 않는다.
+
+    <p>그라데이션도 아래로 돌린다. 넓은 화면에서는 오른쪽에 텍스트가 있어 오른쪽으로 녹였지만,
+    쌓이면 텍스트가 아래에 있다 — 방향을 그대로 두면 사진이 옆으로 지워지는 것처럼 보인다.
   */
   .curriculum-hero--with-cover { grid-template-columns: minmax(0, 1fr); padding: 0; }
-  .curriculum-hero__cover { height: 168px; border-right: 0; border-bottom: 1px solid var(--border-medium); }
+  .curriculum-hero__cover {
+    aspect-ratio: 16 / 9;
+    border-bottom: 1px solid var(--border-medium);
+  }
+  .curriculum-hero__cover img { object-position: center; }
+  .curriculum-hero__cover::after {
+    background: linear-gradient(to bottom, transparent 58%, var(--paper-pure) 100%);
+  }
   .curriculum-hero--with-cover .curriculum-hero__body { padding: 24px 20px; }
   .curriculum-identity h1 { font-size: clamp(2rem, 10vw, 2.8rem); }
   /* 한 열로 쌓이면 제목이 폭을 온전히 쓴다 — 위에서 낮춘 급을 되돌린다. */
