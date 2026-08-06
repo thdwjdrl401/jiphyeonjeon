@@ -218,7 +218,7 @@ function screenPublishArgs(quality: PublishQuality) {
  * preflight와 classroom이 공유하는 session-scoped LiveKit Room 소유자(ADR-0002 §1).
  *
  * <p>이 Provider는 두 페이지의 공통 route 부모에 mount된다. 따라서 preflight → classroom 전환은
- * Room/track을 끊지 않고, 다른 session이나 processing으로 나갈 때만 cleanup한다.
+ * Room/track을 끊지 않고, 다른 세션이나 종료 후 강의 상세처럼 이 route 밖으로 나갈 때만 cleanup한다.
  */
 export default function InstructorLiveMediaProvider({ children }: { children?: ReactNode }) {
   const { sessionId = '' } = useParams()

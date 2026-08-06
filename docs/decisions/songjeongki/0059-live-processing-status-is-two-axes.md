@@ -5,11 +5,12 @@
 > [ADR-0007 녹화 자동 게시·processing 폴링](../choinhoo/0007-recording-ready-auto-publish-and-processing-polling.md) ·
 > [ADR-0034 Egress 완료 webhook](0034-egress-completion-webhook.md) ·
 > [ADR-0039 다시보기 재생 API](0039-replay-playback-api.md) ·
+> [ADR-0092 라이브 종료 후 강의 상세 복귀](../seominkyeong/0092-live-end-returns-to-lesson-detail.md) ·
 > [공유 계약](../../CONTRACT.md) · [프론트 라이브 API](../../frontend/api/LIVE.md)
 
-- **상태**: 채택 — 구현됨
+- **상태**: 채택 — 처리 계약·화면은 유지, 종료 직후 진입 경로는 ADR-0092로 변경
 - **일자**: 2026-08-02
-- **적용 범위**: `GET /api/instructor/live-sessions/{sessionId}/processing` 신설, 강사 종료 후 화면
+- **적용 범위**: `GET /api/instructor/live-sessions/{sessionId}/processing`, 강사용 녹화 처리 현황 화면
 
 ## 한 줄 결정
 
@@ -20,7 +21,9 @@
 
 ### 1. 종료 화면이 항상 오류로 끝나고 있었다
 
-강사가 종료를 누르면 `LiveClassroomPage`가 `/instructor/live-sessions/{id}/processing`으로 이동한다.
+당시 강사가 종료를 누르면 `LiveClassroomPage`가 `/instructor/live-sessions/{id}/processing`으로 이동했다.
+후속 [ADR-0092](../seominkyeong/0092-live-end-returns-to-lesson-detail.md)는 종료 직후에는 강의 상세로
+돌아가도록 바꾸고, 이 처리 현황 화면은 알림·직접 접근용으로 유지한다.
 그런데 그 화면이 부르는 조회는 FE 어댑터에서 `notImplemented`(501)를 던지고 있었고 서버에도 경로가
 없었다. 즉 **정상 종료 경로의 종착지가 오류 화면**이었다.
 
