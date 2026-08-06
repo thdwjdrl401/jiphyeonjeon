@@ -848,7 +848,10 @@ describe('커리큘럼 작업 화면', () => {
 
     expect(operatingPanel).not.toBeNull()
     expect(within(sidebar).queryByRole('link', { name: '커리큘럼 만들기' })).not.toBeInTheDocument()
-    expect(within(operatingPanel!).getByRole('link', { name: '새 커리큘럼' })).toHaveAttribute(
+    // 새 커리큘럼 진입점은 목록 패널이 아니라 페이지 우측 상단 헤더에 있다.
+    expect(within(operatingPanel!).queryByRole('link', { name: '새 커리큘럼' })).not.toBeInTheDocument()
+    const pageHeader = screen.getByRole('heading', { name: '커리큘럼 관리', level: 1 }).closest('header')!
+    expect(within(pageHeader).getByRole('link', { name: '새 커리큘럼' })).toHaveAttribute(
       'href',
       '/instructor/curriculums/new',
     )

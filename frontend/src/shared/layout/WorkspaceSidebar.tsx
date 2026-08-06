@@ -20,7 +20,7 @@ export default function WorkspaceSidebar({ user }: WorkspaceSidebarProps) {
 
   return (
     <aside className="workspace-sidebar" aria-label="작업 메뉴">
-      <div className="workspace-sidebar__masthead" aria-hidden="true">
+      <div className="workspace-sidebar__masthead workspace-sidebar__masthead--inline" aria-hidden="true">
         <span>MY</span>
         <strong>PAGE</strong>
       </div>
