@@ -590,6 +590,94 @@ def test_ignore_completes_operation_without_event_or_chunk_sequence() -> None:
     asyncio.run(scenario())
 
 
+def test_persistently_failing_batch_is_abandoned_and_its_text_carried_over() -> None:
+    """결정적 실패(출력 예산 소진 등)로 draft가 계속 실패하는 배치를 무한 재시도하면 세션
+    노트 전체가 멈추고 호출 비용만 쌓인다(실사고). 한도 뒤엔 포기하되 자막은 이월한다."""
+
+    class FailTwiceModel:
+        def __init__(self) -> None:
+            self.texts: list[str] = []
+
+        async def generate_draft(self, request):
+            self.texts.append(request.text)
+            if len(self.texts) <= 2:
+                raise ValueError("output budget exhausted")
+            return _draft_result(request)
+
+    async def scenario() -> None:
+        model = FailTwiceModel()
+        store = InMemoryStore()
+        service, pipeline = _components(model, store)
+
+        await pipeline.ingest(_delta(1, "포화 창"))
+        await service.drain()  # 실패 1 — in_flight 유지 (재시도는 다음 자막이 유발)
+        assert store.checkpoints[SESSION_ID].inFlight.failures == 1
+
+        await pipeline.ingest(_delta(2, " 다음 창"))
+        await service.drain()  # 실패 2 → 포기+이월 → pending(다음 창)이 이월분과 합쳐짐
+
+        checkpoint = store.checkpoints[SESSION_ID]
+        assert checkpoint.inFlight is None
+
+        assert model.texts == ["포화 창", "포화 창", "포화 창 다음 창"]
+        assert store.events  # 이월분을 합친 세 번째 호출은 발행까지 도달
+
+    asyncio.run(scenario())
+
+
+def test_abandoned_batch_still_publishes_its_completion() -> None:
+    """포기한 배치에 completion이 실려 있으면 캡처 종료 발행은 계속돼야 한다 — 노트는
+    포기해도 세션 수명주기는 멈추지 않는다."""
+
+    class AlwaysFailModel:
+        async def generate_draft(self, request):
+            raise ValueError("output budget exhausted")
+
+    async def scenario() -> None:
+        store = InMemoryStore()
+        service, pipeline = _components(AlwaysFailModel(), store)
+
+        await pipeline.ingest(_delta(1, "마지막 창"))
+        await service.drain()  # 실패 1 — in_flight 유지
+        await pipeline.ingest(_completion(1))
+        await service.drain()  # 실패 2 → 포기 → pending의 completion 발행
+
+        assert [event.type for event in store.events] == ["lecture.note.capture.completed"]
+        assert store.checkpoints[SESSION_ID].deferredText == "마지막 창"
+
+    asyncio.run(scenario())
+
+
+def test_carried_over_text_suppresses_previous_context() -> None:
+    """이월 텍스트는 직전 창 전체를 담으므로, 직전 창 꼬리인 previousContext를 함께 실으면
+    같은 구간이 payload에 두 번 들어간다(실사고 관측 중복)."""
+
+    class IgnoreThenInspectModel:
+        def __init__(self) -> None:
+            self.requests = []
+
+        async def generate_draft(self, request):
+            self.requests.append(request)
+            if len(self.requests) == 1:
+                return LectureNoteDraftUpdateResult(action=LectureNoteDraftUpdateAction.IGNORE)
+            return _draft_result(request)
+
+    async def scenario() -> None:
+        model = IgnoreThenInspectModel()
+        service, pipeline = _components(model, InMemoryStore())
+
+        await pipeline.ingest(_delta(1, "첫 문장입니다."))
+        await service.drain()
+        await pipeline.ingest(_delta(2, " 둘째 문장입니다."))
+        await service.drain()
+
+        second = model.requests[1]
+        assert second.text == "첫 문장입니다. 둘째 문장입니다."
+        assert second.previous_context == ""
+
+    asyncio.run(scenario())
+
+
 def test_ignored_caption_is_carried_into_the_next_model_call() -> None:
     """IGNORE는 '버린다'가 아니라 '아직 판단할 수 없다'이다. 미완결 발화를 흘려보내면 뒷부분만
     앞부분 없이 다음 창에 도착해 조용히 유실된다."""

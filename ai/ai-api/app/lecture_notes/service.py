@@ -75,12 +75,14 @@ class _PendingBatch:
     operation_id: str = field(default_factory=lambda: f"op-{uuid4().hex}")
     windows: list[LectureNoteWindow] = field(default_factory=list)
     completion: CaptionCompleted | None = None
+    failures: int = 0
 
     def to_checkpoint(self) -> LectureNoteWorkCheckpoint:
         return LectureNoteWorkCheckpoint(
             operationId=self.operation_id,
             windows=tuple(self.windows),
             completion=self.completion,
+            failures=self.failures,
         )
 
     @classmethod
@@ -89,6 +91,7 @@ class _PendingBatch:
             operation_id=checkpoint.operationId,
             windows=list(checkpoint.windows),
             completion=checkpoint.completion,
+            failures=checkpoint.failures,
         )
 
 
@@ -124,14 +127,18 @@ class LectureNoteService:
         *,
         refinement_model: LectureNoteRefinementModel | None = None,
         max_deferred_chars: int = 4_000,
+        max_draft_attempts: int = 2,
     ) -> None:
         if max_deferred_chars <= 0:
             raise ValueError("lecture note deferred text bound must be positive")
+        if max_draft_attempts <= 0:
+            raise ValueError("lecture note draft attempt bound must be positive")
         self._model = model
         self._refinement_model = refinement_model
         self._store = store
         self._accumulator = accumulator
         self._max_deferred_chars = max_deferred_chars
+        self._max_draft_attempts = max_draft_attempts
         self._sessions: dict[str, _SessionState] = {}
         self._tasks: set[asyncio.Task[None]] = set()
         self._metrics = LectureNoteServiceMetrics()
@@ -326,6 +333,35 @@ class LectureNoteService:
                         "error_code": type(exc).__name__,
                     },
                 )
+                # 실패한 in_flight를 무한정 다시 부르면 결정적 실패(출력 예산 소진 등)에서
+                # 세션 노트 전체가 멈추고 GMS 비용만 태운다(실사고). 한도에 닿으면 배치를
+                # 포기하되 자막은 버리지 않고 이월해, 다음 창과 합쳐 다시 판단하게 한다.
+                async with state.lock:
+                    if (
+                        state.in_flight is not None
+                        and state.in_flight.operation_id == batch.operation_id
+                    ):
+                        state.in_flight.failures += 1
+                        if state.in_flight.failures >= self._max_draft_attempts:
+                            logger.warning(
+                                "강의 노트 배치를 포기하고 자막을 이월",
+                                extra={
+                                    "event": "lecture_note.window_abandoned",
+                                    "session_id": session_id,
+                                    "failures": state.in_flight.failures,
+                                },
+                            )
+                            state.deferred_text = _bounded_deferred_text(
+                                request.text, self._max_deferred_chars
+                            )
+                            state.in_flight.windows.clear()
+                            if state.in_flight.completion is None:
+                                state.in_flight = None
+                            await self._save_checkpoint(session_id, state)
+                            # completion이 남았으면 다음 루프가 발행을 이어가고, 아니면
+                            # 루프가 pending을 집거나 스스로 끝난다.
+                            return True
+                    await self._save_checkpoint(session_id, state)
                 return False
 
             async with state.lock:
@@ -652,6 +688,7 @@ def _state_after_commit(
         pending=state.pending,
         in_flight=in_flight,
         outbox=None,
+        deferred_text=state.deferred_text,
         completed=completed,
         completion_acked=state.completion_acked,
         refinement_pending=refinement_pending,
@@ -699,7 +736,10 @@ def _draft_model_request(
         lesson_id=latest.lesson_id,
         stt_session_id=latest.stt_session_id,
         note=draft,
-        previous_context=windows[0].previous_context,
+        # 이월분이 있으면 previousContext를 비운다 — 이월 텍스트가 직전 창 전체를 이미 담고
+        # 있어서, 직전 창 꼬리인 previousContext를 함께 실으면 같은 구간이 payload에 두 번
+        # 들어간다(실사고에서 관측된 중복). 토큰 낭비이자 "이미 반영된 내용" 판정을 흐린다.
+        previous_context="" if deferred_text else windows[0].previous_context,
         # 앞서 IGNORE된 자막을 앞에 붙여, 미완결이라 미룬 발화가 완결된 뒤 함께 판단되게 한다.
         text=deferred_text + "".join(window.text for window in windows),
     )

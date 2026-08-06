@@ -41,6 +41,9 @@ class LectureNoteWorkCheckpoint(_CheckpointModel):
     operationId: str
     windows: tuple[LectureNoteWindow, ...] = ()
     completion: CaptionCompleted | None = None
+    # 이 배치의 draft 호출이 실패한 횟수. 재시작을 넘어 누적돼야 같은 배치가 영원히 재시도되는
+    # livelock을 막을 수 있다. version 1의 optional 필드라 구 JSON은 0으로 읽힌다.
+    failures: int = 0
 
 
 class LectureNoteSessionCheckpoint(_CheckpointModel):
