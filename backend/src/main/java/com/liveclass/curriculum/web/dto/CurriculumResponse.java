@@ -24,6 +24,8 @@ public record CurriculumResponse(
         int sectionCount,
         int lessonCount,
         int publishedLessonCount,
+        @Schema(description = "이 커리큘럼의 ACTIVE 수강생 수. 승인 대기·거절·취소는 세지 않는다.")
+        long enrolleeCount,
         int structureVersion,
         @Schema(description = "커리큘럼-레벨 강의 자료(ADR-0042). 관리 GET에서만 채워진다. 생성/수정 응답은 빈 목록.")
         List<CurriculumMaterialResponse> materials,
@@ -32,15 +34,12 @@ public record CurriculumResponse(
         OffsetDateTime updatedAt
 ) {
 
-    public static CurriculumResponse from(Curriculum c) {
-        return from(c, null, List.of());
+    public static CurriculumResponse from(Curriculum c, String thumbnailUrl, long enrolleeCount) {
+        return from(c, thumbnailUrl, enrolleeCount, List.of());
     }
 
-    public static CurriculumResponse from(Curriculum c, String thumbnailUrl) {
-        return from(c, thumbnailUrl, List.of());
-    }
-
-    public static CurriculumResponse from(Curriculum c, String thumbnailUrl, List<MaterialView> materials) {
+    public static CurriculumResponse from(Curriculum c, String thumbnailUrl, long enrolleeCount,
+                                          List<MaterialView> materials) {
         return new CurriculumResponse(
                 c.getId().toString(),
                 c.getTitle(),
@@ -54,6 +53,7 @@ public record CurriculumResponse(
                 c.getSectionCount(),
                 c.getLessonCount(),
                 c.getPublishedLessonCount(),
+                enrolleeCount,
                 c.getStructureVersion(),
                 materials.stream().map(CurriculumMaterialResponse::from).toList(),
                 c.getPublishedAt(),

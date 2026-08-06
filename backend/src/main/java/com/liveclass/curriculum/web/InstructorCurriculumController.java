@@ -18,6 +18,8 @@ import com.liveclass.curriculum.web.dto.StructureOrderRequest;
 import com.liveclass.curriculum.web.dto.StructureOrderResponse;
 import com.liveclass.curriculum.web.dto.UpdateCurriculumRequest;
 import com.liveclass.curriculum.web.dto.UpdateSectionRequest;
+import com.liveclass.enrollment.api.EnrollmentDirectory;
+import com.liveclass.enrollment.api.EnrollmentStatus;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -49,10 +51,13 @@ public class InstructorCurriculumController {
 
     private final InstructorCurriculumService service;
     private final AssetDirectory assetDirectory;
+    private final EnrollmentDirectory enrollmentDirectory;
 
-    public InstructorCurriculumController(InstructorCurriculumService service, AssetDirectory assetDirectory) {
+    public InstructorCurriculumController(InstructorCurriculumService service, AssetDirectory assetDirectory,
+                                          EnrollmentDirectory enrollmentDirectory) {
         this.service = service;
         this.assetDirectory = assetDirectory;
+        this.enrollmentDirectory = enrollmentDirectory;
     }
 
     @Operation(summary = "커리큘럼 생성", description = "새 커리큘럼을 만든다. 처음엔 비공개(초안) 상태이고, 발행해야 공개 카탈로그에 노출된다.")
@@ -99,7 +104,7 @@ public class InstructorCurriculumController {
         String thumbnailUrl = curriculum.getThumbnailAssetId() == null
                 ? null
                 : assetDirectory.resolveUrl(curriculum.getThumbnailAssetId()).orElse(null);
-        return CurriculumResponse.from(curriculum, thumbnailUrl,
+        return CurriculumResponse.from(curriculum, thumbnailUrl, activeEnrolleeCount(curriculumId),
                 service.listCurriculumMaterials(instructorId, curriculumId));
     }
 
@@ -227,7 +232,17 @@ public class InstructorCurriculumController {
         String url = c.getThumbnailAssetId() == null
                 ? null
                 : assetDirectory.resolveUrl(c.getThumbnailAssetId()).orElse(null);
-        return CurriculumResponse.from(c, url);
+        return CurriculumResponse.from(c, url, activeEnrolleeCount(c.getId()));
+    }
+
+    /*
+     * 관리 화면 요약의 "수강생". 자동 저장(PATCH)·게시 응답에도 실어야 한다 — 화면이 이 응답으로
+     * 상태를 갈아끼우므로, 여기서 빼면 저장할 때마다 숫자가 사라졌다 다시 나타난다.
+     *
+     * 집계 쿼리 한 번이라 행을 적재하지 않는다. 방금 만든 커리큘럼은 수강생이 없어 0이다.
+     */
+    private long activeEnrolleeCount(UUID curriculumId) {
+        return enrollmentDirectory.countsByStatus(curriculumId).getOrDefault(EnrollmentStatus.ACTIVE, 0L);
     }
 
     /** 인증 주체엔 사용자 ID(UUID 문자열)만 담겨 있다 — AuthController.establishSession 참고. */

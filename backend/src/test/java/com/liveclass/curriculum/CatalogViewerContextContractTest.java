@@ -25,6 +25,7 @@ import java.time.OffsetDateTime;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -242,6 +243,39 @@ class CatalogViewerContextContractTest {
                 .andExpect(jsonPath("$[0].curriculum.title").value("수강강좌"))
                 .andExpect(jsonPath("$[0].curriculum.instructor.displayName").exists())
                 .andExpect(jsonPath("$[0].curriculum.viewerContext.relationship").value("ENROLLED"));
+    }
+
+    /**
+     * 관리 화면 요약의 "수강생". 응답에 필드 자체가 없어 화면이 늘 {@code --}를 그리고 있었다.
+     *
+     * <p>승인된(ACTIVE) 사람만 센다 — 승인 대기 중인 신청까지 세면 강사가 실제 수강 인원을 잘못 읽는다.
+     * 자동 저장(PATCH) 응답에도 실려야 한다. 화면이 그 응답으로 상태를 갈아끼우므로, 빠지면 저장할
+     * 때마다 숫자가 사라졌다 나타난다.
+     */
+    @Test
+    void instructor_curriculum_carries_active_enrollee_count() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String cid = createPublishedCurriculum(instructor);
+
+        write(get("/api/instructor/curriculums/" + cid), instructor, null)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.enrolleeCount").value(0));
+
+        // 신청만 하고 승인은 받지 않은 사람은 세지 않는다.
+        Cookie[] pending = loginAs("STUDENT");
+        write(post("/api/curriculums/" + cid + "/enrollments"), pending, null).andExpect(status().isCreated());
+        write(get("/api/instructor/curriculums/" + cid), instructor, null)
+                .andExpect(jsonPath("$.enrolleeCount").value(0));
+
+        Cookie[] student = loginAs("STUDENT");
+        approveEnrollment(instructor, student, cid);
+        write(get("/api/instructor/curriculums/" + cid), instructor, null)
+                .andExpect(jsonPath("$.enrolleeCount").value(1));
+
+        // 기본 정보 수정 응답에도 실린다.
+        write(patch("/api/instructor/curriculums/" + cid), instructor, "{\"summary\":\"소개 변경\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.enrolleeCount").value(1));
     }
 
     @Test

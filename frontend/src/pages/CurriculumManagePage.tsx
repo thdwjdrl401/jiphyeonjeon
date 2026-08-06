@@ -198,8 +198,28 @@ function CurriculumManageEditor({
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(routeState?.draft?.thumbnailUrl ?? storedCurriculum?.thumbnailUrl ?? null)
   const [materials, setMaterials] = useState<CurriculumMaterial[]>(routeState?.draft?.materials ?? storedCurriculum.materials)
   const [autosave, setAutosave] = useState<'idle' | 'saving' | 'saved' | 'error'>(routeState?.created ? 'saved' : 'idle')
-  const [saveError, setSaveError] = useState('')
   const toast = useToast()
+  /*
+   * 저장 실패는 <b>토스트로</b> 알린다. 예전에는 요약 툴바 위에 inline-notice를 끼워 넣었는데, 그
+   * 한 줄이 들어오고 나갈 때마다 아래 전체가 59px씩 오르내렸다 — 자동 저장은 편집 중(디바운스 1초)에
+   * 도는 것이라 <b>글을 쓰고 있는 손 밑에서</b> 화면이 튄다.
+   *
+   * 자동으로 닫지 않는다(duration 0). "새로고침한 뒤 다시 시도해 주세요" 같은 복구 방법이 담긴
+   * 문장이라 3초 뒤에 사라지면 읽지 못한 사람이 생긴다. 대신 저장이 다시 성공하면 우리가 치운다.
+   *
+   * 같은 문구가 반복될 때 쌓지 않는다 — 서버가 계속 죽어 있으면 편집할 때마다 한 장씩 늘어난다.
+   */
+  const saveErrorToastRef = useRef<{ id: number; message: string } | null>(null)
+  const reportSaveError = useCallback((message: string) => {
+    if (saveErrorToastRef.current?.message === message) return
+    if (saveErrorToastRef.current) toast.dismiss(saveErrorToastRef.current.id)
+    saveErrorToastRef.current = { id: toast.error(message, 0), message }
+  }, [toast])
+  const clearSaveError = useCallback(() => {
+    if (!saveErrorToastRef.current) return
+    toast.dismiss(saveErrorToastRef.current.id)
+    saveErrorToastRef.current = null
+  }, [toast])
   const [draggedLesson, setDraggedLesson] = useState<DraggedLesson | null>(null)
   const [lessonDropTarget, setLessonDropTarget] = useState<LessonDropTarget | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -278,7 +298,6 @@ function CurriculumManageEditor({
 
     savingRef.current = true
     setAutosave('saving')
-    setSaveError('')
     try {
       const result = await saveCurriculumManagement({
         curriculumId,
@@ -303,6 +322,7 @@ function CurriculumManageEditor({
       setStructureVersion(result.structureVersion)
       savedSignatureRef.current = signature
       setAutosave('saved')
+      clearSaveError()   // 다시 저장됐다 — 떠 있던 실패 토스트를 치운다
       syncCacheAfterSave(result)
       // 사이드바 등 다른 화면이 최신 구조를 읽도록.
       queryClient.invalidateQueries({ queryKey: ['curriculum-lesson-navigation', curriculumId] })
@@ -310,9 +330,9 @@ function CurriculumManageEditor({
     } catch (error) {
       setAutosave('error')
       if (error instanceof ApiError && error.code === 'STRUCTURE_VERSION_CONFLICT') {
-        setSaveError('구조가 다른 곳에서 변경되었습니다. 새로고침한 뒤 다시 시도해 주세요.')
+        reportSaveError('구조가 다른 곳에서 변경되었습니다. 새로고침한 뒤 다시 시도해 주세요.')
       } else if (isNotImplemented(error)) {
-        setSaveError('아직 준비 중인 항목이 포함돼 저장하지 못했습니다.')
+        reportSaveError('아직 준비 중인 항목이 포함돼 저장하지 못했습니다.')
       } else if (error instanceof CurriculumMaterialSyncError) {
         /*
           자료가 일부만 붙은 채로 실패했다 — 붙은 것은 서버 목록에 있으므로 그 목록으로 맞추고 실패한
@@ -323,9 +343,9 @@ function CurriculumManageEditor({
           상태다 — 실패한 저장이 목록을 줄여 놓으면 무엇을 잃었는지 알 수 없다.
         */
         setMaterials((current) => mergeCurriculumMaterials(error.persistedMaterials, current))
-        setSaveError(`${error.message} 자료 목록은 서버 상태로 맞췄습니다.`)
+        reportSaveError(`${error.message} 자료 목록은 서버 상태로 맞췄습니다.`)
       } else {
-        setSaveError('변경 내용을 자동 저장하지 못했습니다.')
+        reportSaveError('변경 내용을 자동 저장하지 못했습니다.')
       }
       return false
     } finally {
@@ -335,7 +355,8 @@ function CurriculumManageEditor({
         void flushSave()
       }
     }
-  }, [curriculumId, curriculumInfo, sections, materials, currentSignature, queryClient, syncCacheAfterSave])
+  }, [curriculumId, curriculumInfo, sections, materials, currentSignature, queryClient, syncCacheAfterSave,
+    reportSaveError, clearSaveError])
 
   // 변경 후 디바운스 자동저장. 첫 렌더에서는 현재 상태를 "저장됨"으로 기록만 하고 저장하지 않는다.
   useEffect(() => {
@@ -414,7 +435,6 @@ function CurriculumManageEditor({
     const previous = thumbnailUrl
     setThumbnailUrl(selection ? selection.previewUrl : null)   // 업로드를 기다리지 않고 먼저 보여 준다
     setAutosave('saving')
-    setSaveError('')
     try {
       let saved: InstructorCurriculumResponse
       if (selection) {
@@ -430,12 +450,13 @@ function CurriculumManageEditor({
       }
       setThumbnailUrl(saved.thumbnailUrl)
       setAutosave('saved')
+      clearSaveError()
       syncCachedCurriculum((current) => ({ ...current, thumbnailUrl: saved.thumbnailUrl }))
     } catch (error) {
       // 실패했으면 미리보기도 되돌린다 — 바뀐 채로 두면 저장된 것으로 읽힌다(지우기도 마찬가지다).
       setThumbnailUrl(previous)
       setAutosave('error')
-      setSaveError(error instanceof ApiError && error.code === 'CURRICULUM_STATE_CONFLICT'
+      reportSaveError(error instanceof ApiError && error.code === 'CURRICULUM_STATE_CONFLICT'
         ? error.message
         : selection
           ? '대표 이미지를 저장하지 못했습니다. 다시 시도해 주세요.'
@@ -494,12 +515,11 @@ function CurriculumManageEditor({
     if (!isNewDraft) return
     // 버튼이 잠겨 있어도 한 번 더 본다 — 낡은 화면 상태로 요청이 새는 것을 막는다.
     if (!publishReadiness.canPublish) {
-      setSaveError(publishReadiness.reason ?? '')
+      toast.error(publishReadiness.reason ?? '아직 게시할 수 없습니다.')
       return
     }
     if (!window.confirm('커리큘럼을 게시할까요? 게시하면 안에 있는 강의가 모두 수강생에게 공개됩니다.')) return
 
-    setSaveError('')
     // 저장이 실패한 채로 게시하면 화면에 보이는 내용과 공개되는 내용이 갈린다 — 게시를 멈춘다.
     if (!await flushSave()) {
       toast.error('변경 내용을 저장하지 못해 게시를 중단했습니다. 저장 오류를 먼저 해결해 주세요.')
@@ -518,7 +538,6 @@ function CurriculumManageEditor({
       // 뭉개면 사용자가 같은 버튼을 계속 누른다.
       const serverExplained = error instanceof ApiError
         && (error.code === 'CURRICULUM_NOT_PUBLISHABLE' || error.code === 'CURRICULUM_STATE_CONFLICT')
-      setSaveError(serverExplained ? (error as ApiError).message : '커리큘럼을 게시하지 못했습니다.')
       invalidateAfterPublish()
       toast.error(serverExplained ? (error as ApiError).message : '커리큘럼을 게시하지 못했습니다.')
     }
@@ -684,7 +703,6 @@ function CurriculumManageEditor({
         description="기본 정보, 수강생, 섹션과 강의 편성을 관리합니다."
         action={<div className="header-action-group"><Link className="button button--soft" to={publicPaths.curriculum(curriculumId)}>커리큘럼 상세</Link><span className="autosave-status" role="status" aria-live="polite">{autosave === 'saving' ? '자동 저장 중…' : autosave === 'saved' ? '자동 저장됨' : autosave === 'error' ? '저장 실패' : '변경 사항이 자동 저장됩니다'}</span></div>}
       />
-      {saveError && <InlineNotice tone="danger">{saveError}</InlineNotice>}
       <div className="curriculum-manage__toolbar">
         <div className="curriculum-manage__summary" role="group" aria-label="커리큘럼 관리 요약">
           <div><span>상태</span><StatusBadge tone={isPubliclyVisible ? 'success' : lifecycleView.tone}>{isNewDraft ? '게시 전' : isPubliclyVisible ? '운영 중' : lifecycleView.label}</StatusBadge></div>

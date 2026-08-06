@@ -24,12 +24,18 @@ interface ToastOptions {
   duration?: number
 }
 
+/**
+ * 띄우기·닫기.
+ *
+ * <p>모두 <b>토스트 id</b>를 돌려준다. 자동으로 닫히지 않는 토스트(`duration: 0`)를 상황이 풀렸을
+ * 때 치우려면 부른 쪽이 id를 쥐고 있어야 한다 — 예: 자동 저장이 실패했다가 다시 성공했을 때.
+ */
 interface ToastApi {
-  show: (message: string, options?: ToastOptions) => void
-  success: (message: string, duration?: number) => void
-  error: (message: string, duration?: number) => void
-  warning: (message: string, duration?: number) => void
-  info: (message: string, duration?: number) => void
+  show: (message: string, options?: ToastOptions) => number
+  success: (message: string, duration?: number) => number
+  error: (message: string, duration?: number) => number
+  warning: (message: string, duration?: number) => number
+  info: (message: string, duration?: number) => number
   dismiss: (id: number) => void
 }
 
@@ -57,6 +63,7 @@ export function ToastProvider({ children }: PropsWithChildren) {
       ...current,
       { id, message, tone: options?.tone ?? 'info', duration: options?.duration ?? DEFAULT_DURATION },
     ])
+    return id
   }, [])
 
   const api = useMemo<ToastApi>(() => ({
