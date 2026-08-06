@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { adminPaths } from '@/app/router/paths'
 import { getActiveEgresses, getLiveSummary, getRecordingSummary, reconcileRecordings } from '@/features/admin/adminService'
+import SessionLabelCell, { useSessionLabels } from '@/features/admin/SessionLabelCell'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import { useToast } from '@/shared/ui/Toast'
 import { InlineNotice, PageHeader, Panel } from '@/shared/ui/WorkspaceUi'
@@ -60,6 +61,12 @@ export default function AdminOverviewPage() {
     queryFn: getLiveSummary,
     refetchInterval: 15_000,
   })
+
+  /*
+   * 갇힌 세션 표의 이름표. 표에 뜬 id를 모아 한 번에 받아 온다.
+   * 이 조회가 실패해도 상태·시각·경과는 그대로 그린다 — 부가 정보 하나가 운영 화면을 막지 않는다.
+   */
+  const labels = useSessionLabels((liveQuery.data?.stuck ?? []).map((s) => s.sessionId))
 
   const toast = useToast()
   const reconcile = useMutation({
@@ -210,7 +217,7 @@ export default function AdminOverviewPage() {
                 <tbody>
                   {stuck.map((s) => (
                     <tr key={s.sessionId}>
-                      <td className="is-mono">{s.sessionId}</td>
+                      <td><SessionLabelCell sessionId={s.sessionId} label={labels.get(s.sessionId)} /></td>
                       <td>{s.status}</td>
                       <td>{new Date(s.startedAt).toLocaleString()}</td>
                       <td>{formatAge(s.startedAt)}</td>

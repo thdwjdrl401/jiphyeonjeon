@@ -125,3 +125,38 @@
   margin-left: auto;
   color: var(--text-muted, #888);
 }
+
+/*
+ * 표에서 "어느 강의인가"를 그리는 칸. 강의 제목이 판단의 근거이므로 제일 크고, 커리큘럼은 그 아래
+ * 맥락으로, 세션 id는 제일 작게 남긴다 — 지우지 않는 이유는 로그를 찾거나 문의를 받을 때 결국
+ * 필요한 값이 그것이기 때문이다.
+ */
+.admin-session-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.admin-session-label__lesson {
+  font-weight: 600;
+}
+
+/* 이름을 못 찾은 행(세션이 지워진 유령)은 실제 제목과 구별되어야 한다. */
+.admin-session-label__lesson.is-unknown {
+  font-weight: 400;
+  color: var(--text-muted, #888);
+}
+
+.admin-session-label__curriculum {
+  font-size: 0.9em;
+  color: var(--text-muted, #888);
+}
+
+.admin-session-label__id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75em;
+  color: var(--text-muted, #888);
+  /* 표가 가로로 밀리지 않게 — UUID는 줄바꿈 지점이 없다. */
+  overflow-wrap: anywhere;
+}
