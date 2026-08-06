@@ -78,12 +78,13 @@ describe('LiveClass AI 공개 페이지', () => {
     expect(window.location.pathname).toBe('/curriculums')
     expect(localStorage.getItem('accessToken')).toBeNull()
 
-    // 역할 메뉴는 헤더에 바로 펼쳐져 있다(예전 "마이페이지" 드롭다운을 거치지 않는다).
+    // 역할 메뉴는 헤더에 바로 펼쳐져 있다(탐색·마이 페이지 둘 뿐이라 따로 열지 않아도 보인다).
     const navigation = screen.getByRole('navigation', { name: '주요 메뉴' })
-    expect(within(navigation).getByRole('link', { name: '내 커리큘럼' })).toHaveAttribute('href', '/student/curriculums')
+    expect(within(navigation).getByRole('link', { name: '마이 페이지' })).toHaveAttribute('href', '/student/curriculums')
 
-    // 프로필 영역 전체가 내 프로필로 가는 링크다.
-    await user.click(screen.getByRole('link', { name: /김학생/ }))
+    // 프로필 영역은 트리거 버튼이다 — 눌러야 기본정보와 전체 프로필 링크가 담긴 드롭다운이 열린다.
+    await user.click(screen.getByRole('button', { name: /김학생/ }))
+    await user.click(await screen.findByRole('link', { name: '내 프로필' }))
     expect(window.location.pathname).toBe('/student/profile')
   })
 
