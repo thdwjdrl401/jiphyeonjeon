@@ -8,6 +8,7 @@ import type { CurriculumSort } from '@/features/curriculum/types'
 import { useCurriculums } from '@/features/curriculum/useCurriculums'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
+import SearchIcon from '@/shared/ui/SearchIcon'
 
 const validSorts = new Set<CurriculumSort>(['LATEST', 'TITLE_ASC'])
 const SEARCH_DEBOUNCE_MS = 300
@@ -121,7 +122,7 @@ export default function CurriculumListPage() {
           </div>
           <label className="search-field">
             <span className="visually-hidden">커리큘럼 검색</span>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
+            <SearchIcon />
             <input value={searchInput} onChange={(event) => setSearchInput(event.target.value)} placeholder="제목과 소개로 검색" />
             {searchInput && <button type="button" aria-label="검색어 지우기" onClick={() => setSearchInput('')}>×</button>}
           </label>

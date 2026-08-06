@@ -16,6 +16,7 @@ import { useMyEnrollmentsQuery } from '@/features/enrollment/useEnrollmentQuerie
 import BrowserPushPrompt from '@/features/notification/BrowserPushPrompt'
 import { isNotImplemented } from '@/shared/api/notImplemented'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
+import SearchIcon from '@/shared/ui/SearchIcon'
 import { InlineNotice, MetricCard, PageHeader, Panel, StatusBadge } from '@/shared/ui/WorkspaceUi'
 
 const CURRICULUM_PAGE_SIZE = 4
@@ -239,8 +240,7 @@ export default function MyCurriculumsPage() {
 
       <div className="my-curriculums-page__layout">
         <div className="my-curriculums-page__main">
-          <Panel className="my-curriculums-page__list-panel" title={isInstructor ? '운영 중인 커리큘럼' : '수강 중인 커리큘럼'} action={<div className="compact-controls"><input aria-label={`${pageTitle} 검색`} placeholder="제목 검색" value={search} onChange={(event) => { setSearch(event.target.value); setPage(0) }} /><select aria-label="상태 필터" value={status} onChange={(event) => { setStatus(event.target.value); setPage(0) }}><option value="">전체 상태</option>{isInstructor ? <><option value="PUBLISHED">공개 중</option><option value="DRAFT">준비 중</option></> : <><option value="ACTIVE">수강 중</option></>}</select></div>}>
-
+          <Panel className="my-curriculums-page__list-panel" title={isInstructor ? '운영 중인 커리큘럼' : '수강 중인 커리큘럼'} action={<div className="compact-controls"><label className="search-field"><span className="visually-hidden">{pageTitle} 검색</span><SearchIcon /><input placeholder="제목 검색" value={search} onChange={(event) => { setSearch(event.target.value); setPage(0) }} /></label><select aria-label="상태 필터" value={status} onChange={(event) => { setStatus(event.target.value); setPage(0) }}><option value="">전체 상태</option>{isInstructor ? <><option value="PUBLISHED">공개 중</option><option value="DRAFT">준비 중</option></> : <><option value="ACTIVE">수강 중</option></>}</select></div>}>
             <div className="dashboard-curriculum-list">
               {displayedCurriculums.map((item) => (
                 <article className="dashboard-curriculum-card" key={item.curriculumId}>
