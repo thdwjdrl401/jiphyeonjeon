@@ -101,6 +101,15 @@ export function usePushSubscription(enabled: boolean): PushSubscriptionControls 
         return
       }
       const registration = await navigator.serviceWorker.register(PUSH_WORKER_URL)
+      /*
+       * **register()는 설치가 끝나기 전에 resolve한다.** 돌아온 등록의 워커는 아직 installing일 수
+       * 있고, active가 없는 상태로 subscribe하면 브라우저가 거절한다:
+       *   InvalidStateError: Subscription failed - no active Service Worker
+       *
+       * 권한을 허용했는데 스위치가 안 켜지고 한 번 더 눌러야 켜지던 것이 이것이다. 두 번째에는
+       * 워커가 이미 활성이라 성공한다 — 사용자에게는 "한 번은 씹힌다"로만 보였다.
+       */
+      await waitForActiveWorker(registration)
       const subscription = await registration.pushManager.subscribe({
         // 표준이 요구한다. false면 브라우저가 구독을 거부한다 — 사용자에게 보이지 않는 푸시를 막는 규칙이다.
         userVisibleOnly: true,
@@ -108,7 +117,12 @@ export function usePushSubscription(enabled: boolean): PushSubscriptionControls 
       })
       await registerPushSubscription(readKeys(subscription))
       setState('on')
-    } catch {
+    } catch (error) {
+      /*
+       * 삼키지 않는다. 예전에는 그냥 'off'로 되돌려서, 사용자는 권한을 허용했는데도 아무 설명 없이
+       * 꺼진 스위치만 봤고 콘솔에도 아무것도 남지 않았다.
+       */
+      console.warn('[push] 구독을 켜지 못했습니다', error)
       setState('off')
     }
   }, [])
@@ -134,6 +148,36 @@ export function usePushSubscription(enabled: boolean): PushSubscriptionControls 
   }, [])
 
   return { state, enable, disable }
+}
+
+/**
+ * 등록의 서비스워커가 <b>활성</b>이 될 때까지 기다린다.
+ *
+ * <p>{@code register()}가 resolve했다고 워커가 도는 것이 아니다 — 처음 등록하는 브라우저에서는
+ * 아직 installing 상태이고, 그 등록으로 {@code pushManager.subscribe()}를 부르면 거절된다.
+ *
+ * <p>이미 활성이면 즉시 끝난다(두 번째 이후 클릭). installing·waiting이면 그 워커의 상태 변화를
+ * 듣고, 둘 다 없으면 {@code navigator.serviceWorker.ready}에 맡긴다.
+ */
+async function waitForActiveWorker(registration: ServiceWorkerRegistration) {
+  if (registration.active) return
+  const pending = registration.installing ?? registration.waiting
+  if (!pending) {
+    await navigator.serviceWorker.ready
+    return
+  }
+  await new Promise<void>((resolve) => {
+    const onStateChange = () => {
+      // redundant는 설치가 실패한 것이다. 여기서 붙잡고 있어 봐야 활성이 되지 않으므로 풀어 주고,
+      // 뒤이은 subscribe가 실제 오류를 던지게 둔다 — 이 함수가 오류를 만들어 내지는 않는다.
+      if (pending.state === 'activated' || pending.state === 'redundant') {
+        pending.removeEventListener('statechange', onStateChange)
+        resolve()
+      }
+    }
+    pending.addEventListener('statechange', onStateChange)
+    onStateChange()   // 리스너를 붙이는 사이에 이미 넘어갔을 수 있다.
+  })
 }
 
 function isSupported() {

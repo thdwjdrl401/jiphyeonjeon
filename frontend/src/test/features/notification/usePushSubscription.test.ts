@@ -57,12 +57,15 @@ describe('푸시 구독', () => {
       getKey: () => new Uint8Array([1, 2, 3]).buffer,
     })
     const registration = {
+      // 이미 활성인 워커. 두 번째 이후 클릭이 이 상태다.
+      active: {},
       pushManager: { getSubscription: vi.fn().mockResolvedValue(withKeys), subscribe },
     }
     vi.stubGlobal('navigator', {
       serviceWorker: {
         getRegistration: vi.fn().mockResolvedValue(registration),
         register: vi.fn().mockResolvedValue(registration),
+        ready: Promise.resolve(registration),
       },
     })
     vi.stubGlobal('Notification', {
@@ -151,6 +154,45 @@ describe('푸시 구독', () => {
     expect(registerPushSubscription).toHaveBeenCalledWith(
       expect.objectContaining({ endpoint: 'https://push.example/abc' }),
     )
+    expect(result.current.state).toBe('on')
+  })
+
+  /**
+   * <b>첫 클릭이 씹히던 것.</b> {@code register()}는 설치가 끝나기 전에 resolve하는데, 그 등록으로
+   * 바로 subscribe하면 브라우저가 "no active Service Worker"로 거절한다. 사용자에게는 권한을
+   * 허용했는데도 스위치가 안 켜지고 한 번 더 눌러야 켜지는 것으로 보였다.
+   */
+  it('서비스워커가 설치 중이면 활성이 될 때까지 기다렸다가 구독한다', async () => {
+    const { subscribe } = installBrowserPush(null)
+    const listeners: Array<() => void> = []
+    const installing = {
+      state: 'installing',
+      addEventListener: (_: string, fn: () => void) => listeners.push(fn),
+      removeEventListener: () => {},
+    }
+    // 갓 등록된 상태 — active가 없고 installing만 있다.
+    const fresh = {
+      active: null,
+      installing,
+      pushManager: { getSubscription: vi.fn().mockResolvedValue(null), subscribe },
+    }
+    vi.mocked(navigator.serviceWorker.register).mockResolvedValue(fresh as never)
+
+    const { result } = renderHook(() => usePushSubscription(true))
+    await waitFor(() => expect(result.current.state).toBe('off'))
+
+    await act(async () => {
+      const enabling = result.current.enable()
+      // 아직 활성이 아니다 — 여기서 구독을 시도하면 브라우저가 거절한다.
+      await waitFor(() => expect(listeners.length).toBeGreaterThan(0))
+      expect(subscribe).not.toHaveBeenCalled()
+
+      installing.state = 'activated'
+      listeners.forEach((fn) => fn())
+      await enabling
+    })
+
+    expect(subscribe).toHaveBeenCalled()
     expect(result.current.state).toBe('on')
   })
 
