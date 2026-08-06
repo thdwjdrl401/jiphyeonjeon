@@ -11,6 +11,7 @@
 |---|---|---|
 | `pitch/` | **아키텍처 19장** — 전체 1 + 제품 8 + 서비스 구성 5 + 세부 5 | 생성물 (스크립트가 원본) |
 | `liveclass-architecture.drawio` | 기능 슬라이스 15탭 | 편집 가능한 원본 |
+| `infrastructure-diagram/liveclass-infrastructure.{svg,png}` | **실배포 인프라 한 장** — 공식 브랜드 아이콘, EC2·GPU·보조 호스트·CI/CD·SSH 터널 | SVG 생성물 (`infrastructure-diagram/tools/build_infrastructure_official.py`) + PNG 렌더 |
 | `tools/` | 생성 스크립트 | 원본 |
 | `overview.html` | `ARCHITECTURE.md` 를 발표용으로 렌더한 한 페이지 | 스냅샷 |
 | `flows/` | 데이터가 지나는 길을 따라가는 해설 페이지 2장 (기능별 흐름 · 알림 팬아웃) | 스냅샷 |
