@@ -510,9 +510,9 @@ async def test_annotation_sources_dedupe_on_highlight_id_not_excerpt() -> None:
 
 
 @async_test
-async def test_annotation_evidence_from_another_session_is_accepted() -> None:
-    """Curriculum-wide search (ADR-0043 §4): highlights from earlier sessions are legitimate;
-    the replay question-time cutoff already ran inside retrieval."""
+async def test_annotation_evidence_from_another_session_is_rejected() -> None:
+    """Highlight search is session-scoped (ADR-0089): a hit from another session — even in the
+    same curriculum — means retrieval is broken, so the guard must refuse to answer with it."""
 
     service = ReplayAnswerService(
         Retriever(
@@ -526,7 +526,8 @@ async def test_annotation_evidence_from_another_session_is_accepted() -> None:
 
     events = await collect(service, request())
 
-    assert [event.event for event in events] == ["answer.delta", "answer.done"]
+    assert [event.event for event in events] == ["answer.error"]
+    assert events[0].data.code == "EVIDENCE_SCOPE_VIOLATION"
 
 
 @async_test

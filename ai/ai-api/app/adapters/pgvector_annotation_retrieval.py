@@ -15,8 +15,10 @@ from app.retrieval.service import EMBEDDING_DIMENSIONS, MAX_ANNOTATION_WINDOW, M
 _DATABASE_ROLE = re.compile(r"^[a-z_][a-z0-9_]{0,62}$")
 
 # Same reciprocal-rank fusion as ACTIVE_MATERIAL_HYBRID_SQL so annotation and material hits
-# carry comparable scores. The cutoff predicate only constrains the asker's own session —
-# snapshots from other, already finished sessions are wholly in the past (ADR-0043 §4).
+# carry comparable scores. Search scope is the asker's own session (ADR-0089 — narrowed from
+# the curriculum-wide scope of ADR-0043 §4 after other sessions' highlights leaked into live
+# answers); curriculum_id stays as defense-in-depth against a session row indexed under the
+# wrong curriculum.
 _CUTOFF_PREDICATE = """
     AND (
       CAST(:cutoff_session_id AS uuid) IS NULL
@@ -38,6 +40,7 @@ WITH scoped AS (
     embedding
   FROM ai.annotation_highlight
   WHERE curriculum_id = CAST(:curriculum_id AS uuid)
+    AND session_id = CAST(:session_id AS uuid)
     AND state = 'ACTIVE'
     {_CUTOFF_PREDICATE}
 ),
@@ -111,7 +114,7 @@ LIMIT :limit
 
 
 class PgvectorAnnotationRepository:
-    """Search instructor highlight snapshots on the curriculum scope (ADR-0043 §4)."""
+    """Search instructor highlight snapshots on the asker's session scope (ADR-0089)."""
 
     def __init__(self, engine: AsyncEngine, *, runtime_role: str = "ai_app") -> None:
         if not _DATABASE_ROLE.fullmatch(runtime_role):
@@ -123,6 +126,7 @@ class PgvectorAnnotationRepository:
         self,
         *,
         curriculum_id: UUID,
+        session_id: UUID,
         query_text: str,
         query_embedding: Sequence[float],
         top_k: int,
@@ -130,6 +134,8 @@ class PgvectorAnnotationRepository:
     ) -> tuple[AnnotationHighlightHit, ...]:
         if not isinstance(curriculum_id, UUID):
             raise TypeError("curriculum_id must be a UUID")
+        if not isinstance(session_id, UUID):
+            raise TypeError("session_id must be a UUID")
         normalized_query = query_text.strip()
         if not normalized_query:
             raise ValueError("query_text must contain non-whitespace text")
@@ -138,6 +144,7 @@ class PgvectorAnnotationRepository:
 
         parameters: dict[str, object] = {
             "curriculum_id": str(curriculum_id),
+            "session_id": str(session_id),
             "query_text": normalized_query,
             "query_embedding": _vector_literal(query_embedding),
             "top_k": top_k,
