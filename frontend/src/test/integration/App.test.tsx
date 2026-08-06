@@ -45,6 +45,21 @@ describe('LiveClass AI 공개 페이지', () => {
     })
   })
 
+  /**
+   * 탐색 카드는 운영 기간이 있으면 <b>날짜를 보여 준다</b> — "일정 준비 중"은 기간이 정말 없을
+   * 때만 나오는 문구다. 카드가 전부 "일정 준비 중"이던 것은 표시 문제가 아니라 기간이 저장되지
+   * 않았기 때문이었고(관리 화면에 기간을 넣을 자리가 없었다), 그 자리를 만든 뒤의 회귀를 여기서 막는다.
+   */
+  it('탐색 카드는 저장된 운영 기간을 날짜로 보여주고 없을 때만 준비 중으로 둔다', async () => {
+    renderAt('/curriculums')
+
+    // cur-spring-live 시드 기간: 2026-08-03 ~ 2026-09-24 (KST). 카드는 "8월 3일 – 9월 24일"로 읽는다.
+    const card = (await screen.findByRole('heading', { name: '라이브로 완성하는 Spring Boot' }))
+      .closest('article')!
+    expect(within(card).getByText('8월 3일 – 9월 24일')).toBeInTheDocument()
+    expect(within(card).queryByText('일정 준비 중')).not.toBeInTheDocument()
+  })
+
   it('커리큘럼 상세 경로를 실제 앱 라우터에서 연다', async () => {
     renderAt('/curriculums/cur-spring-live')
 

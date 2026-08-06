@@ -7,17 +7,10 @@ import CurriculumPeriodFields from '@/features/curriculum/CurriculumPeriodFields
 import { createCurriculum, uploadCurriculumThumbnail } from '@/features/curriculum/curriculumManagementService'
 import type { CurriculumMaterial } from '@/features/curriculum/types'
 import { ApiError } from '@/shared/api/client'
-import { isBeforeToday } from '@/shared/lib/localDateTime'
+import { isBeforeToday, toIsoOrNull } from '@/shared/lib/localDateTime'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import { useToast } from '@/shared/ui/Toast'
 import { InlineNotice, PageHeader, Panel } from '@/shared/ui/WorkspaceUi'
-
-/** datetime-local 값("2026-08-01T10:00")을 서버가 받는 오프셋 포함 ISO-8601로. 비어 있으면 null. */
-function toIsoOrNull(localValue: string): string | null {
-  if (!localValue) return null
-  const parsed = new Date(localValue)
-  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString()
-}
 
 export default function CurriculumFormPage() {
   usePageTitle('커리큘럼 만들기')

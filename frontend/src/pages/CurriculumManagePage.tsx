@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type DragEvent as ReactDragEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent as ReactDragEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
@@ -10,6 +10,7 @@ import {
 import CurriculumPublishPanel from '@/features/curriculum/CurriculumPublishPanel'
 import CurriculumImageField, { type CurriculumImageSelection } from '@/features/curriculum/CurriculumImageField'
 import CurriculumMaterialField from '@/features/curriculum/CurriculumMaterialField'
+import CurriculumPeriodFields, { type CurriculumPeriodValue } from '@/features/curriculum/CurriculumPeriodFields'
 import {
   deleteCurriculum,
   deleteCurriculumThumbnail,
@@ -32,6 +33,7 @@ import InstructorEnrollmentRoster from '@/features/enrollment/InstructorEnrollme
 import { resolveInstructorLessonEditPath } from '@/features/lesson/lessonRouting'
 import { ApiError } from '@/shared/api/client'
 import { isNotImplemented } from '@/shared/api/notImplemented'
+import { isBeforeToday, toIsoOrNull, toLocalInputValue } from '@/shared/lib/localDateTime'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
 import Tabs, { tabPanelProps, type TabItem } from '@/shared/ui/Tabs'
@@ -83,6 +85,22 @@ const LIFECYCLE_VIEW: Record<string, { tone: 'warning' | 'success' | 'neutral'; 
 }
 
 type CurriculumInfoField = 'title' | 'summary' | 'description'
+
+/**
+ * 운영 기간이 저장할 수 있는 상태인지. 저장할 수 없는 이유가 있으면 그 문장을, 없으면 null.
+ *
+ * <p>둘 다 비어 있는 것은 흠이 아니다 — 아직 기간을 정하지 않은 커리큘럼이 있다. 반쪽만 채운
+ * 상태를 막는 이유는 시작·종료가 쌍으로만 뜻이 생기기 때문이고(카드는 "8월 3일 – 9월 24일"로
+ * 읽는다), 과거 종료일을 막는 규칙은 생성 화면과 같게 둔다 — 두 화면이 다르면 만들 때는 거절당한
+ * 기간을 수정으로는 넣을 수 있다.
+ */
+function describePeriodIssue({ startsAt, endsAt }: CurriculumPeriodValue): string | null {
+  if (!startsAt && !endsAt) return null
+  if (!startsAt || !endsAt) return '운영 시작일과 종료일을 함께 입력해 주세요. 한쪽만 저장할 수 없어요.'
+  if (isBeforeToday(endsAt)) return '운영 종료일은 오늘보다 이전일 수 없습니다.'
+  if (startsAt >= endsAt) return '운영 종료일은 시작일보다 뒤여야 합니다.'
+  return null
+}
 type SectionInfoField = 'title' | 'description'
 interface DraggedLesson {
   sectionId: string
@@ -195,6 +213,14 @@ function CurriculumManageEditor({
     summary: routeState?.draft?.summary ?? storedCurriculum?.summary ?? '',
     description: routeState?.draft?.description ?? storedCurriculum?.description ?? '',
   })
+  /*
+    기간은 datetime-local 입력이 그대로 받는 지역 시각 문자열로 들고 있다가 저장할 때만 ISO로
+    바꾼다 — 서버가 준 ISO를 그대로 input에 넣으면 값이 표시되지 않는다.
+  */
+  const [period, setPeriod] = useState<CurriculumPeriodValue>({
+    startsAt: routeState?.draft?.startsAt ?? toLocalInputValue(storedCurriculum?.startsAt),
+    endsAt: routeState?.draft?.endsAt ?? toLocalInputValue(storedCurriculum?.endsAt),
+  })
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(routeState?.draft?.thumbnailUrl ?? storedCurriculum?.thumbnailUrl ?? null)
   const [materials, setMaterials] = useState<CurriculumMaterial[]>(routeState?.draft?.materials ?? storedCurriculum.materials)
   const [autosave, setAutosave] = useState<'idle' | 'saving' | 'saved' | 'error'>(routeState?.created ? 'saved' : 'idle')
@@ -237,17 +263,33 @@ function CurriculumManageEditor({
   // 임시→실제로 바뀌므로 서명에서 제외한다(내용·순서만 본다) — 그래야 id 교체가 재저장을 유발하지 않는다.
   const savedSignatureRef = useRef<string | null>(null)
 
+  const periodIssue = describePeriodIssue(period)
+  /**
+   * PATCH에 실을 기간. <b>저장할 수 없는 상태면 두 값을 null로 보낸다</b> — 서버가 null을 "변경
+   * 안 함"으로 다루므로, 기간을 고치는 중에도 제목·소개 자동 저장이 멈추지 않는다. 기간만 반영이
+   * 미뤄지고, 유효해지는 순간 지문이 바뀌어 저장된다.
+   *
+   * <p>그래서 <b>저장된 기간을 다시 비우는 것은 이 화면으로 할 수 없다</b>(대표 이미지 삭제와 같은
+   * 자리 — null이 삭제가 아니라 무변경이라서다). 기간을 없애는 계약이 생기면 여기서 연결한다.
+   */
+  const periodPatch = useMemo(() => (periodIssue
+    ? { startsAt: null, endsAt: null }
+    : { startsAt: toIsoOrNull(period.startsAt), endsAt: toIsoOrNull(period.endsAt) }
+  ), [periodIssue, period.startsAt, period.endsAt])
+
   // 자료는 fileName:fileSize로 지문을 만든다 — 새로 올린 자료의 임시 id·File이 저장 후 실제
   // materialId로 바뀌어도 지문이 안정적이라(섹션 id를 지문에서 뺀 것과 같은 이유) 재저장 루프가 안 돈다.
   const currentSignature = useCallback(() => JSON.stringify({
     info: curriculumInfo,
+    // 지문에는 "보낼 값"만 넣는다 — 반쪽 입력 상태의 타이핑이 저장을 부르지 않게.
+    period: periodPatch,
     sections: sections.map((section) => ({
       title: section.title,
       description: section.description,
       lessons: section.lessons.map((lesson) => lesson.lessonId),
     })),
     materials: materials.map((material) => `${material.fileName}:${material.fileSize}`),
-  }), [curriculumInfo, sections, materials])
+  }), [curriculumInfo, periodPatch, sections, materials])
 
 
   /**
@@ -280,10 +322,13 @@ function CurriculumManageEditor({
     syncCachedCurriculum((current) => ({
       ...current,
       ...curriculumInfo,
+      // 보내지 않은 기간(null)은 서버에서도 그대로이므로 캐시의 기존 값을 지키다.
+      startsAt: periodPatch.startsAt ?? current.startsAt,
+      endsAt: periodPatch.endsAt ?? current.endsAt,
       materials: result.materials,
       structureVersion: result.structureVersion,
     }))
-  }, [curriculumInfo, syncCachedCurriculum])
+  }, [curriculumInfo, periodPatch, syncCachedCurriculum])
 
   // 구조·기본정보·자료 자동저장(ADR-0042). 자료 추가/삭제도 지문에 반영돼 자동저장이 돈다 —
   // saveCurriculumManagement가 새 자료 업로드·연결과 사라진 자료 삭제를 함께 처리한다.
@@ -301,7 +346,7 @@ function CurriculumManageEditor({
     try {
       const result = await saveCurriculumManagement({
         curriculumId,
-        info: curriculumInfo,
+        info: { ...curriculumInfo, ...periodPatch },
         sections,
         // 커리큘럼-레벨 자료(ADR-0042). 새로 선택한 자료는 업로드·연결되고 사라진 자료는 삭제된다.
         materials,
@@ -355,7 +400,7 @@ function CurriculumManageEditor({
         void flushSave()
       }
     }
-  }, [curriculumId, curriculumInfo, sections, materials, currentSignature, queryClient, syncCacheAfterSave,
+  }, [curriculumId, curriculumInfo, periodPatch, sections, materials, currentSignature, queryClient, syncCacheAfterSave,
     reportSaveError, clearSaveError])
 
   // 변경 후 디바운스 자동저장. 첫 렌더에서는 현재 상태를 "저장됨"으로 기록만 하고 저장하지 않는다.
@@ -852,6 +897,24 @@ function CurriculumManageEditor({
         <div className="workspace-tabpanel curriculum-manage__info-grid" {...tabPanelProps(MANAGE_TAB_PREFIX, 'info')}>
           <Panel className="curriculum-manage__info-panel" title="기본 정보" description="제목과 수강생에게 표시할 소개를 수정합니다.">
             <div className="form-grid"><label><span>제목</span><input value={curriculumInfo.title} onChange={(event) => updateCurriculumInfo('title', event.target.value)} /></label><label><span>짧은 소개</span><input value={curriculumInfo.summary} onChange={(event) => updateCurriculumInfo('summary', event.target.value)} /></label><label className="form-field--wide"><span>상세 설명</span><textarea rows={4} value={curriculumInfo.description} onChange={(event) => updateCurriculumInfo('description', event.target.value)} /></label></div>
+            {/*
+              운영 기간을 여기 두는 이유: 카탈로그 카드와 상세가 이 값을 "8월 3일 – 9월 24일"로
+              읽어 주고, 비어 있으면 "일정 준비 중"에 머문다. 제목·소개와 같은 기본 정보라 같은
+              패널·같은 자동 저장에 태운다.
+            */}
+            <div className="curriculum-manage__embedded-period">
+              <CurriculumPeriodFields
+                idPrefix="manage-curriculum"
+                value={period}
+                onChange={(field, value) => setPeriod((current) => ({ ...current, [field]: value }))}
+              />
+              {periodIssue && (
+                <p className="curriculum-manage__period-issue" role="status">
+                  {periodIssue} 나머지 기본 정보는 그대로 저장됩니다.
+                </p>
+              )}
+            </div>
+
             <div className="curriculum-manage__embedded-image">
               <div>
                 <h3>대표 이미지</h3>

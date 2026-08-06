@@ -8,6 +8,7 @@ import {
   publishMockCurriculum,
   putMockCurriculum,
   updateMockCurriculumMaterials,
+  updateMockCurriculumPeriod,
   updateMockCurriculumThumbnail,
 } from '@/features/demo/mockDatabase'
 import { publishLiveCanceled } from '@/features/notification/mockNotificationEvents'
@@ -117,6 +118,9 @@ function readMockInstructorCurriculum(curriculumId: string): InstructorCurriculu
     description: curriculum.description,
     thumbnailUrl: curriculum.thumbnailUrl,
     lifecycleStatus: curriculum.lifecycleStatus,
+    // 목 엔티티는 기간을 period 한 덩어리로 들고 있다. 서버 응답은 두 필드로 주므로 여기서 푼다.
+    startsAt: curriculum.period?.startsAt ?? null,
+    endsAt: curriculum.period?.endsAt ?? null,
     sectionCount: curriculum.sectionCount,
     lessonCount: curriculum.lessonCount,
     publishedLessonCount: buildMockCurriculumOutline(curriculum)
@@ -195,6 +199,7 @@ export const mockCurriculumManagementService = {
     curriculum.title = request.info.title
     curriculum.summary = request.info.summary
     curriculum.description = request.info.description
+    updateMockCurriculumPeriod(request.curriculumId, request.info.startsAt, request.info.endsAt)
 
     // 새 섹션에 실제 id를 부여(HTTP 구현과 동일 계약) — 저장 후 로컬 상태가 실제 id를 갖도록.
     const sectionIdMap: Record<string, string> = {}

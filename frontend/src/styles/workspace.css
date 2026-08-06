@@ -803,6 +803,11 @@ th { color: var(--ink-500); font-size: .67rem; }
 .curriculum-manage-page .form-grid input,
 .curriculum-manage-page .form-grid textarea { min-height: 40px; padding: 8px 10px; font-size: .76rem; }
 .curriculum-manage-page .form-grid textarea { min-height: 106px; line-height: 1.5; }
+/* 기본 정보 패널 안의 운영 기간. 대표 이미지 블록과 같은 구분선·여백으로 한 패널처럼 읽히게 둔다. */
+.curriculum-manage__embedded-period { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-soft); }
+.curriculum-manage__embedded-period .curriculum-period-fields { gap: 8px; }
+.curriculum-manage__embedded-period legend { font-size: .76rem; }
+.curriculum-manage__period-issue { margin: 6px 0 0; color: var(--red-600); font-size: .66rem; line-height: 1.45; }
 .curriculum-manage__embedded-image { display: grid; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-soft); }
 .curriculum-manage__embedded-image h3 { margin: 0 0 2px; font-size: .76rem; }
 .curriculum-manage__embedded-image > div > p { margin: 0; color: var(--ink-500); font-size: .62rem; line-height: 1.4; }

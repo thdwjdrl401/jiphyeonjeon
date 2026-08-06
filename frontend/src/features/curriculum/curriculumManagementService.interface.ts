@@ -29,6 +29,13 @@ export interface InstructorCurriculumResponse {
   description: string
   thumbnailUrl: string | null
   lifecycleStatus: string
+  /**
+   * 운영 기간. 서버 `CurriculumResponse`가 처음부터 주던 값인데 이 타입이 빠뜨려서 관리 화면이
+   * 쓰지 못했다 — 그래서 생성 때 기간을 놓치면 다시 넣을 방법이 없었고, 카탈로그 카드가 영구히
+   * "일정 준비 중"에 머물렀다. 한쪽만 정해진 상태도 서버가 허용하므로 각각 nullable이다.
+   */
+  startsAt: string | null
+  endsAt: string | null
   sectionCount: number
   lessonCount: number
   publishedLessonCount: number
@@ -68,7 +75,11 @@ export interface UpdateCurriculumThumbnailRequest {
 
 export interface SaveCurriculumManagementRequest {
   curriculumId: string
-  info: { title: string; summary: string; description: string }
+  /**
+   * PATCH /instructor/curriculums/{id} 본문. 기간은 ISO-8601이며 "미정"은 null이다 —
+   * 서버는 null을 "변경 안 함"으로 다루므로, 이 화면은 값이 비어 있어도 기존 기간을 지우지 않는다.
+   */
+  info: { title: string; summary: string; description: string; startsAt: string | null; endsAt: string | null }
   sections: CurriculumManagementSection[]
   materials: CurriculumMaterial[]
   structureVersion: number
