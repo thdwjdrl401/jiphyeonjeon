@@ -110,6 +110,14 @@ export interface CurriculumManagementService {
   uploadCurriculumThumbnail: (file: File) => Promise<string | null>
   /** 대표 이미지를 교체한다. 저장 후의 커리큘럼(서버 진실)을 돌려준다. */
   updateCurriculumThumbnail: (request: UpdateCurriculumThumbnailRequest) => Promise<InstructorCurriculumResponse>
+  /**
+   * 대표 이미지 연결을 해제한다. 이미 없어도 성공한다(멱등). 저장 후의 커리큘럼을 돌려준다.
+   *
+   * <p>교체와 <b>다른 endpoint</b>다 — 기본 정보 PATCH는 `thumbnailAssetId: null`을 "변경 안 함"으로
+   * 읽으므로 그 길로는 비울 수 없다. 서버는 연결만 끊고 업로드된 에셋·스토리지 객체는 즉시 지우지
+   * 않는다(CONTRACT §커리큘럼, seominkyeong/ADR-0077).
+   */
+  deleteCurriculumThumbnail: (curriculumId: string) => Promise<InstructorCurriculumResponse>
   createCurriculum: (request: CreateCurriculumRequest) => Promise<CreateCurriculumResponse>
   getInstructorCurriculum: (curriculumId: string) => Promise<InstructorCurriculumResponse>
   getCurriculumManagementStructure: (curriculumId: string) => Promise<CurriculumManagementSection[]>

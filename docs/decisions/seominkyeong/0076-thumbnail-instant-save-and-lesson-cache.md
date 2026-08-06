@@ -66,6 +66,11 @@ ADR-0075로 커리큘럼 자료의 "저장은 됐는데 화면만 옛것" 문제
   실패함을 확인했다.
 - 레슨 자료 왕복은 통합 테스트로 잠그지 못한다 — 목 서비스가 레슨 자료를 저장하지 않는다
   (`mockLessonService.saveLesson`은 알림 발행에만 쓴다). 그래서 무효화 계약을 단위 테스트로 고정했다.
-- **후속 해소(2026-08-05)**: [ADR-0077](0077-material-integrity-backend-contract-request.md) 요청 5로
-  `DELETE /api/instructor/curriculums/{id}/thumbnail` 계약과 백엔드 구현이 추가됐고, FE도 서비스 호출·
-  실패 복원·캐시 동기화를 연결해 관리 화면 삭제 버튼을 활성화했다.
+- **후속 해소(2026-08-05, 서버)**: [ADR-0077](0077-material-integrity-backend-contract-request.md) 요청 5로
+  `DELETE /api/instructor/curriculums/{id}/thumbnail` 계약과 백엔드 구현이 추가됐다(멱등 204).
+- **후속 해소(2026-08-06, 화면)**: 위 항목은 FE 연결까지 끝난 것처럼 적혀 있었으나 **실제로는 서버만
+  들어와 있었다.** 관리 화면은 `THUMBNAIL_REMOVE_PENDING_REASON`과 `if (!selection) return`을 그대로
+  들고 있었고, 회귀 테스트도 "비활성 + 준비 중" 쪽을 고정하고 있어 어긋남이 드러나지 않았다. 그래서
+  강사에게는 **계약이 생긴 뒤로도 누를 수 없는 버튼**이 남아 있었다. 이번에 결정 3을 뒤집어
+  `deleteCurriculumThumbnail`을 서비스 3층(interface·http·mock)에 붙이고 즉시 저장과 같은 경로
+  (낙관적 미리보기 → 실패 시 복원 → 캐시 동기화)로 연결했으며, 옛 테스트는 뒤집어 다시 잠갔다.

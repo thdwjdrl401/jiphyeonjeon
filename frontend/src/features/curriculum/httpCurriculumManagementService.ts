@@ -115,6 +115,19 @@ export const httpCurriculumManagementService = {
     )
     return { ...data, materials: data.materials ?? [], enrolleeCount: data.enrolleeCount ?? null }
   },
+  /**
+   * 대표 이미지 삭제. <b>전용 endpoint</b>를 쓴다 — 기본 정보 PATCH의 `thumbnailAssetId: null`은
+   * "변경 안 함"이라 그 길로는 비울 수 없다.
+   *
+   * <p>서버는 204(본문 없음)를 준다. 화면은 저장 뒤의 서버 진실이 필요하므로(캐시 동기화가 그 값을
+   * 쓴다) 이어서 한 번 더 읽는다. 같은 객체의 `getInstructorCurriculum`을 부르지 않고 조회를 펼쳐
+   * 쓰는 것은 자기 참조가 되면 이 객체의 타입 추론이 통째로 `any`로 무너지기 때문이다.
+   */
+  async deleteCurriculumThumbnail(curriculumId) {
+    await apiClient.delete(`/instructor/curriculums/${curriculumId}/thumbnail`)
+    const { data } = await apiClient.get<InstructorCurriculumResponse>(`/instructor/curriculums/${curriculumId}`)
+    return { ...data, materials: data.materials ?? [], enrolleeCount: data.enrolleeCount ?? null }
+  },
   async createCurriculum(request) {
     const { data } = await apiClient.post<{ curriculumId: string }>('/instructor/curriculums', {
       title: request.title,

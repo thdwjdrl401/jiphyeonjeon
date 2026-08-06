@@ -17,6 +17,8 @@ const curriculumManagementService = selectDataSource<CurriculumManagementService
 export const uploadCurriculumThumbnail = (file: File) => curriculumManagementService.uploadCurriculumThumbnail(file)
 export const updateCurriculumThumbnail = (request: UpdateCurriculumThumbnailRequest) =>
   curriculumManagementService.updateCurriculumThumbnail(request)
+export const deleteCurriculumThumbnail = (curriculumId: string) =>
+  curriculumManagementService.deleteCurriculumThumbnail(curriculumId)
 export const createCurriculum = (request: CreateCurriculumRequest) => curriculumManagementService.createCurriculum(request)
 export const getInstructorCurriculum = (curriculumId: string) => curriculumManagementService.getInstructorCurriculum(curriculumId)
 export const getCurriculumManagementStructure = (curriculumId: string) => curriculumManagementService.getCurriculumManagementStructure(curriculumId)
