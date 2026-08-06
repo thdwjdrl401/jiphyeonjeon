@@ -9,7 +9,6 @@ const users: ReadonlyArray<{
   curriculumPath: string
   profilePath: string
   notificationsPath: string
-  workspaceLabel: string
   curriculumLabel: string
 }> = [
   {
@@ -24,7 +23,6 @@ const users: ReadonlyArray<{
     curriculumPath: '/instructor/curriculums',
     profilePath: '/instructor/profile',
     notificationsPath: '/instructor/notifications',
-    workspaceLabel: '강사 워크스페이스',
     curriculumLabel: '커리큘럼 관리',
   },
   {
@@ -39,7 +37,6 @@ const users: ReadonlyArray<{
     curriculumPath: '/student/curriculums',
     profilePath: '/student/profile',
     notificationsPath: '/student/notifications',
-    workspaceLabel: '학생 워크스페이스',
     curriculumLabel: '내 커리큘럼',
   },
 ]
@@ -50,7 +47,6 @@ describe('WorkspaceSidebar', () => {
     curriculumPath,
     profilePath,
     notificationsPath,
-    workspaceLabel,
     curriculumLabel,
   }) => {
     render(
@@ -61,7 +57,6 @@ describe('WorkspaceSidebar', () => {
 
     const sidebar = screen.getByRole('complementary', { name: '작업 메뉴' })
     expect(within(sidebar).getByText(user.displayName)).toBeInTheDocument()
-    expect(within(sidebar).getByText(workspaceLabel)).toBeInTheDocument()
     expect(within(sidebar).getByRole('link', { name: curriculumLabel })).toHaveAttribute('href', curriculumPath)
     expect(within(sidebar).getByRole('link', { name: '내 프로필' })).toHaveAttribute('href', profilePath)
     expect(within(sidebar).getByRole('link', { name: '전체 알림' })).toHaveAttribute('href', notificationsPath)
