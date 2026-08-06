@@ -13,6 +13,7 @@ const validSorts = new Set<CurriculumSort>(['LATEST', 'TITLE_ASC'])
 const SEARCH_DEBOUNCE_MS = 300
 const MAX_VISIBLE_PAGES = 5
 const LOADING_ICON_DELAY_MS = 500
+const CURRICULUM_PAGE_SIZE = 10
 
 function getPageWindow(current: number, total: number, maxVisible: number) {
   if (total <= maxVisible) return Array.from({ length: total }, (_, index) => index)
@@ -42,7 +43,7 @@ export default function CurriculumListPage() {
       lifecycleStatus: 'PUBLISHED',
       sort,
       page,
-      size: 9,
+      size: CURRICULUM_PAGE_SIZE,
     },
     user ?? undefined,
   )
@@ -134,11 +135,11 @@ export default function CurriculumListPage() {
         </form>
 
         {curriculumQuery.isPending ? (
-          <CurriculumCardSkeleton count={6} />
+          <CurriculumCardSkeleton count={CURRICULUM_PAGE_SIZE} />
         ) : curriculumQuery.isError ? (
           <PageState title="커리큘럼을 불러오지 못했어요" description="네트워크 연결을 확인한 뒤 다시 시도해 주세요." action={<button className="button button--primary" type="button" onClick={() => curriculumQuery.refetch()}>다시 시도</button>} />
         ) : !data ? (
-          <CurriculumCardSkeleton count={6} />
+          <CurriculumCardSkeleton count={CURRICULUM_PAGE_SIZE} />
         ) : data.items.length === 0 ? (
           <PageState
             title={hasConditions ? '검색 조건에 맞는 커리큘럼이 없어요' : '공개된 커리큘럼을 준비하고 있어요'}
