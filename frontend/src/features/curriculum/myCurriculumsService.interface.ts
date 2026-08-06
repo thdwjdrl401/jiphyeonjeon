@@ -55,7 +55,8 @@ export interface DashboardLiveSession {
   sectionId?: string
   scheduledAt: string | null
   liveSessionStatus: string
-  durationMs?: number | null
+  /** 강사가 입력한 예상 진행 시간(분). 설정하지 않았으면 null. */
+  expectedDurationMinutes?: number | null
 }
 
 export interface InstructorDashboardSummary {

@@ -26,6 +26,14 @@ public record StudentLearningSummary(
     }
 
     /** 대시보드가 강조하는 다음 라이브 세션. FE {@code DashboardLiveSession}과 형태를 맞춘다. */
+    /**
+     * 가장 가까운 예정/진행 라이브 한 건.
+     *
+     * <p>{@code expectedDurationMinutes}는 <b>강사가 강의를 만들 때 입력한 예상 진행 시간</b>이다
+     * (10~480분, {@code LiveSession}). 전에는 이 자리에 녹화 길이를 뜻하는 {@code durationMs}가
+     * 있었는데, 예정된 라이브는 아직 녹화가 없어 구조적으로 영영 null이었다 — 화면은 "예상 --분"만
+     * 보여 줬다. 이름과 값이 어긋난 자리였고, 뜻이 맞는 값으로 바꾼다.
+     */
     public record UpcomingLiveSession(
             UUID sessionId,
             UUID lessonId,
@@ -35,7 +43,7 @@ public record StudentLearningSummary(
             UUID sectionId,
             OffsetDateTime scheduledAt,
             String liveSessionStatus,
-            Long durationMs
+            Integer expectedDurationMinutes
     ) {
     }
 }

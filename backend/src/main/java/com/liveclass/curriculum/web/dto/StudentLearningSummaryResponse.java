@@ -35,13 +35,13 @@ public record StudentLearningSummaryResponse(
             UUID sectionId,
             OffsetDateTime scheduledAt,
             String liveSessionStatus,
-            Long durationMs
+            Integer expectedDurationMinutes
     ) {
         static UpcomingLiveSessionResponse from(StudentLearningSummary.UpcomingLiveSession t) {
             return new UpcomingLiveSessionResponse(
                     t.sessionId(), t.lessonId(), t.lessonTitle(),
                     t.curriculumId(), t.curriculumTitle(), t.sectionId(),
-                    t.scheduledAt(), t.liveSessionStatus(), t.durationMs());
+                    t.scheduledAt(), t.liveSessionStatus(), t.expectedDurationMinutes());
         }
     }
 }

@@ -22,6 +22,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -97,8 +98,12 @@ class InstructorAuthoringReadContractTest {
          */
         String scheduledAt = OffsetDateTime.now(ZoneOffset.ofHours(9)).plusDays(1)
                 .truncatedTo(ChronoUnit.MINUTES).toString();
-        write(post("/api/instructor/lessons/" + lessonId + "/live-sessions"), instructor,
-                "{\"scheduledAt\":\"%s\"}".formatted(scheduledAt)).andExpect(status().isCreated());
+        String sessionId = json(write(post("/api/instructor/lessons/" + lessonId + "/live-sessions"), instructor,
+                "{\"scheduledAt\":\"%s\"}".formatted(scheduledAt))
+                .andExpect(status().isCreated()).andReturn()).get("sessionId").asString();
+        // 예상 진행 시간은 생성이 아니라 일정 수정으로 들어간다(강사가 강의 폼에서 입력하는 값).
+        write(patch("/api/instructor/live-sessions/" + sessionId), instructor,
+                "{\"expectedDurationMinutes\":90}").andExpect(status().isOk());
         enrollAndApprove(instructor, published);
 
         write(get("/api/instructor/dashboard-summary"), instructor, null)
@@ -109,7 +114,13 @@ class InstructorAuthoringReadContractTest {
                 .andExpect(jsonPath("$.totalEnrolleeCount").value(1))
                 .andExpect(jsonPath("$.upcomingLiveSession.sessionId").exists())
                 .andExpect(jsonPath("$.upcomingLiveSession.lessonTitle").value("1강"))
-                .andExpect(jsonPath("$.upcomingLiveSession.curriculumTitle").exists());
+                .andExpect(jsonPath("$.upcomingLiveSession.curriculumTitle").exists())
+                /*
+                 * <b>강사가 입력한 예상 진행 시간이 그대로 와야 한다.</b> 전에는 이 자리에 녹화 길이를
+                 * 뜻하는 durationMs가 있어 예정된 라이브에서는 언제나 null이었고, 화면은 "예상 --분"만
+                 * 보여 줬다. 값이 다시 조용히 비면 화면도 조용히 되돌아가므로 여기서 고정한다.
+                 */
+                .andExpect(jsonPath("$.upcomingLiveSession.expectedDurationMinutes").value(90));
     }
 
     @Test
