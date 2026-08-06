@@ -105,14 +105,28 @@ run_runtime() {
     export CUDA_VISIBLE_DEVICES=0
     while :; do
         set +e
-        "$WHISPER_VLLM_VENV/bin/${WHISPER_VLLM_SERVE_COMMAND:-vllm}" "$WHISPER_VLLM_MODEL_PATH" \
-            --host "$WHISPER_VLLM_HOST" \
-            --port "$WHISPER_VLLM_PORT" \
-            --served-model-name "$WHISPER_VLLM_SERVED_MODEL_NAME" \
-            --dtype "${WHISPER_VLLM_DTYPE:-bfloat16}" \
-            --gpu-memory-utilization "${WHISPER_VLLM_GPU_MEMORY_UTILIZATION:-0.08}" \
-            --max-num-batched-tokens "${WHISPER_VLLM_MAX_NUM_BATCHED_TOKENS:-2048}" \
-            --max-num-seqs "${WHISPER_VLLM_MAX_NUM_SEQS:-1}"
+        case "${WHISPER_VLLM_SERVE_COMMAND:-vllm}" in
+            vllm)
+                "$WHISPER_VLLM_VENV/bin/vllm" serve "$WHISPER_VLLM_MODEL_PATH" \
+                    --host "$WHISPER_VLLM_HOST" \
+                    --port "$WHISPER_VLLM_PORT" \
+                    --served-model-name "$WHISPER_VLLM_SERVED_MODEL_NAME" \
+                    --dtype "${WHISPER_VLLM_DTYPE:-bfloat16}" \
+                    --gpu-memory-utilization "${WHISPER_VLLM_GPU_MEMORY_UTILIZATION:-0.08}" \
+                    --max-num-batched-tokens "${WHISPER_VLLM_MAX_NUM_BATCHED_TOKENS:-2048}" \
+                    --max-num-seqs "${WHISPER_VLLM_MAX_NUM_SEQS:-1}"
+                ;;
+            qwen-asr-serve)
+                "$WHISPER_VLLM_VENV/bin/qwen-asr-serve" "$WHISPER_VLLM_MODEL_PATH" \
+                    --host "$WHISPER_VLLM_HOST" \
+                    --port "$WHISPER_VLLM_PORT" \
+                    --served-model-name "$WHISPER_VLLM_SERVED_MODEL_NAME" \
+                    --dtype "${WHISPER_VLLM_DTYPE:-bfloat16}" \
+                    --gpu-memory-utilization "${WHISPER_VLLM_GPU_MEMORY_UTILIZATION:-0.08}" \
+                    --max-num-batched-tokens "${WHISPER_VLLM_MAX_NUM_BATCHED_TOKENS:-2048}" \
+                    --max-num-seqs "${WHISPER_VLLM_MAX_NUM_SEQS:-1}"
+                ;;
+        esac
         runtime_status=$?
         set -e
         echo "vLLM runtime exited with status $runtime_status; retrying in ${RESTART_DELAY_SECONDS}s" >&2
