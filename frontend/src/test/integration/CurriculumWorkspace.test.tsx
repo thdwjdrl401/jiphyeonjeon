@@ -721,15 +721,28 @@ describe('커리큘럼 작업 화면', () => {
     )
   })
 
-  // 삭제 계약(서버에서 이미지를 비우는 길)이 아직 없다 — 자리는 두고 이유를 말한다(ADR-0076).
-  it('관리 화면의 대표 이미지 삭제 버튼은 자리를 지키되 준비 중임을 알린다', async () => {
+  /**
+   * 관리 화면의 대표 이미지 <b>삭제가 실제로 지운다</b>.
+   *
+   * <p>예전에는 이 버튼이 비활성이었다 — 저장된 이미지를 비우는 서버 계약이 없어 자리만 지키고 "준비
+   * 중"이라고 말했다(ADR-0076 결정 3). 그 계약(`DELETE .../thumbnail`)이 생긴 뒤에도 화면은 옛 상태로
+   * 남아, 강사는 누를 수 없는 버튼을 계속 봤다. 이 테스트가 그 역전을 고정한다.
+   */
+  it('관리 화면에서 대표 이미지를 삭제한다', async () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
     await user.click(await screen.findByRole('tab', { name: '기본 정보' }))
 
+    // 이미지가 있으니 지울 수 있어야 한다 — 여기가 비활성이던 자리다.
+    expect(await screen.findByAltText('대표 이미지 미리보기')).toBeInTheDocument()
     const removeButton = await screen.findByRole('button', { name: '이미지 삭제' })
-    expect(removeButton).toBeDisabled()
-    expect(removeButton).toHaveAttribute('title', expect.stringContaining('준비 중'))
+    expect(removeButton).toBeEnabled()
+
+    await user.click(removeButton)
+
+    // 미리보기가 사라지고, 지울 것이 없어져 버튼이 스스로 잠긴다.
+    await waitFor(() => expect(screen.queryByAltText('대표 이미지 미리보기')).not.toBeInTheDocument())
+    expect(screen.getByRole('button', { name: '이미지 삭제' })).toBeDisabled()
   })
 
   it('커리큘럼 만들기에서는 고른 대표 이미지를 삭제 버튼으로 취소할 수 있다', async () => {

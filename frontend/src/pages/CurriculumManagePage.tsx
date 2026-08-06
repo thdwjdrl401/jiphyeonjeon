@@ -12,6 +12,7 @@ import CurriculumImageField, { type CurriculumImageSelection } from '@/features/
 import CurriculumMaterialField from '@/features/curriculum/CurriculumMaterialField'
 import {
   deleteCurriculum,
+  deleteCurriculumThumbnail,
   deleteSection,
   getCurriculumManagementStructure,
   getInstructorCurriculum,
@@ -80,13 +81,6 @@ const LIFECYCLE_VIEW: Record<string, { tone: 'warning' | 'success' | 'neutral'; 
   PUBLISHED: { tone: 'success', label: '공개 중', description: '카탈로그에서 검색·수강신청할 수 있습니다.' },
   ARCHIVED: { tone: 'neutral', label: '보관됨', description: '카탈로그에 노출되지 않습니다.' },
 }
-
-/**
- * 저장된 대표 이미지를 비우는 서버 계약이 아직 없다 — PATCH의 `thumbnailAssetId`는 null을
- * "변경 안 함"으로 다룬다(InstructorCurriculumService.applyThumbnail). 삭제 버튼은 자리를
- * 지키되 비활성으로 두고 이유를 말한다(ADR-0076). 계약이 생기면 이 상수를 지우고 연결한다.
- */
-const THUMBNAIL_REMOVE_PENDING_REASON = '대표 이미지 삭제는 준비 중입니다. 지금은 다른 이미지로 교체할 수 있어요.'
 
 type CurriculumInfoField = 'title' | 'summary' | 'description'
 type SectionInfoField = 'title' | 'description'
@@ -412,31 +406,40 @@ function CurriculumManageEditor({
    * 저장됩니다"라고 말하는데 이미지는 어디에도 저장되지 않아, 다시 들어오면 옛 이미지로 돌아갔다.
    */
   const applyThumbnailSelection = async (selection: CurriculumImageSelection | null) => {
-    // 저장된 이미지를 비우는 서버 계약이 아직 없다 — 삭제 버튼은 비활성이라 여기 닿지 않는다.
-    if (!selection) return
-
+    /*
+     * 지우는 것도 <b>같은 즉시 저장</b>이다. 다만 교체와 endpoint가 다르다 — 기본 정보 PATCH는
+     * `thumbnailAssetId: null`을 "변경 안 함"으로 읽으므로 그 길로는 비울 수 없고, 서버가 그래서
+     * `DELETE .../thumbnail`을 따로 둔다(멱등 204).
+     */
     const previous = thumbnailUrl
-    setThumbnailUrl(selection.previewUrl)   // 업로드를 기다리지 않고 먼저 보여 준다
+    setThumbnailUrl(selection ? selection.previewUrl : null)   // 업로드를 기다리지 않고 먼저 보여 준다
     setAutosave('saving')
     setSaveError('')
     try {
-      const assetId = await uploadCurriculumThumbnail(selection.file)
-      if (!assetId) throw new Error('THUMBNAIL_ASSET_MISSING')
-      const saved = await updateCurriculumThumbnail({
-        curriculumId,
-        thumbnailAssetId: assetId,
-        thumbnailPreviewUrl: selection.previewUrl,
-      })
+      let saved: InstructorCurriculumResponse
+      if (selection) {
+        const assetId = await uploadCurriculumThumbnail(selection.file)
+        if (!assetId) throw new Error('THUMBNAIL_ASSET_MISSING')
+        saved = await updateCurriculumThumbnail({
+          curriculumId,
+          thumbnailAssetId: assetId,
+          thumbnailPreviewUrl: selection.previewUrl,
+        })
+      } else {
+        saved = await deleteCurriculumThumbnail(curriculumId)
+      }
       setThumbnailUrl(saved.thumbnailUrl)
       setAutosave('saved')
       syncCachedCurriculum((current) => ({ ...current, thumbnailUrl: saved.thumbnailUrl }))
     } catch (error) {
-      // 실패했으면 미리보기도 되돌린다 — 새 이미지가 남아 있으면 저장된 것으로 읽힌다.
+      // 실패했으면 미리보기도 되돌린다 — 바뀐 채로 두면 저장된 것으로 읽힌다(지우기도 마찬가지다).
       setThumbnailUrl(previous)
       setAutosave('error')
       setSaveError(error instanceof ApiError && error.code === 'CURRICULUM_STATE_CONFLICT'
         ? error.message
-        : '대표 이미지를 저장하지 못했습니다. 다시 시도해 주세요.')
+        : selection
+          ? '대표 이미지를 저장하지 못했습니다. 다시 시도해 주세요.'
+          : '대표 이미지를 삭제하지 못했습니다. 다시 시도해 주세요.')
     }
   }
 
@@ -840,7 +843,6 @@ function CurriculumManageEditor({
                 id="manage-curriculum-thumbnail"
                 previewUrl={thumbnailUrl}
                 onChange={(selection: CurriculumImageSelection | null) => void applyThumbnailSelection(selection)}
-                removeDisabledReason={THUMBNAIL_REMOVE_PENDING_REASON}
               />
             </div>
           </Panel>

@@ -139,6 +139,13 @@ export const mockCurriculumManagementService = {
     }
     return readMockInstructorCurriculum(request.curriculumId)
   },
+  async deleteCurriculumThumbnail(curriculumId) {
+    // 서버와 같이 멱등하다 — 이미 비어 있어도 같은 최종 상태이므로 성공이다.
+    if (!updateMockCurriculumThumbnail(curriculumId, null)) {
+      throw new ApiError('커리큘럼을 찾을 수 없습니다.', 404, 'CURRICULUM_NOT_FOUND')
+    }
+    return readMockInstructorCurriculum(curriculumId)
+  },
   async createCurriculum(request) {
     const user = peekMockUser()
     if (!user) throw new ApiError('로그인이 필요해요.', 401, 'AUTH_SESSION_REQUIRED')
