@@ -606,11 +606,39 @@ class LiveAiAnswerContractTest {
         liveCaptionRepository.saveAndFlush(caption);
     }
 
+    /**
+     * AI 질의. <b>스트림이 끝날 때까지 기다렸다가 돌아온다.</b>
+     *
+     * <p>기다리지 않으면 SSE 중계 스레드가 살아 있는 채로 테스트가 다음 {@code mockMvc.perform}을
+     * 부르고, 두 스레드가 MockMvc의 공유 상태를 함께 건드려 {@link java.util.ConcurrentModificationException}이
+     * 난다 — 2026-08-06 CI에서 실제로 났다(질의를 세 번 연속 보내는 테스트에서 터졌다).
+     * 코드가 아니라 스레드가 겹쳤을 때만 나는 실패라, 빨간불을 봐도 원인을 알 수 없다.
+     *
+     * <p>형제 클래스({@code ReplayAiAnswerContractTest})는 질의를 실제 포트로 보내 이 문제를
+     * 없앴지만 여기서는 그 길을 택하지 않았다. 이 클래스는 {@code @Transactional} 롤백에 기대어
+     * 사용자·커리큘럼·라이브 세션을 만드는데, 실제 포트는 다른 스레드·다른 트랜잭션이라 그 전제가
+     * 무너진다. 공유 DB에 데이터를 흘리면 이 클래스 밖의 테스트까지 흔든다.
+     */
     private org.springframework.test.web.servlet.ResultActions ask(String sessionId, Cookie[] auth, String question)
             throws Exception {
         String body = jsonMapper.writeValueAsString(Map.of("question", question));
-        return write(post("/api/live-sessions/" + sessionId + "/ai/answers/stream")
+        var actions = write(post("/api/live-sessions/" + sessionId + "/ai/answers/stream")
                 .accept(MediaType.TEXT_EVENT_STREAM), auth, body);
+        drainStream(actions.andReturn());
+        return actions;
+    }
+
+    /**
+     * 중계가 다 쓰고 손을 뗄 때까지 기다린다. 스트림이 시작되지 않은 응답(4xx·5xx)은 기다릴 것이 없다.
+     *
+     * <p>"다 썼다"의 신호는 <b>본문이 더 자라지 않는 것</b>이다. 고정 시간으로 자르면 느린 러너에서
+     * 그 신호보다 먼저 끝나 경쟁이 그대로 남는다.
+     */
+    private void drainStream(MvcResult result) throws Exception {
+        if (!result.getRequest().isAsyncStarted()) {
+            return;
+        }
+        awaitStableBody(result, new String(result.getResponse().getContentAsByteArray(), StandardCharsets.UTF_8));
     }
 
     /** 세션 시작 + 커리큘럼 발행. {sessionId, curriculumId, lessonId} 반환. */
