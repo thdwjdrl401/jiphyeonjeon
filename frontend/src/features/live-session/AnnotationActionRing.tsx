@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 
 /**
  * 선택한 판서 주변에 뜨는 <b>방사형 액션 링</b>(ADR-0054).
@@ -76,7 +76,15 @@ export default function AnnotationActionRing({
             key={action.id}
             type="button"
             className={`annotation-action-ring__item${running ? ' is-running' : ''}`}
-            style={{ transform: `translate(calc(-50% + ${offset.x}px), calc(-50% + ${offset.y}px))` }}
+            /*
+             * 최종 자리는 CSS 변수로 넘기고 이동은 애니메이션이 한다 — 중심에서 이 자리로 퍼진다.
+             * `--ring-step`은 항목마다 조금씩 늦게 출발시켜 부채꼴로 펼쳐 보이게 하는 값이다.
+             */
+            style={{
+              '--ring-x': `${offset.x}px`,
+              '--ring-y': `${offset.y}px`,
+              '--ring-step': `${index * 34}ms`,
+            } as CSSProperties}
             disabled={locked}
             aria-busy={running}
             title={action.hint}
@@ -92,7 +100,7 @@ export default function AnnotationActionRing({
         닫는 버튼이 된다 — 링을 펼쳐 놓고 왜 눌리지 않는지 알 수 없게 두면 안 된다.
       */}
       {needsSelection ? (
-        <p className="annotation-action-ring__need" style={{ transform: 'translate(-50%, -50%)' }} role="status">
+        <p className="annotation-action-ring__need" role="status">
           판서를 선택하세요
         </p>
       ) : (

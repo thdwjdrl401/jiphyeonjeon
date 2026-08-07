@@ -57,13 +57,6 @@ describe('합성 화면 카메라 편집기', () => {
     expect(onChange).toHaveBeenLastCalledWith({ w: 0.23 })
   })
 
-  // 수강생 화면에서 카메라를 내린 상태에서는 편집기 자체가 없어야 한다 —
-  // 보이지도 않는 것을 옮기는 조작이 남아 있으면 혼란스럽다.
-  it('숨김 상태에서는 편집기를 그리지 않는다', () => {
-    renderControl({ visible: false })
-    expect(screen.queryByRole('group', { name: '합성 화면의 카메라 위치' })).not.toBeInTheDocument()
-  })
-
   it('현재 크기를 보조기술에 백분율로 알린다', () => {
     renderControl({ w: 0.3 })
     const handle = screen.getByRole('slider', { name: '카메라 크기 조절 (현재 화면 폭의 30%)' })

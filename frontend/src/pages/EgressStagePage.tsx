@@ -8,6 +8,7 @@ import {
   Track,
   type RemoteTrack,
   type RemoteTrackPublication,
+  type TrackPublication,
 } from 'livekit-client'
 import {
   DEFAULT_CAMERA_OVERLAY,
@@ -166,6 +167,24 @@ export default function EgressStagePage() {
       if (publication.source === Track.Source.Camera) setHasCamera(false)
     }
 
+    /**
+     * 음소거도 <b>내려간 것으로 본다.</b>
+     *
+     * <p>`setCameraEnabled(false)`는 트랙을 걷어내지 않고 <b>mute</b>한다(livekit-client 문서:
+     * "If a track has already published, it'll mute or unmute the track"). 그래서 구독은 살아 있고
+     * `TrackUnsubscribed`가 오지 않는다 — 우리는 그 이벤트만 듣고 있었으므로 element가 그대로 남아,
+     * 프레임이 끊긴 `<video>`가 <b>검은 상자</b>로 합성에 실렸다. 강사는 카메라를 껐는데 수강생
+     * 화면에는 검은 사각형이 남는다.
+     *
+     * <p>화면공유도 같은 규칙으로 둔다. 지금은 mute 대신 unpublish로 동작하지만, 여기서 갈라 두면
+     * 나중에 동작이 바뀔 때 같은 사고가 되풀이된다.
+     */
+    const syncMuted = (publication: TrackPublication) => {
+      const visible = !publication.isMuted && Boolean(publication.track)
+      if (publication.source === Track.Source.ScreenShare) setHasScreen(visible)
+      if (publication.source === Track.Source.Camera) setHasCamera(visible)
+    }
+
     // 배치는 강사 participant의 metadata에 실린다. 강사 브라우저가 직접 쓸 수 있어(CanUpdateOwnMetadata)
     // 백엔드 왕복 없이 드래그가 곧바로 합성에 반영된다. 카메라를 올린 참가자를 강사로 본다.
     const syncOverlay = () => {
@@ -181,6 +200,8 @@ export default function EgressStagePage() {
     room
       .on(RoomEvent.TrackSubscribed, attach)
       .on(RoomEvent.TrackUnsubscribed, detach)
+      .on(RoomEvent.TrackMuted, syncMuted)
+      .on(RoomEvent.TrackUnmuted, syncMuted)
       .on(RoomEvent.ParticipantMetadataChanged, syncOverlay)
       .on(RoomEvent.TrackPublished, syncOverlay)
       .on(RoomEvent.ParticipantConnected, syncOverlay)
@@ -208,6 +229,8 @@ export default function EgressStagePage() {
       room
         .off(RoomEvent.TrackSubscribed, attach)
         .off(RoomEvent.TrackUnsubscribed, detach)
+        .off(RoomEvent.TrackMuted, syncMuted)
+        .off(RoomEvent.TrackUnmuted, syncMuted)
         .off(RoomEvent.ParticipantMetadataChanged, syncOverlay)
         .off(RoomEvent.TrackPublished, syncOverlay)
         .off(RoomEvent.ParticipantConnected, syncOverlay)
@@ -245,7 +268,7 @@ export default function EgressStagePage() {
         ref={cameraRef}
         className={
           `egress-stage__camera${cameraIsStage ? ' is-stage' : ''}`
-          + `${hasCamera && overlay.visible ? '' : ' is-hidden'}`
+          + `${hasCamera ? '' : ' is-hidden'}`
           // 웹캠은 거울로, 파일 송출은 그대로. 강사 화면이 metadata로 알려 준다(ADR-0100) —
           // 여기서 틀리면 반전된 채로 HLS·녹화에 들어가 VOD에 영구히 남는다.
           + `${overlay.mirrored ? ' is-mirrored' : ''}`

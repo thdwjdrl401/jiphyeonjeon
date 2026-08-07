@@ -265,7 +265,7 @@ describe('판서 한 바퀴 — 강사가 그린 것이 수신 측에서 같은 
 
   /** 판서 토글. 자동으로 켜지는 경우(복원)에는 부르지 않는다. */
   function turnAnnotationOn(getByRole: ReturnType<typeof render>['getByRole']) {
-    const toggle = getByRole('button', { name: /^판서 (켜짐|꺼짐)$/ })
+    const toggle = getByRole('button', { name: '판서' })
     if (toggle.getAttribute('aria-pressed') === 'false') toggle.click()
   }
 
@@ -284,7 +284,7 @@ describe('판서 한 바퀴 — 강사가 그린 것이 수신 측에서 같은 
     server.rows.push({ revision: 2, opType: 'snapshot', payload: '{"elements":[]}' })
 
     const { getByRole, findByRole } = await renderStage()
-    await findByRole('button', { name: /^판서 (켜짐|꺼짐)$/ })
+    await findByRole('button', { name: '판서' })
     await waitFor(() => { expect(liveKit.localParticipant.publishData).toHaveBeenCalled() })
 
     // Egress는 강의를 시작할 때 들어온다 — 강사 페이지가 접속하며 낸 복원 스냅샷은 받지 못한다.
@@ -306,14 +306,14 @@ describe('판서 한 바퀴 — 강사가 그린 것이 수신 측에서 같은 
    */
   it('판서를 껐다 켜도 수신 측 문서가 강사의 것과 같아진다', async () => {
     const { getByRole, findByRole } = await renderStage()
-    await findByRole('button', { name: /^판서 (켜짐|꺼짐)$/ })
+    await findByRole('button', { name: '판서' })
     await waitFor(() => { expect(liveKit.localParticipant.publishData).toHaveBeenCalled() })
 
     turnAnnotationOn(getByRole)
     await waitFor(() => { expect(excalidrawProps.onChange).toBeDefined() })
     draw([element('a', 1), element('b', 1)])
 
-    const toggle = getByRole('button', { name: /^판서 (켜짐|꺼짐)$/ })
+    const toggle = getByRole('button', { name: '판서' })
     toggle.click()   // 끄기 → clear(감추기)
     await waitFor(async () => { expect(visibleAnnotationElements(await receiverDocument())).toHaveLength(0) })
 
@@ -329,14 +329,14 @@ describe('판서 한 바퀴 — 강사가 그린 것이 수신 측에서 같은 
    */
   it('새로고침해도 강사 화면과 수신 측이 모두 그대로 돌아온다', async () => {
     const first = await renderStage()
-    await first.findByRole('button', { name: /^판서 (켜짐|꺼짐)$/ })
+    await first.findByRole('button', { name: '판서' })
     await waitFor(() => { expect(liveKit.localParticipant.publishData).toHaveBeenCalled() })
 
     turnAnnotationOn(first.getByRole)
     await waitFor(() => { expect(excalidrawProps.onChange).toBeDefined() })
     draw([element('a', 1), element('b', 1)])
     // 판서를 끈 채로 떠난다 — clear를 저장하던 시절 판서가 통째로 사라지던 경로다.
-    first.getByRole('button', { name: /^판서 (켜짐|꺼짐)$/ }).click()
+    first.getByRole('button', { name: '판서' }).click()
 
     // 새로고침이 실제로 하는 일: 페이지가 사라지기 직전에 밀린 기록을 비운다.
     window.dispatchEvent(new Event('pagehide'))
@@ -358,11 +358,11 @@ describe('판서 한 바퀴 — 강사가 그린 것이 수신 측에서 같은 
      * 남기면서 그 선택이 그대로 돌아온다 — 영속화의 목적이 원래 그것이다.
      */
     await waitFor(() => {
-      expect(second.getByRole('button', { name: /^판서 (켜짐|꺼짐)$/ }).getAttribute('aria-pressed')).toBe('false')
+      expect(second.getByRole('button', { name: '판서' }).getAttribute('aria-pressed')).toBe('false')
     })
 
     // 그리고 켜면 이전에 그린 것이 그대로 나온다.
-    second.getByRole('button', { name: /^판서 (켜짐|꺼짐)$/ }).click()
+    second.getByRole('button', { name: '판서' }).click()
     await waitFor(() => {
       expect(sceneElements.map((e) => e.id)).toEqual(['a', 'b'])
     })
@@ -398,13 +398,13 @@ describe('판서 한 바퀴 — 강사가 그린 것이 수신 측에서 같은 
    */
   it('전체 상태를 알리는 크기는 판서가 길어져도 늘지 않는다', async () => {
     const { getByRole, findByRole } = await renderStage()
-    await findByRole('button', { name: /^판서 (켜짐|꺼짐)$/ })
+    await findByRole('button', { name: '판서' })
     await waitFor(() => { expect(liveKit.localParticipant.publishData).toHaveBeenCalled() })
 
     turnAnnotationOn(getByRole)
     await waitFor(() => { expect(excalidrawProps.onChange).toBeDefined() })
 
-    const toggle = getByRole('button', { name: /^판서 (켜짐|꺼짐)$/ })
+    const toggle = getByRole('button', { name: '판서' })
     const announceAgain = async () => {
       toggle.click()   // 끄기
       // 한 tick 쉰다. 같은 tick에 껐다 켜면 React가 한 번의 갱신으로 합쳐 `active`가 바뀌지 않는다.
@@ -445,7 +445,7 @@ describe('판서 한 바퀴 — 강사가 그린 것이 수신 측에서 같은 
   it('저장이 밀려 있으면 포인터 대신 스냅샷으로 물러선다', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     const { getByRole, findByRole } = await renderStage()
-    await findByRole('button', { name: /^판서 (켜짐|꺼짐)$/ })
+    await findByRole('button', { name: '판서' })
     await waitFor(() => { expect(liveKit.localParticipant.publishData).toHaveBeenCalled() })
 
     turnAnnotationOn(getByRole)
@@ -459,7 +459,7 @@ describe('판서 한 바퀴 — 강사가 그린 것이 수신 측에서 같은 
         : server.handle(String(url), init)
     )))
 
-    const toggle = getByRole('button', { name: /^판서 (켜짐|꺼짐)$/ })
+    const toggle = getByRole('button', { name: '판서' })
     toggle.click()
     await waitFor(() => { expect(toggle.getAttribute('aria-pressed')).toBe('false') })
     const from = joinNow()

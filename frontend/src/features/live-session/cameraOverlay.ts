@@ -8,8 +8,6 @@
  * 1920x1080), 캔버스 해상도도 설정으로 바뀔 수 있다. 픽셀로 저장하면 둘이 어긋난다.
  */
 export interface CameraOverlay {
-  /** 합성 화면에 카메라를 표시할지. 끄면 화면공유만 나간다. */
-  visible: boolean
   /** 왼쪽 위 모서리 위치(0~1). 0.72는 "가로 72% 지점". */
   x: number
   /** 위쪽 위치(0~1). */
@@ -30,7 +28,7 @@ export interface CameraOverlay {
 }
 
 /** 화면공유를 가리지 않는 우하단. 강사가 옮기기 전까지의 기본 배치다. */
-export const DEFAULT_CAMERA_OVERLAY: CameraOverlay = { visible: true, x: 0.735, y: 0.66, w: 0.25, mirrored: true }
+export const DEFAULT_CAMERA_OVERLAY: CameraOverlay = { x: 0.735, y: 0.66, w: 0.25, mirrored: true }
 
 /** 너무 작으면 얼굴이 안 보이고, 너무 크면 화면공유를 덮는다. */
 export const MIN_OVERLAY_WIDTH = 0.12
@@ -66,7 +64,6 @@ export function clampOverlay(overlay: CameraOverlay): CameraOverlay {
   const w = clamp(overlay.w, MIN_OVERLAY_WIDTH, MAX_OVERLAY_WIDTH)
   const h = overlayHeight(w)
   return {
-    visible: overlay.visible,
     mirrored: overlay.mirrored,
     w,
     x: clamp(overlay.x, 0, 1 - w),
@@ -95,7 +92,6 @@ export function parseCameraOverlay(metadata: string | undefined | null): CameraO
       return DEFAULT_CAMERA_OVERLAY
     }
     return clampOverlay({
-      visible: raw.visible !== false,
       // 없으면 뒤집는다 — 이 키가 생기기 전 세션과 웹캠 송출이 모두 그 동작이다.
       mirrored: raw.mirrored !== false,
       x: raw.x,

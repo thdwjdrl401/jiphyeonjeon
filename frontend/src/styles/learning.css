@@ -251,16 +251,68 @@
  *
  * z-index는 Excalidraw 캔버스(기본 1~4)보다 위, 하지만 판서 레이어 안에 갇힌다. 링 자체는
  * 포인터를 먹지 않고 버튼만 먹는다 — 링이 떠 있는 동안에도 캔버스를 계속 쓸 수 있어야 한다. */
-.annotation-action-ring { position: absolute; z-index: 6; pointer-events: none; }
+/*
+ * 액션 링. <b>중심에서 부채꼴로 퍼지며</b> 나타난다 — 뚝 나타나면 어디서 온 것인지 읽히지 않고,
+ * 무엇에 붙은 메뉴인지도 흐려진다. 항목마다 조금씩 늦게 출발해(`--ring-step`) 펼쳐지는 것으로 보인다.
+ *
+ * 그리고 <b>선택을 따라 미끄러진다</b> — 강사가 고른 것을 옮기면 링도 함께 간다. 좌표는 선택
+ * 한가운데이므로(ringCenter) 여기서는 그 변화를 부드럽게만 이어 준다.
+ */
+.annotation-action-ring { position: absolute; z-index: 6; pointer-events: none;
+  transition: left .16s cubic-bezier(.2,.8,.3,1), top .16s cubic-bezier(.2,.8,.3,1); }
 .annotation-action-ring__item,
 .annotation-action-ring__close { position: absolute; left: 0; top: 0; pointer-events: auto; display: grid; place-items: center; border: 1px solid rgba(255,252,243,.22); border-radius: 999px; background: rgba(28,22,13,.92); color: #fdf8ee; box-shadow: 0 8px 24px rgba(0,0,0,.4); cursor: pointer; }
-.annotation-action-ring__item { width: 74px; height: 74px; gap: 3px; padding: 6px; }
+.annotation-action-ring__item { width: 74px; height: 74px; gap: 3px; padding: 6px;
+  transform: translate(-50%, -50%) scale(.6); opacity: 0;
+  animation: annotation-ring-out .22s cubic-bezier(.2,.9,.3,1.2) forwards;
+  animation-delay: var(--ring-step, 0ms); }
+/* 중심(-50%,-50%)에서 최종 자리(--ring-x,--ring-y)로 퍼진다. */
+@keyframes annotation-ring-out {
+  from { transform: translate(-50%, -50%) scale(.6); opacity: 0; }
+  to { transform: translate(calc(-50% + var(--ring-x)), calc(-50% + var(--ring-y))) scale(1); opacity: 1; }
+}
+.annotation-action-ring__need { transform: translate(-50%, -50%);
+  animation: annotation-ring-fade .18s ease-out both; }
+@keyframes annotation-ring-fade { from { opacity: 0; } to { opacity: 1; } }
 .annotation-action-ring__item:hover:not(:disabled) { border-color: rgba(224,149,138,.8); background: rgba(48,38,24,.96); }
 .annotation-action-ring__item:disabled { opacity: .5; cursor: default; }
 .annotation-action-ring__item.is-running { border-color: #e0958a; }
 .annotation-action-ring__label { font-size: .68rem; font-weight: 700; letter-spacing: .02em; }
-.annotation-action-ring__close { width: 26px; height: 26px; font-size: .7rem; opacity: .75; }
+.annotation-action-ring__close { width: 26px; height: 26px; font-size: .7rem;
+  animation: annotation-ring-close-in .18s ease-out both; animation-delay: .1s; }
+@keyframes annotation-ring-close-in { from { opacity: 0; } to { opacity: .75; } }
 .annotation-action-ring__close:hover:not(:disabled) { opacity: 1; }
+
+/*
+ * 링을 다시 여는 칩. <b>X를 누른 그 자리에</b> 앉는다 — 닫힘과 열림이 같은 점을 중심으로 돌아,
+ * 어디로 갔는지 찾을 필요가 없다.
+ *
+ * 예전에는 스타일이 아예 없어 보이지 않았다(position이 없으니 절대 배치된 레이어 안에서 흐름대로
+ * 놓여 왼쪽 위에 묻혔다). 주석은 "눈에 보이는 자리에 둔다"고 했지만 실제로는 그렇지 않았다.
+ *
+ * 자리는 인라인 style이 준다(링 중심). 여기서는 그 점을 기준으로 가운데 맞춤만 한다.
+ */
+/* 정리 진입점. 강조와 같은 판에 서므로 같은 모양을 쓴다. */
+.annotation-interpret-tool { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 6px;
+  height: 40px; padding: 0 13px; border: 1px solid var(--ink-100); border-radius: 10px;
+  background: #fff; color: var(--ink-900); font-size: .78rem; font-weight: 600;
+  white-space: nowrap; box-shadow: 0 3px 12px rgba(31, 45, 90, .09); }
+.annotation-interpret-tool:hover { border-color: var(--ink-300); }
+/* 대상이 없을 때의 안내. 링을 펼쳐 가운데서 안 된다고 말하는 대신 이 한 줄만 낸다. */
+.annotation-pick-hint { position: absolute; z-index: 7; left: 50%; bottom: 16px; margin: 0;
+  transform: translateX(-50%); padding: 8px 14px; border: 1px solid rgba(255, 252, 243, .22);
+  border-radius: 999px; background: rgba(28, 22, 13, .92); color: #fdf8ee; font-size: .74rem;
+  animation: annotation-ring-fade .18s ease-out both; }
+
+.annotation-interpret-entry {
+  position: absolute; z-index: 7; transform: translate(-50%, -50%);
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px; border: 1px solid rgba(255, 252, 243, .22); border-radius: 999px;
+  background: rgba(28, 22, 13, .92); color: #fdf8ee; font-size: .74rem; font-weight: 700;
+  white-space: nowrap; cursor: pointer;
+  animation: annotation-ring-fade .18s ease-out both;
+}
+.annotation-interpret-entry:hover { border-color: rgba(224, 149, 138, .8); background: rgba(48, 38, 24, .96); }
 
 /* 우리가 넣은 수식을 고르면 뜨는 편집 진입점. 수식은 그림이라 내용을 직접 고칠 수 없고,
  * 붙여 둔 LaTeX를 다시 렌더하는 것이 유일한 편집 경로다(ADR-0051의 "고칠 수 있어야 한다"). */
@@ -275,7 +327,9 @@
 /* 레이저 포인터는 scene 요소가 아니라 사라지는 궤적이라 판서 op 경로로는 수강생에게 도달하지 않는다.
  * 그래서 포인터 좌표를 별도 topic으로 중계한다(InstructorAnnotationLayer). 도구 자체는 열어 둔다. */
 /* 컨트롤 줄 오른쪽 끝 묶음(상태 문구 + 전체화면 아이콘). */
-.control-row__trailing { display: flex; align-items: center; gap: 8px; }
+/* 묶음이 둘로 늘어 직접 자식이 셋이 됐다(내보내기 · 판서 · 꼬리). space-between이 셋을 고르게
+   벌리므로, 꼬리만 오른쪽 끝으로 밀어 왼쪽 두 묶음이 붙어 있게 한다. */
+.control-row__trailing { display: flex; align-items: center; margin-left: auto; gap: 8px; }
 /* 전체화면 아이콘 버튼. 글자 버튼들과 달리 정사각형으로 두어 영상 플레이어의 그 버튼처럼 읽히게 한다. */
 .video-controls-overlay__icon { display: grid; width: 30px; height: 30px; padding: 0; place-items: center; }
 /* 청크가 내려오는 동안. 아래 영상은 계속 보여야 하므로 아무것도 덮지 않는다. */
@@ -339,6 +393,16 @@
 .control-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 7px; }
 .media-page--instructor .control-row { margin-top: 0; }
 .control-row > div { display: flex; gap: 5px; }
+/*
+ * 두 묶음(내보내기 · 판서)을 얇은 선으로 가른다. 글자 제목은 달지 않는다 — 묶음이 둘뿐이라
+ * 간격과 선이면 충분하고, 가로 줄에 제목을 얹으면 무거워진다.
+ */
+.control-row__group { display: flex; align-items: center; gap: 5px; }
+.control-row__group + .control-row__group { margin-left: 5px; padding-left: 10px;
+  border-left: 1px solid rgba(255,252,243,.14); }
+/* 아이콘은 상태(사선)를 지고 글자는 이름만 남는다. */
+.control-row button .media-toggle-icon { width: 15px; height: 15px; flex: 0 0 auto; }
+.control-row button:has(.media-toggle-icon) { display: inline-flex; align-items: center; gap: 6px; }
 .control-row button { border: 1px solid rgba(255,252,243,.12); border-radius: 8px; padding: 7px 10px; background: rgba(255,252,243,.06); color: rgba(255,252,243,.75); font-size: .62rem; }
 .control-row button.is-active { color: #dba13a; }
 .control-row > span { margin-left: auto; color: rgba(255,252,243,.58); font-size: .65rem; }
@@ -1097,6 +1161,28 @@
  * 에디터일 수도, 영상일 수도 있다. 그래서 이 화면의 다른 오버레이(.annotation-math-edit)와 같은
  * 어두운 글래스를 쓴다. 흰 배경 + 상속 글자색으로 두면 배경에 따라 글자가 사라진다 — 실제로
  * 그렇게 안 보였다(디자인 토큰 var(--color-surface)가 이 프로젝트에 없어 #fff로 떨어졌다). */
+/*
+ * 강조는 <b>펜</b>이라 펜들 옆에 산다 — Excalidraw 툴 섬의 형제로 심는다(useToolbarSlot).
+ * 배치는 그 가로 Stack이 하므로 우리가 좌표를 잡지 않는다: 창 폭·비율이 바뀌어도 따라다닌다.
+ */
+/* `강조`와 `AI로 판서 정리`가 같은 슬롯에 서므로 간격은 여기서 준다 — 버튼마다 margin을 달면
+ * 한쪽만 떠 있을 때 툴 섬과의 거리가 달라진다. */
+.annotation-toolbar-slot { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; margin-left: 8px; }
+/*
+ * 툴 섬과 같은 표면을 쓴다 — 옆에 붙는 물건이 혼자 어두우면 이물질로 보인다. Excalidraw 섬이
+ * 밝은 판이므로 여기도 밝게 두고, 켜졌을 때만 인장색으로 채운다.
+ *
+ * `white-space: nowrap`이 없으면 좁은 폭에서 "강/조"로 줄바꿈된다(실제로 그랬다) — 이 버튼은
+ * flex 안에서 줄어들 수 있는 자리에 있다.
+ */
+.annotation-highlight-tool { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 6px;
+  height: 40px; padding: 0 13px; border: 1px solid var(--ink-100); border-radius: 10px;
+  background: #fff; color: var(--ink-900); font-size: .78rem; font-weight: 600;
+  white-space: nowrap; box-shadow: 0 3px 12px rgba(31, 45, 90, .09); }
+.annotation-highlight-tool:hover { border-color: var(--ink-300); }
+.annotation-highlight-tool.is-on { border-color: var(--seal); background: var(--seal); color: #fff; }
+
+/* 툴 섬을 못 찾았을 때의 되돌림 자리. 사라지느니 예전처럼 떠 있는 편이 낫다. */
 .annotation-highlight-entry {
   position: absolute;
   z-index: 7;
@@ -1122,6 +1208,7 @@
 }
 
 .annotation-highlight-prompt {
+  animation: annotation-prompt-in .14s ease-out both;
   position: absolute;
   z-index: 8;
   /* 가운데 아래 16px은 수식 편집(.annotation-math-edit·-editor)이 쓴다. 강조를 그린 직후에
@@ -1140,11 +1227,10 @@
   box-shadow: 0 16px 40px rgba(0, 0, 0, .45);
 }
 
-.annotation-highlight-prompt p {
-  margin: 0;
-  font-size: .78rem;
-  font-weight: 600;
-}
+/* 묻는 말과 그 뜻을 두 줄로 나눈다 — 한 줄에 다 넣으면 상자가 판서 폭을 통째로 가린다. */
+.annotation-highlight-prompt__text { display: grid; gap: 2px; min-width: 0; }
+.annotation-highlight-prompt__text > strong { font-size: .78rem; font-weight: 600; }
+.annotation-highlight-prompt__text > small { font-size: .66rem; line-height: 1.45; opacity: .78; }
 
 .annotation-highlight-prompt__actions {
   display: flex;
@@ -1185,3 +1271,20 @@
   font-size: .74rem;
   font-weight: 700;
 }
+
+/* 움직임을 줄이라고 한 사용자에게는 퍼지는 연출을 생략한다. 자리는 그대로 잡는다. */
+@media (prefers-reduced-motion: reduce) {
+  .annotation-action-ring { transition: none; }
+  .annotation-action-ring__item {
+    animation: none; opacity: 1;
+    transform: translate(calc(-50% + var(--ring-x)), calc(-50% + var(--ring-y)));
+  }
+  .annotation-action-ring__close, .annotation-action-ring__need { animation: none; opacity: 1; }
+}
+
+/* to를 명시한다 — from만 두면 forwards 채움이 무엇을 고정할지 규칙에 기대게 된다. */
+@keyframes annotation-prompt-in {
+  from { opacity: 0; transform: translate(-50%, 6px); }
+  to { opacity: 1; transform: translateX(-50%); }
+}
+@media (prefers-reduced-motion: reduce) { .annotation-highlight-prompt { animation: none; } }

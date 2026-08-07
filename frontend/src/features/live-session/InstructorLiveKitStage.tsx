@@ -3,8 +3,8 @@ import { StatusBadge } from '@/shared/ui/WorkspaceUi'
 import CameraOverlayControl from './CameraOverlayControl'
 import InstructorAnnotationLayer from './InstructorAnnotationLayer'
 import InstructorLocalTrackVideo from './InstructorLocalTrackVideo'
+import MediaToggleIcon from './MediaToggleIcon'
 import MediaFailureNotice from './MediaFailureNotice'
-import PublishQualityPanel from './PublishQualityPanel'
 import { useAnnotationHighlightCapture } from './useAnnotationHighlightCapture'
 import { useInstructorLiveKit, type InstructorLiveKitConnectionState } from './useInstructorLiveKit'
 
@@ -162,11 +162,6 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
    * 바뀌므로, 커진 화면에서 그린 획도 같은 프레임 좌표로 기록된다.
    */
   const stageRef = useRef<HTMLDivElement>(null)
-  /*
-   * 송출 화질 패널. 기본은 접혀 있다 — 한 번 정하면 브라우저에 남아 다음 강의까지 유지되므로
-   * 매 강의 펼쳐 둘 이유가 없고, 펼쳐 두면 미리보기를 가린다.
-   */
-  const [qualityPanel, setQualityPanel] = useState(false)
   const [fullscreen, setFullscreen] = useState(false)
 
   useEffect(() => {
@@ -200,6 +195,37 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
     sessionId,
     resolveVideo: () => mainVideoRef.current,
   })
+  /**
+   * 강조 저장 확인을 <b>스스로 닫는다</b> — 바깥을 누르거나 Esc, 그리고 12초가 지나면.
+   *
+   * <p>예전에는 강사가 둘 중 하나를 누를 때까지 하단 중앙에 남아 있었다. 그런데 강사는 강조를 그린
+   * 직후에 <b>계속 그리고 있고</b>, 그 자리가 정확히 판서하는 자리다 — 대답을 요구하는 상자가 붓
+   * 아래에 눌어붙어 있었다.
+   *
+   * <p><b>닫힘은 "아니요"다.</b> 이 확인이 잘못된 근거를 막는 유일한 게이트이므로(ADR-0074),
+   * 대답하지 않은 것을 승낙으로 읽으면 안 된다.
+   */
+  const highlightPrompt = highlightCapture.prompt
+  useEffect(() => {
+    if (!highlightPrompt) return undefined
+    const close = () => highlightPrompt.dismiss()
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Element | null
+      if (target?.closest('.annotation-highlight-prompt')) return
+      close()
+    }
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') close() }
+    // 판서를 이어 가는 손을 막지 않을 만큼 짧게, 읽고 누를 수는 있을 만큼 길게.
+    const timer = window.setTimeout(close, 12_000)
+    document.addEventListener('pointerdown', onPointerDown, true)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.clearTimeout(timer)
+      document.removeEventListener('pointerdown', onPointerDown, true)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [highlightPrompt])
+
   const showCameraPictureInPicture = Boolean(screenShareTrack && cameraTrack)
   const canRetry = publisher.connectionState === 'error' || publisher.connectionState === 'disconnected'
 
@@ -296,13 +322,20 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
             유일한 게이트다.
           */}
           {highlightCapture.prompt && (
-            <div className="annotation-highlight-prompt" role="dialog" aria-label="강조 근거 저장 확인">
-              <p>{highlightCapture.prompt.message}</p>
+            <div className="annotation-highlight-prompt" role="dialog" aria-label="AI 답변 자료 저장 확인">
+              <div className="annotation-highlight-prompt__text">
+                <strong>{highlightCapture.prompt.message}</strong>
+                <small>{highlightCapture.prompt.detail}</small>
+              </div>
+              {/*
+                버튼 글자에 <b>대상</b>을 넣는다. 예전에는 `남기기`·`안 남김`이라 무엇을 남기는지가
+                동사에 없었다 — 강사는 판서를 지운다는 뜻으로도 읽을 수 있었다.
+              */}
               <div className="annotation-highlight-prompt__actions">
                 <button type="button" className="button button--soft"
-                  onClick={highlightCapture.prompt.dismiss}>안 남김</button>
+                  onClick={highlightCapture.prompt.dismiss}>아니요</button>
                 <button type="button" className="button button--primary"
-                  onClick={highlightCapture.prompt.confirm}>남기기</button>
+                  onClick={highlightCapture.prompt.confirm}>저장</button>
               </div>
             </div>
           )}
@@ -316,14 +349,6 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
         </div>
       </div>
 
-
-      {qualityPanel && (
-        <PublishQualityPanel
-          applying={publisher.applyingQuality}
-          quality={publisher.quality}
-          onChange={publisher.changeQuality}
-        />
-      )}
 
       {publisher.errorMessage && (
         <div className="instructor-media-error" role="alert">
@@ -350,31 +375,57 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
 
       <div className="video-controls-overlay" aria-label="강사 송출 컨트롤">
         <div className="control-row">
-          <div>
-            <button aria-pressed={publisher.microphoneEnabled} className={publisher.microphoneEnabled ? 'is-active' : ''} disabled={!publisher.canControl || Boolean(publisher.pendingControl)} type="button" onClick={publisher.toggleMicrophone}>마이크 {publisher.microphoneEnabled ? '켜짐' : '꺼짐'}</button>
-            <button aria-pressed={publisher.cameraEnabled} className={publisher.cameraEnabled ? 'is-active' : ''} disabled={!publisher.canControl || Boolean(publisher.pendingControl)} type="button" onClick={publisher.toggleCamera}>카메라 {publisher.cameraEnabled ? '켜짐' : '꺼짐'}</button>
-            <button aria-pressed={publisher.screenShareEnabled} className={publisher.screenShareEnabled ? 'is-active' : ''} disabled={!publisher.canControl || Boolean(publisher.pendingControl)} type="button" onClick={publisher.toggleScreenShare}>{publisher.screenShareEnabled ? '화면 공유 중' : '화면 공유'}</button>
-            {/*
-              송출 화질. 구현은 처음부터 있었지만 이걸 여는 버튼이 없어 강사가 쓸 수 없었다 —
-              업로드가 좁거나 노트북이 버거울 때 낮출 수단이 화면에 있어야 한다.
-            */}
+          {/*
+            두 묶음이다 — <b>내보내는 것</b>(마이크·카메라·화면공유)과 <b>판서</b>. 예전에는 일곱 개가
+            같은 굵기·같은 어미로 한 줄에 서서 서로 구분되지 않았고, 넷이 "켜짐/꺼짐"으로 끝나 정작
+            중요한 마이크 상태가 묻혔다.
+
+            상태 규칙은 둘뿐이다.
+              채움 = 켜짐 (예외 없음)
+              사선 = 꺼짐 (아이콘이 있는 마이크·카메라만)
+
+            "켜짐/꺼짐" 글자를 뺀 것은 폭 때문만이 아니다. 대가가 다르기 때문이다 — 마이크가 꺼진 줄
+            모르고 10분을 말하면 그 10분이 통째로 사라지지만(자막도 녹화도 없다), 판서가 켜졌는지는
+            한 획 그어 보면 즉시 안다. 글자는 앞의 것에만 필요하고, 그것도 아이콘의 사선이 더 잘 한다.
+          */}
+          <div className="control-row__group">
             <button
-              aria-pressed={qualityPanel}
-              className={qualityPanel ? 'is-active' : ''}
-              disabled={!publisher.canControl}
+              aria-pressed={publisher.microphoneEnabled}
+              className={publisher.microphoneEnabled ? 'is-active' : ''}
+              disabled={!publisher.canControl || Boolean(publisher.pendingControl)}
+              title={publisher.microphoneEnabled ? '마이크 끄기' : '마이크 켜기'}
               type="button"
-              onClick={() => setQualityPanel((current) => !current)}
+              onClick={publisher.toggleMicrophone}
             >
-              화질 설정
+              <MediaToggleIcon kind="microphone" off={!publisher.microphoneEnabled} />
+              마이크
             </button>
-            {/*
-              카메라 자체를 끄지 않고 합성 화면에서만 내린다. 강사는 계속 자기 카메라를 보면서
-              수강생 화면에는 자료만 띄울 수 있다 — 자료에 집중시키고 싶은 구간에서 쓴다.
-            */}
-            {/*
-              판서를 켜면 캔버스가 포인터를 받는다. 그래서 카메라 배치 드래그와 동시에 쓸 수 없고,
-              토글로 둔다 — 켠 상태를 유지하면 강사가 왜 카메라를 못 옮기는지 알기 어렵다.
-            */}
+            <button
+              aria-pressed={publisher.cameraEnabled}
+              className={publisher.cameraEnabled ? 'is-active' : ''}
+              disabled={!publisher.canControl || Boolean(publisher.pendingControl)}
+              title={publisher.cameraEnabled ? '카메라 끄기' : '카메라 켜기'}
+              type="button"
+              onClick={publisher.toggleCamera}
+            >
+              <MediaToggleIcon kind="camera" off={!publisher.cameraEnabled} />
+              카메라
+            </button>
+            <button
+              aria-pressed={publisher.screenShareEnabled}
+              className={publisher.screenShareEnabled ? 'is-active' : ''}
+              disabled={!publisher.canControl || Boolean(publisher.pendingControl)}
+              type="button"
+              onClick={publisher.toggleScreenShare}
+            >
+              화면 공유
+            </button>
+          </div>
+          {/*
+            판서를 켜면 캔버스가 포인터를 받는다. 그래서 카메라 배치 드래그와 동시에 쓸 수 없고,
+            토글로 둔다 — 켠 상태를 유지하면 강사가 왜 카메라를 못 옮기는지 알기 어렵다.
+          */}
+          <div className="control-row__group">
             <button
               aria-pressed={annotating}
               className={annotating ? 'is-active' : ''}
@@ -382,22 +433,8 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
               type="button"
               onClick={() => changeAnnotating(!annotating)}
             >
-              판서 {annotating ? '켜짐' : '꺼짐'}
+              판서
             </button>
-            {/*
-              색·굵기·투명도 패널. 판서를 켠 동안에만 의미가 있고, 기본은 접혀 있다 —
-              자료 위에 그리는 화면에서 좌우 패널이 시야를 가린다.
-            */}
-            {annotating && (
-              <button
-                aria-pressed={propertyPanel}
-                className={propertyPanel ? 'is-active' : ''}
-                type="button"
-                onClick={() => setPropertyPanel((current) => !current)}
-              >
-                판서 도구 {propertyPanel ? '펼침' : '접힘'}
-              </button>
-            )}
             {/*
               화이트보드. 배경색이 아니라 맨 뒤에 깔리는 잠긴 요소라, 켜고 끄는 것이 그대로
               수강생 화면·녹화에 반영된다.
@@ -409,18 +446,27 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
                 type="button"
                 onClick={() => setWhiteboard((current) => !current)}
               >
-                화이트보드 {whiteboard ? '켜짐' : '꺼짐'}
+                화이트보드
               </button>
             )}
-            {showCameraPictureInPicture && (
+            {/*
+              색·굵기·투명도 패널(Excalidraw zen 모드 해제).
+
+              <b>이름이 "도구 모음"이 아닌 이유.</b> 위 가운데 툴 섬(펜·지우개·도형)은 zen 모드에서도
+              그대로 떠 있다 — 실제 화면에서 확인했다. 그러니 이 버튼이 여는 것은 도구를 고르는 곳이
+              아니라 <b>왼쪽 색·굵기 패널</b>이고, 강사가 이걸 누르는 이유도 "빨간색으로 바꾸려고"다.
+
+              기본은 접혀 있다 — 자료 위에 그리는 화면에서 좌우 패널이 시야를 가리고, 색·굵기는
+              매 획마다 바꾸는 것이 아니다.
+            */}
+            {annotating && (
               <button
-                aria-pressed={publisher.cameraOverlay.visible}
-                className={publisher.cameraOverlay.visible ? 'is-active' : ''}
-                disabled={!publisher.canControl}
+                aria-pressed={propertyPanel}
+                className={propertyPanel ? 'is-active' : ''}
                 type="button"
-                onClick={() => publisher.moveCameraOverlay({ visible: !publisher.cameraOverlay.visible })}
+                onClick={() => setPropertyPanel((current) => !current)}
               >
-                수강생 화면에 카메라 {publisher.cameraOverlay.visible ? '표시' : '숨김'}
+                서식
               </button>
             )}
           </div>

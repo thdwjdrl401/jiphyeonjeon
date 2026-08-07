@@ -251,10 +251,14 @@ describe('전체 페이지 라우트', () => {
 
     await user.click(screen.getByRole('button', { name: '확인하고 참여하기' }))
     expect(within(liveInformation).getByText('Mock 송출 모드')).toBeInTheDocument()
-    const cameraToggle = screen.getByRole('button', { name: '카메라 켜짐' })
+    /*
+     * 상태는 글자가 아니라 `aria-pressed`와 아이콘의 사선이 진다 — 버튼 이름은 `카메라`로 고정이다.
+     * 이름에 상태를 담으면 버튼이 두 배로 길어지고, 이 줄에는 버튼이 예닐곱 개 선다.
+     */
+    const cameraToggle = screen.getByRole('button', { name: '카메라' })
     expect(cameraToggle).toHaveAttribute('aria-pressed', 'true')
     await user.click(cameraToggle)
-    expect(screen.getByRole('button', { name: '카메라 꺼짐' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: '카메라' })).toHaveAttribute('aria-pressed', 'false')
 
     const chatInput = screen.getByLabelText('채팅 메시지')
     await user.type(chatInput, '첫째 줄')
