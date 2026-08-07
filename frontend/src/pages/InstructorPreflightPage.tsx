@@ -237,6 +237,15 @@ export default function InstructorPreflightPage() {
           */}
           <MicrophoneLevelMeter track={publisher.microphoneTrack} />
           {/*
+            시연 스위치는 <b>이 패널</b>에 둔다. 하는 일이 "무엇을 송출할지 고르는 것"이라 미리보기
+            바로 아래가 제자리다 — 고른 결과가 위 화면에 그대로 보인다.
+
+            시작 바에는 둘 수 없다. 그 바는 `grid-template-columns: auto minmax(0,1fr) auto`로 칸이
+            셋인 그리드이고 바탕이 --ink-950(거의 검정)이라, 네 번째 자식을 넣으면 배치가 깨지고
+            잉크색 글자는 보이지 않는다.
+          */}
+          <DemoPublishControl />
+          {/*
             연결 실패와 장치 실패를 갈라 놓는다. 예전에는 한 칸이라, 마이크가 없는 컴퓨터에서
             "Requested device not found"가 연결 오류 자리에 떴다 — 방에는 이미 들어와 있었는데도.
           */}
@@ -403,8 +412,6 @@ export default function InstructorPreflightPage() {
                     : '마이크를 켜고 서버 점검이 완료될 때까지 기다려 주세요.'}
           </small>
         </div>
-        {/* 시연 스위치는 시작 버튼 옆이다 — 여기서 켜고 위 미리보기로 확인한 뒤 그대로 시작한다. */}
-        <DemoPublishControl />
         <button
           disabled={!ready || startMutation.isPending}
           className={`button button--primary${ready ? '' : ' is-disabled'}`}

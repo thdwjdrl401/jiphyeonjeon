@@ -38,9 +38,10 @@
  * 시연 스위치. 시작 버튼과 같은 줄에 서되 왼쪽으로 밀어 두어 평소 시선(오른쪽 끝 시작 버튼)을
  * 가리지 않는다. 켜져 있을 때만 인장색 실선으로 존재를 주장한다.
  */
-.demo-publish { display: flex; align-items: center; gap: 10px; margin-right: auto; padding: 7px 11px; border: 1px dashed var(--ink-200); border-radius: 11px; }
+.demo-publish { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; padding: 9px 11px; border: 1px dashed var(--ink-200); border-radius: 11px; }
+/* 설명이 길어 한 줄을 통째로 쓴다 — 버튼과 같은 줄에 두면 좁은 패널에서 글자가 뭉갠다. */
+.demo-publish__text { display: grid; flex: 1 1 100%; gap: 2px; min-width: 0; }
 .demo-publish.is-armed { border-style: solid; border-color: var(--seal); background: #fdf3f1; }
-.demo-publish__text { display: grid; gap: 2px; min-width: 0; }
 .demo-publish__text > strong { color: var(--ink-900); font-size: .72rem; }
 .demo-publish.is-armed .demo-publish__text > strong { color: var(--seal); }
 .demo-publish__text > small { color: var(--ink-600); font-size: .63rem; line-height: 1.45; overflow-wrap: anywhere; }

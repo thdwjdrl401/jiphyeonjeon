@@ -180,13 +180,26 @@ describe('강사 사전 점검', () => {
     expect(screen.queryByRole('button', { name: '데모 영상 선택' })).not.toBeInTheDocument()
   })
 
-  it('운영 계정에게는 시작 버튼 옆에 데모 스위치가 있다', async () => {
+  /**
+   * 스위치는 <b>송출 장치 패널</b>에 산다 — 하는 일이 "무엇을 송출할지 고르는 것"이라 미리보기
+   * 바로 아래가 제자리고, 고른 결과가 위 화면에 그대로 보인다.
+   *
+   * <p><b>시작 바에는 둘 수 없다.</b> 그 바는 칸이 셋인 그리드(`auto minmax(0,1fr) auto`)라 네 번째
+   * 자식을 넣으면 배치가 깨지고, 바탕이 `--ink-950`이라 잉크색 글자가 보이지 않는다. 실제로 그렇게
+   * 넣었다가 둘 다 겪었다.
+   */
+  it('운영 계정에게 데모 스위치를 보여주되 시작 바에는 넣지 않는다', async () => {
     currentUser = { isAdmin: true }
     publisher = { ...publisher, demoPublish: { armed: false, ready: false, fileName: null, hasAudio: false } }
-    renderPage()
+    const { container } = renderPage()
 
-    expect(await screen.findByRole('button', { name: '데모 영상 선택' })).toBeInTheDocument()
+    const demoButton = await screen.findByRole('button', { name: '데모 영상 선택' })
     // 시작 버튼을 대체하지 않는다 — 데모로 켜 두고 평소처럼 시작하는 흐름이다.
     expect(screen.getByRole('button', { name: '라이브 시작' })).toBeInTheDocument()
+
+    const startBar = container.querySelector('.instructor-preflight__actions')
+    expect(startBar).not.toBeNull()
+    expect(startBar).not.toContainElement(demoButton)
+    expect(demoButton.closest('.instructor-preflight__device-panel')).not.toBeNull()
   })
 })
