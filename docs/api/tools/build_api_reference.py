@@ -64,19 +64,19 @@ AUTH_RULES: list[tuple[str | None, tuple[str, ...], str, str]] = [
     ("POST", ("/api/auth/signup", "/api/auth/login", "/api/auth/logout"), "public",
      "로그인 전에 불러야 한다"),
     ("POST", ("/api/webhooks/livekit",), "signed",
-     "LiveKit이 서명한 JWT를 컨트롤러가 검증한다"),
+     "LiveKit이 서명한 JWT를 검증한다"),
     ("POST", ("/api/internal/ai/callbacks", "/api/internal/ai/materials/download-url"), "signed",
-     "AI 워커 HMAC 서명(ADR-0036)"),
+     "AI 워커와 나눠 가진 키로 HMAC 서명을 검증한다"),
     (None, ("/api/internal/ai/recorded-stt-jobs/**",), "signed",
-     "batch STT 워커 전용 HMAC(ADR-0011)"),
+     "batch STT 워커 전용 키로 HMAC 서명을 검증한다"),
     ("POST", ("/api/internal/ai/recorded-stt-callbacks",), "signed",
-     "batch STT 워커 전용 HMAC(ADR-0011)"),
+     "batch STT 워커 전용 키로 HMAC 서명을 검증한다"),
     ("POST", ("/api/internal/media/**",), "signed",
-     "media-worker 용도별 HMAC(ADR-0008)"),
+     "media-worker와 용도별로 나눈 키로 HMAC 서명을 검증한다"),
     ("GET", ("/api/live-sessions/*/annotation",), "signed",
-     "세션 쿠키가 없으면 LiveKit 토큰 서명을 본다(ADR-0055)"),
+     "세션 쿠키가 없으면 LiveKit 토큰 서명을 본다"),
     ("GET", ("/api/annotation-interpret-images/*",), "signed",
-     "128비트 난수 토큰이 곧 자격, 짧은 TTL(ADR-0058)"),
+     "128비트 난수 토큰이 곧 자격이고, 수명이 짧다"),
     ("GET", ("/api/curriculums/*/materials/*/download",
              "/api/lessons/*/materials/*/download"), "student",
      "자료 다운로드는 공개 상세보다 먼저 학생 역할을 요구한다"),
@@ -85,10 +85,10 @@ AUTH_RULES: list[tuple[str | None, tuple[str, ...], str, str]] = [
     ("POST", ("/api/curriculums/*/enrollments",), "student", "수강 신청은 학생만"),
     ("DELETE", ("/api/curriculums/*/enrollments/me",), "student", "수강 취소는 학생만"),
     (None, ("/api/instructor/**",), "instructor",
-     "소유권(내 커리큘럼인가)은 서비스가 따로 본다"),
+     "내 커리큘럼인지는 그 위에서 한 번 더 본다"),
     (None, ("/api/admin/**",), "admin",
-     "ADMIN은 security.admin-emails allowlist 오버레이"),
-    (None, ("/api/assets/**",), "auth", "익명 발급 금지 — kind별 권한은 컨트롤러가 판정"),
+     "관리자로 지정된 계정만"),
+    (None, ("/api/assets/**",), "auth", "익명 발급은 없다. 용도별 세부 권한은 따로 본다"),
 ]
 
 AUTH_BADGE = {
@@ -136,7 +136,7 @@ def resolve_auth(path: str, method: str) -> tuple[str, str]:
             # 패턴 쪽 `*` 는 [^/]* 이므로 자리표시자 \x00 도 그대로 먹는다.
             if rx.match(concrete):
                 return badge, why
-    return "auth", "anyRequest().authenticated()"
+    return "auth", ""
 
 
 # ---------------------------------------------------------------------------
@@ -456,7 +456,9 @@ def render_op(entry: dict, schemas: dict) -> str:
         parts.append(f'<div class="resp"><span class="code {cls}">{esc(code)}</span>'
                      f'<div><div>{esc(resp.get("description", ""))}</div>{rendered}</div></div>')
 
-    parts.append(f'<p class="why">접근 권한 — <b>{esc(label)}</b>: {esc(entry["auth_why"])}</p>')
+    if entry["auth_why"]:
+        # 근거가 없는 기본값(그냥 로그인)이면 줄을 그리지 않는다 — 배지가 이미 한 말이다.
+        parts.append(f'<p class="why">접근 권한 — <b>{esc(label)}</b>: {esc(entry["auth_why"])}</p>')
     parts.append("</div></details>")
     return "".join(parts)
 
@@ -489,7 +491,7 @@ def build_html(spec: dict, ops: list[dict], source_note: str) -> str:
     out.append('<div class="notice"><b>인증</b> — HttpOnly 쿠키 세션(Redis). '
                '<code>Authorization: Bearer</code>를 쓰지 않는다. '
                '변경 요청(POST·PUT·PATCH·DELETE)은 <code>GET /api/auth/csrf</code>로 받은 토큰을 '
-               '<code>X-XSRF-TOKEN</code> 헤더에 실어 보낸다. (ADR-0014)</div>')
+               '<code>X-XSRF-TOKEN</code> 헤더에 실어 보낸다.</div>')
 
     counts = {}
     for o in ops:
