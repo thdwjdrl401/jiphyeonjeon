@@ -102,6 +102,18 @@ docker run --rm --network host --entrypoint /bin/sh minio/mc:RELEASE.2025-08-13T
 - **클라이언트 접속 URL**: `wss://jiphyeonjeon.thdwjdrl.com:7443`.
 - **기동**: `docker compose -f infra/livekit/docker-compose.yml up -d` (앱 스택·인증서 준비 후).
 
+**도메인이 둘인 이유 — 어디는 옮기고 어디는 못 옮기는가**
+
+정본은 `jiphyeonjeon.thdwjdrl.com`이고, 앱 nginx의 443은 옛 도메인(`jiphyeonjeon.thdwjdrl.com`)을 받으면
+`location /`을 **301로 정본에 넘긴다**(`/api`는 넘기지 않고 그대로 처리한다).
+
+| 자리 | 도메인 | 왜 |
+|---|---|---|
+| Egress 합성 템플릿(`EGRESS_TEMPLATE_BASE_URL`) | **정본** | 브라우저가 여는 주소다. 옛 도메인이면 녹화를 시작할 때마다 301 왕복을 한 번 더 탄다 |
+| LiveKit webhook(`livekit.yaml`) | **정본** | 우리가 부르는 주소이므로 정본을 쓴다 |
+| 시그널링 `wss://…:7443` | **옛 도메인 유지** | 미디어 nginx의 인증서가 `jiphyeonjeon.thdwjdrl.com`로만 발급돼 있다. 정본으로 바꾸려면 그 볼륨에 정본 인증서가 먼저 있어야 하고, 없으면 **미디어가 통째로 끊긴다** |
+| `EC2_INFRA_HOST` · `AI_API_BASE_URL` | 옛 도메인 유지 | 도메인이 아니라 그 기계를 가리키는 주소다(SSH·내부 HTTP) |
+
 **사양**: Egress(Chrome) 때문에 **4 vCPU / 4GB 이상** 권장. 라이브만이면 더 작아도 됨.
 
 > **4 vCPU로는 녹화 1건이 한계다.** EC2 실측에서 room-composite 한 건이 여유 CPU를 4.0 → ~1.0으로
