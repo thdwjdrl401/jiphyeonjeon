@@ -771,6 +771,7 @@ X-Internal-Signature: base64(HMAC-SHA256(AI_INTERNAL_SECRET, rawBody))
 - body는 **정확히 위 8필드**다(ai-api가 `extra="forbid"`라 하나만 늘어도 400). `requestId` 1~128자·재사용 시 409, `lessonId`·`sessionId`는 **소문자 canonical UUID**, `question` 1~4,000자·**임의 trim 금지**, `contextTimeMs`는 0 이상의 **최신 STT attempt-local `streamElapsedMs` 좌표**(세션-ms 아님), `issuedAtMs`는 UTC epoch ms로 수신 시각과 60초 이상 차이나거나 5초 초과 미래면 401.
 - **`contextTimeMs`는 `core.live_caption`의 해당 세션 최신 행 raw `stream_elapsed_ms`로 채운다**(자막이 없으면 0). §3-4가 금지한 `streamElapsedMs→세션ms` 변환을 하지 않으므로 앵커 없이 규격을 만족한다. §3-6의 근사 `sessionMs`(표시용, ADR-0045)는 여기 쓰지 않는다.
 - SSE 이벤트는 `answer.delta` 0개 이상 + `answer.done|answer.insufficient|answer.error` 정확히 하나다. `answer.done.sources` 항목은 `{"type":"PPTX","materialId":uuid,"page":int}` 또는 `{"type":"CAPTION","sessionId":uuid,"sttSessionId":str,"startMs":int,"endMs":int}`이며 최초 evidence 순서를 보존·중복 제거한다.
+- `answer.delta.text`의 **형식은 계약이 정하지 않는다** — 모델이 주는 대로 릴레이하며 실제로 Markdown이 온다. 화면은 그것을 **Markdown으로 그리고**(강의 노트와 같은 렌더러) **링크·이미지는 태그만 걷어내고 글자는 남긴다**([ADR-0096](decisions/songjeongki/0096-ai-answers-render-as-markdown.md)). 답변은 자막·PPTX에서 만들어지므로 링크가 나온다면 모델이 지어낸 것이고, 검증된 출처는 `answer.done.sources`가 따로 싣는다. **서버는 텍스트를 손대지 않는다** — 정제는 화면의 일이다.
 - ai-api 상태코드: 200·400(body 위반)·401(인증 거부)·406(Accept 없음)·409(requestId 재사용)·503(RAG service 미배선 또는 process-local active 한도 초과). SSE 헤더가 시작된 뒤의 실패는 상태를 바꾸지 않고 `answer.error`다.
 - Spring은 브라우저에 이 이벤트를 **변환 없이 그대로 릴레이**하고(§2 AI), 클라 취소 시 업스트림 연결을 닫아 ai-api의 active 슬롯을 반납한다.
 

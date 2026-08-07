@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react'
-import NoteMarkdown from './NoteMarkdown'
+import Markdown from '@/shared/ui/Markdown'
 import type { LectureNoteView } from './liveSessionService.interface'
 
 /** 하단에서 이만큼 안쪽이면 "읽는 중"으로 보고 강제로 끌어내리지 않는다(채팅·AI 패널과 같은 값). */
@@ -12,7 +12,7 @@ const FOLLOW_THRESHOLD_PX = 48
  * 무관한 내용이 그럴듯하게 보여서, 노트 기능이 동작하지 않는다는 사실이 가려졌다.
  *
  * <p><b>주제 하나 = `<details>` 하나.</b> 본문(`keyPoints`)은 서버가 준 Markdown 조각이라 그대로
- * `NoteMarkdown`에 맡긴다 — 예전에는 `<ul><li>`로 직접 그려서 계약이 허용하는 굵게·인라인 코드가
+ * `Markdown`에 맡긴다 — 예전에는 `<ul><li>`로 직접 그려서 계약이 허용하는 굵게·인라인 코드가
  * `**이렇게**` 글자로 남았다. 주제 개수·본문은 구조화 필드(`topics`)에서 뽑는다 — `markdown`(전체
  * 이어붙인 본문)과는 같은 값에서 나온 두 표현이라 어긋나지 않는 것이 계약이다.
  *
@@ -106,12 +106,12 @@ export default function LectureNotePanel({ note, live, panelProps }: Props) {
                 return (
                   <details className="lecture-note-topic" key={key} ref={setDetailsRef(key)} open>
                     <summary><h3>{topic.title}</h3></summary>
-                    <NoteMarkdown markdown={topic.keyPoints.map((point) => `- ${point}`).join('\n')} />
+                    <Markdown className="note-markdown" markdown={topic.keyPoints.map((point) => `- ${point}`).join('\n')} />
                   </details>
                 )
               })
               // topics는 비었는데 markdown만 있는 어긋난 상태(계약상 없어야 하지만) — 빈 화면보다는 통짜로라도 보여준다.
-              : <NoteMarkdown markdown={markdown} />}
+              : <Markdown className="note-markdown" markdown={markdown} />}
 
           {/* 정제본으로 바뀐 뒤에는 더 자라지 않는다 — 계속 기다리게 두면 안 된다. */}
           {live && note?.status === 'CAPTURING' && (

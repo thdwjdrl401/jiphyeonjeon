@@ -1,5 +1,6 @@
 import { memo } from 'react'
 import yeongsilImage from '@/assets/yeongsil.png'
+import Markdown from '@/shared/ui/Markdown'
 import AiEvidenceList from './AiEvidenceList'
 import type { AiConversationTurn } from './aiConversation'
 
@@ -32,11 +33,24 @@ function AiChatTurn({ turn, onRetry, onSeek }: AiChatTurnProps) {
         <img className="ai-turn__avatar" src={yeongsilImage} alt="" aria-hidden="true" />
         <div className={`ai-bubble ai-bubble--ai ai-answer${isStreaming ? ' is-streaming' : ''}`}>
           <span className="visually-hidden">AI 답변</span>
-          {/* 스트리밍 중에는 스크린리더가 조각마다 읽지 않도록 polite로 두고, 끝난 뒤 전문이 남는다.
-              텍스트가 아직 없어도 스트리밍이면 비워 둔 채 먼저 그린다 — live 영역이 뒤늦게 생기면 안 읽힌다. */}
+          {/* 모델은 Markdown으로 답한다 — 계약에 형식 제약이 없어(`answer.delta.text`) 목록·굵게·표가
+              그대로 온다. 평문으로 찍던 동안 `**이것**`이 별표째 보였다.
+
+              스트리밍 중에도 계속 그린다. "끝난 뒤에 한 번에 바꾸기"가 안전해 보이지만 더 나쁘다 —
+              튀는 것을 없애는 게 아니라 다 읽은 문단까지 마지막에 몰아서 재배치한다. 계속 그리면
+              아직 안 읽은 마지막 줄만 흔들린다. 비용은 문제가 아니다(답변이 수천 자 안쪽이고 이 컴포넌트가
+              memo라 지난 턴은 다시 그리지 않는다). */}
           {(isStreaming || turn.text.length > 0) && (
-            <p aria-live="polite" aria-busy={isStreaming}>{turn.text}</p>
+            <div className="ai-answer__body" aria-busy={isStreaming}>
+              <Markdown markdown={turn.text} />
+            </div>
           )}
+          {/* 본문을 live 영역에 두지 않는다. 평문일 때는 글자가 덧붙기만 해서 polite로 흘려도 됐지만,
+              Markdown은 굵게가 닫히거나 표가 서는 순간 그 부분이 통째로 갈린다 — live 영역이면
+              스크린리더가 답변을 처음부터 다시 읽는다. 완성됐다는 사실만 한 번 알리고 본문은 직접 읽게 한다. */}
+          <span aria-live="polite" className="visually-hidden">
+            {!isStreaming && turn.text.length > 0 ? '답변이 완성되었습니다.' : ''}
+          </span>
           {isStreaming && (
             <small className="ai-answer__pending"><i aria-hidden="true" />답변을 작성하고 있습니다…</small>
           )}
