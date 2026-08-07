@@ -555,6 +555,15 @@ function normalizeAiAnswerSources(raw: unknown): AiAnswerSource[] {
         excerpt: readExcerpt(source.excerpt),
       }]
     }
+    if (source?.type === 'ANNOTATION') {
+      return [{
+        type: 'ANNOTATION',
+        highlightId: String(source.highlightId ?? ''),
+        sessionId: String(source.sessionId ?? ''),
+        sessionMs: Number(source.sessionMs ?? 0),
+        excerpt: readExcerpt(source.excerpt),
+      }]
+    }
     return []
   })
 }

@@ -90,6 +90,21 @@ export default function AiEvidenceList({
                 <Excerpt text={source.excerpt} />
               </li>
             )
+            : source.type === 'ANNOTATION'
+            ? (
+              <li className="evidence-card" key={`annotation-${source.highlightId}`}>
+                {/* sessionMs는 다시보기 축(ADR-0043 §6)이라 v2에서만 이동을 준다. */}
+                {source.timeAxis === 'PLAYBACK' && onSeek
+                  ? (
+                    <button className="evidence-card__seek" onClick={() => onSeek(source.sessionMs)} type="button">
+                      {formatStreamElapsed(source.sessionMs)}
+                    </button>
+                  )
+                  : <strong>{formatStreamElapsed(source.sessionMs)}</strong>}
+                <span className="evidence-card__kind">강사 강조</span>
+                <Excerpt text={source.excerpt} />
+              </li>
+            )
             : (
               <li className="evidence-card" key={`caption-${source.sttSessionId}-${source.startMs}-${source.endMs}`}>
                 {/* 플레이어와 같은 축(timeAxis=PLAYBACK)일 때만 이동을 준다. STT 스트림 축은 눌러도
