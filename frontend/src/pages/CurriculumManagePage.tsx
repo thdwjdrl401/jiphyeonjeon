@@ -269,6 +269,21 @@ function CurriculumManageEditor({
     if (saveErrorToastRef.current) toast.dismiss(saveErrorToastRef.current.id)
     saveErrorToastRef.current = { id: toast.error(message, 0), message }
   }, [toast])
+  /**
+   * 저장 성공도 <b>토스트로</b> 알린다. 헤더에 "자동 저장됨"으로 남겨 두면 두 가지가 나빴다 —
+   * 글자 길이가 상태마다 달라 옆에 선 버튼이 밀렸고, 저장이 끝난 지 한참 뒤에도 계속 떠 있어
+   * 방금 저장됐다는 뜻인지 알 수 없었다.
+   *
+   * <p><b>겹쳐 쌓지 않는다.</b> 자동 저장은 편집 중(디바운스 1초)에도 도므로 제목 한 줄을 치는
+   * 동안에도 여러 번 성공한다. 앞의 것을 치우고 다시 띄워 항상 한 장만 남긴다 — 실패 토스트가
+   * 같은 이유로 이미 그렇게 한다.
+   */
+  const savedToastRef = useRef<number | null>(null)
+  const reportSaved = useCallback(() => {
+    setAutosave('saved')
+    if (savedToastRef.current !== null) toast.dismiss(savedToastRef.current)
+    savedToastRef.current = toast.success('저장되었습니다.')
+  }, [toast])
   const clearSaveError = useCallback(() => {
     if (!saveErrorToastRef.current) return
     toast.dismiss(saveErrorToastRef.current.id)
@@ -397,7 +412,7 @@ function CurriculumManageEditor({
       setMaterials((current) => mergeCurriculumMaterials(result.materials, current))
       setStructureVersion(result.structureVersion)
       savedSignatureRef.current = signature
-      setAutosave('saved')
+      reportSaved()
       clearSaveError()   // 다시 저장됐다 — 떠 있던 실패 토스트를 치운다
       syncCacheAfterSave(result)
       // 사이드바 등 다른 화면이 최신 구조를 읽도록.
@@ -432,7 +447,7 @@ function CurriculumManageEditor({
       }
     }
   }, [curriculumId, curriculumInfo, periodPatch, sections, materials, currentSignature, queryClient, syncCacheAfterSave,
-    reportSaveError, clearSaveError])
+    reportSaveError, reportSaved, clearSaveError])
 
   // 변경 후 디바운스 자동저장. 첫 렌더에서는 현재 상태를 "저장됨"으로 기록만 하고 저장하지 않는다.
   useEffect(() => {
@@ -525,7 +540,7 @@ function CurriculumManageEditor({
         saved = await deleteCurriculumThumbnail(curriculumId)
       }
       setThumbnailUrl(saved.thumbnailUrl)
-      setAutosave('saved')
+      reportSaved()
       clearSaveError()
       syncCachedCurriculum((current) => ({ ...current, thumbnailUrl: saved.thumbnailUrl }))
     } catch (error) {
@@ -806,7 +821,23 @@ function CurriculumManageEditor({
       <PageHeader
         title={curriculumInfo.title || '새 커리큘럼 초안'}
         description="기본 정보, 수강생, 섹션과 강의 편성을 관리합니다."
-        action={<div className="header-action-group"><Link className="button button--soft" to={publicPaths.curriculum(curriculumId)}>커리큘럼 상세</Link><span className="autosave-status" role="status" aria-live="polite">{autosave === 'saving' ? '자동 저장 중…' : autosave === 'saved' ? '자동 저장됨' : autosave === 'error' ? '저장 실패' : '변경 사항이 자동 저장됩니다'}</span></div>}
+        /*
+         * 상태를 <b>버튼 왼쪽</b>에 둔다. 헤더 액션 블록은 오른쪽 끝에 붙으므로(.workspace-page-header가
+         * space-between), 버튼이 마지막이면 버튼의 오른쪽 모서리가 고정돼 상태 글자가 길어지거나
+         * 짧아져도 움직이지 않는다. 예전에는 버튼이 먼저라 상태가 바뀔 때마다 버튼이 좌우로 밀렸다.
+         *
+         * 성공은 여기 남기지 않는다 — 토스트로 간다(reportSaved). 저장이 끝난 지 한참 뒤에도 계속
+         * 떠 있으면 방금 저장됐다는 뜻인지 알 수 없다. "변경 사항이 자동 저장됩니다"도 지웠다:
+         * 아무 일도 없을 때 자리를 차지하며 아무것도 알려 주지 않았다.
+         */
+        action={(
+          <div className="header-action-group">
+            <span className="autosave-status" role="status" aria-live="polite">
+              {autosave === 'saving' ? '저장 중…' : autosave === 'error' ? '저장 실패' : ''}
+            </span>
+            <Link className="button button--soft" to={publicPaths.curriculum(curriculumId)}>커리큘럼 상세</Link>
+          </div>
+        )}
       />
       <div className="curriculum-manage__toolbar">
         <div className="curriculum-manage__summary" role="group" aria-label="커리큘럼 관리 요약">

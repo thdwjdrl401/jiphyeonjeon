@@ -1604,7 +1604,8 @@ body {
 .mic-meter__label { color: var(--ink-700); font-size: .72rem; font-weight: 600; }
 .mic-meter__verdict { color: var(--ink-500); font-size: .66rem; }
 .mic-meter--heard .mic-meter__verdict { color: var(--green-700); font-weight: 600; }
-.mic-meter__bar { display: flex; gap: 3px; height: 14px; }
+/* 칸이 24개라 간격을 줄인다 — 3px면 좁은 패널에서 칸보다 틈이 넓어진다. */
+.mic-meter__bar { display: flex; gap: 2px; height: 16px; }
 .mic-meter__bar i { flex: 1; background: var(--ink-100); }
 .mic-meter__bar i.is-lit { background: var(--ink-700); }
 .mic-meter--heard .mic-meter__bar i.is-lit { background: var(--green-700); }

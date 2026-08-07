@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, waitForElementToBeRemoved, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '@/App'
@@ -418,7 +418,7 @@ describe('커리큘럼 작업 화면', () => {
 
     // 디바운스 자동 저장이 새 섹션에 실제 id를 부여하면 "강의 추가"가 링크로 바뀐다.
     await waitFor(() => {
-      expect(screen.getByText('자동 저장됨')).toBeInTheDocument()
+      expect(screen.getByText('저장되었습니다.')).toBeInTheDocument()
     })
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: '녹화강의 업로드' })).not.toBeInTheDocument()
@@ -909,7 +909,7 @@ describe('커리큘럼 작업 화면', () => {
     const dialog = await loadCropSource()
     await user.click(within(dialog).getByRole('button', { name: '이 범위로 등록' }))
 
-    await waitFor(() => expect(screen.getByText('자동 저장됨')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('저장되었습니다.')).toBeInTheDocument())
     await waitFor(() => expect(screen.getByAltText('대표 이미지 미리보기')).toHaveAttribute(
       'src', expect.stringContaining('data:image/jpeg'),
     ))
@@ -1030,7 +1030,12 @@ describe('커리큘럼 작업 화면', () => {
       type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
     })
     await user.upload(screen.getByLabelText('커리큘럼 강의 자료 등록'), material)
-    await waitFor(() => expect(screen.getByText('자동 저장됨')).toBeInTheDocument())
+    /*
+     * 성공 토스트는 저장할 때마다 <b>새로 만들어진다</b>(앞의 것을 치우고 다시 띄운다). 그래서 두 번째
+     * 저장을 기다릴 때 문구만 보면 <b>앞 저장의 토스트에 곧바로 통과</b>해, 아직 저장되지 않은 상태로
+     * 다음 단언에 들어간다. 앞 토스트가 사라지는 것까지 확인해 "이번 저장"을 구분한다.
+     */
+    const firstSaved = await screen.findByText('저장되었습니다.')
 
     // 커리큘럼 상세로 나갔다가 관리로 되돌아온다 — 실제 동선이고, 같은 QueryClient를 공유한다.
     await user.click(screen.getByRole('link', { name: '커리큘럼 상세' }))
@@ -1041,7 +1046,8 @@ describe('커리큘럼 작업 화면', () => {
 
     // 삭제도 같은 문제의 반대 방향이었다 — 지운 자료가 되돌아왔을 때 되살아나 보였다.
     await user.click(screen.getByRole('button', { name: 'cache-sync-guide.pptx 제거' }))
-    await waitFor(() => expect(screen.getByText('자동 저장됨')).toBeInTheDocument())
+    await waitForElementToBeRemoved(firstSaved)
+    expect(await screen.findByText('저장되었습니다.')).toBeInTheDocument()
 
     await user.click(screen.getByRole('link', { name: '커리큘럼 상세' }))
     await user.click(await screen.findByRole('button', { name: '관리하기' }))
@@ -1049,6 +1055,35 @@ describe('커리큘럼 작업 화면', () => {
 
     expect(await screen.findByRole('heading', { name: '커리큘럼 강의 자료' })).toBeInTheDocument()
     expect(screen.queryByText('cache-sync-guide.pptx')).not.toBeInTheDocument()
+  })
+
+  /**
+   * 헤더의 저장 상태가 <b>"커리큘럼 상세" 버튼을 밀지 않는다.</b>
+   *
+   * <p>헤더 액션 블록은 오른쪽 끝에 붙는다(`.workspace-page-header`가 space-between). 버튼이
+   * 상태보다 <b>앞에</b> 있으면 상태 글자가 길어질 때마다 버튼이 왼쪽으로 밀려, 편집 중에 버튼이
+   * 계속 움직였다. 버튼을 마지막에 두면 오른쪽 모서리가 고정된다.
+   */
+  it('저장 상태가 바뀌어도 커리큘럼 상세 버튼이 밀리지 않는다', async () => {
+    const user = userEvent.setup()
+    await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
+    await user.click(await screen.findByRole('tab', { name: '기본 정보' }))
+
+    const group = screen.getByRole('link', { name: '커리큘럼 상세' }).parentElement
+    const lastChild = () => group?.lastElementChild
+    expect(lastChild()).toHaveAccessibleName('커리큘럼 상세')
+
+    // 아무 일도 없을 때는 아무 말도 하지 않는다 — "변경 사항이 자동 저장됩니다"를 지웠다.
+    expect(screen.queryByText(/자동 저장됩니다/)).not.toBeInTheDocument()
+    expect(screen.queryByText('자동 저장됨')).not.toBeInTheDocument()
+
+    fireEvent.change(screen.getByDisplayValue('라이브로 완성하는 Spring Boot'), {
+      target: { value: '헤더가 흔들리지 않는 커리큘럼' },
+    })
+    await waitFor(() => expect(screen.getByText('저장되었습니다.')).toBeInTheDocument())
+
+    // 저장이 오가는 동안에도 버튼은 여전히 마지막이다.
+    expect(lastChild()).toHaveAccessibleName('커리큘럼 상세')
   })
 
   it('내 커리큘럼 카드에서 제목 첫 글자 대신 대표 이미지를 표시한다', async () => {
@@ -1118,7 +1153,7 @@ describe('커리큘럼 작업 화면', () => {
     const newEndsAt = localDateInDays(30)
     fireEvent.change(screen.getByLabelText('운영 종료일'), { target: { value: newEndsAt } })
 
-    await waitFor(() => expect(screen.getByText('자동 저장됨')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('저장되었습니다.')).toBeInTheDocument())
     expect(getMockCurriculum('cur-spring-live')?.period?.endsAt).toBe(toIsoAtEndOfDayOrNull(newEndsAt))
   })
 
@@ -1138,7 +1173,7 @@ describe('커리큘럼 작업 화면', () => {
     fireEvent.change(title, { target: { value: '기간을 고치는 중인 커리큘럼' } })
 
     expect(await screen.findByText(/운영 시작일과 종료일을 함께 입력해 주세요/)).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByText('자동 저장됨')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('저장되었습니다.')).toBeInTheDocument())
     // 제목은 저장됐고, 기간은 건드리지 않았다(PATCH의 null = 변경 안 함).
     expect(getMockCurriculum('cur-spring-live')?.title).toBe('기간을 고치는 중인 커리큘럼')
     expect(getMockCurriculum('cur-spring-live')?.period).toEqual(before)
