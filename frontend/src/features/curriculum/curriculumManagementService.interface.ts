@@ -134,6 +134,12 @@ export interface CurriculumManagementService {
   getCurriculumManagementStructure: (curriculumId: string) => Promise<CurriculumManagementSection[]>
   saveCurriculumManagement: (request: SaveCurriculumManagementRequest) => Promise<SaveCurriculumManagementResult>
   publishCurriculum: (curriculumId: string) => Promise<void>
+  /**
+   * 보관: PUBLISHED → ARCHIVED. 카탈로그에서 내려가 신규 수강신청이 막힌다.
+   * <b>되돌릴 수 없다</b> — 서버에 ARCHIVED에서 나가는 전이가 없다.
+   * 이미 듣던 수강생은 계속 볼 수 있다(서버가 접근을 막지 않는다).
+   */
+  archiveCurriculum: (curriculumId: string) => Promise<void>
   /** 초안(DRAFT)만 삭제할 수 있다. 공개·보관 상태면 서버가 409 CURRICULUM_STATE_CONFLICT로 거절한다. */
   deleteCurriculum: (curriculumId: string) => Promise<void>
   deleteLesson: (lessonId: string) => Promise<void>

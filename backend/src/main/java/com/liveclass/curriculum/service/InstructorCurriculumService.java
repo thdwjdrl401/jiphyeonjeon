@@ -220,13 +220,19 @@ public class InstructorCurriculumService {
     @Transactional
     public Curriculum publish(UUID instructorId, UUID curriculumId) {
         Curriculum curriculum = requireOwned(instructorId, curriculumId);
-        if (curriculum.getLifecycleStatus() != CurriculumLifecycleStatus.DRAFT) {
-            throw new CurriculumStateConflictException("DRAFT 상태에서만 발행할 수 있습니다.");
+        if (curriculum.getLifecycleStatus() == CurriculumLifecycleStatus.PUBLISHED) {
+            throw new CurriculumStateConflictException("이미 공개된 커리큘럼입니다.");
         }
         requirePublishableStructure(curriculumId);
+        boolean restoring = curriculum.getLifecycleStatus() == CurriculumLifecycleStatus.ARCHIVED;
         curriculum.setLifecycleStatus(CurriculumLifecycleStatus.PUBLISHED);
-        curriculum.setPublishedAt(OffsetDateTime.now());
-        log.info(Audit.MARKER, "커리큘럼 발행 curriculumId={} instructorId={}", curriculumId, instructorId);
+        // 최초 공개 시각은 보존한다. 보관했다 되돌릴 때마다 갱신하면 "언제부터 공개된 강의인가"를
+        // 잃는다 — 그 값으로 정렬·표기하는 화면이 순서가 뒤집힌다.
+        if (curriculum.getPublishedAt() == null) {
+            curriculum.setPublishedAt(OffsetDateTime.now());
+        }
+        log.info(Audit.MARKER, "커리큘럼 {} curriculumId={} instructorId={}",
+                restoring ? "보관 해제" : "발행", curriculumId, instructorId);
         return curriculum;
     }
 
@@ -288,7 +294,15 @@ public class InstructorCurriculumService {
         }
     }
 
-    /** 보관: PUBLISHED → ARCHIVED. 카탈로그에서 내려간다. 되돌리기·삭제 정책은 범위 밖. */
+    /**
+     * 보관: PUBLISHED → ARCHIVED. 카탈로그에서 내려가 신규 수강신청이 막힌다.
+     *
+     * <p><b>이미 듣던 수강생은 그대로 볼 수 있다</b> — 접근 판정이 커리큘럼 상태를 보지 않는다
+     * (CatalogService: "듣던 강의는 계속 열려야 한다"). 보관은 "내리는 것"이지 "끊는 것"이 아니다.
+     *
+     * <p>되돌릴 수 있다 — {@link #publish}가 ARCHIVED도 받는다. 보관이 잃는 데이터가 없으므로
+     * 한 방향으로 잠글 이유가 없다. 화면은 이 둘을 스위치 하나로 보여 준다.
+     */
     @Transactional
     public Curriculum archive(UUID instructorId, UUID curriculumId) {
         Curriculum curriculum = requireOwned(instructorId, curriculumId);
