@@ -1,5 +1,6 @@
 import { useRef } from 'react'
 import { useAuth } from '@/features/auth/AuthContext'
+import DemoTransport from './DemoTransport'
 import { useInstructorLiveKit } from './useInstructorLiveKit'
 
 /**
@@ -47,6 +48,8 @@ export default function DemoPublishControl() {
             : '카메라 대신 미리 녹화한 mp4를 송출합니다. 자막·녹화·AI는 평소대로 동작합니다.'}
         </small>
       </div>
+      {/* 시작 전에 원하는 지점으로 맞춰 두고 들어갈 수 있어야 한다. */}
+      <DemoTransport />
       <div className="demo-publish__actions">
         <button
           className="button button--soft button--small"

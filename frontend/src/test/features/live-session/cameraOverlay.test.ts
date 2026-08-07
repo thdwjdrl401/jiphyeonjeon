@@ -24,18 +24,18 @@ describe('카메라 오버레이 계약', () => {
   })
 
   it('캔버스를 벗어나지 않게 접는다', () => {
-    const pushedOut = clampOverlay({ visible: true, x: 0.95, y: 0.95, w: 0.3 })
+    const pushedOut = clampOverlay({ visible: true, mirrored: true, x: 0.95, y: 0.95, w: 0.3 })
     expect(pushedOut.x).toBeCloseTo(0.7, 5)
     expect(pushedOut.y).toBeCloseTo(1 - overlayHeight(0.3), 5)
   })
 
   it('너무 작거나 큰 폭을 범위 안으로 되돌린다', () => {
-    expect(clampOverlay({ visible: true, x: 0, y: 0, w: 0.01 }).w).toBe(MIN_OVERLAY_WIDTH)
-    expect(clampOverlay({ visible: true, x: 0, y: 0, w: 0.9 }).w).toBe(MAX_OVERLAY_WIDTH)
+    expect(clampOverlay({ visible: true, mirrored: true, x: 0, y: 0, w: 0.01 }).w).toBe(MIN_OVERLAY_WIDTH)
+    expect(clampOverlay({ visible: true, mirrored: true, x: 0, y: 0, w: 0.9 }).w).toBe(MAX_OVERLAY_WIDTH)
   })
 
   it('metadata로 왕복해도 값이 유지된다', () => {
-    const overlay = { visible: false, x: 0.1, y: 0.2, w: 0.3 }
+    const overlay = { visible: false, mirrored: false, x: 0.1, y: 0.2, w: 0.3 }
     expect(parseCameraOverlay(withCameraOverlay(null, overlay))).toEqual(overlay)
   })
 
@@ -60,8 +60,34 @@ describe('카메라 오버레이 계약', () => {
     expect(parseCameraOverlay(metadata)).toEqual(DEFAULT_CAMERA_OVERLAY)
   })
 
+  /**
+   * 뒤집기는 <b>강사 화면과 Egress가 같이 알아야</b> 하는 값이라 배치와 같은 통로로 싣는다(ADR-0100).
+   *
+   * <p>웹캠은 거울이 맞지만 <b>파일 송출은 아니다</b> — 미리 녹화한 영상을 뒤집으면 화면 속 글자가
+   * 반전된 채 HLS·녹화에 들어가 VOD에 영구히 남는다. 강사 화면만 고치면 강사는 멀쩡해 보이는데
+   * 수강생만 반전을 본다.
+   */
+  it('뒤집기를 metadata로 실어 나른다', () => {
+    const notMirrored = { visible: true, mirrored: false, x: 0.7, y: 0.6, w: 0.25 }
+    expect(parseCameraOverlay(withCameraOverlay(null, notMirrored)).mirrored).toBe(false)
+    expect(parseCameraOverlay(withCameraOverlay(null, { ...notMirrored, mirrored: true })).mirrored).toBe(true)
+  })
+
+  /**
+   * 이 키가 생기기 전 세션은 metadata에 `mirrored`가 없다. 그때 뒤집지 않으면 <b>진행 중인 강의의
+   * 카메라가 갑자기 좌우로 뒤집힌다</b> — 없으면 지금까지의 동작(거울)으로 읽는다.
+   */
+  it('mirrored가 없는 옛 metadata는 거울로 읽는다', () => {
+    const legacy = JSON.stringify({ cameraOverlay: { visible: true, x: 0.7, y: 0.6, w: 0.25 } })
+    expect(parseCameraOverlay(legacy).mirrored).toBe(true)
+  })
+
+  it('기본값은 거울이다 — 웹캠이 기본 송출이다', () => {
+    expect(DEFAULT_CAMERA_OVERLAY.mirrored).toBe(true)
+  })
+
   it('저장할 때도 범위를 벗어난 값을 접는다', () => {
-    const stored = JSON.parse(withCameraOverlay(null, { visible: true, x: 2, y: -1, w: 5 })) as {
+    const stored = JSON.parse(withCameraOverlay(null, { visible: true, mirrored: true, x: 2, y: -1, w: 5 })) as {
       cameraOverlay: { x: number; y: number; w: number }
     }
     expect(stored.cameraOverlay.w).toBe(MAX_OVERLAY_WIDTH)

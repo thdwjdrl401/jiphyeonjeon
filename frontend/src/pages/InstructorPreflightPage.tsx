@@ -170,6 +170,8 @@ export default function InstructorPreflightPage() {
                   className="camera-preview__video"
                   fit="contain"
                   label="사전 점검 카메라 미리보기"
+                  // 웹캠은 거울, 데모 파일은 그대로 — 실제로 나가는 화면과 같아야 확인이 된다.
+                  mirrored={publisher.cameraOverlay.mirrored}
                   track={cameraTrack}
                 />
                 <span className="camera-preview__status">카메라 미리보기 송출 중</span>

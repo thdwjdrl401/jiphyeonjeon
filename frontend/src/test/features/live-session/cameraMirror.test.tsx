@@ -103,7 +103,10 @@ describe('합성 캔버스의 반전 범위', () => {
   const learningCss = readFileSync(resolve(process.cwd(), 'src/styles/learning.css'), 'utf8')
 
   it('카메라 트랙만 뒤집는다', () => {
-    expect(ruleBody(egressCss, '.egress-stage__camera')).toContain('transform: scaleX(-1)')
+    // 뒤집기는 이제 조건부다 — 웹캠은 거울, 파일 송출은 그대로(ADR-0100).
+    expect(ruleBody(egressCss, '.egress-stage__camera.is-mirrored')).toContain('transform: scaleX(-1)')
+    // 조건 없는 규칙에는 남아 있으면 안 된다. 남으면 파일 송출도 뒤집혀 VOD에 영구히 남는다.
+    expect(ruleBody(egressCss, '.egress-stage__camera')).not.toContain('transform')
   })
 
   it('화면공유와 캔버스 자체는 뒤집지 않는다', () => {

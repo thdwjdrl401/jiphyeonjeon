@@ -339,6 +339,27 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
   overlayRef.current = cameraOverlay
 
   /**
+   * 좌우 뒤집기를 켜고 끈다. <b>강사 화면과 Egress에 동시에</b> 반영해야 한다.
+   *
+   * <p>웹캠은 뒤집고 파일은 뒤집지 않는다(ADR-0100) — 미리 녹화한 영상은 거울상이 아니라서,
+   * 뒤집으면 화면 속 글자가 반전된 채 <b>녹화·VOD에 영구히 남는다</b>. 강사 화면만 고치면 강사는
+   * 멀쩡해 보이는데 수강생만 반전을 본다.
+   *
+   * <p>드래그용 발행({@link flushCameraOverlay})과 달리 프레임으로 묶지 않는다 — 이건 송출을 켜고
+   * 끌 때 한 번씩만 일어나므로 묶을 것이 없고, 곧바로 나가야 첫 프레임부터 방향이 맞는다.
+   */
+  const applyOverlayMirrored = useCallback(async (room: Room | null, mirrored: boolean) => {
+    const merged = clampOverlay({ ...overlayRef.current, mirrored })
+    overlayRef.current = merged
+    setCameraOverlay(merged)
+    if (!room || room.state !== 'connected') return
+    const participant = room.localParticipant
+    await participant
+      .setMetadata(withCameraOverlay(participant.metadata, merged))
+      .catch((error) => { console.warn('카메라 방향을 합성 화면에 전달하지 못했습니다', error) })
+  }, [])
+
+  /**
    * 판서 op 번호. state가 아니라 ref다 — op를 낼 때마다 렌더를 유발하면 획을 그을 때마다 강사 화면
    * 전체가 다시 그려진다.
    */
@@ -428,6 +449,8 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
     if (demoPublishState().armed) {
       try {
         await publishDemoTracks(room, qualityRef.current)
+        // 파일은 거울상이 아니다. 트랙을 올리자마자 방향을 알려 첫 프레임부터 맞춘다.
+        await applyOverlayMirrored(room, false)
       } catch (error) {
         if (!alive()) return
         setMediaFailure(demoMediaFailure(error))
@@ -470,7 +493,7 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
     }
 
     if (alive()) syncLocalState(room)
-  }, [setMediaFailure, syncLocalState])
+  }, [applyOverlayMirrored, setMediaFailure, syncLocalState])
 
   useEffect(() => {
     if (!sessionId) {
@@ -793,6 +816,7 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
         await room.localParticipant.setCameraEnabled(false)
         await room.localParticipant.setMicrophoneEnabled(false)
         await publishDemoTracks(room, qualityRef.current)
+        await applyOverlayMirrored(room, false)
         syncLocalState(room)
       }
       setDemoState(demoPublishState())
@@ -802,7 +826,7 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
     } finally {
       setPendingControl(null)
     }
-  }, [setMediaFailure, syncLocalState])
+  }, [applyOverlayMirrored, setMediaFailure, syncLocalState])
 
   /** 데모를 끄고 평소 장치로 돌아간다. 시연 뒤 정리이자, 잘못 켰을 때의 탈출구다. */
   const stopDemoPublish = useCallback(async () => {
@@ -817,11 +841,13 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
       }
       disarmDemoPublish()
       setDemoState(demoPublishState())
+      // 웹캠으로 돌아가면 다시 거울이다. 되돌리지 않으면 강사가 자기 얼굴을 뒤집힌 채로 본다.
+      await applyOverlayMirrored(room, true)
       if (room && room.state === 'connected') await openLocalDevices(room, ['microphone', 'camera'])
     } finally {
       setPendingControl(null)
     }
-  }, [openLocalDevices])
+  }, [applyOverlayMirrored, openLocalDevices])
 
   /**
    * 품질 변경을 즉시 반영한다. Room을 다시 만들면 연결이 끊기므로, 이미 올라간 트랙만
