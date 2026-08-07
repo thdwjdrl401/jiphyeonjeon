@@ -12,6 +12,7 @@ import { useWatchTracking } from '@/features/live-session/useWatchTracking'
 import { mergeLectureNote } from '@/features/live-session/lectureNoteMerge'
 import { attachGlossary } from '@/features/live-session/glossaryView'
 import CaptionDock from '@/features/live-session/CaptionDock'
+import DemoPublishBanner from '@/features/live-session/DemoPublishBanner'
 import {
   emptyCaptionStreamState,
   reduceCaptionStream,
@@ -607,6 +608,12 @@ export default function LiveClassroomPage() {
           </div>
         </div>
       )}
+
+      {/*
+        데모로 송출 중이면 그 사실을 강의 내내 띄운다(ADR-0100). 화면이 평소와 똑같아서, 말해 주지
+        않으면 진짜 수업에 켜 둔 채 들어간 것을 알아챌 방법이 없다. 강사에게만 보인다.
+      */}
+      {isInstructor && <DemoPublishBanner />}
 
       {!isInstructor && session.status === 'ENDING' && (
         <div className="live-session-state-banner" role="status">
