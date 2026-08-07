@@ -78,11 +78,21 @@ describe('종료 후 처리 현황 화면', () => {
     expect(await screen.findByText(/아직 수강생에게 공개하지 않았습니다/)).toBeInTheDocument()
   })
 
-  it('게시까지 끝나면 다시보기로 자동 이동한다', async () => {
+  /**
+   * 게시까지 끝나도 <b>이 화면에 머문다.</b> 예전에는 다시보기로 자동 이동했는데, 그건 강의를
+   * 종료하면 여기로 끌려와 대기하던 옛 동선을 위한 것이었다. [ADR-0092]가 그 자동 진입을 없앤
+   * 뒤로 이 화면에 오는 사람은 <b>일부러 온 사람</b>뿐이라, 자동 이동은 그 사람을 쫓아낼 뿐이다
+   * — 강의 상세의 배지를 눌러 들어오면 들어오자마자 튕겨 나갔다.
+   */
+  it('게시까지 끝나도 화면에 머물고, 다시보기는 링크로 열어 준다', async () => {
     getProcessingStatus.mockResolvedValue(processing({ status: 'READY', replayStatus: 'PUBLISHED' }))
     renderPage()
 
-    expect(await screen.findByRole('heading', { name: '다시보기 도착' })).toBeInTheDocument()
+    // 끝난 녹화의 단계 기록을 여기서 볼 수 있어야 한다.
+    expect(await screen.findByRole('heading', { name: '영상 처리 단계' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '다시보기 도착' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'VOD 미리보기·검수' }))
+      .toHaveAttribute('href', expect.stringContaining('les-1'))
   })
 
   it('READY 전에는 검수로 가는 링크를 만들지 않는다', async () => {

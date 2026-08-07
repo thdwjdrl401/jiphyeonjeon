@@ -42,8 +42,12 @@ export interface ReplayBadgeView {
   label: string
   /** 아직 서버 상태가 움직이는 중인가 — 배지 안에서 원이 돈다. */
   busy: boolean
-  /** 눌렀을 때 갈 곳. 처리 단계를 봐야 하면 processing, 볼 게 있으면 replay. */
-  goTo: 'processing' | 'replay' | null
+  /**
+   * 눌렀을 때 갈 곳. <b>배지는 언제나 처리 화면으로</b> 간다 — 녹화가 어떻게 됐는지 보는 창이라는
+   * 역할이 끝까지 한결같다. 영상으로 가는 것은 옆의 "미리보기·검수" 버튼이 맡는다. 아직 상태를
+   * 못 읽었을 때만 null이다(어디로 보낼지 모르는 채로 링크를 걸지 않는다).
+   */
+  goTo: 'processing' | null
   /** 배지 옆에 적는 한 줄. 강사가 지금 뭘 할 수 있는지. */
   hint: string
 }
@@ -86,14 +90,14 @@ export function describeReplayBadge(
         tone: 'success',
         label: '다시보기 공개됨',
         busy: false,
-        goTo: 'replay',
+        goTo: 'processing',
         hint: '수강생이 지금 볼 수 있습니다.',
       }
       : {
         tone: 'warning',
         label: '검수 대기',
         busy: false,
-        goTo: 'replay',
+        goTo: 'processing',
         hint: '영상은 준비됐습니다. 검수 후 공개해 주세요.',
       }
   }
