@@ -12,6 +12,7 @@
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 확정 아키텍처 기준선(스택·플레인 분리·데이터플로우·도메인) |
 | [docs/CP-ROADMAP.md](docs/CP-ROADMAP.md) | 착수 순서·의존성·역할(T0 → CP0~CP5) |
 | [docs/CONTRACT.md](docs/CONTRACT.md) | 공유 계약(FE↔Spring, Spring↔AI) — SSOT |
+| [docs/api/](docs/api/) | REST API 레퍼런스(생성물) — 배포본은 `/api-docs/`. Swagger와 달리 호출 버튼이 없다 |
 | [docs/decisions/](docs/decisions/) | 기술 결정 ADR(0001~0014) |
 | [docs/harness/README.md](docs/harness/README.md) | 하네스(계약·판단·강제) 프로세스 |
 | [docs/TEAM-KICKOFF.md](docs/TEAM-KICKOFF.md) | 역할 배분·타임라인·협업 규칙 |
