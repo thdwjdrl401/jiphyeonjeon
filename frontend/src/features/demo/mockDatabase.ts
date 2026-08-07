@@ -294,8 +294,9 @@ export function deleteMockCurriculum(curriculumId: string) {
 export function publishMockCurriculum(curriculumId: string) {
   const curriculum = getMockCurriculum(curriculumId)
   if (!curriculum) throw new ApiError('커리큘럼을 찾을 수 없습니다.', 404, 'CURRICULUM_NOT_FOUND')
-  if (curriculum.lifecycleStatus !== 'DRAFT') {
-    throw new ApiError('DRAFT 상태에서만 발행할 수 있습니다.', 409, 'CURRICULUM_STATE_CONFLICT')
+  // 서버와 같이 ARCHIVED 도 받는다 — 보관은 되돌릴 수 있다.
+  if (curriculum.lifecycleStatus === 'PUBLISHED') {
+    throw new ApiError('이미 공개된 커리큘럼입니다.', 409, 'CURRICULUM_STATE_CONFLICT')
   }
   // 게시 선행 조건도 서버와 같게 본다(ADR-0006). mock이 느슨하면 "화면에선 됐는데 실서버에서
   // 409"가 되고, mock 검증이 정책 문제를 가린다 — ADR-0005에서 겪은 divergence와 같은 함정이다.
@@ -322,6 +323,19 @@ export function publishMockCurriculum(curriculumId: string) {
  * 한쪽만 넘어오면 나머지는 기존 값에서 가져온다. 관리 화면이 "둘 다 입력해야 저장"으로 막으므로
  * 실제로 반쪽이 들어오는 경로는 없고, 여기서는 값을 잃지 않는 쪽으로만 처리한다.
  */
+/**
+ * 커리큘럼 보관. 서버와 같은 규칙이다 — <b>PUBLISHED에서만</b> 가능하고, ARCHIVED에서 나가는
+ * 전이는 없다(되돌릴 수 없다). 카탈로그에서 내려갈 뿐 이미 듣던 수강생의 접근은 막지 않는다.
+ */
+export function archiveMockCurriculum(curriculumId: string) {
+  const curriculum = getMockCurriculum(curriculumId)
+  if (!curriculum) throw new ApiError('커리큘럼을 찾을 수 없습니다.', 404, 'CURRICULUM_NOT_FOUND')
+  if (curriculum.lifecycleStatus !== 'PUBLISHED') {
+    throw new ApiError('PUBLISHED 상태에서만 보관할 수 있습니다.', 409, 'CURRICULUM_STATE_CONFLICT')
+  }
+  curriculum.lifecycleStatus = 'ARCHIVED'
+}
+
 export function updateMockCurriculumPeriod(
   curriculumId: string,
   startsAt: string | null,

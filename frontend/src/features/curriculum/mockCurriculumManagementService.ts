@@ -5,6 +5,7 @@ import {
   deleteMockLesson,
   deleteMockSection,
   getMockCurriculum,
+  archiveMockCurriculum,
   publishMockCurriculum,
   putMockCurriculum,
   updateMockCurriculumMaterials,
@@ -226,6 +227,9 @@ export const mockCurriculumManagementService = {
   async publishCurriculum(curriculumId) {
     // 강의 상태는 그대로 둔다 — 실 서버와 같이 두 축은 독립이다(ADR-0002).
     publishMockCurriculum(curriculumId)
+  },
+  async archiveCurriculum(curriculumId) {
+    archiveMockCurriculum(curriculumId)
   },
   async deleteCurriculum(curriculumId) {
     deleteMockCurriculum(curriculumId)

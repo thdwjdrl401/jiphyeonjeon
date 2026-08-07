@@ -171,18 +171,19 @@ describe('커리큘럼 작업 화면', () => {
     expect(publishNotice.textContent).toContain('강의 7개')
     expect(screen.getByText('커리큘럼 비공개 · 강의 7개 — 게시해야 수강생에게 보입니다.')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: '커리큘럼 게시' }))
+    await user.click(screen.getByRole('switch', { name: '커리큘럼 공개' }))
 
     expect(await screen.findByText('커리큘럼 공개 중 · 강의 7개 — 카탈로그에서 검색·수강신청할 수 있습니다.')).toBeInTheDocument()
-    expect(screen.getByText('공개 중')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '게시 완료' })).toBeDisabled()
+    // 공개된 뒤에도 스위치는 살아 있다 — 다시 내릴 수 있고, 내린 것도 되돌릴 수 있다.
+    expect(screen.getByRole('switch', { name: '커리큘럼 공개' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('switch', { name: '커리큘럼 공개' })).toBeEnabled()
   })
 
   // 강의를 따로 게시하는 축이 없어졌으므로 '커리큘럼만 게시' 우회로도 없다.
   it('강의를 따로 게시하는 우회로를 두지 않는다', async () => {
     await renderAsInstructor('/instructor/curriculums/cur-architecture/manage')
 
-    expect(await screen.findByRole('button', { name: '커리큘럼 게시' })).toBeInTheDocument()
+    expect(await screen.findByRole('switch', { name: '커리큘럼 공개' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '커리큘럼만 게시' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /함께 게시/ })).not.toBeInTheDocument()
   })
@@ -201,11 +202,14 @@ describe('커리큘럼 작업 화면', () => {
     expect(after.flatMap((section) => section.lessons).every((lesson) => lesson.status === 'PUBLISHED')).toBe(true)
   })
 
-  it('이미 전부 공개된 커리큘럼은 게시 동작을 비활성한다', async () => {
+  /** 공개는 한 번 하면 끝이 아니다 — 스위치로 내렸다가 다시 올릴 수 있다. */
+  it('이미 공개된 커리큘럼은 스위치가 켜진 채 다시 내릴 수 있다', async () => {
     // cur-spring-live는 PUBLISHED 커리큘럼이고 시드 강의도 모두 PUBLISHED다.
     await renderAsInstructor('/instructor/curriculums/cur-spring-live/manage')
 
-    expect(await screen.findByRole('button', { name: '게시 완료' })).toBeDisabled()
+    const visibility = await screen.findByRole('switch', { name: '커리큘럼 공개' })
+    expect(visibility).toHaveAttribute('aria-checked', 'true')
+    expect(visibility).toBeEnabled()
     expect(screen.getByText('공개 중')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '커리큘럼만 게시' })).not.toBeInTheDocument()
   })
@@ -216,7 +220,7 @@ describe('커리큘럼 작업 화면', () => {
     const publishPanel = (await screen.findByRole('heading', { name: '커리큘럼 게시' })).closest('section')!
 
     expect(within(publishPanel).getByRole('button', { name: '커리큘럼 삭제' })).toBeInTheDocument()
-    expect(within(publishPanel).getByRole('button', { name: '커리큘럼 게시' })).toBeInTheDocument()
+    expect(within(publishPanel).getByRole('switch', { name: '커리큘럼 공개' })).toBeInTheDocument()
   })
 
   it('이미 공개된 커리큘럼에는 삭제 버튼을 두지 않는다', async () => {

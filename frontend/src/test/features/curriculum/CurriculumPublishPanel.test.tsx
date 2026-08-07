@@ -12,22 +12,36 @@ import { evaluatePublishReadiness } from '@/features/curriculum/publishPrecondit
  * 조건→버튼 상태→안내 문구의 대응이라 패널이 정확한 단위다.
  */
 const LIFECYCLE_DRAFT = { tone: 'warning' as const, label: '비공개', description: '게시해야 수강생에게 보입니다.' }
+const LIFECYCLE_PUBLISHED = { tone: 'success' as const, label: '공개 중', description: '카탈로그에서 검색·수강신청할 수 있습니다.' }
 
-function renderPanel(sectionCount: number, lessonCount: number, onPublish = vi.fn()) {
+interface PanelOptions {
+  isPubliclyVisible?: boolean
+  isChangingVisibility?: boolean
+  onPublish?: ReturnType<typeof vi.fn>
+  onArchive?: ReturnType<typeof vi.fn>
+}
+
+function renderPanel(sectionCount: number, lessonCount: number, options: PanelOptions = {}) {
+  const {
+    isPubliclyVisible = false, isChangingVisibility = false,
+    onPublish = vi.fn(), onArchive = vi.fn(),
+  } = options
   render(
     <CurriculumPublishPanel
-      isNewDraft
-      lifecycleView={LIFECYCLE_DRAFT}
+      isNewDraft={!isPubliclyVisible}
+      lifecycleView={isPubliclyVisible ? LIFECYCLE_PUBLISHED : LIFECYCLE_DRAFT}
       totalLessonCount={lessonCount}
       readiness={evaluatePublishReadiness(sectionCount, lessonCount)}
-      isPubliclyVisible={false}
+      isPubliclyVisible={isPubliclyVisible}
       onPublish={onPublish}
+      onArchive={onArchive}
+      isChangingVisibility={isChangingVisibility}
       canDelete={false}
       isDeleting={false}
       onDelete={vi.fn()}
     />,
   )
-  return { button: screen.getByRole('button', { name: '커리큘럼 게시' }), onPublish }
+  return { button: screen.getByRole('switch', { name: '커리큘럼 공개' }), onPublish, onArchive }
 }
 
 describe('커리큘럼 게시 카드', () => {
@@ -60,5 +74,31 @@ describe('커리큘럼 게시 카드', () => {
   it('게시 가능할 때는 비활성 사유를 tooltip에 남기지 않는다', () => {
     const { button } = renderPanel(1, 1)
     expect(button).not.toHaveAttribute('title')
+  })
+
+  it('공개 중이면 스위치가 켜져 있고 끄면 보관을 부른다', async () => {
+    const user = userEvent.setup()
+    const { button, onArchive } = renderPanel(2, 5, { isPubliclyVisible: true })
+
+    expect(button).toHaveAttribute('aria-checked', 'true')
+    await user.click(button)
+    expect(onArchive).toHaveBeenCalledTimes(1)
+  })
+
+  /**
+   * <b>낙관적으로 그리지 않는다.</b> 전환이 날아가 있는 동안 스위치는 서버가 확인해 준 상태를
+   * 그대로 두고 잠긴다 — 먼저 옮겨 놓고 실패 시 되돌리면, 그 사이 사용자는 성공했다고 믿는다.
+   */
+  it('전환 중에는 스위치를 잠그고 진행 중임을 알린다', async () => {
+    const { button, onArchive } = renderPanel(2, 5, { isPubliclyVisible: true, isChangingVisibility: true })
+
+    expect(button).toBeDisabled()
+    expect(button).toHaveAttribute('aria-busy', 'true')
+    // 상태는 아직 공개 중 그대로다(요청이 확인되기 전).
+    expect(button).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByText('내리는 중…')).toBeInTheDocument()
+
+    await userEvent.setup().click(button)
+    expect(onArchive).not.toHaveBeenCalled()
   })
 })

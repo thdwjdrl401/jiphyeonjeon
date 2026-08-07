@@ -68,6 +68,26 @@ class CurriculumLifecycleContractTest {
                 .andExpect(jsonPath("$.lifecycleStatus").value("ARCHIVED"));
     }
 
+    /**
+     * <b>보관은 되돌릴 수 있다.</b> 보관은 카탈로그에서 내리는 것뿐이고 수강생 접근도 그대로 두므로
+     * 잃는 데이터가 없다 — 한 방향으로 잠글 이유가 없다. 화면은 이 왕복을 스위치 하나로 보여 주는데,
+     * 서버가 다시 잠기면 스위치가 거짓말을 하게 된다.
+     */
+    @Test
+    void archived_can_be_published_again_and_keeps_the_first_published_at() throws Exception {
+        Cookie[] auth = loginAs("INSTRUCTOR");
+        String id = createPublishableCurriculum(auth, "보관 후 복귀");
+        String firstPublishedAt = json(write(post("/api/instructor/curriculums/" + id + "/publish"), auth, null)
+                .andExpect(status().isOk()).andReturn()).get("publishedAt").asString();
+        write(post("/api/instructor/curriculums/" + id + "/archive"), auth, null).andExpect(status().isOk());
+
+        write(post("/api/instructor/curriculums/" + id + "/publish"), auth, null)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.lifecycleStatus").value("PUBLISHED"))
+                // 최초 공개 시각은 보존한다 — 되돌릴 때마다 갱신하면 "언제부터 공개된 강의인가"를 잃는다.
+                .andExpect(jsonPath("$.publishedAt").value(firstPublishedAt));
+    }
+
     @Test
     void archiving_a_draft_returns_409() throws Exception {
         Cookie[] auth = loginAs("INSTRUCTOR");

@@ -17,6 +17,7 @@ import {
   deleteSection,
   getCurriculumManagementStructure,
   getInstructorCurriculum,
+  archiveCurriculum,
   publishCurriculum,
   saveCurriculumManagement,
   updateCurriculumThumbnail,
@@ -586,8 +587,34 @@ function CurriculumManageEditor({
    * (ADR-0002). 레슨에서 초안 상태가 없어졌으므로(ADR-0005) 공개 축이 커리큘럼 하나로 줄었고,
    * 이 버튼을 누르는 순간 커리큘럼과 그 안의 모든 강의가 함께 공개된다.
    */
+  /*
+   * 공개 전환이 날아가 있는 동안 스위치를 잠그고 도는 표시를 띄우기 위한 상태.
+   * 화면은 서버가 확인해 준 뒤에만 바뀐다 — 낙관적으로 먼저 옮기면 실패했을 때
+   * 켜졌다 되돌아가는 순간이 생기고, 그 사이 사용자는 성공했다고 믿는다.
+   */
+  const [isChangingVisibility, setChangingVisibility] = useState(false)
+
+  /** 공개를 내린다(보관). 되돌릴 수 있다 — 서버가 ARCHIVED에서 다시 공개를 받는다. */
+  const runArchive = async () => {
+    if (!isPubliclyVisible || isChangingVisibility) return
+    if (!window.confirm('공개를 내릴까요? 카탈로그에서 사라져 새로 수강신청할 수 없습니다. 이미 듣던 수강생은 계속 볼 수 있고, 다시 공개할 수 있습니다.')) return
+
+    setChangingVisibility(true)
+    try {
+      await archiveCurriculum(curriculumId)
+      invalidateAfterPublish()
+      toast.success('공개를 내렸습니다. 다시 공개할 수 있어요.')
+    } catch (error) {
+      // 서버가 거절한 이유가 가장 정확하다. 뭉개면 사용자가 같은 스위치를 계속 누른다.
+      invalidateAfterPublish()
+      toast.error(error instanceof ApiError ? error.message : '공개를 내리지 못했습니다.')
+    } finally {
+      setChangingVisibility(false)
+    }
+  }
+
   const runPublish = async () => {
-    if (!isNewDraft) return
+    if (isPubliclyVisible || isChangingVisibility) return
     // 버튼이 잠겨 있어도 한 번 더 본다 — 낡은 화면 상태로 요청이 새는 것을 막는다.
     if (!publishReadiness.canPublish) {
       toast.error(publishReadiness.reason ?? '아직 게시할 수 없습니다.')
@@ -601,6 +628,7 @@ function CurriculumManageEditor({
       return
     }
 
+    setChangingVisibility(true)
     try {
       await publishCurriculum(curriculumId)
       setAutosave('saved')
@@ -615,6 +643,8 @@ function CurriculumManageEditor({
         && (error.code === 'CURRICULUM_NOT_PUBLISHABLE' || error.code === 'CURRICULUM_STATE_CONFLICT')
       invalidateAfterPublish()
       toast.error(serverExplained ? (error as ApiError).message : '커리큘럼을 게시하지 못했습니다.')
+    } finally {
+      setChangingVisibility(false)
     }
   }
 
@@ -913,6 +943,8 @@ function CurriculumManageEditor({
                 readiness={publishReadiness}
                 isPubliclyVisible={isPubliclyVisible}
                 onPublish={() => void runPublish()}
+                onArchive={() => void runArchive()}
+                isChangingVisibility={isChangingVisibility}
                 canDelete={isNewDraft}
                 isDeleting={isDeleting}
                 onDelete={() => void removeCurriculum()}

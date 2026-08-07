@@ -8,7 +8,7 @@ export interface CurriculumLifecycleView {
 }
 
 interface CurriculumPublishPanelProps {
-  /** 아직 공개된 적 없는 초안인지. 게시 버튼을 열지 여기서 갈린다. */
+  /** 아직 공개된 적 없는 초안인지. 게시 안내를 띄울지 여기서 갈린다. */
   isNewDraft: boolean
   lifecycleView: CurriculumLifecycleView
   totalLessonCount: number
@@ -17,6 +17,10 @@ interface CurriculumPublishPanelProps {
   /** 공개 중인지. 커리큘럼 lifecycleStatus만으로 결정된다(ADR-0005). */
   isPubliclyVisible: boolean
   onPublish: () => void
+  /** 공개를 내린다(보관). 되돌릴 수 있다 — 서버가 ARCHIVED에서 다시 공개를 받는다. */
+  onArchive: () => void
+  /** 전환 요청이 날아가 있는 동안 true. 스위치를 잠그고 돌아가는 표시를 띄운다. */
+  isChangingVisibility: boolean
   /** 초안(DRAFT)만 삭제할 수 있다 — 공개된 적 있으면 서버가 409로 막는다(ADR-0001). */
   canDelete: boolean
   isDeleting: boolean
@@ -37,6 +41,8 @@ export default function CurriculumPublishPanel({
   readiness,
   isPubliclyVisible,
   onPublish,
+  onArchive,
+  isChangingVisibility,
   canDelete,
   isDeleting,
   onDelete,
@@ -62,14 +68,40 @@ export default function CurriculumPublishPanel({
           <p>{`커리큘럼 ${lifecycleView.label} · 강의 ${totalLessonCount}개 — ${lifecycleView.description}`}</p>
         </div>
         <div className="lifecycle-actions__buttons">
+          {/*
+            공개 여부를 스위치 하나로 다룬다. 켜면 공개(publish), 끄면 내림(archive)이고 둘 다
+            되돌릴 수 있다 — 서버가 ARCHIVED에서 다시 공개를 받는다.
+
+            **낙관적으로 그리지 않는다.** 스위치는 서버가 확인해 준 상태(isPubliclyVisible)만
+            비추고, 요청이 날아가 있는 동안에는 잠근 채 돌아가는 표시를 띄운다. 누른 순간 켜 놓고
+            나중에 되돌리면, 실패했는데 성공한 것처럼 보이는 순간이 생긴다.
+          */}
           <button
-            className="button button--primary"
+            className="visibility-switch"
             type="button"
-            disabled={!isNewDraft || !readiness.canPublish}
-            title={isNewDraft && !readiness.canPublish ? readiness.reason ?? undefined : undefined}
-            onClick={onPublish}
+            role="switch"
+            aria-checked={isPubliclyVisible}
+            aria-busy={isChangingVisibility}
+            aria-label="커리큘럼 공개"
+            disabled={isChangingVisibility || (!isPubliclyVisible && !readiness.canPublish)}
+            title={!isPubliclyVisible && !readiness.canPublish ? readiness.reason ?? undefined : undefined}
+            onClick={isPubliclyVisible ? onArchive : onPublish}
           >
-            {isNewDraft ? '커리큘럼 게시' : '게시 완료'}
+            {/*
+              라벨은 <b>조작 대상</b>을 가리킨다("공개"). 현재 상태는 옆의 상태 배지와 aria-checked가
+              말한다 — 라벨까지 "공개 중"으로 쓰면 같은 글자가 화면에 두 번 나와 어느 쪽이 버튼인지
+              흐려진다.
+            */}
+            <span className="visibility-switch__label">
+              {isChangingVisibility
+                ? (isPubliclyVisible ? '내리는 중…' : '공개하는 중…')
+                : '공개'}
+            </span>
+            <span className="visibility-switch__track" aria-hidden="true">
+              {isChangingVisibility
+                ? <span className="visibility-switch__spinner" />
+                : <span className="visibility-switch__thumb" />}
+            </span>
           </button>
         </div>
       </div>
