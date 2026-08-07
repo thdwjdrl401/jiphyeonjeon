@@ -20,6 +20,12 @@ interface ApiLessonView {
   status: LessonStatus
   deliveryType?: 'LIVE' | 'RECORDED'
   materials?: ApiLessonMaterial[]
+  // /lessons/{id}(수강생 조회)만 준다 — /instructor/lessons/{id}는 sectionId로 이미 커리큘럼 문맥이
+  // 정해져 있어 응답에 없다. 다시보기(ReplayLessonPage)처럼 호출자가 curriculumId를 모르는 화면이
+  // "강의 상세" 경로를 만들 때 이 값을 써야 한다(request.curriculumId에만 기대면 항상 빈 문자열이 된다).
+  curriculumId?: string
+  curriculumTitle?: string
+  sectionTitle?: string
   // 강사 레슨 조회(/instructor/lessons/{id})만 함께 준다. 공개 카탈로그는
   // PUBLISHED 커리큘럼만 보이므로 강사 저작 읽기는 강사 권한 축을 쓴다(BE ADR).
   liveSession?: {
@@ -140,18 +146,22 @@ export const httpLessonService = {
     }
 
     const { data: lesson } = await apiClient.get<ApiLessonView>(`/lessons/${request.lessonId}`)
+    // 레슨 응답이 이미 curriculumId를 준다(수강생 상세, LESSON-DETAIL-01). 다시보기처럼 호출자가
+    // curriculumId를 모르고 부르는 화면도 있으므로 request 값을 우선하지 말고 응답을 신뢰한다 —
+    // 그래야 "강의 상세" 링크가 /curriculums//sections/... 같은 빈 세그먼트로 깨지지 않는다.
+    const curriculumId = lesson.curriculumId ?? request.curriculumId ?? ''
 
-    let curriculumTitle = ''
-    let sectionTitle = ''
+    let curriculumTitle = lesson.curriculumTitle ?? ''
+    let sectionTitle = lesson.sectionTitle ?? ''
     let liveSession: LessonDetailView['liveSession'] = null
     let replayStatus: CurriculumReplayStatus = 'NOT_READY'
     let learning: LessonDetailView['learning'] = null
-    if (request.curriculumId) {
-      const { data: curriculum } = await apiClient.get<ApiCurriculumDetail>(`/curriculums/${request.curriculumId}`)
+    if (curriculumId) {
+      const { data: curriculum } = await apiClient.get<ApiCurriculumDetail>(`/curriculums/${curriculumId}`)
       curriculumTitle = curriculum.title
       const section = curriculum.outline.find((item) => item.sectionId === (request.sectionId ?? lesson.sectionId))
       const outlineLesson = section?.lessons.find((item) => item.lessonId === lesson.lessonId)
-      sectionTitle = section?.title ?? ''
+      sectionTitle = section?.title ?? sectionTitle
       const liveStatus = outlineLesson?.liveSession?.liveSessionStatus ?? outlineLesson?.liveSession?.status
       if (outlineLesson?.liveSession && liveStatus) {
         liveSession = {
@@ -171,7 +181,7 @@ export const httpLessonService = {
       deliveryType: lesson.deliveryType ?? 'LIVE',
       sectionId: lesson.sectionId,
       sectionTitle,
-      curriculumId: request.curriculumId ?? '',
+      curriculumId,
       curriculumTitle,
       materials: (lesson.materials ?? []).map(toMaterialView),
       liveSession,
