@@ -14,6 +14,7 @@ import CurriculumManagePage from '@/pages/CurriculumManagePage'
 import EgressStagePage from '@/pages/EgressStagePage'
 import AdminLayout from '@/pages/admin/AdminLayout'
 import AdminOverviewPage from '@/pages/admin/AdminOverviewPage'
+import AdminSessionDetailPage from '@/pages/admin/AdminSessionDetailPage'
 import EgressAdminPage from '@/pages/admin/EgressAdminPage'
 import ForbiddenPage from '@/pages/ForbiddenPage'
 import InstructorPreflightPage from '@/pages/InstructorPreflightPage'
@@ -86,6 +87,11 @@ export default function AppRouter() {
           <Route element={<AdminLayout />}>
             <Route index element={<AdminOverviewPage />} />
             <Route path="egress" element={<EgressAdminPage />} />
+            {/*
+              세션 하나의 운영 상세(읽기 전용). 강사 화면으로 링크하지 않는 이유는 ADMIN이 도메인
+              게이트를 통과하지 않기 때문이다 — 그쪽은 눌러도 403이다(ADR-0089).
+            */}
+            <Route path="live-sessions/:sessionId" element={<AdminSessionDetailPage />} />
           </Route>
         </Route>
         <Route path="instructor" element={<RequireRoleRoute role="INSTRUCTOR" />}>

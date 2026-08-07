@@ -1,5 +1,6 @@
 package com.liveclass.admin;
 
+import com.liveclass.admin.service.SessionDetailService;
 import com.liveclass.admin.service.SessionLabelService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,9 +24,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @SpringBootTest
 @Transactional
-class SessionLabelContractTest {
+class AdminSessionContractTest {
 
     @Autowired private SessionLabelService service;
+    @Autowired private SessionDetailService detailService;
     @Autowired private JdbcTemplate jdbc;
 
     @Test
@@ -79,6 +81,38 @@ class SessionLabelContractTest {
     @Test
     void nothing_asked_means_nothing_returned() {
         assertThat(service.labelsFor(List.of())).isEmpty();
+    }
+
+    /**
+     * 운영 상세는 강사 화면을 열어 주는 대신 만든 것이다. 운영자가 판단에 쓰는 값이 한 번에 나와야
+     * 한다 — 무슨 강의인지, 무엇을 켜고 시작했는지, 녹화가 어디까지 갔는지.
+     */
+    @Test
+    void the_detail_carries_what_an_operator_judges_with() {
+        Seed seed = seedLiveSession("자료구조 심화", "3주차 — 트리 순회");
+
+        SessionDetailService.SessionDetail detail = detailService.findBySessionId(seed.sessionId())
+                .orElseThrow();
+
+        assertThat(detail.lessonTitle()).isEqualTo("3주차 — 트리 순회");
+        assertThat(detail.curriculumTitle()).isEqualTo("자료구조 심화");
+        assertThat(detail.curriculumId()).isEqualTo(seed.curriculumId());
+        assertThat(detail.instructorName())
+                .as("누구 수업인지는 표시 이름으로 충분하다 — 이메일은 담지 않는다")
+                .isEqualTo("강사");
+        assertThat(detail.roomName())
+                .as("LiveKit 콘솔·로그에서 찾을 때 쓰는 값이다")
+                .isEqualTo("session-" + seed.sessionId());
+        assertThat(detail.features().recording()).isTrue();
+        assertThat(detail.recording())
+                .as("녹화 자산이 아직 없는 세션이다 — null이 정상이고 화면이 그렇게 말한다")
+                .isNull();
+    }
+
+    /** 주소로 직접 들어오는 화면이라 "그런 세션 없음"을 분명히 말해야 한다(목록 이름표와 규칙이 다르다). */
+    @Test
+    void an_unknown_session_has_no_detail() {
+        assertThat(detailService.findBySessionId(UUID.randomUUID())).isEmpty();
     }
 
     // ---- helpers ----

@@ -38,33 +38,52 @@ describe('운영 콘솔 세션 이름표', () => {
     })
   })
 
-  it('강의 제목과 커리큘럼을 보여 주고, 커리큘럼만 링크한다', () => {
+  it('강의 제목은 운영 상세로, 커리큘럼은 공개 페이지로 링크한다', () => {
     render(
       <MemoryRouter>
         <SessionLabelCell sessionId={label().sessionId} label={label()} />
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('3주차 — 트리 순회')).toBeInTheDocument()
-    const link = screen.getByRole('link', { name: '자료구조 심화' })
-    expect(link).toHaveAttribute('href', '/curriculums/a1b2c3d4-1111-2222-3333-444455556666')
+    expect(screen.getByRole('link', { name: '3주차 — 트리 순회' }))
+      .toHaveAttribute('href', '/admin/live-sessions/62f5c761-6919-496d-942e-31ec8425d47e')
+    expect(screen.getByRole('link', { name: '자료구조 심화' }))
+      .toHaveAttribute('href', '/curriculums/a1b2c3d4-1111-2222-3333-444455556666')
     // UUID는 지우지 않는다 — 로그를 찾거나 문의를 받을 때 결국 필요한 값이다.
     expect(screen.getByText('62f5c761-6919-496d-942e-31ec8425d47e')).toBeInTheDocument()
   })
 
   /**
-   * 유령 Egress가 이 경우다 — 세션이 이미 지워졌다. 정리해야 할 바로 그 행이므로 사라지면 안 된다.
+   * 강사 화면(강의 상세·처리 현황)으로는 링크하지 않는다. ADMIN이 그 게이트를 통과하지 않아
+   * 눌러도 403이고, 열리지 않는 링크는 없는 것보다 나쁘다(ADR-0089).
    */
-  it('이름을 못 찾아도 세션 id는 남긴다', () => {
+  it('강사 화면으로는 링크하지 않는다', () => {
+    render(
+      <MemoryRouter>
+        <SessionLabelCell sessionId={label().sessionId} label={label()} />
+      </MemoryRouter>,
+    )
+
+    for (const link of screen.getAllByRole('link')) {
+      expect(link.getAttribute('href')).not.toMatch(/^\/instructor\//)
+      expect(link.getAttribute('href')).not.toMatch(/^\/student\//)
+    }
+  })
+
+  /**
+   * 유령 Egress가 이 경우다 — 세션이 이미 지워졌다. 정리해야 할 바로 그 행이므로 사라지면 안 되고,
+   * 상세로는 갈 수 있어야 한다(상세가 "이미 지워진 세션"이라고 답해 준다).
+   */
+  it('이름을 못 찾아도 세션 id와 상세 링크는 남긴다', () => {
     render(
       <MemoryRouter>
         <SessionLabelCell sessionId="62f5c761-6919-496d-942e-31ec8425d47e" label={undefined} />
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('이름을 찾을 수 없음')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '이름을 찾을 수 없음' }))
+      .toHaveAttribute('href', '/admin/live-sessions/62f5c761-6919-496d-942e-31ec8425d47e')
     expect(screen.getByText('62f5c761-6919-496d-942e-31ec8425d47e')).toBeInTheDocument()
-    expect(screen.queryByRole('link')).not.toBeInTheDocument()
   })
 
   it('커리큘럼 id가 없으면 제목만 두고 링크하지 않는다', () => {
@@ -78,6 +97,6 @@ describe('운영 콘솔 세션 이름표', () => {
     )
 
     expect(screen.getByText('자료구조 심화')).toBeInTheDocument()
-    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '자료구조 심화' })).not.toBeInTheDocument()
   })
 })

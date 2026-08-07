@@ -1,13 +1,18 @@
 package com.liveclass.admin.web;
 
+import com.liveclass.admin.service.SessionDetailService;
 import com.liveclass.admin.service.SessionLabelService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -31,15 +36,18 @@ import java.util.UUID;
  */
 @Tag(name = "운영 콘솔", description = "운영자가 화면에서 판단하는 데 필요한 조합 조회.")
 @RestController
-public class SessionLabelController {
+public class AdminSessionController {
 
     /** 콘솔 표 한 화면 분량. 넘겨받은 만큼 조회하므로 상한을 둔다. */
     private static final int MAX_IDS = 200;
 
     private final SessionLabelService sessionLabelService;
+    private final SessionDetailService sessionDetailService;
 
-    public SessionLabelController(SessionLabelService sessionLabelService) {
+    public AdminSessionController(SessionLabelService sessionLabelService,
+                                  SessionDetailService sessionDetailService) {
         this.sessionLabelService = sessionLabelService;
+        this.sessionDetailService = sessionDetailService;
     }
 
     @Operation(summary = "세션 이름표 일괄 조회",
@@ -49,7 +57,30 @@ public class SessionLabelController {
         return sessionLabelService.labelsFor(request.sessionIds());
     }
 
+    /**
+     * 세션 하나의 운영 상세. <b>읽기 전용</b>이고 여기서 도메인 게이트를 우회하지 않는다 —
+     * 강사 화면을 열어 주는 대신 필요한 값만 모아 보여 준다(ADR-0089).
+     *
+     * <p>없는 세션은 <b>404</b>다. 목록의 이름표와 규칙이 다른 이유는 쓰임이 다르기 때문이다 —
+     * 목록은 행을 짝지어야 해서 빈 값으로 채우지만, 상세는 주소로 직접 들어오는 화면이라 "그런
+     * 세션 없음"을 분명히 말해야 한다.
+     */
+    @Operation(summary = "세션 운영 상세", description = "세션·강의·커리큘럼·강사·녹화 상태를 한 번에. 읽기 전용.")
+    @GetMapping("/api/admin/live-sessions/{sessionId}")
+    public SessionDetailService.SessionDetail detail(@PathVariable UUID sessionId) {
+        return sessionDetailService.findBySessionId(sessionId)
+                .orElseThrow(() -> new SessionNotFoundException(sessionId));
+    }
+
     public record LabelsRequest(
             @NotEmpty @Size(max = MAX_IDS) List<UUID> sessionIds) {
+    }
+
+    /** 없는 세션. 운영 콘솔 전용이라 이 모듈 안에서 404로 매핑한다. */
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    static class SessionNotFoundException extends RuntimeException {
+        SessionNotFoundException(UUID sessionId) {
+            super("세션을 찾을 수 없습니다: " + sessionId);
+        }
     }
 }

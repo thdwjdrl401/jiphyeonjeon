@@ -108,6 +108,12 @@ export const adminPaths = {
   root: '/admin',
   overview: '/admin',
   egress: '/admin/egress',
+  /**
+   * 세션 하나의 운영 상세(읽기 전용). 강사 화면(`instructorPaths.processing` 등)으로 보내지 않는
+   * 이유는 ADMIN이 도메인 게이트를 통과하지 않기 때문이다 — 그쪽으로 링크하면 눌리지 않는 링크가
+   * 된다(ADR-0089).
+   */
+  liveSession: (sessionId: string) => `/admin/live-sessions/${sessionId}`,
 }
 
 export function getRoleHomePath(role: UserRole) {

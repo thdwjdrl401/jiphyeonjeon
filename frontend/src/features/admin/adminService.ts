@@ -127,6 +127,52 @@ export async function getSessionLabels(sessionIds: string[]): Promise<SessionLab
   return data
 }
 
+/** 세션이 무엇을 켜고 시작했는가. "자막이 안 나온다"는 문의에서 제일 먼저 볼 값이다. */
+export interface SessionFeatures {
+  recording: boolean
+  caption: boolean
+  chat: boolean
+  aiQna: boolean
+}
+
+/** 녹화 자산의 기술 상태. 아직 만들어지지 않았거나 녹화를 안 켠 세션이면 `null`이다. */
+export interface SessionRecording {
+  videoAssetId: string
+  status: string
+  replayStatus: string | null
+  failureCode: string | null
+  durationMs: number | null
+  sizeBytes: number | null
+  startedAt: string | null
+  endedAt: string | null
+}
+
+/** 세션 하나의 운영 상세. 백엔드 `SessionDetailService.SessionDetail`과 대응. */
+export interface SessionDetail {
+  sessionId: string
+  /** LiveKit 방 이름. 저쪽 콘솔·로그에서 찾을 때 쓰는 값이다. */
+  roomName: string
+  status: string
+  roomSid: string | null
+  scheduledAt: string | null
+  startedAt: string | null
+  endedAt: string | null
+  features: SessionFeatures
+  lessonId: string | null
+  lessonTitle: string | null
+  curriculumId: string | null
+  curriculumTitle: string | null
+  instructorId: string | null
+  instructorName: string | null
+  recording: SessionRecording | null
+}
+
+/** 세션 하나의 운영 상세. 없는 세션은 404다(목록의 이름표와 달리 주소로 직접 들어오는 화면이라). */
+export async function getSessionDetail(sessionId: string): Promise<SessionDetail> {
+  const { data } = await apiClient.get<SessionDetail>(`/admin/live-sessions/${sessionId}`)
+  return data
+}
+
 /** Egress `roomName`에서 세션 id를 꺼낸다. 방 이름 규약은 `session-{sessionId}`다(LiveSessionRoomNames). */
 export function sessionIdFromRoomName(roomName: string | null | undefined): string | null {
   if (!roomName) return null
