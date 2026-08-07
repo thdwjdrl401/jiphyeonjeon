@@ -560,7 +560,9 @@ public class InstructorCurriculumService {
         LessonView lesson = requireOwnedLesson(instructorId, lessonId);
         LiveSessionView liveSession = liveSessionDirectory.findByLessons(List.of(lessonId)).stream()
                 .findFirst().orElse(null);
-        return new InstructorLessonDetail(lesson, lessonMaterialManagement.findActiveByLesson(lessonId), liveSession);
+        UUID curriculumId = requireOwnedSection(instructorId, lesson.sectionId()).getCurriculumId();
+        return new InstructorLessonDetail(
+                lesson, lessonMaterialManagement.findActiveByLesson(lessonId), liveSession, curriculumId);
     }
 
     @Transactional

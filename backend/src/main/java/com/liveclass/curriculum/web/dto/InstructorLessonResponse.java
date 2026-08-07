@@ -20,6 +20,9 @@ import java.util.UUID;
 public record InstructorLessonResponse(
         UUID lessonId,
         UUID sectionId,
+        // 다시보기 등 curriculumId를 모르고 이 상세를 부르는 화면이 "강의 상세" 경로를 만들 수 있게 준다
+        // (수강생용 GET /lessons/{id}는 이미 준다 — FE ADR, replay-to-lesson-detail 404 수정).
+        UUID curriculumId,
         String title,
         String description,
         int order,
@@ -51,7 +54,8 @@ public record InstructorLessonResponse(
     public static InstructorLessonResponse from(InstructorLessonDetail detail) {
         LessonView l = detail.lesson();
         return new InstructorLessonResponse(
-                l.lessonId(), l.sectionId(), l.title(), l.description(), l.order(), l.status(), l.deliveryType(),
+                l.lessonId(), l.sectionId(), detail.curriculumId(),
+                l.title(), l.description(), l.order(), l.status(), l.deliveryType(),
                 l.createdAt(), l.updatedAt(),
                 detail.materials().stream().map(CurriculumMaterialResponse::from).toList(),
                 LiveSession.from(detail.liveSession()));
