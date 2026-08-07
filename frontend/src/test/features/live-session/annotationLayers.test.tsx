@@ -1548,68 +1548,83 @@ describe('판서 정리 진입점', () => {
     return { container, getByRole, queryByRole, onChange }
   }
 
-  it('그린 것이 없으면 진입점을 보이지 않는다 — 정리할 것이 없다', async () => {
+  /**
+   * 진입점은 <b>조건 없이 자리를 지킨다</b>. 그린 것이 없을 때 숨겨 봤더니, 첫 획을 긋는 순간
+   * 도구 줄에 버튼이 하나 끼어들며 옆 버튼들이 전부 밀렸다.
+   */
+  it('그린 것이 없어도 진입점은 자리를 지킨다', async () => {
     const restore = rectStub()
-    const { onChange, queryByRole } = await draw()
+    const { onChange, getByRole } = await draw()
 
     onChange([], { selectedElementIds: {} })
 
-    expect(queryByRole('button', { name: /AI로 정리/ })).toBeNull()
+    expect(getByRole('button', { name: /AI로 판서 정리/ })).toBeTruthy()
     restore.mockRestore()
   })
 
-  it('그린 것이 있으면 진입점을 보인다', async () => {
+  it('그린 것이 있어도 자리는 그대로다', async () => {
     const restore = rectStub()
     const { onChange, getByRole } = await draw()
 
     onChange([{ id: 'a', type: 'freedraw', version: 1, x: 0, y: 0, points: [[0, 0], [10, 10]] }],
       { selectedElementIds: {} })
 
-    await waitFor(() => { expect(getByRole('button', { name: /AI로 정리/ })).toBeTruthy() })
+    await waitFor(() => { expect(getByRole('button', { name: /AI로 판서 정리/ })).toBeTruthy() })
     restore.mockRestore()
   })
 
-  /** 펜이 잠겨 있으면 클릭도 드래그도 선택이 아니라 획이 된다. 눌렀을 때 도구까지 바꿔 줘야 한다. */
-  it('누르면 선택 도구로 바꾸고 링을 펼친다', async () => {
+  /**
+   * 고른 것이 없는데 링을 펼치면 <b>아무것도 누를 수 없는 메뉴</b>가 판서를 가린다. 링 대신
+   * 무엇이 필요한지만 알린다.
+   *
+   * <p>도구는 그래도 바꿔 준다 — 펜이 잠겨 있으면 클릭도 드래그도 선택이 아니라 획이 되므로,
+   * 안내를 읽고 고르려 해도 고를 수가 없다.
+   */
+  it('고른 것이 없으면 링 대신 무엇이 필요한지 알린다', async () => {
     const restore = rectStub()
     const { onChange, getByRole, container } = await draw()
     onChange([{ id: 'a', type: 'freedraw', version: 1, x: 0, y: 0, points: [[0, 0], [10, 10]] }],
       { selectedElementIds: {} })
-    await waitFor(() => { expect(getByRole('button', { name: /AI로 정리/ })).toBeTruthy() })
+    await waitFor(() => { expect(getByRole('button', { name: /AI로 판서 정리/ })).toBeTruthy() })
     updateScene.mockClear()
 
-    getByRole('button', { name: /AI로 정리/ }).click()
+    getByRole('button', { name: /AI로 판서 정리/ }).click()
 
     const tool = updateScene.mock.calls
       .map(([arg]) => (arg as { appState?: { activeTool?: { type?: string } } }).appState?.activeTool?.type)
       .filter(Boolean)
     expect(tool).toContain('selection')
-    // 링이 펼쳐지되, 대상이 없으므로 고를 수는 없고 무엇이 필요한지 알려 준다.
     await waitFor(() => {
-      expect(container.querySelector('.annotation-action-ring')).not.toBeNull()
+      expect(container.querySelector('.annotation-pick-hint')?.textContent).toContain('선택하세요')
     })
-    expect(container.querySelector('.annotation-action-ring__need')?.textContent).toContain('선택하세요')
-    const items = [...container.querySelectorAll<HTMLButtonElement>('.annotation-action-ring__item')]
-    expect(items.every((b) => b.disabled)).toBe(true)
+    expect(container.querySelector('.annotation-action-ring')).toBeNull()
     restore.mockRestore()
   })
 
-  it('선택하면 진입점 대신 링이 뜬다', async () => {
+  /**
+   * 링이 떠도 진입점은 자리를 지킨다. 도구 줄에서 버튼이 사라졌다 나타나면 옆 버튼이 밀려
+   * 움직이고, 강사는 방금 누른 것이 어디로 갔는지 다시 찾아야 한다.
+   */
+  it('선택하면 링이 뜨고 진입점은 자리를 지킨다', async () => {
     const restore = rectStub()
-    const { onChange, container, queryByRole } = await draw()
+    const { onChange, container, getByRole } = await draw()
     const element = { id: 'a', type: 'freedraw', version: 1, x: 0, y: 0, points: [[0, 0], [10, 10]] }
 
     onChange([element], { selectedElementIds: { a: true } })
 
     await waitFor(() => { expect(container.querySelector('.annotation-action-ring')).not.toBeNull() })
-    expect(queryByRole('button', { name: /AI로 정리/ })).toBeNull()
+    expect(getByRole('button', { name: /AI로 판서 정리/ })).toBeTruthy()
     restore.mockRestore()
   })
 })
 
 /**
- * 링을 여는 두 경로와 닫는 한 경로. 강사가 획을 고르면 바로 뜨고(클릭이든 드래그든), 아무것도
- * 고르지 않았어도 칩을 눌러 펼칠 수 있다. 펼쳐 놓은 메뉴가 스스로 닫히지 않으면 판서를 가린다.
+ * 링의 수명은 <b>선택의 수명</b>이다. 획을 고르면 뜨고(클릭이든 드래그든), 선택을 풀면 사라지며,
+ * X는 선택을 건드리지 않고 링만 접는다.
+ *
+ * <p>그래서 캔버스를 눌렀다고 접지 않는다 — 고른 것을 <b>잡고 끄는 동작</b>도 캔버스 pointerdown으로
+ * 시작하는데, 거기서 접으면 옮기는 내내 링이 사라진다(따라와야 한다는 요구와 정면으로 충돌한다).
+ * 빈 곳을 누르면 Excalidraw가 선택을 풀고, 링은 그 결과로 사라진다.
  */
 describe('액션 링 펼침·접힘', () => {
   function rectStub() {
@@ -1625,23 +1640,37 @@ describe('액션 링 펼침·접힘', () => {
     )
     await view.findByTestId('excalidraw-editor')
     const onChange = excalidrawProps.onChange as (els: unknown[], state?: unknown) => void
+    // 고른 것이 있어야 링이 뜬다 — 진입점만 눌러서는 안내만 나온다.
     onChange([{ id: 'a', type: 'freedraw', version: 1, x: 0, y: 0, points: [[0, 0], [10, 10]] }],
-      { selectedElementIds: {} })
-    await waitFor(() => { expect(view.getByRole('button', { name: /AI로 정리/ })).toBeTruthy() })
-    view.getByRole('button', { name: /AI로 정리/ }).click()
+      { selectedElementIds: { a: true } })
     await waitFor(() => { expect(view.container.querySelector('.annotation-action-ring')).not.toBeNull() })
     return view
   }
 
-  it('링 바깥을 누르면 접힌다', async () => {
+  /** 고른 것을 잡고 끌기 시작하는 pointerdown이다. 여기서 접히면 옮기는 내내 링이 없다. */
+  it('캔버스를 눌러도 고른 것이 그대로면 링은 남는다', async () => {
     const restore = rectStub()
     const view = await open()
 
     view.container.querySelector('.instructor-annotation-layer')!
       .dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }))
 
+    await new Promise((resolve) => { setTimeout(resolve, 0) })
+    expect(view.container.querySelector('.annotation-action-ring')).not.toBeNull()
+    restore.mockRestore()
+  })
+
+  /** 선택을 풀면 링도 간다 — 빈 캔버스를 누른 결과가 이 경로로 들어온다. */
+  it('선택이 풀리면 링이 사라진다', async () => {
+    const restore = rectStub()
+    const view = await open()
+    const onChange = excalidrawProps.onChange as (els: unknown[], state?: unknown) => void
+
+    onChange([{ id: 'a', type: 'freedraw', version: 1, x: 0, y: 0, points: [[0, 0], [10, 10]] }],
+      { selectedElementIds: {} })
+
     await waitFor(() => { expect(view.container.querySelector('.annotation-action-ring')).toBeNull() })
-    expect(view.getByRole('button', { name: /AI로 정리/ })).toBeTruthy()
+    expect(view.getByRole('button', { name: /AI로 판서 정리/ })).toBeTruthy()
     restore.mockRestore()
   })
 

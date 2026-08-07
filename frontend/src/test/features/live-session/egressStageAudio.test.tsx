@@ -348,6 +348,38 @@ describe('비디오 트랙 동작은 그대로다', () => {
     }
   }
 
+  /**
+   * <b>음소거는 검은 상자를 남기던 버그였다.</b> `setCameraEnabled(false)`는 트랙을 걷어내지 않고
+   * mute한다(livekit-client 문서). 그래서 `TrackUnsubscribed`가 오지 않고, 그 이벤트만 듣던 이
+   * 페이지는 element를 그대로 두어 <b>프레임이 끊긴 video가 검은 사각형으로 합성에 실렸다</b> —
+   * 강사는 카메라를 껐는데 수강생 화면에는 검은 상자가 남는다.
+   */
+  it('카메라를 음소거하면 합성에서 내린다', async () => {
+    const stage = await renderStage()
+    stage.subscribe(videoTrack(), Track.Source.Camera)
+    expect(stage.container.querySelector('.egress-stage__camera')).not.toHaveClass('is-hidden')
+
+    act(() => {
+      stage.room.emit(RoomEvent.TrackMuted, { source: Track.Source.Camera, isMuted: true, track: {} })
+    })
+
+    expect(stage.container.querySelector('.egress-stage__camera')).toHaveClass('is-hidden')
+  })
+
+  it('음소거를 풀면 다시 올린다', async () => {
+    const stage = await renderStage()
+    stage.subscribe(videoTrack(), Track.Source.Camera)
+    act(() => {
+      stage.room.emit(RoomEvent.TrackMuted, { source: Track.Source.Camera, isMuted: true, track: {} })
+    })
+
+    act(() => {
+      stage.room.emit(RoomEvent.TrackUnmuted, { source: Track.Source.Camera, isMuted: false, track: {} })
+    })
+
+    expect(stage.container.querySelector('.egress-stage__camera')).not.toHaveClass('is-hidden')
+  })
+
   it('metadata가 없으면 거울로 그린다 — 지금까지의 동작이 그것이다', async () => {
     const stage = await renderStage()
 

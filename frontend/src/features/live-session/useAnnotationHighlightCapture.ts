@@ -21,6 +21,8 @@ export type HighlightCaptureStatus = 'idle' | 'confirming' | 'capturing' | 'save
 export interface HighlightCapturePrompt {
   /** 강사에게 물을 문구. */
   message: string
+  /** 무엇에 쓰이는지 한 줄. 강사는 "근거"가 무엇의 근거인지 알 수 없다. */
+  detail: string
   confirm: () => void
   dismiss: () => void
 }
@@ -87,7 +89,13 @@ export function useAnnotationHighlightCapture({ sessionId, resolveVideo, onCaptu
     setNotice(null)
     setStatus('confirming')
     setPrompt({
-      message: '표시한 부분을 AI 근거로 남길까요?',
+      /*
+       * "AI 근거로 남길까요"는 강사에게 뜻이 서지 않았다 — 무엇의 근거이고 누가 언제 보는지가 없다.
+       * 실제로 하는 일은 <b>이 순간의 화면을 저장해 두었다가, 수강생이 관련 질문을 하면 영실이가
+       * 그 장면을 근거로 보여 주는 것</b>이다. 그대로 말한다.
+       */
+      message: '이 화면을 AI 답변 자료로 저장할까요?',
+      detail: '수강생이 관련 질문을 하면 영실이가 이 장면을 근거로 보여 줍니다.',
       confirm: () => {
         setPrompt(null)
         void run(elements)

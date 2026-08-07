@@ -12,7 +12,6 @@ import {
 describe('카메라 오버레이 계약', () => {
   // 강사 화면과 Egress 템플릿이 같은 값을 읽어야 "보이는 대로 녹화된다"가 성립한다.
   it('기본 배치는 화면공유를 가리지 않는 우하단이다', () => {
-    expect(DEFAULT_CAMERA_OVERLAY.visible).toBe(true)
     expect(DEFAULT_CAMERA_OVERLAY.x + DEFAULT_CAMERA_OVERLAY.w).toBeLessThanOrEqual(1)
     expect(DEFAULT_CAMERA_OVERLAY.y + overlayHeight(DEFAULT_CAMERA_OVERLAY.w)).toBeLessThanOrEqual(1)
   })
@@ -24,18 +23,18 @@ describe('카메라 오버레이 계약', () => {
   })
 
   it('캔버스를 벗어나지 않게 접는다', () => {
-    const pushedOut = clampOverlay({ visible: true, mirrored: true, x: 0.95, y: 0.95, w: 0.3 })
+    const pushedOut = clampOverlay({ mirrored: true, x: 0.95, y: 0.95, w: 0.3 })
     expect(pushedOut.x).toBeCloseTo(0.7, 5)
     expect(pushedOut.y).toBeCloseTo(1 - overlayHeight(0.3), 5)
   })
 
   it('너무 작거나 큰 폭을 범위 안으로 되돌린다', () => {
-    expect(clampOverlay({ visible: true, mirrored: true, x: 0, y: 0, w: 0.01 }).w).toBe(MIN_OVERLAY_WIDTH)
-    expect(clampOverlay({ visible: true, mirrored: true, x: 0, y: 0, w: 0.9 }).w).toBe(MAX_OVERLAY_WIDTH)
+    expect(clampOverlay({ mirrored: true, x: 0, y: 0, w: 0.01 }).w).toBe(MIN_OVERLAY_WIDTH)
+    expect(clampOverlay({ mirrored: true, x: 0, y: 0, w: 0.9 }).w).toBe(MAX_OVERLAY_WIDTH)
   })
 
   it('metadata로 왕복해도 값이 유지된다', () => {
-    const overlay = { visible: false, mirrored: false, x: 0.1, y: 0.2, w: 0.3 }
+    const overlay = { mirrored: false, x: 0.1, y: 0.2, w: 0.3 }
     expect(parseCameraOverlay(withCameraOverlay(null, overlay))).toEqual(overlay)
   })
 
@@ -68,7 +67,7 @@ describe('카메라 오버레이 계약', () => {
    * 수강생만 반전을 본다.
    */
   it('뒤집기를 metadata로 실어 나른다', () => {
-    const notMirrored = { visible: true, mirrored: false, x: 0.7, y: 0.6, w: 0.25 }
+    const notMirrored = { mirrored: false, x: 0.7, y: 0.6, w: 0.25 }
     expect(parseCameraOverlay(withCameraOverlay(null, notMirrored)).mirrored).toBe(false)
     expect(parseCameraOverlay(withCameraOverlay(null, { ...notMirrored, mirrored: true })).mirrored).toBe(true)
   })
@@ -78,7 +77,7 @@ describe('카메라 오버레이 계약', () => {
    * 카메라가 갑자기 좌우로 뒤집힌다</b> — 없으면 지금까지의 동작(거울)으로 읽는다.
    */
   it('mirrored가 없는 옛 metadata는 거울로 읽는다', () => {
-    const legacy = JSON.stringify({ cameraOverlay: { visible: true, x: 0.7, y: 0.6, w: 0.25 } })
+    const legacy = JSON.stringify({ cameraOverlay: { x: 0.7, y: 0.6, w: 0.25 } })
     expect(parseCameraOverlay(legacy).mirrored).toBe(true)
   })
 
@@ -87,7 +86,7 @@ describe('카메라 오버레이 계약', () => {
   })
 
   it('저장할 때도 범위를 벗어난 값을 접는다', () => {
-    const stored = JSON.parse(withCameraOverlay(null, { visible: true, mirrored: true, x: 2, y: -1, w: 5 })) as {
+    const stored = JSON.parse(withCameraOverlay(null, { mirrored: true, x: 2, y: -1, w: 5 })) as {
       cameraOverlay: { x: number; y: number; w: number }
     }
     expect(stored.cameraOverlay.w).toBe(MAX_OVERLAY_WIDTH)

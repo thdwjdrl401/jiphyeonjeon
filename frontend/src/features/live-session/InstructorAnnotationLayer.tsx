@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ComponentType } from 'react'
+import { createPortal } from 'react-dom'
 import {
   WHITEBOARD_ELEMENT_ID,
   annotationStageScale,
@@ -203,6 +204,48 @@ function closestScrollable(target: Element | null, bound: Element): HTMLElement 
   return null
 }
 
+/**
+ * 강조 버튼을 Excalidraw <b>툴 섬 옆에</b> 심을 자리를 만든다(같은 flex 컨테이너의 형제로).
+ *
+ * <p><b>좌표로 띄우지 않는 이유.</b> 예전에는 캔버스 우하단에 `position: absolute`로 띄웠는데,
+ * 같은 자리를 해석 실패 알림·수식 편집이 나눠 쓰느라 CSS가 서로를 피해 좌표를 어긋내고 있었다
+ * (`bottom: 60px`은 그 결과다). 그리고 강조는 <b>펜</b>이라 펜들 옆에 있어야 읽힌다.
+ *
+ * <p>`.App-toolbar-container`는 가로 Stack이고 툴 섬이 그 자식이다. 형제로 하나 더 넣으면
+ * <b>배치를 브라우저가 한다</b> — 창 폭·화면 비율이 바뀌어도 따라다니고, Excalidraw가 툴바 크기를
+ * 바꿔도 어긋나지 않는다. 우리가 계산할 것이 없다.
+ *
+ * <p><b>못 찾으면 null을 준다.</b> 라이브러리가 내부 구조를 바꾸면 버튼이 조용히 사라지는 것이
+ * 최악이므로, 그때는 화면이 예전처럼 떠 있는 자리로 되돌린다.
+ */
+function useToolbarSlot(host: HTMLElement | null, active: boolean): HTMLElement | null {
+  const [slot, setSlot] = useState<HTMLElement | null>(null)
+
+  useEffect(() => {
+    if (!host || !active) { setSlot(null); return }
+    const node = document.createElement('div')
+    node.className = 'annotation-toolbar-slot'
+    const attach = () => {
+      // 우리 레이어 안에서만 찾는다 — Egress 페이지에도 Excalidraw가 있어 document 전역은 위험하다.
+      const container = host.querySelector('.App-toolbar-container')
+      if (container && node.parentElement !== container) {
+        container.append(node)
+        setSlot(node)
+      } else if (!container && node.parentElement) {
+        node.remove()
+        setSlot(null)
+      }
+    }
+    attach()
+    // Excalidraw가 다시 그리면 우리 노드가 떨어진다. 붙어 있는지 계속 지킨다.
+    const observer = new MutationObserver(attach)
+    observer.observe(host, { childList: true, subtree: true })
+    return () => { observer.disconnect(); node.remove() }
+  }, [host, active])
+
+  return slot
+}
+
 export default function InstructorAnnotationLayer({
   sessionId,
   active,
@@ -259,6 +302,16 @@ export default function InstructorAnnotationLayer({
    * 달라지는데, 강사 화면에서는 그게 드러나지 않는다.
    */
   const hostRef = useRef<HTMLDivElement>(null)
+  /*
+   * 훅이 host DOM을 기다려야 하므로 ref만으로는 부족하다(ref 대입은 렌더를 유발하지 않는다).
+   * 콜백 ref로 노드를 state에 올려 두어 툴바 자리를 찾는 effect가 그때 돈다.
+   */
+  const [hostNode, setHostNode] = useState<HTMLDivElement | null>(null)
+  const setHost = useCallback((node: HTMLDivElement | null) => {
+    hostRef.current = node
+    setHostNode(node)
+  }, [])
+  const highlightSlot = useToolbarSlot(hostNode, active)
   const apiRef = useRef<ExcalidrawApi | null>(null)
 
   /**
@@ -393,12 +446,39 @@ export default function InstructorAnnotationLayer({
    * <p>화이트보드는 제외한다. 배경으로 깔아 둔 판이지 정리 대상이 아니다.
    */
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+  /**
+   * 링 중심(컨테이너 px). <b>state로 든다</b> — 렌더 중에 계산하면 객체를 옮기는 동안 리렌더가
+   * 일어나지 않아(선택이 그대로라 `selectedIds`가 안 바뀐다) 링이 제자리에 멈춘다.
+   */
+  const [ringPoint, setRingPoint] = useState<{ x: number; y: number } | null>(null)
+  /**
+   * 포인터를 누르고 있는 동안 <b>선택이 바뀌었는가</b>.
+   *
+   * <p>두 제스처를 갈라야 한다. <b>드래그 선택</b>은 하나 잡힐 때마다 선택이 늘어나므로 그때마다
+   * 링이 새로 생겨 따라다녔다 — 다 고르고 손을 뗀 뒤에 한 번 나와야 한다. <b>객체 이동</b>은 선택이
+   * 그대로라, 그때는 감추지 않고 따라가야 한다.
+   */
+  const [selecting, setSelecting] = useState(false)
+  /**
+   * 링을 <b>이번 선택에 한해</b> 닫았는가.
+   *
+   * <p>X는 링만 닫아야 한다. 예전에는 링이 선택에 묶여 있어(`selectedIds.length > 0`이면 열림)
+   * 닫는 방법이 선택을 비우는 것뿐이었고, 그래서 <b>고른 것이 통째로 풀렸다</b> — 옮기려고 고른
+   * 객체가 X 한 번에 사라졌다.
+   *
+   * <p>선택이 바뀌면 풀린다. 다른 것을 고르면 다시 물어봐야 하기 때문이다.
+   */
+  const [ringDismissed, setRingDismissed] = useState(false)
+  const pointerDownRef = useRef(false)
+  const selectedIdsRef = useRef<string[]>([])
+  /** `handleChange`가 `ringCenter`보다 위에 있어 ref로 잇는다. 정의 순서 때문이지 다른 이유는 없다. */
+  const ringCenterRef = useRef<() => { x: number; y: number } | null>(() => null)
+  const selectionAtPointerDownRef = useRef<string>('')
 
   /**
    * 그린 것이 하나라도 있는지. <b>`elementsRef`로는 안 된다</b> — ref를 바꿔도 리렌더가 일어나지
    * 않아서, 강사가 처음 획을 그어도 정리 진입점이 나타나지 않는다.
    */
-  const [hasElements, setHasElements] = useState(false)
 
   /**
    * 강조 툴이 켜져 있는지(ADR-0074). Excalidraw의 활성 툴을 그대로 읽지 않고 우리가 들고 있는다 —
@@ -559,7 +639,10 @@ export default function InstructorAnnotationLayer({
 
   const handleChange = useCallback((
     elements: readonly AnnotationElement[],
-    appState?: { selectedElementIds?: Record<string, boolean> },
+    appState?: {
+      selectedElementIds?: Record<string, boolean>
+      activeTool?: { type?: string }
+    },
     files?: AnnotationFiles,
   ) => {
     // 스크롤·확대가 조금이라도 밀리면 되돌린다. 판서는 영상 위에 얹히므로 캔버스가 밀리는 순간
@@ -569,7 +652,22 @@ export default function InstructorAnnotationLayer({
 
     elementsRef.current = elements.filter((element) => element.isDeleted !== true)
     if (files) filesRef.current = files
-    setHasElements(elementsRef.current.some((element) => element.id !== WHITEBOARD_ELEMENT_ID))
+    /*
+     * <b>강조는 도구가 아니라 펜의 색이다.</b> 그래서 강사가 지우개·도형·선택으로 바꾸면 강조는
+     * 끝난 것으로 본다.
+     *
+     * <p>예전에는 우리 플래그만 들고 활성 도구를 보지 않았다. 그래서 셋이 어긋났다 —
+     * 지우개를 눌러도 버튼은 "강조 켜짐"으로 남았고, 그 상태에서 사각형을 그리면 <b>그 사각형이
+     * 강조로 표식돼 AI 근거로 색인됐고</b>, 펜으로 되돌아가야만 다시 강조로 그려졌다.
+     *
+     * <p>펜(freedraw)일 때만 강조가 유지된다. 펜을 다시 눌러 일반 획으로 돌아가는 것은 여기서
+     * 구분할 수 없다 — 강조도 freedraw라서다. 그건 강조 버튼을 한 번 더 눌러 끈다.
+     */
+    if (highlightModeRef.current && appState?.activeTool?.type !== undefined
+      && appState.activeTool.type !== 'freedraw') {
+      highlightModeRef.current = false
+      setHighlightMode(false)
+    }
     detectHighlightSettled(elementsRef.current)
 
     /*
@@ -580,7 +678,7 @@ export default function InstructorAnnotationLayer({
      * "Maximum update depth exceeded"로 앱이 통째로 죽는다(React #185). 실제로 화이트보드를 켜는
      * 순간 화면이 하얗게 되며 그렇게 터졌다.
      *
-     * <p>같은 이유로 이 파일의 다른 보고(`setHasElements`·`setSelectedIds`)도 값이 같으면 건드리지
+     * <p>같은 이유로 이 파일의 다른 보고(`setSelectedIds`)도 값이 같으면 건드리지
      * 않는다. 부모로 올라가는 호출은 전부 이 규칙을 지켜야 한다.
      */
     const boardPresent = elementsRef.current.some((element) => element.id === WHITEBOARD_ELEMENT_ID)
@@ -622,6 +720,29 @@ export default function InstructorAnnotationLayer({
     const picked = Object.entries(appState?.selectedElementIds ?? {})
       .filter(([id, on]) => on && id !== WHITEBOARD_ELEMENT_ID)
       .map(([id]) => id)
+    // 선택이 달라졌으면 "이번 선택에 한해 닫음"을 푼다 — 새로 고른 것에는 다시 링이 나와야 한다.
+    if (picked.join(',') !== selectedIdsRef.current.join(',')) setRingDismissed(false)
+    selectedIdsRef.current = picked
+    // 누르고 있는 동안 선택이 달라졌으면 드래그 선택 중이다 — 손을 뗄 때까지 링을 미룬다.
+    if (pointerDownRef.current && picked.join(',') !== selectionAtPointerDownRef.current) {
+      setSelecting(true)
+    }
+    /*
+     * 링 자리를 <b>여기서</b> 갱신한다. 렌더 중에 계산하면 객체를 옮기는 동안 선택이 그대로라
+     * 리렌더가 없어 링이 멈춘다 — onChange는 포인터가 움직일 때마다 불리므로 여기가 맞는 자리다.
+     *
+     * <p><b>값이 같으면 같은 참조를 돌려준다.</b> 매번 새 객체를 넣으면 값이 그대로여도 리렌더가
+     * 나고, 그 리렌더가 Excalidraw를 다시 돌려 <b>무한 루프</b>가 된다("Maximum update depth
+     * exceeded"로 화면이 통째로 하얘진다 — 실제로 그렇게 만들었다).
+     */
+    setRingPoint((current) => {
+      const next = ringCenterRef.current()
+      if (!next) return current === null ? current : null
+      if (current && Math.abs(current.x - next.x) < 0.5 && Math.abs(current.y - next.y) < 0.5) {
+        return current
+      }
+      return next
+    })
     // 같은 값이면 state를 건드리지 않는다 — onChange는 포인터가 움직일 때도 불린다.
     setSelectedIds((current) =>
       current.length === picked.length && current.every((id, i) => id === picked[i]) ? current : picked)
@@ -932,12 +1053,33 @@ export default function InstructorAnnotationLayer({
   const [ringExpanded, setRingExpanded] = useState(false)
 
   /** 선택 도구로 바꾼다. 펜이 잠겨 있으면 드래그도 클릭도 선택이 아니라 획이 된다. */
-  const startPicking = useCallback(() => {
-    apiRef.current?.updateScene({
-      appState: { activeTool: { type: 'selection', locked: false, lastActiveTool: null, customType: null } },
-    })
-    setRingExpanded(true)
-  }, [])
+  /**
+   * 드래그 선택이 끝날 때까지 링을 미룬다.
+   *
+   * <p>`pointerdown` 시점의 선택을 적어 두고, 누르고 있는 동안 선택이 달라지면 <b>고르는 중</b>으로
+   * 본다. 손을 떼면 풀린다 — 그 순간 링이 한 번 퍼진다.
+   */
+  useEffect(() => {
+    const host = hostRef.current
+    if (!active || !host) return undefined
+    const onDown = () => {
+      pointerDownRef.current = true
+      selectionAtPointerDownRef.current = selectedIdsRef.current.join(',')
+    }
+    const onUp = () => {
+      pointerDownRef.current = false
+      setSelecting(false)
+    }
+    host.addEventListener('pointerdown', onDown)
+    // 캔버스 밖에서 손을 떼도 풀려야 한다 — 안 그러면 링이 영영 안 나온다.
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onUp)
+    return () => {
+      host.removeEventListener('pointerdown', onDown)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
+    }
+  }, [active])
 
   /**
    * 링 바깥을 누르면 접는다.
@@ -981,6 +1123,19 @@ export default function InstructorAnnotationLayer({
       y: Math.min(Math.max((bounds.y + bounds.height / 2) * zoom, margin), Math.max(margin, rect.height - margin)),
     }
   }, [selectedElements])
+  ringCenterRef.current = ringCenter
+
+  /**
+   * 정리 진입점. <b>펜이 잠겨 있으면 클릭도 드래그도 선택이 아니라 획이 된다</b> — 그래서 누를 때
+   * 선택 도구로 바꿔 준다. 그러지 않으면 "판서를 선택하세요"를 보고도 선택할 방법이 없다.
+   */
+  const startPicking = useCallback(() => {
+    apiRef.current?.updateScene({
+      appState: { activeTool: { type: 'selection', locked: false, lastActiveTool: null, customType: null } },
+    })
+    setRingDismissed(false)
+    setRingExpanded(true)
+  }, [])
 
   /**
    * 화이트보드를 깔거나 걷는다.
@@ -1165,7 +1320,7 @@ export default function InstructorAnnotationLayer({
 
   // 청크(+365KB gzip)가 내려오는 동안. 아래 영상은 계속 보여야 하므로 자리만 잡고 비워 둔다.
   if (!ui) {
-    return <div ref={hostRef} className="instructor-annotation-layer instructor-annotation-layer--loading" aria-busy="true" />
+    return <div ref={setHost} className="instructor-annotation-layer instructor-annotation-layer--loading" aria-busy="true" />
   }
 
   const { Excalidraw, MainMenu } = ui
@@ -1173,12 +1328,23 @@ export default function InstructorAnnotationLayer({
    * 링을 여는 두 경로. 획을 고르면(클릭이든 드래그든) 바로 뜨고, 아무것도 안 골랐어도 칩을 누르면
    * 펼쳐진다 — 후자는 "무엇을 골라야 하는지"부터 알려 주는 자리다.
    */
-  const ringOpen = selectedIds.length > 0 || ringExpanded
+  // 고르는 중에는 미룬다 — 다 고르고 손을 뗀 뒤에 한 번 퍼진다.
+  /*
+   * 링은 <b>대상이 있을 때만</b> 뜬다. 예전에는 대상이 없어도 링을 펼쳐 가운데에 "판서를 선택하세요"를
+   * 넣었는데, 고를 수 없는 항목 둘을 원주에 늘어놓고 가운데서 안 된다고 말하는 모양이었다.
+   * 지금은 안내만 낸다.
+   */
+  const ringOpen = selectedIds.length > 0 && !selecting && !ringDismissed
+  const needsPick = ringExpanded && selectedIds.length === 0
   const mathLatex = selectedMathLatex()
-  const center = ringOpen ? ringCenter() : null
+  /*
+   * 링이 닫혀 있어도 자리는 필요하다 — 닫은 자리에 칩이 앉기 때문이다. 그래서 `ringOpen`이 아니라
+   * "보여 줄 것이 있는가"로 계산한다.
+   */
+  const center = (ringOpen || ringDismissed) ? (ringPoint ?? ringCenter()) : null
 
   return (
-    <div ref={hostRef} className="instructor-annotation-layer">
+    <div ref={setHost} className="instructor-annotation-layer">
       <Excalidraw
         excalidrawAPI={handleApi}
         // Excalidraw UI를 한국어로. 강사가 쓰는 화면인데 도구 이름이 영어면 읽는 데 시간이 걸린다.
@@ -1263,30 +1429,80 @@ export default function InstructorAnnotationLayer({
         정리 기능의 진입점. 링은 선택이 있어야 뜨는데, 판서를 켜면 펜이 잠긴 채 시작해서 강사가
         선택하는 방법을 모른 채 기능을 찾게 된다 — 그래서 눈에 보이는 자리에 하나 둔다.
       */}
-      {!ringOpen && hasElements && (
-        <button type="button" className="annotation-interpret-entry" onClick={startPicking}>
-          <span aria-hidden="true">✨</span> AI로 정리
-        </button>
+      {/*
+        X로 닫은 <b>그 자리에</b> 남는다. 어디로 갔는지 찾을 필요가 없고, 다시 누르면 같은 자리에서
+        링이 퍼져 나온다 — 닫힘과 열림이 같은 점을 중심으로 도는 것으로 읽힌다.
+
+        평소에는 없다. 선택만 하면 링이 알아서 나오므로 상시로 떠 있을 이유가 없고, 그 자리는
+        판서하는 자리다.
+      */}
+      {/* 대상이 없을 때는 링 대신 이것만. 무엇이 필요한지 한 줄로 말한다. */}
+      {needsPick && (
+        <p className="annotation-pick-hint" role="status">판서를 선택하세요</p>
       )}
 
       {/*
-        강조 툴(ADR-0074). "AI로 정리"와 하는 일이 다르다 — 정리는 판서를 <b>바꾸고</b>, 강조는 그
+        강조 툴(ADR-0074). "AI로 판서 정리"와 하는 일이 다르다 — 정리는 판서를 <b>바꾸고</b>, 강조는 그
         순간의 화면을 <b>근거로 남긴다</b>. 그래서 진입점을 따로 둔다.
 
         진짜 커스텀 툴 타입을 만들지 않는다. freedraw에 전용 색·투명도를 얹고 customData로 표식만
         붙인다 — 그래야 이 획이 일반 판서와 <b>같은 op 경로</b>를 타서 수강생 화면·Egress 녹화·다시보기에
         그대로 나가고, 지우개로도 지워진다. customType으로 새 툴을 만들면 그 경로를 전부 따로 배선해야 한다.
       */}
-      {onHighlightSettled && (
-        <button
-          type="button"
-          className={`annotation-highlight-entry${highlightMode ? ' annotation-highlight-entry--on' : ''}`}
-          aria-pressed={highlightMode}
-          onClick={toggleHighlightTool}
-        >
-          <span aria-hidden="true">🖍</span> {highlightMode ? '강조 끄기' : '강조'}
-        </button>
-      )}
+      {onHighlightSettled && (highlightSlot
+        ? createPortal(
+          <button
+              aria-pressed={highlightMode}
+              className={`annotation-highlight-tool${highlightMode ? ' is-on' : ''}`}
+              onClick={toggleHighlightTool}
+              title={highlightMode ? '강조 끄기' : '강조'}
+              type="button"
+            >
+              <span aria-hidden="true">🖍</span>
+              <span>강조</span>
+            </button>,
+          highlightSlot,
+        )
+        : (
+          /* 툴 섬을 못 찾았다(라이브러리 구조 변경 등). 사라지느니 예전 자리에라도 띄운다. */
+          <button
+            aria-pressed={highlightMode}
+            className={`annotation-highlight-entry${highlightMode ? ' annotation-highlight-entry--on' : ''}`}
+            onClick={toggleHighlightTool}
+            type="button"
+          >
+            <span aria-hidden="true">🖍</span> {highlightMode ? '강조 끄기' : '강조'}
+          </button>
+        ))}
+
+      {/*
+        정리 진입점. <b>강조 오른쪽</b>에 둔다 — 둘 다 판서에 거는 것이라 같은 자리에 모인다.
+
+        <b>조건 없이 늘 둔다.</b> 그린 것이 없을 때와 링이 떠 있을 때 숨겨 봤는데, 도구 줄에서
+        버튼이 사라졌다 나타나면 옆 버튼들이 밀려 움직인다 — 강사는 방금 누른 것이 어디로 갔는지
+        다시 찾아야 한다. 눌러도 할 일이 없는 경우는 안내(`.annotation-pick-hint`)가 말한다.
+
+        강조와 달리 `onHighlightSettled`에 묶이지 않는다 — 그건 강조 캡처를 받을 곳이 있는지의
+        조건이고, 정리는 그것과 무관하게 늘 쓸 수 있어야 한다.
+      */}
+      {(highlightSlot
+        ? createPortal(
+          <button
+            className="annotation-interpret-tool"
+            onClick={startPicking}
+            title="선택한 판서를 다이어그램·수식으로 정리합니다"
+            type="button"
+          >
+            <span aria-hidden="true">✨</span>
+            <span>AI로 판서 정리</span>
+          </button>,
+          highlightSlot,
+        )
+        : (
+          <button className="annotation-interpret-entry" onClick={startPicking} type="button">
+            <span aria-hidden="true">✨</span> AI로 판서 정리
+          </button>
+        ))}
 
       {/*
         우리가 넣은 수식을 고르면 "고치기"를 띄운다. 그림이 되면 내용을 못 고치므로, 붙여 둔 LaTeX를
@@ -1327,9 +1543,12 @@ export default function InstructorAnnotationLayer({
           center={center}
           actions={INTERPRET_ACTIONS}
           busyActionId={busyAction}
-          needsSelection={selectedIds.length === 0}
           onPick={(id) => { void runInterpret(id as InterpretMode) }}
-          onDismiss={() => { setSelectedIds([]); setRingExpanded(false) }}
+          /*
+             링만 닫는다. <b>선택은 건드리지 않는다</b> — 옮기려고 고른 것이 X 한 번에 풀리면
+             안 된다. 다른 것을 고르면 `ringDismissed`가 풀려 다시 나온다.
+          */
+          onDismiss={() => { setRingDismissed(true); setRingExpanded(false) }}
         />
       )}
 

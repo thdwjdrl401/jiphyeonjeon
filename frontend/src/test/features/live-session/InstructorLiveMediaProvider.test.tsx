@@ -484,7 +484,7 @@ describe('InstructorLiveMediaProvider', () => {
 
     const publishedOverlays = () => liveKit.localParticipant.setMetadata.mock.calls
       .map(([metadata]) => (JSON.parse(metadata) as {
-        cameraOverlay: { x: number; y: number; w: number; visible: boolean }
+        cameraOverlay: { x: number; y: number; w: number; mirrored: boolean }
       }).cameraOverlay)
 
     async function connected() {
@@ -551,14 +551,14 @@ describe('InstructorLiveMediaProvider', () => {
       warn.mockRestore()
     })
 
-    /** 한 번짜리 조작(표시 토글)도 프레임 하나 뒤에 그대로 나간다. */
-    it('표시 토글도 발행된다', async () => {
+    /** 한 번짜리 조작(뒤집기 토글)도 프레임 하나 뒤에 그대로 나간다. */
+    it('뒤집기 토글도 발행된다', async () => {
       await connected()
 
-      publisherRef!.moveCameraOverlay({ visible: false })
+      publisherRef!.moveCameraOverlay({ mirrored: false })
       await nextFrame()
 
-      expect(publishedOverlays().at(-1)!.visible).toBe(false)
+      expect(publishedOverlays().at(-1)!.mirrored).toBe(false)
     })
   })
 })

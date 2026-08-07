@@ -120,8 +120,6 @@ export default function CameraOverlayControl({ overlay, onChange, children, disa
     onChange(next)
   }
 
-  if (!overlay.visible) return null
-
   return (
     <div className="camera-overlay-frame" ref={frameRef}>
       <div

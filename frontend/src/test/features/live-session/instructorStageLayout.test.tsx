@@ -88,10 +88,33 @@ describe('강사 스테이지 배치', () => {
     expect(button?.closest('.video-controls-overlay')).not.toBeNull()
   })
 
+  /**
+   * 컨트롤 줄은 <b>내보내는 것</b>과 <b>판서</b> 두 묶음이다. 예전에는 일곱 개가 같은 굵기로 한 줄에
+   * 서서 서로 구분되지 않았고, 넷이 "켜짐/꺼짐"으로 끝나 정작 마이크 상태가 묻혔다(ADR-0101 §1).
+   */
+  it('컨트롤은 내보내는 것과 판서 두 묶음으로 갈린다', () => {
+    const { container } = renderStage()
+
+    expect(container.querySelectorAll('.control-row__group')).toHaveLength(2)
+  })
+
+  /**
+   * 카메라를 내리는 방법은 <b>하나</b>다(ADR-0101 §2). 둘이던 시절 강사에게 이 둘은 구분되지 않는데
+   * 결과는 정반대였다 — 하나는 검은 상자를 남기고 하나는 아무것도 남기지 않았다.
+   *
+   * <p>화질은 강의하는 중에 고를 일이 아니라 사전 점검에서 고른다(§4).
+   */
+  it('카메라 표시 토글과 화질 설정은 라이브 화면에 없다', () => {
+    const { queryByRole } = renderStage()
+
+    expect(queryByRole('button', { name: /수강생 화면에 카메라/ })).toBeNull()
+    expect(queryByRole('button', { name: /화질/ })).toBeNull()
+  })
+
   it('판서 토글은 기본이 꺼짐이다 — 켜져 있으면 카메라 배치를 드래그할 수 없다', () => {
     const { getByRole } = renderStage()
 
-    expect(getByRole('button', { name: /^판서 (켜짐|꺼짐)$/ }).getAttribute('aria-pressed')).toBe('false')
+    expect(getByRole('button', { name: '판서' }).getAttribute('aria-pressed')).toBe('false')
   })
 
   /**
@@ -106,7 +129,7 @@ describe('강사 스테이지 배치', () => {
       restoredAnnotationVisible: true,
     } as Partial<InstructorLiveMedia>)
 
-    expect(getByRole('button', { name: /^판서 (켜짐|꺼짐)$/ }).getAttribute('aria-pressed')).toBe('true')
+    expect(getByRole('button', { name: '판서' }).getAttribute('aria-pressed')).toBe('true')
   })
 
   /**
@@ -119,7 +142,7 @@ describe('강사 스테이지 배치', () => {
       restoredAnnotationVisible: false,
     } as Partial<InstructorLiveMedia>)
 
-    expect(getByRole('button', { name: /^판서 (켜짐|꺼짐)$/ }).getAttribute('aria-pressed')).toBe('false')
+    expect(getByRole('button', { name: '판서' }).getAttribute('aria-pressed')).toBe('false')
   })
 
   /** 판서를 켜고 끄면 서버에 남긴다 — 그래야 다음 새로고침에 그대로 돌아온다. */
@@ -127,7 +150,7 @@ describe('강사 스테이지 배치', () => {
     const saveAnnotationVisible = vi.fn()
     const { getByRole } = renderStage({ saveAnnotationVisible } as Partial<InstructorLiveMedia>)
 
-    getByRole('button', { name: /^판서 (켜짐|꺼짐)$/ }).click()
+    getByRole('button', { name: '판서' }).click()
 
     expect(saveAnnotationVisible).toHaveBeenCalledWith(true)
   })
