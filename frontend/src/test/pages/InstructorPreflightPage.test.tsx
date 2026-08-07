@@ -24,6 +24,15 @@ vi.mock('@/features/live-session/useInstructorLiveKit', () => ({
   useInstructorLiveKit: () => publisher,
 }))
 
+/**
+ * 시연 스위치는 운영 계정에게만 보인다(ADR-0100). 이 파일의 기존 테스트는 <b>평범한 강사</b>를
+ * 가정하므로 그렇게 고정하고, 보이지 않는다는 것 자체를 아래에서 한 번 못 박는다.
+ */
+let currentUser: { isAdmin: boolean } | null = { isAdmin: false }
+vi.mock('@/features/auth/AuthContext', () => ({
+  useAuth: () => ({ user: currentUser }),
+}))
+
 const SESSION = 'ses-1'
 
 function readiness(overrides: Partial<{
@@ -60,6 +69,7 @@ function renderPage() {
 
 describe('강사 사전 점검', () => {
   beforeEach(() => {
+    currentUser = { isAdmin: false }
     publisher = {
       connectionState: 'connected',
       cameraEnabled: false,
@@ -156,5 +166,27 @@ describe('강사 사전 점검', () => {
     renderPage()
 
     expect(await screen.findByText('차단됨')).toBeInTheDocument()
+  })
+
+  /**
+   * 시연 스위치는 운영 계정에게만 보인다(ADR-0100). 평범한 강사에게 보이면 실수로 켤 수 있고,
+   * 데모 모드의 화면은 평소와 <b>완전히 같아서</b> 켠 줄 모른 채 수업을 진행하게 된다.
+   */
+  it('데모 스위치는 평범한 강사에게 보이지 않는다', async () => {
+    currentUser = { isAdmin: false }
+    renderPage()
+
+    await screen.findByRole('button', { name: '라이브 시작' })
+    expect(screen.queryByRole('button', { name: '데모 영상 선택' })).not.toBeInTheDocument()
+  })
+
+  it('운영 계정에게는 시작 버튼 옆에 데모 스위치가 있다', async () => {
+    currentUser = { isAdmin: true }
+    publisher = { ...publisher, demoPublish: { armed: false, ready: false, fileName: null, hasAudio: false } }
+    renderPage()
+
+    expect(await screen.findByRole('button', { name: '데모 영상 선택' })).toBeInTheDocument()
+    // 시작 버튼을 대체하지 않는다 — 데모로 켜 두고 평소처럼 시작하는 흐름이다.
+    expect(screen.getByRole('button', { name: '라이브 시작' })).toBeInTheDocument()
   })
 })

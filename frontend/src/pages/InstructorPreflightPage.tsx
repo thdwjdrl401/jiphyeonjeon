@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { instructorPaths, publicPaths } from '@/app/router/paths'
 import LessonBreadcrumbs from '@/features/lesson/LessonBreadcrumbs'
+import DemoPublishControl from '@/features/live-session/DemoPublishControl'
 import InstructorLocalTrackVideo from '@/features/live-session/InstructorLocalTrackVideo'
 import MediaFailureNotice from '@/features/live-session/MediaFailureNotice'
 import MicrophoneLevelMeter from '@/features/live-session/MicrophoneLevelMeter'
@@ -400,6 +401,8 @@ export default function InstructorPreflightPage() {
                     : '마이크를 켜고 서버 점검이 완료될 때까지 기다려 주세요.'}
           </small>
         </div>
+        {/* 시연 스위치는 시작 버튼 옆이다 — 여기서 켜고 위 미리보기로 확인한 뒤 그대로 시작한다. */}
+        <DemoPublishControl />
         <button
           disabled={!ready || startMutation.isPending}
           className={`button button--primary${ready ? '' : ' is-disabled'}`}

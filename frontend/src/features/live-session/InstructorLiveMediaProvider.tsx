@@ -46,6 +46,15 @@ import {
 } from './annotation'
 import { createAnnotationOpSink, fetchAnnotationDocument, type AnnotationOpSink } from './annotationPersistence'
 import {
+  armDemoPublish,
+  createDemoTracks,
+  demoHasAudio,
+  demoPublishState,
+  disarmDemoPublish,
+  releaseDemoTracks,
+  type DemoPublishState,
+} from './demoPublish'
+import {
   describeMediaFailure,
   hasInputDevice,
   preflightMediaFailure,
@@ -169,6 +178,12 @@ export interface InstructorLiveMedia extends InstructorLiveKitState {
   toggleCamera: () => void
   toggleMicrophone: () => void
   toggleScreenShare: () => void
+  /** 지금 데모 파일을 송출 중인가(ADR-0100). 화면이 그 사실을 숨기지 않도록 내준다. */
+  demoPublish: DemoPublishState & { hasAudio: boolean }
+  /** 장치를 내리고 이 파일로 갈아탄다. */
+  startDemoPublish: (file: File) => void
+  /** 데모를 끄고 평소 장치로 돌아간다. */
+  stopDemoPublish: () => void
 }
 
 const initialState: InstructorLiveKitState = {
@@ -243,6 +258,45 @@ function cameraPublishArgs(quality: PublishQuality) {
   } as const
 }
 
+/**
+ * 데모 파일을 카메라·마이크 <b>자리에</b> 올린다(ADR-0100).
+ *
+ * <p><b>`source`가 계약이다.</b> STT agent는 `SOURCE_MICROPHONE`인 오디오만 강사 발화로 본다
+ * (`audio_source.py`). 그냥 올리면 source가 `UNKNOWN`이 되고, 그러면 <b>영상과 녹화는 멀쩡한데
+ * 자막만 영영 안 뜬다</b> — 자막이 없으면 강의 노트도 AI 근거도 빈 채로 간다. 조용히 실패하는
+ * 종류라 여기 적어 둔다. 카메라도 같다: `SOURCE_CAMERA`여야 Egress 합성이 카메라 자리에 놓는다.
+ *
+ * <p>`capture` 인자는 넘기지 않는다 — getUserMedia 제약이라 파일에는 걸리지 않는다. 대신 `publish`
+ * (인코딩·사이멀캐스트·열화 우선순위)는 그대로 적용된다. 그래서 해상도만 파일 원본을 따른다.
+ */
+async function publishDemoTracks(room: Room, quality: PublishQuality): Promise<void> {
+  const { video, audio } = await createDemoTracks()
+  await room.localParticipant.publishTrack(video, {
+    source: Track.Source.Camera,
+    ...cameraPublishArgs(quality).publish,
+  })
+  if (audio) {
+    await room.localParticipant.publishTrack(audio, { source: Track.Source.Microphone })
+  }
+}
+
+/** 데모 송출 실패도 장치 실패와 같은 자리에 그린다 — 강사가 볼 곳이 하나여야 한다. */
+function demoMediaFailure(error: unknown): MediaFailure {
+  const ready = demoPublishState().ready
+  return {
+    kind: 'camera',
+    cause: 'unknown',
+    title: ready ? '데모 영상을 송출하지 못했습니다' : '데모 영상이 없습니다',
+    detail: ready
+      ? error instanceof Error ? error.message : '알 수 없는 오류입니다.'
+      : '새로고침하면 선택한 파일이 사라집니다. 카메라로 자동 전환하지 않았습니다.',
+    action: '데모 영상을 다시 선택하거나, 데모를 끄고 카메라로 진행해 주세요.',
+    // 브라우저 설정으로 풀리는 문제가 아니다. 파일을 다시 고르면 되므로 재시도는 내준다.
+    retryable: true,
+    needsBrowserSetting: false,
+  }
+}
+
 function screenPublishArgs(quality: PublishQuality) {
   const preset = screenPreset(quality)
   return {
@@ -274,6 +328,8 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
   const [quality, setQuality] = useState<PublishQuality>(loadPublishQuality)
   const [applyingQuality, setApplyingQuality] = useState(false)
   const [microphonePermission, setMicrophonePermission] = useState<MediaPermissionState>('unknown')
+  /** 데모 송출 상태. 화면이 배지를 띄우고 강사가 끌 수 있게 하는 근거다(ADR-0100). */
+  const [demoState, setDemoState] = useState<DemoPublishState>(demoPublishState)
   // Room 생성 effect가 품질 변경마다 재실행되면 연결이 끊긴다. 최신 값은 ref로만 읽고,
   // 이미 올라간 트랙은 재게시로 반영한다.
   const qualityRef = useRef(quality)
@@ -361,6 +417,24 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
     const alive = () => roomRef.current === room
     const wantsMicrophone = kinds.includes('microphone')
     setMediaFailure(undefined)
+
+    /*
+     * 데모로 무장돼 있으면 장치를 아예 건드리지 않는다(ADR-0100). 권한도 묻지 않는다 — 물어 봐야
+     * 쓰지 않을 장치이고, 시연 중에 권한 창이 뜨는 것 자체가 사고다.
+     *
+     * 파일을 잃었으면(새로고침) 아무것도 올리지 않고 그렇다고 말한다. 진짜 카메라로 조용히
+     * 되돌아가면 발표자의 실제 방이 수강생 화면에 뜬다.
+     */
+    if (demoPublishState().armed) {
+      try {
+        await publishDemoTracks(room, qualityRef.current)
+      } catch (error) {
+        if (!alive()) return
+        setMediaFailure(demoMediaFailure(error))
+      }
+      if (alive()) syncLocalState(room)
+      return
+    }
 
     if (wantsMicrophone) {
       const [permission, present] = await Promise.all([
@@ -588,6 +662,8 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
         .off(RoomEvent.ParticipantConnected, onParticipantConnected)
       if (roomRef.current === room) roomRef.current = null
       disconnectRef.current = room.disconnect(true).catch(() => undefined)
+      // 재생 중인 element를 놓아 준다. 안 놓으면 이 route를 떠난 뒤에도 파일이 계속 돌며 소리가 난다.
+      releaseDemoTracks()
     }
   }, [openLocalDevices, retryCount, sessionId, setMediaFailure, syncLocalState])
 
@@ -648,6 +724,21 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
     setPendingControl(control)
     setMediaFailure(undefined)
     try {
+      /*
+       * 데모 중에는 카메라·마이크를 <b>음소거로</b> 끈다. `setCameraEnabled(true)`를 태우면 LiveKit이
+       * 장치를 새로 여는데, 그러면 <b>발표자의 진짜 카메라가 켜진다</b> — 시연 중에 이보다 나쁜
+       * 사고가 없다. 음소거는 publication을 그대로 두므로 `isCameraEnabled` 판정도 그대로 맞는다.
+       */
+      if (demoPublishState().armed && control !== 'screenShare') {
+        const source = control === 'camera' ? Track.Source.Camera : Track.Source.Microphone
+        const publication = room.localParticipant.getTrackPublication(source)
+        if (publication) {
+          if (publication.isMuted) await publication.unmute()
+          else await publication.mute()
+        }
+        syncLocalState(room)
+        return
+      }
       if (control === 'camera') {
         const { capture, publish } = cameraPublishArgs(qualityRef.current)
         await room.localParticipant.setCameraEnabled(!room.localParticipant.isCameraEnabled, capture, publish)
@@ -686,6 +777,53 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
   }, [openLocalDevices, state.mediaFailure?.kind, toggleControl])
 
   /**
+   * 장치를 내리고 데모 파일로 갈아탄다(ADR-0100).
+   *
+   * <p><b>먼저 내리는 것이 중요하다.</b> 진짜 카메라를 올려 둔 채 파일을 또 올리면 카메라 트랙이
+   * 둘이 되고, Egress는 소스별로 element가 하나뿐이라 둘이 서로 덮는다. 마이크가 둘이면 더 나쁘다 —
+   * STT agent가 `multiple remote microphone publishers`로 트랙을 죽여 자막이 통째로 사라진다.
+   */
+  const startDemoPublish = useCallback(async (file: File) => {
+    const room = roomRef.current
+    setPendingControl('initial')
+    setMediaFailure(undefined)
+    try {
+      armDemoPublish(file)
+      if (room && room.state === 'connected') {
+        await room.localParticipant.setCameraEnabled(false)
+        await room.localParticipant.setMicrophoneEnabled(false)
+        await publishDemoTracks(room, qualityRef.current)
+        syncLocalState(room)
+      }
+      setDemoState(demoPublishState())
+    } catch (error) {
+      setMediaFailure(demoMediaFailure(error))
+      setDemoState(demoPublishState())
+    } finally {
+      setPendingControl(null)
+    }
+  }, [setMediaFailure, syncLocalState])
+
+  /** 데모를 끄고 평소 장치로 돌아간다. 시연 뒤 정리이자, 잘못 켰을 때의 탈출구다. */
+  const stopDemoPublish = useCallback(async () => {
+    const room = roomRef.current
+    setPendingControl('initial')
+    try {
+      if (room && room.state === 'connected') {
+        for (const source of [Track.Source.Camera, Track.Source.Microphone]) {
+          const track = room.localParticipant.getTrackPublication(source)?.track
+          if (track) await room.localParticipant.unpublishTrack(track)
+        }
+      }
+      disarmDemoPublish()
+      setDemoState(demoPublishState())
+      if (room && room.state === 'connected') await openLocalDevices(room, ['microphone', 'camera'])
+    } finally {
+      setPendingControl(null)
+    }
+  }, [openLocalDevices])
+
+  /**
    * 품질 변경을 즉시 반영한다. Room을 다시 만들면 연결이 끊기므로, 이미 올라간 트랙만
    * 껐다 다시 올린다. 미리보기에서 바로 확인하고 조정할 수 있어야 의미가 있는 설정이다.
    */
@@ -704,9 +842,27 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
       setState((current) => ({ ...current, notice: undefined }))
       try {
         if (next.camera && room.localParticipant.isCameraEnabled) {
-          const { capture, publish } = cameraPublishArgs(merged)
-          await room.localParticipant.setCameraEnabled(false)
-          await room.localParticipant.setCameraEnabled(true, capture, publish)
+          if (demoPublishState().armed) {
+            /*
+             * 데모는 껐다 켤 수 없다 — `setCameraEnabled(true)`가 진짜 카메라를 연다. 대신 트랙을
+             * 내리고 파일에서 다시 뽑아 올린다.
+             *
+             * <b>해상도는 안 바뀐다.</b> `capture` 제약은 getUserMedia 전용이라 파일에는 걸리지
+             * 않고, 바뀌는 것은 인코딩 비트레이트뿐이다. 그래서 그렇다고 말해 준다 — 화면만 보면
+             * 적용된 것처럼 보이는 종류다.
+             */
+            const published = room.localParticipant.getTrackPublication(Track.Source.Camera)?.track
+            if (published) await room.localParticipant.unpublishTrack(published)
+            await publishDemoTracks(room, merged)
+            setState((current) => ({
+              ...current,
+              notice: '데모 송출은 영상 파일의 해상도를 따릅니다. 전송 비트레이트만 바뀝니다.',
+            }))
+          } else {
+            const { capture, publish } = cameraPublishArgs(merged)
+            await room.localParticipant.setCameraEnabled(false)
+            await room.localParticipant.setCameraEnabled(true, capture, publish)
+          }
         }
         if (next.screenShare && room.localParticipant.isScreenShareEnabled) {
           // 화면공유는 다시 올리면 브라우저가 공유 대상을 새로 묻는다. 강사가 강의 도중
@@ -1004,6 +1160,9 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
   const value = useMemo<InstructorLiveMedia>(() => ({
     ...state,
     sessionId,
+    demoPublish: { ...demoState, hasAudio: demoHasAudio() },
+    startDemoPublish: (file: File) => { void startDemoPublish(file) },
+    stopDemoPublish: () => { void stopDemoPublish() },
     pendingControl,
     canControl: state.connectionState === 'connected' || state.connectionState === 'mock',
     quality,
@@ -1026,7 +1185,7 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
     toggleCamera: () => { void toggleControl('camera') },
     toggleMicrophone: () => { void toggleControl('microphone') },
     toggleScreenShare: () => { void toggleControl('screenShare') },
-  }), [annotationAudienceRevision, applyingQuality, cameraOverlay, changeQuality, microphonePermission, moveCameraOverlay, pendingControl, publishAnnotation, publishAnnotationState, publishLaser, quality, restoredAnnotation, restoredAnnotationVisible, retryMedia, saveAnnotationSnapshot, saveAnnotationVisible, sessionId, setMediaFailure, state, toggleControl])
+  }), [annotationAudienceRevision, applyingQuality, cameraOverlay, changeQuality, demoState, microphonePermission, moveCameraOverlay, pendingControl, publishAnnotation, publishAnnotationState, publishLaser, quality, restoredAnnotation, restoredAnnotationVisible, retryMedia, saveAnnotationSnapshot, saveAnnotationVisible, sessionId, setMediaFailure, startDemoPublish, state, stopDemoPublish, toggleControl])
 
   return (
     <InstructorLiveMediaContext.Provider value={value}>

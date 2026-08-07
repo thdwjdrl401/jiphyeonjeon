@@ -32,6 +32,19 @@
 .media-page--live .media-page__title { flex: 0 0 auto; }
 .live-session-state-banner { flex: 0 0 auto; margin-bottom: 13px; padding: 11px 14px; border: 1px solid var(--ink-100); border-radius: 12px; background: var(--blue-50); color: var(--blue-700); font-size: .68rem; }
 .live-session-state-banner.is-ended { border-color: rgba(168,58,36,.24); background: var(--red-50); color: var(--red-700); }
+/* 데모 송출은 인장색으로 세운다 — 이 화면이 평소와 똑같으니 색으로라도 걸려야 한다(ADR-0100). */
+.live-session-state-banner.is-demo { border-color: var(--seal); background: #fdf3f1; color: var(--seal); font-weight: 600; }
+/*
+ * 시연 스위치. 시작 버튼과 같은 줄에 서되 왼쪽으로 밀어 두어 평소 시선(오른쪽 끝 시작 버튼)을
+ * 가리지 않는다. 켜져 있을 때만 인장색 실선으로 존재를 주장한다.
+ */
+.demo-publish { display: flex; align-items: center; gap: 10px; margin-right: auto; padding: 7px 11px; border: 1px dashed var(--ink-200); border-radius: 11px; }
+.demo-publish.is-armed { border-style: solid; border-color: var(--seal); background: #fdf3f1; }
+.demo-publish__text { display: grid; gap: 2px; min-width: 0; }
+.demo-publish__text > strong { color: var(--ink-900); font-size: .72rem; }
+.demo-publish.is-armed .demo-publish__text > strong { color: var(--seal); }
+.demo-publish__text > small { color: var(--ink-600); font-size: .63rem; line-height: 1.45; overflow-wrap: anywhere; }
+.demo-publish__actions { display: flex; flex: 0 0 auto; gap: 6px; }
 /* "강의 종료" 버튼을 누르면 페이지 상단 배너 대신 그 버튼 바로 아래, 미디어 영역 우측에 붙는
    드롭다운으로 뜬다 — 버튼 자리가 곧 미디어 영역 우측 상단이라 별도 좌표 계산이 필요 없다. */
 .instructor-end-menu { position: relative; }
