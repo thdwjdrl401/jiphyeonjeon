@@ -606,19 +606,26 @@ html:has(.notifications-page) {
 /*
  * 로그인 후 대시보드에서 한 번 보여 주는 사이트 자체 브라우저 알림 안내.
  * 다섯 조건이 모두 맞을 때만 마운트되므로(BrowserPushPrompt) 여기서는 눈에 띄되 과하지
- * 않은 정도로만 강조한다 — 경고가 아니라 제안이다.
+ * 않은 정도로만 강조한다 — 경고가 아니라 제안이다. 비동기 구독 확인이 끝난 뒤 나타나도
+ * 대시보드 본문을 밀지 않도록 뷰포트 정중앙의 비모달 카드로 띄운다.
  */
 .browser-push-prompt {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 70;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
+  width: min(420px, calc(100vw - 40px));
+  align-items: flex-start;
+  flex-direction: column;
   gap: 12px;
-  margin-bottom: 20px;
-  border: 1px solid var(--blue-100);
+  border: 1px solid color-mix(in srgb, var(--seal) 34%, var(--blue-100));
   border-radius: 14px;
-  background: var(--blue-50);
-  padding: 14px 18px;
+  background: color-mix(in srgb, var(--red-50) 30%, #fff);
+  padding: 16px 18px;
+  box-shadow: 0 16px 42px rgba(36, 35, 32, 0.18);
+  transform: translate(-50%, -50%);
+  animation: browser-push-prompt-in 180ms ease-out;
 }
 
 .browser-push-prompt__message {
@@ -626,12 +633,48 @@ html:has(.notifications-page) {
   color: var(--blue-700);
   font-size: 0.85rem;
   font-weight: 500;
+  line-height: 1.5;
 }
 
 .browser-push-prompt__actions {
   display: flex;
-  flex: 0 0 auto;
+  align-self: flex-end;
   gap: 8px;
+}
+
+.browser-push-prompt .button--primary {
+  border-color: var(--seal);
+  background: color-mix(in srgb, var(--red-50) 72%, #fff);
+  color: var(--seal);
+}
+
+.browser-push-prompt .button--primary:hover:not(:disabled) {
+  border-color: var(--red-600);
+  background: color-mix(in srgb, var(--seal) 12%, #fff);
+  color: var(--red-600);
+}
+
+@keyframes browser-push-prompt-in {
+  from { opacity: 0; transform: translate(-50%, calc(-50% + 8px)) scale(0.98); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@media (max-width: 520px) {
+  .browser-push-prompt {
+    width: calc(100vw - 24px);
+  }
+
+  .browser-push-prompt__actions {
+    width: 100%;
+  }
+
+  .browser-push-prompt__actions .button {
+    flex: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .browser-push-prompt { animation: none; }
 }
 
 /*
