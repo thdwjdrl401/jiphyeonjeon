@@ -482,13 +482,14 @@ def build_html(spec: dict, ops: list[dict], source_note: str) -> str:
         "</header><div class=\"wrap\">",
     ]
 
-    if info.get("description"):
-        out.append(f'<div class="notice">{esc(info["description"])}</div>')
-
-    out.append('<div class="notice"><b>운영에는 Swagger UI가 열려 있지 않다.</b> '
-               'nginx가 백엔드로 넘기는 경로는 <code>/api/</code>뿐이라 '
-               '<code>/swagger-ui</code>·<code>/v3/api-docs</code>는 SPA로 떨어진다. '
-               '이 문서가 그 자리를 대신한다 — 스펙 스냅샷에서 구웠고, 서버가 필요 없다.</div>')
+    # 스펙의 `info.description` 은 여기 싣지 않는다. 그 글은 **Swagger UI 앞에 앉은 사람**한테
+    # 쓴 것이라("우측 상단 Authorize", "localhost:8080 origin") 이 페이지로 옮기면 거짓말이 된다 —
+    # 여긴 Authorize 버튼이 없고 주소도 localhost가 아니다. 대신 호출하는 사람에게 실제로
+    # 필요한 것만 한 줄로 적는다. 왜 Swagger가 아니라 이 페이지인지는 docs/api/README.md 몫이다.
+    out.append('<div class="notice"><b>인증</b> — HttpOnly 쿠키 세션(Redis). '
+               '<code>Authorization: Bearer</code>를 쓰지 않는다. '
+               '변경 요청(POST·PUT·PATCH·DELETE)은 <code>GET /api/auth/csrf</code>로 받은 토큰을 '
+               '<code>X-XSRF-TOKEN</code> 헤더에 실어 보낸다. (ADR-0014)</div>')
 
     counts = {}
     for o in ops:
