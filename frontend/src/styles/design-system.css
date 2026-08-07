@@ -1847,15 +1847,16 @@ body {
 .summary-block-list section > strong { color: #bcbcb7; }
 .summary-block-list section p,
 .summary-block-list section li { color: #c7c7c2; }
-/* 강의 노트 Markdown — 잉크 모드 값. learning.css의 밝은 값이 그대로 남으면 안 보인다. */
+/* Markdown 본문(강의 노트·AI 답변) — 잉크 모드 값. learning.css의 밝은 값이 그대로 남으면 안 보인다. */
+.markdown :is(h1, h2, h3) { color: #f5f5f2; }
+.markdown strong { color: #f2f2ef; }
+.markdown li::marker { color: #8c8c87; }
+.markdown :is(code, pre) { background: #222; color: #e6e6e1; }
+.markdown blockquote { border-left-color: #444; color: #a6a6a1; }
+.markdown :is(th, td) { border-color: #333; }
+.markdown__loading { color: #8c8c87; }
 .note-markdown { color: #c7c7c2; }
-.note-markdown :is(h1, h2, h3) { border-top-color: #333; color: #f5f5f2; }
-.note-markdown strong { color: #f2f2ef; }
-.note-markdown li::marker { color: #8c8c87; }
-.note-markdown :is(code, pre) { background: #222; color: #e6e6e1; }
-.note-markdown blockquote { border-left-color: #444; color: #a6a6a1; }
-.note-markdown :is(th, td) { border-color: #333; }
-.note-markdown__loading { color: #8c8c87; }
+.note-markdown :is(h1, h2, h3) { border-top-color: #333; }
 .lecture-note-topic { border-color: #2b2b2b; background: #1f1f1f; }
 .lecture-note-topic > summary h3 { color: #f2f2ef; }
 .lecture-note-topic > summary:hover h3 { color: #fff; }
@@ -1875,6 +1876,9 @@ body {
 /* 애니메이션이 읽는 변수를 덮어쓴다(learning.css 참고) — border-color를 직접 덮어써도 애니메이션에 밀린다. 밝은 파랑을 써야 어두운 배경에서도 도드라진다. */
 .glossary-term.is-flash { --glossary-flash-color: #60a5fa; --glossary-flash-rest: #777; }
 .ai-empty p,
+/* 답변 본문은 Markdown이라 목록·인용도 나온다 — `p`만 덮으면 `li`가 learning.css의 밝은 잉크 값을
+   그대로 물려받아 어두운 말풍선에서 안 보인다. 컨테이너에 걸어 통째로 내려보낸다. */
+.ai-answer__body,
 .ai-answer p { color: #bbb; }
 .ai-empty__avatar { border-color: #333; }
 .review-toolbar { border-color: #444; border-radius: 0; background: #1a1a1a; }
