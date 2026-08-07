@@ -51,7 +51,7 @@ public class NotificationTargetService {
     /** 취소된 라이브는 갈 곳이 남아 있어도 갈 이유가 없다. */
     private static final String LIVE_CANCELLED = "CANCELLED";
 
-    /** 학생이 재생할 수 있는 유일한 다시보기 상태. 나머지(DRAFT·READY_FOR_REVIEW·WITHDRAWN)는 404다. */
+    /** 학생이 재생할 수 있는 유일한 다시보기 상태. 나머지(DRAFT·WITHDRAWN)는 404다. */
     private static final String REPLAY_PUBLISHED = "PUBLISHED";
 
     /**

@@ -234,9 +234,12 @@ export default function ReplayLessonPage() {
 
   const replayStatus = playback.playback?.replayStatus ?? 'NOT_READY'
   const published = replayStatus === 'PUBLISHED'
-  const canPublishManually = replayStatus === 'DRAFT'
-    || replayStatus === 'READY_FOR_REVIEW'
-    || replayStatus === 'WITHDRAWN'
+  /*
+    * 수동 게시는 사실상 **재게시**다. 정상 녹화는 완료와 함께 자동으로 PUBLISHED가 되므로
+    * (ADR-0090) 이 버튼이 필요한 경우는 강사가 내렸다가 다시 올릴 때, 그리고 녹화가 실패해
+    * DRAFT에 남은 자산을 되살릴 때뿐이다.
+    */
+  const canPublishManually = replayStatus === 'DRAFT' || replayStatus === 'WITHDRAWN'
 
   /*
    * 예전에 페이지 위쪽 네비바(LessonLayout)가 담당하던 "돌아가기" 링크. 다시보기는 그 네비바를
@@ -262,12 +265,19 @@ export default function ReplayLessonPage() {
     <>
       {isInstructor && (
         <>
-          <StatusBadge tone="warning">강사 검수 모드</StatusBadge>
+          {/*
+            검수 단계가 없으므로 "검수 모드"·"미리보기"라고 하지 않는다(ADR-0090). 강사가 보고
+            있는 것은 **학생이 지금 보는 그 화면**이고, 그 사실을 그대로 말하는 편이 정확하다.
+            공개되지 않은 상태는 강사가 내렸거나 녹화가 실패한 경우다.
+          */}
+          <StatusBadge tone="neutral">강사 화면</StatusBadge>
           <StatusBadge
             tone={published ? 'success' : 'warning'}
-            title={published ? '영상 다시보기가 수강생에게 공개되어 있습니다.' : '기존 미게시 또는 철회된 다시보기입니다.'}
+            title={published
+              ? '수강생에게 공개되어 있습니다. 지금 보고 있는 것이 학생이 보는 화면입니다.'
+              : '지금은 수강생에게 보이지 않습니다. 강사가 내렸거나 녹화가 준비되지 않은 상태입니다.'}
           >
-            {published ? '게시 완료' : '강사 미리보기'}
+            {published ? '공개 중' : '비공개'}
           </StatusBadge>
           {canPublishManually && (
             <button

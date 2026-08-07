@@ -45,7 +45,7 @@ public record LiveProcessingResponse(
                     example = "READY")
             String status,
 
-            @Schema(description = "DRAFT·READY_FOR_REVIEW·PUBLISHED·WITHDRAWN. 자산 준비와 다른 축이다.",
+            @Schema(description = "DRAFT·PUBLISHED·WITHDRAWN. 자산 준비와 다른 축이다.",
                     example = "DRAFT")
             String replayStatus,
 

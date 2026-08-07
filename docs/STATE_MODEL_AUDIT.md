@@ -444,15 +444,15 @@ STARTING → RECORDING → FINALIZING → VERIFYING → READY
 백엔드와 문서의 가능한 값:
 
 ```text
-DRAFT | READY_FOR_REVIEW | PUBLISHED | WITHDRAWN
+DRAFT | PUBLISHED | WITHDRAWN
 ```
 
-목표 전이:
+전이(ADR-0090 — **영상에는 검수 단계가 없다**):
 
 ```text
-새 정상 녹화: DRAFT ──(VideoAsset READY와 원자적 확정)──→ PUBLISHED
-기존 자산:    DRAFT/READY_FOR_REVIEW ──(강사 수동 게시)──→ PUBLISHED
-공개 관리:    PUBLISHED → WITHDRAWN ──(강사 수동 재게시)──→ PUBLISHED
+정상 녹화:   DRAFT ──(VideoAsset READY와 원자적 확정)──→ PUBLISHED
+실패 잔여:   DRAFT(FAILED 자산) ──(강사 수동 게시)──→ PUBLISHED
+공개 관리:   PUBLISHED → WITHDRAWN ──(강사 수동 재게시)──→ PUBLISHED
 ```
 
 현재 구현:
@@ -461,14 +461,14 @@ DRAFT | READY_FOR_REVIEW | PUBLISHED | WITHDRAWN
 - 소유 강사의 수동 publish·withdraw 서비스와 API는 구현돼 있다.
 - 성공 webhook은 `VideoAsset READY + ReplayStatus PUBLISHED`를 같은 트랜잭션에서 확정한다.
 - 강사 processing 조회 API, FE polling과 `READY + PUBLISHED` replay `replace` 이동이 구현됐다.
-- `READY_FOR_REVIEW`는 enum 호환 상태로 남지만 새 정상 자동 게시 경로는 거치지 않는다.
+- `READY_FOR_REVIEW`는 **제거했다**(ADR-0090). 어디서도 설정한 적이 없었고, 남아 있는 동안 화면과 문서가 검수 흐름이 있는 것처럼 말하게 했다. DB `CHECK`에는 값이 남아 있다(무해).
 - 프론트에는 녹화 자산 또는 replay 자체가 없음을 나타내는 `NOT_READY`가 추가되어 있다.
 - `NOT_READY`는 서버 enum이 아니라 프론트 파생 상태다.
 
 레슨 목록의 두 번째 태그 분기:
 
 1. replay `PUBLISHED` → `다시보기 가능`
-2. live `ENDING/ENDED` 또는 replay `DRAFT/READY_FOR_REVIEW` → `다시보기 준비 중`
+2. live `ENDING/ENDED` 또는 replay `DRAFT` → `다시보기 준비 중`
 3. live가 존재하고 `DRAFT/CANCELLED/FAILED`가 아님 → `라이브 예정`
 4. 그 외 → `라이브 일정 준비 중`
 

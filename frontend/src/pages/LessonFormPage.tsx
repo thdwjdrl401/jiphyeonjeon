@@ -49,7 +49,6 @@ export default function LessonFormPage() {
   const existingLiveSession = isEdit ? currentLesson?.liveSession : null
   const liveHasEnded = existingLiveSession?.status === 'ENDING' || existingLiveSession?.status === 'ENDED'
   const replayIsPreparingOrAvailable = currentLesson?.replayStatus === 'DRAFT'
-    || currentLesson?.replayStatus === 'READY_FOR_REVIEW'
     || currentLesson?.replayStatus === 'PUBLISHED'
   const canEditLiveSchedule = !isEdit || !(liveHasEnded || replayIsPreparingOrAvailable)
   const lessonDetailPath = instructorPaths.lesson(curriculumId, sectionId, lessonId ?? '')

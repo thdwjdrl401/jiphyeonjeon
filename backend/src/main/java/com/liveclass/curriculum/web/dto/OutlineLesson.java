@@ -26,7 +26,7 @@ public record OutlineLesson(
         @Schema(description = "재생 길이(ms). 녹화 완료 webhook이 채우는 값이라 그 경로 전까지는 null.")
         Long durationMs,
         OutlineLessonLiveSession liveSession,
-        @Schema(description = "NOT_READY(녹화 없음)·DRAFT·READY_FOR_REVIEW·PUBLISHED·WITHDRAWN. 게시 검수 흐름 전까지 PUBLISHED에는 도달하지 않는다.")
+        @Schema(description = "NOT_READY(녹화 없음)·DRAFT·PUBLISHED·WITHDRAWN. 정상 녹화는 완료와 함께 자동으로 PUBLISHED다(ADR-0090).")
         String replayStatus,
         @Schema(description = "업로드 녹화강의 재생 패키지 상태. LIVE 레슨이면 null.")
         String recordedPublicationStatus,

@@ -425,7 +425,7 @@ function buildLessonAvailability(
 ): Pick<CurriculumOutlineLesson, 'liveSession' | 'replayStatus'> {
   const statusIndex = (lessonOrder - 1) % 6
   const statuses: CurriculumLiveSessionStatus[] = ['ENDED', 'ENDED', 'SCHEDULED', 'OPEN', 'LIVE', 'DRAFT']
-  const replayStatuses: CurriculumReplayStatus[] = ['PUBLISHED', 'READY_FOR_REVIEW', 'NOT_READY', 'NOT_READY', 'NOT_READY', 'NOT_READY']
+  const replayStatuses: CurriculumReplayStatus[] = ['PUBLISHED', 'WITHDRAWN', 'NOT_READY', 'NOT_READY', 'NOT_READY', 'NOT_READY']
   if (statusIndex === 5) return { liveSession: null, replayStatus: replayStatuses[statusIndex] }
   const sessionId = lessonId === 'les-security' ? 'ses-security-live' : `ses-${curriculum.curriculumId}-${lessonOrder}`
   return {

@@ -28,7 +28,7 @@ public interface LiveRecordingStatus {
      * 화면이 알 필요가 없고, 재생은 별도 playback 계약이 담당한다.
      *
      * @param status       {@code STARTING|RECORDING|FINALIZING|VERIFYING|READY|FAILED}
-     * @param replayStatus {@code DRAFT|READY_FOR_REVIEW|PUBLISHED|WITHDRAWN} — 자산 준비와 <b>다른 축</b>이다.
+     * @param replayStatus {@code DRAFT|PUBLISHED|WITHDRAWN} — 자산 준비와 <b>다른 축</b>이다.
      *                     새 정상 녹화는 READY와 PUBLISHED를 함께 확정하지만 기존 미게시·철회 자산은
      *                     수동 게시 상태로 남을 수 있다.
      * @param failureCode  {@code status=FAILED}일 때의 안정적인 code. 아니면 null

@@ -265,7 +265,7 @@ function normalizePlayback(data: ApiPlayback, lessonId: string): PlaybackView {
 }
 
 const REPLAY_STATUSES: ReplayStatus[] = [
-  'DRAFT', 'READY_FOR_REVIEW', 'PUBLISHED', 'WITHDRAWN',
+  'DRAFT', 'PUBLISHED', 'WITHDRAWN',
 ]
 
 /**

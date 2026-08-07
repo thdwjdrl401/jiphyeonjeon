@@ -7,7 +7,7 @@ import type { CurriculumLiveSessionStatus, CurriculumReplayStatus } from '@/feat
  * <p><b>왜 녹화 관련이 두 개(RECORDING_READY·RECORDING_FAILED)뿐인가</b>: 현재 서버는 Egress
  * COMPLETE 하나로 `VideoAssetStatus.READY`와 `ReplayStatus.PUBLISHED`를 <b>같은 트랜잭션에서</b>
  * 저장한다(`RecordingService.markReady`). 즉 "녹화 완료"와 "강사 검수 가능"이 같은 순간이고
- * `READY_FOR_REVIEW`로 가는 코드 경로가 없다. 그래서 "녹화 완료"와 "녹화 강의 준비 완료"를 두 개로
+ * 검수 단계 자체가 없다(ADR-0090). 그래서 "녹화 완료"와 "녹화 강의 준비 완료"를 두 개로
  * 나누지 않고 하나로 합쳤다(요구사항 §9-1의 "동일하면 통합" 규칙).
  */
 export type NotificationType =

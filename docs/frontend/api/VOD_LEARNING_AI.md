@@ -608,7 +608,7 @@ GET /api/instructor/lessons/{lessonId}/learning-summary
 | 상태 조합 | 수강생 처리 |
 |---|---|
 | 자산 `FINALIZING/VERIFYING` | 레슨 상세에서 준비 중 |
-| 자산 `READY` + replay `DRAFT/READY_FOR_REVIEW` | 기존 미게시 자산: 게시 대기, 재생 불가 |
+| 자산 `READY` + replay `DRAFT` | 공개되지 않은 자산(강사가 내렸거나 실패): 재생 불가 |
 | 자산 `READY` + replay `PUBLISHED` + AI 미게시 | 영상 재생, AI 영역 숨김 또는 준비 상태 |
 | 일부 AI 게시 | 게시된 영역만 활성화 |
 | 일부 AI 실패 | 영상과 기존 게시 영역 유지 |

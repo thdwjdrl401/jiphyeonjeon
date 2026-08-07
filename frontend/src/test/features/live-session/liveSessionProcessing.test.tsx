@@ -71,11 +71,17 @@ describe('종료 후 처리 현황 화면', () => {
     expect(screen.queryByText('ses-1')).not.toBeInTheDocument()
   })
 
-  it('자산이 READY여도 게시 전이면 "공개하지 않았다"고 말한다 — 준비와 게시는 다른 축이다', async () => {
+  /**
+   * 준비와 공개는 다른 축이다. 정상 녹화는 완료와 함께 자동으로 공개되므로(ADR-0090) 이 상태는
+   * 강사가 내렸거나 녹화가 실패해 DRAFT에 남은 경우인데, 그때 화면은 <b>"검수하라"가 아니라
+   * "지금 안 보인다"</b>고 말해야 한다 — 강사가 할 일이 검수가 아니라 공개이기 때문이다.
+   */
+  it('자산이 READY여도 공개 전이면 "지금은 보이지 않는다"고 말한다', async () => {
     getProcessingStatus.mockResolvedValue(processing({ status: 'READY', replayStatus: 'DRAFT' }))
     renderPage()
 
-    expect(await screen.findByText(/아직 수강생에게 공개하지 않았습니다/)).toBeInTheDocument()
+    expect(await screen.findByText(/지금은 수강생에게 보이지 않습니다/)).toBeInTheDocument()
+    expect(screen.queryByText(/검수/)).not.toBeInTheDocument()
   })
 
   /**
@@ -91,24 +97,24 @@ describe('종료 후 처리 현황 화면', () => {
     // 끝난 녹화의 단계 기록을 여기서 볼 수 있어야 한다.
     expect(await screen.findByRole('heading', { name: '영상 처리 단계' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '다시보기 도착' })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'VOD 미리보기·검수' }))
+    expect(screen.getByRole('link', { name: '다시보기 확인' }))
       .toHaveAttribute('href', expect.stringContaining('les-1'))
   })
 
-  it('READY 전에는 검수로 가는 링크를 만들지 않는다', async () => {
+  it('READY 전에는 다시보기로 가는 링크를 만들지 않는다', async () => {
     getProcessingStatus.mockResolvedValue(processing({ status: 'FINALIZING' }))
     renderPage()
 
     // 문구는 남되 링크가 아니어야 한다 — to="#"는 현재 경로로 풀려 "잠긴 링크"가 실제로는 이동한다.
-    expect(await screen.findByText('VOD 미리보기·검수')).toHaveAttribute('aria-disabled')
-    expect(screen.queryByRole('link', { name: 'VOD 미리보기·검수' })).not.toBeInTheDocument()
+    expect(await screen.findByText('다시보기 확인')).toHaveAttribute('aria-disabled')
+    expect(screen.queryByRole('link', { name: '다시보기 확인' })).not.toBeInTheDocument()
   })
 
-  it('READY가 되면 검수 링크가 열린다', async () => {
+  it('READY가 되면 다시보기 링크가 열린다', async () => {
     getProcessingStatus.mockResolvedValue(processing({ status: 'READY' }))
     renderPage()
 
-    expect(await screen.findByRole('link', { name: 'VOD 미리보기·검수' }))
+    expect(await screen.findByRole('link', { name: '다시보기 확인' }))
       .toHaveAttribute('href', expect.stringContaining('les-1'))
   })
 
