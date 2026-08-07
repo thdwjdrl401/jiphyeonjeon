@@ -19,6 +19,14 @@ const CAPTION: AiAnswerSource = {
   excerpt: '여기서 CSRF 토큰을 왜 따로 두는지 설명드리겠습니다.',
 }
 
+const ANNOTATION: AiAnswerSource = {
+  type: 'ANNOTATION',
+  highlightId: 'hl-1',
+  sessionId: 'ses-1',
+  sessionMs: 100_000,
+  excerpt: '순환 대기 — 서로가 서로의 자원을 기다리는 닫힌 고리. 자원에 순서를 매겨 순서대로만 요청.',
+}
+
 const toggle = () => screen.getByRole('button', { name: /근거/ })
 
 /**
@@ -63,6 +71,43 @@ describe('AI 근거 목록 — 발췌문', () => {
  * 고정하는 것은 두 축이다 — (1) **기본은 접힘**이라 답변 아래에 한 줄만 남는다(예전에는 카드가 항상
  * 펼쳐져 패널을 근거로 채웠다), (2) 펼쳐도 근거는 여전히 **표시 전용**이다(ADR-0047 §9의 시간축 문제).
  */
+/**
+ * 판서(강사 강조) 근거는 <b>보여 준다</b> — 자막과 달리 사람이 읽을 설명문이라 감출 이유가 없고,
+ * "아까 강조하신 게 뭐였어?" 답변이 판서에 기댔음을 화면으로 증명하는 유일한 수단이다.
+ * 예전에는 파서가 ANNOTATION 타입을 몰라서 조용히 버렸다.
+ */
+describe('AI 근거 목록 — 강사 강조', () => {
+  it('판서 근거를 강사 강조 카드로 보여 준다', async () => {
+    render(<AiEvidenceList sources={[ANNOTATION]} />)
+    await userEvent.click(toggle())
+
+    expect(screen.getByText('강사 강조')).toBeInTheDocument()
+    expect(screen.getByText(/닫힌 고리/)).toBeInTheDocument()
+  })
+
+  it('다시보기 축(PLAYBACK)이면 눌러서 강조 시점으로 이동한다', async () => {
+    let sought: number | null = null
+    render(
+      <AiEvidenceList
+        sources={[{ ...ANNOTATION, timeAxis: 'PLAYBACK' }]}
+        onSeek={(ms) => { sought = ms }}
+      />,
+    )
+    await userEvent.click(toggle())
+    await userEvent.click(screen.getByRole('button', { name: /01:40/ }))
+
+    expect(sought).toBe(100_000)
+  })
+
+  it('라이브(축 미지정)에서는 표시만 하고 이동을 주지 않는다', async () => {
+    render(<AiEvidenceList sources={[ANNOTATION]} onSeek={() => {}} />)
+    await userEvent.click(toggle())
+
+    expect(screen.queryByRole('button', { name: /01:40/ })).not.toBeInTheDocument()
+    expect(screen.getByText(/01:40/)).toBeInTheDocument()
+  })
+})
+
 describe('AI 근거 목록 — 접힘/펼침', () => {
   it('근거가 있어도 기본은 접혀 있고 개수만 알린다', () => {
     render(<AiEvidenceList sources={[PPTX, { ...PPTX, page: 13 }]} />)

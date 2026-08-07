@@ -125,6 +125,17 @@ function normalizeReplaySources(raw: unknown): AiAnswerSource[] {
         timeAxis: 'PLAYBACK',
       }]
     }
+    if (source?.type === 'ANNOTATION') {
+      return [{
+        type: 'ANNOTATION',
+        highlightId: String(source.highlightId ?? ''),
+        sessionId: String(source.sessionId ?? ''),
+        sessionMs: Number(source.sessionMs ?? 0),
+        excerpt: readExcerpt(source.excerpt),
+        // v2 판서 근거의 sessionMs는 플레이어와 같은 다시보기 축이다(ADR-0043 §6).
+        timeAxis: 'PLAYBACK',
+      }]
+    }
     return []
   })
 }

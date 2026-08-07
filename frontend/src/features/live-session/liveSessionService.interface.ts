@@ -218,6 +218,20 @@ export type AiAnswerSource =
       /** Replay v2 녹화강의 근거는 플레이어와 동일한 MP4 시간축이고, 미지정(v1)은 STT 스트림 축이다. */
       timeAxis?: 'STT_STREAM' | 'PLAYBACK'
     }
+  /**
+   * 강사 강조(판서) 근거 — 강사가 강조 툴로 표시한 화면 캡처의 설명문이 근거로 쓰였다는 표시.
+   *
+   * `sessionMs`는 강조한 순간의 세션 상대 시각이다(ADR-0043 §6 — 다시보기 시간축).
+   * 다시보기(v2)에서만 `timeAxis: 'PLAYBACK'`으로 이동을 준다.
+   */
+  | {
+      type: 'ANNOTATION'
+      highlightId: string
+      sessionId: string
+      sessionMs: number
+      excerpt?: string
+      timeAxis?: 'PLAYBACK'
+    }
 
 /**
  * AI 답변 SSE 이벤트. 한 스트림 = `answer.delta` 0개 이상 + terminal(`done`|`insufficient`|`error`) 정확히 하나.
