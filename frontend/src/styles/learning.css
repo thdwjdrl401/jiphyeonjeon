@@ -599,6 +599,30 @@
 .markdown table { display: block; overflow-x: auto; border-collapse: collapse; margin: 0 0 7px; }
 .markdown :is(th, td) { padding: 4px 8px; border: 1px solid var(--ink-100); text-align: left; }
 .markdown__loading { margin: 10px 0 0; color: var(--ink-500); font-size: .68rem; }
+/*
+ * 코드 문법 강조(ADR-0097). 이 제품의 색은 먹과 인장뿐이라 무지개 하이라이팅을 쓰지 않는다 —
+ * 농담과 굵기로 갈래를 나누고, 인장 붉은색은 키워드 하나에만 쓴다. highlight.js가 내는 토큰 30여 개를
+ * 그대로 칠하면 코드 한 줄이 색 견본이 되므로 다섯 갈래로 묶는다.
+ *
+ * 색은 변수로 두고 잉크 모드(design-system.css)가 변수만 다시 정의한다.
+ */
+.markdown {
+  --code-keyword: var(--seal);
+  --code-string: var(--green-700);
+  --code-comment: var(--ink-500);
+  --code-entity: var(--ink-950);
+  --code-number: var(--ink-700);
+}
+.markdown :is(.hljs-keyword, .hljs-literal, .hljs-type, .hljs-built_in, .hljs-selector-tag, .hljs-name, .hljs-section) {
+  color: var(--code-keyword); font-weight: 600; }
+.markdown :is(.hljs-string, .hljs-regexp, .hljs-addition, .hljs-attribute, .hljs-symbol) { color: var(--code-string); }
+.markdown :is(.hljs-comment, .hljs-quote, .hljs-doctag, .hljs-meta) { color: var(--code-comment); font-style: italic; }
+.markdown :is(.hljs-title, .hljs-class, .hljs-function, .hljs-attr, .hljs-property, .hljs-selector-class, .hljs-variable, .hljs-template-variable) {
+  color: var(--code-entity); }
+.markdown :is(.hljs-number, .hljs-bullet) { color: var(--code-number); }
+.markdown .hljs-deletion { color: var(--red-600); }
+.markdown .hljs-emphasis { font-style: italic; }
+.markdown .hljs-strong { font-weight: 700; }
 
 /*
  * 강의 노트. 주제 하나가 `## 제목` + 목록이라, 제목마다 카드처럼 떨어져 보이게 위쪽 여백과 구분선을
