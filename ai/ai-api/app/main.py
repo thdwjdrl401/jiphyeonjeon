@@ -173,7 +173,17 @@ def run() -> None:
     configure_logging("ai-api", settings.log_level)
     rag_services = build_rag_services(settings)
     replay_services = build_replay_rag_services(settings)
-    lecture_note_services = build_lecture_note_services(settings)
+    # 끄면 노트 consumer가 아예 조립되지 않아 GMS 호출이 0이 된다 — API 사용량을 잠시
+    # 줄여야 할 때 쓰는 운영 스위치. 자막·RAG는 영향 없다. 다시 켜면 consumer group의
+    # last-delivered-id부터 이어 소비하며, 꺼진 동안의 자막 노트는 생성되지 않는다(의도).
+    lecture_note_services = (
+        build_lecture_note_services(settings) if settings.lecture_note_enabled else None
+    )
+    if lecture_note_services is None:
+        logger.info(
+            "강의 노트 파이프라인 비활성화됨 (AI_API_LECTURE_NOTE_ENABLED=false)",
+            extra={"event": "lecture_note.disabled"},
+        )
     internal_authenticator = build_internal_authenticator(settings)
     uvicorn.run(
         create_app(

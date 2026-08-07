@@ -69,6 +69,10 @@ class Settings(BaseSettings):
     # These are no longer a pair to keep in sync: the adapter derives which sampling knob to
     # send from the model name, so `reasoning_effort` is simply ignored on a non-reasoning
     # model instead of 400ing the call.
+    # 라이브 노트 생성 전체 스위치. 끄면 노트 consumer가 조립되지 않아 이 파이프라인의
+    # GMS 호출이 0이 된다(자막·RAG 무관). Spring의 LECTURE_NOTE_CONSUMER_ENABLED는 화면
+    # 전파만 끄고 생성 비용은 그대로라, 사용량 절감에는 이 스위치를 쓴다.
+    lecture_note_enabled: bool = True
     lecture_note_model: str | None = Field(default="gpt-5-mini", min_length=1, max_length=128)
     lecture_note_reasoning_effort: str | None = Field(
         default="minimal", min_length=1, max_length=32
