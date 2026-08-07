@@ -1,5 +1,6 @@
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import rehypeCodeHighlight from './rehypeCodeHighlight'
 
 /**
  * 실제 렌더러. <b>이 모듈만</b> react-markdown·remark-gfm을 import한다 —
@@ -25,6 +26,10 @@ import remarkGfm from 'remark-gfm'
  *
  * <p>GFM을 켜는 것은 문법을 넓히려는 것이 아니라, 표·취소선처럼 우리가 기대하지 않은 문법이 섞여 와도
  * 원문이 그대로 노출되지 않게 하려는 것이다.
+ *
+ * <p><b>문법 강조는 언어를 밝힌 코드에만 건다</b>(`detect: false`, ADR-0097). 자동 감지를 켜면 짧은
+ * 조각에서 자주 틀리는데, <b>여기는 코드를 가르치는 화면</b>이라 잘못 칠한 색이 색이 없는 것보다 나쁘다.
+ * ` ```java `처럼 언어가 붙어 오면 칠하고, 없으면 예전처럼 등폭 글꼴 상자로만 남는다.
  */
 interface Props {
   markdown: string
@@ -32,7 +37,12 @@ interface Props {
 
 export default function MarkdownBody({ markdown }: Props) {
   return (
-    <Markdown remarkPlugins={[remarkGfm]} disallowedElements={['img', 'a']} unwrapDisallowed>
+    <Markdown
+      disallowedElements={['img', 'a']}
+      rehypePlugins={[rehypeCodeHighlight]}
+      remarkPlugins={[remarkGfm]}
+      unwrapDisallowed
+    >
       {markdown}
     </Markdown>
   )

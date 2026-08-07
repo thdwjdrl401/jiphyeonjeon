@@ -1930,6 +1930,14 @@ body {
 .markdown blockquote { border-left-color: #444; color: #a6a6a1; }
 .markdown :is(th, td) { border-color: #333; }
 .markdown__loading { color: #8c8c87; }
+/* 코드 강조는 변수만 갈아 끼운다 — 갈래와 굵기는 learning.css가 정한다. #222 위에서 읽히도록 낮춘 값. */
+.markdown {
+  --code-keyword: #e0928a;
+  --code-string: #9dbfad;
+  --code-comment: #8a8a84;
+  --code-entity: #f2f2ef;
+  --code-number: #cfcfca;
+}
 .note-markdown { color: #c7c7c2; }
 .note-markdown :is(h1, h2, h3) { border-top-color: #333; }
 .lecture-note-topic { border-color: #2b2b2b; background: #1f1f1f; }
