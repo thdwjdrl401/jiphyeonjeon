@@ -138,7 +138,12 @@ API가 없어 운영 콘솔의 정지 버튼으로도 걷히지 않는다(ADR-00
 ```bash
 # 1) 시크릿 — 백엔드와 같은 값이어야 한다
 openssl rand -hex 24 | sed 's/^/EGRESS_PURGE_SECRET=/' | sudo tee /etc/liveclass/livekit/purger.env
-sudo chmod 600 /etc/liveclass/livekit/purger.env
+#    root:gitlab-runner 0640 이어야 한다. CI(deploy-livekit)가 이 파일을 --env-file 로 읽는데,
+#    러너는 uid 999(gitlab-runner)로 돌아서 600이면 "permission denied"로 죽는다.
+#    2026-08-07에 실제로 그렇게 실패했다 — 아래 chmod가 600이었던 것이 원인이다.
+#    /etc/liveclass/ 아래 다른 시크릿(.env.prod·.env.ai 등)이 전부 같은 형태다.
+sudo chown root:gitlab-runner /etc/liveclass/livekit/purger.env
+sudo chmod 640 /etc/liveclass/livekit/purger.env
 #    같은 값을 /etc/liveclass/.env.prod 에도 EGRESS_PURGE_SECRET= 로 넣는다
 
 # 2) ufw — 브리지→호스트가 막혀 있다(실측). 이 규칙이 없으면 백엔드가 중계에 닿지 못한다.
