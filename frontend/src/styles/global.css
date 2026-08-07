@@ -115,6 +115,12 @@ h1, h2, h3 { font-family: var(--font-display); }
 
 html {
   scroll-behavior: smooth;
+  /*
+   * 스크롤바 유무로 뷰포트 가용 너비가 15~17px 오갈 때, 가운데 정렬된 .page-container
+   * (네비바 포함)가 페이지 전환마다 좌우로 미세하게 흔들리는 걸 막는다. 항상 거터를
+   * 예약해 두면 스크롤바가 없어도 폭이 그대로라 흔들리지 않는다.
+   */
+  scrollbar-gutter: stable;
 }
 
 body {
