@@ -15,6 +15,7 @@ import EgressStagePage from '@/pages/EgressStagePage'
 import AdminLayout from '@/pages/admin/AdminLayout'
 import AdminOverviewPage from '@/pages/admin/AdminOverviewPage'
 import AdminSessionDetailPage from '@/pages/admin/AdminSessionDetailPage'
+import BrowserPushPromptPreviewPage from '@/pages/BrowserPushPromptPreviewPage'
 import EgressAdminPage from '@/pages/admin/EgressAdminPage'
 import ForbiddenPage from '@/pages/ForbiddenPage'
 import InstructorPreflightPage from '@/pages/InstructorPreflightPage'
@@ -63,6 +64,9 @@ export default function AppRouter() {
           */}
           <Route path="password-reset" element={<PasswordResetRequestPage />} />
           <Route path="password-reset/confirm" element={<PasswordResetConfirmPage />} />
+          {import.meta.env.DEV && (
+            <Route path="preview/browser-push-prompt" element={<BrowserPushPromptPreviewPage />} />
+          )}
         </Route>
         <Route path="student" element={<RequireRoleRoute role="STUDENT" />}>
           <Route index element={<Navigate to={studentPaths.curriculums} replace />} />

@@ -35,6 +35,7 @@ describe('BrowserPushPrompt', () => {
   })
 
   afterEach(() => {
+    window.history.replaceState({}, '', '/')
     vi.unstubAllGlobals()
   })
 
@@ -98,6 +99,17 @@ describe('BrowserPushPrompt', () => {
       await screen.findByText('라이브 시작과 일정 변경을 놓치지 않도록 이 브라우저에서 알림을 받을까요?'),
     ).toBeInTheDocument()
     expect(Notification.requestPermission).not.toHaveBeenCalled()
+  })
+
+  it('개발 미리보기 쿼리에서는 VAPID 키와 대상 강의가 없어도 뜬다', async () => {
+    stubBrowser('granted')
+    getPushPublicKey.mockResolvedValue(null)
+    window.history.replaceState({}, '', '/student/curriculums?previewBrowserPushPrompt=1')
+
+    render(<BrowserPushPrompt eligible={false} />)
+
+    expect(await screen.findByRole('status', { name: '브라우저 알림 안내' })).toBeInTheDocument()
+    expect(getPushPublicKey).not.toHaveBeenCalled()
   })
 
   it('"브라우저 알림 켜기"를 눌러야만 권한을 묻는다', async () => {
