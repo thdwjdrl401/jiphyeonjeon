@@ -124,7 +124,7 @@ GET /api/curriculums/{curriculumId}
 | 목차 | `outline[].sectionId`, `title`, `description`, `order` | 공개 섹션 |
 | 레슨 | `lessonId`, `title`, `order`, `status` | 레슨 게시 상태와 공개하기로 한 최소 목차 |
 | 라이브 | `liveSession.sessionId`, `liveSessionStatus`, `scheduledAt` | 연결된 라이브 세션이 없으면 `liveSession=null` |
-| 다시보기 | `replayStatus` | `NOT_READY`, `DRAFT`, `READY_FOR_REVIEW`, `PUBLISHED`, `WITHDRAWN` |
+| 다시보기 | `replayStatus` | `NOT_READY`, `DRAFT`, `PUBLISHED`, `WITHDRAWN` (검수 단계 없음 — ADR-0090) |
 
 비수강 사용자에게 `status` 전체를 노출할지, `AVAILABLE|UPCOMING|LOCKED` 같은 공개용 상태로 변환할지는 **협의 필요**다. 내부 준비 상태 노출을 줄이기 위해 공개용 상태를 별도로 제공하는 방식을 제안한다.
 

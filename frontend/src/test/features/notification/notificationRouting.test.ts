@@ -118,7 +118,7 @@ describe('알림 클릭 목적지', () => {
   })
 
   it('녹화 완료 알림은 재생할 자산이 있으면 검수 화면, 없으면 처리 현황으로 간다', () => {
-    expect(resolveNotificationRoute('RECORDING_READY', state({ replayStatus: 'READY_FOR_REVIEW' }), 'INSTRUCTOR', NOW))
+    expect(resolveNotificationRoute('RECORDING_READY', state({ replayStatus: 'DRAFT' }), 'INSTRUCTOR', NOW))
       .toBe('/instructor/lessons/les-1/replay')
     expect(resolveNotificationRoute('RECORDING_READY', state({ replayStatus: 'NOT_READY' }), 'INSTRUCTOR', NOW))
       .toBe('/instructor/live-sessions/ses-1/processing')

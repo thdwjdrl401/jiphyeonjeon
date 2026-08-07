@@ -469,10 +469,10 @@ describe('전체 페이지 라우트', () => {
     expect(await screen.findByText('Mock HLS 재생 준비 · ses-security-live')).toBeInTheDocument()
   })
 
-  it('강사에게 다시보기 검수 화면을 제공한다', async () => {
+  it('강사에게 다시보기 화면을 제공한다', async () => {
     await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
     renderAt('/instructor/lessons/les-security/replay')
-    expect(await screen.findByText('강사 검수 모드')).toBeInTheDocument()
+    expect(await screen.findByText('강사 화면')).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '채팅' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '실시간 노트' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'AI 질문' })).toBeInTheDocument()
@@ -487,7 +487,7 @@ describe('전체 페이지 라우트', () => {
     expect(screen.getByRole('tab', { name: '실시간 노트' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'AI 질문' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '핵심 용어' })).toBeInTheDocument()
-    expect(screen.queryByText('강사 검수 모드')).not.toBeInTheDocument()
+    expect(screen.queryByText('강사 화면')).not.toBeInTheDocument()
   })
 
   it('다시보기가 라이브 때 쌓인 노트·AI 기록을 그대로 보여준다', async () => {

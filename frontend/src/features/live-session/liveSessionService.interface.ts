@@ -277,7 +277,7 @@ export type VideoAssetStatus =
   | 'STARTING' | 'RECORDING' | 'FINALIZING' | 'VERIFYING' | 'READY' | 'FAILED'
 
 /** 다시보기 게시 축. 새 정상 녹화는 READY와 함께 게시되지만 기존 미게시·철회 자산은 별도 상태로 남는다. */
-export type ReplayStatus = 'DRAFT' | 'READY_FOR_REVIEW' | 'PUBLISHED' | 'WITHDRAWN'
+export type ReplayStatus = 'DRAFT' | 'PUBLISHED' | 'WITHDRAWN'
 
 /**
  * 종료 후 처리 현황(CONTRACT §2-2).

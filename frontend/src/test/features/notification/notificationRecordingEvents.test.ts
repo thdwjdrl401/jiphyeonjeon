@@ -15,7 +15,7 @@ import { publishReplayReview } from '@/features/replay/replayService'
 /** 종료된 라이브 + 다시보기 공개 상태인 강의(목차 생성 규칙상 7번째 강의). */
 const PUBLISHED_REPLAY_SESSION = 'ses-cur-spring-live-7'
 const PUBLISHED_REPLAY_LESSON = 'cur-spring-live-lesson-7'
-/** 종료된 라이브지만 아직 학생에게 공개되지 않은 녹화(READY_FOR_REVIEW). */
+/** 종료된 라이브지만 아직 학생에게 공개되지 않은 녹화(WITHDRAWN — 강사가 내린 경우). */
 const UNPUBLISHED_REPLAY_SESSION = 'ses-cur-spring-live-14'
 const UNPUBLISHED_REPLAY_LESSON = 'cur-spring-live-lesson-14'
 

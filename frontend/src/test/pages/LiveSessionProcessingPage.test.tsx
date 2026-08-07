@@ -99,7 +99,7 @@ describe('녹화 처리 화면', () => {
     expect(getProcessingStatus).toHaveBeenCalledWith('ses-1')
 
     // 공개까지 끝났어도 영상으로 갈 길은 열어 둔다.
-    expect(screen.getByRole('link', { name: 'VOD 미리보기·검수' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: '다시보기 확인' })).toHaveAttribute(
       'href',
       '/instructor/lessons/les-1/replay',
     )
@@ -110,7 +110,7 @@ describe('녹화 처리 화면', () => {
 
     expect(await screen.findByRole('heading', { name: '녹화 처리 현황' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: '다시보기 도착' })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'VOD 미리보기·검수' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: '다시보기 확인' })).toHaveAttribute(
       'href',
       '/instructor/lessons/les-1/replay',
     )

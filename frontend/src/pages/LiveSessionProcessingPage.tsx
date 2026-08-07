@@ -164,7 +164,7 @@ export default function LiveSessionProcessingPage() {
       ) : !asset ? (
         <InlineNotice tone="info">아직 녹화 자산이 만들어지지 않았습니다. 라이브가 시작되면 생성됩니다.</InlineNotice>
       ) : asset.status === 'READY' && asset.replayStatus !== 'PUBLISHED' ? (
-        <InlineNotice tone="warning">영상은 재생할 수 있지만 아직 수강생에게 공개하지 않았습니다. 검수 후 게시하세요.</InlineNotice>
+        <InlineNotice tone="warning">영상은 재생할 수 있지만 지금은 수강생에게 보이지 않습니다. 다시보기 화면에서 공개할 수 있습니다.</InlineNotice>
       ) : ready ? (
         <InlineNotice tone="success">다시보기가 수강생에게 공개되어 있습니다.</InlineNotice>
       ) : delayed ? (
@@ -177,8 +177,8 @@ export default function LiveSessionProcessingPage() {
       <div className="sticky-form-actions">
         <Link className="button button--ghost" to={instructorPaths.curriculums}>커리큘럼 관리</Link>
         {asset?.status === 'READY'
-          ? <Link className="button button--primary button--large" to={instructorPaths.replay(session.lessonId)}>VOD 미리보기·검수</Link>
-          : <span aria-disabled className="button button--primary button--large is-disabled">VOD 미리보기·검수</span>}
+          ? <Link className="button button--primary button--large" to={instructorPaths.replay(session.lessonId)}>다시보기 확인</Link>
+          : <span aria-disabled className="button button--primary button--large is-disabled">다시보기 확인</span>}
       </div>
     </div>
   )

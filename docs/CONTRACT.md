@@ -77,9 +77,17 @@ LiveSessionStatus: LIVE → ENDING 커밋
 ### 2-2. `VideoAssetStatus` 상태축
 
 `VideoAssetStatus`는 HLS 파일 생성·검증 상태이며 공개 여부인 `ReplayStatus`
-(`DRAFT`·`READY_FOR_REVIEW`·`PUBLISHED`·`WITHDRAWN`)와 의미상 독립이다. 다만 새 정상 녹화의
-성공 확정 정책은 학생에게 바로 영상을 열기 위해 두 상태를 같은 트랜잭션에서 `READY + PUBLISHED`로
-커밋한다. AI 산출물의 검수·게시 상태는 이 자동 게시에 포함하지 않는다.
+(`DRAFT`·`PUBLISHED`·`WITHDRAWN`)와 의미상 독립이다. 다만 새 정상 녹화의 성공 확정 정책은 학생에게
+바로 영상을 열기 위해 두 상태를 같은 트랜잭션에서 `READY + PUBLISHED`로 커밋한다.
+
+**영상에는 검수 단계가 없다**([ADR-0090](decisions/songjeongki/0090-vod-has-no-review-step.md)).
+라이브는 학생이 이미 실시간으로 본 것이고 녹화는 그 사본이라, 실시간에 공개한 것을 녹화만 다시
+검수한다는 축이 성립하지 않는다. 강사가 잊으면 학생이 영영 못 보는 쪽이 사고 녹화보다 비싸고,
+사고는 `WITHDRAWN`으로 되돌린다. 그래서 `READY_FOR_REVIEW`를 상태에서 뺐다 — **어디서도 설정한 적이
+없는 값**이었다. 수동 `publish`는 이름과 달리 **재게시**다(내렸다 다시 올리거나 실패한 자산을 살릴 때).
+
+AI 산출물(자막·노트·용어)의 검수·게시는 **별개 축이며 아직 없다**. 지금은 만들어진 대로 학생에게
+나간다.
 
 | 상태 | 의미와 처리 |
 |---|---|
@@ -130,7 +138,7 @@ GET /api/instructor/live-sessions/{sessionId}/processing
 
 - **두 상태축을 접지 않는다.** `videoAsset.status`
   (`STARTING|RECORDING|FINALIZING|VERIFYING|READY|FAILED`)와 자산 내부 `replayStatus`
-  (`DRAFT|READY_FOR_REVIEW|PUBLISHED|WITHDRAWN`)를 `ready` 같은 단일 값으로 합치지 않는다.
+  (`DRAFT|PUBLISHED|WITHDRAWN`)를 `ready` 같은 단일 값으로 합치지 않는다.
   새 정상 녹화는 성공 webhook의 한 트랜잭션에서 `READY + PUBLISHED`로 확정하지만, 기존 미게시·철회
   자산에는 다른 조합이 남을 수 있다.
 - **표시 문구를 담지 않는다.** 서버는 상태만 반환하고 단계 이름·설명은 FE가 만든다.
@@ -140,7 +148,7 @@ GET /api/instructor/live-sessions/{sessionId}/processing
 - `STARTING/RECORDING/FINALIZING/VERIFYING`은 최초 30초 동안 2초, 이후 5초 간격으로 폴링한다.
   비활성 탭에서는 중단하며 FE timeout을 `FAILED`로 해석하지 않는다.
 - `READY + PUBLISHED`면 폴링을 멈추고, 별도 세션 상세에서 얻은 `lessonId`의 강사 replay 경로로
-  `replace` 이동한다. `READY + DRAFT/READY_FOR_REVIEW/WITHDRAWN`은 수동 게시 동선을 제공한다.
+  `replace` 이동한다. `READY + DRAFT/WITHDRAWN`은 수동 게시 동선을 제공한다.
   `FAILED`는 폴링을 멈추고 `failureCode`를 표시한다.
 - 소유 강사는 200, 비소유 사용자·수강생은 403 `LIVE_SESSION_FORBIDDEN`, 없는 세션은
   404 `LIVE_SESSION_NOT_FOUND`다. 조회는 매번 LiveKit·MinIO를 호출하지 않고 DB 상태만 반환한다.
