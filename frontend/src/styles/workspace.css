@@ -339,6 +339,8 @@
 .lesson-detail__context a { color: inherit; }
 .lesson-detail__primary,
 .lesson-detail__materials { display: flex; min-width: 0; flex-direction: column; }
+/* 패널 폭은 뷰포트가 아니라 그리드 열이 정한다 — 열이 좁아지는 순간을 컨테이너 쿼리로 잡아야 글씨가 밖으로 새지 않는다. */
+.lesson-detail__primary { container: lesson-primary / inline-size; }
 .lesson-live-summary { display: grid; min-height: 170px; flex: 1; grid-template-columns: auto minmax(160px, .8fr) minmax(200px, 1.2fr); align-items: center; gap: 20px; }
 .lesson-live-date { display: flex; width: 70px; height: 82px; align-items: center; justify-content: center; flex-direction: column; background: var(--blue-600); color: #fff; }
 .lesson-live-date span { font-size: .65rem; }
@@ -443,12 +445,17 @@
   .lesson-detail-page > .breadcrumbs { display: none; }
   .lesson-detail__info-content { grid-template-columns: 1fr; gap: 12px; }
   .lesson-detail__context { padding: 12px 0 0; border-top: 1px solid var(--ink-100); border-left: 0; }
+}
+
+/* 3열(날짜·일정·상태)은 최소 470px가 필요하다 — 그보다 좁아지면 상태 블록을 아래 줄로 내린다. */
+@container lesson-primary (max-width: 500px) {
   .lesson-live-summary { grid-template-columns: auto minmax(0, 1fr); gap: 12px; }
   .lesson-live-state { grid-column: 1 / -1; padding: 10px 0 0; border-top: 1px solid var(--ink-100); border-left: 0; }
   .lesson-detail__primary-footer { align-items: stretch; flex-direction: column; }
   .lesson-readiness-summary { width: 100%; }
   .lesson-detail__primary .lesson-replay-summary { grid-template-columns: 1fr; }
   .lesson-detail__primary .lesson-replay-summary > .button { grid-column: 1; width: 100%; }
+  .empty-live-state { align-items: stretch; flex-direction: column; }
 }
 
 .profile-preview { display: flex; align-items: flex-start; gap: 14px; margin-top: 17px; padding: 16px; border-radius: 13px; background: var(--ink-50); }
