@@ -4,7 +4,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { instructorPaths, publicPaths } from '@/app/router/paths'
 import LessonBreadcrumbs from '@/features/lesson/LessonBreadcrumbs'
 import InstructorLocalTrackVideo from '@/features/live-session/InstructorLocalTrackVideo'
+import MediaFailureNotice from '@/features/live-session/MediaFailureNotice'
+import MicrophoneLevelMeter from '@/features/live-session/MicrophoneLevelMeter'
 import { useInstructorLiveKit } from '@/features/live-session/useInstructorLiveKit'
+import type { MediaPermissionState } from '@/features/live-session/mediaFailure'
 import {
   CAMERA_QUALITIES,
   SCREEN_QUALITIES,
@@ -33,6 +36,19 @@ function connectionLabel(state: ReturnType<typeof useInstructorLiveKit>['connect
   return '대기'
 }
 
+/**
+ * 브라우저에 저장된 마이크 권한을 점검 항목으로 보여 준다.
+ *
+ * <p>차단은 <b>강사가 브라우저 설정에서 직접 풀어야</b> 넘어가는 상태라, 다른 항목들처럼 기다린다고
+ * 해결되지 않는다. 그래서 대기(warning)가 아니라 실패(danger)로 그린다.
+ */
+function permissionBadge(permission: MediaPermissionState): { tone: 'success' | 'warning' | 'danger'; label: string } {
+  if (permission === 'granted') return { tone: 'success', label: '허용됨' }
+  if (permission === 'denied') return { tone: 'danger', label: '차단됨' }
+  if (permission === 'prompt') return { tone: 'warning', label: '확인 필요' }
+  return { tone: 'warning', label: '확인 불가' }
+}
+
 export default function InstructorPreflightPage() {
   const { sessionId = '' } = useParams()
   const navigate = useNavigate()
@@ -45,9 +61,11 @@ export default function InstructorPreflightPage() {
     queryFn: () => getLiveSession(sessionId),
     enabled: Boolean(sessionId),
   })
-  const localPublisherReady = (
-    publisher.connectionState === 'connected' || publisher.connectionState === 'mock'
-  ) && publisher.microphoneEnabled
+  /**
+   * 서버 점검을 시작할 조건. <b>마이크는 넣지 않는다</b>(ADR-0099) — 없으면 무음일 뿐이고, 여기 넣으면
+   * 마이크가 없는 강사는 서버 점검이 영원히 시작되지 않아 화면이 멈춘 것처럼 보인다.
+   */
+  const localPublisherReady = publisher.connectionState === 'connected' || publisher.connectionState === 'mock'
   const cameraTrack = publisher.cameraEnabled ? publisher.cameraTrack : undefined
   const readinessQuery = useQuery({
     queryKey: ['live-session-preflight-readiness', sessionId, publisher.mediaRevision],
@@ -88,16 +106,31 @@ export default function InstructorPreflightPage() {
   const serverReady = readinessQuery.data?.ready === true
   const serverCheckTone = readinessQuery.isError
     ? 'danger'
-    : serverReady
-      ? 'success'
-      : 'info'
-  const serverCheckMessage = !localPublisherReady
-    ? 'LiveKit 연결과 마이크 송출이 확인되면 서버 점검을 자동으로 시작합니다.'
-    : readinessQuery.isError
-      ? '서버 상태를 확인하지 못했습니다. 잠시 후 자동으로 다시 확인합니다.'
+    // 장치 문제는 시작을 막지 않으므로(ADR-0099) 실패가 아니라 경고다.
+    : publisher.mediaFailure
+      ? 'warning'
       : serverReady
-        ? '서버 점검 완료 · 강사 연결과 마이크 송출 상태가 정상입니다.'
-        : 'LiveKit 서버에서 강사 연결과 마이크 송출 상태를 확인하고 있습니다.'
+        ? 'success'
+        : 'info'
+  const serverCheckMessage = publisher.mediaFailure
+    ? `${publisher.mediaFailure.title} — 이대로도 시작할 수 있고, 위 안내대로 해결하면 소리가 함께 나갑니다.`
+    : !localPublisherReady
+      ? 'LiveKit 연결이 확인되면 서버 점검을 자동으로 시작합니다.'
+      : readinessQuery.isError
+        ? '서버 상태를 확인하지 못했습니다. 잠시 후 자동으로 다시 확인합니다.'
+        : serverReady
+          ? '서버 점검 완료 · 강사 연결이 정상입니다.'
+          : 'LiveKit 서버에서 강사 연결 상태를 확인하고 있습니다.'
+  const micPermission = permissionBadge(publisher.microphonePermission)
+  /**
+   * 소리가 나갈 것인가. <b>시작을 막지는 않지만</b>(ADR-0099) 강사가 알고 눌러야 한다 — 무음은
+   * 조용히 실패해서, 알려 주지 않으면 강의가 끝난 뒤에야 드러난다(ADR-0048).
+   *
+   * <p>서버 판정이 있으면 그쪽을 쓴다. 로컬 토글은 트랙이 실제로 올라갔는지까지는 모른다.
+   */
+  const audioSilent = readinessQuery.data
+    ? !readinessQuery.data.microphonePublished || readinessQuery.data.microphoneMuted
+    : !publisher.microphoneEnabled
   const starting = startMutation.isPending || startStatusQuery.data?.attemptStatus === 'IN_PROGRESS'
   const ready = localPublisherReady && serverReady && !starting
   const startFailure = startStatusQuery.data?.attemptStatus === 'FAILED'
@@ -194,11 +227,28 @@ export default function InstructorPreflightPage() {
               <span>마이크 {publisher.microphoneEnabled ? '송출 중' : '켜기'}</span>
             </button>
           </div>
+          {/*
+            서버는 "마이크 1개 송출"까지만 확인해 준다. 그 트랙에 <b>소리가 실려 있는지</b>는 아무도
+            모른다 — 운영체제 음소거·엉뚱한 입력 장치·죽은 마이크는 전부 publish에 성공한다.
+            강사가 한마디 해서 게이지가 오르는 것이 그 마지막 한 칸이다(ADR-0099 §5).
+          */}
+          <MicrophoneLevelMeter track={publisher.microphoneTrack} />
+          {/*
+            연결 실패와 장치 실패를 갈라 놓는다. 예전에는 한 칸이라, 마이크가 없는 컴퓨터에서
+            "Requested device not found"가 연결 오류 자리에 떴다 — 방에는 이미 들어와 있었는데도.
+          */}
           {publisher.errorMessage && (
             <InlineNotice tone="danger">
               {publisher.errorMessage}{' '}
               <button className="button button--soft button--small" type="button" onClick={publisher.retry}>다시 연결</button>
             </InlineNotice>
+          )}
+          {publisher.mediaFailure && (
+            <MediaFailureNotice
+              failure={publisher.mediaFailure}
+              pending={Boolean(publisher.pendingControl)}
+              onRetry={publisher.retryMedia}
+            />
           )}
         </Panel>
 
@@ -273,18 +323,29 @@ export default function InstructorPreflightPage() {
                 <span>LiveKit 연결<small>송출 방 연결 상태</small></span>
                 <StatusBadge tone={localPublisherReady ? 'success' : 'warning'}>{connectionLabel(publisher.connectionState)}</StatusBadge>
               </li>
+              {/*
+                권한을 항목으로 세운다. 이것이 없으면 "마이크 송출 대기"만 계속 보여, 기다리면
+                되는 상태인지 강사가 손대야 하는 상태인지 구분되지 않는다.
+              */}
+              <li>
+                <span>마이크 권한<small>브라우저에 저장된 허용 상태</small></span>
+                <StatusBadge tone={micPermission.tone}>{micPermission.label}</StatusBadge>
+              </li>
               <li>
                 <span>강사 연결<small>강사 입장 확인</small></span>
                 <StatusBadge tone={readinessQuery.data?.instructorPresent ? 'success' : 'warning'}>
                   {readinessQuery.data?.instructorPresent ? '확인됨' : '대기'}
                 </StatusBadge>
               </li>
+              {/* 시작을 막는 항목이 아니다(ADR-0099). "대기"라고 쓰면 기다리면 풀리는 줄 안다. */}
               <li>
-                <span>마이크 송출<small>음성 트랙 상태</small></span>
-                <StatusBadge tone={readinessQuery.data?.microphonePublished && !readinessQuery.data?.microphoneMuted ? 'success' : 'warning'}>
-                  {readinessQuery.data?.microphonePublished
-                    ? readinessQuery.data.microphoneMuted ? '음소거됨' : `${readinessQuery.data.instructorMicrophoneTrackCount}개 송출`
-                    : '대기'}
+                <span>마이크 송출<small>없어도 시작할 수 있습니다</small></span>
+                <StatusBadge tone={readinessQuery.data && !audioSilent ? 'success' : 'warning'}>
+                  {!readinessQuery.data
+                    ? '확인 중'
+                    : readinessQuery.data.microphonePublished
+                      ? readinessQuery.data.microphoneMuted ? '음소거됨' : `${readinessQuery.data.instructorMicrophoneTrackCount}개 송출`
+                      : '소리 없음'}
                 </StatusBadge>
               </li>
               <li>
@@ -310,20 +371,33 @@ export default function InstructorPreflightPage() {
           )}
         </div>
       )}
-      <div className={`sticky-form-actions instructor-preflight__actions${ready ? ' is-ready' : startFailure ? ' is-error' : ''}`}>
+      {/*
+        마이크가 없어도 시작 버튼은 열려 있다(ADR-0099). 대신 무엇을 잃는지 이 자리에서 말한다 —
+        무음은 조용히 실패해서, 여기서 말하지 않으면 강의가 끝난 뒤에야 드러난다.
+      */}
+      <div className={`sticky-form-actions instructor-preflight__actions${ready ? (audioSilent ? ' is-ready is-silent' : ' is-ready') : startFailure ? ' is-error' : ''}`}>
         <span className="instructor-preflight__start-icon" aria-hidden="true">
-          {ready ? '✓' : startFailure ? '!' : starting ? '···' : '•'}
+          {ready ? (audioSilent ? '!' : '✓') : startFailure ? '!' : starting ? '···' : '•'}
         </span>
         <div className="instructor-preflight__start-state" role="status" aria-live="polite">
-          <strong>{ready ? '라이브 시작 준비 완료' : starting ? '라이브 시작 준비 중' : startFailure ? '라이브 시작 실패' : '필수 점검 진행 중'}</strong>
+          <strong>
+            {ready
+              ? audioSilent ? '마이크 없이 시작 준비됨' : '라이브 시작 준비 완료'
+              : starting ? '라이브 시작 준비 중' : startFailure ? '라이브 시작 실패' : '필수 점검 진행 중'}
+          </strong>
           <small>
             {ready
-              ? '실제 마이크 송출과 서버 조건을 모두 확인했습니다.'
+              ? audioSilent
+                ? '소리 없이 송출됩니다 — 녹화와 자막에도 소리가 남지 않습니다.'
+                : '실제 마이크 송출과 서버 조건을 모두 확인했습니다.'
               : starting
                 ? `STARTING · ${startStatusQuery.data?.step ?? 'ACCEPTED'} — 마이크를 끄지 마세요.`
                 : startFailure
                   ? '문제를 확인한 뒤 다시 시작해 주세요.'
-                  : '마이크를 켜고 서버 점검이 완료될 때까지 기다려 주세요.'}
+                  : publisher.mediaFailure
+                    // 장치가 막혀 있으면 기다려서 풀리지 않는다. 할 일을 그대로 옮겨 적는다.
+                    ? publisher.mediaFailure.action
+                    : '마이크를 켜고 서버 점검이 완료될 때까지 기다려 주세요.'}
           </small>
         </div>
         <button

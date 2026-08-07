@@ -53,8 +53,17 @@ public class LivePreflightService {
     /**
      * 방 상태에서 강사 publisher 준비 여부를 판정한다.
      *
-     * <p>필수 조건은 셋이다 — 소유 강사 participant 존재, unmuted microphone 하나,
-     * 예상 밖 microphone publisher 없음.
+     * <p><b>막는 조건은 둘뿐이다</b> — 소유 강사 participant가 방에 있을 것, 강사 외 microphone
+     * publisher가 없을 것(둘이면 소리가 겹친다). 강사 자신의 microphone track도 하나를 넘지 않아야
+     * 한다(같은 이유).
+     *
+     * <p><b>마이크 유무·음소거는 막지 않는다.</b> 예전에는 unmuted microphone 하나를 필수로 요구했는데,
+     * 그 조건이 재려던 것은 "강사가 실제로 방에 있는가"였고 그건 {@code instructorPresent}가 그대로
+     * 만족한다(§ADR-0099). 마이크가 없다고 강의를 못 열 이유는 없다 — Egress는 트랙을 믹스하지 않고
+     * 헤드리스 Chrome의 재생 출력을 담으므로(ADR-0048), 오디오가 없으면 실패가 아니라 무음이다.
+     *
+     * <p>대신 판정 결과의 나머지 필드로 화면이 <b>무음으로 시작한다는 사실을 강사에게 알린다</b>.
+     * 무음은 조용히 실패하는 종류라 알려 주지 않으면 강의가 끝난 뒤에야 드러난다.
      */
     public PreflightCheck check(UUID sessionId, UUID instructorId) {
         String room = LiveSessionService.roomName(sessionId);
@@ -77,7 +86,7 @@ public class LivePreflightService {
         boolean muted = instructor.map(LiveRoomControl.ParticipantMediaState::microphoneMuted).orElse(false);
         int microphoneTrackCount = instructor
                 .map(LiveRoomControl.ParticipantMediaState::microphoneTrackCount).orElse(0);
-        boolean ready = present && microphoneTrackCount == 1 && published && !muted && otherMicPublishers == 0;
+        boolean ready = present && microphoneTrackCount <= 1 && otherMicPublishers == 0;
         return new PreflightCheck(ready, present, published, muted,
                 microphoneTrackCount, (int) otherMicPublishers);
     }
@@ -108,10 +117,11 @@ public class LivePreflightService {
     /**
      * 강사 publisher 준비 판정 결과.
      *
-     * @param ready                       셋을 모두 만족하는가(시작 버튼 활성화 조건)
+     * @param ready                       시작해도 되는가 — 강사가 방에 있고 마이크가 겹치지 않는가.
+     *                                    <b>마이크 유무는 여기 들어가지 않는다</b>(ADR-0099).
      * @param instructorPresent           소유 강사 participant가 방에 있는가
-     * @param microphonePublished         그 강사가 마이크를 publish 중인가
-     * @param microphoneMuted             그 마이크가 muted인가
+     * @param microphonePublished         그 강사가 마이크를 publish 중인가(false여도 시작할 수 있다)
+     * @param microphoneMuted             그 마이크가 muted인가(true여도 시작할 수 있다)
      * @param unexpectedMicrophonePublishers 강사 외 마이크 publisher 수(0이어야 한다)
      */
     public record PreflightCheck(boolean ready, boolean instructorPresent,

@@ -3,6 +3,7 @@ import { StatusBadge } from '@/shared/ui/WorkspaceUi'
 import CameraOverlayControl from './CameraOverlayControl'
 import InstructorAnnotationLayer from './InstructorAnnotationLayer'
 import InstructorLocalTrackVideo from './InstructorLocalTrackVideo'
+import MediaFailureNotice from './MediaFailureNotice'
 import PublishQualityPanel from './PublishQualityPanel'
 import { useAnnotationHighlightCapture } from './useAnnotationHighlightCapture'
 import { useInstructorLiveKit, type InstructorLiveKitConnectionState } from './useInstructorLiveKit'
@@ -326,6 +327,22 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
           <span>{publisher.errorMessage}</span>
           {canRetry && <button className="button button--soft button--small" type="button" onClick={publisher.retry}>다시 연결</button>}
         </div>
+      )}
+
+      {publisher.notice && <div className="instructor-media-notice" role="status">{publisher.notice}</div>}
+
+      {/*
+        장치 문제는 강의 중에도 뜬다 — "이번만 허용"이 끝나면 브라우저가 마이크를 끊는다.
+        그때 닫을 수 있어야 화면을 가리지 않는다(연결 오류와 달리 강의는 계속되고 있다).
+      */}
+      {publisher.mediaFailure && (
+        <MediaFailureNotice
+          className="media-failure--overlay"
+          failure={publisher.mediaFailure}
+          pending={Boolean(publisher.pendingControl)}
+          onDismiss={publisher.dismissMediaFailure}
+          onRetry={publisher.retryMedia}
+        />
       )}
 
       <div className="video-controls-overlay" aria-label="강사 송출 컨트롤">

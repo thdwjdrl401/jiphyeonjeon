@@ -1555,6 +1555,81 @@ body {
 .inline-notice--warning::before { box-shadow: inset 0 0 0 1.5px var(--seal); }
 .inline-notice--danger { border-color: rgba(182,59,50,.32); background: var(--red-50); color: var(--seal); }
 .inline-notice--danger::before { background: var(--seal); }
+
+/*
+ * 장치 실패 안내(MediaFailureNotice). 세 줄이 각자 다른 일을 하므로 무게도 다르게 준다 —
+ * 제목은 먹빛으로 세우고, 까닭은 한 톤 낮추고, <b>조치는 다시 진하게</b> 한다. 강사가 화면에서
+ * 실제로 찾아 읽어야 하는 줄이 조치이기 때문이다.
+ *
+ * <p>바탕과 인장은 위 .inline-notice와 같은 두 축을 쓴다. 다만 브라우저 설정을 직접 고쳐야 하는
+ * 상태(--setting)만 인장을 채운다 — 기다리거나 다시 눌러 풀리는 것과 성격이 다르다.
+ */
+.media-failure {
+  display: grid;
+  gap: 4px;
+  padding: 11px 13px;
+  border: 1px solid color-mix(in srgb, var(--seal) 38%, var(--border-medium));
+  background: var(--ink-50);
+  color: var(--ink-800);
+  font-size: .74rem;
+  line-height: 1.55;
+}
+.media-failure__title { color: var(--ink-900); font-size: .78rem; font-weight: 700; }
+.media-failure__title::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 9px;
+  box-shadow: inset 0 0 0 1.5px var(--seal);
+  vertical-align: 1px;
+}
+.media-failure__detail { margin: 0; color: var(--ink-600); }
+.media-failure__action { margin: 0; color: var(--ink-900); font-weight: 600; }
+.media-failure__buttons { display: flex; gap: 8px; margin-top: 5px; }
+.media-failure__buttons:empty { display: none; }
+.media-failure--setting { border-color: rgba(182,59,50,.32); background: var(--red-50); }
+.media-failure--setting .media-failure__title { color: var(--seal); }
+.media-failure--setting .media-failure__title::before { background: var(--seal); box-shadow: none; }
+.media-failure--setting .media-failure__action { color: var(--seal); }
+/*
+ * 마이크 입력 게이지(ADR-0099 §5). 칸을 <b>세는 눈금</b>으로 그린다 — 매끄럽게 늘어나는 막대는
+ * 소리가 조금 들어오는 것과 제대로 들어오는 것을 눈으로 가르기 어렵다.
+ *
+ * <p>칸이 차오르는 것 자체가 이 화면의 유일한 애니메이션이라, 여기서만 색을 쓴다. 소리가 확인되기
+ * 전에는 먹빛으로 차오르고, 확인된 뒤에는 인장색으로 바뀐다 — "됐다"가 색으로 남는다.
+ */
+.mic-meter { display: grid; gap: 6px; margin-top: 10px; }
+.mic-meter__head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.mic-meter__label { color: var(--ink-700); font-size: .72rem; font-weight: 600; }
+.mic-meter__verdict { color: var(--ink-500); font-size: .66rem; }
+.mic-meter--heard .mic-meter__verdict { color: var(--green-700); font-weight: 600; }
+.mic-meter__bar { display: flex; gap: 3px; height: 14px; }
+.mic-meter__bar i { flex: 1; background: var(--ink-100); }
+.mic-meter__bar i.is-lit { background: var(--ink-700); }
+.mic-meter--heard .mic-meter__bar i.is-lit { background: var(--green-700); }
+/* 마지막 두 칸은 과입력 구간이다 — 여기까지 계속 붙어 있으면 소리가 깨진다. */
+.mic-meter__bar i:nth-last-child(-n+2).is-lit { background: var(--seal); }
+
+/*
+ * 라이브 화면(어두운 무대) 위에 겹쳐 뜨는 경우. <b>여기에 두는 이유는 로드 순서다</b> — 이 파일이
+ * main.tsx에서 맨 뒤에 오므로, learning.css에 두면 바로 위 base 규칙이 같은 특이도로 이 톤을 덮는다.
+ * .inline-notice 톤이 회색으로 뭉갰던 것과 같은 사고다(위 주석 참고).
+ */
+.media-failure--overlay { position: absolute; z-index: 7; top: 84px; right: 18px; left: 18px; border-color: rgba(197,106,90,.4); border-radius: 10px; background: rgba(38,20,17,.92); color: #ece2da; font-size: .66rem; backdrop-filter: blur(10px); }
+.media-failure--overlay .media-failure__title { color: #f4cbc2; font-size: .7rem; }
+.media-failure--overlay .media-failure__title::before { box-shadow: inset 0 0 0 1.5px #d98a7a; }
+.media-failure--overlay.media-failure--setting .media-failure__title::before { background: #d98a7a; box-shadow: none; }
+.media-failure--overlay .media-failure__detail { color: #c3b8ae; }
+.media-failure--overlay .media-failure__action { color: #f2e7dd; }
+/* 버튼도 어두운 바탕에 맞춘다 — 기본 톤은 밝은 화면용이라 여기서는 글자가 바탕에 묻힌다.
+   라이브 컨트롤(.control-row button)과 같은 처리다. */
+.media-failure--overlay .button {
+  border-color: rgba(255,252,243,.2);
+  background: rgba(255,252,243,.08);
+  color: rgba(255,252,243,.86);
+}
+.media-failure--overlay .button:hover:not(:disabled) { background: rgba(255,252,243,.16); }
 .form-grid input,
 .form-grid textarea,
 .form-grid select,

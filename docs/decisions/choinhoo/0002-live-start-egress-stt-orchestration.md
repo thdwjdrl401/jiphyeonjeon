@@ -46,7 +46,10 @@ OPEN
 1. Spring이 `session-{sessionId}` Room을 생성하거나 재사용한다.
 2. 강사 FE가 publisher token으로 연결해 camera·microphone을 publish한다.
 3. Spring이 LiveKit participant와 track을 조회한다.
-4. 소유 강사의 unmuted microphone 하나가 확인돼야 시작 버튼을 활성화한다.
+4. ~~소유 강사의 unmuted microphone 하나가 확인돼야 시작 버튼을 활성화한다.~~
+   → **개정([ADR-0099](../songjeongki/0099-microphone-is-shown-not-required.md))**: 소유 강사가 방에
+   있고 마이크가 겹치지 않으면 활성화한다. **마이크 유무·음소거는 막지 않고 화면에 표시한다.**
+   이 조항이 재려던 것은 "강사가 실제로 방에 있는가"였고 그건 `instructorPresent`가 만족한다.
 
 FE의 로컬 토글 값만으로 준비 완료를 판단하지 않는다. preflight와 classroom 전환 중에는 같은
 LiveKit 연결과 local track을 유지한다.

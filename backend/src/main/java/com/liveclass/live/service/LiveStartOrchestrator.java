@@ -91,9 +91,11 @@ public class LiveStartOrchestrator {
                 if (session.getRoomSid() == null || session.getRoomSid().isBlank()) {
                     preflightService.prepareRoom(sessionId, requesterId);
                 }
+                // 마이크는 보지 않는다 — 없으면 무음일 뿐 실패가 아니다(ADR-0099). 강사가 방에
+                // 들어와 있는지와 마이크가 겹치지 않는지만 본다.
                 if (!preflightService.checkOwned(sessionId, requesterId).ready()) {
                     throw new LiveSessionStateConflictException(
-                            "강사의 unmuted 마이크 송출이 확인된 뒤 라이브를 시작할 수 있습니다.");
+                            "강사 연결이 확인된 뒤 라이브를 시작할 수 있습니다.");
                 }
                 yield toStartOperation(transitions.beginOrReuse(sessionId, requesterId));
             }
@@ -216,15 +218,16 @@ public class LiveStartOrchestrator {
                 return;
             }
 
-            // 4. Gate S3① — 강사 publisher 재검증. STT 플래그와 무관하게 항상 수행한다(§7).
+            // 4. Gate S3① — 강사가 아직 방에 있는지 재검증. STT 플래그와 무관하게 항상 수행한다(§7).
             //    STARTING이 수십 초 걸리는 동안 강사 연결이 끊겨도 여기서 잡지 않으면 빈 방이 LIVE가 된다.
+            //    막으려는 것은 <b>빈 방</b>이지 무음이 아니므로 마이크 유무는 보지 않는다(ADR-0099).
             if (!transitions.advance(event.attemptId(), LiveStartStep.PUBLISHER_RECHECK,
                     executionOwner, startProperties.start().executionLease())) {
                 return;
             }
-            if (!instructorStillPublishing(sessionId)) {
+            if (!instructorStillConnected(sessionId)) {
                 failStart(event, executionOwner, dispatchId, true, "INSTRUCTOR_NOT_PUBLISHING",
-                        "강사의 마이크 송출이 확인되지 않습니다. 마이크를 켠 뒤 다시 시작해 주세요.");
+                        "강사 연결이 확인되지 않습니다. 다시 시작해 주세요.");
                 return;
             }
 
@@ -285,7 +288,7 @@ public class LiveStartOrchestrator {
     }
 
     /** preflight와 <b>같은</b> 판정 로직을 재사용한다 — 두 곳의 기준이 갈리면 안 된다. */
-    private boolean instructorStillPublishing(UUID sessionId) {
+    private boolean instructorStillConnected(UUID sessionId) {
         return transitions.findInstructorId(sessionId)
                 .map(instructorId -> preflightService.check(sessionId, instructorId).ready())
                 .orElse(false);

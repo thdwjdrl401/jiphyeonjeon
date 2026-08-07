@@ -278,6 +278,9 @@
 @media (prefers-reduced-motion: reduce) { .camera-overlay__hint { transition: none; } }
 
 .instructor-media-error { position: absolute; z-index: 6; top: 84px; right: 18px; left: 18px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid rgba(197,106,90,.36); border-radius: 10px; background: rgba(58,20,16,.9); color: #f2c4bb; font-size: .63rem; backdrop-filter: blur(10px); }
+.instructor-media-notice { position: absolute; z-index: 6; top: 84px; right: 18px; left: 18px; padding: 9px 12px; border: 1px solid rgba(255,252,243,.22); border-radius: 10px; background: rgba(28,26,23,.86); color: #ded9cf; font-size: .63rem; backdrop-filter: blur(10px); }
+/* 어두운 무대용 .media-failure--overlay는 design-system.css에 있다 — 그 파일이 맨 뒤에 로드되므로
+   여기 두면 base 규칙(.media-failure)이 같은 특이도로 이 톤을 덮어 버린다. */
 .slide-preview { position: absolute; top: 15%; right: 11%; bottom: 19%; left: 8%; display: flex; justify-content: center; flex-direction: column; padding: clamp(30px,6vw,80px); border-radius: 10px; background: linear-gradient(145deg,#faf4e6,#eee2c7); color: var(--ink-950); box-shadow: 0 25px 70px rgba(43,32,19,.28); }
 .media-page--live .slide-preview { inset: 0; border-radius: inherit; box-shadow: none; }
 .slide-preview > span { color: var(--blue-600); font-size: .7rem; font-weight: 800; letter-spacing: .18em; }
