@@ -45,4 +45,37 @@ describe('httpLessonService.getLesson — 커리큘럼 문맥 복원', () => {
     expect(result.curriculumId).toBe('cur_1')
     expect(result.sectionTitle).toBe('1주차')
   })
+
+  // 실제 재현 사례: 강사가 다시보기에서 "강의 상세로 이동"을 누르면
+  // /instructor/curriculums/sections/.../lessons/...로 curriculumId 세그먼트가 빠진 채 404.
+  it('강사 역할도 요청에 curriculumId가 없으면 레슨 응답의 curriculumId를 쓴다', async () => {
+    vi.spyOn(apiClient, 'get').mockImplementation((url: string) => {
+      if (url === '/instructor/lessons/lsn_1') {
+        return Promise.resolve({
+          data: {
+            lessonId: 'lsn_1',
+            sectionId: 'sec_1',
+            curriculumId: 'cur_1',
+            title: '변수와 타입',
+            description: '',
+            status: 'PUBLISHED',
+            deliveryType: 'LIVE',
+            materials: [],
+          },
+        } as never)
+      }
+      if (url === '/instructor/curriculums/cur_1') {
+        return Promise.resolve({ data: { curriculumId: 'cur_1', title: '자바 기초' } } as never)
+      }
+      if (url === '/instructor/curriculums/cur_1/sections') {
+        return Promise.resolve({ data: [{ sectionId: 'sec_1', title: '1주차', orderIndex: 0 }] } as never)
+      }
+      throw new Error(`unexpected GET ${url}`)
+    })
+
+    const result = await httpLessonService.getLesson({ lessonId: 'lsn_1', role: 'INSTRUCTOR' })
+
+    expect(result.curriculumId).toBe('cur_1')
+    expect(result.sectionTitle).toBe('1주차')
+  })
 })

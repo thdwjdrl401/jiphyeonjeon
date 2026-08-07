@@ -78,6 +78,24 @@ class InstructorAuthoringReadContractTest {
                 .andExpect(jsonPath("$.liveSession").doesNotExist());
     }
 
+    /*
+     * 수강생용 GET /lessons/{id}는 curriculumId를 이미 주는데 이 강사용 상세는 주지 않아서,
+     * curriculumId를 모르고 이 상세를 부르는 화면(다시보기의 "강의 상세로 이동" 등)이
+     * /curriculums//sections/.../lessons/...처럼 빈 세그먼트 경로를 만들어 404로 떨어졌다.
+     * 소유권 검증이 이미 아는 값이므로 응답에 실어 준다.
+     */
+    @Test
+    void instructor_lesson_get_includes_curriculum_id_for_lesson_detail_links() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String curriculumId = createCurriculum(instructor);
+        String sectionId = createSection(instructor, curriculumId);
+        String lessonId = createLesson(instructor, sectionId, "커리큘럼 문맥 확인용 강의");
+
+        write(get("/api/instructor/lessons/" + lessonId), instructor, null)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.curriculumId").value(curriculumId));
+    }
+
     // ---- #2: 강사 대시보드 요약 ----
 
     @Test

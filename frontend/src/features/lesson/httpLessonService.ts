@@ -102,13 +102,17 @@ async function getInstructorLesson(request: {
   sectionId?: string
 }): Promise<LessonDetailView> {
   const { data: lesson } = await apiClient.get<ApiLessonView>(`/instructor/lessons/${request.lessonId}`)
+  // 레슨 응답이 curriculumId를 준다(강사 상세도 수강생 상세와 마찬가지로). 다시보기처럼 호출자가
+  // curriculumId를 모르고 부르는 화면도 있으므로 request 값을 우선하지 말고 응답을 신뢰한다 —
+  // 그래야 "강의 상세" 링크가 /curriculums//sections/... 같은 빈 세그먼트로 깨지지 않는다.
+  const curriculumId = lesson.curriculumId ?? request.curriculumId ?? ''
 
   let curriculumTitle = ''
   let sectionTitle = ''
-  if (request.curriculumId) {
+  if (curriculumId) {
     const [{ data: curriculum }, { data: sections }] = await Promise.all([
-      apiClient.get<ApiInstructorCurriculum>(`/instructor/curriculums/${request.curriculumId}`),
-      apiClient.get<ApiInstructorSection[]>(`/instructor/curriculums/${request.curriculumId}/sections`),
+      apiClient.get<ApiInstructorCurriculum>(`/instructor/curriculums/${curriculumId}`),
+      apiClient.get<ApiInstructorSection[]>(`/instructor/curriculums/${curriculumId}/sections`),
     ])
     curriculumTitle = curriculum.title
     sectionTitle = sections.find((item) => item.sectionId === (request.sectionId ?? lesson.sectionId))?.title ?? ''
@@ -122,7 +126,7 @@ async function getInstructorLesson(request: {
     deliveryType: lesson.deliveryType ?? 'LIVE',
     sectionId: lesson.sectionId,
     sectionTitle,
-    curriculumId: request.curriculumId ?? '',
+    curriculumId,
     curriculumTitle,
     materials: (lesson.materials ?? []).map(toMaterialView),
     liveSession: lesson.liveSession
