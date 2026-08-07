@@ -3,7 +3,7 @@ import {
   CEIL_DBFS,
   FLOOR_DBFS,
   SPEAKING_LEVEL,
-  decayLevel,
+  smoothLevel,
   levelFromRms,
   rmsOf,
 } from '@/features/live-session/micLevel'
@@ -76,19 +76,36 @@ describe('마이크 입력 세기', () => {
     expect(perSegment).toBeLessThanOrEqual(3)
   })
 
-  describe('게이지 감쇠', () => {
-    it('오를 때는 즉시 따라간다', () => {
-      expect(decayLevel(0.1, 0.9)).toBe(0.9)
+  /**
+   * 눈금이 <b>얼마나 빨리 움직이는가</b>. 예전에는 오를 때 측정값으로 즉시 점프해서, 음절마다
+   * 꼭대기를 쳐 말하는 내내 요란하게 튀었다 — 소리가 실제보다 큰 것처럼 보였다.
+   */
+  describe('게이지 평활', () => {
+    /** 한 프레임에 다 오르면 그건 평활이 아니다. 음절이 아니라 말 한 덩어리를 그려야 한다. */
+    it('오를 때 한 번에 도달하지 않는다', () => {
+      const next = smoothLevel(0, 1, 0.28, 0.06)
+      expect(next).toBeCloseTo(0.28, 5)
+      expect(next).toBeLessThan(1)
+    })
+
+    /** 60fps에서 약 180ms. 말이 시작된 것을 눈이 놓치지 않을 만큼은 빨라야 한다. */
+    it('약 11프레임이면 거의 따라붙는다', () => {
+      let level = 0
+      for (let i = 0; i < 11; i += 1) level = smoothLevel(level, 1, 0.28, 0.06)
+      expect(level).toBeGreaterThan(0.95)
     })
 
     /** 말의 사이사이에 게이지가 바닥까지 떨어지면 심하게 깜빡인다. */
-    it('내릴 때는 한 프레임에 정해진 만큼만 내린다', () => {
-      expect(decayLevel(0.9, 0, 0.06)).toBeCloseTo(0.84, 5)
-      expect(decayLevel(0.03, 0, 0.06)).toBe(0)
+    it('내릴 때가 오를 때보다 훨씬 느리다', () => {
+      const rising = smoothLevel(0.5, 1, 0.28, 0.06) - 0.5
+      const falling = 0.5 - smoothLevel(0.5, 0, 0.28, 0.06)
+      expect(falling).toBeLessThan(rising / 2)
+      expect(smoothLevel(0.9, 0, 0.28, 0.06)).toBeCloseTo(0.846, 3)
     })
 
-    it('측정값 아래로는 내려가지 않는다', () => {
-      expect(decayLevel(0.5, 0.48, 0.06)).toBe(0.48)
+    it('측정값을 지나쳐 가지 않는다', () => {
+      expect(smoothLevel(0.5, 0.48, 0.28, 0.06)).toBeGreaterThanOrEqual(0.48)
+      expect(smoothLevel(0.5, 0.9, 0.28, 0.06)).toBeLessThanOrEqual(0.9)
     })
   })
 })

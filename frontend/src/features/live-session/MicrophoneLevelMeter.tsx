@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createAudioAnalyser, type LocalAudioTrack } from 'livekit-client'
-import { SPEAKING_LEVEL, decayLevel, levelFromRms, rmsOf } from './micLevel'
+import { SPEAKING_LEVEL, levelFromRms, rmsOf, smoothLevel } from './micLevel'
 
 /**
  * 게이지 칸 수. 범위가 40 dB이므로 한 칸이 약 <b>1.7 dB</b>다.
@@ -49,7 +49,7 @@ export default function MicrophoneLevelMeter({ track }: { track?: LocalAudioTrac
     let frame = 0
     const tick = () => {
       analyser.getFloatTimeDomainData(samples)
-      const next = decayLevel(levelRef.current, levelFromRms(rmsOf(samples)))
+      const next = smoothLevel(levelRef.current, levelFromRms(rmsOf(samples)))
       levelRef.current = next
       setLevel(next)
       if (next >= SPEAKING_LEVEL) setHeard(true)

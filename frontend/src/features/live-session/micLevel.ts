@@ -64,11 +64,22 @@ export function levelFromRms(rms: number): number {
 }
 
 /**
- * 다음 프레임에 그릴 눈금. <b>빠르게 오르고 천천히 내린다.</b>
+ * 다음 프레임에 그릴 눈금. <b>빠르게 오르고 천천히 내리되, 오를 때도 평활한다.</b>
  *
- * <p>둘을 같은 속도로 두면 말의 자연스러운 사이사이에 게이지가 바닥까지 떨어져 심하게 깜빡인다.
- * 계측기가 예로부터 쓰는 방식이고, 사람이 "지금 소리가 들어오고 있다"를 읽어 내기에도 이쪽이 낫다.
+ * <p>예전에는 오를 때 <b>측정값으로 즉시 점프</b>했다. 그러면 음절 하나하나의 피크가 그대로 꼭대기를
+ * 쳐서 말하는 내내 게이지가 요란하게 튄다 — 실제로 <b>소리가 너무 큰 것처럼 보였다</b>. 계측기가
+ * 쓰는 방식은 그게 아니라 <b>attack·release 시간 상수</b>다.
+ *
+ * <p>지수 평활이라 계수가 곧 시간이다(60fps 기준):
+ * <ul>
+ *   <li>{@code rise 0.28} — 약 180ms에 따라붙는다. 음절이 아니라 <b>말 한 덩어리</b>의 크기를 그린다.</li>
+ *   <li>{@code fall 0.06} — 약 800ms에 걸쳐 내린다. 말 사이의 짧은 쉼에 바닥까지 떨어지지 않는다.</li>
+ * </ul>
+ *
+ * <p>내리는 쪽을 훨씬 느리게 두는 것이 핵심이다. 같은 속도면 말의 자연스러운 사이사이에 게이지가
+ * 깜빡이고, 그러면 "지금 소리가 들어오고 있다"를 읽어 낼 수 없다.
  */
-export function decayLevel(previous: number, measured: number, fallPerFrame = 0.06): number {
-  return measured >= previous ? measured : Math.max(measured, previous - fallPerFrame)
+export function smoothLevel(previous: number, measured: number, rise = 0.28, fall = 0.06): number {
+  const factor = measured > previous ? rise : fall
+  return previous + (measured - previous) * factor
 }
