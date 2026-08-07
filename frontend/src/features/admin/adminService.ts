@@ -101,6 +101,85 @@ export async function getLiveSummary(): Promise<LiveSummary> {
   return data
 }
 
+/**
+ * 세션 하나의 사람이 읽는 이름표. 백엔드 `SessionLabelService.SessionLabel`과 대응.
+ *
+ * <p>못 찾은 세션도 `sessionId`만 채워 함께 온다 — 화면이 행을 짝지어야 하고, 유령 Egress처럼
+ * 세션이 이미 사라진 건이 실제로 있다.
+ */
+export interface SessionLabel {
+  sessionId: string
+  lessonId: string | null
+  lessonTitle: string | null
+  curriculumId: string | null
+  curriculumTitle: string | null
+}
+
+/**
+ * 세션 id를 강의·커리큘럼 제목으로 바꾼다. 표를 그리면서 필요한 id를 모아 <b>한 번에</b> 물어본다 —
+ * 행마다 부르면 행 수만큼 왕복이 생긴다.
+ *
+ * <p>조회지만 POST다. id 여러 개를 쿼리스트링에 늘어놓으면 URL 길이 상한에 걸린다.
+ */
+export async function getSessionLabels(sessionIds: string[]): Promise<SessionLabel[]> {
+  if (sessionIds.length === 0) return []
+  const { data } = await apiClient.post<SessionLabel[]>('/admin/session-labels', { sessionIds })
+  return data
+}
+
+/** 세션이 무엇을 켜고 시작했는가. "자막이 안 나온다"는 문의에서 제일 먼저 볼 값이다. */
+export interface SessionFeatures {
+  recording: boolean
+  caption: boolean
+  chat: boolean
+  aiQna: boolean
+}
+
+/** 녹화 자산의 기술 상태. 아직 만들어지지 않았거나 녹화를 안 켠 세션이면 `null`이다. */
+export interface SessionRecording {
+  videoAssetId: string
+  status: string
+  replayStatus: string | null
+  failureCode: string | null
+  durationMs: number | null
+  sizeBytes: number | null
+  startedAt: string | null
+  endedAt: string | null
+}
+
+/** 세션 하나의 운영 상세. 백엔드 `SessionDetailService.SessionDetail`과 대응. */
+export interface SessionDetail {
+  sessionId: string
+  /** LiveKit 방 이름. 저쪽 콘솔·로그에서 찾을 때 쓰는 값이다. */
+  roomName: string
+  status: string
+  roomSid: string | null
+  scheduledAt: string | null
+  startedAt: string | null
+  endedAt: string | null
+  features: SessionFeatures
+  lessonId: string | null
+  lessonTitle: string | null
+  curriculumId: string | null
+  curriculumTitle: string | null
+  instructorId: string | null
+  instructorName: string | null
+  recording: SessionRecording | null
+}
+
+/** 세션 하나의 운영 상세. 없는 세션은 404다(목록의 이름표와 달리 주소로 직접 들어오는 화면이라). */
+export async function getSessionDetail(sessionId: string): Promise<SessionDetail> {
+  const { data } = await apiClient.get<SessionDetail>(`/admin/live-sessions/${sessionId}`)
+  return data
+}
+
+/** Egress `roomName`에서 세션 id를 꺼낸다. 방 이름 규약은 `session-{sessionId}`다(LiveSessionRoomNames). */
+export function sessionIdFromRoomName(roomName: string | null | undefined): string | null {
+  if (!roomName) return null
+  const match = /^session-([0-9a-fA-F-]{36})$/.exec(roomName)
+  return match ? match[1] : null
+}
+
 export interface ReconcileResult {
   checked: number
   completed: number

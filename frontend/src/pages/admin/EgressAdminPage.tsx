@@ -2,8 +2,9 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { ApiError } from '@/shared/api/client'
 import {
-  getActiveEgresses, purgeEgress, stopEgress, type ActiveEgress,
+  getActiveEgresses, purgeEgress, sessionIdFromRoomName, stopEgress, type ActiveEgress,
 } from '@/features/admin/adminService'
+import SessionLabelCell, { useSessionLabels } from '@/features/admin/SessionLabelCell'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import { useToast } from '@/shared/ui/Toast'
 import { InlineNotice, PageHeader, Panel } from '@/shared/ui/WorkspaceUi'
@@ -122,6 +123,12 @@ export default function EgressAdminPage() {
 
   const forbidden = query.error instanceof ApiError && query.error.status === 403
   const rows: ActiveEgress[] = query.data ?? []
+  /*
+   * 방 이름(session-{id})에서 세션 id를 꺼내 이름표를 한 번에 받아 온다.
+   * 세션이 이미 지워진 유령 건은 이름이 비어 오지만 행은 그대로 남는다 — 정지·정리 버튼이 필요한
+   * 것이 정확히 그런 행이다.
+   */
+  const labels = useSessionLabels(rows.map((e) => sessionIdFromRoomName(e.roomName)))
 
   return (
     <div>
@@ -170,7 +177,7 @@ export default function EgressAdminPage() {
               <table className="admin-table">
                 <thead>
                   <tr>
-                    <th>방(room)</th>
+                    <th>강의</th>
                     <th>상태</th>
                     <th>시작</th>
                     <th>egressId</th>
@@ -180,7 +187,12 @@ export default function EgressAdminPage() {
                 <tbody>
                   {rows.map((e) => (
                     <tr key={e.egressId}>
-                      <td>{e.roomName || '-'}</td>
+                      <td>
+                        <SessionLabelCell
+                          sessionId={sessionIdFromRoomName(e.roomName)}
+                          label={labels.get(sessionIdFromRoomName(e.roomName) ?? '')}
+                        />
+                      </td>
                       <td>{e.state}</td>
                       <td>{formatStartedAt(e.startedAtMs)}</td>
                       <td className="is-mono">{e.egressId}</td>

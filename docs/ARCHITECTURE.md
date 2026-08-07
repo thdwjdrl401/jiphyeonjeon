@@ -145,6 +145,7 @@ flowchart TB
   LRN["learning<br/>진도·학습 접근"]
   AIX["aiintegration<br/>outbox 릴레이·RAG 프록시"]
   NOT["notification<br/>알림 팬아웃·실시간·Web Push"]
+  ADM["admin<br/>운영 콘솔 조합(도메인 없음)"]
   CMN["common<br/>예외·로깅·설정"]
 
   CUR --> LES
@@ -169,13 +170,22 @@ flowchart TB
   NOT --> VID
   NOT --> AUTH
   NOT --> AIX
+  ADM --> LIV
+  ADM --> LES
+  ADM --> CUR
 
-  class CUR,ENR,LIV,VID,LES,AST,AUTH,LRN,AIX,NOT,CMN built
+  class CUR,ENR,LIV,VID,LES,AST,AUTH,LRN,AIX,NOT,ADM,CMN built
 ```
 
-**`notification`은 아무도 참조하지 않는다.** 화살표가 전부 나가기만 한다 — 통째로 들어내도 나머지
-모듈은 컴파일된다. 알림처럼 나중에 붙는 기능이 다른 모듈을 오염시키지 않았다는 증거이고,
+**`notification`과 `admin`은 아무도 참조하지 않는다.** 화살표가 전부 나가기만 한다 — 통째로 들어내도
+나머지 모듈은 컴파일된다. 알림처럼 나중에 붙는 기능이 다른 모듈을 오염시키지 않았다는 증거이고,
 `ModularityTests`가 이 방향을 계속 지킨다.
+
+`admin`에는 **도메인이 없다.** 운영자가 한 화면에서 판단할 수 있게 다른 모듈의 포트를 모아 붙이는
+일만 한다([ADR-0089](decisions/songjeongki/0089-admin-console-reads-names-not-uuids.md)). 조합을 밖으로
+뺀 이유는 순환이다 — 세션 이름표는 live·lesson·curriculum을 함께 읽어야 하는데 `curriculum → live`가
+이미 있어서, live 안에서 curriculum을 읽으면 사이클이 된다. 기존 관리 endpoint(`LiveAdminController`·
+`EgressAdminController`)는 각자 모듈에 그대로 있다.
 
 **규칙**
 - 모듈 간 접근은 **`<module>.api` 패키지(`@NamedInterface("api")`)로만.** 남의 `domain`·`repository`를 직접 부를 수 없다.
