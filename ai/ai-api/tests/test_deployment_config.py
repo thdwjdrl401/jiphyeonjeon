@@ -42,7 +42,7 @@ def test_prod_and_dev_compose_share_operational_shape() -> None:
     prod_note_keys = set(re.findall(r"(?m)^      (AI_API_LECTURE_NOTE_[A-Z0-9_]+):", prod))
     dev_note_keys = set(re.findall(r"(?m)^      (AI_API_LECTURE_NOTE_[A-Z0-9_]+):", dev))
     assert prod_note_keys == dev_note_keys
-    assert len(prod_note_keys) == 11
+    assert len(prod_note_keys) == 12
 
 
 def test_lecture_note_policy_uses_compose_defaults() -> None:
@@ -115,3 +115,5 @@ def test_annotation_switches_reach_both_containers() -> None:
             "AI_API_CONVERSATION_MEMORY_SESSION_FALLBACK_ENABLED: "
             "${AI_API_CONVERSATION_MEMORY_SESSION_FALLBACK_ENABLED:-false}"
         ) in compose
+        # 노트 생성 비용 스위치 — 기본 true. env 예시에만 있고 매핑이 빠지면 못 끈다.
+        assert ("AI_API_LECTURE_NOTE_ENABLED: ${AI_API_LECTURE_NOTE_ENABLED:-true}") in compose

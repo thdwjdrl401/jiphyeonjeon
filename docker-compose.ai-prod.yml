@@ -158,6 +158,8 @@ services:
       AI_API_ANNOTATION_WINDOW_SIZE: ${AI_API_ANNOTATION_WINDOW_SIZE:-5}
       # 유사도 검색된 판서 hit의 vector_score 하한(ADR-0089). recent-window hit에는 적용되지 않는다.
       AI_API_ANNOTATION_VECTOR_THRESHOLD: ${AI_API_ANNOTATION_VECTOR_THRESHOLD:-0.6}
+      # 라이브 노트 생성 전체 스위치 — 끄면 이 파이프라인의 GMS 호출이 0 (자막·RAG 무관)
+      AI_API_LECTURE_NOTE_ENABLED: ${AI_API_LECTURE_NOTE_ENABLED:-true}
       AI_API_LECTURE_NOTE_MODEL: ${AI_API_LECTURE_NOTE_MODEL:-gpt-5-mini}
       # reasoning 모델일 때만 적용된다. 비-reasoning 모델로 바꿔도 무시되므로 안전하다.
       AI_API_LECTURE_NOTE_REASONING_EFFORT: ${AI_API_LECTURE_NOTE_REASONING_EFFORT:-minimal}
