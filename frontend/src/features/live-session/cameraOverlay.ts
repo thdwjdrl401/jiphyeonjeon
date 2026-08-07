@@ -16,10 +16,21 @@ export interface CameraOverlay {
   y: number
   /** 너비 비율(0~1). 높이는 16:9로 파생한다 — 카메라 트랙 비율을 따로 저장하지 않는다. */
   w: number
+  /**
+   * 카메라를 좌우로 뒤집을지. <b>웹캠은 뒤집는다</b> — 강사가 자기 얼굴을 거울로 보는 것이 이
+   * 서비스의 기준이고, Egress 템플릿도 같은 방향으로 뒤집어 두 화면을 맞춘다.
+   *
+   * <p><b>파일 송출은 뒤집지 않는다</b>(ADR-0100). 미리 녹화한 영상은 거울상이 아니라서, 뒤집으면
+   * 화면 속 글자가 반전되고 그대로 <b>녹화·VOD에 영구히 남는다</b>. 강사 화면만 고쳐서는 안 되고
+   * Egress까지 같이 알아야 하므로 배치와 같은 통로(room metadata)로 싣는다.
+   *
+   * <p>값이 없는 옛 세션은 `true`로 읽는다 — 지금까지의 동작이 그것이다.
+   */
+  mirrored: boolean
 }
 
 /** 화면공유를 가리지 않는 우하단. 강사가 옮기기 전까지의 기본 배치다. */
-export const DEFAULT_CAMERA_OVERLAY: CameraOverlay = { visible: true, x: 0.735, y: 0.66, w: 0.25 }
+export const DEFAULT_CAMERA_OVERLAY: CameraOverlay = { visible: true, x: 0.735, y: 0.66, w: 0.25, mirrored: true }
 
 /** 너무 작으면 얼굴이 안 보이고, 너무 크면 화면공유를 덮는다. */
 export const MIN_OVERLAY_WIDTH = 0.12
@@ -56,6 +67,7 @@ export function clampOverlay(overlay: CameraOverlay): CameraOverlay {
   const h = overlayHeight(w)
   return {
     visible: overlay.visible,
+    mirrored: overlay.mirrored,
     w,
     x: clamp(overlay.x, 0, 1 - w),
     y: clamp(overlay.y, 0, 1 - h),
@@ -84,6 +96,8 @@ export function parseCameraOverlay(metadata: string | undefined | null): CameraO
     }
     return clampOverlay({
       visible: raw.visible !== false,
+      // 없으면 뒤집는다 — 이 키가 생기기 전 세션과 웹캠 송출이 모두 그 동작이다.
+      mirrored: raw.mirrored !== false,
       x: raw.x,
       y: raw.y,
       w: raw.w,

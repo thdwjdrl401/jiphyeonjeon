@@ -240,7 +240,7 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
             ? (
               <InstructorLocalTrackVideo
                 fit="contain"
-                mirrored={!screenShareTrack}
+                mirrored={!screenShareTrack && publisher.cameraOverlay.mirrored}
                 label={screenShareTrack ? '공유 화면 미리보기' : '카메라 미리보기'}
                 track={mainTrack}
                 elementRef={mainVideoRef}
@@ -254,6 +254,9 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
             카메라는 거울처럼 뒤집어 그린다. 강사가 자기 얼굴을 거울로 보는 것이 이 서비스의 기준이고,
             Egress 템플릿도 카메라 트랙만 같은 방향으로 뒤집는다(egress-stage.css). 화면공유는 글자가
             읽혀야 하므로 절대 뒤집지 않는다 — 그래서 뒤집기는 프레임 전체가 아니라 카메라에만 건다.
+
+            다만 뒤집을지는 배치(cameraOverlay.mirrored)가 정한다. 파일 송출은 거울상이 아니라서
+            뒤집으면 화면 속 글자가 반전된 채 녹화에 남는다(ADR-0100).
           */}
           {showCameraPictureInPicture && cameraTrack && (
             <CameraOverlayControl
@@ -261,7 +264,7 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
               onChange={publisher.moveCameraOverlay}
               disabled={!publisher.canControl}
             >
-              <InstructorLocalTrackVideo mirrored label="카메라 미리보기" track={cameraTrack} />
+              <InstructorLocalTrackVideo mirrored={publisher.cameraOverlay.mirrored} label="카메라 미리보기" track={cameraTrack} />
             </CameraOverlayControl>
           )}
           {/*

@@ -101,6 +101,7 @@ export function releaseDemoTracks(): void {
     URL.revokeObjectURL(objectUrl)
     objectUrl = null
   }
+  notifyDemoMedia()
 }
 
 export class DemoPublishError extends Error {}
@@ -152,10 +153,37 @@ export async function createDemoTracks(): Promise<DemoTracks> {
   }
   // 오디오가 없으면 자막·노트·AI가 전부 빈 채로 간다. 막지는 않고 화면이 경고한다.
   tracks = { video: videoTrack, audio: stream.getAudioTracks()[0] ?? null }
+  notifyDemoMedia()
   return tracks
 }
 
 /** 오디오 트랙이 없는 파일인가. 화면이 "자막이 안 나온다"고 미리 말할 근거다. */
 export function demoHasAudio(): boolean {
   return tracks?.audio != null
+}
+
+/**
+ * 재생 중인 element. 화면이 정지·재생·구간 이동을 붙이는 손잡이다.
+ *
+ * <p>element를 그대로 내주는 이유는 <b>`timeupdate`·`play`·`pause`를 화면이 직접 듣는 편이
+ * 정확하기 때문</b>이다. 상태를 우리가 복사해 두면 우리를 거치지 않는 변화(반복 재생으로 0으로
+ * 되감기는 등)와 어긋난다.
+ */
+export function demoElement(): HTMLVideoElement | null {
+  return element
+}
+
+/**
+ * 재생 소스가 생기거나 사라질 때 알린다. element는 <b>송출을 시작해야</b> 만들어지므로, 화면이 그
+ * 시점을 알아야 손잡이를 그릴 수 있다.
+ */
+const mediaListeners = new Set<() => void>()
+
+export function subscribeDemoMedia(listener: () => void): () => void {
+  mediaListeners.add(listener)
+  return () => { mediaListeners.delete(listener) }
+}
+
+function notifyDemoMedia(): void {
+  for (const listener of [...mediaListeners]) listener()
 }

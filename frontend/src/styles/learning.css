@@ -45,6 +45,16 @@
 .demo-publish.is-armed .demo-publish__text > strong { color: var(--seal); }
 .demo-publish__text > small { color: var(--ink-600); font-size: .63rem; line-height: 1.45; overflow-wrap: anywhere; }
 .demo-publish__actions { display: flex; flex: 0 0 auto; gap: 6px; }
+/*
+ * 데모 영상 재생 제어. 배너 안에서는 문구 오른쪽에 붙고, 사전 점검 스위치 안에서는 한 줄을 쓴다.
+ * 강의 중에 손이 가는 자리라 버튼을 작게 두되 간격은 넉넉히 준다 — 잘못 눌리면 송출이 멈춘다.
+ */
+.demo-transport { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.demo-transport__bar { flex: 1 1 120px; min-width: 90px; accent-color: var(--seal); }
+.demo-transport__time { flex: 0 0 auto; color: var(--ink-600); font-size: .63rem; }
+.live-session-state-banner.is-demo { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.live-session-state-banner.is-demo .demo-transport { flex: 1 1 260px; }
+.live-session-state-banner.is-demo .demo-transport__time { color: var(--seal); }
 /* "강의 종료" 버튼을 누르면 페이지 상단 배너 대신 그 버튼 바로 아래, 미디어 영역 우측에 붙는
    드롭다운으로 뜬다 — 버튼 자리가 곧 미디어 영역 우측 상단이라 별도 좌표 계산이 필요 없다. */
 .instructor-end-menu { position: relative; }

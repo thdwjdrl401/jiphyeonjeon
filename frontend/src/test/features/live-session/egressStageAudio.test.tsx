@@ -28,6 +28,7 @@ interface FakeRoomHandle {
   connect: ReturnType<typeof vi.fn>
   disconnect: ReturnType<typeof vi.fn>
   startAudio: ReturnType<typeof vi.fn>
+  remoteParticipants: Map<string, unknown>
   emit: (event: string, ...args: unknown[]) => void
 }
 
@@ -330,5 +331,52 @@ describe('비디오 트랙 동작은 그대로다', () => {
     stage.subscribe(videoTrack(), Track.Source.Camera)
 
     expect(stage.container.querySelector('.egress-stage__camera')).not.toHaveClass('is-stage')
+  })
+
+  /**
+   * 뒤집기는 <b>여기서 정해지면 되돌릴 수 없다</b>. 이 캔버스가 그대로 HLS·녹화로 나가므로,
+   * 반전된 채 나가면 VOD에 영구히 남는다.
+   *
+   * <p>웹캠은 거울이 맞고(강사가 자기 얼굴을 거울로 본다) 파일 송출은 아니다 — 어느 쪽인지는
+   * 강사 화면이 participant metadata로 알려 준다(ADR-0100).
+   */
+  function instructorWith(metadata: string | undefined) {
+    return {
+      metadata,
+      getTrackPublication: (source: Track.Source) =>
+        (source === Track.Source.Camera ? publication(source) : undefined),
+    }
+  }
+
+  it('metadata가 없으면 거울로 그린다 — 지금까지의 동작이 그것이다', async () => {
+    const stage = await renderStage()
+
+    stage.subscribe(videoTrack(), Track.Source.Camera)
+
+    expect(stage.container.querySelector('.egress-stage__camera')).toHaveClass('is-mirrored')
+  })
+
+  it('파일 송출이라고 알려 오면 뒤집지 않는다', async () => {
+    const stage = await renderStage()
+    stage.room.remoteParticipants.set('instructor', instructorWith(
+      JSON.stringify({ cameraOverlay: { visible: true, mirrored: false, x: 0.7, y: 0.6, w: 0.25 } }),
+    ))
+
+    act(() => { stage.room.emit(RoomEvent.ParticipantMetadataChanged) })
+    stage.subscribe(videoTrack(), Track.Source.Camera)
+
+    expect(stage.container.querySelector('.egress-stage__camera')).not.toHaveClass('is-mirrored')
+  })
+
+  it('웹캠으로 돌아오면 다시 뒤집는다', async () => {
+    const stage = await renderStage()
+    stage.room.remoteParticipants.set('instructor', instructorWith(
+      JSON.stringify({ cameraOverlay: { visible: true, mirrored: true, x: 0.7, y: 0.6, w: 0.25 } }),
+    ))
+
+    act(() => { stage.room.emit(RoomEvent.ParticipantMetadataChanged) })
+    stage.subscribe(videoTrack(), Track.Source.Camera)
+
+    expect(stage.container.querySelector('.egress-stage__camera')).toHaveClass('is-mirrored')
   })
 })

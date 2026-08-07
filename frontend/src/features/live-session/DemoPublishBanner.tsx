@@ -1,3 +1,4 @@
+import DemoTransport from './DemoTransport'
 import { useInstructorLiveKit } from './useInstructorLiveKit'
 
 /**
@@ -15,9 +16,16 @@ export default function DemoPublishBanner() {
 
   return (
     <div className="live-session-state-banner is-demo" role="status">
-      {demoPublish.ready
-        ? <>데모 영상을 송출 중입니다 — 카메라·마이크 대신 <b>{demoPublish.fileName}</b>이 나갑니다.</>
-        : <>데모로 설정돼 있지만 영상이 없습니다. 카메라로 전환하지 않았으니 사전 점검에서 다시 선택해 주세요.</>}
+      <span>
+        {demoPublish.ready
+          ? <>데모 영상을 송출 중입니다 — 카메라·마이크 대신 <b>{demoPublish.fileName}</b>이 나갑니다.</>
+          : <>데모로 설정돼 있지만 영상이 없습니다. 카메라로 전환하지 않았으니 사전 점검에서 다시 선택해 주세요.</>}
+      </span>
+      {/*
+        정지·구간 이동은 로컬 재생 제어가 아니라 <b>송출 제어</b>다. 멈추면 수강생 화면이 정지 화면이
+        되고 녹화에도 그대로 남는다. 뒤로 감으면 STT가 같은 구간을 다시 받아 노트가 겹친다.
+      */}
+      <DemoTransport />
     </div>
   )
 }

@@ -40,7 +40,7 @@ const liveKit = vi.hoisted(() => {
     }),
     unpublishTrack: vi.fn(async () => {}),
     publishData: vi.fn(async () => {}),
-    setMetadata: vi.fn(async () => {}),
+    setMetadata: vi.fn<(metadata: string) => Promise<void>>(async () => {}),
     metadata: undefined as string | undefined,
   }
   const room = {
@@ -213,6 +213,35 @@ describe('데모 송출 배선', () => {
     publisherRef!.toggleCamera()
     await waitFor(() => expect(liveKit.publications.get('Camera')!.isMuted).toBe(false))
     expect(liveKit.localParticipant.setCameraEnabled).not.toHaveBeenCalled()
+  })
+
+  /**
+   * 뒤집기는 <b>강사 화면과 Egress가 같이</b> 알아야 한다. 강사 화면만 고치면 강사는 멀쩡해
+   * 보이는데 수강생만 반전을 보고, 그 상태로 녹화돼 VOD에 영구히 남는다(ADR-0100).
+   */
+  it('데모를 켜면 "뒤집지 말라"를 metadata로 내보낸다', async () => {
+    installFakeVideo()
+    renderProvider()
+    await screen.findByText(/connected/)
+
+    publisherRef!.startDemoPublish(new File(['x'], 'demo.mp4', { type: 'video/mp4' }))
+
+    await waitFor(() => expect(publisherRef!.cameraOverlay.mirrored).toBe(false))
+    const written = liveKit.localParticipant.setMetadata.mock.calls.at(-1)?.[0]
+    expect(JSON.parse(written ?? '{}').cameraOverlay.mirrored).toBe(false)
+  })
+
+  it('데모를 끄면 다시 거울로 돌아간다', async () => {
+    installFakeVideo()
+    renderProvider()
+    await screen.findByText(/connected/)
+    publisherRef!.startDemoPublish(new File(['x'], 'demo.mp4', { type: 'video/mp4' }))
+    await waitFor(() => expect(publisherRef!.cameraOverlay.mirrored).toBe(false))
+
+    publisherRef!.stopDemoPublish()
+
+    // 되돌리지 않으면 웹캠으로 돌아온 강사가 자기 얼굴을 뒤집힌 채로 본다.
+    await waitFor(() => expect(publisherRef!.cameraOverlay.mirrored).toBe(true))
   })
 
   it('데모를 끄면 트랙을 내리고 평소 장치로 돌아간다', async () => {

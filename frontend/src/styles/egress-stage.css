@@ -37,6 +37,11 @@
   border-radius: 10px;
   object-fit: cover;
   background: #000;
+}
+
+/* 웹캠만 뒤집는다. 파일 송출은 거울상이 아니라서 뒤집으면 화면 속 글자가 반전된 채로
+   HLS·녹화에 들어가 VOD에 영구히 남는다(ADR-0100). 어느 쪽인지는 강사 화면이 metadata로 알려 준다. */
+.egress-stage__camera.is-mirrored {
   transform: scaleX(-1);
 }
 

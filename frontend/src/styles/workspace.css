@@ -1835,8 +1835,10 @@ th { color: var(--ink-500); font-size: .67rem; }
   height: 100%;
   background: #1c160d;
   object-fit: contain;
-  transform: scaleX(-1);
 }
+
+/* 뒤집기는 공용 `.instructor-local-video.is-mirrored`(learning.css)가 맡는다. 여기서 또 걸면
+   같은 일을 하는 규칙이 둘이 되고, 조건이 갈릴 때 한쪽만 고쳐져 어긋난다. */
 
 .camera-preview--active::before {
   z-index: 1;

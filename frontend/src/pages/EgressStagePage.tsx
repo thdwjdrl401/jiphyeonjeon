@@ -246,6 +246,9 @@ export default function EgressStagePage() {
         className={
           `egress-stage__camera${cameraIsStage ? ' is-stage' : ''}`
           + `${hasCamera && overlay.visible ? '' : ' is-hidden'}`
+          // 웹캠은 거울로, 파일 송출은 그대로. 강사 화면이 metadata로 알려 준다(ADR-0100) —
+          // 여기서 틀리면 반전된 채로 HLS·녹화에 들어가 VOD에 영구히 남는다.
+          + `${overlay.mirrored ? ' is-mirrored' : ''}`
         }
         style={cameraStyle}
         autoPlay
