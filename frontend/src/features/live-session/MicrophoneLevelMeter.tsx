@@ -2,7 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import { createAudioAnalyser, type LocalAudioTrack } from 'livekit-client'
 import { SPEAKING_LEVEL, decayLevel, levelFromRms, rmsOf } from './micLevel'
 
-const SEGMENTS = 14
+/**
+ * 게이지 칸 수. 범위가 40 dB이므로 한 칸이 약 <b>1.7 dB</b>다.
+ *
+ * <p>14칸(칸당 3.4 dB)일 때는 목소리를 키워도 눈금이 뭉텅뭉텅 뛰어, 마이크가 실제로 반응하는지
+ * 읽기 어려웠다. 계측기가 쓰는 굵기(1~3 dB)에 맞춘다.
+ */
+export const SEGMENTS = 24
 
 /**
  * 마이크로 들어오는 소리를 게이지로 보여 준다. <b>사전 점검의 마지막 한 칸</b>이다.

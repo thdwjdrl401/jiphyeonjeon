@@ -7,6 +7,7 @@ import {
   levelFromRms,
   rmsOf,
 } from '@/features/live-session/micLevel'
+import { SEGMENTS } from '@/features/live-session/MicrophoneLevelMeter'
 
 /** dBFS를 그 세기의 RMS로. 테스트가 "몇 dB짜리 소리"로 말할 수 있게 한다. */
 function rmsAt(dbfs: number) {
@@ -48,8 +49,31 @@ describe('마이크 입력 세기', () => {
   it('조용한 방의 바닥소음으로는 "말했다"가 되지 않는다', () => {
     expect(levelFromRms(rmsAt(-55))).toBeLessThan(SPEAKING_LEVEL)
     expect(levelFromRms(rmsAt(-50))).toBeLessThan(SPEAKING_LEVEL)
+    // 시끄러운 방(-45)도 통과하면 안 된다. 예전 눈금은 -48에서 이미 통과했다.
+    expect(levelFromRms(rmsAt(-45))).toBeLessThan(SPEAKING_LEVEL)
     // 작게 말해도 통과해야 한다.
     expect(levelFromRms(rmsAt(-40))).toBeGreaterThan(SPEAKING_LEVEL)
+  })
+
+  /**
+   * <b>아무도 말하지 않을 때 게이지가 살아 있으면 안 된다.</b> 예전에는 바닥이 -60이라 방 소음
+   * -50만으로 눈금이 0.2를 넘었고(14칸 중 3칸), 그 상태로는 "지금 소리가 들어오는가"를 읽을 수 없었다.
+   */
+  it('조용한 방에서는 게이지가 켜지지 않는다', () => {
+    expect(levelFromRms(rmsAt(-50))).toBe(0)
+    expect(levelFromRms(rmsAt(-55))).toBe(0)
+    // 시끄러운 방이라도 한 줌만 켜진다.
+    expect(levelFromRms(rmsAt(-45))).toBeLessThan(0.15)
+  })
+
+  /**
+   * 한 칸의 해상도. 범위(FLOOR~CEIL)를 칸 수로 나눈 값이고, 계측기가 흔히 쓰는 1~3 dB 안에 있어야
+   * 목소리를 조금 키운 것이 눈에 보인다.
+   */
+  it('한 칸이 1~3 dB 사이다', () => {
+    const perSegment = (CEIL_DBFS - FLOOR_DBFS) / SEGMENTS
+    expect(perSegment).toBeGreaterThanOrEqual(1)
+    expect(perSegment).toBeLessThanOrEqual(3)
   })
 
   describe('게이지 감쇠', () => {
