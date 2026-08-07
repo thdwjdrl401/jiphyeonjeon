@@ -171,7 +171,7 @@ describe('전체 페이지 라우트', () => {
     renderAt('/instructor/live-sessions/ses-security-live/preflight')
 
     expect(
-      await screen.findByText('서버 점검 완료 · 강사 연결과 마이크 송출 상태가 정상입니다.'),
+      await screen.findByText('서버 점검 완료 · 강사 연결이 정상입니다.'),
     ).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /서버 점검|최신 상태 점검/ })).not.toBeInTheDocument()
   })

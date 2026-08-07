@@ -63,12 +63,6 @@ vi.mock('@/features/live-session/annotationPersistence', () => annotationApi)
 
 vi.mock('livekit-client', () => ({
   LocalVideoTrack: class LocalVideoTrack {},
-  MediaDeviceFailure: {
-    PermissionDenied: 'PermissionDenied',
-    NotFound: 'NotFound',
-    DeviceInUse: 'DeviceInUse',
-    getFailure: vi.fn(),
-  },
   VideoPresets: {
     h1080: { resolution: { width: 1920, height: 1080 }, encoding: { maxBitrate: 3_000_000 } },
     h720: { resolution: { width: 1280, height: 720 }, encoding: { maxBitrate: 1_700_000 } },
@@ -203,6 +197,181 @@ describe('InstructorLiveMediaProvider', () => {
       </MemoryRouter>,
     )
   }
+
+  /**
+   * 운영에서 사전 점검이 "Requested device not found"를 띄우고 <b>연결 실패</b>로 물러났다.
+   * 방에는 이미 들어와 있었고, 실제 원인은 그 컴퓨터에 마이크가 없다는 것이었다.
+   */
+  describe('장치 실패는 연결 실패가 아니다', () => {
+    function domError(name: string, message = '') {
+      const error = new Error(message)
+      error.name = name
+      return error
+    }
+
+    /** 권한 조회와 장치 목록을 원하는 상태로 세운다. jsdom에는 둘 다 없다. */
+    function installBrowserMedia({ permission, hasMicrophone = true }: {
+      permission?: PermissionState
+      hasMicrophone?: boolean
+    }) {
+      const permissionListeners: Array<() => void> = []
+      const status = {
+        state: permission ?? 'granted',
+        addEventListener: (_: string, handler: () => void) => { permissionListeners.push(handler) },
+        removeEventListener: () => { permissionListeners.splice(0, permissionListeners.length) },
+      }
+      const deviceListeners: Array<() => void> = []
+      const originals = {
+        permissions: navigator.permissions,
+        mediaDevices: navigator.mediaDevices,
+      }
+      Object.defineProperty(navigator, 'permissions', {
+        configurable: true,
+        value: permission === undefined ? undefined : { query: vi.fn().mockResolvedValue(status) },
+      })
+      Object.defineProperty(navigator, 'mediaDevices', {
+        configurable: true,
+        value: {
+          enumerateDevices: vi.fn().mockResolvedValue(
+            hasMicrophone ? [{ kind: 'audioinput' }, { kind: 'videoinput' }] : [{ kind: 'videoinput' }],
+          ),
+          addEventListener: (_: string, handler: () => void) => { deviceListeners.push(handler) },
+          removeEventListener: () => { deviceListeners.splice(0, deviceListeners.length) },
+        },
+      })
+
+      return {
+        /** 사이트 설정이 바뀐 것처럼. */
+        changePermission(next: PermissionState) {
+          status.state = next
+          permissionListeners.forEach((handler) => handler())
+        },
+        /** 마이크를 꽂은 것처럼. */
+        plugDevice() { deviceListeners.forEach((handler) => handler()) },
+        restore() {
+          Object.defineProperty(navigator, 'permissions', { configurable: true, value: originals.permissions })
+          Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: originals.mediaDevices })
+        },
+      }
+    }
+
+    it('마이크가 없어도 방을 끊지 않고, 원인을 장치로 말한다', async () => {
+      const browser = installBrowserMedia({ permission: 'granted', hasMicrophone: false })
+      renderProvider()
+
+      await waitFor(() => { expect(publisherRef!.mediaFailure?.cause).toBe('no-device') })
+      // 예전에는 여기서 connectionState가 'error'가 되고 방이 끊겼다.
+      expect(publisherRef!.connectionState).toBe('connected')
+      expect(publisherRef!.errorMessage).toBeUndefined()
+      // 조작이 잠기면 마이크를 꽂고도 마이크만 다시 켤 수가 없다.
+      expect(publisherRef!.canControl).toBe(true)
+      expect(publisherRef!.mediaFailure?.title).toBe('마이크를 찾지 못했습니다')
+      browser.restore()
+    })
+
+    /**
+     * 운영에서 난 그대로. 장치 목록을 미리 못 읽는 브라우저에서는 <b>요청이 던지는 것</b>이
+     * 유일한 신호다 — 그 오류가 바깥 catch로 새어 나가 방을 끊고 "연결 실패"를 띄웠다.
+     */
+    it('던져진 오류가 방을 끊지 않는다 — 장치 목록을 못 읽는 브라우저에서도', async () => {
+      liveKit.localParticipant.setMicrophoneEnabled.mockRejectedValueOnce(
+        domError('NotFoundError', 'Requested device not found'),
+      )
+      renderProvider()
+
+      await waitFor(() => { expect(publisherRef!.mediaFailure?.cause).toBe('no-device') })
+      expect(publisherRef!.connectionState).toBe('connected')
+      expect(publisherRef!.canControl).toBe(true)
+      expect(liveKit.room.disconnect).not.toHaveBeenCalled()
+      // 강사 화면에 영어 원문이 남지 않는다.
+      const shown = `${publisherRef!.mediaFailure?.title}${publisherRef!.mediaFailure?.detail}`
+      expect(shown).not.toContain('Requested device not found')
+    })
+
+    it('권한이 차단이면 요청조차 하지 않는다 — 조용히 거절당하면 멈춘 것처럼 보인다', async () => {
+      const browser = installBrowserMedia({ permission: 'denied' })
+      liveKit.localParticipant.setMicrophoneEnabled.mockClear()
+      renderProvider()
+
+      await waitFor(() => { expect(publisherRef!.mediaFailure?.cause).toBe('blocked') })
+      expect(liveKit.localParticipant.setMicrophoneEnabled).not.toHaveBeenCalled()
+      expect(publisherRef!.mediaFailure?.retryable).toBe(false)
+      expect(publisherRef!.microphonePermission).toBe('denied')
+      browser.restore()
+    })
+
+    it('브라우저가 던진 오류도 우리 말로 옮긴다', async () => {
+      const browser = installBrowserMedia({ permission: 'granted' })
+      liveKit.localParticipant.setMicrophoneEnabled.mockRejectedValueOnce(
+        domError('NotReadableError', 'Could not start audio source'),
+      )
+      renderProvider()
+
+      await waitFor(() => { expect(publisherRef!.mediaFailure?.cause).toBe('in-use') })
+      expect(publisherRef!.connectionState).toBe('connected')
+      expect(publisherRef!.mediaFailure?.detail).not.toContain('Could not start audio source')
+      browser.restore()
+    })
+
+    it('다시 시도는 마이크만 다시 연다 — 방은 다시 붙지 않는다', async () => {
+      const browser = installBrowserMedia({ permission: 'granted', hasMicrophone: false })
+      liveKit.room.connect.mockClear()
+      renderProvider()
+      await waitFor(() => { expect(publisherRef!.mediaFailure?.cause).toBe('no-device') })
+
+      liveKit.localParticipant.setMicrophoneEnabled.mockClear()
+      const recovered = installBrowserMedia({ permission: 'granted', hasMicrophone: true })
+      publisherRef!.retryMedia()
+
+      await waitFor(() => { expect(liveKit.localParticipant.setMicrophoneEnabled).toHaveBeenCalledWith(true) })
+      await waitFor(() => { expect(publisherRef!.mediaFailure).toBeUndefined() })
+      expect(liveKit.room.connect).toHaveBeenCalledTimes(1)
+      recovered.restore()
+      browser.restore()
+    })
+
+    it('마이크를 꽂으면 강사가 아무것도 안 해도 다시 시도한다', async () => {
+      const browser = installBrowserMedia({ permission: 'granted', hasMicrophone: false })
+      renderProvider()
+      await waitFor(() => { expect(publisherRef!.mediaFailure?.cause).toBe('no-device') })
+
+      liveKit.localParticipant.setMicrophoneEnabled.mockClear()
+      // 장치가 생겼다고 알린다. enumerateDevices가 이제 마이크를 준다.
+      ;(navigator.mediaDevices.enumerateDevices as ReturnType<typeof vi.fn>)
+        .mockResolvedValue([{ kind: 'audioinput' }, { kind: 'videoinput' }])
+      browser.plugDevice()
+
+      await waitFor(() => { expect(liveKit.localParticipant.setMicrophoneEnabled).toHaveBeenCalledWith(true) })
+      browser.restore()
+    })
+
+    /** "이번만 허용"이 끝나면 브라우저가 마이크를 끊는다. 아무 말이 없으면 강사는 그대로 강의한다. */
+    it('송출 중에 허용이 걷히면 알린다', async () => {
+      const browser = installBrowserMedia({ permission: 'granted' })
+      renderProvider()
+      await waitFor(() => { expect(publisherRef!.microphoneEnabled).toBe(true) })
+
+      browser.changePermission('prompt')
+
+      await waitFor(() => { expect(publisherRef!.mediaFailure?.cause).toBe('dismissed') })
+      expect(publisherRef!.mediaFailure?.detail).toContain('이번만 허용')
+      expect(publisherRef!.connectionState).toBe('connected')
+      browser.restore()
+    })
+
+    it('허용으로 바뀌면 스스로 회복한다', async () => {
+      const browser = installBrowserMedia({ permission: 'denied' })
+      renderProvider()
+      await waitFor(() => { expect(publisherRef!.mediaFailure?.cause).toBe('blocked') })
+
+      liveKit.localParticipant.setMicrophoneEnabled.mockClear()
+      browser.changePermission('granted')
+
+      await waitFor(() => { expect(liveKit.localParticipant.setMicrophoneEnabled).toHaveBeenCalledWith(true) })
+      await waitFor(() => { expect(publisherRef!.microphonePermission).toBe('granted') })
+      browser.restore()
+    })
+  })
 
   describe('저장된 판서 복원', () => {
     /**

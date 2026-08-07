@@ -1395,6 +1395,9 @@ th { color: var(--ink-500); font-size: .67rem; }
 .instructor-preflight__start-state { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
 .instructor-preflight__start-state strong { color: var(--paper-pure); font-size: .82rem; font-weight: 700; }
 .instructor-preflight__start-state small { overflow: hidden; color: rgba(247, 246, 243, .7); font-size: .68rem; text-overflow: ellipsis; white-space: nowrap; }
+/* 무음으로 시작하는 경우(ADR-0099)만 줄바꿈을 허용한다 — 무엇을 잃는지 끝까지 읽혀야 하는 문장이라
+   좁은 화면에서 말줄임으로 잘리면 안 된다. 밝기도 한 단계 올려 다른 줄과 구분한다. */
+.instructor-preflight__actions.is-silent .instructor-preflight__start-state small { overflow: visible; color: rgba(247, 246, 243, .92); white-space: normal; }
 .instructor-preflight__actions > .button { min-width: 146px; border-color: var(--paper-pure); background: var(--paper-pure); color: var(--ink-950); }
 .instructor-preflight__actions > .button:hover:not(:disabled) { border-color: #fff; background: #fff; color: #000; }
 

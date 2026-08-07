@@ -154,7 +154,7 @@ class LiveSessionLifecycleTest {
     }
 
     @Test
-    void start_rejects_before_attempt_when_actual_microphone_is_not_ready() throws Exception {
+    void start_rejects_before_attempt_when_instructor_is_not_in_the_room() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String[] ids = createSession(instructor);
         LiveStartTestSupport.stubEmptyRoom(roomControl, ids[0]);
@@ -167,6 +167,32 @@ class LiveSessionLifecycleTest {
                 .findFirstByLiveSessionIdOrderByCreatedAtDesc(UUID.fromString(ids[0]))).isEmpty();
         verify(agentDispatchControl, never()).ensureDispatch(anyString(), anyString(), anyString());
         verify(recordingControl, never()).startRecording(any(), any(), anyString());
+    }
+
+    /**
+     * ADR-0099. 마이크가 없다고 강의를 못 열 이유는 없다 — Egress는 트랙을 믹스하지 않고 헤드리스
+     * Chrome의 재생 출력을 담으므로(ADR-0048), 오디오가 없으면 실패가 아니라 무음이다.
+     */
+    @Test
+    void start_is_allowed_without_a_microphone_and_readiness_says_so() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String[] ids = createSession(instructor);
+        LiveStartTestSupport.stubInstructorPresentWithoutMicrophone(roomControl, ids[0], ids[2]);
+        LiveStartTestSupport.stubRecordingReady(recordingControl);
+
+        // 점검은 통과한다 — 다만 마이크가 없다는 사실을 그대로 내려 화면이 강사에게 알릴 수 있게 한다.
+        mockMvc.perform(get("/api/instructor/live-sessions/" + ids[0] + "/preflight/readiness")
+                        .cookie(instructor))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ready").value(true))
+                .andExpect(jsonPath("$.instructorPresent").value(true))
+                .andExpect(jsonPath("$.microphonePublished").value(false))
+                .andExpect(jsonPath("$.instructorMicrophoneTrackCount").value(0));
+
+        startAndRunGates(instructor, ids[0]);
+
+        mockMvc.perform(get("/api/live-sessions/" + ids[0]).cookie(instructor))
+                .andExpect(jsonPath("$.liveSessionStatus").value("LIVE"));
     }
 
     @Test
@@ -264,7 +290,7 @@ class LiveSessionLifecycleTest {
     }
 
     @Test
-    void instructor_without_microphone_does_not_go_live() throws Exception {
+    void instructor_who_left_the_room_does_not_go_live() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String[] ids = createSession(instructor);
         LiveStartTestSupport.stubInstructorDisconnectsAfterPreflight(roomControl, ids[0], ids[2]);
@@ -291,7 +317,7 @@ class LiveSessionLifecycleTest {
         write(post("/api/live-sessions/" + ids[0] + "/start"), instructor, null).andExpect(status().isAccepted());
         startOrchestrator.runStartGates(UUID.fromString(ids[0]));
 
-        // 강사가 마이크를 켜고 다시 시작 → 새 attempt가 만들어지고 이번엔 LIVE가 된다.
+        // 강사가 다시 들어와 시작 → 새 attempt가 만들어지고 이번엔 LIVE가 된다.
         LiveStartTestSupport.stubInstructorPublishing(roomControl, ids[0], ids[2]);
         startAndRunGates(instructor, ids[0]);
 

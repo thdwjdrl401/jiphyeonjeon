@@ -39,7 +39,20 @@ public final class LiveStartTestSupport {
                 .thenReturn(List.of(new LiveRoomControl.ParticipantMediaState(identity, "ACTIVE", true, false)));
     }
 
-    /** 방은 준비되지만 강사가 아직(또는 더 이상) 마이크를 publish하지 않는 상태 — Gate S3① 실패. */
+    /**
+     * 강사는 방에 있는데 마이크가 없는 상태.
+     *
+     * <p>ADR-0099 이후 <b>이것은 시작을 막지 않는다</b> — 소리 없이 송출될 뿐이다.
+     */
+    public static void stubInstructorPresentWithoutMicrophone(
+            LiveRoomControl roomControl, String sessionId, String instructorId) {
+        when(roomControl.ensureRoom(anyString())).thenReturn("RM_" + sessionId);
+        String identity = LiveParticipantIdentity.of(UUID.fromString(sessionId), UUID.fromString(instructorId));
+        when(roomControl.listParticipantMediaStates(anyString()))
+                .thenReturn(List.of(new LiveRoomControl.ParticipantMediaState(identity, "ACTIVE", false, false)));
+    }
+
+    /** 강사가 아직(또는 더 이상) 방에 없는 상태 — Gate S3① 실패. 빈 방이 LIVE가 되면 안 된다. */
     public static void stubEmptyRoom(LiveRoomControl roomControl, String sessionId) {
         when(roomControl.ensureRoom(anyString())).thenReturn("RM_" + sessionId);
         when(roomControl.listParticipantMediaStates(anyString())).thenReturn(List.of());

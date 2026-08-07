@@ -10,8 +10,8 @@ import {
 } from 'react'
 import { Outlet, useParams } from 'react-router-dom'
 import {
+  LocalAudioTrack,
   LocalVideoTrack,
-  MediaDeviceFailure,
   Room,
   RoomEvent,
   Track,
@@ -45,6 +45,16 @@ import {
   type LaserStroke,
 } from './annotation'
 import { createAnnotationOpSink, fetchAnnotationDocument, type AnnotationOpSink } from './annotationPersistence'
+import {
+  describeMediaFailure,
+  hasInputDevice,
+  preflightMediaFailure,
+  queryMediaPermission,
+  watchMediaPermission,
+  type MediaFailure,
+  type MediaKind,
+  type MediaPermissionState,
+} from './mediaFailure'
 
 export type InstructorLiveKitConnectionState =
   | 'idle'
@@ -56,7 +66,7 @@ export type InstructorLiveKitConnectionState =
   | 'error'
   | 'mock'
 
-type MediaControl = 'camera' | 'microphone' | 'screenShare'
+type MediaControl = MediaKind
 
 interface InstructorLiveKitState {
   connectionState: InstructorLiveKitConnectionState
@@ -65,7 +75,19 @@ interface InstructorLiveKitState {
   screenShareEnabled: boolean
   cameraTrack?: LocalVideoTrack
   screenShareTrack?: LocalVideoTrack
+  /** 켜져 있는 마이크 트랙. 사전 점검의 소리 게이지가 이걸 읽는다. */
+  microphoneTrack?: LocalAudioTrack
+  /**
+   * <b>방 연결</b>의 문제만 담는다. 장치 문제는 `mediaFailure`로 간다.
+   *
+   * <p>둘을 한 칸에 담았더니 마이크가 없는 컴퓨터에서 "연결 실패"가 떴다. 강사는 라이브킷이나
+   * 네트워크를 의심하게 되는데, 실제로는 방에 이미 들어와 있었다.
+   */
   errorMessage?: string
+  /** 마이크·카메라·화면공유가 안 열린 이유. 연결은 살아 있다. */
+  mediaFailure?: MediaFailure
+  /** 오류가 아닌 알림. 붉은 경고로 띄우면 안 되는 것들이 여기 온다. */
+  notice?: string
   mediaRevision: number
 }
 
@@ -131,7 +153,19 @@ export interface InstructorLiveMedia extends InstructorLiveKitState {
   saveAnnotationSnapshot: (snapshot: () => AnnotationChange) => void
   /** 품질 변경으로 트랙을 다시 올리는 중. 이때는 선택을 잠근다. */
   applyingQuality: boolean
+  /**
+   * 브라우저에 저장된 마이크 권한. 화면이 "왜 안 되는지"를 요청 전에 말할 수 있는 근거다.
+   *
+   * <p>`unknown`은 조회를 지원하지 않는 브라우저다 — 모른다는 뜻이지 없다는 뜻이 아니므로
+   * 이 값으로 요청을 막지 않는다.
+   */
+  microphonePermission: MediaPermissionState
+  /** 방 전체를 다시 연결한다. 연결이 진짜로 끊겼을 때만 쓴다. */
   retry: () => void
+  /** 장치만 다시 연다. 방은 그대로 두므로 강의 중에도 안전하다. */
+  retryMedia: () => void
+  /** 장치 안내를 닫는다. 원인을 읽었으면 화면을 가리지 않게 한다. */
+  dismissMediaFailure: () => void
   toggleCamera: () => void
   toggleMicrophone: () => void
   toggleScreenShare: () => void
@@ -152,12 +186,22 @@ function getLocalVideoTrack(room: Room, source: Track.Source) {
   return track instanceof LocalVideoTrack ? track : undefined
 }
 
-function describeMediaError(error: unknown) {
-  const failure = MediaDeviceFailure.getFailure(error)
-  if (failure === MediaDeviceFailure.PermissionDenied) return '카메라 또는 마이크 권한이 거부되었습니다. 브라우저 권한을 허용한 뒤 다시 시도해 주세요.'
-  if (failure === MediaDeviceFailure.NotFound) return '사용 가능한 카메라 또는 마이크를 찾지 못했습니다.'
-  if (failure === MediaDeviceFailure.DeviceInUse) return '카메라 또는 마이크를 다른 프로그램이 사용 중입니다.'
-  return error instanceof Error ? error.message : '미디어 장치를 시작하지 못했습니다.'
+/** 사전 점검의 소리 게이지가 읽는 트랙. 음소거면 잴 소리가 없으므로 내주지 않는다. */
+function getLocalMicrophoneTrack(room: Room) {
+  const publication = room.localParticipant.getTrackPublication(Track.Source.Microphone)
+  if (!publication || publication.isMuted) return undefined
+  return publication.audioTrack instanceof LocalAudioTrack ? publication.audioTrack : undefined
+}
+
+/**
+ * 실패 시점의 권한을 읽어 원인을 확정한다. 권한 조회는 창을 띄우지 않으므로 실패 직후에 해도 안전하다.
+ *
+ * <p>화면 공유에는 저장된 사이트 권한이 없다(매번 선택 창이다). 그래서 조회하지 않는다.
+ */
+async function resolveMediaFailure(error: unknown, kind: MediaKind): Promise<MediaFailure> {
+  if (kind === 'screenShare') return describeMediaFailure(error, kind)
+  const permission = await queryMediaPermission(kind)
+  return describeMediaFailure(error, kind, permission)
 }
 
 function describeConnectionError(error: unknown) {
@@ -229,6 +273,7 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
   const [state, setState] = useState<InstructorLiveKitState>(initialState)
   const [quality, setQuality] = useState<PublishQuality>(loadPublishQuality)
   const [applyingQuality, setApplyingQuality] = useState(false)
+  const [microphonePermission, setMicrophonePermission] = useState<MediaPermissionState>('unknown')
   // Room 생성 effect가 품질 변경마다 재실행되면 연결이 끊긴다. 최신 값은 ref로만 읽고,
   // 이미 올라간 트랙은 재게시로 반영한다.
   const qualityRef = useRef(quality)
@@ -284,9 +329,74 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
       screenShareEnabled: room.localParticipant.isScreenShareEnabled,
       cameraTrack: getLocalVideoTrack(room, Track.Source.Camera),
       screenShareTrack: getLocalVideoTrack(room, Track.Source.ScreenShare),
+      microphoneTrack: getLocalMicrophoneTrack(room),
       mediaRevision: current.mediaRevision + 1,
     }))
   }, [])
+
+  /**
+   * 지금 걸려 있는 장치 실패. <b>상태와 같은 순간에</b> 쓴다.
+   *
+   * <p>예전에는 effect로 state를 뒤따라 복사했는데, 그러면 권한 변화 같은 <b>이벤트가 그 사이에</b>
+   * 끼어들 때 아직 갱신되지 않은 값을 보고 자동 재시도가 그냥 지나간다. 화면이 이미 "차단됨"을
+   * 그리고 있는데 허용으로 바꿔도 마이크가 안 켜지는, 재현하기 어려운 종류의 사고다.
+   */
+  const mediaFailureRef = useRef<MediaFailure | undefined>(undefined)
+  const setMediaFailure = useCallback((failure?: MediaFailure) => {
+    mediaFailureRef.current = failure
+    setState((current) => ({ ...current, mediaFailure: failure }))
+  }, [])
+
+  /**
+   * 마이크·카메라를 연다. <b>방은 건드리지 않는다.</b>
+   *
+   * <p>장치가 안 열려도 강사는 이미 방 안에 있다. 끊어 버리면 (1) 원인이 장치라는 사실이 가려지고
+   * (2) 마이크만 다시 시도할 길이 없어져 전체 재연결밖에 남지 않는다.
+   *
+   * <p>요청하기 전에 권한과 장치 존재를 먼저 본다. 차단된 상태에서 요청을 보내면 브라우저가
+   * 조용히 거절해 강사 눈에는 화면이 멈춘 것처럼 보인다.
+   */
+  const openLocalDevices = useCallback(async (room: Room, kinds: MediaKind[]) => {
+    // 방이 바뀌었으면(재연결·언마운트) 결과를 반영하지 않는다.
+    const alive = () => roomRef.current === room
+    const wantsMicrophone = kinds.includes('microphone')
+    setMediaFailure(undefined)
+
+    if (wantsMicrophone) {
+      const [permission, present] = await Promise.all([
+        queryMediaPermission('microphone'),
+        hasInputDevice('microphone'),
+      ])
+      if (!alive()) return
+      setMicrophonePermission(permission)
+
+      const foreseen = preflightMediaFailure('microphone', permission, present)
+      if (foreseen) {
+        setMediaFailure(foreseen)
+      } else {
+        try {
+          await room.localParticipant.setMicrophoneEnabled(true)
+        } catch (error) {
+          const failure = await resolveMediaFailure(error, 'microphone')
+          if (!alive()) return
+          setMediaFailure(failure)
+        }
+      }
+      if (!alive()) return
+    }
+
+    if (kinds.includes('camera')) {
+      try {
+        await room.localParticipant.setCameraEnabled(true)
+      } catch (error) {
+        const failure = await resolveMediaFailure(error, 'camera')
+        // 마이크 안내를 덮지 않는다. 라이브 시작을 막는 것은 마이크뿐이라 그쪽을 먼저 읽어야 한다.
+        if (alive() && !mediaFailureRef.current) setMediaFailure(failure)
+      }
+    }
+
+    if (alive()) syncLocalState(room)
+  }, [setMediaFailure, syncLocalState])
 
   useEffect(() => {
     if (!sessionId) {
@@ -389,7 +499,10 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
     }
     const onMediaDevicesError = (error: Error) => {
       if (!cancelled) {
-        setState((current) => ({ ...current, errorMessage: describeMediaError(error) }))
+        // 어느 장치인지 이벤트가 알려 주지 않는다. 마이크가 필수 게이트라 그쪽으로 본다.
+        void resolveMediaFailure(error, 'microphone').then((failure) => {
+          if (!cancelled) setMediaFailure(failure)
+        })
       }
     }
     const onLocalTrackChanged = () => {
@@ -437,16 +550,12 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
 
         setState((current) => ({ ...current, connectionState: 'connected', errorMessage: undefined }))
         setPendingControl('initial')
-        // 마이크가 필수 gate다. 카메라 실패가 마이크 publish까지 롤백하지 않도록 따로 켠다.
-        await room.localParticipant.setMicrophoneEnabled(true)
-        try {
-          await room.localParticipant.setCameraEnabled(true)
-        } catch (error) {
-          if (!cancelled) {
-            setState((current) => ({ ...current, errorMessage: describeMediaError(error) }))
-          }
-        }
-        if (!cancelled) syncLocalState(room)
+        /*
+         * 장치 여는 일은 여기서 끝난다 — 아래 catch로 새어 나가면 방을 끊고 "연결 실패"라고 말하게
+         * 된다. 마이크가 없는 컴퓨터에서 실제로 그랬다. 방은 이미 붙어 있으므로 끊을 이유가 없고,
+         * 강사에게 필요한 것은 장치 안내다.
+         */
+        await openLocalDevices(room, ['microphone', 'camera'])
       } catch (error) {
         connectionFailed = true
         await room.disconnect(true).catch(() => undefined)
@@ -480,7 +589,48 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
       if (roomRef.current === room) roomRef.current = null
       disconnectRef.current = room.disconnect(true).catch(() => undefined)
     }
-  }, [retryCount, sessionId, syncLocalState])
+  }, [openLocalDevices, retryCount, sessionId, setMediaFailure, syncLocalState])
+
+  /**
+   * 권한과 장치 목록의 변화를 지켜본다.
+   *
+   * <p>강사가 사이트 설정에서 마이크를 허용하거나 마이크를 꽂으면 <b>새로고침 없이</b> 다시 시도한다.
+   * 반대로 "이번만 허용"이 끝나면 브라우저가 마이크를 끊는데, 그때 아무 말이 없으면 강사는 자기
+   * 목소리가 안 나가는 줄도 모른 채 강의를 계속하게 된다.
+   *
+   * <p>자동 재시도는 <b>우리가 마이크 실패를 보고해 둔 경우로만</b> 제한한다. 그러지 않으면 강사가
+   * 일부러 끈 마이크를 이어폰 연결 같은 사건이 제멋대로 다시 켠다.
+   */
+  useEffect(() => {
+    if (!sessionId || isMockApiEnabled) return
+
+    const retryMicrophone = () => {
+      const room = roomRef.current
+      if (!room || room.state !== 'connected') return
+      if (mediaFailureRef.current?.kind !== 'microphone') return
+      void openLocalDevices(room, ['microphone'])
+    }
+
+    const stopWatching = watchMediaPermission('microphone', (next) => {
+      setMicrophonePermission(next)
+      const room = roomRef.current
+      if (next === 'granted') {
+        retryMicrophone()
+        return
+      }
+      // 허용이 걷혔다. 송출 중이었다면 브라우저가 트랙을 끊은 상태다.
+      if (room?.state === 'connected' && room.localParticipant.isMicrophoneEnabled) {
+        setMediaFailure(describeMediaFailure({ name: 'NotAllowedError' }, 'microphone', next))
+      }
+    })
+
+    const devices = navigator.mediaDevices
+    devices?.addEventListener?.('devicechange', retryMicrophone)
+    return () => {
+      stopWatching()
+      devices?.removeEventListener?.('devicechange', retryMicrophone)
+    }
+  }, [openLocalDevices, sessionId, setMediaFailure])
 
   const toggleControl = useCallback(async (control: MediaControl) => {
     if (state.connectionState === 'mock') {
@@ -496,7 +646,7 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
     if (!room || state.connectionState !== 'connected' || pendingControl) return
 
     setPendingControl(control)
-    setState((current) => ({ ...current, errorMessage: undefined }))
+    setMediaFailure(undefined)
     try {
       if (control === 'camera') {
         const { capture, publish } = cameraPublishArgs(qualityRef.current)
@@ -509,11 +659,31 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
       }
       syncLocalState(room)
     } catch (error) {
-      setState((current) => ({ ...current, errorMessage: describeMediaError(error) }))
+      const failure = await resolveMediaFailure(error, control)
+      // 공유 대상 선택 창을 닫은 것은 실패가 아니다. 예전에는 이때 "권한이 거부되었습니다"가 떴다.
+      if (failure.cause !== 'canceled') setMediaFailure(failure)
+      if (control === 'microphone') setMicrophonePermission(await queryMediaPermission('microphone'))
     } finally {
       setPendingControl(null)
     }
-  }, [pendingControl, state.connectionState, syncLocalState])
+  }, [pendingControl, setMediaFailure, state.connectionState, syncLocalState])
+
+  /**
+   * 실패한 장치만 다시 연다. <b>방은 그대로 둔다</b> — 강의 중에도 안전해야 하기 때문이다.
+   *
+   * <p>전체 재연결(`retry`)과 다르다. 마이크가 안 잡히는 것과 서버에 못 붙는 것은 다른 사건이고,
+   * 고치는 방법도 다르다.
+   */
+  const retryMedia = useCallback(() => {
+    const room = roomRef.current
+    const kind = state.mediaFailure?.kind
+    if (!room || room.state !== 'connected' || !kind) return
+    if (kind === 'screenShare') {
+      void toggleControl('screenShare')
+      return
+    }
+    void openLocalDevices(room, [kind])
+  }, [openLocalDevices, state.mediaFailure?.kind, toggleControl])
 
   /**
    * 품질 변경을 즉시 반영한다. Room을 다시 만들면 연결이 끊기므로, 이미 올라간 트랙만
@@ -530,7 +700,8 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
 
     const republish = async () => {
       setApplyingQuality(true)
-      setState((current) => ({ ...current, errorMessage: undefined }))
+      setMediaFailure(undefined)
+      setState((current) => ({ ...current, notice: undefined }))
       try {
         if (next.camera && room.localParticipant.isCameraEnabled) {
           const { capture, publish } = cameraPublishArgs(merged)
@@ -540,20 +711,20 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
         if (next.screenShare && room.localParticipant.isScreenShareEnabled) {
           // 화면공유는 다시 올리면 브라우저가 공유 대상을 새로 묻는다. 강사가 강의 도중
           // 예기치 않게 선택 창을 만나지 않도록, 켜져 있으면 다음 공유부터 적용한다.
-          setState((current) => ({
-            ...current,
-            errorMessage: '화면공유 화질은 공유를 다시 시작할 때 적용됩니다.',
-          }))
+          //
+          // 이건 알림이지 오류가 아니다. 예전에는 오류 칸에 담겨 붉은 경고로 떴다.
+          setState((current) => ({ ...current, notice: '화면공유 화질은 공유를 다시 시작할 때 적용됩니다.' }))
         }
         syncLocalState(room)
       } catch (error) {
-        setState((current) => ({ ...current, errorMessage: describeMediaError(error) }))
+        const failure = await resolveMediaFailure(error, next.screenShare ? 'screenShare' : 'camera')
+        setMediaFailure(failure)
       } finally {
         setApplyingQuality(false)
       }
     }
     void republish()
-  }, [state.connectionState, syncLocalState])
+  }, [setMediaFailure, state.connectionState, syncLocalState])
 
   /** 아직 보내지 않은 최신 배치와, 그것을 보낼 프레임. 레이저와 같은 장치다. */
   const overlayPendingRef = useRef<CameraOverlay | null>(null)
@@ -848,11 +1019,14 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
     saveAnnotationVisible,
     saveAnnotationSnapshot,
     applyingQuality,
+    microphonePermission,
     retry: () => setRetryCount((current) => current + 1),
+    retryMedia,
+    dismissMediaFailure: () => setMediaFailure(undefined),
     toggleCamera: () => { void toggleControl('camera') },
     toggleMicrophone: () => { void toggleControl('microphone') },
     toggleScreenShare: () => { void toggleControl('screenShare') },
-  }), [annotationAudienceRevision, applyingQuality, cameraOverlay, changeQuality, moveCameraOverlay, pendingControl, publishAnnotation, publishAnnotationState, publishLaser, quality, restoredAnnotation, restoredAnnotationVisible, saveAnnotationSnapshot, saveAnnotationVisible, sessionId, state, toggleControl])
+  }), [annotationAudienceRevision, applyingQuality, cameraOverlay, changeQuality, microphonePermission, moveCameraOverlay, pendingControl, publishAnnotation, publishAnnotationState, publishLaser, quality, restoredAnnotation, restoredAnnotationVisible, retryMedia, saveAnnotationSnapshot, saveAnnotationVisible, sessionId, setMediaFailure, state, toggleControl])
 
   return (
     <InstructorLiveMediaContext.Provider value={value}>
