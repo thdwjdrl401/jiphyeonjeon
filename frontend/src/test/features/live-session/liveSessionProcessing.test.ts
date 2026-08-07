@@ -96,16 +96,27 @@ describe('강의 상세 다시보기 배지', () => {
     expect(badge.goTo).toBe('processing')
   })
 
-  it('공개됐으면 성공 톤으로 다시보기를 가리킨다', () => {
+  it('공개됐으면 성공 톤이 된다', () => {
     const badge = describeReplayBadge(snapshot('READY', 'PUBLISHED'), false)!
-    expect(badge).toMatchObject({ tone: 'success', busy: false, goTo: 'replay' })
+    expect(badge).toMatchObject({ tone: 'success', busy: false })
   })
 
   /** 영상은 준비됐지만 아직 공개 전 — 할 일이 남았으므로 성공으로 칠하지 않는다. */
   it('READY지만 미게시면 검수 대기로 구분한다', () => {
     const badge = describeReplayBadge(snapshot('READY', 'DRAFT'), false)!
-    expect(badge).toMatchObject({ tone: 'warning', busy: false, goTo: 'replay' })
+    expect(badge).toMatchObject({ tone: 'warning', busy: false })
     expect(badge.label).not.toBe(describeReplayBadge(snapshot('READY', 'PUBLISHED'), false)!.label)
+  })
+
+  /**
+   * <b>배지는 언제나 처리 화면으로 간다.</b> 준비가 끝나도 그렇다 — 역할이 "녹화가 어떻게 됐나"를
+   * 보는 창이라 끝까지 한결같아야 하고, 영상으로 가는 것은 옆의 "미리보기·검수" 버튼이 맡는다.
+   * 준비 완료에서 배지까지 영상으로 보내면 같은 곳으로 가는 것이 나란히 둘이 된다.
+   */
+  it('어떤 상태에서도 배지는 처리 화면을 가리킨다', () => {
+    const targets = (['RECORDING', 'VERIFYING', 'FAILED', 'READY'] as const)
+      .map((s) => describeReplayBadge(snapshot(s, 'PUBLISHED'), false)!.goTo)
+    expect(targets).toEqual(['processing', 'processing', 'processing', 'processing'])
   })
 
   /** 없는 것을 "준비 중"이라고 말하지 않는다. */

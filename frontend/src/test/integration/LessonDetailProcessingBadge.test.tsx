@@ -57,7 +57,9 @@ describe('강의 상세 — 녹화 처리 배지', () => {
     const panel = settled.closest('.workspace-panel') as HTMLElement
     const link = settled.closest('a')!
     expect(link.querySelector('.status-pill__spinner')).toBeNull()
-    expect(link.getAttribute('href')).toMatch(/\/replay$/)
-    expect(within(panel).getByRole('link', { name: '미리보기·검수' })).toBeInTheDocument()
+    // 준비가 끝나도 배지는 처리 화면으로 간다 — 영상은 옆 버튼이 맡는다.
+    expect(link.getAttribute('href')).toMatch(/\/processing$/)
+    const review = within(panel).getByRole('link', { name: '미리보기·검수' })
+    expect(review.getAttribute('href')).toMatch(/\/replay$/)
   })
 })

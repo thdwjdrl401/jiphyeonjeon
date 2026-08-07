@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ProcessingStatus } from '@/features/live-session/liveSessionService.interface'
@@ -77,20 +77,32 @@ function renderPage(processing: ProcessingStatus) {
   )
 }
 
-describe('녹화 처리 화면 이동', () => {
+describe('녹화 처리 화면', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  it('READY + PUBLISHED에서 한 번 조회하고 replay로 replace 이동한다', async () => {
+  /**
+   * 예전에는 READY + PUBLISHED에서 다시보기로 <b>자동 이동</b>했다. 그건 강의를 종료하면 여기로
+   * 끌려와 대기하던 옛 동선을 위한 것이었고, [ADR-0092]가 그 자동 진입을 없앤 뒤로는 일부러 들어온
+   * 사람을 쫓아내기만 했다 — 강의 상세의 배지를 눌러도 들어오자마자 튕겨 나갔다.
+   *
+   * <p>이제 머문다. 끝난 녹화의 단계 기록을 여기서 볼 수 있고, 영상으로는 <b>사용자가</b> 간다.
+   */
+  it('READY + PUBLISHED에서도 머물고, 조회는 한 번만 한다', async () => {
     renderPage(status('READY', 'PUBLISHED'))
 
-    expect(await screen.findByRole('heading', { name: '다시보기 도착' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '녹화 처리 현황' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '다시보기 도착' })).not.toBeInTheDocument()
+    // terminal 상태라 폴링이 붙지 않는다(ADR-0007).
     expect(getProcessingStatus).toHaveBeenCalledTimes(1)
     expect(getProcessingStatus).toHaveBeenCalledWith('ses-1')
 
-    fireEvent.click(screen.getByRole('button', { name: '뒤로' }))
-    expect(await screen.findByRole('heading', { name: '이전 화면' })).toBeInTheDocument()
+    // 공개까지 끝났어도 영상으로 갈 길은 열어 둔다.
+    expect(screen.getByRole('link', { name: 'VOD 미리보기·검수' })).toHaveAttribute(
+      'href',
+      '/instructor/lessons/les-1/replay',
+    )
   })
 
   it('READY + DRAFT에서는 자동 이동하지 않고 수동 게시 진입을 제공한다', async () => {

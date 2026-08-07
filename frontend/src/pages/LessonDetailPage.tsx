@@ -182,9 +182,7 @@ export default function LessonDetailPage() {
                     <StatusBadge
                       tone={replayBadge.tone}
                       busy={replayBadge.busy}
-                      to={replayBadge.goTo === 'processing' ? processingPath
-                        : replayBadge.goTo === 'replay' ? replayPath
-                          : undefined}
+                      to={replayBadge.goTo === 'processing' ? processingPath : undefined}
                     >{replayBadge.label}</StatusBadge>
                   )}
                   <h3>{replayBadge?.busy ? '녹화를 처리하고 있습니다' : '녹화 영상'}</h3>

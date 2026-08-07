@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { instructorPaths } from '@/app/router/paths'
 import { getLesson } from '@/features/lesson/lessonService'
@@ -43,9 +43,7 @@ function stepLabel(status: 'COMPLETE' | 'PROCESSING' | 'PENDING' | 'FAILED') {
 
 export default function LiveSessionProcessingPage() {
   const { sessionId = '' } = useParams()
-  const navigate = useNavigate()
   const mountedAt = useRef(Date.now())
-  const redirected = useRef(false)
   const [delayed, setDelayed] = useState(false)
   const sessionQuery = useQuery({
     queryKey: ['live-session', sessionId],
@@ -75,17 +73,22 @@ export default function LiveSessionProcessingPage() {
 
   useEffect(() => {
     mountedAt.current = Date.now()
-    redirected.current = false
     setDelayed(false)
     const timeout = window.setTimeout(() => setDelayed(true), DELAY_NOTICE_MS)
     return () => window.clearTimeout(timeout)
   }, [sessionId])
 
-  useEffect(() => {
-    if (!session || !processing || redirected.current || !isReplayReady(processing)) return
-    redirected.current = true
-    navigate(instructorPaths.replay(session.lessonId), { replace: true })
-  }, [navigate, processing, session])
+  /*
+   * 준비되면 다시보기로 <b>자동 이동하던 것을 걷어냈다.</b>
+   *
+   * <p>그 이동은 옛 동선을 위한 것이었다 — 강의를 종료하면 여기로 끌려와 대기하다가, 준비되면
+   * 데려다주는 흐름. [ADR-0092]가 그 자동 진입을 없앴으므로 이제 이 화면에 오는 사람은 <b>일부러
+   * 온 사람</b>뿐이다. 그 사람을 쫓아내면 같은 ADR이 이 화면을 남긴 이유(§3 "장애 확인과 직접
+   * 접근을 위해 유지")가 무너진다.
+   *
+   * <p>실제로 강의 상세의 배지를 눌러 들어오면 들어오자마자 다시보기로 튕겨 나갔다. 끝난 녹화의
+   * 단계 기록·소요 시간을 볼 방법이 없었다. 아래 "다시보기 열기" 링크로 <b>사용자가</b> 간다.
+   */
 
   usePageTitle('녹화 처리 현황')
 
@@ -162,17 +165,20 @@ export default function LiveSessionProcessingPage() {
         <InlineNotice tone="info">아직 녹화 자산이 만들어지지 않았습니다. 라이브가 시작되면 생성됩니다.</InlineNotice>
       ) : asset.status === 'READY' && asset.replayStatus !== 'PUBLISHED' ? (
         <InlineNotice tone="warning">영상은 재생할 수 있지만 아직 수강생에게 공개하지 않았습니다. 검수 후 게시하세요.</InlineNotice>
+      ) : ready ? (
+        <InlineNotice tone="success">다시보기가 수강생에게 공개되어 있습니다.</InlineNotice>
       ) : delayed ? (
         <InlineNotice tone="warning">처리가 평소보다 오래 걸리고 있습니다. 이 화면을 열어 둬도 되고 나중에 다시 확인해도 됩니다.</InlineNotice>
       ) : (
-        <InlineNotice tone="info">녹화 파일을 마무리하고 있습니다. 준비가 끝나면 다시보기 화면으로 자동 이동합니다.</InlineNotice>
+        /* 자동 이동을 걷어냈으므로(위 주석) "끝나면 데려다준다"고 말하지 않는다. */
+        <InlineNotice tone="info">녹화 파일을 마무리하고 있습니다. 끝나면 아래 버튼으로 바로 확인할 수 있습니다.</InlineNotice>
       )}
 
       <div className="sticky-form-actions">
         <Link className="button button--ghost" to={instructorPaths.curriculums}>커리큘럼 관리</Link>
-        {asset?.status === 'READY' && asset.replayStatus !== 'PUBLISHED'
+        {asset?.status === 'READY'
           ? <Link className="button button--primary button--large" to={instructorPaths.replay(session.lessonId)}>VOD 미리보기·검수</Link>
-          : !ready && <span aria-disabled className="button button--primary button--large is-disabled">VOD 미리보기·검수</span>}
+          : <span aria-disabled className="button button--primary button--large is-disabled">VOD 미리보기·검수</span>}
       </div>
     </div>
   )
