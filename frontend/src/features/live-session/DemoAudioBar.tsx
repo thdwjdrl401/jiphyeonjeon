@@ -1,5 +1,6 @@
-import { useRef, type ChangeEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { useAuth } from '@/features/auth/AuthContext'
+import { demoAudioState, subscribeDemoAudio } from './demoAudio'
 import { useInstructorLiveKit } from './useInstructorLiveKit'
 
 /**
@@ -30,6 +31,12 @@ export default function DemoAudioBar() {
     toggleMicrophone,
   } = useInstructorLiveKit()
   const inputRef = useRef<HTMLInputElement>(null)
+  /*
+   * 재생 위치만 <b>여기서</b> 구독한다. 컨텍스트로 올리면 200ms마다 화면 전체가 다시 그려지고,
+   * 그 여파로 판서의 "멎었다" 판정이 무너진다(ADR-0103). 이 줄만 다시 그리는 편이 맞다.
+   */
+  const [progress, setProgress] = useState(() => demoAudioState())
+  useEffect(() => subscribeDemoAudio(() => { setProgress(demoAudioState()) }), [])
 
   if (!user?.isAdmin) return null
 
@@ -76,14 +83,14 @@ export default function DemoAudioBar() {
               <input
                 aria-label="재생 위치"
                 className="demo-audio-bar__seek"
-                max={Math.max(demoAudio.durationMs, 1)}
+                max={Math.max(progress.durationMs, 1)}
                 min={0}
                 onChange={(event) => seekDemoAudio(Number(event.target.value))}
                 type="range"
-                value={demoAudio.positionMs}
+                value={progress.positionMs}
               />
               <span className="demo-audio-bar__time">
-                {formatClock(demoAudio.positionMs)} / {formatClock(demoAudio.durationMs)}
+                {formatClock(progress.positionMs)} / {formatClock(progress.durationMs)}
               </span>
 
               {/*

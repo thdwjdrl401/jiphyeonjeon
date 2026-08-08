@@ -102,3 +102,4 @@ describe('강조 저장 확인', () => {
     expect(onCaptured).not.toHaveBeenCalled()
   })
 })
+

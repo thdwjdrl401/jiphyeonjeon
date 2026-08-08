@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AnnotationElement } from './annotation'
 import { hasHighlight } from './annotationHighlight'
 import { captureHighlightImage } from './annotationHighlightCapture'
@@ -108,6 +108,19 @@ export function useAnnotationHighlightCapture({ sessionId, resolveVideo, onCaptu
   }, [run])
 
   const dismissNotice = useCallback(() => setNotice(null), [])
+
+  /*
+   * <b>성공은 스스로 사라진다.</b> 남길지 물었고 강사가 남기라고 했으니, 그 뒤에 필요한 것은
+   * "됐다"는 짧은 확인뿐이다. 그 문구가 화면에 붙어 있으면 이어서 판서하는 시야를 가린다.
+   *
+   * <p>실패는 남긴다 — 그건 강사가 무엇을 해야 하는지 알려 주는 문장이라, 못 읽고 지나가면
+   * 근거가 빠진 채로 강의가 이어진다.
+   */
+  useEffect(() => {
+    if (status !== 'saved' || notice === null) return undefined
+    const timer = window.setTimeout(() => setNotice(null), 1000)
+    return () => { window.clearTimeout(timer) }
+  }, [notice, status])
 
   return { onHighlightSettled, status, prompt, notice, dismissNotice }
 }
