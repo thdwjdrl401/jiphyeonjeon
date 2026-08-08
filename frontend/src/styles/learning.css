@@ -126,8 +126,9 @@
 /* 다시보기 검수 화면은 배지·버튼·링크가 기본 라이브보다 많다 — 좁은 화면에서 잘리는 대신 줄바꿈한다. */
 .student-live-status > div:last-child { flex-wrap: wrap; justify-content: flex-end; row-gap: 6px; }
 .student-live-status > div:first-child > strong { color: #e0958a; font-size: .62rem; letter-spacing: .1em; }
-/* 라이브 경과 시각. tabular-nums로 자릿수를 고정한다 — 매초 바뀌는 숫자라 폭이 흔들리면 옆의 제목이 밀린다. */
-.student-live-status__elapsed { color: rgba(255,252,243,.72); font-size: .66rem; font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+/* 라이브 컨트롤바의 경과 시각. vds-time을 함께 걸어 vidstack 기본 시간 표기와 같은 크기·색을 쓴다.
+   tabular-nums는 매초 바뀌는 숫자가 폭을 흔들어 옆 컨트롤을 밀지 않게 한다. */
+.live-elapsed-time { font-variant-numeric: tabular-nums; }
 .student-live-status > div:first-child > span:last-child { overflow: hidden; color: rgba(255,252,243,.86); font-size: .7rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
 /* "내 커리큘럼" 이동 링크는 DOM상 맨 앞이지만(backLink prop), 세션 제목 오른쪽에 보이도록 시각
    순서만 맨 뒤로 민다 — title이 여전히 DOM의 마지막 자식이라 위 span:last-child 규칙은 그대로 맞는다. */

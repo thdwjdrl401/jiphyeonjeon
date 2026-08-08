@@ -2,15 +2,18 @@ import { act, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 /*
- * 실제 vidstack을 띄우지 않는다. 여기서 확인할 것은 미디어 element의 동작이 아니라 <b>어느 축의 숫자를
- * 헤더에 찍는가</b>이고, 그건 onTimeChange가 준 값을 어떻게 쓰느냐로 결정된다. 가짜 플레이어가
- * 그 콜백을 그대로 노출하면 시각 갱신을 결정적으로 흉내 낼 수 있다.
+ * 경과 시각은 이제 vidstack 컨트롤바 안(`afterLiveButton` 슬롯)에 그린다 — 사람이 시간을 찾는 곳이
+ * 거기이기 때문이다. 그 렌더는 vidstack이 맡으므로 여기서는 띄우지 않고, 대신 <b>축이 맞는지</b>만
+ * 본다: 플레이어에 넘어가는 값은 미디어 시각이고 위로 올라가는 값은 세션 시각이어야 한다.
  */
 let emitTimeChange: ((mediaTimeMs: number) => void) | null = null
 
+let lastProps: { streamType?: string } | null = null
+
 vi.mock('@/features/media/HlsMediaPlayer', () => ({
-  default: (props: { onTimeChange?: (mediaTimeMs: number) => void }) => {
+  default: (props: { onTimeChange?: (mediaTimeMs: number) => void; streamType?: string }) => {
     emitTimeChange = props.onTimeChange ?? null
+    lastProps = props
     return <div data-testid="fake-player" />
   },
 }))
@@ -52,19 +55,18 @@ function renderLive(onSessionTimeChange = () => undefined) {
 }
 
 describe('라이브 플레이어 경과 시각', () => {
-  it('라이브에서는 헤더에 재생 위치를 찍는다', () => {
-    // 라이브 컨트롤바는 LIVE 배지만 보이고 시각이 없다. 되감았을 때 어디를 보고 있는지 알 수단이 헤더뿐이다.
+  it('라이브면 플레이어에 live:dvr로 넘긴다', () => {
+    // 이 값이 라이브 레이아웃을 만들고, 경과 시각은 그 레이아웃의 LIVE 배지 옆 슬롯에 들어간다.
     renderLive()
-    act(() => emitTimeChange?.(194_000))
-
-    expect(screen.getByLabelText('재생 위치')).toHaveTextContent('03:14')
+    expect(lastProps?.streamType).toBe('live:dvr')
   })
 
-  it('자막을 눌러 이동하면 헤더가 그 자막의 라벨과 같은 숫자를 찍는다', () => {
+  it('컨트롤바에 찍힐 숫자는 그 자막의 라벨과 같다', () => {
     /*
-     * 이 등식이 이 기능의 전부다. 라벨은 "눌러서 갈 자리"를 말하므로, 그 자리에 도착한 뒤 헤더가
-     * 다른 숫자를 보이면 사용자는 이동이 잘못된 것으로 읽는다. 헤더가 세션 축을 찍으면
-     * availableFromMs만큼 어긋난다.
+     * 이 등식이 이 기능의 전부다. 라벨은 "눌러서 갈 자리"를 말하므로, 그 자리에 도착한 뒤 컨트롤바가
+     * 다른 숫자를 보이면 사용자는 이동이 잘못된 것으로 읽는다.
+     *
+     * <p>렌더는 vidstack 레이아웃이 맡으므로 여기서는 <b>같은 값을 만들어 내는지</b>만 본다.
      */
     const caption = {
       segmentId: 'seg-1',
@@ -76,12 +78,10 @@ describe('라이브 플레이어 경과 시각', () => {
       synced: true,
     }
 
-    renderLive()
     // 자막을 눌렀을 때 플레이어가 실제로 가는 지점(미디어 축).
-    act(() => emitTimeChange?.(captionSeekMs(caption) - AVAILABLE_FROM_MS))
+    const landedMediaMs = captionSeekMs(caption) - AVAILABLE_FROM_MS
 
-    expect(screen.getByLabelText('재생 위치'))
-      .toHaveTextContent(captionDisplayLabel(caption, AVAILABLE_FROM_MS))
+    expect(formatTimeLabel(landedMediaMs)).toBe(captionDisplayLabel(caption, AVAILABLE_FROM_MS))
   })
 
   it('세션 축은 그대로 위로 올린다(표시축과 별개다)', () => {
@@ -115,10 +115,7 @@ describe('라이브 플레이어 경과 시각', () => {
         onSessionTimeChange={() => undefined}
       />,
     )
-    act(() => emitTimeChange?.(194_000))
-
-    expect(screen.queryByLabelText('재생 위치')).not.toBeInTheDocument()
-    // 형식 규칙은 자막과 공유한다 — 여기서 다시 구현하면 둘이 갈라진다.
-    expect(formatTimeLabel(194_000)).toBe('03:14')
+    // 다시보기는 vidstack이 이미 `mm:ss / 총길이`를 그리므로 슬롯을 넣지 않는다.
+    expect(lastProps?.streamType).toBe('on-demand')
   })
 })
