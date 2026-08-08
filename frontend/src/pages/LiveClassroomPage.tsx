@@ -162,6 +162,8 @@ export default function LiveClassroomPage() {
   const [selectedTermId, setSelectedTermId] = useState<string | null>(null)
   const [glossaryFocusRequest, setGlossaryFocusRequest] = useState<GlossaryFocusRequest | null>(null)
   const [positionMs, setPositionMs] = useState(0)
+  /** 방금 눌러서 이동한 자막. 그 한 줄만 노출 조건을 면제한다(사라지면 고장으로 읽힌다). */
+  const [pinnedCaptionId, setPinnedCaptionId] = useState<string | null>(null)
   const [message, setMessage] = useState('')
   // 익명은 기본 꺼짐 — 켰을 때만 세션 한정 가명으로 나간다(ADR-0050). 끄면 본인이 지정한 표시 이름.
   const [anonymous, setAnonymous] = useState(false)
@@ -448,7 +450,9 @@ export default function LiveClassroomPage() {
     setPanel('glossary')
   }
 
-  const seekSession = (sessionMs: number) => {
+  const seekSession = (sessionMs: number, segmentId?: string) => {
+    // 누른 자막은 이동 직후 노출 조건을 면제받는다. 자막이 아닌 곳(AI 근거 등)에서 오면 면제를 푼다.
+    setPinnedCaptionId(segmentId ?? null)
     setPositionMs(sessionMs)
     if (!isInstructor) {
       setStudentSeekRequest((current) => ({
@@ -472,7 +476,8 @@ export default function LiveClassroomPage() {
   // 앞선 자막은 누적기(버퍼)에 두었다가 위치가 닿으면 드러낸다(ADR-0045).
   // 강사 화면에는 플레이어가 없어 맞출 위치 자체가 없다 — null을 넘겨 실시간 append 그대로 둔다.
   // 그래서 강사가 보는 자막은 <b>지금 나가고 있는 것</b>이고, 수강생이 보는 것보다 앞선다.
-  const visibleCaptions = selectVisibleCaptions(captions, isInstructor ? null : positionMs)
+  const visibleCaptions = selectVisibleCaptions(
+    captions, isInstructor ? null : positionMs, pinnedCaptionId)
   // 자막에 용어 링크를 걸고, 그 김에 용어별 등장 횟수도 센다(어차피 한 번 훑는다).
   const glossary = attachGlossary(visibleCaptions, glossaryQuery.data ?? [])
 

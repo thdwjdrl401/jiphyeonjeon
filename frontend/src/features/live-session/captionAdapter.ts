@@ -389,9 +389,34 @@ export function selectCaptionViews(state: CaptionStreamState): CaptionView[] {
 export function selectVisibleCaptions(
   captions: CaptionView[],
   positionMs: number | null,
+  pinnedSegmentId?: string | null,
 ): CaptionView[] {
   if (positionMs == null) return captions
-  return captions.filter((caption) => !caption.synced || caption.endMs <= ceilingFor(caption, positionMs))
+  return captions.filter((caption) =>
+    !caption.synced
+    || caption.endMs <= ceilingFor(caption, positionMs)
+    || isPinned(caption, positionMs, pinnedSegmentId))
+}
+
+/**
+ * 방금 눌러서 이동한 자막인가 — 그 한 줄만 노출 조건을 면제한다.
+ *
+ * <p>노출은 문장 <b>끝</b>을 기준으로 하는데(말보다 앞서 읽히지 않게) seek은 문장 <b>시작</b>으로
+ * 간다. 그래서 자막을 누르면 재생 위치가 그 문장 한가운데에 놓이고, 방금 누른 그 줄이 "아직 안 끝난
+ * 문장"이 되어 화면에서 사라진다. 누른 것이 사라지는 것은 고장으로 읽힌다.
+ *
+ * <p><b>스스로 풀린다.</b> 재생이 문장 끝을 지나면 원래 규칙이 그 줄을 보여 주므로 면제가 필요 없어지고,
+ * 사용자가 다른 곳으로 이동해 재생 위치가 문장 시작보다 앞서면 면제가 꺼진다. 따로 지우는 시점을
+ * 관리하지 않아도 되고, 눌러 둔 자막이 엉뚱한 자리에 남지 않는다.
+ */
+function isPinned(
+  caption: CaptionView,
+  positionMs: number,
+  pinnedSegmentId: string | null | undefined,
+): boolean {
+  return Boolean(pinnedSegmentId)
+    && caption.segmentId === pinnedSegmentId
+    && positionMs >= caption.startMs
 }
 
 /**

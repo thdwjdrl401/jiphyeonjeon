@@ -417,6 +417,39 @@ describe('확정 세그먼트 경계 (caption.segment.final)', () => {
   })
 })
 
+describe('누른 자막은 노출 조건을 면제받는다 (selectVisibleCaptions pinned)', () => {
+  // 노출은 문장 끝을 보는데 seek은 문장 시작으로 간다 — 그래서 누른 줄이 "아직 안 끝난 문장"이 되어
+  // 사라진다. 누른 것이 사라지는 것은 고장으로 읽히므로 그 한 줄만 면제한다.
+  const clicked = captionView({
+    segmentId: 'seg-clicked', startMs: 40_000, endMs: 44_000, synced: true, exact: true,
+  })
+  const other = captionView({
+    segmentId: 'seg-other', startMs: 50_000, endMs: 54_000, synced: true, exact: true,
+  })
+
+  it('문장 한가운데로 이동해도 누른 자막은 남는다', () => {
+    // 이동 지점(41_000)은 문장 끝(44_000) 전이라 원래 규칙으로는 감춰진다.
+    expect(selectVisibleCaptions([clicked], 41_000)).toHaveLength(0)
+    expect(selectVisibleCaptions([clicked], 41_000, 'seg-clicked')).toHaveLength(1)
+  })
+
+  it('면제는 누른 그 줄에만 걸린다', () => {
+    const visible = selectVisibleCaptions([clicked, other], 41_000, 'seg-clicked')
+    expect(visible.map((caption) => caption.segmentId)).toEqual(['seg-clicked'])
+  })
+
+  it('재생이 문장 끝을 지나면 원래 규칙이 이어받는다', () => {
+    // 면제를 따로 지울 필요가 없다 — 어차피 정상 노출된다.
+    expect(selectVisibleCaptions([clicked], 44_000, 'seg-clicked')).toHaveLength(1)
+    expect(selectVisibleCaptions([clicked], 44_000)).toHaveLength(1)
+  })
+
+  it('다른 곳으로 이동해 문장 시작보다 앞서면 면제가 꺼진다', () => {
+    // 눌러 둔 자막이 엉뚱한 자리에 남지 않는다.
+    expect(selectVisibleCaptions([clicked], 39_999, 'seg-clicked')).toHaveLength(0)
+  })
+})
+
 describe('자막 라벨은 플레이어와 같은 축으로 보인다 (captionDisplayLabel)', () => {
   it('세션 축 시각을 availableFromMs만큼 내려 미디어 축으로 보여 준다', () => {
     // 라벨은 이동 목표(194_000 − 지연 1_500 = 192_500)를 미디어 축으로 내린 값이다.
