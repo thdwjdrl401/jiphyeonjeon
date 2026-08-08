@@ -19,12 +19,14 @@ public record CaptionSegmentPayload(
         long startStreamElapsedMs,
         long endStreamElapsedMs,
         String boundaryReason,
-        Long sessionMs
+        Long sessionMs,
+        Long anchoredSessionMs
 ) {
 
-    public static CaptionSegmentPayload from(LiveCaptionStoredEvent e, Long sessionMs) {
+    public static CaptionSegmentPayload from(LiveCaptionStoredEvent e, Long sessionMs, Long anchoredSessionMs) {
         return new CaptionSegmentPayload(
                 e.sttSessionId(), e.segmentIndex(), e.lastSequence(), e.text(),
-                e.startStreamElapsedMs(), e.endStreamElapsedMs(), e.boundaryReason(), sessionMs);
+                e.startStreamElapsedMs(), e.endStreamElapsedMs(), e.boundaryReason(),
+                sessionMs, anchoredSessionMs);
     }
 }

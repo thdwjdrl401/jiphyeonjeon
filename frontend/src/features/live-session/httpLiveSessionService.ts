@@ -67,6 +67,7 @@ interface ApiCaptionDeltaPayload {
   sequence: number
   streamElapsedMs: number
   sessionMs: number | null
+  anchoredSessionMs: number | null
   text: string
 }
 
@@ -74,6 +75,7 @@ interface ApiCaptionCompletedPayload {
   sttSessionId: string
   lastSequence: number
   sessionMs: number | null
+  anchoredSessionMs: number | null
   reason: string
 }
 
@@ -87,6 +89,7 @@ interface ApiCaptionSegmentPayload {
   endStreamElapsedMs: number
   boundaryReason: 'SILENCE' | 'MAX_DURATION' | 'STREAM_END'
   sessionMs: number | null
+  anchoredSessionMs: number | null
 }
 
 /** 리로드 응답 한 줄(WS payload와 정합, type으로 delta/segment.final/completed 구분). CAPTION-01 / ADR-0045. */
@@ -97,6 +100,7 @@ interface ApiCaptionReloadItem {
   lastSequence: number | null
   streamElapsedMs: number
   sessionMs: number | null
+  anchoredSessionMs: number | null
   text: string | null
   reason: string | null
   occurredAt: string
@@ -434,6 +438,7 @@ function readCaptionEnvelope(frame: IMessage, sessionId: string): CaptionStreamE
         sequence: payload.sequence,
         streamElapsedMs: payload.streamElapsedMs,
         sessionMs: payload.sessionMs ?? null,
+        anchoredSessionMs: payload.anchoredSessionMs ?? null,
         text: payload.text,
       },
     }
@@ -452,6 +457,7 @@ function readCaptionEnvelope(frame: IMessage, sessionId: string): CaptionStreamE
         endStreamElapsedMs: payload.endStreamElapsedMs,
         boundaryReason: payload.boundaryReason,
         sessionMs: payload.sessionMs ?? null,
+        anchoredSessionMs: payload.anchoredSessionMs ?? null,
       },
     }
   }
@@ -464,6 +470,7 @@ function readCaptionEnvelope(frame: IMessage, sessionId: string): CaptionStreamE
         sttSessionId: payload.sttSessionId,
         lastSequence: payload.lastSequence,
         sessionMs: payload.sessionMs ?? null,
+        anchoredSessionMs: payload.anchoredSessionMs ?? null,
         reason: payload.reason,
       },
     }
@@ -482,6 +489,7 @@ function toCaptionStreamEvent(item: ApiCaptionReloadItem): CaptionStreamEvent[] 
         sequence: item.sequence ?? 0,
         streamElapsedMs: item.streamElapsedMs,
         sessionMs: item.sessionMs ?? null,
+        anchoredSessionMs: item.anchoredSessionMs ?? null,
         text: item.text ?? '',
       },
     }]
@@ -499,6 +507,7 @@ function toCaptionStreamEvent(item: ApiCaptionReloadItem): CaptionStreamEvent[] 
         endStreamElapsedMs: item.endStreamElapsedMs ?? item.streamElapsedMs,
         boundaryReason: (item.boundaryReason ?? 'STREAM_END') as CaptionSegmentFinalPayload['boundaryReason'],
         sessionMs: item.sessionMs ?? null,
+        anchoredSessionMs: item.anchoredSessionMs ?? null,
       },
     }]
   }
@@ -510,6 +519,7 @@ function toCaptionStreamEvent(item: ApiCaptionReloadItem): CaptionStreamEvent[] 
         sttSessionId: item.sttSessionId,
         lastSequence: item.lastSequence ?? 0,
         sessionMs: item.sessionMs ?? null,
+        anchoredSessionMs: item.anchoredSessionMs ?? null,
         reason: item.reason ?? '',
       },
     }]

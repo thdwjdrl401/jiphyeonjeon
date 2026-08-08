@@ -20,6 +20,7 @@ public record CaptionReloadItem(
         Long lastSequence,
         long streamElapsedMs,
         Long sessionMs,
+        Long anchoredSessionMs,
         String text,
         String reason,
         OffsetDateTime occurredAt,
@@ -29,7 +30,7 @@ public record CaptionReloadItem(
         String boundaryReason
 ) {
 
-    public static CaptionReloadItem from(LiveCaption row, Long sessionMs) {
+    public static CaptionReloadItem from(LiveCaption row, Long sessionMs, Long anchoredSessionMs) {
         long streamElapsedMs = row.getStreamElapsedMs() == null ? 0L : row.getStreamElapsedMs();
         return new CaptionReloadItem(
                 row.getEventType(),
@@ -38,6 +39,7 @@ public record CaptionReloadItem(
                 row.getLastSequence(),
                 streamElapsedMs,
                 sessionMs,
+                anchoredSessionMs,
                 row.getText(),
                 row.getReason(),
                 row.getOccurredAt(),

@@ -133,6 +133,12 @@ export interface CaptionView {
    * 라이브 append처럼 그대로 보인다(ADR-0045).
    */
   synced?: boolean
+  /**
+   * `startMs`가 **앵커 기반 정확값**인지(`anchoredSessionMs`). true면 근사가 아니라 실제 발화 시각이라
+   * STT 방출 지연 보정을 걸지 않는다 — 보정은 근사 축의 체계적 편향을 상쇄하려는 것이므로, 정확값에
+   * 걸면 오히려 그만큼 이르게 어긋난다. `anchored`가 true면 `synced`도 항상 true다.
+   */
+  anchored?: boolean
 }
 
 /**
@@ -151,6 +157,12 @@ export interface CaptionDeltaPayload {
    * null — 그때는 streamElapsedMs로 fallback한다.
    */
   sessionMs?: number | null
+  /**
+   * 정확한 **세션-ms**(앵커 + streamElapsedMs, 서버 계산). `caption.stream.started`가 준 attempt 시작
+   * 절대시각으로 환산한 값이라 근사가 아니다 — STT 지연 보정이 필요 없다. 앵커가 없으면(옛 세션 등)
+   * null이고, 그때만 `sessionMs`(근사)로 물러난다.
+   */
+  anchoredSessionMs?: number | null
   text: string
 }
 
@@ -160,6 +172,12 @@ export interface CaptionStreamCompletedPayload {
   lastSequence: number
   /** 델타와 정합을 위한 근사 세션-ms(nullable, ADR-0045). */
   sessionMs?: number | null
+  /**
+   * 정확한 **세션-ms**(앵커 + streamElapsedMs, 서버 계산). `caption.stream.started`가 준 attempt 시작
+   * 절대시각으로 환산한 값이라 근사가 아니다 — STT 지연 보정이 필요 없다. 앵커가 없으면(옛 세션 등)
+   * null이고, 그때만 `sessionMs`(근사)로 물러난다.
+   */
+  anchoredSessionMs?: number | null
   reason: string
 }
 
@@ -179,6 +197,11 @@ export interface CaptionSegmentFinalPayload {
   boundaryReason: 'SILENCE' | 'MAX_DURATION' | 'STREAM_END'
   /** 근사 세션-ms(델타·완료 payload와 같은 의미, nullable, ADR-0045). */
   sessionMs?: number | null
+  /**
+   * 정확한 **세그먼트 시작** 세션-ms(앵커 + startStreamElapsedMs, 서버 계산). 노출 경계도 seek 목표도
+   * 발화가 시작된 시각을 쓰므로 서버가 시작 좌표를 태워 준다. 앵커가 없으면 null.
+   */
+  anchoredSessionMs?: number | null
 }
 
 export type CaptionStreamEvent =

@@ -87,6 +87,7 @@ interface CaptionSegmentState {
   endStreamElapsedMs: number
   boundaryReason: string
   sessionMs: number | null
+  anchoredSessionMs: number | null
 }
 
 interface CaptionLineState {
@@ -94,7 +95,12 @@ interface CaptionLineState {
   /** 처음 등장한 순서 — 렌더 순서를 sequence 리셋(retry)과 무관하게 안정적으로 유지한다. */
   order: number
   /** sequence → 증분 텍스트·시간. sequence로 키잉해 at-least-once 중복 전달을 흡수한다. */
-  deltas: Map<number, { text: string; streamElapsedMs: number; sessionMs: number | null }>
+  deltas: Map<number, {
+    text: string
+    streamElapsedMs: number
+    sessionMs: number | null
+    anchoredSessionMs: number | null
+  }>
   /** segmentIndex → 확정 세그먼트. 같은 index 재전달은 last-wins(멱등). */
   segments: Map<number, CaptionSegmentState>
   completed: boolean
@@ -153,18 +159,23 @@ export function reduceCaptionStream(
   event: CaptionStreamEvent,
 ): CaptionStreamState {
   if (event.type === 'caption.delta') {
-    const { sttSessionId, sequence, streamElapsedMs, sessionMs, text } = event.payload
+    const { sttSessionId, sequence, streamElapsedMs, sessionMs, anchoredSessionMs, text } = event.payload
     const current = state.lines.get(sttSessionId)
     if (current?.deltas.has(sequence)) return state
     const isNewLine = !current
     const { lines, nextOrder, line } = ensureLine(state, sttSessionId)
-    line.deltas.set(sequence, { text, streamElapsedMs, sessionMs: sessionMs ?? null })
+    line.deltas.set(sequence, {
+      text,
+      streamElapsedMs,
+      sessionMs: sessionMs ?? null,
+      anchoredSessionMs: anchoredSessionMs ?? null,
+    })
     if (isNewLine) pruneOldestLines(lines)
     return { lines, nextOrder }
   }
   if (event.type === 'caption.segment.final') {
     // 확정 세그먼트: 이 segmentIndex를 권위 있는 최종 텍스트로 기록한다(같은 index 재전달은 last-wins).
-    const { sttSessionId, segmentIndex, lastSequence, text, startStreamElapsedMs, endStreamElapsedMs, boundaryReason, sessionMs } = event.payload
+    const { sttSessionId, segmentIndex, lastSequence, text, startStreamElapsedMs, endStreamElapsedMs, boundaryReason, sessionMs, anchoredSessionMs } = event.payload
     const isNewLine = !state.lines.has(sttSessionId)
     const { lines, nextOrder, line } = ensureLine(state, sttSessionId)
     line.segments.set(segmentIndex, {
@@ -175,6 +186,7 @@ export function reduceCaptionStream(
       endStreamElapsedMs,
       boundaryReason,
       sessionMs: sessionMs ?? null,
+      anchoredSessionMs: anchoredSessionMs ?? null,
     })
     if (isNewLine) pruneOldestLines(lines)
     return { lines, nextOrder }
@@ -200,24 +212,38 @@ export function reduceCaptionStream(
  *     하나 — pending(라인이 completed면 false). 나중 세그먼트가 이 조각을 덮으면 조각은 줄거나 사라진다.
  *     세그먼트가 아직 없으면 델타 전체가 이 진행 중 조각이다(과거 동작과 같되 문장부호 분할은 없다).
  */
+/** 한 자막 조각이 놓인 시각축. `anchored`면 정확값이라 STT 지연 보정을 걸지 않는다. */
+interface Axis {
+  startMs: number
+  synced: boolean
+  anchored: boolean
+}
+
+/** stream-local 축으로 물러난다 — 세션 축이 아니라 위치 동기화 대상이 아니다. */
+function unsynced(startMs: number): Axis {
+  return { startMs, synced: false, anchored: false }
+}
+
 /**
- * 확정 세그먼트의 시작 시각을 **세션 축**으로 옮긴다.
+ * 확정 세그먼트의 시작 시각을 **세션 축**으로 옮긴다. 좋은 축부터 차례로 고른다.
  *
- * <p>세그먼트가 들고 있는 두 시각은 축이 다르다. `start/endStreamElapsedMs`는 STT attempt가 붙은
- * 순간이 0인 stream-local 축이고, `sessionMs`는 `segment.final`이 **도착한** 시각을 세션 원점
- * (clockOriginAt)에서 잰 값이다 — 즉 구간의 **끝**에 대응한다.
+ * <p>1. `anchoredSessionMs` — 서버가 `caption.stream.started` 앵커로 환산한 <b>정확한</b> 세그먼트 시작
+ * (ADR-0052 앵커, ADR-0053 후속). 근사가 아니므로 보정 없이 그대로 쓴다.
  *
- * <p>두 축은 원점만 다르고 흐르는 속도는 같으므로 <b>구간 길이는 양쪽에서 동일하다.</b> 그래서
- * 끝(sessionMs)에서 길이를 빼면 시작이 나온다. stream-local 값을 세션-ms로 직접 변환하는 것이
- * 아니라(CONTRACT §3-4 금지) 세션 축 안에서 길이만큼 되짚는 것이다.
+ * <p>2. `sessionMs` — 앵커가 없을 때의 근사. 이 값은 `segment.final`이 <b>도착한</b> 시각이라 구간의
+ * <b>끝</b>에 대응한다. 두 축은 원점만 다르고 속도가 같아 구간 길이가 양쪽에서 동일하므로, 끝에서 길이를
+ * 빼면 시작이 나온다. stream-local을 세션-ms로 직접 환산하는 것이 아니라(CONTRACT §3-4 금지) 세션 축
+ * 안에서 되짚는 것이다. 도착 기준이라 STT 지연만큼 늦어 보정 대상이다.
  *
- * <p>이걸 안 하면 stream-local 값이 세션-ms인 척 흘러 들어가 노출·seek·현재 cue가 모두 attempt
- * 시작 시점만큼 어긋난다. STT가 재접속하면 그 축은 0으로 리셋되므로 어긋남의 크기도 그때 바뀐다.
+ * <p>3. 둘 다 없으면 raw stream-local. 위치 동기화가 불가능해 그대로 노출된다(ADR-0045 §4).
  */
-function segmentStartMs(segment: CaptionSegmentState): number {
-  if (segment.sessionMs == null) return segment.startStreamElapsedMs
+function segmentAxis(segment: CaptionSegmentState): Axis {
+  if (segment.anchoredSessionMs != null) {
+    return { startMs: segment.anchoredSessionMs, synced: true, anchored: true }
+  }
+  if (segment.sessionMs == null) return unsynced(segment.startStreamElapsedMs)
   const durationMs = Math.max(0, segment.endStreamElapsedMs - segment.startStreamElapsedMs)
-  return Math.max(0, segment.sessionMs - durationMs)
+  return { startMs: Math.max(0, segment.sessionMs - durationMs), synced: true, anchored: false }
 }
 
 export function selectCaptionViews(state: CaptionStreamState): CaptionView[] {
@@ -230,17 +256,19 @@ export function selectCaptionViews(state: CaptionStreamState): CaptionView[] {
       let maxSegmentIndex = -1
       let maxLastSequence: number | null = null
       for (const segment of segments) {
-        const startMs = segmentStartMs(segment)
-        const synced = segment.sessionMs != null
+        const axis = segmentAxis(segment)
+        // 끝은 시작 + 구간 길이다. 구간 길이는 어느 축에서도 같으므로 시작만 옮기면 끝은 따라온다.
+        const durationMs = Math.max(0, segment.endStreamElapsedMs - segment.startStreamElapsedMs)
         views.push({
           segmentId: `${line.sttSessionId}#${segment.segmentIndex}`,
-          startMs,
-          endMs: synced ? segment.sessionMs! : segment.endStreamElapsedMs,
-          at: formatTimeLabel(startMs),
+          startMs: axis.startMs,
+          endMs: axis.startMs + durationMs,
+          at: formatTimeLabel(axis.startMs),
           text: segment.text,
           termReferences: [],
           pending: false,
-          synced,
+          synced: axis.synced,
+          anchored: axis.anchored,
         })
         if (segment.segmentIndex > maxSegmentIndex) maxSegmentIndex = segment.segmentIndex
         if (maxLastSequence == null || segment.lastSequence > maxLastSequence) maxLastSequence = segment.lastSequence
@@ -249,27 +277,30 @@ export function selectCaptionViews(state: CaptionStreamState): CaptionView[] {
       // 2. 진행 중 조각 — max lastSequence보다 큰(아직 확정 안 된) 델타만 이어 붙인다.
       // 한 델타의 시각은 그 조각을 **내보낸** 시점이라, 그 조각의 말이 **시작된** 시점은 직전 델타의 시각에
       // 가깝다. 그래서 진행 중 조각의 시작 시각으로 첫 진행중 델타의 직전 델타 시각을 쓴다(첫 델타면 자기 시각).
-      // 시각 축은 근사 sessionMs 우선, 없으면 stream-local streamElapsedMs fallback(ADR-0045).
+      // 시각 축은 세그먼트와 같은 우선순위다 — 앵커(정확) > 근사 sessionMs > stream-local fallback.
       const sequences = [...line.deltas.keys()].sort((left, right) => left - right)
       let previousMs: number | null = null
       let partialText = ''
       let partialStartMs: number | null = null
-      let partialSynced = false
+      let partialAxis: Axis | null = null
       let started = false
       for (const sequence of sequences) {
         const delta = line.deltas.get(sequence)!
-        const synced = delta.sessionMs != null
-        const emittedMs = synced ? delta.sessionMs! : delta.streamElapsedMs
+        const axis: Axis = delta.anchoredSessionMs != null
+          ? { startMs: delta.anchoredSessionMs, synced: true, anchored: true }
+          : delta.sessionMs != null
+            ? { startMs: delta.sessionMs, synced: true, anchored: false }
+            : unsynced(delta.streamElapsedMs)
         const isPartial = maxLastSequence == null || sequence > maxLastSequence
         if (isPartial) {
           if (!started) {
-            partialStartMs = previousMs ?? emittedMs
-            partialSynced = synced
+            partialStartMs = previousMs ?? axis.startMs
+            partialAxis = axis
             started = true
           }
           partialText += delta.text
         }
-        previousMs = emittedMs
+        previousMs = axis.startMs
       }
 
       if (started && partialText.trim()) {
@@ -282,7 +313,8 @@ export function selectCaptionViews(state: CaptionStreamState): CaptionView[] {
           text: partialText,
           termReferences: [],
           pending: !line.completed,
-          synced: partialSynced,
+          synced: partialAxis?.synced ?? false,
+          anchored: partialAxis?.anchored ?? false,
         })
       }
 
@@ -307,23 +339,31 @@ export function selectVisibleCaptions(
   positionMs: number | null,
 ): CaptionView[] {
   if (positionMs == null) return captions
-  // startMs는 발화보다 STT 방출 지연만큼 늦으므로, 그 지연을 더한 지점까지 노출해야 말이 들리는 순간에 뜬다.
-  const ceiling = positionMs + CAPTION_STT_LAG_MS
-  return captions.filter((caption) => !caption.synced || caption.startMs <= ceiling)
+  return captions.filter((caption) => !caption.synced || caption.startMs <= ceilingFor(caption, positionMs))
+}
+
+/**
+ * 그 자막을 노출해도 되는 상한.
+ *
+ * <p>앵커 축(`anchored`)은 실제 발화 시각이라 재생 위치를 그대로 상한으로 쓴다. 근사 축은 도착 시각
+ * 기준이라 발화보다 지연만큼 늦으므로, 그 지연을 더한 지점까지 열어야 말이 들리는 순간에 뜬다.
+ * 정확값에 같은 보정을 걸면 오히려 지연만큼 이르게 떠 버린다.
+ */
+function ceilingFor(caption: CaptionView, positionMs: number): number {
+  return caption.anchored ? positionMs : positionMs + CAPTION_STT_LAG_MS
 }
 
 /**
  * 자막의 시각 라벨을 눌렀을 때 실제로 이동할 세션-ms.
  *
- * 근사 축(`synced`)의 startMs는 발화보다 STT 방출 지연만큼 늦다 — 그대로 seek하면 문장 앞부분을 지나친
- * 곳에 떨어져 "정확히 찾아가지 못한다". 지연분을 당겨 문장 시작 직전에 닿게 한다(늦게 도착하는 것보다
- * 조금 이른 편이 회복 가능하다).
+ * <p><b>앵커 축(`anchored`)은 보정하지 않는다.</b> startMs가 실제 발화 시작이라 그 자리가 곧 목표다.
+ * 여기에 지연을 빼면 문장 앞 여백으로 떨어진다.
  *
- * <p>확정 세그먼트도 마찬가지로 보정한다. 세그먼트의 세션 축 시작은 `sessionMs`(= 도착 시각)에서
- * 구간 길이를 뺀 값이라 같은 지연을 그대로 물려받는다 — 구간 길이가 정확한 것과 축의 원점이 늦은 것은
- * 별개다.
+ * <p>근사 축(`synced`)의 startMs는 도착 시각 기준이라 발화보다 STT 방출 지연만큼 늦다 — 그대로 seek하면
+ * 문장 앞부분을 지나친 곳에 떨어져 "정확히 찾아가지 못한다". 지연분을 당겨 문장 시작 직전에 닿게 한다
+ * (늦게 도착하는 것보다 조금 이른 편이 회복 가능하다).
  */
 export function captionSeekMs(caption: CaptionView): number {
-  if (!caption.synced) return caption.startMs
+  if (!caption.synced || caption.anchored) return caption.startMs
   return Math.max(0, caption.startMs - CAPTION_STT_LAG_MS)
 }

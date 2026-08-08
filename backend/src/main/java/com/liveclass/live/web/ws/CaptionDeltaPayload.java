@@ -15,10 +15,12 @@ public record CaptionDeltaPayload(
         long sequence,
         long streamElapsedMs,
         Long sessionMs,
+        Long anchoredSessionMs,
         String text
 ) {
 
-    public static CaptionDeltaPayload from(LiveCaptionStoredEvent e, Long sessionMs) {
-        return new CaptionDeltaPayload(e.sttSessionId(), e.sequence(), e.streamElapsedMs(), sessionMs, e.text());
+    public static CaptionDeltaPayload from(LiveCaptionStoredEvent e, Long sessionMs, Long anchoredSessionMs) {
+        return new CaptionDeltaPayload(
+                e.sttSessionId(), e.sequence(), e.streamElapsedMs(), sessionMs, anchoredSessionMs, e.text());
     }
 }
