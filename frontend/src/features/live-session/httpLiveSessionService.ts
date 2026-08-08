@@ -54,6 +54,8 @@ interface ApiChatMessage {
    * 토픽 브로드캐스트는 뷰어별이 될 수 없기 때문이다(ChatMessagePayload 계약).
    */
   mine?: boolean
+  /** 발신자 프로필 사진. 익명이면 서버가 null로 내려보낸다(ADR-0105). REST·WS 양쪽에 있다. */
+  avatarUrl?: string | null
 }
 
 interface ApiChatEnvelope {
@@ -364,6 +366,11 @@ function normalizeMessage(message: ApiChatMessage): ChatMessageView {
     question: message.isQuestion,
     // WS 에코엔 mine이 없다 — 그때는 화면이 자기 clientMessageId 대조로 채운다(undefined를 false로 굳히지 않는다).
     mine: message.mine,
+    /*
+     * 여기서 버리면 <b>서버가 보내 준 사진이 화면에 닿지 못한다</b>. 실제로 그랬다 — 계약·DTO·화면을
+     * 다 고쳐 놓고 이 매퍼만 빠뜨려서, 사진이 있는 계정도 이니셜만 보였다.
+     */
+    avatarUrl: message.avatarUrl ?? null,
   }
 }
 

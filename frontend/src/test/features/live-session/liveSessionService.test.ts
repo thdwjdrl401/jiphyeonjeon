@@ -281,3 +281,41 @@ describe('라이브 세션 Mock 재생', () => {
     })
   })
 })
+
+/**
+ * 서버가 보낸 값이 <b>화면까지 닿는지</b>를 이 매퍼에서 지킨다.
+ *
+ * <p>실제로 여기서 새어 나갔다 — 계약(CONTRACT)·BE DTO·FE 타입·말풍선을 전부 고쳐 놓고
+ * `normalizeMessage`만 빠뜨려서, 사진이 있는 계정도 이니셜만 보였다. 조각마다 테스트가 있어도
+ * <b>조각을 잇는 자리</b>에 없으면 이렇게 통째로 조용히 사라진다.
+ */
+describe('채팅 응답 정규화', () => {
+  afterEach(() => { vi.restoreAllMocks() })
+
+  it('프로필 사진을 화면 모델까지 실어 보낸다', async () => {
+    vi.spyOn(apiClient, 'get').mockResolvedValue({
+      data: [{
+        messageId: 'm1',
+        alias: '무적의 김강사',
+        text: '안녕하세요',
+        isQuestion: false,
+        avatarUrl: 'https://cdn.test/kim.jpg',
+      }],
+    } as never)
+
+    const messages = await httpLiveSessionService.getChatMessages('ses-1')
+
+    expect(messages[0].avatarUrl).toBe('https://cdn.test/kim.jpg')
+  })
+
+  /** 익명이면 서버가 null을 준다(ADR-0105). 그 null이 그대로 화면까지 가야 이니셜로 떨어진다. */
+  it('사진이 없으면 null로 넘긴다', async () => {
+    vi.spyOn(apiClient, 'get').mockResolvedValue({
+      data: [{ messageId: 'm1', alias: '익명1', text: '질문 있어요', isQuestion: true }],
+    } as never)
+
+    const messages = await httpLiveSessionService.getChatMessages('ses-1')
+
+    expect(messages[0].avatarUrl).toBeNull()
+  })
+})
