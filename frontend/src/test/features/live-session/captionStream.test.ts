@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   CAPTION_MAX_LINES,
+  CAPTION_SEEK_OFFSET_MS,
   CAPTION_STT_LAG_MS,
   captionDisplayLabel,
   captionSeekMs,
+  formatTimeLabel,
   emptyCaptionStreamState,
   reduceCaptionStream,
   selectCaptionViews,
@@ -247,22 +249,47 @@ describe('확정 세그먼트 경계 (caption.segment.final)', () => {
     expect(views[0]).toMatchObject({ startMs: 40_000, endMs: 43_000, synced: true, anchored: true })
   })
 
-  it('앵커 자막은 STT 지연 보정을 받지 않는다(seek·노출 모두)', () => {
-    // 앵커 값은 실제 발화 시각이라 보정하면 그만큼 이르게 어긋난다.
+  it('앵커 자막의 seek은 발화 시작보다 오프셋만큼 뒤로 간다', () => {
+    // startMs는 정확하지만 그 지점은 소리가 나기 직전이라 잠깐 빈다. 그 공백의 절반을 잘라낸다.
     const [anchored] = selectCaptionViews(fold([
-      segmentFinal('stt-1', 0, 1, 900_000, '보정 없음.', { anchoredSessionMs: 40_000 }),
+      segmentFinal('stt-1', 0, 1, 900_000, '오프셋만큼 뒤로.', { anchoredSessionMs: 40_000 }),
     ]))
     const [approx] = selectCaptionViews(fold([
-      segmentFinal('stt-2', 0, 1, 900_000, '보정 있음.', { sessionMs: 43_000 }),
+      segmentFinal('stt-2', 0, 1, 900_000, '근사는 앞을 겨냥한다.', { sessionMs: 43_000 }),
     ]))
 
-    expect(captionSeekMs(anchored)).toBe(40_000)
+    expect(captionSeekMs(anchored)).toBe(40_000 + CAPTION_SEEK_OFFSET_MS)
+    // 근사 축은 이미 앞을 겨냥하므로 오프셋을 더하지 않는다(두 보정이 상쇄된다).
     expect(captionSeekMs(approx)).toBe(40_000 - CAPTION_STT_LAG_MS)
+  })
 
-    // 노출 경계도 같다 — 재생 위치가 딱 시작일 때 앵커는 뜨고, 근사는 보정만큼 미리 떠 있다.
-    expect(selectVisibleCaptions([anchored], 40_000)).toHaveLength(1)
-    expect(selectVisibleCaptions([anchored], 40_000 - 1)).toHaveLength(0)
-    expect(selectVisibleCaptions([approx], 40_000 - CAPTION_STT_LAG_MS)).toHaveLength(1)
+  it('확정 세그먼트는 문장이 끝나야 노출된다(말보다 앞서 읽히지 않게)', () => {
+    // 문장 전체를 담고 있어 시작 시각에 내보내면 문장 길이만큼 앞서 읽게 된다.
+    const [anchored] = selectCaptionViews(fold([
+      segmentFinal('stt-1', 0, 1, 900_000, '네 글자짜리 문장.', { anchoredSessionMs: 40_000 }),
+    ]))
+
+    expect(anchored.startMs).toBe(40_000)
+    expect(anchored.endMs).toBe(43_000)   // 구간 길이 3_000
+    expect(selectVisibleCaptions([anchored], 42_999)).toHaveLength(0)
+    expect(selectVisibleCaptions([anchored], 43_000)).toHaveLength(1)
+  })
+
+  it('진행 중 조각은 끝 기준 노출의 영향을 받지 않는다', () => {
+    // 아직 말한 만큼만 담고 있어 즉시 보여도 앞서지 않는다 — endMs === startMs다.
+    const [partial] = selectCaptionViews(fold([
+      {
+        type: 'caption.delta',
+        occurredAt: '2026-07-29T10:00:00+09:00',
+        payload: {
+          sttSessionId: 'stt-1', sequence: 1, streamElapsedMs: 900_000,
+          sessionMs: null, anchoredSessionMs: 40_000, text: '말하는 중',
+        },
+      },
+    ]))
+
+    expect(partial.endMs).toBe(partial.startMs)
+    expect(selectVisibleCaptions([partial], 40_000)).toHaveLength(1)
   })
 
   it('앵커가 없으면 종전 근사 경로를 그대로 쓴다(옛 세션 회귀)', () => {
@@ -332,15 +359,28 @@ describe('확정 세그먼트 경계 (caption.segment.final)', () => {
 
 describe('자막 라벨은 플레이어와 같은 축으로 보인다 (captionDisplayLabel)', () => {
   it('세션 축 시각을 availableFromMs만큼 내려 미디어 축으로 보여 준다', () => {
-    // 녹화가 세션보다 7초 늦게 시작했다면, 세션 03:14는 플레이어에서 03:07이다.
-    const caption = captionView({ startMs: 194_000, synced: true, at: '03:14' })
+    // 녹화가 세션보다 7초 늦게 시작했다면, 세션 03:14대는 플레이어에서 03:07대다.
+    const caption = captionView({ startMs: 194_000, synced: true, anchored: true, at: '03:14' })
     expect(captionDisplayLabel(caption, 7_000)).toBe('03:07')
   })
 
-  it('availableFromMs가 없거나 0이면 자막 시각 그대로다', () => {
-    const caption = captionView({ startMs: 194_000, synced: true, at: '03:14' })
+  it('availableFromMs가 없거나 0이면 이동 목표를 그대로 보여 준다', () => {
+    const caption = captionView({ startMs: 194_000, synced: true, anchored: true, at: '03:14' })
     expect(captionDisplayLabel(caption, null)).toBe('03:14')
     expect(captionDisplayLabel(caption, 0)).toBe('03:14')
+  })
+
+  it('라벨은 언제나 눌러서 도착할 지점을 가리킨다', () => {
+    // 라벨은 설명이 아니라 버튼이다. seek 보정이 바뀌어도 이 등식은 깨지지 않아야 한다.
+    for (const caption of [
+      captionView({ startMs: 194_000, synced: true, anchored: true, at: '03:14' }),
+      captionView({ startMs: 194_000, synced: true, at: '03:14' }),
+    ]) {
+      for (const availableFromMs of [null, 0, 7_000]) {
+        expect(captionDisplayLabel(caption, availableFromMs))
+          .toBe(formatTimeLabel(Math.max(0, captionSeekMs(caption) - (availableFromMs ?? 0))))
+      }
+    }
   })
 
   it('세션 축이 아닌 fallback 자막은 변환하지 않는다', () => {
