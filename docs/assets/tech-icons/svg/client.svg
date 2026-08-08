@@ -1,0 +1,10 @@
+<!-- 클라이언트 = 브라우저 창. 기기가 아니라 웹앱이라 노트북·폰이 아닌 브라우저로 그린다.
+     신호등 색은 infrastructure-diagram의 browser_card()와 같은 값이다. -->
+<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>Client</title>
+  <rect x="3" y="7" width="42" height="34" rx="5" fill="#17324D"/>
+  <rect x="6.5" y="14.5" width="35" height="23" rx="2" fill="#F8FAFC"/>
+  <circle cx="9" cy="10.75" r="1.6" fill="#FB7185"/>
+  <circle cx="14.5" cy="10.75" r="1.6" fill="#FBBF24"/>
+  <circle cx="20" cy="10.75" r="1.6" fill="#34D399"/>
+</svg>

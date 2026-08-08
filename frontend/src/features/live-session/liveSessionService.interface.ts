@@ -138,12 +138,6 @@ export interface CaptionView {
    * 라이브 append처럼 그대로 보인다(ADR-0045).
    */
   synced?: boolean
-  /**
-   * `startMs`가 **앵커 기반 정확값**인지(`anchoredSessionMs`). true면 근사가 아니라 실제 발화 시각이라
-   * STT 방출 지연 보정을 걸지 않는다 — 보정은 근사 축의 체계적 편향을 상쇄하려는 것이므로, 정확값에
-   * 걸면 오히려 그만큼 이르게 어긋난다. `anchored`가 true면 `synced`도 항상 true다.
-   */
-  anchored?: boolean
 }
 
 /**

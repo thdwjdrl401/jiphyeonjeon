@@ -74,7 +74,6 @@ describe('라이브 플레이어 경과 시각', () => {
       text: '눌러서 이동할 자막',
       termReferences: [],
       synced: true,
-      anchored: true,
     }
 
     renderLive()

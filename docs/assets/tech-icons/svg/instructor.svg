@@ -1,0 +1,13 @@
+<!-- 강사 = 화면 앞의 발표자. 송출하는 쪽이라 사람이 화면 '앞에' 선다.
+     머리(r)와 어깨 곡선은 student.svg와 같은 값이다 — 역할만 다르고 같은 사람이라는 뜻이다.
+     화면 아래변과 머리 사이에 간격을 둔다. 맞닿으면 모니터 받침처럼 읽힌다. -->
+<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>Instructor</title>
+  <rect x="4" y="2" width="40" height="25" rx="3.5" fill="#17324D"/>
+  <rect x="7.5" y="5.5" width="33" height="18" rx="1.5" fill="#F8FAFC"/>
+  <rect x="11" y="9" width="17" height="2.4" rx="1.2" fill="#64748B"/>
+  <rect x="11" y="13.8" width="23" height="2.4" rx="1.2" fill="#CBD5E1"/>
+  <rect x="11" y="18.6" width="13" height="2.4" rx="1.2" fill="#CBD5E1"/>
+  <circle cx="24" cy="35" r="5.6" fill="#17324D"/>
+  <path d="M12 47C12 37.4 36 37.4 36 47Z" fill="#17324D"/>
+</svg>
