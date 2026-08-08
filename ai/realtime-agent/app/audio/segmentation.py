@@ -4,8 +4,8 @@ import logging
 import math
 import struct
 from collections import deque
-from datetime import datetime, timedelta
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from importlib import import_module
 from typing import Literal, Protocol, cast
 
