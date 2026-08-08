@@ -12,6 +12,7 @@ import { useWatchTracking } from '@/features/live-session/useWatchTracking'
 import { mergeLectureNote } from '@/features/live-session/lectureNoteMerge'
 import { attachGlossary } from '@/features/live-session/glossaryView'
 import CaptionDock from '@/features/live-session/CaptionDock'
+import DemoAudioBar from '@/features/live-session/DemoAudioBar'
 import DemoPublishBanner from '@/features/live-session/DemoPublishBanner'
 import {
   emptyCaptionStreamState,
@@ -664,6 +665,11 @@ export default function LiveClassroomPage() {
         않으면 진짜 수업에 켜 둔 채 들어간 것을 알아챌 방법이 없다. 강사에게만 보인다.
       */}
       {isInstructor && <DemoPublishBanner />}
+      {/*
+        시연 음성 재생기(ADR-0103). 데모 배너와 같은 자리에 둔다 — 시연 관련 표시가 한 곳에 모여야
+        평소 강의에서 켜 둔 채로 들어간 것을 알아챌 수 있다.
+      */}
+      {isInstructor && <DemoAudioBar />}
 
       {!isInstructor && session.status === 'ENDING' && (
         <div className="live-session-state-banner" role="status">
