@@ -53,16 +53,33 @@ describe('채팅 메시지 좌우 정렬', () => {
     expect(articleOf(container, 'mine 없음').className).not.toContain('is-mine')
   })
 
-  it('내 메시지에는 alias 대신 내 닉네임을 쓴다', () => {
+  /**
+   * 이름은 <b>남들에게 보이는 그대로</b> 쓴다.
+   *
+   * <p>예전에는 내 메시지만 내 닉네임으로 갈아 끼웠다. 그래서 익명으로 보내도 내 말풍선에는 내
+   * 이름이 떴고, 강사와 다른 수강생에게는 `익명9`가 보였다 — <b>보내는 사람만 그 사실을 모른다.</b>
+   * 익명이 되고 있는지 확인할 방법이 화면에 없었다.
+   *
+   * <p>내 것이라는 표시는 우측 정렬이 이미 한다. 이름까지 그 일을 겹쳐 할 이유가 없다.
+   */
+  it('익명으로 보낸 내 메시지도 남들이 보는 가명으로 보인다', () => {
     render(sidebar([
       { id: 'm1', alias: '익명1', text: '남의 것', time: '10:00' },
       { id: 'm2', alias: '익명9', text: '내 것', time: '10:01', mine: true },
     ]))
 
     expect(screen.getByText('익명1')).toBeInTheDocument()
-    expect(screen.queryByText('익명9')).not.toBeInTheDocument()
-    // 아바타 폴백 이니셜("나")과도 겹치므로 이름 자리(strong)로 좁혀 찾는다.
-    expect(screen.getByText('나', { selector: 'strong' })).toBeInTheDocument()
+    expect(screen.getByText('익명9', { selector: 'strong' })).toBeInTheDocument()
+    expect(screen.queryByText('나', { selector: 'strong' })).not.toBeInTheDocument()
+  })
+
+  /** 익명이 아니면 서버가 내려 준 표시 이름이 그대로 뜬다 — 남들이 보는 것과 같다. */
+  it('실명으로 보낸 내 메시지는 그 표시 이름으로 보인다', () => {
+    render(sidebar([
+      { id: 'm2', alias: '송정기', text: '내 것', time: '10:01', mine: true },
+    ]))
+
+    expect(screen.getByText('송정기', { selector: 'strong' })).toBeInTheDocument()
   })
 
   it('낙관적 항목(시각 미확정)은 우측이면서 빈 시각을 그리지 않는다', () => {
