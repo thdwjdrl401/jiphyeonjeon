@@ -17,6 +17,14 @@ interface CaptionDockProps {
   note?: string
   /** 강사가 경계를 끌어 정한 높이(px). 없으면 CSS 기본값을 쓴다. */
   heightPx?: number
+  /**
+   * 접었다 펼 수 있게 한다. 넘기면 헤더가 버튼이 되고, 접힌 동안은 <b>헤더만</b> 남는다.
+   *
+   * <p>넘기지 않으면 예전 그대로 항상 펼쳐진 독이다 — 수강생 화면은 자막을 보러 온 화면이라
+   * 접을 이유가 없고, 높이는 경계 손잡이로 조절한다.
+   */
+  onToggleCollapse?: () => void
+  collapsed?: boolean
 }
 
 function renderCaptionText(caption: CaptionView, onSelectTerm: (termId: string) => void) {
@@ -54,6 +62,8 @@ export default function CaptionDock({
   canSeek = true,
   note,
   heightPx,
+  onToggleCollapse,
+  collapsed = false,
 }: CaptionDockProps) {
   const sentencesRef = useRef<HTMLDivElement>(null)
   /*
@@ -102,12 +112,31 @@ export default function CaptionDock({
     (latest, caption, index) => (caption.startMs <= currentSessionMs ? index : latest),
     -1,
   )
+  const hint = note ?? '시간을 누르면 영상과 자막이 함께 이동합니다.'
   return (
-    <section className="caption-dock" aria-label={label}>
-      <header>
-        <strong><i />{label}</strong>
-        <span>{note ?? '시간을 누르면 영상과 자막이 함께 이동합니다.'}</span>
-      </header>
+    <section
+      className={`caption-dock${onToggleCollapse ? ' caption-dock--collapsible' : ''}${collapsed ? ' is-collapsed' : ''}`}
+      aria-label={label}
+    >
+      {/*
+        접을 수 있으면 헤더가 곧 손잡이다. 접힌 동안 남는 것이 이 줄뿐이라, 여기 말고는 다시 펼
+        자리가 없다 — 1px 경계선만 남기면 접은 사람도 그것이 자막이었다는 것을 잊는다.
+      */}
+      {onToggleCollapse ? (
+        <header>
+          <button aria-expanded={!collapsed} className="caption-dock__disclosure" type="button" onClick={onToggleCollapse}>
+            <span aria-hidden="true" className="caption-dock__chevron" />
+            <strong><i />{label}</strong>
+          </button>
+          <span>{collapsed ? '눌러서 펼칩니다.' : hint}</span>
+        </header>
+      ) : (
+        <header>
+          <strong><i />{label}</strong>
+          <span>{hint}</span>
+        </header>
+      )}
+      {!collapsed && (
       <div
         className="caption-dock__sentences"
         aria-live="polite"
@@ -138,7 +167,8 @@ export default function CaptionDock({
           )
         })}
       </div>
-      {!isFollowingLatest && (
+      )}
+      {!collapsed && !isFollowingLatest && (
         // 채팅처럼 한 줄을 차지하지 않는다 — 자막 위에 떠 있는 알약으로 둬서 자막 독 높이가
         // 늘었다 줄었다 하지 않는다(자막 영역이 채팅 목록과 달리 flex:1이 아니라 고정 높이라,
         // 아래 붙이면 그만큼 독 전체가 커져 아래 요소를 밀어낸다).

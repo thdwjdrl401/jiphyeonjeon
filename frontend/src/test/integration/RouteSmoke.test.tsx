@@ -269,10 +269,25 @@ describe('전체 페이지 라우트', () => {
     expect(chatInput).toHaveValue('')
     expect(await screen.findByText((text) => text.includes('첫째 줄') && text.includes('둘째 줄'))).toBeInTheDocument()
 
-    // 강사 화면에는 자막 독이 없다. 자기가 말한 것을 다시 읽을 이유가 없고, 자막이 차지하는 높이만큼
-    // 실제로 나가는 프레임을 작게 보게 된다. 자막은 수강생 화면에만 둔다.
-    expect(screen.queryByRole('region', { name: '실시간 자막' })).not.toBeInTheDocument()
-    expect(screen.queryByText(/SecurityContext가 현재 요청의 사용자 정보를 보관합니다/)).not.toBeInTheDocument()
+    /*
+     * 강사 화면에도 자막이 있되 <b>접힌 채로 시작한다</b>. 펼쳐 두면 그 높이만큼 송출 미리보기가
+     * 눌려 실제로 나가는 프레임을 계속 작게 보게 된다 — 강사에게 자막은 늘 읽는 것이 아니라
+     * STT가 내 말을 제대로 받아쓰는지 <b>가끔 확인하는 것</b>이다.
+     */
+    const captionDock = screen.getByRole('region', { name: '실시간 자막' })
+    // 자막 줄은 용어 링크로 쪼개져 여러 노드에 걸친다 — 문단 단위로 이어 붙여 본다.
+    const captionLine = (text: string) => (_content: string, element: Element | null) => (
+      element?.tagName === 'P' && (element.textContent ?? '').includes(text)
+    )
+    const 첫줄 = 'SecurityContext가 현재 요청의 사용자 정보를 보관합니다'
+    expect(within(captionDock).queryByText(captionLine(첫줄))).not.toBeInTheDocument()
+
+    await user.click(within(captionDock).getByRole('button', { expanded: false }))
+
+    // 펼치면 지금까지의 자막이 바로 찬다 — WS는 델타만 보내므로 저장 자막 시드가 함께 돌아야 한다.
+    expect(await within(captionDock).findByText(captionLine(첫줄))).toBeInTheDocument()
+    // 강사는 재생 경로를 타지 않아 맞출 위치가 없다 — 시각은 표시만 하고 이동을 만들지 않는다.
+    expect(within(captionDock).queryByRole('button', { name: /^\d+:\d+$/ })).not.toBeInTheDocument()
 
     // 용어는 자막이 아니라 핵심 용어 탭으로 확인한다.
     await user.click(screen.getByRole('tab', { name: '핵심 용어' }))
