@@ -37,6 +37,7 @@ function renderStage(overrides: Partial<InstructorLiveMedia>) {
     toggleCamera: vi.fn(),
     toggleMicrophone: vi.fn(),
     toggleScreenShare: vi.fn(),
+    demoAudio: { fileName: null, live: false, playing: false, loop: false, positionMs: 0, durationMs: 0 },
     ...overrides,
   } as InstructorLiveMedia
   return render(

@@ -26,6 +26,8 @@ export default function DemoAudioBar() {
     resumeDemoAudio,
     seekDemoAudio,
     setDemoAudioLoop,
+    microphoneEnabled,
+    toggleMicrophone,
   } = useInstructorLiveKit()
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -50,7 +52,7 @@ export default function DemoAudioBar() {
       />
 
       {demoAudio.fileName === null ? (
-        <button className="button button--soft" type="button" onClick={() => inputRef.current?.click()}>
+        <button className="demo-audio-bar__btn" type="button" onClick={() => inputRef.current?.click()}>
           🎧 시연 음성 선택
         </button>
       ) : (
@@ -58,14 +60,14 @@ export default function DemoAudioBar() {
           <span className="demo-audio-bar__name" title={demoAudio.fileName}>{demoAudio.fileName}</span>
 
           {!demoAudio.live ? (
-            <button className="button button--primary" type="button" onClick={startDemoAudio}>
+            <button className="demo-audio-bar__btn demo-audio-bar__btn--go" type="button" onClick={startDemoAudio}>
               ▶ 재생 — 마이크 대신 내보내기
             </button>
           ) : (
             <>
               {demoAudio.playing
-                ? <button className="button button--soft" type="button" onClick={pauseDemoAudio}>Ⅱ 일시정지</button>
-                : <button className="button button--soft" type="button" onClick={resumeDemoAudio}>▶ 이어서</button>}
+                ? <button className="demo-audio-bar__btn" type="button" onClick={pauseDemoAudio}>Ⅱ 일시정지</button>
+                : <button className="demo-audio-bar__btn" type="button" onClick={resumeDemoAudio}>▶ 이어서</button>}
 
               {/*
                 구간 이동은 <b>송출 제어</b>다. 뒤로 감으면 STT가 같은 구간을 다시 받아 자막이 겹친다.
@@ -84,7 +86,23 @@ export default function DemoAudioBar() {
                 {formatClock(demoAudio.positionMs)} / {formatClock(demoAudio.durationMs)}
               </span>
 
-              <button className="button button--soft" type="button" onClick={stopDemoAudio}>
+              {/*
+                나가는 소리를 멎게 한다. <b>일시정지와 다르다</b> — 일시정지는 파일이 멈춰 자리를
+                잃지만, 음소거는 계속 흐르면서 소리만 안 나간다. 강사가 잠깐 끼어들 자리다.
+
+                컨트롤 줄의 마이크 버튼은 이 상황에서 잠겨 있다(내 마이크는 이미 꺼져 있다).
+                그래서 나가는 소리를 다루는 자리가 여기여야 한다.
+              */}
+              <button
+                aria-pressed={!microphoneEnabled}
+                className="demo-audio-bar__btn"
+                type="button"
+                onClick={toggleMicrophone}
+              >
+                {microphoneEnabled ? '🔇 음소거' : '🔈 음소거 해제'}
+              </button>
+
+              <button className="demo-audio-bar__btn" type="button" onClick={stopDemoAudio}>
                 ■ 마이크로 복귀
               </button>
             </>
@@ -101,7 +119,7 @@ export default function DemoAudioBar() {
           </label>
 
           {!demoAudio.live && (
-            <button className="button button--ghost" type="button" onClick={clearDemoAudioFile}>해제</button>
+            <button className="demo-audio-bar__btn demo-audio-bar__btn--quiet" type="button" onClick={clearDemoAudioFile}>해제</button>
           )}
         </>
       )}

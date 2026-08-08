@@ -86,6 +86,7 @@ describe('강사 사전 점검', () => {
       toggleCamera: vi.fn(),
       toggleMicrophone: vi.fn(),
       toggleScreenShare: vi.fn(),
+    demoAudio: { fileName: null, live: false, playing: false, loop: false, positionMs: 0, durationMs: 0 },
       changeQuality: vi.fn(),
       applyingQuality: false,
     } as Partial<InstructorLiveMedia>

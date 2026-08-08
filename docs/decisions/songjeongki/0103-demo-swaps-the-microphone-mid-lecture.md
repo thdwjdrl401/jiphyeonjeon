@@ -63,10 +63,20 @@ if (local instanceof LocalAudioTrack) await local.replaceTrack(fileTrack, true)
 
 반복 토글을 켜 두면 `HTMLMediaElement.loop`로 돌고, 그동안 `ended`가 아예 발생하지 않는다.
 
-### 5. 마이크 버튼은 **음소거**다
+### 5. 재생 중 컨트롤 줄의 마이크 버튼은 **꺼진 것으로 보이고, 잠긴다**
 
-재생 중 마이크 버튼을 누르면 publication을 음소거한다 — 수강생에게 소리가 멎는다. 재생 정지는 재생기
-쪽 별도 컨트롤이다. 둘을 한 버튼에 묶으면 "잠깐 끊고 말 끼어들기"가 안 된다.
+처음에는 "마이크 버튼이 나가는 소리를 음소거한다"로 뒀다. 그런데 화면에서 보니 **버튼이 켜진
+것처럼** 보였다 — publication은 살아 있어서 `microphoneEnabled`가 그대로 true였기 때문이다.
+강사는 자기 목소리가 나가는 줄 안다.
+
+실제로는 **내 마이크가 꺼져 있다.** 트랙을 갈아끼우면서 LiveKit이 장치를 멈추므로(§2) OS 표시등까지
+꺼진다. 그래서 이 버튼은 `microphoneEnabled`가 아니라 **"내 마이크가 잡히고 있는가"**를 그린다 —
+사선이 그어지고 `aria-pressed=false`가 된다. 그리고 **잠근다**: 이 버튼이 할 수 있는 일(내 마이크
+켜기)이 그 상황에는 없다.
+
+**나가는 소리를 멎게 하는 음소거는 재생기로 옮겼다.** 일시정지와 다르다 — 일시정지는 파일이 멈춰
+자리를 잃지만, 음소거는 계속 흐르면서 소리만 안 나간다. 강사가 잠깐 끼어들 자리다. 컨트롤 줄의
+마이크가 잠긴 이상, 그 자리가 여기 없으면 **아무 데도 없다**.
 
 `replaceTrack`은 교체 뒤 `enabled = !isMuted`를 다시 걸어 주므로, 음소거 상태로 파일을 끼우면 파일도
 음소거로 들어간다. 이 일관성은 공짜로 얻는다.
@@ -103,11 +113,16 @@ if (local instanceof LocalAudioTrack) await local.replaceTrack(fileTrack, true)
 - `demoAudio.test.ts` **10건(신규)** — 파일을 골라도 트랙이 생기지 않는지 · 파일 없이 재생을 거절하는지 ·
   `ended`를 알리는지 · 반복이 element에 실리는지(재생 중 변경 포함) · 구간 이동 · `captureStream`이 없는
   브라우저를 짚어 알리는지 · 닫아도 파일이 남는지 · duration이 NaN일 때 0으로 내는지.
+- `demoAudioBar.test.tsx` **7건(신규)** — admin이 아니면(로그인 전 포함) 아무것도 그리지 않는지 ·
+  골라 두어도 재생 버튼일 뿐인지 · 재생 중 재생바·시간·복귀가 서는지 · 나가는 소리를 멎게 할 음소거가
+  있는지 · 시연 중이라는 사실을 계속 말하는지.
+- `instructorStageLayout.test.tsx` **3건(신규)** — 재생 중 마이크 버튼이 꺼진 것으로 보이는지 ·
+  잠기고 왜 그런지 말하는지 · 시연 음성이 없으면 예전 그대로인지.
 - `demoPublishProvider.test.tsx` **3건(신규)** — `publish`가 아니라 `replaceTrack`으로 가는지(그리고
   `publishTrack`이 <b>불리지 않는지</b>) · 마이크가 없을 때만 새로 올리는지 · 되돌릴 때 진짜 마이크를
   `providedByUser=false`로 끼우는지.
 - **돌연변이 확인**(실제로 되돌려 돌려 봤다): `replaceTrack` 경로를 `publish`로 바꾸면 위 2건이 깨진다.
-- FE 전체 1237건 통과, `tsc`·`eslint --max-warnings 0` 클린.
+- FE 전체 1247건 통과, `tsc`·`eslint --max-warnings 0` 클린.
 - **아직 확인하지 못한 것**: 브라우저에서 실제 음성 파일로 돌려 보지 않았다. jsdom에서는
   `captureStream()`이 목이라 <b>진짜 소리가 나가는지는 이 테스트들이 증명하지 못한다.</b> 시연 전
   리허설에서 반드시 한 번 돌려 봐야 한다.

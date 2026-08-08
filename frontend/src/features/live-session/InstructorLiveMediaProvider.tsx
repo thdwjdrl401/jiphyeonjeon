@@ -800,6 +800,19 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
        * 장치를 새로 여는데, 그러면 <b>발표자의 진짜 카메라가 켜진다</b> — 시연 중에 이보다 나쁜
        * 사고가 없다. 음소거는 publication을 그대로 두므로 `isCameraEnabled` 판정도 그대로 맞는다.
        */
+      /*
+       * 시연 음성이 나가는 중에는 마이크 토글이 <b>그 소리</b>를 음소거한다. 장치를 다시 여는
+       * `setMicrophoneEnabled`를 태우면 방금 갈아끼운 파일 트랙이 밀려난다(ADR-0103).
+       */
+      if (demoAudioState().live && control === 'microphone') {
+        const publication = room.localParticipant.getTrackPublication(Track.Source.Microphone)
+        if (publication) {
+          if (publication.isMuted) await publication.unmute()
+          else await publication.mute()
+        }
+        syncLocalState(room)
+        return
+      }
       if (demoPublishState().armed && control !== 'screenShare') {
         const source = control === 'camera' ? Track.Source.Camera : Track.Source.Microphone
         const publication = room.localParticipant.getTrackPublication(source)
