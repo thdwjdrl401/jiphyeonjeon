@@ -432,7 +432,7 @@ Cookie: session=...
 - `sequence`: `(sessionId, sttSessionId)` attempt 범위에서만 증가. retry(새 `sttSessionId`)마다 1부터 다시 시작할 수 있다.
 - `streamElapsedMs`: **agent 첫 오디오 프레임=0 기준 stream-local(attempt) 경과 ms**. 세션 상대 ms가 **아니다** — 세션 ms로 변환하지 말고 그대로 표시한다(계약 강제).
 - `sessionMs`(Long, **nullable**): 서버가 계산한 **근사 세션-ms**(`max(0, occurredAt − clockOriginAt)`, ADR-0045). HLS 영상 위치(`positionMs`)와 **같은 세션 축**이라 학생 위치 동기화의 기준이다. `streamElapsedMs` 변환이 아니라 occurredAt 기반 별도 근사 축이며, clockOriginAt이 없으면 `null`(그때는 `streamElapsedMs`로 fallback). 근사 오차 ~1~2s.
-- `anchoredSessionMs`(Long, **nullable**): **정확한** 세션-ms(`앵커 + streamElapsedMs`, ADR-0104). attempt 앵커는 `caption.stream.started`의 `audioStartedAt`에서 온다. `segment.final`에는 **발화 시작**(`앵커 + startStreamElapsedMs`)이 실린다. **있으면 이걸 쓰고, STT 지연 보정(`CAPTION_STT_LAG_MS`)을 걸지 않는다** — 근사가 아니라 실제 발화 시각이라 보정하면 그만큼 이르게 어긋난다. 앵커가 없으면 `null`이고 그때만 `sessionMs`로 물러난다.
+- `anchoredSessionMs`(Long, **nullable**): ⚠️ **쓰지 말 것**(ADR-0106 철회). `앵커 + streamElapsedMs`인데 `streamElapsedMs`가 벽시계가 아니라 받은 오디오 누적이라 무음만큼 뒤처진다 — 운영 실측 0.6초~21초 어긋남. 표시·seek은 근사 `sessionMs`를 쓴다. 필드는 진단용으로만 남는다.
 - `text`: 이전까지 텍스트에 이어 붙일 증분. FE는 `sttSessionId`별로 `sequence` 순서로 이어 붙여 "자라는" 라인을 만든다.
 
 `caption.stream.completed` payload — 스트림 종료 마커(해당 `sttSessionId`에 더 이상 델타 없음):

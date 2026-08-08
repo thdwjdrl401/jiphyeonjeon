@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   CAPTION_MAX_LINES,
-  CAPTION_SEEK_OFFSET_MS,
   CAPTION_STT_LAG_MS,
   captionDisplayLabel,
   captionSeekMs,
@@ -240,39 +239,38 @@ describe('확정 세그먼트 경계 (caption.segment.final)', () => {
     expect(captionSeekMs(view)).toBe(42_000 - CAPTION_STT_LAG_MS)
   })
 
-  it('앵커가 있으면 근사(sessionMs)를 제치고 앵커 값을 시작으로 쓴다', () => {
-    // sessionMs(도착 기준 근사)와 anchoredSessionMs(정확)를 다르게 둬 어느 쪽을 골랐는지 구분한다.
+  it('anchoredSessionMs가 와도 쓰지 않는다(회귀 가드)', () => {
+    /*
+     * 앵커 축은 `audioStartedAt + streamElapsedMs`인데 streamElapsedMs가 벽시계가 아니라 **받은 오디오
+     * 누적**이라(realtime-agent audio_source), 무음·뮤트로 프레임이 안 온 만큼 계속 뒤처진다. 운영
+     * 데이터에서 세션마다 0.6초~21초씩 이르게 어긋났다. 근사(sessionMs)를 쓴다.
+     */
     const views = selectCaptionViews(fold([
-      segmentFinal('stt-1', 0, 1, 900_000, '앵커가 정본이다.', { sessionMs: 45_000, anchoredSessionMs: 40_000 }),
+      segmentFinal('stt-1', 0, 1, 900_000, '근사를 쓴다.', { sessionMs: 45_000, anchoredSessionMs: 40_000 }),
     ]))
 
-    expect(views[0]).toMatchObject({ startMs: 40_000, endMs: 43_000, synced: true, anchored: true })
+    expect(views[0]).toMatchObject({ startMs: 42_000, endMs: 45_000, synced: true })
   })
 
-  it('앵커 자막의 seek은 발화 시작보다 오프셋만큼 뒤로 간다', () => {
-    // startMs는 정확하지만 그 지점은 소리가 나기 직전이라 잠깐 빈다. 그 공백의 절반을 잘라낸다.
-    const [anchored] = selectCaptionViews(fold([
-      segmentFinal('stt-1', 0, 1, 900_000, '오프셋만큼 뒤로.', { anchoredSessionMs: 40_000 }),
-    ]))
-    const [approx] = selectCaptionViews(fold([
-      segmentFinal('stt-2', 0, 1, 900_000, '근사는 앞을 겨냥한다.', { sessionMs: 43_000 }),
+  it('seek 목표는 STT 방출 지연만큼 당겨진다(문장 시작에 닿게)', () => {
+    const [caption] = selectCaptionViews(fold([
+      segmentFinal('stt-1', 0, 1, 900_000, '문장 시작에 닿아야 한다.', { sessionMs: 43_000 }),
     ]))
 
-    expect(captionSeekMs(anchored)).toBe(40_000 + CAPTION_SEEK_OFFSET_MS)
-    // 근사 축은 이미 앞을 겨냥하므로 오프셋을 더하지 않는다(두 보정이 상쇄된다).
-    expect(captionSeekMs(approx)).toBe(40_000 - CAPTION_STT_LAG_MS)
+    expect(caption.startMs).toBe(40_000)   // 도착(43_000) − 구간 길이(3_000)
+    expect(captionSeekMs(caption)).toBe(40_000 - CAPTION_STT_LAG_MS)
   })
 
   it('확정 세그먼트는 문장이 끝나야 노출된다(말보다 앞서 읽히지 않게)', () => {
     // 문장 전체를 담고 있어 시작 시각에 내보내면 문장 길이만큼 앞서 읽게 된다.
-    const [anchored] = selectCaptionViews(fold([
-      segmentFinal('stt-1', 0, 1, 900_000, '네 글자짜리 문장.', { anchoredSessionMs: 40_000 }),
+    const [caption] = selectCaptionViews(fold([
+      segmentFinal('stt-1', 0, 1, 900_000, '네 글자짜리 문장.', { sessionMs: 43_000 }),
     ]))
 
-    expect(anchored.startMs).toBe(40_000)
-    expect(anchored.endMs).toBe(43_000)   // 구간 길이 3_000
-    expect(selectVisibleCaptions([anchored], 42_999)).toHaveLength(0)
-    expect(selectVisibleCaptions([anchored], 43_000)).toHaveLength(1)
+    expect(caption.endMs).toBe(43_000)
+    // 상한은 positionMs + 지연이라, 도착 시각에서 지연을 뺀 지점부터 보인다.
+    expect(selectVisibleCaptions([caption], 43_000 - CAPTION_STT_LAG_MS - 1)).toHaveLength(0)
+    expect(selectVisibleCaptions([caption], 43_000 - CAPTION_STT_LAG_MS)).toHaveLength(1)
   })
 
   it('진행 중 조각은 끝 기준 노출의 영향을 받지 않는다', () => {
@@ -283,7 +281,7 @@ describe('확정 세그먼트 경계 (caption.segment.final)', () => {
         occurredAt: '2026-07-29T10:00:00+09:00',
         payload: {
           sttSessionId: 'stt-1', sequence: 1, streamElapsedMs: 900_000,
-          sessionMs: null, anchoredSessionMs: 40_000, text: '말하는 중',
+          sessionMs: 40_000, anchoredSessionMs: null, text: '말하는 중',
         },
       },
     ]))
@@ -292,27 +290,27 @@ describe('확정 세그먼트 경계 (caption.segment.final)', () => {
     expect(selectVisibleCaptions([partial], 40_000)).toHaveLength(1)
   })
 
-  it('앵커가 없으면 종전 근사 경로를 그대로 쓴다(옛 세션 회귀)', () => {
+  it('sessionMs가 없으면 stream-local로 물러나 위치 동기화 대상에서 빠진다', () => {
     const views = selectCaptionViews(fold([
-      segmentFinal('stt-1', 0, 1, 900_000, '근사로 물러난다.', { sessionMs: 45_000 }),
+      segmentFinal('stt-1', 0, 1, 900_000, '판단할 수 없다.'),
     ]))
 
-    expect(views[0]).toMatchObject({ startMs: 42_000, synced: true, anchored: false })
+    expect(views[0]).toMatchObject({ startMs: 900_000, synced: false })
   })
 
-  it('델타도 앵커를 우선한다', () => {
+  it('델타도 앵커를 무시하고 근사를 쓴다', () => {
     const views = selectCaptionViews(fold([
       {
         type: 'caption.delta',
         occurredAt: '2026-07-29T10:00:00+09:00',
         payload: {
           sttSessionId: 'stt-1', sequence: 1, streamElapsedMs: 900_000,
-          sessionMs: 45_000, anchoredSessionMs: 40_000, text: '진행 중 조각도 앵커를 쓴다.',
+          sessionMs: 45_000, anchoredSessionMs: 40_000, text: '진행 중 조각도 근사를 쓴다.',
         },
       },
     ]))
 
-    expect(views[0]).toMatchObject({ startMs: 40_000, synced: true, anchored: true })
+    expect(views[0]).toMatchObject({ startMs: 45_000, synced: true })
   })
 
   it('세그먼트가 덮지 않은(sequence > lastSequence) 델타는 뒤에 진행 중 조각으로 붙는다', () => {
@@ -359,21 +357,22 @@ describe('확정 세그먼트 경계 (caption.segment.final)', () => {
 
 describe('자막 라벨은 플레이어와 같은 축으로 보인다 (captionDisplayLabel)', () => {
   it('세션 축 시각을 availableFromMs만큼 내려 미디어 축으로 보여 준다', () => {
-    // 녹화가 세션보다 7초 늦게 시작했다면, 세션 03:14대는 플레이어에서 03:07대다.
-    const caption = captionView({ startMs: 194_000, synced: true, anchored: true, at: '03:14' })
-    expect(captionDisplayLabel(caption, 7_000)).toBe('03:07')
+    // 라벨은 이동 목표(194_000 − 지연 1_500 = 192_500)를 미디어 축으로 내린 값이다.
+    // 녹화가 세션보다 7초 늦게 시작했다면 192_500 − 7_000 = 185_500 → 03:05.
+    const caption = captionView({ startMs: 194_000, synced: true, at: '03:14' })
+    expect(captionDisplayLabel(caption, 7_000)).toBe('03:05')
   })
 
   it('availableFromMs가 없거나 0이면 이동 목표를 그대로 보여 준다', () => {
-    const caption = captionView({ startMs: 194_000, synced: true, anchored: true, at: '03:14' })
-    expect(captionDisplayLabel(caption, null)).toBe('03:14')
-    expect(captionDisplayLabel(caption, 0)).toBe('03:14')
+    const caption = captionView({ startMs: 194_000, synced: true, at: '03:14' })
+    expect(captionDisplayLabel(caption, null)).toBe('03:12')   // 194_000 − 1_500
+    expect(captionDisplayLabel(caption, 0)).toBe('03:12')
   })
 
   it('라벨은 언제나 눌러서 도착할 지점을 가리킨다', () => {
     // 라벨은 설명이 아니라 버튼이다. seek 보정이 바뀌어도 이 등식은 깨지지 않아야 한다.
     for (const caption of [
-      captionView({ startMs: 194_000, synced: true, anchored: true, at: '03:14' }),
+      captionView({ startMs: 194_000, synced: true, at: '03:14' }),
       captionView({ startMs: 194_000, synced: true, at: '03:14' }),
     ]) {
       for (const availableFromMs of [null, 0, 7_000]) {

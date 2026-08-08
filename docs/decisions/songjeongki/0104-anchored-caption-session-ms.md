@@ -2,7 +2,11 @@
 
 > 📍 하네스 개요: [../../harness/README.md](../../harness/README.md) · 아키텍처: [../../ARCHITECTURE.md](../../ARCHITECTURE.md) · 계약: [../../CONTRACT.md](../../CONTRACT.md)
 
-- **상태**: 채택 (BE+FE 구현)
+- **상태**: **철회** — [ADR-0106](0106-caption-time-axis-is-wall-clock-not-audio.md)이 대체한다.
+  `앵커 + streamElapsedMs`가 성립하지 않는다. `streamElapsedMs`는 벽시계가 아니라 **받은 오디오의 누적
+  길이**라(realtime-agent `audio_source.py`), 무음·뮤트로 프레임이 오지 않은 만큼 계속 뒤처진다. 운영
+  데이터에서 세션마다 **0.6초~21초** 이르게 어긋났다. 이 문서의 전제("앵커 + streamElapsedMs = 정확한
+  세션-ms")가 틀렸다. BE는 필드를 계속 내려 주되 소비자는 쓰지 않는다.
 - **일자**: 2026-08-08
 - **관련**: [0045](0045-live-caption-position-sync-approx-session-ms.md)(근사 세션-ms — 이 문서가 그 "후속"이다),
   [0052](0052-caption-segment-anchor-consumption.md)(앵커 영속), [0053](0053-caption-segment-delivery-and-render.md)(세그먼트 전달·렌더 — §후속으로 이 작업을 예고),

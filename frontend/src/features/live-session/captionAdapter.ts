@@ -79,17 +79,6 @@ export const CAPTION_MAX_LINES = 300
  */
 export const CAPTION_STT_LAG_MS = 1_500
 
-/**
- * 자막 시각을 눌렀을 때 발화 시작보다 이만큼 **뒤로** 떨어뜨린다(ms).
- *
- * <p>앵커 축의 `startMs`는 STT가 표시한 발화 경계라 그 자체로 정확하다. 그런데 그 지점으로 이동하면
- * 소리가 실제로 들리기까지 잠깐 빈다 — 경계 앞의 무음, 그리고 캡처에서 HLS로 나오기까지의 지연이
- * 겹친 결과다. 실측으로 약 1초였고, 그 절반을 잘라 체감을 줄인다.
- *
- * <p><b>전부 잘라내지 않는다.</b> 경계보다 뒤로 너무 가면 문장 첫 음절을 놓친다. 조금 이른 편이
- * 회복 가능하고, 늦으면 그 말을 다시 듣기 위해 또 되감아야 한다.
- */
-export const CAPTION_SEEK_OFFSET_MS = 500
 
 /** 확정 세그먼트 하나(caption.segment.final). `text`가 누적 델타를 덮어쓰는 권위 있는 최종 텍스트다. */
 interface CaptionSegmentState {
@@ -225,38 +214,40 @@ export function reduceCaptionStream(
  *     하나 — pending(라인이 completed면 false). 나중 세그먼트가 이 조각을 덮으면 조각은 줄거나 사라진다.
  *     세그먼트가 아직 없으면 델타 전체가 이 진행 중 조각이다(과거 동작과 같되 문장부호 분할은 없다).
  */
-/** 한 자막 조각이 놓인 시각축. `anchored`면 정확값이라 STT 지연 보정을 걸지 않는다. */
+/** 한 자막 조각이 놓인 시각축. */
 interface Axis {
   startMs: number
   synced: boolean
-  anchored: boolean
 }
 
 /** stream-local 축으로 물러난다 — 세션 축이 아니라 위치 동기화 대상이 아니다. */
 function unsynced(startMs: number): Axis {
-  return { startMs, synced: false, anchored: false }
+  return { startMs, synced: false }
 }
 
 /**
- * 확정 세그먼트의 시작 시각을 **세션 축**으로 옮긴다. 좋은 축부터 차례로 고른다.
+ * 확정 세그먼트의 시작 시각을 **세션 축**으로 옮긴다.
  *
- * <p>1. `anchoredSessionMs` — 서버가 `caption.stream.started` 앵커로 환산한 <b>정확한</b> 세그먼트 시작
- * (ADR-0052 앵커, ADR-0053 후속). 근사가 아니므로 보정 없이 그대로 쓴다.
+ * <p><b>`anchoredSessionMs`는 쓰지 않는다</b>(ADR-0104를 되돌린다). 서버는 계속 내려 주지만 그 값이
+ * 실제 발화 시각과 맞지 않는다 — 운영 데이터로 확인했다. 최근 세션 5건에서 앵커 축이 도착 축보다
+ * <b>3.7초에서 24.1초까지</b> 이르고, 그 폭이 세션마다 다르다. 세션 안에서는 거의 일정하므로 원점
+ * 문제이며, {@code audioStartedAt}(앵커가 가리키는 0)과 {@code streamElapsedMs}가 세는 0이 같은
+ * 순간이 아니라는 뜻이다. 그 차이는 "에이전트가 붙은 뒤 실제 오디오가 흐르기까지"라 세션마다 다르다.
  *
- * <p>2. `sessionMs` — 앵커가 없을 때의 근사. 이 값은 `segment.final`이 <b>도착한</b> 시각이라 구간의
- * <b>끝</b>에 대응한다. 두 축은 원점만 다르고 속도가 같아 구간 길이가 양쪽에서 동일하므로, 끝에서 길이를
- * 빼면 시작이 나온다. stream-local을 세션-ms로 직접 환산하는 것이 아니라(CONTRACT §3-4 금지) 세션 축
+ * <p>정확해 보이는 값을 쓰다 라이브 자막이 통째로 어긋났다. 근거가 서기 전까지는 <b>덜 정확해도
+ * 어긋나지 않는 축</b>을 쓴다 — AI팀과 {@code audioStartedAt} 의미를 맞춘 뒤 되돌린다.
+ *
+ * <p>쓰는 축은 `sessionMs`(근사)다. 이 값은 `segment.final`이 <b>도착한</b> 시각이라 구간의 <b>끝</b>에
+ * 대응한다. 두 축은 원점만 다르고 속도가 같아 구간 길이가 양쪽에서 동일하므로, 끝에서 길이를 빼면
+ * 시작이 나온다. stream-local을 세션-ms로 직접 환산하는 것이 아니라(CONTRACT §3-4 금지) 세션 축
  * 안에서 되짚는 것이다. 도착 기준이라 STT 지연만큼 늦어 보정 대상이다.
  *
- * <p>3. 둘 다 없으면 raw stream-local. 위치 동기화가 불가능해 그대로 노출된다(ADR-0045 §4).
+ * <p>`sessionMs`도 없으면 raw stream-local. 위치 동기화가 불가능해 그대로 노출된다(ADR-0045 §4).
  */
 function segmentAxis(segment: CaptionSegmentState): Axis {
-  if (segment.anchoredSessionMs != null) {
-    return { startMs: segment.anchoredSessionMs, synced: true, anchored: true }
-  }
   if (segment.sessionMs == null) return unsynced(segment.startStreamElapsedMs)
   const durationMs = Math.max(0, segment.endStreamElapsedMs - segment.startStreamElapsedMs)
-  return { startMs: Math.max(0, segment.sessionMs - durationMs), synced: true, anchored: false }
+  return { startMs: Math.max(0, segment.sessionMs - durationMs), synced: true }
 }
 
 export function selectCaptionViews(state: CaptionStreamState): CaptionView[] {
@@ -281,7 +272,6 @@ export function selectCaptionViews(state: CaptionStreamState): CaptionView[] {
           termReferences: [],
           pending: false,
           synced: axis.synced,
-          anchored: axis.anchored,
         })
         if (segment.segmentIndex > maxSegmentIndex) maxSegmentIndex = segment.segmentIndex
         if (maxLastSequence == null || segment.lastSequence > maxLastSequence) maxLastSequence = segment.lastSequence
@@ -290,7 +280,7 @@ export function selectCaptionViews(state: CaptionStreamState): CaptionView[] {
       // 2. 진행 중 조각 — max lastSequence보다 큰(아직 확정 안 된) 델타만 이어 붙인다.
       // 한 델타의 시각은 그 조각을 **내보낸** 시점이라, 그 조각의 말이 **시작된** 시점은 직전 델타의 시각에
       // 가깝다. 그래서 진행 중 조각의 시작 시각으로 첫 진행중 델타의 직전 델타 시각을 쓴다(첫 델타면 자기 시각).
-      // 시각 축은 세그먼트와 같은 우선순위다 — 앵커(정확) > 근사 sessionMs > stream-local fallback.
+      // 시각 축은 세그먼트와 같다 — 근사 sessionMs > stream-local fallback(앵커는 위 사유로 미사용).
       const sequences = [...line.deltas.keys()].sort((left, right) => left - right)
       let previousMs: number | null = null
       let partialText = ''
@@ -299,11 +289,9 @@ export function selectCaptionViews(state: CaptionStreamState): CaptionView[] {
       let started = false
       for (const sequence of sequences) {
         const delta = line.deltas.get(sequence)!
-        const axis: Axis = delta.anchoredSessionMs != null
-          ? { startMs: delta.anchoredSessionMs, synced: true, anchored: true }
-          : delta.sessionMs != null
-            ? { startMs: delta.sessionMs, synced: true, anchored: false }
-            : unsynced(delta.streamElapsedMs)
+        const axis: Axis = delta.sessionMs != null
+          ? { startMs: delta.sessionMs, synced: true }
+          : unsynced(delta.streamElapsedMs)
         const isPartial = maxLastSequence == null || sequence > maxLastSequence
         if (isPartial) {
           if (!started) {
@@ -327,7 +315,6 @@ export function selectCaptionViews(state: CaptionStreamState): CaptionView[] {
           termReferences: [],
           pending: !line.completed,
           synced: partialAxis?.synced ?? false,
-          anchored: partialAxis?.anchored ?? false,
         })
       }
 
@@ -361,34 +348,28 @@ export function selectVisibleCaptions(
   positionMs: number | null,
 ): CaptionView[] {
   if (positionMs == null) return captions
-  return captions.filter((caption) => !caption.synced || caption.endMs <= ceilingFor(caption, positionMs))
+  return captions.filter((caption) => !caption.synced || caption.endMs <= ceilingFor(positionMs))
 }
 
 /**
  * 그 자막을 노출해도 되는 상한.
  *
- * <p>앵커 축(`anchored`)은 실제 발화 시각이라 재생 위치를 그대로 상한으로 쓴다. 근사 축은 도착 시각
- * 기준이라 발화보다 지연만큼 늦으므로, 그 지연을 더한 지점까지 열어야 말이 들리는 순간에 뜬다.
- * 정확값에 같은 보정을 걸면 오히려 지연만큼 이르게 떠 버린다.
+ * <p>근사 축은 도착 시각 기준이라 발화보다 STT 지연만큼 늦다. 그 지연을 더한 지점까지 열어야 말이
+ * 들리는 순간에 자막이 뜬다.
  */
-function ceilingFor(caption: CaptionView, positionMs: number): number {
-  return caption.anchored ? positionMs : positionMs + CAPTION_STT_LAG_MS
+function ceilingFor(positionMs: number): number {
+  return positionMs + CAPTION_STT_LAG_MS
 }
 
 /**
  * 자막의 시각 라벨을 눌렀을 때 실제로 이동할 세션-ms.
  *
- * <p><b>앵커 축(`anchored`)은 발화 시작에서 조금 뒤로 간다</b>({@link CAPTION_SEEK_OFFSET_MS}).
- * startMs 자체는 정확하지만 그 지점으로 가면 소리가 들리기까지 잠깐 비어, 실측한 그 공백의 절반을
- * 잘라낸다.
- *
- * <p>근사 축(`synced`)의 startMs는 도착 시각 기준이라 발화보다 STT 방출 지연만큼 늦다 — 그대로 seek하면
- * 문장 앞부분을 지나친 곳에 떨어져 "정확히 찾아가지 못한다". 지연분을 당겨 문장 시작 직전에 닿게 한다.
- * 이쪽은 이미 앞을 겨냥하고 있으므로 위 오프셋을 더하지 않는다 — 두 보정이 서로를 상쇄한다.
+ * <p>근사 축의 startMs는 도착 시각 기준이라 발화보다 STT 방출 지연만큼 늦다 — 그대로 seek하면 문장
+ * 앞부분을 지나친 곳에 떨어져 "정확히 찾아가지 못한다". 지연분을 당겨 문장 시작 직전에 닿게 한다
+ * (늦게 도착하는 것보다 조금 이른 편이 회복 가능하다).
  */
 export function captionSeekMs(caption: CaptionView): number {
   if (!caption.synced) return caption.startMs
-  if (caption.anchored) return caption.startMs + CAPTION_SEEK_OFFSET_MS
   return Math.max(0, caption.startMs - CAPTION_STT_LAG_MS)
 }
 
