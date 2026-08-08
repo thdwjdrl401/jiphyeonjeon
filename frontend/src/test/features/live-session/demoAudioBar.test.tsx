@@ -27,6 +27,14 @@ const publisher = vi.hoisted(() => ({
   toggleMicrophone: vi.fn(),
 }))
 vi.mock('@/features/live-session/useInstructorLiveKit', () => ({ useInstructorLiveKit: () => publisher }))
+/*
+ * 재생 위치는 컨텍스트가 아니라 소스 모듈에서 온다 — 200ms마다 컨텍스트를 갈면 화면 전체가 다시
+ * 그려지고, 그 여파로 판서의 "멎었다" 판정이 무너진다(ADR-0103).
+ */
+vi.mock('@/features/live-session/demoAudio', () => ({
+  demoAudioState: () => publisher.demoAudio,
+  subscribeDemoAudio: () => () => {},
+}))
 
 function setUp(overrides: Partial<DemoAudioState> = {}, isAdmin = true) {
   auth.user = { isAdmin }

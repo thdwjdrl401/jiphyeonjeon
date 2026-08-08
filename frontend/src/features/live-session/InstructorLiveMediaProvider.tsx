@@ -375,7 +375,24 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
    * 그 주기로 다시 그려진다.
    */
   const [audioState, setAudioState] = useState<DemoAudioState>(demoAudioState)
-  useEffect(() => subscribeDemoAudio(() => { setAudioState(demoAudioState()) }), [])
+  /*
+   * <b>재생 위치는 컨텍스트로 올리지 않는다.</b> 200ms마다 바뀌는데, 그때마다 새 컨텍스트 값을 내면
+   * 이 화면 전체가 그 주기로 다시 그려진다 — 그리고 판서 에디터가 그때마다 `onChange`를 내보내
+   * "그리기가 멎었다"는 1초 판정이 <b>영영 오지 않았다</b>. 시연 음성 재생 중 강조 저장 확인이 아예
+   * 뜨지 않던 원인이다.
+   *
+   * <p>여기서는 자주 바뀌지 않는 것만 본다. 재생 위치는 재생기 스스로 구독해서 그린다.
+   */
+  useEffect(() => subscribeDemoAudio(() => {
+    setAudioState((current) => {
+      const next = demoAudioState()
+      const same = current.live === next.live
+        && current.fileName === next.fileName
+        && current.loop === next.loop
+        && current.playing === next.playing
+      return same ? current : next
+    })
+  }), [])
   /** 파일을 넣기 전 마이크가 있었는가. 없었으면 되돌릴 때 트랙을 내려야 한다. */
   const demoAudioReplacedRef = useRef(false)
   // Room 생성 effect가 품질 변경마다 재실행되면 연결이 끊긴다. 최신 값은 ref로만 읽고,

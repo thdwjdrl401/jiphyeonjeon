@@ -531,10 +531,26 @@ export default function InstructorAnnotationLayer({
    * <p>그래서 "그리기가 멎었는가"를 먼저 판단하고, 그 뒤에 표식과 알림을 <b>한 번에</b> 처리한다.
    * 붙인 결과를 로컬에서 만들어 그대로 넘기므로 재진입한 onChange를 기다리지 않는다.
    */
+  /** 마지막으로 타이머를 건 시점의 요소 지문. 같은 그림에 다시 걸지 않으려고 둔다. */
+  const highlightSignatureRef = useRef('')
   const detectHighlightSettled = useCallback((elements: readonly AnnotationElement[]) => {
     if (!highlightModeRef.current && !elements.some(isHighlightElement)) return
     const notify = onHighlightSettledRef.current
     if (!notify) return
+
+    /*
+     * <b>그린 것이 달라졌을 때만</b> 타이머를 다시 건다.
+     *
+     * <p>`onChange`는 그리기와 무관하게도 불린다 — 포인터가 움직일 때, appState가 바뀔 때, 그리고
+     * 부모가 다시 그릴 때. 그때마다 타이머를 되감으면 <b>1초 유휴가 영영 오지 않는다</b>.
+     * 실제로 시연 음성 재생 중(200ms마다 부모가 갱신됐다) 강조 저장 확인이 아예 뜨지 않았고,
+     * 재생을 멈춰야 떴다.
+     *
+     * <p>여기서 재는 것은 "강사가 손을 멈췄는가"이지 "리액트가 조용한가"가 아니다.
+     */
+    const signature = elements.map((element) => `${element.id}:${element.version ?? 0}`).join(',')
+    if (signature === highlightSignatureRef.current) return
+    highlightSignatureRef.current = signature
 
     if (highlightTimerRef.current !== null) window.clearTimeout(highlightTimerRef.current)
     highlightTimerRef.current = window.setTimeout(() => {
