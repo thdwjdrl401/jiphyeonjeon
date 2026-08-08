@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from 'vitest'
 import CaptionDock from '@/features/live-session/CaptionDock'
 import type { CaptionView } from '@/features/live-session/liveSessionService'
 
+// 라벨은 이동 목표에서 파생된다 — 앵커 축이면 728_000 + 오프셋(500) = 728_500 → '12:08'.
+// 이 테스트가 보는 것은 시각이 버튼인지 time인지(이동 게이트)이지 숫자 자체가 아니다.
 const caption: CaptionView = {
   segmentId: 'caption-1',
   startMs: 728_000,
@@ -11,6 +13,7 @@ const caption: CaptionView = {
   text: '종료 직전 자막입니다.',
   termReferences: [],
   synced: true,
+  anchored: true,
 }
 
 describe('실시간 자막 시각 이동 게이트', () => {

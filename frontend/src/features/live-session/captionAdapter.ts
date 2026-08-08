@@ -20,7 +20,8 @@ function parseTimeLabel(label?: string) {
   return parts.reduce((total, part) => total * 60 + part, 0) * 1000
 }
 
-function formatTimeLabel(sessionMs: number) {
+/** ms를 `mm:ss`(1시간 넘으면 `h:mm:ss`)로. 자막 라벨과 같은 규칙이 필요한 곳에서 함께 쓴다. */
+export function formatTimeLabel(sessionMs: number) {
   const totalSeconds = Math.floor(sessionMs / 1000)
   const hours = Math.floor(totalSeconds / 3600)
   const minutes = Math.floor((totalSeconds % 3600) / 60)
@@ -77,6 +78,18 @@ export const CAPTION_MAX_LINES = 300
  * 앵커(ADR-0045 후속)가 오면 이 보정은 필요 없어진다.
  */
 export const CAPTION_STT_LAG_MS = 1_500
+
+/**
+ * 자막 시각을 눌렀을 때 발화 시작보다 이만큼 **뒤로** 떨어뜨린다(ms).
+ *
+ * <p>앵커 축의 `startMs`는 STT가 표시한 발화 경계라 그 자체로 정확하다. 그런데 그 지점으로 이동하면
+ * 소리가 실제로 들리기까지 잠깐 빈다 — 경계 앞의 무음, 그리고 캡처에서 HLS로 나오기까지의 지연이
+ * 겹친 결과다. 실측으로 약 1초였고, 그 절반을 잘라 체감을 줄인다.
+ *
+ * <p><b>전부 잘라내지 않는다.</b> 경계보다 뒤로 너무 가면 문장 첫 음절을 놓친다. 조금 이른 편이
+ * 회복 가능하고, 늦으면 그 말을 다시 듣기 위해 또 되감아야 한다.
+ */
+export const CAPTION_SEEK_OFFSET_MS = 500
 
 /** 확정 세그먼트 하나(caption.segment.final). `text`가 누적 델타를 덮어쓰는 권위 있는 최종 텍스트다. */
 interface CaptionSegmentState {
@@ -329,6 +342,15 @@ export function selectCaptionViews(state: CaptionStreamState): CaptionView[] {
  * 거기까지만 노출한다 — 앞선 자막은 이미 버퍼에 와 있고 위치가 도달하면 드러난다. 위치 축이 아닌
  * fallback 자막(synced=false)은 판단할 수 없어 그대로 보인다.
  *
+ * <p><b>비교하는 것은 시작이 아니라 끝(`endMs`)이다.</b> 확정 세그먼트가 담는 것은 문장 <b>전체</b>라,
+ * 시작 시각에 내보내면 강사가 말을 꺼내는 순간 그 문장을 끝까지 다 보여 준다 — 4초짜리 문장이면 4초를
+ * 앞서 읽게 되어 자막이 이르게 느껴진다. 끝을 기준으로 하면 말이 끝날 무렵 떠서 방송 자막과 같은
+ * 감각이 되고, <b>문장 길이에 자동으로 맞춰진다</b>(긴 문장은 더 늦게, 짧은 문장은 빨리). 상수를
+ * 하나 더 두지 않고 푸는 방법이기도 하다.
+ *
+ * <p>진행 중 조각(pending)은 `endMs === startMs`라 이 변경의 영향을 받지 않는다 — 아직 말한 만큼만
+ * 담고 있어 즉시 보여도 앞서지 않는다.
+ *
  * <p><b>{@code positionMs}가 null이면 전부 노출한다.</b> 라이브 강사 화면처럼 플레이어가 없어
  * 위치를 구할 수 없는 자리다. 한때 이 자리에 {@code isInstructor}가 있었는데, 다시보기에서는
  * 강사도 플레이어를 쓰므로 역할로 판단하면 강사만 미래 자막이 다 보인다 — 물어야 할 것은 처음부터
@@ -339,7 +361,7 @@ export function selectVisibleCaptions(
   positionMs: number | null,
 ): CaptionView[] {
   if (positionMs == null) return captions
-  return captions.filter((caption) => !caption.synced || caption.startMs <= ceilingFor(caption, positionMs))
+  return captions.filter((caption) => !caption.synced || caption.endMs <= ceilingFor(caption, positionMs))
 }
 
 /**
@@ -356,32 +378,36 @@ function ceilingFor(caption: CaptionView, positionMs: number): number {
 /**
  * 자막의 시각 라벨을 눌렀을 때 실제로 이동할 세션-ms.
  *
- * <p><b>앵커 축(`anchored`)은 보정하지 않는다.</b> startMs가 실제 발화 시작이라 그 자리가 곧 목표다.
- * 여기에 지연을 빼면 문장 앞 여백으로 떨어진다.
+ * <p><b>앵커 축(`anchored`)은 발화 시작에서 조금 뒤로 간다</b>({@link CAPTION_SEEK_OFFSET_MS}).
+ * startMs 자체는 정확하지만 그 지점으로 가면 소리가 들리기까지 잠깐 비어, 실측한 그 공백의 절반을
+ * 잘라낸다.
  *
  * <p>근사 축(`synced`)의 startMs는 도착 시각 기준이라 발화보다 STT 방출 지연만큼 늦다 — 그대로 seek하면
- * 문장 앞부분을 지나친 곳에 떨어져 "정확히 찾아가지 못한다". 지연분을 당겨 문장 시작 직전에 닿게 한다
- * (늦게 도착하는 것보다 조금 이른 편이 회복 가능하다).
+ * 문장 앞부분을 지나친 곳에 떨어져 "정확히 찾아가지 못한다". 지연분을 당겨 문장 시작 직전에 닿게 한다.
+ * 이쪽은 이미 앞을 겨냥하고 있으므로 위 오프셋을 더하지 않는다 — 두 보정이 서로를 상쇄한다.
  */
+export function captionSeekMs(caption: CaptionView): number {
+  if (!caption.synced) return caption.startMs
+  if (caption.anchored) return caption.startMs + CAPTION_SEEK_OFFSET_MS
+  return Math.max(0, caption.startMs - CAPTION_STT_LAG_MS)
+}
+
 /**
  * 자막 옆에 보일 시각 문구.
  *
- * <p>내부 시각(`startMs`)은 <b>세션 축</b>이고, 플레이어 컨트롤바가 보여 주는 것은 <b>미디어 축</b>
- * (녹화 시작이 0)이다. 둘은 `availableFromMs`(세션 시작 → 녹화 시작 간격)만큼 다르다. 라벨을 세션
- * 축 그대로 두면 같은 순간인데 자막에는 03:14, 플레이어에는 03:07이 떠 사람이 어긋난 것으로 읽는다.
+ * <p><b>이동 목표에서 그대로 파생한다.</b> 라벨은 설명이 아니라 버튼이다 — 누르면 가는 자리를 말해야
+ * 한다. {@link captionSeekMs}를 따로 계산하지 않고 그 결과를 변환만 하므로, 보정값을 어떻게 바꾸든
+ * "라벨의 숫자 = 눌러서 도착한 플레이어의 숫자"가 깨질 수 없다.
  *
- * <p>그래서 <b>보이는 숫자만</b> 미디어 축으로 내린다. 이동·노출 판정은 세션 축 그대로다 — 축을
- * 통일한 이유(채팅·판서·AI 근거가 모두 세션-ms)를 버리지 않으면서 표시만 플레이어에 맞춘다.
+ * <p>축도 맞춘다. 내부 시각은 <b>세션 축</b>이고 플레이어 컨트롤바가 보여 주는 것은 <b>미디어 축</b>
+ * (녹화 시작이 0)이라 `availableFromMs`만큼 다르다. 그대로 두면 같은 순간인데 자막에는 03:14,
+ * 플레이어에는 03:07이 떠 사람이 어긋난 것으로 읽는다. 이동·노출 판정은 세션 축 그대로이고
+ * 보이는 숫자만 내린다.
  *
  * <p>세션 축이 아닌 fallback 자막(`synced=false`)은 변환하지 않는다. stream-local 값에서 세션 축
  * 간격을 빼면 아무 의미 없는 숫자가 된다.
  */
 export function captionDisplayLabel(caption: CaptionView, availableFromMs: number | null): string {
-  if (!caption.synced || !availableFromMs) return caption.at
-  return formatTimeLabel(Math.max(0, caption.startMs - availableFromMs))
-}
-
-export function captionSeekMs(caption: CaptionView): number {
-  if (!caption.synced || caption.anchored) return caption.startMs
-  return Math.max(0, caption.startMs - CAPTION_STT_LAG_MS)
+  if (!caption.synced) return caption.at
+  return formatTimeLabel(Math.max(0, captionSeekMs(caption) - (availableFromMs ?? 0)))
 }
