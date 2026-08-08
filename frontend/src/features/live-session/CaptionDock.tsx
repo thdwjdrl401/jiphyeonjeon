@@ -9,7 +9,11 @@ interface CaptionDockProps {
   captions: CaptionView[]
   currentSessionMs: number
   label: string
-  onSeek: (sessionMs: number) => void
+  /**
+   * 시각을 눌렀을 때. `segmentId`는 <b>어떤 자막을 눌렀는지</b>다 — 그 줄은 이동 직후 노출 조건을
+   * 면제받아야 한다(문장 시작으로 가면 아직 안 끝난 문장이 되어 사라진다).
+   */
+  onSeek: (sessionMs: number, segmentId?: string) => void
   onSelectTerm: (termId: string) => void
   /** false면 시각을 표시만 하고 HLS seek 요청을 만들지 않는다. */
   canSeek?: boolean
@@ -170,7 +174,7 @@ export default function CaptionDock({
             <article className={className} key={caption.segmentId} aria-busy={caption.pending || undefined}>
               {/* 라벨은 플레이어와 같은 축으로 보이고, 이동은 세션 축 값으로 건다(captionSeekMs). */}
               {canSeek
-                ? <button type="button" onClick={() => onSeek(captionSeekMs(caption))}>{timeLabel(caption)}</button>
+                ? <button type="button" onClick={() => onSeek(captionSeekMs(caption), caption.segmentId)}>{timeLabel(caption)}</button>
                 : <time>{timeLabel(caption)}</time>}
               <p>{renderCaptionText(caption, onSelectTerm)}</p>
             </article>

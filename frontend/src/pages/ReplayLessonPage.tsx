@@ -73,6 +73,8 @@ export default function ReplayLessonPage() {
   const [selectedTermId, setSelectedTermId] = useState<string | null>(null)
   const [glossaryFocusRequest, setGlossaryFocusRequest] = useState<GlossaryFocusRequest | null>(null)
   const [positionMs, setPositionMs] = useState(0)
+  /** 방금 눌러서 이동한 자막. 그 한 줄만 노출 조건을 면제한다(사라지면 고장으로 읽힌다). */
+  const [pinnedCaptionId, setPinnedCaptionId] = useState<string | null>(null)
   const [seekRequest, setSeekRequest] = useState<PlaybackSeekRequest | null>(null)
   // 재생바 위에 재시청 곡선을 얹으려면 플레이어 루트가 필요하다(WatchHeatmapCurve).
   const [playerRoot, setPlayerRoot] = useState<HTMLElement | null>(null)
@@ -179,7 +181,9 @@ export default function ReplayLessonPage() {
    * 강사도 같은 플레이어를 쓴다 — 강사 검수 화면이 수강생이 볼 화면과 달라지면 검수가 성립하지
    * 않는다.
    */
-  const visibleCaptions = useMemo(() => selectVisibleCaptions(captions, positionMs), [captions, positionMs])
+  const visibleCaptions = useMemo(
+    () => selectVisibleCaptions(captions, positionMs, pinnedCaptionId),
+    [captions, positionMs, pinnedCaptionId])
   const glossary = attachGlossary(visibleCaptions, glossaryQuery.data ?? [])
   // 게시는 방금 누른 행동의 결과다 — 화면에 남기지 않고 토스트로 알린다.
   // (게시 여부 자체는 위 툴바 배지가 계속 보여 준다.)
@@ -201,7 +205,9 @@ export default function ReplayLessonPage() {
 
   // 자막·목차에서 특정 시각을 누르면 플레이어를 그 지점으로 옮긴다. sequence는 같은 시각을
   // 다시 눌러도 effect가 재실행되게 하는 용도다.
-  const seekSession = (sessionMs: number) => {
+  const seekSession = (sessionMs: number, segmentId?: string) => {
+    // 누른 자막은 이동 직후 노출 조건을 면제받는다. 자막이 아닌 곳(AI 근거 등)에서 오면 면제를 푼다.
+    setPinnedCaptionId(segmentId ?? null)
     setPositionMs(sessionMs)
     setSeekRequest((current) => ({ sessionMs, sequence: (current?.sequence ?? 0) + 1 }))
   }
