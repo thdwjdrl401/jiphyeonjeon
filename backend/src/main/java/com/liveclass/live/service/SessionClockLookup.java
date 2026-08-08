@@ -30,7 +30,13 @@ public class SessionClockLookup {
         return CaptionSessionMs.approximate(clockOriginAt(sessionId), occurredAt);
     }
 
-    private OffsetDateTime clockOriginAt(UUID sessionId) {
+    /**
+     * 세션 클록 원점. 아직 LIVE 전환 전이면 null.
+     *
+     * <p>{@link CaptionAnchorLookup}이 attempt 앵커를 세션 축으로 옮길 때 같은 원점을 써야 해서 열어 둔다 —
+     * 원점이 갈리면 근사 축과 앵커 축이 서로 다른 0을 기준으로 삼게 된다.
+     */
+    public OffsetDateTime clockOriginAt(UUID sessionId) {
         OffsetDateTime cached = clockOriginCache.get(sessionId);
         if (cached != null) {
             return cached;

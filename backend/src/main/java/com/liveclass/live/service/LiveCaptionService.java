@@ -30,12 +30,14 @@ public class LiveCaptionService {
     private final LiveCaptionRepository repository;
     private final ApplicationEventPublisher eventPublisher;
     private final SessionClockLookup sessionClockLookup;
+    private final CaptionAnchorLookup captionAnchorLookup;
 
     public LiveCaptionService(LiveCaptionRepository repository, ApplicationEventPublisher eventPublisher,
-                              SessionClockLookup sessionClockLookup) {
+                              SessionClockLookup sessionClockLookup, CaptionAnchorLookup captionAnchorLookup) {
         this.repository = repository;
         this.eventPublisher = eventPublisher;
         this.sessionClockLookup = sessionClockLookup;
+        this.captionAnchorLookup = captionAnchorLookup;
     }
 
     /**
@@ -47,8 +49,24 @@ public class LiveCaptionService {
     public List<CaptionReloadItem> reload(UUID sessionId) {
         return repository.findBySessionIdAndEventTypeInOrderByOccurredAtAscIdAsc(sessionId, CaptionEvent.RELAYED_TYPES)
                 .stream()
-                .map(row -> CaptionReloadItem.from(row, sessionClockLookup.approxSessionMs(sessionId, row.getOccurredAt())))
+                .map(row -> CaptionReloadItem.from(
+                        row,
+                        sessionClockLookup.approxSessionMs(sessionId, row.getOccurredAt()),
+                        anchoredSessionMs(sessionId, row)))
                 .toList();
+    }
+
+    /**
+     * 정확한 세션-ms(앵커 기반). 앵커가 없으면 null이라 FE가 근사({@code sessionMs})로 물러난다.
+     *
+     * <p>세그먼트는 <b>시작</b> 좌표를 태운다 — 노출 경계도 seek 목표도 발화가 시작된 시각을 쓴다.
+     * WS 경로({@code WsCaptionBroadcaster})와 같은 규칙이어야 리로드와 실시간이 같은 값을 준다.
+     */
+    private Long anchoredSessionMs(UUID sessionId, LiveCaption row) {
+        Long streamElapsedMs = CaptionEvent.TYPE_SEGMENT_FINAL.equals(row.getEventType())
+                ? row.getStartStreamElapsedMs()
+                : row.getStreamElapsedMs();
+        return captionAnchorLookup.anchoredSessionMs(sessionId, row.getSttSessionId(), streamElapsedMs);
     }
 
     /**

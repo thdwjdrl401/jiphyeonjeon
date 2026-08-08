@@ -67,6 +67,7 @@ function segmentFinal(
       endStreamElapsedMs: startStreamElapsedMs + 3_000,
       boundaryReason: 'SILENCE',
       sessionMs: null,
+      anchoredSessionMs: null,
       ...overrides,
     },
   }
@@ -234,6 +235,56 @@ describe('확정 세그먼트 경계 (caption.segment.final)', () => {
 
     expect(view.startMs).toBe(42_000)
     expect(captionSeekMs(view)).toBe(42_000 - CAPTION_STT_LAG_MS)
+  })
+
+  it('앵커가 있으면 근사(sessionMs)를 제치고 앵커 값을 시작으로 쓴다', () => {
+    // sessionMs(도착 기준 근사)와 anchoredSessionMs(정확)를 다르게 둬 어느 쪽을 골랐는지 구분한다.
+    const views = selectCaptionViews(fold([
+      segmentFinal('stt-1', 0, 1, 900_000, '앵커가 정본이다.', { sessionMs: 45_000, anchoredSessionMs: 40_000 }),
+    ]))
+
+    expect(views[0]).toMatchObject({ startMs: 40_000, endMs: 43_000, synced: true, anchored: true })
+  })
+
+  it('앵커 자막은 STT 지연 보정을 받지 않는다(seek·노출 모두)', () => {
+    // 앵커 값은 실제 발화 시각이라 보정하면 그만큼 이르게 어긋난다.
+    const [anchored] = selectCaptionViews(fold([
+      segmentFinal('stt-1', 0, 1, 900_000, '보정 없음.', { anchoredSessionMs: 40_000 }),
+    ]))
+    const [approx] = selectCaptionViews(fold([
+      segmentFinal('stt-2', 0, 1, 900_000, '보정 있음.', { sessionMs: 43_000 }),
+    ]))
+
+    expect(captionSeekMs(anchored)).toBe(40_000)
+    expect(captionSeekMs(approx)).toBe(40_000 - CAPTION_STT_LAG_MS)
+
+    // 노출 경계도 같다 — 재생 위치가 딱 시작일 때 앵커는 뜨고, 근사는 보정만큼 미리 떠 있다.
+    expect(selectVisibleCaptions([anchored], 40_000)).toHaveLength(1)
+    expect(selectVisibleCaptions([anchored], 40_000 - 1)).toHaveLength(0)
+    expect(selectVisibleCaptions([approx], 40_000 - CAPTION_STT_LAG_MS)).toHaveLength(1)
+  })
+
+  it('앵커가 없으면 종전 근사 경로를 그대로 쓴다(옛 세션 회귀)', () => {
+    const views = selectCaptionViews(fold([
+      segmentFinal('stt-1', 0, 1, 900_000, '근사로 물러난다.', { sessionMs: 45_000 }),
+    ]))
+
+    expect(views[0]).toMatchObject({ startMs: 42_000, synced: true, anchored: false })
+  })
+
+  it('델타도 앵커를 우선한다', () => {
+    const views = selectCaptionViews(fold([
+      {
+        type: 'caption.delta',
+        occurredAt: '2026-07-29T10:00:00+09:00',
+        payload: {
+          sttSessionId: 'stt-1', sequence: 1, streamElapsedMs: 900_000,
+          sessionMs: 45_000, anchoredSessionMs: 40_000, text: '진행 중 조각도 앵커를 쓴다.',
+        },
+      },
+    ]))
+
+    expect(views[0]).toMatchObject({ startMs: 40_000, synced: true, anchored: true })
   })
 
   it('세그먼트가 덮지 않은(sequence > lastSequence) 델타는 뒤에 진행 중 조각으로 붙는다', () => {
