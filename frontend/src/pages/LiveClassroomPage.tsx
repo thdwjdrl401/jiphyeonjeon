@@ -748,6 +748,7 @@ export default function LiveClassroomPage() {
 
           {!isInstructor && !captionPane.collapsed && (
             <CaptionDock
+              availableFromMs={playback.playback?.source?.availableFromMs ?? null}
               captions={glossary.captions}
               currentSessionMs={positionMs}
               label="실시간 자막"

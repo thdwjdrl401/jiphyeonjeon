@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useLayoutEffect, useRef, useState } from 'react'
-import { captionSeekMs } from './captionAdapter'
+import { captionDisplayLabel, captionSeekMs } from './captionAdapter'
 import type { CaptionView } from './liveSessionService.interface'
 
 /** 이만큼 안쪽까지는 "바닥에 붙어 있다"로 본다. 자막 한 줄(약 28px)보다 작아야 한다. */
@@ -13,6 +13,13 @@ interface CaptionDockProps {
   onSelectTerm: (termId: string) => void
   /** false면 시각을 표시만 하고 HLS seek 요청을 만들지 않는다. */
   canSeek?: boolean
+  /**
+   * 재생 중인 source의 `availableFromMs`(미디어 시각 0이 가리키는 세션 시각).
+   *
+   * <p>넘기면 라벨을 <b>플레이어와 같은 미디어 축</b>으로 보여 준다. 이동·노출은 세션 축 그대로이고
+   * 보이는 숫자만 맞춘다 — 안 맞추면 같은 순간에 자막과 컨트롤바가 다른 시각을 띄운다.
+   */
+  availableFromMs?: number | null
   /** 헤더 힌트를 대체하는 안내(예: 라이브 자막 연결 상태). 없으면 기본 힌트를 보인다. */
   note?: string
   /** 강사가 경계를 끌어 정한 높이(px). 없으면 CSS 기본값을 쓴다. */
@@ -64,7 +71,10 @@ export default function CaptionDock({
   heightPx,
   onToggleCollapse,
   collapsed = false,
+  availableFromMs = null,
 }: CaptionDockProps) {
+  // 헤더 prop `label`과 이름이 겹치지 않게 timeLabel로 둔다.
+  const timeLabel = (caption: CaptionView) => captionDisplayLabel(caption, availableFromMs)
   const sentencesRef = useRef<HTMLDivElement>(null)
   /*
    * 새 자막이 들어오면 최신(하단)으로 따라간다 — 단, <b>이미 바닥에 붙어 있을 때만</b>(라이브
@@ -158,10 +168,10 @@ export default function CaptionDock({
             .join(' ')
           return (
             <article className={className} key={caption.segmentId} aria-busy={caption.pending || undefined}>
-              {/* 라벨은 자막 시각 그대로 보이되, 이동은 STT 지연을 보정한 지점으로 간다(문장 시작에 닿게). */}
+              {/* 라벨은 플레이어와 같은 축으로 보이고, 이동은 세션 축 값으로 건다(captionSeekMs). */}
               {canSeek
-                ? <button type="button" onClick={() => onSeek(captionSeekMs(caption))}>{caption.at}</button>
-                : <time>{caption.at}</time>}
+                ? <button type="button" onClick={() => onSeek(captionSeekMs(caption))}>{timeLabel(caption)}</button>
+                : <time>{timeLabel(caption)}</time>}
               <p>{renderCaptionText(caption, onSelectTerm)}</p>
             </article>
           )

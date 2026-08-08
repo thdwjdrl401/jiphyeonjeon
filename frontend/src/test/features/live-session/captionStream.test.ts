@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   CAPTION_MAX_LINES,
   CAPTION_STT_LAG_MS,
+  captionDisplayLabel,
   captionSeekMs,
   emptyCaptionStreamState,
   reduceCaptionStream,
@@ -326,6 +327,31 @@ describe('확정 세그먼트 경계 (caption.segment.final)', () => {
 
     expect(views).toHaveLength(1)
     expect(views[0].text).toBe('교정된 텍스트')
+  })
+})
+
+describe('자막 라벨은 플레이어와 같은 축으로 보인다 (captionDisplayLabel)', () => {
+  it('세션 축 시각을 availableFromMs만큼 내려 미디어 축으로 보여 준다', () => {
+    // 녹화가 세션보다 7초 늦게 시작했다면, 세션 03:14는 플레이어에서 03:07이다.
+    const caption = captionView({ startMs: 194_000, synced: true, at: '03:14' })
+    expect(captionDisplayLabel(caption, 7_000)).toBe('03:07')
+  })
+
+  it('availableFromMs가 없거나 0이면 자막 시각 그대로다', () => {
+    const caption = captionView({ startMs: 194_000, synced: true, at: '03:14' })
+    expect(captionDisplayLabel(caption, null)).toBe('03:14')
+    expect(captionDisplayLabel(caption, 0)).toBe('03:14')
+  })
+
+  it('세션 축이 아닌 fallback 자막은 변환하지 않는다', () => {
+    // stream-local 값에서 세션 축 간격을 빼면 의미 없는 숫자가 된다.
+    const caption = captionView({ startMs: 194_000, synced: false, at: '03:14' })
+    expect(captionDisplayLabel(caption, 7_000)).toBe('03:14')
+  })
+
+  it('녹화 시작보다 이른 자막은 0으로 눌러 음수를 만들지 않는다', () => {
+    const caption = captionView({ startMs: 3_000, synced: true, at: '00:03' })
+    expect(captionDisplayLabel(caption, 7_000)).toBe('00:00')
   })
 })
 
