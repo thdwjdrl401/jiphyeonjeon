@@ -206,6 +206,36 @@ describe('확정 세그먼트 경계 (caption.segment.final)', () => {
     })
   })
 
+  it('세그먼트에 sessionMs가 있으면 끝에서 구간 길이를 빼 세션 축 시작을 잡고 synced=true다', () => {
+    // stream-local은 900_000부터 시작하게 두어(=STT가 늦게 붙은 상황) 어느 축을 썼는지 구분한다.
+    // sessionMs=45_000은 세그먼트가 **끝난** 시각이므로, 길이 3_000을 뺀 42_000이 시작이어야 한다.
+    const views = selectCaptionViews(fold([
+      segmentFinal('stt-1', 0, 2, 900_000, '세션 축으로 옮겨야 한다.', { sessionMs: 45_000 }),
+    ]))
+
+    expect(views[0]).toMatchObject({ startMs: 42_000, endMs: 45_000, at: '00:42', synced: true })
+  })
+
+  it('세션 축 세그먼트는 재생 위치를 앞서면 감춰진다(다시보기에서 전부 노출되지 않는다)', () => {
+    // 이게 깨지면 다시보기에서 강의 끝 자막까지 처음부터 다 떠 있게 된다.
+    const views = selectCaptionViews(fold([
+      segmentFinal('stt-1', 0, 1, 900_000, '지금 지점의 말이다.', { sessionMs: 20_000 }),
+      segmentFinal('stt-1', 1, 2, 960_000, '한참 뒤의 말이다.', { sessionMs: 300_000 }),
+    ]))
+
+    expect(selectVisibleCaptions(views, 30_000).map((view) => view.text))
+      .toEqual(['지금 지점의 말이다.'])
+  })
+
+  it('세션 축 세그먼트의 seek 목표는 STT 방출 지연만큼 당겨진다', () => {
+    const [view] = selectCaptionViews(fold([
+      segmentFinal('stt-1', 0, 1, 900_000, '문장 시작에 닿아야 한다.', { sessionMs: 45_000 }),
+    ]))
+
+    expect(view.startMs).toBe(42_000)
+    expect(captionSeekMs(view)).toBe(42_000 - CAPTION_STT_LAG_MS)
+  })
+
   it('세그먼트가 덮지 않은(sequence > lastSequence) 델타는 뒤에 진행 중 조각으로 붙는다', () => {
     const views = selectCaptionViews(fold([
       delta('stt-1', 1, 1_000, '확정된 문장이다. '),
