@@ -79,6 +79,22 @@ export const CAPTION_MAX_LINES = 300
  */
 export const CAPTION_STT_LAG_MS = 1_500
 
+/**
+ * 자막 시각을 눌렀을 때 발화 시작보다 이만큼 **뒤로** 떨어뜨린다(ms). **정확 축 전용.**
+ *
+ * <p><b>노출 시점에는 걸지 않는다.</b> 자막이 화면에 뜨는 타이밍은 발화 시각 그대로가 맞다 —
+ * 운영에서 확인했다. 문제는 <b>이동</b>뿐이다: 발화 시작 지점으로 가면 소리가 들리기까지 약 2초가
+ * 빈다(운영 다시보기 실측).
+ *
+ * <p>빈 이유는 그 지점이 <b>말이 들리기 직전</b>이기 때문이다. VAD가 발화 경계를 잡을 때 활성화
+ * 프레임만큼 뒤로 물리고, 캡처에서 HLS로 나오기까지 영상이 조금 뒤처지는 것도 겹친다. 노출은
+ * 문장 <b>끝</b>을 보므로 이 앞쪽 여백에 영향을 받지 않고, seek만 시작을 겨냥해 드러난다.
+ *
+ * <p>이 값은 코드가 계산할 수 없다 — VAD 정책과 Egress의 시각 표기에 달렸다. 재보고 넣은 숫자이며,
+ * 다른 강의에서 다르게 보이면 조정한다. 너무 키우면 문장 첫 음절을 놓치므로 실측보다 크게 잡지 않는다.
+ */
+export const CAPTION_SEEK_OFFSET_MS = 2_000
+
 
 /** 확정 세그먼트 하나(caption.segment.final). `text`가 누적 델타를 덮어쓰는 권위 있는 최종 텍스트다. */
 interface CaptionSegmentState {
@@ -372,8 +388,8 @@ export function selectVisibleCaptions(
  * 들리는 순간에 자막이 뜬다.
  */
 function ceilingFor(caption: CaptionView, positionMs: number): number {
-  // 정확값은 발화 시각 그 자체라 재생 위치를 그대로 상한으로 쓴다. 근사 축만 지연을 더해 연다 —
-  // 정확값에 같은 보정을 걸면 그만큼 이르게 떠 버린다.
+  // 정확 축은 발화 시각 그 자체라 재생 위치를 그대로 상한으로 쓴다 — 운영에서 이 노출 시점이
+  // 맞는 것을 확인했다. 근사 축만 도착 기준의 늦음을 상쇄해 미리 연다.
   return caption.exact ? positionMs : positionMs + CAPTION_STT_LAG_MS
 }
 
@@ -385,8 +401,9 @@ function ceilingFor(caption: CaptionView, positionMs: number): number {
  * (늦게 도착하는 것보다 조금 이른 편이 회복 가능하다).
  */
 export function captionSeekMs(caption: CaptionView): number {
-  // 정확값은 그 자리가 곧 발화 시작이다. 지연을 빼면 문장 앞 여백으로 떨어진다.
-  if (!caption.synced || caption.exact) return caption.startMs
+  if (!caption.synced) return caption.startMs
+  // 정확 축: 발화 시각으로 가면 소리는 아직 나오지 않았다. 영상이 뒤처진 만큼 더 가야 그 말이 들린다.
+  if (caption.exact) return caption.startMs + CAPTION_SEEK_OFFSET_MS
   return Math.max(0, caption.startMs - CAPTION_STT_LAG_MS)
 }
 
