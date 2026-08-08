@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   CAPTION_MAX_LINES,
+  CAPTION_SEEK_OFFSET_MS,
   CAPTION_STT_LAG_MS,
   captionDisplayLabel,
   captionSeekMs,
@@ -251,20 +252,39 @@ describe('확정 세그먼트 경계 (caption.segment.final)', () => {
     expect(views[0]).toMatchObject({ startMs: 40_000, endMs: 43_500, synced: true, exact: true })
   })
 
-  it('정확 축은 STT 지연 보정을 받지 않는다(seek·노출 모두)', () => {
-    /*
-     * 보정은 도착 기준 근사값의 편향을 상쇄하려는 것이다. 발화 시각 그 자체에 걸면 그만큼 이르게
-     * 어긋난다 — ADR-0104가 정확값에 보정을 안 걸어야 했던 이유와 같고, 이번엔 축이 진짜 정확하다.
-     */
+  it('정확 축의 노출 시점은 발화 시각 그대로다', () => {
+    // 운영에서 이 타이밍이 맞는 것을 확인했다. seek 보정이 여기까지 번지면 자막이 늦게 뜬다.
     const [exact] = selectCaptionViews(fold([
-      segmentFinal('stt-1', 0, 1, 900_000, '보정 없음.', {
+      segmentFinal('stt-1', 0, 1, 900_000, '노출은 그대로.', {
         speechSessionMs: 40_000, speechEndSessionMs: 43_000,
       }),
     ]))
 
-    expect(captionSeekMs(exact)).toBe(40_000)
     expect(selectVisibleCaptions([exact], 42_999)).toHaveLength(0)
     expect(selectVisibleCaptions([exact], 43_000)).toHaveLength(1)
+  })
+
+  it('정확 축의 seek만 발화 시작보다 뒤로 간다', () => {
+    /*
+     * 발화 시작 지점으로 가면 소리가 들리기까지 약 2초가 빈다(운영 실측). 노출은 문장 **끝**을 보므로
+     * 이 앞쪽 여백에 영향받지 않고, seek만 시작을 겨냥해 드러난다 — 그래서 seek에만 건다.
+     */
+    const [exact] = selectCaptionViews(fold([
+      segmentFinal('stt-1', 0, 1, 900_000, '이동만 뒤로.', {
+        speechSessionMs: 40_000, speechEndSessionMs: 43_000,
+      }),
+    ]))
+
+    expect(captionSeekMs(exact)).toBe(40_000 + CAPTION_SEEK_OFFSET_MS)
+  })
+
+  it('근사 축에는 영상 지연 보정을 걸지 않는다(이중 보정 방지)', () => {
+    // 도착 기준이라 이미 발화보다 늦다 — 실측 2~5초로 영상 지연을 상당 부분 상쇄한다.
+    const [approx] = selectCaptionViews(fold([
+      segmentFinal('stt-2', 0, 1, 900_000, '근사는 그대로.', { sessionMs: 43_000 }),
+    ]))
+
+    expect(captionSeekMs(approx)).toBe(40_000 - CAPTION_STT_LAG_MS)
   })
 
   it('발화 벽시계가 없으면 종전 근사 경로를 그대로 쓴다(옛 세션)', () => {
