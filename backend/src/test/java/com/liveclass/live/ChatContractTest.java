@@ -84,6 +84,8 @@ class ChatContractTest {
                 .doesNotContain("테스터");
         // 익명을 켠 학생만 가명 형식.
         org.assertj.core.api.Assertions.assertThat(json(res).get("alias").asString()).startsWith("익명");
+        // 사진도 나가지 않는다 — 이름을 가려도 얼굴이 실리면 익명이 아니다(ChatAvatarPrivacyTest).
+        org.assertj.core.api.Assertions.assertThat(json(res).get("avatarUrl").isNull()).isTrue();
     }
 
     /**

@@ -1,5 +1,7 @@
 package com.liveclass.live.web;
 
+import com.liveclass.auth.api.UserDirectory;
+import com.liveclass.live.domain.ChatMessage;
 import com.liveclass.live.service.ChatService;
 import com.liveclass.live.web.dto.ChatMessageResponse;
 import com.liveclass.live.web.dto.SendChatMessageRequest;
@@ -17,6 +19,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -31,9 +34,11 @@ import java.util.UUID;
 public class ChatController {
 
     private final ChatService chatService;
+    private final UserDirectory userDirectory;
 
-    public ChatController(ChatService chatService) {
+    public ChatController(ChatService chatService, UserDirectory userDirectory) {
         this.chatService = chatService;
+        this.userDirectory = userDirectory;
     }
 
     @Operation(summary = "채팅 전송", description = "채팅 한 줄을 저장한다. 같은 clientMessageId로 다시 보내도 중복 저장되지 않는다(재전송 안전).")
@@ -46,7 +51,7 @@ public class ChatController {
         var saved = chatService.sendToSession(sessionId, requesterId,
                 request.clientMessageId(), request.text(), Boolean.TRUE.equals(request.isQuestion()),
                 Boolean.TRUE.equals(request.anonymous()));
-        return ChatMessageResponse.from(saved, request.viewingSessionMs(), requesterId);
+        return ChatMessageResponse.from(saved, request.viewingSessionMs(), requesterId, avatarUrls(List.of(saved)));
     }
 
     @Operation(summary = "채팅 복구 조회", description = "저장된 채팅을 시각순으로 불러온다. afterSessionMs 이후만. 접속·새로고침·되감기 때 과거 채팅 복구용.")
@@ -56,8 +61,28 @@ public class ChatController {
                                           @RequestParam(defaultValue = "100") int limit,
                                           Authentication authentication) {
         UUID requesterId = UUID.fromString(authentication.getName());
-        return chatService.listBySession(sessionId, requesterId, afterSessionMs, limit).stream()
-                .map(m -> ChatMessageResponse.from(m, null, requesterId))
+        var messages = chatService.listBySession(sessionId, requesterId, afterSessionMs, limit);
+        var avatars = avatarUrls(messages);
+        return messages.stream()
+                .map(m -> ChatMessageResponse.from(m, null, requesterId, avatars))
                 .toList();
+    }
+
+    /**
+     * 한 페이지에 등장한 <b>익명이 아닌</b> 발신자들의 프로필 사진을 한 번에 해석한다.
+     *
+     * <p>익명 발신자를 애초에 넣지 않는다. {@code ChatMessageResponse}가 익명이면 지도를 보지 않으므로
+     * 넣어도 새어 나가지는 않지만, 필요 없는 사람의 URL을 만들 이유도 없다 — presigned URL은 만드는
+     * 순간부터 유효하다.
+     *
+     * <p>메시지 수가 아니라 <b>사람 수</b>만큼만 왕복한다(distinct). 한 사람이 열 줄을 말해도 한 번이다.
+     */
+    private Map<UUID, String> avatarUrls(List<ChatMessage> messages) {
+        var senderIds = messages.stream()
+                .filter(m -> !m.isAnonymous())
+                .map(ChatMessage::getUserId)
+                .distinct()
+                .toList();
+        return senderIds.isEmpty() ? Map.of() : userDirectory.findAvatarUrls(senderIds);
     }
 }

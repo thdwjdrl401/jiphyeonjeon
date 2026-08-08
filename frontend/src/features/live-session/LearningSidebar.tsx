@@ -178,7 +178,16 @@ function DiscussionPanel({ messages, myDisplayName, revealThroughMs, composer, n
                     {/* 시각은 서버가 확정한 뒤에만 있다(낙관적 항목은 빈 문자열). */}
                     <header>
                       <span className="chat-list__author">
-                        <ProfileAvatar className="user-avatar--chat" displayName={avatarName} decorative />
+                        {/*
+                          사진이 있으면 사진, 없으면 이니셜. 익명 메시지에는 서버가 사진을 내려보내지
+                          않으므로(ADR-0050) 여기서 따로 가릴 것이 없다 — 없는 것을 그릴 수는 없다.
+                        */}
+                        <ProfileAvatar
+                          className="user-avatar--chat"
+                          displayName={avatarName}
+                          imageUrl={item.avatarUrl}
+                          decorative
+                        />
                         <strong>{displayName}</strong>
                       </span>
                       {item.time && <time>{item.time}</time>}
