@@ -9,6 +9,7 @@ import {
   type MediaProviderAdapter,
 } from '@vidstack/react'
 import { DefaultVideoLayout, defaultLayoutIcons } from '@vidstack/react/player/layouts/default'
+import { formatTimeLabel } from '@/features/live-session/captionAdapter'
 import '@vidstack/react/player/styles/default/theme.css'
 import '@vidstack/react/player/styles/default/layouts/video.css'
 
@@ -59,6 +60,23 @@ interface HlsMediaPlayerProps {
 }
 
 /** 라이브 DVR과 업로드 녹화강의가 공유하는 vidstack·hls.js 재생부. 도메인 상태 UI는 소유하지 않는다. */
+/**
+ * 라이브 컨트롤바의 경과 시각.
+ *
+ * <p>형식은 자막 라벨과 <b>같은 함수</b>를 쓴다(`formatTimeLabel`). 여기서 다시 구현하면 규칙이
+ * 갈라져 언젠가 한쪽만 바뀐다 — 자막을 눌러 이동한 뒤 두 숫자가 어긋나면 사용자는 이동이 잘못된
+ * 것으로 읽는다.
+ *
+ * <p>`tabular-nums`로 자릿수를 고정한다. 매초 바뀌는 숫자라 폭이 흔들리면 옆 컨트롤이 밀린다.
+ */
+function LiveElapsedTime({ mediaTimeMs }: { mediaTimeMs: number }) {
+  return (
+    <span className="vds-time live-elapsed-time" aria-label="재생 위치">
+      {formatTimeLabel(mediaTimeMs)}
+    </span>
+  )
+}
+
 export default function HlsMediaPlayer({
   sourceUrl,
   title,
@@ -78,6 +96,8 @@ export default function HlsMediaPlayer({
   const appliedSeekSequence = useRef(-1)
   const [liveDuration, setLiveDuration] = useState(-1)
   const isLive = streamType === 'live:dvr'
+  // 라이브 컨트롤바에 찍을 경과 시각. 라이브가 아니면 vidstack이 이미 시간을 그리므로 쓰지 않는다.
+  const [elapsedMs, setElapsedMs] = useState(0)
 
   // useCallback으로 참조를 고정한다 — 콜백 ref는 정체성이 바뀔 때마다 React가 떼었다 다시 붙이므로,
   // 매 렌더 새 함수를 주면 매번 인스턴스를 null로 지웠다 되살리는 헛수고가 생긴다.
@@ -143,7 +163,11 @@ export default function HlsMediaPlayer({
       onError={() => onStateChange('error')}
       onPlaying={() => onStateChange('playing')}
       onProviderChange={handleProviderChange}
-      onTimeUpdate={(detail) => onTimeChange?.(Math.max(0, Math.round(detail.currentTime * 1000)))}
+      onTimeUpdate={(detail) => {
+        const mediaTimeMs = Math.max(0, Math.round(detail.currentTime * 1000))
+        if (isLive) setElapsedMs(mediaTimeMs)
+        onTimeChange?.(mediaTimeMs)
+      }}
       onWaiting={() => onStateChange('buffering')}
     >
       <MediaProvider>
@@ -160,7 +184,19 @@ export default function HlsMediaPlayer({
           />
         ))}
       </MediaProvider>
-      <DefaultVideoLayout icons={defaultLayoutIcons} />
+      {/*
+        라이브에서는 vidstack이 시간 대신 LIVE 배지만 보인다(streamType='live:dvr'). 되감아도 지금
+        어디를 보고 있는지 알 수 없고, 자막 시각을 눌러 이동해도 확인할 대상이 없다.
+
+        <p>그래서 <b>LIVE 배지 옆, 원래 시간이 나오던 자리</b>에 경과 시각을 넣는다. 별도 헤더에 두면
+        눈이 가지 않는다 — 사람이 시간을 찾는 곳은 컨트롤바다.
+
+        <p>다시보기(on-demand)에는 넣지 않는다. vidstack이 이미 `mm:ss / 총길이`를 그 자리에 그린다.
+      */}
+      <DefaultVideoLayout
+        icons={defaultLayoutIcons}
+        slots={isLive ? { afterLiveButton: <LiveElapsedTime mediaTimeMs={elapsedMs} /> } : undefined}
+      />
     </MediaPlayer>
   )
 }
