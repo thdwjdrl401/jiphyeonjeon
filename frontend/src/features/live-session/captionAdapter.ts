@@ -363,6 +363,24 @@ function ceilingFor(caption: CaptionView, positionMs: number): number {
  * 문장 앞부분을 지나친 곳에 떨어져 "정확히 찾아가지 못한다". 지연분을 당겨 문장 시작 직전에 닿게 한다
  * (늦게 도착하는 것보다 조금 이른 편이 회복 가능하다).
  */
+/**
+ * 자막 옆에 보일 시각 문구.
+ *
+ * <p>내부 시각(`startMs`)은 <b>세션 축</b>이고, 플레이어 컨트롤바가 보여 주는 것은 <b>미디어 축</b>
+ * (녹화 시작이 0)이다. 둘은 `availableFromMs`(세션 시작 → 녹화 시작 간격)만큼 다르다. 라벨을 세션
+ * 축 그대로 두면 같은 순간인데 자막에는 03:14, 플레이어에는 03:07이 떠 사람이 어긋난 것으로 읽는다.
+ *
+ * <p>그래서 <b>보이는 숫자만</b> 미디어 축으로 내린다. 이동·노출 판정은 세션 축 그대로다 — 축을
+ * 통일한 이유(채팅·판서·AI 근거가 모두 세션-ms)를 버리지 않으면서 표시만 플레이어에 맞춘다.
+ *
+ * <p>세션 축이 아닌 fallback 자막(`synced=false`)은 변환하지 않는다. stream-local 값에서 세션 축
+ * 간격을 빼면 아무 의미 없는 숫자가 된다.
+ */
+export function captionDisplayLabel(caption: CaptionView, availableFromMs: number | null): string {
+  if (!caption.synced || !availableFromMs) return caption.at
+  return formatTimeLabel(Math.max(0, caption.startMs - availableFromMs))
+}
+
 export function captionSeekMs(caption: CaptionView): number {
   if (!caption.synced || caption.anchored) return caption.startMs
   return Math.max(0, caption.startMs - CAPTION_STT_LAG_MS)

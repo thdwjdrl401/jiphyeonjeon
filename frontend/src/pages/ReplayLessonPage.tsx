@@ -334,7 +334,7 @@ export default function ReplayLessonPage() {
 
           {/* 라이브 당시 저장된 자막이다. "교정"은 후처리가 붙은 뒤의 이름이라 아직 쓰지 않는다. */}
           {!captionPane.collapsed && (
-            <CaptionDock captions={glossary.captions} currentSessionMs={positionMs} heightPx={captionPane.size} label="자막" onSeek={seekSession} onSelectTerm={openGlossaryTerm} />
+            <CaptionDock availableFromMs={playback.playback?.source?.availableFromMs ?? null} captions={glossary.captions} currentSessionMs={positionMs} heightPx={captionPane.size} label="자막" onSeek={seekSession} onSelectTerm={openGlossaryTerm} />
           )}
         </section>
 
