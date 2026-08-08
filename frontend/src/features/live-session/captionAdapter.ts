@@ -308,6 +308,8 @@ export function selectCaptionViews(state: CaptionStreamState): CaptionView[] {
       }
 
       // 2. 진행 중 조각 — max lastSequence보다 큰(아직 확정 안 된) 델타만 이어 붙인다.
+      // 시작과 끝을 <b>둘 다</b> 추적한다. 노출 판정이 끝을 보므로(문장이 끝나야 뜬다), 끝을 시작으로
+      // 두면 오래 이어진 조각이 옛 시각으로 경계를 통과해 최신 발화까지 한꺼번에 드러난다.
       // 한 델타의 시각은 그 조각을 **내보낸** 시점이라, 그 조각의 말이 **시작된** 시점은 직전 델타의 시각에
       // 가깝다. 그래서 진행 중 조각의 시작 시각으로 첫 진행중 델타의 직전 델타 시각을 쓴다(첫 델타면 자기 시각).
       // 시각 축은 세그먼트와 같다 — 근사 sessionMs > stream-local fallback(앵커는 위 사유로 미사용).
@@ -315,6 +317,7 @@ export function selectCaptionViews(state: CaptionStreamState): CaptionView[] {
       let previousMs: number | null = null
       let partialText = ''
       let partialStartMs: number | null = null
+      let partialEndMs: number | null = null
       let partialAxis: Axis | null = null
       let started = false
       for (const sequence of sequences) {
@@ -329,6 +332,9 @@ export function selectCaptionViews(state: CaptionStreamState): CaptionView[] {
             partialAxis = axis
             started = true
           }
+          // 끝은 <b>마지막</b> 진행중 델타의 시각이다. 시작만 보면 오래 이어진 조각이 옛 시각으로
+          // 노출 경계를 통과해, 아직 들리지 않은 말까지 통째로 드러난다.
+          partialEndMs = axis.startMs
           partialText += delta.text
         }
         previousMs = axis.startMs
@@ -339,7 +345,7 @@ export function selectCaptionViews(state: CaptionStreamState): CaptionView[] {
         views.push({
           segmentId: `${line.sttSessionId}#${maxSegmentIndex + 1}`,
           startMs,
-          endMs: startMs,
+          endMs: partialEndMs ?? startMs,
           at: formatTimeLabel(startMs),
           text: partialText,
           termReferences: [],
