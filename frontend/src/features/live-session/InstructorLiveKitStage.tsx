@@ -180,6 +180,8 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
       console.warn('전체화면으로 전환하지 못했습니다', error)
     })
   }, [])
+  /** 시연 음성이 마이크 자리로 나가는 중인가. 그동안 강사의 실제 마이크는 잡히지 않는다(ADR-0103). */
+  const demoAudioLive = publisher.demoAudio.live
   const screenShareTrack = publisher.screenShareEnabled ? publisher.screenShareTrack : undefined
   const cameraTrack = publisher.cameraEnabled ? publisher.cameraTrack : undefined
   const mainTrack = screenShareTrack ?? cameraTrack
@@ -389,15 +391,28 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
             한 획 그어 보면 즉시 안다. 글자는 앞의 것에만 필요하고, 그것도 아이콘의 사선이 더 잘 한다.
           */}
           <div className="control-row__group">
+            {/*
+              시연 음성이 나가는 동안 <b>내 마이크는 꺼져 있다</b>. 트랙을 갈아끼우면서 LiveKit이
+              장치를 멈추기 때문이다(ADR-0103) — OS 표시등까지 꺼진다.
+
+              그런데 publication은 살아 있어서 `microphoneEnabled`가 그대로 true였고, 버튼은
+              <b>켜진 것처럼</b> 보였다. 강사는 자기 목소리가 나가는 줄 안다. 여기서는 그 값이 아니라
+              "내 마이크가 잡히고 있는가"를 그린다.
+
+              누르는 것은 잠근다 — 이 버튼이 할 수 있는 일(내 마이크 켜기)이 지금은 없다.
+              나가는 소리를 멎게 하는 것은 재생기 쪽 음소거다.
+            */}
             <button
-              aria-pressed={publisher.microphoneEnabled}
-              className={publisher.microphoneEnabled ? 'is-active' : ''}
-              disabled={!publisher.canControl || Boolean(publisher.pendingControl)}
-              title={publisher.microphoneEnabled ? '마이크 끄기' : '마이크 켜기'}
+              aria-pressed={demoAudioLive ? false : publisher.microphoneEnabled}
+              className={!demoAudioLive && publisher.microphoneEnabled ? 'is-active' : ''}
+              disabled={demoAudioLive || !publisher.canControl || Boolean(publisher.pendingControl)}
+              title={demoAudioLive
+                ? '내 마이크는 꺼져 있습니다 — 시연 음성이 마이크 자리로 나가는 중입니다'
+                : publisher.microphoneEnabled ? '마이크 끄기' : '마이크 켜기'}
               type="button"
               onClick={publisher.toggleMicrophone}
             >
-              <MediaToggleIcon kind="microphone" off={!publisher.microphoneEnabled} />
+              <MediaToggleIcon kind="microphone" off={demoAudioLive || !publisher.microphoneEnabled} />
               마이크
             </button>
             <button

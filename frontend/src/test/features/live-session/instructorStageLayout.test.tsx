@@ -38,6 +38,7 @@ function renderStage(overrides: Partial<InstructorLiveMedia> = {}) {
     toggleCamera: vi.fn(),
     toggleMicrophone: vi.fn(),
     toggleScreenShare: vi.fn(),
+    demoAudio: { fileName: null, live: false, playing: false, loop: false, positionMs: 0, durationMs: 0 },
     ...overrides,
   } as InstructorLiveMedia
   return render(
@@ -153,5 +154,40 @@ describe('강사 스테이지 배치', () => {
     getByRole('button', { name: '판서' }).click()
 
     expect(saveAnnotationVisible).toHaveBeenCalledWith(true)
+  })
+})
+
+/**
+ * 시연 음성이 나가는 동안 <b>내 마이크는 꺼져 있다</b> — 트랙을 갈아끼우면서 LiveKit이 장치를
+ * 멈추기 때문이다(ADR-0103). 그런데 publication은 살아 있어서 `microphoneEnabled`가 그대로
+ * true였고, 버튼은 켜진 것처럼 보였다. <b>강사는 자기 목소리가 나가는 줄 안다.</b>
+ */
+describe('시연 음성 중 마이크 표시', () => {
+  const live = {
+    demoAudio: { fileName: 'demo.m4a', live: true, playing: true, loop: false, positionMs: 0, durationMs: 0 },
+    microphoneEnabled: true,
+  }
+
+  it('내 마이크가 꺼진 것으로 보인다', () => {
+    const { getByRole } = renderStage(live)
+
+    const microphone = getByRole('button', { name: '마이크' })
+    expect(microphone).toHaveAttribute('aria-pressed', 'false')
+    expect(microphone.className).not.toContain('is-active')
+  })
+
+  /** 이 버튼이 할 수 있는 일(내 마이크 켜기)이 지금은 없다. 나가는 소리는 재생기에서 멎춘다. */
+  it('누를 수 없고 왜 그런지 말한다', () => {
+    const { getByRole } = renderStage(live)
+
+    const microphone = getByRole('button', { name: '마이크' })
+    expect(microphone).toBeDisabled()
+    expect(microphone.getAttribute('title')).toContain('시연 음성')
+  })
+
+  it('시연 음성이 없으면 예전 그대로다', () => {
+    const { getByRole } = renderStage({ microphoneEnabled: true })
+
+    expect(getByRole('button', { name: '마이크' })).toHaveAttribute('aria-pressed', 'true')
   })
 })
