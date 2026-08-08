@@ -5,6 +5,7 @@ import HlsMediaPlayer, {
   type HlsMediaState,
 } from '@/features/media/HlsMediaPlayer'
 import { StatusBadge } from '@/shared/ui/WorkspaceUi'
+import { formatTimeLabel } from './captionAdapter'
 import { isLiveStatus } from './liveSessionService'
 import type { PlaybackView } from './liveSessionService.interface'
 
@@ -84,6 +85,12 @@ export default function PlaybackPlayer({
   // 재생 정보 헤더를 재생바(vidstack 컨트롤)와 같은 타이밍으로 띄우고 지운다 — 컨트롤이 idle로
   // 숨을 때 헤더도 같이 숨어야 "동기화"고, 따로 놀면 한쪽만 남아 어색해진다.
   const [controlsVisible, setControlsVisible] = useState(true)
+  /*
+   * 라이브 컨트롤바는 시각 대신 LIVE 배지를 보인다(vidstack이 streamType='live:dvr'에서 그렇게 만든다).
+   * 되감아도 "지금 어디를 보고 있는지" 숫자가 없어, 자막 시각을 눌러 이동해도 확인할 대상이 없다.
+   * 그래서 헤더에 경과 시각을 직접 둔다 — 다시보기는 컨트롤바가 이미 보여 주므로 라이브에서만이다.
+   */
+  const [mediaTimeMs, setMediaTimeMs] = useState(0)
   const controlsHandleRef = useRef<HlsMediaControlsHandle | null>(null)
   const source = playback?.source ?? null
   const isLive = playback ? isLiveStatus(playback.liveSessionStatus) : true
@@ -131,9 +138,12 @@ export default function PlaybackPlayer({
             onControlsHandle={(handle) => { controlsHandleRef.current = handle }}
             onControlsVisibleChange={setControlsVisible}
             onStateChange={setPlaybackState}
-            onTimeChange={(mediaTimeMs) => onSessionTimeChange(
-              toSessionMs(mediaTimeMs / 1000, source.availableFromMs),
-            )}
+            onTimeChange={(currentMediaTimeMs) => {
+              // 헤더에는 **미디어 시각**을 그대로 보인다. 자막 라벨도 같은 축이라(captionDisplayLabel이
+              // availableFromMs를 빼서 내린다) 두 숫자가 일치한다 — 세션 축으로 보이면 다시 어긋난다.
+              setMediaTimeMs(currentMediaTimeMs)
+              onSessionTimeChange(toSessionMs(currentMediaTimeMs / 1000, source.availableFromMs))
+            }}
           />
         )
         : (
@@ -179,6 +189,12 @@ export default function PlaybackPlayer({
           {/* 세션이 끝나면 LIVE 표시를 내린다. 플레이어 안의 LIVE 버튼(엣지 복귀)은 vidstack이 담당한다. */}
           {isLive && <span className="live-dot" aria-hidden="true" />}
           <strong>{isLive ? 'LIVE' : '다시보기'}</strong>
+          {/* 자막 라벨과 같은 규칙으로 찍는다 — 형식을 여기서 다시 구현하면 둘이 갈라진다. */}
+          {isLive && (
+            <time className="student-live-status__elapsed" aria-label="재생 위치">
+              {formatTimeLabel(mediaTimeMs)}
+            </time>
+          )}
           <span>{lessonTitle}</span>
         </div>
         <div>
