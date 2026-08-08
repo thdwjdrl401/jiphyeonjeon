@@ -55,6 +55,19 @@ import {
   type DemoPublishState,
 } from './demoPublish'
 import {
+  clearDemoAudioFile as clearDemoAudioFileSource,
+  closeDemoAudioTrack,
+  demoAudioState,
+  openDemoAudioTrack,
+  pauseDemoAudio as pauseDemoAudioSource,
+  resumeDemoAudio as resumeDemoAudioSource,
+  seekDemoAudio as seekDemoAudioSource,
+  selectDemoAudioFile as selectDemoAudioFileSource,
+  setDemoAudioLoop as setDemoAudioLoopSource,
+  subscribeDemoAudio,
+  type DemoAudioState,
+} from './demoAudio'
+import {
   describeMediaFailure,
   hasInputDevice,
   preflightMediaFailure,
@@ -184,6 +197,18 @@ export interface InstructorLiveMedia extends InstructorLiveKitState {
   startDemoPublish: (file: File) => void
   /** 데모를 끄고 평소 장치로 돌아간다. */
   stopDemoPublish: () => void
+  /** 강의 중 마이크 자리에 끼워 넣는 음성 파일(ADR-0103). MP4 데모와 별개다. */
+  demoAudio: DemoAudioState
+  selectDemoAudioFile: (file: File) => void
+  clearDemoAudioFile: () => void
+  /** 재생을 시작하며 마이크를 이 파일로 바꾼다. */
+  startDemoAudio: () => void
+  /** 재생을 끝내고 진짜 마이크로 돌아간다. */
+  stopDemoAudio: () => void
+  pauseDemoAudio: () => void
+  resumeDemoAudio: () => void
+  seekDemoAudio: (positionMs: number) => void
+  setDemoAudioLoop: (loop: boolean) => void
 }
 
 const initialState: InstructorLiveKitState = {
@@ -280,6 +305,20 @@ async function publishDemoTracks(room: Room, quality: PublishQuality): Promise<v
   }
 }
 
+/** 음성 파일 데모의 실패. 카메라가 아니라 <b>마이크</b> 자리의 문제라 kind를 갈라 둔다. */
+function demoAudioFailure(error: unknown): MediaFailure {
+  return {
+    kind: 'microphone',
+    cause: 'unknown',
+    title: '음성 파일을 송출하지 못했습니다',
+    detail: error instanceof Error ? error.message : '알 수 없는 오류입니다.',
+    action: '파일을 다시 선택하거나, 그대로 마이크로 진행해 주세요.',
+    // 브라우저 권한으로 풀리는 문제가 아니다 — 파일 쪽 문제라 설정 안내를 띄우면 헛다리다.
+    needsBrowserSetting: false,
+    retryable: true,
+  }
+}
+
 /** 데모 송출 실패도 장치 실패와 같은 자리에 그린다 — 강사가 볼 곳이 하나여야 한다. */
 function demoMediaFailure(error: unknown): MediaFailure {
   const ready = demoPublishState().ready
@@ -330,6 +369,15 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
   const [microphonePermission, setMicrophonePermission] = useState<MediaPermissionState>('unknown')
   /** 데모 송출 상태. 화면이 배지를 띄우고 강사가 끌 수 있게 하는 근거다(ADR-0100). */
   const [demoState, setDemoState] = useState<DemoPublishState>(demoPublishState)
+  /*
+   * 음성 파일 데모(ADR-0103). 소스 모듈이 스스로 상태를 들고 있고 여기서는 구독만 한다 — 재생 위치는
+   * 200ms마다 바뀌는데, 그것까지 provider의 useState로 끌어올리면 이 컨텍스트를 쓰는 화면 전체가
+   * 그 주기로 다시 그려진다.
+   */
+  const [audioState, setAudioState] = useState<DemoAudioState>(demoAudioState)
+  useEffect(() => subscribeDemoAudio(() => { setAudioState(demoAudioState()) }), [])
+  /** 파일을 넣기 전 마이크가 있었는가. 없었으면 되돌릴 때 트랙을 내려야 한다. */
+  const demoAudioReplacedRef = useRef(false)
   // Room 생성 effect가 품질 변경마다 재실행되면 연결이 끊긴다. 최신 값은 ref로만 읽고,
   // 이미 올라간 트랙은 재게시로 반영한다.
   const qualityRef = useRef(quality)
@@ -850,6 +898,69 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
   }, [applyOverlayMirrored, openLocalDevices])
 
   /**
+   * 재생을 끝내고 <b>진짜 마이크로 돌아간다</b>(ADR-0103).
+   *
+   * <p>파일을 끼울 때 트랙을 갈아끼웠으면 다시 갈아끼워 되돌린다. 마이크가 아예 없던 강사였다면
+   * (ADR-0099는 마이크 없이도 시작을 허용한다) 우리가 올린 트랙이므로 내린다.
+   *
+   * <p>되돌릴 때 `providedByUser=false`로 넘긴다 — 다음 교체 때 LiveKit이 이 마이크 트랙을 스스로
+   * 멈추게 하려는 것이다. 파일 트랙은 그 규칙 밖이라 소스 모듈이 직접 멈춘다.
+   */
+  const stopDemoAudio = useCallback(async () => {
+    const room = roomRef.current
+    const publication = room?.localParticipant.getTrackPublication(Track.Source.Microphone)
+    const local = publication?.track
+    const replaced = demoAudioReplacedRef.current
+    demoAudioReplacedRef.current = false
+    try {
+      if (room && room.state === 'connected' && local instanceof LocalAudioTrack) {
+        if (replaced) {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+          const [microphone] = stream.getAudioTracks()
+          if (microphone) await local.replaceTrack(microphone, false)
+        } else {
+          await room.localParticipant.unpublishTrack(local)
+        }
+      }
+    } catch (error) {
+      setMediaFailure(demoAudioFailure(error))
+    } finally {
+      // 트랙을 되돌리지 못했더라도 파일 재생은 멈춘다 — 안 멈추면 소리만 계속 나간다.
+      closeDemoAudioTrack()
+      if (room) syncLocalState(room)
+    }
+  }, [setMediaFailure, syncLocalState])
+
+  /**
+   * 재생을 시작하며 <b>마이크 자리를 이 파일로 바꾼다</b>(ADR-0103).
+   *
+   * <p>새 트랙을 publish하지 않는다 — STT 에이전트는 마이크 publisher를 하나만 받고 둘째가 오면
+   * 그 자리에서 죽는다(`audio_source.py`). `replaceTrack`은 publication SID를 유지하므로
+   * 에이전트에게는 같은 트랙에서 소리만 바뀐 것이고, 자막이 끊기지 않는다.
+   */
+  const startDemoAudio = useCallback(async () => {
+    const room = roomRef.current
+    if (!room || room.state !== 'connected') return
+    setMediaFailure(undefined)
+    try {
+      const track = await openDemoAudioTrack(() => { void stopDemoAudio() })
+      const local = room.localParticipant.getTrackPublication(Track.Source.Microphone)?.track
+      if (local instanceof LocalAudioTrack) {
+        // 기존 마이크 MediaStreamTrack은 LiveKit이 멈춘다(providedByUser=false였다) — 장치가 풀린다.
+        await local.replaceTrack(track, true)
+        demoAudioReplacedRef.current = true
+      } else {
+        await room.localParticipant.publishTrack(track, { source: Track.Source.Microphone })
+        demoAudioReplacedRef.current = false
+      }
+      syncLocalState(room)
+    } catch (error) {
+      closeDemoAudioTrack()
+      setMediaFailure(demoAudioFailure(error))
+    }
+  }, [setMediaFailure, stopDemoAudio, syncLocalState])
+
+  /**
    * 품질 변경을 즉시 반영한다. Room을 다시 만들면 연결이 끊기므로, 이미 올라간 트랙만
    * 껐다 다시 올린다. 미리보기에서 바로 확인하고 조정할 수 있어야 의미가 있는 설정이다.
    */
@@ -1211,7 +1322,16 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
     toggleCamera: () => { void toggleControl('camera') },
     toggleMicrophone: () => { void toggleControl('microphone') },
     toggleScreenShare: () => { void toggleControl('screenShare') },
-  }), [annotationAudienceRevision, applyingQuality, cameraOverlay, changeQuality, demoState, microphonePermission, moveCameraOverlay, pendingControl, publishAnnotation, publishAnnotationState, publishLaser, quality, restoredAnnotation, restoredAnnotationVisible, retryMedia, saveAnnotationSnapshot, saveAnnotationVisible, sessionId, setMediaFailure, startDemoPublish, state, stopDemoPublish, toggleControl])
+    demoAudio: audioState,
+    selectDemoAudioFile: selectDemoAudioFileSource,
+    clearDemoAudioFile: clearDemoAudioFileSource,
+    startDemoAudio: () => { void startDemoAudio() },
+    stopDemoAudio: () => { void stopDemoAudio() },
+    pauseDemoAudio: pauseDemoAudioSource,
+    resumeDemoAudio: () => { void resumeDemoAudioSource() },
+    seekDemoAudio: seekDemoAudioSource,
+    setDemoAudioLoop: setDemoAudioLoopSource,
+  }), [audioState, startDemoAudio, stopDemoAudio, annotationAudienceRevision, applyingQuality, cameraOverlay, changeQuality, demoState, microphonePermission, moveCameraOverlay, pendingControl, publishAnnotation, publishAnnotationState, publishLaser, quality, restoredAnnotation, restoredAnnotationVisible, retryMedia, saveAnnotationSnapshot, saveAnnotationVisible, sessionId, setMediaFailure, startDemoPublish, state, stopDemoPublish, toggleControl])
 
   return (
     <InstructorLiveMediaContext.Provider value={value}>

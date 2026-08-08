@@ -1302,3 +1302,24 @@
   to { opacity: 1; transform: translateX(-50%); }
 }
 @media (prefers-reduced-motion: reduce) { .annotation-highlight-prompt { animation: none; } }
+
+/*
+ * 시연 음성 재생기(ADR-0103). 평소 강의에서는 admin이 아니면 아예 렌더되지 않으므로, 자리를 비워
+ * 두거나 접어 둘 필요가 없다.
+ *
+ * 재생 중에는 줄 전체가 인장색 테두리를 두른다 — 화면이 평소와 완전히 같아서, 이 줄 말고는 시연
+ * 중이라는 것을 알릴 자리가 없다.
+ */
+.demo-audio-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  margin-top: 10px; border: 1px solid var(--ink-100); border-radius: 12px;
+  padding: 8px 12px; background: var(--white); font-size: .7rem; }
+.demo-audio-bar.is-live { border-color: var(--seal); box-shadow: 0 0 0 3px rgba(168,58,36,.10); }
+/* 파일 입력은 버튼으로 대신 연다 — 기본 위젯은 폭이 브라우저마다 달라 줄이 흔들린다. */
+.demo-audio-bar__input { display: none; }
+.demo-audio-bar__name { overflow: hidden; max-width: 220px; color: var(--ink-700); font-weight: 600;
+  text-overflow: ellipsis; white-space: nowrap; }
+.demo-audio-bar__seek { flex: 1 1 160px; min-width: 120px; accent-color: var(--seal); }
+/* 숫자가 흔들리면 줄 전체가 떨린다 — 재생 중에는 이 값이 매 200ms 바뀐다. */
+.demo-audio-bar__time { color: var(--ink-500); font-variant-numeric: tabular-nums; }
+.demo-audio-bar__loop { display: inline-flex; align-items: center; gap: 5px; color: var(--ink-700); }
+.demo-audio-bar__flag { color: var(--seal); font-size: .66rem; }
