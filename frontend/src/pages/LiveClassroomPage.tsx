@@ -216,8 +216,12 @@ export default function LiveClassroomPage() {
       (current = []) => mergeChatMessage(current, {
         id: input.clientMessageId,
         clientMessageId: input.clientMessageId,
-        // 서버가 확정할 값이라 여기서 가명/표시 이름을 흉내내지 않는다 — 내 말풍선엔 이름을 쓰지 않는다.
-        alias: '',
+        /*
+         * 표시 이름은 서버가 확정한다. 다만 <b>익명으로 보냈다는 사실</b>은 보내는 순간에만 알 수
+         * 있으므로 여기서 남긴다 — 비워 두면 내 이름이 뜨고, 강사에게는 `익명3`이 보인다.
+         * 순번은 서버가 정하므로 `익명`까지만 적고, 에코가 오면 그 값이 이긴다.
+         */
+        alias: input.anonymous ? '익명' : '',
         text: input.text,
         time: '',
         question: input.question,

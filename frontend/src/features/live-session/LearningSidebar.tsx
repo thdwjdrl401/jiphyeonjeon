@@ -155,11 +155,24 @@ function DiscussionPanel({ messages, myDisplayName, revealThroughMs, composer, n
         <div className="chat-list" ref={chatListRef} onScroll={handleChatScroll}>
           {visibleMessages.length > 0
             ? visibleMessages.map((item) => {
-                const displayName = item.mine ? myDisplayName : item.alias
+                /*
+                 * 이름은 <b>남들에게 보이는 그대로</b> 쓴다.
+                 *
+                 * <p>예전에는 내 메시지만 `myDisplayName`으로 갈아 끼웠다. 그래서 익명으로 보내도
+                 * 내 말풍선에는 <b>내 이름</b>이 떴고, 강사·다른 수강생에게는 `익명3`이 보였다 —
+                 * 보내는 사람만 그 사실을 모른다. 익명이 되고 있는지 확인할 방법이 화면에 없었다.
+                 *
+                 * <p>내 것이라는 표시는 <b>오른쪽 정렬</b>이 이미 하고 있다(`is-mine`). 이름까지
+                 * 그 일을 겹쳐 할 이유가 없다.
+                 *
+                 * <p>서버가 아직 확정하지 않은 낙관적 항목은 alias가 비어 있다 — 그때만 내 이름으로
+                 * 메운다. 익명으로 보낸 낙관적 항목은 보내는 쪽이 `익명`을 채워 준다(순번은 서버가
+                 * 정하므로 거기까지만 적는다).
+                 */
+                const displayName = item.alias || myDisplayName
                 // 익명 가명은 진짜 이름이 아니므로 이니셜 아바타 대신 "?"로 채운다(ProfileAvatar의
-                // 빈 이름 폴백). 내 메시지는 내가 익명으로 보냈어도 항상 내 아바타로 보인다 —
-                // 이름 표시(myDisplayName)와 같은 규칙이다.
-                const avatarName = item.mine || !isAnonymousAlias(item.alias) ? displayName : ''
+                // 빈 이름 폴백). 내가 보낸 것이어도 마찬가지다 — 익명이면 남들이 보는 것과 같게 둔다.
+                const avatarName = isAnonymousAlias(displayName) || displayName === '익명' ? '' : displayName
                 return (
                   <article className={item.mine ? 'is-mine' : ''} key={item.id}>
                     {/* 시각은 서버가 확정한 뒤에만 있다(낙관적 항목은 빈 문자열). */}
