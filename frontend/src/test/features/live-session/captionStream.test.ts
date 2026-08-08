@@ -316,6 +316,25 @@ describe('확정 세그먼트 경계 (caption.segment.final)', () => {
     expect(selectVisibleCaptions([caption], 43_000 - CAPTION_STT_LAG_MS)).toHaveLength(1)
   })
 
+  it('오래 이어진 진행 중 조각은 최신 델타 시각까지 기다린다', () => {
+    /*
+     * 노출 판정은 문장 **끝**을 본다. 진행 중 조각의 끝을 시작으로 두면, 1분 전에 시작해 지금까지
+     * 이어진 조각이 "1분 전"이라는 옛 시각으로 경계를 통과해 <b>아직 들리지 않은 최신 발화까지</b>
+     * 한꺼번에 드러난다 — 라이브 학생 화면에서 자막이 주르륵 떴다가 사라지던 증상이다.
+     */
+    const views = selectCaptionViews(fold([
+      syncedDelta('stt-1', 1, 10_000, '한참 전에 시작한 말이 '),
+      syncedDelta('stt-1', 2, 70_000, '지금도 이어지고 있다'),
+    ]))
+
+    expect(views[0].startMs).toBe(10_000)
+    expect(views[0].endMs).toBe(70_000)   // 시작이 아니라 마지막 델타 시각
+
+    // 재생 위치가 10초일 때: 시작은 지났지만 최신 발화는 아직 들리지 않았다 → 감춘다.
+    expect(selectVisibleCaptions(views, 10_000)).toHaveLength(0)
+    expect(selectVisibleCaptions(views, 70_000 - CAPTION_STT_LAG_MS)).toHaveLength(1)
+  })
+
   it('진행 중 조각은 끝 기준 노출의 영향을 받지 않는다', () => {
     // 아직 말한 만큼만 담고 있어 즉시 보여도 앞서지 않는다 — endMs === startMs다.
     const [partial] = selectCaptionViews(fold([
