@@ -194,12 +194,32 @@ export function reduceCaptionStream(
  *
  * 한 라인(sttSessionId)당:
  *  1. 확정 세그먼트(caption.segment.final)마다 권위 있는 CaptionView 하나 — segmentIndex 순, pending=false.
- *     `startMs`는 계약상 raw `startStreamElapsedMs`를 그대로 쓴다(세션-ms 변환 금지). raw stream-local 축이라
- *     synced=false다(위치 동기화 축이 아니므로 학생 화면에서 그대로 노출된다).
+ *     시각 축은 델타와 같다(ADR-0045 §4): 서버가 준 근사 `sessionMs`가 있으면 세션 축(synced=true),
+ *     없으면 raw `startStreamElapsedMs`로 fallback(synced=false). {@link segmentStartMs} 참고.
  *  2. 아직 어느 세그먼트에도 안 잡힌(=sequence > 세그먼트들의 max lastSequence) 델타를 이어 붙인 진행 중 조각
  *     하나 — pending(라인이 completed면 false). 나중 세그먼트가 이 조각을 덮으면 조각은 줄거나 사라진다.
  *     세그먼트가 아직 없으면 델타 전체가 이 진행 중 조각이다(과거 동작과 같되 문장부호 분할은 없다).
  */
+/**
+ * 확정 세그먼트의 시작 시각을 **세션 축**으로 옮긴다.
+ *
+ * <p>세그먼트가 들고 있는 두 시각은 축이 다르다. `start/endStreamElapsedMs`는 STT attempt가 붙은
+ * 순간이 0인 stream-local 축이고, `sessionMs`는 `segment.final`이 **도착한** 시각을 세션 원점
+ * (clockOriginAt)에서 잰 값이다 — 즉 구간의 **끝**에 대응한다.
+ *
+ * <p>두 축은 원점만 다르고 흐르는 속도는 같으므로 <b>구간 길이는 양쪽에서 동일하다.</b> 그래서
+ * 끝(sessionMs)에서 길이를 빼면 시작이 나온다. stream-local 값을 세션-ms로 직접 변환하는 것이
+ * 아니라(CONTRACT §3-4 금지) 세션 축 안에서 길이만큼 되짚는 것이다.
+ *
+ * <p>이걸 안 하면 stream-local 값이 세션-ms인 척 흘러 들어가 노출·seek·현재 cue가 모두 attempt
+ * 시작 시점만큼 어긋난다. STT가 재접속하면 그 축은 0으로 리셋되므로 어긋남의 크기도 그때 바뀐다.
+ */
+function segmentStartMs(segment: CaptionSegmentState): number {
+  if (segment.sessionMs == null) return segment.startStreamElapsedMs
+  const durationMs = Math.max(0, segment.endStreamElapsedMs - segment.startStreamElapsedMs)
+  return Math.max(0, segment.sessionMs - durationMs)
+}
+
 export function selectCaptionViews(state: CaptionStreamState): CaptionView[] {
   return [...state.lines.values()]
     .sort((left, right) => left.order - right.order)
@@ -210,15 +230,17 @@ export function selectCaptionViews(state: CaptionStreamState): CaptionView[] {
       let maxSegmentIndex = -1
       let maxLastSequence: number | null = null
       for (const segment of segments) {
+        const startMs = segmentStartMs(segment)
+        const synced = segment.sessionMs != null
         views.push({
           segmentId: `${line.sttSessionId}#${segment.segmentIndex}`,
-          startMs: segment.startStreamElapsedMs,
-          endMs: segment.endStreamElapsedMs,
-          at: formatTimeLabel(segment.startStreamElapsedMs),
+          startMs,
+          endMs: synced ? segment.sessionMs! : segment.endStreamElapsedMs,
+          at: formatTimeLabel(startMs),
           text: segment.text,
           termReferences: [],
           pending: false,
-          synced: false,
+          synced,
         })
         if (segment.segmentIndex > maxSegmentIndex) maxSegmentIndex = segment.segmentIndex
         if (maxLastSequence == null || segment.lastSequence > maxLastSequence) maxLastSequence = segment.lastSequence
@@ -295,7 +317,11 @@ export function selectVisibleCaptions(
  *
  * 근사 축(`synced`)의 startMs는 발화보다 STT 방출 지연만큼 늦다 — 그대로 seek하면 문장 앞부분을 지나친
  * 곳에 떨어져 "정확히 찾아가지 못한다". 지연분을 당겨 문장 시작 직전에 닿게 한다(늦게 도착하는 것보다
- * 조금 이른 편이 회복 가능하다). 세그먼트형(다시보기) 자막은 정확한 구간 시각이라 보정하지 않는다.
+ * 조금 이른 편이 회복 가능하다).
+ *
+ * <p>확정 세그먼트도 마찬가지로 보정한다. 세그먼트의 세션 축 시작은 `sessionMs`(= 도착 시각)에서
+ * 구간 길이를 뺀 값이라 같은 지연을 그대로 물려받는다 — 구간 길이가 정확한 것과 축의 원점이 늦은 것은
+ * 별개다.
  */
 export function captionSeekMs(caption: CaptionView): number {
   if (!caption.synced) return caption.startMs
