@@ -2,7 +2,7 @@
 
 > 📍 하네스 개요: [../../harness/README.md](../../harness/README.md) · 아키텍처: [../../ARCHITECTURE.md](../../ARCHITECTURE.md) · 계약: [../../CONTRACT.md](../../CONTRACT.md)
 
-- **상태**: 채택 — **생산자(realtime-agent)만 구현.** 소비자(Spring·FE)는 후속.
+- **상태**: 채택 — 생산자(realtime-agent)·소비자(Spring·FE·AI 근거) 전부 구현.
 - **일자**: 2026-08-09
 - **관련**: [0106](0106-caption-time-axis-is-wall-clock-not-audio.md)(원인 규명·되돌림), [0104](0104-anchored-caption-session-ms.md)(철회),
   [0052](0052-caption-segment-anchor-consumption.md)(앵커 영속), `ai/realtime-agent/CONTRACT.md` §3,
@@ -77,10 +77,13 @@ audio source가 도착 시각을 stamp하지 않으면 키 자체가 빠진다. 
 ## 결과
 
 - 자막을 세션 시계에 **정확히** 놓을 수 있는 정보가 처음으로 파이프라인에 생긴다.
-- 지금은 **아무도 소비하지 않는다** — 관측 가능한 변화가 없다.
-- 후속으로 Spring이 `startedAt − clockOriginAt`을 계산해 내려주면, FE의 근사 축과
-  `CAPTION_STT_LAG_MS`가 함께 사라진다. **AI 근거 경로(`ReplayAiContextService`)의 최대 21초 오차도
-  같이 풀린다.**
+- Spring이 `startedAt − clockOriginAt`을 `speechSessionMs`로 내려주고 FE가 그것을 쓴다. 그 경로에서는
+  `CAPTION_STT_LAG_MS` 보정이 걸리지 않는다 — 근사값의 편향을 상쇄하는 상수라 정확값에 걸면 이르게
+  어긋난다. 벽시계가 없으면(옛 세션) 종전 근사 축으로 물러난다.
+- **AI 근거 경로(`ReplayAiContextService`)도 발화 벽시계로 옮겼다.** 이쪽은 **물러나지 않고 버린다** —
+  틀린 시각으로 "지금 이 부분"을 고르면 엉뚱한 곳을 인용해 답이 틀리기 때문이다(ADR-0042). 그래서
+  **이 기능 이전에 녹화된 강의는 다시보기 AI에 자막 근거가 없다**(자료·판서 근거는 그대로).
+- **표시와 AI의 정책이 다르다.** 표시는 덜 정확해도 보여 주는 편이 낫고, 근거는 틀리느니 없는 편이 낫다.
 
 ## 검증
 
