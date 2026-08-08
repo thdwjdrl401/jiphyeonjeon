@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 import asyncio
 import logging
 import time
@@ -270,6 +272,12 @@ class SegmentedStreamingEngine(ABC):
                     end_ms,
                     item.boundary_reason if index == last_index else "SILENCE",
                     text_already_delivered=text_already_delivered,
+                    # Wall clock for this sentence's slice. The audio clock above excludes
+                    # silence, so it cannot be moved onto a session timeline on its own;
+                    # these two carry that mapping. Apportioned with the same ratio as the
+                    # audio-clock span so a sentence keeps its share of the segment.
+                    started_at=_wall_clock_for(item, start_ms),
+                    ended_at=_wall_clock_for(item, end_ms),
                 )
             )
 
@@ -322,3 +330,18 @@ def _apportion(sentences: list[str], start_ms: int, end_ms: int) -> list[tuple[i
         cursor_ms = boundary_ms
     spans.append((cursor_ms, end_ms))
     return spans
+
+
+def _wall_clock_for(item: SpeechSegment, audio_ms: int) -> datetime | None:
+    """세그먼트 안의 한 지점을 벽시계로 옮긴다. 표식이 없으면 None(짐작하지 않는다).
+
+    세그먼트 자체는 `started_at`~`ended_at` 사이를 차지한다. 그 구간 안에서는 소리가 끊기지 않으므로
+    (끊겼다면 세그먼트가 거기서 닫혔다) 오디오 축의 비율을 그대로 벽시계에 적용할 수 있다.
+    """
+    if item.started_at is None or item.ended_at is None:
+        return None
+    audio_span = item.end_ms - item.start_ms
+    if audio_span <= 0:
+        return item.started_at
+    ratio = (audio_ms - item.start_ms) / audio_span
+    return item.started_at + (item.ended_at - item.started_at) * ratio

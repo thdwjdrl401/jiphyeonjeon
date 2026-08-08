@@ -4,6 +4,7 @@ import logging
 import math
 import struct
 from collections import deque
+from datetime import datetime, timedelta
 from dataclasses import dataclass
 from importlib import import_module
 from typing import Literal, Protocol, cast
@@ -31,6 +32,11 @@ class SpeechSegment:
     start_ms: int
     end_ms: int
     boundary_reason: SegmentBoundaryReason = "SILENCE"
+    # Wall clock of the speech boundaries. `start_ms`/`end_ms` run on the received-audio
+    # clock, which excludes silence by design, so they cannot be converted to a session
+    # timeline on their own. None when chunks carried no `captured_at`.
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
     speech_ms: int = 0
     segment_ms: int = 0
     speech_ratio: float = 0.0
@@ -90,8 +96,18 @@ class VadSegmenter:
         self._speech_end_ms = 0
         self._speech_ms = 0
         self._silence_ms = 0
+        # (audio clock, wall clock) pairs, one per chunk. A single running offset would
+        # be wrong the moment audio stops arriving: the gap belongs to the wall clock but
+        # not to the audio clock, so a boundary from *before* the gap must be resolved
+        # against the mark that was current then. Bounded to the longest segment this
+        # policy can produce plus its pre-roll — older marks can no longer be referenced.
+        self._clock_marks: deque[tuple[int, datetime]] = deque(
+            maxlen=max(2, (max_speech_ms + pad_ms) // frame_ms + 2)
+        )
 
     def push(self, chunk: AudioChunk) -> list[SpeechSegment]:
+        if chunk.captured_at is not None:
+            self._clock_marks.append((self._elapsed_ms, chunk.captured_at))
         self._buffer += self._normalizer.normalize(chunk)
         completed: list[SpeechSegment] = []
         while len(self._buffer) >= self._frame_bytes:
@@ -204,6 +220,25 @@ class VadSegmenter:
         rms = math.sqrt(square_sum / sample_count)
         return segment_ms, speech_ratio, 20 * math.log10(rms / 32_768)
 
+    def _wall_clock_at(self, elapsed_ms: int) -> datetime | None:
+        """오디오 시계의 한 지점을 벽시계로 옮긴다. 표식이 없으면 None(짐작하지 않는다).
+
+        같은 청크 안에서는 소리가 끊기지 않으므로, 그 지점을 덮는 <b>가장 최근 표식</b>에서
+        경과분을 더하면 된다. 표식보다 이른 지점을 물으면 그 표식으로 되짚는다 — 사이에 공백이
+        없었다는 뜻이라 안전하다.
+        """
+        mark: tuple[int, datetime] | None = None
+        for candidate in self._clock_marks:
+            if candidate[0] <= elapsed_ms:
+                mark = candidate
+            else:
+                break
+        if mark is None:
+            mark = self._clock_marks[0] if self._clock_marks else None
+        if mark is None:
+            return None
+        return mark[1] + timedelta(milliseconds=elapsed_ms - mark[0])
+
     def _flush(
         self,
         boundary_reason: SegmentBoundaryReason,
@@ -219,6 +254,8 @@ class VadSegmenter:
             start_ms=self._speech_start_ms,
             end_ms=self._speech_end_ms,
             boundary_reason=boundary_reason,
+            started_at=self._wall_clock_at(self._speech_start_ms),
+            ended_at=self._wall_clock_at(self._speech_end_ms),
             speech_ms=self._speech_ms,
             segment_ms=segment_ms,
             speech_ratio=speech_ratio,

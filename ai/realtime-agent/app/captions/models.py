@@ -109,6 +109,13 @@ class CaptionSegmentFinal:
     boundary_reason: str
     occurred_at: datetime
     contract_version: str = "1"
+    # Wall clock of the speech boundaries. `start/end_stream_elapsed_ms` run on the
+    # received-audio clock, which excludes silence by design, so a consumer cannot move
+    # them onto a session timeline without knowing how long audio was absent. These two
+    # carry that directly. Optional — None when the audio source stamped no arrival time,
+    # and then consumers behave exactly as before.
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
 
     def __post_init__(self) -> None:
         if self.contract_version != "1":
@@ -118,6 +125,14 @@ class CaptionSegmentFinal:
         _validate_uuid(self.lesson_id, "lesson_id")
         _validate_identifier(self.stt_session_id, "stt_session_id")
         _validate_integer(self.segment_index, "segment_index", minimum=0)
+        for label, value in (("started_at", self.started_at), ("ended_at", self.ended_at)):
+            if value is None:
+                continue
+            if not isinstance(value, datetime) or value.utcoffset() is None:
+                raise ValueError(f"{label} must be a timezone-aware datetime")
+        if (self.started_at is not None and self.ended_at is not None
+                and self.ended_at < self.started_at):
+            raise ValueError("ended_at must not precede started_at")
         _validate_integer(self.last_sequence, "last_sequence", minimum=1)
         _validate_integer(self.start_stream_elapsed_ms, "start_stream_elapsed_ms", minimum=0)
         _validate_integer(self.end_stream_elapsed_ms, "end_stream_elapsed_ms", minimum=0)

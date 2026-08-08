@@ -41,6 +41,12 @@ class AudioChunk:
     num_channels: int
     stream_elapsed_ms: int
     audio_started_at: datetime | None = None
+    # Wall clock when this chunk arrived. `stream_elapsed_ms` counts *received audio*,
+    # so silence-suppressed or muted stretches never enter it and it falls behind the
+    # wall clock by however long the audio was absent. Carrying the wall clock lets a
+    # consumer place speech on the session timeline without guessing that gap.
+    # Optional: without it everything downstream behaves exactly as before.
+    captured_at: datetime | None = None
 
     def __post_init__(self) -> None:
         if self.sample_rate <= 0:
@@ -78,6 +84,12 @@ class SegmentFinal:
     # mapper then publishes the final without re-sending the text as a delta, which
     # would duplicate it for delta consumers when one segment yields several finals.
     text_already_delivered: bool = False
+    # Wall clock of the speech boundaries. `start/end_stream_elapsed_ms` sit on the
+    # received-audio clock, which excludes silence by design; these two do not, so a
+    # consumer can map speech onto the session timeline directly. Optional — None when
+    # the audio source did not carry `captured_at`.
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
 
     def __post_init__(self) -> None:
         if not self.text:

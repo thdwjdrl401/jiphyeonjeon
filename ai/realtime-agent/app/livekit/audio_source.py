@@ -303,8 +303,9 @@ class LiveKitInstructorAudioSource:
                 duration_ns = (
                     frame.samples_per_channel * _NANOSECONDS_PER_SECOND + frame.sample_rate // 2
                 ) // frame.sample_rate
+                captured_at = self._clock()
                 if self._audio_started_at is None:
-                    self._audio_started_at = self._clock() - timedelta(
+                    self._audio_started_at = captured_at - timedelta(
                         microseconds=duration_ns // 1_000
                     )
                 self._captured_nanoseconds += duration_ns
@@ -314,6 +315,11 @@ class LiveKitInstructorAudioSource:
                     num_channels=frame.num_channels,
                     stream_elapsed_ms=self._captured_nanoseconds // 1_000_000,
                     audio_started_at=self._audio_started_at,
+                    # `stream_elapsed_ms` above is the sum of received frame durations,
+                    # so any stretch without frames (mute, silence suppression, loss) is
+                    # missing from it. Stamping arrival keeps the wall clock available
+                    # downstream instead of discarding it after the first frame.
+                    captured_at=captured_at,
                 )
                 try:
                     self._queue.put_nowait(chunk)
