@@ -132,9 +132,22 @@ public class ChatService {
         // 저장이 실제로 일어난 경우에만 발행 → 커밋 후 리스너가 브로드캐스트한다(REST·WS 공용 실시간 경로).
         eventPublisher.publishEvent(new ChatMessageStoredEvent(
                 saved.getLiveSessionId(), saved.getLessonId(), String.valueOf(saved.getId()),
-                saved.getClientMessageId(), saved.getSenderName(), saved.getSessionMs(),
+                saved.getClientMessageId(), saved.getSenderName(), avatarUrlFor(saved), saved.getSessionMs(),
                 saved.getText(), saved.isQuestion(), saved.getCreatedAt()));
         return saved;
+    }
+
+    /**
+     * 브로드캐스트에 실을 프로필 사진.
+     *
+     * <p><b>익명이면 조회하지 않는다.</b> null을 넣는 것으로 충분해 보이지만, 조회부터 하지 않으면
+     * 나중에 이 자리를 고치는 사람이 실수로 값을 흘릴 여지가 없다 — 손에 없는 것은 실을 수 없다.
+     */
+    private String avatarUrlFor(ChatMessage saved) {
+        if (saved.isAnonymous()) {
+            return null;
+        }
+        return userDirectory.findAvatarUrls(List.of(saved.getUserId())).get(saved.getUserId());
     }
 
     /** 라이브 시작(clock_origin_at) 기준 경과 ms. 아직 시작 전이면 0. */

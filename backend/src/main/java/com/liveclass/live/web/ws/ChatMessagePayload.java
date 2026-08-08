@@ -9,7 +9,7 @@ import java.time.OffsetDateTime;
  * 라이브 중 "내 메시지" 우측 정렬은 FE가 자기 {@code clientMessageId} 에코로 판별하고(접속 중이라 메모리에
  * 있음), 콜드 복구는 REST GET의 {@code mine}으로 한다(open-questions §8). userId는 담지 않는다.
  * {@code alias}는 REST 응답과 같은 규칙이다 — 익명 전송이면 세션 한정 가명, 아니면 발신자가 스스로 지정한
- * 표시 이름(ADR-0050).
+ * 표시 이름(ADR-0050). {@code avatarUrl}도 같은 규칙이다 — 익명이면 null이라 사진으로도 특정되지 않는다.
  */
 public record ChatMessagePayload(
         String messageId,
@@ -20,6 +20,7 @@ public record ChatMessagePayload(
         String text,
         boolean isQuestion,
         String alias,
+        String avatarUrl,
         OffsetDateTime createdAt
 ) {
 
@@ -33,6 +34,7 @@ public record ChatMessagePayload(
                 e.text(),
                 e.isQuestion(),
                 e.alias(),
+                e.avatarUrl(),
                 e.createdAt());
     }
 }

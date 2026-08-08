@@ -92,3 +92,40 @@ describe('채팅 메시지 좌우 정렬', () => {
     expect(article.querySelector('time')).toBeNull()
   })
 })
+
+/**
+ * 채팅에 프로필 사진을 그린다 — 다만 <b>익명 메시지에는 실릴 수 없다.</b>
+ *
+ * <p>이름을 가려도 사진이 실리면 사람이 특정된다. 같은 강의를 듣는 사람들끼리는 얼굴을 알고,
+ * 프로필 사진은 대개 얼굴이다(ADR-0050). 그래서 서버가 익명 메시지에는 `avatarUrl`을 아예 내려보내지
+ * 않는다 — 화면은 없는 것을 그릴 수 없다.
+ */
+describe('채팅 프로필 사진', () => {
+  it('사진이 있으면 이니셜 대신 사진을 그린다', () => {
+    const { container } = render(sidebar([
+      { id: 'm1', alias: '김학생', text: '안녕하세요', time: '10:00', avatarUrl: 'https://cdn.test/a.png' },
+    ]))
+
+    expect(container.querySelector('.user-avatar--chat img')).toHaveAttribute('src', 'https://cdn.test/a.png')
+  })
+
+  it('사진이 없으면 이니셜로 채운다', () => {
+    const { container } = render(sidebar([
+      { id: 'm1', alias: '김학생', text: '안녕하세요', time: '10:00' },
+    ]))
+
+    expect(container.querySelector('.user-avatar--chat img')).toBeNull()
+    expect(container.querySelector('.user-avatar--chat')?.textContent).toBe('김')
+  })
+
+  /** 서버가 안 내려보내는 것이 정본이지만, 화면도 그 전제를 잡아 둔다. */
+  it('익명 메시지에는 사진이 오지 않는다', () => {
+    const { container } = render(sidebar([
+      { id: 'm1', alias: '익명1', text: '질문 있어요', time: '10:00' },
+    ]))
+
+    expect(container.querySelector('.user-avatar--chat img')).toBeNull()
+    // 가명은 진짜 이름이 아니므로 이니셜도 쓰지 않는다.
+    expect(container.querySelector('.user-avatar--chat')?.textContent).toBe('?')
+  })
+})

@@ -298,6 +298,8 @@ export const mockLiveSessionService = {
       id: `msg_${Date.now()}`,
       clientMessageId: input.clientMessageId,
       alias: input.anonymous ? '익명1' : '김학생',
+      // 익명이면 서버가 사진을 내려보내지 않는다(ADR-0050) — mock도 같은 규칙이어야 화면을 시험할 수 있다.
+      avatarUrl: input.anonymous ? null : 'https://i.pravatar.cc/80?img=12',
       text: input.text,
       time: '현재',
       question: input.question,
@@ -615,10 +617,11 @@ export const mockLiveSessionService = {
  */
 
 /** 다른 수강생·강사가 방금 보낸 것처럼 채팅 한 줄을 흘린다. subscribeChatMessages 구독자 전원이 받는다. */
-export function devPushChatMessage(sessionId: string, input: { text: string; alias?: string; mine?: boolean; question?: boolean }) {
+export function devPushChatMessage(sessionId: string, input: { text: string; alias?: string; mine?: boolean; question?: boolean; avatarUrl?: string | null }) {
   const message: ChatMessageView = {
     id: `msg_dev_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     alias: input.alias ?? (input.mine ? '김학생' : '익명2'),
+    avatarUrl: input.avatarUrl ?? null,
     text: input.text,
     time: new Date().toLocaleTimeString('ko-KR'),
     question: input.question,

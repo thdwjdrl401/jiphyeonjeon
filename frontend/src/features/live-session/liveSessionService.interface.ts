@@ -44,6 +44,11 @@ export interface ChatMessageView {
   question?: boolean
   /** 요청자 본인이 보낸 메시지(REST `mine` 또는 내 clientMessageId 에코). 우측 정렬용. */
   mine?: boolean
+  /**
+   * 발신자 프로필 사진. <b>익명 전송이면 언제나 없다</b> — 이름을 가려도 사진이 실리면 사람이
+   * 특정되므로 서버가 아예 내려보내지 않는다(ADR-0050). 사진을 올리지 않은 사용자도 없다.
+   */
+  avatarUrl?: string | null
   /** 서버가 아직 확정하지 않은 낙관적 항목(전송 중). */
   pending?: boolean
 }

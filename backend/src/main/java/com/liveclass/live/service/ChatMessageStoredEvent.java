@@ -12,6 +12,9 @@ import java.util.UUID;
  * {@code alias}는 발신자가 익명을 선택했으면 세션 한정 가명, 아니면 발신자가 스스로 지정한 표시 이름이다
  * (ADR-0050). "내 메시지" 판별은 라이브 중엔 FE가 자기 {@code clientMessageId} 에코로,
  * 콜드 복구는 REST GET의 {@code mine}으로 한다.
+ *
+ * <p>{@code avatarUrl}도 같은 불변식 아래 있다 — <b>익명 전송이면 언제나 null이다.</b> 이름을 가려도
+ * 사진이 실리면 사람이 특정된다. 이 값은 {@code ChatService}가 채우며, 익명이면 조회조차 하지 않는다.
  */
 public record ChatMessageStoredEvent(
         UUID sessionId,
@@ -19,6 +22,7 @@ public record ChatMessageStoredEvent(
         String messageId,
         String clientMessageId,
         String alias,
+        String avatarUrl,
         long sessionMs,
         String text,
         boolean isQuestion,
