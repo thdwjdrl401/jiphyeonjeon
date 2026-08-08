@@ -30,14 +30,14 @@ public class LiveCaptionService {
     private final LiveCaptionRepository repository;
     private final ApplicationEventPublisher eventPublisher;
     private final SessionClockLookup sessionClockLookup;
-    private final CaptionAnchorLookup captionAnchorLookup;
+    private final CaptionSpeechClock captionSpeechClock;
 
     public LiveCaptionService(LiveCaptionRepository repository, ApplicationEventPublisher eventPublisher,
-                              SessionClockLookup sessionClockLookup, CaptionAnchorLookup captionAnchorLookup) {
+                              SessionClockLookup sessionClockLookup, CaptionSpeechClock captionSpeechClock) {
         this.repository = repository;
         this.eventPublisher = eventPublisher;
         this.sessionClockLookup = sessionClockLookup;
-        this.captionAnchorLookup = captionAnchorLookup;
+        this.captionSpeechClock = captionSpeechClock;
     }
 
     /**
@@ -52,22 +52,11 @@ public class LiveCaptionService {
                 .map(row -> CaptionReloadItem.from(
                         row,
                         sessionClockLookup.approxSessionMs(sessionId, row.getOccurredAt()),
-                        anchoredSessionMs(sessionId, row)))
+                        captionSpeechClock.speechSessionMs(sessionId, row.getStartedAt()),
+                        captionSpeechClock.speechSessionMs(sessionId, row.getEndedAt())))
                 .toList();
     }
 
-    /**
-     * 정확한 세션-ms(앵커 기반). 앵커가 없으면 null이라 FE가 근사({@code sessionMs})로 물러난다.
-     *
-     * <p>세그먼트는 <b>시작</b> 좌표를 태운다 — 노출 경계도 seek 목표도 발화가 시작된 시각을 쓴다.
-     * WS 경로({@code WsCaptionBroadcaster})와 같은 규칙이어야 리로드와 실시간이 같은 값을 준다.
-     */
-    private Long anchoredSessionMs(UUID sessionId, LiveCaption row) {
-        Long streamElapsedMs = CaptionEvent.TYPE_SEGMENT_FINAL.equals(row.getEventType())
-                ? row.getStartStreamElapsedMs()
-                : row.getStreamElapsedMs();
-        return captionAnchorLookup.anchoredSessionMs(sessionId, row.getSttSessionId(), streamElapsedMs);
-    }
 
     /**
      * 자막 이벤트를 멱등 적재한다. 새로 저장했으면 {@code true}(WS 발행), 이미 소비한 eventId면 {@code false}.
@@ -93,6 +82,8 @@ public class LiveCaptionService {
         row.setReason(event.reason());
         row.setOccurredAt(event.occurredAt());
         row.setAudioStartedAt(event.audioStartedAt());
+        row.setStartedAt(event.startedAt());
+        row.setEndedAt(event.endedAt());
         row.setSegmentIndex(event.segmentIndex());
         row.setStartStreamElapsedMs(event.startStreamElapsedMs());
         row.setEndStreamElapsedMs(event.endStreamElapsedMs());

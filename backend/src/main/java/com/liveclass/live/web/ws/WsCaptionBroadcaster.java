@@ -1,6 +1,6 @@
 package com.liveclass.live.web.ws;
 
-import com.liveclass.live.service.CaptionAnchorLookup;
+import com.liveclass.live.service.CaptionSpeechClock;
 import com.liveclass.live.service.CaptionEvent;
 import com.liveclass.live.service.LiveCaptionStoredEvent;
 import com.liveclass.live.service.SessionClockLookup;
@@ -20,8 +20,9 @@ import org.springframework.transaction.event.TransactionalEventListener;
  * <ul>
  *   <li>{@code sessionMs} — 근사({@code occurredAt−clockOriginAt}, ADR-0045). 도착 시각 기준이라 발화보다
  *       STT 지연만큼 늦다. clockOriginAt이 없으면 null.</li>
- *   <li>{@code anchoredSessionMs} — 정확({@code 앵커 + streamElapsedMs}, {@link CaptionAnchorLookup}).
- *       앵커가 없으면 null이고, 그때만 소비자가 근사로 물러난다.</li>
+ *   <li>{@code speechSessionMs} — 정확({@code startedAt − clockOriginAt}, {@link CaptionSpeechClock}).
+ *       agent가 실어 준 <b>발화 벽시계</b> 기반이라 STT 지연 보정이 필요 없다. 없으면 null이고,
+ *       그때만 소비자가 근사로 물러난다(ADR-0107).</li>
  * </ul>
  *
  * <p>둘을 <b>같이</b> 보내는 이유는 소비자가 어느 쪽인지 알아야 하기 때문이다 — 근사값에는 STT 지연
@@ -32,32 +33,28 @@ public class WsCaptionBroadcaster {
 
     private final SimpMessagingTemplate messagingTemplate;
     private final SessionClockLookup sessionClockLookup;
-    private final CaptionAnchorLookup captionAnchorLookup;
+    private final CaptionSpeechClock captionSpeechClock;
 
     public WsCaptionBroadcaster(SimpMessagingTemplate messagingTemplate,
                                 SessionClockLookup sessionClockLookup,
-                                CaptionAnchorLookup captionAnchorLookup) {
+                                CaptionSpeechClock captionSpeechClock) {
         this.messagingTemplate = messagingTemplate;
         this.sessionClockLookup = sessionClockLookup;
-        this.captionAnchorLookup = captionAnchorLookup;
-    }
-
-    private Long anchored(LiveCaptionStoredEvent event, Long streamElapsedMs) {
-        return captionAnchorLookup.anchoredSessionMs(event.sessionId(), event.sttSessionId(), streamElapsedMs);
+        this.captionSpeechClock = captionSpeechClock;
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onStored(LiveCaptionStoredEvent event) {
         Long sessionMs = sessionClockLookup.approxSessionMs(event.sessionId(), event.occurredAt());
         Object payload = switch (event.eventType()) {
-            case CaptionEvent.TYPE_COMPLETED ->
-                    CaptionCompletedPayload.from(event, sessionMs, anchored(event, event.streamElapsedMs()));
-            // 세그먼트는 **시작** 좌표를 앵커에 태운다 — 소비자가 필요한 것은 발화가 시작된 시각이다
-            // (노출 경계·seek 목표가 모두 시작 기준이다). 끝은 시작 + 구간 길이로 얻는다.
+            // 발화 벽시계는 segment.final에만 실린다(ADR-0107). delta는 진행 중 조각이라 곧 세그먼트가
+            // 덮으므로 범위를 좁혔다 — 나머지 두 type은 근사 축만 싣는다.
+            case CaptionEvent.TYPE_COMPLETED -> CaptionCompletedPayload.from(event, sessionMs, null);
             case CaptionEvent.TYPE_SEGMENT_FINAL ->
-                    CaptionSegmentPayload.from(event, sessionMs, anchored(event, event.startStreamElapsedMs()));
-            default ->
-                    CaptionDeltaPayload.from(event, sessionMs, anchored(event, event.streamElapsedMs()));
+                    CaptionSegmentPayload.from(event, sessionMs,
+                            captionSpeechClock.speechSessionMs(event.sessionId(), event.startedAt()),
+                            captionSpeechClock.speechSessionMs(event.sessionId(), event.endedAt()));
+            default -> CaptionDeltaPayload.from(event, sessionMs, null);
         };
         WsEnvelope envelope = WsEnvelope.of(event.eventType(), event.sessionId(), event.occurredAt(), payload);
         messagingTemplate.convertAndSend(

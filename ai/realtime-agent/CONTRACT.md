@@ -249,9 +249,27 @@ AI producer가 현재 구현한 attempt 순서는 started 1회, delta와 segment
 commit한다. final의 `lastSequence` 이하 delta는 같은 발화의 미리보기이며 final text가 권위 있다.
 
 `audioStartedAt`은 첫 audio frame 시작, 즉 `streamElapsedMs=0`의 UTC다. segment start/end는 VAD가
-관측한 실제 speech frame 구간이며 pre-roll/trailing silence를 제외한다. 제안하는 Spring 변환은 raw 값을
-보존한 뒤 `audioStartedAt - clockOriginAt + streamElapsedMs`로 세션-ms를 계산하는 방식이다. 이 공식과
-fallback 정책은 아직 미확정이며, 채택 시 GPU와 Spring host의 NTP 동기가 전제다.
+관측한 실제 speech frame 구간이며 pre-roll/trailing silence를 제외한다.
+
+> ⚠️ **`audioStartedAt - clockOriginAt + streamElapsedMs`는 폐기한다.** 한때 제안으로 적혀 있었고
+> 실제로 채택됐다가 라이브 자막이 통째로 어긋나 되돌렸다(ADR-0106).
+>
+> `streamElapsedMs`는 경과 시간이 아니라 **받은 audio frame 길이의 합**이다
+> (`app/livekit/audio_source.py`의 `_captured_nanoseconds`). 무음 억제·뮤트·유실로 frame이 오지 않은
+> 구간은 여기 **들어가지 않는다.** 그래서 벽시계보다 뒤처지고, 앵커에 더하면 그만큼 앞당겨진다.
+> 운영 실측에서 세션마다 **0.6초~21초** 어긋났고 폭이 매번 달라 상수 보정으로 메울 수 없다.
+> NTP 동기와도 무관하다 — 세 값 모두 agent 자기 시계라 skew는 상쇄된다.
+
+**`segment.final`은 `startedAt`·`endedAt`(선택)을 싣는다.** 그 발화가 실제로 시작·종료한 UTC 벽시계이며,
+audio clock이 잃는 무음을 포함한다. 소비자는 `startedAt - clockOriginAt`만으로 세션-ms를 얻는다 —
+앵커 산술도 지연 보정 상수도 필요 없다.
+
+- **선택 필드다.** audio source가 arrival을 stamp하지 않았으면 키 자체가 빠지고, 소비자는 종전대로
+  동작해야 한다(있으면 쓰고 없으면 근사로 물러난다).
+- **한 문장 단위로 안분한다.** 한 segment가 여러 문장으로 쪼개지면 audio clock에서 나눈 것과 같은
+  비율로 벽시계도 나눈다. segment 안에서는 소리가 끊기지 않으므로(끊겼다면 거기서 닫혔다) 비율이 성립한다.
+- `streamElapsedMs`·`start/endStreamElapsedMs`는 **그대로 둔다.** 의미를 바꾸지 않는다 — VAD 정책과
+  문장 안분이 그 위에 서 있다.
 
 completion은 LiveKit `ROOM_DELETED`를 명시적으로 받아 남은 audio와 engine event를 정상 drain한
 뒤에만 새로 발행을 시도한다. 다른 disconnect, cancellation, lease loss, provider 오류에서는 새

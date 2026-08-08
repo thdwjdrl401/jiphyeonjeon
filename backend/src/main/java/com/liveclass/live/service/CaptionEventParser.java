@@ -55,17 +55,17 @@ public class CaptionEventParser {
                     unsignedLong(fields, "sequence"), null,
                     unsignedLong(fields, "streamElapsedMs"),
                     text(fields), null, occurredAt,
-                    null, null, null, null, null);
+                    null, null, null, null, null, null, null);
             case CaptionEvent.TYPE_COMPLETED -> new CaptionEvent(
                     eventId, type, sessionId, lessonId, sttSessionId,
                     null, unsignedLong(fields, "lastSequence"),
                     unsignedLong(fields, "streamElapsedMs"),
                     null, requireEquals(fields, "reason", COMPLETED_REASON), occurredAt,
-                    null, null, null, null, null);
+                    null, null, null, null, null, null, null);
             case CaptionEvent.TYPE_STARTED -> new CaptionEvent(
                     eventId, type, sessionId, lessonId, sttSessionId,
                     null, null, null, null, null, occurredAt,
-                    utcTimestamp(fields, "audioStartedAt"), null, null, null, null);
+                    utcTimestamp(fields, "audioStartedAt"), null, null, null, null, null, null);
             case CaptionEvent.TYPE_SEGMENT_FINAL -> new CaptionEvent(
                     eventId, type, sessionId, lessonId, sttSessionId,
                     null, unsignedLong(fields, "lastSequence"), null,
@@ -73,7 +73,9 @@ public class CaptionEventParser {
                     unsignedLong(fields, "segmentIndex"),
                     unsignedLong(fields, "startStreamElapsedMs"),
                     unsignedLong(fields, "endStreamElapsedMs"),
-                    boundaryReason(fields));
+                    boundaryReason(fields),
+                    optionalUtcTimestamp(fields, "startedAt"),
+                    optionalUtcTimestamp(fields, "endedAt"));
             default -> throw new CaptionParseException("알 수 없는 자막 type: " + type);
         };
     }
@@ -155,6 +157,17 @@ public class CaptionEventParser {
             throw new CaptionParseException(key + " UTC(Z 또는 +00:00) 아님");
         }
         return parsed;
+    }
+
+    /**
+     * 있으면 UTC date-time, 없으면 null(ADR-0107의 선택 필드).
+     *
+     * <p><b>없는 것과 잘못된 것을 구분한다.</b> 없으면 소비자가 근사 축으로 물러나면 되지만, 값이
+     * 있는데 형식이 틀린 것은 생산자 결함이라 조용히 넘기면 안 된다.
+     */
+    private OffsetDateTime optionalUtcTimestamp(Map<String, String> fields, String key) {
+        String value = fields.get(key);
+        return value == null || value.isEmpty() ? null : utcTimestamp(fields, key);
     }
 
     private String boundaryReason(Map<String, String> fields) {

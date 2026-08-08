@@ -62,6 +62,9 @@ def to_stream_fields(
             "text": event.text,
             "startStreamElapsedMs": str(event.start_stream_elapsed_ms),
             "endStreamElapsedMs": str(event.end_stream_elapsed_ms),
+            # 값이 없으면 키를 아예 넣지 않는다 — 빈 문자열을 보내면 소비자가 "0"과 구분하지 못한다.
+            **({"startedAt": utc_rfc3339(event.started_at)} if event.started_at else {}),
+            **({"endedAt": utc_rfc3339(event.ended_at)} if event.ended_at else {}),
             "boundaryReason": event.boundary_reason,
             "occurredAt": utc_rfc3339(event.occurred_at),
         }

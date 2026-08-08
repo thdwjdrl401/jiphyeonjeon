@@ -138,6 +138,12 @@ export interface CaptionView {
    * 라이브 append처럼 그대로 보인다(ADR-0045).
    */
   synced?: boolean
+  /**
+   * `startMs`/`endMs`가 **발화 벽시계 기반 정확값**인지(ADR-0107). true면 STT 지연 보정을 걸지 않는다 —
+   * 보정은 도착 기준 근사값의 체계적 편향을 상쇄하려는 것이라, 정확값에 걸면 그만큼 이르게 어긋난다.
+   * true면 `synced`도 항상 true다.
+   */
+  exact?: boolean
 }
 
 /**
@@ -156,12 +162,6 @@ export interface CaptionDeltaPayload {
    * null — 그때는 streamElapsedMs로 fallback한다.
    */
   sessionMs?: number | null
-  /**
-   * 정확한 **세션-ms**(앵커 + streamElapsedMs, 서버 계산). `caption.stream.started`가 준 attempt 시작
-   * 절대시각으로 환산한 값이라 근사가 아니다 — STT 지연 보정이 필요 없다. 앵커가 없으면(옛 세션 등)
-   * null이고, 그때만 `sessionMs`(근사)로 물러난다.
-   */
-  anchoredSessionMs?: number | null
   text: string
 }
 
@@ -171,12 +171,6 @@ export interface CaptionStreamCompletedPayload {
   lastSequence: number
   /** 델타와 정합을 위한 근사 세션-ms(nullable, ADR-0045). */
   sessionMs?: number | null
-  /**
-   * 정확한 **세션-ms**(앵커 + streamElapsedMs, 서버 계산). `caption.stream.started`가 준 attempt 시작
-   * 절대시각으로 환산한 값이라 근사가 아니다 — STT 지연 보정이 필요 없다. 앵커가 없으면(옛 세션 등)
-   * null이고, 그때만 `sessionMs`(근사)로 물러난다.
-   */
-  anchoredSessionMs?: number | null
   reason: string
 }
 
@@ -197,10 +191,15 @@ export interface CaptionSegmentFinalPayload {
   /** 근사 세션-ms(델타·완료 payload와 같은 의미, nullable, ADR-0045). */
   sessionMs?: number | null
   /**
-   * 정확한 **세그먼트 시작** 세션-ms(앵커 + startStreamElapsedMs, 서버 계산). 노출 경계도 seek 목표도
-   * 발화가 시작된 시각을 쓰므로 서버가 시작 좌표를 태워 준다. 앵커가 없으면 null.
+   * **발화 시작**의 정확한 세션-ms(agent가 실어 준 벽시계 − clockOriginAt, 서버 계산, ADR-0107).
+   *
+   * <p>근사가 아니라 실제 발화 시각이라 STT 지연 보정을 걸지 않는다. 무음이 얼마였든 영향받지 않는다 —
+   * 폐기된 앵커 축(`audioStartedAt + streamElapsedMs`)이 무음만큼 어긋났던 것과 다른 점이다(ADR-0106).
+   * 없으면(옛 세션·agent 미지원) null이고, 그때만 `sessionMs`(근사)로 물러난다.
    */
-  anchoredSessionMs?: number | null
+  speechSessionMs?: number | null
+  /** 발화 종료의 세션-ms. 시작과 같은 규칙이며, 노출 판정이 문장 끝을 보므로 함께 온다. */
+  speechEndSessionMs?: number | null
 }
 
 export type CaptionStreamEvent =

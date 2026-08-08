@@ -15,9 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -29,13 +27,20 @@ import java.util.UUID;
  * {@code audioStartedAt}(그 attempt의 0이 절대 몇 시였나)이다:
  *
  * <pre>
- *   attemptStartSessionMs = audioStartedAt − liveSession.startedAt
- *   captionStartSessionMs = attemptStartSessionMs + startStreamElapsedMs
+ *   captionStartSessionMs = startedAt − liveSession.startedAt
  * </pre>
  *
- * <p>이 변환은 CONTRACT §3-4가 금지한 "앵커 없는 {@code streamElapsedMs}→세션ms 환산"이 <b>아니다</b> —
- * 금지된 것은 앵커 없이 짐작하는 것이고, 여기서는 실제 앵커 행을 읽어 적용한다. 앵커가 없는 attempt의
- * 발화는 <b>버린다</b>. 시간을 지어내느니 근거에서 빼는 편이 낫다(ADR-0042 "앵커가 없는 발화는 제외").
+ * <p><b>발화 벽시계를 그대로 쓴다</b>(ADR-0107). agent가 {@code segment.final}에 그 발화가 실제로
+ * 시작·종료한 UTC 시각을 실어 주므로, 세션 원점만 빼면 정확한 세션-ms가 된다.
+ *
+ * <p>한때 {@code audioStartedAt + startStreamElapsedMs}로 같은 값을 구했다. <b>그 공식은 틀렸다</b> —
+ * {@code startStreamElapsedMs}가 받은 오디오의 누적 길이라 무음이 빠지고, 운영 실측에서 세션마다
+ * 0.6초~21초 어긋났다(ADR-0106). AI 근거 경로는 시각이 밀려도 티가 잘 안 나 오래 남아 있었다.
+ *
+ * <p>벽시계가 없는 발화는 <b>버린다</b>. 시간을 지어내느니 근거에서 빼는 편이 낫다
+ * (ADR-0042 "앵커가 없는 발화는 제외"). 그래서 <b>이 기능이 배포되기 전에 녹화된 강의는 자막 근거가
+ * 없다</b> — 자료·판서 근거만 남는다. 틀린 시각으로 "지금 이 부분"을 고르면 엉뚱한 곳을 인용해 답이
+ * 틀리므로, 없는 편이 낫다고 판단했다.
  */
 @Service
 public class ReplayAiContextService implements ReplayAiContextSource {
@@ -66,42 +71,24 @@ public class ReplayAiContextService implements ReplayAiContextSource {
             // 시작한 적 없는 세션엔 세션 시계의 원점이 없다 — 자막이 있을 수도 없다.
             return List.of();
         }
-        Map<String, Long> anchors = anchors(session.getId(), sessionStart);
-        if (anchors.isEmpty()) {
-            return List.of();
-        }
         List<Caption> candidates = new ArrayList<>();
         for (LiveCaption row : liveCaptionRepository.findBySessionIdAndEventTypeOrderByIdAsc(
                 session.getId(), CaptionEvent.TYPE_SEGMENT_FINAL)) {
-            toSegment(row, anchors).ifPresent(candidates::add);
+            toSegment(row, sessionStart).ifPresent(candidates::add);
         }
         return ReplayCaptionWindow.select(candidates, questionSessionMs);
     }
 
-    /** attempt(sttSessionId) → 그 attempt의 0이 세션 시계로 몇 ms인지. */
-    private Map<String, Long> anchors(UUID sessionId, OffsetDateTime sessionStart) {
-        Map<String, Long> anchors = new HashMap<>();
-        for (LiveCaption row : liveCaptionRepository.findBySessionIdAndEventTypeOrderByIdAsc(
-                sessionId, CaptionEvent.TYPE_STARTED)) {
-            if (row.getSttSessionId() == null || row.getAudioStartedAt() == null) {
-                continue;
-            }
-            // 같은 attempt의 started가 두 번 오면 첫 것을 쓴다 — 0의 정의가 바뀌면 안 된다.
-            anchors.putIfAbsent(row.getSttSessionId(),
-                    Duration.between(sessionStart, row.getAudioStartedAt()).toMillis());
-        }
-        return anchors;
-    }
-
-    private Optional<Caption> toSegment(LiveCaption row, Map<String, Long> anchors) {
-        Long anchor = row.getSttSessionId() == null ? null : anchors.get(row.getSttSessionId());
-        if (anchor == null || row.getStartStreamElapsedMs() == null || row.getEndStreamElapsedMs() == null) {
-            // 앵커·좌표가 없으면 정확한 시각으로 가장하지 않고 버린다(ADR-0042).
-            log.debug("앵커 없는 확정 자막 제외 sessionId={} eventId={}", row.getSessionId(), row.getEventId());
+    private Optional<Caption> toSegment(LiveCaption row, OffsetDateTime sessionStart) {
+        if (row.getStartedAt() == null || row.getEndedAt() == null) {
+            // 벽시계가 없으면 정확한 시각으로 가장하지 않고 버린다(ADR-0042·0107). 이 기능 이전에
+            // 녹화된 강의가 여기 걸린다 — 자막 근거만 빠지고 자료·판서 근거는 그대로 간다.
+            log.debug("발화 시각 없는 확정 자막 제외 sessionId={} eventId={}",
+                    row.getSessionId(), row.getEventId());
             return Optional.empty();
         }
-        long start = anchor + row.getStartStreamElapsedMs();
-        long end = anchor + row.getEndStreamElapsedMs();
+        long start = Duration.between(sessionStart, row.getStartedAt()).toMillis();
+        long end = Duration.between(sessionStart, row.getEndedAt()).toMillis();
         if (end < 0) {
             return Optional.empty();   // 세션 시작 전의 발화 — 재생 축에 자리가 없다
         }

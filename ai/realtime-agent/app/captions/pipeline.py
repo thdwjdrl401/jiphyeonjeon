@@ -154,6 +154,10 @@ class CaptionEventMapper:
             end_stream_elapsed_ms=event.end_stream_elapsed_ms,
             boundary_reason=event.boundary_reason,
             occurred_at=self._clock(),
+            # 엔진이 실어 준 벽시계를 그대로 옮긴다. 여기서 다시 계산하지 않는다 —
+            # 발화 시각을 아는 것은 오디오를 받은 쪽뿐이다.
+            started_at=event.started_at,
+            ended_at=event.ended_at,
         )
         await self._publisher.publish_segment_final(segment)
         self._segment_index += 1

@@ -280,12 +280,18 @@ class ReplayAiAnswerContractTest {
         UUID sessionId = UUID.fromString(ids[1]);
         OffsetDateTime sessionStart = sessionStart(sessionId);
 
-        // attempt는 세션 시작 5초 뒤에 오디오를 받기 시작했다 → 그 attempt의 0이 세션 5,000ms다.
+        /*
+         * 오디오 축(start/endStreamElapsedMs)과 발화 벽시계를 **일부러 어긋나게** 둔다. 벽시계를 쓰지
+         * 않고 옛 공식으로 되돌아가면 값이 달라져 바로 잡힌다.
+         */
         saveStarted(sessionId, ids[0], "stt-attempt-1", sessionStart.plusSeconds(5));
-        saveSegment(sessionId, ids[0], "stt-attempt-1", 0, 10_000, 12_000, "컨슈머 그룹은");
-        saveSegment(sessionId, ids[0], "stt-attempt-1", 1, 13_000, 15_000, "메시지를 나눠 처리합니다");
+        saveSegment(sessionId, ids[0], "stt-attempt-1", 0, 10_000, 12_000, "컨슈머 그룹은",
+                sessionStart.plusSeconds(15), sessionStart.plusSeconds(17));
+        saveSegment(sessionId, ids[0], "stt-attempt-1", 1, 13_000, 15_000, "메시지를 나눠 처리합니다",
+                sessionStart.plusSeconds(18), sessionStart.plusSeconds(20));
         // 질문(세션 25,000ms) 이후에 시작한 발화 — 아직 듣지 않은 말이라 근거가 될 수 없다.
-        saveSegment(sessionId, ids[0], "stt-attempt-1", 2, 30_000, 32_000, "다음 주제로 넘어가면");
+        saveSegment(sessionId, ids[0], "stt-attempt-1", 2, 30_000, 32_000, "다음 주제로 넘어가면",
+                sessionStart.plusSeconds(30), sessionStart.plusSeconds(32));
 
         assertOk(ask(ids[0], instructor, "컨슈머 그룹이 뭐야?", 25_000));
 
@@ -293,7 +299,7 @@ class ReplayAiAnswerContractTest {
                 .readTree(new String(awaitRequest().rawBody(), StandardCharsets.UTF_8))
                 .get("context").get("captions");
         assertThat(captions.size()).isEqualTo(2);
-        // 10,000(attempt-local) + 5,000(앵커) = 15,000(세션). raw 좌표를 그대로 보내면 10초가 어긋난다.
+        // 발화 벽시계 − 세션 원점. 오디오 축(10,000)이 아니라 벽시계(15초)를 썼다는 뜻이다.
         assertThat(captions.get(0).get("startSessionMs").asLong()).isEqualTo(15_000L);
         assertThat(captions.get(0).get("endSessionMs").asLong()).isEqualTo(17_000L);
         assertThat(captions.get(0).get("text").asString()).isEqualTo("컨슈머 그룹은");
@@ -303,16 +309,17 @@ class ReplayAiAnswerContractTest {
     }
 
     @Test
-    void utterances_without_a_time_anchor_are_dropped_instead_of_guessed() throws Exception {
+    void utterances_without_a_speech_clock_are_dropped_instead_of_guessed() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String[] ids = createReadyRecording(instructor);
         UUID sessionId = UUID.fromString(ids[1]);
         OffsetDateTime sessionStart = sessionStart(sessionId);
 
-        saveStarted(sessionId, ids[0], "stt-attempt-1", sessionStart.plusSeconds(5));
-        saveSegment(sessionId, ids[0], "stt-attempt-1", 0, 10_000, 12_000, "앵커 있는 발화");
-        // started를 못 받은 attempt. 시각을 지어내느니 근거에서 뺀다(ADR-0042).
-        saveSegment(sessionId, ids[0], "stt-attempt-2", 0, 10_000, 12_000, "앵커 없는 발화");
+        saveSegment(sessionId, ids[0], "stt-attempt-1", 0, 10_000, 12_000, "시각 있는 발화",
+                sessionStart.plusSeconds(15), sessionStart.plusSeconds(17));
+        // 이 기능 이전에 녹화된 강의. 시각을 지어내느니 근거에서 뺀다(ADR-0042·0107) —
+        // 틀린 시각으로 "지금 이 부분"을 고르면 엉뚱한 곳을 인용해 답이 틀린다.
+        saveSegment(sessionId, ids[0], "stt-attempt-2", 0, 10_000, 12_000, "시각 없는 발화");
 
         assertOk(ask(ids[0], instructor, "질문", 25_000));
 
@@ -320,7 +327,7 @@ class ReplayAiAnswerContractTest {
                 .readTree(new String(awaitRequest().rawBody(), StandardCharsets.UTF_8))
                 .get("context").get("captions");
         assertThat(captions.size()).isEqualTo(1);
-        assertThat(captions.get(0).get("text").asString()).isEqualTo("앵커 있는 발화");
+        assertThat(captions.get(0).get("text").asString()).isEqualTo("시각 있는 발화");
     }
 
     @Test
@@ -548,9 +555,19 @@ class ReplayAiAnswerContractTest {
         liveCaptionRepository.saveAndFlush(row);
     }
 
+    /** 발화 벽시계 없이 저장한다 — 이 기능 이전에 녹화된 강의를 재현한다. */
     private void saveSegment(UUID sessionId, String lessonId, String sttSessionId,
                              long segmentIndex, long startElapsedMs, long endElapsedMs, String text) {
+        saveSegment(sessionId, lessonId, sttSessionId, segmentIndex, startElapsedMs, endElapsedMs,
+                text, null, null);
+    }
+
+    private void saveSegment(UUID sessionId, String lessonId, String sttSessionId,
+                             long segmentIndex, long startElapsedMs, long endElapsedMs, String text,
+                             OffsetDateTime startedAt, OffsetDateTime endedAt) {
         LiveCaption row = new LiveCaption();
+        row.setStartedAt(startedAt);
+        row.setEndedAt(endedAt);
         row.setEventId("segment-" + UUID.randomUUID());
         row.setEventType("caption.segment.final");
         row.setSessionId(sessionId);
