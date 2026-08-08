@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '@/App'
 import { ApiError } from '@/shared/api/client'
@@ -107,9 +108,14 @@ describe('부가 조회 실패 시 화면 유지', () => {
     expect(captions).toHaveBeenCalled()
   })
 
-  // 강사 화면에는 자막 독이 없다. 소비처가 없는데 WS를 열어 두면 송출 중인 브라우저에 쓰지 않을
-  // 스트림 하나와 자막 리로드 요청이 계속 붙는다.
-  it('강사 라이브 강의실은 자막을 구독하지도 리로드하지도 않는다', async () => {
+  /**
+   * 강사 화면의 자막은 <b>펼쳤을 때만</b> 산다. 접힌 채로 열어 두면 송출·인코딩을 하고 있는 그
+   * 브라우저에 쓰지 않을 WS 하나와 자막 리로드 요청이 계속 붙는다.
+   *
+   * <p>펼치면 <b>둘 다</b> 돌아야 한다 — WS는 델타만 보내므로 구독만으로는 다음 발화까지 빈 독이다.
+   */
+  it('강사 라이브 강의실은 자막을 펼쳤을 때만 구독·리로드한다', async () => {
+    const user = userEvent.setup()
     const captions = vi.spyOn(liveSessionService, 'subscribeCaptions')
     const reload = vi.spyOn(liveSessionService, 'getCaptions')
     await mockAuthService.login({ email: 'instructor@liveclass.ai', password: 'password1' })
@@ -117,9 +123,14 @@ describe('부가 조회 실패 시 화면 유지', () => {
     renderAt('/instructor/live-sessions/ses-security-live/classroom')
 
     expect(await screen.findByRole('heading', { name: 'Spring Security 시작하기', level: 1 })).toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: '실시간 자막' })).not.toBeInTheDocument()
+    const dock = screen.getByRole('region', { name: '실시간 자막' })
     expect(captions).not.toHaveBeenCalled()
     expect(reload).not.toHaveBeenCalled()
+
+    await user.click(within(dock).getByRole('button', { expanded: false }))
+
+    expect(captions).toHaveBeenCalled()
+    await waitFor(() => { expect(reload).toHaveBeenCalled() })
   })
 
   it('세션 조회가 실패하면 라이브 강의실은 오류 화면을 낸다', async () => {

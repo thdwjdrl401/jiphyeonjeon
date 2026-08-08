@@ -418,6 +418,20 @@
 .caption-dock > header strong { display: flex; align-items: center; gap: 7px; color: var(--ink-900); font-size: .65rem; }
 .caption-dock > header strong i { width: 6px; height: 6px; border-radius: 50%; background: var(--red-600); box-shadow: 0 0 0 4px rgba(168,58,36,.13); }
 .caption-dock > header span { color: var(--ink-500); font-size: .56rem; }
+/*
+ * 접을 수 있는 독의 헤더는 <b>그 자체가 버튼</b>이다. 접힌 동안 남는 것이 이 줄뿐이라, 여기 말고는
+ * 다시 펼 자리가 없다. 그래서 헤더 전체가 눌리는 폭을 갖도록 버튼을 늘린다.
+ */
+.caption-dock__disclosure { display: flex; flex: 1 1 auto; align-items: center; gap: 8px;
+  border: 0; padding: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.caption-dock__disclosure:hover strong { color: var(--seal); }
+.caption-dock__chevron { width: 0; height: 0; flex: 0 0 auto;
+  border-top: 4px solid transparent; border-bottom: 4px solid transparent; border-left: 5px solid var(--ink-500);
+  transition: transform .16s ease; }
+.caption-dock__disclosure[aria-expanded="true"] .caption-dock__chevron { transform: rotate(90deg); }
+/* 접히면 테두리 하나짜리 줄로 남는다 — 아래 경계선까지 남기면 빈 칸이 하나 더 있는 것처럼 보인다. */
+.caption-dock.is-collapsed > header { border-bottom: 0; }
+@media (prefers-reduced-motion: reduce) { .caption-dock__chevron { transition: none; } }
 /* 높이를 처음부터 고정한다. max-height만 두면 자막이 0줄에서 시작해 도착할 때마다 독이 자라고,
    그만큼 아래 요소가 밀려 화면이 계속 움직인다. 자란 뒤와 같은 높이를 처음부터 준다.
    (사용자가 경계를 끌어 조절하면 --caption-dock-height가 이 값을 대신한다 — useResizablePane) */

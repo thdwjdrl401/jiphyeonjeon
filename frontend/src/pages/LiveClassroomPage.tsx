@@ -89,6 +89,17 @@ export default function LiveClassroomPage() {
   const queryClient = useQueryClient()
   const { user } = useAuth()
   const isInstructor = user?.role === 'INSTRUCTOR'
+  /*
+   * 강사 화면의 자막은 <b>접힌 채로 시작한다.</b>
+   *
+   * <p>강사에게 자막은 늘 읽는 것이 아니라 <b>가끔 확인하는 것</b>이다 — STT가 내 말을 제대로
+   * 받아쓰고 있는지. 펼쳐 두면 그 높이만큼 송출 미리보기가 눌려, 실제로 나가는 프레임을 계속
+   * 작게 보게 된다.
+   *
+   * <p><b>기억하지 않는다.</b> 강의는 매번 새로 시작하고, 지난 강의에 열어 둔 자막이 이번 강의의
+   * 미리보기를 줄여 놓을 이유가 없다. 여는 것은 한 번의 클릭이다.
+   */
+  const [instructorCaptionOpen, setInstructorCaptionOpen] = useState(false)
   const sessionQuery = useQuery({ queryKey: ['live-session', sessionId], queryFn: () => getLiveSession(sessionId), enabled: Boolean(sessionId) })
   const lessonQuery = useQuery({
     queryKey: ['live-classroom-lesson', sessionQuery.data?.lessonId, user?.role],
@@ -113,9 +124,13 @@ export default function LiveClassroomPage() {
   const chatQuery = useQuery({ queryKey: ['live-chat', sessionId], queryFn: () => getChatMessages(sessionId), enabled: Boolean(sessionId) && canReadContent })
   // 저장된 자막 리로드(CAPTION-01, ADR-0045). 마운트 시 세션-ms 순 자막을 받아 WS 누적기에 시드해
   // 새로고침·재연결 뒤 이전 자막을 복원한다. 실패해도 진입 게이트를 막지 않는다(자막 없이도 미디어·채팅은 산다).
-  // 강사는 자막 독을 그리지 않는다(아래 렌더 참고). 자막을 쓰는 곳이 없으므로 리로드도 하지 않는다 —
-  // 송출 중인 브라우저에서 쓰지도 않을 자막을 받아 두는 것은 그대로 낭비다.
-  const captionReloadQuery = useQuery({ queryKey: ['live-captions', sessionId], queryFn: () => getCaptions(sessionId), enabled: Boolean(sessionId) && !isInstructor && canReadContent })
+  // 강사 화면의 자막은 <b>펼쳤을 때만</b> 산다(아래 구독·렌더 참고). 접혀 있는 동안 받아 두면
+  // 송출 중인 브라우저가 쓰지도 않을 자막을 계속 받는다.
+  const captionReloadQuery = useQuery({
+    queryKey: ['live-captions', sessionId],
+    queryFn: () => getCaptions(sessionId),
+    enabled: Boolean(sessionId) && canReadContent && (isInstructor ? instructorCaptionOpen : true),
+  })
   // 라이브 송출이 끝나도 이 세션의 후속 토론·복습 질문은 이어 간다. 자막 seek와 미디어 상태는
   // hasEnded로 별도 잠그므로 대화 가능 상태와 섞지 않는다.
   const canUseConversation = session?.status === 'LIVE'
@@ -161,7 +176,7 @@ export default function LiveClassroomPage() {
   const [aiHistoryDevVersion, setAiHistoryDevVersion] = useState(0)
   /*
    * 영상·자막·사이드패널의 배분은 사람마다 다르다. 경계를 끌어 정하고, 최소치 아래로 끌면 접힌다.
-   * 강사 화면에는 자막 독이 없으므로 세로 손잡이도 두지 않는다.
+   * 강사 화면의 자막 독은 높이를 끌어 정하지 않는다 — 접기/펴기만 있다(아래 렌더 참고).
    */
   const sidebarPane = useResizablePane({
     storageKey: 'liveclass.live.sidebarWidth',
@@ -357,10 +372,18 @@ export default function LiveClassroomPage() {
       setChatConnectionState,
     )
   }, [queryClient, sessionId])
-  // 자막 WS는 자막을 그리는 화면만 연다. 강사 화면에는 자막 독이 없고 다른 자막 소비처도 없어,
-  // 구독을 열면 송출 중인 브라우저에 쓰지 않을 스트림 하나가 계속 붙어 있게 된다.
+  /*
+   * 자막 WS는 <b>자막을 그리는 동안만</b> 연다.
+   *
+   * <p>강사 화면은 접혀 있는 것이 기본이라, 접힌 채로 구독을 열어 두면 송출·인코딩을 하고 있는
+   * 그 브라우저에 쓰지 않을 스트림 하나가 계속 붙어 있게 된다. 펼치는 순간 붙고 접으면 놓는다.
+   *
+   * <p>펼친 직후가 비지 않는 것은 위의 리로드 조회가 지금까지의 자막을 누적기에 시드하기
+   * 때문이다 — WS는 델타만 보내므로 구독만으로는 다음 발화까지 빈 화면이다.
+   */
+  const captionsLive = !isInstructor || instructorCaptionOpen
   useEffect(() => {
-    if (!sessionId || isInstructor) return undefined
+    if (!sessionId || !captionsLive) return undefined
     captionAccumulator.current = emptyCaptionStreamState()
     setCaptions([])
     return subscribeCaptions(
@@ -371,9 +394,16 @@ export default function LiveClassroomPage() {
       },
       setCaptionConnectionState,
     )
-  }, [isInstructor, sessionId])
-  // 리로드된 저장 자막을 누적기에 시드한다. WS 델타와 같은 이벤트라 reduceCaptionStream이 멱등하게 흡수하므로
-  // WS가 먼저 붙어 일부가 이미 쌓였어도(순서 무관) 안전하다 — 중복 sequence는 무시, 누락분만 채운다.
+  }, [captionsLive, sessionId])
+  /*
+   * 리로드된 저장 자막을 누적기에 시드한다. WS 델타와 같은 이벤트라 reduceCaptionStream이 멱등하게
+   * 흡수하므로 WS가 먼저 붙어 일부가 이미 쌓였어도(순서 무관) 안전하다 — 중복 sequence는 무시,
+   * 누락분만 채운다.
+   *
+   * <p><b>스트림이 다시 열릴 때도 다시 시드한다</b>(`captionsLive`). 강사가 자막을 접었다 펴면 위
+   * 구독 효과가 누적기를 비우는데, 조회 결과는 캐시에 그대로라 참조가 바뀌지 않는다 — 데이터만
+   * 보고 있으면 다시 채워지지 않아 <b>다음 발화까지 빈 독</b>이 된다. 멱등이라 다시 돌아도 안전하다.
+   */
   useEffect(() => {
     const seed = captionReloadQuery.data
     if (!seed || seed.length === 0) return
@@ -381,7 +411,7 @@ export default function LiveClassroomPage() {
       captionAccumulator.current = reduceCaptionStream(captionAccumulator.current, event)
     }
     setCaptions(selectCaptionViews(captionAccumulator.current))
-  }, [captionReloadQuery.data])
+  }, [captionReloadQuery.data, captionsLive])
   useEffect(() => {
     if (hasEnded) setStudentSeekRequest(null)
   }, [hasEnded])
@@ -433,9 +463,10 @@ export default function LiveClassroomPage() {
   if (sessionQuery.isError || lessonQuery.isError) return <PageState title="라이브 강의를 불러오지 못했습니다" />
   if (!session || !lesson) return <PageState title="라이브 강의를 불러오는 중입니다" />
 
-  // 자막은 수강생 화면에만 있다. HLS 위치(positionMs)까지 도달한 위치 동기화 자막만 노출하고,
+  // 수강생 자막은 HLS 위치(positionMs)까지 도달한 위치 동기화 자막만 노출하고,
   // 앞선 자막은 누적기(버퍼)에 두었다가 위치가 닿으면 드러낸다(ADR-0045).
-  // 강사 화면에는 플레이어가 없어 위치를 구할 수 없다 — null을 넘겨 실시간 append 그대로 둔다.
+  // 강사 화면에는 플레이어가 없어 맞출 위치 자체가 없다 — null을 넘겨 실시간 append 그대로 둔다.
+  // 그래서 강사가 보는 자막은 <b>지금 나가고 있는 것</b>이고, 수강생이 보는 것보다 앞선다.
   const visibleCaptions = selectVisibleCaptions(captions, isInstructor ? null : positionMs)
   // 자막에 용어 링크를 걸고, 그 김에 용어별 등장 횟수도 센다(어차피 한 번 훑는다).
   const glossary = attachGlossary(visibleCaptions, glossaryQuery.data ?? [])
@@ -511,6 +542,25 @@ export default function LiveClassroomPage() {
     ? '라이브가 종료되어 자막 시간 이동을 사용할 수 없습니다.'
     : captions.length > 0 || captionConnectionState === 'connected'
       ? undefined
+      : captionConnectionState === 'connecting'
+        ? '실시간 자막을 연결하고 있습니다.'
+        : captionConnectionState === 'reconnecting'
+          ? '실시간 자막 연결이 끊겨 다시 연결하고 있습니다.'
+          : captionConnectionState === 'error'
+            ? '실시간 자막 연결에 문제가 생겼습니다. 자동 재연결을 시도합니다.'
+            : '실시간 자막 연결이 종료되었습니다.'
+
+  /*
+   * 강사의 안내는 <b>왜 보는지</b>를 말한다. 수강생 문구("시간을 누르면 영상과 자막이 함께
+   * 이동합니다")는 강사에게 해당이 없다 — 옮길 재생이 없다.
+   *
+   * <p>접혀 있는 동안은 연결 상태를 말하지 않는다. 붙어 있지도 않은 소켓을 "연결하고 있습니다"로
+   * 알리면 고장으로 읽힌다.
+   */
+  const instructorCaptionNote = !instructorCaptionOpen
+    ? undefined
+    : captions.length > 0 || captionConnectionState === 'connected'
+      ? '내 말이 어떻게 받아쓰이는지 확인할 수 있습니다.'
       : captionConnectionState === 'connecting'
         ? '실시간 자막을 연결하고 있습니다.'
         : captionConnectionState === 'reconnecting'
@@ -686,10 +736,6 @@ export default function LiveClassroomPage() {
 
           {!isInstructor && <div {...captionPane.handleProps} />}
 
-          {/*
-            자막은 수강생 화면에만 둔다. 강사는 자기가 말한 것을 다시 읽을 이유가 없고, 자막 독이
-            차지하는 높이만큼 송출 미리보기가 눌려 실제로 나가는 프레임을 작게 보게 된다.
-          */}
           {!isInstructor && !captionPane.collapsed && (
             <CaptionDock
               captions={glossary.captions}
@@ -700,6 +746,28 @@ export default function LiveClassroomPage() {
               onSelectTerm={openGlossaryTerm}
               canSeek={!hasEnded}
               heightPx={captionPane.size}
+            />
+          )}
+
+          {/*
+            강사 자막은 <b>같은 독을 접은 것</b>이다. 다른 화면을 따로 만들면 수강생이 보는 것과
+            강사가 확인하는 것이 갈라져, 정작 확인의 뜻이 없어진다.
+
+            <p>다만 <b>시간 이동은 없다</b>(canSeek=false, currentSessionMs=0). 강사는 재생 경로를
+            타지 않아 맞출 위치 자체가 없고, 위에서 selectVisibleCaptions에 null을 넘겨 도착한
+            자막을 그대로 잇는다 — 강사가 보는 것은 지금 나가고 있는 자막이다.
+          */}
+          {isInstructor && (
+            <CaptionDock
+              captions={glossary.captions}
+              collapsed={!instructorCaptionOpen}
+              currentSessionMs={0}
+              label="실시간 자막"
+              note={instructorCaptionNote}
+              onSeek={seekSession}
+              onSelectTerm={openGlossaryTerm}
+              onToggleCollapse={() => setInstructorCaptionOpen((open) => !open)}
+              canSeek={false}
             />
           )}
         </section>
