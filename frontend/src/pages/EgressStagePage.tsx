@@ -79,6 +79,18 @@ export default function EgressStagePage() {
   // 판서 레이어가 데이터 채널을 구독하려면 Room이 필요하다(ADR-0051).
   const [connectedRoom, setConnectedRoom] = useState<Room | null>(null)
 
+  /*
+   * 이 페이지가 떠 있는 동안만 문서를 합성용으로 바꾼다.
+   *
+   * 전역 스타일이 스크롤바 자리를 항상 예약하는데(`html { scrollbar-gutter: stable }`), 그 15~17px은
+   * 뷰포트 밖이라 무대(position: fixed; inset: 0)가 덮지 못한다. 결과가 녹화 오른쪽의 흰 세로줄이고
+   * VOD에 그대로 박힌다. 클래스를 <html>에 붙였다 떼는 방식이라 앱 화면의 흔들림 방지는 그대로 남는다.
+   */
+  useEffect(() => {
+    document.documentElement.classList.add('egress-document')
+    return () => document.documentElement.classList.remove('egress-document')
+  }, [])
+
   useEffect(() => {
     if (!url || !token) return undefined
 
