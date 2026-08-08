@@ -89,7 +89,8 @@ interface CaptionSegmentState {
   endStreamElapsedMs: number
   boundaryReason: string
   sessionMs: number | null
-  anchoredSessionMs: number | null
+  speechSessionMs: number | null
+  speechEndSessionMs: number | null
 }
 
 interface CaptionLineState {
@@ -101,7 +102,6 @@ interface CaptionLineState {
     text: string
     streamElapsedMs: number
     sessionMs: number | null
-    anchoredSessionMs: number | null
   }>
   /** segmentIndex → 확정 세그먼트. 같은 index 재전달은 last-wins(멱등). */
   segments: Map<number, CaptionSegmentState>
@@ -161,7 +161,7 @@ export function reduceCaptionStream(
   event: CaptionStreamEvent,
 ): CaptionStreamState {
   if (event.type === 'caption.delta') {
-    const { sttSessionId, sequence, streamElapsedMs, sessionMs, anchoredSessionMs, text } = event.payload
+    const { sttSessionId, sequence, streamElapsedMs, sessionMs, text } = event.payload
     const current = state.lines.get(sttSessionId)
     if (current?.deltas.has(sequence)) return state
     const isNewLine = !current
@@ -170,14 +170,13 @@ export function reduceCaptionStream(
       text,
       streamElapsedMs,
       sessionMs: sessionMs ?? null,
-      anchoredSessionMs: anchoredSessionMs ?? null,
     })
     if (isNewLine) pruneOldestLines(lines)
     return { lines, nextOrder }
   }
   if (event.type === 'caption.segment.final') {
     // 확정 세그먼트: 이 segmentIndex를 권위 있는 최종 텍스트로 기록한다(같은 index 재전달은 last-wins).
-    const { sttSessionId, segmentIndex, lastSequence, text, startStreamElapsedMs, endStreamElapsedMs, boundaryReason, sessionMs, anchoredSessionMs } = event.payload
+    const { sttSessionId, segmentIndex, lastSequence, text, startStreamElapsedMs, endStreamElapsedMs, boundaryReason, sessionMs, speechSessionMs, speechEndSessionMs } = event.payload
     const isNewLine = !state.lines.has(sttSessionId)
     const { lines, nextOrder, line } = ensureLine(state, sttSessionId)
     line.segments.set(segmentIndex, {
@@ -188,7 +187,8 @@ export function reduceCaptionStream(
       endStreamElapsedMs,
       boundaryReason,
       sessionMs: sessionMs ?? null,
-      anchoredSessionMs: anchoredSessionMs ?? null,
+      speechSessionMs: speechSessionMs ?? null,
+      speechEndSessionMs: speechEndSessionMs ?? null,
     })
     if (isNewLine) pruneOldestLines(lines)
     return { lines, nextOrder }
@@ -217,12 +217,14 @@ export function reduceCaptionStream(
 /** 한 자막 조각이 놓인 시각축. */
 interface Axis {
   startMs: number
+  endMs: number
   synced: boolean
+  exact: boolean
 }
 
 /** stream-local 축으로 물러난다 — 세션 축이 아니라 위치 동기화 대상이 아니다. */
-function unsynced(startMs: number): Axis {
-  return { startMs, synced: false }
+function unsynced(startMs: number, endMs: number): Axis {
+  return { startMs, endMs, synced: false, exact: false }
 }
 
 /**
@@ -245,9 +247,22 @@ function unsynced(startMs: number): Axis {
  * <p>`sessionMs`도 없으면 raw stream-local. 위치 동기화가 불가능해 그대로 노출된다(ADR-0045 §4).
  */
 function segmentAxis(segment: CaptionSegmentState): Axis {
-  if (segment.sessionMs == null) return unsynced(segment.startStreamElapsedMs)
   const durationMs = Math.max(0, segment.endStreamElapsedMs - segment.startStreamElapsedMs)
-  return { startMs: Math.max(0, segment.sessionMs - durationMs), synced: true }
+  if (segment.speechSessionMs != null) {
+    // 발화 벽시계 기반 정확값(ADR-0107). 끝도 함께 오므로 추정하지 않는다 — 세그먼트 안에도 짧은
+    // 무음이 있어 "시작 + 오디오 길이"로는 끝이 조금씩 이르게 잡힌다.
+    return {
+      startMs: segment.speechSessionMs,
+      endMs: segment.speechEndSessionMs ?? segment.speechSessionMs + durationMs,
+      synced: true,
+      exact: true,
+    }
+  }
+  if (segment.sessionMs == null) {
+    return unsynced(segment.startStreamElapsedMs, segment.endStreamElapsedMs)
+  }
+  const startMs = Math.max(0, segment.sessionMs - durationMs)
+  return { startMs, endMs: startMs + durationMs, synced: true, exact: false }
 }
 
 export function selectCaptionViews(state: CaptionStreamState): CaptionView[] {
@@ -261,17 +276,16 @@ export function selectCaptionViews(state: CaptionStreamState): CaptionView[] {
       let maxLastSequence: number | null = null
       for (const segment of segments) {
         const axis = segmentAxis(segment)
-        // 끝은 시작 + 구간 길이다. 구간 길이는 어느 축에서도 같으므로 시작만 옮기면 끝은 따라온다.
-        const durationMs = Math.max(0, segment.endStreamElapsedMs - segment.startStreamElapsedMs)
         views.push({
           segmentId: `${line.sttSessionId}#${segment.segmentIndex}`,
           startMs: axis.startMs,
-          endMs: axis.startMs + durationMs,
+          endMs: axis.endMs,
           at: formatTimeLabel(axis.startMs),
           text: segment.text,
           termReferences: [],
           pending: false,
           synced: axis.synced,
+          exact: axis.exact,
         })
         if (segment.segmentIndex > maxSegmentIndex) maxSegmentIndex = segment.segmentIndex
         if (maxLastSequence == null || segment.lastSequence > maxLastSequence) maxLastSequence = segment.lastSequence
@@ -290,8 +304,8 @@ export function selectCaptionViews(state: CaptionStreamState): CaptionView[] {
       for (const sequence of sequences) {
         const delta = line.deltas.get(sequence)!
         const axis: Axis = delta.sessionMs != null
-          ? { startMs: delta.sessionMs, synced: true }
-          : unsynced(delta.streamElapsedMs)
+          ? { startMs: delta.sessionMs, endMs: delta.sessionMs, synced: true, exact: false }
+          : unsynced(delta.streamElapsedMs, delta.streamElapsedMs)
         const isPartial = maxLastSequence == null || sequence > maxLastSequence
         if (isPartial) {
           if (!started) {
@@ -348,7 +362,7 @@ export function selectVisibleCaptions(
   positionMs: number | null,
 ): CaptionView[] {
   if (positionMs == null) return captions
-  return captions.filter((caption) => !caption.synced || caption.endMs <= ceilingFor(positionMs))
+  return captions.filter((caption) => !caption.synced || caption.endMs <= ceilingFor(caption, positionMs))
 }
 
 /**
@@ -357,8 +371,10 @@ export function selectVisibleCaptions(
  * <p>근사 축은 도착 시각 기준이라 발화보다 STT 지연만큼 늦다. 그 지연을 더한 지점까지 열어야 말이
  * 들리는 순간에 자막이 뜬다.
  */
-function ceilingFor(positionMs: number): number {
-  return positionMs + CAPTION_STT_LAG_MS
+function ceilingFor(caption: CaptionView, positionMs: number): number {
+  // 정확값은 발화 시각 그 자체라 재생 위치를 그대로 상한으로 쓴다. 근사 축만 지연을 더해 연다 —
+  // 정확값에 같은 보정을 걸면 그만큼 이르게 떠 버린다.
+  return caption.exact ? positionMs : positionMs + CAPTION_STT_LAG_MS
 }
 
 /**
@@ -369,7 +385,8 @@ function ceilingFor(positionMs: number): number {
  * (늦게 도착하는 것보다 조금 이른 편이 회복 가능하다).
  */
 export function captionSeekMs(caption: CaptionView): number {
-  if (!caption.synced) return caption.startMs
+  // 정확값은 그 자리가 곧 발화 시작이다. 지연을 빼면 문장 앞 여백으로 떨어진다.
+  if (!caption.synced || caption.exact) return caption.startMs
   return Math.max(0, caption.startMs - CAPTION_STT_LAG_MS)
 }
 

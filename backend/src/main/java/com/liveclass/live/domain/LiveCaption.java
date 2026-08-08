@@ -66,6 +66,16 @@ public class LiveCaption {
     /** started의 절대 시간 앵커(streamElapsedMs=0의 UTC, ADR-0052). 그 외 type엔 null. */
     private OffsetDateTime audioStartedAt;
 
+    /**
+     * 발화가 실제로 시작·종료한 UTC 벽시계(segment.final 전용, nullable, ADR-0107).
+     *
+     * <p>{@code startStreamElapsedMs}는 받은 오디오의 누적이라 무음이 빠져 세션 시계로 옮길 수 없다.
+     * 이 값은 무음을 포함하므로 {@code clockOriginAt}만 빼면 세션-ms가 된다.
+     */
+    private OffsetDateTime startedAt;
+
+    private OffsetDateTime endedAt;
+
     /** segment.final의 attempt 내 0-based 세그먼트 순번(ADR-0052). 그 외 type엔 null. */
     private Long segmentIndex;
 

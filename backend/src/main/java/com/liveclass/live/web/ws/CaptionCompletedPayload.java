@@ -11,12 +11,12 @@ public record CaptionCompletedPayload(
         String sttSessionId,
         long lastSequence,
         Long sessionMs,
-        Long anchoredSessionMs,
+        Long speechSessionMs,
         String reason
 ) {
 
-    public static CaptionCompletedPayload from(LiveCaptionStoredEvent e, Long sessionMs, Long anchoredSessionMs) {
+    public static CaptionCompletedPayload from(LiveCaptionStoredEvent e, Long sessionMs, Long speechSessionMs) {
         return new CaptionCompletedPayload(
-                e.sttSessionId(), e.lastSequence(), sessionMs, anchoredSessionMs, e.reason());
+                e.sttSessionId(), e.lastSequence(), sessionMs, speechSessionMs, e.reason());
     }
 }

@@ -39,7 +39,16 @@ public record CaptionEvent(
         Long segmentIndex,
         Long startStreamElapsedMs,
         Long endStreamElapsedMs,
-        String boundaryReason
+        String boundaryReason,
+        /**
+         * 발화가 실제로 시작·종료한 UTC 벽시계(segment.final 전용, nullable, ADR-0107).
+         *
+         * <p>{@code start/endStreamElapsedMs}는 <b>받은 오디오의 누적 길이</b>라 무음이 빠진다 — 그래서
+         * 세션 시계로 옮길 수 없다(ADR-0106). 이 두 값은 무음을 포함한 진짜 시각이라 {@code clockOriginAt}만
+         * 빼면 세션-ms가 된다. agent가 안 실어 주면 null이고, 그때는 근사 축으로 물러난다.
+         */
+        OffsetDateTime startedAt,
+        OffsetDateTime endedAt
 ) {
 
     public static final String TYPE_DELTA = "caption.delta";

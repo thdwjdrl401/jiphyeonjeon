@@ -26,13 +26,17 @@ public record LiveCaptionStoredEvent(
         Long segmentIndex,
         Long startStreamElapsedMs,
         Long endStreamElapsedMs,
-        String boundaryReason
+        String boundaryReason,
+        /** 발화 시작·종료 UTC 벽시계(segment.final 전용, nullable, ADR-0107). */
+        OffsetDateTime startedAt,
+        OffsetDateTime endedAt
 ) {
 
     public static LiveCaptionStoredEvent from(CaptionEvent e) {
         return new LiveCaptionStoredEvent(
                 e.sessionId(), e.lessonId(), e.type(), e.sttSessionId(),
                 e.sequence(), e.lastSequence(), e.streamElapsedMs(), e.text(), e.reason(), e.occurredAt(),
-                e.segmentIndex(), e.startStreamElapsedMs(), e.endStreamElapsedMs(), e.boundaryReason());
+                e.segmentIndex(), e.startStreamElapsedMs(), e.endStreamElapsedMs(), e.boundaryReason(),
+                e.startedAt(), e.endedAt());
     }
 }

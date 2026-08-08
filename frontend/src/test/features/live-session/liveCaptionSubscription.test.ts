@@ -57,7 +57,7 @@ describe('라이브 자막 STOMP 구독 계약', () => {
 
     const receive = client.subscribe.mock.calls[0][1] as (frame: { body: string }) => void
 
-    // delta: raw streamElapsedMs 그대로 + 근사 sessionMs(ADR-0045) + 앵커 anchoredSessionMs(ADR-0104) 통과.
+    // delta: raw streamElapsedMs 그대로 + 근사 sessionMs(ADR-0045) 통과. 발화 벽시계는 segment.final 전용이다(ADR-0107).
     receive({
       body: JSON.stringify({
         eventId: 'evt-1',
@@ -71,7 +71,6 @@ describe('라이브 자막 STOMP 구독 계약', () => {
           sequence: 3,
           streamElapsedMs: 42_000,
           sessionMs: 41_000,
-          anchoredSessionMs: 40_500,
           text: '자막 조각',
         },
       }),
@@ -84,7 +83,6 @@ describe('라이브 자막 STOMP 구독 계약', () => {
         sequence: 3,
         streamElapsedMs: 42_000,
         sessionMs: 41_000,
-        anchoredSessionMs: 40_500,
         text: '자막 조각',
       },
     })
@@ -106,7 +104,6 @@ describe('라이브 자막 STOMP 구독 계약', () => {
         sttSessionId: 'stt-1',
         lastSequence: 3,
         sessionMs: null,
-        anchoredSessionMs: null,
         reason: 'ROOM_DELETED',
       },
     })
@@ -142,7 +139,8 @@ describe('라이브 자막 STOMP 구독 계약', () => {
         endStreamElapsedMs: 44_000,
         boundaryReason: 'SILENCE',
         sessionMs: null,
-        anchoredSessionMs: null,
+        speechSessionMs: null,
+        speechEndSessionMs: null,
       },
     })
 
@@ -211,7 +209,6 @@ describe('저장된 자막 리로드(getCaptions) 매핑', () => {
           sequence: 1,
           streamElapsedMs: 40_000,
           sessionMs: null,
-          anchoredSessionMs: null,
           text: '인증이 끝나면 ',
         },
       },
@@ -227,7 +224,8 @@ describe('저장된 자막 리로드(getCaptions) 매핑', () => {
           endStreamElapsedMs: 44_000,
           boundaryReason: 'SILENCE',
           sessionMs: 39_000,
-          anchoredSessionMs: null,
+          speechSessionMs: null,
+          speechEndSessionMs: null,
         },
       },
     ])

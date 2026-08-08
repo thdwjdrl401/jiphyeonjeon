@@ -69,7 +69,8 @@ function segmentFinal(
       endStreamElapsedMs: startStreamElapsedMs + 3_000,
       boundaryReason: 'SILENCE',
       sessionMs: null,
-      anchoredSessionMs: null,
+      speechSessionMs: null,
+      speechEndSessionMs: null,
       ...overrides,
     },
   }
@@ -239,17 +240,39 @@ describe('확정 세그먼트 경계 (caption.segment.final)', () => {
     expect(captionSeekMs(view)).toBe(42_000 - CAPTION_STT_LAG_MS)
   })
 
-  it('anchoredSessionMs가 와도 쓰지 않는다(회귀 가드)', () => {
-    /*
-     * 앵커 축은 `audioStartedAt + streamElapsedMs`인데 streamElapsedMs가 벽시계가 아니라 **받은 오디오
-     * 누적**이라(realtime-agent audio_source), 무음·뮤트로 프레임이 안 온 만큼 계속 뒤처진다. 운영
-     * 데이터에서 세션마다 0.6초~21초씩 이르게 어긋났다. 근사(sessionMs)를 쓴다.
-     */
+  it('발화 벽시계가 오면 근사를 제치고 그것을 쓴다', () => {
+    // 근사(sessionMs)와 정확(speechSessionMs)을 다르게 줘 어느 쪽을 골랐는지 값으로 구분한다.
     const views = selectCaptionViews(fold([
-      segmentFinal('stt-1', 0, 1, 900_000, '근사를 쓴다.', { sessionMs: 45_000, anchoredSessionMs: 40_000 }),
+      segmentFinal('stt-1', 0, 1, 900_000, '정확한 축을 쓴다.', {
+        sessionMs: 45_000, speechSessionMs: 40_000, speechEndSessionMs: 43_500,
+      }),
     ]))
 
-    expect(views[0]).toMatchObject({ startMs: 42_000, endMs: 45_000, synced: true })
+    expect(views[0]).toMatchObject({ startMs: 40_000, endMs: 43_500, synced: true, exact: true })
+  })
+
+  it('정확 축은 STT 지연 보정을 받지 않는다(seek·노출 모두)', () => {
+    /*
+     * 보정은 도착 기준 근사값의 편향을 상쇄하려는 것이다. 발화 시각 그 자체에 걸면 그만큼 이르게
+     * 어긋난다 — ADR-0104가 정확값에 보정을 안 걸어야 했던 이유와 같고, 이번엔 축이 진짜 정확하다.
+     */
+    const [exact] = selectCaptionViews(fold([
+      segmentFinal('stt-1', 0, 1, 900_000, '보정 없음.', {
+        speechSessionMs: 40_000, speechEndSessionMs: 43_000,
+      }),
+    ]))
+
+    expect(captionSeekMs(exact)).toBe(40_000)
+    expect(selectVisibleCaptions([exact], 42_999)).toHaveLength(0)
+    expect(selectVisibleCaptions([exact], 43_000)).toHaveLength(1)
+  })
+
+  it('발화 벽시계가 없으면 종전 근사 경로를 그대로 쓴다(옛 세션)', () => {
+    const views = selectCaptionViews(fold([
+      segmentFinal('stt-1', 0, 1, 900_000, '근사로 물러난다.', { sessionMs: 45_000 }),
+    ]))
+
+    expect(views[0]).toMatchObject({ startMs: 42_000, endMs: 45_000, synced: true, exact: false })
   })
 
   it('seek 목표는 STT 방출 지연만큼 당겨진다(문장 시작에 닿게)', () => {
@@ -281,7 +304,7 @@ describe('확정 세그먼트 경계 (caption.segment.final)', () => {
         occurredAt: '2026-07-29T10:00:00+09:00',
         payload: {
           sttSessionId: 'stt-1', sequence: 1, streamElapsedMs: 900_000,
-          sessionMs: 40_000, anchoredSessionMs: null, text: '말하는 중',
+          sessionMs: 40_000, text: '말하는 중',
         },
       },
     ]))
@@ -305,7 +328,7 @@ describe('확정 세그먼트 경계 (caption.segment.final)', () => {
         occurredAt: '2026-07-29T10:00:00+09:00',
         payload: {
           sttSessionId: 'stt-1', sequence: 1, streamElapsedMs: 900_000,
-          sessionMs: 45_000, anchoredSessionMs: 40_000, text: '진행 중 조각도 근사를 쓴다.',
+          sessionMs: 45_000, text: '진행 중 조각도 근사를 쓴다.',
         },
       },
     ]))

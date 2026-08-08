@@ -200,7 +200,7 @@ class LiveCaptionWebSocketTest {
                 UUID.fromString(sessionId), UUID.fromString(lessonId),
                 "openai-realtime:reload", 1L, null, 41000L, "복원될 자막", null,
                 clockOrigin.plusSeconds(5),
-                null, null, null, null, null));
+                null, null, null, null, null, null, null));
 
         HttpResponse<String> res = student.get("/api/live-sessions/" + sessionId + "/captions");
         assertThat(res.statusCode()).as("참가자는 자막 리로드를 조회한다").isEqualTo(200);
