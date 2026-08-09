@@ -8,7 +8,10 @@ import { deleteLesson } from '@/features/curriculum/curriculumManagementService'
 import { deleteLessonMaterial, getLesson, prepareLessonAi, saveLesson } from '@/features/lesson/lessonService'
 import LessonBreadcrumbs from '@/features/lesson/LessonBreadcrumbs'
 import { invalidateAfterLessonWrite } from '@/features/lesson/lessonQueryCache'
+import type { MaterialUploadProgress } from '@/features/lesson/lessonService.interface'
 import MaterialStatusBadges from '@/features/material/MaterialStatusBadges'
+import UploadProgressNotice from '@/features/material/UploadProgressNotice'
+import { materialUploadLabel } from '@/features/material/uploadProgressLabel'
 import { hasMaterialInProgress, materialRefetchInterval } from '@/features/material/materialStatus'
 import { useMaterialDownload } from '@/features/material/useMaterialDownload'
 import { ApiError } from '@/shared/api/client'
@@ -81,6 +84,7 @@ export default function LessonFormPage() {
   const [duration, setDuration] = useState('90')
   const [entryWindow, setEntryWindow] = useState('10')
   const [submitting, setSubmitting] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState<MaterialUploadProgress | null>(null)
   const pendingMaterialCount = materials.filter((material) => material.file).length
   // 업로드 대기(로컬 File)와 임베딩 진행 중을 한 값으로 본다 — 강사 입장에선 둘 다 "아직"이다.
   const materialsInProgress = hasMaterialInProgress(materials)
@@ -197,6 +201,7 @@ export default function LessonFormPage() {
       return
     }
     setSubmitting(true)
+    setUploadProgress(null)
     try {
       const saved = await saveLesson({
         sectionId,
@@ -208,6 +213,7 @@ export default function LessonFormPage() {
         entryWindowMinutes: Number(entryWindow),
         expectedDurationMinutes: Number(duration),
         materials: materials.flatMap((material) => material.file ? [material.file] : []),
+        onMaterialProgress: setUploadProgress,
       })
       // 올린 파일은 이제 서버에 있다 — 로컬의 "업로드 대기" 항목을 떼지 않으면 다시 저장할 때
       // 같은 자료가 한 번 더 업로드·연결된다. 아래 refetch가 실제 materialId로 채워 준다.
@@ -225,6 +231,7 @@ export default function LessonFormPage() {
       toast.error('강의 저장에 실패했습니다. 입력값과 서버 상태를 확인해 주세요.')
     } finally {
       setSubmitting(false)
+      setUploadProgress(null)
     }
   }
   const prepare = async () => {
@@ -346,6 +353,10 @@ export default function LessonFormPage() {
               </button>
             )}
           />
+        )}
+
+        {uploadProgress && (
+          <UploadProgressNotice label={materialUploadLabel(uploadProgress)} ratio={uploadProgress.ratio} />
         )}
 
         <div className="sticky-form-actions lesson-form__actions">

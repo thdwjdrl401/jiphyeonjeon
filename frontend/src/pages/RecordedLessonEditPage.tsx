@@ -6,7 +6,12 @@ import { useAuth } from '@/features/auth/AuthContext'
 import { deleteLesson } from '@/features/curriculum/curriculumManagementService'
 import { formatRecordedLessonFileSize } from '@/features/curriculum/recordedLessonUpload'
 import { deleteLessonMaterial, getLesson, saveLesson } from '@/features/lesson/lessonService'
+import type { MaterialUploadProgress } from '@/features/lesson/lessonService.interface'
 import { invalidateAfterLessonWrite } from '@/features/lesson/lessonQueryCache'
+import MaterialStatusBadges from '@/features/material/MaterialStatusBadges'
+import { materialRefetchInterval } from '@/features/material/materialStatus'
+import UploadProgressNotice from '@/features/material/UploadProgressNotice'
+import { materialUploadLabel } from '@/features/material/uploadProgressLabel'
 import { useMaterialDownload } from '@/features/material/useMaterialDownload'
 import { useRecordedProcessing } from '@/features/recorded-lesson/useRecordedLessonQueries'
 import { ApiError } from '@/shared/api/client'
@@ -20,6 +25,8 @@ interface SelectedMaterial {
   name: string
   size: string
   file?: File
+  embeddingStatus?: string
+  keyTermStatus?: string
 }
 
 const MAX_MATERIAL_BYTES = 50 * 1024 * 1024
@@ -45,6 +52,7 @@ export default function RecordedLessonEditPage() {
   const [submitting, setSubmitting] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [uploadProgress, setUploadProgress] = useState<MaterialUploadProgress | null>(null)
 
   const lessonQuery = useQuery({
     queryKey: ['recorded-lesson', lessonId, curriculumId, sectionId],
@@ -56,6 +64,8 @@ export default function RecordedLessonEditPage() {
       sectionId,
     }),
     enabled: Boolean(lessonId && curriculumId && sectionId),
+    refetchInterval: (query) => materialRefetchInterval(query.state.data?.materials),
+    refetchIntervalInBackground: false,
   })
   const lesson = lessonQuery.data
   const isRecordedLesson = lesson?.deliveryType === 'RECORDED'
@@ -71,11 +81,22 @@ export default function RecordedLessonEditPage() {
     if (!lesson) return
     setTitle(lesson.title)
     setDescription(lesson.description)
-    setMaterials(lesson.materials.map((material) => ({
-      id: material.id,
-      name: material.name,
-      size: material.size,
-    })))
+    /*
+     * 서버 목록으로 맞추되 아직 저장하지 않은(File 보유) 선택은 남긴다. 예전엔 통째로 덮었는데,
+     * lesson이 거의 안 바뀌어서 드러나지 않았을 뿐이다 — 임베딩 폴링이 붙은 지금은 3초마다
+     * 이 자리를 지나가므로, 방금 드롭한 파일이 저장도 못 해 보고 사라진다.
+     * 저장에 성공한 파일은 save()의 refetch가 서버 목록으로 데려오므로 여기서 중복되지 않는다.
+     */
+    setMaterials((current) => [
+      ...lesson.materials.map((material) => ({
+        id: material.id,
+        name: material.name,
+        size: material.size,
+        embeddingStatus: material.embeddingStatus ?? material.status,
+        keyTermStatus: material.keyTermStatus,
+      })),
+      ...current.filter((material) => material.file),
+    ])
   }, [lesson])
 
   const addMaterialFiles = (incomingFiles: File[]) => {
@@ -131,6 +152,7 @@ export default function RecordedLessonEditPage() {
     if (submitting || !title.trim()) return
     setSubmitting(true)
     setSubmitError(null)
+    setUploadProgress(null)
     try {
       await saveLesson({
         sectionId,
@@ -138,6 +160,7 @@ export default function RecordedLessonEditPage() {
         title: title.trim(),
         description: description.trim(),
         materials: materials.flatMap((material) => material.file ? [material.file] : []),
+        onMaterialProgress: setUploadProgress,
       })
       await invalidateAfterLessonWrite(queryClient, curriculumId, lessonId)
       toast.success('녹화강의 정보를 수정했습니다.')
@@ -148,6 +171,7 @@ export default function RecordedLessonEditPage() {
         : '녹화강의 정보를 수정하지 못했습니다. 입력값과 서버 상태를 확인해 주세요.')
     } finally {
       setSubmitting(false)
+      setUploadProgress(null)
     }
   }
 
@@ -264,7 +288,7 @@ export default function RecordedLessonEditPage() {
                   <span className="file-icon">PPTX</span>
                   <div><strong>{material.name}</strong><small>{material.size}</small></div>
                   {!material.file && <button className="button button--soft button--small" type="button" disabled={downloadingMaterialId === material.id} aria-label={`${material.name} 다운로드`} onClick={() => void downloadMaterial({ scope: 'LESSON', parentId: lessonId, materialId: material.id, fileName: material.name, asInstructor: true })}>{downloadingMaterialId === material.id ? '받는 중…' : '다운로드'}</button>}
-                  <StatusBadge tone={material.file ? 'warning' : 'success'}>{material.file ? '업로드 대기' : '등록됨'}</StatusBadge>
+                  <MaterialStatusBadges material={material} audience="instructor" />
                   <button type="button" aria-label={`${material.name} 제거`} onClick={() => void removeMaterial(material)}>×</button>
                 </li>
               ))}
@@ -292,6 +316,9 @@ export default function RecordedLessonEditPage() {
         />
 
         {submitError && <InlineNotice tone="danger">{submitError}</InlineNotice>}
+        {uploadProgress && (
+          <UploadProgressNotice label={materialUploadLabel(uploadProgress)} ratio={uploadProgress.ratio} />
+        )}
 
         <div className="sticky-form-actions lesson-form__actions">
           <Link className="button button--ghost" to={detailPath}>취소</Link>

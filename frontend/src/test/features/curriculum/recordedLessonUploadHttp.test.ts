@@ -7,6 +7,11 @@ import { apiClient } from '@/shared/api/client'
 vi.mock('@/shared/config/runtime', () => ({ isMockApiEnabled: false, isTestMode: false }))
 vi.mock('@/shared/api/uploadAsset', () => ({
   uploadAsset: vi.fn(async () => ({ assetId: 'material-asset-1', kind: 'MATERIAL', status: 'UPLOADED' })),
+  // 영상 PUT은 putBytes를 거친다(진행률 보고를 붙이면서 axios 직접 호출을 걷어냈다). 이 테스트는
+  // 아래에서 axios.request 자체를 감시하므로, 여기서는 실제 구현을 그대로 통과시킨다.
+  putBytes: vi.fn(async (ticket: { uploadUrl: string; method: string; headers: Record<string, string> }, file: File) => {
+    await axios.request({ url: ticket.uploadUrl, method: ticket.method, headers: ticket.headers, data: file })
+  }),
 }))
 
 describe('녹화강의 HTTP 업로드 계약', () => {

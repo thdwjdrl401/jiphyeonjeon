@@ -1959,3 +1959,20 @@ th { color: var(--ink-500); font-size: .67rem; }
  */
 .recorded-reupload { display: inline-flex; align-items: center; cursor: pointer; }
 .recorded-reupload input { display: none; }
+
+/*
+ * 업로드 진행 막대. 폼 제출 중에만 뜬다(RecordedLessonUploadPage·RecordedLessonEditPage·LessonFormPage).
+ *
+ * value 없는 <progress>는 브라우저가 부정형 막대로 그려 준다 — 전체 크기를 모를 때 0%로 채우면
+ * "멈췄다"로 읽히므로 그 기본 동작을 그대로 쓴다. 따라서 ::-webkit-progress-value에 색만 주고
+ * width를 건드리지 않는다.
+ */
+.upload-progress { display: grid; gap: 6px; padding: 12px 15px; border: 1px solid var(--blue-100); border-radius: 11px; background: var(--blue-50); }
+.upload-progress__line { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.upload-progress__label { min-width: 0; overflow: hidden; color: var(--blue-700); font-size: .76rem; text-overflow: ellipsis; white-space: nowrap; }
+/* 퍼센트는 매 프레임 바뀐다 — tabular-nums가 아니면 자릿수마다 라벨을 좌우로 민다. */
+.upload-progress__percent { flex: 0 0 auto; color: var(--blue-700); font-size: .76rem; font-variant-numeric: tabular-nums; font-weight: 700; }
+.upload-progress__bar { width: 100%; height: 6px; border: 0; border-radius: 3px; appearance: none; background: var(--blue-100); }
+.upload-progress__bar::-webkit-progress-bar { border-radius: 3px; background: var(--blue-100); }
+.upload-progress__bar::-webkit-progress-value { border-radius: 3px; background: var(--blue-600); transition: width .2s ease; }
+.upload-progress__bar::-moz-progress-bar { border-radius: 3px; background: var(--blue-600); }

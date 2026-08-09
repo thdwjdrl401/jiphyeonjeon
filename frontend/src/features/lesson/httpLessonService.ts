@@ -272,9 +272,17 @@ export const httpLessonService = {
 
     // 각 자료를 presigned로 올리고(발급→PUT→complete) 레슨에 연결한다. 레슨은 이미 저장됐으므로
     // 어느 파일에서 멈췄는지 알려, 레슨은 저장됐고 자료만 부분 실패했음을 호출자가 알 수 있게 한다.
-    for (const file of request.materials) {
+    const onMaterialProgress = request.onMaterialProgress
+    for (const [index, file] of request.materials.entries()) {
+      const position = { index: index + 1, count: request.materials.length, fileName: file.name }
       try {
-        const asset = await uploadAsset(file, 'MATERIAL')
+        onMaterialProgress?.({ ...position, ratio: 0 })
+        // 원하지 않는 호출자에게는 콜백 자체를 넘기지 않는다 — 넘기면 청크마다 도는 일이 공짜로 생긴다.
+        const asset = await uploadAsset(
+          file,
+          'MATERIAL',
+          onMaterialProgress && (({ ratio }) => onMaterialProgress({ ...position, ratio })),
+        )
         await apiClient.post(`/instructor/lessons/${lesson.lessonId}/materials`, { assetId: asset.assetId })
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error)
