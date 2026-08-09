@@ -113,3 +113,5 @@ export const getWatchHeatmap = (lessonId: string, durationMs: number | null) =>
 export const getGlossary = (lessonId: string) => liveSessionService.getGlossary(lessonId)
 export const upsertGlossaryTerm = (lessonId: string, term: string, definition: string) =>
   liveSessionService.upsertGlossaryTerm(lessonId, term, definition)
+export const deleteGlossaryTerm = (lessonId: string, term: string) =>
+  liveSessionService.deleteGlossaryTerm(lessonId, term)

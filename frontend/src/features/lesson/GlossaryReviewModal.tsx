@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { SOURCE_LABEL } from '@/features/live-session/glossaryView'
-import { getGlossary, upsertGlossaryTerm, type GlossaryTerm } from '@/features/live-session/liveSessionService'
+import {
+  deleteGlossaryTerm,
+  getGlossary,
+  upsertGlossaryTerm,
+  type GlossaryTerm,
+} from '@/features/live-session/liveSessionService'
 import { InlineNotice } from '@/shared/ui/WorkspaceUi'
 import { useToast } from '@/shared/ui/Toast'
 
@@ -44,6 +49,26 @@ export default function GlossaryReviewModal({ lessonId, lessonTitle, onClose }: 
     },
     onError: () => toast.error('용어를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.'),
     onSettled: () => setSavingTermId(null),
+  })
+
+  /*
+   * 용어를 목록에서 내린다.
+   *
+   * <p>AI가 자료에서 뽑은 용어여도 내려간다 — 서버가 원본을 지우는 것이 아니라 지웠다는 사실을
+   * 덮어쓰기 자리에 남기기 때문이다(ADR-0111). 그래서 자료를 다시 읽어도 되돌아오지 않는다.
+   *
+   * <p>되돌리려면 같은 이름으로 다시 등록하면 된다. 그 길이 열려 있어서 확인 창을 두지 않는다 —
+   * 지우는 것이 강의 자체를 건드리지도 않는다.
+   */
+  const deleteMutation = useMutation({
+    mutationFn: (term: string) => deleteGlossaryTerm(lessonId, term),
+    onSuccess: (_result, term) => {
+      queryClient.setQueryData<GlossaryTerm[]>(queryKey, (previous = []) => (
+        previous.filter((entry) => entry.termId !== term)
+      ))
+      toast.success('용어를 목록에서 내렸습니다. 같은 이름으로 다시 등록하면 되살아납니다.')
+    },
+    onError: () => toast.error('용어를 삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.'),
   })
 
   useEffect(() => {
@@ -162,6 +187,14 @@ export default function GlossaryReviewModal({ lessonId, lessonTitle, onClose }: 
                         <div className="glossary-review-row__view">
                           <p>{term.definition}</p>
                           <button className="text-button" type="button" onClick={() => startEdit(term)}>수정</button>
+                          <button
+                            className="text-button text-button--danger"
+                            disabled={deleteMutation.isPending}
+                            type="button"
+                            onClick={() => deleteMutation.mutate(term.termId)}
+                          >
+                            삭제
+                          </button>
                         </div>
                       )}
                     </li>

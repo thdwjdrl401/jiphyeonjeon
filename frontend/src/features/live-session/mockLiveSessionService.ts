@@ -540,6 +540,12 @@ export const mockLiveSessionService = {
     glossaryOverrides.set(lessonId, next)
     return updated
   },
+  /** 서버는 묘비를 남기지만(ADR-0111) 화면에서 보이는 결과는 같다 — 목록에서 빠진다. */
+  async deleteGlossaryTerm(lessonId, term) {
+    const trimmed = term.trim()
+    const current = glossaryOverrides.get(lessonId) ?? defaultGlossaryTerms
+    glossaryOverrides.set(lessonId, current.filter((entry) => entry.term !== trimmed))
+  },
   async getMyWatchBuckets() {
     return { 0: 1, 1: 1, 2: 3, 3: 1 }
   },

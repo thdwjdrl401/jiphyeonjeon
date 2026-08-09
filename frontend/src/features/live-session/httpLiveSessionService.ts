@@ -958,6 +958,10 @@ export const httpLiveSessionService = {
       `/instructor/lessons/${lessonId}/glossary`, { term, definition })
     return data
   },
+  async deleteGlossaryTerm(lessonId, term) {
+    // 용어가 곧 식별자라 경로에 들어간다(공백·기호가 있을 수 있어 인코딩한다).
+    await apiClient.delete(`/instructor/lessons/${lessonId}/glossary/${encodeURIComponent(term)}`)
+  },
   async getMyWatchBuckets(lessonId) {
     const { data } = await apiClient.get<Record<number, number>>(
       `/lessons/${lessonId}/watch-buckets/me`)

@@ -66,6 +66,11 @@ public class LessonGlossaryService {
             merged.put(source.getTerm(), new GlossaryTerm(source.getTerm(), source.getDefinition(), "MATERIAL"));
         }
         for (LessonGlossaryOverride override : repository.findByLessonId(lessonId)) {
+            // 묘비면 원본까지 걷어낸다 — 지웠는데 AI가 뽑은 것이 그대로 남으면 지운 것이 아니다.
+            if (override.getDeletedAt() != null) {
+                merged.remove(override.getTerm());
+                continue;
+            }
             merged.put(override.getTerm(), new GlossaryTerm(override.getTerm(), override.getDefinition(), "INSTRUCTOR"));
         }
         return new ArrayList<>(merged.values());
@@ -100,12 +105,38 @@ public class LessonGlossaryService {
                     return created;
                 });
         row.setDefinition(definition.trim());
+        // 지웠던 용어를 다시 등록하면 되살아난다. 묘비를 남겨 둔 채 정의만 바꾸면 계속 안 보인다.
+        row.setDeletedAt(null);
         row.setUpdatedBy(instructorId);
         row.setUpdatedAt(OffsetDateTime.now());
         repository.save(row);
         // 진행 중인 라이브 화면이 용어집을 다시 읽게 한다. 라이브가 없으면 듣는 쪽이 조용히 흘린다.
         events.publishEvent(new LessonGlossaryChangedEvent(lessonId, LessonGlossaryChangedEvent.Reason.INSTRUCTOR_EDIT));
         return new GlossaryTerm(trimmed, row.getDefinition(), "INSTRUCTOR");
+    }
+
+    /**
+     * 강사가 용어를 지운다. <b>멱등</b>이다 — 없던 용어를 지워도 성공이고, 두 번 지워도 같다.
+     *
+     * <p>원본을 지우는 것이 아니라 <b>묘비를 세운다</b>. ai 원본은 자료를 다시 읽을 때마다 되살아나므로
+     * 지운 사실을 우리 쪽에 남겨 두지 않으면 다음 조회에서 되돌아온다.
+     */
+    @Transactional
+    public void delete(UUID instructorId, UUID lessonId, String term) {
+        access.ensureCanViewInsights(instructorId, lessonId);
+        String trimmed = term.trim();
+        LessonGlossaryOverride row = repository
+                .findById(new com.liveclass.learning.domain.LessonGlossaryOverrideId(lessonId, trimmed))
+                .orElseGet(() -> {
+                    LessonGlossaryOverride created = new LessonGlossaryOverride();
+                    created.setLessonId(lessonId);
+                    created.setTerm(trimmed);
+                    return created;
+                });
+        row.setDeletedAt(OffsetDateTime.now());
+        row.setUpdatedBy(instructorId);
+        row.setUpdatedAt(OffsetDateTime.now());
+        repository.save(row);
     }
 
     /**
