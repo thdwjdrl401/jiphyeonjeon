@@ -46,7 +46,7 @@ describe('강의 상세 — 녹화 처리 배지', () => {
      * 아직 볼 것이 없으므로 검수 버튼을 내주지 않는다. 예전에는 이 버튼이 늘 있었고, 눌러
      * 들어가면 재생이 안 됐다.
      */
-    expect(within(panel).queryByRole('link', { name: '미리보기·검수' })).not.toBeInTheDocument()
+    expect(within(panel).queryByRole('link', { name: '다시보기 열기' })).not.toBeInTheDocument()
   })
 
   it('처리가 끝나면 원이 멈추고 검수로 들어갈 수 있다', async () => {
@@ -59,7 +59,7 @@ describe('강의 상세 — 녹화 처리 배지', () => {
     expect(link.querySelector('.status-pill__spinner')).toBeNull()
     // 준비가 끝나도 배지는 처리 화면으로 간다 — 영상은 옆 버튼이 맡는다.
     expect(link.getAttribute('href')).toMatch(/\/processing$/)
-    const review = within(panel).getByRole('link', { name: '미리보기·검수' })
+    const review = within(panel).getByRole('link', { name: '다시보기 열기' })
     expect(review.getAttribute('href')).toMatch(/\/replay$/)
   })
 })

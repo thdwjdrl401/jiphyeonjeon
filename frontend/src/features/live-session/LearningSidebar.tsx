@@ -299,7 +299,13 @@ function GlossaryPanel({
   return (
     <div className="side-panel-content glossary-panel" {...panelProps}>
       <header className="learning-panel-heading">
-        <div><strong>검수된 핵심 용어</strong><small>강의 전에 강사가 확정한 설명입니다.</small></div>
+        {/*
+          "검수된"·"강사가 확정한"이라고 하지 않는다. 용어집은 AI가 자료에서 뽑은 것과 강사가
+          고치거나 더한 것을 합친 것이라(ADR-0064) 강사 손이 닿지 않은 항목이 섞여 있고, 실제로
+          아래 각 항목이 "자료에서 추출"·"강사 등록"으로 그 출처를 밝힌다. 게다가 강사는 강의
+          중에도 고칠 수 있다(ADR-0110) — "강의 전에"도 사실이 아니다.
+        */}
+        <div><strong>핵심 용어</strong><small>강의 자료에서 뽑고 강사가 다듬은 설명입니다.</small></div>
         <div className="lecture-note-heading__actions">
           {terms.length > 0 && (
             <div className="lecture-note-toolbar">

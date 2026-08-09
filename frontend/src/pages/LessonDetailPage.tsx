@@ -9,7 +9,7 @@ import { LESSON_MATERIALS_ANCHOR } from '@/features/lesson/lessonRouting'
 import { getLesson } from '@/features/lesson/lessonService'
 import type { LessonMaterialView } from '@/features/lesson/lessonService.interface'
 import LessonBreadcrumbs from '@/features/lesson/LessonBreadcrumbs'
-import { isLiveEntryOpen } from '@/features/live-session/liveEntry'
+import { entryOpensAtOf, isLiveEntryOpen } from '@/features/live-session/liveEntry'
 import { getLiveSession, getProcessingStatus } from '@/features/live-session/liveSessionService'
 import { describeReplayBadge, processingPollInterval } from '@/features/live-session/liveSessionProcessing'
 import type { MaterialDownloadRequest } from '@/features/material/materialDownloadService'
@@ -99,7 +99,18 @@ export default function LessonDetailPage() {
   const replayBadge = isInstructor
     ? describeReplayBadge(processingQuery.data, processingQuery.isPending && Boolean(endedSessionId))
     : null
-  const canEnterLive = lesson.liveSession ? isLiveEntryOpen(lesson.liveSession) : false
+  /*
+   * 입장 판정에는 강사가 정한 입장창을 쓴다. liveSession(세션 조회)에 실제 값이 있고, 레슨 상세의
+   * 슬림한 liveSession에는 없다 — 둘을 합쳐 넘긴다. 예전엔 10분으로 굳어 있어, 30분 창으로 연
+   * 강의에서 학생이 20분을 문 앞에 서 있었다.
+   */
+  const canEnterLive = lesson.liveSession
+    ? isLiveEntryOpen({
+      ...lesson.liveSession,
+      entryWindowMinutes: liveSession?.entryWindowMinutes,
+      entryOpensAt: liveSession?.entryOpensAt,
+    })
+    : false
   const canReplay = lesson.replayStatus === 'PUBLISHED'
   const replayProgress = lesson.learning?.progressPercent ?? 0
   const materialWorkInProgress = hasMaterialInProgress(lesson.materials)
@@ -112,7 +123,7 @@ export default function LessonDetailPage() {
     asInstructor: isInstructor,
   })
   const scheduledDate = liveSession?.scheduledAt ? new Date(liveSession.scheduledAt) : null
-  const entryDate = scheduledDate ? new Date(scheduledDate.getTime() - 10 * 60_000) : null
+  const entryDate = liveSession ? entryOpensAtOf(liveSession) : null
   const liveStatusLabel = liveSession && ['OPEN', 'STARTING', 'LIVE'].includes(liveSession.status) ? '입장 가능' : '예정'
   // 세 칸 모두 자료의 실제 상태에서 나온다. 예전엔 이 칸이 상수 READY였고 "자료 작업"은
   // status!=='READY'라 실패한 자료까지 "진행 중"으로 보였다 — 영원히 끝나지 않는 것처럼 읽혔다.
@@ -208,9 +219,13 @@ export default function LessonDetailPage() {
                   <h3>{replayBadge?.busy ? '녹화를 처리하고 있습니다' : '녹화 영상'}</h3>
                   <p>{replayBadge?.hint || '이 강의는 녹화하지 않았습니다.'}</p>
                 </div>
-                {/* 아직 볼 것이 없을 때 검수로 보내지 않는다 — 들어가 봐야 재생이 안 된다. */}
+                {/*
+                  아직 볼 것이 없을 때 보내지 않는다 — 들어가 봐야 재생이 안 된다.
+                  "미리보기·검수"라고 하지 않는다: 검수 단계는 없고(ADR-0090) 영상은 준비되면
+                  자동 공개된다. 강사가 여는 것은 학생이 보는 바로 그 화면이다.
+                */}
                 {replayBadge && !replayBadge.busy && replayBadge.tone !== 'danger'
-                  && <Link className="button button--primary" to={replayPath}>미리보기·검수</Link>}
+                  && <Link className="button button--primary" to={replayPath}>다시보기 열기</Link>}
               </div>
             ) : (
               <div className="student-replay-summary">
@@ -245,12 +260,27 @@ export default function LessonDetailPage() {
           action={<StatusBadge>{lesson.materials.length}개</StatusBadge>}
         >
           {lesson.materials.length > 0
-            ? <ul className="material-list material-list--compact">{lesson.materials.map((material) => <li key={material.id}><span className="file-icon">PPTX</span><div><strong>{material.name}</strong><small>{material.size}</small></div><MaterialStatusBadges material={material} audience={isInstructor ? 'instructor' : 'student'} /><button className="text-button" type="button" disabled={downloadingMaterialId === material.id} aria-label={`${material.name} 다운로드`} onClick={() => void downloadMaterial(materialDownloadRequest(material))}>{downloadingMaterialId === material.id ? '받는 중…' : '다운로드'}</button></li>)}</ul>
+            ? <ul className="material-list material-list--compact">{lesson.materials.map((material) => <li key={material.id}>
+                <span className="file-icon">PPTX</span>
+                {/*
+                  상태 배지를 이름 위에 모아 둔다. 이름 오른쪽에 두면 이름이 길수록 배지가 밀려
+                  행마다 다른 자리에 서고, 좁아지면 통째로 다음 줄로 내려가 아래에 흩어졌다.
+                  여기서는 늘 같은 자리(왼쪽 맨 위)에서 시작하고 자기들끼리만 줄바꿈한다.
+                */}
+                <div>
+                  <span className="lesson-detail__material-badges">
+                    <MaterialStatusBadges material={material} audience={isInstructor ? 'instructor' : 'student'} />
+                  </span>
+                  <strong>{material.name}</strong>
+                  <small>{material.size}</small>
+                </div>
+                <button className="text-button" type="button" disabled={downloadingMaterialId === material.id} aria-label={`${material.name} 다운로드`} onClick={() => void downloadMaterial(materialDownloadRequest(material))}>{downloadingMaterialId === material.id ? '받는 중…' : '다운로드'}</button>
+              </li>)}</ul>
             : <p className="lesson-detail__material-empty">등록된 강의 자료가 없습니다.</p>}
           {/* 자료 목록과 별개의 flex 자식이라 목록 스크롤과 무관하게 항상 패널 하단에 고정된다. */}
           {isInstructor && (
             <div className="lesson-detail__materials-footer">
-              <button className="text-button" type="button" onClick={() => setGlossaryReviewOpen(true)}>핵심 단어 검수</button>
+              <button className="text-button" type="button" onClick={() => setGlossaryReviewOpen(true)}>핵심 용어 검수</button>
             </div>
           )}
         </Panel>

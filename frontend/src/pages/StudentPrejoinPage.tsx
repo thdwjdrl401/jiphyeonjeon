@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { publicPaths, studentPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
 import LessonBreadcrumbs from '@/features/lesson/LessonBreadcrumbs'
-import { isLiveEntryOpen } from '@/features/live-session/liveEntry'
+import { entryWindowMinutesOf, isLiveEntryOpen } from '@/features/live-session/liveEntry'
 import { isPrestartStatus } from '@/features/live-session/livePrestart'
 import { getLiveSession } from '@/features/live-session/liveSessionService'
 import {
@@ -162,7 +162,7 @@ export default function StudentPrejoinPage() {
   if (sessionQuery.isError || !session) return <PageState title="라이브 세션을 불러오지 못했습니다" />
 
   if (!isLiveEntryOpen(session)) {
-    return <PageState title="강의 시간이 아닙니다" description="라이브 강의는 시작 10분 전부터 입장할 수 있어요." action={<Link className="button button--soft" to={studentPaths.lesson(session.curriculumId, session.sectionId, session.lessonId)}>강의 상세로 돌아가기</Link>} />
+    return <PageState title="강의 시간이 아닙니다" description={`라이브 강의는 시작 ${entryWindowMinutesOf(session)}분 전부터 입장할 수 있어요.`} action={<Link className="button button--soft" to={studentPaths.lesson(session.curriculumId, session.sectionId, session.lessonId)}>강의 상세로 돌아가기</Link>} />
   }
   return (
     <div className="workspace-page student-prejoin-page">

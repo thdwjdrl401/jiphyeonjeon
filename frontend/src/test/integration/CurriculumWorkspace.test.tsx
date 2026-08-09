@@ -698,17 +698,17 @@ describe('커리큘럼 작업 화면', () => {
     expect(screen.queryByRole('link', { name: '강의 상세' })).not.toBeInTheDocument()
   })
 
-  it('학생 강의 상세에는 핵심 단어 검수 버튼을 두지 않는다', async () => {
+  it('학생 강의 상세에는 핵심 용어 검수 버튼을 두지 않는다', async () => {
     await renderAsStudent('/student/curriculums/cur-spring-live/sections/sec-security/lessons/les-security')
     await screen.findByRole('heading', { name: 'Spring Security 시작하기' })
-    expect(screen.queryByRole('button', { name: '핵심 단어 검수' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '핵심 용어 검수' })).not.toBeInTheDocument()
   })
 
   it('강사가 강의 상세에서 핵심 용어를 수정하고 새 용어를 추가한다', async () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/les-security')
 
-    await user.click(await screen.findByRole('button', { name: '핵심 단어 검수' }))
+    await user.click(await screen.findByRole('button', { name: '핵심 용어 검수' }))
     const dialog = await screen.findByRole('dialog', { name: '핵심 용어 검수' })
 
     const materialRow = within(dialog).getByText('SecurityContext').closest('li')!
@@ -740,7 +740,7 @@ describe('커리큘럼 작업 화면', () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/les-security')
 
-    await user.click(await screen.findByRole('button', { name: '핵심 단어 검수' }))
+    await user.click(await screen.findByRole('button', { name: '핵심 용어 검수' }))
     const dialog = await screen.findByRole('dialog', { name: '핵심 용어 검수' })
 
     await user.type(within(dialog).getByRole('textbox', { name: '추가할 용어' }), 'SecurityContext')

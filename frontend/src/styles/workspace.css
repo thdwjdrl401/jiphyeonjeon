@@ -370,7 +370,17 @@
 .lesson-replay-summary h3 { margin-top: 5px; font-size: .9rem; }
 .lesson-replay-summary p { font-size: .68rem; }
 .lesson-detail__materials .material-list { min-height: 0; max-height: none; flex: 1; align-content: start; gap: 7px; margin: 0; padding-right: 3px; overflow-y: auto; }
-.lesson-detail__materials .material-list li { gap: 10px; padding: 10px; border-radius: 0; }
+.lesson-detail__materials .material-list li { gap: 10px; align-items: flex-start; padding: 10px; border-radius: 0; }
+/* 이름·크기 위에 배지 줄이 하나 더 얹히므로 세 덩이 사이에 숨쉴 틈을 준다. */
+.lesson-detail__materials .material-list li > div { gap: 4px; }
+/*
+ * 상태 배지 묶음. 배지가 여럿이면 자기들끼리 줄바꿈하고, 하나도 없으면(수강생이 보는 준비 완료
+ * 자료) 빈 줄을 남기지 않는다 — :empty가 아니면 gap만큼 이름이 아래로 밀린다.
+ */
+.lesson-detail__material-badges { display: flex; flex-wrap: wrap; gap: 5px; }
+.lesson-detail__material-badges:empty { display: none; }
+/* 다운로드는 배지 줄과 눈높이를 맞춘다 — 아래로 내려가면 어느 자료의 버튼인지 흐려진다. */
+.lesson-detail__materials .text-button { align-self: flex-start; }
 .lesson-detail__materials .file-icon { width: 36px; height: 40px; flex: 0 0 auto; border-radius: 0; font-size: .51rem; }
 /* 다운로드는 버튼이다 — 바이트를 받아 파일명을 붙여 저장하고 실패를 토스트로 알린다. */
 .lesson-detail__materials .text-button { display: inline-flex; flex: 0 0 auto; align-items: center; font-size: .62rem; text-decoration: none; }
