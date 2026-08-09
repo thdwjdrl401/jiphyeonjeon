@@ -251,7 +251,7 @@ public class RecordingService {
                 egressId, durationMs, sizeBytes, asset.getReplayStatus());
 
         eventPublisher.publishEvent(new RecordingReadyEvent(
-                asset.getId(), asset.getLessonId(), asset.getLiveSessionId(), now));
+                asset.getId(), asset.getLessonId(), asset.getLiveSessionId(), asset.getDurationMs(), now));
         /*
          * 자동 공개된 경우에만 학생에게 알린다. 이미 PUBLISHED였거나 철회된 자산은 여기서
          * 되살아나지 않으므로(위 가드), 학생에게 새로 알릴 일도 없다.

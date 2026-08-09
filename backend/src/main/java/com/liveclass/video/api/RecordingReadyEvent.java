@@ -13,6 +13,11 @@ public record RecordingReadyEvent(
         UUID videoAssetId,
         UUID lessonId,
         UUID liveSessionId,
+        /**
+         * 녹화 길이. <b>진도 환산의 분모</b>다(ADR-0117) — 라이브 중에는 이 값이 없어서 진도가
+         * 나가지 않는데, 준비되는 이 순간이 그 값이 처음 생기는 자리다. 알 수 없으면 null.
+         */
+        Long durationMs,
         OffsetDateTime occurredAt
 ) {
 }

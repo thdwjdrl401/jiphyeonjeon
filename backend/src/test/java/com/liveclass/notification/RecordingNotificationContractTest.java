@@ -55,7 +55,7 @@ class RecordingNotificationContractTest {
         Fixture f = fixture();
         UUID assetId = UUID.randomUUID();
 
-        publish(new RecordingReadyEvent(assetId, f.lessonId, f.sessionId, OffsetDateTime.now()));
+        publish(new RecordingReadyEvent(assetId, f.lessonId, f.sessionId, null, OffsetDateTime.now()));
         worker.handle(onlyPayloadFor(assetId).toString());
 
         List<Row> rows = notificationsFor(f.curriculumId);
