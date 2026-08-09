@@ -83,18 +83,28 @@ export interface MaterialBadge {
   busy: boolean
 }
 
+/**
+ * 임베딩 상태 배지.
+ *
+ * <p>"AI 준비"라고 뭉뚱그리지 않는다 — 예전에 강사가 눌러야 하는 <b>"AI 준비" 버튼</b>이 있었고
+ * (지금은 없다. 저장하면 자동으로 시작한다), 그 이름이 남아 있으면 누를 것이 있는 줄 알게 된다.
+ *
+ * <p>대신 <b>무엇이 되는지</b>를 쓴다. 이 상태가 정하는 것은 딱 하나 — AI 답변이 이 자료를 인용할
+ * 수 있는가다(`ai.chunk_embedding` 적재 여부, RAG 검색이 이 테이블을 조인한다). 강의 시작도,
+ * 자료 다운로드도, 핵심 용어 추출({@link MaterialStatusSource#keyTermStatus})도 여기에 걸리지 않는다.
+ */
 function embeddingBadge(state: MaterialWorkState): MaterialBadge {
   switch (state) {
     case UPLOAD_PENDING:
       return { label: '업로드 대기', tone: 'warning', busy: false }
     case 'PENDING':
-      return { label: 'AI 준비 대기', tone: 'warning', busy: true }
+      return { label: 'AI 읽기 대기', tone: 'warning', busy: true }
     case 'PROCESSING':
-      return { label: 'AI 준비 중', tone: 'warning', busy: true }
+      return { label: 'AI가 읽는 중', tone: 'warning', busy: true }
     case 'FAILED':
-      return { label: 'AI 준비 실패', tone: 'danger', busy: false }
+      return { label: 'AI가 읽지 못함', tone: 'danger', busy: false }
     default:
-      return { label: 'AI 준비 완료', tone: 'success', busy: false }
+      return { label: 'AI 답변에 사용', tone: 'success', busy: false }
   }
 }
 
@@ -139,6 +149,6 @@ export function instructorMaterialBadges(material: MaterialStatusSource): Materi
 export function studentMaterialBadge(material: MaterialStatusSource): MaterialBadge | null {
   const state = materialEmbeddingState(material)
   if (state === 'READY') return null
-  if (state === 'FAILED') return { label: 'AI 준비 안 됨', tone: 'neutral', busy: false }
-  return { label: 'AI 준비 중', tone: 'warning', busy: true }
+  if (state === 'FAILED') return { label: 'AI가 읽지 못한 자료', tone: 'neutral', busy: false }
+  return { label: 'AI가 읽는 중', tone: 'warning', busy: true }
 }

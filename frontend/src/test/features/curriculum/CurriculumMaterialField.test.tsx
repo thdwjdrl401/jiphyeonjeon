@@ -119,7 +119,7 @@ describe('CurriculumMaterialField 준비 상태', () => {
       />,
     )
 
-    expect(screen.getByText('AI 준비 중')).toBeInTheDocument()
+    expect(screen.getByText('AI가 읽는 중')).toBeInTheDocument()
   })
 
   it('임베딩이 실패한 자료를 강사에게 숨기지 않는다', () => {
@@ -131,7 +131,7 @@ describe('CurriculumMaterialField 준비 상태', () => {
       />,
     )
 
-    expect(screen.getByText('AI 준비 실패')).toBeInTheDocument()
+    expect(screen.getByText('AI가 읽지 못함')).toBeInTheDocument()
   })
 
   it('아직 안 올린 선택은 서버 상태와 무관하게 업로드 대기다', () => {
@@ -144,6 +144,6 @@ describe('CurriculumMaterialField 준비 상태', () => {
     )
 
     expect(screen.getByText('업로드 대기')).toBeInTheDocument()
-    expect(screen.queryByText('AI 준비 완료')).not.toBeInTheDocument()
+    expect(screen.queryByText('AI 답변에 사용')).not.toBeInTheDocument()
   })
 })

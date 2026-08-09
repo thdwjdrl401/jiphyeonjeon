@@ -44,7 +44,7 @@ export default function LessonDetailPage() {
     queryFn: () => getLesson({ lessonId, role: user?.role, userId: user?.userId, curriculumId, sectionId }),
     enabled: Boolean(lessonId),
     // 자료를 올린 직후 이 화면으로 돌아오면 임베딩이 아직 돌고 있다. 폴링이 없으면 새로고침
-    // 전까지 "AI 준비 중"에 멈춰 있어, 실제로 끝났는지 실패했는지 알 방법이 없었다(ADR-0036).
+    // 전까지 "AI가 읽는 중"에 멈춰 있어, 실제로 끝났는지 실패했는지 알 방법이 없었다(ADR-0036).
     refetchInterval: (query) => materialRefetchInterval(query.state.data?.materials),
     refetchIntervalInBackground: false,
   })
@@ -114,7 +114,7 @@ export default function LessonDetailPage() {
   const scheduledDate = liveSession?.scheduledAt ? new Date(liveSession.scheduledAt) : null
   const entryDate = scheduledDate ? new Date(scheduledDate.getTime() - 10 * 60_000) : null
   const liveStatusLabel = liveSession && ['OPEN', 'STARTING', 'LIVE'].includes(liveSession.status) ? '입장 가능' : '예정'
-  // 세 칸 모두 자료의 실제 상태에서 나온다. 예전엔 "AI 준비"가 상수 READY였고 "자료 작업"은
+  // 세 칸 모두 자료의 실제 상태에서 나온다. 예전엔 이 칸이 상수 READY였고 "자료 작업"은
   // status!=='READY'라 실패한 자료까지 "진행 중"으로 보였다 — 영원히 끝나지 않는 것처럼 읽혔다.
   const readyMaterialCount = lesson.materials
     .filter((material) => materialEmbeddingState(material) === 'READY' && !isMaterialInProgress(material))
@@ -123,7 +123,7 @@ export default function LessonDetailPage() {
   const readinessSummary = isInstructor ? (
     <ul className="lesson-readiness-summary" aria-label="강의 준비 상태">
       <li><span>강의 자료</span><strong>{lesson.materials.length}개</strong></li>
-      <li><span>AI 준비</span><strong>{lesson.materials.length > 0 ? `${readyMaterialCount}/${lesson.materials.length} 완료` : '자료 없음'}</strong></li>
+      <li><span>AI가 읽음</span><strong>{lesson.materials.length > 0 ? `${readyMaterialCount}/${lesson.materials.length}` : '자료 없음'}</strong></li>
       <li className={materialWorkInProgress || materialFailed ? 'is-warning' : undefined}>
         <span>자료 작업</span>
         <strong>{materialWorkInProgress ? '진행 중' : materialFailed ? '실패' : '완료'}</strong>

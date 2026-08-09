@@ -10,7 +10,6 @@ export const getLesson = (request: GetLessonRequest) => lessonService.getLesson(
 export const getCurriculumLessonNavigation = (curriculumId: string, role?: UserRole) => lessonService.getCurriculumLessonNavigation(curriculumId, role)
 export const saveLesson = (request: SaveLessonRequest) => lessonService.saveLesson(request)
 export const deleteLessonMaterial = (lessonId: string, materialId: string) => lessonService.deleteLessonMaterial(lessonId, materialId)
-export const prepareLessonAi = (lessonId: string) => lessonService.prepareLessonAi(lessonId)
 
 export type {
   GetLessonRequest,

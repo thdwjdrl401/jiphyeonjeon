@@ -89,5 +89,4 @@ export interface LessonService {
   getCurriculumLessonNavigation: (curriculumId: string, role?: UserRole) => Promise<LessonNavigationView>
   saveLesson: (request: SaveLessonRequest) => Promise<{ lessonId: string; sectionId: string; title: string; description: string; status: LessonStatus }>
   deleteLessonMaterial: (lessonId: string, materialId: string) => Promise<void>
-  prepareLessonAi: (lessonId: string) => Promise<void>
 }

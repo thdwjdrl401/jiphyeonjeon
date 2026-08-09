@@ -129,8 +129,4 @@ export const mockLessonService = {
     // 녹화강의 편집은 상세 화면과 같은 mock 원본을 읽으므로 삭제도 원본에 반영한다.
     deleteMockRecordedLessonMaterial(lessonId, materialId)
   },
-  async prepareLessonAi() {
-    if (import.meta.env.MODE === 'test') return
-    await new Promise<void>((resolve) => window.setTimeout(resolve, 700))
-  },
 } satisfies LessonService

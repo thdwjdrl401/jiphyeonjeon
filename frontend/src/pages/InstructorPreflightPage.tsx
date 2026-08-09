@@ -80,7 +80,7 @@ export default function InstructorPreflightPage() {
   })
   const session = sessionQuery.data
   /*
-   * 자료 AI 준비 상태. 시작을 <b>막지 않는다</b> — 마이크와 같은 판단이다(ADR-0099). 임베딩이 FAILED로
+   * 자료를 AI가 다 읽었는지. 시작을 <b>막지 않는다</b> — 마이크와 같은 판단이다(ADR-0099). 임베딩이 FAILED로
    * 끝나거나 AI 워커·큐가 죽으면 PENDING에 영구히 머무는데, 그 때문에 수업 자체를 못 열면 안 된다.
    * 대신 지금 시작하면 무엇을 잃는지 말한다 — 초반 AI 답변이 이 자료를 못 쓴다.
    */
@@ -392,8 +392,8 @@ export default function InstructorPreflightPage() {
       {pendingMaterials.length > 0 && (
         <div className="instructor-preflight__feedback">
           <InlineNotice tone="warning">
-            강의 자료 {pendingMaterials.length}개가 아직 AI 준비 중입니다. 지금 시작해도 되지만,
-            준비가 끝나기 전에는 AI 답변이 이 자료를 참고하지 못합니다.
+            강의 자료 {pendingMaterials.length}개를 AI가 아직 읽는 중입니다. 지금 시작해도 되지만,
+            다 읽기 전에는 AI 답변이 이 자료를 인용하지 못합니다.
           </InlineNotice>
         </div>
       )}

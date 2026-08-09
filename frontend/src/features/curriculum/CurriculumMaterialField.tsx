@@ -101,7 +101,7 @@ export default function CurriculumMaterialField({ id, value, onChange, downloadR
               )}
               {/*
                 예전엔 "추가 예정 / 등록됨" 두 값뿐이었다 — 저장이 끝나면 임베딩이 아직 돌고 있어도
-                "등록됨"으로 굳어, 이 화면에서는 AI 준비가 끝났는지 알 방법이 전혀 없었다.
+                "등록됨"으로 굳어, 이 화면에서는 AI가 자료를 다 읽었는지 알 방법이 전혀 없었다.
               */}
               <MaterialStatusBadges material={material} audience="instructor" />
               <button

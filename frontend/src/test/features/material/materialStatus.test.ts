@@ -7,6 +7,7 @@ import {
   materialEmbeddingState,
   materialRefetchInterval,
   studentMaterialBadge,
+  type MaterialStatusSource,
 } from '@/features/material/materialStatus'
 
 const pptx = () => new File([''], 'deck.pptx')
@@ -76,7 +77,7 @@ describe('hasMaterialInProgress', () => {
 describe('instructorMaterialBadges', () => {
   it('임베딩 배지는 언제나 하나 나온다', () => {
     expect(instructorMaterialBadges({ embeddingStatus: 'READY' }))
-      .toEqual([{ label: 'AI 준비 완료', tone: 'success', busy: false }])
+      .toEqual([{ label: 'AI 답변에 사용', tone: 'success', busy: false }])
   })
 
   it('요청한 적 없는 용어 추출은 배지를 만들지 않는다', () => {
@@ -87,13 +88,13 @@ describe('instructorMaterialBadges', () => {
 
   it('용어 추출이 돌고 있으면 배지가 하나 더 붙는다', () => {
     const badges = instructorMaterialBadges({ embeddingStatus: 'READY', keyTermStatus: 'PROCESSING' })
-    expect(badges.map((badge) => badge.label)).toEqual(['AI 준비 완료', '용어 추출 중'])
+    expect(badges.map((badge) => badge.label)).toEqual(['AI 답변에 사용', '용어 추출 중'])
   })
 
   it('강사에게는 실패를 감추지 않는다', () => {
     // 감추면 "왜 AI가 이 자료를 모르지"를 알아낼 방법이 없다.
     const [embedding] = instructorMaterialBadges({ embeddingStatus: 'FAILED' })
-    expect(embedding).toEqual({ label: 'AI 준비 실패', tone: 'danger', busy: false })
+    expect(embedding).toEqual({ label: 'AI가 읽지 못함', tone: 'danger', busy: false })
   })
 
   it('기다리는 구간에서만 스피너를 돈다', () => {
@@ -118,6 +119,34 @@ describe('studentMaterialBadge', () => {
   it('실패를 수강생에게 오류로 보여 주지 않는다', () => {
     // 수강생이 고칠 수 있는 게 아니다 — 강사가 손봐야 할 상태로 읽히게 둔다.
     expect(studentMaterialBadge({ embeddingStatus: 'FAILED' }))
-      .toEqual({ label: 'AI 준비 안 됨', tone: 'neutral', busy: false })
+      .toEqual({ label: 'AI가 읽지 못한 자료', tone: 'neutral', busy: false })
+  })
+})
+
+describe('배지 문구가 없는 조작을 시키지 않는다', () => {
+  it('강사에게 보이는 어떤 배지도 "준비"를 눌러야 할 일처럼 말하지 않는다', () => {
+    /*
+     * 예전에 "AI 준비" 버튼이 있었고(누르면 501을 던지는 죽은 버튼이었다) 지금은 없다 —
+     * 임베딩은 저장과 함께 자동으로 시작한다(ADR-0036). 그 이름이 배지로 돌아오면 강사는
+     * 다시 누를 것을 찾는다. 상태는 "무엇이 되는가"로만 말한다.
+     */
+    const states: MaterialStatusSource[] = [
+      { file: new File([''], 'a.pptx') },
+      { embeddingStatus: 'PENDING' },
+      { embeddingStatus: 'PROCESSING' },
+      { embeddingStatus: 'READY' },
+      { embeddingStatus: 'FAILED' },
+    ]
+    for (const material of states) {
+      for (const badge of instructorMaterialBadges(material)) {
+        expect(badge.label).not.toContain('AI 준비')
+      }
+    }
+  })
+
+  it('수강생 배지도 마찬가지다', () => {
+    for (const status of ['PENDING', 'PROCESSING', 'FAILED']) {
+      expect(studentMaterialBadge({ embeddingStatus: status })?.label).not.toContain('AI 준비')
+    }
   })
 })
