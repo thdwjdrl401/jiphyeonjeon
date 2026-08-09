@@ -20,7 +20,9 @@ export const SEGMENTS = 24
  * <p>배선은 livekit의 {@code createAudioAnalyser}를 쓴다(AudioContext 생성·정리를 대신해 준다).
  * 다만 눈금은 <b>시간영역 샘플에서 직접</b> 낸다 — 그쪽이 순수 진폭이라 계산을 시험할 수 있다.
  */
-export default function MicrophoneLevelMeter({ track }: { track?: LocalAudioTrack }) {
+export default function MicrophoneLevelMeter(
+  { track, revision }: { track?: LocalAudioTrack; revision?: number },
+) {
   const [level, setLevel] = useState(0)
   const [heard, setHeard] = useState(false)
   const [unsupported, setUnsupported] = useState(false)
@@ -61,7 +63,13 @@ export default function MicrophoneLevelMeter({ track }: { track?: LocalAudioTrac
       cancelAnimationFrame(frame)
       void cleanup()
     }
-  }, [track])
+    /*
+     * `revision`도 함께 본다. 장치를 바꾸면 LiveKit이 <b>같은 LocalAudioTrack 객체 안의</b>
+     * MediaStreamTrack만 갈아끼우므로(restartTrack) track 참조는 그대로다 — 이 배선은
+     * `track.attach`가 아니라 Web Audio 그래프를 직접 만든 것이라 LiveKit이 다시 붙여 주지 않고,
+     * 그대로 두면 <b>바꾸기 전 마이크</b>를 계속 읽는다. 소리가 안 잡히니 "안 바뀌었다"로 읽힌다.
+     */
+  }, [track, revision])
 
   if (unsupported) return null
 

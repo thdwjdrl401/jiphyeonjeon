@@ -3,6 +3,7 @@ import { StatusBadge } from '@/shared/ui/WorkspaceUi'
 import CameraOverlayControl from './CameraOverlayControl'
 import InstructorAnnotationLayer from './InstructorAnnotationLayer'
 import InstructorLocalTrackVideo from './InstructorLocalTrackVideo'
+import DeviceSettingsButton from './DeviceSettingsButton'
 import MediaToggleIcon from './MediaToggleIcon'
 import MediaFailureNotice from './MediaFailureNotice'
 import { useAnnotationHighlightCapture } from './useAnnotationHighlightCapture'
@@ -426,6 +427,11 @@ export default function InstructorLiveKitStage({ sessionId, lessonTitle, partici
               <MediaToggleIcon kind="camera" off={!publisher.cameraEnabled} />
               카메라
             </button>
+            {/*
+              무엇으로 켤지는 켜고 끄기 바로 옆이다 — 엉뚱한 장치가 잡힌 걸 알아채는 순간
+              손이 가는 자리가 여기다. 목록은 펼쳤을 때만 그린다(컨트롤 줄에 자리가 없다).
+            */}
+            <DeviceSettingsButton publisher={publisher} />
             <button
               aria-pressed={publisher.screenShareEnabled}
               className={publisher.screenShareEnabled ? 'is-active' : ''}
