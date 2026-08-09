@@ -7,6 +7,7 @@ import LessonBreadcrumbs from '@/features/lesson/LessonBreadcrumbs'
 import { getLesson } from '@/features/lesson/lessonService'
 import { isMaterialInProgress, materialRefetchInterval } from '@/features/material/materialStatus'
 import DemoPublishControl from '@/features/live-session/DemoPublishControl'
+import DevicePicker from '@/features/live-session/DevicePicker'
 import InstructorLocalTrackVideo from '@/features/live-session/InstructorLocalTrackVideo'
 import MediaFailureNotice from '@/features/live-session/MediaFailureNotice'
 import MicrophoneLevelMeter from '@/features/live-session/MicrophoneLevelMeter'
@@ -282,6 +283,39 @@ export default function InstructorPreflightPage() {
         </Panel>
 
         <div className="instructor-preflight__side-column">
+          {/*
+            장치 선택은 품질보다 위에 둔다. 품질은 "얼마나 좋게 보낼까"이고 이건 "무엇으로 보낼까"라,
+            잘못 잡혀 있으면 품질을 아무리 만져도 소용이 없다. 시작 전에 눈으로 확인하는 자리다.
+          */}
+          <Panel
+            className="instructor-preflight__device-panel"
+            title="입력 장치"
+            description="송출에 사용할 카메라와 마이크를 고릅니다. 바꾸면 미리보기가 새 장치로 바뀝니다."
+          >
+            <DevicePicker
+              publisher={publisher}
+              kind="videoinput"
+              label="카메라"
+              emptyHint="연결된 카메라를 찾지 못했습니다. 카메라 없이도 강의를 시작할 수 있습니다."
+            />
+            <DevicePicker
+              publisher={publisher}
+              kind="audioinput"
+              label="마이크"
+              emptyHint="연결된 마이크를 찾지 못했습니다. 이대로 시작하면 소리 없이 나갑니다."
+            />
+            {/*
+              스피커는 송출이 아니라 강사 본인이 듣는 쪽이다. 아래 테스트음이 이 선택을 따라간다.
+              일부 브라우저는 출력 장치 선택을 지원하지 않아 목록이 비기도 한다(setSinkId).
+            */}
+            <DevicePicker
+              publisher={publisher}
+              kind="audiooutput"
+              label="스피커"
+              emptyHint="이 브라우저에서는 스피커를 고를 수 없습니다. 운영체제 기본 출력으로 나갑니다."
+            />
+          </Panel>
+
           <Panel
             className="instructor-preflight__quality-panel"
             title="송출 품질"

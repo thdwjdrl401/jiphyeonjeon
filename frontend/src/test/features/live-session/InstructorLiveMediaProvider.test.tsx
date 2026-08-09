@@ -236,7 +236,15 @@ describe('InstructorLiveMediaProvider', () => {
             hasMicrophone ? [{ kind: 'audioinput' }, { kind: 'videoinput' }] : [{ kind: 'videoinput' }],
           ),
           addEventListener: (_: string, handler: () => void) => { deviceListeners.push(handler) },
-          removeEventListener: () => { deviceListeners.splice(0, deviceListeners.length) },
+          /*
+           * 실제 API처럼 <b>해당 핸들러만</b> 뺀다. 전부 지우면 devicechange를 듣는 다른 구독자가
+           * (장치 목록 갱신 등) 재등록될 때 마이크 재시도 리스너까지 함께 사라져, 이 화면과
+           * 무관한 변경이 엉뚱한 테스트를 깨뜨린다.
+           */
+          removeEventListener: (_: string, handler: () => void) => {
+            const index = deviceListeners.indexOf(handler)
+            if (index >= 0) deviceListeners.splice(index, 1)
+          },
         },
       })
 
