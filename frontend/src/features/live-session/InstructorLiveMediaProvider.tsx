@@ -111,6 +111,8 @@ interface InstructorLiveKitState {
   /** 오류가 아닌 알림. 붉은 경고로 띄우면 안 되는 것들이 여기 온다. */
   notice?: string
   mediaRevision: number
+  /** 붙어 있는 입력·출력 장치. `devicechange`로 갱신된다. */
+  devices: MediaDeviceInfo[]
 }
 
 export interface InstructorLiveMedia extends InstructorLiveKitState {
@@ -188,6 +190,13 @@ export interface InstructorLiveMedia extends InstructorLiveKitState {
   retryMedia: () => void
   /** 장치 안내를 닫는다. 원인을 읽었으면 화면을 가리지 않게 한다. */
   dismissMediaFailure: () => void
+  /** 지금 실제로 쓰고 있는 장치의 deviceId. 브라우저 기본값이면 undefined일 수 있다. */
+  activeDeviceId: (kind: MediaDeviceKind) => string | undefined
+  /**
+   * 장치를 바꾼다. LiveKit이 <b>기존 트랙의 소스만 갈아끼우므로</b> 재발행이 아니다 — 트랙의
+   * `source`가 유지돼 STT가 강사 발화를 계속 알아본다(재발행하면 source가 흔들려 자막만 조용히 빈다).
+   */
+  switchDevice: (kind: MediaDeviceKind, deviceId: string) => void
   toggleCamera: () => void
   toggleMicrophone: () => void
   toggleScreenShare: () => void
@@ -217,9 +226,23 @@ const initialState: InstructorLiveKitState = {
   microphoneEnabled: false,
   screenShareEnabled: false,
   mediaRevision: 0,
+  devices: [],
 }
 
 const InstructorLiveMediaContext = createContext<InstructorLiveMedia | null>(null)
+
+/**
+ * 장치 목록이 실제로 달라졌는가. `devicechange`는 아무 변화 없이도 자주 튀는데, 그때마다 새 배열을
+ * 넣으면 이 목록을 쓰는 화면 전체가 매번 다시 그려진다.
+ */
+function sameDeviceList(before: MediaDeviceInfo[], after: MediaDeviceInfo[]) {
+  if (before.length !== after.length) return false
+  return before.every((device, index) => (
+    device.deviceId === after[index].deviceId
+    && device.kind === after[index].kind
+    && device.label === after[index].label
+  ))
+}
 
 function getLocalVideoTrack(room: Room, source: Track.Source) {
   const track = room.localParticipant.getTrackPublication(source)?.videoTrack
@@ -578,6 +601,8 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
               microphoneEnabled: true,
               screenShareEnabled: false,
               mediaRevision: 1,
+              // 목에는 실제 장치가 없다. 화면은 빈 목록을 "고를 것이 없음"으로 그린다.
+              devices: [],
             })
           }
         })
@@ -1324,6 +1349,55 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
       .catch(() => undefined)
   }, [state.connectionState])
 
+  /*
+   * 붙어 있는 장치 목록. 목록만 있고 교체가 없으면 "무엇이 잡혔는지"조차 알 수 없어, 엉뚱한
+   * 마이크로 한 시간을 녹음하고 나서야 알게 된다.
+   *
+   * <p>권한을 받기 전에는 브라우저가 라벨을 빈 문자열로 준다. 여기서 요청하지는 않는다 —
+   * 준비 화면은 이미 카메라·마이크를 열어 둔 뒤라 라벨이 채워져 있고, 권한을 받으려고 목록 조회가
+   * 팝업을 띄우면 사용자가 이유를 모른 채 허용을 묻게 된다.
+   */
+  const refreshDevices = useCallback(async () => {
+    try {
+      const devices = await Room.getLocalDevices(undefined, false)
+      setState((current) => (
+        sameDeviceList(current.devices, devices) ? current : { ...current, devices }
+      ))
+    } catch {
+      // 열거 실패는 조용히 넘긴다 — 장치 선택은 부가 기능이고, 못 읽으면 브라우저 기본값으로 간다.
+    }
+  }, [])
+
+  /*
+   * 구독은 한 번만 건다. 연결 상태에 매달면 상태가 바뀔 때마다 해제·재등록이 반복되는데, 같은
+   * `devicechange`를 듣는 다른 구독자(마이크 재시도)와 얽히면 서로를 지우는 사고가 난다.
+   */
+  useEffect(() => {
+    if (isMockApiEnabled) return
+    const devices = navigator.mediaDevices
+    const onChange = () => { void refreshDevices() }
+    devices?.addEventListener?.('devicechange', onChange)
+    return () => devices?.removeEventListener?.('devicechange', onChange)
+  }, [refreshDevices])
+
+  // 연결이 끝나 권한이 잡히면 라벨이 빈 문자열에서 실제 이름으로 바뀌므로 그때 다시 읽는다.
+  useEffect(() => {
+    if (isMockApiEnabled) return
+    void refreshDevices()
+  }, [refreshDevices, state.connectionState])
+
+  const switchDevice = useCallback(async (kind: MediaDeviceKind, deviceId: string) => {
+    const room = roomRef.current
+    if (!room || room.state !== 'connected') return
+    try {
+      await room.switchActiveDevice(kind, deviceId)
+      // 트랙 객체가 갈릴 수 있다 — 미리보기가 새 트랙을 잡도록 화면에 알린다.
+      setState((current) => ({ ...current, mediaRevision: current.mediaRevision + 1 }))
+    } catch (error) {
+      setMediaFailure(describeMediaFailure(error, kind === 'videoinput' ? 'camera' : 'microphone'))
+    }
+  }, [setMediaFailure])
+
   const value = useMemo<InstructorLiveMedia>(() => ({
     ...state,
     sessionId,
@@ -1349,6 +1423,8 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
     retry: () => setRetryCount((current) => current + 1),
     retryMedia,
     dismissMediaFailure: () => setMediaFailure(undefined),
+    activeDeviceId: (kind: MediaDeviceKind) => roomRef.current?.getActiveDevice(kind),
+    switchDevice: (kind: MediaDeviceKind, deviceId: string) => { void switchDevice(kind, deviceId) },
     toggleCamera: () => { void toggleControl('camera') },
     toggleMicrophone: () => { void toggleControl('microphone') },
     toggleScreenShare: () => { void toggleControl('screenShare') },
@@ -1361,7 +1437,7 @@ export default function InstructorLiveMediaProvider({ children }: { children?: R
     resumeDemoAudio: () => { void resumeDemoAudioSource() },
     seekDemoAudio: seekDemoAudioSource,
     setDemoAudioLoop: setDemoAudioLoopSource,
-  }), [audioState, startDemoAudio, stopDemoAudio, annotationAudienceRevision, applyingQuality, cameraOverlay, changeQuality, demoState, microphonePermission, moveCameraOverlay, pendingControl, publishAnnotation, publishAnnotationState, publishLaser, quality, restoredAnnotation, restoredAnnotationVisible, retryMedia, saveAnnotationSnapshot, saveAnnotationVisible, sessionId, setMediaFailure, startDemoPublish, state, stopDemoPublish, toggleControl])
+  }), [switchDevice, audioState, startDemoAudio, stopDemoAudio, annotationAudienceRevision, applyingQuality, cameraOverlay, changeQuality, demoState, microphonePermission, moveCameraOverlay, pendingControl, publishAnnotation, publishAnnotationState, publishLaser, quality, restoredAnnotation, restoredAnnotationVisible, retryMedia, saveAnnotationSnapshot, saveAnnotationVisible, sessionId, setMediaFailure, startDemoPublish, state, stopDemoPublish, toggleControl])
 
   return (
     <InstructorLiveMediaContext.Provider value={value}>

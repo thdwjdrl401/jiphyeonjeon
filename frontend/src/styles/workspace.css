@@ -1412,6 +1412,19 @@ th { color: var(--ink-500); font-size: .67rem; }
 .instructor-preflight__device-panel > .inline-notice { margin-top: 0; padding: 9px 11px; font-size: .7rem; line-height: 1.5; }
 
 .instructor-preflight__side-column { display: grid; min-width: 0; align-content: start; gap: 14px; }
+/*
+ * 입력 장치 선택. 품질 패널 위에 앉는다 — "무엇으로 보낼까"가 "얼마나 좋게 보낼까"보다 먼저다.
+ */
+.instructor-preflight__device-panel { display: grid; gap: 10px; }
+.device-picker { display: grid; gap: 4px; min-width: 0; }
+.device-picker__label { color: var(--ink-500); font-size: .62rem; font-weight: 700; }
+/*
+ * 장치 이름은 길다("HD Pro Webcam C920 (046d:082d)"). 줄이지 않으면 옆 칸을 밀어내므로
+ * 폭을 가두고 넘치는 만큼만 잘라 낸다 — 어느 장치인지는 앞부분으로 대개 구별된다.
+ */
+.device-picker__select { width: 100%; max-width: 100%; min-height: 32px; border: 1px solid var(--border-medium); border-radius: 8px; padding: 5px 8px; background: #fff; color: var(--ink-900); font: inherit; font-size: .68rem; text-overflow: ellipsis; }
+.device-picker__select:disabled { background: var(--ink-50); color: var(--ink-500); }
+.device-picker__empty { margin: 0; color: var(--ink-500); font-size: .62rem; line-height: 1.4; }
 .instructor-preflight__quality-panel .quality-group { margin-bottom: 10px; }
 .instructor-preflight__quality-panel .quality-group:last-of-type { margin-bottom: 10px; }
 .instructor-preflight__quality-panel .quality-group legend { margin-bottom: 6px; color: var(--ink-700); font-size: .64rem; letter-spacing: .08em; }

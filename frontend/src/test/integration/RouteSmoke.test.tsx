@@ -317,7 +317,17 @@ describe('전체 페이지 라우트', () => {
     ))
     expect(window.location.pathname).not.toContain('/processing')
     expect(window.location.pathname).not.toContain('/replay')
-    expect(await screen.findByRole('heading', { name: 'Spring Security 시작하기', level: 1 })).toBeInTheDocument()
+    /*
+     * 이동 자체는 위 waitFor가 이미 확인했다. 여기서 기다리는 것은 <b>강의 상세가 다 그려지는 것</b>
+     * 이고, 그 화면은 레슨·라이브 세션·처리 현황을 각각 불러온다. 병렬 실행으로 워커가 붐비면
+     * 기본 5초(setup.ts의 asyncUtilTimeout)를 넘겨 간헐적으로 떨어졌다 — 같은 파일의 다른 무거운
+     * 대기들과 같은 여유를 준다.
+     */
+    expect(await screen.findByRole(
+      'heading',
+      { name: 'Spring Security 시작하기', level: 1 },
+      { timeout: 9_000 },
+    )).toBeInTheDocument()
   })
 
   it('강사는 STARTING 동안 preflight에 머물고 LIVE가 된 뒤 같은 세션 classroom으로 이동한다', async () => {

@@ -76,6 +76,10 @@ describe('강사 사전 점검', () => {
       microphoneEnabled: true,
       screenShareEnabled: false,
       mediaRevision: 1,
+      // 장치 목록·교체(DevicePicker가 읽는다). 목에는 실제 장치가 없다.
+      devices: [],
+      activeDeviceId: () => undefined,
+      switchDevice: vi.fn(),
       pendingControl: null,
       canControl: true,
       microphonePermission: 'granted',
