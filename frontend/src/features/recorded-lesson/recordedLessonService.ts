@@ -10,6 +10,8 @@ const recordedLessonService = selectDataSource<RecordedLessonService>(
 
 export const getRecordedProcessing = (lessonId: string) =>
   recordedLessonService.getProcessing(lessonId)
+export const uploadRecordedVideo = (lessonId: string, file: File) =>
+  recordedLessonService.uploadRecordedVideo(lessonId, file)
 export const retryRecordedProcessing = (lessonId: string) =>
   recordedLessonService.retryProcessing(lessonId)
 export const retryRecordedCaptions = (lessonId: string) =>

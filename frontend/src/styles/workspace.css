@@ -1952,3 +1952,10 @@ th { color: var(--ink-500); font-size: .67rem; }
 }
 
 @keyframes visibility-switch-pulse { 50% { opacity: 0.35; } }
+
+/*
+ * 업로드가 끊긴 녹화강의에 원본을 다시 올리는 자리. <label>이 곧 버튼이라 안의 file input은 숨긴다 —
+ * 기본 위젯은 폭이 브라우저마다 달라 버튼 줄이 흔들린다.
+ */
+.recorded-reupload { display: inline-flex; align-items: center; cursor: pointer; }
+.recorded-reupload input { display: none; }

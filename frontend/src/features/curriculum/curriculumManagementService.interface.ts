@@ -107,6 +107,14 @@ export interface UploadRecordedLessonRequest {
   videoFile: File
   /** 녹화강의 생성 뒤 같은 레슨 자료 API로 연결할 PPTX 원본. */
   materials: File[]
+  /**
+   * 자료 하나가 <b>연결까지 끝났을 때</b> 부른다. 실패 뒤 재시도에서 이미 붙은 자료를 건너뛰라고
+   * 알리는 신호다.
+   *
+   * <p>없으면 재시도가 자료 루프를 처음부터 다시 돈다 — 같은 PPTX가 두 번 붙고, 그때마다
+   * 수강생 전원에게 자료 알림이 다시 나간다(ADR-0073).
+   */
+  onMaterialLinked?: (file: File) => void
 }
 
 export interface UploadRecordedLessonResult {

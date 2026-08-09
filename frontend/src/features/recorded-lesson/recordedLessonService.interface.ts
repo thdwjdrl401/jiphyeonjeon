@@ -73,6 +73,14 @@ export interface RecordedCaptionSegmentView {
 export interface RecordedLessonService {
   getProcessing: (lessonId: string) => Promise<RecordedProcessingView>
   retryProcessing: (lessonId: string) => Promise<RecordedProcessingView>
+  /**
+   * 이미 만들어진 녹화강의에 <b>원본 영상을 올린다</b>. 상태가 `AWAITING_UPLOAD`일 때만 열린다.
+   *
+   * <p>업로드가 끊기면 강의는 만들어진 채 영상만 없는 상태로 남는데, 예전에는 그 강의에 영상을
+   * 붙일 길이 화면에 없었다 — 지우고 처음부터 다시 하는 수밖에 없었다. 서버는 처음부터 이 경로를
+   * 열어 두고 있었다(`issueUpload`가 AWAITING_UPLOAD에서 이전 에셋을 버리고 새로 발급한다).
+   */
+  uploadRecordedVideo: (lessonId: string, file: File) => Promise<RecordedProcessingView>
   retryCaptions: (lessonId: string) => Promise<RecordedProcessingView>
   getPlayback: (lessonId: string) => Promise<RecordedPlaybackView>
   getCaptionSegments: (lessonId: string) => Promise<RecordedCaptionSegmentView[]>

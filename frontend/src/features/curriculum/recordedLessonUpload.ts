@@ -15,7 +15,12 @@ export function validateRecordedLessonVideo(file: File): string | null {
   return null
 }
 
+/**
+ * 상한이 5GiB인데 MB에서 멈춰 있었다 — 업로드 요약의 `원본 크기`가 <b>5120.0 MB</b>로 떴다.
+ * 사람이 파일 크기를 그렇게 읽지 않는다.
+ */
 export function formatRecordedLessonFileSize(bytes: number) {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`
 }
