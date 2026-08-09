@@ -416,6 +416,18 @@
 .control-row button:has(.media-toggle-icon) { display: inline-flex; align-items: center; gap: 6px; }
 .control-row button { border: 1px solid rgba(255,252,243,.12); border-radius: 8px; padding: 7px 10px; background: rgba(255,252,243,.06); color: rgba(255,252,243,.75); font-size: .62rem; }
 .control-row button.is-active { color: #dba13a; }
+/*
+ * 장치 설정. 마이크·카메라 버튼 옆의 톱니, 그리고 그 위로 펼쳐지는 패널.
+ *
+ * <b>위로 펼친다.</b> 컨트롤 줄은 영상 <b>아래쪽</b>에 붙어 있어 아래로 열면 화면 밖으로 나간다.
+ * 영상 위에 얹히는 밝은 판이라 여기 글자는 어두운 계열을 쓴다 — 컨트롤 줄의 흰 글자를 물려받으면
+ * 흰 판에 흰 글자가 된다.
+ */
+.device-settings { position: relative; display: inline-flex; }
+.device-settings__panel { position: absolute; bottom: calc(100% + 8px); left: 0; z-index: 5; display: grid; width: max-content; min-width: 220px; max-width: 300px; gap: 9px; padding: 12px; border: 1px solid var(--ink-100); border-radius: 12px; background: var(--white); box-shadow: 0 12px 32px rgba(0,0,0,.28); }
+.device-settings__panel .device-picker__label { color: var(--ink-500); }
+.device-settings__panel .device-picker__select { color: var(--ink-900); }
+.device-settings__hint { margin: 0; color: var(--ink-500); font-size: .6rem; line-height: 1.4; }
 .control-row > span { margin-left: auto; color: rgba(255,252,243,.58); font-size: .65rem; }
 .go-live { display: flex; align-items: center; gap: 6px; }
 .go-live i { width: 6px; height: 6px; border-radius: 50%; background: #8b8171; }

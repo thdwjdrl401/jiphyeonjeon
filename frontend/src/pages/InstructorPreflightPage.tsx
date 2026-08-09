@@ -253,7 +253,7 @@ export default function InstructorPreflightPage() {
             모른다 — 운영체제 음소거·엉뚱한 입력 장치·죽은 마이크는 전부 publish에 성공한다.
             강사가 한마디 해서 게이지가 오르는 것이 그 마지막 한 칸이다(ADR-0099 §5).
           */}
-          <MicrophoneLevelMeter track={publisher.microphoneTrack} />
+          <MicrophoneLevelMeter track={publisher.microphoneTrack} revision={publisher.mediaRevision} />
           {/*
             시연 스위치는 <b>이 패널</b>에 둔다. 하는 일이 "무엇을 송출할지 고르는 것"이라 미리보기
             바로 아래가 제자리다 — 고른 결과가 위 화면에 그대로 보인다.
@@ -288,7 +288,7 @@ export default function InstructorPreflightPage() {
             잘못 잡혀 있으면 품질을 아무리 만져도 소용이 없다. 시작 전에 눈으로 확인하는 자리다.
           */}
           <Panel
-            className="instructor-preflight__device-panel"
+            className="instructor-preflight__input-panel"
             title="입력 장치"
             description="송출에 사용할 카메라와 마이크를 고릅니다. 바꾸면 미리보기가 새 장치로 바뀝니다."
           >

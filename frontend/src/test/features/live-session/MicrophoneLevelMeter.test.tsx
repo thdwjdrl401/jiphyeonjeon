@@ -88,4 +88,29 @@ describe('마이크 입력 게이지', () => {
       expect(document.querySelector('.mic-meter')).toBeNull()
     })
   })
+
+  it('장치를 바꾸면 배선을 다시 만든다', async () => {
+    /*
+     * LiveKit은 장치를 바꿀 때 <b>같은 LocalAudioTrack 객체 안의</b> MediaStreamTrack만 갈아끼운다
+     * (restartTrack). 이 게이지는 track.attach가 아니라 Web Audio 그래프를 직접 만든 것이라 LiveKit이
+     * 다시 붙여 주지 않으므로, track 참조만 보고 있으면 <b>바꾸기 전 마이크</b>를 계속 읽는다.
+     * 소리가 안 잡히니 "마이크를 껐다 켜야 반영된다"로 보인다.
+     */
+    const view = render(<MicrophoneLevelMeter track={track} revision={1} />)
+    await waitFor(() => { expect(cleanup).not.toHaveBeenCalled() })
+
+    view.rerender(<MicrophoneLevelMeter track={track} revision={2} />)
+
+    // 옛 배선을 정리했다 = 새로 만들었다.
+    await waitFor(() => { expect(cleanup).toHaveBeenCalled() })
+  })
+
+  it('바뀐 것이 없으면 배선을 다시 만들지 않는다', async () => {
+    // 리렌더마다 AudioContext를 새로 만들면 브라우저가 컨텍스트 수를 제한해 결국 실패한다.
+    const view = render(<MicrophoneLevelMeter track={track} revision={1} />)
+    view.rerender(<MicrophoneLevelMeter track={track} revision={1} />)
+
+    await waitFor(() => { expect(screen.getByText(/한마디 해 보세요|소리가 들어옵니다/)).toBeInTheDocument() })
+    expect(cleanup).not.toHaveBeenCalled()
+  })
 })

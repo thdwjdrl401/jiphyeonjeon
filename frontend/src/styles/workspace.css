@@ -1414,8 +1414,12 @@ th { color: var(--ink-500); font-size: .67rem; }
 .instructor-preflight__side-column { display: grid; min-width: 0; align-content: start; gap: 14px; }
 /*
  * 입력 장치 선택. 품질 패널 위에 앉는다 — "무엇으로 보낼까"가 "얼마나 좋게 보낼까"보다 먼저다.
+ *
+ * <b>이름을 미리보기 패널(.instructor-preflight__device-panel)과 겹치지 않게 둔다.</b> 처음에 그
+ * 이름을 그대로 썼더니 이 규칙이 파일 뒤쪽이라 원본의 flex column을 grid로 덮었고, 그 패널 안의
+ * 카메라·마이크 토글이 칸을 꽉 채워 커졌다.
  */
-.instructor-preflight__device-panel { display: grid; gap: 10px; }
+.instructor-preflight__input-panel { display: grid; gap: 10px; }
 .device-picker { display: grid; gap: 4px; min-width: 0; }
 .device-picker__label { color: var(--ink-500); font-size: .62rem; font-weight: 700; }
 /*
