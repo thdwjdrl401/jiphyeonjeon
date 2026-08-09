@@ -1,7 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ChangeEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { instructorPaths } from '@/app/router/paths'
+import {
+  RECORDED_LESSON_VIDEO_ACCEPT,
+  validateRecordedLessonVideo,
+} from '@/features/curriculum/recordedLessonUpload'
 import { useAuth } from '@/features/auth/AuthContext'
 import { getLesson } from '@/features/lesson/lessonService'
 import { LESSON_MATERIALS_ANCHOR } from '@/features/lesson/lessonRouting'
@@ -16,6 +20,7 @@ import {
 import {
   useRetryRecordedCaptions,
   useRetryRecordedProcessing,
+  useUploadRecordedVideo,
 } from '@/features/recorded-lesson/useRecordedLessonMutations'
 import {
   useRecordedPlayback,
@@ -105,6 +110,29 @@ export default function RecordedLessonDetailPage() {
     processing?.recordedPublicationStatus === 'PUBLISHED',
   )
   const retryMutation = useRetryRecordedProcessing(lessonId)
+  const uploadMutation = useUploadRecordedVideo(lessonId)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+
+  /*
+   * 업로드가 끊긴 강의에 원본을 다시 올린다.
+   *
+   * <p>예전에는 이 자리에 안내만 있고 <b>올릴 방법이 없었다</b>. 5GiB 업로드가 끊기는 건 예외가
+   * 아니라 일상인데, 그때 강사에게 남는 선택지는 강의를 지우고 처음부터 다시 하는 것뿐이었다.
+   * 서버는 처음부터 이 경로를 열어 두고 있었다(issueUpload가 이전 에셋을 버리고 새로 발급한다).
+   */
+  const pickVideo = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null
+    event.target.value = ''
+    if (!file) return
+    const invalid = validateRecordedLessonVideo(file)
+    setUploadError(invalid)
+    if (invalid) return
+    uploadMutation.mutate(file, {
+      onError: (error) => setUploadError(error instanceof Error && error.message
+        ? error.message
+        : '영상을 업로드하지 못했습니다. 잠시 후 다시 시도해 주세요.'),
+    })
+  }
   const retryCaptionsMutation = useRetryRecordedCaptions(lessonId)
   const lesson = lessonQuery.data
 
@@ -198,7 +226,22 @@ export default function RecordedLessonDetailPage() {
               <button className="button button--soft" type="button" onClick={() => void refetchProcessing()}>상태 다시 확인</button>
             </div>
           ) : processing.status === 'AWAITING_UPLOAD' ? (
-            <InlineNotice tone="warning">영상 업로드가 완료되지 않아 처리를 시작하지 못했습니다.</InlineNotice>
+            <div className="recorded-processing-state" role="status">
+              <StatusBadge tone="warning">영상 없음</StatusBadge>
+              <strong>영상 업로드가 완료되지 않아 처리를 시작하지 못했습니다.</strong>
+              <p>이 강의에 MP4 원본을 다시 올리면 그대로 이어서 처리합니다. 강의와 자료는 그대로 남습니다.</p>
+              <label className="button button--primary recorded-reupload">
+                <input
+                  accept={RECORDED_LESSON_VIDEO_ACCEPT}
+                  aria-label="MP4 영상 파일"
+                  disabled={uploadMutation.isPending}
+                  onChange={pickVideo}
+                  type="file"
+                />
+                {uploadMutation.isPending ? '업로드 중…' : 'MP4 영상 올리기'}
+              </label>
+              {uploadError && <p className="recorded-upload-error" role="alert">{uploadError}</p>}
+            </div>
           ) : processing.status === 'FAILED' ? (
             <div className="recorded-processing-state recorded-processing-state--error" role="alert">
               <StatusBadge tone="danger">처리 실패</StatusBadge>

@@ -1,5 +1,13 @@
+import axios from 'axios'
 import { streamLessonAiAnswer } from '@/features/ai/lessonAiAnswerStream'
 import { ApiError, apiClient } from '@/shared/api/client'
+interface RecordedUploadTicket {
+  assetId: string
+  uploadUrl: string
+  method: 'PUT'
+  headers: Record<string, string>
+}
+
 import type {
   RecordedCaptionSegmentView,
   RecordedLessonService,
@@ -143,6 +151,20 @@ export const httpRecordedLessonService = {
   async retryProcessing(lessonId) {
     const { data } = await apiClient.post<RecordedProcessingView>(
       `/instructor/recorded-lessons/${lessonId}/processing/retry`,
+    )
+    return normalizeProcessing(data, lessonId)
+  },
+  /** 티켓 발급 → 스토리지 직접 PUT → 접수. 업로드 화면의 ③④와 같은 경로다. */
+  async uploadRecordedVideo(lessonId, file) {
+    const { data: ticket } = await apiClient.post<RecordedUploadTicket>(
+      `/instructor/recorded-lessons/${lessonId}/video/upload-requests`,
+      { fileName: file.name, contentType: file.type || 'video/mp4', fileSize: file.size },
+    )
+    // 대용량 MP4는 앱 API·세션 쿠키·CSRF 인터셉터를 거치지 않고 스토리지에 직접 PUT한다.
+    await axios.request({ url: ticket.uploadUrl, method: ticket.method, headers: ticket.headers, data: file })
+    const { data } = await apiClient.post<RecordedProcessingView>(
+      `/instructor/recorded-lessons/${lessonId}/video/complete`,
+      { assetId: ticket.assetId },
     )
     return normalizeProcessing(data, lessonId)
   },

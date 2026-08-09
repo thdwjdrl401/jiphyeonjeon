@@ -41,6 +41,14 @@ export default function RecordedLessonUploadPage() {
   const [fileError, setFileError] = useState<string | null>(null)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  /*
+   * 이미 <b>연결까지 끝난</b> 자료. 재시도에서 건너뛴다.
+   *
+   * <p>업로드는 ①레슨 생성 ②자료 ③영상 PUT 순인데, 5GiB가 오가는 ③이 가장 흔한 실패 지점이다.
+   * 그때 ②를 처음부터 다시 돌면 같은 PPTX가 두 번 붙고, 그때마다 수강생 전원에게 자료 알림이
+   * 다시 나간다. 레슨은 clientRequestId로 멱등인데 자료는 아니라서 생기는 어긋남이다.
+   */
+  const linkedMaterialIds = useRef(new Set<string>())
 
   const contextQuery = useQuery({
     queryKey: ['recorded-lesson-upload-context', curriculumId],
@@ -89,9 +97,11 @@ export default function RecordedLessonUploadPage() {
     const pptxFiles = incomingFiles.filter((file) => (
       file.name.toLowerCase().endsWith('.pptx') && file.size <= MAX_MATERIAL_BYTES
     ))
+    // 둘을 함께 떨어뜨렸으면 둘 다 말한다 — 하나만 알리면 나머지가 왜 빠졌는지 알 수 없다.
     if (incomingFiles.some((file) => !file.name.toLowerCase().endsWith('.pptx'))) {
       toast.error('PPTX 파일만 강의 자료로 등록할 수 있습니다.')
-    } else if (incomingFiles.some((file) => file.size > MAX_MATERIAL_BYTES)) {
+    }
+    if (incomingFiles.some((file) => file.name.toLowerCase().endsWith('.pptx') && file.size > MAX_MATERIAL_BYTES)) {
       toast.error('PPTX 강의 자료는 파일당 50MB까지 등록할 수 있습니다.')
     }
     setMaterials((current) => {
@@ -125,6 +135,7 @@ export default function RecordedLessonUploadPage() {
     setSubmitting(true)
     setSubmitError(null)
     try {
+      const pending = materials.filter((material) => !linkedMaterialIds.current.has(material.id))
       await uploadRecordedLesson({
         clientRequestId: clientRequestId.current,
         curriculumId,
@@ -132,7 +143,11 @@ export default function RecordedLessonUploadPage() {
         title: title.trim(),
         description: description.trim(),
         videoFile,
-        materials: materials.map((material) => material.file),
+        materials: pending.map((material) => material.file),
+        onMaterialLinked: (file) => {
+          const linked = pending.find((material) => material.file === file)
+          if (linked) linkedMaterialIds.current.add(linked.id)
+        },
       })
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['curriculum-management', curriculumId] }),
@@ -152,6 +167,7 @@ export default function RecordedLessonUploadPage() {
   // 컴포넌트가 다른 커리큘럼/섹션으로 재사용될 때 이전 입력을 들고 가지 않는다.
   useEffect(() => {
     clientRequestId.current = crypto.randomUUID()
+    linkedMaterialIds.current = new Set()
     setTitle('')
     setDescription('')
     setVideoFile(null)

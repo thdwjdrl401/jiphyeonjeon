@@ -281,6 +281,8 @@ export const httpCurriculumManagementService = {
       try {
         const asset = await uploadAsset(file, 'MATERIAL')
         await apiClient.post(`/instructor/lessons/${recorded.lessonId}/materials`, { assetId: asset.assetId })
+        // 여기까지 와야 "붙었다"이다. 업로드만 되고 연결이 실패하면 다음 시도에 다시 붙여야 한다.
+        request.onMaterialLinked?.(file)
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error)
         throw new Error(`녹화강의는 생성됐지만 자료 "${file.name}" 업로드·연결에 실패했습니다. 같은 화면에서 다시 시도해 주세요. (${reason})`)

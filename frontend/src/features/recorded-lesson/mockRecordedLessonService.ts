@@ -75,6 +75,27 @@ export const mockRecordedLessonService = {
   async getProcessing(lessonId) {
     return processingStates.get(lessonId) ?? defaultProcessing(lessonId)
   },
+  /** 업로드가 끊긴 강의(AWAITING_UPLOAD)에 원본을 다시 올린다. 접수되면 변환 대기로 넘어간다. */
+  async uploadRecordedVideo(lessonId, file) {
+    const current = processingStates.get(lessonId) ?? defaultProcessing(lessonId)
+    if (current.status !== 'AWAITING_UPLOAD') {
+      throw new ApiError(
+        '업로드를 새로 시작할 수 없는 처리 상태입니다.',
+        409,
+        'RECORDED_VIDEO_UPLOAD_CONFLICT',
+      )
+    }
+    const queued: RecordedProcessingView = {
+      ...current,
+      jobId: `job-${lessonId}-upload-${file.size}`,
+      status: 'QUEUED',
+      failureCode: null,
+      recordedPublicationStatus: 'DRAFT',
+      publishedAt: null,
+    }
+    processingStates.set(lessonId, queued)
+    return queued
+  },
   async retryProcessing(lessonId) {
     const current = processingStates.get(lessonId) ?? defaultProcessing(lessonId)
     if (current.status !== 'FAILED') {
