@@ -19,17 +19,23 @@ public interface LessonGlossaryOverrideRepository
      *
      * <p>활성 버전만 본다. 자료를 다시 올리면 옛 버전이 retire되는데, 그 용어까지 섞이면 지운 자료의
      * 용어가 자막에 계속 링크로 걸린다.
+     *
+     * <p><b>커리큘럼 자료까지 모은다.</b> 커리큘럼에 붙인 자료는 {@code lesson_id IS NULL}이라
+     * (ADR-0045) 강의로만 걸러서는 절대 잡히지 않는다 — 용어를 12개나 뽑아 두고도 화면에는 하나도
+     * 뜨지 않는 상태가 운영에 있었다. 조건은 자료 검색과 같은 모양이다(ADR-0112).
      */
     @Query(value = """
             SELECT kt.term AS term, kt.definition AS definition
             FROM ai.material_key_term kt
             JOIN ai.material_version mv ON mv.id = kt.material_version_id
-            WHERE mv.lesson_id = :lessonId
+            WHERE mv.curriculum_id = :curriculumId
+              AND (mv.lesson_id IS NULL OR mv.lesson_id = :lessonId)
               AND mv.activated_at IS NOT NULL
               AND mv.retired_at IS NULL
             ORDER BY kt.term
             """, nativeQuery = true)
-    List<SourceTerm> findSourceTerms(@Param("lessonId") UUID lessonId);
+    List<SourceTerm> findSourceTerms(@Param("curriculumId") UUID curriculumId,
+                                     @Param("lessonId") UUID lessonId);
 
     /**
      * ai 원본 표가 있는가. <b>먼저 물어봐야 한다.</b>

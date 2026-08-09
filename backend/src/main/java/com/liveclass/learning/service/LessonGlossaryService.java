@@ -88,7 +88,8 @@ public class LessonGlossaryService {
             log.debug("ai 용어 원본 표가 없다 — 강사 수정본만 쓴다");
             return List.of();
         }
-        return repository.findSourceTerms(lessonId);
+        // 커리큘럼 자료(lesson_id IS NULL)까지 모으려면 범위를 알아야 한다. 그 관계는 curriculum이 안다.
+        return repository.findSourceTerms(access.curriculumIdOf(lessonId), lessonId);
     }
 
     /** 강사가 용어를 고치거나 더한다. 같은 용어를 다시 쓰면 덮어쓴다(멱등). */

@@ -72,6 +72,16 @@ public class LessonLearningAccessImpl implements LessonLearningAccess {
                 LessonNotLearnableException.Reason.FORBIDDEN, "이 강의의 집계를 볼 수 없습니다.");
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public UUID curriculumIdOf(UUID lessonId) {
+        LessonDetailView lesson = lessonDirectory.findDetail(lessonId)
+                .orElseThrow(() -> notFound());
+        Section section = sectionRepository.findById(lesson.sectionId())
+                .orElseThrow(() -> notFound());
+        return section.getCurriculumId();
+    }
+
     private LessonNotLearnableException notFound() {
         return new LessonNotLearnableException(
                 LessonNotLearnableException.Reason.NOT_FOUND, "레슨을 찾을 수 없습니다.");
