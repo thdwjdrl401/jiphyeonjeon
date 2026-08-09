@@ -13,7 +13,13 @@ import { formatTimeLabel } from '@/features/live-session/captionAdapter'
 import '@vidstack/react/player/styles/default/theme.css'
 import '@vidstack/react/player/styles/default/layouts/video.css'
 
-export type HlsMediaState = 'loading' | 'ready' | 'playing' | 'buffering' | 'error'
+/**
+ * `ended`는 <b>이 브라우저가 마지막 세그먼트까지 소비했다</b>는 뜻이다.
+ *
+ * <p>라이브에서 이것이 학생의 실제 시청 완료 신호다(ADR-0005 §3). 세션이 ENDED가 되는 시각과는
+ * 다르다 — 강사 송출이 끝나도 인코딩·업로드·버퍼 지연만큼 볼 것이 남아 있다.
+ */
+export type HlsMediaState = 'loading' | 'ready' | 'playing' | 'buffering' | 'ended' | 'error'
 
 /**
  * vidstack 컨트롤을 이 파일 밖(재생 정보 헤더 등)에서 idle 타이머와 무관하게 붙잡아 둘 수 있게
@@ -160,6 +166,7 @@ export default function HlsMediaPlayer({
       title={title}
       onCanPlay={() => onStateChange('ready')}
       onControlsChange={(visible) => onControlsVisibleChange?.(visible)}
+      onEnded={() => onStateChange('ended')}
       onError={() => onStateChange('error')}
       onPlaying={() => onStateChange('playing')}
       onProviderChange={handleProviderChange}
