@@ -424,6 +424,15 @@
  * 흰 판에 흰 글자가 된다.
  */
 .device-settings { position: relative; display: inline-flex; }
+/*
+ * 톱니는 옆 버튼(마이크·카메라)과 <b>같은 높이의 정사각형</b>이다.
+ *
+ * 높이를 숫자로 박지 않는다 — 옆 버튼 높이는 글자 크기·패딩에서 나오므로, 그것이 바뀌면 이 버튼만
+ * 혼자 어긋난다. 줄 높이에 맞춰 늘리고(align-self: stretch + height: 100%) 가로는 aspect-ratio로
+ * 따라오게 한다. 아이콘 전용 규칙(.video-controls-overlay__icon)의 30px 고정을 여기서 덮는다.
+ */
+.control-row .device-settings { align-self: stretch; }
+.control-row .device-settings > button { width: auto; height: 100%; aspect-ratio: 1; padding: 0; }
 .device-settings__panel { position: absolute; bottom: calc(100% + 8px); left: 0; z-index: 5; display: grid; width: max-content; min-width: 220px; max-width: 300px; gap: 9px; padding: 12px; border: 1px solid var(--ink-100); border-radius: 12px; background: var(--white); box-shadow: 0 12px 32px rgba(0,0,0,.28); }
 .device-settings__panel .device-picker__label { color: var(--ink-500); }
 .device-settings__panel .device-picker__select { color: var(--ink-900); }
