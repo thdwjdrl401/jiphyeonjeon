@@ -8,7 +8,7 @@ import GlossaryReviewModal from '@/features/lesson/GlossaryReviewModal'
  * 강사가 주요 용어를 <b>내릴 수 있다</b>.
  *
  * <p>AI가 자료에서 뽑은 용어라도 내려간다 — 서버가 원본을 지우는 것이 아니라 지웠다는 사실을
- * 덮어쓰기 자리에 묘비로 남기기 때문이다(ADR-0110). 화면에서 보는 결과는 하나다: 목록에서 빠진다.
+ * 덮어쓰기 자리에 묘비로 남기기 때문이다(ADR-0111). 화면에서 보는 결과는 하나다: 목록에서 빠진다.
  */
 const service = vi.hoisted(() => ({
   getGlossary: vi.fn(async () => ([

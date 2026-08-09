@@ -523,7 +523,7 @@ export interface LiveSessionService {
   upsertGlossaryTerm: (lessonId: string, term: string, definition: string) => Promise<GlossaryTerm>
   /**
    * 용어를 목록에서 내린다. AI가 자료에서 뽑은 용어여도 내려간다 — 원본을 지우는 것이 아니라
-   * 지웠다는 사실을 덮어쓰기 자리에 남기기 때문이다(ADR-0110). 자료를 다시 읽어도 되돌아오지 않는다.
+   * 지웠다는 사실을 덮어쓰기 자리에 남기기 때문이다(ADR-0111). 자료를 다시 읽어도 되돌아오지 않는다.
    *
    * <p>멱등: 없는 용어를 지워도 성공이다. 같은 용어를 다시 등록하면 되살아난다.
    */
