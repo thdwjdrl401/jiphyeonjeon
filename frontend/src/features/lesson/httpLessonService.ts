@@ -1,5 +1,4 @@
 import { apiClient } from '@/shared/api/client'
-import { notImplemented } from '@/shared/api/notImplemented'
 import { uploadAsset } from '@/shared/api/uploadAsset'
 import type { CurriculumLiveSessionStatus, CurriculumReplayStatus, LessonStatus } from './types'
 import type { LessonDetailView, LessonMaterialView, LessonService } from './lessonService.interface'
@@ -294,9 +293,5 @@ export const httpLessonService = {
   },
   async deleteLessonMaterial(lessonId, materialId) {
     await apiClient.delete(`/instructor/lessons/${lessonId}/materials/${materialId}`)
-  },
-  // 자료 임베딩을 트리거하는 경로. 자료 업로드 자체가 없어 준비할 대상이 없다(CP3).
-  async prepareLessonAi(lessonId) {
-    return notImplemented(`POST /instructor/lessons/${lessonId}/ai-preparation`)
   },
 } satisfies LessonService

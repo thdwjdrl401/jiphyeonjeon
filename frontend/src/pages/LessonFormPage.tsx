@@ -5,7 +5,7 @@ import { instructorPaths, publicPaths } from '@/app/router/paths'
 import { useAuth } from '@/features/auth/AuthContext'
 import { getInstructorCurriculum } from '@/features/curriculum/curriculumManagementService'
 import { deleteLesson } from '@/features/curriculum/curriculumManagementService'
-import { deleteLessonMaterial, getLesson, prepareLessonAi, saveLesson } from '@/features/lesson/lessonService'
+import { deleteLessonMaterial, getLesson, saveLesson } from '@/features/lesson/lessonService'
 import LessonBreadcrumbs from '@/features/lesson/LessonBreadcrumbs'
 import { invalidateAfterLessonWrite } from '@/features/lesson/lessonQueryCache'
 import type { MaterialUploadProgress } from '@/features/lesson/lessonService.interface'
@@ -62,7 +62,7 @@ export default function LessonFormPage() {
     queryFn: () => getLesson({ lessonId: lessonId!, role: user?.role, userId: user?.userId, curriculumId, sectionId }),
     enabled: isEdit,
     // 저장 직후 이 화면에 그대로 머무는 게 기본 동선이다(수정 모드는 이동하지 않는다). 방금 올린
-    // 자료의 임베딩이 끝나는 걸 여기서 봐야 한다 — 폴링이 없으면 "AI 준비 중"에서 멈춘 채로 남는다.
+    // 자료의 임베딩이 끝나는 걸 여기서 봐야 한다 — 폴링이 없으면 "AI가 읽는 중"에서 멈춘 채로 남는다.
     refetchInterval: (query) => materialRefetchInterval(query.state.data?.materials),
     refetchIntervalInBackground: false,
   })
@@ -79,7 +79,6 @@ export default function LessonFormPage() {
   const [description, setDescription] = useState('')
   const [materials, setMaterials] = useState<SelectedMaterial[]>([])
   const [materialDragActive, setMaterialDragActive] = useState(false)
-  const [processing, setProcessing] = useState(false)
   const [scheduledAt, setScheduledAt] = useState(toDateTimeLocal(existingLiveSession?.scheduledAt))
   const [duration, setDuration] = useState('90')
   const [entryWindow, setEntryWindow] = useState('10')
@@ -234,14 +233,6 @@ export default function LessonFormPage() {
       setUploadProgress(null)
     }
   }
-  const prepare = async () => {
-    setProcessing(true)
-    try {
-      await prepareLessonAi(lessonId ?? 'new')
-    } finally {
-      setProcessing(false)
-    }
-  }
 
   if (!curriculumId || !sectionId) return <PageState title="잘못된 강의 경로입니다" />
   if (curriculumQuery.isPending || (isEdit && lessonQuery.isPending)) return <PageState title="강의 정보를 불러오는 중입니다" />
@@ -287,22 +278,18 @@ export default function LessonFormPage() {
                   <h3>강의 자료</h3>
                   {/* 서버 상태에서 나온다. 예전엔 저장만 되면 무조건 "N개 · READY"였다. */}
                   <StatusBadge
-                    tone={processing || materialsInProgress ? 'warning' : materials.length ? 'success' : 'neutral'}
-                    busy={processing || materialsInProgress}
+                    tone={materialsInProgress ? 'warning' : materials.length ? 'success' : 'neutral'}
+                    busy={materialsInProgress}
                   >
                     {/*
-                      "저장 필요"와 "AI 준비 중"을 구분한다 — 아직 올리지 않은 파일은 아무 일도 일어나지
-                      않는 상태라 기다려 봐야 소용없다. 저장을 눌러야 업로드·임베딩이 시작된다.
+                      "저장 필요"와 "AI가 읽는 중"을 구분한다 — 아직 올리지 않은 파일은 아무 일도
+                      일어나지 않는 상태라 기다려야 소용없다. 저장을 눌러야 업로드·임베딩이 시작된다.
                     */}
-                    {processing ? 'AI 준비 중'
-                      : !materials.length ? '자료 없음'
+                    {!materials.length ? '자료 없음'
                       : pendingMaterialCount > 0 ? `${materials.length}개 · 저장 필요`
-                      : materialsInProgress ? `${materials.length}개 · AI 준비 중`
-                      : `${materials.length}개 · 준비 완료`}
+                      : materialsInProgress ? `${materials.length}개 · AI가 읽는 중`
+                      : `${materials.length}개 · AI 답변에 사용`}
                   </StatusBadge>
-                </div>
-                <div className="lesson-form__material-actions">
-                  <button className="button button--soft button--small" type="button" disabled={!materials.length || processing} onClick={prepare}>{processing ? '준비 중…' : 'AI 준비'}</button>
                 </div>
               </div>
               <label
@@ -319,7 +306,11 @@ export default function LessonFormPage() {
               {materials.length > 0
                 ? <ul className="material-list lesson-form__material-list">{materials.map((material) => <li key={material.id}><span className="file-icon">PPTX</span><div><strong>{material.name}</strong><small>{material.size}</small></div>{isEdit && !material.file && <button className="button button--soft button--small" type="button" disabled={downloadingMaterialId === material.id} aria-label={`${material.name} 다운로드`} onClick={() => void downloadMaterial({ scope: 'LESSON', parentId: lessonId ?? '', materialId: material.id, fileName: material.name, asInstructor: true })}>{downloadingMaterialId === material.id ? '받는 중…' : '다운로드'}</button>}<MaterialStatusBadges material={material} audience="instructor" /><button type="button" aria-label={`${material.name} 제거`} onClick={() => void removeMaterial(material)}>×</button></li>)}</ul>
                 : null}
-              {pendingMaterialCount > 0 && !processing && <p className="lesson-form__ai-warning">선택한 자료는 AI 준비를 완료해야 라이브에서 사용할 수 있습니다.</p>}
+              {/*
+                임베딩은 저장할 때 자동으로 시작한다(ADR-0036) — 강사가 따로 누를 것이 없다.
+                여기서 말할 것은 "아직 저장 안 됐다" 하나뿐이다.
+              */}
+              {pendingMaterialCount > 0 && <p className="lesson-form__ai-warning">아직 저장하지 않은 자료가 있습니다. 저장하면 업로드와 AI 읽기가 함께 시작됩니다.</p>}
             </div>
           </Panel>
 
@@ -338,7 +329,12 @@ export default function LessonFormPage() {
               <li><span>CC</span><div><strong>실시간 자막</strong><p>발화가 자막과 AI 근거에 사용됩니다.</p></div></li>
               <li><span>AI</span><div><strong>학습 보조</strong><p>채팅, 개인 질문과 강의 자료가 학습 기능에 연결됩니다.</p></div></li>
             </ul>
-            <InlineNotice tone="warning">AI 준비 전에는 일정 저장만 가능하고 라이브 시작은 차단됩니다.</InlineNotice>
+            {/*
+              예전엔 "AI 준비 전에는 라이브 시작이 차단된다"고 적혀 있었다. 그런 게이트는 없다 —
+              자료가 준비되지 않아도 강의는 시작된다(ADR-0110·0099). 준비가 정하는 것은
+              AI가 그 자료를 인용할 수 있는지뿐이라, 그것만 말한다.
+            */}
+            <InlineNotice tone="info">자료는 저장과 함께 AI가 읽기 시작합니다. 읽기 전에도 강의 시작과 자료 다운로드는 그대로 됩니다.</InlineNotice>
           </Panel>}
         </div>
 

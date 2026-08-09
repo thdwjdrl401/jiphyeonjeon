@@ -181,8 +181,6 @@
 .lesson-form__section-title { display: flex; min-width: 0; align-items: center; gap: 7px; }
 .lesson-form__section-title h3 { margin: 0; font-size: .78rem; }
 .lesson-form__section-title .status-pill { min-height: 21px; padding: 2px 6px; font-size: .56rem; white-space: nowrap; }
-.lesson-form__material-actions { display: flex; flex: 0 0 auto; gap: 5px; }
-.lesson-form__material-actions .button { min-height: 30px; padding: 5px 9px; font-size: .65rem; }
 .lesson-form__dropzone { min-height: 92px; flex: 1; justify-content: flex-start; flex-direction: row; gap: 11px; margin-top: 8px; padding: 12px; border-radius: 0; text-align: left; }
 .lesson-form__dropzone.is-drag-active { border-color: var(--blue-600); background: var(--blue-100); box-shadow: inset 0 0 0 1px var(--blue-600); }
 .lesson-form__dropzone input { min-height: 0; padding: 0; }
@@ -398,9 +396,19 @@
 .glossary-review-row__source { flex: 0 0 auto; border-radius: 99px; padding: 2px 9px; font-size: .61rem; font-weight: 700; }
 .glossary-review-row__source--material { background: var(--blue-100); color: var(--blue-700); }
 .glossary-review-row__source--instructor { background: var(--green-50); color: var(--green-700); }
-.glossary-review-row__view { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px; }
-.glossary-review-row__view p { margin: 0; color: var(--ink-700); font-size: .76rem; line-height: 1.6; }
-.glossary-review-row__view .text-button { flex: 0 0 auto; font-size: .68rem; transition: transform .12s ease; }
+/*
+ * 정의문과 버튼 묶음. <b>버튼은 늘 같은 자리에 선다.</b>
+ *
+ * 예전에는 정의문·수정·삭제 셋을 형제로 두고 space-between으로 밀었다. 남는 자리가 정의문 길이에
+ * 따라 달라져 행마다 버튼의 x좌표가 흔들렸고, align-items: flex-end라 정의문이 두 줄이면 버튼이
+ * 아래로 내려갔다. 정의문이 남는 자리를 전부 먹고(flex: 1) 버튼 묶음은 오른쪽에 고정된다.
+ *
+ * 세로는 위 맞춤이다 — 정의문 줄 수와 무관하게 첫 줄 옆에 서므로 행끼리 높이가 달라도 나란하다.
+ */
+.glossary-review-row__view { display: flex; align-items: flex-start; gap: 10px; }
+.glossary-review-row__view p { min-width: 0; flex: 1; margin: 0; color: var(--ink-700); font-size: .76rem; line-height: 1.6; }
+.glossary-review-row__actions { display: flex; flex: 0 0 auto; align-items: center; gap: 10px; }
+.glossary-review-row__view .text-button { flex: 0 0 auto; font-size: .68rem; white-space: nowrap; transition: transform .12s ease; }
 .glossary-review-row__view .text-button:hover:not(:disabled) { transform: translateY(-2px); }
 .glossary-review-row__edit textarea { width: 100%; border: 1px solid var(--border-medium); border-radius: 8px; padding: 8px 10px; color: var(--ink-900); font: inherit; font-size: .76rem; line-height: 1.6; resize: vertical; }
 .glossary-review-row__edit-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
@@ -1171,10 +1179,28 @@ th { color: var(--ink-500); font-size: .67rem; }
  * 가로 스크롤이 생긴다 — strong의 말줄임도 그래서 걸리지 않았다.
  */
 .material-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin: 16px 0; padding: 0; list-style: none; }
-.material-list li { display: flex; min-width: 0; align-items: center; gap: 11px; padding: 11px; border: 1px solid var(--ink-100); border-radius: 11px; }
-.material-list li > div { display: flex; min-width: 0; flex: 1; flex-direction: column; }
+.material-list li { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 11px; padding: 11px; border: 1px solid var(--ink-100); border-radius: 11px; }
+/*
+ * 파일명 칸. <b>바닥을 준다.</b>
+ *
+ * min-width: 0만 주면 배지·버튼이 늘어난 만큼 이름이 계속 깎여 "짧은이름.pptx"조차 "짧은…"이 된다.
+ * 어느 자료인지 못 알아보면 배지가 정확해도 소용이 없다. 여기까지만 줄고, 그래도 모자라면 위
+ * flex-wrap이 뒤쪽 컨트롤을 다음 줄로 내린다 — 글자가 짓눌리는 것보다 줄이 하나 느는 편이 낫다.
+ */
+.material-list li > div { display: flex; min-width: 108px; flex: 1; flex-direction: column; }
 .material-list strong { overflow: hidden; font-size: .73rem; text-overflow: ellipsis; white-space: nowrap; }
 .material-list small { color: var(--ink-500); font-size: .62rem; }
+/*
+ * 상태 배지는 <b>줄지도 접히지도 않는다</b>.
+ *
+ * flex 자식의 기본값은 `flex-shrink: 1`이라, 자리가 모자라면 배지부터 찌그러지고 글자가 줄바꿈되며
+ * 행 높이가 늘어난다 — 목록 전체가 무너져 보이는 것이 이것이다. 줄어들 몫은 파일명이 진다
+ * (`li > div`가 `min-width: 0`이라 말줄임으로 접힌다). 이름은 잘려도 읽히지만 상태는 잘리면 뜻이 바뀐다.
+ */
+.material-list .status-pill { flex: 0 0 auto; white-space: nowrap; }
+/* 다운로드·제거 버튼도 같은 이유로 고정 폭이다. */
+.material-list li > button,
+.material-list li > .button { flex: 0 0 auto; }
 /*
  * 목록 안의 맨몸 버튼 = × 제거 버튼. `.button`(다운로드)까지 잡으면 테두리·배경이 벗겨져
  * ×와 구분되지 않는다 — 이 선택자가 (0,2,2)라 `.button--soft`(0,1,0)를 이긴다.

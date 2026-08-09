@@ -6,16 +6,13 @@ vi.mock('@/shared/config/runtime', () => ({ isMockApiEnabled: false, isTestMode:
 
 import { httpLiveSessionService } from '@/features/live-session/httpLiveSessionService'
 import { httpReplayService } from '@/features/replay/httpReplayService'
-import { httpLessonService } from '@/features/lesson/httpLessonService'
 import type { LiveSessionService } from '@/features/live-session/liveSessionService.interface'
 import type { ReplayService } from '@/features/replay/replayService.interface'
-import type { LessonService } from '@/features/lesson/lessonService.interface'
 
 // 미구현 구현체는 쓰지 않는 인자를 받지 않으므로, 호출은 계약 타입으로 한다 —
 // 화면이 부르는 방식(전체 인자)이 그대로 통하는지까지 함께 확인하는 셈이다.
 const live: LiveSessionService = httpLiveSessionService
 const replay: ReplayService = httpReplayService
-const lesson: LessonService = httpLessonService
 
 /**
  * 서버에 아직 없는 경로를 부르던 자리가 "미구현"으로 드러나는지 본다.
@@ -62,7 +59,8 @@ describe('미구현 API 표시', () => {
     ['퀴즈 제출', () => replay.submitReplayQuiz('les-1', '답')],
     // 학생 학습 요약(GET /me/learning-summary)·강사 대시보드 요약(GET /instructor/dashboard-summary)은
     // 모두 서버에 구현됨 — 여기서 제외.
-    ['레슨 AI 준비', () => lesson.prepareLessonAi('les-1')],
+    // 레슨 AI 준비(POST /instructor/lessons/{id}/ai-preparation)는 경로째 없앴다 — 자료 임베딩은
+    // attach와 함께 자동으로 시작하므로(ADR-0036) 강사가 누를 것이 없다.
   ]
 
   it.each(unimplemented)('%s은 네트워크로 나가지 않고 501로 끝난다', async (_label, call) => {

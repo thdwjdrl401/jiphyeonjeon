@@ -30,7 +30,9 @@ export default function MaterialStatusBadges({ material, audience }: MaterialSta
   return (
     <>
       {badges.map((badge) => (
-        <StatusBadge key={badge.label} tone={badge.tone} busy={badge.busy}>{badge.label}</StatusBadge>
+        <StatusBadge key={badge.label} tone={badge.tone} busy={badge.busy} title={badge.title}>
+          {badge.label}
+        </StatusBadge>
       ))}
     </>
   )

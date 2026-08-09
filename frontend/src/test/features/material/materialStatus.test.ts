@@ -7,6 +7,7 @@ import {
   materialEmbeddingState,
   materialRefetchInterval,
   studentMaterialBadge,
+  type MaterialStatusSource,
 } from '@/features/material/materialStatus'
 
 const pptx = () => new File([''], 'deck.pptx')
@@ -75,8 +76,10 @@ describe('hasMaterialInProgress', () => {
 
 describe('instructorMaterialBadges', () => {
   it('임베딩 배지는 언제나 하나 나온다', () => {
-    expect(instructorMaterialBadges({ embeddingStatus: 'READY' }))
-      .toEqual([{ label: 'AI 준비 완료', tone: 'success', busy: false }])
+    // 문구 자체보다 "한 개 나온다"가 계약이다. 툴팁 문구까지 묶으면 카피 한 줄에 테스트가 깨진다.
+    expect(instructorMaterialBadges({ embeddingStatus: 'READY' })).toHaveLength(1)
+    expect(instructorMaterialBadges({ embeddingStatus: 'READY' })[0])
+      .toMatchObject({ label: 'AI 반영됨', tone: 'success', busy: false })
   })
 
   it('요청한 적 없는 용어 추출은 배지를 만들지 않는다', () => {
@@ -87,13 +90,13 @@ describe('instructorMaterialBadges', () => {
 
   it('용어 추출이 돌고 있으면 배지가 하나 더 붙는다', () => {
     const badges = instructorMaterialBadges({ embeddingStatus: 'READY', keyTermStatus: 'PROCESSING' })
-    expect(badges.map((badge) => badge.label)).toEqual(['AI 준비 완료', '용어 추출 중'])
+    expect(badges.map((badge) => badge.label)).toEqual(['AI 반영됨', '용어 추출'])
   })
 
   it('강사에게는 실패를 감추지 않는다', () => {
     // 감추면 "왜 AI가 이 자료를 모르지"를 알아낼 방법이 없다.
     const [embedding] = instructorMaterialBadges({ embeddingStatus: 'FAILED' })
-    expect(embedding).toEqual({ label: 'AI 준비 실패', tone: 'danger', busy: false })
+    expect(embedding).toMatchObject({ label: '읽기 실패', tone: 'danger' })
   })
 
   it('기다리는 구간에서만 스피너를 돈다', () => {
@@ -118,6 +121,76 @@ describe('studentMaterialBadge', () => {
   it('실패를 수강생에게 오류로 보여 주지 않는다', () => {
     // 수강생이 고칠 수 있는 게 아니다 — 강사가 손봐야 할 상태로 읽히게 둔다.
     expect(studentMaterialBadge({ embeddingStatus: 'FAILED' }))
-      .toEqual({ label: 'AI 준비 안 됨', tone: 'neutral', busy: false })
+      .toMatchObject({ label: '미반영', tone: 'neutral', busy: false })
+  })
+})
+
+describe('배지 문구가 없는 조작을 시키지 않는다', () => {
+  it('강사에게 보이는 어떤 배지도 "준비"를 눌러야 할 일처럼 말하지 않는다', () => {
+    /*
+     * 예전에 "AI 준비" 버튼이 있었고(누르면 501을 던지는 죽은 버튼이었다) 지금은 없다 —
+     * 임베딩은 저장과 함께 자동으로 시작한다(ADR-0036). 그 이름이 배지로 돌아오면 강사는
+     * 다시 누를 것을 찾는다. 상태는 "무엇이 되는가"로만 말한다.
+     */
+    const states: MaterialStatusSource[] = [
+      { file: new File([''], 'a.pptx') },
+      { embeddingStatus: 'PENDING' },
+      { embeddingStatus: 'PROCESSING' },
+      { embeddingStatus: 'READY' },
+      { embeddingStatus: 'FAILED' },
+    ]
+    for (const material of states) {
+      for (const badge of instructorMaterialBadges(material)) {
+        expect(badge.label).not.toContain('AI 준비')
+      }
+    }
+  })
+
+  it('수강생 배지도 마찬가지다', () => {
+    for (const status of ['PENDING', 'PROCESSING', 'FAILED']) {
+      expect(studentMaterialBadge({ embeddingStatus: status })?.label).not.toContain('AI 준비')
+    }
+  })
+})
+
+describe('배지는 좁은 줄에서 버틴다', () => {
+  /*
+   * 자료 목록의 한 행은 파일명·다운로드·제거 버튼과 자리를 나눠 쓰고, 배지가 두 개 붙기도 한다.
+   * 라벨이 길어지면 배지가 줄바꿈되며 행 높이가 늘어 목록 전체가 무너져 보인다. CSS로 배지를
+   * 안 줄어들게 고정했지만, 애초에 길지 않아야 그 고정이 파일명을 다 잡아먹지 않는다.
+   */
+  const ALL: MaterialStatusSource[] = [
+    { file: new File([''], 'a.pptx') },
+    { embeddingStatus: 'PENDING' },
+    { embeddingStatus: 'PROCESSING' },
+    { embeddingStatus: 'READY' },
+    { embeddingStatus: 'FAILED' },
+    { embeddingStatus: 'READY', keyTermStatus: 'PENDING' },
+    { embeddingStatus: 'READY', keyTermStatus: 'PROCESSING' },
+    { embeddingStatus: 'READY', keyTermStatus: 'READY' },
+    { embeddingStatus: 'READY', keyTermStatus: 'EMPTY' },
+    { embeddingStatus: 'READY', keyTermStatus: 'FAILED' },
+  ]
+
+  it('어떤 배지도 여섯 글자를 넘지 않는다', () => {
+    for (const material of ALL) {
+      for (const badge of instructorMaterialBadges(material)) {
+        expect(badge.label.length, `"${badge.label}"이 너무 길다`).toBeLessThanOrEqual(6)
+      }
+    }
+    for (const status of ['PENDING', 'PROCESSING', 'FAILED']) {
+      const badge = studentMaterialBadge({ embeddingStatus: status })
+      expect(badge!.label.length, `"${badge!.label}"이 너무 길다`).toBeLessThanOrEqual(6)
+    }
+  })
+
+  it('짧아진 만큼 뜻은 툴팁이 받는다', () => {
+    // 라벨만 줄이고 설명을 없애면 "AI 반영됨"이 무슨 뜻인지 알 길이 사라진다.
+    for (const material of ALL) {
+      for (const badge of instructorMaterialBadges(material)) {
+        expect(badge.title.trim()).not.toBe('')
+      }
+    }
+    expect(studentMaterialBadge({ embeddingStatus: 'PROCESSING' })!.title.trim()).not.toBe('')
   })
 })
