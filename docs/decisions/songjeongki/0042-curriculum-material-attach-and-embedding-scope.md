@@ -61,4 +61,5 @@
 - **FE**: `CurriculumMaterial`에 `file?`; `createCurriculum`이 선택 자료를 presigned 업로드→attach; `saveCurriculumManagement`가 `notImplemented` 제거 후 신규 attach·사라진 자료 삭제·저장 후 자료 재조회; 관리 화면 자동저장 지문에 자료(fileName:fileSize) 포함, 다운로드 링크 노출.
 - **계약**: [CONTRACT §2](../../CONTRACT.md#2-rest-api-apiv1) 자료 행에 커리큘럼 엔드포인트, [§3-1](../../CONTRACT.md#3-실시간서비스-간-계약-확정-인터페이스) 잡 envelope에 `scope` 추가.
 - **테스트**: BE `CurriculumMaterialContractTest`(레슨 테스트 대칭 — 201/403/404/409/400·detach 멱등·download 302·관리 GET·공개 상세 게이트), FE `partialWriteGuard.test.ts` 갱신(501 가드 제거, 자료 attach/삭제 동기화 검증).
+- **후속 완료(2026-08-10)**: 아래 blocker는 [ADR-0045](../canola/0045-curriculum-scoped-material-indexing.md)로 해소됐고, Spring 쪽 봉투를 v2로 올려 용어 추출까지 잇는 일은 [ADR-0114](0114-curriculum-material-uses-the-same-v2-job-as-a-lesson.md)로 끝났다.
 - **후속(AI, blocker)**: ai-worker `PptxEmbedJob`은 `lessonId` 필수라 **커리큘럼 스코프 잡을 아직 소비하지 못한다**. `lessonId`를 optional화하고 `scope`를 존중하도록 진화해야 실제 임베딩이 돈다. `material.embedding.enabled`가 기본 off라 현재 배선 단계에서는 무회귀(연결·조회·삭제·다운로드는 스위치와 무관하게 동작). 이 진화는 AI 오너 몫으로 남긴다.

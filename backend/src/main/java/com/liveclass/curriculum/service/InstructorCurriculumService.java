@@ -698,7 +698,13 @@ public class InstructorCurriculumService {
                 curriculumId, assetId, material.materialId());
         if (embeddingEnabled) {
             curriculumMaterialManagement.updateEmbeddingStatus(material.materialId(), "PENDING");
-            material = withEmbeddingPending(material);
+            /*
+             * 용어도 PENDING으로 건다. 상태 기계가 NOT_REQUESTED에서 갈 수 있는 곳은 PENDING뿐이라
+             * (MaterialKeyTermStatus), 이 줄이 없으면 워커가 용어를 뽑아 보내와도 결과를 받아 적을 수
+             * 없다. 실제로 운영에서 ai 쪽에는 용어가 쌓여 있는데 화면은 NOT_REQUESTED였다.
+             */
+            curriculumMaterialManagement.updateKeyTermStatus(material.materialId(), "PENDING");
+            material = withProcessingPending(material);
             enqueueCurriculumEmbedJob(curriculumId, material);
         }
         // 레슨이 없는 커리큘럼 전체 자료다. lessonId를 비워 보내면 화면이 커리큘럼으로 보낸다.
@@ -728,8 +734,12 @@ public class InstructorCurriculumService {
     /**
      * 커리큘럼 자료 임베딩 잡을 outbox에 싣는다(ADR-0042). 레슨 잡({@link #enqueueEmbedJob})과 같은 taskType·
      * 모델·주문형 URL(assetId) 방식이지만, 레슨이 없으므로 {@code lessonId} 대신 {@code scope=CURRICULUM}을
-     * 싣는다. 현재 worker의 curriculum scope 배선은 후속 범위이므로 v1 계약을 유지하고 용어 추출은
-     * 요청하지 않는다(CONTRACT §3-1 evolution).
+     * 싣는다.
+     *
+     * <p><b>레슨 잡과 같은 v2다.</b> 예전에는 "worker의 curriculum scope 배선이 후속"이라 v1을 유지하고
+     * 용어 추출을 요청하지 않았는데, 그 배선은 ADR-0045로 끝났다. v1을 남겨 둔 대가가 컸다 — 워커는
+     * v1에서도 용어를 뽑지만(요청이 없으면 추출기 유무로 결정한다) <b>결과 봉투(outputs)를 v2에서만
+     * 싣기 때문에</b>, 뽑아 놓고도 화면은 영영 모르는 상태가 됐다.
      */
     private void enqueueCurriculumEmbedJob(UUID curriculumId, MaterialView material) {
         String payload = jsonMapper.writeValueAsString(Map.of(
@@ -739,8 +749,8 @@ public class InstructorCurriculumService {
                 "assetId", material.assetId().toString(),
                 "curriculumId", curriculumId.toString(),
                 "fileName", material.fileName() == null ? "" : material.fileName(),
-                "policy", Map.of("embedModel", "bge-m3"),
-                "contractVersion", 1));
+                "policy", Map.of("embedModel", "bge-m3", "extractKeyTerms", true),
+                "contractVersion", 2));
         outboxPublisher.enqueue(OutboxDestinations.INGESTION_EMBED, "material_asset", material.materialId().toString(), "MATERIAL_EMBED_REQUESTED",
                 payload, "material:" + material.materialId() + ":embed", null);
     }
@@ -757,17 +767,6 @@ public class InstructorCurriculumService {
                 "PENDING");
     }
 
-    /** curriculum scope는 v1 embedding만 요청하므로 용어 상태를 NOT_REQUESTED로 유지한다. */
-    private MaterialView withEmbeddingPending(MaterialView material) {
-        return new MaterialView(
-                material.materialId(),
-                material.assetId(),
-                material.fileName(),
-                material.fileSize(),
-                material.status(),
-                "PENDING",
-                material.keyTermStatus());
-    }
 
     /**
      * 커리큘럼 자료 다운로드용 presigned GET URL. 소유권 확인 후, 그 커리큘럼의 활성 자료 중 materialId를
