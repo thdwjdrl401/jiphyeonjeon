@@ -8,10 +8,15 @@ import { useNotificationActivation } from './useNotificationActivation'
 import { useMarkAllNotificationsReadMutation } from './useNotificationMutations'
 import { usePushSubscription } from './usePushSubscription'
 import { useNotificationRealtime } from './useNotificationRealtime'
-import { useNotificationSummaryQuery, useRecentNotificationsQuery } from './useNotificationQueries'
+import { useNotificationListQuery, useNotificationSummaryQuery } from './useNotificationQueries'
 
-/** 드롭다운은 "최근"만 보여 준다. 전체 이력·필터는 알림 페이지가 맡는다. */
-const RECENT_SIZE = 5
+/**
+ * 한 번에 당겨 오는 알림 수. 드롭다운은 <b>끝까지 스크롤해서 다 볼 수 있다</b> — 예전에는 최근 5건에서
+ * 잘리고 나머지는 알림 페이지로 가야 했는데, 그게 "왜 아까 그 알림이 없지"가 됐다.
+ *
+ * <p>10건이면 첫 화면(max-height 420px)이 스크롤될 만큼은 되고, 한 번 당길 때 너무 많이 오지도 않는다.
+ */
+const PAGE_SIZE = 10
 
 /** 세 자리가 되면 배지가 메뉴 폭을 밀어낸다. 정확한 수보다 "많다"가 중요한 자리다. */
 const BADGE_LIMIT = 99
@@ -42,7 +47,14 @@ export default function NotificationBell() {
    * 서버 쪽 소유자를 지금 로그인한 사람 앞으로 맞춰 두는 부수효과만 계속 태운다.
    */
   usePushSubscription(Boolean(user))
-  const recentQuery = useRecentNotificationsQuery(RECENT_SIZE, Boolean(user) && isOpen)
+  /*
+   * 필터 없이 전체를 시간순으로 잇는다(scope=ALL, 읽음 여부는 거르지 않는다). 걸러 보는 일은 알림 페이지가
+   * 맡는다 — 드롭다운은 "방금 무슨 일이 있었나"를 훑는 자리다.
+   *
+   * <p><b>열었을 때만</b> 조회한다. 종 아이콘은 로그인한 모든 화면에 떠 있으므로, 닫힌 채로도
+   * 목록을 받아 두면 모든 페이지가 알림 목록을 한 벌씩 끌고 다닌다(개수는 summary가 따로 준다).
+   */
+  const recentQuery = useNotificationListQuery('ALL', undefined, PAGE_SIZE, Boolean(user) && isOpen)
   const markAllAsRead = useMarkAllNotificationsReadMutation()
   const { activate, activatingId } = useNotificationActivation()
 
@@ -72,7 +84,8 @@ export default function NotificationBell() {
 
   const unreadCount = summaryQuery.data?.unreadCount ?? 0
   const notificationsPath = getNotificationsPath(user.role)
-  const items = recentQuery.data?.items ?? []
+  // 여러 장을 시간순 그대로 이어 붙인다. 서버가 페이지마다 같은 정렬을 주므로 순서는 그대로다.
+  const items = recentQuery.data?.pages.flatMap((page) => page.items) ?? []
   const listUnavailable = isNotImplemented(recentQuery.error)
 
   return (
@@ -130,7 +143,15 @@ export default function NotificationBell() {
               }}
               activatingId={activatingId}
               emptyMessage="새로운 알림이 없습니다."
-              label="최근 알림"
+              label="알림"
+              onReachEnd={() => {
+                if (recentQuery.hasNextPage && !recentQuery.isFetchingNextPage) void recentQuery.fetchNextPage()
+              }}
+              footer={recentQuery.isFetchingNextPage
+                ? <li className="notification-more" role="status">이전 알림을 불러오는 중입니다.</li>
+                : !recentQuery.hasNextPage && items.length > 0
+                  ? <li className="notification-more" aria-hidden="true">여기까지입니다.</li>
+                  : null}
             />
           )}
 

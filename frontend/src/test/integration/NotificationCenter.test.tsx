@@ -65,18 +65,23 @@ describe('알림 센터', () => {
     await waitFor(() => expect(bell()).toHaveAccessibleName('알림'))
   })
 
-  it('드롭다운은 최근 알림과 처리 대기 표시를 보여 주고 전체 알림 보기로 이어진다', async () => {
+  it('드롭다운은 알림과 처리 대기 표시를 보여 주고 전체 알림 보기로 이어진다', async () => {
     const user = userEvent.setup()
     await loginAsInstructor()
     renderAt('/instructor/curriculums')
 
     const dropdown = await openDropdown(user)
-    const list = await within(dropdown).findByRole('list', { name: '최근 알림' })
+    const list = await within(dropdown).findByRole('list', { name: '알림' })
 
-    expect(within(list).getByText('새로운 수강 신청이 있습니다.')).toBeInTheDocument()
+    // 드롭다운이 전체를 잇게 되면서 같은 문구가 여러 건 보인다 — 있는지만 본다.
+    expect(within(list).getAllByText('새로운 수강 신청이 있습니다.').length).toBeGreaterThan(0)
     expect(within(list).getAllByText('처리 대기').length).toBeGreaterThan(0)
-    // 드롭다운은 "최근"만 — 전체 이력은 페이지가 맡는다.
-    expect(within(list).getAllByRole('listitem')).toHaveLength(5)
+    /*
+     * 드롭다운은 이제 <b>끝까지 스크롤해서 다 볼 수 있다</b>. 예전에는 최근 5건에서 잘렸는데,
+     * 종을 누르는 이유가 대개 "방금 뭐 왔지"라 조금 전에 본 알림이 사라진 것처럼 보였다.
+     * 첫 장은 10건까지 오고, 더 있으면 바닥에서 이어 붙는다.
+     */
+    expect(within(list).getAllByRole('listitem').length).toBeGreaterThan(5)
 
     await user.click(within(dropdown).getByRole('link', { name: '전체 알림 보기' }))
 
@@ -90,7 +95,9 @@ describe('알림 센터', () => {
     renderAt('/instructor/curriculums')
 
     const dropdown = await openDropdown(user)
-    await user.click(await within(dropdown).findByRole('button', { name: /새로운 수강 신청이 있습니다/ }))
+    // 같은 종류가 여러 건이라 첫 줄(가장 최근)을 누른다.
+    const rows = await within(dropdown).findAllByRole('button', { name: /새로운 수강 신청이 있습니다/ })
+    await user.click(rows[0])
 
     // 관리 화면 → 수강생 탭 → 승인 대기 필터가 URL에 남아야 새로고침·공유에도 같은 화면이 열린다.
     await waitFor(() => {
@@ -111,7 +118,9 @@ describe('알림 센터', () => {
     renderAt('/instructor/curriculums')
 
     const dropdown = await openDropdown(user)
-    await user.click(await within(dropdown).findByRole('button', { name: /새로운 수강 신청이 있습니다/ }))
+    // 같은 종류가 여러 건이라 첫 줄(가장 최근)을 누른다.
+    const rows = await within(dropdown).findAllByRole('button', { name: /새로운 수강 신청이 있습니다/ })
+    await user.click(rows[0])
     await waitFor(() => expect(bell()).toHaveAccessibleName('알림 (읽지 않음 4건)'))
 
     renderAt('/instructor/notifications')

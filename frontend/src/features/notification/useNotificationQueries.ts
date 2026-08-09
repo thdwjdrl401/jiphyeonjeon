@@ -10,9 +10,8 @@ export const notificationQueryKeys = {
   all: ['notifications'] as const,
   preferences: ['notification-preference'] as const,
   summary: ['notifications', 'summary'] as const,
-  recent: (size: number) => ['notifications', 'recent', size] as const,
   // 두 필터 축이 각각 키에 들어간다 — 하나로 합치면 "처리 대기 + 읽지 않음"이 다른 조합의 캐시를 덮는다.
-  list: (scope: NotificationScope, readState: NotificationReadFilter, size: number) =>
+  list: (scope: NotificationScope, readState: NotificationReadFilter | undefined, size: number) =>
     ['notifications', 'list', scope, readState, size] as const,
   preference: (curriculumId: string, lessonId?: string) =>
     [...notificationQueryKeys.preferences, curriculumId, lessonId ?? null] as const,
@@ -58,16 +57,6 @@ export function useNotificationSummaryQuery(enabled: boolean) {
   })
 }
 
-/** 드롭다운의 "최근 알림". 전체 이력과 필터는 알림 페이지가 맡으므로 첫 페이지만 받는다. */
-export function useRecentNotificationsQuery(size: number, enabled: boolean) {
-  return useQuery({
-    queryKey: notificationQueryKeys.recent(size),
-    queryFn: () => getNotifications({ page: 0, size }),
-    enabled,
-    retry: false,
-  })
-}
-
 /**
  * 알림 페이지 목록. `더 보기`로 페이지를 이어 붙인다 — 목록 전체를 한 번에 불러오지 않는다.
  *
@@ -76,7 +65,8 @@ export function useRecentNotificationsQuery(size: number, enabled: boolean) {
  */
 export function useNotificationListQuery(
   scope: NotificationScope,
-  readState: NotificationReadFilter,
+  /** 생략하면 읽음 여부로 거르지 않는다 — 드롭다운이 그 경우다(전체를 시간순으로 잇는다). */
+  readState: NotificationReadFilter | undefined,
   size: number,
   enabled: boolean,
 ) {

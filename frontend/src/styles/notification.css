@@ -827,3 +827,15 @@ html:has(.notifications-page) {
   outline: 2px solid var(--ink-950);
   outline-offset: 2px;
 }
+
+/*
+ * 드롭다운 무한 스크롤의 끝 표시. 목록(<ul>)이 곧 스크롤 컨테이너라 이 줄도 그 안에 들어가야
+ * 스크롤을 따라 올라온다 — 바깥에 두면 목록 아래에 붙박여, 끝에 닿았다는 신호가 되지 못한다.
+ */
+.notification-more {
+  padding: 10px 14px;
+  border-top: 1px solid var(--ink-100);
+  color: var(--ink-muted);
+  font-size: 0.72rem;
+  text-align: center;
+}
