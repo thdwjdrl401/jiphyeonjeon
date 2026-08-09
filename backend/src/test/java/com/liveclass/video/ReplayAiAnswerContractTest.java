@@ -30,6 +30,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -91,6 +92,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc(print = MockMvcPrint.NONE)
+/*
+ * <b>이 클래스는 자기만의 Spring 컨텍스트를 쓴다.</b> 아래 @DynamicPropertySource가 이 클래스의
+ * 스텁 서버 포트를 심는데, 그 동적 속성은 <b>컨텍스트 캐시 키에 들어가지 않는다</b>. AI 속성이 없는
+ * 다른 @SpringBootTest 클래스가 먼저 컨텍스트를 만들면 이 클래스가 그것을 물려받아, 자기 서버가
+ * 아닌 곳(기본값)을 가리킨 채 돌게 된다. 반대로 이 클래스가 먼저 만들고 @AfterAll에서 서버를 닫으면,
+ * 뒤에 그 컨텍스트를 물려받는 쪽이 죽은 포트를 본다(EOFException).
+ *
+ * <p>둘 다 <b>테스트를 추가하기만 해도 순서가 바뀌어</b> 터진다. 실제로 그렇게 CI가 깨졌다.
+ * 아래 한 줄이 캐시 키를 갈라 두 사고를 함께 막는다 — 컨텍스트 하나를 더 띄우는 값을 치른다.
+ */
+@TestPropertySource(properties = "liveclass.test.ai-suite=replay")
 class ReplayAiAnswerContractTest {
 
     /**
