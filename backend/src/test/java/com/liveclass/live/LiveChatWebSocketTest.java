@@ -42,7 +42,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 핸드셰이크 → 구독 → 전송 → 브로드캐스트 왕복을 확인한다. 핵심:
  * <ul>
  *   <li>학생이 {@code /app/live-sessions/{id}/chat}로 보내면 구독자가 {@code chat.message.created}를 받는다.</li>
- *   <li>{@code ENDED} 뒤에도 같은 채팅 경로로 후속 토론을 이어갈 수 있다.</li>
+ *   <li>{@code ENDED} 뒤 채팅은 REST와 마찬가지로 이 경로에서도 거절된다.</li>
  *   <li>브로드캐스트 payload에 실명·userId가 없다(가명만).</li>
  *   <li>WS로 보낸 메시지가 REST GET으로도 복구된다(같은 저장 경로).</li>
  * </ul>
@@ -245,7 +245,7 @@ class LiveChatWebSocketTest {
     }
 
     @Test
-    void ending_and_ended_are_broadcast_and_ended_still_allows_chat() throws Exception {
+    void ending_and_ended_are_broadcast_and_ended_rejects_chat() throws Exception {
         Client instructor = new Client();
         instructor.signupAndLogin("INSTRUCTOR");
         String[] ids = instructor.createStartedSession();
@@ -288,15 +288,15 @@ class LiveChatWebSocketTest {
         assertThat(endedPayload.get("liveSessionStatus")).isEqualTo("ENDED");
         assertThat(endedPayload.get("endedAt")).isNotNull();
 
+        /*
+         * 종료 뒤 채팅은 STOMP 경로로도 막힌다. REST만 막으면 같은 글이 이 통로로 들어와 다시보기에서
+         * 보이지 않는 글이 다시 쌓인다 — 두 입구가 같은 게이트를 써야 한다.
+         */
         stateSession.send("/app/live-sessions/" + sessionId + "/chat",
                 Map.of("clientMessageId", "ended-chat-1", "text", "수업 끝나고 질문합니다", "isQuestion", true));
-        Map<String, Object> endedChat = chatInbox.poll(10, TimeUnit.SECONDS);
-        assertThat(endedChat).as("ENDED 뒤 채팅 브로드캐스트를 시간 내 수신").isNotNull();
-        assertThat(endedChat.get("type")).isEqualTo("chat.message.created");
-        @SuppressWarnings("unchecked")
-        Map<String, Object> endedChatPayload = (Map<String, Object>) endedChat.get("payload");
-        assertThat(endedChatPayload.get("clientMessageId")).isEqualTo("ended-chat-1");
-        assertThat(endedChatPayload.get("text")).isEqualTo("수업 끝나고 질문합니다");
+        assertThat(chatInbox.poll(2, TimeUnit.SECONDS))
+                .as("ENDED 뒤 채팅은 브로드캐스트되지 않는다")
+                .isNull();
 
         stateSession.disconnect();
     }

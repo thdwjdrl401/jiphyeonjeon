@@ -149,12 +149,20 @@ export default function LiveClassroomPage() {
     queryFn: () => getCaptions(sessionId),
     enabled: Boolean(sessionId) && canReadContent && (isInstructor ? instructorCaptionOpen : true),
   })
-  // 라이브 송출이 끝나도 이 세션의 후속 토론·복습 질문은 이어 간다. 자막 seek와 미디어 상태는
-  // hasEnded로 별도 잠그므로 대화 가능 상태와 섞지 않는다.
+  // 라이브 송출이 끝나도 이 세션의 복습 질문은 이어 간다(ADR-0004). 미디어 상태와 섞지 않는다.
   const canUseConversation = session?.status === 'LIVE'
     || session?.status === 'ENDING'
     || session?.status === 'ENDED'
   const hasEnded = session?.status === 'ENDED'
+  /*
+   * 채팅만 종료와 함께 닫는다. 채팅은 저장될 때 sessionMs를 남기고 다시보기는 그 좌표로 재생
+   * 위치까지만 보여 주는데, 녹화가 멈춘 뒤에 쓴 글은 좌표가 영상 길이를 넘어 다시보기에서 영원히
+   * 보이지 않는다 — 이 URL에 남아 있는 사람에게만 보이는 글이 된다. 서버도 같은 선에서 막는다
+   * (LiveInteractionGuard.requireChatAllowed) — 여기서만 잠그면 화면과 서버가 갈라진다.
+   *
+   * AI 질문은 시간축에 얹히지 않으므로 그대로 열어 둔다.
+   */
+  const canSendChat = canUseConversation && !hasEnded
   /*
    * 아직 시작하지 않은 강의에 들어와 있다.
    *
@@ -451,7 +459,7 @@ export default function LiveClassroomPage() {
 
   const sendMessage = (event: FormEvent) => {
     event.preventDefault()
-    if (!canUseConversation || !message.trim()) return
+    if (!canSendChat || !message.trim()) return
     sendMutation.mutate({
       clientMessageId: createClientMessageId(),
       text: message.trim(),
@@ -506,7 +514,7 @@ export default function LiveClassroomPage() {
   // 자막에 용어 링크를 걸고, 그 김에 용어별 등장 횟수도 센다(어차피 한 번 훑는다).
   const glossary = attachGlossary(visibleCaptions, glossaryQuery.data ?? [])
 
-  const discussionComposer = canUseConversation ? (
+  const discussionComposer = canSendChat ? (
     <form className="chat-composer" onSubmit={sendMessage}>
       <textarea
         aria-label="채팅 메시지"
@@ -532,10 +540,10 @@ export default function LiveClassroomPage() {
         <button className="button button--primary button--small" type="submit" disabled={!message.trim()}>전송</button>
       </div>
     </form>
-  ) : isBeforeLive ? (
+  ) : isBeforeLive || hasEnded ? (
     /*
-     * 시작 전에는 <b>입력창을 지우지 않고 잠근다.</b> 예전에는 통째로 사라져서, 채팅이 원래 없는
-     * 화면인지 지금만 막힌 것인지 구별할 수 없었다 — 잠긴 자리와 그 이유가 같이 보여야 한다.
+     * 못 보내는 동안에도 <b>입력창을 지우지 않고 잠근다.</b> 예전에는 통째로 사라져서, 채팅이 원래
+     * 없는 화면인지 지금만 막힌 것인지 구별할 수 없었다 — 잠긴 자리와 그 이유가 같이 보여야 한다.
      * 이유는 바로 위 `discussionNotice`가 말한다.
      */
     <form className="chat-composer" onSubmit={(event) => event.preventDefault()}>
@@ -544,7 +552,9 @@ export default function LiveClassroomPage() {
         disabled
         rows={2}
         value=""
-        placeholder="강의가 시작되면 채팅을 보낼 수 있습니다."
+        placeholder={hasEnded
+          ? '종료된 강의에는 채팅을 보낼 수 없습니다.'
+          : '강의가 시작되면 채팅을 보낼 수 있습니다.'}
         readOnly
       />
       <div>
@@ -626,6 +636,12 @@ export default function LiveClassroomPage() {
    */
   const chatConnectionNotice = isBeforeLive
     ? prestartNotice(isStarting)
+    /*
+     * 종료 뒤에는 연결 상태를 말하지 않는다 — 끊겨서 못 보내는 것이 아니다. 대신 왜 닫혔는지와
+     * 어디로 이어가면 되는지를 말한다. AI 질문은 그대로 열려 있다.
+     */
+    : hasEnded
+    ? '수업이 끝나 채팅은 닫혔습니다. 지난 대화는 다시보기에서 그대로 볼 수 있고, 궁금한 점은 AI에게 이어서 물어볼 수 있습니다.'
     : chatConnectionState === 'connected'
     ? undefined
     : chatConnectionState === 'connecting'
