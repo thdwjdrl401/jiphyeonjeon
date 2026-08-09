@@ -318,16 +318,15 @@ describe('전체 페이지 라우트', () => {
     expect(window.location.pathname).not.toContain('/processing')
     expect(window.location.pathname).not.toContain('/replay')
     /*
-     * 이동 자체는 위 waitFor가 이미 확인했다. 여기서 기다리는 것은 <b>강의 상세가 다 그려지는 것</b>
-     * 이고, 그 화면은 레슨·라이브 세션·처리 현황을 각각 불러온다. 병렬 실행으로 워커가 붐비면
-     * 기본 5초(setup.ts의 asyncUtilTimeout)를 넘겨 간헐적으로 떨어졌다 — 같은 파일의 다른 무거운
-     * 대기들과 같은 여유를 준다.
+     * <b>노드를 붙잡아 뒀다가 다시 보지 않는다.</b> findByRole은 없으면 스스로 실패하므로
+     * toBeInTheDocument를 덧붙일 이유가 없는데, 덧붙이면 "찾은 시점"과 "확인하는 시점"이 갈린다.
+     *
+     * <p>종료 뮤테이션은 성공하자마자 invalidateQueries(['lesson', ...])를 쏘고 곧바로 이동한다.
+     * 강의 상세가 한 번 그려진 뒤 그 재조회 결과가 도착하면 트리를 다시 그리고, 그때 붙잡아 둔 h1이
+     * 문서에서 떨어진다 — "찾았는데 문서에 없다"는 모순된 실패가 그것이었다. 기다림이 모자란 것이
+     * 아니라서 timeout을 늘려도 그대로였다.
      */
-    expect(await screen.findByRole(
-      'heading',
-      { name: 'Spring Security 시작하기', level: 1 },
-      { timeout: 9_000 },
-    )).toBeInTheDocument()
+    await screen.findByRole('heading', { name: 'Spring Security 시작하기', level: 1 })
   })
 
   it('강사는 STARTING 동안 preflight에 머물고 LIVE가 된 뒤 같은 세션 classroom으로 이동한다', async () => {
