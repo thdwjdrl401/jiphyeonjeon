@@ -97,6 +97,29 @@ export interface SaveCurriculumManagementResult {
   materials: CurriculumMaterial[]
 }
 
+/**
+ * 녹화강의 업로드가 지나가는 단계. 순서가 곧 실행 순서다.
+ *
+ * 자료가 영상보다 먼저다 — 자료 연결이 실패하면 영상은 AWAITING_UPLOAD에 남아 같은 멱등키로
+ * 이어서 재시도할 수 있다(반대 순서면 올린 영상이 붕 뜬다).
+ */
+export type RecordedUploadStage =
+  | 'CREATING_LESSON'
+  | 'UPLOADING_MATERIALS'
+  | 'UPLOADING_VIDEO'
+  | 'REQUESTING_PROCESSING'
+
+export interface RecordedUploadProgress {
+  stage: RecordedUploadStage
+  /** 바이트 전송 비율(0~1). 전체 크기를 모르거나 바이트를 보내지 않는 단계면 null. */
+  ratio: number | null
+  /** 자료 단계에서 지금 몇 번째를 올리는지(1-based). 다른 단계에서는 없다. */
+  materialIndex?: number
+  materialCount?: number
+  /** 지금 올리는 파일 이름. 어느 파일에서 멈췄는지 알아야 재시도를 판단할 수 있다. */
+  fileName?: string
+}
+
 export interface UploadRecordedLessonRequest {
   /** 같은 화면에서 업로드를 재시도해도 레슨이 중복 생성되지 않게 유지하는 멱등키. */
   clientRequestId: string
@@ -109,12 +132,20 @@ export interface UploadRecordedLessonRequest {
   materials: File[]
   /**
    * 자료 하나가 <b>연결까지 끝났을 때</b> 부른다. 실패 뒤 재시도에서 이미 붙은 자료를 건너뛰라고
-   * 알리는 신호다.
+   * 알리는 신호다(ADR-0109).
    *
    * <p>없으면 재시도가 자료 루프를 처음부터 다시 돈다 — 같은 PPTX가 두 번 붙고, 그때마다
    * 수강생 전원에게 자료 알림이 다시 나간다(ADR-0073).
+   *
+   * <p>아래 {@link #onProgress}와 다른 축이다. 이건 <b>어디까지 끝났나</b>(재시도 재개점)이고,
+   * 저건 <b>지금 얼마나 갔나</b>(화면 표시)다.
    */
   onMaterialLinked?: (file: File) => void
+  /**
+   * 단계·전송량 보고. 5GiB MP4를 올리는 동안 화면이 "업로드 중…" 한 줄만 띄우고 있었다 —
+   * 진행도 단계도 알 수 없어, 멈춘 건지 되는 중인지 구분할 방법이 없었다.
+   */
+  onProgress?: (progress: RecordedUploadProgress) => void
 }
 
 export interface UploadRecordedLessonResult {

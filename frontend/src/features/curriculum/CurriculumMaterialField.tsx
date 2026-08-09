@@ -1,7 +1,7 @@
 import { useState, type ChangeEvent, type DragEvent } from 'react'
 import type { MaterialDownloadRequest } from '@/features/material/materialDownloadService'
+import MaterialStatusBadges from '@/features/material/MaterialStatusBadges'
 import { useMaterialDownload } from '@/features/material/useMaterialDownload'
-import { StatusBadge } from '@/shared/ui/WorkspaceUi'
 import type { CurriculumMaterial } from './types'
 
 interface CurriculumMaterialFieldProps {
@@ -99,7 +99,11 @@ export default function CurriculumMaterialField({ id, value, onChange, downloadR
                   {downloadingMaterialId === material.materialId ? '받는 중…' : '다운로드'}
                 </button>
               )}
-              <StatusBadge tone={material.file ? 'warning' : 'success'}>{material.file ? '추가 예정' : '등록됨'}</StatusBadge>
+              {/*
+                예전엔 "추가 예정 / 등록됨" 두 값뿐이었다 — 저장이 끝나면 임베딩이 아직 돌고 있어도
+                "등록됨"으로 굳어, 이 화면에서는 AI 준비가 끝났는지 알 방법이 전혀 없었다.
+              */}
+              <MaterialStatusBadges material={material} audience="instructor" />
               <button
                 type="button"
                 aria-label={`${material.fileName} 제거`}

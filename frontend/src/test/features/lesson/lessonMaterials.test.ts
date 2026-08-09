@@ -62,11 +62,13 @@ describe('레슨 자료 API 계약', () => {
       contentType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
       fileSize: file.size,
     })
+    // onUploadProgress는 호출자가 진행 보고를 원할 때만 붙는다(여기서는 주지 않았다).
     expect(axiosSpy).toHaveBeenCalledWith({
       url: ticket.uploadUrl,
       method: 'PUT',
       headers: ticket.headers,
       data: file,
+      onUploadProgress: undefined,
     })
     expect(postSpy).toHaveBeenNthCalledWith(4, `/assets/${ticket.assetId}/complete`)
     expect(postSpy).toHaveBeenNthCalledWith(5, `/instructor/lessons/${created.lessonId}/materials`, {

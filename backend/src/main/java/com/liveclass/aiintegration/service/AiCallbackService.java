@@ -6,6 +6,7 @@ import com.liveclass.aiintegration.domain.InboxStatus;
 import com.liveclass.aiintegration.repository.ExternalEventInboxRepository;
 import com.liveclass.aiintegration.web.dto.AiCallbackEvent;
 import com.liveclass.aiintegration.api.AnnotationIndexResult;
+import com.liveclass.learning.api.LessonGlossaryChangedEvent;
 import com.liveclass.lesson.api.LessonMaterialManagement;
 import org.springframework.context.ApplicationEventPublisher;
 import org.slf4j.Logger;
@@ -116,6 +117,15 @@ public class AiCallbackService {
             case "NOT_REQUESTED", "READY", "EMPTY", "FAILED" ->
                     lessonMaterialManagement.updateKeyTermStatus(materialId, status);
             default -> throw new IllegalArgumentException("지원하지 않는 keyTermResult.status입니다: " + status);
+        }
+        /*
+         * 용어가 실제로 생겼을 때만 알린다. 진행 중인 라이브 화면은 강의 시작 전에 용어집을 한 번만
+         * 받아 두므로(ADR-0064), 이 신호가 없으면 강의 도중에 끝난 추출 결과를 그 화면이 영영 못 본다.
+         * EMPTY·FAILED는 화면에 더할 게 없고, 강의 밖에서 온 콜백이면 아래 수신자가 조용히 흘린다.
+         */
+        if ("READY".equals(status) && event.lessonId() != null) {
+            events.publishEvent(new LessonGlossaryChangedEvent(
+                    UUID.fromString(event.lessonId()), LessonGlossaryChangedEvent.Reason.MATERIAL_KEY_TERMS));
         }
     }
 }

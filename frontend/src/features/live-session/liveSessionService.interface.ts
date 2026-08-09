@@ -530,6 +530,13 @@ export interface LiveSessionService {
     onNote: (note: LectureNoteView) => void,
     onConnectionChange: (state: ChatConnectionState) => void,
   ) => () => void
+  /**
+   * 용어집이 바뀌었다는 신호를 받는다. 용어 자체는 오지 않는다 — 받은 쪽이 제 권한으로 다시 읽는다.
+   *
+   * 라이브 화면은 시작 전에 용어집을 한 번만 받아 두므로(ADR-0064), 강의 도중에 끝난 AI 용어 추출이
+   * 이 신호 없이는 그 화면에 영영 닿지 않는다.
+   */
+  subscribeGlossaryUpdates: (sessionId: string, onChanged: () => void) => () => void
   getProcessingStatus: (sessionId: string) => Promise<ProcessingStatus>
   getQuestionHighlights: (sessionId: string) => Promise<QuestionHighlight[]>
 }

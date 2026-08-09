@@ -358,9 +358,23 @@ Cookie: session=...
 | `/topic/live-sessions/{sessionId}/captions` | `caption.delta`, `caption.stream.completed` | **구현됨(ADR-0043)** |
 | `/topic/live-sessions/{sessionId}/chat` | `chat.message.created` | **구현됨** |
 | `/topic/live-sessions/{sessionId}/state` | `session.starting`, `session.started`, `session.ending`, `session.ended` | **구현됨(ADR-0003·0082)** |
+| `/topic/live-sessions/{sessionId}/glossary` | `lesson.glossary.updated` | **구현됨(ADR-0110)** |
 | `/topic/live-sessions/{sessionId}/presence` | 참가자 수·접속 요약 | 제안 |
 
 구독 인가(참가자만)는 서버 STOMP 인터셉터가 정확 매칭으로 처리한다(와일드카드 구독 차단, ADR-0043) — FE는 토픽만 구독한다.
+
+`lesson.glossary.updated` — **용어가 아니라 신호다.** 받으면 `GET /api/lessons/{lessonId}/glossary`를
+다시 읽는다. 라이브 화면은 용어집을 시작 전에 한 번만 받으므로(ADR-0064), 강의 도중에 끝난 AI 용어
+추출이나 강사 수정이 이 신호 없이는 그 화면에 닿지 않는다. `reason`은 추적용이라 화면에 쓰지 않는다.
+
+```json
+{
+  "type": "lesson.glossary.updated",
+  "sessionId": "ses_01J...",
+  "occurredAt": "2026-08-09T10:12:33+09:00",
+  "payload": { "lessonId": "les_01J...", "reason": "MATERIAL_KEY_TERMS" }
+}
+```
 
 `session.starting`:
 

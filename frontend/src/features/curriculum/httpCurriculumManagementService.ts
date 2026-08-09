@@ -1,6 +1,5 @@
-import axios from 'axios'
 import { apiClient } from '@/shared/api/client'
-import { uploadAsset } from '@/shared/api/uploadAsset'
+import { putBytes, uploadAsset } from '@/shared/api/uploadAsset'
 import { CurriculumMaterialSyncError } from './curriculumMaterialSyncError'
 import type {
   CurriculumManagementSection,
@@ -266,6 +265,11 @@ export const httpCurriculumManagementService = {
     await apiClient.delete(`/instructor/sections/${sectionId}`)
   },
   async uploadRecordedLesson(request) {
+    // 진행을 원하지 않는 호출자에게는 콜백 자체를 넘기지 않는다 — 넘기면 청크마다 도는 일이 공짜로 생긴다.
+    const onProgress = request.onProgress
+    const report = onProgress ?? (() => {})
+
+    report({ stage: 'CREATING_LESSON', ratio: null })
     const { data: recorded } = await apiClient.post<RecordedLessonCreated>(
       `/instructor/sections/${request.sectionId}/recorded-lessons`,
       {
@@ -277,9 +281,20 @@ export const httpCurriculumManagementService = {
 
     // 녹화강의도 일반 레슨이므로 라이브 강의와 같은 자료 API를 사용한다. 영상 업로드보다 먼저
     // 연결해, 자료 실패 시 recorded video가 AWAITING_UPLOAD에 머물고 같은 멱등키로 재시도할 수 있게 한다.
-    for (const file of request.materials) {
+    for (const [index, file] of request.materials.entries()) {
+      const position = {
+        stage: 'UPLOADING_MATERIALS' as const,
+        materialIndex: index + 1,
+        materialCount: request.materials.length,
+        fileName: file.name,
+      }
       try {
-        const asset = await uploadAsset(file, 'MATERIAL')
+        report({ ...position, ratio: 0 })
+        const asset = await uploadAsset(
+          file,
+          'MATERIAL',
+          onProgress && (({ ratio }) => onProgress({ ...position, ratio })),
+        )
         await apiClient.post(`/instructor/lessons/${recorded.lessonId}/materials`, { assetId: asset.assetId })
         // 여기까지 와야 "붙었다"이다. 업로드만 되고 연결이 실패하면 다음 시도에 다시 붙여야 한다.
         request.onMaterialLinked?.(file)
@@ -289,6 +304,8 @@ export const httpCurriculumManagementService = {
       }
     }
 
+    const videoPosition = { stage: 'UPLOADING_VIDEO' as const, fileName: request.videoFile.name }
+    report({ ...videoPosition, ratio: 0 })
     const contentType = request.videoFile.type || 'video/mp4'
     const { data: ticket } = await apiClient.post<RecordedUploadTicket>(
       `/instructor/recorded-lessons/${recorded.lessonId}/video/upload-requests`,
@@ -300,13 +317,14 @@ export const httpCurriculumManagementService = {
     )
 
     // 대용량 MP4는 앱 API·세션 쿠키·CSRF 인터셉터를 거치지 않고 스토리지에 직접 PUT한다.
-    await axios.request({
-      url: ticket.uploadUrl,
-      method: ticket.method,
-      headers: ticket.headers,
-      data: request.videoFile,
-    })
+    // 이 한 줄이 업로드 시간의 거의 전부다 — 여기서 진행을 못 보면 화면은 몇 분간 아무 말도 못 한다.
+    await putBytes(
+      ticket,
+      request.videoFile,
+      onProgress && (({ ratio }) => onProgress({ ...videoPosition, ratio })),
+    )
 
+    report({ stage: 'REQUESTING_PROCESSING', ratio: null })
     const { data: accepted } = await apiClient.post<RecordedProcessingAccepted>(
       `/instructor/recorded-lessons/${recorded.lessonId}/video/complete`,
       { assetId: ticket.assetId },

@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { MaterialDownloadRequest } from '@/features/material/materialDownloadService'
+import MaterialStatusBadges from '@/features/material/MaterialStatusBadges'
 import { useMaterialDownload } from '@/features/material/useMaterialDownload'
 import type { CurriculumMaterial } from './types'
 
@@ -113,6 +114,12 @@ export default function CurriculumMaterials({ materials, downloadRequest }: Curr
                   <li key={material.materialId}>
                     <span className="curriculum-materials__icon">PPTX</span>
                     <div><strong>{material.fileName}</strong><small>{formatFileSize(material.fileSize)}</small></div>
+                    {/*
+                      수강생에겐 파이프라인 내부 상태를 그대로 보이지 않는다 — PENDING과 PROCESSING을
+                      구분해 봤자 할 수 있는 일이 같다. 준비가 끝나면 배지 자체가 사라진다.
+                      다운로드는 임베딩과 무관하게 언제나 된다(원본 파일은 이미 올라가 있다).
+                    */}
+                    <MaterialStatusBadges material={material} audience="student" />
                     {downloadRequest && (
                       <button
                         className="button button--soft button--small curriculum-materials__download"

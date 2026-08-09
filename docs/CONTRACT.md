@@ -561,6 +561,14 @@ Spring 수신 endpoint를 구현하고 `SPRING_STATUS_CALLBACK_URL`로 주입하
 - **강의 노트 채널** `/topic/live-sessions/{sessionId}/notes`(§3-4a): `lecture.note.updated` payload
   `{coveredThroughSequence, topics, markdown, status, updatedAt}`. **증분이 아니라 늘 전체**이며 조회
   응답과 같은 모양이다. 구독 인가는 자막·채팅과 동일 게이트.
+- **용어집 채널** `/topic/live-sessions/{sessionId}/glossary`([ADR-0110](decisions/songjeongki/0110-live-glossary-is-pushed-not-polled.md)):
+  `lesson.glossary.updated` payload `{lessonId, reason}`. `reason`은 `MATERIAL_KEY_TERMS`(AI가 자료에서
+  핵심 용어를 뽑아 냄) 또는 `INSTRUCTOR_EDIT`(강사가 고치거나 더함)이며 **로그·추적용**이다.
+  **용어 원문은 싣지 않는다** — 받은 쪽이 `GET /api/lessons/{lessonId}/glossary`를 제 권한으로 다시
+  읽는다(payload로 실으면 조회에 걸린 인가를 우회하게 되고, 두 겹을 합치는 규칙이 조회 경로와 갈라진다).
+  세션이 `OPEN|STARTING|LIVE`일 때만 발행하고, 그 강의에 라이브가 없으면 아무 일도 하지 않는다.
+  트랜잭션 커밋 후에 보낸다. 구독 인가는 자막·채팅과 동일 게이트이고 허용목록에 `glossary` 하나가
+  더해졌다(ADR-0019 와일드카드 차단 불변식 유지).
 - **세션 상태 채널** `/topic/live-sessions/{sessionId}/state`([ADR-0003](decisions/choinhoo/0003-simple-live-end-sequential-process.md)):
   **시작 쪽**은 `session.starting` payload `{liveSessionStatus:"STARTING",endedAt:null}`와
   `session.started` payload `{liveSessionStatus:"LIVE",endedAt:null}`이다([ADR-0084](decisions/songjeongki/0084-live-classroom-waits-in-place.md)).

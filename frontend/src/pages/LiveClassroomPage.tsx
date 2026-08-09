@@ -37,6 +37,7 @@ import {
   sendChatMessage,
   subscribeCaptions,
   subscribeChatMessages,
+  subscribeGlossaryUpdates,
   subscribeLectureNotes,
   subscribeSessionState,
   type CaptionView,
@@ -340,12 +341,23 @@ export default function LiveClassroomPage() {
   /*
    * 용어집(ADR-0064). 강의 시작 전에 한 번 받아 두고, 도착하는 자막에서 화면이 직접 찾는다 —
    * 서버가 자막마다 매핑해 주면 왕복이 생기고 강사가 용어를 고쳤을 때 이미 그린 자막을 다시 계산해야 한다.
+   *
+   * 다만 "한 번"으로 끝나면 안 된다. 자료 임베딩은 강의 시작 뒤에 끝나는 일이 흔하고, 강사가
+   * 도중에 용어를 고치기도 한다 — 그때 들어와 있던 수강생 화면에는 용어가 영영 안 나왔다.
+   * 아래 구독이 서버 신호를 받아 이 쿼리를 다시 읽게 한다.
    */
+  const glossaryLessonId = lesson?.lessonId
   const glossaryQuery = useQuery({
-    queryKey: ['glossary', lesson?.lessonId],
-    queryFn: () => getGlossary(lesson!.lessonId),
-    enabled: Boolean(lesson?.lessonId),
+    queryKey: ['glossary', glossaryLessonId],
+    queryFn: () => getGlossary(glossaryLessonId!),
+    enabled: Boolean(glossaryLessonId),
   })
+  useEffect(() => {
+    if (!sessionId || !glossaryLessonId || !canReadContent) return undefined
+    return subscribeGlossaryUpdates(sessionId, () => {
+      void queryClient.invalidateQueries({ queryKey: ['glossary', glossaryLessonId] })
+    })
+  }, [sessionId, glossaryLessonId, canReadContent, queryClient])
   const noteQuery = useQuery({
     queryKey: ['lecture-notes', sessionId],
     queryFn: () => getLectureNotes(sessionId),

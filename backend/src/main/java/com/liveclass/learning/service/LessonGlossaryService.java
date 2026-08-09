@@ -1,10 +1,12 @@
 package com.liveclass.learning.service;
 
+import com.liveclass.learning.api.LessonGlossaryChangedEvent;
 import com.liveclass.learning.api.LessonLearningAccess;
 import com.liveclass.learning.domain.LessonGlossaryOverride;
 import com.liveclass.learning.repository.LessonGlossaryOverrideRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,10 +39,13 @@ public class LessonGlossaryService {
 
     private final LessonGlossaryOverrideRepository repository;
     private final LessonLearningAccess access;
+    private final ApplicationEventPublisher events;
 
-    public LessonGlossaryService(LessonGlossaryOverrideRepository repository, LessonLearningAccess access) {
+    public LessonGlossaryService(LessonGlossaryOverrideRepository repository, LessonLearningAccess access,
+                                 ApplicationEventPublisher events) {
         this.repository = repository;
         this.access = access;
+        this.events = events;
     }
 
     /**
@@ -98,6 +103,8 @@ public class LessonGlossaryService {
         row.setUpdatedBy(instructorId);
         row.setUpdatedAt(OffsetDateTime.now());
         repository.save(row);
+        // 진행 중인 라이브 화면이 용어집을 다시 읽게 한다. 라이브가 없으면 듣는 쪽이 조용히 흘린다.
+        events.publishEvent(new LessonGlossaryChangedEvent(lessonId, LessonGlossaryChangedEvent.Reason.INSTRUCTOR_EDIT));
         return new GlossaryTerm(trimmed, row.getDefinition(), "INSTRUCTOR");
     }
 

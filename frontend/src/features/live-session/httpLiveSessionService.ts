@@ -976,6 +976,42 @@ export const httpLiveSessionService = {
     const { data } = await apiClient.get<ApiLectureNote>(`/live-sessions/${sessionId}/notes`)
     return parseLectureNote(data)
   },
+  /**
+   * 용어집 갱신 신호를 듣는다. payload에는 용어가 없고 "다시 읽어라"만 있다.
+   *
+   * 노트 구독과 달리 연결 상태를 밖으로 알리지 않는다 — 이 구독이 끊겨도 화면이 잃는 건
+   * "즉시성"뿐이라(다음 입장·새로고침에 최신 용어집을 받는다) 배지를 띄워 불안하게 할 일이 아니다.
+   */
+  subscribeGlossaryUpdates(sessionId, onChanged) {
+    let active = true
+    const client = new Client({
+      brokerURL: getBrokerUrl(),
+      connectionTimeout: 10_000,
+      heartbeatIncoming: 10_000,
+      heartbeatOutgoing: 10_000,
+      reconnectDelay: 3_000,
+    })
+
+    client.onConnect = () => {
+      if (!active) return
+      client.subscribe(`/topic/live-sessions/${sessionId}/glossary`, (frame) => {
+        try {
+          const envelope = JSON.parse(frame.body) as { type: string; sessionId: string }
+          // 다른 세션의 프레임이나 같은 토픽의 다른 이벤트를 용어집 갱신으로 오인하지 않는다.
+          if (envelope.sessionId !== sessionId || envelope.type !== 'lesson.glossary.updated') return
+          onChanged()
+        } catch {
+          // 깨진 프레임 하나가 구독을 끊게 두지 않는다. 다음 신호를 계속 기다린다.
+        }
+      })
+    }
+    client.activate()
+
+    return () => {
+      active = false
+      void client.deactivate()
+    }
+  },
   subscribeLectureNotes(sessionId, onNote, onConnectionChange) {
     let active = true
     onConnectionChange('connecting')

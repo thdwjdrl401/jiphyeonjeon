@@ -12,6 +12,9 @@ import {
   RECORDED_LESSON_VIDEO_ACCEPT,
   validateRecordedLessonVideo,
 } from '@/features/curriculum/recordedLessonUpload'
+import type { RecordedUploadProgress } from '@/features/curriculum/curriculumManagementService.interface'
+import UploadProgressNotice from '@/features/material/UploadProgressNotice'
+import { recordedUploadLabel } from '@/features/material/uploadProgressLabel'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
 import { useToast } from '@/shared/ui/Toast'
@@ -49,6 +52,7 @@ export default function RecordedLessonUploadPage() {
    * 다시 나간다. 레슨은 clientRequestId로 멱등인데 자료는 아니라서 생기는 어긋남이다.
    */
   const linkedMaterialIds = useRef(new Set<string>())
+  const [progress, setProgress] = useState<RecordedUploadProgress | null>(null)
 
   const contextQuery = useQuery({
     queryKey: ['recorded-lesson-upload-context', curriculumId],
@@ -134,6 +138,7 @@ export default function RecordedLessonUploadPage() {
     if (submitting || !title.trim() || !videoFile) return
     setSubmitting(true)
     setSubmitError(null)
+    setProgress(null)
     try {
       const pending = materials.filter((material) => !linkedMaterialIds.current.has(material.id))
       await uploadRecordedLesson({
@@ -143,11 +148,13 @@ export default function RecordedLessonUploadPage() {
         title: title.trim(),
         description: description.trim(),
         videoFile,
+        // 재시도면 아직 안 붙은 것만 보낸다 — 진행률의 (n/m)도 그 남은 개수를 센다.
         materials: pending.map((material) => material.file),
         onMaterialLinked: (file) => {
           const linked = pending.find((material) => material.file === file)
           if (linked) linkedMaterialIds.current.add(linked.id)
         },
+        onProgress: setProgress,
       })
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['curriculum-management', curriculumId] }),
@@ -161,6 +168,8 @@ export default function RecordedLessonUploadPage() {
         : '녹화강의를 업로드하지 못했습니다. 같은 화면에서 다시 시도하면 기존 강의를 이어서 업로드합니다.')
     } finally {
       setSubmitting(false)
+      // 실패한 단계를 진행 막대로 남겨 두지 않는다 — 아래 오류 문구가 어디서 멈췄는지 말해 준다.
+      setProgress(null)
     }
   }
 
@@ -237,6 +246,7 @@ export default function RecordedLessonUploadPage() {
         </div>
 
         {submitError && <InlineNotice tone="danger">{submitError}</InlineNotice>}
+        {progress && <UploadProgressNotice label={recordedUploadLabel(progress)} ratio={progress.ratio} />}
 
         <div className="sticky-form-actions lesson-form__actions">
           <Link className="button button--ghost" to={instructorPaths.curriculumManage(curriculumId)}>취소</Link>
