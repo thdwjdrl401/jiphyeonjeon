@@ -68,11 +68,15 @@ export const demoLesson = {
   ],
 }
 
+/** 목 세션의 입장창. mockLiveSessionService가 응답에 싣는 entryWindowMinutes와 같아야 한다. */
+export const DEMO_ENTRY_WINDOW_MINUTES = 10
+
 export const demoSession = {
   sessionId: primarySessionContext.liveSession.sessionId,
   lessonId: primarySessionContext.lesson.lessonId,
   status: primarySessionContext.liveSession.status,
   scheduledAt: primarySessionContext.liveSession.scheduledAt,
+  // 09:50 = 예정 10:00 − 입장창 10분. 아래 세션 뷰와 같은 식이다.
   entryOpensAt: '2026-08-01T09:50:00+09:00',
   expectedDurationMinutes: 90,
   participants: 128,
@@ -122,7 +126,16 @@ export function getDemoLiveSession(sessionId: string) {
     sectionTitle: context.section.title,
     status: context.liveSession.status,
     scheduledAt: context.liveSession.scheduledAt,
-    entryOpensAt: context.liveSession.scheduledAt,
+    /*
+     * 서버는 entryOpensAt을 `scheduledAt − entryWindowMinutes`로 계산한다. 예전엔 여기서
+     * scheduledAt을 그대로 복사해 목만 "입장 = 시작"이었다 — 목이 서버와 다르면 실서버에서만
+     * 깨지는 화면이 된다. 목 세션의 입장창(10분)에 맞춰 같은 식으로 만든다.
+     */
+    entryOpensAt: context.liveSession.scheduledAt
+      ? new Date(
+        new Date(context.liveSession.scheduledAt).getTime() - DEMO_ENTRY_WINDOW_MINUTES * 60_000,
+      ).toISOString()
+      : null,
     expectedDurationMinutes: 90,
     participants: context.liveSession.status === 'LIVE' ? 128 : 0,
   }
