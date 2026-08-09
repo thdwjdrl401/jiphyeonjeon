@@ -82,7 +82,14 @@ describe('강사 스테이지 배치', () => {
   it('전체화면 버튼은 컨트롤 줄 오른쪽 끝에 아이콘으로 둔다', () => {
     const { container } = renderStage()
 
-    const button = container.querySelector('.video-controls-overlay__icon')
+    /*
+     * 오른쪽 끝(`.control-row__trailing`)을 명시해 찾는다. 예전에는 아이콘 버튼이 하나뿐이라
+     * 클래스만으로 집었는데, 그러면 <b>"오른쪽 끝"이라는 이 테스트의 주장은 확인되지 않는다</b> —
+     * 실제로 장치 설정 아이콘이 앞에 생기자 그것이 잡혔다.
+     */
+    const trailing = container.querySelector('.control-row__trailing')
+    expect(trailing).not.toBeNull()
+    const button = trailing?.querySelector('.video-controls-overlay__icon')
     expect(button).not.toBeNull()
     expect(button?.getAttribute('aria-label')).toBe('전체화면')
     // 글자 없이 아이콘만 — 영상 플레이어의 그 버튼처럼 읽혀야 한다.

@@ -57,19 +57,23 @@ export default function DeviceSettingsButton({ publisher }: DeviceSettingsButton
 
   return (
     <div className="device-settings" ref={containerRef}>
+      {/*
+        <b>아이콘만 둔다.</b> 옆 버튼들은 아이콘+글자인데 이것까지 글자를 달았더니 좁은 폭에서
+        두 줄로 접혀 컨트롤 줄 전체가 밀렸다. 톱니는 설정이라는 뜻이 이미 통하고, 이름은
+        aria-label과 title이 진다 — 화면 낭독기와 마우스 양쪽에 남는다.
+      */}
       <button
         aria-controls={open ? panelId : undefined}
         aria-expanded={open}
         aria-haspopup="dialog"
         aria-label="입력 장치 설정"
-        className={open ? 'is-active' : ''}
+        className={`video-controls-overlay__icon${open ? ' is-active' : ''}`}
         disabled={!publisher.canControl}
         title="카메라·마이크 고르기"
         type="button"
         onClick={() => setOpen((current) => !current)}
       >
         <GearIcon />
-        장치
       </button>
       {open && (
         <div className="device-settings__panel" id={panelId} role="dialog" aria-label="입력 장치 설정">
