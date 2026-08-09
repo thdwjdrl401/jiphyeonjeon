@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { instructorPaths, publicPaths } from '@/app/router/paths'
+import { useAuth } from '@/features/auth/AuthContext'
 import LessonBreadcrumbs from '@/features/lesson/LessonBreadcrumbs'
+import { getLesson } from '@/features/lesson/lessonService'
+import { isMaterialInProgress, materialRefetchInterval } from '@/features/material/materialStatus'
 import DemoPublishControl from '@/features/live-session/DemoPublishControl'
 import InstructorLocalTrackVideo from '@/features/live-session/InstructorLocalTrackVideo'
 import MediaFailureNotice from '@/features/live-session/MediaFailureNotice'
@@ -54,6 +57,7 @@ export default function InstructorPreflightPage() {
   const { sessionId = '' } = useParams()
   const navigate = useNavigate()
   const toast = useToast()
+  const { user } = useAuth()
   const queryClient = useQueryClient()
   const publisher = useInstructorLiveKit()
   const [operationId, setOperationId] = useState<string | undefined>()
@@ -75,6 +79,19 @@ export default function InstructorPreflightPage() {
     refetchInterval: (query) => query.state.data?.ready ? 3_000 : 1_000,
   })
   const session = sessionQuery.data
+  /*
+   * 자료 AI 준비 상태. 시작을 <b>막지 않는다</b> — 마이크와 같은 판단이다(ADR-0099). 임베딩이 FAILED로
+   * 끝나거나 AI 워커·큐가 죽으면 PENDING에 영구히 머무는데, 그 때문에 수업 자체를 못 열면 안 된다.
+   * 대신 지금 시작하면 무엇을 잃는지 말한다 — 초반 AI 답변이 이 자료를 못 쓴다.
+   */
+  const lessonQuery = useQuery({
+    queryKey: ['live-preflight-lesson', session?.lessonId, user?.role],
+    queryFn: () => getLesson({ lessonId: session!.lessonId, role: user?.role, userId: user?.userId }),
+    enabled: Boolean(session?.lessonId),
+    refetchInterval: (query) => materialRefetchInterval(query.state.data?.materials),
+    refetchIntervalInBackground: false,
+  })
+  const pendingMaterials = (lessonQuery.data?.materials ?? []).filter(isMaterialInProgress)
   const shouldRecoverStart = session?.status === 'STARTING'
   const startStatusQuery = useQuery({
     queryKey: ['live-session-start-status', sessionId, operationId ?? 'latest'],
@@ -372,6 +389,14 @@ export default function InstructorPreflightPage() {
         </div>
       </div>
 
+      {pendingMaterials.length > 0 && (
+        <div className="instructor-preflight__feedback">
+          <InlineNotice tone="warning">
+            강의 자료 {pendingMaterials.length}개가 아직 AI 준비 중입니다. 지금 시작해도 되지만,
+            준비가 끝나기 전에는 AI 답변이 이 자료를 참고하지 못합니다.
+          </InlineNotice>
+        </div>
+      )}
       {(startStatusQuery.isError || startFailure) && (
         <div className="instructor-preflight__feedback">
           {startStatusQuery.isError && <InlineNotice tone="danger">시작 상태를 확인하지 못했습니다. 자동으로 다시 확인해 주세요.</InlineNotice>}

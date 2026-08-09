@@ -94,6 +94,8 @@ export type {
 
 export const getLectureNotes = (sessionId: string) => liveSessionService.getLectureNotes(sessionId)
 
+export const subscribeGlossaryUpdates = (sessionId: string, onChanged: () => void) =>
+  liveSessionService.subscribeGlossaryUpdates(sessionId, onChanged)
 export const subscribeLectureNotes = (
   sessionId: string,
   onNote: Parameters<LiveSessionService['subscribeLectureNotes']>[1],

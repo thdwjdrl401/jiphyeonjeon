@@ -27,7 +27,7 @@ import java.util.regex.Pattern;
  *
  * <p><b>와일드카드 차단 불변식(ADR-0019)</b>: SimpleBroker는 구독 destination을 패턴(AntPathMatcher)으로
  * 매칭하므로 {@code /topic/**} 같은 와일드카드 구독이 게이트를 우회할 수 있다. 명시적으로 허용한 세 토픽
- * (chat·captions·state·notes)의 <b>정확 매칭</b>만 통과시키고 그 외 {@code /topic} 구독은 전부 거부한다 — 토픽을
+ * (chat·captions·state·notes·glossary)의 <b>정확 매칭</b>만 통과시키고 그 외 {@code /topic} 구독은 전부 거부한다 — 토픽을
  * 추가해도 이 불변식은 유지된다(임의 세션 자막 도청 구멍 금지).
  */
 @Component
@@ -42,6 +42,12 @@ public class ChatTopicSubscriptionInterceptor implements ChannelInterceptor {
     /** 강의 노트(CONTRACT §3-4a). 자막·채팅과 같은 게이트를 쓴다. */
     private static final Pattern NOTES_TOPIC =
             Pattern.compile("^/topic/live-sessions/([^/]+)/notes$");
+    /**
+     * 용어집 갱신 신호. payload에 용어가 없어도 게이트는 똑같이 건다 — 어느 강의가 언제 용어를
+     * 갱신했는지도 수강 관계가 있는 사람만 알 일이다.
+     */
+    private static final Pattern GLOSSARY_TOPIC =
+            Pattern.compile("^/topic/live-sessions/([^/]+)/glossary$");
 
     private final LiveAccessGuard accessGuard;
     private final LivePresenceRegistry presenceRegistry;
@@ -75,6 +81,9 @@ public class ChatTopicSubscriptionInterceptor implements ChannelInterceptor {
         }
         if (!matcher.matches()) {
             matcher = NOTES_TOPIC.matcher(destination);
+        }
+        if (!matcher.matches()) {
+            matcher = GLOSSARY_TOPIC.matcher(destination);
         }
         if (!matcher.matches()) {
             throw new LiveSessionForbiddenException("허용되지 않은 구독 대상입니다.");

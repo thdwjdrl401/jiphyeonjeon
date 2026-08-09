@@ -558,6 +558,10 @@ export const mockLiveSessionService = {
     // 목도 서버와 같은 모양을 돌려준다 — 목이 다르면 실서버에서만 깨지는 화면이 된다.
     return noteOverrides.get(sessionId) ?? defaultLectureNote
   },
+  subscribeGlossaryUpdates() {
+    // 목에서는 용어집이 바뀌지 않는다. 구독 해제만 제대로 돌려준다.
+    return () => {}
+  },
   subscribeLectureNotes(_sessionId, _onNote, onConnectionChange) {
     onConnectionChange('connected')
     return () => onConnectionChange('disconnected')
