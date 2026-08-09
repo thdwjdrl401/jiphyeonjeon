@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 const getMyWatchBuckets = vi.fn<(lessonId: string) => Promise<Record<number, number>>>()
@@ -29,9 +29,14 @@ import { useWatchTracking } from '@/features/live-session/useWatchTracking'
 /** 10초 칸 3개를 지나가게 해 dirty 상태를 만든다. */
 const POSITIONS = [0, 10_000, 20_000]
 
+/*
+ * 클라이언트는 <b>테스트당 하나</b>다. 렌더마다 새로 만들면 캐시가 이어지지 않아, 이 파일이
+ * 재현하려는 "캐시에 남은 낡은 응답" 자체가 성립하지 않는다(실제로 그래서 헛도는 테스트가 있었다).
+ */
+let queryClient: QueryClient
+
 function wrapper({ children }: { children: ReactNode }) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
 }
 
 /** 위치를 흘려보낸 뒤 언마운트한다 — 언마운트 flush가 마지막 한 번을 보낸다. */
@@ -51,9 +56,44 @@ async function watchThenLeave(durationMs: number | null) {
 describe('시청 구간·진도 전송', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     getMyWatchBuckets.mockResolvedValue({})
     reportWatchBuckets.mockResolvedValue(undefined)
     updateProgress.mockResolvedValue(undefined)
+  })
+
+  /**
+   * 운영에서 난 사고. 라이브 입장 때 조회한 <b>빈 목록</b>이 캐시(staleTime 30초)에 남고, 강의가
+   * 끝나 다시보기 화면이 같은 키로 붙으면 그 빈 값을 즉시 받는다. 예전에는 첫 응답으로 seed를
+   * 잠갔기 때문에, 라이브에서 쌓은 23칸(92%)을 물려받지 못하고 <b>4%</b>를 기록했다.
+   */
+  it('서버 누적을 늦게 받아도 물려받는다 — 첫 응답으로 잠그지 않는다', async () => {
+    // 라이브 입장 때의 조회가 <b>빈 목록</b>으로 먼저 도착한다(그때는 아직 아무것도 안 보냈다).
+    let firstResponse!: (counts: Record<number, number>) => void
+    getMyWatchBuckets.mockReturnValue(new Promise((resolve) => { firstResponse = resolve }))
+
+    const view = renderHook(
+      ({ positionMs }: { positionMs: number }) =>
+        useWatchTracking('les-1', positionMs, true, 100_000),
+      { wrapper, initialProps: { positionMs: 0 } },
+    )
+    await waitFor(() => expect(getMyWatchBuckets).toHaveBeenCalled())
+    await act(async () => { firstResponse({}) })
+    // 빈 값으로 <b>한 번 렌더되어 효과가 돌게</b> 한다. 여기까지가 "라이브 입장"의 재현이다.
+    view.rerender({ positionMs: 0 })
+    await act(async () => {})
+    expect(queryClient.getQueryData(['watch-buckets-mine', 'les-1'])).toEqual({})
+
+    // 라이브에서 쌓아 둔 누적이 뒤늦게 도착한다(10칸 중 9칸).
+    await act(async () => {
+      queryClient.setQueryData(['watch-buckets-mine', 'les-1'],
+        { 0: 1, 1: 1, 2: 1, 3: 1, 4: 1, 5: 1, 6: 1, 7: 1, 8: 1 })
+    })
+    view.rerender({ positionMs: 90_000 })
+    view.unmount()
+
+    // 잠그면 20%가 된다(0번 칸 + 방금 센 9번 칸).
+    expect(updateProgress.mock.calls.at(-1)?.[1]).toMatchObject({ progressPercent: 100 })
   })
 
   it('강의 길이를 알면 칸과 함께 진도를 보낸다', async () => {

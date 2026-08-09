@@ -80,13 +80,52 @@ class LearningContractTest {
         write(get("/api/lessons/" + lessonId + "/learning-context"), student, null)
                 .andExpect(jsonPath("$.progress.completed").value(true));
 
-        // 다시 10%로 내려가도 completed는 유지(sticky).
+        /*
+         * 10%를 보고해도 <b>진도는 내려가지 않는다</b>(ADR-0116). 예전에는 그대로 10%로 덮였고,
+         * 운영에서 23칸(92%)을 본 학생이 다시보기를 잠깐 열었다가 4%로 기록됐다.
+         * 완료 표시(sticky)는 예전부터 유지됐다 — 이제 진도율도 같이 지킨다.
+         */
         write(put("/api/lessons/" + lessonId + "/progress"), student,
                 "{\"progressPercent\":10,\"lastPositionMs\":30000}")
                 .andExpect(status().isNoContent());
         write(get("/api/lessons/" + lessonId + "/learning-context"), student, null)
                 .andExpect(jsonPath("$.progress.completed").value(true))
-                .andExpect(jsonPath("$.progress.progressPercent").value(10));
+                .andExpect(jsonPath("$.progress.progressPercent").value(95))
+                // 위치는 최대값이 아니다 — "지금 어디를 보고 있나"라 마지막 값이 맞다(이어보기).
+                .andExpect(jsonPath("$.progress.lastPositionMs").value(30000));
+    }
+
+    /**
+     * 진도가 사람이 들인 시간인 이상, 클라이언트 사정으로 깎이면 안 된다. 완료 임계에 닿지 않는
+     * 구간에서도 같은 규칙이 적용되는지 따로 못박는다 — 위 테스트는 sticky와 섞여 있다.
+     */
+    @Test
+    void progress_never_goes_backwards() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String cid = createPublishedCurriculum(instructor);
+        String lessonId = addLesson(instructor, cid, "1강");
+        Cookie[] student = loginAs("STUDENT");
+        approveEnrollment(instructor, student, cid);
+
+        write(put("/api/lessons/" + lessonId + "/progress"), student,
+                "{\"progressPercent\":60,\"lastPositionMs\":300000}")
+                .andExpect(status().isNoContent());
+
+        // 빈 상태에서 다시 시작한 화면이 4%를 보고한다(운영에서 난 그 모양).
+        write(put("/api/lessons/" + lessonId + "/progress"), student,
+                "{\"progressPercent\":4,\"lastPositionMs\":0}")
+                .andExpect(status().isNoContent());
+
+        write(get("/api/lessons/" + lessonId + "/learning-context"), student, null)
+                .andExpect(jsonPath("$.progress.progressPercent").value(60))
+                .andExpect(jsonPath("$.progress.completed").value(false));
+
+        // 더 많이 본 보고는 그대로 반영된다 — 한 방향으로만 움직인다.
+        write(put("/api/lessons/" + lessonId + "/progress"), student,
+                "{\"progressPercent\":80,\"lastPositionMs\":400000}")
+                .andExpect(status().isNoContent());
+        write(get("/api/lessons/" + lessonId + "/learning-context"), student, null)
+                .andExpect(jsonPath("$.progress.progressPercent").value(80));
     }
 
     @Test

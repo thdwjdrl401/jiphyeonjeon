@@ -17,7 +17,9 @@ import java.util.UUID;
  * 재생이라 브라우저가 재생 위치를 안다. 서버는 두 가지 방어만 얹는다.
  *
  * <ul>
- *   <li><b>순서역전 방어</b>: clientUpdatedAt 이 저장값보다 뒤일 때만 반영한다(진도 후퇴 방지, DDL 설계).</li>
+ *   <li><b>순서역전 방어</b>: clientUpdatedAt 이 저장값보다 뒤일 때만 반영한다(DDL 설계). 이것은
+ *       <b>늦게 도착한 옛 보고</b>를 막을 뿐, 새 보고가 들고 온 낮은 값은 막지 못한다.</li>
+ *   <li><b>진도는 내려가지 않는다</b>: 저장값과 새 값 중 큰 쪽을 남긴다(ADR-0116).</li>
  *   <li><b>완료 sticky</b>: 진도율이 임계(90%)를 넘으면 completedAt 을 한 번 찍고, 이후엔 유지한다.</li>
  * </ul>
  *
@@ -64,17 +66,32 @@ public class LearningService {
             return progress;
         }
 
-        progress.setProgressPercent(clamped);
+        /*
+         * <b>진도는 내려가지 않는다.</b> 순서역전 방어는 늦게 온 옛 보고만 막는다 — 방금 만들어진
+         * 보고가 낮은 값을 들고 오면 그대로 덮였다. 운영에서 23칸(92%)을 본 학생이 다시보기를 잠깐
+         * 열었다가 4%로 기록됐다(클라가 캐시 때문에 빈 상태에서 시작했다). 그쪽 원인은 따로 고쳤지만,
+         * 진도는 사람이 들인 시간이라 한 번 오른 것이 클라이언트 사정으로 깎이면 안 된다.
+         *
+         * <p>대가를 안다: 자료를 다시 올려 길이가 <b>늘어나면</b> 같은 칸 수의 비율이 낮아지는데,
+         * 그때도 옛 값이 남아 과대평가된다. 진도가 사라지는 쪽이 강사·학생 모두에게 더 나쁘다고 보고
+         * 이쪽을 택했다. 되돌리려면 재업로드 시점에 명시적으로 초기화하는 편이 맞다.
+         */
+        // 새로 만든 행은 기본 0이지만 Integer라 null 가능성을 닫아 둔다.
+        int stored = progress.getProgressPercent() == null ? 0 : progress.getProgressPercent();
+        int effective = Math.max(clamped, stored);
+        progress.setProgressPercent(effective);
+        // 위치는 최대값이 아니다 — "지금 어디를 보고 있나"라 마지막 값이 맞다(이어보기가 이걸 쓴다).
         progress.setLastPositionMs(lastPositionMs);
         if (clientUpdatedAt != null) {
             progress.setClientUpdatedAt(clientUpdatedAt);
         }
         // 완료는 sticky — 임계를 한 번 넘으면 그때 시각을 남기고, 이후 진도율이 내려가도 유지한다.
-        if (clamped >= COMPLETION_THRESHOLD_PERCENT && progress.getCompletedAt() == null) {
+        if (effective >= COMPLETION_THRESHOLD_PERCENT && progress.getCompletedAt() == null) {
             progress.setCompletedAt(OffsetDateTime.now());
         }
         LearningProgress saved = progressRepository.save(progress);
-        log.info(Audit.MARKER, "진도 갱신 userId={} lessonId={} percent={}", userId, lessonId, clamped);
+        log.info(Audit.MARKER, "진도 갱신 userId={} lessonId={} percent={} 보고값={}",
+                userId, lessonId, effective, clamped);
         return saved;
     }
 
