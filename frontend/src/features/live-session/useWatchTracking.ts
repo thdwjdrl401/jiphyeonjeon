@@ -7,7 +7,7 @@ import {
   bucketProgressPercent,
   emptyWatchBucketState,
   markWatchBucketsSent,
-  seedWatchBuckets,
+  mergeWatchBuckets,
   type WatchBucketState,
 } from './watchBuckets'
 
@@ -50,15 +50,22 @@ export function useWatchTracking(
     enabled: enabled && Boolean(lessonId),
   })
 
+  /*
+   * 서버 누적이 올 때마다 <b>합친다</b>. 첫 응답으로 잠그지 않는다 — 캐시(staleTime 30초)가 라이브
+   * 입장 때의 빈 목록을 들고 있으면, 다시보기로 넘어온 화면이 그 빈 값에 잠겨 그 회차를 통째로
+   * 잃는다. 운영에서 23칸(92%)을 본 학생의 진도가 4%로 기록된 원인이 정확히 이것이었다.
+   *
+   * <p>합친 직후 <b>지금 있는 칸부터</b> 센다. 아래 효과는 위치가 바뀔 때만 도는데, 응답을 기다리는
+   * 동안 위치가 그대로였으면 다시 돌지 않아 그 칸이 통째로 빠진다 — 0:00에서 시작하는 재생에서는
+   * 늘 첫 칸이었다. 한 칸이 비면 끝까지 봐도 진도가 100%에 닿지 않는다.
+   */
   useEffect(() => {
-    if (!mine.data || seededRef.current) return
+    if (!mine.data) return
     seededRef.current = true
-    /*
-     * seed 직후 <b>지금 있는 칸부터</b> 센다. 아래 효과는 위치가 바뀔 때만 도는데, seed를 기다리는
-     * 동안 위치가 그대로였으면 다시 돌지 않아 그 칸이 통째로 빠진다 — 0:00에서 시작하는 재생에서는
-     * 늘 첫 칸이었다. 한 칸이 비면 끝까지 봐도 진도가 100%에 닿지 않는다.
-     */
-    stateRef.current = advanceWatchBuckets(seedWatchBuckets(mine.data), positionRef.current)
+    stateRef.current = advanceWatchBuckets(
+      mergeWatchBuckets(stateRef.current, mine.data),
+      positionRef.current,
+    )
   }, [mine.data])
 
   // 위치가 흐르는 동안 칸을 센다. 칸이 바뀔 때만 늘어난다(같은 칸 안의 갱신은 무시).

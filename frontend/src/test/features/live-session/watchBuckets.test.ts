@@ -4,7 +4,9 @@ import {
   bucketProgressPercent,
   emptyWatchBucketState,
   markWatchBucketsSent,
+  mergeWatchBuckets,
   seedWatchBuckets,
+  type WatchBucketState,
 } from '@/features/live-session/watchBuckets'
 
 describe('구간별 시청 횟수 집계', () => {
@@ -65,5 +67,54 @@ describe('구간별 시청 횟수 집계', () => {
     const state = advanceWatchBuckets(emptyWatchBucketState, 5_000)
     expect(bucketProgressPercent(state, null)).toBeNull()
     expect(bucketProgressPercent(state, 0)).toBeNull()
+  })
+
+  /**
+   * 서버 응답이 낡을 수 있다. 캐시가 라이브 입장 때의 빈 목록을 들고 있는데 그걸로 덮으면 그 회차가
+   * 통째로 사라진다 — 운영에서 23칸(92%)이 4%로 기록된 원인이다.
+   */
+  describe('서버 누적 합치기', () => {
+    it('낡은 빈 응답이 지금까지 센 칸을 지우지 않는다', () => {
+      let watched = emptyWatchBucketState
+      for (let ms = 0; ms < 100_000; ms += 10_000) watched = advanceWatchBuckets(watched, ms)
+      expect(bucketProgressPercent(watched, 100_000)).toBe(100)
+
+      const merged = mergeWatchBuckets(watched, {})
+
+      expect(bucketProgressPercent(merged, 100_000)).toBe(100)
+      expect(merged.counts).toEqual(watched.counts)
+    })
+
+    it('서버가 더 많이 알고 있으면 물려받는다 — 다른 기기에서 본 회차', () => {
+      const local = advanceWatchBuckets(emptyWatchBucketState, 0)
+
+      const merged = mergeWatchBuckets(local, { 0: 1, 5: 3, 9: 1 })
+
+      expect(Object.keys(merged.counts).length).toBe(3)
+      expect(bucketProgressPercent(merged, 100_000)).toBe(30)
+    })
+
+    it('같은 칸은 큰 쪽을 남긴다 — 어느 쪽이 크든', () => {
+      const local: WatchBucketState = { counts: { 0: 5, 1: 1 }, lastBucket: 1, dirty: false }
+
+      const merged = mergeWatchBuckets(local, { 0: 2, 1: 4 })
+
+      expect(merged.counts).toEqual({ 0: 5, 1: 4 })
+    })
+
+    it('지금 재생 중인 칸은 서버가 건드리지 않는다', () => {
+      const local = advanceWatchBuckets(emptyWatchBucketState, 30_000)
+
+      const merged = mergeWatchBuckets(local, { 0: 1 })
+
+      expect(merged.lastBucket).toBe(3)
+    })
+
+    it('더할 것이 없으면 상태를 그대로 둔다', () => {
+      const local: WatchBucketState = { counts: { 0: 2 }, lastBucket: 0, dirty: false }
+
+      expect(mergeWatchBuckets(local, { 0: 1 })).toBe(local)
+      expect(mergeWatchBuckets(local, {})).toBe(local)
+    })
   })
 })
