@@ -29,8 +29,13 @@ import java.util.UUID;
 public class LearningService {
 
     private static final Logger log = LoggerFactory.getLogger(LearningService.class);
-    /** 완료로 치는 진도율 임계. DDL 주석(90% 돌파)과 같다. */
-    private static final int COMPLETION_THRESHOLD_PERCENT = 90;
+    /**
+     * 완료로 치는 진도율 임계. DDL 주석(90% 돌파)과 같다.
+     *
+     * <p>녹화 완료 시점의 일괄 환산({@link WatchProgressSettlement})도 같은 값을 써야 한다 —
+     * 두 경로가 다른 임계를 쓰면 같은 시청이 어디서 계산됐는지에 따라 완료가 갈린다.
+     */
+    static final int COMPLETION_THRESHOLD_PERCENT = 90;
 
     private final LearningProgressRepository progressRepository;
     private final LessonLearningAccess access;
