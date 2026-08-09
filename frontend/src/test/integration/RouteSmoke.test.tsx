@@ -469,14 +469,22 @@ describe('전체 페이지 라우트', () => {
     expect(screen.getByRole('button', { name: '라이브 입장' })).toHaveFocus()
   })
 
-  it('ENDED 학생 화면은 종료 문구를 표시하되 채팅·AI 질문을 유지한다', async () => {
+  it('ENDED가 돼도 종료 문구로 화면을 덮지 않고 채팅·AI 질문을 유지한다', async () => {
+    /*
+     * session.ended는 강사 송출이 끝났다는 뜻일 뿐이다(ADR-0005 §1). 학생은 Egress가 만든 HLS를
+     * 보므로 인코딩·버퍼 지연만큼 볼 것이 남아 있고, 이 시점에 "종료됐다"고 말하면 아직 보고 있는
+     * 사람에게 끝났다고 하는 셈이다. 종료 안내는 플레이어가 마지막 세그먼트를 소비했을 때 뜬다.
+     */
     const user = userEvent.setup()
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
     await mockLiveSessionService.endLiveSession('ses-security-live')
 
     renderAt('/student/live-sessions/ses-security-live/classroom')
 
-    expect(await screen.findByText('라이브가 종료된 강의입니다.')).toBeInTheDocument()
+    const chatInputEarly = await screen.findByLabelText('채팅 메시지')
+    expect(chatInputEarly).toBeEnabled()
+    expect(screen.queryByText('라이브가 종료된 강의입니다.')).not.toBeInTheDocument()
+    expect(screen.queryByText('강사가 수업을 종료하고 있습니다. 남은 영상을 재생 중입니다.')).not.toBeInTheDocument()
     const chatInput = screen.getByLabelText('채팅 메시지')
     expect(chatInput).toBeEnabled()
     await user.type(chatInput, '종료 뒤에도 이어가는 질문')

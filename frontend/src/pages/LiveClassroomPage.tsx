@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState, type CSSPrope
 import { createPortal } from 'react-dom'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { instructorPaths } from '@/app/router/paths'
+import { instructorPaths, studentPaths } from '@/app/router/paths'
 import PersonalAiQuestionPanel, { type AskAiAnswer } from '@/features/ai/PersonalAiQuestionPanel'
 import { useAuth } from '@/features/auth/AuthContext'
 import { getLesson } from '@/features/lesson/lessonService'
@@ -22,6 +22,7 @@ import {
 } from '@/features/live-session/captionAdapter'
 import LearningSidebar, { type GlossaryFocusRequest } from '@/features/live-session/LearningSidebar'
 import LivePrestartStage from '@/features/live-session/LivePrestartStage'
+import { describeReplayInvitation } from '@/features/live-session/liveEnded'
 import { isPrestartStatus, prestartNotice } from '@/features/live-session/livePrestart'
 import type { LearningPanel } from '@/features/live-session/liveLearningPreview'
 import {
@@ -58,6 +59,9 @@ import { isMockApiEnabled, isTestMode } from '@/shared/config/runtime'
 const DevLivePanel = lazy(() => import('@/features/live-session/DevLivePanel'))
 /** mock API가 실제로 응답을 만들어 줄 때만 의미가 있다 — HTTP 모드에선 패널이 아무것도 못 흔든다. */
 const showDevLivePanel = import.meta.env.DEV && isMockApiEnabled && !isTestMode
+
+/** 다시보기 공개를 기다리는 주기. 자료 임베딩 폴링(ADR-0036)과 같은 성질 — 끝나면 스스로 멈춘다. */
+const REPLAY_READY_POLL_INTERVAL_MS = 5_000
 
 const InstructorLiveKitStage = lazy(() => import('@/features/live-session/InstructorLiveKitStage'))
 const PlaybackPlayer = lazy(() => import('@/features/live-session/PlaybackPlayer'))
@@ -107,6 +111,18 @@ export default function LiveClassroomPage() {
     queryKey: ['live-classroom-lesson', sessionQuery.data?.lessonId, user?.role],
     queryFn: () => getLesson({ lessonId: sessionQuery.data!.lessonId, role: user?.role, userId: user?.userId }),
     enabled: Boolean(sessionQuery.data?.lessonId),
+    /*
+     * 송출이 끝나면 다시보기가 공개될 때까지만 다시 읽는다. 공개는 자동이고(ADR-0090) 수 초~수 분
+     * 걸리므로, 그동안 이 화면에 남아 있는 학생이 "다시보기 열기"를 바로 누를 수 있어야 한다.
+     * 공개되면 스스로 멈춘다 — 화면을 열어 둔 채 계속 도는 폴링으로 굳지 않게 한다.
+     * 화면을 떠난 학생은 VOD_PUBLISHED 알림이 데려온다.
+     */
+    refetchInterval: (query) => (
+      sessionQuery.data?.status === 'ENDED' && query.state.data?.replayStatus !== 'PUBLISHED'
+        ? REPLAY_READY_POLL_INTERVAL_MS
+        : false
+    ),
+    refetchIntervalInBackground: false,
   })
   const session = sessionQuery.data
   const lesson = lessonQuery.data
@@ -431,9 +447,6 @@ export default function LiveClassroomPage() {
     }
     setCaptions(selectCaptionViews(captionAccumulator.current))
   }, [captionReloadQuery.data, captionsLive])
-  useEffect(() => {
-    if (hasEnded) setStudentSeekRequest(null)
-  }, [hasEnded])
   usePageTitle(`LIVE · ${lesson?.title ?? ''}`)
 
   const sendMessage = (event: FormEvent) => {
@@ -555,13 +568,29 @@ export default function LiveClassroomPage() {
     />
   )
 
+  /*
+   * 다 본 학생에게 다음 걸음을 준다. 플레이어가 마지막 세그먼트를 소비했을 때만 뜬다(ADR-0005 §3).
+   *
+   * <p><b>자동으로 옮기지 않는다.</b> 사이드바의 채팅·노트·AI 답변은 종료 뒤에도 살아 있고
+   * (ADR-0004) 방금 들은 것을 정리하는 자리다 — 다시보기가 준비된 순간 화면을 낚아채면 읽던
+   * 사람이 튕겨 나간다. 버튼만 열어 두고 누를지는 학생이 정한다.
+   */
+  const replayInvitation = lesson ? describeReplayInvitation(lesson.replayStatus) : null
+  const endedNotice = !isInstructor && lesson && replayInvitation ? (
+    <div className="student-live-empty student-live-ended" role="status">
+      <strong>수업이 끝났습니다</strong>
+      <p>{replayInvitation.message}</p>
+      {replayInvitation.canOpen && (
+        <Link className="button button--primary button--small" to={studentPaths.replay(lesson.lessonId)}>다시보기 열기</Link>
+      )}
+    </div>
+  ) : undefined
+
   // 자막이 이미 흐르면(누적 라인 존재) 연결 문구로 시야를 어지럽히지 않는다.
   // 아직 한 줄도 없을 때만 연결 상태를 안내한다.
   const captionNote = isBeforeLive
     // 자막은 강사의 발화에서 나온다 — 시작 전이라 연결과 무관하게 나올 것이 없다.
     ? '강의가 시작되면 실시간 자막이 여기에 표시됩니다.'
-    : hasEnded
-    ? '라이브가 종료되어 자막 시간 이동을 사용할 수 없습니다.'
     : captions.length > 0 || captionConnectionState === 'connected'
       ? undefined
       : captionConnectionState === 'connecting'
@@ -692,18 +721,13 @@ export default function LiveClassroomPage() {
       */}
       {isInstructor && <DemoAudioBar />}
 
-      {!isInstructor && session.status === 'ENDING' && (
-        <div className="live-session-state-banner" role="status">
-          강사가 수업을 종료하고 있습니다. 남은 영상을 재생 중입니다.
-        </div>
-      )}
-
-      {!isInstructor && hasEnded && (
-        <div className="live-session-state-banner is-ended" role="status">
-          라이브가 종료된 강의입니다.
-        </div>
-      )}
-
+      {/*
+        종료 배너를 두지 않는다(ADR-0005 §1). 학생이 보는 것은 Egress가 만드는 HLS라, 강사가 송출을
+        끝낸 시각과 학생이 마지막 프레임을 보는 시각이 다르다 — session.ended 시점에 "종료됐다"고
+        말하면 아직 볼 것이 남은 사람에게 끝났다고 하는 셈이다. 게다가 이 페이지는 높이가 고정된
+        세로 flex라 배너가 끼면 그만큼 영상이 줄었다.
+        실제 종료는 플레이어가 마지막 세그먼트를 소비했을 때이고, 그 자리에서 아래 endedNotice가 뜬다.
+      */}
       <div
         className={`media-layout${isInstructor && sidebarWindow.isDetached ? ' is-sidebar-detached' : ''}${sidebarPane.collapsed ? ' is-sidebar-collapsed' : ''}`}
         style={{ '--sidebar-width': `${sidebarPane.size}px` } as CSSProperties}
@@ -745,6 +769,7 @@ export default function LiveClassroomPage() {
               <Suspense fallback={<div className="video-stage instructor-livekit-loading" role="status">Vidstack 플레이어를 불러오는 중입니다.</div>}>
                 <PlaybackPlayer
                   backLink={backLink}
+                  endedNotice={endedNotice}
                   errorMessage={playback.errorMessage}
                   lessonTitle={lesson.title}
                   loading={playback.loading}
@@ -772,7 +797,8 @@ export default function LiveClassroomPage() {
               note={captionNote}
               onSeek={seekSession}
               onSelectTerm={openGlossaryTerm}
-              canSeek={!hasEnded}
+              // 송출이 끝나도 잠그지 않는다 — 남은 HLS를 보는 동안 확정된 자막으로 계속 이동할 수 있다(ADR-0005 §2).
+              canSeek
               heightPx={captionPane.size}
             />
           )}

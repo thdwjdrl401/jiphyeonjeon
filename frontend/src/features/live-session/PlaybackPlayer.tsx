@@ -31,6 +31,11 @@ interface PlaybackPlayerProps {
    */
   onRootChange?: (root: HTMLElement | null) => void
   /**
+   * 이 브라우저가 마지막 세그먼트까지 다 본 뒤 영상 위에 얹을 안내. 라이브에서 학생을 다시보기로
+   * 보내는 자리다(ADR-0005 §3). 세션 상태가 아니라 <b>재생 완료</b>에 걸린다.
+   */
+  endedNotice?: ReactNode
+  /**
    * 예전에 페이지 위쪽 네비바가 담당하던 "브랜드·돌아가기" 링크(LessonLayout 참고). 강의실은
    * 그 네비바를 없애고 이 재생 정보 헤더가 대신 담는다 — 없으면 자리를 비워 둔다.
    */
@@ -78,6 +83,7 @@ export default function PlaybackPlayer({
   onSessionTimeChange,
   onRootChange,
   backLink,
+  endedNotice,
   headerExtra,
 }: PlaybackPlayerProps) {
   const [playbackState, setPlaybackState] = useState<PlaybackState>('loading')
@@ -159,6 +165,12 @@ export default function PlaybackPlayer({
             {errorMessage && <button className="button button--soft button--small" type="button" onClick={retryPlayback}>다시 시도</button>}
           </div>
         )}
+
+      {/*
+        마지막 세그먼트까지 소비했을 때만 뜬다(ADR-0005 §3) — 세션이 ENDED가 된 시각이 아니다.
+        플레이어는 그대로 둔다: 언마운트하면 되감아 다시 볼 수도 없다.
+      */}
+      {source && playbackState === 'ended' && endedNotice}
 
       {source && playbackState === 'error' && (
         <div className="student-live-empty student-live-empty--error" role="alert">

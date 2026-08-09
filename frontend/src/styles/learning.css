@@ -31,7 +31,6 @@
 .media-page--live .review-toolbar,
 .media-page--live .media-page__title { flex: 0 0 auto; }
 .live-session-state-banner { flex: 0 0 auto; margin-bottom: 13px; padding: 11px 14px; border: 1px solid var(--ink-100); border-radius: 12px; background: var(--blue-50); color: var(--blue-700); font-size: .68rem; }
-.live-session-state-banner.is-ended { border-color: rgba(168,58,36,.24); background: var(--red-50); color: var(--red-700); }
 /* 데모 송출은 인장색으로 세운다 — 이 화면이 평소와 똑같으니 색으로라도 걸려야 한다(ADR-0100). */
 .live-session-state-banner.is-demo { border-color: var(--seal); background: #fdf3f1; color: var(--seal); font-weight: 600; }
 /*
@@ -143,6 +142,14 @@
 .student-live-empty strong { color: #fdf8ee; font-size: .82rem; }
 .student-live-empty p { margin: 0; font-size: .65rem; }
 .student-live-empty button { justify-self: center; margin-top: 5px; pointer-events: auto; }
+/*
+ * 다 본 뒤 영상 위에 얹히는 종료 안내(ADR-0005 §3). 영상 프레임이 비쳐 글이 묻히지 않게 바탕을
+ * 깔되, 플레이어는 그대로 살아 있다 — 되감아 다시 볼 수 있어야 한다.
+ */
+.student-live-ended { gap: 9px; background: rgba(18,16,14,.82); }
+.student-live-ended strong { font-size: .95rem; }
+/* 링크는 button이 아니라 a라 위 규칙(.student-live-empty button)이 닿지 않는다. */
+.student-live-ended .button { justify-self: center; margin-top: 3px; pointer-events: auto; }
 .student-live-empty--error { z-index: 5; background: rgba(28,22,13,.9); }
 .student-live-empty--error strong { color: #e5a99c; }
 .instructor-media-preview { position: absolute; z-index: 1; inset: 0; display: grid; place-items: center; background: #1c160d; container-type: size; }
