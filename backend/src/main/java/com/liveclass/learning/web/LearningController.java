@@ -14,6 +14,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -124,5 +125,17 @@ public class LearningController {
                                                    Authentication authentication) {
         return GlossaryTermResponse.from(glossaryService.upsert(
                 UUID.fromString(authentication.getName()), lessonId, request.term(), request.definition()));
+    }
+
+    @Operation(summary = "용어 삭제(강사)",
+            description = "용어를 목록에서 내린다. 원본이 ai 원본에서 온 것이어도 내려간다 — 원본을 지우는 것이 아니라 "
+                    + "지웠다는 사실을 덮어쓰기 자리에 남기기 때문이다(자료를 다시 읽어도 되돌아오지 않는다). "
+                    + "멱등: 없는 용어를 지워도 204다. 같은 용어를 다시 등록하면 되살아난다.")
+    @DeleteMapping("/api/instructor/lessons/{lessonId}/glossary/{term}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteGlossaryTerm(@PathVariable UUID lessonId,
+                                   @PathVariable String term,
+                                   Authentication authentication) {
+        glossaryService.delete(UUID.fromString(authentication.getName()), lessonId, term);
     }
 }

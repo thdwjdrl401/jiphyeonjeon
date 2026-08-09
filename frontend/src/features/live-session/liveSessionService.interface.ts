@@ -521,6 +521,13 @@ export interface LiveSessionService {
   getGlossary: (lessonId: string) => Promise<GlossaryTerm[]>
   /** 강사가 용어를 고치거나 더한다(라이브 시작 전 검수). 같은 용어를 다시 보내면 덮어쓴다(멱등). */
   upsertGlossaryTerm: (lessonId: string, term: string, definition: string) => Promise<GlossaryTerm>
+  /**
+   * 용어를 목록에서 내린다. AI가 자료에서 뽑은 용어여도 내려간다 — 원본을 지우는 것이 아니라
+   * 지웠다는 사실을 덮어쓰기 자리에 남기기 때문이다(ADR-0110). 자료를 다시 읽어도 되돌아오지 않는다.
+   *
+   * <p>멱등: 없는 용어를 지워도 성공이다. 같은 용어를 다시 등록하면 되살아난다.
+   */
+  deleteGlossaryTerm: (lessonId: string, term: string) => Promise<void>
   getMyWatchBuckets: (lessonId: string) => Promise<Record<number, number>>
   reportWatchBuckets: (lessonId: string, counts: Record<number, number>) => Promise<void>
   getWatchHeatmap: (lessonId: string, durationMs: number | null) => Promise<WatchHeatmap>

@@ -32,6 +32,13 @@ public class LessonGlossaryOverride {
     private String term;
 
     private String definition;
+    /**
+     * 강사가 이 용어를 지운 시각. NULL이면 살아 있는 덮어쓰기다.
+     *
+     * <p>원본(ai 스키마)은 우리가 지울 수 없다 — 자료를 다시 읽을 때마다 되살아난다. 그래서 삭제는
+     * 덮어쓰기와 같은 자리에 <b>묘비</b>로 남긴다. 같은 용어를 다시 등록하면 NULL로 되돌아간다.
+     */
+    private OffsetDateTime deletedAt;
 
     private UUID updatedBy;
 

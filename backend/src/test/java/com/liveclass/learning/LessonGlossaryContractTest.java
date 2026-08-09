@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -151,6 +152,54 @@ class LessonGlossaryContractTest {
             builder = builder.contentType(MediaType.APPLICATION_JSON).content(body);
         }
         return mockMvc.perform(builder);
+    }
+
+    /**
+     * 지우는 것은 <b>원본을 지우는 것이 아니다.</b> ai 원본은 자료를 다시 읽을 때마다 되살아나므로,
+     * 지웠다는 사실을 덮어쓰기 자리에 남겨야 한다. 여기서는 그 결과(목록에서 빠진다)를 본다.
+     */
+    @Test
+    void an_instructor_can_delete_a_term() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String lessonId = createLesson(instructor);
+        write(put("/api/instructor/lessons/" + lessonId + "/glossary"), instructor,
+                "{\"term\":\"필터 체인\",\"definition\":\"설명\"}").andExpect(status().isOk());
+
+        write(delete("/api/instructor/lessons/" + lessonId + "/glossary/필터 체인"), instructor, null)
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/lessons/" + lessonId + "/glossary").cookie(instructor))
+                .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    /** 없는 용어를 지워도, 두 번 지워도 같다 — 목록을 여러 탭에서 보다 두 번 눌러도 실패하지 않는다. */
+    @Test
+    void deleting_is_idempotent() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String lessonId = createLesson(instructor);
+
+        write(delete("/api/instructor/lessons/" + lessonId + "/glossary/없던 용어"), instructor, null)
+                .andExpect(status().isNoContent());
+        write(delete("/api/instructor/lessons/" + lessonId + "/glossary/없던 용어"), instructor, null)
+                .andExpect(status().isNoContent());
+    }
+
+    /** 지운 용어를 다시 등록하면 되살아난다. 묘비가 남아 계속 안 보이면 지운 것을 되돌릴 수 없다. */
+    @Test
+    void re_adding_a_deleted_term_brings_it_back() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+        String lessonId = createLesson(instructor);
+        write(put("/api/instructor/lessons/" + lessonId + "/glossary"), instructor,
+                "{\"term\":\"세션\",\"definition\":\"첫 설명\"}").andExpect(status().isOk());
+        write(delete("/api/instructor/lessons/" + lessonId + "/glossary/세션"), instructor, null)
+                .andExpect(status().isNoContent());
+
+        write(put("/api/instructor/lessons/" + lessonId + "/glossary"), instructor,
+                "{\"term\":\"세션\",\"definition\":\"다시 쓴 설명\"}").andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/lessons/" + lessonId + "/glossary").cookie(instructor))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].definition").value("다시 쓴 설명"));
     }
 
     private Cookie[] loginAs(String role) throws Exception {
