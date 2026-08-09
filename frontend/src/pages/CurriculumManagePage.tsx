@@ -32,6 +32,7 @@ import { evaluatePublishReadiness } from '@/features/curriculum/publishPrecondit
 import type { CurriculumMaterial } from '@/features/curriculum/types'
 import InstructorEnrollmentRoster from '@/features/enrollment/InstructorEnrollmentRoster'
 import { resolveInstructorLessonEditPath } from '@/features/lesson/lessonRouting'
+import { materialRefetchInterval } from '@/features/material/materialStatus'
 import { ApiError } from '@/shared/api/client'
 import { isNotImplemented } from '@/shared/api/notImplemented'
 import {
@@ -155,6 +156,10 @@ export default function CurriculumManagePage() {
       return { curriculum, sections }
     },
     enabled: Boolean(curriculumId),
+    // 커리큘럼 공통 자료는 자동저장으로 붙는다 — 강사가 "저장"을 누른 적도 없이 임베딩이 시작된다.
+    // 폴링이 없으면 그 진행이 화면에 영영 도달하지 않는다(ADR-0036의 2~3초 폴링).
+    refetchInterval: (query) => materialRefetchInterval(query.state.data?.curriculum.materials),
+    refetchIntervalInBackground: false,
   })
   usePageTitle('커리큘럼 관리')
 
@@ -251,6 +256,21 @@ function CurriculumManageEditor({
   })
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(routeState?.draft?.thumbnailUrl ?? storedCurriculum?.thumbnailUrl ?? null)
   const [materials, setMaterials] = useState<CurriculumMaterial[]>(routeState?.draft?.materials ?? storedCurriculum.materials)
+  /*
+   * 임베딩 상태만 서버 응답에서 덧입혀 그린다. 폴링 결과를 로컬 `materials`에 써 넣지 않는 게 중요하다 —
+   * 자동 저장이 도는 중에 폴링 응답이 도착하면 아직 안 올라간 선택을 덮거나, 방금 붙인 자료를 모르는
+   * 낡은 응답이 목록에서 걷어내(그러면 폴링까지 멈춰 되돌아오지 못한다) 버린다. 렌더에서만 합치면
+   * 그 경합이 아예 생기지 않는다. 편집 중인 이름·순서는 로컬이, 상태는 서버가 각각 진실이다.
+   */
+  const materialsWithServerStatus = useMemo(() => {
+    const server = new Map(storedCurriculum.materials.map((material) => [material.materialId, material]))
+    return materials.map((material) => {
+      const persisted = server.get(material.materialId)
+      return persisted
+        ? { ...material, embeddingStatus: persisted.embeddingStatus, keyTermStatus: persisted.keyTermStatus }
+        : material
+    })
+  }, [materials, storedCurriculum.materials])
   const [autosave, setAutosave] = useState<'idle' | 'saving' | 'saved' | 'error'>(routeState?.created ? 'saved' : 'idle')
   const toast = useToast()
   /*
@@ -1025,7 +1045,7 @@ function CurriculumManageEditor({
           <Panel className="curriculum-manage__materials-panel" title="커리큘럼 강의 자료" description="전체 강의에서 공통으로 사용할 PPTX 자료를 관리합니다.">
             <CurriculumMaterialField
               id="manage-curriculum-materials"
-              value={materials}
+              value={materialsWithServerStatus}
               onChange={updateMaterials}
               downloadRequest={(material) => ({
                 scope: 'CURRICULUM',

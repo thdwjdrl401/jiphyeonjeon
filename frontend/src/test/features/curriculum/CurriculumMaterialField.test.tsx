@@ -107,3 +107,43 @@ describe('CurriculumMaterialField 다운로드', () => {
     expect(screen.queryByRole('button', { name: /다운로드$/ })).not.toBeInTheDocument()
   })
 })
+
+describe('CurriculumMaterialField 준비 상태', () => {
+  it('저장은 됐지만 임베딩이 도는 자료를 "등록됨"으로 덮지 않는다', () => {
+    // 이 화면이 서버 상태를 아예 읽지 않아, 저장만 끝나면 임베딩이 진행 중이어도 늘 "등록됨"이었다.
+    renderField(
+      <CurriculumMaterialField
+        id="manage-materials"
+        value={[{ ...persisted, embeddingStatus: 'PROCESSING' }]}
+        onChange={() => {}}
+      />,
+    )
+
+    expect(screen.getByText('AI 준비 중')).toBeInTheDocument()
+  })
+
+  it('임베딩이 실패한 자료를 강사에게 숨기지 않는다', () => {
+    renderField(
+      <CurriculumMaterialField
+        id="manage-materials"
+        value={[{ ...persisted, embeddingStatus: 'FAILED' }]}
+        onChange={() => {}}
+      />,
+    )
+
+    expect(screen.getByText('AI 준비 실패')).toBeInTheDocument()
+  })
+
+  it('아직 안 올린 선택은 서버 상태와 무관하게 업로드 대기다', () => {
+    renderField(
+      <CurriculumMaterialField
+        id="manage-materials"
+        value={[{ ...persisted, embeddingStatus: 'READY', file: new File([''], 'new.pptx') }]}
+        onChange={() => {}}
+      />,
+    )
+
+    expect(screen.getByText('업로드 대기')).toBeInTheDocument()
+    expect(screen.queryByText('AI 준비 완료')).not.toBeInTheDocument()
+  })
+})

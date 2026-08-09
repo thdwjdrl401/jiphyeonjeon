@@ -13,6 +13,13 @@ import { isLiveEntryOpen } from '@/features/live-session/liveEntry'
 import { getLiveSession, getProcessingStatus } from '@/features/live-session/liveSessionService'
 import { describeReplayBadge, processingPollInterval } from '@/features/live-session/liveSessionProcessing'
 import type { MaterialDownloadRequest } from '@/features/material/materialDownloadService'
+import MaterialStatusBadges from '@/features/material/MaterialStatusBadges'
+import {
+  hasMaterialInProgress,
+  isMaterialInProgress,
+  materialEmbeddingState,
+  materialRefetchInterval,
+} from '@/features/material/materialStatus'
 import { useMaterialDownload } from '@/features/material/useMaterialDownload'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
@@ -36,6 +43,10 @@ export default function LessonDetailPage() {
     queryKey: ['lesson', lessonId, user?.role, user?.userId, curriculumId, sectionId],
     queryFn: () => getLesson({ lessonId, role: user?.role, userId: user?.userId, curriculumId, sectionId }),
     enabled: Boolean(lessonId),
+    // 자료를 올린 직후 이 화면으로 돌아오면 임베딩이 아직 돌고 있다. 폴링이 없으면 새로고침
+    // 전까지 "AI 준비 중"에 멈춰 있어, 실제로 끝났는지 실패했는지 알 방법이 없었다(ADR-0036).
+    refetchInterval: (query) => materialRefetchInterval(query.state.data?.materials),
+    refetchIntervalInBackground: false,
   })
   const liveSessionQuery = useQuery({
     queryKey: ['live-session', lessonQuery.data?.liveSession?.sessionId],
@@ -91,7 +102,7 @@ export default function LessonDetailPage() {
   const canEnterLive = lesson.liveSession ? isLiveEntryOpen(lesson.liveSession) : false
   const canReplay = lesson.replayStatus === 'PUBLISHED'
   const replayProgress = lesson.learning?.progressPercent ?? 0
-  const materialWorkInProgress = lesson.materials.some((material) => material.status !== 'READY')
+  const materialWorkInProgress = hasMaterialInProgress(lesson.materials)
   // 커리큘럼 자료와 같은 규칙 — 강사는 관리용 경로, 수강생은 수강 관계로 열리는 경로.
   const materialDownloadRequest = (material: LessonMaterialView): MaterialDownloadRequest => ({
     scope: 'LESSON',
@@ -103,11 +114,20 @@ export default function LessonDetailPage() {
   const scheduledDate = liveSession?.scheduledAt ? new Date(liveSession.scheduledAt) : null
   const entryDate = scheduledDate ? new Date(scheduledDate.getTime() - 10 * 60_000) : null
   const liveStatusLabel = liveSession && ['OPEN', 'STARTING', 'LIVE'].includes(liveSession.status) ? '입장 가능' : '예정'
+  // 세 칸 모두 자료의 실제 상태에서 나온다. 예전엔 "AI 준비"가 상수 READY였고 "자료 작업"은
+  // status!=='READY'라 실패한 자료까지 "진행 중"으로 보였다 — 영원히 끝나지 않는 것처럼 읽혔다.
+  const readyMaterialCount = lesson.materials
+    .filter((material) => materialEmbeddingState(material) === 'READY' && !isMaterialInProgress(material))
+    .length
+  const materialFailed = lesson.materials.some((material) => materialEmbeddingState(material) === 'FAILED')
   const readinessSummary = isInstructor ? (
     <ul className="lesson-readiness-summary" aria-label="강의 준비 상태">
-      <li><span>강의 자료</span><strong>{lesson.materials.length}개 준비</strong></li>
-      <li><span>AI 준비</span><strong>READY</strong></li>
-      <li className={materialWorkInProgress ? 'is-warning' : undefined}><span>자료 작업</span><strong>{materialWorkInProgress ? '진행 중' : '완료'}</strong></li>
+      <li><span>강의 자료</span><strong>{lesson.materials.length}개</strong></li>
+      <li><span>AI 준비</span><strong>{lesson.materials.length > 0 ? `${readyMaterialCount}/${lesson.materials.length} 완료` : '자료 없음'}</strong></li>
+      <li className={materialWorkInProgress || materialFailed ? 'is-warning' : undefined}>
+        <span>자료 작업</span>
+        <strong>{materialWorkInProgress ? '진행 중' : materialFailed ? '실패' : '완료'}</strong>
+      </li>
     </ul>
   ) : null
 
@@ -225,7 +245,7 @@ export default function LessonDetailPage() {
           action={<StatusBadge>{lesson.materials.length}개</StatusBadge>}
         >
           {lesson.materials.length > 0
-            ? <ul className="material-list material-list--compact">{lesson.materials.map((material) => <li key={material.id}><span className="file-icon">PPTX</span><div><strong>{material.name}</strong><small>{material.size}</small></div><button className="text-button" type="button" disabled={downloadingMaterialId === material.id} aria-label={`${material.name} 다운로드`} onClick={() => void downloadMaterial(materialDownloadRequest(material))}>{downloadingMaterialId === material.id ? '받는 중…' : '다운로드'}</button></li>)}</ul>
+            ? <ul className="material-list material-list--compact">{lesson.materials.map((material) => <li key={material.id}><span className="file-icon">PPTX</span><div><strong>{material.name}</strong><small>{material.size}</small></div><MaterialStatusBadges material={material} audience={isInstructor ? 'instructor' : 'student'} /><button className="text-button" type="button" disabled={downloadingMaterialId === material.id} aria-label={`${material.name} 다운로드`} onClick={() => void downloadMaterial(materialDownloadRequest(material))}>{downloadingMaterialId === material.id ? '받는 중…' : '다운로드'}</button></li>)}</ul>
             : <p className="lesson-detail__material-empty">등록된 강의 자료가 없습니다.</p>}
           {/* 자료 목록과 별개의 flex 자식이라 목록 스크롤과 무관하게 항상 패널 하단에 고정된다. */}
           {isInstructor && (

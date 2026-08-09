@@ -8,6 +8,8 @@ import { deleteLesson } from '@/features/curriculum/curriculumManagementService'
 import { deleteLessonMaterial, getLesson, prepareLessonAi, saveLesson } from '@/features/lesson/lessonService'
 import LessonBreadcrumbs from '@/features/lesson/LessonBreadcrumbs'
 import { invalidateAfterLessonWrite } from '@/features/lesson/lessonQueryCache'
+import MaterialStatusBadges from '@/features/material/MaterialStatusBadges'
+import { hasMaterialInProgress, materialRefetchInterval } from '@/features/material/materialStatus'
 import { useMaterialDownload } from '@/features/material/useMaterialDownload'
 import { ApiError } from '@/shared/api/client'
 import { isBeforeToday, todayLocalStart } from '@/shared/lib/localDateTime'
@@ -16,7 +18,20 @@ import PageState from '@/shared/ui/PageState'
 import { useToast } from '@/shared/ui/Toast'
 import { InlineNotice, PageHeader, Panel, StatusBadge } from '@/shared/ui/WorkspaceUi'
 
-interface SelectedMaterial { id: string; name: string; size: string; file?: File }
+/**
+ * 폼이 들고 있는 자료 한 건. `file`이 있으면 아직 안 올린 것, 없으면 서버에 저장된 것이다.
+ *
+ * 서버 상태(embeddingStatus·keyTermStatus)를 함께 들고 있어야 한다 — 예전엔 이름·크기만 옮겨 담아,
+ * 저장된 자료의 배지가 실제 상태와 무관하게 늘 "READY"로 굳어 있었다.
+ */
+interface SelectedMaterial {
+  id: string
+  name: string
+  size: string
+  file?: File
+  embeddingStatus?: string
+  keyTermStatus?: string
+}
 
 function toDateTimeLocal(value?: string | null) {
   if (!value) return ''
@@ -43,6 +58,10 @@ export default function LessonFormPage() {
     queryKey: ['instructor-lesson-form', lessonId],
     queryFn: () => getLesson({ lessonId: lessonId!, role: user?.role, userId: user?.userId, curriculumId, sectionId }),
     enabled: isEdit,
+    // 저장 직후 이 화면에 그대로 머무는 게 기본 동선이다(수정 모드는 이동하지 않는다). 방금 올린
+    // 자료의 임베딩이 끝나는 걸 여기서 봐야 한다 — 폴링이 없으면 "AI 준비 중"에서 멈춘 채로 남는다.
+    refetchInterval: (query) => materialRefetchInterval(query.state.data?.materials),
+    refetchIntervalInBackground: false,
   })
   const currentLesson = lessonQuery.data
   const curriculum = curriculumQuery.data
@@ -63,6 +82,8 @@ export default function LessonFormPage() {
   const [entryWindow, setEntryWindow] = useState('10')
   const [submitting, setSubmitting] = useState(false)
   const pendingMaterialCount = materials.filter((material) => material.file).length
+  // 업로드 대기(로컬 File)와 임베딩 진행 중을 한 값으로 본다 — 강사 입장에선 둘 다 "아직"이다.
+  const materialsInProgress = hasMaterialInProgress(materials)
   /**
    * 강의 삭제. 관리 화면 목록이 아니라 이 화면에만 둔다 — 목록에서는 행마다 삭제 버튼이 있어
    * 한 번의 오클릭으로 강의가 사라졌다. 수정 화면까지 들어온 사람은 대상을 분명히 알고 있다.
@@ -107,7 +128,13 @@ export default function LessonFormPage() {
       사라진다. 저장에 성공한 파일은 save()가 먼저 로컬에서 떼므로 여기서 중복되지 않는다.
     */
     setMaterials((current) => [
-      ...currentLesson.materials.map((item) => ({ id: item.id, name: item.name, size: item.size })),
+      ...currentLesson.materials.map((item) => ({
+        id: item.id,
+        name: item.name,
+        size: item.size,
+        embeddingStatus: item.embeddingStatus ?? item.status,
+        keyTermStatus: item.keyTermStatus,
+      })),
       ...current.filter((item) => item.file),
     ])
     setScheduledAt(toDateTimeLocal(currentLesson.liveSession?.scheduledAt))
@@ -251,8 +278,20 @@ export default function LessonFormPage() {
               <div className="lesson-form__embedded-heading">
                 <div className="lesson-form__section-title">
                   <h3>강의 자료</h3>
-                  <StatusBadge tone={processing || pendingMaterialCount > 0 ? 'warning' : materials.length ? 'success' : 'neutral'}>
-                    {processing ? 'AI 준비 중' : pendingMaterialCount > 0 ? `${materials.length}개 · 준비 필요` : materials.length ? `${materials.length}개 · READY` : '자료 없음'}
+                  {/* 서버 상태에서 나온다. 예전엔 저장만 되면 무조건 "N개 · READY"였다. */}
+                  <StatusBadge
+                    tone={processing || materialsInProgress ? 'warning' : materials.length ? 'success' : 'neutral'}
+                    busy={processing || materialsInProgress}
+                  >
+                    {/*
+                      "저장 필요"와 "AI 준비 중"을 구분한다 — 아직 올리지 않은 파일은 아무 일도 일어나지
+                      않는 상태라 기다려 봐야 소용없다. 저장을 눌러야 업로드·임베딩이 시작된다.
+                    */}
+                    {processing ? 'AI 준비 중'
+                      : !materials.length ? '자료 없음'
+                      : pendingMaterialCount > 0 ? `${materials.length}개 · 저장 필요`
+                      : materialsInProgress ? `${materials.length}개 · AI 준비 중`
+                      : `${materials.length}개 · 준비 완료`}
                   </StatusBadge>
                 </div>
                 <div className="lesson-form__material-actions">
@@ -271,7 +310,7 @@ export default function LessonFormPage() {
                 <span className="lesson-form__dropzone-copy"><strong>PPTX 파일을 드래그하거나 클릭해 선택</strong><small>{isEdit ? '한 번에 한 파일 · 기존 자료 유지' : '여러 파일 동시 등록 가능'}</small></span>
               </label>
               {materials.length > 0
-                ? <ul className="material-list lesson-form__material-list">{materials.map((material) => <li key={material.id}><span className="file-icon">PPTX</span><div><strong>{material.name}</strong><small>{material.size}</small></div>{isEdit && !material.file && <button className="button button--soft button--small" type="button" disabled={downloadingMaterialId === material.id} aria-label={`${material.name} 다운로드`} onClick={() => void downloadMaterial({ scope: 'LESSON', parentId: lessonId ?? '', materialId: material.id, fileName: material.name, asInstructor: true })}>{downloadingMaterialId === material.id ? '받는 중…' : '다운로드'}</button>}<StatusBadge tone={processing || material.file ? 'warning' : 'success'}>{processing ? 'EMBEDDING' : material.file ? '대기' : 'READY'}</StatusBadge><button type="button" aria-label={`${material.name} 제거`} onClick={() => void removeMaterial(material)}>×</button></li>)}</ul>
+                ? <ul className="material-list lesson-form__material-list">{materials.map((material) => <li key={material.id}><span className="file-icon">PPTX</span><div><strong>{material.name}</strong><small>{material.size}</small></div>{isEdit && !material.file && <button className="button button--soft button--small" type="button" disabled={downloadingMaterialId === material.id} aria-label={`${material.name} 다운로드`} onClick={() => void downloadMaterial({ scope: 'LESSON', parentId: lessonId ?? '', materialId: material.id, fileName: material.name, asInstructor: true })}>{downloadingMaterialId === material.id ? '받는 중…' : '다운로드'}</button>}<MaterialStatusBadges material={material} audience="instructor" /><button type="button" aria-label={`${material.name} 제거`} onClick={() => void removeMaterial(material)}>×</button></li>)}</ul>
                 : null}
               {pendingMaterialCount > 0 && !processing && <p className="lesson-form__ai-warning">선택한 자료는 AI 준비를 완료해야 라이브에서 사용할 수 있습니다.</p>}
             </div>

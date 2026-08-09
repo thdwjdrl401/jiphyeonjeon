@@ -9,6 +9,8 @@ import {
 import { useAuth } from '@/features/auth/AuthContext'
 import { getLesson } from '@/features/lesson/lessonService'
 import { LESSON_MATERIALS_ANCHOR } from '@/features/lesson/lessonRouting'
+import MaterialStatusBadges from '@/features/material/MaterialStatusBadges'
+import { materialRefetchInterval } from '@/features/material/materialStatus'
 import HlsMediaPlayer, { type HlsMediaState } from '@/features/media/HlsMediaPlayer'
 import {
   RECORDED_PROCESSING_STAGES,
@@ -58,23 +60,6 @@ function playbackStateLabel(state: HlsMediaState) {
   return '플레이어 준비 중'
 }
 
-const ACTIVE_MATERIAL_STATUSES = new Set(['PENDING', 'PROCESSING'])
-
-function materialStatusTone(status: string) {
-  if (status === 'READY' || status === 'EMPTY' || status === 'NOT_REQUESTED') return 'success' as const
-  if (status === 'FAILED') return 'danger' as const
-  return 'warning' as const
-}
-
-function keyTermStatusLabel(status: string) {
-  if (status === 'READY') return '용어 준비 완료'
-  if (status === 'EMPTY') return '추출 용어 없음'
-  if (status === 'FAILED') return '용어 추출 실패'
-  if (status === 'NOT_REQUESTED') return '용어 추출 안 함'
-  if (status === 'PROCESSING') return '용어 추출 중'
-  return '용어 추출 대기'
-}
-
 export default function RecordedLessonDetailPage() {
   const { curriculumId = '', sectionId = '', lessonId = '' } = useParams()
   const { user } = useAuth()
@@ -92,13 +77,7 @@ export default function RecordedLessonDetailPage() {
       sectionId,
     }),
     enabled: Boolean(lessonId && curriculumId && sectionId),
-    refetchInterval: (query) => {
-      const materials = query.state.data?.materials ?? []
-      return materials.some((material) => (
-        ACTIVE_MATERIAL_STATUSES.has(material.embeddingStatus ?? material.status)
-        || ACTIVE_MATERIAL_STATUSES.has(material.keyTermStatus ?? 'NOT_REQUESTED')
-      )) ? 3_000 : false
-    },
+    refetchInterval: (query) => materialRefetchInterval(query.state.data?.materials),
     refetchIntervalInBackground: false,
   })
   const isRecordedLesson = lessonQuery.data?.deliveryType === 'RECORDED'
@@ -351,22 +330,13 @@ export default function RecordedLessonDetailPage() {
             <InlineNotice tone="info">등록된 PPTX 강의 자료가 없습니다.</InlineNotice>
           ) : (
             <ul className="material-list material-list--compact">
-              {lesson.materials.map((material) => {
-                const embeddingStatus = material.embeddingStatus ?? material.status
-                const keyTermStatus = material.keyTermStatus ?? 'NOT_REQUESTED'
-                return (
-                  <li key={material.id}>
-                    <span className="file-icon">PPTX</span>
-                    <div><strong>{material.name}</strong><small>{material.size}</small></div>
-                    <StatusBadge tone={materialStatusTone(embeddingStatus)}>
-                      임베딩 {embeddingStatus}
-                    </StatusBadge>
-                    <StatusBadge tone={materialStatusTone(keyTermStatus)}>
-                      {keyTermStatusLabel(keyTermStatus)}
-                    </StatusBadge>
-                  </li>
-                )
-              })}
+              {lesson.materials.map((material) => (
+                <li key={material.id}>
+                  <span className="file-icon">PPTX</span>
+                  <div><strong>{material.name}</strong><small>{material.size}</small></div>
+                  <MaterialStatusBadges material={material} audience="instructor" />
+                </li>
+              ))}
             </ul>
           )}
         </Panel>
