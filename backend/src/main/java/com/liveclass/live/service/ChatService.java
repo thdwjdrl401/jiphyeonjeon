@@ -66,11 +66,11 @@ public class ChatService {
     @Transactional
     public ChatMessage sendToSession(UUID sessionId, UUID senderId, String clientMessageId, String text,
                                      boolean isQuestion, boolean anonymousRequested) {
-        // 세션 상태 전이와 채팅 저장을 같은 행 잠금으로 직렬화한다. ENDED도 후속 토론을 위해 허용하고,
-        // 시작 전·취소·실패 상태만 저장 전에 거절한다.
+        // 세션 상태 전이와 채팅 저장을 같은 행 잠금으로 직렬화한다. 시작 전·취소·실패에 더해
+        // ENDED도 거절한다 — 녹화가 멈춘 뒤의 sessionMs는 영상 길이를 넘어 다시보기에서 보이지 않는다.
         LiveSession session = liveSessionRepository.findByIdForUpdate(sessionId)
                 .orElseThrow(() -> new LiveSessionNotFoundException("라이브 세션이 없습니다."));
-        interactionGuard.requireInteractionAllowed(session);
+        interactionGuard.requireChatAllowed(session);
         return sendIdempotent(session, session.getLessonId(), senderId, clientMessageId, text, isQuestion, anonymousRequested);
     }
 

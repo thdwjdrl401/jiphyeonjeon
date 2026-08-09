@@ -469,11 +469,18 @@ describe('전체 페이지 라우트', () => {
     expect(screen.getByRole('button', { name: '라이브 입장' })).toHaveFocus()
   })
 
-  it('ENDED가 돼도 종료 문구로 화면을 덮지 않고 채팅·AI 질문을 유지한다', async () => {
+  it('ENDED는 화면을 덮지 않고 채팅만 닫되 AI 질문은 유지한다', async () => {
     /*
-     * session.ended는 강사 송출이 끝났다는 뜻일 뿐이다(ADR-0005 §1). 학생은 Egress가 만든 HLS를
-     * 보므로 인코딩·버퍼 지연만큼 볼 것이 남아 있고, 이 시점에 "종료됐다"고 말하면 아직 보고 있는
-     * 사람에게 끝났다고 하는 셈이다. 종료 안내는 플레이어가 마지막 세그먼트를 소비했을 때 뜬다.
+     * 두 가지를 함께 지킨다.
+     *
+     * <p>①(ADR-0005 §1) session.ended는 강사 송출이 끝났다는 뜻일 뿐이다. 학생은 Egress가 만든
+     * HLS를 보므로 볼 것이 남아 있고, 이 시점에 "종료됐다"는 배너를 덮으면 아직 보고 있는 사람에게
+     * 끝났다고 하는 셈이다. 종료 안내는 플레이어가 마지막 세그먼트를 소비했을 때 뜬다.
+     *
+     * <p>② 채팅은 닫는다. 채팅은 sessionMs를 남기고 다시보기는 그 좌표로 재생 위치까지만 보여
+     * 주는데, 녹화가 멈춘 뒤에 쓴 글은 좌표가 영상 길이를 넘어 다시보기에서 영원히 보이지 않는다.
+     * 대신 <b>입력창을 지우지 않고 잠가</b> 왜 못 쓰는지가 보이게 한다. AI 질문은 시간축에 얹히지
+     * 않으므로 그대로 열려 있다.
      */
     const user = userEvent.setup()
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
@@ -481,15 +488,14 @@ describe('전체 페이지 라우트', () => {
 
     renderAt('/student/live-sessions/ses-security-live/classroom')
 
-    const chatInputEarly = await screen.findByLabelText('채팅 메시지')
-    expect(chatInputEarly).toBeEnabled()
+    const chatInput = await screen.findByLabelText('채팅 메시지')
     expect(screen.queryByText('라이브가 종료된 강의입니다.')).not.toBeInTheDocument()
     expect(screen.queryByText('강사가 수업을 종료하고 있습니다. 남은 영상을 재생 중입니다.')).not.toBeInTheDocument()
-    const chatInput = screen.getByLabelText('채팅 메시지')
-    expect(chatInput).toBeEnabled()
-    await user.type(chatInput, '종료 뒤에도 이어가는 질문')
-    await user.click(screen.getByRole('button', { name: '전송' }))
-    expect(await screen.findByText('종료 뒤에도 이어가는 질문')).toBeInTheDocument()
+
+    // 사라지지 않고 잠긴다 — 채팅이 원래 없는 화면인지 지금만 막힌 것인지 구별되어야 한다.
+    expect(chatInput).toBeDisabled()
+    expect(chatInput).toHaveAttribute('placeholder', '종료된 강의에는 채팅을 보낼 수 없습니다.')
+    expect(await screen.findByText(/수업이 끝나 채팅은 닫혔습니다/)).toBeInTheDocument()
 
     await user.click(screen.getByRole('tab', { name: 'AI 질문' }))
     expect(screen.getByRole('textbox', { name: 'AI에게 할 질문' })).toBeEnabled()

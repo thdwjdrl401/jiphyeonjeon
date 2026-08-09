@@ -10,6 +10,9 @@
 - **일자**: 2026-07-31
 - **적용 범위**: 종료된 세션의 기존 classroom, 채팅 REST·STOMP, 세션 기반 AI SSE, 학생 UI
 - **부분 대체**: ADR-0003의 “`ENDED`부터 채팅·AI 질문을 잠근다”는 상호작용 정책
+- **부분 개정됨**: [songjeongki/0113](../songjeongki/0113-post-end-chat-has-nowhere-to-land.md) —
+  **채팅**은 `ENDED`에서 다시 닫혔다(그때 쓴 글은 `sessionMs`가 영상 길이를 넘어 다시보기에서
+  보이지 않는다). **AI 질문 허용은 이 문서대로 유지된다.**
 - **후속 개정**: 학생 HLS·자막 종료 판단은 ADR-0005가 정본
 
 ## 맥락

@@ -215,7 +215,15 @@ class ChatContractTest {
     }
 
     @Test
-    void ending_and_ended_allow_chat_for_follow_up_discussion() throws Exception {
+    void ending_allows_chat_but_ended_rejects_it() throws Exception {
+        /*
+         * ENDING은 허용한다 — 녹화가 아직 돌고 있어 sessionMs가 영상 안에 들어간다.
+         *
+         * ENDED는 막는다. 채팅은 sessionMs를 남기고 다시보기는 그 좌표로 재생 위치까지의 채팅만
+         * 보여 주는데, 녹화가 멈춘 뒤에 쓴 글은 좌표가 영상 길이를 넘어 다시보기에서 영원히 보이지
+         * 않는다 — 그 강의실 URL에 남아 있는 사람에게만 보이는 글이 된다. 갈 곳이 없는 글은 받지
+         * 않는다(ADR-0004 개정). AI 질문은 시간축에 얹히지 않으므로 그대로 열려 있다.
+         */
         Cookie[] instructor = loginAs("INSTRUCTOR");
         String[] created = createStartedSession(instructor);
         Cookie[] student = loginAs("STUDENT");
@@ -230,14 +238,15 @@ class ChatContractTest {
 
         liveSessionRepository.findById(sessionId).orElseThrow().setStatus(LiveSessionStatus.ENDED);
         write(post("/api/live-sessions/" + sessionId + "/messages"), student, """
-                {"clientMessageId":"ended-ok","text":"종료 뒤 질문"}
+                {"clientMessageId":"ended-blocked","text":"종료 뒤 질문"}
                 """)
-                .andExpect(status().isCreated());
+                .andExpect(status().isConflict());
 
+        // 막힌 글은 저장도 되지 않는다 — 409를 주고 뒤에서 조용히 쌓이면 더 나쁘다.
         mockMvc.perform(get("/api/live-sessions/" + sessionId + "/messages").cookie(student))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(2))
-                .andExpect(jsonPath("$[1].text").value("종료 뒤 질문"));
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].text").value("남은 HLS 구간 질문"));
     }
 
     @Test

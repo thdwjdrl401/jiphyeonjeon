@@ -1,4 +1,5 @@
 import { demoLiveCaptions, demoMessages, getDemoLiveSession } from '@/features/demo/demoData'
+import { ApiError } from '@/shared/api/client'
 import { findMockLesson, findMockLiveSession } from '@/features/demo/mockDatabase'
 import type { CurriculumLiveSessionStatus } from '@/features/lesson/types'
 import {
@@ -293,6 +294,14 @@ export const mockLiveSessionService = {
     return chatOverrides.get(sessionId) ?? demoMessages
   },
   async sendChatMessage(_sessionId, input) {
+    /*
+     * 종료된 세션은 서버가 409로 막는다(LiveInteractionGuard.requireChatAllowed) — 목도 같아야
+     * 한다. 목만 받아 주면 화면 잠금이 풀린 채로 넘어가도 테스트가 통과해, 실서버에서만 깨진다.
+     */
+    const status = liveStatusOverrides.get(_sessionId) ?? getDemoLiveSession(_sessionId).status
+    if (status === 'ENDED') {
+      throw new ApiError('종료된 강의에는 채팅을 보낼 수 없습니다.', 409, 'LIVE_SESSION_STATE_CONFLICT')
+    }
     // 익명을 켜면 서버가 세션 한정 가명을 붙인다 — 데모도 같은 모양으로 흉내 낸다(ADR-0050·ADR-0023).
     return {
       id: `msg_${Date.now()}`,
