@@ -22,6 +22,8 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
+    // 임시 비밀번호 발송(비밀번호 찾기). SMTP 설정은 application.yml에서 env로 읽는다.
+    implementation 'org.springframework.boot:spring-boot-starter-mail'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
 
     // 쿠키 세션 저장소 = Redis (ADR-0014). Boot 4.x는 세션 오토컨피그가 전용 스타터에 있음

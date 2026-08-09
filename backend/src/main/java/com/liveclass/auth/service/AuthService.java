@@ -33,6 +33,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final AssetDirectory assetDirectory;
     private final List<AccountWithdrawalGuard> withdrawalGuards;
+    private final PasswordResetMailer passwordResetMailer;
 
     /**
      * 계정이 없을 때도 해싱 비용을 치르기 위한 미끼 해시.
@@ -45,12 +46,14 @@ public class AuthService {
                        InstructorProfileRepository instructorProfileRepository,
                        PasswordEncoder passwordEncoder,
                        AssetDirectory assetDirectory,
-                       List<AccountWithdrawalGuard> withdrawalGuards) {
+                       List<AccountWithdrawalGuard> withdrawalGuards,
+                       PasswordResetMailer passwordResetMailer) {
         this.appUserRepository = appUserRepository;
         this.instructorProfileRepository = instructorProfileRepository;
         this.passwordEncoder = passwordEncoder;
         this.assetDirectory = assetDirectory;
         this.withdrawalGuards = withdrawalGuards;
+        this.passwordResetMailer = passwordResetMailer;
         this.decoyHash = passwordEncoder.encode("decoy-password-that-never-matches");
     }
 
@@ -197,7 +200,38 @@ public class AuthService {
             throw new PasswordMismatchException("현재 비밀번호가 일치하지 않습니다.");
         }
         user.setPasswordHash(passwordEncoder.encode(newPassword));
+        // 임시 비밀번호로 들어왔다면 여기서 풀린다 — 이 한 줄이 없으면 바꾸고도 계속 갇힌다.
+        user.setMustChangePassword(false);
         log.info(Audit.MARKER, "비밀번호 변경 userId={}", userId);
+    }
+
+    /**
+     * 비밀번호 찾기. 임시 비밀번호를 만들어 계정에 걸고 메일로 보낸다.
+     *
+     * <p><b>계정이 있는지 알려 주지 않는다.</b> 없는 이메일이면 아무 일도 하지 않고 조용히 끝낸다 —
+     * "그런 계정 없음"을 돌려주면 이 경로가 가입 여부를 확인하는 도구가 된다. 탈퇴·정지 계정도 같다.
+     *
+     * <p><b>메일 발송 실패는 되돌린다.</b> 비밀번호는 바꿔 놓고 메일만 실패하면 사용자는 예전
+     * 비밀번호로도, 받지 못한 임시 비밀번호로도 못 들어간다 — 스스로 복구할 방법이 없는 상태다.
+     * 예외를 그대로 올려 트랜잭션을 되돌리고, 사용자에게는 다시 시도해 달라고 답한다.
+     *
+     * <p>임시 비밀번호는 <b>로그에 남기지 않는다.</b> 그 값 자체가 계정을 여는 열쇠다.
+     */
+    @Transactional
+    public void issueTemporaryPassword(String email) {
+        String normalized = email.trim().toLowerCase(Locale.ROOT);
+        AppUser user = appUserRepository.findByEmail(normalized).orElse(null);
+        if (user == null || user.getStatus() != AccountStatus.ACTIVE) {
+            log.info(Audit.MARKER, "임시 비밀번호 요청 — 대상 없음(응답은 동일)");
+            return;
+        }
+
+        String temporaryPassword = TemporaryPassword.generate();
+        user.setPasswordHash(passwordEncoder.encode(temporaryPassword));
+        user.setMustChangePassword(true);
+        // 발송이 실패하면 예외가 올라가 위 변경까지 함께 되돌아간다.
+        passwordResetMailer.sendTemporaryPassword(user.getEmail(), temporaryPassword);
+        log.info(Audit.MARKER, "임시 비밀번호 발급 userId={}", user.getId());
     }
 
     /**

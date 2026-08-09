@@ -41,6 +41,8 @@ public class SecurityConfig {
                         // 로그인 전에 부를 수 있어야 하는 것들 — csrf가 막히면 로그인 자체가 불가능하다.
                         .requestMatchers(HttpMethod.GET, "/api/auth/csrf", "/api/auth/email-availability").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/signup", "/api/auth/login", "/api/auth/logout").permitAll()
+                        // 비밀번호를 잊은 사람은 로그인할 수 없다 — 이 경로만은 인증 없이 열려야 한다.
+                        .requestMatchers(HttpMethod.POST, "/api/auth/password-reset").permitAll()
                         // LiveKit egress webhook — 로그인 세션이 아니라 JWT 서명으로 인증한다(컨트롤러가 검증).
                         .requestMatchers(HttpMethod.POST, "/api/webhooks/livekit").permitAll()
                         // AI 워커 콜백·자료 URL 발급 — 로그인 세션 아니라 HMAC 서명으로 인증한다(AiCallbackVerifier). ADR-0036.

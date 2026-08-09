@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { instructorPaths, studentPaths } from './paths'
 import ScrollToTop from './ScrollToTop'
 import GuestOnlyRoute from '@/features/auth/GuestOnlyRoute'
+import RequirePasswordChangeRoute from '@/features/auth/RequirePasswordChangeRoute'
 import RequireAdminRoute from '@/features/auth/RequireAdminRoute'
 import RequireRoleRoute from '@/features/auth/RequireRoleRoute'
 import RequireStudentPrejoinRoute from '@/features/live-session/RequireStudentPrejoinRoute'
@@ -28,7 +29,7 @@ import LoginPage from '@/pages/LoginPage'
 import MyCurriculumsPage from '@/pages/MyCurriculumsPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 import NotificationsPage from '@/pages/NotificationsPage'
-import PasswordResetConfirmPage from '@/pages/PasswordResetConfirmPage'
+import PasswordChangeRequiredPage from '@/pages/PasswordChangeRequiredPage'
 import PasswordResetRequestPage from '@/pages/PasswordResetRequestPage'
 import ProfilePage from '@/pages/ProfilePage'
 import ReplayLessonPage from '@/pages/ReplayLessonPage'
@@ -49,6 +50,12 @@ export default function AppRouter() {
       {/* 라우트 이동 시 스크롤 초기화. 라우팅 계층에 한 번만 둔다(페이지별 중복 구현 금지). */}
       <ScrollToTop />
       <Routes>
+        {/*
+          임시 비밀번호로 들어온 사람은 이 화면 말고 어디도 갈 수 없다(RequirePasswordChangeRoute).
+          그 가드가 이리로 보내므로 이 경로 자체는 가드 밖에 둔다 — 안에 두면 서로를 가리킨다.
+        */}
+        <Route path="password-change-required" element={<PasswordChangeRequiredPage />} />
+        <Route element={<RequirePasswordChangeRoute />}>
         <Route element={<PublicLayout />}>
           <Route index element={<WelcomePage />} />
           <Route path="curriculums" element={<CurriculumListPage />} />
@@ -63,7 +70,6 @@ export default function AppRouter() {
             와야 한다. 게스트 전용으로 묶으면 그 링크가 홈으로 튕긴다.
           */}
           <Route path="password-reset" element={<PasswordResetRequestPage />} />
-          <Route path="password-reset/confirm" element={<PasswordResetConfirmPage />} />
           {import.meta.env.DEV && (
             <Route path="preview/browser-push-prompt" element={<BrowserPushPromptPreviewPage />} />
           )}
@@ -142,6 +148,7 @@ export default function AppRouter() {
         <Route path="notifications" element={<NotificationsRedirect />} />
         <Route path="forbidden" element={<ForbiddenPage />} />
         <Route path="*" element={<NotFoundPage />} />
+        </Route>
       </Routes>
     </>
   )

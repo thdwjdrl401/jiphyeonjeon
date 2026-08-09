@@ -38,16 +38,10 @@ export const httpAuthService = {
   // 엔드포인트가 없는 동안의 404/405를 "준비 중"으로 번역해, 사용자가 자기 입력을 의심하지
   // 않게 한다. 이 저장소의 선례와 같은 방식이다(ADR-0030).
   async requestPasswordReset(email) {
+    // 계정 유무는 서버도 화면도 말하지 않는다. 여기서 오는 오류는 서버가 없거나 메일 발송이
+    // 실패했을 때뿐이다(502 MAIL_DELIVERY_FAILED — 그때는 비밀번호도 바뀌지 않았다).
     try {
       await apiClient.post('/auth/password-reset', { email })
-    } catch (error) {
-      throw translateMissingEndpoint(error)
-    }
-    return {}
-  },
-  async confirmPasswordReset(request) {
-    try {
-      await apiClient.post('/auth/password-reset/confirm', request)
     } catch (error) {
       throw translateMissingEndpoint(error)
     }
