@@ -77,7 +77,13 @@ export function materialRefetchInterval(
 export type MaterialBadgeTone = 'neutral' | 'success' | 'warning' | 'danger'
 
 export interface MaterialBadge {
+  /**
+   * 배지에 찍히는 글자. <b>짧게 유지한다</b> — 자료 목록의 행은 파일명·다운로드·제거 버튼과 자리를
+   * 나눠 쓰는 좁은 줄이고, 배지가 두 개 붙는 경우도 있다. 길어지면 파일명을 밀어내고 행이 무너진다.
+   */
   label: string
+  /** 짧은 라벨이 못 담는 뜻. 마우스를 올리면 보인다. */
+  title: string
   tone: MaterialBadgeTone
   /** 스피너를 돌릴지. 사용자가 기다리면 되는 구간에만 켠다. */
   busy: boolean
@@ -96,30 +102,50 @@ export interface MaterialBadge {
 function embeddingBadge(state: MaterialWorkState): MaterialBadge {
   switch (state) {
     case UPLOAD_PENDING:
-      return { label: '업로드 대기', tone: 'warning', busy: false }
+      return {
+        label: '저장 대기',
+        title: '아직 올리지 않은 파일입니다. 저장하면 업로드와 AI 읽기가 함께 시작됩니다.',
+        tone: 'warning', busy: false,
+      }
     case 'PENDING':
-      return { label: 'AI 읽기 대기', tone: 'warning', busy: true }
+      return {
+        label: '읽기 대기',
+        title: 'AI가 곧 이 자료를 읽습니다.',
+        tone: 'warning', busy: true,
+      }
     case 'PROCESSING':
-      return { label: 'AI가 읽는 중', tone: 'warning', busy: true }
+      return {
+        label: '읽는 중',
+        title: 'AI가 이 자료를 읽고 있습니다. 끝나면 답변에 인용됩니다.',
+        tone: 'warning', busy: true,
+      }
     case 'FAILED':
-      return { label: 'AI가 읽지 못함', tone: 'danger', busy: false }
+      return {
+        label: '읽기 실패',
+        title: 'AI가 이 자료를 읽지 못했습니다. 답변에 인용되지 않습니다.',
+        tone: 'danger', busy: false,
+      }
     default:
-      return { label: 'AI 답변에 사용', tone: 'success', busy: false }
+      return {
+        label: 'AI 반영됨',
+        title: 'AI 답변이 이 자료를 인용할 수 있습니다.',
+        tone: 'success', busy: false,
+      }
   }
 }
 
 function keyTermBadge(status: string): MaterialBadge | null {
   switch (status) {
     case 'PENDING':
-      return { label: '용어 추출 대기', tone: 'warning', busy: true }
+      return { label: '용어 대기', title: '핵심 용어 추출을 기다리고 있습니다.', tone: 'warning', busy: true }
     case 'PROCESSING':
-      return { label: '용어 추출 중', tone: 'warning', busy: true }
+      return { label: '용어 추출', title: 'PPTX에서 핵심 용어를 뽑고 있습니다.', tone: 'warning', busy: true }
     case 'READY':
-      return { label: '용어 준비 완료', tone: 'success', busy: false }
+      return { label: '용어 완료', title: '핵심 용어를 뽑았습니다. 용어집에서 확인·수정할 수 있습니다.', tone: 'success', busy: false }
     case 'EMPTY':
-      return { label: '추출 용어 없음', tone: 'neutral', busy: false }
+      return { label: '용어 없음', title: '뽑을 만한 핵심 용어가 없었습니다.', tone: 'neutral', busy: false }
     case 'FAILED':
-      return { label: '용어 추출 실패', tone: 'danger', busy: false }
+      return { label: '용어 실패', title: '핵심 용어를 뽑지 못했습니다. 용어집에 직접 추가할 수 있습니다.', tone: 'danger', busy: false }
     default:
       // NOT_REQUESTED. 배지를 만들지 않는다 — 요청한 적 없는 작업의 "안 함"은 정보가 아니라 소음이다.
       return null
@@ -149,6 +175,8 @@ export function instructorMaterialBadges(material: MaterialStatusSource): Materi
 export function studentMaterialBadge(material: MaterialStatusSource): MaterialBadge | null {
   const state = materialEmbeddingState(material)
   if (state === 'READY') return null
-  if (state === 'FAILED') return { label: 'AI가 읽지 못한 자료', tone: 'neutral', busy: false }
-  return { label: 'AI가 읽는 중', tone: 'warning', busy: true }
+  if (state === 'FAILED') {
+    return { label: '미반영', title: '이 자료는 AI 답변에 인용되지 않습니다.', tone: 'neutral', busy: false }
+  }
+  return { label: '준비 중', title: 'AI가 이 자료를 읽고 있습니다.', tone: 'warning', busy: true }
 }

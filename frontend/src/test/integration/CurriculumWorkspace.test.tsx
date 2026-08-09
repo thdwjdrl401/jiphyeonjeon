@@ -312,7 +312,7 @@ describe('커리큘럼 작업 화면', () => {
     fireEvent.drop(materialDropzone!, { dataTransfer: { files: [material] } })
     expect(screen.getByText('curriculum-guide.pptx')).toBeInTheDocument()
     // 아직 서버에 없는 선택이다. 저장해야 업로드·임베딩이 시작된다.
-    expect(screen.getByText('업로드 대기')).toBeInTheDocument()
+    expect(screen.getByText('저장 대기')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '초안 만들기' }))
 
     // 공개 상세를 거치지 않고 관리 화면으로 직행한다.

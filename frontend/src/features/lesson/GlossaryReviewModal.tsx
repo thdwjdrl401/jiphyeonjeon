@@ -186,15 +186,22 @@ export default function GlossaryReviewModal({ lessonId, lessonTitle, onClose }: 
                       ) : (
                         <div className="glossary-review-row__view">
                           <p>{term.definition}</p>
-                          <button className="text-button" type="button" onClick={() => startEdit(term)}>수정</button>
-                          <button
-                            className="text-button text-button--danger"
-                            disabled={deleteMutation.isPending}
-                            type="button"
-                            onClick={() => deleteMutation.mutate(term.termId)}
-                          >
-                            삭제
-                          </button>
+                          {/*
+                            두 버튼을 한 묶음으로 싼다. 예전엔 정의문과 형제로 나란히 두고
+                            justify-content: space-between으로 밀었는데, 남는 자리가 정의문 길이에
+                            따라 달라져 행마다 "수정"의 x좌표가 들쭉날쭉했다.
+                          */}
+                          <div className="glossary-review-row__actions">
+                            <button className="text-button" type="button" onClick={() => startEdit(term)}>수정</button>
+                            <button
+                              className="text-button text-button--danger"
+                              disabled={deleteMutation.isPending}
+                              type="button"
+                              onClick={() => deleteMutation.mutate(term.termId)}
+                            >
+                              삭제
+                            </button>
+                          </div>
                         </div>
                       )}
                     </li>
