@@ -260,7 +260,22 @@ export default function LessonDetailPage() {
           action={<StatusBadge>{lesson.materials.length}개</StatusBadge>}
         >
           {lesson.materials.length > 0
-            ? <ul className="material-list material-list--compact">{lesson.materials.map((material) => <li key={material.id}><span className="file-icon">PPTX</span><div><strong>{material.name}</strong><small>{material.size}</small></div><MaterialStatusBadges material={material} audience={isInstructor ? 'instructor' : 'student'} /><button className="text-button" type="button" disabled={downloadingMaterialId === material.id} aria-label={`${material.name} 다운로드`} onClick={() => void downloadMaterial(materialDownloadRequest(material))}>{downloadingMaterialId === material.id ? '받는 중…' : '다운로드'}</button></li>)}</ul>
+            ? <ul className="material-list material-list--compact">{lesson.materials.map((material) => <li key={material.id}>
+                <span className="file-icon">PPTX</span>
+                {/*
+                  상태 배지를 이름 위에 모아 둔다. 이름 오른쪽에 두면 이름이 길수록 배지가 밀려
+                  행마다 다른 자리에 서고, 좁아지면 통째로 다음 줄로 내려가 아래에 흩어졌다.
+                  여기서는 늘 같은 자리(왼쪽 맨 위)에서 시작하고 자기들끼리만 줄바꿈한다.
+                */}
+                <div>
+                  <span className="lesson-detail__material-badges">
+                    <MaterialStatusBadges material={material} audience={isInstructor ? 'instructor' : 'student'} />
+                  </span>
+                  <strong>{material.name}</strong>
+                  <small>{material.size}</small>
+                </div>
+                <button className="text-button" type="button" disabled={downloadingMaterialId === material.id} aria-label={`${material.name} 다운로드`} onClick={() => void downloadMaterial(materialDownloadRequest(material))}>{downloadingMaterialId === material.id ? '받는 중…' : '다운로드'}</button>
+              </li>)}</ul>
             : <p className="lesson-detail__material-empty">등록된 강의 자료가 없습니다.</p>}
           {/* 자료 목록과 별개의 flex 자식이라 목록 스크롤과 무관하게 항상 패널 하단에 고정된다. */}
           {isInstructor && (
