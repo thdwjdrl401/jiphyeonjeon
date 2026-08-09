@@ -24,4 +24,14 @@ public interface LessonLearningAccess {
      * 하면 안 되지만, 재시청 그래프는 강사가 보라고 만든 것이다. 같은 게이트를 쓰면 정작 볼 사람이 막힌다.
      */
     void ensureCanViewInsights(UUID userId, UUID lessonId);
+
+    /**
+     * 이 강의가 속한 커리큘럼. 용어집이 <b>커리큘럼 종속 자료</b>까지 모으려면 그 범위를 알아야 한다
+     * (ADR-0045: 커리큘럼 자료는 {@code lesson_id IS NULL}로 표현되므로 강의로는 찾을 수 없다).
+     *
+     * <p>레슨→섹션→커리큘럼 관계는 curriculum 쪽 지식이라 여기서 묻는다 — 위 두 검사와 같은 이유다.
+     *
+     * @throws LessonNotLearnableException 강의가 없으면
+     */
+    UUID curriculumIdOf(UUID lessonId);
 }
