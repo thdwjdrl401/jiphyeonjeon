@@ -127,11 +127,11 @@ async def _insert_chunk(
         )
 
 
-def test_real_postgres_shares_active_chunks_across_lessons_in_the_same_curriculum(
+def test_real_postgres_keeps_a_lesson_material_inside_its_own_lesson(
     integration_database: IntegrationDatabase,
 ) -> None:
-    """ADR-0007: search is scoped by curriculum_id, so a sibling lesson's active material is
-    included, while a different curriculum's material (even if ACTIVE) is excluded."""
+    """자료는 붙은 자리를 벗어나지 않는다: 옆 강의의 ACTIVE 자료도, 다른 커리큘럼의 자료도 나오면
+    안 된다. RETIRED도 제외된다. 커리큘럼 종속 자료만 강의를 넘어 공유된다(아래 테스트)."""
 
     async def scenario() -> None:
         engine = create_async_engine(integration_database.database_url)
@@ -193,12 +193,15 @@ def test_real_postgres_shares_active_chunks_across_lessons_in_the_same_curriculu
             )
             hits = await service.retrieve(
                 curriculum_id=curriculum_id,
+                lesson_id=lesson_id,
                 query_text="target",
                 top_k=10,
             )
 
-            assert {hit.material_id for hit in hits} == {active_material_id, sibling_material_id}
+            # 옆 강의(sibling_material_id)는 같은 커리큘럼이어도 빠진다 — 예전에는 들어왔다.
+            assert {hit.material_id for hit in hits} == {active_material_id}
             assert all(hit.curriculum_id == curriculum_id for hit in hits)
+            assert all(hit.lesson_id == lesson_id for hit in hits)
         finally:
             await engine.dispose()
 
@@ -208,9 +211,8 @@ def test_real_postgres_shares_active_chunks_across_lessons_in_the_same_curriculu
 def test_curriculum_scoped_material_with_no_lesson_is_searchable(
     integration_database: IntegrationDatabase,
 ) -> None:
-    """Curriculum materials have lesson_id NULL (docs/ai/CONTRACT.md §9). Search already scopes
-    by curriculum_id alone (ADR-0007), so they must come back — and the row mapper must not
-    treat the NULL as corruption."""
+    """커리큘럼 종속 자료는 lesson_id가 NULL이다(docs/ai/CONTRACT.md §9). 어느 강의에서 물어도
+    나와야 하고, 행 매퍼가 그 NULL을 손상으로 다루면 안 된다."""
 
     async def scenario() -> None:
         engine = create_async_engine(integration_database.database_url)
@@ -249,7 +251,11 @@ def test_curriculum_scoped_material_with_no_lesson_is_searchable(
                 ),
             )
             hits = await service.retrieve(
-                curriculum_id=curriculum_id, query_text="target", top_k=10
+                curriculum_id=curriculum_id,
+                # 이 커리큘럼의 <b>아무 강의</b>. 커리큘럼 종속 자료는 강의를 가리지 않는다.
+                lesson_id=uuid4(),
+                query_text="target",
+                top_k=10,
             )
 
             assert [hit.material_id for hit in hits] == [curriculum_material_id]

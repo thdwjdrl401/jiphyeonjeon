@@ -105,6 +105,8 @@ def test_combines_pptx_top_k_with_single_merged_caption_source() -> None:
     assert result.sufficient is True
     assert materials.call == {
         "curriculum_id": CURRICULUM_ID,
+        # 묻는 강의를 함께 넘긴다 — 강의 자료가 그 강의 밖으로 나가지 않게 하는 근거다.
+        "lesson_id": LESSON_ID,
         "query_text": "여기서 말한 consumer group이 뭐야?",
         "top_k": 3,
     }

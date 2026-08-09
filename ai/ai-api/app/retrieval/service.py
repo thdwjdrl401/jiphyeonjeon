@@ -21,6 +21,7 @@ class ActiveMaterialSearchPort(Protocol):
         self,
         *,
         curriculum_id: UUID,
+        lesson_id: UUID,
         query_text: str,
         query_embedding: Sequence[float],
         top_k: int,
@@ -40,11 +41,15 @@ class ActiveMaterialRetrievalService:
         self,
         *,
         curriculum_id: UUID,
+        lesson_id: UUID,
         query_text: str,
         top_k: int = 5,
     ) -> tuple[MaterialChunkHit, ...]:
+        """자료를 찾는다. <b>묻는 강의를 반드시 받는다</b> — 강의 자료는 그 강의 밖으로 나가면 안 된다."""
         if not isinstance(curriculum_id, UUID):
             raise TypeError("curriculum_id must be a UUID")
+        if not isinstance(lesson_id, UUID):
+            raise TypeError("lesson_id must be a UUID")
         normalized_query = query_text.strip()
         if not normalized_query:
             raise ValueError("query_text must contain non-whitespace text")
@@ -54,6 +59,7 @@ class ActiveMaterialRetrievalService:
         query_embedding = _normalize_embedding(await self._embedding.embed_query(normalized_query))
         return await self._repository.search_active(
             curriculum_id=curriculum_id,
+            lesson_id=lesson_id,
             query_text=normalized_query,
             query_embedding=query_embedding,
             top_k=top_k,

@@ -28,6 +28,7 @@ class MaterialRetrievalPort(Protocol):
         self,
         *,
         curriculum_id: UUID,
+        lesson_id: UUID,
         query_text: str,
         top_k: int,
     ) -> tuple[MaterialChunkHit, ...]: ...
@@ -204,6 +205,7 @@ class CombinedEvidenceRetriever:
     ) -> tuple[Sequence[MaterialChunkHit], Sequence[AnnotationHighlightHit]]:
         material_search = self._materials.retrieve(
             curriculum_id=request.curriculumId,
+            lesson_id=request.lessonId,
             query_text=request.question,
             top_k=self._material_top_k,
         )
@@ -359,6 +361,7 @@ class ReplayEvidenceRetriever:
     ) -> tuple[Sequence[MaterialChunkHit], Sequence[AnnotationHighlightHit]]:
         material_search = self._materials.retrieve(
             curriculum_id=request.curriculumId,
+            lesson_id=request.lessonId,
             query_text=request.question,
             top_k=self._material_top_k,
         )

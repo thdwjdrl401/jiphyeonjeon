@@ -93,18 +93,26 @@ def _hit(lesson_id: UUID, curriculum_id: UUID, material_id: UUID) -> MaterialChu
 
 def test_service_normalizes_query_embedding_before_scoped_search() -> None:
     curriculum_id = uuid4()
-    expected_hit = _hit(uuid4(), curriculum_id, uuid4())
+    lesson_id = uuid4()
+    expected_hit = _hit(lesson_id, curriculum_id, uuid4())
     embedding = FakeEmbedding([3.0, 4.0, *([0.0] * 1022)])
     repository = FakeRepository((expected_hit,))
     service = ActiveMaterialRetrievalService(embedding, repository)
 
     result = asyncio.run(
-        service.retrieve(curriculum_id=curriculum_id, query_text="  vector query  ", top_k=7)
+        service.retrieve(
+            curriculum_id=curriculum_id,
+            lesson_id=lesson_id,
+            query_text="  vector query  ",
+            top_k=7,
+        )
     )
 
     assert result == (expected_hit,)
     assert embedding.observed_text == "vector query"
     assert repository.call is not None
+    # 강의를 저장소까지 넘긴다 — 여기서 떨어뜨리면 SQL 조건이 있어도 소용이 없다.
+    assert repository.call["lesson_id"] == lesson_id
     assert repository.call["curriculum_id"] == curriculum_id
     assert repository.call["query_text"] == "vector query"
     observed_vector = repository.call["query_embedding"]
@@ -125,7 +133,9 @@ def test_service_rejects_invalid_query_embedding(vector, error: str) -> None:
     service = ActiveMaterialRetrievalService(FakeEmbedding(vector), FakeRepository())
 
     with pytest.raises(ValueError, match=error):
-        asyncio.run(service.retrieve(curriculum_id=uuid4(), query_text="question"))
+        asyncio.run(
+            service.retrieve(curriculum_id=uuid4(), lesson_id=uuid4(), query_text="question")
+        )
 
 
 def test_repository_sql_enforces_role_active_curriculum_scope_and_maps_hits() -> None:
@@ -158,6 +168,7 @@ def test_repository_sql_enforces_role_active_curriculum_scope_and_maps_hits() ->
     hits = asyncio.run(
         repository.search_active(
             curriculum_id=curriculum_id,
+            lesson_id=lesson_id,
             query_text="active query",
             query_embedding=[1.0, *([0.0] * 1023)],
             top_k=5,
@@ -172,6 +183,8 @@ def test_repository_sql_enforces_role_active_curriculum_scope_and_maps_hits() ->
     assert "JOIN ai.chunk_embedding ce ON ce.chunk_id = dc.id" in compact_sql
     assert "mv.curriculum_id = CAST(:curriculum_id AS uuid)" in compact_sql
     assert "mv.state = 'ACTIVE'" in compact_sql
+    # 자료가 붙은 자리를 벗어나지 않게 하는 조건. 이 줄이 빠지면 옆 강의 자료가 근거로 샌다.
+    assert "(mv.lesson_id IS NULL OR mv.lesson_id = CAST(:lesson_id AS uuid))" in compact_sql
     assert "1.0 / (60.0 + vector_rank)" in compact_sql
     assert parameters is not None
     assert parameters["curriculum_id"] == str(curriculum_id)
