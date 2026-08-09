@@ -58,7 +58,7 @@ class Materials:
     def __init__(self, hits: tuple[MaterialChunkHit, ...] = ()) -> None:
         self.hits = hits
 
-    async def retrieve(self, *, curriculum_id, query_text, top_k):
+    async def retrieve(self, *, curriculum_id, lesson_id, query_text, top_k):
         return self.hits
 
 

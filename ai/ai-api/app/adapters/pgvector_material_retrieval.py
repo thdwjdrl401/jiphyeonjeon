@@ -33,6 +33,11 @@ WITH scoped AS (
   JOIN ai.chunk_embedding ce ON ce.chunk_id = dc.id
   WHERE mv.curriculum_id = CAST(:curriculum_id AS uuid)
     AND mv.state = 'ACTIVE'
+    -- 자료의 범위를 그대로 지킨다. 커리큘럼 자료(lesson_id IS NULL)는 그 커리큘럼의 모든 강의가
+    -- 함께 쓰고, 강의 자료는 그 강의에서만 쓴다. 이 줄이 없으면 1강에서 물어본 질문에 7강 자료가
+    -- 근거로 올라온다 — 답이 엉뚱해질 뿐 아니라, 같은 파일이 여러 강의에 붙어 있으면 똑같은 문단이
+    -- 사본 수만큼 근거로 중복된다(운영에서 한 커리큘럼에 같은 pptx가 15개 붙어 있었다).
+    AND (mv.lesson_id IS NULL OR mv.lesson_id = CAST(:lesson_id AS uuid))
 ),
 scored AS (
   SELECT
@@ -108,12 +113,15 @@ class PgvectorActiveMaterialRepository:
         self,
         *,
         curriculum_id: UUID,
+        lesson_id: UUID,
         query_text: str,
         query_embedding: Sequence[float],
         top_k: int,
     ) -> tuple[MaterialChunkHit, ...]:
         if not isinstance(curriculum_id, UUID):
             raise TypeError("curriculum_id must be a UUID")
+        if not isinstance(lesson_id, UUID):
+            raise TypeError("lesson_id must be a UUID")
         normalized_query = query_text.strip()
         if not normalized_query:
             raise ValueError("query_text must contain non-whitespace text")
@@ -122,6 +130,7 @@ class PgvectorActiveMaterialRepository:
 
         parameters: dict[str, object] = {
             "curriculum_id": str(curriculum_id),
+            "lesson_id": str(lesson_id),
             "query_text": normalized_query,
             "query_embedding": _vector_literal(query_embedding),
             "top_k": top_k,

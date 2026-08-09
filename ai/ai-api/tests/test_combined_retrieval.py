@@ -117,6 +117,8 @@ def test_combines_scoped_material_and_bounded_latest_attempt_caption() -> None:
     assert result.sufficient is True
     assert materials.call == {
         "curriculum_id": CURRICULUM_ID,
+        # 묻는 강의를 함께 넘긴다 — 강의 자료가 그 강의 밖으로 나가지 않게 하는 근거다.
+        "lesson_id": LESSON_ID,
         "query_text": "방금 설명한 개념은 무엇인가요?",
         "top_k": 8,
     }

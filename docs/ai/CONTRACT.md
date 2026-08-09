@@ -422,10 +422,16 @@ Spring realtime-agent health proxy client는 아직 없다. 따라서 prod `/int
 
 자료(PPTX)는 두 수준에 종속된다.
 
-- **커리큘럼 종속 자료**: 커리큘럼 전체에서 **항상** 참조(RAG 검색에 상시 포함).
-- **강의(레슨) 종속 자료**: 해당 강의 문맥에서 **추가로** 참조.
+- **커리큘럼 종속 자료**(`lesson_id IS NULL`): 커리큘럼 전체에서 **항상** 참조(RAG 검색에 상시 포함).
+- **강의(레슨) 종속 자료**: **그 강의에서만** 참조. 옆 강의로 넘어가지 않는다.
 
-즉 강의 문맥의 RAG 질의 결과 = `커리큘럼 종속(항상) + 그 강의 종속(추가)`.
+즉 강의 문맥의 RAG 질의 결과 = `커리큘럼 종속(항상) + 그 강의 종속(그 강의만)`.
+
+> 검색 SQL이 이 문장을 그대로 옮긴다 —
+> `AND (mv.lesson_id IS NULL OR mv.lesson_id = :lesson_id)`.
+> 2026-08-10까지는 `curriculum_id`로만 걸러 **레슨 종속 자료가 옆 강의로 새고 있었다**
+> ([songjeongki/ADR-0112](../decisions/songjeongki/0112-material-search-respects-the-scope-it-was-attached-to.md)).
+> 그래서 `RagAnswerRequest.lessonId`는 검색에 **실제로 쓰이는** 필드다(예전에는 받기만 했다).
 
 ### 9.1 인제스천 잡 (Spring→ai-worker, `ingestion.embed`)
 

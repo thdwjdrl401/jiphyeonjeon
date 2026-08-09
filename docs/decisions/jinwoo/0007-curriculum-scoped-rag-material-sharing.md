@@ -1,6 +1,12 @@
 # ADR-0007: RAG PPTX 자료 검색 범위를 lesson에서 curriculum으로 확장
 
-- **상태**: 채택
+- **상태**: 채택 — **부분 대체됨**(→ [songjeongki/ADR-0112](../songjeongki/0112-material-search-respects-the-scope-it-was-attached-to.md))
+
+> ⚠️ **2026-08-10 부분 대체**: "A 세션 자료를 B 세션에서도 근거로 쓴다"는 요구는 되돌렸다. 그 사이
+> [ADR-0045](../canola/0045-curriculum-scoped-material-indexing.md)로 **커리큘럼 종속 자료**가 생겨,
+> 강의를 가로질러 공유할 자료는 커리큘럼에 붙이는 것으로 표현하게 됐기 때문이다. 검색은 이제
+> `curriculum_id` + `(lesson_id IS NULL OR lesson_id = :lesson_id)`로 거른다.
+> `curriculumId`를 요청에 싣기로 한 이 ADR의 나머지 결정은 그대로 유효하다.
 - **일자**: 2026-07-30
 - **관련**: `ai/ai-api/app/rag/models.py`, `ai/ai-api/app/rag/service.py`,
   `ai/ai-api/app/rag/retrieval.py`, `ai/ai-api/app/retrieval/`,
