@@ -82,6 +82,20 @@ class RecordedLessonUploadContractTest {
                 .thenReturn("http://fake-minio/source-download.mp4");
     }
 
+    /**
+     * 스위치가 둘 다 열린 환경에서는 화면을 잠그지 않는다. 닫힌 쪽은
+     * {@code RecordedSttRequiredContractTest}가 본다.
+     */
+    @Test
+    void capabilities_report_both_switches_open() throws Exception {
+        Cookie[] instructor = loginAs("INSTRUCTOR");
+
+        mockMvc.perform(get("/api/instructor/recorded-lessons/capabilities").cookie(instructor))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.videoUploadEnabled").value(true))
+                .andExpect(jsonPath("$.captionGenerationEnabled").value(true));
+    }
+
     @Test
     void creates_uploads_and_commits_transcode_job() throws Exception {
         Cookie[] instructor = loginAs("INSTRUCTOR");

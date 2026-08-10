@@ -500,6 +500,65 @@ describe('커리큘럼 작업 화면', () => {
     expect(screen.getByText('녹화강의를 업로드했습니다. 영상 처리가 완료되면 재생할 수 있습니다.')).toBeInTheDocument()
   })
 
+  /**
+   * 자막 스위치가 닫혀 있으면 <b>폼을 열 때</b> 알리고 제출을 잠근다.
+   *
+   * <p>예전에는 다 채우고 제출한 뒤에야 503으로 막혔다. 그 시점에는 업로드 흐름의 ①레슨 생성이
+   * 이미 끝난 뒤라, 영상 없는 강의가 커리큘럼에 남았다 — 시도할 때마다 하나씩.
+   */
+  it('자막 스위치가 닫혀 있으면 업로드 화면이 이유를 알리고 제출을 잠근다', async () => {
+    vi.spyOn(mockCurriculumManagementService, 'getRecordedVideoCapabilities')
+      .mockResolvedValue({ videoUploadEnabled: true, captionGenerationEnabled: false })
+    const upload = vi.spyOn(mockCurriculumManagementService, 'uploadRecordedLesson')
+    const user = userEvent.setup()
+    await renderAsInstructor(
+      '/instructor/curriculums/cur-spring-live/sections/sec-foundation/recorded-lessons/new',
+    )
+
+    expect(await screen.findByText('지금은 녹화강의를 업로드할 수 없습니다.')).toBeInTheDocument()
+    expect(screen.getByText(/외부 STT API를 호출해 만듭니다/)).toBeInTheDocument()
+    expect(screen.getByText(/쓴 만큼 요금이 붙어 지금은 잠가 두었습니다/)).toBeInTheDocument()
+    // 자동 처리 설명이 "자막을 생성합니다"로 남아 있으면 안내와 화면이 서로 다른 말을 한다.
+    expect(screen.getByText('외부 유료 STT API를 쓰는 경로라 지금은 잠겨 있습니다.')).toBeInTheDocument()
+
+    // 제목·영상이 다 갖춰져도 잠긴 채로 있어야 한다 — 이게 없으면 잠금이 화면 장식일 뿐이다.
+    await user.type(screen.getByLabelText(/강의 제목/), '올리면 안 되는 강의')
+    await user.upload(
+      screen.getByLabelText('MP4 영상 파일'),
+      new File(['video'], '보안-기초.mp4', { type: 'video/mp4' }),
+    )
+    const submit = screen.getByRole('button', { name: '녹화강의 업로드' })
+    expect(submit).toBeDisabled()
+
+    await user.click(submit)
+    expect(upload).not.toHaveBeenCalled()
+    expect(window.location.pathname).toContain('/recorded-lessons/new')
+  })
+
+  /**
+   * 스위치를 <b>못 읽었을 때는 열어 둔다</b>. 이 값은 안내이고 게이트가 아니다 — 진짜 차단은
+   * 서버가 503으로 계속 한다. 조회 실패를 잠금으로 바꾸면 멀쩡한 환경에서 업로드를 막는다.
+   */
+  it('기능 스위치를 읽지 못하면 업로드를 막지 않는다', async () => {
+    vi.spyOn(mockCurriculumManagementService, 'getRecordedVideoCapabilities')
+      .mockRejectedValue(new Error('capabilities unavailable'))
+    const user = userEvent.setup()
+    await renderAsInstructor(
+      '/instructor/curriculums/cur-spring-live/sections/sec-foundation/recorded-lessons/new',
+    )
+
+    await user.type(await screen.findByLabelText(/강의 제목/), '스위치를 모르는 강의')
+    await user.upload(
+      screen.getByLabelText('MP4 영상 파일'),
+      new File(['video'], '보안-기초.mp4', { type: 'video/mp4' }),
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '녹화강의 업로드' })).toBeEnabled()
+    })
+    expect(screen.queryByText('지금은 녹화강의를 업로드할 수 없습니다.')).not.toBeInTheDocument()
+  })
+
   it('새 강의를 저장하면 구성 화면으로 돌아가 중복 생성을 막는다', async () => {
     const user = userEvent.setup()
     await renderAsInstructor('/instructor/curriculums/cur-spring-live/sections/sec-security/lessons/new')

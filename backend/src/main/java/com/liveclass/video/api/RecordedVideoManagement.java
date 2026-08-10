@@ -6,6 +6,8 @@ import java.util.UUID;
 /** curriculum의 소유권 facade가 호출하는 업로드 녹화강의 관리 포트. */
 public interface RecordedVideoManagement {
 
+    RecordedVideoCapabilities capabilities();
+
     Optional<RecordedLessonView> findByClientRequestId(UUID clientRequestId);
 
     RecordedLessonView register(UUID lessonId, UUID clientRequestId);
