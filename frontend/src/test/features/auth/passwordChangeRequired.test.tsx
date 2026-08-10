@@ -15,7 +15,8 @@ function user(overrides: Partial<AuthUser> = {}): AuthUser {
     role: 'STUDENT',
     profileImageUrl: null,
     isAdmin: false,
-    mustChangePassword: false,
+    signedInWithTemporaryPassword: false,
+      temporaryPasswordActive: false,
     ...overrides,
   }
 }
@@ -42,7 +43,7 @@ function renderAt(path: string) {
  */
 describe('RequirePasswordChangeRoute', () => {
   it('임시 비밀번호 상태면 어느 화면을 열어도 변경 화면으로 보낸다', () => {
-    useAuth.mockReturnValue({ user: user({ mustChangePassword: true }) })
+    useAuth.mockReturnValue({ user: user({ signedInWithTemporaryPassword: true }) })
 
     renderAt('/student/curriculums')
 
@@ -52,7 +53,7 @@ describe('RequirePasswordChangeRoute', () => {
 
   it('로그인 뒤 화면만이 아니라 공개 화면에서도 붙잡는다', () => {
     // 화면마다 검사하면 새 화면이 생길 때 빠뜨릴 자리가 늘고, 빠뜨린 것은 조용히 열린 채 남는다.
-    useAuth.mockReturnValue({ user: user({ mustChangePassword: true }) })
+    useAuth.mockReturnValue({ user: user({ signedInWithTemporaryPassword: true }) })
 
     renderAt('/curriculums')
 
@@ -60,7 +61,7 @@ describe('RequirePasswordChangeRoute', () => {
   })
 
   it('바꾸고 나면 놓아 준다', () => {
-    useAuth.mockReturnValue({ user: user({ mustChangePassword: false }) })
+    useAuth.mockReturnValue({ user: user({ signedInWithTemporaryPassword: false }) })
 
     renderAt('/student/curriculums')
 
@@ -74,5 +75,20 @@ describe('RequirePasswordChangeRoute', () => {
     renderAt('/curriculums')
 
     expect(screen.getByText('공개 커리큘럼')).toBeInTheDocument()
+  })
+
+  it('원래 비밀번호로 들어온 사람은 임시 비밀번호가 살아 있어도 붙잡지 않는다', () => {
+    /*
+     * 재발급은 남이 눌렀을 수도 있다. 그 사람에게 변경을 강요하면 "요청한 적도 없는데 왜"가 된다 —
+     * 강제의 목적은 메일에 남은 평문이 영구 비밀번호가 되는 것을 막는 것이고, 원래 비밀번호로
+     * 들어온 사람에게는 해당이 없다.
+     */
+    useAuth.mockReturnValue({
+      user: user({ signedInWithTemporaryPassword: false, temporaryPasswordActive: true }),
+    })
+
+    renderAt('/student/curriculums')
+
+    expect(screen.getByText('내 커리큘럼')).toBeInTheDocument()
   })
 })

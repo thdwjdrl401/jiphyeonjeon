@@ -17,6 +17,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Locale;
@@ -34,6 +35,13 @@ public class AuthService {
     private final AssetDirectory assetDirectory;
     private final List<AccountWithdrawalGuard> withdrawalGuards;
     private final PasswordResetMailer passwordResetMailer;
+
+    /**
+     * 임시 비밀번호 수명. 메일에 평문으로 남는 값이라 오래 살려 두지 않는다.
+     *
+     * <p>새 비밀번호를 정하면 그 전에라도 즉시 폐기된다(changePassword).
+     */
+    static final Duration TEMPORARY_PASSWORD_TTL = Duration.ofMinutes(30);
 
     /**
      * 계정이 없을 때도 해싱 비용을 치르기 위한 미끼 해시.
@@ -84,7 +92,7 @@ public class AuthService {
     }
 
     @Transactional
-    public AppUser authenticate(String email, String rawPassword) {
+    public Authenticated authenticate(String email, String rawPassword) {
         AppUser user = appUserRepository.findByEmail(normalize(email)).orElse(null);
         if (user == null) {
             // 곧바로 거절하면 응답 시간이 계정 존재 여부를 알려준다 → 미끼 해시로 같은 비용을 치른다.
@@ -92,7 +100,13 @@ public class AuthService {
             throw new InvalidCredentialsException(CREDENTIALS_REJECTED);
         }
 
-        if (!passwordEncoder.matches(rawPassword, user.getPasswordHash())) {
+        /*
+         * <b>원래 비밀번호를 먼저 본다.</b> 임시 비밀번호가 발급돼 있어도 원래 것을 아는 사람은
+         * 평소처럼 들어온다 — 재발급은 남이 눌렀을 수도 있고, 그 사람에게는 바꿀 이유가 없다.
+         */
+        boolean matchedPrimary = passwordEncoder.matches(rawPassword, user.getPasswordHash());
+        boolean matchedTemporary = !matchedPrimary && matchesTemporaryPassword(user, rawPassword);
+        if (!matchedPrimary && !matchedTemporary) {
             throw new InvalidCredentialsException(CREDENTIALS_REJECTED);
         }
         if (user.getStatus() != AccountStatus.ACTIVE) {
@@ -101,8 +115,70 @@ public class AuthService {
         }
 
         user.setLastLoginAt(OffsetDateTime.now());
-        log.info(Audit.MARKER, "로그인 성공 userId={}", user.getId());
-        return user;
+        log.info(Audit.MARKER, "로그인 성공 userId={} 임시비밀번호={}", user.getId(), matchedTemporary);
+        return new Authenticated(user, matchedTemporary);
+    }
+
+    /**
+     * 이번 로그인이 무엇으로 이루어졌는가.
+     *
+     * <p><b>계정이 아니라 이 로그인의 성질이다.</b> 같은 계정이라도 원래 비밀번호로 들어오면
+     * 바꿀 이유가 없고, 임시 비밀번호로 들어오면 반드시 바꿔야 한다.
+     */
+    public record Authenticated(AppUser user, boolean usedTemporaryPassword) {
+    }
+
+    /** 만료됐거나 발급된 적 없으면 false. 만료 검사를 빠뜨리면 30분이 무의미해진다. */
+    private boolean matchesTemporaryPassword(AppUser user, String rawPassword) {
+        if (user.getTemporaryPasswordHash() == null || user.getTemporaryPasswordExpiresAt() == null) {
+            return false;
+        }
+        if (user.getTemporaryPasswordExpiresAt().isBefore(OffsetDateTime.now())) {
+            return false;
+        }
+        return passwordEncoder.matches(rawPassword, user.getTemporaryPasswordHash());
+    }
+
+    /** 지금 쓸 수 있는 임시 비밀번호가 걸려 있는가. 원래 비밀번호로 들어온 사람에게 폐기를 물을 때 쓴다. */
+    @Transactional(readOnly = true)
+    public boolean hasActiveTemporaryPassword(UUID userId) {
+        return appUserRepository.findById(userId)
+                .map(user -> user.getTemporaryPasswordHash() != null
+                        && user.getTemporaryPasswordExpiresAt() != null
+                        && user.getTemporaryPasswordExpiresAt().isAfter(OffsetDateTime.now()))
+                .orElse(false);
+    }
+
+    /**
+     * 임시 비밀번호로 들어온 사람이 새 비밀번호를 정한다. <b>현재 비밀번호를 묻지 않는다.</b>
+     *
+     * <p>방금 그 값으로 로그인해 세션이 섰다 — 이미 증명된 것을 한 번 더 치게 하면, 사용자는
+     * "방금 친 걸 왜 또 치지"에서 막힌다. 이 경로를 여는 조건은 <b>세션이 임시 로그인인가</b>이고,
+     * 그 판정은 컨트롤러가 한다.
+     *
+     * <p>원래 비밀번호를 아는 사람은 이 경로가 아니라 {@link #changePassword}를 쓴다.
+     */
+    @Transactional
+    public void replaceTemporaryPassword(UUID userId, String newPassword) {
+        AppUser user = appUserRepository.findById(userId)
+                .orElseThrow(() -> new InvalidCredentialsException(CREDENTIALS_REJECTED));
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        clearTemporaryPassword(user);
+        log.info(Audit.MARKER, "임시 비밀번호를 새 비밀번호로 교체 userId={}", userId);
+    }
+
+    /** 임시 비밀번호를 즉시 버린다. 내가 요청한 적 없는 재발급을 무르는 길이다. */
+    @Transactional
+    public void discardTemporaryPassword(UUID userId) {
+        appUserRepository.findById(userId).ifPresent(user -> {
+            clearTemporaryPassword(user);
+            log.info(Audit.MARKER, "임시 비밀번호 폐기 userId={}", userId);
+        });
+    }
+
+    private void clearTemporaryPassword(AppUser user) {
+        user.setTemporaryPasswordHash(null);
+        user.setTemporaryPasswordExpiresAt(null);
     }
 
     @Transactional(readOnly = true)
@@ -200,8 +276,9 @@ public class AuthService {
             throw new PasswordMismatchException("현재 비밀번호가 일치하지 않습니다.");
         }
         user.setPasswordHash(passwordEncoder.encode(newPassword));
-        // 임시 비밀번호로 들어왔다면 여기서 풀린다 — 이 한 줄이 없으면 바꾸고도 계속 갇힌다.
-        user.setMustChangePassword(false);
+        // 새 비밀번호를 정했으면 임시 열쇠는 그 자리에서 버린다 — 메일에 남은 값이 계속 통하면
+        // 30분 만료를 둔 뜻이 없다.
+        clearTemporaryPassword(user);
         log.info(Audit.MARKER, "비밀번호 변경 userId={}", userId);
     }
 
@@ -227,10 +304,15 @@ public class AuthService {
         }
 
         String temporaryPassword = TemporaryPassword.generate();
-        user.setPasswordHash(passwordEncoder.encode(temporaryPassword));
-        user.setMustChangePassword(true);
+        OffsetDateTime expiresAt = OffsetDateTime.now().plus(TEMPORARY_PASSWORD_TTL);
+        /*
+         * <b>기존 비밀번호를 건드리지 않는다.</b> 덮어쓰면 남이 내 이메일로 재발급을 누르기만 해도
+         * 내가 로그인에서 튕긴다 — 메일함을 못 봐도 남의 계정을 잠글 수 있게 된다.
+         */
+        user.setTemporaryPasswordHash(passwordEncoder.encode(temporaryPassword));
+        user.setTemporaryPasswordExpiresAt(expiresAt);
         // 발송이 실패하면 예외가 올라가 위 변경까지 함께 되돌아간다.
-        passwordResetMailer.sendTemporaryPassword(user.getEmail(), temporaryPassword);
+        passwordResetMailer.sendTemporaryPassword(user.getEmail(), temporaryPassword, expiresAt);
         log.info(Audit.MARKER, "임시 비밀번호 발급 userId={}", user.getId());
     }
 

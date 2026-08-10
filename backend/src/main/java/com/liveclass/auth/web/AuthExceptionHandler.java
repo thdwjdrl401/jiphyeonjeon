@@ -4,6 +4,7 @@ import com.liveclass.auth.api.WithdrawalBlockedException;
 import com.liveclass.auth.service.EmailDuplicatedException;
 import com.liveclass.auth.service.InstructorOnlyException;
 import com.liveclass.auth.service.InvalidCredentialsException;
+import com.liveclass.auth.service.TemporaryLoginRequiredException;
 import com.liveclass.auth.service.PasswordMismatchException;
 import com.liveclass.auth.service.ProfileImageInvalidException;
 import com.liveclass.common.web.ErrorResponse;
@@ -50,6 +51,12 @@ public class AuthExceptionHandler {
         log.warn("임시 비밀번호 메일 발송 실패 — 비밀번호는 바뀌지 않았다", e);
         return respond(HttpStatus.BAD_GATEWAY, ErrorResponse.of("MAIL_DELIVERY_FAILED",
                 "메일을 보내지 못했습니다. 잠시 후 다시 시도해 주세요."));
+    }
+
+    /** 임시 비밀번호 로그인 세션이 아닌데 그 전용 경로를 불렀다 → 409(상태 충돌). */
+    @ExceptionHandler(TemporaryLoginRequiredException.class)
+    public ResponseEntity<ErrorResponse> handleTemporaryLoginRequired(TemporaryLoginRequiredException e) {
+        return respond(HttpStatus.CONFLICT, ErrorResponse.of("TEMPORARY_LOGIN_REQUIRED", e.getMessage()));
     }
 
     @ExceptionHandler(InvalidCredentialsException.class)

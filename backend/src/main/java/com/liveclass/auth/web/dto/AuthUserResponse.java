@@ -26,9 +26,14 @@ public record AuthUserResponse(
                 + "security.admin-emails allowlist로 로그인 시 덧입혀지는 권한이다.", example = "false")
         boolean isAdmin,
 
-        @Schema(description = "임시 비밀번호로 로그인했고 아직 바꾸지 않았는가. true면 화면이 "
-                + "비밀번호 변경 외의 이동을 막는다.", example = "false")
-        boolean mustChangePassword
+        @Schema(description = "이번 로그인이 임시 비밀번호로 이루어졌는가. true면 화면이 비밀번호 "
+                + "변경 외의 이동을 막는다. **계정이 아니라 이 세션의 성질이다** — 같은 계정이라도 "
+                + "원래 비밀번호로 들어오면 false다.", example = "false")
+        boolean signedInWithTemporaryPassword,
+
+        @Schema(description = "지금 쓸 수 있는 임시 비밀번호가 발급돼 있는가. 원래 비밀번호로 "
+                + "들어온 사람에게 '폐기하시겠습니까'를 묻는 데 쓴다.", example = "false")
+        boolean temporaryPasswordActive
 ) {
 
     /**
@@ -38,7 +43,9 @@ public record AuthUserResponse(
      * <p>기본값을 두지 않고 호출자가 명시하게 한다. 조용히 {@code false}로 흘려보내면 관리자인데 메뉴가
      * 안 보이는(=원인을 찾기 어려운) 상태가 만들어진다.
      */
-    public static AuthUserResponse from(AppUser user, String profileImageUrl, boolean isAdmin) {
+    public static AuthUserResponse from(AppUser user, String profileImageUrl, boolean isAdmin,
+                                        boolean signedInWithTemporaryPassword,
+                                        boolean temporaryPasswordActive) {
         return new AuthUserResponse(
                 user.getId().toString(),
                 user.getEmail(),
@@ -46,7 +53,8 @@ public record AuthUserResponse(
                 user.getRole(),
                 profileImageUrl,
                 isAdmin,
-                user.isMustChangePassword()
+                signedInWithTemporaryPassword,
+                temporaryPasswordActive
         );
     }
 }

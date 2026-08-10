@@ -3,13 +3,17 @@ package com.liveclass.auth.web;
 import com.liveclass.auth.domain.AppUser;
 import com.liveclass.auth.service.AdminAccounts;
 import com.liveclass.auth.service.AuthService;
+import com.liveclass.auth.service.TemporaryLoginRequiredException;
 import com.liveclass.auth.web.dto.AuthUserResponse;
 import com.liveclass.auth.web.dto.ChangePasswordRequest;
 import com.liveclass.auth.web.dto.DisplayNameRequest;
 import com.liveclass.auth.web.dto.InstructorProfileResponse;
 import com.liveclass.auth.web.dto.ProfileImageRequest;
+import com.liveclass.auth.web.dto.TemporaryPasswordReplacementRequest;
 import com.liveclass.auth.web.dto.UpdateInstructorProfileRequest;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -63,20 +67,35 @@ public class AccountController {
             description = "미리 업로드 완료한 본인 PROFILE_IMAGE 에셋을 프로필 이미지로 지정한다.")
     @PutMapping("/api/me/profile-image")
     public AuthUserResponse updateProfileImage(@Valid @RequestBody ProfileImageRequest request,
-                                               Authentication authentication) {
+                                               Authentication authentication,
+                                               HttpServletRequest httpRequest) {
         UUID userId = UUID.fromString(authentication.getName());
         AppUser user = authService.updateProfileImage(userId, request.assetId());
-        return AuthUserResponse.from(user, authService.resolveProfileImageUrl(user), adminAccounts.isAdmin(user.getEmail()));
+        return authResponse(user, userId, httpRequest);
     }
 
     @Operation(summary = "표시 이름 변경",
             description = "화면에 보이는 이름을 바꾼다. 로그인 식별자(email)는 바뀌지 않는다.")
     @PutMapping("/api/me/display-name")
     public AuthUserResponse updateDisplayName(@Valid @RequestBody DisplayNameRequest request,
-                                              Authentication authentication) {
+                                              Authentication authentication,
+                                              HttpServletRequest httpRequest) {
         UUID userId = UUID.fromString(authentication.getName());
         AppUser user = authService.updateDisplayName(userId, request.displayName());
-        return AuthUserResponse.from(user, authService.resolveProfileImageUrl(user), adminAccounts.isAdmin(user.getEmail()));
+        return authResponse(user, userId, httpRequest);
+    }
+
+    /**
+     * 인증 응답을 만든다.
+     *
+     * <p>임시 비밀번호 관련 두 값을 <b>여기서도 실어 보낸다</b> — 화면은 이 응답으로 auth 캐시를
+     * 갱신하므로, 빠뜨리면 false가 실려 강제 변경 게이트가 조용히 풀린다.
+     */
+    private AuthUserResponse authResponse(AppUser user, UUID userId, HttpServletRequest request) {
+        return AuthUserResponse.from(user, authService.resolveProfileImageUrl(user),
+                adminAccounts.isAdmin(user.getEmail()),
+                TemporaryLoginSession.isSignedInWithTemporaryPassword(request),
+                authService.hasActiveTemporaryPassword(userId));
     }
 
     @Operation(summary = "강사 공개 프로필 조회",
@@ -96,6 +115,27 @@ public class AccountController {
         List<String> expertise = request.expertise() == null ? List.of() : request.expertise();
         return InstructorProfileResponse.from(
                 authService.updateInstructorProfile(userId, request.bio(), expertise));
+    }
+
+    @Operation(summary = "임시 비밀번호를 새 비밀번호로 교체",
+            description = "임시 비밀번호로 로그인한 세션에서만 쓸 수 있다. **현재 비밀번호를 묻지 않는다** — "
+                    + "방금 그 값으로 로그인해 세션이 섰으므로 이미 증명된 것이다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "교체 완료. 임시 비밀번호는 즉시 폐기된다."),
+            @ApiResponse(responseCode = "409", description = "임시 비밀번호 로그인이 아니다 (TEMPORARY_LOGIN_REQUIRED)")
+    })
+    @PutMapping("/api/me/password/temporary")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void replaceTemporaryPassword(@Valid @RequestBody TemporaryPasswordReplacementRequest request,
+                                         Authentication authentication,
+                                         HttpServletRequest httpRequest) {
+        if (!TemporaryLoginSession.isSignedInWithTemporaryPassword(httpRequest)) {
+            throw new TemporaryLoginRequiredException("임시 비밀번호로 로그인한 경우에만 사용할 수 있습니다.");
+        }
+        UUID userId = UUID.fromString(authentication.getName());
+        authService.replaceTemporaryPassword(userId, request.newPassword());
+        // 더는 임시 로그인이 아니다 — 표시를 지워야 화면의 게이트가 풀린다.
+        TemporaryLoginSession.mark(httpRequest, false);
     }
 
     @Operation(summary = "비밀번호 변경",
