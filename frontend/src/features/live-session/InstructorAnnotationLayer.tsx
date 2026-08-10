@@ -1044,6 +1044,16 @@ export default function InstructorAnnotationLayer({
       // 확인을 거치지 않고 바로 넣는다. 되돌림은 Ctrl+Z가 맡는다 — 매번 확인 창을 띄우면
       // 강의 흐름이 끊기고, 잘못 나온 것을 되돌리는 비용은 그보다 훨씬 싸다.
       await applyResult(result, bounds)
+      /*
+       * 정리했으면 링은 <b>물러난다</b>. 방금 만들어진 결과를 가리지 않아야 하고, 같은 대상을
+       * 연달아 또 변환할 일도 없다. 다른 것을 고르면 `ringDismissed`가 풀려 다시 나온다.
+       */
+      /*
+       * 정리했으면 링은 <b>물러난다</b>. 방금 만들어진 결과를 가리지 않아야 하고, 같은 대상을
+       * 연달아 또 변환할 일도 없다. 다른 것을 고르면 `ringDismissed`가 풀려 다시 나온다.
+       */
+      setRingDismissed(true)
+      setRingExpanded(false)
     } catch (error) {
       console.warn('판서 해석 실패', error)
       /*
@@ -1350,7 +1360,13 @@ export default function InstructorAnnotationLayer({
    * 넣었는데, 고를 수 없는 항목 둘을 원주에 늘어놓고 가운데서 안 된다고 말하는 모양이었다.
    * 지금은 안내만 낸다.
    */
+  /*
+   * <b>대상이 실제로 남아 있을 때만</b> 연다. 변환·삭제로 요소가 사라져도 `selectedIds`에는 id가
+   * 남는데, 그러면 `ringCenter`가 폴백 좌표(왼쪽 아래)를 돌려주어 <b>아무것도 가리키지 않는 링</b>이
+   * 화면 구석에 떴다. 실제로 수식·다이어그램으로 바꾼 직후마다 그랬다.
+   */
   const ringOpen = selectedIds.length > 0 && !selecting && !ringDismissed
+    && selectedElements().length > 0
   const needsPick = ringExpanded && selectedIds.length === 0
   const mathLatex = selectedMathLatex()
   /*
