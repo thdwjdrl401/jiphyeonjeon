@@ -54,6 +54,12 @@ export const httpProfileService = {
   async changePassword(request) {
     await apiClient.put('/me/password', request)
   },
+  async replaceTemporaryPassword(newPassword) {
+    await apiClient.put('/me/password/temporary', { newPassword })
+  },
+  async discardTemporaryPassword() {
+    await apiClient.delete('/auth/temporary-password')
+  },
   async withdrawAccount() {
     await apiClient.delete('/me')
   },

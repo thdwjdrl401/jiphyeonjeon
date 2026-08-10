@@ -31,6 +31,7 @@ import org.springframework.security.web.authentication.session.SessionAuthentica
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CsrfToken;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -86,7 +87,8 @@ public class AuthController {
                 request.displayName(),
                 request.role().toRole()
         );
-        return AuthUserResponse.from(user, null, adminAccounts.isAdmin(user.getEmail()));
+        // 방금 만든 계정이라 임시 비밀번호가 있을 수 없다.
+        return AuthUserResponse.from(user, null, adminAccounts.isAdmin(user.getEmail()), false, false);
     }
 
     @Operation(summary = "비밀번호 찾기",
@@ -115,9 +117,17 @@ public class AuthController {
             HttpServletRequest httpRequest,
             HttpServletResponse httpResponse
     ) {
-        AppUser user = authService.authenticate(request.email(), request.password());
+        AuthService.Authenticated authenticated = authService.authenticate(request.email(), request.password());
+        AppUser user = authenticated.user();
         establishSession(user, httpRequest, httpResponse);
-        return AuthUserResponse.from(user, null, adminAccounts.isAdmin(user.getEmail()));
+        /*
+         * 임시 비밀번호로 들어왔다는 사실은 <b>이 세션의 것</b>이라 세션에 적는다. 계정 행에 두면
+         * 원래 비밀번호로 들어온 사람까지 변경 화면에 갇히고, 응답에만 담으면 새로고침에 사라진다.
+         */
+        TemporaryLoginSession.mark(httpRequest, authenticated.usedTemporaryPassword());
+        return AuthUserResponse.from(user, null, adminAccounts.isAdmin(user.getEmail()),
+                authenticated.usedTemporaryPassword(),
+                authService.hasActiveTemporaryPassword(user.getId()));
     }
 
     @Operation(summary = "로그아웃", description = "로그아웃한다. 이미 로그아웃 상태여도 정상 성공으로 처리된다.")
@@ -131,11 +141,24 @@ public class AuthController {
     @Operation(summary = "현재 사용자 조회", description = "지금 로그인된 사용자 정보를 반환한다. 앱을 처음 열거나 새로고침할 때 로그인 상태를 복원하는 데 쓴다.")
     @ApiResponse(responseCode = "401", description = "세션 없음")
     @GetMapping("/me")
-    public AuthUserResponse me(Authentication authentication) {
+    public AuthUserResponse me(Authentication authentication, HttpServletRequest request) {
         UUID userId = UUID.fromString(authentication.getName());
         AppUser user = authService.getById(userId);
-        return AuthUserResponse.from(user, authService.resolveProfileImageUrl(user), adminAccounts.isAdmin(user.getEmail()));
+        return AuthUserResponse.from(user, authService.resolveProfileImageUrl(user), adminAccounts.isAdmin(user.getEmail()),
+                TemporaryLoginSession.isSignedInWithTemporaryPassword(request),
+                authService.hasActiveTemporaryPassword(userId));
     }
+
+    @Operation(summary = "임시 비밀번호 폐기",
+            description = "발급된 임시 비밀번호를 즉시 버린다. 내가 요청한 적 없는 재발급을 무르는 길이다.")
+    @ApiResponse(responseCode = "204", description = "폐기 완료. 이미 없거나 만료됐어도 성공이다(멱등).")
+    @DeleteMapping("/temporary-password")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void discardTemporaryPassword(Authentication authentication) {
+        authService.discardTemporaryPassword(UUID.fromString(authentication.getName()));
+    }
+
+
 
     @Operation(summary = "이메일 사용 가능 여부", description = "회원가입 화면에서 이 이메일이 이미 쓰이는지 확인한다. 로그인 없이 호출할 수 있다.")
     @GetMapping("/email-availability")

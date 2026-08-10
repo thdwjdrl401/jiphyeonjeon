@@ -64,7 +64,8 @@ export const mockAuthService = {
       displayName: isInstructor ? '이도현' : '김학생',
       role: isInstructor ? 'INSTRUCTOR' : 'STUDENT',
       profileImageUrl: null,
-      mustChangePassword: false,
+      signedInWithTemporaryPassword: false,
+      temporaryPasswordActive: false,
       // 데모에서는 강사 계정이 운영 콘솔도 볼 수 있게 둔다 — 실서버는 allowlist가 정한다.
       isAdmin: isInstructor,
     }
@@ -87,7 +88,8 @@ export const mockAuthService = {
       displayName: request.displayName,
       role: request.role,
       profileImageUrl: null,
-      mustChangePassword: false,
+      signedInWithTemporaryPassword: false,
+      temporaryPasswordActive: false,
       isAdmin: false,
     } satisfies AuthUser
   },

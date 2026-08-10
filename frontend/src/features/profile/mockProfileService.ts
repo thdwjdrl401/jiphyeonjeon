@@ -57,6 +57,12 @@ export const mockProfileService = {
       throw new ApiError('새 비밀번호는 8자 이상이어야 합니다.', 400, 'NEW_PASSWORD_INVALID')
     }
   },
+  async replaceTemporaryPassword() {
+    // 목에는 세션 표시가 없다. 실패할 조건이 없으므로 그대로 성공시킨다.
+  },
+  async discardTemporaryPassword() {
+    // 목은 임시 비밀번호를 만들지 않는다 — 버릴 것도 없다.
+  },
   /*
    * 탈퇴는 <b>계정만</b> 처리한다. 세션을 여기서 끊지 않는다 — 실제 어댑터(`DELETE /me`)도 그렇고,
    * 로그아웃은 호출한 화면이 `useAuth().logout()`으로 이어서 한다.

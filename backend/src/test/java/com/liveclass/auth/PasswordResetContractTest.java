@@ -1,5 +1,6 @@
 package com.liveclass.auth;
 
+import com.liveclass.auth.domain.AppUser;
 import com.liveclass.auth.repository.AppUserRepository;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.AfterEach;
@@ -19,6 +20,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
+import java.time.OffsetDateTime;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -27,6 +29,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -79,18 +82,57 @@ class PasswordResetContractTest {
     }
 
     @Test
-    void 임시_비밀번호를_메일로_보내고_그것으로만_로그인된다() throws Exception {
+    void 임시_비밀번호를_보내도_기존_비밀번호는_그대로_통한다() throws Exception {
+        /*
+         * 덮어쓰면 남이 내 이메일로 재발급을 누르기만 해도 내가 로그인에서 튕긴다 — 메일함을 못
+         * 봐도 남의 계정을 잠글 수 있게 된다. 임시 비밀번호는 열쇠 하나 더일 뿐이다.
+         */
         requestReset(EMAIL).andExpect(status().isAccepted());
-
         String temporary = capturedTemporaryPassword();
         assertThat(temporary).isNotBlank();
 
-        // 예전 비밀번호는 더 이상 통하지 않는다.
-        login(EMAIL, ORIGINAL_PASSWORD).andExpect(status().isUnauthorized());
+        login(EMAIL, ORIGINAL_PASSWORD)
+                .andExpect(status().isOk())
+                // 원래 비밀번호로 들어온 사람은 바꿀 이유가 없다 — 변경 화면에 가두지 않는다.
+                .andExpect(jsonPath("$.signedInWithTemporaryPassword").value(false))
+                // 대신 "발급된 게 있다"를 알려 폐기를 물을 수 있게 한다.
+                .andExpect(jsonPath("$.temporaryPasswordActive").value(true));
+
         login(EMAIL, temporary)
                 .andExpect(status().isOk())
-                // 화면이 이 값을 보고 비밀번호 변경으로 붙잡아 둔다.
-                .andExpect(jsonPath("$.mustChangePassword").value(true));
+                .andExpect(jsonPath("$.signedInWithTemporaryPassword").value(true));
+    }
+
+    @Test
+    void 만료된_임시_비밀번호로는_로그인되지_않는다() throws Exception {
+        requestReset(EMAIL).andExpect(status().isAccepted());
+        String temporary = capturedTemporaryPassword();
+
+        // 만료 시각을 지난 것으로 돌린다 — 만료 검사를 빠뜨리면 30분이 무의미해진다.
+        AppUser target = appUserRepository.findByEmail(EMAIL).orElseThrow();
+        target.setTemporaryPasswordExpiresAt(OffsetDateTime.now().minusMinutes(1));
+        appUserRepository.saveAndFlush(target);
+
+        login(EMAIL, temporary).andExpect(status().isUnauthorized());
+        // 기존 비밀번호는 만료와 무관하다.
+        login(EMAIL, ORIGINAL_PASSWORD).andExpect(status().isOk());
+    }
+
+    @Test
+    void 원래_비밀번호로_들어와_임시_비밀번호를_폐기할_수_있다() throws Exception {
+        // 내가 요청한 적 없는 재발급을 무르는 길이다.
+        requestReset(EMAIL).andExpect(status().isAccepted());
+        String temporary = capturedTemporaryPassword();
+
+        MvcResult loggedIn = login(EMAIL, ORIGINAL_PASSWORD).andExpect(status().isOk()).andReturn();
+        Cookie session = loggedIn.getResponse().getCookie("SESSION");
+
+        Csrf csrf = fetchCsrf();
+        mockMvc.perform(withCsrf(delete("/api/auth/temporary-password"), csrf).cookie(session))
+                .andExpect(status().isNoContent());
+
+        login(EMAIL, temporary).andExpect(status().isUnauthorized());
+        login(EMAIL, ORIGINAL_PASSWORD).andExpect(status().isOk());
     }
 
     @Test
@@ -109,13 +151,14 @@ class PasswordResetContractTest {
                 .andExpect(status().isBadGateway())
                 .andExpect(jsonPath("$.code").value("MAIL_DELIVERY_FAILED"));
 
-        // 되돌아갔으므로 예전 비밀번호가 그대로 살아 있다 — 사용자는 스스로 복구할 수 있다.
-        login(EMAIL, ORIGINAL_PASSWORD).andExpect(status().isOk());
-        assertThat(appUserRepository.findByEmail(EMAIL).orElseThrow().isMustChangePassword()).isFalse();
+        // 임시 비밀번호가 걸리지 않았다 — 발송 실패인데 열쇠만 늘어나면 안 된다.
+        login(EMAIL, ORIGINAL_PASSWORD)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.temporaryPasswordActive").value(false));
     }
 
     @Test
-    void 비밀번호를_바꾸면_표시가_풀린다() throws Exception {
+    void 새_비밀번호를_정하면_임시_비밀번호는_즉시_폐기된다() throws Exception {
         requestReset(EMAIL).andExpect(status().isAccepted());
         String temporary = capturedTemporaryPassword();
 
@@ -124,18 +167,21 @@ class PasswordResetContractTest {
         assertThat(session).isNotNull();
 
         Csrf csrf = fetchCsrf();
-        mockMvc.perform(withCsrf(put("/api/me/password"), csrf)
+        // 방금 그 값으로 로그인했으므로 현재 비밀번호를 다시 묻지 않는다.
+        mockMvc.perform(withCsrf(put("/api/me/password/temporary"), csrf)
                         .cookie(session)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"currentPassword":"%s","newPassword":"brand-new-password"}
-                                """.formatted(temporary)))
+                                {"newPassword":"brand-new-password"}
+                                """))
                 .andExpect(status().isNoContent());
 
-        assertThat(appUserRepository.findByEmail(EMAIL).orElseThrow().isMustChangePassword()).isFalse();
+        // 메일에 남은 값이 계속 통하면 30분 만료를 둔 뜻이 없다.
+        login(EMAIL, temporary).andExpect(status().isUnauthorized());
         login(EMAIL, "brand-new-password")
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.mustChangePassword").value(false));
+                .andExpect(jsonPath("$.signedInWithTemporaryPassword").value(false))
+                .andExpect(jsonPath("$.temporaryPasswordActive").value(false));
     }
 
     /** 발송된 본문에서 임시 비밀번호를 되찾는다. 본문 형식이 바뀌면 여기서 먼저 드러난다. */

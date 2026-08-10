@@ -46,12 +46,15 @@ public class AppUser {
     private OffsetDateTime lastLoginAt;
 
     /**
-     * 임시 비밀번호를 받고 아직 바꾸지 않았는가(V40).
+     * 메일로 보낸 임시 비밀번호의 해시(V41). {@code passwordHash}와 <b>별개로</b> 산다.
      *
-     * <p>임시 비밀번호는 평문으로 메일함에 남는다. 만료만 걸고 두면 그 메일이 살아 있는 한 계정도
-     * 열려 있는 셈이라, 첫 로그인에서 반드시 바꾸게 한다.
+     * <p>덮어쓰지 않는 이유: 그러면 남이 내 이메일로 재발급을 누르기만 해도 내가 로그인에서 튕긴다 —
+     * 메일함을 못 봐도 남의 계정을 잠글 수 있게 된다.
      */
-    private boolean mustChangePassword;
+    private String temporaryPasswordHash;
+
+    /** 임시 비밀번호 만료 시각. 지나면 그 값으로는 로그인할 수 없다. */
+    private OffsetDateTime temporaryPasswordExpiresAt;
 
     @CreationTimestamp
     private OffsetDateTime createdAt;
