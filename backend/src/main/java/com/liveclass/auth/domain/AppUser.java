@@ -45,6 +45,14 @@ public class AppUser {
 
     private OffsetDateTime lastLoginAt;
 
+    /**
+     * 임시 비밀번호를 받고 아직 바꾸지 않았는가(V40).
+     *
+     * <p>임시 비밀번호는 평문으로 메일함에 남는다. 만료만 걸고 두면 그 메일이 살아 있는 한 계정도
+     * 열려 있는 셈이라, 첫 로그인에서 반드시 바꾸게 한다.
+     */
+    private boolean mustChangePassword;
+
     @CreationTimestamp
     private OffsetDateTime createdAt;
 

@@ -19,8 +19,6 @@ const initialReservedEmails = [
 ]
 const reservedEmails = new Set(initialReservedEmails)
 /** 발급된 재설정 토큰 → 요청 이메일. 1회용이라 확인 성공 시 지운다. */
-const issuedResetTokens = new Map<string, string>()
-let resetTokenSequence = 0
 
 async function wait() {
   if (import.meta.env.MODE === 'test') return
@@ -41,8 +39,6 @@ export function resetMockAuth() {
   clearMockNotificationPreferences()
   reservedEmails.clear()
   initialReservedEmails.forEach((email) => reservedEmails.add(email))
-  issuedResetTokens.clear()
-  resetTokenSequence = 0
 }
 
 export const mockAuthService = {
@@ -68,6 +64,7 @@ export const mockAuthService = {
       displayName: isInstructor ? '이도현' : '김학생',
       role: isInstructor ? 'INSTRUCTOR' : 'STUDENT',
       profileImageUrl: null,
+      mustChangePassword: false,
       // 데모에서는 강사 계정이 운영 콘솔도 볼 수 있게 둔다 — 실서버는 allowlist가 정한다.
       isAdmin: isInstructor,
     }
@@ -90,6 +87,7 @@ export const mockAuthService = {
       displayName: request.displayName,
       role: request.role,
       profileImageUrl: null,
+      mustChangePassword: false,
       isAdmin: false,
     } satisfies AuthUser
   },
@@ -133,36 +131,16 @@ export const mockAuthService = {
   },
 
   /**
-   * 재설정 메일 발송 요청. **계정이 있든 없든 똑같이 성공한다** — 이메일이 로그인 식별자라
-   * 존재 여부를 응답으로 흘리면 가입자 목록 확인 수단이 된다.
+   * 비밀번호 찾기. **계정이 있든 없든 똑같이 성공한다** — 이메일이 로그인 식별자라 존재 여부를
+   * 응답으로 흘리면 가입자 목록 확인 수단이 된다.
    *
-   * <p>`devResetToken`은 mock에서만 돌려준다. 실제 서버는 메일로만 보내므로, 이 값에
-   * 의존하는 화면 코드를 쓰면 안 된다 — mock 모드 안내 문구에서만 쓴다.
+   * <p>실제 서버는 임시 비밀번호를 만들어 메일로 보낸다. 목에는 보낼 곳이 없으므로 아무것도
+   * 돌려주지 않는다 — 응답에 임시 비밀번호를 담으면 메일 소유 확인이라는 절차 자체가 없어진다.
    */
   async requestPasswordReset(email: string) {
     await wait()
-    const normalized = email.trim().toLowerCase()
-    if (!normalized) {
+    if (!email.trim()) {
       throw new ApiError('이메일을 입력해 주세요.', 400, 'AUTH_EMAIL_REQUIRED')
     }
-    const token = `mock-reset-${(resetTokenSequence += 1)}`
-    issuedResetTokens.set(token, normalized)
-    return { devResetToken: token }
-  },
-
-  /** 토큰은 **1회용**이다. 성공하면 즉시 폐기해 같은 링크가 두 번 통하지 않는다. */
-  async confirmPasswordReset({ token, newPassword }: { token: string; newPassword: string }) {
-    await wait()
-    if (!issuedResetTokens.has(token)) {
-      throw new ApiError(
-        '재설정 링크가 만료되었거나 이미 사용되었습니다. 다시 요청해 주세요.',
-        410,
-        'AUTH_PASSWORD_RESET_TOKEN_INVALID',
-      )
-    }
-    if (newPassword.length < 8) {
-      throw new ApiError('새 비밀번호는 8자 이상이어야 합니다.', 400, 'AUTH_PASSWORD_INVALID')
-    }
-    issuedResetTokens.delete(token)
   },
 }

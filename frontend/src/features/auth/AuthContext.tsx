@@ -33,6 +33,13 @@ interface AuthContextValue {
   updateProfileImage: (file: File) => Promise<AuthUser>
   logout: () => Promise<void>
   updateDisplayName: (displayName: string) => Promise<AuthUser>
+  /**
+   * 서버가 가진 내 정보를 다시 읽는다.
+   *
+   * <p>비밀번호를 바꾸면 서버가 `mustChangePassword`를 내리는데, 화면이 그 사실을 알아야 강제
+   * 변경 게이트가 풀린다. 응답 본문이 없는 API라 반환값으로 받을 수 없어 다시 읽는다.
+   */
+  refreshUser: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -99,6 +106,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
        */
       setGuestReason('signed-out')
       queryClient.setQueryData(authQueryKey, null)
+    },
+    async refreshUser() {
+      await queryClient.invalidateQueries({ queryKey: authQueryKey })
     },
     async updateDisplayName(displayName) {
       const updatedUser = await authService.updateDisplayName(displayName)

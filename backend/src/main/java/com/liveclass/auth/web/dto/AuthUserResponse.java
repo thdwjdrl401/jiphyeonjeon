@@ -24,7 +24,11 @@ public record AuthUserResponse(
 
         @Schema(description = "운영 콘솔(ROLE_ADMIN) 접근 권한 여부. 가입 역할이 아니라 "
                 + "security.admin-emails allowlist로 로그인 시 덧입혀지는 권한이다.", example = "false")
-        boolean isAdmin
+        boolean isAdmin,
+
+        @Schema(description = "임시 비밀번호로 로그인했고 아직 바꾸지 않았는가. true면 화면이 "
+                + "비밀번호 변경 외의 이동을 막는다.", example = "false")
+        boolean mustChangePassword
 ) {
 
     /**
@@ -41,7 +45,8 @@ public record AuthUserResponse(
                 user.getDisplayName(),
                 user.getRole(),
                 profileImageUrl,
-                isAdmin
+                isAdmin,
+                user.isMustChangePassword()
         );
     }
 }

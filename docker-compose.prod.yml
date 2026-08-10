@@ -265,6 +265,16 @@ services:
       # 별도 가입 역할이 아니라 로그인 시 기존 계정에 권한을 덧입히는 방식이라(AdminAccounts),
       # 목록을 바꾸면 해당 사용자는 재로그인해야 반영된다. 이 줄이 없으면 .env.prod에 넣어도 전달되지 않는다.
       SECURITY_ADMIN_EMAILS: ${SECURITY_ADMIN_EMAILS:-}
+      # 비밀번호 찾기 메일(임시 비밀번호). 이 줄들이 없으면 .env.prod에 넣어도 전달되지 않는다.
+      #
+      # Gmail은 계정 비밀번호가 아니라 **앱 비밀번호**를 요구한다(2단계 인증을 켠 뒤 발급).
+      # 값은 /etc/liveclass/.env.prod에만 둔다 — 저장소에 커밋하지 않는다.
+      MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      # 받는 사람에게 보이는 발신 주소. 비우면 MAIL_USERNAME을 쓴다.
+      MAIL_FROM: ${MAIL_FROM:-}
       # AI 강의 노트 소비(CONTRACT §3-4a). 이 줄이 없으면 .env.prod에 넣어도 전달되지 않는다 —
       # 위 두 사례와 같은 함정이고, 실제로 여기서 한 번 더 걸렸다. 기본 꺼짐이라 켜는 것은 환경별 결정이며
       # 켜는 순간 그동안 스트림에 쌓인 이벤트를 처음(0-0)부터 읽어 지난 세션 노트가 먼저 채워진다.

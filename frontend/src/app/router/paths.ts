@@ -6,8 +6,9 @@ export const publicPaths = {
   signup: '/signup',
   // 비밀번호 재설정은 로그인을 못 하는 사람이 쓰는 흐름이라 공개 경로에 둔다.
   passwordResetRequest: '/password-reset',
-  passwordResetConfirm: (token?: string) =>
-    token ? `/password-reset/confirm?token=${encodeURIComponent(token)}` : '/password-reset/confirm',
+  // 임시 비밀번호로 로그인한 사람이 갇히는 곳. 로그인 뒤에만 의미가 있지만 역할과
+  // 무관하므로(강사·수강생 모두) 공개 경로 옆에 둔다.
+  passwordChangeRequired: '/password-change-required',
   curriculums: '/curriculums',
   curriculum: (curriculumId: string) => `/curriculums/${curriculumId}`,
   /**

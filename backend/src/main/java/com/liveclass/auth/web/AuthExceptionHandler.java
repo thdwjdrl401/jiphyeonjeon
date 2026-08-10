@@ -7,11 +7,12 @@ import com.liveclass.auth.service.InvalidCredentialsException;
 import com.liveclass.auth.service.PasswordMismatchException;
 import com.liveclass.auth.service.ProfileImageInvalidException;
 import com.liveclass.common.web.ErrorResponse;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.mail.MailException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -33,6 +34,22 @@ public class AuthExceptionHandler {
     @ExceptionHandler(ProfileImageInvalidException.class)
     public ResponseEntity<ErrorResponse> handleProfileImageInvalid(ProfileImageInvalidException e) {
         return respond(HttpStatus.BAD_REQUEST, ErrorResponse.of("AUTH_PROFILE_IMAGE_INVALID", e.getMessage()));
+    }
+
+    /**
+     * 임시 비밀번호 메일 발송 실패 → 502.
+     *
+     * <p>비밀번호는 <b>바뀌지 않았다</b> — 발송이 실패하면 트랜잭션이 함께 되돌아간다
+     * (AuthService.issueTemporaryPassword). 그래서 "다시 시도해 주세요"가 정직한 안내다.
+     *
+     * <p>500으로 흘리면 화면이 "서버 오류"로 읽고, 사용자는 비밀번호가 이미 바뀌었는지 아닌지
+     * 모른 채 기다리게 된다.
+     */
+    @ExceptionHandler(MailException.class)
+    public ResponseEntity<ErrorResponse> handleMailFailure(MailException e) {
+        log.warn("임시 비밀번호 메일 발송 실패 — 비밀번호는 바뀌지 않았다", e);
+        return respond(HttpStatus.BAD_GATEWAY, ErrorResponse.of("MAIL_DELIVERY_FAILED",
+                "메일을 보내지 못했습니다. 잠시 후 다시 시도해 주세요."));
     }
 
     @ExceptionHandler(InvalidCredentialsException.class)

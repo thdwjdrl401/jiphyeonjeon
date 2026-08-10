@@ -42,6 +42,28 @@ spring:
     redis:
       host: localhost
       port: 6379
+  # 임시 비밀번호 발송용 SMTP. 기본값은 Gmail이고, 계정 값은 반드시 env로 넣는다 —
+  # 앱 비밀번호를 이 파일에 적으면 저장소에 그대로 남는다.
+  #
+  # Gmail은 계정 비밀번호가 아니라 **앱 비밀번호**(2단계 인증 켠 뒤 발급)를 요구한다. 평문
+  # 계정 비밀번호로는 인증이 거절된다.
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          # Gmail 587은 STARTTLS다(465는 SMTPS). 포트를 바꾸면 이 둘도 함께 봐야 한다.
+          starttls:
+            enable: true
+            required: true
+          # 붙지 않는 SMTP에 매달려 요청 스레드를 잡아 두지 않는다.
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
   session:
     timeout: 30m
     data:
@@ -79,6 +101,12 @@ management:
     web:
       exposure:
         include: health,info,prometheus,metrics   # prometheus = 스크레이프 엔드포인트
+  health:
+    # SMTP를 헬스체크에 넣지 않는다. /actuator/health는 컨테이너 healthcheck가 부르는 곳이라,
+    # 메일 서버가 잠깐 안 붙는 것만으로 앱이 DOWN이 되고 재시작된다 — 비밀번호 찾기 하나 때문에
+    # 강의 중인 서비스가 내려가면 안 된다. 발송 실패는 그 요청에서 502로 답하면 충분하다.
+    mail:
+      enabled: false
   prometheus:
     metrics:
       export:

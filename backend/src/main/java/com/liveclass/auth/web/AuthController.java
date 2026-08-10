@@ -7,6 +7,7 @@ import com.liveclass.auth.web.dto.AuthUserResponse;
 import com.liveclass.auth.web.dto.CsrfResponse;
 import com.liveclass.auth.web.dto.EmailAvailabilityResponse;
 import com.liveclass.auth.web.dto.LoginRequest;
+import com.liveclass.auth.web.dto.PasswordResetRequest;
 import com.liveclass.auth.web.dto.SignupRequest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -86,6 +87,21 @@ public class AuthController {
                 request.role().toRole()
         );
         return AuthUserResponse.from(user, null, adminAccounts.isAdmin(user.getEmail()));
+    }
+
+    @Operation(summary = "비밀번호 찾기",
+            description = "임시 비밀번호를 만들어 계정에 걸고 등록된 메일로 보낸다. "
+                    + "그 비밀번호로 로그인하면 비밀번호를 바꾸기 전까지 다른 기능을 쓸 수 없다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "202",
+                    description = "요청 접수. **계정 유무와 무관하게 같은 응답이다** — 이 경로가 "
+                            + "가입 여부를 확인하는 도구가 되지 않게 한다."),
+            @ApiResponse(responseCode = "502", description = "메일 발송 실패 (MAIL_DELIVERY_FAILED). 비밀번호는 바뀌지 않았다.")
+    })
+    @PostMapping("/password-reset")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public void requestPasswordReset(@Valid @RequestBody PasswordResetRequest request) {
+        authService.issueTemporaryPassword(request.email());
     }
 
     @Operation(summary = "로그인", description = "이메일·비밀번호로 로그인한다. 성공하면 세션 쿠키가 발급돼 이후 요청이 자동으로 인증된다.")

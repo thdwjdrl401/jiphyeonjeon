@@ -21,6 +21,7 @@ const student: AuthUser = {
   role: 'STUDENT',
   profileImageUrl: null,
   isAdmin: false,
+  mustChangePassword: false,
 }
 
 const instructor: AuthUser = {
@@ -30,6 +31,7 @@ const instructor: AuthUser = {
   role: 'INSTRUCTOR',
   profileImageUrl: 'https://cdn.example.com/avatar.png',
   isAdmin: false,
+  mustChangePassword: false,
 }
 
 function renderCard(user: AuthUser, onEdit = vi.fn()) {
