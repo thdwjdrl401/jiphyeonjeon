@@ -1,5 +1,6 @@
 package com.liveclass.video.web;
 
+import com.liveclass.live.api.LiveRoomLifecycle;
 import com.liveclass.video.service.RecordingService;
 import com.liveclass.video.web.dto.EgressWebhookEvent;
 import io.swagger.v3.oas.annotations.Operation;
@@ -31,16 +32,20 @@ public class LiveKitWebhookController {
 
     private final LiveKitWebhookVerifier verifier;
     private final RecordingService recordingService;
+    private final LiveRoomLifecycle roomLifecycle;
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
 
-    public LiveKitWebhookController(LiveKitWebhookVerifier verifier, RecordingService recordingService) {
+    public LiveKitWebhookController(LiveKitWebhookVerifier verifier, RecordingService recordingService,
+                                    LiveRoomLifecycle roomLifecycle) {
         this.verifier = verifier;
         this.recordingService = recordingService;
+        this.roomLifecycle = roomLifecycle;
     }
 
-    @Operation(summary = "LiveKit egress webhook",
+    @Operation(summary = "LiveKit webhook",
             description = "egress 완료/실패 신호를 받아 VideoAsset을 READY 또는 FAILED로 확정하고, "
-                    + "신규 정상 녹화는 READY와 ReplayStatus PUBLISHED를 함께 저장한다. 서명으로 인증한다.")
+                    + "신규 정상 녹화는 READY와 ReplayStatus PUBLISHED를 함께 저장한다. "
+                    + "room_finished는 아직 진행 중인 세션을 종료로 확정한다. 서명으로 인증한다.")
     @PostMapping(value = "/api/webhooks/livekit", consumes = MediaType.ALL_VALUE)
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void onWebhook(@RequestBody(required = false) byte[] body,
@@ -48,8 +53,21 @@ public class LiveKitWebhookController {
         verifier.verify(body, authorization);
 
         EgressWebhookEvent event = jsonMapper.readValue(body, EgressWebhookEvent.class);
-        // egress 종료 이벤트만 다룬다. 시작/진행(egress_started·egress_updated)은 무시.
-        if (event == null || !"egress_ended".equals(event.event()) || event.egressInfo() == null) {
+        if (event == null) {
+            return;
+        }
+        /*
+         * 방이 닫혔다 = 아무도 남지 않았다. 강사가 종료를 누르지 않고 창을 닫았다면 세션이 LIVE인
+         * 채로 남는데, 그것을 여기서 끝낸다(ADR-0119). 세션 상태는 live 모듈이 가지므로 포트로 넘긴다.
+         */
+        if ("room_finished".equals(event.event())) {
+            if (event.room() != null) {
+                roomLifecycle.onRoomFinished(event.room().name());
+            }
+            return;
+        }
+        // 나머지는 egress 종료만 다룬다. 시작/진행(egress_started·egress_updated)은 무시.
+        if (!"egress_ended".equals(event.event()) || event.egressInfo() == null) {
             return;
         }
         EgressWebhookEvent.EgressInfo info = event.egressInfo();

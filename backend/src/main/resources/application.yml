@@ -209,6 +209,20 @@ live:
     execution-lease: ${LIVE_START_EXECUTION_LEASE:90s}
     reconcile-fixed-delay: ${LIVE_START_RECONCILE_DELAY:10s}
     reconcile-initial-delay: ${LIVE_START_RECONCILE_INITIAL_DELAY:20s}
+  end:
+    # 강사가 종료를 누르지 않고 사라진 세션을 끝내는 루프(ADR-0119).
+    #
+    # start-grace: 시작 직후에는 강사 publisher가 아직 안 붙어 방이 비어 보인다. 그 창을 피한다.
+    # empty-grace: 방이 이만큼 비어 있어야 종료한다.
+    #
+    # **이 값은 livekit.room-departure-timeout-seconds(기본 10분)보다 커야 한다.** 그 10분은
+    # 강사가 끊겨도 방을 열어 두는 시간이고, 그동안 방은 비어 있다 — 돌아올 사람을 기다리는
+    # 중이라서다. 그보다 먼저 세션을 끊으면 방을 열어 둔 의미가 없어진다. 더 짧게 잡으면
+    # LiveEndReconciler가 기동 시 끌어올리고 경고를 남긴다.
+    start-grace: ${LIVE_END_START_GRACE:2m}
+    empty-grace: ${LIVE_END_EMPTY_GRACE:12m}
+    reconcile-fixed-delay: ${LIVE_END_RECONCILE_DELAY:60s}
+    reconcile-initial-delay: ${LIVE_END_RECONCILE_INITIAL_DELAY:45s}
 
 video:
   playback:
