@@ -120,6 +120,23 @@ export interface RecordedUploadProgress {
   fileName?: string
 }
 
+/**
+ * 업로드 녹화강의 기능 스위치의 현재 상태.
+ *
+ * <p>화면이 <b>폼을 열 때</b> 읽는다. 예전에는 강사가 제목·영상·자료를 다 채우고 제출한 뒤에야
+ * 503으로 막혔고, 그때는 이미 레슨 행이 만들어진 뒤라 영상 없는 강의가 커리큘럼에 남았다.
+ *
+ * <p>이건 <b>안내용이지 게이트가 아니다</b> — 실제 차단은 서버가 계속 한다.
+ */
+export interface RecordedVideoCapabilities {
+  videoUploadEnabled: boolean
+  /**
+   * 업로드 영상의 배치 STT가 열려 있는가. 자막이 끝나야 재생 패키지가 게시되므로,
+   * 닫혀 있으면 서버가 업로드 티켓 발급 자체를 503 `RECORDED_STT_REQUIRED`로 막는다.
+   */
+  captionGenerationEnabled: boolean
+}
+
 export interface UploadRecordedLessonRequest {
   /** 같은 화면에서 업로드를 재시도해도 레슨이 중복 생성되지 않게 유지하는 멱등키. */
   clientRequestId: string
@@ -183,5 +200,6 @@ export interface CurriculumManagementService {
   deleteCurriculum: (curriculumId: string) => Promise<void>
   deleteLesson: (lessonId: string) => Promise<void>
   deleteSection: (sectionId: string) => Promise<void>
+  getRecordedVideoCapabilities: () => Promise<RecordedVideoCapabilities>
   uploadRecordedLesson: (request: UploadRecordedLessonRequest) => Promise<UploadRecordedLessonResult>
 }

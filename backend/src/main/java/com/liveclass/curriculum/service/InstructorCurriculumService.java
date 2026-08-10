@@ -10,6 +10,7 @@ import com.liveclass.video.api.RecordedLessonView;
 import com.liveclass.video.api.RecordedProcessingView;
 import com.liveclass.video.api.RecordedUploadTicket;
 import com.liveclass.video.api.RecordedVideoConflictException;
+import com.liveclass.video.api.RecordedVideoCapabilities;
 import com.liveclass.video.api.RecordedVideoManagement;
 import com.liveclass.video.api.RecordedVideoNotFoundException;
 import com.liveclass.curriculum.domain.CurriculumLifecycleStatus;
@@ -498,6 +499,11 @@ public class InstructorCurriculumService {
         log.info(Audit.MARKER, "녹화강의 생성 sectionId={} lessonId={} recordedVideoId={}",
                 sectionId, lesson.lessonId(), recorded.recordedVideoId());
         return recorded;
+    }
+
+    /** 기능 스위치 상태는 특정 강의에 매이지 않는다 — 소유권 검사도, DB 접근도 없다. */
+    public RecordedVideoCapabilities getRecordedVideoCapabilities() {
+        return recordedVideoManagement.capabilities();
     }
 
     @Transactional

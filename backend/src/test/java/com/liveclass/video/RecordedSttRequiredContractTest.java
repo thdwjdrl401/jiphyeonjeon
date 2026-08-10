@@ -55,6 +55,36 @@ class RecordedSttRequiredContractTest {
                 .andExpect(jsonPath("$.code").value("RECORDED_STT_REQUIRED"));
     }
 
+    /**
+     * 같은 사실을 <b>업로드 전에</b> 묻는 길. 강사 화면이 폼을 열 때 읽어 미리 잠근다 —
+     * 예전에는 5GiB를 다 채우고 제출한 뒤에야 위 503을 만났고, 그때는 레슨 행이 이미 만들어진
+     * 뒤라 영상 없는 강의가 커리큘럼에 남았다.
+     */
+    @Test
+    void capabilities_report_the_closed_caption_switch_before_the_form_is_filled() throws Exception {
+        Cookie[] instructor = loginAsInstructor();
+
+        read("/api/instructor/recorded-lessons/capabilities", instructor)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.videoUploadEnabled").value(true))
+                .andExpect(jsonPath("$.captionGenerationEnabled").value(false));
+    }
+
+    /** 강사 전용 경로다 — 로그인하지 않았으면 스위치 상태도 알려주지 않는다. */
+    @Test
+    void capabilities_require_an_authenticated_instructor() throws Exception {
+        read("/api/instructor/recorded-lessons/capabilities", null)
+                .andExpect(status().isUnauthorized());
+    }
+
+    private ResultActions read(String path, Cookie[] authCookies) throws Exception {
+        MockHttpServletRequestBuilder builder = get(path);
+        if (authCookies != null) {
+            builder.cookie(authCookies);
+        }
+        return mockMvc.perform(builder);
+    }
+
     private Cookie[] loginAsInstructor() throws Exception {
         String email = "stt-required-" + UUID.randomUUID() + "@liveclass.test";
         write(post("/api/auth/signup"), null,

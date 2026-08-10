@@ -17,6 +17,7 @@ import { ApiError } from '@/shared/api/client'
 import type {
   CurriculumManagementService,
   InstructorCurriculumResponse,
+  RecordedVideoCapabilities,
 } from './curriculumManagementService.interface'
 import type { CurriculumMaterial } from './types'
 
@@ -256,6 +257,11 @@ export const mockCurriculumManagementService = {
     for (const [key, structure] of savedStructures) {
       savedStructures.set(key, structure.filter((section) => section.sectionId !== sectionId))
     }
+  },
+  // mock 데이터소스는 서버 없이 화면을 돌려 보는 용도라 스위치를 열어 둔다. 잠긴 화면을 보려면
+  // 실제 서버(RECORDED_STT_ENABLED=false)를 붙인다.
+  async getRecordedVideoCapabilities(): Promise<RecordedVideoCapabilities> {
+    return { videoUploadEnabled: true, captionGenerationEnabled: true }
   },
   async uploadRecordedLesson(request) {
     const curriculum = getMockCurriculum(request.curriculumId)

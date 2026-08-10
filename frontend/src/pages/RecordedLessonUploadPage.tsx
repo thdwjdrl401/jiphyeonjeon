@@ -5,10 +5,12 @@ import { instructorPaths } from '@/app/router/paths'
 import {
   getCurriculumManagementStructure,
   getInstructorCurriculum,
+  getRecordedVideoCapabilities,
   uploadRecordedLesson,
 } from '@/features/curriculum/curriculumManagementService'
 import {
   formatRecordedLessonFileSize,
+  recordedUploadLockReason,
   RECORDED_LESSON_VIDEO_ACCEPT,
   validateRecordedLessonVideo,
 } from '@/features/curriculum/recordedLessonUpload'
@@ -65,6 +67,20 @@ export default function RecordedLessonUploadPage() {
     },
     enabled: Boolean(curriculumId && sectionId),
   })
+
+  /*
+   * 기능 스위치는 <b>폼을 열 때</b> 묻는다. 예전에는 강사가 제목·5GiB 영상·자료를 다 채우고
+   * 제출한 뒤에야 503으로 막혔고, 그때는 ①레슨 생성이 이미 끝난 뒤라 영상 없는 강의가 커리큘럼에
+   * 남았다(멱등키는 같은 화면 재시도만 지킨다 — 나갔다 들어오면 새로 하나 더 생긴다).
+   *
+   * <p>커리큘럼과 별개 축이라 별도 query로 둔다. 실패해도 폼을 막지 않는다 — 아래 잠금은
+   * 안내이고, 진짜 차단은 서버가 계속 한다.
+   */
+  const capabilitiesQuery = useQuery({
+    queryKey: ['recorded-video-capabilities'],
+    queryFn: getRecordedVideoCapabilities,
+  })
+  const lockReason = recordedUploadLockReason(capabilitiesQuery.data)
 
   usePageTitle('녹화강의 업로드')
 
@@ -135,7 +151,8 @@ export default function RecordedLessonUploadPage() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
-    if (submitting || !title.trim() || !videoFile) return
+    // 버튼을 잠갔어도 Enter로 폼이 제출된다 — 잠금은 여기서도 본다.
+    if (submitting || !title.trim() || !videoFile || lockReason) return
     setSubmitting(true)
     setSubmitError(null)
     setProgress(null)
@@ -193,7 +210,7 @@ export default function RecordedLessonUploadPage() {
   }
 
   const { curriculum, section } = contextQuery.data
-  const canSubmit = Boolean(title.trim() && videoFile && !fileError && !submitting)
+  const canSubmit = Boolean(title.trim() && videoFile && !fileError && !submitting && !lockReason)
 
   return (
     <div className="workspace-page workspace-page--narrow lesson-form-page recorded-lesson-upload-page">
@@ -202,6 +219,12 @@ export default function RecordedLessonUploadPage() {
         description={`${curriculum.title} · ${section.title}`}
         action={<Link className="button button--soft" to={instructorPaths.curriculumManage(curriculumId)}>구성으로 돌아가기</Link>}
       />
+
+      {lockReason && (
+        <InlineNotice tone="warning">
+          <strong>지금은 녹화강의를 업로드할 수 없습니다.</strong> {lockReason}
+        </InlineNotice>
+      )}
 
       <form className="workspace-form lesson-form recorded-lesson-upload-form" onSubmit={submit}>
         <div className="lesson-form__top-grid">
@@ -240,8 +263,14 @@ export default function RecordedLessonUploadPage() {
 
           <Panel className="lesson-form__panel lesson-form__panel--policy recorded-upload__detail-panel" title="업로드 세부 확인" description="선택한 파일과 자동 처리 방식을 업로드 전에 확인하세요.">
             <dl className="recorded-upload-summary"><div><dt>동영상</dt><dd>{videoFile ? videoFile.name : '선택 전'}</dd></div><div><dt>원본 크기</dt><dd>{videoFile ? formatRecordedLessonFileSize(videoFile.size) : '--'}</dd></div><div><dt>강의 자료</dt><dd>{materials.length}개</dd></div></dl>
-            <ul className="policy-list lesson-form__policy-list"><li><span>HLS</span><div><strong>재생용 변환</strong><p>업로드 후 HLS 변환과 영상 검증을 자동으로 진행합니다.</p></div></li><li><span>CC</span><div><strong>AI 자막</strong><p>영상 처리와 함께 자막을 생성합니다.</p></div></li><li><span>公</span><div><strong>자동 공개</strong><p>영상과 자막 검증이 끝나면 수강생에게 공개됩니다.</p></div></li></ul>
-            <InlineNotice tone={videoFile ? 'info' : 'warning'}>{videoFile ? '필수 영상이 준비되었습니다. 제목과 자료를 마지막으로 확인해 주세요.' : '업로드할 MP4 영상을 선택해 주세요.'}</InlineNotice>
+            <ul className="policy-list lesson-form__policy-list"><li><span>HLS</span><div><strong>재생용 변환</strong><p>업로드 후 HLS 변환과 영상 검증을 자동으로 진행합니다.</p></div></li><li><span>CC</span><div><strong>AI 자막</strong><p>{lockReason ? '외부 유료 STT API를 쓰는 경로라 지금은 잠겨 있습니다.' : '영상 처리와 함께 자막을 생성합니다.'}</p></div></li><li><span>公</span><div><strong>자동 공개</strong><p>영상과 자막 검증이 끝나면 수강생에게 공개됩니다.</p></div></li></ul>
+            <InlineNotice tone={lockReason ? 'warning' : videoFile ? 'info' : 'warning'}>
+              {lockReason
+                ? '업로드가 잠겨 있어 제출할 수 없습니다.'
+                : videoFile
+                  ? '필수 영상이 준비되었습니다. 제목과 자료를 마지막으로 확인해 주세요.'
+                  : '업로드할 MP4 영상을 선택해 주세요.'}
+            </InlineNotice>
           </Panel>
         </div>
 

@@ -28,6 +28,7 @@ export const archiveCurriculum = (curriculumId: string) => curriculumManagementS
 export const deleteCurriculum = (curriculumId: string) => curriculumManagementService.deleteCurriculum(curriculumId)
 export const deleteLesson = (lessonId: string) => curriculumManagementService.deleteLesson(lessonId)
 export const deleteSection = (sectionId: string) => curriculumManagementService.deleteSection(sectionId)
+export const getRecordedVideoCapabilities = () => curriculumManagementService.getRecordedVideoCapabilities()
 export const uploadRecordedLesson = (request: UploadRecordedLessonRequest) => curriculumManagementService.uploadRecordedLesson(request)
 
 export type {
@@ -36,6 +37,7 @@ export type {
   CurriculumManagementSection,
   CurriculumManagementService,
   InstructorCurriculumResponse,
+  RecordedVideoCapabilities,
   SaveCurriculumManagementRequest,
   SaveCurriculumManagementResult,
   UpdateCurriculumThumbnailRequest,

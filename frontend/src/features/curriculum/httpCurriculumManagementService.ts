@@ -5,6 +5,7 @@ import type {
   CurriculumManagementSection,
   CurriculumManagementService,
   InstructorCurriculumResponse,
+  RecordedVideoCapabilities,
 } from './curriculumManagementService.interface'
 import type { CurriculumMaterial } from './types'
 
@@ -263,6 +264,10 @@ export const httpCurriculumManagementService = {
   },
   async deleteSection(sectionId) {
     await apiClient.delete(`/instructor/sections/${sectionId}`)
+  },
+  async getRecordedVideoCapabilities() {
+    const { data } = await apiClient.get<RecordedVideoCapabilities>('/instructor/recorded-lessons/capabilities')
+    return data
   },
   async uploadRecordedLesson(request) {
     // 진행을 원하지 않는 호출자에게는 콜백 자체를 넘기지 않는다 — 넘기면 청크마다 도는 일이 공짜로 생긴다.

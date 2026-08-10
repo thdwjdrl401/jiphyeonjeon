@@ -7,6 +7,7 @@ import com.liveclass.curriculum.web.dto.RecordedLessonResponse;
 import com.liveclass.curriculum.web.dto.RecordedVideoUploadRequest;
 import com.liveclass.video.api.RecordedProcessingView;
 import com.liveclass.video.api.RecordedUploadTicket;
+import com.liveclass.video.api.RecordedVideoCapabilities;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -29,6 +30,12 @@ public class InstructorRecordedLessonController {
 
     public InstructorRecordedLessonController(InstructorCurriculumService service) {
         this.service = service;
+    }
+
+    @Operation(summary = "녹화강의 업로드 기능 스위치 조회")
+    @GetMapping("/api/instructor/recorded-lessons/capabilities")
+    public RecordedVideoCapabilities capabilities() {
+        return service.getRecordedVideoCapabilities();
     }
 
     @Operation(summary = "녹화강의 생성")

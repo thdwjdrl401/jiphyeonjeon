@@ -9,6 +9,7 @@ import com.liveclass.video.api.RecordedLessonView;
 import com.liveclass.video.api.RecordedProcessingView;
 import com.liveclass.video.api.RecordedUploadTicket;
 import com.liveclass.video.api.RecordedVideoConflictException;
+import com.liveclass.video.api.RecordedVideoCapabilities;
 import com.liveclass.video.api.RecordedVideoDisabledException;
 import com.liveclass.video.api.RecordedVideoForbiddenException;
 import com.liveclass.video.api.RecordedVideoInvalidException;
@@ -76,6 +77,11 @@ public class RecordedVideoService implements RecordedVideoManagement, RecordedVi
         this.captionTrackRepository = captionTrackRepository;
         this.sttJobRepository = sttJobRepository;
         this.sttEnabled = sttEnabled;
+    }
+
+    @Override
+    public RecordedVideoCapabilities capabilities() {
+        return new RecordedVideoCapabilities(enabled, enabled && sttEnabled);
     }
 
     @Override
@@ -211,7 +217,9 @@ public class RecordedVideoService implements RecordedVideoManagement, RecordedVi
     public RecordedProcessingView retryCaptions(UUID lessonId) {
         requireEnabled();
         if (!sttEnabled) {
-            throw new RecordedVideoDisabledException("녹화강의 자막 생성 기능이 비활성화되어 있습니다.");
+            throw new RecordedVideoDisabledException(
+                    "자막 생성이 잠겨 있어 다시 처리할 수 없습니다. "
+                            + "업로드한 영상의 자막은 외부 유료 STT API로 만듭니다.");
         }
         RecordedVideo video = requireByLesson(lessonId);
         RecordedCaptionTrack track = captionTrackRepository.findByRecordedVideoId(video.getId())
@@ -301,10 +309,17 @@ public class RecordedVideoService implements RecordedVideoManagement, RecordedVi
         }
     }
 
+    /**
+     * 업로드 자막은 라이브 자막과 경로가 다르다 — 라이브는 우리가 직접 돌리는 STT 모델이지만
+     * 업로드 MP4는 외부 STT API를 호출량만큼 과금되는 방식으로 부른다(ADR-0011). 비용 때문에
+     * 스위치를 닫아 둔 것이므로, 고장으로 읽히지 않게 <b>이유와 남은 선택지</b>를 문구에 담는다.
+     */
     private void requireSttEnabled() {
         if (!sttEnabled) {
-            throw new RecordedVideoDisabledException(
-                    "RECORDED_STT_REQUIRED", "녹화강의 자막 생성 기능을 사용할 수 없습니다.");
+            throw new RecordedVideoDisabledException("RECORDED_STT_REQUIRED",
+                    "업로드한 영상의 자막은 실시간 강의와 달리 외부 STT API를 호출해 만듭니다. "
+                            + "이 API는 쓴 만큼 요금이 붙어 지금은 잠가 두었습니다. "
+                            + "실시간 강의와 자막은 그대로 사용할 수 있습니다.");
         }
     }
 
