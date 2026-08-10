@@ -50,4 +50,36 @@ public class LiveEndOrchestrator {
 
         return transitions.complete(sessionId, requesterId);
     }
+
+    /**
+     * 강사가 종료를 누르지 않은 채 사라진 세션을 시스템이 끝낸다(ADR-0119).
+     *
+     * <p>사람이 부르는 {@link #end}와 <b>외부 제어 실패를 다루는 방식이 다르다.</b> 저쪽은 Room 삭제가
+     * 실패하면 예외를 올려 강사가 다시 누르게 하지만, 여기는 다시 누를 사람이 없다. 게다가 이 경로가
+     * 열리는 조건 자체가 <b>방이 이미 없거나 비어 있다</b>는 것이라, 실패의 대부분은 "지울 게 없다"다.
+     * 그래서 로그만 남기고 ENDED까지 간다 — 여기서 멈추면 세션이 ENDING에 갇혀 문제가 그대로 남는다.
+     *
+     * @return 이번 호출이 실제로 종료시켰으면 true. 이미 끝났거나 손댈 상태가 아니면 false.
+     */
+    public boolean endBySystem(UUID sessionId, String reason) {
+        var begin = transitions.beginBySystem(sessionId);
+        if (begin.isEmpty() || begin.get().alreadyEnded()) {
+            return false;
+        }
+
+        try {
+            roomControl.closeRoom(LiveSessionService.roomName(sessionId));
+        } catch (RuntimeException e) {
+            log.warn("시스템 종료 중 Room 삭제 실패(계속 진행) session={}: {}", sessionId, e.getMessage());
+        }
+        try {
+            recordingControl.stopRecording(sessionId);
+        } catch (RuntimeException e) {
+            log.warn("시스템 종료 중 Egress 중지 실패(계속 진행) session={}: {}", sessionId, e.getMessage());
+        }
+
+        transitions.completeBySystem(sessionId);
+        log.info("시스템이 라이브 세션을 종료함 session={} 사유={}", sessionId, reason);
+        return true;
+    }
 }
