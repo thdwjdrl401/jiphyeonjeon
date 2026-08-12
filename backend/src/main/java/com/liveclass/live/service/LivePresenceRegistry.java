@@ -1,7 +1,13 @@
 package com.liveclass.live.service;
 
+import com.liveclass.live.api.LivePresenceDirectory;
+import com.liveclass.live.api.LivePresentUser;
 import org.springframework.stereotype.Component;
 
+import java.time.OffsetDateTime;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -26,7 +32,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * 브로커를 외부 relay로 바꾸는 기존 과제와 함께 이 집계도 공유 저장소로 옮겨야 한다.
  */
 @Component
-public class LivePresenceRegistry {
+public class LivePresenceRegistry implements LivePresenceDirectory {
 
     /** WebSocket 세션 하나가 어느 라이브의 누구인지. 구독이 여러 개여도 연결 하나가 사람 하나다. */
     private final Map<String, Presence> byConnection = new ConcurrentHashMap<>();
@@ -37,7 +43,7 @@ public class LivePresenceRegistry {
      * @return 이 등록으로 <b>새 연결이 잡혔는가</b>. 이미 등록된 연결이면 false
      */
     public boolean join(String connectionId, UUID liveSessionId, UUID userId, boolean instructor) {
-        Presence added = new Presence(liveSessionId, userId, instructor);
+        Presence added = new Presence(liveSessionId, userId, instructor, OffsetDateTime.now());
         return byConnection.putIfAbsent(connectionId, added) == null;
     }
 
@@ -60,6 +66,30 @@ public class LivePresenceRegistry {
         return distinct.size();
     }
 
-    private record Presence(UUID liveSessionId, UUID userId, boolean instructor) {
+    /**
+     * 지금 이 라이브에 들어와 있는 사람들(강사 포함, 사람 단위).
+     *
+     * <p>세는 것과 달리 <b>강사를 빼지 않는다</b>. "N명 참여 중"은 강사가 자기 청중을 보는 숫자라
+     * 자기 자신이 빠져야 하지만, 운영자가 보는 목록은 강사가 들어와 있는지도 답해야 한다 —
+     * 시작은 됐는데 강사가 안 들어온 세션이 실제로 문의가 되는 경우다.
+     *
+     * <p>한 사람이 탭을 여럿 열었으면 <b>가장 이른</b> 접속 시각을 남긴다. 뒤에 연 탭의 시각을 쓰면
+     * 탭을 열 때마다 "방금 들어온 사람"으로 보인다.
+     */
+    @Override
+    public List<LivePresentUser> presentIn(UUID liveSessionId) {
+        Map<UUID, LivePresentUser> byUser = new HashMap<>();
+        byConnection.values().stream()
+                .filter(p -> p.liveSessionId().equals(liveSessionId))
+                .forEach(p -> byUser.merge(
+                        p.userId(),
+                        new LivePresentUser(p.userId(), p.instructor(), p.since()),
+                        (kept, incoming) -> incoming.since().isBefore(kept.since()) ? incoming : kept));
+        return byUser.values().stream()
+                .sorted(Comparator.comparing(LivePresentUser::since))
+                .toList();
+    }
+
+    private record Presence(UUID liveSessionId, UUID userId, boolean instructor, OffsetDateTime since) {
     }
 }

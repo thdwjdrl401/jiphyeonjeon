@@ -36,6 +36,19 @@ public class UserDirectoryService implements UserDirectory {
 
     @Override
     @Transactional(readOnly = true)
+    public Map<UUID, String> findDisplayNames(Collection<UUID> userIds) {
+        if (userIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, String> names = new HashMap<>();
+        for (var user : appUserRepository.findAllById(userIds)) {
+            names.put(user.getId(), user.getDisplayName());
+        }
+        return names;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<UserContact> findContacts(Collection<UUID> userIds) {
         return appUserRepository.findAllById(userIds).stream()
                 .map(u -> new UserContact(u.getId(), u.getDisplayName(), u.getEmail()))

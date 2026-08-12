@@ -7,6 +7,8 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -49,6 +51,50 @@ public interface WatchBucketRepository extends JpaRepository<WatchBucket, WatchB
             ORDER BY bucket_index
             """, nativeQuery = true)
     List<BucketAggregate> aggregate(@Param("lessonId") UUID lessonId);
+
+    /**
+     * 방금까지 이 레슨을 보고 있던 사람들(운영 콘솔).
+     *
+     * <p><b>{@code watch_bucket.updated_at}으로 판정하는 이유</b>: 이 컬럼은 클라이언트가 시청을
+     * 보고할 때만, 그것도 {@code now()}(서버 시각)로 갱신된다. {@code learning_progress.updated_at}은
+     * 진도 환산 배치(ADR-0117)가 레슨의 모든 시청자 행을 한꺼번에 건드리므로 "지금 보는 중"의
+     * 근거가 될 수 없다.
+     *
+     * <p>위치는 {@code learning_progress}에서 가져온다 — 같은 15초 주기에 함께 올라오는 값이고,
+     * 칸 번호의 최댓값은 <b>가장 멀리 간 지점</b>이라 현재 위치가 아니다. 진도 기록이 아직 없으면
+     * ({@code LEFT JOIN}) 0으로 둔다. 레슨·사용자당 진도는 한 행이라 {@code MAX}는 그 한 행이다.
+     */
+    @Query(value = """
+            SELECT w.user_id AS userId,
+                   MAX(w.updated_at) AS lastReportedAt,
+                   COALESCE(MAX(p.last_position_ms), 0) AS lastPositionMs,
+                   COALESCE(MAX(p.progress_percent), 0) AS progressPercent
+            FROM core.watch_bucket w
+            LEFT JOIN core.learning_progress p
+                   ON p.user_id = w.user_id AND p.lesson_id = w.lesson_id
+            WHERE w.lesson_id = :lessonId AND w.updated_at >= :since
+            GROUP BY w.user_id
+            ORDER BY MAX(w.updated_at) DESC
+            """, nativeQuery = true)
+    List<RecentWatcher> findRecentWatchers(@Param("lessonId") UUID lessonId,
+                                           @Param("since") OffsetDateTime since);
+
+    /**
+     * 최근 시청자 한 줄.
+     *
+     * <p>시각을 {@code Instant}로 받는다 — 네이티브 쿼리의 {@code timestamptz}는 그 타입으로 오고,
+     * 프로젝션은 {@code OffsetDateTime}으로 변환해 주지 않는다(변환기 없이 실패한다). 표시용 오프셋은
+     * 경계 DTO를 만들 때 붙인다.
+     */
+    interface RecentWatcher {
+        UUID getUserId();
+
+        Instant getLastReportedAt();
+
+        long getLastPositionMs();
+
+        int getProgressPercent();
+    }
 
     /** 칸 하나의 집계 한 줄. */
     interface BucketAggregate {

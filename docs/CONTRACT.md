@@ -891,6 +891,35 @@ PPTX 검색만 계속한다. ai-api endpoint는 `POST /internal/v2/rag/answers:s
 - 인가는 다시보기 재생과 같은 게이트다 — 소유 강사는 게시 전에도, 학생은 활성 수강 + 게시본만.
 - 답변은 라이브 질문과 같은 표(`live_ai_answer`)에 쌓여 `GET /api/live-sessions/{sessionId}/ai/answers`로 함께 읽힌다. 녹화강의(RECORDED)는 라이브 세션이 없어 기록을 남기지 않는다.
 
+### 3-12. 운영 콘솔 (`/api/admin/**`, ROLE_ADMIN)
+
+권한은 `SecurityConfig`의 `/api/admin/**`(ROLE_ADMIN)이 한 번에 건다. **여기서 도메인 게이트를
+우회하지 않는다** — ADMIN은 남의 커리큘럼 화면을 열지 못하므로, 강사 화면으로 링크하는 대신 판단에
+필요한 값만 모아 **읽기 전용**으로 보여 준다([ADR-0089](decisions/songjeongki/0089-admin-console-reads-names-not-uuids.md)).
+
+| 경로 | 응답 | 비고 |
+|---|---|---|
+| `GET /admin/egress` | 진행 중 Egress 목록 | LiveKit 실시간 조회(DB 아님). `POST .../{id}/stop`·`.../{id}/purge`로 정지·유령 회수 |
+| `GET /admin/recordings/summary` · `POST /admin/recordings/reconcile` | 자산 상태 분포 · 확정 결과 | 확정은 완료 webhook과 같은 경로라 **정상 녹화를 자동 게시한다** |
+| `GET /admin/live/summary` | 상태 분포 · 갇힌 세션 · 자막 소비 상태 | 갇힘 기준을 `stuckAfterHours`로 함께 준다 — 화면이 서버와 같은 기준으로 설명하도록 |
+| `POST /admin/session-labels` | `[{sessionId, lessonId, lessonTitle, curriculumId, curriculumTitle}]` | 조회지만 POST(URL 길이), 상한 200. **못 찾은 id도 빈 값으로 함께 온다**(유령 Egress가 정확히 그 경우라 404면 정리할 행이 사라진다) |
+| `GET /admin/live-sessions/{sessionId}` | 세션·강의·커리큘럼·강사·녹화 상태 | 없는 세션 **404**(목록과 달리 주소로 직접 들어오는 화면). 이메일은 담지 않는다 |
+| `GET /admin/live-sessions/{sessionId}/viewers` | `{sessionId, live[], replay[], recentWindowSeconds}` | 아래 |
+
+**시청자 현황([ADR-0121](decisions/songjeongki/0121-the-console-sees-people-not-just-machines.md))** — 조회 시점의 현황이라 매번 달라진다. 상세와 나눈 것은 **수명이 다르기 때문**이다(화면이 10초마다 다시 받는다).
+
+- `live[]`는 `{userId, displayName, instructor, since}`. **STOMP 구독 집계**이고 LiveKit `listParticipants`가
+  아니다 — 수강생은 HLS로만 보고 방에 들어오지 않아([ADR-0032](decisions/songjeongki/0032-media-playback-hls-only.md)) 저쪽에는 강사·Egress·STT 에이전트만 잡힌다.
+  **목록은 강사를 포함한다**(세션 응답의 `participantCount`는 강사를 빼고 센다 — 쓰임이 다르다).
+- `replay[]`는 `{userId, displayName, lastPositionMs, progressPercent, lastReportedAt}`. 판정은
+  **`watch_bucket.updated_at`**(보고할 때만 서버 시각으로 갱신)이고 `learning_progress.updated_at`이
+  아니다 — 진도 환산 배치([ADR-0117](decisions/songjeongki/0117-progress-settles-when-the-recording-is-ready.md))가 레슨의 모든 시청자 행을 한꺼번에 갱신하므로 그 컬럼은 근거가 될 수 없다.
+  위치는 같은 주기에 올라오는 `last_position_ms`에서 온다.
+- `recentWindowSeconds`는 판정에 쓴 창(60초 = 보고 주기 15초의 네 배). **일시정지·창 닫기로 보고가
+  끊기면 목록에서 빠지는 것이 의도한 동작**이고, 강사 본인의 재생은 애초에 기록되지 않아 잡히지 않는다.
+- `displayName`은 못 찾으면 `null`이며 **행은 남는다**(이름 하나 때문에 인원이 틀리면 안 된다).
+- 없는 세션 **404**. 접속자 집계는 메모리라 **단일 인스턴스 전제**다(SimpleBroker와 같은 전제, [ADR-0019](decisions/songjeongki/0019-ws-realtime-chat-stomp.md)).
+
 ## 4. 스키마 소유권 (공동수정 금지)
 - `core` = Spring 단독 쓰기, `ai` = Python 단독 쓰기. AI 후보(ai)→강사 게시→core read model. 상세: [ARCHITECTURE.md](ARCHITECTURE.md) 도메인 모델.
 

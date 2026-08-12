@@ -11,6 +11,16 @@ public interface UserDirectory {
 
     Optional<UserView> findById(UUID userId);
 
+    /**
+     * userId → 표시 이름 배치 해석. 목록에 이름을 붙일 때 행마다 {@link #findById}를 부르면 행 수만큼
+     * 왕복이 생긴다.
+     *
+     * <p><b>이메일이 필요하면 {@link #findContacts}를 쓴다.</b> 이름만 있으면 되는 자리에 PII를 실어
+     * 나르지 않는다 — 두 포트가 나뉜 이유가 그것이다. 없는 사용자는 결과에서 빠진다(호출자가 "이름을
+     * 찾을 수 없음"으로 표시한다).
+     */
+    Map<UUID, String> findDisplayNames(Collection<UUID> userIds);
+
     /** PII(이메일) 배치 조회 — 강사 로스터 등 이메일이 필요한 경로 전용. N+1 없이 목록을 한 번에 보강한다. */
     List<UserContact> findContacts(Collection<UUID> userIds);
 
