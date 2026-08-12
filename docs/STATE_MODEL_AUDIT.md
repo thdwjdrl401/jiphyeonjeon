@@ -29,8 +29,6 @@
 
 제외 범위:
 
-- `sub1/`
-- `docs/legacy/`
 - `docs/decisions/`
 - `docs/frontend/design/`
 - `node_modules/`, `build/`, `dist/` 등 외부 의존성·생성 산출물

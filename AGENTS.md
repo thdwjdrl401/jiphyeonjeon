@@ -39,8 +39,6 @@ Codex는 별도 명령 어댑터 없이 위 문서 흐름을 기준으로 판단
 
 - **확정 아키텍처·다이어그램**: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · 실행법: [RUN.md](RUN.md)
 - 마일스톤(CP): **CP0**(인증·강좌) → **CP1**(라이브 미디어) → **CP2**(자막) → **CP3**(용어·RAG) → **CP4**(녹화·다시보기) → **CP5**(퀴즈). 상세는 [docs/CP-ROADMAP.md](docs/CP-ROADMAP.md).
-- 참고(구 화상회의 명세, 참고용): [docs/legacy/SPEC.md](docs/legacy/SPEC.md) · [docs/legacy/ROADMAP.md](docs/legacy/ROADMAP.md)
-
 ---
 
 ## 2. 반드시 지킬 공유 계약 (요약)

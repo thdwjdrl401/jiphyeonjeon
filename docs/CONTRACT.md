@@ -5,8 +5,6 @@
 >
 > **FE↔Spring**, **Spring↔AI(RabbitMQ/HTTP/LiveKit AgentDispatch/Redis Streams)**,
 > **EC2 AI↔GPU AI(HTTP)** 가 동시에 지켜야 어긋나지 않는 계약. 한쪽이 바꾸면 다른 쪽이 깨지는 항목만.
-> (구 화상회의 명세 [SPEC.md](legacy/SPEC.md)는 참고용 — [decisions/songjeongki/0003](decisions/songjeongki/0003-greenfield-redesign.md))
-
 ---
 
 ## 1. 필드명 규칙 — camelCase 통일

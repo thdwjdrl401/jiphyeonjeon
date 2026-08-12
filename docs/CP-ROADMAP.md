@@ -2,7 +2,7 @@
 
 > 📍 하네스 개요: [harness/README.md](harness/README.md) · 아키텍처: [ARCHITECTURE.md](ARCHITECTURE.md) · 계약: [CONTRACT.md](CONTRACT.md)
 >
-> 아키텍처를 착수 순서·의존성·역할로 변환. 라이브 다시보기는 Egress 산출물이고, 강사가 직접 올리는 MP4 녹화강의는 별도 변환 경로다. (구 [ROADMAP.md](legacy/ROADMAP.md)는 대체됨)
+> 아키텍처를 착수 순서·의존성·역할로 변환. 라이브 다시보기는 Egress 산출물이고, 강사가 직접 올리는 MP4 녹화강의는 별도 변환 경로다.
 
 ## 원칙
 - **증분 vertical slice**: 각 CP는 독립 데모 가능. 폭이 아니라 깊이.
