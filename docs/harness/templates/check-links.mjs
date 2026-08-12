@@ -8,14 +8,11 @@ import { execSync } from 'node:child_process';
 
 // 추적 + 신규(무시 제외) md/mdc 문서 검사 — pre-commit 에서 새 파일도 잡히게.
 //
-// -z 로 받는다. 기본 출력은 비ASCII 경로를 큰따옴표로 감싸고 이스케이프해서
-// ("sub1/\353\260\225.../README.md") 그대로 열면 ENOENT 로 죽는다 — 한글 이름 문서가
-// 하나만 생겨도 검사기 전체가 멈췄다. NUL 구분은 이스케이프가 없다.
+// -z 로 받는다. 기본 출력은 비ASCII 경로를 큰따옴표로 감싸고 이스케이프하므로
+// 한글 이름 문서가 하나만 생겨도 검사기 전체가 멈출 수 있다. NUL 구분은 이스케이프가 없다.
 const files = execSync('git ls-files -z --cached --others --exclude-standard "*.md" "*.mdc"', { encoding: 'utf8' })
   .split('\0').filter(Boolean)
-  .filter(f => !f.startsWith('frontend/node_modules') && !f.startsWith('node_modules'))
-  // sub1/ 은 개인 과제 폴더다. 공유 문서 규약이 적용되지 않고 링크도 각자 관리하므로 검사하지 않는다.
-  .filter(f => !f.startsWith('sub1/'));
+  .filter(f => !f.startsWith('frontend/node_modules') && !f.startsWith('node_modules'));
 
 const linkRe = /\[[^\]]+\]\(([^)]+)\)/g;
 let broken = 0, checked = 0;

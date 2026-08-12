@@ -29,7 +29,6 @@
 
 제외 범위:
 
-- `sub1/`
 - `docs/legacy/`
 - `docs/decisions/`
 - `docs/frontend/design/`
