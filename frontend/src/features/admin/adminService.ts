@@ -180,6 +180,51 @@ export function sessionIdFromRoomName(roomName: string | null | undefined): stri
   return match ? match[1] : null
 }
 
+/**
+ * 지금 라이브 강의실을 열어 둔 사람. 백엔드 `SessionViewerService.LiveViewer`와 대응.
+ *
+ * <p>LiveKit이 아니라 STOMP 구독으로 센다 — 수강생은 HLS로만 보고 LiveKit 방에 들어오지 않아
+ * 저쪽에는 강사·Egress·STT 에이전트만 잡힌다(ADR-0032·0121).
+ */
+export interface LiveViewer {
+  userId: string
+  /** 못 찾으면 null. 사용자가 사라져도 행은 남는다 — 이름 하나 때문에 인원이 틀리면 안 된다. */
+  displayName: string | null
+  instructor: boolean
+  /** 들어온 시각(ISO). 탭을 여럿 열었으면 가장 이른 시각이다. */
+  since: string
+}
+
+/** 방금까지 다시보기를 보고 있던 사람. 백엔드 `SessionViewerService.ReplayViewer`와 대응. */
+export interface ReplayViewer {
+  userId: string
+  displayName: string | null
+  /** 마지막으로 보고된 재생 위치 — "어디를 보고 있는가". */
+  lastPositionMs: number
+  progressPercent: number
+  /** 마지막 보고가 서버에 닿은 시각(ISO). 클라이언트 시계가 아니다. */
+  lastReportedAt: string
+}
+
+export interface SessionViewers {
+  sessionId: string
+  live: LiveViewer[]
+  replay: ReplayViewer[]
+  /** 다시보기 판정에 쓴 기준 창(초). 화면이 같은 기준으로 설명하도록 서버가 함께 준다. */
+  recentWindowSeconds: number
+}
+
+/**
+ * 세션 하나의 시청자 현황. 조회 시점의 현황이라 매번 달라진다 — 없는 세션은 404다.
+ *
+ * <p>상세와 나뉜 이유는 수명이 다르기 때문이다. 접속자는 초 단위로 바뀌어 짧게 폴링하는데, 한
+ * 응답에 묶으면 그때마다 강의 제목·녹화 상태까지 다시 조회하게 된다.
+ */
+export async function getSessionViewers(sessionId: string): Promise<SessionViewers> {
+  const { data } = await apiClient.get<SessionViewers>(`/admin/live-sessions/${sessionId}/viewers`)
+  return data
+}
+
 export interface ReconcileResult {
   checked: number
   completed: number

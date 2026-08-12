@@ -2,6 +2,7 @@ package com.liveclass.admin.web;
 
 import com.liveclass.admin.service.SessionDetailService;
 import com.liveclass.admin.service.SessionLabelService;
+import com.liveclass.admin.service.SessionViewerService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -43,11 +44,14 @@ public class AdminSessionController {
 
     private final SessionLabelService sessionLabelService;
     private final SessionDetailService sessionDetailService;
+    private final SessionViewerService sessionViewerService;
 
     public AdminSessionController(SessionLabelService sessionLabelService,
-                                  SessionDetailService sessionDetailService) {
+                                  SessionDetailService sessionDetailService,
+                                  SessionViewerService sessionViewerService) {
         this.sessionLabelService = sessionLabelService;
         this.sessionDetailService = sessionDetailService;
+        this.sessionViewerService = sessionViewerService;
     }
 
     @Operation(summary = "세션 이름표 일괄 조회",
@@ -69,6 +73,23 @@ public class AdminSessionController {
     @GetMapping("/api/admin/live-sessions/{sessionId}")
     public SessionDetailService.SessionDetail detail(@PathVariable UUID sessionId) {
         return sessionDetailService.findBySessionId(sessionId)
+                .orElseThrow(() -> new SessionNotFoundException(sessionId));
+    }
+
+    /**
+     * 이 세션을 <b>지금 누가 보고 있는가</b>(ADR-0121). 읽기 전용이고 상세와 같은 게이트 위에 있다.
+     *
+     * <p>상세와 나눈 이유는 <b>수명이 다르기 때문</b>이다. 세션 상세는 거의 변하지 않지만 접속자는
+     * 초 단위로 바뀌어 화면이 짧게 폴링한다. 한 응답에 묶으면 접속자를 새로 받으려고 강의 제목·녹화
+     * 상태까지 매번 다시 조회하게 된다.
+     *
+     * <p>없는 세션은 <b>404</b>다(상세와 같은 규칙).
+     */
+    @Operation(summary = "세션 시청자 현황",
+            description = "라이브 강의실 접속자와 최근 다시보기 시청자를 한 번에. 조회 시점의 현황이라 매번 달라진다.")
+    @GetMapping("/api/admin/live-sessions/{sessionId}/viewers")
+    public SessionViewerService.SessionViewers viewers(@PathVariable UUID sessionId) {
+        return sessionViewerService.findBySessionId(sessionId)
                 .orElseThrow(() -> new SessionNotFoundException(sessionId));
     }
 

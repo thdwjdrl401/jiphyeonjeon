@@ -216,3 +216,26 @@
   border-color: currentColor;
   color: var(--success, #16a34a);
 }
+
+/* 한 패널 안에 목록이 둘(라이브·다시보기)이라 어느 쪽 표인지 제목이 갈라 준다. */
+.admin-viewer__heading {
+  margin: 16px 0 8px;
+  font-size: 0.95em;
+  font-weight: 600;
+}
+
+.admin-viewer__heading:first-child {
+  margin-top: 0;
+}
+
+/* 인원은 제목이 아니라 값이다 — 굵기를 빼고 제목 옆에 붙인다. */
+.admin-viewer__count {
+  margin-left: 6px;
+  font-weight: 400;
+  color: var(--text-muted, #888);
+}
+
+/* 이름을 못 찾은 행(탈퇴 등)은 실제 이름과 구별되어야 한다. 행 자체는 남는다. */
+.admin-viewer__unknown {
+  color: var(--text-muted, #888);
+}

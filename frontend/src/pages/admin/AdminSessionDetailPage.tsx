@@ -1,7 +1,13 @@
 import { Link, useParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, type UseQueryResult } from '@tanstack/react-query'
 import { adminPaths, publicPaths } from '@/app/router/paths'
-import { getActiveEgresses, getSessionDetail, sessionIdFromRoomName } from '@/features/admin/adminService'
+import {
+  getActiveEgresses,
+  getSessionDetail,
+  getSessionViewers,
+  sessionIdFromRoomName,
+  type SessionViewers,
+} from '@/features/admin/adminService'
 import { ApiError } from '@/shared/api/client'
 import { usePageTitle } from '@/shared/lib/usePageTitle'
 import PageState from '@/shared/ui/PageState'
@@ -26,6 +32,23 @@ function formatSize(bytes: number | null): string {
   return mb >= 1024 ? `${(mb / 1024).toFixed(2)} GB` : `${mb.toFixed(1)} MB`
 }
 
+/** 재생 위치를 시:분:초로. 길이 표시(분·초)와 달리 위치는 시간 단위까지 갈 수 있다. */
+function formatPosition(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return '-'
+  const total = Math.floor(ms / 1000)
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const seconds = total % 60
+  const mmss = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+  return hours > 0 ? `${hours}:${mmss}` : mmss
+}
+
+/** 이름을 못 찾은 사람도 행은 남는다 — 이름 하나 때문에 인원이 틀리면 안 된다. */
+function ViewerName({ displayName }: { displayName: string | null }) {
+  if (displayName) return <>{displayName}</>
+  return <span className="admin-viewer__unknown">이름을 찾을 수 없음</span>
+}
+
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="admin-detail__row">
@@ -41,6 +64,125 @@ function Flag({ on, label }: { on: boolean; label: string }) {
     <span className={`admin-flag${on ? ' is-on' : ''}`}>
       {label} {on ? '켜짐' : '꺼짐'}
     </span>
+  )
+}
+
+/** 마지막 보고가 얼마나 됐는가. 초 단위로 움직이는 값이라 분·초로만 말한다. */
+function formatSince(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime()
+  if (!Number.isFinite(ms) || ms < 0) return '-'
+  const seconds = Math.floor(ms / 1000)
+  if (seconds < 60) return `${seconds}초 전`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}분 전`
+  return `${Math.floor(minutes / 60)}시간 ${minutes % 60}분 전`
+}
+
+/**
+ * 지금 이 세션을 누가 보고 있는가(ADR-0121).
+ *
+ * <p><b>두 목록은 다른 것을 말한다.</b> 라이브 접속자는 지금 강의실을 열어 둔 사람이고, 다시보기
+ * 시청자는 녹화를 재생 중인 사람이다. 한 표에 섞으면 "강의가 도는 중인가"와 "녹화가 쓰이고 있나"가
+ * 구분되지 않는다.
+ *
+ * <p>이 조회가 실패해도 아래 상세는 그대로다 — 운영 화면이 부가 정보 하나 때문에 통째로 못 쓰게
+ * 되면 안 된다.
+ */
+function ViewersPanel({ query, sessionStatus }: {
+  query: UseQueryResult<SessionViewers>
+  sessionStatus: string
+}) {
+  const live = query.data?.live ?? []
+  const replay = query.data?.replay ?? []
+  const windowSeconds = query.data?.recentWindowSeconds ?? 60
+  const audience = live.filter((v) => !v.instructor)
+  const instructorPresent = live.some((v) => v.instructor)
+
+  return (
+    <Panel
+      title="지금 접속 중"
+      description={`강의실을 열어 둔 사람과, 최근 ${windowSeconds}초 안에 다시보기를 재생한 사람입니다.`}
+    >
+      {query.isPending ? (
+        <p>확인하는 중입니다…</p>
+      ) : query.isError ? (
+        <InlineNotice tone="danger">접속 현황을 불러오지 못했습니다.</InlineNotice>
+      ) : (
+        <>
+          {/*
+            * 시작은 됐는데 강사가 안 들어온 세션은 실제로 문의가 되는 경우다. 수강생이 기다리고
+            * 있는데 화면에는 "진행 중"으로만 보여 정상과 구분되지 않았다.
+            */}
+          {sessionStatus === 'LIVE' && !instructorPresent && (
+            <InlineNotice tone="warning">
+              진행 중인 세션인데 <strong>강사가 강의실에 없습니다.</strong>
+              {audience.length > 0 && ` 수강생 ${audience.length}명이 들어와 있습니다.`}
+            </InlineNotice>
+          )}
+
+          <h3 className="admin-viewer__heading">
+            라이브 강의실 <span className="admin-viewer__count">{audience.length}명</span>
+          </h3>
+          {live.length === 0 ? (
+            <p>지금 강의실을 열어 둔 사람이 없습니다.</p>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>사용자</th>
+                    <th>구분</th>
+                    <th>접속</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {live.map((v) => (
+                    <tr key={v.userId}>
+                      <td><ViewerName displayName={v.displayName} /></td>
+                      <td>{v.instructor ? '강사' : '수강생'}</td>
+                      <td>{formatSince(v.since)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <h3 className="admin-viewer__heading">
+            다시보기 <span className="admin-viewer__count">{replay.length}명</span>
+          </h3>
+          {replay.length === 0 ? (
+            <p>
+              최근 {windowSeconds}초 안에 다시보기를 재생한 사람이 없습니다. 일시정지하거나 창을 닫으면
+              보고가 끊겨 이 목록에서 빠집니다.
+            </p>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>사용자</th>
+                    <th>보고 있는 지점</th>
+                    <th>진도</th>
+                    <th>마지막 보고</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {replay.map((v) => (
+                    <tr key={v.userId}>
+                      <td><ViewerName displayName={v.displayName} /></td>
+                      <td>{formatPosition(v.lastPositionMs)}</td>
+                      <td>{v.progressPercent}%</td>
+                      <td>{formatSince(v.lastReportedAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </Panel>
   )
 }
 
@@ -71,6 +213,17 @@ export default function AdminSessionDetailPage() {
     queryKey: ['admin-egress'],
     queryFn: getActiveEgresses,
     refetchInterval: 10_000,
+  })
+  /*
+   * 접속자는 조회 시점의 현황이라 <b>따로</b> 받는다. 상세에 묶으면 이걸 새로 받을 때마다 강의
+   * 제목·녹화 상태까지 다시 조회하게 된다. 실패해도 아래 상세는 그대로 그린다.
+   */
+  const viewersQuery = useQuery({
+    queryKey: ['admin-session-viewers', sessionId],
+    queryFn: () => getSessionViewers(sessionId),
+    enabled: Boolean(sessionId),
+    refetchInterval: 10_000,
+    retry: false,
   })
   const detail = query.data
   usePageTitle(detail?.lessonTitle ?? '세션 상세')
@@ -126,6 +279,8 @@ export default function AdminSessionDetailPage() {
           <Row label="세션 id"><code className="is-mono">{detail.sessionId}</code></Row>
         </dl>
       </Panel>
+
+      <ViewersPanel query={viewersQuery} sessionStatus={detail.status} />
 
       <Panel title="녹화">
         {!detail.features.recording ? (
