@@ -25,7 +25,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 강사 공개 프로필·비밀번호 변경 계약 (ADR-0031).
+ * 강사 공개 프로필·비밀번호 변경 계약 (ADR-0031, ADR-0018).
  *
  * <p>프로필 이미지(전원 공통)와 달리 공개 프로필(bio·expertise)은 강사 전용이다 — 카탈로그 강사
  * 소개에 노출되는 값이라 학생에겐 개념이 없다.
@@ -123,6 +123,22 @@ class AccountProfileContractTest {
                 """)
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("AUTH_PASSWORD_MISMATCH"));
+    }
+
+    @Test
+    void change_password_to_current_password_returns_409_and_keeps_current_password() throws Exception {
+        String email = "samepw-" + UUID.randomUUID() + "@liveclass.test";
+        Cookie[] user = signupAndLogin(email, "password123");
+
+        write(put("/api/me/password"), user, """
+                {"currentPassword":"password123","newPassword":"password123"}
+                """)
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("AUTH_PASSWORD_UNCHANGED"))
+                .andExpect(jsonPath("$.message").value("새 비밀번호는 현재 비밀번호와 다르게 입력해 주세요."));
+
+        // 거절된 요청은 저장된 자격 증명을 바꾸지 않는다.
+        login(email, "password123").andExpect(status().isOk());
     }
 
     @Test

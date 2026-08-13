@@ -53,6 +53,13 @@ export const mockProfileService = {
       // 현재 비밀번호 불일치는 로그인 실패와 같은 계열(401) — 서버 계약과 코드까지 맞춘다(ADR-0031).
       throw new ApiError('현재 비밀번호가 일치하지 않습니다.', 401, 'AUTH_PASSWORD_MISMATCH')
     }
+    if (request.currentPassword === request.newPassword) {
+      throw new ApiError(
+        '새 비밀번호는 현재 비밀번호와 다르게 입력해 주세요.',
+        409,
+        'AUTH_PASSWORD_UNCHANGED',
+      )
+    }
     if (request.newPassword.length < 8) {
       throw new ApiError('새 비밀번호는 8자 이상이어야 합니다.', 400, 'NEW_PASSWORD_INVALID')
     }

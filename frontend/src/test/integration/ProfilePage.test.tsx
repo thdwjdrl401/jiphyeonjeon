@@ -162,6 +162,20 @@ describe('내 프로필 화면', () => {
     await screen.findByRole('heading', { name: '비밀번호를 잊으셨나요?' })
   })
 
+  it('현재 비밀번호와 같은 새 비밀번호는 안내하고 제출하지 않는다', async () => {
+    const user = userEvent.setup()
+    await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })
+    renderAt('/student/profile')
+
+    await user.type(await screen.findByLabelText('현재 비밀번호'), 'password1')
+    await user.type(screen.getByLabelText('새 비밀번호'), 'password1')
+    await user.type(screen.getByLabelText('새 비밀번호 확인'), 'password1')
+
+    expect(screen.getByText('새 비밀번호는 현재 비밀번호와 다르게 입력해 주세요.')).toBeInTheDocument()
+    expect(screen.getByLabelText('새 비밀번호')).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByRole('button', { name: '비밀번호 변경' })).toBeDisabled()
+  })
+
   it('회원 탈퇴 안내가 실제 동작(소프트 삭제·재가입 허용)을 말한다', async () => {
     const user = userEvent.setup()
     await mockAuthService.login({ email: 'student01@example.com', password: 'password1' })

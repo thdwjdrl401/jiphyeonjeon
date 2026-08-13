@@ -45,9 +45,13 @@ export default function PasswordChangePanel() {
 
   const isTooShort = newPassword.length > 0 && newPassword.length < MIN_PASSWORD_LENGTH
   const isMismatched = confirmPassword.length > 0 && newPassword !== confirmPassword
+  const isSameAsCurrent = currentPassword.length > 0
+    && newPassword.length > 0
+    && currentPassword === newPassword
   const canSubmit = Boolean(currentPassword)
     && newPassword.length >= MIN_PASSWORD_LENGTH
     && newPassword === confirmPassword
+    && !isSameAsCurrent
     && !passwordMutation.isPending
 
   const submit = (event: FormEvent) => {
@@ -92,7 +96,7 @@ export default function PasswordChangePanel() {
               autoComplete="new-password"
               aria-labelledby="new-password-label"
               aria-describedby="password-form-hint"
-              aria-invalid={isTooShort}
+              aria-invalid={isTooShort || isSameAsCurrent}
               disabled={passwordMutation.isPending}
               onChange={(event) => setNewPassword(event.target.value)}
             />
@@ -115,6 +119,10 @@ export default function PasswordChangePanel() {
           */}
           {isMismatched ? (
             <p className="field-error password-form__hint" id="password-form-hint">새 비밀번호가 서로 다릅니다.</p>
+          ) : isSameAsCurrent ? (
+            <p className="field-error password-form__hint" id="password-form-hint">
+              새 비밀번호는 현재 비밀번호와 다르게 입력해 주세요.
+            </p>
           ) : (
             <small className="password-form__hint" id="password-form-hint">8자 이상으로 입력해 주세요.</small>
           )}

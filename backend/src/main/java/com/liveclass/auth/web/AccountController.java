@@ -139,7 +139,12 @@ public class AccountController {
     }
 
     @Operation(summary = "비밀번호 변경",
-            description = "현재 비밀번호가 맞아야 새 비밀번호로 바꾼다. 틀리면 401.")
+            description = "현재 비밀번호가 맞아야 하며 새 비밀번호는 현재 비밀번호와 달라야 한다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "변경 완료"),
+            @ApiResponse(responseCode = "401", description = "현재 비밀번호 불일치 (AUTH_PASSWORD_MISMATCH)"),
+            @ApiResponse(responseCode = "409", description = "현재 비밀번호와 동일 (AUTH_PASSWORD_UNCHANGED)")
+    })
     @PutMapping("/api/me/password")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void changePassword(@Valid @RequestBody ChangePasswordRequest request,
