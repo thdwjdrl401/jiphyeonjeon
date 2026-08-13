@@ -4,6 +4,7 @@ import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.QueueBuilder;
 import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.amqp.autoconfigure.SimpleRabbitListenerContainerFactoryConfigurer;
 import com.liveclass.notification.push.WebPushProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -29,6 +30,17 @@ public class NotificationMessagingConfig {
 
     public static final String FANOUT_QUEUE = "notification.fanout";
     public static final String FANOUT_DLQ = "notification.fanout.dlq";
+
+    /**
+     * 푸시 전달 명령 큐(ADR-0124). 팬아웃 워커가 알림 행과 <b>같은 트랜잭션</b>에서 아웃박스에
+     * 실은 명령이 릴레이를 거쳐 여기로 오고, {@code PushDeliveryWorker}가 꺼내 실제 발송을 한다.
+     *
+     * <p><b>팬아웃 큐와 분리한 이유가 이 설계의 전부다.</b> 푸시는 조각당 최대 60초짜리 HTTP
+     * 대량 발송이라, 팬아웃 소비자가 이 일을 함께 하면 삽입 처리량이 푸시 속도에 묶인다.
+     * 소비자·동시성을 따로 두면 팬아웃은 삽입 속도로 풀리고, 푸시는 자기 속도로 뒤따라온다.
+     */
+    public static final String PUSH_QUEUE = "notification.push";
+    public static final String PUSH_DLQ = "notification.push.dlq";
 
     /**
      * 실패한 메시지가 갈 곳. <b>이게 없으면 안 된다</b> — 기본 동작은 실패 시 큐에 되돌리는 것이라,
@@ -65,6 +77,42 @@ public class NotificationMessagingConfig {
         SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
         configurer.configure(factory, connectionFactory);
         factory.setDefaultRequeueRejected(false);
+        return factory;
+    }
+
+    // ---- 푸시 전달 큐(ADR-0124) ----
+
+    /** 푸시 명령의 DLQ. 팬아웃 DLQ와 같은 이유로 있어야 한다 — poison message가 소비자를 붙잡는다. */
+    @Bean
+    Queue notificationPushDlq() {
+        return QueueBuilder.durable(PUSH_DLQ).build();
+    }
+
+    @Bean
+    Queue notificationPushQueue() {
+        return QueueBuilder.durable(PUSH_QUEUE)
+                .deadLetterExchange("")
+                .deadLetterRoutingKey(PUSH_DLQ)
+                .build();
+    }
+
+    /**
+     * 푸시 전용 리스너 팩토리. 실패 규칙은 팬아웃과 같다(재시도 뒤 DLQ, requeue 금지).
+     *
+     * <p>따로 두는 이유는 규칙이 아니라 <b>동시성</b>이다 — 전역 {@code concurrency}(팬아웃 워커
+     * 수)를 그대로 물려받으면 두 큐가 같은 손잡이에 묶여, 푸시를 늘리려다 팬아웃까지 늘리게 된다.
+     * 푸시 소비자 수는 {@code notification.push.listener-concurrency}가 따로 정한다.
+     */
+    @Bean
+    SimpleRabbitListenerContainerFactory notificationPushListenerContainerFactory(
+            ConnectionFactory connectionFactory,
+            SimpleRabbitListenerContainerFactoryConfigurer configurer,
+            @Value("${notification.push.listener-concurrency:2}") int concurrency) {
+        SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
+        configurer.configure(factory, connectionFactory);
+        factory.setDefaultRequeueRejected(false);
+        // configurer가 전역 설정(팬아웃 워커 수)을 이미 부어 놓았으므로 **뒤에** 덮어쓴다.
+        factory.setConcurrentConsumers(concurrency);
         return factory;
     }
 }

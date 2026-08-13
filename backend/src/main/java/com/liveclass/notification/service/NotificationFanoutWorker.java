@@ -1,5 +1,6 @@
 package com.liveclass.notification.service;
 
+import com.liveclass.aiintegration.api.OutboxPublisher;
 import com.liveclass.auth.api.UserDirectory;
 import com.liveclass.enrollment.api.EnrollmentDirectory;
 import com.liveclass.enrollment.api.EnrollmentStatus;
@@ -11,6 +12,7 @@ import com.liveclass.notification.api.NotificationLeadTimes;
 import com.liveclass.notification.api.NotificationTypes;
 import com.liveclass.notification.config.NotificationMessagingConfig;
 import com.liveclass.notification.domain.NotificationStatus;
+import com.liveclass.notification.push.PushDeliveryCommand;
 import com.liveclass.notification.repository.NotificationFanoutRepository;
 import com.liveclass.notification.repository.NotificationInsertRepository;
 import com.liveclass.notification.repository.NotificationRepository;
@@ -25,6 +27,7 @@ import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;
 
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -46,6 +49,11 @@ import java.util.UUID;
  * <p><b>같은 메시지가 두 번 와도 안전하다.</b> 릴레이가 발행 직후 죽으면 그 메시지는 다시 발행되고,
  * 실패한 메시지도 재시도된다. 중복은 코드가 아니라 DB가 막는다 — 전역 등록표
  * {@code core.notification_dedupe}에 대한 {@code ON CONFLICT DO NOTHING}이다(ADR-0123).
+ *
+ * <p><b>푸시는 여기서 보내지 않는다 — 명령만 싣는다</b>(ADR-0124). 푸시 명령은 알림 삽입과
+ * <b>같은 트랜잭션</b>에서 아웃박스로 들어간다. 커밋 후 직접 발행(afterCommit)이면 커밋~발행
+ * 사이 크래시에서 그 조각 전원의 푸시가 유실된다 — 재배달은 삽입 0건이라 명단을 비워서 돌려주기
+ * 때문이다. 아웃박스면 알림 행과 명령이 원자적으로 함께 남아 그 창이 닫힌다.
  */
 @Component
 public class NotificationFanoutWorker {
@@ -83,6 +91,7 @@ public class NotificationFanoutWorker {
     private final RabbitTemplate rabbitTemplate;
     private final WsNotificationBroadcaster broadcaster;
     private final NotificationPreferenceService preferenceService;
+    private final OutboxPublisher outboxPublisher;
 
     public NotificationFanoutWorker(NotificationInsertRepository insertRepository,
                                     NotificationFanoutRepository fanoutRepository,
@@ -93,7 +102,8 @@ public class NotificationFanoutWorker {
                                     EnrollmentDirectory enrollmentDirectory,
                                     RabbitTemplate rabbitTemplate,
                                     WsNotificationBroadcaster broadcaster,
-                                    NotificationPreferenceService preferenceService) {
+                                    NotificationPreferenceService preferenceService,
+                                    OutboxPublisher outboxPublisher) {
         this.insertRepository = insertRepository;
         this.fanoutRepository = fanoutRepository;
         this.notificationRepository = notificationRepository;
@@ -104,6 +114,7 @@ public class NotificationFanoutWorker {
         this.rabbitTemplate = rabbitTemplate;
         this.broadcaster = broadcaster;
         this.preferenceService = preferenceService;
+        this.outboxPublisher = outboxPublisher;
     }
 
     @RabbitListener(queues = NotificationMessagingConfig.FANOUT_QUEUE,
@@ -153,6 +164,7 @@ public class NotificationFanoutWorker {
             if (sent > 0) {
                 broadcaster.announce(filled.instructorId(), filled.type(),
                         forInstructor.title(), forInstructor.message());
+                enqueuePush(forInstructor, null);
             }
             log.info("녹화 알림 type={} asset={} 삽입={}", filled.type(), filled.videoAssetId(), sent);
             return;
@@ -163,6 +175,7 @@ public class NotificationFanoutWorker {
         if (inserted > 0) {
             broadcaster.announce(notification.recipientId(), command.type(),
                     notification.title(), notification.message());
+            enqueuePush(notification, null);
         }
         log.info("알림 팬아웃 type={} enrollment={} 삽입={}", command.type(), command.enrollmentId(), inserted);
 
@@ -273,7 +286,7 @@ public class NotificationFanoutWorker {
             return;
         }
         String subject = lessonTitleOf(command.lessonId());
-        int inserted = insertRepository.insert(NewNotification.of(
+        NewNotification forInstructor = NewNotification.of(
                 command.instructorId(),
                 command.type(),
                 NotificationStatus.INFO,
@@ -283,12 +296,12 @@ public class NotificationFanoutWorker {
                         null, command.nextStartsAt()),
                 wideTargetsJson(command),
                 command.type() + ':' + command.curriculumId(),
-                dedupePrefix(command) + command.instructorId()));
+                dedupePrefix(command) + command.instructorId());
+        int inserted = insertRepository.insert(forInstructor);
         if (inserted > 0) {
             broadcaster.announce(command.instructorId(), command.type(),
-                    NotificationCopy.title(command.type()),
-                    NotificationCopy.wideMessage(command.type(), command.curriculumTitle(), subject,
-                            null, command.nextStartsAt()));
+                    forInstructor.title(), forInstructor.message());
+            enqueuePush(forInstructor, null);
         }
     }
 
@@ -339,6 +352,12 @@ public class NotificationFanoutWorker {
 
         // 문구는 조각 전체가 같다 — 넓은 팬아웃은 사람 이름을 넣지 않는다.
         broadcaster.announceAll(slice.insertedRecipients(), command.type(), title, message);
+        /*
+         * 이 조각의 푸시 명령. 사건 해시는 dedupePrefix에서 오므로 조각 전체가 같은 사건이고,
+         * 멱등 키에는 커서를 붙여 조각마다 명령이 하나씩 실린다. 재배달(삽입 0건, 명단 빈 채)에는
+         * 아무것도 싣지 않는다 — 첫 커밋에 명령이 이미 원자적으로 실려 있다.
+         */
+        enqueuePushForSlice(dedupePrefix(command), command, slice.insertedRecipients(), title, message);
 
         log.info("넓은 팬아웃 조각 type={} curriculum={} 커서={} 훑음={} 삽입={}",
                 command.type(), command.curriculumId(), command.afterUserId(),
@@ -348,6 +367,63 @@ public class NotificationFanoutWorker {
             rabbitTemplate.convertAndSend(NotificationMessagingConfig.FANOUT_QUEUE,
                     JSON.writeValueAsString(command.nextSlice(slice.lastUserId())));
         }
+    }
+
+    // ---- 푸시 명령 적재(ADR-0124) ----
+
+    /**
+     * 한 명짜리 알림의 푸시 명령. 사건 해시는 그 알림의 dedupe 키에서 나온다 — 키에 수신자·사건
+     * 시각이 이미 들어 있어 사건마다 유일하고, 재배달이 와도 아웃박스 멱등 키가 같아 한 번만 실린다.
+     */
+    private void enqueuePush(NewNotification notification, String sliceKey) {
+        enqueuePushCommand(notification.dedupeKey(), sliceKey, List.of(notification.recipientId()),
+                notification.type(), notification.title(), notification.message());
+    }
+
+    /**
+     * 넓은 팬아웃 한 조각의 푸시 명령. 명단은 <b>이 조각에서 새로 삽입된 사람들</b>이다 — 조각끼리는
+     * 커서로 겹치지 않으므로, 첫 처리(커밋된 처리)에서 이 명단이 곧 조각 전원이다.
+     */
+    private void enqueuePushForSlice(String dedupePrefix, NotificationFanoutCommand command,
+                                     List<UUID> recipients, String title, String message) {
+        /*
+         * 곧 시작 알림은 리드타임이 dedupe 키에 없다(dedupePrefix 주석 — 일정이 바뀌었을 때 같은
+         * 회차가 두 번 뜨지 않게 하려고). 그래서 같은 회차의 리드타임 발화들(30분 전 발화, 10분 전
+         * 발화…)이 **같은 사건 해시를 공유**하는데, 푸시 멱등 키까지 공유하면 두 발화의 첫 조각이
+         * 둘 다 "start"라 **뒤 발화의 명령이 아웃박스 멱등에 조용히 삼켜진다** — 명단이 전혀
+         * 다른데도. 리드타임을 멱등 키에만 붙여 가른다. 진행 표의 사건 해시는 공유해도 무해하다 —
+         * 한 사람은 자기 리드타임 하나에만 걸리므로 발화끼리 명단이 겹치지 않는다.
+         */
+        String sliceKey = (command.leadMinutes() == null ? "" : "l" + command.leadMinutes() + ':')
+                + (command.afterUserId() == null ? "start" : command.afterUserId().toString());
+        enqueuePushCommand(dedupePrefix, sliceKey, recipients, command.type(), title, message);
+    }
+
+    /**
+     * 푸시 명령을 <b>알림 삽입과 같은 트랜잭션</b>으로 아웃박스에 싣는다. 여기가 이 설계의 요점이다 —
+     * 커밋 후 직접 발송(이전 구조)은 커밋~발송 사이 크래시에서 조각 전원의 푸시를 유실했다.
+     * 아웃박스면 롤백 시 명령도 함께 사라지고, 커밋되면 명령도 반드시 남는다.
+     *
+     * <p>URL은 싣지 않는다({@code null}) — 분리 전 푸시도 URL 없이 나갔고, 눌렀을 때의 이동은
+     * 서비스워커가 알림함으로 보낸다.
+     */
+    private void enqueuePushCommand(String eventKey, String sliceKey, Collection<UUID> recipients,
+                                    String type, String title, String message) {
+        if (recipients.isEmpty()) {
+            return;
+        }
+        UUID eventHash = PushDeliveryCommand.eventHashOf(eventKey);
+        PushDeliveryCommand pushCommand = new PushDeliveryCommand(
+                type, eventHash, List.copyOf(recipients), title, message, null);
+        outboxPublisher.enqueue(
+                NotificationMessagingConfig.PUSH_QUEUE,
+                "notification_push",
+                eventHash.toString(),
+                "PUSH_DELIVERY_REQUESTED",
+                JSON.writeValueAsString(pushCommand),
+                // 조각(사건 해시 + 커서)당 유일. 같은 조각의 재배달은 같은 키라 조용히 무시된다.
+                "push:" + eventHash + (sliceKey == null ? "" : ":" + sliceKey),
+                null);
     }
 
     /**

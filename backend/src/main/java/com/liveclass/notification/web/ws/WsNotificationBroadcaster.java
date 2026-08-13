@@ -1,6 +1,5 @@
 package com.liveclass.notification.web.ws;
 
-import com.liveclass.notification.push.WebPushSender;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -16,6 +15,12 @@ import java.util.UUID;
 
 /**
  * 새 알림을 <b>지금 접속해 있는</b> 사람에게 즉시 알린다(ADR-0073 5단계).
+ *
+ * <p><b>STOMP 전용이다.</b> 전달은 두 층인데 이제 길이 다르다 — STOMP(탭이 열려 있는 사람에게
+ * 즉시)는 여기서 커밋 직후에 나가고, Web Push(탭을 닫아도 닿는)는 팬아웃 워커가 아웃박스에 실은
+ * 명령을 {@code PushDeliveryWorker}가 소비해 나간다(ADR-0124). 분리한 이유는 실패 비용이 달라서다:
+ * STOMP는 놓쳐도 알림함이 받치므로 커밋 후 한 번 쏘고 잊어도 되지만, 푸시는 그 사람에게 닿는
+ * 유일한 즉시 채널일 수 있어 커밋 후 크래시로 유실되면 안 된다 — 그래서 푸시만 아웃박스로 옮겼다.
  *
  * <p>목적지는 {@code /user/queue/notifications}다. Spring이 이 목적지를 <b>세션의 Principal로</b>
  * 해석하므로 남의 알림을 구독할 방법이 없다 — 토픽처럼 구독 인가 목록을 늘리지 않아도 된다.
@@ -41,14 +46,11 @@ public class WsNotificationBroadcaster {
 
     private final SimpMessagingTemplate messagingTemplate;
     private final SimpUserRegistry userRegistry;
-    private final WebPushSender pushSender;
 
     public WsNotificationBroadcaster(SimpMessagingTemplate messagingTemplate,
-                                     SimpUserRegistry userRegistry,
-                                     WebPushSender pushSender) {
+                                     SimpUserRegistry userRegistry) {
         this.messagingTemplate = messagingTemplate;
         this.userRegistry = userRegistry;
-        this.pushSender = pushSender;
     }
 
     /** 한 명에게. 좁은 팬아웃(수강 판정·녹화)이 쓴다. */
@@ -62,16 +64,15 @@ public class WsNotificationBroadcaster {
     /**
      * 방금 <b>새로</b> 받은 사람들에게. 중복으로 걸러진 사람은 여기 없다.
      *
-     * <p>두 층으로 나간다 — <b>STOMP</b>는 탭이 열려 있는 사람에게 즉시, <b>Web Push</b>는 탭을
-     * 닫은 사람에게도. 둘 다 보내는 이유는 어느 쪽이 닿을지 서버가 알 수 없기 때문이다. 탭이 열려
-     * 있으면 둘 다 오지만, 서비스워커가 <b>화면이 떠 있을 때는 시스템 알림을 띄우지 않는</b>다.
+     * <p>문구(title·body)를 여전히 받는 것은 호출부 계약을 지키기 위해서다 — 신호 페이로드에는
+     * 들어가지 않는다(위 "내용을 싣지 않는다").
      */
     public void announceAll(Collection<UUID> recipientIds, String notificationType,
                             String title, String body) {
         if (recipientIds.isEmpty()) {
             return;
         }
-        afterCommit(() -> deliver(recipientIds, notificationType, title, body));
+        afterCommit(() -> deliver(recipientIds, notificationType));
     }
 
     /**
@@ -79,7 +80,7 @@ public class WsNotificationBroadcaster {
      * 목록을 다시 읽을 때 <b>그 행이 아직 커밋되지 않아</b> 옛 데이터가 온다 — 신호는 갔는데
      * 배지가 그대로이고, 60초 폴링이나 새로고침에서야 보인다(운영에서 실제로 그랬다).
      *
-     * <p>푸시도 함께 미룬다. 트랜잭션이 롤백되면 <b>없는 알림에 대한 푸시</b>를 보낸 셈이 된다.
+     * <p>롤백되면 아예 보내지 않는다 — 없는 알림을 알리지 않는다.
      *
      * <p>트랜잭션 밖에서 부르면 곧바로 보낸다 — 기다릴 커밋이 없다.
      */
@@ -96,13 +97,7 @@ public class WsNotificationBroadcaster {
         });
     }
 
-    private void deliver(Collection<UUID> recipientIds, String notificationType,
-                         String title, String body) {
-        /*
-         * 푸시를 먼저 띄운다. 여기서 실패해도 STOMP는 나가야 하고, 반대도 마찬가지다 —
-         * 전달 층 하나가 죽었다고 다른 층까지 멈추면 안 된다.
-         */
-        pushSender.send(recipientIds, title, body, null);
+    private void deliver(Collection<UUID> recipientIds, String notificationType) {
         NotificationSignalPayload payload =
                 new NotificationSignalPayload(notificationType, OffsetDateTime.now());
         int sent = 0;

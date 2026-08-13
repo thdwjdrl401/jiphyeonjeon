@@ -281,8 +281,9 @@ class NotificationFanoutContractTest {
      */
     @AfterEach
     void cleanUpCommittedRows() {
-        jdbc.update("DELETE FROM core.outbox_events WHERE destination = ?",
-                NotificationMessagingConfig.FANOUT_QUEUE);
+        // 워커가 알림 삽입과 같은 트랜잭션에서 푸시 명령도 싣는다(ADR-0124) — 그쪽 목적지도 치운다.
+        jdbc.update("DELETE FROM core.outbox_events WHERE destination IN (?, ?)",
+                NotificationMessagingConfig.FANOUT_QUEUE, NotificationMessagingConfig.PUSH_QUEUE);
     }
 
     // ---- helpers ----

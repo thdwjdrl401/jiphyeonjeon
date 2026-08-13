@@ -49,8 +49,9 @@ import static org.mockito.Mockito.when;
  * 같은 endpoint로 두 번 POST하면 기기가 두 번 울린다. 그래서 "조각을 통째로 다시"는 쓸 수 없고,
  * 실패한 기기만 골라 보내야 한다.
  *
- * <p>큐가 이 일을 대신할 수 없다. 메시지를 재배달하면 알림 행이 이미 커밋돼 있어 중복 제거가
- * 수신자 명단을 <b>비워서</b> 돌려주고, 그러면 못 받은 사람도 영영 못 받는다.
+ * <p>큐가 이 일을 대신할 수 없다. 진행 표(ADR-0124)가 재배달을 <b>사람</b> 단위로는 안전하게
+ * 만들었지만, 한 사람을 다시 보내는 것은 그 사람의 이미 받은 기기까지 다시 울리는 일이다 —
+ * 기기 단위 물결은 send() 안에서 끝나야 한다.
  *
  * <p>실제 푸시 서비스로 보낼 수 없으므로 로컬 HTTP 서버를 세우고 <b>기기별로 응답을 정해 준다</b>.
  * 암호화·서명은 라이브러리 몫이라 여기서 확인하지 않는다 — 다만 라이브러리가 진짜 동작해야 요청이
@@ -63,6 +64,8 @@ class WebPushRetryTest {
 
     /** 기기 이름 → 앞에서부터 돌려줄 상태 코드. 다 쓰면 마지막 것을 계속 쓴다. */
     private final Map<String, Queue<Integer>> scriptedStatuses = new ConcurrentHashMap<>();
+    /** 기기 이름 → 응답 지연. 배치 마감(batch-timeout)에 걸려 <b>미완</b>이 되는 기기를 만들 때 쓴다. */
+    private final Map<String, Long> scriptedDelays = new ConcurrentHashMap<>();
     /** 기기 이름 → 실제로 받은 요청 수. <b>여기서 중복 발송이 드러난다.</b> */
     private final Map<String, AtomicInteger> received = new ConcurrentHashMap<>();
     private volatile String retryAfterHeader;
@@ -89,9 +92,10 @@ class WebPushRetryTest {
             lastBodyLength.set(exchange.getRequestBody().readAllBytes().length);
             int now = concurrentNow.incrementAndGet();
             concurrentPeak.accumulateAndGet(now, Math::max);
-            if (serverDelayMs > 0) {
+            long delay = scriptedDelays.getOrDefault(device, serverDelayMs);
+            if (delay > 0) {
                 try {
-                    Thread.sleep(serverDelayMs);
+                    Thread.sleep(delay);
                 } catch (InterruptedException interrupted) {
                     Thread.currentThread().interrupt();
                 }
@@ -150,7 +154,7 @@ class WebPushRetryTest {
         sender(3, 5_000).send(recipients(a), "제목", "본문", null);
 
         assertThat(count("a")).isEqualTo(3);
-        verify(repository, never()).deleteAll(any());
+        verify(repository, never()).deleteAllByIds(any());
     }
 
     /** 429는 "지금 말고 이따가"다. 언제가 이따인지는 상대가 정한다. */
@@ -199,10 +203,11 @@ class WebPushRetryTest {
         sender(3, 5_000).send(recipients(a), "제목", "본문", null);
 
         assertThat(count("a")).isEqualTo(1);
+        // 지우기는 한 문장짜리 벌크 삭제로 간다(ADR-0124) — 엔티티가 아니라 id 목록을 본다.
         @SuppressWarnings("unchecked")
-        ArgumentCaptor<Iterable<PushSubscription>> deleted = ArgumentCaptor.forClass(Iterable.class);
-        verify(repository).deleteAll(deleted.capture());
-        assertThat(deleted.getValue()).containsExactly(a);
+        ArgumentCaptor<java.util.Collection<UUID>> deleted = ArgumentCaptor.forClass(java.util.Collection.class);
+        verify(repository).deleteAllByIds(deleted.capture());
+        assertThat(deleted.getValue()).containsExactly(a.getId());
     }
 
     /**
@@ -218,7 +223,7 @@ class WebPushRetryTest {
         sender(3, 5_000).send(recipients(a), "제목", "본문", null);
 
         assertThat(count("a")).isEqualTo(1);
-        verify(repository, never()).deleteAll(any());
+        verify(repository, never()).deleteAllByIds(any());
     }
 
     /**
@@ -326,6 +331,76 @@ class WebPushRetryTest {
         assertThat(concurrentPeak.get())
                 .as("그렇다고 1이면 병렬이 아니다")
                 .isGreaterThan(1);
+    }
+
+    // ---- 반환값: "시도를 마친 사람" (ADR-0124) ----
+
+    /**
+     * <b>반환값은 진행 표에 기록될 집합이다.</b> 여기 들어간 사람은 큐 재배달이 다시 집지 않으므로,
+     * 성공뿐 아니라 <b>최종 실패도</b> 들어가야 한다 — 재시도 물결은 이 호출 안에서 끝났고, 실패한
+     * 기기를 재배달로 또 치게 두면 그 사람의 이미 받은 기기까지 다시 운다.
+     */
+    @Test
+    void the_settled_set_contains_successes_and_final_failures_alike() {
+        PushSubscription ok = subscription("ok");
+        PushSubscription broken = subscription("broken");
+        script("ok", 201);
+        script("broken", 500, 500, 500);
+        given(ok, broken);
+
+        java.util.Set<UUID> settled = sender(3, 5_000).send(recipients(ok, broken), "제목", "본문", null);
+
+        assertThat(settled).containsExactlyInAnyOrder(ok.getUserId(), broken.getUserId());
+    }
+
+    /**
+     * batch-timeout으로 <b>응답을 못 본</b> 기기의 주인은 빠진다. 그 사람은 기록되지 않아 큐
+     * 재배달이 다시 집는다 — "미완"과 "실패"를 가르는 경계가 이것이다(실패는 결과를 봤다).
+     */
+    @Test
+    void an_abandoned_device_keeps_its_owner_out_of_the_settled_set() {
+        PushSubscription fast = subscription("fast");
+        PushSubscription slow = subscription("slow");
+        script("fast", 201);
+        script("slow", 201);
+        scriptedDelays.put("slow", 8_000L);
+        given(fast, slow);
+
+        java.util.Set<UUID> settled = sender(1, 2_000).send(recipients(fast, slow), "제목", "본문", null);
+
+        assertThat(settled)
+                .as("응답을 본 기기의 주인만 끝났다")
+                .containsExactly(fast.getUserId());
+    }
+
+    /** 구독이 하나도 없는 사람은 보낼 곳이 없으니 그 자리에서 끝났다 — 재배달이 다시 집으면 헛돈다. */
+    @Test
+    void a_recipient_without_a_device_is_settled_immediately() {
+        PushSubscription a = subscription("a");
+        script("a", 201);
+        given(a);
+        UUID deviceless = UUID.randomUUID();
+        java.util.List<UUID> everyone = new java.util.ArrayList<>(recipients(a));
+        everyone.add(deviceless);
+
+        java.util.Set<UUID> settled = sender(3, 5_000).send(everyone, "제목", "본문", null);
+
+        assertThat(settled).containsExactlyInAnyOrder(a.getUserId(), deviceless);
+    }
+
+    /**
+     * 키가 없어 꺼져 있으면 <b>전원 끝난 것</b>으로 답한다. 빈 집합을 주면 진행 표가 영영 차지
+     * 않아, 켜 있지도 않은 푸시 때문에 재배달이 같은 명단을 계속 다시 집는다.
+     */
+    @Test
+    void a_disabled_sender_settles_everyone_because_there_is_nothing_to_send() {
+        WebPushSender disabled = new WebPushSender(repository, new WebPushProperties("", "", null),
+                new NoOpTransactionManager(), 10, 2_000, 5_000, 5_000, 3, 10, Integer.MAX_VALUE, 0);
+        UUID recipient = UUID.randomUUID();
+
+        java.util.Set<UUID> settled = disabled.send(List.of(recipient), "제목", "본문", null);
+
+        assertThat(settled).containsExactly(recipient);
     }
 
     // ---- 도구 ----

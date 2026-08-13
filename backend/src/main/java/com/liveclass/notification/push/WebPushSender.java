@@ -12,7 +12,9 @@ import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -56,9 +58,10 @@ import java.util.concurrent.atomic.AtomicInteger;
  * 기기가 실패했는지는 결과에 정확히 남아 있으므로, <b>실패한 것만</b> 다시 보내면 중복이 없다.
  * 성공(2xx)한 구독은 두 번째 물결에 <b>절대 들어가지 않는다</b> — 이것이 이 층의 불변식이다.
  *
- * <p>큐가 대신해 줄 수 없는 일이라 여기서 한다. 이 메서드가 예외를 던져 메시지가 재배달되면
- * 알림 행은 이미 커밋돼 있어 중복 제거가 수신자 명단을 <b>비워서</b> 돌려주고, 그러면 못 받은
- * 사람도 영영 못 받는다. 재시도할 수 있는 단위(조각)와 실패하는 단위(기기)가 다르다.
+ * <p>큐 재배달은 이 일을 대신하지 못한다. 진행 표(ADR-0124)가 재배달을 <b>사람</b> 단위로는
+ * 안전하게 만들었지만, 한 사람을 다시 보내는 것은 그 사람의 <b>이미 받은 기기</b>까지 다시
+ * 울리는 일이다. 재시도할 수 있는 단위(사람)와 실패하는 단위(기기)가 여전히 다르므로, 기기 단위
+ * 물결은 이 호출 안에서 끝낸다.
  *
  * <p><b>죽은 구독은 즉시 지운다.</b> 404·410은 영영 살아나지 않는다(브라우저를 지웠거나 권한을
  * 껐다). 남겨 두면 시간이 갈수록 발송의 대부분이 죽은 구독을 두드리는 일이 된다.
@@ -177,14 +180,28 @@ public class WebPushSender {
      *
      * <p>단계가 셋이고 <b>가운데 단계에만 시간이 든다</b> — 구독 조회(짧은 읽기) → 병렬 발송(HTTP,
      * 트랜잭션 밖) → 결과 반영(짧은 쓰기).
+     *
+     * @return <b>이번 호출에서 발송 시도를 마친 사람들</b>(ADR-0124). 진행 표에 기록될 집합이다.
+     *         경계는 이렇다 — 그 사람의 <b>모든 기기가 최종 결과를 냈으면</b> 들어간다(성공이든
+     *         최종 실패든: 재시도 물결은 이 호출 안에서 끝났으므로 더 해 볼 것이 없다). 구독이
+     *         하나도 없는 사람도 들어간다(보낼 곳이 없으니 시도가 끝났다). 반면 batch-timeout이나
+     *         인터럽트로 <b>응답을 못 본 기기</b>가 하나라도 있는 사람은 빠진다 — 그 사람은
+     *         기록되지 않아 큐 재배달이 다시 집는다.
      */
-    public void send(Collection<UUID> recipientIds, String title, String body, String url) {
-        if (!isEnabled() || recipientIds.isEmpty()) {
-            return;
+    public Set<UUID> send(Collection<UUID> recipientIds, String title, String body, String url) {
+        if (recipientIds.isEmpty()) {
+            return Set.of();
+        }
+        if (!isEnabled()) {
+            /*
+             * 키가 없으면 보낼 것이 없다 — 전원 "시도를 마쳤다"로 친다. 빈 집합을 돌려주면 진행
+             * 표가 영영 차지 않아, 켜 있지도 않은 푸시 때문에 재배달이 같은 명단을 계속 다시 집는다.
+             */
+            return Set.copyOf(recipientIds);
         }
         List<PushSubscription> subscriptions = loadSubscriptions(recipientIds);
         if (subscriptions.isEmpty()) {
-            return;
+            return Set.copyOf(recipientIds);
         }
         byte[] payload = PushPayload.json(title, body, url)
                 .getBytes(java.nio.charset.StandardCharsets.UTF_8);
@@ -193,6 +210,30 @@ public class WebPushSender {
         List<Outcome> outcomes = dispatchWithRetries(subscriptions, payload);
         applyOutcomes(outcomes);
         logBatch(subscriptions.size(), outcomes, (System.nanoTime() - startedAt) / 1_000_000);
+        return attemptCompleted(recipientIds, subscriptions, outcomes);
+    }
+
+    /**
+     * 시도를 마친 사람 = 명단 전체 − (결과 없는 기기의 주인들). 결과의 유무만 보고 내용은 보지
+     * 않는다 — 실패도 "시도를 마쳤다"다. 실패한 기기를 큐 재배달로 또 치게 두면 그 사람의 이미
+     * 받은 기기까지 다시 울린다(클래스 주석의 불변식).
+     */
+    private static Set<UUID> attemptCompleted(Collection<UUID> recipientIds,
+                                              List<PushSubscription> subscriptions,
+                                              List<Outcome> outcomes) {
+        Set<UUID> answered = HashSet.newHashSet(outcomes.size());
+        for (Outcome outcome : outcomes) {
+            answered.add(outcome.subscription().getId());
+        }
+        Set<UUID> unfinishedOwners = new HashSet<>();
+        for (PushSubscription subscription : subscriptions) {
+            if (!answered.contains(subscription.getId())) {
+                unfinishedOwners.add(subscription.getUserId());
+            }
+        }
+        Set<UUID> settled = new HashSet<>(recipientIds);
+        settled.removeAll(unfinishedOwners);
+        return settled;
     }
 
     /**
@@ -382,28 +423,29 @@ public class WebPushSender {
         writeTx.executeWithoutResult(status -> applyOutcomesInTx(outcomes));
     }
 
+    /*
+     * 둘 다 **한 문장**이다. deleteAll·saveAll은 행마다 문장을 만든다 — saveAll은 심지어 바뀐 것이
+     * 시각 한 칸뿐인데 넓은 행 전체를 성공 수만큼 다시 쓴다. 푸시 소비자 경로가 조각(≤1,000명 ×
+     * 기기 수)마다 이 코드를 지나므로 그 곱이 그대로 DB 부하였다.
+     */
     private void applyOutcomesInTx(List<Outcome> outcomes) {
-        List<PushSubscription> dead = new ArrayList<>();
-        List<PushSubscription> delivered = new ArrayList<>();
-        OffsetDateTime now = OffsetDateTime.now();
+        List<UUID> dead = new ArrayList<>();
+        List<UUID> delivered = new ArrayList<>();
         for (Outcome outcome : outcomes) {
             switch (verdictOf(outcome.status())) {
-                case DELIVERED -> {
-                    outcome.subscription().setLastSuccessAt(now);
-                    delivered.add(outcome.subscription());
-                }
-                case EXPIRED -> dead.add(outcome.subscription());
+                case DELIVERED -> delivered.add(outcome.subscription().getId());
+                case EXPIRED -> dead.add(outcome.subscription().getId());
                 // 여기까지 왔다는 건 재시도를 다 썼거나 시간이 없었다는 뜻이다.
                 case RETRY, REJECTED -> log.warn("푸시 발송 실패 status={} id={}",
                         outcome.status(), outcome.subscription().getId());
             }
         }
         if (!dead.isEmpty()) {
-            repository.deleteAll(dead);
+            repository.deleteAllByIds(dead);
             log.info("죽은 푸시 구독 {}건 정리", dead.size());
         }
         if (!delivered.isEmpty()) {
-            repository.saveAll(delivered);
+            repository.markDelivered(delivered, OffsetDateTime.now());
         }
     }
 
