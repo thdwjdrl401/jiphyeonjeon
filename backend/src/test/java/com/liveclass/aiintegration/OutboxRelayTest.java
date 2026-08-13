@@ -133,6 +133,63 @@ class OutboxRelayTest {
         assertThat(published).isEqualTo(100);
     }
 
+    /**
+     * 성공분은 <b>네이티브 UPDATE 한 문장</b>으로 넘어간다(ADR-0122). 엔티티를 고치지 않으므로,
+     * 배치가 제대로 돌지 않으면 상태가 PENDING으로 남는다 — 즉 이 단언이 배치 UPDATE 자체를 본다.
+     *
+     * <p>{@code published_at}까지 함께 본다. 상태만 넘기고 시각을 빠뜨리면 "언제 나갔나"를 잃는데,
+     * 그건 발행이 밀렸는지 브로커가 못 받았는지 가를 때 처음 보는 값이다.
+     */
+    @Test
+    void the_batch_update_leaves_every_success_published_with_a_timestamp() {
+        for (int i = 0; i < 5; i++) {
+            publisher.enqueue(OTHER_DESTINATION, "notification", "b" + i,
+                    "NOTIFICATION_FANOUT_REQUESTED", "{}", "idem-batch-" + i, null);
+        }
+
+        relay.publishPending();
+
+        for (int i = 0; i < 5; i++) {
+            OutboxEvent saved = findByKey("idem-batch-" + i);
+            assertThat(saved.getStatus()).isEqualTo(OutboxStatus.PUBLISHED);
+            assertThat(saved.getPublishedAt())
+                    .as("배치 UPDATE도 발행 시각을 채운다")
+                    .isNotNull();
+        }
+    }
+
+    /**
+     * <b>섞인 배치.</b> 성공분은 한 문장으로 묶고 실패분은 행마다 개별로 쓰는데, 두 경로가 같은
+     * 트랜잭션에서 돌기 때문에 서로를 덮어쓸 여지가 있다 — 특히 성공분 UPDATE가 영속성 컨텍스트를
+     * 비우므로 실패분의 아직 안 나간 변경이 <b>조용히 사라질</b> 수 있다.
+     *
+     * <p>그래서 한 목적지 안에 성공과 실패를 함께 놓고 양쪽을 다 확인한다.
+     */
+    @Test
+    void a_mixed_batch_publishes_the_successes_and_keeps_the_failures_pending() {
+        publisher.enqueue(OTHER_DESTINATION, "notification", "ok1",
+                "NOTIFICATION_FANOUT_REQUESTED", "{}", "idem-mixed-ok", null);
+        publisher.enqueue(OutboxDestinations.INGESTION_EMBED, "material_asset", "bad1",
+                "MATERIAL_EMBED_REQUESTED", "{}", "idem-mixed-fail", null);
+        doThrow(new AmqpException("no broker"))
+                .when(rabbitTemplate).convertAndSend(eq("ingestion.embed"), any(Object.class));
+
+        relay.publishPending();
+
+        OutboxEvent ok = findByKey("idem-mixed-ok");
+        assertThat(ok.getStatus()).isEqualTo(OutboxStatus.PUBLISHED);
+        assertThat(ok.getPublishedAt()).isNotNull();
+
+        OutboxEvent failed = findByKey("idem-mixed-fail");
+        assertThat(failed.getStatus())
+                .as("실패분은 성공분 배치에 휩쓸리지 않는다 — 아직 재시도 대상이다")
+                .isEqualTo(OutboxStatus.PENDING);
+        assertThat(failed.getAttemptCount())
+                .as("실패분의 개별 UPDATE가 성공분 배치에 지워지지 않는다")
+                .isEqualTo(1);
+        assertThat(failed.getPublishedAt()).isNull();
+    }
+
     private OutboxEvent findByKey(String idempotencyKey) {
         return outboxEventRepository.findAll().stream()
                 .filter(e -> idempotencyKey.equals(e.getIdempotencyKey()))

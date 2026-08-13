@@ -360,9 +360,18 @@ material:
     enabled: ${MATERIAL_EMBEDDING_ENABLED:false}
 
 # outbox → RabbitMQ 릴레이 폴링 주기(ADR-0036). 발행 전용, 빈 결과면 무해.
+#
+# 5초에서 30초로 늘렸다(ADR-0122). 잡이 실린 트랜잭션이 커밋되면 릴레이가 곧바로 깨어나므로
+# 폴링은 더 이상 발행 지연을 결정하지 않는다 — 평소 지연은 오히려 최대 5초에서 수십 ms로 줄었다.
+#
+# 그래도 **폴링을 없애지는 않는다**. 트리거가 닿지 않는 자리가 넷 있다.
+#   1. 발행에 실패해 백오프를 기다리는 행 — 그 시각에 커밋하는 사람이 없다.
+#   2. 트리거를 쏜 직후 프로세스가 죽으면 그 신호는 어디에도 남지 않는다.
+#   3. 다른 인스턴스에서 일어난 커밋은 이 프로세스의 트리거를 부르지 못한다.
+#   4. 기동 시점에 남아 있던 PENDING은 애초에 아무 커밋도 동반하지 않는다.
 outbox:
   relay:
-    fixed-delay-ms: ${OUTBOX_RELAY_FIXED_DELAY_MS:5000}
+    fixed-delay-ms: ${OUTBOX_RELAY_FIXED_DELAY_MS:30000}
     initial-delay-ms: ${OUTBOX_RELAY_INITIAL_DELAY_MS:15000}
 
 # ── 알림 ──
