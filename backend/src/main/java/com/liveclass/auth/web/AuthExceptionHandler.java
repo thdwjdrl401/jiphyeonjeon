@@ -4,9 +4,10 @@ import com.liveclass.auth.api.WithdrawalBlockedException;
 import com.liveclass.auth.service.EmailDuplicatedException;
 import com.liveclass.auth.service.InstructorOnlyException;
 import com.liveclass.auth.service.InvalidCredentialsException;
-import com.liveclass.auth.service.TemporaryLoginRequiredException;
 import com.liveclass.auth.service.PasswordMismatchException;
+import com.liveclass.auth.service.PasswordUnchangedException;
 import com.liveclass.auth.service.ProfileImageInvalidException;
+import com.liveclass.auth.service.TemporaryLoginRequiredException;
 import com.liveclass.common.web.ErrorResponse;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -68,6 +69,12 @@ public class AuthExceptionHandler {
     @ExceptionHandler(PasswordMismatchException.class)
     public ResponseEntity<ErrorResponse> handlePasswordMismatch(PasswordMismatchException e) {
         return respond(HttpStatus.UNAUTHORIZED, ErrorResponse.of("AUTH_PASSWORD_MISMATCH", e.getMessage()));
+    }
+
+    /** 비밀번호 변경 시 새 비밀번호가 현재 비밀번호와 같음 → 409(계정 상태 충돌). */
+    @ExceptionHandler(PasswordUnchangedException.class)
+    public ResponseEntity<ErrorResponse> handlePasswordUnchanged(PasswordUnchangedException e) {
+        return respond(HttpStatus.CONFLICT, ErrorResponse.of("AUTH_PASSWORD_UNCHANGED", e.getMessage()));
     }
 
     /** 강사 전용 리소스에 비강사 접근 → 403. */

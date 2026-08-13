@@ -266,6 +266,7 @@ public class AuthService {
 
     /**
      * 비밀번호 변경. 현재 비밀번호가 맞아야 바꾼다 — 틀리면 로그인 실패와 같은 401 계열로 답한다.
+     * 현재 비밀번호와 같은 새 비밀번호는 실제 자격 증명이 달라지지 않으므로 409로 거절한다.
      * 새 비밀번호 형식(길이·bcrypt 72바이트)은 요청 DTO가 가입과 같은 규칙으로 검증한다.
      */
     @Transactional
@@ -274,6 +275,9 @@ public class AuthService {
                 .orElseThrow(() -> new InvalidCredentialsException(CREDENTIALS_REJECTED));
         if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
             throw new PasswordMismatchException("현재 비밀번호가 일치하지 않습니다.");
+        }
+        if (passwordEncoder.matches(newPassword, user.getPasswordHash())) {
+            throw new PasswordUnchangedException("새 비밀번호는 현재 비밀번호와 다르게 입력해 주세요.");
         }
         user.setPasswordHash(passwordEncoder.encode(newPassword));
         // 새 비밀번호를 정했으면 임시 열쇠는 그 자리에서 버린다 — 메일에 남은 값이 계속 통하면
