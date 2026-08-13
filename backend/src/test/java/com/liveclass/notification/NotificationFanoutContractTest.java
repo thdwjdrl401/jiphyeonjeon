@@ -383,12 +383,14 @@ class NotificationFanoutContractTest {
                 .toList();
     }
 
+    // 문구·targets는 사건당 한 행(content)으로 갔다(ADR-0123). 검증 내용은 그대로고 읽는 곳만 조인이다.
     private List<Row> notificationsFor(String curriculumId) {
         return jdbc.query("""
-                        SELECT recipient_id, type, read_status, action_status, message
-                        FROM core.notification
-                        WHERE targets->>'curriculumId' = ?
-                        ORDER BY created_at DESC
+                        SELECT n.recipient_id, c.type, n.read_status, n.action_status, c.message
+                        FROM core.notification n
+                        JOIN core.notification_content c ON c.id = n.content_id
+                        WHERE c.targets->>'curriculumId' = ?
+                        ORDER BY n.created_at DESC
                         """,
                 (rs, i) -> new Row(rs.getObject("recipient_id", UUID.class), rs.getString("type"),
                         rs.getString("read_status"), rs.getString("action_status"), rs.getString("message")),
