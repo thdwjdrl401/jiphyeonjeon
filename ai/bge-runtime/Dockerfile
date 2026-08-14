@@ -3,22 +3,29 @@
 FROM python:3.12-slim-bookworm AS build
 
 ARG UV_VERSION=0.11.27
+# cuda or cpu — picks the torch build. The two extras conflict, so exactly one is installed.
+ARG TORCH_EXTRA=cuda
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy
 WORKDIR /app
 
 RUN pip install --no-cache-dir "uv==${UV_VERSION}"
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --extra cuda --no-install-project
+RUN uv sync --frozen --no-dev --extra "${TORCH_EXTRA}" --no-install-project
 
 COPY app ./app
-RUN uv sync --frozen --no-dev --extra cuda
+RUN uv sync --frozen --no-dev --extra "${TORCH_EXTRA}"
 
 FROM python:3.12-slim-bookworm AS runtime
 
 WORKDIR /app
 RUN groupadd --system liveclass \
- && useradd --system --gid liveclass --create-home liveclass
+ && useradd --system --gid liveclass --create-home liveclass \
+ && mkdir -p /home/liveclass/.cache/huggingface \
+ && chown -R liveclass:liveclass /home/liveclass/.cache
+# HF_HOME은 named 볼륨이 붙는 자리다. 이미지에 이 경로가 없으면 Docker가 볼륨을 root 소유로
+# 새로 만들어, liveclass 사용자가 가중치를 못 받고 기동에 실패한다. 미리 만들어 두면 Docker가
+# 이 디렉토리의 소유권을 그대로 볼륨에 복사한다.
 
 COPY --from=build --chown=liveclass:liveclass /app/.venv /app/.venv
 COPY --chown=liveclass:liveclass app ./app

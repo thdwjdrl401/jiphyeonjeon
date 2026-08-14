@@ -1,0 +1,51 @@
+# BGE-M3 임베딩 런타임 — 가속기 없는 상시 가동 호스트용 (ADR-0125).
+#
+# GPU 서버가 회수되면서 임베딩은 항상 켜져 있는 호스트로 내려왔다. 실시간 STT는 노트북 GPU가
+# 계속 맡지만 노트북은 상시 가동이 아니고, RAG 질의와 자료 인덱싱은 서비스가 사는 내내 가능해야
+# 한다. 가동 요구가 다르므로 실행 위치가 갈라진다.
+#
+# GPU 배포(deploy/bin/*supervisor, tmux, CUDA_VISIBLE_DEVICES 강제)는 그대로 두고 이 파일만 쓴다.
+#
+# 기동:
+#   docker compose -f docker-compose.bge-cpu.yml up -d --build
+#
+# 호출부는 이 스택을 모른다 — AI_API_BGE_BASE_URL / AI_WORKER_BGE_RUNTIME_URL 이 여기를 가리키면
+# 끝이다(ADR-0029가 남겨 둔 확장점).
+name: liveclass-bge-cpu
+
+services:
+  bge-runtime:
+    build:
+      context: ./ai/bge-runtime
+      args:
+        # cuda extra와 torch 버전은 같고 빌드만 다르다. 두 extra는 conflicts라 하나만 깔린다.
+        TORCH_EXTRA: cpu
+    image: liveclass-bge-runtime:cpu
+    container_name: liveclass-bge-runtime-cpu
+    restart: unless-stopped
+    environment:
+      BGE_RUNTIME_HOST: 0.0.0.0
+      BGE_RUNTIME_PORT: "8020"
+      BGE_RUNTIME_INTERNAL_TOKEN: ${BGE_RUNTIME_INTERNAL_TOKEN:?BGE_RUNTIME_INTERNAL_TOKEN 필요}
+      BGE_RUNTIME_DEVICE: cpu
+      HF_HOME: /home/liveclass/.cache/huggingface
+    ports:
+      # GPU 서버 시절 터널이 쓰던 번호를 그대로 둔다 — 호출부 URL을 바꾸지 않기 위해서다.
+      - "127.0.0.1:18020:8020"
+    volumes:
+      # 가중치 2.2GB. 이 볼륨이 없으면 재시작마다 다시 받고 start_period 안에 못 끝낸다.
+      - bge-model-cache:/home/liveclass/.cache/huggingface
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8020/readyz', timeout=2)"]
+      interval: 15s
+      timeout: 5s
+      retries: 30
+      start_period: 120s
+    deploy:
+      resources:
+        limits:
+          # 실측 peak RSS 2,094 MB. 여유를 두되, 새는 경우 호스트를 끌고 가지 않게 막는다.
+          memory: 3g
+
+volumes:
+  bge-model-cache:

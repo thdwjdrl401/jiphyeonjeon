@@ -1,0 +1,82 @@
+# lazy 배포.
+#
+# 배포 대상이 가정용 NAT 뒤에 있어 GitHub가 들어올 수 없다. 그래서 lazy에 self-hosted 러너를
+# 두고 러너가 밖으로 나가 폴링한다 — 열어야 할 포트도, 주고받을 SSH 키도 없다. 러너가 배포
+# 대상과 같은 호스트라 `docker compose`를 그대로 부르면 된다(옛 EC2 배포와 같은 방식).
+#
+# 시크릿은 GitHub Secrets가 아니라 호스트의 `/etc/liveclass/*`에 있다. 저장소가 아직 private이고
+# 그 값들이 교체 전이라, 시크릿을 CI로 끌어올리지 않고 호스트에 두는 옛 방식을 유지한다.
+#
+# ⚠️ 현재 수동 실행 전용이다. lazy에 프로덕션 스택을 올린 뒤 아래 `push:` 트리거를 풀어라.
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      stack:
+        description: 배포할 스택
+        required: true
+        type: choice
+        default: prod
+        options: [prod, livekit, bge-cpu, all]
+  # 스택이 lazy에 자리 잡으면 주석을 푼다.
+  # push:
+  #   branches: [master]
+
+concurrency:
+  # 같은 호스트의 같은 스택을 동시에 건드리지 않는다. 옛 resource_group과 같은 역할.
+  group: deploy-lazy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, lazy]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 시크릿 파일 확인
+        run: |
+          for f in /etc/liveclass/.env.prod /etc/liveclass/.env.ai; do
+            [ -r "$f" ] || { echo "::error::$f 없음 — 호스트에 시크릿을 먼저 두어라"; exit 1; }
+          done
+
+      - name: prod 스택
+        if: inputs.stack == 'prod' || inputs.stack == 'all'
+        run: |
+          docker compose -f docker-compose.prod.yml \
+            --env-file /etc/liveclass/.env.prod \
+            up -d --build --wait --wait-timeout 300
+          docker compose -f docker-compose.prod.yml ps
+
+      - name: AI 스택
+        if: inputs.stack == 'prod' || inputs.stack == 'all'
+        run: |
+          docker compose -f docker-compose.ai-prod.yml \
+            --env-file /etc/liveclass/.env.prod \
+            --env-file /etc/liveclass/.env.ai \
+            up -d --build --wait --wait-timeout 300
+          docker compose -f docker-compose.ai-prod.yml ps
+
+      - name: BGE 임베딩 (CPU)
+        if: inputs.stack == 'bge-cpu' || inputs.stack == 'all'
+        run: |
+          set -a; . /etc/liveclass/.env.ai; set +a
+          docker compose -f docker-compose.bge-cpu.yml up -d --build --wait --wait-timeout 600
+          docker compose -f docker-compose.bge-cpu.yml ps
+
+      - name: LiveKit
+        if: inputs.stack == 'livekit' || inputs.stack == 'all'
+        run: |
+          # egress-purger가 EGRESS_PURGE_SECRET을 필수로 받는다. 이 값은 커밋하지 않으므로
+          # env-file 없이 부르면 up 이전 보간 단계에서 죽는다.
+          docker compose -f infra/livekit/docker-compose.yml \
+            --env-file /etc/liveclass/livekit/purger.env \
+            up -d --build
+          docker compose -f infra/livekit/docker-compose.yml ps
+
+      - name: 상태 요약
+        if: always()
+        run: docker ps --format 'table {{.Names}}\t{{.Status}}'

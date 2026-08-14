@@ -32,15 +32,15 @@ def test_defaults_pin_full_immutable_revision_and_admission_limit(
 
 @pytest.mark.parametrize(
     "device",
-    ["cpu", "CUDA", "cuda0", "cuda:", "cuda:-1", "cuda:01", "cuda:1.0", "cuda:0:1", " cuda"],
+    ["CPU", "CUDA", "cuda0", "cuda:", "cuda:-1", "cuda:01", "cuda:1.0", "cuda:0:1", " cuda"],
 )
-def test_settings_rejects_noncanonical_cuda_device(device: str) -> None:
+def test_settings_rejects_noncanonical_device(device: str) -> None:
     with pytest.raises(ValidationError, match="canonical non-negative"):
         Settings(internal_token=TOKEN, device=device)
 
 
-@pytest.mark.parametrize("device", ["cuda", "cuda:0", "cuda:12"])
-def test_settings_accepts_canonical_cuda_device(device: str) -> None:
+@pytest.mark.parametrize("device", ["cpu", "cuda", "cuda:0", "cuda:12"])
+def test_settings_accepts_canonical_device(device: str) -> None:
     assert Settings(internal_token=TOKEN, device=device).device == device
 
 

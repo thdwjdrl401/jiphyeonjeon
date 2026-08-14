@@ -1,0 +1,43 @@
+# GitHub Actions self-hosted 러너 — 배포 전용.
+#
+# 테스트는 GitHub 호스티드 러너에서 돈다(격리되고 무료다). 이 러너는 **배포만** 맡는다.
+# 배포 대상이 이 호스트 자신이라 SSH도, 열린 포트도 필요 없다.
+#
+# 최초 기동:
+#   RUNNER_TOKEN=$(gh api -X POST repos/thdwjdrl401/jiphyeonjeon/actions/runners/registration-token --jq .token) \
+#     docker compose up -d --build
+#
+# 등록이 끝나면 설정이 볼륨에 남아 이후 재시작에는 토큰이 필요 없다.
+name: github-runner
+
+services:
+  runner:
+    build:
+      context: .
+    image: liveclass-github-runner
+    container_name: github-runner
+    restart: unless-stopped
+    environment:
+      GITHUB_REPO_URL: ${GITHUB_REPO_URL:-https://github.com/thdwjdrl401/jiphyeonjeon}
+      RUNNER_NAME: ${RUNNER_NAME:-lazy}
+      # 워크플로의 `runs-on: [self-hosted, lazy]`가 이 라벨을 고른다.
+      RUNNER_LABELS: ${RUNNER_LABELS:-self-hosted,linux,x64,lazy}
+      RUNNER_TOKEN: ${RUNNER_TOKEN:-}
+    volumes:
+      # 배포가 곧 호스트의 compose 스택을 올리는 일이라 호스트 데몬을 그대로 쓴다.
+      - /var/run/docker.sock:/var/run/docker.sock
+      - runner-config:/home/runner/actions-runner
+      - runner-work:/home/runner/_work
+    group_add:
+      # 호스트 도커 소켓의 그룹. 호스트마다 다르므로 .env로 덮어쓴다.
+      #   getent group docker | cut -d: -f3
+      - ${DOCKER_GID:-999}
+    deploy:
+      resources:
+        limits:
+          # 이 호스트는 프로덕션도 같이 진다. 러너가 빌드로 메모리를 다 먹지 않게 막는다.
+          memory: 2g
+
+volumes:
+  runner-config:
+  runner-work:

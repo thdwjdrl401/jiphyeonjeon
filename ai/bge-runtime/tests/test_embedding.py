@@ -13,6 +13,7 @@ from app.embedding import (
     BgeM3EmbeddingModel,
     ensure_device_available,
     parse_cuda_device,
+    parse_device,
 )
 
 
@@ -56,10 +57,46 @@ def test_parse_cuda_device_accepts_only_canonical_values(device: str, index: int
     assert parse_cuda_device(device) == index
 
 
-@pytest.mark.parametrize("device", ["cpu", "cuda:", "cuda:-1", "cuda:01", "cuda:1:2"])
+@pytest.mark.parametrize("device", ["CPU", "cuda:", "cuda:-1", "cuda:01", "cuda:1:2"])
 def test_model_rejects_invalid_device_before_custom_validator(device: str) -> None:
     with pytest.raises(ValueError, match="canonical non-negative"):
         create_model(loader=lambda *args, **kwargs: Encoded([]), device=device)
+
+
+@pytest.mark.parametrize("device", ["cpu", "cuda", "cuda:7"])
+def test_parse_device_accepts_cpu_and_canonical_cuda(device: str) -> None:
+    assert parse_device(device) == device
+
+
+def test_ensure_device_available_skips_cuda_probe_on_cpu(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The cpu extra installs a torch built without CUDA, so probing torch.cuda would fail
+    # on exactly the hosts this device exists to serve.
+    class CudalessTorch:
+        class cuda:
+            @staticmethod
+            def is_available() -> bool:
+                raise AssertionError("cpu device must not probe CUDA")
+
+            @staticmethod
+            def device_count() -> int:
+                raise AssertionError("cpu device must not probe CUDA")
+
+    original_import = builtins.__import__
+
+    def import_cudaless_torch(
+        name: str,
+        globals: object = None,
+        locals: object = None,
+        fromlist: object = (),
+        level: int = 0,
+    ) -> object:
+        if name == "torch":
+            return CudalessTorch
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", import_cudaless_torch)
+
+    ensure_device_available("cpu")
 
 
 def test_model_requires_full_immutable_revision() -> None:

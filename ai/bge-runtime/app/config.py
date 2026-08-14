@@ -4,7 +4,7 @@ from typing import Literal, Self
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from app.embedding import BGE_M3_MODEL, BGE_M3_REVISION, parse_cuda_device
+from app.embedding import BGE_M3_MODEL, BGE_M3_REVISION, parse_device
 
 
 class Settings(BaseSettings):
@@ -31,8 +31,7 @@ class Settings(BaseSettings):
     @field_validator("device")
     @classmethod
     def validate_device(cls, device: str) -> str:
-        parse_cuda_device(device)
-        return device
+        return parse_device(device)
 
     @field_validator("host", "model")
     @classmethod

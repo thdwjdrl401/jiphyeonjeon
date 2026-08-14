@@ -10,9 +10,10 @@ BGE_M3_MODEL = "BAAI/bge-m3"
 BGE_M3_REVISION = "5617a9f61b028005a4858fdac845db406aefb181"
 EMBEDDING_DIMENSIONS = 1024
 
+CPU_DEVICE = "cpu"
+
 _CUDA_DEVICE_PATTERN = re.compile(r"cuda(?::(0|[1-9][0-9]*))?\Z")
 _IMMUTABLE_REVISION_PATTERN = re.compile(r"[0-9a-f]{40}\Z")
-_CUDA_EXTRA_INSTALL_COMMAND = "uv sync --frozen --extra cuda"
 
 
 def parse_cuda_device(device: str) -> int:
@@ -25,21 +26,40 @@ def parse_cuda_device(device: str) -> int:
     return 0 if index is None else int(index)
 
 
-def _missing_cuda_extra_error(missing: str | None) -> RuntimeError:
+def parse_device(device: str) -> str:
+    """Return the canonical device string for ``cpu``, ``cuda``, or ``cuda:N``."""
+
+    if device == CPU_DEVICE:
+        return device
+    if _CUDA_DEVICE_PATTERN.fullmatch(device) is None:
+        raise ValueError("device must be 'cpu', 'cuda', or a canonical non-negative 'cuda:N'")
+    return device
+
+
+def _install_extra_for(device: str) -> str:
+    return CPU_DEVICE if device == CPU_DEVICE else "cuda"
+
+
+def _missing_extra_error(missing: str | None, device: str) -> RuntimeError:
     dependency = f" ({missing})" if missing else ""
+    extra = _install_extra_for(device)
     return RuntimeError(
-        "BGE-M3 CUDA dependencies are not installed"
-        f"{dependency}; run `{_CUDA_EXTRA_INSTALL_COMMAND}` in ai/bge-runtime"
+        f"BGE-M3 {extra} dependencies are not installed"
+        f"{dependency}; run `uv sync --frozen --extra {extra}` in ai/bge-runtime"
     )
 
 
 def ensure_device_available(device: str) -> None:
-    index = parse_cuda_device(device)
+    parse_device(device)
     try:
         import torch
     except ImportError as exc:
-        raise _missing_cuda_extra_error(getattr(exc, "name", None)) from exc
+        raise _missing_extra_error(getattr(exc, "name", None), device) from exc
 
+    if device == CPU_DEVICE:
+        return
+
+    index = parse_cuda_device(device)
     if not torch.cuda.is_available() or index >= torch.cuda.device_count():
         raise RuntimeError(f"requested embedding device {device!r} is unavailable")
 
@@ -55,7 +75,7 @@ class BgeM3EmbeddingModel:
         loader: Callable[..., object] | None = None,
         device_validator: Callable[[str], None] = ensure_device_available,
     ) -> None:
-        parse_cuda_device(device)
+        parse_device(device)
         if _IMMUTABLE_REVISION_PATTERN.fullmatch(revision) is None:
             raise ValueError("revision must be a full 40-character lowercase Git commit SHA")
         if not model.strip() or model != model.strip():
@@ -124,7 +144,7 @@ class BgeM3EmbeddingModel:
             try:
                 from sentence_transformers import SentenceTransformer
             except ImportError as exc:
-                raise _missing_cuda_extra_error(getattr(exc, "name", None)) from exc
+                raise _missing_extra_error(getattr(exc, "name", None), self.device) from exc
             loader = SentenceTransformer
 
         try:
@@ -135,7 +155,7 @@ class BgeM3EmbeddingModel:
                 trust_remote_code=False,
             )
         except ImportError as exc:
-            raise _missing_cuda_extra_error(getattr(exc, "name", None)) from exc
+            raise _missing_extra_error(getattr(exc, "name", None), self.device) from exc
 
         self._loaded = loaded
         return loaded
