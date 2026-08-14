@@ -36,21 +36,26 @@ public class OutboxRelayTrigger {
     private final AsyncTaskExecutor executor;
 
     /**
-     * 아직 시작하지 않은 깨우기가 떠 있는가. <b>대기 중인 패스를 하나로 합쳐</b> 깨우기 폭주를
-     * 누그러뜨리기 위한 것이다.
+     * 트리거가 띄운 패스가 지금 돌고 있는가. <b>동시에 최대 한 개</b>만 돌게 하는 실행 게이트다.
      *
      * <p>커밋 하나에 릴레이 한 번을 그대로 대응시키면, 알림 팬아웃처럼 짧은 트랜잭션이 몰릴 때
-     * 패스가 그 수만큼 뜨고 각자 커넥션을 하나씩 잡는다. 대기 중인 패스가 있으면 그 패스가 어차피
-     * 훑을 것이므로 새로 띄우지 않는다.
-     *
-     * <p><b>합쳐지는 것은 대기 중인 패스뿐이다.</b> 깃발은 패스가 <b>시작할 때</b> 내려간다 — 그래야
-     * 그 뒤에 커밋된 행이 지금 도는 패스의 스냅샷에서 빠지더라도 새 패스가 집는다. 대신 <b>실행 중인
-     * 패스와의 동시 실행은 막지 않는다</b>(막으면 진행 중 커밋된 행을 놓친다). 커밋이 연달아 오면
-     * 동시에 도는 패스가 여럿이 되고 그만큼 커넥션을 잡으므로, 동시 패스 수의 상한은 <b>여기서
-     * 보장되지 않는다</b>. 정합성은 {@code FOR UPDATE SKIP LOCKED}가 지키니 남는 것은 순수한 커넥션
-     * 압박이고, 그 상한이 필요해지면 세대 카운터나 실행 게이트를 들여야 한다 — 이번 범위는 아니다.
+     * 패스가 그 수만큼 떠서 각자 커넥션을 잡는다. 처음에는 "대기 중인 패스만 합치고 실행 중과의
+     * 동시 실행은 허용"으로 두었는데, 그 상한 없음이 CI에서 실제 사고가 됐다 — 커밋형 테스트가
+     * 커밋할 때마다 패스가 쌓였고, 밀린 패스들이 <b>한참 뒤의 다른 테스트 위로</b> 겹치며
+     * SessionFactory 전역인 Hibernate 통계를 오염시켜 쿼리 수 단언을 깨뜨렸다(간섭이 테스트라서
+     * 보였을 뿐, 운영이라면 커넥션 풀 압박으로 나타났을 것이다).
      */
-    private final AtomicBoolean wakeupPending = new AtomicBoolean();
+    private final AtomicBoolean running = new AtomicBoolean();
+
+    /**
+     * 패스가 끝난 뒤 <b>한 번 더</b> 돌아야 하는가. 실행 중에 도착한 깨우기를 잃지 않기 위한 표다.
+     *
+     * <p>실행 게이트만 두면 "패스가 도는 동안 커밋된 행"을 놓친다 — 그 행은 지금 패스의 스냅샷에
+     * 없을 수 있는데 게이트가 새 패스를 막는다. 그래서 깨우기는 언제나 이 표를 먼저 세우고,
+     * 도는 패스가 끝날 때 표가 서 있으면 <b>이어서 한 번 더</b> 훑는다. 몇 번의 커밋이 겹쳐도
+     * 추가 패스는 한 번으로 합쳐진다 — 어차피 한 번이면 그 시점까지의 행을 전부 본다.
+     */
+    private final AtomicBoolean rerun = new AtomicBoolean();
 
     public OutboxRelayTrigger(OutboxRelay relay,
                               @Qualifier(OutboxAsyncConfig.OUTBOX_RELAY_EXECUTOR) AsyncTaskExecutor executor) {
@@ -86,25 +91,53 @@ public class OutboxRelayTrigger {
     }
 
     private void wake() {
-        if (!wakeupPending.compareAndSet(false, true)) {
-            return;   // 아직 시작하지 않은 패스가 있다 — 그 패스가 이 행까지 본다.
+        /*
+         * 표를 먼저 세우고 게이트를 잡는다. 순서가 반대면 — 게이트 확인 뒤 표를 세우면 — 도는
+         * 패스가 "표 검사 → 없음 → 게이트 해제" 사이에 이 깨우기가 끼어들어 통째로 사라질 수 있다.
+         * 표가 먼저면 어느 쪽이든 잡힌다: 게이트를 내가 잡으면 새 패스가 표를 보고, 남이 잡고
+         * 있으면 그 패스의 마무리 검사가 본다.
+         */
+        rerun.set(true);
+        if (!running.compareAndSet(false, true)) {
+            return;   // 패스가 돌고 있다 — 끝날 때 rerun 표를 보고 이어서 한 번 더 돈다.
         }
+        submit();
+    }
+
+    private void submit() {
         try {
             executor.execute(this::runRelay);
         } catch (RuntimeException e) {
-            // 실행기가 거절했다(종료 중 등). 깃발을 되돌려 다음 커밋이 다시 시도할 수 있게 한다.
-            wakeupPending.set(false);
+            // 실행기가 거절했다(종료 중 등). 게이트를 되돌려 다음 커밋이 다시 시도할 수 있게 한다.
+            running.set(false);
             log.warn("outbox 릴레이 깨우기 실패 — 폴링을 기다린다: {}", e.getMessage());
         }
     }
 
     private void runRelay() {
-        wakeupPending.set(false);
         try {
-            relay.publishPending();
-        } catch (RuntimeException e) {
-            // 여기는 이미 업무 트랜잭션 밖이라 올려 봐야 받을 사람이 없다. 다음 폴링이 다시 집는다.
-            log.warn("outbox 릴레이 깨우기 실행 실패 — 폴링을 기다린다: {}", e.getMessage());
+            /*
+             * 표가 서 있는 동안 이어서 돈다. 한 바퀴 도는 사이에 커밋이 몇 번 오든 표는 하나라
+             * 추가 패스도 한 번이다 — 패스 수가 커밋 수가 아니라 "밀린 일이 있는가"에 비례한다.
+             */
+            while (rerun.getAndSet(false)) {
+                try {
+                    relay.publishPending();
+                } catch (RuntimeException e) {
+                    // 이미 업무 트랜잭션 밖이라 올려 봐야 받을 사람이 없다. 다음 폴링이 다시 집는다.
+                    log.warn("outbox 릴레이 깨우기 실행 실패 — 폴링을 기다린다: {}", e.getMessage());
+                    break;   // 같은 원인으로 곧장 또 돌지 않는다 — 남은 일은 폴링 몫이다.
+                }
+            }
+        } finally {
+            running.set(false);
+            /*
+             * 마무리 검사. while이 표를 내리고 게이트를 놓기 직전에 도착한 깨우기는 게이트가
+             * 잡혀 있어 새 패스를 못 띄웠다 — 그 표가 남아 있으면 여기서 대신 띄운다.
+             */
+            if (rerun.get() && running.compareAndSet(false, true)) {
+                submit();
+            }
         }
     }
 }
