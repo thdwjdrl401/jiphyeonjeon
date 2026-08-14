@@ -27,8 +27,15 @@ CPU가 예산 안에 드는 근거는 ADR-0013이 이미 남겨 두었다. RTX 4
 측정됐고, 런타임은 `batch_size=4`·`max_batch_size=4`·`max_inflight_requests=8`로 매우 보수적이다.
 자료 인덱싱은 오프라인 경로이고, 온라인 경로인 질의 임베딩의 타임아웃 예산은 8초다.
 
-CPU 실측(Core Ultra 9 185H, 22 스레드): warm 단건 **45 ms**, batch 4 **89 ms**(첫 호출 167 ms),
-1024차원·L2 정규화 정상, peak RSS **2,094 MB**. 8초 예산에 크게 못 미친다.
+CPU 실측. 배포 대상 호스트(i7-6700HQ, 4코어 8스레드, 2015년 칩)에서 컨테이너로 띄워 HTTP로 측정:
+
+| | warm 단건 | warm batch 4 | 컨테이너 메모리 |
+|---|---|---|---|
+| i7-6700HQ (배포 대상) | **155 ms** | **177 ms** | 1.81 GiB |
+| Ultra 9 185H (참고) | 45 ms | 89 ms | 2.09 GiB |
+
+둘 다 1024차원·L2 정규화 정상(`norm=1.000000`). 배포 대상의 155 ms는 ADR-0013이 RTX 4050에서
+잰 116.8 ms와 같은 자릿수이고, 8초 예산의 **1/50**이다. 이 워크로드에서 GPU는 필요 없다.
 
 ## 결정
 
@@ -69,10 +76,16 @@ CPU 실측(Core Ultra 9 185H, 22 스레드): warm 단건 **45 ms**, batch 4 **89
 
 - GPU 배포 스크립트(`deploy/bin/*supervisor`, tmux, `CUDA_VISIBLE_DEVICES=0` 강제)는 **건드리지 않았다.**
   `tests/test_operational_scripts.py`가 검증하는 GPU 경로는 그대로 유효하다.
-- **메모리가 이 결정의 실질 비용이다.** 실측 peak RSS 2,094 MB. 지연이 아니라 이 값이 먼저 한계에
+- **메모리가 이 결정의 실질 비용이다.** 컨테이너 상주 1.81 GiB. 지연이 아니라 이 값이 먼저 한계에
   닿는다 — 같은 호스트에 다른 서비스가 얹혀 있으면 총 RAM에서 2 GB를 먼저 떼어 놓고 계산해야 한다.
-- 모델 가중치를 처음 받는 데 오래 걸린다(2.2 GB). `HEALTHCHECK`의 `start-period=120s`는 **가중치가
-  이미 캐시에 있을 때** 기준이므로, 컨테이너의 `HF_HOME`(`/home/liveclass/.cache/huggingface`)을
-  볼륨으로 유지해 재시작마다 다시 받지 않게 한다. 캐시가 빈 첫 기동은 healthcheck 밖에서 워밍한다.
+  compose에 `memory: 3g` 상한을 걸어 두었다.
+- 캐시가 빈 첫 기동은 ready까지 **349초**가 걸렸다(HF에서 4.3 GB 수신 포함 — `pytorch_model.bin`과
+  `model.safetensors`를 둘 다 받는다). `HEALTHCHECK`의 `start_period=120s`는 **가중치가 이미 캐시에
+  있을 때** 기준이므로, `HF_HOME`(`/home/liveclass/.cache/huggingface`)을 반드시 볼륨으로 유지한다.
+  첫 기동은 unhealthy를 한 번 지나갔다가 회복하므로, 그 시간을 못 견디는 오케스트레이션 아래에서는
+  캐시를 미리 채워 두고 띄운다.
+- 그 볼륨 때문에 이미지에 `HF_HOME` 경로를 미리 만들어야 한다. 없으면 Docker가 named 볼륨을 root
+  소유로 만들어 `liveclass` 사용자가 가중치를 못 받고 `PermissionError`로 죽는다. GPU 배포는 tmux
+  rootless라 이 경로를 안 타서 드러나지 않던 문제다.
 - 서로 다른 device로 만든 벡터의 수치 동등성은 보장 대상이 아니다. 정규화된 1024차원이라는 계약만
   유지된다 — 검색 품질에 유의미한 차이가 관측되면 별도로 다룬다.
