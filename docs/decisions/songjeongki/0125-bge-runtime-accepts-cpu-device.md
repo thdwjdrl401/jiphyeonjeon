@@ -27,6 +27,9 @@ CPU가 예산 안에 드는 근거는 ADR-0013이 이미 남겨 두었다. RTX 4
 측정됐고, 런타임은 `batch_size=4`·`max_batch_size=4`·`max_inflight_requests=8`로 매우 보수적이다.
 자료 인덱싱은 오프라인 경로이고, 온라인 경로인 질의 임베딩의 타임아웃 예산은 8초다.
 
+CPU 실측(Core Ultra 9 185H, 22 스레드): warm 단건 **45 ms**, batch 4 **89 ms**(첫 호출 167 ms),
+1024차원·L2 정규화 정상, peak RSS **2,094 MB**. 8초 예산에 크게 못 미친다.
+
 ## 결정
 
 `device`가 받는 값을 `cpu` | `cuda` | `cuda:N`으로 넓힌다.
@@ -66,9 +69,10 @@ CPU가 예산 안에 드는 근거는 ADR-0013이 이미 남겨 두었다. RTX 4
 
 - GPU 배포 스크립트(`deploy/bin/*supervisor`, tmux, `CUDA_VISIBLE_DEVICES=0` 강제)는 **건드리지 않았다.**
   `tests/test_operational_scripts.py`가 검증하는 GPU 경로는 그대로 유효하다.
-- CPU 호스트의 메모리 예산을 봐야 한다. FP32 BGE-M3는 모델만 2.2 GB 수준이고 프로세스 RSS는 그보다
-  크다. 같은 호스트에 다른 서비스가 얹혀 있으면 이 값이 먼저 한계에 닿는다.
-- cold load가 GPU보다 길다. `HEALTHCHECK`의 `start-period=120s`가 여전히 충분한지는 실제 호스트에서
-  확인해야 한다.
+- **메모리가 이 결정의 실질 비용이다.** 실측 peak RSS 2,094 MB. 지연이 아니라 이 값이 먼저 한계에
+  닿는다 — 같은 호스트에 다른 서비스가 얹혀 있으면 총 RAM에서 2 GB를 먼저 떼어 놓고 계산해야 한다.
+- 모델 가중치를 처음 받는 데 오래 걸린다(2.2 GB). `HEALTHCHECK`의 `start-period=120s`는 **가중치가
+  이미 캐시에 있을 때** 기준이므로, 컨테이너의 `HF_HOME`(`/home/liveclass/.cache/huggingface`)을
+  볼륨으로 유지해 재시작마다 다시 받지 않게 한다. 캐시가 빈 첫 기동은 healthcheck 밖에서 워밍한다.
 - 서로 다른 device로 만든 벡터의 수치 동등성은 보장 대상이 아니다. 정규화된 1024차원이라는 계약만
   유지된다 — 검색 품질에 유의미한 차이가 관측되면 별도로 다룬다.
