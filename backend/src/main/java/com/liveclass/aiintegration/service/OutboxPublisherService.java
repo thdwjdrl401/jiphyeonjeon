@@ -18,9 +18,12 @@ public class OutboxPublisherService implements OutboxPublisher {
     private static final Logger log = LoggerFactory.getLogger(OutboxPublisherService.class);
 
     private final OutboxEventRepository outboxEventRepository;
+    private final OutboxRelayTrigger relayTrigger;
 
-    public OutboxPublisherService(OutboxEventRepository outboxEventRepository) {
+    public OutboxPublisherService(OutboxEventRepository outboxEventRepository,
+                                  OutboxRelayTrigger relayTrigger) {
         this.outboxEventRepository = outboxEventRepository;
+        this.relayTrigger = relayTrigger;
     }
 
     @Override
@@ -52,5 +55,14 @@ public class OutboxPublisherService implements OutboxPublisher {
         }
         log.info("outbox 적재 dest={} type={} aggId={} idempotencyKey={}",
                 destination, eventType, aggregateId, idempotencyKey);
+        /*
+         * 커밋된 뒤에 릴레이를 깨운다(ADR-0122). 여기서 바로 발행하지 않는 이유가 아웃박스의 존재
+         * 이유 그 자체다 — 이 트랜잭션은 아직 롤백될 수 있고, 롤백된 일에 대한 메시지가 브로커에
+         * 남으면 되돌릴 방법이 없다. 신호만 예약하고 실제 발행은 커밋 뒤 다른 스레드가 한다.
+         *
+         * 중복으로 걸러진 경우(위 두 return)에는 깨우지 않는다. 새로 실린 잡이 없으므로 깨워도
+         * 빈 배치를 훑을 뿐이다.
+         */
+        relayTrigger.wakeAfterCommit();
     }
 }
