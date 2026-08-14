@@ -3,16 +3,18 @@
 FROM python:3.12-slim-bookworm AS build
 
 ARG UV_VERSION=0.11.27
+# cuda or cpu — picks the torch build. The two extras conflict, so exactly one is installed.
+ARG TORCH_EXTRA=cuda
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy
 WORKDIR /app
 
 RUN pip install --no-cache-dir "uv==${UV_VERSION}"
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --extra cuda --no-install-project
+RUN uv sync --frozen --no-dev --extra "${TORCH_EXTRA}" --no-install-project
 
 COPY app ./app
-RUN uv sync --frozen --no-dev --extra cuda
+RUN uv sync --frozen --no-dev --extra "${TORCH_EXTRA}"
 
 FROM python:3.12-slim-bookworm AS runtime
 
