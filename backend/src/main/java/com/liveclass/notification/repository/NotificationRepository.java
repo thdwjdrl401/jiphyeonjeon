@@ -21,13 +21,22 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
      * <p>필터 조합이 넷이지만 인덱스를 넷 두지 않는다. 한 사람의 알림은 많아야 수천 건이라
      * {@code (recipient_id, created_at DESC)} 하나로 좁힌 뒤 걸러도 충분하고, 조합마다 인덱스를 두면
      * 쓰기가 그만큼 느려진다.
+     *
+     * <p>문구는 content에 있다(ADR-0123). <b>fetch join으로 한 문장에 가져온다</b> — 없으면 페이지
+     * 크기만큼 content 조회가 따라붙는다(N+1). 페이지 카운트는 fetch join을 셀 수 없으므로 따로 쓴다.
      */
-    @Query("""
-            SELECT n FROM Notification n
+    @Query(value = """
+            SELECT n FROM Notification n JOIN FETCH n.content
             WHERE n.recipientId = :recipientId
               AND (:actionStatus IS NULL OR n.actionStatus = :actionStatus)
               AND (:readStatus IS NULL OR n.readStatus = :readStatus)
             ORDER BY n.createdAt DESC, n.id DESC
+            """,
+            countQuery = """
+            SELECT count(n) FROM Notification n
+            WHERE n.recipientId = :recipientId
+              AND (:actionStatus IS NULL OR n.actionStatus = :actionStatus)
+              AND (:readStatus IS NULL OR n.readStatus = :readStatus)
             """)
     Page<Notification> findMine(@Param("recipientId") UUID recipientId,
                                 @Param("actionStatus") String actionStatus,
@@ -37,6 +46,7 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
     /**
      * 배지 개수는 <b>필터와 무관한 전체 기준</b>이다(§2-4). 두 개수를 한 문장에 묶지 않는 이유는
      * 부분 인덱스를 쓰기 위해서다 — {@code FILTER}로 묶으면 그 사람의 알림을 전부 훑는다.
+     * content와 무관한 경로라 정규화(ADR-0123) 뒤에도 단일 테이블 읽기 그대로다.
      */
     long countByRecipientIdAndReadStatus(UUID recipientId, String readStatus);
 
@@ -80,21 +90,24 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
      * 되살아난 뒤의 <b>새</b> 대기 알림까지 닫아 버리지 않게 막는 것은 부르는 쪽의 수강 상태
      * 확인이다 — 시각으로 자르지 않는 이유는 팬아웃이 밀리면 알림 생성 시각이 결정 시각보다
      * 늦을 수 있기 때문이다.
+     *
+     * <p>종류와 targets는 content로 갔으므로(ADR-0123) 조인해서 거른다. 갱신되는 것은 여전히
+     * 수신자별 행의 처리 축뿐이다 — content는 여러 행이 공유하니 절대 갱신하지 않는다.
      */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(value = """
-            UPDATE core.notification
+            UPDATE core.notification n
                SET action_status = :status,
                    completed_at = :settledAt
-             WHERE type = 'ENROLLMENT_REQUESTED'
-               AND action_status = 'ACTION_REQUIRED'
-               AND targets ->> 'enrollmentId' = :enrollmentId
+              FROM core.notification_content c
+             WHERE c.id = n.content_id
+               AND c.type = 'ENROLLMENT_REQUESTED'
+               AND n.action_status = 'ACTION_REQUIRED'
+               AND c.targets ->> 'enrollmentId' = :enrollmentId
             """, nativeQuery = true)
     int settleEnrollmentRequests(@Param("enrollmentId") String enrollmentId,
                                  @Param("status") String status,
                                  @Param("settledAt") OffsetDateTime settledAt);
 
     Optional<Notification> findByIdAndRecipientId(UUID id, UUID recipientId);
-
-    Optional<Notification> findByDedupeKey(String dedupeKey);
 }

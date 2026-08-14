@@ -17,6 +17,9 @@ import java.util.UUID;
  *
  * <p><b>조건은 SQL이 걸고 커서는 그 집합 안에서의 위치다.</b> 메시지가 조건문을 실어 나르면 주입
  * 표면이 생기고, 조건을 고쳤을 때 큐에 떠 있는 옛 메시지가 옛 조건으로 돈다.
+ *
+ * <p>ADR-0123 이후 문구는 사건당 한 행(content)이고 중복 판정은 전역 등록표가 한다. 둘 다 같은
+ * 한 문장 CTE 안에 있다 — 트랜잭션이 갈라지면 "등록은 됐는데 행이 없는" 사건이 생길 수 있다.
  */
 @Repository
 public class NotificationFanoutRepository {
@@ -42,10 +45,22 @@ public class NotificationFanoutRepository {
      * 데이터 변경 CTE 하나로 끝낸다.
      *
      * slice를 먼저 고정해 두는 것이 요점이다. INSERT ... RETURNING만으로는 커서를 얻을 수 없다 —
-     * ON CONFLICT DO NOTHING이 중복을 건너뛰므로, 조각의 마지막 몇 명이 이미 받은 사람이면
+     * 중복 제거가 이미 받은 사람을 건너뛰므로, 조각의 마지막 몇 명이 이미 받은 사람이면
      * RETURNING에 그들이 없고 커서가 뒤로 밀린다. 그러면 그 자리부터 영영 다시 훑는다.
+     * 커서(last_user_id)와 훑은 수(scanned)는 그래서 언제나 slice에서 나온다 — 등록표가 얼마나
+     * 걸러내든 체인은 이어진다.
      *
-     * dedupe_key는 행마다 달라야 하므로(수신자가 다르다) SQL에서 이어 붙인다.
+     * passed가 중복 판정이다(ADR-0123). 본체의 dedupe 유니크가 하던 일을 전역 등록표에 대한
+     * ON CONFLICT DO NOTHING + RETURNING이 이어받았다 — RETURNING에 남은 지문이 곧 "처음 본
+     * 사건"이고, 그 사람들만 본체에 넣는다. 같은 문장·같은 트랜잭션이라 등록과 삽입이 함께
+     * 커밋되거나 함께 사라진다.
+     *
+     * content는 사건당 한 벌이다. 첫 조각이 만들고 뒤 조각·재배달은 ON CONFLICT DO NOTHING으로
+     * 재사용한다 — id가 dedupe 접두사에서 결정적으로 파생돼(Java에서 계산) 조각들이 같은 id에
+     * 도달한다. 본체 삽입은 RETURNING이 아니라 그 id 파라미터를 그대로 쓴다(재사용이면 RETURNING이
+     * 비기 때문). FK 검증은 문장 끝에 몰아 돌아 같은 문장 안에서 만든 content 행도 보인다.
+     *
+     * dedupe 지문은 행마다 달라야 하므로(수신자가 다르다) SQL에서 이어 붙여 해시한다.
      */
     private static final String INSERT_SLICE = """
             WITH slice AS (
@@ -56,23 +71,34 @@ public class NotificationFanoutRepository {
                   AND (CAST(:afterUserId AS uuid) IS NULL OR e.user_id > CAST(:afterUserId AS uuid))
                 ORDER BY e.user_id
                 LIMIT :sliceLimit
-            ), inserted AS (
-                INSERT INTO core.notification (
-                    id, recipient_id, type, read_status, action_status, severity,
-                    title, message, targets, group_key, dedupe_key,
+            ), content AS (
+                INSERT INTO core.notification_content (
+                    id, type, severity, title, message, targets, group_key,
                     previous_starts_at, next_starts_at)
-                SELECT gen_random_uuid(), s.user_id, :type, 'UNREAD', :actionStatus, :severity,
-                       :title, :message, CAST(:targets AS jsonb), :groupKey,
-                       :dedupePrefix || s.user_id,
+                SELECT CAST(:contentId AS uuid), :type, :severity, :title, :message,
+                       CAST(:targets AS jsonb), :groupKey,
                        CAST(:previousStartsAt AS timestamptz), CAST(:nextStartsAt AS timestamptz)
+                WHERE EXISTS (SELECT 1 FROM slice)
+                ON CONFLICT (id) DO NOTHING
+            ), candidate AS (
+                SELECT s.user_id, md5(:dedupePrefix || s.user_id)::uuid AS dedupe_hash
                 FROM slice s
-                ON CONFLICT (dedupe_key) DO NOTHING
+            ), passed AS (
+                INSERT INTO core.notification_dedupe (dedupe_hash)
+                SELECT c.dedupe_hash FROM candidate c
+                ON CONFLICT (dedupe_hash) DO NOTHING
+                RETURNING dedupe_hash
+            ), inserted AS (
+                INSERT INTO core.notification (id, recipient_id, content_id, read_status, action_status)
+                SELECT gen_random_uuid(), c.user_id, CAST(:contentId AS uuid), 'UNREAD', :actionStatus
+                FROM candidate c
+                JOIN passed p ON p.dedupe_hash = c.dedupe_hash
                 RETURNING recipient_id
             )
             SELECT (SELECT count(*) FROM slice)    AS scanned,
                    (SELECT count(*) FROM inserted) AS inserted,
                    /*
-                    * 실시간 알림을 보낼 사람들. ON CONFLICT로 걸러진 뒤에 남은 <b>새로 받은 사람만</b>
+                    * 실시간 알림을 보낼 사람들. 등록표에서 걸러진 뒤에 남은 <b>새로 받은 사람만</b>
                     * 나온다 — 재배달로 같은 조각을 다시 처리해도 알림이 두 번 뜨지 않는다.
                     * 조각 크기가 상한이라 이 배열은 수신자 총수와 무관하게 일정하다.
                     */
@@ -90,6 +116,8 @@ public class NotificationFanoutRepository {
      * 우선순위는 강의 설정 → 커리큘럼 설정 → 기본값이다. 끄기(enabled=false)는 어느 층에서든
      * 걸리면 제외한다 — 강의별로 켜 두었어도 커리큘럼을 껐으면 그 강의는 <b>덮어쓴 값이 이기므로</b>
      * 강의 설정을 먼저 본다(끄기도 덮어쓰기의 일부다).
+     *
+     * slice 이후는 INSERT_SLICE와 같은 구조다(content 한 벌 → 등록표 통과 → 통과자만 삽입).
      */
     private static final String INSERT_STARTING_SOON_SLICE = """
             WITH slice AS (
@@ -108,17 +136,28 @@ public class NotificationFanoutRepository {
                   AND COALESCE(lp.lead_minutes, cp.lead_minutes, :defaultLead) = :leadMinutes
                 ORDER BY e.user_id
                 LIMIT :sliceLimit
-            ), inserted AS (
-                INSERT INTO core.notification (
-                    id, recipient_id, type, read_status, action_status, severity,
-                    title, message, targets, group_key, dedupe_key,
+            ), content AS (
+                INSERT INTO core.notification_content (
+                    id, type, severity, title, message, targets, group_key,
                     previous_starts_at, next_starts_at)
-                SELECT gen_random_uuid(), s.user_id, :type, 'UNREAD', :actionStatus, :severity,
-                       :title, :message, CAST(:targets AS jsonb), :groupKey,
-                       :dedupePrefix || s.user_id,
+                SELECT CAST(:contentId AS uuid), :type, :severity, :title, :message,
+                       CAST(:targets AS jsonb), :groupKey,
                        CAST(:previousStartsAt AS timestamptz), CAST(:nextStartsAt AS timestamptz)
+                WHERE EXISTS (SELECT 1 FROM slice)
+                ON CONFLICT (id) DO NOTHING
+            ), candidate AS (
+                SELECT s.user_id, md5(:dedupePrefix || s.user_id)::uuid AS dedupe_hash
                 FROM slice s
-                ON CONFLICT (dedupe_key) DO NOTHING
+            ), passed AS (
+                INSERT INTO core.notification_dedupe (dedupe_hash)
+                SELECT c.dedupe_hash FROM candidate c
+                ON CONFLICT (dedupe_hash) DO NOTHING
+                RETURNING dedupe_hash
+            ), inserted AS (
+                INSERT INTO core.notification (id, recipient_id, content_id, read_status, action_status)
+                SELECT gen_random_uuid(), c.user_id, CAST(:contentId AS uuid), 'UNREAD', :actionStatus
+                FROM candidate c
+                JOIN passed p ON p.dedupe_hash = c.dedupe_hash
                 RETURNING recipient_id
             )
             SELECT (SELECT count(*) FROM slice)    AS scanned,
@@ -138,6 +177,7 @@ public class NotificationFanoutRepository {
      *
      * @param afterUserId 커서. {@code null}이면 처음부터.
      * @param dedupePrefix 수신자 id를 이어 붙이기 <b>전까지</b>의 중복 제거 키. 뒤에 user_id가 붙는다.
+     *                     문구(content) 행의 id도 여기서 파생한다 — 접두사가 사건을 식별하기 때문이다.
      * @param previousStartsAt 일정 변경 알림에만 값이 있다. 나머지는 {@code null}.
      */
     public Slice insertForActiveStudents(UUID curriculumId, UUID afterUserId, int sliceLimit,
@@ -157,6 +197,7 @@ public class NotificationFanoutRepository {
                 .addValue("targets", targetsJson)
                 .addValue("groupKey", groupKey)
                 .addValue("dedupePrefix", dedupePrefix)
+                .addValue("contentId", contentIdOf(dedupePrefix).toString())
                 /*
                  * 일정 변경 알림의 "언제에서 언제로". 문자열로 넘기고 SQL에서 캐스팅한다 —
                  * null일 때 JDBC가 타입을 못 정해 "could not determine data type"으로 터지기 때문이다.
@@ -192,9 +233,24 @@ public class NotificationFanoutRepository {
                 .addValue("targets", targetsJson)
                 .addValue("groupKey", groupKey)
                 .addValue("dedupePrefix", dedupePrefix)
+                /*
+                 * 리드타임은 content id에 들어가지 않는다(dedupe 접두사에 원래 없다). 같은 회차의
+                 * 5분 전·30분 전 발화가 문구도 같으므로 한 content를 나눠 쓴다 — 한 사람은 어차피
+                 * 자기 리드타임 하나에만 걸린다.
+                 */
+                .addValue("contentId", contentIdOf(dedupePrefix).toString())
                 .addValue("previousStartsAt", null)
                 .addValue("nextStartsAt", nextStartsAt == null ? null : nextStartsAt.toString());
         return jdbc.queryForObject(INSERT_STARTING_SOON_SLICE, params, NotificationFanoutRepository::readSlice);
+    }
+
+    /**
+     * 문구 행의 <b>결정적</b> id. 조각들이 커서로 나뉘어 따로 도착해도 같은 사건이면 같은 id에
+     * 도달한다 — 첫 조각이 만들고 뒤 조각은 ON CONFLICT로 재사용한다. content id를 커서 메시지에
+     * 실어 나르는 안도 있었지만, 그러면 첫 조각의 재배달이 새 content를 만든다(ADR-0123).
+     */
+    private static UUID contentIdOf(String dedupePrefix) {
+        return NotificationInsertRepository.contentIdOf(dedupePrefix);
     }
 
     private static Slice readSlice(java.sql.ResultSet rs, int i) throws java.sql.SQLException {
