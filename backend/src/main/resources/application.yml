@@ -73,12 +73,14 @@ spring:
     listener:
       simple:
         # 알림 팬아웃 워커 수. **기본값은 1이다**(Spring), 그래서 조각이 순차로 돌았다.
-        # 워커는 푸시가 시작되기 전에 다음 조각을 큐에 넣으므로(커밋 전 발행) 여럿이면
-        # 조각들의 푸시가 실제로 겹친다.
         #
-        # 실측(운영 4코어, 기기 1만): 1개 599건/s · 2개 758건/s · 4개 579건/s
-        # 4개가 오히려 느린 이유는 같은 동시 상한을 넷이 나눠 갖느라 조각당 점유 시간만
-        # 늘기 때문이다(1.67초 → 6.42초). 코어 수에 딸린 값이라 장비가 바뀌면 다시 재야 한다.
+        # 푸시가 전용 큐로 분리된 뒤(ADR-0124) 이 값이 좌우하는 것은 **삽입 처리량뿐**이다 —
+        # 조각 하나가 집합 삽입 한 문장(1,000행에 수~수십 ms)이라 2면 넉넉하고, 시간이 드는
+        # 푸시는 notification.push.listener-concurrency가 따로 정한다.
+        #
+        # (분리 전 실측 — 1개 599건/s · 2개 758건/s · 4개 579건/s — 는 푸시가 이 소비자를
+        # 붙잡던 시절의 값이다. 그때 4개가 느렸던 이유(푸시 동시 상한을 나눠 가짐)도 함께
+        # 사라졌으므로, 삽입이 병목이 되면 이 값은 새로 재야 한다.)
         concurrency: ${RABBIT_LISTENER_CONCURRENCY:2}
     # AI 배치 잡 발행(ADR-0036). 로컬/dev는 미기동(스위치 off라 발행 안 함), prod는 env로 override.
     host: ${SPRING_RABBITMQ_HOST:localhost}
@@ -429,3 +431,14 @@ notification:
     max-attempts: ${NOTIFICATION_WEB_PUSH_MAX_ATTEMPTS:3}
     # 지수 백오프의 첫 간격. 상대가 Retry-After를 주면 그 값이 이긴다.
     retry-backoff-ms: ${NOTIFICATION_WEB_PUSH_RETRY_BACKOFF_MS:500}
+  # 푸시 전달 큐(ADR-0124). 팬아웃에서 분리된 전용 소비자·진행 표의 손잡이들.
+  push:
+    # 푸시 큐 소비자 수. 팬아웃의 concurrency와 **별개다** — 푸시(조각당 최대 batch-timeout)가
+    # 팬아웃 소비자를 붙잡지 않게 분리한 것이 이 큐의 존재 이유라, 손잡이도 따로 둔다.
+    # 분리 후 실측 전의 기본값이다. 푸시 처리량이 문제면 이 값부터 잰다(위 max-in-flight를
+    # 나눠 갖는 구조는 그대로이므로, 늘릴 때는 그 상한과 함께 본다).
+    listener-concurrency: ${NOTIFICATION_PUSH_LISTENER_CONCURRENCY:2}
+    # 진행 표 파티션 잡. 매일치 선생성(14일) + 오래된 파티션 DROP(7일)이라 주기가 정확할 필요
+    # 없다 — 하루 안에 한 번만 성공하면 되는 관대한 잡이다(PushProgressPartitionJob).
+    partition-maintenance-ms: ${NOTIFICATION_PUSH_PARTITION_MAINTENANCE_MS:21600000}
+    partition-initial-delay-ms: ${NOTIFICATION_PUSH_PARTITION_INITIAL_DELAY_MS:15000}

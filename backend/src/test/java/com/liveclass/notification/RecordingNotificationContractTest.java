@@ -145,8 +145,9 @@ class RecordingNotificationContractTest {
      */
     @AfterEach
     void cleanUpCommittedRows() {
-        jdbc.update("DELETE FROM core.outbox_events WHERE destination = ?",
-                NotificationMessagingConfig.FANOUT_QUEUE);
+        // 워커가 조각마다 푸시 명령도 함께 싣는다(ADR-0124) — 그쪽 목적지도 치운다.
+        jdbc.update("DELETE FROM core.outbox_events WHERE destination IN (?, ?)",
+                NotificationMessagingConfig.FANOUT_QUEUE, NotificationMessagingConfig.PUSH_QUEUE);
     }
 
     // ---- helpers ----
