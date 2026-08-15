@@ -340,7 +340,6 @@ services:
         # (EC2 hairpin NAT 회피). 외부 클라이언트는 여전히 공개 DNS→퍼블릭 IP로 이 nginx에 닿는다.
         aliases:
           - jiphyeonjeon.thdwjdrl.com
-          - jiphyeonjeon.thdwjdrl.com
     # 6h마다 nginx reload → 갱신된 인증서 반영
     command: /bin/sh -c "while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g 'daemon off;'"
 
