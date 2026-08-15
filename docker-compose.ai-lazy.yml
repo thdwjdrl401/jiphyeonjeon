@@ -1,0 +1,18 @@
+# AI 스택 lazy 오버라이드 — BGE가 같은 호스트에 있다 (ADR-0125).
+#
+#   docker compose -f docker-compose.ai-prod.yml -f docker-compose.ai-lazy.yml \
+#     --env-file ~/secrets/.env.prod --env-file ~/secrets/.env.ai up -d
+#
+# 옛 구조에서 BGE는 별도 GPU 서버에 있었고, 리버스 SSH 터널로 끌어온 것을 nginx 프록시(18080)가
+# `/internal/bge`로 중계했다. 지금은 임베딩이 이 호스트의 CPU 컨테이너로 내려와 루프백 18020에
+# 그대로 있다 — 터널도 프록시도 중간에 없다.
+#
+# HTTP 계약은 그대로다. URL만 바뀐다(ADR-0029가 남겨 둔 확장점).
+services:
+  ai-worker:
+    environment:
+      AI_WORKER_BGE_RUNTIME_URL: http://host.docker.internal:18020
+
+  ai-api:
+    environment:
+      AI_API_BGE_BASE_URL: http://host.docker.internal:18020
