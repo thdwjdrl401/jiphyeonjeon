@@ -22,6 +22,13 @@ services:
     # 갱신이 조용히 실패한다.
     profiles: ["disabled"]
 
+  minio:
+    volumes: !override
+      # 이관해 온 데이터 디렉토리를 그대로 물린다. named 볼륨으로 복사하면 같은 25GB를 디스크에
+      # 두 벌 두게 되고, 이 호스트의 느린 디스크에서 그 복사가 한 시간 가까이 IO를 잡아먹으며
+      # 다른 컨테이너(특히 postgres의 fsync)를 굶긴다. 실제로 복원 중 postgres가 그렇게 죽었다.
+      - ${LIVECLASS_MINIO_DATA:?LIVECLASS_MINIO_DATA 필요 — MinIO 데이터 디렉토리 경로}:/data
+
   minio-init:
-    # 버킷은 이관된 볼륨에 이미 있다. 그래도 멱등이라 그대로 둔다.
+    # 버킷은 이관된 데이터에 이미 있다. 그래도 멱등이라 그대로 둔다.
     restart: unless-stopped
