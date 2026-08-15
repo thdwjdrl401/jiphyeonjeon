@@ -1,0 +1,27 @@
+# lazy 배포 오버라이드 — 호스트 nginx가 단일 엔트리다.
+#
+#   docker compose -f docker-compose.prod.yml -f docker-compose.lazy.yml --env-file ~/secrets/.env.prod up -d
+#
+# prod compose와 달라지는 점은 둘뿐이다:
+#   1) frontend가 80·443을 잡지 않고 루프백 8100만 연다 — 그 포트는 호스트 nginx가 이미 쓴다.
+#   2) certbot을 띄우지 않는다 — 인증서는 호스트 certbot이 발급·갱신하고, TLS도 호스트가 종단한다.
+#
+# 나머지(backend·postgres·redis·minio·rabbitmq·media-worker)는 prod 정의를 그대로 쓴다.
+services:
+  frontend:
+    ports: !override
+      # 루프백에만 연다. 외부에서 오는 건 전부 호스트 nginx를 지난다.
+      - "127.0.0.1:8100:80"
+    volumes: !override
+      - ./infra/nginx/frontend-behind-host-proxy.conf:/etc/nginx/conf.d/default.conf:ro
+    # 인증서 갱신 reload가 필요 없다 — 호스트 nginx가 자기 것을 reload한다.
+    command: !reset null
+
+  certbot:
+    # 호스트 certbot이 이미 이 도메인들을 관리한다. 두 개가 같은 웹루트를 두고 다투면
+    # 갱신이 조용히 실패한다.
+    profiles: ["disabled"]
+
+  minio-init:
+    # 버킷은 이관된 볼륨에 이미 있다. 그래도 멱등이라 그대로 둔다.
+    restart: unless-stopped

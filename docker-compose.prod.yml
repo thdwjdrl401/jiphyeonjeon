@@ -133,7 +133,7 @@ services:
     # 두 곳이 갈라져 드리프트가 생긴다. 이 파일이 없으면 부팅을 실패시킨다(조용히 dev 더미 키로
     # 도는 것보다 낫다 — 실제로 그 상태로 녹화가 안 되고 있었다).
     env_file:
-      - /etc/liveclass/livekit/CREDENTIALS.txt
+      - ${LIVECLASS_SECRETS_DIR:-/etc/liveclass}/livekit/CREDENTIALS.txt
     # 공개 도메인을 호스트로 직결시킨다. frontend의 network alias는 이 도메인을 앱 nginx 컨테이너로
     # 묶어버려서 :443은 되지만 다른 포트(:7443 LiveKit API)에는 닿지 못한다. /etc/hosts가 도커 DNS보다
     # 우선하므로 이 컨테이너만 호스트 게시 포트로 나가고, :443·:7443이 모두 열리면서 hairpin도 그대로 피한다.

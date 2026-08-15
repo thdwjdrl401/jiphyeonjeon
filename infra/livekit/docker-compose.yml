@@ -13,7 +13,7 @@ services:
     restart: unless-stopped
     network_mode: host                        # RTC 포트 직접 바인딩
     volumes:
-      - /etc/liveclass/livekit/livekit.yaml:/etc/livekit.yaml:ro   # 실 시크릿(호스트). git엔 템플릿만.
+      - ${LIVECLASS_SECRETS_DIR:-/etc/liveclass}/livekit/livekit.yaml:/etc/livekit.yaml:ro   # 실 시크릿(호스트). git엔 템플릿만.
     depends_on: [redis]
 
   redis:                                      # LiveKit ↔ Egress 통신 전용 (앱 Redis와 별개)
@@ -31,7 +31,7 @@ services:
     shm_size: "1g"                            # Chrome /dev/shm
     environment: ["EGRESS_CONFIG_FILE=/out/egress.yaml"]
     volumes:
-      - /etc/liveclass/livekit/egress.yaml:/out/egress.yaml:ro     # 실 시크릿(호스트)
+      - ${LIVECLASS_SECRETS_DIR:-/etc/liveclass}/livekit/egress.yaml:/out/egress.yaml:ro     # 실 시크릿(호스트)
     depends_on: [redis, livekit]
 
   nginx-livekit:                              # 시그널링(WSS) TLS 종단 → livekit 7880. 미디어(UDP)는 우회.
@@ -54,7 +54,7 @@ services:
     restart: unless-stopped
     network_mode: host                        # livekit 127.0.0.1:7880 직결
     depends_on: [livekit]
-    env_file: /etc/liveclass/livekit/CREDENTIALS.txt   # 서버 로컬 시크릿(커밋 안 됨)
+    env_file: ${LIVECLASS_SECRETS_DIR:-/etc/liveclass}/livekit/CREDENTIALS.txt   # 서버 로컬 시크릿(커밋 안 됨)
     environment:
       LIVEKIT_URL: ws://localhost:7880
       STT_ROOM: stt-test
@@ -90,7 +90,7 @@ services:
       EGRESS_PURGE_SECRET: ${EGRESS_PURGE_SECRET:?EGRESS_PURGE_SECRET 필요 — /etc/liveclass/livekit/purger.env 참고}
     volumes:
       # LiveKit API 자격증명. 지우기 전에 StopEgress로 유령임을 스스로 다시 확인하는 데 쓴다.
-      - /etc/liveclass/livekit/egress.yaml:/out/egress.yaml:ro
+      - ${LIVECLASS_SECRETS_DIR:-/etc/liveclass}/livekit/egress.yaml:/out/egress.yaml:ro
 
 volumes:
   certbot-etc:                                # 앱 스택(docker-compose.prod.yml)이 생성한 볼륨을 공유
