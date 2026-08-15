@@ -30,8 +30,15 @@ services:
       BGE_RUNTIME_DEVICE: cpu
       HF_HOME: /home/liveclass/.cache/huggingface
     ports:
-      # GPU 서버 시절 터널이 쓰던 번호를 그대로 둔다 — 호출부 URL을 바꾸지 않기 위해서다.
+      # 루프백에도 열어 둔다 — 호스트에서 헬스체크·디버깅할 때 쓴다.
+      # 앱 스택은 이 포트가 아니라 아래 공유 네트워크의 서비스명으로 붙는다.
       - "127.0.0.1:18020:8020"
+    networks:
+      # 앱 스택과 같은 네트워크에 발을 걸친다. 컨테이너에서 host.docker.internal은 브리지
+      # 게이트웨이라 루프백 바인드에 닿지 못한다 — 실제로 ai-worker가 그래서 not-ready였다.
+      # 서비스명으로 부르면 호스트 포트를 넓게 열 필요가 없다.
+      - default
+      - liveclass
     volumes:
       # 가중치 2.2GB. 이 볼륨이 없으면 재시작마다 다시 받고 start_period 안에 못 끝낸다.
       - bge-model-cache:/home/liveclass/.cache/huggingface
@@ -46,6 +53,12 @@ services:
         limits:
           # 실측 peak RSS 2,094 MB. 여유를 두되, 새는 경우 호스트를 끌고 가지 않게 막는다.
           memory: 3g
+
+networks:
+  default:
+  liveclass:
+    name: liveclass_default
+    external: true
 
 volumes:
   bge-model-cache:
