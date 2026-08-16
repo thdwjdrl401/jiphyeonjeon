@@ -95,7 +95,8 @@ jobs:
           docker compose -f docker-compose.prod.yml -f docker-compose.lazy.yml \
             --env-file "$LIVECLASS_SECRETS_DIR/.env.prod" \
             up -d --build --wait --wait-timeout 300
-          docker compose -f docker-compose.prod.yml -f docker-compose.lazy.yml ps
+          docker compose -f docker-compose.prod.yml -f docker-compose.lazy.yml \
+            --env-file "$LIVECLASS_SECRETS_DIR/.env.prod" ps
 
   ai:
     needs: changes
@@ -112,7 +113,9 @@ jobs:
             --env-file "$LIVECLASS_SECRETS_DIR/.env.prod" \
             --env-file "$LIVECLASS_SECRETS_DIR/.env.ai" \
             up -d --build --wait --wait-timeout 300
-          docker compose -f docker-compose.ai-prod.yml ps
+          docker compose -f docker-compose.ai-prod.yml \
+            --env-file "$LIVECLASS_SECRETS_DIR/.env.prod" \
+            --env-file "$LIVECLASS_SECRETS_DIR/.env.ai" ps
 
   bge:
     needs: changes
@@ -144,4 +147,5 @@ jobs:
           docker compose -f infra/livekit/docker-compose.yml -f infra/livekit/docker-compose.lazy.yml \
             --env-file "$LIVECLASS_SECRETS_DIR/livekit/purger.env" \
             up -d --build
-          docker compose -f infra/livekit/docker-compose.yml -f infra/livekit/docker-compose.lazy.yml ps
+          docker compose -f infra/livekit/docker-compose.yml -f infra/livekit/docker-compose.lazy.yml \
+            --env-file "$LIVECLASS_SECRETS_DIR/livekit/purger.env" ps
