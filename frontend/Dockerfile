@@ -1,6 +1,7 @@
+# syntax=docker/dockerfile:1
+# 파서 지시어는 주석보다 앞에 와야 인식된다.
 # 프론트(React+Vite) 빌드 → nginx 정적 서빙 + 리버스 프록시
 # build context = ./frontend (docker-compose.prod.yml의 frontend.build)
-# syntax=docker/dockerfile:1
 
 # ---- build stage : Vite 프로덕션 빌드 ----
 FROM node:20-alpine AS build

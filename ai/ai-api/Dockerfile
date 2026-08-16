@@ -9,10 +9,12 @@ WORKDIR /app
 
 RUN pip install --no-cache-dir "uv==${UV_VERSION}"
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project
+RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
+    uv sync --frozen --no-dev --no-install-project
 
 COPY app ./app
-RUN uv sync --frozen --no-dev
+RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
+    uv sync --frozen --no-dev
 
 FROM python:3.12-slim-bookworm AS runtime
 
