@@ -25,7 +25,14 @@ RUN install -m 0755 -d /etc/apt/keyrings \
  && apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin \
  && rm -rf /var/lib/apt/lists/*
 
-RUN useradd -m -s /bin/bash runner
+RUN useradd -m -s /bin/bash runner \
+ && mkdir -p /home/runner/_work /home/runner/actions-runner \
+ && chown -R runner:runner /home/runner
+# _work와 actions-runner는 둘 다 named 볼륨이 붙는 자리다. 이미지에 이 경로가 없으면 Docker가
+# 볼륨을 root 소유로 새로 만들고, runner 사용자로 도는 워커가 `_work/_tool`을 못 만들어
+# 잡이 시작하자마자 UnauthorizedAccessException으로 죽는다. 미리 만들어 두면 Docker가
+# 이 디렉토리의 소유권을 그대로 볼륨에 복사한다.
+
 WORKDIR /home/runner/actions-runner
 
 RUN curl -fsSL -o runner.tar.gz \
