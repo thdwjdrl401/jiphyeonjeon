@@ -37,4 +37,6 @@ uv sync --frozen --extra nemotron
 
 echo "== 에이전트 시작 =="
 set -a; . "$ENV_FILE"; set +a
-exec uv run --frozen python -m app.main
+# LiveKit Agents CLI라 서브커맨드가 필요하다. `start`가 워커로 등록해 job을 기다리는 모드다
+# (인자 없이 부르면 도움말만 찍고 끝난다).
+exec uv run --frozen python -m app.main start
