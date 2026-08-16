@@ -22,6 +22,14 @@ services:
     # 갱신이 조용히 실패한다.
     profiles: ["disabled"]
 
+  backend:
+    environment:
+      # 유령 Egress 회수 중계는 호스트 네트워크로 떠 있어 브리지 게이트웨이로 불러야 한다.
+      # 게이트웨이 주소는 호스트마다 다르다 — EC2에서는 172.18.0.1이었지만 이 호스트는
+      # 172.24.0.1이다. 하드코딩하지 않고, backend가 이미 host-gateway로 매핑해 둔 공개
+      # 도메인 이름을 재사용한다(prod의 extra_hosts).
+      EGRESS_PURGER_BASE_URL: http://jiphyeonjeon.thdwjdrl.com:9107
+
   minio:
     volumes: !override
       # 이관해 온 데이터 디렉토리를 그대로 물린다. named 볼륨으로 복사하면 같은 25GB를 디스크에
