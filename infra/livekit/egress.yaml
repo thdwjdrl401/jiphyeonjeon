@@ -4,6 +4,9 @@ log_level: debug
 api_key: <API_KEY>
 api_secret: <API_SECRET>           # livekit.yaml keys의 secret과 동일
 ws_url: ws://localhost:7880        # ★ recorder는 co-located라 로컬 직결 (nginx/wss 아님 — 트러블슈팅 #5)
+# 합성 템플릿이 HTTPS로 서빙되면 여기도 wss여야 한다 — 평문 ws는 브라우저가 혼합
+# 콘텐츠로 막는다. 그리고 그 경로 앞에 nginx가 있으면 large_client_header_buffers를
+# 올려야 한다(join_request가 10KB를 넘는다).
 insecure: true                     # 로컬 ws 허용
 redis:
   address: localhost:6379          # livekit.yaml과 동일 Redis
