@@ -48,7 +48,7 @@ model/revision 불일치는 `409`, 크기 초과는 `413`, schema·text 위반�
 EC2 host process
   → 127.0.0.1:18020
 EC2 production container
-  → host.docker.internal:18080/internal/bge
+  → 같은 도커 네트워크의 liveclass-bge-runtime-cpu:8020
   → host-network nginx → EC2 127.0.0.1:18020
   → reverse SSH tunnel
   → GPU 127.0.0.1:8020
@@ -88,12 +88,12 @@ GPU→EC2 tunnel은 runtime이 ready인 뒤 다음 운영 script로 시작한다
 ```bash
 SSH_KEY=/secure/path/bge-tunnel.pem \
 SSH_TARGET=bge-tunnel@ec2.example.internal \
-./scripts/start_ec2_reverse_tunnel.sh
+docker compose -f docker-compose.bge-cpu.yml up -d --build   # 저장소 루트에서
 ```
 
 EC2 host process는 `AI_API_BGE_BASE_URL`과 `AI_WORKER_BGE_RUNTIME_URL`에
 `http://127.0.0.1:18020`을 사용한다. 운영 container는
-`http://host.docker.internal:18080/internal/bge`를 사용하며 nginx가 같은 tunnel로 전달한다.
+같은 네트워크의 서비스명으로 직접 부른다 — 터널도 프록시도 중간에 없다(ADR-0125).
 root 운영 env의 `BGE_RUNTIME_INTERNAL_TOKEN`은 compose에서 각 client token으로 매핑한다.
 `AI_INTERNAL_SECRET`은 Spring↔ai-api 전용이므로 GPU bge-runtime에서는 사용하지 않는다.
 

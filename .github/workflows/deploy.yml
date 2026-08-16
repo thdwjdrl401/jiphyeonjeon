@@ -58,11 +58,11 @@ jobs:
       - name: AI 스택
         if: inputs.stack == 'ai' || inputs.stack == 'all'
         run: |
-          docker compose -f docker-compose.ai-prod.yml -f docker-compose.ai-lazy.yml \
+          docker compose -f docker-compose.ai-prod.yml \
             --env-file "$LIVECLASS_SECRETS_DIR/.env.prod" \
             --env-file "$LIVECLASS_SECRETS_DIR/.env.ai" \
             up -d --build --wait --wait-timeout 300
-          docker compose -f docker-compose.ai-prod.yml -f docker-compose.ai-lazy.yml ps
+          docker compose -f docker-compose.ai-prod.yml ps
 
       - name: BGE 임베딩 (CPU)
         if: inputs.stack == 'bge-cpu' || inputs.stack == 'all'
