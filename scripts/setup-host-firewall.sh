@@ -27,6 +27,11 @@ SUBNET=$(docker network inspect liveclass_default \
 if [ -n "$SUBNET" ]; then
   ufw allow from "$SUBNET" to any port 9107 proto tcp comment 'egress-purger'
   echo "   $SUBNET → 9107/tcp"
+  # 브라우저의 LiveKit 시그널링은 443의 /livekit 경로로 온다(ADR-0078 — 학교·사내망이
+  # 7000~7999를 막아서다). 그 경로는 앱 nginx 컨테이너가 호스트의 LiveKit으로 넘기는데,
+  # 이 규칙이 없으면 그 홉에서 죽는다 — 강사가 방에 못 붙고 라이브 시작이 거부된다.
+  ufw allow from "$SUBNET" to any port 7880 proto tcp comment 'livekit signaling from app nginx'
+  echo "   $SUBNET → 7880/tcp"
 else
   echo "   ⚠️ liveclass_default 네트워크를 찾지 못했다 — 앱 스택을 먼저 띄워라"
 fi
