@@ -4,25 +4,30 @@
 # 두고 러너가 밖으로 나가 폴링한다 — 열어야 할 포트도, 주고받을 SSH 키도 없다. 러너가 배포
 # 대상과 같은 호스트라 `docker compose`를 그대로 부르면 된다.
 #
-# 시크릿은 GitHub Secrets가 아니라 호스트에 둔다(`LIVECLASS_SECRETS_DIR`, 기본 `~/secrets`).
-# 이 호스트의 배포는 root 없이 도는 것이 원칙이라 `/etc` 아래를 쓰지 않는다(ADR-0126).
+# **바뀐 스택만 배포한다.** 이 호스트는 디스크가 느려 앱 스택 재빌드가 오래 걸린다. 문서 한 줄
+# 고쳤다고 운영을 재기동할 이유가 없다. 판정은 CI와 같은 방식(paths-filter)을 쓴다.
 #
-# 스택마다 `-lazy.yml` 오버라이드를 반드시 함께 준다. 그게 없으면 frontend가 80·443을 잡으려
-# 들어 호스트 nginx와 충돌하고, MinIO가 빈 볼륨을 새로 만든다.
+# 시크릿은 GitHub Secrets가 아니라 호스트에 둔다(`LIVECLASS_SECRETS_DIR`). 이 호스트의 배포는
+# root 없이 도는 것이 원칙이라 `/etc` 아래를 쓰지 않는다(ADR-0126).
+#
+# 실시간 STT(realtime-agent)는 노트북에서 돌므로 여기서 배포하지 않는다.
 name: Deploy
 
 on:
+  push:
+    branches: [master]
   workflow_dispatch:
     inputs:
       stack:
-        description: 배포할 스택
+        description: 강제로 배포할 스택 (경로 판정을 무시한다)
         required: true
         type: choice
-        default: prod
-        options: [prod, ai, livekit, bge-cpu, all]
+        default: all
+        options: [all, app, ai, bge, livekit]
 
 concurrency:
-  # 같은 호스트의 같은 스택을 동시에 건드리지 않는다.
+  # 같은 호스트를 동시에 건드리지 않는다. 배포는 취소하지 않고 줄 세운다 —
+  # 중간에 끊기면 스택이 어중간한 상태로 남는다.
   group: deploy-lazy
   cancel-in-progress: false
 
@@ -34,46 +39,105 @@ env:
   LIVECLASS_MINIO_DATA: /home/lazy/data/minio
 
 jobs:
-  deploy:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      app: ${{ steps.filter.outputs.app }}
+      ai: ${{ steps.filter.outputs.ai }}
+      bge: ${{ steps.filter.outputs.bge }}
+      livekit: ${{ steps.filter.outputs.livekit }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # push 이벤트는 직전 커밋과 비교한다. 얕게 받으면 비교 대상이 없다.
+          fetch-depth: 0
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            deployfile: &deployfile
+              - '.github/workflows/deploy.yml'
+            app:
+              - *deployfile
+              - 'backend/**'
+              - 'frontend/**'
+              - 'media-worker/**'
+              - 'docker-compose.prod.yml'
+              - 'docker-compose.lazy.yml'
+              - 'infra/nginx/frontend-behind-host-proxy.conf'
+            ai:
+              - *deployfile
+              - 'ai/ai-api/**'
+              - 'ai/ai-worker/**'
+              - 'docker-compose.ai-prod.yml'
+            bge:
+              - *deployfile
+              - 'ai/bge-runtime/**'
+              - 'docker-compose.bge-cpu.yml'
+            livekit:
+              - *deployfile
+              - 'infra/livekit/**'
+
+  app:
+    needs: changes
+    if: |
+      (github.event_name == 'push' && needs.changes.outputs.app == 'true')
+      || (github.event_name == 'workflow_dispatch' && (inputs.stack == 'app' || inputs.stack == 'all'))
     runs-on: [self-hosted, lazy]
     steps:
       - uses: actions/checkout@v4
-
       - name: 전제 확인
         run: |
-          for f in "$LIVECLASS_SECRETS_DIR/.env.prod" "$LIVECLASS_SECRETS_DIR/.env.ai" \
-                   "$LIVECLASS_SECRETS_DIR/livekit/purger.env"; do
-            [ -r "$f" ] || { echo "::error::$f 없음"; exit 1; }
-          done
+          [ -r "$LIVECLASS_SECRETS_DIR/.env.prod" ] || { echo "::error::.env.prod 없음"; exit 1; }
           [ -d "$LIVECLASS_MINIO_DATA" ] || { echo "::error::$LIVECLASS_MINIO_DATA 없음"; exit 1; }
-
       - name: 앱 스택
-        if: inputs.stack == 'prod' || inputs.stack == 'all'
         run: |
           docker compose -f docker-compose.prod.yml -f docker-compose.lazy.yml \
             --env-file "$LIVECLASS_SECRETS_DIR/.env.prod" \
             up -d --build --wait --wait-timeout 300
           docker compose -f docker-compose.prod.yml -f docker-compose.lazy.yml ps
 
+  ai:
+    needs: changes
+    if: |
+      (github.event_name == 'push' && needs.changes.outputs.ai == 'true')
+      || (github.event_name == 'workflow_dispatch' && (inputs.stack == 'ai' || inputs.stack == 'all'))
+    runs-on: [self-hosted, lazy]
+    steps:
+      - uses: actions/checkout@v4
       - name: AI 스택
-        if: inputs.stack == 'ai' || inputs.stack == 'all'
         run: |
+          [ -r "$LIVECLASS_SECRETS_DIR/.env.ai" ] || { echo "::error::.env.ai 없음"; exit 1; }
           docker compose -f docker-compose.ai-prod.yml \
             --env-file "$LIVECLASS_SECRETS_DIR/.env.prod" \
             --env-file "$LIVECLASS_SECRETS_DIR/.env.ai" \
             up -d --build --wait --wait-timeout 300
           docker compose -f docker-compose.ai-prod.yml ps
 
+  bge:
+    needs: changes
+    if: |
+      (github.event_name == 'push' && needs.changes.outputs.bge == 'true')
+      || (github.event_name == 'workflow_dispatch' && (inputs.stack == 'bge' || inputs.stack == 'all'))
+    runs-on: [self-hosted, lazy]
+    steps:
+      - uses: actions/checkout@v4
       - name: BGE 임베딩 (CPU)
-        if: inputs.stack == 'bge-cpu' || inputs.stack == 'all'
         run: |
           set -a; . "$LIVECLASS_SECRETS_DIR/.env.ai"; set +a
           # 가중치를 처음 받으면 ready까지 6분 가까이 걸린다. 볼륨에 캐시되면 그 뒤로는 빠르다.
           docker compose -f docker-compose.bge-cpu.yml up -d --build --wait --wait-timeout 600
           docker compose -f docker-compose.bge-cpu.yml ps
 
+  livekit:
+    needs: changes
+    if: |
+      (github.event_name == 'push' && needs.changes.outputs.livekit == 'true')
+      || (github.event_name == 'workflow_dispatch' && (inputs.stack == 'livekit' || inputs.stack == 'all'))
+    runs-on: [self-hosted, lazy]
+    steps:
+      - uses: actions/checkout@v4
       - name: LiveKit
-        if: inputs.stack == 'livekit' || inputs.stack == 'all'
         run: |
           # egress-purger가 EGRESS_PURGE_SECRET을 필수로 받는다. env-file 없이 부르면
           # up 이전 보간 단계에서 죽는다.
@@ -82,6 +146,17 @@ jobs:
             up -d --build
           docker compose -f infra/livekit/docker-compose.yml -f infra/livekit/docker-compose.lazy.yml ps
 
-      - name: 상태 요약
-        if: always()
-        run: docker ps --format 'table {{.Names}}\t{{.Status}}'
+  summary:
+    if: always()
+    needs: [app, ai, bge, livekit]
+    runs-on: [self-hosted, lazy]
+    steps:
+      - name: 결과
+        run: |
+          echo '${{ toJSON(needs) }}' | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          if echo '${{ toJSON(needs) }}' | jq -e 'any(.[]; .result == "failure")' >/dev/null; then
+            echo "::error::배포 실패한 스택이 있다"
+            docker ps --format 'table {{.Names}}\t{{.Status}}'
+            exit 1
+          fi
+          docker ps --format 'table {{.Names}}\t{{.Status}}'
