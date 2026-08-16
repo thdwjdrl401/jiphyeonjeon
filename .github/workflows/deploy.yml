@@ -145,18 +145,3 @@ jobs:
             --env-file "$LIVECLASS_SECRETS_DIR/livekit/purger.env" \
             up -d --build
           docker compose -f infra/livekit/docker-compose.yml -f infra/livekit/docker-compose.lazy.yml ps
-
-  summary:
-    if: always()
-    needs: [app, ai, bge, livekit]
-    runs-on: [self-hosted, lazy]
-    steps:
-      - name: 결과
-        run: |
-          echo '${{ toJSON(needs) }}' | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
-          if echo '${{ toJSON(needs) }}' | jq -e 'any(.[]; .result == "failure")' >/dev/null; then
-            echo "::error::배포 실패한 스택이 있다"
-            docker ps --format 'table {{.Names}}\t{{.Status}}'
-            exit 1
-          fi
-          docker ps --format 'table {{.Names}}\t{{.Status}}'
