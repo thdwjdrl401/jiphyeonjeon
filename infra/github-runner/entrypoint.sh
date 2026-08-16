@@ -11,6 +11,10 @@ cd /home/runner/actions-runner
 : "${GITHUB_REPO_URL:?GITHUB_REPO_URL 필요 (예: https://github.com/owner/repo)}"
 RUNNER_NAME="${RUNNER_NAME:-$(hostname)}"
 RUNNER_LABELS="${RUNNER_LABELS:-self-hosted,linux,x64}"
+# 호스트와 **같은 경로**여야 한다. 배포가 호스트 도커 데몬에 compose를 시키는데, 그 데몬이
+# 해석하는 바인드 마운트 경로(저장소의 nginx 설정 등)는 호스트 파일시스템 기준이다. 러너
+# 컨테이너 안에서만 존재하는 경로에 체크아웃하면 데몬이 그 파일을 찾지 못한다.
+RUNNER_WORKDIR="${RUNNER_WORKDIR:-/home/lazy/ci}"
 
 if [ ! -f .runner ]; then
   : "${RUNNER_TOKEN:?최초 등록에는 RUNNER_TOKEN 필요 — gh api -X POST repos/<owner>/<repo>/actions/runners/registration-token --jq .token}"
@@ -21,7 +25,7 @@ if [ ! -f .runner ]; then
     --token "$RUNNER_TOKEN" \
     --name "$RUNNER_NAME" \
     --labels "$RUNNER_LABELS" \
-    --work /home/runner/_work \
+    --work "$RUNNER_WORKDIR" \
     --replace
 else
   echo "== 기존 설정 사용: $(jq -r .agentName .runner 2>/dev/null || echo "$RUNNER_NAME") =="

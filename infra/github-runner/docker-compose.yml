@@ -23,11 +23,18 @@ services:
       # 워크플로의 `runs-on: [self-hosted, lazy]`가 이 라벨을 고른다.
       RUNNER_LABELS: ${RUNNER_LABELS:-self-hosted,linux,x64,lazy}
       RUNNER_TOKEN: ${RUNNER_TOKEN:-}
+      RUNNER_WORKDIR: ${RUNNER_WORKDIR:-/home/lazy/ci}
     volumes:
       # 배포가 곧 호스트의 compose 스택을 올리는 일이라 호스트 데몬을 그대로 쓴다.
       - /var/run/docker.sock:/var/run/docker.sock
       - runner-config:/home/runner/actions-runner
-      - runner-work:/home/runner/_work
+      # 체크아웃 위치를 **호스트와 같은 경로**로 묶는다. 호스트 데몬이 저장소 안의 파일을
+      # 바인드 마운트해야 하는데(nginx 설정 등), 컨테이너 안에만 있는 경로는 못 찾는다.
+      - ${RUNNER_WORKDIR:-/home/lazy/ci}:${RUNNER_WORKDIR:-/home/lazy/ci}
+      # compose가 --env-file을 직접 읽는다. 데몬이 아니라 러너 쪽에 있어야 한다.
+      - ${LIVECLASS_SECRETS_DIR:-/home/lazy/secrets}:${LIVECLASS_SECRETS_DIR:-/home/lazy/secrets}:ro
+      # 배포 전 존재 확인용(실제 마운트는 데몬이 호스트 경로로 한다).
+      - ${LIVECLASS_MINIO_DATA:-/home/lazy/data/minio}:${LIVECLASS_MINIO_DATA:-/home/lazy/data/minio}:ro
     group_add:
       # 호스트 도커 소켓의 그룹. 호스트마다 다르므로 .env로 덮어쓴다.
       #   getent group docker | cut -d: -f3
@@ -40,4 +47,3 @@ services:
 
 volumes:
   runner-config:
-  runner-work:
