@@ -323,7 +323,7 @@ class PushDeliveryContractTest {
                                     java.time.OffsetDateTime startsAt, int leadMinutes) {
         return jsonMapper.writeValueAsString(new com.liveclass.notification.service.NotificationFanoutCommand(
                 "LIVE_STARTING_SOON", null, curriculumId, "푸시 큐 커리큘럼", null, null,
-                lessonId, null, null, null, null, 100, liveSessionId, null, leadMinutes, null, startsAt));
+                lessonId, null, null, null, null, null, 100, liveSessionId, null, leadMinutes, null, startsAt));
     }
 
     private UUID seedLesson() {

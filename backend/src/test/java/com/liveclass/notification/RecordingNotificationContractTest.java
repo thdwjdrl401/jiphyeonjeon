@@ -56,7 +56,7 @@ class RecordingNotificationContractTest {
         UUID assetId = UUID.randomUUID();
 
         publish(new RecordingReadyEvent(assetId, f.lessonId, f.sessionId, null, OffsetDateTime.now()));
-        worker.handle(onlyPayloadFor(assetId).toString());
+        onePayloadSetFor(assetId).forEach(p -> worker.handle(p.toString()));
 
         List<Row> rows = notificationsFor(f.curriculumId);
         assertThat(rows).hasSize(1);
@@ -78,7 +78,7 @@ class RecordingNotificationContractTest {
 
         publish(new RecordingFailedEvent(assetId, f.lessonId, f.sessionId,
                 "MANIFEST_MISSING", OffsetDateTime.now()));
-        worker.handle(onlyPayloadFor(assetId).toString());
+        onePayloadSetFor(assetId).forEach(p -> worker.handle(p.toString()));
 
         List<Row> rows = notificationsFor(f.curriculumId);
         assertThat(rows).hasSize(1);
@@ -97,7 +97,7 @@ class RecordingNotificationContractTest {
         UUID assetId = UUID.randomUUID();
 
         publish(new ReplayPublishedEvent(assetId, f.lessonId, f.sessionId, OffsetDateTime.now()));
-        worker.handle(onlyPayloadFor(assetId).toString());
+        onePayloadSetFor(assetId).forEach(p -> worker.handle(p.toString()));
 
         List<Row> rows = notificationsFor(f.curriculumId);
         assertThat(rows.stream().map(Row::recipientId).toList())
@@ -118,8 +118,8 @@ class RecordingNotificationContractTest {
         publish(new ReplayPublishedEvent(assetId, f.lessonId, f.sessionId, OffsetDateTime.now()));
 
         List<JsonNode> payloads = fanoutPayloadsFor(assetId);
-        assertThat(payloads).as("아웃박스 멱등 키가 두 번째를 막는다").hasSize(1);
-        worker.handle(payloads.getFirst().toString());
+        assertThat(distinctEvents(payloads)).as("아웃박스 멱등 키가 두 번째를 막는다").hasSize(1);
+        payloads.forEach(p -> worker.handle(p.toString()));
         assertThat(notificationsFor(f.curriculumId)).hasSize(f.studentIds.size());
     }
 
@@ -133,7 +133,7 @@ class RecordingNotificationContractTest {
         UUID assetId = UUID.randomUUID();
         publish(new ReplayPublishedEvent(assetId, f.lessonId, UUID.randomUUID(), OffsetDateTime.now()));
 
-        worker.handle(onlyPayloadFor(assetId).toString());   // 던지지 않는다
+        onePayloadSetFor(assetId).forEach(p -> worker.handle(p.toString()));   // 던지지 않는다
 
         assertThat(notificationsFor(f.curriculumId)).isEmpty();
     }
@@ -203,11 +203,30 @@ class RecordingNotificationContractTest {
         return id;
     }
 
-    private JsonNode onlyPayloadFor(UUID assetId) {
+    /** 사건이 정확히 하나인지 보고, 그 사건의 <b>모든 구간</b> 명령을 준다. */
+    private List<JsonNode> onePayloadSetFor(UUID assetId) {
         List<JsonNode> payloads = fanoutPayloadsFor(assetId);
-        assertThat(payloads).hasSize(1);
-        return payloads.getFirst();
+        assertThat(distinctEvents(payloads)).hasSize(1);
+        return payloads;
     }
+
+    /**
+     * 구간 분할을 걷어낸 <b>사건</b> 목록. 넓은 팬아웃은 사건 하나를 uuid 구간 수만큼의 명령으로
+     * 낸다(ADR-0130) — 이 테스트들이 세려는 것은 명령 수가 아니라 사건 수다.
+     *
+     * <p>구간 필드만 다르고 나머지가 같으면 같은 사건이다.
+     */
+    private List<JsonNode> distinctEvents(List<JsonNode> payloads) {
+        java.util.Map<String, JsonNode> byEvent = new java.util.LinkedHashMap<>();
+        for (JsonNode p : payloads) {
+            tools.jackson.databind.node.ObjectNode key = ((tools.jackson.databind.node.ObjectNode) p).deepCopy();
+            key.remove("afterUserId");
+            key.remove("untilUserId");
+            byEvent.putIfAbsent(key.toString(), p);
+        }
+        return List.copyOf(byEvent.values());
+    }
+
 
     private List<JsonNode> fanoutPayloadsFor(UUID assetId) {
         return outboxEventRepository.findAll().stream()

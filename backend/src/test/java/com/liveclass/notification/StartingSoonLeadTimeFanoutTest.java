@@ -90,7 +90,7 @@ class StartingSoonLeadTimeFanoutTest {
         // 설정은 JPA로 저장했고 조각은 네이티브 SQL이다 — 플러시하지 않으면 설정이 보이지 않는다.
         entityManager.flush();
         return fanoutRepository.insertForStartingSoon(
-                f.curriculumId, f.lessonId, null, 100, leadMinutes,
+                f.curriculumId, f.lessonId, null, null, 100, leadMinutes,
                 com.liveclass.notification.api.NotificationLeadTimes.DEFAULT_MINUTES,
                 NotificationTypes.LIVE_STARTING_SOON, NotificationStatus.INFO, NotificationStatus.HIGH,
                 "라이브가 곧 시작합니다", "«강의» 라이브가 곧 시작합니다.",

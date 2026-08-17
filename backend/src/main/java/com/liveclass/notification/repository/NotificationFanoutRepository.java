@@ -69,6 +69,8 @@ public class NotificationFanoutRepository {
                 WHERE e.curriculum_id = CAST(:curriculumId AS uuid)
                   AND e.status = 'ACTIVE'
                   AND (CAST(:afterUserId AS uuid) IS NULL OR e.user_id > CAST(:afterUserId AS uuid))
+                  -- 이 체인이 맡은 구간의 상한. null이면 끝까지(병렬화 이전과 같다).
+                  AND (CAST(:untilUserId AS uuid) IS NULL OR e.user_id <= CAST(:untilUserId AS uuid))
                 ORDER BY e.user_id
                 LIMIT :sliceLimit
             ), content AS (
@@ -132,6 +134,8 @@ public class NotificationFanoutRepository {
                 WHERE e.curriculum_id = CAST(:curriculumId AS uuid)
                   AND e.status = 'ACTIVE'
                   AND (CAST(:afterUserId AS uuid) IS NULL OR e.user_id > CAST(:afterUserId AS uuid))
+                  -- 이 체인이 맡은 구간의 상한. null이면 끝까지(병렬화 이전과 같다).
+                  AND (CAST(:untilUserId AS uuid) IS NULL OR e.user_id <= CAST(:untilUserId AS uuid))
                   AND COALESCE(lp.enabled, cp.enabled, true)
                   AND COALESCE(lp.lead_minutes, cp.lead_minutes, :defaultLead) = :leadMinutes
                 ORDER BY e.user_id
@@ -180,7 +184,8 @@ public class NotificationFanoutRepository {
      *                     문구(content) 행의 id도 여기서 파생한다 — 접두사가 사건을 식별하기 때문이다.
      * @param previousStartsAt 일정 변경 알림에만 값이 있다. 나머지는 {@code null}.
      */
-    public Slice insertForActiveStudents(UUID curriculumId, UUID afterUserId, int sliceLimit,
+    public Slice insertForActiveStudents(UUID curriculumId, UUID afterUserId, UUID untilUserId,
+                                         int sliceLimit,
                                          String type, String actionStatus, String severity,
                                          String title, String message, String targetsJson,
                                          String groupKey, String dedupePrefix,
@@ -188,6 +193,7 @@ public class NotificationFanoutRepository {
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("curriculumId", curriculumId.toString())
                 .addValue("afterUserId", afterUserId == null ? null : afterUserId.toString())
+                .addValue("untilUserId", untilUserId == null ? null : untilUserId.toString())
                 .addValue("sliceLimit", sliceLimit)
                 .addValue("type", type)
                 .addValue("actionStatus", actionStatus)
@@ -212,7 +218,8 @@ public class NotificationFanoutRepository {
      *
      * @param leadMinutes 이 예약 행의 리드타임. 이 값을 고른 사람만 대상이다.
      */
-    public Slice insertForStartingSoon(UUID curriculumId, UUID lessonId, UUID afterUserId, int sliceLimit,
+    public Slice insertForStartingSoon(UUID curriculumId, UUID lessonId, UUID afterUserId,
+                                       UUID untilUserId, int sliceLimit,
                                        int leadMinutes, int defaultLead,
                                        String type, String actionStatus, String severity,
                                        String title, String message, String targetsJson,
@@ -222,6 +229,7 @@ public class NotificationFanoutRepository {
                 .addValue("curriculumId", curriculumId.toString())
                 .addValue("lessonId", lessonId == null ? null : lessonId.toString())
                 .addValue("afterUserId", afterUserId == null ? null : afterUserId.toString())
+                .addValue("untilUserId", untilUserId == null ? null : untilUserId.toString())
                 .addValue("sliceLimit", sliceLimit)
                 .addValue("leadMinutes", leadMinutes)
                 .addValue("defaultLead", defaultLead)

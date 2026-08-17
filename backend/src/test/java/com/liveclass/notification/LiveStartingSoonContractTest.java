@@ -126,7 +126,7 @@ class LiveStartingSoonContractTest {
          * 지났고, 5분 전 행만 아직이다.
          */
         List<JsonNode> payloads = fanoutPayloadsFor(sessionId, "LIVE_STARTING_SOON");
-        assertThat(payloads).hasSize(NotificationLeadTimes.CHOICES.size() - 1);
+        assertThat(distinctEvents(payloads)).hasSize(NotificationLeadTimes.CHOICES.size() - 1);
         assertThat(schedulesOf(sessionId).stream().filter(r -> r.getFiredAt() != null).toList())
                 .hasSize(NotificationLeadTimes.CHOICES.size() - 1);
 
@@ -280,5 +280,20 @@ class LiveStartingSoonContractTest {
                 JOIN core.notification_content c ON c.id = n.content_id
                 WHERE c.targets->>'curriculumId' = ? AND c.type = ?
                 """, UUID.class, curriculumId.toString(), type);
+    }
+
+    /**
+     * 구간 분할을 걷어낸 <b>사건</b> 목록. 넓은 팬아웃은 사건 하나를 uuid 구간 수만큼의 명령으로
+     * 낸다(ADR-0130) — 이 테스트가 세려는 것은 명령 수가 아니라 사건 수다.
+     */
+    private List<JsonNode> distinctEvents(List<JsonNode> payloads) {
+        java.util.Map<String, JsonNode> byEvent = new java.util.LinkedHashMap<>();
+        for (JsonNode p : payloads) {
+            tools.jackson.databind.node.ObjectNode key = ((tools.jackson.databind.node.ObjectNode) p).deepCopy();
+            key.remove("afterUserId");
+            key.remove("untilUserId");
+            byEvent.putIfAbsent(key.toString(), p);
+        }
+        return List.copyOf(byEvent.values());
     }
 }

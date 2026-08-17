@@ -56,10 +56,11 @@ class LiveScheduleNotificationContractTest {
         UUID sessionId = liveSessionManagement
                 .create(f.lessonId, f.curriculumId, f.instructorId, at).sessionId();
 
-        JsonNode payload = onlyPayloadFor(sessionId);
-        assertThat(payload.get("type").asString()).isEqualTo("LIVE_SCHEDULED");
+        List<JsonNode> payloads = onePayloadSetFor(sessionId);
+        assertThat(payloads.getFirst().get("type").asString()).isEqualTo("LIVE_SCHEDULED");
 
-        worker.handle(payload.toString());
+        // 구간을 나눠 냈으므로 전부 처리해야 전원이 받는다.
+        payloads.forEach(p -> worker.handle(p.toString()));
         List<Row> rows = notificationsFor(f.curriculumId);
         assertThat(rows).hasSize(1);
         assertThat(rows.getFirst().recipientId).isEqualTo(f.studentId);
@@ -123,7 +124,7 @@ class LiveScheduleNotificationContractTest {
         liveSessionService.updateSchedule(sessionId, f.instructorId, first.plusDays(2), null, null);
 
         List<JsonNode> changes = payloadsOfType(sessionId, "LIVE_SCHEDULE_CHANGED");
-        assertThat(changes).hasSize(2);
+        assertThat(distinctEvents(changes)).as("두 번 바뀌었으면 사건이 둘이다").hasSize(2);
         changes.forEach(p -> worker.handle(p.toString()));
 
         assertThat(notificationsFor(f.curriculumId).stream()
@@ -143,9 +144,9 @@ class LiveScheduleNotificationContractTest {
         liveSessionService.cancel(sessionId, f.instructorId);   // 멱등 — 두 번째는 사건이 아니다
 
         List<JsonNode> canceled = payloadsOfType(sessionId, "LIVE_CANCELED");
-        assertThat(canceled).hasSize(1);
+        assertThat(distinctEvents(canceled)).as("두 번 취소해도 사건은 하나다").hasSize(1);
 
-        worker.handle(canceled.getFirst().toString());
+        canceled.forEach(p -> worker.handle(p.toString()));
         assertThat(notificationsFor(f.curriculumId).stream()
                 .filter(r -> "LIVE_CANCELED".equals(r.type)).toList())
                 .hasSize(1);
@@ -207,11 +208,30 @@ class LiveScheduleNotificationContractTest {
         return id;
     }
 
-    private JsonNode onlyPayloadFor(UUID sessionId) {
+    /** 사건이 정확히 하나인지 보고, 그 사건의 <b>모든 구간</b> 명령을 준다. */
+    private List<JsonNode> onePayloadSetFor(UUID sessionId) {
         List<JsonNode> payloads = fanoutPayloadsFor(sessionId);
-        assertThat(payloads).hasSize(1);
-        return payloads.getFirst();
+        assertThat(distinctEvents(payloads)).hasSize(1);
+        return payloads;
     }
+
+    /**
+     * 구간 분할을 걷어낸 <b>사건</b> 목록. 넓은 팬아웃은 사건 하나를 uuid 구간 수만큼의 명령으로
+     * 낸다(ADR-0130) — 이 테스트들이 세려는 것은 명령 수가 아니라 사건 수다.
+     *
+     * <p>구간 필드만 다르고 나머지가 같으면 같은 사건이다.
+     */
+    private List<JsonNode> distinctEvents(List<JsonNode> payloads) {
+        java.util.Map<String, JsonNode> byEvent = new java.util.LinkedHashMap<>();
+        for (JsonNode p : payloads) {
+            tools.jackson.databind.node.ObjectNode key = ((tools.jackson.databind.node.ObjectNode) p).deepCopy();
+            key.remove("afterUserId");
+            key.remove("untilUserId");
+            byEvent.putIfAbsent(key.toString(), p);
+        }
+        return List.copyOf(byEvent.values());
+    }
+
 
     private List<JsonNode> payloadsOfType(UUID sessionId, String type) {
         return fanoutPayloadsFor(sessionId).stream()

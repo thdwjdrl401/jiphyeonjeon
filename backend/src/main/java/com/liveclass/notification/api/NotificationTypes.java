@@ -34,6 +34,24 @@ public final class NotificationTypes {
     public static final String VOD_PUBLISHED = "VOD_PUBLISHED";
 
     /**
+     * 커리큘럼의 수강 중 학생 <b>전원</b>에게 가는 종류들. 나머지는 받는 사람이 한 명으로 정해져 있다.
+     *
+     * <p>여기 있는 것만 uuid 구간으로 나눠 병렬로 돈다(ADR-0130). 한 명짜리 알림을 나누면 명령만
+     * 늘고 한 갈래를 뺀 나머지는 빈손으로 돌아간다 — 중복 제거가 막아 주긴 하지만 헛일이다.
+     *
+     * <p>팬아웃 워커의 수신자 규칙도 이 집합이다. 두 곳이 각자 목록을 들면 하나만 고쳤을 때
+     * 조용히 갈린다.
+     */
+    public static final java.util.Set<String> WIDE = java.util.Set.of(
+            MATERIAL_PUBLISHED, LIVE_SCHEDULED, LIVE_SCHEDULE_CHANGED,
+            LIVE_CANCELED, LIVE_STARTING_SOON, VOD_PUBLISHED);
+
+    /** 이 종류가 수강생 전원에게 가는가. */
+    public static boolean isWide(String type) {
+        return WIDE.contains(type);
+    }
+
+    /**
      * 알림을 <b>만들지 않는</b> 정리 신호. 학생이 신청을 물렀으니 강사에게 나가 있던 대기 알림을
      * 만료시키라는 뜻이다.
      *

@@ -17,6 +17,25 @@ repositories {
     mavenCentral()
 }
 
+/*
+ * 벤치마크 소스셋(측정 전용, 운영 빌드에 들어가지 않는다).
+ *
+ * main과 같은 패키지에 두는 이유: WebPushCrypto가 package-private이라 밖에서 부를 수 없다.
+ * 측정 대상을 public으로 열어 주는 것보다 소스셋을 하나 더 두는 쪽이 운영 코드를 덜 건드린다.
+ */
+sourceSets {
+    bench {
+        java.srcDirs = ['src/bench/java']
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+    }
+}
+
+configurations {
+    benchImplementation.extendsFrom implementation
+    benchRuntimeOnly.extendsFrom runtimeOnly
+}
+
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-security'
@@ -116,4 +135,28 @@ tasks.named('test') {
     // GC가 잦아진다. 병렬 포크는 켜지 않는다 — 컨테이너가 JVM당 하나라 포크마다 PG·Redis가 새로 뜨고,
     // 타이밍에 민감한 WS 테스트가 같은 러너에서 서로를 밀어낸다.
     maxHeapSize = '1500m'
+}
+
+/*
+ * 벤치마크 배포. 얇은 jar + 의존성을 lib/에 **원본 그대로** 복사한다.
+ *
+ * fat jar로 말면 안 된다 — BouncyCastle은 서명된 JCE 프로바이더라 재포장하면 서명이 깨지고
+ * "JCE cannot authenticate the provider BC"로 죽는다.
+ *
+ *   ./gradlew :benchDist
+ *   java -cp 'build/bench/*:build/bench/lib/*' com.liveclass.notification.push.CryptoBench --threads 1
+ */
+tasks.register('benchJar', Jar) {
+    archiveClassifier = 'bench'
+    from sourceSets.bench.output
+    from sourceSets.main.output
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+tasks.register('benchDist', Sync) {
+    into layout.buildDirectory.dir('bench')
+    from tasks.named('benchJar')
+    into('lib') {
+        from configurations.benchRuntimeClasspath
+    }
 }

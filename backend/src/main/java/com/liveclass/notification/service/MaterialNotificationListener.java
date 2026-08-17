@@ -1,6 +1,5 @@
 package com.liveclass.notification.service;
 
-import com.liveclass.aiintegration.api.OutboxPublisher;
 import com.liveclass.lesson.api.CurriculumMaterialPublishedEvent;
 import com.liveclass.notification.config.NotificationMessagingConfig;
 import org.slf4j.Logger;
@@ -27,13 +26,13 @@ public class MaterialNotificationListener {
     private static final Logger log = LoggerFactory.getLogger(MaterialNotificationListener.class);
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
-    private final OutboxPublisher outboxPublisher;
+    private final WideFanoutPublisher wideFanout;
     private final int sliceLimit;
 
     public MaterialNotificationListener(
-            OutboxPublisher outboxPublisher,
+            WideFanoutPublisher wideFanout,
             @Value("${notification.fanout.slice-size:1000}") int sliceLimit) {
-        this.outboxPublisher = outboxPublisher;
+        this.wideFanout = wideFanout;
         this.sliceLimit = sliceLimit;
     }
 
@@ -43,14 +42,8 @@ public class MaterialNotificationListener {
                 event.curriculumId(), event.curriculumTitle(), event.lessonId(),
                 event.materialId(), event.fileName(), event.occurredAt(), sliceLimit);
 
-        outboxPublisher.enqueue(
-                NotificationMessagingConfig.FANOUT_QUEUE,
-                "material",
-                event.materialId().toString(),
-                "NOTIFICATION_FANOUT_REQUESTED",
-                JSON.writeValueAsString(command),
-                "notif:MATERIAL_PUBLISHED:" + event.materialId(),
-                null);
+        wideFanout.publish(command, "material", event.materialId().toString(),
+                "notif:MATERIAL_PUBLISHED:" + event.materialId());
         log.debug("자료 알림 팬아웃 요청 적재 material={} curriculum={}",
                 event.materialId(), event.curriculumId());
     }
