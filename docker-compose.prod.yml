@@ -125,9 +125,12 @@ services:
       retries: 5
     # 호스트 포트 미노출 — 백엔드(같은 네트워크)만 발행. AI 워커 접속은 그 스택 배포 시 네트워크로 결정(후속).
 
+  # 웹·팬아웃 노드. 발송은 backend-push가 맡는다(ADR-0127).
+  #
+  # **container_name을 두지 않는다.** 이름을 박으면 복제본을 만들 수 없고, 그게 이 앱이 구조적으로
+  # 한 대였던 이유 중 하나였다. nginx는 서비스명(backend)으로 찾으므로 이름이 없어도 닿는다.
   backend:
     build: ./backend
-    container_name: liveclass-backend-prod
     restart: unless-stopped
     # LiveKit API 자격. 미디어 스택과 같은 파일을 읽어 단일 출처를 지킨다 — .env.prod에 복사하면
     # 두 곳이 갈라져 드리프트가 생긴다. 이 파일이 없으면 부팅을 실패시킨다(조용히 dev 더미 키로
@@ -279,6 +282,10 @@ services:
       # 위 두 사례와 같은 함정이고, 실제로 여기서 한 번 더 걸렸다. 기본 꺼짐이라 켜는 것은 환경별 결정이며
       # 켜는 순간 그동안 스트림에 쌓인 이벤트를 처음(0-0)부터 읽어 지난 세션 노트가 먼저 채워진다.
       LECTURE_NOTE_CONSUMER_ENABLED: ${LECTURE_NOTE_CONSUMER_ENABLED:-false}
+      # 발송은 backend-push가 맡는다(ADR-0127). 이 노드는 알림 행을 만들고 명령을 큐에 넣는
+      # 데까지만 한다 — 발송이 같은 프로세스에 있으면 암호화가 팬아웃의 CPU를 훔친다
+      # (실측: 동시 실행 시 발송 1,636건/s → 분리 시 2,654건/s).
+      NOTIFICATION_PUSH_LISTENER_ENABLED: ${NOTIFICATION_PUSH_LISTENER_ENABLED:-false}
     depends_on:
       postgres:
         condition: service_healthy   # Flyway 마이그레이션 전 DB 준비 대기
@@ -293,6 +300,37 @@ services:
       retries: 10
       start_period: 60s
     # 호스트 포트 미노출 — nginx(frontend)만 접근
+
+  # 발송 전용 노드(ADR-0127). **여기만 늘리면 발송이 는다** — 실측으로 물리 1코어 1,483건/s,
+  # 2코어 2,654건/s(1.79배)로 거의 선형이다. 팬아웃과 달리 공유 자원(DB)을 21%밖에 안 쓴다.
+  #
+  #     docker compose -f docker-compose.prod.yml up -d --scale backend-push=3
+  #
+  # 정의는 backend에서 물려받고 역할 스위치 넷만 덮어쓴다. extends는 environment를 병합하므로
+  # 172줄짜리 env를 복사하지 않는다. depends_on은 병합되지 않아 다시 적는다(compose 사양).
+  backend-push:
+    extends:
+      service: backend
+    environment:
+      # 팬아웃 큐는 안 잡는다. 잡으면 이 노드가 팬아웃 조각을 가져가 발송이 그만큼 밀린다.
+      NOTIFICATION_FANOUT_LISTENER_ENABLED: "false"
+      NOTIFICATION_PUSH_LISTENER_ENABLED: "true"
+      # 주기 작업 전부 정지. 이 앱의 @Scheduled 중 여러 대에서 동시에 돌아도 안전하다고 확인된
+      # 것은 일부뿐이고, LiveStartingSoonScheduler는 잠금이 없어 두 노드가 같은 예정 행을 집으면
+      # 아웃박스에 두 줄을 넣는다. 아웃박스 릴레이도 여기서는 필요 없다 — 이 노드는 아웃박스에
+      # 행을 넣지 않으므로 발행할 것이 없다.
+      LIVECLASS_SCHEDULING_ENABLED: "false"
+      # Redis 스트림 소비자는 consumer 이름이 고정이라 두 노드가 같은 이름으로 붙으면 서로의
+      # pending을 건드린다. 발송 노드는 자막·노트와 무관하므로 아예 붙지 않는다.
+      CAPTION_CONSUMER_ENABLED: "false"
+      LECTURE_NOTE_CONSUMER_ENABLED: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
 
   media-worker:
     build: ./media-worker

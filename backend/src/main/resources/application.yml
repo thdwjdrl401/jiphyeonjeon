@@ -280,6 +280,17 @@ asset:
     initial-delay: ${ASSET_REAPER_INITIAL_DELAY:PT5M}               # 기동 직후 첫 실행까지 지연
 
 liveclass:
+  # 이 노드가 주기 작업을 도는가(ADR-0127). 앱 전체의 @Scheduled가 한 스위치에 매달려 있다
+  # (AssetSchedulingConfig — 이 앱에서 @EnableScheduling은 그 한 곳뿐이다).
+  #
+  # **끄는 이유는 낭비가 아니라 정확성이다.** 주기 작업 중 여러 대가 동시에 돌아도 안전하다고
+  # 확인된 것은 일부뿐이고, LiveStartingSoonScheduler는 잠금이 없어 두 노드가 같은 예정 행을
+  # 집으면 아웃박스에 두 줄을 넣는다고 스스로 적어 두고 있다. 노드를 늘리기 전에 그 전부를
+  # 감사하는 대신, 늘어나는 노드에서는 주기 작업을 아예 돌리지 않는다.
+  #
+  # 빈은 그대로 두고 스케줄 등록만 끄므로, 다른 코드가 직접 부르는 경로는 살아 있다.
+  scheduling:
+    enabled: ${LIVECLASS_SCHEDULING_ENABLED:true}
   egress:
     # 유령 Egress 회수 중계(infra/livekit/egress-purger). 비워 두면 기능이 꺼지고 콘솔이 그렇게 말한다.
     #
@@ -373,6 +384,23 @@ outbox:
     initial-delay-ms: ${OUTBOX_RELAY_INITIAL_DELAY_MS:15000}
 
 # ── 알림 ──
+#
+# ── 노드 역할 (ADR-0127) ──
+# 같은 산출물을 아래 네 값만 바꿔 배포하면 역할이 갈린다.
+#
+#                              web            push 전용
+#   ───────────────────────────────────────────────────────
+#   notification.fanout.listener-enabled   true      false
+#   notification.push.listener-enabled     false     true
+#   liveclass.scheduling.enabled           true      false
+#   caption / lecture-note consumer        true      false
+#
+# 나눈 이유는 두 일의 병목이 다르기 때문이다 — 실측으로 팬아웃은 DB가(앱 CPU 39% · pg 90%)
+# 발송은 앱 CPU가(앱 82% · pg 21%) 막고, 그래서 팬아웃은 워커를 늘려도 2대에서 멈추는 반면
+# 발송은 1.79배로 늘어난다. 한 프로세스에 두면 서로 CPU를 훔치고(동시 실행 시 발송
+# 1,636건/s → 분리 시 2,654건/s), 늘리고 싶은 쪽만 늘릴 수도 없다.
+#
+# 기본값은 전부 켜짐이라 **한 대로 돌리던 동작은 그대로다.** 나누는 것은 배포의 선택이다.
 notification:
   # 알림 본체(core.notification)는 월 파티션이다(ADR-0123). 잡이 매일 새벽 + 기동 직후에
   # 앞으로 months-ahead개월치를 선생성하고, DEFAULT 파티션(에어백)에 행이 있으면 WARN을 남긴다.
@@ -427,8 +455,14 @@ notification:
     max-attempts: ${NOTIFICATION_WEB_PUSH_MAX_ATTEMPTS:3}
     # 지수 백오프의 첫 간격. 상대가 Retry-After를 주면 그 값이 이긴다.
     retry-backoff-ms: ${NOTIFICATION_WEB_PUSH_RETRY_BACKOFF_MS:500}
+  fanout:
+    # 이 노드가 팬아웃 큐를 소비하는가. 발송 전용 노드는 이 값을 false로 두고 뜬다(ADR-0127).
+    listener-enabled: ${NOTIFICATION_FANOUT_LISTENER_ENABLED:true}
   # 푸시 전달 큐(ADR-0124). 팬아웃에서 분리된 전용 소비자·진행 표의 손잡이들.
   push:
+    # 이 노드가 발송 큐를 소비하는가. 발송 전용 노드를 두는 수단이고(ADR-0127), 운영에서
+    # 발송만 잠시 멈추는 데도 쓴다 — 메시지는 durable이라 큐에 쌓였다가 재개하면 나간다.
+    listener-enabled: ${NOTIFICATION_PUSH_LISTENER_ENABLED:true}
     # 푸시 큐 소비자 수. 팬아웃의 concurrency와 **별개다** — 푸시(조각당 최대 batch-timeout)가
     # 팬아웃 소비자를 붙잡지 않게 분리한 것이 이 큐의 존재 이유라, 손잡이도 따로 둔다.
     # 분리 후 실측 전의 기본값이다. 푸시 처리량이 문제면 이 값부터 잰다(위 max-in-flight를
