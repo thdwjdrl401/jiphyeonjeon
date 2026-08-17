@@ -414,7 +414,8 @@ public class NotificationFanoutWorker {
         }
         UUID eventHash = PushDeliveryCommand.eventHashOf(eventKey);
         PushDeliveryCommand pushCommand = new PushDeliveryCommand(
-                type, eventHash, List.copyOf(recipients), title, message, null);
+                // 첫 번째 시도다. 막혀서 못 보낸 사람이 있으면 소비자가 이 값을 올려 다시 싣는다(ADR-0128).
+                type, eventHash, List.copyOf(recipients), title, message, null, 1);
         outboxPublisher.enqueue(
                 NotificationMessagingConfig.PUSH_QUEUE,
                 "notification_push",
