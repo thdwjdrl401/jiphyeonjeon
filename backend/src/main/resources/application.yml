@@ -434,6 +434,16 @@ notification:
     # 분리 후 실측 전의 기본값이다. 푸시 처리량이 문제면 이 값부터 잰다(위 max-in-flight를
     # 나눠 갖는 구조는 그대로이므로, 늘릴 때는 그 상한과 함께 본다).
     listener-concurrency: ${NOTIFICATION_PUSH_LISTENER_CONCURRENCY:2}
+    # 한 사건을 몇 번까지 다시 실을 것인가(ADR-0128). 푸시 서비스가 429·5xx로 막아 batch-timeout
+    # 안에 못 보낸 사람은 진행 표에 기록하지 않고 새 명령으로 다시 싣는데, 상한이 없으면 상대가
+    # 계속 막을 때 같은 명단이 큐를 영원히 돈다. 상한에 닿으면 포기하고 WARN으로 사람 수를 남긴다.
+    #
+    # 4는 "몇 분 안에 회복되는 스로틀링은 넘기고, 몇 시간짜리 장애는 붙들지 않는다"는 값이다 —
+    # 아래 대기(30초)와 곱하면 최소 1분 30초, Retry-After가 길면 그만큼 늘어난다.
+    max-delivery-attempts: ${NOTIFICATION_PUSH_MAX_DELIVERY_ATTEMPTS:4}
+    # 다시 싣기 전 기본 대기. **상대가 Retry-After를 주면 그 값이 이긴다** — 언제 와도 되는지는
+    # 그쪽이 안다. 이 값은 응답을 아예 못 봤을 때(타임아웃)처럼 알려 준 게 없을 때만 쓴다.
+    retry-delay-ms: ${NOTIFICATION_PUSH_RETRY_DELAY_MS:30000}
     # 진행 표 파티션 잡. 매일치 선생성(14일) + 오래된 파티션 DROP(7일)이라 주기가 정확할 필요
     # 없다 — 하루 안에 한 번만 성공하면 되는 관대한 잡이다(PushProgressPartitionJob).
     partition-maintenance-ms: ${NOTIFICATION_PUSH_PARTITION_MAINTENANCE_MS:21600000}

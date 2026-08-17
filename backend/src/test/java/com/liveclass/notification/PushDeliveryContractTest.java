@@ -192,7 +192,8 @@ class PushDeliveryContractTest {
         UUID event = UUID.randomUUID();
         List<UUID> recipients = List.of(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
         when(pushSender.send(any(), any(), any(), any()))
-                .thenAnswer(invocation -> Set.copyOf(invocation.<Collection<UUID>>getArgument(0)));
+                .thenAnswer(invocation -> new WebPushSender.SendResult(
+                        Set.copyOf(invocation.<Collection<UUID>>getArgument(0)), Set.of(), null));
         String command = pushCommandJson(event, recipients);
 
         pushWorker.handle(command);
@@ -215,8 +216,10 @@ class PushDeliveryContractTest {
         UUID alsoDone = UUID.randomUUID();
         UUID abandoned = UUID.randomUUID();
         when(pushSender.send(any(), any(), any(), any()))
-                .thenReturn(Set.of(done, alsoDone))   // 첫 배달 — abandoned는 마감에 걸려 미완
-                .thenAnswer(invocation -> Set.copyOf(invocation.<Collection<UUID>>getArgument(0)));
+                // 첫 배달 — abandoned는 마감에 걸려 미완. 미완인 사람은 기록되지 않는다.
+                .thenReturn(new WebPushSender.SendResult(Set.of(done, alsoDone), Set.of(abandoned), null))
+                .thenAnswer(invocation -> new WebPushSender.SendResult(
+                        Set.copyOf(invocation.<Collection<UUID>>getArgument(0)), Set.of(), null));
         String command = pushCommandJson(event, List.of(done, alsoDone, abandoned));
 
         pushWorker.handle(command);
@@ -335,7 +338,7 @@ class PushDeliveryContractTest {
 
     private String pushCommandJson(UUID eventHash, List<UUID> recipients) {
         return jsonMapper.writeValueAsString(
-                new PushDeliveryCommand("MATERIAL_PUBLISHED", eventHash, recipients, "제목", "본문", null));
+                new PushDeliveryCommand("MATERIAL_PUBLISHED", eventHash, recipients, "제목", "본문", null, 1));
     }
 
     /** 이 테스트의 사건(materialId) 것만 고른다 — 아웃박스는 스위트가 공유한다. */

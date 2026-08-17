@@ -1,5 +1,7 @@
 package com.liveclass.aiintegration.api;
 
+import java.time.Duration;
+
 /**
  * 다른 모듈이 AI 배치 잡을 outbox에 싣는 포트(ADR-0036, CONTRACT §3-1). 도메인 변경과 <b>같은 트랜잭션</b>에서
  * 호출해 발행 신뢰성을 얻는다 — 실제 RabbitMQ 발행은 릴레이가 별도로 한다. outbox 엔티티·리포는 이 모듈 내부.
@@ -20,6 +22,22 @@ public interface OutboxPublisher {
      * @param idempotencyKey 중복 발행 방지 키(UNIQUE)
      * @param correlationId 서비스 간 추적 id(없으면 null)
      */
-    void enqueue(String destination, String aggregateType, String aggregateId, String eventType,
-                 String payloadJson, String idempotencyKey, String correlationId);
+    default void enqueue(String destination, String aggregateType, String aggregateId, String eventType,
+                         String payloadJson, String idempotencyKey, String correlationId) {
+        enqueueAfter(destination, aggregateType, aggregateId, eventType,
+                payloadJson, idempotencyKey, correlationId, Duration.ZERO);
+    }
+
+    /**
+     * {@link #enqueue}와 같되 <b>지금 발행하지 않는다</b>. 릴레이는 {@code next_attempt_at}이 지난
+     * 행만 집으므로, 그 시각을 앞당기지 않고 미루는 것으로 지연이 된다.
+     *
+     * <p>필요해진 계기는 푸시의 429다(ADR-0128). 푸시 서비스가 "속도를 줄여라"라고 답한 직후에
+     * 같은 명단을 다시 실으면, 커밋이 릴레이를 곧바로 깨우므로(ADR-0122) 밀리초 안에 같은 곳을
+     * 다시 두드린다 — 상대가 말한 대기 시간을 그대로 무시하는 셈이다.
+     *
+     * @param delay 지금부터 이만큼 뒤에 발행 대상이 된다. {@code null}이나 음수는 지연 없음.
+     */
+    void enqueueAfter(String destination, String aggregateType, String aggregateId, String eventType,
+                      String payloadJson, String idempotencyKey, String correlationId, Duration delay);
 }

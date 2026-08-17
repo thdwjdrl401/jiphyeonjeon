@@ -12,6 +12,7 @@ import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -181,27 +182,29 @@ public class WebPushSender {
      * <p>단계가 셋이고 <b>가운데 단계에만 시간이 든다</b> — 구독 조회(짧은 읽기) → 병렬 발송(HTTP,
      * 트랜잭션 밖) → 결과 반영(짧은 쓰기).
      *
-     * @return <b>이번 호출에서 발송 시도를 마친 사람들</b>(ADR-0124). 진행 표에 기록될 집합이다.
-     *         경계는 이렇다 — 그 사람의 <b>모든 기기가 최종 결과를 냈으면</b> 들어간다(성공이든
-     *         최종 실패든: 재시도 물결은 이 호출 안에서 끝났으므로 더 해 볼 것이 없다). 구독이
-     *         하나도 없는 사람도 들어간다(보낼 곳이 없으니 시도가 끝났다). 반면 batch-timeout이나
-     *         인터럽트로 <b>응답을 못 본 기기</b>가 하나라도 있는 사람은 빠진다 — 그 사람은
-     *         기록되지 않아 큐 재배달이 다시 집는다.
+     * @return 명단을 <b>끝난 사람과 안 끝난 사람으로 가른 것</b>(ADR-0124, ADR-0128).
+     *         <ul>
+     *           <li>끝남 — 그 사람의 모든 기기가 <b>최종 판정</b>을 냈다(성공·구독 만료·영구 거절).
+     *               구독이 하나도 없는 사람도 여기 들어간다(보낼 곳이 없으니 끝났다).</li>
+     *           <li>안 끝남 — 429·5xx로 막혔거나 batch-timeout·인터럽트로 응답을 못 본 기기가
+     *               하나라도 있다. <b>이들을 진행 표에 기록하면 영구 유실이다</b> — 호출자가
+     *               다시 실어야 한다.</li>
+     *         </ul>
      */
-    public Set<UUID> send(Collection<UUID> recipientIds, String title, String body, String url) {
+    public SendResult send(Collection<UUID> recipientIds, String title, String body, String url) {
         if (recipientIds.isEmpty()) {
-            return Set.of();
+            return SendResult.nothingToDo();
         }
         if (!isEnabled()) {
             /*
              * 키가 없으면 보낼 것이 없다 — 전원 "시도를 마쳤다"로 친다. 빈 집합을 돌려주면 진행
              * 표가 영영 차지 않아, 켜 있지도 않은 푸시 때문에 재배달이 같은 명단을 계속 다시 집는다.
              */
-            return Set.copyOf(recipientIds);
+            return SendResult.allSettled(recipientIds);
         }
         List<PushSubscription> subscriptions = loadSubscriptions(recipientIds);
         if (subscriptions.isEmpty()) {
-            return Set.copyOf(recipientIds);
+            return SendResult.allSettled(recipientIds);
         }
         byte[] payload = PushPayload.json(title, body, url)
                 .getBytes(java.nio.charset.StandardCharsets.UTF_8);
@@ -210,30 +213,76 @@ public class WebPushSender {
         List<Outcome> outcomes = dispatchWithRetries(subscriptions, payload);
         applyOutcomes(outcomes);
         logBatch(subscriptions.size(), outcomes, (System.nanoTime() - startedAt) / 1_000_000);
-        return attemptCompleted(recipientIds, subscriptions, outcomes);
+        Split split = splitByCompletion(recipientIds, subscriptions, outcomes);
+        return new SendResult(Set.copyOf(split.settled()), Set.copyOf(split.unfinished()), split.retryAfter());
     }
 
     /**
-     * 시도를 마친 사람 = 명단 전체 − (결과 없는 기기의 주인들). 결과의 유무만 보고 내용은 보지
-     * 않는다 — 실패도 "시도를 마쳤다"다. 실패한 기기를 큐 재배달로 또 치게 두면 그 사람의 이미
-     * 받은 기기까지 다시 울린다(클래스 주석의 불변식).
+     * 이번 호출의 결말.
+     *
+     * @param settled    시도가 끝난 사람들. 진행 표에 기록해 다시 보내지 않는다.
+     * @param unfinished <b>아직 못 보낸</b> 사람들. 429·5xx로 막혔거나 응답을 못 본 기기가 있다.
+     *                   기록하면 영구 유실이므로 기록하지 않고, 호출자가 다시 실어야 한다.
+     * @param retryAfter 푸시 서비스가 알려 준 대기 시간 중 가장 긴 것. 없으면 {@code null} —
+     *                   그때는 호출자가 자기 백오프를 쓴다.
      */
-    private static Set<UUID> attemptCompleted(Collection<UUID> recipientIds,
-                                              List<PushSubscription> subscriptions,
-                                              List<Outcome> outcomes) {
-        Set<UUID> answered = HashSet.newHashSet(outcomes.size());
+    public record SendResult(Set<UUID> settled, Set<UUID> unfinished, Duration retryAfter) {
+
+        static SendResult nothingToDo() {
+            return new SendResult(Set.of(), Set.of(), null);
+        }
+
+        static SendResult allSettled(Collection<UUID> recipientIds) {
+            return new SendResult(Set.copyOf(recipientIds), Set.of(), null);
+        }
+    }
+
+    /**
+     * 시도를 마친 사람과 <b>아직 안 끝난 사람</b>을 가른다.
+     *
+     * <p>전에는 결과의 유무만 봤다 — 응답이 왔으면 내용을 보지 않고 "시도를 마쳤다"로 쳤다.
+     * 그래서 <b>429를 받고 제한 시간이 끝난 기기</b>도 마친 것이 되어 진행 표에 기록됐고, 그 뒤로는
+     * anti-join이 그 사람을 영영 걸러 냈다. 푸시 서비스가 "속도를 줄여라"라고 답한 것을 "보냈다"로
+     * 기록한 셈이고, 결과는 조용한 영구 유실이었다(ADR-0128).
+     *
+     * <p>기준은 <b>판정</b>이다. 최종 판정(성공·구독 만료·영구 거절)만 끝난 것으로 치고,
+     * {@code RETRY} 판정(429·5xx)과 응답을 못 본 기기는 안 끝난 것으로 남긴다. 한 사람의 기기
+     * 하나라도 안 끝났으면 그 사람은 안 끝난 쪽이다.
+     *
+     * <p><b>이 갈라놓기가 곧 "그 사람의 기기 하나가 두 번 울 수 있다"를 뜻한다.</b> 기기 A는
+     * 성공하고 기기 B가 429로 남으면 그 사람을 다시 보내게 되고, 그때 A도 다시 울린다. 진행 표가
+     * 사람 단위라서 그렇다. 그래도 이쪽을 고른 이유는 반대쪽이 "아예 못 받는다"이기 때문이고,
+     * 이 프로젝트는 같은 갈림길에서 이미 "조용한 유실보다 가끔 두 번"을 골랐다(ADR-0124).
+     * 기기 단위로 진행을 기록하면 그 두 번도 사라지지만, 그건 표 구조를 바꾸는 일이다.
+     */
+    private static Split splitByCompletion(Collection<UUID> recipientIds,
+                                           List<PushSubscription> subscriptions,
+                                           List<Outcome> outcomes) {
+        Map<UUID, Outcome> byDevice = HashMap.newHashMap(outcomes.size());
         for (Outcome outcome : outcomes) {
-            answered.add(outcome.subscription().getId());
+            byDevice.put(outcome.subscription().getId(), outcome);
         }
         Set<UUID> unfinishedOwners = new HashSet<>();
+        Duration askedToWait = null;
         for (PushSubscription subscription : subscriptions) {
-            if (!answered.contains(subscription.getId())) {
+            Outcome outcome = byDevice.get(subscription.getId());
+            // 응답을 못 봤거나(null) 다시 해 볼 여지가 있는 판정이면 안 끝난 것이다.
+            if (outcome == null || verdictOf(outcome.status()) == Verdict.RETRY) {
                 unfinishedOwners.add(subscription.getUserId());
+                if (outcome != null && outcome.retryAfter() != null
+                        && (askedToWait == null || outcome.retryAfter().compareTo(askedToWait) > 0)) {
+                    askedToWait = outcome.retryAfter();
+                }
             }
         }
         Set<UUID> settled = new HashSet<>(recipientIds);
         settled.removeAll(unfinishedOwners);
-        return settled;
+        // 명단에 없는 사람이 섞여 들어오지 않게 교집합으로 자른다.
+        unfinishedOwners.retainAll(recipientIds);
+        return new Split(settled, unfinishedOwners, askedToWait);
+    }
+
+    private record Split(Set<UUID> settled, Set<UUID> unfinished, Duration retryAfter) {
     }
 
     /**

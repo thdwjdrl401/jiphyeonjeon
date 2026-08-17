@@ -336,21 +336,63 @@ class WebPushRetryTest {
     // ---- 반환값: "시도를 마친 사람" (ADR-0124) ----
 
     /**
-     * <b>반환값은 진행 표에 기록될 집합이다.</b> 여기 들어간 사람은 큐 재배달이 다시 집지 않으므로,
-     * 성공뿐 아니라 <b>최종 실패도</b> 들어가야 한다 — 재시도 물결은 이 호출 안에서 끝났고, 실패한
-     * 기기를 재배달로 또 치게 두면 그 사람의 이미 받은 기기까지 다시 운다.
+     * <b>5xx로 물결을 다 쓴 기기의 주인은 끝나지 않았다</b>(ADR-0128).
+     *
+     * <p>전에는 "결과를 봤으니 끝났다"로 쳐서 진행 표에 기록했다. 그 기록은 anti-join의 입력이라,
+     * 한 번 들어가면 그 사람은 이 사건에 대해 영영 걸러진다 — 못 받은 사람을 받은 것으로 적은 셈이다.
+     * 상대가 5xx나 429로 답한 것은 "지금은 안 된다"이지 "보냈다"가 아니다.
      */
     @Test
-    void the_settled_set_contains_successes_and_final_failures_alike() {
+    void a_device_that_exhausted_its_waves_on_5xx_leaves_its_owner_unfinished() {
         PushSubscription ok = subscription("ok");
         PushSubscription broken = subscription("broken");
         script("ok", 201);
         script("broken", 500, 500, 500);
         given(ok, broken);
 
-        java.util.Set<UUID> settled = sender(3, 5_000).send(recipients(ok, broken), "제목", "본문", null);
+        WebPushSender.SendResult result = sender(3, 5_000).send(recipients(ok, broken), "제목", "본문", null);
 
-        assertThat(settled).containsExactlyInAnyOrder(ok.getUserId(), broken.getUserId());
+        assertThat(result.settled())
+                .as("성공한 기기의 주인만 끝났다")
+                .containsExactly(ok.getUserId());
+        assertThat(result.unfinished())
+                .as("막힌 기기의 주인은 다시 보내야 한다")
+                .containsExactly(broken.getUserId());
+    }
+
+    /**
+     * <b>영구 거절(4xx)은 끝난 것이다.</b> 다시 보내도 같은 답이 오므로 재시도가 무의미하고,
+     * 안 끝난 것으로 두면 상한에 닿을 때까지 헛되이 큐를 돈다. 429만 예외라는 것이 요점이다.
+     */
+    @Test
+    void a_permanently_rejected_device_settles_its_owner() {
+        PushSubscription rejected = subscription("rejected");
+        script("rejected", 400);
+        given(rejected);
+
+        WebPushSender.SendResult result = sender(3, 5_000).send(recipients(rejected), "제목", "본문", null);
+
+        assertThat(result.settled()).containsExactly(rejected.getUserId());
+        assertThat(result.unfinished()).isEmpty();
+    }
+
+    /**
+     * <b>429의 {@code Retry-After}를 그대로 올려 준다.</b> 언제 다시 와도 되는지는 상대가 알고,
+     * 호출자는 그 값만큼 미뤄 다시 싣는다 — 우리 기본 대기로 덮으면 상대의 말을 무시하는 것이 된다.
+     */
+    @Test
+    void the_retry_after_of_a_throttled_device_is_reported_to_the_caller() {
+        PushSubscription throttled = subscription("throttled");
+        script("throttled", 429, 429, 429);
+        retryAfterHeader = "7";
+        given(throttled);
+
+        WebPushSender.SendResult result = sender(1, 2_000).send(recipients(throttled), "제목", "본문", null);
+
+        assertThat(result.unfinished()).containsExactly(throttled.getUserId());
+        assertThat(result.retryAfter())
+                .as("상대가 말한 대기 시간")
+                .isEqualTo(java.time.Duration.ofSeconds(7));
     }
 
     /**
@@ -366,7 +408,7 @@ class WebPushRetryTest {
         scriptedDelays.put("slow", 8_000L);
         given(fast, slow);
 
-        java.util.Set<UUID> settled = sender(1, 2_000).send(recipients(fast, slow), "제목", "본문", null);
+        java.util.Set<UUID> settled = sender(1, 2_000).send(recipients(fast, slow), "제목", "본문", null).settled();
 
         assertThat(settled)
                 .as("응답을 본 기기의 주인만 끝났다")
@@ -383,7 +425,7 @@ class WebPushRetryTest {
         java.util.List<UUID> everyone = new java.util.ArrayList<>(recipients(a));
         everyone.add(deviceless);
 
-        java.util.Set<UUID> settled = sender(3, 5_000).send(everyone, "제목", "본문", null);
+        java.util.Set<UUID> settled = sender(3, 5_000).send(everyone, "제목", "본문", null).settled();
 
         assertThat(settled).containsExactlyInAnyOrder(a.getUserId(), deviceless);
     }
@@ -398,7 +440,7 @@ class WebPushRetryTest {
                 new NoOpTransactionManager(), 10, 2_000, 5_000, 5_000, 3, 10, Integer.MAX_VALUE, 0);
         UUID recipient = UUID.randomUUID();
 
-        java.util.Set<UUID> settled = disabled.send(List.of(recipient), "제목", "본문", null);
+        java.util.Set<UUID> settled = disabled.send(List.of(recipient), "제목", "본문", null).settled();
 
         assertThat(settled).containsExactly(recipient);
     }

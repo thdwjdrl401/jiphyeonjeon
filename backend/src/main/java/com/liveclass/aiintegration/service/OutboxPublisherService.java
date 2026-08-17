@@ -10,6 +10,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.OffsetDateTime;
 
 @Service
@@ -28,8 +29,8 @@ public class OutboxPublisherService implements OutboxPublisher {
 
     @Override
     @Transactional
-    public void enqueue(String destination, String aggregateType, String aggregateId, String eventType,
-                        String payloadJson, String idempotencyKey, String correlationId) {
+    public void enqueueAfter(String destination, String aggregateType, String aggregateId, String eventType,
+                             String payloadJson, String idempotencyKey, String correlationId, Duration delay) {
         // 멱등: 같은 idempotencyKey가 이미 있으면(같은 자료 재요청 등) 새로 넣지 않는다.
         if (outboxEventRepository.existsByIdempotencyKey(idempotencyKey)) {
             log.debug("outbox 중복 무시 idempotencyKey={}", idempotencyKey);
@@ -45,7 +46,11 @@ public class OutboxPublisherService implements OutboxPublisher {
         event.setIdempotencyKey(idempotencyKey);
         event.setCorrelationId(correlationId);
         event.setAttemptCount(0);
-        event.setNextAttemptAt(OffsetDateTime.now());
+        // 지연이 있으면 그만큼 미뤄 둔다. 릴레이는 next_attempt_at이 지난 행만 집으므로
+        // 이 한 줄이 곧 "나중에 발행"이다(ADR-0128).
+        event.setNextAttemptAt(delay == null || delay.isNegative() || delay.isZero()
+                ? OffsetDateTime.now()
+                : OffsetDateTime.now().plus(delay));
         try {
             outboxEventRepository.saveAndFlush(event);
         } catch (DataIntegrityViolationException e) {

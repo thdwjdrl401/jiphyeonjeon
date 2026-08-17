@@ -21,6 +21,10 @@ import java.util.UUID;
  *                     로컬 인덱스가 절반 이하로 작다. <b>다른 목적의 dedupe 등록표와는 별개다.</b>
  * @param recipientIds 이 조각에서 <b>새로 알림을 받은</b> 사람들. 진행 표 anti-join의 모집합이다.
  * @param url          눌렀을 때 열 곳. 지금은 항상 {@code null}이다(분리 전 푸시도 null로 보냈다).
+ * @param attempt      이 명령이 <b>몇 번째 시도</b>인가(ADR-0128). 푸시 서비스가 429로 막아
+ *                     제한 시간 안에 못 보낸 사람들은 이 값을 하나 올린 새 명령으로 다시 실린다.
+ *                     끝없이 도는 것을 막는 유일한 장치이므로 반드시 실어 나른다. 이 필드가
+ *                     생기기 전에 발행된 메시지는 값이 없으므로 {@link #attemptOrFirst()}로 읽는다.
  */
 public record PushDeliveryCommand(
         String type,
@@ -28,8 +32,25 @@ public record PushDeliveryCommand(
         List<UUID> recipientIds,
         String title,
         String body,
-        String url
+        String url,
+        Integer attempt
 ) {
+
+    /**
+     * 큐에 이미 떠 있던 옛 메시지에는 {@code attempt}가 없다. 없으면 첫 번째다.
+     *
+     * <p>{@code int}가 아니라 {@code Integer}인 이유가 이것이다 — {@code int}면 없는 값이 0이 되어
+     * "0번째 시도"라는 없는 상태가 생기고, 상한 비교가 한 번 더 도는 쪽으로 조용히 틀어진다.
+     */
+    public int attemptOrFirst() {
+        return attempt == null || attempt < 1 ? 1 : attempt;
+    }
+
+    /** 같은 사건·같은 사람들을 다음 번째 시도로 다시 싣는다. 문구는 그대로 간다. */
+    public PushDeliveryCommand nextAttempt(List<UUID> stillUnfinished) {
+        return new PushDeliveryCommand(type, eventHash, List.copyOf(stillUnfinished),
+                title, body, url, attemptOrFirst() + 1);
+    }
 
     /**
      * dedupe 키 문자열 → 사건 해시. {@link UUID#nameUUIDFromBytes}가 곧 md5(uuid v3)라서 따로
