@@ -342,6 +342,27 @@ public class NotificationFanoutWorker {
                 dedupePrefix(command),
                 command.previousStartsAt(), command.nextStartsAt());
 
+        /*
+         * **다음 조각을 먼저 발행한다**(ADR-0131). 다음 커서는 방금 돌아온 조각이 이미 알고 있고,
+         * 이 아래의 일(수신자 5,000명을 JSON으로 만들어 아웃박스에 넣기, STOMP 방송)은 그것과
+         * 무관하다. 뒤에 두면 그 시간 동안 이 갈래의 DB가 논다 — 실측으로 조각당 DB 122ms 뒤에
+         * 앱 82ms가 붙어 벽시계의 40%가 거기였다.
+         *
+         * 먼저 내면 다른 소비자가 다음 조각의 DB 일을 곧바로 시작하고, 이 스레드는 그 사이에
+         * 푸시 명령을 만든다. 그래서 **소비자 수가 갈래 수보다 많아야** 효과가 있다
+         * (notification.fanout.chains 와 rabbitmq listener concurrency).
+         *
+         * 커밋 의미론은 바뀌지 않는다 — 이 발행은 전에도 커밋 전이었다. 다음 조각은 커서가
+         * `> lastUserId`라 이 조각의 행이 보이는지와 무관하다.
+         *
+         * 부수 효과가 하나 있다. 아래에서 무엇이 실패해도 다음 조각은 이미 나갔으므로 **체인이
+         * 거기서 끊기지 않는다.** 전에는 푸시 명령 적재가 실패하면 그 뒤 전원이 조용히 사라졌다.
+         */
+        if (slice.mayHaveMore(limit)) {
+            rabbitTemplate.convertAndSend(NotificationMessagingConfig.FANOUT_QUEUE,
+                    JSON.writeValueAsString(command.nextSlice(slice.lastUserId())));
+        }
+
         // 문구는 조각 전체가 같다 — 넓은 팬아웃은 사람 이름을 넣지 않는다.
         broadcaster.announceAll(slice.insertedRecipients(), command.type(), title, message);
         /*
@@ -354,11 +375,6 @@ public class NotificationFanoutWorker {
         log.info("넓은 팬아웃 조각 type={} curriculum={} 커서={} 훑음={} 삽입={}",
                 command.type(), command.curriculumId(), command.afterUserId(),
                 slice.scanned(), slice.inserted());
-
-        if (slice.mayHaveMore(limit)) {
-            rabbitTemplate.convertAndSend(NotificationMessagingConfig.FANOUT_QUEUE,
-                    JSON.writeValueAsString(command.nextSlice(slice.lastUserId())));
-        }
     }
 
     // ---- 푸시 명령 적재(ADR-0124) ----

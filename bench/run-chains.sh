@@ -28,6 +28,10 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BENCH="$REPO_ROOT/bench"
 CHAIN_COUNTS="${CHAIN_COUNTS:-1 2 3 4 6 8}"
+# 소비자 스레드 수. 기본은 갈래 수와 같지만, **다음 조각을 먼저 발행하는**(ADR-0131) 구조에서는
+# 갈래보다 많아야 효과가 난다 — 앞 조각의 앱 일이 끝나기 전에 다음 조각의 DB 일을 시작할
+# 스레드가 있어야 한다. 비워 두면 갈래 수와 같다.
+CONCURRENCY="${CONCURRENCY:-}"
 SLICE="${SLICE:-5000}"
 OUT="${OUT:-$BENCH/results/chains-$(date +%Y%m%dT%H%M%S)}"
 STALL_SECONDS="${STALL_SECONDS:-150}"
@@ -69,7 +73,7 @@ printf 'chains,elapsed_s,throughput_per_s,slices,db_ms_per_slice,offdb_ms_per_sl
 
 for CHAINS in $CHAIN_COUNTS; do
   echo
-  echo "════ 체인 ${CHAINS}개 (소비자 스레드 ${CHAINS}개, 앱 프로세스 1개) ════"
+  echo "════ 갈래 ${CHAINS}개 · 소비자 ${CONCURRENCY:-$CHAINS}개 (앱 프로세스 1개) ════"
   compose rm -sf app app2 app3 > /dev/null 2>&1 || true
 
   pg -c "TRUNCATE core.notification, core.notification_dedupe, core.notification_content,
@@ -83,7 +87,7 @@ for CHAINS in $CHAIN_COUNTS; do
   PG_CPUSET="$PG_CPUSET_V" INFRA_CPUSET="$INFRA_CPUSET_V" APP_CPUSET="$APP_CPUSET_V" \
   APP_HEAP="${APP_HEAP:-1g}" APP_MEM="${APP_MEM:-1600m}" \
   FANOUT_ENABLED=true PUSH_ENABLED=false \
-  FANOUT_CONCURRENCY="$CHAINS" \
+  FANOUT_CONCURRENCY="${CONCURRENCY:-$CHAINS}" \
     compose up -d --build --wait --wait-timeout 300 app > /dev/null 2>&1 || fail "앱 기동 실패"
 
   pg -c "SELECT pg_stat_statements_reset();" > /dev/null 2>&1 || true
