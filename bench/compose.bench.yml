@@ -1,0 +1,234 @@
+# 전체 경로 측정 하네스.
+#
+# 사건 발생(자료 게시 API 1회) → 마지막 기기 발송까지 실제로 몇 초인지 잰다.
+# 지금까지의 측정은 부분의 하한이었다 — 암호화 CPU만, 팬아웃 DB만. 여기서 처음으로
+# 앱·브로커·HTTP가 다 붙은 값이 나온다.
+#
+# ── cpuset 배정 (lazy: i7-6700HQ 4물리코어 · 형제 쌍 (0,4)(1,5)(2,6)(3,7)) ──
+#
+# 배분은 **구간마다 다르다**(bench/run-phases.sh가 정한다). 팬아웃은 DB가, 발송은
+# 앱 CPU가 병목이라 한 배분으로 둘 다 재면 어느 쪽도 그 구간의 실력이 아니다.
+#
+#   구간 A 팬아웃   pg 2물리(0,4,1,5) · app 2물리(2,6,3,7) · infra는 pg와 공유
+#   구간 B 발송     pg 1물리(0,4) · infra 1물리(1,5) · app 2물리(2,6,3,7)
+#
+# **앱은 두 구간 모두 물리 2코어**로 고정한다. 그래야 "앱 2코어짜리 머신 한 대"라는
+# 단위가 서고, 거기서 스케일아웃을 역산할 수 있다.
+#
+# **cpuset과 쿼터를 같이 쓴다.** cpuset은 논리 CPU 단위라 0.5코어를 못 준다. 반대로
+# 쿼터(cpus:)만 쓰면 CFS가 100ms 주기마다 예산을 끊어 지연 분포에 계단이 생기고,
+# 컨테이너가 아무 코어에나 올라가 형제 스레드를 다른 역할과 섞는다.
+#
+#   cpuset  물리 위치를 고정한다 — 역할끼리 형제 쌍을 안 나눠 갖게
+#   cpus    같은 cpuset 위의 컨테이너끼리 몫을 자른다 — 서로 훔칠 수 없게
+#
+# 기본값 8은 사실상 무제한이라 쿼터를 안 쓰는 실행은 예전과 같이 동작한다. 쿼터를
+# 걸면 스로틀링이 실제로 얼마나 걸렸는지 cgroup의 nr_throttled로 확인한다 —
+# 계단이 생겼는지를 짐작하지 않고 읽는다(run-probe.sh가 출력한다).
+#
+# ── 통제 ──
+#   · 메모리 상한 + 스왑 비활성(memswap = mem)
+#   · Postgres checkpoint_timeout 1h — 측정 구간에 체크포인트가 안 떨어지게
+#   · JVM 힙 고정 + AlwaysPreTouch — 페이지 폴트와 힙 확장을 측정 밖으로
+#   · 목 푸시 지연·응답분포를 주입 파라미터로 — 우연히 정해지지 않게
+#
+# 사용법: bench/run-e2e.sh (직접 up 하지 말 것 — 초기화·트리거·판정이 스크립트에 있다)
+
+name: liveclass-bench
+
+x-appbase: &appbase
+    build: ../backend
+    # **세 인스턴스가 같은 태그를 가리켜야 한다.** build만 공유하면 compose가 서비스마다
+    # 별도 이미지(liveclass-bench-app / -app2 / -app3)를 만든다. 한 번 만들어진 이미지는
+    # --build 없이는 재사용되므로, app만 옛 코드로 남고 app2·app3만 새로 빌드되는 일이
+    # 실제로 일어났다 — app의 푸시 리스너가 안 꺼지고 체인 경계(untilUserId)도 안 먹어
+    # 인스턴스 측정 전부를 버렸다. 태그를 하나로 묶으면 세 서비스가 한 산출물을 공유한다.
+    image: liveclass-bench-app:latest
+    mem_limit: ${APP_MEM:-3g}
+    memswap_limit: ${APP_MEM:-3g}
+    environment:
+      # 힙을 고정한다. 컨테이너 인지 ergonomics에 맡기면 mem_limit을 바꿀 때마다
+      # 힙이 달라져 비교가 깨진다.
+      #
+      # JFR_OPTS로 비행기록을 켠다(기본 꺼짐 — 켜면 샘플링 오버헤드가 붙어 처리량
+      # 비교값이 오염된다). 앱 CPU가 어디로 가는지는 이걸로만 알 수 있다.
+      JAVA_TOOL_OPTIONS: >-
+        -Xms${APP_HEAP:-2g} -Xmx${APP_HEAP:-2g} -XX:+AlwaysPreTouch -XX:+UseG1GC
+        -XX:+PerfDisableSharedMem -Xlog:gc:file=/tmp/gc.log ${JFR_OPTS:-}
+
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/liveclass
+      SPRING_DATASOURCE_USERNAME: liveclass
+      SPRING_DATASOURCE_PASSWORD: bench
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_USERNAME: liveclass
+      SPRING_RABBITMQ_PASSWORD: bench
+
+      # 앱이 마이그레이션을 돌린다. 운영과 같은 방식이고(ADR-0123: core는 백엔드 부팅이
+      # 곧 마이그레이션), 껐더니 스키마가 없어 JPA 검증이 기동을 막았다
+      # (missing table [core.annotation_highlight]).
+      SPRING_FLYWAY_ENABLED: "true"
+
+      # VAPID. 없으면 WebPushSender가 조용히 꺼져 발송이 0건이 된다.
+      NOTIFICATION_WEB_PUSH_PUBLIC_KEY: ${VAPID_PUBLIC:-BEh8bDuiDnGNgAp2DlYutECGuB6Csa0ueVPka3bx0qgoyXf3fd-q-946NrJehrAnYY6mkj42cPTk61Ex--2rDZo}
+      NOTIFICATION_WEB_PUSH_PRIVATE_KEY: ${VAPID_PRIVATE:-Gc2qdwPEBQg12tfqmUWna7LmlUxXSGEbehmmzUc-LZ4}
+      NOTIFICATION_WEB_PUSH_SUBJECT: mailto:bench@liveclass.test
+
+      # ── 여기가 실험 손잡이다. 삭제법(ablation)이 이 값들을 바꾼다 ──
+      NOTIFICATION_WEB_PUSH_MAX_IN_FLIGHT: ${PUSH_MAX_IN_FLIGHT:-800}
+      NOTIFICATION_WEB_PUSH_STREAMS_PER_CONNECTION: ${PUSH_STREAMS:-100}
+      NOTIFICATION_WEB_PUSH_CRYPTO_THREADS: ${PUSH_CRYPTO_THREADS:-0}
+      NOTIFICATION_WEB_PUSH_BATCH_TIMEOUT_MS: ${PUSH_BATCH_TIMEOUT_MS:-60000}
+      NOTIFICATION_PUSH_LISTENER_CONCURRENCY: ${PUSH_CONCURRENCY:-2}
+      RABBIT_LISTENER_CONCURRENCY: ${FANOUT_CONCURRENCY:-2}
+      # 한 소비자가 미리 쥐는 메시지 수. 기본 250은 조각을 키웠을 때 위험하다 — 조각
+      # 5,000명이면 푸시 명령이 201건뿐이라 먼저 붙은 소비자가 전부 가져가고 나머지
+      # 노드가 논다. 명령 하나가 수천 건 발송(수 초)이라 미리 쥘 이유도 없다.
+      SPRING_RABBITMQ_LISTENER_SIMPLE_PREFETCH: ${PREFETCH:-250}
+      # 구간을 가르는 손잡이. 기본은 둘 다 켜짐(운영과 같다).
+      NOTIFICATION_FANOUT_LISTENER_ENABLED: ${FANOUT_ENABLED:-true}
+      NOTIFICATION_PUSH_LISTENER_ENABLED: ${PUSH_ENABLED:-true}
+      OUTBOX_RELAY_FIXED_DELAY_MS: ${RELAY_DELAY_MS:-5000}
+      OUTBOX_RELAY_INITIAL_DELAY_MS: "3000"
+
+      # 측정에 필요 없는 주기 작업을 멀리 밀어 둔다. 측정 구간에 끼어들면 잡음이 된다.
+      NOTIFICATION_PARTITION_MAINTENANCE_CRON: "0 0 4 1 1 *"
+      NOTIFICATION_PUSH_PARTITION_INITIAL_DELAY_MS: "5000"
+      NOTIFICATION_PUSH_PARTITION_MAINTENANCE_MS: "86400000"
+
+      # 관측. 액추에이터로 힙·GC·큐를 노출한다.
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: health,metrics,prometheus
+      SPRING_JPA_PROPERTIES_HIBERNATE_GENERATE_STATISTICS: "true"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+      mock-push: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/actuator/health | grep -q UP || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    cpuset: "${PG_CPUSET:-0,4,1,5}"
+    cpus: ${PG_CPUS:-8}
+    # Docker 기본 /dev/shm은 64MB다. Postgres의 동적 공유 메모리(병렬 질의·병렬 인덱스
+    # VACUUM)가 이걸 쓰는데, 인덱스 3벌짜리 구독 표를 VACUUM하자 69MB를 요구해
+    # "could not resize shared memory segment ... No space left on device"로 죽었다.
+    shm_size: 1g
+    mem_limit: 1500m
+    memswap_limit: 1500m
+    environment:
+      POSTGRES_USER: liveclass
+      POSTGRES_PASSWORD: bench
+      POSTGRES_DB: liveclass
+    # -c 와 값은 **별도 인자**여야 한다. -c=key=value 로 주면 파라미터 이름이 빈 문자열이
+    # 되어 "unrecognized configuration parameter" 로 기동이 실패한다.
+    command:
+      ["postgres",
+       "-c", "shared_buffers=384MB",
+       "-c", "work_mem=64MB",
+       "-c", "maintenance_work_mem=384MB",
+       # autovacuum을 켠다. 껐더니 발송 25만 건이 구독 행 25만 개를 갱신하면서
+       # 죽은 튜플 10만 개가 쌓여 테이블이 466→488MB로 부풀고 처리율이 시간에 따라
+       # 떨어졌다(실측). 측정 중 끼어드는 것보다 부풀어 가는 것이 더 나쁘고,
+       # 운영도 켜져 있다.
+       "-c", "autovacuum=on",
+       "-c", "checkpoint_timeout=1h",
+       "-c", "max_wal_size=16GB",
+       "-c", "max_connections=100",
+       "-c", "log_min_duration_statement=2000",
+       # 어느 문장이 DB 시간을 얼마나 먹는지 직접 읽는다. cpuset을 바꿔 가며 결과가
+       # 달라지는 걸로 병목을 짐작하던 것을 대신한다.
+       "-c", "shared_preload_libraries=pg_stat_statements",
+       "-c", "pg_stat_statements.max=1000",
+       "-c", "pg_stat_statements.track=all"]
+    ports: ["127.0.0.1:15499:5432"]
+    # 명명 볼륨. 시드(100만 행, 수 분)가 실행 간에 남아야 삭제법 반복이 현실적이다.
+    # 다시 시드하려면 docker volume rm liveclass-bench_pgdata
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U liveclass -d liveclass"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    cpuset: "${INFRA_CPUSET:-1,5}"
+    cpus: ${INFRA_CPUS:-8}
+    mem_limit: 256m
+    memswap_limit: 256m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    cpuset: "${INFRA_CPUSET:-1,5}"
+    cpus: ${INFRA_CPUS:-8}
+    mem_limit: 512m
+    memswap_limit: 512m
+    environment:
+      RABBITMQ_DEFAULT_USER: liveclass
+      RABBITMQ_DEFAULT_PASS: bench
+    ports: ["127.0.0.1:15672:15672"]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+
+  # 발송 대역. h2c를 말한다 — 1.1로 떨어지면 클라이언트 동시성이 800에서 8로 깎여
+  # 우리 시스템이 아니라 이 서버를 재게 된다.
+  mock-push:
+    build: ./mock-push
+    cpuset: "${INFRA_CPUSET:-1,5}"
+    cpus: ${INFRA_CPUS:-8}
+    mem_limit: 256m
+    memswap_limit: 256m
+    command:
+      - -addr=:8080
+      - -delay=${MOCK_DELAY:-50ms}
+      - -jitter=${MOCK_JITTER:-10ms}
+      - -rate-429=${MOCK_RATE_429:-0}
+      - -rate-5xx=${MOCK_RATE_5XX:-0}
+      - -rate-410=${MOCK_RATE_410:-0}
+    ports: ["127.0.0.1:18080:8080"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+# 앱 인스턴스는 셋까지 띄운다. 팬아웃 체인도 발송도 competing consumer라 프로세스를
+# 나누면 수평 확장이 되는데, --scale 은 복제본마다 다른 cpuset을 줄 수 없어 서비스를
+# 따로 둔다. 정의는 앵커로 공유하고 cpuset만 다르다.
+#
+# **힙은 한 비교 안에서 고정해야 한다.** 인스턴스를 늘리면 한 대당 힙을 줄여야 7GB에
+# 들어가므로, 1대 기준선도 같은 힙으로 재야 비교가 성립한다.
+  app:
+    <<: *appbase
+    cpuset: "${APP_CPUSET:-2,6,3,7}"
+    cpus: ${APP_CPUS:-8}
+    ports: ["127.0.0.1:18081:8080"]
+
+  app2:
+    <<: *appbase
+    cpuset: "${APP2_CPUSET:-3,7}"
+    cpus: ${APP_CPUS:-8}
+    profiles: ["scale2", "scale3"]
+
+  app3:
+    <<: *appbase
+    cpuset: "${APP3_CPUSET:-1,5}"
+    cpus: ${APP_CPUS:-8}
+    profiles: ["scale3"]
+
+volumes:
+  pgdata:
