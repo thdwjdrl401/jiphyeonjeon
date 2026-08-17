@@ -50,7 +50,7 @@
 
 ## 5. 협업 규칙 (하네스가 강제)
 - **계약 우선**: FE↔BE, Spring↔AI 인터페이스는 [CONTRACT.md](CONTRACT.md)에서 먼저 합의 → 병렬 개발.
-- **브랜치 + MR + CODEOWNERS + [하네스 체크리스트](../.gitlab/merge_request_templates/merge_request_template.md)**. master는 보호 브랜치(직접 커밋 불가).
+- **브랜치 + PR + CODEOWNERS + [하네스 체크리스트](../.github/PULL_REQUEST_TEMPLATE.md)**. master는 보호 브랜치(직접 커밋 불가).
 - **결정은 ADR**([decisions/](decisions/)), 문서는 단일 원본(SSOT). 커밋은 한글 `<타입>: <제목>`.
 - 도구는 각자(Claude/Cursor/Codex/Gemini) — 규칙 정본은 [AGENTS.md](../AGENTS.md), 도구별 어댑터 연결됨.
 

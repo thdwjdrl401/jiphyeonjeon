@@ -14,7 +14,7 @@
 | **기억(근거)** | 기술 결정·판단의 이유 | [decisions/](../decisions/) (ADR) |
 | **강제(자물쇠)** | 규칙을 기계가 검증 | [ENFORCEMENT.md](ENFORCEMENT.md) (git 훅·린트·테스트) |
 
-핵심 원칙: **강제는 특정 AI 도구가 아니라 git 훅·스크립트·MR에 둔다.** 그래야 누가 무슨 도구로 짰든 안전망이 유지됩니다.
+핵심 원칙: **강제는 특정 AI 도구가 아니라 git 훅·스크립트·PR에 둔다.** 그래야 누가 무슨 도구로 짰든 안전망이 유지됩니다.
 
 ## 파일 지도 (무엇이 어디에)
 
@@ -30,7 +30,7 @@
 
 ## 작업 흐름 (프로세스)
 
-기능 하나를 착수해서 머지까지 가는 과정입니다. **①판단 → ②구현 → ③기억 → ④강제 → ⑤완료게이트 → ⑥MR**. (아래 다이어그램은 GitLab에서 그림으로 렌더링됩니다.)
+기능 하나를 착수해서 머지까지 가는 과정입니다. **①판단 → ②구현 → ③기억 → ④강제 → ⑤완료게이트 → ⑥PR**. (아래 다이어그램은 GitHub에서 그림으로 렌더링됩니다.)
 
 ```mermaid
 flowchart TD
@@ -45,7 +45,7 @@ flowchart TD
     G --> H["④ 강제 · ENFORCEMENT.md<br/>계약 걸린 것은 자물쇠 켜고 통과<br/>린트 · 계약테스트 · 링크검사"]
     H --> I{"⑤ 완료 게이트 · AGENTS.md §4<br/>테스트 증거 · ADR번호 · 가짜완료 없음"}
     I -->|"미충족"| F
-    I -->|"충족"| J["⑥ MR · 하네스 체크리스트<br/>+ CODEOWNERS 승인 → 머지 ✅"]
+    I -->|"충족"| J["⑥ PR · 하네스 체크리스트<br/>+ CODEOWNERS 승인 → 머지 ✅"]
 ```
 
 <details>
@@ -74,11 +74,11 @@ flowchart TD
    ⑤ 완료 게이트  AGENTS.md §4 ──미충족──▶ ② 구현으로
                   │ 충족
                   ▼
-   ⑥ MR  체크리스트 + CODEOWNERS 승인 → 머지 ✅
+   ⑥ PR  체크리스트 + CODEOWNERS 승인 → 머지 ✅
 ```
 </details>
 
-> 각 단계의 정본: ① [POLICY.md](POLICY.md) · ③ [decisions/](../decisions/) · ④ [ENFORCEMENT.md](ENFORCEMENT.md) · ⑤ [AGENTS.md §4](../../AGENTS.md#4-완료-게이트-기능-완료-선언-전-필수) · ⑥ [MR 템플릿](../../.gitlab/merge_request_templates/merge_request_template.md)
+> 각 단계의 정본: ① [POLICY.md](POLICY.md) · ③ [decisions/](../decisions/) · ④ [ENFORCEMENT.md](ENFORCEMENT.md) · ⑤ [AGENTS.md §4](../../AGENTS.md#4-완료-게이트-기능-완료-선언-전-필수) · ⑥ [PR 템플릿](../../.github/PULL_REQUEST_TEMPLATE.md)
 
 ## 내 도구 연결하기
 
