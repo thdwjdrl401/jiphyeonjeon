@@ -32,9 +32,14 @@ SLICE="${SLICE:-5000}"
 OUT="${OUT:-$BENCH/results/chains-$(date +%Y%m%dT%H%M%S)}"
 STALL_SECONDS="${STALL_SECONDS:-150}"
 
-PG_CPUSET_V="0,4,1,5"
-INFRA_CPUSET_V="3,7"
-APP_CPUSET_V="2,6"
+# 배분은 밖에서 바꾼다. 팬아웃에서 앱은 물리 코어의 1/4밖에 안 쓰므로(실측 최대 51%/200%)
+# 앱에 1코어를 통째로 주는 것은 낭비다 — 남는 몫을 DB로 옮겨 보는 것이 이 손잡이의 용도다.
+#
+#   기본     pg 2코어 · 브로커 1코어 · 앱 1코어
+#   DB 우선  PG_CPUSET=0,4,1,5,2,6 INFRA_CPUSET=3,7 APP_CPUSET=3,7   (앱+브로커가 1코어 공유)
+PG_CPUSET_V="${PG_CPUSET:-0,4,1,5}"
+INFRA_CPUSET_V="${INFRA_CPUSET:-3,7}"
+APP_CPUSET_V="${APP_CPUSET:-2,6}"
 
 fail() { echo "실패: $*" >&2; exit 1; }
 mkdir -p "$OUT"
