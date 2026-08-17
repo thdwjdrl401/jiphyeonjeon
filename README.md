@@ -72,7 +72,7 @@ npm start              # WSL: npm start:wsl
 
 ## 5. 기여 규칙
 
-- **master는 보호 브랜치** — 브랜치 + MR + [하네스 체크리스트](.gitlab/merge_request_templates/merge_request_template.md) + CODEOWNERS.
+- **master는 보호 브랜치** — 브랜치 + PR + [하네스 체크리스트](.github/PULL_REQUEST_TEMPLATE.md) + CODEOWNERS.
 - **계약 우선**: 인터페이스는 [CONTRACT.md](docs/CONTRACT.md)에서 먼저 합의 후 병렬 개발.
 - **기술 결정은 ADR**([docs/decisions/](docs/decisions/)), 문서는 단일 원본(SSOT).
 - 커밋은 한글 `<타입>: <제목>`. 상세는 [AGENTS.md](AGENTS.md).

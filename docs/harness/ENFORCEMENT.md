@@ -54,9 +54,9 @@ echo "npx lint-staged" > .husky/pre-commit
 ```
 지금은 주석 예시만. 팀 합의 후 활성화하고 근거는 [decisions/](../decisions/)에 ADR.
 
-## E. CI (GitLab, 후속·2차 방어선)
+## E. CI (GitHub Actions, 후속·2차 방어선)
 
-로컬 훅을 우회한 경우를 위한 2차 방어선. `.gitlab-ci.yml`에 `frontend lint` + `backend test` 잡 추가. 로컬 훅(B)이 1차, CI가 2차입니다.
+로컬 훅을 우회한 경우를 위한 2차 방어선. [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)이 프런트 lint·타입체크·vitest와 백엔드 gradle test, 그리고 번호 충돌 검사(`대상 브랜치와 대조`)를 돌립니다. 로컬 훅(B)이 1차, CI가 2차입니다.
 
 ## F. 도구별 어댑터 (설치 완료 — 추가 작업 없음)
 
@@ -104,7 +104,7 @@ fi
 
 ### G-3. 리뷰 게이트 (이미 활성)
 - 공유 문서 변경은 [CODEOWNERS](../../CODEOWNERS)로 리드 승인 필수.
-- [MR 체크리스트](../../.gitlab/merge_request_templates/merge_request_template.md)의 계약·ADR·문서 항목.
+- [PR 체크리스트](../../.github/PULL_REQUEST_TEMPLATE.md)의 계약·ADR·문서 항목.
 
 ## 활성화 체크리스트
 

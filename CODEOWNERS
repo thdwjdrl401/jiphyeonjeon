@@ -1,8 +1,9 @@
 # CODEOWNERS — 공유 하네스·계약 파일 변경 시 리드 승인 필요
 #
 # 📍 하네스 개요: docs/harness/README.md
-# GitLab: 이 파일의 오너로 지정된 사용자의 승인이 있어야 머지 가능(보호 브랜치 + Code Owner approval 설정 시).
-# 사용법: 아래 @lead 를 실제 팀 리드의 GitLab 사용자명(또는 그룹)으로 교체하세요.
+# GitHub: 이 파일의 오너로 지정된 사용자의 승인이 있어야 머지 가능
+#   (브랜치 보호 규칙에서 "Require review from Code Owners"를 켰을 때).
+# 사용법: 아래 @lead 를 실제 팀 리드의 GitHub 사용자명(또는 @org/team)으로 교체하세요.
 
 # 정본 규칙·공유 계약 — 무분별 수정 방지 (합의로만 변경)
 /AGENTS.md              @lead
@@ -13,7 +14,7 @@
 
 # 하네스 강제 레이어
 /CODEOWNERS             @lead
-/.gitlab/               @lead
+/.github/               @lead
 
 # 기능별 파일은 각 오너가 단독 관할(병렬 작업 충돌 방지) — 역할 분담 확정 후 채우기
 # /backend/   @backend-owner

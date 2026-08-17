@@ -77,7 +77,7 @@ Codex는 별도 명령 어댑터 없이 위 문서 흐름을 기준으로 판단
 
 ---
 
-## 5. 브랜치·커밋·MR 규칙
+## 5. 브랜치·커밋·PR 규칙
 
 ### 브랜치 이름
 
@@ -89,10 +89,11 @@ Codex는 별도 명령 어댑터 없이 위 문서 흐름을 기준으로 판단
 - **description**: 영문 kebab-case로 작성한다.
 - 하나의 브랜치는 하나의 영역만 담당한다.
 
-### 커밋·MR
+### 커밋·PR
 
 - **커밋 메시지**: 한글, `<타입>: <제목>` (타입: feat/fix/refactor/style/docs/chore/test). 상세는 [.gitcommit_template.txt](.gitcommit_template.txt).
-- **MR**: [MR 템플릿](.gitlab/merge_request_templates/merge_request_template.md)의 하네스 체크리스트를 채운다.
+- **PR**: [PR 템플릿](.github/PULL_REQUEST_TEMPLATE.md)의 하네스 체크리스트를 채운다. GitHub로 옮긴 뒤에는
+  PR 본문이 이 템플릿으로 자동으로 채워진다.
 - 공유 계약 파일(`AGENTS.md`, `docs/CONTRACT.md`)은 [CODEOWNERS](CODEOWNERS)에 따라 리드 승인이 필요하다.
 
 ### 번호를 새로 집을 때 (마이그레이션·ADR)
@@ -101,20 +102,23 @@ Codex는 별도 명령 어댑터 없이 위 문서 흐름을 기준으로 판단
 기동을 거부해 **운영이 내려간다**(2026-07-31·2026-08-03 실제 발생). ADR은 기동을 막지는 않지만
 `ADR-NNNN` 참조가 어디를 가리키는지 알 수 없게 만든다.
 
-- 새 번호를 집기 전에 **`master`와 열린 MR을 함께** 확인한다. 로컬 파일 목록만 보면 놓친다.
+- 새 번호를 집기 전에 **`master`와 열린 PR을 함께** 확인한다. 로컬 파일 목록만 보면 놓친다
+  (`gh pr list`, 또는 `git ls-remote --heads origin`으로 열린 브랜치를 훑는다).
 - CI `check-collisions`가 대상 브랜치와 대조해 막는다. 로컬 확인은 `bash scripts/check-version-collisions.sh`.
 - 충돌이 났으면 **이미 적용·머지된 쪽은 그대로 두고 내 번호만** 올린다. 운영에 적용된 마이그레이션
   번호를 바꾸면 `flyway_schema_history`와 어긋나 더 크게 깨진다.
 - ADR 번호는 **저자 폴더별**이라 폴더가 다르면 같은 번호여도 충돌이 아니다.
-- 검사가 통과한 뒤 머지 전에 `master`가 움직이면 검사는 그 변화를 보지 못한다. 그래서 프로젝트
-  Merge method가 **반선형 이력**이며, `master`가 앞서 있으면 **rebase 후 재검사**를 거쳐야 머지된다
-  ([ADR-0069](docs/decisions/songjeongki/0069-number-collisions-close-the-merge-window.md)).
+- 검사가 통과한 뒤 머지 전에 `master`가 움직이면 검사는 그 변화를 보지 못한다. 그래서 `master`가
+  앞서 있으면 **rebase 후 재검사**를 거쳐야 머지된다 — GitHub에서는 브랜치 보호 규칙의
+  **Require branches to be up to date before merging**이 그 자물쇠다(GitLab 시절에는 Merge method
+  "반선형 이력"이 같은 일을 했다). 근거는
+  [ADR-0069](docs/decisions/songjeongki/0069-number-collisions-close-the-merge-window.md).
 
 ---
 
 ## 6. 강제(자물쇠)는 도구 중립 레이어에 있다
 
-팀원마다 AI 도구가 다르므로, 규칙 강제는 특정 도구가 아니라 **git 훅·lint/test 스크립트·MR 체크리스트**에 둔다. AI 도구 설정(`.claude/`·`.cursor/`·`.gemini/`·`CLAUDE.md`·`GEMINI.md`)은 정본을 가리키는 **얇은 어댑터**이며, 없어도 안전망이 유지된다. 활성화·주의사항은 [docs/harness/ENFORCEMENT.md](docs/harness/ENFORCEMENT.md).
+팀원마다 AI 도구가 다르므로, 규칙 강제는 특정 도구가 아니라 **git 훅·lint/test 스크립트·PR 체크리스트**에 둔다. AI 도구 설정(`.claude/`·`.cursor/`·`.gemini/`·`CLAUDE.md`·`GEMINI.md`)은 정본을 가리키는 **얇은 어댑터**이며, 없어도 안전망이 유지된다. 활성화·주의사항은 [docs/harness/ENFORCEMENT.md](docs/harness/ENFORCEMENT.md).
 
 ## 7. 문서 최신화 규칙 (표류 방지)
 
