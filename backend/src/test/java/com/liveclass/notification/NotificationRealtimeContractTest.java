@@ -181,7 +181,7 @@ class NotificationRealtimeContractTest {
 
     private Slice insertSlice() {
         return fanoutRepository.insertForActiveStudents(
-                curriculumId, null, 100,
+                curriculumId, null, null, 100,
                 NotificationTypes.MATERIAL_PUBLISHED, NotificationStatus.INFO, NotificationStatus.NORMAL,
                 "새 강의 자료", "«테스트»에 새 자료가 올라왔습니다.",
                 "{\"curriculumId\":\"" + curriculumId + "\"}",

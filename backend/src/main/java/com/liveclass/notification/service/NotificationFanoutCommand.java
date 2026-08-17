@@ -39,6 +39,14 @@ public record NotificationFanoutCommand(
         String subjectName,
         OffsetDateTime occurredAt,
         UUID afterUserId,
+        /**
+         * 이 체인이 맡은 구간의 <b>상한</b>(포함). {@code null}이면 끝까지 — 병렬화 이전과 같다.
+         *
+         * <p>커서 하나로 끝까지 훑으면 조각 체인이 직렬이 된다 — 조각 N을 커밋해야 N+1이
+         * 발행되므로, 워커를 늘려도 한 사건의 팬아웃은 빨라지지 않는다(실측 100만 행 72.6초).
+         * user_id 공간을 N등분해 각 체인에 상한을 주면 N개가 서로를 기다리지 않는다.
+         */
+        UUID untilUserId,
         Integer sliceLimit,
         UUID liveSessionId,
         UUID videoAssetId,
@@ -55,7 +63,7 @@ public record NotificationFanoutCommand(
                                                    String curriculumTitle, UUID instructorId,
                                                    UUID studentId, OffsetDateTime occurredAt) {
         return new NotificationFanoutCommand(type, enrollmentId, curriculumId, curriculumTitle,
-                instructorId, studentId, null, null, null, occurredAt, null, null, null, null, null, null, null);
+                instructorId, studentId, null, null, null, occurredAt, null, null, null, null, null, null, null, null);
     }
 
     /** 넓은 팬아웃의 <b>첫</b> 조각. 커서는 비어 있고 워커가 이어 간다. */
@@ -66,7 +74,7 @@ public record NotificationFanoutCommand(
         return new NotificationFanoutCommand(
                 com.liveclass.notification.api.NotificationTypes.MATERIAL_PUBLISHED,
                 null, curriculumId, curriculumTitle, null, null,
-                lessonId, materialId, fileName, occurredAt, null, sliceLimit, null, null, null, null, null);
+                lessonId, materialId, fileName, occurredAt, null, null, sliceLimit, null, null, null, null, null);
     }
 
     /**
@@ -87,7 +95,7 @@ public record NotificationFanoutCommand(
                                                      OffsetDateTime nextStartsAt, OffsetDateTime occurredAt,
                                                      int sliceLimit, Integer leadMinutes) {
         return new NotificationFanoutCommand(type, null, curriculumId, null, null, null,
-                lessonId, null, null, occurredAt, null, sliceLimit,
+                lessonId, null, null, occurredAt, null, null, sliceLimit,
                 liveSessionId, null, leadMinutes, previousStartsAt, nextStartsAt);
     }
 
@@ -99,7 +107,7 @@ public record NotificationFanoutCommand(
                                                   UUID liveSessionId, OffsetDateTime occurredAt,
                                                   int sliceLimit) {
         return new NotificationFanoutCommand(type, null, null, null, null, null,
-                lessonId, null, null, occurredAt, null, sliceLimit,
+                lessonId, null, null, occurredAt, null, null, sliceLimit,
                 liveSessionId, videoAssetId, null, null, null);
     }
 
@@ -107,7 +115,7 @@ public record NotificationFanoutCommand(
     NotificationFanoutCommand withSession(UUID sessionCurriculumId, UUID sessionInstructorId) {
         return new NotificationFanoutCommand(type, enrollmentId, sessionCurriculumId, curriculumTitle,
                 sessionInstructorId, studentId, lessonId, materialId, subjectName, occurredAt,
-                afterUserId, sliceLimit, liveSessionId, videoAssetId, leadMinutes,
+                afterUserId, untilUserId, sliceLimit, liveSessionId, videoAssetId, leadMinutes,
                 previousStartsAt, nextStartsAt);
     }
 
@@ -115,6 +123,7 @@ public record NotificationFanoutCommand(
     NotificationFanoutCommand nextSlice(UUID lastUserId) {
         return new NotificationFanoutCommand(type, enrollmentId, curriculumId, curriculumTitle,
                 instructorId, studentId, lessonId, materialId, subjectName, occurredAt,
-                lastUserId, sliceLimit, liveSessionId, videoAssetId, leadMinutes, previousStartsAt, nextStartsAt);
+                lastUserId, untilUserId, sliceLimit, liveSessionId, videoAssetId, leadMinutes,
+                previousStartsAt, nextStartsAt);
     }
 }

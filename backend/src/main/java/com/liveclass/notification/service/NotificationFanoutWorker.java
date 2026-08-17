@@ -339,7 +339,8 @@ public class NotificationFanoutWorker {
 
         NotificationFanoutRepository.Slice slice = NotificationTypes.LIVE_STARTING_SOON.equals(command.type())
                 ? fanoutRepository.insertForStartingSoon(
-                        command.curriculumId(), command.lessonId(), command.afterUserId(), limit,
+                        command.curriculumId(), command.lessonId(), command.afterUserId(),
+                        command.untilUserId(), limit,
                         command.leadMinutes() == null
                                 ? NotificationLeadTimes.DEFAULT_MINUTES : command.leadMinutes(),
                         NotificationLeadTimes.DEFAULT_MINUTES,
@@ -348,7 +349,7 @@ public class NotificationFanoutWorker {
                         command.type() + ':' + command.curriculumId(),
                         dedupePrefix(command), command.nextStartsAt())
                 : fanoutRepository.insertForActiveStudents(
-                command.curriculumId(), command.afterUserId(), limit,
+                command.curriculumId(), command.afterUserId(), command.untilUserId(), limit,
                 command.type(), NotificationStatus.INFO, NotificationTypes.severityOf(command.type()),
                 title, message, wideTargetsJson(command),
                 command.type() + ':' + command.curriculumId(),

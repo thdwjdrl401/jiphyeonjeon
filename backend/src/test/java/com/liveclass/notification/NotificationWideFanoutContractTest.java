@@ -185,9 +185,80 @@ class NotificationWideFanoutContractTest {
                 afterUserId == null ? "null" : "\"" + afterUserId + "\"", sliceLimit);
     }
 
+
+    /**
+     * <b>구간 상한이 있으면 그 너머는 건드리지 않는다.</b> 체인 하나가 커서로 끝까지 훑으면 조각이
+     * 직렬이 되므로(조각 N을 커밋해야 N+1이 발행된다) 워커를 늘려도 한 사건의 팬아웃은 안 빨라진다.
+     * user_id 공간을 나눠 체인마다 상한을 주면 서로를 기다리지 않는다.
+     *
+     * <p>지켜야 할 것은 <b>겹치지도 빠지지도 않는 것</b>이다 — 두 구간이 겹치면 같은 사람을 두
+     * 체인이 집어 헛일이 늘고(등록표가 막아 주긴 한다), 빠지면 그 사람은 알림을 못 받는다.
+     */
+    @Test
+    void a_bounded_chain_stays_inside_its_range() {
+        List<UUID> everyone = new ArrayList<>(seedEnrollments(curriculumId, "ACTIVE", 6));
+        everyone.sort(POSTGRES_ORDER);
+        UUID boundary = everyone.get(2);   // 앞의 셋(0·1·2)만 이 구간이다
+
+        Slice bounded = insertBounded(null, boundary, 100);
+
+        assertThat(bounded.inserted()).isEqualTo(3);
+        assertThat(recipients()).containsExactlyInAnyOrderElementsOf(everyone.subList(0, 3));
+    }
+
+    /** 두 구간을 이어 붙이면 전원이 정확히 한 번씩이다 — 겹치지도 빠지지도 않는다. */
+    @Test
+    void two_ranges_together_cover_everyone_exactly_once() {
+        List<UUID> everyone = new ArrayList<>(seedEnrollments(curriculumId, "ACTIVE", 6));
+        everyone.sort(POSTGRES_ORDER);
+        UUID boundary = everyone.get(2);
+
+        insertBounded(null, boundary, 100);      // (−∞, boundary]
+        insertBounded(boundary, null, 100);      // (boundary, +∞)
+
+        assertThat(recipients())
+                .containsExactlyInAnyOrderElementsOf(everyone)
+                .doesNotHaveDuplicates();
+    }
+
+    /** 상한이 없으면 예전과 같다 — 끝까지 훑는다. 기본 동작이 바뀌지 않았음을 못박는다. */
+    @Test
+    void no_bound_means_all_the_way_as_before() {
+        List<UUID> everyone = seedEnrollments(curriculumId, "ACTIVE", 5);
+
+        Slice slice = insertBounded(null, null, 100);
+
+        assertThat(slice.inserted()).isEqualTo(5);
+        assertThat(recipients()).containsExactlyInAnyOrderElementsOf(everyone);
+    }
+
+    /**
+     * <b>Postgres의 uuid 정렬은 Java의 {@link UUID#compareTo}와 다르다.</b> Java는 두 {@code long}을
+     * <b>부호 있게</b> 비교하므로 최상위 비트가 선 uuid가 음수로 취급돼 앞으로 온다. Postgres는 16
+     * 바이트를 <b>부호 없이</b> 비교한다.
+     *
+     * <p>이 테스트가 처음 실패한 이유가 그것이었다 — Java 순서로 세 번째를 상한으로 잡았는데 SQL은
+     * 다섯 명을 골랐다. 구간 경계를 Java에서 계산해 SQL에 넘기는 코드는 전부 이 함정을 지난다.
+     */
+    private static final java.util.Comparator<UUID> POSTGRES_ORDER =
+            java.util.Comparator.comparingLong((UUID u) -> u.getMostSignificantBits() + Long.MIN_VALUE)
+                    .thenComparingLong(u -> u.getLeastSignificantBits() + Long.MIN_VALUE);
+
+    /** 구간 상한을 주는 판. {@code insert}는 상한 없이 부르는 지금까지의 판이다. */
+    private Slice insertBounded(UUID afterUserId, UUID untilUserId, int limit) {
+        return fanoutRepository.insertForActiveStudents(
+                curriculumId, afterUserId, untilUserId, limit,
+                NotificationTypes.MATERIAL_PUBLISHED, NotificationStatus.INFO, NotificationStatus.NORMAL,
+                "새 강의 자료", "«테스트»에 새 자료가 올라왔습니다.",
+                "{\"curriculumId\":\"" + curriculumId + "\"}",
+                NotificationTypes.MATERIAL_PUBLISHED + ':' + curriculumId,
+                NotificationTypes.MATERIAL_PUBLISHED + ":mat-" + curriculumId + ':',
+                null, null);
+    }
+
     private Slice insert(UUID afterUserId, int limit) {
         return fanoutRepository.insertForActiveStudents(
-                curriculumId, afterUserId, limit,
+                curriculumId, afterUserId, null, limit,
                 NotificationTypes.MATERIAL_PUBLISHED, NotificationStatus.INFO, NotificationStatus.NORMAL,
                 "새 강의 자료", "«테스트»에 새 자료가 올라왔습니다.",
                 "{\"curriculumId\":\"" + curriculumId + "\"}",
