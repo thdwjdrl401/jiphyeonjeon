@@ -1,6 +1,5 @@
 package com.liveclass.notification.service;
 
-import com.liveclass.aiintegration.api.OutboxPublisher;
 import com.liveclass.notification.api.NotificationTypes;
 import com.liveclass.notification.config.NotificationMessagingConfig;
 import com.liveclass.notification.domain.NotificationSchedule;
@@ -39,16 +38,16 @@ public class LiveStartingSoonScheduler {
 
     private final NotificationScheduleRepository repository;
     private final LiveSessionDirectory liveSessionDirectory;
-    private final OutboxPublisher outboxPublisher;
+    private final WideFanoutPublisher wideFanout;
     private final int sliceLimit;
 
     public LiveStartingSoonScheduler(NotificationScheduleRepository repository,
                                      LiveSessionDirectory liveSessionDirectory,
-                                     OutboxPublisher outboxPublisher,
+                                     WideFanoutPublisher wideFanout,
                                      @Value("${notification.fanout.slice-size:1000}") int sliceLimit) {
         this.repository = repository;
         this.liveSessionDirectory = liveSessionDirectory;
-        this.outboxPublisher = outboxPublisher;
+        this.wideFanout = wideFanout;
         this.sliceLimit = sliceLimit;
     }
 
@@ -90,18 +89,12 @@ public class LiveStartingSoonScheduler {
                 schedule.getLiveSessionId(), null, schedule.getStartsAt(), now, sliceLimit,
                 schedule.getLeadMinutes());
 
-        outboxPublisher.enqueue(
-                NotificationMessagingConfig.FANOUT_QUEUE,
-                "live_session",
-                schedule.getLiveSessionId().toString(),
-                "NOTIFICATION_FANOUT_REQUESTED",
-                JSON.writeValueAsString(command),
+        wideFanout.publish(command, "live_session", schedule.getLiveSessionId().toString(),
                 // 시작 시각이 키에 들어간다 — 일정이 바뀌면 새 회차이므로 다시 알려야 한다.
                 // 리드타임이 키에 들어간다 — 같은 세션의 5분 전과 30분 전은 다른 발화다.
                 "notif:LIVE_STARTING_SOON:" + schedule.getLiveSessionId()
                         + ':' + schedule.getLeadMinutes()
-                        + ':' + schedule.getStartsAt().toInstant().toEpochMilli(),
-                null);
+                        + ':' + schedule.getStartsAt().toInstant().toEpochMilli());
         log.info("곧 시작 알림 예약 발화 session={} startsAt={}",
                 schedule.getLiveSessionId(), schedule.getStartsAt());
     }

@@ -62,20 +62,6 @@ public class NotificationFanoutWorker {
     private static final JsonMapper JSON = JsonMapper.builder().build();
     private static final int DEFAULT_SLICE = 1000;
 
-    /**
-     * 커리큘럼의 수강 중 학생 전원에게 가는 종류들. 나머지는 받는 사람이 한 명으로 정해져 있다.
-     *
-     * <p>이 집합이 곧 수신자 규칙이다 — 메시지가 조건을 실어 나르지 않으므로, 규칙을 고치면
-     * 큐에 떠 있는 옛 메시지도 새 규칙으로 돈다(ADR-0073 §5).
-     */
-    private static final Set<String> WIDE_TYPES = Set.of(
-            NotificationTypes.MATERIAL_PUBLISHED,
-            NotificationTypes.LIVE_SCHEDULED,
-            NotificationTypes.LIVE_SCHEDULE_CHANGED,
-            NotificationTypes.LIVE_CANCELED,
-            NotificationTypes.LIVE_STARTING_SOON,
-            NotificationTypes.VOD_PUBLISHED);
-
     /** 담당 강사 한 명에게 가는 종류들. 학생에게 보내면 할 수 있는 일이 없는데 불안만 준다. */
     private static final Set<String> INSTRUCTOR_TYPES = Set.of(
             NotificationTypes.RECORDING_READY,
@@ -139,7 +125,7 @@ public class NotificationFanoutWorker {
             // 계약에 없는 종류다. 재시도해도 같으므로 DLQ로 보낸다.
             throw new IllegalArgumentException("알 수 없는 알림 종류입니다: " + command.type());
         }
-        if (WIDE_TYPES.contains(command.type())) {
+        if (NotificationTypes.isWide(command.type())) {
             NotificationFanoutCommand filled = withSessionContext(command);
             if (filled.curriculumId() == null) {
                 logMissingContext(filled, "커리큘럼");

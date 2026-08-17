@@ -119,6 +119,20 @@ public record NotificationFanoutCommand(
                 previousStartsAt, nextStartsAt);
     }
 
+    /**
+     * 이 체인이 맡을 구간. 사건은 그대로 두고 경계만 준다(ADR-0130).
+     *
+     * <p>{@code after}는 <b>배타</b>(SQL이 {@code > afterUserId}), {@code until}은 <b>포함</b>이다
+     * ({@code <= untilUserId}). 그래서 이웃한 두 구간은 같은 경계값을 공유해야 빈틈이 없다 —
+     * 앞 구간이 B에서 끝나면 뒤 구간은 B 다음부터다.
+     */
+    public NotificationFanoutCommand withRange(UUID after, UUID until) {
+        return new NotificationFanoutCommand(type, enrollmentId, curriculumId, curriculumTitle,
+                instructorId, studentId, lessonId, materialId, subjectName, occurredAt,
+                after, until, sliceLimit, liveSessionId, videoAssetId, leadMinutes,
+                previousStartsAt, nextStartsAt);
+    }
+
     /** 다음 조각. 사건은 그대로 두고 커서만 옮긴다. */
     NotificationFanoutCommand nextSlice(UUID lastUserId) {
         return new NotificationFanoutCommand(type, enrollmentId, curriculumId, curriculumTitle,

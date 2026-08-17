@@ -1,6 +1,5 @@
 package com.liveclass.notification.service;
 
-import com.liveclass.aiintegration.api.OutboxPublisher;
 import com.liveclass.live.api.LiveScheduleEvent;
 import com.liveclass.notification.api.NotificationTypes;
 import com.liveclass.notification.config.NotificationMessagingConfig;
@@ -27,12 +26,12 @@ public class LiveNotificationListener {
     private static final Logger log = LoggerFactory.getLogger(LiveNotificationListener.class);
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
-    private final OutboxPublisher outboxPublisher;
+    private final WideFanoutPublisher wideFanout;
     private final int sliceLimit;
 
-    public LiveNotificationListener(OutboxPublisher outboxPublisher,
+    public LiveNotificationListener(WideFanoutPublisher wideFanout,
                                     @Value("${notification.fanout.slice-size:1000}") int sliceLimit) {
-        this.outboxPublisher = outboxPublisher;
+        this.wideFanout = wideFanout;
         this.sliceLimit = sliceLimit;
     }
 
@@ -43,14 +42,8 @@ public class LiveNotificationListener {
                 type, event.curriculumId(), event.lessonId(), event.sessionId(),
                 event.previousStartsAt(), event.nextStartsAt(), event.occurredAt(), sliceLimit);
 
-        outboxPublisher.enqueue(
-                NotificationMessagingConfig.FANOUT_QUEUE,
-                "live_session",
-                event.sessionId().toString(),
-                "NOTIFICATION_FANOUT_REQUESTED",
-                JSON.writeValueAsString(command),
-                idempotencyKey(type, event),
-                null);
+        wideFanout.publish(command, "live_session", event.sessionId().toString(),
+                idempotencyKey(type, event));
         log.debug("라이브 알림 팬아웃 요청 적재 type={} session={}", type, event.sessionId());
     }
 

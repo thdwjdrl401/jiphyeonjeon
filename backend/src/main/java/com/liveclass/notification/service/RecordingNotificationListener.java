@@ -1,6 +1,5 @@
 package com.liveclass.notification.service;
 
-import com.liveclass.aiintegration.api.OutboxPublisher;
 import com.liveclass.notification.api.NotificationTypes;
 import com.liveclass.notification.config.NotificationMessagingConfig;
 import com.liveclass.video.api.RecordingFailedEvent;
@@ -32,12 +31,12 @@ public class RecordingNotificationListener {
     private static final Logger log = LoggerFactory.getLogger(RecordingNotificationListener.class);
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
-    private final OutboxPublisher outboxPublisher;
+    private final WideFanoutPublisher wideFanout;
     private final int sliceLimit;
 
-    public RecordingNotificationListener(OutboxPublisher outboxPublisher,
+    public RecordingNotificationListener(WideFanoutPublisher wideFanout,
                                          @Value("${notification.fanout.slice-size:1000}") int sliceLimit) {
-        this.outboxPublisher = outboxPublisher;
+        this.wideFanout = wideFanout;
         this.sliceLimit = sliceLimit;
     }
 
@@ -63,18 +62,12 @@ public class RecordingNotificationListener {
                          UUID liveSessionId, OffsetDateTime occurredAt) {
         NotificationFanoutCommand command = NotificationFanoutCommand.forRecording(
                 type, videoAssetId, lessonId, liveSessionId, occurredAt, sliceLimit);
-        outboxPublisher.enqueue(
-                NotificationMessagingConfig.FANOUT_QUEUE,
-                "video_asset",
-                String.valueOf(videoAssetId),
-                "NOTIFICATION_FANOUT_REQUESTED",
-                JSON.writeValueAsString(command),
-                /*
-                 * 자산 하나당 종류별 한 번이다. 철회했다 다시 공개해도 학생에게 다시 알리지 않는다 —
-                 * 그 다시보기가 있다는 것은 이미 알고 있고, 오갈 때마다 알리면 소음이 된다.
-                 */
-                "notif:" + type + ':' + videoAssetId,
-                null);
+        /*
+         * 자산 하나당 종류별 한 번이다. 철회했다 다시 공개해도 학생에게 다시 알리지 않는다 —
+         * 그 다시보기가 있다는 것은 이미 알고 있고, 오갈 때마다 알리면 소음이 된다.
+         */
+        wideFanout.publish(command, "video_asset", String.valueOf(videoAssetId),
+                "notif:" + type + ':' + videoAssetId);
         log.debug("녹화 알림 팬아웃 요청 적재 type={} asset={}", type, videoAssetId);
     }
 }
