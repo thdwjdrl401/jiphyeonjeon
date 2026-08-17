@@ -117,8 +117,13 @@ public class NotificationFanoutWorker {
         this.outboxPublisher = outboxPublisher;
     }
 
+    /*
+     * 발송 전용 노드는 이 값을 false로 두고 뜬다(기본 켜짐). 짝은
+     * {@code notification.push.listener-enabled}이며, 둘을 갈라 역할별로 배포한다(ADR-0127).
+     */
     @RabbitListener(queues = NotificationMessagingConfig.FANOUT_QUEUE,
-            containerFactory = "notificationListenerContainerFactory")
+            containerFactory = "notificationListenerContainerFactory",
+            autoStartup = "${notification.fanout.listener-enabled:true}")
     @Transactional
     public void handle(String payload) {
         NotificationFanoutCommand command = JSON.readValue(payload, NotificationFanoutCommand.class);

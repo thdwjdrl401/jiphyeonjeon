@@ -62,8 +62,20 @@ public class PushDeliveryWorker {
         this.retryDelay = Duration.ofMillis(retryDelayMs);
     }
 
+    /*
+     * 소비를 끈 채로 뜰 수 있다(기본 켜짐 — 한 대로 돌리던 동작은 그대로다).
+     *
+     * <p><b>이 손잡이가 발송 노드를 따로 두는 수단이다.</b> 발송은 기기 수만큼 HTTPS를 치고
+     * 건당 암호화가 붙어 CPU가 병목인 반면, 팬아웃은 DB가 병목이라 워커를 늘려도 안 빨라진다
+     * (ADR-0127). 두 일이 한 프로세스에 있으면 서로 CPU를 훔쳐 어느 쪽도 제 속도가 안 나오고,
+     * 늘리고 싶은 쪽만 늘릴 수도 없다. 같은 산출물을 이 값만 바꿔 배포하면 역할이 갈린다.
+     *
+     * <p>운영에서 발송만 잠시 멈추는 데도 쓴다. 푸시 서비스 장애나 오발송 의심 때 큐에 쌓아 두고
+     * 원인을 본 뒤 재개할 수 있다 — 메시지는 durable이라 사라지지 않는다.
+     */
     @RabbitListener(queues = NotificationMessagingConfig.PUSH_QUEUE,
-            containerFactory = "notificationPushListenerContainerFactory")
+            containerFactory = "notificationPushListenerContainerFactory",
+            autoStartup = "${notification.push.listener-enabled:true}")
     public void handle(String payload) {
         PushDeliveryCommand command = JSON.readValue(payload, PushDeliveryCommand.class);
         List<UUID> remaining = progressRepository.remaining(command.eventHash(), command.recipientIds());
