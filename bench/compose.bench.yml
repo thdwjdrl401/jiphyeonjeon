@@ -230,5 +230,79 @@ services:
     cpus: ${APP_CPUS:-8}
     profiles: ["scale3"]
 
+# ── 관측 (프로파일 mon) ──
+#
+# 평소 측정에는 뜨지 않는다. 컨테이너가 넷 더 뜨면 그만큼 CPU를 먹고, lazy는 물리 4코어라
+# 그 영향이 수치에 남는다. **스크린샷용 실행과 기록용 실행을 가른다** — 대표 수치는 관측을
+# 끈 채로 잰 값이고, 여기서 얻는 것은 그 수치가 어떤 모양으로 흘러가는지다.
+#
+# 전부 브로커 코어(INFRA_CPUSET)에 얹는다. pg와 앱 코어를 건드리면 재는 대상이 흔들린다.
+#
+#   docker compose -f bench/compose.bench.yml --profile mon up -d
+#   Grafana  http://127.0.0.1:13000  (admin/admin)
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    profiles: [mon]
+    cpuset: "${INFRA_CPUSET:-1,5}"
+    mem_limit: 512m
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      # 벤치는 짧게 여러 번 돈다. 오래 보관할 이유가 없다.
+      - --storage.tsdb.retention.time=6h
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports: ["127.0.0.1:19090:9090"]
+
+  # 표별 삽입 수(팬아웃 진행), 활성 백엔드, 커밋 수를 낸다.
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    profiles: [mon]
+    cpuset: "${INFRA_CPUSET:-1,5}"
+    mem_limit: 128m
+    environment:
+      DATA_SOURCE_NAME: "postgresql://liveclass:bench@postgres:5432/liveclass?sslmode=disable"
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  # 컨테이너별 CPU·메모리. docker stats를 2초마다 부르던 것을 대신한다 —
+  # 그쪽은 버스트를 놓쳤고(RabbitMQ가 29 → 25 → 60 → 2%로 튀었다) 이쪽은 누적 카운터라 안 놓친다.
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    profiles: [mon]
+    cpuset: "${INFRA_CPUSET:-1,5}"
+    mem_limit: 256m
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    command: ["--housekeeping_interval=5s", "--docker_only=true"]
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    profiles: [mon]
+    cpuset: "${INFRA_CPUSET:-1,5}"
+    mem_limit: 512m
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      # 스크린샷을 API로 뜨기 위한 렌더러. 없으면 /render 가 실패한다.
+      GF_RENDERING_SERVER_URL: http://grafana-renderer:8081/render
+      GF_RENDERING_CALLBACK_URL: http://grafana:3000/
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports: ["127.0.0.1:13000:3000"]
+    depends_on: [prometheus]
+
+  grafana-renderer:
+    image: grafana/grafana-image-renderer:3.11.6
+    profiles: [mon]
+    cpuset: "${INFRA_CPUSET:-1,5}"
+    mem_limit: 512m
+
 volumes:
   pgdata:

@@ -1,0 +1,29 @@
+# 측정 구간을 눈으로 보게 하는 스크레이프 설정.
+#
+# 간격이 5초다. 팬아웃이 20초 안에 끝나므로 기본값 15초로는 점이 한둘밖에 안 찍힌다 —
+# 그래프가 그려지려면 구간 안에 표본이 여러 개 있어야 한다.
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  # 앱 — JVM 힙·GC, Hikari 커넥션, Rabbit 리스너
+  - job_name: app
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['app:8080']
+
+  # Postgres — 표별 삽입 수(팬아웃 진행), 활성 백엔드, 커밋·WAL
+  - job_name: postgres
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+
+  # RabbitMQ — 큐 깊이. 어느 구간이 밀리는지가 여기서 보인다
+  - job_name: rabbitmq
+    static_configs:
+      - targets: ['rabbitmq:15692']
+
+  # 컨테이너 CPU·메모리 — 팬아웃은 DB가, 발송은 앱이 먹는다는 그림이 여기서 나온다
+  - job_name: cadvisor
+    static_configs:
+      - targets: ['cadvisor:8080']
