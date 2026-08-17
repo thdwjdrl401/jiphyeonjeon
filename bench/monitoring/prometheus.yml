@@ -18,8 +18,12 @@ scrape_configs:
     static_configs:
       - targets: ['postgres-exporter:9187']
 
-  # RabbitMQ — 큐 깊이. 어느 구간이 밀리는지가 여기서 보인다
+  # RabbitMQ — 큐 깊이. 어느 구간이 밀리는지가 여기서 보인다.
+  #
+  # **/metrics가 아니라 /metrics/per-object다.** 기본 경로는 큐별로 안 내보내고 합계만 낸다
+  # (queue 라벨이 아예 없다). 팬아웃 큐와 푸시 큐를 갈라 보려면 이 경로여야 한다.
   - job_name: rabbitmq
+    metrics_path: /metrics/per-object
     static_configs:
       - targets: ['rabbitmq:15692']
 

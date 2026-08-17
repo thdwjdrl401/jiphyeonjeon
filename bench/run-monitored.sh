@@ -36,9 +36,13 @@ pg() { compose exec -T -e PGPASSWORD=bench postgres psql -U liveclass -d livecla
 echo "▶ 인프라·관측 기동"
 PG_CPUSET="$PG_CPUSET_V" INFRA_CPUSET="$INFRA_CPUSET_V" \
   compose up -d --wait --wait-timeout 300 postgres redis rabbitmq mock-push > /dev/null 2>&1 || fail "인프라 기동 실패"
+# **exporter만 여기서 돈다.** Prometheus·Grafana·렌더러는 측정 머신 밖에서 돌린다
+# (bench/monitoring/compose.remote.yml) — 관측을 같이 돌렸더니 팬아웃이 18.3초에서
+# 20.976초로 늘었다. cAdvisor는 cgroup과 /var/lib/docker를 읽어야 해서 못 옮긴다.
+MON_SERVICES="${MON_SERVICES:-postgres-exporter cadvisor}"
 PG_CPUSET="$PG_CPUSET_V" INFRA_CPUSET="$INFRA_CPUSET_V" \
-  compose --profile mon up -d --wait --wait-timeout 300 \
-  prometheus postgres-exporter cadvisor grafana grafana-renderer > /dev/null 2>&1 || fail "관측 기동 실패"
+  compose --profile mon up -d --wait --wait-timeout 300 $MON_SERVICES > /dev/null 2>&1 \
+  || fail "관측 기동 실패"
 
 USERS="$(pg -c "SELECT count(*) FROM core.enrollment WHERE curriculum_id='00000000-0000-4000-8000-000000000002' AND status='ACTIVE';")"
 [ "${USERS:-0}" -gt 0 ] || fail "시드가 없다."

@@ -1,0 +1,41 @@
+# 관측만 따로 띄운다 — **측정 머신이 아닌 곳에서** 돈다.
+#
+# 측정 머신에는 exporter 둘만 남는다(cAdvisor는 cgroup을 읽어야 해서 못 옮기고,
+# postgres-exporter는 옮길 수 있으나 터널 하나 줄이려고 남긴다).
+#
+# 쓰는 법
+#   1) 측정 머신으로 터널을 연다
+#        ssh -N -L 18081:127.0.0.1:18081 -L 15692:127.0.0.1:15692 \
+#               -L 19187:127.0.0.1:19187 -L 18082:127.0.0.1:18082 lazy
+#   2) 여기를 띄운다
+#        docker compose -f bench/monitoring/compose.remote.yml up -d
+#   3) http://127.0.0.1:13000/d/fanout-bench
+name: liveclass-bench-mon
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=6h
+    volumes:
+      - ./prometheus.remote.yml:/etc/prometheus/prometheus.yml:ro
+    ports: ["127.0.0.1:19090:9090"]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_RENDERING_SERVER_URL: http://grafana-renderer:8081/render
+      GF_RENDERING_CALLBACK_URL: http://grafana:3000/
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports: ["127.0.0.1:13000:3000"]
+    depends_on: [prometheus]
+
+  grafana-renderer:
+    image: grafana/grafana-image-renderer:3.11.6

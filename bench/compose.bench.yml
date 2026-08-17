@@ -109,6 +109,8 @@ x-appbase: &appbase
       interval: 5s
       timeout: 5s
       retries: 60
+    # 관측을 다른 머신에서 돌릴 때 /actuator/prometheus를 터널로 가져간다.
+    ports: ["127.0.0.1:18081:8080"]
 
 services:
   postgres:
@@ -177,7 +179,8 @@ services:
     environment:
       RABBITMQ_DEFAULT_USER: liveclass
       RABBITMQ_DEFAULT_PASS: bench
-    ports: ["127.0.0.1:15672:15672"]
+    # 15692는 prometheus 플러그인. 관측을 다른 머신에서 돌릴 때 터널로 가져간다.
+    ports: ["127.0.0.1:15672:15672", "127.0.0.1:15692:15692"]
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 3s
@@ -261,6 +264,7 @@ services:
     mem_limit: 128m
     environment:
       DATA_SOURCE_NAME: "postgresql://liveclass:bench@postgres:5432/liveclass?sslmode=disable"
+    ports: ["127.0.0.1:19187:9187"]
     depends_on:
       postgres: { condition: service_healthy }
 
@@ -279,6 +283,7 @@ services:
       - /var/lib/docker/:/var/lib/docker:ro
       - /dev/disk/:/dev/disk:ro
     command: ["--housekeeping_interval=5s", "--docker_only=true"]
+    ports: ["127.0.0.1:18082:8080"]
 
   grafana:
     image: grafana/grafana:11.2.0

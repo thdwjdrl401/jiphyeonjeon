@@ -1,6 +1,9 @@
 apiVersion: 1
 datasources:
   - name: Prometheus
+    # **uid를 박는다.** 안 주면 Grafana가 자동 생성하는데, 대시보드 JSON은 uid로 데이터소스를
+    # 가리키므로 둘이 어긋나 패널이 전부 "No data"가 된다.
+    uid: prometheus
     type: prometheus
     access: proxy
     url: http://prometheus:9090
