@@ -38,5 +38,7 @@ scrape_configs:
       - targets: ['host.docker.internal:15692']
 
   - job_name: cadvisor
+    # 메모리 한계에 닿는 장면을 남기려면 전역 간격으로는 부족하다.
+    scrape_interval: 2s
     static_configs:
       - targets: ['host.docker.internal:18082']

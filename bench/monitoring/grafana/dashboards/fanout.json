@@ -654,8 +654,8 @@
     },
     {
       "id": 7,
-      "title": "컨테이너 메모리 — 한계선에 닿으면 컨테이너가 종료된다",
-      "description": "앞의 짧은 봉우리가 팬아웃(Postgres)이고, 뒤의 긴 고원이 발송(앱)이다. 노드를 나눈 이유가 이 그림이다.",
+      "title": "Postgres 컨테이너 메모리 — 한계선에 닿으면 컨테이너가 종료된다",
+      "description": "cAdvisor 1초 집계·2초 스크레이프. OOM 판정 기준은 working set(usage에서 회수 가능한 파일 캐시를 뺀 값)이다.",
       "type": "timeseries",
       "gridPos": {
         "x": 0,
@@ -669,8 +669,8 @@
       },
       "targets": [
         {
-          "expr": "sum(container_memory_usage_bytes{name=\"liveclass-bench-postgres-1\"})",
-          "legendFormat": "Postgres 사용",
+          "expr": "max(container_memory_working_set_bytes{name=\"liveclass-bench-postgres-1\"})",
+          "legendFormat": "working set",
           "refId": "A",
           "datasource": {
             "type": "prometheus",
@@ -678,8 +678,8 @@
           }
         },
         {
-          "expr": "sum(container_spec_memory_limit_bytes{name=\"liveclass-bench-postgres-1\"})",
-          "legendFormat": "Postgres 한계",
+          "expr": "max(container_memory_usage_bytes{name=\"liveclass-bench-postgres-1\"})",
+          "legendFormat": "usage",
           "refId": "B",
           "datasource": {
             "type": "prometheus",
@@ -687,8 +687,8 @@
           }
         },
         {
-          "expr": "sum(container_memory_usage_bytes{name=\"liveclass-bench-app-1\"})",
-          "legendFormat": "앱 사용",
+          "expr": "max(container_spec_memory_limit_bytes{name=\"liveclass-bench-postgres-1\"})",
+          "legendFormat": "한계",
           "refId": "C",
           "datasource": {
             "type": "prometheus",
@@ -711,7 +711,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Postgres 사용"
+              "options": "working set"
             },
             "properties": [
               {
@@ -730,7 +730,30 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Postgres 한계"
+              "options": "usage"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#7C8AA5"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "한계"
             },
             "properties": [
               {
@@ -757,25 +780,6 @@
               {
                 "id": "custom.fillOpacity",
                 "value": 0
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "앱 사용"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#3D9970"
-                }
-              },
-              {
-                "id": "custom.lineWidth",
-                "value": 2
               }
             ]
           }

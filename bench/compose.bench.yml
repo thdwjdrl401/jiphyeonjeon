@@ -295,7 +295,9 @@ services:
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
       - /dev/disk/:/dev/disk:ro
-    command: ["--housekeeping_interval=5s", "--docker_only=true"]
+    # 1초. 컨테이너가 한계까지 오르는 데 몇 초뿐이라 5초로는 마지막 급등을 놓친다 —
+    # 실제로 cgroup을 직접 읽으면 1,500MB인데 그래프에는 1.28GiB까지만 찍혔다.
+    command: ["--housekeeping_interval=1s", "--docker_only=true"]
     ports: ["127.0.0.1:18082:8080"]
 
   grafana:
