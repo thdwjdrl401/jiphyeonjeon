@@ -97,8 +97,8 @@ WITH candidate AS (
   INSERT INTO core.notification_dedupe (dedupe_hash)
   SELECT h FROM candidate ON CONFLICT DO NOTHING RETURNING dedupe_hash
 )
-INSERT INTO core.notification (recipient_id, content_id, read_status, action_status, created_at)
-SELECT c.user_id, '$CID', 'UNREAD', 'INFO', now()
+INSERT INTO core.notification (id, recipient_id, content_id, read_status, action_status)
+SELECT gen_random_uuid(), c.user_id, '$CID', 'UNREAD', 'INFO'
   FROM candidate c JOIN passed p ON p.dedupe_hash = c.h;" > /dev/null
 T1="$(now_ms)"
 report "집합 삽입 (지금 구조)" "$ROWS" "$(( T1 - T0 ))"
@@ -122,10 +122,12 @@ if [ "${SCALE:-1}" = "1" ]; then
       INSERT INTO core.notification_dedupe (dedupe_hash)
       SELECT h FROM candidate ON CONFLICT DO NOTHING RETURNING dedupe_hash
     )
-    INSERT INTO core.notification (recipient_id, content_id, read_status, action_status, created_at)
-    SELECT c.user_id, '$CID', 'UNREAD', 'INFO', now()
+    INSERT INTO core.notification (id, recipient_id, content_id, read_status, action_status)
+    SELECT gen_random_uuid(), c.user_id, '$CID', 'UNREAD', 'INFO'
       FROM candidate c JOIN passed p ON p.dedupe_hash = c.h;" > /dev/null
     T1="$(now_ms)"
+    INS="$(pg -c 'SELECT count(*) FROM core.notification;')"
+    [ "${INS:-0}" -ge "$N" ] || echo "   경고: N=$N 인데 알림 $INS 건만 들어갔다 — 이 회차는 못 쓴다"
     report "집합 삽입 N=$N" "$N" "$(( T1 - T0 ))"
   done
 fi
@@ -179,8 +181,10 @@ run_push() {  # $1 동시 상한 $2 라벨
   report "$2" "$target" "$span"
 }
 
-run_push 1   "한 건씩 순차 발송"
-run_push 800 "동시 800건 (지금 구조)"
+if [ "${PUSH:-1}" = "1" ]; then
+  run_push 1   "한 건씩 순차 발송"
+  run_push 800 "동시 800건 (지금 구조)"
+fi
 
 echo
 echo "── 요약 ──"
