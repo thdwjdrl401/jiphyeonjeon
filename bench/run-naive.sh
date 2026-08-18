@@ -21,10 +21,10 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BENCH="$REPO_ROOT/bench"
-SLICES="${SLICES:-1100000 200000 50000 5000}"
+SLICES="${SLICES:-1100000 800000 500000 300000 200000 5000}"
 APP_HEAP="${APP_HEAP:-1g}"
 APP_MEM="${APP_MEM:-1600m}"
-TIMEOUT_S="${TIMEOUT_S:-300}"
+TIMEOUT_S="${TIMEOUT_S:-180}"
 OUT="${OUT:-$BENCH/results/naive-$(date +%Y%m%dT%H%M%S)}"
 
 PG_CPUSET_V="${PG_CPUSET:-0,4,1,5}"; APP_CPUSET_V="${APP_CPUSET:-2,6}"; INFRA_CPUSET_V="${INFRA_CPUSET:-3,7}"
@@ -38,9 +38,25 @@ compose() { docker compose -f "$BENCH/compose.bench.yml" "$@"; }
 pg() { compose exec -T -e PGPASSWORD=bench postgres psql -U liveclass -d liveclass -qtA "$@" < /dev/null; }
 
 # actuator에서 한 줄짜리 수치를 뽑는다. 앱이 죽어 있으면 빈 문자열이 나온다.
-app_metric() { curl -s --max-time 3 http://127.0.0.1:18081/actuator/prometheus 2>/dev/null | awk -v p="$1" '$0 ~ p {s += $NF} END {if (s) printf "%.0f", s}'; }
-heap_used() { app_metric '^jvm_memory_used_bytes\{[^}]*area="heap"'; }
+app_metric() { curl -s --max-time 3 http://127.0.0.1:18081/actuator/prometheus 2>/dev/null | awk -v p="$1" '$0 ~ p {s += $NF} END {if (s) printf "%.6f", s}'; }
+heap_used() { app_metric '^jvm_memory_used_bytes[{][^}]*area="heap"' | cut -d. -f1; }
 gc_pause_sum() { app_metric '^jvm_gc_pause_seconds_sum'; }
+
+# 컨테이너 메모리는 호스트 cgroup 파일에서 바로 읽는다. docker stats나 exec는 폴링에 얹히지만
+# 이건 그냥 파일 하나다. memory.peak은 cgroup이 생긴 뒤의 최고치라 변형마다 0으로 되돌린다.
+# memory.peak은 되돌리려면 권한이 필요하고 컨테이너가 살아 있는 동안 누적된다. 그래서 대신
+# memory.current를 1초마다 읽어 변형 안에서의 최고치를 잡는다 — 파일 하나 읽기라 부담이 없다.
+cgroup_of() {
+  local id p; id="$(compose ps -q "$1")"; [ -n "$id" ] || return 1
+  for p in "/sys/fs/cgroup/system.slice/docker-$id.scope" \
+           "/sys/fs/cgroup/docker/$id" \
+           "/sys/fs/cgroup/memory/docker/$id"; do
+    [ -r "$p/memory.current" ] && { echo "$p"; return 0; }
+  done
+  return 1
+}
+pg_mem_now() { cat "$PG_CGROUP/memory.current" 2>/dev/null || echo 0; }
+pg_oomkilled() { docker inspect "$(compose ps -q postgres)" --format '{{.State.OOMKilled}}' 2>/dev/null; }
 app_alive() { [ "$(compose ps -q app | xargs -r docker inspect -f '{{.State.Running}}' 2>/dev/null)" = "true" ]; }
 
 echo "▶ 인프라 기동 (pg[$PG_CPUSET_V] 앱[$APP_CPUSET_V] 인프라[$INFRA_CPUSET_V] · 힙 $APP_HEAP)"
@@ -51,6 +67,9 @@ PG_CPUSET="$PG_CPUSET_V" INFRA_CPUSET="$INFRA_CPUSET_V" \
 USERS="$(pg -c "SELECT count(*) FROM core.enrollment WHERE curriculum_id='00000000-0000-4000-8000-000000000002' AND status='ACTIVE';")"
 [ "${USERS:-0}" -gt 0 ] || fail "시드가 없다."
 echo "   수강생 $USERS"
+PG_CGROUP="$(cgroup_of postgres || true)"
+[ -n "${PG_CGROUP:-}" ] && echo "   postgres cgroup $PG_CGROUP" \
+  || echo "   postgres cgroup 찾지 못함 — 메모리 열은 0으로 남는다"
 
 reset_state() {
   pg -c "TRUNCATE core.notification, core.notification_dedupe, core.notification_content,
@@ -72,7 +91,7 @@ trigger() {
                  'PENDING','naive:$material',0,now(),now(),now());" > /dev/null
 }
 
-echo "조각,결과,소요초,알림건수,힙최대MB,GC정지초,아웃박스최대행KB,임시파일MB,WAL_MB" > "$OUT/summary.csv"
+echo "조각,결과,소요초,알림건수,앱힙최대MB,GC정지초,pg메모리최대MB,pgOOM,아웃박스최대행KB,WAL_MB" > "$OUT/summary.csv"
 
 for SLICE in $SLICES; do
   echo
@@ -87,8 +106,7 @@ for SLICE in $SLICES; do
   reset_state
 
   T_WAL0="$(pg -c "SELECT pg_current_wal_lsn();")"
-  T_TMP0="$(pg -c "SELECT temp_bytes FROM pg_stat_database WHERE datname='liveclass';")"
-  HEAP_MAX=0; T0="$(now_ms)"
+  HEAP_MAX=0; PG_MAX=0; T0="$(now_ms)"
   trigger "$SLICE"
 
   # 폴링이 측정에 얹히지 않게 아낀다. 힙은 호스트 포트로 바로 가는 curl이라 가볍고 1초마다,
@@ -102,8 +120,13 @@ for SLICE in $SLICES; do
     elif ! app_alive; then
       RESULT="앱 죽음"; break
     fi
+    M="$(pg_mem_now)"; [ "${M:-0}" -gt "$PG_MAX" ] && PG_MAX="$M"
     if (( t % 4 == 3 )); then
-      N="$(pg -c "SELECT count(*) FROM core.notification;" 2>/dev/null || echo 0)"
+      # 세는 데 실패하면 Postgres가 답을 못 하는 것이다. 넘어갔으면 더 기다릴 이유가 없다.
+      if ! N="$(pg -c "SELECT count(*) FROM core.notification;" 2>/dev/null)"; then
+        [ "$(pg_oomkilled)" = "true" ] && break
+        N=0
+      fi
       [ "${N:-0}" -ge "$USERS" ] && break
     fi
     sleep 1
@@ -113,21 +136,31 @@ for SLICE in $SLICES; do
   [ "$RESULT" = "완료" ] && [ "${N:-0}" -lt "$USERS" ] && RESULT="시간초과"
 
   GC="$(gc_pause_sum || true)"; GC="${GC:-0}"
+  M="$(pg_mem_now)"; [ "${M:-0}" -gt "$PG_MAX" ] && PG_MAX="$M"
+  PGOOM="$(pg_oomkilled)"
+  # Postgres가 넘어갔으면 앱이 아니라 여기가 먼저 터진 것이다. 크래시 복구가 전량 롤백하므로
+  # 알림 건수는 0이 되고, 그때까지 쓴 WAL은 아무것도 남기지 못한 채 버려진다.
+  if [ "$PGOOM" = "true" ]; then
+    RESULT="Postgres 메모리 초과(OOMKilled) → 크래시 복구·전량 롤백"
+    compose logs --tail 200 postgres > "$OUT/pg-slice-$SLICE.log" 2>&1 || true
+    compose restart postgres > /dev/null 2>&1 || true
+    compose up -d --wait --wait-timeout 300 postgres > /dev/null 2>&1 || true
+    PG_CGROUP="$(cgroup_of postgres || true)"   # 재시작하면 cgroup 경로가 바뀐다
+  fi
   OBOX="$(pg -c "SELECT coalesce(max(pg_column_size(payload_json)),0) FROM core.outbox_events WHERE event_type='PUSH_DELIVERY_REQUESTED';" || echo 0)"
-  TMP1="$(pg -c "SELECT temp_bytes FROM pg_stat_database WHERE datname='liveclass';" || echo "$T_TMP0")"
-  WAL="$(pg -c "SELECT pg_wal_lsn_diff(pg_current_wal_lsn(), '$T_WAL0');" || echo 0)"
+  WAL="$(pg -c "SELECT pg_wal_lsn_diff(pg_current_wal_lsn(), '$T_WAL0');" 2>/dev/null || echo 0)"
 
   # 앱이 죽었으면 왜 죽었는지 남긴다. OOM인지 아닌지가 이 실험의 요지다.
   compose logs --tail 400 app > "$OUT/app-slice-$SLICE.log" 2>&1 || true
   OOM="$(grep -c "OutOfMemoryError" "$OUT/app-slice-$SLICE.log" || true)"
   [ "${OOM:-0}" -gt 0 ] && RESULT="힙 부족(OutOfMemoryError)"
 
-  python3 - "$OUT/summary.csv" "$SLICE" "$RESULT" "$T0" "$T1" "${N:-0}" "$HEAP_MAX" "$GC" "$OBOX" "$T_TMP0" "$TMP1" "$WAL" <<'PY'
+  python3 - "$OUT/summary.csv" "$SLICE" "$RESULT" "$T0" "$T1" "${N:-0}" "$HEAP_MAX" "$GC" "$PG_MAX" "${PGOOM:-false}" "$OBOX" "$WAL" <<'PY'
 import sys
-f, slice_, res, t0, t1, n, heap, gc, obox, tmp0, tmp1, wal = sys.argv[1:]
+f, slice_, res, t0, t1, n, heap, gc, pgmem, pgoom, obox, wal = sys.argv[1:]
 row = (f"{slice_},{res},{(int(t1)-int(t0))/1000:.2f},{n},"
-       f"{int(heap)/1048576:.0f},{float(gc):.2f},{int(obox)/1024:.0f},"
-       f"{(int(tmp1)-int(tmp0))/1048576:.1f},{int(wal)/1048576:.1f}")
+       f"{int(heap)/1048576:.0f},{float(gc):.2f},{int(pgmem)/1048576:.0f},{pgoom},"
+       f"{int(obox)/1024:.0f},{int(wal)/1048576:.1f}")
 open(f, "a").write(row + "\n")
 print("   " + row.replace(",", "  "))
 PY
