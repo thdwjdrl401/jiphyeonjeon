@@ -77,13 +77,17 @@ with open(dst, "w") as f:
         if not u: continue
         h = hashlib.md5(("serial:" + u).encode()).hexdigest()
         f.write(f"INSERT INTO core.notification_dedupe (dedupe_hash) VALUES ('{h}'::uuid) ON CONFLICT DO NOTHING;\n")
-        f.write(f"INSERT INTO core.notification (recipient_id, content_id, read_status, action_status, created_at) "
-                f"VALUES ('{u}','{cid}','UNREAD','INFO', now());\n")
+        f.write(f"INSERT INTO core.notification (id, recipient_id, content_id, read_status, action_status) "
+                f"VALUES (gen_random_uuid(),'{u}','{cid}','UNREAD','INFO');\n")
 PY
 compose cp "$OUT/serial.sql" postgres:/tmp/serial.sql > /dev/null 2>&1
 T0="$(now_ms)"
 compose exec -T -e PGPASSWORD=bench postgres psql -U liveclass -d liveclass -q -f /tmp/serial.sql < /dev/null > /dev/null 2>&1
 T1="$(now_ms)"
+# 정말 들어갔는지 센다. 앞선 회차에서 id 컬럼 누락으로 알림 삽입이 전부 실패했는데도 시간만
+# 찍혀 나온 적이 있다 — 중복 제거 삽입만 돌고 있었다.
+INS="$(pg -c 'SELECT count(*) FROM core.notification;')"
+[ "${INS:-0}" -ge "$ROWS" ] || echo "   경고: $ROWS건 목표인데 알림 $INS건만 들어갔다 — 이 회차는 못 쓴다"
 report "행마다 왕복·커밋" "$ROWS" "$(( T1 - T0 ))"
 
 pg -c "TRUNCATE core.notification, core.notification_dedupe CASCADE;" > /dev/null
