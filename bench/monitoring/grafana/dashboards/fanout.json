@@ -1,7 +1,7 @@
 {
   "uid": "fanout-bench",
   "title": "알림 팬아웃·발송",
-  "description": "100만 명 팬아웃과 웹푸시 발송을 한 화면에서 본다. 구간마다 무엇이 막는지가 CPU 그래프에서 갈린다.",
+  "description": "100만 명 팬아웃과 웹푸시 발송. 구간마다 무엇이 막는지가 CPU 그래프에서 갈린다.",
   "tags": [
     "liveclass",
     "notification"
@@ -15,15 +15,15 @@
   },
   "panels": [
     {
-      "id": 1,
-      "title": "알림 생성 속도",
-      "description": "팬아웃이 초당 몇 행을 만드는가. 100만 행을 다 만들면 0으로 떨어진다.",
+      "id": 2,
+      "title": "컨테이너 CPU — 구간마다 병목이 자리를 바꾼다",
+      "description": "앞의 짧은 봉우리가 팬아웃(Postgres)이고, 뒤의 긴 고원이 발송(앱)이다. 노드를 나눈 이유가 이 그림이다.",
       "type": "timeseries",
       "gridPos": {
         "x": 0,
         "y": 0,
-        "w": 12,
-        "h": 7
+        "w": 24,
+        "h": 8
       },
       "datasource": {
         "type": "prometheus",
@@ -31,30 +31,101 @@
       },
       "targets": [
         {
-          "expr": "rate(pg_stat_user_tables_n_tup_ins{relname=~\"notification.*\"}[15s])",
-          "legendFormat": "{{relname}}",
+          "expr": "sum(rate(container_cpu_usage_seconds_total{name=\"liveclass-bench-postgres-1\"}[30s]))*100",
+          "legendFormat": "Postgres",
           "refId": "A"
+        },
+        {
+          "expr": "sum(rate(container_cpu_usage_seconds_total{name=\"liveclass-bench-app-1\"}[30s]))*100",
+          "legendFormat": "앱",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(container_cpu_usage_seconds_total{name=\"liveclass-bench-rabbitmq-1\"}[30s]))*100",
+          "legendFormat": "RabbitMQ",
+          "refId": "C"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "rowsps",
+          "unit": "percent",
           "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 12,
+            "lineWidth": 2.5,
+            "fillOpacity": 15,
             "showPoints": "never",
-            "stacking": {
-              "mode": "none"
-            }
+            "spanNulls": true,
+            "lineInterpolation": "smooth"
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Postgres"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#2E9E5B"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "앱"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#2D6FD4"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "RabbitMQ"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#D97B29"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "legend": {
-          "displayMode": "list",
+          "displayMode": "table",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": true,
+          "calcs": [
+            "max",
+            "mean"
+          ]
         },
         "tooltip": {
           "mode": "multi",
@@ -63,15 +134,15 @@
       }
     },
     {
-      "id": 2,
-      "title": "컨테이너 CPU",
-      "description": "팬아웃 구간은 postgres가, 발송 구간은 app이 올라간다. 이 그래프 하나가 노드를 나눈 이유다.",
+      "id": 1,
+      "title": "초당 삽입 행 수 — 알림 하나에 두 행을 쓴다",
+      "description": "알림 행(굵은 선)과 중복 제거 등록표(파선)가 완전히 포개져 있다. 파선이 굵은 선 위를 정확히 따라가는 것이 요점이다.",
       "type": "timeseries",
       "gridPos": {
-        "x": 12,
-        "y": 0,
-        "w": 12,
-        "h": 7
+        "x": 0,
+        "y": 8,
+        "w": 24,
+        "h": 8
       },
       "datasource": {
         "type": "prometheus",
@@ -79,30 +150,111 @@
       },
       "targets": [
         {
-          "expr": "rate(container_cpu_usage_seconds_total{name=~\"liveclass-bench-(app|postgres|rabbitmq).*\"}[15s]) * 100",
-          "legendFormat": "{{name}}",
+          "expr": "sum(rate(pg_stat_user_tables_n_tup_ins{relname=~\"notification_p20.*\"}[30s]))",
+          "legendFormat": "알림 행",
           "refId": "A"
+        },
+        {
+          "expr": "sum(rate(pg_stat_user_tables_n_tup_ins{relname=\"notification_dedupe\"}[30s]))",
+          "legendFormat": "중복 제거 등록표",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(pg_stat_user_tables_n_tup_ins{relname=~\"notification_push_progress.*\"}[30s]))",
+          "legendFormat": "발송 진행 기록",
+          "refId": "C"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "percent",
+          "unit": "rowsps",
           "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 12,
+            "lineWidth": 2.5,
+            "fillOpacity": 8,
             "showPoints": "never",
-            "stacking": {
-              "mode": "none"
-            }
+            "spanNulls": true,
+            "lineInterpolation": "smooth"
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "알림 행"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#2E9E5B"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 5
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "중복 제거 등록표"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#C2185B"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    8,
+                    6
+                  ]
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2.5
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "발송 진행 기록"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#2D6FD4"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2.5
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "legend": {
-          "displayMode": "list",
+          "displayMode": "table",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": true,
+          "calcs": [
+            "max",
+            "mean"
+          ]
         },
         "tooltip": {
           "mode": "multi",
@@ -112,14 +264,14 @@
     },
     {
       "id": 3,
-      "title": "큐 깊이",
-      "description": "어느 구간이 밀리는지. 팬아웃 큐는 갈래 수만큼만 떠 있고, 푸시 큐는 발송이 따라올 때까지 쌓인다.",
+      "title": "큐 깊이 — 어디가 밀리는가",
+      "description": "팬아웃 큐는 갈래 수만큼만 떠 있다(직렬 체인). 푸시 큐는 21초 만에 다 쌓이고 발송이 12분에 걸쳐 비운다.",
       "type": "timeseries",
       "gridPos": {
         "x": 0,
-        "y": 7,
-        "w": 12,
-        "h": 7
+        "y": 16,
+        "w": 24,
+        "h": 8
       },
       "datasource": {
         "type": "prometheus",
@@ -127,30 +279,101 @@
       },
       "targets": [
         {
-          "expr": "rabbitmq_queue_messages{queue=~\"notification.*\"}",
-          "legendFormat": "{{queue}}",
+          "expr": "rabbitmq_queue_messages{queue=\"notification.fanout\"}",
+          "legendFormat": "팬아웃 큐",
           "refId": "A"
+        },
+        {
+          "expr": "rabbitmq_queue_messages{queue=\"notification.push\"}",
+          "legendFormat": "푸시 큐",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rabbitmq_queue_messages{queue=~\".*dlq\"})",
+          "legendFormat": "DLQ",
+          "refId": "C"
         }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "short",
           "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 12,
+            "lineWidth": 2.5,
+            "fillOpacity": 15,
             "showPoints": "never",
-            "stacking": {
-              "mode": "none"
-            }
+            "spanNulls": true,
+            "lineInterpolation": "smooth"
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "팬아웃 큐"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#2E9E5B"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 3.5
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "푸시 큐"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#2D6FD4"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "DLQ"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#C62828"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "legend": {
-          "displayMode": "list",
+          "displayMode": "table",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": true,
+          "calcs": [
+            "max",
+            "mean"
+          ]
         },
         "tooltip": {
           "mode": "multi",
@@ -160,14 +383,14 @@
     },
     {
       "id": 4,
-      "title": "JVM 힙",
-      "description": "슬라이싱이 없으면 여기가 폭발한다 — 수신자 100만 명을 앱으로 끌어오면 힙에 다 올라간다.",
+      "title": "JVM 힙 — 슬라이싱이 지키는 자리",
+      "description": "수신자를 조각으로 끊어 읽으므로 힙은 수신자 수와 무관하게 평평하다. 한 번에 다 읽으면 여기가 100만 명만큼 부푼다.",
       "type": "timeseries",
       "gridPos": {
-        "x": 12,
-        "y": 7,
-        "w": 12,
-        "h": 7
+        "x": 0,
+        "y": 24,
+        "w": 24,
+        "h": 8
       },
       "datasource": {
         "type": "prometheus",
@@ -175,13 +398,13 @@
       },
       "targets": [
         {
-          "expr": "jvm_memory_used_bytes{area=\"heap\"}",
-          "legendFormat": "used",
+          "expr": "sum(jvm_memory_used_bytes{area=\"heap\"})",
+          "legendFormat": "사용",
           "refId": "A"
         },
         {
-          "expr": "jvm_memory_max_bytes{area=\"heap\"}",
-          "legendFormat": "max",
+          "expr": "sum(jvm_memory_max_bytes{area=\"heap\"})",
+          "legendFormat": "상한",
           "refId": "B"
         }
       ],
@@ -189,21 +412,73 @@
         "defaults": {
           "unit": "bytes",
           "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 12,
+            "lineWidth": 2.5,
+            "fillOpacity": 15,
             "showPoints": "never",
-            "stacking": {
-              "mode": "none"
-            }
+            "spanNulls": true,
+            "lineInterpolation": "smooth"
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "사용"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#2D6FD4"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "상한"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#8A8D95"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    6,
+                    6
+                  ]
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "legend": {
-          "displayMode": "list",
+          "displayMode": "table",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": true,
+          "calcs": [
+            "max",
+            "mean"
+          ]
         },
         "tooltip": {
           "mode": "multi",
@@ -213,13 +488,13 @@
     },
     {
       "id": 5,
-      "title": "Postgres 활성 백엔드",
-      "description": "동시에 도는 조각 수. 갈래를 늘려도 물리 코어 수를 넘으면 서로 기다리기만 한다.",
+      "title": "Postgres 활성 백엔드 — 동시에 도는 조각 수",
+      "description": "갈래를 늘려도 물리 코어 수를 넘으면 서로 기다리기만 한다. 대기 이벤트를 세어 보니 락도 디스크도 아닌 CPU 초과 구독이었다.",
       "type": "timeseries",
       "gridPos": {
         "x": 0,
-        "y": 14,
-        "w": 12,
+        "y": 32,
+        "w": 24,
         "h": 7
       },
       "datasource": {
@@ -228,8 +503,8 @@
       },
       "targets": [
         {
-          "expr": "pg_stat_activity_count{state=\"active\",datname=\"liveclass\"}",
-          "legendFormat": "active",
+          "expr": "sum(pg_stat_activity_count{state=\"active\",datname=\"liveclass\"})",
+          "legendFormat": "활성 백엔드",
           "refId": "A"
         }
       ],
@@ -237,21 +512,44 @@
         "defaults": {
           "unit": "short",
           "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 12,
+            "lineWidth": 2.5,
+            "fillOpacity": 15,
             "showPoints": "never",
-            "stacking": {
-              "mode": "none"
-            }
+            "spanNulls": true,
+            "lineInterpolation": "smooth"
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "활성 백엔드"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#2E9E5B"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 3
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "legend": {
-          "displayMode": "list",
+          "displayMode": "table",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": true,
+          "calcs": [
+            "max",
+            "mean"
+          ]
         },
         "tooltip": {
           "mode": "multi",
@@ -261,13 +559,13 @@
     },
     {
       "id": 6,
-      "title": "DB 커넥션 풀",
-      "description": "Hikari 풀(10개)을 팬아웃 소비자와 웹 요청이 나눠 쓴다. 갈래를 올릴 때 봐야 하는 값.",
+      "title": "DB 커넥션 풀 — 갈래를 올릴 때 봐야 하는 값",
+      "description": "Hikari 풀 10개를 팬아웃 소비자와 웹 요청이 나눠 쓴다. 소비자 스레드는 8개지만 동시에 도는 것은 갈래 수 근처다.",
       "type": "timeseries",
       "gridPos": {
-        "x": 12,
-        "y": 14,
-        "w": 12,
+        "x": 0,
+        "y": 39,
+        "w": 24,
         "h": 7
       },
       "datasource": {
@@ -276,13 +574,13 @@
       },
       "targets": [
         {
-          "expr": "hikaricp_connections_active",
-          "legendFormat": "active",
+          "expr": "sum(hikaricp_connections_active)",
+          "legendFormat": "사용 중",
           "refId": "A"
         },
         {
-          "expr": "hikaricp_connections_idle",
-          "legendFormat": "idle",
+          "expr": "sum(hikaricp_connections_idle)",
+          "legendFormat": "유휴",
           "refId": "B"
         }
       ],
@@ -290,21 +588,63 @@
         "defaults": {
           "unit": "short",
           "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 12,
+            "lineWidth": 2.5,
+            "fillOpacity": 15,
             "showPoints": "never",
-            "stacking": {
-              "mode": "none"
-            }
+            "spanNulls": true,
+            "lineInterpolation": "smooth"
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "사용 중"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#2D6FD4"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "유휴"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#8A8D95"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "legend": {
-          "displayMode": "list",
+          "displayMode": "table",
           "placement": "bottom",
-          "showLegend": true
+          "showLegend": true,
+          "calcs": [
+            "max",
+            "mean"
+          ]
         },
         "tooltip": {
           "mode": "multi",
