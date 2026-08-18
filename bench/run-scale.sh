@@ -24,6 +24,7 @@
 #   bench/run-scale.sh A                      # 팬아웃 1→2→3 인스턴스 (앱 1코어 공유)
 #   bench/run-scale.sh B                      # 발송 1→2→3 인스턴스 (큐가 차 있어야 한다)
 #   LAYOUT=dedicated bench/run-scale.sh B     # 발송은 앱마다 코어를 줘 볼 만하다
+#   INSTANCES="1 2" LAYOUT=fanout bench/run-scale.sh A   # 팬아웃 노드 확장 (pg 고정)
 #   INSTANCES="1 2" bench/run-scale.sh A
 #
 set -euo pipefail
@@ -123,6 +124,16 @@ plan_for() {
       2) echo "scale2|$P|$I|2,6|2,6" ;;
       3) echo "scale3|$P|$I|2,6|2,6|2,6" ;;
       *) fail "지원하지 않는 인스턴스 수: $1" ;;
+    esac
+  elif [ "$LAYOUT" = "fanout" ]; then
+    # 팬아웃 노드를 늘렸을 때 빨라지는가만 본다. **pg 코어를 고정**해야 답이 나온다 —
+    # 앱에 코어를 주려고 pg에서 빼면 DB가 더 막혀 인스턴스 효과와 뒤섞인다.
+    # 브로커는 pg와 코어를 나눠 쓴다. 팬아웃 구간 RabbitMQ CPU는 0.2% 수준이라 영향이 없다.
+    P="0,4,1,5"; I="1,5"
+    case "$1" in
+      1) echo "none|$P|$I|2,6" ;;
+      2) echo "scale2|$P|$I|2,6|3,7" ;;
+      *) fail "fanout 배치는 인스턴스 1~2만 지원한다(물리 4코어)" ;;
     esac
   elif [ "$LAYOUT" = "balanced" ]; then
     P="0,4"; I="1,5"              # 앱에 2코어를 주는 대신 pg·브로커가 1코어씩
