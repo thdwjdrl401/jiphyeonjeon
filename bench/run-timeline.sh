@@ -102,7 +102,14 @@ for i in range(n):
   done <<< "$ranges"
 }
 
-# 0.5초마다 (시각, 알림 행, 발송 건수)를 남긴다. 겹침은 이 시계열에서 계산된다.
+# 진행만 본다. **폴링을 촘촘히 하지 않는다** — 0.5초마다 docker compose exec를 두 번씩 부르면
+# 그 자체가 측정에 얹힌다(팬아웃이 18.8초에서 22.3초로 늘었다). 정확한 시각은 폴링이 아니라
+# 이미 기록된 곳에서 가져온다.
+#
+#   팬아웃 완료   SELECT max(created_at) FROM core.notification   행에 박힌 시각
+#   첫·마지막 발송  목 서버의 firstAtUnixMs · lastAtUnixMs
+#
+# 그래서 여기서는 "끝났는지"만 2초마다 확인하면 되고, 그 간격이 결과의 정밀도를 좌우하지 않는다.
 sample_until() {  # $1 목표알림 $2 목표발송(0이면 무시) $3 로그파일
     local want_n="$1" want_p="$2" f="$3" n p last=0 idle=0
     printf 'ms,notifications,pushes\n' > "$f"
@@ -114,10 +121,17 @@ sample_until() {  # $1 목표알림 $2 목표발송(0이면 무시) $3 로그파
       if [ "$n" -ge "$want_n" ] && { [ "$want_p" -eq 0 ] || [ "$p" -ge "$want_p" ]; }; then break; fi
       if [ "$(( n + p ))" -eq "$last" ]; then idle=$(( idle + 1 )); else idle=0; fi
       last=$(( n + p ))
-      [ "$idle" -ge 120 ] && { echo; echo "   정체"; break; }
-      sleep 0.5
+      [ "$idle" -ge 60 ] && { echo; echo "   정체"; break; }
+      sleep 2
     done
     echo
+}
+
+# 알림 행에 박힌 시각. 폴링 간격과 무관하게 정확하다.
+fanout_bounds_ms() {
+  pg -c "SELECT (extract(epoch from min(created_at))*1000)::bigint || ' ' ||
+                (extract(epoch from max(created_at))*1000)::bigint
+         FROM core.notification;" 2>/dev/null || echo "0 0"
 }
 
 echo "▶ 모드 $MODE · 갈래 $CHAINS · 조각 $SLICE"
@@ -133,6 +147,7 @@ if [ "$MODE" = "shared" ]; then
   T0="$(now_ms)"; trigger
   sample_until "$USERS" "$SUBS" "$OUT/samples.csv"
   T_END="$(now_ms)"
+  read -r FAN_MIN FAN_MAX <<< "$(fanout_bounds_ms)"
 else
   # ── 구간 A: 팬아웃만, DB에 코어를 몰아준다 ──
   start_infra "$PG_FANOUT" "$INFRA_FANOUT"
@@ -144,14 +159,19 @@ else
   sleep 8
   T0="$(now_ms)"; trigger
   sample_until "$USERS" 0 "$OUT/samples-fanout.csv"
-  T_FANOUT_END="$(now_ms)"
-  echo "   팬아웃 $(python3 -c "print(($T_FANOUT_END-$T0)/1000)")초"
+  read -r FAN_MIN FAN_MAX <<< "$(fanout_bounds_ms)"
+  T_FANOUT_END="$FAN_MAX"
+  echo "   팬아웃 $(python3 -c "print(($T_FANOUT_END-$T0)/1000)")초 (마지막 행에 박힌 시각 기준)"
 
   # ── 구간 B: 발송만, 앱에 코어를 몰아준다 ──
   echo "   구간 B 배분 pg[$PG_PUSH] 앱[$APP_PUSH] 인프라[$INFRA_PUSH]"
   start_infra "$PG_PUSH" "$INFRA_PUSH"
   mock /reset > /dev/null 2>&1 || true
   pg -c "TRUNCATE core.notification_push_progress;" > /dev/null
+  QD="$(compose exec -T rabbitmq rabbitmqctl list_queues -q name messages < /dev/null 2>/dev/null \
+        | awk '$1=="notification.push"{print $2}')"
+  [ "${QD:-0}" -gt 0 ] || fail "푸시 큐가 비었다(${QD:-없음}). 구간 A가 쌓은 명령이 사라졌다면 RabbitMQ 볼륨을 확인할 것."
+  echo "   푸시 큐 $QD건 대기 중"
   start_app "$PG_PUSH" "$INFRA_PUSH" "$APP_PUSH" false true
   T_PUSH_START="$(now_ms)"
   sample_until 0 "$SUBS" "$OUT/samples-push.csv"
@@ -161,10 +181,10 @@ fi
 MOCK_STATS="$(mock /stats 2>/dev/null || echo '{}')"
 echo "$MOCK_STATS" > "$OUT/mock.json"
 
-python3 - "$OUT" "$MODE" "${T0:-0}" "${T_END:-0}" "${T_FANOUT_END:-0}" "${T_PUSH_START:-0}" <<'PY'
+python3 - "$OUT" "$MODE" "${T0:-0}" "${T_END:-0}" "${T_FANOUT_END:-0}" "${T_PUSH_START:-0}" "${FAN_MAX:-0}" <<'PY'
 import csv, json, os, sys
 out, mode = sys.argv[1], sys.argv[2]
-t0, t_end, t_fan, t_push0 = (int(x) for x in sys.argv[3:7])
+t0, t_end, t_fan, t_push0, fan_max = (int(x) for x in sys.argv[3:8])
 mock = json.load(open(os.path.join(out, "mock.json")))
 S = lambda ms: ms / 1000.0
 
@@ -174,7 +194,8 @@ print("════ 타임라인 (%s) ════" % mode)
 if mode == "shared":
     rows = list(csv.DictReader(open(os.path.join(out, "samples.csv"))))
     ts = [(int(r["ms"]), int(r["notifications"]), int(r["pushes"])) for r in rows]
-    fan_done = next((m for m, n, _ in ts if n >= max(n for _, n, _ in ts)), t_end)
+    # 폴링이 아니라 마지막 알림 행에 박힌 시각. 2초 간격과 무관하게 정확하다.
+    fan_done = fan_max or next((m for m, n, _ in ts if n >= max(n for _, n, _ in ts)), t_end)
     first_push = mock.get("firstAtUnixMs") or next((m for m, _, p in ts if p > 0), 0)
     last_push = mock.get("lastAtUnixMs") or t_end
 

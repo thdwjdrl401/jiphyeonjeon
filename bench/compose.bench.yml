@@ -181,6 +181,11 @@ services:
       RABBITMQ_DEFAULT_PASS: bench
     # 15692는 prometheus 플러그인. 관측을 다른 머신에서 돌릴 때 터널로 가져간다.
     ports: ["127.0.0.1:15672:15672", "127.0.0.1:15692:15692"]
+    # **볼륨이 있어야 한다.** 구간을 나눠 재려면 cpuset을 바꿔 컨테이너를 다시 만드는데,
+    # 볼륨이 없으면 그때 큐가 통째로 사라진다 — 구간 A가 쌓아 둔 푸시 명령 200개를 잃고
+    # 구간 B가 빈손으로 도는 일이 실제로 있었다(목 수신 0건). 메시지는 durable이라
+    # 저장 경로만 살려 두면 재생성을 넘어 남는다.
+    volumes: ["rabbitdata:/var/lib/rabbitmq"]
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 3s
@@ -311,3 +316,4 @@ services:
 
 volumes:
   pgdata:
+  rabbitdata:
