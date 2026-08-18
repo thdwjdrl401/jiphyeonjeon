@@ -227,10 +227,15 @@ if has 11; then
   TARGET="$(pg -c "SELECT count(*) FROM core.push_subscription s
                     WHERE EXISTS (SELECT 1 FROM core.notification n WHERE n.recipient_id = s.user_id);")"
   start_app false true 5000
-  for i in $(seq 1 60); do
-    D="$(curl -s --max-time 5 http://127.0.0.1:18080/stats | python3 -c 'import sys,json;print(json.load(sys.stdin)["delivered"])' 2>/dev/null || echo 0)"
+  # **끝났는지의 기준은 목 서버 수신 건수가 아니다.** 429를 받은 기기는 재적재를 거쳐 다시
+  # 오므로, 목이 구독 수를 넘겼어도 아직 못 마친 사람이 남는다. 진행 표의 사람 수가 알림
+  # 사람 수에 닿고 큐와 아웃박스가 함께 빌 때까지 기다린다.
+  PEOPLE="$(pg -c 'SELECT count(*) FROM core.notification;')"
+  for i in $(seq 1 90); do
+    DONE_="$(pg -c 'SELECT count(DISTINCT recipient_id) FROM core.notification_push_progress;' 2>/dev/null || echo 0)"
     Q="$(compose exec -T rabbitmq rabbitmqctl list_queues -q name messages < /dev/null 2>/dev/null | awk '$1=="notification.push"{print $2}')"
-    [ "${D:-0}" -ge "${TARGET:-1}" ] && [ "${Q:-0}" -eq 0 ] && break
+    P="$(pg -c "SELECT count(*) FROM core.outbox_events WHERE destination='notification.push' AND status='PENDING';" 2>/dev/null || echo 0)"
+    [ "${DONE_:-0}" -ge "${PEOPLE:-1}" ] && [ "${Q:-0}" -eq 0 ] && [ "${P:-0}" -eq 0 ] && break
     sleep 5
   done
   {
