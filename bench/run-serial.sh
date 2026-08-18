@@ -66,12 +66,12 @@ pgv -c "\timing off" > /dev/null 2>&1
 T0="$(now_ms)"
 pg -c "
 DO \$\$
-DECLARE r record; h text;
+DECLARE r record; h uuid;
 BEGIN
   FOR r IN SELECT user_id FROM core.enrollment
             WHERE curriculum_id='$CUR' AND status='ACTIVE'
             ORDER BY user_id LIMIT $ROWS LOOP
-    h := md5('serial:' || r.user_id::text);
+    h := md5('serial:' || r.user_id::text)::uuid;
     INSERT INTO core.notification_dedupe (dedupe_hash) VALUES (h) ON CONFLICT DO NOTHING;
     INSERT INTO core.notification (recipient_id, content_id, read_status, action_status, created_at)
     VALUES (r.user_id, '$CID', 'UNREAD', 'INFO', now());
@@ -84,7 +84,7 @@ pg -c "TRUNCATE core.notification, core.notification_dedupe CASCADE;" > /dev/nul
 T0="$(now_ms)"
 pg -c "
 WITH candidate AS (
-  SELECT user_id, md5('serial:' || user_id::text) AS h
+  SELECT user_id, md5('serial:' || user_id::text)::uuid AS h
     FROM core.enrollment WHERE curriculum_id='$CUR' AND status='ACTIVE'
     ORDER BY user_id LIMIT $ROWS
 ), passed AS (
@@ -132,14 +132,18 @@ run_push() {  # $1 동시 상한 $2 라벨
   APP_HEAP=1g APP_MEM=1600m FANOUT_ENABLED=false PUSH_ENABLED=true \
   PUSH_MAX_IN_FLIGHT="$1" PUSH_CONCURRENCY=1 \
     compose up -d --build --wait --wait-timeout 300 app > /dev/null 2>&1 || fail "앱 기동 실패"
-  local t0 d
-  t0="$(now_ms)"
+  # **폴링으로 재지 않는다.** 동시 800건이면 2,000여 건이 1초 안에 끝나 2초 간격 폴링으로는
+  # 0.05초 같은 값이 나온다. 목 서버가 첫 수신과 마지막 수신 시각을 들고 있으므로 그것을 쓴다.
+  local d
   for i in $(seq 1 240); do
     d="$(mock /stats | python3 -c 'import sys,json;print(json.load(sys.stdin)["delivered"])' 2>/dev/null || echo 0)"
     [ "${d:-0}" -ge "$target" ] && break
     sleep 2
   done
-  report "$2" "$target" "$(( $(now_ms) - t0 ))"
+  sleep 3
+  local span
+  span="$(mock /stats | python3 -c 'import sys,json;d=json.load(sys.stdin);print(max(1,d["lastAtUnixMs"]-d["firstAtUnixMs"]))' 2>/dev/null || echo 1)"
+  report "$2" "$target" "$span"
 }
 
 run_push 1   "한 건씩 순차 발송"
