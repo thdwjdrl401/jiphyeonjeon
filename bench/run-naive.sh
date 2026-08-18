@@ -60,7 +60,9 @@ pg_oomkilled() { docker inspect "$(compose ps -q postgres)" --format '{{.State.O
 app_alive() { [ "$(compose ps -q app | xargs -r docker inspect -f '{{.State.Running}}' 2>/dev/null)" = "true" ]; }
 
 echo "▶ 인프라 기동 (pg[$PG_CPUSET_V] 앱[$APP_CPUSET_V] 인프라[$INFRA_CPUSET_V] · 힙 $APP_HEAP)"
-compose down > /dev/null 2>&1 || true
+# 관측을 켜고 돌릴 때는 내리지 않는다. down이 네트워크를 지우면 붙어 있던 cAdvisor·exporter가
+# 떨어져 스크레이프가 끊기고, 정작 보려던 메모리 곡선에 구멍이 난다.
+[ "${KEEP_UP:-0}" = "1" ] || compose down > /dev/null 2>&1 || true
 PG_CPUSET="$PG_CPUSET_V" INFRA_CPUSET="$INFRA_CPUSET_V" \
   compose up -d --wait --wait-timeout 300 postgres redis rabbitmq mock-push > /dev/null 2>&1 \
   || fail "인프라 기동 실패"
