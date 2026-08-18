@@ -62,23 +62,29 @@ pg -c "INSERT INTO core.notification_content
        VALUES ('$CID','MATERIAL_PUBLISHED','INFO','새 자료','x.pptx가 올라왔습니다','{}','g:$CID', now())
        ON CONFLICT DO NOTHING;" > /dev/null
 
-pgv -c "\timing off" > /dev/null 2>&1
+# 서버 안의 루프(plpgsql)로는 순진한 구조를 재지 못한다. 거기엔 왕복도 커밋도 없다.
+# 실제로 값을 만드는 것은 **행마다 왕복하고 행마다 커밋하는** 것이므로, 행 수만큼의 독립
+# INSERT 문을 파일로 만들어 psql에 먹인다. psql은 한 문장씩 보내고 결과를 기다리며,
+# 기본 자동 커밋이라 문장마다 커밋이 하나씩 붙는다.
+pg -c "SELECT user_id FROM core.enrollment WHERE curriculum_id='$CUR' AND status='ACTIVE'
+        ORDER BY user_id LIMIT $ROWS;" > "$OUT/users.txt"
+python3 - "$OUT/users.txt" "$OUT/serial.sql" "$CID" <<'PY'
+import sys, hashlib
+src, dst, cid = sys.argv[1:4]
+with open(dst, "w") as f:
+    for line in open(src):
+        u = line.strip()
+        if not u: continue
+        h = hashlib.md5(("serial:" + u).encode()).hexdigest()
+        f.write(f"INSERT INTO core.notification_dedupe (dedupe_hash) VALUES ('{h}'::uuid) ON CONFLICT DO NOTHING;\n")
+        f.write(f"INSERT INTO core.notification (recipient_id, content_id, read_status, action_status, created_at) "
+                f"VALUES ('{u}','{cid}','UNREAD','INFO', now());\n")
+PY
+compose cp "$OUT/serial.sql" postgres:/tmp/serial.sql > /dev/null 2>&1
 T0="$(now_ms)"
-pg -c "
-DO \$\$
-DECLARE r record; h uuid;
-BEGIN
-  FOR r IN SELECT user_id FROM core.enrollment
-            WHERE curriculum_id='$CUR' AND status='ACTIVE'
-            ORDER BY user_id LIMIT $ROWS LOOP
-    h := md5('serial:' || r.user_id::text)::uuid;
-    INSERT INTO core.notification_dedupe (dedupe_hash) VALUES (h) ON CONFLICT DO NOTHING;
-    INSERT INTO core.notification (recipient_id, content_id, read_status, action_status, created_at)
-    VALUES (r.user_id, '$CID', 'UNREAD', 'INFO', now());
-  END LOOP;
-END \$\$;" > /dev/null
+compose exec -T -e PGPASSWORD=bench postgres psql -U liveclass -d liveclass -q -f /tmp/serial.sql < /dev/null > /dev/null 2>&1
 T1="$(now_ms)"
-report "행마다 INSERT" "$ROWS" "$(( T1 - T0 ))"
+report "행마다 왕복·커밋" "$ROWS" "$(( T1 - T0 ))"
 
 pg -c "TRUNCATE core.notification, core.notification_dedupe CASCADE;" > /dev/null
 T0="$(now_ms)"
