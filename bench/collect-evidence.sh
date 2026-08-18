@@ -109,8 +109,11 @@ if has 05; then
     pg -c "SELECT count(*) FROM core.notification;"
     echo
     echo "-- 지금 구조: 문구는 content 1행, 수신자 행에는 수신자별 값만"
+    # 파티션 부모는 자기 데이터를 갖지 않는다. 자식을 합쳐야 실제 크기가 나온다.
     pgv -c "SELECT
-        pg_size_pretty(pg_total_relation_size('core.notification'))          AS notification,
+        pg_size_pretty((SELECT sum(pg_total_relation_size(relid))
+                          FROM pg_partition_tree('core.notification')
+                         WHERE isleaf))                                      AS notification,
         pg_size_pretty(pg_total_relation_size('core.notification_content'))  AS content,
         pg_size_pretty(pg_total_relation_size('core.notification_dedupe'))   AS dedupe;" 2>&1
     echo
@@ -182,6 +185,13 @@ fi
 if has 04; then
   F="$OUT/04-relay.txt"
   hdr "04 · 아웃박스 적재에서 발행까지 걸린 시간" "$F"
+  # 표본을 다시 만든다. 여기서 갈라 보는 두 집단이 한 실행 안에 같이 나온다.
+  #   notification.fanout — 이 스크립트가 psql로 직접 INSERT한 행. enqueue()를 안 거치므로
+  #                         커밋 후 깨우기가 걸리지 않고 폴링을 기다린다.
+  #   notification.push   — 팬아웃 워커가 enqueue()로 적재한 행. 깨우기 경로를 탄다.
+  reset_state; start_app true false 5000
+  trigger 5000 "08000000-0000-0000-0000-000000000000" > /dev/null
+  sleep 45
   {
     echo "\$ psql -c \"SELECT ... FROM core.outbox_events WHERE status='PUBLISHED'\""
     pgv -c "SELECT destination,
@@ -194,8 +204,11 @@ if has 04; then
              WHERE status='PUBLISHED' AND published_at IS NOT NULL
              GROUP BY destination;" 2>&1
     echo
-    echo "-- 폴링만 쓰던 구조에서는 이 값의 상한이 폴링 주기(5초)였다."
-    echo "-- 지금은 커밋 시점에 릴레이를 깨우고 폴링은 30초 안전망으로 둔다."
+    echo "-- 두 줄이 같은 실행에서 나왔고 경로가 다르다."
+    echo "--   notification.fanout : 이 스크립트가 psql로 직접 INSERT — enqueue()를 안 거쳐"
+    echo "--                         커밋 후 깨우기가 걸리지 않고 폴링을 기다린 값이다."
+    echo "--   notification.push   : 팬아웃 워커가 enqueue()로 적재 — 커밋 후 깨우기 경로."
+    echo "-- 폴링만 쓰던 구조에서는 전부 위쪽 값이었다. 지금은 폴링을 30초 안전망으로 둔다."
   } >> "$F"
   echo "   04 완료"
 fi
@@ -204,7 +217,10 @@ fi
 if has 11; then
   F="$OUT/11-retry-429.txt"
   hdr "11 · 공급자가 429를 30% 비율로 돌려줄 때 최종 유실" "$F"
-  MOCK_RATE_429=0.3 compose up -d --force-recreate --wait --wait-timeout 120 mock-push > /dev/null 2>&1
+  # **항목 내내 export 해 둔다.** 뒤에서 compose up app 을 부르면 compose가 mock-push 설정도
+  # 함께 맞추는데, 그때 이 값이 없으면 기본값 0으로 되돌려 재생성한다 — 429가 한 번도 안 나온다.
+  export MOCK_RATE_429=0.3
+  compose up -d --force-recreate --wait --wait-timeout 120 mock-push > /dev/null 2>&1
   reset_state; start_app true false 5000
   trigger 5000 "01000000-0000-0000-0000-000000000000" > /dev/null
   sleep 25
@@ -221,11 +237,12 @@ if has 11; then
     echo "목 서버 설정 · 응답 통계"
     curl -s --max-time 5 http://127.0.0.1:18080/stats
     echo; echo
-    echo "대상 구독 수                 $TARGET"
+    echo "알림을 받은 사람             $(pg -c 'SELECT count(*) FROM core.notification;')"
+    echo "그 사람들의 구독(기기) 수     $TARGET"
     echo "남은 푸시 큐                 $(compose exec -T rabbitmq rabbitmqctl list_queues -q name messages < /dev/null 2>/dev/null | awk '$1=="notification.push"{print $2}')"
     echo "DLQ                          $(compose exec -T rabbitmq rabbitmqctl list_queues -q name messages < /dev/null 2>/dev/null | awk '$1=="notification.push.dlq"{print $2}')"
     echo
-    echo "-- 발송을 마친 수신자 수 (진행 테이블). 대상 수와 같으면 유실이 없다."
+    echo "-- 발송을 마친 사람 수 (진행 테이블). 위의 사람 수와 같으면 유실이 없다."
     pg -c "SELECT count(DISTINCT recipient_id) FROM core.notification_push_progress;"
     echo
     echo "-- 재적재된 명령 (멱등 키에 회차가 붙는다)"
@@ -235,7 +252,8 @@ if has 11; then
     pg -c "SELECT count(*) FROM core.outbox_events
             WHERE destination='notification.push' AND idempotency_key LIKE '%:retry:%';"
   } >> "$F"
-  MOCK_RATE_429=0 compose up -d --force-recreate --wait --wait-timeout 120 mock-push > /dev/null 2>&1
+  export MOCK_RATE_429=0
+  compose up -d --force-recreate --wait --wait-timeout 120 mock-push > /dev/null 2>&1
   echo "   11 완료"
 fi
 
@@ -243,13 +261,38 @@ fi
 if has 13; then
   F="$OUT/13-cpu.txt"
   hdr "13 · 발송이 도는 동안의 컨테이너 CPU · 메모리" "$F"
+  # 표본이 작으면 발송이 몇 초 만에 끝나 스냅숏이 빈 구간을 찍는다. 범위를 넓게 잡고
+  # 도는 동안 2초마다 찍어 앱 CPU가 가장 높았던 회차를 남긴다.
   reset_state; start_app true false 5000
-  trigger 5000 "02000000-0000-0000-0000-000000000000" > /dev/null
-  sleep 25; start_app false true 5000; sleep 30
+  trigger 5000 "20000000-0000-0000-0000-000000000000" > /dev/null
+  sleep 60; start_app false true 5000
+  SNAP="$OUT/13-samples.txt"; : > "$SNAP"
+  for i in $(seq 1 30); do
+    { echo "--- $i ---"; docker stats --no-stream --format '{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}' \
+        $(compose ps -q app postgres rabbitmq mock-push 2>/dev/null) 2>/dev/null; } >> "$SNAP"
+    sleep 2
+  done
   {
-    echo "\$ docker stats --no-stream"
-    docker stats --no-stream --format 'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}' \
-      $(compose ps -q app postgres rabbitmq mock-push 2>/dev/null) 2>/dev/null
+    echo "\$ docker stats --no-stream   # 발송 중 2초 간격 30회 중 앱 CPU 최고 회차"
+    python3 - "$SNAP" <<'PYX'
+import sys, re
+blocks, cur = [], []
+for line in open(sys.argv[1]):
+    if line.startswith("---"):
+        if cur: blocks.append(cur)
+        cur = []
+    elif line.strip(): cur.append(line.rstrip())
+if cur: blocks.append(cur)
+def appcpu(b):
+    for l in b:
+        if "-app-" in l:
+            m = re.search(r'\t([\d.]+)%', l)
+            if m: return float(m.group(1))
+    return -1
+best = max(blocks, key=appcpu) if blocks else []
+print("NAME                          CPU %     MEM USAGE / LIMIT")
+for l in best: print("  ".join(l.split("\t")))
+PYX
     echo
     echo "-- 100%는 논리 코어 1개. 앱은 물리 2코어(논리 4)를 배정받았다."
     echo "-- 공유 자원인 Postgres 사용률이 낮아, 발송 노드를 늘려도 DB가 먼저 막히지 않는다."
