@@ -41,6 +41,10 @@ new_uuid() { python3 -c 'import uuid; print(uuid.uuid4())'; }
 compose() { docker compose -f "$BENCH/compose.bench.yml" "$@"; }
 pg() { compose exec -T -e PGPASSWORD=bench postgres psql -U liveclass -d liveclass -qtA "$@" < /dev/null; }
 mock() { curl -s --max-time 5 "http://127.0.0.1:18080$1"; }
+push_queue_depth() {
+  compose exec -T rabbitmq rabbitmqctl list_queues -q name messages < /dev/null 2>/dev/null \
+    | awk '$1=="notification.push"{print $2}'
+}
 
 # 구간별 배분. 팬아웃은 DB가, 발송은 앱이 병목이라 같은 배분으로 둘 다 재면 어느 쪽도 제 실력이 아니다.
 #   팬아웃  pg 2코어 · 앱 1코어 · 인프라 1코어
@@ -54,6 +58,20 @@ start_infra() {
     || fail "인프라 기동 실패"
   PG_CPUSET="$1" INFRA_CPUSET="$2" \
     compose --profile mon up -d --wait --wait-timeout 300 postgres-exporter cadvisor > /dev/null 2>&1 || true
+}
+
+# 도는 컨테이너의 cpuset을 **제자리에서** 바꾼다. compose로 바꾸면 컨테이너가 다시 만들어지고,
+# 그러면 구간 A가 큐에 쌓아 둔 푸시 명령을 잃는다(호스트명이 바뀌어 RabbitMQ가 빈 노드로 뜬다).
+# compose에는 항상 구간 A 값을 넘겨 설정 차이를 만들지 않는다 — 실제 배정은 여기서만 바꾼다.
+set_cpuset() {  # $1 pg $2 infra
+  local id
+  for svc in postgres; do
+    id="$(compose ps -q "$svc")" && [ -n "$id" ] && docker update --cpuset-cpus "$1" "$id" > /dev/null
+  done
+  for svc in redis rabbitmq mock-push; do
+    id="$(compose ps -q "$svc")" && [ -n "$id" ] && docker update --cpuset-cpus "$2" "$id" > /dev/null
+  done
+  echo "   인프라 cpuset 제자리 변경 pg[$1] 인프라[$2]"
 }
 
 start_app() {  # $1 pg $2 infra $3 app $4 fanout_on $5 push_on
@@ -161,18 +179,18 @@ else
   sample_until "$USERS" 0 "$OUT/samples-fanout.csv"
   read -r FAN_MIN FAN_MAX <<< "$(fanout_bounds_ms)"
   T_FANOUT_END="$FAN_MAX"
+  echo "   구간 A 종료 시점 푸시 큐 $(push_queue_depth)건"
   echo "   팬아웃 $(python3 -c "print(($T_FANOUT_END-$T0)/1000)")초 (마지막 행에 박힌 시각 기준)"
 
   # ── 구간 B: 발송만, 앱에 코어를 몰아준다 ──
   echo "   구간 B 배분 pg[$PG_PUSH] 앱[$APP_PUSH] 인프라[$INFRA_PUSH]"
-  start_infra "$PG_PUSH" "$INFRA_PUSH"
+  set_cpuset "$PG_PUSH" "$INFRA_PUSH"
   mock /reset > /dev/null 2>&1 || true
   pg -c "TRUNCATE core.notification_push_progress;" > /dev/null
-  QD="$(compose exec -T rabbitmq rabbitmqctl list_queues -q name messages < /dev/null 2>/dev/null \
-        | awk '$1=="notification.push"{print $2}')"
-  [ "${QD:-0}" -gt 0 ] || fail "푸시 큐가 비었다(${QD:-없음}). 구간 A가 쌓은 명령이 사라졌다면 RabbitMQ 볼륨을 확인할 것."
+  QD="$(push_queue_depth)"
+  [ "${QD:-0}" -gt 0 ] || fail "푸시 큐가 비었다(${QD:-없음}). 구간 A가 쌓은 명령이 사라졌다."
   echo "   푸시 큐 $QD건 대기 중"
-  start_app "$PG_PUSH" "$INFRA_PUSH" "$APP_PUSH" false true
+  start_app "$PG_FANOUT" "$INFRA_FANOUT" "$APP_PUSH" false true
   T_PUSH_START="$(now_ms)"
   sample_until 0 "$SUBS" "$OUT/samples-push.csv"
   T_END="$(now_ms)"
