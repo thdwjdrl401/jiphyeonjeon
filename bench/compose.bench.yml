@@ -297,7 +297,14 @@ services:
       - /dev/disk/:/dev/disk:ro
     # 1초. 컨테이너가 한계까지 오르는 데 몇 초뿐이라 5초로는 마지막 급등을 놓친다 —
     # 실제로 cgroup을 직접 읽으면 1,500MB인데 그래프에는 1.28GiB까지만 찍혔다.
-    command: ["--housekeeping_interval=1s", "--docker_only=true"]
+    # housekeeping_interval만으로는 부족하다. cAdvisor는 기본으로 동적 집계를 켜 두고 한가한
+    # 컨테이너의 간격을 max_housekeeping_interval(기본 60초)까지 늘린다 — 그래서 1초를 줘도
+    # 한계에 닿는 마지막 몇 초가 표본에 안 잡혔다. 동적 집계를 끄고 상한도 1초로 묶는다.
+    command:
+      - --housekeeping_interval=1s
+      - --max_housekeeping_interval=1s
+      - --allow_dynamic_housekeeping=false
+      - --docker_only=true
     ports: ["127.0.0.1:18082:8080"]
 
   grafana:
