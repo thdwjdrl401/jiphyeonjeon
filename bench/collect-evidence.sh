@@ -51,12 +51,15 @@ hdr() { { echo "# $1"; echo "# $(date --iso-8601=seconds 2>/dev/null || date)"; 
 term() {
   local shown="$1"; shift
   printf '\033[1;32m$\033[0m \033[1m%s\033[0m\n' "$shown"
-  script -q -e -c "$*" /dev/null 2>&1 | sed -e 's/\r$//'
+  # 그래도 멈추는 명령이 있으면 수집 전체를 붙잡지 않게 시간 제한을 둔다.
+  timeout 120 script -q -e -c "$*" /dev/null 2>&1 | sed -e 's/\r$//'
   echo
 }
 # 주석 한 줄. 캡처가 아니라 읽는 사람에게 주는 설명이라 색을 달리한다.
 note() { printf '\033[2;37m%s\033[0m\n' "$*"; }
-PSQL="docker compose -f $BENCH/compose.bench.yml exec -e PGPASSWORD=bench postgres psql -U liveclass -d liveclass"
+# -P pager=off 가 있어야 한다. script(1)이 붙여 준 의사 단말을 psql이 사람으로 읽고 페이저를
+# 띄우는데, 그 페이저가 입력을 기다리며 멈춘다 — 첫 항목에서 수집이 통째로 정지했다.
+PSQL="docker compose -f $BENCH/compose.bench.yml exec -e PGPASSWORD=bench postgres psql -U liveclass -d liveclass -P pager=off"
 
 # 넓은 팬아웃 한 건을 아웃박스에 넣는다. $1 슬라이스 크기, $2 untilUserId(없으면 전체)
 trigger() {
