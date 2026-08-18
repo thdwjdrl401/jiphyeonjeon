@@ -59,7 +59,7 @@ pg -c "TRUNCATE core.notification, core.notification_dedupe, core.notification_c
 CID="$(new_uuid)"
 pg -c "INSERT INTO core.notification_content
         (id, type, severity, title, message, targets, group_key, created_at)
-       VALUES ('$CID','MATERIAL_PUBLISHED','INFO','새 자료','x.pptx가 올라왔습니다','{}','g:$CID', now())
+       VALUES ('$CID','MATERIAL_PUBLISHED','NORMAL','새 자료','x.pptx가 올라왔습니다','{}','g:$CID', now())
        ON CONFLICT DO NOTHING;" > /dev/null
 
 # 서버 안의 루프(plpgsql)로는 순진한 구조를 재지 못한다. 거기엔 왕복도 커밋도 없다.
