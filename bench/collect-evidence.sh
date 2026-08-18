@@ -18,7 +18,10 @@
 #   08  슬라이스 SQL 실행 계획
 #   11  429 응답 시 재적재 (유실 0)
 #   13  발송 중 컨테이너 CPU
-set -euo pipefail
+#
+# **오류를 내는 것이 근거인 항목이 있다**(06은 Postgres가 거절하는 것을 보이는 게 목적이다).
+# 그래서 -e를 켜지 않는다. 대신 기동처럼 실패하면 안 되는 자리에는 || fail 을 직접 붙였다.
+set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BENCH="$REPO_ROOT/bench"
