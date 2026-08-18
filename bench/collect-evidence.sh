@@ -37,9 +37,26 @@ pgv() { compose exec -T -e PGPASSWORD=bench postgres psql -U liveclass -d livecl
 new_uuid() { python3 -c 'import uuid; print(uuid.uuid4())'; }
 iso_now()  { python3 -c 'import datetime; print(datetime.datetime.now().astimezone().isoformat())'; }
 has() { [[ " $ITEMS " == *" $1 "* ]]; }
+push_q() { compose exec -T rabbitmq rabbitmqctl list_queues -q name messages < /dev/null 2>/dev/null | awk '$1=="notification.push"{print $2}'; }
+dlq_q()  { compose exec -T rabbitmq rabbitmqctl list_queues -q name messages < /dev/null 2>/dev/null | awk '$1=="notification.push.dlq"{print $2}'; }
 
 # 표준 머리말. 어느 항목인지, 무엇을 재현한 것인지 파일 자체가 말하게 둔다.
 hdr() { { echo "# $1"; echo "# $(date --iso-8601=seconds 2>/dev/null || date)"; echo; } > "$2"; }
+
+# **실제 터미널에서 돌린 그대로 남긴다.** script(1)이 의사 단말을 붙여 주므로 psql은 자기가
+# 사람 앞에 있다고 보고 평소 쓰는 서식과 색을 그대로 낸다. 파이프로 받으면 그게 전부 사라져
+# 어디서 옮겨 적은 텍스트와 구분이 안 된다.
+#   $1  화면에 보일 명령줄(길이를 줄여 적는다)
+#   $2… 실제로 돌릴 명령
+term() {
+  local shown="$1"; shift
+  printf '\033[1;32m$\033[0m \033[1m%s\033[0m\n' "$shown"
+  script -q -e -c "$*" /dev/null 2>&1 | sed -e 's/\r$//'
+  echo
+}
+# 주석 한 줄. 캡처가 아니라 읽는 사람에게 주는 설명이라 색을 달리한다.
+note() { printf '\033[2;37m%s\033[0m\n' "$*"; }
+PSQL="docker compose -f $BENCH/compose.bench.yml exec -e PGPASSWORD=bench postgres psql -U liveclass -d liveclass"
 
 # 넓은 팬아웃 한 건을 아웃박스에 넣는다. $1 슬라이스 크기, $2 untilUserId(없으면 전체)
 trigger() {
@@ -80,19 +97,14 @@ if has 06; then
   F="$OUT/06-partition-unique.txt"
   hdr "06 · 파티션 테이블에 (수신자, 이벤트) 전역 UNIQUE를 걸 수 없다" "$F"
   {
-    echo "\$ psql -c \"\\d+ core.notification\" | head"
-    pgv -c "\d core.notification" 2>&1 | head -20
+    term "psql -c '\\d core.notification'" "$PSQL -c '\\d core.notification'"
+    term "psql -c 'CREATE UNIQUE INDEX ... ON core.notification (recipient_id, content_id)'" \
+         "$PSQL -c \"CREATE UNIQUE INDEX notification_recipient_content_uk ON core.notification (recipient_id, content_id);\""
+    note "파티션 키(created_at)를 포함하면 통과하지만, 그때는 달이 다르면 중복이 통과한다."
+    note "그래서 멱등 처리를 파티션이 아닌 별도 테이블로 옮겼다."
     echo
-    echo "\$ psql -c \"CREATE UNIQUE INDEX ... ON core.notification (recipient_id, content_id)\""
-    pgv -v ON_ERROR_STOP=0 -c \
-      "CREATE UNIQUE INDEX notification_recipient_content_uk ON core.notification (recipient_id, content_id);" 2>&1
-    echo
-    echo "-- 파티션 키(created_at)를 포함하면 통과하지만, 그때는 달이 다르면 중복이 통과한다."
-    echo "-- 그래서 멱등 처리를 파티션이 아닌 별도 테이블로 옮겼다."
-    echo
-    echo "\$ psql -c \"\\d core.notification_dedupe\""
-    pgv -c "\d core.notification_dedupe" 2>&1 | head -15
-  } >> "$F"
+    term "psql -c '\\d core.notification_dedupe'" "$PSQL -c '\\d core.notification_dedupe'"
+  } >> "$F" 2>&1
   echo "   06 완료"
 fi
 
@@ -104,31 +116,19 @@ if has 05; then
   reset_state; trigger 5000 "01000000-0000-0000-0000-000000000000" > /dev/null
   sleep 20
   {
-    echo "-- 표본: 앞의 uuid 범위 한 조각만 팬아웃한 결과"
-    echo "\$ psql -c \"SELECT count(*) FROM core.notification\""
-    pg -c "SELECT count(*) FROM core.notification;"
-    echo
-    echo "-- 지금 구조: 문구는 content 1행, 수신자 행에는 수신자별 값만"
-    # 파티션 부모는 자기 데이터를 갖지 않는다. 자식을 합쳐야 실제 크기가 나온다.
-    pgv -c "SELECT
-        pg_size_pretty((SELECT sum(pg_total_relation_size(relid))
-                          FROM pg_partition_tree('core.notification')
-                         WHERE isleaf))                                      AS notification,
-        pg_size_pretty(pg_total_relation_size('core.notification_content'))  AS content,
-        pg_size_pretty(pg_total_relation_size('core.notification_dedupe'))   AS dedupe;" 2>&1
-    echo
-    echo "-- 문구를 수신자 행마다 저장했을 때의 행 크기 (content 컬럼을 행에 되돌려 계산)"
-    pgv -c "SELECT
-        round(avg(pg_column_size(n.*)))                                    AS 현재_행_바이트,
-        round(avg(pg_column_size(c.title) + pg_column_size(c.message)
-                + pg_column_size(c.targets) + pg_column_size(c.group_key))) AS 문구_바이트,
-        round(avg(pg_column_size(n.*)) + avg(pg_column_size(c.title) + pg_column_size(c.message)
-                + pg_column_size(c.targets) + pg_column_size(c.group_key))) AS 분리전_행_바이트
-      FROM core.notification n JOIN core.notification_content c ON c.id = n.content_id;" 2>&1
-    echo
-    echo "-- content 행 수 (이벤트당 1행)"
-    pg -c "SELECT count(*) FROM core.notification_content;"
-  } >> "$F"
+    note "표본: 앞의 uuid 범위 한 조각만 팬아웃한 결과"
+    term "psql -c 'SELECT count(*) FROM core.notification'" \
+         "$PSQL -c 'SELECT count(*) FROM core.notification;'"
+    note "파티션 부모는 자기 데이터를 갖지 않는다. 자식을 합쳐야 실제 크기가 나온다."
+    term "psql -c '테이블 크기'" \
+         "$PSQL -c \"SELECT pg_size_pretty((SELECT sum(pg_total_relation_size(relid)) FROM pg_partition_tree('core.notification') WHERE isleaf)) AS notification, pg_size_pretty(pg_total_relation_size('core.notification_content')) AS content, pg_size_pretty(pg_total_relation_size('core.notification_dedupe')) AS dedupe;\""
+    note "문구를 수신자 행마다 저장했을 때의 행 크기 (content 컬럼을 행에 되돌려 계산)"
+    term "psql -c '행 크기 구성'" \
+         "$PSQL -c \"SELECT round(avg(pg_column_size(n.*))) AS 현재_행_바이트, round(avg(pg_column_size(c.title)+pg_column_size(c.message)+pg_column_size(c.targets)+pg_column_size(c.group_key))) AS 문구_바이트, round(avg(pg_column_size(n.*))+avg(pg_column_size(c.title)+pg_column_size(c.message)+pg_column_size(c.targets)+pg_column_size(c.group_key))) AS 분리전_행_바이트 FROM core.notification n JOIN core.notification_content c ON c.id = n.content_id;\""
+    note "content 행 수 (이벤트당 1행)"
+    term "psql -c 'SELECT count(*) FROM core.notification_content'" \
+         "$PSQL -c 'SELECT count(*) FROM core.notification_content;'"
+  } >> "$F" 2>&1
   echo "   05 완료"
 fi
 
@@ -138,16 +138,10 @@ if has 08; then
   hdr "08 · 슬라이스 SQL 실행 계획 (커서 5,000건)" "$F"
   CUT="$(pg -c "SELECT user_id FROM core.enrollment WHERE curriculum_id='$CUR' AND status='ACTIVE' ORDER BY user_id OFFSET 500000 LIMIT 1;")"
   {
-    echo "-- 커서 이후 5,000명만 훑는지 확인. 커서 = 50만 번째 수강생"
-    echo "\$ EXPLAIN (ANALYZE, BUFFERS, COSTS OFF)"
-    pgv -c "EXPLAIN (ANALYZE, BUFFERS, COSTS OFF)
-      SELECT e.user_id
-        FROM core.enrollment e
-       WHERE e.curriculum_id = '$CUR' AND e.status = 'ACTIVE'
-         AND e.user_id > '$CUT'
-       ORDER BY e.user_id
-       LIMIT 5000;" 2>&1
-  } >> "$F"
+    note "커서 이후 5,000명만 훑는지 확인. 커서 = 50만 번째 수강생"
+    term "psql -c 'EXPLAIN (ANALYZE, BUFFERS, COSTS OFF) SELECT ... LIMIT 5000'" \
+         "$PSQL -c \"EXPLAIN (ANALYZE, BUFFERS, COSTS OFF) SELECT e.user_id FROM core.enrollment e WHERE e.curriculum_id='$CUR' AND e.status='ACTIVE' AND e.user_id > '$CUT' ORDER BY e.user_id LIMIT 5000;\""
+  } >> "$F" 2>&1
   echo "   08 완료"
 fi
 
@@ -167,17 +161,15 @@ if has 01; then
            FROM core.outbox_events WHERE aggregate_id='$M' AND event_type='NOTIFICATION_FANOUT_REQUESTED' LIMIT 1;" > /dev/null
   sleep 20; N2="$(pg -c 'SELECT count(*) FROM core.notification;')"
   {
-    echo "1회차 실행 후 알림 행   $N1"
-    echo "동일 이벤트 재발행 후    $N2"
-    echo "증가분                  $(( N2 - N1 ))"
-    echo
-    echo "-- 중복 제거 테이블이 후보를 먼저 잡고 통과분만 알림 행이 된다."
-    echo "\$ psql -c \"SELECT count(*) FROM core.notification_dedupe\""
-    pg -c "SELECT count(*) FROM core.notification_dedupe;"
-    echo
-    echo "-- 응답·로그에는 성공으로 남는다. 주기적으로 재실행하는 구조였다면"
-    echo "-- 이 0건 삽입이 매분 반복되면서도 어디에도 드러나지 않는다."
-  } >> "$F"
+    note "1회차 실행 후 알림 행 $N1 · 동일 이벤트 재발행 후 $N2 · 증가분 $(( N2 - N1 ))"
+    term "psql -c 'SELECT count(*) FROM core.notification'" \
+         "$PSQL -c 'SELECT count(*) FROM core.notification;'"
+    note "중복 제거 테이블이 후보를 먼저 잡고 통과분만 알림 행이 된다."
+    term "psql -c 'SELECT count(*) FROM core.notification_dedupe'" \
+         "$PSQL -c 'SELECT count(*) FROM core.notification_dedupe;'"
+    note "응답·로그에는 성공으로 남는다. 주기적으로 재실행하는 구조였다면"
+    note "이 0건 삽입이 매분 반복되면서도 어디에도 드러나지 않는다."
+  } >> "$F" 2>&1
   echo "   01 완료"
 fi
 
@@ -193,23 +185,14 @@ if has 04; then
   trigger 5000 "08000000-0000-0000-0000-000000000000" > /dev/null
   sleep 45
   {
-    echo "\$ psql -c \"SELECT ... FROM core.outbox_events WHERE status='PUBLISHED'\""
-    pgv -c "SELECT destination,
-                   count(*)                                                       AS 건수,
-                   round(min(extract(epoch FROM published_at - created_at))*1000) AS 최소_ms,
-                   round(percentile_cont(0.5) WITHIN GROUP (
-                       ORDER BY extract(epoch FROM published_at - created_at))*1000) AS 중앙_ms,
-                   round(max(extract(epoch FROM published_at - created_at))*1000) AS 최대_ms
-              FROM core.outbox_events
-             WHERE status='PUBLISHED' AND published_at IS NOT NULL
-             GROUP BY destination;" 2>&1
-    echo
-    echo "-- 두 줄이 같은 실행에서 나왔고 경로가 다르다."
-    echo "--   notification.fanout : 이 스크립트가 psql로 직접 INSERT — enqueue()를 안 거쳐"
-    echo "--                         커밋 후 깨우기가 걸리지 않고 폴링을 기다린 값이다."
-    echo "--   notification.push   : 팬아웃 워커가 enqueue()로 적재 — 커밋 후 깨우기 경로."
-    echo "-- 폴링만 쓰던 구조에서는 전부 위쪽 값이었다. 지금은 폴링을 30초 안전망으로 둔다."
-  } >> "$F"
+    term "psql -c '아웃박스 적재→발행 지연'" \
+         "$PSQL -c \"SELECT destination, count(*) AS 건수, round(min(extract(epoch FROM published_at-created_at))*1000) AS 최소_ms, round(percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM published_at-created_at))*1000) AS 중앙_ms, round(max(extract(epoch FROM published_at-created_at))*1000) AS 최대_ms FROM core.outbox_events WHERE status='PUBLISHED' AND published_at IS NOT NULL GROUP BY destination;\""
+    note "두 줄이 같은 실행에서 나왔고 경로가 다르다."
+    note "  notification.fanout : 이 스크립트가 psql로 직접 INSERT — enqueue()를 안 거쳐"
+    note "                        커밋 후 깨우기가 걸리지 않고 폴링을 기다린 값이다."
+    note "  notification.push   : 팬아웃 워커가 enqueue()로 적재 — 커밋 후 깨우기 경로."
+    note "폴링만 쓰던 구조에서는 전부 위쪽 값이었다. 지금은 폴링을 30초 안전망으로 둔다."
+  } >> "$F" 2>&1
   echo "   04 완료"
 fi
 
@@ -239,24 +222,17 @@ if has 11; then
     sleep 5
   done
   {
-    echo "목 서버 설정 · 응답 통계"
-    curl -s --max-time 5 http://127.0.0.1:18080/stats
-    echo; echo
-    echo "알림을 받은 사람             $(pg -c 'SELECT count(*) FROM core.notification;')"
-    echo "그 사람들의 구독(기기) 수     $TARGET"
-    echo "남은 푸시 큐                 $(compose exec -T rabbitmq rabbitmqctl list_queues -q name messages < /dev/null 2>/dev/null | awk '$1=="notification.push"{print $2}')"
-    echo "DLQ                          $(compose exec -T rabbitmq rabbitmqctl list_queues -q name messages < /dev/null 2>/dev/null | awk '$1=="notification.push.dlq"{print $2}')"
+    term "curl -s http://127.0.0.1:18080/stats" "curl -s --max-time 5 http://127.0.0.1:18080/stats"
     echo
-    echo "-- 발송을 마친 사람 수 (진행 테이블). 위의 사람 수와 같으면 유실이 없다."
-    pg -c "SELECT count(DISTINCT recipient_id) FROM core.notification_push_progress;"
-    echo
-    echo "-- 재적재된 명령 (멱등 키에 회차가 붙는다)"
-    pg -c "SELECT idempotency_key FROM core.outbox_events
-            WHERE destination='notification.push' AND idempotency_key LIKE '%:retry:%'
-            ORDER BY id LIMIT 5;"
-    pg -c "SELECT count(*) FROM core.outbox_events
-            WHERE destination='notification.push' AND idempotency_key LIKE '%:retry:%';"
-  } >> "$F"
+    note "알림을 받은 사람 $(pg -c 'SELECT count(*) FROM core.notification;') · 그 사람들의 구독(기기) 수 $TARGET"
+    note "남은 푸시 큐 $(push_q) · DLQ $(dlq_q)"
+    note "발송을 마친 사람 수 (진행 테이블). 위의 사람 수와 같으면 유실이 없다."
+    term "psql -c 'SELECT count(DISTINCT recipient_id) FROM core.notification_push_progress'" \
+         "$PSQL -c 'SELECT count(DISTINCT recipient_id) FROM core.notification_push_progress;'"
+    note "재적재된 명령 (멱등 키에 회차가 붙는다)"
+    term "psql -c '재적재 멱등 키'" \
+         "$PSQL -c \"SELECT idempotency_key FROM core.outbox_events WHERE destination='notification.push' AND idempotency_key LIKE '%:retry:%' ORDER BY id LIMIT 5;\""
+  } >> "$F" 2>&1
   export MOCK_RATE_429=0
   compose up -d --force-recreate --wait --wait-timeout 120 mock-push > /dev/null 2>&1
   echo "   11 완료"
@@ -278,30 +254,29 @@ if has 13; then
     sleep 2
   done
   {
-    echo "\$ docker stats --no-stream   # 발송 중 2초 간격 30회 중 앱 CPU 최고 회차"
-    python3 - "$SNAP" <<'PYX'
+    note "발송 중 2초 간격 30회 중 앱 CPU가 가장 높았던 회차"
+    term "docker stats --no-stream" "python3 - '$SNAP' <<'PYX'
 import sys, re
 blocks, cur = [], []
 for line in open(sys.argv[1]):
-    if line.startswith("---"):
+    if line.startswith('---'):
         if cur: blocks.append(cur)
         cur = []
     elif line.strip(): cur.append(line.rstrip())
 if cur: blocks.append(cur)
 def appcpu(b):
     for l in b:
-        if "-app-" in l:
-            m = re.search(r'\t([\d.]+)%', l)
+        if '-app-' in l:
+            m = re.search(r'\\t([\\d.]+)%', l)
             if m: return float(m.group(1))
     return -1
 best = max(blocks, key=appcpu) if blocks else []
-print("NAME                          CPU %     MEM USAGE / LIMIT")
-for l in best: print("  ".join(l.split("\t")))
-PYX
-    echo
-    echo "-- 100%는 논리 코어 1개. 앱은 물리 2코어(논리 4)를 배정받았다."
-    echo "-- 공유 자원인 Postgres 사용률이 낮아, 발송 노드를 늘려도 DB가 먼저 막히지 않는다."
-  } >> "$F"
+print('NAME                          CPU %     MEM USAGE / LIMIT')
+for l in best: print('  '.join(l.split('\\t')))
+PYX"
+    note "100%는 논리 코어 1개. 앱은 물리 2코어(논리 4)를 배정받았다."
+    note "공유 자원인 Postgres 사용률이 낮아, 발송 노드를 늘려도 DB가 먼저 막히지 않는다."
+  } >> "$F" 2>&1
   echo "   13 완료"
 fi
 
@@ -320,25 +295,21 @@ if has 03; then
     [ "$(pg -c 'SELECT count(*) FROM core.notification;' 2>/dev/null || echo 0)" -ge "$USERS" ] && break
   done
   {
-    echo "\$ docker inspect \$(docker compose ps -q postgres) --format '{{json .State}}'"
-    docker inspect "$(compose ps -q postgres)" --format '{{json .State}}' 2>/dev/null \
-      | python3 -m json.tool 2>/dev/null | head -14
-    echo
-    echo "\$ docker inspect ... --format '{{.HostConfig.Memory}}'  # 컨테이너 메모리 상한"
-    docker inspect "$(compose ps -q postgres)" --format '{{.HostConfig.Memory}}' 2>/dev/null \
-      | python3 -c "import sys;print('%.0f MiB' % (int(sys.stdin.read().strip())/1048576))" 2>/dev/null
-    echo
-    echo "\$ docker compose logs postgres | grep -iE 'recovery|not properly shut down'"
-    compose logs postgres 2>&1 | grep -iE "recovery in progress|not properly shut down|not yet accepting" | tail -6
-    echo
+    term "docker inspect \$(docker compose ps -q postgres) --format '{{json .State}}'" \
+         "docker inspect $(compose ps -q postgres) --format '{{json .State}}' | python3 -m json.tool | head -14"
+    term "docker inspect ... --format '{{.HostConfig.Memory}}'" \
+         "docker inspect $(compose ps -q postgres) --format '{{.HostConfig.Memory}}'"
+    term "docker compose logs postgres | grep -iE 'recovery|not properly shut down'" \
+         "docker compose -f $BENCH/compose.bench.yml logs postgres 2>&1 | grep -iE 'recovery in progress|not properly shut down|not yet accepting' | tail -6"
     compose up -d --wait --wait-timeout 300 postgres > /dev/null 2>&1 || true
     sleep 5
-    echo "\$ psql -c \"SELECT count(*) FROM core.notification\"   # 크래시 복구 후"
-    pg -c "SELECT count(*) FROM core.notification;" 2>&1
-    echo
-    echo "-- 롤백된 WAL"
-    pg -c "SELECT pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), '$W0'));" 2>&1
-  } >> "$F"
+    note "크래시 복구 후"
+    term "psql -c 'SELECT count(*) FROM core.notification'" \
+         "$PSQL -c 'SELECT count(*) FROM core.notification;'"
+    note "롤백된 WAL"
+    term "psql -c 'pg_wal_lsn_diff'" \
+         "$PSQL -c \"SELECT pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), '$W0'));\""
+  } >> "$F" 2>&1
   echo "   03 완료 (OOMKilled=$OOM)"
 fi
 
