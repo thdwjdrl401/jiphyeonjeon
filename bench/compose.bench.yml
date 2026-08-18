@@ -110,7 +110,6 @@ x-appbase: &appbase
       timeout: 5s
       retries: 60
     # 관측을 다른 머신에서 돌릴 때 /actuator/prometheus를 터널로 가져간다.
-    ports: ["127.0.0.1:18081:8080"]
 
 services:
   postgres:
@@ -235,12 +234,16 @@ services:
     <<: *appbase
     cpuset: "${APP2_CPUSET:-3,7}"
     cpus: ${APP_CPUS:-8}
+    # 인스턴스마다 포트가 달라야 한다. 앵커에 두면 셋이 같은 포트를 잡아 두 번째부터
+    # "port is already allocated"로 기동에 실패한다 — 확장 측정이 시작도 못 한다.
+    ports: ["127.0.0.1:18083:8080"]
     profiles: ["scale2", "scale3"]
 
   app3:
     <<: *appbase
     cpuset: "${APP3_CPUSET:-1,5}"
     cpus: ${APP_CPUS:-8}
+    ports: ["127.0.0.1:18084:8080"]
     profiles: ["scale3"]
 
 # ── 관측 (프로파일 mon) ──

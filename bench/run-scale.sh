@@ -173,7 +173,9 @@ for n in $INSTANCES; do
     echo "════ $PHASE · 인스턴스 ${n}개 (앱 물리 ${n}코어 · pg $pgset · 브로커 $infraset) ════"
   fi
 
-  compose down > /dev/null 2>&1 || true
+  # 프로파일 뒤에 숨은 서비스(app2·app3)까지 지운다. 그냥 down 하면 남아서 다음 회차의
+  # app과 포트가 부딪히거나, 낡은 인스턴스가 큐를 같이 소비해 회차 수치를 섞는다.
+  compose --profile scale2 --profile scale3 down --remove-orphans > /dev/null 2>&1 || true
 
   if [ "$PHASE" = "A" ]; then
     pg_up() { PG_CPUSET="$pgset" INFRA_CPUSET="$infraset" compose up -d --wait --wait-timeout 300 postgres redis rabbitmq mock-push; }
