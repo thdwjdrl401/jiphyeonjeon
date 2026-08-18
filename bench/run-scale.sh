@@ -24,7 +24,7 @@
 #   bench/run-scale.sh A                      # 팬아웃 1→2→3 인스턴스 (앱 1코어 공유)
 #   bench/run-scale.sh B                      # 발송 1→2→3 인스턴스 (큐가 차 있어야 한다)
 #   LAYOUT=dedicated bench/run-scale.sh B     # 발송은 앱마다 코어를 줘 볼 만하다
-#   INSTANCES="1 2" LAYOUT=fanout bench/run-scale.sh A   # 팬아웃 노드 확장 (pg 고정)
+#   CHAINS=2 INSTANCES="1 2" LAYOUT=fanout bench/run-scale.sh A   # 팬아웃 노드 확장 (pg·체인 고정)
 #   INSTANCES="1 2" bench/run-scale.sh A
 #
 set -euo pipefail
@@ -68,8 +68,11 @@ qdepth() { compose exec -T rabbitmq rabbitmqctl list_queues -q name messages 2>/
 [ "$PHASE" = "A" ] || [ "$PHASE" = "B" ] || fail "PHASE는 A 또는 B"
 
 # 체인 수만큼 팬아웃 명령을 넣는다. 소비자가 n개인데 체인이 1개면 n-1대가 논다.
+# 체인 수를 인스턴스 수와 분리한다. 기본은 인스턴스 수와 같지만(옛 동작), CHAINS를 주면
+# 그 값으로 고정한다. 노드를 늘렸을 때 빨라지는가를 물으려면 체인은 붙잡아 둬야 한다 —
+# 둘이 같이 움직이면 얻은 차이를 어느 쪽에도 귀속시킬 수 없다.
 trigger_fanout() {
-  local n="$1" material ranges c after upto lo hi
+  local n="${CHAINS:-$1}" material ranges c after upto lo hi
   material="$(new_uuid)"
   ranges="$(python3 -c "
 import sys
