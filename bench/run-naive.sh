@@ -108,6 +108,11 @@ for SLICE in $SLICES; do
   reset_state
 
   T_WAL0="$(pg -c "SELECT pg_current_wal_lsn();")"
+  # 1초 표본을 파일로 남긴다. cAdvisor는 working set(회수 가능한 파일 캐시를 뺀 값)을 보는데
+  # 여기 증가분은 대부분 그 캐시라, 한계에 닿는 장면이 그쪽 그래프에는 안 나온다.
+  # OOM 판정이 걸리는 값은 memory.current이고 그것을 직접 읽는다.
+  SERIES="$OUT/mem-$SLICE.csv"; echo "t_ms,pg_bytes,limit_bytes" > "$SERIES"
+  PG_LIMIT="$(cat "$PG_CGROUP/memory.max" 2>/dev/null || echo 0)"
   HEAP_MAX=0; PG_MAX=0; T0="$(now_ms)"
   trigger "$SLICE"
 
@@ -123,6 +128,7 @@ for SLICE in $SLICES; do
       RESULT="앱 죽음"; break
     fi
     M="$(pg_mem_now)"; [ "${M:-0}" -gt "$PG_MAX" ] && PG_MAX="$M"
+    echo "$(now_ms),${M:-0},${PG_LIMIT:-0}" >> "$SERIES"
     if (( t % 4 == 3 )); then
       # 세는 데 실패하면 Postgres가 답을 못 하는 것이다. 넘어갔으면 더 기다릴 이유가 없다.
       if ! N="$(pg -c "SELECT count(*) FROM core.notification;" 2>/dev/null)"; then
