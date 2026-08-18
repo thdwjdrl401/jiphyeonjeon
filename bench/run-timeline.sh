@@ -31,6 +31,9 @@ CHAINS="${CHAINS:-2}"
 SLICE="${SLICE:-5000}"
 FANOUT_CONC="${FANOUT_CONC:-8}"
 PUSH_CONC="${PUSH_CONC:-2}"
+# 목 서버의 응답 지연. 순진한 구조와 지금 구조를 같은 조건에서 비교하려면 이 값이 둘 다 같아야
+# 한다. 이 프로젝트가 따로 재 둔 FCM 왕복이 230ms다(application.yml notification.web-push).
+MOCK_DELAY="${MOCK_DELAY:-230ms}"
 OUT="${OUT:-$BENCH/results/timeline-$MODE-$(date +%Y%m%dT%H%M%S)}"
 
 fail() { echo "실패: $*" >&2; exit 1; }
@@ -53,7 +56,7 @@ PG_FANOUT="0,4,1,5"; APP_FANOUT="2,6";     INFRA_FANOUT="3,7"
 PG_PUSH="0,4";       APP_PUSH="2,6,3,7";   INFRA_PUSH="1,5"
 
 start_infra() {
-  PG_CPUSET="$1" INFRA_CPUSET="$2" \
+  PG_CPUSET="$1" INFRA_CPUSET="$2" MOCK_DELAY="$MOCK_DELAY" \
     compose up -d --wait --wait-timeout 300 postgres redis rabbitmq mock-push > /dev/null 2>&1 \
     || fail "인프라 기동 실패"
   PG_CPUSET="$1" INFRA_CPUSET="$2" \
@@ -76,7 +79,7 @@ set_cpuset() {  # $1 pg $2 infra
 
 start_app() {  # $1 pg $2 infra $3 app $4 fanout_on $5 push_on
   compose rm -sf app > /dev/null 2>&1 || true
-  PG_CPUSET="$1" INFRA_CPUSET="$2" APP_CPUSET="$3" \
+  PG_CPUSET="$1" INFRA_CPUSET="$2" APP_CPUSET="$3" MOCK_DELAY="$MOCK_DELAY" \
   APP_HEAP="${APP_HEAP:-1g}" APP_MEM="${APP_MEM:-1600m}" \
   FANOUT_ENABLED="$4" PUSH_ENABLED="$5" \
   FANOUT_CONCURRENCY="$FANOUT_CONC" PUSH_CONCURRENCY="$PUSH_CONC" \
@@ -152,7 +155,7 @@ fanout_bounds_ms() {
          FROM core.notification;" 2>/dev/null || echo "0 0"
 }
 
-echo "▶ 모드 $MODE · 갈래 $CHAINS · 조각 $SLICE"
+echo "▶ 모드 $MODE · 갈래 $CHAINS · 조각 $SLICE · 공급자 지연 $MOCK_DELAY"
 USERS_Q="SELECT count(*) FROM core.enrollment WHERE curriculum_id='00000000-0000-4000-8000-000000000002' AND status='ACTIVE';"
 
 if [ "$MODE" = "shared" ]; then
