@@ -19,6 +19,10 @@ BENCH="$REPO_ROOT/bench"
 ROWS="${ROWS:-20000}"           # 행 단위 INSERT 표본
 PUSH_SAMPLE="${PUSH_SAMPLE:-2000}"
 TOTAL_USERS="${TOTAL_USERS:-1000000}"
+# 목 서버의 응답 지연. 기본 50ms는 빠른 쪽 가정이고, 이 프로젝트가 따로 재 둔 FCM 왕복은
+# 230ms다(application.yml notification.web-push 주석). 순진한 구조를 볼 때는 그 값을 쓴다.
+SERIAL_DELAY="${SERIAL_DELAY:-230ms}"
+FAST_DELAY="${FAST_DELAY:-50ms}"
 OUT="${OUT:-$BENCH/results/serial-$(date +%Y%m%dT%H%M%S)}"
 CUR="00000000-0000-4000-8000-000000000002"
 
@@ -90,6 +94,32 @@ INS="$(pg -c 'SELECT count(*) FROM core.notification;')"
 [ "${INS:-0}" -ge "$ROWS" ] || echo "   경고: $ROWS건 목표인데 알림 $INS건만 들어갔다 — 이 회차는 못 쓴다"
 report "행마다 왕복·커밋" "$ROWS" "$(( T1 - T0 ))"
 
+# 완전히 순진한 판. 수신자마다 사용자와 구독을 따로 조회하고, 중복 여부도 SELECT로 먼저 본 뒤
+# INSERT한다 — 흔히 N+1이라 부르는 모양이다. 왕복이 행마다 다섯 번으로 늘어난다.
+python3 - "$OUT/users.txt" "$OUT/naive.sql" "$CID" <<'PY'
+import sys, hashlib
+src, dst, cid = sys.argv[1:4]
+with open(dst, "w") as f:
+    for line in open(src):
+        u = line.strip()
+        if not u: continue
+        h = hashlib.md5(("serial:" + u).encode()).hexdigest()
+        f.write(f"SELECT id, email FROM core.app_user WHERE id = '{u}';\n")
+        f.write(f"SELECT 1 FROM core.notification_dedupe WHERE dedupe_hash = '{h}'::uuid;\n")
+        f.write(f"INSERT INTO core.notification_dedupe (dedupe_hash) VALUES ('{h}'::uuid) ON CONFLICT DO NOTHING;\n")
+        f.write(f"INSERT INTO core.notification (id, recipient_id, content_id, read_status, action_status) "
+                f"VALUES (gen_random_uuid(),'{u}','{cid}','UNREAD','INFO');\n")
+        f.write(f"SELECT endpoint FROM core.push_subscription WHERE user_id = '{u}';\n")
+PY
+pg -c "TRUNCATE core.notification, core.notification_dedupe CASCADE;" > /dev/null
+compose cp "$OUT/naive.sql" postgres:/tmp/naive.sql > /dev/null 2>&1
+T0="$(now_ms)"
+compose exec -T -e PGPASSWORD=bench postgres psql -U liveclass -d liveclass -q -f /tmp/naive.sql < /dev/null > /dev/null 2>&1
+T1="$(now_ms)"
+INS="$(pg -c 'SELECT count(*) FROM core.notification;')"
+[ "${INS:-0}" -ge "$ROWS" ] || echo "   경고: $ROWS건 목표인데 알림 $INS건만 들어갔다 — 이 회차는 못 쓴다"
+report "행마다 왕복·커밋 + N+1 조회" "$ROWS" "$(( T1 - T0 ))"
+
 pg -c "TRUNCATE core.notification, core.notification_dedupe CASCADE;" > /dev/null
 T0="$(now_ms)"
 pg -c "
@@ -144,9 +174,11 @@ CUTOFF="$(pg -c "SELECT user_id FROM core.enrollment
                   WHERE curriculum_id='$CUR' AND status='ACTIVE'
                   ORDER BY user_id LIMIT 1 OFFSET $PUSH_SAMPLE;")"
 
-run_push() {  # $1 동시 상한 $2 라벨
+run_push() {  # $1 동시 상한 $2 라벨 $3 목 지연
+  MOCK_DELAY="${3:-$FAST_DELAY}" compose up -d --force-recreate --wait --wait-timeout 120 mock-push > /dev/null 2>&1
   compose rm -sf app > /dev/null 2>&1 || true
   APP_HEAP=1g APP_MEM=1600m FANOUT_ENABLED=true PUSH_ENABLED=false \
+  MOCK_DELAY="${3:-$FAST_DELAY}" \
   PUSH_MAX_IN_FLIGHT="$1" NOTIFICATION_FANOUT_SLICE_SIZE=5000 \
     compose up -d --build --wait --wait-timeout 300 app > /dev/null 2>&1 || fail "앱 기동 실패"
   pg -c "TRUNCATE core.notification, core.notification_dedupe, core.notification_content,
@@ -169,6 +201,7 @@ run_push() {  # $1 동시 상한 $2 라벨
   compose rm -sf app > /dev/null 2>&1 || true
   mock /reset > /dev/null
   APP_HEAP=1g APP_MEM=1600m FANOUT_ENABLED=false PUSH_ENABLED=true \
+  MOCK_DELAY="${3:-$FAST_DELAY}" \
   PUSH_MAX_IN_FLIGHT="$1" PUSH_CONCURRENCY=1 \
     compose up -d --build --wait --wait-timeout 300 app > /dev/null 2>&1 || fail "앱 기동 실패"
   # **폴링으로 재지 않는다.** 동시 800건이면 2,000여 건이 1초 안에 끝나 2초 간격 폴링으로는
@@ -186,8 +219,8 @@ run_push() {  # $1 동시 상한 $2 라벨
 }
 
 if [ "${PUSH:-1}" = "1" ]; then
-  run_push 1   "한 건씩 순차 발송"
-  run_push 800 "동시 800건 (지금 구조)"
+  run_push 1   "한 건씩 순차 발송 (공급자 $SERIAL_DELAY)" "$SERIAL_DELAY"
+  run_push 800 "동시 800건 (지금 구조)"              "$FAST_DELAY"
 fi
 
 echo
