@@ -103,6 +103,33 @@ SELECT c.user_id, '$CID', 'UNREAD', 'INFO', now()
 T1="$(now_ms)"
 report "집합 삽입 (지금 구조)" "$ROWS" "$(( T1 - T0 ))"
 
+# ── 1-b. 선형인지 확인 ────────────────────────────────────────────────────────
+# 표본에서 100만 건으로 환산하려면 그 사이 처리율이 유지돼야 한다. 규모가 커지면 인덱스가
+# 깊어지고 작업 집합이 캐시를 벗어나므로 유지된다는 보장이 없다. 몇 지점에서 직접 잰다.
+if [ "${SCALE:-1}" = "1" ]; then
+  echo
+  echo "══ 집합 삽입 — 규모별 처리율 ══"
+  for N in ${SCALE_POINTS:-20000 100000 500000 1000000}; do
+    pg -c "TRUNCATE core.notification, core.notification_dedupe CASCADE;" > /dev/null
+    pg -c "CHECKPOINT;" > /dev/null
+    T0="$(now_ms)"
+    pg -c "
+    WITH candidate AS (
+      SELECT user_id, md5('serial:' || user_id::text)::uuid AS h
+        FROM core.enrollment WHERE curriculum_id='$CUR' AND status='ACTIVE'
+        ORDER BY user_id LIMIT $N
+    ), passed AS (
+      INSERT INTO core.notification_dedupe (dedupe_hash)
+      SELECT h FROM candidate ON CONFLICT DO NOTHING RETURNING dedupe_hash
+    )
+    INSERT INTO core.notification (recipient_id, content_id, read_status, action_status, created_at)
+    SELECT c.user_id, '$CID', 'UNREAD', 'INFO', now()
+      FROM candidate c JOIN passed p ON p.dedupe_hash = c.h;" > /dev/null
+    T1="$(now_ms)"
+    report "집합 삽입 N=$N" "$N" "$(( T1 - T0 ))"
+  done
+fi
+
 # ── 2. 푸시 보내기 ─────────────────────────────────────────────────────────────
 # 동시 상한만 바꾼다. 1이면 한 건 보내고 응답을 기다린 뒤 다음 건으로 간다.
 echo
