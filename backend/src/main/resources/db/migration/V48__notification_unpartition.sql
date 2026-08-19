@@ -57,6 +57,7 @@ SELECT id, recipient_id, content_id, NULL, read_status, action_status,
 DROP TABLE core.notification CASCADE;
 ALTER TABLE core.notification_flat RENAME TO notification;
 ALTER TABLE core.notification RENAME CONSTRAINT notification_flat_pkey TO notification_pkey;
+-- 체크 제약 둘도 임시 이름을 물고 있다. V49가 마저 돌린다.
 
 -- ── 4. 인덱스 ──
 -- V45와 같은 세 벌. 이번에는 파티션드가 아니라 보통 인덱스다.
