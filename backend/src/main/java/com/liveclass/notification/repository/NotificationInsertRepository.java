@@ -57,7 +57,7 @@ public class NotificationInsertRepository {
                     (id, recipient_id, content_id, dedupe_hash, read_status, action_status)
             VALUES (:id, :recipientId, CAST(:contentId AS uuid),
                     md5(:dedupeKey)::uuid, 'UNREAD', :actionStatus)
-            ON CONFLICT (dedupe_hash) DO NOTHING
+            ON CONFLICT (dedupe_hash) WHERE dedupe_hash IS NOT NULL DO NOTHING
             """;
 
     private final NamedParameterJdbcTemplate jdbc;

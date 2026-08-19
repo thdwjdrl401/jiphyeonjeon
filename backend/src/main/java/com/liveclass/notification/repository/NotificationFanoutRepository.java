@@ -85,7 +85,7 @@ public class NotificationFanoutRepository {
                 SELECT gen_random_uuid(), s.user_id, CAST(:contentId AS uuid),
                        md5(:dedupePrefix || s.user_id)::uuid, 'UNREAD', :actionStatus
                 FROM slice s
-                ON CONFLICT (dedupe_hash) DO NOTHING
+                ON CONFLICT (dedupe_hash) WHERE dedupe_hash IS NOT NULL DO NOTHING
                 RETURNING recipient_id
             )
             SELECT (SELECT count(*) FROM slice)    AS scanned,
@@ -151,7 +151,7 @@ public class NotificationFanoutRepository {
                 SELECT gen_random_uuid(), s.user_id, CAST(:contentId AS uuid),
                        md5(:dedupePrefix || s.user_id)::uuid, 'UNREAD', :actionStatus
                 FROM slice s
-                ON CONFLICT (dedupe_hash) DO NOTHING
+                ON CONFLICT (dedupe_hash) WHERE dedupe_hash IS NOT NULL DO NOTHING
                 RETURNING recipient_id
             )
             SELECT (SELECT count(*) FROM slice)    AS scanned,

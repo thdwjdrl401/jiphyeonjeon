@@ -69,7 +69,17 @@ for i in range(n):
     done; }
 
 T0="$(now_ms)"
-until [ "$(pg -c 'SELECT count(*) FROM core.notification;' 2>/dev/null || echo 0)" -ge "$USERS" ]; do sleep 2; done
+# 정체하면 멈춘다. 앞서 SQL이 거절돼 팬아웃이 DLQ로 갔는데도 이 반복문이 끝나지 않았다.
+LAST=0; STILL=0
+while :; do
+  CUR="$(pg -c 'SELECT count(*) FROM core.notification;' 2>/dev/null || echo 0)"
+  [ "${CUR:-0}" -ge "$USERS" ] && break
+  if [ "${CUR:-0}" -eq "$LAST" ]; then
+    STILL=$(( STILL + 1 ))
+    [ "$STILL" -ge 30 ] && { echo "   정체 — 알림 $CUR건에서 멈췄다. DLQ를 확인할 것"; break; }
+  else STILL=0; fi
+  LAST="${CUR:-0}"; sleep 2
+done
 T1="$(now_ms)"
 echo "   팬아웃 $(python3 -c "print(($T1-$T0)/1000)")초"
 WAL="$(pg -c "SELECT pg_wal_lsn_diff(pg_current_wal_lsn(), '$W0');")"

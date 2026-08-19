@@ -67,6 +67,12 @@ CREATE INDEX idx_notification_action_required ON core.notification (recipient_id
     WHERE action_status = 'ACTION_REQUIRED';
 
 -- 중복 방지. 부분 인덱스라 이관된 옛 행(NULL)은 서로 부딪히지 않는다.
+--
+-- **넣는 쪽은 같은 술어를 ON CONFLICT에 적어야 한다.** 부분 인덱스는 술어까지 맞아야 추론되고,
+-- 빼면 "there is no unique or exclusion constraint matching the ON CONFLICT specification"으로
+-- 문장 자체가 거절된다.
+--
+--   INSERT ... ON CONFLICT (dedupe_hash) WHERE dedupe_hash IS NOT NULL DO NOTHING
 CREATE UNIQUE INDEX notification_dedupe_uk ON core.notification (dedupe_hash)
     WHERE dedupe_hash IS NOT NULL;
 
