@@ -132,7 +132,7 @@ echo "   수강생 $TOTAL_USERS · 구독 $TOTAL_SUBS"
 # ── 구간 A ───────────────────────────────────────────────────────────────
 if [[ "$PHASE" == *A* ]]; then
   echo "▶ 초기화"
-  pg -c "TRUNCATE core.notification, core.notification_dedupe, core.notification_content,
+  pg -c "TRUNCATE core.notification, core.notification_content,
                 core.notification_push_progress, core.outbox_events CASCADE;" > /dev/null
   pg -c "VACUUM (ANALYZE) core.push_subscription;" > /dev/null
   pg -c "CHECKPOINT;" > /dev/null

@@ -75,7 +75,7 @@ trigger() {
 }
 
 reset_state() {
-  pg -c "TRUNCATE core.notification, core.notification_dedupe, core.notification_content,
+  pg -c "TRUNCATE core.notification, core.notification_content,
                 core.notification_push_progress, core.outbox_events CASCADE;" > /dev/null
   compose exec -T rabbitmq rabbitmqctl purge_queue notification.fanout < /dev/null > /dev/null 2>&1 || true
   compose exec -T rabbitmq rabbitmqctl purge_queue notification.push  < /dev/null > /dev/null 2>&1 || true

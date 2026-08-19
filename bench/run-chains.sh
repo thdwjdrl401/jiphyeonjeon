@@ -76,7 +76,7 @@ for CHAINS in $CHAIN_COUNTS; do
   echo "════ 갈래 ${CHAINS}개 · 소비자 ${CONCURRENCY:-$CHAINS}개 (앱 프로세스 1개) ════"
   compose rm -sf app app2 app3 > /dev/null 2>&1 || true
 
-  pg -c "TRUNCATE core.notification, core.notification_dedupe, core.notification_content,
+  pg -c "TRUNCATE core.notification, core.notification_content,
                 core.notification_push_progress, core.outbox_events CASCADE;" > /dev/null
   pg -c "VACUUM (ANALYZE) core.push_subscription;" > /dev/null
   pg -c "CHECKPOINT;" > /dev/null

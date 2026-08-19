@@ -183,7 +183,7 @@ for n in $INSTANCES; do
   if [ "$PHASE" = "A" ]; then
     pg_up() { PG_CPUSET="$pgset" INFRA_CPUSET="$infraset" compose up -d --wait --wait-timeout 300 postgres redis rabbitmq mock-push; }
     pg_up > /dev/null 2>&1
-    pg -c "TRUNCATE core.notification, core.notification_dedupe, core.notification_content,
+    pg -c "TRUNCATE core.notification, core.notification_content,
                   core.notification_push_progress, core.outbox_events CASCADE;" > /dev/null
     pg -c "VACUUM (ANALYZE) core.push_subscription;" > /dev/null
     pg -c "CHECKPOINT;" > /dev/null
@@ -197,7 +197,7 @@ for n in $INSTANCES; do
     # 한 번 돌려 큐를 채우고(발송은 꺼 둔 채), 그다음에 앱만 발송 모드로 다시 세운다.
     # 채우는 구간은 측정 밖이다 — 시계는 발송 모드로 바꾼 뒤에 시작한다.
     PG_CPUSET="$pgset" INFRA_CPUSET="$infraset" compose up -d --wait --wait-timeout 300 postgres redis rabbitmq mock-push > /dev/null 2>&1
-    pg -c "TRUNCATE core.notification, core.notification_dedupe, core.notification_content,
+    pg -c "TRUNCATE core.notification, core.notification_content,
                   core.notification_push_progress, core.outbox_events CASCADE;" > /dev/null
     pg -c "VACUUM (ANALYZE) core.push_subscription;" > /dev/null
     pg -c "CHECKPOINT;" > /dev/null

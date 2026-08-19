@@ -49,7 +49,7 @@ USERS="$(pg -c "SELECT count(*) FROM core.enrollment WHERE curriculum_id='000000
 echo "   수강생 $USERS · 갈래 $CHAINS · 조각 $SLICE · 소비자 $CONCURRENCY"
 
 echo "▶ 초기화"
-pg -c "TRUNCATE core.notification, core.notification_dedupe, core.notification_content,
+pg -c "TRUNCATE core.notification, core.notification_content,
               core.notification_push_progress, core.outbox_events CASCADE;" > /dev/null
 pg -c "VACUUM (ANALYZE) core.push_subscription;" > /dev/null
 pg -c "CHECKPOINT;" > /dev/null

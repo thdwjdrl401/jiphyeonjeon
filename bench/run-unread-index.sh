@@ -129,7 +129,7 @@ echo "════ 쓰기: 같은 100만 건 팬아웃 ════"
 printf 'side,variant,value\n' > "$OUT/summary.csv"
 for idx in with without; do
   [ "$idx" = "with" ] && create_index || drop_index
-  pg -c "TRUNCATE core.notification, core.notification_dedupe, core.notification_content CASCADE;" > /dev/null
+  pg -c "TRUNCATE core.notification, core.notification_content CASCADE;" > /dev/null
   pg -c "CHECKPOINT;" > /dev/null
   wal0="$(pg -c 'SELECT pg_current_wal_lsn();')"
   t0="$(now_ms)"

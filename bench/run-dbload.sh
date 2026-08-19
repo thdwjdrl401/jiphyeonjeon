@@ -36,11 +36,11 @@ FANOUT_ENABLED=true PUSH_ENABLED=false FANOUT_CONCURRENCY=8 \
   compose up -d --build --wait --wait-timeout 300 app > /dev/null 2>&1 || fail "앱"
 
 USERS="$(pg -c "SELECT count(*) FROM core.enrollment WHERE curriculum_id='$CUR' AND status='ACTIVE';")"
-pg -c "TRUNCATE core.notification, core.notification_dedupe, core.notification_content,
+pg -c "TRUNCATE core.notification, core.notification_content,
               core.notification_push_progress, core.outbox_events CASCADE;" > /dev/null
 compose exec -T rabbitmq rabbitmqctl purge_queue notification.fanout < /dev/null > /dev/null 2>&1
 compose exec -T rabbitmq rabbitmqctl purge_queue notification.push  < /dev/null > /dev/null 2>&1
-pg -c "VACUUM (ANALYZE) core.notification, core.notification_dedupe;" > /dev/null
+pg -c "VACUUM (ANALYZE) core.notification;" > /dev/null
 pg -c "CHECKPOINT;" > /dev/null
 pg -c "SELECT pg_stat_statements_reset();" > /dev/null
 pg -c "SELECT pg_stat_reset();" > /dev/null
@@ -86,19 +86,18 @@ SELECT c.relname AS 인덱스, pg_size_pretty(pg_relation_size(c.oid)) AS 크기
   FROM pg_class c JOIN pg_index i ON i.indexrelid = c.oid
   JOIN pg_class t ON t.oid = i.indrelid
   JOIN pg_namespace n ON n.oid = t.relnamespace
- WHERE n.nspname='core' AND (t.relname LIKE 'notification_p20%' OR t.relname='notification_dedupe')
+ WHERE n.nspname='core' AND t.relname IN ('notification', 'notification_content')
    AND pg_relation_size(c.oid) > 0
  ORDER BY pg_relation_size(c.oid) DESC LIMIT 10;
 
 \echo '── 3. 테이블 본체 크기 ──'
-SELECT 'notification(파티션 합)' AS 대상,
-       pg_size_pretty(sum(pg_relation_size(relid))) AS 힙,
-       pg_size_pretty(sum(pg_indexes_size(relid))) AS 인덱스
-  FROM pg_partition_tree('core.notification') WHERE isleaf
+SELECT 'notification' AS 대상,
+       pg_size_pretty(pg_relation_size('core.notification')) AS 힙,
+       pg_size_pretty(pg_indexes_size('core.notification')) AS 인덱스
 UNION ALL
-SELECT 'notification_dedupe',
-       pg_size_pretty(pg_relation_size('core.notification_dedupe')),
-       pg_size_pretty(pg_indexes_size('core.notification_dedupe'));
+SELECT 'notification_content',
+       pg_size_pretty(pg_relation_size('core.notification_content')),
+       pg_size_pretty(pg_indexes_size('core.notification_content'));
 
 \echo '── 4. 시간을 가장 많이 쓴 문장 ──'
 SELECT left(regexp_replace(query, '\s+', ' ', 'g'), 78) AS 문장,

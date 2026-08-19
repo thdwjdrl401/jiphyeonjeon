@@ -87,7 +87,7 @@ start_app() {  # $1 pg $2 infra $3 app $4 fanout_on $5 push_on
 }
 
 reset_state() {
-  pg -c "TRUNCATE core.notification, core.notification_dedupe, core.notification_content,
+  pg -c "TRUNCATE core.notification, core.notification_content,
                 core.notification_push_progress, core.outbox_events CASCADE;" > /dev/null
   pg -c "VACUUM (ANALYZE) core.push_subscription;" > /dev/null
   pg -c "CHECKPOINT;" > /dev/null

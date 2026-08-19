@@ -74,7 +74,7 @@ PG_CGROUP="$(cgroup_of postgres || true)"
   || echo "   postgres cgroup 찾지 못함 — 메모리 열은 0으로 남는다"
 
 reset_state() {
-  pg -c "TRUNCATE core.notification, core.notification_dedupe, core.notification_content,
+  pg -c "TRUNCATE core.notification, core.notification_content,
                 core.notification_push_progress, core.outbox_events CASCADE;" > /dev/null
   pg -c "CHECKPOINT;" > /dev/null
   compose exec -T rabbitmq rabbitmqctl purge_queue notification.fanout < /dev/null > /dev/null 2>&1 || true

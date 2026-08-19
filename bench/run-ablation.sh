@@ -163,7 +163,7 @@ BASE=""
 for v in $VARIANTS; do
   echo
   echo "════ $v ════"
-  pg -c "TRUNCATE core.notification, core.notification_dedupe, core.notification_content CASCADE;" > /dev/null
+  pg -c "TRUNCATE core.notification, core.notification_content CASCADE;" > /dev/null
   apply_ddl "$v"
   variant_sql "$v" | fix_into > "$OUT/$v.sql"
   pgf -f - < "$OUT/$v.sql" > /dev/null 2>&1 || { echo "   프로시저 생성 실패 — SQL: $OUT/$v.sql"; revert_ddl "$v"; continue; }

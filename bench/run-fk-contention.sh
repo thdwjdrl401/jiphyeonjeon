@@ -122,7 +122,7 @@ for FK in on off; do
   BASE_DB=""
 
   for CHAINS in $CHAIN_COUNTS; do
-    pg -c "TRUNCATE core.notification, core.notification_dedupe, core.notification_content CASCADE;" > /dev/null
+    pg -c "TRUNCATE core.notification, core.notification_content CASCADE;" > /dev/null
     pg -c "VACUUM (ANALYZE) core.notification;" > /dev/null 2>&1 || true
     pg -c "CHECKPOINT;" > /dev/null
     pg -c "SELECT pg_stat_statements_reset();" > /dev/null 2>&1 || true

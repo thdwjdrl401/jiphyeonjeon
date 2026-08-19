@@ -83,7 +83,7 @@ for SLICE in $SLICES; do
   PG_CPUSET="$PG_CPUSET_V" INFRA_CPUSET="$INFRA_CPUSET_V" \
     compose up -d --wait --wait-timeout 300 postgres redis rabbitmq mock-push > /dev/null 2>&1
 
-  pg -c "TRUNCATE core.notification, core.notification_dedupe, core.notification_content,
+  pg -c "TRUNCATE core.notification, core.notification_content,
                 core.notification_push_progress, core.outbox_events CASCADE;" > /dev/null
   pg -c "VACUUM (ANALYZE) core.push_subscription;" > /dev/null
   pg -c "CHECKPOINT;" > /dev/null

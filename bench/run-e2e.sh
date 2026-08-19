@@ -90,7 +90,7 @@ echo "   구독 $subs 건"
 
 # ── 초기화 ────────────────────────────────────────────────────────────────
 echo "▶ 초기화"
-pg -c "TRUNCATE core.notification, core.notification_dedupe, core.notification_content,
+pg -c "TRUNCATE core.notification, core.notification_content,
               core.notification_push_progress, core.outbox_events CASCADE;" > /dev/null
 pg -c "CHECKPOINT;" > /dev/null
 mock /reset > /dev/null || true

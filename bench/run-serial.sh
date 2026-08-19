@@ -59,7 +59,7 @@ PY
 # 중복 제거 등록표까지 같이 넣어 실제 슬라이스 SQL과 하는 일을 맞춘다.
 echo
 echo "══ 알림 만들기 ══"
-pg -c "TRUNCATE core.notification, core.notification_dedupe, core.notification_content CASCADE;" > /dev/null
+pg -c "TRUNCATE core.notification, core.notification_content CASCADE;" > /dev/null
 CID="$(new_uuid)"
 pg -c "INSERT INTO core.notification_content
         (id, type, severity, title, message, targets, group_key, created_at)
@@ -111,7 +111,7 @@ with open(dst, "w") as f:
                 f"VALUES (gen_random_uuid(),'{u}','{cid}','UNREAD','INFO');\n")
         f.write(f"SELECT endpoint FROM core.push_subscription WHERE user_id = '{u}';\n")
 PY
-pg -c "TRUNCATE core.notification, core.notification_dedupe CASCADE;" > /dev/null
+pg -c "TRUNCATE core.notification CASCADE;" > /dev/null
 compose cp "$OUT/naive.sql" postgres:/tmp/naive.sql > /dev/null 2>&1
 T0="$(now_ms)"
 compose exec -T -e PGPASSWORD=bench postgres psql -U liveclass -d liveclass -q -f /tmp/naive.sql < /dev/null > /dev/null 2>&1
@@ -120,7 +120,7 @@ INS="$(pg -c 'SELECT count(*) FROM core.notification;')"
 [ "${INS:-0}" -ge "$ROWS" ] || echo "   경고: $ROWS건 목표인데 알림 $INS건만 들어갔다 — 이 회차는 못 쓴다"
 report "행마다 왕복·커밋 + N+1 조회" "$ROWS" "$(( T1 - T0 ))"
 
-pg -c "TRUNCATE core.notification, core.notification_dedupe CASCADE;" > /dev/null
+pg -c "TRUNCATE core.notification CASCADE;" > /dev/null
 T0="$(now_ms)"
 pg -c "
 WITH candidate AS (
@@ -144,7 +144,7 @@ if [ "${SCALE:-1}" = "1" ]; then
   echo
   echo "══ 집합 삽입 — 규모별 처리율 ══"
   for N in ${SCALE_POINTS:-20000 100000 500000 1000000}; do
-    pg -c "TRUNCATE core.notification, core.notification_dedupe CASCADE;" > /dev/null
+    pg -c "TRUNCATE core.notification CASCADE;" > /dev/null
     pg -c "CHECKPOINT;" > /dev/null
     T0="$(now_ms)"
     pg -c "
@@ -181,7 +181,7 @@ run_push() {  # $1 동시 상한 $2 라벨 $3 목 지연
   MOCK_DELAY="${3:-$FAST_DELAY}" \
   PUSH_MAX_IN_FLIGHT="$1" NOTIFICATION_FANOUT_SLICE_SIZE=5000 \
     compose up -d --build --wait --wait-timeout 300 app > /dev/null 2>&1 || fail "앱 기동 실패"
-  pg -c "TRUNCATE core.notification, core.notification_dedupe, core.notification_content,
+  pg -c "TRUNCATE core.notification, core.notification_content,
                  core.notification_push_progress, core.outbox_events CASCADE;" > /dev/null
   compose exec -T rabbitmq rabbitmqctl purge_queue notification.fanout < /dev/null > /dev/null 2>&1
   compose exec -T rabbitmq rabbitmqctl purge_queue notification.push  < /dev/null > /dev/null 2>&1
