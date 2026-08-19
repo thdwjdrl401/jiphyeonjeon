@@ -3,7 +3,10 @@
 > 관련 결정: [ADR-0073 알림 팬아웃 아키텍처](0073-notification-fanout-architecture.md)(§7의 문구 저장
 > 결정을 일부 뒤집는다) · [공유 계약 §2-4 알림 센터](../../CONTRACT.md)
 
-- **상태**: 채택 — 구현됨 (V43·V44·V45, `NotificationPartitionMaintenance`)
+- **상태**: 일부 뒤집힘 — §A(문구 분리)는 유효하고, §B(월 파티셔닝)·§C(등록표 분리)는
+  [ADR-0132](0132-notifications-are-not-deleted-so-the-table-is-not-partitioned.md)가 되돌렸다.
+  알림을 지우지 않기로 하면서 파티션의 근거인 보존 정리가 사라졌다.
+  원래 상태: 채택 — 구현됨 (V43·V44·V45, `NotificationPartitionMaintenance`)
 - **일자**: 2026-08-13
 - **적용 범위**: `core.notification`·`core.notification_content`·`core.notification_dedupe`,
   `notification` 모듈의 삽입 리포지토리 둘과 읽기 경로
