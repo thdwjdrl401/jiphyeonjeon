@@ -23,6 +23,8 @@ TOTAL_USERS="${TOTAL_USERS:-1000000}"
 # 230ms다(application.yml notification.web-push 주석). 순진한 구조를 볼 때는 그 값을 쓴다.
 SERIAL_DELAY="${SERIAL_DELAY:-230ms}"
 FAST_DELAY="${FAST_DELAY:-50ms}"
+# 동시 발송을 잴 때의 공급자 지연. 순진한 판과 같은 조건으로 두는 것이 기본이다.
+PUSH_DELAY="${PUSH_DELAY:-230ms}"
 OUT="${OUT:-$BENCH/results/serial-$(date +%Y%m%dT%H%M%S)}"
 CUR="00000000-0000-4000-8000-000000000002"
 
@@ -218,9 +220,16 @@ run_push() {  # $1 동시 상한 $2 라벨 $3 목 지연
   report "$2" "$target" "$span"
 }
 
+# 동시 상한을 여러 값으로 돌려 본다. 1은 순진한 구조이고, 나머지는 지금 구조에서 상한만 바꾼
+# 것이다 — 상한을 올려 처리량이 늘면 네트워크 동시성이 걸려 있던 것이고, 그대로면 CPU가 먼저 막는다.
 if [ "${PUSH:-1}" = "1" ]; then
-  run_push 1   "한 건씩 순차 발송 (공급자 $SERIAL_DELAY)" "$SERIAL_DELAY"
-  run_push 800 "동시 800건 (지금 구조)"              "$FAST_DELAY"
+  for LV in ${PUSH_LEVELS:-1 800}; do
+    if [ "$LV" = "1" ]; then
+      run_push 1 "한 건씩 순차 발송 (공급자 $SERIAL_DELAY)" "$SERIAL_DELAY"
+    else
+      run_push "$LV" "동시 ${LV}건 (공급자 $PUSH_DELAY)" "$PUSH_DELAY"
+    fi
+  done
 fi
 
 echo
