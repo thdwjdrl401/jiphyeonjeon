@@ -14,7 +14,7 @@
 #   03  일괄 조회 시 Postgres 메모리 초과
 #   04  커밋 후 트리거 — 아웃박스 적재에서 발행까지
 #   05  알림 행의 크기 구성
-#   06  파티션 테이블에 전역 UNIQUE를 걸 수 없다
+#   06  중복 방지가 알림 표 안에서 끝난다 (파티션을 걷은 뒤)
 #   08  슬라이스 SQL 실행 계획
 #   11  429 응답 시 재적재 (유실 0)
 #   13  발송 중 컨테이너 CPU
@@ -94,19 +94,26 @@ compose up -d --wait --wait-timeout 300 postgres redis rabbitmq mock-push > /dev
 USERS="$(pg -c "SELECT count(*) FROM core.enrollment WHERE curriculum_id='$CUR' AND status='ACTIVE';")"
 echo "   수강생 $USERS"
 
-# ── 06. 파티션 테이블에 전역 UNIQUE를 걸 수 없다 ────────────────────────────────
-# 한 문장이면 끝난다. 05에서 월 파티셔닝을 채택한 순간 06이 왜 필요했는지가 이 오류다.
+# ── 06. 중복 방지가 한 문장 안에서 끝난다 ─────────────────────────────────────
+# 파티션을 쓰던 동안에는 전역 UNIQUE를 걸 수 없어 별도 등록표가 문지기 노릇을 했다(ADR-0123).
+# 알림을 지우지 않기로 하면서 파티션을 걷었고(ADR-0132), 그러면서 되돌아온 자리다.
 if has 06; then
-  F="$OUT/06-partition-unique.txt"
-  hdr "06 · 파티션 테이블에 (수신자, 이벤트) 전역 UNIQUE를 걸 수 없다" "$F"
+  F="$OUT/06-dedupe-in-table.txt"
+  hdr "06 · 중복 방지가 알림 표 안에서 끝난다 (파티션을 걷은 뒤)" "$F"
   {
     term "psql -c '\\d core.notification'" "$PSQL -c '\\d core.notification'"
-    term "psql -c 'CREATE UNIQUE INDEX ... ON core.notification (recipient_id, content_id)'" \
-         "$PSQL -c \"CREATE UNIQUE INDEX notification_recipient_content_uk ON core.notification (recipient_id, content_id);\""
-    note "파티션 키(created_at)를 포함하면 통과하지만, 그때는 달이 다르면 중복이 통과한다."
-    note "그래서 멱등 처리를 파티션이 아닌 별도 테이블로 옮겼다."
+    note "파티션이 아니라 일반 테이블이고, PK가 (id, created_at)이 아니라 id다."
+    note "dedupe_hash 부분 유니크가 사람 × 사건 중복을 막는다."
     echo
+    note "등록표는 이제 없다."
     term "psql -c '\\d core.notification_dedupe'" "$PSQL -c '\\d core.notification_dedupe'"
+    echo
+    note "왜 부분 인덱스인가 — 이관된 옛 행은 해시를 복원할 수 없어 NULL이다."
+    note "그래서 넣는 쪽도 같은 술어를 적어야 한다. 빼면 문장 자체가 거절된다."
+    term "psql -c 'INSERT ... ON CONFLICT (dedupe_hash) DO NOTHING  -- 술어 없이'" \
+         "$PSQL -c \"INSERT INTO core.notification (id, recipient_id, content_id, dedupe_hash, read_status, action_status) VALUES (gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), gen_random_uuid(), 'UNREAD', 'INFO') ON CONFLICT (dedupe_hash) DO NOTHING;\""
+    note "운영 SQL은 술어를 붙여 쓴다."
+    note "  ON CONFLICT (dedupe_hash) WHERE dedupe_hash IS NOT NULL DO NOTHING"
   } >> "$F" 2>&1
   echo "   06 완료"
 fi
@@ -122,9 +129,8 @@ if has 05; then
     note "표본: 앞의 uuid 범위 한 조각만 팬아웃한 결과"
     term "psql -c 'SELECT count(*) FROM core.notification'" \
          "$PSQL -c 'SELECT count(*) FROM core.notification;'"
-    note "파티션 부모는 자기 데이터를 갖지 않는다. 자식을 합쳐야 실제 크기가 나온다."
     term "psql -c '테이블 크기'" \
-         "$PSQL -c \"SELECT pg_size_pretty((SELECT sum(pg_total_relation_size(relid)) FROM pg_partition_tree('core.notification') WHERE isleaf)) AS notification, pg_size_pretty(pg_total_relation_size('core.notification_content')) AS content, pg_size_pretty(pg_total_relation_size('core.notification_dedupe')) AS dedupe;\""
+         "$PSQL -c \"SELECT pg_size_pretty(pg_relation_size('core.notification')) AS 알림_힙, pg_size_pretty(pg_indexes_size('core.notification')) AS 알림_인덱스, pg_size_pretty(pg_total_relation_size('core.notification_content')) AS 문구;\""
     note "문구를 수신자 행마다 저장했을 때의 행 크기 (content 컬럼을 행에 되돌려 계산)"
     term "psql -c '행 크기 구성'" \
          "$PSQL -c \"SELECT round(avg(pg_column_size(n.*))) AS 현재_행_바이트, round(avg(pg_column_size(c.title)+pg_column_size(c.message)+pg_column_size(c.targets)+pg_column_size(c.group_key))) AS 문구_바이트, round(avg(pg_column_size(n.*))+avg(pg_column_size(c.title)+pg_column_size(c.message)+pg_column_size(c.targets)+pg_column_size(c.group_key))) AS 분리전_행_바이트 FROM core.notification n JOIN core.notification_content c ON c.id = n.content_id;\""
@@ -167,9 +173,9 @@ if has 01; then
     note "1회차 실행 후 알림 행 $N1 · 동일 이벤트 재발행 후 $N2 · 증가분 $(( N2 - N1 ))"
     term "psql -c 'SELECT count(*) FROM core.notification'" \
          "$PSQL -c 'SELECT count(*) FROM core.notification;'"
-    note "중복 제거 테이블이 후보를 먼저 잡고 통과분만 알림 행이 된다."
-    term "psql -c 'SELECT count(*) FROM core.notification_dedupe'" \
-         "$PSQL -c 'SELECT count(*) FROM core.notification_dedupe;'"
+    note "dedupe_hash 유니크가 두 번째 삽입을 접는다. 값이 채워진 행 수는 알림 수와 같다."
+    term "psql -c 'SELECT count(dedupe_hash) FROM core.notification'" \
+         "$PSQL -c 'SELECT count(dedupe_hash) AS 해시있는행 FROM core.notification;'"
     note "응답·로그에는 성공으로 남는다. 주기적으로 재실행하는 구조였다면"
     note "이 0건 삽입이 매분 반복되면서도 어디에도 드러나지 않는다."
   } >> "$F" 2>&1
