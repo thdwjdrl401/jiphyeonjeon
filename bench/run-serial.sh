@@ -82,9 +82,9 @@ with open(dst, "w") as f:
         u = line.strip()
         if not u: continue
         h = hashlib.md5(("serial:" + u).encode()).hexdigest()
-        f.write(f"INSERT INTO core.notification_dedupe (dedupe_hash) VALUES ('{h}'::uuid) ON CONFLICT DO NOTHING;\n")
-        f.write(f"INSERT INTO core.notification (id, recipient_id, content_id, read_status, action_status) "
-                f"VALUES (gen_random_uuid(),'{u}','{cid}','UNREAD','INFO');\n")
+        f.write(f"INSERT INTO core.notification (id, recipient_id, content_id, dedupe_hash, read_status, action_status) "
+                f"VALUES (gen_random_uuid(),'{u}','{cid}','{h}'::uuid,'UNREAD','INFO') "
+                f"ON CONFLICT (dedupe_hash) WHERE dedupe_hash IS NOT NULL DO NOTHING;\n")
 PY
 compose cp "$OUT/serial.sql" postgres:/tmp/serial.sql > /dev/null 2>&1
 T0="$(now_ms)"
@@ -107,10 +107,10 @@ with open(dst, "w") as f:
         if not u: continue
         h = hashlib.md5(("serial:" + u).encode()).hexdigest()
         f.write(f"SELECT id, email FROM core.app_user WHERE id = '{u}';\n")
-        f.write(f"SELECT 1 FROM core.notification_dedupe WHERE dedupe_hash = '{h}'::uuid;\n")
-        f.write(f"INSERT INTO core.notification_dedupe (dedupe_hash) VALUES ('{h}'::uuid) ON CONFLICT DO NOTHING;\n")
-        f.write(f"INSERT INTO core.notification (id, recipient_id, content_id, read_status, action_status) "
-                f"VALUES (gen_random_uuid(),'{u}','{cid}','UNREAD','INFO');\n")
+        f.write(f"SELECT 1 FROM core.notification WHERE dedupe_hash = '{h}'::uuid;\n")
+        f.write(f"INSERT INTO core.notification (id, recipient_id, content_id, dedupe_hash, read_status, action_status) "
+                f"VALUES (gen_random_uuid(),'{u}','{cid}','{h}'::uuid,'UNREAD','INFO') "
+                f"ON CONFLICT (dedupe_hash) WHERE dedupe_hash IS NOT NULL DO NOTHING;\n")
         f.write(f"SELECT endpoint FROM core.push_subscription WHERE user_id = '{u}';\n")
 PY
 pg -c "TRUNCATE core.notification CASCADE;" > /dev/null
@@ -129,13 +129,11 @@ WITH candidate AS (
   SELECT user_id, md5('serial:' || user_id::text)::uuid AS h
     FROM core.enrollment WHERE curriculum_id='$CUR' AND status='ACTIVE'
     ORDER BY user_id LIMIT $ROWS
-), passed AS (
-  INSERT INTO core.notification_dedupe (dedupe_hash)
-  SELECT h FROM candidate ON CONFLICT DO NOTHING RETURNING dedupe_hash
 )
-INSERT INTO core.notification (id, recipient_id, content_id, read_status, action_status)
-SELECT gen_random_uuid(), c.user_id, '$CID', 'UNREAD', 'INFO'
-  FROM candidate c JOIN passed p ON p.dedupe_hash = c.h;" > /dev/null
+INSERT INTO core.notification (id, recipient_id, content_id, dedupe_hash, read_status, action_status)
+SELECT gen_random_uuid(), c.user_id, '$CID', c.h, 'UNREAD', 'INFO'
+  FROM candidate c
+ON CONFLICT (dedupe_hash) WHERE dedupe_hash IS NOT NULL DO NOTHING;" > /dev/null
 T1="$(now_ms)"
 report "집합 삽입 (지금 구조)" "$ROWS" "$(( T1 - T0 ))"
 
@@ -154,13 +152,11 @@ if [ "${SCALE:-1}" = "1" ]; then
       SELECT user_id, md5('serial:' || user_id::text)::uuid AS h
         FROM core.enrollment WHERE curriculum_id='$CUR' AND status='ACTIVE'
         ORDER BY user_id LIMIT $N
-    ), passed AS (
-      INSERT INTO core.notification_dedupe (dedupe_hash)
-      SELECT h FROM candidate ON CONFLICT DO NOTHING RETURNING dedupe_hash
     )
-    INSERT INTO core.notification (id, recipient_id, content_id, read_status, action_status)
-    SELECT gen_random_uuid(), c.user_id, '$CID', 'UNREAD', 'INFO'
-      FROM candidate c JOIN passed p ON p.dedupe_hash = c.h;" > /dev/null
+    INSERT INTO core.notification (id, recipient_id, content_id, dedupe_hash, read_status, action_status)
+    SELECT gen_random_uuid(), c.user_id, '$CID', c.h, 'UNREAD', 'INFO'
+      FROM candidate c
+    ON CONFLICT (dedupe_hash) WHERE dedupe_hash IS NOT NULL DO NOTHING;" > /dev/null
     T1="$(now_ms)"
     INS="$(pg -c 'SELECT count(*) FROM core.notification;')"
     [ "${INS:-0}" -ge "$N" ] || echo "   경고: N=$N 인데 알림 $INS 건만 들어갔다 — 이 회차는 못 쓴다"
