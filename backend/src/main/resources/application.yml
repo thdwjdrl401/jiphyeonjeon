@@ -407,14 +407,6 @@ outbox:
 notification:
   # 알림 본체(core.notification)는 월 파티션이다(ADR-0123). 잡이 매일 새벽 + 기동 직후에
   # 앞으로 months-ahead개월치를 선생성하고, DEFAULT 파티션(에어백)에 행이 있으면 WARN을 남긴다.
-  partition:
-    months-ahead: ${NOTIFICATION_PARTITION_MONTHS_AHEAD:3}
-    maintenance-cron: ${NOTIFICATION_PARTITION_MAINTENANCE_CRON:0 40 4 * * *}
-  # 보존 기간(개월). 지난 파티션은 DELETE가 아니라 DROP으로 정리한다 — 몇 ms로 끝나고 팽창이 없다.
-  # **정책은 미확정이다**(ADR-0123): 확정 전까지 보수적으로 12개월을 두고, 정해지면 이 값만 바꾼다.
-  # 중복 제거 등록표는 보존과 무관하게 영구다 — 파티션이 사라져도 지난 사건이 다시 알리지 않는다.
-  retention:
-    months: ${NOTIFICATION_RETENTION_MONTHS:12}
   web-push:
     # VAPID 키쌍(RFC 8292). **벤더 계정 등록이 필요 없다** — 키는 우리가 만들고 푸시 서비스는
     # 서명으로 "같은 서버가 보냈다"만 확인한다.

@@ -48,7 +48,7 @@ import java.util.UUID;
  *
  * <p><b>같은 메시지가 두 번 와도 안전하다.</b> 릴레이가 발행 직후 죽으면 그 메시지는 다시 발행되고,
  * 실패한 메시지도 재시도된다. 중복은 코드가 아니라 DB가 막는다 — 전역 등록표
- * {@code core.notification_dedupe}에 대한 {@code ON CONFLICT DO NOTHING}이다(ADR-0123).
+ * 알림 표의 {@code dedupe_hash} 유니크에 대한 {@code ON CONFLICT DO NOTHING}이다(ADR-0132).
  *
  * <p><b>푸시는 여기서 보내지 않는다 — 명령만 싣는다</b>(ADR-0124). 푸시 명령은 알림 삽입과
  * <b>같은 트랜잭션</b>에서 아웃박스로 들어간다. 커밋 후 직접 발행(afterCommit)이면 커밋~발행

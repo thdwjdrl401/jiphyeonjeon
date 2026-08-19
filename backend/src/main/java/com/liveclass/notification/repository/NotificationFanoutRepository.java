@@ -50,17 +50,9 @@ public class NotificationFanoutRepository {
      * 커서(last_user_id)와 훑은 수(scanned)는 그래서 언제나 slice에서 나온다 — 등록표가 얼마나
      * 걸러내든 체인은 이어진다.
      *
-     * passed가 중복 판정이다(ADR-0123). 본체의 dedupe 유니크가 하던 일을 전역 등록표에 대한
-     * ON CONFLICT DO NOTHING + RETURNING이 이어받았다 — RETURNING에 남은 지문이 곧 "처음 본
-     * 사건"이고, 그 사람들만 본체에 넣는다. 같은 문장·같은 트랜잭션이라 등록과 삽입이 함께
-     * 커밋되거나 함께 사라진다.
-     *
-     * content는 사건당 한 벌이다. 첫 조각이 만들고 뒤 조각·재배달은 ON CONFLICT DO NOTHING으로
-     * 재사용한다 — id가 dedupe 접두사에서 결정적으로 파생돼(Java에서 계산) 조각들이 같은 id에
-     * 도달한다. 본체 삽입은 RETURNING이 아니라 그 id 파라미터를 그대로 쓴다(재사용이면 RETURNING이
-     * 비기 때문). FK 검증은 문장 끝에 몰아 돌아 같은 문장 안에서 만든 content 행도 보인다.
-     *
-     * dedupe 지문은 행마다 달라야 하므로(수신자가 다르다) SQL에서 이어 붙여 해시한다.
+     * 중복 판정은 알림 표의 dedupe_hash 유니크가 한다(ADR-0132). 파티션을 쓰던 동안에는
+     * 전역 유니크를 걸 수 없어 별도 등록표가 그 일을 맡았고, 파티션을 걷으면서 되돌렸다.
+     * ON CONFLICT DO NOTHING이 통과 여부를 정하고, RETURNING이 새로 받은 사람만 돌려준다.
      */
     private static final String INSERT_SLICE = """
             WITH slice AS (
@@ -82,19 +74,18 @@ public class NotificationFanoutRepository {
                        CAST(:previousStartsAt AS timestamptz), CAST(:nextStartsAt AS timestamptz)
                 WHERE EXISTS (SELECT 1 FROM slice)
                 ON CONFLICT (id) DO NOTHING
-            ), candidate AS (
-                SELECT s.user_id, md5(:dedupePrefix || s.user_id)::uuid AS dedupe_hash
-                FROM slice s
-            ), passed AS (
-                INSERT INTO core.notification_dedupe (dedupe_hash)
-                SELECT c.dedupe_hash FROM candidate c
-                ON CONFLICT (dedupe_hash) DO NOTHING
-                RETURNING dedupe_hash
             ), inserted AS (
-                INSERT INTO core.notification (id, recipient_id, content_id, read_status, action_status)
-                SELECT gen_random_uuid(), c.user_id, CAST(:contentId AS uuid), 'UNREAD', :actionStatus
-                FROM candidate c
-                JOIN passed p ON p.dedupe_hash = c.dedupe_hash
+                /*
+                 * 중복 방지가 이 삽입 안에서 끝난다(ADR-0132). 파티션을 걷어 알림 표에 전역
+                 * 유니크를 걸 수 있게 되면서, 등록표에 먼저 넣고 통과분을 조인하던 두 단계가
+                 * 한 단계가 됐다 — 알림 1건에 힙 2행·인덱스 4벌이 들던 것이 1행·3벌이다.
+                 */
+                INSERT INTO core.notification
+                        (id, recipient_id, content_id, dedupe_hash, read_status, action_status)
+                SELECT gen_random_uuid(), s.user_id, CAST(:contentId AS uuid),
+                       md5(:dedupePrefix || s.user_id)::uuid, 'UNREAD', :actionStatus
+                FROM slice s
+                ON CONFLICT (dedupe_hash) DO NOTHING
                 RETURNING recipient_id
             )
             SELECT (SELECT count(*) FROM slice)    AS scanned,
@@ -149,19 +140,18 @@ public class NotificationFanoutRepository {
                        CAST(:previousStartsAt AS timestamptz), CAST(:nextStartsAt AS timestamptz)
                 WHERE EXISTS (SELECT 1 FROM slice)
                 ON CONFLICT (id) DO NOTHING
-            ), candidate AS (
-                SELECT s.user_id, md5(:dedupePrefix || s.user_id)::uuid AS dedupe_hash
-                FROM slice s
-            ), passed AS (
-                INSERT INTO core.notification_dedupe (dedupe_hash)
-                SELECT c.dedupe_hash FROM candidate c
-                ON CONFLICT (dedupe_hash) DO NOTHING
-                RETURNING dedupe_hash
             ), inserted AS (
-                INSERT INTO core.notification (id, recipient_id, content_id, read_status, action_status)
-                SELECT gen_random_uuid(), c.user_id, CAST(:contentId AS uuid), 'UNREAD', :actionStatus
-                FROM candidate c
-                JOIN passed p ON p.dedupe_hash = c.dedupe_hash
+                /*
+                 * 중복 방지가 이 삽입 안에서 끝난다(ADR-0132). 파티션을 걷어 알림 표에 전역
+                 * 유니크를 걸 수 있게 되면서, 등록표에 먼저 넣고 통과분을 조인하던 두 단계가
+                 * 한 단계가 됐다 — 알림 1건에 힙 2행·인덱스 4벌이 들던 것이 1행·3벌이다.
+                 */
+                INSERT INTO core.notification
+                        (id, recipient_id, content_id, dedupe_hash, read_status, action_status)
+                SELECT gen_random_uuid(), s.user_id, CAST(:contentId AS uuid),
+                       md5(:dedupePrefix || s.user_id)::uuid, 'UNREAD', :actionStatus
+                FROM slice s
+                ON CONFLICT (dedupe_hash) DO NOTHING
                 RETURNING recipient_id
             )
             SELECT (SELECT count(*) FROM slice)    AS scanned,

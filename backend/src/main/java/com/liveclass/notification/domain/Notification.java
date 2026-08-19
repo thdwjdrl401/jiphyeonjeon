@@ -27,7 +27,9 @@ import java.util.UUID;
  *
  * <p><b>dedupe_key가 여기 없다.</b> 표가 월 파티션이라 파티션 키 없는 전역 유니크를 걸 수 없고,
  * 중복 제거는 월을 넘어야 한다(재공개가 다시 알리지 않음). 그 역할은 전역 등록표
- * {@code core.notification_dedupe}가 한다 — 넣는 쪽 CTE가 등록표를 먼저 통과시킨다.
+ * 이 표의 {@code dedupe_hash} 유니크가 한다 — 넣는 쪽이 {@code ON CONFLICT DO NOTHING}으로
+ * 통과 여부를 판정한다(ADR-0132). 파티션을 쓰던 동안에는 전역 유니크를 걸 수 없어 별도
+ * 등록표가 그 일을 맡았다.
  */
 @Entity
 @Table(schema = "core", name = "notification")

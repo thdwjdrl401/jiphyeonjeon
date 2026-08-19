@@ -30,34 +30,34 @@ import java.util.UUID;
 public class NotificationInsertRepository {
 
     /*
-     * 세 단계가 전부 gate에 걸려 있다. 등록표 삽입이 충돌하면(이미 본 사건) gate가 비고,
-     * content도 본체도 0행이다 — 반환값(본체 삽입 수)이 그대로 "실제로 들어갔는가"가 된다.
-     *
-     * content 삽입에도 ON CONFLICT를 거는 이유: content id는 dedupe_key에서 결정적으로 파생하므로
-     * 등록표가 초기화되는 일 없이 겹칠 수는 없지만, 만에 하나 겹쳐도 문구 한 벌이 재사용될 뿐
-     * 삽입이 죽지 않아야 한다. 본체 삽입은 CTE의 RETURNING이 아니라 파라미터의 content id를 그대로
-     * 쓴다 — DO NOTHING이면 RETURNING이 비기 때문이다. FK 검증은 문장 끝에 몰아서 돌아 같은 문장
-     * 안에서 만든 content 행도 보인다.
+     * 두 단계가 한 문장 안에 있다. 문구는 사건당 1행이라 같은 사건이면 같은 id에 부딪혀
+     * 접히고, 알림은 dedupe_hash 유니크에 부딪혀 접힌다. 둘 다 ON CONFLICT DO NOTHING이라
+     * 재배달이 와도 오류가 아니라 0건이다.
      */
     private static final String INSERT = """
-            WITH gate AS (
-                INSERT INTO core.notification_dedupe (dedupe_hash)
-                VALUES (md5(:dedupeKey)::uuid)
-                ON CONFLICT (dedupe_hash) DO NOTHING
-                RETURNING dedupe_hash
-            ), content AS (
+            WITH content AS (
+                /*
+                 * 문구를 먼저 넣는다. 중복이면 아래 삽입이 0건으로 접히는데, 그때 이 행은
+                 * **이미 있던 것**이다 — content id가 사건 식별자에서 파생되므로 같은 사건이면
+                 * 같은 id에 부딪혀 ON CONFLICT로 접힌다. 고아가 쌓이지 않는다.
+                 */
                 INSERT INTO core.notification_content (
                     id, type, severity, title, message, targets, group_key,
                     previous_starts_at, next_starts_at)
-                SELECT CAST(:contentId AS uuid), :type, :severity, :title, :message,
-                       CAST(:targets AS jsonb), :groupKey,
-                       CAST(:previousStartsAt AS timestamptz), CAST(:nextStartsAt AS timestamptz)
-                FROM gate
+                VALUES (CAST(:contentId AS uuid), :type, :severity, :title, :message,
+                        CAST(:targets AS jsonb), :groupKey,
+                        CAST(:previousStartsAt AS timestamptz), CAST(:nextStartsAt AS timestamptz))
                 ON CONFLICT (id) DO NOTHING
             )
-            INSERT INTO core.notification (id, recipient_id, content_id, read_status, action_status)
-            SELECT :id, :recipientId, CAST(:contentId AS uuid), 'UNREAD', :actionStatus
-            FROM gate
+            /*
+             * 중복 판정이 이 삽입 안에서 끝난다(ADR-0132). 파티션을 쓰던 동안에는 알림 표에
+             * 전역 유니크를 걸 수 없어 별도 등록표가 문지기 노릇을 했다.
+             */
+            INSERT INTO core.notification
+                    (id, recipient_id, content_id, dedupe_hash, read_status, action_status)
+            VALUES (:id, :recipientId, CAST(:contentId AS uuid),
+                    md5(:dedupeKey)::uuid, 'UNREAD', :actionStatus)
+            ON CONFLICT (dedupe_hash) DO NOTHING
             """;
 
     private final NamedParameterJdbcTemplate jdbc;
