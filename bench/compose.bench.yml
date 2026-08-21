@@ -101,6 +101,12 @@ x-appbase: &appbase
       # 구간을 가르는 손잡이. 기본은 둘 다 켜짐(운영과 같다).
       NOTIFICATION_FANOUT_LISTENER_ENABLED: ${FANOUT_ENABLED:-true}
       NOTIFICATION_PUSH_LISTENER_ENABLED: ${PUSH_ENABLED:-true}
+      # 발송 전용 노드는 알림 리스너 말고도 꺼야 할 것이 있다(ADR-0127의 역할 표).
+      # 지금까지 벤치는 이 셋을 켠 채로 쟀다 — 앱 로그에 자막 consumer와 STOMP 브로커가
+      # 그대로 찍혀 있었다. 노드마다 붙는 고정 비용이 그만큼 부풀려져 있었다는 뜻이다.
+      LIVECLASS_SCHEDULING_ENABLED: ${SCHEDULING_ENABLED:-true}
+      CAPTION_CONSUMER_ENABLED: ${CAPTION_ENABLED:-true}
+      LECTURE_NOTE_CONSUMER_ENABLED: ${LECTURE_NOTE_ENABLED:-false}
       OUTBOX_RELAY_FIXED_DELAY_MS: ${RELAY_DELAY_MS:-5000}
       OUTBOX_RELAY_INITIAL_DELAY_MS: "3000"
 
