@@ -4,7 +4,8 @@
 - **일자**: 2026-08-21
 - **관련**: [0130](0130-a-wide-fanout-goes-out-in-lanes.md)(체인 도입),
   [0131](0131-the-next-slice-goes-out-before-the-app-work.md)(다음 조각 선발행 · 소비자 절은 이 문서가 대체),
-  [0132](0132-notifications-are-not-deleted-so-the-table-is-not-partitioned.md)(파티셔닝 제거)
+  [0132](0132-notifications-are-not-deleted-so-the-table-is-not-partitioned.md)(파티셔닝 제거),
+  [0135](0135-the-fanout-elapsed-comes-from-the-row-timestamps.md)(측정 기준 — 아래 하네스 결함을 닫는다)
 - **적용 범위**: `application.yml`의 `notification.fanout.chains`·`listener-concurrency`,
   `bench/compose.bench.yml`, `bench/run-chains.sh`
 
@@ -83,6 +84,6 @@ Postgres 코어 수가 바뀌면 `chains`를 그 수에 맞추고 `listener-conc
 
 ## 남은 것
 
-- `run-chains.sh`가 보고하는 소요시간은 아직 릴레이 폴링 대기를 포함한다. 앱 로그 기준으로 재거나 깨우기 경로를 타게 고쳐야 한다.
+- ~~`run-chains.sh`가 보고하는 소요시간은 아직 릴레이 폴링 대기를 포함한다.~~ **[ADR-0135](0135-the-fanout-elapsed-comes-from-the-row-timestamps.md)에서 닫았다.** 지표를 알림 행에 박힌 시각(`created_at`의 최소~최대)으로 옮겼다. 그 기준으로 조건마다 3회 다시 재니 체인 2가 14.42초, 체인 4가 11.74초로 위 표(앱 로그로 우회해 잰 14.27·11.35초)와 같은 자리에 들어왔다.
 - 단건 알림이 조각 뒤에서 기다리는 시간은 재지 않았다. 소비자 ×2의 여유가 실제로 그것을 막는지 확인되지 않았다.
 - 사용자 요청 영향 측정은 반복 2회다. 배율의 방향과 크기 순서는 세 요청률에서 일관되지만 개별 값은 ±20%로 본다.

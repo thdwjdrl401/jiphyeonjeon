@@ -97,7 +97,8 @@ INS="$(pg -c 'SELECT count(*) FROM core.notification;')"
 report "행마다 왕복·커밋" "$ROWS" "$(( T1 - T0 ))"
 
 # 완전히 순진한 판. 수신자마다 사용자와 구독을 따로 조회하고, 중복 여부도 SELECT로 먼저 본 뒤
-# INSERT한다 — 흔히 N+1이라 부르는 모양이다. 왕복이 행마다 다섯 번으로 늘어난다.
+# INSERT한다 — 흔히 N+1이라 부르는 모양이다. 왕복이 행마다 네 번으로 늘어난다
+# (사용자 조회 · 중복 확인 · 알림 삽입 · 구독 조회). 아래 루프가 그 넷을 그대로 찍는다.
 python3 - "$OUT/users.txt" "$OUT/naive.sql" "$CID" <<'PY'
 import sys, hashlib
 src, dst, cid = sys.argv[1:4]

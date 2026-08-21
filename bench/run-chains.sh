@@ -28,9 +28,10 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BENCH="$REPO_ROOT/bench"
 CHAIN_COUNTS="${CHAIN_COUNTS:-1 2 3 4 6 8}"
-# 소비자 스레드 수. 기본은 갈래 수와 같지만, **다음 조각을 먼저 발행하는**(ADR-0131) 구조에서는
-# 갈래보다 많아야 효과가 난다 — 앞 조각의 앱 일이 끝나기 전에 다음 조각의 DB 일을 시작할
-# 스레드가 있어야 한다. 비워 두면 갈래 수와 같다.
+# 소비자 스레드 수. 비워 두면 **체인 수 x 2**다 — 운영 기준과 같다(ADR-0134).
+# ADR-0131은 "체인보다 많아야 효과가 난다"고 적었으나 통제 재측정에서 재현되지 않았다.
+# 체인 2에서 소비자 2/3/4/8의 체인당 진행 간격이 138/140/135/136ms로 같다.
+# 그때 근거였던 20.5초 대 18.3초는 이 스크립트의 손잡이가 고장 난 상태에서 나온 값이다.
 CONCURRENCY="${CONCURRENCY:-}"
 SLICE="${SLICE:-5000}"
 OUT="${OUT:-$BENCH/results/chains-$(date +%Y%m%dT%H%M%S)}"
@@ -69,11 +70,11 @@ USERS="$(pg -c "SELECT count(*) FROM core.enrollment WHERE curriculum_id='000000
 [ "${USERS:-0}" -gt 0 ] || fail "시드가 없다."
 echo "   수강생 $USERS"
 
-printf 'chains,elapsed_s,throughput_per_s,slices,db_ms_per_slice,offdb_ms_per_slice,db_total_s,concurrency,app_cpu_pct,pg_cpu_pct\n' > "$OUT/summary.csv"
+printf 'chains,span_s,elapsed_s,throughput_per_s,slices,db_ms_per_slice,offdb_ms_per_slice,db_total_s,concurrency,app_cpu_pct,pg_cpu_pct\n' > "$OUT/summary.csv"
 
 for CHAINS in $CHAIN_COUNTS; do
   echo
-  echo "════ 갈래 ${CHAINS}개 · 소비자 ${CONCURRENCY:-$CHAINS}개 (앱 프로세스 1개) ════"
+  echo "════ 체인 ${CHAINS}개 · 소비자 ${CONCURRENCY:-$(( CHAINS * 2 ))}개 (앱 프로세스 1개) ════"
   compose rm -sf app app2 app3 > /dev/null 2>&1 || true
 
   pg -c "TRUNCATE core.notification, core.notification_content,
@@ -83,11 +84,11 @@ for CHAINS in $CHAIN_COUNTS; do
   compose exec -T rabbitmq rabbitmqctl purge_queue notification.fanout < /dev/null > /dev/null 2>&1 || true
   compose exec -T rabbitmq rabbitmqctl purge_queue notification.push < /dev/null > /dev/null 2>&1 || true
 
-  # 소비자 스레드 수 = 체인 수. 체인이 n개인데 소비자가 1개면 n-1개가 큐에서 기다린다.
+  # 소비자 수 = 체인 수 x 2 (ADR-0134). 체인 하나가 동시에 쓸 수 있는 스레드가 최대 둘이다.
   PG_CPUSET="$PG_CPUSET_V" INFRA_CPUSET="$INFRA_CPUSET_V" APP_CPUSET="$APP_CPUSET_V" \
   APP_HEAP="${APP_HEAP:-1g}" APP_MEM="${APP_MEM:-1600m}" \
   FANOUT_ENABLED=true PUSH_ENABLED=false \
-  FANOUT_CONCURRENCY="${CONCURRENCY:-$CHAINS}" \
+  FANOUT_CONCURRENCY="${CONCURRENCY:-$(( CHAINS * 2 ))}" \
     compose up -d --build --wait --wait-timeout 300 app > /dev/null 2>&1 || fail "앱 기동 실패"
 
   pg -c "SELECT pg_stat_statements_reset();" > /dev/null 2>&1 || true
@@ -143,19 +144,32 @@ for i in range(n):
   kill "$cpu_pid" 2>/dev/null || true
   echo
 
+  # 하네스 시계는 앞뒤가 오염돼 있다. 앞에는 릴레이 폴링 대기가 붙는다 — 이 스크립트가 아웃박스
+  # 행을 psql로 직접 넣어 afterCommit 깨우기 경로(ADR-0122)를 안 타므로, 릴레이가 폴링으로 집을
+  # 때까지 0~RELAY_DELAY_MS를 기다린다. 뒤에는 완료 확인 주기 0~2초가 붙는다.
+  # 둘을 합쳐 회차마다 평균 3.5초가 얹혔고, 그게 조건 간 차이를 덮었다(ADR-0134).
+  #
+  # 그래서 지표는 DB가 스스로 남긴 시각에서 뽑는다. core.notification.created_at의 기본값이
+  # clock_timestamp()라 행마다 찍히므로, 최소~최대가 곧 첫 행부터 마지막 행까지의 팬아웃 구간이다.
+  # 하네스가 언제 넣었는지, 언제 알아챘는지와 무관하다.
+  span_s="$(pg -c "SELECT round(extract(epoch FROM max(created_at) - min(created_at))::numeric, 2)
+                   FROM core.notification;")"
+
   read -r slices db_ms <<< "$(pg -c "SELECT coalesce(sum(calls),0) || ' ' ||
       coalesce(round((sum(total_exec_time)/nullif(sum(calls),0))::numeric, 2), 0)
       FROM pg_stat_statements WHERE query LIKE 'WITH slice%';")"
 
-  python3 - "$OUT/summary.csv" "$CHAINS" "$elapsed_ms" "$USERS" "$slices" "$db_ms" "$cpu_csv" <<'PY'
+  python3 - "$OUT/summary.csv" "$CHAINS" "$elapsed_ms" "$USERS" "$slices" "$db_ms" "$cpu_csv" "$span_s" <<'PY'
 import csv, os, sys
 path, chains, ms, users = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
 slices, db_ms, cpuf = int(sys.argv[5] or 0), float(sys.argv[6] or 0), sys.argv[7]
-sec = ms / 1000
-tp = users / sec
+span = float(sys.argv[8] or 0)            # DB가 남긴 첫 행~마지막 행 구간(초)
+harness = ms / 1000                       # 하네스 시계. 폴링 대기가 섞여 있어 참고용이다
+sec = span if span > 0 else harness       # 파생 지표는 전부 이 값에서 나온다
+tp = users / sec if sec else 0
 db_total = slices * db_ms / 1000          # DB 안에서 쓴 시간의 총합(초)
-# 체인이 c개면 c개가 동시에 도므로, 한 체인이 벽시계 동안 낼 수 있는 시간은 sec다.
-# DB 밖 시간 = (체인 하나의 벽시계) − (체인 하나가 DB에서 쓴 시간)
+# 체인이 c개면 c개가 동시에 도므로, 한 체인이 구간 동안 낼 수 있는 시간은 sec다.
+# DB 밖 시간 = (체인 하나의 구간) − (체인 하나가 DB에서 쓴 시간)
 per_chain_db = db_total / chains if chains else 0
 per_chain_slices = slices / chains if chains else 0
 offdb_ms = ((sec - per_chain_db) / per_chain_slices * 1000) if per_chain_slices else 0
@@ -173,11 +187,13 @@ if os.path.exists(cpuf):
     pgc = avg(lambda k: "postgres" in k)
 
 with open(path, "a") as f:
-    f.write("%d,%.1f,%.0f,%d,%.2f,%.1f,%.1f,%.2f,%.0f,%.0f\n"
-            % (chains, sec, tp, slices, db_ms, offdb_ms, db_total, concurrency, app, pgc))
-print("   체인 %d → %.1f초 · %d건/s · 조각 %d회 · DB %.2fms/조각 · DB밖 %.1fms/조각 "
+    f.write("%d,%.2f,%.1f,%.0f,%d,%.2f,%.1f,%.1f,%.2f,%.0f,%.0f\n"
+            % (chains, span, harness, tp, slices, db_ms, offdb_ms, db_total, concurrency, app, pgc))
+print("   체인 %d → %.2f초(DB 구간) · %d건/s · 조각 %d회 · DB %.2fms/조각 · DB밖 %.1fms/조각 "
       "· DB총합 %.1f초 · 동시성 %.2f · 앱CPU %.0f%% · pgCPU %.0f%%"
-      % (chains, sec, tp, slices, db_ms, offdb_ms, db_total, concurrency, app, pgc))
+      % (chains, span, tp, slices, db_ms, offdb_ms, db_total, concurrency, app, pgc))
+print("      하네스 시계 %.1f초 — 차이 %.1f초가 릴레이 폴링 대기와 완료 확인 주기다"
+      % (harness, harness - span))
 PY
 done
 
