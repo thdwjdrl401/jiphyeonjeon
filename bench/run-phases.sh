@@ -177,6 +177,16 @@ for i in range(n):
   done <<< "$ranges"
 
   watch_until A fanout_state fanout_line || true
+
+  # 하네스 시계에는 릴레이 폴링 대기와 완료 확인 주기가 섞인다(ADR-0134). 팬아웃 구간은
+  # DB가 남긴 시각에서 다시 뽑는다 — created_at 기본값이 clock_timestamp()라 행마다 찍히므로
+  # 최소~최대가 곧 첫 행부터 마지막 행까지다.
+  pg -c "SELECT round(extract(epoch FROM max(created_at) - min(created_at))::numeric, 2)
+         FROM core.notification;" > "$OUT/A-span-s"
+  # 발송이 실제로 시작할 수 있는 시각. 첫 조각의 푸시 명령이 큐에 오른 때다.
+  pg -c "SELECT round(extract(epoch FROM
+           (SELECT min(published_at) FROM core.outbox_events WHERE destination='notification.push')
+         - (SELECT min(created_at)   FROM core.notification))::numeric, 3);" > "$OUT/A-first-push-s"
 fi
 
 # ── 구간 B ───────────────────────────────────────────────────────────────
@@ -205,7 +215,19 @@ out, subs, cores = pathlib.Path(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3])
 def ms(name):
     p = out / f"{name}-elapsed-ms"
     return int(p.read_text().strip()) / 1000 if p.exists() else None
-a, b = ms("A"), ms("B")
+def num(name):
+    p = out / name
+    try:
+        return float(p.read_text().strip())
+    except Exception:
+        return None
+# 팬아웃은 DB가 남긴 구간을 쓴다. 하네스 시계는 폴링 대기가 섞여 있어 참고로만 찍는다.
+a_harness, b = ms("A"), ms("B")
+a = num("A-span-s") or a_harness
+first_push = num("A-first-push-s")
+if a and a_harness:
+    print(f"\n  (팬아웃 하네스 시계 {a_harness:.1f}초 · DB 구간 {a:.2f}초 — "
+          f"차이 {a_harness - a:.1f}초가 릴레이 폴링 대기와 완료 확인 주기다)")
 print("\n══ 구간별 결과 ══")
 if a: print(f"  A 팬아웃   {a:7.1f}초   알림 행 생성 + 큐 적재   (스케일아웃 불가 — 조각 체인 직렬)")
 if b:
@@ -224,6 +246,11 @@ if a and b:
     if a >= 60:
         print(f"  → 팬아웃만으로 60초 초과. 커서 공간 분할 없이는 대수를 늘려도 못 맞춘다")
     else:
-        print(f"  → 발송에 쓸 수 있는 예산 {60-a:.0f}초 → 필요 대수 {subs/((60-a)*per_machine):.1f}대")
+        # 발송은 팬아웃이 끝나기를 기다리지 않는다. 첫 조각의 푸시 명령이 큐에 오르는 순간
+        # 시작할 수 있으므로, 창은 60-a가 아니라 60-(첫 푸시 명령 시각)이다.
+        start = first_push if first_push is not None else a
+        label = "첫 푸시 명령" if first_push is not None else "팬아웃 완료"
+        print(f"  → 발송 시작 {start:.2f}초({label}) · 창 {60-start:.1f}초 "
+              f"→ 필요 대수 {subs/((60-start)*per_machine):.1f}대")
 PY
 echo; echo "결과: $OUT"
