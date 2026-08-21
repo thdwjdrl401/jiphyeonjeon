@@ -1,8 +1,6 @@
 package com.liveclass.notification.push;
 
-import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
-import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 import org.springframework.stereotype.Repository;
 
 import java.util.Collection;
@@ -41,12 +39,29 @@ public class PushDeliveryProgressRepository {
     /*
      * ON CONFLICT DO NOTHING — 재배달과 크래시 재시도가 같은 (사건, 사람)을 다시 적을 수 있다.
      * 대상 제약을 명시하지 않는 이유는 유니크가 파티션 지역이라 부모에 이름 붙은 제약이 없어서다.
+     *
+     * <b>명단을 배열로 넘겨 한 문장에 여러 사람을 적는다.</b> 사람마다 문장 하나였을 때는 100만
+     * 명이면 문장도 100만 개였다 — 건당 0.01ms인데 횟수가 그만큼이라 10.5초였다(ADR-0137).
      */
     private static final String SETTLE = """
             INSERT INTO core.notification_push_progress (event_hash, recipient_id)
-            VALUES (:eventHash, :recipientId)
+            SELECT CAST(? AS uuid), r
+              FROM unnest(CAST(? AS uuid[])) AS r
             ON CONFLICT DO NOTHING
             """;
+
+    /**
+     * 한 문장에 적는 사람 수.
+     *
+     * <p><b>조각 전체를 한 문장으로 하지 않는 이유는 실패 의미론을 그대로 두기 위해서다.</b>
+     * 한 문장이면 전부 아니면 전무가 된다 — 발송을 마치고 기록하는 도중에 죽으면 하나도 안 남고,
+     * 재배달이 그 조각 전원(5,000명대)에게 다시 보낸다. 지금은 앞쪽이 남아 있어 안 남은 사람만
+     * 다시 간다. 성능만 바꾸려던 변경이 동작까지 바꾸면 안 된다.
+     *
+     * <p>이 크기면 조각당 문장이 대여섯 개다. 100만 개에서 1,200개대로 줄면서 크래시 때 다시 갈
+     * 사람 수는 지금과 같은 자리에 남는다.
+     */
+    private static final int SETTLE_CHUNK = 1_000;
 
     private final NamedParameterJdbcTemplate jdbc;
 
@@ -85,11 +100,13 @@ public class PushDeliveryProgressRepository {
         if (recipientIds.isEmpty()) {
             return;
         }
-        SqlParameterSource[] batch = recipientIds.stream()
-                .map(recipientId -> new MapSqlParameterSource()
-                        .addValue("eventHash", eventHash)
-                        .addValue("recipientId", recipientId))
-                .toArray(SqlParameterSource[]::new);
-        jdbc.batchUpdate(SETTLE, batch);
+        List<UUID> all = List.copyOf(recipientIds);
+        for (int from = 0; from < all.size(); from += SETTLE_CHUNK) {
+            List<UUID> chunk = all.subList(from, Math.min(from + SETTLE_CHUNK, all.size()));
+            jdbc.getJdbcTemplate().update(SETTLE, ps -> {
+                ps.setObject(1, eventHash);
+                ps.setArray(2, ps.getConnection().createArrayOf("uuid", chunk.toArray()));
+            });
+        }
     }
 }
