@@ -80,6 +80,9 @@ x-appbase: &appbase
       NOTIFICATION_WEB_PUSH_CRYPTO_THREADS: ${PUSH_CRYPTO_THREADS:-0}
       NOTIFICATION_WEB_PUSH_BATCH_TIMEOUT_MS: ${PUSH_BATCH_TIMEOUT_MS:-60000}
       NOTIFICATION_PUSH_LISTENER_CONCURRENCY: ${PUSH_CONCURRENCY:-2}
+      # 푸시 소비자가 미리 쥐는 수. 전역 PREFETCH와 **따로** 줘야 한다 — 전역만 주면 팩토리가
+      # notification.push.listener-prefetch로 뒤에 덮어쓴다(소비자 수와 같은 자리, ADR-0136).
+      NOTIFICATION_PUSH_LISTENER_PREFETCH: ${PUSH_PREFETCH:-1}
       # **팬아웃 소비자 수는 전용 손잡이로 줘야 한다.** ADR-0131이 전역에서 갈라내면서
       # notificationListenerContainerFactory가 configurer로 전역을 먹은 **뒤에**
       # notification.fanout.listener-concurrency(기본 8)로 덮어쓴다. 전역만 주면 그 덮어쓰기에
