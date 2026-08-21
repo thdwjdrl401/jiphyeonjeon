@@ -32,6 +32,11 @@ SLICE="${SLICE:-5000}"
 # 팬아웃 소비자는 체인 수 x 2가 기준이다(ADR-0134). 예전 기본값 8은 그 기준이 서기 전 값이다.
 FANOUT_CONC="${FANOUT_CONC:-$(( CHAINS * 2 ))}"
 PUSH_CONC="${PUSH_CONC:-2}"
+# 구간 B를 발송 노드 몇 대로 돌릴 것인가. 2 이상이면 **같은 총 코어를 나눠** 준다 —
+# 1대에 물리 2코어와 2대에 물리 1코어씩은 코어 예산이 같으므로, 차이가 나면 그것은
+# 코어가 아니라 큐가 일을 나누는 방식에서 온 것이다(ADR-0136).
+PUSH_NODES="${PUSH_NODES:-1}"
+PUSH_NODE_CPUSETS="${PUSH_NODE_CPUSETS:-2,6|3,7|1,5}"
 # 목 서버의 응답 지연. 순진한 구조와 지금 구조를 같은 조건에서 비교하려면 이 값이 둘 다 같아야
 # 한다. 이 프로젝트가 따로 재 둔 FCM 왕복이 230ms다(application.yml notification.web-push).
 MOCK_DELAY="${MOCK_DELAY:-230ms}"
@@ -55,6 +60,14 @@ push_queue_depth() {
 #   발송    앱 2코어 · pg 1코어 · 인프라 1코어   (발송은 DB를 21%밖에 안 쓴다)
 PG_FANOUT="0,4,1,5"; APP_FANOUT="2,6";     INFRA_FANOUT="3,7"
 PG_PUSH="0,4";       APP_PUSH="2,6,3,7";   INFRA_PUSH="1,5"
+
+# **이미지를 한 번 빌드한다.** 이 스크립트에는 --build이 한 군데도 없었다. 그래서 코드를 고쳐도
+# 앞서 누군가 빌드해 둔 이미지로 쟀고, 새로 만든 프로퍼티는 앱에 아예 없었다 —
+# 컨테이너 환경변수에는 값이 보이는데 그 값을 읽는 코드가 없어서 전역 기본값이 걸렸다.
+build_app() {
+  echo "▶ 앱 이미지 빌드"
+  compose build app > /dev/null 2>&1 || fail "앱 이미지 빌드 실패"
+}
 
 start_infra() {
   PG_CPUSET="$1" INFRA_CPUSET="$2" MOCK_DELAY="$MOCK_DELAY" \
@@ -85,7 +98,10 @@ set_cpuset() {  # $1 pg $2 infra
 }
 
 start_app() {  # $1 pg $2 infra $3 app $4 fanout_on $5 push_on
-  compose rm -sf app > /dev/null 2>&1 || true
+  # **app2·app3까지 지운다.** 앞 회차가 노드를 여러 대 띄웠으면 그것들이 그대로 살아남아
+  # 같은 큐를 계속 소비한다. 1대로 재는 회차에 소비자가 넷 붙어 있는 것을 실제로 봤다 —
+  # 둘은 prefetch 1, 둘은 앞 회차가 남긴 250이었다.
+  compose rm -sf app app2 app3 > /dev/null 2>&1 || true
   PG_CPUSET="$1" INFRA_CPUSET="$2" APP_CPUSET="$3" MOCK_DELAY="$MOCK_DELAY" \
   APP_HEAP="${APP_HEAP:-1g}" APP_MEM="${APP_MEM:-1600m}" \
   FANOUT_ENABLED="$4" PUSH_ENABLED="$5" \
@@ -98,6 +114,34 @@ start_app() {  # $1 pg $2 infra $3 app $4 fanout_on $5 push_on
        "· 동시 상한 $(grep -oP 'NOTIFICATION_WEB_PUSH_MAX_IN_FLIGHT=\K.*' <<< "$env_dump")"
 }
 
+# 발송 노드를 여러 대 띄운다. 노드마다 물리 코어 하나씩 주고, 전부 푸시 전용으로 둔다.
+# 세 서비스가 같은 이미지 태그를 가리키므로 산출물은 하나다(compose 주석 참조).
+start_push_nodes() {  # $1 노드 수
+  local n="$1" svcs=() i=0 set_i cpuset
+  compose rm -sf app app2 app3 > /dev/null 2>&1 || true
+  IFS='|' read -r -a set_i <<< "$PUSH_NODE_CPUSETS"
+  [ "$n" -le "${#set_i[@]}" ] || fail "노드 $n대에 줄 cpuset이 모자라다(${#set_i[@]}개)"
+  for ((i = 0; i < n; i++)); do
+    case "$i" in
+      0) svcs+=(app);  export APP_CPUSET="${set_i[i]}" ;;
+      1) svcs+=(app2); export APP2_CPUSET="${set_i[i]}" ;;
+      2) svcs+=(app3); export APP3_CPUSET="${set_i[i]}" ;;
+    esac
+  done
+  PG_CPUSET="$PG_FANOUT" INFRA_CPUSET="$INFRA_FANOUT" MOCK_DELAY="$MOCK_DELAY" \
+  APP_HEAP="${APP_HEAP:-1g}" APP_MEM="${APP_MEM:-1600m}" \
+  FANOUT_ENABLED=false PUSH_ENABLED=true \
+  FANOUT_CONCURRENCY="$FANOUT_CONC" PUSH_CONCURRENCY="$PUSH_CONC" \
+    compose up -d --wait --wait-timeout 300 "${svcs[@]}" > /dev/null 2>&1 \
+    || fail "발송 노드 기동 실패"
+  for svc in "${svcs[@]}"; do
+    cpuset="$(docker inspect "$(compose ps -q "$svc")" --format '{{.HostConfig.CpusetCpus}}' 2>/dev/null)"
+    echo "   발송 노드 $svc — cpuset[$cpuset] 소비자 $(docker inspect "$(compose ps -q "$svc")" \
+      --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null \
+      | grep -oP 'NOTIFICATION_PUSH_LISTENER_PREFETCH=\K.*' | head -1) prefetch"
+  done
+}
+
 reset_state() {
   pg -c "TRUNCATE core.notification, core.notification_content,
                 core.notification_push_progress, core.outbox_events CASCADE;" > /dev/null
@@ -105,6 +149,11 @@ reset_state() {
   pg -c "CHECKPOINT;" > /dev/null
   compose exec -T rabbitmq rabbitmqctl purge_queue notification.fanout < /dev/null > /dev/null 2>&1 || true
   compose exec -T rabbitmq rabbitmqctl purge_queue notification.push < /dev/null > /dev/null 2>&1 || true
+  # DLQ도 비운다. 안 비우면 옛 회차가 남긴 메시지가 durable로 계속 남아, 이번 회차가 아무것도
+  # 실패시키지 않았는데 DLQ 경보(ADR-0133)가 서 있는 상태가 된다. 실제로 하루 전 회차의
+  # 메시지 한 건이 그대로 있었다.
+  compose exec -T rabbitmq rabbitmqctl purge_queue notification.fanout.dlq < /dev/null > /dev/null 2>&1 || true
+  compose exec -T rabbitmq rabbitmqctl purge_queue notification.push.dlq < /dev/null > /dev/null 2>&1 || true
   mock /reset > /dev/null 2>&1 || true
 }
 
@@ -168,6 +217,7 @@ fanout_bounds_ms() {
 }
 
 echo "▶ 모드 $MODE · 갈래 $CHAINS · 조각 $SLICE · 공급자 지연 $MOCK_DELAY"
+build_app
 USERS_Q="SELECT count(*) FROM core.enrollment WHERE curriculum_id='00000000-0000-4000-8000-000000000002' AND status='ACTIVE';"
 
 if [ "$MODE" = "shared" ]; then
@@ -205,7 +255,14 @@ else
   QD="$(push_queue_depth)"
   [ "${QD:-0}" -gt 0 ] || fail "푸시 큐가 비었다(${QD:-없음}). 구간 A가 쌓은 명령이 사라졌다."
   echo "   푸시 큐 $QD건 대기 중"
-  start_app "$PG_FANOUT" "$INFRA_FANOUT" "$APP_PUSH" false true
+  if [ "$PUSH_NODES" -le 1 ]; then
+    start_app "$PG_FANOUT" "$INFRA_FANOUT" "$APP_PUSH" false true
+  else
+    start_push_nodes "$PUSH_NODES"
+  fi
+  echo "   소비자 실효 prefetch — $(compose exec -T rabbitmq rabbitmqctl list_consumers \
+        queue_name prefetch_count < /dev/null 2>/dev/null \
+        | awk '$1=="notification.push"{print $2}' | sort | uniq -c | tr '\n' ' ')"
   T_PUSH_START="$(now_ms)"
   sample_until 0 "$SUBS" "$OUT/samples-push.csv"
   T_END="$(now_ms)"
