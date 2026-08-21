@@ -218,7 +218,7 @@ class NotificationListenerRetryTest {
         SimpleRabbitListenerContainerFactory fanout = config.notificationListenerContainerFactory(
                 connectionFactory, configurer, 8, 3, 500, 2.0, 5000);
         SimpleRabbitListenerContainerFactory push = config.notificationPushListenerContainerFactory(
-                connectionFactory, configurer, 2, 3, 500, 2.0, 5000);
+                connectionFactory, configurer, 2, 1, 3, 500, 2.0, 5000);
 
         for (SimpleRabbitListenerContainerFactory factory : new SimpleRabbitListenerContainerFactory[] {fanout, push}) {
             Advice[] chain = factory.getAdviceChain();
@@ -230,5 +230,33 @@ class NotificationListenerRetryTest {
             assertThat(ReflectionTestUtils.getField(factory, "defaultRequeueRejected"))
                     .as("requeue 금지").isEqualTo(Boolean.FALSE);
         }
+    }
+
+    /**
+     * 푸시 소비자가 미리 쥐는 수는 전역값이 아니라 전용값이어야 한다.
+     *
+     * <p>전역 기본값은 250이다. 푸시 명령은 조각 수만큼(100만 명·조각 5,000이면 201건)뿐이라
+     * 250이면 먼저 붙은 소비자가 전부 가져가고 다른 소비자도 다른 발송 노드도 논다. 실측에서
+     * 250 대 1이 2,718 대 3,910건/s였다(ADR-0136).
+     *
+     * <p>이 테스트가 지키는 것은 <b>덮어쓰는 순서</b>다. configurer가 전역값을 부은 뒤에
+     * setPrefetchCount를 불러야 하고, 그 순서가 뒤집히면 전용값이 조용히 사라진다 —
+     * 소비자 수에서 이미 한 번 그렇게 됐다(ADR-0134).
+     */
+    @Test
+    @DisplayName("푸시 리스너의 prefetch는 전역값을 덮어쓴다")
+    void push_prefetch_overrides_the_global_default() {
+        NotificationMessagingConfig config = new NotificationMessagingConfig();
+        ConnectionFactory connectionFactory = mock(ConnectionFactory.class);
+        RabbitProperties properties = new RabbitProperties();
+        properties.getListener().getSimple().setPrefetch(250);
+        SimpleRabbitListenerContainerFactoryConfigurer configurer =
+                new SimpleRabbitListenerContainerFactoryConfigurer(properties);
+
+        SimpleRabbitListenerContainerFactory push = config.notificationPushListenerContainerFactory(
+                connectionFactory, configurer, 2, 1, 3, 500, 2.0, 5000);
+
+        assertThat(ReflectionTestUtils.getField(push, "prefetchCount"))
+                .as("전용 prefetch가 전역 250을 이긴다").isEqualTo(1);
     }
 }

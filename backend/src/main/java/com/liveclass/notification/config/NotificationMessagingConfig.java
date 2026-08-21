@@ -146,6 +146,7 @@ public class NotificationMessagingConfig {
             ConnectionFactory connectionFactory,
             SimpleRabbitListenerContainerFactoryConfigurer configurer,
             @Value("${notification.push.listener-concurrency:2}") int concurrency,
+            @Value("${notification.push.listener-prefetch:1}") int prefetch,
             @Value("${notification.push.listener-max-retries:3}") int maxRetries,
             @Value("${notification.push.listener-retry-initial-backoff-ms:500}") long initialBackoffMs,
             @Value("${notification.push.listener-retry-multiplier:2.0}") double multiplier,
@@ -155,6 +156,16 @@ public class NotificationMessagingConfig {
         factory.setDefaultRequeueRejected(false);
         // configurer가 전역 설정(팬아웃 워커 수)을 이미 부어 놓았으므로 **뒤에** 덮어쓴다.
         factory.setConcurrentConsumers(concurrency);
+        /*
+         * **미리 쥐는 수를 1로 둔다.** 전역 기본값은 250인데, 넓은 팬아웃 한 번이 만드는 푸시 명령은
+         * 조각 수만큼(수신자 100만·조각 5,000이면 201건)뿐이다. 250이면 먼저 붙은 소비자가 201건을
+         * 통째로 가져가고 같은 프로세스의 다른 소비자도, 다른 발송 노드도 빈손으로 논다 —
+         * 노드를 늘려도 처리량이 안 늘어난다는 뜻이다(ADR-0136).
+         *
+         * 명령 하나가 수천 건 발송이라 수 초씩 걸리므로 미리 쥘 이유도 없다. 쥐는 순간부터
+         * 그 메시지는 다른 소비자에게 못 간다.
+         */
+        factory.setPrefetchCount(prefetch);
         factory.setAdviceChain(listenerRetryAdvice(maxRetries, initialBackoffMs, multiplier, maxBackoffMs));
         return factory;
     }
