@@ -585,11 +585,11 @@ public class WebPushSender {
             }
         }
         if (!dead.isEmpty()) {
-            repository.deleteAllByIds(dead);
+            repository.deleteAllByIds(dead.toArray(UUID[]::new));
             log.info("죽은 푸시 구독 {}건 정리", dead.size());
         }
         if (!delivered.isEmpty()) {
-            repository.markDelivered(delivered, OffsetDateTime.now());
+            repository.markDelivered(delivered.toArray(UUID[]::new), OffsetDateTime.now());
         }
     }
 
