@@ -98,7 +98,10 @@ set_cpuset() {  # $1 pg $2 infra
 }
 
 start_app() {  # $1 pg $2 infra $3 app $4 fanout_on $5 push_on
-  compose rm -sf app > /dev/null 2>&1 || true
+  # **app2·app3까지 지운다.** 앞 회차가 노드를 여러 대 띄웠으면 그것들이 그대로 살아남아
+  # 같은 큐를 계속 소비한다. 1대로 재는 회차에 소비자가 넷 붙어 있는 것을 실제로 봤다 —
+  # 둘은 prefetch 1, 둘은 앞 회차가 남긴 250이었다.
+  compose rm -sf app app2 app3 > /dev/null 2>&1 || true
   PG_CPUSET="$1" INFRA_CPUSET="$2" APP_CPUSET="$3" MOCK_DELAY="$MOCK_DELAY" \
   APP_HEAP="${APP_HEAP:-1g}" APP_MEM="${APP_MEM:-1600m}" \
   FANOUT_ENABLED="$4" PUSH_ENABLED="$5" \
@@ -146,6 +149,11 @@ reset_state() {
   pg -c "CHECKPOINT;" > /dev/null
   compose exec -T rabbitmq rabbitmqctl purge_queue notification.fanout < /dev/null > /dev/null 2>&1 || true
   compose exec -T rabbitmq rabbitmqctl purge_queue notification.push < /dev/null > /dev/null 2>&1 || true
+  # DLQ도 비운다. 안 비우면 옛 회차가 남긴 메시지가 durable로 계속 남아, 이번 회차가 아무것도
+  # 실패시키지 않았는데 DLQ 경보(ADR-0133)가 서 있는 상태가 된다. 실제로 하루 전 회차의
+  # 메시지 한 건이 그대로 있었다.
+  compose exec -T rabbitmq rabbitmqctl purge_queue notification.fanout.dlq < /dev/null > /dev/null 2>&1 || true
+  compose exec -T rabbitmq rabbitmqctl purge_queue notification.push.dlq < /dev/null > /dev/null 2>&1 || true
   mock /reset > /dev/null 2>&1 || true
 }
 
