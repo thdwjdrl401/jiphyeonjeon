@@ -59,6 +59,10 @@ x-appbase: &appbase
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/liveclass
       SPRING_DATASOURCE_USERNAME: liveclass
       SPRING_DATASOURCE_PASSWORD: bench
+      # 노드당 커넥션 수. 기본값은 application.yml과 같은 10이라 지금까지의 측정은 그대로다.
+      # 노드를 늘리면 이 값이 노드 수만큼 곱해져 PG에 걸린다 — 2노드 회차의 손실 12%가
+      # DB 경합에서 오는지 가르려면 이 손잡이를 밖에서 낮출 수 있어야 한다.
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: ${DB_POOL:-10}
       SPRING_DATA_REDIS_HOST: redis
       SPRING_RABBITMQ_HOST: rabbitmq
       SPRING_RABBITMQ_USERNAME: liveclass
