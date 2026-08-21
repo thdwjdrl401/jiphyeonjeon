@@ -334,7 +334,7 @@ public class WebPushSender {
 
     private List<PushSubscription> loadSubscriptions(Collection<UUID> recipientIds) {
         // 사람마다 조회하면 조각 크기만큼 왕복이 생긴다 — 한 번에 가져온다.
-        return readTx.execute(status -> repository.findByUserIdIn(recipientIds));
+        return readTx.execute(status -> repository.findAllByUserIds(recipientIds.toArray(UUID[]::new)));
     }
 
     /**

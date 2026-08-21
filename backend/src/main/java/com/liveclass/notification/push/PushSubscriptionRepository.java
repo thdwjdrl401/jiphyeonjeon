@@ -17,8 +17,20 @@ public interface PushSubscriptionRepository extends JpaRepository<PushSubscripti
 
     List<PushSubscription> findByUserId(UUID userId);
 
-    /** 팬아웃 한 조각의 수신자 전원의 기기를 한 번에. 사람마다 조회하면 조각 크기만큼 왕복이 생긴다. */
-    List<PushSubscription> findByUserIdIn(Collection<UUID> userIds);
+    /**
+     * 팬아웃 한 조각의 수신자 전원의 기기를 한 번에. 사람마다 조회하면 조각 크기만큼 왕복이 생긴다.
+     *
+     * <p><b>명단은 배열로 넘긴다</b>(ADR-0137). 파생 질의의 {@code In}은 파라미터를 명단 크기만큼
+     * 만들어 크기마다 다른 문장이 된다. 조각 크기가 거의 일정해 Hibernate의 패딩이 잘 먹는 편이라
+     * 종류는 셋뿐이었지만, 배열이면 하나로 고정되고 5,000개짜리 바인딩도 사라진다.
+     *
+     * <p>엔티티를 그대로 돌려주므로 {@code SELECT *}다 — 컬럼 이름으로 매핑된다.
+     */
+    @Query(value = """
+            SELECT * FROM core.push_subscription
+             WHERE user_id = ANY(:userIds)
+            """, nativeQuery = true)
+    List<PushSubscription> findAllByUserIds(@Param("userIds") UUID[] userIds);
 
     void deleteByEndpointAndUserId(String endpoint, UUID userId);
 
