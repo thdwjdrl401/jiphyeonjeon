@@ -437,7 +437,8 @@ class WebPushRetryTest {
     @Test
     void a_disabled_sender_settles_everyone_because_there_is_nothing_to_send() {
         WebPushSender disabled = new WebPushSender(repository, new WebPushProperties("", "", null),
-                new NoOpTransactionManager(), 10, 2_000, 5_000, 5_000, 3, 10, Integer.MAX_VALUE, 0);
+                new NoOpTransactionManager(), 10, 2_000, 5_000, 5_000, 3, 10, Integer.MAX_VALUE, 0,
+                1, false);
         UUID recipient = UUID.randomUUID();
 
         java.util.Set<UUID> settled = disabled.send(List.of(recipient), "제목", "본문", null).settled();
@@ -459,7 +460,13 @@ class WebPushRetryTest {
         return new WebPushSender(repository, properties, new NoOpTransactionManager(),
                 maxInFlight, 2_000, 5_000, batchTimeoutMs, maxAttempts, 10,
                 // 로컬 서버는 h2가 아니라 스트림 상한이 의미 없다 — 연결 하나로 붙게 둔다.
-                Integer.MAX_VALUE, cryptoThreads);
+                Integer.MAX_VALUE, cryptoThreads,
+                /*
+                 * 조절기는 끈다. 이 테스트들은 429·5xx를 일부러 먹이므로 켜 두면 동시 상한이
+                 * 회차마다 반토막 나고, 그것이 재시도 동작과 섞여 무엇을 보는 시험인지 흐려진다.
+                 * 조절 자체는 WebPushInFlightGovernorTest가 본다.
+                 */
+                1, false);
     }
 
     private void given(PushSubscription... subscriptions) {
