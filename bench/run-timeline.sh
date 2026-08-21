@@ -32,6 +32,11 @@ SLICE="${SLICE:-5000}"
 # 팬아웃 소비자는 체인 수 x 2가 기준이다(ADR-0134). 예전 기본값 8은 그 기준이 서기 전 값이다.
 FANOUT_CONC="${FANOUT_CONC:-$(( CHAINS * 2 ))}"
 PUSH_CONC="${PUSH_CONC:-2}"
+# 구간 B를 발송 노드 몇 대로 돌릴 것인가. 2 이상이면 **같은 총 코어를 나눠** 준다 —
+# 1대에 물리 2코어와 2대에 물리 1코어씩은 코어 예산이 같으므로, 차이가 나면 그것은
+# 코어가 아니라 큐가 일을 나누는 방식에서 온 것이다(ADR-0136).
+PUSH_NODES="${PUSH_NODES:-1}"
+PUSH_NODE_CPUSETS="${PUSH_NODE_CPUSETS:-2,6|3,7|1,5}"
 # 목 서버의 응답 지연. 순진한 구조와 지금 구조를 같은 조건에서 비교하려면 이 값이 둘 다 같아야
 # 한다. 이 프로젝트가 따로 재 둔 FCM 왕복이 230ms다(application.yml notification.web-push).
 MOCK_DELAY="${MOCK_DELAY:-230ms}"
@@ -96,6 +101,34 @@ start_app() {  # $1 pg $2 infra $3 app $4 fanout_on $5 push_on
   echo "   앱이 받은 값 — 팬아웃 소비자 $(grep -oP 'NOTIFICATION_FANOUT_LISTENER_CONCURRENCY=\K.*' <<< "$env_dump")" \
        "· 푸시 소비자 $(grep -oP 'NOTIFICATION_PUSH_LISTENER_CONCURRENCY=\K.*' <<< "$env_dump")" \
        "· 동시 상한 $(grep -oP 'NOTIFICATION_WEB_PUSH_MAX_IN_FLIGHT=\K.*' <<< "$env_dump")"
+}
+
+# 발송 노드를 여러 대 띄운다. 노드마다 물리 코어 하나씩 주고, 전부 푸시 전용으로 둔다.
+# 세 서비스가 같은 이미지 태그를 가리키므로 산출물은 하나다(compose 주석 참조).
+start_push_nodes() {  # $1 노드 수
+  local n="$1" svcs=() i=0 set_i cpuset
+  compose rm -sf app app2 app3 > /dev/null 2>&1 || true
+  IFS='|' read -r -a set_i <<< "$PUSH_NODE_CPUSETS"
+  [ "$n" -le "${#set_i[@]}" ] || fail "노드 $n대에 줄 cpuset이 모자라다(${#set_i[@]}개)"
+  for ((i = 0; i < n; i++)); do
+    case "$i" in
+      0) svcs+=(app);  export APP_CPUSET="${set_i[i]}" ;;
+      1) svcs+=(app2); export APP2_CPUSET="${set_i[i]}" ;;
+      2) svcs+=(app3); export APP3_CPUSET="${set_i[i]}" ;;
+    esac
+  done
+  PG_CPUSET="$PG_FANOUT" INFRA_CPUSET="$INFRA_FANOUT" MOCK_DELAY="$MOCK_DELAY" \
+  APP_HEAP="${APP_HEAP:-1g}" APP_MEM="${APP_MEM:-1600m}" \
+  FANOUT_ENABLED=false PUSH_ENABLED=true \
+  FANOUT_CONCURRENCY="$FANOUT_CONC" PUSH_CONCURRENCY="$PUSH_CONC" \
+    compose up -d --wait --wait-timeout 300 "${svcs[@]}" > /dev/null 2>&1 \
+    || fail "발송 노드 기동 실패"
+  for svc in "${svcs[@]}"; do
+    cpuset="$(docker inspect "$(compose ps -q "$svc")" --format '{{.HostConfig.CpusetCpus}}' 2>/dev/null)"
+    echo "   발송 노드 $svc — cpuset[$cpuset] 소비자 $(docker inspect "$(compose ps -q "$svc")" \
+      --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null \
+      | grep -oP 'NOTIFICATION_PUSH_LISTENER_PREFETCH=\K.*' | head -1) prefetch"
+  done
 }
 
 reset_state() {
@@ -205,7 +238,11 @@ else
   QD="$(push_queue_depth)"
   [ "${QD:-0}" -gt 0 ] || fail "푸시 큐가 비었다(${QD:-없음}). 구간 A가 쌓은 명령이 사라졌다."
   echo "   푸시 큐 $QD건 대기 중"
-  start_app "$PG_FANOUT" "$INFRA_FANOUT" "$APP_PUSH" false true
+  if [ "$PUSH_NODES" -le 1 ]; then
+    start_app "$PG_FANOUT" "$INFRA_FANOUT" "$APP_PUSH" false true
+  else
+    start_push_nodes "$PUSH_NODES"
+  fi
   T_PUSH_START="$(now_ms)"
   sample_until 0 "$SUBS" "$OUT/samples-push.csv"
   T_END="$(now_ms)"
