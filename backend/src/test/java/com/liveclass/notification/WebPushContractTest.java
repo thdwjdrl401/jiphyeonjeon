@@ -1,5 +1,6 @@
 package com.liveclass.notification;
 
+import com.liveclass.notification.push.PushSubscription;
 import com.liveclass.notification.push.PushSubscriptionRepository;
 import com.liveclass.notification.push.PushSubscriptionService;
 import org.junit.jupiter.api.Test;
@@ -10,6 +11,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -68,6 +70,47 @@ class WebPushContractTest {
 
         assertThat(repository.findByUserId(first)).isEmpty();
         assertThat(repository.findByUserId(second)).hasSize(1);
+    }
+
+    /**
+     * 발송이 조각 전원의 기기를 <b>한 문장</b>으로 가져오는 경로. 명단을 배열로 넘기는 네이티브
+     * 질의라(ADR-0137) <b>실제 DB에서 돌려 봐야</b> 확인된다 — 컨텍스트 기동은 파싱만 하고,
+     * {@code SELECT *}가 엔티티로 매핑되는지는 실행할 때 처음 드러난다.
+     *
+     * <p>명단에 없는 사람의 기기가 섞여 들어오면 그 사람은 남의 알림을 받는다. 그래서 "가져온다"만
+     * 보지 않고 <b>안 가져온다</b>도 같이 본다.
+     */
+    @Test
+    void loading_devices_by_a_roster_returns_exactly_those_users_devices() {
+        UUID wanted = seedUser();
+        UUID alsoWanted = seedUser();
+        UUID stranger = seedUser();
+        subscriptionService.register(wanted, "https://push.example/" + UUID.randomUUID(), "k1", "a1", "Chrome");
+        subscriptionService.register(wanted, "https://push.example/" + UUID.randomUUID(), "k2", "a2", "Firefox");
+        subscriptionService.register(alsoWanted, "https://push.example/" + UUID.randomUUID(), "k3", "a3", "Safari");
+        subscriptionService.register(stranger, "https://push.example/" + UUID.randomUUID(), "k4", "a4", "Edge");
+
+        List<PushSubscription> loaded =
+                repository.findAllByUserIds(new UUID[] {wanted, alsoWanted});
+
+        assertThat(loaded).extracting(PushSubscription::getUserId)
+                .as("명단에 있는 사람만, 기기 수만큼")
+                .containsExactlyInAnyOrder(wanted, wanted, alsoWanted);
+        assertThat(loaded).extracting(PushSubscription::getP256dh)
+                .as("암호화 키까지 매핑돼야 보낼 수 있다")
+                .containsExactlyInAnyOrder("k1", "k2", "k3");
+        assertThat(loaded).allSatisfy(row -> {
+            assertThat(row.getId()).isNotNull();
+            assertThat(row.getEndpoint()).startsWith("https://push.example/");
+            assertThat(row.getAuth()).isNotBlank();
+            assertThat(row.getCreatedAt()).as("SELECT * 의 나머지 컬럼도 매핑된다").isNotNull();
+        });
+    }
+
+    /** 빈 배열이면 빈 결과다 — 구독이 하나도 없는 조각에서 이 경로를 탄다. */
+    @Test
+    void an_empty_roster_loads_nothing() {
+        assertThat(repository.findAllByUserIds(new UUID[0])).isEmpty();
     }
 
     /**

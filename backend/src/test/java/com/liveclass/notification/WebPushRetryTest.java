@@ -469,7 +469,7 @@ class WebPushRetryTest {
     }
 
     private void given(PushSubscription... subscriptions) {
-        when(repository.findByUserIdIn(any())).thenReturn(List.of(subscriptions));
+        when(repository.findAllByUserIds(any())).thenReturn(List.of(subscriptions));
     }
 
     private void script(String device, Integer... statuses) {
