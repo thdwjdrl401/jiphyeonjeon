@@ -61,6 +61,14 @@ push_queue_depth() {
 PG_FANOUT="0,4,1,5"; APP_FANOUT="2,6";     INFRA_FANOUT="3,7"
 PG_PUSH="0,4";       APP_PUSH="2,6,3,7";   INFRA_PUSH="1,5"
 
+# **이미지를 한 번 빌드한다.** 이 스크립트에는 --build이 한 군데도 없었다. 그래서 코드를 고쳐도
+# 앞서 누군가 빌드해 둔 이미지로 쟀고, 새로 만든 프로퍼티는 앱에 아예 없었다 —
+# 컨테이너 환경변수에는 값이 보이는데 그 값을 읽는 코드가 없어서 전역 기본값이 걸렸다.
+build_app() {
+  echo "▶ 앱 이미지 빌드"
+  compose build app > /dev/null 2>&1 || fail "앱 이미지 빌드 실패"
+}
+
 start_infra() {
   PG_CPUSET="$1" INFRA_CPUSET="$2" MOCK_DELAY="$MOCK_DELAY" \
     compose up -d --wait --wait-timeout 300 postgres redis rabbitmq mock-push > /dev/null 2>&1 \
@@ -201,6 +209,7 @@ fanout_bounds_ms() {
 }
 
 echo "▶ 모드 $MODE · 갈래 $CHAINS · 조각 $SLICE · 공급자 지연 $MOCK_DELAY"
+build_app
 USERS_Q="SELECT count(*) FROM core.enrollment WHERE curriculum_id='00000000-0000-4000-8000-000000000002' AND status='ACTIVE';"
 
 if [ "$MODE" = "shared" ]; then
@@ -243,6 +252,9 @@ else
   else
     start_push_nodes "$PUSH_NODES"
   fi
+  echo "   소비자 실효 prefetch — $(compose exec -T rabbitmq rabbitmqctl list_consumers \
+        queue_name prefetch_count < /dev/null 2>/dev/null \
+        | awk '$1=="notification.push"{print $2}' | sort | uniq -c | tr '\n' ' ')"
   T_PUSH_START="$(now_ms)"
   sample_until 0 "$SUBS" "$OUT/samples-push.csv"
   T_END="$(now_ms)"
