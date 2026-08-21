@@ -54,6 +54,13 @@ import static org.mockito.Mockito.when;
 @SpringBootTest
 class PushDeliveryContractTest {
 
+    /**
+     * 브로커의 재배달 표시. 정상 경로(처음 배달)에서는 진행 표를 안 보므로(ADR-0137),
+     * 재배달을 흉내 내는 시험은 그 표시를 달아야 원래 의도대로 돈다.
+     */
+    private static final Boolean FIRST_DELIVERY = null;
+    private static final Boolean REDELIVERED = Boolean.TRUE;
+
     @Autowired private NotificationFanoutWorker fanoutWorker;
     @Autowired private PushDeliveryWorker pushWorker;
     @Autowired private PushProgressPartitionJob partitionJob;
@@ -196,8 +203,8 @@ class PushDeliveryContractTest {
                         Set.copyOf(invocation.<Collection<UUID>>getArgument(0)), Set.of(), null));
         String command = pushCommandJson(event, recipients);
 
-        pushWorker.handle(command);
-        pushWorker.handle(command);
+        pushWorker.handle(command, FIRST_DELIVERY);
+        pushWorker.handle(command, REDELIVERED);
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Collection<UUID>> sent = ArgumentCaptor.forClass(Collection.class);
@@ -222,9 +229,9 @@ class PushDeliveryContractTest {
                         Set.copyOf(invocation.<Collection<UUID>>getArgument(0)), Set.of(), null));
         String command = pushCommandJson(event, List.of(done, alsoDone, abandoned));
 
-        pushWorker.handle(command);
-        pushWorker.handle(command);
-        pushWorker.handle(command);   // 전원 완료 — 발송이 없어야 한다
+        pushWorker.handle(command, FIRST_DELIVERY);
+        pushWorker.handle(command, REDELIVERED);
+        pushWorker.handle(command, REDELIVERED);   // 전원 완료 — 발송이 없어야 한다
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Collection<UUID>> sent = ArgumentCaptor.forClass(Collection.class);

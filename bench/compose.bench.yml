@@ -76,6 +76,10 @@ x-appbase: &appbase
 
       # ── 여기가 실험 손잡이다. 삭제법(ablation)이 이 값들을 바꾼다 ──
       NOTIFICATION_WEB_PUSH_MAX_IN_FLIGHT: ${PUSH_MAX_IN_FLIGHT:-800}
+      # 조절기는 벤치에서 기본으로 끈다 — 목 서버가 429를 안 내므로 켜 두면 천장까지
+      # 되올라가기만 하고, 그 오르는 구간이 처리량 비교에 섞인다. 조절 자체를 잴 때만 켠다.
+      NOTIFICATION_WEB_PUSH_ADAPTIVE_IN_FLIGHT: ${PUSH_ADAPTIVE:-false}
+      NOTIFICATION_WEB_PUSH_MIN_IN_FLIGHT: ${PUSH_MIN_IN_FLIGHT:-100}
       NOTIFICATION_WEB_PUSH_STREAMS_PER_CONNECTION: ${PUSH_STREAMS:-100}
       NOTIFICATION_WEB_PUSH_CRYPTO_THREADS: ${PUSH_CRYPTO_THREADS:-0}
       NOTIFICATION_WEB_PUSH_BATCH_TIMEOUT_MS: ${PUSH_BATCH_TIMEOUT_MS:-60000}

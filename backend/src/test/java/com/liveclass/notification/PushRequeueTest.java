@@ -37,6 +37,8 @@ import static org.mockito.Mockito.when;
 class PushRequeueTest {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
+    /** 브로커가 재배달 표시를 안 단 상태. 정상 경로다. */
+    private static final Boolean NOT_REDELIVERED = null;
 
     private PushDeliveryProgressRepository progress;
     private WebPushSender sender;
@@ -74,7 +76,7 @@ class PushRequeueTest {
     void the_blocked_recipient_is_requeued_and_not_recorded() {
         given(Set.of(delivered), Set.of(blocked), null);
 
-        worker(4).handle(commandJson(1, List.of(delivered, blocked)));
+        worker(4).handle(commandJson(1, List.of(delivered, blocked)), NOT_REDELIVERED);
 
         // 기록은 끝난 사람만.
         verify(progress).settle(eq(event), eq(Set.of(delivered)));
@@ -99,7 +101,7 @@ class PushRequeueTest {
     void the_providers_retry_after_wins_over_our_default() {
         given(Set.of(delivered), Set.of(blocked), Duration.ofSeconds(120));
 
-        worker(4).handle(commandJson(1, List.of(delivered, blocked)));
+        worker(4).handle(commandJson(1, List.of(delivered, blocked)), NOT_REDELIVERED);
 
         ArgumentCaptor<Duration> delay = ArgumentCaptor.forClass(Duration.class);
         verify(outbox).enqueueAfter(anyString(), anyString(), anyString(), anyString(),
@@ -112,7 +114,7 @@ class PushRequeueTest {
     void the_requeue_stops_at_the_attempt_limit() {
         given(Set.of(delivered), Set.of(blocked), null);
 
-        worker(4).handle(commandJson(4, List.of(delivered, blocked)));
+        worker(4).handle(commandJson(4, List.of(delivered, blocked)), NOT_REDELIVERED);
 
         verify(progress).settle(eq(event), eq(Set.of(delivered)));
         verify(outbox, never()).enqueueAfter(anyString(), anyString(), anyString(), anyString(),
@@ -124,7 +126,7 @@ class PushRequeueTest {
     void nothing_is_requeued_when_everyone_finished() {
         given(Set.of(delivered, blocked), Set.of(), null);
 
-        worker(4).handle(commandJson(1, List.of(delivered, blocked)));
+        worker(4).handle(commandJson(1, List.of(delivered, blocked)), NOT_REDELIVERED);
 
         verify(outbox, never()).enqueueAfter(anyString(), anyString(), anyString(), anyString(),
                 anyString(), anyString(), any(), any());
@@ -146,12 +148,60 @@ class PushRequeueTest {
                 .thenReturn(new WebPushSender.SendResult(Set.of(), Set.of(otherSliceBlocked), null));
 
         PushDeliveryWorker worker = worker(4);
-        worker.handle(commandJson(1, List.of(blocked)));
-        worker.handle(commandJson(1, List.of(otherSliceBlocked)));
+        worker.handle(commandJson(1, List.of(blocked)), NOT_REDELIVERED);
+        worker.handle(commandJson(1, List.of(otherSliceBlocked)), NOT_REDELIVERED);
 
         ArgumentCaptor<String> keys = ArgumentCaptor.forClass(String.class);
         verify(outbox, org.mockito.Mockito.times(2)).enqueueAfter(anyString(), anyString(), anyString(),
                 anyString(), anyString(), keys.capture(), any(), any());
         assertThat(keys.getAllValues()).doesNotHaveDuplicates();
+    }
+
+    /**
+     * 정상 경로에서는 진행 표를 보지 않는다.
+     *
+     * <p>처음 배달되는 첫 시도면 이 사건의 이 조각에 대해 아무도 발송을 마치지 않았다 —
+     * 조각끼리 명단이 겹치지 않고 같은 사건이 두 번 실리지도 않는다. 그런데 그 조회가
+     * 발송 경로 DB 시간의 61%였다(ADR-0137).
+     */
+    @Test
+    @DisplayName("첫 배달·첫 시도면 진행 표를 조회하지 않는다")
+    void first_delivery_skips_the_progress_check() {
+        when(sender.send(any(), any(), any(), any()))
+                .thenReturn(new WebPushSender.SendResult(Set.of(delivered, blocked), Set.of(), null));
+
+        worker(4).handle(commandJson(1, List.of(delivered, blocked)), NOT_REDELIVERED);
+
+        verify(progress, never()).remaining(any(), any());
+        // 조회를 건너뛰었어도 명령이 싣고 온 명단 그대로 보낸다.
+        verify(sender).send(eq(List.of(delivered, blocked)), any(), any(), any());
+    }
+
+    /** 재배달은 앞선 처리가 발송까지 하고 기록 전에 죽었을 수 있다. 그때는 봐야 한다. */
+    @Test
+    @DisplayName("재배달이면 진행 표를 조회한다")
+    void redelivery_checks_the_progress() {
+        when(progress.remaining(any(), any())).thenReturn(List.of(blocked));
+        when(sender.send(any(), any(), any(), any()))
+                .thenReturn(new WebPushSender.SendResult(Set.of(blocked), Set.of(), null));
+
+        worker(4).handle(commandJson(1, List.of(delivered, blocked)), Boolean.TRUE);
+
+        verify(progress).remaining(eq(event), eq(List.of(delivered, blocked)));
+        // 이미 끝난 delivered는 빠지고 blocked에게만 간다.
+        verify(sender).send(eq(List.of(blocked)), any(), any(), any());
+    }
+
+    /** 두 번째 이후 시도는 막힌 사람만 골라 다시 실은 명령이라 이미 끝난 사람이 섞일 수 있다. */
+    @Test
+    @DisplayName("두 번째 시도면 진행 표를 조회한다")
+    void later_attempt_checks_the_progress() {
+        when(progress.remaining(any(), any())).thenReturn(List.of(blocked));
+        when(sender.send(any(), any(), any(), any()))
+                .thenReturn(new WebPushSender.SendResult(Set.of(blocked), Set.of(), null));
+
+        worker(4).handle(commandJson(2, List.of(delivered, blocked)), NOT_REDELIVERED);
+
+        verify(progress).remaining(eq(event), eq(List.of(delivered, blocked)));
     }
 }

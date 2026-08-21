@@ -112,7 +112,14 @@ public class WebPushSender {
     private final PushSubscriptionRepository repository;
     private final WebPushRequestFactory requests;
     private final WebPushHttpClient httpClient;
-    private final Semaphore inFlight;
+    private final AdjustableSemaphore inFlight;
+    /** 동시 상한의 천장·바닥과 지금 값. 조절기가 이 사이를 오간다. */
+    private final int inFlightCeiling;
+    private final int inFlightFloor;
+    private final int inFlightStep;
+    private final boolean adaptiveInFlight;
+    private final Object limitLock = new Object();
+    private int inFlightLimit;
     /**
      * 암호화 전용 풀. <b>CPU 바운드라 코어 수를 넘겨도 의미가 없다</b> — 실측으로 4코어에서
      * 스레드 8개가 4개보다 7% 빠를 뿐이다(초당 475 대 444건).
@@ -142,7 +149,9 @@ public class WebPushSender {
                          @Value("${notification.web-push.max-attempts:3}") int maxAttempts,
                          @Value("${notification.web-push.retry-backoff-ms:500}") long retryBackoffMs,
                          @Value("${notification.web-push.streams-per-connection:100}") int streamsPerConnection,
-                         @Value("${notification.web-push.crypto-threads:0}") int cryptoThreads) {
+                         @Value("${notification.web-push.crypto-threads:0}") int cryptoThreads,
+                         @Value("${notification.web-push.min-in-flight:100}") int minInFlight,
+                         @Value("${notification.web-push.adaptive-in-flight:true}") boolean adaptiveInFlight) {
         this.repository = repository;
         this.requests = properties.isConfigured() ? new WebPushRequestFactory(properties) : null;
         /*
@@ -153,7 +162,21 @@ public class WebPushSender {
         int connections = WebPushHttpClient.connectionsFor(maxInFlight, streamsPerConnection);
         this.httpClient = new WebPushHttpClient(
                 Duration.ofMillis(connectTimeoutMs), Duration.ofMillis(requestTimeoutMs), connections);
-        this.inFlight = new Semaphore(maxInFlight);
+        /*
+         * **동시 상한은 공급자가 정하게 둔다.** 목 서버로는 옳은 값을 못 찾는다 — 속도 제한이
+         * 없어서 올리는 만큼 빨라지고(800 → 2,400에서 +20%), 그 값을 그대로 실제 공급자에게
+         * 쓰면 429를 맞는다. 그래서 짐작하지 않고 **막히면 줄이고 안 막히면 늘린다**(ADR-0137).
+         *
+         * max-in-flight는 이제 시작값이자 천장이다. 조각 하나가 429·5xx로 끝나면 절반으로
+         * 줄이고(바닥은 min-in-flight), 깨끗하게 끝나면 천장의 1/16씩 되올린다. 연결 수는
+         * 천장에 맞춰 잡아 둔다 — 줄었다 늘 때 새로 열 필요가 없다.
+         */
+        this.inFlightCeiling = Math.max(1, maxInFlight);
+        this.inFlightFloor = Math.max(1, Math.min(minInFlight, this.inFlightCeiling));
+        this.inFlightStep = Math.max(1, this.inFlightCeiling / 16);
+        this.adaptiveInFlight = adaptiveInFlight;
+        this.inFlightLimit = this.inFlightCeiling;
+        this.inFlight = new AdjustableSemaphore(this.inFlightCeiling);
         this.batchTimeout = Duration.ofMillis(batchTimeoutMs);
         this.maxAttempts = Math.max(1, maxAttempts);
         this.retryBackoff = Duration.ofMillis(retryBackoffMs);
@@ -211,6 +234,7 @@ public class WebPushSender {
 
         long startedAt = System.nanoTime();
         List<Outcome> outcomes = dispatchWithRetries(subscriptions, payload);
+        adjustInFlight(outcomes);
         applyOutcomes(outcomes);
         logBatch(subscriptions.size(), outcomes, (System.nanoTime() - startedAt) / 1_000_000);
         Split split = splitByCompletion(recipientIds, subscriptions, outcomes);
@@ -461,6 +485,77 @@ public class WebPushSender {
         } catch (Exception e) {
             // 여기 오는 건 그 구독의 키가 깨졌다는 뜻이다.
             throw new IllegalStateException("푸시 요청 생성 실패 id=" + subscription.getId(), e);
+        }
+    }
+
+    /**
+     * 이번 조각의 결과로 동시 상한을 옮긴다.
+     *
+     * <p>신호는 <b>조각 안 재시도까지 다 쓰고도 남은 RETRY</b>다. 그 안에서 429를 맞았다가 다시
+     * 보내 성공했다면 공급자가 견딘 것이므로 줄일 이유가 없다. 끝까지 막힌 기기가 하나라도 있으면
+     * 그때 줄인다.
+     *
+     * <p>줄일 때는 절반, 늘릴 때는 천장의 1/16씩이다. 막히는 쪽에 빠르게 반응하고 푸는 쪽은
+     * 천천히 — 반대로 하면 상한 근처에서 429를 반복해서 맞는다.
+     */
+    private void adjustInFlight(List<Outcome> outcomes) {
+        if (!adaptiveInFlight) {
+            return;
+        }
+        boolean pushedBack = false;
+        for (Outcome outcome : outcomes) {
+            if (verdictOf(outcome.status()) == Verdict.RETRY) {
+                pushedBack = true;
+                break;
+            }
+        }
+        synchronized (limitLock) {
+            int now = inFlightLimit;
+            int next = nextInFlight(now, pushedBack, inFlightCeiling, inFlightFloor, inFlightStep);
+            if (next == now) {
+                return;
+            }
+            if (next > now) {
+                inFlight.release(next - now);
+            } else {
+                inFlight.take(now - next);
+            }
+            inFlightLimit = next;
+            log.info("동시 상한 {} → {} ({}, 천장 {} 바닥 {})",
+                    now, next, pushedBack ? "공급자가 막았다" : "깨끗했다",
+                    inFlightCeiling, inFlightFloor);
+        }
+    }
+
+    /**
+     * 다음 동시 상한. <b>줄일 때는 절반, 늘릴 때는 한 걸음씩</b>이다.
+     *
+     * <p>비대칭인 이유는 틀렸을 때의 값이 다르기 때문이다. 너무 높으면 공급자가 거절하고 그
+     * 사람들은 다음 회차까지 못 받는다. 너무 낮으면 조금 느릴 뿐이다. 그래서 막히는 쪽으로는
+     * 빠르게, 푸는 쪽으로는 천천히 움직인다.
+     *
+     * <p>산술만 떼어 둔다 — 세마포어와 잠금이 붙어 있으면 경계값을 확인하기 어렵다.
+     */
+    static int nextInFlight(int now, boolean pushedBack, int ceiling, int floor, int step) {
+        return pushedBack
+                ? Math.max(floor, now / 2)
+                : Math.min(ceiling, now + step);
+    }
+
+    /**
+     * 허가 수를 줄일 수 있는 세마포어. {@code reducePermits}가 protected라 열어 준다.
+     *
+     * <p>줄이는 것은 <b>지금 나가 있는 요청을 취소하지 않는다</b> — 이미 나간 것은 그대로 끝나고,
+     * 다음 요청부터 줄어든 수만큼만 나간다.
+     */
+    private static final class AdjustableSemaphore extends Semaphore {
+
+        private AdjustableSemaphore(int permits) {
+            super(permits);
+        }
+
+        private void take(int permits) {
+            reducePermits(permits);
         }
     }
 

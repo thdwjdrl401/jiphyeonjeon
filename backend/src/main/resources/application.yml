@@ -433,6 +433,19 @@ notification:
     # 더 올리지 않는 이유가 하나 더 있다 — 실제 FCM에는 Chrome 정책 상한(분당 1,000)이 있어
     # 초당 1,609건은 그 96배다. 대규모 팬아웃에서 그 속도로 밀면 429를 맞고 벌칙이 누적된다.
     max-in-flight: ${NOTIFICATION_WEB_PUSH_MAX_IN_FLIGHT:800}
+    # 동시 상한의 **바닥**과 조절기 스위치.
+    #
+    # 위 max-in-flight는 이제 시작값이자 천장이다. 목 서버로는 옳은 천장을 못 찾는다 — 속도
+    # 제한이 없어서 올리는 만큼 빨라진다(800 → 2,400에서 +20%). 실제 공급자는 429로 막으므로
+    # 그 값을 그대로 쓰면 거절을 맞는다. 그래서 값을 짐작하지 않고 공급자 반응으로 정한다.
+    #
+    # 조각 하나가 429·5xx로 끝나면 절반으로 줄이고, 깨끗하게 끝나면 천장의 1/16씩 되올린다.
+    # 막히는 쪽에 빠르게, 푸는 쪽은 천천히 반응한다 (ADR-0137).
+    #
+    # 끄면 max-in-flight가 예전처럼 고정 상한이 된다. 공급자가 429를 안 쓰거나 조절 자체가
+    # 방해가 될 때 쓴다.
+    min-in-flight: ${NOTIFICATION_WEB_PUSH_MIN_IN_FLIGHT:100}
+    adaptive-in-flight: ${NOTIFICATION_WEB_PUSH_ADAPTIVE_IN_FLIGHT:true}
     # 연결 하나가 소화하는 동시 요청 수. **실측값이다** — FCM·Mozilla 모두 연결 직후 SETTINGS로
     # MAX_CONCURRENT_STREAMS=100을 광고한다(2026-08-04 확인). 연결 수는 이 값과 위 상한에서
     # 계산하므로, 상한만 올리고 연결이 그대로여서 조용히 막히는 일이 없다.

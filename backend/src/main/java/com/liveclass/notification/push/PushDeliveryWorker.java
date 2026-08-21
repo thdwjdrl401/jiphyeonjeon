@@ -5,6 +5,8 @@ import com.liveclass.notification.config.NotificationMessagingConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.amqp.support.AmqpHeaders;
+import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.json.JsonMapper;
@@ -76,9 +78,12 @@ public class PushDeliveryWorker {
     @RabbitListener(queues = NotificationMessagingConfig.PUSH_QUEUE,
             containerFactory = "notificationPushListenerContainerFactory",
             autoStartup = "${notification.push.listener-enabled:true}")
-    public void handle(String payload) {
+    public void handle(String payload,
+                       @Header(name = AmqpHeaders.REDELIVERED, required = false) Boolean redelivered) {
         PushDeliveryCommand command = JSON.readValue(payload, PushDeliveryCommand.class);
-        List<UUID> remaining = progressRepository.remaining(command.eventHash(), command.recipientIds());
+        List<UUID> remaining = needsProgressCheck(command, redelivered)
+                ? progressRepository.remaining(command.eventHash(), command.recipientIds())
+                : command.recipientIds();
         if (remaining.isEmpty()) {
             // 재배달인데 전원이 이미 끝났다 — 기록 후 ack 전에 죽었던 메시지다. 조용히 ack한다.
             log.debug("푸시 재배달 전원 완료 event={} 명단={}", command.eventHash(), command.recipientIds().size());
@@ -92,6 +97,33 @@ public class PushDeliveryWorker {
                 command.recipientIds().size(), remaining.size(),
                 result.settled().size(), result.unfinished().size());
         requeueUnfinished(command, result);
+    }
+
+    /**
+     * 진행 표를 봐야 하는가.
+     *
+     * <p><b>정상 경로에서는 볼 것이 없다.</b> 이 명령이 처음 배달되는 첫 시도라면 이 사건의 이
+     * 조각에 대해 아무도 발송을 마치지 않았다 — 조각끼리 명단이 겹치지 않고(커서로 갈린다),
+     * 같은 사건이 두 번 실리지도 않는다(아웃박스 멱등 키). 그래서 anti-join이 반드시 빈 집합이다.
+     *
+     * <p>그런데 그 조회가 발송 경로에서 제일 비쌌다. 100만 명 회차에서 메시지당 203ms, 합쳐
+     * 40.5초로 발송 경로 DB 시간의 61%였다 — 100만 행을 실제로 <b>쓰는</b> settle이 8.3초인데
+     * 그 확인이 다섯 배였다(ADR-0137).
+     *
+     * <p>봐야 하는 경우는 둘뿐이다.
+     * <ul>
+     *   <li>브로커가 <b>재배달</b>이라고 표시한 메시지 — 앞선 처리가 발송까지 하고 기록 전에
+     *       죽었을 수 있다.</li>
+     *   <li><b>두 번째 이후 시도</b> — 429·5xx로 막힌 사람만 골라 다시 실은 명령이고(ADR-0128),
+     *       그 명단에는 이미 끝난 사람이 섞일 수 있다.</li>
+     * </ul>
+     *
+     * <p><b>표시가 없어도 안전하다.</b> 재배달 표시를 못 받아 조회를 건너뛰면 이미 보낸 사람에게
+     * 한 번 더 가는데, 그것은 이 구조가 처음부터 고른 쪽이다 — "조용한 유실보다 가끔 두 번"
+     * (ADR-0124). 반대 방향(보내야 할 사람을 빼는 것)으로는 틀리지 않는다.
+     */
+    private static boolean needsProgressCheck(PushDeliveryCommand command, Boolean redelivered) {
+        return Boolean.TRUE.equals(redelivered) || command.attemptOrFirst() > 1;
     }
 
     /**

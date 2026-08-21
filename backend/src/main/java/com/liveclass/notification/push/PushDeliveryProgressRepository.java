@@ -7,7 +7,6 @@ import org.springframework.stereotype.Repository;
 
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -26,13 +25,17 @@ public class PushDeliveryProgressRepository {
 
     /*
      * anti-join을 SQL 한 문장(NOT EXISTS)으로 하지 않고 "기록된 쪽"을 조회해 자바에서 뺀다.
-     * 명단이 이미 앱 메모리에 있으므로(명령이 싣고 왔다) 배열을 DB에 넣어 되받을 이유가 없고,
-     * IN 목록 조회가 파티션 로컬 인덱스를 그대로 탄다.
+     * 명단이 이미 앱 메모리에 있으므로(명령이 싣고 왔다) 배열을 DB에 넣어 되받을 이유가 없다.
+     *
+     * <b>명단은 IN 목록이 아니라 배열로 넘긴다.</b> IN이면 파라미터가 명단 크기만큼 생겨
+     * (조각 5,000명이면 5,001개) 크기마다 다른 문장이 되고, 계획 캐시가 그만큼 쪼개진다 —
+     * 같은 이유로 markDelivered는 pg_stat_statements에 105종으로 흩어져 있었다.
+     * 배열이면 문장이 하나로 고정되고 파티션 로컬 인덱스도 그대로 탄다.
      */
     private static final String SETTLED = """
             SELECT recipient_id
             FROM core.notification_push_progress
-            WHERE event_hash = :eventHash AND recipient_id IN (:recipientIds)
+            WHERE event_hash = ? AND recipient_id = ANY(?)
             """;
 
     /*
@@ -61,8 +64,13 @@ public class PushDeliveryProgressRepository {
         if (recipientIds.isEmpty()) {
             return List.of();
         }
-        Set<UUID> settled = Set.copyOf(jdbc.queryForList(SETTLED,
-                Map.of("eventHash", eventHash, "recipientIds", recipientIds), UUID.class));
+        Set<UUID> settled = Set.copyOf(jdbc.getJdbcTemplate().query(SETTLED,
+                ps -> {
+                    ps.setObject(1, eventHash);
+                    ps.setArray(2, ps.getConnection()
+                            .createArrayOf("uuid", recipientIds.toArray()));
+                },
+                (rs, rowNum) -> rs.getObject(1, UUID.class)));
         if (settled.isEmpty()) {
             return recipientIds;
         }
