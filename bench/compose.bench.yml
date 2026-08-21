@@ -80,7 +80,13 @@ x-appbase: &appbase
       NOTIFICATION_WEB_PUSH_CRYPTO_THREADS: ${PUSH_CRYPTO_THREADS:-0}
       NOTIFICATION_WEB_PUSH_BATCH_TIMEOUT_MS: ${PUSH_BATCH_TIMEOUT_MS:-60000}
       NOTIFICATION_PUSH_LISTENER_CONCURRENCY: ${PUSH_CONCURRENCY:-2}
-      RABBIT_LISTENER_CONCURRENCY: ${FANOUT_CONCURRENCY:-2}
+      # **팬아웃 소비자 수는 전용 손잡이로 줘야 한다.** ADR-0131이 전역에서 갈라내면서
+      # notificationListenerContainerFactory가 configurer로 전역을 먹은 **뒤에**
+      # notification.fanout.listener-concurrency(기본 8)로 덮어쓴다. 전역만 주면 그 덮어쓰기에
+      # 지워져 FANOUT_CONCURRENCY가 조용히 무시된다 — 2·4·8을 재도 전부 8로 도는 회차가 나왔다.
+      NOTIFICATION_FANOUT_LISTENER_CONCURRENCY: ${FANOUT_CONCURRENCY:-8}
+      # 전역은 자기 손잡이가 없는 리스너의 기본값으로만 남는다.
+      RABBIT_LISTENER_CONCURRENCY: ${RABBIT_CONCURRENCY:-2}
       # 한 소비자가 미리 쥐는 메시지 수. 기본 250은 조각을 키웠을 때 위험하다 — 조각
       # 5,000명이면 푸시 명령이 201건뿐이라 먼저 붙은 소비자가 전부 가져가고 나머지
       # 노드가 논다. 명령 하나가 수천 건 발송(수 초)이라 미리 쥘 이유도 없다.
@@ -267,6 +273,7 @@ services:
       - --storage.tsdb.retention.time=6h
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../infra/prometheus:/etc/prometheus/rules:ro
     ports: ["127.0.0.1:19090:9090"]
 
   # 표별 삽입 수(팬아웃 진행), 활성 백엔드, 커밋 수를 낸다.
