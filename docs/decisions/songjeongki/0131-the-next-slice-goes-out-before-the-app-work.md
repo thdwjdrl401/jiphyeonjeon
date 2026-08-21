@@ -2,7 +2,8 @@
 
 - **상태**: 채택 — 워커·설정 반영
 - **일자**: 2026-08-18
-- **관련**: [0130](0130-a-wide-fanout-goes-out-in-lanes.md)(갈래 나누기),
+- **관련**: [0133](0133-the-listener-retries-only-what-can-succeed.md)(아래 "남아 있는 문제"를 닫는다),
+  [0130](0130-a-wide-fanout-goes-out-in-lanes.md)(갈래 나누기),
   [0129](0129-the-foreign-key-costs-a-fifth-of-the-fanout.md)(외래 키 제거),
   [0124](0124-push-delivery-queue-and-progress.md)(푸시 전용 큐)
 - **적용 범위**: `NotificationFanoutWorker`, `NotificationMessagingConfig`, `application.yml`
@@ -61,6 +62,10 @@ notification.fanout.chains                 2 (그대로)
 발행을 앞으로 옮기면 그 아래에서 무엇이 실패해도 다음 조각은 이미 나가 있다. **전에는 푸시 명령 적재가 실패하면 그 뒤 전원이 조용히 사라졌다** — 조각 1,000개짜리 팬아웃의 500번째에서 끊기면 50만 명이었다.
 
 이 결정이 그 구멍을 완전히 막지는 않는다. 조각 SQL 자체가 실패하면 다음 조각은 여전히 안 나간다. 팬아웃 리스너에 재시도 인터셉터가 없어 첫 실패가 곧 DLQ이고 DLQ 경보도 없다 — **그 둘은 남아 있는 문제다.**
+
+> 그 둘은 [ADR-0133](0133-the-listener-retries-only-what-can-succeed.md)에서 닫았다. 두 알림 리스너
+> 팩토리에 재시도 어드바이스가 걸렸고(결정론적 실패는 분류기로 걸러 곧바로 DLQ), DLQ 깊이 경보
+> 규칙이 생겼다. 경보의 운영 전개는 미실시다.
 
 ## 커밋 의미론은 바뀌지 않는다
 

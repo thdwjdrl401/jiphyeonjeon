@@ -20,6 +20,7 @@ services:
       - --storage.tsdb.retention.time=6h
     volumes:
       - ./prometheus.remote.yml:/etc/prometheus/prometheus.yml:ro
+      - ../../infra/prometheus:/etc/prometheus/rules:ro
     ports: ["127.0.0.1:19090:9090"]
     extra_hosts: ["host.docker.internal:host-gateway"]
 

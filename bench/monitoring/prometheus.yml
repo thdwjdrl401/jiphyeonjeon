@@ -6,6 +6,11 @@ global:
   scrape_interval: 5s
   evaluation_interval: 5s
 
+# 알림 DLQ 경보 규칙(ADR-0133). 벤치 전용 규칙이 아니라 운영에 필요한 규칙이고, 지금 이 파일을
+# 읽을 수 있는 Prometheus가 여기 하나뿐이라 여기서 읽는다. 규칙 본문은 infra/prometheus/에 있다.
+rule_files:
+  - /etc/prometheus/rules/notification-dlq.rules.yml
+
 scrape_configs:
   # 앱 — JVM 힙·GC, Hikari 커넥션, Rabbit 리스너
   - job_name: app

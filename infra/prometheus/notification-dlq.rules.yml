@@ -1,0 +1,54 @@
+# 알림 DLQ 경보 규칙 (ADR-0133).
+#
+# **여기 값을 앱이 재지 않는다.** RabbitMQ의 rabbitmq_prometheus 플러그인이 15692/metrics/per-object로
+# 큐별 깊이를 이미 내보내고 있고, 앱이 자기 DLQ를 폴링하면 없어도 될 결합이 하나 생긴다 —
+# 발송 전용 노드처럼 그 큐를 안 보는 노드에서도 폴링이 돌고, 앱이 죽은 동안에는 경보도 함께 죽는다.
+#
+# 메트릭 이름은 이 저장소의 벤치 대시보드가 이미 쓰는 것과 같다
+# (bench/monitoring/grafana/dashboards/fanout.json의 rabbitmq_queue_messages{queue=~".*dlq"}).
+# ready가 아니라 총량(ready + unacked)을 본다 — DLQ는 소비자가 없어 둘이 같지만, 나중에 재처리
+# 소비자를 붙이면 그것이 집어 든 메시지도 아직 해결된 것이 아니다.
+#
+# **적용 위치.** 지금 이 파일을 읽는 Prometheus는 벤치 스택(bench/compose.bench.yml, profile mon)
+# 하나뿐이다. 운영(docker-compose.prod.yml)에는 Prometheus도 Alertmanager도 없고 RabbitMQ의
+# 15692 포트도 노출돼 있지 않다 — 운영 전개는 미실시다. 운영에서 켜려면 셋이 필요하다.
+#   1. rabbitmq 서비스가 15692를 같은 네트워크에 열 것
+#   2. 이 파일을 rule_files로 읽는 Prometheus가 그 포트를 /metrics/per-object로 스크레이프할 것
+#   3. Alertmanager 수신처(팀 채널 등)를 붙일 것
+groups:
+  - name: notification-dlq
+    # DLQ는 소비자가 없어 저절로 비지 않는다. 평가 간격이 짧을 이유가 없다.
+    interval: 30s
+    rules:
+      # DLQ에 무엇이든 들어왔다는 것은 이미 재시도로 안 되는 실패라는 뜻이다(ADR-0133의 분류기가
+      # 결정론적 실패를, 소진된 재시도가 나머지를 여기로 보낸다). 사람이 봐야 하므로 임계값은 1이다.
+      #
+      # for가 2분인 이유는 스크레이프 한 점이 튀는 것을 걸러 내기 위해서일 뿐이다. 값이 저절로
+      # 0으로 돌아오는 경로는 없다.
+      - alert: NotificationDlqHasMessages
+        expr: rabbitmq_queue_messages{queue=~"notification\\.(fanout|push)\\.dlq"} > 0
+        for: 2m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "{{ $labels.queue }}에 처리되지 못한 알림 메시지 {{ $value }}건"
+          description: >-
+            재시도로 회복되지 않은 메시지가 DLQ에 남아 있다. 그만큼의 알림이 수신자에게 가지 않았다.
+            rabbitmqctl 또는 관리 UI로 메시지 본문을 확인하고, 원인이 페이로드면 버리고 코드면 고친 뒤
+            재발행한다.
+
+      # 한 건은 잘못된 페이로드 하나일 수 있지만 급증은 그런 모양이 아니다 — 넓은 팬아웃의 조각이
+      # 줄줄이 실패하거나(수강생 100만 명이면 조각 200개) 푸시 발송 전체가 막힌 것이다.
+      # 100은 조각 몇 개분에 해당하는 값이고, 실측 후 조정한다.
+      - alert: NotificationDlqFillingFast
+        expr: rabbitmq_queue_messages{queue=~"notification\\.(fanout|push)\\.dlq"} > 100
+        for: 2m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "{{ $labels.queue }}에 {{ $value }}건 — 개별 메시지 문제가 아니다"
+          description: >-
+            팬아웃 조각이나 푸시 발송이 통째로 실패하고 있다. 앱 로그에서 DLQ 직전 예외를 먼저 보고,
+            의존하는 곳(Postgres·푸시 서비스)의 상태를 함께 확인한다.
