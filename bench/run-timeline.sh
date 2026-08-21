@@ -29,7 +29,8 @@ BENCH="$REPO_ROOT/bench"
 MODE="${MODE:-shared}"
 CHAINS="${CHAINS:-2}"
 SLICE="${SLICE:-5000}"
-FANOUT_CONC="${FANOUT_CONC:-8}"
+# 팬아웃 소비자는 체인 수 x 2가 기준이다(ADR-0134). 예전 기본값 8은 그 기준이 서기 전 값이다.
+FANOUT_CONC="${FANOUT_CONC:-$(( CHAINS * 2 ))}"
 PUSH_CONC="${PUSH_CONC:-2}"
 # 목 서버의 응답 지연. 순진한 구조와 지금 구조를 같은 조건에서 비교하려면 이 값이 둘 다 같아야
 # 한다. 이 프로젝트가 따로 재 둔 FCM 왕복이 230ms다(application.yml notification.web-push).
@@ -90,6 +91,11 @@ start_app() {  # $1 pg $2 infra $3 app $4 fanout_on $5 push_on
   FANOUT_ENABLED="$4" PUSH_ENABLED="$5" \
   FANOUT_CONCURRENCY="$FANOUT_CONC" PUSH_CONCURRENCY="$PUSH_CONC" \
     compose up -d --wait --wait-timeout 300 app > /dev/null 2>&1 || fail "앱 기동 실패"
+  local env_dump
+  env_dump="$(docker inspect "$(compose ps -q app)" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null)"
+  echo "   앱이 받은 값 — 팬아웃 소비자 $(grep -oP 'NOTIFICATION_FANOUT_LISTENER_CONCURRENCY=\K.*' <<< "$env_dump")" \
+       "· 푸시 소비자 $(grep -oP 'NOTIFICATION_PUSH_LISTENER_CONCURRENCY=\K.*' <<< "$env_dump")" \
+       "· 동시 상한 $(grep -oP 'NOTIFICATION_WEB_PUSH_MAX_IN_FLIGHT=\K.*' <<< "$env_dump")"
 }
 
 reset_state() {
