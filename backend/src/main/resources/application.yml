@@ -488,6 +488,27 @@ notification:
     # 대가는 실패 시 되돌아가는 양과 푸시 명령 크기(39KB → 195KB)인데, 큐에 담기는 총량은
     # 같다(39KB×1001 = 195KB×201).
     slice-size: ${NOTIFICATION_FANOUT_SLICE_SIZE:5000}
+    # 리스너 재시도(ADR-0133). **전역 spring.rabbitmq.listener.simple.retry.*를 켜지 않는다** —
+    # 그 스위치는 아웃박스 릴레이를 비롯한 모든 리스너에 걸리고, 여기서 정하려는 것은 이 큐의 규칙이다.
+    #
+    # 첫 시도 뒤 몇 번 더 해 볼 것인가(총 시도 = 1 + 이 값). 재시도는 브로커에 되돌리지 않고
+    # 소비자 스레드 안에서 도는 stateless 방식이라, 백오프 동안 그 소비자가 묶인다 — 아래 값이면
+    # 한 메시지가 최대 0.5+1+2 = 3.5초를 잡는다. 팬아웃 소비자가 8이므로 그 사이 1/8이 멈춘다.
+    #
+    # 3인 이유는 두 가지다. 3.5초 안에 안 돌아온 장애는 10초를 더 기다려도 대개 그대로이고,
+    # 이 저장소가 이미 같은 값을 쓴다(notification.web-push.max-attempts 3 · retry-backoff-ms 500).
+    # 실패를 세는 단위가 하나로 유지된다.
+    listener-max-retries: ${NOTIFICATION_FANOUT_LISTENER_MAX_RETRIES:3}
+    # 첫 재시도까지의 대기. 노리는 것은 커넥션 풀이 잠깐 빈 순간처럼 곧 지나가는 실패다.
+    # spring.datasource.hikari.connection-timeout이 5초이므로, 그보다 짧게 잡아야 풀이 비어 실패한
+    # 뒤 다시 시도할 때 이미 자리가 났을 가능성이 있다.
+    listener-retry-initial-backoff-ms: ${NOTIFICATION_FANOUT_LISTENER_RETRY_INITIAL_BACKOFF_MS:500}
+    # 지수 백오프 배수. 2.0이면 0.5 → 1 → 2초다. 1.0으로 두면 고정 간격이 된다.
+    listener-retry-multiplier: ${NOTIFICATION_FANOUT_LISTENER_RETRY_MULTIPLIER:2.0}
+    # 한 번의 대기 상한. 위 hikari connection-timeout과 같은 자릿수로 둔다 — 그보다 오래 기다리면
+    # 소비자를 붙잡는 대가가 재시도로 건질 확률보다 커진다. 기본값(3회)에서는 2초에서 끝나 닿지
+    # 않고, 횟수를 올렸을 때의 상한 역할을 한다.
+    listener-retry-max-backoff-ms: ${NOTIFICATION_FANOUT_LISTENER_RETRY_MAX_BACKOFF_MS:5000}
   # 푸시 전달 큐(ADR-0124). 팬아웃에서 분리된 전용 소비자·진행 표의 손잡이들.
   push:
     # 이 노드가 발송 큐를 소비하는가. 발송 전용 노드를 두는 수단이고(ADR-0127), 운영에서
@@ -512,3 +533,13 @@ notification:
     # 없다 — 하루 안에 한 번만 성공하면 되는 관대한 잡이다(PushProgressPartitionJob).
     partition-maintenance-ms: ${NOTIFICATION_PUSH_PARTITION_MAINTENANCE_MS:21600000}
     partition-initial-delay-ms: ${NOTIFICATION_PUSH_PARTITION_INITIAL_DELAY_MS:15000}
+    # 리스너 재시도(ADR-0133). 값의 근거는 위 fanout 쪽과 같고, 손잡이만 따로 둔다 — 두 큐가
+    # 같은 값을 공유하면 한쪽만 조정할 수 없다.
+    #
+    # **위 max-delivery-attempts와 다른 층이다.** 그쪽은 푸시 서비스가 429·5xx로 막은 사람만 골라
+    # 새 명령으로 다시 싣는 기기 단위 재시도이고(ADR-0128), 이쪽은 소비 자체가 예외로 끝났을 때
+    # 같은 메시지를 다시 처리하는 것이다.
+    listener-max-retries: ${NOTIFICATION_PUSH_LISTENER_MAX_RETRIES:3}
+    listener-retry-initial-backoff-ms: ${NOTIFICATION_PUSH_LISTENER_RETRY_INITIAL_BACKOFF_MS:500}
+    listener-retry-multiplier: ${NOTIFICATION_PUSH_LISTENER_RETRY_MULTIPLIER:2.0}
+    listener-retry-max-backoff-ms: ${NOTIFICATION_PUSH_LISTENER_RETRY_MAX_BACKOFF_MS:5000}
