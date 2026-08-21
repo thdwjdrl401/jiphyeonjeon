@@ -253,8 +253,8 @@ class PushDeliveryContractTest {
         UUID alive = insertSubscription(owner);
 
         inTx(status -> {
-            subscriptionRepository.deleteAllByIds(List.of(dead));
-            subscriptionRepository.markDelivered(List.of(alive), java.time.OffsetDateTime.now());
+            subscriptionRepository.deleteAllByIds(new UUID[] {dead});
+            subscriptionRepository.markDelivered(new UUID[] {alive}, java.time.OffsetDateTime.now());
         });
 
         assertThat(jdbc.queryForObject("SELECT count(*) FROM core.push_subscription WHERE id = ?",

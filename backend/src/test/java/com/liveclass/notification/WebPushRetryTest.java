@@ -203,9 +203,8 @@ class WebPushRetryTest {
         sender(3, 5_000).send(recipients(a), "제목", "본문", null);
 
         assertThat(count("a")).isEqualTo(1);
-        // 지우기는 한 문장짜리 벌크 삭제로 간다(ADR-0124) — 엔티티가 아니라 id 목록을 본다.
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<java.util.Collection<UUID>> deleted = ArgumentCaptor.forClass(java.util.Collection.class);
+        // 지우기는 한 문장짜리 벌크 삭제로 간다(ADR-0124) — 엔티티가 아니라 id 배열을 본다(ADR-0137).
+        ArgumentCaptor<UUID[]> deleted = ArgumentCaptor.forClass(UUID[].class);
         verify(repository).deleteAllByIds(deleted.capture());
         assertThat(deleted.getValue()).containsExactly(a.getId());
     }
