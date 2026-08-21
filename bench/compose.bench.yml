@@ -84,7 +84,7 @@ x-appbase: &appbase
       # notificationListenerContainerFactory가 configurer로 전역을 먹은 **뒤에**
       # notification.fanout.listener-concurrency(기본 8)로 덮어쓴다. 전역만 주면 그 덮어쓰기에
       # 지워져 FANOUT_CONCURRENCY가 조용히 무시된다 — 2·4·8을 재도 전부 8로 도는 회차가 나왔다.
-      NOTIFICATION_FANOUT_LISTENER_CONCURRENCY: ${FANOUT_CONCURRENCY:-8}
+      NOTIFICATION_FANOUT_LISTENER_CONCURRENCY: ${FANOUT_CONCURRENCY:-4}
       # 전역은 자기 손잡이가 없는 리스너의 기본값으로만 남는다.
       RABBIT_LISTENER_CONCURRENCY: ${RABBIT_CONCURRENCY:-2}
       # 한 소비자가 미리 쥐는 메시지 수. 기본 250은 조각을 키웠을 때 위험하다 — 조각
