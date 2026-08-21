@@ -202,10 +202,13 @@ fi
 MOCK_STATS="$(mock /stats 2>/dev/null || echo '{}')"
 echo "$MOCK_STATS" > "$OUT/mock.json"
 
-python3 - "$OUT" "$MODE" "${T0:-0}" "${T_END:-0}" "${T_FANOUT_END:-0}" "${T_PUSH_START:-0}" "${FAN_MAX:-0}" <<'PY'
+python3 - "$OUT" "$MODE" "${T0:-0}" "${T_END:-0}" "${T_FANOUT_END:-0}" "${T_PUSH_START:-0}" "${FAN_MAX:-0}" "${FAN_MIN:-0}" <<'PY'
 import csv, json, os, sys
 out, mode = sys.argv[1], sys.argv[2]
-t0, t_end, t_fan, t_push0, fan_max = (int(x) for x in sys.argv[3:8])
+t0, t_end, t_fan, t_push0, fan_max, fan_min = (int(x) for x in sys.argv[3:9])
+# t0는 하네스가 아웃박스 행을 psql로 넣은 시각이다. 그 행은 afterCommit 깨우기 경로를 안 타므로
+# 릴레이가 폴링으로 집을 때까지(0~RELAY_DELAY_MS) 기다리고, 그 대기가 t0 기준 값에 통째로 얹힌다
+# (ADR-0134·0135). 팬아웃 자체는 행에 박힌 시각으로 잰다 — created_at 기본값이 clock_timestamp()다.
 mock = json.load(open(os.path.join(out, "mock.json")))
 S = lambda ms: ms / 1000.0
 
@@ -220,22 +223,27 @@ if mode == "shared":
     first_push = mock.get("firstAtUnixMs") or next((m for m, _, p in ts if p > 0), 0)
     last_push = mock.get("lastAtUnixMs") or t_end
 
-    lag = S(first_push - t0)
-    fan = S(fan_done - t0)
-    total = S(last_push - t0)
+    origin = fan_min or t0          # 첫 알림 행 = 팬아웃이 실제로 시작한 시각
+    lag = S(first_push - origin)
+    fan = S(fan_done - origin)
+    total = S(last_push - origin)
     overlap = S(fan_done - first_push)
+    relay_wait = S(origin - t0)     # 하네스가 넣은 행을 릴레이가 집기까지
 
+    print("   (하네스 적재 → 첫 알림 행 %.2f초 — 릴레이 폴링 대기. 운영은 커밋이 깨운다)" % relay_wait)
     print("   사건 → 첫 발송        %7.2f초   (발송이 팬아웃을 기다리지 않는다)" % lag)
     print("   사건 → 팬아웃 완료    %7.2f초" % fan)
     print("   사건 → 마지막 발송    %7.2f초" % total)
     print()
     print("   겹친 구간             %7.2f초   팬아웃과 발송이 동시에 돈 시간" % overlap)
     print("   겹침 비율             %7.1f%%   팬아웃 시간 중" % (100 * overlap / fan if fan else 0))
-    summary = {"mode": mode, "lag_s": lag, "fanout_s": fan, "total_s": total, "overlap_s": overlap}
+    summary = {"mode": mode, "lag_s": lag, "fanout_s": fan, "total_s": total,
+               "overlap_s": overlap, "relay_wait_s": relay_wait}
 else:
-    fan = S(t_fan - t0)
+    fan = S(fan_max - fan_min) if fan_min else S(t_fan - t0)
     push = S(t_end - t_push0)
-    print("   팬아웃 (pg에 코어)     %7.2f초" % fan)
+    print("   (하네스 적재 → 첫 알림 행 %.2f초 — 릴레이 폴링 대기)" % S((fan_min or t0) - t0))
+    print("   팬아웃 (pg에 코어)     %7.2f초   첫 행~마지막 행" % fan)
     print("   발송   (앱에 코어)     %7.2f초   = %.1f분" % (push, push / 60))
     print()
     print("   순차 합               %7.2f초" % (fan + push))
