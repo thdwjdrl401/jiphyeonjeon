@@ -59,6 +59,11 @@ start_infra() {
   PG_CPUSET="$1" INFRA_CPUSET="$2" MOCK_DELAY="$MOCK_DELAY" \
     compose up -d --wait --wait-timeout 300 postgres redis rabbitmq mock-push > /dev/null 2>&1 \
     || fail "인프라 기동 실패"
+  # **cpuset을 여기서 다시 박는다.** 구간 B가 docker update로 제자리에서 바꿔 놓은 배정을 compose는
+  # 모른다 — 설정 차이가 없으니 컨테이너를 다시 만들지 않고 그대로 둔다. 그래서 앞 회차가 남긴
+  # 발송 배정(pg 1코어)으로 다음 회차의 구간 A가 돌아간 적이 있다. 팬아웃이 15.00초 대신 21.35초로
+  # 나왔고, 그 회차만 조건이 달랐다는 것이 나중에 드러났다.
+  set_cpuset "$1" "$2"
   PG_CPUSET="$1" INFRA_CPUSET="$2" \
     compose --profile mon up -d --wait --wait-timeout 300 postgres-exporter cadvisor > /dev/null 2>&1 || true
 }
@@ -74,7 +79,8 @@ set_cpuset() {  # $1 pg $2 infra
   for svc in redis rabbitmq mock-push; do
     id="$(compose ps -q "$svc")" && [ -n "$id" ] && docker update --cpuset-cpus "$2" "$id" > /dev/null
   done
-  echo "   인프라 cpuset 제자리 변경 pg[$1] 인프라[$2]"
+  echo "   인프라 cpuset pg[$(docker inspect "$(compose ps -q postgres)" --format '{{.HostConfig.CpusetCpus}}' 2>/dev/null)]" \
+       "브로커[$(docker inspect "$(compose ps -q rabbitmq)" --format '{{.HostConfig.CpusetCpus}}' 2>/dev/null)]"
 }
 
 start_app() {  # $1 pg $2 infra $3 app $4 fanout_on $5 push_on
