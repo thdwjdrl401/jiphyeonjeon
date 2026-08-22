@@ -63,7 +63,7 @@ BEGIN
     END LOOP;
 END $$;
 
--- 에어백. 선생성 잡이 어떤 이유로든 멈춰도 INSERT가 실패하는 대신 여기로 떨어진다. 잡이 매일
+-- DEFAULT 파티션이 받아 둔다. 선생성 잡이 어떤 이유로든 멈춰도 INSERT가 실패하는 대신 여기로 떨어진다. 잡이 매일
 -- 이 파티션의 행 수를 보고 0이 아니면 WARN을 남긴다 — 조용히 쌓이면 "파티션이 안 만들어지고
 -- 있다"를 아무도 모른다.
 CREATE TABLE core.notification_default

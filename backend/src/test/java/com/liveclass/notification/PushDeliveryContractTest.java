@@ -47,7 +47,7 @@ import static org.mockito.Mockito.when;
  * <p>{@code @Transactional}을 쓰지 않는다 — 아웃박스 원자성은 롤백/커밋의 <b>차이</b>가 검증
  * 대상이라 트랜잭션을 직접 연다. 남긴 행은 직접 치운다.
  *
- * <p>{@code WebPushSender}는 목이다. 기기 단위 물결·미완 판정("시도를 마쳤다"의 경계)은
+ * <p>{@code WebPushSender}는 목이다. 기기 단위 회차·미완 판정("시도를 마쳤다"의 경계)은
  * {@code WebPushRetryTest}가 실제 HTTP로 검증하고, 여기서는 그 반환값(시도를 마친 사람들)이
  * 진행 표와 어떻게 맞물리는지를 본다.
  */
@@ -290,7 +290,7 @@ class PushDeliveryContractTest {
         assertThat(dayPartitions())
                 .doesNotContain(partitionName(expired))
                 .contains(partitionName(LocalDate.now(ZoneOffset.UTC)));
-        assertThat(defaultPartitionExists()).as("에어백은 남는다").isTrue();
+        assertThat(defaultPartitionExists()).as("DEFAULT 파티션은 남는다").isTrue();
     }
 
     /** DEFAULT에 떨어진 행(선생성이 밀렸던 흔적)이 있어도 잡은 던지지 않는다 — WARN으로만 알린다. */

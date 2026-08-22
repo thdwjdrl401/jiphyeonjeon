@@ -358,7 +358,7 @@ export function visibleAnnotationElements(document: AnnotationDocument): Annotat
   const visible = document.elements.filter((element) => element.isDeleted !== true)
 
   // 화이트보드는 정의상 <b>배경</b>이라 언제나 맨 아래다. 우리가 손으로 만든 요소라 index가 없을 수
-  // 있어 아래 정렬에서 빠질 수 있는데, 그러면 나중에 도착한 판이 판서를 덮는다. 규칙으로 못박는다.
+  // 있어 아래 정렬에서 빠질 수 있는데, 그러면 나중에 도착한 판이 판서를 덮는다. 규칙으로 정한다.
   const board = visible.filter((element) => element.id === WHITEBOARD_ELEMENT_ID)
   const rest = visible.filter((element) => element.id !== WHITEBOARD_ELEMENT_ID)
 

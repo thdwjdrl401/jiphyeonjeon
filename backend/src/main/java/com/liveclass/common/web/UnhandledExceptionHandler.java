@@ -70,7 +70,7 @@ public class UnhandledExceptionHandler {
         return ErrorResponses.of(HttpStatus.INTERNAL_SERVER_ERROR, body);
     }
 
-    // Content-Type을 못박는다 — Accept: text/event-stream인 SSE 요청에서 JSON 협상에 실패하면
+    // Content-Type을 고정한다 — Accept: text/event-stream인 SSE 요청에서 JSON 협상에 실패하면
     // 오류 봉투 대신 원래 예외가 그대로 새어나간다(ErrorResponses 참고).
     private ResponseEntity<ErrorResponse> status(HttpStatus status, String code, String message) {
         return ErrorResponses.of(status, code, message);

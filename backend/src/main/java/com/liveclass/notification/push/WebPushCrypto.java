@@ -46,7 +46,7 @@ import java.util.Base64;
  * BouncyCastle이 일반 경로를 탄다. {@code ECGenParameterSpec("secp256r1")}으로 만들면 최적화된
  * 이름 곡선 경로를 탄다 — <b>같은 곡선, 같은 수학인데 생성 5.3배·ECDH 6.7배 차이</b>다.
  *
- * <p>CPU가 발송 처리량의 천장이라(부하 중 사용률 93.5%, 유휴 1.1%) 이 차이가 그대로 처리량이 된다.
+ * <p>CPU가 발송 처리량의 상한이라(부하 중 사용률 93.5%, 유휴 1.1%) 이 차이가 그대로 처리량이 된다.
  *
  * <p><b>스레드마다 도구를 따로 둔다.</b> {@code Cipher}·{@code KeyAgreement}·{@code Mac}·
  * {@code Signature}·{@code KeyPairGenerator}는 상태를 갖고 <b>스레드 안전하지 않다</b>. 공유하면

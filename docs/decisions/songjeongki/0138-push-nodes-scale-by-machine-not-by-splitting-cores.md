@@ -137,7 +137,7 @@ CPU를 먹는다는 설명은 이 데이터로 받쳐지지 않는다. 남는 �
   줄로 넣었다(web 10 · push 전용 4). 발송 전용 노드는 DB를 진행 표에만 쓰고 동시에 필요한 것이
   소비자 수(2)뿐이다.
 - `bench/compose.bench.yml`에 `DB_POOL`, `bench/run-timeline.sh`에 `PUSH_ROLE_ONLY`와
-  구간 B의 cpuset 손잡이를 넣었다. 기본값은 전부 종전 동작이다.
+  구간 B의 cpuset 설정을 넣었다. 기본값은 전부 종전 동작이다.
 - `docs/benchmark/README.md`의 발송 절을 지금 코드 기준으로 다시 쟀다.
 
 ## 되돌리는 조건

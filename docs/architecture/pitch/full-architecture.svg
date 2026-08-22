@@ -109,10 +109,10 @@
 <text x="1420.0" y="97.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">API 클라이언트</text>
 <text x="1420.0" y="116.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">쿠키 · CSRF</text>
 <rect x="70" y="300" width="560" height="60" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
-<text x="350.0" y="327.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">웹 관문</text>
+<text x="350.0" y="327.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">웹 진입점</text>
 <text x="350.0" y="346.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">TLS 종단 · 정적 화면 · /api 프록시</text>
 <rect x="680" y="300" width="420" height="60" rx="3" fill="#EAE5F5" stroke="#5B4B8A" stroke-width="1.8"/>
-<text x="890.0" y="327.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">미디어 관문</text>
+<text x="890.0" y="327.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">미디어 진입점</text>
 <text x="890.0" y="346.0" text-anchor="middle" font-size="11.5" fill="#4A5A6B">시그널링 WSS 종단</text>
 <rect x="1150" y="300" width="440" height="60" rx="3" fill="#E1EDF4" stroke="#1D4E6F" stroke-width="1.8"/>
 <text x="1370.0" y="327.0" text-anchor="middle" font-size="14.5" font-weight="650" fill="#0F1B2A">인증서 갱신</text>

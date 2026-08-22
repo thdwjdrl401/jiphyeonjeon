@@ -37,17 +37,17 @@ class WebPushInFlightGovernorTest {
         assertThat(next(250, false)).isEqualTo(300);
     }
 
-    /** 바닥이 없으면 계속 반토막 나 결국 1이 되고, 그때는 조각 하나가 영원히 안 끝난다. */
+    /** 최솟값이 없으면 계속 반토막 나 결국 1이 되고, 그때는 조각 하나가 영원히 안 끝난다. */
     @Test
-    @DisplayName("아무리 막혀도 바닥 아래로는 안 내려간다")
+    @DisplayName("아무리 막혀도 최솟값 아래로는 안 내려간다")
     void the_floor_holds() {
         assertThat(next(FLOOR, true)).isEqualTo(FLOOR);
         assertThat(next(120, true)).isEqualTo(FLOOR);
     }
 
-    /** 천장은 max-in-flight다. 연결 수를 그 값에 맞춰 잡아 뒀으므로 넘으면 스트림이 모자란다. */
+    /** 최댓값은 max-in-flight다. 연결 수를 그 값에 맞춰 잡아 뒀으므로 넘으면 스트림이 모자란다. */
     @Test
-    @DisplayName("아무리 깨끗해도 천장 위로는 안 올라간다")
+    @DisplayName("아무리 깨끗해도 최댓값 위로는 안 올라간다")
     void the_ceiling_holds() {
         assertThat(next(CEILING, false)).isEqualTo(CEILING);
         assertThat(next(CEILING - 10, false)).isEqualTo(CEILING);

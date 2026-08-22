@@ -197,7 +197,7 @@ Spring이 협상에 실패해 **원래 예외가 그대로 새어나간다**(500
 
 `LessonAiAnswerServiceTest` 3건 — 분기가 맞는지. `RECORDED`면 라이브 자막을 건드리지 않고, `LIVE`면
 `askedBy`를 넘겨 답변이 기록되며, 없는 레슨은 어느 갈래도 돌기 전에 404로 은닉된다. **잘못 갈리면 다른
-강의의 자막을 근거로 답한다** — 그래서 단정으로 못박는다.
+강의의 자막을 근거로 답한다** — 그래서 단정으로 적는다.
 
 `LessonAiAnswerControllerContractTest` 3건 — 공개 입력이 `lessonId`·`question`·`playbackMs`뿐이고,
 음수·**누락** 위치를 서비스 호출 전에 거절한다.

@@ -127,11 +127,11 @@ READY  ||  FAILED  ||  (videoAsset === null && !recordingEnabled)
 
 - `liveSessionProcessing.test.ts` **+6건** — 처리 중 회전·실패 시 정지·공개됨·검수 대기 구분·
   녹화 안 함이면 배지 없음·못 읽었으면 단정하지 않음
-- `liveSessionProcessing.test.ts` — "어떤 상태에서도 배지는 처리 화면을 가리킨다"로 규칙을 못박음
+- `liveSessionProcessing.test.ts` — "어떤 상태에서도 배지는 처리 화면을 가리킨다"로 규칙을 고정함
 - `LessonDetailProcessingBadge.test.tsx` **2건**(신규) — 처리 중이면 링크가 `/processing`이고 원이
   돌며 검수 버튼이 없음, 폴링이 한 번 더 돌면 원이 멈추고 **배지는 여전히 `/processing`** ·
   검수 버튼이 생기며 그 버튼이 `/replay`
-- 자동 이동을 못박고 있던 기존 2건을 **머무는 규칙으로 교체**했다
+- 자동 이동을 고정하고 있던 기존 2건을 **머무는 규칙으로 교체**했다
   (`LiveSessionProcessingPage.test.tsx`, `liveSessionProcessing.test.tsx`)
 - **돌연변이 확인**: `describeReplayBadge`가 옛날처럼 언제나 "다시보기 공개됨"을 돌려주게 바꾸면
   **6건이 깨진다**(단위 5 + 통합 1). 정확히 이 ADR이 고친 거짓말이다.

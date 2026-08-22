@@ -12,7 +12,7 @@
 -- WAL을 쓰지 않으므로 팬아웃 속도로 쌓여도 쓰기 비용이 낮다.
 --
 -- 일 파티션인 이유: 행은 발송 뒤 며칠이면 쓸모가 없는데(재배달 창은 길어야 시간 단위) DELETE로
--- 지우면 vacuum이 따라와야 한다. 파티션 DROP은 지우기가 공짜다. 선생성·DROP·에어백 점검은
+-- 지우면 vacuum이 따라와야 한다. 파티션 DROP은 지우기가 공짜다. 선생성·DROP·DEFAULT 파티션 점검은
 -- PushProgressPartitionJob이 맡는다.
 --
 -- PG16에서 UNLOGGED는 파티션에 **상속되지 않는다**(부모는 저장소가 없어 선언이 장식일 뿐이다 —
@@ -38,7 +38,7 @@ COMMENT ON TABLE core.notification_push_progress IS
  * 폭(하루)보다 훨씬 짧아 실제로도 드물다. 이 인덱스의 진짜 일은 anti-join 탐색이다.
  */
 
--- DEFAULT 파티션 = 에어백. 잡이 오래 죽어 그 날짜의 파티션이 없어도 INSERT가 실패하지 않고
+-- DEFAULT 파티션이 받아 둔다. 잡이 오래 죽어 그 날짜의 파티션이 없어도 INSERT가 실패하지 않고
 -- 여기로 떨어진다. 행이 잡히면 잡이 WARN으로 알린다 — 파티션 선생성이 밀렸다는 신호다.
 CREATE UNLOGGED TABLE core.notification_push_progress_default
   PARTITION OF core.notification_push_progress DEFAULT;

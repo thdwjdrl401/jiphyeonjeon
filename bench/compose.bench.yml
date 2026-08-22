@@ -61,7 +61,7 @@ x-appbase: &appbase
       SPRING_DATASOURCE_PASSWORD: bench
       # 노드당 커넥션 수. 기본값은 application.yml과 같은 10이라 지금까지의 측정은 그대로다.
       # 노드를 늘리면 이 값이 노드 수만큼 곱해져 PG에 걸린다 — 2노드 회차의 손실 12%가
-      # DB 경합에서 오는지 가르려면 이 손잡이를 밖에서 낮출 수 있어야 한다.
+      # DB 경합에서 오는지 가르려면 이 값을 밖에서 낮출 수 있어야 한다.
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: ${DB_POOL:-10}
       SPRING_DATA_REDIS_HOST: redis
       SPRING_RABBITMQ_HOST: rabbitmq
@@ -78,9 +78,9 @@ x-appbase: &appbase
       NOTIFICATION_WEB_PUSH_PRIVATE_KEY: ${VAPID_PRIVATE:-Gc2qdwPEBQg12tfqmUWna7LmlUxXSGEbehmmzUc-LZ4}
       NOTIFICATION_WEB_PUSH_SUBJECT: mailto:bench@liveclass.test
 
-      # ── 여기가 실험 손잡이다. 삭제법(ablation)이 이 값들을 바꾼다 ──
+      # ── 여기가 실험 설정이다. 삭제법(ablation)이 이 값들을 바꾼다 ──
       NOTIFICATION_WEB_PUSH_MAX_IN_FLIGHT: ${PUSH_MAX_IN_FLIGHT:-800}
-      # 조절기는 벤치에서 기본으로 끈다 — 목 서버가 429를 안 내므로 켜 두면 천장까지
+      # 조절기는 벤치에서 기본으로 끈다 — 목 서버가 429를 안 내므로 켜 두면 최댓값까지
       # 되올라가기만 하고, 그 오르는 구간이 처리량 비교에 섞인다. 조절 자체를 잴 때만 켠다.
       NOTIFICATION_WEB_PUSH_ADAPTIVE_IN_FLIGHT: ${PUSH_ADAPTIVE:-false}
       NOTIFICATION_WEB_PUSH_MIN_IN_FLIGHT: ${PUSH_MIN_IN_FLIGHT:-100}
@@ -91,18 +91,18 @@ x-appbase: &appbase
       # 푸시 소비자가 미리 쥐는 수. 전역 PREFETCH와 **따로** 줘야 한다 — 전역만 주면 팩토리가
       # notification.push.listener-prefetch로 뒤에 덮어쓴다(소비자 수와 같은 자리, ADR-0136).
       NOTIFICATION_PUSH_LISTENER_PREFETCH: ${PUSH_PREFETCH:-1}
-      # **팬아웃 소비자 수는 전용 손잡이로 줘야 한다.** ADR-0131이 전역에서 갈라내면서
+      # **팬아웃 소비자 수는 전용 설정으로 줘야 한다.** ADR-0131이 전역에서 갈라내면서
       # notificationListenerContainerFactory가 configurer로 전역을 먹은 **뒤에**
       # notification.fanout.listener-concurrency(기본 8)로 덮어쓴다. 전역만 주면 그 덮어쓰기에
       # 지워져 FANOUT_CONCURRENCY가 조용히 무시된다 — 2·4·8을 재도 전부 8로 도는 회차가 나왔다.
       NOTIFICATION_FANOUT_LISTENER_CONCURRENCY: ${FANOUT_CONCURRENCY:-4}
-      # 전역은 자기 손잡이가 없는 리스너의 기본값으로만 남는다.
+      # 전역은 자기 설정이 없는 리스너의 기본값으로만 남는다.
       RABBIT_LISTENER_CONCURRENCY: ${RABBIT_CONCURRENCY:-2}
       # 한 소비자가 미리 쥐는 메시지 수. 기본 250은 조각을 키웠을 때 위험하다 — 조각
       # 5,000명이면 푸시 명령이 201건뿐이라 먼저 붙은 소비자가 전부 가져가고 나머지
       # 노드가 논다. 명령 하나가 수천 건 발송(수 초)이라 미리 쥘 이유도 없다.
       SPRING_RABBITMQ_LISTENER_SIMPLE_PREFETCH: ${PREFETCH:-250}
-      # 구간을 가르는 손잡이. 기본은 둘 다 켜짐(운영과 같다).
+      # 구간을 가르는 설정. 기본은 둘 다 켜짐(운영과 같다).
       NOTIFICATION_FANOUT_LISTENER_ENABLED: ${FANOUT_ENABLED:-true}
       NOTIFICATION_PUSH_LISTENER_ENABLED: ${PUSH_ENABLED:-true}
       # 발송 전용 노드는 알림 리스너 말고도 꺼야 할 것이 있다(ADR-0127의 역할 표).

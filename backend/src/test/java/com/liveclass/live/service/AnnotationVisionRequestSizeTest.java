@@ -14,7 +14,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 강조 설명 요청이 <b>이미지 크기와 무관</b>한지 못박는다(ADR-0058·ADR-0079).
+ * 강조 설명 요청이 <b>이미지 크기와 무관</b>한지 확인한다(ADR-0058·ADR-0079).
  *
  * <p>GMS 게이트웨이에는 본문 한도(~100KB)가 있고, 넘으면 크기와 상관없어 보이는
  * {@code "Model not found in request"}를 돌려준다 — 실제로 그 오류를 쫓느라 시간을 썼다(ADR-0058).

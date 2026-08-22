@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * <p>발송 전용 노드는 {@code liveclass.scheduling.enabled=false}로 뜬다. 이 값이 조용히 무시되면
  * 노드를 늘리는 순간 잠금 없는 잡(LiveStartingSoonScheduler)이 여러 대에서 같이 돌아 아웃박스에
- * 중복이 실린다 — 눈에 잘 띄지 않는 종류의 고장이라 코드로 못박아 둔다.
+ * 중복이 실린다 — 눈에 잘 띄지 않는 종류의 고장이라 코드로 고정해 둔다.
  *
  * <p>확인하는 것은 두 가지다. 스케줄 등록기가 아예 없다는 것과, <b>설정 프로퍼티 빈은 살아 있다</b>는
  * 것. 후자는 바깥 클래스에 조건을 걸었다가 {@code AssetReaperProperties}까지 사라져 그것을

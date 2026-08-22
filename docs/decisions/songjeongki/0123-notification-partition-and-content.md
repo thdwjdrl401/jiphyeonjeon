@@ -64,8 +64,8 @@ fan-out on write(ADR-0073 §7)는 수신자별로 한 행을 만든다. 수강�
 - 인덱스 세 벌(recipient+created_at, unread 부분, action_required 부분)은 파티션드 인덱스로 유지.
 - **선생성 잡**(`NotificationPartitionMaintenance`, 매일 새벽 + 기동 직후): 앞으로 3개월치를
   `CREATE TABLE IF NOT EXISTS … PARTITION OF`로 만든다. 멱등이고, 실패해도 다음 달 생성을 계속
-  시도하는 관대한 잡이다. `DEFAULT` 파티션을 에어백으로 두어 선생성이 멈춰도 INSERT가 죽지 않고,
-  에어백에 행이 있으면 매일 WARN을 남긴다.
+  시도하는 관대한 잡이다. `DEFAULT` 파티션을 예비로 두어 선생성이 멈춰도 INSERT가 죽지 않고,
+  거기에 행이 있으면 매일 WARN을 남긴다.
 - **보존 DROP 잡**: `notification.retention.months`(기본 12)를 지난 달의 파티션을 DROP.
   **보존 정책 자체는 미확정이다** — 기본값을 보수적으로 두고 설정으로 조절한다. 어느 파티션이
   어느 달인지는 이름(`notification_pYYYY_MM`)에서 읽는다 — 파티션은 전부 우리 코드가 이 규칙으로
@@ -169,7 +169,7 @@ VACUUM 뒤에나 공간이 돌아온다. 파티션 DROP은 이 문제 자체가 
 - `NotificationFanoutContractTest`·`RecordingNotificationContractTest`·
   `LiveScheduleNotificationContractTest`·`LiveStartingSoonContractTest` — dedupe 의미(재신청은 다시,
   재공개는 조용히)가 등록표로 옮긴 뒤에도 같다.
-- `NotificationPartitionMaintenanceTest` — 선생성 멱등, 범위 밖 행이 에어백에 잡히고 잡이 보고,
+- `NotificationPartitionMaintenanceTest` — 선생성 멱등, 범위 밖 행이 `DEFAULT` 파티션에 잡히고 잡이 보고,
   **파티션을 DROP해도 같은 사건이 다시 알리지 않음**(등록표 생존), 보존 기간 안 파티션은 무사.
 - `StaleEnrollmentNotificationBackfillTest` — V35는 번호순 덕에 언제나 V45 이전 모양 위에서
   돈다는 사실을 테스트가 그 모양을 재현해 그대로 잠근다.

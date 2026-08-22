@@ -79,11 +79,11 @@ public class SecurityConfig {
                         // 로그인 시 오버레이되는 권한이다(AdminAccounts) — 별도 회원가입 역할이 아니다.
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         // 에셋 업로드는 로그인 필수(익명 발급 금지). kind별 세부 권한(THUMBNAIL=강사)은
-                        // 컨트롤러가 판정한다. anyRequest().authenticated()로도 덮이지만 의도를 못박아 둔다.
+                        // 컨트롤러가 판정한다. anyRequest().authenticated()로도 덮이지만 의도를 적어 둔다.
                         .requestMatchers("/api/assets/**").authenticated()
                         .anyRequest().authenticated()
                 )
-                // 기본 동작은 403이지만 CONTRACT §2는 인증 실패를 401로 못박았다.
+                // 기본 동작은 403이지만 CONTRACT §2는 인증 실패를 401로 고정했다.
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)));
         return http.build();
     }

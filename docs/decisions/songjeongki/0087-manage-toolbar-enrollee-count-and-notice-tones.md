@@ -59,7 +59,7 @@
 **네 톤이 전부 같은 회색이었다.** 저장 실패가 안내문과 구분되지 않았고, 토스트는 성공과 실패가
 똑같은 먹색 상자였다(살아남은 차이는 1px 테두리 색뿐이라 사실상 구분되지 않는다).
 
-[ADR-0021](../yoongwanghyeok/0021-modern-ink-monotone-curation-ui.md) §8이 못박은 지점이다 —
+[ADR-0021](../yoongwanghyeok/0021-modern-ink-monotone-curation-ui.md) §8이 정한 지점이다 —
 *"의미 있는 상태색은 모노톤 전환 뒤에도 식별 가능해야 한다."* 같은 파일의 `.status-pill--*`는
 톤을 다시 세워 두었으니, 이 둘만 빠진 **누락**으로 본다.
 
