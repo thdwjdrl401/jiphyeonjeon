@@ -116,9 +116,15 @@ if [[ " $SECTIONS " == *" A "* ]]; then
   run "psql -c \"<아웃박스 타임라인>\"" pgv -c "$TL_SQL"
   FIRST="$(curl -s "$MOCK/stats" | jval firstAtUnixMs)"
   if [ "${FIRST:-0}" -gt 0 ] 2>/dev/null; then
-    run "psql -c \"<게시 커밋에서 첫 푸시까지>\"" pgv -c \
-      "SELECT round(extract(epoch from (to_timestamp($FIRST/1000.0) - created_at)) * 1000) AS 첫푸시지연ms
-         FROM core.outbox_events ORDER BY id LIMIT 1;"
+    # 구간을 쪼개 보인다. 마지막 칸(첫알림행_첫푸시)이 run-timeline.sh가 origin=min(created_at)로
+    # 재는 값과 같은 구간이다. 문서의 1.40초가 그것이다.
+    run "psql -c \"<게시에서 첫 푸시까지, 구간별>\"" pgv -c \
+      "SELECT round(extract(epoch from o.published_at - o.created_at) * 1000)        AS 커밋_발행,
+              round(extract(epoch from n.first - o.published_at) * 1000)             AS 발행_첫알림행,
+              round(extract(epoch from to_timestamp($FIRST/1000.0) - n.first) * 1000) AS 첫알림행_첫푸시,
+              round(extract(epoch from to_timestamp($FIRST/1000.0) - o.created_at) * 1000) AS 게시_첫푸시
+         FROM (SELECT created_at, published_at FROM core.outbox_events ORDER BY id LIMIT 1) o,
+              (SELECT min(created_at) AS first FROM core.notification) n;"
   else
     echo "  경고: 첫 푸시가 안 잡혔다 — 이 회차는 못 쓴다"
   fi
