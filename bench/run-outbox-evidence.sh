@@ -35,11 +35,17 @@ new_uuid() { python3 -c 'import uuid; print(uuid.uuid4())'; }
 jval() { python3 -c "import sys,json;print(json.load(sys.stdin).get('$1',''))" 2>/dev/null; }
 run() { echo; echo "\$ $1"; shift; "$@" 2>&1 | sed 's/^/  /'; }
 
-start_app() {  # $1 추가 env (문자열)
+start_app() {  # $1 추가 env "KEY=VALUE" (선택)
+  # **확장 결과는 환경 대입이 아니다.** `FOO=1 ${VAR} cmd` 에서 $VAR가 "K=V"로 풀려도 bash는
+  # 그것을 대입이 아니라 명령으로 본다. 그래서 export로 넘긴다.
   compose rm -sf app > /dev/null 2>&1 || true
-  APP_HEAP=1g APP_MEM=1600m MOCK_DELAY="$DELAY" \
-  SCHEDULING_ENABLED=false CAPTION_ENABLED=false ${1:-} \
-    compose up -d --build --wait --wait-timeout 420 app > /dev/null 2>&1 || fail "앱 기동 실패"
+  (
+    export APP_HEAP=1g APP_MEM=1600m MOCK_DELAY="$DELAY" \
+           SCHEDULING_ENABLED=false CAPTION_ENABLED=false
+    [ -n "${1:-}" ] && export "$1"
+    compose up -d --build --wait --wait-timeout 420 app
+  ) > "$OUT/app-start.log" 2>&1 \
+    || { echo; sed 's/^/  /' "$OUT/app-start.log" >&2; fail "앱 기동 실패 — 위 로그를 보라"; }
 }
 
 echo "▶ 준비"
