@@ -125,7 +125,9 @@ if [[ " $SECTIONS " == *" B "* ]]; then
   echo "══════ B. 브로커가 내려간 채로 게시 ══════"
   compose rm -sf app > /dev/null 2>&1 || true
   reset_state
-  start_app ""
+  # **여기서만 스케줄링을 켠다.** 이 구간이 증명하려는 것이 릴레이의 30초 폴링인데,
+  # liveclass.scheduling.enabled=false면 @EnableScheduling이 통째로 꺼져 그 폴링도 안 돈다.
+  start_app "SCHEDULING_ENABLED=true"
   run "docker compose stop rabbitmq" compose stop rabbitmq
   publish
   sleep 3
@@ -134,6 +136,9 @@ if [[ " $SECTIONS " == *" B "* ]]; then
        FROM core.outbox_events ORDER BY id LIMIT 3;"
   run "psql -c \"SELECT count(*) FROM core.material_asset WHERE lesson_id='…';\"" pgv -c \
     "SELECT count(*) FROM core.material_asset WHERE lesson_id = '$LESSON';"
+  echo
+  echo "\$ docker compose logs app | grep '릴레이 깨우기'"
+  compose logs --no-log-prefix app 2>/dev/null | grep '릴레이 깨우기' | tail -2 | sed 's/^/  /'
   run "docker compose start rabbitmq" compose start rabbitmq
   echo
   echo "\$ # 폴링 주기 30초. 발행될 때까지 기다린다"
@@ -164,7 +169,7 @@ if [[ " $SECTIONS " == *" C "* ]]; then
   echo
   echo "\$ docker kill -s KILL \$(docker compose ps -q app)     # 알림 $MID 건 시점"
   docker kill -s KILL "$(compose ps -q app)" 2>&1 | sed 's/^/  /'
-  run "docker compose ps app" compose ps app
+  run "docker compose ps -a app" compose ps -a app
   start_app "PUSH_ENABLED=false"
   for _ in $(seq 1 300); do
     [ "$(pg -c 'SELECT count(*) FROM core.notification;')" -ge "$TARGET" ] && break
