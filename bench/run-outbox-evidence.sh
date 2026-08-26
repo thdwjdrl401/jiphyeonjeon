@@ -51,7 +51,7 @@ start_app() {  # $1 추가 env "KEY=VALUE" (선택)
     [ -n "${1:-}" ] && export "$1"
     compose up -d --build --wait --wait-timeout 420 app
   ) > "$OUT/app-start.log" 2>&1 \
-    || { echo; sed 's/^/  /' "$OUT/app-start.log" >&2; fail "앱 기동 실패 — 위 로그를 보라"; }
+    || { echo; sed 's/^/  /' "$OUT/app-start.log" >&2; fail "앱 기동 실패. 위 로그를 보라"; }
 }
 
 echo "▶ 준비"
@@ -60,7 +60,7 @@ PG_CPUSET="$PG_CPUSET_V" INFRA_CPUSET="$INFRA_CPUSET_V" \
 MOCK_DELAY="$DELAY" compose up -d --force-recreate --wait --wait-timeout 120 mock-push > /dev/null 2>&1
 LESSON="$(pg -c "SELECT l.id FROM core.lesson l JOIN core.section s ON s.id = l.section_id
                   WHERE s.curriculum_id = '$CUR' ORDER BY l.id LIMIT 1;")"
-[ -n "$LESSON" ] || fail "벤치 커리큘럼의 레슨이 없다 — 시드부터 하라"
+[ -n "$LESSON" ] || fail "벤치 커리큘럼의 레슨이 없다. 시드부터 하라"
 start_app ""
 CSRF="$(curl -s -c "$JAR" "$APP/api/auth/csrf" | jval token)"
 curl -s -b "$JAR" -c "$JAR" -X POST "$APP/api/auth/signup" -H 'Content-Type: application/json' \
@@ -85,6 +85,11 @@ reset_state() {   # B·C는 앱을 내린 뒤 부른다. 소비 중에 표를 �
 }
 
 publish() {  # 게시 API 호출. curl 출력을 그대로 흘린다
+  # 목이 0에서 시작하는지 여기서 본다. 앱이 뜨면서 이전 실행이 남긴 푸시를 소비하면
+  # firstAtUnixMs가 이번 게시보다 앞서 박혀 구간 계산이 음수가 된다.
+  local d; d="$(curl -s "$MOCK/stats" | jval delivered)"
+  [ "${d:-0}" -eq 0 ] 2>/dev/null \
+    || fail "게시 전인데 목 수신이 $d 건이다. 이전 실행이 남았으니 이 회차는 못 쓴다"
   local aid csrf; aid="$(new_uuid)"
   pg -c "INSERT INTO core.asset (id, kind, bucket, object_key, original_filename, content_type, status, uploaded_by)
          VALUES ('$aid','MATERIAL','bench','outbox/$aid','x.pptx','application/vnd.ms-powerpoint','UPLOADED','$UID_');" > /dev/null
@@ -107,7 +112,9 @@ TL_SQL="SELECT id, status, attempt_count AS 시도,
 if [[ " $SECTIONS " == *" A "* ]]; then
   echo
   echo "══════ A. 게시 응답과 첫 발송   pg[$PG_CPUSET_V] 앱[$APP_CPUSET_V] 인프라[$INFRA_CPUSET_V] ══════"
+  compose rm -sf app > /dev/null 2>&1 || true
   reset_state
+  start_app ""
   publish
   for _ in $(seq 1 60); do
     [ "$(curl -s "$MOCK/stats" | jval delivered)" -gt 0 ] 2>/dev/null && break
@@ -126,7 +133,7 @@ if [[ " $SECTIONS " == *" A "* ]]; then
          FROM (SELECT created_at, published_at FROM core.outbox_events ORDER BY id LIMIT 1) o,
               (SELECT min(created_at) AS first FROM core.notification) n;"
   else
-    echo "  경고: 첫 푸시가 안 잡혔다 — 이 회차는 못 쓴다"
+    echo "  경고: 첫 푸시가 안 잡혔다. 이 회차는 못 쓴다"
   fi
   compose rm -sf app > /dev/null 2>&1 || true
 fi
