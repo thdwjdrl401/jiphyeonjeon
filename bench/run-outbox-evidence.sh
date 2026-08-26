@@ -18,6 +18,11 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BENCH="$REPO_ROOT/bench"
 SECTIONS="${SECTIONS:-A B C}"
 DELAY="${MOCK_DELAY:-230ms}"
+# 앱 코어 배분. 문서(docs/benchmark/README.md)의 첫 발송 1.40초는 shared 실행,
+# 즉 앱이 물리 1코어에서 팬아웃과 발송을 다 하는 조건에서 나왔다. 같은 조건으로 둔다.
+APP_CPUSET_V="${APP_CPUSET:-2,6}"
+PG_CPUSET_V="${PG_CPUSET:-0,4,1,5}"
+INFRA_CPUSET_V="${INFRA_CPUSET:-3,7}"
 APP="http://127.0.0.1:18081"
 MOCK="http://127.0.0.1:18080"
 CUR="00000000-0000-4000-8000-000000000002"
@@ -41,6 +46,7 @@ start_app() {  # $1 추가 env "KEY=VALUE" (선택)
   compose rm -sf app > /dev/null 2>&1 || true
   (
     export APP_HEAP=1g APP_MEM=1600m MOCK_DELAY="$DELAY" \
+           APP_CPUSET="$APP_CPUSET_V" PG_CPUSET="$PG_CPUSET_V" INFRA_CPUSET="$INFRA_CPUSET_V" \
            SCHEDULING_ENABLED=false CAPTION_ENABLED=false
     [ -n "${1:-}" ] && export "$1"
     compose up -d --build --wait --wait-timeout 420 app
@@ -49,7 +55,7 @@ start_app() {  # $1 추가 env "KEY=VALUE" (선택)
 }
 
 echo "▶ 준비"
-PG_CPUSET="${PG_CPUSET:-0,4,1,5}" \
+PG_CPUSET="$PG_CPUSET_V" INFRA_CPUSET="$INFRA_CPUSET_V" \
   compose up -d --wait --wait-timeout 300 postgres redis rabbitmq > /dev/null 2>&1 || fail "인프라 기동 실패"
 MOCK_DELAY="$DELAY" compose up -d --force-recreate --wait --wait-timeout 120 mock-push > /dev/null 2>&1
 LESSON="$(pg -c "SELECT l.id FROM core.lesson l JOIN core.section s ON s.id = l.section_id
@@ -100,7 +106,7 @@ TL_SQL="SELECT id, status, attempt_count AS 시도,
 # ── A. 커밋에서 발행까지, 그리고 첫 발송 ─────────────────────────────────────
 if [[ " $SECTIONS " == *" A "* ]]; then
   echo
-  echo "══════ A. 게시 응답과 첫 발송 ══════"
+  echo "══════ A. 게시 응답과 첫 발송   pg[$PG_CPUSET_V] 앱[$APP_CPUSET_V] 인프라[$INFRA_CPUSET_V] ══════"
   reset_state
   publish
   for _ in $(seq 1 60); do
@@ -122,7 +128,7 @@ fi
 # ── B. 커밋 후 발행 전 장애 ──────────────────────────────────────────────────
 if [[ " $SECTIONS " == *" B "* ]]; then
   echo
-  echo "══════ B. 브로커가 내려간 채로 게시 ══════"
+  echo "══════ B. 브로커가 내려간 채로 게시   앱[$APP_CPUSET_V] ══════"
   compose rm -sf app > /dev/null 2>&1 || true
   reset_state
   # **여기서만 스케줄링을 켠다.** 이 구간이 증명하려는 것이 릴레이의 30초 폴링인데,
@@ -136,9 +142,6 @@ if [[ " $SECTIONS " == *" B "* ]]; then
        FROM core.outbox_events ORDER BY id LIMIT 3;"
   run "psql -c \"SELECT count(*) FROM core.material_asset WHERE lesson_id='…';\"" pgv -c \
     "SELECT count(*) FROM core.material_asset WHERE lesson_id = '$LESSON';"
-  echo
-  echo "\$ docker compose logs app | grep '릴레이 깨우기'"
-  compose logs --no-log-prefix app 2>/dev/null | grep '릴레이 깨우기' | tail -2 | sed 's/^/  /'
   run "docker compose start rabbitmq" compose start rabbitmq
   echo
   echo "\$ # 폴링 주기 30초. 발행될 때까지 기다린다"
@@ -147,15 +150,22 @@ if [[ " $SECTIONS " == *" B "* ]]; then
     sleep 1
   done
   run "psql -c \"<아웃박스 타임라인>\"" pgv -c "$TL_SQL"
-  sleep 5
-  run "psql -c \"SELECT count(*) FROM core.notification;\"" pgv -c "SELECT count(*) FROM core.notification;"
+  TARGET_B="$(pg -c "SELECT count(*) FROM core.enrollment WHERE curriculum_id='$CUR' AND status='ACTIVE';")"
+  for _ in $(seq 1 180); do
+    [ "$(pg -c 'SELECT count(*) FROM core.notification;')" -ge "$TARGET_B" ] && break
+    sleep 1
+  done
+  run "psql -c \"<수강생 수와 알림 수>\"" pgv -c \
+    "SELECT (SELECT count(*) FROM core.enrollment
+              WHERE curriculum_id='$CUR' AND status='ACTIVE') AS 수강생,
+            (SELECT count(*) FROM core.notification) AS 알림;"
   compose rm -sf app > /dev/null 2>&1 || true
 fi
 
 # ── C. 팬아웃 도중 앱이 죽어도 ───────────────────────────────────────────────
 if [[ " $SECTIONS " == *" C "* ]]; then
   echo
-  echo "══════ C. 팬아웃 도중 kill -9 ══════"
+  echo "══════ C. 팬아웃 도중 kill -9   앱[$APP_CPUSET_V] ══════"
   compose rm -sf app > /dev/null 2>&1 || true
   reset_state
   start_app "PUSH_ENABLED=false"
