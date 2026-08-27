@@ -81,10 +81,16 @@ reset_state() {   # B·C는 앱을 내린 뒤 부른다. 소비 중에 표를 �
   pg -c "DELETE FROM core.material_asset WHERE lesson_id='$LESSON';" > /dev/null
   pg -c "DELETE FROM core.asset WHERE bucket='bench' AND object_key LIKE 'outbox/%';" > /dev/null
   # DLQ까지 비운다. 이전 회차가 남긴 것이 큐 목록에 찍히면 유실 없음을 보이는 캡처에
-  # 설명 못 할 숫자가 같이 남는다.
+  # 설명 못 할 숫자가 같이 남는다. **결과를 확인한다** — 앞서 오류를 /dev/null로 버려
+  # purge가 안 먹은 것을 캡처에서야 알았다.
+  local q left
   for q in notification.fanout notification.push notification.fanout.dlq notification.push.dlq; do
-    compose exec -T rabbitmq rabbitmqctl purge_queue "$q" < /dev/null > /dev/null 2>&1
+    compose exec -T rabbitmq rabbitmqctl purge_queue "$q" < /dev/null > "$OUT/purge.log" 2>&1 || {
+      sed 's/^/  /' "$OUT/purge.log" >&2; fail "$q 비우기 실패"; }
   done
+  left="$(compose exec -T rabbitmq rabbitmqctl list_queues -q name messages < /dev/null 2>/dev/null \
+          | awk '$1 ~ /^notification\./ && $2 > 0 {printf "%s=%s ", $1, $2}')"
+  [ -z "$left" ] || fail "비웠는데 남아 있다: $left"
   curl -s "$MOCK/reset" > /dev/null 2>&1 || true
 }
 
