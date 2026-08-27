@@ -201,16 +201,17 @@ if [[ " $SECTIONS " == *" C "* ]]; then
   echo "\$ docker kill -s KILL \$(docker compose ps -q app)     # 알림 $MID 건 시점"
   docker kill -s KILL "$(compose ps -q app)" 2>&1 | sed 's/^/  /'
   run "docker compose ps -a app" compose ps -a app
-  # **다시 켜는 명령도 보여야 한다.** 죽인 것만 찍히고 재기동이 안 보이면 독자가 kill 다음에
-  # 바로 카운트를 보게 되어 그 사이가 끊긴다. compose가 낸 줄을 그대로 흘린다.
-  echo
-  echo "\$ docker compose up -d app"
-  start_app "PUSH_ENABLED=false"
-  grep -E 'Container .*app.*(Created|Started|Running|Healthy)' "$OUT/app-start.log" | sed 's/^/  /'
+  # **죽은 그 컨테이너를 그대로 다시 켠다.** start_app 은 앞에서 `rm -sf` 를 하므로 죽은 것을
+  # 지우고 새로 빌드해 올린다. 그러면 복구가 같은 프로세스가 이어받은 것인지 새로 만든 것인지
+  # 구분되지 않는다. start 는 SIGKILL 로 멈춘 컨테이너를 env 그대로 되살리고, 빌드 로그가 없어
+  # 걸러낼 것도 없다. 찍는 명령과 실제 명령이 같아진다.
+  run "docker compose start app" compose start app
+  ok=0
   for _ in $(seq 1 300); do
-    [ "$(pg -c 'SELECT count(*) FROM core.notification;')" -ge "$TARGET" ] && break
+    [ "$(pg -c 'SELECT count(*) FROM core.notification;')" -ge "$TARGET" ] && { ok=1; break; }
     sleep 1
   done
+  [ "$ok" -eq 1 ] || fail "재기동 뒤 300초 안에 $TARGET 건에 못 미쳤다. 이 회차는 못 쓴다"
   run "psql -c \"<수강생 수와 알림 수>\"" pgv -c \
     "SELECT (SELECT count(*) FROM core.enrollment
               WHERE curriculum_id='$CUR' AND status='ACTIVE') AS 수강생,
