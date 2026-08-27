@@ -80,8 +80,11 @@ reset_state() {   # B·C는 앱을 내린 뒤 부른다. 소비 중에 표를 �
                  core.notification_push_progress, core.outbox_events CASCADE;" > /dev/null
   pg -c "DELETE FROM core.material_asset WHERE lesson_id='$LESSON';" > /dev/null
   pg -c "DELETE FROM core.asset WHERE bucket='bench' AND object_key LIKE 'outbox/%';" > /dev/null
-  compose exec -T rabbitmq rabbitmqctl purge_queue notification.fanout < /dev/null > /dev/null 2>&1
-  compose exec -T rabbitmq rabbitmqctl purge_queue notification.push   < /dev/null > /dev/null 2>&1
+  # DLQ까지 비운다. 이전 회차가 남긴 것이 큐 목록에 찍히면 유실 없음을 보이는 캡처에
+  # 설명 못 할 숫자가 같이 남는다.
+  for q in notification.fanout notification.push notification.fanout.dlq notification.push.dlq; do
+    compose exec -T rabbitmq rabbitmqctl purge_queue "$q" < /dev/null > /dev/null 2>&1
+  done
   curl -s "$MOCK/reset" > /dev/null 2>&1 || true
 }
 
