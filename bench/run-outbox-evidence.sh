@@ -45,44 +45,7 @@ rmq_queues() { compose exec -T rabbitmq rabbitmqctl list_queues name messages co
 new_uuid() { python3 -c 'import uuid; print(uuid.uuid4())'; }
 jval() { python3 -c "import sys,json;print(json.load(sys.stdin).get('$1',''))" 2>/dev/null; }
 
-# **화면에 찍는 명령을 손으로 쓰지 않는다.** 손으로 쓰면 실제 명령과 어긋난다. compose 는
-# -f 가 붙은 셸 함수인데 `docker compose ...` 라고만 찍어서, 독자가 그대로 치면 루트 compose
-# 파일을 읽어 recorded-stt-worker 의 OPENAI_API_KEY 를 요구하며 죽었다. 아래 헬퍼는 실제로
-# 넘길 argv 에서 문자열을 만들므로 어긋날 수 없다.
-q() {  # 셸에 다시 넣어도 같은 한 낱말이 되게 감싼다
-  local esc="'\\''"
-  case "$1" in
-    *[!A-Za-z0-9_/:.,=@%+-]*) printf "'%s'" "${1//\'/$esc}" ;;
-    *) printf '%s' "$1" ;;
-  esac
-}
-show_argv() {  # $1=명령 머리, 나머지=인자. 140칸에서 접는다
-  local head="$1"; shift
-  # 플래그와 그 값을 한 덩이로 묶는다. 안 묶으면 -H 만 줄 끝에 남고 값이 다음 줄로 넘어간다.
-  local -a unit=(); local i=1 n=$#
-  while [ $i -le $n ]; do
-    local a="${!i}" b="" j=$(( i + 1 ))
-    case "$a" in
-      -*) if [ $j -le $n ]; then b="${!j}"; case "$b" in -*) b="" ;; *) i=$j ;; esac; fi ;;
-    esac
-    if [ -n "$b" ]; then unit+=("$(q "$a") $(q "$b")"); else unit+=("$(q "$a")"); fi
-    i=$(( i + 1 ))
-  done
-  local line="\$ $head" tok
-  for tok in "${unit[@]}"; do
-    if [ $(( ${#line} + ${#tok} + 1 )) -gt 140 ]; then
-      printf '%s \\\n' "$line"; line="    $tok"
-    else
-      line="$line $tok"
-    fi
-  done
-  printf '%s\n' "$line"
-}
-PSQL_CMD="docker compose -f $CF exec -T -e PGPASSWORD=bench postgres \\
-    psql -U liveclass -d liveclass"
-runc() { echo; show_argv "docker compose -f $CF" "$@"; compose "$@" < /dev/null; }
-# SQL 은 자리표시가 아니라 실제로 돌린 문장을 찍는다. 세는 방식이 보여야 숫자가 증거가 된다.
-runq() { echo; echo "\$ $PSQL_CMD -c \"$1\""; pgv -c "$1"; }
+. bench/evidence-lib.sh   # q · show_argv · runc · runq
 
 start_app() {  # 추가 env "KEY=VALUE" 를 인자로 여러 개 받는다
   # **확장 결과는 환경 대입이 아니다.** `FOO=1 ${VAR} cmd` 에서 $VAR가 "K=V"로 풀려도 bash는
