@@ -16,6 +16,9 @@ set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BENCH="$REPO_ROOT/bench"
+# **찍는 경로와 넘기는 경로가 같아야 한다.** 화면에는 bench/... 라고 찍으면서 실제로는
+# 절대 경로를 넘기고 있었다. 루트로 옮겨 상대 경로 하나로 통일한다.
+cd "$REPO_ROOT" || exit 1
 SECTIONS="${SECTIONS:-A B C}"
 DELAY="${MOCK_DELAY:-230ms}"
 # 앱 코어 배분. 문서(docs/benchmark/README.md)의 첫 발송 1.40초는 shared 실행,
@@ -29,26 +32,57 @@ CUR="00000000-0000-4000-8000-000000000002"
 EMAIL="outbox-$(date +%s)@liveclass.test"
 PASS="outbox-demo-1234"
 OUT="${OUT:-$BENCH/results/outbox-$(date +%Y%m%dT%H%M%S)}"
-JAR="$OUT/cookies.txt"
+JAR="bench/results/cookies.txt"   # 화면에 두 번 찍히므로 짧게. 매 실행 새로 만든다
 
+CF="bench/compose.bench.yml"
 fail() { echo "실패: $*" >&2; exit 1; }
-mkdir -p "$OUT"
-compose() { docker compose -f "$BENCH/compose.bench.yml" "$@"; }
+mkdir -p "$OUT" bench/results
+rm -f "$JAR"
+compose() { docker compose -f "$CF" "$@"; }
 pg()  { compose exec -T -e PGPASSWORD=bench postgres psql -U liveclass -d liveclass -qtA "$@" < /dev/null; }
 pgv() { compose exec -T -e PGPASSWORD=bench postgres psql -U liveclass -d liveclass "$@" < /dev/null; }
 rmq_queues() { compose exec -T rabbitmq rabbitmqctl list_queues name messages consumers < /dev/null; }
 new_uuid() { python3 -c 'import uuid; print(uuid.uuid4())'; }
 jval() { python3 -c "import sys,json;print(json.load(sys.stdin).get('$1',''))" 2>/dev/null; }
 
-# **화면에 찍는 명령을 손으로 쓰지 않는다.** compose 는 -f 가 붙은 함수라 `docker compose ...`
-# 라고만 찍으면 독자가 그대로 쳤을 때 루트 compose 파일을 읽어 다른 서비스까지 끌고 온다
-# (실제로 recorded-stt-worker 의 OPENAI_API_KEY 를 요구하며 죽었다). 아래 두 헬퍼는 실제로
-# 넘길 argv 로 문자열을 만들므로 찍는 명령과 도는 명령이 어긋날 수 없다.
-CF="bench/compose.bench.yml"
+# **화면에 찍는 명령을 손으로 쓰지 않는다.** 손으로 쓰면 실제 명령과 어긋난다. compose 는
+# -f 가 붙은 셸 함수인데 `docker compose ...` 라고만 찍어서, 독자가 그대로 치면 루트 compose
+# 파일을 읽어 recorded-stt-worker 의 OPENAI_API_KEY 를 요구하며 죽었다. 아래 헬퍼는 실제로
+# 넘길 argv 에서 문자열을 만들므로 어긋날 수 없다.
+q() {  # 셸에 다시 넣어도 같은 한 낱말이 되게 감싼다
+  local esc="'\\''"
+  case "$1" in
+    *[!A-Za-z0-9_/:.,=@%+-]*) printf "'%s'" "${1//\'/$esc}" ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+show_argv() {  # $1=명령 머리, 나머지=인자. 140칸에서 접는다
+  local head="$1"; shift
+  # 플래그와 그 값을 한 덩이로 묶는다. 안 묶으면 -H 만 줄 끝에 남고 값이 다음 줄로 넘어간다.
+  local -a unit=(); local i=1 n=$#
+  while [ $i -le $n ]; do
+    local a="${!i}" b="" j=$(( i + 1 ))
+    case "$a" in
+      -*) if [ $j -le $n ]; then b="${!j}"; case "$b" in -*) b="" ;; *) i=$j ;; esac; fi ;;
+    esac
+    if [ -n "$b" ]; then unit+=("$(q "$a") $(q "$b")"); else unit+=("$(q "$a")"); fi
+    i=$(( i + 1 ))
+  done
+  local line="\$ $head" tok
+  for tok in "${unit[@]}"; do
+    if [ $(( ${#line} + ${#tok} + 1 )) -gt 140 ]; then
+      printf '%s \\\n' "$line"; line="    $tok"
+    else
+      line="$line $tok"
+    fi
+  done
+  printf '%s\n' "$line"
+}
 PSQL_CMD="docker compose -f $CF exec -T -e PGPASSWORD=bench postgres \\
     psql -U liveclass -d liveclass"
-runc() { echo; echo "\$ docker compose -f $CF $*"; compose "$@" < /dev/null; }
-runq() { local lbl="$1"; shift; echo; echo "\$ $PSQL_CMD -c \"$lbl\""; pgv "$@"; }
+runc() { echo; show_argv "docker compose -f $CF" "$@"; compose "$@" < /dev/null; }
+# SQL 은 자리표시가 아니라 실제로 돌린 문장을 찍는다. 세는 방식이 보여야 숫자가 증거가 된다.
+runq() { echo; echo "\$ $PSQL_CMD -c \"$1\""; pgv -c "$1"; }
 
 start_app() {  # 추가 env "KEY=VALUE" 를 인자로 여러 개 받는다
   # **확장 결과는 환경 대입이 아니다.** `FOO=1 ${VAR} cmd` 에서 $VAR가 "K=V"로 풀려도 bash는
@@ -113,12 +147,18 @@ publish() {  # 게시 API 호출. curl 출력을 그대로 흘린다
   pg -c "INSERT INTO core.asset (id, kind, bucket, object_key, original_filename, content_type, status, uploaded_by)
          VALUES ('$aid','MATERIAL','bench','outbox/$aid','x.pptx','application/vnd.ms-powerpoint','UPLOADED','$UID_');" > /dev/null
   csrf="$(curl -s -b "$JAR" -c "$JAR" "$APP/api/auth/csrf" | jval token)"
-  echo
-  echo "\$ curl -s -o /dev/null -w 'HTTP %{http_code}   응답 %{time_total}초\\n' -X POST \\"
-  echo "    $APP/api/instructor/lessons/$LESSON/materials -d '{\"assetId\":\"$aid\"}'"
-  curl -s -b "$JAR" -c "$JAR" --max-time 120 -X POST "$APP/api/instructor/lessons/$LESSON/materials" \
-    -H 'Content-Type: application/json' -H "X-XSRF-TOKEN: $csrf" -d "{\"assetId\":\"$aid\"}" \
+  # **찍는 인자와 넘기는 인자가 같은 배열이어야 한다.** 앞서는 인증 플래그를 빼고 찍어서
+  # 화면의 명령을 그대로 치면 401 이 났다.
+  local -a cargs=(
+    -s -b "$JAR" -c "$JAR" --max-time 120
+    -X POST "$APP/api/instructor/lessons/$LESSON/materials"
+    -H 'Content-Type: application/json' -H "X-XSRF-TOKEN: $csrf"
+    -d "{\"assetId\":\"$aid\"}"
     -o /dev/null -w 'HTTP %{http_code}   응답 %{time_total}초\n'
+  )
+  echo
+  show_argv curl "${cargs[@]}"
+  curl "${cargs[@]}"
 }
 
 TL_SQL="SELECT id, status, attempt_count AS 시도,
@@ -162,11 +202,9 @@ if [[ " $SECTIONS " == *" B "* ]]; then
   runc stop rabbitmq
   publish
   sleep 3
-  runq "<아웃박스 상태>" -c \
-    "SELECT id, status, attempt_count AS 시도, left(last_error, 58) AS 마지막_오류
+  runq "SELECT id, status, attempt_count AS 시도, left(last_error, 58) AS 마지막_오류
        FROM core.outbox_events ORDER BY id LIMIT 3;"
-  runq "SELECT count(*) FROM core.material_asset WHERE lesson_id='…';" -c \
-    "SELECT count(*) FROM core.material_asset WHERE lesson_id = '$LESSON';"
+  runq "SELECT count(*) FROM core.material_asset WHERE lesson_id = '$LESSON';"
   runc start rabbitmq
   echo
   echo "\$ # 폴링 주기 30초. 발행될 때까지 기다린다"
@@ -174,7 +212,7 @@ if [[ " $SECTIONS " == *" B "* ]]; then
     [ "$(pg -c "SELECT count(*) FROM core.outbox_events WHERE status='PUBLISHED';")" -gt 0 ] && break
     sleep 1
   done
-  runq "<아웃박스 타임라인>" -c "$TL_SQL"
+  runq "$TL_SQL"
   # 브로커가 실제로 받았는가. 소비자를 꺼 뒀으므로 큐에 그대로 쌓여 있다.
   runc exec -T rabbitmq rabbitmqctl list_queues name messages consumers
   # 이제 팬아웃 소비자를 켠다. 푸시는 계속 꺼 둔다. 이 구간은 푸시를 재지 않고,
@@ -185,8 +223,7 @@ if [[ " $SECTIONS " == *" B "* ]]; then
     [ "$(pg -c 'SELECT count(*) FROM core.notification;')" -ge "$TARGET_B" ] && break
     sleep 1
   done
-  runq "<수강생 수와 알림 행 수>" -c \
-    "SELECT (SELECT count(*) FROM core.enrollment
+  runq "SELECT (SELECT count(*) FROM core.enrollment
               WHERE curriculum_id='$CUR' AND status='ACTIVE') AS 수강생,
             (SELECT count(*) FROM core.notification) AS 알림_행;"
   compose rm -sf app > /dev/null 2>&1 || true
@@ -221,8 +258,7 @@ if [[ " $SECTIONS " == *" C "* ]]; then
     sleep 1
   done
   [ "$ok" -eq 1 ] || fail "재기동 뒤 300초 안에 $TARGET 건에 못 미쳤다. 이 회차는 못 쓴다"
-  runq "<수강생 수와 알림 수>" -c \
-    "SELECT (SELECT count(*) FROM core.enrollment
+  runq "SELECT (SELECT count(*) FROM core.enrollment
               WHERE curriculum_id='$CUR' AND status='ACTIVE') AS 수강생,
             (SELECT count(*) FROM core.notification) AS 알림,
             (SELECT count(*) FROM core.enrollment
