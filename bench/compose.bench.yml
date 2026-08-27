@@ -105,6 +105,9 @@ x-appbase: &appbase
       # 구간을 가르는 설정. 기본은 둘 다 켜짐(운영과 같다).
       NOTIFICATION_FANOUT_LISTENER_ENABLED: ${FANOUT_ENABLED:-true}
       NOTIFICATION_PUSH_LISTENER_ENABLED: ${PUSH_ENABLED:-true}
+      # 사건 하나를 uuid 구간 몇 개로 갈라 실을 것인가(ADR-0130, 기준은 ADR-0134).
+      # 기본 2. 아웃박스만 보이는 캡처에서는 1로 두어 사건 하나가 명령 하나로 나오게 한다.
+      NOTIFICATION_FANOUT_CHAINS: ${FANOUT_CHAINS:-2}
       # 발송 전용 노드는 알림 리스너 말고도 꺼야 할 것이 있다(ADR-0127의 역할 표).
       # 지금까지 벤치는 이 셋을 켠 채로 쟀다 — 앱 로그에 자막 consumer와 STOMP 브로커가
       # 그대로 찍혀 있었다. 노드마다 붙는 고정 비용이 그만큼 부풀려져 있었다는 뜻이다.
@@ -186,6 +189,8 @@ services:
     cpus: ${INFRA_CPUS:-8}
     mem_limit: 256m
     memswap_limit: 256m
+    # 5672와 같은 이유로 연다 — 다른 머신의 발송 노드가 붙는다.
+    ports: ["127.0.0.1:16379:6379"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 2s
@@ -202,7 +207,9 @@ services:
       RABBITMQ_DEFAULT_USER: liveclass
       RABBITMQ_DEFAULT_PASS: bench
     # 15692는 prometheus 플러그인. 관측을 다른 머신에서 돌릴 때 터널로 가져간다.
-    ports: ["127.0.0.1:15672:15672", "127.0.0.1:15692:15692"]
+    # 5672는 **다른 머신의 발송 노드**가 SSH 터널로 붙기 위해 연다(머신을 나눈 증설을
+    # 실측하려면 브로커가 이 박스 밖에서 보여야 한다). 127.0.0.1 바인딩이라 LAN에는 안 뜬다.
+    ports: ["127.0.0.1:5672:5672", "127.0.0.1:15672:15672", "127.0.0.1:15692:15692"]
     # **볼륨과 호스트명을 둘 다 고정해야 한다.** 구간을 나눠 재려면 cpuset을 바꿔 컨테이너를
     # 다시 만드는데, 그때 구간 A가 쌓아 둔 푸시 명령 200개가 사라져 구간 B가 빈손으로 도는 일이
     # 있었다(목 수신 0건).

@@ -151,7 +151,7 @@ fi
 # ── B. 커밋 후 발행 전 장애 ──────────────────────────────────────────────────
 if [[ " $SECTIONS " == *" B "* ]]; then
   echo
-  echo "══════ B. 브로커가 내려간 채로 게시   앱[$APP_CPUSET_V] ══════"
+  echo "══════ B. 브로커가 내려간 채로 게시   앱[$APP_CPUSET_V] · 체인 ${FANOUT_CHAINS:-1}개 ══════"
   compose rm -sf app > /dev/null 2>&1 || true
   reset_state
   # **팬아웃 소비자를 꺼 둔 채 시작한다.** 켜 두면 발행되자마자 비워져서 브로커가 실제로
@@ -160,7 +160,11 @@ if [[ " $SECTIONS " == *" B "* ]]; then
   #
   # 스케줄링은 켠다. 이 구간이 증명하려는 것이 릴레이의 30초 폴링인데
   # liveclass.scheduling.enabled=false면 @EnableScheduling이 통째로 꺼져 그 폴링도 안 돈다.
-  start_app "SCHEDULING_ENABLED=true" "FANOUT_ENABLED=false"
+  #
+  # **체인 1개로 둔다.** 포트폴리오에서 이 캡처가 놓이는 자리는 트랜잭션 분리 항목이고,
+  # uuid 구간 분할은 그보다 뒤에 만들어진 것이다. 기본값 2로 뜨면 사건 하나에 명령 2건이
+  # 찍혀, 아직 나오지 않은 구조를 독자가 먼저 보게 된다.
+  start_app "SCHEDULING_ENABLED=true" "FANOUT_ENABLED=false" "FANOUT_CHAINS=${FANOUT_CHAINS:-1}"
   run "docker compose stop rabbitmq" compose stop rabbitmq
   publish
   sleep 3
@@ -180,7 +184,7 @@ if [[ " $SECTIONS " == *" B "* ]]; then
   # 브로커가 실제로 받았는가. 소비자를 꺼 뒀으므로 큐에 그대로 쌓여 있다.
   run "docker compose exec rabbitmq rabbitmqctl list_queues name messages consumers" rmq_queues
   # 이제 소비자를 켠다
-  start_app "SCHEDULING_ENABLED=true"
+  start_app "SCHEDULING_ENABLED=true" "FANOUT_CHAINS=${FANOUT_CHAINS:-1}"
   TARGET_B="$(pg -c "SELECT count(*) FROM core.enrollment WHERE curriculum_id='$CUR' AND status='ACTIVE';")"
   for _ in $(seq 1 180); do
     [ "$(pg -c 'SELECT count(*) FROM core.notification;')" -ge "$TARGET_B" ] && break
