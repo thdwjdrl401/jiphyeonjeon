@@ -41,6 +41,16 @@ new_uuid() { python3 -c 'import uuid; print(uuid.uuid4())'; }
 jval() { python3 -c "import sys,json;print(json.load(sys.stdin).get('$1',''))" 2>/dev/null; }
 run() { echo; echo "\$ $1"; shift; "$@" 2>&1 | sed 's/^/  /'; }
 
+# **화면에 찍는 명령을 손으로 쓰지 않는다.** compose 는 -f 가 붙은 함수라 `docker compose ...`
+# 라고만 찍으면 독자가 그대로 쳤을 때 루트 compose 파일을 읽어 다른 서비스까지 끌고 온다
+# (실제로 recorded-stt-worker 의 OPENAI_API_KEY 를 요구하며 죽었다). 아래 두 헬퍼는 실제로
+# 넘길 argv 로 문자열을 만들므로 찍는 명령과 도는 명령이 어긋날 수 없다.
+CF="bench/compose.bench.yml"
+PSQL_CMD="docker compose -f $CF exec -T -e PGPASSWORD=bench postgres \\
+    psql -U liveclass -d liveclass"
+runc() { echo; echo "\$ docker compose -f $CF $*"; compose "$@" < /dev/null 2>&1 | sed 's/^/  /'; }
+runq() { local lbl="$1"; shift; echo; echo "\$ $PSQL_CMD -c \"$lbl\""; pgv "$@" 2>&1 | sed 's/^/  /'; }
+
 start_app() {  # 추가 env "KEY=VALUE" 를 인자로 여러 개 받는다
   # **확장 결과는 환경 대입이 아니다.** `FOO=1 ${VAR} cmd` 에서 $VAR가 "K=V"로 풀려도 bash는
   # 그것을 대입이 아니라 명령으로 본다. 그래서 export로 넘긴다.
@@ -150,24 +160,24 @@ if [[ " $SECTIONS " == *" B "* ]]; then
   # 찍혀, 아직 나오지 않은 구조를 독자가 먼저 보게 된다.
   start_app "SCHEDULING_ENABLED=true" "FANOUT_ENABLED=false" "PUSH_ENABLED=false" \
             "FANOUT_CHAINS=${FANOUT_CHAINS:-1}"
-  run "docker compose stop rabbitmq" compose stop rabbitmq
+  runc stop rabbitmq
   publish
   sleep 3
-  run "psql -c \"<아웃박스 상태>\"" pgv -c \
+  runq "<아웃박스 상태>" -c \
     "SELECT id, status, attempt_count AS 시도, left(last_error, 58) AS 마지막_오류
        FROM core.outbox_events ORDER BY id LIMIT 3;"
-  run "psql -c \"SELECT count(*) FROM core.material_asset WHERE lesson_id='…';\"" pgv -c \
+  runq "SELECT count(*) FROM core.material_asset WHERE lesson_id='…';" -c \
     "SELECT count(*) FROM core.material_asset WHERE lesson_id = '$LESSON';"
-  run "docker compose start rabbitmq" compose start rabbitmq
+  runc start rabbitmq
   echo
   echo "\$ # 폴링 주기 30초. 발행될 때까지 기다린다"
   for _ in $(seq 1 240); do
     [ "$(pg -c "SELECT count(*) FROM core.outbox_events WHERE status='PUBLISHED';")" -gt 0 ] && break
     sleep 1
   done
-  run "psql -c \"<아웃박스 타임라인>\"" pgv -c "$TL_SQL"
+  runq "<아웃박스 타임라인>" -c "$TL_SQL"
   # 브로커가 실제로 받았는가. 소비자를 꺼 뒀으므로 큐에 그대로 쌓여 있다.
-  run "docker compose exec rabbitmq rabbitmqctl list_queues name messages consumers" rmq_queues
+  runc exec -T rabbitmq rabbitmqctl list_queues name messages consumers
   # 이제 팬아웃 소비자를 켠다. 푸시는 계속 꺼 둔다. 이 구간은 푸시를 재지 않고,
   # 켜 두면 큐 목록에 푸시 소비자 수가 함께 찍혀 메시지 수로 읽힌다(열이 안 맞는다).
   start_app "SCHEDULING_ENABLED=true" "PUSH_ENABLED=false" "FANOUT_CHAINS=${FANOUT_CHAINS:-1}"
@@ -176,7 +186,7 @@ if [[ " $SECTIONS " == *" B "* ]]; then
     [ "$(pg -c 'SELECT count(*) FROM core.notification;')" -ge "$TARGET_B" ] && break
     sleep 1
   done
-  run "psql -c \"<수강생 수와 알림 행 수>\"" pgv -c \
+  runq "<수강생 수와 알림 행 수>" -c \
     "SELECT (SELECT count(*) FROM core.enrollment
               WHERE curriculum_id='$CUR' AND status='ACTIVE') AS 수강생,
             (SELECT count(*) FROM core.notification) AS 알림_행;"
@@ -198,21 +208,21 @@ if [[ " $SECTIONS " == *" C "* ]]; then
   done
   MID="$(pg -c 'SELECT count(*) FROM core.notification;')"
   echo
-  echo "\$ docker kill -s KILL \$(docker compose ps -q app)     # 알림 $MID 건 시점"
+  echo "\$ docker kill -s KILL \$(docker compose -f $CF ps -q app)   # 알림 $MID 건 시점"
   docker kill -s KILL "$(compose ps -q app)" 2>&1 | sed 's/^/  /'
-  run "docker compose ps -a app" compose ps -a app
+  runc ps -a app
   # **죽은 그 컨테이너를 그대로 다시 켠다.** start_app 은 앞에서 `rm -sf` 를 하므로 죽은 것을
   # 지우고 새로 빌드해 올린다. 그러면 복구가 같은 프로세스가 이어받은 것인지 새로 만든 것인지
   # 구분되지 않는다. start 는 SIGKILL 로 멈춘 컨테이너를 env 그대로 되살리고, 빌드 로그가 없어
   # 걸러낼 것도 없다. 찍는 명령과 실제 명령이 같아진다.
-  run "docker compose start app" compose start app
+  runc start app
   ok=0
   for _ in $(seq 1 300); do
     [ "$(pg -c 'SELECT count(*) FROM core.notification;')" -ge "$TARGET" ] && { ok=1; break; }
     sleep 1
   done
   [ "$ok" -eq 1 ] || fail "재기동 뒤 300초 안에 $TARGET 건에 못 미쳤다. 이 회차는 못 쓴다"
-  run "psql -c \"<수강생 수와 알림 수>\"" pgv -c \
+  runq "<수강생 수와 알림 수>" -c \
     "SELECT (SELECT count(*) FROM core.enrollment
               WHERE curriculum_id='$CUR' AND status='ACTIVE') AS 수강생,
             (SELECT count(*) FROM core.notification) AS 알림,
