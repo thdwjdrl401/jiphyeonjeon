@@ -133,15 +133,12 @@ if [[ " $SECTIONS " == *" A "* ]]; then
   run "psql -c \"<아웃박스 타임라인>\"" pgv -c "$TL_SQL"
   FIRST="$(curl -s "$MOCK/stats" | jval firstAtUnixMs)"
   if [ "${FIRST:-0}" -gt 0 ] 2>/dev/null; then
-    # 구간을 쪼개 보인다. 마지막 칸(첫알림행_첫푸시)이 run-timeline.sh가 origin=min(created_at)로
-    # 재는 값과 같은 구간이다. 문서의 1.40초가 그것이다.
-    run "psql -c \"<게시에서 첫 푸시까지, 구간별>\"" pgv -c \
-      "SELECT round(extract(epoch from o.published_at - o.created_at) * 1000)        AS 커밋_발행,
-              round(extract(epoch from n.first - o.published_at) * 1000)             AS 발행_첫알림행,
-              round(extract(epoch from to_timestamp($FIRST/1000.0) - n.first) * 1000) AS 첫알림행_첫푸시,
-              round(extract(epoch from to_timestamp($FIRST/1000.0) - o.created_at) * 1000) AS 게시_첫푸시
-         FROM (SELECT created_at, published_at FROM core.outbox_events ORDER BY id LIMIT 1) o,
-              (SELECT min(created_at) AS first FROM core.notification) n;"
+    # **한 칸만 찍는다.** 이 캡처가 놓이는 자리는 트랜잭션 분리 항목이고, 그 절이 주장하는 값은
+    # 게시 응답 시간과 "첫 발송이 게시 후 몇 초"뿐이다. 구간을 쪼개면 그 이름부터가 조각·팬아웃
+    # 워커를 가리키는데, 둘 다 뒤 항목에서 나온다. 구간 분해는 docs/benchmark/README.md에 있다.
+    run "psql -c \"<게시 커밋에서 첫 푸시까지>\"" pgv -c \
+      "SELECT round(extract(epoch from to_timestamp($FIRST/1000.0) - created_at) * 1000) AS 게시_첫푸시
+         FROM core.outbox_events ORDER BY id LIMIT 1;"
   else
     echo "  경고: 첫 푸시가 안 잡혔다. 이 회차는 못 쓴다"
   fi
