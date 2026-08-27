@@ -121,30 +121,14 @@ TL_SQL="SELECT id, status, attempt_count AS 시도,
 # ── A. 커밋에서 발행까지, 그리고 첫 발송 ─────────────────────────────────────
 if [[ " $SECTIONS " == *" A "* ]]; then
   echo
-  echo "══════ A. 게시 응답과 첫 발송   pg[$PG_CPUSET_V] 앱[$APP_CPUSET_V] 인프라[$INFRA_CPUSET_V] · 체인 ${FANOUT_CHAINS:-1}개 ══════"
+  echo "══════ A. 게시 응답   pg[$PG_CPUSET_V] 앱[$APP_CPUSET_V] 인프라[$INFRA_CPUSET_V] · 체인 ${FANOUT_CHAINS:-1}개 ══════"
   compose rm -sf app > /dev/null 2>&1 || true
   reset_state
-  # 체인 수는 첫 푸시 지연을 거의 안 바꾼다. 첫 푸시는 어느 한 체인의 첫 조각만 끝나면
-  # 나가고, 체인 수가 조각 크기를 바꾸지 않기 때문이다. B와 조건을 맞추고 아웃박스 표에
-  # 뒤 항목의 구조가 덜 드러나게 1로 둔다.
   start_app "FANOUT_CHAINS=${FANOUT_CHAINS:-1}"
+  # **응답 시간 하나만 찍는다.** 이 캡처가 놓이는 자리가 증명할 것은 "게시 응답이 발송을
+  # 기다리지 않는다" 하나다. 아웃박스가 커밋 뒤에 발행되는 기제는 B가 보이고, 첫 푸시가
+  # 몇 초에 나가는지는 1분 예산의 입력이라 그쪽 자리다.
   publish
-  for _ in $(seq 1 60); do
-    [ "$(curl -s "$MOCK/stats" | jval delivered)" -gt 0 ] 2>/dev/null && break
-    sleep 0.5
-  done
-  run "psql -c \"<아웃박스 타임라인>\"" pgv -c "$TL_SQL"
-  FIRST="$(curl -s "$MOCK/stats" | jval firstAtUnixMs)"
-  if [ "${FIRST:-0}" -gt 0 ] 2>/dev/null; then
-    # **한 칸만 찍는다.** 이 캡처가 놓이는 자리는 트랜잭션 분리 항목이고, 그 절이 주장하는 값은
-    # 게시 응답 시간과 "첫 발송이 게시 후 몇 초"뿐이다. 구간을 쪼개면 그 이름부터가 조각·팬아웃
-    # 워커를 가리키는데, 둘 다 뒤 항목에서 나온다. 구간 분해는 docs/benchmark/README.md에 있다.
-    run "psql -c \"<게시 커밋에서 첫 푸시까지>\"" pgv -c \
-      "SELECT round(extract(epoch from to_timestamp($FIRST/1000.0) - created_at) * 1000) AS 게시_첫푸시
-         FROM core.outbox_events ORDER BY id LIMIT 1;"
-  else
-    echo "  경고: 첫 푸시가 안 잡혔다. 이 회차는 못 쓴다"
-  fi
   compose rm -sf app > /dev/null 2>&1 || true
 fi
 
