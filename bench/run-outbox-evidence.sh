@@ -39,7 +39,6 @@ pgv() { compose exec -T -e PGPASSWORD=bench postgres psql -U liveclass -d livecl
 rmq_queues() { compose exec -T rabbitmq rabbitmqctl list_queues name messages consumers < /dev/null; }
 new_uuid() { python3 -c 'import uuid; print(uuid.uuid4())'; }
 jval() { python3 -c "import sys,json;print(json.load(sys.stdin).get('$1',''))" 2>/dev/null; }
-run() { echo; echo "\$ $1"; shift; "$@" 2>&1 | sed 's/^/  /'; }
 
 # **화면에 찍는 명령을 손으로 쓰지 않는다.** compose 는 -f 가 붙은 함수라 `docker compose ...`
 # 라고만 찍으면 독자가 그대로 쳤을 때 루트 compose 파일을 읽어 다른 서비스까지 끌고 온다
@@ -48,8 +47,8 @@ run() { echo; echo "\$ $1"; shift; "$@" 2>&1 | sed 's/^/  /'; }
 CF="bench/compose.bench.yml"
 PSQL_CMD="docker compose -f $CF exec -T -e PGPASSWORD=bench postgres \\
     psql -U liveclass -d liveclass"
-runc() { echo; echo "\$ docker compose -f $CF $*"; compose "$@" < /dev/null 2>&1 | sed 's/^/  /'; }
-runq() { local lbl="$1"; shift; echo; echo "\$ $PSQL_CMD -c \"$lbl\""; pgv "$@" 2>&1 | sed 's/^/  /'; }
+runc() { echo; echo "\$ docker compose -f $CF $*"; compose "$@" < /dev/null; }
+runq() { local lbl="$1"; shift; echo; echo "\$ $PSQL_CMD -c \"$lbl\""; pgv "$@"; }
 
 start_app() {  # 추가 env "KEY=VALUE" 를 인자로 여러 개 받는다
   # **확장 결과는 환경 대입이 아니다.** `FOO=1 ${VAR} cmd` 에서 $VAR가 "K=V"로 풀려도 bash는
@@ -119,7 +118,7 @@ publish() {  # 게시 API 호출. curl 출력을 그대로 흘린다
   echo "    $APP/api/instructor/lessons/$LESSON/materials -d '{\"assetId\":\"$aid\"}'"
   curl -s -b "$JAR" -c "$JAR" --max-time 120 -X POST "$APP/api/instructor/lessons/$LESSON/materials" \
     -H 'Content-Type: application/json' -H "X-XSRF-TOKEN: $csrf" -d "{\"assetId\":\"$aid\"}" \
-    -o /dev/null -w 'HTTP %{http_code}   응답 %{time_total}초\n' | sed 's/^/  /'
+    -o /dev/null -w 'HTTP %{http_code}   응답 %{time_total}초\n'
 }
 
 TL_SQL="SELECT id, status, attempt_count AS 시도,
@@ -209,7 +208,7 @@ if [[ " $SECTIONS " == *" C "* ]]; then
   MID="$(pg -c 'SELECT count(*) FROM core.notification;')"
   echo
   echo "\$ docker kill -s KILL \$(docker compose -f $CF ps -q app)   # 알림 $MID 건 시점"
-  docker kill -s KILL "$(compose ps -q app)" 2>&1 | sed 's/^/  /'
+  docker kill -s KILL "$(compose ps -q app)"
   runc ps -a app
   # **죽은 그 컨테이너를 그대로 다시 켠다.** start_app 은 앞에서 `rm -sf` 를 하므로 죽은 것을
   # 지우고 새로 빌드해 올린다. 그러면 복구가 같은 프로세스가 이어받은 것인지 새로 만든 것인지
