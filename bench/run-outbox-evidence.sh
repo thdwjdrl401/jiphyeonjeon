@@ -201,7 +201,12 @@ if [[ " $SECTIONS " == *" C "* ]]; then
   echo "\$ docker kill -s KILL \$(docker compose ps -q app)     # 알림 $MID 건 시점"
   docker kill -s KILL "$(compose ps -q app)" 2>&1 | sed 's/^/  /'
   run "docker compose ps -a app" compose ps -a app
+  # **다시 켜는 명령도 보여야 한다.** 죽인 것만 찍히고 재기동이 안 보이면 독자가 kill 다음에
+  # 바로 카운트를 보게 되어 그 사이가 끊긴다. compose가 낸 줄을 그대로 흘린다.
+  echo
+  echo "\$ docker compose up -d app"
   start_app "PUSH_ENABLED=false"
+  grep -E 'Container .*app.*(Created|Started|Running|Healthy)' "$OUT/app-start.log" | sed 's/^/  /'
   for _ in $(seq 1 300); do
     [ "$(pg -c 'SELECT count(*) FROM core.notification;')" -ge "$TARGET" ] && break
     sleep 1
