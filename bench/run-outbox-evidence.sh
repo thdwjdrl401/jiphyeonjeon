@@ -36,11 +36,12 @@ mkdir -p "$OUT"
 compose() { docker compose -f "$BENCH/compose.bench.yml" "$@"; }
 pg()  { compose exec -T -e PGPASSWORD=bench postgres psql -U liveclass -d liveclass -qtA "$@" < /dev/null; }
 pgv() { compose exec -T -e PGPASSWORD=bench postgres psql -U liveclass -d liveclass "$@" < /dev/null; }
+rmq_queues() { compose exec -T rabbitmq rabbitmqctl list_queues name messages consumers < /dev/null; }
 new_uuid() { python3 -c 'import uuid; print(uuid.uuid4())'; }
 jval() { python3 -c "import sys,json;print(json.load(sys.stdin).get('$1',''))" 2>/dev/null; }
 run() { echo; echo "\$ $1"; shift; "$@" 2>&1 | sed 's/^/  /'; }
 
-start_app() {  # $1 추가 env "KEY=VALUE" (선택)
+start_app() {  # 추가 env "KEY=VALUE" 를 인자로 여러 개 받는다
   # **확장 결과는 환경 대입이 아니다.** `FOO=1 ${VAR} cmd` 에서 $VAR가 "K=V"로 풀려도 bash는
   # 그것을 대입이 아니라 명령으로 본다. 그래서 export로 넘긴다.
   compose rm -sf app > /dev/null 2>&1 || true
@@ -48,7 +49,7 @@ start_app() {  # $1 추가 env "KEY=VALUE" (선택)
     export APP_HEAP=1g APP_MEM=1600m MOCK_DELAY="$DELAY" \
            APP_CPUSET="$APP_CPUSET_V" PG_CPUSET="$PG_CPUSET_V" INFRA_CPUSET="$INFRA_CPUSET_V" \
            SCHEDULING_ENABLED=false CAPTION_ENABLED=false
-    [ -n "${1:-}" ] && export "$1"
+    for kv in "$@"; do [ -n "$kv" ] && export "$kv"; done
     compose up -d --build --wait --wait-timeout 420 app
   ) > "$OUT/app-start.log" 2>&1 \
     || { echo; sed 's/^/  /' "$OUT/app-start.log" >&2; fail "앱 기동 실패. 위 로그를 보라"; }
@@ -144,9 +145,13 @@ if [[ " $SECTIONS " == *" B "* ]]; then
   echo "══════ B. 브로커가 내려간 채로 게시   앱[$APP_CPUSET_V] ══════"
   compose rm -sf app > /dev/null 2>&1 || true
   reset_state
-  # **여기서만 스케줄링을 켠다.** 이 구간이 증명하려는 것이 릴레이의 30초 폴링인데,
+  # **팬아웃 소비자를 꺼 둔 채 시작한다.** 켜 두면 발행되자마자 비워져서 브로커가 실제로
+  # 받았는지를 큐 깊이로 볼 수 없다. status='PUBLISHED'는 앱이 스스로 적은 값이라
+  # 그것만으로는 브로커 쪽 증거가 안 된다.
+  #
+  # 스케줄링은 켠다. 이 구간이 증명하려는 것이 릴레이의 30초 폴링인데
   # liveclass.scheduling.enabled=false면 @EnableScheduling이 통째로 꺼져 그 폴링도 안 돈다.
-  start_app "SCHEDULING_ENABLED=true"
+  start_app "SCHEDULING_ENABLED=true" "FANOUT_ENABLED=false"
   run "docker compose stop rabbitmq" compose stop rabbitmq
   publish
   sleep 3
@@ -163,15 +168,19 @@ if [[ " $SECTIONS " == *" B "* ]]; then
     sleep 1
   done
   run "psql -c \"<아웃박스 타임라인>\"" pgv -c "$TL_SQL"
+  # 브로커가 실제로 받았는가. 소비자를 꺼 뒀으므로 큐에 그대로 쌓여 있다.
+  run "docker compose exec rabbitmq rabbitmqctl list_queues name messages consumers" rmq_queues
+  # 이제 소비자를 켠다
+  start_app "SCHEDULING_ENABLED=true"
   TARGET_B="$(pg -c "SELECT count(*) FROM core.enrollment WHERE curriculum_id='$CUR' AND status='ACTIVE';")"
   for _ in $(seq 1 180); do
     [ "$(pg -c 'SELECT count(*) FROM core.notification;')" -ge "$TARGET_B" ] && break
     sleep 1
   done
-  run "psql -c \"<수강생 수와 알림 수>\"" pgv -c \
+  run "psql -c \"<수강생 수와 알림 행 수>\"" pgv -c \
     "SELECT (SELECT count(*) FROM core.enrollment
               WHERE curriculum_id='$CUR' AND status='ACTIVE') AS 수강생,
-            (SELECT count(*) FROM core.notification) AS 알림;"
+            (SELECT count(*) FROM core.notification) AS 알림_행;"
   compose rm -sf app > /dev/null 2>&1 || true
 fi
 
