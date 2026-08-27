@@ -81,7 +81,7 @@ reset_state() {   # B·C는 앱을 내린 뒤 부른다. 소비 중에 표를 �
   pg -c "DELETE FROM core.material_asset WHERE lesson_id='$LESSON';" > /dev/null
   pg -c "DELETE FROM core.asset WHERE bucket='bench' AND object_key LIKE 'outbox/%';" > /dev/null
   # DLQ까지 비운다. 이전 회차가 남긴 것이 큐 목록에 찍히면 유실 없음을 보이는 캡처에
-  # 설명 못 할 숫자가 같이 남는다. **결과를 확인한다** — 앞서 오류를 /dev/null로 버려
+  # 설명 못 할 숫자가 같이 남는다. **결과를 확인한다**. 앞서 오류를 /dev/null로 버려
   # purge가 안 먹은 것을 캡처에서야 알았다.
   local q left
   for q in notification.fanout notification.push notification.fanout.dlq notification.push.dlq; do
@@ -164,7 +164,8 @@ if [[ " $SECTIONS " == *" B "* ]]; then
   # **체인 1개로 둔다.** 포트폴리오에서 이 캡처가 놓이는 자리는 트랜잭션 분리 항목이고,
   # uuid 구간 분할은 그보다 뒤에 만들어진 것이다. 기본값 2로 뜨면 사건 하나에 명령 2건이
   # 찍혀, 아직 나오지 않은 구조를 독자가 먼저 보게 된다.
-  start_app "SCHEDULING_ENABLED=true" "FANOUT_ENABLED=false" "FANOUT_CHAINS=${FANOUT_CHAINS:-1}"
+  start_app "SCHEDULING_ENABLED=true" "FANOUT_ENABLED=false" "PUSH_ENABLED=false" \
+            "FANOUT_CHAINS=${FANOUT_CHAINS:-1}"
   run "docker compose stop rabbitmq" compose stop rabbitmq
   publish
   sleep 3
@@ -183,8 +184,9 @@ if [[ " $SECTIONS " == *" B "* ]]; then
   run "psql -c \"<아웃박스 타임라인>\"" pgv -c "$TL_SQL"
   # 브로커가 실제로 받았는가. 소비자를 꺼 뒀으므로 큐에 그대로 쌓여 있다.
   run "docker compose exec rabbitmq rabbitmqctl list_queues name messages consumers" rmq_queues
-  # 이제 소비자를 켠다
-  start_app "SCHEDULING_ENABLED=true" "FANOUT_CHAINS=${FANOUT_CHAINS:-1}"
+  # 이제 팬아웃 소비자를 켠다. 푸시는 계속 꺼 둔다. 이 구간은 푸시를 재지 않고,
+  # 켜 두면 큐 목록에 푸시 소비자 수가 함께 찍혀 메시지 수로 읽힌다(열이 안 맞는다).
+  start_app "SCHEDULING_ENABLED=true" "PUSH_ENABLED=false" "FANOUT_CHAINS=${FANOUT_CHAINS:-1}"
   TARGET_B="$(pg -c "SELECT count(*) FROM core.enrollment WHERE curriculum_id='$CUR' AND status='ACTIVE';")"
   for _ in $(seq 1 180); do
     [ "$(pg -c 'SELECT count(*) FROM core.notification;')" -ge "$TARGET_B" ] && break
