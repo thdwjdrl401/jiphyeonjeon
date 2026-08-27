@@ -121,10 +121,13 @@ TL_SQL="SELECT id, status, attempt_count AS 시도,
 # ── A. 커밋에서 발행까지, 그리고 첫 발송 ─────────────────────────────────────
 if [[ " $SECTIONS " == *" A "* ]]; then
   echo
-  echo "══════ A. 게시 응답과 첫 발송   pg[$PG_CPUSET_V] 앱[$APP_CPUSET_V] 인프라[$INFRA_CPUSET_V] ══════"
+  echo "══════ A. 게시 응답과 첫 발송   pg[$PG_CPUSET_V] 앱[$APP_CPUSET_V] 인프라[$INFRA_CPUSET_V] · 체인 ${FANOUT_CHAINS:-1}개 ══════"
   compose rm -sf app > /dev/null 2>&1 || true
   reset_state
-  start_app ""
+  # 체인 수는 첫 푸시 지연을 거의 안 바꾼다. 첫 푸시는 어느 한 체인의 첫 조각만 끝나면
+  # 나가고, 체인 수가 조각 크기를 바꾸지 않기 때문이다. B와 조건을 맞추고 아웃박스 표에
+  # 뒤 항목의 구조가 덜 드러나게 1로 둔다.
+  start_app "FANOUT_CHAINS=${FANOUT_CHAINS:-1}"
   publish
   for _ in $(seq 1 60); do
     [ "$(curl -s "$MOCK/stats" | jval delivered)" -gt 0 ] 2>/dev/null && break
