@@ -175,7 +175,8 @@ wait_pg_ready() {  # 크래시 복구가 끝나 접속을 받을 때까지
 
 reset_state() {
   pg -c "TRUNCATE core.notification, core.notification_content,
-                core.notification_push_progress, core.outbox_events CASCADE;" > /dev/null
+                core.notification_push_progress, core.outbox_events CASCADE;" > /dev/null 2>&1 \
+    || fail "비우기(TRUNCATE)가 실패했다. Postgres 가 성한지 보라 — 이 회차는 못 쓴다"
   pg -c "CHECKPOINT;" > /dev/null
   for qn in notification.fanout notification.push notification.fanout.dlq notification.push.dlq; do
     compose exec -T rabbitmq rabbitmqctl purge_queue "$qn" < /dev/null > "$OUT/purge.log" 2>&1 \
@@ -227,7 +228,16 @@ for SLICE in $SLICES; do
   # **비우기 전에 소비자를 내린다.** 워커가 메시지를 미확인으로 쥐고 있으면 purge 뒤에 되돌아온다.
   # 앞 회차가 OOM 이었으면 Postgres 가 아직 복구 중이라 TRUNCATE 도 못 한다. 그것부터 기다린다.
   echo; echo "── 조각 $SLICE ──"
-  compose rm -sf app > /dev/null 2>&1 || true
+  # **회차마다 postgres 를 다시 만든다.** cgroup 이 회차 사이에 공유되기 때문이다. 1.1M 이
+  # 631MB 의 WAL 을 쓰고 죽으면 그 페이지 캐시가 cgroup 에 남고, 다음 회차는 이미 가득 찬
+  # 상태에서 시작한다. 실제로 800,000 의 TRUNCATE 가 두 번째 OOM 을 맞았다.
+  # 다시 만들면 cgroup 도 oom_kill 카운터도 docker inspect 의 OOMKilled 도 새로 시작한다.
+  # 데이터는 볼륨에 남는다. 회차가 서로 독립이어야 비교표가 성립한다.
+  compose rm -sf app postgres > /dev/null 2>&1 || true
+  compose up -d --wait --wait-timeout 300 postgres > "$OUT/pg-up-$SLICE.log" 2>&1 \
+    || { tail -20 "$OUT/pg-up-$SLICE.log" >&2; fail "postgres 재생성 실패"; }
+  PG_CGROUP="$(cgroup_of postgres || true)"
+  [ -n "${PG_CGROUP:-}" ] || fail "재생성 뒤 postgres cgroup 을 못 찾았다"
   wait_pg_ready
   reset_state
   compose up -d --wait --wait-timeout 420 app > "$OUT/app-start.log" 2>&1 \
