@@ -193,21 +193,23 @@ for SLICE in $SLICES; do
   OOMK0="$(oom_kills)"; OOMK0="${OOMK0:-0}"
   trigger "$SLICE"
 
-  for ((t = 0; t < TIMEOUT_S; t++)); do
+  # **0.5초로 뜬다.** 1초 간격에서는 죽기 직전 표본(711MB)과 죽은 뒤 표본(4MB) 사이가 비어
+  # 어디까지 올라갔는지 알 수 없었다. 건수 조회는 비싸므로 8번에 한 번(약 4초)만 한다.
+  for ((t = 0; t < TIMEOUT_S * 2; t++)); do
     H="$(heap_used)"
     if [ -n "$H" ]; then [ "$H" -gt "$HEAP_MAX" ] && HEAP_MAX="$H"
     elif ! app_alive; then RESULT="앱 죽음"; break; fi
     ST="$(mem_stat)"; A="${ST%%,*}"; C="$(cat "$PG_CGROUP/memory.current" 2>/dev/null || echo 0)"
     [ "${A:-0}" -gt "$ANON_MAX" ] && ANON_MAX="$A"
     echo "$(now_ms),$ST,${C:-0},${PG_LIMIT:-0},${H:-0}" >> "$SERIES"
-    if (( t % 4 == 3 )); then
+    if (( t % 8 == 7 )); then
       if ! N="$(pg -c "SELECT count(*) FROM core.notification;" 2>/dev/null)"; then
         OOMK="$(oom_kills)"; [ "${OOMK:-0}" -gt "$OOMK0" ] && break
         N=0
       fi
       [ "${N:-0}" -ge "$USERS" ] && break
     fi
-    sleep 1
+    sleep 0.5
   done
   T1="$(now_ms)"
   OOMK1="$(oom_kills)"; OOMK1="${OOMK1:-0}"
@@ -264,39 +266,27 @@ column -s, -t < "$OUT/summary.csv"
 # ── 그래프용 표본 ────────────────────────────────────────────────────────────
 # 곡선은 화면에 못 찍으므로 초 단위로 추려 텍스트로 낸다. 이 표가 그대로 그래프의 원본이다.
 echo
-echo "══════ ③ 1초 표본 (pg 익명 메모리 · 앱 힙)   한도 $(( PG_LIMIT / 1048576 ))MB ══════"
+echo "══════ ③ 0.5초 표본   pg 한도 $(( PG_LIMIT / 1048576 ))MB ══════"
 # 캡션이 말하는 두 조건만 낸다 — 일괄과 가장 작은 조각. 중간값은 표에 이미 있다.
+# **초로 묶지 않는다.** 정수 초로 반올림해 합쳤더니 간격이 흔들릴 때 칸이 겹치거나 비어
+# 그래프에 구멍이 났다. 조건별로 실제 경과 시간을 그대로 낸다.
+# **총합(current)도 낸다.** 천장에 닿는 값은 총합이고 anon 은 그 총합을 밀어 올린 몫이다.
+# anon 만 그리면 711MB 에서 멈춰 한도선에 안 닿고, 그림이 캡션을 반박한다.
 SMALLEST="$(for x in $SLICES; do echo "$x"; done | sort -n | head -1)"
 python3 - "$OUT" "$BATCH_SLICE" "$SMALLEST" <<'PY'
 import csv, os, sys
 out, slices = sys.argv[1], sys.argv[2:]
-cols, series = [], {}
+mb = lambda v: f"{int(v)/1048576:.0f}"
 for sl in slices:
     path = os.path.join(out, f"mem-{sl}.csv")
-    if not os.path.exists(path):
-        continue
-    rows = list(csv.DictReader(open(path)))
+    rows = list(csv.DictReader(open(path))) if os.path.exists(path) else []
     if not rows:
-        continue
+        print(f"  [조각 {sl}] 표본 없음\n"); continue
     t0 = int(rows[0]["t_ms"])
-    series[sl] = {round((int(r["t_ms"]) - t0) / 1000): r for r in rows}
-    cols.append(sl)
-if not cols:
-    print("  표본이 없다"); raise SystemExit
-mb = lambda v: f"{int(v)/1048576:.0f}"
-head = ["초"] + [f"{c}_anonMB" for c in cols] + [f"{c}_힙MB" for c in cols]
-print("  " + ",".join(head))
-last = max(max(s) for s in series.values())
-for t in range(0, last + 1):
-    cells = [str(t)]
-    for c in cols:
-        r = series[c].get(t)
-        cells.append(mb(r["anon"]) if r else "")
-    for c in cols:
-        r = series[c].get(t)
-        cells.append(mb(r["heap"]) if r else "")
-    if any(x for x in cells[1:]):
-        print("  " + ",".join(cells))
+    print(f"  [조각 {sl}]  초,pg총MB,pg익명MB,앱힙MB")
+    for r in rows:
+        print(f"  {(int(r['t_ms'])-t0)/1000:.1f},{mb(r['current'])},{mb(r['anon'])},{mb(r['heap'])}")
+    print()
 PY
 echo
 echo "결과: $OUT"
