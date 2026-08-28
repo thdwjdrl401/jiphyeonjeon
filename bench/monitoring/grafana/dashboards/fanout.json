@@ -415,8 +415,8 @@
             "lineWidth": 2.5,
             "fillOpacity": 15,
             "showPoints": "never",
-            "spanNulls": true,
-            "lineInterpolation": "smooth"
+            "spanNulls": false,
+            "lineInterpolation": "linear"
           }
         },
         "overrides": [
