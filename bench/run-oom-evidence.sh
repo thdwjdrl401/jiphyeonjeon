@@ -65,6 +65,10 @@ app_metric() { curl -s --max-time 3 http://127.0.0.1:18081/actuator/prometheus 2
 heap_used() { app_metric '^jvm_memory_used_bytes[{][^}]*area="heap"'; }
 app_alive() { [ "$(compose ps -q app | xargs -r docker inspect -f '{{.State.Running}}' 2>/dev/null)" = "true" ]; }
 pg_oomkilled() { docker inspect "$(compose ps -q postgres)" --format '{{.State.OOMKilled}}' 2>/dev/null; }
+# **회차를 가르는 것은 이 카운터다.** docker inspect 의 OOMKilled 는 컨테이너를 다시 만들기 전까지
+# 켜진 채로 남는다. 첫 회차가 죽고 나면 뒤의 회차도 전부 true 로 찍혀 비교표가 무의미해진다.
+# cgroup v2 의 memory.events 는 oom_kill 을 누적해서 세므로 회차 앞뒤 차이로 판정한다.
+oom_kills() { awk '$1=="oom_kill"{print $2}' "$PG_CGROUP/memory.events" 2>/dev/null; }
 
 # 컨테이너 메모리는 호스트 cgroup 파일에서 바로 읽는다. exec 는 폴링에 얹히지만 이건 파일 하나다.
 cgroup_of() {
@@ -82,14 +86,30 @@ mem_stat() {
 }
 
 echo "▶ 인프라 기동 (pg[$PG_CPUSET_V] 앱[$APP_CPUSET_V] 인프라[$INFRA_CPUSET_V] · 힙 $APP_HEAP)"
+# **postgres 컨테이너를 다시 만들고 시작한다.** docker inspect 의 OOMKilled 는 컨테이너를 다시
+# 만들기 전까지 켜진 채로 남는다. 앞선 실행이 죽여 놨으면 ① 캡처의 OOMKilled=true 가 이번 것인지
+# 지난 것인지 구분되지 않는다. 데이터는 볼륨에 있어 사라지지 않는다.
+compose rm -sf postgres > /dev/null 2>&1 || true
 PG_CPUSET="$PG_CPUSET_V" INFRA_CPUSET="$INFRA_CPUSET_V" \
   compose up -d --wait --wait-timeout 300 postgres redis rabbitmq mock-push > "$OUT/infra.log" 2>&1 \
   || { sed 's/^/  /' "$OUT/infra.log" >&2; fail "인프라 기동 실패"; }
+[ "$(pg_oomkilled)" = "false" ] \
+  || fail "시작부터 OOMKilled=$(pg_oomkilled) 다. 플래그가 깨끗하지 않으면 ① 캡처를 못 쓴다"
 USERS="$(pg -c "SELECT count(*) FROM core.enrollment WHERE curriculum_id='$CUR' AND status='ACTIVE';")"
 [ "${USERS:-0}" -gt 0 ] || fail "시드가 없다. 수강생 0명이면 잴 것이 없다"
 PG_CGROUP="$(cgroup_of postgres || true)"
 [ -n "${PG_CGROUP:-}" ] || fail "postgres cgroup 경로를 못 찾았다. 메모리 표본 없이는 이 회차를 못 쓴다"
-echo "   수강생 $USERS · cgroup $PG_CGROUP"
+[ -n "$(oom_kills)" ] || fail "memory.events 에 oom_kill 이 없다. 회차별 OOM 판정을 못 하므로 못 쓴다"
+echo "   수강생 $USERS · cgroup $PG_CGROUP · 지금까지 oom_kill $(oom_kills)회"
+
+wait_pg_ready() {  # 크래시 복구가 끝나 접속을 받을 때까지
+  local i
+  for i in $(seq 1 180); do
+    pg -c 'SELECT 1;' > /dev/null 2>&1 && return 0
+    sleep 1
+  done
+  fail "Postgres 가 180초 안에 접속을 받지 않는다. 이 회차는 못 쓴다"
+}
 
 reset_state() {
   pg -c "TRUNCATE core.notification, core.notification_content,
@@ -100,10 +120,18 @@ reset_state() {
       || grep -q 'no queue\|not_found' "$OUT/purge.log" \
       || { sed 's/^/  /' "$OUT/purge.log" >&2; fail "$qn 비우기 실패"; }
   done
-  local left
-  left="$(compose exec -T rabbitmq rabbitmqctl list_queues -q name messages < /dev/null 2>/dev/null \
-          | awk '$1 ~ /^notification\./ && $2 > 0 {printf "%s=%s ", $1, $2}')"
-  [ -z "$left" ] || fail "비웠는데 남아 있다: $left"
+  # 소비자가 붙어 있으면 미확인 메시지가 비운 뒤에 되돌아온다. 한 번 더 보고 그래도 남으면 멈춘다.
+  local left i
+  for i in 1 2 3; do
+    left="$(compose exec -T rabbitmq rabbitmqctl list_queues -q name messages < /dev/null 2>/dev/null \
+            | awk '$1 ~ /^notification\./ && $2 > 0 {printf "%s=%s ", $1, $2}')"
+    [ -z "$left" ] && return 0
+    sleep 2
+    for qn in notification.fanout notification.push notification.fanout.dlq notification.push.dlq; do
+      compose exec -T rabbitmq rabbitmqctl purge_queue "$qn" < /dev/null > /dev/null 2>&1 || true
+    done
+  done
+  fail "비웠는데 남아 있다: $left (소비자가 살아 있지 않은지 보라)"
 }
 
 start_app() {  # $1 = 조각 크기
@@ -141,12 +169,17 @@ PG_LIMIT="$(cat "$PG_CGROUP/memory.max" 2>/dev/null || echo 0)"
 case "$PG_LIMIT" in ''|*[!0-9]*) PG_LIMIT=0 ;; esac
 
 for SLICE in $SLICES; do
-  start_app "$SLICE"
+  # **비우기 전에 소비자를 내린다.** 워커가 메시지를 미확인으로 쥐고 있으면 purge 뒤에 되돌아온다.
+  # 앞 회차가 OOM 이었으면 Postgres 가 아직 복구 중이라 TRUNCATE 도 못 한다. 그것부터 기다린다.
+  compose rm -sf app > /dev/null 2>&1 || true
+  wait_pg_ready
   reset_state
+  start_app "$SLICE"
   T_WAL0="$(pg -c "SELECT pg_current_wal_lsn();")"
   SERIES="$OUT/mem-$SLICE.csv"
   echo "t_ms,anon,file,shmem,current,limit,heap" > "$SERIES"
   HEAP_MAX=0; ANON_MAX=0; CUR_MAX=0; T0="$(now_ms)"; RESULT="완료"; N=0
+  OOMK0="$(oom_kills)"; OOMK0="${OOMK0:-0}"
   trigger "$SLICE"
 
   for ((t = 0; t < TIMEOUT_S; t++)); do
@@ -159,7 +192,7 @@ for SLICE in $SLICES; do
     echo "$(now_ms),$ST,${C:-0},${PG_LIMIT:-0},${H:-0}" >> "$SERIES"
     if (( t % 4 == 3 )); then
       if ! N="$(pg -c "SELECT count(*) FROM core.notification;" 2>/dev/null)"; then
-        [ "$(pg_oomkilled)" = "true" ] && break
+        OOMK="$(oom_kills)"; [ "${OOMK:-0}" -gt "$OOMK0" ] && break
         N=0
       fi
       [ "${N:-0}" -ge "$USERS" ] && break
@@ -167,26 +200,36 @@ for SLICE in $SLICES; do
     sleep 1
   done
   T1="$(now_ms)"
-  PGOOM="$(pg_oomkilled)"
+  OOMK1="$(oom_kills)"; OOMK1="${OOMK1:-0}"
+  if [ "$OOMK1" -gt "$OOMK0" ]; then PGOOM=true; else PGOOM=false; fi
 
-  # ── ① 일괄 한 번의 결말. 죽은 직후의 화면이라 여기서 찍어야 한다 ──────────────────
+  if [ "$PGOOM" = "true" ]; then
+    RESULT="Postgres OOMKilled → 크래시 복구 · 전량 롤백"
+    compose logs --tail 200 postgres > "$OUT/pg-slice-$SLICE.log" 2>&1 || true
+  fi
+
+  # ── ① 일괄 한 번의 결말 ──────────────────────────────────────────────────────
+  # **복구를 기다린 뒤에 물어야 한다.** 컨테이너는 안 죽었다. cgroup OOM 킬러가 거대 INSERT 를
+  # 돌리던 백엔드 프로세스를 잡았고, postmaster 가 그것을 감지해 스스로 크래시 복구를 돌린다.
+  # 그 사이에 물으면 "the database system is not yet accepting connections" 만 돌아온다.
+  # 화면의 순서가 곧 일어난 순서다 — 죽음 → 복구 로그 → 접속 회복 → 남은 알림 0건.
   if [ "$SLICE" = "$BATCH_SLICE" ]; then
     echo
     echo "══════ ① 일괄(조각 $SLICE = 수강생 전원) 한 번의 결말   pg[$PG_CPUSET_V] 앱[$APP_CPUSET_V] ══════"
     show_inspect '{{.Name}} mem_limit={{.HostConfig.Memory}} OOMKilled={{.State.OOMKilled}}'
-    logcmd="docker compose -f $CF logs --no-log-prefix postgres | grep -E 'not properly shut down|recovery in progress|redo|ready to accept' | tail -5"
+    wait_pg_ready
+    echo
+    echo "\$ # 크래시 복구가 끝나 접속을 받을 때까지 기다린다"
+    runc exec -T postgres pg_isready -U liveclass -d liveclass
+    # redo 만 걸면 체크포인트 줄의 "redo lsn=" 이 딸려 와 복구 줄을 밀어낸다.
+    logcmd="docker compose -f $CF logs --no-log-prefix postgres | grep -E 'was not properly shut down|automatic recovery in progress|redo starts at|redo done at|database system is ready to accept' | tail -4"
     echo
     echo "\$ $logcmd"
     eval "$logcmd"
     runq "SELECT count(*) AS 만든_알림 FROM core.notification;"
     runq "SELECT pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), '$T_WAL0')) AS 버려진_WAL;"
-  fi
-
-  if [ "$PGOOM" = "true" ]; then
-    RESULT="Postgres OOMKilled → 크래시 복구 · 전량 롤백"
-    compose logs --tail 200 postgres > "$OUT/pg-slice-$SLICE.log" 2>&1 || true
-    compose up -d --wait --wait-timeout 300 postgres > /dev/null 2>&1 || true
-    PG_CGROUP="$(cgroup_of postgres || true)"   # 재시작하면 cgroup 경로가 바뀐다
+  else
+    [ "$PGOOM" = "true" ] && wait_pg_ready
   fi
   N="$(pg -c "SELECT count(*) FROM core.notification;" 2>/dev/null || echo 0)"
   [ "$RESULT" = "완료" ] && [ "${N:-0}" -lt "$USERS" ] && RESULT="시간초과"
