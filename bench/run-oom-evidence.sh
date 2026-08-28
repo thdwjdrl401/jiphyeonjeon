@@ -101,7 +101,8 @@ echo "▶ 인프라 기동 (pg[$PG_CPUSET_V] 앱[$APP_CPUSET_V] 인프라[$INFRA
 # 만들기 전까지 켜진 채로 남는다. 앞선 실행이 죽여 놨으면 ① 캡처의 OOMKilled=true 가 이번 것인지
 # 지난 것인지 구분되지 않는다. 데이터는 볼륨에 있어 사라지지 않는다.
 compose rm -sf postgres app > /dev/null 2>&1 || true
-runc up -d --wait --wait-timeout 300 postgres redis rabbitmq mock-push
+compose up -d --wait --wait-timeout 300 postgres redis rabbitmq mock-push > "$OUT/infra.log" 2>&1 \
+  || { tail -20 "$OUT/infra.log" >&2; fail "인프라 기동 실패"; }
 PGC="$(docker inspect "$(compose ps -q postgres)" --format '{{.Name}}' 2>/dev/null | sed 's#^/##')"
 [ -n "$PGC" ] || fail "postgres 컨테이너 이름을 못 찾았다. 인프라가 안 떴다"
 [ "$(pg_oomkilled)" = "false" ] \
@@ -169,13 +170,12 @@ case "$PG_LIMIT" in ''|*[!0-9]*) PG_LIMIT=0 ;; esac
 for SLICE in $SLICES; do
   # **비우기 전에 소비자를 내린다.** 워커가 메시지를 미확인으로 쥐고 있으면 purge 뒤에 되돌아온다.
   # 앞 회차가 OOM 이었으면 Postgres 가 아직 복구 중이라 TRUNCATE 도 못 한다. 그것부터 기다린다.
-  echo
-  echo "── 조각 $SLICE ──"
-  runc rm -sf app
+  echo; echo "── 조각 $SLICE ──"
+  compose rm -sf app > /dev/null 2>&1 || true
   wait_pg_ready
   reset_state
-  runc up -d --wait --wait-timeout 420 app
-  app_alive || fail "앱 기동 실패. 위 출력을 보라"
+  compose up -d --wait --wait-timeout 420 app > "$OUT/app-start.log" 2>&1 \
+    || { tail -20 "$OUT/app-start.log" >&2; fail "앱 기동 실패. 위 로그를 보라"; }
   T_WAL0="$(pg -c "SELECT pg_current_wal_lsn();")"
   SERIES="$OUT/mem-$SLICE.csv"
   echo "t_ms,anon,file,shmem,current,limit,heap" > "$SERIES"
@@ -218,10 +218,7 @@ for SLICE in $SLICES; do
     echo
     echo "══════ ① 일괄(조각 $SLICE = 수강생 전원) 한 번의 결말   pg[$PG_CPUSET_V] 앱[$APP_CPUSET_V] ══════"
     show_inspect 'OOMKilled={{.State.OOMKilled}}  mem_limit={{.HostConfig.Memory}}'
-    wait_pg_ready
-    echo
-    echo "\$ # 크래시 복구가 끝나 접속을 받을 때까지 기다린다"
-    runc exec -T postgres pg_isready -U liveclass -d liveclass
+    wait_pg_ready   # 복구가 끝나야 셀 수 있다. 끝났다는 사실은 아래 로그의 마지막 줄이 말한다
     # redo 만 걸면 체크포인트 줄의 "redo lsn=" 이 딸려 와 복구 줄을 밀어낸다. starts·done 으로 좁힌다.
     # 한 줄로 두면 216자가 되어 화면에서 접힌다. 줄 이음을 넣어 두 줄로 찍고 eval 이 그대로 실행한다.
     logcmd="docker compose -f $CF logs --no-log-prefix postgres \\
