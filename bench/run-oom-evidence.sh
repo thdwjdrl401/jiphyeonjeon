@@ -162,7 +162,17 @@ trigger() {  # 갈래 1 · 조각 $1 로 넓은 팬아웃 한 건을 아웃박�
                  'PENDING','oom:$material',0,now(),now(),now());" > /dev/null
 }
 
-echo "조각,소요초,알림건수,앱힙최대MB,pg_anon최대MB,pg_current최대MB,한도MB,pgOOM,아웃박스최대행KB,WAL_MB,결과" > "$OUT/summary.csv"
+# 열마다 항목 2 의 문장 하나씩에 걸린다. 그 밖의 것은 안 적는다.
+#   조각          1회 처리 인원만 바꿔
+#   소요초        결과: 조각을 바꿔도 소요 시간이 같다
+#   알림건수      문제: 전량 롤백되어 0건 / 결과: 완료되지 않던 작업이 완료됨
+#   앱힙최대MB    원인: 앱 힙은 조건과 무관하다. 병목이 앱이 아니다
+#   pg_anon최대MB 원인: 일괄에서만 메모리가 한도까지 오른다
+#   pgOOM         문제: 한도를 넘어 강제 종료된다
+# 뺀 것 — pg_current 는 anon 을 쓰는 이유를 설명하려던 것이지 본문에 없는 이야기다.
+# 아웃박스 행 크기와 WAL 도 항목 2 가 하지 않는 주장이고, WAL 은 ① 에 이미 있다.
+# 한도는 모든 행이 같으므로 열 대신 구간 제목에 적는다.
+echo "조각,소요초,알림건수,앱힙최대MB,pg_anon최대MB,pgOOM,결과" > "$OUT/summary.csv"
 PG_LIMIT="$(cat "$PG_CGROUP/memory.max" 2>/dev/null || echo 0)"
 # 한도가 없으면 memory.max 는 "max" 라는 글자다. 그대로 두면 산술에서 깨진다.
 case "$PG_LIMIT" in ''|*[!0-9]*) PG_LIMIT=0 ;; esac
@@ -179,7 +189,7 @@ for SLICE in $SLICES; do
   T_WAL0="$(pg -c "SELECT pg_current_wal_lsn();")"
   SERIES="$OUT/mem-$SLICE.csv"
   echo "t_ms,anon,file,shmem,current,limit,heap" > "$SERIES"
-  HEAP_MAX=0; ANON_MAX=0; CUR_MAX=0; T0="$(now_ms)"; RESULT="완료"; N=0
+  HEAP_MAX=0; ANON_MAX=0; T0="$(now_ms)"; RESULT="완료"; N=0
   OOMK0="$(oom_kills)"; OOMK0="${OOMK0:-0}"
   trigger "$SLICE"
 
@@ -189,7 +199,6 @@ for SLICE in $SLICES; do
     elif ! app_alive; then RESULT="앱 죽음"; break; fi
     ST="$(mem_stat)"; A="${ST%%,*}"; C="$(cat "$PG_CGROUP/memory.current" 2>/dev/null || echo 0)"
     [ "${A:-0}" -gt "$ANON_MAX" ] && ANON_MAX="$A"
-    [ "${C:-0}" -gt "$CUR_MAX" ] && CUR_MAX="$C"
     echo "$(now_ms),$ST,${C:-0},${PG_LIMIT:-0},${H:-0}" >> "$SERIES"
     if (( t % 4 == 3 )); then
       if ! N="$(pg -c "SELECT count(*) FROM core.notification;" 2>/dev/null)"; then
@@ -233,24 +242,21 @@ for SLICE in $SLICES; do
   fi
   N="$(pg -c "SELECT count(*) FROM core.notification;" 2>/dev/null || echo 0)"
   [ "$RESULT" = "완료" ] && [ "${N:-0}" -lt "$USERS" ] && RESULT="시간초과"
-  OBOX="$(pg -c "SELECT coalesce(max(pg_column_size(payload_json)),0) FROM core.outbox_events WHERE event_type='PUSH_DELIVERY_REQUESTED';" 2>/dev/null || echo 0)"
-  WAL="$(pg -c "SELECT pg_wal_lsn_diff(pg_current_wal_lsn(), '$T_WAL0');" 2>/dev/null || echo 0)"
   compose logs --tail 400 app > "$OUT/app-slice-$SLICE.log" 2>&1 || true
   grep -q OutOfMemoryError "$OUT/app-slice-$SLICE.log" && RESULT="앱 힙 부족(OutOfMemoryError)"
 
   python3 - "$OUT/summary.csv" "$SLICE" "$RESULT" "$T0" "$T1" "${N:-0}" "$HEAP_MAX" \
-           "$ANON_MAX" "$CUR_MAX" "${PG_LIMIT:-0}" "${PGOOM:-false}" "$OBOX" "$WAL" <<'PY'
+           "$ANON_MAX" "${PGOOM:-false}" <<'PY'
 import sys
-f, sl, res, t0, t1, n, heap, anon, cur, lim, oom, obox, wal = sys.argv[1:]
+f, sl, res, t0, t1, n, heap, anon, oom = sys.argv[1:]
 mb = lambda v: f"{int(v)/1048576:.0f}"
-open(f, "a").write(f"{sl},{(int(t1)-int(t0))/1000:.2f},{n},{mb(heap)},{mb(anon)},"
-                   f"{mb(cur)},{mb(lim)},{oom},{int(obox)/1024:.0f},{int(wal)/1048576:.1f},{res}\n")
+open(f, "a").write(f"{sl},{(int(t1)-int(t0))/1000:.2f},{n},{mb(heap)},{mb(anon)},{oom},{res}\n")
 PY
 done
 
 # ── ② 조각만 바꾼 비교표 ──────────────────────────────────────────────────────
 echo
-echo "══════ ② 조각 크기만 바꾼 같은 100만 건   앱 힙 $APP_HEAP · 푸시 꺼짐 · 갈래 1 ══════"
+echo "══════ ② 조각 크기만 바꾼 같은 100만 건   pg 한도 $(( PG_LIMIT / 1048576 ))MB · 앱 힙 $APP_HEAP · 푸시 꺼짐 · 갈래 1 ══════"
 echo
 echo "\$ column -s, -t < $OUT/summary.csv"
 column -s, -t < "$OUT/summary.csv"
@@ -259,7 +265,9 @@ column -s, -t < "$OUT/summary.csv"
 # 곡선은 화면에 못 찍으므로 초 단위로 추려 텍스트로 낸다. 이 표가 그대로 그래프의 원본이다.
 echo
 echo "══════ ③ 1초 표본 (pg 익명 메모리 · 앱 힙)   한도 $(( PG_LIMIT / 1048576 ))MB ══════"
-python3 - "$OUT" $SLICES <<'PY'
+# 캡션이 말하는 두 조건만 낸다 — 일괄과 가장 작은 조각. 중간값은 표에 이미 있다.
+SMALLEST="$(for x in $SLICES; do echo "$x"; done | sort -n | head -1)"
+python3 - "$OUT" "$BATCH_SLICE" "$SMALLEST" <<'PY'
 import csv, os, sys
 out, slices = sys.argv[1], sys.argv[2:]
 cols, series = [], {}
