@@ -53,11 +53,12 @@ now_ms() { python3 -c 'import time; print(int(time.time()*1000))'; }
 
 . bench/evidence-lib.sh   # q · show_argv · runc · runq
 
-# $(...) 를 쓰는 줄은 argv 로 못 만든다. 찍는 문자열과 도는 명령이 같은 낱말을 쓰게 둔다.
+# 컨테이너 이름을 풀어 쓴다. $(docker compose ... ps -q postgres) 를 그대로 찍으면 한 줄이
+# 150자가 되어 화면에서 접히고, 정작 봐야 할 OOMKilled 가 벽 속에 묻힌다.
 show_inspect() {  # $1 = --format 값
   echo
-  echo "\$ docker inspect \$(docker compose -f $CF ps -q postgres) --format '$1'"
-  docker inspect "$(compose ps -q postgres)" --format "$1"
+  show_argv "docker inspect" "$PGC" --format "$1"
+  docker inspect "$PGC" --format "$1"
 }
 
 app_metric() { curl -s --max-time 3 http://127.0.0.1:18081/actuator/prometheus 2>/dev/null \
@@ -85,16 +86,30 @@ mem_stat() {
        END{printf "%d,%d,%d", a+0, f+0, s+0}' "$PG_CGROUP/memory.stat" 2>/dev/null || echo "0,0,0"
 }
 
+# **cpuset 을 인프라보다 먼저 내보내야 한다.** 아래에 두었더니 postgres·rabbitmq 가 코어 배분
+# 없이 떠서 측정 조건이 달라졌다. 조각 크기가 메시지로 옮겨 가면서 회차마다의 앱 설정도
+# 같아졌으므로 env 는 여기서 한 번만 내보낸다.
+# 조각 크기가 메시지로 옮겨 가면서 회차마다의 앱 설정이 같아졌다. 그래서 env 는 한 번만
+# 내보내고, 회차마다의 앱 내림·올림은 화면에 보인다(runc). 숨기면 화면이 텍스트 덩어리가 된다.
+export PG_CPUSET="$PG_CPUSET_V" INFRA_CPUSET="$INFRA_CPUSET_V" APP_CPUSET="$APP_CPUSET_V" \
+       APP_HEAP="$APP_HEAP" APP_MEM="$APP_MEM" \
+       FANOUT_ENABLED=true PUSH_ENABLED=false CAPTION_ENABLED=false \
+       FANOUT_CHAINS=1 FANOUT_CONCURRENCY=8
+
 echo "▶ 인프라 기동 (pg[$PG_CPUSET_V] 앱[$APP_CPUSET_V] 인프라[$INFRA_CPUSET_V] · 힙 $APP_HEAP)"
 # **postgres 컨테이너를 다시 만들고 시작한다.** docker inspect 의 OOMKilled 는 컨테이너를 다시
 # 만들기 전까지 켜진 채로 남는다. 앞선 실행이 죽여 놨으면 ① 캡처의 OOMKilled=true 가 이번 것인지
 # 지난 것인지 구분되지 않는다. 데이터는 볼륨에 있어 사라지지 않는다.
-compose rm -sf postgres > /dev/null 2>&1 || true
-PG_CPUSET="$PG_CPUSET_V" INFRA_CPUSET="$INFRA_CPUSET_V" \
-  compose up -d --wait --wait-timeout 300 postgres redis rabbitmq mock-push > "$OUT/infra.log" 2>&1 \
-  || { sed 's/^/  /' "$OUT/infra.log" >&2; fail "인프라 기동 실패"; }
+compose rm -sf postgres app > /dev/null 2>&1 || true
+runc up -d --wait --wait-timeout 300 postgres redis rabbitmq mock-push
+PGC="$(docker inspect "$(compose ps -q postgres)" --format '{{.Name}}' 2>/dev/null | sed 's#^/##')"
+[ -n "$PGC" ] || fail "postgres 컨테이너 이름을 못 찾았다. 인프라가 안 떴다"
 [ "$(pg_oomkilled)" = "false" ] \
   || fail "시작부터 OOMKilled=$(pg_oomkilled) 다. 플래그가 깨끗하지 않으면 ① 캡처를 못 쓴다"
+# 이미지는 한 번만 굽는다. 조각 크기가 메시지로 가면서 회차마다 다시 빌드할 이유가 없어졌다.
+# 빌드 로그는 준비 단계라 파일로 보내되, 실패하면 그 자리에서 띄우고 멈춘다.
+compose build app > "$OUT/build.log" 2>&1 \
+  || { tail -30 "$OUT/build.log" >&2; fail "앱 이미지 빌드 실패. 위 로그를 보라"; }
 USERS="$(pg -c "SELECT count(*) FROM core.enrollment WHERE curriculum_id='$CUR' AND status='ACTIVE';")"
 [ "${USERS:-0}" -gt 0 ] || fail "시드가 없다. 수강생 0명이면 잴 것이 없다"
 PG_CGROUP="$(cgroup_of postgres || true)"
@@ -134,24 +149,7 @@ reset_state() {
   fail "비웠는데 남아 있다: $left (소비자가 살아 있지 않은지 보라)"
 }
 
-start_app() {  # $1 = 조각 크기
-  compose rm -sf app > /dev/null 2>&1 || true
-  (
-    export PG_CPUSET="$PG_CPUSET_V" INFRA_CPUSET="$INFRA_CPUSET_V" APP_CPUSET="$APP_CPUSET_V" \
-           APP_HEAP="$APP_HEAP" APP_MEM="$APP_MEM" \
-           FANOUT_ENABLED=true PUSH_ENABLED=false CAPTION_ENABLED=false \
-           FANOUT_CHAINS=1 FANOUT_CONCURRENCY=8
-    # **폴링을 끄면 안 된다.** 아웃박스 행을 앱이 아니라 SQL 로 직접 넣으므로 afterCommit 이
-    # 울리지 않는다. 그 행을 발행하는 것은 30초 주기 폴링뿐이다. 껐다가는 세 회차가 전부
-    # 아무 일도 없이 시간 초과로 끝난다. compose 기본값이 true 라 건드리지 않는다.
-    #
-    # 조각 크기는 env 가 아니라 메시지가 나른다. NOTIFICATION_FANOUT_SLICE_SIZE 는
-    # compose.bench.yml 에 없어서 컨테이너까지 가지도 않는다. trigger() 가 payload 의
-    # sliceLimit 에 싣고 워커가 그 값으로 LIMIT 을 건다.
-    compose up -d --build --wait --wait-timeout 420 app
-  ) > "$OUT/app-start.log" 2>&1 \
-    || { sed 's/^/  /' "$OUT/app-start.log" >&2; fail "앱 기동 실패. 위 로그를 보라"; }
-}
+
 
 trigger() {  # 갈래 1 · 조각 $1 로 넓은 팬아웃 한 건을 아웃박스에 넣는다
   local material; material="$(new_uuid)"
@@ -171,10 +169,13 @@ case "$PG_LIMIT" in ''|*[!0-9]*) PG_LIMIT=0 ;; esac
 for SLICE in $SLICES; do
   # **비우기 전에 소비자를 내린다.** 워커가 메시지를 미확인으로 쥐고 있으면 purge 뒤에 되돌아온다.
   # 앞 회차가 OOM 이었으면 Postgres 가 아직 복구 중이라 TRUNCATE 도 못 한다. 그것부터 기다린다.
-  compose rm -sf app > /dev/null 2>&1 || true
+  echo
+  echo "── 조각 $SLICE ──"
+  runc rm -sf app
   wait_pg_ready
   reset_state
-  start_app "$SLICE"
+  runc up -d --wait --wait-timeout 420 app
+  app_alive || fail "앱 기동 실패. 위 출력을 보라"
   T_WAL0="$(pg -c "SELECT pg_current_wal_lsn();")"
   SERIES="$OUT/mem-$SLICE.csv"
   echo "t_ms,anon,file,shmem,current,limit,heap" > "$SERIES"
@@ -216,13 +217,15 @@ for SLICE in $SLICES; do
   if [ "$SLICE" = "$BATCH_SLICE" ]; then
     echo
     echo "══════ ① 일괄(조각 $SLICE = 수강생 전원) 한 번의 결말   pg[$PG_CPUSET_V] 앱[$APP_CPUSET_V] ══════"
-    show_inspect '{{.Name}} mem_limit={{.HostConfig.Memory}} OOMKilled={{.State.OOMKilled}}'
+    show_inspect 'OOMKilled={{.State.OOMKilled}}  mem_limit={{.HostConfig.Memory}}'
     wait_pg_ready
     echo
     echo "\$ # 크래시 복구가 끝나 접속을 받을 때까지 기다린다"
     runc exec -T postgres pg_isready -U liveclass -d liveclass
-    # redo 만 걸면 체크포인트 줄의 "redo lsn=" 이 딸려 와 복구 줄을 밀어낸다.
-    logcmd="docker compose -f $CF logs --no-log-prefix postgres | grep -E 'was not properly shut down|automatic recovery in progress|redo starts at|redo done at|database system is ready to accept' | tail -4"
+    # redo 만 걸면 체크포인트 줄의 "redo lsn=" 이 딸려 와 복구 줄을 밀어낸다. starts·done 으로 좁힌다.
+    # 한 줄로 두면 216자가 되어 화면에서 접힌다. 줄 이음을 넣어 두 줄로 찍고 eval 이 그대로 실행한다.
+    logcmd="docker compose -f $CF logs --no-log-prefix postgres \\
+    | grep -E 'not properly shut down|redo (starts|done)|ready to accept' | tail -4"
     echo
     echo "\$ $logcmd"
     eval "$logcmd"
