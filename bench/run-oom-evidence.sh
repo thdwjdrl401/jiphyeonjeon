@@ -57,6 +57,11 @@ BENCH="$REPO_ROOT/bench"
 # 일어날 수 있는 일이다. 캡션을 그렇게 써야 한다.
 SLICES="${SLICES:-5000 50000 200000 500000 800000 1100000}"
 BATCH_REPEAT="${BATCH_REPEAT:-3}"   # 일괄은 여러 번 돈다. OOM 이 매번 나지는 않는다
+# **회차 사이를 비워 둔다.** 앱을 내린 뒤 이만큼 아무것도 안 하고 기다린다. Prometheus 는
+# 폴링이라 회차가 붙어 있으면 어디까지가 어느 시험인지 흐리고, 지표가 바닥으로 안 내려간 채
+# 다음 회차가 시작해 앞 회차의 꼬리가 섞인다. 비워 두면 회차마다 바닥에서 올라가는 모양이
+# 나와 그림만 보고도 구분된다.
+SETTLE_S="${SETTLE_S:-30}"
 # MON=1 이면 exporter 를 확인하고 회차별 시각 범위를 남긴다.
 #
 # **Prometheus·Grafana 는 여기서 안 띄운다.** 관측 컨테이너가 측정 머신에서 같이 돌면 코어를
@@ -236,7 +241,10 @@ trigger() {  # 갈래 1 · 조각 $1 로 넓은 팬아웃 한 건을 아웃박�
 #
 # 앱힙최대는 뺀다. 톱니치는 값의 최대치라 GC 시점에 좌우돼 조각이 클수록 작게 나오기도 했다
 # (814 → 756 → 692). 힙이 조건과 무관하다는 것은 Grafana 의 JVM 힙 곡선이 보인다.
-echo "조각,처리초,알림건수,pg익명최대MB,한도대비%,pgOOM,결과" > "$OUT/summary.csv"
+# 한도대비% 는 뺀다. 익명만 한도로 나눠 63% 가 나오는데, 한도를 채운 것은 익명 + 공유 +
+# 캐시다(커널 기록: anon-rss 1,090MB + shmem-rss 373MB + file-rss 59MB = 1,522MB).
+# "63%인데 왜 죽나" 라는 질문만 부른다. 총 최고 수위를 그대로 두면 한도와 바로 대볼 수 있다.
+echo "조각,처리초,알림건수,pg총최고MB,pg익명최고MB,pgOOM,결과" > "$OUT/summary.csv"
 PG_LIMIT="$(cat "$PG_CGROUP/memory.max" 2>/dev/null || echo 0)"
 # 한도가 없으면 memory.max 는 "max" 라는 글자다. 그대로 두면 산술에서 깨진다.
 case "$PG_LIMIT" in ''|*[!0-9]*) PG_LIMIT=0 ;; esac
@@ -251,7 +259,7 @@ for sl in $SLICES; do
     RUNLIST="$RUNLIST $sl"
   fi
 done
-BATCH_DIED=0; BATCH_RAN=0
+BATCH_DIED=0; BATCH_RAN=0; LAST_DIED=0
 
 for SLICE in $RUNLIST; do
   # **비우기 전에 소비자를 내린다.** 워커가 메시지를 미확인으로 쥐고 있으면 purge 뒤에 되돌아온다.
@@ -262,12 +270,18 @@ for SLICE in $RUNLIST; do
   # 상태가 실제 조건이다. 반면 **일괄은 매번 새 컨테이너에서 돈다** — 3회를 독립 시행으로
   # 세려면 앞 시행의 OOM 잔해(페이지 캐시)가 다음 시행에 남으면 안 된다. 실제로 그것 때문에
   # 다음 회차의 TRUNCATE 가 두 번째 OOM 을 맞은 적이 있다.
-  if [ "$SLICE" = "$BATCH_SLICE" ]; then
+  # **앞 회차가 죽었을 때만 다시 만든다.** 일괄 앞에서 매번 다시 만들었더니 빈 cgroup 에서
+  # 시작해 회수할 페이지 캐시가 넉넉해졌고, OOM 재현이 3회 중 2회에서 1회로 떨어졌다.
+  # 실제 사고는 한동안 서비스하던 Postgres 에서 났다. 그 조건을 지킨다.
+  # 반면 죽고 난 뒤에는 반드시 다시 만든다 — 잔해가 남으면 다음 회차의 TRUNCATE 가
+  # 두 번째 OOM 을 맞는다.
+  if [ "${LAST_DIED:-0}" = "1" ]; then
     compose rm -sf postgres > /dev/null 2>&1 || true
     compose up -d --wait --wait-timeout 300 postgres > "$OUT/pg-up.log" 2>&1 \
       || { tail -20 "$OUT/pg-up.log" >&2; fail "postgres 재생성 실패"; }
     PG_CGROUP="$(cgroup_of postgres || true)"
     [ -n "${PG_CGROUP:-}" ] || fail "재생성 뒤 postgres cgroup 을 못 찾았다"
+    LAST_DIED=0
   fi
   wait_pg_ready
   reset_state
@@ -276,9 +290,10 @@ for SLICE in $RUNLIST; do
   T_WAL0="$(pg -c "SELECT pg_current_wal_lsn();")"
   SERIES="$OUT/mem-$SLICE.csv"
   echo "t_ms,anon,file,shmem,current,limit,heap" > "$SERIES"
-  ANON_MAX=0; T0="$(now_ms)"; RESULT="완료"; N=0
+  ANON_MAX=0; CUR_MAX=0; T0="$(now_ms)"; RESULT="완료"; N=0
   # exporter 의 최고 수위를 회차마다 되돌린다. 누적이면 그래프가 회차별 최고점이 아니라
   # 지금까지의 최고점을 그려, 작은 조각 구간에도 앞 회차의 봉우리가 남는다.
+  # 앞 회차의 여유 시간이 끝나 지표가 내려앉은 뒤라 바닥값에서 시작한다.
   [ "$MON" = "1" ] && curl -sf -X POST --max-time 5 http://127.0.0.1:18083/reset > /dev/null 2>&1
   OOMK0="$(oom_kills)"; OOMK0="${OOMK0:-0}"
   trigger "$SLICE"
@@ -291,6 +306,7 @@ for SLICE in $RUNLIST; do
     elif ! app_alive; then RESULT="앱 죽음"; break; fi
     ST="$(mem_stat)"; A="${ST%%,*}"; C="$(cat "$PG_CGROUP/memory.current" 2>/dev/null || echo 0)"
     [ "${A:-0}" -gt "$ANON_MAX" ] && ANON_MAX="$A"
+    [ "${C:-0}" -gt "$CUR_MAX" ] && CUR_MAX="$C"
     echo "$(now_ms),$ST,${C:-0},${PG_LIMIT:-0},${H:-0}" >> "$SERIES"
     if (( t % 8 == 7 )); then
       if ! N="$(pg -c "SELECT count(*) FROM core.notification;" 2>/dev/null)"; then
@@ -307,12 +323,15 @@ for SLICE in $RUNLIST; do
   # 두 번째 OOM 이 났고, 다음 회차가 그 복구와 겹쳐 돌았다(소요초 31.32, 앱힙 944 가 그 값이다).
   compose rm -sf app > /dev/null 2>&1 || true
   mark_range "$SLICE" "$T0" "$T1"
+  # 앱을 내린 뒤 비워 둔다. 지표가 바닥으로 내려가야 다음 회차가 바닥에서 올라간다.
+  [ "$MON" = "1" ] && sleep "$SETTLE_S"
   OOMK1="$(oom_kills)"; OOMK1="${OOMK1:-0}"
   if [ "$OOMK1" -gt "$OOMK0" ]; then PGOOM=true; else PGOOM=false; fi
   if [ "$SLICE" = "$BATCH_SLICE" ]; then
     BATCH_RAN=$(( BATCH_RAN + 1 ))
     [ "$PGOOM" = "true" ] && BATCH_DIED=$(( BATCH_DIED + 1 ))
   fi
+  [ "$PGOOM" = "true" ] && LAST_DIED=1
 
   if [ "$PGOOM" = "true" ]; then
     RESULT="Postgres OOMKilled → 크래시 복구 · 전량 롤백"
@@ -328,6 +347,12 @@ for SLICE in $RUNLIST; do
     echo
     echo "══════ ① 일괄(조각 $SLICE = 수강생 전원) 한 번의 결말   pg[$PG_CPUSET_V] 앱[$APP_CPUSET_V] ══════"
     show_inspect 'OOMKilled={{.State.OOMKilled}}  mem_limit={{.HostConfig.Memory}}'
+    # 시작 줄의 cgroup 은 이 회차의 것이 아닐 수 있다. 죽고 난 뒤에는 컨테이너를 다시
+    # 만들기 때문이다. 아래 커널 기록의 oom_memcg 에 이 id 가 들어 있어야 그 기록이
+    # 이 컨테이너의 것이다. 그래서 여기서 id 를 찍는다.
+    echo
+    show_argv "docker inspect" "$PGC" --format '{{.Id}}'
+    docker inspect "$PGC" --format '{{.Id}}'
 
     # **커널 로그가 빠진 고리다.** 그래프는 메모리가 한도에 닿은 것까지만 말하고, 거기서
     # 커널이 죽였는지 회수하고 버텼는지는 안 말한다(실제로 한도에 닿고도 안 죽은 회차가 있다).
@@ -366,13 +391,12 @@ for SLICE in $RUNLIST; do
   grep -q OutOfMemoryError "$OUT/app-slice-$SLICE.log" && RESULT="앱 힙 부족(OutOfMemoryError)"
 
   python3 - "$OUT/summary.csv" "$SLICE" "$RESULT" "${SPAN:-0}" "${N:-0}" \
-           "$ANON_MAX" "${PG_LIMIT:-0}" "${PGOOM:-false}" <<'PY'
+           "$CUR_MAX" "$ANON_MAX" "${PGOOM:-false}" <<'PY'
 import sys
-f, sl, res, span, n, anon, lim, oom = sys.argv[1:]
-a = int(anon) / 1048576
-pct = (int(anon) / int(lim) * 100) if int(lim) else 0
+f, sl, res, span, n, cur, anon, oom = sys.argv[1:]
+mb = lambda v: int(v) / 1048576
 span_s = f"{float(span):.2f}" if float(span) > 0 else "-"
-open(f, "a").write(f"{sl},{span_s},{n},{a:.0f},{pct:.0f}%,{oom},{res}\n")
+open(f, "a").write(f"{sl},{span_s},{n},{mb(cur):.0f},{mb(anon):.0f},{oom},{res}\n")
 PY
 done
 

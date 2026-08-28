@@ -49,8 +49,9 @@ scrape_configs:
       - targets: ['host.docker.internal:18082']
 
   - job_name: cgroup
-    # 커널 카운터(memory.events)는 누적이라 간격과 무관하지만, current·anon 은 급등이
-    # 짧아 촘촘히 가져온다. exporter 가 이미 50ms 로 훑어 최고 수위를 들고 있다.
-    scrape_interval: 1s
+    # 커널 카운터(memory.events)는 누적이라 간격과 무관하고, 최고 수위도 단조 증가라 놓칠 수
+    # 없다. 촘촘히 가져오는 이유는 순간값 곡선의 모양과 회차 경계 때문이다 — 1초면 20초짜리
+    # 회차가 20점이라 오르내림이 각지고, 회차가 바뀌는 순간이 두 점 사이로 뭉갠다.
+    scrape_interval: 500ms
     static_configs:
       - targets: ['host.docker.internal:18083']
