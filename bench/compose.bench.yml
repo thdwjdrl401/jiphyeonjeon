@@ -347,6 +347,32 @@ services:
       - --docker_only=true
     ports: ["127.0.0.1:18082:8080"]
 
+  # cAdvisor 가 이 커널(5.15)에서 못 주는 값을 낸다.
+  #   container_memory_max_usage_bytes 와 failcnt 는 cgroup v2 에서 0 으로 비어 있고,
+  #   memory.events 의 max·oom_kill 은 아예 안 내보낸다.
+  # 그리고 급등이 표본 사이로 빠진다 — 익명 메모리가 731MB 로 튄 구간은 0.5초 표본 40개 중
+  # 하나였다. 이 exporter 는 50ms 로 훑어 최고 수위를 들고, 커널 누적 카운터를 그대로 낸다.
+  # 커널 5.19 부터 있는 memory.peak 이 없는 커널에서 그 자리를 메운다.
+  cgroup-exporter:
+    image: python:3.12-alpine
+    profiles: [mon]
+    cpuset: "${INFRA_CPUSET:-1,5}"
+    mem_limit: 128m
+    command: ["python3", "/app/cgroup-exporter.py", "--port", "8080",
+              "--container", "liveclass-bench-postgres-1"]
+    volumes:
+      - ./cgroup-exporter.py:/app/cgroup-exporter.py:ro
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports: ["127.0.0.1:18083:8080"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/"]
+      interval: 10s
+      start_period: 20s
+      start_interval: 2s
+      timeout: 4s
+      retries: 15
+
   grafana:
     image: grafana/grafana:11.2.0
     profiles: [mon]
