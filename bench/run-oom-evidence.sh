@@ -55,7 +55,8 @@ BENCH="$REPO_ROOT/bench"
 # 1500MB 에 닿았고, 익명 메모리도 857~940MB 로 비슷했다. 커널이 그 지점에서 죽이느냐
 # 회수하느냐가 갈린 것이다. 재현되는 것은 "한도에 닿는다"이고, "강제 종료"는 그 지점에서
 # 일어날 수 있는 일이다. 캡션을 그렇게 써야 한다.
-SLICES="${SLICES:-5000 800000 1100000}"
+SLICES="${SLICES:-5000 50000 200000 500000 800000 1100000}"
+BATCH_REPEAT="${BATCH_REPEAT:-3}"   # 일괄은 여러 번 돈다. OOM 이 매번 나지는 않는다
 # MON=1 이면 exporter 를 확인하고 회차별 시각 범위를 남긴다.
 #
 # **Prometheus·Grafana 는 여기서 안 띄운다.** 관측 컨테이너가 측정 머신에서 같이 돌면 코어를
@@ -228,19 +229,46 @@ trigger() {  # 갈래 1 · 조각 $1 로 넓은 팬아웃 한 건을 아웃박�
 # 뺀 것 — pg_current 는 anon 을 쓰는 이유를 설명하려던 것이지 본문에 없는 이야기다.
 # 아웃박스 행 크기와 WAL 도 항목 2 가 하지 않는 주장이고, WAL 은 ① 에 이미 있다.
 # 한도는 모든 행이 같으므로 열 대신 구간 제목에 적는다.
-echo "조각,소요초,알림건수,앱힙최대MB,pg_anon최대MB,pgOOM,결과" > "$OUT/summary.csv"
+# **하네스 시계를 쓰지 않는다.** 거기에는 릴레이 폴링 대기(최대 30초)와 완료 확인 주기가
+# 섞여, 무슨 조각이든 비슷한 값이 나온다. 그 값으로 "조각을 바꿔도 시간이 같다"를 말하면
+# 폴링 대기가 같다는 말밖에 안 된다. core.notification.created_at 은 clock_timestamp() 라
+# 첫 행부터 마지막 행까지가 순수 처리 시간이다.
+#
+# 앱힙최대는 뺀다. 톱니치는 값의 최대치라 GC 시점에 좌우돼 조각이 클수록 작게 나오기도 했다
+# (814 → 756 → 692). 힙이 조건과 무관하다는 것은 Grafana 의 JVM 힙 곡선이 보인다.
+echo "조각,처리초,알림건수,pg익명최대MB,한도대비%,pgOOM,결과" > "$OUT/summary.csv"
 PG_LIMIT="$(cat "$PG_CGROUP/memory.max" 2>/dev/null || echo 0)"
 # 한도가 없으면 memory.max 는 "max" 라는 글자다. 그대로 두면 산술에서 깨진다.
 case "$PG_LIMIT" in ''|*[!0-9]*) PG_LIMIT=0 ;; esac
 
-for SLICE in $SLICES; do
+# **일괄은 여러 번 돈다.** 한 번만 보이면 재현성이 없어 보이고, 실제로 3회 중 2회 죽었다.
+# 몇 번 돌려 몇 번 죽었는지를 적는 것이 사실에 맞다.
+RUNLIST=""
+for sl in $SLICES; do
+  if [ "$sl" = "$BATCH_SLICE" ]; then
+    i=1; while [ "$i" -le "$BATCH_REPEAT" ]; do RUNLIST="$RUNLIST $sl"; i=$(( i + 1 )); done
+  else
+    RUNLIST="$RUNLIST $sl"
+  fi
+done
+BATCH_DIED=0; BATCH_RAN=0
+
+for SLICE in $RUNLIST; do
   # **비우기 전에 소비자를 내린다.** 워커가 메시지를 미확인으로 쥐고 있으면 purge 뒤에 되돌아온다.
   # 앞 회차가 OOM 이었으면 Postgres 가 아직 복구 중이라 TRUNCATE 도 못 한다. 그것부터 기다린다.
   echo; echo "── 조각 $SLICE ──"
-  # postgres 는 다시 만들지 않는다. 다시 만들면 cgroup 이 비어 회수할 캐시가 넉넉해지고,
-  # 커널이 죽이는 대신 회수해서 버틴다. 그건 실제 조건이 아니다(위 SLICES 주석 참조).
-  # 앞 회차가 데워 놓은 컨테이너를 그대로 쓴다. 일괄이 마지막이라 오염될 뒤 회차가 없다.
   compose rm -sf app > /dev/null 2>&1 || true
+  # 조각 회차끼리는 컨테이너를 그대로 쓴다. 죽지 않으므로 오염될 것이 없고, 앞 회차가 데워 둔
+  # 상태가 실제 조건이다. 반면 **일괄은 매번 새 컨테이너에서 돈다** — 3회를 독립 시행으로
+  # 세려면 앞 시행의 OOM 잔해(페이지 캐시)가 다음 시행에 남으면 안 된다. 실제로 그것 때문에
+  # 다음 회차의 TRUNCATE 가 두 번째 OOM 을 맞은 적이 있다.
+  if [ "$SLICE" = "$BATCH_SLICE" ]; then
+    compose rm -sf postgres > /dev/null 2>&1 || true
+    compose up -d --wait --wait-timeout 300 postgres > "$OUT/pg-up.log" 2>&1 \
+      || { tail -20 "$OUT/pg-up.log" >&2; fail "postgres 재생성 실패"; }
+    PG_CGROUP="$(cgroup_of postgres || true)"
+    [ -n "${PG_CGROUP:-}" ] || fail "재생성 뒤 postgres cgroup 을 못 찾았다"
+  fi
   wait_pg_ready
   reset_state
   compose up -d --wait --wait-timeout 420 app > "$OUT/app-start.log" 2>&1 \
@@ -248,7 +276,7 @@ for SLICE in $SLICES; do
   T_WAL0="$(pg -c "SELECT pg_current_wal_lsn();")"
   SERIES="$OUT/mem-$SLICE.csv"
   echo "t_ms,anon,file,shmem,current,limit,heap" > "$SERIES"
-  HEAP_MAX=0; ANON_MAX=0; T0="$(now_ms)"; RESULT="완료"; N=0
+  ANON_MAX=0; T0="$(now_ms)"; RESULT="완료"; N=0
   OOMK0="$(oom_kills)"; OOMK0="${OOMK0:-0}"
   trigger "$SLICE"
 
@@ -256,7 +284,7 @@ for SLICE in $SLICES; do
   # 어디까지 올라갔는지 알 수 없었다. 건수 조회는 비싸므로 8번에 한 번(약 4초)만 한다.
   for ((t = 0; t < TIMEOUT_S * 2; t++)); do
     H="$(heap_used)"
-    if [ -n "$H" ]; then [ "$H" -gt "$HEAP_MAX" ] && HEAP_MAX="$H"
+    if [ -n "$H" ]; then :
     elif ! app_alive; then RESULT="앱 죽음"; break; fi
     ST="$(mem_stat)"; A="${ST%%,*}"; C="$(cat "$PG_CGROUP/memory.current" 2>/dev/null || echo 0)"
     [ "${A:-0}" -gt "$ANON_MAX" ] && ANON_MAX="$A"
@@ -278,6 +306,10 @@ for SLICE in $SLICES; do
   mark_range "$SLICE" "$T0" "$T1"
   OOMK1="$(oom_kills)"; OOMK1="${OOMK1:-0}"
   if [ "$OOMK1" -gt "$OOMK0" ]; then PGOOM=true; else PGOOM=false; fi
+  if [ "$SLICE" = "$BATCH_SLICE" ]; then
+    BATCH_RAN=$(( BATCH_RAN + 1 ))
+    [ "$PGOOM" = "true" ] && BATCH_DIED=$(( BATCH_DIED + 1 ))
+  fi
 
   if [ "$PGOOM" = "true" ]; then
     RESULT="Postgres OOMKilled → 크래시 복구 · 전량 롤백"
@@ -289,7 +321,7 @@ for SLICE in $SLICES; do
   # 돌리던 백엔드 프로세스를 잡았고, postmaster 가 그것을 감지해 스스로 크래시 복구를 돌린다.
   # 그 사이에 물으면 "the database system is not yet accepting connections" 만 돌아온다.
   # 화면의 순서가 곧 일어난 순서다 — 죽음 → 복구 로그 → 접속 회복 → 남은 알림 0건.
-  if [ "$SLICE" = "$BATCH_SLICE" ]; then
+  if [ "$SLICE" = "$BATCH_SLICE" ] && [ "$PGOOM" = "true" ] && [ "$BATCH_DIED" = "1" ]; then
     echo
     echo "══════ ① 일괄(조각 $SLICE = 수강생 전원) 한 번의 결말   pg[$PG_CPUSET_V] 앱[$APP_CPUSET_V] ══════"
     show_inspect 'OOMKilled={{.State.OOMKilled}}  mem_limit={{.HostConfig.Memory}}'
@@ -323,16 +355,21 @@ for SLICE in $SLICES; do
     [ "$PGOOM" = "true" ] && wait_pg_ready
   fi
   N="$(pg -c "SELECT count(*) FROM core.notification;" 2>/dev/null || echo 0)"
+  # DB 가 찍은 시각으로 순수 처리 시간을 잰다. 행이 없으면(전량 롤백) 잴 것이 없다.
+  SPAN="$(pg -c "SELECT coalesce(round(extract(epoch from max(created_at) - min(created_at))::numeric, 2), 0)
+                   FROM core.notification;" 2>/dev/null || echo 0)"
   [ "$RESULT" = "완료" ] && [ "${N:-0}" -lt "$USERS" ] && RESULT="시간초과"
   compose logs --tail 400 app > "$OUT/app-slice-$SLICE.log" 2>&1 || true
   grep -q OutOfMemoryError "$OUT/app-slice-$SLICE.log" && RESULT="앱 힙 부족(OutOfMemoryError)"
 
-  python3 - "$OUT/summary.csv" "$SLICE" "$RESULT" "$T0" "$T1" "${N:-0}" "$HEAP_MAX" \
-           "$ANON_MAX" "${PGOOM:-false}" <<'PY'
+  python3 - "$OUT/summary.csv" "$SLICE" "$RESULT" "${SPAN:-0}" "${N:-0}" \
+           "$ANON_MAX" "${PG_LIMIT:-0}" "${PGOOM:-false}" <<'PY'
 import sys
-f, sl, res, t0, t1, n, heap, anon, oom = sys.argv[1:]
-mb = lambda v: f"{int(v)/1048576:.0f}"
-open(f, "a").write(f"{sl},{(int(t1)-int(t0))/1000:.2f},{n},{mb(heap)},{mb(anon)},{oom},{res}\n")
+f, sl, res, span, n, anon, lim, oom = sys.argv[1:]
+a = int(anon) / 1048576
+pct = (int(anon) / int(lim) * 100) if int(lim) else 0
+span_s = f"{float(span):.2f}" if float(span) > 0 else "-"
+open(f, "a").write(f"{sl},{span_s},{n},{a:.0f},{pct:.0f}%,{oom},{res}\n")
 PY
 done
 
@@ -343,6 +380,8 @@ echo "══════ ② 조각 크기만 바꾼 같은 100만 건   pg 한�
 echo
 echo "\$ column -s, -t < $OUT/summary.csv"
 column -s, -t < "$OUT/summary.csv"
+echo
+echo "  일괄(조각 $BATCH_SLICE) $BATCH_RAN회 중 $BATCH_DIED회 강제 종료"
 
 # ── 곡선은 관측 머신에서 ────────────────────────────────────────────────────
 # 여기에는 Prometheus 도 Grafana 도 없다. 회차별 시각 범위만 남기고 끝낸다.

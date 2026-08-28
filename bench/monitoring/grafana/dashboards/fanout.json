@@ -800,6 +800,216 @@
           "sort": "desc"
         }
       }
+    },
+    {
+      "id": 8,
+      "title": "Postgres cgroup 메모리 (커널 값)",
+      "description": "cAdvisor 1초 집계·2초 스크레이프. OOM 판정 기준은 working set(usage에서 회수 가능한 파일 캐시를 뺀 값)이다.",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 54,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "expr": "bench_cgroup_memory_current_bytes{container=\"liveclass-bench-postgres-1\"}",
+          "legendFormat": "현재",
+          "refId": "A"
+        },
+        {
+          "expr": "bench_cgroup_memory_peak_bytes{container=\"liveclass-bench-postgres-1\"}",
+          "legendFormat": "최고 수위 (50ms 표본)",
+          "refId": "B"
+        },
+        {
+          "expr": "bench_cgroup_memory_anon_bytes{container=\"liveclass-bench-postgres-1\"}",
+          "legendFormat": "익명",
+          "refId": "C"
+        },
+        {
+          "expr": "bench_cgroup_memory_limit_bytes{container=\"liveclass-bench-postgres-1\"}",
+          "legendFormat": "한계",
+          "refId": "D"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "lineWidth": 2.5,
+            "fillOpacity": 15,
+            "showPoints": "never",
+            "spanNulls": false,
+            "lineInterpolation": "linear"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "한계"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#C0392B"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "fill": "dash",
+                  "dash": [
+                    8,
+                    6
+                  ]
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "최고 수위 (50ms 표본)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#E67E22"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "익명"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#8E44AD"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "max",
+            "mean"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 9,
+      "title": "Postgres cgroup 메모리 이벤트 (커널 누적 카운터)",
+      "description": "cAdvisor 1초 집계·2초 스크레이프. OOM 판정 기준은 working set(usage에서 회수 가능한 파일 캐시를 뺀 값)이다.",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 62,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "expr": "bench_cgroup_memory_events_total{container=\"liveclass-bench-postgres-1\",event=\"max\"}",
+          "legendFormat": "한계 도달",
+          "refId": "A"
+        },
+        {
+          "expr": "bench_cgroup_memory_events_total{container=\"liveclass-bench-postgres-1\",event=\"oom_kill\"}",
+          "legendFormat": "OOM 킬",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 2.5,
+            "fillOpacity": 15,
+            "showPoints": "never",
+            "spanNulls": false,
+            "lineInterpolation": "linear"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "OOM 킬"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#C0392B"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 3
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "max",
+            "mean"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
     }
   ]
 }
