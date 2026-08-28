@@ -27,15 +27,20 @@ services:
   grafana:
     image: grafana/grafana:11.2.0
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      # 밖으로 낼 때는 반드시 바꾼다. 기본값 admin 인 채로 열면 아무나 관리자로 들어온다.
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASS:-admin}
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      # 프록시 뒤에서 Grafana 가 스스로의 주소를 만들 때 쓴다. 없으면 로그인·렌더 링크가 깨진다.
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://127.0.0.1:13000/}
       GF_RENDERING_SERVER_URL: http://grafana-renderer:8081/render
       GF_RENDERING_CALLBACK_URL: http://grafana:3000/
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
-    ports: ["127.0.0.1:13000:3000"]
+    # **LAN 에 연다.** 브라우저가 다른 망에 있어서 lazy 의 nginx 가 이 포트로 프록시한다.
+    # 인터넷 쪽 자물쇠는 nginx 의 basic auth 와 TLS 다. 이 포트 자체는 집 LAN 에만 뜬다.
+    ports: ["${GRAFANA_BIND:-127.0.0.1}:13000:3000"]
     depends_on: [prometheus]
 
   grafana-renderer:

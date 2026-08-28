@@ -16,7 +16,7 @@
   "panels": [
     {
       "id": 2,
-      "title": "컨테이너 CPU — 구간마다 병목이 자리를 바꾼다",
+      "title": "컨테이너 CPU",
       "description": "앞의 짧은 봉우리가 팬아웃(Postgres)이고, 뒤의 긴 고원이 발송(앱)이다. 노드를 나눈 이유가 이 그림이다.",
       "type": "timeseries",
       "gridPos": {
@@ -135,7 +135,7 @@
     },
     {
       "id": 1,
-      "title": "초당 삽입 행 수 — 알림 하나에 두 행을 쓴다",
+      "title": "초당 삽입 행 수",
       "description": "알림 행(굵은 선)과 중복 제거 등록표(파선)가 완전히 포개져 있다. 파선이 굵은 선 위를 정확히 따라가는 것이 요점이다.",
       "type": "timeseries",
       "gridPos": {
@@ -264,7 +264,7 @@
     },
     {
       "id": 3,
-      "title": "큐 깊이 — 어디가 밀리는가",
+      "title": "큐 깊이",
       "description": "팬아웃 큐는 갈래 수만큼만 떠 있다(직렬 체인). 푸시 큐는 21초 만에 다 쌓이고 발송이 12분에 걸쳐 비운다.",
       "type": "timeseries",
       "gridPos": {
@@ -383,7 +383,7 @@
     },
     {
       "id": 4,
-      "title": "JVM 힙 — 슬라이싱이 지키는 자리",
+      "title": "JVM 힙",
       "description": "수신자를 조각으로 끊어 읽으므로 힙은 수신자 수와 무관하게 평평하다. 한 번에 다 읽으면 여기가 100만 명만큼 부푼다.",
       "type": "timeseries",
       "gridPos": {
@@ -488,7 +488,7 @@
     },
     {
       "id": 5,
-      "title": "Postgres 활성 백엔드 — 동시에 도는 조각 수",
+      "title": "Postgres 활성 백엔드",
       "description": "갈래를 늘려도 물리 코어 수를 넘으면 서로 기다리기만 한다. 대기 이벤트를 세어 보니 락도 디스크도 아닌 CPU 초과 구독이었다.",
       "type": "timeseries",
       "gridPos": {
@@ -559,7 +559,7 @@
     },
     {
       "id": 6,
-      "title": "DB 커넥션 풀 — 갈래를 올릴 때 봐야 하는 값",
+      "title": "DB 커넥션 풀",
       "description": "Hikari 풀 10개를 팬아웃 소비자와 웹 요청이 나눠 쓴다. 소비자 스레드는 8개지만 동시에 도는 것은 갈래 수 근처다.",
       "type": "timeseries",
       "gridPos": {
@@ -654,7 +654,7 @@
     },
     {
       "id": 7,
-      "title": "Postgres 컨테이너 메모리 — 한계선에 닿으면 컨테이너가 종료된다",
+      "title": "Postgres 컨테이너 메모리",
       "description": "cAdvisor 1초 집계·2초 스크레이프. OOM 판정 기준은 working set(usage에서 회수 가능한 파일 캐시를 뺀 값)이다.",
       "type": "timeseries",
       "gridPos": {
