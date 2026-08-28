@@ -46,7 +46,16 @@ cd "$REPO_ROOT" || exit 1
 CF="bench/compose.bench.yml"
 BENCH="$REPO_ROOT/bench"
 
-SLICES="${SLICES:-1100000 800000 5000}"
+# **일괄을 마지막에 둔다.** OOM 이 나면 그 뒤 회차가 오염되기 때문이다. 실제로 일괄을 먼저
+# 돌린 회차에서, 죽고 남은 페이지 캐시 탓에 다음 회차의 TRUNCATE 가 두 번째 OOM 을 맞았다.
+# 맨 끝에 두면 그 뒤에 오염될 회차가 없다.
+#
+# **순서를 바꿔도 OOM 이 항상 나지는 않는다.** 오늘 세 번 돌려 두 번 죽고 한 번 살았다.
+# 같은 조건(시작에 postgres 재생성, 일괄 먼저)에서도 갈렸다. 총 메모리는 세 번 다 한도
+# 1500MB 에 닿았고, 익명 메모리도 857~940MB 로 비슷했다. 커널이 그 지점에서 죽이느냐
+# 회수하느냐가 갈린 것이다. 재현되는 것은 "한도에 닿는다"이고, "강제 종료"는 그 지점에서
+# 일어날 수 있는 일이다. 캡션을 그렇게 써야 한다.
+SLICES="${SLICES:-5000 800000 1100000}"
 # MON=1 이면 exporter 를 확인하고 회차별 시각 범위를 남긴다.
 #
 # **Prometheus·Grafana 는 여기서 안 띄운다.** 관측 컨테이너가 측정 머신에서 같이 돌면 코어를
@@ -228,16 +237,10 @@ for SLICE in $SLICES; do
   # **비우기 전에 소비자를 내린다.** 워커가 메시지를 미확인으로 쥐고 있으면 purge 뒤에 되돌아온다.
   # 앞 회차가 OOM 이었으면 Postgres 가 아직 복구 중이라 TRUNCATE 도 못 한다. 그것부터 기다린다.
   echo; echo "── 조각 $SLICE ──"
-  # **회차마다 postgres 를 다시 만든다.** cgroup 이 회차 사이에 공유되기 때문이다. 1.1M 이
-  # 631MB 의 WAL 을 쓰고 죽으면 그 페이지 캐시가 cgroup 에 남고, 다음 회차는 이미 가득 찬
-  # 상태에서 시작한다. 실제로 800,000 의 TRUNCATE 가 두 번째 OOM 을 맞았다.
-  # 다시 만들면 cgroup 도 oom_kill 카운터도 docker inspect 의 OOMKilled 도 새로 시작한다.
-  # 데이터는 볼륨에 남는다. 회차가 서로 독립이어야 비교표가 성립한다.
-  compose rm -sf app postgres > /dev/null 2>&1 || true
-  compose up -d --wait --wait-timeout 300 postgres > "$OUT/pg-up-$SLICE.log" 2>&1 \
-    || { tail -20 "$OUT/pg-up-$SLICE.log" >&2; fail "postgres 재생성 실패"; }
-  PG_CGROUP="$(cgroup_of postgres || true)"
-  [ -n "${PG_CGROUP:-}" ] || fail "재생성 뒤 postgres cgroup 을 못 찾았다"
+  # postgres 는 다시 만들지 않는다. 다시 만들면 cgroup 이 비어 회수할 캐시가 넉넉해지고,
+  # 커널이 죽이는 대신 회수해서 버틴다. 그건 실제 조건이 아니다(위 SLICES 주석 참조).
+  # 앞 회차가 데워 놓은 컨테이너를 그대로 쓴다. 일괄이 마지막이라 오염될 뒤 회차가 없다.
+  compose rm -sf app > /dev/null 2>&1 || true
   wait_pg_ready
   reset_state
   compose up -d --wait --wait-timeout 420 app > "$OUT/app-start.log" 2>&1 \
