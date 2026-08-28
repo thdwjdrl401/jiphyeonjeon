@@ -47,12 +47,16 @@ CF="bench/compose.bench.yml"
 BENCH="$REPO_ROOT/bench"
 
 SLICES="${SLICES:-1100000 800000 5000}"
-# MON=1 이면 관측을 함께 띄우고 회차마다 Grafana 주석을 남긴 뒤 패널을 PNG 로 뽑는다.
-# 관측은 측정 머신의 코어를 나눠 쓴다(실측 팬아웃 18.3→20.976초, +15%). 그래서 대표 수치는
-# MON=0 회차에서 얻고, MON=1 회차는 곡선의 모양만 본다. 두 회차의 목적이 다르다.
+# MON=1 이면 exporter 를 확인하고 회차별 시각 범위를 남긴다.
+#
+# **Prometheus·Grafana 는 여기서 안 띄운다.** 관측 컨테이너가 측정 머신에서 같이 돌면 코어를
+# 나눠 쓴다(실측 팬아웃 18.3→20.976초, +15%). 그것들은 LAN 의 다른 기기에 있고 SSH 터널로
+# 이 머신의 exporter 를 긁어 간다. 여기 남는 것은 cadvisor 와 postgres-exporter 둘뿐이다.
+# cadvisor 는 cgroup 과 /var/lib/docker 를 읽어야 해서 못 옮긴다.
+#
+# 그래서 이 스크립트는 시각 범위만 ranges.csv 에 남긴다. 주석 달기와 패널 PNG 뽑기는
+# Grafana 가 있는 관측 머신에서 bench/render-panels.sh 로 한다.
 MON="${MON:-0}"
-GRAF="http://127.0.0.1:13000"
-DASH_UID="fanout-bench"
 BATCH_SLICE="${BATCH_SLICE:-1100000}"      # 이 조각이 일괄 구조다(한 조각 = 전원)
 APP_HEAP="${APP_HEAP:-1g}"; APP_MEM="${APP_MEM:-1600m}"
 TIMEOUT_S="${TIMEOUT_S:-240}"
@@ -72,19 +76,10 @@ now_ms() { python3 -c 'import time; print(int(time.time()*1000))'; }
 
 . bench/evidence-lib.sh   # q · show_argv · runc · runq
 
-# 회차 구간을 Grafana 에 주석으로 남긴다. 곡선 두 개가 한 화면에 겹칠 때, 어느 쪽이
-# 일괄이고 어느 쪽이 조각인지 그림 안에서 읽히게 하려는 것이다.
-annotate() {  # $1=시작ms $2=끝ms $3=글
+# 회차별 시각 범위를 남긴다. 관측 머신이 이 값으로 주석을 달고 패널을 뽑는다.
+mark_range() {  # $1=조각 $2=시작ms $3=끝ms
   [ "$MON" = "1" ] || return 0
-  curl -s --max-time 10 -u admin:admin -H 'Content-Type: application/json' \
-    -d "{\"dashboardUID\":\"$DASH_UID\",\"time\":$1,\"timeEnd\":$2,\"tags\":[\"oom\"],\"text\":\"$3\"}" \
-    "$GRAF/api/annotations" > /dev/null 2>&1 || true
-}
-
-render_panel() {  # $1=패널번호 $2=파일명 $3=from(ms) $4=to(ms)
-  curl -s --max-time 180 -u admin:admin -o "$OUT/$2" \
-    "$GRAF/render/d-solo/$DASH_UID/fanout?orgId=1&panelId=$1&from=$3&to=$4&width=1500&height=520&theme=light&tz=Asia%2FSeoul" \
-    && [ -s "$OUT/$2" ] && echo "  $OUT/$2"
+  echo "$1,$2,$3" >> "$OUT/ranges.csv"
 }
 
 # 컨테이너 이름을 풀어 쓴다. $(docker compose ... ps -q postgres) 를 그대로 찍으면 한 줄이
@@ -138,19 +133,20 @@ compose rm -sf postgres app > /dev/null 2>&1 || true
 INFRA_SVC="postgres redis rabbitmq mock-push"
 PROFILE=""
 if [ "$MON" = "1" ]; then
+  # 여기 남는 것은 둘뿐이다. cadvisor 는 cgroup 을 읽어야 해서 못 옮기고, postgres-exporter 는
+  # TCP 로만 붙으면 되지만 터널 하나 줄이려고 남긴다. 둘 다 가볍다.
   PROFILE="--profile mon"
-  INFRA_SVC="$INFRA_SVC prometheus cadvisor grafana grafana-renderer postgres-exporter"
+  INFRA_SVC="$INFRA_SVC cadvisor postgres-exporter"
+  echo "조각,시작ms,끝ms" > "$OUT/ranges.csv"
 fi
 # shellcheck disable=SC2086
 compose $PROFILE up -d --wait --wait-timeout 300 $INFRA_SVC > "$OUT/infra.log" 2>&1 \
   || { tail -20 "$OUT/infra.log" >&2; fail "인프라 기동 실패"; }
 if [ "$MON" = "1" ]; then
-  for _ in $(seq 1 60); do
-    curl -sf --max-time 3 "$GRAF/api/health" > /dev/null 2>&1 && break
-    sleep 2
-  done
-  curl -sf --max-time 3 "$GRAF/api/health" > /dev/null 2>&1 \
-    || fail "Grafana 가 안 뜬다. 관측 회차는 그래프가 목적이므로 여기서 멈춘다"
+  curl -sf --max-time 5 http://127.0.0.1:18082/healthz > /dev/null 2>&1 \
+    || fail "cAdvisor 가 안 뜬다. 곡선이 목적인 회차라 여기서 멈춘다"
+  curl -sf --max-time 5 http://127.0.0.1:19187/metrics > /dev/null 2>&1 \
+    || fail "postgres-exporter 가 안 뜬다"
 fi
 T_SESSION0="$(now_ms)"
 PGC="$(docker inspect "$(compose ps -q postgres)" --format '{{.Name}}' 2>/dev/null | sed 's#^/##')"
@@ -266,7 +262,7 @@ for SLICE in $SLICES; do
   # ①을 찍는 동안 릴레이 폴링이 그 행을 다시 발행했다. 워커가 거대 INSERT 를 한 번 더 돌려
   # 두 번째 OOM 이 났고, 다음 회차가 그 복구와 겹쳐 돌았다(소요초 31.32, 앱힙 944 가 그 값이다).
   compose rm -sf app > /dev/null 2>&1 || true
-  annotate "$T0" "$T1" "조각 $SLICE"
+  mark_range "$SLICE" "$T0" "$T1"
   OOMK1="$(oom_kills)"; OOMK1="${OOMK1:-0}"
   if [ "$OOMK1" -gt "$OOMK0" ]; then PGOOM=true; else PGOOM=false; fi
 
@@ -318,21 +314,21 @@ echo
 echo "\$ column -s, -t < $OUT/summary.csv"
 column -s, -t < "$OUT/summary.csv"
 
-# ── 그래프 ──────────────────────────────────────────────────────────────────
-# 곡선은 Grafana 가 그린다. 화면에 숫자 표를 쏟아 놓는 것보다 그림 한 장이 낫고,
-# cAdvisor 는 이미 1초 간격에 동적 집계까지 꺼 둔 상태다(compose.bench.yml 주석 참조).
-# 1초 표본 CSV 는 파일로 남겨 둔다 — 그래프가 의심스러울 때 대조할 원본이다.
+# ── 곡선은 관측 머신에서 ────────────────────────────────────────────────────
+# 여기에는 Prometheus 도 Grafana 도 없다. 회차별 시각 범위만 남기고 끝낸다.
+# 관측 머신이 이 범위로 주석을 달고 패널을 PNG 로 뽑는다.
 if [ "$MON" = "1" ]; then
   T_SESSION1="$(now_ms)"
   echo
-  echo "══════ 그래프 (관측 켜짐 · 곡선 모양만 본다) ══════"
+  echo "══════ 곡선용 시각 범위 ══════"
   echo
-  echo "  대시보드   $GRAF/d/$DASH_UID?from=$T_SESSION0&to=$T_SESSION1"
-  echo "  뽑은 패널"
-  render_panel 7 panel-pg-memory.png "$T_SESSION0" "$T_SESSION1" \
-    || echo "  (패널 7 렌더 실패 — 위 대시보드 주소에서 직접 보라)"
-  render_panel 4 panel-jvm-heap.png "$T_SESSION0" "$T_SESSION1" \
-    || echo "  (패널 4 렌더 실패 — 위 대시보드 주소에서 직접 보라)"
+  column -s, -t < "$OUT/ranges.csv"
+  echo
+  echo "  세션 전체   $T_SESSION0 ~ $T_SESSION1"
+  echo
+  echo "  관측 머신에서:"
+  echo "    scp lazy:$PWD/$OUT/ranges.csv /tmp/ranges.csv"
+  echo "    bash bench/render-panels.sh /tmp/ranges.csv"
 fi
 
 echo
