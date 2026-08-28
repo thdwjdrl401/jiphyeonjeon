@@ -6,25 +6,38 @@
 # 같은 힙, 푸시는 꺼 둔다. 조각 1,100,000 이면 한 조각이 수강생 전원이라 그것이 일괄 구조다.
 # 되돌린 브랜치가 필요 없다. 조각 크기가 런타임 값이기 때문이다.
 #
-# 화면에 나가는 것은 두 덩이다. 각각 포트폴리오의 한 자리에 대응한다.
+# 그때 무슨 일이 있었는지를 알아 가던 순서를 그대로 낸다.
 #
-#   ① 일괄 한 번의 결말      메모리 한도 → OOMKilled=true → 크래시 복구 로그 → 알림 0건 → 버려진 WAL
-#                            (문제 절: "1.5GB 를 초과해 강제 종료 … 전량 롤백되어 알림 0건")
-#   ② 조각만 바꾼 비교표     pgOOM 열이 일괄에서만 true · 알림 0 vs 100만 · 앱 힙이 조각과 무관
-#                            · 소요 시간이 조각과 무관
-#                            (원인 파악: "병목이 앱이 아니라 PostgreSQL" / 결과: "분할은 완료를 위한 조치")
+#   알림이 0건이다 → 앱은 멀쩡한데 DB 연결이 끊겼다 → docker inspect 로 OOM 확인
+#   → Postgres 로그로 크래시 복구 확인 → 그럼 왜 터졌나, 메모리 곡선을 본다
+#   → 앱인가 DB인가, JVM 힙을 본다 → 조각을 줄여 다시 돌려 본다
 #
-# 그래프용 표본은 파일로 남긴다(화면에 찍지 않는다).
+# 그래서 증거가 두 종류다.
 #
-#   mem-<조각>.csv   1초마다 t_ms, anon, file, shmem, current, limit, heap
+#   로그·질의 (이 스크립트가 화면에 낸다)
+#     ① 일괄 한 번의 결말   OOMKilled=true → 크래시 복구 로그 → 알림 0건 → 버려진 WAL
+#                           (문제 절: "1.5GB 를 초과해 강제 종료 … 전량 롤백되어 알림 0건")
+#     ② 조각만 바꾼 비교표  pgOOM 이 일괄에서만 true · 알림 0 vs 100만 · 앱 힙이 조각과 무관
+#                           · 소요 시간이 조각과 무관
+#                           (결과: "분할은 속도가 아니라 완료를 위한 조치")
 #
-# **메모리는 anon 을 본다.** memory.current 는 페이지 캐시를 포함해 신호가 뒤집힌다 — 지난 측정에서
-# 50만 조각이 1,497MB 로 한도(1,536MB)에 붙었는데 죽지 않았고, 80만 조각은 1,112MB 로 더 낮았다.
-# 조각이 클수록 커져야 하는 값이 거꾸로 나온 것이다. cgroup v2 의 memory.stat 은 익명 메모리(anon)와
-# 페이지 캐시(file)를 나눠 주므로, 작업 자체가 쓴 메모리는 anon 으로 본다.
+#   곡선 (Grafana 가 그린다. MON=1 일 때)
+#     패널 7  Postgres 컨테이너 메모리   한계선에 닿는 장면
+#     패널 4  JVM 힙                     조건과 무관하게 같은 띠 안에 있음 → 병목이 앱이 아니다
 #
-# 사용법: bash bench/run-oom-evidence.sh
-#         SLICES="1100000 5000" bash bench/run-oom-evidence.sh
+# **곡선을 bash 로 그리지 않는다.** 관측 스택이 이미 있고 cAdvisor 는 1초 간격에 동적 집계까지
+# 꺼 둔 상태다(compose.bench.yml 의 cadvisor 주석). 회차마다 Grafana 주석을 남겨 두 곡선이
+# 한 화면에 겹쳐도 어느 쪽이 일괄인지 그림 안에서 읽히게 한다.
+#
+# **관측은 측정을 느리게 한다.** 실측으로 팬아웃이 18.3초에서 20.976초가 됐다(+15%). 그래서
+# 대표 수치는 MON=0 회차에서 얻고, MON=1 회차는 곡선의 모양만 본다. 두 회차의 목적이 다르다.
+#
+# 1초 표본 CSV(mem-<조각>.csv)는 화면에 안 찍고 파일로만 남긴다. 그래프가 의심스러울 때
+# 대조할 원본이다.
+#
+# 사용법
+#   bash bench/run-oom-evidence.sh              대표 수치 (관측 꺼짐)
+#   MON=1 SLICES="1100000 5000" bash bench/run-oom-evidence.sh    곡선 (관측 켜짐)
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -34,6 +47,12 @@ CF="bench/compose.bench.yml"
 BENCH="$REPO_ROOT/bench"
 
 SLICES="${SLICES:-1100000 800000 5000}"
+# MON=1 이면 관측을 함께 띄우고 회차마다 Grafana 주석을 남긴 뒤 패널을 PNG 로 뽑는다.
+# 관측은 측정 머신의 코어를 나눠 쓴다(실측 팬아웃 18.3→20.976초, +15%). 그래서 대표 수치는
+# MON=0 회차에서 얻고, MON=1 회차는 곡선의 모양만 본다. 두 회차의 목적이 다르다.
+MON="${MON:-0}"
+GRAF="http://127.0.0.1:13000"
+DASH_UID="fanout-bench"
 BATCH_SLICE="${BATCH_SLICE:-1100000}"      # 이 조각이 일괄 구조다(한 조각 = 전원)
 APP_HEAP="${APP_HEAP:-1g}"; APP_MEM="${APP_MEM:-1600m}"
 TIMEOUT_S="${TIMEOUT_S:-240}"
@@ -52,6 +71,21 @@ iso_now() { python3 -c 'import datetime; print(datetime.datetime.now().astimezon
 now_ms() { python3 -c 'import time; print(int(time.time()*1000))'; }
 
 . bench/evidence-lib.sh   # q · show_argv · runc · runq
+
+# 회차 구간을 Grafana 에 주석으로 남긴다. 곡선 두 개가 한 화면에 겹칠 때, 어느 쪽이
+# 일괄이고 어느 쪽이 조각인지 그림 안에서 읽히게 하려는 것이다.
+annotate() {  # $1=시작ms $2=끝ms $3=글
+  [ "$MON" = "1" ] || return 0
+  curl -s --max-time 10 -u admin:admin -H 'Content-Type: application/json' \
+    -d "{\"dashboardUID\":\"$DASH_UID\",\"time\":$1,\"timeEnd\":$2,\"tags\":[\"oom\"],\"text\":\"$3\"}" \
+    "$GRAF/api/annotations" > /dev/null 2>&1 || true
+}
+
+render_panel() {  # $1=패널번호 $2=파일명 $3=from(ms) $4=to(ms)
+  curl -s --max-time 180 -u admin:admin -o "$OUT/$2" \
+    "$GRAF/render/d-solo/$DASH_UID/fanout?orgId=1&panelId=$1&from=$3&to=$4&width=1500&height=520&theme=light&tz=Asia%2FSeoul" \
+    && [ -s "$OUT/$2" ] && echo "  $OUT/$2"
+}
 
 # 컨테이너 이름을 풀어 쓴다. $(docker compose ... ps -q postgres) 를 그대로 찍으면 한 줄이
 # 150자가 되어 화면에서 접히고, 정작 봐야 할 OOMKilled 가 벽 속에 묻힌다.
@@ -101,8 +135,24 @@ echo "▶ 인프라 기동 (pg[$PG_CPUSET_V] 앱[$APP_CPUSET_V] 인프라[$INFRA
 # 만들기 전까지 켜진 채로 남는다. 앞선 실행이 죽여 놨으면 ① 캡처의 OOMKilled=true 가 이번 것인지
 # 지난 것인지 구분되지 않는다. 데이터는 볼륨에 있어 사라지지 않는다.
 compose rm -sf postgres app > /dev/null 2>&1 || true
-compose up -d --wait --wait-timeout 300 postgres redis rabbitmq mock-push > "$OUT/infra.log" 2>&1 \
+INFRA_SVC="postgres redis rabbitmq mock-push"
+PROFILE=""
+if [ "$MON" = "1" ]; then
+  PROFILE="--profile mon"
+  INFRA_SVC="$INFRA_SVC prometheus cadvisor grafana grafana-renderer postgres-exporter"
+fi
+# shellcheck disable=SC2086
+compose $PROFILE up -d --wait --wait-timeout 300 $INFRA_SVC > "$OUT/infra.log" 2>&1 \
   || { tail -20 "$OUT/infra.log" >&2; fail "인프라 기동 실패"; }
+if [ "$MON" = "1" ]; then
+  for _ in $(seq 1 60); do
+    curl -sf --max-time 3 "$GRAF/api/health" > /dev/null 2>&1 && break
+    sleep 2
+  done
+  curl -sf --max-time 3 "$GRAF/api/health" > /dev/null 2>&1 \
+    || fail "Grafana 가 안 뜬다. 관측 회차는 그래프가 목적이므로 여기서 멈춘다"
+fi
+T_SESSION0="$(now_ms)"
 PGC="$(docker inspect "$(compose ps -q postgres)" --format '{{.Name}}' 2>/dev/null | sed 's#^/##')"
 [ -n "$PGC" ] || fail "postgres 컨테이너 이름을 못 찾았다. 인프라가 안 떴다"
 [ "$(pg_oomkilled)" = "false" ] \
@@ -212,6 +262,11 @@ for SLICE in $SLICES; do
     sleep 0.5
   done
   T1="$(now_ms)"
+  # **여기서 곧바로 앱을 내린다.** 1.1M 의 아웃박스 행이 PENDING 으로 남아 있는데 앱을 켜 둔 채
+  # ①을 찍는 동안 릴레이 폴링이 그 행을 다시 발행했다. 워커가 거대 INSERT 를 한 번 더 돌려
+  # 두 번째 OOM 이 났고, 다음 회차가 그 복구와 겹쳐 돌았다(소요초 31.32, 앱힙 944 가 그 값이다).
+  compose rm -sf app > /dev/null 2>&1 || true
+  annotate "$T0" "$T1" "조각 $SLICE"
   OOMK1="$(oom_kills)"; OOMK1="${OOMK1:-0}"
   if [ "$OOMK1" -gt "$OOMK0" ]; then PGOOM=true; else PGOOM=false; fi
 
@@ -238,7 +293,7 @@ for SLICE in $SLICES; do
     echo "\$ $logcmd"
     eval "$logcmd"
     runq "SELECT count(*) AS 만든_알림 FROM core.notification;"
-    runq "SELECT pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), '$T_WAL0')) AS 버려진_WAL;"
+    runq "SELECT pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), '$T_WAL0')) AS \"버려진_WAL\";"
   else
     [ "$PGOOM" = "true" ] && wait_pg_ready
   fi
@@ -263,30 +318,22 @@ echo
 echo "\$ column -s, -t < $OUT/summary.csv"
 column -s, -t < "$OUT/summary.csv"
 
-# ── 그래프용 표본 ────────────────────────────────────────────────────────────
-# 곡선은 화면에 못 찍으므로 초 단위로 추려 텍스트로 낸다. 이 표가 그대로 그래프의 원본이다.
-echo
-echo "══════ ③ 0.5초 표본   pg 한도 $(( PG_LIMIT / 1048576 ))MB ══════"
-# 캡션이 말하는 두 조건만 낸다 — 일괄과 가장 작은 조각. 중간값은 표에 이미 있다.
-# **초로 묶지 않는다.** 정수 초로 반올림해 합쳤더니 간격이 흔들릴 때 칸이 겹치거나 비어
-# 그래프에 구멍이 났다. 조건별로 실제 경과 시간을 그대로 낸다.
-# **총합(current)도 낸다.** 천장에 닿는 값은 총합이고 anon 은 그 총합을 밀어 올린 몫이다.
-# anon 만 그리면 711MB 에서 멈춰 한도선에 안 닿고, 그림이 캡션을 반박한다.
-SMALLEST="$(for x in $SLICES; do echo "$x"; done | sort -n | head -1)"
-python3 - "$OUT" "$BATCH_SLICE" "$SMALLEST" <<'PY'
-import csv, os, sys
-out, slices = sys.argv[1], sys.argv[2:]
-mb = lambda v: f"{int(v)/1048576:.0f}"
-for sl in slices:
-    path = os.path.join(out, f"mem-{sl}.csv")
-    rows = list(csv.DictReader(open(path))) if os.path.exists(path) else []
-    if not rows:
-        print(f"  [조각 {sl}] 표본 없음\n"); continue
-    t0 = int(rows[0]["t_ms"])
-    print(f"  [조각 {sl}]  초,pg총MB,pg익명MB,앱힙MB")
-    for r in rows:
-        print(f"  {(int(r['t_ms'])-t0)/1000:.1f},{mb(r['current'])},{mb(r['anon'])},{mb(r['heap'])}")
-    print()
-PY
+# ── 그래프 ──────────────────────────────────────────────────────────────────
+# 곡선은 Grafana 가 그린다. 화면에 숫자 표를 쏟아 놓는 것보다 그림 한 장이 낫고,
+# cAdvisor 는 이미 1초 간격에 동적 집계까지 꺼 둔 상태다(compose.bench.yml 주석 참조).
+# 1초 표본 CSV 는 파일로 남겨 둔다 — 그래프가 의심스러울 때 대조할 원본이다.
+if [ "$MON" = "1" ]; then
+  T_SESSION1="$(now_ms)"
+  echo
+  echo "══════ 그래프 (관측 켜짐 · 곡선 모양만 본다) ══════"
+  echo
+  echo "  대시보드   $GRAF/d/$DASH_UID?from=$T_SESSION0&to=$T_SESSION1"
+  echo "  뽑은 패널"
+  render_panel 7 panel-pg-memory.png "$T_SESSION0" "$T_SESSION1" \
+    || echo "  (패널 7 렌더 실패 — 위 대시보드 주소에서 직접 보라)"
+  render_panel 4 panel-jvm-heap.png "$T_SESSION0" "$T_SESSION1" \
+    || echo "  (패널 4 렌더 실패 — 위 대시보드 주소에서 직접 보라)"
+fi
+
 echo
 echo "결과: $OUT"
