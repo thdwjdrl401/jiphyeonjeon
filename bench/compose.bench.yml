@@ -220,9 +220,18 @@ services:
     # 고아로 남는다 — 실제로 rabbit@9d03b0c6ea6f 아래에 38.5MB가 그대로 있었다.
     hostname: rabbitmq
     volumes: ["rabbitdata:/var/lib/rabbitmq"]
+    # **rabbitmq-diagnostics 를 3초마다 돌리면 안 된다.** 그건 짧은 명령이 아니라 얼랭 런타임을
+    # 새로 부팅해 브로커에 붙었다 떠나는 것이다. 실측 1회 1,256ms — 3초 간격이면 평균 0.42코어를
+    # 아무 일 없이 태운다. lazy 는 물리 4코어이고 이 프로젝트의 결론이 코어 수 역산이다.
+    # 15692 는 prometheus 플러그인이고 인증이 없다. 그 응답이 나온다는 것은 브로커가 실제로
+    # 서빙 중이라는 뜻이라 ping 보다 약하지 않다. 실측 1회 64ms — 20배 싸다.
+    # start_interval 은 docker 25+ 기능이다(lazy 는 29.6). 기동 중에만 촘촘히 확인하므로
+    # --wait 대기 시간은 늘지 않는다.
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 3s
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:15692/metrics"]
+      interval: 10s
+      start_period: 60s
+      start_interval: 2s
       timeout: 5s
       retries: 30
 
