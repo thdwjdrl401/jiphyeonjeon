@@ -277,6 +277,9 @@ for SLICE in $RUNLIST; do
   SERIES="$OUT/mem-$SLICE.csv"
   echo "t_ms,anon,file,shmem,current,limit,heap" > "$SERIES"
   ANON_MAX=0; T0="$(now_ms)"; RESULT="완료"; N=0
+  # exporter 의 최고 수위를 회차마다 되돌린다. 누적이면 그래프가 회차별 최고점이 아니라
+  # 지금까지의 최고점을 그려, 작은 조각 구간에도 앞 회차의 봉우리가 남는다.
+  [ "$MON" = "1" ] && curl -sf -X POST --max-time 5 http://127.0.0.1:18083/reset > /dev/null 2>&1
   OOMK0="$(oom_kills)"; OOMK0="${OOMK0:-0}"
   trigger "$SLICE"
 

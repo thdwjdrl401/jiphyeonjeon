@@ -146,6 +146,12 @@ class Sampler(threading.Thread):
                     }
             time.sleep(self.interval)
 
+    def reset_peak(self):
+        with self.lock:
+            cur = (self.state or {}).get("current") or 0
+            anon = (self.state or {}).get("anon") or 0
+            self.peak_current, self.peak_anon = cur, anon
+
     def render(self):
         with self.lock:
             s = dict(self.state)
@@ -184,6 +190,15 @@ def main():
     sampler.start()
 
     class H(BaseHTTPRequestHandler):
+        def do_POST(self):
+            # 회차 시작에 부른다. 최고 수위가 누적이면 앞 회차 값을 물고 시작해
+            # 그래프가 회차별 최고점이 아니라 지금까지의 최고점을 그린다.
+            if self.path.rstrip("/") == "/reset":
+                sampler.reset_peak()
+                self.send_response(204); self.end_headers()
+            else:
+                self.send_response(404); self.end_headers()
+
         def do_GET(self):
             body = sampler.render().encode()
             self.send_response(200)

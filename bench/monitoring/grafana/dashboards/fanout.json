@@ -803,7 +803,7 @@
     },
     {
       "id": 8,
-      "title": "Postgres cgroup 메모리 (커널 값)",
+      "title": "Postgres cgroup 메모리 (커널 값 · 50ms 최고 수위)",
       "description": "cAdvisor 1초 집계·2초 스크레이프. OOM 판정 기준은 working set(usage에서 회수 가능한 파일 캐시를 뺀 값)이다.",
       "type": "timeseries",
       "gridPos": {
@@ -818,18 +818,18 @@
       },
       "targets": [
         {
-          "expr": "bench_cgroup_memory_current_bytes{container=\"liveclass-bench-postgres-1\"}",
-          "legendFormat": "현재",
+          "expr": "bench_cgroup_memory_peak_bytes{container=\"liveclass-bench-postgres-1\"}",
+          "legendFormat": "총 최고 수위",
           "refId": "A"
         },
         {
-          "expr": "bench_cgroup_memory_peak_bytes{container=\"liveclass-bench-postgres-1\"}",
-          "legendFormat": "최고 수위 (50ms 표본)",
+          "expr": "bench_cgroup_memory_anon_peak_bytes{container=\"liveclass-bench-postgres-1\"}",
+          "legendFormat": "익명 최고 수위",
           "refId": "B"
         },
         {
-          "expr": "bench_cgroup_memory_anon_bytes{container=\"liveclass-bench-postgres-1\"}",
-          "legendFormat": "익명",
+          "expr": "bench_cgroup_memory_current_bytes{container=\"liveclass-bench-postgres-1\"}",
+          "legendFormat": "총 현재",
           "refId": "C"
         },
         {
@@ -876,13 +876,17 @@
               {
                 "id": "custom.fillOpacity",
                 "value": 0
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "최고 수위 (50ms 표본)"
+              "options": "총 최고 수위"
             },
             "properties": [
               {
@@ -895,13 +899,17 @@
               {
                 "id": "custom.fillOpacity",
                 "value": 0
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 3
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "익명"
+              "options": "익명 최고 수위"
             },
             "properties": [
               {
@@ -914,6 +922,33 @@
               {
                 "id": "custom.fillOpacity",
                 "value": 0
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "총 현재"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#7F8C8D"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 8
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
               }
             ]
           }
@@ -988,8 +1023,47 @@
                 }
               },
               {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
                 "id": "custom.lineWidth",
                 "value": 3
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.axisSoftMax",
+                "value": 2
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "OOM 킬 (건)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "한계 도달"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#27AE60"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 10
+              },
+              {
+                "id": "custom.axisLabel",
+                "value": "한계 도달 (회)"
               }
             ]
           }
