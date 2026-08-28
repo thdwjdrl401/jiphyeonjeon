@@ -338,7 +338,8 @@ done
 
 # ── ② 조각만 바꾼 비교표 ──────────────────────────────────────────────────────
 echo
-echo "══════ ② 조각 크기만 바꾼 같은 100만 건   pg 한도 $(( PG_LIMIT / 1048576 ))MB · 앱 힙 $APP_HEAP · 푸시 꺼짐 · 갈래 1 ══════"
+MONLBL=""; [ "$MON" = "1" ] && MONLBL=" · 관측 켜짐"
+echo "══════ ② 조각 크기만 바꾼 같은 100만 건   pg 한도 $(( PG_LIMIT / 1048576 ))MB · 앱 힙 $APP_HEAP · 푸시 꺼짐 · 갈래 1$MONLBL ══════"
 echo
 echo "\$ column -s, -t < $OUT/summary.csv"
 column -s, -t < "$OUT/summary.csv"
