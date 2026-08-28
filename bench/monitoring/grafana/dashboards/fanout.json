@@ -669,7 +669,7 @@
       },
       "targets": [
         {
-          "expr": "max(container_memory_working_set_bytes{name=\"liveclass-bench-postgres-1\"})",
+          "expr": "max(container_memory_working_set_bytes{name=\"liveclass-bench-postgres-1\"} and on(id) (container_last_seen{name=\"liveclass-bench-postgres-1\"} > time() - 30))",
           "legendFormat": "working set",
           "refId": "A",
           "datasource": {
@@ -678,7 +678,7 @@
           }
         },
         {
-          "expr": "max(container_memory_usage_bytes{name=\"liveclass-bench-postgres-1\"})",
+          "expr": "max(container_memory_usage_bytes{name=\"liveclass-bench-postgres-1\"} and on(id) (container_last_seen{name=\"liveclass-bench-postgres-1\"} > time() - 30))",
           "legendFormat": "usage",
           "refId": "B",
           "datasource": {
