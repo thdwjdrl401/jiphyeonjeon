@@ -8,3 +8,8 @@ datasources:
     access: proxy
     url: http://prometheus:9090
     isDefault: true
+    jsonData:
+      # **최소 간격을 안 주면 Grafana 가 15초를 쓴다.** 그러면 초당 긁어 온 값이 있어도
+      # 15초마다 한 점만 그려, 20초짜리 회차가 점 두어 개짜리 선분이 된다. 급등도 완만한
+      # 사선으로 뭉개진다. cgroup 은 500ms, 나머지는 1~5초로 긁으므로 1초를 하한으로 둔다.
+      timeInterval: "1s"
