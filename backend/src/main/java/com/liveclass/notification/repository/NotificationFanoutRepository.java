@@ -238,9 +238,14 @@ public class NotificationFanoutRepository {
         this.insertMode = "row".equalsIgnoreCase(insertMode) ? "row" : "set";
     }
 
-    /** 지금 어느 길로 넣고 있는가. 워커가 로그에 적는다 — 어느 판의 값인지 그림에서 읽히게. */
-    public String insertMode() {
-        return insertMode;
+    /**
+     * 지금 어느 길로 넣고 있는가. 워커가 로그에 적는다.
+     *
+     * <p>설정값(set·row)이 아니라 <b>한국어를 돌려준다</b>. 이 값은 로그에 찍히고 그 로그가
+     * 그대로 근거 자료가 되는데, 거기에 set·row가 있으면 읽는 사람이 범례를 찾아야 한다.
+     */
+    public String insertModeLabel() {
+        return "row".equals(insertMode) ? "행마다" : "한문장";
     }
 
     /**

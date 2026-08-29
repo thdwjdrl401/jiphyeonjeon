@@ -331,7 +331,7 @@ public class NotificationFanoutWorker {
          */
         if (command.afterUserId() == null) {
             log.info("넓은 팬아웃 갈래 시작 type={} curriculum={} 조각={} 방식={}",
-                    command.type(), command.curriculumId(), limit, fanoutRepository.insertMode());
+                    command.type(), command.curriculumId(), limit, fanoutRepository.insertModeLabel());
         }
         long insertStartedNanos = System.nanoTime();
         NotificationFanoutRepository.Slice slice = NotificationTypes.LIVE_STARTING_SOON.equals(command.type())
@@ -387,11 +387,11 @@ public class NotificationFanoutWorker {
 
         log.info("넓은 팬아웃 조각 type={} curriculum={} 커서={} 훑음={} 삽입={} 삽입소요={}ms 방식={}",
                 command.type(), command.curriculumId(), command.afterUserId(),
-                slice.scanned(), slice.inserted(), insertMs, fanoutRepository.insertMode());
+                slice.scanned(), slice.inserted(), insertMs, fanoutRepository.insertModeLabel());
         if (!slice.mayHaveMore(limit)) {
             log.info("넓은 팬아웃 갈래 끝 type={} curriculum={} 마지막커서={} 방식={}",
                     command.type(), command.curriculumId(), slice.lastUserId(),
-                    fanoutRepository.insertMode());
+                    fanoutRepository.insertModeLabel());
         }
     }
 
