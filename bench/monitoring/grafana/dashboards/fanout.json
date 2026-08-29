@@ -103,7 +103,7 @@
       "id": 2,
       "title": "컨테이너 메모리 (한계 대비)",
       "type": "timeseries",
-      "description": "working set 기준. 정확한 값은 Postgres cgroup 패널을 본다.",
+      "description": "working set 기준. 컨테이너를 다시 만들면 id 가 바뀌므로 이름으로 묶는다. 정확한 값은 Postgres cgroup 패널을 본다.",
       "gridPos": {
         "x": 12,
         "y": 1,
@@ -116,7 +116,7 @@
       },
       "targets": [
         {
-          "expr": "(container_memory_working_set_bytes{name=~\"liveclass-bench-.*\"} and on(id) (container_last_seen{name=~\"liveclass-bench-.*\"} > time() - 30)) / on(id) group_left container_spec_memory_limit_bytes{name=~\"liveclass-bench-.*\"} * 100",
+          "expr": "max by (name) ((container_memory_working_set_bytes{name=~\"liveclass-bench-.*\"} and on(id) (container_last_seen{name=~\"liveclass-bench-.*\"} > time() - 30)) / on(id) group_left container_spec_memory_limit_bytes{name=~\"liveclass-bench-.*\"} * 100)",
           "legendFormat": "{{name}}",
           "refId": "A",
           "datasource": {
