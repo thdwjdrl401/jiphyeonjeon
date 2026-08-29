@@ -54,4 +54,4 @@ scrape_configs:
     # 회차가 20점이라 오르내림이 각지고, 회차가 바뀌는 순간이 두 점 사이로 뭉갠다.
     scrape_interval: 500ms
     static_configs:
-      - targets: ['bench-host:18083']
+      - targets: ['bench-host:18085']

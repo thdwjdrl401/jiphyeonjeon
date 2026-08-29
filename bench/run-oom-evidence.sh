@@ -294,7 +294,7 @@ for SLICE in $RUNLIST; do
   # exporter 의 최고 수위를 회차마다 되돌린다. 누적이면 그래프가 회차별 최고점이 아니라
   # 지금까지의 최고점을 그려, 작은 조각 구간에도 앞 회차의 봉우리가 남는다.
   # 앞 회차의 여유 시간이 끝나 지표가 내려앉은 뒤라 바닥값에서 시작한다.
-  [ "$MON" = "1" ] && curl -sf -X POST --max-time 5 http://127.0.0.1:18083/reset > /dev/null 2>&1
+  [ "$MON" = "1" ] && curl -sf -X POST --max-time 5 http://127.0.0.1:18085/reset > /dev/null 2>&1
   OOMK0="$(oom_kills)"; OOMK0="${OOMK0:-0}"
   trigger "$SLICE"
 

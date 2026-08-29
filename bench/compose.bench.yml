@@ -278,7 +278,7 @@ services:
     cpus: ${APP_CPUS:-8}
     # 인스턴스마다 포트가 달라야 한다. 앵커에 두면 셋이 같은 포트를 잡아 두 번째부터
     # "port is already allocated"로 기동에 실패한다 — 확장 측정이 시작도 못 한다.
-    ports: ["${METRICS_BIND:-127.0.0.1}:18083:8080"]
+    ports: ["127.0.0.1:18083:8080"]
     profiles: ["scale2", "scale3"]
 
   app3:
@@ -356,6 +356,8 @@ services:
   # 그리고 급등이 표본 사이로 빠진다 — 익명 메모리가 731MB 로 튄 구간은 0.5초 표본 40개 중
   # 하나였다. 이 exporter 는 50ms 로 훑어 최고 수위를 들고, 커널 누적 카운터를 그대로 낸다.
   # 커널 5.19 부터 있는 memory.peak 이 없는 커널에서 그 자리를 메운다.
+  # 포트 18085. 18083 은 app2, 18084 는 app3 이 쓴다 — mon 과 scale2 를 같이
+  # 띄우면 충돌한다.
   cgroup-exporter:
     image: python:3.12-alpine
     profiles: [mon]
@@ -367,7 +369,7 @@ services:
       - ./cgroup-exporter.py:/app/cgroup-exporter.py:ro
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    ports: ["127.0.0.1:18083:8080"]
+    ports: ["${METRICS_BIND:-127.0.0.1}:18085:8080"]
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/"]
       interval: 10s
