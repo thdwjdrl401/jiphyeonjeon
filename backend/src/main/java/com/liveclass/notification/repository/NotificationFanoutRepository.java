@@ -1,5 +1,6 @@
 package com.liveclass.notification.repository;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -160,10 +161,37 @@ public class NotificationFanoutRepository {
                    (SELECT s.user_id FROM slice s ORDER BY s.user_id DESC LIMIT 1) AS last_user_id
             """;
 
-    private final NamedParameterJdbcTemplate jdbc;
+    /*
+     * **벤치 전용 스위치.** 조각을 수강생 전원으로 두면 Postgres 익명 메모리가 1,080MB 까지
+     * 오른다. 그 메모리를 이 집계가 먹은 것인지 가르려면 그것만 뺀 판이 필요하다 — uuid
+     * 100만 개는 16MB 남짓인데 실측은 수신자당 1,000바이트라, 코드만 읽어서는 지목할 수 없다.
+     *
+     * 끄면 실시간 신호(announceAll)와 푸시 적재가 빈 목록을 받는다. 그래서 기본은 켜짐이고,
+     * 끄는 것은 이 비교 측정뿐이다.
+     */
+    private static final String AGG = "(SELECT array_agg(recipient_id) FROM inserted)";
+    private static final String NO_AGG = "NULL::uuid[]";
+    private static final String INSERT_SLICE_NO_RECIPIENTS = INSERT_SLICE.replace(AGG, NO_AGG);
+    private static final String INSERT_STARTING_SOON_SLICE_NO_RECIPIENTS =
+            INSERT_STARTING_SOON_SLICE.replace(AGG, NO_AGG);
 
-    public NotificationFanoutRepository(NamedParameterJdbcTemplate jdbc) {
+    static {
+        // 문자열 치환이라 SQL 을 손대면 조용히 안 먹는다. 그러면 두 판이 같은 질의를 돌리고
+        // 비교표에 차이 없음이 찍힌다. 기동 때 걸리게 둔다.
+        if (INSERT_SLICE_NO_RECIPIENTS.equals(INSERT_SLICE)
+                || INSERT_STARTING_SOON_SLICE_NO_RECIPIENTS.equals(INSERT_STARTING_SOON_SLICE)) {
+            throw new IllegalStateException("array_agg 자리를 못 찾았다. return-recipients 스위치가 아무 일도 안 한다");
+        }
+    }
+
+    private final NamedParameterJdbcTemplate jdbc;
+    private final boolean returnRecipients;
+
+    public NotificationFanoutRepository(
+            NamedParameterJdbcTemplate jdbc,
+            @Value("${notification.fanout.return-recipients:true}") boolean returnRecipients) {
         this.jdbc = jdbc;
+        this.returnRecipients = returnRecipients;
     }
 
     /**
@@ -200,7 +228,8 @@ public class NotificationFanoutRepository {
                  */
                 .addValue("previousStartsAt", previousStartsAt == null ? null : previousStartsAt.toString())
                 .addValue("nextStartsAt", nextStartsAt == null ? null : nextStartsAt.toString());
-        return jdbc.queryForObject(INSERT_SLICE, params, NotificationFanoutRepository::readSlice);
+        return jdbc.queryForObject(returnRecipients ? INSERT_SLICE : INSERT_SLICE_NO_RECIPIENTS,
+                params, NotificationFanoutRepository::readSlice);
     }
 
     /**
@@ -239,7 +268,9 @@ public class NotificationFanoutRepository {
                 .addValue("contentId", contentIdOf(dedupePrefix).toString())
                 .addValue("previousStartsAt", null)
                 .addValue("nextStartsAt", nextStartsAt == null ? null : nextStartsAt.toString());
-        return jdbc.queryForObject(INSERT_STARTING_SOON_SLICE, params, NotificationFanoutRepository::readSlice);
+        return jdbc.queryForObject(
+                returnRecipients ? INSERT_STARTING_SOON_SLICE : INSERT_STARTING_SOON_SLICE_NO_RECIPIENTS,
+                params, NotificationFanoutRepository::readSlice);
     }
 
     /**
