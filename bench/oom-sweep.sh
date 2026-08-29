@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 #
-# 조각 크기만 바꿔 같은 100만 건을 넣고, 회차별 수치를 summary.csv 한 장으로 남긴다.
+# 슬라이스 크기만 바꿔 같은 100만 건을 넣고, 회차별 수치를 summary.csv 한 장으로 남긴다.
 #
-# 나머지는 전부 같다. 갈래 1, 같은 코어 배분, 같은 힙, 푸시는 꺼 둔다. 조각 1,100,000 이면
-# 한 조각이 수강생 전원이라 그것이 일괄 구조다. 되돌린 브랜치가 필요 없다. 조각 크기가
+# 나머지는 전부 같다. 체인 1, 같은 코어 배분, 같은 힙, 푸시는 꺼 둔다. 슬라이스 1,100,000 이면
+# 한 슬라이스이 수강생 전원이라 그것이 일괄 구조다. 되돌린 브랜치가 필요 없다. 슬라이스 크기가
 # 런타임 값이기 때문이다.
 #
 # **캡처는 이 스크립트가 뜨지 않는다.** 표만 만들어 두고, 화면 캡처는 끝난 뒤 손으로 뜬다.
@@ -11,7 +11,7 @@
 #   column -s, -t < bench/results/oom-<회차>/summary.csv
 #
 # 죽는 장면 하나를 만드는 것은 bench/oom-break.sh 가 한다. 이쪽은 여러 회차를 돌려
-# 조각 크기와 수치의 관계를 내는 것이 목적이다.
+# 슬라이스 크기와 수치의 관계를 내는 것이 목적이다.
 #
 # **일괄은 여러 번 돈다.** 3회 중 2회 죽었다. 총 메모리는 세 번 다 한도 1500MB 에 닿았고
 # 익명 메모리도 857~940MB 로 비슷했다. 커널이 그 지점에서 죽이느냐 회수하느냐가 갈린 것이다.
@@ -57,7 +57,7 @@ SETTLE_S="${SETTLE_S:-30}"
 # 그래서 이 스크립트는 시각 범위만 ranges.csv 에 남긴다. 주석 달기와 패널 PNG 뽑기는
 # Grafana 가 있는 관측 머신에서 bench/render-panels.sh 로 한다.
 MON="${MON:-0}"
-BATCH_SLICE="${BATCH_SLICE:-1100000}"      # 이 조각이 일괄 구조다(한 조각 = 전원)
+BATCH_SLICE="${BATCH_SLICE:-1100000}"      # 이 슬라이스이 일괄 구조다(한 슬라이스 = 전원)
 APP_HEAP="${APP_HEAP:-1g}"; APP_MEM="${APP_MEM:-1600m}"
 TIMEOUT_S="${TIMEOUT_S:-240}"
 PG_CPUSET_V="${PG_CPUSET:-0,4,1,5}"; APP_CPUSET_V="${APP_CPUSET:-2,6}"; INFRA_CPUSET_V="${INFRA_CPUSET:-3,7}"
@@ -75,7 +75,7 @@ iso_now() { python3 -c 'import datetime; print(datetime.datetime.now().astimezon
 now_ms() { python3 -c 'import time; print(int(time.time()*1000))'; }
 
 # 회차별 시각 범위를 남긴다. 관측 머신이 이 값으로 주석을 달고 패널을 뽑는다.
-mark_range() {  # $1=조각 $2=시작ms $3=끝ms
+mark_range() {  # $1=슬라이스 $2=시작ms $3=끝ms
   [ "$MON" = "1" ] || return 0
   echo "$1,$2,$3" >> "$OUT/ranges.csv"
 }
@@ -106,7 +106,7 @@ mem_stat() {
 }
 
 # **cpuset 을 인프라보다 먼저 내보내야 한다.** 아래에 두었더니 postgres·rabbitmq 가 코어 배분
-# 없이 떠서 측정 조건이 달라졌다. 조각 크기가 메시지로 옮겨 가면서 회차마다의 앱 설정도
+# 없이 떠서 측정 조건이 달라졌다. 슬라이스 크기가 메시지로 옮겨 가면서 회차마다의 앱 설정도
 # 같아졌으므로 env 는 여기서 한 번만 내보낸다.
 export PG_CPUSET="$PG_CPUSET_V" INFRA_CPUSET="$INFRA_CPUSET_V" APP_CPUSET="$APP_CPUSET_V" \
        APP_HEAP="$APP_HEAP" APP_MEM="$APP_MEM" \
@@ -130,7 +130,7 @@ if [ "$MON" = "1" ]; then
   # TCP 로만 붙으면 되지만 터널 하나 줄이려고 남긴다. 둘 다 가볍다.
   PROFILE="--profile mon"
   INFRA_SVC="$INFRA_SVC cadvisor postgres-exporter"
-  echo "조각,시작ms,끝ms" > "$OUT/ranges.csv"
+  echo "슬라이스,시작ms,끝ms" > "$OUT/ranges.csv"
 fi
 # shellcheck disable=SC2086
 compose $PROFILE up -d --wait --wait-timeout 300 $INFRA_SVC > "$OUT/infra.log" 2>&1 \
@@ -144,7 +144,7 @@ fi
 T_SESSION0="$(now_ms)"
 [ "$(pg_oomkilled)" = "false" ] \
   || fail "시작부터 OOMKilled=$(pg_oomkilled) 다. 앞 회차 잔해가 남아 있으면 이번 회차를 못 쓴다"
-# 이미지는 한 번만 굽는다. 조각 크기가 메시지로 가면서 회차마다 다시 빌드할 이유가 없어졌다.
+# 이미지는 한 번만 굽는다. 슬라이스 크기가 메시지로 가면서 회차마다 다시 빌드할 이유가 없어졌다.
 # 빌드 로그는 준비 단계라 파일로 보내되, 실패하면 그 자리에서 띄우고 멈춘다.
 compose build app > "$OUT/build.log" 2>&1 \
   || { tail -30 "$OUT/build.log" >&2; fail "앱 이미지 빌드 실패. 위 로그를 보라"; }
@@ -190,7 +190,7 @@ reset_state() {
 
 
 
-trigger() {  # 갈래 1 · 조각 $1 로 넓은 팬아웃 한 건을 아웃박스에 넣는다
+trigger() {  # 체인 1 · 슬라이스 $1 로 넓은 팬아웃 한 건을 아웃박스에 넣는다
   local material; material="$(new_uuid)"
   pg -c "INSERT INTO core.outbox_events
           (aggregate_type, aggregate_id, event_type, destination, payload_json,
@@ -201,8 +201,8 @@ trigger() {  # 갈래 1 · 조각 $1 로 넓은 팬아웃 한 건을 아웃박�
 }
 
 # 열마다 항목 2 의 문장 하나씩에 걸린다. 그 밖의 것은 안 적는다.
-#   조각          1회 처리 인원만 바꿔
-#   소요초        결과: 조각을 바꿔도 소요 시간이 같다
+#   슬라이스          1회 처리 인원만 바꿔
+#   소요초        결과: 슬라이스을 바꿔도 소요 시간이 같다
 #   알림건수      문제: 전량 롤백되어 0건 / 결과: 완료되지 않던 작업이 완료됨
 #   앱힙최대MB    원인: 앱 힙은 조건과 무관하다. 병목이 앱이 아니다
 #   pg_anon최대MB 원인: 일괄에서만 메모리가 한도까지 오른다
@@ -211,16 +211,16 @@ trigger() {  # 갈래 1 · 조각 $1 로 넓은 팬아웃 한 건을 아웃박�
 # 아웃박스 행 크기와 WAL 도 항목 2 가 하지 않는 주장이다.
 # 한도는 모든 행이 같으므로 열 대신 구간 제목에 적는다.
 # **하네스 시계를 쓰지 않는다.** 거기에는 릴레이 폴링 대기(최대 30초)와 완료 확인 주기가
-# 섞여, 무슨 조각이든 비슷한 값이 나온다. 그 값으로 "조각을 바꿔도 시간이 같다"를 말하면
+# 섞여, 무슨 슬라이스이든 비슷한 값이 나온다. 그 값으로 "슬라이스을 바꿔도 시간이 같다"를 말하면
 # 폴링 대기가 같다는 말밖에 안 된다. core.notification.created_at 은 clock_timestamp() 라
 # 첫 행부터 마지막 행까지가 순수 처리 시간이다.
 #
-# 앱힙최대는 뺀다. 톱니치는 값의 최대치라 GC 시점에 좌우돼 조각이 클수록 작게 나오기도 했다
+# 앱힙최대는 뺀다. 톱니치는 값의 최대치라 GC 시점에 좌우돼 슬라이스이 클수록 작게 나오기도 했다
 # (814 → 756 → 692). 힙이 조건과 무관하다는 것은 Grafana 의 JVM 힙 곡선이 보인다.
 # 한도대비% 는 뺀다. 익명만 한도로 나눠 63% 가 나오는데, 한도를 채운 것은 익명 + 공유 +
 # 캐시다(커널 기록: anon-rss 1,090MB + shmem-rss 373MB + file-rss 59MB = 1,522MB).
 # "63%인데 왜 죽나" 라는 질문만 부른다. 총 최고 수위를 그대로 두면 한도와 바로 대볼 수 있다.
-echo "조각,처리초,알림건수,pg총최고MB,pg익명최고MB,pgOOM,결과" > "$OUT/summary.csv"
+echo "슬라이스,처리초,알림건수,pg총최고MB,pg익명최고MB,pgOOM,결과" > "$OUT/summary.csv"
 PG_LIMIT="$(cat "$PG_CGROUP/memory.max" 2>/dev/null || echo 0)"
 # 한도가 없으면 memory.max 는 "max" 라는 글자다. 그대로 두면 산술에서 깨진다.
 case "$PG_LIMIT" in ''|*[!0-9]*) PG_LIMIT=0 ;; esac
@@ -240,9 +240,9 @@ BATCH_DIED=0; BATCH_RAN=0; LAST_DIED=0
 for SLICE in $RUNLIST; do
   # **비우기 전에 소비자를 내린다.** 워커가 메시지를 미확인으로 쥐고 있으면 purge 뒤에 되돌아온다.
   # 앞 회차가 OOM 이었으면 Postgres 가 아직 복구 중이라 TRUNCATE 도 못 한다. 그것부터 기다린다.
-  echo; echo "── 조각 $SLICE ──"
+  echo; echo "── 슬라이스 $SLICE ──"
   compose rm -sf app > /dev/null 2>&1 || true
-  # 조각 회차끼리는 컨테이너를 그대로 쓴다. 죽지 않으므로 오염될 것이 없고, 앞 회차가 데워 둔
+  # 슬라이스 회차끼리는 컨테이너를 그대로 쓴다. 죽지 않으므로 오염될 것이 없고, 앞 회차가 데워 둔
   # 상태가 실제 조건이다. 반면 **일괄은 매번 새 컨테이너에서 돈다** — 3회를 독립 시행으로
   # 세려면 앞 시행의 OOM 잔해(페이지 캐시)가 다음 시행에 남으면 안 된다. 실제로 그것 때문에
   # 다음 회차의 TRUNCATE 가 두 번째 OOM 을 맞은 적이 있다.
@@ -267,7 +267,7 @@ for SLICE in $RUNLIST; do
   echo "t_ms,anon,file,shmem,current,limit,heap" > "$SERIES"
   ANON_MAX=0; CUR_MAX=0; T0="$(now_ms)"; RESULT="완료"; N=0
   # exporter 의 최고 수위를 회차마다 되돌린다. 누적이면 그래프가 회차별 최고점이 아니라
-  # 지금까지의 최고점을 그려, 작은 조각 구간에도 앞 회차의 봉우리가 남는다.
+  # 지금까지의 최고점을 그려, 작은 슬라이스 구간에도 앞 회차의 봉우리가 남는다.
   # 앞 회차의 여유 시간이 끝나 지표가 내려앉은 뒤라 바닥값에서 시작한다.
   [ "$MON" = "1" ] && curl -sf -X POST --max-time 5 http://127.0.0.1:18085/reset > /dev/null 2>&1
   OOMK0="$(oom_kills)"; OOMK0="${OOMK0:-0}"
@@ -337,7 +337,7 @@ PY
 done
 
 echo
-echo "  일괄(조각 $BATCH_SLICE) $BATCH_RAN회 중 $BATCH_DIED회 강제 종료"
+echo "  일괄(슬라이스 $BATCH_SLICE) $BATCH_RAN회 중 $BATCH_DIED회 강제 종료"
 # ── 곡선은 관측 머신에서 ────────────────────────────────────────────────────
 # 여기에는 Prometheus 도 Grafana 도 없다. 회차별 시각 범위만 남기고 끝낸다.
 # 관측 머신이 이 범위로 주석을 달고 패널을 PNG 로 뽑는다.

@@ -9,7 +9,7 @@
 #
 # 만드는 상태는 이것이다.
 #
-#   조각 1,100,000 = 수강생 전원 → 삽입 문장 하나가 uuid 100만 개를 array_agg 로 모은다
+#   슬라이스 1,100,000 = 수강생 전원 → 삽입 문장 하나가 uuid 100만 개를 array_agg 로 모은다
 #   → Postgres 익명 메모리가 한도 1.5GB 에 닿는다 → 백엔드가 강제 종료되고 크래시 복구가
 #   돌아 전량 롤백된다 (알림 0건)
 #
@@ -25,7 +25,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT" || exit 1
 CF="bench/compose.bench.yml"
 
-SLICE="${SLICE:-1100000}"          # 한 조각 = 수강생 전원. 이것이 일괄 구조다
+SLICE="${SLICE:-1100000}"          # 한 슬라이스 = 수강생 전원. 이것이 일괄 구조다
 TIMEOUT_S="${TIMEOUT_S:-240}"
 APP_HEAP="${APP_HEAP:-1g}"; APP_MEM="${APP_MEM:-1600m}"
 PG_CPUSET_V="${PG_CPUSET:-0,4,1,5}"; APP_CPUSET_V="${APP_CPUSET:-2,6}"; INFRA_CPUSET_V="${INFRA_CPUSET:-3,7}"
@@ -70,7 +70,7 @@ export PG_CPUSET="$PG_CPUSET_V" INFRA_CPUSET="$INFRA_CPUSET_V" APP_CPUSET="$APP_
 # 없으면 compose 기본값 127.0.0.1 로 되돌아가 관측 머신의 Prometheus 가 조용히 끊긴다.
 export METRICS_BIND="${METRICS_BIND:-0.0.0.0}"
 
-echo "▶ 상태 만들기 (조각 $SLICE · 삽입 ${FANOUT_INSERT_MODE:-set} · pg[$PG_CPUSET_V] 앱[$APP_CPUSET_V] 인프라[$INFRA_CPUSET_V] · 힙 $APP_HEAP)"
+echo "▶ 상태 만들기 (슬라이스 $SLICE · 삽입 ${FANOUT_INSERT_MODE:-set} · pg[$PG_CPUSET_V] 앱[$APP_CPUSET_V] 인프라[$INFRA_CPUSET_V] · 힙 $APP_HEAP)"
 
 # postgres 를 다시 만든다. 앞선 실행이 죽여 놨으면 OOMKilled 가 켜진 채로 남아 있어,
 # 캡처를 떠도 이번 죽음인지 지난 죽음인지 구분되지 않는다. 데이터는 볼륨에 있어 남는다.
@@ -119,7 +119,7 @@ WAL0="$(pg -c "SELECT pg_current_wal_lsn();")"
 OOMK0="$(oom_kills)"; OOMK0="${OOMK0:-0}"
 T0="$(now_ms)"; C0="$(hhmmss)"
 
-echo "   자료 올림 (조각 $SLICE) $C0"
+echo "   자료 올림 (슬라이스 $SLICE) $C0"
 MATERIAL="$(new_uuid)"
 pg -c "INSERT INTO core.outbox_events
         (aggregate_type, aggregate_id, event_type, destination, payload_json,
