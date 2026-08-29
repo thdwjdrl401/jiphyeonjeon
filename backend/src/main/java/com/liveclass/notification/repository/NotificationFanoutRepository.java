@@ -239,6 +239,27 @@ public class NotificationFanoutRepository {
     }
 
     /**
+     * 이 체인이 시작한 뒤 흐른 시간(ms). 없으면 {@code null}.
+     *
+     * <p>기준은 <b>문구 행의 created_at</b>이다. 문구는 첫 슬라이스가 자기 트랜잭션 안에서
+     * 한 번만 넣고 그 뒤 슬라이스는 건너뛰므로, 그 시각이 곧 체인이 일을 시작한 시각이다.
+     * 기본키 조회 한 번이라 마지막 슬라이스에서 한 번 물어도 부담이 없다.
+     *
+     * <p>메시지에 시작 시각을 실어 나르지 않는 이유는, 그러려고 명령 스키마를 늘리면 발행하는
+     * 곳 전부를 고쳐야 하는데 이 값은 이미 표에 있기 때문이다.
+     */
+    public Long chainElapsedMs(String dedupePrefix) {
+        List<Long> rows = jdbc.queryForList("""
+                SELECT round(extract(epoch from (clock_timestamp() - created_at)) * 1000)
+                  FROM core.notification_content
+                 WHERE id = CAST(:contentId AS uuid)
+                """,
+                new MapSqlParameterSource("contentId", contentIdOf(dedupePrefix).toString()),
+                Long.class);
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    /**
      * 지금 어느 길로 넣고 있는가. 워커가 로그에 적는다.
      *
      * <p>설정값(set·row)이 아니라 <b>한국어를 돌려준다</b>. 이 값은 로그에 찍히고 그 로그가
