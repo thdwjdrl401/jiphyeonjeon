@@ -381,9 +381,9 @@ public class NotificationFanoutWorker {
                 slice.scanned(), slice.inserted());
         if (!slice.mayHaveMore(limit)) {
             Long elapsedMs = fanoutRepository.chainElapsedMs(dedupePrefix(command));
-            log.info("넓은 팬아웃 끝 슬라이스={} 방식={} 소요={}초", limit,
-                    fanoutRepository.insertModeLabel(),
-                    elapsedMs == null ? "?" : String.format("%.1f", elapsedMs / 1000.0));
+            log.info("넓은 팬아웃 끝 슬라이스={} 소요={}초 방식={}", limit,
+                    elapsedMs == null ? "?" : String.format("%.1f", elapsedMs / 1000.0),
+                    fanoutRepository.insertModeLabel());
         }
     }
 

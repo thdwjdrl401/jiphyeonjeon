@@ -70,7 +70,7 @@ export PG_CPUSET="$PG_CPUSET_V" INFRA_CPUSET="$INFRA_CPUSET_V" APP_CPUSET="$APP_
 # 없으면 compose 기본값 127.0.0.1 로 되돌아가 관측 머신의 Prometheus 가 조용히 끊긴다.
 export METRICS_BIND="${METRICS_BIND:-0.0.0.0}"
 
-echo "▶ 상태 만들기 (슬라이스 $SLICE · 삽입 ${FANOUT_INSERT_MODE:-set} · pg[$PG_CPUSET_V] 앱[$APP_CPUSET_V] 인프라[$INFRA_CPUSET_V] · 힙 $APP_HEAP)"
+echo "▶ 상태 만들기 (슬라이스 $SLICE · pg[$PG_CPUSET_V] 앱[$APP_CPUSET_V] 인프라[$INFRA_CPUSET_V] · 힙 $APP_HEAP)"
 
 # postgres 를 다시 만든다. 앞선 실행이 죽여 놨으면 OOMKilled 가 켜진 채로 남아 있어,
 # 캡처를 떠도 이번 죽음인지 지난 죽음인지 구분되지 않는다. 데이터는 볼륨에 있어 남는다.
