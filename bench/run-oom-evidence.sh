@@ -147,7 +147,12 @@ echo "▶ 인프라 기동 (pg[$PG_CPUSET_V] 앱[$APP_CPUSET_V] 인프라[$INFRA
 compose rm -sf postgres app > /dev/null 2>&1 || true
 INFRA_SVC="postgres redis rabbitmq mock-push"
 PROFILE=""
+# **지표 포트를 열어 둔 채로 다시 만들어야 한다.** 이 스크립트는 회차마다 컨테이너를 다시
+# 만드는데, METRICS_BIND 가 환경에 없으면 compose 기본값인 127.0.0.1 로 되돌아간다. 그러면
+# 다른 기기의 Prometheus 가 붙어 있다가 끊기고, 그 사실을 55분 뒤에야 안다. 실제로 그랬다.
+# MON=1 은 관측이 다른 기기에 있다는 뜻이므로 여기서 열어 둔다.
 if [ "$MON" = "1" ]; then
+  export METRICS_BIND="${METRICS_BIND:-0.0.0.0}"
   # 여기 남는 것은 둘뿐이다. cadvisor 는 cgroup 을 읽어야 해서 못 옮기고, postgres-exporter 는
   # TCP 로만 붙으면 되지만 터널 하나 줄이려고 남긴다. 둘 다 가볍다.
   PROFILE="--profile mon"
