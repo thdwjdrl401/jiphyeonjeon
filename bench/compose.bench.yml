@@ -209,7 +209,8 @@ services:
     # 15692는 prometheus 플러그인. 관측을 다른 머신에서 돌릴 때 터널로 가져간다.
     # 5672는 **다른 머신의 발송 노드**가 SSH 터널로 붙기 위해 연다(머신을 나눈 증설을
     # 실측하려면 브로커가 이 박스 밖에서 보여야 한다). 127.0.0.1 바인딩이라 LAN에는 안 뜬다.
-    ports: ["127.0.0.1:5672:5672", "127.0.0.1:15672:15672", "127.0.0.1:15692:15692"]
+    ports: ["127.0.0.1:5672:5672", "127.0.0.1:15672:15672",
+            "${METRICS_BIND:-127.0.0.1}:15692:15692"]
     # **볼륨과 호스트명을 둘 다 고정해야 한다.** 구간을 나눠 재려면 cpuset을 바꿔 컨테이너를
     # 다시 만드는데, 그때 구간 A가 쌓아 둔 푸시 명령 200개가 사라져 구간 B가 빈손으로 도는 일이
     # 있었다(목 수신 0건).
@@ -267,7 +268,9 @@ services:
     <<: *appbase
     cpuset: "${APP_CPUSET:-2,6,3,7}"
     cpus: ${APP_CPUS:-8}
-    ports: ["127.0.0.1:18081:8080"]
+    # 관측이 같은 LAN 의 다른 기기에 있으면 METRICS_BIND=0.0.0.0 으로 열어 터널을 없앤다.
+    # 기본은 127.0.0.1 이라 아무것도 안 주면 지금처럼 이 기기 밖으로 안 나간다.
+    ports: ["${METRICS_BIND:-127.0.0.1}:18081:8080"]
 
   app2:
     <<: *appbase
@@ -275,7 +278,7 @@ services:
     cpus: ${APP_CPUS:-8}
     # 인스턴스마다 포트가 달라야 한다. 앵커에 두면 셋이 같은 포트를 잡아 두 번째부터
     # "port is already allocated"로 기동에 실패한다 — 확장 측정이 시작도 못 한다.
-    ports: ["127.0.0.1:18083:8080"]
+    ports: ["${METRICS_BIND:-127.0.0.1}:18083:8080"]
     profiles: ["scale2", "scale3"]
 
   app3:
@@ -317,7 +320,7 @@ services:
     mem_limit: 128m
     environment:
       DATA_SOURCE_NAME: "postgresql://liveclass:bench@postgres:5432/liveclass?sslmode=disable"
-    ports: ["127.0.0.1:19187:9187"]
+    ports: ["${METRICS_BIND:-127.0.0.1}:19187:9187"]
     depends_on:
       postgres: { condition: service_healthy }
 
@@ -345,7 +348,7 @@ services:
       - --max_housekeeping_interval=1s
       - --allow_dynamic_housekeeping=false
       - --docker_only=true
-    ports: ["127.0.0.1:18082:8080"]
+    ports: ["${METRICS_BIND:-127.0.0.1}:18082:8080"]
 
   # cAdvisor 가 이 커널(5.15)에서 못 주는 값을 낸다.
   #   container_memory_max_usage_bytes 와 failcnt 는 cgroup v2 에서 0 으로 비어 있고,

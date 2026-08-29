@@ -17,7 +17,7 @@
 #   ssh -N -L 18081:127.0.0.1:18081 -L 15692:127.0.0.1:15692 \
 #          -L 19187:127.0.0.1:19187 -L 18082:127.0.0.1:18082 lazy
 #
-# 도커 안에서 호스트의 그 포트를 보려면 host.docker.internal을 쓴다(compose에서 매핑한다).
+# 도커 안에서 호스트의 그 포트를 보려면 bench-host을 쓴다(compose에서 매핑한다).
 global:
   scrape_interval: 5s
   evaluation_interval: 5s
@@ -31,22 +31,22 @@ scrape_configs:
   - job_name: app
     metrics_path: /actuator/prometheus
     static_configs:
-      - targets: ['host.docker.internal:18081']
+      - targets: ['bench-host:18081']
 
   - job_name: postgres
     static_configs:
-      - targets: ['host.docker.internal:19187']
+      - targets: ['bench-host:19187']
 
   - job_name: rabbitmq
     metrics_path: /metrics/per-object
     static_configs:
-      - targets: ['host.docker.internal:15692']
+      - targets: ['bench-host:15692']
 
   - job_name: cadvisor
     # 메모리 한계에 닿는 장면을 남기려면 전역 간격으로는 부족하다.
     scrape_interval: 1s
     static_configs:
-      - targets: ['host.docker.internal:18082']
+      - targets: ['bench-host:18082']
 
   - job_name: cgroup
     # 커널 카운터(memory.events)는 누적이라 간격과 무관하고, 최고 수위도 단조 증가라 놓칠 수
@@ -54,4 +54,4 @@ scrape_configs:
     # 회차가 20점이라 오르내림이 각지고, 회차가 바뀌는 순간이 두 점 사이로 뭉갠다.
     scrape_interval: 500ms
     static_configs:
-      - targets: ['host.docker.internal:18083']
+      - targets: ['bench-host:18083']

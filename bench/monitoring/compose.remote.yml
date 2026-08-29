@@ -22,7 +22,11 @@ services:
       - ./prometheus.remote.yml:/etc/prometheus/prometheus.yml:ro
       - ../../infra/prometheus:/etc/prometheus/rules:ro
     ports: ["127.0.0.1:19090:9090"]
-    extra_hosts: ["host.docker.internal:host-gateway"]
+    # 측정 머신을 가리키는 이름 하나로 둔다. 두 가지로 쓴다.
+    #   BENCH_HOST 미지정  → host-gateway. 이 기기의 127.0.0.1 로 SSH 터널을 끌어온 경우
+    #   BENCH_HOST=192.168.219.124 → 같은 LAN 이면 터널 없이 바로 붙는다
+    #                                (측정 머신에서 METRICS_BIND=0.0.0.0 으로 띄워야 한다)
+    extra_hosts: ["bench-host:${BENCH_HOST:-host-gateway}"]
 
   grafana:
     image: grafana/grafana:11.2.0
