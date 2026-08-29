@@ -1,15 +1,15 @@
 # 관측만 따로 띄운다 — **측정 머신이 아닌 곳에서** 돈다.
 #
-# 측정 머신에는 exporter 둘만 남는다(cAdvisor는 cgroup을 읽어야 해서 못 옮기고,
-# postgres-exporter는 옮길 수 있으나 터널 하나 줄이려고 남긴다).
+# 측정 머신에는 exporter 셋만 남는다(cadvisor · postgres-exporter · cgroup-exporter).
 #
-# 쓰는 법
-#   1) 측정 머신으로 터널을 연다
-#        ssh -N -L 18081:127.0.0.1:18081 -L 15692:127.0.0.1:15692 \
-#               -L 19187:127.0.0.1:19187 -L 18082:127.0.0.1:18082 lazy
-#   2) 여기를 띄운다
-#        docker compose -f bench/monitoring/compose.remote.yml up -d
-#   3) http://127.0.0.1:13000/d/fanout-bench
+# 같은 LAN 이면
+#   1) 측정 머신    METRICS_BIND=0.0.0.0 docker compose -f bench/compose.bench.yml \
+#                     --profile mon up -d cadvisor postgres-exporter cgroup-exporter
+#   2) 여기         BENCH_HOST=192.168.219.124 docker compose -f bench/monitoring/compose.remote.yml up -d
+#   3) 대시보드      http://<이 기기 주소>:13000/d/fanout-bench
+#
+# 다른 망이면 BENCH_HOST 없이 띄우고 SSH 터널을 연다(prometheus.remote.yml 머리말 참조).
+
 name: liveclass-bench-mon
 
 services:

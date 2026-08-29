@@ -133,7 +133,7 @@ start_push_nodes() {  # $1 노드 수
   local n="$1" svcs=() i=0 set_i cpuset
   compose rm -sf app app2 app3 > /dev/null 2>&1 || true
   IFS='|' read -r -a set_i <<< "$PUSH_NODE_CPUSETS"
-  [ "$n" -le "${#set_i[@]}" ] || fail "노드 $n대에 줄 cpuset이 모자라다(${#set_i[@]}개)"
+  [ "$n" -le "${#set_i[@]}" ] || fail "노드 ${n}대에 줄 cpuset이 모자라다(${#set_i[@]}개)"
   for ((i = 0; i < n; i++)); do
     case "$i" in
       0) svcs+=(app);  export APP_CPUSET="${set_i[i]}" ;;
@@ -269,7 +269,7 @@ else
   pg -c "TRUNCATE core.notification_push_progress;" > /dev/null
   QD="$(push_queue_depth)"
   [ "${QD:-0}" -gt 0 ] || fail "푸시 큐가 비었다(${QD:-없음}). 구간 A가 쌓은 명령이 사라졌다."
-  echo "   푸시 큐 $QD건 대기 중"
+  echo "   푸시 큐 ${QD}건 대기 중"
   if [ "$PUSH_NODES" -le 1 ]; then
     start_app "$PG_FANOUT" "$INFRA_FANOUT" "$APP_PUSH" false true
   else

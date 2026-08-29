@@ -233,3 +233,30 @@ echo
 echo "── 요약 ──"
 column -s, -t < "$OUT/summary.csv"
 echo "결과: $OUT"
+
+# ── 동기 구조 합계 ────────────────────────────────────────────────────────────
+# 게시 트랜잭션 안에서 알림 생성과 발송을 모두 처리했을 때의 100만 건 비용이다.
+# **한 번의 실행이 아니라 두 표본의 환산 합이다** — 100만 건을 실제로 순차 발송하면
+# 수십 시간이라 측정이 성립하지 않는다. 그 사실을 출력 안에 같이 적어, 캡처만 떼어 봐도
+# 무엇을 잰 값인지 알 수 있게 한다.
+python3 - "$OUT/summary.csv" <<'PY'
+import csv, sys
+rows = list(csv.DictReader(open(sys.argv[1])))
+def pick(pred):
+    return next((r for r in rows if pred(r["방식"])), None)
+make = pick(lambda m: "N+1" in m)
+send = pick(lambda m: m.startswith("한 건씩 순차 발송"))
+if not (make and send):
+    print("\n(동기 구조 합계: 필요한 두 줄이 없다 — N+1 조회·순차 발송 회차를 함께 돌려야 한다)")
+    raise SystemExit
+def label(sec):
+    h, m, s = int(sec // 3600), int((sec % 3600) // 60), int(sec % 60)
+    return f"{h}시간 {m}분" if h else (f"{m}분 {s}초" if m else f"{sec:.1f}초")
+total = float(make["100만건_환산초"]) + float(send["100만건_환산초"])
+print()
+print("── 동기 구조 (게시 트랜잭션 안에서 알림 생성 + 발송) ──")
+print(f"  알림 생성  {make['방식']:<28} 표본 {int(make['표본']):>6,}건 · {float(make['소요초']):8.2f}초 · {float(make['초당']):8.1f}건/s → {make['환산_표기']}")
+print(f"  발송       {send['방식']:<28} 표본 {int(send['표본']):>6,}건 · {float(send['소요초']):8.2f}초 · {float(send['초당']):8.1f}건/s → {send['환산_표기']}")
+print(f"  {'합계':<40} 수신자 {int(make['수신자']):,}명{'':>27}→ {label(total)}")
+print("  * 100만 건은 표본 처리율로 환산한 값이다. 순차 발송 100만 건은 실측이 성립하지 않는다.")
+PY
