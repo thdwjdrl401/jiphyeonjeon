@@ -326,6 +326,9 @@ for SLICE in $RUNLIST; do
   # **여기서 곧바로 앱을 내린다.** 1.1M 의 아웃박스 행이 PENDING 으로 남아 있는데 앱을 켜 둔 채
   # ①을 찍는 동안 릴레이 폴링이 그 행을 다시 발행했다. 워커가 거대 INSERT 를 한 번 더 돌려
   # 두 번째 OOM 이 났고, 다음 회차가 그 복구와 겹쳐 돌았다(소요초 31.32, 앱힙 944 가 그 값이다).
+  # **지우기 전에 받는다.** 아래에서 컨테이너를 지운 뒤 로그를 받고 있었고, 그래서 앱 로그가
+  # 0줄이었다. 워커가 DB 연결을 잃고 멈추는 장면이 여기 있어야 한다.
+  compose logs --no-log-prefix --tail 400 app > "$OUT/app-slice-$SLICE.log" 2>&1 || true
   compose rm -sf app > /dev/null 2>&1 || true
   mark_range "$SLICE" "$T0" "$T1"
   # 앱을 내린 뒤 비워 둔다. 지표가 바닥으로 내려가야 다음 회차가 바닥에서 올라간다.
@@ -392,8 +395,8 @@ for SLICE in $RUNLIST; do
   SPAN="$(pg -c "SELECT coalesce(round(extract(epoch from max(created_at) - min(created_at))::numeric, 2), 0)
                    FROM core.notification;" 2>/dev/null || echo 0)"
   [ "$RESULT" = "완료" ] && [ "${N:-0}" -lt "$USERS" ] && RESULT="시간초과"
-  compose logs --tail 400 app > "$OUT/app-slice-$SLICE.log" 2>&1 || true
-  grep -q OutOfMemoryError "$OUT/app-slice-$SLICE.log" && RESULT="앱 힙 부족(OutOfMemoryError)"
+  grep -q OutOfMemoryError "$OUT/app-slice-$SLICE.log" 2>/dev/null \
+    && RESULT="앱 힙 부족(OutOfMemoryError)"
 
   python3 - "$OUT/summary.csv" "$SLICE" "$RESULT" "${SPAN:-0}" "${N:-0}" \
            "$CUR_MAX" "$ANON_MAX" "${PGOOM:-false}" <<'PY'
