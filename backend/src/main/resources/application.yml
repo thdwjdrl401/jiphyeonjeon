@@ -516,6 +516,10 @@ notification:
     # 실시간 신호를 보내고 푸시 명령을 적재하므로 운영에서는 켜 둔다. 끄는 자리는 벤치
     # 한 곳뿐이다 — 조각을 키웠을 때의 Postgres 메모리가 이 집계 탓인지 가르는 비교 측정.
     return-recipients: ${NOTIFICATION_FANOUT_RETURN_RECIPIENTS:true}
+    # 한 조각을 어떻게 넣을 것인가. set 은 집합 삽입 한 문장이고, row 는 명단을 앱으로 가져와
+    # 행마다 한 문장씩 던진다. row 는 벤치 전용이다 — 항목 3이 대는 왕복 비용을 앱에서 재려면
+    # 그 길이 실제로 있어야 한다. 운영은 언제나 set 이다.
+    insert-mode: ${NOTIFICATION_FANOUT_INSERT_MODE:set}
     chains: ${NOTIFICATION_FANOUT_CHAINS:2}
     # 팬아웃 큐 소비자 수. **기준은 체인 수 × 2다**(ADR-0134). 체인 하나가 동시에 쓸 수 있는
     # 스레드가 최대 둘이라서다 — 앞 조각의 앱 일을 하는 스레드와, 그 사이 다음 조각의 DB 일을

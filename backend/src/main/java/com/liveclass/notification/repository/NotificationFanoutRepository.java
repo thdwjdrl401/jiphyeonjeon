@@ -6,6 +6,7 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -169,6 +170,46 @@ public class NotificationFanoutRepository {
      * 끄면 실시간 신호(announceAll)와 푸시 적재가 빈 목록을 받는다. 그래서 기본은 켜짐이고,
      * 끄는 것은 이 비교 측정뿐이다.
      */
+    /*
+     * **벤치 전용, 순진한 판.** 항목 3이 대는 "DB 왕복 100만 회"는 앱과 DB 사이의 왕복이다.
+     * 그 값을 서버 안에서 psql 로 재면 네트워크도 JDBC 도 없어 다른 것을 잰다. 그래서 같은 일을
+     * 앱이 행마다 던지는 길을 남겨 두고, 워커의 로그로 두 방식의 소요를 나란히 본다.
+     *
+     * 집합 삽입 한 문장이 하던 일을 셋으로 가른다 — 명단 조회 한 번, 문구 한 번, 그리고 행마다
+     * 삽입. 커서와 훑은 수는 명단에서 나오고, 새로 넣은 사람은 update 가 돌려주는 행 수로 가른다
+     * (중복이면 0). 집합 판의 RETURNING 이 하던 구실이다.
+     */
+    private static final String SLICE_USERS = """
+            SELECT e.user_id
+            FROM core.enrollment e
+            WHERE e.curriculum_id = CAST(:curriculumId AS uuid)
+              AND e.status = 'ACTIVE'
+              AND (CAST(:afterUserId AS uuid) IS NULL OR e.user_id > CAST(:afterUserId AS uuid))
+              AND (CAST(:untilUserId AS uuid) IS NULL OR e.user_id <= CAST(:untilUserId AS uuid))
+            ORDER BY e.user_id
+            LIMIT :sliceLimit
+            """;
+
+    private static final String INSERT_CONTENT_ONE = """
+            INSERT INTO core.notification_content (
+                id, type, severity, title, message, targets, group_key,
+                previous_starts_at, next_starts_at)
+            VALUES (CAST(:contentId AS uuid), :type, :severity, :title, :message,
+                    CAST(:targets AS jsonb), :groupKey,
+                    CAST(:previousStartsAt AS timestamptz), CAST(:nextStartsAt AS timestamptz))
+            ON CONFLICT (id) DO NOTHING
+            """;
+
+    // 중복 제거 키는 집합 판과 글자까지 같아야 한다. uuid 를 text 로 잇는 자리가 같으므로
+    // 같은 사람에게 두 방식이 같은 해시를 만든다.
+    private static final String INSERT_ONE = """
+            INSERT INTO core.notification
+                    (id, recipient_id, content_id, dedupe_hash, read_status, action_status)
+            VALUES (gen_random_uuid(), CAST(:userId AS uuid), CAST(:contentId AS uuid),
+                    md5(:dedupePrefix || CAST(:userId AS uuid))::uuid, 'UNREAD', :actionStatus)
+            ON CONFLICT (dedupe_hash) WHERE dedupe_hash IS NOT NULL DO NOTHING
+            """;
+
     private static final String AGG = "(SELECT array_agg(recipient_id) FROM inserted)";
     private static final String NO_AGG = "NULL::uuid[]";
     private static final String INSERT_SLICE_NO_RECIPIENTS = INSERT_SLICE.replace(AGG, NO_AGG);
@@ -186,12 +227,20 @@ public class NotificationFanoutRepository {
 
     private final NamedParameterJdbcTemplate jdbc;
     private final boolean returnRecipients;
+    private final String insertMode;
 
     public NotificationFanoutRepository(
             NamedParameterJdbcTemplate jdbc,
-            @Value("${notification.fanout.return-recipients:true}") boolean returnRecipients) {
+            @Value("${notification.fanout.return-recipients:true}") boolean returnRecipients,
+            @Value("${notification.fanout.insert-mode:set}") String insertMode) {
         this.jdbc = jdbc;
         this.returnRecipients = returnRecipients;
+        this.insertMode = "row".equalsIgnoreCase(insertMode) ? "row" : "set";
+    }
+
+    /** 지금 어느 길로 넣고 있는가. 워커가 로그에 적는다 — 어느 판의 값인지 그림에서 읽히게. */
+    public String insertMode() {
+        return insertMode;
     }
 
     /**
@@ -228,8 +277,37 @@ public class NotificationFanoutRepository {
                  */
                 .addValue("previousStartsAt", previousStartsAt == null ? null : previousStartsAt.toString())
                 .addValue("nextStartsAt", nextStartsAt == null ? null : nextStartsAt.toString());
+        if ("row".equals(insertMode)) {
+            return insertRowByRow(params, dedupePrefix, actionStatus);
+        }
         return jdbc.queryForObject(returnRecipients ? INSERT_SLICE : INSERT_SLICE_NO_RECIPIENTS,
                 params, NotificationFanoutRepository::readSlice);
+    }
+
+    /**
+     * 순진한 판. 명단을 앱으로 가져와 <b>행마다 한 문장씩</b> 던진다. 조각 하나에 왕복이
+     * 1 + 1 + 조각 크기만큼 생긴다.
+     *
+     * <p>벤치에서만 쓴다({@code notification.fanout.insert-mode=row}). 운영은 집합 판이다.
+     */
+    private Slice insertRowByRow(MapSqlParameterSource params, String dedupePrefix, String actionStatus) {
+        List<UUID> users = jdbc.queryForList(SLICE_USERS, params, UUID.class);
+        if (users.isEmpty()) {
+            return new Slice(0, 0, List.of(), null);
+        }
+        jdbc.update(INSERT_CONTENT_ONE, params);
+        List<UUID> inserted = new ArrayList<>();
+        for (UUID user : users) {
+            MapSqlParameterSource one = new MapSqlParameterSource()
+                    .addValue("userId", user.toString())
+                    .addValue("contentId", params.getValue("contentId"))
+                    .addValue("dedupePrefix", dedupePrefix)
+                    .addValue("actionStatus", actionStatus);
+            if (jdbc.update(INSERT_ONE, one) > 0) {
+                inserted.add(user);
+            }
+        }
+        return new Slice(users.size(), inserted.size(), inserted, users.get(users.size() - 1));
     }
 
     /**

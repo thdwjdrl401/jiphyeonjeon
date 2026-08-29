@@ -109,6 +109,8 @@ x-appbase: &appbase
       # 기본 2. 아웃박스만 보이는 캡처에서는 1로 두어 사건 하나가 명령 하나로 나오게 한다.
       # array_agg 를 끄는 비교 측정용. 켠 채 두는 것이 운영과 같은 조건이다.
       NOTIFICATION_FANOUT_RETURN_RECIPIENTS: ${FANOUT_RETURN_RECIPIENTS:-true}
+      # set = 집합 삽입 한 문장, row = 행마다 한 문장. row 는 순진한 판을 재는 회차에만.
+      NOTIFICATION_FANOUT_INSERT_MODE: ${FANOUT_INSERT_MODE:-set}
       NOTIFICATION_FANOUT_CHAINS: ${FANOUT_CHAINS:-2}
       # 발송 전용 노드는 알림 리스너 말고도 꺼야 할 것이 있다(ADR-0127의 역할 표).
       # 지금까지 벤치는 이 셋을 켠 채로 쟀다 — 앱 로그에 자막 consumer와 STOMP 브로커가

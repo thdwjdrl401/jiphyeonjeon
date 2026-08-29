@@ -70,7 +70,7 @@ export PG_CPUSET="$PG_CPUSET_V" INFRA_CPUSET="$INFRA_CPUSET_V" APP_CPUSET="$APP_
 # 없으면 compose 기본값 127.0.0.1 로 되돌아가 관측 머신의 Prometheus 가 조용히 끊긴다.
 export METRICS_BIND="${METRICS_BIND:-0.0.0.0}"
 
-echo "▶ 상태 만들기 (조각 $SLICE · pg[$PG_CPUSET_V] 앱[$APP_CPUSET_V] 인프라[$INFRA_CPUSET_V] · 힙 $APP_HEAP)"
+echo "▶ 상태 만들기 (조각 $SLICE · 삽입 ${FANOUT_INSERT_MODE:-set} · pg[$PG_CPUSET_V] 앱[$APP_CPUSET_V] 인프라[$INFRA_CPUSET_V] · 힙 $APP_HEAP)"
 
 # postgres 를 다시 만든다. 앞선 실행이 죽여 놨으면 OOMKilled 가 켜진 채로 남아 있어,
 # 캡처를 떠도 이번 죽음인지 지난 죽음인지 구분되지 않는다. 데이터는 볼륨에 있어 남는다.
@@ -150,6 +150,9 @@ T1="$(now_ms)"; C1="$(hhmmss)"
 # 잃는 장면을 나중에 뜰 수 없다. stop 이면 컨테이너가 남아 logs 가 그대로 나온다.
 # 멈추기는 해야 한다. 켜 둔 채로 두면 릴레이 폴링이 PENDING 아웃박스 행을 다시 발행해
 # 거대 INSERT 를 한 번 더 돌리고, 두 번째 OOM 이 캡처할 상태를 덮는다.
+# **지우기 전에 파일로 받는다.** 다음 회차가 컨테이너를 다시 만들면 이 로그가 사라진다.
+# 컨테이너는 stop 이라 지금 회차 안에서는 docker compose logs app 으로도 그대로 나온다.
+compose logs --no-log-prefix --timestamps app > "$OUT/app.log" 2>&1 || true
 compose stop app > /dev/null 2>&1 || true
 [ "$DIED" = "1" ] && wait_pg_ready
 
@@ -157,12 +160,13 @@ echo
 if [ "$DIED" = "1" ]; then
   echo "  죽음   예. Postgres 백엔드가 강제 종료됐다"
 else
-  echo "  죽음   아니오. 한도에 닿았어도 커널이 죽이지 않은 회차다. 다시 돌리면 된다"
+  echo "  죽음   아니오. Postgres 는 강제 종료되지 않았다"
 fi
 echo "  구간   $C0 ~ $C1   ($T0 ~ $T1)"
 echo "  WAL    $WAL0"
 echo
 echo "  캡처는 직접. 컨테이너와 로그는 이 상태로 남아 있다."
+echo "  앱 로그   $OUT/app.log   (다음 회차가 컨테이너를 다시 만들면 컨테이너 쪽은 사라진다)"
 echo "  WAL 질의에는 위 $WAL0 을 넣는다."
 echo
 echo "  결과: $OUT"

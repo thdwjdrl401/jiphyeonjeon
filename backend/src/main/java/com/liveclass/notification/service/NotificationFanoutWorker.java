@@ -323,6 +323,17 @@ public class NotificationFanoutWorker {
         String message = NotificationCopy.wideMessage(command.type(), command.curriculumTitle(), subject,
                 command.previousStartsAt(), command.nextStartsAt());
 
+        /*
+         * **조각 삽입에 걸린 시간을 앱에서 잰다.** 항목 3이 대는 왕복 비용은 앱과 DB 사이에
+         * 있으므로 서버 안에서 재면 그것을 못 본다. 여기서 재면 JDBC 왕복과 커밋이 다 들어온다.
+         * 첫 조각이면 갈래가 시작한 것이고, 마지막 조각이면 끝난 것이라 그 두 줄의 시각 차이가
+         * 곧 갈래 전체의 소요다.
+         */
+        if (command.afterUserId() == null) {
+            log.info("넓은 팬아웃 갈래 시작 type={} curriculum={} 조각={} 방식={}",
+                    command.type(), command.curriculumId(), limit, fanoutRepository.insertMode());
+        }
+        long insertStartedNanos = System.nanoTime();
         NotificationFanoutRepository.Slice slice = NotificationTypes.LIVE_STARTING_SOON.equals(command.type())
                 ? fanoutRepository.insertForStartingSoon(
                         command.curriculumId(), command.lessonId(), command.afterUserId(),
@@ -341,6 +352,8 @@ public class NotificationFanoutWorker {
                 command.type() + ':' + command.curriculumId(),
                 dedupePrefix(command),
                 command.previousStartsAt(), command.nextStartsAt());
+
+        long insertMs = (System.nanoTime() - insertStartedNanos) / 1_000_000L;
 
         /*
          * **다음 조각을 먼저 발행한다**(ADR-0131). 다음 커서는 방금 돌아온 조각이 이미 알고 있고,
@@ -372,9 +385,14 @@ public class NotificationFanoutWorker {
          */
         enqueuePushForSlice(dedupePrefix(command), command, slice.insertedRecipients(), title, message);
 
-        log.info("넓은 팬아웃 조각 type={} curriculum={} 커서={} 훑음={} 삽입={}",
+        log.info("넓은 팬아웃 조각 type={} curriculum={} 커서={} 훑음={} 삽입={} 삽입소요={}ms 방식={}",
                 command.type(), command.curriculumId(), command.afterUserId(),
-                slice.scanned(), slice.inserted());
+                slice.scanned(), slice.inserted(), insertMs, fanoutRepository.insertMode());
+        if (!slice.mayHaveMore(limit)) {
+            log.info("넓은 팬아웃 갈래 끝 type={} curriculum={} 마지막커서={} 방식={}",
+                    command.type(), command.curriculumId(), slice.lastUserId(),
+                    fanoutRepository.insertMode());
+        }
     }
 
     // ---- 푸시 명령 적재(ADR-0124) ----
