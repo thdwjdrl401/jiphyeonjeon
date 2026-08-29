@@ -58,10 +58,11 @@ show_input() {  # $1 = 로컬 sql 파일
 
 # 찍는 명령과 도는 명령이 같아야 하므로 한 문자열에서 둘 다 나온다.
 feed() {  # $1 = 컨테이너 안 sql 경로
-  local cmd="docker compose -f $CF exec -T -e PGPASSWORD=bench postgres \
-       psql -U liveclass -d liveclass -q -f $1"
-  echo "   \$ $cmd"
-  eval "$cmd" < /dev/null > /dev/null 2>&1
+  local head="docker compose -f $CF exec -T -e PGPASSWORD=bench postgres"
+  local tail="psql -U liveclass -d liveclass -q -f $1"
+  echo "   \$ $head \\"
+  echo "       $tail"
+  eval "$head $tail" < /dev/null > /dev/null 2>&1
 }
 
 report() {  # $1 방식 $2 표본수 $3 소요ms
