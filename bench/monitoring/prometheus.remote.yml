@@ -28,6 +28,9 @@ rule_files:
 
 scrape_configs:
   - job_name: app
+    # 팬아웃이 20~30초라 전역 5초로는 힙 곡선이 대여섯 점이다. 죽는 순간 앞뒤가
+    # 두 점 사이로 뭉개져 pg 곡선과 가로축을 맞춰 읽을 수 없다.
+    scrape_interval: 1s
     metrics_path: /actuator/prometheus
     static_configs:
       - targets: ['bench-host:18081']

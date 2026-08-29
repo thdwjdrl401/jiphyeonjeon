@@ -856,8 +856,17 @@
           }
         },
         {
-          "expr": "jvm_memory_max_bytes{area=\"heap\"}",
+          "expr": "sum(jvm_memory_used_bytes{area=\"heap\"})",
           "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "legendFormat": "jvm_memory_used_bytes{area=\"heap\"} 합계"
+        },
+        {
+          "expr": "jvm_memory_max_bytes{area=\"heap\"} > 0",
+          "refId": "C",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
