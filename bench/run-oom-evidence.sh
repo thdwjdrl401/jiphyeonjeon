@@ -353,35 +353,21 @@ for SLICE in $RUNLIST; do
   # 화면의 순서가 곧 일어난 순서다 — 죽음 → 복구 로그 → 접속 회복 → 남은 알림 0건.
   if [ "$SLICE" = "$BATCH_SLICE" ] && [ "$PGOOM" = "true" ] && [ "$BATCH_DIED" = "1" ]; then
     echo
-    echo "══════ ① 일괄(조각 $SLICE = 수강생 전원) 한 번의 결말   pg[$PG_CPUSET_V] 앱[$APP_CPUSET_V] ══════"
-    show_inspect 'OOMKilled={{.State.OOMKilled}}  mem_limit={{.HostConfig.Memory}}'
-    # 시작 줄의 cgroup 은 이 회차의 것이 아닐 수 있다. 죽고 난 뒤에는 컨테이너를 다시
-    # 만들기 때문이다. 아래 커널 기록의 oom_memcg 에 이 id 가 들어 있어야 그 기록이
-    # 이 컨테이너의 것이다. 그래서 여기서 id 를 찍는다.
     echo
-    show_argv "docker inspect" "$PGC" --format '{{.Id}}'
-    docker inspect "$PGC" --format '{{.Id}}'
-
-    # **커널 로그가 빠진 고리다.** 그래프는 메모리가 한도에 닿은 것까지만 말하고, 거기서
-    # 커널이 죽였는지 회수하고 버텼는지는 안 말한다(실제로 한도에 닿고도 안 죽은 회차가 있다).
-    # Postgres 로그도 "다른 서버 프로세스가 죽었다"까지고 이유는 안 말한다 — 세그폴트여도
-    # 같은 줄이 나온다. 커널 로그에만 원인(Memory cgroup out of memory), 대상(postgres),
-    # 그리고 죽는 순간의 anon-rss 가 있다. 표본기는 0.5초 간격이라 그 마지막 급등을 못 잡는다.
-    kcmd="journalctl -k --since '10 min ago' --grep 'Memory cgroup out of memory' | tail -2"
+    echo "══════ ①-가 죽었다   조각 $SLICE = 수강생 전원 · pg[$PG_CPUSET_V] ══════"
+    show_inspect 'OOMKilled={{.State.OOMKilled}}  mem_limit={{.HostConfig.Memory}}'
+    # 컨테이너 id 와 oom_memcg 를 대조하던 두 줄을 걷는다. 화면에서 제일 긴 줄인데,
+    # 커널 기록에 (postgres) 가 있고 그 컨테이너는 하나뿐이라 없어도 가려진다.
+    kcmd="journalctl -k --since '10 min ago' --grep 'Memory cgroup out of memory' | tail -1"
     echo
     echo "\$ $kcmd"
     eval "$kcmd"
-    # 그 기록이 이 컨테이너의 cgroup 인지 대조한다. 위에 찍은 cgroup 경로와 같아야 한다.
-    mcmd="journalctl -k --since '10 min ago' --grep oom_memcg | grep -o 'oom_memcg=[^,]*' | tail -1"
-    echo
-    echo "\$ $mcmd"
-    eval "$mcmd"
 
-    wait_pg_ready   # 복구가 끝나야 셀 수 있다. 끝났다는 사실은 아래 로그의 마지막 줄이 말한다
-    # redo 만 걸면 체크포인트 줄의 "redo lsn=" 이 딸려 와 복구 줄을 밀어낸다. starts·done 으로 좁힌다.
-    # 한 줄로 두면 216자가 되어 화면에서 접힌다. 줄 이음을 넣어 두 줄로 찍고 eval 이 그대로 실행한다.
+    wait_pg_ready   # 복구가 끝나야 셀 수 있다
+    echo
+    echo "══════ ①-나 잃었다   크래시 복구 뒤 남은 것 ══════"
     logcmd="docker compose -f $CF logs --no-log-prefix postgres \\
-    | grep -E 'not properly shut down|redo (starts|done)|ready to accept' | tail -4"
+    | grep -E 'not properly shut down|redo (starts|done)' | tail -3"
     echo
     echo "\$ $logcmd"
     eval "$logcmd"
