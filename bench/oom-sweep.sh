@@ -1,43 +1,28 @@
 #!/usr/bin/env bash
 #
-# 항목 2(일괄 조회·단일 INSERT의 Postgres OOM → 커서 범위 슬라이싱)의 증거를 만든다.
+# 조각 크기만 바꿔 같은 100만 건을 넣고, 회차별 수치를 summary.csv 한 장으로 남긴다.
 #
-# 조각 크기만 바꿔 같은 100만 건을 넣는다. 나머지는 전부 같다 — 갈래 1, 같은 코어 배분,
-# 같은 힙, 푸시는 꺼 둔다. 조각 1,100,000 이면 한 조각이 수강생 전원이라 그것이 일괄 구조다.
-# 되돌린 브랜치가 필요 없다. 조각 크기가 런타임 값이기 때문이다.
+# 나머지는 전부 같다. 갈래 1, 같은 코어 배분, 같은 힙, 푸시는 꺼 둔다. 조각 1,100,000 이면
+# 한 조각이 수강생 전원이라 그것이 일괄 구조다. 되돌린 브랜치가 필요 없다. 조각 크기가
+# 런타임 값이기 때문이다.
 #
-# 그때 무슨 일이 있었는지를 알아 가던 순서를 그대로 낸다.
+# **캡처는 이 스크립트가 뜨지 않는다.** 표만 만들어 두고, 화면 캡처는 끝난 뒤 손으로 뜬다.
 #
-#   알림이 0건이다 → 앱은 멀쩡한데 DB 연결이 끊겼다 → docker inspect 로 OOM 확인
-#   → Postgres 로그로 크래시 복구 확인 → 그럼 왜 터졌나, 메모리 곡선을 본다
-#   → 앱인가 DB인가, JVM 힙을 본다 → 조각을 줄여 다시 돌려 본다
+#   column -s, -t < bench/results/oom-<회차>/summary.csv
 #
-# 그래서 증거가 두 종류다.
+# 죽는 장면 하나를 만드는 것은 bench/oom-break.sh 가 한다. 이쪽은 여러 회차를 돌려
+# 조각 크기와 수치의 관계를 내는 것이 목적이다.
 #
-#   로그·질의 (이 스크립트가 화면에 낸다)
-#     ① 일괄 한 번의 결말   OOMKilled=true → 크래시 복구 로그 → 알림 0건 → 버려진 WAL
-#                           (문제 절: "1.5GB 를 초과해 강제 종료 … 전량 롤백되어 알림 0건")
-#     ② 조각만 바꾼 비교표  pgOOM 이 일괄에서만 true · 알림 0 vs 100만 · 앱 힙이 조각과 무관
-#                           · 소요 시간이 조각과 무관
-#                           (결과: "분할은 속도가 아니라 완료를 위한 조치")
-#
-#   곡선 (Grafana 가 그린다. MON=1 일 때)
-#     패널 7  Postgres 컨테이너 메모리   한계선에 닿는 장면
-#     패널 4  JVM 힙                     조건과 무관하게 같은 띠 안에 있음 → 병목이 앱이 아니다
-#
-# **곡선을 bash 로 그리지 않는다.** 관측 스택이 이미 있고 cAdvisor 는 1초 간격에 동적 집계까지
-# 꺼 둔 상태다(compose.bench.yml 의 cadvisor 주석). 회차마다 Grafana 주석을 남겨 두 곡선이
-# 한 화면에 겹쳐도 어느 쪽이 일괄인지 그림 안에서 읽히게 한다.
+# **일괄은 여러 번 돈다.** 3회 중 2회 죽었다. 총 메모리는 세 번 다 한도 1500MB 에 닿았고
+# 익명 메모리도 857~940MB 로 비슷했다. 커널이 그 지점에서 죽이느냐 회수하느냐가 갈린 것이다.
+# 재현되는 것은 "한도에 닿는다" 이고, "강제 종료" 는 그 지점에서 일어날 수 있는 일이다.
 #
 # **관측은 측정을 느리게 한다.** 실측으로 팬아웃이 18.3초에서 20.976초가 됐다(+15%). 그래서
-# 대표 수치는 MON=0 회차에서 얻고, MON=1 회차는 곡선의 모양만 본다. 두 회차의 목적이 다르다.
-#
-# 1초 표본 CSV(mem-<조각>.csv)는 화면에 안 찍고 파일로만 남긴다. 그래프가 의심스러울 때
-# 대조할 원본이다.
+# 대표 수치는 MON=0 회차에서 얻고, MON=1 회차는 곡선의 모양만 본다.
 #
 # 사용법
-#   bash bench/run-oom-evidence.sh              대표 수치 (관측 꺼짐)
-#   MON=1 SLICES="1100000 5000" bash bench/run-oom-evidence.sh    곡선 (관측 켜짐)
+#   bash bench/oom-sweep.sh                                        대표 수치 (관측 꺼짐)
+#   MON=1 SLICES="1100000 5000" bash bench/oom-sweep.sh            곡선 (관측 켜짐)
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -89,20 +74,10 @@ new_uuid() { python3 -c 'import uuid; print(uuid.uuid4())'; }
 iso_now() { python3 -c 'import datetime; print(datetime.datetime.now().astimezone().isoformat())'; }
 now_ms() { python3 -c 'import time; print(int(time.time()*1000))'; }
 
-. bench/evidence-lib.sh   # q · show_argv · runc · runq
-
 # 회차별 시각 범위를 남긴다. 관측 머신이 이 값으로 주석을 달고 패널을 뽑는다.
 mark_range() {  # $1=조각 $2=시작ms $3=끝ms
   [ "$MON" = "1" ] || return 0
   echo "$1,$2,$3" >> "$OUT/ranges.csv"
-}
-
-# 컨테이너 이름을 풀어 쓴다. $(docker compose ... ps -q postgres) 를 그대로 찍으면 한 줄이
-# 150자가 되어 화면에서 접히고, 정작 봐야 할 OOMKilled 가 벽 속에 묻힌다.
-show_inspect() {  # $1 = --format 값
-  echo
-  show_argv "docker inspect" "$PGC" --format "$1"
-  docker inspect "$PGC" --format "$1"
 }
 
 app_metric() { curl -s --max-time 3 http://127.0.0.1:18081/actuator/prometheus 2>/dev/null \
@@ -133,8 +108,6 @@ mem_stat() {
 # **cpuset 을 인프라보다 먼저 내보내야 한다.** 아래에 두었더니 postgres·rabbitmq 가 코어 배분
 # 없이 떠서 측정 조건이 달라졌다. 조각 크기가 메시지로 옮겨 가면서 회차마다의 앱 설정도
 # 같아졌으므로 env 는 여기서 한 번만 내보낸다.
-# 조각 크기가 메시지로 옮겨 가면서 회차마다의 앱 설정이 같아졌다. 그래서 env 는 한 번만
-# 내보내고, 회차마다의 앱 내림·올림은 화면에 보인다(runc). 숨기면 화면이 텍스트 덩어리가 된다.
 export PG_CPUSET="$PG_CPUSET_V" INFRA_CPUSET="$INFRA_CPUSET_V" APP_CPUSET="$APP_CPUSET_V" \
        APP_HEAP="$APP_HEAP" APP_MEM="$APP_MEM" \
        FANOUT_ENABLED=true PUSH_ENABLED=false CAPTION_ENABLED=false \
@@ -142,8 +115,8 @@ export PG_CPUSET="$PG_CPUSET_V" INFRA_CPUSET="$INFRA_CPUSET_V" APP_CPUSET="$APP_
 
 echo "▶ 인프라 기동 (pg[$PG_CPUSET_V] 앱[$APP_CPUSET_V] 인프라[$INFRA_CPUSET_V] · 힙 $APP_HEAP)"
 # **postgres 컨테이너를 다시 만들고 시작한다.** docker inspect 의 OOMKilled 는 컨테이너를 다시
-# 만들기 전까지 켜진 채로 남는다. 앞선 실행이 죽여 놨으면 ① 캡처의 OOMKilled=true 가 이번 것인지
-# 지난 것인지 구분되지 않는다. 데이터는 볼륨에 있어 사라지지 않는다.
+# 만들기 전까지 켜진 채로 남는다. 앞선 실행이 죽여 놨으면 시작 점검이 이번 잔해인지 지난
+# 잔해인지 구분하지 못한다. 데이터는 볼륨에 있어 사라지지 않는다.
 compose rm -sf postgres app > /dev/null 2>&1 || true
 INFRA_SVC="postgres redis rabbitmq mock-push"
 PROFILE=""
@@ -169,10 +142,8 @@ if [ "$MON" = "1" ]; then
     || fail "postgres-exporter 가 안 뜬다"
 fi
 T_SESSION0="$(now_ms)"
-PGC="$(docker inspect "$(compose ps -q postgres)" --format '{{.Name}}' 2>/dev/null | sed 's#^/##')"
-[ -n "$PGC" ] || fail "postgres 컨테이너 이름을 못 찾았다. 인프라가 안 떴다"
 [ "$(pg_oomkilled)" = "false" ] \
-  || fail "시작부터 OOMKilled=$(pg_oomkilled) 다. 플래그가 깨끗하지 않으면 ① 캡처를 못 쓴다"
+  || fail "시작부터 OOMKilled=$(pg_oomkilled) 다. 앞 회차 잔해가 남아 있으면 이번 회차를 못 쓴다"
 # 이미지는 한 번만 굽는다. 조각 크기가 메시지로 가면서 회차마다 다시 빌드할 이유가 없어졌다.
 # 빌드 로그는 준비 단계라 파일로 보내되, 실패하면 그 자리에서 띄우고 멈춘다.
 compose build app > "$OUT/build.log" 2>&1 \
@@ -237,7 +208,7 @@ trigger() {  # 갈래 1 · 조각 $1 로 넓은 팬아웃 한 건을 아웃박�
 #   pg_anon최대MB 원인: 일괄에서만 메모리가 한도까지 오른다
 #   pgOOM         문제: 한도를 넘어 강제 종료된다
 # 뺀 것 — pg_current 는 anon 을 쓰는 이유를 설명하려던 것이지 본문에 없는 이야기다.
-# 아웃박스 행 크기와 WAL 도 항목 2 가 하지 않는 주장이고, WAL 은 ① 에 이미 있다.
+# 아웃박스 행 크기와 WAL 도 항목 2 가 하지 않는 주장이다.
 # 한도는 모든 행이 같으므로 열 대신 구간 제목에 적는다.
 # **하네스 시계를 쓰지 않는다.** 거기에는 릴레이 폴링 대기(최대 30초)와 완료 확인 주기가
 # 섞여, 무슨 조각이든 비슷한 값이 나온다. 그 값으로 "조각을 바꿔도 시간이 같다"를 말하면
@@ -292,7 +263,6 @@ for SLICE in $RUNLIST; do
   reset_state
   compose up -d --wait --wait-timeout 420 app > "$OUT/app-start.log" 2>&1 \
     || { tail -20 "$OUT/app-start.log" >&2; fail "앱 기동 실패. 위 로그를 보라"; }
-  T_WAL0="$(pg -c "SELECT pg_current_wal_lsn();")"
   SERIES="$OUT/mem-$SLICE.csv"
   echo "t_ms,anon,file,shmem,current,limit,heap" > "$SERIES"
   ANON_MAX=0; CUR_MAX=0; T0="$(now_ms)"; RESULT="완료"; N=0
@@ -324,7 +294,7 @@ for SLICE in $RUNLIST; do
   done
   T1="$(now_ms)"
   # **여기서 곧바로 앱을 내린다.** 1.1M 의 아웃박스 행이 PENDING 으로 남아 있는데 앱을 켜 둔 채
-  # ①을 찍는 동안 릴레이 폴링이 그 행을 다시 발행했다. 워커가 거대 INSERT 를 한 번 더 돌려
+  # 두는 동안 릴레이 폴링이 그 행을 다시 발행했다. 워커가 거대 INSERT 를 한 번 더 돌려
   # 두 번째 OOM 이 났고, 다음 회차가 그 복구와 겹쳐 돌았다(소요초 31.32, 앱힙 944 가 그 값이다).
   # **지우기 전에 받는다.** 아래에서 컨테이너를 지운 뒤 로그를 받고 있었고, 그래서 앱 로그가
   # 0줄이었다. 워커가 DB 연결을 잃고 멈추는 장면이 여기 있어야 한다.
@@ -346,36 +316,8 @@ for SLICE in $RUNLIST; do
     compose logs --tail 200 postgres > "$OUT/pg-slice-$SLICE.log" 2>&1 || true
   fi
 
-  # ── ① 일괄 한 번의 결말 ──────────────────────────────────────────────────────
-  # **복구를 기다린 뒤에 물어야 한다.** 컨테이너는 안 죽었다. cgroup OOM 킬러가 거대 INSERT 를
-  # 돌리던 백엔드 프로세스를 잡았고, postmaster 가 그것을 감지해 스스로 크래시 복구를 돌린다.
-  # 그 사이에 물으면 "the database system is not yet accepting connections" 만 돌아온다.
-  # 화면의 순서가 곧 일어난 순서다 — 죽음 → 복구 로그 → 접속 회복 → 남은 알림 0건.
-  if [ "$SLICE" = "$BATCH_SLICE" ] && [ "$PGOOM" = "true" ] && [ "$BATCH_DIED" = "1" ]; then
-    echo
-    echo
-    echo "══════ ①-가 죽었다   조각 $SLICE = 수강생 전원 · pg[$PG_CPUSET_V] ══════"
-    show_inspect 'OOMKilled={{.State.OOMKilled}}  mem_limit={{.HostConfig.Memory}}'
-    # 컨테이너 id 와 oom_memcg 를 대조하던 두 줄을 걷는다. 화면에서 제일 긴 줄인데,
-    # 커널 기록에 (postgres) 가 있고 그 컨테이너는 하나뿐이라 없어도 가려진다.
-    kcmd="journalctl -k --since '10 min ago' --grep 'Memory cgroup out of memory' | tail -1"
-    echo
-    echo "\$ $kcmd"
-    eval "$kcmd"
-
-    wait_pg_ready   # 복구가 끝나야 셀 수 있다
-    echo
-    echo "══════ ①-나 잃었다   크래시 복구 뒤 남은 것 ══════"
-    logcmd="docker compose -f $CF logs --no-log-prefix postgres \\
-    | grep -E 'not properly shut down|redo (starts|done)' | tail -3"
-    echo
-    echo "\$ $logcmd"
-    eval "$logcmd"
-    runq "SELECT count(*) AS 만든_알림 FROM core.notification;"
-    runq "SELECT pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), '$T_WAL0')) AS \"버려진_WAL\";"
-  else
-    [ "$PGOOM" = "true" ] && wait_pg_ready
-  fi
+  # 죽었으면 크래시 복구가 끝나야 셀 수 있다.
+  [ "$PGOOM" = "true" ] && wait_pg_ready
   N="$(pg -c "SELECT count(*) FROM core.notification;" 2>/dev/null || echo 0)"
   # DB 가 찍은 시각으로 순수 처리 시간을 잰다. 행이 없으면(전량 롤백) 잴 것이 없다.
   SPAN="$(pg -c "SELECT coalesce(round(extract(epoch from max(created_at) - min(created_at))::numeric, 2), 0)
@@ -394,16 +336,8 @@ open(f, "a").write(f"{sl},{span_s},{n},{mb(cur):.0f},{mb(anon):.0f},{oom},{res}\
 PY
 done
 
-# ── ② 조각만 바꾼 비교표 ──────────────────────────────────────────────────────
-echo
-MONLBL=""; [ "$MON" = "1" ] && MONLBL=" · 관측 켜짐"
-echo "══════ ② 조각 크기만 바꾼 같은 100만 건   pg 한도 $(( PG_LIMIT / 1048576 ))MB · 앱 힙 $APP_HEAP · 푸시 꺼짐 · 갈래 1$MONLBL ══════"
-echo
-echo "\$ column -s, -t < $OUT/summary.csv"
-column -s, -t < "$OUT/summary.csv"
 echo
 echo "  일괄(조각 $BATCH_SLICE) $BATCH_RAN회 중 $BATCH_DIED회 강제 종료"
-
 # ── 곡선은 관측 머신에서 ────────────────────────────────────────────────────
 # 여기에는 Prometheus 도 Grafana 도 없다. 회차별 시각 범위만 남기고 끝낸다.
 # 관측 머신이 이 범위로 주석을 달고 패널을 PNG 로 뽑는다.
@@ -422,4 +356,6 @@ if [ "$MON" = "1" ]; then
 fi
 
 echo
-echo "결과: $OUT"
+echo "  표는 직접 뜬다:  column -s, -t < $OUT/summary.csv"
+echo
+echo "  결과: $OUT"
