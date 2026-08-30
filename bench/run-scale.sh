@@ -35,6 +35,9 @@ PHASE="${1:-A}"
 INSTANCES="${INSTANCES:-1 2 3}"
 OUT="${OUT:-$BENCH/results/scale-$PHASE-${LAYOUT:-shared}-$(date +%Y%m%dT%H%M%S)}"
 
+# 목 서버의 응답 지연. 이 프로젝트가 잰 FCM 왕복이 230ms 이고 포트폴리오의 발송 수치가
+# 전부 그 값 위에 서 있다. compose 기본값은 50ms 라 안 넘기면 다른 조건으로 돈다.
+MOCK_DELAY="${MOCK_DELAY:-230ms}"; export MOCK_DELAY
 LAYOUT="${LAYOUT:-shared}"
 APP_HEAP="${APP_HEAP:-1g}"
 APP_MEM="${APP_MEM:-1600m}"
