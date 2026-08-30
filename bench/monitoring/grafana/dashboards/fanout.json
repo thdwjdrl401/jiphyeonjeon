@@ -57,7 +57,7 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(container_cpu_usage_seconds_total{name=~\"liveclass-bench-.*\"}[1m])) by (name) * 100",
+          "expr": "sum(rate(container_cpu_usage_seconds_total{name=~\"liveclass-bench-.*\"}[30s])) by (name) * 100",
           "refId": "A",
           "datasource": {
             "type": "prometheus",
@@ -79,6 +79,76 @@
               "type": "linear"
             },
             "pointSize": 4
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 14,
+      "title": "컨테이너 CPU (배정 대비)",
+      "type": "timeseries",
+      "description": "각 컨테이너가 자기 몫을 얼마나 쓰는가. 100% = 배정된 코어를 다 씀.\ncpuset 으로 코어를 나눠 주므로 컨테이너마다 상한이 다르다. 원 % 로 보면 400% 짜리와 200% 짜리를 한 축에서 못 읽는다.",
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(container_cpu_usage_seconds_total{name=~\"liveclass-bench-.*\"}[30s])) by (name)\n  / on(name) group_left bench_cgroup_cpus_effective * 100",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 110,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "always",
+            "pointSize": 4,
+            "spanNulls": false,
+            "lineInterpolation": "linear",
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 100
+              }
+            ]
           }
         },
         "overrides": []

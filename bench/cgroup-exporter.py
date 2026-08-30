@@ -64,6 +64,51 @@ def container_id(name):
         c.close()
 
 
+def list_containers(prefix):
+    """이름이 prefix로 시작하는 컨테이너의 {이름: id}. 죽은 것은 빼고."""
+    c = UnixHTTP(DOCKER_SOCK)
+    out = {}
+    try:
+        c.request("GET", "/containers/json")
+        r = c.getresponse()
+        if r.status != 200:
+            return out
+        for item in json.loads(r.read()):
+            for name in item.get("Names") or []:
+                name = name.lstrip("/")
+                if name.startswith(prefix):
+                    out[name] = item.get("Id")
+    except OSError:
+        pass
+    finally:
+        c.close()
+    return out
+
+
+def cpus_effective(cgdir):
+    """cpuset.cpus.effective 가 몇 개인가. "0-1,4" 같은 표기를 센다.
+
+    **cAdvisor 로는 못 구한다.** container_spec_cpu_quota 는 compose 의 cpus 값(8코어)을
+    말하고, 실제로 쓸 수 있는 것은 cpuset 이 정한 코어다. 그 둘이 다르면 "몇 %까지 갈 수
+    있는가"를 알 수 없고, 그러면 컨테이너끼리 CPU 를 나란히 놓고 못 읽는다.
+    """
+    try:
+        with open(os.path.join(cgdir, "cpuset.cpus.effective")) as f:
+            spec = f.read().strip()
+    except OSError:
+        return None
+    if not spec:
+        return None
+    n = 0
+    for part in spec.split(","):
+        if "-" in part:
+            a, _, b = part.partition("-")
+            n += int(b) - int(a) + 1
+        else:
+            n += 1
+    return n
+
+
 def cgroup_dir(cid):
     for p in (f"{CGROOT}/system.slice/docker-{cid}.scope",
               f"{CGROOT}/docker/{cid}",
@@ -110,6 +155,7 @@ class Sampler(threading.Thread):
         self.peak_anon = 0
         self.cid = None
         self.dir = None
+        self.cpus = {}
 
     def resolve(self):
         cid = container_id(self.name_)
@@ -121,12 +167,26 @@ class Sampler(threading.Thread):
                 self.cid, self.dir = cid, d
                 self.peak_current = self.peak_anon = 0
 
+    def scan_cpus(self):
+        """벤치 컨테이너 전부의 배정 코어 수. 회차마다 cpuset 이 바뀌므로 계속 다시 읽는다."""
+        found = {}
+        for name, cid in list_containers("liveclass-bench-").items():
+            d = cgroup_dir(cid)
+            if not d:
+                continue
+            n = cpus_effective(d)
+            if n:
+                found[name] = n
+        with self.lock:
+            self.cpus = found
+
     def run(self):
         last_resolve = 0.0
         while True:
             now = time.time()
             if now - last_resolve > 2 or not self.dir:
                 self.resolve()
+                self.scan_cpus()
                 last_resolve = now
             if self.dir:
                 cur = read_int(os.path.join(self.dir, "memory.current"))
@@ -156,8 +216,15 @@ class Sampler(threading.Thread):
         with self.lock:
             s = dict(self.state)
             pc, pa = self.peak_current, self.peak_anon
+            cpus = dict(self.cpus)
+        head = [
+            "# HELP bench_cgroup_cpus_effective cpuset.cpus.effective 의 코어 수 (CPU 상한 = 이 값 × 100%)",
+            "# TYPE bench_cgroup_cpus_effective gauge",
+        ]
+        head += ['bench_cgroup_cpus_effective{name="%s"} %d' % (n, v) for n, v in sorted(cpus.items())]
+        prefix = "\n".join(head) + "\n"
         if not s:
-            return "# cgroup 을 아직 못 찾았다\n"
+            return prefix + "# 메모리 cgroup 을 아직 못 찾았다\n"
         lb = 'container="%s"' % self.name_
         out = [
             "# HELP bench_cgroup_memory_current_bytes cgroup memory.current",
@@ -176,7 +243,7 @@ class Sampler(threading.Thread):
         out.append("bench_cgroup_memory_anon_peak_bytes{%s} %d" % (lb, pa))
         for k, v in (s.get("events") or {}).items():
             out.append('bench_cgroup_memory_events_total{%s,event="%s"} %d' % (lb, k, v))
-        return "\n".join(out) + "\n"
+        return prefix + "\n".join(out) + "\n"
 
 
 def main():
