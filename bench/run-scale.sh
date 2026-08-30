@@ -231,7 +231,10 @@ for n in $INSTANCES; do
     pg -c "TRUNCATE core.notification_push_progress;" > /dev/null
     # 소비자가 미리 쥐는 양을 1로 낮춘다. 명령 하나가 수천 건 발송이라 기본 250이면
     # 먼저 붙은 인스턴스가 전부 가져가 다른 인스턴스가 논다 — 확장 측정이 성립하지 않는다.
-    PREFETCH_V=1
+    # 소비자가 미리 쥐는 양. 기본 1이다 — 명령 하나가 수천 건 발송이라 250이면 먼저 붙은
+    # 인스턴스가 전부 가져가 다른 인스턴스가 논다(ADR-0136). 그 상태를 다시 만들어 보려면
+    # PUSH_PREFETCH=250 으로 부른다.
+    PUSH_PREFETCH_V="${PUSH_PREFETCH:-1}"
     FAN=false; PUSHON=true; TARGET="$SUBS"
   fi
 
@@ -242,7 +245,8 @@ for n in $INSTANCES; do
   PG_CPUSET="$pgset" INFRA_CPUSET="$infraset" \
   APP_CPUSET="$a1" APP2_CPUSET="${a2:-3,7}" APP3_CPUSET="${a3:-1,5}" \
   APP_HEAP="$APP_HEAP" APP_MEM="$APP_MEM" \
-  FANOUT_ENABLED="$FAN" PUSH_ENABLED="$PUSHON" PREFETCH="${PREFETCH_V:-250}" \
+  FANOUT_ENABLED="$FAN" PUSH_ENABLED="$PUSHON" PUSH_PREFETCH="${PUSH_PREFETCH_V:-1}" \
+  JFR_OPTS="${JFR:+-XX:StartFlightRecording=settings=profile,filename=/tmp/app.jfr,dumponexit=true}" \
     compose "${args[@]}" > /dev/null 2>&1 || fail "앱 기동 실패 (인스턴스 $n)"
   svc=(app); [ "$n" -ge 2 ] && svc+=(app2); [ "$n" -ge 3 ] && svc+=(app3)
   assert_same_image "${svc[@]}" > /dev/null
@@ -315,6 +319,26 @@ with open(path, "a") as f:
 print("   %d대 → %.1f초 · %d건/s · 대당 %d건/s · 1대대비 %.2fx · 앱CPU %.0f%% · pgCPU %.0f%%"
       % (n, sec, tp, tp / n, vs, app, db))
 PY
+  # **누가 얼마나 가져갔나.** 처리량만 보면 한 대가 다 하고 있어도 알 수 없다.
+  # 푸시 워커는 명령 하나를 끝낼 때마다 "푸시 전달" 한 줄을 남긴다. 그것을 센다.
+  if [ "$PHASE" = "B" ]; then
+    echo -n "   명령 분배  "
+    for x in "${svc[@]}"; do
+      printf '%s=%s건  ' "$x" "$(compose logs --no-log-prefix "$x" 2>/dev/null | grep -c '푸시 전달' || echo 0)"
+    done
+    echo
+  fi
+
+  # JFR 은 종료할 때 덤프된다(dumponexit). 정상 종료를 기다렸다 꺼낸다.
+  if [ -n "${JFR:-}" ]; then
+    for x in "${svc[@]}"; do
+      compose stop -t 60 "$x" > /dev/null 2>&1 || true
+      cid="$(compose ps -aq "$x" 2>/dev/null | head -1)"
+      [ -n "$cid" ] && docker cp "$cid:/tmp/app.jfr" "$OUT/$x-$n.jfr" 2>/dev/null || true
+    done
+    echo "   JFR  $(ls "$OUT"/*.jfr 2>/dev/null | wc -l | tr -d ' ')개"
+  fi
+
   [ -n "$BASE" ] || BASE="$(python3 -c "print($TARGET / ($elapsed_ms/1000))")"
 done
 
