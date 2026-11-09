@@ -25,7 +25,7 @@
 export const FLOOR_DBFS = -50
 
 /**
- * 눈금 천장. 보통 말소리(-30~-18 dBFS)가 위쪽 절반에 오고 그 위로 여유가 남는다 — 끝 두 칸은
+ * 눈금 상한. 보통 말소리(-30~-18 dBFS)가 위쪽 절반에 오고 그 위로 여유가 남는다 — 끝 두 칸은
  * 붉게 칠해 과입력을 알린다(`mic-meter__bar i:nth-last-child(-n+2)`).
  */
 export const CEIL_DBFS = -10

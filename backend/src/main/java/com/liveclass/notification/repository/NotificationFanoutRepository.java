@@ -1,10 +1,12 @@
 package com.liveclass.notification.repository;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -160,10 +162,112 @@ public class NotificationFanoutRepository {
                    (SELECT s.user_id FROM slice s ORDER BY s.user_id DESC LIMIT 1) AS last_user_id
             """;
 
-    private final NamedParameterJdbcTemplate jdbc;
+    /*
+     * **벤치 전용 스위치.** 조각을 수강생 전원으로 두면 Postgres 익명 메모리가 1,080MB 까지
+     * 오른다. 그 메모리를 이 집계가 먹은 것인지 가르려면 그것만 뺀 판이 필요하다 — uuid
+     * 100만 개는 16MB 남짓인데 실측은 수신자당 1,000바이트라, 코드만 읽어서는 지목할 수 없다.
+     *
+     * 끄면 실시간 신호(announceAll)와 푸시 적재가 빈 목록을 받는다. 그래서 기본은 켜짐이고,
+     * 끄는 것은 이 비교 측정뿐이다.
+     */
+    /*
+     * **벤치 전용, 순진한 판.** 항목 3이 대는 "DB 왕복 100만 회"는 앱과 DB 사이의 왕복이다.
+     * 그 값을 서버 안에서 psql 로 재면 네트워크도 JDBC 도 없어 다른 것을 잰다. 그래서 같은 일을
+     * 앱이 행마다 던지는 길을 남겨 두고, 워커의 로그로 두 방식의 소요를 나란히 본다.
+     *
+     * 집합 삽입 한 문장이 하던 일을 셋으로 가른다 — 명단 조회 한 번, 문구 한 번, 그리고 행마다
+     * 삽입. 커서와 훑은 수는 명단에서 나오고, 새로 넣은 사람은 update 가 돌려주는 행 수로 가른다
+     * (중복이면 0). 집합 판의 RETURNING 이 하던 구실이다.
+     */
+    private static final String SLICE_USERS = """
+            SELECT e.user_id
+            FROM core.enrollment e
+            WHERE e.curriculum_id = CAST(:curriculumId AS uuid)
+              AND e.status = 'ACTIVE'
+              AND (CAST(:afterUserId AS uuid) IS NULL OR e.user_id > CAST(:afterUserId AS uuid))
+              AND (CAST(:untilUserId AS uuid) IS NULL OR e.user_id <= CAST(:untilUserId AS uuid))
+            ORDER BY e.user_id
+            LIMIT :sliceLimit
+            """;
 
-    public NotificationFanoutRepository(NamedParameterJdbcTemplate jdbc) {
+    private static final String INSERT_CONTENT_ONE = """
+            INSERT INTO core.notification_content (
+                id, type, severity, title, message, targets, group_key,
+                previous_starts_at, next_starts_at)
+            VALUES (CAST(:contentId AS uuid), :type, :severity, :title, :message,
+                    CAST(:targets AS jsonb), :groupKey,
+                    CAST(:previousStartsAt AS timestamptz), CAST(:nextStartsAt AS timestamptz))
+            ON CONFLICT (id) DO NOTHING
+            """;
+
+    // 중복 제거 키는 집합 판과 글자까지 같아야 한다. uuid 를 text 로 잇는 자리가 같으므로
+    // 같은 사람에게 두 방식이 같은 해시를 만든다.
+    private static final String INSERT_ONE = """
+            INSERT INTO core.notification
+                    (id, recipient_id, content_id, dedupe_hash, read_status, action_status)
+            VALUES (gen_random_uuid(), CAST(:userId AS uuid), CAST(:contentId AS uuid),
+                    md5(:dedupePrefix || CAST(:userId AS uuid))::uuid, 'UNREAD', :actionStatus)
+            ON CONFLICT (dedupe_hash) WHERE dedupe_hash IS NOT NULL DO NOTHING
+            """;
+
+    private static final String AGG = "(SELECT array_agg(recipient_id) FROM inserted)";
+    private static final String NO_AGG = "NULL::uuid[]";
+    private static final String INSERT_SLICE_NO_RECIPIENTS = INSERT_SLICE.replace(AGG, NO_AGG);
+    private static final String INSERT_STARTING_SOON_SLICE_NO_RECIPIENTS =
+            INSERT_STARTING_SOON_SLICE.replace(AGG, NO_AGG);
+
+    static {
+        // 문자열 치환이라 SQL 을 손대면 조용히 안 먹는다. 그러면 두 판이 같은 질의를 돌리고
+        // 비교표에 차이 없음이 찍힌다. 기동 때 걸리게 둔다.
+        if (INSERT_SLICE_NO_RECIPIENTS.equals(INSERT_SLICE)
+                || INSERT_STARTING_SOON_SLICE_NO_RECIPIENTS.equals(INSERT_STARTING_SOON_SLICE)) {
+            throw new IllegalStateException("array_agg 자리를 못 찾았다. return-recipients 스위치가 아무 일도 안 한다");
+        }
+    }
+
+    private final NamedParameterJdbcTemplate jdbc;
+    private final boolean returnRecipients;
+    private final String insertMode;
+
+    public NotificationFanoutRepository(
+            NamedParameterJdbcTemplate jdbc,
+            @Value("${notification.fanout.return-recipients:true}") boolean returnRecipients,
+            @Value("${notification.fanout.insert-mode:set}") String insertMode) {
         this.jdbc = jdbc;
+        this.returnRecipients = returnRecipients;
+        this.insertMode = "row".equalsIgnoreCase(insertMode) ? "row" : "set";
+    }
+
+    /**
+     * 이 체인이 시작한 뒤 흐른 시간(ms). 없으면 {@code null}.
+     *
+     * <p>기준은 <b>문구 행의 created_at</b>이다. 문구는 첫 슬라이스가 자기 트랜잭션 안에서
+     * 한 번만 넣고 그 뒤 슬라이스는 건너뛰므로, 그 시각이 곧 체인이 일을 시작한 시각이다.
+     * 기본키 조회 한 번이라 마지막 슬라이스에서 한 번 물어도 부담이 없다.
+     *
+     * <p>메시지에 시작 시각을 실어 나르지 않는 이유는, 그러려고 명령 스키마를 늘리면 발행하는
+     * 곳 전부를 고쳐야 하는데 이 값은 이미 표에 있기 때문이다.
+     */
+    public Long chainElapsedMs(String dedupePrefix) {
+        List<Long> rows = jdbc.queryForList("""
+                SELECT round(extract(epoch from (clock_timestamp() - created_at)) * 1000)
+                  FROM core.notification_content
+                 WHERE id = CAST(:contentId AS uuid)
+                """,
+                new MapSqlParameterSource("contentId", contentIdOf(dedupePrefix).toString()),
+                Long.class);
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    /**
+     * 지금 어느 길로 넣고 있는가. 워커가 로그에 적는다.
+     *
+     * <p>설정값(set·row)이 아니라 <b>SQL 을 그대로 돌려준다</b>. 이 값은 로그에 찍히고 그
+     * 로그가 근거 자료가 되는데, set·row 나 집합·한문장 같은 말은 읽는 사람이 범례를 찾아야
+     * 한다. 행마다 INSERT 와 INSERT ... SELECT 는 설명이 필요 없다.
+     */
+    public String insertModeLabel() {
+        return "row".equals(insertMode) ? "행마다 INSERT" : "INSERT ... SELECT";
     }
 
     /**
@@ -200,7 +304,37 @@ public class NotificationFanoutRepository {
                  */
                 .addValue("previousStartsAt", previousStartsAt == null ? null : previousStartsAt.toString())
                 .addValue("nextStartsAt", nextStartsAt == null ? null : nextStartsAt.toString());
-        return jdbc.queryForObject(INSERT_SLICE, params, NotificationFanoutRepository::readSlice);
+        if ("row".equals(insertMode)) {
+            return insertRowByRow(params, dedupePrefix, actionStatus);
+        }
+        return jdbc.queryForObject(returnRecipients ? INSERT_SLICE : INSERT_SLICE_NO_RECIPIENTS,
+                params, NotificationFanoutRepository::readSlice);
+    }
+
+    /**
+     * 순진한 판. 명단을 앱으로 가져와 <b>행마다 한 문장씩</b> 던진다. 조각 하나에 왕복이
+     * 1 + 1 + 조각 크기만큼 생긴다.
+     *
+     * <p>벤치에서만 쓴다({@code notification.fanout.insert-mode=row}). 운영은 집합 판이다.
+     */
+    private Slice insertRowByRow(MapSqlParameterSource params, String dedupePrefix, String actionStatus) {
+        List<UUID> users = jdbc.queryForList(SLICE_USERS, params, UUID.class);
+        if (users.isEmpty()) {
+            return new Slice(0, 0, List.of(), null);
+        }
+        jdbc.update(INSERT_CONTENT_ONE, params);
+        List<UUID> inserted = new ArrayList<>();
+        for (UUID user : users) {
+            MapSqlParameterSource one = new MapSqlParameterSource()
+                    .addValue("userId", user.toString())
+                    .addValue("contentId", params.getValue("contentId"))
+                    .addValue("dedupePrefix", dedupePrefix)
+                    .addValue("actionStatus", actionStatus);
+            if (jdbc.update(INSERT_ONE, one) > 0) {
+                inserted.add(user);
+            }
+        }
+        return new Slice(users.size(), inserted.size(), inserted, users.get(users.size() - 1));
     }
 
     /**
@@ -239,7 +373,9 @@ public class NotificationFanoutRepository {
                 .addValue("contentId", contentIdOf(dedupePrefix).toString())
                 .addValue("previousStartsAt", null)
                 .addValue("nextStartsAt", nextStartsAt == null ? null : nextStartsAt.toString());
-        return jdbc.queryForObject(INSERT_STARTING_SOON_SLICE, params, NotificationFanoutRepository::readSlice);
+        return jdbc.queryForObject(
+                returnRecipients ? INSERT_STARTING_SOON_SLICE : INSERT_STARTING_SOON_SLICE_NO_RECIPIENTS,
+                params, NotificationFanoutRepository::readSlice);
     }
 
     /**

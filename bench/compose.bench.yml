@@ -59,6 +59,10 @@ x-appbase: &appbase
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/liveclass
       SPRING_DATASOURCE_USERNAME: liveclass
       SPRING_DATASOURCE_PASSWORD: bench
+      # 노드당 커넥션 수. 기본값은 application.yml과 같은 10이라 지금까지의 측정은 그대로다.
+      # 노드를 늘리면 이 값이 노드 수만큼 곱해져 PG에 걸린다 — 2노드 회차의 손실 12%가
+      # DB 경합에서 오는지 가르려면 이 값을 밖에서 낮출 수 있어야 한다.
+      SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: ${DB_POOL:-10}
       SPRING_DATA_REDIS_HOST: redis
       SPRING_RABBITMQ_HOST: rabbitmq
       SPRING_RABBITMQ_USERNAME: liveclass
@@ -74,9 +78,9 @@ x-appbase: &appbase
       NOTIFICATION_WEB_PUSH_PRIVATE_KEY: ${VAPID_PRIVATE:-Gc2qdwPEBQg12tfqmUWna7LmlUxXSGEbehmmzUc-LZ4}
       NOTIFICATION_WEB_PUSH_SUBJECT: mailto:bench@liveclass.test
 
-      # ── 여기가 실험 손잡이다. 삭제법(ablation)이 이 값들을 바꾼다 ──
+      # ── 여기가 실험 설정이다. 삭제법(ablation)이 이 값들을 바꾼다 ──
       NOTIFICATION_WEB_PUSH_MAX_IN_FLIGHT: ${PUSH_MAX_IN_FLIGHT:-800}
-      # 조절기는 벤치에서 기본으로 끈다 — 목 서버가 429를 안 내므로 켜 두면 천장까지
+      # 조절기는 벤치에서 기본으로 끈다 — 목 서버가 429를 안 내므로 켜 두면 최댓값까지
       # 되올라가기만 하고, 그 오르는 구간이 처리량 비교에 섞인다. 조절 자체를 잴 때만 켠다.
       NOTIFICATION_WEB_PUSH_ADAPTIVE_IN_FLIGHT: ${PUSH_ADAPTIVE:-false}
       NOTIFICATION_WEB_PUSH_MIN_IN_FLIGHT: ${PUSH_MIN_IN_FLIGHT:-100}
@@ -87,20 +91,33 @@ x-appbase: &appbase
       # 푸시 소비자가 미리 쥐는 수. 전역 PREFETCH와 **따로** 줘야 한다 — 전역만 주면 팩토리가
       # notification.push.listener-prefetch로 뒤에 덮어쓴다(소비자 수와 같은 자리, ADR-0136).
       NOTIFICATION_PUSH_LISTENER_PREFETCH: ${PUSH_PREFETCH:-1}
-      # **팬아웃 소비자 수는 전용 손잡이로 줘야 한다.** ADR-0131이 전역에서 갈라내면서
+      # **팬아웃 소비자 수는 전용 설정으로 줘야 한다.** ADR-0131이 전역에서 갈라내면서
       # notificationListenerContainerFactory가 configurer로 전역을 먹은 **뒤에**
       # notification.fanout.listener-concurrency(기본 8)로 덮어쓴다. 전역만 주면 그 덮어쓰기에
       # 지워져 FANOUT_CONCURRENCY가 조용히 무시된다 — 2·4·8을 재도 전부 8로 도는 회차가 나왔다.
       NOTIFICATION_FANOUT_LISTENER_CONCURRENCY: ${FANOUT_CONCURRENCY:-4}
-      # 전역은 자기 손잡이가 없는 리스너의 기본값으로만 남는다.
+      # 전역은 자기 설정이 없는 리스너의 기본값으로만 남는다.
       RABBIT_LISTENER_CONCURRENCY: ${RABBIT_CONCURRENCY:-2}
       # 한 소비자가 미리 쥐는 메시지 수. 기본 250은 조각을 키웠을 때 위험하다 — 조각
       # 5,000명이면 푸시 명령이 201건뿐이라 먼저 붙은 소비자가 전부 가져가고 나머지
       # 노드가 논다. 명령 하나가 수천 건 발송(수 초)이라 미리 쥘 이유도 없다.
       SPRING_RABBITMQ_LISTENER_SIMPLE_PREFETCH: ${PREFETCH:-250}
-      # 구간을 가르는 손잡이. 기본은 둘 다 켜짐(운영과 같다).
+      # 구간을 가르는 설정. 기본은 둘 다 켜짐(운영과 같다).
       NOTIFICATION_FANOUT_LISTENER_ENABLED: ${FANOUT_ENABLED:-true}
       NOTIFICATION_PUSH_LISTENER_ENABLED: ${PUSH_ENABLED:-true}
+      # 사건 하나를 uuid 구간 몇 개로 갈라 실을 것인가(ADR-0130, 기준은 ADR-0134).
+      # 기본 2. 아웃박스만 보이는 캡처에서는 1로 두어 사건 하나가 명령 하나로 나오게 한다.
+      # array_agg 를 끄는 비교 측정용. 켠 채 두는 것이 운영과 같은 조건이다.
+      NOTIFICATION_FANOUT_RETURN_RECIPIENTS: ${FANOUT_RETURN_RECIPIENTS:-true}
+      # set = 집합 삽입 한 문장, row = 행마다 한 문장. row 는 순진한 판을 재는 회차에만.
+      NOTIFICATION_FANOUT_INSERT_MODE: ${FANOUT_INSERT_MODE:-set}
+      NOTIFICATION_FANOUT_CHAINS: ${FANOUT_CHAINS:-2}
+      # 발송 전용 노드는 알림 리스너 말고도 꺼야 할 것이 있다(ADR-0127의 역할 표).
+      # 지금까지 벤치는 이 셋을 켠 채로 쟀다 — 앱 로그에 자막 consumer와 STOMP 브로커가
+      # 그대로 찍혀 있었다. 노드마다 붙는 고정 비용이 그만큼 부풀려져 있었다는 뜻이다.
+      LIVECLASS_SCHEDULING_ENABLED: ${SCHEDULING_ENABLED:-true}
+      CAPTION_CONSUMER_ENABLED: ${CAPTION_ENABLED:-true}
+      LECTURE_NOTE_CONSUMER_ENABLED: ${LECTURE_NOTE_ENABLED:-false}
       OUTBOX_RELAY_FIXED_DELAY_MS: ${RELAY_DELAY_MS:-5000}
       OUTBOX_RELAY_INITIAL_DELAY_MS: "3000"
 
@@ -176,6 +193,8 @@ services:
     cpus: ${INFRA_CPUS:-8}
     mem_limit: 256m
     memswap_limit: 256m
+    # 5672와 같은 이유로 연다 — 다른 머신의 발송 노드가 붙는다.
+    ports: ["127.0.0.1:16379:6379"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 2s
@@ -192,7 +211,10 @@ services:
       RABBITMQ_DEFAULT_USER: liveclass
       RABBITMQ_DEFAULT_PASS: bench
     # 15692는 prometheus 플러그인. 관측을 다른 머신에서 돌릴 때 터널로 가져간다.
-    ports: ["127.0.0.1:15672:15672", "127.0.0.1:15692:15692"]
+    # 5672는 **다른 머신의 발송 노드**가 SSH 터널로 붙기 위해 연다(머신을 나눈 증설을
+    # 실측하려면 브로커가 이 박스 밖에서 보여야 한다). 127.0.0.1 바인딩이라 LAN에는 안 뜬다.
+    ports: ["127.0.0.1:5672:5672", "127.0.0.1:15672:15672",
+            "${METRICS_BIND:-127.0.0.1}:15692:15692"]
     # **볼륨과 호스트명을 둘 다 고정해야 한다.** 구간을 나눠 재려면 cpuset을 바꿔 컨테이너를
     # 다시 만드는데, 그때 구간 A가 쌓아 둔 푸시 명령 200개가 사라져 구간 B가 빈손으로 도는 일이
     # 있었다(목 수신 0건).
@@ -203,9 +225,18 @@ services:
     # 고아로 남는다 — 실제로 rabbit@9d03b0c6ea6f 아래에 38.5MB가 그대로 있었다.
     hostname: rabbitmq
     volumes: ["rabbitdata:/var/lib/rabbitmq"]
+    # **rabbitmq-diagnostics 를 3초마다 돌리면 안 된다.** 그건 짧은 명령이 아니라 얼랭 런타임을
+    # 새로 부팅해 브로커에 붙었다 떠나는 것이다. 실측 1회 1,256ms — 3초 간격이면 평균 0.42코어를
+    # 아무 일 없이 태운다. lazy 는 물리 4코어이고 이 프로젝트의 결론이 코어 수 역산이다.
+    # 15692 는 prometheus 플러그인이고 인증이 없다. 그 응답이 나온다는 것은 브로커가 실제로
+    # 서빙 중이라는 뜻이라 ping 보다 약하지 않다. 실측 1회 64ms — 20배 싸다.
+    # start_interval 은 docker 25+ 기능이다(lazy 는 29.6). 기동 중에만 촘촘히 확인하므로
+    # --wait 대기 시간은 늘지 않는다.
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 3s
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:15692/metrics"]
+      interval: 10s
+      start_period: 60s
+      start_interval: 2s
       timeout: 5s
       retries: 30
 
@@ -241,7 +272,9 @@ services:
     <<: *appbase
     cpuset: "${APP_CPUSET:-2,6,3,7}"
     cpus: ${APP_CPUS:-8}
-    ports: ["127.0.0.1:18081:8080"]
+    # 관측이 같은 LAN 의 다른 기기에 있으면 METRICS_BIND=0.0.0.0 으로 열어 터널을 없앤다.
+    # 기본은 127.0.0.1 이라 아무것도 안 주면 지금처럼 이 기기 밖으로 안 나간다.
+    ports: ["${METRICS_BIND:-127.0.0.1}:18081:8080"]
 
   app2:
     <<: *appbase
@@ -258,32 +291,6 @@ services:
     cpus: ${APP_CPUS:-8}
     ports: ["127.0.0.1:18084:8080"]
     profiles: ["scale3"]
-
-# ── 관측 (프로파일 mon) ──
-#
-# 평소 측정에는 뜨지 않는다. 컨테이너가 넷 더 뜨면 그만큼 CPU를 먹고, lazy는 물리 4코어라
-# 그 영향이 수치에 남는다. **스크린샷용 실행과 기록용 실행을 가른다** — 대표 수치는 관측을
-# 끈 채로 잰 값이고, 여기서 얻는 것은 그 수치가 어떤 모양으로 흘러가는지다.
-#
-# 전부 브로커 코어(INFRA_CPUSET)에 얹는다. pg와 앱 코어를 건드리면 재는 대상이 흔들린다.
-#
-#   docker compose -f bench/compose.bench.yml --profile mon up -d
-#   Grafana  http://127.0.0.1:13000  (admin/admin)
-  prometheus:
-    image: prom/prometheus:v2.54.1
-    profiles: [mon]
-    cpuset: "${INFRA_CPUSET:-1,5}"
-    mem_limit: 512m
-    command:
-      - --config.file=/etc/prometheus/prometheus.yml
-      # 벤치는 짧게 여러 번 돈다. 오래 보관할 이유가 없다.
-      - --storage.tsdb.retention.time=6h
-    volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ../infra/prometheus:/etc/prometheus/rules:ro
-    ports: ["127.0.0.1:19090:9090"]
-
-  # 표별 삽입 수(팬아웃 진행), 활성 백엔드, 커밋 수를 낸다.
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter:v0.15.0
     profiles: [mon]
@@ -291,7 +298,7 @@ services:
     mem_limit: 128m
     environment:
       DATA_SOURCE_NAME: "postgresql://liveclass:bench@postgres:5432/liveclass?sslmode=disable"
-    ports: ["127.0.0.1:19187:9187"]
+    ports: ["${METRICS_BIND:-127.0.0.1}:19187:9187"]
     depends_on:
       postgres: { condition: service_healthy }
 
@@ -319,32 +326,35 @@ services:
       - --max_housekeeping_interval=1s
       - --allow_dynamic_housekeeping=false
       - --docker_only=true
-    ports: ["127.0.0.1:18082:8080"]
+    ports: ["${METRICS_BIND:-127.0.0.1}:18082:8080"]
 
-  grafana:
-    image: grafana/grafana:11.2.0
+  # cAdvisor 가 이 커널(5.15)에서 못 주는 값을 낸다.
+  #   container_memory_max_usage_bytes 와 failcnt 는 cgroup v2 에서 0 으로 비어 있고,
+  #   memory.events 의 max·oom_kill 은 아예 안 내보낸다.
+  # 그리고 급등이 표본 사이로 빠진다 — 익명 메모리가 731MB 로 튄 구간은 0.5초 표본 40개 중
+  # 하나였다. 이 exporter 는 50ms 로 훑어 최고 수위를 들고, 커널 누적 카운터를 그대로 낸다.
+  # 커널 5.19 부터 있는 memory.peak 이 없는 커널에서 그 자리를 메운다.
+  # 포트 18085. 18083 은 app2, 18084 는 app3 이 쓴다 — mon 과 scale2 를 같이
+  # 띄우면 충돌한다.
+  cgroup-exporter:
+    image: python:3.12-alpine
     profiles: [mon]
     cpuset: "${INFRA_CPUSET:-1,5}"
-    mem_limit: 512m
-    environment:
-      GF_SECURITY_ADMIN_PASSWORD: admin
-      GF_AUTH_ANONYMOUS_ENABLED: "true"
-      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
-      # 스크린샷을 API로 뜨기 위한 렌더러. 없으면 /render 가 실패한다.
-      GF_RENDERING_SERVER_URL: http://grafana-renderer:8081/render
-      GF_RENDERING_CALLBACK_URL: http://grafana:3000/
+    mem_limit: 128m
+    command: ["python3", "/app/cgroup-exporter.py", "--port", "8080",
+              "--container", "liveclass-bench-postgres-1"]
     volumes:
-      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
-    ports: ["127.0.0.1:13000:3000"]
-    depends_on: [prometheus]
-
-  grafana-renderer:
-    image: grafana/grafana-image-renderer:3.11.6
-    profiles: [mon]
-    cpuset: "${INFRA_CPUSET:-1,5}"
-    mem_limit: 512m
-
+      - ./cgroup-exporter.py:/app/cgroup-exporter.py:ro
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports: ["${METRICS_BIND:-127.0.0.1}:18085:8080"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/"]
+      interval: 10s
+      start_period: 20s
+      start_interval: 2s
+      timeout: 4s
+      retries: 15
 volumes:
   pgdata:
   rabbitdata:

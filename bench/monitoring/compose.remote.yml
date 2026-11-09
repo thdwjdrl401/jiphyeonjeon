@@ -1,15 +1,15 @@
 # 관측만 따로 띄운다 — **측정 머신이 아닌 곳에서** 돈다.
 #
-# 측정 머신에는 exporter 둘만 남는다(cAdvisor는 cgroup을 읽어야 해서 못 옮기고,
-# postgres-exporter는 옮길 수 있으나 터널 하나 줄이려고 남긴다).
+# 측정 머신에는 exporter 셋만 남는다(cadvisor · postgres-exporter · cgroup-exporter).
 #
-# 쓰는 법
-#   1) 측정 머신으로 터널을 연다
-#        ssh -N -L 18081:127.0.0.1:18081 -L 15692:127.0.0.1:15692 \
-#               -L 19187:127.0.0.1:19187 -L 18082:127.0.0.1:18082 lazy
-#   2) 여기를 띄운다
-#        docker compose -f bench/monitoring/compose.remote.yml up -d
-#   3) http://127.0.0.1:13000/d/fanout-bench
+# 같은 LAN 이면
+#   1) 측정 머신    METRICS_BIND=0.0.0.0 docker compose -f bench/compose.bench.yml \
+#                     --profile mon up -d cadvisor postgres-exporter cgroup-exporter
+#   2) 여기         BENCH_HOST=192.168.219.124 docker compose -f bench/monitoring/compose.remote.yml up -d
+#   3) 대시보드      http://<이 기기 주소>:13000/d/fanout-bench
+#
+# 다른 망이면 BENCH_HOST 없이 띄우고 SSH 터널을 연다(prometheus.remote.yml 머리말 참조).
+
 name: liveclass-bench-mon
 
 services:
@@ -22,20 +22,29 @@ services:
       - ./prometheus.remote.yml:/etc/prometheus/prometheus.yml:ro
       - ../../infra/prometheus:/etc/prometheus/rules:ro
     ports: ["127.0.0.1:19090:9090"]
-    extra_hosts: ["host.docker.internal:host-gateway"]
+    # 측정 머신을 가리키는 이름 하나로 둔다. 두 가지로 쓴다.
+    #   BENCH_HOST 미지정  → host-gateway. 이 기기의 127.0.0.1 로 SSH 터널을 끌어온 경우
+    #   BENCH_HOST=192.168.219.124 → 같은 LAN 이면 터널 없이 바로 붙는다
+    #                                (측정 머신에서 METRICS_BIND=0.0.0.0 으로 띄워야 한다)
+    extra_hosts: ["bench-host:${BENCH_HOST:-host-gateway}"]
 
   grafana:
     image: grafana/grafana:11.2.0
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      # 밖으로 낼 때는 반드시 바꾼다. 기본값 admin 인 채로 열면 아무나 관리자로 들어온다.
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASS:-admin}
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      # 프록시 뒤에서 Grafana 가 스스로의 주소를 만들 때 쓴다. 없으면 로그인·렌더 링크가 깨진다.
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://127.0.0.1:13000/}
       GF_RENDERING_SERVER_URL: http://grafana-renderer:8081/render
       GF_RENDERING_CALLBACK_URL: http://grafana:3000/
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
-    ports: ["127.0.0.1:13000:3000"]
+    # **LAN 에 연다.** 브라우저가 다른 망에 있어서 lazy 의 nginx 가 이 포트로 프록시한다.
+    # 인터넷 쪽 자물쇠는 nginx 의 basic auth 와 TLS 다. 이 포트 자체는 집 LAN 에만 뜬다.
+    ports: ["${GRAFANA_BIND:-127.0.0.1}:13000:3000"]
     depends_on: [prometheus]
 
   grafana-renderer:

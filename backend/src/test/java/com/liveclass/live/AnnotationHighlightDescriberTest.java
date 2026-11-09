@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * 검증 없이 신뢰하기로 했으므로(MR !350), 흐릿한 화면에 대한 추측이 그대로 영실이의 근거가 되고
  * 수강생 답변에 인용된다. 빈 근거를 색인하는 것보다 아무것도 색인하지 않는 편이 낫다.
  *
- * <p>판서 해석(ADR-0054)과 목적이 정반대라는 것도 함께 못박는다. 그쪽은 강조 표시를 빼야 하고
+ * <p>판서 해석(ADR-0054)과 목적이 정반대라는 것도 함께 확인한다. 그쪽은 강조 표시를 빼야 하고
  * (도형으로 오독된다) 여기는 반드시 넣어야 한다(어디를 볼지 알려 주는 신호다).
  */
 class AnnotationHighlightDescriberTest {

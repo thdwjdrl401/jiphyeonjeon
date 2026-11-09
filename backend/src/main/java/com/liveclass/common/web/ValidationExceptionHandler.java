@@ -74,7 +74,7 @@ public class ValidationExceptionHandler {
     private ResponseEntity<ErrorResponse> badRequest(ErrorResponse body) {
         // correlationId는 남겨야 의미가 있다 — 사용자가 들고 온 값으로 로그를 찾을 수 있어야 한다.
         log.debug("검증 실패 correlationId={} code={}", body.correlationId(), body.code());
-        // Content-Type을 못박는다 — Accept: text/event-stream인 SSE 요청에서 협상에 실패하면
+        // Content-Type을 고정한다 — Accept: text/event-stream인 SSE 요청에서 협상에 실패하면
         // 400 대신 원래 예외가 새어나간다(ErrorResponses 참고).
         return ErrorResponses.of(HttpStatus.BAD_REQUEST, body);
     }

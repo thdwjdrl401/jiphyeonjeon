@@ -98,7 +98,7 @@ public class NotificationMessagingConfig {
         configurer.configure(factory, connectionFactory);
         factory.setDefaultRequeueRejected(false);
         /*
-         * 소비자 수를 <b>자기 손잡이로</b> 정한다(ADR-0131). 전에는 전역
+         * 소비자 수를 <b>자기 설정으로</b> 정한다(ADR-0131). 전에는 전역
          * {@code spring.rabbitmq.listener.simple.concurrency}를 그대로 물려받았는데, 그러면 팬아웃을
          * 늘리려고 전역을 올리게 되고 전역은 이름상 팬아웃 것이 아니다. 푸시가 이미 같은 이유로
          * 자기 값을 갖는다.
@@ -130,10 +130,10 @@ public class NotificationMessagingConfig {
      * 푸시 전용 리스너 팩토리. 실패 규칙은 팬아웃과 같다(재시도 뒤 DLQ, requeue 금지).
      *
      * <p>따로 두는 이유는 규칙이 아니라 <b>동시성</b>이다 — 전역 {@code concurrency}(팬아웃 워커
-     * 수)를 그대로 물려받으면 두 큐가 같은 손잡이에 묶여, 푸시를 늘리려다 팬아웃까지 늘리게 된다.
+     * 수)를 그대로 물려받으면 두 큐가 같은 설정에 묶여, 푸시를 늘리려다 팬아웃까지 늘리게 된다.
      * 푸시 소비자 수는 {@code notification.push.listener-concurrency}가 따로 정한다.
      *
-     * <p>재시도 손잡이도 {@code notification.push.listener-retry-*}로 따로 둔다. 값은 팬아웃과 같지만
+     * <p>재시도 설정도 {@code notification.push.listener-retry-*}로 따로 둔다. 값은 팬아웃과 같지만
      * 조각당 최대 {@code batch-timeout-ms}(60초)를 붙잡는 소비자라 한 번의 재시도가 큐에 미치는
      * 영향이 다르고, 한쪽만 조정할 수 있어야 한다.
      *

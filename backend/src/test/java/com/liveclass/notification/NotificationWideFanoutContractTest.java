@@ -221,7 +221,7 @@ class NotificationWideFanoutContractTest {
                 .doesNotHaveDuplicates();
     }
 
-    /** 상한이 없으면 예전과 같다 — 끝까지 훑는다. 기본 동작이 바뀌지 않았음을 못박는다. */
+    /** 상한이 없으면 예전과 같다 — 끝까지 훑는다. 기본 동작이 바뀌지 않았음을 확인한다. */
     @Test
     void no_bound_means_all_the_way_as_before() {
         List<UUID> everyone = seedEnrollments(curriculumId, "ACTIVE", 5);

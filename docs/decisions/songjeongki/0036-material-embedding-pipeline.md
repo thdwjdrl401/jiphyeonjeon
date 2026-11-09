@@ -94,7 +94,7 @@ materials 응답에 `embeddingStatus` 포함. FE는 `PENDING/PROCESSING`이면 �
 - **inbox 멱등**: RabbitMQ at-least-once라 콜백이 중복될 수 있다. `(source, eventId)` 복합 PK로 한 번만 처리.
 - **바이트는 스토리지 직결**: 잡·큐에는 식별자만 싣고, 워커가 주문형 presigned URL(§3 B안)로 스토리지에서 직접 읽는다 — 앱 서버·큐에 바이트를 싣지 않는다([0023] 원칙 4).
 - **후속**: AI측 명세 `docs/ai/features/AI-CP3-01-material-indexing.md`(미병합 `feat/ai/STT` 브랜치)의 "bucket+objectKey를 job input으로" 조항은 B안으로 대체됐다 — 해당 브랜치 병합 시 갱신 필요.
-- **계약을 먼저 못박는다**: 잡 envelope·콜백 형태를 이 ADR로 확정해야 BE(발행/수신)·AI(소비/발신)가 독립 개발 후 맞물린다.
+- **계약을 먼저 정한다**: 잡 envelope·콜백 형태를 이 ADR로 확정해야 BE(발행/수신)·AI(소비/발신)가 독립 개발 후 맞물린다.
 
 ## 대안
 

@@ -57,12 +57,12 @@ import java.util.concurrent.atomic.AtomicInteger;
  * <p><b>재시도는 기기 단위다.</b> 조각을 통째로 다시 보내면 <b>이미 받은 사람이 두 번 울린다</b> —
  * Web Push에는 멱등 키가 없어서 같은 endpoint로 두 번 POST하면 기기가 두 번 운다. 그런데 어느
  * 기기가 실패했는지는 결과에 정확히 남아 있으므로, <b>실패한 것만</b> 다시 보내면 중복이 없다.
- * 성공(2xx)한 구독은 두 번째 물결에 <b>절대 들어가지 않는다</b> — 이것이 이 층의 불변식이다.
+ * 성공(2xx)한 구독은 두 번째 회차에 <b>절대 들어가지 않는다</b> — 이것이 이 층의 불변식이다.
  *
  * <p>큐 재배달은 이 일을 대신하지 못한다. 진행 표(ADR-0124)가 재배달을 <b>사람</b> 단위로는
  * 안전하게 만들었지만, 한 사람을 다시 보내는 것은 그 사람의 <b>이미 받은 기기</b>까지 다시
  * 울리는 일이다. 재시도할 수 있는 단위(사람)와 실패하는 단위(기기)가 여전히 다르므로, 기기 단위
- * 물결은 이 호출 안에서 끝낸다.
+ * 회차는 이 호출 안에서 끝낸다.
  *
  * <p><b>죽은 구독은 즉시 지운다.</b> 404·410은 영영 살아나지 않는다(브라우저를 지웠거나 권한을
  * 껐다). 남겨 두면 시간이 갈수록 발송의 대부분이 죽은 구독을 두드리는 일이 된다.
@@ -113,7 +113,7 @@ public class WebPushSender {
     private final WebPushRequestFactory requests;
     private final WebPushHttpClient httpClient;
     private final AdjustableSemaphore inFlight;
-    /** 동시 상한의 천장·바닥과 지금 값. 조절기가 이 사이를 오간다. */
+    /** 동시 상한의 최댓값·최솟값과 지금 값. 조절기가 이 사이를 오간다. */
     private final int inFlightCeiling;
     private final int inFlightFloor;
     private final int inFlightStep;
@@ -167,9 +167,9 @@ public class WebPushSender {
          * 없어서 올리는 만큼 빨라지고(800 → 2,400에서 +20%), 그 값을 그대로 실제 공급자에게
          * 쓰면 429를 맞는다. 그래서 짐작하지 않고 **막히면 줄이고 안 막히면 늘린다**(ADR-0137).
          *
-         * max-in-flight는 이제 시작값이자 천장이다. 조각 하나가 429·5xx로 끝나면 절반으로
-         * 줄이고(바닥은 min-in-flight), 깨끗하게 끝나면 천장의 1/16씩 되올린다. 연결 수는
-         * 천장에 맞춰 잡아 둔다 — 줄었다 늘 때 새로 열 필요가 없다.
+         * max-in-flight는 이제 시작값이자 최댓값이다. 조각 하나가 429·5xx로 끝나면 절반으로
+         * 줄이고(최솟값은 min-in-flight), 깨끗하게 끝나면 최댓값의 1/16씩 되올린다. 연결 수는
+         * 최댓값에 맞춰 잡아 둔다 — 줄었다 늘 때 새로 열 필요가 없다.
          */
         this.inFlightCeiling = Math.max(1, maxInFlight);
         this.inFlightFloor = Math.max(1, Math.min(minInFlight, this.inFlightCeiling));
@@ -338,7 +338,7 @@ public class WebPushSender {
     }
 
     /**
-     * 물결을 여러 번 친다. <b>두 번째 물결에는 실패한 기기만 담긴다.</b>
+     * 회차를 여러 번 돈다. <b>두 번째 회차에는 실패한 기기만 담긴다.</b>
      *
      * <p>기기마다 마지막 결과가 최종 결과다 — 2차에서 성공하면 그것이 이긴다.
      *
@@ -347,7 +347,7 @@ public class WebPushSender {
      */
     private List<Outcome> dispatchWithRetries(List<PushSubscription> subscriptions, byte[] payload) {
         long deadline = System.nanoTime() + batchTimeout.toNanos();
-        // 구독 id로 모은다 — 같은 기기가 물결마다 결과를 하나씩 내므로 마지막 것만 남겨야 한다.
+        // 구독 id로 모은다 — 같은 기기가 회차마다 결과를 하나씩 내므로 마지막 것만 남겨야 한다.
         Map<UUID, Outcome> latest = new LinkedHashMap<>();
         List<PushSubscription> pending = subscriptions;
 
@@ -359,7 +359,7 @@ public class WebPushSender {
                 break;
             }
             /*
-             * 다음 물결 대상은 **RETRY 판정을 받은 것만**이다. DELIVERED는 여기에 들어올 수 없고,
+             * 다음 회차 대상은 **RETRY 판정을 받은 것만**이다. DELIVERED는 여기에 들어올 수 없고,
              * 그래서 한 기기가 두 번 울 수 없다 — 이 층에서 지켜야 할 단 하나의 불변식이다.
              */
             List<PushSubscription> retryable = new ArrayList<>();
@@ -379,14 +379,14 @@ public class WebPushSender {
             if (retryable.isEmpty() || !sleepBeforeRetry(askedToWait, attempt, deadline)) {
                 break;
             }
-            log.debug("푸시 재시도 물결 attempt={} 대상={}", attempt + 1, retryable.size());
+            log.debug("푸시 재시도 회차 attempt={} 대상={}", attempt + 1, retryable.size());
             pending = retryable;
         }
         return List.copyOf(latest.values());
     }
 
     /**
-     * 다음 물결까지 기다린다. 기다릴 시간이 남지 않았으면 {@code false}를 주고 거기서 끝낸다.
+     * 다음 회차까지 기다린다. 기다릴 시간이 남지 않았으면 {@code false}를 주고 거기서 끝낸다.
      *
      * <p>{@code Retry-After}가 남은 시간보다 길면 <b>기다리지 않는다</b> — 어차피 그 안에 못 끝낸다.
      */
@@ -434,7 +434,7 @@ public class WebPushSender {
              * 푸시는 못 받아도 알림함에 남아 있고, 여기서 예외를 올리면 워커가 조각 전체를 재시도해
              * 알림 행은 중복 제거에 걸리고 **푸시는 아무에게도 가지 않는다**.
              */
-            log.warn("푸시 물결이 제한 시간 안에 끝나지 않았습니다 — 완료분만 반영합니다: {}", e.toString());
+            log.warn("푸시 회차가 제한 시간 안에 끝나지 않았습니다 — 완료분만 반영합니다: {}", e.toString());
         }
         List<Outcome> done = new ArrayList<>(futures.size());
         for (CompletableFuture<Outcome> future : futures) {
@@ -495,7 +495,7 @@ public class WebPushSender {
      * 보내 성공했다면 공급자가 견딘 것이므로 줄일 이유가 없다. 끝까지 막힌 기기가 하나라도 있으면
      * 그때 줄인다.
      *
-     * <p>줄일 때는 절반, 늘릴 때는 천장의 1/16씩이다. 막히는 쪽에 빠르게 반응하고 푸는 쪽은
+     * <p>줄일 때는 절반, 늘릴 때는 최댓값의 1/16씩이다. 막히는 쪽에 빠르게 반응하고 푸는 쪽은
      * 천천히 — 반대로 하면 상한 근처에서 429를 반복해서 맞는다.
      */
     private void adjustInFlight(List<Outcome> outcomes) {
@@ -521,7 +521,7 @@ public class WebPushSender {
                 inFlight.take(now - next);
             }
             inFlightLimit = next;
-            log.info("동시 상한 {} → {} ({}, 천장 {} 바닥 {})",
+            log.info("동시 상한 {} → {} ({}, 최대 {} 최소 {})",
                     now, next, pushedBack ? "공급자가 막았다" : "깨끗했다",
                     inFlightCeiling, inFlightFloor);
         }

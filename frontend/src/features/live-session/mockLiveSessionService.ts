@@ -631,7 +631,7 @@ export const mockLiveSessionService = {
 
 /*
  * 아래는 DevLivePanel(개발 전용 화면 안 조작 패널) 전용 API다. LiveSessionService 계약에는 없다 —
- * 실 서버엔 대응하는 게 없는, 목 상태를 직접 흔드는 손잡이이기 때문이다. 프로덕션 빌드에는
+ * 실 서버엔 대응하는 게 없는, 목 상태를 직접 바꾸는 함수이기 때문이다. 프로덕션 빌드에는
  * DevLivePanel 자체가 안 실리므로(‎import.meta.env.DEV) 이 함수들도 호출되지 않는다.
  */
 

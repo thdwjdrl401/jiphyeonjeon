@@ -1,4 +1,4 @@
-# ADR-0086: 그릇의 상한을 우리가 정한다 — nginx·Hikari·Redis·consumer 이름
+# ADR-0086: 자원 상한을 우리가 정한다 — nginx·Hikari·Redis·consumer 이름
 
 > 📍 하네스 개요: [../../harness/README.md](../../harness/README.md) · 아키텍처: [../../ARCHITECTURE.md](../../ARCHITECTURE.md) · 계약: [../../CONTRACT.md](../../CONTRACT.md)
 
@@ -17,7 +17,7 @@
 
 결과에 공통점이 있었다. **기능 코드에는 상한이 잘 걸려 있다** — Redis Stream은 `MAXLEN 10,000`으로
 잘리고, 알림 팬아웃은 커서로 조각을 나누고, 재시도에는 횟수 상한이 있고, 자산 리퍼가 돈다.
-그런데 **그 기능을 담는 그릇에는 아무 상한도 없다.** nginx·Hikari·Redis·docker 로그·빌드 캐시가
+그런데 **그 기능이 쓰는 자원에는 아무 상한도 없다.** nginx·Hikari·Redis·docker 로그·빌드 캐시가
 전부 기본값이고, 그 기본값이 무엇인지 아무도 적어 두지 않았다.
 
 기능 단위로 리뷰하면 보이지 않는 층이다. 어느 MR도 "nginx worker_connections"를 건드리지 않았기
@@ -40,7 +40,7 @@
 `worker_connections`도 스톡 기본값 1024다. 그리고 이 둘은 **main·events 컨텍스트** 지시어라
 우리가 가진 `frontend/nginx/default.conf`(http 안에 include)로는 손댈 수 없다.
 
-천장 계산:
+상한 계산:
 
 ```
 프록시된 WebSocket 1개 = nginx fd 2개 (브라우저 쪽 + 백엔드 쪽)
@@ -162,7 +162,7 @@ sudo find /sys/fs/cgroup -maxdepth 4 -path "*$id*" -name memory.peak -exec cat {
 ```
 
 **STOMP 소켓 통합(5→1).** 라이브 탭이 `new Client`를 5번 만든다(알림·채팅·세션상태·자막·강의노트).
-합치면 탭당 fd가 12 → 4로 준다. 다만 ①로 천장이 크게 오르면 급하지 않고, 라이브 화면 전체를
+합치면 탭당 fd가 12 → 4로 준다. 다만 ①로 상한이 크게 오르면 급하지 않고, 라이브 화면 전체를
 건드려 회귀 위험이 크다. 브로커가 단일 인스턴스 `enableSimpleBroker`라 다중 인스턴스 확장 때
 어차피 다시 봐야 하므로 그때 함께 다룬다.
 

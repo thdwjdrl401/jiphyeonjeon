@@ -23,6 +23,9 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BENCH="$REPO_ROOT/bench"
 OUT="${OUT:-$BENCH/results/phases-$(date +%Y%m%dT%H%M%S)}"
+# 목 서버의 응답 지연. 이 프로젝트가 잰 FCM 왕복이 230ms 이고 포트폴리오의 발송 수치가
+# 전부 그 값 위에 서 있다. compose 기본값은 50ms 라 안 넘기면 다른 조건으로 돈다.
+MOCK_DELAY="${MOCK_DELAY:-230ms}"; export MOCK_DELAY
 PHASE="${PHASE:-AB}"
 STALL_SECONDS="${STALL_SECONDS:-120}"
 
@@ -43,6 +46,63 @@ pg() { compose exec -T -e PGPASSWORD=bench postgres psql -U liveclass -d livecla
 mock() { curl -s --max-time 5 "http://127.0.0.1:18080$1"; }
 qdepth() { compose exec -T rabbitmq rabbitmqctl list_queues -q name messages 2>/dev/null < /dev/null \
              | awk -v q="$1" '$1==q{print $2}'; }
+
+# ── 앱 기동 열을 그래프에서 걷어내는 두 도우미 ────────────────────────────
+#
+# **문제.** 앱이 뜨자마자 큐를 빨아들이므로, 부팅(스프링 기동·JIT)의 CPU와 일하는 CPU가
+# 그래프에서 붙어 나온다. 실측으로 부팅이 400% 상한 중 280%를 90초 가까이 쓴다. 그 봉우리를
+# 보고 독자는 "저건 뭐냐"부터 묻게 되고, 정작 봐야 할 발송 구간이 그 옆에 묻힌다.
+#
+# **고침.** 일감을 잠시 딴 큐에 옮겨 두고 앱을 띄운다. 큐가 비어 있으니 앱은 부팅만 하고
+# 논다. CPU가 가라앉기를 기다린 뒤 일감을 되돌리면, 그 순간이 곧 시작점이다.
+#
+# 옮기는 일은 브로커가 한다(shovel). 앱을 거치지 않으므로 앱 CPU에 안 잡힌다.
+PARKED="notification.push.parked"
+
+ensure_shovel() {
+  compose exec -T rabbitmq rabbitmq-plugins enable rabbitmq_shovel < /dev/null > /dev/null 2>&1 \
+    || fail "shovel 플러그인을 못 켠다. 이것 없이는 기동 열과 일하는 열을 못 가른다"
+}
+
+# $1 = 보내는 큐, $2 = 받는 큐. 지금 들어 있는 것만 옮기고 스스로 멈춘다.
+move_queue() {
+  local from="$1" to="$2" i left
+  ensure_shovel
+  compose exec -T rabbitmq rabbitmqctl set_parameter shovel move \
+    "{\"src-protocol\":\"amqp091\",\"src-uri\":\"amqp://\",\"src-queue\":\"$from\",
+      \"dest-protocol\":\"amqp091\",\"dest-uri\":\"amqp://\",\"dest-queue\":\"$to\",
+      \"src-delete-after\":\"queue-length\"}" < /dev/null > /dev/null \
+    || fail "$from → $to 옮기기를 시작하지 못했다"
+  for i in $(seq 1 120); do
+    left="$(qdepth "$from")"
+    [ "${left:-0}" -eq 0 ] && break
+    sleep 1
+  done
+  compose exec -T rabbitmq rabbitmqctl clear_parameter shovel move < /dev/null > /dev/null 2>&1 || true
+  [ "${left:-0}" -eq 0 ] || fail "$from 에 $left 건이 남았다"
+}
+
+# 앱 CPU가 가라앉을 때까지 기다린다. 부팅 열이 식은 뒤부터가 측정 구간이다.
+settle_app() {
+  local quiet=0 i cpu
+  echo "▶ 앱이 가라앉기를 기다린다 (부팅 열이 그래프에 섞이지 않게)"
+  for i in $(seq 1 "${SETTLE_MAX_S:-180}"); do
+    cpu="$(docker stats --no-stream --format '{{.Name}} {{.CPUPerc}}' 2>/dev/null \
+           | awk '/liveclass-bench-app-1/{gsub("%","",$2); print int($2); exit}')"
+    if [ "${cpu:-999}" -lt "${SETTLE_CPU_PCT:-15}" ]; then
+      quiet=$(( quiet + 1 ))
+    else
+      quiet=0
+    fi
+    printf '\r   앱 CPU %3s%% · 조용한 초 %2s/%s   ' "${cpu:-?}" "$quiet" "${SETTLE_QUIET_S:-20}"
+    [ "$quiet" -ge "${SETTLE_QUIET_S:-20}" ] && break
+    sleep 1
+  done
+  echo
+  [ "$quiet" -ge "${SETTLE_QUIET_S:-20}" ] \
+    || echo "   경고: 안 가라앉았다. 이 회차의 그래프에는 부팅 열이 섞인다"
+  echo "   시작 $(date +%H:%M:%S)"
+}
 
 # ── 격리 ──────────────────────────────────────────────────────────────────
 ISOLATED=true
@@ -144,6 +204,8 @@ if [[ "$PHASE" == *A* ]]; then
   PG_CPUSET="0,4,1,5" INFRA_CPUSET="0,4,1,5" APP_CPUSET="2,6,3,7" \
     FANOUT_ENABLED=true PUSH_ENABLED=false \
     compose up -d --wait --wait-timeout 300 app 2>&1 | tail -1
+  compose exec -T rabbitmq rabbitmqctl purge_queue "$PARKED" < /dev/null > /dev/null 2>&1 || true
+  settle_app
 
   # 커서 공간을 CHAINS등분해 독립 체인을 넣는다. user_id가 난수 UUID라 128비트 공간을
   # 균등 분할하면 행 수도 고르게 갈린다. CHAINS=1이면 병렬화 이전과 같다(상한 null).
@@ -192,12 +254,21 @@ fi
 # ── 구간 B ───────────────────────────────────────────────────────────────
 if [[ "$PHASE" == *B* ]]; then
   pending="$(qdepth notification.push)"
+  [ "${pending:-0}" -gt 0 ] || pending="$(qdepth "$PARKED")"
   [ "${pending:-0}" -gt 0 ] || fail "푸시 큐가 비었다. 구간 A를 먼저 돌려라."
   echo "▶ 구간 B — 발송 (팬아웃 소비 정지 · app 2물리 · 대기 $pending 메시지)"
+
+  # **일감을 먼저 치운다.** 이걸 안 하면 앱이 뜨는 도중에 큐를 빨아들여, 부팅 CPU와
+  # 발송 CPU가 그래프에서 한 덩어리가 된다.
+  [ "$(qdepth notification.push)" -gt 0 ] && move_queue notification.push "$PARKED"
 
   PG_CPUSET="0,4" INFRA_CPUSET="1,5" APP_CPUSET="2,6,3,7" \
     FANOUT_ENABLED=false PUSH_ENABLED=true \
     compose up -d --force-recreate --wait --wait-timeout 300 app 2>&1 | tail -1
+
+  settle_app
+  # 일감을 되돌린다. 이 순간이 발송의 시작점이다.
+  move_queue "$PARKED" notification.push
 
   watch_until B push_state push_line || true
 fi

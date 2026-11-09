@@ -27,7 +27,7 @@ describe('마이크 입력 세기', () => {
     expect(loud).toBeCloseTo(0.5, 5)
   })
 
-  it('바닥과 천장 밖은 잘라 낸다', () => {
+  it('하한과 상한 밖은 잘라 낸다', () => {
     expect(levelFromRms(rmsAt(FLOOR_DBFS - 20))).toBe(0)
     expect(levelFromRms(rmsAt(CEIL_DBFS + 20))).toBe(1)
     expect(levelFromRms(rmsAt(FLOOR_DBFS))).toBeCloseTo(0, 5)

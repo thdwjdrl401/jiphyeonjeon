@@ -11,7 +11,7 @@ import { httpLessonService } from '@/features/lesson/httpLessonService'
  *
  * saveLesson은 한때 자료가 있으면 첫 쓰기 전에 501로 막혔다. BE가 kind=MATERIAL presigned와
  * POST /instructor/lessons/{id}/materials를 열었으므로, 실제 3단계 업로드+연결로 나가는지,
- * getLesson이 서버 materials를 뷰로 매핑하는지 못박는다.
+ * getLesson이 서버 materials를 뷰로 매핑하는지 확인한다.
  */
 describe('레슨 자료 API 계약', () => {
   afterEach(() => {

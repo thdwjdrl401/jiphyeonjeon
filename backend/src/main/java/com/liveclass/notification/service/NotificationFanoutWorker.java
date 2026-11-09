@@ -323,6 +323,10 @@ public class NotificationFanoutWorker {
         String message = NotificationCopy.wideMessage(command.type(), command.curriculumTitle(), subject,
                 command.previousStartsAt(), command.nextStartsAt());
 
+        // 시작과 끝만 찍는다. 두 줄의 시각 차이가 체인 전체의 소요다.
+        if (command.afterUserId() == null) {
+            log.info("넓은 팬아웃 시작 슬라이스={} 방식={}", limit, fanoutRepository.insertModeLabel());
+        }
         NotificationFanoutRepository.Slice slice = NotificationTypes.LIVE_STARTING_SOON.equals(command.type())
                 ? fanoutRepository.insertForStartingSoon(
                         command.curriculumId(), command.lessonId(), command.afterUserId(),
@@ -372,9 +376,15 @@ public class NotificationFanoutWorker {
          */
         enqueuePushForSlice(dedupePrefix(command), command, slice.insertedRecipients(), title, message);
 
-        log.info("넓은 팬아웃 조각 type={} curriculum={} 커서={} 훑음={} 삽입={}",
+        log.info("넓은 팬아웃 슬라이스 type={} curriculum={} 커서={} 훑음={} 삽입={}",
                 command.type(), command.curriculumId(), command.afterUserId(),
                 slice.scanned(), slice.inserted());
+        if (!slice.mayHaveMore(limit)) {
+            Long elapsedMs = fanoutRepository.chainElapsedMs(dedupePrefix(command));
+            log.info("넓은 팬아웃 끝 슬라이스={} 소요={}초 방식={}", limit,
+                    elapsedMs == null ? "?" : String.format("%.1f", elapsedMs / 1000.0),
+                    fanoutRepository.insertModeLabel());
+        }
     }
 
     // ---- 푸시 명령 적재(ADR-0124) ----

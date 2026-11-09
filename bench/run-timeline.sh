@@ -35,6 +35,10 @@ PUSH_CONC="${PUSH_CONC:-2}"
 # 구간 B를 발송 노드 몇 대로 돌릴 것인가. 2 이상이면 **같은 총 코어를 나눠** 준다 —
 # 1대에 물리 2코어와 2대에 물리 1코어씩은 코어 예산이 같으므로, 차이가 나면 그것은
 # 코어가 아니라 큐가 일을 나누는 방식에서 온 것이다(ADR-0136).
+# 구간 B의 노드를 **발송 전용으로** 띄울 것인가. ADR-0127의 역할 표는 알림 리스너 말고도
+# 스케줄링과 자막·강의노트 consumer를 끄라고 적어 두는데, 벤치는 그것을 적용한 적이 없다.
+# 기본은 꺼짐 — 지금까지 잰 값과 비교할 수 있게 두고, 켜서 그 차이를 잰다.
+PUSH_ROLE_ONLY="${PUSH_ROLE_ONLY:-false}"
 PUSH_NODES="${PUSH_NODES:-1}"
 PUSH_NODE_CPUSETS="${PUSH_NODE_CPUSETS:-2,6|3,7|1,5}"
 # 목 서버의 응답 지연. 순진한 구조와 지금 구조를 같은 조건에서 비교하려면 이 값이 둘 다 같아야
@@ -58,8 +62,11 @@ push_queue_depth() {
 # 구간별 배분. 팬아웃은 DB가, 발송은 앱이 병목이라 같은 배분으로 둘 다 재면 어느 쪽도 제 실력이 아니다.
 #   팬아웃  pg 2코어 · 앱 1코어 · 인프라 1코어
 #   발송    앱 2코어 · pg 1코어 · 인프라 1코어   (발송은 DB를 21%밖에 안 쓴다)
-PG_FANOUT="0,4,1,5"; APP_FANOUT="2,6";     INFRA_FANOUT="3,7"
-PG_PUSH="0,4";       APP_PUSH="2,6,3,7";   INFRA_PUSH="1,5"
+PG_FANOUT="${PG_FANOUT:-0,4,1,5}"; APP_FANOUT="${APP_FANOUT:-2,6}";     INFRA_FANOUT="${INFRA_FANOUT:-3,7}"
+# APP_PUSH를 밖에서 바꿀 수 있게 둔다. 노드를 나눌 때의 손해가 JVM이 하나 더 붙는 값인지,
+# 아니면 **한 JVM에 물리 코어를 하나만 주는 것** 자체의 값인지 가르려면 1대짜리 회차를
+# 코어 하나(2,6)와 형제 없는 두 코어(2,3)로도 돌려 봐야 한다.
+PG_PUSH="${PG_PUSH:-0,4}";       APP_PUSH="${APP_PUSH:-2,6,3,7}";   INFRA_PUSH="${INFRA_PUSH:-1,5}"
 
 # **이미지를 한 번 빌드한다.** 이 스크립트에는 --build이 한 군데도 없었다. 그래서 코드를 고쳐도
 # 앞서 누군가 빌드해 둔 이미지로 쟀고, 새로 만든 프로퍼티는 앱에 아예 없었다 —
@@ -102,9 +109,15 @@ start_app() {  # $1 pg $2 infra $3 app $4 fanout_on $5 push_on
   # 같은 큐를 계속 소비한다. 1대로 재는 회차에 소비자가 넷 붙어 있는 것을 실제로 봤다 —
   # 둘은 prefetch 1, 둘은 앞 회차가 남긴 250이었다.
   compose rm -sf app app2 app3 > /dev/null 2>&1 || true
+  local role_off=true
+  # 팬아웃 구간에는 역할 스위치를 건드리지 않는다 — 여기서 보려는 것은 발송 노드다.
+  [ "$4" = "true" ] && role_off=false
+  [ "$PUSH_ROLE_ONLY" = "true" ] || role_off=false
   PG_CPUSET="$1" INFRA_CPUSET="$2" APP_CPUSET="$3" MOCK_DELAY="$MOCK_DELAY" \
   APP_HEAP="${APP_HEAP:-1g}" APP_MEM="${APP_MEM:-1600m}" \
   FANOUT_ENABLED="$4" PUSH_ENABLED="$5" \
+  SCHEDULING_ENABLED="$([ "$role_off" = true ] && echo false || echo true)" \
+  CAPTION_ENABLED="$([ "$role_off" = true ] && echo false || echo true)" \
   FANOUT_CONCURRENCY="$FANOUT_CONC" PUSH_CONCURRENCY="$PUSH_CONC" \
     compose up -d --wait --wait-timeout 300 app > /dev/null 2>&1 || fail "앱 기동 실패"
   local env_dump
@@ -120,7 +133,7 @@ start_push_nodes() {  # $1 노드 수
   local n="$1" svcs=() i=0 set_i cpuset
   compose rm -sf app app2 app3 > /dev/null 2>&1 || true
   IFS='|' read -r -a set_i <<< "$PUSH_NODE_CPUSETS"
-  [ "$n" -le "${#set_i[@]}" ] || fail "노드 $n대에 줄 cpuset이 모자라다(${#set_i[@]}개)"
+  [ "$n" -le "${#set_i[@]}" ] || fail "노드 ${n}대에 줄 cpuset이 모자라다(${#set_i[@]}개)"
   for ((i = 0; i < n; i++)); do
     case "$i" in
       0) svcs+=(app);  export APP_CPUSET="${set_i[i]}" ;;
@@ -131,6 +144,8 @@ start_push_nodes() {  # $1 노드 수
   PG_CPUSET="$PG_FANOUT" INFRA_CPUSET="$INFRA_FANOUT" MOCK_DELAY="$MOCK_DELAY" \
   APP_HEAP="${APP_HEAP:-1g}" APP_MEM="${APP_MEM:-1600m}" \
   FANOUT_ENABLED=false PUSH_ENABLED=true \
+  SCHEDULING_ENABLED="$([ "$PUSH_ROLE_ONLY" = true ] && echo false || echo true)" \
+  CAPTION_ENABLED="$([ "$PUSH_ROLE_ONLY" = true ] && echo false || echo true)" \
   FANOUT_CONCURRENCY="$FANOUT_CONC" PUSH_CONCURRENCY="$PUSH_CONC" \
     compose up -d --wait --wait-timeout 300 "${svcs[@]}" > /dev/null 2>&1 \
     || fail "발송 노드 기동 실패"
@@ -254,7 +269,7 @@ else
   pg -c "TRUNCATE core.notification_push_progress;" > /dev/null
   QD="$(push_queue_depth)"
   [ "${QD:-0}" -gt 0 ] || fail "푸시 큐가 비었다(${QD:-없음}). 구간 A가 쌓은 명령이 사라졌다."
-  echo "   푸시 큐 $QD건 대기 중"
+  echo "   푸시 큐 ${QD}건 대기 중"
   if [ "$PUSH_NODES" -le 1 ]; then
     start_app "$PG_FANOUT" "$INFRA_FANOUT" "$APP_PUSH" false true
   else

@@ -40,7 +40,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * <p>이 계약이 테스트를 요구하는 이유(POLICY): FE 대시보드가 소비하는 실제 JSON 필드명·페이지 봉투와
  * 소유권 경계가 걸려 있고, nextLiveSession은 모듈(live·lesson)을 가로질러 조립되므로 회귀가 조용히 난다.
  *
- * <p>범위 밖(의도적 미구현)도 계약으로 못박는다 — materialAttentionCount·allowedActions는 응답에
+ * <p>범위 밖(의도적 미구현)도 계약으로 정한다 — materialAttentionCount·allowedActions는 응답에
  * 없어야 하고, sort=NEXT_SESSION은 400이어야 한다(조용히 틀린 정렬 대신).
  */
 @SpringBootTest

@@ -15,7 +15,10 @@
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# 화면에 상대 경로를 찍으므로 루트에서 돈다. 안 그러면 찍는 경로와 도는 경로가 어긋난다.
+cd "$REPO_ROOT" || exit 1
 BENCH="$REPO_ROOT/bench"
+CF="bench/compose.bench.yml"
 ROWS="${ROWS:-20000}"           # 행 단위 INSERT 표본
 PUSH_SAMPLE="${PUSH_SAMPLE:-2000}"
 TOTAL_USERS="${TOTAL_USERS:-1000000}"
@@ -30,7 +33,7 @@ CUR="00000000-0000-4000-8000-000000000002"
 
 fail() { echo "실패: $*" >&2; exit 1; }
 mkdir -p "$OUT"
-compose() { docker compose -f "$BENCH/compose.bench.yml" "$@"; }
+compose() { docker compose -f "$CF" "$@"; }
 pg()  { compose exec -T -e PGPASSWORD=bench postgres psql -U liveclass -d liveclass -qtA "$@" < /dev/null; }
 pgv() { compose exec -T -e PGPASSWORD=bench postgres psql -U liveclass -d liveclass "$@" < /dev/null; }
 now_ms() { python3 -c 'import time; print(int(time.time()*1000))'; }
@@ -43,6 +46,24 @@ PG_CPUSET="${PG_CPUSET:-0,4,1,5}" INFRA_CPUSET="${INFRA_CPUSET:-3,7}" \
   compose up -d --wait --wait-timeout 300 postgres redis rabbitmq mock-push > /dev/null 2>&1 \
   || fail "인프라 기동 실패"
 echo "수신자,방식,표본,소요초,초당,100만건_환산초,환산_표기" > "$OUT/summary.csv"
+
+# **무엇을 먹였는지 화면에 남긴다.** 이 회차의 값은 "행마다 한 문장"이라는 서술에 걸려
+# 있는데, 숫자만 찍으면 그 서술을 화면에서 확인할 방법이 없다. 문장 수와 첫 줄을 같이
+# 찍으면 캡처 한 장이 방법의 기록이 된다.
+show_input() {  # $1 = 로컬 sql 파일
+  printf '   입력 /tmp/%s  %s줄 · 첫 줄\n' \
+         "$(basename "$1")" "$(wc -l < "$1" | tr -d ' ')"
+  printf '     %s\n' "$(head -1 "$1" | cut -c1-160)"
+}
+
+# 찍는 명령과 도는 명령이 같아야 하므로 한 문자열에서 둘 다 나온다.
+feed() {  # $1 = 컨테이너 안 sql 경로
+  local head="docker compose -f $CF exec -T -e PGPASSWORD=bench postgres"
+  local tail="psql -U liveclass -d liveclass -q -f $1"
+  echo "   \$ $head \\"
+  echo "       $tail"
+  eval "$head $tail" < /dev/null > /dev/null 2>&1
+}
 
 report() {  # $1 방식 $2 표본수 $3 소요ms
   python3 - "$OUT/summary.csv" "$1" "$2" "$3" "$TOTAL_USERS" <<'PY'
@@ -87,8 +108,10 @@ with open(dst, "w") as f:
                 f"ON CONFLICT (dedupe_hash) WHERE dedupe_hash IS NOT NULL DO NOTHING;\n")
 PY
 compose cp "$OUT/serial.sql" postgres:/tmp/serial.sql > /dev/null 2>&1
+echo
+show_input "$OUT/serial.sql"
 T0="$(now_ms)"
-compose exec -T -e PGPASSWORD=bench postgres psql -U liveclass -d liveclass -q -f /tmp/serial.sql < /dev/null > /dev/null 2>&1
+feed /tmp/serial.sql
 T1="$(now_ms)"
 # 정말 들어갔는지 센다. 앞선 회차에서 id 컬럼 누락으로 알림 삽입이 전부 실패했는데도 시간만
 # 찍혀 나온 적이 있다 — 중복 제거 삽입만 돌고 있었다.
@@ -116,25 +139,31 @@ with open(dst, "w") as f:
 PY
 pg -c "TRUNCATE core.notification CASCADE;" > /dev/null
 compose cp "$OUT/naive.sql" postgres:/tmp/naive.sql > /dev/null 2>&1
+echo
+show_input "$OUT/naive.sql"
 T0="$(now_ms)"
-compose exec -T -e PGPASSWORD=bench postgres psql -U liveclass -d liveclass -q -f /tmp/naive.sql < /dev/null > /dev/null 2>&1
+feed /tmp/naive.sql
 T1="$(now_ms)"
 INS="$(pg -c 'SELECT count(*) FROM core.notification;')"
 [ "${INS:-0}" -ge "$ROWS" ] || echo "   경고: $ROWS건 목표인데 알림 $INS건만 들어갔다 — 이 회차는 못 쓴다"
 report "행마다 왕복·커밋 + N+1 조회" "$ROWS" "$(( T1 - T0 ))"
 
 pg -c "TRUNCATE core.notification CASCADE;" > /dev/null
+SET_SQL="WITH candidate AS (
+    SELECT user_id, md5('serial:' || user_id::text)::uuid AS h
+      FROM core.enrollment WHERE curriculum_id='$CUR' AND status='ACTIVE'
+      ORDER BY user_id LIMIT $ROWS
+  )
+  INSERT INTO core.notification (id, recipient_id, content_id, dedupe_hash, read_status, action_status)
+  SELECT gen_random_uuid(), c.user_id, '$CID', c.h, 'UNREAD', 'INFO'
+    FROM candidate c
+  ON CONFLICT (dedupe_hash) WHERE dedupe_hash IS NOT NULL DO NOTHING;"
+echo
+echo "   입력 문장 1개 · 같은 $ROWS명"
+echo "   \$ docker compose -f $CF exec -T -e PGPASSWORD=bench postgres \\"
+echo "       psql -U liveclass -d liveclass -c \"$SET_SQL\""
 T0="$(now_ms)"
-pg -c "
-WITH candidate AS (
-  SELECT user_id, md5('serial:' || user_id::text)::uuid AS h
-    FROM core.enrollment WHERE curriculum_id='$CUR' AND status='ACTIVE'
-    ORDER BY user_id LIMIT $ROWS
-)
-INSERT INTO core.notification (id, recipient_id, content_id, dedupe_hash, read_status, action_status)
-SELECT gen_random_uuid(), c.user_id, '$CID', c.h, 'UNREAD', 'INFO'
-  FROM candidate c
-ON CONFLICT (dedupe_hash) WHERE dedupe_hash IS NOT NULL DO NOTHING;" > /dev/null
+pg -c "$SET_SQL" > /dev/null
 T1="$(now_ms)"
 report "집합 삽입 (지금 구조)" "$ROWS" "$(( T1 - T0 ))"
 
@@ -233,3 +262,30 @@ echo
 echo "── 요약 ──"
 column -s, -t < "$OUT/summary.csv"
 echo "결과: $OUT"
+
+# ── 동기 구조 합계 ────────────────────────────────────────────────────────────
+# 게시 트랜잭션 안에서 알림 생성과 발송을 모두 처리했을 때의 100만 건 비용이다.
+# **한 번의 실행이 아니라 두 표본의 환산 합이다** — 100만 건을 실제로 순차 발송하면
+# 수십 시간이라 측정이 성립하지 않는다. 그 사실을 출력 안에 같이 적어, 캡처만 떼어 봐도
+# 무엇을 잰 값인지 알 수 있게 한다.
+python3 - "$OUT/summary.csv" <<'PY'
+import csv, sys
+rows = list(csv.DictReader(open(sys.argv[1])))
+def pick(pred):
+    return next((r for r in rows if pred(r["방식"])), None)
+make = pick(lambda m: "N+1" in m)
+send = pick(lambda m: m.startswith("한 건씩 순차 발송"))
+if not (make and send):
+    print("\n(동기 구조 합계: 필요한 두 줄이 없다 — N+1 조회·순차 발송 회차를 함께 돌려야 한다)")
+    raise SystemExit
+def label(sec):
+    h, m, s = int(sec // 3600), int((sec % 3600) // 60), int(sec % 60)
+    return f"{h}시간 {m}분" if h else (f"{m}분 {s}초" if m else f"{sec:.1f}초")
+total = float(make["100만건_환산초"]) + float(send["100만건_환산초"])
+print()
+print("── 동기 구조 (게시 트랜잭션 안에서 알림 생성 + 발송) ──")
+print(f"  알림 생성  {make['방식']:<28} 표본 {int(make['표본']):>6,}건 · {float(make['소요초']):8.2f}초 · {float(make['초당']):8.1f}건/s → {make['환산_표기']}")
+print(f"  발송       {send['방식']:<28} 표본 {int(send['표본']):>6,}건 · {float(send['소요초']):8.2f}초 · {float(send['초당']):8.1f}건/s → {send['환산_표기']}")
+print(f"  {'합계':<40} 수신자 {int(make['수신자']):,}명{'':>27}→ {label(total)}")
+print("  * 100만 건은 표본 처리율로 환산한 값이다. 순차 발송 100만 건은 실측이 성립하지 않는다.")
+PY

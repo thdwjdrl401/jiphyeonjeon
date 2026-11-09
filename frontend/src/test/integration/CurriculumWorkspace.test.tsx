@@ -90,7 +90,7 @@ describe('커리큘럼 작업 화면', () => {
 
   /**
    * 요약 툴바의 수강생 수. 서버가 이 값을 주지 않으면 화면이 조용히 `--`로 떨어지므로
-   * (실제로 그 상태였다 — 응답에 필드 자체가 없었다) 실제 숫자가 그려지는지 못박는다.
+   * (실제로 그 상태였다 — 응답에 필드 자체가 없었다) 실제 숫자가 그려지는지 확인한다.
    */
   it('요약 툴바가 수강생 수를 보여 준다', async () => {
     await renderAsInstructor('/instructor/curriculums/cur-architecture/manage')

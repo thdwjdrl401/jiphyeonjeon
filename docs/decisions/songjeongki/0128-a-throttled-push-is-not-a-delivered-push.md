@@ -24,7 +24,7 @@ for (PushSubscription s : subscriptions)
     if (!answered.contains(s.getId())) unfinishedOwners.add(s.getUserId());
 ```
 
-429는 "지금은 속도를 줄여라"라는 답이지 "보냈다"가 아니다. 그런데 재시도 물결이 `batch-timeout`
+429는 "지금은 속도를 줄여라"라는 답이지 "보냈다"가 아니다. 그런데 재시도 회차가 `batch-timeout`
 (60초) 안에 끝나지 못하면 그 기기의 마지막 결과는 429로 남고, 위 코드는 그것을 결과로 세어 주인을
 진행 표에 적었다. 진행 표는 재배달 anti-join의 입력이므로, 한 번 적히면 그 사람은 이 사건에 대해
 **영영 걸러진다.** 못 받은 사람을 받은 것으로 적고 조용히 끝나는 경로였다.
@@ -77,7 +77,7 @@ for (PushSubscription s : subscriptions)
 
 ## 확인
 
-- `WebPushRetryTest` — 5xx로 물결을 다 쓴 기기의 주인은 안 끝남, 영구 거절(4xx)은 끝남,
+- `WebPushRetryTest` — 5xx로 회차를 다 쓴 기기의 주인은 안 끝남, 영구 거절(4xx)은 끝남,
   `Retry-After`가 호출자에게 그대로 올라옴
 - `PushRequeueTest` — 막힌 사람만 다시 실림(받은 사람을 끼우지 않음), `Retry-After`가 기본 대기를
   이김, 상한에서 멈춤, 전원 끝나면 다시 싣지 않음, 같은 사건의 두 조각이 키가 겹치지 않음

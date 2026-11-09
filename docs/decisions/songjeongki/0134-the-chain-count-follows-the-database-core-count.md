@@ -70,7 +70,7 @@
 
 앞선 측정을 못 믿을 이유가 셋이었다. 셋 다 측정값을 바꾸는 종류다.
 
-**소비자 손잡이가 먹지 않았다.** ADR-0131이 소비자 수를 `notification.fanout.listener-concurrency`로 갈라내면서, `notificationListenerContainerFactory`가 `configurer`로 전역을 먹은 **뒤에** 그 전용 값(기본 8)으로 덮어쓰게 됐다. `bench/compose.bench.yml`은 전역 `RABBIT_LISTENER_CONCURRENCY`만 넘기고 있었으므로, 그 시점부터 `FANOUT_CONCURRENCY`를 바꾼 모든 회차가 실제로는 8로 돌았다. 2·4·8을 재고 18.2 · 18.3 · 18.3초를 얻은 뒤에야 드러났다. compose에 전용 변수를 추가하고, 회차마다 컨테이너가 실제로 받은 값을 찍어 확인하게 했다.
+**소비자 수 설정이 먹지 않았다.** ADR-0131이 소비자 수를 `notification.fanout.listener-concurrency`로 갈라내면서, `notificationListenerContainerFactory`가 `configurer`로 전역을 먹은 **뒤에** 그 전용 값(기본 8)으로 덮어쓰게 됐다. `bench/compose.bench.yml`은 전역 `RABBIT_LISTENER_CONCURRENCY`만 넘기고 있었으므로, 그 시점부터 `FANOUT_CONCURRENCY`를 바꾼 모든 회차가 실제로는 8로 돌았다. 2·4·8을 재고 18.2 · 18.3 · 18.3초를 얻은 뒤에야 드러났다. compose에 전용 변수를 추가하고, 회차마다 컨테이너가 실제로 받은 값을 찍어 확인하게 했다.
 
 **소요시간에 릴레이 폴링 대기가 섞였다.** `run-chains.sh`가 아웃박스 행을 psql로 직접 넣어 `afterCommit` 깨우기 경로(ADR-0122)를 타지 않는다. 릴레이가 폴링으로 집을 때까지의 약 4초가 모든 회차에 얹혀 조건 간 차이를 덮었다. 앱 로그의 조각 완료 시각으로 재면 같은 실행이 14.3초인데 하네스는 18.3초로 보고한다.
 

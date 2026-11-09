@@ -18,7 +18,7 @@ PLATES.append(("12-architecture", Free(
      ("AI 플레인", 40, 530, 1140, 180)],
     {
         "web":   ("브라우저", "React · TypeScript", U, 500, 36, 220, 56),
-        "gw":    ("웹 관문", "nginx", S, 70, 190, 230, 56),
+        "gw":    ("웹 진입점", "nginx", S, 70, 190, 230, 56),
         "svc":   ("서비스", "core-api", S, 70, 290, 230, 72),
         "cache": ("세션 · 캐시", "Redis", D, 380, 190, 230, 56),
         "db":    ("데이터베이스", "PostgreSQL + pgvector", D, 380, 272, 230, 56),

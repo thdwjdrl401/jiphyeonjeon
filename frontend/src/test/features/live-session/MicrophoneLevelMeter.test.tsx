@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LocalAudioTrack } from 'livekit-client'
 import MicrophoneLevelMeter from '@/features/live-session/MicrophoneLevelMeter'
 
-/** 지금 마이크에서 들어오고 있다고 칠 진폭. 테스트가 소리를 만들어 넣는 손잡이다. */
+/** 지금 마이크에서 들어오고 있다고 칠 진폭. 테스트가 소리를 만들어 넣는 입력값이다. */
 let amplitude = 0
 let analyserFails = false
 const cleanup = vi.fn(async () => {})

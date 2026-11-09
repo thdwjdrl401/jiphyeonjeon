@@ -97,7 +97,7 @@ FE를 고쳤으니 이건 안전망이다. 그런데 안전망이 필요하다 �
   않았고, 응답 순서도 제어되지 않아 진짜 데이터가 첫 응답으로 도착했다. 클라이언트를 테스트당 하나로
   고정하고 첫 응답을 손으로 resolve하도록 고친 뒤에야 잠금을 잡아냈다.
 - `LearningContractTest.progress_never_goes_backwards` — 60% 뒤 4% 보고가 무시되고, 80% 보고는
-  반영되는지. 기존 `progress_over_threshold_is_completed_and_sticky`는 "10%로 내려간다"를 못박고
+  반영되는지. 기존 `progress_over_threshold_is_completed_and_sticky`는 "10%로 내려간다"를 고정하고
   있어 **함께 갱신**했다(그 값이 이번에 바꾸는 동작이다).
 - **돌연변이 확인**: 잠금을 되돌리면 훅 테스트가 `20%`로 깨진다.
 - 백엔드 **767건** · 프런트 **1,344건** 통과.

@@ -30,7 +30,7 @@ location ~ ^/api/.+/stream$ { ... proxy_buffering off; ... }
 ```
 
 만 `proxy_buffering off`를 적용하고, 그 블록의 주석이 **"SSE 엔드포인트 경로를 `/stream`으로 끝내면 이
-블록이 자동 적용(백엔드 라우팅도 동일하게)"** 라고 규약을 못박아 두었다. `questions:stream`은 정규식에
+블록이 자동 적용(백엔드 라우팅도 동일하게)"** 라고 규약을 고정해 두었다. `questions:stream`은 정규식에
 매칭되지 않아 nginx가 토큰을 버퍼링하고 **스트리밍이 그냥 깨진다**(운영에서만, 로컬 Vite 프록시에서는
 안 드러나는 종류의 버그다). 규약을 지키는 쪽이 옳다 — nginx를 고쳐 예외를 늘리는 대신 경로를 맞춘다.
 
@@ -85,7 +85,7 @@ X-Internal-Signature: base64(HMAC-SHA256(AI_INTERNAL_SECRET, rawBody))
 
 `RagAnswerHttpClient`가 `writeValueAsBytes(...)`로 **한 번** 만든 `byte[]`를 서명하고 같은 배열을
 `BodyPublishers.ofByteArray(...)`로 보낸다. 객체를 다시 직렬화해 전송하면(필드 순서·공백·escape가 달라져)
-서명이 깨져 401이 난다 — 이 계열에서 가장 흔한 버그라 계약 테스트로 못박았다(`signs_the_exact_raw_body_it_sends`).
+서명이 깨져 401이 난다 — 이 계열에서 가장 흔한 버그라 계약 테스트로 고정했다(`signs_the_exact_raw_body_it_sends`).
 
 - 시크릿은 `AI_INTERNAL_SECRET`이다. 콜백/download-url의 `AI_CALLBACK_SECRET`과 **다른 값**이다
   ([`docs/ai/CONTRACT.md` §3.2](../../ai/CONTRACT.md)). 계산 자체는 기존 `AiCallbackVerifier`와 같은
@@ -164,7 +164,7 @@ FE에 `askReplayAi(lessonId, question, sessionMs)`(501 스텁)가 있지만 이�
 
 - 릴레이 요청 하나당 virtual thread + 소켓 하나가 스트림 동안 유지된다. 한도·요금 정책(사용자당 동시 질문 수)은
   아직 없다 — ai-api의 process-local active 한도(503)에 기대는 상태다. 후속 결정 대상.
-- 스트림 재연결·이어받기가 없다. 끊기면 새 `requestId`로 다시 질문한다(ai-api도 replay 멱등키가 아니라고 못박음).
+- 스트림 재연결·이어받기가 없다. 끊기면 새 `requestId`로 다시 질문한다(ai-api도 replay 멱등키가 아니라고 고정함).
 - ~~다시보기 AI는 여전히 막혀 있다(위 §9).~~ → [ADR-0075](0075-replay-ai-answer-sse-proxy.md)로 열렸다.
 
 ## 계약 테스트
