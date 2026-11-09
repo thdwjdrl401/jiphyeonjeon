@@ -2,9 +2,9 @@
 
 배포 프로세스가 아니라 명시적으로 실행하는 통합 검증 도구를 둔다.
 
-## EC2 → GPU BGE 통신 smoke
+## EC2 → BGE 통신 smoke
 
-`smoke_remote_bge.py`는 EC2 host에서 `127.0.0.1:18020` reverse tunnel을 통해 GPU BGE에 실제 HTTP
+`smoke_remote_bge.py`는 EC2 host에서 `127.0.0.1:18020`(bge-runtime container publish, 기본값)으로 BGE에 실제 HTTP
 요청을 보낸다. `/readyz`, Bearer 인증, pinned model·revision, 두 입력의 1024차원 정규화 vector를 검증한다.
 원문 probe·embedding vector·token은 출력하지 않고 계약 metadata와 latency만 출력한다.
 
@@ -23,7 +23,7 @@ uv run --frozen python -m scripts.smoke_remote_bge
 {"count":2,"dimensions":[1024],"embeddingMs":123.4,"maxNormError":0.0,"model":"BAAI/bge-m3","revision":"5617a9f61b028005a4858fdac845db406aefb181","runtimeUrl":"http://127.0.0.1:18020","status":"ok"}
 ```
 
-이 smoke는 EC2→tunnel→GPU→EC2 요청/응답만 검증한다. Spring·RabbitMQ·pgvector·callback까지 포함하는 최종
+이 smoke는 EC2 host→bge-runtime 요청/응답만 검증한다. Spring·RabbitMQ·pgvector·callback까지 포함하는 최종
 검증은 아래 `e2e_material_ingestion.py`를 사용한다.
 
 ## 자료 임베딩 전체 E2E

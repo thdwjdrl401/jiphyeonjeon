@@ -4,7 +4,7 @@
 
 | 라우트 | 레이아웃 | 접근 |
 |---|---|---|
-| `/lessons/:lessonId/replay` | `LessonLayout` | 해당 커리큘럼 강사·수강생 |
+| `/student/lessons/:lessonId/replay`, `/instructor/lessons/:lessonId/replay` | `LessonLayout` | 해당 커리큘럼 강사·수강생 |
 
 ## 목적
 종료된 라이브 레슨의 녹화(HLS)를 재생하며, 교정 자막·채팅 리플레이·PPTX 근거·개인 AI Q&A·퀴즈를 같은 시간축에서 제공하는 학습 페이지. 강사는 같은 화면에서 AI 결과를 검수·게시한다. 영상 업로드 기능은 없다(녹화 결과만 사용).

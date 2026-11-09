@@ -35,9 +35,8 @@ flowchart LR
   CP2 -.녹화 자막.-> CP4
   CP3 -.녹화 RAG.-> CP4
 
-  class T0,CP0,MAT done
-  class CP1,CP3,CP4 partial
-  class CP2,CP5,SPK todo
+  class T0,CP0,MAT,SPK,CP1,CP2,CP3,CP4 done
+  class CP5 todo
 ```
 
 - **핵심 트랙**: CP1(라이브 미디어) → CP2(자막) → CP3(용어·RAG)
@@ -47,16 +46,16 @@ flowchart LR
 
 ## 현재 위치
 
-**CP0 백엔드 완료 · CP1 백엔드 완료 — CP1 데모까지 남은 건 프론트 미디어 연동.**
+현재 상태: T0·CP0~CP4 구현, CP5(퀴즈) 미착수. CP4는 녹화강의 운영 E2E와 검수 데이터 저장이 남았다([ARCHITECTURE §10](ARCHITECTURE.md)).
 
 | CP | 백엔드 | 프론트 | AI |
 |---|---|---|---|
-| **T0** | ✅ compose·CI·Flyway·EC2 배포·LiveKit/Egress 상시가동 | ✅ Vite·라우팅·목 데이터 계층 | ⬜ Alembic·`ai` 스키마 |
+| **T0** | ✅ compose·CI·Flyway·EC2 배포·LiveKit/Egress 상시가동 | ✅ Vite·라우팅·목 데이터 계층 | ✅ Alembic·`ai` 스키마(`ai/ai-worker/migrations`) |
 | **CP0** | ✅ 인증·커리큘럼·섹션·레슨·수강·카탈로그·구조 재정렬 | ✅ 화면 + 실 API 연동 | — |
-| **CP1** ★ | ✅ LiveKit 토큰·채팅 WS·세션 수명주기·참가자 관리 | 🟡 세션·채팅 API 연동 ✅ / `livekit-client` ⬜ | — |
-| **CP2** | ⬜ | ⬜ | ⬜ realtime-agent |
-| **CP3** ★ | 🟡 BE 슬라이스 착수(자료 연결·삭제·다운로드, 임베딩 outbox→RabbitMQ→콜백 inbox, 스위치 off) | ⬜ | ⬜ ai-api·ai-worker |
-| **CP4** | 🟡 라이브 Egress 재생 + 업로드 녹화강의 전용 API·DB·RabbitMQ dispatch·callback·HLS 재생 구현 / 운영 E2E·검수 데이터 미완료 | 🟡 라이브 processing/replay 연결 + 녹화강의 MP4 선택·직접 업로드 구현 / 녹화강의 처리 폴링·학습 플레이어 연결 미완료 | 🟡 `media-worker` FFmpeg 구현 / 운영 E2E 미완료 |
+| **CP1** ★ | ✅ LiveKit 토큰·채팅 WS·세션 수명주기·참가자 관리 | ✅ 세션·채팅 API 연동 · `livekit-client` | — |
+| **CP2** | ✅ 자막 Streams 소비·영속·WS(`live/config/CaptionStreamConsumer`) | ✅ 자막 렌더 | ✅ realtime-agent |
+| **CP3** ★ | ✅ 자료 연결·삭제·다운로드, 임베딩 outbox→RabbitMQ→콜백 inbox, RAG SSE 중계 | ✅ AI 질문·용어 UI | ✅ ai-api·ai-worker |
+| **CP4** | 🟡 라이브 Egress 재생 + 업로드 녹화강의 전용 API·DB·RabbitMQ dispatch·callback·HLS 재생 구현 / 운영 E2E·검수 데이터 미완료 | ✅ 라이브 processing/replay 연결 + 녹화강의 MP4 선택·직접 업로드·처리 폴링·학습 플레이어(`/lessons/:lessonId/recorded`) 구현 | 🟡 `media-worker` FFmpeg 구현 / 운영 E2E 미완료 |
 | **CP5** | ⬜ | ⬜ | ⬜ |
 
 ## 단계별 상세
@@ -68,7 +67,7 @@ flowchart LR
 | **CP1** ★ | 라이브 미디어 | LiveKit 토큰, **WebRTC 화상 입장**(강사 publish/학생 subscribe), Spring **채팅**(WS) | — |
 | **CP2** | 라이브 자막 | **realtime-agent 스트리밍 STT(VAD)** → Redis Streams → Spring 영속+WS, 자막 렌더·검수 | realtime-agent · **`ai` 스키마+Alembic** · 외부 STT API |
 | **CP3** ★ | 용어·근거(RAG) | PPTX 업로드·파싱, chunk·embedding(pgvector), 용어 후보·카드, **RAG SSE**(FTS+vector+RRF+scope+citation+insufficient) | ai-api · ai-worker · **RabbitMQ** · model gateway |
-| **CP4** | 녹화·다시보기 | 라이브 Egress→HLS 경로와 별도로 **녹화강의 생성→MP4 presigned PUT→RabbitMQ→media-worker FFmpeg→HLS 검증→전용 playback** 구현 ✅([choinhoo/0008](decisions/choinhoo/0008-recorded-lesson-upload-and-hls-transcoding.md)). 라이브 되감기·종료 VOD 재생·자동/수동 게시도 구현 ✅. 남은 항목은 녹화강의 운영 E2E, 처리 폴링·학습 플레이어, 교정 자막·용어·RAG 재생 | HLS.js · media-worker · FFmpeg |
+| **CP4** | 녹화·다시보기 | 라이브 Egress→HLS 경로와 별도로 **녹화강의 생성→MP4 presigned PUT→RabbitMQ→media-worker FFmpeg→HLS 검증→전용 playback** 구현 ✅([choinhoo/0008](decisions/choinhoo/0008-recorded-lesson-upload-and-hls-transcoding.md)). 라이브 되감기·종료 VOD 재생·자동/수동 게시도 구현 ✅. 남은 항목은 녹화강의 운영 E2E | HLS.js · media-worker · FFmpeg |
 | **CP5** | 퀴즈·따라잡기 | 퀴즈 후보→검수→응시(**결정론 채점**), 재접속 catch-up | — |
 
 > **RabbitMQ 배선은 CP3에서 이뤄졌다.** backend에 `spring-amqp` 의존성·설정이 들어가 outbox 릴레이가 `ingestion.embed`로 발행하고, prod compose에도 RabbitMQ가 추가됐다([ADR-0036](decisions/songjeongki/0036-material-embedding-pipeline.md), [ARCHITECTURE §9-4](ARCHITECTURE.md)). CP2 자막 경로는 여전히 Redis Streams만으로 충분하다. 자료 임베딩 파이프라인은 스위치(`material.embedding.enabled`) 뒤에서 기본 off다.
@@ -85,7 +84,7 @@ flowchart LR
 | CP1 | LiveKit 토큰·채팅 WS | LiveKit 클라·화상·채팅 UI | — |
 | CP2 | 자막 영속·WS 전달 | 자막 렌더·싱크 | **realtime-agent STT** |
 | CP3 | 자료→레슨 연결·AI 게이트웨이·정책·SSE 중계 | 챗봇·용어카드 UI | **chunk·embed·RAG·citation** |
-| CP4 | Egress 재생 + 녹화강의 API·DB·dispatch·callback·playback ✅ | 라이브 processing/replay + 녹화강의 업로드 UI ✅, 녹화강의 processing/학습 player ⬜ | media-worker FFmpeg ✅(운영 E2E ⬜), 2-pass 교정 옵션 |
+| CP4 | Egress 재생 + 녹화강의 API·DB·dispatch·callback·playback ✅ | 라이브 processing/replay + 녹화강의 업로드 UI ✅, 녹화강의 processing/학습 player ✅ | media-worker FFmpeg ✅(운영 E2E ⬜), 2-pass 교정 옵션 |
 | CP5 | 퀴즈 채점·API | 퀴즈 UI | *(퀴즈 후보)* |
 
 > **선행 스파이크(Week1 병렬)**: 한국어 STT bake-off + LiveKit/Egress self-host PoC — CP1·CP2 리스크 검증. **미디어·라이브는 3그룹 합동.**

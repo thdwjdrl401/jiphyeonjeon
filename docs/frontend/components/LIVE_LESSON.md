@@ -41,7 +41,7 @@ LiveKit 토큰은 소유 강사의 WebRTC 송출에만 발급한다. 수강생�
 ## 3. 컴포넌트 트리
 
 ```text
-LiveLessonPage
+LiveClassroomPage
 └─ LessonLayout
    ├─ LiveLessonPrimaryContent
    │  ├─ LiveMediaStage
@@ -72,7 +72,7 @@ LiveLessonPage
 
 | 컴포넌트 | 소유 영역 | 책임 |
 |---|---|---|
-| `LiveLessonPage` | `pages` | `sessionId` 기준 접근 권한·세션 상태 확인, 초기 데이터 조회, 실시간 연결과 feature 조합 |
+| `LiveClassroomPage` | `pages` | `sessionId` 기준 접근 권한·세션 상태 확인, 초기 데이터 조회, 실시간 연결과 feature 조합 |
 | `LiveLessonHeader` | page 전용 | 상위 커리큘럼·섹션·레슨 정보와 핵심 상태 표시 |
 | `LiveLessonPrimaryContent` | page 조합 | 미디어·타임라인·자막 영역 조합 |
 | `LiveLessonSidePanel` | page 조합 | 역할에 맞는 채팅·AI·자료·질문 패널 조합 |

@@ -11,7 +11,7 @@
 ## 2. 컴포넌트 트리
 
 ```text
-CurriculumManagementPage
+CurriculumManagePage
 ├─ CurriculumManagementHeader
 ├─ CurriculumManagementNavigation
 └─ CurriculumManagementContent
@@ -24,7 +24,7 @@ CurriculumManagementPage
    └─ EnrolleeManager
 ```
 
-기본 정보, 편성, 수강생 관리를 한 화면에 모두 펼치지 않고 탭 또는 하위 메뉴로 구분한다. URL에 하위 상태를 반영할지는 추후 결정한다.
+기본 정보, 편성, 수강생 관리를 한 화면에 모두 펼치지 않고 탭 또는 하위 메뉴로 구분한다. URL에 하위 상태를 반영할지는 추후 결정한다. 현재 상태: 탭은 `?tab=info|structure|enrollees` 쿼리로 URL에 남긴다(`frontend/src/app/router/paths.ts`의 `CurriculumManageTab`).
 
 ## 3. 접근 권한
 
@@ -37,7 +37,7 @@ CurriculumManagementPage
 
 | 컴포넌트 | 소유 영역 | 책임 |
 |---|---|---|
-| `CurriculumManagementPage` | `pages` | 권한·조회 상태와 관리 feature 조합 |
+| `CurriculumManagePage` | `pages` | 권한·조회 상태와 관리 feature 조합 |
 | `CurriculumManagementHeader` | page 전용 | 커리큘럼 이름·상태·상세 이동·대표 행동 표시 |
 | `CurriculumManagementNavigation` | `features/curriculum` | 기본 정보·편성·수강생 관리 전환 |
 | `CurriculumManagementContent` | page 조합 | 선택된 관리 영역 표시 |

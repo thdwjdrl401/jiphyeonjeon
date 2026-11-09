@@ -68,14 +68,17 @@ PPTX `ai-worker`는 별도 프로세스·queue로 계속 동작한다.
 > VSCode(Remote-WSL)가 `backend/`를 Gradle 프로젝트 `liveclass`로 자동 import. Java 런타임 **JDK 21**.
 
 ### 방법 C. EC2 인프라에 붙어 실행 (remote 프로필) — [ADR-0022](./docs/decisions/songjeongki/0022-local-vs-ec2-infra-profile.md)
-AI(realtime-agent)가 만든 **라이브 STT**는 EC2 Redis 스트림에만 쌓인다. 로컬 백엔드에서 그 스트림을 실제로 소비/개발하려면 인프라를 **통째로 EC2**로 바꾼다(한 스위치: `SPRING_PROFILES_ACTIVE=remote`). datasource·Redis만 EC2로 가고 **LiveKit은 로컬/원격 무관 항상 EC2**다.
 
-**1) EC2에서 포트 공개** (한 번):
+> **2026-11 기준 쓸 수 없다.** 개발용 EC2 인프라가 회수됐다. 아래는 당시 절차의 기록이다. 방법 A·B는 로컬 Docker Compose로 동작한다.
+
+AI(realtime-agent)가 만든 **라이브 STT**는 EC2 Redis 스트림에만 쌓인다. 로컬 백엔드에서 그 스트림을 실제로 소비/개발하려면 인프라를 **통째로 EC2**로 바꾼다(한 스위치: `SPRING_PROFILES_ACTIVE=remote`). datasource·Redis·RabbitMQ·에셋 스토리지(MinIO)가 EC2 dev 인프라(`docker-compose.dev-infra.yml`)로 가고 **LiveKit은 로컬/원격 무관 항상 EC2**다.
+
+**1) EC2에서 dev 인프라 기동** (한 번):
 ```bash
-# EC2에서 — .env.prod에 EC2_REDIS_PASSWORD 채운 뒤
-docker compose -f docker-compose.prod.yml -f docker-compose.expose.yml --env-file .env.prod up -d
+# EC2에서 .env.dev(.env.dev.example 참고)에 비밀번호를 채운 뒤
+docker compose -f docker-compose.dev-infra.yml --env-file /etc/liveclass/.env.dev up -d
 ```
-> ⚠️ 반드시 AWS SG 인바운드 5432/6379 → **팀 공인 IP만** + EC2 ufw 소스 제한. Redis는 `requirepass`로 보호(공개 인터넷 노출 금지).
+> ⚠️ 반드시 AWS SG 인바운드 5433/4000/4001/8990/9090 → **팀 공인 IP만** + EC2 ufw 소스 제한. Redis는 `requirepass`로 보호(공개 인터넷 노출 금지).
 
 **2) 로컬에서 remote 프로필로 실행**:
 ```bash
@@ -92,7 +95,7 @@ npm run dev:remote:wsl                   # FE + BE(remote) 동시
 - remote는 공유 EC2 dev DB에 대해 Flyway를 실행한다. 실행 전 최신 master로 rebase하고
   `bash scripts/check-version-collisions.sh`를 통과시켜야 한다. 이미 배포된 master 마이그레이션 번호는
   바꾸지 않고, 브랜치 마이그레이션만 다음 빈 번호로 이동한다.
-- **범위 밖(현재)**: 에셋 스토리지(MinIO)는 remote 전환에 포함되지 않는다 — datasource·Redis(STT 핵심 경로)만 전환. STT consumer(CP2) 착수 시 **consumer group을 개발자별로 분리**할 것(같은 그룹이면 EC2 백엔드와 메시지를 뺏는다, ADR-0022 유보).
+- 자막 consumer group은 `CAPTION_CONSUMER_GROUP_SUFFIX`(기본 `dev`)로 EC2 백엔드와 분리된다. 여러 개발자가 동시에 붙으면 값을 개발자별로 바꾼다(같은 그룹이면 메시지를 나눠 가진다).
 
 ## 4. 포트
 | 서비스 | 포트 | 설명 |
@@ -101,15 +104,15 @@ npm run dev:remote:wsl                   # FE + BE(remote) 동시
 | React (Vite dev) | 8083 | 프론트 dev, `/api`→8080 프록시 |
 | PostgreSQL + pgvector | 5432 | DB (`liveclass`) |
 | Redis | 6379 | 세션·캐시 |
+| MinIO | 9000 / 9001 | S3 API / 콘솔 |
+| RabbitMQ | 5672 / 15672 | AMQP / 관리 UI |
 
 > 미디어(LiveKit/Egress)는 별도 원격 호스트 — [infra/livekit/README.md](./infra/livekit/README.md).
 
 ## 5. 스모크 확인 (백엔드)
 ```bash
 curl -s localhost:8080/actuator/health          # {"status":"UP"}
-curl -s localhost:8080/api/ping               # {"status":"ok","app":"liveclass"}
-curl -s -i localhost:8080/api/session/touch | grep -i set-cookie   # LIVECLASS_SESSION 발급
-docker exec liveclass-redis redis-cli --scan --pattern 'liveclass:session:*'   # Redis에 세션
+docker exec liveclass-redis redis-cli --scan --pattern 'liveclass:session:*'   # 로그인(POST /api/auth/login) 뒤 Redis에 세션
 ```
 
 ## 6. 테스트 (백엔드)

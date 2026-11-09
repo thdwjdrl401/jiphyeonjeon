@@ -7,10 +7,10 @@
 `CurriculumForm`은 커리큘럼 생성 페이지와 커리큘럼 관리 페이지의 기본 정보 수정 영역에서 공유하는 폼이다.
 
 ```text
-CurriculumCreatePage
+CurriculumFormPage
 └─ CurriculumForm(mode="create")
 
-CurriculumManagementPage
+CurriculumManagePage
 └─ CurriculumInfoPanel
    └─ CurriculumForm(mode="edit")
 ```

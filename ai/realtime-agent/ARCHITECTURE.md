@@ -41,7 +41,7 @@ flowchart LR
     Publisher -->|XADD MAXLEN ~| Stream[(Redis Stream<br/>ai:captions:live)]
     Stream --- Redis
     Stream -->|consumer group ai-rag-live-v1| ApiConsumer[ai-api consumer<br/>구현됨]
-    Stream -.->|향후 consumer group| SpringConsumer[Spring consumer<br/>미구현]
+    Stream -->|consumer group spring-caption-live-v1| SpringConsumer[Spring consumer<br/>구현됨]
 
     classDef external fill:#fff4dd,stroke:#b26a00
 ```

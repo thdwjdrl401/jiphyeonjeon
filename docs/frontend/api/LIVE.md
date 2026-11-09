@@ -33,28 +33,33 @@ STARTING ─────────→ FAILED
 
 | ID | Method | Path | 설명 | 상태 |
 |---|---|---|---|---|
-| `LIVE-SESSION-01` | `POST` | `/api/instructor/lessons/{lessonId}/live-sessions` | 세션 생성 | **제안** |
-| `LIVE-SESSION-02` | `PATCH` | `/api/instructor/live-sessions/{sessionId}` | 일정 수정 | **제안** |
-| `LIVE-SESSION-03` | `GET` | `/api/live-sessions/{sessionId}` | 역할별 세션 상세 | **제안** |
-| `LIVE-SESSION-04` | `POST` | `/api/instructor/live-sessions/{sessionId}/cancel` | 시작 전 취소 | **제안** |
-| `LIVE-SESSION-05` | `POST` | `/api/instructor/live-sessions/{sessionId}/preflight` | 서버·미디어 시작 조건 점검 | **제안** |
-| `LIVE-SESSION-06` | `POST` | `/api/live-sessions/{sessionId}/start` | 멱등 라이브 시작 | URL **확정** |
-| `LIVE-SESSION-07` | `POST` | `/api/instructor/live-sessions/{sessionId}/token` | 소유 강사 LiveKit 송출 token 발급 | URL **확정** |
+| `LIVE-SESSION-01` | `POST` | `/api/instructor/lessons/{lessonId}/live-sessions` | 세션 생성 | **구현됨** (§3.1 현재 상태) |
+| `LIVE-SESSION-02` | `PATCH` | `/api/instructor/live-sessions/{sessionId}` | 일정 수정 | **구현됨** |
+| `LIVE-SESSION-03` | `GET` | `/api/live-sessions/{sessionId}` | 역할별 세션 상세 | **구현됨** (§3.3 현재 상태) |
+| `LIVE-SESSION-04` | `POST` | `/api/instructor/live-sessions/{sessionId}/cancel` | 시작 전 취소 | **구현됨** |
+| `LIVE-SESSION-05` | `POST` | `/api/instructor/live-sessions/{sessionId}/preflight` | 서버·미디어 시작 조건 점검 | **구현됨** (§4.2 현재 상태) |
+| `LIVE-SESSION-05A` | `GET` | `/api/instructor/live-sessions/{sessionId}/preflight/readiness` | 강사 마이크 publish 후 LiveKit readiness 검사 | **구현됨** |
+| `LIVE-SESSION-06` | `POST` | `/api/live-sessions/{sessionId}/start` | 멱등 라이브 시작 | **구현됨** (`202`, §5.1 현재 상태) |
+| `LIVE-SESSION-06A` | `GET` | `/api/live-sessions/{sessionId}/start-status` | `STARTING` 동안 시작 시도 상태 폴링 | **구현됨** |
+| `LIVE-SESSION-07` | `POST` | `/api/instructor/live-sessions/{sessionId}/token` | 소유 강사 LiveKit 송출 token 발급 | **구현됨** |
+| `LIVE-SESSION-10` | `GET`·`DELETE` | `/api/instructor/live-sessions/{sessionId}/participants[/{identity}]` | 방 참여자 조회·강퇴 | **구현됨** |
 | `LIVE-SESSION-08` | `POST` | `/api/live-sessions/{sessionId}/end` | 동기 순차·멱등 라이브 종료 | **구현됨(ADR-0003)** |
 | `LIVE-SESSION-09` | `GET` | `/api/instructor/live-sessions/{sessionId}/processing` | 종료 후 녹화 처리 조회 | **구현됨(ADR-0059·ADR-0007)** |
-| `LIVE-PLAYBACK-01` | `GET` | `/api/live-sessions/{sessionId}/playback` | 최근·전체 DVR HLS 재생 정보 | **제안** |
+| `LIVE-PLAYBACK-01` | `GET` | `/api/live-sessions/{sessionId}/playback` | 최근·전체 DVR HLS 재생 정보 | **미구현**. 레슨 기준 `GET /api/lessons/{lessonId}/playback`이 대신함(§7.1) |
 
 ### 2.2 실시간·학습
 
 | ID | Transport | Path/Channel | 설명 | 상태 |
 |---|---|---|---|---|
-| `LIVE-WS-01` | WebSocket | `/api/ws` | 인증 쿠키 기반 WS 연결 | **제안** |
+| `LIVE-WS-01` | WebSocket | `/api/ws` | 인증 쿠키 기반 WS 연결 | **구현됨** (STOMP) |
 | `CHAT-01` | REST | `GET/POST /api/live-sessions/{sessionId}/messages` | 채팅 복구 조회·전송 fallback | **구현됨(세션 키잉)** |
 | `CAPTION-01` | REST | `GET /api/live-sessions/{sessionId}/captions` | 저장 자막 리로드(새로고침·재연결 복구) | **구현됨(ADR-0045)** |
 | `AI-QUESTION-01` | SSE | `POST /api/live-sessions/{sessionId}/ai/answers/stream` | 개인 AI Q&A | **구현됨([ADR-0047](../../decisions/songjeongki/0047-live-ai-answer-sse-proxy.md))** |
-| `AI-TERM-01` | REST | `POST /api/lessons/{lessonId}/ai/terms:explain` | 전문용어 설명 | URL **확정** |
-| `LIVE-QUESTION-01` | REST | `GET /api/instructor/live-sessions/{sessionId}/question-pins` | 강사용 질문 시점 집계 | **제안** |
-| `LIVE-QUESTION-02` | REST | `GET /api/instructor/live-sessions/{sessionId}/question-pins/{pinId}/questions` | 핀의 익명 질문 원문 | **제안** |
+| `AI-HISTORY-LIVE-01` | REST | `GET /api/live-sessions/{sessionId}/ai/answers` | 이 세션의 내 AI 질문·답변 기록 | **구현됨** |
+| `LIVE-NOTE-01` | REST | `GET /api/live-sessions/{sessionId}/notes` | AI 강의 노트 현재 전체 | **구현됨** |
+| `AI-TERM-01` | REST | `POST /api/lessons/{lessonId}/ai/terms:explain` | 전문용어 설명 | **미구현** |
+| `LIVE-QUESTION-01` | REST | `GET /api/instructor/live-sessions/{sessionId}/question-pins` | 강사용 질문 시점 집계 | **미구현** |
+| `LIVE-QUESTION-02` | REST | `GET /api/instructor/live-sessions/{sessionId}/question-pins/{pinId}/questions` | 핀의 익명 질문 원문 | **미구현** |
 
 ## 3. 세션 생성·수정·상세
 
@@ -89,13 +94,15 @@ POST /api/instructor/lessons/{lessonId}/live-sessions
 - 동일 강사 일정 충돌은 `409 INSTRUCTOR_SCHEDULE_CONFLICT`
 - `saveAsDraft=true`이면 `DRAFT`, 아니면 검증 후 `SCHEDULED`
 
+현재 상태: 요청 본문은 선택이며 `scheduledAt`만 받는다. 값이 없으면 `DRAFT`로 만든다. `expectedDurationMinutes`·`entryWindowMinutes`는 생성 후 `LIVE-SESSION-02`로 저장한다. 응답은 `201`과 §3.3과 같은 세션 표현이다(`CreateLiveSessionRequest`, `InstructorLiveSessionController`).
+
 ### 3.2 `LIVE-SESSION-02` 수정
 
 ```http
 PATCH /api/instructor/live-sessions/{sessionId}
 ```
 
-생성과 같은 일정 필드를 사용한다. `DRAFT`, `SCHEDULED`에서 허용하고 `OPEN` 이후 범위는 서버 `allowedActions`를 따른다. `STARTING` 이후에는 `409 LIVE_SESSION_STATE_CONFLICT`를 반환한다.
+현재 요청 필드는 `scheduledAt`·`entryWindowMinutes`·`expectedDurationMinutes`이고 보낸 필드만 바뀐다(`UpdateLiveSessionRequest`). `DRAFT`, `SCHEDULED`에서 허용하고 `OPEN` 이후 범위는 서버 `allowedActions`를 따른다. `STARTING` 이후에는 `409 LIVE_SESSION_STATE_CONFLICT`를 반환한다.
 
 ### 3.3 `LIVE-SESSION-03` 역할별 상세
 
@@ -141,6 +148,8 @@ GET /api/live-sessions/{sessionId}
 
 강사에게만 공개 가능한 시작 차단 요약을 추가할 수 있지만, 인프라 내부 endpoint·stack trace·스토리지 경로는 노출하지 않는다.
 
+현재 상태: 실제 응답은 평면 구조로 `sessionId`·`lessonId`·`instructorId`·`liveSessionStatus`·`scheduledAt`·`entryWindowMinutes`·`expectedDurationMinutes`·`roomSid`·`startedAt`·`endedAt`·`recordingEnabled`·`captionEnabled`·`chatEnabled`·`aiQnaEnabled`·`annotationVisible`·`createdAt`·`updatedAt`·`participantCount`다. `lesson` 객체·`entryOpensAt`·`notices`·`readiness`·`viewerContext`는 없다(`LiveSessionView`). 레슨 정보는 `GET /api/lessons/{lessonId}`로 따로 읽는다.
+
 ### 3.4 취소
 
 ```http
@@ -153,7 +162,7 @@ POST /api/instructor/live-sessions/{sessionId}/cancel
 }
 ```
 
-`DRAFT`, `SCHEDULED`, 정책상 허용된 `OPEN`에서만 처리한다. 성공 시 최신 session을 `200`으로 반환한다.
+`DRAFT`, `SCHEDULED`, 정책상 허용된 `OPEN`에서만 처리한다. 성공 시 최신 session을 `200`으로 반환한다. 현재 구현은 요청 본문(`reason`)을 받지 않는다(`LiveSessionController.cancel`).
 
 ## 4. 수강생 prejoin과 강사 preflight
 
@@ -175,6 +184,8 @@ POST /api/instructor/live-sessions/{sessionId}/cancel
 ```http
 POST /api/instructor/live-sessions/{sessionId}/preflight
 ```
+
+현재 상태: 이 호출은 LiveKit 방을 만들거나 재사용하고 `{sessionId, roomName, roomSid}`를 반환한다(멱등). 점검 결과는 강사가 마이크를 publish한 뒤 `GET .../preflight/readiness`로 받으며, 응답은 `ready`·`instructorPresent`·`microphonePublished`·`microphoneMuted`·`instructorMicrophoneTrackCount`·`unexpectedMicrophonePublishers`다. 아래 `checks[]`·`canStart` 형태는 구현되지 않았다(`LivePreflightRoomResponse`, `LivePreflightReadinessResponse`).
 
 ```json
 {
@@ -204,6 +215,8 @@ AI 미준비, LiveKit, Egress, STT 시작 문제는 우회 없이 차단한다. 
 POST /api/live-sessions/{sessionId}/start
 Idempotency-Key: 01J...
 ```
+
+현재 상태: 요청 본문과 `Idempotency-Key`를 받지 않는다. 응답은 `202`와 `{operationId, sessionId, status}`이고, 같은 세션을 다시 요청하면 진행 중인 같은 시도를 돌려준다. 진행 상황은 `GET /api/live-sessions/{sessionId}/start-status`(`operationId`·`attemptStatus`·`step`·`failureCode`·`failureMessage`·`session`)로 폴링한다(`LiveStartResponse`, `LiveStartStatusResponse`).
 
 ```json
 {
@@ -301,6 +314,8 @@ classroom 진입 시 다음 순서로 호출한다.
 GET /api/live-sessions/{sessionId}/playback
 ```
 
+현재 상태: 세션 경로는 없고 `GET /api/lessons/{lessonId}/playback`이 라이브 중과 종료 후 모두 재생 정보를 준다. 응답은 단일 `source`(`url`·`availableFromMs`·`availableToMs`)이며 `recent`/`dvr` 분리는 없다. 형태는 [VOD_LEARNING_AI.md §4](VOD_LEARNING_AI.md)를 따른다(`ReplayPlaybackController.playback`, `httpLiveSessionService`).
+
 ```json
 {
   "sessionId": "ses_01J...",
@@ -355,11 +370,11 @@ Cookie: session=...
 
 | 채널 | 수신 이벤트 | 상태 |
 |---|---|---|
-| `/topic/live-sessions/{sessionId}/captions` | `caption.delta`, `caption.stream.completed` | **구현됨(ADR-0043)** |
+| `/topic/live-sessions/{sessionId}/captions` | `caption.delta`, `caption.stream.completed`, `caption.segment.final` | **구현됨(ADR-0043·0052)** |
 | `/topic/live-sessions/{sessionId}/chat` | `chat.message.created` | **구현됨** |
-| `/topic/live-sessions/{sessionId}/state` | `session.starting`, `session.started`, `session.ending`, `session.ended` | **구현됨(ADR-0003·0082)** |
+| `/topic/live-sessions/{sessionId}/state` | `session.starting`, `session.started`, `session.ending`, `session.ended`, `session.presence`(접속 인원) | **구현됨(ADR-0003·0082·0060)** |
+| `/topic/live-sessions/{sessionId}/notes` | `lecture.note.updated` | **구현됨** |
 | `/topic/live-sessions/{sessionId}/glossary` | `lesson.glossary.updated` | **구현됨(ADR-0110)** |
-| `/topic/live-sessions/{sessionId}/presence` | 참가자 수·접속 요약 | 제안 |
 
 구독 인가(참가자만)는 서버 STOMP 인터셉터가 정확 매칭으로 처리한다(와일드카드 구독 차단, ADR-0043) — FE는 토픽만 구독한다.
 
@@ -433,8 +448,8 @@ Cookie: session=...
 ### 8.2 자막 payload — 델타 스트림(CONTRACT §3-4 / ADR-0040·0043)
 
 > **옛 `caption.partial|final|revised` 세그먼트 모델은 폐기됐다.** 실시간 STT 원출력은 확정 문장이 아니라
-> append-only 증분이라, 계약은 델타 전송 모델로 개정됐다(ADR-0040). 지금 서버가 발행하는 라이브 이벤트는
-> **`caption.delta`·`caption.stream.completed` 2종뿐**이다(`segment.final`도 아직 없음).
+> append-only 증분이라, 계약은 델타 전송 모델로 개정됐다(ADR-0040). 지금 서버가 WS로 중계하는 라이브 이벤트는
+> `caption.delta`·`caption.stream.completed`·`caption.segment.final` 3종이다(`CaptionEvent.RELAYED_TYPES`, ADR-0052).
 
 `caption.delta` payload — **append-only 증분**:
 
@@ -648,7 +663,7 @@ Accept: text/event-stream
 
 #### 아직 없는 것
 
-- `AI-HISTORY-01`(질문 기록), `AI-TERM-01`(용어 설명), 강사용 question-pins는 미구현.
+- `AI-TERM-01`(용어 설명), 강사용 question-pins, 레슨 단위 `AI-HISTORY-01`은 미구현. 세션 단위 기록 `GET /api/live-sessions/{sessionId}/ai/answers`는 구현되어 있으나 현재 `DevLivePanel`만 호출하고 질문 패널은 쓰지 않는다.
   패널은 챗 UX라 **여러 턴을 이력으로 쌓지만**, 그 이력은 `features/ai/aiConversation.ts`의 클라이언트
   메모리뿐이다(ADR-0049) — 새로고침·패널 언마운트면 사라지고 화면도 그 한계를 입력창 옆에서 밝힌다.
   서버 이력이 필요하면 `AI-HISTORY-01`을 라이브 스코프까지 포함해 계약으로 올려야 한다.
@@ -765,7 +780,7 @@ GET /api/instructor/live-sessions/{sessionId}/processing
 | 자산 없음·`recordingEnabled=false` | 200, `videoAsset:null`; 녹화 비활성 안내 후 폴링 중단 |
 | `STARTING/RECORDING/FINALIZING/VERIFYING` | 200 진행 상태 |
 | `READY + PUBLISHED` | 폴링 중단 후 강사 replay 화면으로 자동 이동 |
-| `READY + DRAFT/READY_FOR_REVIEW/WITHDRAWN` | 폴링 중단, 기존 자산의 수동 게시 동선 제공 |
+| `READY + DRAFT/WITHDRAWN` | 폴링 중단, 기존 자산의 수동 게시 동선 제공 |
 | `FAILED` | 폴링 중단, `failureCode`와 복귀 동선 표시 |
 
 정상 전이는 `(신규 또는 FAILED) → STARTING → RECORDING → FINALIZING → VERIFYING → READY`다.

@@ -8,5 +8,5 @@
 - 변경한 서비스에서 `uv run --frozen pytest -q -p no:cacheprovider`와
   `uv run --frozen ruff check app tests`를 실행한다.
 - API payload, 메시지 payload, 상태코드처럼 Java와 공유하는 계약을 바꾸면
-  `docs/CONTRACT.md`와 양쪽 계약 테스트를 같은 MR에서 갱신한다.
+  `docs/CONTRACT.md`와 양쪽 계약 테스트를 같은 PR에서 갱신한다.
 - 로그의 message, event, exception, context에는 토큰·비밀번호·API key를 넣지 않는다.

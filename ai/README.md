@@ -9,8 +9,8 @@ LiveClass AI는 Python 3.12와 `uv`를 사용하며 서비스별 의존성과 lo
 | [ai-api](ai-api/README.md) | EC2 `:8010` | RAG 검색·답변 SSE | Spring HTTP |
 | [ai-worker](ai-worker/README.md) | EC2, 관리 `:8011` | PPTX embedding·인덱싱 | RabbitMQ |
 | recorded-stt-worker | EC2, 관리 `:8012` | 업로드 녹화강의 음성→OpenAI `whisper-1` 전사 | RabbitMQ |
-| [realtime-agent](realtime-agent/README.md) | GPU, 관리 `:8081` | LiveKit audio→STT→Redis 자막 | LiveKit dispatch |
-| [bge-runtime](bge-runtime/README.md) | GPU `:8020` | BGE-M3 embedding | 내부 HTTP |
+| [realtime-agent](realtime-agent/README.md) | 노트북 GPU, 관리 `:8081` | LiveKit audio→STT→Redis 자막 | LiveKit dispatch |
+| [bge-runtime](bge-runtime/README.md) | EC2 CPU container `:8020`(host `127.0.0.1:18020`) | BGE-M3 embedding | 내부 HTTP |
 
 Frontend는 AI 서비스를 직접 호출하지 않는다. 사용자 인증·권한과 공개 API는 Spring이 소유하고,
 강사의 microphone만 LiveKit으로 직접 전송한다.
@@ -62,17 +62,16 @@ Spring dispatch ─────→ LiveKit → realtime-agent → Nemotron/OpenA
 ## 4. EC2와 GPU 배치
 
 ```text
-EC2 container                 EC2 host                         GPU
-ai-api / ai-worker ──HTTP──→ :18080/internal/bge ──nginx──→ :18020 ⇠SSH-R⇢ bge-runtime :8020
-Spring ──dispatch────────────→ LiveKit ⇠SSH-L(control)────── realtime-agent
-application Redis ⇠────────── SSH-L(control) ─────────────── realtime-agent
-TURN/TCP ⇠─────────────────── SSH-L(TURN) ────────────────── realtime-agent
-:18081 ⇠───────────────────── SSH-R(control) ─────────────── realtime-agent :8081
+EC2 container                                              노트북 GPU
+ai-api / ai-worker ──HTTP(Docker network)──→ liveclass-bge-runtime-cpu:8020
+Spring ──dispatch──→ LiveKit(공개 WSS :7443) ←────────── realtime-agent
+application Redis 127.0.0.1:6390 ⇠──── SSH-L 6390 ──── realtime-agent
 ```
 
-GPU application port는 public ingress로 열지 않는다. BGE와 realtime-agent 관리 경계는 EC2 loopback의
-`:18020`, `:18081`로 reverse-forward한다. EC2 host process는 BGE `:18020`을 직접 사용하고, 운영
-container는 host-network nginx의 `:18080/internal/bge`를 경유한다.
+bge-runtime은 `docker-compose.bge-cpu.yml`의 CPU container로 EC2에서 돈다(ADR-0125). 운영 container는
+서비스명으로 직접 부르고 EC2 host process는 publish된 `127.0.0.1:18020`을 쓴다. realtime-agent는 노트북에서
+`deploy/run-laptop.sh`로 실행하며 남은 터널은 Redis `-L 6390` 하나다
+([realtime-agent 배포](realtime-agent/deploy/README.md)).
 
 ## 5. 실행과 설정
 
@@ -98,7 +97,7 @@ backend가 SSH 터널 없이 붙도록 의도적으로 host 전체 인터페이�
 |---|---|---|
 | `AI_INTERNAL_SECRET` | Spring→ai-api RAG HMAC | 사용하지 않음 |
 | `AI_CALLBACK_SECRET` | Spring↔ai-worker 자료 HMAC | realtime callback을 켤 때만 별도 선택 사용 |
-| `BGE_RUNTIME_INTERNAL_TOKEN` | EC2 ai-api·ai-worker→GPU bge-runtime Bearer | bge-runtime이 사용 |
+| `BGE_RUNTIME_INTERNAL_TOKEN` | EC2 ai-api·ai-worker→bge-runtime Bearer | 해당 없음(bge-runtime은 CPU container) |
 | `GMS_API_KEY` | EC2 ai-api→GMS 답변 모델·ai-worker→GMS 핵심 용어 추출 | 사용하지 않음 |
 | `OPENAI_API_KEY` | recorded-stt-worker→OpenAI `whisper-1` segment·word timestamp | 사용하지 않음 |
 | `AI_WORKER_GMS_API_KEY` | EC2 ai-worker→GMS 핵심 용어 추출(선택, `AI_WORKER_KEY_TERM_EXTRACTION_ENABLED=true`일 때만 필수) | 사용하지 않음 |
@@ -108,7 +107,7 @@ backend가 SSH 터널 없이 붙도록 의도적으로 host 전체 인터페이�
 `AI_WORKER_GMS_API_KEY`로,
 `OPENAI_API_KEY`를 `RECORDED_STT_OPENAI_API_KEY`로 매핑한다. 핵심 용어 추출은
 `AI_WORKER_KEY_TERM_EXTRACTION_ENABLED`(기본 `false`)로만 켜고 끄며, 켜면 GMS 키가 없을 때 worker가
-기동에 실패한다. 필수 환경변수와 tunnel 실행은 각 서비스 README를, 전체 인프라와 Spring·Frontend
+기동에 실패한다. 필수 환경변수와 실행 방법은 각 서비스 README를, 전체 인프라와 Spring·Frontend
 실행 순서는 [RUN.md](../RUN.md)에서 확인한다.
 
 ## 6. 현재 연동 상태
@@ -118,12 +117,12 @@ backend가 SSH 터널 없이 붙도록 의도적으로 host 전체 인터페이�
 | Spring→ai-api RAG SSE | AI route·HMAC verifier와 Spring signer·브라우저 SSE proxy 양쪽 구현([ADR-0047](../docs/decisions/songjeongki/0047-live-ai-answer-sse-proxy.md)). PPTX 자료 검색은 커리큘럼 전체로 공유됨([ADR-0007](../docs/decisions/jinwoo/0007-curriculum-scoped-rag-material-sharing.md)) — 요청에 `curriculumId` 필수이며 Spring이 세션에서 조회해 보낸다 |
 | Spring→RabbitMQ→ai-worker | `PPTX_EMBED`·`EMBED_DELETE` 양쪽 구현, Spring producer·worker 앱 기본 off, AI 운영 compose는 worker만 on |
 | ai-worker→Spring download-url·callback | 양쪽 구현 |
-| ai-api·ai-worker→bge-runtime | client·runtime·reverse tunnel·운영 container proxy 배선 구현 |
-| ai-worker→GMS(핵심 용어 추출) | AI 구현·기본 off, dev/prod compose가 `GMS_API_KEY`를 `AI_WORKER_GMS_API_KEY`로 전달한다. 추출 결과는 기존 `MATERIAL_EMBEDDED` Spring 콜백에 `keyTerms`를 실어 한 번에 전달하고(AI 구현, [ADR-0004](../docs/decisions/jinwoo/0004-key-term-callback-delivery-timing.md)), 동시에 ai-worker가 소유한 `ai.material_key_term`에도 best-effort로 저장([ADR-0005](../docs/decisions/jinwoo/0005-key-term-storage-schema.md)); Spring 쪽 `keyTerms` 콜백 수신과 `ai.material_key_term` 읽기 API는 둘 다 미구현([ADR-0003](../docs/decisions/jinwoo/0003-pptx-key-term-extraction-approach.md)) |
+| ai-api·ai-worker→bge-runtime | client·runtime 구현. 운영 container는 Docker network로 `liveclass-bge-runtime-cpu:8020` 직접 호출 |
+| ai-worker→GMS(핵심 용어 추출) | AI 구현·기본 off, dev/prod compose가 `GMS_API_KEY`를 `AI_WORKER_GMS_API_KEY`로 전달한다. 추출 결과는 기존 `MATERIAL_EMBEDDED` Spring 콜백에 `keyTerms`를 실어 한 번에 전달하고(AI 구현, [ADR-0004](../docs/decisions/jinwoo/0004-key-term-callback-delivery-timing.md)), 동시에 ai-worker가 소유한 `ai.material_key_term`에도 best-effort로 저장([ADR-0005](../docs/decisions/jinwoo/0005-key-term-storage-schema.md)); Spring은 v2 콜백의 `outputs.keyTermResult`를 수신하고 `ai.material_key_term`을 강의 용어집(`GET /api/lessons/{lessonId}/glossary`)의 기본값으로 읽는다. `keyTerms` 원문 필드는 Spring DTO가 받지 않는다([ADR-0003](../docs/decisions/jinwoo/0003-pptx-key-term-extraction-approach.md)) |
 | Spring→LiveKit→realtime-agent | 양쪽 dispatch 구현, job readiness 우회 중 |
 | realtime-agent→Redis caption | producer·ai-api consumer·Spring consumer 구현([ADR-0043](../docs/decisions/songjeongki/0043-caption-consumer-persistence.md)) |
 | realtime-agent→Spring lifecycle | AI 구현·기본 off, Spring receiver 미구현 |
-| realtime-agent `/health/live`·`/health/ready` | endpoint·schema·tunnel 구현, Spring client 미구현 |
+| realtime-agent `/health/live`·`/health/ready` | endpoint·schema 구현(노트북 loopback), Spring client 미구현 |
 
 ## 7. 관련 문서
 
@@ -131,5 +130,6 @@ backend가 SSH 터널 없이 붙도록 의도적으로 host 전체 인터페이�
 - [전체 공유 계약](../docs/CONTRACT.md)
 - [전체 아키텍처](../docs/ARCHITECTURE.md)
 - [통합 실행 가이드](../RUN.md)
-- [GPU realtime-agent 운영](../docs/ai/GPU-REALTIME-AGENT-RUNBOOK.md)
+- [realtime-agent 노트북 배포](realtime-agent/deploy/README.md)
+- [GPU realtime-agent 운영(GPU 서버 시절 기록)](../docs/ai/GPU-REALTIME-AGENT-RUNBOOK.md)
 - [EC2 AI 운영 compose](../docker-compose.ai-prod.yml)

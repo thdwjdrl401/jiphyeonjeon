@@ -40,7 +40,7 @@ flowchart LR
     C --> D[("outbox_events<br/>한 줄")]
   end
 
-  D --> E["OutboxRelay<br/>5초 주기 · 목적지별"]
+  D --> E["OutboxRelay<br/>커밋 시 깨움 · 30초 폴링 · 목적지별"]
   E --> F(["notification.fanout"])
   E --> G(["ingestion.embed"])
 
@@ -88,10 +88,10 @@ WITH slice AS (
       AND (? IS NULL OR e.user_id > ?)          -- 커서
     ORDER BY e.user_id LIMIT ?
 ), inserted AS (
-    INSERT INTO core.notification (…)
-    SELECT gen_random_uuid(), s.user_id, … , :dedupePrefix || s.user_id
+    INSERT INTO core.notification (id, recipient_id, content_id, dedupe_hash, …)
+    SELECT gen_random_uuid(), s.user_id, :contentId, md5(:dedupePrefix || s.user_id)::uuid, …
     FROM slice s
-    ON CONFLICT (dedupe_key) DO NOTHING
+    ON CONFLICT (dedupe_hash) WHERE dedupe_hash IS NOT NULL DO NOTHING
     RETURNING recipient_id
 )
 SELECT (SELECT count(*) FROM slice)    AS scanned,
@@ -237,7 +237,7 @@ created_at timestamptz NOT NULL DEFAULT now()   -- ❌
 | 한계 | 내용 |
 |---|---|
 | **단일 인스턴스 전제** | 발화 폴링과 SimpleBroker 둘 다. 늘리면 같은 예약 행을 두 인스턴스가 집을 수 있고(알림은 `dedupe_key`가 막지만 헛일이 는다), STOMP 브로드캐스트가 인스턴스 경계를 못 넘는다. 외부 브로커 릴레이로 교체할 때 함께 풀린다 |
-| 릴레이 주기 지연 | 아웃박스 경유라 최대 5초. 필요하면 커밋 뒤 릴레이를 깨워 줄일 수 있다 |
+| 릴레이 주기 지연 | 커밋 뒤 릴레이를 깨운다([ADR-0122](decisions/songjeongki/0122-the-commit-wakes-the-relay.md)). 30초 폴링(`outbox.relay.fixed-delay-ms`)은 트리거가 닿지 않는 경우에만 지연을 정한다 |
 | 팬아웃 중 명단 변화 | 커서가 지나간 자리는 반영되지 않는다. 사건 뒤 수강자가 빠지는 것은 옳고, 방금 취소한 사람이 하나 더 받는 것은 해롭지 않다 |
 | 기기별 푸시 | PC에서 읽어도 폰 알림은 사라지지 않는다 |
 | 발화 시각을 놓치면 건너뛴다 | 배포·장애로 폴링이 멈춘 사이 시작 시각이 지났으면 **보내지 않는다** — "곧 시작합니다"가 거짓이 되기 때문이다. 행은 끝난 것으로 표시해 매 주기 다시 집지 않는다 |
@@ -426,6 +426,8 @@ Message Delivery"). 실측으로는 FCM·Mozilla·Apple 셋 다 ALPN에서 `h2`�
 **아직 한 프로세스 안이다.** 조각마다 발송이 끝날 때까지 워커 스레드가 기다리므로, 소비자를 늘려
 분산하려면 푸시를 별도 큐로 빼야 한다. 지금 규모에서는 필요하지 않다.
 
+현재 상태: 푸시는 전용 큐로 분리됐다. 팬아웃 워커가 아웃박스에 실은 명령을 `PushDeliveryWorker`가 소비하고(`notification.push.*` 설정), 발송 전용 노드로 나눠 띄울 수 있다([ADR-0124](decisions/songjeongki/0124-push-delivery-queue-and-progress.md), [ADR-0127](decisions/songjeongki/0127-push-worker-node-role-split.md)).
+
 무엇을 언제 해야 하는지는 `푸시 배치 … Nms` 로그가 말해 준다.
 
 | 보이는 것 | 문제 | 손댈 곳 |
@@ -531,7 +533,7 @@ ECDH        스펙 직접 방식 키                  2.240 ms   ← 6.7배
 | 상황 | 무엇을 해야 하나 |
 |---|---|
 | 인스턴스를 늘린다 | 발화 폴링에 잠금(또는 리더 선출), SimpleBroker → 외부 브로커 릴레이 |
-| 알림 종류를 더한다 | `NotificationTypes`에 상수와 severity, `NotificationCopy`에 문구, 발행 지점에 이벤트. 수신자 규칙은 워커의 `WIDE_TYPES`/`INSTRUCTOR_TYPES` 집합 |
+| 알림 종류를 더한다 | `NotificationTypes`에 상수와 severity, `NotificationCopy`에 문구, 발행 지점에 이벤트. 수신자 규칙은 `NotificationTypes.WIDE`와 워커의 `INSTRUCTOR_TYPES` 집합 |
 | 수신자 규칙이 복잡해진다 | 조건은 SQL에 둔다. 메시지에 실으면 큐에 뜬 옛 메시지가 옛 조건으로 돈다 |
 | INFO 알림이 너무 많아진다 | read fan-out 하이브리드를 검토한다. **임계치는 측정해서 정한다** — 그 측정 자체가 남은 과제다 |
 | 다국어를 시작한다 | `params` 컬럼을 더한다. 그 이전 알림은 한국어로 남는 것을 감수한다 |
@@ -546,15 +548,15 @@ ECDH        스펙 직접 방식 키                  2.240 ms   ← 6.7배
 | 경로 | 역할 |
 |---|---|
 | `api/` | 다른 모듈에 공개하는 타입 — `NotificationTypes`(12종+severity), `NotificationLeadTimes`(선택지), `NewNotification` |
-| `domain/` | `Notification`, `NotificationSchedule`(발화 예정), `NotificationPreference`(리드타임) |
+| `domain/` | `Notification`, `NotificationContent`(사건당 문구), `NotificationSchedule`(발화 예정), `NotificationPreference`(리드타임) |
 | `repository/NotificationFanoutRepository` | **집합 삽입과 커서.** 이 설계의 심장 |
 | `repository/NotificationInsertRepository` | 좁은 팬아웃용 단건·배치 삽입 |
 | `service/*NotificationListener` | 사건 → 아웃박스 한 줄. 수강·자료·라이브·녹화 넷 |
 | `service/NotificationFanoutWorker` | 큐 소비. `type`으로 수신자 규칙을 고르고 조각을 이어 간다 |
 | `service/LiveStartingSoonScheduler` | 발화 예정을 시각에 맞춰 아웃박스로 |
 | `service/NotificationTargetService` | 클릭 시점 재판정. 다른 모듈 넷을 읽는 유일한 자리 |
-| `web/ws/WsNotificationBroadcaster` | STOMP 신호 + Web Push 발송 |
-| `push/` | VAPID·구독 관리·죽은 구독 정리 |
+| `web/ws/WsNotificationBroadcaster` | STOMP 신호 |
+| `push/` | VAPID·구독 관리·죽은 구독 정리, `PushDeliveryWorker`(Web Push 발송 큐 소비)·`PushProgressPartitionJob`(발송 진행 표 파티션) |
 
 ### 프론트엔드 (`frontend/src/features/notification/`)
 
@@ -572,6 +574,13 @@ ECDH        스펙 직접 방식 키                  2.240 ms   ← 6.7배
 | `V26` | `core.notification_schedule` — 발화 예정 |
 | `V27` | `core.push_subscription` — 기기당 한 행 |
 | `V28` | `core.notification_preference` — 리드타임 |
+| `V43` | `core.notification_content` (문구를 사건당 한 행으로 분리) |
+| `V44` | 중복 제거 등록표 분리(V48에서 되돌림) |
+| `V45` | `core.notification` 월 파티션(V48에서 되돌림) |
+| `V46` | `core.notification_push_progress` (푸시 발송 진행 표) |
+| `V47` | `content_id` 외래 키 제거 |
+| `V48` | 파티션 제거, `dedupe_hash` 부분 UNIQUE 인덱스로 중복 제거 |
+| `V49` | V48 체크 제약 이름 정리 |
 
 ### 테스트
 

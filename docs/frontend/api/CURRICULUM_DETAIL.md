@@ -23,9 +23,10 @@
 
 | ID | Method | Path | 설명 | 상태 |
 |---|---|---|---|---|
-| `CURRICULUM-DETAIL-01` | `GET` | `/api/curriculums/{curriculumId}` | 공개 상세·목차·관계 조회 | URL **확정**, 상세 계약 **협의 필요** |
-| `ENROLLMENT-01` | `POST` | `/api/curriculums/{curriculumId}/enrollments` | 현재 사용자 수강 신청 | **제안·협의 필요** |
-| `ENROLLMENT-02` | `DELETE` | `/api/curriculums/{curriculumId}/enrollments/me` | 현재 사용자 신청 취소 | **제안·정책 확정 필요** |
+| `CURRICULUM-DETAIL-01` | `GET` | `/api/curriculums/{curriculumId}` | 공개 상세·목차·관계 조회 | **구현됨** |
+| `ENROLLMENT-01` | `POST` | `/api/curriculums/{curriculumId}/enrollments` | 현재 사용자 수강 신청 | **구현됨** (학생만) |
+| `ENROLLMENT-02` | `DELETE` | `/api/curriculums/{curriculumId}/enrollments/me` | 현재 사용자 신청·수강 취소 | **구현됨** (학생만) |
+| `CURRICULUM-MATERIAL-01` | `GET` | `/api/curriculums/{curriculumId}/materials/{materialId}/download` | 활성 수강생 자료 다운로드(presigned URL로 `302`) | **구현됨** |
 
 ## 4. `CURRICULUM-DETAIL-01` 상세 조회
 
@@ -75,7 +76,7 @@ GET /api/curriculums/{curriculumId}
           "durationMs": 5400000,
           "liveSession": {
             "sessionId": "ses_01J...",
-            "liveSessionStatus": "SCHEDULED",
+            "status": "SCHEDULED",
             "scheduledAt": "2026-08-01T10:00:00+09:00"
           },
           "replayStatus": "NOT_READY",
@@ -123,7 +124,9 @@ GET /api/curriculums/{curriculumId}
 | 강사 | `instructor` | 공개 가능한 강사 요약 |
 | 목차 | `outline[].sectionId`, `title`, `description`, `order` | 공개 섹션 |
 | 레슨 | `lessonId`, `title`, `order`, `status` | 레슨 게시 상태와 공개하기로 한 최소 목차 |
-| 라이브 | `liveSession.sessionId`, `liveSessionStatus`, `scheduledAt` | 연결된 라이브 세션이 없으면 `liveSession=null` |
+| 라이브 | `liveSession.sessionId`, `liveSession.status`, `liveSession.scheduledAt` | 연결된 라이브 세션이 없으면 `liveSession=null`. 프론트는 `liveSessionStatus`도 읽도록 호환 처리함 |
+| 레슨 유형 | `deliveryType`, `recordedPublicationStatus` | `LIVE` 또는 `RECORDED`. 업로드 녹화강의 재생 패키지 상태이며 LIVE 레슨이면 `null` |
+| 자료 | `materials[]` | 목차 레슨들에 연결된 활성 PPTX 자료(ADR-0035) |
 | 다시보기 | `replayStatus` | `NOT_READY`, `DRAFT`, `PUBLISHED`, `WITHDRAWN` (검수 단계 없음 — ADR-0090) |
 
 비수강 사용자에게 `status` 전체를 노출할지, `AVAILABLE|UPCOMING|LOCKED` 같은 공개용 상태로 변환할지는 **협의 필요**다. 내부 준비 상태 노출을 줄이기 위해 공개용 상태를 별도로 제공하는 방식을 제안한다.
@@ -202,8 +205,10 @@ POST /api/curriculums/{curriculumId}/enrollments
   "enrollmentId": "enr_01J...",
   "curriculumId": "cur_01J...",
   "status": "PENDING",
+  "userId": "usr_01J...",
   "requestedAt": "2026-07-20T12:00:00+09:00",
-  "approvedAt": null
+  "decidedAt": null,
+  "enrolledAt": null
 }
 ```
 
@@ -219,12 +224,12 @@ POST /api/curriculums/{curriculumId}/enrollments
 |---|---|---|
 | `201` | - | 신청 생성 |
 | `401` | `AUTH_SESSION_REQUIRED` | 로그인 필요 |
-| `403` | `ENROLLMENT_NOT_ALLOWED_FOR_ROLE` | 계정 유형 정책상 신청 불가 |
-| `404` | `CURRICULUM_NOT_FOUND` | 공개·신청 가능한 커리큘럼 없음 |
-| `409` | `ENROLLMENT_ALREADY_EXISTS` | 이미 신청·수강 중 |
-| `409` | `ENROLLMENT_CLOSED` | 모집 종료·정원 등 현재 상태 충돌 |
+| `403` | - | 학생 계정이 아님(`SecurityConfig`의 `hasRole("STUDENT")`) |
+| `404` | `CURRICULUM_NOT_FOUND` | 커리큘럼 없음 |
+| `409` | `ENROLLMENT_STATE_CONFLICT` | 이미 신청·수강 중 |
+| `409` | `CURRICULUM_STATE_CONFLICT` | 미발행·초대 전용·모집 기간 전·모집 마감 |
 
-`ENROLLMENT_ALREADY_EXISTS` 응답에는 현재 enrollment 상태를 안전한 범위에서 포함하면 프론트가 최신 상태로 복구하기 쉽다.
+`ENROLLMENT_STATE_CONFLICT` 응답에는 현재 enrollment 상태를 안전한 범위에서 포함하면 프론트가 최신 상태로 복구하기 쉽다.
 
 ## 6. `ENROLLMENT-02` 신청 취소
 
@@ -232,14 +237,14 @@ POST /api/curriculums/{curriculumId}/enrollments
 DELETE /api/curriculums/{curriculumId}/enrollments/me
 ```
 
-초기에는 `PENDING` 신청 취소만 허용하는 방식을 제안한다. 활성 수강 취소·권한 회수는 학습 기록 처리 정책 확정 후 별도 행동으로 다룬다.
+현재 상태: `PENDING`과 `ACTIVE` 모두 취소할 수 있고 결과 상태는 `CANCELLED`다. 응답은 `200 OK`와 §5.1과 같은 enrollment 본문이다(`StudentEnrollmentController.cancel`, `EnrollmentService.cancel`).
 
 | 상태 | 오류 코드 예시 | 의미 |
 |---|---|---|
-| `204` | - | 신청 취소 완료 |
+| `200` | - | 취소 완료. 갱신된 enrollment 반환 |
 | `401` | `AUTH_SESSION_REQUIRED` | 로그인 필요 |
 | `404` | `ENROLLMENT_NOT_FOUND` | 현재 사용자 신청 없음 |
-| `409` | `ENROLLMENT_CANNOT_BE_CANCELLED` | 이미 승인·거절·취소됨 |
+| `409` | `ENROLLMENT_STATE_CONFLICT` | `PENDING`·`ACTIVE`가 아님(거절·취소·제적됨) |
 
 ## 7. 갱신과 일관성
 

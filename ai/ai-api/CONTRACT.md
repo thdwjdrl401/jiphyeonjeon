@@ -220,7 +220,7 @@ FE가 세션 안에서 대화를 더 잘게 나눌 때 `conversationId`를 붙�
 - 저장된 `previous_response_id`를 provider가 거부하면(GMS 재시작·키 로테이션 — 실측 401) 그 id를
   지우고 **체이닝 없이 한 번 재시도**한다(ADR-0085). delta가 나간 뒤에는 재시도하지 않으며, 진짜
   인증 장애는 재시도도 같은 오류로 죽어 표면화된다. 이벤트: `rag.conversation_chain_dropped`.
-- 적용 범위는 v1(Live)뿐이다. v2(Replay)는 ADR-0037이 "서버 대화 기억"을 명시적으로 범위 밖에
+- 적용 범위는 v1(Live)뿐이다. v2(Replay)는 ADR-0042이 "서버 대화 기억"을 명시적으로 범위 밖에
   뒀으므로 이 기능이 없다.
 - 실제 GMS Responses API 스트리밍 이벤트 형태(`response.created`/`response.output_text.delta`/
   `response.completed`)는 2026-08-03 실측 검증됨 — 자세한 내용은
@@ -228,7 +228,7 @@ FE가 세션 안에서 대화를 더 잘게 나눌 때 `conversationId`를 붙�
 
 ## 8. Replay(v2) 내부 HTTP 경계
 
-ADR-0037([`docs/decisions/canola/0042-replay-ai-caption-context-contract.md`](../../docs/decisions/canola/0042-replay-ai-caption-context-contract.md))과
+ADR-0042([`docs/decisions/canola/0042-replay-ai-caption-context-contract.md`](../../docs/decisions/canola/0042-replay-ai-caption-context-contract.md))과
 [ADR-0008(구현 설계, jinwoo)](../../docs/decisions/jinwoo/0008-replay-rag-answer-v2-endpoint.md)에 따라
 다시보기(Replay) 질문 전용 `POST /internal/v2/rag/answers:stream`을 별도 경로로 추가했다. 위 §1~§7의
 v1 endpoint(`/internal/v1/rag/answers:stream`)는 이 절 때문에 요청·응답·시간 의미가 전혀 바뀌지 않는다.
@@ -237,7 +237,7 @@ v1 endpoint(`/internal/v1/rag/answers:stream`)는 이 절 때문에 요청·응�
 - 요청 body는 `contextTimeMs` 대신 `context: {mode:"REPLAY", questionSessionMs, captions[]}`를 쓴다.
   `captions[]`는 Spring이 이미 세션 시간으로 변환한 확정 자막이며, ai-api는 caption을 다시 조회하지 않는다.
 - material(PPTX) 검색은 v1과 동일한 pgvector 경로·threshold·`curriculumId` 스코프를 그대로 재사용한다.
-- caption evidence는 `captions[]`를 하나로 병합해 **CAPTION source 최대 1개**만 만든다(ADR-0037).
+- caption evidence는 `captions[]`를 하나로 병합해 **CAPTION source 최대 1개**만 만든다(ADR-0042).
 - `answer.done.sources`는 v1과 달리 각 source에 원문 그대로의 plain-text `excerpt`(최대 300자)를 포함한다.
   CAPTION source는 `sttSessionId`를 포함하지 않는다(v1 `CaptionSource`와 다른 점).
 - source 중복 제거는 `(materialId,page)` / `(sessionId,startSessionMs,endSessionMs)` / `highlightId` 키로만

@@ -4,8 +4,8 @@
 
 | 화면 | 라우트 | 레이아웃 | 접근 |
 |---|---|---|---|
-| 레슨 생성 | `/curriculums/:curriculumId/sections/:sectionId/lessons/new` | `WorkspaceLayout` | 해당 커리큘럼 강사 |
-| 레슨 수정 | `/curriculums/:curriculumId/sections/:sectionId/lessons/:lessonId/edit` | `WorkspaceLayout` | 해당 커리큘럼 강사 |
+| 레슨 생성 | `/instructor/curriculums/:curriculumId/sections/:sectionId/lessons/new` | `WorkspaceLayout` | 해당 커리큘럼 강사 |
+| 레슨 수정 | `/instructor/curriculums/:curriculumId/sections/:sectionId/lessons/:lessonId/edit` | `WorkspaceLayout` | 해당 커리큘럼 강사 |
 
 같은 `LessonForm`을 공유한다. 생성 페이지에서 기본 정보를 저장하면 같은 화면 안에서 곧바로 "초기 자료 준비" 단계로 전환되고(새 라우트로 넘어가지 않음), 이후 흐름은 수정 화면과 같다.
 

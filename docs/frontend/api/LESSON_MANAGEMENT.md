@@ -8,6 +8,8 @@
 
 ### 1.1 확정 상태와 원칙
 
+현재 상태: 레슨 `status`는 `PUBLISHED` 한 값뿐이고 생성 즉시 게시 상태다. 외부 공개는 커리큘럼 발행이 결정한다([ADR-0005](../../decisions/seominkyeong/0005-lesson-has-no-draft-state.md), `LessonDetailResponse.status`). 아래 `DRAFT → AI_NOT_READY → READY → PUBLISHED` 흐름, 레슨 게시 API, 초기 AI 준비 API는 구현되지 않았다. 자료는 공용 에셋 업로드 후 `assetId`로 연결하고, 영상 업로드는 녹화강의(`RECORDED`) API로 별도 구현되어 있다(`InstructorRecordedLessonController`).
+
 - `status`: `DRAFT → AI_NOT_READY → READY → PUBLISHED`
 - 별도 `isPublished` boolean을 사용하지 않음
 - 제목만으로 `DRAFT` 생성 가능
@@ -26,22 +28,24 @@
 
 | ID | Method | Path | 설명 | 상태 |
 |---|---|---|---|---|
-| `LESSON-01` | `POST` | `/api/instructor/sections/{sectionId}/lessons` | `DRAFT` 생성 | URL **확정** |
-| `LESSON-02` | `GET` | `/api/instructor/lessons/{lessonId}` | 생성·수정용 전체 상태 조회 | **제안** |
-| `LESSON-03` | `PATCH` | `/api/instructor/lessons/{lessonId}` | 제목·설명 수정 | URL **확정** |
-| `LESSON-04` | `POST` | `/api/instructor/lessons/{lessonId}/publish` | `READY → PUBLISHED` | **제안** |
-| `LESSON-05` | `GET` | `/api/lessons/{lessonId}` | 역할별 레슨 상세 허브 조회 | **제안** |
+| `LESSON-01` | `POST` | `/api/instructor/sections/{sectionId}/lessons` | `DRAFT` 생성 | **구현됨** (생성 즉시 `PUBLISHED`) |
+| `LESSON-01A` | `GET` | `/api/instructor/sections/{sectionId}/lessons` | 섹션 내 레슨 목록 | **구현됨** |
+| `LESSON-02` | `GET` | `/api/instructor/lessons/{lessonId}` | 생성·수정용 전체 상태 조회 | **구현됨** (응답 형태는 §3.2 현재 상태) |
+| `LESSON-03` | `PATCH` | `/api/instructor/lessons/{lessonId}` | 제목·설명 수정 | **구현됨** |
+| `LESSON-03A` | `DELETE` | `/api/instructor/lessons/{lessonId}` | 레슨 삭제 | **구현됨** (`204`) |
+| `LESSON-04` | `POST` | `/api/instructor/lessons/{lessonId}/publish` | `READY → PUBLISHED` | **미구현** (레슨 게시 단계 없음, ADR-0005) |
+| `LESSON-05` | `GET` | `/api/lessons/{lessonId}` | 역할별 레슨 상세 허브 조회 | **구현됨** (응답 형태는 §8 현재 상태) |
 
 ### 2.2 PPTX 자료
 
 | ID | Method | Path | 설명 | 상태 |
 |---|---|---|---|---|
-| `MATERIAL-01` | `POST` | `/api/instructor/lessons/{lessonId}/materials` | PPTX 업로드 요청 생성 | URL **확정**, 상세 **협의 필요** |
-| `MATERIAL-02` | `POST` | `/api/instructor/lessons/{lessonId}/materials/{materialId}/complete` | 직접 업로드 완료 통지·검증 시작 | **제안** |
-| `MATERIAL-03` | `POST` | `/api/instructor/lessons/{lessonId}/ai-preparation` | 초기 자료 집합 AI 준비 시작 | **제안** |
-| `MATERIAL-04` | `DELETE` | `/api/instructor/lessons/{lessonId}/materials/{materialId}` | 활성 자료 하나 삭제·영향 처리 | **제안** |
-| `MATERIAL-05` | `POST` | `/api/instructor/lessons/{lessonId}/material-operations/{operationId}/retry` | 실패한 작업 재시도 | **제안** |
-| `MATERIAL-06` | `GET` | `/api/lessons/{lessonId}/materials/{materialId}/download` | 권한 검증 후 PPTX 다운로드 URL 발급 | **제안** |
+| `MATERIAL-01` | `POST` | `/api/instructor/lessons/{lessonId}/materials` | PPTX 업로드 요청 생성 | **구현됨, 형태 변경**: 업로드 완료한 `MATERIAL` 에셋을 `{assetId}`로 연결(`201`) |
+| `MATERIAL-02` | `POST` | `/api/instructor/lessons/{lessonId}/materials/{materialId}/complete` | 직접 업로드 완료 통지·검증 시작 | **미구현**. 공용 `POST /api/assets/{assetId}/complete`가 대신함 |
+| `MATERIAL-03` | `POST` | `/api/instructor/lessons/{lessonId}/ai-preparation` | 초기 자료 집합 AI 준비 시작 | **미구현**. `material.embedding.enabled`가 켜져 있으면 자료 연결 시 서버가 임베딩 잡을 outbox에 기록함 |
+| `MATERIAL-04` | `DELETE` | `/api/instructor/lessons/{lessonId}/materials/{materialId}` | 활성 자료 하나 삭제·영향 처리 | **구현됨** (소프트 삭제, 멱등, `204`) |
+| `MATERIAL-05` | `POST` | `/api/instructor/lessons/{lessonId}/material-operations/{operationId}/retry` | 실패한 작업 재시도 | **미구현** |
+| `MATERIAL-06` | `GET` | `/api/lessons/{lessonId}/materials/{materialId}/download` | 권한 검증 후 PPTX 다운로드 URL 발급 | **구현됨** (활성 수강생, presigned URL로 `302`). 강사용은 `GET /api/instructor/lessons/{lessonId}/materials/{materialId}/download` |
 
 ## 3. 레슨 생성·수정 모델
 
@@ -73,11 +77,15 @@ POST /api/instructor/sections/{sectionId}/lessons
 
 서버가 해당 섹션의 마지막 순서에 추가한다. 섹션 이동과 순서 변경은 커리큘럼 구조 API가 담당한다.
 
+현재 상태: 응답은 `lessonId`·`sectionId`·`title`·`description`·`order`·`status`(`PUBLISHED`)·`deliveryType`·`createdAt`·`updatedAt`이며 `allowedActions`는 없다(`LessonView`).
+
 ### 3.2 `LESSON-02` 강사용 편집 조회
 
 ```http
 GET /api/instructor/lessons/{lessonId}
 ```
+
+현재 상태: 실제 응답은 `lessonId`·`sectionId`·`curriculumId`·`title`·`description`·`order`·`status`·`deliveryType`·`createdAt`·`updatedAt`·`materials[]`(`materialId`·`fileName`·`fileSize`·`embeddingStatus`·`keyTermStatus`)·`liveSession`(`sessionId`·`status`·`scheduledAt`·`entryWindowMinutes`·`expectedDurationMinutes`)이다. 아래 `parent`·`currentMaterialOperation`·`aiReadiness`·`replay`·`allowedActions`는 없다(`InstructorLessonResponse`).
 
 ```json
 {
@@ -174,6 +182,8 @@ POST /api/instructor/lessons/{lessonId}/publish
 Spring 업로드 요청 생성 → MinIO presigned URL로 직접 PUT
 → Spring에 완료 통지 → 서버 검증 → AI 작업
 ```
+
+현재 상태: `POST /api/assets/upload-requests`(`kind=MATERIAL`) → 스토리지 `PUT` → `POST /api/assets/{assetId}/complete` → `POST /api/instructor/lessons/{lessonId}/materials {assetId}` 순서로 구현되어 있다. 연결 응답은 `materialId`·`assetId`·`fileName`·`status`·`embeddingStatus`·`keyTermStatus`다. 아래 4.2·4.3의 `mode`·`files[]`·`uploads[]` 형태는 구현되지 않았다(`AttachMaterialRequest`, `LessonMaterialResponse`, `frontend/src/features/lesson/httpLessonService.ts`).
 
 프론트는 스토리지 key를 만들지 않고, `materialId`와 발급된 URL만 사용한다. 업로드 URL은 짧은 만료 시간을 가진다.
 
@@ -362,6 +372,8 @@ POST /api/instructor/lessons/{lessonId}/material-operations/{operationId}/retry
 GET /api/lessons/{lessonId}
 ```
 
+현재 상태: 소유 강사 또는 활성 수강생만 열 수 있고, 응답은 `lessonId`·`sectionId`·`curriculumId`·`sectionTitle`·`curriculumTitle`·`title`·`description`·`order`·`status`·`deliveryType`·`materials[]`다. 아래 `parent`·`liveSession`·`replay`·`viewerContext`·`previousLessonId`·`nextLessonId`는 없다(`LessonDetailResponse`).
+
 ```json
 {
   "lessonId": "les_01J...",
@@ -419,6 +431,8 @@ GET /api/lessons/{lessonId}
 ```http
 GET /api/lessons/{lessonId}/materials/{materialId}/download
 ```
+
+현재 상태: JSON을 반환하지 않고 presigned GET URL로 `302` 리다이렉트한다(`StudentLessonController.downloadMaterial`).
 
 ```json
 {

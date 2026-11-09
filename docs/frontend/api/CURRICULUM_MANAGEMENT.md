@@ -17,30 +17,38 @@
 
 | ID | Method | Path | 설명 | 상태 |
 |---|---|---|---|---|
-| `CURRICULUM-MGMT-01` | `POST` | `/api/instructor/curriculums` | 커리큘럼 생성 | prefix **확정**, 상세 **협의 필요** |
-| `CURRICULUM-MGMT-02` | `GET` | `/api/instructor/curriculums/{curriculumId}` | 관리용 기본 정보·권한 조회 | **제안** |
-| `CURRICULUM-MGMT-03` | `PATCH` | `/api/instructor/curriculums/{curriculumId}` | 기본 정보 수정 | URL 계열 **확정**, 상세 **협의 필요** |
-| `CURRICULUM-MGMT-04` | `POST` | `/api/instructor/curriculum-thumbnails/upload-requests` | 대표 이미지 직접 업로드 정보 발급 | **제안** |
+| `CURRICULUM-MGMT-01` | `POST` | `/api/instructor/curriculums` | 커리큘럼 생성 | **구현됨** |
+| `CURRICULUM-MGMT-02` | `GET` | `/api/instructor/curriculums/{curriculumId}` | 관리용 기본 정보·권한 조회 | **구현됨** (응답 형태는 §3 현재 상태) |
+| `CURRICULUM-MGMT-03` | `PATCH` | `/api/instructor/curriculums/{curriculumId}` | 기본 정보 수정 | **구현됨** (보낸 필드만 변경) |
+| `CURRICULUM-MGMT-04` | `POST` | `/api/assets/upload-requests` (`kind=THUMBNAIL`) | 대표 이미지 직접 업로드 정보 발급 | **구현됨** (공용 에셋 API. 제안 경로 `/api/instructor/curriculum-thumbnails/upload-requests`는 없음) |
+| `CURRICULUM-MGMT-05` | `DELETE` | `/api/instructor/curriculums/{curriculumId}/thumbnail` | 대표 이미지 연결 해제 | **구현됨** (`204`) |
+| `CURRICULUM-MGMT-06` | `POST` | `/api/instructor/curriculums/{curriculumId}/publish` | 발행(`DRAFT`에서만) | **구현됨** |
+| `CURRICULUM-MGMT-07` | `POST` | `/api/instructor/curriculums/{curriculumId}/archive` | 보관(`PUBLISHED`에서만) | **구현됨** |
+| `CURRICULUM-MGMT-08` | `DELETE` | `/api/instructor/curriculums/{curriculumId}` | 초안 삭제 | **구현됨** (`204`) |
+| `CURRICULUM-MGMT-09` | `POST`·`DELETE`·`GET` | `/api/instructor/curriculums/{curriculumId}/materials[/{materialId}[/download]]` | 커리큘럼 자료 연결·삭제·다운로드(ADR-0042) | **구현됨** |
 
 ### 2.2 섹션·순서
 
 | ID | Method | Path | 설명 | 상태 |
 |---|---|---|---|---|
-| `SECTION-01` | `POST` | `/api/instructor/curriculums/{curriculumId}/sections` | 섹션 생성 | URL 계열 **확정** |
-| `SECTION-02` | `PATCH` | `/api/instructor/sections/{sectionId}` | 섹션 정보 수정 | **제안** |
-| `SECTION-03` | `DELETE` | `/api/instructor/sections/{sectionId}` | 빈 섹션 삭제 | **제안·정책 필요** |
-| `STRUCTURE-01` | `PUT` | `/api/instructor/curriculums/{curriculumId}/curriculum/order` | 섹션·레슨 전체 순서 원자 저장 | URL **확정**, 상세 **협의 필요** |
+| `SECTION-00` | `GET` | `/api/instructor/curriculums/{curriculumId}/sections` | 섹션 목록(배치 순서) | **구현됨** |
+| `SECTION-01` | `POST` | `/api/instructor/curriculums/{curriculumId}/sections` | 섹션 생성 | **구현됨** |
+| `SECTION-02` | `PATCH` | `/api/instructor/sections/{sectionId}` | 섹션 정보 수정 | **구현됨** |
+| `SECTION-03` | `DELETE` | `/api/instructor/sections/{sectionId}` | 빈 섹션 삭제 | **구현됨** |
+| `STRUCTURE-01` | `PUT` | `/api/instructor/curriculums/{curriculumId}/curriculum/order` | 섹션·레슨 전체 순서 원자 저장 | **구현됨** |
 
 ### 2.3 수강생
 
 | ID | Method | Path | 설명 | 상태 |
 |---|---|---|---|---|
-| `ENROLLEE-01` | `GET` | `/api/instructor/curriculums/{curriculumId}/enrollments` | 수강 신청·수강생 목록 | **제안** |
-| `ENROLLEE-02` | `PATCH` | `/api/instructor/curriculums/{curriculumId}/enrollments/{enrollmentId}` | 신청 승인·거절·권한 회수 | **제안·정책 필요** |
+| `ENROLLEE-01` | `GET` | `/api/instructor/curriculums/{curriculumId}/enrollments` | 수강 신청·수강생 목록 | **구현됨** |
+| `ENROLLEE-02` | `POST` | `/api/instructor/curriculums/{curriculumId}/enrollments/{enrollmentId}/approve` · `/reject` · `/revoke` | 신청 승인·거절·권한 회수 | **구현됨** (제안했던 단일 `PATCH`는 없음) |
 
 ## 3. 관리용 조회 모델
 
 `CURRICULUM-MGMT-02` 응답은 관리 페이지 헤더·기본 폼·편성 목록이 사용할 데이터를 제공한다.
+
+현재 상태: 실제 응답은 평면 구조로 `curriculumId`·`title`·`summary`·`description`·`thumbnailUrl`·`lifecycleStatus`·`enrollmentType`·`startsAt`·`endsAt`·`sectionCount`·`lessonCount`·`publishedLessonCount`·`enrolleeCount`·`structureVersion`·`materials`·`publishedAt`·`createdAt`·`updatedAt`이다. `sections`·`allowedActions`·`thumbnail` 객체는 없고, 섹션·레슨은 `GET .../sections`와 `GET /api/instructor/sections/{sectionId}/lessons`로 따로 조회한다(`CurriculumResponse`).
 
 ```json
 {
@@ -123,6 +131,8 @@ POST /api/instructor/curriculums
 
 초기에는 제목, 짧은 소개, 상세 설명, 진행 기간을 입력한다. 대표 이미지 필수 여부와 enrollment policy는 확정 후 요청 필드에 추가한다.
 
+현재 상태: 생성 요청은 `title`(필수, 최대 200자)·`summary`(최대 500자)·`description`·`thumbnailAssetId`만 받고 `startsAt`·`endsAt`는 받지 않는다. 응답은 `201`과 `CURRICULUM-MGMT-02`와 같은 `CurriculumResponse`다. 프론트는 생성 후 `PATCH`로 기간을 저장한다(`CreateCurriculumRequest`, `httpCurriculumManagementService`).
+
 ### 4.2 `CURRICULUM-MGMT-03` 수정
 
 ```http
@@ -148,13 +158,15 @@ PATCH /api/instructor/curriculums/{curriculumId}
 |---|---|---|
 | `400` | `VALIDATION_FAILED` | 길이·기간·이미지 참조 오류 |
 | `401` | `AUTH_SESSION_REQUIRED` | 로그인 필요 |
-| `403` | `CURRICULUM_MANAGE_FORBIDDEN` | 강사 역할 또는 소유권 없음 |
+| `403` | `CURRICULUM_FORBIDDEN` | 강사 역할 또는 소유권 없음 |
 | `404` | `CURRICULUM_NOT_FOUND` | 관리 대상 없음 |
 | `409` | `CURRICULUM_STATE_CONFLICT` | 현재 lifecycle에서 수정 불가 |
 
 ## 5. 대표 이미지 업로드
 
 Spring이 이미지 바이트를 중계하지 않고 presigned URL로 스토리지에 직접 업로드하는 방식을 제안한다.
+
+현재 상태: 전용 경로 없이 공용 `POST /api/assets/upload-requests`(`kind=THUMBNAIL`, `fileName`·`contentType`·`fileSize`) → 스토리지 `PUT` → `POST /api/assets/{assetId}/complete` 순서로 구현되어 있다(`AssetController`, `frontend/src/shared/api/uploadAsset.ts`).
 
 ### 5.1 업로드 요청
 
@@ -199,7 +211,7 @@ POST /api/instructor/curriculums/{curriculumId}/sections
 }
 ```
 
-서버가 마지막 순서에 추가하고 `201`로 `sectionId`, `order`, `structureVersion`을 반환한다.
+서버가 마지막 순서에 추가하고 `201`로 섹션을 반환한다. 현재 응답 필드는 `sectionId`·`curriculumId`·`title`·`description`·`orderIndex`·`createdAt`·`updatedAt`이며 `structureVersion`은 없다(`SectionResponse`).
 
 ### 6.2 수정
 
@@ -228,7 +240,6 @@ DELETE /api/instructor/sections/{sectionId}
 |---|---|---|
 | `204` | - | 삭제 완료 |
 | `409` | `SECTION_NOT_EMPTY` | 소속 레슨이 있어 삭제 불가 |
-| `409` | `SECTION_STATE_CONFLICT` | 진행·종료 상태에서 삭제 불가 |
 
 ## 7. 구조 순서 저장
 
@@ -273,6 +284,7 @@ PUT /api/instructor/curriculums/{curriculumId}/curriculum/order
 - 모든 section·lesson이 해당 curriculum에 속하는지 검증한다.
 - 누락·중복 ID가 있으면 전체 요청을 실패시킨다.
 - `baseVersion` 불일치는 `409 STRUCTURE_VERSION_CONFLICT`와 최신 version을 반환한다.
+- 응답의 `order`는 0부터 시작한다(`StructureOrderResponse`).
 - 프론트는 충돌 시 최신 구조를 재조회하고 사용자 변경을 다시 적용하도록 안내한다.
 
 ## 8. 수강생 관리
@@ -313,6 +325,8 @@ GET /api/instructor/curriculums/{curriculumId}/enrollments?q=김&status=PENDING&
 
 검색 가능한 학생 필드와 강사에게 공개할 정보 범위는 개인정보 정책과 함께 확정한다.
 
+현재 상태: `q` 검색은 없고 `status`·`page`·`size`만 받는다. `summary`는 `pending`·`active`·`rejected`·`revoked`·`cancelled`, 항목 `student`는 `userId`·`displayName`·`email`이며 항목에 `enrolledAt`이 있다(`InstructorEnrollmentController`, `EnrollmentRosterResponse`).
+
 ### 8.2 상태 변경
 
 ```http
@@ -325,17 +339,21 @@ PATCH /api/instructor/curriculums/{curriculumId}/enrollments/{enrollmentId}
 }
 ```
 
+현재 상태: 단일 `PATCH` 대신 본문 없는 `POST .../{enrollmentId}/approve`·`/reject`·`/revoke`로 구현되어 있고, 응답은 갱신된 enrollment다(`InstructorEnrollmentController`).
+
 | 전이 | 용도 |
 |---|---|
 | `PENDING → ACTIVE` | 승인 |
 | `PENDING → REJECTED` | 거절 |
-| `ACTIVE → REVOKED` | 권한 회수. 초기 지원 여부는 정책 필요 |
+| `ACTIVE → REVOKED` | 권한 회수(`/revoke`로 구현됨) |
 
 상태 변경은 현재 상태를 서버가 다시 검증한다. 동시 처리된 신청은 `409 ENROLLMENT_STATE_CONFLICT`와 최신 상태를 반환한다.
 
 ## 9. lifecycle 행동 보류
 
 공개, 모집 시작·종료, 커리큘럼 종료·삭제는 정책 확정 전 API를 만들지 않는다. 도입 시 일반 정보 수정과 분리된 command endpoint와 확인용 영향 요약을 사용한다.
+
+현재 상태: 발행(`POST .../publish`), 보관(`POST .../archive`), 초안 삭제(`DELETE /api/instructor/curriculums/{curriculumId}`)는 command endpoint로 구현되어 있다. 모집 시작·종료 API는 없다.
 
 ## 10. 백엔드 협의 사항
 

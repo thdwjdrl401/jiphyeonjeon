@@ -27,7 +27,7 @@
 | placeholder | 뜻 | 맞춰야 할 곳 |
 |---|---|---|
 | `<API_KEY>` / `<API_SECRET>` | LiveKit API 키/시크릿(`openssl rand -base64 32`) | livekit.yaml `keys` = egress.yaml `api_secret` |
-| `<MINIO_USER>` / `<MINIO_PASSWORD>` | MinIO 루트 계정 | compose `MINIO_ROOT_*` = request.json `s3.access_key/secret` |
+| `<MINIO_USER>` / `<MINIO_PASSWORD>` | MinIO 루트 계정 | 앱 스택(`docker-compose.prod.yml`) `MINIO_ROOT_*` = request.json `s3.access_key/secret` |
 | `<LIVEKIT_DOMAIN>` | 시그널링 도메인 | nginx server_name + 클라 접속 URL |
 | `<HOST_LAN_IP>` | 미디어 서버 내부 IP | nginx upstream |
 
@@ -38,7 +38,7 @@
 2. **포트 개방**: 443·80·7880·7881/tcp + **3478/udp**(미디어) → 서버. (라우터 포워딩 or EC2 보안그룹)
 3. **nginx**: `nginx-livekit.conf`의 ①②③ 반영 + 인증서 지정 → `sudo nginx -t && sudo systemctl reload nginx`. 확인: `curl -sI https://<LIVEKIT_DOMAIN>` → 200.
 4. **시크릿 생성**: `openssl rand -base64 32` → livekit.yaml·egress.yaml에 동일 반영.
-5. **기동**: `docker compose up -d` → `docker compose ps`로 4개(livekit·redis·egress·minio) 확인.
+5. **기동**: `docker compose up -d` → `docker compose ps`로 livekit·redis·egress·nginx-livekit·egress-purger 확인. 이 compose에는 MinIO가 없고 녹화는 앱 스택 MinIO에 올린다(`docker-compose.yml` 머리 주석).
 6. **버킷**: 
    ```bash
    docker run --rm --network host --entrypoint /bin/sh minio/mc:RELEASE.2025-08-13T08-35-41Z \
@@ -158,7 +158,7 @@ docker compose -f infra/livekit/docker-compose.yml --env-file /etc/liveclass/liv
 
 ```bash
 curl -s http://127.0.0.1:9107/health                 # {"ok": true}
-docker exec liveclass-backend-prod curl -s -o /dev/null -w "%{http_code}\n" \
+docker exec liveclass-backend-1 curl -s -o /dev/null -w "%{http_code}\n" \
   -X POST http://172.18.0.1:9107/purge -d '{}'       # 401 (시크릿 없이 거부)
 ```
 

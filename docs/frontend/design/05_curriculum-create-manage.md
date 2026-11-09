@@ -4,14 +4,14 @@
 
 | 화면 | 라우트 | 레이아웃 | 접근 |
 |---|---|---|---|
-| 커리큘럼 생성 | `/curriculums/new` | `WorkspaceLayout` | 강사 계정 |
-| 커리큘럼 관리 | `/curriculums/:curriculumId/manage` | `WorkspaceLayout` | 해당 커리큘럼 강사만 |
+| 커리큘럼 생성 | `/instructor/curriculums/new` | `WorkspaceLayout` | 강사 계정 |
+| 커리큘럼 관리 | `/instructor/curriculums/:curriculumId/manage` | `WorkspaceLayout` | 해당 커리큘럼 강사만 |
 
 두 화면은 같은 기본 정보 폼(`CurriculumForm`)을 생성/수정 모드로 공유한다.
 
 ---
 
-## 1. 커리큘럼 생성 (`/curriculums/new`)
+## 1. 커리큘럼 생성 (`/instructor/curriculums/new`)
 
 ### 화면 구성
 ```text
@@ -39,7 +39,7 @@ CurriculumForm(mode="create")
 
 ---
 
-## 2. 커리큘럼 관리 (`/curriculums/:curriculumId/manage`)
+## 2. 커리큘럼 관리 (`/instructor/curriculums/:curriculumId/manage`)
 
 ### 목적
 해당 커리큘럼 강사가 기본 정보·섹션/레슨 편성·수강생 상태를 관리하는 작업 화면. 별도 "커리큘럼 수정" 페이지는 없고, 이 화면 안에서 기본 정보 폼을 수정 모드로 재사용한다.

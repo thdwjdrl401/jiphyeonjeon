@@ -4,7 +4,7 @@
 
 | 라우트 | 레이아웃 | 접근 |
 |---|---|---|
-| `/live-sessions/:sessionId/classroom` | `LessonLayout` | 해당 커리큘럼 강사·수강생 (세션 `LIVE`일 때) |
+| `/student/live-sessions/:sessionId/classroom`, `/instructor/live-sessions/:sessionId/classroom` | `LessonLayout` | 해당 커리큘럼 강사·수강생 (세션 `LIVE`일 때) |
 
 ## 목적
 강사의 실시간 수업과 수강생의 시청·채팅·자막·AI 학습 기능을 한 화면에서 제공하는 전용 페이지. 새로고침·일시 단절·늦은 입장을 고려해 세션 상세와 분리되어 있다.

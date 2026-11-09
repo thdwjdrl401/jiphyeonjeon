@@ -433,6 +433,9 @@ uv run --frozen stt-lab \
   --output results/whisper-large-v3-lora-dev-502.json
 ```
 
+현재 `stt-lab` CLI(`src/stt_lab/cli.py`)에는 `--adapter` 인자가 없어 위 명령은 인자 오류로 끝난다. adapter 로드는
+`runners.build_runner(..., adapter_id=...)`에만 남아 있다.
+
 ## vLLM Whisper 서빙 실험
 
 vLLM은 realtime-agent 환경과 섞지 않고 별도 venv에 설치한다. sudo는 필요 없다. 현재

@@ -4,7 +4,7 @@
 
 | 라우트 | 레이아웃 | 접근 |
 |---|---|---|
-| `/curriculums/:curriculumId/sections/:sectionId/lessons/:lessonId` | `WorkspaceLayout` | 강사(커리큘럼 운영자)·수강생 |
+| `/student/curriculums/:curriculumId/sections/:sectionId/lessons/:lessonId`, `/instructor/curriculums/:curriculumId/sections/:sectionId/lessons/:lessonId` | `WorkspaceLayout` | 강사(커리큘럼 운영자)·수강생 |
 
 ## 목적
 레슨의 기본 정보·게시 상태·자료, 연결된 라이브 세션과 다시보기 상태를 한 곳에서 확인하는 허브 페이지. 일정 편집·사전 점검·라이브 시청·VOD 재생은 각각 전용 화면으로 이동해서 처리하며, 이 페이지 자체에는 플레이어를 두지 않는다.

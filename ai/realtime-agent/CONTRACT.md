@@ -163,7 +163,7 @@ audio, engine queue와 dispatch capacity는 검사하지 않으므로 job별 `ST
 > Spring consumer는 전부 영속하고 `segment.final`을 WS로 전달하며(발화별 렌더링·시간 앵커),
 > ai-api는 delta/completed만 소비한다 — started/final은 단일 좌표가 없어 RAG 대상에서 계약상 제외.
 
-- Redis URL: `REDIS_URL`로 주입한다. dev는 password Redis tunnel `127.0.0.1:4000`, prod는 prod Redis tunnel `127.0.0.1:6390`을 사용한다. LiveKit 내부 Redis나 host `6380`을 전제로 하지 않는다.
+- Redis URL: `REDIS_URL`로 주입한다. 노트북 배포(`deploy/run-laptop.sh`)는 SSH `-L` Redis tunnel `127.0.0.1:6390`을 사용한다. GPU 서버 시절에는 dev가 password Redis tunnel `127.0.0.1:4000`, prod가 `127.0.0.1:6390`을 썼다. LiveKit 내부 Redis나 host `6380`을 전제로 하지 않는다.
 - stream key: `CAPTION_STREAM_KEY`, 기본값 `ai:captions:live`
 - write: 각 `XADD`를 직접 await하고 제한 시간 안에 응답하지 않거나 실패하면 job을 실패시킨다.
 - retention: 모든 `XADD`에 `MAXLEN ~ CAPTION_STREAM_MAXLEN`을 적용하며 기본값은 10,000 엔트리다.

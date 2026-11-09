@@ -18,7 +18,7 @@
 
 # 알림 센터 백엔드 인수 문서 (이슈 초안)
 
-> 📍 **API 규격의 정본은 [CONTRACT §2-4](CONTRACT.md#2-4-알림-센터--서버-미구현-fe-완료-be-착수-전)다.**
+> 📍 **API 규격의 정본은 [CONTRACT §2-4](CONTRACT.md#2-4-알림-센터--다섯-경로-모두-구현됨-나머지-발행-지점은-남음)다.**
 > 이 문서는 규격을 **복제하지 않고** 작업 분해·삽입 지점·완료 조건만 담는다(AGENTS.md §7 SSOT).
 > 판단 배경은 [ADR-0012](decisions/seominkyeong/0012-notification-center-two-status-axes.md).
 >
@@ -46,7 +46,7 @@ FE는 mock 모드에서 전체 흐름이 동작하는 것을 확인했다. 서�
 학생·강사 공통 알림 센터의 서버 측을 구현한다. 화면(헤더 종·드롭다운·알림 페이지)과 이동 규칙은
 이미 FE에 있고, 서버가 알림을 **저장·조회·상태 전이·발행**하는 부분이 비어 있다.
 
-요청/응답 규격(Method·URL·DTO·상태코드·권한)은 [CONTRACT §2-4](CONTRACT.md#2-4-알림-센터--서버-미구현-fe-완료-be-착수-전)를
+요청/응답 규격(Method·URL·DTO·상태코드·권한)은 [CONTRACT §2-4](CONTRACT.md#2-4-알림-센터--다섯-경로-모두-구현됨-나머지-발행-지점은-남음)를
 그대로 따른다. 이 이슈에서 규격을 새로 정하지 않는다 — 바꿔야 할 부분이 있으면 CONTRACT를 먼저 고치고
 FE와 함께 반영한다.
 
@@ -154,7 +154,7 @@ WS/SSE 채널이 없어 FE는 60초 주기로 `summary`를 폴링한다. 채널�
 
 ### 🔗 관련
 
-- 규격: [CONTRACT §2-4](CONTRACT.md#2-4-알림-센터--서버-미구현-fe-완료-be-착수-전)
+- 규격: [CONTRACT §2-4](CONTRACT.md#2-4-알림-센터--다섯-경로-모두-구현됨-나머지-발행-지점은-남음)
 - 판단: [ADR-0012](decisions/seominkyeong/0012-notification-center-two-status-axes.md)
 - 배경: [ADR-0005](decisions/seominkyeong/0005-lesson-has-no-draft-state.md)(강의 초안 축 없음),
   [choinhoo/ADR-0007](decisions/choinhoo/0007-recording-ready-auto-publish-and-processing-polling.md)(녹화 자동 게시),

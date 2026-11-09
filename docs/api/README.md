@@ -107,8 +107,11 @@ springdoc은 시큐리티 체인을 읽지 않아 이걸 못 낸다. 그런데 �
 |---|---|
 | `GET /api/annotation-interpret-images/{token}` | 받아가는 쪽이 모델 제공자 서버라 사람이 부를 API가 아니다. 128비트 난수 토큰이 곧 자격(ADR-0058) |
 
-소스의 `@*Mapping` 132개 중 스펙에 130개가 실려 있고, 차이는 이 하나와 상수로 정의된 경로 표기
-하나뿐이다. **숨긴 엔드포인트도 인증은 걸려 있다** — 문서에 없는 것과 열려 있는 것은 다르다.
+소스의 `@*Mapping` 메서드는 지금 137개이고 스냅샷(`SNAPSHOT`)에는 130개가 실려 있다. 차이는 위
+`@Hidden` 하나와 스냅샷 이후 추가된 6개다. 그 6개(`POST /api/auth/password-reset`,
+`DELETE /api/auth/temporary-password`, `PUT /api/me/password/temporary`,
+`GET /api/instructor/recorded-lessons/capabilities`, `DELETE /api/instructor/lessons/{lessonId}/glossary/{term}`,
+`GET /api/admin/live-sessions/{sessionId}/viewers`)는 스펙을 다시 뜨기 전까지 `API.md`에 없다. **숨긴 엔드포인트도 인증은 걸려 있다** — 문서에 없는 것과 열려 있는 것은 다르다.
 
 ## CONTRACT.md 와의 관계
 

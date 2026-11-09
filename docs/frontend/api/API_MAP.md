@@ -161,11 +161,16 @@
 | `AUTH-05` | `GET` | `/api/auth/me` | 앱 시작·새로고침 시 현재 사용자 복원 | **구현됨** |
 | `AUTH-06` | `POST` | `/api/auth/logout` | 로그아웃 | **구현됨** |
 | `PROFILE-IMG-01` | `PUT` | `/api/me/profile-image` | 프로필 이미지 지정(`{assetId}`) | **구현됨**. 결과는 `/auth/me`의 `profileImageUrl`로 반영 |
-| `PROFILE-01` | `GET` | `/api/users/me/profile` | 내 프로필 조회 | **미구현(제안)** — 현재 백엔드 없음 |
-| `PROFILE-02` | `PATCH` | `/api/users/me/profile` | 공통 프로필 수정(`displayName`) | **미구현(제안)** — 현재 백엔드 없음 |
-| `PROFILE-03` | `PATCH` | `/api/instructor/me/public-profile` | 강사 공개 프로필 수정(`bio`/`expertise`) | **미구현(제안)** — 현재 백엔드 없음 |
+| `PROFILE-01` | `GET` | `/api/users/me/profile` | 내 프로필 조회 | **미구현(제안)**. 현재 백엔드 없음. 프로필 화면은 `AUTH-05`를 사용 |
+| `PROFILE-02` | `PUT` | `/api/me/display-name` | 공통 프로필 수정(`displayName`) | **구현됨**. 응답은 `AUTH-05`와 같은 사용자 DTO |
+| `PROFILE-03` | `GET`·`PUT` | `/api/me/instructor-profile` | 강사 공개 프로필 조회·저장(`bio`/`expertise`) | **구현됨**. 강사만 |
+| `PROFILE-04` | `PUT` | `/api/me/password` | 비밀번호 변경(`currentPassword`·`newPassword`) | **구현됨**. `204` |
+| `PROFILE-05` | `PUT` | `/api/me/password/temporary` | 임시 비밀번호 로그인 세션에서 새 비밀번호로 교체 | **구현됨**. `204` |
+| `PROFILE-06` | `DELETE` | `/api/me` | 회원 탈퇴(소프트 삭제, 세션 파기) | **구현됨**. `204`, 진행 중 라이브가 있으면 `409` |
+| `AUTH-07` | `POST` | `/api/auth/password-reset` | 비밀번호 찾기(임시 비밀번호 메일 발송) | **구현됨**. `202` |
+| `AUTH-08` | `DELETE` | `/api/auth/temporary-password` | 발급된 임시 비밀번호 폐기 | **구현됨**. `204` |
 
-인증 식별자는 **`email`**이다(`loginId` 아님). `AUTH-05`는 전역 헤더와 라우트 가드가 사용하는 최소 인증 사용자 API이며 `userId`·`email`·`displayName`·`role`·`profileImageUrl`을 반환한다. `PROFILE-01`은 프로필 페이지가 사용하는 상세 API 제안이지만 아직 백엔드가 없다. 두 응답의 공통 사용자 필드는 같은 명칭과 enum을 사용한다. 프로필 이미지 지정만 실제 구현되어 있고(`PROFILE-IMG-01`), `displayName`·`bio`·`expertise` 수정 API는 아직 없다.
+인증 식별자는 **`email`**이다(`loginId` 아님). `AUTH-05`는 전역 헤더와 라우트 가드가 사용하는 최소 인증 사용자 API이며 `userId`·`email`·`displayName`·`role`·`profileImageUrl`·`isAdmin`·`signedInWithTemporaryPassword`·`temporaryPasswordActive`를 반환한다. `PROFILE-01`은 프로필 페이지가 사용하는 상세 API 제안이지만 아직 백엔드가 없다. 두 응답의 공통 사용자 필드는 같은 명칭과 enum을 사용한다. `displayName` 수정은 `PUT /api/me/display-name`, `bio`·`expertise` 조회·저장은 `GET`·`PUT /api/me/instructor-profile`로 구현되어 있다.
 
 ## 4. 인증 API
 
@@ -354,7 +359,7 @@ POST /api/auth/logout
 
 ## 5. 내 프로필 API
 
-> **구현 현황**: 프로필 관리에서 실제 백엔드가 있는 것은 **`PUT /api/me/profile-image {assetId}`**(프로필 이미지 지정)와 **`GET /api/auth/me`**뿐이다. 아래 `PROFILE-01/02/03`(`/api/users/me/profile`, `/api/instructor/me/public-profile`)은 **미구현(제안)**으로, `displayName`·`bio`·`expertise` 조회·수정 API는 아직 백엔드에 없다.
+> **구현 현황**: 프로필 관리 백엔드는 `PUT /api/me/profile-image {assetId}`, `GET /api/auth/me`, `PUT /api/me/display-name {displayName}`, `GET`·`PUT /api/me/instructor-profile {bio, expertise}`, `PUT /api/me/password`, `DELETE /api/me`다. `PROFILE-01`(`/api/users/me/profile`)은 **미구현(제안)**이다. 아래 5.3·5.4의 경로·메서드는 협의 당시 제안이며 실제 구현은 §3 표를 따른다.
 
 ### 5.0 `PROFILE-IMG-01` 프로필 이미지 지정 (구현됨)
 
@@ -428,13 +433,13 @@ URL에 사용자 ID를 받지 않고 현재 세션의 본인만 조회한다. **
 
 역할별로 의미 없는 필드는 `null`로 채우기보다 응답에서 생략하는 방식을 제안한다. `role`을 판별 필드로 사용하면 프론트가 안전하게 역할별 영역을 구성할 수 있다.
 
-### 5.3 `PROFILE-02` 공통 프로필 수정 (미구현·제안)
+### 5.3 `PROFILE-02` 공통 프로필 수정 (구현됨)
 
 ```http
-PATCH /api/users/me/profile
+PUT /api/me/display-name
 ```
 
-**현재 백엔드에 없다.** `displayName` 수정 API는 아직 준비되지 않았다.
+현재 상태: `PUT /api/me/display-name`으로 구현됨(`AccountController.updateDisplayName`). `displayName`은 필수, 최대 100자. 응답은 `AUTH-05`와 같은 사용자 DTO다.
 
 **제안 요청**
 
@@ -463,13 +468,13 @@ PATCH /api/users/me/profile
 | `400` | `VALIDATION_FAILED` | 입력값을 유지하고 필드 오류 표시 |
 | `401` | `AUTH_SESSION_REQUIRED` | 로그인 후 프로필 복귀 |
 
-### 5.4 `PROFILE-03` 강사 공개 프로필 수정 (미구현·제안)
+### 5.4 `PROFILE-03` 강사 공개 프로필 수정 (구현됨)
 
 ```http
-PATCH /api/instructor/me/public-profile
+PUT /api/me/instructor-profile
 ```
 
-**현재 백엔드에 없다.** `bio`·`expertise` 수정 API는 아직 준비되지 않았다. 공통 프로필과 저장 상태를 분리하기 위해 별도 API를 제안한다. 현재 세션이 강사 계정이 아니면 서버가 거부한다.
+현재 상태: `GET`·`PUT /api/me/instructor-profile`로 구현됨(`AccountController`). 응답은 `{bio, expertise}`이고 `bio`가 저장된 적 없으면 `null`, `expertise`는 빈 목록이다. 공통 프로필과 저장 상태를 분리하기 위해 별도 API를 제안한다. 현재 세션이 강사 계정이 아니면 서버가 거부한다.
 
 **제안 요청**
 
@@ -496,7 +501,7 @@ PATCH /api/instructor/me/public-profile
 | `401` | `AUTH_SESSION_REQUIRED` | 로그인 후 프로필 복귀 |
 | `403` | `INSTRUCTOR_ROLE_REQUIRED` | 강사 전용 기능 접근 불가 표시 |
 
-`bio` 최대 길이, `expertise`의 최대 개수·항목 길이·자유 입력 여부는 **협의 필요**다.
+현재 상태: `bio` 최대 1000자, `expertise` 최대 8개·각 30자(`UpdateInstructorProfileRequest`).
 
 ## 6. 시스템 페이지와 오류 매핑
 
@@ -533,8 +538,8 @@ PATCH /api/instructor/me/public-profile
 
 | 기능 | 보류 이유 |
 |---|---|
-| 비밀번호 변경 | 현재 비밀번호 확인과 다른 세션 종료 정책 미확정 |
-| 회원 탈퇴 | 운영 커리큘럼·예정 라이브·수강·학습 데이터 처리 정책 미확정 |
+| 비밀번호 변경 | 현재 상태: `PUT /api/me/password`로 구현됨(§3 `PROFILE-04`) |
+| 회원 탈퇴 | 현재 상태: `DELETE /api/me`로 구현됨(§3 `PROFILE-06`) |
 | 공개 강사 프로필 조회 | 별도 공개 페이지 도입 여부 미확정 |
 
 학생 학습 요약과 강사 운영 요약은 [내 커리큘럼 API](MY_CURRICULUMS.md)에서 정의한다.

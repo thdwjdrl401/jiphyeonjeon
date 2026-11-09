@@ -28,7 +28,7 @@ python -m app.main -> WorkerRuntime -> RabbitMaterialConsumer + management FastA
 ```
 
 관리 API는 `GET /healthz`의 `200 status=ok`와, runtime 상태에 따라 `200 ready` 또는 `503 not_ready`를
-반환하는 `GET /readyz`다. consumer가 켜지면 RabbitMQ, PostgreSQL, tunnel을 통한 BGE `/readyz`가 모두 준비돼야 ready가 된다.
+반환하는 `GET /readyz`다. consumer가 켜지면 RabbitMQ, PostgreSQL, BGE `/readyz`가 모두 준비돼야 ready가 된다.
 RabbitMQ는 HTTP 업무 API가 아니라 비동기 입력 transport다.
 
 ## 파일 구성

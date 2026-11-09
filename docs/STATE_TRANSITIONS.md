@@ -33,7 +33,7 @@
 | 자료 처리 작업 | `QUEUED`부터 `COMPLETED` 또는 `FAILED` | AI worker | polling과 단계 안내 |
 | 라이브 세션 | `DRAFT`부터 `ENDED`, `CANCELLED`, `FAILED` | 강사·라이브 오케스트레이터 | 입장, 시작, 종료, 재시도 |
 | 녹화 자산 | `STARTING`부터 `READY` 또는 `FAILED` | Egress·webhook | 강사 미리보기와 처리 안내 |
-| 다시보기 | `DRAFT`, `READY_FOR_REVIEW`, `PUBLISHED`, `WITHDRAWN` | 강사 | 수강생 VOD 공개 여부 |
+| 다시보기 | `DRAFT`, `PUBLISHED`, `WITHDRAWN` | 강사 | 수강생 VOD 공개 여부 |
 | AI 게시 콘텐츠 | 준비·검수·초안·게시·실패 상태 | AI worker·강사 | 자막·용어·챕터·퀴즈 노출 |
 
 ## 3. 계정 상태
@@ -108,6 +108,8 @@ REJECTED · REVOKED · CANCELLED ──재신청──→ 정책에 따라 PENDI
 
 ## 6. 레슨 상태
 
+현재 상태: 이 절의 목표 흐름은 구현하지 않았다. `LessonStatus`는 `PUBLISHED` 하나이고 레슨은 생성 즉시 `PUBLISHED`이며, 공개 여부는 커리큘럼 lifecycle만으로 정한다(`backend/src/main/java/com/liveclass/lesson/domain/LessonStatus.java`, `V10__lesson_single_published_state.sql`, [ADR-0005](decisions/seominkyeong/0005-lesson-has-no-draft-state.md)).
+
 목표 상태 흐름은 다음과 같다.
 
 ```text
@@ -130,7 +132,6 @@ DRAFT ──AI 준비 시작──→ AI_NOT_READY ──필수 처리 완료─
 - `AI_NOT_READY`에서는 라이브 시작을 차단한다.
 - `PUBLISHED` 레슨의 자료를 추가하거나 삭제하면 `AI_NOT_READY`로 되돌리고, 처리가 끝난 뒤 `READY → PUBLISHED` 재게시를 요구한다.
 - 라이브 중에는 레슨 전체 편집을 잠그고, 종료 후 초기 범위에서는 제목·설명만 수정한다.
-- 현재 백엔드는 레슨 생성·수정 시 `DRAFT`를 사용한다. PPTX/AI 준비와 `READY → PUBLISHED` 전환 API는 목표 명세이며 추가 구현이 필요하다.
 
 ## 7. 레슨 자료와 처리 작업
 
@@ -207,14 +208,14 @@ DRAFT → SCHEDULED → OPEN → STARTING → LIVE → ENDING → ENDED
 | `CANCELLED` | 시작 전 취소 | 입장·시작 불가 |
 | `FAILED` | 시작 또는 오케스트레이션 실패 | 원인 표시, 재시도 정책 미정 |
 
-현재 백엔드는 외부 오케스트레이션 전 단계라 아래처럼 중간 상태를 건너뛴다.
+현재 백엔드는 `STARTING`, `ENDING`을 서버가 관리한다. 시작 실패는 `FAILED`가 아니라 `OPEN`으로 되돌리고, `FAILED`를 설정하는 코드는 없다(`LiveStartTransitions.java`, `LiveEndTransitions.java`, `LiveSessionService.java`).
 
 ```text
-DRAFT/SCHEDULED/OPEN → LIVE → ENDED
+DRAFT/SCHEDULED/OPEN → STARTING → LIVE → ENDING → ENDED
+STARTING ──시작 실패──→ OPEN
 DRAFT/SCHEDULED/OPEN → CANCELLED
 ```
 
-- 목표 구현에서는 `STARTING`, `ENDING`을 서버가 관리한다.
 - 프론트는 `STARTING` timeout만으로 `FAILED`로 바꾸지 않고 상세를 재조회한다.
 - `OPEN`을 저장 상태로 둘지 현재 시각과 정책으로 계산할지는 아직 결정이 필요하다. 권장안은 서버 계산이다.
 - `FAILED` 세션을 재시도할지 새 세션을 만들지는 정책 결정이 필요하다.
@@ -248,16 +249,17 @@ webhook 트랜잭션에서 `replayStatus=PUBLISHED`도 함께 커밋하므로 �
 
 ## 10. 다시보기 공개 상태
 
+현재 상태: `ReplayStatus`는 `DRAFT`, `PUBLISHED`, `WITHDRAWN`이다. `READY_FOR_REVIEW`는 [ADR-0090](decisions/songjeongki/0090-vod-has-no-review-step.md)으로 enum에서 제거했고 DB `CHECK`에만 남아 있다.
+
 ```text
 새 정상 녹화: DRAFT ──(VideoAsset READY와 원자적 확정)──→ PUBLISHED
-기존 자산:    DRAFT 또는 READY_FOR_REVIEW ──(강사 수동 게시)──→ PUBLISHED
+기존 자산:    DRAFT ──(강사 수동 게시)──→ PUBLISHED
 공개 관리:    PUBLISHED → WITHDRAWN ──(강사 수동 재게시)──→ PUBLISHED
 ```
 
 | 상태 | 의미 | 강사 | 학생 |
 |---|---|---|---|
 | `DRAFT` | 녹화 생성·처리 중 또는 기존 미게시 자산 | 처리 상태 확인, 기존 자산 수동 게시 | 재생 불가 |
-| `READY_FOR_REVIEW` | 기존 수동 검수 정책의 호환 상태. 새 정상 경로는 거치지 않음 | 미리보기·검수·게시 | 재생 불가 |
 | `PUBLISHED` | 새 정상 녹화의 시스템 자동 게시 또는 강사의 수동 게시 | 관리·공개 중단 | 조건 충족 시 재생 가능 |
 | `WITHDRAWN` | 강사가 공개 중단 | 미리보기·수동 재게시 | 신규 재생 불가 |
 

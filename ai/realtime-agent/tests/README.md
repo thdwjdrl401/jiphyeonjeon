@@ -20,7 +20,6 @@
 - `test_job_metadata.py`: dispatch schema 계약
 - `test_stt_catalog.py`, `test_stt_registry.py`: provider profile, active/idle 상한과 prewarm resource 소유권
 - `test_main.py`, `test_config.py`: AgentServer load 계산과 환경 변수 조립
-- `test_operational_scripts.py`: SSH tunnel·배포 helper의 port와 secret 취급
 
 ## 경계와 불변식
 

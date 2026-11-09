@@ -123,4 +123,6 @@ app → pages → features → shared
 | [VOD_LESSON.md](VOD_LESSON.md) | 초안 | Egress VOD 재생과 게시 콘텐츠·학습·강사 검수 기능 |
 | [SYSTEM_PAGES.md](SYSTEM_PAGES.md) | 초안 | 접근 불가와 찾을 수 없음의 원인별 복구 동선 |
 
+현재 상태: 각 문서의 컴포넌트 트리와 "소유 영역" 열은 설계 시점 이름이다. 실제 feature 디렉터리는 `frontend/src/features/` 아래 `admin`·`ai`·`auth`·`curriculum`·`curriculum-detail`·`demo`·`enrollment`·`learning`·`lesson`·`live-session`·`material`·`media`·`notification`·`profile`·`recorded-lesson`·`replay`이고, 문서의 `features/lesson-material`·`features/live`·`features/chat`·`features/caption`·`features/playback`·`features/content-review`·`features/quiz`·`features/account` 등은 디렉터리로 존재하지 않는다. 알림·녹화강의·운영 콘솔 페이지는 이 디렉터리에 별도 명세가 없다.
+
 페이지별 문서를 만들거나 여러 페이지를 한 문서로 묶을 때 이 표에 링크와 포함 페이지를 추가한다. 작성 예정 문서가 실제로 생성되면 파일명 표기를 링크로 변경한다.

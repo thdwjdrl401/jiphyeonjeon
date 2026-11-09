@@ -6,10 +6,10 @@
 
 | 화면 | 라우트 | 레이아웃 | 접근 |
 |---|---|---|---|
-| 세션 생성 | `/instructor/lessons/:lessonId/live-sessions/new` | `WorkspaceLayout` | 해당 레슨 강사 |
-| 세션 수정 | `/instructor/live-sessions/:sessionId/edit` | `WorkspaceLayout` | 해당 세션 강사 |
-| 세션 상세 | `/live-sessions/:sessionId` | `WorkspaceLayout` | 해당 강사·수강생 |
-| 수강생 입장 전 점검 | `/live-sessions/:sessionId/prejoin` | `WorkspaceLayout` | 입장 권한 있는 수강생 |
+| 세션 생성 | 라우트 없음(레슨 생성·수정 폼에서 일정 입력) | `WorkspaceLayout` | 해당 레슨 강사 |
+| 세션 수정 | 라우트 없음(레슨 수정 폼에서 일정 수정) | `WorkspaceLayout` | 해당 세션 강사 |
+| 세션 상세 | 라우트 없음. 학생은 `/student/curriculums/:curriculumId/lessons/:lessonId/live-upcoming`, 강사 `/instructor/live-sessions/:sessionId`는 `preflight`로 리다이렉트 | `WorkspaceLayout` | 해당 강사·수강생 |
+| 수강생 입장 전 점검 | `/student/live-sessions/:sessionId/prejoin` | `WorkspaceLayout` | 입장 권한 있는 수강생 |
 | 강사 사전 점검 | `/instructor/live-sessions/:sessionId/preflight` | `WorkspaceLayout` | 해당 세션 강사 |
 | 녹화 처리 현황 | `/instructor/live-sessions/:sessionId/processing` | `WorkspaceLayout` | 해당 세션 강사 |
 

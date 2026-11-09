@@ -12,6 +12,8 @@
 계정 유형 변경, 커리큘럼 운영·수강 목록, 상세 학습 분석은 이 페이지에서 처리하지 않는다.
 
 > **구현 현황(2026-07)**: 기본 프로필은 읽기 전용 요약과 `프로필 수정` 모달로 제공한다. 모달에서 프로필 이미지를 presigned 업로드한 뒤 `PUT /api/me/profile-image {assetId}`로 지정하고, `/auth/me`와 같은 사용자 DTO의 `profileImageUrl`을 전역 인증 캐시에 즉시 반영한다. `displayName`·`bio`·`expertise` 수정 API는 아직 없어 입력·가짜 저장을 제공하지 않고 **준비 중**으로 안내한다. 인증 식별자는 `email`이다.
+>
+> **현재 상태**: 표시 이름은 프로필 수정 모달에서 `PUT /api/me/display-name`으로, 강사 `bio`·`expertise`는 `PUT /api/me/instructor-profile`로 저장한다. 비밀번호 변경(`PasswordChangePanel`)과 회원 탈퇴(`AccountWithdrawPanel`)도 제공한다(`frontend/src/pages/ProfilePage.tsx`, `features/profile/`).
 
 ## 2. 컴포넌트 트리
 
@@ -79,7 +81,7 @@ ProfilePage
 ### 5.2 수정 가능
 
 - 프로필 이미지 (**구현됨**)
-- 사용자 이름 또는 표시 이름 (**수정 API 미구현 — 읽기 전용·준비 중**)
+- 사용자 이름 또는 표시 이름 (**구현됨**, `PUT /api/me/display-name`)
 
 이메일·전화번호는 계정 계약이 확정되기 전까지 필수 필드로 추가하지 않는다. 프로필 이미지는 `POST /api/assets/upload-requests` → presigned 스토리지 PUT → `POST /api/assets/{assetId}/complete` → `PUT /api/me/profile-image` 순서로 저장한다.
 
@@ -93,7 +95,7 @@ ProfilePage
 
 ## 6. 강사 공개 프로필
 
-강사 계정에만 다음 영역을 제공한다. 현재는 수정 API가 없으므로 준비 중 안내만 표시하고 입력 폼과 저장 성공 상태를 만들지 않는다.
+강사 계정에만 다음 영역을 제공한다. 현재 상태: `GET`/`PUT /api/me/instructor-profile`로 공개 소개·전문 분야를 조회·수정한다(`frontend/src/pages/ProfilePage.tsx`).
 
 - 공개 소개·전문 분야 편집 준비 상태
 

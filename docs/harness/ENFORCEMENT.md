@@ -2,7 +2,7 @@
 
 > 📍 하네스 개요: [README.md](README.md) · 판단 정책: [POLICY.md](POLICY.md)
 >
-> **지금은 비활성입니다.** 이 문서는 "채울 자리와 켜는 법"만 정의합니다.
+> 현재 상태: C(백엔드 계약 테스트, 예: `backend/src/test/java/com/liveclass/video/ReplayPlaybackContractTest.java`)·E(CI)·G-3은 켜져 있고, A(camelCase 린트)·B(pre-commit 훅, `.husky/` 없음)·D·G-1 훅 연결·G-2는 꺼져 있습니다. 이 문서는 "채울 자리와 켜는 법"을 정의합니다.
 > 기능 착수 시 [POLICY](POLICY.md)로 필요하다고 판단한 자물쇠만, 아래 절차대로 켜세요.
 > 모든 템플릿은 [templates/](templates/)에 있으며 **컴파일·린트 대상이 아니라 빌드를 깨지 않습니다.**
 
@@ -10,9 +10,9 @@
 
 ## A. 프론트엔드 camelCase 린트 (Sub Ⅱ 착수 시)
 
-FE는 `npm run lint`(ESLint)가 이미 동작하고 규칙은 `frontend/package.json`의 `eslintConfig.rules`가 비어 있습니다. camelCase 강제를 켜려면:
+FE는 `npm run lint`(ESLint)가 이미 동작하고 설정은 `frontend/.eslintrc.cjs`(추천 규칙 확장, 별도 `rules` 없음)입니다. camelCase 강제를 켜려면:
 
-1. [templates/eslint-camelcase.rules.jsonc](templates/eslint-camelcase.rules.jsonc)의 규칙을 `frontend/package.json`의 `eslintConfig.rules`에 병합.
+1. [templates/eslint-camelcase.rules.jsonc](templates/eslint-camelcase.rules.jsonc)의 규칙을 `frontend/.eslintrc.cjs`의 `rules`에 병합.
 2. 확인: `cd frontend && npm run lint` → snake_case 식별자에서 경고/에러.
 
 ## B. Git pre-commit 훅 (린트 자동 실행, 도구 무관)
@@ -54,9 +54,9 @@ echo "npx lint-staged" > .husky/pre-commit
 ```
 지금은 주석 예시만. 팀 합의 후 활성화하고 근거는 [decisions/](../decisions/)에 ADR.
 
-## E. CI (GitHub Actions, 후속·2차 방어선)
+## E. CI (GitHub Actions, 2차 방어선)
 
-로컬 훅을 우회한 경우를 위한 2차 방어선. [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)이 프런트 lint·타입체크·vitest와 백엔드 gradle test, 그리고 번호 충돌 검사(`대상 브랜치와 대조`)를 돌립니다. 로컬 훅(B)이 1차, CI가 2차입니다.
+로컬 훅을 우회한 경우를 위한 2차 방어선. [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)이 프런트 lint·타입체크·vitest와 백엔드 gradle test, AI 서비스 테스트(ai-api·ai-worker·realtime-agent·bge-runtime), 이미지 빌드, 그리고 번호 충돌 검사(`check-collisions`, 대상 브랜치와 대조)를 돌립니다. 로컬 훅(B)이 1차, CI가 2차입니다.
 
 ## F. 도구별 어댑터 (설치 완료 — 추가 작업 없음)
 

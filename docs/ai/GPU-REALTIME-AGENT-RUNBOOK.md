@@ -1,5 +1,11 @@
 # GPU realtime-agent 운영 RUNBOOK
 
+> 현재 상태: 이 RUNBOOK이 쓰는 GPU 서버 배포 일습(`deploy/install.sh`, `deploy/bin/*` supervisor,
+> `scripts/start_ec2_tunnels.sh`, `deploy/configure-gpu-ec2-tunnels.sh`, `livekit-tunnel-dns.c`,
+> `realtime-agent.env.example`·`realtime-agent-dev.env.example`, `tests/test_operational_scripts.py`)는 삭제됐다
+> (커밋 `c490634b`). 현재 실행 절차는 노트북 GPU에서 `deploy/run-laptop.sh`를 쓰는
+> [`ai/realtime-agent/deploy/README.md`](../../ai/realtime-agent/deploy/README.md)다. 아래는 GPU 서버 시절 절차 기록이다.
+
 GPU 서버에서 정식 clone의 realtime-agent를 CUDA/Nemotron으로 실행하고, SSH tunnel을 통해 외부
 LiveKit·application Redis·coturn에 연결하는 절차다. 실제 secret, token, host, PEM 경로와 dispatch
 ID는 문서나 Git에 기록하지 않는다.

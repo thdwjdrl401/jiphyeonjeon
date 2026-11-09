@@ -3,7 +3,7 @@
 ## 1. 이 서비스가 하는 일
 
 `ai-worker`는 EC2에서 실행되는 비동기 자료 처리 프로세스다. Spring이 RabbitMQ에 넣은 PPTX 작업을 받아
-원본을 내려받고, GPU에서 embedding을 생성해 PostgreSQL `ai` schema에 저장한 뒤 결과를 Spring에 알린다.
+원본을 내려받고, bge-runtime에서 embedding을 생성해 PostgreSQL `ai` schema에 저장한 뒤 결과를 Spring에 알린다.
 
 작업용 HTTP endpoint는 없다. FastAPI는 관리용 health/readiness endpoint만 제공한다.
 
@@ -15,7 +15,7 @@
 | 운영 환경 | `GET /healthz`, `GET /readyz` | HTTP | 프로세스·의존성 준비 확인 | 구현됨 |
 | ai-worker | Spring `POST /api/internal/ai/materials/download-url` | HTTP, HMAC | PPTX 임시 다운로드 URL 발급 | 구현됨 |
 | ai-worker | 발급된 presigned URL | HTTP GET | PPTX 원본 다운로드 | 구현됨 |
-| ai-worker | bge-runtime `GET /readyz`, `POST /internal/v1/embeddings` | HTTP, Bearer | GPU 준비 확인·embedding 생성 | 구현됨 |
+| ai-worker | bge-runtime `GET /readyz`, `POST /internal/v1/embeddings` | HTTP, Bearer | BGE 준비 확인·embedding 생성 | 구현됨 |
 | ai-worker | GMS(OpenAI 호환) `POST /chat/completions` | HTTP, Bearer, structured output | PPTX 전체 텍스트에서 핵심 용어+정의 추출 | 구현됨, 기본 비활성 |
 | ai-worker | PostgreSQL `ai` schema | SQL/pgvector | 작업·chunk·embedding 저장 및 활성화 | 구현됨 |
 | ai-worker | Spring `POST /api/internal/ai/callbacks` | HTTP, HMAC | READY·FAILED 및 (있으면) 핵심 용어 결과 전달 | 구현됨 |
@@ -117,7 +117,7 @@ uv run --frozen python -m app.main
 | `AI_CALLBACK_SECRET` 또는 `AI_WORKER_SPRING_HMAC_SECRET` | consumer 활성화 시 필수 | Spring download-url·callback HMAC |
 | `AI_WORKER_BGE_INTERNAL_TOKEN` | consumer 활성화 시 필수 | bge-runtime Bearer token |
 | `AI_WORKER_SPRING_INTERNAL_BASE_URL` | 선택 | 기본 `http://127.0.0.1:8080` |
-| `AI_WORKER_BGE_RUNTIME_URL` | 선택 | 로컬 `:8020`, EC2 host `:18020`, 운영 container `:18080/internal/bge` |
+| `AI_WORKER_BGE_RUNTIME_URL` | 선택, 기본 `http://127.0.0.1:8020` | 로컬 `:8020`, EC2 host `:18020`, 운영 container `liveclass-bge-runtime-cpu:8020` |
 | `AI_WORKER_KEY_TERM_EXTRACTION_ENABLED` | 선택, 기본 `false` | PPTX 핵심 용어 추출 활성화 |
 | `AI_WORKER_ANNOTATION_INGESTION_ENABLED` | 선택, 기본 `false` | 강조 판서 색인 활성화. Spring이 보낸 텍스트를 임베딩·저장만 한다 |
 | `AI_WORKER_GMS_API_KEY` | 핵심 용어 추출 활성화 시 필수 | GMS(OpenAI 호환) API key. 강조 판서 색인은 모델을 부르지 않아 필요 없다 |
@@ -126,14 +126,14 @@ uv run --frozen python -m app.main
 
 운영에서는 root [`.env.ai-prod.example`](../../.env.ai-prod.example)의 `AI_CALLBACK_SECRET`을
 container의 `AI_WORKER_SPRING_HMAC_SECRET`으로, `BGE_RUNTIME_INTERNAL_TOKEN`을
-`AI_WORKER_BGE_INTERNAL_TOKEN`으로 매핑한다. `AI_INTERNAL_SECRET`은 ai-api용이며 worker와 GPU
+`AI_WORKER_BGE_INTERNAL_TOKEN`으로 매핑한다. `AI_INTERNAL_SECRET`은 ai-api용이며 worker와
 bge-runtime에는 주입하지 않는다.
 
 | 실행 형태 | `AI_WORKER_BGE_RUNTIME_URL` |
 |---|---|
-| 로컬 GPU runtime | `http://127.0.0.1:8020` |
+| 로컬 runtime | `http://127.0.0.1:8020` |
 | EC2 host process | `http://127.0.0.1:18020` |
-| EC2 운영 container | `http://host.docker.internal:18080/internal/bge` |
+| EC2 운영 container | `http://liveclass-bge-runtime-cpu:8020`(compose 기본값, `BGE_RUNTIME_URL`로 덮어씀) |
 
 기본 관리 주소는 `127.0.0.1:8011`이다. 최초 DB 준비에는 psycopg migration DSN이 필요하다.
 
@@ -163,7 +163,7 @@ DB role과 권한 조건은 [migration 문서](migrations/README.md)를 따른�
 - [외부 adapter](app/adapters/README.md)
 - [DB migration](migrations/README.md)
 - [Spring AI 연동](../../backend/src/main/java/com/liveclass/aiintegration/README.md)
-- [GPU BGE 연결과 운영 스크립트](../bge-runtime/scripts/README.md)
+- [bge-runtime 실행과 운영 배포](../bge-runtime/README.md)
 - [EC2 AI 운영 compose](../../docker-compose.ai-prod.yml)
 - [EC2 AI 운영 환경변수](../../.env.ai-prod.example)
 - [PPTX 핵심 용어 추출 방식 ADR](../../docs/decisions/jinwoo/0003-pptx-key-term-extraction-approach.md)

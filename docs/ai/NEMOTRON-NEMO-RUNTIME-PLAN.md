@@ -1,5 +1,11 @@
 # Tuned Nemotron NeMo final-only runtime 개발 계획
 
+> 현재 상태: 구현됨. provider는 `ai/realtime-agent/app/stt/providers/nemotron_nemo.py`, runtime은
+> `ai/realtime-agent/deploy/runtime/nemotron_nemo_server.py`, env 예시는 `deploy/env/nemotron-nemo.env.example`·
+> `realtime-agent-nemo.env.example`이다. §4의 tmux supervisor(`deploy/bin/liveclass-nemotron-nemo-supervisor`)는
+> 커밋 `c490634b`에서 삭제됐고, tuned `.nemo` checkpoint는 저장소 밖 GPU 서버에만 있었다
+> ([`deploy/README.md`](../../ai/realtime-agent/deploy/README.md)).
+
 ## 1. 목표
 
 6,000 step full fine-tuning 결과인 Prompt-RNNT `.nemo` archive를 GPU 0에 5개 replica로 적재하고,

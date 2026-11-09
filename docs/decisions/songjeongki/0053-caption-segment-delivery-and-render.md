@@ -1,4 +1,4 @@
-# ADR-0053: 자막 세그먼트 전달·렌더 — segment.final WS/REST + FE 권위 렌더(ADR-0044 supersede)
+# ADR-0053: 자막 세그먼트 전달·렌더, segment.final WS/REST + FE 권위 렌더
 
 > 📍 하네스 개요: [../../harness/README.md](../../harness/README.md) · 아키텍처: [../../ARCHITECTURE.md](../../ARCHITECTURE.md) · 계약: [../../CONTRACT.md](../../CONTRACT.md)
 

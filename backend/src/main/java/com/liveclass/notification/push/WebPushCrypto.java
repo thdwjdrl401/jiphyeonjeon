@@ -30,28 +30,28 @@ import java.util.Base64;
 /**
  * Web Push 발신자 측 암호화(RFC 8291)와 VAPID 서명(RFC 8292).
  *
- * <p><b>왜 직접 구현하는가.</b> 라이브러리(`nl.martijndwars:web-push`)를 쓰면 <b>기기 하나에
- * 5.95ms</b>가 든다. 그런데 실제 암호 연산은 <b>0.9ms</b>면 된다. 나머지가 어디로 가는지 실측으로
- * 쪼갠 결과다(운영 장비 4코어 기준).
+ * <p>라이브러리(`nl.martijndwars:web-push`) 대신 직접 구현한다. 라이브러리는 기기 하나에
+ * 5.95ms가 들고, 실제 암호 연산에 필요한 시간은 0.9ms다. 나머지 비용을 실측으로 쪼갠 결과다
+ * (운영 장비 4코어 기준).
  *
  * <pre>
- *   verifyKeyPair    1.83ms   키쌍은 안 바뀌는데 호출마다 다시 검사한다
- *   임시 키쌍 생성    1.44ms   ↓ 아래 참고. 0.27ms면 될 일이다
- *   ECDH             2.24ms   ↓ 0.34ms면 될 일이다
+ *   verifyKeyPair    1.83ms   키쌍은 바뀌지 않는데 호출마다 다시 검사한다
+ *   임시 키쌍 생성    1.44ms   이름 곡선 경로를 쓰면 0.27ms(아래 참고)
+ *   ECDH             2.24ms   이름 곡선 경로를 쓰면 0.34ms
  *   나머지           ~0.4ms
  * </pre>
  *
- * <p><b>키를 어떻게 만드느냐가 5~7배를 가른다.</b> 라이브러리는
- * {@code ECNamedCurveTable.getParameterSpec("prime256v1")}이 준 스펙으로 키를 만드는데, 그러면
- * BouncyCastle이 일반 경로를 탄다. {@code ECGenParameterSpec("secp256r1")}으로 만들면 최적화된
- * 이름 곡선 경로를 탄다 — <b>같은 곡선, 같은 수학인데 생성 5.3배·ECDH 6.7배 차이</b>다.
+ * <p>키 생성 방식에 따라 5~7배 차이가 난다. 라이브러리는
+ * {@code ECNamedCurveTable.getParameterSpec("prime256v1")}이 준 스펙으로 키를 만들고, 이 경우
+ * BouncyCastle은 일반 경로를 탄다. {@code ECGenParameterSpec("secp256r1")}으로 만들면 최적화된
+ * 이름 곡선 경로를 탄다. 같은 곡선이고 수학도 같은데 생성은 5.3배, ECDH는 6.7배 차이가 난다.
  *
- * <p>CPU가 발송 처리량의 상한이라(부하 중 사용률 93.5%, 유휴 1.1%) 이 차이가 그대로 처리량이 된다.
+ * <p>CPU가 발송 처리량의 상한이라(부하 중 사용률 93.5%, 유휴 1.1%) 이 차이가 처리량에 그대로 반영된다.
  *
- * <p><b>스레드마다 도구를 따로 둔다.</b> {@code Cipher}·{@code KeyAgreement}·{@code Mac}·
- * {@code Signature}·{@code KeyPairGenerator}는 상태를 갖고 <b>스레드 안전하지 않다</b>. 공유하면
- * 조용히 깨진다. 호출마다 새로 만드는 것도 방법이지만(라이브러리가 그렇게 한다) 곡선 초기화가
- * 비싸므로, 스레드마다 한 번만 만들어 재사용한다.
+ * <p>도구는 스레드마다 따로 둔다. {@code Cipher}·{@code KeyAgreement}·{@code Mac}·
+ * {@code Signature}·{@code KeyPairGenerator}는 상태를 가지며 스레드 안전하지 않다. 공유하면
+ * 오류 없이 결과가 깨진다. 호출마다 새로 만드는 방법도 있지만(라이브러리가 그렇게 한다) 곡선
+ * 초기화 비용이 크므로 스레드마다 한 번만 만들어 재사용한다.
  */
 final class WebPushCrypto {
 
@@ -77,12 +77,12 @@ final class WebPushCrypto {
     private static final int RECORD_SIZE = 4096;
 
     /*
-     * 스레드마다 하나씩. 곡선 초기화가 비싸서 매번 만들면 그게 그대로 비용이 된다.
+     * 스레드마다 하나씩. 곡선 초기화 비용이 크므로 매번 만들지 않는다.
      */
     private static final ThreadLocal<KeyPairGenerator> KEY_PAIRS = ThreadLocal.withInitial(() -> {
         try {
             KeyPairGenerator generator = KeyPairGenerator.getInstance("EC", PROVIDER);
-            // **이 초기화 방식이 핵심이다.** 스펙 객체를 직접 넘기면 5배 느려진다.
+            // 이름 곡선(ECGenParameterSpec)으로 초기화한다. 스펙 객체를 직접 넘기면 5배 느려진다.
             generator.initialize(new ECGenParameterSpec(CURVE), new SecureRandom());
             return generator;
         } catch (Exception e) {
@@ -106,7 +106,7 @@ final class WebPushCrypto {
     /**
      * 본문을 암호화한다(RFC 8291).
      *
-     * <p>임시 키쌍과 salt는 <b>메시지마다 새로</b> 만든다 — 규격이 요구한다. 같은 키와 salt를
+     * <p>임시 키쌍과 salt는 메시지마다 새로 만든다. 규격이 요구한다. 같은 키와 salt를
      * 다시 쓰면 AES-GCM의 nonce가 재사용되어 암호가 통째로 깨진다.
      *
      * @return {@code salt(16) ‖ rs(4) ‖ idlen(1) ‖ 임시공개키(65) ‖ 암호문}
@@ -129,7 +129,7 @@ final class WebPushCrypto {
             byte[] contentKey = hkdf(salt, ikm, CEK_INFO, 16);
             byte[] nonce = hkdf(salt, ikm, NONCE_INFO, 12);
 
-            // 평문 뒤에 구분자를 붙인다. 패딩은 넣지 않는다 — 길이를 감출 이유가 없다.
+            // 평문 뒤에 구분자를 붙인다. 패딩은 넣지 않는다. 길이를 감출 이유가 없다.
             byte[] plaintext = Arrays.copyOf(payload, payload.length + 1);
             plaintext[payload.length] = LAST_RECORD;
 
@@ -159,7 +159,7 @@ final class WebPushCrypto {
     /**
      * VAPID 인증 헤더 값(RFC 8292). {@code vapid t=<JWT>, k=<공개키>} 형태다.
      *
-     * <p>JWT는 <b>오리진마다 하나</b>면 되고 만료까지 재사용할 수 있다 — 부르는 쪽이 캐시한다.
+     * <p>JWT는 오리진마다 하나면 되고 만료까지 재사용할 수 있다. 부르는 쪽이 캐시한다.
      *
      * @param audience 엔드포인트의 오리진({@code https://fcm.googleapis.com}). 경로가 붙으면 거부된다.
      */
@@ -181,10 +181,10 @@ final class WebPushCrypto {
     }
 
     /**
-     * JDK의 ECDSA 서명은 <b>DER</b>인데 JOSE는 <b>raw {@code R‖S}</b> 64바이트를 요구한다.
+     * JDK의 ECDSA 서명은 DER이고 JOSE는 raw {@code R‖S} 64바이트를 요구한다.
      *
-     * <p>이걸 안 바꾸면 푸시 서비스가 서명을 거부한다 — 그리고 그 실패는 401/403으로 오므로
-     * 암호문 쪽을 아무리 봐도 원인이 안 보인다.
+     * <p>변환하지 않으면 푸시 서비스가 서명을 거부한다. 이 실패는 401/403으로 오므로
+     * 암호문 쪽을 아무리 봐도 원인이 보이지 않는다.
      */
     private static byte[] toJoseSignature(byte[] der) {
         // DER: 30 <len> 02 <rlen> R 02 <slen> S
@@ -246,14 +246,14 @@ final class WebPushCrypto {
     }
 
     /**
-     * 곡선 파라미터. <b>한 번만 만들어 돌려쓴다</b> — 매번 만들면 그 자체가 비싸고, 키마다 다른
-     * 곡선 객체를 물면 BouncyCastle의 사전계산이 매번 빗나간다.
+     * 곡선 파라미터. 한 번만 만들어 재사용한다. 매번 만들면 비용이 크고, 키마다 다른
+     * 곡선 객체를 쓰면 BouncyCastle의 사전계산이 매번 빗나간다.
      */
     private static ECParameterSpec namedCurve() {
         return NamedCurve.SPEC;
     }
 
-    /** 지연 초기화 홀더 — 곡선 파라미터를 얻으려면 키쌍을 한 번 만들어야 한다. */
+    /** 지연 초기화 홀더, 곡선 파라미터를 얻으려면 키쌍을 한 번 만들어야 한다. */
     private static final class NamedCurve {
         static final ECParameterSpec SPEC;
 

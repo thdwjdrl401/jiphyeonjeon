@@ -553,7 +553,7 @@ vision 모델을 부르지도 않는다. 그 대신 **검증 없이 텍스트를
 - `eventId`는 `(jobId, eventType)`에서 결정적으로 파생하므로 같은 결과의 HTTP 재시도가 같은 값을 쓴다.
 - `ANNOTATION_EMBEDDING`(PROCESSING)은 계약에 존재하지만 §9.5와 같은 이유로 발신하지 않는다 —
   응답 유실 뒤의 늦은 PROCESSING이 READY/FAILED를 되돌리는 것을 막는다.
-- Spring은 이 eventType들을 아직 매핑하지 않아 현재는 inbox에만 남는다.
+- Spring은 `ANNOTATION_EMBEDDED`·`ANNOTATION_EMBED_FAILED`·`ANNOTATION_EMBEDDING`을 READY·FAILED·PROCESSING으로 매핑해 `highlightId`의 색인 상태를 갱신한다(`backend/.../aiintegration/service/AiCallbackService.java`).
 - **`ANNOTATION_EMBED_DELETE`는 callback을 보내지 않는다.** ADR-0074가 정의한 eventType 3종은 모두
   색인용이고 `ANNOTATION_DELETED`에 해당하는 값이 없다. `ANNOTATION_EMBEDDED/READY`를 쓰면 삭제된
   스냅샷을 "색인됨"으로 알리게 되므로 사실과 반대다. 성공은 무응답이고 영구 실패는 DLQ가 운영

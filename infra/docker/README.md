@@ -67,7 +67,7 @@ jar COPY 레이어가 140건 × 213MB. (같은 파일의 프론트 `npm ci`는 9
 
 ```bash
 # 1) 진행 중인 라이브 세션이 없는지 확인
-ssh ec2 'docker logs liveclass-backend-prod --since 10m 2>&1 | grep -i "live.*start" | tail'
+ssh ec2 'docker logs liveclass-backend-1 --since 10m 2>&1 | grep -i "live.*start" | tail'
 
 # 2) 파일 배치 (이 디렉터리의 daemon.json을 그대로)
 scp infra/docker/daemon.json ec2:/tmp/daemon.json
@@ -86,7 +86,7 @@ ssh ec2 'docker buildx du | tail -3'                     # 며칠 관찰하며 �
 (`docker compose ... up -d --build`)로 교체될 때 반영된다. 확인:
 
 ```bash
-ssh ec2 'docker inspect --format="{{.HostConfig.LogConfig}}" liveclass-backend-prod'
+ssh ec2 'docker inspect --format="{{.HostConfig.LogConfig}}" liveclass-backend-1'
 ```
 
 ## 함께 하는 일회성 정리

@@ -51,12 +51,13 @@ STARTING ─────────→ FAILED
 
 ## 4. 페이지와 라우트
 
+현재 상태: 아래 표는 `frontend/src/app/router/AppRouter.tsx` 기준이다. 5절 트리의 `LiveSessionFormPage`·`LiveSessionDetailPage`는 구현되지 않았고, 구현 페이지는 `StudentPrejoinPage`·`InstructorPreflightPage`·`LiveSessionProcessingPage`·`LessonLiveUpcomingPage`다.
+
 | 화면 | 라우트 | 접근 |
 |---|---|---|
-| 세션 생성 | `/instructor/lessons/:lessonId/live-sessions/new` | 해당 lesson 강사 |
-| 세션 수정 | `/instructor/live-sessions/:sessionId/edit` | 해당 세션 강사 |
-| 강사 세션 상세 | `/instructor/live-sessions/:sessionId` | 해당 세션 강사 |
-| 학생 세션 상세 | `/student/live-sessions/:sessionId` | 해당 커리큘럼 수강생 |
+| 세션 생성·수정 | 라우트 없음. 레슨 생성·수정 폼(`LessonFormPage`)에서 일정 입력 | 해당 lesson 강사 |
+| 강사 세션 진입 | `/instructor/live-sessions/:sessionId` (`preflight`로 리다이렉트) | 해당 세션 강사 |
+| 학생 라이브 대기 | `/student/curriculums/:curriculumId/lessons/:lessonId/live-upcoming` (`LessonLiveUpcomingPage`) | 해당 커리큘럼 수강생 |
 | 수강생 prejoin | `/student/live-sessions/:sessionId/prejoin` | 입장 권한 수강생 |
 | 강사 preflight | `/instructor/live-sessions/:sessionId/preflight` | 해당 세션 강사 |
 | 강사 라이브 강의실 | `/instructor/live-sessions/:sessionId/classroom` | 해당 세션 강사 |

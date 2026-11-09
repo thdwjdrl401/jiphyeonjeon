@@ -2,6 +2,7 @@
 
 > 기준일: 2026-07-22  
 > 부분 재감사: 2026-08-02 — 라이브 종료·녹화·replay 공개 축만 ADR-0007 기준으로 갱신
+> 백엔드 상태값 재대조: 2026-11-09. 레슨·자료 연결·라이브 강의·outbox/inbox·학습 진도·viewerContext 절에 "현재 상태" 줄을 달았다. 그 아래 원문은 감사 시점 기록이다.
 > 상태 전이 목표: [STATE_TRANSITIONS.md](STATE_TRANSITIONS.md)  
 > 런타임 계약: [CONTRACT.md](CONTRACT.md)
 
@@ -49,7 +50,8 @@
 - 수강: `PENDING → ACTIVE/REJECTED/CANCELLED`, `ACTIVE → REVOKED/CANCELLED`
 - 계정: 회원가입 시 `ACTIVE`, 로그인은 `ACTIVE`만 허용
 - 공용 asset: `PENDING → UPLOADED`, 만료된 `PENDING → FAILED`
-- 라이브 강의: `DRAFT/SCHEDULED/OPEN → LIVE → ENDED`, 시작 전 `→ CANCELLED`
+- 레슨: 생성 즉시 `PUBLISHED`(값 하나, §4.5)
+- 라이브 강의: `DRAFT/SCHEDULED/OPEN → STARTING → LIVE → ENDING → ENDED`, 시작 실패 시 `STARTING → OPEN`, 시작 전 `→ CANCELLED`
 - 녹화 자산: `STARTING → RECORDING → FINALIZING → VERIFYING → READY`, 각 단계 실패 시 `FAILED`
 
 레슨 AI 준비, 자료 작업, 학습 진도는 전체 상태값에 비해 실제 서비스 전이가 부족하다. 녹화 검증,
@@ -231,6 +233,8 @@ ACTIVE ─────────────────────→ CANCEL
 
 ### 4.5 레슨 lifecycle
 
+현재 상태: `LessonStatus`는 `PUBLISHED` 하나이고 레슨은 생성 즉시 `PUBLISHED`다. DB `CHECK`도 `PUBLISHED`만 허용하며, 공개 여부는 커리큘럼 lifecycle만으로 정한다(`LessonStatus.java`, `V10__lesson_single_published_state.sql`, [ADR-0005](decisions/seominkyeong/0005-lesson-has-no-draft-state.md)).
+
 백엔드와 문서의 상태 필드명은 `status`다. 가능한 값은 다음과 같다.
 
 ```text
@@ -316,7 +320,7 @@ PENDING 등 미완료 상태 → UPLOADED
 ACTIVE | DELETING | DELETED
 ```
 
-현재는 DB, enum, entity만 있고 자료 연결을 생성하거나 삭제하는 repository·service·controller가 없다. 따라서 애플리케이션 코드에서 도달할 수 없는 상태다.
+현재 상태: `LessonMaterialService`·`CurriculumMaterialService`가 연결 시 `ACTIVE`, 삭제 시 `ACTIVE → DELETED`로 바꾼다. `DELETING`을 설정하는 코드는 없다.
 
 문서가 제안하는 업로드 세부 상태:
 
@@ -361,24 +365,27 @@ DRAFT → SCHEDULED → OPEN → STARTING → LIVE → ENDING → ENDED
 ```text
 일정 없음으로 생성 → DRAFT
 일정 있음으로 생성 → SCHEDULED
-DRAFT/SCHEDULED/OPEN → LIVE → ENDED
+DRAFT/SCHEDULED/OPEN → STARTING → LIVE → ENDING → ENDED
+STARTING ──시작 실패──→ OPEN
 DRAFT/SCHEDULED/OPEN → CANCELLED
 ```
 
 현재 코드 특성:
 
-- `OPEN`, `STARTING`, `ENDING`, `FAILED`를 만드는 코드가 없다.
+- `FAILED`를 설정하는 코드는 없다. `OPEN`은 시작 실패로 `STARTING`에서 되돌릴 때만 설정한다.
 - 일정 수정은 상태를 변경하지 않으므로 `DRAFT`에 일정을 넣어도 계속 `DRAFT`다.
-- 시작 시 일정 시각, 레슨 게시 상태, 자료, AI 준비, 자료 작업, preflight를 검사하지 않는다.
-- 라이브 시작과 종료는 목표 중간 상태를 건너뛰고 동기적으로 `LIVE`, `ENDED`가 된다.
+- 시작 시 녹화 활성화 여부와 preflight 방 준비(`roomSid`)만 검사하고 일정 시각, 자료, AI 준비, 자료 작업은 검사하지 않는다.
+- 시작은 `STARTING`에서 `LiveStartAttempt`로 진행한 뒤 `LIVE`를 확정하고, 종료는 `ENDING`에서 Room·Egress 제어를 마친 뒤 `ENDED`를 확정한다.
 - 강사 또는 `ACTIVE` 수강생인지 여부는 접근 검사에서 확인한다.
-- 토큰 발급은 `ENDED`, `CANCELLED`, `FAILED`만 차단한다.
-- 따라서 `DRAFT`, 너무 이른 `SCHEDULED`, `OPEN`, `STARTING`, `ENDING` 상태에서도 API를 직접 호출하면 토큰이 발급될 수 있다.
+- LiveKit 토큰은 소유 강사에게만 발급하고 `ENDING`, `ENDED`, `CANCELLED`, `FAILED`를 차단한다. 수강생 재생은 HLS다.
+- 따라서 소유 강사는 `DRAFT`, `SCHEDULED`, `OPEN`, `STARTING` 상태에서 토큰을 받을 수 있다.
 
 근거:
 
 - `backend/src/main/java/com/liveclass/live/domain/LiveSessionStatus.java`
 - `backend/src/main/java/com/liveclass/live/service/LiveSessionService.java`
+- `backend/src/main/java/com/liveclass/live/service/LiveStartTransitions.java`
+- `backend/src/main/java/com/liveclass/live/service/LiveEndTransitions.java`
 - `backend/src/main/java/com/liveclass/live/service/LiveAccessGuard.java`
 - `backend/src/main/java/com/liveclass/live/web/LiveSessionController.java`
 
@@ -484,7 +491,7 @@ Inbox:
 RECEIVED | PROCESSED | FAILED
 ```
 
-현재는 migration, enum, entity만 있다. 이벤트 저장, relay, 재시도, 처리 완료·실패 전이를 수행하는 서비스가 없다.
+현재 상태: `OutboxPublisherService`가 `PENDING`으로 저장하고 `OutboxRelay`가 발행 성공 시 `PUBLISHED`, 재시도 한도 초과 시 `FAILED`로 바꾼다. Inbox는 `AiCallbackService`가 `RECEIVED → PROCESSED`로 처리하며 `FAILED`를 설정하는 코드는 없다.
 
 `docs/ai-schema-draft.sql`의 AI 내부 상태는 적용되지 않은 초안이다.
 
@@ -511,7 +518,7 @@ NON_OWNER_INSTRUCTOR
 현재 계산 주체:
 
 - mock 모드: 프론트 통합 mock이 계산
-- HTTP 모드: 백엔드 상세 응답에 `viewerContext`가 없어 프론트 fallback이 로그인 여부와 역할만으로 계산
+- HTTP 모드: 백엔드 상세 응답의 `viewerContext`가 계산(`CatalogViewerContext.java`, `ViewerContextResponse.java`)
 
 HTTP fallback은 실제 소유권과 수강 상태를 알 수 없으므로 다음 오분류가 가능하다.
 
@@ -535,7 +542,7 @@ EDIT_LESSON
 OPEN_LIVE_SESSION
 ```
 
-현재 이 값은 프론트 mock 전용이다. 백엔드 커리큘럼 목록·상세 응답에는 `allowedActions`가 없다.
+현재 상태: 백엔드 커리큘럼 상세 응답은 `viewerContext.allowedActions`를 내려준다(`ViewerContextResponse.java`). 강사 커리큘럼 목록 응답에는 `allowedActions`가 없다(`InstructorCurriculumController.java`).
 
 ### 5.3 레슨 접근 목적지
 
@@ -601,7 +608,7 @@ preflight의 `라이브 시작` 버튼은 서버 `/start` API를 호출하지 �
 UPCOMING | IN_PROGRESS | COMPLETED
 ```
 
-현재 백엔드는 `learning_progress` 테이블과 entity만 있고 repository, service, API가 없다.
+현재 상태: `LearningService`와 `PUT /api/lessons/{lessonId}/progress` API가 구현돼 있고, 진도율 90% 이상에서 `completedAt`을 한 번 기록한다(`LearningService.java`, `LearningController.java`).
 
 저장 필드:
 
@@ -720,6 +727,8 @@ VITE_USE_MOCK_API=true + API 미구현 → mock
 
 #### 2. 커리큘럼 상세 FE/BE 응답 구조 불일치
 
+현재 상태: 백엔드 상세 응답에 `materials`, `enrollmentPolicy`, `viewerContext`가, 레슨 항목에 `access`, `liveSession`, `replayStatus`가 추가됐다(`CurriculumDetailResponse.java`, `OutlineLesson.java`).
+
 프론트가 기대하는 필드:
 
 - `enrollmentPolicy`
@@ -750,7 +759,7 @@ VITE_USE_MOCK_API=true + API 미구현 → mock
 
 #### 3. 라이브 입장 시간 정책을 서버가 강제하지 않음
 
-프론트는 시작 10분 전을 계산하지만 백엔드 토큰 API는 종료·취소·실패만 차단한다.
+프론트는 시작 10분 전을 계산하지만 백엔드 강사 토큰 API는 종료 중·종료·취소·실패만 차단한다. 수강생 LiveKit 토큰 발급은 없어졌고 수강생은 HLS로 재생한다.
 
 영향:
 
@@ -769,9 +778,11 @@ VITE_USE_MOCK_API=true + API 미구현 → mock
 - preflight 통과
 - 강사 소유권
 
-현재 시작 서비스는 강사 소유권과 현재 live 상태만 검사한다. 강사 preflight 화면도 `/start` API를 호출하지 않는다.
+현재 시작 서비스는 강사 소유권, 현재 live 상태, 녹화 활성화, preflight 방 준비(`roomSid`)만 검사한다. 강사 preflight 화면도 `/start` API를 호출하지 않는다.
 
 #### 5. 레슨 상태값 계약과 실제 전이 불일치
+
+현재 상태: 레슨 상태를 `PUBLISHED` 하나로 줄여 해소했다(§4.5, [ADR-0005](decisions/seominkyeong/0005-lesson-has-no-draft-state.md)).
 
 `CONTRACT.md`와 프론트 타입은 네 상태값을 계약처럼 사용하지만 백엔드 서비스는 `DRAFT ↔ PUBLISHED`만 구현한다. 이 문제는 1번의 필드명 불일치와 별개인 전이 의미 문제다.
 

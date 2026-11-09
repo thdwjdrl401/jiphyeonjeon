@@ -7,6 +7,7 @@ test/
 ├── setup.ts       # 모든 Vitest 파일에 공통으로 적용되는 환경 초기화
 ├── features/      # 한 feature의 서비스·순수 함수·컴포넌트 테스트
 ├── shared/        # 공용 API·유틸리티 테스트
+├── pages/         # 페이지 단위 렌더링 테스트(`src/pages/` 대응)
 └── integration/   # 라우터와 여러 feature를 함께 렌더링하는 사용자 흐름 테스트
 ```
 

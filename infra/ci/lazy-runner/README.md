@@ -1,6 +1,8 @@
 # 테스트 전용 GitLab 러너
 
-> 관련: [`.gitlab-ci.yml`](../../../.gitlab-ci.yml) · [원격 Egress](../../livekit/remote-egress/README.md)(같은 이유로 부하를 뗀 사례)
+> 관련: `.gitlab-ci.yml`(저장소에서 삭제됨) · [원격 Egress](../../livekit/remote-egress/README.md)(같은 이유로 부하를 뗀 사례)
+>
+> 현재 상태: `.gitlab-ci.yml`은 저장소에 없다. 테스트는 GitHub 호스티드 러너(`.github/workflows/ci.yml`의 `runs-on: ubuntu-latest`)에서 돌고, 배포는 [`infra/github-runner/`](../../github-runner/docker-compose.yml)의 self-hosted 러너가 맡는다. 아래는 GitLab 러너를 쓰던 시점의 기록이다.
 
 ## 왜 뗐나
 

@@ -9,6 +9,7 @@
 ### 1.1 확정 원칙
 
 - VOD는 라이브 Egress 녹화 HLS만 사용하며 영상 업로드는 없음
+  - 현재 상태: 강사가 영상을 올리는 녹화강의(`deliveryType=RECORDED`)가 별도로 구현되어 있다(`InstructorRecordedLessonController`, `GET /api/lessons/{lessonId}/recorded-playback`). 이 문서는 라이브 다시보기 기준이다.
 - `videoAssetStatus=READY`와 `replayStatus=PUBLISHED`를 분리
 - 강사는 자산 `READY`부터 미리보기·검수 가능
 - 수강생은 replay `PUBLISHED` 이후 재생 가능
@@ -27,42 +28,46 @@
 
 | ID | Method | Path | 설명 | 상태 |
 |---|---|---|---|---|
-| `VOD-01` | `GET` | `/api/lessons/{lessonId}/learning-context` | VOD 화면 초기 context | URL **확정** |
+| `VOD-01` | `GET` | `/api/lessons/{lessonId}/learning-context` | VOD 화면 초기 context | **구현됨** (응답 형태는 §3 현재 상태) |
 | `VOD-02` | `GET` | `/api/lessons/{lessonId}/playback` | 권한 적용 HLS metadata 조회 | **구현됨** |
-| `PROGRESS-01` | `PUT` | `/api/lessons/{lessonId}/progress` | 마지막 위치·유효 시청 구간 저장 | URL **확정** |
+| `PROGRESS-01` | `PUT` | `/api/lessons/{lessonId}/progress` | 마지막 위치·유효 시청 구간 저장 | **구현됨** (요청 형태는 §5.1 현재 상태) |
+| `WATCH-01` | `PUT` | `/api/lessons/{lessonId}/watch-buckets` | 구간별 누적 시청 횟수 보고(`bucketSizeMs`·`counts`) | **구현됨** (`204`) |
+| `WATCH-02` | `GET` | `/api/lessons/{lessonId}/watch-buckets/me` | 내 구간별 시청 횟수 | **구현됨** |
+| `WATCH-03` | `GET` | `/api/lessons/{lessonId}/watch-heatmap` | 많이 다시 본 구간 그래프(`bucketSizeMs`·`points`·`viewers`) | **구현됨** |
 
 ### 2.2 게시 콘텐츠·채팅·AI
 
 | ID | Method | Path | 설명 | 상태 |
 |---|---|---|---|---|
-| `TRANSCRIPT-01` | `GET` | `/api/lessons/{lessonId}/transcript` | 게시 자막 조회·검색 | URL **확정** |
-| `GLOSSARY-01` | `GET` | `/api/lessons/{lessonId}/glossary` | 게시 전문용어 조회 | URL **확정** |
-| `CHAPTER-01` | `GET` | `/api/lessons/{lessonId}/chapters` | 게시 챕터·구조 요약 조회 | **제안** |
+| `TRANSCRIPT-01` | `GET` | `/api/lessons/{lessonId}/transcript` | 게시 자막 조회·검색 | **미구현**. 자막은 `GET /api/live-sessions/{sessionId}/captions`(라이브 다시보기), `GET /api/lessons/{lessonId}/recorded-playback/captions`(녹화강의)로 조회 |
+| `GLOSSARY-01` | `GET` | `/api/lessons/{lessonId}/glossary` | 게시 전문용어 조회 | **구현됨** (응답 형태는 §6.2 현재 상태) |
+| `GLOSSARY-02` | `PUT`·`DELETE` | `/api/instructor/lessons/{lessonId}/glossary` · `/glossary/{term}` | 강사 용어 수정·추가·삭제 | **구현됨** |
+| `CHAPTER-01` | `GET` | `/api/lessons/{lessonId}/chapters` | 게시 챕터·구조 요약 조회 | **미구현** |
 | `CHAT-REPLAY-01` | `GET` | `/api/live-sessions/{sessionId}/messages` | 저장 채팅 리플레이 | **구현됨(세션 키잉)**. 리플레이 페이지는 `lessonId` 기준이므로 lesson→session 해석 필요(설계 후속) |
-| `AI-HISTORY-01` | `GET` | `/api/lessons/{lessonId}/ai/questions` | 본인 AI Q&A 기록 | **제안** |
+| `AI-HISTORY-01` | `GET` | `/api/lessons/{lessonId}/ai/questions` | 본인 AI Q&A 기록 | **미구현**. 기록은 `GET /api/live-sessions/{sessionId}/ai/answers`로 조회(§8.2) |
 | `AI-QUESTION-01` | `POST/SSE` | `/api/live-sessions/{sessionId}/ai/answers/stream` | 현재 시점 개인 AI 질문 | **라이브만 구현됨**([ADR-0047](../../decisions/songjeongki/0047-live-ai-answer-sse-proxy.md)) — VOD/다시보기는 미구현 |
-| `AI-QUESTION-REPLAY-01` | `POST/SSE` | `/api/lessons/{lessonId}/ai/answers/stream` | 재생 위치 주변 자막 기반 개인 AI 질문 | **요구사항 제안**([ADR-0037](../../decisions/canola/0042-replay-ai-caption-context-contract.md)) |
+| `AI-QUESTION-REPLAY-01` | `POST/SSE` | `/api/lessons/{lessonId}/ai/answers/stream` | 재생 위치 주변 자막 기반 개인 AI 질문 | **구현됨**([ADR-0042](../../decisions/canola/0042-replay-ai-caption-context-contract.md), [ADR-0075](../../decisions/songjeongki/0075-replay-ai-answer-sse-proxy.md), `LessonAiAnswerController`) |
 
 ### 2.3 퀴즈
 
 | ID | Method | Path | 설명 | 상태 |
 |---|---|---|---|---|
-| `QUIZ-01` | `GET` | `/api/lessons/{lessonId}/quizzes` | 현재 게시 퀴즈와 내 최신 결과 | URL **확정** |
-| `QUIZ-02` | `POST` | `/api/quizzes/{quizId}/attempts` | 응시 제출·결정론 채점 | URL **확정** |
-| `QUIZ-03` | `GET` | `/api/quizzes/{quizId}/attempts/me` | 내 응시 이력 | **제안** |
+| `QUIZ-01` | `GET` | `/api/lessons/{lessonId}/quizzes` | 현재 게시 퀴즈와 내 최신 결과 | **미구현** |
+| `QUIZ-02` | `POST` | `/api/quizzes/{quizId}/attempts` | 응시 제출·결정론 채점 | **미구현** |
+| `QUIZ-03` | `GET` | `/api/quizzes/{quizId}/attempts/me` | 내 응시 이력 | **미구현** |
 
 ### 2.4 강사 replay·콘텐츠 검수·통계
 
 | ID | Method | Path | 설명 | 상태 |
 |---|---|---|---|---|
-| `REPLAY-01` | `POST` | `/api/instructor/lessons/{lessonId}/replay/publish` | VOD 영상 수강생 공개 | **제안** |
-| `REPLAY-02` | `POST` | `/api/instructor/lessons/{lessonId}/replay/withdraw` | 신규 VOD 재생 공개 중단 | **제안** |
-| `REVIEW-01` | `GET` | `/api/instructor/lessons/{lessonId}/reviews` | 영역별 후보·초안·게시본·상태 | **제안** |
-| `REVIEW-02` | `PUT` | `/api/instructor/lessons/{lessonId}/reviews/{contentType}/draft` | 검수 초안 저장 | **제안** |
-| `REVIEW-03` | `POST` | `/api/instructor/lessons/{lessonId}/reviews/{contentType}/publish` | 새 게시본 version 생성·활성화 | **제안** |
-| `QUESTION-STATS-01` | `GET` | `/api/instructor/lessons/{lessonId}/question-pins` | 라이브·VOD 익명 질문 집계 | **제안** |
-| `QUESTION-STATS-02` | `GET` | `/api/instructor/lessons/{lessonId}/question-pins/{pinId}/questions` | 익명 질문 원문 | **제안** |
-| `LEARNING-STATS-01` | `GET` | `/api/instructor/lessons/{lessonId}/learning-summary` | 재생·완료·퀴즈 집계 | **제안** |
+| `REPLAY-01` | `POST` | `/api/instructor/lessons/{lessonId}/replay-review/publish` | VOD 영상 수강생 공개 | **구현됨** (`204`, 멱등) |
+| `REPLAY-02` | `POST` | `/api/instructor/lessons/{lessonId}/replay-review/withdraw` | 신규 VOD 재생 공개 중단 | **구현됨** (`204`, 라이브 중 `409`) |
+| `REVIEW-01` | `GET` | `/api/instructor/lessons/{lessonId}/reviews` | 영역별 후보·초안·게시본·상태 | **미구현** |
+| `REVIEW-02` | `PUT` | `/api/instructor/lessons/{lessonId}/reviews/{contentType}/draft` | 검수 초안 저장 | **미구현** |
+| `REVIEW-03` | `POST` | `/api/instructor/lessons/{lessonId}/reviews/{contentType}/publish` | 새 게시본 version 생성·활성화 | **미구현** |
+| `QUESTION-STATS-01` | `GET` | `/api/instructor/lessons/{lessonId}/question-pins` | 라이브·VOD 익명 질문 집계 | **미구현** |
+| `QUESTION-STATS-02` | `GET` | `/api/instructor/lessons/{lessonId}/question-pins/{pinId}/questions` | 익명 질문 원문 | **미구현** |
+| `LEARNING-STATS-01` | `GET` | `/api/instructor/lessons/{lessonId}/learning-summary` | 재생·완료·퀴즈 집계 | **미구현** |
 
 ## 3. `VOD-01` 초기 학습 context
 
@@ -71,6 +76,8 @@ GET /api/lessons/{lessonId}/learning-context
 ```
 
 재생 URL과 대용량 자막·채팅을 제외한 페이지 조합 정보를 반환한다.
+
+현재 상태: 실제 응답은 `{lessonId, progress}`이고 `progress`는 `progressPercent`·`lastPositionMs`·`completed`·`completedAt`이며 진도가 없으면 `null`이다. 아래 예시의 나머지 필드는 구현되지 않았다(`LearningContextResponse`).
 
 ```json
 {
@@ -176,6 +183,8 @@ GET /api/lessons/{lessonId}/playback
 PUT /api/lessons/{lessonId}/progress
 ```
 
+현재 상태: 요청은 `progressPercent`(0~100, 클라이언트 계산, 필수)·`lastPositionMs`(필수)·`clientUpdatedAt`(선택)이고 응답은 `204`다. 90% 이상이면 완료로 고정된다. `watchedRanges`·`playbackSessionId`는 받지 않는다(`ProgressUpdateRequest`, ADR-0033).
+
 ```json
 {
   "lastPositionMs": 185000,
@@ -237,6 +246,8 @@ GET /api/lessons/{lessonId}/transcript?q=security&page=0&size=50
 GET /api/lessons/{lessonId}/glossary
 ```
 
+현재 상태: 응답은 배열이고 항목은 `termId`(용어 이름과 같음)·`term`·`definition`·`source`(`MATERIAL`·`INSTRUCTOR`)다. `version`·`occurrences`·`evidence`는 없다(`GlossaryTermResponse`).
+
 ```json
 {
   "version": 1,
@@ -292,6 +303,8 @@ GET /api/lessons/{lessonId}/chapters
 ```http
 GET /api/live-sessions/{sessionId}/messages?afterSessionMs=0&limit=200
 ```
+
+현재 상태: 응답은 페이지 봉투 없는 배열이다. `afterSessionMs` 기본 `-1`, `limit` 기본 `100`(`ChatController.list`).
 
 ```json
 {
@@ -446,6 +459,8 @@ POST /api/quizzes/{quizId}/attempts
 POST /api/instructor/lessons/{lessonId}/replay/publish
 ```
 
+현재 상태: 경로는 `POST /api/instructor/lessons/{lessonId}/replay-review/publish`이고 응답은 본문 없는 `204`다(`ReplayPlaybackController.publish`).
+
 서버는 video asset `READY`, lesson 소유권, 게시 차단 상태를 검증한다. AI 콘텐츠가 미게시여도 영상 게시를 허용한다.
 
 ```json
@@ -462,6 +477,8 @@ POST /api/instructor/lessons/{lessonId}/replay/publish
 ```http
 POST /api/instructor/lessons/{lessonId}/replay/withdraw
 ```
+
+현재 상태: 경로는 `POST /api/instructor/lessons/{lessonId}/replay-review/withdraw`이고 본문(`reason`)은 선택, 응답은 `204`다(`ReplayPlaybackController.withdraw`).
 
 ```json
 {

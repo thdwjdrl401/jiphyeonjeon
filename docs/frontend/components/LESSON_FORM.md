@@ -9,7 +9,7 @@
 - 생성: 기본 정보를 먼저 저장해 `DRAFT`를 만들고 초기 PPTX를 복수 선택해 준비
 - 수정: 기본 정보는 독립적으로 저장하고, 준비된 자료는 한 파일씩 추가하거나 삭제
 
-두 페이지는 같은 `LessonForm`을 사용하고 라우트와 모드만 구분한다. 레슨은 모두 라이브로 진행되므로 영상 업로드와 레슨 유형 선택은 제공하지 않는다.
+두 페이지는 같은 `LessonForm`을 사용하고 라우트와 모드만 구분한다. 레슨은 모두 라이브로 진행되므로 영상 업로드와 레슨 유형 선택은 제공하지 않는다. 현재 상태: 영상 업로드 레슨은 별도 녹화강의 라우트(`…/sections/:sectionId/recorded-lessons/new`, `RecordedLessonUploadPage`)에서 만든다.
 
 라이브 일정은 lesson 필드가 아니라 별도 `liveSession`에서 관리하며 [LIVE_SESSION.md](LIVE_SESSION.md)를 따른다.
 
@@ -36,7 +36,7 @@
 ## 3. 컴포넌트 트리
 
 ```text
-LessonCreatePage | LessonEditPage
+LessonFormPage
 └─ WorkspaceLayout
    ├─ LessonFormHeader
    │  ├─ LessonParentContext
@@ -78,8 +78,8 @@ LessonCreatePage | LessonEditPage
 
 | 컴포넌트 | 소유 영역 | 책임 |
 |---|---|---|
-| `LessonCreatePage` | `pages` | 생성 권한·상위 정보 확인, `DRAFT` 생성과 생성 단계 조합 |
-| `LessonEditPage` | `pages` | 수정 권한·레슨 상태 확인, 기존 데이터와 허용 행동 조합 |
+| `LessonFormPage`(생성 모드) | `pages` | 생성 권한·상위 정보 확인, `DRAFT` 생성과 생성 단계 조합 |
+| `LessonFormPage`(수정 모드) | `pages` | 수정 권한·레슨 상태 확인, 기존 데이터와 허용 행동 조합 |
 | `LessonForm` | `features/lesson` | 생성·수정 모드의 입력·검증·저장 상태 조합 |
 | `LessonFormHeader` | page 전용 | 상위 계층, 레슨 준비 상태, 복귀 동선 표시 |
 | `LessonParentContext` | `features/lesson` | 커리큘럼·섹션 정보를 읽기 전용으로 표시 |

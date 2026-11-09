@@ -2,6 +2,8 @@
 
 > 원본: [../components/SYSTEM_PAGES.md](../components/SYSTEM_PAGES.md) · 로드맵: [00_ROADMAP.md](00_ROADMAP.md)
 
+현재 상태: `SystemLayout` 컴포넌트는 없다. `ForbiddenPage`·`NotFoundPage`가 `system-page` 마크업을 직접 쓴다(`frontend/src/pages/`).
+
 | 화면 | 라우트 | 레이아웃 | 접근 |
 |---|---|---|---|
 | 접근 불가 | `/forbidden` | `SystemLayout` | 전체 |

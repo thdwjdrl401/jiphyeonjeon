@@ -61,7 +61,7 @@ data: {"requestId":"request-1","sources":[{"type":"PPTX","materialId":"22222222-
 
 v1 요청에 optional `userId`를 추가로 실으면 GMS Responses API로 이전 turn을 이어간다(ADR-0010).
 대화의 기본 범위는 그 사용자의 라이브 세션이며 optional `conversationId`는 이 범위를 더 좁힐 때만
-쓴다(ADR-0046). Spring이 아직 이 두 필드를 보내지 않으므로 지금은 항상 기존 경로로만 동작한다.
+쓴다(ADR-0046). Spring은 `userId`를 보내고(`RagAnswerHttpClient`) `conversationId`는 아직 보내지 않으므로, 대화 범위는 그 사용자의 그 라이브 세션이다.
 
 다시보기(Replay) 질문은 별도 경로 `POST /internal/v2/rag/answers:stream`을 쓴다. 시간 필드가
 `contextTimeMs`(STT attempt-local) 대신 `context.questionSessionMs`(세션 상대 ms)이고, Spring이 이미
@@ -151,9 +151,9 @@ network의 Spring이 접근할 수 있도록 container 내부 bind만 `0.0.0.0:8
 
 | 실행 형태 | `AI_API_BGE_BASE_URL` | token 주입 |
 |---|---|---|
-| 로컬 GPU runtime | `http://127.0.0.1:8020` | `AI_API_BGE_TOKEN` |
+| 로컬 runtime | `http://127.0.0.1:8020` | `AI_API_BGE_TOKEN` |
 | EC2 host process | `http://127.0.0.1:18020` | `AI_API_BGE_TOKEN` |
-| EC2 운영 container | `http://host.docker.internal:18080/internal/bge` | root `BGE_RUNTIME_INTERNAL_TOKEN` → `AI_API_BGE_TOKEN` |
+| EC2 운영 container | `http://liveclass-bge-runtime-cpu:8020`(compose 기본값, `BGE_RUNTIME_URL`로 덮어씀) | root `BGE_RUNTIME_INTERNAL_TOKEN` → `AI_API_BGE_TOKEN` |
 운영 root env의 `GMS_API_KEY`는 compose에서 container의 `AI_API_GMS_API_KEY`로 매핑한다.
 backend와 GPU 서비스에는 이 값을 주입하지 않는다.
 

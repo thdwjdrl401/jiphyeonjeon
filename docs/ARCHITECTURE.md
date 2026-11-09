@@ -115,12 +115,11 @@ flowchart LR
   WK -.-> GW
   WK -.-> PG
 
-  class FE,SP,PG,RD,MQ,LK,EG,OBJ built
+  class FE,SP,PG,RD,MQ,LK,EG,OBJ,AG,API,WK,GW built
   class MW partial
-  class AG,API,WK,GW planned
 ```
 
-**실선 = 구현됨, 점선 = 설계(CP2~CP4).**
+**점선은 비동기·AI 경로이고, 그림의 경로는 모두 구현됐다(§10).**
 녹화강의 경로는 코드가 배선됐고 실제 MinIO·RabbitMQ·FFmpeg 통합 검증이 남아 부분 구현으로 표시한다.
 미디어·자료 바이트가 Spring을 통과하지 않는다는 원칙 4가 화살표에 그대로 드러난다 — `FE→OBJ`, `FE→LK`, `EG→OBJ`, `MW→OBJ`는 모두 Spring을 우회한다.
 
@@ -191,7 +190,7 @@ flowchart TB
 - 모듈 간 접근은 **`<module>.api` 패키지(`@NamedInterface("api")`)로만.** 남의 `domain`·`repository`를 직접 부를 수 없다.
 - 포트는 읽기/쓰기로 나눈다 — `XxxDirectory`(조회) / `XxxManagement`(변경). 경계를 넘는 값은 전부 record DTO.
 - **순환 금지.** `ModularityTests`가 CI에서 검증하므로 위반은 리뷰가 아니라 **빌드 실패**로 잡힌다.
-- 포트는 **필요해질 때** 만든다. 지금은 `common`을 뺀 **10개 모듈 전부** `.api`를 갖는다 —
+- 포트는 **필요해질 때** 만든다. 지금은 `common`·`admin`을 뺀 **10개 모듈 전부** `.api`를 갖는다 —
   `curriculum`이 마지막이었고, 알림이 "이 커리큘럼이 아직 있는가"를 물어야 해서 생겼다
   ([ADR-0073](decisions/songjeongki/0073-notification-fanout-architecture.md)).
 
@@ -297,7 +296,7 @@ flowchart LR
 
 다시보기는 라이브 때 만든 산출물을 **그대로 재생**한다. 지평선 뒤라 이미 교정이 끝난 상태이고, 세션 상대 ms 좌표로 HLS와 자막을 자동 정렬한다.
 
-### 6-5. 업로드 녹화강의 🟡 (UI·API·worker ✅ / 운영 E2E·학습 플레이어 연결 ⬜)
+### 6-5. 업로드 녹화강의 🟡 (UI·API·worker·학습 플레이어 ✅ / 운영 E2E ⬜)
 
 ```mermaid
 flowchart LR
@@ -339,7 +338,7 @@ Spring은 접수 트랜잭션과 분리된 dispatcher로 durable queue에 발행
 
 ### `ai` — Python 단독 쓰기 ✅ (Alembic: `ai/ai-worker/migrations`, 운영에 표 6개)
 
-`document_chunk` · `chunk_embedding`(RAG 인덱스) · `job_run` · `model_run`(실행 메타) — **이 4개뿐**이다.
+`document_chunk` · `chunk_embedding`(RAG 인덱스) · `material_version` · `material_key_term` · `annotation_highlight` · `job_run` · `model_run`(실행 메타) — **이 7개뿐**이다(`ai/ai-worker/migrations/versions/0001~0003`).
 
 > ⚠️ 이전 판 문서는 `ai`에 자막 원본·후보·질의응답까지 올려놨었는데, [ADR-0017](decisions/songjeongki/0017-schema-ownership-core-ai.md)이 이를 정리했다.
 > **원본 자막의 write-owner는 Spring이다** — realtime-agent는 Redis 스트림에 흘리기만 하고, 영속은 Spring이 한다.
@@ -350,12 +349,14 @@ Spring은 접수 트랜잭션과 분리된 dispatcher로 durable queue에 발행
 - **FK는 스키마 안에서만.** 스키마를 넘는 참조는 물리 FK 없이 논리 `_ref` 컬럼 + 앱 검증.
 - **PK는 UUID/BIGINT 하이브리드**([ADR-0018](decisions/songjeongki/0018-pk-strategy-uuid-bigint-hybrid.md)) — 외부 노출은 UUID, 대량 append-only는 BIGINT.
 - **시간축은 세션 상대 ms** — 자막·HLS·다시보기 정렬의 공통 좌표.
-- **마이그레이션 주체**: `core` = Flyway(Spring, 현재 V1~V20), `ai` = Alembic(Python). 상대 스키마 수정 금지.
+- **마이그레이션 주체**: `core` = Flyway(Spring, 현재 V1~V49), `ai` = Alembic(Python). 상대 스키마 수정 금지.
 - **보류**: org/멀티테넌트 · roles 테이블 · audit_logs · learning_events · question_clusters.
 
 ---
 
 ## 8. 배포 토폴로지 ✅
+
+현재 상태: 배포 호스트는 `lazy`이고, 호스트 nginx가 80·443과 TLS를 맡으며 앱 스택은 `docker-compose.prod.yml` + `docker-compose.lazy.yml`로 뜬다(certbot 컨테이너 비활성). 아래 그림과 설명은 EC2 단독 구성 기준이다([ADR-0126](decisions/songjeongki/0126-single-host-deployment-behind-host-nginx.md), `.github/workflows/deploy.yml`).
 
 단일 EC2(Ubuntu 24.04, 4vCPU/15GB)에 **두 스택이 독립적으로** 돈다.
 
@@ -404,7 +405,7 @@ flowchart TB
 - **DB·Redis는 호스트 포트를 열지 않는다.** 도커 내부 네트워크 전용 + Security Group 차단, 2중 방어.
 - **도메인이 하나뿐이고 DNS 콘솔 권한이 없어** 미디어 시그널링을 서브도메인이 아니라 **같은 도메인의 별도 TLS 포트(`:7443`)** 로 분리했다([ADR-0022](decisions/songjeongki/0022-local-vs-ec2-infra-profile.md)). 인증서는 앱 스택 certbot이 단독 발급·갱신하고 미디어 nginx는 볼륨으로 읽기만 한다.
 - **미디어 스택은 `network_mode: host`** — SFU가 UDP 포트 범위를 직접 잡아야 해서 도커 NAT를 우회한다.
-- 배포는 GitLab CI/CD self-hosted runner가 EC2에서 직접 수행한다.
+- 배포는 GitHub Actions(`.github/workflows/deploy.yml`)의 self-hosted 러너가 배포 호스트에서 직접 수행한다.
 
 ---
 
@@ -436,9 +437,9 @@ backend에 `spring-amqp` 의존성·설정이 들어가고, `outbox_events`를 �
 STOMP 브로커가 인메모리 SimpleBroker라 **브로드캐스트가 인스턴스 로컬**이다. backend를 2대로 늘리는 순간 채팅이 인스턴스별로 갈린다.
 → 세션이 Redis에 있어 나머지는 이미 stateless이므로, **수평 확장의 유일한 선행조건이 브로커 교체**다. CP3에서 RabbitMQ를 들일 때 STOMP relay로 함께 전환하는 게 자연스럽다.
 
-### 9-7. 🟡 Python → Spring 역방향 경로 — 자료 임베딩은 콜백 inbox로 구현됨
+### 9-7. ✅ Python → Spring 역방향 경로 — 자료 임베딩은 콜백 inbox, 자막은 Redis Streams 소비로 구현됨
 `external_event_inbox`(멱등 수신)를 쓰는 **AI 콜백 수신기가 배선됐다** — 워커가 `POST /api/internal/ai/callbacks`(HMAC 서명, permitAll이되 서명이 실질 인증)로 보내면 `(source=ai-worker, eventId)` 복합키로 멱등 처리해 자료 embeddingStatus를 확정한다([ADR-0036](decisions/songjeongki/0036-material-embedding-pipeline.md), CONTRACT §3-2).
-→ 다만 **STT/자막 실시간 역방향(Redis Streams 소비→core 영속)은 여전히 미결**이다. ADR-0017이 상정한 "결과 큐" 경로 중 배치 잡 콜백만 섰고, 실시간 경로는 CP2에서 붙는다.
+→ **STT/자막 실시간 역방향(Redis Streams 소비→core 영속)도 구현됐다**(`live/config/CaptionStreamConsumer`·`live/service/CaptionStreamListener`).
 
 ### 9-8. ✅ 다시보기 재생 인증 — presigned 방식으로 구현됨
 이전 판은 "seam 3개(재생 URL 발급 · nginx · PlaybackTokenService)"라고 적었지만, 실제로는 **셋 다 존재하지 않고**, 현재 nginx는 SPA·API 프록시 전용이라 HLS 서빙 경로 자체가 없었다.
@@ -500,16 +501,16 @@ HLS 재생목록은 **"지금 존재하는 세그먼트 전체 목록"** 이고,
 원칙 2("스키마 소유권")가 관례로만 지켜진다.
 
 ### 9-12. 🟡 남은 프론트 임시 API 경로를 계약화해야 한다
-FE는 **오퍼레이션 단위 하이브리드 라우팅**을 쓴다 — 각 호출에 `apiImplemented` 플래그가 붙어 구현된 API는 실 HTTP로, 미구현은 목으로 간다([ADR-0027](decisions/songjeongki/0027-frontend-incremental-api-cutover.md)). 현재 인증·커리큘럼·레슨·라이브 세션에서 **28개 오퍼레이션이 실 연동**됐다(세션 시작/종료·토큰·참가자·채팅 포함).
+FE는 `VITE_USE_MOCK_API`로 전체를 mock 또는 HTTP 구현체로 고르고(`shared/api/dataSource.ts`), HTTP 구현체에서 서버에 없는 경로만 `notImplemented()`로 501 `API_NOT_IMPLEMENTED`를 던진다([ADR-0027](decisions/songjeongki/0027-frontend-incremental-api-cutover.md)). 현재 남은 것은 질문 하이라이트(`GET /instructor/live-sessions/{id}/question-highlights`)·검수 저장(`PUT /instructor/lessons/{id}/replay-review`)·퀴즈 제출(`POST /lessons/{id}/quizzes/answers`) 셋이다.
 
 `/instructor/live-sessions/{id}/processing`은 [ADR-0007](decisions/choinhoo/0007-recording-ready-auto-publish-and-processing-polling.md)과
 `CONTRACT.md` §2-3의 계약대로 FE adapter와 backend endpoint가 구현됐다.
-`/instructor/lessons/{id}/ai-preparation` 등 나머지 임시 경로는 구현 전에 계약으로 승격하거나 FE 코드에
+`/instructor/lessons/{id}/ai-preparation`은 경로째 없앴다(자료 임베딩은 attach와 함께 시작, ADR-0036). 나머지 임시 경로는 구현 전에 계약으로 승격하거나 FE 코드에
 임시 경로임을 계속 명시해야 한다.
 
 > ✅ 이전에 충돌하던 자료 업로드 경로는 해소됐다. FE가 `POST /instructor/lessons/{id}/materials`를 **presigned 티켓 흐름**(에셋 업로드 후 `{"assetId":"..."}` 연결, multipart 아님)으로 배선해 원칙 4·[ADR-0023](decisions/songjeongki/0023-asset-presigned-upload.md)·[ADR-0035](decisions/songjeongki/0035-lesson-material-attach.md)와 일치한다.
 
-`livekit-client`·`hls.js` 의존성은 아직 없다 — **CP1 데모의 실제 잔여 작업은 FE 미디어 연동 하나**다.
+`livekit-client`(^2.21.0)·`hls.js`(^1.6.16) 의존성은 들어갔고 FE 미디어 연동은 끝났다(`frontend/package.json`).
 
 ---
 
@@ -520,7 +521,7 @@ FE는 **오퍼레이션 단위 하이브리드 라우팅**을 쓴다 — 각 호
 
 | CP | 범위 | 상태 | 근거 |
 |---|---|---|---|
-| **T0** | 인프라·배포 | ✅ | compose·CI·Flyway(V1~V29)·EC2 자동 배포(master 머지 → `docker compose up --wait`) |
+| **T0** | 인프라·배포 | ✅ | compose·CI·Flyway(V1~V49)·self-hosted 러너 자동 배포(master 머지 → `docker compose up --wait`) |
 | **CP0** | 인증 + 강좌 골격 | ✅ | 로그인·커리큘럼·섹션·레슨·수강·카탈로그. FE 실 API 연동 |
 | **CP1** | 라이브 미디어 | ✅ | LiveKit 자체 호스팅, 토큰·방 제어·Egress, 채팅 WS, 세션 수명주기. FE 미디어 클라이언트 포함 |
 | **CP2** | 라이브 자막 | ✅ | realtime-agent(GPU 호스트) → Redis Streams → 소비자 → WS. 세그먼트 앵커·위치 동기화 |

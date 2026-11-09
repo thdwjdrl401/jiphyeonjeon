@@ -18,7 +18,7 @@
 | [05_curriculum-create-manage.md](05_curriculum-create-manage.md) | 커리큘럼 생성, 커리큘럼 관리 |
 | [06_lesson-create-edit.md](06_lesson-create-edit.md) | 레슨 생성, 레슨 수정 |
 | [07_lesson-detail.md](07_lesson-detail.md) | 레슨 상세 |
-| [08_live-session.md](08_live-session.md) | 라이브 세션 생성/수정/상세, 입장 전 점검(수강생), 사전 점검(강사), 녹화 처리 현황 |
+| [08_live-session.md](08_live-session.md) | 라이브 세션 생성/수정/상세, 입장 전 점검(수강생), 사전 점검(강사), 녹화 처리 현황. 현재 상태: 세션 생성·수정·상세는 별도 라우트 없이 레슨 폼과 학생 `live-upcoming` 화면으로 구현(`frontend/src/app/router/AppRouter.tsx`) |
 | [09_live-lesson.md](09_live-lesson.md) | 라이브 레슨(강의실) |
 | [10_vod-lesson.md](10_vod-lesson.md) | VOD 레슨 |
 | [11_system-pages.md](11_system-pages.md) | 접근 불가, 찾을 수 없음 |
@@ -43,6 +43,7 @@
 
 ### `SystemLayout` — 브랜드 링크만 있는 최소 헤더 + 단순 본문
 - 사용: 접근 불가, 찾을 수 없음
+- 현재 상태: 별도 레이아웃 컴포넌트 없이 `ForbiddenPage`·`NotFoundPage`가 `system-page` 마크업으로 구현(`frontend/src/pages/`)
 
 ## 3. 전역 내비게이션 요소
 

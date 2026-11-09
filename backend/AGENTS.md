@@ -18,16 +18,16 @@
 - **Redis Streams 소비**: AI가 푸시한 자막·용어·근거를 소비 → Postgres 영속 + WebSocket 전달.
 - **채팅·자막 WebSocket** 소유(강의/세션별 채널).
 - **AI 프론트도어**(RAG SSE 중계·Q&A): 인증·정책·비용 검증 후 ai-api 호출, 응답을 **요청자에게만** 라우팅.
-- **후보→게시**: AI 후보(ai schema)를 강사 수정 후 core read model(published_transcript·glossary_term…)로 반영.
+- **후보→게시**: AI 후보(ai schema)를 강사 수정 후 core read model(`live_caption`·`lesson_glossary_override`·`live_lecture_note` 등)로 반영.
 
 ## 계약 준수 (BE가 지킬 것)
 - **Response/Request 모델 필드명은 camelCase**([CONTRACT §1](../docs/CONTRACT.md#1-필드명-규칙--camelcase-통일)). DB 컬럼은 snake여도 DTO는 camel.
-- **상태코드 규격**: 생성 201, 중복 409, 인증 실패 401, 권한 403([CONTRACT §2](../docs/CONTRACT.md#2-rest-api-apiv1)).
+- **상태코드 규격**: 생성 201, 중복 409, 인증 실패 401, 권한 403([CONTRACT §2](../docs/CONTRACT.md#2-rest-api-api-spring-소유)).
 - Python↔Spring 브릿지 메시지는 [CONTRACT §3](../docs/CONTRACT.md#3-내부-계약-확정-인터페이스) 준수.
   realtime-agent의 raw `streamElapsedMs`는 attempt-local 시간이며, 후속 계약으로 변환하기 전에는 세션 상대 ms로 간주하지 않는다.
 
 ## 패키지 구조
-- **모듈러 모놀리스**: 도메인 모듈(auth·course·curriculum·lesson·enrollment·video·transcript·glossary·quiz·chat·aiintegration·live) 단일 배포. 모듈 간 ID/port로만 연결(다른 모듈 Entity 직접 참조 금지). 도메인은 **course→section→lesson 중심**(live_session은 lesson 연결, [../docs/decisions/songjeongki/0007](../docs/decisions/songjeongki/0007-domain-live-session.md)).
+- **모듈러 모놀리스**: 도메인 모듈(auth·curriculum·lesson·enrollment·learning·live·video·asset·aiintegration·notification·admin + 공용 common) 단일 배포(Spring Modulith, `ModularityTests`). 모듈 간 ID/port로만 연결(다른 모듈 Entity 직접 참조 금지). 도메인은 **course→section→lesson 중심**(live_session은 lesson 연결, [../docs/decisions/songjeongki/0007](../docs/decisions/songjeongki/0007-domain-live-session.md)).
 
 ## 빌드·실행·테스트
 ```bash
@@ -40,4 +40,4 @@ cd backend
 ## 자물쇠 활성화 (필요 시)
 계약 테스트 도입은 [../docs/harness/ENFORCEMENT.md](../docs/harness/ENFORCEMENT.md) 참고. 첫 계약 테스트 템플릿: `docs/harness/templates/ContractTestTemplate.java`.
 
-> 구현 후속: `build.gradle` Kurento 제거 + **Postgres·Redis·RabbitMQ(amqp)·MinIO(S3)·LiveKit(server SDK)** 의존성 추가는 CP 착수 시.
+> 현재 상태: `build.gradle`에 Kurento는 없고 **Postgres·Redis·RabbitMQ(amqp)·MinIO(S3)·LiveKit(server SDK)** 의존성이 들어가 있다.

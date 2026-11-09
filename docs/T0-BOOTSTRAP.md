@@ -10,6 +10,8 @@
 
 CP0가 쓰는 것만: **Postgres+pgvector · Redis**. 루트 [`docker-compose.yml`](../docker-compose.yml).
 
+현재 상태: 루트 `docker-compose.yml`에는 postgres·redis·minio·rabbitmq·media-worker·recorded-stt-worker가 함께 정의돼 있다(실행법은 [RUN.md](../RUN.md)).
+
 ```bash
 cp .env.example .env          # 값 확인/수정 (.env는 git 무시)
 docker compose up -d
@@ -66,18 +68,18 @@ server:
 ```
 
 ### 2-3. 인증 설정 포인트 (ADR-0014 반영)
-- **쿠키 세션**: Spring Session Redis 자동 구성 → `SESSION` 쿠키(HttpOnly). `Authorization: Bearer`·localStorage 안 씀.
+- **쿠키 세션**: Spring Session Redis 자동 구성 → `LIVECLASS_SESSION` 쿠키(HttpOnly, `application.yml`의 `server.servlet.session.cookie.name`). `Authorization: Bearer`·localStorage 안 씀.
 - **CSRF**: SPA 패턴 → `CookieCsrfTokenRepository.withHttpOnlyFalse()`(JS가 `XSRF-TOKEN` 읽어 헤더로 에코). 상태변경 요청에 적용.
 - **CORS/프록시**: dev는 Vite 프록시로 `/api`→8080 **same-origin** 권장(쿠키·CSRF 단순). 분리 오리진 유지 시 `allowCredentials=true` + 정확한 origin.
 - **필터 seam**: 인증 필터를 seam으로 → 향후 opaque↔JWT 교체는 필터만(ADR-0014).
 
 ### 2-4. 패키지 구조 (모듈러 모놀리스)
-[backend/AGENTS.md](../backend/AGENTS.md) 대로 도메인 모듈(auth·course·curriculum·lesson·live·chat·aiintegration…) 단일 배포, 모듈 간 ID/port로만 연결.
+[backend/AGENTS.md](../backend/AGENTS.md) 대로 도메인 모듈(auth·curriculum·lesson·enrollment·learning·live·video·asset·aiintegration·notification·admin) 단일 배포, 모듈 간 ID/port로만 연결.
 
 ### 2-5. T0 완료 기준(스모크)
 1. `./gradlew bootRun` 기동 → `GET /actuator/health` = UP.
 2. Postgres 연결(Hibernate/Hikari) + **Flyway 설정 완료**. 첫 마이그레이션(core DDL)은 **CP0 DDL 설계 후** 작성(스캐폴드엔 임의 DDL 미포함).
-3. 세션 스모크(`GET /api/session/touch`) → **HttpOnly 쿠키 발급 + Redis 세션 키**(`liveclass:session:*`) 확인.
+3. 세션 스모크(`GET /api/session/touch`) → **HttpOnly 쿠키 발급 + Redis 세션 키**(`liveclass:session:*`) 확인. 현재 상태: 스모크 컨트롤러는 제거됐고 세션은 `POST /api/auth/login`으로 발급된다.
 > 전체 인증·강좌 도메인은 CP0에서. T0는 "붙고 뜬다"까지만.
 
 ---

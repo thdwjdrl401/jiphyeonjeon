@@ -29,19 +29,19 @@ import java.util.List;
  * {@link RedisConnectionFactory}(=프로필 구동 {@code spring.data.redis} Redis)를 재사용해
  * {@link StreamMessageListenerContainer}(Lettuce)로 소비한다.
  *
- * <p>{@link SmartLifecycle}로 컨테이너 수명을 직접 통제한다 — 컨테이너를 시작하기 <b>전에</b> group을
+ * <p>{@link SmartLifecycle}로 컨테이너 수명을 직접 통제한다. 컨테이너를 시작하기 전에 group을
  * 만들고(BUSYGROUP 무시, {@code MKSTREAM}) 재기동 시 자기 consumer의 pending을 drain해야 하기 때문이다.
- * 등록은 {@link StreamReadRequest}를 직접 만들어 한다({@code receive(...)} 대신) — 수동 ACK
+ * 등록은 {@link StreamReadRequest}를 직접 만들어 한다({@code receive(...)} 대신), 수동 ACK
  * ({@code autoAcknowledge(false)}, {@link CaptionStreamListener}가 엔트리별 XACK)와 함께
- * <b>{@code cancelOnError(t -> false)}</b>를 걸어야 하기 때문이다.
+ * {@code cancelOnError(t -> false)}를 걸어야 하기 때문이다.
  *
- * <p><b>왜 cancelOnError가 필요한가(복원력)</b>: Spring Data Redis의 기본 정책은
+ * <p>왜 cancelOnError가 필요한가(복원력): Spring Data Redis의 기본 정책은
  * {@code StreamReadRequestBuilder.cancelSubscriptionOnError = t -> true}이고
  * {@code StreamPollTask.doLoop()}는 poll 예외마다 이 술어를 먼저 평가해 참이면 구독을 {@code cancel()}
- * 하고 그 다음에 errorHandler를 호출한다. 즉 errorHandler를 줘도 <b>로깅만 하고 구독은 이미 취소</b>된다.
+ * 하고 그 다음에 errorHandler를 호출한다. 즉 errorHandler를 줘도 로깅만 하고 구독은 이미 취소된다.
  * 그래서 네트워크가 한 번 끊겨 {@code RedisConnectionFailureException} 하나만 나도 poll 루프가 끝나고,
  * 네트워크가 복구돼도(다른 그룹은 정상 소비) 우리 그룹만 lag이 고정된 채 재기동 전까지 멈춘다(실측).
- * Lettuce는 자동 재연결하므로 <b>컨테이너만 죽지 않으면</b> 다음 poll부터 스스로 복구된다.
+ * Lettuce는 자동 재연결하므로 컨테이너만 죽지 않으면 다음 poll부터 스스로 복구된다.
  */
 @Component
 public class CaptionStreamConsumer implements SmartLifecycle {
@@ -52,7 +52,7 @@ public class CaptionStreamConsumer implements SmartLifecycle {
     /**
      * 연결 장애 중 poll이 즉시 실패하며 도는 것을 막는 백오프. cancelOnError=false로 루프를 살려두면
      * 연결이 죽은 동안 XREADGROUP이 블로킹 없이 곧바로 실패하므로, 이 sleep이 없으면 초당 수천 번
-     * 재시도하며 CPU와 로그를 태운다.
+     * 재시도하며 CPU와 로그를 소모한다.
      */
     private static final Duration CONNECTIVITY_BACKOFF = Duration.ofSeconds(1);
 
@@ -70,7 +70,7 @@ public class CaptionStreamConsumer implements SmartLifecycle {
     private volatile StreamMessageListenerContainer<String, MapRecord<String, String, String>> container;
     private volatile boolean running;
 
-    /** 연속 오류 카운터와 마지막 ERROR 로그 시각 — poll 스레드 하나만 만지지만 조회는 밖에서도 한다. */
+    /** 연속 오류 카운터와 마지막 ERROR 로그 시각, poll 스레드 하나만 만지지만 조회는 밖에서도 한다. */
     private volatile long consecutiveErrors;
     private volatile long lastErrorAtMs;
     private volatile long lastErrorLogAtMs;
@@ -139,7 +139,7 @@ public class CaptionStreamConsumer implements SmartLifecycle {
     }
 
     /**
-     * poll 등록 요청. 클래스 javadoc의 복원력 정책이 여기에 코드로 박혀 있다 —
+     * poll 등록 요청. 클래스 javadoc의 복원력 정책이 여기에 코드로 구현돼 있다.
      * {@code cancelOnError(t -> false)}가 없으면 일시 오류 하나로 자막 소비가 영구 정지한다.
      *
      * <p>package-private인 이유: 이 정책(cancelOnError=false, autoAcknowledge=false)이 유지되는지
@@ -152,7 +152,7 @@ public class CaptionStreamConsumer implements SmartLifecycle {
         return StreamReadRequest.builder(StreamOffset.create(streamKey, ReadOffset.lastConsumed()))
                 .consumer(consumer)
                 .autoAcknowledge(false)
-                // 기본값 t -> true(구독 취소)를 반드시 덮어쓴다. 회귀 시 자막이 조용히 멈춘다.
+                // 기본값 t -> true(구독 취소)를 반드시 덮어쓴다. 회귀 시 자막이 오류 없이 멈춘다.
                 .cancelOnError(t -> false)
                 .errorHandler(this::handleContainerError)
                 .build();
@@ -182,10 +182,10 @@ public class CaptionStreamConsumer implements SmartLifecycle {
      * <p>정지 중(!running)이거나 blocking XREADGROUP이 연결 종료로 취소된
      * {@link java.util.concurrent.CancellationException}은 컨텍스트 종료 시의 정상 잡음이라 debug로 낮춘다.
      *
-     * <p>로그 폭주 방지: 장애 에피소드의 <b>첫 오류는 항상 ERROR</b>로 남기고, 계속 실패하는 동안은
+     * <p>로그 폭주 방지: 장애 에피소드의 첫 오류는 항상 ERROR로 남기고, 계속 실패하는 동안은
      * {@value #ERROR_LOG_INTERVAL_MS}ms마다 누적 횟수를 담아 ERROR로 요약한다(그 사이는 debug).
      * 마지막 오류로부터 {@value #ERROR_EPISODE_RESET_MS}ms가 지나면 새 에피소드로 보고 다시 즉시 ERROR다.
-     * 삼키지는 않는다 — 모든 오류는 최소 debug로 남고 장애는 ERROR로 반드시 드러난다.
+     * 삼키지는 않는다. 모든 오류는 최소 debug로 남고 장애는 ERROR로 반드시 드러난다.
      */
     private void handleContainerError(Throwable t) {
         if (!running || hasCancellation(t)) {
@@ -213,7 +213,7 @@ public class CaptionStreamConsumer implements SmartLifecycle {
     }
 
     /**
-     * 연결·타임아웃 계열 장애 판별. 이 경우에만 백오프한다 — poll 자체가 즉시 실패해 busy loop가 되기
+     * 연결·타임아웃 계열 장애 판별. 이 경우에만 백오프한다. poll 자체가 즉시 실패해 busy loop가 되기
      * 때문이다. listener 처리 오류(예: DB 일시 장애)는 엔트리 단위로 다음 엔트리로 진행하므로 루프가
      * 폭주하지 않아 지연을 넣지 않는다.
      */

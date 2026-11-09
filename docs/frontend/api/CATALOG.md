@@ -24,7 +24,7 @@
 
 | ID | Method | Path | 설명 | 상태 |
 |---|---|---|---|---|
-| `CATALOG-01` | `GET` | `/api/curriculums` | 공개 커리큘럼 검색·필터·정렬·페이지 조회 | URL **확정**, 상세 계약 **협의 필요** |
+| `CATALOG-01` | `GET` | `/api/curriculums` | 공개 커리큘럼 검색·필터·정렬·페이지 조회 | **구현됨** (`q`·`sort`·`page`·`size`) |
 
 ## 4. `CATALOG-01` 공개 목록 조회
 
@@ -33,6 +33,8 @@ GET /api/curriculums?q=spring&featured=false&lifecycleStatus=PUBLISHED&sort=LATE
 ```
 
 ### 4.1 Query parameter 제안
+
+현재 상태: 백엔드는 `q`, `sort`(`LATEST`·`TITLE_ASC`, 기본 `LATEST`, 그 외 값은 `400`), `page`(기본 `0`), `size`(기본 `20`)만 받는다. `featured`·`lifecycleStatus`·`instructorId`와 `STARTING_SOON`은 구현되지 않았다(`CatalogController.list`, `CatalogSort`). 프론트도 이 네 값만 보낸다(`httpCurriculumService.toApiQuery`).
 
 | 이름 | 형식 | 기본값 | 설명 |
 |---|---|---|---|
@@ -94,7 +96,7 @@ GET /api/curriculums?q=spring&featured=false&lifecycleStatus=PUBLISHED&sort=LATE
 | `title` | string | 예 | 제목 |
 | `summary` | string | 예 | 카드용 짧은 소개 |
 | `thumbnailUrl` | string/null | 예 | 표시용 이미지 URL. 프론트가 스토리지 경로를 조합하지 않음 |
-| `instructor` | object | 예 | 공개 가능한 담당 강사 요약 |
+| `instructor` | object | 예 | 공개 가능한 담당 강사 요약(`instructorId`·`displayName`·`bio`·`expertise`) |
 | `lifecycleStatus` | enum | 예 | 서버가 판정한 공개·운영 상태 |
 | `period` | object/null | 예 | 전체 진행 기간 |
 | `sectionCount` | integer | 예 | 공개 가능한 섹션 수 |
@@ -110,9 +112,13 @@ GET /api/curriculums?q=spring&featured=false&lifecycleStatus=PUBLISHED&sort=LATE
 | `progress` | object | 수강생이고 카드에 표시할 데이터가 있을 때만 포함 |
 | `nextLesson` | object | 실제 카드에 다음 레슨을 표시하기로 확정할 때만 포함 |
 
+현재 상태: 응답 필드는 `relationship`·`allowedActions`·`enrollment`(`enrollmentId`·`status`·`requestedAt`)·`progress`·`nextLiveSession`이다. 공개 목록에서 `progress`는 채우지 않고(`CatalogService.list`), `nextLiveSession`은 항상 `null`이며, `nextLesson`은 없다(`ViewerContextResponse`). 실제 `allowedActions` 값은 `LOGIN_TO_ENROLL`(GUEST), `MANAGE_CURRICULUM`·`EDIT_LESSON`(OWNER_INSTRUCTOR), 빈 목록(NON_OWNER_INSTRUCTOR), `VIEW_LESSON`·`CONTINUE_LEARNING`·`CANCEL_ENROLLMENT`(ENROLLED), `CANCEL_ENROLLMENT`(PENDING_ENROLLMENT), 모집 중일 때 `ENROLL`(UNENROLLED_STUDENT)이다(`CatalogService.viewerContext`).
+
 비로그인 요청도 `viewerContext.relationship=GUEST`를 반환한다. 인증 쿠키가 잘못되었거나 만료된 공개 목록 요청을 `401`로 실패시킬지, 비로그인으로 취급할지는 **협의 필요**다. 탐색 연속성을 위해 만료 세션을 정리한 뒤 비로그인 결과를 반환하는 방식을 우선 제안한다.
 
 ## 5. 추천 커리큘럼
+
+현재 상태: `featured`·`RECOMMENDED`는 백엔드에 없다. 웰컴 추천 영역은 같은 `GET /api/curriculums`를 `sort=LATEST`로 호출한다(`httpCurriculumService.toApiQuery`가 `RECOMMENDED`를 `LATEST`로 바꾸고 `featured`를 보내지 않음).
 
 별도 `/featured-curriculums` API를 만들지 않고 다음처럼 같은 목록 계약을 사용한다.
 

@@ -24,10 +24,10 @@
 
 | ID | Method | Path | 설명 | 상태 |
 |---|---|---|---|---|
-| `MY-CURRICULUM-01` | `GET` | `/api/instructor/dashboard-summary` | 강사 운영 요약·가장 가까운 세션 | **제안** |
-| `MY-CURRICULUM-02` | `GET` | `/api/instructor/curriculums` | 내가 운영하는 커리큘럼 목록 | prefix **확정**, 상세 **협의 필요** |
-| `MY-CURRICULUM-03` | `GET` | `/api/me/learning-summary` | 학생 학습 요약·이어보기 | **제안** |
-| `MY-CURRICULUM-04` | `GET` | `/api/me/enrollments` | 내 수강 커리큘럼 목록 | **제안** |
+| `MY-CURRICULUM-01` | `GET` | `/api/instructor/dashboard-summary` | 강사 운영 요약·가장 가까운 세션 | **구현됨** (응답 형태는 §4.1 현재 상태) |
+| `MY-CURRICULUM-02` | `GET` | `/api/instructor/curriculums` | 내가 운영하는 커리큘럼 목록 | **구현됨** (§4.2 구현 현황) |
+| `MY-CURRICULUM-03` | `GET` | `/api/me/learning-summary` | 학생 학습 요약·이어보기 | **구현됨** (응답 형태는 §5.1 현재 상태) |
+| `MY-CURRICULUM-04` | `GET` | `/api/me/enrollments` | 내 수강 커리큘럼 목록 | **구현됨** (응답 형태는 §5.2 현재 상태) |
 
 ## 4. 강사 대시보드
 
@@ -36,6 +36,8 @@
 ```http
 GET /api/instructor/dashboard-summary
 ```
+
+현재 상태: 실제 응답은 `totalCurriculumCount`·`publishedCurriculumCount`·`upcomingLiveCount`·`totalEnrolleeCount`·`upcomingLiveSession`(`sessionId`·`lessonId`·`lessonTitle`·`curriculumId`·`curriculumTitle`·`sectionId`·`scheduledAt`·`liveSessionStatus`·`expectedDurationMinutes`)이다. 아래 `curriculumCounts`·`liveSessionCounts`·`allowedActions`는 구현되지 않았다(`InstructorDashboardSummaryResponse`).
 
 **응답 제안 — `200 OK`**
 
@@ -131,6 +133,8 @@ GET /api/instructor/curriculums?q=spring&status=PUBLISHED&sort=TITLE_ASC&page=0&
 GET /api/me/learning-summary
 ```
 
+현재 상태: 실제 응답은 `inProgressCurriculumCount`·`completedCurriculumCount`·`averageProgress`·`completedLessonCount`·`upcomingLiveSession`(§4.1과 같은 형태)이다. 아래 `enrollmentCounts`·`continueLearning`은 구현되지 않았다(`StudentLearningSummaryResponse`).
+
 **응답 제안 — `200 OK`**
 
 ```json
@@ -168,6 +172,8 @@ GET /api/me/learning-summary
 ```http
 GET /api/me/enrollments?q=spring&learningStatus=IN_PROGRESS&sort=RECENT_LEARNING&page=0&size=20
 ```
+
+현재 상태: query parameter를 받지 않고 페이지 봉투 없이 배열을 최신순으로 반환한다. 항목은 `enrollmentId`·`curriculumId`·`status`·`requestedAt`·`enrolledAt`·`curriculum`(공개 목록 카드 `CurriculumCardSummary`, ENROLLED면 `viewerContext.progress` 포함)이다(`MyEnrollmentController`, `MyEnrollmentResponse`). 아래 제안 형태는 구현되지 않았다.
 
 | Query | 형식 | 설명 |
 |---|---|---|

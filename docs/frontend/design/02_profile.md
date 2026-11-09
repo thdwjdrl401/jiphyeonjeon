@@ -7,7 +7,7 @@
 | `/student/profile`, `/instructor/profile` | `WorkspaceLayout` | 로그인 사용자 본인만 |
 
 ## 목적
-로그인 사용자가 계정 정보·가입 유형을 확인하고, 프로필 이미지를 관리하는 개인 설정 페이지. 닉네임과 강사 공개 프로필은 수정 API가 준비될 때까지 읽기 전용·준비 중으로 표시한다.
+로그인 사용자가 계정 정보·가입 유형을 확인하고, 프로필 이미지를 관리하는 개인 설정 페이지. 닉네임과 강사 공개 프로필은 수정 API가 준비될 때까지 읽기 전용·준비 중으로 표시한다. 현재 상태: 닉네임(`PUT /me/display-name`)과 강사 공개 소개·전문 분야(`/me/instructor-profile`) 수정이 구현돼 있다(`frontend/src/pages/ProfilePage.tsx`).
 
 ## 화면 구성
 ```text

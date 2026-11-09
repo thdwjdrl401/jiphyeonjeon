@@ -4,7 +4,7 @@
 
 | 라우트 | 레이아웃 | 접근 |
 |---|---|---|
-| `/me/curriculums` | `WorkspaceLayout` | 로그인 사용자 |
+| `/student/curriculums`, `/instructor/curriculums` | `WorkspaceLayout` | 로그인 사용자 |
 
 ## 목적
 로그인 사용자가 자신의 계정 유형에 맞는 커리큘럼과 다음 행동을 한 곳에서 확인하는 개인 대시보드. 같은 라우트·레이아웃을 쓰지만 본문은 강사/학생용으로 완전히 다르게 조합한다.

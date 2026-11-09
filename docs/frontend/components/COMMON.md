@@ -67,6 +67,8 @@ LessonLayout
 
 ### 2.4 `SystemLayout`
 
+현재 상태: 별도 컴포넌트로 구현되지 않았다. 시스템 페이지가 `BrandLink`와 `system-page` 마크업을 직접 쓴다(`frontend/src/pages/ForbiddenPage.tsx`, `NotFoundPage.tsx`).
+
 ```text
 SystemLayout
 ├─ BrandLink
@@ -81,10 +83,10 @@ SystemLayout
 
 | 컴포넌트 | 책임 | 소유 영역 |
 |---|---|---|
-| `GlobalHeader` | 브랜드·주요 메뉴·사용자 행동 조합 | `app` |
-| `GlobalFooter` | 서비스 공통 하단 정보 | `app` |
+| `GlobalHeader` | 브랜드·주요 메뉴·사용자 행동 조합 | `shared/layout` |
+| `GlobalFooter` | 서비스 공통 하단 정보 | `shared/layout` |
 | `PrimaryNavigation` | 전역 페이지 이동 | `app` |
-| `WorkspaceSidebar` | 로그인 후 작업 메뉴 | `app` |
+| `WorkspaceSidebar` | 로그인 후 작업 메뉴 | `shared/layout` |
 | `Breadcrumbs` | 현재 페이지 계층 표시 | `app` |
 | `GuestAuthActions` | 로그인·회원가입 이동 | `features/auth` |
 | `AuthenticatedUserMenu` | 프로필·내 커리큘럼·로그아웃 | `features/auth` |
@@ -135,7 +137,7 @@ SystemLayout
 | 레슨 생성·수정·상세 | `WorkspaceLayout` |
 | 라이브 세션 생성·수정·상세·점검·처리 | `WorkspaceLayout` |
 | 라이브·VOD 레슨 | `LessonLayout` |
-| 접근 불가·찾을 수 없음 | `SystemLayout` |
+| 접근 불가·찾을 수 없음 | 레이아웃 없음(`system-page` 마크업, 2.4 참고) |
 
 ## 7. 현재 확인할 사항
 

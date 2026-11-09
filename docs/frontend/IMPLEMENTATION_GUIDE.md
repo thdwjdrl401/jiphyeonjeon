@@ -19,9 +19,9 @@ npm run dev
 ```
 
 - 개발 서버: `http://localhost:8083`
-- `VITE_USE_MOCK_API=true`: 구현된 함수는 `/api`, 미구현 함수는 통합 mock을 사용
-- `VITE_USE_MOCK_API=false`: 구현 여부와 무관하게 모든 데이터 함수가 `/api`를 호출하며 오류를 숨기지 않음
-- 모든 화면은 공통 데이터 소스 경계를 사용하고, 함수별 `apiImplemented` 값으로 구현 여부를 명시한다([ADR-0014](../decisions/yoongwanghyeok/0014-operation-level-hybrid-api-routing.md)).
+- `VITE_USE_MOCK_API=true`: 모든 feature 서비스가 mock 구현체를 사용
+- `VITE_USE_MOCK_API=false`: 모든 feature 서비스가 HTTP 구현체로 `/api`를 호출하며 오류를 숨기지 않음. 서버에 아직 없는 엔드포인트는 `notImplemented()`가 `API_NOT_IMPLEMENTED`(501) 오류로 알린다(`src/shared/api/notImplemented.ts`).
+- 모든 화면은 `src/shared/api/dataSource.ts`의 `selectDataSource`로 feature 서비스 구현체 단위로 mock/HTTP를 고른다([ADR-0015](../decisions/yoongwanghyeok/0015-feature-service-adapter-routing.md), [ADR-0014](../decisions/yoongwanghyeok/0014-operation-level-hybrid-api-routing.md)를 대체).
 - 값을 바꾼 뒤에는 Vite 개발 서버를 다시 시작해야 함
 - 값을 생략하면 개발 모드는 mock, 프로덕션 빌드는 실제 API를 사용
 - 테스트 모드: 로컬 환경 변수와 무관하게 fixture를 사용해 독립 실행
@@ -51,6 +51,8 @@ fixture 로그인 계정은 이메일 문자열로 역할을 구분한다.
 
 ## 4. 전체 라우트 구현 상태
 
+현재 상태: 아래 라우트는 `src/app/router/AppRouter.tsx`에 등록돼 있고, 각 feature에 HTTP 구현체(`features/*/http*Service.ts`)가 있다. "초기 구현" 열은 작성 시점의 fixture 범위다.
+
 | 페이지 | 라우트 | 초기 구현 |
 |---|---|---|
 | 웰컴 | `/` | 실제/fixture 공개 목록 |
@@ -68,10 +70,9 @@ fixture 로그인 계정은 이메일 문자열로 역할을 구분한다.
 | 레슨 수정 | `/instructor/curriculums/:curriculumId/sections/:sectionId/lessons/:lessonId/edit` | 기본 정보·증분 자료 UI fixture |
 | 학생 레슨 상세 | `/student/curriculums/:curriculumId/sections/:sectionId/lessons/:lessonId` | 학생용 자료·세션·replay 허브 fixture |
 | 강사 레슨 상세 | `/instructor/curriculums/:curriculumId/sections/:sectionId/lessons/:lessonId` | 강사용 준비·게시·운영 허브 fixture |
-| 세션 생성 | `/instructor/lessons/:lessonId/live-sessions/new` | 일정·입장 창·운영 정책 폼 fixture |
-| 세션 수정 | `/instructor/live-sessions/:sessionId/edit` | 일정 수정 폼 fixture |
-| 학생 세션 상세 | `/student/live-sessions/:sessionId` | 학생의 상태별 다음 행동 fixture |
-| 강사 세션 상세 | `/instructor/live-sessions/:sessionId` | 강사의 상태별 다음 행동 fixture |
+| 세션 일정 입력 | 별도 라우트 없음 | 레슨 생성·수정 폼(`LessonFormPage`)에서 일정 입력 |
+| 학생 라이브 대기 | `/student/curriculums/:curriculumId/lessons/:lessonId/live-upcoming` | 라이브 시작 전 안내(`LessonLiveUpcomingPage`) |
+| 강사 세션 진입 | `/instructor/live-sessions/:sessionId` | `preflight`로 리다이렉트 |
 | 학생 입장 점검 | `/student/live-sessions/:sessionId/prejoin` | 스피커·autoplay·네트워크·고지 확인 UI |
 | 강사 사전 점검 | `/instructor/live-sessions/:sessionId/preflight` | 장치·서버 필수 조건 점검 UI |
 | 학생 라이브 강의실 | `/student/live-sessions/:sessionId/classroom` | 학생 미디어 stage, 되감기, 채팅, 자막, AI, 자료 |
@@ -79,13 +80,22 @@ fixture 로그인 계정은 이메일 문자열로 역할을 구분한다.
 | 녹화 처리 | `/instructor/live-sessions/:sessionId/processing` | 녹화 DB snapshot 폴링·자동 게시 확인·강사 replay 자동 이동 |
 | 학생 VOD 다시보기 | `/student/lessons/:lessonId/replay` | 플레이어, 챕터, 자막 검색, 채팅 replay, AI, 퀴즈 |
 | 강사 VOD 검수 | `/instructor/lessons/:lessonId/replay` | replay 콘텐츠 검수와 학습 통계 |
+| 녹화강의 업로드 | `/instructor/curriculums/:curriculumId/sections/:sectionId/recorded-lessons/new` | `RecordedLessonUploadPage` |
+| 녹화강의 상세 | `/instructor/curriculums/:curriculumId/sections/:sectionId/recorded-lessons/:lessonId` | `RecordedLessonDetailPage` |
+| 녹화강의 수정 | `/instructor/curriculums/:curriculumId/sections/:sectionId/recorded-lessons/:lessonId/edit` | `RecordedLessonEditPage` |
+| 학생 녹화강의 재생 | `/student/lessons/:lessonId/recorded` | `RecordedLessonPlaybackPage` |
+| 알림함 | `/student/notifications`, `/instructor/notifications`, `/notifications`(역할별 경로로 리다이렉트) | `NotificationsPage`, `NotificationsRedirect` |
+| 비밀번호 재설정 요청 | `/password-reset` | `PasswordResetRequestPage` |
+| 임시 비밀번호 변경 | `/password-change-required` | `PasswordChangeRequiredPage` |
+| 운영 콘솔 | `/admin`, `/admin/egress`, `/admin/live-sessions/:sessionId` | `AdminOverviewPage`, `EgressAdminPage`, `AdminSessionDetailPage` |
+| Egress 합성 화면 | `/egress/stage` | `EgressStagePage`(로그인 가드 밖) |
 | 접근 불가 | `/forbidden` | 실패 사유별 복구 동선 |
 | 찾을 수 없음 | `*` | 안전한 404와 탐색 동선 |
 
 ## 5. 권한과 라우팅
 
-- 공개 탐색·인증은 `/`, `/curriculums/*`, `/login`, `/signup`에 둔다.
-- 로그인 이후 학생 기능은 `/student/*`, 강사 기능은 `/instructor/*`에 둔다. 현재 사용자 역할에 없는 `/admin/*`는 만들지 않는다.
+- 공개 탐색·인증은 `/`, `/curriculums/*`, `/login`, `/signup`, `/password-reset`에 둔다.
+- 로그인 이후 학생 기능은 `/student/*`, 강사 기능은 `/instructor/*`에 둔다. 운영 콘솔은 `/admin/*`에 두고 `RequireAdminRoute`가 막는다.
 - `RequireRoleRoute`를 `student`, `instructor` 상위 라우트에 각각 한 번 배치한다. 자식 페이지마다 인증·역할 가드를 반복하지 않는다.
 - 비로그인 사용자는 `/login`으로 보내고 현재 내부 경로를 `returnTo`로 보존한다.
 - 다른 역할의 상위 라우트에 접근하면 `/forbidden?reason=student|instructor`로 이동한다.
@@ -103,9 +113,11 @@ fixture 로그인 계정은 이메일 문자열로 역할을 구분한다.
 - 공개 커리큘럼 목록과 상세
 - 커리큘럼 생성의 현재 백엔드 지원 필드
 
-위 요청은 각각 별도 환경 분기를 두지 않고 `src/shared/api/dataSource.ts`의 단일 선택 경계를 사용한다. **테스트 모드**에서 선택 경계를 우회한 Axios 요청은 `MOCK_API_NETWORK_REQUEST_BLOCKED` 오류로 차단해 테스트가 네트워크에 의존하지 않게 막는다. dev에서는 차단하지 않는다 — 막으면 이미 실 API로 옮긴 서비스까지 백엔드에 닿지 못해 점진 전환이 불가능해진다.
+위 요청은 각각 별도 환경 분기를 두지 않고 `src/shared/api/dataSource.ts`의 단일 선택 경계를 사용한다. mock 모드(테스트 모드와 `VITE_USE_MOCK_API`를 생략한 dev 포함)에서 선택 경계를 우회한 Axios 요청은 `MOCK_API_NETWORK_REQUEST_BLOCKED` 오류로 차단한다(`src/shared/config/runtime.ts`의 `isNetworkBlocked`, `src/shared/api/client.ts`).
 
 ### fixture 우선
+
+현재 상태: 아래 항목도 각 feature에 HTTP 구현체가 있다. HTTP 모드에서 `notImplemented()`로 남은 엔드포인트는 `GET /instructor/live-sessions/{sessionId}/question-highlights`, `PUT /instructor/lessons/{lessonId}/replay-review`, `POST /lessons/{lessonId}/quizzes/answers`다(`httpLiveSessionService.ts`, `httpReplayService.ts`).
 
 - 프로필 수정과 강사 공개 프로필
 - 학생 수강 목록과 진행률

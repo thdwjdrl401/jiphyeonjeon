@@ -16,8 +16,8 @@ HTTP endpoint뿐 아니라 RabbitMQ queue, Redis Stream, LiveKit AgentDispatch�
 | [`ai-api`](../../ai/ai-api/README.md) | EC2 | Spring 전용 RAG SSE + 실시간 강의 노트 producer |
 | [`ai-worker`](../../ai/ai-worker/README.md) | EC2 | RabbitMQ 자료 작업 consumer |
 | `recorded-stt-worker` | EC2 | 업로드 녹화강의 음성→OpenAI `whisper-1` 전사 consumer — ai-worker 이미지의 별도 entrypoint(`app.recorded_stt.main`), 관리 `:8012`, queue `ingestion.transcribe`. wire 정본은 [루트 §3-11](../CONTRACT.md), 결정은 [choinhoo/ADR-0011](../decisions/choinhoo/0011-recorded-lesson-batch-stt-with-gms-whisper.md) |
-| [`realtime-agent`](../../ai/realtime-agent/README.md) | GPU | LiveKit audio→STT→Redis caption agent |
-| [`bge-runtime`](../../ai/bge-runtime/README.md) | GPU | BGE-M3 embedding HTTP runtime |
+| [`realtime-agent`](../../ai/realtime-agent/README.md) | 노트북 GPU([`deploy/README.md`](../../ai/realtime-agent/deploy/README.md)) | LiveKit audio→STT→Redis caption agent |
+| [`bge-runtime`](../../ai/bge-runtime/README.md) | EC2 CPU container(`docker-compose.bge-cpu.yml`, ADR-0125) | BGE-M3 embedding HTTP runtime |
 
 Frontend는 위 프로세스를 직접 호출하지 않는다. 사용자 인증·권한·공개 API와 브라우저용 SSE/WS는
 Spring이 소유한다.
@@ -36,8 +36,8 @@ flowchart LR
     Redis --> Api
     Api -->|lecture note event XADD| Redis
     Redis -->|caption consumer 구현| Spring
-    Worker -->|HTTP reverse tunnel| BGE[GPU bge-runtime]
-    Api -->|HTTP reverse tunnel| BGE
+    Worker -->|HTTP, Docker network| BGE[EC2 bge-runtime CPU]
+    Api -->|HTTP, Docker network| BGE
 ```
 
 ## 3. AI 프로세스 제공 HTTP endpoint
@@ -49,9 +49,9 @@ flowchart LR
 | ai-api | 기본 `127.0.0.1:8010`; compose `0.0.0.0:8010` | container `ai-api:8010`; host prod `127.0.0.1:8010`, dev `127.0.0.1:18010` | `POST /internal/v1/rag/answers:stream` | Spring | `X-Internal-Signature` HMAC | RAG SSE |
 | ai-worker | 기본 `127.0.0.1:8011`; compose `0.0.0.0:8011` | host prod `127.0.0.1:8011`, dev `127.0.0.1:18011` | `GET /healthz` | 운영 probe | 없음, loopback 전제 | worker 생존 |
 | ai-worker | 기본 `127.0.0.1:8011`; compose `0.0.0.0:8011` | host prod `127.0.0.1:8011`, dev `127.0.0.1:18011` | `GET /readyz` | 운영 probe | 없음, loopback 전제 | runtime 준비 |
-| bge-runtime | GPU `127.0.0.1:8020` | host `:18020`; container `:18080/internal/bge` | `GET /healthz` | EC2 AI/운영 | 없음, 내부망 전제 | FastAPI 생존 |
-| bge-runtime | GPU `127.0.0.1:8020` | host `:18020`; container `:18080/internal/bge` | `GET /readyz` | ai-api, ai-worker | 없음, 내부망 전제 | model warmup 완료 |
-| bge-runtime | GPU `127.0.0.1:8020` | host `:18020`; container `:18080/internal/bge` | `POST /internal/v1/embeddings` | ai-api, ai-worker | Bearer token | embedding |
+| bge-runtime | 기본 `127.0.0.1:8020`; compose `0.0.0.0:8020` | container `liveclass-bge-runtime-cpu:8020`; host `127.0.0.1:18020` | `GET /healthz` | EC2 AI/운영 | 없음, 내부망 전제 | FastAPI 생존 |
+| bge-runtime | 기본 `127.0.0.1:8020`; compose `0.0.0.0:8020` | container `liveclass-bge-runtime-cpu:8020`; host `127.0.0.1:18020` | `GET /readyz` | ai-api, ai-worker | 없음, 내부망 전제 | model warmup 완료 |
+| bge-runtime | 기본 `127.0.0.1:8020`; compose `0.0.0.0:8020` | container `liveclass-bge-runtime-cpu:8020`; host `127.0.0.1:18020` | `POST /internal/v1/embeddings` | ai-api, ai-worker | Bearer token | embedding |
 | prod realtime-agent | GPU `127.0.0.1:8081` | EC2 `127.0.0.1:18081` | `GET /health/live` | 운영/Spring 목표 경로 | 없음, loopback 전제 | Python health server 생존 |
 | prod realtime-agent | GPU `127.0.0.1:8081` | EC2 `127.0.0.1:18081` | `GET /health/ready` | 운영/Spring 목표 경로 | 없음, loopback 전제 | STT prewarm·AgentServer·LiveKit 준비 |
 | prod realtime-agent | GPU `127.0.0.1:8081` | EC2 `127.0.0.1:18081` | `GET /` | 기존 운영 smoke | 없음, loopback 전제 | 호환용 plain `OK` |
@@ -74,6 +74,10 @@ host publish는 **dev ai-api 하나만 예외**로 열려 있다.
 dev ai-api 노출은 dev-infra의 pg·redis·rabbitmq·minio와 같은 방식이며 prod에는 적용하지 않는다.
 `docker-compose.ai-dev.yml`의 주석과 `ai/ai-api/tests/test_deployment_config.py`가 이 비대칭을 고정한다.
 
+현재 상태: realtime-agent는 노트북에서 `deploy/run-laptop.sh`로 실행하며, health를 EC2 `18081`·`18082`로 잇던
+reverse tunnel은 삭제됐다(커밋 `c490634b`). health server는 노트북 loopback `STT_HEALTH_PORT`에서만 열린다.
+위 표의 realtime-agent 행은 GPU 서버 시절 주소다.
+
 realtime-agent는 FastAPI가 아니다. Python `ThreadingHTTPServer`가 prod loopback `:8081`, dev
 loopback `:8082`의 service health를 제공하고 LiveKit Agents SDK의 자체 HTTP server는 각 process의
 loopback 임의 port를 사용한다. 두 management port에 `/worker`는 없고 알 수 없는 path는 404다.
@@ -95,7 +99,7 @@ loopback 임의 port를 사용한다. 두 management port에 `/worker`는 없고
 |---|---|---|---|
 | `AI_INTERNAL_SECRET` | ai-api; **Spring signer(구현됨)** | Spring→ai-api RAG HMAC | 사용하지 않음 |
 | `AI_CALLBACK_SECRET` | Spring; ai-worker mapping | 자료 download-url·callback HMAC | realtime callback 활성 시에만 선택 사용 |
-| `BGE_RUNTIME_INTERNAL_TOKEN` | GPU bge-runtime; EC2 compose mapping | EC2 AI→GPU BGE Bearer | 사용 |
+| `BGE_RUNTIME_INTERNAL_TOKEN` | bge-runtime container; EC2 compose mapping | EC2 AI→BGE Bearer | 해당 없음(bge-runtime은 CPU container) |
 
 운영 compose는 `BGE_RUNTIME_INTERNAL_TOKEN`을 ai-api의 `AI_API_BGE_TOKEN`과 ai-worker의
 `AI_WORKER_BGE_INTERNAL_TOKEN`으로, `AI_CALLBACK_SECRET`을 worker의
@@ -200,7 +204,7 @@ Spring
 | Redis | LiveKit 내부 Redis가 아닌 application Redis |
 | Stream key | `CAPTION_STREAM_KEY`, 기본 `ai:captions:live` |
 | write | `XADD MAXLEN ~ CAPTION_STREAM_MAXLEN` |
-| event | `caption.delta`, `caption.stream.completed` |
+| event | `caption.stream.started`, `caption.delta`, `caption.segment.final`, `caption.stream.completed` |
 | idempotency | `eventId` |
 | attempt scope | `(sessionId, sttSessionId)` |
 | ai-api consumer group | `ai-rag-live-v1` |
@@ -209,9 +213,8 @@ payload는 [`delta fixture`](../../ai/realtime-agent/contracts/fixtures/caption-
 [`completion fixture`](../../ai/realtime-agent/contracts/fixtures/caption-completed.valid.json)를 따른다.
 ai-api consumer는 구현됐고 Spring caption consumer도 구현됐다(별도 group `spring-caption-live-v1`,
 `eventId` 멱등, `core.live_caption` append-only 영속, `/topic/.../captions` WS 전달, raw `streamElapsedMs`
-그대로 — [ADR-0043](../../docs/decisions/songjeongki/0043-caption-consumer-persistence.md)). Spring consumer는 `spring.data.redis`가 가리키는 환경별 application Redis를 소비한다. dev agent의
-GPU tunnel `:4000`과 dev Spring의 `redis:6379`, prod agent의 GPU tunnel `:6390`과 prod Spring의
-`redis:6379`는 각각 같은 환경별 Redis instance를 가리킨다.
+그대로 — [ADR-0043](../../docs/decisions/songjeongki/0043-caption-consumer-persistence.md)). Spring consumer는 `spring.data.redis`가 가리키는 환경별 application Redis를 소비한다. 노트북 agent는
+`deploy/run-laptop.sh`가 여는 SSH `-L 6390`으로 prod Spring의 `redis:6379`와 같은 Redis instance에 쓴다.
 
 ### 4.6a ai-api→application Redis 실시간 강의 노트
 
@@ -225,7 +228,7 @@ GPU tunnel `:4000`과 dev Spring의 `redis:6379`, prod agent의 GPU tunnel `:639
 | 멱등 | `eventId` |
 | Spring group | `spring-lecture-notes-live-v1` |
 
-AI producer와 단일 process 재시작 복구는 구현됐고 Spring consumer·DB·REST·WebSocket은 미구현이다.
+AI producer와 단일 process 재시작 복구, Spring consumer·DB(`V17__live_lecture_note.sql`)·REST(`GET /api/live-sessions/{sessionId}/notes`)·WebSocket(`/topic/live-sessions/{sessionId}/notes`)이 구현됐다. Spring 소비 스위치 `LECTURE_NOTE_CONSUMER_ENABLED`는 기본 `false`다.
 라이브 중에는 append 조각만 보내고 capture 완료 뒤 정제한 전체 snapshot을 별도 event로 한 번 보낸다.
 Spring은 정상 chunk를 transaction으로 누적한 뒤 ACK하고, refined snapshot은 live draft에 append하지 않고
 별도 read model 전체 교체로 반영해야 한다. payload 제한, Markdown 결합법, gap·terminal·refined 처리는
@@ -241,6 +244,11 @@ Spring receiver URL은 아직 확정·구현되지 않았고 기존 material cal
 정상 EOF로 보고 drain 뒤 `caption.stream.completed`를 발행한다.
 
 ## 5. EC2 AI↔GPU AI 통신
+
+> 현재 상태: 아래 SSH forward·tunnel script·`infra/nginx/gpu-proxy.conf`가 삭제됐다
+> (커밋 `c490634b`). 지금 bge-runtime은 EC2 CPU container(§5.2)이고, realtime-agent는 노트북에서 LiveKit 공개
+> WSS에 직접 붙으며 남은 터널은 Redis `-L 6390` 하나다([`realtime-agent 배포`](../../ai/realtime-agent/deploy/README.md)).
+> §5.1·§5.3·§5.4·§5.5는 GPU 서버 시절 구성 기록이다.
 
 ### 5.1 SSH forward 지도
 
@@ -294,8 +302,10 @@ prod realtime-agent는 local Nemotron과 `REDIS_URL=redis://127.0.0.1:6390/0`, a
 
 ### 5.2 EC2 AI→GPU BGE
 
-EC2 host process의 운영 origin은 `http://127.0.0.1:18020`이다. 운영 container의 base URL은
-`http://host.docker.internal:18080/internal/bge`이며 5.4의 nginx를 거쳐 같은 reverse tunnel에 도달한다.
+EC2 host process의 운영 origin은 `http://127.0.0.1:18020`(container port publish)이다. 운영 container의 base URL은
+`docker-compose.ai-prod.yml`의 기본값 `http://liveclass-bge-runtime-cpu:8020`이며 같은 Docker network
+`liveclass_default`로 직접 도달한다. `BGE_RUNTIME_URL`로 덮어쓸 수 있다. `docker-compose.ai-dev.yml`은 아직
+삭제된 nginx 경로 `http://host.docker.internal:18080/internal/bge`를 가리킨다.
 
 ```http
 GET http://127.0.0.1:18020/readyz
@@ -348,7 +358,7 @@ dev 확인은 위 URL의 port를 `18082`로 바꾼다. `GET /`는 호환용 plai
 
 ### 5.4 EC2 container용 내부 nginx proxy
 
-[`gpu-proxy.conf`](../../infra/nginx/gpu-proxy.conf)는 host network `:18080`에서 다음 prefix를 제공한다.
+`infra/nginx/gpu-proxy.conf`(삭제됨, 커밋 `c490634b`)는 host network `:18080`에서 다음 prefix를 제공했다.
 
 | 요청 prefix | upstream |
 |---|---|
@@ -392,15 +402,14 @@ Spring realtime-agent health proxy client는 아직 없다. 따라서 prod `/int
 | Spring→ai-api RAG SSE | **v1·Replay v2 양쪽 구현**. AI route/HMAC verifier, Spring signer와 브라우저 SSE 프록시를 구현했다. 라이브는 `POST /api/live-sessions/{sessionId}/ai/answers/stream`, 업로드 녹화강의는 `POST /api/lessons/{lessonId}/ai/answers/stream` → 내부 v2 `sessionId=recordedVideoId`다(ADR-0047·ADR-0015, 공유 계약 §3-9). 운영은 backend·ai-api가 같은 `AI_INTERNAL_SECRET`을 받아야 동작 |
 | Spring→RabbitMQ→ai-worker | 양쪽 구현. 레슨·커리큘럼 두 스코프 모두 수용(ADR-0045, alembic `0006`). Spring producer·worker 앱 기본 비활성, AI 운영 compose는 worker만 활성 |
 | ai-worker→Spring download URL/callback | 양쪽 구현 |
-| ai-worker/ai-api→BGE | runtime/client/reverse tunnel/운영 container proxy 배선 구현 |
+| ai-worker/ai-api→BGE | runtime/client 구현. 운영 container는 Docker network로 `liveclass-bge-runtime-cpu:8020` 직접 호출(reverse tunnel·nginx proxy 삭제) |
 | Spring→LiveKit→realtime-agent dispatch | 양쪽 Phase 4a 구현, STT readiness gate 우회 중 |
-| realtime-agent→Redis caption | producer·ai-api consumer·Spring consumer 구현(Spring: 별도 group·eventId 멱등·core.live_caption 영속·WS 전달, ADR-0043). `caption.stream.started`·`caption.segment.final`도 발행(!233)·Spring 영속 구현(ADR-0052; 표시 대상 `delta`/`completed`만 WS·리로드·RAG 중계, 신규 2종은 영속만). dev/prod agent가 각 환경의 application Redis를 사용 |
-| ai-api→Redis 실시간 강의 노트 | append·capture 완료·refined snapshot producer와 단일 process 재시작 복구 구현. 공유 payload 계약 §3-4a 확정, Spring consumer·DB·REST·WebSocket 미구현 |
+| realtime-agent→Redis caption | producer·ai-api consumer·Spring consumer 구현(Spring: 별도 group·eventId 멱등·core.live_caption 영속·WS 전달, ADR-0043). `caption.stream.started`·`caption.segment.final`도 발행(!233)·Spring 영속 구현(ADR-0052). `caption.segment.final`은 WS·REST 전달과 FE 렌더까지 구현(ADR-0053), `caption.stream.started`는 영속만. 노트북 agent는 prod application Redis(`-L 6390`)를 사용 |
+| ai-api→Redis 실시간 강의 노트 | append·capture 완료·refined snapshot producer와 단일 process 재시작 복구 구현. 공유 payload 계약 §3-4a 확정, Spring consumer·DB·REST·WebSocket 구현(소비 스위치 `LECTURE_NOTE_CONSUMER_ENABLED` 기본 off) |
 | realtime-agent→Spring lifecycle callback | AI v1 구현·기본 off, Spring receiver 미구현 |
-| realtime-agent service health prod `:18081`·dev `:18082` | endpoint·schema·tunnel 구현, Spring client 미구현 |
-| nginx `:18080/internal/bge/*` | ai-api·ai-worker 운영 container caller 배선 구현 |
-| nginx prod `/internal/realtime-agent/*`·dev `/internal/realtime-agent-dev/*` | proxy 구현, Spring health client 미구현 |
-| EC2 AI 스택 dev/prod 2벌 | 두 compose는 같은 서비스 구조다. prod는 host loopback `:8010/:8011`, dev는 `:18010/:18011`로 관리 포트만 분리하고 각각 자기 pg/redis/rabbitmq에 접속한다. GPU BGE 프록시는 공용이며 dev Spring 주소는 별도 env로 주입(§3·§5.1·§5.5) |
+| realtime-agent service health | endpoint·schema 구현(노트북 loopback), EC2 tunnel 삭제, Spring client 미구현 |
+| nginx `:18080` gpu-proxy | 삭제(커밋 `c490634b`) |
+| EC2 AI 스택 dev/prod 2벌 | 두 compose는 같은 서비스 구조다. prod는 host loopback `:8010/:8011`, dev는 `:18010/:18011`로 관리 포트만 분리하고 각각 자기 pg/redis/rabbitmq에 접속한다. prod ai-api·ai-worker는 BGE container를 서비스명으로 직접 부르고 dev compose는 삭제된 nginx 경로를 그대로 두고 있으며, dev Spring 주소는 별도 env로 주입(§3·§5.1·§5.5) |
 
 ## 8. 변경 규칙
 
@@ -470,6 +479,11 @@ Spring realtime-agent health proxy client는 아직 없다. 따라서 prod `/int
 - 9.1/9.2 구현 시 루트 `docs/CONTRACT.md`(§3-1 잡 wire, RAG 요청)와 §7 상태표를 함께 갱신한다.
 
 ## 10. 자막 세그먼트 경계 `caption.segment.final`·시간 앵커 `caption.stream.started` — 부분 구현
+
+> 현재 상태: `caption.segment.final`의 Spring WS·REST 전달과 FE 세그먼트 렌더(ADR-0044 휴리스틱 대체)는
+> 구현됐다([songjeongki/ADR-0053](../decisions/songjeongki/0053-caption-segment-delivery-and-render.md),
+> `backend/.../live/web/ws/WsCaptionBroadcaster.java`, `frontend/src/features/live-session/captionAdapter.ts`).
+> `caption.stream.started` 기반 seek는 아직 없다.
 
 > 상태: **부분 구현**(2026-07-31). AI producer는 `!233`으로 병합됐고(schema·fixture 반영), 루트
 > [`docs/CONTRACT.md`](../CONTRACT.md) §3-4에 두 신규 type을 정본화했다. Spring은 ADR-0052로 **영속까지

@@ -12,7 +12,7 @@ AI endpoint와 Python 계약 테스트까지 구현됐고 Java consumer는 별�
 | `dispatch-metadata.schema.json` | Spring dispatch adapter | LiveKit job metadata | realtime-agent |
 | `caption-stream-entry.schema.json` | realtime-agent | Redis Stream | Spring은 4종 전부 영속(ADR-0052), ai-api는 delta/completed만 소비(계약상 제외) |
 | `live-agent-status.schema.json` | realtime-agent | 서명된 내부 HTTP | 향후 Spring callback |
-| `realtime-agent-health.schema.json` | realtime-agent | loopback/reverse tunnel HTTP | 향후 Spring consumer |
+| `realtime-agent-health.schema.json` | realtime-agent | loopback HTTP | 향후 Spring consumer |
 
 `sessionId`와 `lessonId`는 소문자 canonical UUID 문자열이다. 모든 payload 필드는
 `camelCase`이고 알 수 없는 필드는 거부한다.

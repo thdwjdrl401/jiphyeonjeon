@@ -1,5 +1,7 @@
 # `bge-runtime/scripts`
 
+> 현재 상태: 아래에 적힌 `smoke_cuda.py`와 `start_ec2_reverse_tunnel.sh`, `deploy/` 디렉토리는 삭제됐다(커밋 `c490634b`). 이 디렉토리에는 이 README만 남아 있고, 운영은 저장소 루트의 `docker-compose.bge-cpu.yml`을 쓴다.
+
 실제 CUDA와 pinned BGE-M3 model을 확인하는 수동 smoke 도구다.
 
 ## 역할
@@ -56,7 +58,7 @@ BGE_EC2_PORT=18020 \
 EC2에서는 `curl http://127.0.0.1:18020/readyz`를 확인하고 host process ai-worker에
 `AI_WORKER_BGE_RUNTIME_URL=http://127.0.0.1:18020`을 주입한다. script는 local BGE가 ready가 아니거나 SSH
 forward 생성에 실패하면 즉시 종료하므로 supervisor가 재기동을 맡는다 — GPU host에는 sudo/systemd가
-없어 실제 감독자는 tmux 기반 [`deploy/bin/liveclass-bge-runtime-supervisor`](../deploy/README.md)다.
+없어 실제 감독자는 tmux 기반 `deploy/bin/liveclass-bge-runtime-supervisor`(삭제됨)다.
 [ADR-0029](../../../docs/decisions/canola/0029-gpu-bge-ec2-ai-worker-connectivity.md)가 통신 방식과 대안을 기록한다.
 
 ## 검증

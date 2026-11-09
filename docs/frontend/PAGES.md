@@ -84,7 +84,7 @@
   `replayStatus=PUBLISHED`를 원자적으로 확정해 학생 영상 다시보기를 자동 공개한다.
 - 기존 `READY + DRAFT/READY_FOR_REVIEW`와 `WITHDRAWN`은 자동 공개하지 않고 강사의 수동 게시·재게시 동선을 유지한다.
 - 수강생 다시보기는 `videoAssetStatus=READY`와 `replayStatus=PUBLISHED`를 모두 만족할 때만 허용한다.
-- VOD는 라이브 레슨의 Egress 녹화 결과로만 생성하며 영상 파일 업로드는 제공하지 않는다.
+- VOD는 라이브 레슨의 Egress 녹화 결과로만 생성하며 영상 파일 업로드는 제공하지 않는다. 영상 업로드는 별도 레슨 유형인 녹화강의(`recorded-lessons`)에서 제공한다.
 - AI 처리 실패는 라이브 영상·채팅 장애와 구분해서 표시한다.
 
 ## 4. 전체 페이지 및 라우트 제안
@@ -118,7 +118,9 @@
 
 ### 4.2 라우트 매핑
 
-공개 탐색 경로는 역할과 무관하게 유지한다. 로그인 이후 화면은 실제 계정 역할명과 맞춘 `/student/*`, `/instructor/*` 아래에 배치하며, 각 상위 라우트의 `RequireRoleRoute`가 인증과 역할을 한 번에 검사한다. 현재 역할 모델에 없는 `/admin/*` 경로는 만들지 않는다. URL 세그먼트와 프론트 fixture 식별자는 대시(`-`) 표기를 사용하되, 서버가 내려주는 식별자는 불투명 값으로 취급하여 임의 변환하지 않는다.
+공개 탐색 경로는 역할과 무관하게 유지한다. 로그인 이후 화면은 실제 계정 역할명과 맞춘 `/student/*`, `/instructor/*` 아래에 배치하며, 각 상위 라우트의 `RequireRoleRoute`가 인증과 역할을 한 번에 검사한다. 운영 콘솔 `/admin/*`는 `RequireAdminRoute` 아래 별도 트리로 둔다. URL 세그먼트와 프론트 fixture 식별자는 대시(`-`) 표기를 사용하되, 서버가 내려주는 식별자는 불투명 값으로 취급하여 임의 변환하지 않는다.
+
+현재 상태: 실제 등록 라우트는 `frontend/src/app/router/AppRouter.tsx`, 경로 생성 함수는 `paths.ts`에 있다. 아래 표는 그 기준으로 맞췄다.
 
 | 페이지 | 제안 라우트 |
 |---|---|
@@ -137,10 +139,9 @@
 | 강사 레슨 수정 | `/instructor/curriculums/:curriculumId/sections/:sectionId/lessons/:lessonId/edit` |
 | 학생 레슨 상세 | `/student/curriculums/:curriculumId/sections/:sectionId/lessons/:lessonId` |
 | 강사 레슨 상세 | `/instructor/curriculums/:curriculumId/sections/:sectionId/lessons/:lessonId` |
-| 라이브 세션 생성 | `/instructor/lessons/:lessonId/live-sessions/new` |
-| 라이브 세션 수정 | `/instructor/live-sessions/:sessionId/edit` |
-| 학생 라이브 세션 상세 | `/student/live-sessions/:sessionId` |
-| 강사 라이브 세션 상세 | `/instructor/live-sessions/:sessionId` |
+| 라이브 세션 생성·수정 | 별도 라우트 없음. 레슨 생성·수정 폼에서 일정 입력 |
+| 학생 라이브 대기 | `/student/curriculums/:curriculumId/lessons/:lessonId/live-upcoming` |
+| 강사 라이브 세션 진입 | `/instructor/live-sessions/:sessionId` (`preflight`로 리다이렉트) |
 | 수강생 입장 전 점검 | `/student/live-sessions/:sessionId/prejoin` |
 | 강사 사전 점검 | `/instructor/live-sessions/:sessionId/preflight` |
 | 학생 라이브 레슨 | `/student/live-sessions/:sessionId/classroom` |
@@ -148,6 +149,14 @@
 | 녹화 처리 현황 | `/instructor/live-sessions/:sessionId/processing` |
 | 학생 VOD 레슨 | `/student/lessons/:lessonId/replay` |
 | 강사 VOD 검수 | `/instructor/lessons/:lessonId/replay` |
+| 녹화강의 업로드 | `/instructor/curriculums/:curriculumId/sections/:sectionId/recorded-lessons/new` |
+| 녹화강의 상세·수정 | `/instructor/curriculums/:curriculumId/sections/:sectionId/recorded-lessons/:lessonId`, `…/edit` |
+| 학생 녹화강의 재생 | `/student/lessons/:lessonId/recorded` |
+| 알림함 | `/student/notifications`, `/instructor/notifications`, `/notifications`(역할별 경로로 리다이렉트) |
+| 비밀번호 재설정 요청 | `/password-reset` |
+| 임시 비밀번호 변경 | `/password-change-required` |
+| 운영 콘솔 | `/admin`, `/admin/egress`, `/admin/live-sessions/:sessionId` |
+| Egress 합성 화면 | `/egress/stage` |
 | 접근 불가 | `/forbidden` |
 | 찾을 수 없음 | `*` |
 
@@ -208,6 +217,8 @@
 ### 5.5 내 프로필
 
 공통 계정 정보 영역을 유지하고 가입 유형에 따라 필요한 프로필 영역만 추가한다.
+
+현재 상태: 표시 이름 수정(`PUT /me/display-name`), 비밀번호 변경(`PasswordChangePanel`), 강사 소개·전문 분야 편집(`/me/instructor-profile`), 회원 탈퇴(`AccountWithdrawPanel`)가 구현돼 있다(`frontend/src/pages/ProfilePage.tsx`). 아래 "API 준비 중"·"도입되면" 서술은 작성 시점 기준이다.
 
 **공통**
 
@@ -484,7 +495,7 @@ AI 원본과 후보는 자동 게시하지 않고, 강사가 승인한 영역별
 - 인증 상태에 따라 웰컴·내 커리큘럼·커리큘럼 목록으로 이동
 - 자동 이동하지 않고 명시적인 복구 행동 제공
 
-접근 불가와 찾을 수 없음은 `SystemLayout`을 공유하며 세부 구성은 [시스템 페이지 컴포넌트 명세](components/SYSTEM_PAGES.md)를 따른다.
+접근 불가와 찾을 수 없음은 별도 레이아웃 컴포넌트 없이 `system-page` 마크업을 공유하며 세부 구성은 [시스템 페이지 컴포넌트 명세](components/SYSTEM_PAGES.md)를 따른다.
 
 ## 6. 라우트 전환 규칙
 

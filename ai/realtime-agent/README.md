@@ -4,7 +4,7 @@
 
 `realtime-agent`는 GPU에서 실행되는 LiveKit Agents worker다. 강사 microphone을 받아 streaming STT로
 변환하고 application Redis에 실시간 자막을 발행한다. STT provider는 로컬 Nemotron,
-GPU0 loopback vLLM Whisper 또는 OpenAI Realtime을 선택할 수 있다.
+loopback NeMo runtime, loopback vLLM Whisper 또는 OpenAI Realtime을 선택할 수 있다.
 
 FastAPI 서비스가 아니며 작업을 받는 POST endpoint도 없다. LiveKit `AgentServer`가 outbound WebSocket으로
 등록한 뒤 named dispatch를 통해 room job을 받는다.
@@ -97,18 +97,19 @@ uv run --frozen --env-file ../.env python -m app.main start
 ```
 
 기본 설정은 [`ai/.env.example`](../.env.example)을 `ai/.env`로 복사해 사용한다.
-GPU 배포에서는 `deploy/env/realtime-agent-common.env.example`의 공통 LiveKit/TURN·운영 정책을 먼저 로드하고, prod/dev provider profile을 나중에 덮어쓴다. 같은 provider에 필요하지 않은 model key나 CUDA 변수는 profile에 넣지 않는다.
+현재 노트북 배포는 `deploy/env/realtime-agent-laptop.env.example`을 `deploy/env/laptop.env`로 복사해 `deploy/run-laptop.sh`로 실행한다([deploy/README.md](deploy/README.md)). GPU 서버 배포에서는 `deploy/env/realtime-agent-common.env.example`의 공통 LiveKit/TURN·운영 정책을 먼저 로드하고, prod/dev provider profile을 나중에 덮어쓴다. 같은 provider에 필요하지 않은 model key나 CUDA 변수는 profile에 넣지 않는다.
 
 | 환경변수 | 필요 조건 | 용도 |
 |---|---|---|
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | 실행 필수 | LiveKit Worker 등록 |
-| `STT_ENGINE_PROVIDER` | 실행 필수 | `nemotron`, `vllm-whisper`, `openai-realtime`, `stub` |
+| `STT_ENGINE_PROVIDER` | 실행 필수 | `nemotron`, `nemotron-nemo`, `vllm-whisper`, `openai-realtime`, `stub` |
 | `REDIS_URL` | 운영 필수, 개발 기본 `redis://localhost:6379/0` | application Redis |
 | `STT_AGENT_NAME` | 선택 | 기본 `liveclass-realtime-stt-dev` |
 | `STT_HEALTH_HOST`, `STT_HEALTH_PORT` | 선택 | host는 `127.0.0.1` 고정, port는 기본 `8081`이며 `1~65535` 허용 |
 | `OPENAI_API_KEY` | OpenAI provider 필수 | OpenAI Realtime WSS 인증 |
 | `ASR_MODEL_ID` | Nemotron provider | model ID 또는 로컬 경로 |
 | `VLLM_WHISPER_BASE_URL`, `VLLM_WHISPER_MODEL` | vLLM provider 필수 | loopback `/v1` endpoint와 served-model alias |
+| `NEMO_RUNTIME_BASE_URL`, `NEMO_RUNTIME_MODEL` | nemotron-nemo provider | loopback NeMo runtime `/v1`(기본 `http://127.0.0.1:18084/v1`)과 served-model alias |
 | `VLLM_API_KEY` | vLLM provider 선택 | 별도 인증 runtime의 Bearer token; 기본 loopback runtime은 비움 |
 | `LIVEKIT_TURN_URL`, `LIVEKIT_TURN_SECRET` | TURN 강제 시 | TURN/TCP 연결 |
 | `SPRING_STATUS_CALLBACK_ENABLED` | 선택, 기본 `false` | Spring lifecycle callback 활성화 |
@@ -117,6 +118,8 @@ GPU 배포에서는 `deploy/env/realtime-agent-common.env.example`의 공통 Liv
 `AI_INTERNAL_SECRET`은 Spring↔EC2 ai-api RAG 전용이므로 GPU realtime-agent에는 주입하지 않는다.
 realtime-agent의 `AI_CALLBACK_SECRET`도 lifecycle callback을 명시적으로 켠 경우에만 필요하다.
 
+아래 문단은 GPU 서버 시절 운영 구성이다. 해당 tunnel·supervisor는 커밋 `c490634b`에서 삭제됐고, 노트북
+배포는 prod agent name·Redis `6390`·health `8081`·active/idle `1/1`인 단일 process다.
 GPU 운영에서는 prod/dev 두 process가 같은 호스트와 LiveKit/TURN tunnel을 공유하되 agent name, Redis와
 health port를 분리한다. 기본 prod는 GPU0 tuned Nemotron NeMo, Redis `6390`, health `8081→18081`, active/idle
 `5/5`이고 runtime도 독립 model process 5개를 사용한다. dev는 OpenAI Realtime API, Redis `4000`, health `8082→18082`, active/idle `1/1`이다.
@@ -138,8 +141,8 @@ realtime-agent가 직접 만든 loopback HTTP server는 prod process가 `127.0.0
 
 service readiness는 설정한 warm pool과 LiveKit 연결이 준비됐다는 뜻이다. 특정 dispatch의 session lease,
 Redis, room audio, engine queue 또는 capacity 예약은 검사하지 않으므로 job-level readiness gate를
-대체하지 않는다. GPU inbound port는 열지 않고 EC2에서는 prod
-`http://127.0.0.1:18081`, dev `http://127.0.0.1:18082`로 접근한다. 현재 Spring health client는
+대체하지 않는다. EC2로 health를 잇던 reverse tunnel(`18081`·`18082`)은 삭제됐고 health는 실행 호스트
+loopback에서만 확인한다. 현재 Spring health client는
 구현되지 않았으며 `/worker`는 두 관리 port에서 제공하지 않는다.
 
 ## 7. 관련 문서
@@ -151,8 +154,8 @@ Redis, room audio, engine queue 또는 capacity 예약은 검사하지 않으므
 - [LiveKit job lifecycle](app/jobs/README.md)
 - [STT provider](app/stt/providers/README.md)
 - [Redis·Spring adapter](app/adapters/README.md)
-- [GPU 배포와 tunnel](deploy/README.md)
-- [운영 runbook](../../docs/ai/GPU-REALTIME-AGENT-RUNBOOK.md)
+- [노트북 배포](deploy/README.md)
+- [운영 runbook(GPU 서버 시절 기록)](../../docs/ai/GPU-REALTIME-AGENT-RUNBOOK.md)
 - [service health 결정](../../docs/decisions/canola/0032-realtime-agent-service-health-contract.md)
 - [SSH 연결 격리 결정](../../docs/decisions/canola/0033-realtime-agent-ssh-channel-isolation.md)
 - [dev/prod 동시 운영 결정](../../docs/decisions/canola/0035-realtime-agent-dual-environment-runtime.md)

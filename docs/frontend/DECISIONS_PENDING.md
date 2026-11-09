@@ -8,25 +8,25 @@
 
 ### 1. 공개 커리큘럼의 사용자 관계 응답
 
-- [ ] 목록·상세 응답에 `viewerContext`를 포함할지 별도 관계 API로 분리할지
-- [ ] 비로그인, 미수강 학생, 승인 대기, 수강생, 운영 강사, 비운영 강사의 관계 enum
-- [ ] `allowedActions`의 최종 enum과 `MANAGE_CURRICULUM` 사용 확정
+- [x] 목록·상세 응답에 `viewerContext`를 포함할지 별도 관계 API로 분리할지. 목록·상세에 포함([ADR-0026](../decisions/songjeongki/0026-catalog-viewer-context.md))
+- [x] 비로그인, 미수강 학생, 승인 대기, 수강생, 운영 강사, 비운영 강사의 관계 enum. `GUEST`·`UNENROLLED_STUDENT`·`PENDING_ENROLLMENT`·`ENROLLED`·`OWNER_INSTRUCTOR`·`NON_OWNER_INSTRUCTOR`(ADR-0026)
+- [x] `allowedActions`의 최종 enum과 `MANAGE_CURRICULUM` 사용 확정. 운영 강사에게 `MANAGE_CURRICULUM`을 준다(`backend/.../curriculum/service/CatalogService.java`, `frontend/src/features/curriculum/types.ts`)
 
 권장안: 목록과 상세에 최소 `viewerContext`를 포함한다. 카드와 대표 CTA가 관계별로 달라 별도 요청은 waterfall과 사용자별 캐시 복잡도를 늘린다.
 
 ### 2. 수강 정책과 수강 API
 
 - [ ] `IMMEDIATE`, `APPROVAL_REQUIRED`, `INVITATION_ONLY` 지원 범위
-- [ ] 즉시 수강도 최종 상태를 `ACTIVE`로 반환할지
-- [ ] 승인 대기 신청 취소와 재신청 허용 정책
+- [x] 즉시 수강도 최종 상태를 `ACTIVE`로 반환할지. `IMMEDIATE`는 즉시 `ACTIVE`([ADR-0016](../decisions/yoongwanghyeok/0016-enrollment-reapplication-and-immediate-policy.md))
+- [x] 승인 대기 신청 취소와 재신청 허용 정책. `CANCELLED`·`REJECTED`·`REVOKED` 뒤 같은 `enrollmentId`로 재신청(ADR-0016)
 - [ ] 강사 계정이 다른 강사의 커리큘럼을 수강할 수 있는지
 
 권장안: CP0에서는 `APPROVAL_REQUIRED` 하나로 시작하고 신청·취소·승인 흐름을 완성한 뒤 나머지 정책을 추가한다.
 
 ### 3. 내 커리큘럼 응답
 
-- [ ] 강사 대시보드 요약과 목록을 분리할지
-- [ ] 학생 학습 요약과 수강 목록을 분리할지
+- [x] 강사 대시보드 요약과 목록을 분리할지. `GET /instructor/dashboard-summary`로 분리([ADR-0041](../decisions/songjeongki/0041-instructor-authoring-reads-and-autosave.md))
+- [x] 학생 학습 요약과 수강 목록을 분리할지. `GET /me/learning-summary`로 분리(`frontend/src/features/curriculum/httpMyCurriculumsService.ts`)
 - [ ] 진행률·완료 판정의 서버 계산 기준
 - [ ] 다음 라이브와 최근 학습 중 대표 행동 우선순위
 
@@ -35,7 +35,7 @@
 ### 4. 관리용 커리큘럼 조회
 
 - [ ] 기본 정보와 전체 `섹션 → 레슨` 구조를 한 응답으로 줄지
-- [ ] 구조 저장 시 `structureVersion` 기반 충돌 검사를 사용할지
+- [x] 구조 저장 시 `structureVersion` 기반 충돌 검사를 사용할지. compare-and-set, 불일치 시 409 `STRUCTURE_VERSION_CONFLICT`([ADR-0025](../decisions/songjeongki/0025-structure-reorder-and-version-cas.md))
 - [ ] 커리큘럼 lifecycle별 수정 가능 범위
 - [ ] 대표 이미지 업로드 형식·크기·비율과 presigned upload 적용
 - [ ] 커리큘럼 공통 강의 자료의 업로드·목록·삭제 API와 presigned upload 적용
@@ -48,7 +48,7 @@
 
 - [ ] 초기 PPTX 복수 업로드의 부분 실패 처리 방식
 - [ ] 파일별 최대 크기와 개수 제한
-- [ ] `DRAFT → AI_NOT_READY → READY → PUBLISHED` 전환 API
+- [x] `DRAFT → AI_NOT_READY → READY → PUBLISHED` 전환 API. MVP는 AI 준비도 게이팅 없이 `DRAFT → PUBLISHED` 직행, 게시 취소는 `PUBLISHED → DRAFT`([ADR-0021](../decisions/songjeongki/0021-lesson-publish-mvp-direct.md))
 - [ ] 게시 후 자료 변경 시 자동 비공개 또는 명시적 재게시 정책
 
 권장안: 파일별 결과를 반환해 성공 파일은 유지하고 실패 파일만 재시도한다. 자료 변경 후에는 `READY`로 돌아가 강사가 명시적으로 재게시한다.
@@ -102,10 +102,10 @@
 
 ### 10. 프로필과 계정
 
-- [ ] 표시 이름 수정 API
+- [x] 표시 이름 수정 API([ADR-0029](../decisions/songjeongki/0029-lesson-detail-and-display-name.md))
 - [ ] 강사 소개와 전문 분야 형식·길이
 - [ ] 비밀번호 변경 시 다른 세션 종료 여부
-- [ ] 회원 탈퇴 시 운영·수강·학습 데이터 처리
+- [x] 회원 탈퇴 시 운영·수강·학습 데이터 처리. `WITHDRAWN` 소프트 삭제로 커리큘럼·수강 기록 보존, 진행 중 라이브가 있으면 409([ADR-0031](../decisions/songjeongki/0031-account-profile-security.md))
 - [ ] 공개 강사 프로필 페이지 도입 여부
 
 권장안: 표시 이름과 강사 공개 프로필 저장을 분리한다. 탈퇴는 데이터 보존·운영 이관 정책 전까지 비활성화한다.

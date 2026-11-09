@@ -59,7 +59,7 @@ AI 원본(ai)
 ## 4. 컴포넌트 트리
 
 ```text
-VodLessonPage
+ReplayLessonPage
 └─ LessonLayout
    ├─ VodLessonHeader
    │  ├─ LessonIdentity
@@ -101,7 +101,7 @@ VodLessonPage
 
 | 컴포넌트 | 소유 영역 | 책임 |
 |---|---|---|
-| `VodLessonPage` | `pages` | 접근 권한·VOD 상태 확인, 초기 조회, 재생과 학습·검수 feature 조합 |
+| `ReplayLessonPage` | `pages` | 접근 권한·VOD 상태 확인, 초기 조회, 재생과 학습·검수 feature 조합 |
 | `VodLessonHeader` | page 전용 | 레슨 정보, 게시본 상태, 강사 검수 진입 표시 |
 | `VodPlayerStage` | `features/playback` | HLS 플레이어와 로딩·오류 상태 조합 |
 | `HlsVodPlayer` | `features/playback` | 권한이 적용된 HLS URL 재생과 시점 탐색 |

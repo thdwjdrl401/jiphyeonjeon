@@ -6,6 +6,8 @@
 
 `SystemLayout`을 사용하는 다음 두 페이지를 함께 정의한다.
 
+현재 상태: `SystemLayout`·`SystemPage`·`SystemMessagePanel` 컴포넌트는 없다. `ForbiddenPage`·`NotFoundPage`가 `BrandLink`와 `system-page` 마크업을 직접 조합한다(`frontend/src/pages/`).
+
 - 접근 불가
 - 찾을 수 없음
 
